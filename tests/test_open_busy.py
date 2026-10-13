@@ -7,7 +7,7 @@ s=Path(os.environ.get('EFS_FUSE_SOURCE',root/'src/client/efs_fuse.c')).read_text
 def function(name):
  m=re.search(r'^static (?:int|void|uint64_t) '+name+r'\([^;]+?\)\n\{',s,re.M)
  return s[m.start():s.index('\n}',m.end())+2] if m else ''
-a=s.index('static pthread_mutex_t g_open_mu');b=s.index('/* Inodes this client has actually locked.',a)
+a=s.index('static pthread_mutex_t g_open_mu');b=s.index('/* Returns 1 when this is the first open',a)
 code=r'''
 #include "client_internal.h"
 #include "efs/session.h"

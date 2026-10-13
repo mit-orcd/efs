@@ -4,7 +4,9 @@ from pathlib import Path
 import subprocess,tempfile,re
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/server/raft_host.c').read_text()
-a=s.index('static int host_namespace_capacity(');b=s.index('\nstruct host_idx_ref',a)
+a=s.index('static int host_namespace_capacity(');expiry_start=s.index('static int host_expiry_collect(',a)
+s=s[:expiry_start]+s[s.index('\n}',expiry_start)+2:]
+b=s.index('\nstruct host_idx_ref',a)
 def function(path,name):
     text=(root/path).read_text()
     match=re.search(r'^static [^\n;]*\b'+name+r'\([^;]+?\)\n\{',text,re.M)

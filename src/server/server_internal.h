@@ -382,6 +382,7 @@ void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out);
  * ReadIndex). Leader-only; NOT_PRIMARY otherwise. */
 void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
                              struct efs_msg_raft_mkfs_reply *out);
+void server_raft_host_expiry_status(struct efs_expiry_status *out);
 void server_raft_host_status(struct efs_msg_raft_status_reply *out);
 int server_raft_host_active(void);
 /* Borrowed immutable query image; group slots are 0 and 2. Only background
@@ -440,6 +441,12 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
  * fence-view/cache and epoch-preserving publication integration first. */
 int server_raft_host_logical_resize(efs_ino_t ino, uint64_t size, uint64_t now,
                                     int *leader_hint);
+struct efs_expiry_due;
+/* Staged conditional transaction. Not connected to RPC or a live worker. */
+void server_raft_host_expire(efs_ino_t parent,const char *name,
+                             uint64_t committed_now,
+                             const struct efs_expiry_due *,
+                             struct efs_msg_inode_reply *);
 void server_raft_host_xattr(efs_ino_t ino, uint8_t op, uint32_t flags,
                             const uint8_t *name, uint16_t nlen,
                             const uint8_t *val, uint32_t vlen,

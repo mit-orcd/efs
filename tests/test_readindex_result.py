@@ -15,12 +15,17 @@ code=r'''
 #include <assert.h>
 #define HOST_READ_TRIES 1
 #define HOST_TICK_US 5000
-struct efs_raft_host {pthread_mutex_t mu,cv_mu;int raft_id,n;};
+struct server {int storage_engine;};
+struct efs_raft_host {struct server *s;pthread_mutex_t mu,cv_mu;int raft_id,n;};
 struct host_read_admission {uint64_t want,round,term;};
 struct read_prof_acc {int unused;};
-static struct {struct read_prof_acc ri_remote,ri_remote_wait,ri_leader_covered,ri_leader;} g_read_prof;
+static struct {struct read_prof_acc ri_remote,ri_remote_wait,ri_leader_covered,ri_leader,ri_lock,ri_begin,ri_sleep_apply,ri_sleep_quorum;} g_read_prof;
 '''+view+r'''
 struct host_read_floor {uint64_t index,context;};
+static uint64_t efs_batch_obs_now_us(void){return 0;}
+static uint64_t host_read_register(struct efs_raft_host *h,uint8_t g){(void)h;(void)g;return 0;}
+static uint64_t host_read_eligible_round(struct efs_raft_host *h,uint8_t g,struct efs_raft *r,uint64_t t){(void)h;(void)g;(void)r;(void)t;assert(0);return 0;}
+static int host_read_begin_tracked(struct efs_raft_host *h,uint8_t g,struct efs_raft *r){(void)h;(void)g;(void)r;assert(0);return 0;}
 static int delayed_floor;
 static struct host_view current;
 static int remote_rc,apply_rc,admissions,deadline=1,cv_progress,views;
@@ -37,6 +42,7 @@ static struct efs_raft *group_raft(struct efs_raft_host*h,uint8_t g){(void)h;(vo
 static int host_read_admit(struct efs_raft*r,struct host_read_admission*a,int*start){(void)r;admissions++;*a=(struct host_read_admission){101,11,2};*start=1;current.proven_round=11;return EFS_OK;}
 static void host_publish_group(struct efs_raft_host*h,uint8_t g){(void)h;(void)g;}
 static void host_pump_kick(struct efs_raft_host*h){(void)h;}
+uint64_t efs_raft_term(const struct efs_raft*r){(void)r;assert(0);return 0;}
 int efs_raft_role(const struct efs_raft*r){(void)r;assert(0);return 0;}
 uint64_t efs_raft_read_round(const struct efs_raft*r){(void)r;assert(0);return 0;}
 int efs_raft_read_pending(const struct efs_raft*r){(void)r;assert(0);return 0;}

@@ -10,6 +10,8 @@
 # Usage:
 #   run_tests.sh posix [--keep] [--parallel] [efs-host ...]
 #                                                POSIX suite vs XFS baseline
+#   run_tests.sh posix expiry MOUNT --root PRIVATE --peer-mount PEER [--clock-fault]
+#                                                local isolated expiry + regression gates
 #   run_tests.sh posix extras [efs-host ...]   optional mmap / .efs checks
 #   run_tests.sh posix concurrent [host-a] [host-b]  two-client visibility
 #   run_tests.sh posix2 [host-a] [host-b]        two-client visibility vs XFS
@@ -44,6 +46,12 @@
 set -u
 SSH="${EFS_SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
+# Expiry owns a local fault/restart fixture; bypass remote baseline orchestration
+# and automatic raw-result commits.
+if [ "${1:-}" = posix ] && [ "${2:-}" = expiry ]; then
+    shift 2
+    exec python3 "$REPO/tests/posix/posix_suite.py" "$@" --suite expiry
+fi
 RESULTS="$REPO/results"
 XFS_HOST=${XFS_HOST:-node9901.ib}
 XFS_DIR=${XFS_DIR:-/data1/efs}

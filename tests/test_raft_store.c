@@ -8,6 +8,7 @@
 #include "efs/common.h"
 #include "efs/raft.h"
 #include "efs/raft_disk.h"
+#include "../src/raft/raft_disk_internal.h"
 
 #include <dirent.h>
 #include <fcntl.h>
@@ -19,6 +20,8 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <signal.h>
+#include <sys/resource.h>
 
 static int failures = 0;
 
@@ -966,11 +969,91 @@ out:
     free(payload); free(actual); rmtree(g_dir);
 }
 
+static void test_index_reserve_failure(void)
+{
+#if defined(__linux__)
+    rmtree(g_dir);pid_t pid=fork();CHECK(pid>=0,"fork index reservation failure");
+    if(pid==0) {
+        signal(SIGXFSZ,SIG_IGN);struct rlimit limit={10,10};
+        if(setrlimit(RLIMIT_FSIZE,&limit))_exit(2);
+        struct efs_raft_disk *d=efs_raft_disk_open(g_dir,EFS_RAFT_DISK_SYNC);
+        if(!d)_exit(3);
+        struct efs_raft_store *s=efs_raft_disk_group(d,0);
+        struct raft_disk_group *g=(struct raft_disk_group *)s;
+        uint8_t b=42;int rc=s->append(s,1,1,&b,1);uint64_t index=99,term=99;
+        int ok=rc!=EFS_OK && g->index_fd>=0 && g->cap==0 &&
+               s->last(s,&index,&term)==EFS_OK && index==0 && efs_raft_disk_bytes(d)==8;
+        efs_raft_disk_close(d);_exit(ok?0:4);
+    }
+    int status=0;if(pid>0){waitpid(pid,&status,0);CHECK(WIFEXITED(status)&&WEXITSTATUS(status)==0,"index space failure precedes durable append");}
+    rmtree(g_dir);
+#endif
+}
+
+/* Cache eviction must preserve the entire retained log across replay,
+ * rotation and conflicting suffix replacement. Cold reads validate frames. */
+static void test_bounded_history_cache(void)
+{
+    rmtree(g_dir);
+    struct efs_raft_disk *d=efs_raft_disk_open(g_dir,EFS_RAFT_DISK_NOSYNC);
+    CHECK(d!=NULL,"cache store open");if(!d)return;
+    struct efs_raft_store *s=efs_raft_disk_group(d,0);
+    struct raft_disk_group *g=(struct raft_disk_group *)s;
+    uint8_t value[256],out[256];memset(value,0x5a,sizeof(value));
+    CHECK(s->save_hard(s,5,0)==EFS_OK,"cache hard state");
+    CHECK(s->save_cfg(s,3,15)==EFS_OK,"cache cfg");
+    for(uint64_t i=1;i<=100000;i++) {
+        memcpy(value,&i,sizeof(i));
+        if(s->append(s,i,3,value,sizeof(value))!=EFS_OK){CHECK(0,"cache append");goto done;}
+    }
+    CHECK(g->cache_bytes<=RAFT_COMMAND_CACHE_BYTES,"history payload cache bounded");
+    CHECK(g->log[0].cmd==NULL,"old payload evicted");
+    for(uint64_t i=1;i<=100000;i+=2501) {
+        uint64_t term=0,number=0;uint32_t n=sizeof(out);
+        CHECK(s->get(s,i,&term,out,&n)==EFS_OK,"evicted get");memcpy(&number,out,sizeof(number));
+        CHECK(n==sizeof(value) && term==3 && number==i,"evicted exact bytes");
+    }
+    CHECK(s->save_snap(s,50000,3)==EFS_OK,"cache snapshot");
+    CHECK(efs_raft_disk_rotate(d)==EFS_OK,"cache rotation");
+    uint64_t term=0,number=0;uint32_t n=sizeof(out);
+    CHECK(s->get(s,1,&term,out,&n)==EFS_OK,"old command after rotation");memcpy(&number,out,sizeof(number));
+    CHECK(number==1 && term==3,"rotation preserves evicted payload");
+    CHECK(s->truncate_from(s,75000)==EFS_OK,"cache suffix truncate");
+    uint64_t replace=75000;memcpy(value,&replace,sizeof(replace));
+    CHECK(s->append(s,replace,7,value,sizeof(value))==EFS_OK,"cache replacement append");
+    CHECK(efs_raft_disk_rotate(d)==EFS_OK,"cache replacement rotation");
+    CHECK(efs_raft_disk_covered_index(d,0,efs_raft_disk_synced_bytes(d))==75000,"rotation durable floor");
+    efs_raft_disk_close(d);d=efs_raft_disk_open(g_dir,EFS_RAFT_DISK_SYNC);
+    CHECK(d!=NULL,"cache cold open");if(!d)return;
+    s=efs_raft_disk_group(d,0);g=(struct raft_disk_group *)s;
+    CHECK(g->cache_bytes<=RAFT_COMMAND_CACHE_BYTES,"cold cache bounded");
+    n=sizeof(out);CHECK(s->get(s,1,&term,out,&n)==EFS_OK,"cold oldest command");
+    memcpy(&number,out,sizeof(number));CHECK(number==1 && term==3,"cold oldest exact");
+    n=sizeof(out);CHECK(s->get(s,75000,&term,out,&n)==EFS_OK && term==7,"cold replaced term");
+    n=sizeof(out);CHECK(s->get(s,75001,&term,out,&n)==EFS_ERR_NOT_FOUND,"cold truncated tail absent");
+    CHECK(g->log[0].cmd==NULL,"corruption test uses disk miss");
+    uint8_t saved=0,bad=0;
+    CHECK(pread(d->fd,&saved,1,(off_t)g->log[0].payload_off)==1,"cache frame read");bad=saved^0xff;
+    CHECK(pwrite(d->fd,&bad,1,(off_t)g->log[0].payload_off)==1,"cache frame corrupt");
+    n=sizeof(out);CHECK(s->get(s,1,&term,out,&n)==EFS_ERR_PROTO,"corrupt evicted frame refuses");
+    CHECK(pwrite(d->fd,&saved,1,(off_t)g->log[0].payload_off)==1 && fsync(d->fd)==0,"cache frame restore");
+    uint64_t floor=efs_raft_disk_synced_bytes(d);
+    CHECK(efs_raft_disk_sync_hold(d)==EFS_OK,"cache held append");
+    CHECK(s->append(s,75001,7,value,sizeof(value))==EFS_OK,"cache held write");
+    CHECK(efs_raft_disk_covered_index(d,0,floor)==75000,"cache offsets do not certify unsynced write");
+    CHECK(efs_raft_disk_sync_release(d)==EFS_OK,"cache held durability");
+    CHECK(efs_raft_disk_covered_index(d,0,efs_raft_disk_synced_bytes(d))==75001,"cache synced floor advances");
+done:
+    efs_raft_disk_close(d);rmtree(g_dir);
+}
+
 int main(void)
 {
     snprintf(g_dir, sizeof(g_dir), "/tmp/efs-raftstore-test-%d", (int)getpid());
     rmtree(g_dir);
 
+    test_index_reserve_failure();
+    test_bounded_history_cache();
     test_four_voter_permanent_loss();
     test_backlog_byte_accounting();
     test_recv_batch_crash(0);

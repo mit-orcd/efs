@@ -9,14 +9,12 @@ code=r'''
 #define _GNU_SOURCE
 #include <pthread.h>
 #include <stdint.h>
+#include "efs/kv_key.h"
 #include <assert.h>
 #include <stdio.h>
 #define FRAG_LOCKS 4096
-#define EFS_KV_SHARD_BITS 12
-#define EFS_KV_SHARD_MASK 4095
-#define EFS_ROOT_INO 1
-typedef uint64_t efs_ino_t;
-typedef uint32_t efs_export_id_t;
+
+
 struct efsd_server {int storage_engine;};
 static pthread_rwlock_t inode_gc_locks[FRAG_LOCKS];
 static pthread_once_t frag_locks_once=PTHREAD_ONCE_INIT;
@@ -43,7 +41,7 @@ int main(void){
 '''
 with tempfile.TemporaryDirectory(prefix='efs-inode-guard-') as d:
  p=Path(d)/'test.c';p.write_text(code)
- subprocess.run(['cc','-std=c99','-Wall','-Wextra','-Werror',*shlex.split(os.environ.get('EFS_TEST_CFLAGS','')),'-pthread',str(p),'-o',str(p.with_suffix(''))],check=True)
+ subprocess.run(['cc','-std=c99','-Wall','-Wextra','-Werror',*shlex.split(os.environ.get('EFS_TEST_CFLAGS','')),'-pthread','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True)
 # No active storage path may keep the old hash independently of its peer.
 assert s[s.index('#define DEATH_PAGE_BYTES'):].count('inode_gc_lock(')==5

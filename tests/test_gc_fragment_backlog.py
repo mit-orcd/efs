@@ -21,9 +21,13 @@ source=r'''
 #define GC_FRAG_YIELD_US 0
 struct efs_gc_ack_item {int unused;};
 struct efs_export {int unused;};
-struct fake_server {uint64_t gc_scan_errors,gc_pending[2],gc_sampled_mask,gc_missing_exports;};
+struct fake_server {int storage_engine,repair_experiment;uint64_t gc_scan_errors,gc_pending[2],gc_sampled_mask,gc_missing_exports;};
 struct efs_raft_host {void *kv;struct fake_server *s;int gc_running,running;};
 '''+ctx+r'''
+#define HOST_GC_RECORD_BATCH 32
+struct host_gc_record_batch {struct efs_raft_host *h;struct efs_export *ex;const struct gc_scan_ctx *scan;int first,count;struct efs_gc_ack_item acks[32][3];int nack[32];};
+static void host_gc_records_join(struct host_gc_record_batch *batch){(void)batch;assert(0);}
+
 static uint8_t g_gc_cur[2][GC_KEY_LEN];static uint32_t g_gc_cur_len[2];
 static uint64_t clock_us,record_cost;static unsigned attempts;static int64_t pending;static int full,records,scan_error,flush_error,acks_enabled,missing_export,scan_calls,flush_calls;
 static struct efs_export export;

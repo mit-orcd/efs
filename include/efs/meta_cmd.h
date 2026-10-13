@@ -27,6 +27,19 @@
 #define EFS_MD_REQ_PACK_STATUS 46 /* same manifest, fresh authority only */
 /* Exact single-shard APPEND image envelope; no replica-local EOF selection. */
 #define EFS_MD_APPEND_COMPLETE_ATOMIC_LEN 101u
+#define EFS_MD_REQ_EXPIRY_CLOCK 63 /* local clock health only */
+#define EFS_MD_REQ_EXPIRY_CLOCK_RESET 64 /* local operator uid4; no namespace mutation */
+#define EFS_MD_REQ_EXPIRY_POLICY_INFO 68 /* policy read; OK hint carries enabled/clear flags */
+#define EFS_MD_REQ_EXPIRY_ORIGIN 69 /* record root-generation/policy-revision/max; OK hint=clear */
+#define EFS_MD_REQ_EXPIRY_PARENT 70 /* inode read: parent/generation/mode */
+#define EFS_MD_REQ_EXPIRY_ID 67 /* inode8; authoritative generation/uid/mode/links */
+#define EFS_MD_REQ_EXPIRY_ENABLE 66 /* renewal prefix + parent/name; absent-record CAS */
+#define EFS_MD_REQ_EXPIRY_DELETE 65 /* guarded due FileID/name; receiver owns clock */
+#define EFS_MD_CMD_CREATE_REFUSAL 62 /* shard4 + existing op-id trailer; EEXIST receipt */
+#define EFS_MD_CMD_EXPIRY_POLICY 58 /* root/gen/uid/expected/TTL/max/flags:46 */
+#define EFS_MD_CMD_EXPIRY_RENEW 59 /* ino/gen/uid/expected/leader-now/deadline:45 */
+#define EFS_MD_REQ_EXPIRY_POLICY 60 /* root/gen:17; fresh revision/TTL/max */
+#define EFS_MD_REQ_EXPIRY_RECORD 61 /* ino/gen:17; fresh revision/deadline/root */
 #define EFS_MD_REQ_REPAIR_SEAL_AUTHORITY 57 /* ReadIndex-only exact eligible job; no seal receipt */
 #define EFS_MD_REQ_REPAIR_WRITE_AUTHORITY 56 /* ReadIndex-only canonical job; never a data receipt */
 #define EFS_MD_CMD_REPAIR_JOB 55 /* staged: op1, canonical job260, arg4; no RPC/worker admission */

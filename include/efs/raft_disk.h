@@ -23,8 +23,11 @@
  * thousands of groups cost one fsync stream instead of thousands. Records
  * carry their group id; a group's state is reconstructed by replay.
  *
- * RAM holds the live (un-snapshotted) log entries, which the snapshot point
- * bounds; the file is the durability boundary and the recovery source.
+ * The complete retained log remains on disk. Recent command copies use a
+ * bounded 2-MiB/group cache; misses validate/read their original log frame.
+ * Linux uses an unlinked derived index file and a recent resident window;
+ * non-Linux retains the heap index fallback. Neither cache is authority and
+ * neither changes the snapshot window or the durable ACK boundary.
  *
  * Threading: concurrent use across DIFFERENT groups is supported and is the
  * point of the shared log. One group's store must be driven by one caller at

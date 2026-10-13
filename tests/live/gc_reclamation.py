@@ -101,6 +101,10 @@ class PosixPhaseCollector:
 
 
 p = argparse.ArgumentParser(description=__doc__)
+p.add_argument('--expiry-backlog-files',type=int,default=0,help='1000..100000 files in each of three expiry backlog/restart/off-on phases')
+p.add_argument('--expiry-clock-fault',action='store_true',help='expiry clock-health pause/reset gate; requires a fault-enabled daemon')
+p.add_argument('--expiry-soak-seconds',type=int,default=0,help='0 or 60..7200 seconds of bounded two-mount expiry churn/restarts; requires --expiry')
+p.add_argument('--expiry',action='store_true',help='expiry lifecycle before normal reclamation/POSIX gates; explicit TCP/direct/files only')
 p.add_argument('--peer-mkdir-race-only',action='store_true',help='64 competing peer mkdir races in an isolated cluster, then cold namespace verification')
 p.add_argument('--peer-open-contention-only',action='store_true',help='twenty concurrent append/OPEN races, full peer POSIX, exact cold bytes and physical cleanup only')
 p.add_argument('--append-truncate-only',action='store_true',help='run eight peer append/truncate races, a concurrent append handoff check, cold-remount repeats and physical cleanup only')
@@ -260,10 +264,19 @@ for path in sorted(inputs):
     "real_roots":[str(x.resolve()) for x in roots],"port":a.port,
     "gates":{key:str(value) if isinstance(value,Path) else value for key,value in vars(a).items()},"source_tree_sha256":digest.hexdigest(),
     "test_script_sha256":hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+    "expiry_script_sha256":hashlib.sha256((source/"tests/live/expiry_lifecycle.py").read_bytes()).hexdigest() if a.expiry else None,
     "binary_sha256":{name:hashlib.sha256((a.server_binary if name=='efsd' and a.server_binary else a.client_binary if name=='efs-fuse' and a.client_binary else source/name).read_bytes()).hexdigest()
                       for name in ('efsd','efs-fuse','efs-mgmt')},
 },indent=2))
 env = dict(os.environ, EFS_MD_RAFT_N='4', EFS_TRANSPORT=a.transport)
+if a.expiry_backlog_files:
+    assert a.expiry and 1000 <= a.expiry_backlog_files <= 100000
+if a.expiry_soak_seconds:
+    assert a.expiry and 60 <= a.expiry_soak_seconds <= 7200
+if a.expiry:
+    assert a.mode=='direct' and a.transport=='tcp' and a.disable_efs_commands
+    env.update(EFS_EXPIRY='1',EFS_PACKED_WRITES='0')
+    if a.expiry_clock_fault:env['EFS_FAULT_EXPIRY_CLOCK_FILE']=str(work/'expiry-clock-uncertain')
 if a.replication_pressure:
     assert a.tiny_sustained_seconds>=120, 'pressure requires a sustained recovery window'
     assert not (a.storage_session_fence_fault or a.put_barrier_fault or a.kv_wal_persistence_only or a.compactor_pressure)
@@ -367,7 +380,9 @@ def wait(predicate, label, seconds=120):
         if predicate():
             print(label+' PASS',flush=True);return
         time.sleep(.25)
-    (work/'failed-status.json').write_text(json.dumps(status(),indent=2))
+    try:failure_status=status()
+    except Exception as error:failure_status={'diagnostic_error':str(error)}
+    (work/'failed-status.json').write_text(json.dumps(failure_status,indent=2))
     raise AssertionError(label+' timed out')
 
 def start(prefer_single_host=False):
@@ -383,6 +398,7 @@ def start(prefer_single_host=False):
         root.mkdir(exist_ok=True)
         log=open(work/f'n{i+1}.log','ab');handles.append(log)
         cmd=[a.server_binary or source/'efsd','--node-id',str(i+1),'--addr','127.0.0.1','--port',str(a.port+i),'--storage',root,'--quota',a.fixture_quota or ('16G' if (a.ior_binary or a.gc_bulk_gib) else ('4G' if a.compactor_pressure else '1G')),'--'+('direct-io' if a.mode=='direct' else 'no-direct-io')]
+        if a.expiry:cmd += ['--storage-engine','files']
         if a.fixture_quota == '0':
             quota_arg = cmd.index('--quota');del cmd[quota_arg:quota_arg+2]
         if a.storage_roots==2:
@@ -591,6 +607,77 @@ try:
     start()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
+    if a.expiry:
+        from expiry_lifecycle import exercise
+        runtime=[]
+        for proc in [*servers,client]:
+            base=Path('/proc')/str(proc.pid)
+            command=(base/'cmdline').read_bytes().split(b'\0')
+            values=dict(item.split(b'=',1) for item in (base/'environ').read_bytes().split(b'\0') if b'=' in item)
+            for key,value in ((b'EFS_COMMANDS',b'0'),(b'EFS_COMMANDS_SERVER',b'0'),(b'EFS_PACKED_WRITES',b'0'),(b'EFS_TRANSPORT',b'tcp')):
+                assert values.get(key)==value,(proc.pid,key,values.get(key))
+            if proc in servers:
+                assert b'--direct-io' in command and b'--storage-engine' in command and b'files' in command
+                assert values.get(b'EFS_EXPIRY')==b'1'
+            runtime.append({'pid':proc.pid,'command':[item.decode() for item in command if item],
+                'environment':{key.decode():values[key].decode() for key in values if key.startswith(b'EFS_')},
+                'mapped_exe_sha256':hashlib.sha256((base/'exe').read_bytes()).hexdigest()})
+        (work/'expiry-runtime.json').write_text(json.dumps(runtime,indent=2))
+        assert not (mount/'.efs').exists(),'synthetic commands must be disabled'
+        def expiry_restart(enabled=None):
+            unmount();stop(crash=True)
+            if enabled is not None:env['EFS_EXPIRY']='1' if enabled else '0'
+            start();mount_client()
+        def expiry_offline(group=None,storage_ino=None,node_id=None):
+            node=3 if node_id is None else node_id-1
+            assert 0<=node<4
+            if storage_ino is not None:
+                fragments=files(storage_ino)
+                holders=[i for i,root in enumerate(roots) if any(path.is_relative_to(root) for path in fragments)]
+                assert holders,('no fragment holder for offline gate',storage_ino)
+                node=holders[-1]
+                (work/'expiry-offline-holder.json').write_text(json.dumps({'ino':storage_ino,'node':node+1,
+                    'fragments':[str(path) for path in fragments if path.is_relative_to(roots[node])]},indent=2))
+            if group is not None:
+                elected=None;status=''
+                for candidate in range(4):
+                    observed=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port+candidate}'],capture_output=True,text=True).stdout
+                    match=re.search(r'group '+str(group)+r' hosted=1 role=LEADER leader=(\d+)',observed)
+                    if match:
+                        elected=int(match.group(1));status=observed;assert elected==candidate,observed;break
+                assert elected is not None,'no current group leader found'
+                node=elected
+                (work/'expiry-killed-leader.txt').write_text(status+'killed_raft_id='+str(node)+'\n')
+            proc=servers[node];proc.kill();proc.wait(timeout=10)
+            def rejoin():
+                log=open(work/f'n{node+1}.log','ab');handles.append(log)
+                servers[node]=subprocess.Popen(proc.args,env=env,stdout=log,stderr=log)
+                time.sleep(3)
+            return rejoin
+        def expiry_forward_group():
+            for candidate in (0,3):
+                observed=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port+candidate}'],capture_output=True,text=True).stdout
+                match=re.search(r'group (0|2) hosted=1 role=LEADER',observed)
+                if match:return int(match.group(1))
+            return 0
+        exercise(mount,a.port,work,wait,files,expiry_restart,expiry_offline,expiry_forward_group,a.expiry_clock_fault)
+        if a.expiry_backlog_files:
+            from expiry_backlog import exercise as backlog
+            backlog(mount,a.port,work,wait,files,expiry_restart,a.expiry_backlog_files)
+        if a.expiry_soak_seconds:
+            peer_log=open(work/'expiry-soak-peer.log','ab');handles.append(peer_log)
+            def soak_peer_start():
+                global peer
+                peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+                wait(lambda:os.path.ismount(peer_mount),'expiry soak peer mounted',40)
+            def soak_restart():
+                global peer
+                run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
+                expiry_restart();soak_peer_start()
+            soak_peer_start()
+            from expiry_soak import exercise as soak
+            soak(mount,peer_mount,a.port,work,wait,files,soak_restart,a.expiry_soak_seconds)
+            run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
     if a.ordinary_overwrite_only:
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
         peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)

@@ -16,7 +16,7 @@ terminal commands (mkdir, ln, dd, cp, mv, stat, ...) via subprocess.
 Usage:
     posix_suite.py <mount-dir> [--results <file>] [--keep] [--stop]
                    [--filter <substr>] [--timeout-s <sec>] [--jobs N]
-                   [--suite core|extras|all]
+                   [--suite core|extras|all|expiry]
 
 Exit code: 0 if every selected test passes, 1 otherwise.
 
@@ -27,6 +27,11 @@ when comparing results; increasing it does not satisfy the original latency gate
 
 Default core excludes optional mmap and .efs command checks. Use --suite extras
 (or posix_extras.py) to run those separately; --suite all includes both.
+
+Expiry uses a separate owned cluster and requires --root and --peer-mount.
+Use `posix_suite.py MOUNT --suite expiry --help` for its options. It runs the
+lifecycle/recovery/physical-GC gates plus core and peer regression suites.
+It is deliberately excluded from --suite all, which tests an existing mount.
 
 Two-client visibility (create on A, see on B without remount) lives in
 posix_2client.py — run via `tests/run_tests.sh posix2`.
@@ -5087,6 +5092,11 @@ def main(argv=None):
             return 2
         _worker_main(args[1], args[2], args[3])
         return 1
+    if "--suite=expiry" in args:
+        args[args.index("--suite=expiry"):args.index("--suite=expiry") + 1] = ["--suite", "expiry"]
+    if any(args[i:i + 2] == ["--suite", "expiry"] for i in range(len(args))):
+        from posix_expiry import main as expiry_main
+        return expiry_main(args)
     parsed = _parse_cli(args)
     if parsed is None:
         print(__doc__)

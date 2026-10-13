@@ -7,6 +7,8 @@ root = Path(__file__).resolve().parents[1]
 fixture = Path(os.environ.get('EFS_NAMESPACE_ENVELOPE_SOURCE', root/'tests/live/gc_reclamation.py'))
 host = (root/'src/server/raft_host.c').read_text()
 start = host.index('static int host_namespace_capacity(')
+expiry_start=host.index('static int host_expiry_collect(',start)
+host=host[:expiry_start]+host[host.index('\n}',expiry_start)+2:]
 end = host.index('\nstruct host_idx_ref', start)
 code = r'''
 #include <efs/txn.h>

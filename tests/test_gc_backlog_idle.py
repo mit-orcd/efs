@@ -5,7 +5,7 @@ import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/server/raft_host.c').read_text()
 a=s.index('static int host_gc_backlog_config(')
-b=s.index('static void *host_gc_thread(',a)
+b=s.index('static int host_expiry_clock_read(',a)
 code='''#include "efs/common.h"
 #include <assert.h>
 #include <errno.h>
@@ -33,18 +33,33 @@ int main(void) {
  assert(host_gc_packed_idle(1000,0,1)==1000);
  assert(host_gc_packed_idle(1000,1,1)==20);
  assert(host_gc_packed_idle(40,1,0)==40);
+ assert(host_gc_expiry_idle(1000,0)==1000);
+ assert(host_gc_expiry_idle(1000,1)==100);
+ assert(host_gc_expiry_idle(20,1)==20);
+ assert(host_gc_expiry_idle(100,1)==100);
+ assert(host_gc_expiry_idle(40,0)==40);
  puts("GC backlog idle: strict config, default/idle/blocked/reset backoff and bounded progress PASS");
 }
 '''
 # Integration must keep both groups and snapshot-responsive shutdown slices.
-thread=s[b:s.index('/* W92 query publication:',b)]
+thread=s[s.index('static void *host_gc_thread(',b):s.index('/* W92 query publication:',b)]
 assert 'host_gc_reap_pass(h, h->g[g].group' in thread
 assert 'backlog_capped |= __atomic_load_n' in thread
 assert 'backlog_capped |= host_gc_frag_pass(' in thread
 assert 'pack_capped = host_gc_pack_pass(' in thread
 assert 'host_gc_packed_idle(idle_ms, packed_capped, packed_deleted)' in thread
+assert 'expiry_progress |= host_gc_expiry_pass(' in thread
+assert 'idle_ms = host_gc_expiry_idle(idle_ms, expiry_progress)' in thread
+assert 'expiry_progress = host_gc_expiry_groups(h)' in thread
+assert 'efs_iostats_now_us() < idle_end' in thread
+yield_code=thread[thread.index('uint64_t idle_end ='):]
+assert 'now_us_()' not in yield_code
+assert 'maintenance_at = efs_iostats_now_us() + (uint64_t)GC_LOOP_MS * 1000' in thread
+assert 'if (maintenance) host_dir_spread_pass(h)' in thread
+assert 'i<2 && h->gc_running' in s
+assert 'expiry_at = efs_iostats_now_us() +\n                            20000' in thread
 assert 'removed_before' in thread and 'removed_after' in thread
-assert 'host_snap_export_pass(h)' in thread and 'usleep(20 * 1000)' in thread
+assert 'host_snap_export_pass(h)' in thread and 'if (sleep_us > 20000) sleep_us = 20000' in thread
 with tempfile.TemporaryDirectory(prefix='efs-gc-idle-') as temp:
  p=Path(temp)/'test.c';p.write_text(code)
  command=shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))]

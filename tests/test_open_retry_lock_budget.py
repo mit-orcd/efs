@@ -15,7 +15,7 @@ code=r'''
 #define EFS_ERR_BUSY -13
 #define EFS_ERR_IO -5
 typedef uint64_t efs_ino_t;
-struct efs_open_ref {efs_ino_t ino;int close_pending;uint64_t retry_order;struct efs_open_ref *next;};
+struct efs_open_ref {efs_ino_t ino;int close_pending;uint64_t retry_order,retry_turn;struct efs_open_ref *next;};
 static struct efs_open_ref row={.ino=42,.close_pending=1,.retry_order=3},*g_open_refs=&row;
 static pthread_mutex_t g_open_mu=PTHREAD_MUTEX_INITIALIZER, stripe=PTHREAD_MUTEX_INITIALIZER;
 static uint64_t now,deadline=10;static int releases;

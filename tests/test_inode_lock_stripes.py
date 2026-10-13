@@ -9,7 +9,7 @@ sections = []
 ops = Path(os.environ.get('EFS_DIR_LOCK_SOURCE', root / 'src/client/ops.c')).read_text()
 a = ops.index('static int dir_stripe(')
 sections.append('#define EFS_DIR_LOCKS 64\n' + ops[a:ops.index('\n}', a)+2])
-for start, end in [('#define OPEN_EDGE_SHARDS', '/* Inodes this client'),
+for start, end in [('#define OPEN_EDGE_SHARDS', '/* Returns 1 when this is the first open'),
                    ('#define EFS_WB_INO_STRIPES', '\nstatic struct {'),
                    ('#define APPEND_MU_N', '/* Close: flush')]:
     a = source.index(start)

@@ -20,6 +20,9 @@ static int gc_unlink(const char*p){if(fault==4){errno=EACCES;return -1;}return u
 #undef pread
 #undef unlink
 #undef fsync
+/* No Raft host exists in this physical-store fixture. */
+void server_raft_host_expiry_status(struct efs_expiry_status *out){memset(out,0,sizeof(*out));}
+
 int main(int argc,char **argv){
  assert(argc==1 || (argc==2 && !strcmp(argv[1],"unlimited")));
  char a[]="/tmp/efs-gc-a-XXXXXX",b[]="/tmp/efs-gc-b-XXXXXX";assert(mkdtemp(a)&&mkdtemp(b));
@@ -50,7 +53,7 @@ int main(int argc,char **argv){
   s.nodes[0].used=123456;server_init_local_usage(&s);
   assert(s.nodes[0].used==0); /* crash snapshot cannot resurrect quota charges */
   struct efs_msg_gc_status_reply status;server_gc_status(&s,&status);
-  assert(status.version==2&&status.removed_fragments==removed+2&&status.delete_errors>0);
+  assert(status.version==3&&status.removed_fragments==removed+2&&status.delete_errors>0);
   assert(status.last_delete_age_ms<10000);
   assert(status.io[0].ops && status.io[0].bytes && status.io[0].errors);
   assert(status.io[1].ops && !status.io[1].bytes && status.io[1].errors);

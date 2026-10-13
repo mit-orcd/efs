@@ -1,4 +1,4 @@
-# W90 · Matched storage simulator comparisons
+# W113 · Matched storage simulator comparisons
 
 Plan recorded before implementation, October 8, 2026, on `devel-bench`.
 
@@ -78,7 +78,7 @@ focused comparison and is excluded from the performance conclusion.
 `devel-storage-engine` starts from committed `devel` at `6a38d4a8` and merges
 `devel-bench` at `5071867c`, preserving simulator history and recorded evidence.
 The separate worktree leaves the other developer's checkout and uncommitted work
-untouched. Work-item conflict resolution retains both W92 and W90; generated
+untouched. Work-item conflict resolution retains both W92 and W113; generated
 architecture pages are rebuilt from the reconciled sources. Two inherited
 directory links now explicitly reference their existing evidence README files.
 
@@ -93,3 +93,6 @@ and six shared-range test methods; eight churn-runner and three range-runner
 methods; CLI ownership/scratch checks and all five documentation gates pass.
 This is integration validation, not production container-backend acceptance.
 Remote build/test logs: `/data1/efs/bench/storage-engine-integration-20261008`.
+
+Numbering correction (Oct 12): this benchmark is W113. Historical `w90-*`
+fixture and evidence paths retain their names; W90 denotes scratch expiry.

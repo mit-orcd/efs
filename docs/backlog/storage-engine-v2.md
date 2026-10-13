@@ -149,10 +149,10 @@ sectors. Keep filesystem free-space headroom; any SSD-GC benefit also depends
 on discard delivery or device provisioning. Preserve metadata checksums,
 ordering and required persistence barriers rather than trading them for numbers.
 
-## W90 xorinox follow-up (Oct 8, 2026)
+## W113 xorinox follow-up (Oct 8, 2026)
 
 The AMD USB observations above remain historical evidence. The independent
-[W90 workload](work-items.md#w90) now runs on xorinox under the private
+[W113 workload](work-items.md#w113) now runs on xorinox under the private
 `/data1/efs/bench/w90-20261008/` root. This host has XFS on `/dev/nvme1n1`,
 a 4 TB HP SSD FX900 Pro, 4 KiB blocks and 16 allocation groups, with
 `noatime,logbufs=8,logbsize=256k` already set. About 3.3 TiB was free before
@@ -169,7 +169,7 @@ measurement. No cluster services or global mount options were changed.
 | Internal noatime | Already enabled on this host; no additional change tested. |
 | Journal buffers / size | Already eight buffers and 256 KiB, the maximum documented size; no larger-size proposal here. |
 | Reflink | Defer until a real cloning workload exists; later writes to shared extents incur COW. |
-| Periodic TRIM | Separate device/host investigation; no global discard or trim action in W90. |
+| Periodic TRIM | Separate device/host investigation; no global discard or trim action in W113. |
 | External log / realtime device | Requires separate provisioning and recovery tests; outside this benchmark. |
 
 The [35-case xorinox evidence](../../results/measure/20261008-w90-xorinox/README.md)
@@ -465,5 +465,5 @@ than age alone. Explicit crash gates belong between body flush and mapping
 publication, publication and retirement, retirement and punch/reuse, and each
 relocation step. Stale reader/writer/delete generations, concurrent publication,
 restart during cleaning, checkpoint references and idempotent replay are
-separate required tests before production integration. The W90 in-memory index
+separate required tests before production integration. The W113 in-memory index
 cannot answer any of those recovery questions.

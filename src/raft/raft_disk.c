@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/mman.h>
 #include <unistd.h>
 
 #define REC_OVERHEAD 13u /* crc + paylen + type + group */
@@ -29,20 +30,95 @@ static struct raft_disk_group *group_of(void *ctx)
 
 /* --- RAM state (also the replay target) ------------------------------ */
 
+/* Only the recent index window needs PTEs. The backing file is private,
+ * unlinked and reconstructible from the checked authoritative log. MAP_SHARED
+ * retains old index contents when DONTNEED drops their resident mappings. */
+void raft_group_index_trim(struct raft_disk_group *g)
+{
+#if defined(__linux__)
+    if(!g->log)return;
+    size_t page=(size_t)sysconf(_SC_PAGESIZE),used=(size_t)g->n*sizeof(*g->log);
+    size_t cold=used>RAFT_INDEX_RESIDENT_BYTES ? (used-RAFT_INDEX_RESIDENT_BYTES)/page*page : 0;
+    if(cold>g->index_advised+(256u<<10)) {
+        madvise(g->log,cold,MADV_DONTNEED);g->index_advised=cold;
+    }
+#else
+    (void)g;
+#endif
+}
+
+static void index_reset_residency(struct raft_disk_group *g)
+{
+    g->index_advised=0;raft_group_index_trim(g);
+#if defined(__linux__)
+    if(g->log) {
+        size_t page=(size_t)sysconf(_SC_PAGESIZE);
+        size_t end=((size_t)g->n*sizeof(*g->log)+page-1)/page*page;
+        size_t capacity=(size_t)g->cap*sizeof(*g->log);
+        if(end<capacity)madvise((uint8_t *)g->log+end,capacity-end,MADV_DONTNEED);
+    }
+#endif
+}
+
+static void index_cold_read(struct raft_disk_group *g,uint32_t off)
+{
+#if defined(__linux__)
+    size_t page=(size_t)sysconf(_SC_PAGESIZE),at=(size_t)off*sizeof(*g->log);
+    size_t used=(size_t)g->n*sizeof(*g->log);
+    if(used>RAFT_INDEX_RESIDENT_BYTES && at+sizeof(*g->log)<used-RAFT_INDEX_RESIDENT_BYTES) {
+        size_t begin=at/page*page,end=(at+sizeof(*g->log)+page-1)/page*page;
+        madvise((uint8_t *)g->log+begin,end-begin,MADV_DONTNEED);
+    }
+#else
+    (void)g;(void)off;
+#endif
+}
+
 int raft_group_reserve(struct raft_disk_group *g)
 {
     uint32_t cap;
     struct raft_log_ent *p;
+    if(g->n<g->cap)return EFS_OK;
+    if(g->cap>UINT32_MAX/2)return EFS_ERR_NOMEM;
+    cap=g->cap?g->cap*2:16;
+    size_t bytes=(size_t)cap*sizeof(*p);
+    if(bytes/sizeof(*p)!=cap)return EFS_ERR_NOMEM;
+#if defined(__linux__)
+    if(g->index_fd<0) {
+        char path[RAFT_DISK_PATH_MAX+40];
+        snprintf(path,sizeof(path),"%s/.index-%u-XXXXXX",g->d->dir,g->group);
+        g->index_fd=mkstemp(path);
+        if(g->index_fd<0)return EFS_ERR_IO;
+        unlink(path);fcntl(g->index_fd,F_SETFD,FD_CLOEXEC);
+    }
+    /* Reserve actual blocks BEFORE logging an entry: a sparse mmap can SIGBUS
+     * at installation after the durable append if the filesystem is full. */
+    if(posix_fallocate(g->index_fd,0,(off_t)bytes))return EFS_ERR_IO;
+    p=mmap(NULL,bytes,PROT_READ|PROT_WRITE,MAP_SHARED,g->index_fd,0);
+    if(p==MAP_FAILED)return EFS_ERR_NOMEM;
+    if(g->log)munmap(g->log,(size_t)g->cap*sizeof(*p));
+    g->index_advised=0;
+#else
+    p=realloc(g->log,bytes);
+    if(!p)return EFS_ERR_NOMEM;
+#endif
+    g->log=p;g->cap=cap;return EFS_OK;
+}
 
-    if (g->n < g->cap)
-        return EFS_OK;
-    cap = g->cap ? g->cap * 2 : 16;
-    p = realloc(g->log, (size_t)cap * sizeof(*p));
-    if (!p)
-        return EFS_ERR_NOMEM;
-    g->log = p;
-    g->cap = cap;
-    return EFS_OK;
+static void cache_free(struct raft_disk_group *g,struct raft_log_ent *e)
+{
+    if(e->cmd){g->cache_bytes-=e->clen;free(e->cmd);e->cmd=NULL;}
+}
+
+static void cache_trim(struct raft_disk_group *g,uint64_t index)
+{
+    uint64_t first=g->log_base+1;
+    if(!g->cache_cursor || g->cache_cursor<first)g->cache_cursor=first;
+    if(index<g->cache_cursor)g->cache_cursor=index;
+    while(g->cache_bytes>RAFT_COMMAND_CACHE_BYTES && g->cache_cursor<first+g->n) {
+        cache_free(g,&g->log[g->cache_cursor-first]);g->cache_cursor++;
+    }
+    raft_group_index_trim(g);
 }
 
 void raft_group_install(struct raft_disk_group *g, uint64_t index,
@@ -56,7 +132,7 @@ void raft_group_install(struct raft_disk_group *g, uint64_t index,
         g->bytes_all -= g->log[off].clen;
         if (index <= g->snap_idx)
             g->bytes_old -= g->log[off].clen;
-        free(g->log[off].cmd);
+        cache_free(g,&g->log[off]);
     } else {
         off = g->n;
         g->n++;
@@ -67,12 +143,14 @@ void raft_group_install(struct raft_disk_group *g, uint64_t index,
     g->log[off].term = term;
     g->log[off].end_off = 0;
     g->log[off].clen = clen;
-    g->log[off].cmd = cmd;
+    g->log[off].cmd = cmd;g->log[off].payload_off=0;
+    if(cmd)g->cache_bytes+=clen;
     g->log[off].prefix_bytes = (off ? g->log[off-1].prefix_bytes : origin) + clen;
     for (uint32_t j=off+1; j<g->n; j++) {
         if (clen >= old) g->log[j].prefix_bytes += clen-old;
         else g->log[j].prefix_bytes -= old-clen;
     }
+    cache_trim(g,index);
 }
 
 /* True when index is the next slot or an existing one; a gap is invalid. */
@@ -121,9 +199,10 @@ int raft_group_truncate(struct raft_disk_group *g, uint64_t index)
         g->bytes_all -= g->log[i].clen;
         if (g->log_base + 1 + i <= g->snap_idx)
             g->bytes_old -= g->log[i].clen;
-        free(g->log[i].cmd);
+        cache_free(g,&g->log[i]);
     }
     g->n = off;
+    index_reset_residency(g);
     return EFS_OK;
 }
 
@@ -147,8 +226,7 @@ int raft_group_snap(struct raft_disk_group *g, uint64_t last_index,
         while (drop < n_in && bytes > EFS_RAFT_SNAP_BYTES) {
             bytes -= g->log[drop].clen;
             g->bytes_all -= g->log[drop].clen;
-            free(g->log[drop].cmd);
-            g->log[drop].cmd = NULL;
+            cache_free(g,&g->log[drop]);
             drop++;
         }
         if (drop) {
@@ -165,7 +243,7 @@ int raft_group_snap(struct raft_disk_group *g, uint64_t last_index,
          * next append, so the log is emptied, as before the window. */
         if (g->n == 0 || g->log_base + g->n < last_index) {
             for (i = 0; i < g->n; i++)
-                free(g->log[i].cmd);
+                cache_free(g,&g->log[i]);
             g->n = 0;
             g->bytes_all = 0;
             g->bytes_old = 0;
@@ -188,6 +266,7 @@ int raft_group_snap(struct raft_disk_group *g, uint64_t last_index,
     }
     g->snap_idx = last_index;
     g->snap_term = last_term;
+    index_reset_residency(g);
     return EFS_OK;
 }
 
@@ -218,7 +297,7 @@ static int disk_save_hard(void *ctx, uint64_t current_term, int32_t voted_for)
         return EFS_ERR_INVAL;
     pthread_mutex_lock(&g->d->mu);
     rc = raft_log_append(g->d, RAFT_REC_HARD, g, current_term,
-                         (uint32_t)voted_for, NULL, 0, NULL);
+                         (uint32_t)voted_for, NULL, 0, NULL, NULL);
     if (rc == EFS_OK) {
         g->term = current_term;
         g->voted_for = voted_for;
@@ -246,7 +325,7 @@ static int disk_append(void *ctx, uint64_t index, uint64_t term,
 {
     struct raft_disk_group *g = group_of(ctx);
     uint8_t *copy = NULL;
-    uint32_t record_crc;
+    uint32_t record_crc;uint64_t record_end;
     int rc;
 
     if (!g)
@@ -267,7 +346,7 @@ static int disk_append(void *ctx, uint64_t index, uint64_t term,
     rc = raft_group_reserve(g);
     if (rc != EFS_OK)
         goto out;
-    rc = raft_log_append(g->d, RAFT_REC_ENTRY, g, index, term, cmd, clen, &record_crc);
+    rc = raft_log_append(g->d, RAFT_REC_ENTRY, g, index, term, cmd, clen, &record_crc, &record_end);
     if (rc != EFS_OK)
         goto out;
     raft_group_install(g, index, term, copy, clen);
@@ -275,9 +354,10 @@ static int disk_append(void *ctx, uint64_t index, uint64_t term,
         uint32_t off = (uint32_t)(index - (g->log_base + 1));
 
         if (off < g->n)
-            g->log[off].end_off = g->d->bytes;
+            g->log[off].end_off = record_end;
         if (off < g->n)
             g->log[off].record_crc = record_crc;
+        if(off<g->n && clen)g->log[off].payload_off=record_end-clen;
     }
     copy = NULL;
     raft_log_maybe_rotate_locked(g->d);
@@ -304,7 +384,7 @@ static int disk_truncate_from(void *ctx, uint64_t index)
         pthread_mutex_unlock(&g->d->mu);
         return EFS_OK;
     }
-    rc = raft_log_append(g->d, RAFT_REC_TRUNC, g, index, 0, NULL, 0, NULL);
+    rc = raft_log_append(g->d, RAFT_REC_TRUNC, g, index, 0, NULL, 0, NULL, NULL);
     if (rc == EFS_OK) {
         rc = raft_group_truncate(g, index);
         raft_log_maybe_rotate_locked(g->d);
@@ -319,7 +399,7 @@ static int disk_get(void *ctx, uint64_t index, uint64_t *term, uint8_t *cmd,
     struct raft_disk_group *g = group_of(ctx);
     uint64_t first;
     uint32_t off, need;
-    int rc = EFS_OK;
+    int rc = EFS_OK,found=0;
 
     if (!g || !term || !clen || index == 0)
         return EFS_ERR_INVAL;
@@ -340,7 +420,7 @@ static int disk_get(void *ctx, uint64_t index, uint64_t *term, uint8_t *cmd,
     rc = EFS_ERR_NOT_FOUND;
     goto out;
 hit:
-    need = g->log[off].clen;
+    found=1;need = g->log[off].clen;
     *term = g->log[off].term;
     if (*clen < need) {
         *clen = need; /* short buffer: report the size the caller needs */
@@ -352,10 +432,12 @@ hit:
             rc = EFS_ERR_INVAL;
             goto out;
         }
-        memcpy(cmd, g->log[off].cmd, need);
+        if(g->log[off].cmd)memcpy(cmd,g->log[off].cmd,need);
+        else {rc=raft_log_read_command(g,off,g->d->fd,cmd);if(rc)goto out;}
     }
     *clen = need;
 out:
+    if(found)index_cold_read(g,off);
     pthread_mutex_unlock(&g->d->mu);
     return rc;
 }
@@ -399,7 +481,7 @@ static int disk_save_snap(void *ctx, uint64_t last_index, uint64_t last_term)
         return EFS_ERR_INVAL;
     }
     rc = raft_log_append(g->d, RAFT_REC_SNAP, g, last_index, last_term, NULL,
-                         0, NULL);
+                         0, NULL, NULL);
     if (rc == EFS_OK) {
         rc = raft_group_snap(g, last_index, last_term, RAFT_SNAP_NO_HINT);
         /* A snapshot can drop almost the whole file. The usual check
@@ -433,7 +515,7 @@ static int disk_save_cfg(void *ctx, uint32_t cfg_old, uint32_t cfg_new)
     if (!g)
         return EFS_ERR_INVAL;
     pthread_mutex_lock(&g->d->mu);
-    rc = raft_log_append(g->d, RAFT_REC_CFG, g, cfg_old, cfg_new, NULL, 0, NULL);
+    rc = raft_log_append(g->d, RAFT_REC_CFG, g, cfg_old, cfg_new, NULL, 0, NULL, NULL);
     if (rc == EFS_OK) {
         g->cfg_old = cfg_old;
         g->cfg_new = cfg_new;
@@ -581,7 +663,7 @@ struct raft_disk_group *raft_group_get(struct efs_raft_disk *d, uint32_t group)
     g->ops = disk_ops;
     g->d = d;
     g->group = group;
-    g->voted_for = -1;
+    g->voted_for = -1;g->index_fd=-1;
     d->g[group] = g;
     return g;
 }
@@ -681,7 +763,12 @@ void efs_raft_disk_close(struct efs_raft_disk *d)
             continue;
         for (k = 0; k < g->n; k++)
             free(g->log[k].cmd);
+#if defined(__linux__)
+        if(g->log)munmap(g->log,(size_t)g->cap*sizeof(*g->log));
+        if(g->index_fd>=0)close(g->index_fd);
+#else
         free(g->log);
+#endif
         free(g);
     }
     if (d->fd >= 0)
@@ -741,7 +828,7 @@ uint64_t efs_raft_disk_covered_index(struct efs_raft_disk *d, uint32_t group,
 
             i--;
             if (off == 0 || off <= synced) {
-                best = g->snap_idx + 1 + i;
+                best = g->log_base + 1 + i;
                 break;
             }
         }

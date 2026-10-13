@@ -529,7 +529,7 @@ measure the fraction of wall time waiting.
 
 ## Independent mixed storage churn
 
-The [W90 storage churn guide](storage-churn.md) documents 1 GiB container versus
+The [W113 storage churn guide](storage-churn.md) documents 1 GiB container versus
 small-file comparisons, matched persistence, bounded 50/80/95-percent model
 occupancy, verification and result interpretation. This is an independent
 benchmark with a volatile index, not production GC or a recovery acceptance gate.

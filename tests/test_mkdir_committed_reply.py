@@ -10,7 +10,12 @@ compat = '' if 'struct efs_inode *created)' in function('efs_fuse_mkdir_at') els
 static int efs_client_create_result(efs_ino_t p,const char *n,uint32_t mode,uid_t uid,gid_t gid,uint32_t flags,efs_ino_t *ino) {struct efs_inode row;return efs_client_create_result_inode(p,n,mode,uid,gid,flags,ino,&row);}
 static int lookup_fill_committed(fuse_ino_t ino,struct fuse_entry_param *e,const char *op,fuse_ino_t p,const char *n) {(void)op;(void)p;(void)n;stats++;struct efs_inode row={.ino=42,.parent=7,.mode=S_IFDIR|02750,.uid=17,.gid=91,.nlink=2,.mtime=123};fill_entry_row(ino,e,&row);return 0;}
 '''
-code=r''' 
+code=r'''
+struct deep_callback_sample {int unused;};
+static struct deep_callback_sample deep_callback_begin(void *op,const char *ino){(void)op;(void)ino;return (struct deep_callback_sample){0};}
+static void deep_callback_reply_begin(struct deep_callback_sample *sample){(void)sample;}
+static void deep_callback_end(struct deep_callback_sample sample,const char *op,unsigned long long ino,int rc){(void)sample;(void)op;(void)ino;(void)rc;}
+
 #include <assert.h>
 #include <errno.h>
 #include <stdint.h>

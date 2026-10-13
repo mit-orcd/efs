@@ -1695,10 +1695,15 @@ static void test_deferred_held_flush(void)
     CHECK(!efs_kv_lsm_defer_held_flush(kv,1),"startup opt in");
     CHECK(!efs_kv_lsm_sync_hold(kv) && !efs_kv_lsm_sync_hold(kv),"nested deferred holds");
     CHECK(efs_kv_lsm_defer_held_flush(kv,0)==EFS_ERR_BUSY,"cannot change active policy");
+    uint64_t detached=99;
+    CHECK(efs_kv_lsm_sync_detach(kv,&detached)==EFS_ERR_BUSY && detached==0,
+          "deferred flush hold cannot be detached without flush accounting");
     for(int i=0;i<32;i++){char k[16];snprintf(k,sizeof(k),"held%d",i);CHECK(!put_s(kv,k,value),"deferred visible ordered put");}
     CHECK(!get_is(kv,"held0",value),"held effects remain readable");
     CHECK(!efs_kv_lsm_stats(kv,&shape) && shape.mt_bytes>=256 && !shape.n_l0 && !shape.n_l1,"no inline automatic flush during hold");
     CHECK(!efs_kv_lsm_sync_release(kv),"inner release");
+    CHECK(efs_kv_lsm_sync_detach(kv,&detached)==EFS_ERR_BUSY && detached==0,
+          "single deferred flush hold also refuses detachment");
     CHECK(!efs_kv_lsm_stats(kv,&shape) && shape.mt_bytes>=256 && !shape.n_l0 && !shape.n_l1,"nested release cannot flush before outer WAL barrier");
     CHECK(!efs_kv_lsm_sync_release(kv),"outer barrier and same automatic flush");
     CHECK(!efs_kv_lsm_stats(kv,&shape) && !shape.mt_bytes && shape.n_l0+shape.n_l1>0,"outer release completed deferred flush");

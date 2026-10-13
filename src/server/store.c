@@ -456,7 +456,7 @@ int server_unlink_fragment_files(struct efsd_server *s, struct efs_export *ex,
 void server_gc_status(struct efsd_server *s, struct efs_msg_gc_status_reply *out)
 {
     memset(out, 0, sizeof(*out));
-    out->version = 2;
+    out->version = 3;
     out->node_id = s->id;
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -504,6 +504,7 @@ void server_gc_status(struct efsd_server *s, struct efs_msg_gc_status_reply *out
     pthread_mutex_unlock(&s->lock);
 #undef GC_AGE
 #undef GC_LOAD
+    server_raft_host_expiry_status(&out->expiry);
 }
 
 /* Measure completed GC syscalls, including failed attempts. This deliberately

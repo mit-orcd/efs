@@ -55,7 +55,7 @@ static inline void efs_cli_help(FILE *out,const char *program,const char *topic)
         notes="The legacy QUERY_STATS endpoint is retired on current servers.\nUse a mounted directory's .efs/stats command for server-owned snapshots.";
     } else if (!strcmp(name,"efs-mgmt")) {
         summary="Inspect and manage an EFS cluster";syntax="COMMAND [arguments]";
-        commands="status               Cluster status\nio-stats             I/O counters\ngc-status            Garbage-collection status\nversion              Node version\nadd-node             Add a node\nadd-storage          Add storage roots\nshrink-quota         Reduce a node quota\nmkfs, raft-mkfs      Format metadata\ncommands-policy      Get/set versioned command policy\nraft-status          Raft group status\nraft-change          Change group voters\nraft-dir             Directory layout migration\nraft-session         Session lifecycle\nraft-getattr         Read inode attributes\nraft-lookup          Look up a name\nraft-lookup-path     Resolve a path\nraft-create          Create a file\nraft-unlink          Remove a file name\nraft-rmdir           Remove an empty directory\nraft-link            Create a hard link\nraft-setattr         Change attributes\nraft-rename          Rename a name\nraft-readdir         List directory entries\nraft-publish         Publish a chunk\nraft-getchunks       Read chunk mappings\nraft-append          Allocate an append range\nraft-hold            Open/close a lease\nraft-flock           Whole-file locking\nraft-fcntl           Byte-range locking";
+        commands="status               Cluster status\nio-stats             I/O counters\ngc-status            Garbage-collection status\nversion              Node version\nadd-node             Add a node\nadd-storage          Add storage roots\nshrink-quota         Reduce a node quota\nmkfs, raft-mkfs      Format metadata\ncommands-policy      Get/set versioned command policy\nexpiry-policy        Get/set scratch expiry policy\nexpiry               Show path expiry or inspect/renew a deadline\nexpiry-status        Worker health, backlog and removal counters\nexpiry-clock         Inspect/reset node clock health\nexpiry-enable        Enable an existing file deadline\nexpiry-id            Inspect authoritative FileID\nraft-status          Raft group status\nraft-change          Change group voters\nraft-dir             Directory layout migration\nraft-session         Session lifecycle\nraft-getattr         Read inode attributes\nraft-lookup          Look up a name\nraft-lookup-path     Resolve a path\nraft-create          Create a file\nraft-unlink          Remove a file name\nraft-rmdir           Remove an empty directory\nraft-link            Create a hard link\nraft-setattr         Change attributes\nraft-rename          Rename a name\nraft-readdir         List directory entries\nraft-publish         Publish a chunk\nraft-getchunks       Read chunk mappings\nraft-append          Allocate an append range\nraft-hold            Open/close a lease\nraft-flock           Whole-file locking\nraft-fcntl           Byte-range locking";
         examples="efs-mgmt status 127.0.0.1:17432\nefs-mgmt gc-status 127.0.0.1:17432";
         notes="Run efs-mgmt COMMAND --help for its argument syntax.";
     } else if (!strcmp(name,"blake3-bench") || (topic && !strcmp(topic,"blake3"))) {
@@ -105,6 +105,12 @@ static inline int efs_mgmt_help(FILE *out,const char *command)
         {"status","NODE:PORT"},{"io-stats","NODE:PORT"},{"gc-status","NODE:PORT"},
         {"version","NODE:PORT"},{"add-node","NEW_NODE:PORT EXISTING_NODE:PORT"},
         {"shrink-quota","NODE:PORT AMOUNT[K|M|G|T]"},{"add-storage","NODE:PORT PATH[,PATH...]"},
+        {"expiry-policy","NODE:PORT get ROOT GENERATION | set ROOT GENERATION EXPECTED_REV --expire-after DURATION [--renewal-limit DURATION] --flags FLAGS"},
+        {"expiry-id","NODE:PORT INO"},
+        {"expiry-enable","NODE:PORT INO GENERATION PARENT NAME DEADLINE_NS"},
+        {"expiry-clock","NODE:PORT get|reset"},
+        {"expiry-status","NODE:PORT"},
+        {"expiry","NODE:PORT show PATH [--mount MOUNT] | get INO GENERATION | renew INO GENERATION EXPECTED_REV DEADLINE_NS"},
         {"commands-policy","NODE:PORT get | set MASK EXPECTED_VERSION"},{"mkfs","NODE:PORT [legacy-label]"},{"raft-mkfs","NODE:PORT [legacy-label]"},
         {"raft-status","NODE:PORT"},{"raft-change","NODE:PORT GROUP VOTERS"},
         {"raft-dir","NODE:PORT INO begin|migrate|finish"},
@@ -127,8 +133,22 @@ static inline int efs_mgmt_help(FILE *out,const char *command)
     for (size_t i=0;i<sizeof(specs)/sizeof(specs[0]);i++) if (!strcmp(command,specs[i].name)) {
         fprintf(out,"efs-mgmt %s - Administrative command\n\nUsage:\n  efs-mgmt %s %s\n",
                 command,command,specs[i].args);
-        efs_help_section(out,"Options","-h, --help           Show this help");
-        efs_help_section(out,"Notes",(!strcmp(command,"mkfs") || !strcmp(command,"raft-mkfs")) ?
+        efs_help_section(out,"Options",!strcmp(command,"expiry-policy") ?
+            "--expire-after DURATION   Initial new-file lifetime from creation\n"
+            "--renewal-limit DURATION  Maximum deadline distance from renewal time\n"
+            "--flags FLAGS             Bit 0: enabled; bit 1: owner clearing\n"
+            "-h, --help                Show this help" : "-h, --help           Show this help");
+        efs_help_section(out,"Notes",!strcmp(command,"expiry-policy") ?
+            "Durations: positive integer with ns, s, m, h or d (example: 24h).\n"
+            "Renewal limit defaults to expire-after and must be at least that duration.\n"
+            "Reading/writing does not renew. Repeated renewal can extend total lifetime.\n"
+            "--expire-after affects future files; existing deadlines remain unchanged.\n"
+            "Renewal checks the current limits at the file's saved policy source.\n"
+            "The renewal limit is not a maximum lifetime rule.\n"
+            "Set requires operator UID 0 and server EFS_EXPIRY=1.\n"
+            "Legacy set ROOT GENERATION EXPECTED_REV TTL_NS MAX_NS FLAGS is supported.\n"
+            "Node addresses use HOST:PORT." :
+            (!strcmp(command,"mkfs") || !strcmp(command,"raft-mkfs")) ?
             "Single export; the legacy label is accepted and ignored.\nNode addresses use HOST:PORT." :
             "Node addresses use HOST:PORT.");return 0;
     }

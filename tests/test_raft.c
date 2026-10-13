@@ -716,7 +716,7 @@ static void test_readindex_control(void)
     CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"zero-prefix old round begins");
     reply.last_log_index=efs_raft_read_round(n.r[leader]);
     CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"newer zero-prefix round supersedes old");
-    CHECK(!efs_raft_read_control(n.r[leader],&reply) && !efs_raft_read_ready(n.r[leader]),
+    CHECK(efs_raft_read_control(n.r[leader],&reply)==1 && !efs_raft_read_ready(n.r[leader]),
           "obsolete zero-prefix vote cannot contribute current quorum");
     CHECK(efs_raft_recv(n.r[leader],&reply)==EFS_OK && !efs_raft_read_ready(n.r[leader]),
           "obsolete normal receive cannot grant current authority");
@@ -731,7 +731,7 @@ static void test_readindex_control(void)
           "latest-only zero-prefix request echoes its own independent context");
     CHECK(app[follower].n==follower_applied,"request supersession never applies follower entries");
     reply.last_log_index=n.cap_read_context;
-    CHECK(efs_raft_read_control(n.r[leader],&reply)==2 && efs_raft_read_ready(n.r[leader]),
+    CHECK(efs_raft_read_control(n.r[leader],&reply)==1 && efs_raft_read_ready(n.r[leader]),
           "newer zero-prefix vote proves exactly current round");
     CHECK(efs_raft_recv(n.r[leader],&reply)==EFS_OK && efs_raft_read_ready(n.r[leader]),
           "latest vote retains normal ordered bookkeeping");
@@ -746,7 +746,10 @@ static void test_readindex_control(void)
     CHECK(efs_raft_read_control(n.r[leader],&reply)==1,
           "known prefix probe consumes no unrelated suffix bookkeeping");
     CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"another suffix round");
-    CHECK(!efs_raft_read_control(n.r[leader],&reply),"old suffix probe stays on pump");
+    CHECK(efs_raft_read_control(n.r[leader],&reply)==1 && !efs_raft_read_ready(n.r[leader]),"old known prefix may retire without fresh authority");
+    reply.match_index=index;reply.last_log_index=efs_raft_read_round(n.r[leader]);
+    CHECK(efs_raft_read_control(n.r[leader],&reply)==2,"new suffix progress retains normal receive");
+    reply.last_log_index--;
     /* A prefix-zero vote has no append/progress bookkeeping to re-drive.
      * In ordered receive, even an obsolete vote must not produce another
      * commit probe for an outstanding data window. */

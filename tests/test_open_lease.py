@@ -8,7 +8,7 @@ def function(name):
     match = re.search(r'^static [^\n;]*\b' + name + r'\([^;]+?\)\n\{', text, re.M)
     if not match: raise RuntimeError(name)
     return text[match.start():text.index('\n}', match.end()) + 2]
-refs = text[text.index('static pthread_mutex_t g_open_mu'):text.index('/* Inodes this client has actually locked.')]
+refs = text[text.index('static pthread_mutex_t g_open_mu'):text.index('/* Returns 1 when this is the first open')]
 source = r"""
 #include "client_internal.h"
 #include "efs/session.h"
@@ -24,7 +24,7 @@ void efs_client_rpc_set_deadline_ms(uint64_t d){mock_deadline=d;}
 static uint64_t stats_now_ms(void){struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return (uint64_t)t.tv_sec*1000+t.tv_nsec/1000000;}
 int efs_client_rpc_past_deadline(void){return mock_deadline && stats_now_ms()>=mock_deadline;}
 struct efs_client g_client;
-struct fuse_file_info { uint64_t fh, lock_owner; };
+struct fuse_file_info { uint64_t fh, lock_owner;unsigned flock_release; };
 typedef uint64_t fuse_ino_t;
 static pthread_mutex_t gate = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cv = PTHREAD_COND_INITIALIZER;
@@ -57,7 +57,8 @@ static void efs_file_close(struct fuse_file_info *fi) { fi->fh = 0; }
 static int virt_kind(fuse_ino_t ino) { return (ino & (7ULL << 60)) != 0; }
 int efs_client_note_meta_change(int force) { (void)force; return EFS_OK; }
 void efs_client_stage_evict_ino(efs_ino_t ino) { (void)ino; }
-static int flock_armed_take(efs_ino_t ino, uint64_t *owner) { (void)ino; (void)owner; return 0; }
+static void efs_fuse_log_err(const char *where,int rc,efs_ino_t ino,uint64_t offset,size_t size,const char *path){(void)where;(void)rc;(void)ino;(void)offset;(void)size;(void)path;}
+static int efs_rc_to_errno(int rc){return rc?-EIO:0;}
 int efs_client_rpc_flock(efs_export_id_t ex, efs_ino_t ino, uint32_t op, uint64_t owner) {
     (void)ex; (void)ino; (void)op; (void)owner; return EFS_OK;
 }

@@ -11,6 +11,7 @@
 #include "efs/opid.h"
 #include "efs/placement.h"
 #include "efs/session.h"
+#include "efs/txn.h"
 #include "efs/version.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -698,7 +699,9 @@ static int cmd_version(int argc, char **argv)
     return 0;
 }
 
-static int cmd_gc_status(int argc, char **argv)
+static void expiry_duration(uint64_t ns,char *out,size_t n);
+
+static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
 {
     char host[64];
     uint16_t port;
@@ -706,7 +709,7 @@ static int cmd_gc_status(int argc, char **argv)
     void *payload = NULL;
     uint32_t len = 0;
     if (argc != 1 || parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
-        fprintf(stderr, "Usage:\n  efs-mgmt gc-status <node:port>\n");
+        fprintf(stderr, "Usage:\n  efs-mgmt %s <node:port>\n",expiry_only?"expiry-status":"gc-status");
         return 1;
     }
     int fd = efs_connect_tcp(host, port);
@@ -717,6 +720,7 @@ static int cmd_gc_status(int argc, char **argv)
     close(fd);
     if (rc || type != EFS_MSG_GC_STATUS_REPLY ||
         (len != sizeof(struct efs_msg_gc_status_reply) &&
+         len != offsetof(struct efs_msg_gc_status_reply, expiry) &&
          len != offsetof(struct efs_msg_gc_status_reply, io))) {
         fprintf(stderr, "GC status unavailable (server upgrade may be required)\n");
         free(payload);
@@ -724,9 +728,34 @@ static int cmd_gc_status(int argc, char **argv)
     }
     struct efs_msg_gc_status_reply *g = payload;
     if (!((g->version == 1 && len == offsetof(struct efs_msg_gc_status_reply, io)) ||
-          (g->version == 2 && len == sizeof(*g)))) {
+          (g->version == 2 && len == offsetof(struct efs_msg_gc_status_reply, expiry)) ||
+          (g->version == 3 && len == sizeof(*g)))) {
         free(payload);
         return 1;
+    }
+    if(expiry_only) {
+        if(g->version<3 || !g->expiry.available) {
+            fprintf(stderr,"Expiry worker status unavailable; upgrade the server.\n");free(payload);return 1;
+        }
+        const struct efs_expiry_status *e=&g->expiry;char bytes[64],age[80];
+        const char *state=!e->enabled?"disabled":e->uncertain?"paused: clock uncertain":!e->healthy?"waiting: clock health sample":
+                          !e->leader_mask?"standby: no local leader group":"running";
+        format_bytes(e->namespace_bytes,bytes,sizeof(bytes));
+        printf("Expiry worker: %s\nClock: %s%s\nConfirmed namespace removals: %llu files; %s observed logical bytes\n"
+               "Counters: since process start; size_unknown=%llu refused/retry=%llu errors=%llu passes=%llu\n",state,
+               e->healthy?"healthy":"not healthy",e->uncertain?" (operator reset required)":"",
+               (unsigned long long)e->removed_files,bytes,(unsigned long long)e->size_unknown_files,(unsigned long long)e->refused,
+               (unsigned long long)e->errors,(unsigned long long)e->passes);
+        if(e->last_delete_age_ms==UINT64_MAX)printf("Last successful removal: none in this process\n");
+        else {expiry_duration(e->last_delete_age_ms*1000000ull,age,sizeof(age));printf("Last successful removal: %s ago\n",age);}
+        for(unsigned i=0;i<2;i++) {
+            if(!(e->sampled_mask&(1u<<i))) {printf("Group %u backlog: not sampled on a current local leader\n",i*2);continue;}
+            expiry_duration(e->sample_age_ms[i]*1000000ull,age,sizeof(age));
+            printf("Group %u overdue: %s%llu at sample, as of %s ago (bounded, non-atomic sample)\n",i*2,
+                   e->due_capped[i]?"at least ":"",(unsigned long long)e->due_lower_bound[i],age);
+        }
+        printf("Physical reclamation: separate GC totals; no expiry-only physical byte attribution\n");
+        free(payload);return 0;
     }
     printf("node=%u stage=%u group=%u exports=%u passes=%llu elapsed_ms=%llu "
            "last_pass_age_ms=%llu last_delete_age_ms=%llu\n",
@@ -753,6 +782,22 @@ static int cmd_gc_status(int argc, char **argv)
                (unsigned long long)g->reap_seen[i], (unsigned long long)g->orphan_seen[i], g->reap_capped[i],
                (unsigned long long)g->first_reap[i],
                (unsigned long long)g->first_seen_age_ms[i]);
+    if(g->version>=3) {
+        const struct efs_expiry_status *e=&g->expiry;
+        const char *state=!e->available?"unavailable":!e->enabled?"disabled":
+                          e->uncertain?"paused_clock":!e->healthy?"warming_clock":!e->leader_mask?"standby":"running";
+        printf("expiry_state=%s expiry_available=%u expiry_enabled=%u expiry_clock_healthy=%u expiry_clock_uncertain=%u "
+               "expiry_leader_mask=%u expired_files=%llu expired_namespace_bytes=%llu "
+               "expired_size_unknown_files=%llu expiry_refused=%llu expiry_errors=%llu expiry_passes=%llu "
+               "expiry_last_pass_age_ms=%llu expiry_last_delete_age_ms=%llu scope=since_process_start\n",state,
+               e->available,e->enabled,e->healthy,e->uncertain,e->leader_mask,
+               (unsigned long long)e->removed_files,(unsigned long long)e->namespace_bytes,
+               (unsigned long long)e->size_unknown_files,(unsigned long long)e->refused,(unsigned long long)e->errors,(unsigned long long)e->passes,
+               (unsigned long long)e->last_pass_age_ms,(unsigned long long)e->last_delete_age_ms);
+        for(unsigned i=0;i<2;i++)printf("expiry_group=%u expiry_sampled=%u overdue_lower_bound=%llu "
+               "overdue_capped=%u expiry_sample_age_ms=%llu\n",i*2,(e->sampled_mask>>i)&1,
+               (unsigned long long)e->due_lower_bound[i],e->due_capped[i],(unsigned long long)e->sample_age_ms[i]);
+    }
     if (g->version >= 2) {
         const char *names[] = {"checksum_read", "unlink", "dir_sync"};
         for (unsigned i = 0; i < EFS_GC_IO_CLASSES; i++) {
@@ -766,6 +811,9 @@ static int cmd_gc_status(int argc, char **argv)
     free(payload);
     return 0;
 }
+
+static int cmd_gc_status(int argc,char **argv) {return cmd_gc_status_mode(argc,argv,0);}
+static int cmd_expiry_status(int argc,char **argv) {return cmd_gc_status_mode(argc,argv,1);}
 
 static int cmd_raft_status(int argc, char **argv)
 {
@@ -1209,6 +1257,261 @@ static int cmd_commands_policy(int argc,char **argv)
     printf("commands-policy rc=%d version=%llu mask=%llu leader_hint=%d\n",rc,
            (unsigned long long)reply.index,(unsigned long long)reply.salt,reply.leader_hint);
     return rc?1:0;
+}
+
+static int cmd_expiry_clock(int argc,char **argv)
+{
+    int reset=argc==2 && !strcmp(argv[1],"reset");
+    if(argc!=2 || (!reset && strcmp(argv[1],"get"))) {
+        fprintf(stderr,"Usage:\n  efs-mgmt expiry-clock NODE:PORT get|reset\n\n"
+                       "Inspect this node's current clock health. Reset requires operator uid 0\n"
+                       "after clock synchronization is restored; expiry resumes only on healthy samples.\n");
+        return 1;
+    }
+    char host[64];uint16_t port;
+    if(parse_host_port(argv[0],host,sizeof(host),&port))return 1;
+    uint8_t payload[6]={0,reset?EFS_MD_REQ_EXPIRY_CLOCK_RESET:EFS_MD_REQ_EXPIRY_CLOCK};
+    if(reset)wr32be_mgmt(payload+2,(uint32_t)geteuid());
+    struct efs_msg_raft_mkfs_reply r;int rc=sess_rpc(host,port,payload,reset?6:2,&r);
+    printf("expiry-clock rc=%d enabled=%s healthy=%s uncertain=%s wall_ns=%llu monotonic_ns=%llu\n",
+        rc,(r.index&4)?"yes":"no",(r.index&1)?"yes":"no",(r.index&2)?"yes":"no",
+        (unsigned long long)r.salt,(unsigned long long)r.term);
+    return rc?1:0;
+}
+
+static int expiry_u64(const char *text,uint64_t *out)
+{
+    char *end=NULL;errno=0;unsigned long long n=strtoull(text,&end,10);
+    if(errno || !text[0] || text[0]=='-' || *end)return -1;
+    *out=n;return 0;
+}
+
+static int cmd_expiry_id(int argc,char **argv)
+{
+    if(argc!=2){fprintf(stderr,"Usage:\n  efs-mgmt expiry-id NODE:PORT INO\n\nInspect the authoritative FileID before setting a policy or deadline.\n");return 1;}
+    char host[64];uint16_t port;uint64_t ino;
+    if(parse_host_port(argv[0],host,sizeof(host),&port) || expiry_u64(argv[1],&ino) || !ino)return 1;
+    uint8_t payload[10]={0,EFS_MD_REQ_EXPIRY_ID};payload[0]=efs_raft_shard_group(efs_kv_inode_shard(ino));
+    wr64be_mgmt(payload+2,ino);struct efs_msg_raft_mkfs_reply r;int rc=sess_rpc(host,port,payload,sizeof(payload),&r);
+    printf("expiry-id rc=%d ino=%llu generation=%llu uid=%u mode=0%o nlink=%llu leader_hint=%d\n",
+        rc,(unsigned long long)ino,(unsigned long long)r.index,(uint32_t)r.salt,(uint32_t)(r.salt>>32),
+        (unsigned long long)r.term,r.leader_hint);return rc?1:0;
+}
+
+static int cmd_expiry_enable(int argc,char **argv)
+{
+    if(argc!=6) {
+        fprintf(stderr,"Usage:\n  efs-mgmt expiry-enable NODE:PORT INO GENERATION PARENT NAME DEADLINE_NS\n\n"
+                       "Enable a deadline on an existing singly linked regular file.\n"
+                       "Requires current file ownership and an enabled containing scratch policy.\n"
+                       "NAME is one filename; DEADLINE_NS is an absolute Unix nanosecond value.\n");
+        return 1;
+    }
+    char host[64];uint16_t port;uint64_t ino,gen,parent,deadline;
+    size_t n=strlen(argv[4]);
+    if(parse_host_port(argv[0],host,sizeof(host),&port) ||
+       expiry_u64(argv[1],&ino) || expiry_u64(argv[2],&gen) ||
+       expiry_u64(argv[3],&parent) || expiry_u64(argv[5],&deadline) ||
+       !ino || !gen || !parent || !deadline || !n || n>=EFS_MAX_NAME || strchr(argv[4],'/'))return 1;
+    uint8_t payload[55+EFS_MAX_NAME]={0};
+    payload[0]=efs_raft_shard_group(efs_kv_inode_shard(ino));payload[1]=EFS_MD_REQ_EXPIRY_ENABLE;
+    wr64be_mgmt(payload+2,ino);wr64be_mgmt(payload+10,gen);
+    wr32be_mgmt(payload+18,(uint32_t)geteuid());wr64be_mgmt(payload+38,deadline);
+    wr64be_mgmt(payload+46,parent);payload[54]=(uint8_t)n;memcpy(payload+55,argv[4],n);
+    struct efs_msg_raft_mkfs_reply r;int rc=sess_rpc(host,port,payload,(uint32_t)(55+n),&r);
+    printf("expiry-enable rc=%d revision=%llu deadline_ns=%llu root_ino=%llu leader_hint=%d\n",
+        rc,(unsigned long long)r.index,(unsigned long long)r.salt,(unsigned long long)r.term,r.leader_hint);
+    return rc?1:0;
+}
+
+static void expiry_duration(uint64_t ns,char *out,size_t n)
+{
+    uint64_t sec=ns/1000000000ull;
+    if(sec>=86400)snprintf(out,n,"%llu days %llu hours",(unsigned long long)(sec/86400),(unsigned long long)(sec/3600%24));
+    else if(sec>=3600)snprintf(out,n,"%llu hours %llu minutes",(unsigned long long)(sec/3600),(unsigned long long)(sec/60%60));
+    else if(sec>=60)snprintf(out,n,"%llu minutes %llu seconds",(unsigned long long)(sec/60),(unsigned long long)(sec%60));
+    else snprintf(out,n,"%llu seconds",(unsigned long long)sec);
+}
+
+static int expiry_read(const char *host,uint16_t port,uint8_t tag,uint64_t ino,uint64_t gen,
+                       struct efs_msg_raft_mkfs_reply *r)
+{
+    uint8_t payload[18]={efs_raft_shard_group(efs_kv_inode_shard(ino)),tag};
+    wr64be_mgmt(payload+2,ino);wr64be_mgmt(payload+10,gen);
+    return sess_rpc(host,port,payload,(tag==EFS_MD_REQ_EXPIRY_ID || tag==EFS_MD_REQ_EXPIRY_PARENT)?10:18,r);
+}
+
+static int expiry_lookup(const char *host,uint16_t port,const char *path,struct efs_inode *inode)
+{
+    struct efs_msg_inode_lookup_path req={0};
+    if(strlen(path)>=sizeof(req.path))return EFS_ERR_OVERFLOW;
+    memcpy(req.path,path,strlen(path)+1);
+    int fd=efs_connect_tcp(host,port);if(fd<0)return EFS_ERR_IO;
+    efs_set_recv_timeout(fd,EFS_IO_TIMEOUT_MS);efs_set_send_timeout(fd,EFS_IO_TIMEOUT_MS);
+    uint8_t type;void *payload=NULL;uint32_t len=0;
+    int rc=send_recv(fd,EFS_MSG_INODE_LOOKUP_PATH,&req,sizeof(req),&type,&payload,&len);
+    close(fd);
+    if(rc || type!=EFS_MSG_INODE_LOOKUP_PATH_REPLY || len!=sizeof(struct efs_msg_inode_lookup_path_reply)) {
+        free(payload);return EFS_ERR_IO;
+    }
+    struct efs_msg_inode_lookup_path_reply *r=payload;
+    rc=r->status==EFS_INODE_RPC_OK?EFS_OK:r->status==EFS_INODE_RPC_NOT_FOUND?EFS_ERR_NOT_FOUND:
+       r->status==EFS_INODE_RPC_NOT_PRIMARY?EFS_ERR_NOT_PRIMARY:EFS_ERR_BUSY;
+    if(!rc)*inode=r->inode;
+    free(payload);return rc;
+}
+
+static int cmd_expiry_show(int argc,char **argv)
+{
+    if((argc!=3 && argc!=5) || strcmp(argv[1],"show") || (argc==5 && strcmp(argv[3],"--mount"))) {
+        fprintf(stderr,"Usage:\n  efs-mgmt expiry NODE:PORT show PATH [--mount MOUNT]\n\n"
+          "PATH is export-relative; --mount resolves a local mounted path instead.\n"
+          "Files show fixed deadlines; folders show nearest future-file policy.\n"
+          "Inspection is sampled across RPCs, not an atomic namespace snapshot.\n");return 1;
+    }
+    char host[64];uint16_t port;if(parse_host_port(argv[0],host,sizeof(host),&port))return 1;
+    char *local=NULL,*mount=NULL;const char *path=argv[2];struct stat st={0};
+    if(argc==5) {
+        local=realpath(argv[2],NULL);mount=realpath(argv[4],NULL);
+        if(!local || !mount || stat(local,&st))goto bad;
+        size_t n=strlen(mount);
+        if(strncmp(local,mount,n) || (local[n] && local[n]!='/'))goto bad;
+        path=local+n;if(!*path)path="/";
+    }
+    struct efs_inode inode,verify;int rc=expiry_lookup(host,port,path,&inode);
+    if(rc || (local && inode.ino!=(uint64_t)st.st_ino))goto bad;
+    struct efs_msg_raft_mkfs_reply id,r,origin;
+    if(expiry_read(host,port,EFS_MD_REQ_EXPIRY_ID,inode.ino,0,&id))goto bad;
+    uint64_t gen=id.index;
+    printf("path: %s\nfile_id: %llu:%llu\n",argv[2],(unsigned long long)inode.ino,(unsigned long long)gen);
+    if(S_ISDIR(inode.mode)) {
+        uint64_t current=inode.ino,seen[EFS_TXN_NAMESPACE_MAX_PART];unsigned count=0;
+        while(current && count<EFS_TXN_NAMESPACE_MAX_PART) {
+            for(unsigned i=0;i<count;i++)if(seen[i]==current)goto bad;
+            seen[count++]=current;
+            struct efs_msg_raft_mkfs_reply parent;
+            if(expiry_read(host,port,EFS_MD_REQ_EXPIRY_PARENT,current,0,&parent) ||
+               expiry_read(host,port,EFS_MD_REQ_EXPIRY_POLICY_INFO,current,parent.salt,&r))goto bad;
+            if(r.index) {
+                char ttl[80],max[80];expiry_duration(r.salt,ttl,sizeof(ttl));expiry_duration(r.term,max,sizeof(max));
+                printf("folder_expiry: none (folders do not expire)\nfuture_file_policy: %s\ndefault_ttl: %s\nmaximum_retention: %s\n"
+                       "owner_clear: %s\npolicy_source: inode %llu generation %llu revision %llu\n",
+                       (r.leader_hint&1)?"enabled":"disabled (shadows ancestor)",ttl,max,
+                       (r.leader_hint&2)?"allowed":"refused",(unsigned long long)current,
+                       (unsigned long long)parent.salt,(unsigned long long)r.index);
+                break;
+            }
+            if(current==EFS_ROOT_INO) {printf("folder_expiry: none\nfuture_file_policy: none\n");break;}
+            current=parent.index;
+        }
+        if(!current || count==EFS_TXN_NAMESPACE_MAX_PART)goto bad;
+    } else {
+        if(expiry_read(host,port,EFS_MD_REQ_EXPIRY_RECORD,inode.ino,gen,&r) ||
+           expiry_read(host,port,EFS_MD_REQ_EXPIRY_ORIGIN,inode.ino,gen,&origin))goto bad;
+        if(!r.salt)printf("expiry: none%s\n",r.index?" (cleared)":"");
+        else {
+            time_t seconds=(time_t)(r.salt/1000000000ull);struct tm tm;char date[80],zone[16],relative[80];
+            if(!localtime_r(&seconds,&tm) || !strftime(date,sizeof(date),"%Y-%m-%dT%H:%M:%S",&tm) ||
+               !strftime(zone,sizeof(zone),"%z",&tm))goto bad;
+            struct timespec now;if(clock_gettime(CLOCK_REALTIME,&now))goto bad;
+            uint64_t ns=(uint64_t)now.tv_sec*1000000000ull+now.tv_nsec;
+            expiry_duration(r.salt>ns?r.salt-ns:ns-r.salt,relative,sizeof(relative));
+            printf("expiry: %s.%09llu%s (%s %s)\ndeadline_ns: %llu\nrevision: %llu\n"
+                   "policy_source: inode %llu generation %llu revision %llu (materialized at enable/create)\n",
+                   date,(unsigned long long)(r.salt%1000000000ull),zone,
+                   r.salt>ns?"expires in":"overdue by",relative,(unsigned long long)r.salt,
+                   (unsigned long long)r.index,(unsigned long long)r.term,
+                   (unsigned long long)origin.index,(unsigned long long)origin.salt);
+        }
+        struct efs_msg_raft_mkfs_reply after;
+        if(expiry_read(host,port,EFS_MD_REQ_EXPIRY_RECORD,inode.ino,gen,&after) ||
+           after.index!=r.index || after.salt!=r.salt)goto bad;
+    }
+    if(expiry_lookup(host,port,path,&verify) || verify.ino!=inode.ino ||
+       expiry_read(host,port,EFS_MD_REQ_EXPIRY_ID,inode.ino,0,&id) || id.index!=gen)goto bad;
+    printf("inspection: sampled now; namespace/policy may change after this read\n");
+    free(local);free(mount);return 0;
+bad:
+    fprintf(stderr,"Expiry inspection failed: missing/mismatched path, concurrent change, unavailable server or inspection limit.\n");
+    free(local);free(mount);return 1;
+}
+
+/* Human durations are integer quantities with explicit units, never floats. */
+static int expiry_parse_duration(const char *text,uint64_t *out)
+{
+    uint64_t value=0,mult=0;const char *p=text;
+    if(!*p)return -1;
+    while(*p>='0' && *p<='9') {
+        unsigned digit=(unsigned)(*p++-'0');
+        if(value>(UINT64_MAX-digit)/10)return -1;
+        value=value*10+digit;
+    }
+    if(p==text)return -1;
+    if(!strcmp(p,"ns"))mult=1;
+    else if(!strcmp(p,"s"))mult=1000000000ULL;
+    else if(!strcmp(p,"m"))mult=60*1000000000ULL;
+    else if(!strcmp(p,"h"))mult=3600*1000000000ULL;
+    else if(!strcmp(p,"d"))mult=86400*1000000000ULL;
+    if(!mult || !value || value>UINT64_MAX/mult)return -1;
+    *out=value*mult;return 0;
+}
+
+static int cmd_expiry(int argc,char **argv,int policy)
+{
+    if(!policy && argc>=2 && !strcmp(argv[1],"show"))return cmd_expiry_show(argc,argv);
+    int get=argc>=2 && !strcmp(argv[1],"get");
+    int mutate=argc>=2 && !strcmp(argv[1],policy?"set":"renew");
+    int named=policy && mutate && argc>5 && argv[5][0]=='-';
+    char host[64];uint16_t port;uint64_t n[6]={0};
+    if((get && argc!=4) || (mutate && !named && argc!=(policy?8:6)) || (!get && !mutate))goto usage;
+    if(parse_host_port(argv[0],host,sizeof(host),&port))return 1;
+    for(int i=2;i<(named?5:argc);i++)if(expiry_u64(argv[i],&n[i-2]))return 1;
+    if(named) {
+        unsigned seen=0;
+        for(int i=5;i<argc;i+=2) {
+            if(i+1>=argc)goto usage;
+            unsigned bit=!strcmp(argv[i],"--expire-after")?1:
+                         !strcmp(argv[i],"--renewal-limit")?2:
+                         !strcmp(argv[i],"--flags")?4:0;
+            if(!bit || (seen&bit))goto usage;
+            seen|=bit;
+            if(bit==4) {if(expiry_u64(argv[i+1],&n[5]))goto usage;}
+            else if(expiry_parse_duration(argv[i+1],&n[bit==1?3:4]))goto usage;
+        }
+        if(!(seen&1) || !(seen&4))goto usage;
+        if(!(seen&2))n[4]=n[3];
+    }
+    if(!n[0] || !n[1] || (policy && mutate && (n[5]>3 || n[3]>n[4])))goto usage;
+    uint8_t payload[47]={0};payload[0]=efs_raft_shard_group(efs_kv_inode_shard(n[0]));
+    payload[1]=policy?(get?EFS_MD_REQ_EXPIRY_POLICY:EFS_MD_CMD_EXPIRY_POLICY):
+                      (get?EFS_MD_REQ_EXPIRY_RECORD:EFS_MD_CMD_EXPIRY_RENEW);
+    wr64be_mgmt(payload+2,n[0]);wr64be_mgmt(payload+10,n[1]);uint32_t length=18;
+    if(mutate) {
+        wr32be_mgmt(payload+18,(uint32_t)geteuid());wr64be_mgmt(payload+22,n[2]);
+        if(policy) {wr64be_mgmt(payload+30,n[3]);wr64be_mgmt(payload+38,n[4]);payload[46]=(uint8_t)n[5];length=47;}
+        else {wr64be_mgmt(payload+38,n[3]);length=46;}
+    }
+    struct efs_msg_raft_mkfs_reply reply;int rc=sess_rpc(host,port,payload,length,&reply);
+    printf("expiry%s rc=%d revision=%llu %s=%llu %s=%llu leader_hint=%d\n",
+           policy?"-policy":"",rc,(unsigned long long)reply.index,
+           policy?"ttl_ns":"deadline_ns",(unsigned long long)reply.salt,
+           policy?"max_ns":"root_ino",(unsigned long long)reply.term,reply.leader_hint);
+    return rc?1:0;
+usage:
+    fprintf(stderr,"Usage:\n  efs-mgmt expiry-policy NODE:PORT get ROOT_INO GENERATION\n"
+                   "  efs-mgmt expiry-policy NODE:PORT set ROOT_INO GENERATION EXPECTED_REV\n"
+                   "    --expire-after DURATION [--renewal-limit DURATION] --flags FLAGS\n"
+                   "  Legacy: set ROOT_INO GENERATION EXPECTED_REV TTL_NS MAX_NS FLAGS\n"
+                   "  efs-mgmt expiry NODE:PORT get FILE_INO GENERATION\n"
+                   "  efs-mgmt expiry NODE:PORT renew FILE_INO GENERATION EXPECTED_REV DEADLINE_NS\n\n"
+                   "DURATION: positive integer followed by ns, s, m, h or d (example: 24h).\n"
+                   "--expire-after: new-file lifetime from creation; changes affect future files.\n"
+                   "--renewal-limit: furthest deadline from renewal time; defaults to expire-after.\n"
+                   "Reading/writing does not renew expiry. Repeated explicit renewals may extend lifetime.\n"
+                   "Renewal limit must be at least expire-after; it is not a maximum lifetime.\n"
+                   "FLAGS: bit 0 enables future-file defaults; bit 1 permits owner clearing.\n"
+                   "Server EFS_EXPIRY=1 required. Set requires uid 0. Renewal requires ownership.\n");
+    return 1;
 }
 
 /* Repeating this exact monotonic certificate barrier cannot reopen a session.
@@ -2552,6 +2855,12 @@ int main(int argc, char **argv)
         return cmd_gc_status(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-status") == 0)
         return cmd_raft_status(argc - 2, argv + 2);
+    if (strcmp(cmd,"expiry-status")==0)return cmd_expiry_status(argc-2,argv+2);
+    if (strcmp(cmd,"expiry-id")==0)return cmd_expiry_id(argc-2,argv+2);
+    if (strcmp(cmd,"expiry-enable")==0)return cmd_expiry_enable(argc-2,argv+2);
+    if (strcmp(cmd,"expiry-clock")==0)return cmd_expiry_clock(argc-2,argv+2);
+    if (strcmp(cmd,"expiry-policy")==0)return cmd_expiry(argc-2,argv+2,1);
+    if (strcmp(cmd,"expiry")==0)return cmd_expiry(argc-2,argv+2,0);
     if (strcmp(cmd, "commands-policy") == 0)
         return cmd_commands_policy(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-mkfs") == 0)

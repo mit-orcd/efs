@@ -3039,6 +3039,12 @@ publication primitives or reclaiming state before revocation completes.
 supported software direct/buffered × TCP/RXE and mount-sync gates accepted;
 hardware power-loss acceptance remains separate under W71.
 
+**Oct 13 branch regression:** expiry memory work exposed a retained-window
+certificate base error; `e85b1b9c` uses `log_base`, preserving the unsynced append
+fence after snapshot/rotation. Native and sanitizer store regressions PASS on
+`devel-expiry`; this is not new RXE or hardware power-loss acceptance.
+[Evidence](../status/expiry-rss-cleanup-20261013.md).
+
 Both production FUSE write callbacks now flush/publish positive O_SYNC/O_DSYNC
 writes before replying, after admission credits and append locks are released
 and within the inherited call budget. Publication failure returns an error and
@@ -4022,9 +4028,9 @@ large-tree/load/checksum and remaining fault/gateway gates stay open.
 The accepted design below is retained, with no implementation or activation
 authorization inferred from this work profile.
 
-**Policy accepted Oct 8 (D33):** opt-in fixed expiry, no universal TTL, owner renewal within operator limits, singly linked regular files and safe conditional namespace deletion. This supersedes the initial open-policy discussion below; implementation remains open. [Contract](../status/accepted-namespace-scratch-20261008.md#d33--w90-opt-in-fixed-scratch-expiry).
+**Policy accepted Oct 8 (D33):** opt-in fixed expiry, no universal TTL, owner renewal within operator limits, singly linked regular files and safe conditional namespace deletion. This supersedes the initial open-policy discussion below; initial implementation closed Oct 12 after both NUC matrices passed. [Contract](../status/accepted-namespace-scratch-20261008.md#d33--w90-opt-in-fixed-scratch-expiry).
 
-**Class/state:** feature; accepted D33 policy, implementation open. Recorded Oct 8, 2026 at the user's request.
+**Class/state:** feature; closed for accepted D33 initial scope, Oct 12, 2026. Recorded Oct 8, 2026 at the user's request.
 No universal default retention period is selected. The proposal below is historical; the accepted D33 contract governs.
 [Design and open decisions](../status/scratch-expiry-interface.md#proposed-expiry-metadata-and-policy).
 
@@ -4036,13 +4042,51 @@ reclaimed. Bind expiry to FileID and policy revision so renewal, rename and path
 reuse cannot turn stale work into deletion of a different file. Expose effective
 expiry to W91 and optionally through a defined extended attribute.
 
-**Next:** resolve hard-link and symlink behavior, directory inheritance, policy
-ownership and retention limits, renewal races, clock uncertainty and recovery.
-Audit active namespace/open-reference/GC integration, including W72/W86 and the
-[GC checkpoint](../status/gc-implementation-20261007.md). Age alone never authorizes
-deletion of unpublished fragments; expiry must retain existing authority fences.
-Fixed deadlines and singly linked regular files are proposed initial scope,
-not a settled policy. Do not make clock-based leader leases a dependency.
+**Implementation branch (Oct 12):** `devel-expiry`, based on
+`release-v0.3.2-pre-alpha` at `3a41493591dcede820700db7d934da9dc10f07ee`.
+Implement accepted D33 policy; hard links to expiring files and enabling expiry
+on multiply linked files are refused. Symlink and recursive directory expiry
+remain outside initial scope. Audit namespace/open-reference/GC integration,
+including W72/W86 and the [GC checkpoint](../status/gc-implementation-20261007.md).
+Age alone never authorizes deletion of unpublished fragments. Test on NUC with
+TCP, direct I/O, FILES storage, `.efs` disabled, no containers and no packing.
+Normal and clock-fault matrices at `0e975936` PASS: expiry/recovery/physical GC,
+216/216 core and 67/67 peer tests in each. [Evidence and reproduction](../status/expiry-implementation-20261012.md#final-qualification--pass).
+
+**Oct 12 follow-up complete:** readable management path inspection and worker
+status; expiry-specific confirmed namespace file/observed logical-byte counters,
+separate from all-cause physical GC totals. Normal 24/24 and fault 25/25 gates,
+30-minute two-mount soak (1,644 expirations, six restarts), and both core/peer
+matrices PASS. [Evidence, limitations and commands](../status/expiry-inspection-soak-20261012.md).
+
+**Oct 12–13 follow-up PASS:** `--expire-after`/`--renewal-limit` plus duration/help
+regressions; three 10,000-file queues including mid-drain restart and global
+disable/re-enable, physical/cold checks, core 216/216 and peer 67/67. Default
+single-group cleanup took 22–23 minutes per 10,000 due files (eight attempts/pass,
+normal 1s yield); this is asynchronous eligibility, not immediate disappearance.
+Peak sampled RSS rose 185→263→392 MiB across phases, within the 512 MiB fixture guard
+but not proof of a memory plateau. Worker cadence and retained-metadata/memory
+investigation remain performance follow-ups, without attributing an expiry leak
+or claiming a hardware ceiling. [Exact-source evidence and reproduction](../status/expiry-backlog-20261012.md).
+
+**Oct 13 performance follow-up:** `afbce294` bounds command-cache retention,
+uses Linux file-backed derived indices with cold residency eviction, and shortens
+progressing expiry backlog yields. All 30,000 files pass restart/off-on, physical
+and cold checks; drains 212–218s versus 22–23min, sampled peak node RSS 60–72 MiB
+versus 185–392 MiB. Foreground p95 is higher; no universal memory/hardware ceiling
+claim. Normal 24/24 and clock-fault 25/25 lifecycle gates, core 216/216 and peer
+67/67 in both builds, plus cold physical/queue/quota/fencing gates PASS.
+[Exact measurements and regression evidence](../status/expiry-rss-cleanup-20261013.md).
+
+**Oct 13 foreground fairness follow-up:** `99f6ef0c` retains fast physical GC,
+spreads expiry into two-file bursts, and schedules broader housekeeping at its
+ordinary cadence using monotonic deadlines. Matched 30,000-file restart/off-on
+run PASS: p95 29.2/32.9/33.0 → 23.3/19.7/21.2ms, physical drain
+216/212/219 → 153/159/165s; normal 24/24, POSIX 216/216 and peer 67/67 PASS.
+Clock-fault 25/25, core 216/216, peer 67/67 and cold physical/queue/quota/fencing
+gates also PASS. Peak RSS 76.1 MiB; isolated maximum-latency outliers remain. Fully separating
+physical GC was tested and rejected because reclamation lagged.
+[Measurements, rejected experiment and reproduction](../status/expiry-foreground-latency-20261013.md).
 
 **Gate:** focused renewal/deletion, path-reuse, rename, hard-link, open-file and
 concurrent-publication tests; clock jumps, leader change, restart, retries and
@@ -4727,9 +4771,9 @@ mixed large-writer/tiny-close tails.
 remove required persistence, grow queues without bounds, wipe existing stores,
 or declare the system hardware-bound from busy percentages or sync timings.
 
-<a id="w90"></a>
+<a id="w113"></a>
 
-## W90 · Independent steady-state storage churn benchmark
+## W113 · Independent steady-state storage churn benchmark
 
 **Class/state:** benchmark enhancement; implemented Oct 8, 2026 on `devel-bench`,
 starting from `53be1da7f190`. Functional gates pass; initial same-device

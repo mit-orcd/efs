@@ -25,7 +25,8 @@ static fuse_req_t t_req;
 static int stat_rc,kind,enabled=1,is_dir=1,allocation_fail,error=-1,opens,allocations;
 static int virt_kind(uint64_t ino){(void)ino;return kind;}
 static int commands_enabled(void){return enabled;}
-static int efs_client_stat_ino(uint64_t ino,struct efs_inode *row){row->ino=ino;row->mode=is_dir?S_IFDIR:S_IFREG;return stat_rc;}
+static int efs_client_stat_refresh(uint64_t ino,struct efs_inode *row){row->ino=ino;row->mode=is_dir?S_IFDIR:S_IFREG;return stat_rc;}
+static int efs_client_stat_ino(uint64_t ino,struct efs_inode *row){return efs_client_stat_refresh(ino,row);}
 static struct efs_dirh *dirh_new(uint64_t ino){if(allocation_fail)return NULL;struct efs_dirh *d=malloc(sizeof(*d));assert(d);d->ino=ino;allocations++;return d;}
 static void dirh_free(struct efs_dirh *d){free(d);allocations--;}
 static void fuse_reply_err(fuse_req_t req,int e){(void)req;error=e;assert(!t_req);}
