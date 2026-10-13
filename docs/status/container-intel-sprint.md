@@ -1500,3 +1500,28 @@ Local fresh-child original os.makedirs socket smoke PASS after ordinary
 sandbox denied Unix-socket bind; escalated check succeeded. This observer
 is a diagnostic-only addition after the tested product freeze; no product
 input or binary change is claimed for326da5be.
+
+
+### 2026-10-13 — original deep-path diagnostic and local wait instrumentation
+
+Diagnostic product326da5be with fresh-child observer13c7ca5b, same retained
+Intel four-node4G/node containers/TCP/direct/seven clients/jobs16 and original
+30-second deadlines; .efs/expiry-date/packing OFF, explicit profiling ON.
+Full1491/1512PASS21FAIL: deep60, crazy directories and deep100 on all7.
+127.402–138.417s; immediate strict physical PASS58.731s, zero58.710.
+Raw external artifacts/container-20261012/deepsteps326da5be-diagnostic;
+reproduction uses the preceding committed sitecustomize/phase-socket steps.
+This separate instrumented result does not replace profiling-OFF acceptance.
+Deep60 completes only37–40 mkdir levels by deadline; recursive initial stat
+cost is0.354–1.242s, completed mkdir calls26.888–28.441s. Late full-path mkdir
+calls1.293–2.137s. Client0 first30-second LOOKUP means7.2–7.5ms; RPC checkout
+is approximately1us, not a demonstrated bottleneck. No report-pressure event
+was observed in that interval. FUSE already configures32 active workers and
+8 idle workers; a presumed ten-worker default is ruled out by actual code.
+
+Next diagnostic adds EFS_RPC_PROF-only DIRLOCK-WAIT records for local stripe
+waits >=20ms, including single/pair/all-stripe acquisitions, retaining identical
+mutex order, ownership, deadline and workload. Profiling-OFF behavior has no
+clock/logging calls. This instrumentation is not a performance fix; build/native
+and exact diagnostic deployment remain required. Directory gate stays FAIL;
+physical success still covers only the named failed-directory workload.
