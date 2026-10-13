@@ -1,9 +1,9 @@
 [ORCD package 1 deployment and open gates](orcd-package1-20261013.md):
-`19b14609` is installed on all11 with native RDMA/direct/files, .efs client/server
-on, packing/containers/expiry off; normal unmount and acknowledged markers PASS.
-Initial300s startup and six ENOSPC command suites FAIL; bounded single-root
-inventory correction native + ASan/UBSan + Linux process ownership PASS in isolation.
-AMD compact-index/cache-retirement handoff and full scale acceptance remain OPEN.
+`d54949ec` installed native RDMA/direct/files, `.efs` client/server on,
+packing/containers/expiry off. Full normal native and six full-library query
+ASan/UBSan plus root inventory PASS. Normal deployment/marker integrity PASS,
+readiness85.091s (300s limit); full catalogue still QUOTA near13.5M inodes.
+AMD transient sort-reservation proof/fix and remaining scale gates OPEN.
 
 [Intel package 3 execution](intel-package3-20261013.md): files/TCP/direct,
 client/server commands, packing and expiry OFF; container fixture stopped.

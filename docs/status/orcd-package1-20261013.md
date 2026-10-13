@@ -125,6 +125,60 @@ retained stream/CLOSE after a different seed, localhost compatibility, refusal
 propagation, unmapped owner and redirect loop. No mounted pass is inferred;
 server transport/production code is unchanged by this harness correction.
 
+## Integrated devel hardware deployment
+
+Frozen devel `d54949ecb50482db0099a34345b7daff47977078` contains the startup
+correction, AMD compact-directory references and legacy publication corrections
+through `3409e0c6`, distributed command-gate routing, and Intel's rejected
+experiment revert. Eleven native staged builds and **857 source/test input
+hashes per host PASS**. Full normal native `make -j4 test` on fcstor006 PASS;
+six query tests with their entire linked library built with ASan/UBSan and leak
+detection PASS (`test_query_catalog`, `test_query_disk`, `test_query_delta`,
+`test_query_disk_io`, `test_query_policy`, `test_query_refresh`), plus the root
+inventory sanitizer oracle. Use a separate clean sanitizer tree, not an
+unsanitized supporting library. Normal efsd SHA256 on fcstor006
+`6ffc253f8701db4e034a665b9119411f0ce0e78492ab1f126f4fcbf470cb83e9`;
+efs-fuse `884e839bc1724e4550bda7e72ce9e1129d4d50f8440efe988282155e034c11ca`.
+Build with the same recorded native flags/private runtime as the initial run.
+
+AMD's exact `3409e0c6` handoff passes normal/fault native, six fully linked
+query sanitizers, genuine v5→v6 mounted transition and next refresh, orderly
+quorum refusal/restoration, command/options/pages and loaded10,268-payload
+oracle. These small-target results authorize scale testing, not ORCD closure.
+See its [source-specific evidence](amd-package2-query-20261013.md).
+
+Orderly deployment **PASS**: all seven normal unmounts, four normal server stops,
+all eleven source/profile installations, seven remounts and independently known
+acknowledged marker bytes. Exact installed inputs and actual native RDMA/file
+engine/direct-I/O/feature flags PASS. **Server readiness85.091s**, unchanged
+300s ceiling; fcstor004's complete six-root inventory67.365s accounts for
+1,396,495,020,032 payload bytes. This deployment improvement is not yet the
+required same-source cold-restart acceptance.
+
+**Full catalogue build still FAIL / ENOSPC** at unchanged16/32GiB: projected
+v6 admission fails at raw shard3640/3641 and13,507,436 inodes, before
+stats/persist, versus the v5 baseline shard3002 /11,122,417 inodes. Retained v5
+checkpoint10,543,618 inodes,13,018,089,332 actual file bytes per publisher;
+13,026,375,540 bytes including directory entries. Both original checkpoints
+remain because replacement has not published. Do not erase them or authoritative
+stores to turn this into a passing transition.
+
+The permanent name-index reservation currently charges two full n/a copies
+for every namespace entry although merge scratch is confined to the partition
+being sorted. AMD is investigating explicit transient reservations and release,
+with real peak/fault proof; no budget increase or unqualified accounting change
+has been deployed. Remaining mounted gates are NOTRUN on this source while
+catalogue admission fails. Resource/cache samples retain all11/4 observations
+outside Git; sampling alone does not prove unobserved peak safety.
+
+Reproduce the full fixture oracle after command/concurrency and normal cold
+restart gates with `python3 tests/live/efs_query_capacity.py verify /tmp/efs-mount
+FIXTURE NEW_EXTERNAL_RESULTS --files 1638400 --bytes 262144 --workers 8`. The fixture name is
+`devel-efs-400g-0dd2a7c7912b-20261012`. It checks every acknowledged payload and
+exported path; mount-ID checks avoid forks while direct reads are in flight.
+Run the latency sampler as a separate process and collect all daemon/client
+RSS, CPU, I/O and available memory before resuming the paused screen benchmarks.
+
 ## Remaining package 1 gates
 
 Review and integrate the AMD compact-index and legacy-view retirement fixes;
