@@ -41,7 +41,7 @@ int efs_raft_read_pending(const struct efs_raft*r){(void)r;assert(0);return 0;}
 int efs_raft_read_quorum(const struct efs_raft*r){(void)r;assert(0);return 0;}
 int efs_raft_read_covers(const struct efs_raft*r,uint64_t n){(void)r;(void)n;assert(0);return 0;}
 int efs_raft_read_begin(struct efs_raft*r){(void)r;assert(0);return EFS_OK;}
-static void host_waiter_sleep(struct efs_raft_host*h,uint8_t g,int any,uint64_t i,uint64_t seen,const struct timespec*t){(void)h;(void)g;(void)any;(void)i;(void)seen;(void)t;assert(0);}
+static void host_waiter_sleep(struct efs_raft_host*h,uint8_t g,int any,uint64_t i,uint64_t seen,const struct timespec*t,uint64_t r,uint64_t term,int proof_only){(void)h;(void)g;(void)any;(void)i;(void)seen;(void)t;(void)r;(void)term;(void)proof_only;assert(0);}
 '''+fn('host_view_covers')+fn('host_view_wait_apply')+fn('host_view_quorum_index')+fn('host_read_index_admitted')+r'''
 int main(void){
  struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.cv_mu=PTHREAD_MUTEX_INITIALIZER,.n=4};
