@@ -4570,14 +4570,13 @@ static int host_read_index(struct efs_raft_host *h,uint8_t group,int *hint)
     return host_read_index_admitted(h,group,hint,NULL,NULL,0);
 }
 
-/* Container directory walks can overlap both metadata groups on every
- * component. Eight blocked proof helpers otherwise force other admitted
- * reads to serialize independent rounds. Bound containers at 32 persistent
- * 128KiB helpers (4MiB total stacks); ordinary files retain eight (1MiB).
- * Saturation/init failure still falls back, never queues or reuses a proof. */
+/* Both storage backends use the same independently fresh metadata proofs.
+ * Bound initialized hosts at 32 persistent 128KiB helpers (4MiB total stacks).
+ * Files previously fell back to scalar proof routing after only eight helpers.
+ * Saturation/init failure still falls back without a queue or reused proof. */
 static unsigned host_read_pair_capacity(void)
 {
-    return g_host && g_host->s && g_host->s->storage_engine ? 32u : 8u;
+    return g_host && g_host->s ? 32u : 8u;
 }
 static void host_read_pair_note(int parallel)
 {

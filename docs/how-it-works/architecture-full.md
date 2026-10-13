@@ -1505,7 +1505,9 @@ client/server commands, packing and expiry OFF; container fixture stopped.
 Baseline1a737143 core432/432, peer67/67 and600s snapshot/foreground pressure PASS;
 seven-client1511/1512 FAIL. Files-admission candidate72416530 passes both-host
 native/sanitizer and upgrade hashes but REGRESSES loaded tests; rejected and
-code reverted, baseline restoration in progress. W97/D30/W106 remain OPEN.
+code reverted, baseline restored (normal control1461/1512 FAIL).
+Read-only diagnostic finds paired-proof helper saturation; bounded32-helper
+files candidate locally regressed, not yet deployed. Profilers restored OFF. W97/D30/W106 remain OPEN.
 
 [AMD package 2 compact-cache qualification](../status/amd-package2-query-20261013.md):
 `9daee617`/`0412e5b7` reduce derived rows 584→312 bytes; comparable native
