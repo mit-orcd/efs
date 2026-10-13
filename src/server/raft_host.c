@@ -2800,6 +2800,7 @@ static int host_snap_open(void *app, uint64_t incl, void **handle,
     struct efs_raft_host *h = g->host;
     struct efs_kv_lsm_view *view = NULL;
     int fd, rc;
+    uint64_t prepare_start, flush_us, pin_us;
 
     if (!h || !h->kv || !handle || !total)
         return EFS_ERR_INVAL;
@@ -2825,10 +2826,22 @@ static int host_snap_open(void *app, uint64_t incl, void **handle,
     /* The pump calls this on every catch-up heartbeat. A flush that
      * would walk the memtable and return BUSY (L0 cannot take another
      * full set of ranges) stays off this thread. */
+    prepare_start = now_us_();
     rc = efs_kv_lsm_flush_nowait(h->kv);
-    if (rc != EFS_OK)
+    flush_us = now_us_() - prepare_start;
+    if (rc != EFS_OK) {
+        if (flush_us > 20000)
+            fprintf(stderr, "raft-snap: prepare group=%u flush_us=%llu rc=%d\n",
+                    g->group, (unsigned long long)flush_us, rc);
         return rc;
+    }
+    prepare_start = now_us_();
     rc = efs_kv_lsm_view_pin(h->kv, &view);
+    pin_us = now_us_() - prepare_start;
+    if (flush_us + pin_us > 20000)
+        fprintf(stderr, "raft-snap: prepare group=%u flush_us=%llu pin_us=%llu rc=%d\n",
+                g->group, (unsigned long long)flush_us,
+                (unsigned long long)pin_us, rc);
     if (rc != EFS_OK)
         return rc;
     pthread_mutex_lock(&h->snap_mu);
@@ -3091,7 +3104,14 @@ static int host_maybe_snapshot(struct efs_raft_host *h, int gi)
     }
     /* efs_raft_snapshot → host_snap_open flushes again and pins. A BUSY
      * open still records the snap point; the file follows on the GC thread. */
-    return efs_raft_snapshot(h->g[gi].r);
+    uint64_t started = now_us_();
+    int rc = efs_raft_snapshot(h->g[gi].r);
+    uint64_t elapsed = now_us_() - started;
+    if (elapsed > 20000)
+        fprintf(stderr, "raft-snap: advance group=%u applied=%llu elapsed_us=%llu rc=%d\n",
+                h->g[gi].group, (unsigned long long)applied,
+                (unsigned long long)elapsed, rc);
+    return rc;
 }
 
 static int host_session_combined_group(const uint8_t *cmd,uint32_t clen,uint8_t group)

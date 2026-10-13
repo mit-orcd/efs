@@ -518,6 +518,7 @@ int raft_log_rotate_locked(struct efs_raft_disk *d)
     uint64_t old_bytes, old_allocated;
     uint32_t i;
     int rc = EFS_OK;
+    uint64_t started = efs_batch_obs_now_us();
 
     if (d->io_failed)
         return EFS_ERR_IO;
@@ -592,6 +593,11 @@ int raft_log_rotate_locked(struct efs_raft_disk *d)
         for (k = 0; k < g->n; k++)
             g->log[k].end_off = 0;
     }
+    uint64_t elapsed = efs_batch_obs_now_us() - started;
+    if (elapsed > 20000)
+        fprintf(stderr, "raft-log: rotate old_bytes=%llu live_bytes=%llu elapsed_us=%llu\n",
+                (unsigned long long)old_bytes, (unsigned long long)d->bytes,
+                (unsigned long long)elapsed);
     return EFS_OK;
 }
 

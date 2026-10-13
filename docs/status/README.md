@@ -1,12 +1,12 @@
-Current ORCD `.efs` gate at `62770d5c3bfd`: concurrent core and query suites
-pass before and after a same-code orderly restart. The full verifier exposed
-a fork/direct-read platform race: its concurrent `findmnt` subprocess checks
-trigger stale partial user-buffer pages. Matched native controls reproduce it.
-An in-process exact mount-ID check preserves fallback refusal without forking
-readers; strict full payload/path verification is running on restored normal
-clients. Seven tiny-file benchmarks remain stopped. W106 retains the separate
-application fork/direct-read platform gate. See the
-[400 GiB evidence](orcd-efs-400g-20261012.md).
+Current ORCD `.efs` real 400 GiB subset PASS: exact deployed daemon source
+`62770d5c3bfd`, strict no-fork oracle `3539917e`, 1,638,400 complete payloads
+and paths, 1,608 directory inventories, pre/post concurrent suites and same-code
+orderly restart. All seven original benchmarks resumed and advancing.
+Foreground latency remains under active investigation: successful 5.57s and
+22.04s create/fsync/unlink outliers overlap Raft snapshot activity. User requests
+a code fix, redeployment and same-profile latency qualification. The separate
+application fork/direct-read platform gate and broader W92 scale gates remain
+open. See the [400 GiB evidence](orcd-efs-400g-20261012.md).
 
 # Project status — current work and index
 
