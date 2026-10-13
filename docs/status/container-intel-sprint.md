@@ -1197,3 +1197,29 @@ Actual outbox controls over1000rounds, every header guard, UINT64_MAX,
 late-context negative and ASan/UBSan PASS locally. Real core test adds
 obsolete-zero-prefix refusal and current fresh quorum without commit/
 apply progress; both-host native and exact-source live remain pending.
+
+
+### Canonical read-vote coalescingcb39a4f6 — all gates completed
+
+Exactcb39a4f6b2cab06be3497cff3d0b416ef2466189. Both Intel complete
+affected native builds/controls PASS, including actual core current-vs-
+obsolete zero-prefix replies, Linux flow and outbox ASan/UBSan/negative.
+All787 tracked product/test inputs match both deployments; binaries built
+with full EFS_GIT_ID/EFS_GIT_DESCRIBE and devel-container branch. Intel1
+efsd SHA2565cc83102ab2f1d6667929d9c93ce8824e259adc6c882c1e0ddb667ae88098fd8;
+FUSEa7ca50b94a0ade13b68f4ffb4f55e3ce909ba21be3a542f60f79cd0be14e78e8.
+Same retained four-node4G/node containers/TCP/direct Intel fixture, seven
+clients/jobs16/original deadlines,8writers/20msGC; commands/.efs/expiry-
+date/packing/profiling OFF. No reset or production change. Full1498/1512
+PASS14FAIL: deep60 and crazy directories on all7;123.990–130.929s.
+Immediate physical PASS176.539s,zero176.536s. Quiet core432/432
+PASS56.647/59.054s;peer134/134 PASS39.726/41.636s;private mmap PASS/
+shared ENODEV skips. Lifecycle/tiny/warm/cold/global restart/deletion
+PASS;finalphysical PASS27.876s,zero27.871s. Reproduce existing committed
+intel_container_node.py deployment/proof and intel_container_qualification.py
+gates in their established order. Raw votequeuecb39a4f6-deploy and
+votequeuecb39a4f6-qualification stay outside Git. Physical passes cover
+only this failed-directory workload, not hypothetical all-passing load.
+No directory closure or release acceptance; narrow queue bound retained,
+its performance benefit remains unproven. Next investigate the directory
+creation/authority latency with separately labelled diagnostics.
