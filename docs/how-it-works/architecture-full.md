@@ -1509,7 +1509,9 @@ packing/containers/expiry off. Full native and full-library query sanitizer
 gates PASS; deployment markers PASS, server readiness92.003s. Both complete
 15.2M-inode catalogues publish within unchanged16/32GiB limits; exact400GiB
 subtree stats PASS. Initial build-time stats timeout retained as FAIL;
-command/concurrent/cold/full-payload acceptance remains OPEN.
+focused commands/options/virtual/load FAIL, pages/large-delta PASS; tiny
+recursive subtrees scan unrelated catalogue entries. Owner/numeric and
+human/default/JSON stats PASS all7. Concurrent/cold/full-payload gates OPEN.
 
 [Intel package 3 execution](../status/intel-package3-20261013.md): files/TCP/direct,
 client/server commands, packing and expiry OFF; container fixture stopped.

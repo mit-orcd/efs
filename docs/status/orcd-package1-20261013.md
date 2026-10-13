@@ -223,3 +223,30 @@ The first stats preflight during catalogue construction **FAILS** its unchanged
 passes the same stats deadline and proceeds to focused commands, concurrent
 queries, orderly cold restart and full payload verification. Those gates remain
 OPEN until completed; this later probe does not erase the initial failure.
+
+The post-publication focused attempt finds two additional **FAIL** results:
+`efs_commands` (34.004 s) and `efs_command_options` (33.153 s) each exceed
+an individual peer `find` 30-second deadline; `efs_command_pages` PASS (60.984 s).
+A read-only syscall trace of the options query shows successful continuation
+reads, not a single blocked call: consecutive opens take 5.864, 6.736, 2.815,
+2.058 and 3.170 seconds. The source selects a parent-key range only for LOCAL
+immediate listings or recursive leaf directories. Recursive directories with
+children use the global name-index cursor, scanning unrelated entries in the
+15.2-million-inode catalogue even for this 13-file subtree. Bounded recursive
+subtree continuation is an open acceptance correction; no deadline widening or
+helper tuning has been applied. AMD has the exact reproducer and trace finding.
+
+The six-suite attempt finishes with commands/options/virtual/load FAIL and
+pages/large-delta PASS; temporary peer drains and unmounts normally. Virtual
+mutation and nested-authorization checks do not observe changes within their
+bounds; load readers return BUSY throughout. Logs show refresh QUOTA while an
+older catalogue remains pinned. Conservative aggregate accounting may correctly
+refuse a third approximately14.48GB generation; investigate retained stream
+lifetime alongside subtree continuation, preserving the32GiB limit.
+
+Independent owner-name/numeric checks PASS on all seven clients. Default,
+human-readable, help and JSON stats checks also PASS on all seven after fixing
+an operations-harness oracle that incorrectly required the2TB export root to
+use GiB rather than TiB. The400GiB fixture oracle remains exact. Seven active DD
+workloads appear in resource samples; concurrent acceptance runs under that
+ordinary I/O, separately from the paused tiny-file screen launchers.
