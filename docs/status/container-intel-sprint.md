@@ -1623,3 +1623,24 @@ Seven-client jobs16 with unchanged30/75/120/180case and600outer limits;
 full/removal/reclaim then quiet/peer/mmap/lifecycle/tiny/cold/global restart/
 final physical as earlier. Native PASS does not qualify loaded performance;
 full exact-source live sequence is running, no all-passing acceptance yet.
+
+
+### 2026-10-13 — duplicate inbox live result and next memo diagnostic
+
+Exact015b55c3 profiling-OFF full1491/1512PASS21FAIL: deep60/crazy/deep100
+all7;123.697–142.327s. Immediate strict physical105.053s PASS,zero105.035.
+No reset or deadline/workload/concurrency change. Remaining integrity gates
+running; duplicate folding did not resolve the loaded directory gate and
+is not accepted as a performance fix. After this sequence ends, restore
+--inbox-fold0. Raw external inboxfold2015b55c3-qualification as above.
+
+Next diagnostic measures the unchanged one-shot50ms LOOKUP-to-GETATTR memo:
+EFS_RPC_PROF-only MEMO-PROF cumulative attempts/hit/active/expired/missing,
+one line per1024 attempts, outside the memo mutex. No cache lifetime, kernel
+cache timeout, mutation fence, lookup RPC or quorum rule changes. Existing
+actual memo/callback controls PASS (mutation success/failure, overlap, stale
+RPC reply rejection, TTL and read-only hits), including MEMO_TEST_CFLAGS=
+'-fsanitize=address,undefined -fno-omit-frame-pointer'. This tests the
+hypothesis that unrelated simultaneous mutations suppress useful memo hits;
+no scoped memo or coherence change is implemented or justified yet.
+Build/native and separate original-workload diagnostics still required.

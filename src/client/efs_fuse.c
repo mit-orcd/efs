@@ -1408,10 +1408,29 @@ static void lookup_memo_put(const struct efs_inode *row)
     pthread_mutex_unlock(&g_lookup_memo_mu);
 }
 
+/* Diagnostic counters only; one line per1024 memo attempts. They never
+ * change cache lifetime, mutation fencing, RPC or quorum decisions. */
+static void lookup_memo_observe(unsigned reason)
+{
+    static uint64_t counts[4], total;
+    if (!getenv("EFS_RPC_PROF"))
+        return;
+    __atomic_add_fetch(&counts[reason], 1, __ATOMIC_RELAXED);
+    uint64_t n = __atomic_add_fetch(&total, 1, __ATOMIC_RELAXED);
+    if (!(n % 1024))
+        fprintf(stderr, "MEMO-PROF attempts=%llu hit=%llu active=%llu expired=%llu missing=%llu\n",
+                (unsigned long long)n,
+                (unsigned long long)__atomic_load_n(&counts[0], __ATOMIC_RELAXED),
+                (unsigned long long)__atomic_load_n(&counts[1], __ATOMIC_RELAXED),
+                (unsigned long long)__atomic_load_n(&counts[2], __ATOMIC_RELAXED),
+                (unsigned long long)__atomic_load_n(&counts[3], __ATOMIC_RELAXED));
+}
+
 static int lookup_memo_take(efs_ino_t ino, struct efs_inode *out)
 {
     uint64_t now;
     int i;
+    unsigned reason = 3;
 
     if (!ino || !out)
         return 0;
@@ -1419,18 +1438,23 @@ static int lookup_memo_take(efs_ino_t ino, struct efs_inode *out)
     pthread_mutex_lock(&g_lookup_memo_mu);
     if (g_lookup_memo_active) {
         pthread_mutex_unlock(&g_lookup_memo_mu);
+        lookup_memo_observe(1);
         return 0;
     }
     for (i = 0; i < LOOKUP_MEMO_N; i++) {
+        if (g_lookup_memo[i].ino == ino)
+            reason = 2;
         if (g_lookup_memo[i].ino == ino &&
             now - g_lookup_memo[i].us < LOOKUP_MEMO_US) {
             *out = g_lookup_memo[i].row;
             g_lookup_memo[i].ino = 0;
             pthread_mutex_unlock(&g_lookup_memo_mu);
+            lookup_memo_observe(0);
             return 1;
         }
     }
     pthread_mutex_unlock(&g_lookup_memo_mu);
+    lookup_memo_observe(reason);
     return 0;
 }
 
