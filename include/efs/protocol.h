@@ -660,6 +660,9 @@ struct efs_msg_query_stats_reply {
 #define EFS_INODE_RPC_NODATA    12
 /* Explicit metadata/output capacity refusal; never transient BUSY. */
 #define EFS_INODE_RPC_OVERFLOW  13
+/* Container FLOCK transient admission; BUSY retains immediate lock conflict.
+ * Requires coordinated server/client upgrade; reply layout is unchanged. */
+#define EFS_INODE_RPC_ADMISSION_BUSY 14
 
 struct efs_msg_inode_lookup {
     efs_export_id_t export_id;

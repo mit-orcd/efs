@@ -2582,3 +2582,40 @@ heartbeat, admission/allocation/capacity fallback. Unmodified56e898ef negative
 fails at the intended cached-context assertion; disabled first-separation
 negative also fails. Fresh both-host native and loaded results remain pending.
 W100/deep gate remains open; no performance or successful directory claim.
+
+
+## Covered-context qualification and typed lock admission (2026-10-13)
+
+W100 loaded acceptance remains FAIL at exact deployed product
+`2a56c060c4ba9bf354f72ffa0033befa2be7ef04`. Both Intel native suites,
+affected sanitizers, 794 frozen input proofs and mounted ownership12/12 PASS.
+All15 normal gates complete: concurrent1504/1512 PASS, seven deep-directory30s
+timeouts and Intel1 client0 flock_basic EAGAIN at its first nonblocking EX grant
+on a newly created private file. Physical reclamation96.331s PASS (all four
+nodes zero records and allocated data bodies); final9.306s PASS. Quiet432,
+peer134, lifecycle, tiny-file hashes, graceful restart/cold reads/deletes and
+post-restart configuration proofs PASS; shared mmap ENODEV remains skipped.
+Environment and exact gate reproduction are the committed qualification script
+and preceding64-worker ledger: isolated Intel2x2, containers/TCP/direct,
+4G/node, GC20ms, profilesOFF, .efs/expiry-date/packingOFF. Raw evidence outside
+Git: artifacts/container-20261012/covered2a56c060-{deploy,workers64-normal,
+workers64-qualification}. No data reset or production promotion.
+
+Next candidate fixes a demonstrable FLOCK error classification ambiguity:
+server EFS_ERR_BUSY (authority/session/proposal admission) and real lock
+EFS_ERR_AGAIN both became wireBUSY, which a grant returns immediately. Only
+container FLOCK now emits typed ADMISSION_BUSY14 for EFS_ERR_BUSY; true conflicts
+retain BUSY5 and immediate nonblocking response. Client retries admission using
+the existing16 attempts/absolute deadline/backoff and identical owner/session/
+range packet. Files legacy classification, all authority checks and Raft apply
+remain unchanged. Status14 requires coordinated daemon/client upgrade; no wire
+layout/opcode change. The observed mounted EAGAIN is consistent with this path,
+but causal closure has not yet been established.
+
+Actual production RPC-loop and server classification-tail fixtures PASS normal
+and ASan/UBSan locally. They cover grants with/without NB, success after two
+admission refusals, short deadline,16-attempt ceiling, unchanged full packet,
+true conflicts, files/null server compatibility and primary hint. Original
+client2a negative fails the intended three-attempt success assertion. Full
+server-handler integration and native/mounted Intel validation remain pending;
+the classification fixture does not substitute for fresh authority tests.

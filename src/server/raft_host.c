@@ -12184,6 +12184,10 @@ void server_raft_host_flock(efs_ino_t ino, uint32_t op, uint64_t owner,
         (op & EFS_FLOCK_WAIT))
         rc = host_lock_wait(h, ig, &req, &hint);
     set_inode_rc(out, rc, hint);
+    /* A fresh authority/proposal refusal is not a competing lock. Keep
+     * real AGAIN conflicts immediate, including nonblocking grants. */
+    if (rc == EFS_ERR_BUSY && h->s && h->s->storage_engine)
+        out->status = EFS_INODE_RPC_ADMISSION_BUSY;
     if (is_getlk && rc == EFS_OK) {
         out->inode.nlink = hit.type;
         out->inode.size = hit.start;

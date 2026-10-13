@@ -85,6 +85,15 @@ int main(void){for(int d=0;d<2;d++){
   uq.op=op;memcpy(unlock,&uq,sizeof(uq));reset();reply_status=EFS_INODE_RPC_BUSY;
   assert(rpc_send_recv_shard(0,EFS_MSG_INODE_FLOCK,unlock,sizeof(unlock),EFS_MSG_INODE_GETATTR_REPLY,&ur,sizeof(ur),0,NULL)==EFS_OK);
   assert(calls==1 && !sleeps && ur.status==EFS_INODE_RPC_BUSY);
+  reset();reply_status=EFS_INODE_RPC_ADMISSION_BUSY;mkdir_ready=3;
+  assert(rpc_send_recv_shard(0,EFS_MSG_INODE_FLOCK,unlock,sizeof(unlock),EFS_MSG_INODE_GETATTR_REPLY,&ur,sizeof(ur),0,NULL)==EFS_OK);
+  assert(calls==3 && sleeps==2 && freed==3 && ur.status==EFS_INODE_RPC_OK);
+  reset();reply_status=EFS_INODE_RPC_ADMISSION_BUSY;deadline=1010;
+  assert(rpc_send_recv_shard(0,EFS_MSG_INODE_FLOCK,unlock,sizeof(unlock),EFS_MSG_INODE_GETATTR_REPLY,&ur,sizeof(ur),0,NULL)==EFS_ERR_BUSY);
+  assert(calls==1 && sleeps==1 && freed==1 && now==deadline);
+  reset();reply_status=EFS_INODE_RPC_ADMISSION_BUSY;
+  assert(rpc_send_recv_shard(0,EFS_MSG_INODE_FLOCK,unlock,sizeof(unlock),EFS_MSG_INODE_GETATTR_REPLY,&ur,sizeof(ur),0,NULL)==EFS_ERR_BUSY);
+  assert(calls==16 && sleeps==15 && freed==16);
  }
  /* A directory prepare can outlive the legacy 16-attempt window. */
  unsigned char packet[sizeof(struct efs_msg_inode_create)+EFS_OPID_WIRE_LEN]={0};

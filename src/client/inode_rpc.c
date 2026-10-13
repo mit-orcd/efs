@@ -150,7 +150,8 @@ static int rpc_status_to_efs(uint8_t st)
     case EFS_INODE_RPC_NOT_FOUND:   return EFS_ERR_NOT_FOUND;
     case EFS_INODE_RPC_EXIST:       return EFS_ERR_EXIST;
     case EFS_INODE_RPC_QUOTA:       return EFS_ERR_QUOTA;
-    case EFS_INODE_RPC_BUSY:        return EFS_ERR_BUSY;
+    case EFS_INODE_RPC_BUSY:
+    case EFS_INODE_RPC_ADMISSION_BUSY: return EFS_ERR_BUSY;
     case EFS_INODE_RPC_INVAL:       return EFS_ERR_INVAL;
     case EFS_INODE_RPC_NOT_PRIMARY: return EFS_ERR_NOT_PRIMARY;
     case EFS_INODE_RPC_NOT_EMPTY:   return EFS_ERR_NOT_EMPTY;
@@ -711,7 +712,8 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
         }
         free(payload);
         struct efs_msg_inode_reply *r = reply;
-        if (r->status == EFS_INODE_RPC_BUSY) {
+        if (r->status == EFS_INODE_RPC_BUSY ||
+            r->status == EFS_INODE_RPC_ADMISSION_BUSY) {
             saw_busy = 1;
             /* INODE_APPEND uses BUSY as the unflushed-reservation barrier.
              * The caller must flush + report before retrying; spinning here
@@ -720,9 +722,10 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
              * to resolve. Retry the identical owner/session/range after
              * transient authority/proposal BUSY, with the existing budget.
              * Grants retain their immediate conflict response. */
-            if (type == EFS_MSG_INODE_APPEND ||
+            if (r->status == EFS_INODE_RPC_BUSY &&
+                (type == EFS_MSG_INODE_APPEND ||
                 (type == EFS_MSG_INODE_FLOCK && !(flock_op & EFS_FLOCK_UN)) ||
-                type == EFS_MSG_CREATE_RETAINED) {
+                type == EFS_MSG_CREATE_RETAINED)) {
                 rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, 0);
                 return EFS_OK;
             }
