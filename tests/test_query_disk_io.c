@@ -18,6 +18,7 @@ static int fault_clone(int fd,unsigned long request,int source)
 #endif
 static int partial_write;
 static unsigned write_calls;
+static int fail_directory_open;
 static unsigned read_calls;
 static unsigned alias_opens,name_opens;
 static unsigned raw_syncs,index_syncs,sync_faults;
@@ -45,6 +46,7 @@ static int fault_writeback(int fd,off64_t offset,off64_t bytes,unsigned flags)
 #endif
 static int tracked_open(const char *path,int flags,...)
 {
+    if((flags&O_DIRECTORY) && fail_directory_open){errno=fail_directory_open;return -1;}
     mode_t mode=0;
     if(flags&O_CREAT){va_list args;va_start(args,flags);mode=va_arg(args,int);va_end(args);}
     int fd=open(path,flags,mode);
@@ -615,6 +617,15 @@ static void legacy_retirement_test(void)
     efs_query_disk_free(old);old=NULL;CHECK(!access(legacy,F_OK));
     CHECK(!efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&next));
     if(next){
+        for(unsigned i=0;i<2;i++){
+            fail_directory_open=i?EIO:EMFILE;
+            CHECK(efs_query_disk_checkpoint(next,wm)==EFS_ERR_IO);
+            fail_directory_open=0;
+            char current[EFS_MAX_PATH],target[256];snprintf(current,sizeof(current),"%s/current",cache);
+            ssize_t length=readlink(current,target,sizeof(target)-1);CHECK(length>0);
+            if(length>0){target[length]=0;CHECK(!strcmp(target,strrchr(legacy,'/')+1));}
+            CHECK(!access(legacy,F_OK));
+        }
         fail_sync_kind='m';CHECK(efs_query_disk_checkpoint(next,wm)==EFS_ERR_IO);fail_sync_kind=0;
         CHECK(!access(legacy,F_OK)); /* Failed publication preserves old current. */
         CHECK(!efs_query_disk_checkpoint(next,wm));CHECK(access(legacy,F_OK)!=0);
