@@ -57,7 +57,7 @@ int efs_client_lease_resume(struct efs_client_lease_request *r,int probe) {
  else if(r->flags==EFS_LEASE_EDGE_CLEAR_PENDING){adopts++;assert((r->q.id.seq==55 || (combined_known_stale&&r->q.id.seq==56)) && r->pending_token==3);rc=adopt_rc;
   if(adopt_resume_busy){adopt_resume_busy--;pressure_sleep=1;rc=EFS_ERR_BUSY;}
   if(adopt_known_busy){r->complete=1;r->result=EFS_ERR_BUSY;return EFS_ERR_BUSY;}}
- else {closes++;rc=close_rc;if(!rc)server_hold=0;}
+ else {closes++;rc=r->ino==43?EFS_OK:close_rc;if(!rc&&r->ino==42)server_hold=0;}
  r->attempted=1;
  if(revocation && rc==EFS_ERR_STALE){r->revoked=1;r->complete=1;r->result=rc;server_hold=0;}
  if(!rc){r->complete=1;r->result=rc;}return rc;
@@ -167,11 +167,24 @@ int main(void) {
  assert(efs_open_drain_pending()==EFS_ERR_BUSY&&g_open_refs&&server_hold);
  assert(efs_client_rpc_past_deadline());
  pthread_mutex_unlock(open_edge_mu(42));mock_deadline=0;
- g_open_refs->retry_order=1;
+ g_open_refs->retry_order=1;g_open_refs->retry_turn=0;
  struct efs_open_ref *newer=calloc(1,sizeof(*newer));assert(newer);
  newer->ino=43;newer->close_pending=1;newer->retry_order=99;newer->next=g_open_refs;g_open_refs=newer;
  assert(efs_open_drain_pending()==EFS_ERR_BUSY&&g_open_refs==newer&&!newer->next);
  g_open_refs=NULL;free(newer);
+ /* One unrecoverable/unknown old close cannot starve another retained
+  * identity until the mount's shared ACK window fills. Neither is dropped. */
+ assert(!efs_open_acquire(42));assert(efs_close_note(42,&leased));
+ close_rc=EFS_ERR_NET;
+ newer=calloc(1,sizeof(*newer));assert(newer);
+ newer->ino=43;newer->close_pending=1;newer->leased=1;
+ newer->lease_generation=99;newer->retry_order=99;
+ newer->edge=(struct efs_client_lease_request){.ino=43,.generation=99,.flags=EFS_LEASE_EDGE_CLOSE,.active=1};
+ newer->edge.q.id.seq=70;newer->next=g_open_refs;g_open_refs=newer;
+ assert(efs_open_drain_pending()==EFS_ERR_NET&&g_open_refs==newer&&newer->next&&server_hold);
+ assert(efs_open_drain_pending()==EFS_ERR_BUSY&&g_open_refs->ino==42&&!g_open_refs->next&&server_hold);
+ close_rc=0;assert(efs_open_drain_pending()==EFS_ERR_BUSY&&!g_open_refs&&!server_hold);
+
  assert(!efs_open_acquire(42));assert(efs_close_note(42,&leased));
  efs_open_retry_start();assert(g_open_retry_started);usleep(200000);efs_open_retry_stop();
  assert(!g_open_refs&&!server_hold&&!g_open_retry_started);

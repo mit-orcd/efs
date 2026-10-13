@@ -1849,6 +1849,7 @@ struct efs_open_ref {
     int close_pending; /* retain ownership until release is confirmed */
     uint64_t lease_generation;
     uint64_t retry_order; /* published under g_open_mu; edge is stripe-owned */
+    uint64_t retry_turn; /* fair retry visits, protected by g_open_mu */
     struct efs_client_lease_request edge; /* immutable OPEN or CLOSE identity */
     struct efs_client_lease_request adoption; /* clear pending before CLOSE */
     struct efs_open_ref *next;
@@ -1986,6 +1987,7 @@ static int efs_close_note(efs_ino_t ino, int *leased)
                 if (r->leased) {
                     r->close_pending = 1;
                     r->retry_order = r->edge.q.id.seq;
+                    r->retry_turn = 0;
                 } else {
                     *pp = r->next;
                     free(r);
@@ -2096,14 +2098,29 @@ static int wb_lock_budget(pthread_mutex_t *mu)
 /* One retained release per iteration, with no RPC under the table mutex. */
 static int efs_open_drain_pending(void)
 {
+    static uint64_t counter; /* protected by g_open_mu */
     efs_ino_t ino = 0;
-    uint64_t oldest = UINT64_MAX;
+    uint64_t oldest = UINT64_MAX, turn = UINT64_MAX;
+    struct efs_open_ref *selected = NULL;
     pthread_mutex_lock(&g_open_mu);
     for (struct efs_open_ref *r = g_open_refs; r; r = r->next)
-        if (r->close_pending && (!ino || r->retry_order < oldest)) {
+        if (r->close_pending && (!ino || r->retry_turn < turn ||
+            (r->retry_turn == turn && r->retry_order < oldest))) {
             ino = r->ino;
             oldest = r->retry_order;
+            turn = r->retry_turn;
+            selected = r;
         }
+    if (selected) {
+        if (counter == UINT64_MAX) {
+            for (struct efs_open_ref *r = g_open_refs; r; r = r->next)
+                r->retry_turn = 0;
+            counter = 0;
+        }
+        /* Give every retained identity a turn even when an older CLOSE has
+         * an unresolved or negative verdict. Never discard that old owner. */
+        selected->retry_turn = ++counter;
+    }
     pthread_mutex_unlock(&g_open_mu);
     if (!ino) return EFS_OK;
     pthread_mutex_t *edge = open_edge_mu(ino);
