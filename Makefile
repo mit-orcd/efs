@@ -456,7 +456,6 @@ test: all
 	python3 tests/test_host_outbox.py
 	python3 tests/test_container_read_probe.py
 	python3 tests/test_container_read_admission.py
-	python3 tests/test_container_read_wake.py
 	python3 tests/test_posix_timeout_zombie.py
 	python3 tests/test_host_flow.py
 	python3 tests/test_raft_slow_sync.py

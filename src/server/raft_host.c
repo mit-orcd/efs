@@ -349,8 +349,6 @@ struct host_waiter {
     uint8_t group;
     uint8_t active;
     uint8_t any;
-    uint8_t read_proof;
-    uint64_t read_want,read_round,read_term;
 };
 
 struct efs_raft_host {
@@ -1038,6 +1036,19 @@ static int outbox_is_ae_rep(const uint8_t *buf, uint32_t len)
     return buf && len >= 1 && buf[0] == EFS_RAFT_MSG_AE_REP;
 }
 
+/* A successful prefix-zero escape-probe vote carries only a read context:
+ * vote_granted forbids retiring an entry window, and all progress fields
+ * are zero. Within one peer/group/term/boot, a newer context means the
+ * leader already began a newer independent round; older queued votes can
+ * no longer contribute to its current quorum. Never fold ordinary ACKs. */
+static int outbox_pure_read_vote(const uint8_t *buf,uint32_t len)
+{
+    static const uint8_t no_progress[44]={0};
+    return buf && len==EFS_WIRE_RAFT_HDR_LEN && buf[0]==EFS_RAFT_MSG_AE_REP &&
+           buf[2]==1 && buf[3]==1 && rd64be(buf+28) &&
+           !memcmp(buf+36,no_progress,sizeof(no_progress));
+}
+
 /* Coalesce within one Raft group only. Independent groups sharing a
  * peer retain their own heartbeat / reply progress. A vote may still
  * evict a heartbeat at capacity, as before. */
@@ -1055,12 +1066,19 @@ static int outbox_pri_replace(struct host_outbox *tx,
             continue;
         if (!pred(tx->pri[i].buf, tx->pri[i].len))
             continue;
+        int read_vote=tx->preserve_read &&
+            outbox_pure_read_vote(buf,len) &&
+            outbox_pure_read_vote(tx->pri[i].buf,tx->pri[i].len) &&
+            !memcmp(tx->pri[i].buf+4,buf+4,24); /* peer,term,boot */
+        if(read_vote && rd64be(tx->pri[i].buf+28)>rd64be(buf+28)){
+            free(buf);return 1; /* Newer queued vote owns the slot. */
+        }
         /* An early probe does not retire an entry batch. Nor may a delayed
          * queued reply erase a newer read round or a different proven prefix.
          * Keep exact class/status, term/boot/read context and ACK prefix for
          * containers; otherwise the original bounded enqueue owns the frame.
          * Votes still evict heartbeats at capacity via the existing path. */
-        if(tx->preserve_read && tx->pri[i].buf[0]==buf[0] &&
+        if(tx->preserve_read && !read_vote && tx->pri[i].buf[0]==buf[0] &&
            (buf[0]==EFS_RAFT_MSG_AE_REQ || buf[0]==EFS_RAFT_MSG_AE_REP) &&
            (memcmp(tx->pri[i].buf+2,buf+2,2) ||
             memcmp(tx->pri[i].buf+12,buf+12,24) ||
@@ -3425,10 +3443,9 @@ static int host_view_wait_apply(const struct host_view *v, uint64_t want,
  * wake when the group's applied >= idx (or the replica goes away); any=1:
  * wake when the group's view stamp moves past `seen`. Falls back to the
  * shared applied_cv when all slots are busy. Returns with cv_mu held. */
-static void host_waiter_sleep_impl(struct efs_raft_host *h, uint8_t group, int any,
+static void host_waiter_sleep(struct efs_raft_host *h, uint8_t group, int any,
                               uint64_t idx, uint64_t seen,
-                              const struct timespec *end,int read_proof,
-                              uint64_t want,uint64_t round,uint64_t term)
+                              const struct timespec *end)
 {
     uint32_t i, n = HOST_WAITERS;
     struct host_waiter *w = NULL;
@@ -3451,36 +3468,9 @@ static void host_waiter_sleep_impl(struct efs_raft_host *h, uint8_t group, int a
     w->any = (uint8_t)any;
     w->idx = idx;
     w->seen = seen;
-    w->read_proof=(uint8_t)read_proof;
-    w->read_want=want;w->read_round=round;w->read_term=term;
     w->active = 1;
     pthread_cond_timedwait(&w->cv, &h->cv_mu, end);
     w->active = 0;
-}
-
-static void host_waiter_sleep(struct efs_raft_host *h,uint8_t group,int any,
-                              uint64_t idx,uint64_t seen,const struct timespec *end)
-{
-    host_waiter_sleep_impl(h,group,any,idx,seen,end,0,0,0,0);
-}
-static void host_read_waiter_sleep(struct efs_raft_host *h,uint8_t group,
-                              uint64_t want,uint64_t round,uint64_t term,
-                              uint64_t seen,const struct timespec *end)
-{
-    host_waiter_sleep_impl(h,group,1,0,seen,end,
-                          h->s && h->s->storage_engine,want,round,term);
-}
-/* A queued read needs a useful transition, not every unrelated write's
- * stamp. This is only wake selection: the waiter still checks the unchanged
- * fresh proof and full own-apply predicates after waking. Missing/changed
- * authority and a completed old round requiring a new begin wake promptly. */
-static int host_read_waiter_ready(const struct host_view *v,
-                                  const struct host_waiter *w)
-{
-    return !v->has || v->role!=EFS_RAFT_LEADER || v->term!=w->read_term ||
-           host_view_covers(v,w->read_want,w->read_round,w->read_term) ||
-           (!v->read_pending &&
-            !host_view_wait_apply(v,w->read_want,w->read_round,w->read_term));
 }
 
 /* Pump side: after publishing every hosted group's view, wake the waiters
@@ -3500,10 +3490,6 @@ static void host_waiters_wake(struct efs_raft_host *h)
         g = group_slot(h, w->group);
         if (!g || !V_LOAD(g->v_has))
             wake = 1;
-        else if(w->read_proof){
-            struct host_view v;host_view_get(h,w->group,&v);
-            wake=host_read_waiter_ready(&v,w);
-        }
         else if (w->any)
             wake = V_LOAD(g->v_stamp) != w->seen;
         else
@@ -4230,7 +4216,7 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             (v.read_pending || host_view_wait_apply(&v, want, round, admitted_term)) &&
             !host_view_covers(&v, want, round, admitted_term)) {
             uint64_t s0 = now_us_();
-            host_read_waiter_sleep(h,group,want,round,admitted_term,v.stamp,&end);
+            host_waiter_sleep(h, group, 1, 0, v.stamp, &end);
             s0 = now_us_() - s0;
             if (s0 > 20000)
                 fprintf(stderr, "raft-host: read-sleep us=%llu group=%u "

@@ -686,6 +686,24 @@ static void test_readindex_control(void)
         CHECK(efs_raft_commit(n.r[leader])==commit && app[leader].n==applied,
               "consumed control ACK never commits or applies");
     }
+    /* Replacing an obsolete queued prefix-zero vote never lends its
+     * authority to the new round or changes replication progress. */
+    reply.match_index=0;reply.vote_granted=1;
+    CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"zero-prefix old round begins");
+    reply.last_log_index=efs_raft_read_round(n.r[leader]);
+    CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"newer zero-prefix round supersedes old");
+    CHECK(!efs_raft_read_control(n.r[leader],&reply) && !efs_raft_read_ready(n.r[leader]),
+          "obsolete zero-prefix vote cannot contribute current quorum");
+    CHECK(efs_raft_recv(n.r[leader],&reply)==EFS_OK && !efs_raft_read_ready(n.r[leader]),
+          "obsolete normal receive cannot grant current authority");
+    reply.last_log_index=efs_raft_read_round(n.r[leader]);
+    CHECK(efs_raft_read_control(n.r[leader],&reply)==2 && efs_raft_read_ready(n.r[leader]),
+          "newer zero-prefix vote proves exactly current round");
+    CHECK(efs_raft_recv(n.r[leader],&reply)==EFS_OK && efs_raft_read_ready(n.r[leader]),
+          "latest vote retains normal ordered bookkeeping");
+    CHECK(efs_raft_commit(n.r[leader])==commit && app[leader].n==applied,
+          "zero-prefix supersession never advances commit or apply");
+    reply.match_index=index;
     /* Even a probe must retain normal bookkeeping when a local suffix can
      * advance replication or commit. Hold replies so the suffix stays live. */
     CHECK(efs_raft_propose(n.r[leader],&cmd,1,&index)==EFS_OK,"control uncommitted suffix");

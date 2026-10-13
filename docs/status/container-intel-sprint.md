@@ -1166,3 +1166,34 @@ round/wrong floor refusal, next-round progress, term/role/missing views,
 files/index controls and ASan/UBSan PASS locally. Restoring stamp wakeups
 fails negative control. Both-host native and exact-source live remain
 required; this is a candidate, not directory closure.
+
+
+### Wake selection35ac542e — completed, rejected
+
+Exact35ac542e1cd76eba4ca5218d064a6ff88d882435, both-host native and
+788-input deployment proofs PASS. Same retained four-node4G/node Intel
+containers/TCP/direct, seven clients/jobs16/original deadlines,8writers/
+20msGC, commands/.efs/expiry-date/packing/profiling OFF. Full1498/1512
+PASS14FAIL, deep60 and crazy directories on all7;115.526–132.075s.
+Immediate physical FAIL180.524s, last180.515s: maps1914/1915/1903/1949
+and allocated bodies132128768/133386240/131919872/135401472 bytes.
+Quiet core432/432 PASS56.855/58.488s,peer134/134 PASS39.421/40.324s;
+private mmap PASS/shared ENODEV skips. Lifecycle/tiny/warm/cold/global
+restart/deletion PASS; finalphysical PASS22.957s,zero22.954s. This final
+pass does not replace the failed immediate deadline. Raw wake35ac-deploy
+and wake35ac-qualification stay outside Git. Wake filter/test retired;
+original waiter publication policy restored. No resets or production change.
+
+Next candidate coalesces only canonical80-byte successful prefix-zero
+READ-vote replies in the container priority outbox. Same group/peer/term/
+boot and nonzero monotonic read context; all44 progress bytes must be
+zero and vote_granted=1. Newer context replaces obsolete queued context;
+late older arrival is consumed without erasing the newest vote. Ordinary
+replication ACKs, progress-bearing replies, changed identities, failures
+and files retain existing policy. Core still requires exact current-round
+quorum and full own apply; no authority cache, deadline or receive-credit
+change. Leader restart requires a new term; read contexts never wrap.
+Actual outbox controls over1000rounds, every header guard, UINT64_MAX,
+late-context negative and ASan/UBSan PASS locally. Real core test adds
+obsolete-zero-prefix refusal and current fresh quorum without commit/
+apply progress; both-host native and exact-source live remain pending.
