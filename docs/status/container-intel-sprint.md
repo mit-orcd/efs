@@ -1121,3 +1121,14 @@ Local pending-read/probe/inbox/pair/completion/operation authority controls
 PASS. Actual Linux eventfd lifecycle control NOTRUN on macOS; local txn
 control NOTRUN because libefs.a is absent. Both require fresh Linux native
 validation before deployment; no performance or acceptance claim yet.
+
+
+Workerdb72bd5843daf71cb93e09ec6f54cd056b74bbc0 product builds PASS on
+both Intel hosts. Full affected native stopped at flow adapter compile:
+missing rd64be/worker-kick mock hooks; no deployment. Actual Linux worker
+control separately PASS both hosts: real eventfd/thread, pump-independent
+votes, refusal/retry, unchanged FIFO/credits, bounded coalesced wakeups,
+files/eventfd/thread-failure fallback, stopped-before-core and join cleanup;
+ASan/UBSan and worker-disabled timeout/SIGABRT negative PASS. Corrected
+mock adapter receives those hooks; complete corrected-source native remains
+required. This is native progress evidence, not loaded performance closure.
