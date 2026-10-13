@@ -221,11 +221,15 @@ static int private_derived(struct efs_query_disk *d,uint32_t shard)
             rc=io_at(dst,buf,(size_t)n,off,1);off+=(uint64_t)n;
         }
     }
-    if(src>=0)close(src);
-    if(dst>=0)close(dst);
+    if(src>=0 && close(src) && !rc)rc=EFS_ERR_IO;
+    if(dst>=0 && close(dst) && !rc)rc=EFS_ERR_IO;
     if(!rc && rename(tmp,path))rc=EFS_ERR_IO;
+    if(rc){
+        /* Release the copy reservation only after its pathname is gone. */
+        if(!unlink(tmp) || errno==ENOENT)d->disk_bytes-=temporary;
+        return rc;
+    }
     d->disk_bytes-=temporary;
-    if(rc){unlink(tmp);return rc;}
     /* Any cached descriptor/windows refer to the old immutable inode. */
     uint8_t slot=d->fd_index[shard][3];
     if(slot){close(d->fds[slot-1].fd);d->fds[slot-1].fd=-1;d->fd_index[shard][3]=0;}

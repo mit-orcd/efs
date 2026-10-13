@@ -402,6 +402,8 @@ test: all
 	python3 tests/test_read_verify.py
 	python3 tests/test_opid_admission.py
 	python3 tests/test_server_processes.py
+	python3 tests/test_storage_root_inventory.py
+	python3 tests/test_query_rpc_routing.py
 	python3 tests/test_mgmt_session_routing.py
 	python3 tests/test_session_admission.py
 	python3 tests/test_close_effects.py

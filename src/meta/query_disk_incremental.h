@@ -381,7 +381,7 @@ static int changes_sort(struct efs_query_disk *d,struct incremental *s)
         int fd=rc?-1:open(path,O_CREAT|O_EXCL|O_RDWR|O_CLOEXEC,0600);
         if(!rc && fd<0)rc=EFS_ERR_IO;
         if(!rc)rc=io_at(fd,s->sort_ids,n*sizeof(efs_ino_t),0,1);
-        if(fd>=0)close(fd);
+        if(fd>=0 && close(fd) && !rc)rc=EFS_ERR_IO;
     }
     while(runs>1 && !rc){
         for(uint64_t i=0;i<runs && !rc;i+=2){
@@ -396,8 +396,10 @@ static int changes_sort(struct efs_query_disk *d,struct incremental *s)
             if(fa<0 || fb<0 || fo<0 || fstat(fa,&sa) || fstat(fb,&sb))rc=EFS_ERR_IO;
             if(!rc && (sa.st_size<0 || sb.st_size<0 || sa.st_size%sizeof(efs_ino_t) || sb.st_size%sizeof(efs_ino_t)))rc=EFS_ERR_IO;
             if(!rc)rc=merge_names(d,fa,fb,fo,(uint64_t)sa.st_size/sizeof(efs_ino_t),(uint64_t)sb.st_size/sizeof(efs_ino_t),sizeof(efs_ino_t),changed_ino_compare,(uint8_t *)s->sort_ids);
-            if(fa>=0)close(fa);if(fb>=0)close(fb);if(fo>=0)close(fo);
-            if(!rc && (unlink(a) || unlink(b)))rc=EFS_ERR_IO;
+            if(fa>=0 && close(fa) && !rc)rc=EFS_ERR_IO;
+            if(fb>=0 && close(fb) && !rc)rc=EFS_ERR_IO;
+            if(fo>=0 && close(fo) && !rc)rc=EFS_ERR_IO;
+            if(!rc){int ua=unlink(a),ub=unlink(b);if(ua || ub)rc=EFS_ERR_IO;}
         }
         runs=(runs+1)/2;pass++;
     }
@@ -405,7 +407,11 @@ static int changes_sort(struct efs_query_disk *d,struct incremental *s)
         char final[EFS_MAX_PATH];rc=run_path(d,SHARDS,pass,0,path);
         if(!rc)rc=filename(d,0,'c',final,sizeof(final));
         if(!rc && rename(path,final))rc=EFS_ERR_IO;
-        if(!rc){close(s->changes_fd);s->changes_fd=open(final,O_RDWR|O_CLOEXEC);if(s->changes_fd<0)rc=EFS_ERR_IO;}
+        if(!rc){
+            if(close(s->changes_fd))rc=EFS_ERR_IO;
+            s->changes_fd=-1;
+            if(!rc){s->changes_fd=open(final,O_RDWR|O_CLOEXEC);if(s->changes_fd<0)rc=EFS_ERR_IO;}
+        }
     }
     if(!rc)d->disk_bytes-=extra;
     return rc;

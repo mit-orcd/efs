@@ -1501,6 +1501,33 @@ source, 17G data quota and unchanged 16/32 GiB query limits. Global W91/W92/W109
 remain OPEN: large-catalogue recursive-subtree continuation needs a bounded
 correctness fix; small AMD passes do not close ORCD's reported 30-second failures.
 
+[Query temporary-peak correctness](../status/query-sort-peak-correctness-20261013.md):
+`5f8ec779` checks sort cleanup and charges temporary copies only for their
+simultaneous lifetime, retaining unchanged16/32GiB limits and cache format.
+Bounded Linux query, quota/peak refusal, fault/cancellation, retained-reader,
+next-refresh and ASan/UBSan gates PASS. Full ORCD mounted/scale acceptance NOTRUN.
+Human scope is correctness only; no performance tuning or further compression.
+
+[ORCD package 1 deployment and open gates](../status/orcd-package1-20261013.md):
+Current scope is feature correctness/acceptance; latency/resources are measured
+evidence and existing bounds, with no additional performance tuning.
+`d54949ec` installed native RDMA/direct/files, `.efs` client/server on,
+packing/containers/expiry off. Full normal native and six full-library query
+ASan/UBSan plus root inventory PASS. Normal deployment/marker integrity PASS,
+readiness85.091s (300s limit); full catalogue still QUOTA near13.5M inodes.
+AMD transient sort-reservation proof/fix and remaining scale gates OPEN.
+
+[Intel package 3 execution](../status/intel-package3-20261013.md): files/TCP/direct,
+client/server commands, packing and expiry OFF; container fixture stopped.
+Baseline1a737143 core432/432, peer67/67 and600s snapshot/foreground pressure PASS;
+seven-client1511/1512 FAIL. Files-admission candidate72416530 passes both-host
+native/sanitizer and upgrade hashes but REGRESSES loaded tests; rejected and
+code reverted, baseline restored (normal control1461/1512 FAIL).
+Read-only diagnostic finds paired-proof helper saturation; the unaccepted32-helper
+experiment was withdrawn by5f8ec779 after the human correctness-only scope
+clarification. Further Intel performance work is paused. Profilers restored OFF.
+W97/D30/W106 remain OPEN.
+
 [W92 sort scratch follow-up](../status/amd-package2-transition-load-20261013.md#w92-follow-up-sort-scratch-accounting-and-unchecked-deletion):
 FIXED/AMD-qualified on **d17f940f**: measured scratch peak/negative control,
 close/unlink/rename faults, full normal/fault native and six full-library query
@@ -1540,7 +1567,7 @@ build and full normal native suite PASS at `986b4ec0`; 849 product/test input
 hashes match. Mounted/fault/full-sanitizer/RDMA/scale gates remain separate.
 No deployed-source verdict is superseded. Churn numbering is W114; client telemetry retains W113.
 
-Current ORCD `.efs` source `419aa90f367a` passes complete native/fault/sanitizer
+Historical ORCD `.efs` source `419aa90f367a` passes complete native/fault/sanitizer
 prerequisites, exact-source/profile deployment and acknowledged payload markers
 on all seven clients. Orderly redeployment used no force; server readiness took
 284.704 seconds of the unchanged 300-second budget. Mounted acceptance FAIL:
@@ -1562,7 +1589,7 @@ and unplanned-event repair/recovery remain outside the current profile.
 
 ## Project status — current work and index
 
-**Explicitly authorized experimental work:** [Intel container sprint](../status/container-intel-sprint.md), `devel-container`, containers/TCP/direct; `.efs`, expiry-date and packing OFF. Latest exact tested/deployed product **9145b7a3**: container native/sanitizers/runtime, ownership12/12 and all15 normal gates complete. Concurrent **1510/1512 PASS**; deep-directory30s timeouts remain on Intel1client3 and Intel2client2, other five clients216/216 PASS. Immediate physical113.767s/final8.983s and all quiet432/peer134/lifecycle/tiny/restart/cold gates PASS (shared mmap ENODEV skip). Loaded acceptance FAIL; one-run improvement does not close W100. Historical --deepsteps cleanup attribution is withdrawn: observer capability wrapping selected pathname-based rmtree. Capability-preserving descriptor observer committed as `1c86ac81286e3d21030a1e2a011678f5c80d9a21`: local regression checks PASS; Intel build, deployment and corrected diagnostic rerun NOTRUN; normal1510/1512 is unaffected; no release promotion.
+**Historical experimental work, superseded by package 3; fixture stopped:** [Intel container sprint](../status/container-intel-sprint.md), `devel-container`, containers/TCP/direct; `.efs`, expiry-date and packing OFF. Latest exact tested/deployed product **9145b7a3**: container native/sanitizers/runtime, ownership12/12 and all15 normal gates complete. Concurrent **1510/1512 PASS**; deep-directory30s timeouts remain on Intel1client3 and Intel2client2, other five clients216/216 PASS. Immediate physical113.767s/final8.983s and all quiet432/peer134/lifecycle/tiny/restart/cold gates PASS (shared mmap ENODEV skip). Loaded acceptance FAIL; one-run improvement does not close W100. Historical --deepsteps cleanup attribution is withdrawn: observer capability wrapping selected pathname-based rmtree. Capability-preserving descriptor observer committed as `1c86ac81286e3d21030a1e2a011678f5c80d9a21`: local regression checks PASS; Intel build, deployment and corrected diagnostic rerun NOTRUN; normal1510/1512 is unaffected; no release promotion.
 **Mac checkpoint committed; native qualification remains open:** implementation `32f71f27`, full regression PASS; latest native **213/216**, three small-file timeouts, best fresh 214/216. Current-source persistence **27/27 prepare + 27/27 verify** after clean same-store restart PASS. Proposed 64-entry durable-ancestry cache is **undeployed**, awaiting approval and real-storage safety gates. [Results and small-file durability investigation](../status/mac-v032-posix-20261012.md).
 
 **Proposed feature:** [W113 — aggregate client workload telemetry](#w113--aggregate-application-workload-telemetry-across-fuse-clients): ORCD seven-client read/write ops/s and human-friendly bytes/s, separate from server/internal traffic. Discussion recorded; implementation and acceptance NOTRUN.

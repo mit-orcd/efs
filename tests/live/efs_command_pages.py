@@ -6,24 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import time
-from query_rpc import page_request, query as raw_query
-def query(port, req):
-    # A four-node local fixture may seed a node that does not host this group.
-    base = int(os.environ['EFS_QUERY_TEST_PORT'])
-    if req.token:
-        owner = req.token >> 56
-        assert 1 <= owner <= 4, owner
-        return raw_query(base + owner - 1, req)
-    seen = set()
-    for _ in range(4):
-        assert port not in seen, ('query redirect loop', port, seen)
-        seen.add(port)
-        reply, text = raw_query(port, req)
-        if reply.status != -15:
-            return reply, text
-        assert 1 <= reply.primary_id <= 4, reply.primary_id
-        port = base + reply.primary_id - 1
-    raise AssertionError('query redirect bound exceeded')
+from query_rpc import page_request, routed_query as query
 
 mount, peer, work = map(Path, sys.argv[1:4])
 root = mount / ('efs-pages-%d' % os.getpid())
