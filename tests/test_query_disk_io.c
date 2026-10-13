@@ -648,6 +648,142 @@ static void names_peak_test(void)
     puts("name/alias sort: exact temporary peak admission, cleanup refusal, partial ENOSPC and cancellation PASS");
 }
 
+struct subtree_output { unsigned count,limit;uint64_t hash; };
+static int subtree_emit(void *ctx,const struct efs_name_entry *entry,const char *path)
+{
+    struct subtree_output *out=ctx;
+    if(out->count==out->limit)return EFS_ERR_AGAIN;
+    out->count++;
+    for(const unsigned char *p=(const unsigned char *)path;*p;p++)out->hash=out->hash*33+*p;
+    out->hash=out->hash*33+entry->dentry.ino;return EFS_OK;
+}
+static int subtree_deny(void *ctx,const struct efs_name_entry *entry,const char *path)
+{
+    struct subtree_output *out=ctx;
+    if(!out || out->count==3)return EFS_ERR_BUSY;
+    return subtree_emit(out,entry,path);
+}
+static int subtree_cancel(void *ctx)
+{ unsigned *calls=ctx;return !--*calls; }
+struct subtree_job { struct efs_query_disk *disk;efs_ino_t root;struct subtree_output expected;int rc; };
+static void *subtree_reader(void *ctx)
+{
+    struct subtree_job *job=ctx;
+    for(unsigned i=0;i<16 && !job->rc;i++){
+        uint64_t cursor=0;struct subtree_output out={.limit=UINT_MAX};
+        job->rc=efs_query_disk_page(job->disk,job->root,EFS_NAME_CONTAINS,"",0,&cursor,512,NULL,NULL,subtree_emit,&out);
+        if(!job->rc && (cursor!=(UINT64_C(4096)<<32) || out.count!=job->expected.count || out.hash!=job->expected.hash))job->rc=EFS_ERR_PROTO;
+    }
+    return NULL;
+}
+static void subtree_page_test(void)
+{
+    unsigned before=failures;
+    char store[]="/tmp/efs-subtree-kv-XXXXXX",cache[]="/tmp/efs-subtree-cache-XXXXXX";
+    CHECK(mkdtemp(store));CHECK(mkdtemp(cache));
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
+    CHECK(kv);if(!kv)return;
+    struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t unrelated,root,child,empty,file;
+    CHECK(!efs_meta_apply_init(kv,100));
+    CHECK(!efs_meta_apply_mkdir(kv,&attrs,EFS_ROOT_INO,S_IFDIR|0755,"unrelated",&unrelated));
+    for(unsigned i=0;i<20000;i++){
+        char name[32];snprintf(name,sizeof(name),"other-%08u.txt",i);
+        CHECK(!efs_meta_apply_create_file(kv,&attrs,unrelated,S_IFREG|0644,name,&file));
+    }
+    const char *duplicates[]={"item-00.txt","alias.txt","child","empty"};
+    for(unsigned i=0;i<4;i++)CHECK(!efs_meta_apply_create_file(kv,&attrs,unrelated,S_IFREG|0644,duplicates[i],&file));
+    CHECK(!efs_meta_apply_mkdir(kv,&attrs,EFS_ROOT_INO,S_IFDIR|0755,"target",&root));
+    CHECK(!efs_meta_apply_mkdir(kv,&attrs,root,S_IFDIR|0755,"child",&child));
+    CHECK(!efs_meta_apply_mkdir(kv,&attrs,child,S_IFDIR|0755,"empty",&empty));
+    for(unsigned i=0;i<12;i++){
+        char name[32];snprintf(name,sizeof(name),"item-%02u.txt",i);
+        CHECK(!efs_meta_apply_create_file(kv,&attrs,i%2?child:root,S_IFREG|0644,name,&file));
+    }
+    CHECK(!efs_meta_apply_link(kv,root,"item-00.txt",child,"alias.txt",200));
+    CHECK(!efs_meta_apply_create_file(kv,&attrs,child,S_IFREG|0644,"gone.txt",&file));
+    CHECK(!efs_meta_apply_unlink(kv,child,"gone.txt",201));
+    CHECK(!efs_kv_lsm_flush(kv));
+    struct efs_kv_lsm_snapshot *source=NULL;struct efs_query_disk *disk=NULL,*next=NULL;
+    struct efs_query_catalog *memory=NULL;
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));
+    CHECK(!efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&disk));
+    CHECK(!efs_query_catalog_build(source,NULL,64<<20,NULL,NULL,&memory));
+    if(!disk || !memory)return;
+    for(unsigned match=0;match<4;match++){
+        const char *terms[]={"item-00.txt","item-",".txt",""};
+        struct subtree_output oracle={.limit=UINT_MAX},actual={.limit=UINT_MAX};
+        uint64_t mc=0,dc=0;
+        CHECK(!efs_query_catalog_page(memory,root,match,terms[match],0,&mc,100000,NULL,NULL,subtree_emit,&oracle));
+        CHECK(mc==(UINT64_C(4096)<<32));
+        CHECK(!efs_query_disk_page(disk,root,match,terms[match],0,&dc,512,NULL,NULL,subtree_emit,&actual));
+        CHECK(dc==(UINT64_C(4096)<<32));
+        if(actual.count!=oracle.count || actual.hash!=oracle.hash)
+            fprintf(stderr,"subtree mode=%u disk=%u/%llu RAM=%u/%llu\n",match,actual.count,
+                (unsigned long long)actual.hash,oracle.count,(unsigned long long)oracle.hash);
+        CHECK(actual.count==oracle.count && actual.hash==oracle.hash);
+        uint64_t cursor=0;unsigned pages=0;actual=(struct subtree_output){.limit=UINT_MAX};
+        while(cursor!=(UINT64_C(4096)<<32) && pages<8){
+            uint64_t start=cursor,replay=start;
+            struct subtree_output page={.limit=3,.hash=actual.hash},copy=page;
+            CHECK(!efs_query_disk_page(disk,root,match,terms[match],0,&cursor,512,NULL,NULL,subtree_emit,&page));
+            CHECK(!efs_query_disk_page(disk,root,match,terms[match],0,&replay,512,NULL,NULL,subtree_emit,&copy));
+            CHECK(replay==cursor && page.count==copy.count && page.hash==copy.hash && cursor>start);
+            actual.count+=page.count;actual.hash=page.hash;
+            pages++;
+        }
+        if(match==3)printf("recursive subtree bounded pages: %u %s\n",pages,
+            cursor==(UINT64_C(4096)<<32)?"complete":"incomplete");
+        CHECK(cursor==(UINT64_C(4096)<<32) && pages<=5);
+        CHECK(actual.count==oracle.count && actual.hash==oracle.hash);
+    }
+    uint64_t retained=0;struct subtree_output first={.limit=3};
+    CHECK(!efs_query_disk_page(disk,root,EFS_NAME_CONTAINS,"",0,&retained,512,NULL,NULL,subtree_emit,&first));
+    uint64_t replay=retained;struct subtree_output old_page={.limit=3};
+    CHECK(!efs_query_disk_page(disk,root,EFS_NAME_CONTAINS,"",0,&replay,512,NULL,NULL,subtree_emit,&old_page));
+    CHECK(!efs_meta_apply_rename(kv,root,"item-00.txt",root,"renamed.txt",202));
+    efs_kv_lsm_snapshot_release(source);source=NULL;CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));
+    CHECK(!efs_query_disk_build(cache,source,disk,4<<20,NULL,NULL,NULL,&next));
+    uint64_t after=retained;struct subtree_output after_page={.limit=3};
+    CHECK(!efs_query_disk_page(disk,root,EFS_NAME_CONTAINS,"",0,&after,512,NULL,NULL,subtree_emit,&after_page));
+    CHECK(after==replay && after_page.count==old_page.count && after_page.hash==old_page.hash);
+    uint64_t cursor=0;unsigned calls=4;struct subtree_output cancelled={.limit=3};
+    CHECK(efs_query_disk_page(disk,root,EFS_NAME_CONTAINS,"",0,&cursor,512,subtree_cancel,&calls,subtree_emit,&cancelled)==EFS_ERR_BUSY);
+    CHECK(!cursor && !cancelled.count);
+    CHECK(efs_query_disk_page(disk,root,EFS_NAME_CONTAINS,"",0,&cursor,512,NULL,NULL,subtree_deny,NULL)==EFS_ERR_BUSY);
+    CHECK(cursor<=(UINT64_C(4096)<<32));
+    cursor=0;struct subtree_output denied={.limit=UINT_MAX};
+    CHECK(efs_query_disk_page(disk,root,EFS_NAME_CONTAINS,"",0,&cursor,512,NULL,NULL,subtree_deny,&denied)==EFS_ERR_BUSY);
+    CHECK(denied.count==3); /* A denial after output is still an error. */
+    for(unsigned budget=1;budget<=61;budget+=15){
+        cursor=0;struct subtree_output bounded={.limit=UINT_MAX},oracle={.limit=UINT_MAX};
+        CHECK(!efs_query_disk_page(disk,root,EFS_NAME_CONTAINS,"",0,&cursor,budget,NULL,NULL,subtree_emit,&bounded));
+        CHECK(cursor && cursor<=(UINT64_C(4096)<<32));
+        CHECK(!efs_query_disk_page(disk,root,EFS_NAME_CONTAINS,"",0,&cursor,512,NULL,NULL,subtree_emit,&bounded));
+        uint64_t full=0;CHECK(!efs_query_disk_page(disk,root,EFS_NAME_CONTAINS,"",0,&full,512,NULL,NULL,subtree_emit,&oracle));
+        CHECK(cursor==(UINT64_C(4096)<<32) && bounded.count==oracle.count && bounded.hash==oracle.hash);
+    }
+    uint64_t watermarks[4]={9,10,11,12};struct efs_query_disk *restored=NULL;
+    CHECK(next && !efs_query_disk_checkpoint(next,watermarks));
+    CHECK(!efs_query_disk_restore(cache,watermarks,4<<20,&restored));
+    if(restored){
+        cursor=0;struct subtree_output renamed={.limit=UINT_MAX};
+        CHECK(!efs_query_disk_page(restored,root,EFS_NAME_EXACT,"renamed.txt",0,&cursor,512,NULL,NULL,subtree_emit,&renamed));
+        CHECK(renamed.count==1 && cursor==(UINT64_C(4096)<<32));
+        efs_query_disk_free(restored);
+    }
+    printf("recursive subtree scratch: %zu fixed query-local bytes, no retained traversal allocation\n",sizeof(struct subtree_scan));
+    uint64_t full=0;struct subtree_output expected={.limit=UINT_MAX};
+    CHECK(!efs_query_catalog_page(memory,root,EFS_NAME_CONTAINS,"",0,&full,100000,NULL,NULL,subtree_emit,&expected));
+    struct subtree_job jobs[8];pthread_t threads[8];unsigned created=0;
+    for(unsigned i=0;i<8;i++){
+        jobs[i]=(struct subtree_job){.disk=disk,.root=root,.expected=expected};
+        int rc=pthread_create(&threads[i],NULL,subtree_reader,&jobs[i]);CHECK(!rc);if(rc)break;created++;
+    }
+    for(unsigned i=0;i<created;i++){CHECK(!pthread_join(threads[i],NULL));CHECK(!jobs[i].rc);}
+    efs_query_disk_free(next);efs_query_disk_free(disk);efs_query_catalog_free(memory);
+    efs_kv_lsm_snapshot_release(source);efs_kv_lsm_close(kv);
+    printf("recursive subtree: unrelated catalogue, aliases/tombstone/empty dir, match modes, bounded completion, replay, retained generation, refusal and cancellation %s\n",failures==before?"PASS":"FAIL");
+}
 static void changed_journal_test(void)
 {
     const unsigned count=2*SORT_ROWS+17,shards=FD_CACHE*2;
@@ -899,6 +1035,7 @@ int main(void)
     pending_preflight_test();
     rebuild_cache_test();
     local_page_test();
+    subtree_page_test();
     {
         struct efs_query_rollup r={.tree_files=UINT64_MAX-1,.tree_dirs=7,.tree_bytes=9};
         CHECK(!rollup_tree_add(&r,1,2,3));

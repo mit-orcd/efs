@@ -1405,6 +1405,151 @@ static int local_directory_page(struct efs_query_disk *d,const struct efs_meta_r
     }
     *position=UINT64_C(4096)<<32;return EFS_OK;
 }
+/* Small directory sets can merge immutable parent-key ranges instead of
+ * visiting unrelated names. Positions are still the original global n-file
+ * ordinals: no new cursor encoding, session state or checkpoint format.
+ * Discovery and iteration share the request's existing candidate budget.
+ * A non-LOCAL descendant or exhausted bounded discovery falls back to the
+ * original scan with only the unspent budget. */
+struct subtree_range {
+    struct efs_meta_row row;
+    struct efs_name_entry entry;
+    uint64_t at,position;
+    uint32_t shard;
+    int valid;
+};
+struct subtree_scan {
+    struct efs_query_disk *d;
+    struct subtree_range ranges[INODE_CACHE];
+    unsigned count,current;
+    uint32_t remaining,discovery;
+    uint64_t entries;
+    int (*stop)(void *);void *stop_ctx;
+};
+_Static_assert(sizeof(struct subtree_scan)<=RAW_WRITE_WINDOW,
+               "query-local subtree scratch is bounded to 64 KiB");
+static int subtree_discover(void *ctx,const uint8_t *key,uint32_t kn,const uint8_t *val,uint32_t vn)
+{
+    struct subtree_scan *s=ctx;
+    if(s->stop && s->stop(s->stop_ctx))return EFS_ERR_BUSY;
+    if(!s->discovery)return EFS_ERR_AGAIN;
+    s->discovery--;s->remaining--;
+    struct efs_name_entry e;int rc=entry_from(key,kn,val,vn,&e);if(rc)return rc;
+    struct subtree_range *parent=&s->ranges[s->current];uint32_t chosen;
+    rc=chosen_shard(s->d,&parent->row,&e,&chosen);if(rc)return rc;
+    if(chosen!=parent->shard || !e.dentry.ino || e.dentry.type==EFS_META_DENT_TOMBSTONE)return EFS_OK;
+    s->entries++;
+    if(!S_ISDIR(e.dentry.type))return EFS_OK;
+    struct disk_node node;rc=locate(s->d,e.dentry.ino,&node,NULL);if(rc)return rc;
+    if(node.row.generation!=e.dentry.generation)return EFS_ERR_IO;
+    if(!S_ISDIR(node.row.mode))return EFS_OK;
+    if(node.link.parent!=e.parent || node.row.parent!=e.parent)return EFS_ERR_PROTO;
+    if(node.row.layout!=EFS_META_LAYOUT_LOCAL || s->count==INODE_CACHE)return EFS_ERR_AGAIN;
+    for(unsigned i=0;i<s->count;i++)if(s->ranges[i].row.ino==node.row.ino)return EFS_ERR_PROTO;
+    s->ranges[s->count++]=(struct subtree_range){.row=node.row,.shard=efs_kv_inode_shard(node.row.ino)};
+    return EFS_OK;
+}
+static int subtree_position(struct efs_query_disk *d,uint32_t shard,const struct efs_name_entry *entry,uint64_t *position)
+{
+    uint64_t lo=0,hi=d->part[shard].names;
+    while(lo<hi){
+        uint64_t mid=lo+(hi-lo)/2;struct efs_name_entry e;
+        int rc=disk_io(d,shard,'n',&e,sizeof(e),mid*sizeof(e),0);if(rc)return rc;
+        if(name_compare(&e,entry)<0)lo=mid+1;else hi=mid;
+    }
+    if(lo>=d->part[shard].names || lo>UINT32_MAX)return EFS_ERR_PROTO;
+    struct efs_name_entry e;int rc=disk_io(d,shard,'n',&e,sizeof(e),lo*sizeof(e),0);if(rc)return rc;
+    if(name_compare(&e,entry) || memcmp(&e.dentry,&entry->dentry,sizeof(e.dentry)))return EFS_ERR_PROTO;
+    *position=((uint64_t)shard<<32)|lo;return EFS_OK;
+}
+static int subtree_next(struct subtree_scan *s,struct subtree_range *range,uint64_t start,
+    enum efs_name_match match,const char *term)
+{
+    range->valid=0;
+    uint8_t prefix[EFS_KV_KEY_MAX];uint32_t pn;
+    int rc=efs_kv_key_dentry_prefix(range->shard,range->row.ino,prefix,&pn);if(rc)return rc;
+    int kind=kind_at(EFS_KV_KIND_DENTRY);
+    while(range->at<s->d->part[range->shard].end[kind]){
+        if(s->stop && s->stop(s->stop_ctx))return EFS_ERR_BUSY;
+        if(!s->remaining)return EFS_ERR_AGAIN;
+        struct slot slot;uint8_t key[EFS_KV_KEY_MAX],value[VALUE_MAX];
+        rc=read_record(s->d,range->shard,range->at,&slot,key,value);if(rc)return rc;
+        if(slot.key_len<pn || memcmp(key,prefix,pn))return EFS_OK;
+        s->remaining--;range->at++;
+        struct efs_name_entry e;rc=entry_from(key,slot.key_len,value,slot.value_len,&e);if(rc)return rc;
+        if(!matches(e.name,match,term)){
+            if(match==EFS_NAME_EXACT || match==EFS_NAME_PREFIX)return EFS_OK;
+            continue;
+        }
+        if(!e.dentry.ino || e.dentry.type==EFS_META_DENT_TOMBSTONE)continue;
+        uint32_t chosen;rc=chosen_shard(s->d,&range->row,&e,&chosen);if(rc)return rc;
+        if(chosen!=range->shard)continue;
+        uint64_t position;rc=subtree_position(s->d,range->shard,&e,&position);if(rc)return rc;
+        if(position<start)continue;
+        range->entry=e;range->position=position;range->valid=1;return EFS_OK;
+    }
+    return EFS_OK;
+}
+static int subtree_page(struct efs_query_disk *d,const struct efs_meta_row *root,
+    const struct efs_query_rollup *rollup,enum efs_name_match match,const char *term,
+    uint64_t *position,uint32_t *budget,int (*stop)(void *),void *stop_ctx,
+    int (*emit)(void *,const struct efs_name_entry *,const char *),void *user)
+{
+    struct subtree_scan s={.d=d,.count=1,.remaining=*budget,.discovery=*budget/3,.stop=stop,.stop_ctx=stop_ctx};
+    s.ranges[0]=(struct subtree_range){.row=*root,.shard=efs_kv_inode_shard(root->ino)};
+    int rc=EFS_OK;
+    for(s.current=0;s.current<s.count && !rc;s.current++){
+        struct subtree_range *range=&s.ranges[s.current];uint8_t prefix[EFS_KV_KEY_MAX];uint32_t pn;
+        rc=efs_kv_key_dentry_prefix(range->shard,range->row.ino,prefix,&pn);
+        if(!rc)rc=raw_prefix(d,prefix,pn,subtree_discover,&s);
+    }
+    *budget=s.remaining;
+    if(rc)return rc;
+    /* A directory with a noncanonical type tag cannot hide descendants:
+     * the immutable rollup must prove discovery covered every directory. */
+    if(s.count-1!=rollup->tree_dirs || s.entries!=rollup->tree_files+rollup->tree_dirs)return EFS_ERR_AGAIN;
+    for(unsigned i=0;i<s.count && !rc;i++){
+        struct subtree_range *range=&s.ranges[i];
+        if(range->shard<(*position>>32))continue;
+        uint8_t prefix[EFS_KV_KEY_MAX],lower[EFS_KV_KEY_MAX];uint32_t pn,ln;
+        rc=efs_kv_key_dentry_prefix(range->shard,range->row.ino,prefix,&pn);if(rc)break;
+        memcpy(lower,prefix,pn);ln=pn;const char *name="";struct efs_name_entry cursor;
+        if(match==EFS_NAME_EXACT || match==EFS_NAME_PREFIX)name=term;
+        if(range->shard==(*position>>32)){
+            uint32_t at=(uint32_t)*position;
+            if(at>=d->part[range->shard].names)continue;
+            rc=disk_io(d,range->shard,'n',&cursor,sizeof(cursor),(uint64_t)at*sizeof(cursor),0);if(rc)break;
+            if(strcmp(cursor.name,name)>0)name=cursor.name;
+        }
+        size_t length=strnlen(name,EFS_MAX_NAME);
+        if(length>=EFS_MAX_NAME || length>EFS_KV_KEY_MAX-pn)continue;
+        memcpy(lower+pn,name,length);ln+=(uint32_t)length;
+        rc=seek(d,lower,ln,&range->at,NULL);
+        if(rc==EFS_ERR_NOT_FOUND){rc=EFS_OK;continue;}
+        if(!rc)rc=subtree_next(&s,range,*position,match,term);
+    }
+    /* Budget exhaustion before any output can safely use the global path.
+     * After output, resume at its original ordinal; never reset the cursor. */
+    if(rc){*budget=s.remaining;return rc;}
+    for(;;){
+        struct subtree_range *next=NULL;
+        for(unsigned i=0;i<s.count;i++)if(s.ranges[i].valid && (!next || s.ranges[i].position<next->position))next=&s.ranges[i];
+        if(!next){*position=UINT64_C(4096)<<32;return EFS_OK;}
+        *position=next->position;
+        if(stop && stop(stop_ctx))return EFS_ERR_BUSY;
+        char path[EFS_MAX_PATH];rc=efs_query_disk_path(d,next->entry.parent,root->ino,path,sizeof(path));if(rc)return rc;
+        size_t length=strlen(path),name=strlen(next->entry.name);
+        if(length+name+(length?1:0)>=sizeof(path))return EFS_ERR_NAMETOOLONG;
+        if(length)path[length++]='/';memcpy(path+length,next->entry.name,name+1);
+        rc=emit(user,&next->entry,path);
+        if(rc==EFS_ERR_AGAIN)return EFS_OK;
+        if(rc)return rc;
+        *position=next->position+1;
+        rc=subtree_next(&s,next,*position,match,term);
+        if(rc==EFS_ERR_AGAIN)return EFS_OK;
+        if(rc)return rc;
+    }
+}
 int efs_query_disk_page(const struct efs_query_disk *cd,efs_ino_t root,enum efs_name_match match,const char *term,int immediate,
     uint64_t *position,uint32_t budget,int (*stop)(void *),void *stop_ctx,
     int (*emit)(void *,const struct efs_name_entry *,const char *),void *user)
@@ -1417,6 +1562,11 @@ int efs_query_disk_page(const struct efs_query_disk *cd,efs_ino_t root,enum efs_
         if(immediate)return local_directory_page(d,&row,match,term,position,budget,stop,stop_ctx,emit,user);
         rc=efs_query_disk_stats(d,root,&rollup);if(rc)return rc;
         if(!rollup.tree_dirs)return local_directory_page(d,&row,match,term,position,budget,stop,stop_ctx,emit,user);
+        if(*position!=(UINT64_C(4096)<<32) && rollup.tree_dirs<INODE_CACHE &&
+           rollup.tree_files<=budget/4 && rollup.tree_dirs<=budget/4-rollup.tree_files){
+            rc=subtree_page(d,&row,&rollup,match,term,position,&budget,stop,stop_ctx,emit,user);
+            if(rc!=EFS_ERR_AGAIN)return rc;
+        }
     }
     uint32_t shard=(uint32_t)(*position>>32);uint64_t at=(uint32_t)*position;
     for(;shard<SHARDS;shard++,at=0){
