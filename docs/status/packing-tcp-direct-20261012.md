@@ -13,13 +13,15 @@ independently of inherited command-enabled environment. Its summary records the
 packing and command flags. Physical packing, mutation, peer, cold-byte and
 reclamation assertions and original deadlines remain unchanged.
 
-Current candidate: **eb2fad1b76e5311087076f70d2c3544a62825edf**, with a bounded
-metadata insertion buffer, shorter FIFO receive slices and reserved ReadIndex
-peer connections. The two-RPC follower experiment was reverted. Targeted safety
-gates pass, but full live repeatability remains **FAIL**. Full current-source
-normal/fault native reruns PASS.
-The earlier deep-directory failures are not closed by a single passing run.
-See the final checkpoints below for each tested SHA and its exact verdict.
+Current candidate: **dc4ad1ed424986b01e070040ca5a1a8f89c3f65f**, combining
+atomic scalar admission, bounded coherent-view publication and fresh quorum
+scheduling while a preceding proven read waits for own apply. Local focused
+regressions and exact-source AMD normal/fault/sanitizer safety PASS.
+Live qualification is NOTRUN pending space for the unchanged4G fixture. No
+candidate closes the directory timeout: latest completed quiet61ba3c16 passed
+1492/1512 core with20 timeouts; peer and orderly shutdown PASS, cold and
+reclamation/drain NOTRUN after reserve refusal. Earlier full rounds that passed
+once did not establish repeatability. See checkpoints for exact verdicts.
 
 Historical baseline source: **0dcce384fa442479070a31464777f104c1fe7829**.
 Memtable insertion optimization and GC shutdown correction pass normal/fault
@@ -686,3 +688,144 @@ Full eb2fad1b safety reruns completed with exit0 for `make test` and a clean
 normal `640a0d7ac2f479b845b5f1f0bf68340181d841281f079fda7ea53edc0006eab9`;
 fault `4eb3f06baeabcb0c94234dfc65f4c722e6c6a07c66bcea77dc59c2d28cd972e8`.
 These safety results do not change the failed quiet packing verdict.
+
+
+## Atomic scalar admission and bounded view publication: qualification pending
+
+**3393b129693b46747261caf360d6e892bdd6d1ea** captures the scalar reader's
+current core commit/term and next-round admission, then starts an idle round
+under the same pump-mutex acquisition. A pending round still forces the new
+arrival to wait for the next round. Failures and round-counter exhaustion remain
+failures. The waiter retains quorum/term/applied-prefix guards and its deadline.
+The new actual-helper regression checks100 post-send arrivals, fresh commit
+floors, next independent rounds, role refusal, storage failure and overflow.
+Full normal/fault native and ten focused normal/ASan/UBSan tests PASS on AMD;
+quiet live acceptance FAILS:1492/1512 core PASS,20 timeouts in
+`gc-direct-70f5973i`: seven deep60, seven names_crazy_dirs, three deep100 and
+three names_crazy_roundtrip. Peer67/67, cold bytes, physical reclamation,
+metadata drain and four orderly exits PASS independently. Further quiet and
+crash repeats were NOTRUN after this failure. Normal/fault log SHA-256:
+`981940ef882ec857cd4e53701db3e01a8c09478dee143fb6a81ef1f210a60b19` and
+`f3f143113601df57573810566e0e22ee264fa18a2d799fe79506448465170e01`.
+Manifest782-input digest:
+`6ff41a2e317a7f9c8636018230986d9d7642abdcc8cc4607487ddb9bd0324ca5`.
+
+**61ba3c1695ef8ee5f96be8522825248622c2db42** additionally collects Raft
+state under the existing pump mutex before marking the published view sequence
+odd. Quorum getters take the shared disk-log mutex, so the former odd window
+could include a blocking getter and make lock-free readers spin. The new odd
+window covers only the atomic field copy; identical published state makes no
+sequence/stamp writes. Readers see the preceding coherent snapshot while state
+is collected; it cannot cover arrivals after that proof's send. Fresh admission
+and the existing quorum/term/apply guards remain the authority requirements.
+
+The actual publication regression holds a quorum getter blocked in another
+thread, requires an even sequence and a readable old coherent view, rejects
+post-send admission, then verifies the new term/round after release. Both this
+regression and the unchanged-publication check fail against3393b129 and PASS
+with61ba3c16. Local admission/pair/completion/publication regressions PASS.
+AMD full normal/fault native and ten targeted normal/ASan/UBSan regressions
+PASS. Quiet fixture `gc-direct-x8u82cbf` FAILS:1492/1512 core PASS,20 timeouts
+(seven deep60, seven names_crazy_dirs, five deep100, one names_crazy_roundtrip).
+Peer67/67 and all four status-zero exits within20s PASS. Cold restart was
+NOTRUN:4G exceeded the3.88GiB safe maximum. Thus this run verifies neither
+cold bytes nor post-restart reclamation/drain. Reserve and quota were unchanged.
+Further quiet/crash repeats NOTRUN. Manifest782-input digest:
+`a032a9e53391a999f9d1851d9d7e400b38f203cc37c2c7c3b9a6a1370c9a523f`.
+
+Build each candidate with its short SHA in `EFS_GIT_ID`/`EFS_GIT_DESCRIBE`
+and `EFS_GIT_BRANCH=devel`, then run full `make test`, clean fault-enabled
+build/test and the focused admission/publication plus existing read/FIFO/pool
+regressions normally and with the sanitizer wrapper above. Live reproduction
+is the same seven-client/jobs16/4G fixture with fresh ports36610 for3393b129
+and36710 for61ba3c16. Three quiet rounds and the acknowledged-fsync crash repeat
+are required, not assumed. Every client/server command feature remains off;
+files/TCP/direct/packing remains selected, and30/20/180s budgets are unchanged.
+External raw locations: `amd_efs:/data1/efs/packing-qualification-20261012/admit-*`
+and `view-*`; failed stores are retained. No raw outputs are committed.
+
+An instrumented eb2fad1b diagnostic (`gc-direct-mnesv935`) separately failed
+1498/1512 core: all seven deep60 and names_crazy_dirs cases timed out. Peer,
+cold bytes, reclamation, metadata drain and orderly shutdown PASS. Node1's
+cumulative leader ReadIndex mean was3257us; node2's remote proof mean5946us
+and post-proof apply wait1472us. These whole-run counters are diagnostic, not
+exclusive deep-case timing or evidence that either new change closes the gate.
+Instrumentation included phase, read, RPC and Raft observations; it cannot be
+counted as quiet acceptance or compared as an unconfounded throughput result.
+
+
+## Fresh quorum scheduling without waiting for preceding apply
+
+Candidate **dc4ad1ed424986b01e070040ca5a1a8f89c3f65f** uses the existing Raft
+core support for retaining a completed quorum while its own apply target is
+pending. Host scalar and paired admissions can start the next fresh round once
+that prior quorum is complete; a current unproven round still cannot be
+superseded. A reader whose own proof is complete waits for that proof's own
+apply, rather than starting repeated replacement rounds. The sleep predicate
+lets a later admission start its fresh proof after quorum completion. No rows
+are returned until the unchanged host_view_covers term/quorum/round/index/apply
+predicate succeeds. No added remote RPC window, threads, cached authority,
+protocol change, deadline or concurrency relaxation.
+
+The actual scalar/pair regressions cover pending-unproven refusal and a new
+round after quorum with own apply still pending. Existing actual-core parked
+apply/floor/early-ACK tests exercise retained proofs and rejection of unapplied
+read authority. Local admission, pair, completed-proof and coherent-publication
+regressions PASS. Exact-source AMD full normal/fault native and ten targeted normal/ASan/UBSan checks PASS.
+Fully instrumented actual Raft tests PASS normally and with early read ACKs. Live acceptance is NOTRUN pending capacity for unchanged4G fixtures.
+Manifest782-input digest:
+`e6be8db84569c3727919d49dbc863dc5f005d6336b59b112a46decb74665fee9`.
+Build with `EFS_GIT_ID=dc4ad1ed EFS_GIT_DESCRIBE=dc4ad1ed EFS_GIT_BRANCH=devel`.
+
+Run `make test`, clean fault-enabled build/test, the ten focused read/FIFO/pool
+Python scripts with the sanitizer wrapper, and a fully instrumented libefs.a +
+tests/test_raft build. Run actual Raft once normally and once with
+`EFS_TEST_EARLY_READ_ACK=1`, retaining ASan/UBSan abort/leak options above. The
+live command remains the same seven-client/jobs16 fixture, fresh port36810,
+4G per node and30/20/180s budgets. Raw output lives externally under
+`amd_efs:/data1/efs/packing-qualification-20261012/quorum-*`.
+
+Inactive generated build outputs were cleaned without deleting failed stores,
+source, manifests or logs. A proposed lossless transfer of the failed61ba3c16
+store to a local archive was rejected by automatic approval review as
+unauthorized private-data egress; no fixture data was copied or deleted. Human
+approval is pending to erase exactly the four stopped synthetic stores for
+`root-a/gc-direct-x8u82cbf/{n1,n2}` and
+`root-b/gc-direct-7gukbidf/{n3,n4}` (about3.6GiB), while preserving logs,
+manifest and committed reproduction. The alternative is explicit authorization
+for local lossless archival before erasure. No storage reserve changes are
+proposed, and no live qualification pass is inferred from safety or space work.
+
+Current dc4ad1ed safety checkpoint: both full native suites exit0, targeted
+read/FIFO/pool normal and sanitizer gates exit0, and fully instrumented actual
+Raft normal/early-ACK checks exit0. Original-budget live qualification remains
+NOTRUN pending the requested storage decision. No owned live fixture remains
+running. Local architecture documentation and diff checks PASS.
+
+Normal executable SHA-256:
+
+| Executable | SHA-256 |
+| --- | --- |
+| efsd | 62b61827e438afc44cfabfe49fc75783a596214c742ce8c121c78eb88973fee9 |
+| efs-fuse | fa0b03098d9fbb6b90884e998d4497eda174037598636dce10be1b113b83a1c4 |
+| efs-mgmt | efe8893cf94e43155c6f575da6b9b104240ed0ae79d2c6a8c8d798f0d2158784 |
+
+Full native log SHA-256: normal
+`4f84e7b5803abe3f5dd724a5f64193498c749b2afec5294720bad0db25aed6b6`;
+fault `70d3b9fcb170f1b47e174e386c77ebd22e5d0b3bf496afd9ed0f41d39eb2e5b7`.
+To reproduce the fully instrumented actual core, clean a separate source copy,
+build `libefs.a tests/test_raft` with `CC` pointing to the gcc sanitizer wrapper
+(which appends `-fsanitize=address,undefined -fno-omit-frame-pointer -g` at both
+compile and link), then run `./tests/test_raft` normally and with
+`EFS_TEST_EARLY_READ_ACK=1`; set `ASAN_OPTIONS=detect_leaks=1:abort_on_error=1`
+and `UBSAN_OPTIONS=halt_on_error=1` for both. Compile/link command logs are
+retained in `quorum-core-san-compile.log`; executable output in
+`quorum-core-san-{normal,early}.log`. Safety PASS is not packing acceptance.
+
+Fully instrumented actual Raft output SHA-256 (both normal and early-ACK
+outputs, independently executed):
+`6d5a0e475c33ea6abcdf753bbbfa2d556d4b0998d269589838fb7cd8d8e6f40d`.
+Preceding61ba3c16 quiet executable identities (`view-binaries.txt`):
+efsd `a292cab995ac9ead66efc212ca328ffa87e7eda5a4c863e10fa1d25938a2d4a2`;
+efs-fuse `4862cf5fdae672dd143458a00e33c317a0c2f759d032fda9c92e61abd1ad06a1`;
+efs-mgmt `3405d151081f55ea5881d2ff1fb0f9adddb5a7aa7ba93f35571c110a814c2ac1`.
