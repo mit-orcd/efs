@@ -133,8 +133,20 @@ static inline int efs_mgmt_help(FILE *out,const char *command)
     for (size_t i=0;i<sizeof(specs)/sizeof(specs[0]);i++) if (!strcmp(command,specs[i].name)) {
         fprintf(out,"efs-mgmt %s - Administrative command\n\nUsage:\n  efs-mgmt %s %s\n",
                 command,command,specs[i].args);
-        efs_help_section(out,"Options","-h, --help           Show this help");
-        efs_help_section(out,"Notes",(!strcmp(command,"mkfs") || !strcmp(command,"raft-mkfs")) ?
+        efs_help_section(out,"Options",!strcmp(command,"expiry-policy") ?
+            "--expire-after DURATION   Initial new-file lifetime from creation\n"
+            "--renewal-limit DURATION  Maximum deadline distance from renewal time\n"
+            "--flags FLAGS             Bit 0: enabled; bit 1: owner clearing\n"
+            "-h, --help                Show this help" : "-h, --help           Show this help");
+        efs_help_section(out,"Notes",!strcmp(command,"expiry-policy") ?
+            "Durations: positive integer with ns, s, m, h or d (example: 24h).\n"
+            "Renewal limit defaults to expire-after and must be at least that duration.\n"
+            "Reading/writing does not renew. Repeated renewal can extend total lifetime.\n"
+            "Policy changes affect future files; this is not a maximum lifetime rule.\n"
+            "Set requires operator UID 0 and server EFS_EXPIRY=1.\n"
+            "Legacy set ROOT GENERATION EXPECTED_REV TTL_NS MAX_NS FLAGS is supported.\n"
+            "Node addresses use HOST:PORT." :
+            (!strcmp(command,"mkfs") || !strcmp(command,"raft-mkfs")) ?
             "Single export; the legacy label is accepted and ignored.\nNode addresses use HOST:PORT." :
             "Node addresses use HOST:PORT.");return 0;
     }
