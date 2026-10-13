@@ -1494,6 +1494,14 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+large32-file/2GiB and small20,000-file/4KiB peer-byte/rename/unlink correctness
+PASS on deployed1a737143 files/TCP/direct with all requested features OFF.
+Host TCP retransmissions35/51, NIC receive misses10/6 observed; no timeout/reset
+increments or logged transport retries; seven large-writer RPC backoffs per host.
+Diagnostic mounts/fixtures cleaned normally. Receive-loss cause remains OPEN;
+no performance tuning and no transfer of this result to broader acceptance.
+
+[Query temporary-peak correctness](../status/query-sort-peak-correctness-20261013.md):
 `5f8ec779` checks sort cleanup and charges temporary copies only for their
 simultaneous lifetime, retaining unchanged16/32GiB limits and cache format.
 Bounded Linux query, quota/peak refusal, fault/cancellation, retained-reader,
