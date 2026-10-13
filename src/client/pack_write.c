@@ -619,7 +619,10 @@ static int pack_flush_run(efs_ino_t ino)
         }
         pthread_mutex_unlock(&pack_mu);if(!pending)return EFS_OK;
         int rc=pack_flush_group(gi,0);
-        if(rc!=EFS_OK && rc!=EFS_ERR_BUSY)return rc;
+        /* A storage peer may temporarily lack fresh metadata authority. The
+         * cohort, object and successful PUT bits remain owned for retry; do
+         * not turn that healthy refusal into a permanent close error. */
+        if(rc!=EFS_OK && rc!=EFS_ERR_BUSY && rc!=EFS_ERR_NOT_PRIMARY)return rc;
         if(pack_pause())return EFS_ERR_BUSY;
     }
 }
