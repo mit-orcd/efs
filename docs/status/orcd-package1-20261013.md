@@ -102,10 +102,12 @@ Reproduce `python3 scripts/orcd_efs_commands.py /tmp/efs-mount PEER --query-host
 RDMA mounts and the requested profile. Preserve failures and normally unmount
 the peer; do not widen the per-suite deadlines or delete authoritative stores.
 
-Reviewed devel ordinary-file metadata read-admission correction `2b927c1b`
-integrated into the isolated ORCD candidate. It shares only pre-admitted quorum
-rounds; storage backend no longer excludes ordinary files. Combined-source
-qualification and deployment are pending. AMD is correcting legacy retirement
+Reviewed devel ordinary-file metadata read-admission experiment `2b927c1b`
+was initially integrated in the private candidate. Intel's later loaded run
+regressed despite native passes, so devel `cecc3524` reverts it. The ORCD
+candidate includes that rejection and preserves the previous production
+read-admission behavior. No ORCD deployment of this experiment occurred.
+AMD is correcting legacy retirement
 after replacement-link rename succeeds but root fsync fails: abandoning the
 candidate must retain the old checkpoint until durable replacement publication.
 Do not deploy the earlier retirement candidate as a qualified format transition.

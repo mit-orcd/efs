@@ -170,3 +170,30 @@ same-filesystem hardlinked copy is suitable for unchanged historical results),
 not an escaping symlink, in native test trees. Both-host complete candidate
 native reruns are pending. First failed native evidence is retained, and no
 candidate was deployed before its prerequisites passed.
+
+## Rejected ordinary-files admission experiment
+
+Frozen7241653012c64b8cdb70dc09f32b1b77c556ffb6 has the same853 product/test
+inputs as2b927c1b; full normal native and admission ASan/UBSan PASS both hosts.
+Orderly deployment and actual disabled-profile checks PASS, all1024 retained
+fork-fixture files checked through both mounts and all256 lifecycle hashes
+PASS after upgrade. These are upgrade integrity, not new-source same-source
+cold acceptance.
+
+Normal seven-client/jobs16 candidate run FAIL:44 failed cases (verify exact TSV
+count in subsequent checkpoint), broad deep/name/append/mtime timeouts plus
+EBUSY in create/unlink and mkdirat/unlinkat. This is a performance regression,
+not accepted merely because native correctness controls pass. Reject the
+ordinary-files tracking extension and restore the exact prior production
+read-admission behavior; retain all source/test/failed evidence in history.
+Restore Intel binaries to1a737143 under package3 feature settings, preserve all
+storage and cleanly drain clients. No force, reset or timeout/concurrency change.
+Further liveness diagnosis is required before another candidate.
+
+Correction to the earlier baseline log search: `raft-snap` was omitted from its
+search expression. Fresh captured baseline logs actually contain successful
+snapshots in BOTH groups, six voter advances192–287ms and six background exports
+approximately643–651MiB,903–2299ms. Foreground1s gate PASS during them. Thus
+normal snapshots were triggered; original5.569/22.044s foreground tails remain
+unreproduced in this bounded run. Do not confuse exporter duration with a
+foreground blocked interval or claim the original stall is globally fixed.
