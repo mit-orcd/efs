@@ -13,15 +13,13 @@ independently of inherited command-enabled environment. Its summary records the
 packing and command flags. Physical packing, mutation, peer, cold-byte and
 reclamation assertions and original deadlines remain unchanged.
 
-Current candidate: **dc4ad1ed424986b01e070040ca5a1a8f89c3f65f**, combining
-atomic scalar admission, bounded coherent-view publication and fresh quorum
-scheduling while a preceding proven read waits for own apply. Local focused
-regressions and exact-source AMD normal/fault/sanitizer safety PASS.
-Live qualification is RUNNING after user-authorized stopped test-store cleanup, with unchanged4G fixtures. No
-candidate closes the directory timeout: latest completed quiet61ba3c16 passed
-1492/1512 core with20 timeouts; peer and orderly shutdown PASS, cold and
-reclamation/drain NOTRUN after reserve refusal. Earlier full rounds that passed
-once did not establish repeatability. See checkpoints for exact verdicts.
+Current candidate: **59534b9ae9eb47694214fd3ee4740e23758921d5** adds a
+queued-byte TCP receive fast path. Local absolute-deadline regression PASS;
+exact-source AMD full safety is RUNNING, quiet live repeats NOTRUN until safety
+finishes. Previous dc4ad1ed quiet core **1494/1512 PASS,18 timeouts**, peer67/67,
+cold acknowledged bytes, physical reclamation and metadata drain PASS. Three
+repeat rounds and the additional crash gate were not completed after that
+failure. Packing repeatability remains FAIL; no deadline or authority change.
 
 Historical baseline source: **0dcce384fa442479070a31464777f104c1fe7829**.
 Memtable insertion optimization and GC shutdown correction pass normal/fault
@@ -828,3 +826,64 @@ Preceding61ba3c16 quiet executable identities (`view-binaries.txt`):
 efsd `a292cab995ac9ead66efc212ca328ffa87e7eda5a4c863e10fa1d25938a2d4a2`;
 efs-fuse `4862cf5fdae672dd143458a00e33c317a0c2f759d032fda9c92e61abd1ad06a1`;
 efs-mgmt `3405d151081f55ea5881d2ff1fb0f9adddb5a7aa7ba93f35571c110a814c2ac1`.
+
+
+### Syscall diagnosis and queued-byte receive candidate
+
+At the user's request, dc4ad1ed was traced during the unchanged seven-client,
+16-jobs/core workload on AMD (four4G daemons, TCP/direct, packing enabled,
+`.efs` disabled at client and server, repair experiment disabled). `strace -ff
+-ttt -T` covered all four daemons and all seven FUSE processes from startup
+through80s after the seventh mount, including the30s directory timeout window.
+The traced core passed1438/1512 with74 timeouts: instrumentation introduced
+additional failures, so this is diagnostic evidence, never qualification.
+Peer, cold acknowledged-byte checks, reclamation and drain still passed.
+Raw captures remain outside Git at
+`amd_efs:/data1/efs/packing-qualification-20261012/quorum-strace-*`.
+
+FUSE clients issued roughly42–45k poll calls and73–77k recvfrom calls each.
+Daemon2 recorded about2.77million futex calls, including repeated condition
+wakeups/mutex contention. These are aggregate thread counts, not elapsed wall
+latency; long idle receive/condition waits must not be called request stalls.
+Traced individual fsync/fdatasync maxima were below10ms. A separate49Hz dwarf
+stack sample (`quorum-stack-*`) found ext4 journal sync spin contention plus
+TCP send/receive and condition-lock work. Daemon2 do_fsync accounted for13.85%
+inclusive CPU samples; product callers included KV hold release and Raft log
+batch barriers. No durability barrier was removed based on those observations.
+
+One confirmed avoidable cost is `efs_recv_all` polling before every bounded
+receive even when the remaining frame bytes are already queued. Candidate
+59534b9a first tries MSG_DONTWAIT after checking the same absolute deadline,
+then polls only on EAGAIN with the remaining budget recomputed. It retains
+partial-read handling, EINTR retry, EOF refusal, expired-before-read refusal and
+shared fd flags; framing and all read/quorum authority requirements are unchanged.
+The actual-function regression additionally proves three queued single-byte
+reads issue zero polls. Idle and slow-drip deadline regressions remain PASS.
+This is a syscall optimization; timeout closure is not inferred from it.
+
+Exact candidate input manifest:772 tracked source/test/build files, aggregate
+`bce8c5e88b9d655467ca54d0c8e3b218cfb7f1cf5d75fc12e92e48069c16cb49`,
+external `efs-recv-inputs.json`; build IDs are59534b9a/devel. The normal/fault
+native, ten focused sanitizer checks and three quiet repeats plus focused crash
+gate are sequential in detached screen `packing-recv`. Raw logs/markers use
+`recv-*` in the same external directory. No pushes or release promotion.
+
+Reproduce syscall or stack diagnostics from the tested source with strace/perf
+installed and same-user ptrace/perf permission. Use an empty output directory
+outside Git, separate from the test roots:
+
+```sh
+python3 tests/live/packing_diagnostic.py --capture strace \
+  --output /data1/efs/packing-diagnostic-new \
+  --root /data1/efs/packing-qualification/root-a \
+  --root /data1/efs/packing-qualification/root-b --port 36910
+```
+
+Use `--capture perf` and fresh output/ports for the separate49Hz stack capture.
+The committed helper preserves4G and30/75/180s case/drain budgets, traces only
+the selected source binaries/private four-port range, detaches captures after
+80s of concurrent work, and lets the fixture finish cold/reclamation cleanup.
+Inspect attach stderr for capture failures. For acceptance, run the documented
+quiet gc_reclamation command without this helper or observation flags. Test
+stores may be erased after processes stop under the user's AMD data waiver;
+retain diagnostic summaries/reproduction and external logs as useful.
