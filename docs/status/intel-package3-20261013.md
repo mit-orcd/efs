@@ -250,3 +250,13 @@ the package3 disabled-feature profile and profiling OFF. Existing loaded
 failures remain OPEN. The active work is now [checked query-sort cleanup and
 actual temporary peak accounting](query-sort-peak-correctness-20261013.md) for
 ORCD acceptance under unchanged16/32GiB limits, with no further compression.
+
+## Authorized cross-host network diagnostic
+
+[2026-10-13 network workloads](intel-network-workloads-20261013.md) PASS for
+32×64MiB and20,000×4KiB files, opposite-host byte verification, small-file
+rename/unlink and normal fixture/client cleanup on deployed1a737143. TCP
+retransmissions35/51 and NIC hardware receive misses10/6 were observed.
+No timeout/reset increment or logged transport retry; seven metadata RPC
+backoffs per large writer. Cause remains OPEN; no tuning or claim of broader
+seven-client, ORCD or physical-reclamation acceptance.
