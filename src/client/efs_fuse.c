@@ -1389,6 +1389,8 @@ static void lookup_memo_mutation_end(void)
     pthread_mutex_unlock(&g_lookup_memo_mu);
 }
 
+static void lookup_memo_observe(unsigned reason);
+
 static void lookup_memo_put(const struct efs_inode *row)
 {
     unsigned i;
@@ -1398,7 +1400,9 @@ static void lookup_memo_put(const struct efs_inode *row)
     pthread_mutex_lock(&g_lookup_memo_mu);
     if (!t_lookup_memo_serial || g_lookup_memo_active ||
         t_lookup_memo_serial != g_lookup_memo_serial) {
+        unsigned reason = g_lookup_memo_active ? 5 : 6;
         pthread_mutex_unlock(&g_lookup_memo_mu);
+        lookup_memo_observe(reason);
         return;
     }
     i = g_lookup_memo_i++ % LOOKUP_MEMO_N;
@@ -1406,24 +1410,30 @@ static void lookup_memo_put(const struct efs_inode *row)
     g_lookup_memo[i].row = *row;
     g_lookup_memo[i].us = fuse_now_us();
     pthread_mutex_unlock(&g_lookup_memo_mu);
+    lookup_memo_observe(4);
 }
 
 /* Diagnostic counters only; one line per1024 memo attempts. They never
  * change cache lifetime, mutation fencing, RPC or quorum decisions. */
 static void lookup_memo_observe(unsigned reason)
 {
-    static uint64_t counts[4], total;
+    static uint64_t counts[7], total;
     if (!getenv("EFS_RPC_PROF"))
         return;
     __atomic_add_fetch(&counts[reason], 1, __ATOMIC_RELAXED);
+    if (reason >= 4)
+        return;
     uint64_t n = __atomic_add_fetch(&total, 1, __ATOMIC_RELAXED);
     if (!(n % 1024))
-        fprintf(stderr, "MEMO-PROF attempts=%llu hit=%llu active=%llu expired=%llu missing=%llu\n",
+        fprintf(stderr, "MEMO-PROF attempts=%llu hit=%llu active=%llu expired=%llu missing=%llu put_stored=%llu put_active=%llu put_fenced=%llu\n",
                 (unsigned long long)n,
                 (unsigned long long)__atomic_load_n(&counts[0], __ATOMIC_RELAXED),
                 (unsigned long long)__atomic_load_n(&counts[1], __ATOMIC_RELAXED),
                 (unsigned long long)__atomic_load_n(&counts[2], __ATOMIC_RELAXED),
-                (unsigned long long)__atomic_load_n(&counts[3], __ATOMIC_RELAXED));
+                (unsigned long long)__atomic_load_n(&counts[3], __ATOMIC_RELAXED),
+                (unsigned long long)__atomic_load_n(&counts[4], __ATOMIC_RELAXED),
+                (unsigned long long)__atomic_load_n(&counts[5], __ATOMIC_RELAXED),
+                (unsigned long long)__atomic_load_n(&counts[6], __ATOMIC_RELAXED));
 }
 
 static int lookup_memo_take(efs_ino_t ino, struct efs_inode *out)
