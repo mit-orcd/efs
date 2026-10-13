@@ -1,16 +1,23 @@
+[Installed AMD strict RDMA qualification](rdma-installed-amd-20261013.md):
+**PARTIAL on 0ec2a869** — deployed files/direct with .efs/packing/containers/expiry OFF.
+Serial216/216, peer67/67, cold27/27 and48 reconnect cycles PASS; seven-client
+load1510/1512 has two deep-directory timeouts. Paused-follower existing-file read
+returned EIO; restored10GiB full digest PASS. Snapshot workload FAIL630s;
+actual import NOTRUN. Quiet post-fault core216/216 and peer67/67 PASS. No TCP comparison or push.
+
 [Strict segmented RDMA AMD qualification](rdma-soft-roce-integration-20261013.md):
 **PASS affected gates on a32567d7**, branchdevel-rdma — verbs credit progress,
 complete-message protocol/handler and Raft integration. Soft-RoCE core216/216,
 peer67/67; same-binary TCP216/216+67/67. Full-library ASan/UBSan normal/fault
 transport PASS. All333 upgraded TCP sockets zero post-setup payload;19 live
 connections sent multi-segment filesystem messages. Features .efs/packing/
-containers/expiry OFF. Fixtures stopped, installed AMD TCP cluster unchanged.
-Hardware IB, cold/large-metadata/snapshot/load/churn acceptance still NOTRUN.
+containers/expiry OFF. Historical isolated fixtures stopped; installed deployment is now recorded above.
+Hardware IB acceptance remains NOTRUN; subsequent cold/load/churn verdicts above.
 
 [RDMA implementation checkpoint](rdma-implementation-20261013.md):
 `devel-rdma` foundation e6d1ecda native/ASan/UBSan and offset negative control PASS.
 Historical foundation checkpoint; subsequent verbs/application integration and
-AMD affected results are in the current ledger above. Installed AMD TCP cluster unchanged.
+AMD affected results and installed strict-RDMA deployment are in the ledgers above.
 
 [Merged devel ordinary-file AMD qualification](amd-devel-merged-posix-20261013.md):
 **PASS on 96f40602** — all local branch tips integrated; fresh four-node files/TCP/direct

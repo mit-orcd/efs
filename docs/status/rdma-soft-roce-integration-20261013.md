@@ -1,5 +1,8 @@
 # Strict segmented RDMA — AMD integration qualification
 
+Historical isolated checkpoint. Subsequent installed strict-RDMA deployment and
+expanded gates are in the [installed AMD ledger](rdma-installed-amd-20261013.md).
+
 Branch: `devel-rdma`. Final runtime source:
 `a32567d7ef1153b19182cf4f028ac6027bfe39bd`.
 [Agreed contract](rdma-segmented-messages-plan-20261013.md),
