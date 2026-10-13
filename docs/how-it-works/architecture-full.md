@@ -1475,6 +1475,13 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+Latest ORCD `.efs` gate: `4791b7938d6e` passes prerequisites, focused suites
+and 1,512 core cases; 20/21 mixed query cases pass. The remaining stale-empty
+case uses a hidden ten-second polling cutoff inside the configured thirty-second
+budget. A configured-budget harness fix is under qualification; final cold
+400 GiB verification and benchmark resumption remain pending. See the
+[400 GiB evidence](../status/orcd-efs-400g-20261012.md).
+
 Latest ORCD `.efs` gate: `f56f7cadff9d` passes prerequisites, focused suites
 and all 1,512 core cases but has four busy find continuations. Tracing isolates
 maximal reply reservations exhausting the shared budget. A smaller paged-command

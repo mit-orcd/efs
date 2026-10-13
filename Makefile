@@ -544,6 +544,7 @@ test: all
 	python3 tests/test_query_policy_forward.py
 	python3 tests/test_command_policy_mount.py
 	python3 tests/test_efs_commands.py
+	python3 tests/test_posix_query_budget.py
 	python3 tests/test_namespace_bounds.py
 	python3 tests/test_namespace_fixture.py
 	python3 tests/test_namespace_envelope_fixture.py
