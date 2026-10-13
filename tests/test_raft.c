@@ -39,7 +39,7 @@ struct net {
     int cap_rep;          /* record AE_REP match_index */
     int cap_n;
     int cap_ok;
-    uint64_t cap_match;
+    uint64_t cap_match, cap_read_context;
 };
 
 static void msg_free_deep(struct efs_raft_msg *m)
@@ -224,6 +224,7 @@ static int send_now(void *net, const struct efs_raft_msg *msg)
         n->cap_n++;
         n->cap_ok = msg->success;
         n->cap_match = msg->match_index;
+        n->cap_read_context = msg->last_log_index;
     }
     if (msg->type == EFS_RAFT_MSG_SNAP_REQ) {
         n->snap_chunks++;
@@ -696,7 +697,17 @@ static void test_readindex_control(void)
           "obsolete zero-prefix vote cannot contribute current quorum");
     CHECK(efs_raft_recv(n.r[leader],&reply)==EFS_OK && !efs_raft_read_ready(n.r[leader]),
           "obsolete normal receive cannot grant current authority");
-    reply.last_log_index=efs_raft_read_round(n.r[leader]);
+    /* Sending only the newest canonical request after queue supersession
+     * returns exactly its context, without borrowing an old round or apply. */
+    struct efs_raft_msg zero_probe=probe;
+    zero_probe.prev_index=zero_probe.prev_term=zero_probe.leader_commit=0;
+    zero_probe.vote_granted=1;zero_probe.last_log_index=efs_raft_read_round(n.r[leader]);
+    int follower_applied=app[follower].n;n.cap_n=0;
+    CHECK(efs_raft_read_control(n.r[follower],&zero_probe)==1 && n.cap_n==1 &&
+          n.cap_ok && !n.cap_match && n.cap_read_context==zero_probe.last_log_index,
+          "latest-only zero-prefix request echoes its own independent context");
+    CHECK(app[follower].n==follower_applied,"request supersession never applies follower entries");
+    reply.last_log_index=n.cap_read_context;
     CHECK(efs_raft_read_control(n.r[leader],&reply)==2 && efs_raft_read_ready(n.r[leader]),
           "newer zero-prefix vote proves exactly current round");
     CHECK(efs_raft_recv(n.r[leader],&reply)==EFS_OK && efs_raft_read_ready(n.r[leader]),

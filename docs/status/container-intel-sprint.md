@@ -1337,3 +1337,20 @@ recorded in established order; raw flush2034c04ee-deploy/qualification
 remain outside Git. No reset or production change. Safe flush scheduling
 retained, directory closure remains unproven. Physical results qualify
 only this named failed-directory workload; no release acceptance.
+
+
+Next bounded-outbox candidate extends canonical coalescing from replies to
+zero-prefix escape requests as well. Exact80bytes, vote class1, request
+status0/reply success1, nonzero monotonic context and all44 progress bytes
+zero; only same direction/group/peer/term/boot can replace. The leader has
+already started a newer independent round before producing its request,
+so obsolete queued probes cannot contribute to current quorum. Delayed
+older arrivals retire without erasing the latest context. Original entry
+frames and ordinary heartbeat/ACK prefixes stay separate; files policy,
+FIFO receive/credits, core term/config/boot/quorum/own-apply unchanged.
+Actual outbox1000-round request/reply bounds, header guards, no late
+overwrite, original progress traffic and ASan/UBSan PASS locally. Both
+late-context and request-bound-disabled negatives fail as expected. Actual
+core control adds latest-only zero-prefix request echo and unchanged
+follower apply before proving exactly its current context; Linux native
+and fresh complete live remain required. No performance/closure claim.

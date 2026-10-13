@@ -5,7 +5,7 @@ import os, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/server/raft_host.c').read_text()
 a=s.index('static int outbox_pri_replace(');b=s.index('\n}',a)+2
-helper=s.index('static int outbox_pure_read_vote(');helper_end=s.index('\n}',helper)+2
+helper=s.index('static int outbox_pure_read_control(');helper_end=s.index('\n}',helper)+2
 code=r'''
 #include <assert.h>
 #include <stdint.h>
@@ -84,7 +84,7 @@ int main(void){
  assert(!outbox_pri_replace(&tx,heartbeat,probe,80));
  tx.pri[1]=(struct host_outbox_item){probe,80};tx.npri++;tx.queued_bytes+=80;
  fresh=malloc(80);memcpy(fresh,probe,80);fresh[35]=21;
- assert(!outbox_pri_replace(&tx,heartbeat,fresh,80));free(fresh);
+ assert(outbox_pri_replace(&tx,heartbeat,fresh,80) && tx.pri[1].buf==fresh);probe=fresh;
  /* A matched-tail heartbeat must not overwrite the prefix-zero escape. */
  for(unsigned field=0;field<2;field++) {
   new=malloc(80);memcpy(new,probe,80);new[field?59:51]=9;
@@ -99,7 +99,7 @@ int main(void){
  tx=(struct host_outbox){.preserve_read=1,.npri=2,.queued_bytes=160,.queued_bytes_hi=160};
  progress=frame(4,0,1,80);progress[3]=1;progress[19]=2;progress[27]=7;progress[35]=20;progress[75]=9;
  uint8_t canonical[80]={0};memcpy(canonical,progress,80);canonical[2]=1;canonical[75]=0;
- assert(outbox_pure_read_vote(canonical,80));
+ assert(outbox_pure_read_control(canonical,80));
  probe=malloc(80);memcpy(probe,canonical,80);
  tx.pri[0]=(struct host_outbox_item){progress,80};tx.pri[1]=(struct host_outbox_item){probe,80};
  for(uint64_t round=21;round<=1024;round++){
@@ -117,7 +117,7 @@ int main(void){
  for(unsigned field=0;field<80;field++){
   if(field==0 || (field>=28 && field<36))continue;
   new=malloc(80);memcpy(new,canonical,80);new[field]++;
-  assert(!outbox_pure_read_vote(new,80) || (field>=4 && field<28) || field==1);
+  assert(!outbox_pure_read_control(new,80) || (field>=4 && field<28) || field==1);
   assert(!outbox_pri_replace(&tx,reply,new,80));free(new);
  }
  new=malloc(80);memcpy(new,canonical,80);memset(new+28,0,8);
@@ -130,6 +130,29 @@ int main(void){
  tx.preserve_read=0;new=malloc(80);memcpy(new,canonical,80);
  assert(outbox_pri_replace(&tx,reply,new,80) && tx.pri[0].buf==new && tx.pri[1].buf==probe);
  free(tx.pri[0].buf);free(tx.pri[1].buf);
+ /* Requests have their own canonical queue bound, separate from ordinary
+  * progress-bearing AE and from votes. Original entries remain owed. */
+ tx=(struct host_outbox){.preserve_read=1,.npri=2,.queued_bytes=160,.queued_bytes_hi=160};
+ uint8_t request[80]={0};memcpy(request,canonical,80);request[0]=3;request[3]=0;
+ assert(outbox_pure_read_control(request,80));
+ ordinary=malloc(80);memcpy(ordinary,request,80);ordinary[2]=0;ordinary[59]=7;
+ tx.pri[0]=(struct host_outbox_item){ordinary,80};
+ uint8_t *queued=malloc(80);memcpy(queued,request,80);tx.pri[1]=(struct host_outbox_item){queued,80};
+ for(unsigned r=21;r<=1024;r++) {
+  new=malloc(80);memcpy(new,request,80);new[34]=(uint8_t)(r>>8);new[35]=(uint8_t)r;
+  assert(outbox_pri_replace(&tx,heartbeat,new,80));
+  assert(tx.pri[0].buf==ordinary && tx.pri[0].buf[59]==7 && tx.npri==2 && tx.queued_bytes==160 && tx.queued_bytes_hi==160);
+ }
+ probe=tx.pri[1].buf;new=malloc(80);memcpy(new,request,80);
+ assert(outbox_pri_replace(&tx,heartbeat,new,80) && tx.pri[1].buf==probe && rd64be(probe+28)==1024);
+ for(unsigned field=1;field<80;field++) {
+  if(field>=28 && field<36)continue;
+  new=malloc(80);memcpy(new,request,80);new[field]++;
+  assert(!outbox_pri_replace(&tx,heartbeat,new,80));free(new);
+ }
+ new=malloc(80);memcpy(new,request,80);memset(new+28,0,8);
+ assert(!outbox_pri_replace(&tx,heartbeat,new,80));free(new);
+ for(int i=0;i<tx.npri;i++)free(tx.pri[i].buf);
  return 0;
 }
 '''
@@ -145,5 +168,8 @@ with tempfile.TemporaryDirectory(prefix='efs-host-outbox-') as d:
  subprocess.run([os.environ.get('CC','cc'),'-std=c99','-Wall','-Wextra','-Werror',str(p),'-o',str(negative)],check=True)
  result=subprocess.run([str(negative)],capture_output=True)
  assert result.returncode!=0,'late context negative unexpectedly passed'
- print('host outbox: canonical vote bounded across1000rounds, delayed context refusal, all header guards, ASan/UBSan and late-context negative PASS')
+ p.write_text(code.replace('(buf[0]==EFS_RAFT_MSG_AE_REQ && buf[3]==0)', '(0 && buf[0]==EFS_RAFT_MSG_AE_REQ && buf[3]==0)'))
+ subprocess.run([os.environ.get('CC','cc'),'-std=c99','-Wall','-Wextra','-Werror',str(p),'-o',str(negative)],check=True)
+ assert subprocess.run([str(negative)],capture_output=True).returncode!=0,'request-bound negative unexpectedly passed'
+ print('host outbox: canonical request/vote bounded across1000rounds, delayed context refusal, all header guards, ASan/UBSan and late-context negative PASS')
 print('host outbox: group/class/read-context/prefix retention, vote eviction and bounded replacement PASS')

@@ -1036,16 +1036,18 @@ static int outbox_is_ae_rep(const uint8_t *buf, uint32_t len)
     return buf && len >= 1 && buf[0] == EFS_RAFT_MSG_AE_REP;
 }
 
-/* A successful prefix-zero escape-probe vote carries only a read context:
- * vote_granted forbids retiring an entry window, and all progress fields
- * are zero. Within one peer/group/term/boot, a newer context means the
- * leader already began a newer independent round; older queued votes can
- * no longer contribute to its current quorum. Never fold ordinary ACKs. */
-static int outbox_pure_read_vote(const uint8_t *buf,uint32_t len)
+/* A prefix-zero escape probe or its successful vote carries only a read
+ * context: vote_granted forbids retiring an entry window, and all progress
+ * fields are zero. Within one peer/group/term/boot, a newer context means the
+ * leader already began a newer independent round; older queued probes/votes
+ * no longer contribute to its current quorum. Never fold ordinary traffic. */
+static int outbox_pure_read_control(const uint8_t *buf,uint32_t len)
 {
     static const uint8_t no_progress[44]={0};
-    return buf && len==EFS_WIRE_RAFT_HDR_LEN && buf[0]==EFS_RAFT_MSG_AE_REP &&
-           buf[2]==1 && buf[3]==1 && rd64be(buf+28) &&
+    return buf && len==EFS_WIRE_RAFT_HDR_LEN &&
+           ((buf[0]==EFS_RAFT_MSG_AE_REP && buf[3]==1) ||
+            (buf[0]==EFS_RAFT_MSG_AE_REQ && buf[3]==0)) &&
+           buf[2]==1 && rd64be(buf+28) &&
            !memcmp(buf+36,no_progress,sizeof(no_progress));
 }
 
@@ -1067,9 +1069,9 @@ static int outbox_pri_replace(struct host_outbox *tx,
         if (!pred(tx->pri[i].buf, tx->pri[i].len))
             continue;
         int read_vote=tx->preserve_read &&
-            outbox_pure_read_vote(buf,len) &&
-            outbox_pure_read_vote(tx->pri[i].buf,tx->pri[i].len) &&
-            !memcmp(tx->pri[i].buf+4,buf+4,24); /* peer,term,boot */
+            outbox_pure_read_control(buf,len) &&
+            outbox_pure_read_control(tx->pri[i].buf,tx->pri[i].len) &&
+            tx->pri[i].buf[0]==buf[0] && !memcmp(tx->pri[i].buf+4,buf+4,24); /* peer,term,boot */
         if(read_vote && rd64be(tx->pri[i].buf+28)>rd64be(buf+28)){
             free(buf);return 1; /* Newer queued vote owns the slot. */
         }
