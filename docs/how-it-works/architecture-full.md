@@ -1475,26 +1475,21 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-Current ORCD `.efs` real 400 GiB subset PASS: exact deployed daemon source
-`62770d5c3bfd`, strict no-fork oracle `3539917e`, 1,638,400 complete payloads
-and paths, 1,608 directory inventories, pre/post concurrent suites and same-code
-orderly restart. Seven original benchmarks were resumed; they are now paused for stall diagnostics.
-Foreground latency remains under active investigation: successful 5.57s and
-22.04s create/fsync/unlink outliers overlap Raft snapshot activity. User requests
-a code fix, redeployment and same-profile latency qualification. A Raft-only
-rewrite optimization and fair retained-CREATE/lease retry correction have
-regression evidence; live qualification is pending. The initial Linux
-prerequisite run stopped on a missing extracted-harness dependency, now fixed;
-the complete prerequisite run is being repeated. Deadline-aware cleanup locks
-and fair sharing of shorter inherited deadlines have deterministic regressions.
-`11e35f89` deployed after full native/fault/sanitizer PASS, but mounted command
-gates FAILED: startup catch-up leaked a retired ~13 GB catalogue and exhausted
-the unchanged aggregate quota. Its retirement/reader-safety fix has a native
-negative control and full Linux prerequisites at `46c05c05`; mounted and latency qualification remain pending. A new node-007 retained-CLOSE admission deadlock was proved and cleared by correcting only live scheduling keys. The source fix prioritizes allocated unresolved CLOSE/adoption identities over unallocated rows; regression/negative control PASS, exact-source Linux and deployment gates pending. The user-load probe additionally found two 512-byte files inflated to 128 KiB with zero padding; retained-file rereads confirm it. A write-acceptance publication fence has an exact-EOF regression and early-REPORT negative control; Linux/mounted/loaded-latency qualification remains pending. Old clients 010/011 also
-refused orderly drain with an exhausted identity window; explicit authorized
-discard was used for the diagnostic redeploy. The separate
-application fork/direct-read platform gate and broader W92 scale gates remain
-open. See the [400 GiB evidence](../status/orcd-efs-400g-20261012.md).
+Current ORCD `.efs` source `419aa90f367a` passes complete native/fault/sanitizer
+prerequisites, exact-source/profile deployment and acknowledged payload markers
+on all seven clients. Orderly redeployment used no force; server readiness took
+284.704 seconds of the unchanged 300-second budget. Mounted acceptance FAIL:
+all six focused command suites encounter ENOSPC reading query files. Later
+concurrent/restart/full-400-GiB/loaded-latency gates are NOTRUN on this source.
+The earlier strict full 400 GiB PASS at `62770d5c3bfd` remains source-specific.
+
+Catalogue retirement, retained-CLOSE scheduling and exact-EOF write acceptance
+have small native regressions and corrections in this deployment; their loaded
+mounted acceptance is still open. The original 5.569/22.044-second stalls,
+application fork/direct-read platform gate and broader scale gates remain open.
+See [small-cluster development findings](../status/orcd-small-cluster-followups-20261013.md)
+and the [400 GiB evidence](../status/orcd-efs-400g-20261012.md). Expiry, packing, containers
+and unplanned-event repair/recovery remain outside the current profile.
 
 ## Project status — current work and index
 
