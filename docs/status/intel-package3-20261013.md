@@ -239,3 +239,14 @@ for bounded second task, no growth during reuse and128KiB stack bound. Old
 full native/build, new-source live qualification and same-source cold/physical
 gates are pending. Optional validated read-profiler forwarding committed in
 devops `a140b51`; unset settings preserve normal defaults.
+
+## Human scope correction: correctness only
+
+The 32-helper candidate `328153c9` completed both-host native checks, but was
+not deployed or accepted. Human clarification prohibits performance tuning.
+`5f8ec779` restores ordinary-file capacity8, with fixture checks passing. Intel
+performance investigation is paused; production remains baseline1a737143 with
+the package3 disabled-feature profile and profiling OFF. Existing loaded
+failures remain OPEN. The active work is now [checked query-sort cleanup and
+actual temporary peak accounting](query-sort-peak-correctness-20261013.md) for
+ORCD acceptance under unchanged16/32GiB limits, with no further compression.

@@ -1494,6 +1494,13 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+`5f8ec779` checks sort cleanup and charges temporary copies only for their
+simultaneous lifetime, retaining unchanged16/32GiB limits and cache format.
+Bounded Linux query, quota/peak refusal, fault/cancellation, retained-reader,
+next-refresh and ASan/UBSan gates PASS. Full ORCD mounted/scale acceptance NOTRUN.
+Human scope is correctness only; no performance tuning or further compression.
+
+[ORCD package 1 deployment and open gates](../status/orcd-package1-20261013.md):
 Current scope is feature correctness/acceptance; latency/resources are measured
 evidence and existing bounds, with no additional performance tuning.
 `d54949ec` installed native RDMA/direct/files, `.efs` client/server on,
@@ -1508,8 +1515,10 @@ Baseline1a737143 core432/432, peer67/67 and600s snapshot/foreground pressure PAS
 seven-client1511/1512 FAIL. Files-admission candidate72416530 passes both-host
 native/sanitizer and upgrade hashes but REGRESSES loaded tests; rejected and
 code reverted, baseline restored (normal control1461/1512 FAIL).
-Read-only diagnostic finds paired-proof helper saturation; bounded32-helper
-files candidate locally regressed, not yet deployed. Profilers restored OFF. W97/D30/W106 remain OPEN.
+Read-only diagnostic finds paired-proof helper saturation; the unaccepted32-helper
+experiment was withdrawn by5f8ec779 after the human correctness-only scope
+clarification. Further Intel performance work is paused. Profilers restored OFF.
+W97/D30/W106 remain OPEN.
 
 [W92 sort scratch follow-up](../status/amd-package2-transition-load-20261013.md#w92-follow-up-sort-scratch-accounting-and-unchecked-deletion):
 OPEN: checked close/unlink/rename and explicit scratch accounting implemented;
