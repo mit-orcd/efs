@@ -38,7 +38,7 @@ static const char *hn[BH_HIST_N] = {
     "hold_us", "hold_depth", "proposers", "inbox", "host_messages",
     "follow_messages", "follow_entries", "follow_assembly_us", "follow_total_us", "spins",
     "inbox_age_us", "pump_lock_us", "pump_drain_us",
-    "kv_release_us", "applied_persist_us"
+    "kv_release_us", "applied_persist_us", "read_req_queue_us", "read_reply_queue_us"
 };
 static void init_once(void)
 {

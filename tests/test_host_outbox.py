@@ -15,7 +15,11 @@ code=r'''
 #define EFS_WIRE_RAFT_HDR_LEN 80
 #define EFS_RAFT_MSG_AE_REQ 3
 #define EFS_RAFT_MSG_AE_REP 4
-struct host_outbox_item {uint8_t *buf;uint32_t len;};
+static int observer_on;
+static uint64_t observed_now;
+#define BO_ON() observer_on
+static uint64_t efs_batch_obs_now_us(void){return observed_now;}
+struct host_outbox_item {uint8_t *buf;uint32_t len;uint64_t queued_us;};
 struct host_outbox {int preserve_read,npri;uint64_t queued_bytes,queued_bytes_hi;struct host_outbox_item pri[4];};
 static uint64_t rd64be(const uint8_t*p){uint64_t v=0;for(unsigned i=0;i<8;i++)v=(v<<8)|p[i];return v;}
 static int reply(const uint8_t*b,uint32_t n){return b&&n>=1&&b[0]==4;}
@@ -24,9 +28,26 @@ static uint8_t *frame(unsigned type,unsigned group,unsigned mark,unsigned len){
  uint8_t*b=calloc(1,len);assert(b);b[0]=type;b[1]=group;b[4]=mark;return b;}
 '''+s[helper:helper_end]+s[a:b]+r'''
 int main(void){
+ /* Queue timing belongs to the exact replacement, never a discarded older
+  * context; diagnostics off and ordinary files retain zero observation. */
+ observer_on=1;observed_now=100;
+ struct host_outbox timed={.preserve_read=1,.npri=1,.queued_bytes=80};
+ uint8_t *timed_old=frame(3,0,7,80);timed_old[2]=1;timed_old[19]=2;timed_old[27]=7;timed_old[35]=1;
+ timed.pri[0]=(struct host_outbox_item){.buf=timed_old,.len=80,.queued_us=20};
+ uint8_t *timed_new=malloc(80);memcpy(timed_new,timed_old,80);timed_new[35]=2;
+ assert(outbox_pri_replace(&timed,heartbeat,timed_new,80));
+ assert(timed.pri[0].queued_us==100 && timed.pri[0].buf==timed_new);
+ uint8_t *timed_late=malloc(80);memcpy(timed_late,timed_new,80);timed_late[35]=1;observed_now=200;
+ assert(outbox_pri_replace(&timed,heartbeat,timed_late,80));
+ assert(timed.pri[0].queued_us==100 && timed.pri[0].buf==timed_new);
+ observer_on=0;timed_old=malloc(80);memcpy(timed_old,timed_new,80);timed_old[35]=3;
+ assert(outbox_pri_replace(&timed,heartbeat,timed_old,80));assert(!timed.pri[0].queued_us);
+ observer_on=1;timed.preserve_read=0;timed_new=malloc(80);memcpy(timed_new,timed_old,80);timed_new[35]=4;
+ assert(outbox_pri_replace(&timed,heartbeat,timed_new,80));assert(!timed.pri[0].queued_us);
+ free(timed.pri[0].buf);observer_on=0;
  struct host_outbox tx={.npri=2,.queued_bytes=160,.queued_bytes_hi=160};
- tx.pri[0]=(struct host_outbox_item){frame(4,0,10,80),80};
- tx.pri[1]=(struct host_outbox_item){frame(4,2,20,80),80};
+ tx.pri[0]=(struct host_outbox_item){.buf=frame(4,0,10,80),.len=80};
+ tx.pri[1]=(struct host_outbox_item){.buf=frame(4,2,20,80),.len=80};
  uint8_t *g0=tx.pri[0].buf,*g2=tx.pri[1].buf;
  uint8_t *new=frame(4,2,21,96);
  assert(outbox_pri_replace(&tx,reply,new,96)==1);
@@ -37,8 +58,8 @@ int main(void){
  assert(outbox_pri_replace(&tx,reply,new,80)==0);
  assert(tx.pri[0].buf==g0&&tx.pri[1].buf==g2&&tx.queued_bytes==176);free(new);
  free(tx.pri[0].buf);free(tx.pri[1].buf);
- tx.pri[0]=(struct host_outbox_item){frame(3,0,10,80),80};
- tx.pri[1]=(struct host_outbox_item){frame(3,2,20,96),96};
+ tx.pri[0]=(struct host_outbox_item){.buf=frame(3,0,10,80),.len=80};
+ tx.pri[1]=(struct host_outbox_item){.buf=frame(3,2,20,96),.len=96};
  g0=tx.pri[0].buf;new=frame(3,2,22,80);
  assert(outbox_pri_replace(&tx,heartbeat,new,80)==1);
  assert(tx.pri[0].buf==g0&&tx.pri[1].buf==new&&tx.queued_bytes==160);
@@ -54,17 +75,17 @@ int main(void){
  free(tx.pri[0].buf);free(tx.pri[1].buf);
  tx=(struct host_outbox){.preserve_read=1,.npri=1,.queued_bytes=80,.queued_bytes_hi=80};
  uint8_t *progress=frame(4,0,1,80);progress[3]=1;progress[19]=2;progress[27]=7;progress[35]=20;progress[75]=9;
- tx.pri[0]=(struct host_outbox_item){progress,80};
+ tx.pri[0]=(struct host_outbox_item){.buf=progress,.len=80};
  /* Probe votes cannot erase entry-batch retirement, or the converse. */
  uint8_t *probe=malloc(80);memcpy(probe,progress,80);probe[2]=1;
  assert(!outbox_pri_replace(&tx,reply,probe,80));
- tx.pri[1]=(struct host_outbox_item){probe,80};tx.npri++;tx.queued_bytes+=80;
+ tx.pri[1]=(struct host_outbox_item){.buf=probe,.len=80};tx.npri++;tx.queued_bytes+=80;
  uint8_t *fresh=malloc(80);memcpy(fresh,progress,80);fresh[35]=21;
  assert(!outbox_pri_replace(&tx,reply,fresh,80));
- tx.pri[2]=(struct host_outbox_item){fresh,80};tx.npri++;tx.queued_bytes+=80;
+ tx.pri[2]=(struct host_outbox_item){.buf=fresh,.len=80};tx.npri++;tx.queued_bytes+=80;
  uint8_t *late=malloc(80);memcpy(late,probe,80);late[35]=19;
  assert(!outbox_pri_replace(&tx,reply,late,80));
- tx.pri[3]=(struct host_outbox_item){late,80};tx.npri++;tx.queued_bytes+=80;
+ tx.pri[3]=(struct host_outbox_item){.buf=late,.len=80};tx.npri++;tx.queued_bytes+=80;
  new=malloc(80);memcpy(new,probe,80);new[4]=99;
  assert(outbox_pri_replace(&tx,reply,new,80));
  assert(tx.pri[0].buf==progress && tx.pri[1].buf==new && tx.pri[2].buf==fresh && tx.pri[3].buf==late);
@@ -79,10 +100,10 @@ int main(void){
  for(unsigned i=0;i<4;i++)free(tx.pri[i].buf);
  tx=(struct host_outbox){.preserve_read=1,.npri=1,.queued_bytes=80,.queued_bytes_hi=80};
  uint8_t *ordinary=frame(3,0,1,80);ordinary[19]=2;ordinary[27]=7;ordinary[35]=20;
- tx.pri[0]=(struct host_outbox_item){ordinary,80};
+ tx.pri[0]=(struct host_outbox_item){.buf=ordinary,.len=80};
  probe=malloc(80);memcpy(probe,ordinary,80);probe[2]=1;
  assert(!outbox_pri_replace(&tx,heartbeat,probe,80));
- tx.pri[1]=(struct host_outbox_item){probe,80};tx.npri++;tx.queued_bytes+=80;
+ tx.pri[1]=(struct host_outbox_item){.buf=probe,.len=80};tx.npri++;tx.queued_bytes+=80;
  fresh=malloc(80);memcpy(fresh,probe,80);fresh[35]=21;
  assert(outbox_pri_replace(&tx,heartbeat,fresh,80) && tx.pri[1].buf==fresh);probe=fresh;
  /* A matched-tail heartbeat must not overwrite the prefix-zero escape. */
@@ -101,7 +122,7 @@ int main(void){
  uint8_t canonical[80]={0};memcpy(canonical,progress,80);canonical[2]=1;canonical[75]=0;
  assert(outbox_pure_read_control(canonical,80));
  probe=malloc(80);memcpy(probe,canonical,80);
- tx.pri[0]=(struct host_outbox_item){progress,80};tx.pri[1]=(struct host_outbox_item){probe,80};
+ tx.pri[0]=(struct host_outbox_item){.buf=progress,.len=80};tx.pri[1]=(struct host_outbox_item){.buf=probe,.len=80};
  for(uint64_t round=21;round<=1024;round++){
   new=malloc(80);memcpy(new,canonical,80);
   for(unsigned j=0;j<8;j++)new[28+j]=(uint8_t)(round>>(56-8*j));
@@ -136,8 +157,8 @@ int main(void){
  uint8_t request[80]={0};memcpy(request,canonical,80);request[0]=3;request[3]=0;
  assert(outbox_pure_read_control(request,80));
  ordinary=malloc(80);memcpy(ordinary,request,80);ordinary[2]=0;ordinary[59]=7;
- tx.pri[0]=(struct host_outbox_item){ordinary,80};
- uint8_t *queued=malloc(80);memcpy(queued,request,80);tx.pri[1]=(struct host_outbox_item){queued,80};
+ tx.pri[0]=(struct host_outbox_item){.buf=ordinary,.len=80};
+ uint8_t *queued=malloc(80);memcpy(queued,request,80);tx.pri[1]=(struct host_outbox_item){.buf=queued,.len=80};
  for(unsigned r=21;r<=1024;r++) {
   new=malloc(80);memcpy(new,request,80);new[34]=(uint8_t)(r>>8);new[35]=(uint8_t)r;
   assert(outbox_pri_replace(&tx,heartbeat,new,80));

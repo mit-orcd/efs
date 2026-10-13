@@ -1909,3 +1909,39 @@ both-host Linux/native validation executing after every normal64 gate finished.
 Explicit diagnostic will retain64 to distinguish reply dispatch from server
 service after the prior capacity comparison. New-source loaded/cold acceptance
 NOTRUN; prior-source normal64 does not qualify a879fac0.
+
+### 2026-10-13 — reply delivery ruled out; next pure sender queue measurement
+
+Frozena879fac0c9b5744d7f35aa71b39c5347a8810332 both-host full native,
+sanitizers and792-input source/runtime proofs PASS. Same original retained
+four-node containers/TCP/direct4G/eight writers/seven clients/jobs16/deadlines,
+explicit64-worker/profiling/path/batch ON, requested features/folding OFF.
+Full1498/1512PASS14FAIL(deep60/crazy all7),130.351–142.436s. Immediate strict
+physical98.630s PASS,zero98.622. External raw replyprofa879fac0-workers64-
+diagnostic and replyprofa879fac0-deploy. No normal new-source acceptance.
+Every deep60 caller reached leaf-write, leaf-read and recursive-cleanup before
+timeout; none reached absence-check/case-complete. First30s completed mkdir
+60 levels,21.577–27.732s; LOOKUP callback service13.807–17.156s and MKDIR
+11.309–15.048s include additional cleanup work, so do not add their totals
+and compare to creation-only syscalls. LOOKUP reply total14.577–21.115ms,
+max0.183–1.739ms; MKDIR replies0.499–1.258ms total/max0.032–0.726ms.
+ACCESS absent. Reply dispatch is negligible in this selected window; logs
+now occur after reply and never dereference freed request memory. Remaining
+service cost cannot be solved by lengthening deadlines/reusing stale proofs.
+
+Next diagnostic appends pure sender queue-age histograms, containers only,
+EFS_BATCH_OBS ON: queued_us RAM observation on canonical80-byte prefix-zero
+request/vote frames. Record enqueue/replacement to existing sender selection,
+separate read_req_queue_us/read_reply_queue_us. A newer replacement owns its
+arrival timestamp; rejected older context preserves the newer slot/timestamp.
+Discarded/coalesced frames have no sample, a stated measurement limitation.
+Derived probe insertion is stamped too. Normal/files modes leave timestamp0
+and do not read a diagnostic clock; no wire/disk/selection/order/thread/lane/
+credit/admission/quorum/deadline change. Previous histogram enum slots stable.
+Strict mock fixtures now use designated initializers for the added RAM field
+(no warning suppression). Initial local adapter compile caught omitted field
+initializers; corrected before any Linux build/deploy. Actual outbox canonical/
+late-context/sanitizer/negative controls PASS; async Linux sender NOTRUN locally
+and requires both-host fresh native validation. New exact replacement/older
+context/files/off timestamp controls PASS. No dedicated sender or authority
+optimization is implemented or justified until live queue evidence exists.

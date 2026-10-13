@@ -137,7 +137,7 @@ static void queue(struct host_outbox*tx,unsigned type,unsigned group,unsigned da
  uint32_t len;uint8_t*p=frame(type,group,data,&len);
  pthread_mutex_lock(&tx->h->outbox_mu);
  struct host_outbox_item*q=data?tx->ent:tx->pri;int*n=data?&tx->nent:&tx->npri;
- assert(*n<2048);q[*n]=(struct host_outbox_item){p,len};(*n)++;tx->queued_bytes+=len;
+ assert(*n<2048);q[*n]=(struct host_outbox_item){.buf=p,.len=len};(*n)++;tx->queued_bytes+=len;
  int gi=efs_raft_flow_group(group);if(data)tx->pending_entries[gi]++;
  if(type==EFS_RAFT_MSG_AE_REQ){memcpy(tx->probe_header[gi],p,80);tx->probe_valid[gi]=1;}
  pthread_cond_signal(&tx->cv);pthread_mutex_unlock(&tx->h->outbox_mu);

@@ -157,6 +157,7 @@ struct host_inbox_item {
 struct host_outbox_item {
     uint8_t *buf;
     uint32_t len;
+    uint64_t queued_us; /* Pure container read observation, never wire/credits. */
 };
 
 /* Per-peer send queue + its lazily-spawned sender thread. All fields are
@@ -751,6 +752,11 @@ static void host_sender_take(struct host_outbox *tx, int priority, int index,
     int *count=priority ? &tx->npri : &tx->nent;
     int gi=efs_raft_flow_group(lane[index].buf[1]);
     *buf=lane[index].buf; *len=lane[index].len;
+    if (lane[index].queued_us) {
+        uint64_t age = efs_batch_obs_now_us() - lane[index].queued_us;
+        BO_HIST((*buf)[0] == EFS_RAFT_MSG_AE_REQ ? BH_READ_REQ_QUEUE_US :
+                                                       BH_READ_REPLY_QUEUE_US, age);
+    }
     tx->queued_bytes-=*len;
     if (!priority && gi>=0) tx->pending_entries[gi]--;
     memmove(lane+index,lane+index+1,(size_t)(*count-index-1)*sizeof(*lane));
@@ -1094,6 +1100,8 @@ static int outbox_pri_replace(struct host_outbox *tx,
         free(tx->pri[i].buf);
         tx->pri[i].buf = buf;
         tx->pri[i].len = len;
+        tx->pri[i].queued_us = tx->preserve_read && BO_ON() &&
+            outbox_pure_read_control(buf, len) ? efs_batch_obs_now_us() : 0;
         return 1;
     }
     return 0;
@@ -1166,7 +1174,8 @@ static void host_container_read_probe(struct host_outbox *tx,const uint8_t *p,ui
     if(tx->npri+tx->nent>=HOST_OUTBOX_MAX || tx->queued_bytes>HOST_OUTBOX_BYTES-EFS_WIRE_RAFT_HDR_LEN)return;
     uint8_t *probe=malloc(EFS_WIRE_RAFT_HDR_LEN);if(!probe)return;
     efs_raft_flow_probe(probe,p);
-    tx->pri[tx->npri++]=(struct host_outbox_item){probe,EFS_WIRE_RAFT_HDR_LEN};
+    tx->pri[tx->npri++]=(struct host_outbox_item){probe,EFS_WIRE_RAFT_HDR_LEN,
+                                                    BO_ON() ? efs_batch_obs_now_us() : 0};
     tx->queued_bytes+=EFS_WIRE_RAFT_HDR_LEN;
     if(tx->queued_bytes>tx->queued_bytes_hi)tx->queued_bytes_hi=tx->queued_bytes;
     tx->st_enq++;
@@ -1291,6 +1300,8 @@ static int host_send(void *net, const struct efs_raft_msg *msg)
         }
         slot->buf = heap;
         slot->len = len;
+        slot->queued_us = tx->preserve_read && BO_ON() &&
+            outbox_pure_read_control(heap, len) ? efs_batch_obs_now_us() : 0;
         if (entry) {
             int gi=efs_raft_flow_group(heap[1]);
             if (gi>=0) tx->pending_entries[gi]++;
