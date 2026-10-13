@@ -7622,6 +7622,27 @@ int main(int argc, char **argv)
     return ret;
 }
 
+/* libfuse supplies max_threads=10 and an unset idle sentinel itself,
+ * so zero-value fallbacks cannot establish our bounded defaults. Insert them
+ * first; later explicit user options retain ordinary last-option precedence. */
+static int efs_fuse_parse_cmdline(struct fuse_args *args,
+                                  struct fuse_cmdline_opts *opts)
+{
+    if(!args || args->argc<1 || !args->argv)return -1;
+    struct fuse_args configured=FUSE_ARGS_INIT(0,NULL);
+    for(int i=0;i<args->argc;i++) {
+        if(fuse_opt_add_arg(&configured,args->argv[i])!=0)goto failed;
+        if(i==0 && fuse_opt_add_arg(&configured,
+            "-omax_threads=32,max_idle_threads=8")!=0)goto failed;
+    }
+    fuse_opt_free_args(args);
+    *args=configured;
+    return fuse_parse_cmdline(args,opts);
+failed:
+    fuse_opt_free_args(&configured);
+    return -1;
+}
+
 static int efs_fuse_main_mt(int argc, char *argv[])
 {
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
@@ -7629,7 +7650,7 @@ static int efs_fuse_main_mt(int argc, char *argv[])
     struct fuse_loop_config *config = NULL;
     int ret = -1;
 
-    if (fuse_parse_cmdline(&args, &opts) != 0)
+    if (efs_fuse_parse_cmdline(&args, &opts) != 0)
         return 1;
 
     if (opts.show_version) {

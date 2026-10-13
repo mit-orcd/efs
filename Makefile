@@ -634,6 +634,7 @@ tests/test_bufpool: tests/test_bufpool.c src/common/common.c src/client/publicat
 
 test-client-memory: tests/test_reply_buffers tests/test_bufpool
 	python3 tests/test_fuse_workers.py
+	python3 tests/test_fuse_worker_options.py
 	python3 tests/test_fuse_open_reply.py
 	python3 tests/test_fuse_lease_retention.py
 	python3 tests/test_inode_lock_stripes.py
