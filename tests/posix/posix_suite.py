@@ -878,13 +878,13 @@ def root_mkdir_rmdir_immediate(mnt):
         _root_cleanup(a)
 
 
-def _deep_phase(event, worker=0):
+def _deep_phase(event, worker=0, test_name="dir_deep_nesting"):
     """Best-effort bounded datagram; no wait, fsync, or EFS path access."""
     target = os.environ.get("EFS_POSIX_PHASE_SOCKET")
     if not target:
         return
-    payload = ("test=dir_deep_nesting event=%s pid=%d worker=%d mono_ns=%d client=%s\n" %
-               (event, os.getpid(), worker or os.getpid(), time.monotonic_ns(),
+    payload = ("test=%s event=%s pid=%d worker=%d mono_ns=%d client=%s\n" %
+               (test_name, event, os.getpid(), worker or os.getpid(), time.monotonic_ns(),
                 os.environ.get("EFS_POSIX_PHASE_CLIENT", "unknown")[:32])).encode()
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as sender:
@@ -1989,18 +1989,22 @@ def names_unicode_nfc_nfd_coexist(d):
 @test
 def names_crazy_dirs(d):
     # Crazy names as DIRECTORIES: mkdir, a file inside, readdir, then remove.
+    _deep_phase("create-read-list", test_name="names_crazy_dirs")
     for n in CRAZY_NAMES:
         sub = os.path.join(d, n)
         os.mkdir(sub)
         wr(os.path.join(sub, "inner"), b"y")
         eq(rd(os.path.join(sub, "inner")), b"y", "file inside crazy dir %r" % n)
         eq(os.listdir(sub), ["inner"], "readdir crazy dir %r" % n)
+    _deep_phase("remove", test_name="names_crazy_dirs")
     for n in CRAZY_NAMES:
         sub = os.path.join(d, n)
         os.unlink(os.path.join(sub, "inner"))
         rmdir_rideout_sillyrename(sub)
+    _deep_phase("absence-check", test_name="names_crazy_dirs")
     eq(os.listdir(d), [], "crazy dirs removed: leftover %r" % os.listdir(d))
 
+    _deep_phase("case-complete", test_name="names_crazy_dirs")
 
 @test
 def dir_deep_nesting_beyond_64(d):

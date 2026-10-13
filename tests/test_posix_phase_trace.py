@@ -11,9 +11,9 @@ space = dict(Path=Path, threading=threading, tempfile=tempfile, socket=socket, t
 exec(compile(ast.Module(body=[node], type_ignores=[]), '<actual-collector>', 'exec'), space)
 Collector = space['PosixPhaseCollector']
 # Strip only diagnostics and compare the actual case operations with its baseline.
-def shape(source):
+def shape(source, name="dir_deep_nesting"):
     module = ast.parse(source)
-    fn = next(n for n in module.body if isinstance(n, ast.FunctionDef) and n.name == 'dir_deep_nesting')
+    fn = next(n for n in module.body if isinstance(n, ast.FunctionDef) and n.name == name)
     fn.body = [n for n in fn.body if not (isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
                and isinstance(n.value.func, ast.Name) and n.value.func.id == '_deep_phase')]
     # Python 3.12 adds type_params; this baseline has no generic parameters.
@@ -27,6 +27,7 @@ def shape(source):
     return ast.dump(fn, **options)
 # Canonical AST of actual b239dc7d case, excluding only observer calls.
 assert hashlib.sha256(shape((root/'tests/posix/posix_suite.py').read_text()).encode()).hexdigest() == '1cdb1d66e21f56f3a1e03b878d8cfef6807168c7d04c026f70823b840d2357e7'
+assert hashlib.sha256(shape((root/'tests/posix/posix_suite.py').read_text(), "names_crazy_dirs").encode()).hexdigest() == 'c76963682dc2fb2ce8341ed18441ee2cd99496ac7c59ad4c91581401ac057668'
 saved = dict(os.environ)
 try:
     os.environ.pop('EFS_POSIX_PHASE_SOCKET', None)
@@ -46,6 +47,12 @@ try:
         times = [int(e['mono_ns']) for e in events]; assert times == sorted(times)
         summary = json.loads((work/'posix-case-phases-summary.json').read_text())
         assert summary['received'] == summary['retained'] == 8 and not summary['errors']
+        with Collector(work, True) as observer:
+            os.environ.update(observer.environment(os.environ, 3))
+            assert suite.invoke(suite.names_crazy_dirs, str(work/'names-traced')) == ('PASS', '')
+        observed = [dict(x.split('=', 1) for x in line.split()) for line in (work/'posix-case-phases.log').read_text().splitlines()]
+        assert [e['event'] for e in observed] == ['create-read-list', 'remove', 'absence-check', 'case-complete']
+        assert all(e['test'] == 'names_crazy_dirs' and e['client'] == '3' for e in observed)
         # No receiver, and a filled receiver queue, must never block or affect case bytes.
         os.environ['EFS_POSIX_PHASE_SOCKET'] = str(work/'absent')
         assert suite.invoke(suite.dir_deep_nesting, str(work/'absent-sink')) == ('PASS', '')
