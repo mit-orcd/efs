@@ -17,6 +17,8 @@ int efs_query_disk_link(const struct efs_query_disk *,efs_ino_t,struct efs_name_
 int efs_query_disk_path(const struct efs_query_disk *,efs_ino_t,efs_ino_t,char *,size_t);
 int efs_query_disk_page(const struct efs_query_disk *,efs_ino_t,enum efs_name_match,const char *,int,
     uint64_t *,uint32_t,int (*)(void *),void *,int (*)(void *,const struct efs_name_entry *,const char *),void *);
+int efs_query_disk_find(const struct efs_query_disk *,efs_ino_t,enum efs_name_match,const char *,uint64_t,
+    int (*)(void *,const struct efs_name_entry *,const char *),void *);
 int efs_query_disk_ls(const struct efs_query_disk *,efs_ino_t,uint64_t,int (*)(void *),void *,
     int (*)(void *,const struct efs_name_entry *,const char *),void *);
 int efs_query_disk_checkpoint(struct efs_query_disk *,const uint64_t[4]);

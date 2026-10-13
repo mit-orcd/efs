@@ -13,6 +13,8 @@ code=r'''
 #include <stdio.h>
 static pthread_mutex_t stripe=PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t *open_edge_mu(efs_ino_t ino){assert(ino==42);return &stripe;}
+static int lock_rc;
+static int wb_lock_budget(pthread_mutex_t *mu){if(lock_rc)return lock_rc;return pthread_mutex_lock(mu);}
 static int release_rc,create_known,create_rc,lease_rc,begins,submits,cancels;
 static int efs_open_release_pending(efs_ino_t ino){assert(ino==42);return release_rc;}
 '''
@@ -52,7 +54,9 @@ int main(void) {
  assert(!efs_pending_create_drain()&&cancels==EFS_PENDING_CREATES_MAX);
  struct efs_pending_create *entry=unknown();create_rc=EFS_ERR_NET;
  assert(efs_pending_create_drain()==EFS_ERR_NET&&g_pending_create_count==1&&!begins&&g_pending_creates==entry);
- create_known=1;create_rc=0;release_rc=EFS_ERR_BUSY;
+ create_known=1;create_rc=0;lock_rc=EFS_ERR_BUSY;
+ assert(efs_pending_create_drain()==EFS_ERR_BUSY && g_pending_create_count==1 && !begins);
+ lock_rc=0;release_rc=EFS_ERR_BUSY;
  assert(efs_pending_create_drain()==EFS_ERR_BUSY&&!begins&&entry->request.complete);
  release_rc=0;lease_rc=EFS_ERR_NET;
  assert(efs_pending_create_drain()==EFS_ERR_NET&&begins==1&&entry->cleanup.active&&g_pending_create_count==1);

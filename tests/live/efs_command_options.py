@@ -103,15 +103,15 @@ print('sort directions/ties, directories first, UTC/relative dates, sizes, paths
 
 port=int(os.environ['EFS_QUERY_TEST_PORT'])
 ino=root.stat().st_ino
-fields=dict(root=ino,match=3,term=b'',kind=1,flags=3,min_size=7,max_size=7,max_output=65536)
+fields=dict(root=ino,uid=os.getuid(),gid=os.getgid(),match=3,term=b'',kind=1,flags=3,min_size=7,max_size=7,max_output=65536)
 reply,text=query(port,filtered_request(**fields))
 assert reply.status==0 and paths(json.loads(text))==['child/nested.bin'],(reply.status,text)
 cap=len(text)+64
 reply,text=query(port,filtered_request(**dict(fields,max_output=cap)))
 assert reply.status==0,(reply.status,text)
-reply,text=query(port,request(version=2,operation=1,root=ino,match=3,term=b'',max_output=cap))
+reply,text=query(port,request(version=2,operation=1,root=ino,uid=os.getuid(),gid=os.getgid(),match=3,term=b'',max_output=cap))
 assert reply.status==-22 and not text,(reply.status,len(text))
-reply,text=query(port,filtered_request(root=ino,match=3,term=b'',flags=1,min_size=10**12,
+reply,text=query(port,filtered_request(root=ino,uid=os.getuid(),gid=os.getgid(),match=3,term=b'',flags=1,min_size=10**12,
                                      max_output=65536,visit_budget=1))
 assert reply.status==-13 and not text,(reply.status,text)
 print('filters precede output limits while candidate-visit bounds remain enforced PASS',flush=True)

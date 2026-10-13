@@ -420,12 +420,15 @@ def main(argv=None, script_path=None):
         epilog={"help": "Examples:\n  .efs/help --extended",
                 "ls": "Examples:\n  .efs/ls -l --human-readable --sort mtime\n  .efs/ls --dirs-first --relative",
                 "find": "Examples:\n  .efs/find report -l --sort mtime\n  .efs/find .log --match suffix --min-size 100MiB\n  .efs/find '' --type file --modified-within 2d -0",
-                "stats": "Examples:\n  .efs/stats --json"}[command] +
+                "stats": "Examples:\n  .efs/stats --human-readable\n  .efs/stats --json"}[command] +
                "\n\nNotes:\n  Use .efs/help --extended for limits and requirements.")
     parser.add_argument("-h", "--help", action="help", help="Show this help")
     if command == "help":
         parser.add_argument("--extended", action="store_true", help="Show limits and requirements")
     parser.add_argument("--json", action="store_true", help="Structured results and snapshot details")
+    if command == "stats":
+        parser.add_argument("--human-readable", action="store_true",
+                            help="Format logical byte totals as KiB, MiB, GiB; JSON keeps exact bytes")
     if command in ("find", "ls"):
         parser.add_argument("--limit", "--size", type=int, default=100,
                             help="Maximum displayed results: 1–10000 (default: 100)")
@@ -541,7 +544,8 @@ def main(argv=None, script_path=None):
         print(json.dumps(result, ensure_ascii=True, separators=(",", ":")))
     elif command == "stats":
         for key, value in result["stats"].items():
-            print("%s=%d" % (safe_text(key), value))
+            text = human_size(value) if args.human_readable and key in ("imm_bytes", "tree_bytes") else "%d" % value
+            print("%s=%s" % (safe_text(key), text))
         print("expiry=unavailable")
     else:
         root = os.fsencode(os.path.dirname(directory))

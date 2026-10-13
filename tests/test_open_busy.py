@@ -5,7 +5,7 @@ import os,re,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 s=Path(os.environ.get('EFS_FUSE_SOURCE',root/'src/client/efs_fuse.c')).read_text()
 def function(name):
- m=re.search(r'^static (?:int|void) '+name+r'\([^;]+?\)\n\{',s,re.M)
+ m=re.search(r'^static (?:int|void|uint64_t) '+name+r'\([^;]+?\)\n\{',s,re.M)
  return s[m.start():s.index('\n}',m.end())+2] if m else ''
 a=s.index('static pthread_mutex_t g_open_mu');b=s.index('/* Inodes this client has actually locked.',a)
 code=r'''
@@ -48,7 +48,7 @@ int efs_client_lease_resume(struct efs_client_lease_request *r,int probe){
 }
 int efs_client_lease_reset(struct efs_client_lease_request *r){assert(!r->active||r->complete);memset(r,0,sizeof(*r));return EFS_OK;}
 ''' + s[a:b]
-for name in ('efs_open_note','efs_open_set_leased','efs_close_note','efs_open_release_pending','wb_lock_budget','efs_open_lease_resume_wait','efs_open_acquire_fileid_run','efs_open_acquire_fileid_mode','efs_open_acquire_fileid','efs_open_acquire'):
+for name in ('efs_open_note','efs_open_set_leased','efs_open_retry_order','efs_close_note','efs_open_release_pending_run','efs_open_release_pending','wb_lock_budget','efs_open_lease_resume_wait','efs_open_acquire_fileid_run','efs_open_acquire_fileid_mode','efs_open_acquire_fileid','efs_open_acquire'):
  if name=='wb_lock_budget' and not function('efs_open_acquire_fileid_run'):continue
  code+='\n'+function(name)
 code+=r'''

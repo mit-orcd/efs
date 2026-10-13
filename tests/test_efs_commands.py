@@ -176,6 +176,23 @@ class Commands(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertEqual(json.loads(p.stdout), envelope("ls", [b"invalid\xff"]))
 
+    def test_stats_human_readable_preserves_counts_and_json(self):
+        path = self.result("stats")
+        result = json.loads(path.read_text())
+        result["stats"].update(imm_bytes=1024, tree_bytes=400 * (1 << 30), tree_files=1638400)
+        path.write_text(json.dumps(result))
+        human = self.run_command("stats", "--human-readable")
+        self.assertEqual(human.returncode, 0, human.stderr)
+        self.assertIn(b"imm_bytes=1.0 KiB\n", human.stdout)
+        self.assertIn(b"tree_bytes=400.0 GiB\n", human.stdout)
+        self.assertIn(b"tree_files=1638400\n", human.stdout)
+        default = self.run_command("stats")
+        self.assertEqual(default.returncode, 0, default.stderr)
+        self.assertIn(b"tree_bytes=429496729600\n", default.stdout)
+        structured = self.run_command("stats", "--human-readable", "--json")
+        self.assertEqual(structured.returncode, 0, structured.stderr)
+        self.assertEqual(json.loads(structured.stdout)["stats"], result["stats"])
+
     def test_stats(self):
         self.result("stats")
         p = self.run_command("stats")
@@ -418,6 +435,32 @@ int main(int argc,char **argv) {
                 self.assertEqual(result.stdout, ("4 1 3 10000 144115188075855873 %d 123 7 %s" % (4096 << 32, term.hex())).encode())
             for bad in ("v3.", name+"=", name+"a"*300, "v3.GG"):
                 self.assertNotEqual(subprocess.run([str(binary), bad]).returncode, 0)
+
+    def test_page_reply_size_and_close_identity(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp) / "sizes.c"
+            source.write_text(r'''#include "efs/command_path.h"
+#include <stdio.h>
+int main(int argc,char **argv) {
+    struct efs_msg_query_snapshot_v4 q;
+    if(argc!=2 || efs_command_path_parse_v4(argv[1],&q))return 1;
+    printf("%u",q.base.max_output);return 0;
+}
+''')
+            binary = Path(temp) / "sizes"
+            subprocess.run([os.environ.get("CC", "cc"), "-std=c99", "-D_GNU_SOURCE", "-Wall", "-Wextra", "-Werror",
+                            "-I" + str(ROOT / "include"), str(source), "-o", str(binary)], check=True)
+            for command, limits, expected in (("stats", (0, 1), 16384),
+                                              ("find", (0, 1, 100, 1000, 10000), 1 << 20),
+                                              ("ls", (0, 1, 100, 10000), 1 << 20)):
+                for limit in limits:
+                    name = commands.page_name(command, b"", "contains", None, limit,
+                                              144115188075855873 if not limit else 0, 0, 123)
+                    self.assertEqual(int(subprocess.check_output([str(binary), name])), expected)
+            # Historical nonpaged paths cannot continue and retain their cap.
+            for command in ("stats", "find", "ls"):
+                name = commands.query_name(command, b"report" if command == "find" else b"")
+                self.assertEqual(int(subprocess.check_output([str(binary), name])), 16 << 20)
 
     def test_python_c_roundtrip_and_refusals(self):
         with tempfile.TemporaryDirectory() as temp:

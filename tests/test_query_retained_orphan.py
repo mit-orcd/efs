@@ -4,7 +4,10 @@ from pathlib import Path
 import os, shlex, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
 s=Path(os.environ.get('EFS_QUERY_ORPHAN_SOURCE',root/'src/meta/query_disk.c')).read_text()
-a=s.index('struct backlink_probe {');b=s.index('/* Private bounded incremental builder',a)
+a=s.index('struct backlink_probe {')
+# Include the orphan helper and its backlink helpers, independently of later
+# unrelated builder helpers or their declaration order.
+b=s.index('\n}\n',s.index('static int orphan_preflight(',a))+3
 code=r'''
 #include "efs/query_catalog.h"
 #include "efs/meta_apply.h"

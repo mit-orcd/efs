@@ -165,7 +165,7 @@ int main(void)
     CHECK(!efs_query_catalog_find(c,a,EFS_NAME_EXACT,"report.dat",1,collect,&f) && f.n==1 &&
           !strcmp(f.path[0],"b/report.dat"),"exact query spends only matching candidate budget");
     f=(struct found){0};
-    CHECK(efs_query_catalog_find(c,a,EFS_NAME_SUFFIX,".dat",1,collect,&f)==EFS_ERR_BUSY,"global scan budget explicit");
+    CHECK(efs_query_catalog_find(c,a,EFS_NAME_SUFFIX,".dat",1,collect,&f)==EFS_ERR_BUSY,"subtree scan budget explicit");
     f=(struct found){.fail=1};
     CHECK(efs_query_catalog_find(c,a,EFS_NAME_EXACT,"report.dat",10,collect,&f)==EFS_ERR_ACCES,"emitter denial preserved");
     CHECK(!capture(kv,c,&newer) && efs_query_catalog_rebuilt(newer)==0,"unchanged partitions reused");

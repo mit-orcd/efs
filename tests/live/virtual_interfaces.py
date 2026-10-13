@@ -154,8 +154,18 @@ def name_limits():
     while b'deep-payload' not in find_bytes(query_path(deep,'deep-payload')):
         assert time.monotonic()<deadline,'deep indexed query did not converge';time.sleep(.2)
 def fd_capacity():
-    d=root/'capacity';d.mkdir(exist_ok=True);(d/'capacity-file').write_bytes(b'x')
-    q=query_path(d,'capacity-*');expected=contents(q);fds=[];bounded=False
+    d=root/'capacity';d.mkdir(exist_ok=True)
+    payload=d/'capacity-file'
+    # Repeated exhaustion checks must leave the comparison fixture immutable.
+    if not payload.exists():payload.write_bytes(b'x')
+    q=query_path(d,'capacity-*');deadline=time.monotonic()+a.freshness_s
+    while True:
+        expected=contents(q)
+        entries=json.loads(expected)['entries']
+        if len(entries)==1 and bytes.fromhex(entries[0]['path_hex'])==b'capacity-file' and entries[0]['size']==1:break
+        assert time.monotonic()<deadline,'capacity fixture did not publish'
+        time.sleep(.2)
+    fds=[];bounded=False
     try:
         for _ in range(80):
             try:fds.append(os.open(query_path(d,f'absent-capacity-{_:03}*'),os.O_RDONLY))
@@ -166,7 +176,8 @@ def fd_capacity():
         for fd in fds:assert not json.loads(os.read(fd,1<<20))['entries']
     finally:
         for fd in fds:os.close(fd)
-    assert json.loads(contents(q))['entries']==json.loads(expected)['entries']
+    actual=json.loads(contents(q))['entries'];wanted=json.loads(expected)['entries']
+    assert actual==wanted,dict(expected=wanted,actual=actual)
 def recovery():
     d=root/'recovery';d.mkdir()
     for i in range(256):

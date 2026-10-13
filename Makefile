@@ -411,6 +411,9 @@ test: all
 	python3 tests/test_create_request.py
 	python3 tests/test_retained_create_authority.py
 	python3 tests/test_pending_create_cleanup.py
+	python3 tests/test_open_retry_fairness.py
+	python3 tests/test_open_retry_lock_budget.py
+	python3 tests/test_write_acceptance_gate.py
 	python3 tests/test_mount_identity_rpc.py
 	python3 tests/test_pending_create_command.py
 	python3 tests/test_lock_apply_verdict.py
@@ -443,6 +446,7 @@ test: all
 	python3 tests/test_read_admission.py
 	python3 tests/test_read_failure_admission.py
 	python3 tests/test_read_refs_window.py
+	python3 tests/test_query_capacity_mount.py
 	python3 tests/test_client_memory.py
 	python3 tests/test_rollup_allocation_failure.py
 	python3 tests/test_rollup_budget.py
@@ -471,7 +475,7 @@ test: all
 	./tests/test_query_catalog
 	./tests/test_query_disk
 	EFS_QUERY_DELTA_DIRS=1 ./tests/test_query_delta
-	EFS_QUERY_DELTA_PARENTS=64 EFS_QUERY_DELTA_LANES=1 ./tests/test_query_delta
+	EFS_QUERY_DELTA_PARENTS=64 EFS_QUERY_DELTA_LANES=1 EFS_QUERY_DELTA_MULTI_LANES=1 ./tests/test_query_delta
 	./tests/test_query_disk_io
 	./tests/test_query_refresh
 	./tests/test_name_index
@@ -554,6 +558,7 @@ test: all
 	python3 tests/test_query_policy_forward.py
 	python3 tests/test_command_policy_mount.py
 	python3 tests/test_efs_commands.py
+	python3 tests/test_posix_query_budget.py
 	python3 tests/test_namespace_bounds.py
 	python3 tests/test_namespace_fixture.py
 	python3 tests/test_namespace_envelope_fixture.py
@@ -887,3 +892,6 @@ tests/faults/repair_request: tests/faults/repair_request.c $(LIB)
 
 tests/test_repair_worker: tests/test_repair_worker.c src/server/repair_worker.c $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< src/server/repair_worker.c $(LIB) $(LDFLAGS)
+
+# Broad subtree queries share the bounded immutable-KV traversal.
+src/meta/query_catalog.o src/meta/query_disk.o: src/meta/query_walk.h

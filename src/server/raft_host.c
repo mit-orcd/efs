@@ -2806,6 +2806,7 @@ static int host_snap_open(void *app, uint64_t incl, void **handle,
     struct efs_raft_host *h = g->host;
     struct efs_kv_lsm_view *view = NULL;
     int fd, rc;
+    uint64_t prepare_start, flush_us, pin_us;
 
     if (!h || !h->kv || !handle || !total)
         return EFS_ERR_INVAL;
@@ -2831,10 +2832,22 @@ static int host_snap_open(void *app, uint64_t incl, void **handle,
     /* The pump calls this on every catch-up heartbeat. A flush that
      * would walk the memtable and return BUSY (L0 cannot take another
      * full set of ranges) stays off this thread. */
+    prepare_start = now_us_();
     rc = efs_kv_lsm_flush_nowait(h->kv);
-    if (rc != EFS_OK)
+    flush_us = now_us_() - prepare_start;
+    if (rc != EFS_OK) {
+        if (flush_us > 20000)
+            fprintf(stderr, "raft-snap: prepare group=%u flush_us=%llu rc=%d\n",
+                    g->group, (unsigned long long)flush_us, rc);
         return rc;
+    }
+    prepare_start = now_us_();
     rc = efs_kv_lsm_view_pin(h->kv, &view);
+    pin_us = now_us_() - prepare_start;
+    if (flush_us + pin_us > 20000)
+        fprintf(stderr, "raft-snap: prepare group=%u flush_us=%llu pin_us=%llu rc=%d\n",
+                g->group, (unsigned long long)flush_us,
+                (unsigned long long)pin_us, rc);
     if (rc != EFS_OK)
         return rc;
     pthread_mutex_lock(&h->snap_mu);
@@ -3097,7 +3110,14 @@ static int host_maybe_snapshot(struct efs_raft_host *h, int gi)
     }
     /* efs_raft_snapshot → host_snap_open flushes again and pins. A BUSY
      * open still records the snap point; the file follows on the GC thread. */
-    return efs_raft_snapshot(h->g[gi].r);
+    uint64_t started = now_us_();
+    int rc = efs_raft_snapshot(h->g[gi].r);
+    uint64_t elapsed = now_us_() - started;
+    if (elapsed > 20000)
+        fprintf(stderr, "raft-snap: advance group=%u applied=%llu elapsed_us=%llu rc=%d\n",
+                h->g[gi].group, (unsigned long long)applied,
+                (unsigned long long)elapsed, rc);
+    return rc;
 }
 
 static int host_session_combined_group(const uint8_t *cmd,uint32_t clen,uint8_t group)
@@ -9294,17 +9314,21 @@ static int host_query_source_once(struct efs_raft_host *h,struct efs_kv_lsm_snap
 /* Namespace mutation can invalidate a cut during its post-capture barriers.
  * Recapture promptly instead of waiting a full refresh interval for each
  * collision. Each attempt owns a new pin and repeats every authority/import
- * and transaction fence. The existing build deadline and four-cut bound
- * prevent a busy namespace from monopolizing the background worker. */
+ * and transaction fence. A short, bounded burst avoids spending most of the
+ * retry interval idle when transaction arrivals invalidate cheap cuts. Both
+ * the original build deadline and a 100ms burst budget bound this worker;
+ * every failed source is released before another pin is acquired. */
 static int host_query_source(struct efs_raft_host *h,struct efs_kv_lsm_snapshot **source,
                               struct efs_server_query_view *view,uint64_t *revisions,uint64_t *import_generation,
                               int *final_transaction_changed,struct efs_query_capture_work *work)
 {
     *final_transaction_changed=0;
+    uint64_t started=query_mono_ms();
     for(unsigned attempt=0;;attempt++) {
         int changed=0;
         int rc=host_query_source_once(h,source,view,revisions,import_generation,&changed,work);
-        if(!changed || attempt==3 || query_mono_ms()>=h->query_deadline_ms) {
+        uint64_t now=query_mono_ms();
+        if(!changed || attempt==15 || now-started>=100 || now>=h->query_deadline_ms) {
             *final_transaction_changed=changed;return rc;
         }
     }
@@ -9366,12 +9390,12 @@ static void *host_query_thread(void *ctx)
         else fprintf(stderr,"query-config: invalid EFS_QUERY_CATALOG_MIB; using 256 (allowed 64..1024)\n");
     }
     while (__atomic_load_n(&h->query_running,__ATOMIC_ACQUIRE)) {
-        usleep(100000);
+        usleep(efs_query_refresh_poll_ms(cut_retry)*1000u);
         query_page_sweep(0);
         uint64_t policy_version;uint32_t policy_mask;
         if(efs_query_policy_get(h->kv,&policy_version,&policy_mask) || !policy_mask) {cut_retry=0;continue;}
         uint64_t now=query_mono_ms(),dirty=0;
-        if (now-last_attempt<200) continue;
+        if (now-last_attempt<efs_query_refresh_admit_ms(cut_retry)) continue;
         int rc=efs_kv_lsm_metadata_revisions(h->kv,current,4096);
         if (rc) {
             cut_retry=0;
@@ -9414,6 +9438,7 @@ static void *host_query_thread(void *ctx)
         uint64_t revisions[4096],import_generation[HOST_NGROUPS];
         h->query_deadline_ms=now+HOST_QUERY_BUILD_MS;
         h->query_cancel_checks=0;
+        build_failure.pending=0;
         int final_transaction_changed=0,work_enabled=efs_query_work_enabled();
         struct efs_query_capture_work work={0};
         if(work_enabled){work.dirty=dirty;uint64_t admitted=query_mono_ms();
@@ -9442,10 +9467,15 @@ static void *host_query_thread(void *ctx)
                 }
                 if(work_enabled && initial)work.restore_ms=query_mono_ms()-restore_start;
                 if(initial)fprintf(stderr,"query-restore: rc=%d backend=disk\n",restored);
-                uint64_t build_start=work_enabled?query_mono_ms():0;
+                uint64_t build_start=query_mono_ms();
                 if(restored)rc=efs_query_catalog_build_disk_checked(query_root,source,h->query_view.catalog,
                     catalog_bytes,host_query_disk_cancel,h,&build_failure,&candidate);
-                if(work_enabled && restored)work.build_ms=query_mono_ms()-build_start;
+                uint64_t build_elapsed=query_mono_ms()-build_start;
+                if(work_enabled && restored)work.build_ms=build_elapsed;
+                if(restored && efs_query_refresh_preflight_retry(rc,build_failure.pending,build_elapsed)){
+                    cut_retry=1;refresh_stage="prepared-preflight";
+                    if(work_enabled){work.fast_eligible=1;work.reason="prepared-preflight";}
+                }
                 if(!rc) {
                     pthread_mutex_lock(&h->mu);
                     if(!host_query_capable(h))rc=EFS_ERR_NOT_PRIMARY;
@@ -9481,9 +9511,10 @@ static void *host_query_thread(void *ctx)
          * retain their start-to-start coalescing and pending-age reporting. */
         if (failed) last_attempt=query_mono_ms();
         if (rc && rc!=EFS_ERR_NOT_PRIMARY && (rc!=last_error || now-last_error_log>=30000)) {
-            fprintf(stderr,"query-refresh: rc=%d cap_mib=%llu initial=%d elapsed_ms=%llu\n",
+            fprintf(stderr,"query-refresh: rc=%d cap_mib=%llu initial=%d elapsed_ms=%llu stage=%s pending=%d capture_ms=%llu\n",
                     rc,(unsigned long long)(catalog_bytes>>20),initial,
-                    (unsigned long long)(query_mono_ms()-now));
+                    (unsigned long long)(query_mono_ms()-now),refresh_stage,build_failure.pending,
+                    (unsigned long long)(capture_done-now));
             last_error_log=now;
         }
         last_error=rc;

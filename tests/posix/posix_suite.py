@@ -2810,13 +2810,23 @@ def virt_stats_readable(d):
 @extra
 def virt_find_query(d):
     import json
+    # A published snapshot may legitimately predate this write. Use the case's
+    # configured wall budget instead of a hidden shorter visibility cutoff;
+    # the parent still kills the whole process group at the original deadline.
+    budget_s = float(os.environ.get("EFS_POSIX_CASE_TIMEOUT_S", "10"))
+    deadline = time.monotonic() + (budget_s if budget_s > 0 else 10)
     wr(os.path.join(d, "report.txt"), b"x")
     p = os.path.join(d, ".efs", "find")
     if not os.path.exists(p):
         raise Fail(".efs commands absent (opt-in disabled)", soft=True)
-    deadline = time.monotonic() + 10
     while True:
-        out = subprocess.check_output([sys.executable, p, "report", "--json"], timeout=30)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise Fail(".efs/find missed report.txt within the configured case budget")
+        out = subprocess.check_output([sys.executable, p, "report", "--json"],
+                                      timeout=min(30, remaining))
+        if time.monotonic() >= deadline:
+            raise Fail(".efs/find exceeded the configured case budget")
         result = json.loads(out)
         if b"report.txt" in {bytes.fromhex(e["path_hex"]) for e in result["entries"]}:
             break
@@ -5224,11 +5234,13 @@ def main(argv=None):
     signal.signal(signal.SIGINT, _cut)
 
     def spawn_test(name, tdir):
+        case_timeout = max(test_timeout, getattr(dict(TESTS)[name], "_posix_timeout", test_timeout))
+        child_env = dict(os.environ, EFS_POSIX_CASE_TIMEOUT_S=str(case_timeout))
         fd, result = tempfile.mkstemp(prefix="posix-result-")
         os.close(fd)
         proc = subprocess.Popen(
             [sys.executable, script, "--worker", name, tdir, result],
-            start_new_session=True)
+            start_new_session=True, env=child_env)
         live.append(proc)
         if name == "dir_deep_nesting": _deep_phase("spawned", proc.pid)
         pidfile = os.environ.get("EFS_POSIX_SPAWN_PID")

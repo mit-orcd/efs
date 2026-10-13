@@ -1,5 +1,7 @@
 /* Exercise the production cache boundary and partial-write error behavior. */
 #include "efs/dir_layout.h"
+#include "efs/kv_lsm.h"
+#include "efs/kv_key.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
@@ -7,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <pthread.h>
 #ifdef __linux__
 #include <sys/ioctl.h>
 static int clone_error;
@@ -16,8 +19,15 @@ static int fault_clone(int fd,unsigned long request,int source)
 static int partial_write;
 static unsigned write_calls;
 static unsigned read_calls;
-static unsigned alias_opens;
+static unsigned alias_opens,name_opens;
 static unsigned raw_syncs,index_syncs,sync_faults;
+static unsigned thread_creates,fail_thread_create;
+static int fault_thread_create(pthread_t *thread,const pthread_attr_t *attr,void *(*fn)(void *),void *ctx)
+{
+    thread_creates++;
+    if(fail_thread_create && !--fail_thread_create)return EAGAIN;
+    return pthread_create(thread,attr,fn,ctx);
+}
 static char fail_sync_kind,fail_write_kind;
 static unsigned write_faults,fail_derived_after;
 static char descriptor_kind[4096];
@@ -47,7 +57,8 @@ static int tracked_open(const char *path,int flags,...)
             const char *name=strrchr(path,'/');if(name && !strcmp(name+1,"manifest"))kind='m';
         }
         descriptor_kind[fd]=kind;
-        if(kind=='a')alias_opens++;
+        if(kind=='a')__atomic_add_fetch(&alias_opens,1,__ATOMIC_RELAXED);
+        if(kind=='n')__atomic_add_fetch(&name_opens,1,__ATOMIC_RELAXED);
         if((flags&O_CREAT) && (kind=='r' || kind=='i')){
             writing_raw[fd]=1;raw_handles++;
             if(raw_handles>raw_handles_high)raw_handles_high=raw_handles;
@@ -66,13 +77,13 @@ static int tracked_close(int fd)
 static int fault_fsync(int fd)
 {
     char kind=fd>=0 && fd<(int)sizeof(descriptor_kind)?descriptor_kind[fd]:0;
-    if(kind=='r')raw_syncs++;
-    if(kind=='i')index_syncs++;
-    if(kind && kind==fail_sync_kind){sync_faults++;errno=EIO;return -1;}
+    if(kind=='r')__atomic_add_fetch(&raw_syncs,1,__ATOMIC_RELAXED);
+    if(kind=='i')__atomic_add_fetch(&index_syncs,1,__ATOMIC_RELAXED);
+    if(kind && kind==fail_sync_kind){__atomic_add_fetch(&sync_faults,1,__ATOMIC_RELAXED);errno=EIO;return -1;}
     return fsync(fd);
 }
 static ssize_t counted_pread(int fd,void *buf,size_t size,off_t offset)
-{ read_calls++;return pread(fd,buf,size,offset); }
+{ __atomic_add_fetch(&read_calls,1,__ATOMIC_RELAXED);return pread(fd,buf,size,offset); }
 static ssize_t fault_pwrite(int fd,const void *buf,size_t size,off_t offset)
 {
     write_calls++;
@@ -86,6 +97,16 @@ static ssize_t fault_pwrite(int fd,const void *buf,size_t size,off_t offset)
     if(partial_write==1){partial_write=2;return pwrite(fd,buf,size<3?size:3,offset);}
     return pwrite(fd,buf,size,offset);
 }
+static unsigned pending_scans;
+static int counted_snapshot_scan(struct efs_kv_lsm_snapshot *source,
+    const uint8_t *prefix,uint32_t pn,const uint8_t *start,uint32_t sn,
+    int (*cb)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t),void *user)
+{
+    if(pn==3 && (prefix[2]==EFS_KV_KIND_INTENT || prefix[2]==EFS_KV_KIND_GUARD || prefix[2]==EFS_KV_KIND_REDUCE))pending_scans++;
+    return efs_kv_lsm_snapshot_scan(source,prefix,pn,start,sn,cb,user);
+}
+#define efs_kv_lsm_snapshot_scan counted_snapshot_scan
+#define pthread_create fault_thread_create
 #ifdef __linux__
 #define ioctl fault_clone
 #endif
@@ -98,6 +119,8 @@ static ssize_t fault_pwrite(int fd,const void *buf,size_t size,off_t offset)
 #define sync_file_range fault_writeback
 #endif
 #include "../src/meta/query_disk.c"
+#undef pthread_create
+#undef efs_kv_lsm_snapshot_scan
 #undef pwrite
 #undef pread
 #undef fsync
@@ -139,6 +162,100 @@ static void rebuild_cache_test(void)
         CHECK(!folds_build(disk));
         struct efs_query_rollup totals;CHECK(!efs_query_disk_stats(disk,EFS_ROOT_INO,&totals));
         CHECK(totals.tree_files==1 && totals.tree_dirs==1);
+    }
+    efs_query_disk_free(disk);efs_kv_lsm_snapshot_release(source);efs_kv_lsm_close(kv);
+}
+struct local_page_output {unsigned emitted,limit,allow_nested;char name[8][EFS_MAX_NAME];};
+static int local_page_emit(void *ctx,const struct efs_name_entry *entry,const char *path)
+{
+    struct local_page_output *p=ctx;
+    if(p->emitted==p->limit)return EFS_ERR_AGAIN;
+    CHECK(p->emitted<8 && (p->allow_nested || !strcmp(entry->name,path)));
+    if(p->emitted<8)strcpy(p->name[p->emitted],path);
+    p->emitted++;return EFS_OK;
+}
+static int local_page_busy(void *ctx,const struct efs_name_entry *entry,const char *path)
+{(void)ctx;(void)entry;(void)path;return EFS_ERR_BUSY;}
+static int local_page_stop(void *ctx){(void)ctx;return 1;}
+static void local_page_test(void)
+{
+    char store[]="/tmp/efs-query-local-kv-XXXXXX",cache[]="/tmp/efs-query-local-cache-XXXXXX";
+    CHECK(mkdtemp(store));CHECK(mkdtemp(cache));
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
+    CHECK(kv);if(!kv)return;
+    struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t leaf,outside,file;
+    CHECK(!efs_meta_apply_init(kv,100));
+    CHECK(!efs_meta_apply_mkdir(kv,&attrs,EFS_ROOT_INO,S_IFDIR|0755,"leaf",&leaf));
+    CHECK(!efs_meta_apply_mkdir(kv,&attrs,EFS_ROOT_INO,S_IFDIR|0755,"outside",&outside));
+    for(unsigned i=0;i<5;i++){char name[32];snprintf(name,sizeof(name),"report-%02u",i);CHECK(!efs_meta_apply_create_file(kv,&attrs,leaf,S_IFREG|0644,name,&file));}
+    for(unsigned i=0;i<2048;i++){char name[32];snprintf(name,sizeof(name),"unrelated-%04u",i);CHECK(!efs_meta_apply_create_file(kv,&attrs,outside,S_IFREG|0644,name,&file));}
+    /* Historical inactive lanes populate enough physical partitions to
+     * exercise the parallel barrier threshold without changing file totals. */
+    struct efs_meta_row lane_owner;CHECK(!efs_meta_apply_get_inode(kv,file,&lane_owner));
+    for(unsigned lane=0;lane<64;lane++){
+        uint8_t key[EFS_KV_KEY_MAX],value[EFS_META_LANE_BYTES]={0};uint32_t kn;
+        CHECK(!efs_kv_key_lane(efs_kv_lane_shard(file,(uint8_t)lane),file,lane_owner.generation,(uint8_t)lane,key,&kn));
+        CHECK(!efs_kv_put(kv,key,kn,value,sizeof(value)));
+    }
+    struct efs_kv_lsm_snapshot *source=NULL;struct efs_query_disk *disk=NULL;
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,16<<20,&source));pending_scans=0;thread_creates=0;
+    CHECK(!efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&disk));
+    CHECK(pending_scans==3*SHARDS); /* One complete immutable proof, not a second raw-copy scan. */
+    CHECK(thread_creates==PERSIST_WORKERS);
+    if(disk){
+        struct efs_meta_row row;CHECK(!efs_query_disk_inode(disk,leaf,&row,NULL));CHECK(row.layout==EFS_META_LAYOUT_LOCAL);
+        uint64_t watermark[4]={101,102,103,104};CHECK(!efs_query_disk_checkpoint(disk,watermark));
+        struct efs_query_disk *failed=NULL,*restored=NULL;
+        thread_creates=0;fail_thread_create=3;
+        CHECK(efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&failed)==EFS_ERR_NOMEM && !failed);
+        CHECK(!fail_thread_create && thread_creates==3); /* Started workers joined before failed-candidate cleanup. */
+        fail_thread_create=0;
+        CHECK(!efs_query_disk_restore(cache,watermark,4<<20,&restored));
+        CHECK(restored);if(restored){struct efs_query_rollup total;CHECK(!efs_query_disk_stats(restored,leaf,&total));CHECK(total.tree_files==5);}
+        efs_query_disk_free(restored);
+        for(unsigned match=EFS_NAME_EXACT;match<=EFS_NAME_CONTAINS;match++){
+            const char *term=match==EFS_NAME_EXACT?"report-02":match==EFS_NAME_SUFFIX?"02":"report";
+            struct local_page_output output={.limit=8};uint64_t position=0;close_cache(disk);name_opens=0;
+            CHECK(!efs_query_disk_page(disk,leaf,match,term,0,&position,100,NULL,NULL,local_page_emit,&output));
+            CHECK(position==(UINT64_C(4096)<<32) && !name_opens);
+            CHECK(output.emitted==((match==EFS_NAME_EXACT || match==EFS_NAME_SUFFIX)?1:5));
+            if(match==EFS_NAME_EXACT || match==EFS_NAME_SUFFIX)CHECK(!strcmp(output.name[0],"report-02"));
+        }
+        uint64_t position=0,first=0;struct local_page_output one={.limit=1};
+        CHECK(!efs_query_disk_page(disk,leaf,EFS_NAME_CONTAINS,"report",0,&position,1,NULL,NULL,local_page_emit,&one));
+        CHECK(one.emitted==1 && !strcmp(one.name[0],"report-00") && position<(UINT64_C(4096)<<32));first=position;
+        struct local_page_output replay={.limit=8};uint64_t again=0;
+        CHECK(!efs_query_disk_page(disk,leaf,EFS_NAME_CONTAINS,"report",0,&again,1,NULL,NULL,local_page_emit,&replay));
+        CHECK(again==first && replay.emitted==1 && !strcmp(replay.name[0],one.name[0]));
+        struct local_page_output rest={.limit=8};
+        CHECK(!efs_query_disk_page(disk,leaf,EFS_NAME_CONTAINS,"report",0,&position,100,NULL,NULL,local_page_emit,&rest));
+        CHECK(position==(UINT64_C(4096)<<32) && rest.emitted==4 && !strcmp(rest.name[0],"report-01"));
+        position=0;CHECK(efs_query_disk_page(disk,leaf,EFS_NAME_CONTAINS,"report",0,&position,100,NULL,NULL,local_page_busy,NULL)==EFS_ERR_BUSY);
+        position=0;CHECK(efs_query_disk_page(disk,leaf,EFS_NAME_CONTAINS,"report",0,&position,100,local_page_stop,NULL,local_page_emit,&rest)==EFS_ERR_BUSY);
+        struct local_page_output missing={.limit=8};position=0;
+        CHECK(!efs_query_disk_page(disk,leaf,EFS_NAME_CONTAINS,"absent",0,&position,100,NULL,NULL,local_page_emit,&missing));
+        CHECK(!missing.emitted && position==(UINT64_C(4096)<<32));
+        /* A later live mutation cannot change the old stream's traversal.
+         * A new catalog with descendants falls back to global names for find,
+         * while an immediate LOCAL listing still uses only its parent range. */
+        efs_ino_t child;CHECK(!efs_meta_apply_mkdir(kv,&attrs,leaf,S_IFDIR|0755,"child",&child));
+        CHECK(!efs_meta_apply_create_file(kv,&attrs,child,S_IFREG|0644,"report-inner",&file));
+        struct local_page_output unchanged={.limit=8};position=0;
+        CHECK(!efs_query_disk_page(disk,leaf,EFS_NAME_CONTAINS,"report",0,&position,100,NULL,NULL,local_page_emit,&unchanged));
+        CHECK(unchanged.emitted==5 && position==(UINT64_C(4096)<<32));
+        struct efs_kv_lsm_snapshot *fresh=NULL;struct efs_query_disk *newer=NULL;
+        CHECK(!efs_kv_lsm_snapshot_pin(kv,16<<20,&fresh));CHECK(!efs_query_disk_build(cache,fresh,disk,4<<20,NULL,NULL,NULL,&newer));
+        if(newer){
+            close_cache(newer);name_opens=0;position=0;struct local_page_output nested={.limit=8,.allow_nested=1};
+            CHECK(!efs_query_disk_page(newer,leaf,EFS_NAME_CONTAINS,"report",0,&position,100000,NULL,NULL,local_page_emit,&nested));
+            CHECK(nested.emitted==6 && position==(UINT64_C(4096)<<32) && name_opens>0);
+            unsigned inner=0;for(unsigned i=0;i<nested.emitted && i<8;i++)inner+=!strcmp(nested.name[i],"child/report-inner");CHECK(inner==1);
+            close_cache(newer);name_opens=0;position=0;struct local_page_output immediate={.limit=8};
+            CHECK(!efs_query_disk_page(newer,leaf,EFS_NAME_CONTAINS,"report",1,&position,100,NULL,NULL,local_page_emit,&immediate));
+            CHECK(immediate.emitted==5 && position==(UINT64_C(4096)<<32) && !name_opens);
+        }
+        efs_query_disk_free(newer);efs_kv_lsm_snapshot_release(fresh);
+        printf("local page: unrelated=2048 names_index_opens=%u all match modes, bounded continuation/replay, absent and BUSY/cancel controls PASS\n",name_opens);
     }
     efs_query_disk_free(disk);efs_kv_lsm_snapshot_release(source);efs_kv_lsm_close(kv);
 }
@@ -288,8 +405,14 @@ static void alias_batch_test(void)
     unsigned batch_opens=alias_opens,batch_reads=read_calls;
     CHECK(batch_opens==shards && batch_reads==2*shards && !state.count);
     close_cache(d);alias_opens=read_calls=0;
-    /* Equivalent original traversal exhausts the FD cache between IDs. */
+    /* Proven endpoints eliminate repeated opens even across separate batches. */
     for(unsigned i=0;i<CHANGE_BATCH;i++)CHECK(!aliases_dirty_batch(d,&state,ids+i,1));
+    CHECK(!alias_opens && !read_calls);
+    /* Fresh endpoint state models the uncached traversal between IDs. */
+    for(unsigned i=0;i<CHANGE_BATCH;i++){
+        memset(state.alias_known,0,sizeof(state.alias_known));
+        CHECK(!aliases_dirty_batch(d,&state,ids+i,1));
+    }
     CHECK(alias_opens==shards*CHANGE_BATCH && read_calls==2*alias_opens);
     printf("alias batch: shards=%u ids=%u opens=%u->%u reads=%u->%u\n",shards,CHANGE_BATCH,alias_opens,batch_opens,read_calls,batch_reads);
     close_cache(d);d->stop=cancel_budget;alias_opens=0;
@@ -297,12 +420,97 @@ static void alias_batch_test(void)
     d->stop=NULL;char path[EFS_MAX_PATH];
     CHECK(!filename(d,FD_CACHE/2,'a',path,sizeof(path)));
     CHECK(!truncate(path,sizeof(alias)-1));
+    memset(state.alias_known,0,sizeof(state.alias_known));
     CHECK(aliases_dirty_batch(d,&state,ids,CHANGE_BATCH)==EFS_ERR_IO);
     close_cache(d);
     for(unsigned i=0;i<shards;i++){
         CHECK(!filename(d,i,'a',path,sizeof(path)));CHECK(!unlink(path));
     }
     pthread_mutex_destroy(&d->mutex);free(d);CHECK(!rmdir(root));
+}
+
+static void changed_journal_test(void)
+{
+    const unsigned count=2*SORT_ROWS+17,shards=FD_CACHE*2;
+    for(unsigned mode=0;mode<5;mode++){
+        char root[]="/tmp/efs-query-changes-XXXXXX";CHECK(mkdtemp(root));
+        struct efs_query_disk *d=calloc(1,sizeof(*d));struct incremental *state=calloc(1,sizeof(*state));
+        CHECK(d && state);if(!d || !state){free(d);free(state);continue;}
+        d->budget_fd=-1;d->disk_limit=UINT64_MAX;strcpy(d->path,root);pthread_mutex_init(&d->mutex,NULL);
+        for(unsigned i=0;i<FD_CACHE;i++)d->fds[i].fd=-1;
+        state->changes=count;state->change_bytes=count*sizeof(efs_ino_t);state->changes_fd=make_file(d,0,'c');
+        CHECK(state->changes_fd>=0);CHECK(!charge_disk(d,state->change_bytes));
+        for(unsigned at=0;at<count;at+=SORT_ROWS){
+            unsigned n=count-at>SORT_ROWS?SORT_ROWS:count-at;
+            for(unsigned i=0;i<n;i++)state->sort_ids[i]=count-at-i;
+            CHECK(!io_at(state->changes_fd,state->sort_ids,n*sizeof(efs_ino_t),at*sizeof(efs_ino_t),1));
+        }
+        uint64_t before=d->disk_bytes;
+        if(mode==1)d->disk_limit=before+2*state->change_bytes-1;
+        if(mode==2)partial_write=1;
+        if(mode==3)d->stop=cancel_budget;
+        if(mode==4)CHECK(!ftruncate(state->changes_fd,state->change_bytes-1));
+        int rc=changes_sort(d,state);
+        CHECK(rc==(mode==1?EFS_ERR_QUOTA:mode==3?EFS_ERR_BUSY:mode?EFS_ERR_IO:EFS_OK));
+        CHECK(!partial_write);d->stop=NULL;d->disk_limit=UINT64_MAX;
+        if(!mode){
+            CHECK(d->disk_bytes==before);
+            for(unsigned at=0;at<count;at+=SORT_ROWS){
+                unsigned n=count-at>SORT_ROWS?SORT_ROWS:count-at;
+                CHECK(!io_at(state->changes_fd,state->sort_ids,n*sizeof(efs_ino_t),at*sizeof(efs_ino_t),0));
+                for(unsigned i=0;i<n;i++)CHECK(state->sort_ids[i]==at+i+1);
+            }
+            struct disk_alias alias={UINT64_MAX,EFS_ROOT_INO,0};
+            for(unsigned i=0;i<shards;i++){
+                d->part[i].names=1;int fd=make_file(d,i,'a');CHECK(fd>=0);
+                if(fd>=0){CHECK(!io_at(fd,&alias,sizeof(alias),0,1));close(fd);}
+            }
+            alias_opens=0;CHECK(!aliases_dirty_sorted(d,state));CHECK(alias_opens==shards && !state->count);
+            close_cache(d);d->stop=cancel_budget;alias_opens=0;
+            CHECK(aliases_dirty_sorted(d,state)==EFS_ERR_BUSY && !alias_opens);d->stop=NULL;
+            char path[EFS_MAX_PATH];CHECK(!filename(d,0,'a',path,sizeof(path)));CHECK(!truncate(path,sizeof(alias)-1));
+            CHECK(aliases_dirty_sorted(d,state)==EFS_ERR_IO);
+        }else{
+            efs_ino_t first=0;CHECK(!io_at(state->changes_fd,&first,sizeof(first),0,0));CHECK(first==count);
+        }
+        close(state->changes_fd);free(state);efs_query_disk_free(d);CHECK(access(root,F_OK)<0);
+    }
+    puts("changed journal: external sort, one-pass aliases, charged peak, partial writes/EOF and cancellation PASS");
+}
+
+static void pending_preflight_test(void)
+{
+    char store[]="/tmp/efs-query-pending-kv-XXXXXX",cache[]="/tmp/efs-query-pending-cache-XXXXXX";
+    CHECK(mkdtemp(store));CHECK(mkdtemp(cache));
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);CHECK(kv);if(!kv)return;
+    struct efs_meta_attrs attrs={1000,1000,100};CHECK(!efs_meta_apply_init(kv,100));
+    for(unsigned i=0;i<32;i++){
+        char name[32];efs_ino_t ino;snprintf(name,sizeof(name),"ordinary-%u",i);
+        CHECK(!efs_meta_apply_create_file(kv,&attrs,EFS_ROOT_INO,S_IFREG|0644,name,&ino));
+    }
+    struct efs_meta_row row={.ino=SHARDS-1,.parent=EFS_ROOT_INO,.generation=1,.mode=S_IFREG|0644};
+    uint8_t key[EFS_KV_KEY_MAX],value[EFS_META_INO_BYTES];uint32_t kn;
+    CHECK(!efs_kv_key_inode(SHARDS-1,row.ino,key,&kn));CHECK(!efs_meta_pack_inode(&row,value,sizeof(value)));
+    CHECK(!efs_kv_put(kv,key,kn,value,sizeof(value)));
+    struct efs_kv_lsm_snapshot *base=NULL,*blocked=NULL,*clean=NULL;struct efs_query_disk *old=NULL,*next=NULL;
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&base));CHECK(!efs_query_disk_build(cache,base,NULL,4<<20,NULL,NULL,NULL,&old));
+    struct efs_txid tx={{0}};tx.bytes[15]=67;struct efs_txn_parts parts={.n=1,.shard={SHARDS-1}};
+    uint64_t version;CHECK(!efs_txn_ver_get(kv,key,kn,&version));CHECK(!efs_txn_prepare_guard(kv,&tx,&parts,key,kn,version));
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&blocked));
+    struct efs_query_build_failure failure={0};struct efs_query_build_times times;
+    unsigned writes=write_calls,syncs=raw_syncs+index_syncs;
+    CHECK(efs_query_disk_build_checked(cache,blocked,old,4<<20,NULL,NULL,&times,&failure,&next)==EFS_ERR_BUSY);
+    CHECK(failure.pending && !next && write_calls==writes && raw_syncs+index_syncs==syncs);
+    CHECK(efs_query_disk_build_checked(cache,blocked,old,4<<20,cancel_budget,NULL,&times,&failure,&next)==EFS_ERR_BUSY);
+    CHECK(!failure.pending && !next && write_calls==writes);
+    CHECK(!efs_txn_resolve(kv,&tx,SHARDS-1,EFS_TXN_ABORT));CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&clean));
+    CHECK(!efs_query_disk_build_checked(cache,clean,old,4<<20,NULL,NULL,&times,&failure,&next));CHECK(!failure.pending && next);
+    efs_query_disk_free(next);next=NULL;writes=write_calls;
+    CHECK(efs_query_disk_build_checked(cache,blocked,old,4<<20,NULL,NULL,&times,&failure,&next)==EFS_ERR_BUSY);
+    CHECK(failure.pending && !next && write_calls==writes);
+    CHECK(!efs_query_disk_inode(old,row.ino,NULL,NULL));
+    efs_query_disk_free(old);efs_kv_lsm_snapshot_release(base);efs_kv_lsm_snapshot_release(blocked);efs_kv_lsm_snapshot_release(clean);efs_kv_lsm_close(kv);
+    puts("pending preflight: high-shard guard refuses before writes, shutdown distinguished, immutable cut and fresh resolved rebuild PASS");
 }
 
 static void orphan_preflight_test(void)
@@ -384,7 +592,10 @@ int main(void)
     raw_sync_batch_test();
     orphan_preflight_test();
     alias_batch_test();
+    changed_journal_test();
+    pending_preflight_test();
     rebuild_cache_test();
+    local_page_test();
     {
         struct efs_query_rollup r={.tree_files=UINT64_MAX-1,.tree_dirs=7,.tree_bytes=9};
         CHECK(!rollup_tree_add(&r,1,2,3));
@@ -684,7 +895,7 @@ int main(void)
                 fail_sync_kind=kinds_to_fail[i];sync_faults=0;
                 CHECK(efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&next)==EFS_ERR_IO && !next);
                 CHECK(raw_handles==0 && raw_handles_high<=RAW_SYNC_FILES);
-                CHECK(sync_faults==1);fail_sync_kind=0;
+                CHECK(sync_faults>=1 && sync_faults<=PERSIST_WORKERS);fail_sync_kind=0;
                 CHECK(!efs_query_disk_inode(old,file,NULL,NULL));
                 CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
                 CHECK(!efs_query_disk_inode(next,file,NULL,NULL));efs_query_disk_free(next);next=NULL;
@@ -707,7 +918,39 @@ int main(void)
             struct efs_query_rollup totals;CHECK(!efs_query_disk_stats(old,EFS_ROOT_INO,&totals));CHECK(totals.tree_bytes==465);
             uint64_t wm[4]={1,2,3,4};CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
             CHECK(!efs_query_disk_stats(next,EFS_ROOT_INO,&totals));CHECK(totals.tree_bytes==465);
-            efs_query_disk_free(next);next=NULL;efs_kv_lsm_snapshot_release(changed);
+            efs_query_disk_free(next);next=NULL;
+            /* Non-dentry edits reuse the exact immutable name/alias inodes
+             * and their validated digests, without a redundant sync barrier. */
+            fail_sync_kind='n';sync_faults=0;
+            CHECK(!efs_query_disk_build(cache,changed,old,4<<20,NULL,NULL,NULL,&next));
+            CHECK(!sync_faults);fail_sync_kind=0;
+            if(next){
+                unsigned reused=0;
+                for(unsigned shard=0;shard<SHARDS;shard++)if(next->shared_names[shard]){
+                    reused++;
+                    const char kinds[]={'n','a'};
+                    for(unsigned j=0;j<sizeof(kinds);j++){
+                        char a[EFS_MAX_PATH],b[EFS_MAX_PATH];struct stat x,y;
+                        CHECK(!filename(old,shard,kinds[j],a,sizeof(a)));
+                        CHECK(!filename(next,shard,kinds[j],b,sizeof(b)));
+                        CHECK(!stat(a,&x) && !stat(b,&y));
+                        CHECK(x.st_dev==y.st_dev && x.st_ino==y.st_ino && x.st_size==y.st_size);
+                        unsigned digest=j?4:2;
+                        CHECK(!memcmp(old->part[shard].digest[digest],next->part[shard].digest[digest],32));
+                    }
+                }
+                CHECK(reused);
+                CHECK(!efs_query_disk_stats(next,EFS_ROOT_INO,&totals));CHECK(totals.tree_bytes==1464);
+                uint64_t newer_wm[4]={2,3,4,5};CHECK(!efs_query_disk_checkpoint(next,newer_wm));
+                struct efs_query_disk *restored=NULL;
+                CHECK(!efs_query_disk_restore(cache,newer_wm,4<<20,&restored));
+                if(restored){
+                    CHECK(!efs_query_disk_stats(restored,EFS_ROOT_INO,&totals));CHECK(totals.tree_bytes==1464);
+                    efs_query_disk_free(restored);
+                }
+                efs_query_disk_free(next);next=NULL;
+            }
+            efs_kv_lsm_snapshot_release(changed);
         }
         efs_query_disk_free(old);efs_kv_lsm_snapshot_release(source);efs_kv_lsm_close(kv);
     }

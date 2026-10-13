@@ -51,9 +51,19 @@ if a.resume_from is not None:
         assert 0 <= acknowledged[number] <= a.files * (number + 1) // a.workers - a.files * number // a.workers
 
 def mounted():
-    result = subprocess.run(['findmnt', '-n', '-T', str(a.mount), '-o', 'FSTYPE'],
-                            capture_output=True, text=True, timeout=10, check=True)
-    assert result.stdout.strip() == 'fuse.efs-fuse', 'refuse local/NFS fallback'
+    # Never fork this process while another worker has a direct read in flight.
+    # The open directory's mount ID also identifies stacked mounts exactly.
+    fd = os.open(a.mount, os.O_PATH | os.O_DIRECTORY)
+    try:
+        info = Path('/proc/self/fdinfo/%d' % fd).read_text().splitlines()
+        mount_id = next(line.split()[1] for line in info if line.startswith('mnt_id:'))
+        filesystem = next((line.split(' - ', 1)[1].split()[0]
+                           for line in Path('/proc/self/mountinfo').read_text().splitlines()
+                           if line.split()[0] == mount_id), None)
+        assert filesystem == 'fuse.efs-fuse', 'refuse local/NFS fallback'
+    finally:
+        os.close(fd)
+
 
 def payload(index):
     # Nonzero actual writes. XFS/files does not deduplicate this bounded buffer.
@@ -111,14 +121,27 @@ def worker(number):
             else:
                 digest = hashlib.sha256()
                 length = 0
+                chunks = []
                 with open(target, 'rb', buffering=0) as stream:
                     while True:
                         chunk = stream.read(64 << 10)
                         if not chunk:
                             break
                         digest.update(chunk)
+                        chunks.append(chunk)
                         length += len(chunk)
-                assert length == a.bytes and digest.digest() == hashlib.sha256(expected).digest(), target
+                if length != a.bytes or digest.digest() != hashlib.sha256(expected).digest():
+                    # Preserve the actual failing read, never a successful reread.
+                    name = 'mismatch-worker-%02d-file-%09d' % (number, index)
+                    (a.results / (name + '.bin')).write_bytes(b''.join(chunks))
+                    (a.results / (name + '.json')).write_text(json.dumps(dict(
+                        path=str(target), index=index, length=length,
+                        expected_length=a.bytes, actual_sha256=digest.hexdigest(),
+                        expected_sha256=hashlib.sha256(expected).hexdigest(),
+                        chunk_lengths=[len(chunk) for chunk in chunks],
+                        chunk_sha256=[hashlib.sha256(chunk).hexdigest() for chunk in chunks]
+                    ), sort_keys=True) + '\n')
+                    raise AssertionError(target)
             completed[number] += 1
         if a.phase == 'verify':
             folder = root / ('worker-%02d' % number)

@@ -4017,6 +4017,11 @@ large-tree/load/checksum and remaining fault/gateway gates stay open.
 
 ## W90 · Scratch-file expiry metadata and safe lifecycle
 
+**Oct 12 user scope:** deferred for now. `devel-efs` focuses on non-expiry
+`.efs` commands; retain truthful unavailable/refusal behavior for expiry options.
+The accepted design below is retained, with no implementation or activation
+authorization inferred from this work profile.
+
 **Policy accepted Oct 8 (D33):** opt-in fixed expiry, no universal TTL, owner renewal within operator limits, singly linked regular files and safe conditional namespace deletion. This supersedes the initial open-policy discussion below; implementation remains open. [Contract](../status/accepted-namespace-scratch-20261008.md#d33--w90-opt-in-fixed-scratch-expiry).
 
 **Class/state:** feature; accepted D33 policy, implementation open. Recorded Oct 8, 2026 at the user's request.
@@ -5023,11 +5028,24 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 
 <a id="w108"></a>
 
+**Oct 13 ORCD platform gate remains open:** forced FUSE direct reads and
+concurrent application `fork()` reproduce stale partial private-buffer pages.
+No-fork native controls pass 80,000 files; adding forks fails after seven.
+The W92 oracle's mount validation now uses exact in-process mount IDs so it
+can qualify all bytes without causing that separate platform race. This is
+not a general fork-safety fix or W106 closure. See the
+[400 GiB source/control ledger](../status/orcd-efs-400g-20261012.md).
+
 ## W108 · Resolve owner names in directory-local long listings
 
-**Class/state:** Command usability; implemented with rollout gate open.
+**Class/state:** Command usability; closed (rebuilt ORCD rollout PASS Oct 12).
 
-**Oct 11 checkpoint:** names/fallback, bounded NSS cache, numeric `-n` mode and
+**Oct 12 acceptance:** `devel-efs` source `0dd2a7c7` passes all seven rebuilt
+ORCD clients, warm/cold shared ls/find names, numeric mode and JSON, plus29
+native regressions. RDMA/direct/files, commands enabled, packing/containers
+disabled. [Exact-source qualification](../status/devel-efs-query-20261012.md).
+
+**Historical Oct 11 checkpoint:** names/fallback, bounded NSS cache, numeric `-n` mode and
 safe output are implemented; 29 local regressions and the live candidate using
 ORCD's actual snapshot pass. The running clients still embed the old formatter;
 keep the rebuilt-client/shared find/ls deployment gate open.
@@ -5045,6 +5063,14 @@ ORCD virtual command. Now owned by `devel-orcd` under the user's ORCD assignment
 
 **Class/state:** liveness/performance investigation; open.
 **Assigned cluster:** `orcd-test` — native IB/RDMA, direct I/O.
+
+**Oct 12 scoped acceptance:** `devel-efs` `0dd2a7c7` fixes fresh coherent
+capture collisions without weakening transaction fences or test deadlines.
+Three quiet seven-client ordinary-file rounds pass4,536 core/63 query cases,
+peer67 and enabled cold exact-payload/path checks. The a54 baseline retains14
+query failures. Broader original namespace/pressure/scale investigations stay
+open; packing, expiry and unplanned recovery are outside this profile.
+[Fix and reproduction](../status/devel-efs-query-20261012.md).
 
 C profiles show substantial query rebuild work (42.96% inclusive on fcstor005);
 fcstor004 logs 15 apply waits of 21.668–50.117 ms. Earlier full-load gates retain

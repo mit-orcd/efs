@@ -1967,6 +1967,17 @@ static void efs_open_set_leased(efs_ino_t ino)
 
 /* Returns 1 when this was the last close. *leased is 1 when that close
  * must release the HOLD taken on the first open. */
+static uint64_t efs_open_retry_order(const struct efs_open_ref *r)
+{
+    uint64_t order = UINT64_MAX;
+    if (r->edge.active && !r->edge.complete && r->edge.q.id.seq)
+        order = r->edge.q.id.seq;
+    if (r->adoption.active && !r->adoption.complete &&
+        r->adoption.q.id.seq && r->adoption.q.id.seq < order)
+        order = r->adoption.q.id.seq;
+    return order;
+}
+
 static int efs_close_note(efs_ino_t ino, int *leased)
 {
     struct efs_open_ref **pp, *r;
@@ -1984,7 +1995,7 @@ static int efs_close_note(efs_ino_t ino, int *leased)
                     *leased = r->leased;
                 if (r->leased) {
                     r->close_pending = 1;
-                    r->retry_order = r->edge.q.id.seq;
+                    r->retry_order = efs_open_retry_order(r);
                 } else {
                     *pp = r->next;
                     free(r);
@@ -2000,7 +2011,7 @@ static int efs_close_note(efs_ino_t ino, int *leased)
 
 /* Caller holds the inode edge stripe. A failed reply retains the old
  * ownership, preventing a fresh OPEN from racing its delayed release. */
-static int efs_open_release_pending(efs_ino_t ino)
+static int efs_open_release_pending_run(efs_ino_t ino)
 {
     struct efs_open_ref *owner = NULL;
     pthread_mutex_lock(&g_open_mu);
@@ -2076,29 +2087,23 @@ static int efs_open_release_pending(efs_ino_t ino)
     return EFS_OK;
 }
 
-/* One retained release per iteration, with no RPC under the table mutex. */
-static int efs_open_drain_pending(void)
+/* The caller's inode stripe protects request bodies; the table mutex
+ * publishes only their scheduling key. A new CLOSE may acquire an identity
+ * after close_note. Publish it before returning an ambiguous reply, so a
+ * newer unallocated CLOSE cannot starve the identity holding admission. */
+static int efs_open_release_pending(efs_ino_t ino)
 {
-    efs_ino_t ino = 0;
-    uint64_t oldest = UINT64_MAX;
+    int rc = efs_open_release_pending_run(ino);
     pthread_mutex_lock(&g_open_mu);
     for (struct efs_open_ref *r = g_open_refs; r; r = r->next)
-        if (r->close_pending && (!ino || r->retry_order < oldest)) {
-            ino = r->ino;
-            oldest = r->retry_order;
+        if (r->ino == ino && r->close_pending) {
+            r->retry_order = efs_open_retry_order(r);
+            break;
         }
     pthread_mutex_unlock(&g_open_mu);
-    if (!ino) return EFS_OK;
-    pthread_mutex_t *edge = open_edge_mu(ino);
-    pthread_mutex_lock(edge);
-    int rc = efs_open_release_pending(ino);
-    pthread_mutex_unlock(edge);
-    return rc == EFS_OK ? EFS_ERR_BUSY : rc;
+    return rc;
 }
 
-/* Every returned regular descriptor, including CREATE, owns a server lease.
- * The edge stripe prevents a second open returning before proven OPEN,
- * and prevents a delayed last-close release deleting a new lease. */
 static int wb_lock_budget(pthread_mutex_t *mu)
 {
     if (!efs_client_rpc_deadline_ms())
@@ -2114,6 +2119,32 @@ static int wb_lock_budget(pthread_mutex_t *mu)
         usleep(1000);
     }
 }
+
+/* One retained release per iteration, with no RPC under the table mutex. */
+static int efs_open_drain_pending(void)
+{
+    efs_ino_t ino = 0;
+    uint64_t oldest = UINT64_MAX;
+    pthread_mutex_lock(&g_open_mu);
+    for (struct efs_open_ref *r = g_open_refs; r; r = r->next)
+        if (r->close_pending && (!ino || r->retry_order < oldest)) {
+            ino = r->ino;
+            oldest = r->retry_order;
+        }
+    pthread_mutex_unlock(&g_open_mu);
+    if (!ino) return EFS_OK;
+    pthread_mutex_t *edge = open_edge_mu(ino);
+    int rc = wb_lock_budget(edge);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_open_release_pending(ino);
+    pthread_mutex_unlock(edge);
+    return rc == EFS_OK ? EFS_ERR_BUSY : rc;
+}
+
+/* Every returned regular descriptor, including CREATE, owns a server lease.
+ * The edge stripe prevents a second open returning before proven OPEN,
+ * and prevents a delayed last-close release deleting a new lease. */
 
 /* BUSY without durable result proof owns the same OPEN edge. Wait within the
  * caller's single budget rather than return a transient contention as EBUSY
@@ -2344,7 +2375,8 @@ static int efs_pending_create_drain(void)
         if(!request->complete)goto pending;
         if(request->result==EFS_OK) {
             pthread_mutex_t *stripe=open_edge_mu(request->inode.ino);
-            pthread_mutex_lock(stripe);
+            rc=wb_lock_budget(stripe);
+            if(rc!=EFS_OK)goto pending;
             rc=efs_open_release_pending(request->inode.ino);
             if(rc==EFS_OK && !entry->cleanup.active)
                 rc=efs_client_lease_begin(&entry->cleanup,request->inode.ino,
@@ -2366,15 +2398,35 @@ pending:
  * unmount. Retry oldest ownership first, with bounded per-pass RPC time. */
 static pthread_t g_open_retry_thread;
 static int g_open_retry_running, g_open_retry_started;
+/* Both queues share the bounded identity window. A lease admission wait
+ * can consume the entire pass while an older abandoned CREATE owns the
+ * slot that would unblock it. Reserve half the pass for CREATE proof;
+ * neither queue may starve the other or extend the caller's deadline. */
+static int efs_open_retry_pass(uint64_t deadline)
+{
+    uint64_t previous = efs_client_rpc_deadline_ms();
+    if (previous && previous < deadline)
+        deadline = previous;
+    uint64_t now = stats_now_ms();
+    if (deadline <= now)
+        return EFS_ERR_BUSY;
+    uint64_t share = (deadline - now) / 2;
+    if (share > 500)
+        share = 500;
+    uint64_t split = now + share;
+    efs_client_rpc_set_deadline_ms(split);
+    int lease_rc = efs_open_drain_pending();
+    efs_client_rpc_set_deadline_ms(deadline);
+    int create_rc = efs_pending_create_drain();
+    efs_client_rpc_set_deadline_ms(previous);
+    return lease_rc != EFS_OK ? lease_rc : create_rc;
+}
+
 static void *efs_open_retry_worker(void *unused)
 {
     (void)unused;
     while (__atomic_load_n(&g_open_retry_running,__ATOMIC_ACQUIRE)) {
-        uint64_t previous=efs_client_rpc_deadline_ms();
-        efs_client_rpc_set_deadline_ms(stats_now_ms()+1000);
-        (void)efs_open_drain_pending();
-        (void)efs_pending_create_drain();
-        efs_client_rpc_set_deadline_ms(previous);
+        (void)efs_open_retry_pass(stats_now_ms()+1000);
         usleep(100000);
     }
     return NULL;
@@ -4772,14 +4824,16 @@ static int efs_control_drain(uint64_t deadline, int force)
             continue;
         }
         efs_buf_drain_enter();
+        uint64_t ownership_deadline = stats_now_ms() + 1000;
+        if (deadline < ownership_deadline)
+            ownership_deadline = deadline;
+        int ownership_rc = efs_open_retry_pass(ownership_deadline);
         int data_rc = efs_dcache_drain_pending();
         int report_rc = efs_client_report_dirty(1);
-        int lease_rc = efs_open_drain_pending();
-        int create_rc = efs_pending_create_drain();
         efs_buf_drain_leave();
         struct efs_report_pressure pressure;
         efs_client_report_pressure_stats(&pressure);
-        if (data_rc == EFS_OK && report_rc == EFS_OK && lease_rc == EFS_OK && create_rc == EFS_OK &&
+        if (data_rc == EFS_OK && report_rc == EFS_OK && ownership_rc == EFS_OK &&
             !pressure.pending_records && !pressure.reserved_records &&
             !pressure.inflight_records &&
             !efs_dcache_pending_records(NULL)) {

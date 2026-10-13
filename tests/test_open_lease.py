@@ -61,7 +61,7 @@ static int flock_armed_take(efs_ino_t ino, uint64_t *owner) { (void)ino; (void)o
 int efs_client_rpc_flock(efs_export_id_t ex, efs_ino_t ino, uint32_t op, uint64_t owner) {
     (void)ex; (void)ino; (void)op; (void)owner; return EFS_OK;
 }
-""" + refs + '\n'.join(function(n) for n in ['efs_open_note', 'efs_open_set_leased', 'efs_close_note', 'efs_open_release_pending', 'wb_lock_budget','efs_open_lease_resume_wait','efs_open_acquire_fileid_run','efs_open_acquire_fileid_mode','efs_open_acquire_fileid','efs_open_acquire', 'efs_fuse_release_ino']) + r"""
+""" + refs + '\n'.join(function(n) for n in ['efs_open_note', 'efs_open_set_leased', 'efs_open_retry_order', 'efs_close_note', 'efs_open_release_pending_run', 'efs_open_release_pending', 'wb_lock_budget','efs_open_lease_resume_wait','efs_open_acquire_fileid_run','efs_open_acquire_fileid_mode','efs_open_acquire_fileid','efs_open_acquire', 'efs_fuse_release_ino']) + r"""
 static void release(void) { struct fuse_file_info fi = {.fh = 42}; assert(!efs_fuse_release_ino(42, &fi)); }
 static void *opener(void *arg) { (void)arg; assert(efs_open_acquire(42) == EFS_OK); return NULL; }
 static void *closer(void *arg) { (void)arg; release(); return NULL; }

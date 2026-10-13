@@ -15,6 +15,14 @@ int main(void)
     /* Failure neither hot-loops at startup nor suppresses the later retry. */
     assert(!efs_query_refresh_due(2999,0,1000,0,1,1,256,2000));
     assert(efs_query_refresh_due(3000,0,1000,0,1,1,256,2000));
+    assert(efs_query_refresh_preflight_retry(EFS_ERR_BUSY,1,199));
+    assert(efs_query_refresh_preflight_retry(EFS_ERR_BUSY,1,200));
+    assert(efs_query_refresh_preflight_retry(EFS_ERR_BUSY,1,1691));
+    assert(efs_query_refresh_preflight_retry(EFS_ERR_BUSY,1,1999));
+    assert(!efs_query_refresh_preflight_retry(EFS_ERR_BUSY,1,2000));
+    assert(!efs_query_refresh_preflight_retry(EFS_ERR_BUSY,0,1));
+    assert(!efs_query_refresh_preflight_retry(EFS_ERR_IO,1,1));
+    assert(!efs_query_refresh_preflight_retry(EFS_ERR_NOT_PRIMARY,1,1));
     /* A 49-second failed build backs off from its completion, not admission.
      * Retained invalid data must not drive uninterrupted full rebuilds. */
     assert(!efs_query_refresh_due(50001,0,50000,0,1,1,256,2000));
@@ -45,14 +53,16 @@ int main(void)
     assert(efs_query_refresh_due(52000,1000,50000,10000,0,0,256,2000));
     /* A slow completed build has already used the interval; no added delay. */
     assert(efs_query_refresh_due(5000,1001,1000,256,0,0,256,2000));
+    assert(efs_query_refresh_poll_ms(1)==20 && efs_query_refresh_admit_ms(1)==20);
+    assert(efs_query_refresh_poll_ms(0)==100 && efs_query_refresh_admit_ms(0)==200);
     /* Only cheap final cut refusals retry early; authority/costly failures wait. */
     assert(efs_query_refresh_cut_retry(EFS_ERR_BUSY,1,55));
     assert(!efs_query_refresh_cut_retry(EFS_ERR_BUSY,0,55));
     assert(!efs_query_refresh_cut_retry(EFS_ERR_NOT_PRIMARY,1,55));
     assert(!efs_query_refresh_cut_retry(EFS_ERR_IO,1,55));
     assert(!efs_query_refresh_cut_retry(EFS_ERR_BUSY,1,200));
-    assert(!efs_query_refresh_due_reason(1199,0,1000,256,0,1,1,256,2000));
-    assert(efs_query_refresh_due_reason(1200,0,1000,256,0,1,1,256,2000));
+    assert(!efs_query_refresh_due_reason(1019,0,1000,256,0,1,1,256,2000));
+    assert(efs_query_refresh_due_reason(1020,0,1000,256,0,1,1,256,2000));
     assert(!efs_query_refresh_due_reason(1200,0,1000,256,0,1,0,256,2000));
     assert(!efs_query_refresh_due_reason(1200,0,1000,0,0,1,1,256,2000));
     assert(!efs_query_refresh_due_reason(1200,0,1000,256,0,0,1,256,2000));

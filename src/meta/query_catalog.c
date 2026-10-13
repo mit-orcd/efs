@@ -1,6 +1,7 @@
 #include "efs/query_catalog.h"
 #include "query_disk.h"
 #include "query_build_time.h"
+#include "query_walk.h"
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -40,6 +41,7 @@ struct directory_value {
 struct node { struct inode_value *inode; struct directory_value *dir; };
 struct efs_query_catalog {
     struct efs_query_disk *disk;
+    struct efs_query_catalog *checkpoint_parent;
     struct efs_query_build_times times;
     struct partition *part[4096];
     struct edge_fold *fold[4096];
@@ -119,7 +121,11 @@ static void partition_release(struct partition *p)
 void efs_query_catalog_free(struct efs_query_catalog *c)
 {
     if (!c || __atomic_sub_fetch(&c->refs,1,__ATOMIC_ACQ_REL)) return;
-    if (c->disk) { efs_query_disk_free(c->disk);free(c);return; }
+    if (c->disk) {
+        efs_query_disk_free(c->disk);
+        efs_query_catalog_free(c->checkpoint_parent);
+        free(c);return;
+    }
     for (uint32_t i=0;i<4096;i++) {
         partition_release(c->part[i]);
         struct inode_block *b=c->inodes[i];
@@ -546,7 +552,14 @@ int efs_query_catalog_build_disk(const char *root,struct efs_kv_lsm_snapshot *so
 { return efs_query_catalog_build_disk_checked(root,source,old,max_bytes,stop,ctx,NULL,out); }
 int efs_query_catalog_checkpoint(struct efs_query_catalog *c,const uint64_t watermark[4])
 {
-    return c && c->disk?efs_query_disk_checkpoint(c->disk,watermark):EFS_ERR_INVAL;
+    if (!c || !c->disk) return EFS_ERR_INVAL;
+    int rc=efs_query_disk_checkpoint(c->disk,watermark);
+    if (!rc) {
+        struct efs_query_catalog *parent=c->checkpoint_parent;
+        c->checkpoint_parent=NULL;
+        efs_query_catalog_free(parent);
+    }
+    return rc;
 }
 int efs_query_catalog_restore_disk(const char *root,struct efs_kv_lsm_snapshot *source,const uint64_t watermark[4],uint64_t max_bytes,
     struct efs_query_catalog **out)
@@ -574,6 +587,10 @@ int efs_query_catalog_catchup_disk(const char *root,struct efs_kv_lsm_snapshot *
     struct efs_query_catalog *old=calloc(1,sizeof(*old));if(!old)return EFS_ERR_NOMEM;
     old->refs=1;int rc=efs_query_disk_restore(root,NULL,max_bytes-sizeof(*old),&old->disk);
     if(!rc)rc=efs_query_catalog_build_disk(root,source,old,max_bytes,stop,ctx,out);
+    /* Releasing the old current before checkpoint keeps its files on disk
+     * forever: the symlink still names it at that instant. Keep this private
+     * input until replacement checkpoint or abandonment, then retire it. */
+    if (!rc) { (*out)->checkpoint_parent=old;old=NULL; }
     efs_query_catalog_free(old);return rc;
 }
 void efs_query_catalog_retain(struct efs_query_catalog *c)
@@ -683,11 +700,15 @@ static int find_candidate(void *ctx, const struct efs_name_entry *entry)
     memcpy(path+len,entry->name,nl+1);
     return f->emit(f->user,entry,path);
 }
+static int catalog_walk(const struct efs_query_catalog *,efs_ino_t,enum efs_name_match,const char *,uint64_t,int (*)(void *,const struct efs_name_entry *,const char *),void *);
 int efs_query_catalog_find(const struct efs_query_catalog *c, efs_ino_t root, enum efs_name_match match,
                             const char *term, uint64_t visit_budget,
                             int (*emit)(void *,const struct efs_name_entry *,const char *), void *user)
 {
     if (!c || !term || !emit || !visit_budget) return EFS_ERR_INVAL;
+    if (match==EFS_NAME_CONTAINS || match==EFS_NAME_SUFFIX)
+        return c->disk ? efs_query_disk_find(c->disk,root,match,term,visit_budget,emit,user) :
+            catalog_walk(c,root,match,term,visit_budget,emit,user);
     if(c->disk) {
         uint64_t cursor=0;uint32_t budget=visit_budget>UINT32_MAX?UINT32_MAX:(uint32_t)visit_budget;
         int rc=efs_query_disk_page(c->disk,root,match,term,0,&cursor,budget,NULL,NULL,emit,user);
@@ -738,6 +759,7 @@ int efs_query_catalog_page(const struct efs_query_catalog *c,efs_ino_t root,
 /* Per-query scan accounting must never mutate the shared immutable catalog.
  * Charge every visited lane record, including tombstones skipped by readdir. */
 struct listing_scan {
+    int exhausted;
     const struct efs_query_catalog *catalog;
     uint64_t remaining;
     int (*stop)(void *);
@@ -750,7 +772,7 @@ static int listing_record(void *ctx,const uint8_t *key,uint32_t kn,
 {
     struct listing_scan *s=ctx;
     if (s->stop && s->stop(s->stop_ctx)) return EFS_ERR_BUSY;
-    if (!s->remaining) return EFS_ERR_OVERFLOW;
+    if (!s->remaining) { s->exhausted=1;return EFS_ERR_OVERFLOW; }
     s->remaining--;
     return s->callback(s->user,key,kn,value,vn);
 }
@@ -775,6 +797,18 @@ static int listing_prefix(void *ctx,const uint8_t *prefix,uint32_t pn,
 static const struct efs_kv_ops listing_ops={
     .get=listing_get,.scan_prefix=listing_prefix,.scan_from=listing_from
 };
+
+static int catalog_walk(const struct efs_query_catalog *c,efs_ino_t root,enum efs_name_match match,
+    const char *term,uint64_t budget,int (*emit)(void *,const struct efs_name_entry *,const char *),void *user)
+{
+    struct node *node=find_node(c,root);
+    if (!node) return EFS_ERR_NOT_FOUND;
+    if (!S_ISDIR(node->inode->row.mode)) return EFS_ERR_INVAL;
+    struct listing_scan scan={.catalog=c,.remaining=budget};
+    struct efs_kv kv={.ops=&listing_ops,.ctx=&scan};
+    int rc=query_walk(&kv,root,match,term,emit,user);
+    return scan.exhausted ? EFS_ERR_BUSY : rc;
+}
 
 int efs_query_catalog_ls_bounded(const struct efs_query_catalog *c, efs_ino_t root,
                           uint64_t budget,int (*stop)(void *),void *stop_ctx,

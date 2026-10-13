@@ -1,8 +1,58 @@
+Current ORCD `.efs` source `419aa90f367a` passes complete native/fault/sanitizer
+prerequisites, exact-source/profile deployment and acknowledged payload markers
+on all seven clients. Orderly redeployment used no force; server readiness took
+284.704 seconds of the unchanged 300-second budget. Mounted acceptance FAIL:
+all six focused command suites encounter ENOSPC reading query files. The generation-size ceiling also reproduces with 3,000 synthetic files and a private 4 MiB test budget; compact derived-directory links are a proposed small-target optimization. Later
+concurrent/restart/full-400-GiB/loaded-latency gates are NOTRUN on this source.
+The earlier strict full 400 GiB PASS at `62770d5c3bfd` remains source-specific.
+
+Catalogue retirement, retained-CLOSE scheduling and exact-EOF write acceptance
+have small native regressions and corrections in this deployment; their loaded
+mounted acceptance is still open. The original 5.569/22.044-second stalls,
+application fork/direct-read platform gate and broader scale gates remain open.
+All outstanding `.efs` work remains required: the [cluster assignment matrix](orcd-small-cluster-followups-20261013.md#required-outstanding-efs-work-and-cluster-assignment)
+assigns logic/regression development to AMD or Intel Linux, with full-scale
+seven-client RDMA/direct-I/O, cold restart, payload, latency and resource
+acceptance on ORCD. No new execution or passing verdict is implied.
+See [small-cluster development findings](orcd-small-cluster-followups-20261013.md)
+and the [400 GiB evidence](orcd-efs-400g-20261012.md). Expiry, packing, containers
+and unplanned-event repair/recovery remain outside the current profile.
+
 # Project status — current work and index
 
 **Proposed feature:** [W113 — aggregate client workload telemetry](../backlog/work-items.md#w113--aggregate-application-workload-telemetry-across-fuse-clients): ORCD seven-client read/write ops/s and human-friendly bytes/s, separate from server/internal traffic. Discussion recorded; implementation and acceptance NOTRUN.
 
 **Current development work:** [W95 packing TCP/direct-I/O](packing-tcp-direct-20261012.md) on `devel`, solo/exclusive AMD with `.efs` disabled. Exact `8151debe`: full normal/fault native, nineteen focused normal/sanitizer and actual-core sanitizers PASS; three quiet rounds each1512/1512 core +67/67 peer, all orderly/cold/reclamation/drain PASS; focused acknowledged-fsync SIGKILL/cold PASS. Deep-directory/unusual-name timeout acceptance closed for this source/workload. W95 production-format/migration and matched packing-on/off performance remain open. Next: [three alternating off/on pairs, lifecycle coverage audit, and P4.1 decision](packing-tcp-direct-20261012.md#next-work-toward-w95-closure--oct-13). Fresh-store-only opt-in packing is a recommendation, not an approved rollout. Original quotas/deadlines unchanged; no push or release promotion.
+
+**Historical ORCD qualification (superseded by the current verdict above):**
+
+[ORCD real 400 GiB command gate](orcd-efs-400g-20261012.md) uses `devel-efs`,
+RDMA/direct/files, commands enabled and packing/containers disabled. Full writes,
+all 1,638,400 cold payloads and exported paths, and human/default/JSON stats on
+all seven clients PASS at `254a4a295c66`. Overall follow-up acceptance is FAIL:
+full-catalog simultaneous seven-client queries still time out at `6bc43418`,
+although all 1,512 core cases and all focused suites pass. Its production
+worker-stack correction is verified and the cluster is healthy. Refreshes
+take about 15–17 seconds and alias discovery is about 145ms. Late pending
+transaction refusals still delay publication; early rejection before cache
+copying and bounded fresh-capture retry are qualified in native/sanitized
+oracles. Full qualification found a retained-orphan harness extraction
+regression, corrected and verified before deployment; live acceptance remains
+pending.
+Deadlines and quotas stay unchanged. Passing basic commands/pages/large deltas and all failing logs are retained.
+Orderly shutdown/remount and cold markers PASS after correcting startup readiness.
+Seven screen benchmarks remain cleanly stopped pending successful follow-up gates,
+then will resume with their existing files. Contended-write freshness and host
+resource limitations remain documented.
+
+[devel-efs scope and outstanding items](devel-efs-20261012.md) records the new
+release-v0.3.2-based branch, the original four-item scope (expiry deferred) and the requested ORCD
+RDMA/direct-I/O profile with commands enabled and containers/packing disabled.
+Deployment and ordinary-file ORCD command gates PASS at `0dd2a7c7`: six
+focused suites, three quiet mixed rounds (4,536 POSIX + 63 query cases), peer67,
+cold queries/owner names, policy persistence and 1 GiB exact-payload/export
+verification. [ORCD command qualification](devel-efs-query-20261012.md) retains
+the failing baseline, fix and limitations. Broader scale/platform gates remain open.
 
 **Current release integration:** `release-v0.3.2-pre-alpha` merges reviewed ORCD evidence9fc5e024 into v0.3.1. Product/test inputs unchanged. AMD TCP/direct and TCP/buffered PASS; independently reviewed ORCD nativeRDMA/direct two core rounds1512/1512 and peer67/67 per round, native/fault/sanitizers/cold/physicalGC PASS. Tested SHAs remain15e2a531 AMD and40f4509d ORCD; the merge itself was not remotely executed. Packing/containers/.efs/repair remain disabled. No push/tag/deployment. [v0.3.2 review and coverage](v032-integration-review-20261012.md).
 

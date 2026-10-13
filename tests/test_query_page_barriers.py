@@ -8,6 +8,7 @@ a=s.index('int server_raft_host_query_page(')
 b=s.index('\nint server_raft_host_start(',a)
 code=r'''
 #include "efs/protocol.h"
+#include "efs/command_path.h"
 #include "efs/name_index.h"
 #include <assert.h>
 #include <pthread.h>
@@ -29,7 +30,6 @@ static struct query_page_session slot={.token=99};
 static int fresh=1,captures,barriers,consumed,barrier_rc,consume_rc,capable=1,released,cleared;
 static uint64_t query_mono_ms(void){return 100;}
 static int host_query_policy_operation(unsigned op){(void)op;return 0;}
-int efs_query_filters_valid(const struct efs_query_filters *f){(void)f;return 1;}
 static int query_page_acquire(const struct efs_msg_query_snapshot_v4 *r,struct query_page_session **p,int *created)
 {(void)r;*p=&slot;*created=fresh;return 0;}
 static int query_page_capture(void *ctx,const struct efs_server_query_view *v,int error)
@@ -59,6 +59,27 @@ int main(void){host.query_enabled=1;host.g[0].group=0;host.g[1].group=2;pthread_
  barrier_rc=0;consume_rc=EFS_ERR_ACCES;assert(run()==EFS_ERR_ACCES && consumed==1 && cleared);
  consume_rc=0;fresh=0;req.token=99;req.limit=0;assert(!run() && !captures && !barriers && !consumed && cleared);
  req.limit=1;capable=0;assert(run()==EFS_ERR_BUSY && barriers==1 && !consumed);
+ /* Replies remain charged until delivery/free, independently of stream locks.
+  * Default command pages must admit eight held replies within the existing
+  * 64 MiB budget. Ninth request still refuses; large raw requests retain their
+  * original byte refusal. This models concurrent clients, not a quota increase. */
+ capable=1;fresh=0;req.base.operation=EFS_QUERY_FIND;req.limit=100;
+ req.base.max_output=efs_command_page_output(req.base.operation);
+ if(getenv("EFS_QUERY_TEST_OVERSIZED_OUTPUT"))req.base.max_output=EFS_QUERY_MAX_OUTPUT;
+ void *held[8]={0};uint32_t lengths[8]={0};
+ for(unsigned i=0;i<8;i++)assert(!server_raft_host_query_page(&req,&held[i],&lengths[i]) && held[i]);
+ assert(query_requests==8 && query_reply_bytes<HOST_QUERY_REPLY_BYTES);
+ void *refused=(void*)1;uint32_t refused_len=0;
+ assert(server_raft_host_query_page(&req,&refused,&refused_len)==EFS_ERR_BUSY && !refused);
+ assert(query_requests==8);
+ for(unsigned i=0;i<8;i++){struct query_allocation *a=(struct query_allocation*)held[i]-1;query_reply_bytes-=a->bytes;query_requests--;free(a);}
+ assert(!query_requests && !query_reply_bytes);
+ req.base.max_output=EFS_QUERY_MAX_OUTPUT;
+ for(unsigned i=0;i<3;i++)assert(!server_raft_host_query_page(&req,&held[i],&lengths[i]) && held[i]);
+ assert(server_raft_host_query_page(&req,&refused,&refused_len)==EFS_ERR_BUSY && !refused && query_requests==3);
+ for(unsigned i=0;i<3;i++){struct query_allocation *a=(struct query_allocation*)held[i]-1;query_reply_bytes-=a->bytes;query_requests--;free(a);}
+ assert(!query_requests && !query_reply_bytes);
+ puts("query reply admission: eight bounded command pages, unchanged ninth-request refusal, three maximal raw replies, exact charge release PASS");
  puts("query pages: first-page capture supplies fresh authority once; continuations recheck, failed cuts emit no bytes, fresh permission refusal and close PASS");}
 '''
 code='#include "'+str(root/'src/common/query_stage_trace.h')+'"\n'+code

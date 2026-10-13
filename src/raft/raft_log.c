@@ -43,7 +43,8 @@ static uint64_t get_u64(const uint8_t *p)
 /* Serialize one record into d->rec; returns total length, 0 if too big. */
 static uint32_t rec_encode(struct efs_raft_disk *d, uint8_t type,
                            uint32_t group, uint64_t a, uint64_t b,
-                           const uint8_t *cmd, uint32_t clen)
+                           const uint8_t *cmd, uint32_t clen,
+                           const uint32_t *record_crc)
 {
     uint8_t *p = d->rec;
     uint32_t off = 8;
@@ -102,7 +103,7 @@ static uint32_t rec_encode(struct efs_raft_disk *d, uint8_t type,
     }
     if (off > RAFT_REC_MAX)
         return 0;
-    put_u32(p, efs_crc32(p + 8, off - 8));
+    put_u32(p, record_crc ? *record_crc : efs_crc32(p + 8, off - 8));
     put_u32(p + 4, off - 8);
     return off;
 }
@@ -248,7 +249,7 @@ static int log_write_locked(struct efs_raft_disk *d, uint8_t type,
 
     if (d->io_failed)
         return EFS_ERR_IO;
-    len = rec_encode(d, type, group, a, b, cmd, clen);
+    len = rec_encode(d, type, group, a, b, cmd, clen, NULL);
     if (len == 0)
         return EFS_ERR_INVAL;
     log_reserve_locked(d, d->bytes + len);
@@ -272,12 +273,16 @@ static __thread int log_defer_depth;
 
 int raft_log_append(struct efs_raft_disk *d, uint8_t type,
                     struct raft_disk_group *g, uint64_t a, uint64_t b,
-                    const uint8_t *cmd, uint32_t clen)
+                    const uint8_t *cmd, uint32_t clen, uint32_t *record_crc)
 {
     int rc = log_write_locked(d, type, g->group, a, b, cmd, clen);
 
     if (rc != EFS_OK)
         return rc;
+    /* Capture before log_sync_locked can drop d->mu and another writer
+     * replaces d->rec. Commands are immutable until removed from the log. */
+    if (record_crc)
+        *record_crc = get_u32(d->rec);
     /* Count new append requests, not old records copied during rotation. */
     if (BO_ON() && type == RAFT_REC_ENTRY)
         efs_batch_obs_command(clen ? cmd[0] : 0);
@@ -351,7 +356,7 @@ static int replay_read(struct replay_reader *r, uint8_t *p, size_t n,
     return EFS_OK;
 }
 
-static int replay_one(struct efs_raft_disk *d, const uint8_t *p, uint32_t len)
+static int replay_one(struct efs_raft_disk *d, const uint8_t *p, uint32_t len, uint32_t record_crc)
 {
     struct raft_disk_group *g;
     uint32_t group, off = 0;
@@ -386,8 +391,10 @@ static int replay_one(struct efs_raft_disk *d, const uint8_t *p, uint32_t len)
         off += 20;
         if (clen > RAFT_CMD_MAX || len - off != clen)
             return EFS_ERR_PROTO;
-        return raft_group_put_entry(g, index, term, clen ? p + off : NULL,
-                                    clen);
+        int rc = raft_group_put_entry(g, index, term, clen ? p + off : NULL, clen);
+        if (rc == EFS_OK)
+            g->log[index - g->log_base - 1].record_crc = record_crc;
+        return rc;
     }
     case RAFT_REC_TRUNC:
         if (len - off != 8)
@@ -492,7 +499,7 @@ int raft_log_replay(struct efs_raft_disk *d)
         }
         if (efs_crc32(buf, paylen) != crc)
             break;
-        rc = replay_one(d, buf, paylen);
+        rc = replay_one(d, buf, paylen, crc);
         if (rc != EFS_OK) {
             /* CRC passed, so the bytes are what we wrote — a record that
              * cannot apply means the log is inconsistent, not torn. */
@@ -507,6 +514,59 @@ int raft_log_replay(struct efs_raft_disk *d)
 
 /* --- rotation -------------------------------------------------------- */
 
+/* Rotation is synchronous under the disk and host locks. Coalesce small
+ * framed records into bounded writes instead of one syscall per retained
+ * entry. The encoding and final fsync/rename barriers are unchanged. Large
+ * records bypass this scratch buffer after flushing all earlier records. */
+#define RAFT_ROTATE_BUFFER_BYTES (1024u * 1024u)
+struct rotation_writer {
+    uint8_t *buffer;
+    size_t used;
+};
+
+static int rotation_flush(struct efs_raft_disk *d, struct rotation_writer *w)
+{
+    int rc;
+    if (!w->used)
+        return EFS_OK;
+    log_reserve_locked(d, d->bytes);
+    rc = write_all(d->fd, w->buffer, w->used, d->bytes - w->used);
+    if (rc == EFS_OK)
+        w->used = 0;
+    return rc;
+}
+
+static int rotation_record(struct efs_raft_disk *d, struct rotation_writer *w,
+                           uint8_t type, uint32_t group, uint64_t a, uint64_t b,
+                           const uint8_t *cmd, uint32_t clen,
+                           const uint32_t *record_crc)
+{
+    uint32_t len = rec_encode(d, type, group, a, b, cmd, clen, record_crc);
+    int rc;
+    if (!len)
+        return EFS_ERR_INVAL;
+    if (len > RAFT_ROTATE_BUFFER_BYTES - w->used) {
+        rc = rotation_flush(d, w);
+        if (rc != EFS_OK)
+            return rc;
+    }
+    if (len > RAFT_ROTATE_BUFFER_BYTES) {
+        log_reserve_locked(d, d->bytes + len);
+        rc = write_all(d->fd, d->rec, len, d->bytes);
+        if (rc != EFS_OK)
+            return rc;
+    } else {
+        memcpy(w->buffer + w->used, d->rec, len);
+        w->used += len;
+    }
+    d->bytes += len;
+    if (BO_ON() && type == RAFT_REC_ENTRY)
+        d->obs_entries++;
+    if (d->allocated_bytes < d->bytes && !w->used)
+        d->allocated_bytes = d->bytes;
+    return EFS_OK;
+}
+
 /* Writes every group's live state to a fresh file and renames it over the
  * old one, so a crash mid-rotation leaves the previous log intact. */
 int raft_log_rotate_locked(struct efs_raft_disk *d)
@@ -515,17 +575,24 @@ int raft_log_rotate_locked(struct efs_raft_disk *d)
     char final[RAFT_DISK_PATH_MAX + 32];
     uint8_t hdr[RAFT_DISK_HDR_LEN];
     int fd, dfd, old_fd;
-    uint64_t old_bytes, old_allocated;
+    struct rotation_writer writer = {0};
+    uint64_t old_bytes, old_allocated, reserve_bytes;
     uint32_t i;
     int rc = EFS_OK;
+    uint64_t started = efs_batch_obs_now_us();
 
     if (d->io_failed)
         return EFS_ERR_IO;
+    writer.buffer = malloc(RAFT_ROTATE_BUFFER_BYTES);
+    if (!writer.buffer)
+        return EFS_ERR_NOMEM;
     snprintf(tmp, sizeof(tmp), "%s/raft.log.new", d->dir);
     snprintf(final, sizeof(final), "%s/raft.log", d->dir);
     fd = open(tmp, O_RDWR | O_CREAT | O_TRUNC, 0644);
-    if (fd < 0)
+    if (fd < 0) {
+        free(writer.buffer);
         return EFS_ERR_IO;
+    }
     put_u32(hdr, RAFT_DISK_MAGIC);
     put_u32(hdr + 4, RAFT_DISK_VERSION);
     rc = write_all(fd, hdr, sizeof(hdr), 0);
@@ -536,6 +603,18 @@ int raft_log_rotate_locked(struct efs_raft_disk *d)
     d->fd = fd;
     d->bytes = RAFT_DISK_HDR_LEN;
     d->allocated_bytes = RAFT_DISK_HDR_LEN;
+    /* Reserve the complete immutable live image once. Repeating fallocate
+     * for each MiB added avoidable metadata I/O to this locked rewrite. */
+    reserve_bytes = RAFT_DISK_HDR_LEN;
+    for (i = 0; i < RAFT_DISK_MAX_GROUPS; i++) {
+        if (d->g[i]) {
+            reserve_bytes += raft_group_live_bytes(d->g[i]);
+            if (d->g[i]->snap_idx)
+                reserve_bytes += 8; /* retained-window base in rotated SNAP */
+        }
+    }
+    if (rc == EFS_OK)
+        log_reserve_locked(d, reserve_bytes);
     for (i = 0; rc == EFS_OK && i < RAFT_DISK_MAX_GROUPS; i++) {
         struct raft_disk_group *g = d->g[i];
         uint32_t k;
@@ -543,20 +622,23 @@ int raft_log_rotate_locked(struct efs_raft_disk *d)
         if (!g)
             continue;
         if (g->term || g->voted_for != -1)
-            rc = log_write_locked(d, RAFT_REC_HARD, g->group, g->term,
-                                  (uint32_t)g->voted_for, NULL, 0);
+            rc = rotation_record(d, &writer, RAFT_REC_HARD, g->group, g->term,
+                                  (uint32_t)g->voted_for, NULL, 0, NULL);
         if (rc == EFS_OK && g->snap_idx)
-            rc = log_write_locked(d, RAFT_REC_SNAP, g->group, g->snap_idx,
+            rc = rotation_record(d, &writer, RAFT_REC_SNAP, g->group, g->snap_idx,
                                   g->snap_term,
-                                  (const uint8_t *)&g->log_base, 8);
+                                  (const uint8_t *)&g->log_base, 8, NULL);
         if (rc == EFS_OK && g->have_cfg)
-            rc = log_write_locked(d, RAFT_REC_CFG, g->group, g->cfg_old,
-                                  g->cfg_new, NULL, 0);
+            rc = rotation_record(d, &writer, RAFT_REC_CFG, g->group, g->cfg_old,
+                                  g->cfg_new, NULL, 0, NULL);
         for (k = 0; rc == EFS_OK && k < g->n; k++)
-            rc = log_write_locked(d, RAFT_REC_ENTRY, g->group,
+            rc = rotation_record(d, &writer, RAFT_REC_ENTRY, g->group,
                                   g->log_base + 1 + k, g->log[k].term,
-                                  g->log[k].cmd, g->log[k].clen);
+                                  g->log[k].cmd, g->log[k].clen, &g->log[k].record_crc);
     }
+    if (rc == EFS_OK)
+        rc = rotation_flush(d, &writer);
+    free(writer.buffer);
     if (rc == EFS_OK && fsync(fd) != 0)
         rc = EFS_ERR_IO;
     if (rc == EFS_OK && rename(tmp, final) != 0)
@@ -592,6 +674,11 @@ int raft_log_rotate_locked(struct efs_raft_disk *d)
         for (k = 0; k < g->n; k++)
             g->log[k].end_off = 0;
     }
+    uint64_t elapsed = efs_batch_obs_now_us() - started;
+    if (elapsed > 20000)
+        fprintf(stderr, "raft-log: rotate old_bytes=%llu live_bytes=%llu elapsed_us=%llu\n",
+                (unsigned long long)old_bytes, (unsigned long long)d->bytes,
+                (unsigned long long)elapsed);
     return EFS_OK;
 }
 
