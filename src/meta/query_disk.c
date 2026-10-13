@@ -148,8 +148,9 @@ static int disk_reserve(int fd)
     if(block && fs.f_bavail<reserve_bytes/block+(reserve_bytes%block!=0))return EFS_ERR_IO;
     return EFS_OK;
 }
-/* Conservative logical storage admission: raw/index bytes, final name/alias indexes,
- * derived inode rows and a queue entry per inode. Shared hard links
+/* Conservative logical storage admission: raw/index bytes, two name-sort
+ * files, derived inode rows and a queue entry per inode. Sort scratch is
+ * admitted separately while live. Shared hard links
  * are charged to each generation. Filesystem allocation overhead and other
  * retained generations remain separate from this per-generation limit. */
 static int charge_disk(struct efs_query_disk *d,uint64_t bytes)
@@ -646,14 +647,21 @@ static int names_build(struct efs_query_disk *d,uint32_t shard,char kind)
     uint64_t count=d->part[shard].names;if(!count)return EFS_OK;
     size_t width=kind=='n'?sizeof(struct efs_name_entry):sizeof(struct disk_alias);
     int (*compare)(const void *,const void *)=kind=='n'?name_compare:alias_compare;
-    /* The final index is already reserved by derived_charge. Run inputs plus
-     * merge output occupy at most twice that size, only for this one sort.
-     * Keep the extra reservation on failure until candidate cleanup. */
     if(count>UINT64_MAX/width)return EFS_ERR_OVERFLOW;
-    uint64_t temporary=count*width;
-    int admitted=charge_disk(d,temporary);if(admitted)return admitted;
+    char final[EFS_MAX_PATH];int rc=filename(d,shard,kind,final,sizeof(final));
+    if(rc)return rc;
+    struct stat existing;
+    if(!lstat(final,&existing))return EFS_ERR_PROTO; /* Fresh immutable output only. */
+    if(errno!=ENOENT)return EFS_ERR_IO;
     uint8_t *rows=malloc(SORT_ROWS*width);if(!rows)return EFS_ERR_NOMEM;
-    uint64_t runs=0;int rc=EFS_OK;char path[EFS_MAX_PATH];
+    /* Permanent forecast owns one full final file. One extra full partition
+     * covers all original runs plus the largest simultaneous merge output:
+     * their combined bytes never exceed two full files. Merge inputs must be
+     * removed before starting another pass. Failure keeps scratch charged
+     * until the entire unpublished candidate is destroyed. */
+    uint64_t temporary=count*width;
+    rc=charge_disk(d,temporary);if(rc){free(rows);return rc;}
+    uint64_t runs=0;char path[EFS_MAX_PATH];
     for(uint64_t at=0;at<count && !rc;at+=SORT_ROWS) {
         unsigned n=(unsigned)(count-at>SORT_ROWS?SORT_ROWS:count-at);
         if(cancelled(d)){rc=EFS_ERR_BUSY;break;}
@@ -671,7 +679,8 @@ static int names_build(struct efs_query_disk *d,uint32_t shard,char kind)
         if(rc)break;
         int fd=open(path,O_CREAT|O_EXCL|O_RDWR|O_CLOEXEC,0600);
         if(fd<0){rc=EFS_ERR_IO;break;}
-        rc=io_at(fd,rows,n*width,0,1);if(close(fd) && !rc)rc=EFS_ERR_IO;
+        rc=io_at(fd,rows,n*width,0,1);
+        if(close(fd) && !rc)rc=EFS_ERR_IO;
     }
     unsigned pass=0;
     while(runs>1 && !rc) {
@@ -692,16 +701,13 @@ static int names_build(struct efs_query_disk *d,uint32_t shard,char kind)
             if(fa>=0 && close(fa) && !rc)rc=EFS_ERR_IO;
             if(fb>=0 && close(fb) && !rc)rc=EFS_ERR_IO;
             if(fo>=0 && close(fo) && !rc)rc=EFS_ERR_IO;
-            if(!rc){
-                int ua=unlink(a),ub=unlink(b);
-                if(ua || ub)rc=EFS_ERR_IO;
-            }
+            if(!rc && unlink(a))rc=EFS_ERR_IO;
+            if(!rc && unlink(b))rc=EFS_ERR_IO;
         }
         runs=(runs+1)/2;pass++;
     }
     if(!rc) {
-        rc=run_path(d,shard,pass,0,path);char final[EFS_MAX_PATH];
-        if(!rc)rc=filename(d,shard,kind,final,sizeof(final));
+        rc=run_path(d,shard,pass,0,path);
         if(!rc && rename(path,final))rc=EFS_ERR_IO;
     }
     if(!rc)d->disk_bytes-=temporary;

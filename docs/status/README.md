@@ -16,6 +16,12 @@ code reverted, baseline restored (normal control1461/1512 FAIL).
 Read-only diagnostic finds paired-proof helper saturation; bounded32-helper
 files candidate locally regressed, not yet deployed. Profilers restored OFF. W97/D30/W106 remain OPEN.
 
+[W92 sort scratch follow-up](amd-package2-transition-load-20261013.md#w92-follow-up-sort-scratch-accounting-and-unchecked-deletion):
+OPEN: checked close/unlink/rename and explicit scratch accounting implemented;
+AMD measured-peak, negative-control and focused fault/quota regressions PASS.
+Full new-candidate native/sanitizer and mounted gates remain NOTRUN; deployed
+3409e0c6 evidence does not qualify this patch or ORCD full-size acceptance.
+
 [AMD package 2 final functional handoff](amd-package2-transition-load-20261013.md):
 **PASS on `3409e0c6`** — full normal/fault native, six full-library query
 ASan/UBSan harnesses, genuine v5→v6 retirement/next refresh, quorum safety,

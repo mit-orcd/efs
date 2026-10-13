@@ -167,3 +167,68 @@ seven-client loaded query and hardware-RDMA gates. The original W91/W92/W109
 scale/pressure work remains open; W108's historical implementation closure is
 not reopened by these new-source rollout checks. Containers, packing, expiry
 and unplanned-event repair are outside this package.
+
+## W92 follow-up: sort scratch accounting and unchecked deletion
+
+**OPEN — implementation and focused regressions PASS; full candidate qualification pending.** Inspected
+`3409e0c6` product inputs (unchanged in documentation checkpoint `4afd1f7f`).
+`names_build` calls `unlink(a); unlink(b);` after a successful merge without
+checking either result. If removal fails, an input run can remain while later
+passes create additional outputs; a successful return does not prove all scratch
+was removed. Injected unlink-failure behavior is not yet qualified. This is
+local derived-cache cleanup/accounting, not demonstrated authoritative data loss.
+
+Current `derived_charge` permanently forecasts two name entries and two aliases
+per dentry (624 bytes), while steady files need one of each (312 bytes).
+That conservative allowance covers sort scratch; lowering it alone is unsafe.
+Candidate design: permanent one-name/one-alias charge, plus an explicitly admitted
+`count * width` temporary reservation per serial sort before creating runs.
+Check multiplication overflow, propagate failed unlink/rename, and keep the
+reservation until scratch is actually removed or the candidate is destroyed.
+Existing copy/journal temporary charges must remain. This is a proposal, not
+implemented or accepted budget relief. Existing limits stay unchanged.
+
+Reproduce the inspected path with `rg -n 'derived_charge|names_build|unlink\(a\)'
+ src/meta/query_disk.c`. Next add fault hooks around merge input unlink and final
+rename in `tests/test_query_disk_io.c`, using more than SORT_ROWS entries and odd
+three-or-more-run merge passes. Assert no successful result on failed deletion,
+retained checkpoint correctness and actual file bytes within generation/aggregate
+charges during writes, merges, failure and cancellation. Compare fixed private
+quota baseline/candidate, then next refresh and all affected native/sanitizer and
+mounted gates before claiming a fix. No fault PASS or ORCD footprint acceptance
+is implied by this code inspection.
+
+### Checked-sort implementation checkpoint
+
+The patch accompanying this checkpoint forecasts one permanent name/alias pair
+per dentry and admits one partition of scratch before each serial sort. It
+checks run and merge descriptor closes, merge input deletion and rename;
+failed candidates retain the scratch charge until destruction. No disk format,
+16/32 GiB default, transport or feature-profile change is included.
+
+AMD focused native regression PASS: 8,193 rows produce five initial runs and
+odd merge passes. The measured peak is 5,210,748 logical file bytes against
+4,260,308 permanent forecast bytes; every sampled write/rename/unlink remains
+within candidate and aggregate charges, including a retained 65,536-byte view.
+Injected initial-run/merge-output close, unlink, carry/final rename, partial
+ENOSPC, cancellation, exact generation/root quota and overflow refusals PASS.
+Sorted names and aliases are checked in full. The negative control removes only
+the scratch charge and is rejected by the actual file-byte oracle.
+
+Reproduce on Linux from this checkpoint (normal libefs.a build required):
+
+```sh
+make -j8 tests/test_query_disk_io tests/test_query_disk
+./tests/test_query_disk_io
+python3 tests/test_query_sort_peak_negative.py
+EFS_QUERY_TEST_BRANCHES=64 EFS_QUERY_DISK_MAX_MIB=4 EFS_QUERY_DISK_TOTAL_MIB=16 ./tests/test_query_disk
+```
+
+The same 64-directory/3,000-file semantic fixture at unchanged 4/16 MiB limits
+passes with the new accounting and refuses QUOTA against product source
+3409e0c6. A concentrated single-directory fixture at those limits remains QUOTA
+on both sources, an expected admission control rather than a claimed fix.
+Raw logs remain outside Git under /data1/efs/package2-sort-*.log on AMD.
+Full normal/fault native, full-library sanitizers, deployment and mounted
+transition/retained-reader/next-refresh/load gates are NOTRUN on this new patch.
+Installed AMD daemons still use 3409e0c6. ORCD full-size acceptance remains OPEN.

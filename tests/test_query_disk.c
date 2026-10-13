@@ -136,9 +136,16 @@ int main(void)
     unsigned files=3000;
     const char *size=getenv("EFS_QUERY_TEST_FILES");
     if(size){unsigned long count=strtoul(size,NULL,10);if(count<1 || count>200000)return 2;files=(unsigned)count;}
+    unsigned branches=0;efs_ino_t branch[64];
+    const char *fanout=getenv("EFS_QUERY_TEST_BRANCHES");
+    if(fanout){unsigned long n=strtoul(fanout,NULL,10);if(n<1 || n>64)return 2;branches=(unsigned)n;}
+    for(unsigned i=0;i<branches;i++){
+        char name[32];snprintf(name,sizeof(name),"branch-%02u",i);
+        CHECK(!efs_meta_apply_mkdir(kv,&attrs,sub,S_IFDIR|0755,name,&branch[i]));
+    }
     for(unsigned i=0;i<files;i++) {
         char name[32];snprintf(name,sizeof(name),"file-%08u",files-1-i);
-        CHECK(!efs_meta_apply_create_file(kv,&attrs,sub,S_IFREG|0644,name,&file));
+        CHECK(!efs_meta_apply_create_file(kv,&attrs,branches?branch[i%branches]:sub,S_IFREG|0644,name,&file));
     }
     efs_ino_t removed,removed_file;
     CHECK(!efs_meta_apply_mkdir(kv,&attrs,EFS_ROOT_INO,S_IFDIR|0755,"removed",&removed));
