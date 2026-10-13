@@ -1175,7 +1175,8 @@ static void host_container_read_probe(struct host_outbox *tx,const uint8_t *p,ui
     uint8_t *probe=malloc(EFS_WIRE_RAFT_HDR_LEN);if(!probe)return;
     efs_raft_flow_probe(probe,p);
     tx->pri[tx->npri++]=(struct host_outbox_item){probe,EFS_WIRE_RAFT_HDR_LEN,
-                                                    BO_ON() ? efs_batch_obs_now_us() : 0};
+        BO_ON() && outbox_pure_read_control(probe, EFS_WIRE_RAFT_HDR_LEN) ?
+                                                    efs_batch_obs_now_us() : 0};
     tx->queued_bytes+=EFS_WIRE_RAFT_HDR_LEN;
     if(tx->queued_bytes>tx->queued_bytes_hi)tx->queued_bytes_hi=tx->queued_bytes;
     tx->st_enq++;

@@ -1945,3 +1945,17 @@ late-context/sanitizer/negative controls PASS; async Linux sender NOTRUN locally
 and requires both-host fresh native validation. New exact replacement/older
 context/files/off timestamp controls PASS. No dedicated sender or authority
 optimization is implemented or justified until live queue evidence exists.
+
+Queue observation frozen11e9e7cdd515c272ff0a8bf79faefc7b42d4a2e1 complete
+native builds/checks PASS both Intel hosts; no deployment/live test. Before
+launch, review identified derived probes may preserve noncanonical last_log_term
+bytes, so their timing must use the same canonical predicate as ordinary enqueue/
+replacement. New guard excludes those frames from timing only; probe bytes,
+capacity/dedup/term/boot/retry and original replication ownership unchanged.
+Actual derived-probe fixture now includes the canonical classifier and checks
+noncanonical timestamp0/canonical42/off0, original bytes and existing queue
+bounds; normal and ASan/UBSan PASS. An extra fixture sample initially reached
+the original four-slot bound; remove that sampled probe before continuing the
+unchanged existing capacity controls, rather than increasing the bound. Strict
+compiler flags and all original guards retained. Corrected-source full Linux
+native validation required before deployment; older11e9e7cd will not deploy.

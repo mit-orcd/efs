@@ -6,6 +6,9 @@ root=Path(__file__).resolve().parents[1]
 s=Path(os.environ.get('EFS_RAFT_HOST_SOURCE',root/'src/server/raft_host.c')).read_text()
 a=s.index('static void host_container_read_probe(');fn=s[a:s.index('\n}',a)+2]
 timing = 'efs_batch_obs_now_us' in fn
+pure_helper=''
+if 'outbox_pure_read_control' in fn:
+ start=s.index('static int outbox_pure_read_control(');pure_helper=s[start:s.index('\n}',start)+2]
 code=r'''
 #include "efs/raft_flow.h"
 #include <assert.h>
@@ -15,6 +18,7 @@ code=r'''
 #define HOST_OUTBOX_MAX 4
 #define HOST_OUTBOX_BYTES 512
 #define EFS_WIRE_RAFT_HDR_LEN 80
+#define rd64be efs_raft_flow_rd64
 static int observer_on;
 #define BO_ON() observer_on
 #define efs_batch_obs_now_us() UINT64_C(42)
@@ -23,7 +27,7 @@ struct host_outbox {int preserve_read,npri,nent;uint64_t queued_bytes,queued_byt
 static int fail_alloc;
 static void *probe_alloc(size_t n){return fail_alloc?NULL:malloc(n);}
 #define malloc probe_alloc
-'''+fn+r'''
+'''+pure_helper+fn+r'''
 #undef malloc
 int main(void){
  struct host_outbox tx={0};uint8_t p[100],original[100];memset(p,0,sizeof(p));
@@ -38,7 +42,9 @@ int main(void){
  host_container_read_probe(&tx,p,100);assert(tx.npri==1);p[35]=6;host_container_read_probe(&tx,p,100);assert(tx.npri==1);
  p[35]=8;tx.queued_bytes=500;host_container_read_probe(&tx,p,100);assert(tx.npri==1&&tx.read_probe_context[0]==7);tx.queued_bytes=180;
  tx.nent=3;host_container_read_probe(&tx,p,100);assert(tx.npri==1);tx.nent=1;
- observer_on=1;host_container_read_probe(&tx,p,100);assert(tx.npri==2&&tx.read_probe_context[0]==8); TIMING_ON observer_on=0;
+ observer_on=1;host_container_read_probe(&tx,p,100);assert(tx.npri==2&&tx.read_probe_context[0]==8); TIMING_NONCANONICAL
+ p[67]=0;p[35]=9;host_container_read_probe(&tx,p,100);assert(tx.npri==3); TIMING_ON observer_on=0;
+ free(tx.pri[2].buf);tx.npri--;tx.queued_bytes-=80;
  p[1]=EFS_RAFT_GROUP_SHARD2;p[35]=1;host_container_read_probe(&tx,p,100);assert(tx.npri==3&&tx.read_probe_context[1]==1);
  for(int i=0;i<tx.npri;i++)free(tx.pri[i].buf);tx.npri=0;tx.nent=0;tx.queued_bytes=0;
  p[1]=EFS_RAFT_GROUP_SHARD;p[27]=6;p[35]=1;host_container_read_probe(&tx,p,80);assert(tx.npri==1);free(tx.pri[0].buf);tx.npri=0;tx.queued_bytes=0;
@@ -47,7 +53,7 @@ int main(void){
  puts("container read probe: bounded priority vote, original bytes/progress retained, scoped/dedup/failure guards PASS");return 0;
 }
 '''
-code=code.replace('TIMING_FIELD','uint64_t queued_us;' if timing else '').replace('TIMING_OFF','assert(!tx.pri[0].queued_us);' if timing else '').replace('TIMING_ON','assert(tx.pri[1].queued_us==42);' if timing else '')
+code=code.replace('TIMING_FIELD','uint64_t queued_us;' if timing else '').replace('TIMING_OFF','assert(!tx.pri[0].queued_us);' if timing else '').replace('TIMING_NONCANONICAL','assert(!tx.pri[1].queued_us);' if pure_helper else '').replace('TIMING_ON','assert(tx.pri[2].queued_us==42);' if timing else '')
 with tempfile.TemporaryDirectory(prefix='efs-container-probe-') as d:
  p=Path(d)/'test.c';p.write_text(code)
  subprocess.run(['cc','-std=c99','-Wall','-Wextra','-Werror','-Wno-misleading-indentation',*shlex.split(os.environ.get('EFS_TEST_CFLAGS','')),'-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
