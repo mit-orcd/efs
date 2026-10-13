@@ -84,7 +84,7 @@ static void *fixture_calloc(size_t n,size_t size) {
 }
 #define calloc fixture_calloc
 '''
-for name in ('efs_open_note','efs_open_set_leased','efs_close_note','efs_open_release_pending','efs_open_drain_pending','wb_lock_budget','efs_open_lease_resume_wait','efs_open_acquire_fileid_run','efs_open_acquire_fileid_mode','efs_open_acquire_fileid','efs_open_acquire','efs_open_adopt','efs_open_acquire_created'):
+for name in ('efs_open_note','efs_open_set_leased','efs_close_note','efs_open_release_pending','wb_lock_budget','efs_open_drain_pending','efs_open_lease_resume_wait','efs_open_acquire_fileid_run','efs_open_acquire_fileid_mode','efs_open_acquire_fileid','efs_open_acquire','efs_open_adopt','efs_open_acquire_created'):
  source+='\n'+function(name)
 w=s.index('/* A lost last-close reply must not pin')
 x=s.index('/* Client-cache design Part A, pin rule 2:',w)
@@ -160,6 +160,13 @@ int main(void) {
  close_rc=EFS_ERR_NOT_FOUND;assert(efs_open_release_pending(42)==EFS_ERR_NOT_FOUND&&g_open_refs&&server_hold);
  close_rc=0;assert(!efs_open_release_pending(42)&&!g_open_refs&&!server_hold);
  assert(!efs_open_acquire(42));assert(efs_close_note(42,&leased));
+ /* A retry cannot block forever on a foreground inode stripe. Keep the
+  * exact owner and retry it after the deadline/stripe clears. */
+ pthread_mutex_lock(open_edge_mu(42));
+ mock_deadline=stats_now_ms()+15;
+ assert(efs_open_drain_pending()==EFS_ERR_BUSY&&g_open_refs&&server_hold);
+ assert(efs_client_rpc_past_deadline());
+ pthread_mutex_unlock(open_edge_mu(42));mock_deadline=0;
  g_open_refs->retry_order=1;
  struct efs_open_ref *newer=calloc(1,sizeof(*newer));assert(newer);
  newer->ino=43;newer->close_pending=1;newer->retry_order=99;newer->next=g_open_refs;g_open_refs=newer;

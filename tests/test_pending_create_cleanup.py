@@ -13,6 +13,8 @@ code=r'''
 #include <stdio.h>
 static pthread_mutex_t stripe=PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t *open_edge_mu(efs_ino_t ino){assert(ino==42);return &stripe;}
+static int lock_busy;
+static int wb_lock_budget(pthread_mutex_t *mu){if(lock_busy)return EFS_ERR_BUSY;return pthread_mutex_lock(mu)?EFS_ERR_IO:EFS_OK;}
 static int release_rc,create_known,create_rc,lease_rc,begins,submits,cancels;
 static int efs_open_release_pending(efs_ino_t ino){assert(ino==42);return release_rc;}
 '''
@@ -54,7 +56,9 @@ int main(void) {
  assert(efs_pending_create_drain()==EFS_ERR_NET&&g_pending_create_count==1&&!begins&&g_pending_creates==entry);
  create_known=1;create_rc=0;release_rc=EFS_ERR_BUSY;
  assert(efs_pending_create_drain()==EFS_ERR_BUSY&&!begins&&entry->request.complete);
- release_rc=0;lease_rc=EFS_ERR_NET;
+ release_rc=0;lock_busy=1;
+ assert(efs_pending_create_drain()==EFS_ERR_BUSY&&entry->request.complete&&!begins&&g_pending_creates==entry);
+ lock_busy=0;lease_rc=EFS_ERR_NET;
  assert(efs_pending_create_drain()==EFS_ERR_NET&&begins==1&&entry->cleanup.active&&g_pending_create_count==1);
  lease_rc=0;assert(efs_pending_create_drain()==EFS_ERR_BUSY&&begins==1&&submits==2&&!g_pending_create_count);
  entry=unknown();create_rc=EFS_ERR_EXIST;
