@@ -4367,7 +4367,21 @@ open latency as a measured saving.
 
 ## W95 · Tiny-file data persistence and packing principles
 
-**Oct 11 ORCD implementation:** bounded segment codec/files storage, immutable
+**Current checkpoint — Oct 13:** exact8151debe on AMD/files/TCP/direct with
+`.efs` disabled passes full normal/fault native, nineteen focused normal and
+sanitizer checks, actual-core sanitizers, three quiet seven-client/jobs16 rounds
+(each1512/1512 core and67/67 peer), and focused acknowledged-fsync SIGKILL/cold,
+physical reclamation and metadata drain. The directory-timeout acceptance gate
+is closed for this source/workload; W95 remains partial.
+[Current evidence and next work](../status/packing-tcp-direct-20261012.md#next-work-toward-w95-closure--oct-13)
+supersede older lists claiming all mounted writer/GC integration is still absent.
+Next: matched off/on performance/allocation, audit existing lifecycle coverage
+and test actual gaps, then approve the P4.1 format/rollout boundary and reconcile
+closure. Recommended fresh-store-only, opt-in pre-alpha packing is **not yet an
+approved decision**. No containers, RDMA, `.efs`, release activation or push in
+this scoped AMD follow-up.
+
+**Historical Oct 11 ORCD implementation:** bounded segment codec/files storage, immutable
 Raft upload admission, typed packed PUT/GET, initial durable publication,
 versioned authoritative reads and shared-reference retirement now pass private
 Linux and four-server ORCD gates. Retired permits retain LIVE objects and fence
@@ -4383,7 +4397,7 @@ abandoned-PENDING cancellation, compatibility rollout and matched acceptance
 remain open. Production packing remains inactive.
 [Integration checkpoint and remaining activation gates](../status/orcd-tiny-packing-20261011.md#admission-distributed-reads-and-coalescing-checkpoint--oct-11).
 
-**Oct 11 ORCD priority:** production logical-payload packing is the first item on
+**Historical Oct 11 ORCD priority:** production logical-payload packing is the first item on
 `devel-orcd`. Replace per-file full-stripe padding with bounded immutable packed
 segments and versioned publication/GC mappings. Existing independent packing and
 server fragment containers do not implement this. [Plan, geometry targets and
@@ -4412,14 +4426,23 @@ or write-amplification ratio per file. Measure that explicitly.
 
 **Oct 11 AMD review completed:** all 24 raw samples / 184,320 operations reconcile; publication order, failure fencing, generation checks and reference-based collection reviewed. Manifest writes independently match 10,320 bytes per cohort (10,320/322.5 index bytes per operation for cohorts 1/32). Full-snapshot index cost grows with capacity and is not selected for production. [Review and limits](../status/amd-sustained-20261011.md#w95-retained-amd-experiment-review-completed).
 
-**Remaining action:** Complete mounted/shared-object production integration and P4.1 format/compatibility decisions; the process-crash/fault-tested independent model is not a production packed index. [Implemented model and limits](../status/w95-indexed-model-20261008.md). Port only a demonstrated principle; retain existing stores and require explicit P4.1 compatibility/migration decisions before a layout change.
+**Remaining action:** Follow the current four-step closure plan: matched
+packing-off/on measurements, an evidence audit of shared GC/PENDING cancellation
+and failure boundaries, only uncovered lifecycle tests/fixes, then the P4.1
+format/activation/upgrade decision. Existing mounted safety and cold/reclamation
+passes are not outstanding gates. The independent full-snapshot indexed model
+still is not the production packed index; retain its
+[limits](../status/w95-indexed-model-20261008.md). An opt-in fresh-store-only
+pre-alpha policy is recommended, pending an explicit decision; migration and
+production rollout must not remain implicit closure obligations.
 
 **Governing contracts/related work:** W71 durable PUT, W73 synchronous writes,
 W75 integrity, W86 ownership/GC fencing and W77 publication. P4.1 owns the
 eventual layout decision; W53 supplies the mixed big-writer/tiny-close gate.
-Any production format change needs an explicit compatibility/migration plan.
-Existing NUC data must be retained; the old P4.1 wipe label is not permission
-to wipe it.
+Any production format change needs an explicit retained-store compatibility
+or fresh-store-only policy. AMD synthetic stores may be erased under the user's
+authorization; this scoped plan does not authorize unrelated datasets or NUC
+wipes. Historical wipe labels are not rollout permission.
 
 **Gate:** representative tiny payload and 64 KiB-fragment baselines, mixed
 large/small I/O, and create/write/overwrite/delete churn with measured latency,

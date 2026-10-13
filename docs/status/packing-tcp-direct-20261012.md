@@ -87,6 +87,120 @@ and the P4.1 production-format/migration decision. Single-host functional
 acceptance does not establish multi-host/network/hardware failure behavior or
 a production packaging rollout. The release branch/tag is unchanged.
 
+## Next work toward W95 closure — Oct 13
+
+**Plan only: NOTRUN.** The user requested this plan be documented and committed;
+that does not approve a production format choice, default activation, migration,
+release promotion or push. Continue solo on `devel`, exclusive AMD, ordinary
+files/TCP/direct with `EFS_COMMANDS=0`, `EFS_COMMANDS_SERVER=0` and repair disabled.
+Containers, RDMA and `.efs` are outside this scoped closure. Existing hardware
+or release obligations remain separate work; older ORCD-wide checklists do not
+add them to this AMD/TCP task.
+
+The recommended order is matched A/B, coverage audit and only uncovered
+lifecycle tests, then P4.1 decision and closure reconciliation. Do not repeat
+already-passed native/POSIX/peer/cold gates unless source/configuration changes
+or a new failure requires an affected rerun.
+
+| Order | Remaining work | Completion evidence |
+|---|---|---|
+| 1 | Matched packing off/on on one frozen source | Three alternating pairs, same durable workload and conditions; sustained files/s, durable-close p50/p95/p99/max, CPU, allocated fragment bytes/count and metadata/WAL writes; all errors retained |
+| 2 | Shared-object lifecycle coverage audit | Map current native/fault/live tests and exact-source evidence to the cases below; distinguish PASS, missing evidence and missing implementation; run only actual gaps |
+| 3 | P4.1 format/rollout decision | Explicit eligibility/geometry, capability negotiation, mixed packed/ordinary behavior, activation policy and fresh-store/upgrade policy; recommendation remains unapproved |
+| 4 | Reconcile W95 and its index | One current acceptance matrix links measured benefits and lifecycle evidence, records limitations and the approved decision, and removes superseded implementation blockers |
+
+### First: matched performance and allocation
+
+Use the same product/test inputs as qualified8151debe, or freeze and identify a
+new source before both arms. A uses `EFS_PACKED_WRITES=0`; B uses1. Verify actual
+client/server flags and binary hashes. Both arms retain the same files engine,
+TCP/direct I/O, four4G quotas, placement/configuration,16 workload workers,
+logical1–512-byte payload distribution, seed and directory geometry. Use fresh
+synthetic sibling namespaces/stores; never compare an old binary or a warm
+retained namespace against a fresh candidate.
+
+Reuse the existing tiny-file workload and committed helpers
+`tests/live/tiny_sustained.py`, `tiny_churn.py` and `tiny_mixed.py` as applicable;
+inspect their supported modes before selecting the measurement runner. Reuse
+`~/git/cluster/testing/tiny_files.py` rather than create a different workload
+for each arm. Freeze the generator revision, commands, file count, seed,
+durations and supported persistence semantics in the run manifest before
+measurement. If existing helpers cannot measure durable-close latency,
+allocation or metadata/WAL writes, add the minimal common measurement support
+first and use it identically in both arms.
+
+A setup pilot should select a capacity-safe workload large enough to observe
+the sustained slow phase, not only startup. This pilot is not an accepted
+sample. For the fixed-file-count workload, both arms must perform the same
+operation sequence and complete the same count; record one-minute rates through
+the slow phase. A separate bounded churn measurement may use equal fixed
+windows, with identical logical occupancy and operation mix. Never stop the
+slower arm early and present unequal work as a matched comparison.
+
+Run three pairs in alternating order: A/B, B/A, A/B. First compare pure tiny
+create/write/durable-close and deletion; then compare mixed large-writer/tiny
+close load under W53, again with three alternating pairs and an explicitly
+frozen large-writer load. Quiet timing excludes simultaneous builds, profilers
+and other owned fixtures. Low-rate CPU/host I/O counters may be collected
+identically in both arms; intrusive profiling follows a demonstrated problem
+in a separately labelled diagnostic run.
+
+Report each repeat and its variation, not just a best run or average. Include
+observed cohort occupancy and singleton costs, fragment headers/padding/tails,
+metadata/index/WAL overhead, peak client memory, physical garbage/reclamation,
+and foreground close tails. Count application bytes separately from allocated
+bytes and host writes; host-write counters do not measure NAND endurance.
+Require exact acknowledged payload verification, including peer/cold checks,
+and no EIO/EBUSY/timeouts or concealed refresh errors. A performance target is
+not permission to weaken durability, freshness, reserve or deadlines. Decide
+from measured benefit and tail regressions; do not presume a2× speedup or that
+packing benefits every workload.
+
+### Then: audit lifecycle evidence, test only uncovered cases
+
+The current normal/fault suites and live cold/reclamation passes already cover
+many ownership and shared-object behaviors. Audit these specific obligations
+against existing tests before describing anything as unimplemented:
+
+- Abandoned PENDING cancellation requires authoritative session revocation and
+  rejection floors; elapsed time or transport loss must not substitute for proof.
+- Lost PUT/publication/retirement replies preserve immutable identities and
+  successful ACK bits, including coordinator/leader changes and cold replay.
+- Shared-object GC across coordinator failure at fence/delete/absence-ACK
+  boundaries preserves live neighbors and newer generations; missing members
+  never count as durable ACKs.
+- Quota/ENOSPC and aggregate client memory pressure refuse safely; partial
+  publication and failed reclamation retain the ownership needed for retry.
+- Mixed ordinary/packed reads, oversized-file promotion and unsupported peer
+  capabilities retain correct fallback/refusal before ambiguous publication.
+
+Record test names, exact source, passed assertions and coverage gaps in a small
+matrix here. An absent live scenario is not automatically missing code; a unit
+pass is not automatically evidence for a distributed crash scenario. Add
+focused regressions/fault cases only for uncovered requirements. Fix actual
+failures and rerun affected gates on the merged source, preserving original
+budgets and raw failed evidence externally.
+
+### Decision recommendation and closure boundary
+
+Recommend **opt-in packing on freshly formatted stores for this pre-alpha**,
+with ordinary files available and packing off by default. P4.1 should approve
+eligible payloads/cohort geometry, immutable mapping/ledger versions, capability
+negotiation and mixed-format behavior. Explicitly decide whether upgrades to
+retained older stores are unsupported for this stage or need a migration plan.
+Do not implement migration merely to finish an experiment if fresh-store-only
+is approved; equally, do not silently treat retained stores as compatible.
+This recommendation is not an approved format or rollout decision.
+
+W95 may close when matched benefit/limitations are documented, all required
+in-scope lifecycle evidence is accounted for or gaps fixed, and the P4.1
+acceptance/rollout boundary is explicitly decided. If production rollout or
+migration is deferred, give it a separately indexed follow-up with clear scope;
+do not close W95 by leaving its existing obligations implicit. AMD synthetic
+stores may be erased under the user's authorization; that grants no permission
+to wipe unrelated datasets or other clusters. Do not push or activate packing
+on a release/default deployment as part of this documentation task.
+
 ## AMD checkpoint: first complete quiet run
 
 AMD Ryzen AI Max+ 395, kernel 7.0.0-38-generic, GCC Ubuntu 15.2.0-16ubuntu1.
