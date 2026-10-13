@@ -1200,7 +1200,7 @@ static int host_send_ready(void *net, int peer, uint8_t group)
  * The core still validates current term/boot/voters and the leader's own
  * applied ReadIndex; class 1 grants no replication progress/window credit.
  * This shares the existing priority lane and its byte/count bounds. */
-static void host_container_read_probe(struct host_outbox *tx,const uint8_t *p,uint32_t len)
+static void host_container_read_probe(struct host_outbox *tx,uint8_t *p,uint32_t len)
 {
     if(!tx->preserve_read || len<EFS_WIRE_RAFT_HDR_LEN || p[0]!=EFS_RAFT_MSG_AE_REQ)return;
     int gi=efs_raft_flow_group(p[1]);
@@ -1222,6 +1222,11 @@ static void host_container_read_probe(struct host_outbox *tx,const uint8_t *p,ui
     tx->st_enq++;
     if((uint32_t)(tx->npri+tx->nent)>tx->st_hi)tx->st_hi=(uint32_t)(tx->npri+tx->nent);
     tx->read_probe_context[gi]=read;tx->read_probe_term[gi]=term;tx->read_probe_boot[gi]=boot;
+    /* Only after the independent exact read probe owns its bounded slot,
+     * let entry replication omit that duplicate read context. Its entries,
+     * prefix, term/boot, commit advertisement and durable ACK remain intact.
+     * Empty heartbeats and every failure/dedup fallback retain their context. */
+    if(len>EFS_WIRE_RAFT_HDR_LEN && outbox_nentries(p,len)>0)memset(p+28,0,8);
 }
 
 static int host_send(void *net, const struct efs_raft_msg *msg)
@@ -7421,7 +7426,7 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
         cfg.batch_noop = mode && !strcmp(mode, "1");
         mode=getenv("EFS_RAFT_BATCH_OVERLAP");
         if (mode && strcmp(mode,"0") && strcmp(mode,"1")) return EFS_ERR_INVAL;
-        cfg.batch_overlap=mode && !strcmp(mode,"1");
+        cfg.batch_overlap=mode ? !strcmp(mode,"1") : (h->s && h->s->storage_engine);
     }
     cfg.net = h;
     cfg.apply = host_apply;

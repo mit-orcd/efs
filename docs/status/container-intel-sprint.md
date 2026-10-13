@@ -2446,3 +2446,43 @@ ASan/UBSan, including refusal, single-note, ordinary/header exclusion,
 zero stamp, files/off controls and unchanged credits. Sender control PASS
 locally (Linux async NOTRUN on macOS). Both-host full native required before
 deploy; no new measured age or directory acceptance claimed yet. W100 open.
+
+
+### Canonical age d2818564 measured; container replication/read separation candidate
+
+Exactd28185643260e1c70f2bd7910c5a5e46f98cd37e both-host full native,
+affected pending/inline/sender sanitizers and794-input/runtime proofs PASS.
+Diagnostic1505/1512 PASS, seven deep30s FAIL. Immediate physical PASS
+(records/maps/container bodies zero at109.076s) before profile collection.
+Canonical queued request handling age: n1 4508samples mean9.892ms, n2
+16898mean9.564ms, n4 7491mean3.659ms; queued leader reply1642mean2.991ms.
+Inline canonical handling counts n1/n2/n4 5503/7415/8675requests, n3
+18265replies. Counts are handled frames, not unique logical rounds; do not
+interpret them as an exact partition or per-directory attribution. Windows
+start0.54–2.81s before first deep mkdir. Leader52948request wire-frame
+samples mean119us, request queue39us. KV release9259mean2.594ms,
+read quorum sleep383747mean2308us; own-apply wait samples0.
+
+Follower n2 first30s recorded12813suffix_read events, no overlap cohorts
+and15264global sync samples averaging1.284ms (combined observer, not just
+Raft disk). Its pump drain2539samples mean9.325ms; no per-RPC causal claim.
+A proposed heartbeat-replacement probe fix was disproved by actual existing
+read-context replacement guards and discarded without commit/deployment.
+External evidence aged2818564-{deploy,workers64-diagnostic}; no normal
+full15 acceptance run claimed for this diagnostic-only freeze.
+
+Next candidate separates an entry packet's duplicate read context only after
+its exact canonical probe owns a bounded priority slot. All entry/prefix/term/
+boot/commit/payload bytes and ordinary durable ACK semantics remain intact.
+Empty heartbeats, files, deduplicated contexts, zero context, allocation or
+capacity failure retain the original context. A lost/failed probe still leaves
+ordinary empty heartbeat read-context fallback; no deadline is extended.
+Enable the existing fully prefix/term/suffix/admission/byte/config-validated
+receive-overlap implementation by default **only for containers**; explicit
+EFS_RAFT_BATCH_OVERLAP=0 disables it and files retain defaultOFF. No new
+protocol/opcode, repair activation, expiry, packing or authority shortcut.
+Actual sender helper normal/ASan/UBSan and disabled-separation negative PASS,
+including full original-byte equality except the separate eight context bytes,
+files/off/allocation/capacity and empty-heartbeat fallback controls. Existing
+outbox/pending controls PASS. Both-host complete native and fresh mounted
+qualification are pending. W100/deep-directory acceptance remains open.
