@@ -1073,3 +1073,26 @@ rechecks argv/start after pinning before signalling. Actual helper mock
 controls exercise every ESRCH stage, reused-PID refusal, zombie return and
 FD cleanup PASS locally. No forced daemon kill or private-store reset.
 Exact corrected source will be rebuilt/proved before renewed live testing.
+
+
+### Paired-floor and safe fixture0f851fcc — completed, directory gate FAIL
+
+Exact0f851fcce3154bc1f090893cd317553bd2f61bff, both-host native and
+787input deployed proofs PASS. Identical retained four-node4G/node
+containers/TCP/direct,8writers,20ms progressingGC, seven cross-host mounts;
+commands/.efs/expiry-date/packing disabled; no profiling/reset/history removal.
+Same reproduction gates and original case/concurrency/deadline limits as2065.
+Full1497/1512PASS15FAIL: deep60/crazy directories all7,deep100one;
+138.439–140.159s. Immediate strict physical PASS146.014s, zero145.994.
+Quiet core432/432PASS56.600/57.135s;peer134/134PASS39.335/39.673s;
+private mmap PASS/shared ENODEV skips. Lifecycle and tiny warm/cold hashes,
+global graceful restart/deletion PASS; finalphysical20.060sPASS,zero20.047.
+Intel1 efsd sha2560c7c8d69321383138a95e0bfa097f912cb8868ad40fe65f02ac3ab5a5f570b8c,
+fuse83c7a5356befe4f1cf6af13984504d076fd74684075de17e24be6dbcd3672047;
+Intel2 efsd3ed4ee6215d12eab584c722ecb191ad061bd996e9ba7eccbb504565383bed1cf,
+fuse30d17887e0cba3277633727fa2aeb765335a33ec0b80f787b3448e9f7aa782fe.
+Raw retained outsideGit safe0f85-deploy/safe0f85-qualification. Paired
+floor change is safety-tested but has not improved the loaded directory
+verdict. Physical passes apply to this failed-directory workload only.
+Separate same-source diagnostic next enables existing read/Raft/batch
+counters and flushes phase observations; it cannot replace acceptance.
