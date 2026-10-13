@@ -6354,9 +6354,11 @@ static void ll_statfs(fuse_req_t req, fuse_ino_t ino)
 static void ll_access(fuse_req_t req, fuse_ino_t ino, int mask)
 {
     int rc;
+    uint64_t path_begin = deep_callback_begin(req, NULL);
     t_req = req;
     rc = efs_fuse_access_ino(ino, mask);
     t_req = NULL;
+    deep_callback_end(req, "ACCESS", ino, NULL, path_begin, rc);
     fuse_reply_err(req, rc ? -rc : 0);
 }
 

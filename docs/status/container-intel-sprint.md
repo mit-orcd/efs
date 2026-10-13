@@ -1787,3 +1787,18 @@ memo/callback controls PASS; fresh Linux/native/live gates required. Repeat the
 same original seven-client diagnostic then immediate strict reclamation, and
 join every callback to syscall intervals by PID/monotonic time; keep all raw
 logs and analysis outside Git. No acceptance claim.
+
+Expanded exacte14925c80c275ea166adf12d7ec2870543dd354a: both fresh Intel
+native/sanitizer and792-input source proofs PASS; explicit diagnostic full
+1497/1512PASS15FAIL (deep60/crazy all7, deep100 one),136.292–140.442s.
+Immediate strict physical88.705s PASS,zero88.692. External raw
+pathprof2e14925c8-diagnostic. Completed first30s deep caller observations:
+998–1057 LOOKUPs (including non-dXX prefix),8.202–9.252s;38–39 MKDIRs,
+3.556–4.491s; exactly one GETATTR/client,0.550–8.887ms. Completed mkdir
+syscalls26.693–28.289s,depth38–39. Thus repeated GETATTR is ruled out in
+this run; LOOKUP/MKDIR still leave substantial time unaccounted for. Existing
+ACCESS calls are not captured: efs_fuse_access_ino uses a local inode row
+(efs_client_stat_ino), with an authoritative RPC only when missing, then
+caller permission checks. Do not describe every ACCESS as a fresh RPC.
+Next optional diagnostic includes ACCESS in the same PID selection/bound;
+permission logic and reply unchanged. No scoped memo/cache change justified.
