@@ -72,6 +72,25 @@ static void dir_lock_report(const char *what, int stripe, efs_ino_t parent)
     }
 }
 
+/* Diagnostic only: sample long local stripe waits without changing locking.
+ * The same EFS_RPC_PROF switch enables the RPC timings used for comparison. */
+static void dir_lock_take(int stripe, efs_ino_t parent)
+{
+    struct timespec before, after;
+    int profile = getenv("EFS_RPC_PROF") != NULL;
+    if (profile)
+        clock_gettime(CLOCK_MONOTONIC, &before);
+    pthread_mutex_lock(&g_client.dir_lock[stripe]);
+    if (profile) {
+        clock_gettime(CLOCK_MONOTONIC, &after);
+        int64_t elapsed = (int64_t)(after.tv_sec - before.tv_sec) * 1000000 +
+                          (after.tv_nsec - before.tv_nsec) / 1000;
+        if (elapsed >= 20000)
+            fprintf(stderr, "DIRLOCK-WAIT stripe=%d ino=%llu wait_us=%lld\n",
+                    stripe, (unsigned long long)parent, (long long)elapsed);
+    }
+}
+
 void efs_client_lock_dir(efs_ino_t parent)
 {
     int s = dir_stripe(parent);
@@ -80,7 +99,7 @@ void efs_client_lock_dir(efs_ino_t parent)
         dir_lock_report("RECURSE", s, parent);
     else if (efs_client_dir_locks_held())
         dir_lock_report("NEST", s, parent);
-    pthread_mutex_lock(&g_client.dir_lock[s]);
+    dir_lock_take(s, parent);
     t_dir_held[s]++;
 }
 
@@ -109,16 +128,16 @@ void efs_client_lock_dirs2(efs_ino_t a, efs_ino_t b)
     efs_client_ensure_dir_locks();
     int ia = dir_stripe(a), ib = dir_stripe(b);
     if (ia == ib) {
-        pthread_mutex_lock(&g_client.dir_lock[ia]);
+        dir_lock_take(ia, a);
         t_dir_held[ia]++;
         return;
     }
     if (ia < ib) {
-        pthread_mutex_lock(&g_client.dir_lock[ia]);
-        pthread_mutex_lock(&g_client.dir_lock[ib]);
+        dir_lock_take(ia, a);
+        dir_lock_take(ib, b);
     } else {
-        pthread_mutex_lock(&g_client.dir_lock[ib]);
-        pthread_mutex_lock(&g_client.dir_lock[ia]);
+        dir_lock_take(ib, b);
+        dir_lock_take(ia, a);
     }
     t_dir_held[ia]++;
     t_dir_held[ib]++;
@@ -142,7 +161,7 @@ void efs_client_lock_all_dirs(void)
 {
     efs_client_ensure_dir_locks();
     for (int i = 0; i < EFS_DIR_LOCKS; i++) {
-        pthread_mutex_lock(&g_client.dir_lock[i]);
+        dir_lock_take(i, 0);
         t_dir_held[i]++;
     }
 }

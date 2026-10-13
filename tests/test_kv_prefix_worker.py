@@ -4,7 +4,7 @@ from pathlib import Path
 import os,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 s=Path(os.getenv('EFS_KV_PREFIX_SOURCE',root/'src/server/raft_host.c')).read_text()
-a=s.index('struct host_kv_worker {');b=s.index('static void *host_pump(',a)
+a=s.index('struct host_kv_worker {');b=s.index('/* Called by the sole inbox consumer',a)
 code=r'''
 #include "efs/common.h"
 #include <assert.h>

@@ -152,12 +152,14 @@ struct host_inbox_item {
     uint8_t *buf;
     uint32_t len;
     uint64_t queued_us; /* Opt-in monotonic observation; never admission state. */
+    int read_noted; /* Early vote only; normal recv/credits remain owed. */
 };
 
 /* One queued outbound raft message (encoded wire bytes, heap-owned). */
 struct host_outbox_item {
     uint8_t *buf;
     uint32_t len;
+    uint64_t queued_us; /* Pure container read observation, never wire/credits. */
 };
 
 /* Per-peer send queue + its lazily-spawned sender thread. All fields are
@@ -194,6 +196,8 @@ struct host_outbox {
      * heartbeat. Depth is npri + nent, capped at HOST_OUTBOX_MAX. */
     int npri;
     int nent;
+    uint64_t read_probe_context[HOST_NGROUPS],read_probe_term[HOST_NGROUPS],read_probe_boot[HOST_NGROUPS];
+    int preserve_read; /* containers: keep read contexts and replication ACKs distinct */
     uint64_t queued_bytes, queued_bytes_hi;
     struct host_outbox_item pri[HOST_OUTBOX_MAX];
     struct host_outbox_item ent[HOST_OUTBOX_MAX];
@@ -226,6 +230,7 @@ struct host_fin_item {
 #define HOST_APPLY_RC_MASK (HOST_APPLY_RC_RING - 1)
 
 struct host_group {
+    uint64_t read_admit_count,read_begin_admits,read_begin_round,read_begin_term;
     uint64_t balance_term, balance_since_us, balance_attempt_us;
     uint32_t balance_voters;
     uint8_t group;
@@ -755,6 +760,11 @@ static void host_sender_take(struct host_outbox *tx, int priority, int index,
     int *count=priority ? &tx->npri : &tx->nent;
     int gi=efs_raft_flow_group(lane[index].buf[1]);
     *buf=lane[index].buf; *len=lane[index].len;
+    if (lane[index].queued_us) {
+        uint64_t age = efs_batch_obs_now_us() - lane[index].queued_us;
+        BO_HIST((*buf)[0] == EFS_RAFT_MSG_AE_REQ ? BH_READ_REQ_QUEUE_US :
+                                                       BH_READ_REPLY_QUEUE_US, age);
+    }
     tx->queued_bytes-=*len;
     if (!priority && gi>=0) tx->pending_entries[gi]--;
     memmove(lane+index,lane+index+1,(size_t)(*count-index-1)*sizeof(*lane));
@@ -830,6 +840,9 @@ static void host_sender_wait(struct host_outbox *tx, uint64_t now)
     BO_COUNT(BO_FLOW_WAIT);
     pthread_cond_timedwait(&tx->cv,&tx->h->outbox_mu,&until);
 }
+
+static int
+outbox_pure_read_control(const uint8_t *buf,uint32_t len);
 
 static void *host_sender(void *arg)
 {
@@ -928,8 +941,33 @@ static void *host_sender(void *arg)
              * results/measure/20260930-060000-dd-wedge). Count the
              * expected replies per channel and read each on its own. */
             int n_rdma = 0, n_tcp = 0;
+            uint64_t read_wire_begin = 0;
+            int read_wire_type = 0;
+            uint64_t read_frame_begin[HOST_SENDER_PIPE_MAX]={0};
+            int read_tcp=tx->preserve_read && BO_ON() && pc->kind==EFS_CONN_TCP;
+            /* Observe only homogeneous, canonical read-only batches.
+             * The entire send/transport-reply interval is one sample, not
+             * a per-frame RTT. Mixed and failed batches provide no sample.
+             * No clock or classification runs in normal mode. */
+            if (tx->preserve_read && BO_ON() && n > 0 && n <= depth) {
+                read_wire_type = bufs[0][0];
+                for (i = 0; i < n; i++)
+                    if (bufs[i][0] != read_wire_type ||
+                        !outbox_pure_read_control(bufs[i],lens[i])) {
+                        read_wire_type = 0;
+                        break;
+                    }
+                if (read_wire_type)
+                    read_wire_begin = efs_batch_obs_now_us();
+            }
 
             for (sent = 0; sent < n && sent < depth; sent++) {
+                /* A TCP-only pipeline returns transport replies in send order.
+                 * Include mixed batches, but never infer an RDMA/TCP mapping.
+                 * This interval includes later sends before ACK collection; it
+                 * is not a bare-link RTT or Raft quorum completion. */
+                if(read_tcp && outbox_pure_read_control(bufs[sent],lens[sent]))
+                    read_frame_begin[sent]=efs_batch_obs_now_us();
                 if (efs_conn_send_msg(pc, EFS_MSG_RAFT, bufs[sent],
                                       lens[sent]) != 0) {
                     bad = 1;
@@ -984,7 +1022,15 @@ static void *host_sender(void *arg)
                     }
                     n_tcp--;
                 }
+                if(read_frame_begin[acked])
+                    BO_HIST(bufs[acked][0]==EFS_RAFT_MSG_AE_REQ ?
+                            BH_READ_REQ_WIRE_FRAME_US : BH_READ_REPLY_WIRE_FRAME_US,
+                            efs_batch_obs_now_us()-read_frame_begin[acked]);
             }
+            if (read_wire_begin && !bad && sent == n && acked == n)
+                BO_HIST(read_wire_type == EFS_RAFT_MSG_AE_REQ ?
+                        BH_READ_REQ_WIRE_BATCH_US : BH_READ_REPLY_WIRE_BATCH_US,
+                        efs_batch_obs_now_us() - read_wire_begin);
         }
         if (bad) {
             /* Everything unacked is lost with the conn; Raft resends. */
@@ -1040,6 +1086,21 @@ static int outbox_is_ae_rep(const uint8_t *buf, uint32_t len)
     return buf && len >= 1 && buf[0] == EFS_RAFT_MSG_AE_REP;
 }
 
+/* A prefix-zero escape probe or its successful vote carries only a read
+ * context: vote_granted forbids retiring an entry window, and all progress
+ * fields are zero. Within one peer/group/term/boot, a newer context means the
+ * leader already began a newer independent round; older queued probes/votes
+ * no longer contribute to its current quorum. Never fold ordinary traffic. */
+static int outbox_pure_read_control(const uint8_t *buf,uint32_t len)
+{
+    static const uint8_t no_progress[44]={0};
+    return buf && len==EFS_WIRE_RAFT_HDR_LEN &&
+           ((buf[0]==EFS_RAFT_MSG_AE_REP && buf[3]==1) ||
+            (buf[0]==EFS_RAFT_MSG_AE_REQ && buf[3]==0)) &&
+           buf[2]==1 && rd64be(buf+28) &&
+           !memcmp(buf+36,no_progress,sizeof(no_progress));
+}
+
 /* Coalesce within one Raft group only. Independent groups sharing a
  * peer retain their own heartbeat / reply progress. A vote may still
  * evict a heartbeat at capacity, as before. */
@@ -1057,6 +1118,24 @@ static int outbox_pri_replace(struct host_outbox *tx,
             continue;
         if (!pred(tx->pri[i].buf, tx->pri[i].len))
             continue;
+        int read_vote=tx->preserve_read &&
+            outbox_pure_read_control(buf,len) &&
+            outbox_pure_read_control(tx->pri[i].buf,tx->pri[i].len) &&
+            tx->pri[i].buf[0]==buf[0] && !memcmp(tx->pri[i].buf+4,buf+4,24); /* peer,term,boot */
+        if(read_vote && rd64be(tx->pri[i].buf+28)>rd64be(buf+28)){
+            free(buf);return 1; /* Newer queued vote owns the slot. */
+        }
+        /* An early probe does not retire an entry batch. Nor may a delayed
+         * queued reply erase a newer read round or a different proven prefix.
+         * Keep exact class/status, term/boot/read context and ACK prefix for
+         * containers; otherwise the original bounded enqueue owns the frame.
+         * Votes still evict heartbeats at capacity via the existing path. */
+        if(tx->preserve_read && !read_vote && tx->pri[i].buf[0]==buf[0] &&
+           (buf[0]==EFS_RAFT_MSG_AE_REQ || buf[0]==EFS_RAFT_MSG_AE_REP) &&
+           (memcmp(tx->pri[i].buf+2,buf+2,2) ||
+            memcmp(tx->pri[i].buf+12,buf+12,24) ||
+            memcmp(tx->pri[i].buf+68,buf+68,8) ||
+            (buf[0]==EFS_RAFT_MSG_AE_REQ && memcmp(tx->pri[i].buf+44,buf+44,16))))continue;
         if (len > HOST_OUTBOX_BYTES - (tx->queued_bytes-tx->pri[i].len))
             return 0;
         tx->queued_bytes -= tx->pri[i].len;
@@ -1065,6 +1144,8 @@ static int outbox_pri_replace(struct host_outbox *tx,
         free(tx->pri[i].buf);
         tx->pri[i].buf = buf;
         tx->pri[i].len = len;
+        tx->pri[i].queued_us = tx->preserve_read && BO_ON() &&
+            outbox_pure_read_control(buf, len) ? efs_batch_obs_now_us() : 0;
         return 1;
     }
     return 0;
@@ -1119,6 +1200,49 @@ static int host_send_ready(void *net, int peer, uint8_t group)
     pthread_mutex_unlock(&h->outbox_mu);
     if (!ready) BO_COUNT(BO_FLOW_PREBUILD_RETRY);
     return ready;
+}
+
+/* A fresh container read need not wait for a newly sent data window to
+ * become durable on its follower. Queue one bounded prefix-zero vote probe
+ * per peer/group/context alongside, never instead of, the original frame.
+ * The core still validates current term/boot/voters and the leader's own
+ * applied ReadIndex; class 1 grants no replication progress/window credit.
+ * This shares the existing priority lane and its byte/count bounds. */
+static void host_container_read_probe(struct host_outbox *tx,uint8_t *p,uint32_t len)
+{
+    if(!tx->preserve_read || len<EFS_WIRE_RAFT_HDR_LEN || p[0]!=EFS_RAFT_MSG_AE_REQ)return;
+    int gi=efs_raft_flow_group(p[1]);
+    uint64_t read=efs_raft_flow_rd64(p+28),term=efs_raft_flow_rd64(p+12),boot=efs_raft_flow_rd64(p+20);
+    if(gi<0 || !read)return;
+    if(tx->read_probe_term[gi]==term && tx->read_probe_boot[gi]==boot &&
+       read<=tx->read_probe_context[gi]){
+        /* An exact-context probe was already admitted. Subsequent entry
+         * packets need not repeat that context either. Empty heartbeats
+         * retain it, including retransmit fallback if the probe is lost. */
+        if(read==tx->read_probe_context[gi] && len>EFS_WIRE_RAFT_HDR_LEN &&
+           outbox_nentries(p,len)>0)memset(p+28,0,8);
+        return;
+    }
+    if(tx->npri+tx->nent>=HOST_OUTBOX_MAX || tx->queued_bytes>HOST_OUTBOX_BYTES-EFS_WIRE_RAFT_HDR_LEN)return;
+    uint8_t *probe=malloc(EFS_WIRE_RAFT_HDR_LEN);if(!probe)return;
+    efs_raft_flow_probe(probe,p);
+    /* This additional frame earns only a fresh heartbeat vote. The original
+     * frame retains the commit advertisement and all replication work; do
+     * not make the escape probe owe a second copy of that ordered work. */
+    memset(probe+60,0,8); /* leader_commit; original p is untouched */
+    tx->pri[tx->npri++]=(struct host_outbox_item){probe,EFS_WIRE_RAFT_HDR_LEN,
+        BO_ON() && outbox_pure_read_control(probe, EFS_WIRE_RAFT_HDR_LEN) ?
+                                                    efs_batch_obs_now_us() : 0};
+    tx->queued_bytes+=EFS_WIRE_RAFT_HDR_LEN;
+    if(tx->queued_bytes>tx->queued_bytes_hi)tx->queued_bytes_hi=tx->queued_bytes;
+    tx->st_enq++;
+    if((uint32_t)(tx->npri+tx->nent)>tx->st_hi)tx->st_hi=(uint32_t)(tx->npri+tx->nent);
+    tx->read_probe_context[gi]=read;tx->read_probe_term[gi]=term;tx->read_probe_boot[gi]=boot;
+    /* Only after the independent exact read probe owns its bounded slot,
+     * let entry replication omit that duplicate read context. Its entries,
+     * prefix, term/boot, commit advertisement and durable ACK remain intact.
+     * Empty heartbeats and every failure/older-context fallback retain their context. */
+    if(len>EFS_WIRE_RAFT_HDR_LEN && outbox_nentries(p,len)>0)memset(p+28,0,8);
 }
 
 static int host_send(void *net, const struct efs_raft_msg *msg)
@@ -1238,6 +1362,8 @@ static int host_send(void *net, const struct efs_raft_msg *msg)
         }
         slot->buf = heap;
         slot->len = len;
+        slot->queued_us = tx->preserve_read && BO_ON() &&
+            outbox_pure_read_control(heap, len) ? efs_batch_obs_now_us() : 0;
         if (entry) {
             int gi=efs_raft_flow_group(heap[1]);
             if (gi>=0) tx->pending_entries[gi]++;
@@ -1265,6 +1391,7 @@ static int host_send(void *net, const struct efs_raft_msg *msg)
             }
         }
     }
+    host_container_read_probe(tx,heap,len);
     pthread_cond_signal(&tx->cv);
     pthread_mutex_unlock(&h->outbox_mu);
     host_wire_taken(msg);
@@ -2784,8 +2911,13 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         (cmd[0] == EFS_MD_CMD_CREATE || cmd[0] == EFS_MD_CMD_APPEND_RSV))
         host_clear_incomplete(g);
     if (a0) {
+        uint64_t elapsed=now_us_()-a0;
         h->obs_apply_cnt++;
-        h->obs_apply_cycle_us += now_us_() - a0;
+        h->obs_apply_cycle_us += elapsed;
+        if(h->s && h->s->storage_engine && elapsed>=20000)
+            fprintf(stderr,"container-apply-prof: group=%u index=%llu term=%llu tag=%u bytes=%u us=%llu rc=%d\n",
+                    g->group,(unsigned long long)index,(unsigned long long)term,
+                    cmd[0],clen,(unsigned long long)elapsed,rc);
     }
     /* Record the apply verdict BEFORE the raft core bumps last_applied, so a
      * waiter that observes applied >= index always finds the slot. The pump
@@ -3929,9 +4061,10 @@ static struct {
     struct read_prof_acc ri_leader_covered; /* ... and no new round needed */
     struct read_prof_acc ri_remote;   /* host_read_index, forwarded */
     struct read_prof_acc ri_remote_wait; /* host_wait_applied after it */
+    struct read_prof_acc ri_lock, ri_begin, ri_sleep_quorum, ri_sleep_apply;
     struct read_prof_acc lk_total, lk_ri_parent, lk_kv, lk_lanes, lk_getattr;
     struct read_prof_acc ga_total, ga_lanes, ga_getattr;
-    uint64_t lk_fwd, ga_fwd;
+    uint64_t lk_fwd, ga_fwd, pair_parallel, pair_scalar;
     uint64_t ticks;
 } g_read_prof;
 
@@ -3995,11 +4128,27 @@ static void read_prof_tick(void)
     line[0] = '\0';
     for (i = 0; i < 12; i++)
         strncat(line, f[i], sizeof(line) - strlen(line) - 1);
-    fprintf(stderr, "read-prof:%s lk_fwd=%llu ga_fwd=%llu\n", line,
+    fprintf(stderr, "read-prof:%s lk_fwd=%llu ga_fwd=%llu pair_parallel=%llu pair_scalar=%llu\n", line,
             (unsigned long long)__atomic_load_n(&g_read_prof.lk_fwd,
                                                 __ATOMIC_RELAXED),
             (unsigned long long)__atomic_load_n(&g_read_prof.ga_fwd,
-                                                __ATOMIC_RELAXED));
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_read_prof.pair_parallel,__ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_read_prof.pair_scalar,__ATOMIC_RELAXED));
+    const struct read_prof_acc *phase[] = {&g_read_prof.ri_lock,
+        &g_read_prof.ri_begin, &g_read_prof.ri_sleep_quorum,
+        &g_read_prof.ri_sleep_apply};
+    const char *names[] = {"lock", "begin", "sleep_quorum", "sleep_apply"};
+    snprintf(line, sizeof(line), "read-phase-prof mono_us=%llu",
+            (unsigned long long)efs_batch_obs_now_us());
+    for (i=0; i<4; i++) {
+        size_t used = strlen(line);
+        snprintf(line+used, sizeof(line)-used, " %s=%llu/%llu/%llu", names[i],
+            (unsigned long long)__atomic_load_n(&phase[i]->n,__ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&phase[i]->sum,__ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&phase[i]->max,__ATOMIC_RELAXED));
+    }
+    fprintf(stderr, "%s\n", line);
 }
 
 /* A follower's ReadIndex is one RPC to the leader per caller. The dual
@@ -4159,6 +4308,49 @@ static int host_read_admit(struct efs_raft *r, struct host_read_admission *a,
     return rc;
 }
 
+/* Register before waiting for h->mu. A tracked round may cover this ticket
+ * only if its admission watermark was captured BEFORE any probes were sent.
+ * Saturation disables this optimization rather than wrapping authority. */
+static uint64_t host_read_register(struct efs_raft_host *h,uint8_t group)
+{
+    if(!h->s || !h->s->storage_engine)return 0;
+    struct host_group *g=group_slot(h,group);
+    if(!g)return 0;
+    uint64_t value=__atomic_load_n(&g->read_admit_count,__ATOMIC_ACQUIRE);
+    for(;;){
+        if(value>=UINT64_MAX-1)return 0;
+        if(__atomic_compare_exchange_n(&g->read_admit_count,&value,value+1,0,
+                __ATOMIC_ACQ_REL,__ATOMIC_ACQUIRE))return value+1;
+    }
+}
+/* h->mu held. The existing round/proof predicates still decide authority. */
+static uint64_t host_read_eligible_round(struct efs_raft_host *h,uint8_t group,
+                                        struct efs_raft *r,uint64_t ticket)
+{
+    uint64_t previous=efs_raft_read_round(r);
+    struct host_group *g=group_slot(h,group);
+    if(ticket && h->s && h->s->storage_engine && previous && g && g->read_begin_round==previous &&
+       g->read_begin_term==efs_raft_term(r) && ticket<=g->read_begin_admits)
+        return previous;
+    return previous+1;
+}
+static int host_read_begin_tracked(struct efs_raft_host *h,uint8_t group,
+                                  struct efs_raft *r)
+{
+    struct host_group *g=group_slot(h,group);
+    uint64_t admits=h->s && h->s->storage_engine && g?
+        __atomic_load_n(&g->read_admit_count,__ATOMIC_ACQUIRE):0;
+    uint64_t previous=efs_raft_read_round(r);
+    int rc=efs_raft_read_begin(r);
+    if(!rc && admits && efs_raft_read_round(r)>previous){
+        g->read_begin_admits=admits;
+        g->read_begin_round=efs_raft_read_round(r);
+        g->read_begin_term=efs_raft_term(r);
+    }
+    return rc;
+}
+
+
 static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
                            int *leader_hint,const struct host_read_admission *admission,
                            uint64_t *proof_index, int proof_only)
@@ -4170,6 +4362,7 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
     int prof = read_prof_on();
     uint64_t p0 = prof ? now_us_() : 0;
     int first = 1;
+    uint64_t ticket=admission?0:host_read_register(h,group);
 
     if (proof_index)
         *proof_index = 0;
@@ -4222,24 +4415,26 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             /* Admit this request BEFORE any heartbeat eligible to cover it.
              * Readers arriving during an existing round queue for the next. */
             struct host_read_admission fresh;
-            int started;
+            int started=0;
             pthread_mutex_lock(&h->mu);
-            rc = host_read_admit(group_raft(h, group), &fresh, &started);
-            if (started)
-                host_publish_group(h, group);
+            struct efs_raft *r=group_raft(h,group);
+            if(h->s && h->s->storage_engine) {
+                rc=(!r || efs_raft_role(r)!=EFS_RAFT_LEADER)?EFS_ERR_NOT_PRIMARY:
+                   efs_raft_read_round(r)==UINT64_MAX?EFS_ERR_BUSY:EFS_OK;
+                if(!rc) {
+                    fresh=(struct host_read_admission){want,host_read_eligible_round(h,group,r,ticket),efs_raft_term(r)};
+                    if(!efs_raft_read_pending(r) || efs_raft_read_quorum(r)) {
+                        rc=host_read_begin_tracked(h,group,r);started=rc==EFS_OK;
+                    }
+                }
+            } else rc=host_read_admit(r,&fresh,&started);
+            if(started)host_publish_group(h,group);
             pthread_mutex_unlock(&h->mu);
-            if (rc == EFS_ERR_NOT_PRIMARY) {
-                host_view_get(h, group, &v);
-                continue;
-            }
-            if (rc != EFS_OK)
-                return rc;
-            want = fresh.want;
-            round = fresh.round;
-            admitted_term = fresh.term;
-            if (started)
-                host_pump_kick(h);
-            host_view_get(h, group, &v);
+            if(rc==EFS_ERR_NOT_PRIMARY){host_view_get(h,group,&v);continue;}
+            if(rc!=EFS_OK)return rc;
+            want=fresh.want;round=fresh.round;admitted_term=fresh.term;
+            if(started)host_pump_kick(h);
+            host_view_get(h,group,&v);
         }
         if (v.term != admitted_term) {
             if (prof) fprintf(stderr,"raft-host: admitted-read-term group=%u admitted_term=%llu term=%llu admitted_round=%llu raw_round=%llu proven_round=%llu role=%d leader=%d\n",group,(unsigned long long)admitted_term,(unsigned long long)v.term,(unsigned long long)round,(unsigned long long)v.read_round,(unsigned long long)v.proven_round,v.role,v.leader);
@@ -4278,14 +4473,20 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
              * (another reader may have begun one since the view). */
             struct efs_raft *r;
 
+            uint64_t lock_begin = prof ? efs_batch_obs_now_us() : 0;
             pthread_mutex_lock(&h->mu);
+            if (prof) read_prof_add(&g_read_prof.ri_lock, efs_batch_obs_now_us() - lock_begin);
             r = group_raft(h, group);
             rc = EFS_OK;
             if (r && efs_raft_role(r) == EFS_RAFT_LEADER &&
                 (!efs_raft_read_pending(r) || efs_raft_read_quorum(r)) &&
                 !(efs_raft_read_round(r) >= round &&
                   efs_raft_read_covers(r, want)))
-                rc = efs_raft_read_begin(r);
+            {
+                uint64_t begin_us = prof ? efs_batch_obs_now_us() : 0;
+                rc = host_read_begin_tracked(h,group,r);
+                if (prof) read_prof_add(&g_read_prof.ri_begin, efs_batch_obs_now_us() - begin_us);
+            }
             host_publish_group(h, group);
             pthread_mutex_unlock(&h->mu);
             if (rc != EFS_OK)
@@ -4307,10 +4508,14 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
          * quorum arriving just before registration must not park an already
          * satisfied proof RPC until another pump/view change. */
         if (!host_read_floor_ready(&v, &floor, want, round, admitted_term, proof_only)) {
+            int waiting_apply = prof && host_view_wait_apply(&v, want, round, admitted_term);
+            uint64_t sleep_begin = prof ? efs_batch_obs_now_us() : 0;
             uint64_t s0 = now_us_();
             host_waiter_sleep(h, group, 2, want, v.stamp, &end,
                               round, admitted_term, proof_only, &floor);
             s0 = now_us_() - s0;
+            if (prof) read_prof_add(waiting_apply ? &g_read_prof.ri_sleep_apply :
+                                                   &g_read_prof.ri_sleep_quorum, efs_batch_obs_now_us() - sleep_begin);
             if (s0 > 20000)
                 fprintf(stderr, "raft-host: read-sleep us=%llu group=%u "
                         "want=%llu read_idx=%llu applied=%llu pending=%d\n",
@@ -4329,7 +4534,25 @@ static int host_read_index(struct efs_raft_host *h,uint8_t group,int *hint)
     return host_read_index_admitted(h,group,hint,NULL,NULL,0);
 }
 
+/* Container directory walks can overlap both metadata groups on every
+ * component. Eight blocked proof helpers otherwise force other admitted
+ * reads to serialize independent rounds. Bound containers at 32 persistent
+ * 128KiB helpers (4MiB total stacks); ordinary files retain eight (1MiB).
+ * Saturation/init failure still falls back, never queues or reuses a proof. */
+static unsigned host_read_pair_capacity(void)
+{
+    return g_host && g_host->s && g_host->s->storage_engine ? 32u : 8u;
+}
+static void host_read_pair_note(int parallel)
+{
+    if(read_prof_on())__atomic_fetch_add(parallel?&g_read_prof.pair_parallel:
+        &g_read_prof.pair_scalar,1,__ATOMIC_RELAXED);
+}
+#define HOST_READ_PAIR_LIMIT() host_read_pair_capacity()
+#define HOST_READ_PAIR_NOTE(parallel) host_read_pair_note(parallel)
 #include "read_index_pair_remote.h"
+#undef HOST_READ_PAIR_LIMIT
+#undef HOST_READ_PAIR_NOTE
 
 /* Overlap two independent hosted-leader read rounds. Both admissions are
  * captured before either probe is sent. A pending older round cannot cover
@@ -4340,8 +4563,12 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
                                 uint8_t second,int *hint)
 {
     if(first==second)return host_read_index(h,first,hint);
+    uint64_t tickets[2]={host_read_register(h,first),host_read_register(h,second)};
     struct efs_raft *r[2];struct host_read_admission admission[2];
     uint8_t groups[2]={first,second};int rc=EFS_OK;
+    struct host_view admitted[2]={{0}};
+    if(h->s && h->s->storage_engine)
+        for(unsigned i=0;i<2;i++)host_view_get(h,groups[i],&admitted[i]);
     pthread_mutex_lock(&h->mu);
     r[0]=group_raft(h,first);r[1]=group_raft(h,second);
     if(r[0] && r[1] &&
@@ -4382,12 +4609,21 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
         if(previous==UINT64_MAX) {
             pthread_mutex_unlock(&h->mu);return EFS_ERR_BUSY;
         }
-        admission[i]=(struct host_read_admission){efs_raft_commit(r[i]),
-                                                  previous+1,efs_raft_term(r[i])};
+        uint64_t want=efs_raft_commit(r[i]);
+        /* This request's floor precedes mutex waiting. The chosen core round
+         * still captures its full commit index and requires own apply through
+         * that index; concurrent later commits are not new read dependencies. */
+        if(admitted[i].has && admitted[i].role==EFS_RAFT_LEADER &&
+           admitted[i].term==efs_raft_term(r[i])){
+            if(want<admitted[i].commit){pthread_mutex_unlock(&h->mu);return EFS_ERR_BUSY;}
+            want=admitted[i].commit;
+        }
+        admission[i]=(struct host_read_admission){want,
+                                                  host_read_eligible_round(h,groups[i],r[i],tickets[i]),efs_raft_term(r[i])};
     }
     for(unsigned i=0;i<2;i++) {
         if(!efs_raft_read_pending(r[i]) || efs_raft_read_quorum(r[i]))
-            rc=efs_raft_read_begin(r[i]);
+            rc=host_read_begin_tracked(h,groups[i],r[i]);
         host_publish_group(h,groups[i]);
         if(rc!=EFS_OK)break;
     }
@@ -6875,6 +7111,27 @@ static int host_checkpoint_retire(struct efs_raft_host *h, const uint64_t *idx,
     return rc;
 }
 
+/* Containers route inode/dentry reads to leaders hosting both metadata
+ * groups. Prefer that committed-membership intersection for placement too;
+ * choosing a single-group leader forces an extra forwarding hop per lookup.
+ * This is only an opt-in placement hint under h->mu, never read authority.
+ * Unknown membership postpones handoff; disjoint groups keep their ordinary
+ * actual-voter preference. Files retain the original placement policy. */
+static int host_container_balanced_voter(struct efs_raft_host *h,uint32_t voters,unsigned ordinal)
+{
+    if(!h->s || !h->s->storage_engine)return efs_raft_preferred_voter(voters,ordinal);
+    uint32_t common=voters;
+    for(unsigned i=0;i<HOST_NGROUPS;i++){
+        struct host_group *g=group_slot(h,(uint8_t)(i<<1));
+        uint32_t mask=g?(g->r?efs_raft_voters(g->r):g->voters):0;
+        if(!mask)return -1;
+        common&=mask;
+    }
+    /* Colocate related fresh proofs on one committed dual-group voter.
+     * Disjoint groups still require their independent placement policy. */
+    return efs_raft_preferred_voter(common?common:voters,common?HOST_NGROUPS-1:ordinal);
+}
+
 /* Shared pump, bounded state per hosted group; no extra timer/thread/lease.
  * Stable placement is a preference. Loss/lag/pressure never weakens quorum. */
 static void host_balance_leaders(struct efs_raft_host *h, uint64_t now)
@@ -6900,7 +7157,7 @@ static void host_balance_leaders(struct efs_raft_host *h, uint64_t now)
         if (now - g->balance_since_us < 2000000u ||
             (g->balance_attempt_us && now - g->balance_attempt_us < 30000000u))
             continue;
-        target = efs_raft_preferred_voter(voters, (unsigned)i);
+        target = host_container_balanced_voter(h,voters,(unsigned)i);
         if (target < 0 || target == h->raft_id) continue;
         rc = efs_raft_transfer(g->r, target);
         if (rc == EFS_ERR_BUSY) continue; /* Target not durably caught up yet. */
@@ -7192,6 +7449,78 @@ static int host_kv_stop(struct host_kv_worker *w)
     w->started=0;return rc;
 }
 
+/* Called by the sole inbox consumer with h->mu held. A network trylock
+ * failure must not hide an otherwise eligible fresh vote behind unrelated
+ * durable receive work. Snapshot bounded headers without removing frames;
+ * the unchanged core checks term/boot/voters/leader/persisted prefix. Every
+ * progress-bearing frame still enters normal recv in order and retains its
+ * admission credits; fully handled canonical requests may retire without flow. */
+static void host_container_pending_reads(struct efs_raft_host *h)
+{
+    struct pending_read {uint8_t p[EFS_WIRE_RAFT_HDR_LEN];uint8_t *identity;uint64_t queued_us;int slot,consume;};
+    struct pending_read frames[HOST_INBOX_MAX];unsigned n=0,consume_n=0;uint8_t published=0;
+    if(!h->s || !h->s->storage_engine)return;
+    pthread_mutex_lock(&h->inbox_mu);
+    for(int i=0;i<h->inbox_n && i<HOST_INBOX_MAX;i++){
+        struct host_inbox_item *item=&h->inbox[i];
+        if(item->read_noted || item->len!=EFS_WIRE_RAFT_HDR_LEN ||
+           (item->buf[0]!=EFS_RAFT_MSG_AE_REQ && item->buf[0]!=EFS_RAFT_MSG_AE_REP) ||
+           !rd64be(item->buf+28))continue;
+        memcpy(frames[n].p,item->buf,EFS_WIRE_RAFT_HDR_LEN);
+        frames[n].identity=item->buf;frames[n].queued_us=item->queued_us;frames[n].consume=0;frames[n++].slot=i;
+    }
+    pthread_mutex_unlock(&h->inbox_mu);
+    for(unsigned i=0;i<n;i++){
+        struct efs_raft_msg msg;
+        if(efs_wire_raft_decode(frames[i].p,EFS_WIRE_RAFT_HDR_LEN,&msg,NULL,0)!=EFS_OK)continue;
+        struct efs_raft *r=group_raft(h,msg.group);
+        int handled=efs_raft_read_control(r,&msg);
+        if(!handled)continue;
+        frames[i].consume=handled==1 && !h->flow_enabled &&
+            msg.type==EFS_RAFT_MSG_AE_REQ &&
+            outbox_pure_read_control(frames[i].p,EFS_WIRE_RAFT_HDR_LEN);
+        if(frames[i].consume)consume_n++;
+        /* Time only the first accepted canonical queued control; retained
+         * receive/credits and all core refusal rules remain unchanged. */
+        if(BO_ON() && frames[i].queued_us &&
+           outbox_pure_read_control(frames[i].p,EFS_WIRE_RAFT_HDR_LEN))
+            BO_HIST(msg.type==EFS_RAFT_MSG_AE_REQ ? BH_READ_REQ_INBOX_US :
+                    BH_READ_REPLY_INBOX_US,efs_batch_obs_now_us()-frames[i].queued_us);
+        pthread_mutex_lock(&h->inbox_mu);
+        int slot=frames[i].slot;
+        if(slot<h->inbox_n && h->inbox[slot].buf==frames[i].identity)h->inbox[slot].read_noted=1;
+        pthread_mutex_unlock(&h->inbox_mu);
+        if(msg.type==EFS_RAFT_MSG_AE_REP){
+            published|=(uint8_t)(1u<<msg.group);BO_COUNT(BO_READ_CONTROL_REPLY);
+        }else BO_COUNT(BO_READ_CONTROL_REQUEST);
+    }
+    /* The same fully-accounted prefix-zero request is already consumed by
+     * the network fast path. After its queued equivalent has sent its vote,
+     * remove only the exact unchanged frame: no receive or durable work is
+     * owed. Flow-controlled admission/retirement stays entirely unchanged.
+     * Compact once, preserving every retained tail and raced arrival. */
+    if(consume_n){
+        pthread_mutex_lock(&h->inbox_mu);
+        int out=0;
+        for(int j=0;j<h->inbox_n;j++){
+            struct host_inbox_item item=h->inbox[j];int consume=0;
+            for(unsigned i=0;i<n;i++)
+                if(frames[i].consume && item.buf==frames[i].identity &&
+                   item.len==EFS_WIRE_RAFT_HDR_LEN &&
+                   !memcmp(item.buf,frames[i].p,EFS_WIRE_RAFT_HDR_LEN)){
+                    consume=1;break;
+                }
+            if(consume){h->inbox_bytes-=item.len;free(item.buf);BO_COUNT(BO_INBOX_READ_CONSUMED);}
+            else h->inbox[out++]=item;
+        }
+        h->inbox_n=out;
+        pthread_mutex_unlock(&h->inbox_mu);
+    }
+    for(unsigned i=0;i<HOST_NGROUPS;i++)
+        if(published&(1u<<h->g[i].group))host_publish_group(h,h->g[i].group);
+    if(published)host_waiters_wake(h);
+}
+
 static void *host_pump(void *arg)
 {
     struct efs_raft_host *h = arg;
@@ -7237,6 +7566,7 @@ static void *host_pump(void *arg)
                     (void)efs_raft_step_down(g->r);
             }
         }
+        host_container_pending_reads(h);
         /* One AppendEntries for everything appended since the last
          * send. Proposers only raise the send ceiling; doing the send
          * under their lock shipped a single entry and the next mkdir
@@ -7271,6 +7601,11 @@ static void *host_pump(void *arg)
         (void)efs_kv_lsm_sync_hold(h->kv);
         if (batch_obs) phase_us = efs_batch_obs_now_us();
         drain_inbox(h,&done_n,&done_bytes);
+        /* Network trylocks can fail while this bounded drain holds h->mu.
+         * Account eligible new read-only votes before the KV durability
+         * tail; their unchanged core checks do not apply replication work.
+         * Progress-bearing/refused frames retain FIFO and durable credits. */
+        host_container_pending_reads(h);
         if (batch_obs) BO_HIST(BH_PUMP_DRAIN_US, efs_batch_obs_now_us() - phase_us);
         if (obs) {
             t_drain = now_us_() - c0;
@@ -7568,14 +7903,15 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
     cfg.store_ctx = st;
     cfg.send = host_send;
     cfg.send_ready = h->flow_enabled ? host_send_ready : NULL;
+    cfg.preserve_ack_window = h->s && h->s->storage_engine;
     {
         const char *mode = getenv("EFS_RAFT_BATCH_NOOP");
         if (mode && strcmp(mode, "0") && strcmp(mode, "1"))
             return EFS_ERR_INVAL;
-        cfg.batch_noop = mode && !strcmp(mode, "1");
+        cfg.batch_noop = mode ? !strcmp(mode, "1") : (h->s && h->s->storage_engine);
         mode=getenv("EFS_RAFT_BATCH_OVERLAP");
         if (mode && strcmp(mode,"0") && strcmp(mode,"1")) return EFS_ERR_INVAL;
-        cfg.batch_overlap=mode && !strcmp(mode,"1");
+        cfg.batch_overlap=mode ? !strcmp(mode,"1") : (h->s && h->s->storage_engine);
     }
     cfg.net = h;
     cfg.apply = host_apply;
@@ -8074,6 +8410,26 @@ static int host_bg_propose(struct efs_raft_host *h, uint8_t group,
     struct efs_msg_raft_mkfs_reply rep;
     uint64_t idx = 0, term = 0;
     int rc, lid = -1;
+
+    /* Container cleanup must not introduce a private append fsync under
+     * the read/propose mutex. Join the existing foreground cohort only for
+     * a hosted multi-voter leader; preserve files, repair, solo and forwarding
+     * policy. A role change after this snapshot fails normally, never lends
+     * another entry's verdict or advertises an unflushed append. */
+    if (h->s && h->s->storage_engine && !h->s->repair_experiment) {
+        pthread_mutex_lock(&h->mu);
+        r = group_raft(h, group);
+        uint32_t voters = r ? efs_raft_voters(r) : 0;
+        int local_multi = r && efs_raft_role(r) == EFS_RAFT_LEADER &&
+                          voters && (voters & (voters-1));
+        pthread_mutex_unlock(&h->mu);
+        if (local_multi) {
+            rc = host_propose_impl(h, group, cmd, clen, &idx, &term, NULL, 1);
+            if (rc != EFS_OK) return rc;
+            return verdict ? host_wait_verdict(h, group, idx, term, NULL) :
+                             host_wait_settled(h, group, idx, term, NULL);
+        }
+    }
 
     pthread_mutex_lock(&h->mu);
     r = group_raft(h, group);
@@ -8647,6 +9003,48 @@ static void host_gc_record(struct efs_raft_host *h, struct efs_export *ex,
     }
 }
 
+/* A bounded page of independent durable fragment deletes. Each record owns
+ * its ACK buffer; metadata remains on the caller after every helper joins.
+ * The export and scan are pinned for that whole lifetime. Files and repair
+ * retain the serial path; failed deletes never gain an acknowledgement. */
+#define HOST_GC_RECORD_BATCH 32
+struct host_gc_record_batch {
+    struct efs_raft_host *h;
+    struct efs_export *ex;
+    struct gc_scan_ctx *scan;
+    int first, count;
+    unsigned next;
+    struct efs_gc_ack_item acks[HOST_GC_RECORD_BATCH][EFS_NUM_FRAGMENTS];
+    int nack[HOST_GC_RECORD_BATCH];
+};
+static void *host_gc_record_worker(void *arg)
+{
+    struct host_gc_record_batch *b=arg;
+    for(;;){
+        unsigned i=__atomic_fetch_add(&b->next,1,__ATOMIC_RELAXED);
+        if(i>=(unsigned)b->count)break;
+        if(!__atomic_load_n(&b->h->gc_running,__ATOMIC_ACQUIRE) ||
+           !__atomic_load_n(&b->h->running,__ATOMIC_ACQUIRE))continue;
+        int record=b->first+(int)i;
+        host_gc_record(b->h,b->ex,b->scan->keys[record],b->scan->vals[record],
+                       b->acks[i],&b->nack[i]);
+    }
+    return NULL;
+}
+static void host_gc_records_join(struct host_gc_record_batch *b)
+{
+    pthread_t workers[3];int n=0;
+    if(b->count<=0 || b->count>HOST_GC_RECORD_BATCH ||
+       !__atomic_load_n(&b->h->gc_running,__ATOMIC_ACQUIRE) ||
+       !__atomic_load_n(&b->h->running,__ATOMIC_ACQUIRE))return;
+    while(n<3 && n+1<b->count){
+        if(pthread_create(&workers[n],NULL,host_gc_record_worker,b))break;
+        n++;
+    }
+    host_gc_record_worker(b);
+    for(int i=0;i<n;i++)pthread_join(workers[i],NULL);
+}
+
 /* REAP pass over one group's anchor shard: sweep every active lane of
  * each dead inode, then finish the reap on the inode's group. A failed
  * proposal skips the marker — the next pass re-drives it. */
@@ -8675,6 +9073,90 @@ static int host_gc_metadata_waiting(struct efs_raft_host *h)
     return !pressured;
 }
 
+/* A partial reap retries all originally active lanes. Containers need no
+ * new durable no-op to clear a lane already absent under a fresh group
+ * proof. The unfenced key check is only a scheduling hint; both absence
+ * and an empty source prefix are rechecked after request-local ReadIndex.
+ * Physical inode fencing and final REAP retirement remain mandatory. */
+static int host_container_gc_lane_empty(struct efs_raft_host *h,efs_ino_t ino,
+                                       uint64_t gen,uint8_t lane,uint8_t *covered)
+{
+    uint8_t key[EFS_KV_KEY_MAX],value[1];uint32_t kl,vl=sizeof(value);
+    uint8_t group=efs_raft_shard_group(efs_kv_lane_shard(ino,lane));
+    if(!h->s->storage_engine || !host_hosts(h,group) ||
+       efs_kv_key_lane(efs_kv_lane_shard(ino,lane),ino,gen,lane,key,&kl)!=EFS_OK ||
+       efs_kv_get(h->kv,key,kl,value,&vl)!=EFS_ERR_NOT_FOUND)return 0;
+    if(!(*covered&(1u<<group))){
+        int hint=-1;
+        if(host_read_index(h,group,&hint)!=EFS_OK)return 0;
+        *covered|=(uint8_t)(1u<<group);
+    }
+    vl=sizeof(value);
+    if(efs_kv_get(h->kv,key,kl,value,&vl)!=EFS_ERR_NOT_FOUND)return 0;
+    uint32_t indices[EFS_META_SWEEP_BATCH_MAX],n;
+    return efs_meta_lane_sweep_select(h->kv,ino,gen,lane,indices,&n)==EFS_OK && !n;
+}
+
+static void host_gc_reap_finish(struct efs_raft_host *h,efs_ino_t ino,uint64_t gen,
+                                uint64_t lanes,struct reap_times *times)
+{
+    uint8_t cmd[18 + 32 * EFS_META_REAP_BATCH_MAX];
+    int drc;uint64_t started;
+    struct efs_meta_reap_key keys[EFS_META_REAP_BATCH_MAX]; uint32_t count;
+    drc=efs_meta_reap_select(h->kv,ino,gen,keys,&count);
+    if (drc != EFS_OK) return;
+    cmd[0] = EFS_MD_CMD_REAP_BATCH;
+    wr64be(cmd + 1, ino);
+    wr64be(cmd + 9, gen);
+    cmd[17]=(uint8_t)count;
+    for (uint32_t j=0; j<count; j++) {
+        cmd[18+32*j]=keys[j].len;
+        memcpy(cmd+19+32*j,keys[j].key,EFS_META_REAP_KEY_MAX);
+    }
+    started = now_us_();
+    drc = host_gc_propose(h,
+                          efs_raft_shard_group(efs_kv_inode_shard(ino)),
+                          cmd, 18+32*count);
+    times->done += now_us_() - started;
+    if (env_on("EFS_GC_DBG"))
+        fprintf(stderr, "raft-host: gc reap ino=%llu lanes=%llx sweep ok, reap_done rc=%d\n",
+                (unsigned long long)ino,
+                (unsigned long long)lanes, drc);
+}
+
+/* At most four independent physical inode fences; no metadata work runs
+ * in helpers. Caller joins every helper before retiring any REAP marker or
+ * returning its stack/host. Creation failure reduces concurrency only. */
+struct host_gc_fence_batch {
+    struct efs_raft_host *h;
+    const struct reap_scan_ctx *scan;
+    const unsigned char *ready;
+    int *result;
+    unsigned next;
+};
+static void *host_gc_fence_worker(void *arg)
+{
+    struct host_gc_fence_batch *b=arg;
+    for(;;){
+        unsigned i=__atomic_fetch_add(&b->next,1,__ATOMIC_RELAXED);
+        if(i>=(unsigned)b->scan->n)break;
+        if(!b->ready[i] || !__atomic_load_n(&b->h->gc_running,__ATOMIC_ACQUIRE) || !__atomic_load_n(&b->h->running,__ATOMIC_ACQUIRE))continue;
+        b->result[i]=host_gc_inode_nodes(b->h,b->scan->ino[i],b->scan->gen[i]);
+    }
+    return NULL;
+}
+static void host_gc_container_fences(struct efs_raft_host *h,
+        const struct reap_scan_ctx *scan,const unsigned char *ready,int *result)
+{
+    struct host_gc_fence_batch b={.h=h,.scan=scan,.ready=ready,.result=result};
+    pthread_t workers[3];unsigned n=0,count=0;
+    for(int i=0;i<scan->n;i++){result[i]=EFS_ERR_BUSY;count+=!!ready[i];}
+    if(!count || !h->gc_running || !h->running)return;
+    while(n<3 && n+1<count){if(pthread_create(&workers[n],NULL,host_gc_fence_worker,&b))break;n++;}
+    host_gc_fence_worker(&b);
+    for(unsigned i=0;i<n;i++)pthread_join(workers[i],NULL);
+}
+
 static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
                               uint32_t anchor, struct reap_times *times)
 {
@@ -8683,6 +9165,9 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
     uint32_t plen = 0;
     int i, lane;
 
+    unsigned char ready[REAP_SCAN_MAX]={0};
+    int results[REAP_SCAN_MAX];
+    int parallel=h->s->storage_engine && !h->s->repair_experiment;
     int prc, src;
     uint64_t started = now_us_();
 
@@ -8727,7 +9212,8 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
         h->reap_cursor_len[gi]=REAP_KEY_LEN;
         uint8_t cmd[18 + 32 * EFS_META_REAP_BATCH_MAX];
         int lanes_ok = 1;
-        int lrc = 0, drc = 0;
+        int lrc = 0;
+        uint8_t empty_covered=0; /* This inode reap attempt only. */
 
         started = now_us_();
         for (lane = 0; lane < EFS_META_LANES; lane++) {
@@ -8747,6 +9233,7 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
             cmd[17] = (uint8_t)lane;
             if (host_hosts(h,efs_raft_shard_group(lshard))) {
                 uint32_t indices[EFS_META_SWEEP_BATCH_MAX], n;
+                if(host_container_gc_lane_empty(h,c.ino[i],c.gen[i],(uint8_t)lane,&empty_covered))continue;
                 lrc=efs_meta_lane_sweep_select(h->kv,c.ino[i],c.gen[i],(uint8_t)lane,indices,&n);
                 if (lrc != EFS_OK) { lanes_ok=0; break; }
                 cmd[0] = EFS_MD_CMD_LANE_SWEEP_BATCH;
@@ -8777,6 +9264,8 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
                         (unsigned long long)c.ino[i], lrc);
             continue;
         }
+        ready[i]=1;
+        if(parallel)continue;
         /* Include losing/never-published PUT objects. Namespace deletion
          * alone is insufficient evidence of physical reclamation. */
         started = now_us_();
@@ -8784,28 +9273,19 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
         times->fence += now_us_() - started;
         if (frc != EFS_OK)
             continue;
-        struct efs_meta_reap_key keys[EFS_META_REAP_BATCH_MAX]; uint32_t count;
-        drc=efs_meta_reap_select(h->kv,c.ino[i],c.gen[i],keys,&count);
-        if (drc != EFS_OK) continue;
-        cmd[0] = EFS_MD_CMD_REAP_BATCH;
-        wr64be(cmd + 1, c.ino[i]);
-        wr64be(cmd + 9, c.gen[i]);
-        cmd[17]=(uint8_t)count;
-        for (uint32_t j=0; j<count; j++) {
-            cmd[18+32*j]=keys[j].len;
-            memcpy(cmd+19+32*j,keys[j].key,EFS_META_REAP_KEY_MAX);
-        }
-        started = now_us_();
-        drc = host_gc_propose(h,
-                              efs_raft_shard_group(efs_kv_inode_shard(c.ino[i])),
-                              cmd, 18+32*count);
-        times->done += now_us_() - started;
-        if (env_on("EFS_GC_DBG"))
-            fprintf(stderr, "raft-host: gc reap ino=%llu lanes=%llx sweep ok, reap_done rc=%d\n",
-                    (unsigned long long)c.ino[i],
-                    (unsigned long long)c.lanes[i], drc);
+        host_gc_reap_finish(h,c.ino[i],c.gen[i],c.lanes[i],times);
+
+    }
+    if(parallel){
+        started=now_us_();
+        host_gc_container_fences(h,&c,ready,results);
+        times->fence+=now_us_()-started;
+        for(i=0;i<c.n && h->gc_running && h->running;i++)
+            if(ready[i] && results[i]==EFS_OK)
+                host_gc_reap_finish(h,c.ino[i],c.gen[i],c.lanes[i],times);
     }
 }
+
 
 /* GC pass over one group's anchor shard: delete fragments for each dead
  * chunk generation, then batch the acks into one GC_ACK entry. */
@@ -8931,6 +9411,24 @@ static int host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
             __atomic_fetch_add(&h->s->gc_missing_exports, 1, __ATOMIC_RELAXED);
             break;
         }
+        if(h->s->storage_engine && !h->s->repair_experiment){
+            for(int first=0;first<c.n && h->gc_running && h->running;
+                first+=HOST_GC_RECORD_BATCH){
+                struct host_gc_record_batch batch={.h=h,.ex=ex,.scan=&c,.first=first,
+                    .count=c.n-first<HOST_GC_RECORD_BATCH?c.n-first:HOST_GC_RECORD_BATCH};
+                host_gc_records_join(&batch);
+                for(int record=0;record<batch.count;record++){
+                    /* Keep one record's fragments in one replicated ACK. */
+                    if(nack+EFS_NUM_FRAGMENTS>GC_ACK_MAX){
+                        if(host_gc_ack_flush(h,group,acks,&nack)!=EFS_OK)goto out;
+                        ack_progress=1;
+                    }
+                    memcpy(acks+nack,batch.acks[record],
+                           (size_t)batch.nack[record]*sizeof(acks[0]));
+                    nack+=batch.nack[record];recs++;
+                }
+            }
+        } else {
         for (i = 0; i < c.n && __atomic_load_n(&h->gc_running,__ATOMIC_ACQUIRE) && h->running; i++) {
             /* Physical deletes may each wait for directory durability. Bound
              * the pass between records, not only after an entire scan page.
@@ -8947,8 +9445,6 @@ static int host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
                     goto out;
                 ack_progress = 1;
             }
-            host_gc_record(h, ex, c.keys[i], c.vals[i], acks, &nack);
-            recs++;
         }
         /* Unattempted records must remain ahead of the cursor. Failed
          * attempts stay in the ledger and are retried on the normal wrap. */
@@ -10476,6 +10972,7 @@ int server_raft_host_start(struct efsd_server *s)
         for (i = 0; i < EFS_RAFT_MAX_PEERS; i++) {
             h->tx[i].h = h;
             h->tx[i].peer = i;
+            h->tx[i].preserve_read = s->storage_engine;
             h->tx[i].flow.sequence=(unsigned)i+1;
             pthread_cond_init(&h->tx[i].cv, &attr);
         }
@@ -10514,6 +11011,8 @@ int server_raft_host_start(struct efsd_server *s)
             free(h);
             return EFS_ERR_IO;
         }
+        if(s->storage_engine)
+            (void)efs_kv_lsm_defer_held_flush(h->kv,1);
         h->disk = efs_raft_disk_open(logdir, EFS_RAFT_DISK_SYNC);
         if (!h->disk) {
             fprintf(stderr, "raft-host: raft_disk_open %s failed\n", logdir);
@@ -10714,9 +11213,11 @@ void server_raft_host_stop(void)
 /* The pump's off-lock durability tail need not park a fresh quorum ACK.
  * Try the existing mutex only. With pending inbox work, replies may note
  * current-term read quorum but MUST still enter normal recv for ordered
- * replication bookkeeping. Requests may grant only the same strict heartbeat
- * vote; with queued work they also stay on normal recv. No commit,
- * apply, storage promise or membership change occurs on this path. */
+ * replication bookkeeping. Container fresh-context requests may note a
+ * heartbeat vote while work is pending. Only fully accounted prefix-zero
+ * read-only requests can then be consumed; progress stays on ordered recv.
+ * The core requires a known current-term leader and matching durable prefix;
+ * no commit, apply, storage promise or membership change occurs here. */
 static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n)
 {
     struct efs_raft_msg msg;
@@ -10729,20 +11230,28 @@ static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n
     pthread_mutex_lock(&h->inbox_mu);
     int pending=h->inbox_n;
     pthread_mutex_unlock(&h->inbox_mu);
+    int container_probe=h->s && h->s->storage_engine &&
+        msg.type==EFS_RAFT_MSG_AE_REQ && msg.last_log_index;
     {
-        /* A matched stable-leader probe can grant a heartbeat vote without
-         * touching queued log/apply state. The Raft core checks boot, term,
-         * membership, persisted prefix and deferred durability. Pending
-         * work retains requests for normal ordered receive below; only the
-         * read vote may precede unrelated inbox work. */
         struct efs_raft *r=group_raft(h,msg.group);
         handled=efs_raft_read_control(r,&msg);
         /* A pure read vote does not reorder commit/apply or replication.
          * Queued higher-term/config frames have made no durable promise yet;
          * the core's current boot/term/config and own apply checks still rule.
-         * Pending requests remain ordered; fully accounted replies carry
-         * no commit/apply or replication progress to reorder. */
-        if(pending && handled==1 && msg.type==EFS_RAFT_MSG_AE_REQ)handled=2;
+         * Pending work retains ordinary/progress-bearing frames and replies.
+         * The exact fully accounted read-only request below owes no receive
+         * bookkeeping beyond its already sent vote. */
+        /* A successful fully accounted prefix-zero read-only request has
+         * no replication/commit/apply work left for FIFO receive. Keeping it
+         * there repeats the already sent vote and occupies inbox credits.
+         * Every progress-bearing request and every result2 remains ordered. */
+        int pure_probe=container_probe && msg.vote_granted==1 && !msg.success &&
+            !msg.prev_index && !msg.prev_term && !msg.leader_commit &&
+            !msg.match_index && !msg.last_log_term && !msg.nentries;
+        if(pending && handled==1 && msg.type==EFS_RAFT_MSG_AE_REQ && !pure_probe)handled=2;
+        if(handled && h->s && h->s->storage_engine && BO_ON() &&
+           outbox_pure_read_control(p,n))
+            BO_COUNT(msg.type==EFS_RAFT_MSG_AE_REQ ? BO_READ_REQ_INLINE : BO_READ_REPLY_INLINE);
         if (handled && msg.type==EFS_RAFT_MSG_AE_REQ) BO_COUNT(BO_READ_CONTROL_REQUEST);
         if (handled && msg.type==EFS_RAFT_MSG_AE_REP) BO_COUNT(BO_READ_CONTROL_REPLY);
         if (handled && msg.type==EFS_RAFT_MSG_AE_REP) {
@@ -10752,6 +11261,32 @@ static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n
     }
     pthread_mutex_unlock(&h->mu);
     return handled==1;
+}
+
+/* Candidate container optimization, opt-in until loaded qualification.
+ * Only an identical queued read-only frame can be folded; do not substitute
+ * a newer read context or cross an ordinary/progress/configuration frame.
+ * The newest arrival stays at the tail, so every retained frame keeps order.
+ * Flow admission owns durability credits and is deliberately excluded. */
+static int host_inbox_duplicate_read(struct efs_raft_host *h,
+                                      const uint8_t *payload, uint32_t plen)
+{
+    if (!h->s || !h->s->storage_engine || h->flow_enabled ||
+        !env_on("EFS_CONTAINER_INBOX_FOLD") ||
+        !outbox_pure_read_control(payload, plen))
+        return -1;
+    for (int i = h->inbox_n - 1; i >= 0; --i) {
+        struct host_inbox_item *item = &h->inbox[i];
+        if (!outbox_pure_read_control(item->buf, item->len))
+            break;
+        if (!memcmp(item->buf, payload, plen))
+            return i;
+        /* A different context, peer, boot or term in this group is also
+         * a fence; do not fold around a possible role/liveness transition. */
+        if (item->buf[1] == payload[1])
+            break;
+    }
+    return -1;
 }
 
 int server_raft_host_inbox(const uint8_t *payload, uint32_t plen,
@@ -10793,14 +11328,25 @@ int server_raft_host_inbox(const uint8_t *payload, uint32_t plen,
             h->inbox_work_n>=HOST_INBOX_MAX || plen>HOST_INBOX_BYTES-h->inbox_work_bytes)
             goto busy;
     }
-    if (h->inbox_n>=HOST_INBOX_MAX || plen>HOST_INBOX_BYTES-h->inbox_bytes) goto busy;
+    int duplicate=host_inbox_duplicate_read(h,payload,plen);
+    if (duplicate<0 && (h->inbox_n>=HOST_INBOX_MAX ||
+                        plen>HOST_INBOX_BYTES-h->inbox_bytes)) goto busy;
     copy = malloc(plen);
     if (!copy) { pthread_mutex_unlock(&h->inbox_mu); return EFS_ERR_NOMEM; }
     memcpy(copy,payload,plen);
+    if (duplicate>=0) {
+        BO_COUNT(BO_INBOX_READ_DUPLICATE);
+        free(h->inbox[duplicate].buf);
+        h->inbox_bytes-=h->inbox[duplicate].len;
+        memmove(h->inbox+duplicate,h->inbox+duplicate+1,
+                (size_t)(h->inbox_n-duplicate-1)*sizeof(h->inbox[0]));
+        h->inbox_n--;
+    }
     h->inbox_bytes+=plen;
     if (h->inbox_bytes>h->inbox_bytes_hi) h->inbox_bytes_hi=h->inbox_bytes;
     h->inbox[h->inbox_n].buf=copy; h->inbox[h->inbox_n].len=plen;
     h->inbox[h->inbox_n].queued_us=BO_ON() ? efs_batch_obs_now_us() : 0;
+    h->inbox[h->inbox_n].read_noted=0;
     h->inbox_n++;
     if (h->flow_enabled) {
         h->inbox_work_n++; h->inbox_work_bytes+=plen;
@@ -11723,6 +12269,16 @@ int server_raft_host_active(void)
     return h && h->running;
 }
 
+/* Container qualification keeps fresh metadata proofs on a known dual-group
+ * leader when available. A follower would otherwise proxy each component's
+ * proof before serving LOOKUP/GETATTR. This is routing only: the recipient
+ * still admits a new ReadIndex and rechecks all inode/dentry/lane authority. */
+static int host_namespace_leader_hint(struct efs_raft_host *,uint8_t);
+static int host_container_read_leader_hint(struct efs_raft_host *h,uint8_t group)
+{
+    return h->s && h->s->storage_engine ? host_namespace_leader_hint(h,group) : -1;
+}
+
 void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out)
 {
     struct efs_raft_host *h = g_host;
@@ -11746,6 +12302,8 @@ void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out)
 
     {
         uint8_t ig = efs_raft_shard_group(efs_kv_inode_shard(ino));
+        hint=host_container_read_leader_hint(h,ig);
+        if(hint>=0){set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;}
         if (!host_hosts(h, ig)) {
             if (prof)
                 __atomic_fetch_add(&g_read_prof.ga_fwd, 1, __ATOMIC_RELAXED);
@@ -12206,6 +12764,10 @@ void server_raft_host_flock(efs_ino_t ino, uint32_t op, uint64_t owner,
         (op & EFS_FLOCK_WAIT))
         rc = host_lock_wait(h, ig, &req, &hint);
     set_inode_rc(out, rc, hint);
+    /* A fresh authority/proposal refusal is not a competing lock. Keep
+     * real AGAIN conflicts immediate, including nonblocking grants. */
+    if (rc == EFS_ERR_BUSY && h->s && h->s->storage_engine)
+        out->status = EFS_INODE_RPC_ADMISSION_BUSY;
     if (is_getlk && rc == EFS_OK) {
         out->inode.nlink = hit.type;
         out->inode.size = hit.start;
@@ -12259,6 +12821,8 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
 
     psh = efs_kv_inode_shard(parent);
     pg = efs_raft_shard_group(psh);
+    hint=host_container_read_leader_hint(h,pg);
+    if(hint>=0){set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;}
     if (!host_hosts(h, pg)) {
         uint8_t need[2];
         need[0] = pg;
@@ -18809,6 +19373,8 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
         p++;
     {
         uint8_t sg = efs_raft_shard_group(efs_kv_inode_shard(cur));
+        hint=host_container_read_leader_hint(h,sg);
+        if(hint>=0){set_inode_rc((struct efs_msg_inode_reply *)out,EFS_ERR_NOT_PRIMARY,hint);return;}
         if (!host_hosts(h, sg)) {
             uint8_t need[2];
             need[0] = EFS_RAFT_GROUP_SHARD;

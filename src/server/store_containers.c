@@ -19,8 +19,12 @@
 #define BLOCKS (SEG_BYTES/PAGE)
 #define MAX_SEGS 1024u
 #define CACHED_SEGS 8u
+#define DURABLE_DIRS 128u
 struct target {
-    pthread_mutex_t mu;
+    pthread_mutex_t mu, durable_mu;
+    struct { int fd; dev_t dev; ino_t ino; uint64_t touched; } durable[DURABLE_DIRS];
+    uint64_t durable_clock;
+    unsigned durable_slots;
     char root[4096], dir[8192];
     int lockfd, rootfd, failed;
     int direct_io, data_fds[CACHED_SEGS];
@@ -62,9 +66,45 @@ static int barrier(int fd){
     while(r&&errno==EINTR);
     return r?EFS_ERR_IO:EFS_OK;
 }
-/* Startup makes the root path durable. Runtime publication must sync every
- * directory below it and the root itself, but never unrelated ancestors. */
-static int parents_at(const char *path, struct target *t)
+/* A pinned directory descriptor prevents inode-number reuse from turning a
+ * cache hit into a durability guess. Entries are admitted only after the full
+ * ancestry barrier succeeds. GC may remove directories: a newly created one
+ * cannot match the pinned, unlinked inode. Capacity pressure evicts a hint. */
+static int durable_known(struct target *t, const struct stat *st)
+{
+    int known=0;
+    pthread_mutex_lock(&t->durable_mu);
+    for(unsigned i=0;i<t->durable_slots;i++)if(t->durable[i].fd>=0 &&
+        t->durable[i].dev==st->st_dev && t->durable[i].ino==st->st_ino){
+        t->durable[i].touched=++t->durable_clock;known=1;break;
+    }
+    pthread_mutex_unlock(&t->durable_mu);
+    return known;
+}
+static void durable_remember(struct target *t,int fd,const struct stat *st)
+{
+    unsigned slot=0;int dispose=-1;
+    pthread_mutex_lock(&t->durable_mu);
+    for(unsigned i=0;i<t->durable_slots;i++){
+        if(t->durable[i].fd>=0 && t->durable[i].dev==st->st_dev &&
+           t->durable[i].ino==st->st_ino){
+            t->durable[i].touched=++t->durable_clock;dispose=fd;goto done;
+        }
+        if(t->durable[i].fd<0){slot=i;break;}
+        if(t->durable[i].touched<t->durable[slot].touched)slot=i;
+    }
+    dispose=t->durable[slot].fd;
+    t->durable[slot].fd=fd;t->durable[slot].dev=st->st_dev;
+    t->durable[slot].ino=st->st_ino;t->durable[slot].touched=++t->durable_clock;
+done:
+    pthread_mutex_unlock(&t->durable_mu);
+    if(dispose>=0)close(dispose);
+}
+/* Startup seals the root path. Runtime publication syncs the changed
+ * namespace and any unknown ancestry to a pinned durability boundary or the
+ * root itself, never unrelated ancestors. */
+static int parents_at_sync(const char *path, struct target *t,
+                           int (*sync)(void *,int),void *context)
 {
     const char *root=t?t->root:NULL;
     if (root && strcmp(root, "/") &&
@@ -77,26 +117,50 @@ static int parents_at(const char *path, struct target *t)
     if(!slash)return EFS_ERR_IO;
     if(slash==p)slash[1]=0;
     else *slash=0;
+    int retained[16];unsigned retained_n=0;
+    struct stat retained_st[16];
     for(;;){
         int is_root=t && !strcmp(p,t->root);
         int fd=is_root?t->rootfd:t?openat(t->rootfd,p+strlen(t->root)+1,O_RDONLY|O_DIRECTORY|O_CLOEXEC):open(p,O_RDONLY|O_DIRECTORY|O_CLOEXEC);
-        int rc=EFS_OK;
+        int rc=EFS_OK, known=0;
         if(fd<0){
-            if(errno!=ENOENT)return EFS_ERR_IO;
+            if(errno!=ENOENT){rc=EFS_ERR_IO;goto failed;}
         }
         else{
-            rc=barrier(fd);
+            struct stat st;
+            if(t && !is_root){
+                if(fstat(fd,&st)){close(fd);rc=EFS_ERR_IO;goto failed;}
+                known=durable_known(t,&st);
+                if(!known && retained_n<16){
+                    int pin=fcntl(fd,F_DUPFD_CLOEXEC,0);
+                    if(pin>=0){retained[retained_n]=pin;retained_st[retained_n++]=st;}
+                }
+            }
+            /* A hit elides only unchanged ancestry. The namespace operation's
+             * containing directory still needs a fresh barrier on EVERY call. */
+            rc=sync?sync(context,fd):barrier(fd);
             if(!is_root && close(fd))rc=EFS_ERR_IO;
-            if(rc)return rc;
+            if(rc)goto failed;
         }
-        if(!strcmp(p,"/") || (root && !strcmp(p,root)))break;
+        if(known || !strcmp(p,"/") || (root && !strcmp(p,root)))break;
         slash=strrchr(p,'/');
-        if(!slash)return EFS_ERR_IO;
+        if(!slash){rc=EFS_ERR_IO;goto failed;}
         if(slash==p)slash[1]=0;
         else *slash=0;
+        continue;
+failed:
+        for(unsigned i=0;i<retained_n;i++)close(retained[i]);
+        return rc;
     }
+    /* Remember every successfully sealed ancestor, not just the temporary
+     * per-inode leaf: sibling publication/deletion can reuse shared ancestry.
+     * The fixed LRU descriptor budget preserves hot shared parents despite
+     * inode-number/hash collisions; no failed barrier admits any entry. */
+    for(unsigned i=retained_n;i>0;i--)durable_remember(t,retained[i-1],&retained_st[i-1]);
     return EFS_OK;
 }
+static int parents_at(const char *path,struct target *t)
+{ return parents_at_sync(path,t,NULL,NULL); }
 static int parents(const char *path) { return parents_at(path, NULL); }
 static int mkdirs(const char *path)
 {
@@ -194,6 +258,21 @@ static struct target *target_at(struct efsd_server *s,const char *path)
     }
     return NULL;
 }
+/* Container deployments share the same durable physical hierarchy for their
+ * buffered metadata fragments. Files deployments retain their existing path. */
+int server_container_sync_parents(struct efsd_server *s,const char *path)
+{
+    struct target *t=target_at(s,path);
+    return t?parents_at(path,t):EFS_ERR_IO;
+}
+/* GC uses the same ancestry proof while retaining syscall accounting and
+ * failure propagation through its own directory barrier. */
+int server_container_sync_parents_with(struct efsd_server *s,const char *path,
+                                      int (*sync)(void *,int),void *context)
+{
+    struct target *t=target_at(s,path);
+    return t?parents_at_sync(path,t,sync,context):EFS_ERR_IO;
+}
 static void segpath(struct target *t,unsigned seg,char path[8192]){
     snprintf(path,8192,"%s/%016x.dat",t->dir,seg);
 }
@@ -243,7 +322,7 @@ static int decode(const char *path,struct target *t,struct mapping *m)
     }
     return EFS_OK;
 }
-static int mapping_read(const char *path,struct target *t,struct mapping *m)
+static int mapping_read_as(const char *path,const char *identity,struct target *t,struct mapping *m)
 {
     if(t && (strncmp(path,t->root,strlen(t->root)) || path[strlen(t->root)]!='/'))return EFS_ERR_IO;
     int fd=t?openat(t->rootfd,path+strlen(t->root)+1,O_RDONLY|O_NOFOLLOW|O_CLOEXEC):open(path,O_RDONLY|O_NOFOLLOW|O_CLOEXEC);
@@ -251,7 +330,11 @@ static int mapping_read(const char *path,struct target *t,struct mapping *m)
     struct stat st;
     int rc=fstat(fd,&st)||!S_ISREG(st.st_mode)||st.st_size!=PAGE?EFS_ERR_IO:full_io(fd,m->page,PAGE,0,0);
     if(close(fd))rc=EFS_ERR_IO;
-    return rc?rc:decode(path,t,m);
+    return rc?rc:decode(identity,t,m);
+}
+static int mapping_read(const char *path,struct target *t,struct mapping *m)
+{
+    return mapping_read_as(path,path,t,m);
 }
 int server_container_payload(const char *path,uint64_t *len)
 {
@@ -283,7 +366,7 @@ static int segment_create(struct target *t,unsigned seg)
     if(close(fd))rc=EFS_ERR_IO;
     if(!rc&&link(tmp,path))rc=EFS_ERR_IO;
     unlink(tmp);
-    if(!rc)rc=parents(path);
+    if(!rc)rc=parents_at(path,t);
     if(!rc){
         t->bits[seg]=calloc(1,BLOCKS/8);
         if(!t->bits[seg])rc=EFS_ERR_NOMEM;
@@ -461,6 +544,86 @@ int server_container_delete(struct efsd_server *s,const char *path,const uint8_t
     * because the caller holds the fragment/inode lifetime lock. */
     return release_extent(t,&m);
 }
+/* Only the durably dead inode's exclusive lifetime guard permits this batch.
+ * A retirement name preserves the checksummed mapping through punch/sync
+ * failure. Startup already discards non-authoritative .tmp. names before
+ * reconstructing allocations; an in-process retry decodes the original name.
+ * No extent is reusable until names and every touched segment are durable. */
+int server_container_gc_directory(struct efsd_server *s,const char *path,
+                                 unsigned *left,uint64_t *count,
+                                 uint64_t *payload,uint64_t *bytes)
+{
+    struct retirement { char original[8192], pending[8192]; struct mapping map; int staged; };
+    *count=*payload=*bytes=0;
+    struct target *t=target_at(s,path);
+    if(!t || !left)return EFS_ERR_IO;
+    if(!*left)return EFS_ERR_BUSY;
+    DIR *dir=opendir(path);
+    if(!dir)return errno==ENOENT?parents_at(path,t):EFS_ERR_IO;
+    unsigned cap=*left,n=0;
+    struct retirement *items=calloc(cap,sizeof(*items));
+    if(!items){closedir(dir);return EFS_ERR_NOMEM;}
+    int rc=EFS_OK,more=0;
+    for(;;){
+        errno=0;struct dirent *de=readdir(dir);
+        if(!de){if(errno)rc=EFS_ERR_IO;break;}
+        if(!strcmp(de->d_name,".") || !strcmp(de->d_name,".."))continue;
+        if(n==cap){more=1;break;}
+        struct retirement *r=&items[n];
+        if(snprintf(r->original,sizeof(r->original),"%s/%s",path,de->d_name)>=(int)sizeof(r->original)){rc=EFS_ERR_IO;break;}
+        size_t len=strlen(r->original);
+        r->staged=len>=7 && !strcmp(r->original+len-7,".tmp.gc");
+        if(r->staged){
+            strcpy(r->pending,r->original);r->original[len-7]=0;
+            struct stat st;
+            if(!lstat(r->original,&st) || errno!=ENOENT){rc=EFS_ERR_IO;break;}
+        }else if(snprintf(r->pending,sizeof(r->pending),"%s.tmp.gc",r->original)>=(int)sizeof(r->pending)){rc=EFS_ERR_IO;break;}
+        rc=mapping_read_as(r->staged?r->pending:r->original,r->original,t,&r->map);
+        if(rc)break;
+        n++;
+    }
+    if(closedir(dir))rc=EFS_ERR_IO;
+    if(rc)goto done;
+    /* Snapshot first: renames during readdir could otherwise visit a mapping
+     * twice, incorrectly retiring/counting the same range twice. */
+    for(unsigned i=0;i<n;i++)if(!items[i].staged){
+        const char *from=items[i].original+strlen(t->root)+1;
+        const char *to=items[i].pending+strlen(t->root)+1;
+        if(renameat2(t->rootfd,from,t->rootfd,to,RENAME_NOREPLACE)){rc=EFS_ERR_IO;goto done;}
+    }
+    if(n && (rc=parents_at(items[0].pending,t)))goto done;
+    unsigned char touched[MAX_SEGS]={0};
+    for(unsigned i=0;i<n;i++){
+        struct mapping *m=&items[i].map;int owned,fd=body_open(t,m->seg,&owned);
+        if(fd<0){rc=EFS_ERR_IO;goto done;}
+        int pr=fallocate(fd,FALLOC_FL_PUNCH_HOLE|FALLOC_FL_KEEP_SIZE,(off_t)m->off*PAGE,(off_t)m->span*PAGE);
+        int cr=body_close(fd,owned);
+        if(pr || cr){rc=EFS_ERR_IO;goto done;}
+        touched[m->seg]=1;
+    }
+    for(unsigned seg=0;seg<MAX_SEGS;seg++)if(touched[seg]){
+        int owned,fd=body_open(t,seg,&owned);
+        if(fd<0){rc=EFS_ERR_IO;goto done;}
+        rc=barrier(fd);
+        if(body_close(fd,owned))rc=EFS_ERR_IO;
+        if(rc)goto done;
+    }
+    for(unsigned i=0;i<n;i++)if(unlinkat(t->rootfd,items[i].pending+strlen(t->root)+1,0)){rc=EFS_ERR_IO;goto done;}
+    if(n && (rc=parents_at(items[0].pending,t)))goto done;
+    pthread_mutex_lock(&t->mu);
+    for(unsigned i=0;i<n;i++){
+        struct mapping *m=&items[i].map;
+        mark(t,m->seg,m->off,m->span,0);
+        *payload+=m->len;*bytes+=(uint64_t)m->span*PAGE+PAGE;
+    }
+    pthread_mutex_unlock(&t->mu);
+    *count=n;*left-=n;rc=more?EFS_ERR_BUSY:EFS_OK;
+done:
+    /* Any uncertain retirement retains busy bits; retryable names survive
+     * punch/barrier failures. Failed final unlinks remain quarantined until
+     * startup reconciliation, as with individual retirement failures. */
+    free(items);return rc;
+}
 int server_container_metadata_path(const char *relative)
 {
     if (strncmp(relative, "/data/exports/", 14)) return 0;
@@ -637,6 +800,11 @@ int server_storage_engine_init(struct efsd_server *s)
         t->direct_io=s->direct_io;
         for(unsigned j=0;j<CACHED_SEGS;j++)t->data_fds[j]=-1;
         pthread_mutex_init(&t->mu,NULL);
+        pthread_mutex_init(&t->durable_mu,NULL);
+        /* Bound retained hints across the whole fixed target set, not per
+         * root: normal sockets/metadata still need descriptor headroom. */
+        t->durable_slots=DURABLE_DIRS/s->storage_path_count;
+        for(unsigned j=0;j<DURABLE_DIRS;j++)t->durable[j].fd=-1;
         if (!realpath(s->storage_paths[i], t->root)) goto fail;
         if (strlen(t->root) >= sizeof(s->storage_paths[i])) goto fail;
         strcpy(s->storage_paths[i], t->root);
@@ -694,6 +862,8 @@ void server_storage_engine_close(struct efsd_server *s)
         if(t->rootfd>=0)close(t->rootfd);
         if(t->lockfd>=0)close(t->lockfd);
         for(unsigned j=0;j<MAX_SEGS;j++)free(t->bits[j]);
+        for(unsigned j=0;j<DURABLE_DIRS;j++)if(t->durable[j].fd>=0)close(t->durable[j].fd);
+        pthread_mutex_destroy(&t->durable_mu);
         pthread_mutex_destroy(&t->mu);
         free(t);
         s->container_targets[i]=NULL;

@@ -87,6 +87,10 @@ int efs_kv_lsm_l0_hot(struct efs_kv *kv);
 /* Nested. Hold: WAL write + memtable apply, no fsync. Release (last nest):
  * one fsync. No-op on a non-LSM store. Raft apply of a batched PUBLISH
  * holds across the entry so 256 pubs share one durable boundary. */
+/* Startup-only opt-in: automatic memtable flush waits for the outer sync
+ * release, after its WAL barrier. The Raft container pump releases off its
+ * mutex. Explicit maintenance flush and ordinary stores retain their policy. */
+int efs_kv_lsm_defer_held_flush(struct efs_kv *kv, int enabled);
 int efs_kv_lsm_sync_hold(struct efs_kv *kv);
 int efs_kv_lsm_sync_release(struct efs_kv *kv);
 /* Detach exactly one outer hold without claiming durability. A successful

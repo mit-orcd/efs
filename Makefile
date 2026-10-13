@@ -224,6 +224,10 @@ test-create-errors: $(LIB)
 	python3 tests/test_open_busy.py
 	python3 tests/test_unlink_verdict.py
 	python3 tests/test_gc_verdict.py
+	python3 tests/test_container_gc_empty_lane.py
+	python3 tests/test_container_gc_fence_batch.py
+	python3 tests/test_container_gc_record_batch.py
+	python3 tests/test_container_inode_guard.py
 	python3 tests/test_put_hint.py
 
 test-fold-observation:
@@ -383,6 +387,9 @@ test: all
 	python3 tests/test_lookup_path_authority.py
 	python3 tests/test_read_control_host.py
 	python3 tests/test_queued_read_control.py
+	python3 tests/test_container_inbox_duplicate.py
+	python3 tests/test_container_ack_window.py
+	python3 tests/test_container_pending_reads.py
 	python3 tests/test_prepare_cohort.py
 	python3 tests/test_append_cohort.py
 	python3 tests/test_atomic_append_host.py
@@ -422,6 +429,8 @@ test: all
 	python3 tests/test_open_retry_lock_budget.py
 	python3 tests/test_write_acceptance_gate.py
 	python3 tests/test_mount_identity_rpc.py
+	python3 tests/test_flock_description_release.py
+	python3 tests/test_readdir_permission_authority.py
 	python3 tests/test_pending_create_command.py
 	python3 tests/test_lock_apply_verdict.py
 	python3 tests/test_applied_cursor.py
@@ -469,6 +478,10 @@ test: all
 	python3 tests/test_metadata_balance.py
 	python3 tests/test_host_pressure.py
 	python3 tests/test_host_outbox.py
+	python3 tests/test_container_read_probe.py
+	python3 tests/test_container_read_admission.py
+	python3 tests/test_container_flush_tail.py
+	python3 tests/test_posix_timeout_zombie.py
 	python3 tests/test_host_flow.py
 	python3 tests/test_raft_slow_sync.py
 	python3 tests/test_host_inbox.py
@@ -575,6 +588,7 @@ test: all
 	python3 tests/test_namespace_fixture.py
 	python3 tests/test_namespace_envelope_fixture.py
 	python3 tests/test_posix_phase_trace.py
+	python3 tests/test_deepsteps_transparent.py
 	python3 tests/test_query_work_trace.py
 	python3 tests/test_gc_fixture_drain.py
 	python3 tests/test_rename_budget.py

@@ -11,9 +11,10 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <time.h>
 static int fault;
 static const char *watched_root;
-static unsigned outside_syncs, root_syncs, mkdir_calls, mapping_reads;
+static unsigned outside_syncs, root_syncs, directory_syncs, body_syncs, mkdir_calls, mapping_reads;
 static ssize_t container_pread(int fd,void *buf,size_t n,off_t off) {
     struct stat st;assert(!fstat(fd,&st));
     if(st.st_size==4096 && n==4096 && off==0)
@@ -21,7 +22,7 @@ static ssize_t container_pread(int fd,void *buf,size_t n,off_t off) {
     return pread(fd,buf,n,off);
 }
 static int container_mkdir(const char *path, mode_t mode) {
-    mkdir_calls++;
+    __atomic_fetch_add(&mkdir_calls,1,__ATOMIC_RELAXED);
     return mkdir(path,mode);
 }
 static int container_sync(int fd)
@@ -30,10 +31,12 @@ static int container_sync(int fd)
     char p[64],name[8192];snprintf(p,sizeof(p),"/proc/self/fd/%d",fd);
     ssize_t n=readlink(p,name,sizeof(name)-1);assert(n>=0);name[n]=0;
     if(watched_root && S_ISDIR(st.st_mode)) {
-        if(!strcmp(name,watched_root))root_syncs++;
-        else if(strncmp(name,watched_root,strlen(watched_root)))outside_syncs++;
+        __atomic_fetch_add(&directory_syncs,1,__ATOMIC_RELAXED);
+        if(!strcmp(name,watched_root))__atomic_fetch_add(&root_syncs,1,__ATOMIC_RELAXED);
+        else if(strncmp(name,watched_root,strlen(watched_root)))__atomic_fetch_add(&outside_syncs,1,__ATOMIC_RELAXED);
     }
     int body=strstr(name,".efs-containers/")&&strstr(name,".dat");
+    if(body)__atomic_fetch_add(&body_syncs,1,__ATOMIC_RELAXED);
     if(fault==1&&body){errno=EIO;return -1;}
     if(fault==2&&S_ISDIR(st.st_mode)){errno=EIO;return -1;}
     int rc=fsync(fd);
@@ -43,7 +46,9 @@ static int container_sync(int fd)
 static int container_punch(int fd,int mode,off_t off,off_t len)
 {
     if(fault==3&&(mode&FALLOC_FL_PUNCH_HOLE)){errno=EIO;return -1;}
-    return fallocate(fd,mode,off,len);
+    int rc=fallocate(fd,mode,off,len);
+    if(!rc && fault==8 && (mode&FALLOC_FL_PUNCH_HOLE))_exit(48);
+    return rc;
 }
 static int container_rename(const char *a,const char *b)
 {
@@ -53,6 +58,20 @@ static int container_renameat(int ad,const char *a,int bd,const char *b)
 {
     int rc=renameat(ad,a,bd,b);if(!rc&&fault==5)_exit(45);return rc;
 }
+static int container_renameat2(int ad,const char *a,int bd,const char *b,unsigned flags)
+{
+    int rc=renameat2(ad,a,bd,b,flags);
+    if(!rc && fault==7)_exit(47);
+    return rc;
+}
+static int container_unlinkat(int fd,const char *path,int flags)
+{
+    int rc=unlinkat(fd,path,flags);
+    if(!rc && fault==9 && strstr(path,".tmp.gc"))_exit(49);
+    return rc;
+}
+#define renameat2 container_renameat2
+#define unlinkat container_unlinkat
 #define pread container_pread
 #define renameat container_renameat
 #define mkdir container_mkdir
@@ -60,6 +79,8 @@ static int container_renameat(int ad,const char *a,int bd,const char *b)
 #define fallocate container_punch
 #define rename container_rename
 #include "../src/server/store_containers.c"
+#undef renameat2
+#undef unlinkat
 #undef pread
 #undef renameat
 #undef mkdir
@@ -67,6 +88,8 @@ static int container_renameat(int ad,const char *a,int bd,const char *b)
 #undef fallocate
 #undef rename
 #include "../src/server/store.c"
+static int test_parent_barrier(void *context,int fd)
+{ (void)context;return container_sync(fd)==0?EFS_OK:EFS_ERR_IO; }
 static struct efsd_server server;
 static struct efs_export ex={.id=1,.chunk_size=EFS_DEFAULT_CHUNK_SIZE};
 static void write_value(efs_ino_t ino,unsigned ci,unsigned char value,int expected)
@@ -81,17 +104,42 @@ static void read_value(efs_ino_t ino,unsigned ci,int expected,int value)
     if(!rc){assert(ok==(efs_ino_is_meta_table(ino)?EFS_STORE_SUM_PRESENT:EFS_STORE_SUM_VERIFIED)&&len==sizeof(data));uint8_t h[32];efs_hash(data,len,h);assert(!memcmp(sum,h,32));
         for(unsigned i=0;i<len;i++)assert(data[i]==(value<0?data[0]:(unsigned)value));}
 }
-static void restart(void){server_storage_engine_close(&server);assert(!server_storage_engine_init(&server));server_init_local_usage(&server);}
+/* A real restart execs a new process and drops thread-local death hints. */
+static void restart(void){__atomic_fetch_add(&inode_gc_epoch,1,__ATOMIC_RELEASE);server_storage_engine_close(&server);assert(!server_storage_engine_init(&server));server_init_local_usage(&server);}
 static void *actor(void *arg)
 {
     efs_tls_chunk_gen=333;efs_tls_write_root=0;
     for(unsigned i=0;i<25;i++){write_value(4242,0,(uintptr_t)arg,EFS_OK);read_value(4242,0,EFS_OK,-1);}return NULL;
 }
+static pthread_mutex_t gc_test_mu=PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t gc_test_cv=PTHREAD_COND_INITIALIZER;
+static unsigned gc_test_arrived;
+static int gc_guard_overlap(void *context,efs_ino_t ino)
+{
+    (void)context;
+    assert(pthread_rwlock_tryrdlock(server_inode_gc_lock(&server,1,ino))!=0);
+    struct timespec end;assert(!clock_gettime(CLOCK_REALTIME,&end));end.tv_sec+=3;
+    pthread_mutex_lock(&gc_test_mu);gc_test_arrived++;
+    if(gc_test_arrived==4)pthread_cond_broadcast(&gc_test_cv);
+    int rc=0;
+    while(gc_test_arrived<4 && !rc)rc=pthread_cond_timedwait(&gc_test_cv,&gc_test_mu,&end);
+    pthread_mutex_unlock(&gc_test_mu);
+    return rc?EFS_ERR_BUSY:EFS_OK;
+}
+static void *gc_guard_actor(void *arg)
+{
+    efs_ino_t ino=((9000+(uintptr_t)arg)<<EFS_KV_SHARD_BITS)|7;
+    assert(!server_gc_inode_checked(&server,1,ino,9,gc_guard_overlap,NULL));
+    return NULL;
+}
 static int remove_owned(const char *p,const struct stat *st,int type,struct FTW *f)
 {(void)st;(void)f;return type==FTW_DP?rmdir(p):unlink(p);}
-int main(void)
+int main(int argc, char **argv)
 {
-    for(int direct=0;direct<=1;direct++) {
+    int first_direct=0;
+    if(argc==2 && !strcmp(argv[1],"--direct-only"))first_direct=1;
+    else if(argc!=1){fprintf(stderr,"usage: %s [--direct-only]\n",argv[0]);return 2;}
+    for(int direct=first_direct;direct<=1;direct++) {
         char base[]="/tmp/efs-containers-XXXXXX";assert(mkdtemp(base));
         memset(&server,0,sizeof(server));server.id=1;server.node_count=1;server.nodes[0].id=1;
         server.storage_engine=1;server.direct_io=direct;server.quota=1ull<<30;server.storage_path_count=2;
@@ -106,12 +154,47 @@ int main(void)
         /* Idempotent same identity is charged once; replacement uses a fresh extent. */
         int cached_fd=((struct target*)server.container_targets[0])->data_fds[0];assert(cached_fd>=0);
         assert(!!(fcntl(cached_fd,F_GETFL)&O_DIRECT)==direct);
-        watched_root=server.storage_paths[0];outside_syncs=root_syncs=mkdir_calls=0;
+        watched_root=server.storage_paths[0];outside_syncs=root_syncs=directory_syncs=mkdir_calls=0;
         write_value(42,0,18,EFS_OK);assert(server.nodes[0].used==EFS_FRAGMENT_SIZE);
-        assert(!outside_syncs && root_syncs && !mkdir_calls);watched_root=NULL;
+        assert(!outside_syncs && !root_syncs && directory_syncs==1 && !mkdir_calls);watched_root=NULL;
         assert(((struct target*)server.container_targets[0])->data_fds[0]==cached_fd);
         /* One validated mapping serves quota admission and old-extent retirement. */
         mapping_reads=0;write_value(42,0,18,EFS_OK);assert(mapping_reads==1);
+        /* A failed ancestry barrier never seeds a hit. A pinned, removed
+         * directory must not match its replacement, even at the same path. */
+        char cache_dir[8192],cache_file[8192];
+        snprintf(cache_dir,sizeof(cache_dir),"%s/cache-proof",server.storage_paths[0]);
+        snprintf(cache_file,sizeof(cache_file),"%s/item",cache_dir);
+        assert(!mkdir(cache_dir,0755));
+        struct target *cache_target=target_at(&server,cache_file);
+        fault=2;assert(parents_at(cache_file,cache_target)==EFS_ERR_IO);fault=0;
+        watched_root=server.storage_paths[0];outside_syncs=root_syncs=directory_syncs=0;
+        assert(!parents_at(cache_file,cache_target));assert(root_syncs==1);
+        root_syncs=directory_syncs=0;
+        assert(!parents_at(cache_file,cache_target));assert(!root_syncs && directory_syncs==1);
+        assert(!rmdir(cache_dir));assert(!mkdir(cache_dir,0755));
+        root_syncs=directory_syncs=0;
+        assert(!parents_at(cache_file,cache_target));assert(root_syncs==1);
+        assert(!rmdir(cache_dir));watched_root=NULL;
+        /* Sealed shared ancestors survive sibling leaf churn. A single-leaf
+         * cache cannot avoid root barriers for a previously unseen sibling. */
+        char sibling_a[8192],sibling_b[8192],hot[8192];
+        snprintf(sibling_a,sizeof(sibling_a),"%s/ancestry-proof/shared/a/b/item",server.storage_paths[0]);
+        snprintf(sibling_b,sizeof(sibling_b),"%s/ancestry-proof/shared/x/y/item",server.storage_paths[0]);
+        assert(!mkdirs(sibling_a));assert(!parents_at(sibling_a,cache_target));
+        assert(!mkdirs(sibling_b));watched_root=server.storage_paths[0];
+        root_syncs=directory_syncs=outside_syncs=0;
+        assert(!parents_at(sibling_b,cache_target));
+        assert(!root_syncs && !outside_syncs && directory_syncs==3);
+        snprintf(hot,sizeof(hot),"%s/ancestry-proof/shared",server.storage_paths[0]);
+        for(unsigned i=0;i<cache_target->durable_slots+20;i++){
+            char noise[8192];snprintf(noise,sizeof(noise),"%s/noise%u/item",hot,i);
+            assert(!mkdirs(noise));root_syncs=directory_syncs=0;
+            assert(!parents_at(noise,cache_target));assert(!root_syncs && directory_syncs==2);
+        }
+        struct stat hot_st;assert(!stat(hot,&hot_st));assert(durable_known(cache_target,&hot_st));
+        unsigned pins=0;for(unsigned i=0;i<DURABLE_DIRS;i++)pins+=cache_target->durable[i].fd>=0;
+        assert(pins<=cache_target->durable_slots);watched_root=NULL;
         /* A nonce collision must fail without altering the existing temp/map. */
         char collision_path[8192],collision_tmp[8192];
         server_fragment_path(&server,&ex,42,0,0,collision_path,sizeof(collision_path));
@@ -157,9 +240,59 @@ int main(void)
         for(unsigned i=0;i<4;i++)assert(!pthread_join(threads[i],NULL));
         efs_tls_chunk_gen=333;read_value(4242,0,EFS_OK,-1);restart();read_value(4242,0,EFS_OK,-1);
         assert(!server_gc_inode(&server,1,4242,9));read_value(4242,0,EFS_ERR_NOT_FOUND,0);write_value(4242,0,60,EFS_ERR_STALE);
+        /* Real same-shard concurrent physical GC retains each exact guard.
+         * A live sibling's bytes survive; dead siblings refuse delayed PUTs. */
+        efs_tls_chunk_gen=555;
+        for(unsigned j=0;j<5;j++)write_value(((9000ull+j)<<EFS_KV_SHARD_BITS)|7,0,70+j,EFS_OK);
+        gc_test_arrived=0;
+        for(uintptr_t j=0;j<4;j++)assert(!pthread_create(&threads[j],NULL,gc_guard_actor,(void*)j));
+        for(unsigned j=0;j<4;j++)assert(!pthread_join(threads[j],NULL));
+        for(unsigned j=0;j<4;j++){
+            efs_ino_t dead=((9000ull+j)<<EFS_KV_SHARD_BITS)|7;
+            read_value(dead,0,EFS_ERR_NOT_FOUND,0);write_value(dead,0,80,EFS_ERR_STALE);
+        }
+        efs_ino_t sibling=(9004ull<<EFS_KV_SHARD_BITS)|7;
+        read_value(sibling,0,EFS_OK,74);assert(!server_gc_inode(&server,1,sibling,9));
+        /* Callback failures cannot seed the shared ancestry proof. */
+        char proof[8192];snprintf(proof,sizeof(proof),"%s/gc-fence-proof/new/page",server.storage_paths[0]);
+        assert(!mkdirs(proof));struct target *proof_target=server.container_targets[0];
+        watched_root=server.storage_paths[0];fault=2;
+        assert(parents_at_sync(proof,proof_target,test_parent_barrier,NULL)==EFS_ERR_IO);
+        fault=0;root_syncs=directory_syncs=0;
+        assert(!parents_at_sync(proof,proof_target,test_parent_barrier,NULL));assert(root_syncs==1);
+        root_syncs=directory_syncs=0;
+        assert(!parents_at_sync(proof,proof_target,test_parent_barrier,NULL));assert(!root_syncs && directory_syncs==1);
+        watched_root=NULL;
+        /* A sealed death-page ancestry needs its containing barrier on retry,
+         * not three independent ancestor barriers; GC accounting remains. */
+        uint64_t fence_barriers=server.gc_io[2].ops;
+        assert(!inode_death_set(&server,1,4242));
+        assert(server.gc_io[2].ops==fence_barriers+1);
         /* Bounded inode orphan cleanup and persistent death fence. */
         efs_tls_chunk_gen=444;for(unsigned ci=0;ci<70;ci++)write_value(777,ci,61,EFS_OK);
+        body_syncs=0;
         int gr;do{gr=server_gc_inode(&server,1,777,9);}while(gr==EFS_ERR_BUSY);assert(gr==EFS_OK);
+        assert(body_syncs==1); /* Seventy punches, one durable segment barrier. */
+        for(int failed=1;failed<=3;failed++){
+            efs_ino_t ino=8000+failed;efs_tls_chunk_gen=555;
+            for(unsigned ci=0;ci<20;ci++)write_value(ino,ci,65,EFS_OK);
+            uint64_t held=server.nodes[0].used;
+            fault=failed;assert(server_gc_inode(&server,1,ino,9)==EFS_ERR_IO);fault=0;
+            assert(server.nodes[0].used==held); /* no physical success charged early */
+            do{gr=server_gc_inode(&server,1,ino,9);}while(gr==EFS_ERR_BUSY);assert(gr==EFS_OK);
+            assert(server.nodes[0].used==held-20*EFS_FRAGMENT_SIZE);
+            write_value(ino,21,66,EFS_ERR_STALE);
+        }
+        for(int stage=7;stage<=9;stage++){
+            efs_ino_t ino=9000+stage;efs_tls_chunk_gen=666;
+            for(unsigned ci=0;ci<20;ci++)write_value(ino,ci,67,EFS_OK);
+            pid_t child=fork();assert(child>=0);
+            if(!child){fault=stage;server_gc_inode(&server,1,ino,9);_exit(1);}
+            int status;assert(waitpid(child,&status,0)==child && WIFEXITED(status) && WEXITSTATUS(status)==40+stage);
+            restart();
+            do{gr=server_gc_inode(&server,1,ino,9);}while(gr==EFS_ERR_BUSY);assert(gr==EFS_OK);
+            read_value(ino,0,EFS_ERR_NOT_FOUND,0);write_value(ino,21,68,EFS_ERR_STALE);
+        }
         restart();write_value(777,71,61,EFS_ERR_STALE);
         /* A large variable fragment and full-segment rollover use another container. */
         struct target *full=server.container_targets[0];
@@ -174,7 +307,12 @@ int main(void)
         assert(!server_delete_fragment_if_sum(&server,&ex,900,0,0,large_sum));free(large);free(large_read);
         /* A segment outside the descriptor cache retains per-operation I/O. */
         full=server.container_targets[0];full->cursor_seg=CACHED_SEGS;full->cursor_block=0;
-        efs_tls_chunk_gen=889;write_value(901,0,78,EFS_OK);read_value(901,0,EFS_OK,78);
+        /* New segment publication must keep the initialized root's durability
+         * boundary, including segments outside the descriptor cache. */
+        watched_root=server.storage_paths[0];outside_syncs=root_syncs=directory_syncs=0;
+        efs_tls_chunk_gen=889;write_value(901,0,78,EFS_OK);
+        assert(!outside_syncs && directory_syncs);watched_root=NULL;
+        read_value(901,0,EFS_OK,78);
         restart();read_value(901,0,EFS_OK,78);memset(data,78,sizeof(data));efs_hash(data,sizeof(data),sum);
         assert(!server_delete_fragment_if_sum(&server,&ex,901,0,0,sum));
         /* Short payloads preserve zeroed alignment padding after copy changes. */
@@ -251,6 +389,6 @@ int main(void)
     assert(server_storage_engine_init(&server)==EFS_ERR_IO);server.storage_engine=0;assert(!server_storage_engine_init(&server));
     server_storage_engine_close(&server);server.storage_engine=1;assert(server_storage_engine_init(&server)==EFS_ERR_IO);
     assert(!nftw(legacy,remove_owned,32,FTW_DEPTH|FTW_PHYS));
-    puts("containers: buffered/direct, multi-root, quota, same-range concurrency, conditional/inode GC, restart, crash boundaries and corruption PASS");
+    printf("containers: %s, multi-root, quota, same-range concurrency, conditional/inode GC, restart, crash boundaries and corruption PASS\n",first_direct?"direct":"buffered/direct");
     return 0;
 }

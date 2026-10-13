@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/server/raft_host.c').read_text()
-a=s.index('static int host_namespace_leader_hint(')
+a=s.index('static int host_namespace_leader_hint(struct efs_raft_host *h,')
 b=s.index('\n}',a)+2
 code=r'''
 #include <assert.h>
@@ -15,17 +15,23 @@ code=r'''
 #define HOST_NGROUPS 2
 struct efs_raft {uint32_t voters;};
 struct host_group {struct efs_raft *r;uint32_t voters;};
-struct efs_raft_host {pthread_mutex_t mu;int n,raft_id;struct host_group groups[2];};
+struct efsd_server {int storage_engine;};
+struct efs_raft_host {pthread_mutex_t mu;int n,raft_id;struct host_group groups[2];struct efsd_server *s;};
 static int leader=-1;
 static int host_local_leader(struct efs_raft_host *h,uint8_t group){(void)h;assert(group==0 || group==2);return leader;}
 static struct host_group *group_slot(struct efs_raft_host *h,uint8_t group){return &h->groups[group>>1];}
 static uint32_t efs_raft_voters(struct efs_raft *r){return r->voters;}
 static int hosts_group(int id,uint32_t voters){return id>=0 && id<32 && (voters&(1u<<id));}
-'''+s[a:b]+r'''
+'''+s[a:b]+s[s.index('static int host_container_read_leader_hint('):s.index('\n}',s.index('static int host_container_read_leader_hint('))+2]+r'''
 int main(void){
  struct efs_raft r[2]={{7},{7}};
  struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.n=3,.raft_id=0,.groups={{&r[0],0},{&r[1],0}}};
  leader=1;assert(host_namespace_leader_hint(&h,2)==1);
+ struct efsd_server server={0};h.s=&server;
+ assert(host_container_read_leader_hint(&h,2)==-1);
+ server.storage_engine=1;assert(host_container_read_leader_hint(&h,2)==1);
+ leader=0;assert(host_container_read_leader_hint(&h,2)==-1);
+ leader=1;
  leader=0;assert(host_namespace_leader_hint(&h,0)==-1);
  leader=-1;assert(host_namespace_leader_hint(&h,0)==-1);
  leader=3;assert(host_namespace_leader_hint(&h,2)==-1);
@@ -53,3 +59,15 @@ for name in ['mkdir','rmdir']:
  assert route<body.index('host_read_index(')
  assert route<body.index('host_command_cohort_begin(')
  assert 'set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;' in body
+
+for name in ['lookup','getattr']:
+ a=s.index('void server_raft_host_'+name+'(');b=s.index('\n}',a)
+ body=s[a:b];route=body.index('host_container_read_leader_hint(')
+ assert route<body.index('host_hosts(')
+ assert route<body.index('host_read_')
+ assert 'set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;' in body
+
+# Batched paths use the same container-only hint before any row/proof read.
+a=s.index('void server_raft_host_lookup_path(');body=s[a:s.index('\n}',a)]
+assert body.index('host_container_read_leader_hint(')<body.index('host_hosts(')
+assert body.index('host_container_read_leader_hint(')<body.index('host_read_inode_lanes_reuse(')

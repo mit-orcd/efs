@@ -9,7 +9,7 @@ def function(name):
  assert m,name
  return s[m.start():s.index('\n}',m.end())+2]
 a=s.index('static pthread_mutex_t g_open_mu')
-b=s.index('/* Inodes this client has actually locked.',a)
+b=s.index('/* Returns 1 when this is the first open',a)
 source=r'''
 #include <assert.h>
 #include <stdint.h>

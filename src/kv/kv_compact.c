@@ -851,6 +851,10 @@ int kv_maybe_flush_locked(struct kv_lsm *l)
 
     if (kv_memtable_bytes(l) < mmax)
         return EFS_OK;
+    /* Every effect remains in the ordered WAL and visible memtable. The
+     * outer release first fsyncs that WAL, then performs this same flush
+     * without the container Raft mutex. Never reset an undurable prefix. */
+    if(l->defer_held_flush && l->flush_holds)return EFS_OK;
     /* The only stall left: L0 is at the engine cap, so the writer waits
      * until the compactor publishes. That is 16x behind (l0_max is 4);
      * log it. Inline compact only if the thread never started. */
@@ -873,7 +877,13 @@ int kv_maybe_flush_locked(struct kv_lsm *l)
     l->bp_logged = 0;
     if (l->io_failed)
         return EFS_ERR_IO;
+    const char *observe=getenv("EFS_RAFT_OBS");
+    int prof=observe && !strcmp(observe,"1");
+    uint64_t started=prof?mono_ms():0,bytes_before=l->mt.bytes;
     rc = kv_flush_locked(l);
+    if(prof && mono_ms()-started>=20)
+        fprintf(stderr,"kv-flush-prof: bytes=%llu ms=%llu l0=%u rc=%d\n",
+                (unsigned long long)bytes_before,(unsigned long long)(mono_ms()-started),l->n_l0,rc);
     if (rc == EFS_ERR_BUSY) {
         /* Not enough L0 slots for this memtable's ranges. The keys are
          * in the memtable and the WAL; the apply must not fail. */

@@ -4,7 +4,7 @@ The mock transport routes independently ordered TCP/RDMA replies; production
 admission/retirement and queue selection remain the actual source functions.
 """
 from pathlib import Path
-import os, subprocess, tempfile
+import os, shlex, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
 s=Path(os.environ.get('EFS_RAFT_HOST_SOURCE',root/'src/server/raft_host.c')).read_text()
 def function(name):
@@ -28,7 +28,11 @@ code=r'''
 #include "efs/batch_obs.h"
 #undef BO_ON
 #undef BO_COUNT
-#define BO_ON() 0
+#undef BO_HIST
+static int observer_on;
+static unsigned observations[BH_HIST_N];
+#define BO_HIST(k,v) do {if(observer_on){(void)(v);__atomic_add_fetch(&observations[k],1,__ATOMIC_RELAXED);}} while(0)
+#define BO_ON() observer_on
 #define BO_COUNT(k) ((void)0)
 #define HOST_NGROUPS 2
 #define HOST_INBOX_MAX 256
@@ -47,7 +51,9 @@ uint64_t efs_batch_obs_now_us(void) {
 static uint64_t now_us_(void) {return efs_batch_obs_now_us();}
 static int raft_obs_on(void) {return 1;}
 '''+struct('host_inbox_item')+'\n'+struct('host_outbox_item')+'\n'+struct('host_outbox')+r'''
+struct efsd_server {int storage_engine;};
 struct efs_raft_host {
+ struct efsd_server *s;
  pthread_mutex_t inbox_mu,outbox_mu;
  int running,tx_running,flow_enabled,raft_id,inbox_n,inbox_pressure;
  unsigned inbox_work_n;
@@ -62,7 +68,9 @@ static void host_pump_kick(struct efs_raft_host *h) {(void)h;}
 static int host_read_control(struct efs_raft_host *h,const uint8_t*p,uint32_t n)
 {(void)h;(void)p;(void)n;return 0;}
 static int outbox_nentries(const uint8_t*p,uint32_t n) {return n<80?-1:(int)efs_raft_flow_rd32(p+76);}
-'''+function('server_raft_host_inbox')+'\n'+function('host_inbox_retire')+r'''
+static int env_on(const char *name){(void)name;return 0;}
+static uint64_t rd64be(const uint8_t *p){return efs_raft_flow_rd64(p);}
+'''+(function('outbox_pure_read_control')+'\n'+function('host_inbox_duplicate_read')+'\n' if 'static int host_inbox_duplicate_read(' in s else '')+function('server_raft_host_inbox')+'\n'+function('host_inbox_retire')+r'''
 static int peer_addr(struct efs_raft_host*h,int peer,char*host,size_t cap,uint16_t*port)
 {(void)h;(void)peer;snprintf(host,cap,"fixture");*port=1;return 0;}
 static struct efs_conn *server_peer_conn_new(const char*h,uint16_t port)
@@ -83,7 +91,7 @@ int efs_conn_send_msg(struct efs_conn*c,uint8_t type,const void*buf,uint32_t len
  int rc=server_raft_host_inbox(p,len,&feedback);
  feedback.status=rc==EFS_OK?EFS_RAFT_FLOW_OK:rc==EFS_ERR_BUSY?EFS_RAFT_FLOW_BUSY:EFS_RAFT_FLOW_ERROR;
  struct reply*r=&outstanding[nout++];efs_raft_flow_encode(r->data,&feedback);
- r->channel=len>80?EFS_CONN_TCP:EFS_CONN_RDMA;r->legacy=legacy;
+ r->channel=c->kind==EFS_CONN_TCP || len>80?EFS_CONN_TCP:EFS_CONN_RDMA;r->legacy=legacy;
  if(malformed)r->data[2]=99;
  c->recv_chan=r->channel;__atomic_add_fetch(&sends,1,__ATOMIC_RELAXED);
  if(rc==EFS_OK)__atomic_add_fetch(&admitted,1,__ATOMIC_RELAXED);
@@ -133,7 +141,7 @@ static void queue(struct host_outbox*tx,unsigned type,unsigned group,unsigned da
  uint32_t len;uint8_t*p=frame(type,group,data,&len);
  pthread_mutex_lock(&tx->h->outbox_mu);
  struct host_outbox_item*q=data?tx->ent:tx->pri;int*n=data?&tx->nent:&tx->npri;
- assert(*n<2048);q[*n]=(struct host_outbox_item){p,len};(*n)++;tx->queued_bytes+=len;
+ assert(*n<2048);q[*n]=(struct host_outbox_item){.buf=p,.len=len};(*n)++;tx->queued_bytes+=len;
  int gi=efs_raft_flow_group(group);if(data)tx->pending_entries[gi]++;
  if(type==EFS_RAFT_MSG_AE_REQ){memcpy(tx->probe_header[gi],p,80);tx->probe_valid[gi]=1;}
  pthread_cond_signal(&tx->cv);pthread_mutex_unlock(&tx->h->outbox_mu);
@@ -161,7 +169,11 @@ static void admission(void)
 {
  struct efs_raft_host*h=host();g_host=h;struct efs_raft_flow_reply f;
  uint32_t len;uint8_t*p=frame(3,0,1,&len);
- for(int i=0;i<64;i++)assert(server_raft_host_inbox(p,len,&f)==EFS_OK);
+ for(int i=0;i<64;i++){
+  h->inbox[i].read_noted=1;
+  assert(server_raft_host_inbox(p,len,&f)==EFS_OK);
+  assert(!h->inbox[i].read_noted); /* reused admission slot is fresh */
+ }
  assert(f.pressure&&h->inbox_work_n==64);
  assert(server_raft_host_inbox(p,len,&f)==EFS_ERR_BUSY);
  /* Detached accepted work remains charged until processing AND KV durability. */
@@ -292,10 +304,39 @@ static void asynchronous(void)
  queue(tx,3,0,1);queue(tx,3,2,1);assert(!pthread_create(&tid,NULL,host_sender,tx));usleep(20000);
  stop_sender(h,tx,tid);assert(tx->st_fail);retire(g_host);free(g_host);free(h);
 }
+static void wire_observation(void)
+{
+ /* Exercise the actual sender with mixed canonical request/reply/data frames.
+  * Sampling must work without homogeneous batches, exclude RDMA mapping,
+  * omit failed receives, and remain inactive with diagnostics off. */
+ for(int mode=0;mode<4;mode++) {
+  struct efs_raft_host*h=host();g_host=host();struct host_outbox*tx=&h->tx[1];
+  h->flow_enabled=0;tx->preserve_read=1;observer_on=mode!=0;
+  memset(observations,0,sizeof(observations));
+  queue(tx,3,0,0);queue(tx,4,2,0);queue(tx,3,0,1);
+  tx->pri[0].buf[2]=1;tx->pri[1].buf[2]=1;tx->pri[1].buf[3]=1;
+  tx->conn=server_peer_conn_new("fixture",1);
+  tx->conn->kind=mode==2?EFS_CONN_RDMA:EFS_CONN_TCP;
+  lost_reply=mode==3;
+  pthread_t tid;assert(!pthread_create(&tid,NULL,host_sender,tx));
+  int done=0;for(int i=0;i<1000;i++) {
+   pthread_mutex_lock(&h->outbox_mu);done=!tx->npri&&!tx->nent;
+   pthread_mutex_unlock(&h->outbox_mu);if(done)break;usleep(1000);
+  }
+  assert(done);stop_sender(h,tx,tid);
+  unsigned expected=mode==1?1:0;
+  assert(observations[BH_READ_REQ_WIRE_FRAME_US]==expected);
+  assert(observations[BH_READ_REPLY_WIRE_FRAME_US]==expected);
+  assert(!observations[BH_READ_REQ_WIRE_BATCH_US] && !observations[BH_READ_REPLY_WIRE_BATCH_US]);
+  if(mode==3)assert(tx->st_fail);
+  retire(g_host);free(g_host);free(h);observer_on=0;
+ }
+}
+
 #endif
 int main(void){codec();admission();selection();slow_lane_fairness();
 #ifdef __linux__
- asynchronous();
+ asynchronous();wire_observation();
 #endif
  puts("host flow: codec, bounded admission/detached work, control/read escape PASS");
 #ifdef __linux__
@@ -307,5 +348,5 @@ int main(void){codec();admission();selection();slow_lane_fairness();
 '''
 with tempfile.TemporaryDirectory(prefix='efs-host-flow-') as d:
     p=Path(d)/'test.c';p.write_text(code);binary=p.with_suffix('')
-    subprocess.run([os.environ.get('CC','cc'),'-std=c99','-Wall','-Wextra','-Werror','-Wno-misleading-indentation','-Wno-unused-function','-Wno-unused-variable','-I'+str(root/'include'),str(p),'-pthread','-o',str(binary)],check=True)
+    subprocess.run([os.environ.get('CC','cc'),*shlex.split(os.environ.get('EFS_TEST_CFLAGS','')),'-std=c99','-Wall','-Wextra','-Werror','-Wno-misleading-indentation','-Wno-unused-function','-Wno-unused-variable','-I'+str(root/'include'),str(p),'-pthread','-o',str(binary)],check=True)
     subprocess.run([str(binary)],check=True,timeout=10)

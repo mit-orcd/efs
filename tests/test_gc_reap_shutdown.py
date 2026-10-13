@@ -6,6 +6,8 @@ root=Path(__file__).resolve().parents[1]
 s=(root/'src/server/raft_host.c').read_text()
 a=s.index('static void host_gc_reap_pass(');b=s.index('\n}',a)+2
 ctx=s[s.index('struct reap_scan_ctx {'):s.index('\n};',s.index('struct reap_scan_ctx {'))+3]
+finish_start=s.index('static void host_gc_reap_finish(')
+finish=s[finish_start:s.index('\n}',finish_start)+2]
 code=r'''
 #include "efs/meta_apply.h"
 #include "efs/meta_cmd.h"
@@ -17,7 +19,7 @@ code=r'''
 #define GC_FRAG_BUDGET_US 100000
 #define efs_kv_scan_from fake_scan_from
 #define efs_kv_inode_shard fake_inode_shard
-struct server {uint64_t gc_scan_errors,gc_reap_seen[2],gc_reap_capped[2],gc_first_reap[2],gc_first_seen_us[2];};
+struct server {int storage_engine,repair_experiment;uint64_t gc_scan_errors,gc_reap_seen[2],gc_reap_capped[2],gc_first_reap[2],gc_first_seen_us[2];};
 struct efs_raft_host {struct efs_kv *kv;struct server *s;int gc_running,running;uint8_t reap_cursor[2][REAP_KEY_LEN];uint32_t reap_cursor_len[2];};
 struct reap_times {uint64_t scan,sweep,fence,done;};
 '''+ctx+r'''
@@ -58,7 +60,9 @@ static int host_gc_inode_nodes(struct efs_raft_host *h,efs_ino_t ino,uint64_t ge
 int efs_meta_reap_select(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,struct efs_meta_reap_key *keys,uint32_t *n) {
  (void)kv;assert(ino==42&&gen==7);selects++;memset(keys,0,sizeof(*keys));*n=1;return 0;
 }
-'''+s[a:b]+r'''
+static int host_container_gc_lane_empty(struct efs_raft_host *h,efs_ino_t ino,uint64_t gen,uint8_t lane,uint8_t *covered){(void)h;(void)ino;(void)gen;(void)lane;(void)covered;assert(!h->s->storage_engine);return 0;}
+static void host_gc_container_fences(struct efs_raft_host *h,const struct reap_scan_ctx *scan,const unsigned char *ready,int *result){(void)h;(void)scan;(void)ready;(void)result;assert(0);}
+'''+finish+'\n'+s[a:b]+r'''
 int main(void) {
  struct server server={0};struct efs_raft_host h={.s=&server,.running=1};
  for(hosted=0;hosted<=1;hosted++)for(busy=0;busy<=1;busy++)for(unsigned stopped=0;stopped<=64;stopped++) {

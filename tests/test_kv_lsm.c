@@ -1039,7 +1039,7 @@ static int sst_names(char names[][64], int cap)
         if (strncmp(de->d_name, "seg-1-", 6) != 0)
             continue;
         if (n < cap)
-            snprintf(names[n], 64, "%s", de->d_name);
+            snprintf(names[n], 64, "%.63s", de->d_name);
         n++;
     }
     closedir(d);
@@ -1681,10 +1681,65 @@ static void test_apply_scope(void)
  rmtree(g_dir);
 }
 
+/* Automatic flush deferral preserves nested holds, durable WAL order and cold recovery. */
+static void test_deferred_held_flush(void)
+{
+    rmtree(g_dir);
+    struct efs_kv *kv=open_store(EFS_KV_LSM_SYNC,256);
+    CHECK(kv!=NULL,"open ordinary auto flush");if(!kv)return;
+    char value[129];memset(value,'x',128);value[128]=0;
+    for(int i=0;i<8;i++){char k[16];snprintf(k,sizeof(k),"normal%d",i);CHECK(!put_s(kv,k,value),"normal put");}
+    struct efs_kv_lsm_stats shape={0};CHECK(!efs_kv_lsm_stats(kv,&shape) && shape.n_l0+shape.n_l1>0,"ordinary policy still auto flushes");
+    efs_kv_lsm_close(kv);rmtree(g_dir);
+    kv=open_store(EFS_KV_LSM_SYNC,256);CHECK(kv!=NULL,"open deferred flush");if(!kv)return;
+    CHECK(!efs_kv_lsm_defer_held_flush(kv,1),"startup opt in");
+    CHECK(!efs_kv_lsm_sync_hold(kv) && !efs_kv_lsm_sync_hold(kv),"nested deferred holds");
+    CHECK(efs_kv_lsm_defer_held_flush(kv,0)==EFS_ERR_BUSY,"cannot change active policy");
+    for(int i=0;i<32;i++){char k[16];snprintf(k,sizeof(k),"held%d",i);CHECK(!put_s(kv,k,value),"deferred visible ordered put");}
+    CHECK(!get_is(kv,"held0",value),"held effects remain readable");
+    CHECK(!efs_kv_lsm_stats(kv,&shape) && shape.mt_bytes>=256 && !shape.n_l0 && !shape.n_l1,"no inline automatic flush during hold");
+    CHECK(!efs_kv_lsm_sync_release(kv),"inner release");
+    CHECK(!efs_kv_lsm_stats(kv,&shape) && shape.mt_bytes>=256 && !shape.n_l0 && !shape.n_l1,"nested release cannot flush before outer WAL barrier");
+    CHECK(!efs_kv_lsm_sync_release(kv),"outer barrier and same automatic flush");
+    CHECK(!efs_kv_lsm_stats(kv,&shape) && !shape.mt_bytes && shape.n_l0+shape.n_l1>0,"outer release completed deferred flush");
+    efs_kv_lsm_close(kv);kv=open_store(EFS_KV_LSM_SYNC,256);CHECK(kv!=NULL,"cold deferred reopen");
+    if(kv){for(int i=0;i<32;i++){char k[16];snprintf(k,sizeof(k),"held%d",i);CHECK(!get_is(kv,k,value),"cold deferred effects");}efs_kv_lsm_close(kv);}
+    /* Crash after release with a newer WAL record not yet in the memtable.
+     * The deferred flush must preserve that tail rather than reset it. */
+    rmtree(g_dir);pid_t pid=fork();CHECK(pid>=0,"fork deferred WAL tail");if(pid<0)return;
+    if(!pid){
+        kv=open_store(EFS_KV_LSM_SYNC,256);if(!kv || efs_kv_lsm_defer_held_flush(kv,1) || efs_kv_lsm_sync_hold(kv))_exit(1);
+        for(int i=0;i<16;i++){char k[16];snprintf(k,sizeof(k),"cold%d",i);if(put_s(kv,k,value))_exit(2);}
+        struct kv_lsm *l=kv->ctx;uint64_t seq=0;
+        struct efs_kv_item item={EFS_KV_PUT,(const uint8_t *)"cold0",5,(const uint8_t *)"new-tail",8};
+        if(kv_wal_append(l->wal,&item,1,&seq) || seq!=l->apply_next || efs_kv_lsm_sync_release(kv))_exit(3);
+        _exit(0); /* No clean shutdown to make this pass. */
+    }
+    int status=0;CHECK(waitpid(pid,&status,0)==pid && WIFEXITED(status) && !WEXITSTATUS(status),"actual crash after deferred release");
+    kv=open_store(EFS_KV_LSM_SYNC,256);CHECK(kv!=NULL,"cold preserved tail");
+    if(kv){CHECK(!get_is(kv,"cold0","new-tail"),"unapplied newer tail survives deferred flush");CHECK(!get_is(kv,"cold1",value),"older flushed key also survives");CHECK(!put_s(kv,"after","progress"),"cold apply ordering resumes");efs_kv_lsm_close(kv);}
+    /* A real SST-open failure after the WAL barrier must fail release,
+     * reject further mutation and retain the durable effects for cold replay. */
+    if(geteuid()!=0){
+        rmtree(g_dir);kv=open_store(EFS_KV_LSM_SYNC,256);CHECK(kv!=NULL,"open deferred failure");if(!kv)return;
+        CHECK(!efs_kv_lsm_defer_held_flush(kv,1) && !efs_kv_lsm_sync_hold(kv),"failure held setup");
+        for(int i=0;i<16;i++){char k[16];snprintf(k,sizeof(k),"failed%d",i);CHECK(!put_s(kv,k,value),"WAL effects before flush failure");}
+        CHECK(!chmod(g_dir,0500),"deny new SST publication");
+        CHECK(efs_kv_lsm_sync_release(kv)==EFS_ERR_IO,"failed flush cannot report successful release");
+        CHECK(put_s(kv,"rejected","mutation")==EFS_ERR_IO,"failed engine rejects new mutation");
+        CHECK(!chmod(g_dir,0700),"restore owned fixture");efs_kv_lsm_close(kv);
+        kv=open_store(EFS_KV_LSM_SYNC,256);CHECK(kv!=NULL,"reopen after uncertain flush");
+        if(kv){CHECK(!get_is(kv,"failed0",value),"already durable WAL survives failed flush");CHECK(get_is(kv,"rejected","")==EFS_ERR_NOT_FOUND,"failed mutation remains absent");efs_kv_lsm_close(kv);}
+    }else fprintf(stderr,"deferred flush real permission failure NOTRUN as root\n");
+    rmtree(g_dir);
+}
+
 int main(void)
 {
     snprintf(g_dir, sizeof(g_dir), "/tmp/efs-kvlsm-%d", (int)getpid());
     rmtree(g_dir);
+    if (getenv("EFS_TEST_KV_DEFER_ONLY")) {test_deferred_held_flush();goto report;}
+    test_deferred_held_flush();
     if (getenv("EFS_TEST_KV_APPLY_ONLY")) {test_apply_scope();goto report;}
     if (getenv("EFS_TEST_KV_SNAPSHOT_ONLY")) {
         test_snapshot_scan_bounds();

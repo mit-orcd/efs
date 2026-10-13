@@ -1583,6 +1583,18 @@ int efs_kv_lsm_apply_end(struct efs_kv *kv,const struct efs_kv_item *cursor)
     return rc;
 }
 
+int efs_kv_lsm_defer_held_flush(struct efs_kv *kv,int enabled)
+{
+    if(!kv || kv->ops!=&lsm_ops || !kv->ctx)return EFS_ERR_INVAL;
+    struct kv_lsm *l=kv->ctx;
+    if(l->magic!=KV_LSM_MAGIC)return EFS_ERR_INVAL;
+    pthread_mutex_lock(&l->mu);
+    int rc=l->flush_holds?EFS_ERR_BUSY:EFS_OK;
+    if(!rc)__atomic_store_n(&l->defer_held_flush,!!enabled,__ATOMIC_RELEASE);
+    pthread_mutex_unlock(&l->mu);
+    return rc;
+}
+
 int efs_kv_lsm_sync_hold(struct efs_kv *kv)
 {
     struct kv_lsm *l;
@@ -1592,7 +1604,14 @@ int efs_kv_lsm_sync_hold(struct efs_kv *kv)
     l = kv->ctx;
     if (l->magic != KV_LSM_MAGIC || !l->wal)
         return EFS_OK;
-    return kv_wal_hold(l->wal, 1);
+    int rc=kv_wal_hold(l->wal,1);
+    if(!__atomic_load_n(&l->defer_held_flush,__ATOMIC_ACQUIRE))return rc;
+    if(rc==EFS_OK) {
+        pthread_mutex_lock(&l->mu);
+        if(l->defer_held_flush)l->flush_holds++;
+        pthread_mutex_unlock(&l->mu);
+    }
+    return rc;
 }
 
 int efs_kv_lsm_sync_release(struct efs_kv *kv)
@@ -1604,7 +1623,19 @@ int efs_kv_lsm_sync_release(struct efs_kv *kv)
     l = kv->ctx;
     if (l->magic != KV_LSM_MAGIC || !l->wal)
         return EFS_OK;
-    return kv_wal_hold(l->wal, 0);
+    int rc=kv_wal_hold(l->wal,0);
+    if(!__atomic_load_n(&l->defer_held_flush,__ATOMIC_ACQUIRE))return rc;
+    pthread_mutex_lock(&l->mu);
+    if(l->defer_held_flush && l->flush_holds) {
+        l->flush_holds--;
+        if(rc!=EFS_OK)l->io_failed=1;
+        else if(!l->flush_holds) {
+            rc=kv_maybe_flush_locked(l);
+            if(rc!=EFS_OK)l->io_failed=1;
+        }
+    }
+    pthread_mutex_unlock(&l->mu);
+    return rc;
 }
 
 int efs_kv_lsm_sync_detach(struct efs_kv *kv,uint64_t *prefix)
@@ -1613,6 +1644,7 @@ int efs_kv_lsm_sync_detach(struct efs_kv *kv,uint64_t *prefix)
     *prefix=0;
     if(!kv || kv->ops!=&lsm_ops || !kv->ctx)return EFS_OK;
     struct kv_lsm *l=kv->ctx;
+    if(__atomic_load_n(&l->defer_held_flush,__ATOMIC_ACQUIRE))return EFS_ERR_BUSY;
     return l->magic!=KV_LSM_MAGIC || !l->wal?EFS_OK:kv_wal_detach(l->wal,prefix);
 }
 

@@ -1390,6 +1390,8 @@ static void lookup_memo_mutation_end(void)
     pthread_mutex_unlock(&g_lookup_memo_mu);
 }
 
+static void lookup_memo_observe(unsigned reason);
+
 static void lookup_memo_put(const struct efs_inode *row)
 {
     unsigned i;
@@ -1399,7 +1401,9 @@ static void lookup_memo_put(const struct efs_inode *row)
     pthread_mutex_lock(&g_lookup_memo_mu);
     if (!t_lookup_memo_serial || g_lookup_memo_active ||
         t_lookup_memo_serial != g_lookup_memo_serial) {
+        unsigned reason = g_lookup_memo_active ? 5 : 6;
         pthread_mutex_unlock(&g_lookup_memo_mu);
+        lookup_memo_observe(reason);
         return;
     }
     i = g_lookup_memo_i++ % LOOKUP_MEMO_N;
@@ -1407,12 +1411,37 @@ static void lookup_memo_put(const struct efs_inode *row)
     g_lookup_memo[i].row = *row;
     g_lookup_memo[i].us = fuse_now_us();
     pthread_mutex_unlock(&g_lookup_memo_mu);
+    lookup_memo_observe(4);
+}
+
+/* Diagnostic counters only; one line per1024 memo attempts. They never
+ * change cache lifetime, mutation fencing, RPC or quorum decisions. */
+static void lookup_memo_observe(unsigned reason)
+{
+    static uint64_t counts[7], total;
+    if (!getenv("EFS_RPC_PROF"))
+        return;
+    __atomic_add_fetch(&counts[reason], 1, __ATOMIC_RELAXED);
+    if (reason >= 4)
+        return;
+    uint64_t n = __atomic_add_fetch(&total, 1, __ATOMIC_RELAXED);
+    if (!(n % 1024))
+        fprintf(stderr, "MEMO-PROF attempts=%llu hit=%llu active=%llu expired=%llu missing=%llu put_stored=%llu put_active=%llu put_fenced=%llu\n",
+                (unsigned long long)n,
+                (unsigned long long)__atomic_load_n(&counts[0], __ATOMIC_RELAXED),
+                (unsigned long long)__atomic_load_n(&counts[1], __ATOMIC_RELAXED),
+                (unsigned long long)__atomic_load_n(&counts[2], __ATOMIC_RELAXED),
+                (unsigned long long)__atomic_load_n(&counts[3], __ATOMIC_RELAXED),
+                (unsigned long long)__atomic_load_n(&counts[4], __ATOMIC_RELAXED),
+                (unsigned long long)__atomic_load_n(&counts[5], __ATOMIC_RELAXED),
+                (unsigned long long)__atomic_load_n(&counts[6], __ATOMIC_RELAXED));
 }
 
 static int lookup_memo_take(efs_ino_t ino, struct efs_inode *out)
 {
     uint64_t now;
     int i;
+    unsigned reason = 3;
 
     if (!ino || !out)
         return 0;
@@ -1420,18 +1449,23 @@ static int lookup_memo_take(efs_ino_t ino, struct efs_inode *out)
     pthread_mutex_lock(&g_lookup_memo_mu);
     if (g_lookup_memo_active) {
         pthread_mutex_unlock(&g_lookup_memo_mu);
+        lookup_memo_observe(1);
         return 0;
     }
     for (i = 0; i < LOOKUP_MEMO_N; i++) {
+        if (g_lookup_memo[i].ino == ino)
+            reason = 2;
         if (g_lookup_memo[i].ino == ino &&
             now - g_lookup_memo[i].us < LOOKUP_MEMO_US) {
             *out = g_lookup_memo[i].row;
             g_lookup_memo[i].ino = 0;
             pthread_mutex_unlock(&g_lookup_memo_mu);
+            lookup_memo_observe(0);
             return 1;
         }
     }
     pthread_mutex_unlock(&g_lookup_memo_mu);
+    lookup_memo_observe(reason);
     return 0;
 }
 
@@ -1770,7 +1804,10 @@ static int efs_fuse_readdir_ino(fuse_ino_t ino, struct readdir_collect_arg *col,
         return -ENOTDIR;
 
     struct efs_inode parent;
-    int rc = efs_client_stat_ino((efs_ino_t)ino, &parent);
+    /* Local directory rows may be overwritten by an older LOOKUP reply.
+     * Listing permission must come from a fresh authority read, including
+     * peer chmod; the local cache cannot authorize enumeration. */
+    int rc = efs_client_stat_refresh((efs_ino_t)ino, &parent);
     if (rc == EFS_ERR_ACCES)
         return -EACCES;
     if (rc != EFS_OK)
@@ -1794,7 +1831,7 @@ static int efs_fuse_readdir_ino(fuse_ino_t ino, struct readdir_collect_arg *col,
         rc = efs_client_rpc_readdir_cur(g_client.export_id, parent.ino,
                                         ents, &n, &src, name_cur, &done);
         if (rc != 0)
-            return (rc == EFS_ERR_NOT_FOUND) ? -ENOENT : -EIO;
+            return fuse_stat_errno(rc);
         if (readdir_collect_page(col, ents, n) != 0)
             return -ENOMEM;
         if (n == 0 && !done)
@@ -1868,64 +1905,6 @@ static pthread_mutex_t *open_edge_mu(efs_ino_t ino)
 {
     pthread_once(&g_open_edge_once, open_edge_init);
     return &g_open_edge_mu[efs_ino_lock_slot(ino, OPEN_EDGE_SHARDS)];
-}
-
-/* Inodes this client has actually locked. Last close otherwise sent
- * LOCK_UN for every file (a Raft round trip) so a skipped hold could
- * not leave flock_unlock_on_close stuck. */
-#define FLOCK_ARMED_MAX 64
-struct flock_arm_slot {
-    efs_ino_t ino;
-    uint64_t owner;
-};
-static struct flock_arm_slot g_flock_armed[FLOCK_ARMED_MAX];
-static int g_flock_armed_n;
-static int g_flock_arm_all;
-static pthread_mutex_t g_flock_armed_mu = PTHREAD_MUTEX_INITIALIZER;
-
-static void flock_arm(efs_ino_t ino, uint64_t owner)
-{
-    int i;
-
-    if (!ino)
-        return;
-    pthread_mutex_lock(&g_flock_armed_mu);
-    for (i = 0; i < g_flock_armed_n; i++) {
-        if (g_flock_armed[i].ino == ino) {
-            g_flock_armed[i].owner = owner;
-            pthread_mutex_unlock(&g_flock_armed_mu);
-            return;
-        }
-    }
-    if (g_flock_armed_n < FLOCK_ARMED_MAX) {
-        g_flock_armed[g_flock_armed_n].ino = ino;
-        g_flock_armed[g_flock_armed_n].owner = owner;
-        g_flock_armed_n++;
-    } else {
-        g_flock_arm_all = 1;
-    }
-    pthread_mutex_unlock(&g_flock_armed_mu);
-}
-
-/* 1 when this close must LOCK_UN. Writes the owner that took the lock. */
-static int flock_armed_take(efs_ino_t ino, uint64_t *owner_out)
-{
-    int i, hit = 0;
-
-    pthread_mutex_lock(&g_flock_armed_mu);
-    if (g_flock_arm_all)
-        hit = 1;
-    for (i = 0; i < g_flock_armed_n; i++) {
-        if (g_flock_armed[i].ino == ino) {
-            if (owner_out)
-                *owner_out = g_flock_armed[i].owner;
-            g_flock_armed[i] = g_flock_armed[--g_flock_armed_n];
-            hit = 1;
-            break;
-        }
-    }
-    pthread_mutex_unlock(&g_flock_armed_mu);
-    return hit;
 }
 
 /* Returns 1 when this is the first open (caller must acquire the HOLD). */
@@ -4125,20 +4104,10 @@ static int efs_fuse_flush_ino(fuse_ino_t ino, struct fuse_file_info *fi)
         efs_fuse_log_err("flush-meta", rc, ino, 0, 0, NULL);
         return rc == EFS_ERR_QUOTA ? -ENOSPC : -EIO;
     }
-    /* close() flushes before the syscall returns. Drop a lock this fd
-     * took here; release can run after the next open already locked. */
-    {
-        efs_ino_t fh = efs_file_ino(fi, (efs_ino_t)ino);
-        uint64_t locked_owner = 0;
-        int hit = flock_armed_take(fh, &locked_owner);
-
-        if (!hit && ino && (efs_ino_t)ino != fh)
-            hit = flock_armed_take((efs_ino_t)ino, &locked_owner);
-        if (hit) {
-            (void)efs_client_rpc_flock(g_client.export_id, fh, EFS_FLOCK_UN,
-                                       locked_owner);
-        }
-    }
+    /* FLUSH also runs when one dup/fork copy is closed. Flock belongs to
+     * the open file description; only RELEASE's flock_release flag permits
+     * dropping it. Releasing here lets a child close its inherited copy and
+     * silently unlock the descriptor its parent still holds. */
     return 0;
 }
 
@@ -4787,40 +4756,29 @@ static int efs_fuse_release_ino(fuse_ino_t ino, struct fuse_file_info *fi)
     efs_ino_t fh = efs_file_ino(fi, (efs_ino_t)ino);
     if (virt_kind(fh)) { efs_file_close(fi); return 0; }
     int leased = 0;
+    int lock_rc = EFS_OK;
     efs_client_note_meta_change(0);
-    efs_file_close(fi);
-    if (!fh)
-        return 0;
+    if (!fh) { efs_file_close(fi); return 0; }
     pthread_mutex_t *edge = open_edge_mu(fh);
     pthread_mutex_lock(edge);
-    if (!efs_close_note(fh, &leased)) {
-        pthread_mutex_unlock(edge);
-        return 0;
+    /* The kernel supplies this open description's valid owner at final
+     * RELEASE. Other opens of the inode must neither delay its unlock nor
+     * select a different owner's lock. Serialize with the existing OPEN edge. */
+    if (fi && fi->flock_release) {
+        uint64_t owner = g_client.flock_token ^ fi->lock_owner;
+        lock_rc = efs_client_rpc_flock(g_client.export_id, fh,
+                                       EFS_FLOCK_UN, owner);
+        if (lock_rc != EFS_OK)
+            efs_fuse_log_err("release-flock", lock_rc, fh, 0, 0, NULL);
     }
-    {
-        uint64_t lk = fi ? fi->lock_owner : 0;
-        uint64_t owner = g_client.flock_token ^
-                         (lk ? lk : ((uint64_t)(uintptr_t)fi << 8));
-
-        /* The kernel does not send LOCK_UN on close. Only an inode
-         * this client locked pays the Raft unlock, with the owner that
-         * took the lock (release's fi->lock_owner is not that one). */
-        {
-            uint64_t locked_owner = owner;
-            int hit = flock_armed_take(fh, &locked_owner);
-            if (!hit && ino && (efs_ino_t)ino != fh)
-                hit = flock_armed_take((efs_ino_t)ino, &locked_owner);
-            if (hit) {
-                (void)efs_client_rpc_flock(g_client.export_id, fh,
-                                           EFS_FLOCK_UN, locked_owner);
-            }
-        }
+    efs_file_close(fi);
+    if (efs_close_note(fh, &leased)) {
         if (leased)
             (void)efs_open_release_pending(fh);
         efs_client_stage_evict_ino(fh);
     }
     pthread_mutex_unlock(edge);
-    return 0;
+    return efs_rc_to_errno(lock_rc);
 }
 
 /* Runs before unmount with mutations quiesced. Timeout of the control
@@ -5287,7 +5245,6 @@ static int efs_fuse_setlk_ino(fuse_ino_t ino, struct fuse_file_info *fi,
         n->next = g_plocks;
         g_plocks = n;
         pthread_mutex_unlock(&g_plock_mu);
-        flock_arm(inum, plock_rpc_owner(fi));
         return 0;
     }
 }
@@ -5295,23 +5252,19 @@ static int efs_fuse_setlk_ino(fuse_ino_t ino, struct fuse_file_info *fi,
 static int efs_fuse_flock_ino(fuse_ino_t ino, struct fuse_file_info *fi, int op)
 {
     efs_ino_t fh = efs_file_ino(fi, (efs_ino_t)ino);
-    uint64_t lk = fi ? fi->lock_owner : 0;
-    uint64_t owner = g_client.flock_token ^
-                     (lk ? lk : ((uint64_t)(uintptr_t)fi << 8));
+    if (!fi) return -EBADF;
+    uint64_t owner = g_client.flock_token ^ fi->lock_owner;
+    uint32_t rpc_op = (uint32_t)op;
+    if (!(op & (LOCK_UN | LOCK_NB))) rpc_op |= EFS_FLOCK_WAIT;
     int rc;
     if (getenv("EFS_FLOCK_DBG"))
         fprintf(stderr, "flock: ino=%llu op=%u owner=%llu\n",
                 (unsigned long long)fh, op, (unsigned long long)owner);
-    rc = efs_client_rpc_flock(g_client.export_id, fh, (uint32_t)op, owner);
+    rc = efs_client_rpc_flock(g_client.export_id, fh, rpc_op, owner);
     if (rc == EFS_ERR_BUSY)
         return -EAGAIN;
     if (rc != EFS_OK)
         return -EIO;
-    if (!(op & LOCK_UN)) {
-        flock_arm(fh, owner);
-        if ((efs_ino_t)ino != fh)
-            flock_arm((efs_ino_t)ino, owner);
-    }
     return 0;
 }
 
@@ -5725,15 +5678,100 @@ static int dirbuf_add(fuse_req_t req, char *buf, size_t bufsize, size_t *used,
     return 0;
 }
 
+/* Explicit bounded deep-path diagnostics. Normal callbacks do not read a
+ * clock or write a line. This records callback service, not kernel queue time;
+ * join caller PID/monotonic time to the transparent syscall observer. */
+static int deep_callback_name(const char *name)
+{
+    return name && name[0] == 'd' && name[1] >= '0' && name[1] <= '9' &&
+           name[2] >= '0' && name[2] <= '9' && name[3] == '\0';
+}
+
+struct deep_callback_sample {
+    uint64_t begin, service_end;
+    long pid;
+    char name[6];
+};
+
+static struct deep_callback_sample deep_callback_begin(fuse_req_t req, const char *name)
+{
+    struct deep_callback_sample sample = {0};
+    static int enabled;
+    static unsigned samples;
+    static pid_t callers[128];
+    int state = __atomic_load_n(&enabled, __ATOMIC_ACQUIRE);
+    if (!state) {
+        state = getenv("EFS_RPC_PROF") && getenv("EFS_CONTAINER_PATH_PROF") ? 2 : 1;
+        __atomic_store_n(&enabled, state, __ATOMIC_RELEASE);
+    }
+    if (state != 2)
+        return sample;
+    const struct fuse_ctx *ctx = fuse_req_ctx(req);
+    if (!ctx || ctx->pid <= 0)
+        return sample;
+    int selected = deep_callback_name(name), found = 0;
+    for (unsigned i = 0; i < 128; ++i) {
+        pid_t pid = __atomic_load_n(&callers[i], __ATOMIC_RELAXED);
+        if (pid == ctx->pid) { found = 1; break; }
+        if (!pid && selected) {
+            if (__atomic_compare_exchange_n(&callers[i], &pid, ctx->pid, 0,
+                                             __ATOMIC_RELAXED, __ATOMIC_RELAXED) ||
+                pid == ctx->pid) { found = 1; break; }
+        }
+    }
+    if (!found)
+        return sample;
+    unsigned slot = __atomic_load_n(&samples, __ATOMIC_RELAXED);
+    do {
+        if (slot >= 16384)
+            return sample;
+    } while (!__atomic_compare_exchange_n(&samples, &slot, slot + 1, 0,
+                                         __ATOMIC_RELAXED, __ATOMIC_RELAXED));
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    sample.begin = (uint64_t)ts.tv_sec * UINT64_C(1000000000) + (uint64_t)ts.tv_nsec;
+    sample.pid = (long)ctx->pid;
+    memcpy(sample.name, selected ? name : "other", selected ? 4 : 6);
+    return sample;
+}
+
+/* Capture before reply without logging; the after-reply record never
+ * dereferences a freed fuse_req or its message/name buffer. */
+static void deep_callback_reply_begin(struct deep_callback_sample *sample)
+{
+    if (!sample->begin)
+        return;
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    sample->service_end = (uint64_t)ts.tv_sec * UINT64_C(1000000000) + (uint64_t)ts.tv_nsec;
+}
+
+static void deep_callback_end(struct deep_callback_sample sample, const char *op,
+                              fuse_ino_t parent, int rc)
+{
+    if (!sample.begin)
+        return;
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    uint64_t end = (uint64_t)ts.tv_sec * UINT64_C(1000000000) + (uint64_t)ts.tv_nsec;
+    fprintf(stderr, "PATH-PROF op=%s pid=%ld parent=%llu name=%s mono_ns=%llu elapsed_ns=%llu rc=%d reply_ns=%llu\n",
+            op, sample.pid, (unsigned long long)parent, sample.name,
+            (unsigned long long)sample.begin,
+            (unsigned long long)(sample.service_end - sample.begin), rc,
+            (unsigned long long)(end - sample.service_end));
+}
+
 static void ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
     struct fuse_entry_param e;
     int rc;
+    struct deep_callback_sample path_sample = deep_callback_begin(req, name);
     t_lookup_memo_serial = lookup_memo_start();
     t_req = req;
     rc = efs_fuse_lookup_at(parent, name, &e);
     t_lookup_memo_serial = 0;
     t_req = NULL;
+    deep_callback_reply_begin(&path_sample);
     if (rc)
         fuse_reply_err(req, -rc);
     else {
@@ -5744,6 +5782,7 @@ static void ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
         if (virt_kind(e.ino) == 3)
             ll_inval_entry(parent, name);
     }
+    deep_callback_end(path_sample, "LOOKUP", parent, rc);
 }
 
 static void ll_forget(fuse_req_t req, fuse_ino_t ino, uint64_t nlookup)
@@ -5768,13 +5807,16 @@ static void ll_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi
 {
     struct stat st;
     int rc;
+    struct deep_callback_sample path_sample = deep_callback_begin(req, NULL);
     t_req = req;
     rc = efs_fuse_getattr_ino(ino, &st, fi);
     t_req = NULL;
+    deep_callback_reply_begin(&path_sample);
     if (rc)
         fuse_reply_err(req, -rc);
     else
         fuse_reply_attr(req, &st, 0.0);
+    deep_callback_end(path_sample, "GETATTR", ino, rc);
 }
 
 static void ll_setattr_run(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
@@ -5836,6 +5878,7 @@ static void ll_mkdir_run(fuse_req_t req, fuse_ino_t parent, const char *name,
     struct fuse_entry_param e;
     struct efs_inode created = {0};
     int rc;
+    struct deep_callback_sample path_sample = deep_callback_begin(req, name);
     lookup_memo_mutation_begin();
     t_req = req;
     uint64_t previous = efs_client_rpc_deadline_ms();
@@ -5856,10 +5899,12 @@ static void ll_mkdir_run(fuse_req_t req, fuse_ino_t parent, const char *name,
     efs_client_rpc_set_deadline_ms(previous);
     lookup_memo_mutation_end();
     t_req = NULL;
+    deep_callback_reply_begin(&path_sample);
     if (rc)
         fuse_reply_err(req, -rc);
     else
         fuse_reply_entry(req, &e);
+    deep_callback_end(path_sample, "MKDIR", parent, rc);
 }
 
 static void ll_unlink_run(fuse_req_t req, fuse_ino_t parent, const char *name)
@@ -5876,12 +5921,15 @@ static void ll_unlink_run(fuse_req_t req, fuse_ino_t parent, const char *name)
 static void ll_rmdir_run(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
     int rc;
+    struct deep_callback_sample path_sample = deep_callback_begin(req, name);
     lookup_memo_mutation_begin();
     t_req = req;
     rc = efs_fuse_rmdir_at(parent, name);
     lookup_memo_mutation_end();
     t_req = NULL;
+    deep_callback_reply_begin(&path_sample);
     fuse_reply_err(req, rc ? -rc : 0);
+    deep_callback_end(path_sample, "RMDIR", parent, rc);
 }
 
 static void ll_symlink_run(fuse_req_t req, const char *link, fuse_ino_t parent,
@@ -6334,10 +6382,13 @@ static void ll_statfs(fuse_req_t req, fuse_ino_t ino)
 static void ll_access(fuse_req_t req, fuse_ino_t ino, int mask)
 {
     int rc;
+    struct deep_callback_sample path_sample = deep_callback_begin(req, NULL);
     t_req = req;
     rc = efs_fuse_access_ino(ino, mask);
     t_req = NULL;
+    deep_callback_reply_begin(&path_sample);
     fuse_reply_err(req, rc ? -rc : 0);
+    deep_callback_end(path_sample, "ACCESS", ino, rc);
 }
 
 /* nfsd creates through vfs_create, which the FUSE kernel module turns

@@ -532,6 +532,8 @@ static int gc_sync_directory(struct efsd_server *s, int fd)
     errno = saved_errno;
     return rc;
 }
+static int gc_parent_barrier(void *context,int fd)
+{ return gc_sync_directory(context,fd)==0?EFS_OK:EFS_ERR_IO; }
 static int gc_unlink_file(struct efsd_server *s, const char *path)
 {
     uint64_t start = gc_clock_us();
@@ -749,6 +751,18 @@ static pthread_rwlock_t *inode_gc_lock(efs_export_id_t eid, efs_ino_t ino)
     return &inode_gc_locks[efs_ino_lock_slot(ino ^ ((uint64_t)eid << 32),
                                            FRAG_LOCKS)];
 }
+/* Container inodes share low shard bits. Include their ordinal so unrelated
+ * PUT/read/GC operations do not collapse onto one writer guard. All paths
+ * for the exact inode/export use this same selection; files stay unchanged. */
+static pthread_rwlock_t *server_inode_gc_lock(struct efsd_server *s,
+                                            efs_export_id_t eid,efs_ino_t ino)
+{
+    if(!s || !s->storage_engine)return inode_gc_lock(eid,ino);
+    pthread_once(&frag_locks_once,frag_locks_init);
+    uint64_t key=ino ^ (ino >> EFS_KV_SHARD_BITS) ^ (ino >> 32) ^ eid;
+    return &inode_gc_locks[key & (FRAG_LOCKS-1)];
+}
+
 #define DEATH_PAGE_BYTES 2048u
 #define DEATH_PAGE_BITS (DEATH_PAGE_BYTES * 8u)
 static void inode_death_path(struct efsd_server *s, efs_export_id_t eid, efs_ino_t ino,
@@ -873,9 +887,14 @@ static int inode_death_set(struct efsd_server *s, efs_export_id_t eid, efs_ino_t
     __atomic_fetch_add(&inode_gc_epoch, 1, __ATOMIC_RELEASE);
     /* Repeat all parent syncs even after a previous rename succeeded but
      * its directory sync failed. Newly-created ancestors must survive too. */
-    if (rc == EFS_OK)
+    if (rc == EFS_OK && s->storage_engine)
+        /* One complete ancestry proof seals new directories and retries the
+         * containing-directory barrier. Extra independent ancestor calls
+         * would repeat barriers already covered by the pinned proof. */
+        rc=server_container_sync_parents_with(s,path,gc_parent_barrier,s);
+    else if (rc == EFS_OK)
         rc = fragment_parent_sync(s, path);
-    if (rc == EFS_OK) {
+    if (rc == EFS_OK && !s->storage_engine) {
         char parent[8192];
         strcpy(parent, path);
         *strrchr(parent, '/') = '\0';
@@ -887,10 +906,33 @@ static int inode_death_set(struct efsd_server *s, efs_export_id_t eid, efs_ino_t
     pthread_mutex_unlock(mu);
     return rc;
 }
+static void gc_account_removed(struct efsd_server *s,uint64_t count,
+                               uint64_t payload,uint64_t stored_bytes)
+{
+    if(!count)return;
+    pthread_mutex_lock(&s->lock);
+    struct efs_node *ln=server_local_node(s);
+    if(ln)ln->used=ln->used>=payload?ln->used-payload:0;
+    pthread_mutex_unlock(&s->lock);
+    server_usage_mark_dirty(s);
+    __atomic_fetch_add(&s->gc_removed_fragments,count,__ATOMIC_RELAXED);
+    __atomic_fetch_add(&s->gc_removed_file_bytes,stored_bytes,__ATOMIC_RELAXED);
+    __atomic_fetch_add(&s->gc_removed_payload_bytes,payload,__ATOMIC_RELAXED);
+    __atomic_store_n(&s->gc_last_delete_us,gc_clock_us(),__ATOMIC_RELAXED);
+}
 /* Bounded physical orphan sweep, called only after Raft-confirmed lane
  * sweeps. These bodies include losing CAS attempts absent from chunk rows. */
 static int gc_dead_directory(struct efsd_server *s, const char *path, unsigned *left, unsigned depth)
 {
+    if(s->storage_engine && depth==1){
+        uint64_t count,payload,bytes;
+        int rc=server_container_gc_directory(s,path,left,&count,&payload,&bytes);
+        gc_account_removed(s,count,payload,bytes);
+        if(rc)return rc;
+        if(rmdir(path) && errno!=ENOENT)return EFS_ERR_IO;
+        return fragment_parent_sync(s,path);
+    }
+
     int dfd = open(path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
     if (dfd < 0)
         return errno == ENOENT ? fragment_parent_sync(s, path) : EFS_ERR_IO;
@@ -945,21 +987,7 @@ static int gc_dead_directory(struct efsd_server *s, const char *path, unsigned *
             (*left)--;
             if (!s->storage_engine && fragment_payload_bytes((uint64_t)st.st_size, &payload) != EFS_OK)
                 payload = (uint64_t)st.st_size;
-            pthread_mutex_lock(&s->lock);
-            struct efs_node *ln = server_local_node(s);
-            if (ln)
-                ln->used = ln->used >= payload ? ln->used - payload : 0;
-            pthread_mutex_unlock(&s->lock);
-            server_usage_mark_dirty(s);
-            __atomic_fetch_add(&s->gc_removed_fragments, 1, __ATOMIC_RELAXED);
-            __atomic_fetch_add(&s->gc_removed_file_bytes, stored_bytes,
-                               __ATOMIC_RELAXED);
-            __atomic_fetch_add(&s->gc_removed_payload_bytes, payload, __ATOMIC_RELAXED);
-            struct timespec ts;
-            clock_gettime(CLOCK_MONOTONIC, &ts);
-            __atomic_store_n(&s->gc_last_delete_us,
-                             (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000,
-                             __ATOMIC_RELAXED);
+            gc_account_removed(s,1,payload,stored_bytes);
         } else {
             rc = EFS_ERR_IO;
             break;
@@ -1007,7 +1035,7 @@ int server_gc_inode_checked(struct efsd_server *s, efs_export_id_t eid, efs_ino_
 {
     if (!s || !eid || ino <= EFS_ROOT_INO || efs_ino_is_meta_table(ino) || !generation)
         return EFS_ERR_INVAL;
-    pthread_rwlock_t *mu = inode_gc_lock(eid, ino);
+    pthread_rwlock_t *mu = server_inode_gc_lock(s,eid,ino);
     pthread_rwlock_wrlock(mu);
     /* Keep the exact inode write guard across nonblocking repair-debt recheck and
      * durable death. An ADMIT racing after that proof cannot publish a DATA
@@ -1152,6 +1180,7 @@ static int finish_shard_write(int fd, size_t bytes, int sync_write, int direct)
  * Unknown/uninitialized roots retain the full ancestry barrier. */
 static int sync_fragment_parents(struct efsd_server *s, const char *path)
 {
+    if (s && s->storage_engine) return server_container_sync_parents(s,path);
     char parent[8192], root[EFS_MAX_PATH] = {0};
     size_t n = strlen(path);
     if (!n || n >= sizeof(parent)) return EFS_ERR_INVAL;
@@ -1585,7 +1614,7 @@ int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
 {
     if (!s->storage_engine || efs_ino_is_meta_table(ino))
         return read_fragment_impl(s, ex, ino, ci, fi, data, len, sum, sum_ok);
-    pthread_rwlock_t *im = inode_gc_lock(ex->id, ino);
+    pthread_rwlock_t *im = server_inode_gc_lock(s,ex->id,ino);
     pthread_mutex_t *mu = fragment_mutex(ex->id, ino, ci, fi);
     pthread_rwlock_rdlock(im);
     pthread_mutex_lock(mu);
@@ -2145,7 +2174,7 @@ int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
     char path[8192];
     server_fragment_path(s, ex, ino, chunk_index, fragment_index, path,
                          sizeof(path));
-    pthread_rwlock_t *im = inode_gc_lock(ex->id, ino);
+    pthread_rwlock_t *im = server_inode_gc_lock(s,ex->id,ino);
     pthread_rwlock_rdlock(im);
     int dead = inode_is_dead(s, ex->id, ino);
     if (dead) { pthread_rwlock_unlock(im); return dead > 0 ? EFS_ERR_STALE : EFS_ERR_IO; }
@@ -2170,7 +2199,7 @@ int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export
     char path[8192];
     server_fragment_path(s, ex, ino, chunk_index, fragment_index, path,
                          sizeof(path));
-    pthread_rwlock_t *im = inode_gc_lock(ex->id, ino);
+    pthread_rwlock_t *im = server_inode_gc_lock(s,ex->id,ino);
     pthread_rwlock_rdlock(im);
     int dead = inode_is_dead(s, ex->id, ino);
     if (dead) { pthread_rwlock_unlock(im); return dead > 0 ? EFS_ERR_STALE : EFS_ERR_IO; }
@@ -2206,7 +2235,7 @@ int server_repair_file_atomic(struct efsd_server *s,struct efs_export *ex,
     efs_tls_chunk_gen=saved_gen;strcpy(dir,path);char *slash=strrchr(dir,'/');
     if(!slash)return EFS_ERR_INVAL;
     *slash=0;
-    pthread_rwlock_t *im=inode_gc_lock(ex->id,ino);pthread_rwlock_rdlock(im);
+    pthread_rwlock_t *im=server_inode_gc_lock(s,ex->id,ino);pthread_rwlock_rdlock(im);
     int dead=inode_is_dead(s,ex->id,ino);
     if(dead){pthread_rwlock_unlock(im);return dead>0?EFS_ERR_STALE:EFS_ERR_IO;}
     pthread_mutex_t *mu=fragment_mutex(ex->id,ino,ci,fi);pthread_mutex_lock(mu);

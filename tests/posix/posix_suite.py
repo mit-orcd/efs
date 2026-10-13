@@ -45,6 +45,7 @@ import sys
 import tempfile
 import threading
 import time
+import traceback
 
 # --------------------------------------------------------------------------
 # Test registry + result tracking
@@ -3874,6 +3875,9 @@ def invoke(fn, tdir):
     except TestTimeout as e:
         return "FAIL", str(e)
     except Exception as e:  # noqa: BLE001
+        # Preserve the failing syscall in the worker log; the TSV verdict and
+        # deadlines stay unchanged. Limit output to the relevant stack tail.
+        traceback.print_exc(limit=8)
         try:
             return "FAIL", "%s: %s" % (type(e).__name__, e)
         except TestTimeout:
@@ -4156,15 +4160,17 @@ def _kill_group(proc, grace=1.0):
         if settled():
             return True
         time.sleep(0.02)
+    # A killed descendant may remain a zombie in this group until init
+    # reaps it. Reuse the bounded state-aware shutdown oracle rather than
+    # treating killpg(0)'s zombie membership as a still-running worker.
+    # Real live/D-state members and unavailable process snapshots still fail
+    # conservatively. The original TERM + KILL grace budget is unchanged.
+    if grace > 0:
+        return not _stop_registered([proc], budget=grace)
     try:
         _signal_group(pgid, signal.SIGKILL)
     except OSError:
         pass
-    deadline = time.monotonic() + grace
-    while time.monotonic() < deadline:
-        if settled():
-            return True
-        time.sleep(0.02)
     return settled()
 
 
