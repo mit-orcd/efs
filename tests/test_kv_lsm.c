@@ -1039,7 +1039,7 @@ static int sst_names(char names[][64], int cap)
         if (strncmp(de->d_name, "seg-1-", 6) != 0)
             continue;
         if (n < cap)
-            snprintf(names[n], 64, "%s", de->d_name);
+            snprintf(names[n], 64, "%.63s", de->d_name);
         n++;
     }
     closedir(d);

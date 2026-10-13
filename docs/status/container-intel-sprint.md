@@ -1308,3 +1308,11 @@ unapplied tail, and real SST-open failure with retained cold WAL effects.
 Old-inline negative plus ASan/UBSan instrument all actual KV modules. These
 controls and both-host native/live remain NOTRUN before the fresh freeze;
 local structural/order review PASS. No directory fix or acceptance claim.
+
+
+Deferred-flush2f8d4b7edf8898e39934b82b4d1c244aba12c528 product builds
+PASS both hosts; native run stops at negative-harness compilation because
+the existing sst_names helper's64-byte snprintf triggers GCC format-
+truncation under Werror. No deployment. Bounded63-character precision
+retains the helper's original truncation behavior and fixes that adapter
+warning; full corrected-source native and live remain required.
