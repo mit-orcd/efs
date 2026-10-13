@@ -1494,6 +1494,12 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+OPEN source-review finding: merge input unlink errors are ignored. Proposed
+steady-versus-temporary accounting reduction remains unimplemented; deletion,
+peak-accounting and quota fault gates NOTRUN. Prior AMD handoff does not close
+this newly identified path or ORCD footprint acceptance.
+
+[AMD package 2 final functional handoff](../status/amd-package2-transition-load-20261013.md):
 **PASS on `3409e0c6`** — full normal/fault native, six full-library query
 ASan/UBSan harnesses, genuine v5→v6 retirement/next refresh, quorum safety,
 commands/options/pages and final quiet load (10,268 exact peer payloads).

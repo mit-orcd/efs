@@ -167,3 +167,33 @@ seven-client loaded query and hardware-RDMA gates. The original W91/W92/W109
 scale/pressure work remains open; W108's historical implementation closure is
 not reopened by these new-source rollout checks. Containers, packing, expiry
 and unplanned-event repair are outside this package.
+
+## W92 follow-up: sort scratch accounting and unchecked deletion
+
+**OPEN — source-review finding; fault reproduction and fix NOTRUN.** Inspected
+`3409e0c6` product inputs (unchanged in documentation checkpoint `4afd1f7f`).
+`names_build` calls `unlink(a); unlink(b);` after a successful merge without
+checking either result. If removal fails, an input run can remain while later
+passes create additional outputs; a successful return does not prove all scratch
+was removed. Injected unlink-failure behavior is not yet qualified. This is
+local derived-cache cleanup/accounting, not demonstrated authoritative data loss.
+
+Current `derived_charge` permanently forecasts two name entries and two aliases
+per dentry (624 bytes), while steady files need one of each (312 bytes).
+That conservative allowance covers sort scratch; lowering it alone is unsafe.
+Candidate design: permanent one-name/one-alias charge, plus an explicitly admitted
+`count * width` temporary reservation per serial sort before creating runs.
+Check multiplication overflow, propagate failed unlink/rename, and keep the
+reservation until scratch is actually removed or the candidate is destroyed.
+Existing copy/journal temporary charges must remain. This is a proposal, not
+implemented or accepted budget relief. Existing limits stay unchanged.
+
+Reproduce the inspected path with `rg -n 'derived_charge|names_build|unlink\(a\)'
+ src/meta/query_disk.c`. Next add fault hooks around merge input unlink and final
+rename in `tests/test_query_disk_io.c`, using more than SORT_ROWS entries and odd
+three-or-more-run merge passes. Assert no successful result on failed deletion,
+retained checkpoint correctness and actual file bytes within generation/aggregate
+charges during writes, merges, failure and cancellation. Compare fixed private
+quota baseline/candidate, then next refresh and all affected native/sanitizer and
+mounted gates before claiming a fix. No fault PASS or ORCD footprint acceptance
+is implied by this code inspection.

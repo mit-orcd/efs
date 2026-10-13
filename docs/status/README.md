@@ -1,3 +1,9 @@
+[W92 sort scratch follow-up](amd-package2-transition-load-20261013.md#w92-follow-up-sort-scratch-accounting-and-unchecked-deletion):
+OPEN source-review finding: merge input unlink errors are ignored. Proposed
+steady-versus-temporary accounting reduction remains unimplemented; deletion,
+peak-accounting and quota fault gates NOTRUN. Prior AMD handoff does not close
+this newly identified path or ORCD footprint acceptance.
+
 [AMD package 2 final functional handoff](amd-package2-transition-load-20261013.md):
 **PASS on `3409e0c6`** — full normal/fault native, six full-library query
 ASan/UBSan harnesses, genuine v5→v6 retirement/next refresh, quorum safety,
