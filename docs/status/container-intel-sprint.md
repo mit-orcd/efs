@@ -1994,3 +1994,45 @@ needed, then python3 scripts/intel_container_qualification.py concurrent
 Immediately run the same runner's reclaim gate (no --deepsteps), before heavy
 log collection. It requires empty exports and zero records/body allocation on
 all four nodes within180s; do not reset stores or extend this deadline.
+
+### f0af8482 queue diagnostic result and extra-probe candidate
+
+Same-source seven-client profiling-ON diagnostic FAIL:1505/1512 PASS,
+seven dir_deep_nesting timeouts only,117.034–134.704s. Immediate strict
+physical reclamation PASS93.282s, first zero inventory93.256s on all four
+nodes. Six deep60 children finish creation24.423–28.547s; one reaches
+depth58 by30s. First30 callback LOOKUP service16.420–18.336s, MKDIR
+10.496–13.002s; reply delivery remains negligible. These include later
+verification/cleanup work and must not be summed against creation-only time.
+Read-prof first sample on leader n3: LOOKUP6.004ms mean, parent proof
+5.898ms, KV70us; fresh leader ReadIndex4.987ms. All are aggregate traffic,
+not individual deep-child causal attribution.
+
+Sender histogram snapshots bracketing approximately the first30s window
+(five-second cadence; starts1.543–4.703s early and ends1.507–4.680s early)
+show successful canonical reply queue means25–64us, counts140–24369/node.
+Max fields are cumulative, not interval deltas. Coalesced/discarded frames
+have no sample; no per-child linkage or send/receive RTT measurement.
+There are zero canonical request samples: derived probes retain nonzero
+leader_commit at wire60..67, so the strict classifier excludes them. This
+is a measurement limitation, not proof that all request queue waits are zero.
+No dedicated sender is justified by these sampled reply queues.
+
+Container-only candidate removes the commit advertisement from the EXTRA
+prefix-zero read-vote probe. The original input frame is byte-for-byte
+unchanged and still owns its commit advertisement, data/replication ordering,
+credits and durability. The generic flow-probe helper is unchanged. Current
+term/boot/voters/config/leader, durable prefix and full leader own-apply checks
+remain mandatory; any follower internal apply debt still produces result2
+and retains ordered receive. No membership/lease/deadline/cache change.
+This makes the extra frame match its stated read-only purpose and the existing
+fully-accounted pure-probe guard; its live benefit is unproven.
+Actual-source probe, ASan/UBSan, read-control/pending-inbox and canonical
+outbox controls PASS locally; unmodified f0af8482 fails the new exact zero-
+commit probe assertion, an observed regression negative. Original-byte,
+allocation failure, capacity, dedup, newer boot/term/group and off-mode
+controls retained. Both-host native and full original-budget live gates are
+required before acceptance. Reproduce python3 tests/test_container_read_probe.py
+(with EFS_TEST_CFLAGS sanitizer flags), tests/test_read_control_host.py,
+tests/test_container_pending_reads.py and tests/test_host_outbox.py; source
+override EFS_RAFT_HOST_SOURCE permits checking the original failure.

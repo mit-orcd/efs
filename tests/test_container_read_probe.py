@@ -37,12 +37,12 @@ int main(void){
  tx.nent=1;tx.queued_bytes=100;host_container_read_probe(&tx,p,100);
  assert(tx.nent==1&&tx.npri==1&&tx.queued_bytes==180&&tx.queued_bytes_hi==180&&tx.st_hi==2&&tx.st_enq==1);
  assert(!memcmp(p,original,100));uint8_t *q=tx.pri[0].buf; TIMING_OFF
- assert(tx.pri[0].len==80&&q[2]==1&&!q[3]&&q[35]==7&&q[19]==3&&q[27]==5&&q[67]==11);
- for(int i=36;i<60;i++)assert(!q[i]);for(int i=68;i<80;i++)assert(!q[i]);
+ assert(tx.pri[0].len==80&&q[2]==1&&!q[3]&&q[35]==7&&q[19]==3&&q[27]==5&&!q[67]);
+ for(int i=36;i<68;i++)assert(!q[i]);for(int i=68;i<80;i++)assert(!q[i]);
  host_container_read_probe(&tx,p,100);assert(tx.npri==1);p[35]=6;host_container_read_probe(&tx,p,100);assert(tx.npri==1);
  p[35]=8;tx.queued_bytes=500;host_container_read_probe(&tx,p,100);assert(tx.npri==1&&tx.read_probe_context[0]==7);tx.queued_bytes=180;
  tx.nent=3;host_container_read_probe(&tx,p,100);assert(tx.npri==1);tx.nent=1;
- observer_on=1;host_container_read_probe(&tx,p,100);assert(tx.npri==2&&tx.read_probe_context[0]==8); TIMING_NONCANONICAL
+ observer_on=1;host_container_read_probe(&tx,p,100);assert(tx.npri==2&&tx.read_probe_context[0]==8); TIMING_DERIVED
  p[67]=0;p[35]=9;host_container_read_probe(&tx,p,100);assert(tx.npri==3); TIMING_ON observer_on=0;
  free(tx.pri[2].buf);tx.npri--;tx.queued_bytes-=80;
  p[1]=EFS_RAFT_GROUP_SHARD2;p[35]=1;host_container_read_probe(&tx,p,100);assert(tx.npri==3&&tx.read_probe_context[1]==1);
@@ -53,7 +53,7 @@ int main(void){
  puts("container read probe: bounded priority vote, original bytes/progress retained, scoped/dedup/failure guards PASS");return 0;
 }
 '''
-code=code.replace('TIMING_FIELD','uint64_t queued_us;' if timing else '').replace('TIMING_OFF','assert(!tx.pri[0].queued_us);' if timing else '').replace('TIMING_NONCANONICAL','assert(!tx.pri[1].queued_us);' if pure_helper else '').replace('TIMING_ON','assert(tx.pri[2].queued_us==42);' if timing else '')
+code=code.replace('TIMING_FIELD','uint64_t queued_us;' if timing else '').replace('TIMING_OFF','assert(!tx.pri[0].queued_us);' if timing else '').replace('TIMING_DERIVED','assert(tx.pri[1].queued_us==42);' if pure_helper else '').replace('TIMING_ON','assert(tx.pri[2].queued_us==42);' if timing else '')
 with tempfile.TemporaryDirectory(prefix='efs-container-probe-') as d:
  p=Path(d)/'test.c';p.write_text(code)
  subprocess.run(['cc','-std=c99','-Wall','-Wextra','-Werror','-Wno-misleading-indentation',*shlex.split(os.environ.get('EFS_TEST_CFLAGS','')),'-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)

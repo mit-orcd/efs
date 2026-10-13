@@ -1174,6 +1174,10 @@ static void host_container_read_probe(struct host_outbox *tx,const uint8_t *p,ui
     if(tx->npri+tx->nent>=HOST_OUTBOX_MAX || tx->queued_bytes>HOST_OUTBOX_BYTES-EFS_WIRE_RAFT_HDR_LEN)return;
     uint8_t *probe=malloc(EFS_WIRE_RAFT_HDR_LEN);if(!probe)return;
     efs_raft_flow_probe(probe,p);
+    /* This additional frame earns only a fresh heartbeat vote. The original
+     * frame retains the commit advertisement and all replication work; do
+     * not make the escape probe owe a second copy of that ordered work. */
+    memset(probe+60,0,8); /* leader_commit; original p is untouched */
     tx->pri[tx->npri++]=(struct host_outbox_item){probe,EFS_WIRE_RAFT_HDR_LEN,
         BO_ON() && outbox_pure_read_control(probe, EFS_WIRE_RAFT_HDR_LEN) ?
                                                     efs_batch_obs_now_us() : 0};
