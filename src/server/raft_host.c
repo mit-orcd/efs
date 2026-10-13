@@ -4344,12 +4344,13 @@ static int host_read_admit(struct efs_raft *r, struct host_read_admission *a,
     return rc;
 }
 
-/* Register before waiting for h->mu. A tracked round may cover this ticket
+/* Metadata freshness is independent of the data storage engine. Register
+ * before waiting for h->mu. A tracked round may cover this ticket
  * only if its admission watermark was captured BEFORE any probes were sent.
  * Saturation disables this optimization rather than wrapping authority. */
 static uint64_t host_read_register(struct efs_raft_host *h,uint8_t group)
 {
-    if(!h->s || !h->s->storage_engine)return 0;
+    if(!h->s)return 0;
     struct host_group *g=group_slot(h,group);
     if(!g)return 0;
     uint64_t value=__atomic_load_n(&g->read_admit_count,__ATOMIC_ACQUIRE);
@@ -4365,7 +4366,7 @@ static uint64_t host_read_eligible_round(struct efs_raft_host *h,uint8_t group,
 {
     uint64_t previous=efs_raft_read_round(r);
     struct host_group *g=group_slot(h,group);
-    if(ticket && h->s && h->s->storage_engine && previous && g && g->read_begin_round==previous &&
+    if(ticket && h->s && previous && g && g->read_begin_round==previous &&
        g->read_begin_term==efs_raft_term(r) && ticket<=g->read_begin_admits)
         return previous;
     return previous+1;
@@ -4374,7 +4375,7 @@ static int host_read_begin_tracked(struct efs_raft_host *h,uint8_t group,
                                   struct efs_raft *r)
 {
     struct host_group *g=group_slot(h,group);
-    uint64_t admits=h->s && h->s->storage_engine && g?
+    uint64_t admits=h->s && g?
         __atomic_load_n(&g->read_admit_count,__ATOMIC_ACQUIRE):0;
     uint64_t previous=efs_raft_read_round(r);
     int rc=efs_raft_read_begin(r);
@@ -4454,7 +4455,7 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             int started=0;
             pthread_mutex_lock(&h->mu);
             struct efs_raft *r=group_raft(h,group);
-            if(h->s && h->s->storage_engine) {
+            if(ticket) {
                 rc=(!r || efs_raft_role(r)!=EFS_RAFT_LEADER)?EFS_ERR_NOT_PRIMARY:
                    efs_raft_read_round(r)==UINT64_MAX?EFS_ERR_BUSY:EFS_OK;
                 if(!rc) {

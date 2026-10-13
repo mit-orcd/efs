@@ -97,3 +97,52 @@ Raw evidence outside Git:
 `/Users/mike/Documents/Codex/2026-10-10/n-x20/artifacts/intel-package3-20261013`.
 Original frozen source/archive:
 `/Users/mike/Documents/Codex/2026-10-10/n-x20/artifacts/intel-devel-20261013`.
+
+## Initial mounted results and metadata-admission candidate
+
+Exact product1a737143: two simultaneous jobs16 core runs PASS432/432
+(44.7/47.6s suite times). Cross-host peer PASS67/67 (78.4s); extras each1/5 PASS,
+zero failures/four legitimate skips (disabled virtual commands and unsupported
+shared mmap; private mmap PASS). Extras briefly overlapped the beginning of
+peer execution; this is recorded loaded execution, not a quiet latency control.
+Seven clients4+3/jobs16 normal concurrent **FAIL1511/1512**: only Intel1 temporary
+client1 dir_deep_nesting30s timeout; other six216/216 PASS, controller92.541–
+101.226s. All five temporary clients cleanly drained, no forced discard.
+
+Capability-preserving phase-only diagnostic (expensive profilers OFF) also
+**FAIL1511/1512**, this time Intel1client2 dangling-symlink unlink EBUSY;
+all seven deep cases PASS. Observed deep creation11.150–23.265s, before leaf/
+recursive cleanup. The nonblocking observer loses some events under load;
+missing completion events and incomplete call counts are not evidence of an
+unfinished passing case. Analyze only `test=dir_deep_nesting`, separately from
+the beyond64 test. This is diagnostic evidence, not normal acceptance or an
+isolated causal improvement. No normal timeout or BUSY failure is closed.
+Reproduce with `concurrent --phase-observer` and a fresh run-id/output directory.
+
+Small W1061024-file/256MiB no-fork and5ms fork-thread read diagnostics PASS on
+both hosts, every file/all four64KiB parts. Existing ORCD scale/kernel finding
+remains open; do not transfer bounded Intel evidence to its platform gate.
+Warm deterministic256x512KiB/4worker lifecycle PASS: create2.903s; read30.016s/
+6911ops; churn30.015s/6076ops; verify256/256 hashes1.070s. No errors, warm
+read integrity PASS. The test does not inventory all pre-existing production
+payloads, for which this chat has no immutable historical baseline.
+
+Candidate: use pre-mutex read admission tracking for ordinary files as well as
+containers. Files previously registered no ticket and could not share a probe
+sent AFTER their request arrived while waiting for the mutex; they conservatively
+waited for another round. Registration watermark is captured before sends;
+late arrivals still require a new round. Term/round/own-apply/quorum predicates,
+RPC/case deadlines, voters, durable storage and core batch flags unchanged.
+Counter saturation falls back to the existing conservative admission path.
+No inbox consumption, storage-engine activation or query permission changes.
+This is a plausible shared metadata-latency improvement, not a measured fix yet.
+
+Local `test_container_read_admission.py` normal+ASan/UBSan PASS, extended to
+files early/late admission while retaining container, term/round/failure/
+saturation and1024 concurrent-ticket uniqueness controls. Exact1a737143 old
+production helper fails intended file_ticket==4 assertion with the new fixture.
+`test_readindex_pair.py` (including existing sanitizer/negative controls) and
+`test_readindex_result.py` PASS. Both-host full native, affected fault/sanitizer,
+new-source deployment and loaded requalification are NOTRUN for this candidate.
+Baseline600s normal snapshot-pressure/foreground/resource gate is running on
+unchanged deployed1a737143. Complete it before native builds or redeployment.
