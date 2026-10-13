@@ -1,8 +1,10 @@
 [W92 sort scratch follow-up](amd-package2-transition-load-20261013.md#w92-follow-up-sort-scratch-accounting-and-unchecked-deletion):
-OPEN: checked close/unlink/rename and explicit scratch accounting implemented;
-AMD measured-peak, negative-control and focused fault/quota regressions PASS.
-Full new-candidate native/sanitizer and mounted gates remain NOTRUN; deployed
-3409e0c6 evidence does not qualify this patch or ORCD full-size acceptance.
+FIXED/AMD-qualified on **d17f940f**: measured scratch peak/negative control,
+close/unlink/rename faults, full normal/fault native and six full-library query
+sanitizers PASS. Genuine transition/next refresh, retained reader, commands/pages
+and three quiet load rounds PASS (25,486 exact peer payloads). Current synthetic
+quota 17G/node; query 16/32 GiB unchanged. Global W92/ORCD full-size acceptance OPEN;
+other integrated source revisions need their own qualification.
 
 [AMD package 2 final functional handoff](amd-package2-transition-load-20261013.md):
 **PASS on `3409e0c6`** — full normal/fault native, six full-library query
