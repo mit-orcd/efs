@@ -13,7 +13,15 @@ independently of inherited command-enabled environment. Its summary records the
 packing and command flags. Physical packing, mutation, peer, cold-byte and
 reclamation assertions and original deadlines remain unchanged.
 
-Current tested source: **0dcce384fa442479070a31464777f104c1fe7829**.
+Current candidate: **eb2fad1b76e5311087076f70d2c3544a62825edf**, with a bounded
+metadata insertion buffer, shorter FIFO receive slices and reserved ReadIndex
+peer connections. The two-RPC follower experiment was reverted. Targeted safety
+gates pass, but full live repeatability remains **FAIL**. Full current-source
+normal/fault native reruns PASS.
+The earlier deep-directory failures are not closed by a single passing run.
+See the final checkpoints below for each tested SHA and its exact verdict.
+
+Historical baseline source: **0dcce384fa442479070a31464777f104c1fe7829**.
 Memtable insertion optimization and GC shutdown correction pass normal/fault
 native, fully instrumented LSM/model/GC safety gates, focused orderly packing
 and acknowledged-fsync crash/cold/reclamation gates on AMD. The isolated insertion
@@ -424,3 +432,257 @@ runtime stores of two earlier verified PASS fixtures, retaining their logs,
 manifests and reports plus all failed/current stores. No normal service or
 unrelated path changed. All owned qualification screens/processes are stopped;
 no push, tag or main/release promotion.
+
+## Deep-directory proof scheduling follow-up
+
+Root-only AMD work on `devel` retains files/TCP/direct I/O, packed writes,
+client `EFS_COMMANDS=0`, server `EFS_COMMANDS_SERVER=0`, four explicit4G quotas,
+seven clients/jobs16, and the original30/20/180-second case/shutdown/drain
+budgets. No reserve, freshness, TTL, concurrency or test-shape relaxation.
+
+The current-source diagnostic before these changes (`0dcce384`, product/test
+inputs also used by documentation checkpoint330fac5c) retained five deep-case
+failures in `/data1/efs/packing-qualification/root-a/gc-direct-r_x13bjs`.
+Creation took24.920–28.421s; the two cases that completed spent another2.573–2.575s
+in recursive cleanup. Failed cases have no completion record: their cleanup
+length is unknown. These observations identify the exhausted case budget rather
+than a stuck leaf write. Instrumented results are diagnostic, not quiet acceptance.
+The CPU recording lost1012 samples/25chunks; its global/inclusive costs cannot
+be attributed exclusively to deep creation or added together. The node3
+cumulative read counters included71438 remote proofs averaging2909us; these
+are whole-fixture observations, not per-case latency or helper-saturation counts.
+
+A wake-predicate/single-notification experiment was committed as `c759376b`.
+Its focused native/ASan/UBSan tests and full native suite passed, but the
+seven-client live gate failed all seven deep cases. One run was confounded by
+an owned `du` inventory that had remained active; it was stopped and that result
+is explicitly excluded as a quiet comparison. A subsequent quiet retry also
+failed all seven. Peer/cold/physical/metadata checks passed independently.
+`9252bfc6` reverts the experiment; it is not an accepted performance fix.
+The failed/raw evidence remains outside Git. No failed runtime stores were
+deleted: automatic approval review rejected that cleanup. Only reproducible
+generated binaries/objects in inactive older source copies were cleaned to
+provide headroom; logs, source, manifests and runtime stores remain.
+
+`a863af5a` starts a locally led proof before synchronously waiting for the other
+leader's proof. Mixed leadership no longer needs the eight-helper pool, whose
+saturation previously fell back to serial proofs. Both-follower cases retain the
+bounded pool/scalar fallback. This preserves fresh pre-send admissions and
+ordinary term/quorum/applied-prefix checks. Full normal/fault native and targeted
+ASan/UBSan gates passed. Quiet round1 passed1512/1512 core checks; round2 still
+failed one deep case (1511/1512). Peer67/67, orderly shutdown, cold bytes and
+physical/metadata drain passed in both. Round3 and the planned additional crash
+gate were NOTRUN after the failure. The overlap change alone is not qualification.
+
+`4d1f0e33aa9ea0b8bfd8df2b279fc35071a44bb7` additionally records bounded
+next-round demand under the existing Raft mutex. The pump begins that requested
+round when the older pending round completes, avoiding the reader wake/lock/kick
+handoff before sending probes. Two fields per group coalesce concurrent demand;
+no pending ACK set is reset, no completed old proof covers a new admission, and
+term/role/replica changes discard demand. There is no new read authority, lease
+or permanent worker allocation. The regression executes the actual helpers for
+112-reader coalescing, unchanged pending ACKs, fresh prefix, no idle probe loop,
+term/role/removal and send-error retry. Existing real read-proof tests continue
+to check own apply, post-send refusal and context invalidation.
+
+That next-round experiment passed native/sanitizer safety and one quiet full
+round, then failed all seven deep cases on quiet round2 (1505/1512). A separate
+instrumented diagnostic also failed all seven. Commit `611ef6d4` reverts it;
+next-round demand is not retained as an accepted fix.
+
+`661f5282253f28314b18d0ae433e8620a4010475` lets the existing strict Raft
+read-control guard acknowledge a safe probe before unrelated queued replication
+work. Pending frames still enter the normal ordered receive/apply path. Term,
+leader, membership, matched-prefix and durability checks remain mandatory.
+Full native, six targeted ASan/UBSan regressions, and the fully instrumented
+Raft suite with normal/early-ACK modes passed. Quiet round1 still failed one
+deep case (1511/1512); peer, cold bytes, orderly shutdown and reclamation passed.
+The other planned quiet/crash/fault runs were NOTRUN after that failure.
+An all-actor diagnostic failed three deep cases (1509/1512), with the remaining
+peer/cold/reclamation checks passing independently. The bounded35s/99Hz recording
+had zero lost samples; 99.62% of sampled CPU was in daemons and memmove took6.89%
+self cost, including large committed-table insertion. These are diagnostic
+sampling costs, not end-to-end throughput or exclusive per-case attribution.
+
+## Bounded metadata insertion buffer
+
+Candidate **4734e1a40e29ab76c52682b17b4ad24a64f4649d** reuses the sorted
+memtable implementation as a newer insertion buffer. It merges into the large
+main table at1024 keys or256KiB. Gets and ordered/prefix/resumed scans select
+newer buffered entries first, including tombstones. Flush materializes both
+before segment publication/WAL reset; snapshots account for both tables before
+allocating and preserve their original isolated view. WAL sequence/apply order
+and durability remain unchanged. This changes no disk or wire format.
+
+The deterministic distributed-key regression starts with8192 keys and adds4096
+keys in128 batches of32. Pointer/prefix movement falls from20794768 to2112048
+bytes (9.85x less), with identical entries and ordering. This is a copying-work
+measurement, not a live performance claim. The model also covers2000 mixed
+binary-key batches, all26 preparation allocation refusals, and independent
+merge-capacity refusals that preserve both owned tables.
+The real-LSM regression covers buffered replacements/tombstones, point and
+ordered/prefix/resumed reads, snapshot budget/isolation, manual flush, and a cold
+WAL tail. Initial working-tree regression passed; exact-commit gates follow.
+
+Build identity: `EFS_GIT_ID=4734e1a4 EFS_GIT_DESCRIBE=4734e1a4
+EFS_GIT_BRANCH=devel`, GCC15.2, AMD395/Radeon8060S,32 logical CPUs,
+Linux7.0.0-38-generic. All781 tracked Makefile/src/include/tests/scripts/deps
+inputs verified remotely; sorted path/hash manifest digest
+`88dc08c580af4fb3ca72edacb0153b212f294f0f310780bf096a977b6f5a4ed3`.
+Raw output is outside Git in
+`amd_efs:/data1/efs/packing-qualification-20261012/insertion-*`.
+
+Exact-source normal/fault native and fully instrumented LSM/model sanitizer
+checks PASS. Quiet round1 (`gc-direct-6vt8o53m`) passed1512/1512 core and67/67
+peer, cold bytes, physical reclamation, metadata drain and four orderly exits.
+Round2 (`gc-direct-iv76fiyw`) is FAIL:1498/1512 core PASS, with seven deep-directory30s
+timeouts, four names_crazy_dirs30s timeouts, plus EIO in concurrent_write_and_readdir,
+rename_to_self and dir_many_files. Peer67/67 and cold/physical/metadata/shutdown
+checks passed independently. Planned round3 and additional crash were NOTRUN
+because the qualification runner stopped on round2's final failure.
+
+A separate diagnostic (`gc-direct-nwpez910`) passed all1512 core plus lifecycle
+checks. Its35s/99Hz all-daemon/client recording lost zero samples; memmove self
+cost was2.67% (previous661f recording6.89%), while kv_mtab_pos rose to3.01%.
+These separate sampled runs are descriptive, not a controlled throughput result.
+Deep creation took25.352–26.795s, cleanup2.049–2.267s, and complete worker
+budgets28.488–29.669s. Live-phase pump mutex hold maxima reached136786us.
+Cold restart elections are ordinary term changes, not evidence of live leader
+churn. Whole-fixture remote proof/catch-up counters cannot attribute a case's
+failure. Buffer correctness/copying improvements do not close live repeatability.
+
+Binary SHA256, normal4734 build:
+
+- efsd: `b79807ad44202426bf035e42cc14fb40f059fe632182b0d971040076f696ea06`
+- efs-fuse: `35093a7d4a31882eb0ee86dcd6ef332fe05e8d6e810a600ae81704a69af268da`
+- efs-mgmt: `1a12677c78975e9b417e944300922257f90f781f83234e2f11fb7122c2a2b3f2`
+
+Use the reproduction commands above with seven clients/jobs16 and fresh ports.
+Native: `make -j8 && make test`; fault native: a separate clean build,
+`make -j8 EFS_FAULTS=1 && make EFS_FAULTS=1 test`. ASan/UBSan: a separate clean
+build with a compiler wrapper adding `-fsanitize=address,undefined
+-fno-omit-frame-pointer -g` to every compile and link; run test_kv_insertion_buffer,
+test_kv_lsm, test_kv_snapshot_tail, test_kv_seg_index, test_kv_reader_gate and the
+Python memtable model. Set `ASAN_OPTIONS=detect_leaks=1:abort_on_error=1
+UBSAN_OPTIONS=halt_on_error=1`.
+For diagnostic reproduction, set `EFS_POSIX_PHASE_TRACE=1 EFS_READ_PROF=1
+EFS_RAFT_OBS=1`, wait for the committed phase stream's `event=create`, and record
+only owned fixture daemon/client PIDs using `perf record -F99 -g --call-graph fp
+-p <comma-separated-PIDs> -- sleep 35`; keep resulting artifacts outside Git.
+Do not use instrumented runs as quiet acceptance.
+
+## Shorter FIFO receive slices
+
+Candidate **77c1d0d813a62c3cad074eeafb73da82ac97fb89** lowers the hard
+inbox prefix from32 to8 frames so apply/read progress publishes between shorter
+lock-held receive batches. Existing global control/configuration/read fences,
+per-group message order, queued-tail precedence, deferred durability credits
+and backlog eventfd wakes are unchanged. The actual FIFO scheduler regression
+passes. Same-source full normal/fault native and seven targeted read/FIFO sanitizer
+gates PASS. Initial quiet core passed1512/1512 and peer67/67 with four clean
+exits (`gc-direct-m20wtyfa`), but cold restart was NOTRUN after storage refused
+4G against a1.50GiB safe maximum. This is a reserve refusal, not verified cold
+bytes or a deep-case failure. No quota/reserve relaxation was made.
+
+Only inactive generated build outputs and verified PASS fixtures' node stores
+were reclaimed; logs, manifests, reports and every failed store remain.
+A fresh quiet retry (`gc-direct-w05_ax1b`) then failed1499/1512 core: seven
+30s deep-directory timeouts and six30s names_crazy_dirs timeouts. Peer67/67,
+cold bytes, physical reclamation, metadata drain and orderly shutdown passed
+independently. Other planned quiet/crash repeats were NOTRUN. Shorter slices
+alone are not accepted as closing live repeatability.
+Build with `EFS_GIT_ID=77c1d0d8 EFS_GIT_DESCRIBE=77c1d0d8 EFS_GIT_BRANCH=devel`.
+Verified781-input manifest digest:
+`6f7caf7320a755deb09ab75c16e7bc525ea606d00d031dd0586ff44da42ebaf6`.
+Raw output: `amd_efs:/data1/efs/packing-qualification-20261012/slice-*`.
+Same live reproduction, fresh ports36110,36120,36130; no timeout increases.
+
+## Bounded follower proof overlap
+
+Candidate **1cb3b20345a1c07cb32d11f917a9ebc7ba0b294e** allows two remote
+ReadIndex RPCs in flight per group instead of one. Existing caller threads own
+both; no detached workers or unbounded RPC fanout. A reader still records an
+admission floor beyond every already-started RPC. The next fresh request can
+reach the leader while an older RPC returns. Results publish only in increasing
+local admission order, so a late older reply cannot replace newer proof/error
+state. The leader's existing fresh-round/term/quorum/applied-prefix guards and
+follower catch-up checks remain unchanged; no cached proof grants authority.
+
+The actual threaded coalescer regression checks a held first request, concurrent
+second request, blocked third admission, maximum two owned RPCs, out-of-order
+completion, newer errors, late older replies, a new request after completion,
+and counter exhaustion. Full normal native and eight targeted ASan/UBSan
+read/FIFO/coalescer regressions and full fault-enabled native PASS. The quiet
+live run failed:1493/1512 core cases passed. Peer and packing lifecycle checks
+passed independently. The experiment was reverted in **6950e001**; the window
+regression and Makefile entry were removed with it. Later repeats were NOTRUN.
+Build identity: `EFS_GIT_ID=1cb3b203 EFS_GIT_DESCRIBE=1cb3b203
+EFS_GIT_BRANCH=devel`. All782 inputs verified; digest
+`74772e838760bb139ba5db2bf235e1bb53fe405ca3ed8ab63a659b93c94fd449`.
+Raw output: `amd_efs:/data1/efs/packing-qualification-20261012/window-*`.
+Same live reproduction, fresh ports36310,36320,36330; concurrency, quota and
+deadlines remain unchanged. Run `python3 tests/test_remote_read_window.py` for
+historical focused reproduction at1cb3b203; that historical Makefile includes it. The inactive
+qualification source checkout was reused; no effort to preserve old binaries,
+as authorized by the user. Exact input/binary hashes and raw verdicts remain.
+
+
+## Reserved ReadIndex connections: timeout regression remains open
+
+Candidate **eb2fad1b76e5311087076f70d2c3544a62825edf** retains32 ordinary
+peer connections and reserves two additional slots for ReadIndex requests.
+Mutations cannot borrow those slots; release/drop signals the matching waiter
+class. Existing RPC deadlines, TCP timeout restoration and failure ownership
+remain unchanged. Saturated ordinary-pool regressions demonstrate independent
+read admission, but this does not establish pool starvation as the cause of
+the live directory timeout. The two-RPC coalescer experiment is absent.
+
+Same AMD395/kernel7.0.0-38/GCC15.2 environment and four private4G nodes, seven
+clients/jobs16, files/TCP/direct/packing1/commands0/server0/repair0. Build:
+`make -j8 EFS_GIT_ID=eb2fad1b EFS_GIT_DESCRIBE=eb2fad1b EFS_GIT_BRANCH=devel`.
+Verified781-input manifest digest:
+`fc0db7bdbdd51c3c9a29f40e77e115ad3e16a127aed93df672121a83cea03ec2`.
+Executable SHA-256:
+
+| Executable | SHA-256 |
+| --- | --- |
+| efsd | e11f66e86d9827f9a39056fc9a1109eccac6da558d3aac4f4ccac5c48c762af5 |
+| efs-fuse | 801314ce5d123d4eaa2860ce7c043b6152213bdd15254e1c9a75cf13b6bcab32 |
+| efs-mgmt | 31d6cdd92df06c44baccf8e1ac9de661bbf61e030b08cd5ab756d218050d6bfd |
+
+Nine focused regressions PASS normally and under ASan/UBSan: ReadIndex pair,
+completion, remote pair, host read control, operation, publication, FIFO inbox,
+peer-pool deadline and host-read deadline. Run the corresponding
+`python3 tests/test_*.py` scripts; sanitizer reproduction uses the compiler
+wrapper and options documented above. These extracted tests are not fully
+instrumented live daemons. Full normal/fault native reruns PASS.
+
+Quiet fixture `gc-direct-wyam0tcz` (**FAIL**):1492/1512 core PASS,20 directory
+timeouts at the original30s deadline: all seven dir_deep_nesting and
+names_crazy_dirs cases, plus six dir_deep_nesting_beyond_64 cases. Client6
+passed beyond64. No EIO was reported in this run. Peer67/67, acknowledged
+cold bytes, physical packed reclamation, metadata queue drain and all four
+orderly exits within20s PASS independently. Further quiet repeats and the
+current-source crash repeat were NOTRUN after that failure. Suite durations
+were71.9–75.4s. Cold admission had6.54GiB safe capacity against4G; this failure
+was not the earlier reserve refusal. No deadline, quota or authority was relaxed.
+
+Use the full seven-client reproduction above with fresh ports36410–36413.
+Raw logs, binary/input manifests and failed stores remain externally at
+`amd_efs:/data1/efs/packing-qualification-20261012/proof-*` and
+`/data1/efs/packing-qualification/root-a/gc-direct-wyam0tcz`
+(with companion root-b `gc-direct-flkol6tj`). No raw captures are committed.
+
+The reviewed GC reap path already selects active lane bits; it does not issue
+all64 sweeps for each tiny file. Logs also show repeated GC passes visiting
+thousands of tombstones. That is a diagnostic lead, not a proven timeout cause
+or a completed fix. Existing profiles show fresh ReadIndex dominates lookup
+wall time. Next acceptance requires a demonstrated scheduling/lookup fix and
+repeatable quiet full runs on its exact source, preserving the30s cases. W95
+and its production-format/migration obligations remain open.
+
+Full eb2fad1b safety reruns completed with exit0 for `make test` and a clean
+`make -j8 EFS_FAULTS=1` / `make EFS_FAULTS=1 test`. Native log SHA-256:
+normal `640a0d7ac2f479b845b5f1f0bf68340181d841281f079fda7ea53edc0006eab9`;
+fault `4eb3f06baeabcb0c94234dfc65f4c722e6c6a07c66bcea77dc59c2d28cd972e8`.
+These safety results do not change the failed quiet packing verdict.
