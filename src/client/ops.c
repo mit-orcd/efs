@@ -1041,8 +1041,8 @@ efs_ino_t efs_client_create_ex(efs_ino_t parent, const char *name, uint32_t mode
 static void create_stage_inode(efs_ino_t parent, const char *name, uint32_t mode,
                                 uid_t uid, gid_t gid, const struct efs_inode *out)
 {
-    /* Pin across the local insert. The dirty mark below is what keeps
-     * the row after we unpin; the pin covers the insert itself. */
+    /* Pin across the local insert. Regular-file staging retains dirty rows
+     * for later data publication; committed directory mirrors may evict. */
     efs_client_stage_pin(out->ino);
     efs_client_stage_pin(parent);
     efs_client_lock_dir(parent);
@@ -1075,8 +1075,13 @@ static void create_stage_inode(efs_ino_t parent, const char *name, uint32_t mode
      * hold — otherwise the row could be evicted in the gap and the later
      * REPORT would skip the missing row (its size/chunk recs never reach
      * the server). Peers never mark this ino dirty. */
-    efs_client_mark_ino_dirty(out->ino);
-    efs_client_mark_ino_dirty(parent);
+    /* MKDIR's returned row and parent mutation are already committed on the
+     * server. Mirroring them creates no pending file-data publication. Do not
+     * add directory REPORT work, or clear unrelated existing dirty marks. */
+    if (!S_ISDIR(out->mode)) {
+        efs_client_mark_ino_dirty(out->ino);
+        efs_client_mark_ino_dirty(parent);
+    }
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(parent);
     efs_client_stage_unpin(parent);
@@ -1104,7 +1109,8 @@ int efs_client_create_result_inode(efs_ino_t parent, const char *name, uint32_t 
     if (!ino)
         return EFS_ERR_INVAL;
     *ino = 0;
-    int admission = efs_client_report_admit(2); /* child and parent rows */
+    int publish = !S_ISDIR(mode);
+    int admission = publish ? efs_client_report_admit(2) : EFS_OK;
     if (admission != EFS_OK)
         return admission;
     /* Phase 2b: the mutation runs on the metadata primary (which allocates the
@@ -1119,7 +1125,7 @@ int efs_client_create_result_inode(efs_ino_t parent, const char *name, uint32_t 
         if (created)
             *created = out;
     }
-    efs_client_report_unreserve();
+    if (publish) efs_client_report_unreserve();
     return rc;
 }
 

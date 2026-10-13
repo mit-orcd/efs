@@ -213,6 +213,7 @@ test-report-pressure:
 test-create-errors: $(LIB)
 	python3 tests/test_kv_wal_faults.py
 	python3 tests/test_create_errors.py
+	python3 tests/test_committed_directory_stage.py
 	python3 tests/test_create_retry_identity.py
 	python3 tests/test_create_retry_ack.py
 	python3 tests/test_open_lease.py

@@ -1475,7 +1475,7 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-**Mac live qualification:** `a4679e14` passes persistence **27/27 prepare + 27/27 verify** across clean restart; native completes **210/216**, six original-budget timeouts. Deep-directory and many-file diagnostics pass alone. A queued fresh-probe candidate retains every ordered frame and passes local focused tests; live qualification is pending. [Results and durability-I/O investigation](../status/mac-v032-posix-20261012.md).
+**Mac live qualification:** `cf51a0b2` completes fresh-store native **210/216**, six original-budget timeouts; persistence prepare **26/27**, 500-file timeout, verify NOTRUN. Earlier `a4679e14` passes **27/27 prepare + 27/27 verify** on its recorded store/run. A directory staging fix removes redundant REPORT ownership while preserving regular-file admission; live validation is pending. [Results and durability-I/O investigation](../status/mac-v032-posix-20261012.md).
 
 **Current release integration:** `release-v0.3.2-pre-alpha` merges reviewed ORCD evidence9fc5e024 into v0.3.1. Product/test inputs unchanged. AMD TCP/direct and TCP/buffered PASS; independently reviewed ORCD nativeRDMA/direct two core rounds1512/1512 and peer67/67 per round, native/fault/sanitizers/cold/physicalGC PASS. Tested SHAs remain15e2a531 AMD and40f4509d ORCD; the merge itself was not remotely executed. Packing/containers/.efs/repair remain disabled. No push/tag/deployment. [v0.3.2 review and coverage](../status/v032-integration-review-20261012.md).
 
