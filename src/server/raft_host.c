@@ -935,6 +935,8 @@ static void *host_sender(void *arg)
             int n_rdma = 0, n_tcp = 0;
             uint64_t read_wire_begin = 0;
             int read_wire_type = 0;
+            uint64_t read_frame_begin[HOST_SENDER_PIPE_MAX]={0};
+            int read_tcp=tx->preserve_read && BO_ON() && pc->kind==EFS_CONN_TCP;
             /* Observe only homogeneous, canonical read-only batches.
              * The entire send/transport-reply interval is one sample, not
              * a per-frame RTT. Mixed and failed batches provide no sample.
@@ -952,6 +954,12 @@ static void *host_sender(void *arg)
             }
 
             for (sent = 0; sent < n && sent < depth; sent++) {
+                /* A TCP-only pipeline returns transport replies in send order.
+                 * Include mixed batches, but never infer an RDMA/TCP mapping.
+                 * This interval includes later sends before ACK collection; it
+                 * is not a bare-link RTT or Raft quorum completion. */
+                if(read_tcp && outbox_pure_read_control(bufs[sent],lens[sent]))
+                    read_frame_begin[sent]=efs_batch_obs_now_us();
                 if (efs_conn_send_msg(pc, EFS_MSG_RAFT, bufs[sent],
                                       lens[sent]) != 0) {
                     bad = 1;
@@ -1006,6 +1014,10 @@ static void *host_sender(void *arg)
                     }
                     n_tcp--;
                 }
+                if(read_frame_begin[acked])
+                    BO_HIST(bufs[acked][0]==EFS_RAFT_MSG_AE_REQ ?
+                            BH_READ_REQ_WIRE_FRAME_US : BH_READ_REPLY_WIRE_FRAME_US,
+                            efs_batch_obs_now_us()-read_frame_begin[acked]);
             }
             if (read_wire_begin && !bad && sent == n && acked == n)
                 BO_HIST(read_wire_type == EFS_RAFT_MSG_AE_REQ ?

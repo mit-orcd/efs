@@ -2370,3 +2370,23 @@ established; variable unlink EBUSY did not recur, which is not causal proof.
 The64-frame experiment is reverted to the previous32-frame policy. The earlier
 retained flock ownership/unlock and physical-GC fixes remain. Loaded acceptance
 FAIL; W100 stays open. No push, merge or production promotion.
+
+
+### TCP mixed-batch wire timing diagnostic candidate
+
+The previous homogeneous-batch observer captured no canonical request samples.
+An opt-in TCP-only per-frame observer now records each strict canonical request
+or vote from immediately before its own send to its own valid ordered transport
+reply. Mixed request/reply/data batches are included. Pure TCP reply order is
+required; RDMA/mixed-channel mapping is excluded. Failed/unmatched receives
+produce no sample. The interval includes later pipeline sends before receive
+collection, so it is not bare-link RTT, receiver admission, Raft vote latency
+or quorum completion. Existing batch timing remains separate. Normal profiling
+OFF does no extra classification or clocks; protocol, FIFO, authority, admission,
+durability and budgets are unchanged. The prior32-frame scheduler is restored.
+
+Actual sender fixture adds mixed TCP, diagnostics-OFF, RDMA-exclusion and
+failed-receive controls; Linux/native and sanitizer coverage is pending. Local
+outbox/read-control tests PASS; async sender cannot execute on macOS.
+The preceding tested4f deployment and disabled-feature runtime are restored
+and verified. This observer is for diagnosis only, not directory acceptance.
