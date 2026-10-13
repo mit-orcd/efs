@@ -1205,8 +1205,16 @@ static void host_container_read_probe(struct host_outbox *tx,uint8_t *p,uint32_t
     if(!tx->preserve_read || len<EFS_WIRE_RAFT_HDR_LEN || p[0]!=EFS_RAFT_MSG_AE_REQ)return;
     int gi=efs_raft_flow_group(p[1]);
     uint64_t read=efs_raft_flow_rd64(p+28),term=efs_raft_flow_rd64(p+12),boot=efs_raft_flow_rd64(p+20);
-    if(gi<0 || !read || (tx->read_probe_term[gi]==term && tx->read_probe_boot[gi]==boot &&
-                       read<=tx->read_probe_context[gi]))return;
+    if(gi<0 || !read)return;
+    if(tx->read_probe_term[gi]==term && tx->read_probe_boot[gi]==boot &&
+       read<=tx->read_probe_context[gi]){
+        /* An exact-context probe was already admitted. Subsequent entry
+         * packets need not repeat that context either. Empty heartbeats
+         * retain it, including retransmit fallback if the probe is lost. */
+        if(read==tx->read_probe_context[gi] && len>EFS_WIRE_RAFT_HDR_LEN &&
+           outbox_nentries(p,len)>0)memset(p+28,0,8);
+        return;
+    }
     if(tx->npri+tx->nent>=HOST_OUTBOX_MAX || tx->queued_bytes>HOST_OUTBOX_BYTES-EFS_WIRE_RAFT_HDR_LEN)return;
     uint8_t *probe=malloc(EFS_WIRE_RAFT_HDR_LEN);if(!probe)return;
     efs_raft_flow_probe(probe,p);
@@ -1225,7 +1233,7 @@ static void host_container_read_probe(struct host_outbox *tx,uint8_t *p,uint32_t
     /* Only after the independent exact read probe owns its bounded slot,
      * let entry replication omit that duplicate read context. Its entries,
      * prefix, term/boot, commit advertisement and durable ACK remain intact.
-     * Empty heartbeats and every failure/dedup fallback retain their context. */
+     * Empty heartbeats and every failure/older-context fallback retain their context. */
     if(len>EFS_WIRE_RAFT_HDR_LEN && outbox_nentries(p,len)>0)memset(p+28,0,8);
 }
 
@@ -7451,7 +7459,7 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
         const char *mode = getenv("EFS_RAFT_BATCH_NOOP");
         if (mode && strcmp(mode, "0") && strcmp(mode, "1"))
             return EFS_ERR_INVAL;
-        cfg.batch_noop = mode && !strcmp(mode, "1");
+        cfg.batch_noop = mode ? !strcmp(mode, "1") : (h->s && h->s->storage_engine);
         mode=getenv("EFS_RAFT_BATCH_OVERLAP");
         if (mode && strcmp(mode,"0") && strcmp(mode,"1")) return EFS_ERR_INVAL;
         cfg.batch_overlap=mode ? !strcmp(mode,"1") : (h->s && h->s->storage_engine);

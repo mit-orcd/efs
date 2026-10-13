@@ -39,7 +39,9 @@ int main(void){
  memset(original+28,0,8);assert(!memcmp(p,original,100));uint8_t *q=tx.pri[0].buf; TIMING_OFF
  assert(tx.pri[0].len==80&&q[2]==1&&!q[3]&&q[35]==7&&q[19]==3&&q[27]==5&&!q[67]);
  for(int i=36;i<68;i++)assert(!q[i]);for(int i=68;i<80;i++)assert(!q[i]);
- host_container_read_probe(&tx,p,100);assert(tx.npri==1);p[35]=6;host_container_read_probe(&tx,p,100);assert(tx.npri==1);
+ p[35]=7;host_container_read_probe(&tx,p,100);assert(tx.npri==1 && !p[35] && !memcmp(p,original,100));
+ p[35]=7;p[79]=0;uint8_t heartbeat[80];memcpy(heartbeat,p,80);host_container_read_probe(&tx,p,80);assert(tx.npri==1 && p[35]==7 && !memcmp(p,heartbeat,80));p[79]=1;
+ p[35]=6;host_container_read_probe(&tx,p,100);assert(tx.npri==1 && p[35]==6);
  p[35]=8;tx.queued_bytes=500;host_container_read_probe(&tx,p,100);assert(tx.npri==1&&tx.read_probe_context[0]==7&&p[35]==8);tx.queued_bytes=180;
  tx.nent=3;host_container_read_probe(&tx,p,100);assert(tx.npri==1);tx.nent=1;
  observer_on=1;host_container_read_probe(&tx,p,100);assert(tx.npri==2&&tx.read_probe_context[0]==8); TIMING_DERIVED

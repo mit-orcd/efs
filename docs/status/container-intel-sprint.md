@@ -2545,3 +2545,40 @@ arrival, unchanged credits and negative disabling consumption. Real allocations
 are freed under sanitizer (no stack-free adapter). Inline handler/outbox controls
 PASS. Both-host complete native and loaded qualification are pending; no deep
 closure claimed. Containers experimental and W100 open.
+
+
+### Queued-complete consumption56e898ef — full normal qualification; covered-entry candidate
+
+Exact56e898ef74a9586860ddc4debe23d83298c26542 both-host complete
+native/sanitizers/794-input/runtime proofs PASS, mounted flock ownership12/12
+PASS. All15 normal gates completed. Concurrent1505/1512 PASS, seven
+deep60 30s FAIL, other215cases/client PASS;117.960–127.738s. Immediate
+physical102.622s PASS, zero102.615. Quiet432/432 PASS53.493/53.918s;
+peer134/134 PASS42.053/42.527s; private mmap PASS/shared ENODEV skip.
+Lifecycle256x512KiB/4workers/read30/churn30/warm/cold, tiny100files+300
+durable generations/host, graceful restart, deletes PASS; final physical9.240s
+PASS. Both actual post-restart64worker/GC20ms/TCP/direct/container/4G-node/
+profile-OFF/disabled-feature proofs PASS. No reset/history removal; loaded
+acceptance FAIL. External consume56e898ef-{deploy,workers64-normal,
+workers64-qualification}; standard committed qualification gates reproduce.
+
+The entry split currently applies only when a new probe is queued; later entry
+packets for that exact already-admitted term/boot/read context retain a duplicate
+read boundary. Next candidate strips only those eight duplicate context bytes
+for the exact matching admitted context too. Older contexts, new term/boot,
+missing/failed probe admission and **all empty heartbeats** retain their original
+context. Empty heartbeat/commit probes provide normal retry fallback if the
+separate canonical probe is lost. Every replication/commit/body/durable ACK
+field remains unchanged, and read authority still requires the unchanged fresh
+quorum/config/boot/term/own-apply predicates. No timer/lease/cache/budget change.
+
+Also default the existing stable-leader/term-matched held-prefix duplicate
+receive implementation ON only for containers; explicitEFS_RAFT_BATCH_NOOP=0
+disables it, files retain defaultOFF. Receive overlap remains container default1;
+group-drain remainsOFF. Both existing no-op policies are exercised by actual
+Raft native tests. Local sender helper normal/ASan/UBSan PASS, exact original
+bytes except context, cached exact-vs-older context, unchanged real empty
+heartbeat, admission/allocation/capacity fallback. Unmodified56e898ef negative
+fails at the intended cached-context assertion; disabled first-separation
+negative also fails. Fresh both-host native and loaded results remain pending.
+W100/deep gate remains open; no performance or successful directory claim.
