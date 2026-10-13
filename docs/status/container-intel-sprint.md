@@ -1568,3 +1568,9 @@ platform-only dependency. Full Linux native and live qualification are still
 required before activation; this is a bounded queue candidate, not an
 established directory-timeout fix. New profiling-only inbox_read_duplicate
 counter measures actual folding, never admission or authority.
+
+Candidate review tightened the fence further before any Linux freeze/build:
+a same-group nonidentical pure frame is also a boundary, including a different
+context, peer, boot or term. Only independent-group pure frames may intervene
+between identical duplicates. This prevents folding around a possible
+same-group role/liveness transition; the context fence control was strengthened.

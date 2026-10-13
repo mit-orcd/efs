@@ -50,7 +50,7 @@ int main(void){
  p[1]=2;send_frame(p);p[1]=0;send_frame(p);
  assert(h.inbox_n==2&&h.inbox[0].buf[1]==2&&h.inbox[1].buf[1]==0&&h.inbox_bytes==160);
  /* Different contexts never fold, including equal-key older arrivals. */
- p[35]=10;send_frame(p);p[35]=9;send_frame(p);assert(h.inbox_n==3);
+ p[35]=10;send_frame(p);p[35]=9;send_frame(p);assert(h.inbox_n==4);
  clear(&h);send_frame(p);p[2]=0;send_frame(p);p[2]=1;send_frame(p);
  assert(h.inbox_n==3); /* Ordinary traffic is an ordering fence. */
  clear(&h);

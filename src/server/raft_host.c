@@ -10575,6 +10575,10 @@ static int host_inbox_duplicate_read(struct efs_raft_host *h,
             break;
         if (!memcmp(item->buf, payload, plen))
             return i;
+        /* A different context, peer, boot or term in this group is also
+         * a fence; do not fold around a possible role/liveness transition. */
+        if (item->buf[1] == payload[1])
+            break;
     }
     return -1;
 }
