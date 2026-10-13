@@ -110,6 +110,19 @@ after replacement-link rename succeeds but root fsync fails: abandoning the
 candidate must retain the old checkpoint until durable replacement publication.
 Do not deploy the earlier retirement candidate as a qualified format transition.
 
+## Distributed query harness routing
+
+AMD's localhost node-ID redirects use consecutive ports. ORCD nodes use
+separate addresses at port17432; retained page tokens identify the owner node,
+not the initial seed. Shared `query_rpc.routed_query` now accepts explicit
+`EFS_QUERY_TEST_NODES` JSON endpoint mapping, retains the existing localhost
+fallback, routes retained stream/CLOSE directly to its owner and bounds fresh
+request redirects. The ORCD command runner sets all four known endpoints.
+`python3 tests/test_query_rpc_routing.py` **PASS** locally: distributed redirect,
+retained stream/CLOSE after a different seed, localhost compatibility, refusal
+propagation, unmapped owner and redirect loop. No mounted pass is inferred;
+server transport/production code is unchanged by this harness correction.
+
 ## Remaining package 1 gates
 
 Review and integrate the AMD compact-index and legacy-view retirement fixes;

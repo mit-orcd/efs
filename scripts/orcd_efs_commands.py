@@ -17,7 +17,8 @@ assert os.path.ismount(a.mount) and os.path.ismount(a.peer)
 a.output.mkdir(parents=True,exist_ok=False)
 repo=Path(__file__).resolve().parents[1]
 env=dict(os.environ,EFS_QUERY_TEST_HOST=a.query_host,EFS_QUERY_TEST_PORT=str(a.query_port),
-         EFS_PACKED_WRITES="0",EFS_QUERY_TEST_FIXTURE="devel-efs-load-"+str(time.time_ns()))
+         EFS_PACKED_WRITES="0", EFS_EXPIRY="0",
+         EFS_QUERY_TEST_NODES=json.dumps({str(i):["172.16.223."+str(56+i),a.query_port] for i in range(1,5)}),EFS_QUERY_TEST_FIXTURE="devel-efs-load-"+str(time.time_ns()))
 rows=[]
 for name,extra,budget in [
     ("efs_commands",[],240), ("efs_command_options",[],240),

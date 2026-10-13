@@ -7,6 +7,7 @@ import ctypes as C
 import socket
 import os
 import struct
+import json
 class Request(C.Structure):
     _fields_=[('version',C.c_uint32),('operation',C.c_uint32),('root',C.c_uint64),
               ('uid',C.c_uint32),('gid',C.c_uint32),('ngroups',C.c_uint32),('match',C.c_uint32),
@@ -50,9 +51,9 @@ def receive(s,n):
         if not chunk:raise EOFError('short query frame')
         data.extend(chunk)
     return bytes(data)
-def query(port,q,raw=None):
+def query(port,q,raw=None,*,host=None):
     body=bytes(q) if raw is None else raw
-    with socket.create_connection((os.environ.get('EFS_QUERY_TEST_HOST','127.0.0.1'),port),7) as s:
+    with socket.create_connection((host or os.environ.get('EFS_QUERY_TEST_HOST','127.0.0.1'),port),7) as s:
         s.sendall(struct.pack('!I',len(body)+1)+bytes([123])+body)
         n=struct.unpack('!I',receive(s,4))[0]
         assert 121<=n<=120+(16<<20)+1,n
@@ -73,3 +74,38 @@ def features(port):
     mask=struct.unpack('@I',payload[1:5])[0]
     assert payload[5]==0,payload
     return mask
+
+
+def routed_query(port, q):
+    """Follow node ownership in local-port or explicit multi-host fixtures.
+
+    EFS_QUERY_TEST_NODES is JSON mapping node IDs to [host, port]. Retained
+    page tokens are node-owned; sending them to the initial seed is invalid.
+    Default consecutive ports preserve the four-node localhost test fixture.
+    """
+    supplied = os.environ.get('EFS_QUERY_TEST_NODES')
+    nodes = json.loads(supplied) if supplied else None
+    seed = (os.environ.get('EFS_QUERY_TEST_HOST', '127.0.0.1'), port)
+    def endpoint(owner):
+        if nodes is None:
+            assert 1 <= owner <= 4, ('unknown query owner', owner)
+            return seed[0], int(os.environ['EFS_QUERY_TEST_PORT']) + owner - 1
+        assert str(owner) in nodes, ('unknown query owner', owner)
+        host, target_port = nodes[str(owner)]
+        assert isinstance(host, str) and host and isinstance(target_port, int)
+        assert 1 <= target_port <= 65535, target_port
+        return host, target_port
+    token = getattr(q, 'token', 0)
+    if token:
+        host, target_port = endpoint(token >> 56)
+        return query(target_port, q, host=host)
+    seen = set()
+    target = seed
+    for _ in range(len(nodes) if nodes is not None else 4):
+        assert target not in seen, ('query redirect loop', target, seen)
+        seen.add(target)
+        reply, text = query(target[1], q, host=target[0])
+        if reply.status != -15:
+            return reply, text
+        target = endpoint(reply.primary_id)
+    raise AssertionError('query redirect bound exceeded')
