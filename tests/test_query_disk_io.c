@@ -51,7 +51,7 @@ static int tracked_open(const char *path,int flags,...)
     if(fd>=0 && fd<(int)sizeof(descriptor_kind)){
         /* Test code also closes descriptors outside the production wrapper. */
         if(writing_raw[fd]){writing_raw[fd]=0;raw_handles--;}
-        size_t n=strlen(path);char kind=0;
+        size_t n=strlen(path);char kind=(flags&O_DIRECTORY)?'D':0;
         if(!(flags&O_DIRECTORY)){
             if(n>=2 && path[n-2]=='.')kind=path[n-1];
             const char *name=strrchr(path,'/');if(name && !strcmp(name+1,"manifest"))kind='m';
@@ -629,6 +629,22 @@ static void legacy_retirement_test(void)
                 CHECK(!efs_query_disk_checkpoint(next,wm));CHECK(!access(legacy,F_OK));
                 struct efs_query_rollup total;CHECK(!efs_query_disk_stats(later,EFS_ROOT_INO,&total) && total.tree_files==1);
                 efs_query_disk_free(later);later=NULL;CHECK(access(legacy,F_OK)!=0);
+            }
+        }
+    }
+    /* A failed parent-directory fsync happens after current has switched.
+     * Keep the opaque owner through retry/abandonment so it cannot leak. */
+    for(unsigned mode=0;mode<2 && next;mode++){
+        char abandoned[EFS_MAX_PATH];strcpy(abandoned,next->path);tag_legacy(next);
+        efs_query_disk_free(next);next=NULL;
+        CHECK(!efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&next));
+        if(next){
+            fail_sync_kind='D';CHECK(efs_query_disk_checkpoint(next,wm)==EFS_ERR_IO);fail_sync_kind=0;
+            CHECK(!access(abandoned,F_OK));
+            if(!mode){CHECK(!efs_query_disk_checkpoint(next,wm));CHECK(access(abandoned,F_OK)!=0);}
+            else {
+                efs_query_disk_free(next);next=NULL;CHECK(access(abandoned,F_OK)!=0);
+                CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next));
             }
         }
     }

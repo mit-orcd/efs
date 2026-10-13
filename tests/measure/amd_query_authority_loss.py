@@ -20,6 +20,9 @@ p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('output', type=Path)
 p.add_argument('--stop-nodes', nargs=2, type=int, choices=(1,2,3,4), default=(1,2))
 a=p.parse_args();a.output.mkdir(parents=True, exist_ok=False)
+# Read the actual cluster quota; do not hard-code an old startup admission.
+quota=subprocess.check_output(['bash','-c','source /data1/efs/devops/clusters/amd.env; printf %s "$QUOTA"'],text=True)
+assert quota and quota[-1] in 'GM' and quota[:-1].isdigit(), quota
 base=Path('/data1/efs');root=base/'mnt/package2-deterministic-lifecycle'
 assert os.getuid()!=0 and os.environ.get('USER')=='efs' and root.is_dir()
 os.environ['EFS_QUERY_TEST_HOST']='127.0.0.1'
@@ -82,7 +85,7 @@ finally:
         with (base/('logs/efsd-n%d.log'%n)).open('ab') as log:
             child=subprocess.Popen([str(base/'src/efsd'),'--node-id',str(n),
                 '--addr','127.0.0.1','--port',str(17431+n),'--storage',str(base/('n%d'%n)),
-                '--storage-engine','files','--quota','20G','--direct-io']+
+                '--storage-engine','files','--quota',quota,'--direct-io']+
                 (['--join','127.0.0.1:17432'] if n>1 else []),
                 env=env,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
         pidfile.write_text(str(child.pid)+'\n')

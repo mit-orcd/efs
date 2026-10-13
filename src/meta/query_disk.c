@@ -69,7 +69,10 @@ struct fd_slot {
     struct read_window windows[READ_WAYS];
 };
 struct inode_cache { struct disk_node node;uint64_t at,tick;uint32_t shard;int valid; };
+struct legacy_checkpoint { char path[EFS_MAX_PATH];dev_t device;ino_t inode; };
+static int legacy_checkpoint_retire(const struct legacy_checkpoint *old);
 struct efs_query_disk {
+    struct legacy_checkpoint legacy;
     char path[EFS_MAX_PATH];
     struct efs_query_disk *live_next;
     dev_t view_device;ino_t view_inode;int registered;
@@ -356,6 +359,7 @@ void efs_query_disk_free(struct efs_query_disk *d)
         closedir(dir);rmdir(d->path);
     }
     pthread_mutex_unlock(&live_mutex);
+    (void)legacy_checkpoint_retire(&d->legacy);
     if(d->budget_fd>=0)close(d->budget_fd);
     pthread_mutex_destroy(&d->mutex);free(d);
 }
@@ -1479,7 +1483,6 @@ int efs_query_disk_ls(const struct efs_query_disk *cd,efs_ino_t root,uint64_t bu
  * The current symlink protects it until replacement; the live-handle registry
  * protects retained readers afterwards. Ordinary v6 retirement stays with its
  * existing catalog owner. */
-struct legacy_checkpoint { char path[EFS_MAX_PATH];dev_t device;ino_t inode; };
 static void legacy_checkpoint_pin(const char *current,struct legacy_checkpoint *old)
 {
     memset(old,0,sizeof(*old));
@@ -1513,6 +1516,14 @@ static int legacy_checkpoint_retire(const struct legacy_checkpoint *old)
     for(struct efs_query_disk *live=live_disks;live;live=live->live_next)
         if(live->view_device==old->device && live->view_inode==old->inode){keep=1;break;}
     if(keep)goto done; /* Last registered reader will retire it normally. */
+    const char *base=strrchr(old->path,'/');char current[EFS_MAX_PATH],target[256];
+    if(!base){rc=EFS_ERR_PROTO;goto done;}
+    int n=snprintf(current,sizeof(current),"%.*s/current",(int)(base-old->path),old->path);
+    if(n<0 || (size_t)n>=sizeof(current)){rc=EFS_ERR_IO;goto done;}
+    ssize_t length=readlink(current,target,sizeof(target)-1);
+    if(length<0 && errno!=ENOENT){rc=EFS_ERR_IO;goto done;}
+    if(length>0){target[length]=0;if(!strcmp(target,base+1))goto done;}
+
     DIR *dir=opendir(old->path);if(!dir){rc=EFS_ERR_IO;goto done;}
     struct dirent *entry;
     while((entry=readdir(dir))){
@@ -1541,14 +1552,18 @@ int efs_query_disk_checkpoint(struct efs_query_disk *d,const uint64_t watermark[
     if(n<0 || (size_t)n>=sizeof(current))return EFS_ERR_NAMETOOLONG;
     n=snprintf(temp,sizeof(temp),"%s.new",current);
     if(n<0 || (size_t)n>=sizeof(temp))return EFS_ERR_NAMETOOLONG;
-    struct legacy_checkpoint legacy;legacy_checkpoint_pin(current,&legacy);
+    if(!d->legacy.path[0])legacy_checkpoint_pin(current,&d->legacy);
     unlink(temp);if(symlink(base+1,temp))return EFS_ERR_IO;
     if(rename(temp,current)){unlink(temp);return EFS_ERR_IO;}
     char root[EFS_MAX_PATH];memcpy(root,d->path,(size_t)(base-d->path));root[base-d->path]=0;
     fd=open(root,O_RDONLY|O_DIRECTORY|O_CLOEXEC);if(fd<0)return EFS_ERR_IO;
     if(fsync(fd))rc=EFS_ERR_IO;
     close(fd);
-    if(!rc){memcpy(d->watermark,watermark,sizeof(d->watermark));rc=legacy_checkpoint_retire(&legacy);}
+    if(!rc){
+        memcpy(d->watermark,watermark,sizeof(d->watermark));
+        rc=legacy_checkpoint_retire(&d->legacy);
+        if(!rc)d->legacy.path[0]=0;
+    }
     return rc;
 }
 int efs_query_disk_restore(const char *root,const uint64_t watermark[4],uint64_t max_bytes,struct efs_query_disk **out)
