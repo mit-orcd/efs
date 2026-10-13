@@ -807,6 +807,40 @@ static void test_transport_pressure_zero_probe(void)
         for(int i=0;i<3;i++){CHECK(efs_raft_applied(n.r[i])>=idx,"both groups catch up refused work");efs_raft_free(n.r[i]);efs_raft_mem_free(st[i]);}
     }
 }
+static void test_read_before_uncommitted_suffix(void)
+{
+    for (int group=0;group<=2;group+=2) {
+        struct net n={.n=3};struct efs_raft_store *st[3];struct app app[3]={{0}};
+        struct efs_raft_cfg cfg={0};uint8_t cmd='F';uint64_t idx=0;
+        cfg.n=3;cfg.group=(uint8_t)group;cfg.send=send_now;cfg.net=&n;
+        cfg.apply=apply_cmd;cfg.heartbeat_ticks=1;
+        for(int i=0;i<3;i++) {
+            st[i]=efs_raft_mem_create();cfg.id=i;cfg.store=st[i];cfg.store_ctx=st[i];
+            cfg.app=&app[i];cfg.election_ticks=4+i*4;n.r[i]=efs_raft_new(&cfg);
+        }
+        CHECK(elect(&n,20)==1,"elect transport-pressure fixture");
+        int lid=leader_id(&n);uint64_t committed=efs_raft_commit(n.r[lid]);
+        int applied[3];for(int i=0;i<3;i++)applied[i]=app[i].n;
+        n.flow_refuse_data=1;n.flow_zero_probe=0;
+        efs_raft_arm_durable(n.r[lid]);
+        CHECK(efs_raft_propose_local(n.r[lid],&cmd,1,&idx)==EFS_OK,"pressure append local");
+        CHECK(efs_raft_submit(n.r[lid],idx)==EFS_OK,"pressure submit local");
+        CHECK(efs_raft_durable(n.r[lid],idx)==EFS_OK,"pressure local durable");
+        int builds=0;for(int i=0;i<3;i++)builds+=n.batches[i];
+        CHECK(efs_raft_flush(n.r[lid])==EFS_OK,"transport refuses data");
+        int after=0;for(int i=0;i<3;i++)after+=n.batches[i];
+        CHECK(after>=builds,"ordinary transport owns refused batch");
+        CHECK(efs_raft_commit(n.r[lid])==committed && idx>committed,"transport handling cannot commit refused tail");
+        CHECK(efs_raft_read_begin(n.r[lid])==EFS_OK,"pressure fresh read starts");
+        CHECK(efs_raft_read_ready(n.r[lid]),"fresh read proves committed prefix without refused suffix");
+        CHECK(efs_raft_commit(n.r[lid])==committed,"fresh probe quorum does not replicate refused data");
+        for(int i=0;i<3;i++)CHECK(app[i].n==applied[i],"fresh probe never applies refused command");
+        n.flow_refuse_data=n.flow_zero_probe=0;
+        for(int t=0;t<5;t++)for(int i=0;i<3;i++)efs_raft_tick(n.r[i]);
+        CHECK(efs_raft_commit(n.r[lid])>=idx,"Raft retries refused tail after pressure clears");
+        for(int i=0;i<3;i++){CHECK(efs_raft_applied(n.r[i])>=idx,"both groups catch up refused work");efs_raft_free(n.r[i]);efs_raft_mem_free(st[i]);}
+    }
+}
 
 static void test_i3_i4_and_restart(void)
 {
@@ -2543,6 +2577,7 @@ int main(void)
     test_replicate_and_readindex();
     test_readindex_outstanding_batch();
     test_transport_pressure_zero_probe();
+    test_read_before_uncommitted_suffix();
     test_i3_i4_and_restart();
     test_snapshot();
     test_grow_3_to_5();

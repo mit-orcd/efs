@@ -980,6 +980,25 @@ static int broadcast_ae(struct efs_raft *r)
     return EFS_OK;
 }
 
+/* A fresh read votes on leadership, not on an uncommitted data suffix.
+ * The universal empty prefix cannot advance a peer's replication match or
+ * clear its outstanding entry batch. Current term/configuration quorum and
+ * this leader's applied read_index still decide readiness. Normal replication
+ * and heartbeat scheduling remain responsible for catching followers up. */
+static int broadcast_read(struct efs_raft *r)
+{
+    uint32_t mask=peer_mask(r);
+    for(int i=0;i<EFS_RAFT_MAX_PEERS;i++) {
+        if(i==r->id || !(mask&(1u<<i)))continue;
+        struct efs_raft_msg m={0};
+        m.type=EFS_RAFT_MSG_AE_REQ;m.to=i;m.vote_granted=1;
+        m.leader_commit=r->read_index;
+        int rc=send_msg(r,&m);
+        if(rc!=EFS_OK)return rc;
+    }
+    return EFS_OK;
+}
+
 static int maybe_append_cold(struct efs_raft *r)
 {
     uint8_t cmd[5];
@@ -2518,7 +2537,7 @@ int efs_raft_read_begin(struct efs_raft *r)
     r->read_in_flight = 1;
     if (solo(r))
         return apply_committed(r);
-    return broadcast_ae(r);
+    return broadcast_read(r);
 }
 
 /* Service matched durable-prefix stable-leader probes without waiting for
