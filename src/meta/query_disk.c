@@ -1474,6 +1474,58 @@ int efs_query_disk_ls(const struct efs_query_disk *cd,efs_ino_t root,uint64_t bu
     }
     return EFS_OK;
 }
+/* A rejected v5 current still owns disk space but cannot be a v6 build
+ * input. Capture only its directory identity/header, never decode old rows.
+ * The current symlink protects it until replacement; the live-handle registry
+ * protects retained readers afterwards. Ordinary v6 retirement stays with its
+ * existing catalog owner. */
+struct legacy_checkpoint { char path[EFS_MAX_PATH];dev_t device;ino_t inode; };
+static void legacy_checkpoint_pin(const char *current,struct legacy_checkpoint *old)
+{
+    memset(old,0,sizeof(*old));
+    char name[256],manifest[EFS_MAX_PATH];
+    ssize_t length=readlink(current,name,sizeof(name)-1);
+    if(length<5 || length>=(ssize_t)sizeof(name)-1 || strncmp(name,"view-",5))return;
+    name[length]=0;if(strchr(name,'/'))return;
+    const char *base=strrchr(current,'/');if(!base)return;
+    int n=snprintf(old->path,sizeof(old->path),"%.*s/%s",(int)(base-current),current,name);
+    struct stat st;
+    if(n<0 || (size_t)n>=sizeof(old->path) || lstat(old->path,&st) || !S_ISDIR(st.st_mode))goto absent;
+    n=snprintf(manifest,sizeof(manifest),"%s/manifest",old->path);
+    if(n<0 || (size_t)n>=sizeof(manifest))goto absent;
+    int fd=open(manifest,O_RDONLY|O_NOFOLLOW|O_CLOEXEC);uint64_t header[12];
+    int rc=fd<0?EFS_ERR_IO:io_at(fd,header,sizeof(header),0,0);
+    if(fd>=0)close(fd);
+    uint64_t legacy_row=sizeof(struct disk_node)+sizeof(struct efs_name_entry)-sizeof(struct disk_link);
+    if(rc || header[0]!=UINT64_C(0x454653514449534b) || header[1]!=5 ||
+       header[2]!=sizeof(struct slot) || header[3]!=legacy_row || header[5]!=SHARDS)goto absent;
+    old->device=st.st_dev;old->inode=st.st_ino;return;
+absent:
+    old->path[0]=0;
+}
+static int legacy_checkpoint_retire(const struct legacy_checkpoint *old)
+{
+    if(!old->path[0])return EFS_OK;
+    pthread_mutex_lock(&live_mutex);
+    int rc=EFS_OK,keep=0;struct stat st;
+    if(lstat(old->path,&st)){rc=errno==ENOENT?EFS_OK:EFS_ERR_IO;goto done;}
+    if(!S_ISDIR(st.st_mode) || st.st_dev!=old->device || st.st_ino!=old->inode){rc=EFS_ERR_PROTO;goto done;}
+    for(struct efs_query_disk *live=live_disks;live;live=live->live_next)
+        if(live->view_device==old->device && live->view_inode==old->inode){keep=1;break;}
+    if(keep)goto done; /* Last registered reader will retire it normally. */
+    DIR *dir=opendir(old->path);if(!dir){rc=EFS_ERR_IO;goto done;}
+    struct dirent *entry;
+    while((entry=readdir(dir))){
+        if(!strcmp(entry->d_name,".") || !strcmp(entry->d_name,".."))continue;
+        char path[EFS_MAX_PATH];int n=snprintf(path,sizeof(path),"%s/%s",old->path,entry->d_name);
+        if(n<0 || (size_t)n>=sizeof(path) || (unlink(path) && errno!=ENOENT)){rc=EFS_ERR_IO;break;}
+    }
+    closedir(dir);if(!rc && rmdir(old->path) && errno!=ENOENT)rc=EFS_ERR_IO;
+done:
+    pthread_mutex_unlock(&live_mutex);
+    if(rc)fprintf(stderr,"query-retire: legacy-generation rc=%d path=%s\n",rc,old->path);
+    return rc;
+}
 int efs_query_disk_checkpoint(struct efs_query_disk *d,const uint64_t watermark[4])
 {
     if(!d || !watermark)return EFS_ERR_INVAL;
@@ -1489,13 +1541,14 @@ int efs_query_disk_checkpoint(struct efs_query_disk *d,const uint64_t watermark[
     if(n<0 || (size_t)n>=sizeof(current))return EFS_ERR_NAMETOOLONG;
     n=snprintf(temp,sizeof(temp),"%s.new",current);
     if(n<0 || (size_t)n>=sizeof(temp))return EFS_ERR_NAMETOOLONG;
+    struct legacy_checkpoint legacy;legacy_checkpoint_pin(current,&legacy);
     unlink(temp);if(symlink(base+1,temp))return EFS_ERR_IO;
     if(rename(temp,current)){unlink(temp);return EFS_ERR_IO;}
     char root[EFS_MAX_PATH];memcpy(root,d->path,(size_t)(base-d->path));root[base-d->path]=0;
     fd=open(root,O_RDONLY|O_DIRECTORY|O_CLOEXEC);if(fd<0)return EFS_ERR_IO;
     if(fsync(fd))rc=EFS_ERR_IO;
     close(fd);
-    if(!rc)memcpy(d->watermark,watermark,sizeof(d->watermark));
+    if(!rc){memcpy(d->watermark,watermark,sizeof(d->watermark));rc=legacy_checkpoint_retire(&legacy);}
     return rc;
 }
 int efs_query_disk_restore(const char *root,const uint64_t watermark[4],uint64_t max_bytes,struct efs_query_disk **out)
