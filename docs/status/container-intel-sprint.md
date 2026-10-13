@@ -2486,3 +2486,28 @@ including full original-byte equality except the separate eight context bytes,
 files/off/allocation/capacity and empty-heartbeat fallback controls. Existing
 outbox/pending controls PASS. Both-host complete native and fresh mounted
 qualification are pending. W100/deep-directory acceptance remains open.
+
+
+### Entry separation/receive overlap7f0c611c — complete normal qualification
+
+Exact7f0c611c2b2da37cf3c8a5b8dc9be87c6bd06744 both Intel full native,
+affected probe/pending/inline/sender sanitizers,794-input/source/runtime
+proofs PASS. All15 original normal gates completed with profiling OFF,
+64FUSEworkers/7clients/16jobs per client,4nodes/8writers/4G per node,
+TCP/direct containers, GC20ms and .efs/expiry-date/packing inactive. Default
+container overlap1 is established by frozen source and absent override env;
+ordinary files still default0. Mounted flock ownership12/12 PASS.
+Concurrent1504/1512 PASS: deep60timeouts all seven; Intel2client0
+names_crazy_roundtrip unlink `...` EBUSY, actual worker traceback available
+on private host. Durations130.321–137.181s. Immediate physical97.490s
+PASS, zero97.484. Quiet432/432 PASS52.147/53.708s; peer134/134
+PASS (both completed summaries). Private mmap PASS/shared ENODEV skip;
+all lifecycle/tiny/warm/cold/graceful restart/delete gates PASS; final physical
+8.843s PASS. Both actual post-restart configurations and source proofs PASS.
+No reset; retained stores/history preserved. Variable unlink BUSY does not
+establish a causal regression or fix. No performance improvement or directory
+closure is established; loaded acceptance FAIL.
+External evidence separate7f0c611c-{deploy,workers64-normal,workers64-qualification}.
+Reproduce via committed qualification standard15 gates and live flock ownership
+helper. Same-source diagnostic now measuring receive-cohort effectiveness;
+no diagnostic result yet. No push/merge/production promotion. W100 open.
