@@ -1275,3 +1275,36 @@ explicit profiling flag. Normal configuration emits neither diagnostic.
 No apply budget, memtable size, authority, durability or placement change.
 Both-host native including actual KV LSM and diagnostic investigation
 remain required; no new performance fix/acceptance claim.
+
+
+### Slow apply/flush diagnosisfab16632 and off-mutex candidate
+
+Exactfab16632a1d55b71e60ebc22b12383b409eab0ff both-host affected
+native (including actual KV LSM/snapshot-tail/segment-index) and787-input
+deployment proofs PASS. Separate profiling run, same retained Intel
+containers/TCP/direct/4G/node/seven clients/jobs16/original deadlines,
+8writers/20msGC; commands/.efs/expiry-date/packing OFF; profiling ON.
+Full1498PASS14FAIL127.028–133.538s (diagnostic, not acceptance).
+Diagnostic cleanup PASS91.083s,zero91.063s; no reset. Bounded raw slices
+outside Git slowapplyfab16632-diagnostic. Inline4MiB automatic flushes
+match individual apply stalls at the same timestamp: leader295/247ms;
+later leader460ms flush/465ms apply, follower541ms flush/541.110ms apply.
+This establishes that those inline flushes occupy the Raft apply mutex;
+it does not prove they account for every directory timeout.
+
+Next container-only opt-in defers automatic flush while the existing WAL
+sync hold is open, then runs the unchanged flush at the outer release
+AFTER the WAL barrier and OFF the Raft mutex. Explicit maintenance flush
+retains policy; ordinary stores retain the old fast hold/release path.
+No new worker/queue, memtable size, placement, apply cap or authority change.
+Effects stay in the ordered WAL/memtable; the existing reset guard retains
+newer unapplied WAL records. Nested releases cannot flush early. Failed
+barrier/flush fails release and fences further mutation; captured applied
+checkpoint retirement receives the failure. Container startup enables only
+this scheduling option; current proof/own-apply and physical GC guards stay
+unchanged. Actual native controls cover default inline policy, nested holds,
+visible ordered effects, outer flush/cold bytes, real crash with newer
+unapplied tail, and real SST-open failure with retained cold WAL effects.
+Old-inline negative plus ASan/UBSan instrument all actual KV modules. These
+controls and both-host native/live remain NOTRUN before the fresh freeze;
+local structural/order review PASS. No directory fix or acceptance claim.

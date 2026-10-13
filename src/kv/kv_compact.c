@@ -849,6 +849,10 @@ int kv_maybe_flush_locked(struct kv_lsm *l)
 
     if (l->mt.bytes < mmax)
         return EFS_OK;
+    /* Every effect remains in the ordered WAL and visible memtable. The
+     * outer release first fsyncs that WAL, then performs this same flush
+     * without the container Raft mutex. Never reset an undurable prefix. */
+    if(l->defer_held_flush && l->flush_holds)return EFS_OK;
     /* The only stall left: L0 is at the engine cap, so the writer waits
      * until the compactor publishes. That is 16x behind (l0_max is 4);
      * log it. Inline compact only if the thread never started. */

@@ -10245,6 +10245,8 @@ int server_raft_host_start(struct efsd_server *s)
             free(h);
             return EFS_ERR_IO;
         }
+        if(s->storage_engine)
+            (void)efs_kv_lsm_defer_held_flush(h->kv,1);
         h->disk = efs_raft_disk_open(logdir, EFS_RAFT_DISK_SYNC);
         if (!h->disk) {
             fprintf(stderr, "raft-host: raft_disk_open %s failed\n", logdir);
