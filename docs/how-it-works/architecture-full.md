@@ -1494,6 +1494,11 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+`devel-rdma` foundation e6d1ecda native/ASan/UBSan and offset negative control PASS.
+Versioned setup/envelope, bounded assembly and cumulative credit model implemented;
+verbs/application integration and strict live RDMA NOTRUN. AMD TCP cluster unchanged.
+
+[Merged devel ordinary-file AMD qualification](../status/amd-devel-merged-posix-20261013.md):
 **PASS on 96f40602** — all local branch tips integrated; fresh four-node files/TCP/direct
 cluster with .efs, packing, containers and expiry disabled. Core POSIX216/216
 passes in44.0s at original deadlines. No broader acceptance claim or push.

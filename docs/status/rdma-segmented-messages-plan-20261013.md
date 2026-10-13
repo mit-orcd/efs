@@ -1,6 +1,10 @@
 # Agreed RDMA large-message design — 2026-10-13
 
-**Design agreed; implementation and qualification NOTRUN.** This records the
+**Design agreed; codec/assembly foundation implemented; enabled transport and live qualification NOTRUN.**
+See [implementation checkpoint](rdma-implementation-20261013.md) for exact
+source and native/sanitizer evidence. The verbs/setup/application integration
+remains outstanding; the following review instructions retain their original
+review baseline. This records the
 human decision following the [ORCD TCP/RDMA investigation](orcd-rdma-tcp-cause-20261013.md).
 No product code, running cluster, network setting or deployment was changed for
 this plan. It is a transport correctness proposal, not performance acceptance.
