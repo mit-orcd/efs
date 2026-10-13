@@ -227,6 +227,7 @@ struct host_fin_item {
 #define HOST_APPLY_RC_MASK (HOST_APPLY_RC_RING - 1)
 
 struct host_group {
+    uint64_t read_admit_count,read_begin_admits,read_begin_round,read_begin_term;
     uint64_t balance_term, balance_since_us, balance_attempt_us;
     uint32_t balance_voters;
     uint8_t group;
@@ -4035,6 +4036,49 @@ static int host_follower_read_result(int rc,int self,int peers,int remote_hint,
 
 struct host_read_admission {uint64_t want,round,term;};
 
+/* Register before waiting for h->mu. A tracked round may cover this ticket
+ * only if its admission watermark was captured BEFORE any probes were sent.
+ * Saturation disables this optimization rather than wrapping authority. */
+static uint64_t host_read_register(struct efs_raft_host *h,uint8_t group)
+{
+    if(!h->s || !h->s->storage_engine)return 0;
+    struct host_group *g=group_slot(h,group);
+    if(!g)return 0;
+    uint64_t value=__atomic_load_n(&g->read_admit_count,__ATOMIC_ACQUIRE);
+    for(;;){
+        if(value>=UINT64_MAX-1)return 0;
+        if(__atomic_compare_exchange_n(&g->read_admit_count,&value,value+1,0,
+                __ATOMIC_ACQ_REL,__ATOMIC_ACQUIRE))return value+1;
+    }
+}
+/* h->mu held. The existing round/proof predicates still decide authority. */
+static uint64_t host_read_eligible_round(struct efs_raft_host *h,uint8_t group,
+                                        struct efs_raft *r,uint64_t ticket)
+{
+    uint64_t previous=efs_raft_read_round(r);
+    struct host_group *g=group_slot(h,group);
+    if(ticket && h->s && h->s->storage_engine && previous && g && g->read_begin_round==previous &&
+       g->read_begin_term==efs_raft_term(r) && ticket<=g->read_begin_admits)
+        return previous;
+    return previous+1;
+}
+static int host_read_begin_tracked(struct efs_raft_host *h,uint8_t group,
+                                  struct efs_raft *r)
+{
+    struct host_group *g=group_slot(h,group);
+    uint64_t admits=h->s && h->s->storage_engine && g?
+        __atomic_load_n(&g->read_admit_count,__ATOMIC_ACQUIRE):0;
+    uint64_t previous=efs_raft_read_round(r);
+    int rc=efs_raft_read_begin(r);
+    if(!rc && admits && efs_raft_read_round(r)>previous){
+        g->read_begin_admits=admits;
+        g->read_begin_round=efs_raft_read_round(r);
+        g->read_begin_term=efs_raft_term(r);
+    }
+    return rc;
+}
+
+
 static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
                            int *leader_hint,const struct host_read_admission *admission)
 {
@@ -4044,6 +4088,7 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
     int prof = read_prof_on();
     uint64_t p0 = prof ? now_us_() : 0;
     int first = 1;
+    uint64_t ticket=admission?0:host_read_register(h,group);
 
     if (leader_hint)
         *leader_hint = -1;
@@ -4101,7 +4146,7 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
                 pthread_mutex_unlock(&h->mu);
                 return EFS_ERR_BUSY;
             }
-            round = previous + 1;
+            round = host_read_eligible_round(h,group,r,ticket);
             admitted_term = efs_raft_term(r);
             pthread_mutex_unlock(&h->mu);
         }
@@ -4129,7 +4174,7 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
                 !efs_raft_read_pending(r) &&
                 !(efs_raft_read_round(r) >= round &&
                   efs_raft_read_covers(r, want)))
-                rc = efs_raft_read_begin(r);
+                rc = host_read_begin_tracked(h,group,r);
             host_publish_group(h, group);
             pthread_mutex_unlock(&h->mu);
             if (rc != EFS_OK)
@@ -4200,6 +4245,7 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
                                 uint8_t second,int *hint)
 {
     if(first==second)return host_read_index(h,first,hint);
+    uint64_t tickets[2]={host_read_register(h,first),host_read_register(h,second)};
     struct efs_raft *r[2];struct host_read_admission admission[2];
     uint8_t groups[2]={first,second};int rc=EFS_OK;
     pthread_mutex_lock(&h->mu);
@@ -4216,10 +4262,10 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
             pthread_mutex_unlock(&h->mu);return EFS_ERR_BUSY;
         }
         admission[i]=(struct host_read_admission){efs_raft_commit(r[i]),
-                                                  previous+1,efs_raft_term(r[i])};
+                                                  host_read_eligible_round(h,groups[i],r[i],tickets[i]),efs_raft_term(r[i])};
     }
     for(unsigned i=0;i<2;i++) {
-        if(!efs_raft_read_pending(r[i]))rc=efs_raft_read_begin(r[i]);
+        if(!efs_raft_read_pending(r[i]))rc=host_read_begin_tracked(h,groups[i],r[i]);
         host_publish_group(h,groups[i]);
         if(rc!=EFS_OK)break;
     }

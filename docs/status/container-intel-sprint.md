@@ -984,3 +984,43 @@ peer134/134 PASS (39.466/42.766s), private mmap PASS/shared-write ENODEV
 skips. Lifecycle/tiny/restart/cold/final observer still running. Directory
 acceptance remains open; next work is targeted diagnostics without changing
 case deadlines, client count, fresh authority or namespace cache coherence.
+
+
+C4 remaining acceptance completed: lifecycle256×512KiB four-worker
+create/read/churn and both-host tiny300 durable generations, warm/cold
+hashes, graceful global restart and deletes PASS. Final physical
+PASS30.887s. Immediate full-load physical164.183 PASS remains distinct.
+
+Separate C4 diagnostic configuration enabled existing RPC/read/Raft
+profiling, not acceptance: full1498/1512 PASS,14 deep60/crazy-dir timeouts.
+All metadata leaders are local to the serving dual-group node; counters
+show no remote paired/scalar proof calls there. Lookup averages about6.8ms,
+about6.5ms in fresh authority versus0.2ms metadata lookup. Diagnostic
+phase collector produced empty files: the harness intentionally os._exit's
+its frontend, discarding that collector's buffered writes. No phase timing
+conclusion is supported by those files. Completed diagnostic workload
+physically drained without resets; profiling results do not replace any
+acceptance result.
+
+Next container-only admission candidate registers a bounded monotonic
+ticket before h->mu acquisition. Each tracked ReadIndex begin captures its
+watermark BEFORE calling the unchanged core/send. A delayed reader may use
+that round only if its ticket was registered before probes; arrivals during
+probe send or later require another round. Round/term identity must match;
+untracked/unknown and saturating counters conservatively use the original
+next-round rule. This avoids requiring an extra quorum solely because a
+request waited for the Raft mutex. Both paired admissions precede this
+caller's begins; independently eligible group proofs remain mandatory.
+No lease, clock/expiry authority, queue, thread, proof-index reduction or
+quorum/apply/configuration predicate changes. Files retain their original
+admission policy.
+
+Actual-helper native and ASan/UBSan controls PASS: mutex-blocked request
+admitted before probes, late-in-send exclusion, old completed/pending
+rounds, term/untracked round and failure refusal, files unchanged, counter
+saturation fallback and1024 concurrent unique tickets. Both restoring the
+extra-round rule and capturing the watermark AFTER probe send fail/SIGABRT
+negative controls. Existing actual paired admissions, publication and
+completed-proof term/config/role/storage/own-apply controls PASS locally.
+Both-host native and fresh complete live validation of the exact corrected
+source remain required; C4's physical pass cannot qualify this newer source.

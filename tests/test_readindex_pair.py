@@ -13,7 +13,10 @@ code=r'''
 #include <stdio.h>
 #define EFS_RAFT_LEADER 2
 struct efs_raft {int role,pending,fail;uint64_t round,term,commit;};
-struct efs_raft_host {pthread_mutex_t mu;struct efs_raft core[3];int absent;};
+struct host_group {uint64_t read_admit_count,read_begin_admits,read_begin_round,read_begin_term;};
+struct server {int storage_engine;};
+struct efs_raft_host {pthread_mutex_t mu;struct efs_raft core[3];struct host_group g[3];struct server *s;int absent;};
+static struct host_group *group_slot(struct efs_raft_host *h,uint8_t group){return &h->g[group];}
 struct host_read_admission {uint64_t want,round,term;};
 static int begun,waits,scalar,kicks,published,wait_error;
 static uint64_t expected[3];
@@ -36,7 +39,7 @@ static int host_read_index_admitted(struct efs_raft_host*h,uint8_t g,int*hint,co
   * contexts are less than the captured minimum eligible round. */
  assert(h->core[0].pending && h->core[2].pending);waits++;return wait_error;
 }
-''' + (root/'src/server/read_index_pair_remote.h').read_text() + s[a:b]+r'''
+''' + s[s.index('static uint64_t host_read_register('):s.index('static int host_read_index_admitted(')] + (root/'src/server/read_index_pair_remote.h').read_text() + s[a:b]+r'''
 static void host_need_both(uint8_t groups[2]){groups[0]=0;groups[1]=2;}
 static int host_hosts(struct efs_raft_host*h,uint8_t g){return h->absent!=g+1;}
 static int host_pick_peer(struct efs_raft_host*h,const uint8_t*g,unsigned n,int avoid){(void)h;assert(g[0]==0 && g[1]==2 && n==2 && avoid==-1);return 7;}
