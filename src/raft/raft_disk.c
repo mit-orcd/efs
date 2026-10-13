@@ -811,7 +811,7 @@ uint64_t efs_raft_disk_covered_index(struct efs_raft_disk *d, uint32_t group,
 
             i--;
             if (off == 0 || off <= synced) {
-                best = g->snap_idx + 1 + i;
+                best = g->log_base + 1 + i;
                 break;
             }
         }
