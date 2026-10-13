@@ -1594,3 +1594,12 @@ python3 tests/test_container_inbox_duplicate.py; repeat with EFS_TEST_CFLAGS=
 and all existing container/host/authority/physical/fault/cold controls remain
 required on both Linux hosts. Default-OFF flag control is retained; no live
 candidate result is claimed before its own deploy/proof and15-gate sequence.
+
+Frozen9610602a built binaries on both hosts but native sequence FAIL in the
+existing test_host_flow source-extraction adapter: it lacked the new
+host_inbox_duplicate_read dependency. NO DEPLOY/activation. The adapter now
+extracts the actual helper and classifier, supplies an ordinary/default-OFF
+fixture and preserves its existing credit and async Linux sender controls;
+older external source comparisons still work without the absent helper.
+Local admission/default-OFF controls PASS; Linux async sender remains NOTRUN
+locally and must PASS in the fresh corrected both-host native build.
