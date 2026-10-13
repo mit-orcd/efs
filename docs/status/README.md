@@ -49,20 +49,13 @@ Human scope is correctness only; no performance tuning or further compression.
 [ORCD package 1 deployment and open gates](orcd-package1-20261013.md):
 Current scope is feature correctness/acceptance; latency/resources are measured
 evidence and existing bounds, with no additional performance tuning.
-`9b2fac55` integrates Intel checked cleanup and AMD measured temporary-peak
-accounting, installed native RDMA/direct/files, `.efs` client/server on,
-packing/containers/expiry off. Full native and full-library query sanitizer
-gates PASS; deployment markers PASS, server readiness92.003s. Both complete
-15.2M-inode catalogues publish within unchanged16/32GiB limits; exact400GiB
-subtree stats PASS. Initial build-time stats timeout retained as FAIL;
-focused commands/options/virtual/load FAIL, pages/large-delta PASS; tiny
-recursive subtrees scan unrelated catalogue entries. Owner/numeric and
-human/default/JSON stats PASS all7. Concurrent query21/21 PASS, accompanying core1501/1512 FAIL
-(10EBUSY, one EOF); EOF repeats4/1120 FAIL and the committed wrapper
-finds12/1120 failures including persistent shrink. Intel handoff queued after
-current work. Subtree correction e77f6030 is merged into a candidate;
-helper retry-window regression34/34 and its negative control PASS locally.
-Combined candidate native/mounted, cold and full-payload gates OPEN.
+Frozen devel f7e3c81e deployed native RDMA/direct/files, `.efs` client/server on,
+packing/containers/expiry off. All863 inputs/host, full native, full-library query
+sanitizers, normal deployment and acknowledged markers PASS; readiness88.131s.
+Focused commands/options/pages/virtual/load PASS; payload large-delta FAIL EIO
+in write/flush/fsync. Separate1025-file metadata-only oracle PASS, not a waiver.
+Earlier ordinary EOF growth/shrink and EBUSY remain OPEN with Intel handoff.
+Final concurrent, cold and full400GiB payload/path acceptance remains OPEN.
 
 [Intel package 3 execution](intel-package3-20261013.md): files/TCP/direct,
 client/server commands, packing and expiry OFF; container fixture stopped.

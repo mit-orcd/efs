@@ -3,6 +3,7 @@
 Current user scope is feature correctness/acceptance; latency/resources are
 measurements and existing bounded gates, with no new performance tuning.
 
+Current live frozen devel source is `f7e3c81e2d5bd4715b6c6dc86debb10b093c0d03`.
 Package 1 remains OPEN; all-gates acceptance is not yet PASS. See the
 [three-package assignment](three-work-packages-20261013.md). Package 2 fixes
 are being qualified on AMD; ordinary-file Intel work is independent.
@@ -308,3 +309,49 @@ ORCD native/mounted qualification of this combined candidate remains NOTRUN;
 all11 builds of earlier subtree-only integration8743e699 PASS but are not deployed.
 Native request limits, query16/32GiB caps, cache format and feature flags are
 unchanged. The original live9b failures stay recorded until final-source gates.
+
+## Combined f7e3c81e ORCD deployment and acceptance
+
+The frozen devel revision combines the bounded LOCAL subtree correction and
+helper retry-window fix. All11 staged/installed hosts match863 committed build
+inputs. Full native `make -j4 test`, all six full-library query ASan/UBSan/leak
+harnesses and startup-inventory sanitizer PASS on exactf7 source. Native fcstor006
+efsd SHA256 `035a3b5c9a6f20cf439e6936e6f5fdcbae36fe0b046fbf0d67b868433b4ee45b`;
+efs-fuse `016fc6642a266b5172823418d47127ac70046cbaca4357a0e9e6c788fad896ca`.
+Candidate f7 is an ancestor of integrated devel5cf9fb40; only later diagnostic
+script/docs distinguish that integration head, with no source/include/deps/
+Makefile production difference. No working-tree mixture was deployed.
+
+Stopped seven identified nonroot DD processes with SIGINT and stable pidfd/
+UID/start-time/argv checks. Partial outputs75.95–85.92GB remain; no output was
+deleted or truncated. Seven clients drain/unmount normally before four daemons
+stop. Installed/startup/profile, remount and acknowledged large/512-byte marker
+verification PASS on all7. Initial server readiness88.131s. Actual profile is
+native RDMA/mlx5_2, server direct-I/O/files, client/server commands enabled,
+packing/containers/expiry disabled. Real400GiB subtree stats is exact with
+refresh_error0; full payload verification is still NOTRUN.
+
+| Focused suite on f7e3c81e | Verdict | Seconds |
+| --- | --- | ---: |
+| commands | PASS | 8.773 |
+| options | PASS | 5.871 |
+| pages | PASS | 14.279 |
+| virtual interfaces | PASS | 85.247 |
+| loaded commands | PASS | 22.690 |
+| large delta, payload | FAIL: EIO during write/flush/fsync | 12.077 |
+
+The temporary peer drains normally. The payload failure stops the aggregate
+gate driver; it is not relabelled by the five successes. Main-client log records
+REPORT type67 resource-busy after8016ms, one chunk, inode8562082, then fsync
+EFS_ERR_BUSY; the application sees EIO. Preceding opid-admission messages show
+oldest12431/next12447/live3 and oldest12433/next12449/live4 at unchanged window16.
+Source has a fixed1000×1ms opid admission poll and unchanged8s sync REPORT budget.
+Intel has the evidence for correctness investigation, without budget/window
+widening. Earlier EOF growth/shrink and ordinary EBUSY findings remain OPEN.
+
+Separately labelled metadata-only large delta PASS:1025 exact creations, updates
+and mtime/zero-size fields, followed by512 deletions, rename and hardlink. Both
+peer syscall and query count/byte oracles agree with refresh_error0. Phases take
+5.158/8.586s; temporary peer stop PASS. It isolates query functionality but does
+not replace payload qualification. Independent all7 stats/owner and concurrent
+checks continue; post-test cold and complete payload/path gates remain OPEN.
