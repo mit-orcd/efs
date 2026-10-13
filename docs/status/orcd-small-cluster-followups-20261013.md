@@ -77,6 +77,36 @@ selection, retained snapshots, restore/version transition and authority
 validation need small native regressions before any rollout. No authoritative
 metadata or ordinary-file payload format change is proposed here.
 
+## Required outstanding `.efs` work and cluster assignment
+
+All rows below remain required and OPEN. This is a development/acceptance
+assignment, not evidence that AMD or Intel has run or passed these gates.
+The latest mounted verdict remains FAIL at `419aa90f367a`; follow-up gates are
+NOTRUN on that source. Earlier source-specific passes do not close these rows.
+
+| Required work | AMD or Intel development/testing | ORCD requirement |
+| --- | --- | --- |
+| W92: reduce query-index footprint and resolve the current query ENOSPC within unchanged budgets | Either Linux cluster: small quota fixture, compact-record implementation, initial build, accounting of temporary peak space, cache-format transition, restore/catch-up, directory rename/layout, permissions, rollups and retained-reader regressions. The existing 3,000-file test reproduces quota refusal; it does not yet prove the fix. | Final full-namespace rebuild/refresh under the existing 16 GiB generation and 32 GiB aggregate caps. All six focused mounted command suites must pass. |
+| W109 / W92: concurrent-query correctness, freshness and timeout qualification | Either Linux cluster: concurrent ordinary-file mutations and `.efs` queries; reproduce contention and fix failures with existing deadlines and bounded resources. | Final seven-client concurrent queries against the full catalogue while ordinary-file I/O is active, using native RDMA/direct I/O. |
+| W92 / W91: catalogue lifecycle and orderly restart | Either Linux cluster: retained readers, successful/abandoned refresh, checkpoint retirement, compatible restore or explicit derived-cache migration, clean unmount and restart, exact acknowledged payloads and post-restart queries. | Same-source full-size orderly restart and cold query/readiness checks within the unchanged 300-second gate, plus acknowledged-data verification on all seven clients. A cache-format migration does not substitute for a subsequent same-format cold restart. |
+| W91 / W108: command behavior and integration regressions after these changes | Either Linux cluster: help/discovery, options/pages, `ls`/`find`, permissions, owner-name/numeric modes, default/human/JSON stats, feature transitions and truthful unsupported-expiry behavior. Existing owner-name passes remain historical evidence; rerun affected checks on the final source. | Final focused suites and default/human/JSON output checks on all seven clients at the real catalogue size. |
+| W92 scale gate: full 400 GiB acceptance, latency and resource bounds | Either Linux cluster: smaller deterministic payload/path oracles, concurrent workloads and resource/latency instrumentation. Useful for development, but insufficient to close the specified scale gate. | Complete verification of all 1,638,400 payloads and exported paths (429,496,729,600 logical bytes), cold restart, loaded queries, latency and resource measurements on the final source/profile. No sampling or inherited PASS. |
+
+AMD and Intel development requires Linux FUSE and isolated stores, ports and
+mounts; use the four logical server roles and at least one mounted client for
+integration. Use RDMA/direct I/O where available. Explicitly labelled TCP logic
+experiments may establish algorithmic correctness but do not qualify ORCD's
+hardware transport. These assignments do not authorize changing another
+cluster's active workload or imply that RDMA is currently available there.
+
+Keep `.efs` enabled, ordinary files, packing and containers disabled throughout
+this package. Expiry and unplanned-event recovery remain deferred. The broader
+CLOSE/EOF, fork/read and snapshot/log-rotation findings above can also be
+developed on AMD or Intel, but their loaded/platform acceptance remains
+separate from completion of these `.efs` rows. Any broader platform or
+billion-entry W91/W92 gates retain their own requirements; the 400 GiB run
+does not close them automatically.
+
 ## Practical split
 
 Use a private Linux development target with the current four logical server

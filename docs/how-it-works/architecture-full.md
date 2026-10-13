@@ -1487,6 +1487,10 @@ Catalogue retirement, retained-CLOSE scheduling and exact-EOF write acceptance
 have small native regressions and corrections in this deployment; their loaded
 mounted acceptance is still open. The original 5.569/22.044-second stalls,
 application fork/direct-read platform gate and broader scale gates remain open.
+All outstanding `.efs` work remains required: the [cluster assignment matrix](../status/orcd-small-cluster-followups-20261013.md#required-outstanding-efs-work-and-cluster-assignment)
+assigns logic/regression development to AMD or Intel Linux, with full-scale
+seven-client RDMA/direct-I/O, cold restart, payload, latency and resource
+acceptance on ORCD. No new execution or passing verdict is implied.
 See [small-cluster development findings](../status/orcd-small-cluster-followups-20261013.md)
 and the [400 GiB evidence](../status/orcd-efs-400g-20261012.md). Expiry, packing, containers
 and unplanned-event repair/recovery remain outside the current profile.
