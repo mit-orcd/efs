@@ -23,7 +23,7 @@ code=r'''
 #define HOST_NGROUPS 2
 struct host_drain_view { uint64_t applied, term; int leader, ready; };
 static struct host_drain_view view[2]={{0,0,0,1},{0,0,0,1}};
-struct host_inbox_item {uint8_t *buf;uint32_t len;uint64_t queued_us;};
+struct host_inbox_item {uint8_t *buf;uint32_t len;uint64_t queued_us;int read_noted;};
 struct efs_raft_host {pthread_mutex_t inbox_mu;int inbox_n;uint64_t inbox_bytes,inbox_work_n,inbox_work_bytes;struct host_inbox_item inbox[HOST_INBOX_MAX];};
 '''+f'#define HOST_INBOX_SLICE_MAX {limit}\n'+s[a:b]+s[take:take_end]+s[poll:poll_end]+r'''
 static struct host_inbox_item frame(unsigned group,unsigned bytes) {
@@ -48,7 +48,7 @@ int main(void) {
  struct host_inbox_item prefix[256];unsigned done;uint64_t bytes;
  unsigned next=40,expected=0;uint64_t accounted=0;
  for(unsigned i=0;i<next;i++) {
-  h.inbox[i]=(struct host_inbox_item){.buf=(void*)(uintptr_t)(i+1),.len=80+17*i,.queued_us=i};
+  h.inbox[i]=(struct host_inbox_item){.buf=(void*)(uintptr_t)(i+1),.len=80+17*i,.queued_us=i,.read_noted=i%2};
   h.inbox_bytes+=h.inbox[i].len;
  }
  h.inbox_n=40;h.inbox_work_n=64;h.inbox_work_bytes=999999;
@@ -59,6 +59,7 @@ int main(void) {
   uint64_t want=0;
   for(int i=0;i<n;i++) {
    assert(prefix[i].queued_us==expected && prefix[i].buf==(void*)(uintptr_t)(expected+1));
+   assert(prefix[i].read_noted==(int)(expected%2));
    want+=80+17*expected++;
   }
   assert(bytes==want);accounted+=bytes;
@@ -69,7 +70,7 @@ int main(void) {
   if(next<64) {
    /* Arrival after the pop appends behind every older retained frame. */
    pthread_mutex_lock(&h.inbox_mu);
-   h.inbox[h.inbox_n++]=(struct host_inbox_item){.buf=(void*)(uintptr_t)(next+1),.len=80+17*next,.queued_us=next};
+   h.inbox[h.inbox_n++]=(struct host_inbox_item){.buf=(void*)(uintptr_t)(next+1),.len=80+17*next,.queued_us=next,.read_noted=next%2};
    h.inbox_bytes+=80+17*next++;
    pthread_mutex_unlock(&h.inbox_mu);
    assert(host_pump_poll_timeout(&h)==0);

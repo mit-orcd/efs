@@ -152,6 +152,7 @@ struct host_inbox_item {
     uint8_t *buf;
     uint32_t len;
     uint64_t queued_us; /* Opt-in monotonic observation; never admission state. */
+    int read_noted; /* Early vote only; frame stays on ordered normal receive. */
 };
 
 /* One queued outbound raft message (encoded wire bytes, heap-owned). */
@@ -6221,11 +6222,50 @@ static int host_pump_poll_timeout(struct efs_raft_host *h)
     return pending ? 0 : HOST_TICK_US/1000;
 }
 
+/* h->mu HELD: only this pump removes inbox entries; arrivals append under
+ * inbox_mu. A handler that missed trylock left a fresh quorum frame behind
+ * the durable FIFO work. Note the same strict core read vote once, without
+ * consuming/reordering the frame or retiring its admission credits. Core
+ * boot/term/config/log/apply guards remain the only proof authority. */
+static void host_inbox_read_votes(struct efs_raft_host *h)
+{
+    struct host_inbox_item pending[HOST_INBOX_MAX];
+    int n, changed = 0;
+    pthread_mutex_lock(&h->inbox_mu);
+    n = h->inbox_n;
+    memcpy(pending, h->inbox, (size_t)n * sizeof(pending[0]));
+    pthread_mutex_unlock(&h->inbox_mu);
+    for (int i = 0; i < n; i++) {
+        struct efs_raft_msg msg;
+        if (pending[i].read_noted || pending[i].len != EFS_WIRE_RAFT_HDR_LEN ||
+            (pending[i].buf[0] != EFS_RAFT_MSG_AE_REQ &&
+             pending[i].buf[0] != EFS_RAFT_MSG_AE_REP) ||
+            efs_wire_raft_decode(pending[i].buf, pending[i].len,
+                                 &msg, NULL, 0) != EFS_OK ||
+            !msg.last_log_index)
+            continue;
+        struct efs_raft *r = group_raft(h, msg.group);
+        int handled = efs_raft_read_control(r, &msg);
+        if (!handled)
+            continue;
+        pthread_mutex_lock(&h->inbox_mu);
+        h->inbox[i].read_noted = 1;
+        pthread_mutex_unlock(&h->inbox_mu);
+        if (msg.type == EFS_RAFT_MSG_AE_REP) {
+            host_publish_group(h, msg.group);
+            changed = 1;
+        }
+    }
+    if (changed)
+        host_waiters_wake(h);
+}
+
 static void drain_inbox(struct efs_raft_host *h, unsigned *done_n, uint64_t *done_bytes)
 {
     struct host_inbox_item local[HOST_INBOX_MAX];
     int n, i;
 
+    host_inbox_read_votes(h);
     n=host_inbox_take(h,local,done_n,done_bytes);
 
     if (h->group_drain && n>1) {
@@ -10326,6 +10366,7 @@ int server_raft_host_inbox(const uint8_t *payload, uint32_t plen,
     if (h->inbox_bytes>h->inbox_bytes_hi) h->inbox_bytes_hi=h->inbox_bytes;
     h->inbox[h->inbox_n].buf=copy; h->inbox[h->inbox_n].len=plen;
     h->inbox[h->inbox_n].queued_us=BO_ON() ? efs_batch_obs_now_us() : 0;
+    h->inbox[h->inbox_n].read_noted=0;
     h->inbox_n++;
     if (h->flow_enabled) {
         h->inbox_work_n++; h->inbox_work_bytes+=plen;
