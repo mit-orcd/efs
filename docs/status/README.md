@@ -10,7 +10,9 @@ worker-stack correction is verified and the cluster is healthy. Refreshes
 take about 15–17 seconds and alias discovery is about 145ms. Late pending
 transaction refusals still delay publication; early rejection before cache
 copying and bounded fresh-capture retry are qualified in native/sanitized
-oracles, pending live acceptance.
+oracles. Full qualification found a retained-orphan harness extraction
+regression, corrected and verified before deployment; live acceptance remains
+pending.
 Deadlines and quotas stay unchanged. Passing basic commands/pages/large deltas and all failing logs are retained.
 Orderly shutdown/remount and cold markers PASS after correcting startup readiness.
 Seven screen benchmarks remain cleanly stopped pending successful follow-up gates,
