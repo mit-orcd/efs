@@ -192,7 +192,6 @@ static void get_two_parallel_run(struct frag_get_job *jobs)
             deadline = (int64_t)parent;
         while (pending[0] || pending[1]) {
             struct pollfd pfds[2];
-            int map[2];
             int np = 0;
             int64_t now, left;
             int pr;
@@ -225,7 +224,6 @@ static void get_two_parallel_run(struct frag_get_job *jobs)
                 pfds[np].fd = w;
                 pfds[np].events = POLLIN;
                 pfds[np].revents = 0;
-                map[np] = i;
                 np++;
             }
             if (!pending[0] && !pending[1])
@@ -249,24 +247,10 @@ static void get_two_parallel_run(struct frag_get_job *jobs)
             pr = poll(pfds, (nfds_t)np, left > 2000 ? 2000 : (int)left);
             if (pr <= 0)
                 continue;
-            for (i = 0; i < np; i++) {
-                int k;
-                if (!(pfds[i].revents & (POLLIN | POLLERR | POLLHUP)))
-                    continue;
-                k = map[i];
-                if (!pending[k] || !conns[k])
-                    continue;
-                if (get_one_reply(conns[k], &jobs[k]) != 0) {
-                    efs_client_conn_drop(jobs[k].node, conns[k]);
-                    efs_client_node_note_fail(jobs[k].node);
-                } else {
-                    efs_client_conn_release(jobs[k].node, conns[k]);
-                    if (jobs[k].rc == EFS_OK)
-                        efs_client_node_note_ok(jobs[k].node);
-                }
-                conns[k] = NULL;
-                pending[k] = 0;
-            }
+            /* A physical/CREDIT event is not a complete logical reply.
+             * Recheck both owners at the top before entering blocking receive;
+             * otherwise a control wake on a stalled peer hides a healthy reply. */
+
         }
     }
 }

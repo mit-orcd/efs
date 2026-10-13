@@ -192,6 +192,7 @@ test-report-pressure:
 	python3 tests/test_connect_deadline.py
 	python3 tests/test_resolver_deadline.py
 	python3 tests/test_rdma_reply_budget.py
+	python3 tests/test_rdma_progress_ready.py
 	python3 tests/test_rdma_setup_reentry.py
 	python3 tests/test_wb_worker_budget.py
 	python3 tests/test_wb_drain_budget.py
@@ -202,6 +203,7 @@ test-report-pressure:
 	python3 tests/test_get_pool_startup.py
 	python3 tests/test_get_pool_budget.py
 	python3 tests/test_get_pair_budget.py
+	python3 tests/test_get_pair_readiness.py
 	python3 tests/test_put_retry_budget.py
 	python3 tests/test_put_reply_deadline.py
 	python3 tests/test_put_tcp_frame.py

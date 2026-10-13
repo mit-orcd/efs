@@ -1555,7 +1555,8 @@ int efs_rdma_send_quiesce(struct efs_rdma_conn *rc)
     int ms=efs_net_remaining_ms(EFS_RDMA_SEND_WAIT_US/1000);
     int64_t end=now_us()+(int64_t)ms*1000;
     while (!rc->broken && rc->n_reaped<rc->n_posted) {
-        if (message_progress(rc,rc->nrecv)<0 || message_pause(rc,end)<0) return -1;
+        if (message_progress(rc,rc->nrecv)<0) return -1;
+        if (rc->n_reaped<rc->n_posted && message_pause(rc,end)<0) return -1;
     }
     return rc->broken ? -1 : 0;
 }
@@ -1687,13 +1688,20 @@ int efs_rdma_message_ready(struct efs_rdma_conn *rc)
 {
     efd_disarm(rc);
     if (message_progress(rc,1)<0) return -1;
-    return efs_rmsg_rx_peek(&rc->messages)!=NULL;
+    /* CREDIT-only and consumed-frame wakes must not leave a permanently ready
+     * eventfd. The caller arms/rechecks the ring before its next poll, so a
+     * concurrent push racing this drain is still observed without a lost wake. */
+    if (__atomic_load_n(&rc->pr_head,__ATOMIC_ACQUIRE)==rc->pr_tail)
+        pend_drain_efd(rc);
+    return rc->broken ? -1 : efs_rmsg_rx_peek(&rc->messages)!=NULL;
 }
 int efs_rdma_message_wait(struct efs_rdma_conn *rc,int timeout_ms)
 {
     int64_t end=timeout_ms<0?INT64_MAX:now_us()+(int64_t)timeout_ms*1000;
     while (!efs_rmsg_rx_peek(&rc->messages)) {
-        if (message_progress(rc,rc->nrecv)<0 || message_pause(rc,end)<0) return EFS_ERR_NET;
+        if (message_progress(rc,rc->nrecv)<0) return EFS_ERR_NET;
+        if (!efs_rmsg_rx_peek(&rc->messages) && message_pause(rc,end)<0)
+            return EFS_ERR_NET;
     }
     return rc->broken?EFS_ERR_NET:EFS_OK;
 }
