@@ -263,3 +263,14 @@ EOF reproducer repeats the existing POSIX oracle160times/client with16workers:
 fixtures remain. Seven isolated single-case reruns PASS but do not clear it.
 Existing cache/publication tracing on temporary clients gives960/960 PASS and
 normal drains; a traced concurrent bulk-I/O reproduction is running. Post-cold and full payload gates remain NOTRUN.
+
+Reproduce the shared-core EOF defect independently of `.efs` with
+`python3 tests/live/concurrent_extend_eof.py /tmp/efs-mount --cases 160 --workers 16`
+on each client simultaneously. The script reuses the committed POSIX high/low
+extension oracle, forks no reader, retries no operation and preserves failed
+fixtures. Requires an active ordinary-file mount and the source tree's
+`tests/posix/posix_suite.py`; run against a qualified native binary, recording
+source/build/profile. Successful owned fixtures are removed. Apply any
+shared-core fix first under package3's Intel disabled-feature profile, then
+requalify ORCD RDMA/direct-I/O with commands enabled. Human authorizes Intel
+coordination after its current network workload finishes; do not interrupt it.
