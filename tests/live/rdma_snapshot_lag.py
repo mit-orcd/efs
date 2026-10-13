@@ -3,7 +3,7 @@
 
 No threshold, quota, timeout or transport-window changes. Run only with exclusive
 access to the four-node installed AMD fixture; retains raw output outside Git.
-Both group workloads use the existing 600-second pressure script. Follower is
+Each independent writer uses the existing 600-second pressure script. Follower is
 selected only after its role is FOLLOWER in both groups; restored on every exit.
 """
 import argparse
@@ -18,7 +18,9 @@ p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('source', type=Path)
 p.add_argument('mount', type=Path)
 p.add_argument('output', type=Path)
+p.add_argument('--writers-per-group', type=int, default=1)
 a = p.parse_args()
+assert 1 <= a.writers_per_group <= 16
 a.output.mkdir(parents=True, exist_ok=False)
 mgmt = a.source / 'efs-mgmt'
 statuses = {}
@@ -40,13 +42,18 @@ def abort(signum, _frame):
 signal.signal(signal.SIGTERM, abort)
 signal.signal(signal.SIGINT, abort)
 try:
+    finish = time.monotonic()+630 #600s workload + existing30s I/O allowance
+    outputs = []
     for group in (0, 2):
-        log = (a.output/f'group{group}.log').open('w')
-        streams.append(log)
-        children.append(subprocess.Popen(['python3', str(a.source/'tests/live/efs_snapshot_pressure.py'), str(a.mount), str(a.output/f'group{group}'), '--group', str(group)], stdout=log, stderr=subprocess.STDOUT))
+        for writer in range(a.writers_per_group):
+            output = a.output/f'group{group}-writer{writer}'
+            outputs.append(output)
+            log = output.with_suffix('.log').open('w')
+            streams.append(log)
+            children.append(subprocess.Popen(['python3', str(a.source/'tests/live/efs_snapshot_pressure.py'), str(a.mount), str(output), '--group', str(group)], stdout=log, stderr=subprocess.STDOUT))
     # Files and initial data fsync must complete before pausing a data holder.
     end = time.monotonic()+30
-    while not all((a.output/f'group{g}/latency.jsonl').exists() for g in (0, 2)):
+    while not all((output/'latency.jsonl').exists() for output in outputs):
         assert all(c.poll() is None for c in children), 'pressure failed before lag injection'
         assert time.monotonic()<end, 'pressure setup exceeded original30s budget'
         time.sleep(.1)
@@ -54,8 +61,7 @@ try:
     assert current.count('role=FOLLOWER') == 2, current
     os.kill(pid, signal.SIGSTOP)
     stopped = True
-    print(f'Lagging follower node={candidate} pid={pid}; both natural pressure workloads active', flush=True)
-    finish = time.monotonic()+630 #600s workload + existing30s I/O allowance
+    print(f'Lagging follower node={candidate} pid={pid}; {len(children)} independent natural pressure writers active', flush=True)
     codes = [c.wait(timeout=max(0, finish-time.monotonic())) for c in children]
     assert not any(codes), codes
 finally:
