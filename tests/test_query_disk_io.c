@@ -312,6 +312,55 @@ static void alias_batch_test(void)
     pthread_mutex_destroy(&d->mutex);free(d);CHECK(!rmdir(root));
 }
 
+static void changed_journal_test(void)
+{
+    const unsigned count=2*SORT_ROWS+17,shards=FD_CACHE*2;
+    for(unsigned mode=0;mode<5;mode++){
+        char root[]="/tmp/efs-query-changes-XXXXXX";CHECK(mkdtemp(root));
+        struct efs_query_disk *d=calloc(1,sizeof(*d));struct incremental *state=calloc(1,sizeof(*state));
+        CHECK(d && state);if(!d || !state){free(d);free(state);continue;}
+        d->budget_fd=-1;d->disk_limit=UINT64_MAX;strcpy(d->path,root);pthread_mutex_init(&d->mutex,NULL);
+        for(unsigned i=0;i<FD_CACHE;i++)d->fds[i].fd=-1;
+        state->changes=count;state->change_bytes=count*sizeof(efs_ino_t);state->changes_fd=make_file(d,0,'c');
+        CHECK(state->changes_fd>=0);CHECK(!charge_disk(d,state->change_bytes));
+        for(unsigned at=0;at<count;at+=SORT_ROWS){
+            unsigned n=count-at>SORT_ROWS?SORT_ROWS:count-at;
+            for(unsigned i=0;i<n;i++)state->sort_ids[i]=count-at-i;
+            CHECK(!io_at(state->changes_fd,state->sort_ids,n*sizeof(efs_ino_t),at*sizeof(efs_ino_t),1));
+        }
+        uint64_t before=d->disk_bytes;
+        if(mode==1)d->disk_limit=before+2*state->change_bytes-1;
+        if(mode==2)partial_write=1;
+        if(mode==3)d->stop=cancel_budget;
+        if(mode==4)CHECK(!ftruncate(state->changes_fd,state->change_bytes-1));
+        int rc=changes_sort(d,state);
+        CHECK(rc==(mode==1?EFS_ERR_QUOTA:mode==3?EFS_ERR_BUSY:mode?EFS_ERR_IO:EFS_OK));
+        CHECK(!partial_write);d->stop=NULL;d->disk_limit=UINT64_MAX;
+        if(!mode){
+            CHECK(d->disk_bytes==before);
+            for(unsigned at=0;at<count;at+=SORT_ROWS){
+                unsigned n=count-at>SORT_ROWS?SORT_ROWS:count-at;
+                CHECK(!io_at(state->changes_fd,state->sort_ids,n*sizeof(efs_ino_t),at*sizeof(efs_ino_t),0));
+                for(unsigned i=0;i<n;i++)CHECK(state->sort_ids[i]==at+i+1);
+            }
+            struct disk_alias alias={UINT64_MAX,EFS_ROOT_INO,0};
+            for(unsigned i=0;i<shards;i++){
+                d->part[i].names=1;int fd=make_file(d,i,'a');CHECK(fd>=0);
+                if(fd>=0){CHECK(!io_at(fd,&alias,sizeof(alias),0,1));close(fd);}
+            }
+            alias_opens=0;CHECK(!aliases_dirty_sorted(d,state));CHECK(alias_opens==shards && !state->count);
+            close_cache(d);d->stop=cancel_budget;alias_opens=0;
+            CHECK(aliases_dirty_sorted(d,state)==EFS_ERR_BUSY && !alias_opens);d->stop=NULL;
+            char path[EFS_MAX_PATH];CHECK(!filename(d,0,'a',path,sizeof(path)));CHECK(!truncate(path,sizeof(alias)-1));
+            CHECK(aliases_dirty_sorted(d,state)==EFS_ERR_IO);
+        }else{
+            efs_ino_t first=0;CHECK(!io_at(state->changes_fd,&first,sizeof(first),0,0));CHECK(first==count);
+        }
+        close(state->changes_fd);free(state);efs_query_disk_free(d);CHECK(access(root,F_OK)<0);
+    }
+    puts("changed journal: external sort, one-pass aliases, charged peak, partial writes/EOF and cancellation PASS");
+}
+
 static void orphan_preflight_test(void)
 {
     char store[]="/tmp/efs-query-orphan-kv-XXXXXX",cache[]="/tmp/efs-query-orphan-cache-XXXXXX";
@@ -391,6 +440,7 @@ int main(void)
     raw_sync_batch_test();
     orphan_preflight_test();
     alias_batch_test();
+    changed_journal_test();
     rebuild_cache_test();
     {
         struct efs_query_rollup r={.tree_files=UINT64_MAX-1,.tree_dirs=7,.tree_bytes=9};

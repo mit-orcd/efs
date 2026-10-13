@@ -17,6 +17,8 @@ struct incremental {
     struct stat_change_range stat_changes[SHARDS][3];
     struct stat_change_range alias_bounds[SHARDS];
     uint8_t alias_known[SHARDS];
+    efs_ino_t sort_ids[SORT_ROWS];
+    struct disk_alias alias_rows[CHANGE_BATCH];
 };
 /* Each inode is visited once in the candidate stream; removed IDs occur only
  * in the old-only pass. No namespace-sized deduplication set is needed.
@@ -355,6 +357,92 @@ static int aliases_dirty_batch(struct efs_query_disk *d,struct incremental *s,
     return EFS_OK;
 }
 
+/* Large change sets use one globally sorted private journal, not repeated
+ * searches of every alias partition for each 256-ID batch. Fixed merge buffers
+ * live in admitted heap scratch; transient run files are charged at their
+ * simultaneous peak, and every error aborts publication. */
+static int changes_sort(struct efs_query_disk *d,struct incremental *s)
+{
+    if(s->changes<=SORT_ROWS){
+        int rc=io_at(s->changes_fd,s->sort_ids,s->changes*sizeof(efs_ino_t),0,0);
+        if(!rc)qsort(s->sort_ids,(size_t)s->changes,sizeof(efs_ino_t),changed_ino_compare);
+        if(!rc)rc=io_at(s->changes_fd,s->sort_ids,s->changes*sizeof(efs_ino_t),0,1);
+        return rc;
+    }
+    if(s->change_bytes>UINT64_MAX/2)return EFS_ERR_OVERFLOW;
+    uint64_t extra=s->change_bytes*2;int rc=charge_disk(d,extra);if(rc)return rc;
+    uint64_t runs=0;unsigned pass=0;char path[EFS_MAX_PATH];
+    for(uint64_t at=0;at<s->changes && !rc;at+=SORT_ROWS){
+        if(cancelled(d)){rc=EFS_ERR_BUSY;break;}
+        unsigned n=(unsigned)(s->changes-at>SORT_ROWS?SORT_ROWS:s->changes-at);
+        rc=io_at(s->changes_fd,s->sort_ids,n*sizeof(efs_ino_t),at*sizeof(efs_ino_t),0);
+        if(!rc)qsort(s->sort_ids,n,sizeof(efs_ino_t),changed_ino_compare);
+        if(!rc)rc=run_path(d,SHARDS,0,runs++,path);
+        int fd=rc?-1:open(path,O_CREAT|O_EXCL|O_RDWR|O_CLOEXEC,0600);
+        if(!rc && fd<0)rc=EFS_ERR_IO;
+        if(!rc)rc=io_at(fd,s->sort_ids,n*sizeof(efs_ino_t),0,1);
+        if(fd>=0)close(fd);
+    }
+    while(runs>1 && !rc){
+        for(uint64_t i=0;i<runs && !rc;i+=2){
+            char a[EFS_MAX_PATH],b[EFS_MAX_PATH],out[EFS_MAX_PATH];
+            rc=run_path(d,SHARDS,pass,i,a);
+            if(!rc)rc=run_path(d,SHARDS,pass+1,i/2,out);
+            if(rc)break;
+            if(i+1==runs){if(rename(a,out))rc=EFS_ERR_IO;continue;}
+            rc=run_path(d,SHARDS,pass,i+1,b);if(rc)break;
+            int fa=open(a,O_RDONLY|O_CLOEXEC),fb=open(b,O_RDONLY|O_CLOEXEC),fo=open(out,O_CREAT|O_EXCL|O_RDWR|O_CLOEXEC,0600);
+            struct stat sa,sb;
+            if(fa<0 || fb<0 || fo<0 || fstat(fa,&sa) || fstat(fb,&sb))rc=EFS_ERR_IO;
+            if(!rc && (sa.st_size<0 || sb.st_size<0 || sa.st_size%sizeof(efs_ino_t) || sb.st_size%sizeof(efs_ino_t)))rc=EFS_ERR_IO;
+            if(!rc)rc=merge_names(d,fa,fb,fo,(uint64_t)sa.st_size/sizeof(efs_ino_t),(uint64_t)sb.st_size/sizeof(efs_ino_t),sizeof(efs_ino_t),changed_ino_compare,(uint8_t *)s->sort_ids);
+            if(fa>=0)close(fa);if(fb>=0)close(fb);if(fo>=0)close(fo);
+            if(!rc && (unlink(a) || unlink(b)))rc=EFS_ERR_IO;
+        }
+        runs=(runs+1)/2;pass++;
+    }
+    if(!rc){
+        char final[EFS_MAX_PATH];rc=run_path(d,SHARDS,pass,0,path);
+        if(!rc)rc=filename(d,0,'c',final,sizeof(final));
+        if(!rc && rename(path,final))rc=EFS_ERR_IO;
+        if(!rc){close(s->changes_fd);s->changes_fd=open(final,O_RDWR|O_CLOEXEC);if(s->changes_fd<0)rc=EFS_ERR_IO;}
+    }
+    if(!rc)d->disk_bytes-=extra;
+    return rc;
+}
+struct change_cursor { uint64_t at;unsigned used,count;efs_ino_t ino;int valid; };
+static int change_next(struct efs_query_disk *d,struct incremental *s,struct change_cursor *c)
+{
+    if(c->at==s->changes){c->valid=0;return EFS_OK;}
+    if(c->used==c->count){
+        if(cancelled(d))return EFS_ERR_BUSY;
+        c->count=(unsigned)(s->changes-c->at>CHANGE_BATCH?CHANGE_BATCH:s->changes-c->at);c->used=0;
+        int rc=io_at(s->changes_fd,s->changed,c->count*sizeof(efs_ino_t),c->at*sizeof(efs_ino_t),0);if(rc)return rc;
+    }
+    c->ino=s->changed[c->used++];c->at++;c->valid=1;return EFS_OK;
+}
+static int aliases_dirty_sorted(struct efs_query_disk *d,struct incremental *s)
+{
+    for(uint32_t shard=0;shard<SHARDS;shard++){
+        if(cancelled(d))return EFS_ERR_BUSY;
+        if(!d->part[shard].names)continue;
+        struct change_cursor ids={0};int rc=change_next(d,s,&ids);if(rc)return rc;
+        for(uint64_t at=0;at<d->part[shard].names && ids.valid;at+=CHANGE_BATCH){
+            if(cancelled(d))return EFS_ERR_BUSY;
+            unsigned n=(unsigned)(d->part[shard].names-at>CHANGE_BATCH?CHANGE_BATCH:d->part[shard].names-at);
+            rc=disk_io(d,shard,'a',s->alias_rows,n*sizeof(struct disk_alias),at*sizeof(struct disk_alias),0);if(rc)return rc;
+            for(unsigned i=0;i<n && ids.valid;i++){
+                struct disk_alias *alias=&s->alias_rows[i];
+                while(ids.valid && ids.ino<alias->child){rc=change_next(d,s,&ids);if(rc)return rc;}
+                if(!ids.valid || alias->child!=ids.ino)continue;
+                if(alias->ordinal>=d->part[shard].names)return EFS_ERR_PROTO;
+                rc=dirty_add(d,s,alias->parent);if(rc)return rc;
+            }
+        }
+    }
+    return EFS_OK;
+}
+
 struct parent_fold { struct efs_query_disk *disk;struct incremental *state;uint32_t shard; };
 static int parent_fold_entry(void *user,const uint8_t *key,uint32_t kn,const uint8_t *value,uint32_t vn)
 {
@@ -426,8 +514,12 @@ static int incremental_build(struct efs_query_disk *d,struct efs_query_disk *old
             if(!lookup && S_ISDIR(node.row.mode))rc=dirty_add(d,s,node.row.ino);
             /* Old edges for removed/renamed IDs already dirtied their parents. */
         }
-        if(!rc)rc=aliases_dirty_batch(d,s,s->changed,n);
+        if(!rc && s->changes<=CHANGE_BATCH)rc=aliases_dirty_batch(d,s,s->changed,n);
         at+=n;
+    }
+    if(!rc && s->changes>CHANGE_BATCH){
+        rc=changes_sort(d,s);
+        if(!rc)rc=aliases_dirty_sorted(d,s);
     }
     aliases_done=query_build_clock();
     /* Sorted insertion can move the current entry: process an explicit done

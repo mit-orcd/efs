@@ -4,11 +4,12 @@
 RDMA/direct/files, commands enabled and packing/containers disabled. Full writes,
 all 1,638,400 cold payloads and exported paths, and human/default/JSON stats on
 all seven clients PASS at `254a4a295c66`. Overall follow-up acceptance is FAIL:
-full-catalog simultaneous seven-client queries still time out at `83885259`,
+full-catalog simultaneous seven-client queries still time out at `3512cf81`,
 although all 1,512 core cases and all focused suites pass. Its production
 worker-stack correction is verified and the cluster is healthy. Refreshes
-now take about 20–23 seconds; immutable name-index reuse and cached alias
-bounds are qualified in native/sanitized oracles, pending live acceptance.
+still take about 20–23 seconds. Broad changed-ID ranges defeat endpoint
+pruning; a fixed-memory external journal sort and one-pass alias merge are
+qualified in native/sanitized oracles, pending live acceptance.
 Deadlines and quotas stay unchanged. Passing basic commands/pages/large deltas and all failing logs are retained.
 Orderly shutdown/remount and cold markers PASS after correcting startup readiness.
 Seven screen benchmarks remain cleanly stopped pending successful follow-up gates,
