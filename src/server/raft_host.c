@@ -3408,20 +3408,21 @@ static int host_view_wait_apply(const struct host_view *v, uint64_t want,
 }
 
 static int host_read_wait_ready(const struct host_view *v,
-                                 const struct host_waiter *w)
+                                 uint64_t want, uint64_t round, uint64_t term,
+                                 int proof_only)
 {
     uint64_t proof;
-    if (!v->has || v->role != EFS_RAFT_LEADER || v->term != w->term)
+    if (!v->has || v->role != EFS_RAFT_LEADER || v->term != term)
         return 1;
-    if (w->proof_only &&
-        host_view_quorum_index(v, w->idx, w->round, w->term, &proof))
+    if (proof_only &&
+        host_view_quorum_index(v, want, round, term, &proof))
         return 1;
-    if (host_view_covers(v, w->idx, w->round, w->term))
+    if (host_view_covers(v, want, round, term))
         return 1;
     /* A future admission can start after the old quorum completes even if
      * that old round still awaits own apply. Its data rows remain fenced. */
     return (!v->read_pending || v->read_done) &&
-           !host_view_wait_apply(v, w->idx, w->round, w->term);
+           !host_view_wait_apply(v, want, round, term);
 }
 
 /* Sleep until the pump wakes this waiter or `end` passes. cv_mu HELD by
@@ -3491,7 +3492,8 @@ static void host_waiters_wake(struct efs_raft_host *h)
                 host_view_get(h, w->group, &view[gi]);
                 loaded |= (uint8_t)(1u << gi);
             }
-            wake = host_read_wait_ready(&view[gi], w);
+            wake = host_read_wait_ready(&view[gi], w->idx, w->round, w->term,
+                                        w->proof_only);
         } else if (w->any)
             wake = V_LOAD(g->v_stamp) != w->seen;
         else
@@ -4219,10 +4221,10 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
          * publishes the view and broadcasts applied_cv each cycle. */
         pthread_mutex_lock(&h->cv_mu);
         host_view_get(h, group, &v);
-        if (v.has && v.role == EFS_RAFT_LEADER && v.term == admitted_term &&
-            ((v.read_pending && !v.read_done) ||
-             host_view_wait_apply(&v, want, round, admitted_term)) &&
-            !host_view_covers(&v, want, round, admitted_term)) {
+        /* Registration and wake use the same predicate under cv_mu. A
+         * quorum arriving just before registration must not park an already
+         * satisfied proof RPC until another pump/view change. */
+        if (!host_read_wait_ready(&v, want, round, admitted_term, proof_only)) {
             uint64_t s0 = now_us_();
             host_waiter_sleep(h, group, 2, want, v.stamp, &end,
                               round, admitted_term, proof_only);
