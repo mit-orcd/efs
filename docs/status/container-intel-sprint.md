@@ -882,3 +882,38 @@ fallback/refusal, and files retain their original policy. Existing settling,
 catch-up, backoff, quorum and independently fresh read checks remain mandatory.
 This is a hypothesis based on earlier colocated quiet432/432 versus split
 quiet430/432 results; native and exact-source live validation are required.
+
+
+Colocated `5d454a9db211a0cd8118c9e4bea60b3a95e62295` (784 inputs):
+both-host affected native/storage/Raft controls and harness self-tests PASS.
+Seven-client **1497/1512 PASS,15 FAIL**, no NOTRUN: deep60 and crazy
+directories all seven; deep100 one. Full clients113.695–133.912s.
+Immediate physical **FAIL180.057s**: final ordinary mapping counts
+45/46/42/41; allocated bodies3137536/3207168/2928640/2859008 bytes.
+Original180-second requirement is retained. Quiet core **432/432 PASS**
+(56.885/58.182s), peer134/134 PASS, private mmap PASS with existing
+shared-write ENODEV skips. Lifecycle/tiny/cold continuation still running.
+No newer source is deployed during this qualification.
+
+Next scoped changes: batched LOOKUP_PATH uses the same container-only
+committed dual-group leader routing hint as LOOKUP/GETATTR before reading
+rows. This is routing, never authority: fresh encountered-group proofs
+still run at the destination. Actual handler tests confirm redirect has no
+metadata reads; ancestors, fresh next RPC, storage refusal, bounds and
+missing names remain controlled. Native/sanitizer PASS; old handler fails
+the redirect assertion/SIGABRT negative control.
+
+Container reaper now prepares lanes serially, overlaps at most four
+independent all-member physical inode fences, joins every helper, then
+serially selects/proposes REAP only for successful inode results. Files and
+repair experiment retain serial fencing. Failed lane prep, failed/busy
+physical fences, shutdown and thread creation failure retain ledger work;
+creation failure only reduces concurrency. No timers, expiry authority or
+per-RPC proof reuse is added. Helpers own distinct result slots and exact
+inode/generation; the existing inode guards, membership completeness, death
+record durability, punch/body barriers and mapping retirement remain in
+host_gc_inode_nodes/server_gc_inode. Native/sanitizer controls PASS for
+four bounded participants, zero/partial thread creation, joined lifetimes,
+per-inode hard/BUSY outcomes and stop/empty batches. A masked-failure
+negative control aborts. Both-host native and fresh live qualification are
+required before claiming either failure gate closed.

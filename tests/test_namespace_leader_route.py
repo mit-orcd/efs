@@ -66,3 +66,8 @@ for name in ['lookup','getattr']:
  assert route<body.index('host_hosts(')
  assert route<body.index('host_read_')
  assert 'set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;' in body
+
+# Batched paths use the same container-only hint before any row/proof read.
+a=s.index('void server_raft_host_lookup_path(');body=s[a:s.index('\n}',a)]
+assert body.index('host_container_read_leader_hint(')<body.index('host_hosts(')
+assert body.index('host_container_read_leader_hint(')<body.index('host_read_inode_lanes_reuse(')

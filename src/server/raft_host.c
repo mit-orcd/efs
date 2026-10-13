@@ -8307,6 +8307,66 @@ static int host_container_gc_lane_empty(struct efs_raft_host *h,efs_ino_t ino,
     return efs_meta_lane_sweep_select(h->kv,ino,gen,lane,indices,&n)==EFS_OK && !n;
 }
 
+static void host_gc_reap_finish(struct efs_raft_host *h,efs_ino_t ino,uint64_t gen,
+                                uint64_t lanes,struct reap_times *times)
+{
+    uint8_t cmd[18 + 32 * EFS_META_REAP_BATCH_MAX];
+    int drc;uint64_t started;
+    struct efs_meta_reap_key keys[EFS_META_REAP_BATCH_MAX]; uint32_t count;
+    drc=efs_meta_reap_select(h->kv,ino,gen,keys,&count);
+    if (drc != EFS_OK) return;
+    cmd[0] = EFS_MD_CMD_REAP_BATCH;
+    wr64be(cmd + 1, ino);
+    wr64be(cmd + 9, gen);
+    cmd[17]=(uint8_t)count;
+    for (uint32_t j=0; j<count; j++) {
+        cmd[18+32*j]=keys[j].len;
+        memcpy(cmd+19+32*j,keys[j].key,EFS_META_REAP_KEY_MAX);
+    }
+    started = now_us_();
+    drc = host_gc_propose(h,
+                          efs_raft_shard_group(efs_kv_inode_shard(ino)),
+                          cmd, 18+32*count);
+    times->done += now_us_() - started;
+    if (env_on("EFS_GC_DBG"))
+        fprintf(stderr, "raft-host: gc reap ino=%llu lanes=%llx sweep ok, reap_done rc=%d\n",
+                (unsigned long long)ino,
+                (unsigned long long)lanes, drc);
+}
+
+/* At most four independent physical inode fences; no metadata work runs
+ * in helpers. Caller joins every helper before retiring any REAP marker or
+ * returning its stack/host. Creation failure reduces concurrency only. */
+struct host_gc_fence_batch {
+    struct efs_raft_host *h;
+    const struct reap_scan_ctx *scan;
+    const unsigned char *ready;
+    int *result;
+    unsigned next;
+};
+static void *host_gc_fence_worker(void *arg)
+{
+    struct host_gc_fence_batch *b=arg;
+    for(;;){
+        unsigned i=__atomic_fetch_add(&b->next,1,__ATOMIC_RELAXED);
+        if(i>=(unsigned)b->scan->n)break;
+        if(!b->ready[i] || !__atomic_load_n(&b->h->gc_running,__ATOMIC_ACQUIRE) || !__atomic_load_n(&b->h->running,__ATOMIC_ACQUIRE))continue;
+        b->result[i]=host_gc_inode_nodes(b->h,b->scan->ino[i],b->scan->gen[i]);
+    }
+    return NULL;
+}
+static void host_gc_container_fences(struct efs_raft_host *h,
+        const struct reap_scan_ctx *scan,const unsigned char *ready,int *result)
+{
+    struct host_gc_fence_batch b={.h=h,.scan=scan,.ready=ready,.result=result};
+    pthread_t workers[3];unsigned n=0,count=0;
+    for(int i=0;i<scan->n;i++){result[i]=EFS_ERR_BUSY;count+=!!ready[i];}
+    if(!count || !h->gc_running || !h->running)return;
+    while(n<3 && n+1<count){if(pthread_create(&workers[n],NULL,host_gc_fence_worker,&b))break;n++;}
+    host_gc_fence_worker(&b);
+    for(unsigned i=0;i<n;i++)pthread_join(workers[i],NULL);
+}
+
 static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
                               uint32_t anchor, struct reap_times *times)
 {
@@ -8315,6 +8375,9 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
     uint32_t plen = 0;
     int i, lane;
 
+    unsigned char ready[REAP_SCAN_MAX]={0};
+    int results[REAP_SCAN_MAX];
+    int parallel=h->s->storage_engine && !h->s->repair_experiment;
     int prc, src;
     uint64_t started = now_us_();
 
@@ -8346,7 +8409,7 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
     for (i = 0; i < c.n && h->gc_running && h->running; i++) {
         uint8_t cmd[18 + 32 * EFS_META_REAP_BATCH_MAX];
         int lanes_ok = 1;
-        int lrc = 0, drc = 0;
+        int lrc = 0;
         uint8_t empty_covered=0; /* This inode reap attempt only. */
 
         started = now_us_();
@@ -8390,6 +8453,8 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
                         (unsigned long long)c.ino[i], lrc);
             continue;
         }
+        ready[i]=1;
+        if(parallel)continue;
         /* Include losing/never-published PUT objects. Namespace deletion
          * alone is insufficient evidence of physical reclamation. */
         started = now_us_();
@@ -8397,28 +8462,19 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
         times->fence += now_us_() - started;
         if (frc != EFS_OK)
             continue;
-        struct efs_meta_reap_key keys[EFS_META_REAP_BATCH_MAX]; uint32_t count;
-        drc=efs_meta_reap_select(h->kv,c.ino[i],c.gen[i],keys,&count);
-        if (drc != EFS_OK) continue;
-        cmd[0] = EFS_MD_CMD_REAP_BATCH;
-        wr64be(cmd + 1, c.ino[i]);
-        wr64be(cmd + 9, c.gen[i]);
-        cmd[17]=(uint8_t)count;
-        for (uint32_t j=0; j<count; j++) {
-            cmd[18+32*j]=keys[j].len;
-            memcpy(cmd+19+32*j,keys[j].key,EFS_META_REAP_KEY_MAX);
-        }
-        started = now_us_();
-        drc = host_gc_propose(h,
-                              efs_raft_shard_group(efs_kv_inode_shard(c.ino[i])),
-                              cmd, 18+32*count);
-        times->done += now_us_() - started;
-        if (env_on("EFS_GC_DBG"))
-            fprintf(stderr, "raft-host: gc reap ino=%llu lanes=%llx sweep ok, reap_done rc=%d\n",
-                    (unsigned long long)c.ino[i],
-                    (unsigned long long)c.lanes[i], drc);
+        host_gc_reap_finish(h,c.ino[i],c.gen[i],c.lanes[i],times);
+
+    }
+    if(parallel){
+        started=now_us_();
+        host_gc_container_fences(h,&c,ready,results);
+        times->fence+=now_us_()-started;
+        for(i=0;i<c.n && h->gc_running && h->running;i++)
+            if(ready[i] && results[i]==EFS_OK)
+                host_gc_reap_finish(h,c.ino[i],c.gen[i],c.lanes[i],times);
     }
 }
+
 
 /* GC pass over one group's anchor shard: delete fragments for each dead
  * chunk generation, then batch the acks into one GC_ACK entry. */
@@ -18343,6 +18399,8 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
         p++;
     {
         uint8_t sg = efs_raft_shard_group(efs_kv_inode_shard(cur));
+        hint=host_container_read_leader_hint(h,sg);
+        if(hint>=0){set_inode_rc((struct efs_msg_inode_reply *)out,EFS_ERR_NOT_PRIMARY,hint);return;}
         if (!host_hosts(h, sg)) {
             uint8_t need[2];
             need[0] = EFS_RAFT_GROUP_SHARD;
