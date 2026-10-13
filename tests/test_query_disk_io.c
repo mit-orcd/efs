@@ -361,6 +361,41 @@ static void changed_journal_test(void)
     puts("changed journal: external sort, one-pass aliases, charged peak, partial writes/EOF and cancellation PASS");
 }
 
+static void pending_preflight_test(void)
+{
+    char store[]="/tmp/efs-query-pending-kv-XXXXXX",cache[]="/tmp/efs-query-pending-cache-XXXXXX";
+    CHECK(mkdtemp(store));CHECK(mkdtemp(cache));
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);CHECK(kv);if(!kv)return;
+    struct efs_meta_attrs attrs={1000,1000,100};CHECK(!efs_meta_apply_init(kv,100));
+    for(unsigned i=0;i<32;i++){
+        char name[32];efs_ino_t ino;snprintf(name,sizeof(name),"ordinary-%u",i);
+        CHECK(!efs_meta_apply_create_file(kv,&attrs,EFS_ROOT_INO,S_IFREG|0644,name,&ino));
+    }
+    struct efs_meta_row row={.ino=SHARDS-1,.parent=EFS_ROOT_INO,.generation=1,.mode=S_IFREG|0644};
+    uint8_t key[EFS_KV_KEY_MAX],value[EFS_META_INO_BYTES];uint32_t kn;
+    CHECK(!efs_kv_key_inode(SHARDS-1,row.ino,key,&kn));CHECK(!efs_meta_pack_inode(&row,value,sizeof(value)));
+    CHECK(!efs_kv_put(kv,key,kn,value,sizeof(value)));
+    struct efs_kv_lsm_snapshot *base=NULL,*blocked=NULL,*clean=NULL;struct efs_query_disk *old=NULL,*next=NULL;
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&base));CHECK(!efs_query_disk_build(cache,base,NULL,4<<20,NULL,NULL,NULL,&old));
+    struct efs_txid tx={{0}};tx.bytes[15]=67;struct efs_txn_parts parts={.n=1,.shard={SHARDS-1}};
+    uint64_t version;CHECK(!efs_txn_ver_get(kv,key,kn,&version));CHECK(!efs_txn_prepare_guard(kv,&tx,&parts,key,kn,version));
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&blocked));
+    struct efs_query_build_failure failure={0};struct efs_query_build_times times;
+    unsigned writes=write_calls,syncs=raw_syncs+index_syncs;
+    CHECK(efs_query_disk_build_checked(cache,blocked,old,4<<20,NULL,NULL,&times,&failure,&next)==EFS_ERR_BUSY);
+    CHECK(failure.pending && !next && write_calls==writes && raw_syncs+index_syncs==syncs);
+    CHECK(efs_query_disk_build_checked(cache,blocked,old,4<<20,cancel_budget,NULL,&times,&failure,&next)==EFS_ERR_BUSY);
+    CHECK(!failure.pending && !next && write_calls==writes);
+    CHECK(!efs_txn_resolve(kv,&tx,SHARDS-1,EFS_TXN_ABORT));CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&clean));
+    CHECK(!efs_query_disk_build_checked(cache,clean,old,4<<20,NULL,NULL,&times,&failure,&next));CHECK(!failure.pending && next);
+    efs_query_disk_free(next);next=NULL;writes=write_calls;
+    CHECK(efs_query_disk_build_checked(cache,blocked,old,4<<20,NULL,NULL,&times,&failure,&next)==EFS_ERR_BUSY);
+    CHECK(failure.pending && !next && write_calls==writes);
+    CHECK(!efs_query_disk_inode(old,row.ino,NULL,NULL));
+    efs_query_disk_free(old);efs_kv_lsm_snapshot_release(base);efs_kv_lsm_snapshot_release(blocked);efs_kv_lsm_snapshot_release(clean);efs_kv_lsm_close(kv);
+    puts("pending preflight: high-shard guard refuses before writes, shutdown distinguished, immutable cut and fresh resolved rebuild PASS");
+}
+
 static void orphan_preflight_test(void)
 {
     char store[]="/tmp/efs-query-orphan-kv-XXXXXX",cache[]="/tmp/efs-query-orphan-cache-XXXXXX";
@@ -441,6 +476,7 @@ int main(void)
     orphan_preflight_test();
     alias_batch_test();
     changed_journal_test();
+    pending_preflight_test();
     rebuild_cache_test();
     {
         struct efs_query_rollup r={.tree_files=UINT64_MAX-1,.tree_dirs=7,.tree_bytes=9};

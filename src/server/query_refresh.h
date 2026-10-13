@@ -48,6 +48,13 @@ static inline int efs_query_refresh_cut_retry(int rc,int transaction_changed,uin
 {
     return rc==EFS_ERR_BUSY && transaction_changed && capture_ms<EFS_QUERY_CUT_RETRY_MS;
 }
+/* A confirmed pending-row preflight also rejects without candidate I/O.
+ * Only cheap BUSY refusals use the same bounded fresh-capture schedule; errors,
+ * shutdown/scan BUSY and expensive checks retain the existing backoff. */
+static inline int efs_query_refresh_preflight_retry(int rc,int pending,uint64_t build_ms)
+{
+    return rc==EFS_ERR_BUSY && pending && build_ms<EFS_QUERY_CUT_RETRY_MS;
+}
 static inline int efs_query_refresh_due_reason(uint64_t now,uint64_t pending_since,
     uint64_t last_attempt,uint64_t dirty,int initial,int failed,int cut_retry,
     uint64_t trigger,uint64_t interval)

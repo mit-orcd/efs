@@ -9231,10 +9231,15 @@ static void *host_query_thread(void *ctx)
                 }
                 if(work_enabled && initial)work.restore_ms=query_mono_ms()-restore_start;
                 if(initial)fprintf(stderr,"query-restore: rc=%d backend=disk\n",restored);
-                uint64_t build_start=work_enabled?query_mono_ms():0;
+                uint64_t build_start=query_mono_ms();
                 if(restored)rc=efs_query_catalog_build_disk_checked(query_root,source,h->query_view.catalog,
                     catalog_bytes,host_query_disk_cancel,h,&build_failure,&candidate);
-                if(work_enabled && restored)work.build_ms=query_mono_ms()-build_start;
+                uint64_t build_elapsed=query_mono_ms()-build_start;
+                if(work_enabled && restored)work.build_ms=build_elapsed;
+                if(restored && efs_query_refresh_preflight_retry(rc,build_failure.pending,build_elapsed)){
+                    cut_retry=1;refresh_stage="prepared-preflight";
+                    if(work_enabled){work.fast_eligible=1;work.reason="prepared-preflight";}
+                }
                 if(!rc) {
                     pthread_mutex_lock(&h->mu);
                     if(!host_query_capable(h))rc=EFS_ERR_NOT_PRIMARY;

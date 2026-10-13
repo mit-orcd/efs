@@ -15,6 +15,11 @@ int main(void)
     /* Failure neither hot-loops at startup nor suppresses the later retry. */
     assert(!efs_query_refresh_due(2999,0,1000,0,1,1,256,2000));
     assert(efs_query_refresh_due(3000,0,1000,0,1,1,256,2000));
+    assert(efs_query_refresh_preflight_retry(EFS_ERR_BUSY,1,199));
+    assert(!efs_query_refresh_preflight_retry(EFS_ERR_BUSY,1,200));
+    assert(!efs_query_refresh_preflight_retry(EFS_ERR_BUSY,0,1));
+    assert(!efs_query_refresh_preflight_retry(EFS_ERR_IO,1,1));
+    assert(!efs_query_refresh_preflight_retry(EFS_ERR_NOT_PRIMARY,1,1));
     /* A 49-second failed build backs off from its completion, not admission.
      * Retained invalid data must not drive uninterrupted full rebuilds. */
     assert(!efs_query_refresh_due(50001,0,50000,0,1,1,256,2000));

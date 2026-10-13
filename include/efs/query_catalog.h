@@ -14,8 +14,9 @@ struct efs_query_build_times {
 struct efs_query_build_times efs_query_catalog_build_times(const struct efs_query_catalog *);
 /* A failed derived build may remember one orphan-directory identity. It is
  * only a hint: each retry rechecks an immutable source before avoiding scratch
- * I/O. No authoritative row, published generation or watermark is changed. */
-struct efs_query_build_failure { efs_ino_t directory; };
+ * I/O. A callback-confirmed pending-row refusal is a separate cheap-retry
+ * hint. No authoritative row, published generation or watermark is changed. */
+struct efs_query_build_failure { efs_ino_t directory;int pending; };
 struct efs_query_rollup {
     uint64_t imm_files, imm_dirs, imm_bytes, imm_tmin, imm_tmax;
     uint64_t tree_files, tree_dirs, tree_bytes, tree_tmin, tree_tmax;

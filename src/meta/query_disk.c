@@ -471,7 +471,8 @@ static int save(void *ctx,const uint8_t *key,uint32_t kl,const uint8_t *val,uint
 }
 static int pending(void *u,const uint8_t *k,uint32_t kn,const uint8_t *v,uint32_t vn)
 {
-    (void)u;(void)v;(void)vn;
+    if(u)*(int *)u=1;
+    (void)v;(void)vn;
     if(kn>=3)efs_query_stage_trace("pending-record",EFS_ERR_BUSY,0,
         ((uint32_t)k[0]<<8)|k[1],k[2]);
     return EFS_ERR_BUSY;
@@ -976,6 +977,28 @@ static int orphan_preflight(struct efs_kv_lsm_snapshot *source,
     return EFS_ERR_IO;
 }
 
+/* Reject an immutable image with pending transaction inputs before creating
+ * candidate files. Keep raw_build's checks as defense in depth. Only prefixes
+ * the old revision proof would rebuild are examined; no authority proof is
+ * relaxed and callback-confirmed blockers are distinguished from scan errors. */
+static int pending_preflight(struct efs_kv_lsm_snapshot *source,const struct efs_query_disk *old,
+    const uint64_t *revisions,int (*stop)(void *),void *ctx,struct efs_query_build_failure *failure)
+{
+    const uint8_t refuse[]={EFS_KV_KIND_INTENT,EFS_KV_KIND_GUARD,EFS_KV_KIND_REDUCE};
+    for(uint32_t shard=0;shard<SHARDS;shard++){
+        if(stop && stop(ctx))return EFS_ERR_BUSY;
+        if(old && old->part[shard].revision==revisions[shard])continue;
+        uint8_t prefix[3]={(uint8_t)(shard>>8),(uint8_t)shard,0};
+        for(unsigned i=0;i<sizeof(refuse);i++){
+            int found=0;prefix[2]=refuse[i];
+            int rc=efs_kv_lsm_snapshot_scan(source,prefix,3,NULL,0,pending,&found);
+            if(found && failure)failure->pending=1;
+            if(rc)return rc;
+        }
+    }
+    return EFS_OK;
+}
+
 /* Private bounded incremental builder; no public/disk ABI change. */
 #include "query_disk_incremental.h"
 int efs_query_disk_build_checked(const char *root,struct efs_kv_lsm_snapshot *source,
@@ -983,12 +1006,18 @@ int efs_query_disk_build_checked(const char *root,struct efs_kv_lsm_snapshot *so
     struct efs_query_build_failure *failure,struct efs_query_disk **out)
 {
     if(out)*out=NULL;
+    if(failure)failure->pending=0;
     if(times)memset(times,0,sizeof(*times));
     uint64_t phase_start=query_build_clock();
     uint64_t working=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX+RAW_RECORD_MAX+NODE_BATCH*sizeof(struct disk_node)+sizeof(struct fold_parent)+sizeof(struct incremental)+sizeof(struct raw_sync_batch)+64*sizeof(struct efs_meta_dir_ent)+65536+2*RAW_RECORD_MAX;
     if(!root || !source || !out)return EFS_ERR_INVAL;
     if(max_bytes<working)return EFS_ERR_NOMEM;
     int preflight=orphan_preflight(source,failure,stop,ctx);
+    if(preflight){if(times)times->index_ns=query_build_elapsed(phase_start);return preflight;}
+    uint64_t revisions[SHARDS],lineage[2];
+    preflight=efs_kv_lsm_snapshot_query_revisions(source,lineage,revisions);
+    if(old && !preflight && memcmp(old->lineage,lineage,sizeof(lineage)))old=NULL;
+    if(!preflight)preflight=pending_preflight(source,old,revisions,stop,ctx,failure);
     if(preflight){if(times)times->index_ns=query_build_elapsed(phase_start);return preflight;}
     if(mkdir(root,0700) && errno!=EEXIST)return EFS_ERR_IO;
     struct efs_query_disk *d=calloc(1,sizeof(*d));if(!d)return EFS_ERR_NOMEM;
@@ -1003,9 +1032,8 @@ int efs_query_disk_build_checked(const char *root,struct efs_kv_lsm_snapshot *so
     if(admitted){efs_query_disk_free(d);return admitted;}
     int n=snprintf(d->path,sizeof(d->path),"%s/view-XXXXXX",root);
     if(n<0 || (size_t)n>=sizeof(d->path) || !mkdtemp(d->path)){efs_query_disk_free(d);return EFS_ERR_IO;}
-    uint64_t revisions[SHARDS];int rc=efs_kv_lsm_snapshot_query_revisions(source,d->lineage,revisions);
+    memcpy(d->lineage,lineage,sizeof(lineage));int rc=EFS_OK;
     struct raw_sync_batch sync={0};
-    if(old && memcmp(old->lineage,d->lineage,sizeof(d->lineage)))old=NULL;
     for(uint32_t shard=0;shard<SHARDS && !rc;shard++) {
         if(cancelled(d)){rc=EFS_ERR_BUSY;break;}
         d->part[shard].revision=revisions[shard];
