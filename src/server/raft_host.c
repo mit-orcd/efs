@@ -6146,12 +6146,34 @@ static int host_pump_poll_timeout(struct efs_raft_host *h)
     return pending ? 0 : HOST_TICK_US/1000;
 }
 
+/* A read probe may have missed the receiver trylock during the previous
+ * follower log barrier. Note only fresh zero-prefix leadership probes before
+ * starting more batch I/O. The core still checks term/boot/config and known
+ * leader. This does not acknowledge the queued write suffix. Every frame
+ * remains in normal receive order; the leader retains its apply barrier. */
+static void host_note_queued_reads(struct efs_raft_host *h,
+                                  const struct host_inbox_item *items,int n)
+{
+    for(int i=0;i<n;i++) {
+        struct efs_raft_msg msg;
+        if(items[i].len!=EFS_WIRE_RAFT_HDR_LEN ||
+           items[i].buf[0]!=EFS_RAFT_MSG_AE_REQ ||
+           efs_wire_raft_decode(items[i].buf,items[i].len,&msg,NULL,0)!=EFS_OK ||
+           msg.nentries || msg.prev_index || msg.prev_term ||
+           !msg.last_log_index || !msg.vote_granted)
+            continue;
+        struct efs_raft *r=group_raft(h,msg.group);
+        if(efs_raft_read_control(r,&msg))BO_COUNT(BO_READ_CONTROL_REQUEST);
+    }
+}
+
 static void drain_inbox(struct efs_raft_host *h, unsigned *done_n, uint64_t *done_bytes)
 {
     struct host_inbox_item local[HOST_INBOX_MAX];
     int n, i;
 
     n=host_inbox_take(h,local,done_n,done_bytes);
+    host_note_queued_reads(h,local,n);
 
     if (h->group_drain && n>1) {
         unsigned order[HOST_INBOX_MAX];
