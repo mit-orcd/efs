@@ -77,7 +77,6 @@ def exercise(mount,port,work,wait,physical_files,restart,count):
             with survivor.open('xb',buffering=0) as f:f.write(b'renewed');os.fsync(f.fileno())
             id=survivor.stat().st_ino;rev,_,_=rpc(61,id)
             rpc(59,id,struct.pack('>IQQQ',os.getuid(),rev,0,time.time_ns()+1800_000_000_000))
-            if phase=='restart':restart(True)
             if phase=='disable-reenable':
                 restart(False)
                 wait(lambda:time.time_ns()>due+5_000_000_000,'deadlines passed while globally disabled',240)
@@ -86,6 +85,14 @@ def exercise(mount,port,work,wait,physical_files,restart,count):
                 row['disabled_overdue_preserved']=count
                 restart(True)
             else:wait(lambda:time.time_ns()>=due,'first queue deadline',240)
+            if phase=='restart':
+                remaining=[count]
+                def partially_drained():
+                    remaining[0]=sum(p.name.startswith('f-') for p in root.iterdir())
+                    return 0<remaining[0]<count
+                wait(partially_drained,'restart with partially drained expiry queue',60)
+                row['remaining_before_restart']=remaining[0]
+                restart(True)
             started=time.monotonic();values=[];errors=[];stop=threading.Event()
             probe=threading.Thread(target=latency_probe,args=(stop,values,errors));probe.start()
             observations=[]
