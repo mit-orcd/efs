@@ -1,4 +1,7 @@
-# RDMA implementation checkpoint
+# RDMA implementation foundation checkpoint
+
+Subsequent transport integration and AMD qualification: [current ledger](rdma-soft-roce-integration-20261013.md).
+The following describes the historicale6d1ecda foundation, not the current branch runtime.
 
 Branch `devel-rdma`, created from integrated devel `fc341f00`.
 Foundation source: `e6d1ecda64fd4a38ed814ff5432d786abed9d56a`.

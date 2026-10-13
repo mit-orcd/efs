@@ -1494,9 +1494,18 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**PASS affected gates on a32567d7**, branchdevel-rdma — verbs credit progress,
+complete-message protocol/handler and Raft integration. Soft-RoCE core216/216,
+peer67/67; same-binary TCP216/216+67/67. Full-library ASan/UBSan normal/fault
+transport PASS. All333 upgraded TCP sockets zero post-setup payload;19 live
+connections sent multi-segment filesystem messages. Features .efs/packing/
+containers/expiry OFF. Fixtures stopped, installed AMD TCP cluster unchanged.
+Hardware IB, cold/large-metadata/snapshot/load/churn acceptance still NOTRUN.
+
+[RDMA implementation checkpoint](../status/rdma-implementation-20261013.md):
 `devel-rdma` foundation e6d1ecda native/ASan/UBSan and offset negative control PASS.
-Versioned setup/envelope, bounded assembly and cumulative credit model implemented;
-verbs/application integration and strict live RDMA NOTRUN. AMD TCP cluster unchanged.
+Historical foundation checkpoint; subsequent verbs/application integration and
+AMD affected results are in the current ledger above. Installed AMD TCP cluster unchanged.
 
 [Merged devel ordinary-file AMD qualification](../status/amd-devel-merged-posix-20261013.md):
 **PASS on 96f40602** — all local branch tips integrated; fresh four-node files/TCP/direct
@@ -1516,7 +1525,8 @@ metadata/data/replication messages over bounded RDMA buffers. Strict RDMA uses
 TCP only for setup and rejects incompatible peers. AMD Soft-RoCE then ORCD-test
 native IB qualification required. Code-review instructions now map negotiation,
 credits, complete-message APIs, buffer lifetimes and Raft pipelining to exact
-functions and ordered gates; implementation and tests NOTRUN. No cluster changes.
+functions and ordered gates. Historical plan; current implementation/test
+verdicts are in the segmented RDMA ledger above. No hardware deployment.
 
 [ORCD RDMA/TCP cause investigation](../status/orcd-rdma-tcp-cause-20261013.md):
 matched9b source explicitly sends oversized frames via retained TCP channel;
