@@ -122,7 +122,9 @@ its own peak/retirement measurement. Invalid-format rejection and current-format
 restore pass; mounted transition from a genuinely old checkpoint remains a
 separate gate (the retained AMD catalogue might already have been retired).
 
-Next: finish isolated enabled policy-transition/fault suites, genuine v5→v6
+Historical next actions below are superseded by the [transition/load follow-up](amd-package2-transition-load-20261013.md), which records actual upgrade retirement, next refresh and broader fault results.
+
+Next at this original checkpoint: finish isolated enabled policy-transition/fault suites, genuine v5→v6
 mounted rebuild and representative loaded concurrency, then qualify all affected
 native/fault/sanitizer gates on final integration. ORCD owns full-size peak,
 loaded seven-client, complete 400 GiB and hardware transport acceptance. W108's
