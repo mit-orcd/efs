@@ -7863,6 +7863,26 @@ static int host_bg_propose(struct efs_raft_host *h, uint8_t group,
     uint64_t idx = 0, term = 0;
     int rc, lid = -1;
 
+    /* Container cleanup must not introduce a private append fsync under
+     * the read/propose mutex. Join the existing foreground cohort only for
+     * a hosted multi-voter leader; preserve files, repair, solo and forwarding
+     * policy. A role change after this snapshot fails normally, never lends
+     * another entry's verdict or advertises an unflushed append. */
+    if (h->s && h->s->storage_engine && !h->s->repair_experiment) {
+        pthread_mutex_lock(&h->mu);
+        r = group_raft(h, group);
+        uint32_t voters = r ? efs_raft_voters(r) : 0;
+        int local_multi = r && efs_raft_role(r) == EFS_RAFT_LEADER &&
+                          voters && (voters & (voters-1));
+        pthread_mutex_unlock(&h->mu);
+        if (local_multi) {
+            rc = host_propose_impl(h, group, cmd, clen, &idx, &term, NULL, 1);
+            if (rc != EFS_OK) return rc;
+            return verdict ? host_wait_verdict(h, group, idx, term, NULL) :
+                             host_wait_settled(h, group, idx, term, NULL);
+        }
+    }
+
     pthread_mutex_lock(&h->mu);
     r = group_raft(h, group);
     if (r && efs_raft_role(r) == EFS_RAFT_LEADER) {

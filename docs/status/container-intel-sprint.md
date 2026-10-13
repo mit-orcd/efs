@@ -2118,3 +2118,54 @@ phase observation is not part of tested42316531 and needs a new frozen source.
 Phase duration clocks use monotonic time as well as the snapshot timestamp;
 existing wall-time read-sleep logging remains unchanged. Instrumentation
 source0d8ae026 was not deployed; this correction precedes its source freeze.
+
+### Authority-phase31abdc36 result and background cohort candidate
+
+Frozen31abdc360c918ffc161d97d90f50ef166faca4d1 complete native/sanitizer/
+792-input and live binary/start/configuration proofs PASS both Intel hosts.
+Diagnostic same retained fixture/configuration/workload: FAIL1503/1512PASS,
+7deep60timeouts plus2names_crazy_roundtrip failures; raw TSV details retained.
+Immediate strict physical PASS102.089s, first zero102.062s. Profiling ON, not
+a new normal acceptance result. All latest normal gates remain tied to42316531.
+External raw readphase31abdc36-{deploy,workers64-diagnostic} directories.
+
+Selected first30s leader phase window29.637s (74samples):182053 mutex waits,
+79.482aggregate seconds/436.587us mean;21729new-round begins,297.197ms
+aggregate/13.677us mean;358155 condition sleeps classified quorum at entry,
+843.680aggregate seconds/2355.628us mean; zero classified apply sleeps.
+Aggregate concurrent time is not single-child elapsed time; relaxed snapshots
+and entry-state classification cannot assign exclusive causality. Current
+source inspection and previous42316531 GC traces show cleanup proposals
+using raw efs_raft_propose under h->mu, whereas foreground proposals already
+join the shared log cohort and perform its fsync outside that mutex. Leader
+GC REAP completion takes183–1794ms per sampled first30s pass; that is aggregate
+proposal/commit/verdict latency, not a measured private-fsync duration.
+No read-wake/extra-worker/own-apply relaxation is implemented from these data.
+
+Container-only candidate routes hosted multi-voter leader background commands
+through the EXISTING host_propose_impl local-only cohort path, then waits for
+the exact returned(idx,term) verdict or settled identity as before. Files,
+repair, solo/unknown-voter, follower/unhosted forwarding retain original paths.
+A role/configuration change after the preference snapshot fails/retries under
+existing rules. Shared-log completed coverage still gates durable admission;
+no ACK, commit/apply, recovery cursor, quota/admission ceiling, deadline,
+wire/disk format or helper-thread change. Commands owned by an outer cohort
+wait for the normal covered commit/apply before retirement. This is a scheduling
+candidate, not closure of either loaded directory latency or the diagnostic
+Unicode EBUSY failures.
+
+Actual-source GC decoder/verdict controls now exercise container cohort calls
+outside h->mu with a distinct returned identity42/9, all business/storage/role
+errors, settled-vs-verdict waits and unchanged legacy/repair/solo/forwarding
+paths. Normal and ASan/UBSan PASS locally; unchanged31abdc36 fails the exact
+allow_private assertion (observed negative). Existing shared-log coverage and
+actual foreground cohort controls PASS; they do not substitute for complete
+fresh Linux/native/live qualification. Reproduce tests/test_gc_verdict.py
+(EFS_TEST_CFLAGS optional sanitizer flags, EFS_RAFT_HOST_SOURCE permits the
+original regression), test_report_log_coverage.py and test_prepare_cohort.py.
+No parallel metadata-finalizer or new Raft opcode is introduced.
+
+Production read-only verification this turn: Intel1 daemon PIDs5945/5953 and
+FUSE6602; Intel2 daemon10086/10094 and FUSE10331. Both/data1/efs/mnt mounts
+retain opposite-host17432 seeds and400G/direct production daemons. No
+immutable payload baseline exists; this is process/mount verification only.
