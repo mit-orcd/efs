@@ -1024,3 +1024,40 @@ negative controls. Existing actual paired admissions, publication and
 completed-proof term/config/role/storage/own-apply controls PASS locally.
 Both-host native and fresh complete live validation of the exact corrected
 source remain required; C4's physical pass cannot qualify this newer source.
+
+
+### Pre-mutex admission 2065f216 — completed, directory gate FAIL
+
+Exact source2065f21664ac04e00e4ebde67b40be914381c296; both Intel hosts
+built with EFS_GIT_ID/EFS_GIT_DESCRIBE set to that SHA, branch devel-container.
+All787 frozen source input hashes match deployed proofs. Same retained
+four-node4G/node fixture, containers/TCP/direct, seven cross-host mounts,
+commands/.efs/expiry-date/packing disabled,8writers and20ms progressing GC.
+Both-host affected native/storage/Raft/self-test controls PASS before deployment.
+Reproduce via intel_container_qualification.py concurrent then immediate reclaim,
+followed by core/peer/mmap/lifecycle-create/read/churn/verify/tiny-create/restart/
+lifecycle-cold/tiny-cold/lifecycle-delete/reclaim, with unique --run-id and
+--output outside Git. Original seven clients,16jobs/client,216cases/client
+and case deadlines unchanged; physical deadline180s, no reset/history removal.
+Concurrent1498/1512 PASS,14FAIL: deep60 and crazy-directory cases on all
+seven clients,120.410–133.336s. Immediate physical PASS178.336s, all four
+ordinary maps and allocated container bodies zero at178.326s. Quiet core
+432/432 and peer134/134 PASS; private mmap PASS, shared ENODEV skips.
+Lifecycle256x512KiB/4workers/read30/churn30, tiny300 durable generations/host,
+warm/cold hash checks, global graceful restart and deletion PASS. Final
+physical PASS14.263s. Narrow physical margin and failed-directory load do
+not establish reclamation under a fully passing concurrent workload.
+Raw logs/proofs/TSVs retained outside Git under container-20261012/
+admit2065-deploy and admit2065-qualification. Directory gate stays open.
+
+Next container candidate captures coherent hosted-leader commit floors
+before mutex waiting, paired with the already pre-send admission tickets.
+Only matching leader/term views are used; missing/follower/changed-term
+views fall back to the locked current floor, same-term commit regression
+refuses BUSY. The unchanged core captures its full proof index and own
+apply must reach that actual index; later concurrent writes do not become
+extra minimum dependencies. Files retain original admission floors.
+Actual paired helper controls, unknown/follower/term fallbacks, regression
+refusal, ASan/UBSan and restoring the late-floor negative PASS locally.
+Both-host native and fresh live qualification remain required for this
+candidate;2065 results cannot qualify it.

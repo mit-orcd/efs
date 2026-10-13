@@ -4248,6 +4248,9 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
     uint64_t tickets[2]={host_read_register(h,first),host_read_register(h,second)};
     struct efs_raft *r[2];struct host_read_admission admission[2];
     uint8_t groups[2]={first,second};int rc=EFS_OK;
+    struct host_view admitted[2]={{0}};
+    if(h->s && h->s->storage_engine)
+        for(unsigned i=0;i<2;i++)host_view_get(h,groups[i],&admitted[i]);
     pthread_mutex_lock(&h->mu);
     for(unsigned i=0;i<2;i++) {
         r[i]=group_raft(h,groups[i]);
@@ -4261,7 +4264,16 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
         if(previous==UINT64_MAX) {
             pthread_mutex_unlock(&h->mu);return EFS_ERR_BUSY;
         }
-        admission[i]=(struct host_read_admission){efs_raft_commit(r[i]),
+        uint64_t want=efs_raft_commit(r[i]);
+        /* This request's floor precedes mutex waiting. The chosen core round
+         * still captures its full commit index and requires own apply through
+         * that index; concurrent later commits are not new read dependencies. */
+        if(admitted[i].has && admitted[i].role==EFS_RAFT_LEADER &&
+           admitted[i].term==efs_raft_term(r[i])){
+            if(want<admitted[i].commit){pthread_mutex_unlock(&h->mu);return EFS_ERR_BUSY;}
+            want=admitted[i].commit;
+        }
+        admission[i]=(struct host_read_admission){want,
                                                   host_read_eligible_round(h,groups[i],r[i],tickets[i]),efs_raft_term(r[i])};
     }
     for(unsigned i=0;i<2;i++) {
