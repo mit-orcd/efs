@@ -2348,3 +2348,25 @@ fences, and existing post-KV durability/credit retirement remain unchanged.
 The actual scheduler fixture exercises both policies, exact initial limits,
 arrival ordering, unchanged credits and backlog wakeup. This is a hypothesis,
 not a passing directory claim; native and mounted qualification are pending.
+
+
+### Bounded64-frame candidate complete: directory blocker unchanged; reverted
+
+Exact tested source5ee027fe138aa331ae539ed9383f3610a49e40d6, both-host
+full native/sanitizers and794-input/source/live proofs PASS. All12 mounted
+flock ownership checks PASS. Normal concurrent1505/1512 PASS, seven
+dir_deep_nesting30s FAIL (all seven clients); other215 cases per client PASS.
+Durations127.297–130.072s. Physical103.643s PASS; quiet432/432,
+peer134/134, private mmap, lifecycle/create/read30s/churn30s/warm/cold,
+tiny100files+300generations per host, graceful restart, deletes and final
+physical9.114s PASS. Shared mmap retains ENODEV skip. Both post-restart
+actual64-worker/TCP/containers/direct/GC20ms/profile-OFF/disabled-feature
+proofs PASS. Quota4G/node; retained history/stores preserved. All15 gates
+ran using committed intel_container_qualification.py, standard deadlines.
+External evidence: slice5ee027fe-{deploy,workers64-normal,workers64-qualification}.
+
+The larger prefix did not resolve the deep deadline. No performance gain is
+established; variable unlink EBUSY did not recur, which is not causal proof.
+The64-frame experiment is reverted to the previous32-frame policy. The earlier
+retained flock ownership/unlock and physical-GC fixes remain. Loaded acceptance
+FAIL; W100 stays open. No push, merge or production promotion.

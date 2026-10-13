@@ -59,7 +59,6 @@
 #define HOST_SEND_IO_MS    250
 #define HOST_INBOX_MAX     256
 #define HOST_INBOX_SLICE_MAX 32
-#define HOST_CONTAINER_INBOX_SLICE_MAX 64
 #define HOST_INBOX_BYTES   (32ull << 20)
 #define HOST_OUTBOX_BYTES  (16ull << 20)
 #define HOST_FRAME_MAX     (EFS_WIRE_RAFT_MAX_CMD + EFS_WIRE_RAFT_HDR_LEN + 12u)
@@ -6341,11 +6340,7 @@ static int host_inbox_take(struct efs_raft_host *h,
 {
     pthread_mutex_lock(&h->inbox_mu);
     int n=h->inbox_n;
-    /* Containers amortize their post-drain KV release over a larger bounded
-     * prefix. FIFO, receive-group bounds and durability retirement stay the
-     * same; ordinary-file scheduling retains its existing limit. */
-    int limit=h->s->storage_engine ? HOST_CONTAINER_INBOX_SLICE_MAX : HOST_INBOX_SLICE_MAX;
-    if(n>limit)n=limit;
+    if(n>HOST_INBOX_SLICE_MAX)n=HOST_INBOX_SLICE_MAX;
     *done_n=(unsigned)n;*done_bytes=0;
     for(int i=0;i<n;i++)*done_bytes+=h->inbox[i].len;
     memcpy(local,h->inbox,(size_t)n*sizeof(local[0]));
