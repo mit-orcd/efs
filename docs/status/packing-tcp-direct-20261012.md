@@ -17,7 +17,7 @@ Current candidate: **dc4ad1ed424986b01e070040ca5a1a8f89c3f65f**, combining
 atomic scalar admission, bounded coherent-view publication and fresh quorum
 scheduling while a preceding proven read waits for own apply. Local focused
 regressions and exact-source AMD normal/fault/sanitizer safety PASS.
-Live qualification is NOTRUN pending space for the unchanged4G fixture. No
+Live qualification is RUNNING after user-authorized stopped test-store cleanup, with unchanged4G fixtures. No
 candidate closes the directory timeout: latest completed quiet61ba3c16 passed
 1492/1512 core with20 timeouts; peer and orderly shutdown PASS, cold and
 reclamation/drain NOTRUN after reserve refusal. Earlier full rounds that passed
@@ -785,22 +785,21 @@ live command remains the same seven-client/jobs16 fixture, fresh port36810,
 4G per node and30/20/180s budgets. Raw output lives externally under
 `amd_efs:/data1/efs/packing-qualification-20261012/quorum-*`.
 
-Inactive generated build outputs were cleaned without deleting failed stores,
-source, manifests or logs. A proposed lossless transfer of the failed61ba3c16
-store to a local archive was rejected by automatic approval review as
-unauthorized private-data egress; no fixture data was copied or deleted. Human
-approval is pending to erase exactly the four stopped synthetic stores for
-`root-a/gc-direct-x8u82cbf/{n1,n2}` and
-`root-b/gc-direct-7gukbidf/{n3,n4}` (about3.6GiB), while preserving logs,
-manifest and committed reproduction. The alternative is explicit authorization
-for local lossless archival before erasure. No storage reserve changes are
-proposed, and no live qualification pass is inferred from safety or space work.
+The user subsequently authorized deleting any AMD EFS cluster test data as
+needed. Cleanup removed 97 stopped synthetic node stores identified by fixture
+manifests, retaining parent logs and manifests; available capacity increased
+from188GiB to220GiB. Unrelated services were untouched. The earlier proposed
+archive transfer was rejected before execution, and no archive was exported.
+No quota or storage reserve policy was changed.
 
 Current dc4ad1ed safety checkpoint: both full native suites exit0, targeted
 read/FIFO/pool normal and sanitizer gates exit0, and fully instrumented actual
-Raft normal/early-ACK checks exit0. Original-budget live qualification remains
-NOTRUN pending the requested storage decision. No owned live fixture remains
-running. Local architecture documentation and diff checks PASS.
+Raft normal/early-ACK checks exit0. Original-budget live qualification is RUNNING
+in detached screen `packing-quorum-live`: three quiet seven-client rounds,
+followed by the focused acknowledged-fsync crash gate if all rounds pass.
+Normal binary hashes below match the running candidate. No live pass is inferred
+from safety checks or space cleanup. Raw progress is in `quorum-quiet-1.log`,
+subsequent round logs, and `quorum-live.exit`/`quorum-live.finished` markers.
 
 Normal executable SHA-256:
 
