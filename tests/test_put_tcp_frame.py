@@ -24,7 +24,7 @@ int efs_conn_reply_watch_quick(struct efs_conn *c){assert(c->rc);quick++;return 
 int efs_conn_reply_watch_us(struct efs_conn *c,int b){assert(c->rc && b==24);spin++;return EFS_CONN_REPLY_READY;}
 int efs_recv_put_reply(int fd,uint8_t *t,uint8_t *s,uint8_t *p){(void)fd;(void)t;(void)s;(void)p;assert(0);return -1;}
 static int conn_rdma_frame(struct efs_conn *c,uint8_t *t,const uint8_t **p,uint32_t *n){(void)c;(void)t;(void)p;(void)n;assert(0);return -1;}
-int efs_rdma_recv_repost(struct efs_rdma_conn *c){(void)c;assert(0);return -1;}
+void efs_rdma_message_release(struct efs_rdma_conn *c){(void)c;assert(0);}
 '''+function('efs_conn_recv_put_reply')+function('efs_conn_put_reply_watch')+r'''
 int main(void){
  int fd[2];assert(!socketpair(AF_UNIX,SOCK_STREAM,0,fd));struct efs_conn c={.fd=fd[0]};
