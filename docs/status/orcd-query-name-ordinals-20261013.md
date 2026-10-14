@@ -182,3 +182,29 @@ reads gdb types without attaching, accounts for PIE, and samples only the
 ordered/priority counters and two pending-group counters through read-only
 process memory. Never interpret these racy samples as a durability proof; keep
 raw output outside Git.
+
+## Follow-up live result and internal retry normalization
+
+`f58eab0f1d99d0158c93a12d706cbebef8bd5ccc` full Linux native, focused
+ASan/UBSan/leaks and893-input installed source proofs PASS. All11 runtime flags
+match the required profile; normal marker restart PASS, elected/caught-up
+readiness132.883s. Repeated mounted close PASS again at0.53–0.58ms.
+
+The quiet six-suite rerun improves to5/6 PASS: basic5.52s, options5.87s,
+pages6.67s, virtual interfaces49.71s, large-delta21.24s. Large-delta includes
+the previously failed peer readdir after rename/link/512 unlinks. This quiet
+pass does not invalidate the earlier loaded EBUSY failure. Load remains FAIL
+14.08s: reader receives internal retry status EFS_ERR_AGAIN(-18), not the
+BUSY refusal its unchanged oracle accepts. Successful mounted snapshots show
+advancing generations79–82 and refresh_error0 before the failure. The auxiliary
+mount drains/unmounts normally, cleanup0. Logs are retained separately at
+`fcstor007/six-commands-f58eab0f1d99` under the scratch base.
+
+The next candidate maps internal AGAIN to query BUSY, matching the existing
+ordinary-inode rc_to_inode_status behavior. It retains known redirects, errors
+such as ACCES/IO, reply accounting, failed-proof zero bytes and existing stream
+release behavior. Actual page-dispatch tests inject AGAIN in early policy and
+consume paths and require BUSY without data; the load oracle is unchanged and
+still requires successful reads and snapshot progress. Local native/sanitizer
+checks PASS; Linux/live qualification for this additional correction NOTRUN.
+All seven long-running writer/crawler screens remain stopped.

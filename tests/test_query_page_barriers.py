@@ -57,6 +57,7 @@ int main(void){host.query_enabled=1;host.g[0].group=0;host.g[1].group=2;pthread_
  policy_rc=EFS_ERR_NOT_PRIMARY;void *early=(void*)1;uint32_t early_len=0;
  assert(server_raft_host_query_page(&req,&early,&early_len)==EFS_ERR_BUSY && !early);
  policy_rc=EFS_ERR_ACCES;assert(server_raft_host_query_page(&req,&early,&early_len)==EFS_ERR_ACCES && !early);
+ policy_rc=EFS_ERR_AGAIN;assert(server_raft_host_query_page(&req,&early,&early_len)==EFS_ERR_BUSY && !early);
  policy_rc=0;
  assert(!run() && captures==1 && barriers==1 && consumed==1 && !cleared);
  fresh=0;req.token=99;assert(!run() && !captures && barriers==1 && consumed==1);
@@ -68,6 +69,7 @@ int main(void){host.query_enabled=1;host.g[0].group=0;host.g[1].group=2;pthread_
  barrier_rc=EFS_ERR_BUSY;assert(run()==EFS_ERR_BUSY && barriers==1 && !consumed && !cleared);
  fresh=1;req.token=0;assert(run()==EFS_ERR_BUSY && captures==1 && barriers==1 && !consumed && cleared);
  barrier_rc=0;consume_rc=EFS_ERR_ACCES;assert(run()==EFS_ERR_ACCES && consumed==1 && cleared);
+ consume_rc=EFS_ERR_AGAIN;assert(run()==EFS_ERR_BUSY && consumed==1 && cleared);
  consume_rc=0;fresh=0;req.token=99;req.limit=0;assert(!run() && !captures && !barriers && !consumed && cleared);
  missing_close=1;
  assert(!run() && !captures && !barriers && !consumed && cleared);

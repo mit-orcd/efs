@@ -10383,7 +10383,7 @@ static int host_query_policy_authority(uint32_t *mask)
  * no usable target accompanies it. Never deliver bytes from a failed proof. */
 static int query_reply_status(int rc,uint16_t primary_id)
 {
-    return rc==EFS_ERR_NOT_PRIMARY && !primary_id ? EFS_ERR_BUSY : rc;
+    return rc==EFS_ERR_AGAIN || (rc==EFS_ERR_NOT_PRIMARY && !primary_id) ? EFS_ERR_BUSY : rc;
 }
 static int host_query_policy_operation(uint8_t operation)
 {
