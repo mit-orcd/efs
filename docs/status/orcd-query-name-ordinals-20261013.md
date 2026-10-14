@@ -260,7 +260,7 @@ five generations; its first successful headers carry its boot/generation and
 directories andzero data, supporting pre-consume refusal rather than filtered
 result corruption. Both see the same writer fixture; this diagnostic does not
 qualify its final payload oracle, which aborts on the zero-success reader.
-Raw output: `fcstor007/query-target-20261014-065130.log` (the controller records
+Raw output: `fcstor007/query-target-20261014-065406.log` (the controller records
 the actual scratch path), plus the separate header comparison controller output.
 Record the retained path from the run when reproducing; no private captures are
 needed to reproduce the hypothesis using the committed14-second load driver
@@ -284,3 +284,12 @@ SIGABRT). Reproduce with `python3 tests/test_query_target_route.py`; use
 negative invocation had an unused helper warning; explicitly testing that
 helper makes the intended old-code negative compile and reach the runtime
 assertion. Linux/live qualification of this new routing candidate is NOTRUN.
+
+Committed diagnostic reproduction: run `python3 tests/live/efs_query_target_compare.py
+/tmp/efs-mount /tmp/INDEPENDENT_RDMA_PEER_MOUNT --targets 172.16.223.58
+172.16.223.59 --port 17432 --fixture UNIQUE_UNUSED_NAME` on a client,. Redirect stdout/stderr to an owned scratch log
+outside Git. Both mounts must already serve the same export under the required
+profile. It uses the stock14s/eight-writer workload and payload checks, changing
+only reader endpoints and adding bounded header samples; it retains the original
+zero-success assertion. Stop the auxiliary mount normally only after the
+driver's threads exit, preserving failed fixtures.
