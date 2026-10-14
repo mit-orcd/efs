@@ -1,5 +1,10 @@
 # AMD RDMA namespace admission — 2026-10-14
 
+Historical a7 source checkpoint. The later [paused-follower read fix and
+affected qualification](rdma-paused-follower-read-20261014.md) on ade source
+passes four full32MiB reads and repeats all quiet core/peer/cold/EOF gates.
+The a7 degraded failure below remains historical failed evidence.
+
 W106. Branch `devel-rdma`. Files/direct/strict segmented RDMA, Soft-RoCE
 rxe0/GID1 on AMD-395; four same-host nodes. `.efs` client/server, packing,
 containers, expiry and repair experiment OFF; metadata balancing1.

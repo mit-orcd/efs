@@ -5071,6 +5071,13 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 
 **Evidence/current state:** AMD software-RXE functional evidence already exists; current-code distributed and hardware acceptance must retain their own named gates. Intel remains the TCP acceptance deployment. Its 5 Gb/s links and absence of exposed RDMA devices/software modules do not block RDMA testing on the designated environments.
 
+**Later Oct 14 AMD read update:** `ade336daf` bounded advisory peer ordering
+passes four full32MiB paused-follower reads/digests at the unchanged180s outer
+and30s read/5s pair budgets. Fresh quiet core4536/4536, peer/cold/EOF, clean full
+native and targeted ASan/UBSan PASS. .efs/packing/containers/expiry disabled;
+no TCP comparison. Earlier degraded failures retained. W106 broader/hardware
+scope remains OPEN; see [current source/config/reproduction ledger](../status/rdma-paused-follower-read-20261014.md).
+
 **Oct 14 AMD update:** `a7e2b6b7d` early namespace leader routing qualified
 on files/direct/strict Soft-RoCE with .efs/packing/containers/expiry disabled:
 full native and three unchanged seven-client/jobs16 cores4536/4536 PASS,

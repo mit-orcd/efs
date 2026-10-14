@@ -1494,12 +1494,14 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-W106 fix pending AMD qualification. Failed preferred GET peers move behind
-other verified-fragment candidates only until the original read deadline;
-no global health/placement change, window or timeout increase. Focused checks
-PASS; previous degraded failures retained. .efs/packing/containers/expiry OFF.
+**ade336daf deployed; affected AMD gates PASS** — bounded advisory peer order
+avoids repeated stalled fragment setup without changing health/placement or
+budgets. Four full32MiB paused-follower digests PASS; read-phase2.612–2.622s.
+Clean full native and targeted AMD ASan/UBSan PASS; quiet core4536/4536,
+peer/cold/EOF all PASS. Three internal admission retries recovered, no case
+failure. .efs/packing/containers/expiry OFF; W106 broader/hardware OPEN; no push.
 
-[AMD RDMA namespace admission](../status/rdma-namespace-admission-20261014.md):
+[Historical AMD RDMA namespace admission](../status/rdma-namespace-admission-20261014.md):
 **a7e2b6b7d deployed; loaded namespace PASS** — early proven dual-group leader
 routing for unlink/link/rename; full native PASS. Three quiet core cohorts each
 1512/1512, zero admission refusals; unlink/link/root-rename21 each, deep42 and
@@ -2362,7 +2364,7 @@ This index adds traceable IDs to the Intel acceptance follow-ups; it does not ch
 | [W103](#w103) | Investigate intermittent Intel persistence and stats timeouts | Liveness/performance investigation; open. |
 | [W104](#w104) | Decide and gate writable shared mmap support | Feature scope/design follow-up; deferred, currently unsupported by specification. |
 | [W105](#w105) | Stable NFS file handles across EFS client restarts | Gateway acceptance/correctness investigation; open. |
-| [W106](#w106) | RDMA acceptance: AMD software / orcd-test hardware IB/RDMA | Open: a7 AMD loaded namespace4536/4536 PASS; degraded read FAIL; hardware gates remain. See [current ledger](../status/rdma-namespace-admission-20261014.md). |
+| [W106](#w106) | RDMA acceptance: AMD software / orcd-test hardware IB/RDMA | Open broader/hardware validation. ade AMD four32MiB paused reads, native and quiet core4536/4536 PASS; see [current ledger](../status/rdma-paused-follower-read-20261014.md). |
 
 Pending choices retain their existing homes: W99 cache-only pressure escalation and numeric thresholds; W54 additional live-reference GC guard; W66/W74 metadata mechanism under accepted D36. W104 separately records the deferred shared-mmap scope choice. No new D number or policy acceptance is implied.
 
@@ -7943,6 +7945,13 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 **Governing test policy:** All RDMA work is tested on the AMD cluster using software RDMA, or on `orcd-test` using hardware InfiniBand/RDMA. Select the environment appropriate to the claim; software acceptance does not establish hardware acceptance. This policy applies to RDMA gates throughout the backlog, not just W106.
 
 **Evidence/current state:** AMD software-RXE functional evidence already exists; current-code distributed and hardware acceptance must retain their own named gates. Intel remains the TCP acceptance deployment. Its 5 Gb/s links and absence of exposed RDMA devices/software modules do not block RDMA testing on the designated environments.
+
+**Later Oct 14 AMD read update:** `ade336daf` bounded advisory peer ordering
+passes four full32MiB paused-follower reads/digests at the unchanged180s outer
+and30s read/5s pair budgets. Fresh quiet core4536/4536, peer/cold/EOF, clean full
+native and targeted ASan/UBSan PASS. .efs/packing/containers/expiry disabled;
+no TCP comparison. Earlier degraded failures retained. W106 broader/hardware
+scope remains OPEN; see [current source/config/reproduction ledger](../status/rdma-paused-follower-read-20261014.md).
 
 **Oct 14 AMD update:** `a7e2b6b7d` early namespace leader routing qualified
 on files/direct/strict Soft-RoCE with .efs/packing/containers/expiry disabled:

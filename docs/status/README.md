@@ -1,10 +1,12 @@
 [AMD paused-follower read](rdma-paused-follower-read-20261014.md):
-W106 fix pending AMD qualification. Failed preferred GET peers move behind
-other verified-fragment candidates only until the original read deadline;
-no global health/placement change, window or timeout increase. Focused checks
-PASS; previous degraded failures retained. .efs/packing/containers/expiry OFF.
+**ade336daf deployed; affected AMD gates PASS** — bounded advisory peer order
+avoids repeated stalled fragment setup without changing health/placement or
+budgets. Four full32MiB paused-follower digests PASS; read-phase2.612–2.622s.
+Clean full native and targeted AMD ASan/UBSan PASS; quiet core4536/4536,
+peer/cold/EOF all PASS. Three internal admission retries recovered, no case
+failure. .efs/packing/containers/expiry OFF; W106 broader/hardware OPEN; no push.
 
-[AMD RDMA namespace admission](rdma-namespace-admission-20261014.md):
+[Historical AMD RDMA namespace admission](rdma-namespace-admission-20261014.md):
 **a7e2b6b7d deployed; loaded namespace PASS** — early proven dual-group leader
 routing for unlink/link/rename; full native PASS. Three quiet core cohorts each
 1512/1512, zero admission refusals; unlink/link/root-rename21 each, deep42 and
@@ -867,7 +869,7 @@ This index adds traceable IDs to the Intel acceptance follow-ups; it does not ch
 | [W103](../backlog/work-items.md#w103) | Investigate intermittent Intel persistence and stats timeouts | Liveness/performance investigation; open. |
 | [W104](../backlog/work-items.md#w104) | Decide and gate writable shared mmap support | Feature scope/design follow-up; deferred, currently unsupported by specification. |
 | [W105](../backlog/work-items.md#w105) | Stable NFS file handles across EFS client restarts | Gateway acceptance/correctness investigation; open. |
-| [W106](../backlog/work-items.md#w106) | RDMA acceptance: AMD software / orcd-test hardware IB/RDMA | Open: a7 AMD loaded namespace4536/4536 PASS; degraded read FAIL; hardware gates remain. See [current ledger](rdma-namespace-admission-20261014.md). |
+| [W106](../backlog/work-items.md#w106) | RDMA acceptance: AMD software / orcd-test hardware IB/RDMA | Open broader/hardware validation. ade AMD four32MiB paused reads, native and quiet core4536/4536 PASS; see [current ledger](rdma-paused-follower-read-20261014.md). |
 
 Pending choices retain their existing homes: W99 cache-only pressure escalation and numeric thresholds; W54 additional live-reference GC guard; W66/W74 metadata mechanism under accepted D36. W104 separately records the deferred shared-mmap scope choice. No new D number or policy acceptance is implied.
 
