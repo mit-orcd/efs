@@ -5000,7 +5000,9 @@ A later O_EXCL diagnostic reproduced accepted EOF loss: Intel2 old client
 778/1000 quiet cases pass. Fix61e5c939d preserves EOF while a pending body
 owns bytes, using a coherent dirty-mark/body-pin probe. Targeted native,
 ASan/UBSan and1000 mounted cases per host pass; exact committed-source broad
-qualification is pending. Directory deadlines remain a separate OPEN gate.
+qualification now passes full native/core and2000 loaded O_EXCL cases,
+but seven-client1510/1512 retains two directory deadlines. Full recovery/GC rerun passes both hosts; directory deadlines remain a
+separate OPEN gate.
 
 **Evidence/current state:** Original Intel2 private `mtime_monotonic_many_writes` exceeds its unchanged 30-second limit; a bounded diagnostic preserves exact bytes and monotonic timestamps but takes 33.828 seconds. Later production runs on both hosts also retain deep-directory, many-entry and concurrent-append timeout verdicts. Mixed tiny/large private runs intermittently report fsync EIO or exceed the 180-second tiny-worker limit. Successful repeats do not establish a universal repair.
 

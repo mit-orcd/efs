@@ -2,10 +2,9 @@
 
 **Updated: 2026-10-14 (America/New_York).**
 
-**Aggregate: FAIL — final seven-client repeat retains five directory timeouts.**
+**Aggregate: FAIL — latest61e5c939d seven-client/EOF overlap retains two directory timeouts.**
 The subsequent diagnostic also reproduced accepted-EOF loss on old clients;
-correction `61e5c939d` passes the focused gates below. Its full deployment
-qualification is in progress. Earlier native/recovery passes belong to the
+correction `61e5c939d` passes the focused gates below. Its full native, deployed core and loaded EOF gates pass; full isolated recovery/GC passes on both hosts. Earlier native/recovery passes belong to the
 recorded earlier source; W100 remains OPEN. This records the authorized
 merged-source deployment and failure correction. Production Intel and ORCD are
 not changed by this work. A clean seven-client PASS is not a universal loaded
@@ -51,7 +50,7 @@ source files matched `3d279417f` on both hosts after the first harness fix.
 The handoff candidate was built at `/data1/efs/w100-private/handoff-candidate`
 with identity `ca7f7b2f3-handoff`, branch devel, 2026-10-14T03:42:56Z on both
 hosts (Oct 13 local). Its production C matches `382d537d6`; the candidate
-archive predates only the later private-resume helper fix. Exact final-source
+archive predates only the later private-resume helper fix. Earlier exact-source
 staging is `/data1/efs/w100-private/devel-382d537d6` (1,273 non-results files).
 
 ## Recorded results
@@ -80,6 +79,11 @@ staging is `/data1/efs/w100-private/devel-382d537d6` (1,273 non-results files).
 | Offline-member rerun | Both hosts | FAIL: cached reap_seen=0 despite durable markers; corrected by `172e3f502` |
 | Live two-fsync omission/refusal/recovery | Normal final servers + isolated EFS_FAULTS clients, both directions | PASS, temporary clients cleanly drained/stopped |
 | Full isolated GC / quota / fencing / recovery | Runtime `382d537d6`, fixtures `172e3f502`, both hosts | PASS, complete exit 0 |
+| Full native + mounted core/extras |61e5c939d, both hosts |PASS native exit0; core216/216 each; extras1PASS/4expected skips each |
+| Seven clients plus2000 O_EXCL cases |61e5c939d, normal profile |FAIL1510/1512: two depth60timeouts; focused2000/2000PASS |
+| Cold persistence and cross-host peer |61e5c939d |PASS27/27 perhost, peer67/67 (53.7s; overlapped fault-client build/qualification) |
+| Full isolated recovery/GC and two-fsync |61e5c939d, both hosts |PASS complete GC exit0 and both directions refusal/recovery |
+
 
 The first core/extras runs briefly overlapped their tails. The initial peer
 failure overlapped the diagnostic seven-client run; retain that failed verdict,
@@ -247,4 +251,61 @@ Raw logs per host: `pending2-target.log`, `pending2-1000.json`,
 under `/data1/efs/w100-private`; copied evidence remains outside Git in the
 local artifact directory above. Failed fixtures are retained under the private
 main/trace mounts, e.g. `exclusive-visibility-o2_35f9t` on Intel2 main mount.
-Exact committed-source full-native/deployment testing is pending at this checkpoint.
+Exact committed-source61e5c939d full native (`make -j8 test`, explicit build
+identity) now passes on both hosts. All four private daemons and both main
+clients have been cleanly replaced with that source, retaining existing stores
+and16GiB quotas; commands-policy remains version1/mask0. Cold persistence
+verify27/27 per host passes after restart. Mounted core216/216 per host and extras1PASS/4expected skips per host
+pass. Seven clients (16jobs each) plus1000 additional O_EXCL cases on each
+host finish1510/1512: only Intel1client1 and Intel2client1 depth-60 directory
+timeouts at unchanged30s. All2000 focused cases pass (Intel1 55.563s,
+maxcase3.426s; Intel2 49.360s, maxcase3.085s). The repeated EOF loss is
+not observed after the correction; this is not universal closure of W100.
+Extra clients were cleanly stopped. Full isolated GC completes exit0 on both hosts, including core216/216
+and peer67/67 each, mixed append/GC and exact800 cold records, invalid WAL
+tail repair, second crash recovery, zero quota/inventory and late-PUT fencing.
+These are isolated loopback fixtures, not additional cross-host deployment
+proof. Raw logs `intel{1,2}_efs-61e5-gc.log` and `.exit` record the result.
+Aggregate remains OPEN. Raw final native/build logs
+are named `61e5-native.log`/`61e5-build.log`, deployment snapshots
+`intel{1,2}_efs-61e5-deployment.json` in the local artifact directory.
+
+
+The directory hypothesis remains cumulative fresh-authority/namespace
+serialization under competing operations, not one proven stuck RPC. Existing
+phase evidence on382d reaches depth60, writes/reads the leaf and starts recursive
+cleanup before the30s deadline; completed mkdir calls total22.2–26.1s. No
+causal claim is made that the EOF fix improves directory latency. A future
+correction needs a demonstrated unnecessary wait and retained authority proofs
+(rename/unlink visibility, retained readers and next refresh). Deadlines and
+cache policy have not been relaxed. Latest loaded raw files are
+`concurrent-*-eof61e5-final-*.tsv` and `intel{1,2}_efs-61e5-loaded-exclusive.json`.
+
+
+Post-deploy policy probes from both hosts return version1/mask0 through n1,
+n2 and n3; direct n4 endpoint returns NOT_PRIMARY(-15), not a successful
+policy read. Its raft-status confirms it does not host group0 (group2 follower,
+commit/applied equal). All four process environments disable commands, packing
+and expiry, and both mounted `.efs` paths are absent. This n4 refusal is retained
+in `61e5-disabled-policy.json`; it is not counted as four successful policy reads.
+
+
+Exact61e5c939d two-fsync mounted qualification also passes both directions:
+normal four-node servers, separate EFS_FAULTS clients built from61e5c939d,
+512B and8MiB+1 cases, two refusals with peerEOF0 then exact recovery after
+clearing omission. Sparse validation checks anchors/EOF, not every hole byte.
+Both temporary fault clients were cleanly stopped and fault files resetOFF.
+Raw logs: `intel{1,2}_efs-61e5-two-fsync.log`. Full source manifests verify
+all1276 non-results committed files on both hosts with zero mismatches.
+Main private deployment stays running; temporary candidate, trace, concurrent
+and fault mounts are stopped. Production PIDs/mounts/17432–17433 listeners
+remain unchanged; final process evidence is retained outside Git.
+
+
+Final cross-host peer gate on normal61e5c939d mounts passes67/67 in53.7s.
+It overlapped the independent fault-client build/qualification; no added case
+budgets or retries. Remote `61e5-cross-peer.tsv`/`.log` copied to the local
+artifact directory. No newly observed EOF failure remains in these gates;
+W100 still requires a demonstrated directory-wait correction and repeatable
+loaded acceptance. This checkpoint does not close historical mixed EIO or
+all possible ownership races merely because these selected rounds pass.

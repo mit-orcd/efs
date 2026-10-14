@@ -1494,16 +1494,16 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-**Concurrent acceptance FAIL; W100 OPEN (Oct 14).** Runtime `382d537d6` and
-fixture corrections through `172e3f502`. New EOF ownership fix `61e5c939d`
-passes targeted native/sanitizer and1000 mounted O_EXCL cases per host; full
-new-source qualification is pending. Old Intel2 client failed222/1000. Full native and isolated GC/recovery
-pass both hosts, peer67/67, persistence27/27 per host, mixed cold bytes and live
-two-fsync refusal/recovery pass. First clean seven-client round1512/1512, but
-both heavier EOF1000/fsync4096 overlap and the final clean repeat retain five
-depth-60 directory timeouts (1507/1512). No deadline/window increases or full
-closure claim. TCP/direct/files; optional features disabled; production
-Intel/ORCD untouched.
+**Concurrent acceptance FAIL; W100 OPEN (Oct14).** Runtime61e5c939d fixes
+accepted EOF loss when an inode-only report retires before its pending body.
+Full native/core, targeted sanitizer,1000 quiet and1000 loaded O_EXCL cases
+per host pass; old Intel2 client failed222/1000. Latest loaded seven-client
+1510/1512 retains two depth-60 directory timeouts. Cold persistence27/27 per
+host, cross-host peer67/67, full recovery/GC and two-fsync refusal/recovery
+on both hosts pass.
+Earlier382d peer67/67, full GC, mixed cold bytes and live refusal/recovery pass;
+earlier clean1512/1512 does not override subsequent timeout verdicts.
+TCP/direct/files, optional features disabled; production Intel/ORCD untouched.
 
 [AMD RDMA load/fallback fixes](../status/rdma-load-fallback-fixes-20261013.md):
 **PARTIAL on14d621182** — files pinned ancestry barriers and explicit metadata
@@ -7854,7 +7854,9 @@ A later O_EXCL diagnostic reproduced accepted EOF loss: Intel2 old client
 778/1000 quiet cases pass. Fix61e5c939d preserves EOF while a pending body
 owns bytes, using a coherent dirty-mark/body-pin probe. Targeted native,
 ASan/UBSan and1000 mounted cases per host pass; exact committed-source broad
-qualification is pending. Directory deadlines remain a separate OPEN gate.
+qualification now passes full native/core and2000 loaded O_EXCL cases,
+but seven-client1510/1512 retains two directory deadlines. Full recovery/GC rerun passes both hosts; directory deadlines remain a
+separate OPEN gate.
 
 **Evidence/current state:** Original Intel2 private `mtime_monotonic_many_writes` exceeds its unchanged 30-second limit; a bounded diagnostic preserves exact bytes and monotonic timestamps but takes 33.828 seconds. Later production runs on both hosts also retain deep-directory, many-entry and concurrent-append timeout verdicts. Mixed tiny/large private runs intermittently report fsync EIO or exceed the 180-second tiny-worker limit. Successful repeats do not establish a universal repair.
 
