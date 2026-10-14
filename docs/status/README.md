@@ -1,3 +1,12 @@
+[Private Intel seven-client strace/perf](intel-seven-client-profile-20261014.md):
+**Diagnostic capture PASS; core1443/1512 FAIL; W100 OPEN.** Seven matched37ff
+clients, four retained private daemons, TCP/direct/files, optional features OFF.
+53timeouts/16EBUSY; captured admission waits, ReadIndex/host-mutex contention
+and14 retained REPORT-invalid events. No sampled sync above74ms or demonstrated
+CPU saturation; tracing perturbs timings and does not prove the root cause.
+Earlier1468/1512 and first capture had discarded Intel2 client experiment,
+so are mixed-source evidence. Private clients corrected; production untouched.
+
 [ORCD live824 qualification](orcd-query-name-ordinals-20261013.md): reviewed devel integrated; six command suites,63 concurrent queries,140,000 finite files and orderly marker restart PASS. Sustained query cohort FAIL7/21; writers plus MD5 crawlers FAIL: close REPORT budget exhaustion and ordinary directory EBUSY remain OPEN. RDMA/direct I/O, .efs on, packing/containers/expiry off.
 
 [Intel receive persistence correctness](intel-receive-persistence-20261014.md):
