@@ -1,7 +1,9 @@
 # W100 EOF rounding: missing REPORT size record — reproduction and fix verdict
 
-**Verdict: PASS** (fix gated on the owned two-host fixture; baseline
-reproduction retained on the same harness).
+**Historical server-contract verdict: PASS.** The c3d8ee560 client repair
+had a second-attempt staging hole; superseded by the qualified
+[read-only repair and two-fsync follow-up](w100-client-retry-eof-20261013.md).
+The baseline reproduction and server refusal evidence below remain valid.
 
 **Purpose.** A REPORT publishes chunk mappings together with per-inode
 logical sizes. When a chunk record arrived without its inode's size record
@@ -43,17 +45,13 @@ rejection is a *retained-residual* failure, not a side-effect-free
 rollback, and the peer may observe the committed prefix while the
 client's fsync still fails.
 
-Client side (`src/client/write.c`, review follow-up): a chunk-rec ino
-whose staged row is missing at snapshot time is now repaired after the
-snapshot unlock via a server getattr (`efs_client_stat_ino`). The
-re-staged size is attached only when it covers the batch's highest dirty
-chunk end for that inode; a covering row proves no dirty growth is lost.
-`NOT_FOUND` means unlinked mid-report — the records ship sizeless and
-the server skips them as deleted. A re-staged row below the dirty
-coverage means the dirty EOF was lost with the evicted row: no size
-ships, the server rejects, fsync fails EIO, the snap is retained and
-retried. The remaining natural trigger for that path is eviction of a
-dirty-marked row mid-flight; it is loud, not silent.
+Historical client side (`c3d8ee560`) called `efs_client_stat_ino` during
+repair. Although its coverage check refused an undersized remote EOF on the
+first attempt, that helper adopted the row locally, allowing the next snapshot
+to attach the unvalidated EOF. This was unsafe. Commit `842a4c3d9` uses
+read-only `efs_client_rpc_getattr`; see the follow-up for the negative control,
+two-attempt regression and new Intel qualification. Missing trustworthy EOF
+still fails visibly rather than inventing a chunk-rounded size.
 
 **Environment.** Intel1 (`10.0.0.207`) + Intel2 (`10.0.0.209`), Core
 Ultra 7 256V, owned four-daemon fixture on ports 27432/27433 (2 GiB

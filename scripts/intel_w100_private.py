@@ -52,7 +52,9 @@ for host, addr, ids in hosts:
 import os,pathlib,socket,subprocess,json
 r=pathlib.Path({runtime!r});r.mkdir(parents=True,exist_ok=False)
 for port in (27432,27433):
-    s=socket.socket();s.bind(({addr!r},port));s.close()
+    # Match the daemon's bind policy: old TIME_WAIT sockets are not listeners.
+    s=socket.socket();s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
+    s.bind(({addr!r},port));s.close()
 (r/'omit-size').write_text('OFF\\n');(r/'other-faults').write_text('OFF\\n')
 env=os.environ.copy();env.update({env!r})
 for node in {ids!r}:
