@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Start/stop an owned two-host W100 fixture; never touch installed EFS stores.
+"""Start/resume/stop an owned two-host W100 fixture; never touch installed EFS stores.
 
 Run locally with Intel SSH aliases. Source must already be built on both hosts.
 Example: python3 scripts/intel_w100_private.py start baseline baseline
@@ -74,10 +74,13 @@ for node in {ids!r}:
     print(json.dumps(dict(node=node,pid=p.pid,args=args)),flush=True)
 ''')
 
+ready = [src+'/efs-mgmt', 'raft-mkfs', '10.0.0.207:27432'] if a.action=='start' else [src+'/efs-mgmt', 'commands-policy', '10.0.0.207:27432', 'get']
 for attempt in range(45):
-    r = subprocess.run(['ssh', hosts[0][0], shlex.join([src+'/efs-mgmt', 'raft-mkfs' if a.action=='start' else 'raft-status', '10.0.0.207:27432'])],
+    r = subprocess.run(['ssh', hosts[0][0], shlex.join(ready)],
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     if r.returncode == 0:
+        if a.action=='resume' and 'mask=0 ' not in r.stdout:
+            raise RuntimeError('owned fixture command policy is not disabled; refusing mount')
         print(r.stdout, flush=True)
         break
     time.sleep(1)
