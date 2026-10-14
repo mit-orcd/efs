@@ -1,7 +1,10 @@
 # ORCD tiny-file close EIO investigation
 
-Status: **targeted close/fsync gate PASS**. Original seven benchmarks RUNNING;
-10million-file targets are not complete. Failure baseline was
+Status: **finite close/fsync gate PASS; sustained tiny-file load FAIL**.
+All seven original benchmarks later fail close EIO after about29minutes.
+The140000-file finite pass does not close sustained-load correctness.
+The user requests restarting all seven on the same installed correction;
+failed fixtures/logs remain preserved.10million-file targets are not complete. Failure baseline was
 fc341f00e3ac2a8decddd408ef47aeb2c7e02e34. Current installed correction is
 e8bab21014bad21e5ea2198141e4df3a45d3dc3d, verified on all11 hosts.
 Gate: normal-operation close/fsync publication, preserving W17.1 deadlines.
@@ -115,3 +118,29 @@ Intel's checkout has separate W100 work in progress; Intel explicitly requested
 that it remain untouched. Newer W100/segmented-RDMA commits were reviewed as
 separate objects and not mixed into this qualification. General `.efs` scale
 acceptance, final400GiB audit and its open gates remain onhold.
+
+## Sustained-load follow-up — failure remains open
+
+A later process/log check finds all7 jobs stopped with EIO during close on the
+same verifiede8bab210 deployment and profile. Last reported progress:
+
+| Client | Files | Seconds | Files/s |
+| --- | ---: | ---: | ---: |
+| fcstor007 | 267638 | 1761.6 | 152 |
+| fcstor008 | 278601 | 1760.6 | 158 |
+| fcstor009 | 266434 | 1755.4 | 152 |
+| fcstor010 | 264997 | 1754.8 | 151 |
+| fcstor011 | 274464 | 1753.2 | 157 |
+| fcstor012 | 266422 | 1754.3 | 152 |
+| fcstor013 | 273791 | 1740.7 | 157 |
+
+Therefore the scan-work defect is corrected and finite gates pass, but the
+prior starvation theory is not a complete explanation or a sustained-load
+closure. Correlating these later failures with fresh client/server logs is
+still required; no later root cause is claimed. The user requested restart,
+so the existing screens start fresh uniquely named benchmark directories,
+with failed directories and logs retained. Local launch/progress identities
+are archived before their current summary files are reused. Runtime and866
+installed-input hashes are reverified on all11 hosts before restart. No daemon
+restart, deployment, timeout/profile change, storage erasure or resume of an
+invalid partial fixture is part of this benchmark restart.
