@@ -10205,7 +10205,10 @@ static int query_page_acquire(const struct efs_msg_query_snapshot_v4 *req,
         if (req->token ? p->token==req->token : !memcmp(&identity,&p->request,sizeof(identity))) { session=p;break; }
     }
     int rc=EFS_OK;
-    if (!session && req->token) rc=EFS_ERR_STALE;
+    /* FUSE may repeat a zero-limit close at LOOKUP/GETATTR/OPEN. Once
+     * gone there is no resource to authorize or allocate. Live tokens still
+     * require exact caller identity and exclusive admission below. */
+    if (!session && req->token) rc=req->limit ? EFS_ERR_STALE : EFS_OK;
     else if (session && memcmp(&identity,&session->request,sizeof(identity))) rc=EFS_ERR_ACCES;
     else if (session && session->busy) rc=EFS_ERR_BUSY;
     else if (!session && !empty) rc=EFS_ERR_BUSY;
@@ -11025,7 +11028,7 @@ int server_raft_host_query_page(const struct efs_msg_query_snapshot_v4 *req,void
     uint16_t primary=0;
     if (!rc && created) { request_stage="page-fresh-capture";rc=server_raft_host_query_read(query_page_capture,session,&primary); }
     /* Even continuations need current quorum/ReadIndex before fresh checks. */
-    if (!rc && !created && session->token && req->limit) {
+    if (!rc && req->limit && !created && session && session->token) {
         request_stage="page-continuation-authority";
         int hint=-1;rc=host_read_index_pair(g_host,g_host->g[0].group,g_host->g[1].group,&hint);
         pthread_mutex_lock(&g_host->mu);

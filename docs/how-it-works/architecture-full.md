@@ -2411,7 +2411,7 @@ on exacte8 source with7writers+7MD5crawlers. Global Raft-host mutex/durable
 I/O convoy, failed `.efs` refresh/device contention and LSM point-probe fanout
 are the largest observed priorities. Diagnostic only; sustained closeEIOOPEN.
 
-- [ORCD query name ordinals: candidate, qualification pending](../status/orcd-query-name-ordinals-20261013.md).
+- [ORCD query name ordinals and token close: cache/handoff deployed; close qualification pending](../status/orcd-query-name-ordinals-20261013.md).
 
 
 ## Appendix 2 — In flight — the current handoff block

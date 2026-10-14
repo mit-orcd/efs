@@ -27,11 +27,11 @@ struct query_request {void *h;const struct efs_msg_query_snapshot *req;
  uint64_t page_token,deadline;struct efs_msg_query_snapshot_reply *reply;char *text;struct query_auth *auth;};
 struct query_page_session {uint64_t token;struct efs_server_query_view view;int refresh_error;};
 static struct query_page_session slot={.token=99};
-static int fresh=1,captures,barriers,consumed,barrier_rc,consume_rc,capable=1,released,cleared;
+static int missing_close,fresh=1,captures,barriers,consumed,barrier_rc,consume_rc,capable=1,released,cleared;
 static uint64_t query_mono_ms(void){return 100;}
 static int host_query_policy_operation(unsigned op){(void)op;return 0;}
 static int query_page_acquire(const struct efs_msg_query_snapshot_v4 *r,struct query_page_session **p,int *created)
-{(void)r;*p=&slot;*created=fresh;return 0;}
+{(void)r;*p=missing_close?NULL:&slot;*created=missing_close?0:fresh;return 0;}
 static int query_page_capture(void *ctx,const struct efs_server_query_view *v,int error)
 {(void)ctx;(void)v;(void)error;return 0;}
 static int server_raft_host_query_read(int (*fn)(void *,const struct efs_server_query_view *,int),void *ctx,uint16_t *primary)
@@ -42,7 +42,7 @@ static int host_query_capable(void *h){assert(h==g_host);return capable;}
 static int query_consume(void *ctx,const struct efs_server_query_view *v,int error)
 {struct query_request *q=ctx;assert(q->auth && v==&slot.view && !error);consumed++;return consume_rc;}
 static void query_page_release(struct query_page_session *p,int clear)
-{assert(p==&slot);released++;cleared=clear;}
+{assert(p==&slot || (missing_close && !p));released++;cleared=clear;}
 '''+s[a:b]+r'''
 static struct efs_msg_query_snapshot_v4 req={.base={.version=EFS_QUERY_PAGE_VERSION,
  .root=1,.operation=EFS_QUERY_STATS,.max_output=16384,.visit_budget=100,.match=EFS_NAME_PREFIX},.limit=1};
@@ -58,6 +58,10 @@ int main(void){host.query_enabled=1;host.g[0].group=0;host.g[1].group=2;pthread_
  fresh=1;req.token=0;assert(run()==EFS_ERR_BUSY && captures==1 && barriers==1 && !consumed && cleared);
  barrier_rc=0;consume_rc=EFS_ERR_ACCES;assert(run()==EFS_ERR_ACCES && consumed==1 && cleared);
  consume_rc=0;fresh=0;req.token=99;req.limit=0;assert(!run() && !captures && !barriers && !consumed && cleared);
+ missing_close=1;
+ assert(!run() && !captures && !barriers && !consumed && cleared);
+ assert(!run() && !captures && !barriers && !consumed && cleared);
+ missing_close=0;
  req.limit=1;capable=0;assert(run()==EFS_ERR_BUSY && barriers==1 && !consumed);
  /* Replies remain charged until delivery/free, independently of stream locks.
   * Default command pages must admit eight held replies within the existing

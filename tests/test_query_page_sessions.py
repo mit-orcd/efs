@@ -36,6 +36,8 @@ int main(void){
  /* A reserved slot holds no global lock: a different stream can progress. */
  pthread_t t;assert(!pthread_create(&t,NULL,independent,NULL));assert(!pthread_join(t,NULL));
  assert(query_page_acquire(&req,&slots[0],&created)==EFS_ERR_BUSY);
+ req.token=first;req.limit=0;assert(query_page_acquire(&req,&slots[0],&created)==EFS_ERR_BUSY);
+ req.token=0;req.limit=1;
  p->view.catalog=&catalog;catalog.refs++;query_page_release(p,0);
  assert(!query_page_acquire(&req,&p,&created)&&!created&&p->token==first);query_page_release(p,0);
  for(unsigned i=0;i<HOST_QUERY_PAGE_SESSIONS;i++){
@@ -47,13 +49,21 @@ int main(void){
  }
  req.nonce=100;assert(query_page_acquire(&req,&p,&created)==EFS_ERR_BUSY);
  req.nonce=0;req.token=tokens[0];req.base.uid=101;
- assert(query_page_acquire(&req,&p,&created)==EFS_ERR_ACCES);req.base.uid=100;
+ assert(query_page_acquire(&req,&p,&created)==EFS_ERR_ACCES);
+ req.limit=0;assert(query_page_acquire(&req,&p,&created)==EFS_ERR_ACCES);
+ req.limit=1;req.base.uid=100;
  assert(!query_page_acquire(&req,&p,&created)&&!created);
  clock_ms+=60001;query_page_sweep(0);assert(p->token==tokens[0]); /* busy pin cannot expire */
  assert(catalog.refs==1);query_page_release(p,0);
  req.token=tokens[1];req.nonce=1;assert(query_page_acquire(&req,&p,&created)==EFS_ERR_STALE);
  req.token=tokens[0];req.nonce=0;assert(!query_page_acquire(&req,&p,&created));query_page_release(p,1);
  assert(!catalog.refs);assert(query_page_acquire(&req,&p,&created)==EFS_ERR_STALE);
+ req.limit=0;
+ for(unsigned callback=0;callback<4;callback++){
+  p=(void*)1;created=1;assert(!query_page_acquire(&req,&p,&created) && !p && !created);
+  query_page_release(p,1);assert(!catalog.refs);
+ }
+ req.limit=1;assert(query_page_acquire(&req,&p,&created)==EFS_ERR_STALE);
  req.token=0;assert(!query_page_acquire(&req,&p,&created)&&created&&p->token!=first);
  query_page_release(p,0);query_page_sweep(1);
  puts("query streams: independent progress, 16-slot bound, identity/token isolation, same-open reuse, busy/idle expiry and balanced catalog release PASS");
