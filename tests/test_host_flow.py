@@ -75,7 +75,7 @@ static int peer_addr(struct efs_raft_host*h,int peer,char*host,size_t cap,uint16
 {(void)h;(void)peer;snprintf(host,cap,"fixture");*port=1;return 0;}
 static struct efs_conn *server_peer_conn_new(const char*h,uint16_t port)
 {(void)h;(void)port;struct efs_conn*c=calloc(1,sizeof(*c));assert(c);c->kind=EFS_CONN_RDMA;c->fd=-1;return c;}
-static int efs_rdma_conn_nrecv(void*p) {(void)p;return 16;}
+static int efs_rdma_message_capacity(void*p) {(void)p;return 4;}
 static void efs_conn_set_recv_timeout(struct efs_conn*c,int ms) {(void)c;(void)ms;}
 static void efs_set_send_timeout(int fd,int ms) {(void)fd;(void)ms;}
 struct reply {uint8_t data[8];int channel;unsigned legacy;};

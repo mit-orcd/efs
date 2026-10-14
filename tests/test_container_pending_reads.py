@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Early container inbox votes retain ordered receive and credit ownership."""
+"""Early files/container inbox votes retain ordered receive and credit ownership."""
 from pathlib import Path
 import os, shlex, subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
@@ -37,8 +37,8 @@ int efs_raft_read_control(struct efs_raft*r,const struct efs_raft_msg*m){(void)r
 static void host_publish_group(struct efs_raft_host*h,uint8_t g){assert(h==current&&g==2);published++;}
 static void host_waiters_wake(struct efs_raft_host*h){assert(h==current);woken++;}
 '''+s[pure:pure_end]+s[a:b]+r'''
-int main(void){
- struct server s={0};struct efs_raft_host h={.s=&s,.inbox_n=7,.inbox_bytes=572,.inbox_work_n=7,.inbox_work_bytes=572};current=&h;h.g[1].group=2;
+int main(int argc,char **argv){
+ struct server s={argc>1?atoi(argv[1]):0};struct efs_raft_host h={.s=&s,.inbox_n=7,.inbox_bytes=572,.inbox_work_n=7,.inbox_work_bytes=572};current=&h;h.g[1].group=2;
  assert(!pthread_mutex_init(&h.inbox_mu,NULL));uint8_t (*p)[92]=calloc(HOST_INBOX_MAX,92),saved[HOST_INBOX_MAX][92];assert(p);
  for(int i=0;i<7;i++){p[i][0]=EFS_RAFT_MSG_AE_REQ;p[i][3]=1;p[i][35]=7;h.inbox[i]=(struct host_inbox_item){p[i],80,(uint64_t)i,0};}
  p[1][0]=EFS_RAFT_MSG_AE_REP;p[1][1]=2;p[1][3]=2;
@@ -48,7 +48,7 @@ int main(void){
  p[5][2]=255; /* decoder failure */
  p[6][3]=0; /* core refuses: e.g. prefix/term/boot not yet eligible */
  memcpy(saved,p,sizeof(saved));
- host_container_pending_reads(&h);assert(!calls&&!decoded&&!published&&!woken);s.storage_engine=1;
+ h.s=NULL;host_container_pending_reads(&h);assert(!calls&&!decoded&&!published&&!woken);h.s=&s;
  host_container_pending_reads(&h);assert(calls==3&&decoded==4&&published==1&&woken==1);
  assert(h.inbox[0].read_noted&&h.inbox[1].read_noted&&!h.inbox[6].read_noted);
  assert(h.inbox_n==7&&h.inbox_bytes==572&&h.inbox_work_n==7&&h.inbox_work_bytes==572);
@@ -126,10 +126,10 @@ int main(void){
 with tempfile.TemporaryDirectory(prefix='efs-container-pending-read-') as d:
  p=Path(d)/'test.c';p.write_text(code);binary=p.with_suffix('')
  subprocess.run([os.environ.get('CC','cc'),*shlex.split(os.environ.get('EFS_TEST_CFLAGS','')),'-std=c99','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-lpthread','-o',str(binary)],check=True)
- subprocess.run([str(binary)],check=True)
+ for engine in ("0","1"):subprocess.run([str(binary),engine],check=True)
  p.write_text(code.replace('if(consume_n){','if(0 && consume_n){'))
  subprocess.run([os.environ.get('CC','cc'),'-std=c99','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-lpthread','-o',str(binary)],check=True)
  negative=subprocess.run([str(binary)],capture_output=True,text=True)
  assert negative.returncode and 'h.inbox_n' in negative.stderr, 'retained complete-request negative did not expose intended duplicate'
  print('retained fully handled request negative refused as expected')
-print('container pending reads: bounded headers, core refusal/retry, retained FIFO/credits, single note and no inbox lock across core PASS')
+print('files/container pending reads: bounded headers, core refusal/retry, retained FIFO/credits, single note and no inbox lock across core PASS')

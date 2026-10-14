@@ -198,7 +198,7 @@ struct host_outbox {
     int npri;
     int nent;
     uint64_t read_probe_context[HOST_NGROUPS],read_probe_term[HOST_NGROUPS],read_probe_boot[HOST_NGROUPS];
-    int preserve_read; /* containers: keep read contexts and replication ACKs distinct */
+    int preserve_read; /* keep fresh-read contexts and replication ACKs distinct */
     uint64_t queued_bytes, queued_bytes_hi;
     struct host_outbox_item pri[HOST_OUTBOX_MAX];
     struct host_outbox_item ent[HOST_OUTBOX_MAX];
@@ -1201,7 +1201,7 @@ static int host_send_ready(void *net, int peer, uint8_t group)
     return ready;
 }
 
-/* A fresh container read need not wait for a newly sent data window to
+/* A fresh metadata read need not wait for a newly sent data window to
  * become durable on its follower. Queue one bounded prefix-zero vote probe
  * per peer/group/context alongside, never instead of, the original frame.
  * The core still validates current term/boot/voters and the leader's own
@@ -7484,7 +7484,7 @@ static void host_container_pending_reads(struct efs_raft_host *h)
 {
     struct pending_read {uint8_t p[EFS_WIRE_RAFT_HDR_LEN];uint8_t *identity;uint64_t queued_us;int slot,consume;};
     struct pending_read frames[HOST_INBOX_MAX];unsigned n=0,consume_n=0;uint8_t published=0;
-    if(!h->s || !h->s->storage_engine)return;
+    if(!h->s)return;
     pthread_mutex_lock(&h->inbox_mu);
     for(int i=0;i<h->inbox_n && i<HOST_INBOX_MAX;i++){
         struct host_inbox_item *item=&h->inbox[i];
@@ -11135,7 +11135,7 @@ int server_raft_host_start(struct efsd_server *s)
         for (i = 0; i < EFS_RAFT_MAX_PEERS; i++) {
             h->tx[i].h = h;
             h->tx[i].peer = i;
-            h->tx[i].preserve_read = s->storage_engine;
+            h->tx[i].preserve_read = 1;
             h->tx[i].flow.sequence=(unsigned)i+1;
             pthread_cond_init(&h->tx[i].cv, &attr);
         }
