@@ -5094,6 +5094,14 @@ separate OPEN gate.
 
 **Evidence/current state:** AMD software-RXE functional evidence already exists; current-code distributed and hardware acceptance must retain their own named gates. Intel remains the TCP acceptance deployment. Its 5 Gb/s links and absence of exposed RDMA devices/software modules do not block RDMA testing on the designated environments.
 
+**Oct 14 merged devel acceptance:** frozen `a40428d9d` combines RDMA fixes,
+cached EOF ownership and default Raft queued-entry guard. AMD full native,
+four32MiB paused reads/digests, three quiet cores4536/4536, peer/cold/EOF and
+three targeted sanitizers PASS. Quiet/loaded O_EXCL1000 each plus additional
+loaded core1512/1512 PASS; stock deadlines, optional features OFF. Source-specific
+Intel failures and broader/hardware gates remain open. See
+[merged-source evidence/reproduction](../status/devel-rdma-merge-qualification-20261014.md).
+
 **Later Oct 14 AMD read update:** `ade336daf` bounded advisory peer ordering
 passes four full32MiB paused-follower reads/digests at the unchanged180s outer
 and30s read/5s pair budgets. Fresh quiet core4536/4536, peer/cold/EOF, clean full

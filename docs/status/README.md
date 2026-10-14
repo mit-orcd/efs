@@ -10,10 +10,13 @@ improvement claim.
 Production Intel untouched; later merged-source AMD qualification is separate.
 
 [devel / RDMA merge](devel-rdma-merge-qualification-20261014.md):
-RDMA endpoint e6b6b83f4 and Intel checkpoint1ac603128 integrated into the devel
-candidate; code merged cleanly, status/generated-doc conflicts resolved with
-both evidence blocks retained. AMD merged qualification pending; earlier
-separate-source passes remain historical. Flags/deadlines unchanged, no push.
+**a40428d9d deployed; affected AMD gates PASS** — RDMA endpoint and clean Intel
+1ac checkpoint integrated, docs conflicts preserve both sites' evidence.
+Full native, four32MiB paused digests, quiet core4536/4536, peer/cold/EOF and
+three targeted sanitizers PASS. O_EXCL quiet1000 + loaded1000 with additional
+core1512/1512 PASS. Four-node files/direct/rxe0, features/deadlines unchanged.
+Later f258 Intel docs/controllers do not alter production code; their peer
+and directory failures remain separate. W106 broader/hardware OPEN; no push.
 
 [Merged devel private Intel qualification](intel-devel-merged-qualification-20261013.md):
 **Concurrent acceptance FAIL; W100 OPEN (Oct14).** Runtime61e5c939d fixes
@@ -898,7 +901,7 @@ This index adds traceable IDs to the Intel acceptance follow-ups; it does not ch
 | [W103](../backlog/work-items.md#w103) | Investigate intermittent Intel persistence and stats timeouts | Liveness/performance investigation; open. |
 | [W104](../backlog/work-items.md#w104) | Decide and gate writable shared mmap support | Feature scope/design follow-up; deferred, currently unsupported by specification. |
 | [W105](../backlog/work-items.md#w105) | Stable NFS file handles across EFS client restarts | Gateway acceptance/correctness investigation; open. |
-| [W106](../backlog/work-items.md#w106) | RDMA acceptance: AMD software / orcd-test hardware IB/RDMA | Open broader/hardware validation. ade AMD four32MiB paused reads, native and quiet core4536/4536 PASS; see [current ledger](rdma-paused-follower-read-20261014.md). |
+| [W106](../backlog/work-items.md#w106) | RDMA acceptance: AMD software / orcd-test hardware IB/RDMA | Open broader/hardware validation. Merged a404 AMD native, paused-read, quiet/load/EOF/peer/cold gates PASS; see [merged ledger](devel-rdma-merge-qualification-20261014.md). |
 
 Pending choices retain their existing homes: W99 cache-only pressure escalation and numeric thresholds; W54 additional live-reference GC guard; W66/W74 metadata mechanism under accepted D36. W104 separately records the deferred shared-mmap scope choice. No new D number or policy acceptance is implied.
 
