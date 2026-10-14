@@ -32,4 +32,63 @@ Preparing live command qualification found two harness defects in `efs_command_o
 
 The human observed EBUSY on root `.efs/ls` and `.efs/stats`. The explicitly assigned NUC agent traced six commands successfully and found first cache publication at 04:09:36–40 UTC, after initial builds of 381–384 seconds. This supports an initial-publication explanation; no failing EBUSY command was captured, and the initial-publication gate is not closed by later success. The same investigation confirmed a separate cleanup defect: token `284626450853288382` on owner 3/fcstor005 could continue successfully; zero-limit close returned EIO after 6.7 ms; old-token continuation then failed; a fresh request using the same identity obtained a new token. Raw traces and lifecycle JSON remain under `/home/erbmi1/orcd/scratch/efs/orcd-test/fcstor007/query-ebusy-20261014`; lifecycle trace SHA256 `d1bb3a572a9226cd2d2058c41fd62e3433353f0955cd343fdc7fdf0294151e39`. Source analysis identifies repeated virtual LOOKUP/GETATTR/OPEN calls: the first close clears the session; the next acquisition reports STALE, mapped to EIO. The protocol status is source-derived, not a captured wire response. This sampled token was not retained; it does not prove that every reader retires correctly.
 
-The commit adding this paragraph makes zero-limit close idempotent when the token is already gone, returns no data and allocates no session; live-session identity and BUSY checks remain, as does STALE for unknown-token continuation. Page dispatch guards a NULL session on the already-closed path. Production-code session and page-dispatch regressions PASS locally with ASan/UBSan (Mac leak detection unsupported; Linux leak check pending); both old-code negative controls fail as expected. Reproduce with `python3 tests/test_query_page_sessions.py` and `python3 tests/test_query_page_barriers.py`; use `CC="cc -fsanitize=address,undefined -fno-omit-frame-pointer"` and supported sanitizer options. Final Linux qualification, redeployment of this correction and live lifecycle retest are NOTRUN. The seven-client 140,000-file finite close gate on `a5743754977d` is still running; sustained benchmarks remain stopped after their orderly drain.
+The commit adding this paragraph makes zero-limit close idempotent when the token is already gone, returns no data and allocates no session; live-session identity and BUSY checks remain, as does STALE for unknown-token continuation. Page dispatch guards a NULL session on the already-closed path. Production-code session and page-dispatch regressions PASS locally with ASan/UBSan (Mac leak detection unsupported; Linux leak check pending); both old-code negative controls fail as expected. Reproduce with `python3 tests/test_query_page_sessions.py` and `python3 tests/test_query_page_barriers.py`; use `CC="cc -fsanitize=address,undefined -fno-omit-frame-pointer"` and supported sanitizer options. Final Linux qualification, redeployment of this correction and live lifecycle retest are NOTRUN. The seven-client 140,000-file finite close gate on `a5743754977d` FAILS its unchanged 1,800-second controller deadline: fcstor008/013 finished in 1,309/1,309 seconds; the other five finished later in 3,636–3,639 seconds. All seven eventually completed 20,000 files with zero reported data errors and exit 0. Late completion does not turn the deadline failure into a pass. All finite processes subsequently drained normally; sustained benchmarks remain stopped.
+
+## Reviewed integration and outstanding loaded gate — October 14
+
+Reviewed every local development branch against package 1. `devel-container`,
+`devel-expiry`, `devel-efs` and `devel-kimi` have no missing commits;
+`devel-rdma` is contained in reviewed `devel` endpoint `a40428d9d`. Merge
+`b65d99dcf280f1a9919688997b65e1413c4d5af5` incorporates that endpoint while
+retaining the query token-close correction `850168c66`. Production merged
+cleanly; generated architecture HTML was regenerated, all five architecture
+checks PASS. The superseded local pending-frame draft is preserved in Git stash,
+not applied on top of the integrated fix.
+
+Relevant production changes: `61e5c939d` preserves accepted EOF while a cached
+body awaits publication; `a7e2b6b7d` routes unlink/link/rename before follower
+coordination; `ade336daf` puts a stalled preferred fragment last within the
+existing read deadline; `1ac603128` bounds queued ordered Raft data per peer/group
+with flow control off, including the defensive enqueue guard. Dequeue reopens
+admission; control frames and other peers/groups can progress. No durability
+acknowledgment, operation deadline, transport pipeline or optional feature was
+relaxed. Intel's deep-directory timeouts remain open. Prior AMD passes are
+source-specific and do not qualify this merged ORCD deployment.
+
+On merged `b65d99dcf`, local native regressions PASS: host pending entries, host
+flow, pending EOF, namespace routing, read preference, query sessions and query
+page barriers. Host pending entries, pending EOF and read preference also PASS
+with local ASan/UBSan. Mac does not run the Linux async sender portion or qualify
+Linux leak detection. Reproduce using `python3 tests/test_NAME.py`, where NAME
+is `host_pending_entries`, `host_flow`, `inode_pending_eof`,
+`namespace_leader_route`, `read_peer_order`, `query_page_sessions` or
+`query_page_barriers`; for sanitizer runs prefix
+`CC="cc -fsanitize=address,undefined -fno-omit-frame-pointer"`. Full Linux native,
+Linux focused sanitizers and loaded mounted gates remain NOTRUN on the merge.
+
+A second 45-second profile on installed `a5743754977d`, with five surviving
+finite fsync workers, did not reproduce the earlier sustained global-mutex
+convoy in the subsequent ten-second lock sample. Cache incremental publications
+succeeded in roughly 0.75–1.16 seconds. A separate 200-sample/50-ms bounded
+read-only outbox observation on fcstor005 found ordered data queued to fcstor003
+at mean 506/max 767 frames and to fcstor004 at mean 62/max 86; priority lanes
+were small. This supports testing the default pending-data admission fix, not
+a claim of completed acceptance. Observer-disabled send/failure counters provide
+no transport-failure verdict. Workloads differ from the original seven-writer/
+seven-crawler profile, so throughput comparisons are not controlled.
+
+Raw current profiles remain at
+`/home/erbmi1/orcd/scratch/efs/orcd-test/fcstorNNN/live-profile-20261014-043729`;
+finite logs are `close-eio-20000-a5743754977d.log` in each host's scratch directory.
+Baseline remote perf/pidstat/process-I/O captures remain intact. An accidental
+local filename reuse overwrote baseline-only ten-second lock JSON/iostat and
+some post-build snippets; these cannot be reconstructed and are not claimed
+as retained evidence. Current captures use a distinct source prefix.
+
+Next: qualify the frozen merge on Linux, normally redeploy all eleven nodes
+without erasing data, verify acknowledged cold markers and the exact unchanged
+RDMA/direct/files/commands-on profile, then rerun seven simultaneous
+`tests/live/fsync_admission.py /tmp/efs-mount --files 20000 --workers 16`
+with the original 1,800-second deadline. Concurrent commands, idempotent live
+close, and sustained seven tiny-file writers plus seven MD5 crawlers remain
+required. General 400 GiB acceptance stays on hold.

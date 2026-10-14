@@ -1494,6 +1494,7 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+[devel / RDMA merge](../status/devel-rdma-merge-qualification-20261014.md):
 RDMA endpoint e6b6b83f4 and Intel checkpoint1ac603128 integrated into the devel
 candidate; code merged cleanly, status/generated-doc conflicts resolved with
 both evidence blocks retained. AMD merged qualification pending; earlier
