@@ -1,6 +1,17 @@
 [ORCD merged deployment](orcd-query-name-ordinals-20261013.md): `b65d99dcf` Linux native/sanitizers, installed source/profile, orderly marker restart and mounted token close PASS. Seven-client finite gate RUNNING; concurrent and sustained acceptance OPEN.
 
-[ORCD reviewed merge](orcd-query-name-ordinals-20261013.md): `b65d99dcf` integrates EOF, RDMA routing/read recovery and default ordered-frame bounds. Local regressions PASS; Linux/live merged qualification pending. Prior finite gate FAIL on deadline despite eventual error-free completion.
+[ORCD reviewed merge](orcd-query-name-ordinals-20261013.md): `b65d99dcf` integrates EOF, RDMA routing/read recovery and default ordered-frame bounds. Linux/native and focused sanitizers PASS; deployed marker/token-close checks PASS. Prior finite gate FAIL on deadline despite eventual error-free completion.
+
+[Intel default Raft queue guard](intel-queue-guard-20261014.md):
+**Concurrent acceptance FAIL; W100 OPEN.** Guard1ac603128 deployed privately,
+TCP/direct/files, optional features disabled and flow control off. Full native
+and targeted sanitizers pass both hosts; seven-client repeats1506/1512 and
+1507/1512 retain only depth60timeouts. Queue samples respect one pending
+frame/group/peer. Paused-daemon writes/peer bytes and cold verification pass;
+full GC/fencing and two-fsync refusal/recovery pass. Final cross-host peer66/67
+hits shared-pwrite15s step timeout; focused repeat is pending. No latency
+improvement claim.
+Production Intel untouched; later merged-source AMD qualification is separate.
 
 [devel / RDMA merge](devel-rdma-merge-qualification-20261014.md):
 RDMA endpoint e6b6b83f4 and Intel checkpoint1ac603128 integrated into the devel
