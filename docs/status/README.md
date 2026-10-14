@@ -1,3 +1,14 @@
+[Intel post-route live profile](intel-post-route-profile-20261014.md):
+**Capture PASS; next optimization NOTRUN.** Existing four-worker AMD writer and
+xorinox read/hash crawl remain running on f6b980a6e, TCP/direct/files with optional
+features OFF. Metadata leader n2 uses 105% of one CPU; GETATTR 42–47%, LSM get
+35–39% of Intel1 sampled user cycles. Recommend bounded exact-key indexing of
+cached immutable metadata blocks, preserving collision checks/tombstones/read
+validation. REPORT 2,529/2,529 OK; normal CREATE probe BUSY, no retry storm.
+Ethernet errors/drops zero; one host-wide AMD TCP retransmission. No service
+changes; private/local clusters unchanged. Proposal requires measured A/B and
+correctness qualification before rollout.
+
 [Intel mounted stat routing slowdown](intel-mounted-stat-routing-20261014.md):
 **Deployed devel f6b980a6e; focused native/four-client smoke PASS. Material
 adaptive mounted speedup NOT ESTABLISHED.** Profile/trace identifies repeated
