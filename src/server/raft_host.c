@@ -12749,8 +12749,10 @@ void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out)
         return;
     }
     set_inode_rc(out, rc, hint);
-    if (rc == EFS_OK)
+    if (rc == EFS_OK) {
         stat_to_inode(&st, &out->inode);
+        out->read_node_id = h->s ? h->s->id : 0;
+    }
     if (prof) {
         uint64_t p2 = now_us_();
 
@@ -13354,6 +13356,7 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
         stat_to_inode(&st, &out->inode);
         out->inode.parent = parent;
         strncpy(out->inode.name, name, EFS_MAX_NAME - 1);
+        out->read_node_id = h->s ? h->s->id : 0;
     }
     if (prof) {
         uint64_t p4 = now_us_();

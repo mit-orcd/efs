@@ -121,6 +121,11 @@ static void test_frame_reject(void)
 
 static void test_status_offset(void)
 {
+    CHECK(offsetof(struct efs_msg_inode_reply, read_node_id) == 1 &&
+          offsetof(struct efs_msg_inode_reply, primary_id) == 4 &&
+          offsetof(struct efs_msg_inode_reply, inode) == 8 &&
+          sizeof(struct efs_msg_inode_reply) == 8 + sizeof(struct efs_inode),
+          "read route hint preserves reply layout");
     CHECK(offsetof(struct efs_msg_inode_reply, status) == 0,
           "inode_reply status@0");
     CHECK(offsetof(struct efs_msg_inode_lookup_path_reply, status) == 0,

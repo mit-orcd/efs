@@ -9,6 +9,7 @@ def fn(prefix,second=False):
  return s[a:s.index('\n}',a)+2]
 code=r'''
 #include "efs/protocol.h"
+#include "metadata_read_route.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -18,11 +19,15 @@ code=r'''
 #include <sys/stat.h>
 static uint64_t now=1000,deadline;static unsigned calls,sleeps,freed,drops,releases;
 static int reply_status,fail_recv,fail_send,bad_type,expire_recv;
+static unsigned read_hint;
 static unsigned mkdir_ready, mkdir_packet_len;
 static unsigned char mkdir_packet[1024];
 static unsigned failover,routing_sends,stale_hint;
 struct efs_conn {unsigned node;};static struct efs_conn connection;
 static unsigned g_group_leader[2];
+static struct {unsigned node_count;} g_client={4};
+static struct efs_meta_read_routes g_read_routes={.mu=PTHREAD_MUTEX_INITIALIZER};
+static int efs_client_node_is_down(efs_node_id_t n){(void)n;return 0;}
 uint64_t efs_client_rpc_deadline_ms(void){return deadline;}
 int efs_client_rpc_past_deadline(void){return deadline&&now>=deadline;}
 static int rpc_past_deadline(void){return efs_client_rpc_past_deadline();}
@@ -35,6 +40,7 @@ static void test_free(void*p){if(p)freed++;free(p);}
 static struct efs_conn *efs_client_conn_get(efs_node_id_t n){connection.node=n;return &connection;}
 static struct efs_conn *raft_voter_conn_skip(uint32_t s,efs_node_id_t*n,efs_node_id_t skip){(void)s;*n=(failover&&skip==2)?3:1;connection.node=*n;return &connection;}
 static struct efs_conn *raft_dual_voter_conn(efs_node_id_t*n,efs_node_id_t skip){return raft_voter_conn_skip(0,n,skip);}
+static struct efs_conn *raft_read_voter_conn_skip(uint32_t s,efs_node_id_t*n,efs_node_id_t skip){return raft_voter_conn_skip(s,n,skip);}
 static void efs_client_conn_drop(efs_node_id_t n,struct efs_conn*c){(void)n;(void)c;drops++;}
 static void efs_client_conn_release(efs_node_id_t n,struct efs_conn*c){(void)n;(void)c;releases++;}
 static int rpc_prof_enabled(void){return 0;}
@@ -48,12 +54,23 @@ static unsigned efs_raft_shard_group(uint32_t s){(void)s;return 0;}
 static unsigned rpc_leader_of(unsigned g){(void)g;return 1;}
 static void efs_conn_set_recv_timeout(struct efs_conn*c,int n){(void)c;(void)n;}
 int efs_conn_send_msg(struct efs_conn*c,uint8_t t,const void*p,uint32_t n){(void)t;if(stale_hint && calls)assert(c->node==3);if(mkdir_ready){assert(n<=sizeof(mkdir_packet));if(!mkdir_packet_len){memcpy(mkdir_packet,p,n);mkdir_packet_len=n;}else assert(n==mkdir_packet_len&&!memcmp(mkdir_packet,p,n));}if(failover){routing_sends++;if(routing_sends==2){assert(c->node==2);if(failover==2)return 1;}if(routing_sends==3)assert(c->node==3);}return fail_send;}
-int efs_conn_recv_msg(struct efs_conn*c,uint8_t*t,void**p,uint32_t*n){(void)c;calls++;struct efs_msg_inode_reply*r=calloc(1,sizeof(*r));assert(r);r->status=mkdir_ready && calls>=mkdir_ready ? EFS_INODE_RPC_OK : reply_status;*p=r;*n=sizeof(*r);*t=bad_type?0:EFS_MSG_INODE_GETATTR_REPLY;if(expire_recv)now=deadline;if(stale_hint && calls==1){r->status=EFS_INODE_RPC_STALE;r->primary_id=3;}if(failover){if(calls==1){r->status=EFS_INODE_RPC_NOT_PRIMARY;r->primary_id=2;}else if(failover==1&&calls==2)return 1;else assert(c->node==3);}return fail_recv;}
+int efs_conn_recv_msg(struct efs_conn*c,uint8_t*t,void**p,uint32_t*n){(void)c;calls++;struct efs_msg_inode_reply*r=calloc(1,sizeof(*r));assert(r);r->read_node_id=read_hint;r->status=mkdir_ready && calls>=mkdir_ready ? EFS_INODE_RPC_OK : reply_status;*p=r;*n=sizeof(*r);*t=bad_type?0:EFS_MSG_INODE_GETATTR_REPLY;if(expire_recv)now=deadline;if(stale_hint && calls==1){r->status=EFS_INODE_RPC_STALE;r->primary_id=3;}if(failover){if(calls==1){r->status=EFS_INODE_RPC_NOT_PRIMARY;r->primary_id=2;}else if(failover==1&&calls==2)return 1;else assert(c->node==3);}return fail_recv;}
 static void opid_retry_ack(void *packet,uint32_t length){(void)packet;(void)length;}
 '''+fn('static int rpc_writer_retry_pause(' ,True)+fn('static void rpc_retry_peer(')+fn('static int rpc_send_recv_shard(')+fn('static int rpc_send_recv_dual(',True)+r'''
-static void reset(void){calls=sleeps=freed=drops=releases=0;reply_status=EFS_INODE_RPC_OK;fail_recv=fail_send=bad_type=expire_recv=0;now=1000;deadline=0;failover=routing_sends=mkdir_ready=mkdir_packet_len=stale_hint=0;g_group_leader[0]=0;}
+static void reset(void){calls=sleeps=freed=drops=releases=0;reply_status=EFS_INODE_RPC_OK;fail_recv=fail_send=bad_type=expire_recv=0;now=1000;deadline=0;failover=routing_sends=mkdir_ready=mkdir_packet_len=stale_hint=0;g_group_leader[0]=0;read_hint=0;memset(g_read_routes.slot,0,sizeof(g_read_routes.slot));}
 static int run(int dual,struct efs_msg_inode_reply*r){return dual?rpc_send_recv_dual(EFS_MSG_INODE_GETATTR,NULL,0,EFS_MSG_INODE_GETATTR_REPLY,r,sizeof(*r),100):rpc_send_recv_shard(0,EFS_MSG_INODE_GETATTR,NULL,0,EFS_MSG_INODE_GETATTR_REPLY,r,sizeof(*r),0,NULL);}
-int main(void){for(int d=0;d<2;d++){
+int main(void){
+ struct efs_msg_inode_reply route_reply;
+ reset();read_hint=2;assert(!run(0,&route_reply));
+ uint64_t key=efs_meta_read_route_key(EFS_MSG_INODE_GETATTR,NULL,0);
+ assert(efs_meta_read_route_get(&g_read_routes,key)==2);
+ assert(!run(0,&route_reply)&&connection.node==2);
+ reset();read_hint=9;assert(!run(0,&route_reply));assert(!efs_meta_read_route_get(&g_read_routes,key));
+ reset();read_hint=3;reply_status=EFS_INODE_RPC_BUSY;deadline=1010;
+ assert(run(0,&route_reply)==EFS_ERR_BUSY&&!efs_meta_read_route_get(&g_read_routes,key));
+ reset();read_hint=3;deadline=1010;expire_recv=1;
+ assert(run(0,&route_reply)==EFS_ERR_BUSY&&!efs_meta_read_route_get(&g_read_routes,key));
+ for(int d=0;d<2;d++){
  struct efs_msg_inode_reply r;
  reset();assert(!run(d,&r)&&calls==1&&freed==1&&releases==1);
  reset();deadline=1000;assert(run(d,&r)==EFS_ERR_BUSY&&!calls&&!sleeps);
@@ -116,6 +133,6 @@ int main(void){for(int d=0;d<2;d++){
 '''
 with tempfile.TemporaryDirectory(prefix='efs-metadata-budget-') as d:
  p=Path(d)/'t.c';p.write_text(code)
- subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include')]+shlex.split(os.environ.get('EFS_TEST_CFLAGS',''))+[str(p),'-o',str(p.with_suffix(''))],check=True)
+ subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),'-I'+str(root/'src/client')]+shlex.split(os.environ.get('EFS_TEST_CFLAGS',''))+[str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=5)
 print('metadata retries: shard/dual budgets, STALE/BUSY/hints, failed payload cleanup and late-output retention, lost hinted peer rerouting, concurrent leader retention same-identity MKDIR beyond 16 attempts with shorter deadline enforcement, and exact-packet bounded unlock BUSY retries with immediate grant conflicts PASS')

@@ -8,6 +8,7 @@
 #include "efs/publication.h"
 #include "efs/put_ticket.h"
 #include "efs/session.h"
+#include "metadata_read_route.h"
 #include <stddef.h>
 #include <string.h>
 #include <stdio.h>
@@ -435,6 +436,7 @@ static uint32_t raft_group_voters(uint8_t group, int n)
  * leader forwards or answers NOT_PRIMARY with the hint and the reply
  * corrects the note. 0 = unknown; indexed by group >> 1. */
 static efs_node_id_t g_group_leader[2];
+static struct efs_meta_read_routes g_read_routes={.mu=PTHREAD_MUTEX_INITIALIZER};
 
 static void rpc_note_leader(uint8_t group, efs_node_id_t nid)
 {
@@ -559,6 +561,30 @@ static struct efs_conn *rpc_owner_conn_shard(uint32_t shard,
     return raft_voter_conn(shard, nid_out);
 }
 
+/* LOOKUP/GETATTR can need inode, dentry and lane groups even when their
+ * entry shard has a single-group leader. Enter at a dual voter rather than
+ * paying an inode RPC forward to it. Prefer a known leader when it also
+ * covers both groups. This changes routing only: every recipient retains
+ * its fresh ReadIndex, apply wait and transaction/sequence validation. */
+static struct efs_conn *raft_read_voter_conn_skip(uint32_t shard,
+                                                  efs_node_id_t *nid_out,
+                                                  efs_node_id_t skip)
+{
+    int n = (int)g_client.node_count;
+    uint32_t dual = raft_group_voters(EFS_RAFT_GROUP_SHARD, n) &
+                    raft_group_voters(EFS_RAFT_GROUP_SHARD2, n);
+    efs_node_id_t lead = rpc_leader_of(efs_raft_shard_group(shard));
+    if (lead && lead != skip && lead <= (efs_node_id_t)n &&
+        (dual & (1u << (lead - 1))) && !efs_client_node_is_down(lead)) {
+        struct efs_conn *conn = efs_client_conn_get(lead);
+        if (conn) {
+            *nid_out = lead;
+            return conn;
+        }
+    }
+    return raft_dual_voter_conn(nid_out, skip);
+}
+
 static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
                               uint8_t expect, void *reply, uint32_t reply_len,
                               int recv_ms);
@@ -664,6 +690,8 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
     efs_node_id_t skip = 0;   /* answered NOT_PRIMARY with no hint */
     int prof = rpc_prof_enabled();
     int saw_busy = 0;
+    int read_route = type == EFS_MSG_INODE_LOOKUP || type == EFS_MSG_INODE_GETATTR;
+    uint64_t read_key = read_route ? efs_meta_read_route_key(type,req,req_len) : 0;
     unsigned long long t_start = rpc_prof_now_us();
     union { struct efs_msg_inode_create create; struct efs_msg_inode_unlink unlink;
             struct efs_msg_inode_link link; struct efs_msg_inode_rename_at rename; } mutation;
@@ -688,6 +716,12 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
         if (target != 0) {
             conn = efs_client_conn_get(target);
             nid = target;
+        } else if (read_route) {
+            nid = efs_meta_read_route_get(&g_read_routes,read_key);
+            conn = nid && nid != skip && nid <= g_client.node_count &&
+                   !efs_client_node_is_down(nid) ? efs_client_conn_get(nid) : NULL;
+            if (!conn)
+                conn = raft_read_voter_conn_skip(shard, &nid, skip);
         } else {
             conn = raft_voter_conn_skip(shard, &nid, skip);
         }
@@ -758,6 +792,9 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
         }
         free(payload);
         struct efs_msg_inode_reply *r = reply;
+        if (read_route && r->status == EFS_INODE_RPC_OK && r->read_node_id &&
+            r->read_node_id <= g_client.node_count)
+            efs_meta_read_route_note(&g_read_routes,read_key,r->read_node_id);
         if (r->status == EFS_INODE_RPC_BUSY ||
             r->status == EFS_INODE_RPC_ADMISSION_BUSY) {
             saw_busy = 1;

@@ -49,6 +49,7 @@ def summarize(path, names):
     statuses = collections.defaultdict(collections.Counter)
     times = collections.defaultdict(list)
     exchanges = []
+    endpoints = collections.defaultdict(list)
     report_shapes = collections.defaultdict(collections.Counter)
     for start, end, body, rc, error in syscalls(path):
         call = re.match(r'(sendmsg|writev|recvfrom)\((\d+)<TCP:\[([^]]+)\]>', body)
@@ -127,11 +128,13 @@ def summarize(path, names):
             duration = end-state['start']
             statuses[label][str(prefix[1])] += 1
             times[label].append(duration)
+            endpoints[label+' '+fd[1]].append(duration)
             exchanges.append(dict(request=request, reply=prefix[0], status=prefix[1],
                                   seconds=duration, endpoint=fd[1]))
     return dict(sent={names.get(k, str(k)):v for k,v in sent.items()},
                 replies={k:dict(v) for k,v in statuses.items()},
                 exchange_timings={k:quantiles(v) for k,v in times.items()},
+                by_endpoint={k:quantiles(v) for k,v in endpoints.items()},
                 report_shapes={k:dict(v) for k,v in report_shapes.items()},
                 diagnostics=dict(counts), pending_at_end=len(live),
                 longest=sorted(exchanges, key=lambda x:x['seconds'], reverse=True)[:12])

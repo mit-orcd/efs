@@ -405,6 +405,7 @@ test: all
 	python3 tests/test_atomic_append_host.py
 	python3 tests/test_host_cover_route.py
 	python3 tests/test_namespace_leader_route.py
+	python3 tests/test_metadata_read_route.py
 	python3 tests/test_namespace_admission_rounds.py
 	python3 tests/test_session_combined_group.py
 	python3 tests/test_namespace_authority.py
@@ -768,6 +769,11 @@ tests/faults/fault_sim: tests/faults/fault_sim.c src/sim/sim.o src/sim/sim_raft.
 
 %: %.c $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ $< $(LIB) $(LDFLAGS)
+
+src/client/inode_rpc.o: src/client/metadata_read_route.h
+
+tests/measure/metadata_route_smoke: tests/measure/metadata_route_smoke.c $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(LIB) $(LDFLAGS)
 
 tests/measure/getattr_lane_smoke: tests/measure/getattr_lane_smoke.c $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(LIB) $(LDFLAGS)

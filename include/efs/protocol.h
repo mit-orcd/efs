@@ -789,6 +789,10 @@ struct efs_msg_inode_unlink {
 
 struct efs_msg_inode_reply {
     uint8_t status;
+    /* Successful LOOKUP/GETATTR only: node that collected the reply, not
+     * the inode group's leader. A route hint, never cached read authority.
+     * Uses former alignment padding; primary_id/inode offsets stay. */
+    uint8_t read_node_id;
     /* Phase 2b: on EFS_INODE_RPC_NOT_PRIMARY, the server's view of the
      * metadata primary (lowest-id live node) so the client can retry there. */
     efs_node_id_t primary_id;
