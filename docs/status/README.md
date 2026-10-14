@@ -1,3 +1,13 @@
+[Intel live tiny-file strace/perf](intel-live-performance-20261014.md):
+**Diagnostic capture PASS; speedup NOTRUN; old-tree read correctness FAIL.**
+Four main Intel daemons and four clients, TCP/direct/files, optional features
+OFF; existing AMD four-worker writer and xorinox four-worker MD5 crawl observed.
+Intel1 GETATTR/reduction/KV work consumes about70–72% of user CPU; selective
+LSM candidate indexing is the leading performance experiment, not a measured
+speedup. Three old-tree EIO files reproduce on all four clients; controls match.
+No runtime changes; human workloads continue. Earlier readiness samples do not
+establish whole-tree integrity.
+
 [Intel production and independent external clients](intel-external-clients-deployment-20261014.md):
 **PASS: main Intel upgraded to85f2a199aa39; AMD/xorinox mount at /data1/efs/intel-mnt.**
 Four Intel daemons,400 GiB/node, TCP/direct/files; .efs client/server, packing,
@@ -6,7 +16,7 @@ containers and expiry OFF. External source/config/logs isolated under
 stop cleanup scoped to its configured mounts. Preserved512 samples match on
 both external clients; fsynced four-host smoke PASS. Intel source rules and
 AMD exact-path AppArmor rule applied by human; all four TCP endpoints reachable.
-Readiness qualification only; performance workloads have not started.
+Readiness qualification at deployment time; subsequent live profiling is linked above.
 
 [Private Intel direct-read/fork](intel-direct-read-fork-20261014.md):
 **W118: Intel stale-byte symptom NOT REPRODUCED; historical ORCD gate remains open.**
