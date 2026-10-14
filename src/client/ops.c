@@ -640,7 +640,10 @@ static void adopt_rpc_inode(const struct efs_inode *rpc)
                      rpc->mtime_nsec > local.mtime_nsec);
         int times_differ = rpc->mtime != local.mtime ||
                            rpc->mtime_nsec != local.mtime_nsec;
-        int local_dirty = efs_client_ino_is_dirty(rpc->ino);
+        /* An inode-only REPORT can retire its size mark before its dirty
+         * dcache body is PUT. That body still owns the accepted local EOF;
+         * a newer empty owner echo must not shrink it in that interval. */
+        int local_dirty = efs_client_ino_has_unpublished_data(rpc->ino);
         int mtime_pinned = efs_client_mtime_is_pinned(rpc->ino);
         /* Equal-size with a newer mtime also takes the remote: a peer can
          * change chunk mappings without changing size (writing into a
@@ -873,7 +876,7 @@ static void overlay_local_size(struct efs_inode *child, int more)
      * not grant ownership of parent times after a committed rename. */
     if (efs_mode_is_dir(child->mode))
         return;
-    int dirty = efs_client_ino_is_dirty(child->ino);
+    int dirty = efs_client_ino_has_unpublished_data(child->ino);
     int want_local = dirty ||
                      (!more && !efs_mode_is_dir(child->mode));
     if (!want_local)
