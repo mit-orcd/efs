@@ -173,3 +173,12 @@ Intel was given the ordinary-core readdir failure for its remaining package3
 work on Intel; AMD was given the query-refusal evidence for package2 coordination.
 Root owns the reply normalization draft to avoid duplicate edits. No workload
 deadline, quorum, feature mask, cache limit or data-plane transport was changed.
+
+Queue observations can be reproduced without private controller files using
+`scripts/orcd_queue_sample.py --node fcstor005 --revision FULL_INSTALLED_SHA
+--seconds 10 --output /tmp/orcd-queue-sample.json`. Supply `--ssh-control PATH`
+when reusing an authenticated login master. The script validates source/UID/exe,
+reads gdb types without attaching, accounts for PIE, and samples only the
+ordered/priority counters and two pending-group counters through read-only
+process memory. Never interpret these racy samples as a durability proof; keep
+raw output outside Git.
