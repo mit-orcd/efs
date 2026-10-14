@@ -1494,6 +1494,8 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+[ORCD concurrent inode race](../status/orcd-query-name-ordinals-20261013.md): fa0 six command suites and140,000 finite files PASS; loaded queries FAIL20/21 on one synthetic ENOENT. Actual-cache reservation fix native/sanitizer/old-negative qualified locally; Linux/live pending.
+
 [ORCD routing candidate](../status/orcd-query-name-ordinals-20261013.md): `fa0ac827f` full Linux/native, targeted sanitizers and 897-input staged source checks PASS. Orderly deployment in progress; loaded and sustained gates OPEN.
 
 [ORCD query-target starvation](../status/orcd-query-name-ordinals-20261013.md): production90 load remains intermittent/OPEN. Controlled same-fixture readers: first dual follower0/187; eligible dual leader333 successes/five generations. Seed target correction in native qualification; original failures retained, long-running jobs stopped.
