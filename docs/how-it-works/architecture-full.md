@@ -1494,6 +1494,17 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**Implemented/deployed6cbd99e54; bounded smoke PASS; short measurements improve.**
+In-memory coarse-range bitmaps plus binary L1 bounds preserve precedence and
+invalidate on segment publication; no format/freshness/durability change.
+Same-core native point misses2.79–2.88x and prefix misses2.36–2.54x faster.
+Mounted six-path stat round means29.6% lower AMD/45.1% lower xorinox, with
+unchanged persisted MANIFEST hashes. Small untraced smoke, not sustained
+throughput acceptance.64prior files/client and fsynced four-host bytes/EOF pass;
+TCP/direct/files, optional features OFF, independent external clients retained.
+Full/concurrent/fault/sanitizer suites NOTRUN per human scope.
+
+[Intel direct checksum-tail EIO correction](../status/intel-direct-tail-eio-20261014.md):
 **Bounded smoke PASS; devel f76101e8f deployed to main Intel and all four clients.**
 Direct GET now accepts complete32byte buffered-format digest tails as well as
 4KiB padded tails, retaining payload verification. Old control reproduces;

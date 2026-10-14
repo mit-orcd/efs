@@ -6,6 +6,11 @@ the main Intel cluster and its clients, following
 [package 3 deployment readiness](intel-external-clients-deployment-20261014.md).
 This does not reopen W100 or qualify a performance implementation.
 
+Subsequent performance implementation: [LSM candidate indexing](intel-lsm-candidate-index-20261014.md)
+is deployed at6cbd99e54. Bounded engine and mounted comparisons improve;
+full/sustained qualification remains NOTRUN. The proposals/observations below
+are historical source evidence, not a claim that the implementation is pending.
+
 Subsequent correction: [direct checksum-tail EIO](intel-direct-tail-eio-20261014.md)
 identifies and fixes the stored buffered-tail/direct-reader incompatibility.
 Main Intel/all four clients redeployed;32previous failures per client pass the
