@@ -6,7 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import time
-from query_rpc import page_request, routed_query as query
+from query_rpc import page_request, accepted_query as query
 
 mount, peer, work = map(Path, sys.argv[1:4])
 root = mount / ('efs-pages-%d' % os.getpid())

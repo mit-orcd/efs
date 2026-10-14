@@ -208,3 +208,35 @@ consume paths and require BUSY without data; the load oracle is unchanged and
 still requires successful reads and snapshot progress. Local native/sanitizer
 checks PASS; Linux/live qualification for this additional correction NOTRUN.
 All seven long-running writer/crawler screens remain stopped.
+
+## Final production source and page-oracle freshness window
+
+Production `90a1324d10ea8861127083627ddfbb131988fa71` passes full Linux native
+and focused ASan/UBSan/leaks, with894 input hashes verified on all installed
+hosts. A staging diagnostic defect printed branch devel although the frozen
+source SHAs were correct. Before deploying90, only version.o was rebuilt and
+binaries relinked to print devel-orcd-package1; all11 efsd/efs-fuse --version
+checks passed. Behavior code is unchanged by this text correction; final
+version-display relink hashes are retained with the deployment metadata.
+Required runtime flags/native verbs, normal restart and acknowledged marker
+reads PASS.
+
+The unchanged six-suite run on90 PASS5/6. Load now PASS: two readers each have
+299 successes across three advancing generations, all2,761 payloads exact;
+writer p50/p95/p99=33.74/68.79/87.95ms, final convergence2.37s. Query p95 about
+54–55ms and p99 about115–119ms; temporary BUSY refusals are explicitly counted
+by the original load oracle and carry no bytes. Pages FAIL on a one-shot raw
+first-page BUSY after its mounted complete/NUL/NDJSON export checks pass.
+This failure remains recorded at `fcstor007/six-commands-90a1324d10ea`.
+
+The following test-only correction makes positive raw-page requests respect
+the same eight-second freshness window as mounted helpers. Only BUSY is
+retried; hard statuses and negative probes are unchanged. Redirects/socket
+reads share one absolute deadline, with each socket retaining its at-most
+seven-second timeout. The240-second suite budget and production query deadlines
+are unchanged. `tests/test_query_rpc_retry.py` verifies late publication beyond
+eight fast refusals, unchanged request identity, exact hard refusals, remaining
+route time and rejection of partial BUSY bytes. All four local checks and
+34 production helper tests PASS. Private Linux and live corrected-harness
+qualification remain pending. Installed production source stays90; record the
+separate harness SHA when qualifying this correction.
