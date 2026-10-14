@@ -64,12 +64,12 @@ static void delayed_apply(unsigned port, efs_ino_t ino, const struct efs_opid *i
     }
 }
 
-static struct packet pack(const struct efs_chunk_rec *rec,const struct efs_opid *id)
+static struct packet pack(const struct efs_chunk_rec *rec,const struct efs_opid *id,uint64_t eof)
 {
     struct packet p={0};struct efs_msg_report_chunks h={.export_id=1,.count=1,.sync=EFS_REPORT_F_SYNC|EFS_REPORT_F_SESSION,.ino_count=1};
     memcpy(p.body,&h,sizeof(h));size_t used=sizeof(h);
     size_t n=efs_chunk_rec_pack(p.body+used,sizeof(p.body)-used,rec);assert(n);used+=n;
-    struct efs_ino_size_rec ino={.ino=rec->ino,.size=1};memcpy(p.body+used,&ino,sizeof(ino));used+=sizeof(ino);
+    struct efs_ino_size_rec ino={.ino=rec->ino,.size=eof};memcpy(p.body+used,&ino,sizeof(ino));used+=sizeof(ino);
     efs_report_session_pack(p.body+used,id);used+=EFS_REPORT_SESSION_LEN;p.len=used;return p;
 }
 int main(int argc,char **argv)
@@ -98,12 +98,17 @@ int main(int argc,char **argv)
     }
     assert(rec.nodes[0] && rec.nodes[1] && rec.nodes[2] && rec.chunk_generation);
     memset(&rec.read_view,0,sizeof(rec.read_view));
+    struct efs_inode row;assert(!efs_client_rpc_getattr(1,ino,&row));
+    struct efs_ino_size_rec size={.ino=ino,.size=row.size};
     struct efs_opid id;assert(!efs_client_publication_id(1,&id));
-    struct packet p=pack(&rec,&id);rpc(port,&p,1); /* Lost reply retains the immutable mapping body. */
+    struct packet p=pack(&rec,&id,size.size);rpc(port,&p,1); /* Lost reply retains the immutable mapping body. */
     assert(rpc(port,&p,0).status==EFS_INODE_RPC_OK);
-    assert(!efs_client_rpc_report_dirty_raft(1,&rec,1,NULL,0,1));
+    /* Missing EOF is deliberately malformed; session positives must carry
+     * the exact existing EOF rather than relying on the removed guess. */
+    assert(efs_client_rpc_report_dirty_raft(1,&rec,1,NULL,0,1)==EFS_ERR_INVAL);
+    assert(!efs_client_rpc_report_dirty_raft(1,&rec,1,&size,1,1));
     struct efs_chunk_rec invalid=rec;invalid.nodes[0]=0;
-    assert(efs_client_rpc_report_dirty_raft(1,&invalid,1,NULL,0,1)==EFS_ERR_INVAL);
+    assert(efs_client_rpc_report_dirty_raft(1,&invalid,1,&size,1,1)==EFS_ERR_INVAL);
     struct packet malformed=p;malformed.len--;assert(rpc(port,&malformed,0).status==EFS_INODE_RPC_INVAL);
     malformed=p;malformed.body[sizeof(struct efs_msg_report_chunks)+efs_chunk_rec_wire_size(&rec)+sizeof(struct efs_ino_size_rec)]=0;
     memset(malformed.body+malformed.len-EFS_REPORT_SESSION_LEN,0,16);assert(rpc(port,&malformed,0).status==EFS_INODE_RPC_INVAL);
@@ -112,8 +117,8 @@ int main(int argc,char **argv)
     int status;assert(waitpid(child,&status,0)==child && WIFEXITED(status) && !WEXITSTATUS(status));
     assert(rpc(port,&p,0).status==EFS_INODE_RPC_STALE);
     delayed_apply(port,ino,&id);
-    assert(efs_client_rpc_report_dirty_raft(1,&rec,1,NULL,0,1)==EFS_ERR_STALE);
-    rec.chunk_index=17;struct packet first=pack(&rec,&id);assert(rpc(port,&first,0).status==EFS_INODE_RPC_STALE);
+    assert(efs_client_rpc_report_dirty_raft(1,&rec,1,&size,1,1)==EFS_ERR_STALE);
+    rec.chunk_index=17;struct packet first=pack(&rec,&id,size.size);assert(rpc(port,&first,0).status==EFS_INODE_RPC_STALE);
     FILE *f=fopen(argv[4],"wb");assert(f && fwrite(&p,sizeof(p),1,f)==1 && !fclose(f));
     puts("REPORT mount identity: discarded reply/exact mapping retry, malformed frame, revoked replay, delayed mapping/activation apply and first-touch rejection PASS");
 }
