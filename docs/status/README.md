@@ -1,3 +1,13 @@
+[Intel GETATTR first-lane reuse](intel-getattr-lane-read-20261014.md):
+**Implemented/deployed0d996b33d; bounded correctness smoke PASS.** Reuses the
+reduction's visible lane; independent sequence/inode/decision validation stays.
+Paired actual-LSM fixture11.8–11.9% less time with1lane,21.4–22.9% with8.
+Mounted speedup NOT ESTABLISHED: serial post-restart stat samples slower;
+restart/catalog/cache/leadership uncontrolled.64preserved controls/client and
+four-host fsync/shrink/grow/EOF/mtime checks pass. TCP/direct/files, optional
+features OFF; independent clusters unchanged. Writer resumed preserving157,709
+files; MD5 crawl restarted. Full/concurrent/fault/sanitizer suites NOTRUN.
+
 [Intel post-index live profile](intel-post-index-profile-20261014.md):
 **Diagnostic capture PASS; next optimization NOTRUN.** Existing AMD four-worker
 writer and xorinox four-worker MD5 crawl observed; user jobs remain running.

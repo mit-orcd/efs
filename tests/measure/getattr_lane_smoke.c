@@ -1,6 +1,6 @@
 /* Bounded GETATTR correctness/measurement on private KV fixtures only.
  * The same --measure source links against baseline and candidate libraries.
- * --check injects a lane change between reduction and sequence validation. */
+ * Default checks inject a lane change between reduction and validation. */
 #include "efs/meta_apply.h"
 #include "efs/metadata.h"
 #include "efs/txn.h"
