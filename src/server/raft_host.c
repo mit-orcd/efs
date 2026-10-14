@@ -11376,7 +11376,7 @@ void server_raft_host_stop(void)
 /* The pump's off-lock durability tail need not park a fresh quorum ACK.
  * Try the existing mutex only. With pending inbox work, replies may note
  * current-term read quorum but MUST still enter normal recv for ordered
- * replication bookkeeping. Container fresh-context requests may note a
+ * replication bookkeeping. Fresh-context requests may note a
  * heartbeat vote while work is pending. Only fully accounted prefix-zero
  * read-only requests can then be consumed; progress stays on ordered recv.
  * The core requires a known current-term leader and matching durable prefix;
@@ -11393,7 +11393,7 @@ static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n
     pthread_mutex_lock(&h->inbox_mu);
     int pending=h->inbox_n;
     pthread_mutex_unlock(&h->inbox_mu);
-    int container_probe=h->s && h->s->storage_engine &&
+    int fresh_probe=h->s &&
         msg.type==EFS_RAFT_MSG_AE_REQ && msg.last_log_index;
     {
         struct efs_raft *r=group_raft(h,msg.group);
@@ -11408,11 +11408,11 @@ static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n
          * no replication/commit/apply work left for FIFO receive. Keeping it
          * there repeats the already sent vote and occupies inbox credits.
          * Every progress-bearing request and every result2 remains ordered. */
-        int pure_probe=container_probe && msg.vote_granted==1 && !msg.success &&
+        int pure_probe=fresh_probe && msg.vote_granted==1 && !msg.success &&
             !msg.prev_index && !msg.prev_term && !msg.leader_commit &&
             !msg.match_index && !msg.last_log_term && !msg.nentries;
         if(pending && handled==1 && msg.type==EFS_RAFT_MSG_AE_REQ && !pure_probe)handled=2;
-        if(handled && h->s && h->s->storage_engine && BO_ON() &&
+        if(handled && h->s && BO_ON() &&
            outbox_pure_read_control(p,n))
             BO_COUNT(msg.type==EFS_RAFT_MSG_AE_REQ ? BO_READ_REQ_INLINE : BO_READ_REPLY_INLINE);
         if (handled && msg.type==EFS_RAFT_MSG_AE_REQ) BO_COUNT(BO_READ_CONTROL_REQUEST);
@@ -19251,7 +19251,7 @@ static int host_publication_committed(struct efs_raft_host *h, uint8_t group,
         if (r && efs_raft_role(r)==EFS_RAFT_LEADER && efs_raft_term(r)==term &&
             (!efs_raft_read_pending(r) || efs_raft_read_quorum(r)) &&
             !(efs_raft_read_round(r)>=round && efs_raft_read_covers(r,want)))
-            rc=efs_raft_read_begin(r);
+            rc=host_read_begin_tracked(h,group,r);
         host_publish_group(h,group);
         pthread_mutex_unlock(&h->mu);
         if (rc!=EFS_OK) return rc;
