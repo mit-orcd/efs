@@ -252,7 +252,7 @@ static void sort_budget_test(void)
         uint64_t baseline=d->disk_bytes,temp=2*(uint64_t)count*sizeof(struct sort_name);
         if(scenario==1)sort_unlink_fault=1;
         if(scenario==2)sort_rename_fault=1;
-        if(scenario==3)sort_rename_fault=2;
+        if(scenario==3)fail_write_kind='n'; /* Compact final output replaces full-name rename. */
         if(scenario==4)partial_write=1;
         unsigned calls=2;
         if(scenario==5){d->stop=sort_cancel;d->stop_ctx=&calls;}
