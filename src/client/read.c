@@ -148,8 +148,8 @@ static int get_one_reply(struct efs_conn *conn, struct frag_get_job *j)
 }
 
 /* Both preferred peers share the original pair deadline. Reserve admission
- * time for the second peer: a cold blackholed first checkout must not consume
- * the whole budget before the healthy request is even sent. */
+ * time for the second peer and any already-sent reply: a cold blackholed
+ * checkout in either position must not consume the entire pair budget. */
 static int get_pair_start(struct frag_get_job *job, struct efs_conn **conn,
                           const struct efs_msg_get_chunk *req, int reserve)
 {
@@ -196,8 +196,8 @@ static void get_two_parallel_run(struct frag_get_job *jobs)
         if (jobs[i].chunk_generation &&
             jobs[i].chunk_generation != EFS_CHUNK_BASE_UNCOND)
             req.chunk_generation = jobs[i].chunk_generation;
-        int reserve = i == 0 && jobs[1].node != 0 &&
-                      !efs_client_node_is_down(jobs[1].node);
+        int reserve = pending[0] || (i == 0 && jobs[1].node != 0 &&
+                                     !efs_client_node_is_down(jobs[1].node));
         if (!get_pair_start(&jobs[i], &conns[i], &req, reserve))
             continue;
         pending[i] = 1;
