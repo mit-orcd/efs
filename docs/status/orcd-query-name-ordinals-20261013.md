@@ -240,3 +240,47 @@ route time and rejection of partial BUSY bytes. All four local checks and
 34 production helper tests PASS. Private Linux and live corrected-harness
 qualification remain pending. Installed production source stays90; record the
 separate harness SHA when qualifying this correction.
+
+## Dual-query target starvation — controlled diagnostic
+
+Private corrected harness93 on production90 passes basic/options/pages/virtual
+checks but a further complete run FAILS load and large-delta. Load readers have
+0 successes (162/159 BUSY replies, no bytes); large-delta again reaches peer
+readdir EBUSY after both1,025-file payload phases. Earlier isolated passes
+remain historical and do not close this repeated failure. Private staging
+initially lacked the efs-mgmt path; linking the verified90 binary fixes that
+staging failure. A subsequent wrapper path typo runs no suites and is NOTRUN,
+not a production regression. Normal auxiliary cleanup succeeds on every attempt.
+
+A controlled14-second, eight-writer comparison uses the same load fixture and
+one raw reader per dual-group node. fcstor004 (both groups FOLLOWER) has0/187
+successes. fcstor005 (group0 LEADER, group2 FOLLOWER) has333 successes across
+five generations; its first successful headers carry its boot/generation and
+10 checked directories. Sampled BUSY headers havezero boot/generation/checked
+directories andzero data, supporting pre-consume refusal rather than filtered
+result corruption. Both see the same writer fixture; this diagnostic does not
+qualify its final payload oracle, which aborts on the zero-success reader.
+Raw output: `fcstor007/query-target-20261014-065130.log` (the controller records
+the actual scratch path), plus the separate header comparison controller output.
+Record the retained path from the run when reproducing; no private captures are
+needed to reproduce the hypothesis using the committed14-second load driver
+with one reader explicitly addressed to each dual host.
+
+The next candidate changes only a non-capable query host's redirect selection:
+prefer a known leader whose committed voter membership covers both groups,
+then retain the original dual-host fallback if no such leader is known.
+Capable local hosts still serve; fresh authority, import guards, permissions,
+retained generations and pinned continuations are unchanged. This avoids the
+seed always choosing the first dual follower when a known eligible leader is
+available. Existing namespace leader-cover selection provides the membership
+check; it grants no authority.
+
+Actual production-function target regression PASS locally/native+ASan/UBSan:
+dual leader preference for either group, single-group/unknown/removed leader
+fallback, local-capable service and BUSY/IO/changed-capability refusal. The
+actual old90 source compiles and fails the target assertion at runtime (expected
+SIGABRT). Reproduce with `python3 tests/test_query_target_route.py`; use
+`EFS_RAFT_HOST_SOURCE` to select the old source for the negative. The first
+negative invocation had an unused helper warning; explicitly testing that
+helper makes the intended old-code negative compile and reach the runtime
+assertion. Linux/live qualification of this new routing candidate is NOTRUN.

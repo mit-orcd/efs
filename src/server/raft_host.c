@@ -10597,6 +10597,12 @@ int server_raft_host_query_read(int (*consume)(void *,const struct efs_server_qu
     int peer=capable ? -1 : host_pick_peer(h,both,2,-1);
     pthread_mutex_unlock(&h->mu);
     if (!capable) {
+        /* A known leader covering both groups is a better query target than
+         * the first dual follower, whose fresh cut can starve under writes.
+         * This is a routing hint only; the receiver repeats every proof. */
+        int leader=host_leader_cover_pick(h,both[0],both,2);
+        if(leader<0)leader=host_leader_cover_pick(h,both[1],both,2);
+        if(leader>=0)peer=leader;
         if (primary_id && peer>=0) *primary_id=(uint16_t)(peer+1);
         return EFS_ERR_NOT_PRIMARY;
     }

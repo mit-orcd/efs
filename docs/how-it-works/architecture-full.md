@@ -1494,6 +1494,8 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+[ORCD final production](../status/orcd-query-name-ordinals-20261013.md): `90a1324d1` deployed; full native/sanitizers/source/profile/restart PASS. Command load and exact2,761 payloads PASS; five of six suites PASS. Raw-page positive freshness harness correction under qualification; original BUSY failure retained.
+
 [ORCD loaded results](../status/orcd-query-name-ordinals-20261013.md): `b65d99dcf` finite140,000 files and concurrent21 queries PASS. Broader two-mount commands FAIL5/6; missing-target refusal correction in qualification. Long-running writer/crawler screens remain stopped.
 
 [ORCD merged deployment](../status/orcd-query-name-ordinals-20261013.md): `b65d99dcf` Linux native/sanitizers, installed source/profile, orderly marker restart and mounted token close PASS. Seven-client finite gate RUNNING; concurrent and sustained acceptance OPEN.
