@@ -7,25 +7,10 @@ import stat
 import subprocess
 import sys
 import time
-from query_rpc import query as raw_query, request, filtered_request
-
-def query(port, req):
-    # Private fixture ports are consecutive by node id; the seed need not
-    # host both metadata groups. Preserve business errors such as BUSY.
-    base = int(os.environ['EFS_QUERY_TEST_PORT'])
-    seen = set()
-    for _ in range(4):
-        assert port not in seen, ('query redirect loop', port, seen)
-        seen.add(port)
-        reply, text = raw_query(port, req)
-        if reply.status != -15:
-            return reply, text
-        assert 1 <= reply.primary_id <= 4, (reply.status, reply.primary_id)
-        port = base + reply.primary_id - 1
-    raise AssertionError('query redirect bound exceeded')
+from query_rpc import routed_query as query, request, filtered_request
 
 mount, peer = map(Path, sys.argv[1:3])
-root = mount / 'efs-options-gates'
+root = mount / ('efs-options-gates-'+str(time.time_ns()))
 other = peer / root.name
 root.mkdir()
 (root/'child').mkdir()
