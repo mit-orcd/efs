@@ -6691,6 +6691,22 @@ static void host_note_queued_reads(struct efs_raft_host *h,
     }
 }
 
+/* h->mu and the pump's KV hold are owned on entry/return. Only a fully
+ * returned recv_batch may hand off: its log barrier, replies and ordered apply
+ * have finished (or the core has fenced failure). Publish that completed
+ * progress before unrelated next-group I/O. Keep the KV hold and all receive
+ * credits in this cycle; neither cursor persistence nor retirement moves here.
+ * Raft objects live until the pump is joined, so local decoded frames remain
+ * valid across handler/read-control admission between complete batches. */
+static void host_inbox_batch_handoff(struct efs_raft_host *h)
+{
+    for (int gi=0; gi<HOST_NGROUPS; gi++)
+        if (h->g[gi].hosted) host_publish_view(h,gi);
+    host_waiters_wake(h);
+    pthread_mutex_unlock(&h->mu);
+    pthread_mutex_lock(&h->mu);
+}
+
 static void drain_inbox(struct efs_raft_host *h, unsigned *done_n, uint64_t *done_bytes)
 {
     struct host_inbox_item local[HOST_INBOX_MAX];
@@ -6754,6 +6770,7 @@ static void drain_inbox(struct efs_raft_host *h, unsigned *done_n, uint64_t *don
             for (uint32_t j = 0; j < count; j++) free(commands[j]);
             count = 0;
             bytes = 0;
+            if (i < n) host_inbox_batch_handoff(h);
         }
         if (r) {
             pending = r;
