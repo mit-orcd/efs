@@ -235,6 +235,27 @@ int efs_client_put_id(struct efs_opid *out)
     pthread_mutex_unlock(&opid_mu);return EFS_OK;
 }
 
+/* opid_mu is held. Allocation and the receipt-window check are one action;
+ * both waiting namespace admission and lock-owning lease admission use it. */
+static int opid_take_locked(struct efs_opid_req *q)
+{
+    int slot=-1;uint64_t low=0;
+    opid_seed_locked();
+    for(unsigned i=0;i<EFS_OPID_INFLIGHT;i++) {
+        uint64_t seq=g_client.opid_inflight[i];
+        if(!seq){if(slot<0)slot=(int)i;}
+        else if(!low || seq<low)low=seq;
+    }
+    if(g_client.opid_next==UINT64_MAX)return -2;
+    if(slot<0 || (low && g_client.opid_next-low>=EFS_OPID_REPLY_CACHE))return -1;
+    uint64_t seq=g_client.opid_next++;
+    g_client.opid_inflight[slot]=seq;
+    memcpy(q->id.client_uuid,g_client.opid_uuid,EFS_OPID_UUID_LEN);
+    q->id.session_epoch=g_client.opid_epoch;q->id.seq=seq;
+    q->ack=(low?low:seq)-1;
+    return slot;
+}
+
 /* Fill q and take a slot (returned; -1 = none, q left invalid). */
 static int opid_begin(struct efs_opid_req *q)
 {
@@ -253,25 +274,17 @@ static int opid_begin(struct efs_opid_req *q)
         clock_gettime(CLOCK_MONOTONIC, &now);
         uint64_t now_ms = (uint64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000;
         if (now_ms >= deadline || efs_client_rpc_past_deadline()) break;
-        int slot=-1;uint64_t low=0;
         pthread_mutex_lock(&opid_mu);
-        opid_seed_locked();
-        for(unsigned i=0;i<EFS_OPID_INFLIGHT;i++) {
-            uint64_t seq=g_client.opid_inflight[i];
-            if(!seq){if(slot<0)slot=(int)i;}
-            else if(!low || seq<low)low=seq;
+        int slot=opid_take_locked(q);
+        if(slot>=0) {
+            pthread_mutex_unlock(&opid_mu);
+            if (getenv("EFS_OPID_TRACE_VERBOSE"))
+                fprintf(stderr,"opid-begin: seq=%llu ack=%llu slot=%d thread=%lu deadline_ms=%llu\n",
+                    (unsigned long long)q->id.seq,(unsigned long long)q->ack,slot,
+                    (unsigned long)pthread_self(),(unsigned long long)efs_client_rpc_deadline_ms());
+            return slot;
         }
-        int exhausted=g_client.opid_next==UINT64_MAX;
-        if(slot>=0 && !exhausted &&
-           (!low || g_client.opid_next-low<EFS_OPID_REPLY_CACHE)) {
-            uint64_t seq=g_client.opid_next++;
-            g_client.opid_inflight[slot]=seq;
-            memcpy(q->id.client_uuid,g_client.opid_uuid,EFS_OPID_UUID_LEN);
-            q->id.session_epoch=g_client.opid_epoch;q->id.seq=seq;
-            q->ack=(low?low:seq)-1;
-            pthread_mutex_unlock(&opid_mu);return slot;
-        }
-        if (exhausted) {
+        if (slot == -2) {
             pthread_mutex_unlock(&opid_mu);
             return -2; /* sequence exhaustion is permanent */
         }
@@ -303,14 +316,19 @@ static int opid_begin(struct efs_opid_req *q)
     return -1;
 }
 
+
 static void opid_end(int slot)
 {
     if (slot < 0)
         return;
     pthread_mutex_lock(&opid_mu);
+    uint64_t seq = g_client.opid_inflight[slot];
     g_client.opid_inflight[slot] = 0;
     pthread_cond_broadcast(&opid_cv);
     pthread_mutex_unlock(&opid_mu);
+    if (getenv("EFS_OPID_TRACE_VERBOSE"))
+        fprintf(stderr,"opid-end: seq=%llu slot=%d thread=%lu\n",
+            (unsigned long long)seq,slot,(unsigned long)pthread_self());
 }
 
 /* A reservation identity lives across the entire FUSE BUSY retry loop,
@@ -319,7 +337,10 @@ static void opid_end(int slot)
  * mount UUID is shared with lease and lock ownership. */
 int efs_client_append_begin(struct efs_opid_req *q)
 {
-    return opid_begin(q);
+    int slot = opid_begin(q);
+    if (slot >= 0 && getenv("EFS_OPID_TRACE_VERBOSE"))
+        fprintf(stderr,"opid-owner: seq=%llu kind=APPEND\n",(unsigned long long)q->id.seq);
+    return slot;
 }
 
 void efs_client_append_end(int slot)
@@ -922,6 +943,10 @@ int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
         slot = opid_begin(&q);
     if (slot < 0)
         return EFS_ERR_BUSY;
+    if (getenv("EFS_OPID_TRACE_VERBOSE"))
+        fprintf(stderr,"opid-owner: seq=%llu kind=%s parent=%llu name=%s\n",
+            (unsigned long long)q.id.seq,S_ISDIR(mode)?"MKDIR":"CREATE",
+            (unsigned long long)parent,name?name:"");
     slen = opid_suffix(buf, sizeof(*req), &q);
     struct efs_msg_inode_reply r;
     /* Files co-locate with the parent (one group). MKDIR scatters the
@@ -997,6 +1022,9 @@ int efs_client_create_begin(struct efs_client_create_request *r,efs_ino_t parent
     if(r->active)return EFS_ERR_BUSY;
     struct efs_opid_req q;int slot=opid_begin(&q);
     if(slot<0)return EFS_ERR_BUSY;
+    if(getenv("EFS_OPID_TRACE_VERBOSE"))
+        fprintf(stderr,"opid-owner: seq=%llu kind=RETAINED_CREATE parent=%llu name=%s\n",
+            (unsigned long long)q.id.seq,(unsigned long long)parent,name);
     memset(r,0,sizeof(*r));r->slot=slot;r->active=1;
     r->wire.q=q;r->wire.create.export_id=g_client.export_id;
     r->wire.create.parent=parent;r->wire.create.mode=mode;
@@ -1434,6 +1462,25 @@ int efs_client_rpc_publication_session(uint32_t shard,const struct efs_opid *ide
 /* Production ownership primitive: an unknown reply never frees its ACK slot
  * or permits replacing identity/body. Namespace and publication use the same
  * full mount UUID; legacy append/HOLD still need a versioned adoption bridge. */
+/* Lease callers own an inode edge stripe. An older retained identity can
+ * need that stripe to finish: waiting for its receipt capacity here would
+ * keep both operations blocked until the new caller's deadline. Allocate
+ * once, or leave q invalid so the caller can release its stripe and retry.
+ * This changes no identity, ACK, capacity or inherited deadline. */
+static int opid_try_begin(struct efs_opid_req *q)
+{
+    memset(q,0,sizeof(*q));
+    if(efs_client_rpc_past_deadline())return -1;
+    pthread_mutex_lock(&opid_mu);
+    int slot=opid_take_locked(q);
+    pthread_mutex_unlock(&opid_mu);
+    if(slot>=0 && getenv("EFS_OPID_TRACE_VERBOSE"))
+        fprintf(stderr,"opid-begin: seq=%llu ack=%llu slot=%d thread=%lu deadline_ms=%llu\n",
+            (unsigned long long)q->id.seq,(unsigned long long)q->ack,slot,
+            (unsigned long)pthread_self(),(unsigned long long)efs_client_rpc_deadline_ms());
+    return slot;
+}
+
 int efs_client_lease_begin(struct efs_client_lease_request *r,efs_ino_t ino,
                            uint64_t generation,unsigned flags,uint64_t token)
 {
@@ -1443,8 +1490,11 @@ int efs_client_lease_begin(struct efs_client_lease_request *r,efs_ino_t ino,
         return EFS_ERR_INVAL;
     if (r->active) return EFS_ERR_BUSY;
     struct efs_opid_req q;
-    int slot = opid_begin(&q);
+    int slot = opid_try_begin(&q);
     if (slot < 0) return EFS_ERR_BUSY;
+    if(getenv("EFS_OPID_TRACE_VERBOSE"))
+        fprintf(stderr,"opid-owner: seq=%llu kind=LEASE ino=%llu flags=%u\n",
+            (unsigned long long)q.id.seq,(unsigned long long)ino,flags);
     *r = (struct efs_client_lease_request){.q=q,.ino=ino,
         .generation=generation,.pending_token=token,.flags=flags,
         .slot=slot,.active=1};
@@ -2011,6 +2061,10 @@ int efs_client_rpc_unlink(efs_export_id_t export_id, efs_ino_t parent,
     slot = opid_begin(&q);
     if (slot < 0)
         return EFS_ERR_BUSY;
+    if(getenv("EFS_OPID_TRACE_VERBOSE"))
+        fprintf(stderr,"opid-owner: seq=%llu kind=%s parent=%llu name=%s\n",
+            (unsigned long long)q.id.seq,is_dir?"RMDIR":"UNLINK",
+            (unsigned long long)parent,name?name:"");
     slen = opid_suffix(buf, sizeof(*req), &q);
     struct efs_msg_inode_reply r;
     int rc = rpc_send_recv_owner(parent, EFS_MSG_INODE_UNLINK, buf, slen,
@@ -2042,6 +2096,10 @@ int efs_client_rpc_rename_at(efs_export_id_t export_id, efs_ino_t old_parent,
     slot = opid_begin(&q);
     if (slot < 0)
         return EFS_ERR_BUSY;
+    if(getenv("EFS_OPID_TRACE_VERBOSE"))
+        fprintf(stderr,"opid-owner: seq=%llu kind=RENAME parent=%llu name=%s new_parent=%llu new_name=%s\n",
+            (unsigned long long)q.id.seq,(unsigned long long)old_parent,old_name?old_name:"",
+            (unsigned long long)new_parent,new_name?new_name:"");
     slen = opid_suffix(buf, sizeof(*req), &q);
     struct efs_msg_inode_reply r;
     int rc = rpc_send_recv_owner(old_parent, EFS_MSG_INODE_RENAME_AT, buf,
@@ -2123,6 +2181,9 @@ int efs_client_rpc_append_reserve(efs_export_id_t export_id, efs_ino_t ino,
     if (low - 1 > current.ack) current.ack = low - 1;
     pthread_mutex_unlock(&opid_mu);
     efs_opid_req_pack(&current, su);
+    if(getenv("EFS_OPID_TRACE_VERBOSE"))
+        fprintf(stderr,"opid-append-rpc: seq=%llu ino=%llu len=%llu\n",
+            (unsigned long long)q->id.seq,(unsigned long long)ino,(unsigned long long)len);
     rc = rpc_send_recv_owner(ino, EFS_MSG_INODE_APPEND, buf, sizeof(buf),
                              EFS_MSG_INODE_APPEND_REPLY, &r, sizeof(r));
     if (rc != EFS_OK)
@@ -2227,6 +2288,10 @@ int efs_client_rpc_link(efs_export_id_t export_id, efs_ino_t src_ino,
     slot = opid_begin(&q);
     if (slot < 0)
         return EFS_ERR_BUSY;
+    if(getenv("EFS_OPID_TRACE_VERBOSE"))
+        fprintf(stderr,"opid-owner: seq=%llu kind=LINK ino=%llu parent=%llu name=%s\n",
+            (unsigned long long)q.id.seq,(unsigned long long)src_ino,
+            (unsigned long long)new_parent,new_name?new_name:"");
     slen = opid_suffix(buf, sizeof(*req), &q);
     struct efs_msg_inode_reply r;
     int rc = rpc_send_recv_owner(new_parent, EFS_MSG_INODE_LINK, buf, slen,

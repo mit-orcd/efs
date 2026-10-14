@@ -15,6 +15,7 @@ code=r'''
 #include "efs/protocol.h"
 #include "efs/opid.h"
 #include <assert.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -24,7 +25,7 @@ static pthread_cond_t opid_cv=PTHREAD_COND_INITIALIZER;
 int efs_client_rpc_past_deadline(void) {return 0;}
 uint64_t efs_client_rpc_deadline_ms(void) {return 0;}
 static void opid_seed_locked(void) {}
-'''+ '\n'.join(fn(n) for n in ('opid_begin','opid_end','opid_refresh_ack','opid_retry_ack'))+r'''
+'''+ '\n'.join(fn(n) for n in ('opid_take_locked','opid_begin','opid_end','opid_refresh_ack','opid_retry_ack'))+r'''
 int main(void) {
  g_client.opid_next=1;g_client.opid_epoch=1;g_client.opid_uuid[0]=1;
  struct efs_opid_req old,q;

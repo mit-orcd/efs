@@ -319,6 +319,8 @@ int efs_client_create_reset(struct efs_client_create_request *);
 int efs_client_create_cancel(struct efs_client_create_request *);
 int efs_client_create_stage_open_result(const struct efs_client_create_request *);
 int efs_client_stage_is_open(efs_ino_t);
+/* Local capacity refusal is nonblocking and leaves the request inactive:
+ * callers must release their inode stripe before retrying admission. */
 int efs_client_lease_begin(struct efs_client_lease_request *,efs_ino_t,
                            uint64_t,unsigned,uint64_t);
 int efs_client_lease_resume(struct efs_client_lease_request *,int probe_only);

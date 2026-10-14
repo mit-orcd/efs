@@ -55,6 +55,13 @@ code+=r'''
 static void close_owned(void){int leased;assert(efs_close_note(42,&leased) && leased);assert(!efs_open_release_pending(42) && !g_open_refs);}
 int main(void){
  begin_busy=3;assert(!efs_open_acquire(42));assert(begins==4 && !begin_busy && !admission_sleep && g_open_refs->edge.complete);close_owned();begins=resumes=0;
+ /* Pending CLOSE admission must release the stripe before retry too;
+  * otherwise a new OPEN exposes the transient local capacity refusal. */
+ assert(!efs_open_acquire(42));int leased=0;
+ assert(efs_close_note(42,&leased) && leased && g_open_refs->close_pending);
+ begin_busy=3;assert(!efs_open_acquire(42));
+ assert(!begin_busy && !admission_sleep && g_open_refs->n==1);
+ close_owned();begins=resumes=0;
  busy=2;assert(!efs_open_acquire(42));assert(begins==1 && resumes==3 && g_open_refs->n==1 && g_open_refs->edge.complete && !deadline);close_owned();
  /* A known rejection is final, not an excuse to allocate a different edge. */
  busy=1;known=1;int before=begins;assert(efs_open_acquire(42)==EFS_ERR_BUSY);assert(begins==before+1 && !g_open_refs && !deadline);known=0;

@@ -51,7 +51,7 @@ static int rpc_send_recv_dual(uint8_t type,const void *buf,uint32_t length,uint8
                               void *out,uint32_t outlen,int unused) {
     (void)reply;(void)unused;return send(type,buf,length,out,outlen);
 }
-'''+'\n'.join(function(name) for name in ('opid_seed_locked','opid_begin','opid_end','opid_suffix',
+'''+'\n'.join(function(name) for name in ('opid_seed_locked','opid_take_locked','opid_begin','opid_end','opid_suffix',
                                         'efs_client_rpc_create','efs_client_rpc_unlink',
                                         'efs_client_rpc_rename_at','efs_client_rpc_link'))+r'''
 static pthread_mutex_t hold_mu=PTHREAD_MUTEX_INITIALIZER;

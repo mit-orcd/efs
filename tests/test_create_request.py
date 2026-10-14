@@ -3,7 +3,7 @@
 from pathlib import Path
 import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1];s=(root/'src/client/inode_rpc.c').read_text()
-a=s.index('static int opid_begin(');b=s.index('/* A reservation identity',a)
+a=s.index('static int opid_take_locked(');b=s.index('/* A reservation identity',a)
 c=s.index('static void opid_refresh_ack(');d=s.index('static void opid_retry_ack(',c)
 e=s.index('int efs_client_session_admit(');f=s.index('int efs_client_rpc_getattr(',e)
 code=r'''

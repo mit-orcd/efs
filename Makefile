@@ -305,6 +305,7 @@ test-wb-runtime:
 	python3 tests/test_report_forward.py
 	python3 tests/test_report_zero_eof.py
 	python3 tests/test_report_retry_eof.py
+	python3 tests/test_report_span_base.py
 	python3 tests/test_inode_pending_eof.py
 	python3 tests/test_report_session_apply.py
 	python3 tests/test_report_activation.py
@@ -428,6 +429,7 @@ test: all
 	python3 tests/test_lease_edge_rpc.py
 	python3 tests/test_lease_submission_proof.py
 	python3 tests/test_lease_request.py
+	python3 tests/test_lease_admission_lock.py
 	python3 tests/test_identity_revocation.py
 	python3 tests/test_put_ticket_rpc.py
 	python3 tests/test_put_ticket_owner.py

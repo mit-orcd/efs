@@ -4989,6 +4989,16 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 
 **Class/state:** Correctness/performance investigation; open.
 
+**Oct14 admission/REPORT correction:** [Private Intel checkpoint](../status/intel-opid-report-correctness-20261014.md).
+Production-code regressions reproduce lease admission's lock dependency and a
+retained partial PUT borrowing a newer dirty UNCOND base. Both corrections pass
+full native and targeted ASan/UBSan/leaks on both Intel hosts; old-source controls
+fail. Corrected seven-client4431/4536 retains83timeouts/22EBUSY but zero invalid
+REPORTs; all121,319 traced IDs complete. Unchanged clients on the same aged
+stores/running daemons retain37 failures and14 invalid REPORTs. No window,
+deadline, quota or format tuning. Further byte/fault qualification is in progress;
+W100 aggregate and original ORCD EIO remain open.
+
 **Oct14 default queue guard:** [Intel queue qualification](../status/intel-queue-guard-20261014.md).
 Guard1ac603128 is committed/deployed; full native and targeted sanitizer pass
 both hosts. Seven-client rounds1506/1512 and1507/1512 retain only depth60timeouts;

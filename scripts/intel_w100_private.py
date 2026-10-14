@@ -16,6 +16,8 @@ ap.add_argument('run')
 ap.add_argument('source')
 ap.add_argument('--quota', choices=['2G', '16G'], default='2G',
                 help='per-node private fixture quota; stores must be new')
+ap.add_argument('--opid-trace', action='store_true',
+                help='diagnostic owner/start/end logging; does not change limits')
 a = ap.parse_args()
 for label in (a.run, a.source):
     if not label or any(c not in 'abcdefghijklmnopqrstuvwxyz0123456789-' for c in label):
@@ -28,6 +30,8 @@ env = dict(EFS_TRANSPORT='tcp', EFS_COMMANDS='0', EFS_COMMANDS_SERVER='0',
            EFS_PACKED_WRITES='0', EFS_EXPIRY='0', EFS_MD_RAFT_N='4',
            EFS_FAULT_REPORT_SIZE_FILE=runtime+'/omit-size',
            EFS_FAULT_REPORT_FILE=runtime+'/other-faults')
+if a.opid_trace:
+    env.update(EFS_OPID_TRACE='1', EFS_OPID_TRACE_VERBOSE='1', EFS_RPC_PROF='1')
 
 
 def remote(host, code):

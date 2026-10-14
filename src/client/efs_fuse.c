@@ -2189,6 +2189,9 @@ static int efs_open_acquire_fileid_run(efs_ino_t ino, uint64_t create_generation
     if(lock_rc!=EFS_OK)return lock_rc;
     int rc = efs_open_release_pending(ino);
     if (rc != EFS_OK) {
+        /* Pending release may have deferred local receipt admission. Retry
+         * outside the stripe so its oldest owner can make progress too. */
+        *admission_busy = rc == EFS_ERR_BUSY;
         pthread_mutex_unlock(edge);
         return rc;
     }
@@ -2253,8 +2256,9 @@ static int efs_open_acquire_fileid_mode(efs_ino_t ino, uint64_t create_generatio
         int admission_busy=0;
         rc=efs_open_acquire_fileid_run(ino,create_generation,pending_token,
                                      handed_off,&admission_busy);
-        /* No identity was allocated. Drop the stripe before waiting so an
-         * older append on a colliding inode can finish and release capacity. */
+        /* Failed local admission allocates no identity; a retained release
+         * keeps its exact identity. Both must retry outside the stripe so
+         * an older owner on a colliding inode can finish and free capacity. */
         if(rc!=EFS_ERR_BUSY || !admission_busy)break;
         usleep(1000);
     }

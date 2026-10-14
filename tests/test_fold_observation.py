@@ -123,7 +123,8 @@ static void putid_note(efs_ino_t ino,uint32_t ci,uint64_t obj,uint64_t seq,
                        const efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
                        const uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE],
                        uint32_t off,uint32_t len,uint32_t n,uint64_t newest,
-                       const struct efs_chunk_entry *obs) {
+                      const struct efs_chunk_entry *obs,uint64_t span_base_gen) {
+    (void)span_base_gen;
     (void)ino;(void)ci;(void)obj;(void)seq;(void)nodes;(void)sums;
     if (obs && obs->read_view.count) {
         assert(obs->read_view.fence_epoch == 6);

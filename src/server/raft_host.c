@@ -18605,9 +18605,8 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
         return EFS_ERR_INVAL;
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         if (rec->nodes[i] == 0) {
-            if (raft_dbg_on())
-                fprintf(stderr, "raft-host: pub ino=%llu ci=%u INVAL node0\n",
-                        (unsigned long long)rec->ino, rec->chunk_index);
+            fprintf(stderr, "raft-host: pub-reject reason=node0 fragment=%d ino=%llu ci=%u\n",
+                    i,(unsigned long long)rec->ino,rec->chunk_index);
             return EFS_ERR_INVAL;
         }
     }
@@ -18640,9 +18639,8 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
         return rc;
     }
     if (!host_holds_chunks(row.mode)) {
-        if (raft_dbg_on())
-            fprintf(stderr, "raft-host: pub ino=%llu ci=%u INVAL mode=%o\n",
-                    (unsigned long long)rec->ino, rec->chunk_index, row.mode);
+        fprintf(stderr, "raft-host: pub-reject reason=mode ino=%llu ci=%u mode=%o\n",
+                (unsigned long long)rec->ino,rec->chunk_index,row.mode);
         return EFS_ERR_INVAL;
     }
     lane = (uint8_t)(rec->chunk_index % EFS_META_LANES);
@@ -18654,8 +18652,13 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
      * Never re-stamp an old materialization with a later truncation epoch. */
     uint64_t publish_epoch;
     int epoch_rc = efs_chunk_publish_authority(rec, row.generation, row.content_epoch, &publish_epoch);
-    if (epoch_rc != EFS_OK)
+    if (epoch_rc != EFS_OK) {
+        if(epoch_rc==EFS_ERR_INVAL)
+            fprintf(stderr,"raft-host: pub-reject reason=authority ino=%llu ci=%u flags=%u file_gen=%llu epoch=%llu\n",
+                (unsigned long long)rec->ino,rec->chunk_index,rec->publish_flags,
+                (unsigned long long)rec->file_generation,(unsigned long long)rec->publish_epoch);
         return epoch_rc;
+    }
     if (lg != ig && (row.active_lanes & (1ULL << lane)) == 0) {
         /* Waiting for activation while owning the REPORT's log hold would
          * wait for our own unreleased fsync. Preflight or retry outside it. */
@@ -18693,8 +18696,11 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
     if (rec->delta_len) {
         uint64_t cur = 0;
 
-        if (rec->base_gen == EFS_CHUNK_BASE_UNCOND)
+        if (rec->base_gen == EFS_CHUNK_BASE_UNCOND) {
+            fprintf(stderr,"raft-host: pub-reject reason=unconditional-span ino=%llu ci=%u delta_off=%u delta_len=%u\n",
+                (unsigned long long)rec->ino,rec->chunk_index,rec->delta_off,rec->delta_len);
             return EFS_ERR_INVAL;
+        }
         /* A span that is already in the chain is a retry of a REPORT
          * whose apply wait timed out (BUSY) after the entry was proposed.
          * The apply would answer OK for it; proposing it again costs a
@@ -19238,8 +19244,11 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
             /* Whole-batch OK releases all client dirty bodies. A permanent
              * malformed record therefore cannot be silently skipped. */
             if (rc == EFS_ERR_INVAL) {
-                fprintf(stderr, "raft-host: invalid REPORT rec ino=%llu ci=%u; retaining batch\n",
-                        (unsigned long long)recs[i].ino, recs[i].chunk_index);
+                fprintf(stderr, "raft-host: invalid REPORT rec ino=%llu ci=%u flags=%u nodes=%u,%u,%u base=%llu object=%llu delta=%u/%u; retaining batch\n",
+                        (unsigned long long)recs[i].ino, recs[i].chunk_index,
+                        recs[i].publish_flags,recs[i].nodes[0],recs[i].nodes[1],recs[i].nodes[2],
+                        (unsigned long long)recs[i].base_gen,(unsigned long long)recs[i].chunk_generation,
+                        recs[i].delta_off,recs[i].delta_len);
                 n_inval++;
                 fail_phase = "pack-invalid"; fail_rc = rc;
                 break;

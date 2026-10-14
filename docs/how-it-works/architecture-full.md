@@ -1494,6 +1494,25 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**Two targeted corrections/native+sanitizers PASS; loaded POSIX FAIL; W100 OPEN.**
+Lease admission no longer waits under the inode edge stripe; partial REPORTs
+retain their PUT base. Old-code regression controls fail on both hosts.
+Three corrected seven-client cohorts4431/4536 pass (83timeouts,22EBUSY),
+zero invalid REPORTs and121,319 completed traced IDs. Unchanged-client aged
+comparison1475/1512 retains37 failures and14 invalid REPORTs. Further byte/fault
+qualification is in progress; no production deployment or ORCD acceptance claim.
+
+[Private Intel seven-client strace/perf](../status/intel-seven-client-profile-20261014.md):
+**Diagnostic capture PASS; core1443/1512 FAIL; W100 OPEN.** Seven matched37ff
+clients, four retained private daemons, TCP/direct/files, optional features OFF.
+53timeouts/16EBUSY; captured admission waits, ReadIndex/host-mutex contention
+and14 retained REPORT-invalid events. No sampled sync above74ms or demonstrated
+CPU saturation; tracing perturbs timings and does not prove the root cause.
+Earlier1468/1512 and first capture had discarded Intel2 client experiment,
+so are mixed-source evidence. Private clients corrected; production untouched.
+
+[ORCD live824 qualification](../status/orcd-query-name-ordinals-20261013.md): reviewed devel integrated; six command suites,63 concurrent queries,140,000 finite files and orderly marker restart PASS. Sustained query cohort FAIL7/21; writers plus MD5 crawlers FAIL: close REPORT budget exhaustion and ordinary directory EBUSY remain OPEN. RDMA/direct I/O, .efs on, packing/containers/expiry off.
+
 [Intel receive persistence correctness](../status/intel-receive-persistence-20261014.md):
 **Correctness/failure gates PASS; loaded acceptance FAIL; W100 OPEN.**
 Frozen a58e93942 deployed privately, TCP/direct/files, optional features OFF.
@@ -7909,6 +7928,16 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 ### W100 · Intel concurrent POSIX timeouts and mixed-workload EIO
 
 **Class/state:** Correctness/performance investigation; open.
+
+**Oct14 admission/REPORT correction:** [Private Intel checkpoint](../status/intel-opid-report-correctness-20261014.md).
+Production-code regressions reproduce lease admission's lock dependency and a
+retained partial PUT borrowing a newer dirty UNCOND base. Both corrections pass
+full native and targeted ASan/UBSan/leaks on both Intel hosts; old-source controls
+fail. Corrected seven-client4431/4536 retains83timeouts/22EBUSY but zero invalid
+REPORTs; all121,319 traced IDs complete. Unchanged clients on the same aged
+stores/running daemons retain37 failures and14 invalid REPORTs. No window,
+deadline, quota or format tuning. Further byte/fault qualification is in progress;
+W100 aggregate and original ORCD EIO remain open.
 
 **Oct14 default queue guard:** [Intel queue qualification](../status/intel-queue-guard-20261014.md).
 Guard1ac603128 is committed/deployed; full native and targeted sanitizer pass

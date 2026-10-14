@@ -15,6 +15,10 @@ a=p.parse_args()
 base='/data1/efs/w100-private/'
 for v in [a.source,a.runtime]:
     if not v.startswith(base) or '..' in v.split('/'):p.error('owned private paths required')
+run=a.runtime.removeprefix(base+'runtime-')
+if not a.runtime.startswith(base+'runtime-') or not run or any(c not in 'abcdefghijklmnopqrstuvwxyz0123456789-' for c in run):
+    p.error('owned runtime label required')
+storage='/data1/efs/w100-private-'+run+'/n3'
 hosts=['intel1_efs','intel2_efs'];mnt=a.runtime+'/mnt'
 root=a.verify or mnt+'/queue-pause-'+uuid.uuid4().hex[:12]
 if not root.startswith(mnt+'/queue-pause-') or '..' in root.split('/'):p.error('owned fixture root required')
@@ -37,7 +41,7 @@ try:
  assert os.readlink(q/'exe')=={a.source+'/efsd'!r}
  args=(q/'cmdline').read_bytes().split(b'\\0')
  assert b'--node-id' in args and args[args.index(b'--node-id')+1]==b'3'
- assert args[args.index(b'--storage')+1]==b'/data1/efs/w100-private-merged-aa508c820/n3'
+ assert args[args.index(b'--storage')+1]=={storage.encode()!r}
  signal.pidfd_send_signal(fd,signal.SIGSTOP)
  try:
   print(json.dumps(dict(paused=pid,seconds=10)),flush=True);time.sleep(10)

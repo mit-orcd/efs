@@ -26,7 +26,7 @@ int efs_client_rpc_past_deadline(void) {return 0;}
 uint64_t efs_client_rpc_deadline_ms(void) {return 0;}
 static void opid_seed_locked(void) {}
 static uint64_t values[N][M];
-'''+fn('static int opid_begin(')+fn('static void opid_end(')+fn('int efs_client_append_begin(')+fn('void efs_client_append_end(')+r'''
+'''+fn('static int opid_take_locked(')+fn('static int opid_begin(')+fn('static void opid_end(')+fn('int efs_client_append_begin(')+fn('void efs_client_append_end(')+r'''
 static void *worker(void *arg) {
  unsigned i=(unsigned)(uintptr_t)arg;
  for(unsigned j=0;j<M;j++) {

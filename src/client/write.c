@@ -259,6 +259,7 @@ struct put_id {
     uint32_t ci;
     uint64_t gen;
     uint64_t seq; /* dcache snapshot seq of this PUT (0 = unordered) */
+    uint64_t span_base_gen; /* immutable base observed by this span's PUT */
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
     uint8_t cks[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
     uint32_t delta_off;
@@ -371,7 +372,7 @@ static void putid_note(efs_ino_t ino, uint32_t ci, uint64_t gen, uint64_t seq,
                       const uint8_t cks[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE],
                       uint32_t delta_off, uint32_t delta_len,
                       uint32_t delta_base_n, uint64_t delta_base_seq,
-                      const struct efs_chunk_entry *obs)
+                      const struct efs_chunk_entry *obs, uint64_t span_base_gen)
 {
     struct put_id *p;
 
@@ -402,6 +403,7 @@ static void putid_note(efs_ino_t ino, uint32_t ci, uint64_t gen, uint64_t seq,
     p->ci = ci;
     p->gen = gen;
     p->seq = seq;
+    p->span_base_gen = span_base_gen;
     memcpy(p->nodes, nodes, sizeof(p->nodes));
     memcpy(p->cks, cks, sizeof(p->cks));
     p->delta_off = delta_off;
@@ -431,6 +433,11 @@ static int putid_fill(efs_ino_t ino, uint32_t ci, struct efs_chunk_rec *rec,
         if (seq) *seq = p->seq;
         rec->delta_off = p->delta_off;
         rec->delta_len = p->delta_len;
+        /* A later full overwrite can change the dirty slot to UNCOND
+         * before this older span is reported. Its mapping and CAS base
+         * must come from the same owned PUT, not that newer dirty image. */
+        if (p->delta_len)
+            rec->base_gen = p->span_base_gen;
         rec->delta_base_n = p->delta_base_n;
         rec->delta_base_seq = p->delta_base_seq;
         rec->publish_epoch = p->publish_epoch;
@@ -3243,6 +3250,7 @@ struct dcache_ent {
     uint64_t committed_seq; /* local PUT snapshot whose REPORT was accepted */
     uint64_t snap_seq;
     uint64_t object_seq;
+    uint64_t object_span_base_gen;
     /* snap_seq of the image currently installed in e->data by a completed
      * flush (dcache_install_image). Same race as object_seq, other side:
      * close A snapshots (dirty=0), a write patches + re-dirties, close B
@@ -3782,7 +3790,7 @@ static int dcache_put_now_budgeted(efs_ino_t ino, uint32_t ci, const uint8_t *ch
         pthread_mutex_unlock(&g_client.idx_mu);
         efs_client_unlock_dir(ino);
         putid_note(ino, ci, obj, snap_seq, nodes, checksums,
-                   span ? delta_off : 0, span ? delta_len : 0, obs_n, obs_seq, obs);
+                   span ? delta_off : 0, span ? delta_len : 0, obs_n, obs_seq, obs, base_gen);
     }
     {
         uint64_t obj = object_gen;
@@ -3793,6 +3801,7 @@ static int dcache_put_now_budgeted(efs_ino_t ino, uint32_t ci, const uint8_t *ch
         if (de && (!snap_seq || snap_seq >= de->object_seq)) {
             de->object_gen = obj;
             de->object_seq = snap_seq;
+            de->object_span_base_gen = base_gen;
             memcpy(de->object_nodes, nodes, sizeof(de->object_nodes));
             memcpy(de->object_cks, checksums, sizeof(de->object_cks));
             de->object_delta_off = span ? delta_off : 0;
@@ -6471,6 +6480,8 @@ static int dcache_object_of(efs_ino_t ino, uint32_t ci, struct efs_chunk_rec *re
         if (seq) *seq = e->object_seq;
         rec->delta_off = e->object_delta_off;
         rec->delta_len = e->object_delta_len;
+        if (e->object_delta_len)
+            rec->base_gen = e->object_span_base_gen;
         rec->delta_base_n = e->object_delta_base_n;
         rec->delta_base_seq = e->object_delta_base_seq;
         rec->file_generation = e->object_file_generation;
@@ -7561,7 +7572,7 @@ static int client_write_run(efs_ino_t ino, uint64_t offset, size_t size, const c
                                        object_gen);
         pthread_mutex_unlock(&g_client.idx_mu);
         efs_client_unlock_dir(ino);
-        putid_note(ino,ci,object_gen,0,nodes,checksums,0,0,0,0,NULL);
+        putid_note(ino,ci,object_gen,0,nodes,checksums,0,0,0,0,NULL,0);
         efs_client_mark_chunk_dirty(ino, ci);
     }
 
@@ -7733,7 +7744,7 @@ static int write_chunks_no_replicate(efs_ino_t ino, uint64_t offset, size_t size
                            jobs[i].object_gen,
                            0, jobs[i].nodes, jobs[i].checksums, 0, 0,
                            have ? prev.ndelta : 0,
-                           have ? prev.delta_seq : 0, NULL);
+                           have ? prev.delta_seq : 0, NULL, 0);
                 /* Same placement + new checksums is a new immutable
                  * generation. Skipping REPORT left KV on the ftruncate
                  * stub gen while PUT wrote `{ci}.{fi}.{G}` — remount
