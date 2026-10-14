@@ -8,9 +8,9 @@ export EFS_MD_RAFT_N=4 EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 
 unset EFS_READ_PROF EFS_RPC_PROF EFS_CONTAINER_PATH_PROF EFS_READ_FRAG_PROF
 base=${EFS_GATE_BASE_PORT:-27432}
 work=$(mktemp -d /data1/efs/rdma-qualification-XXXXXX)
-home=$(mktemp -d /home/efs/rdma-qualification-XXXXXX)
-mkdir -p "$home/mnt" "$home/mnt2"
-printf '%s\n' "$home" > "$work/mount-root.txt"
+client_root=$(mktemp -d /home/efs/rdma-qualification-XXXXXX)
+mkdir -p "$client_root/mnt" "$client_root/mnt2"
+printf '%s\n' "$client_root" > "$work/mount-root.txt"
 printf '%s\n' "$work" # raw artifacts stay outside Git
 pids=();rc=0
 stop_nodes() {
@@ -19,7 +19,7 @@ stop_nodes() {
  pids=()
 }
 stop_mounts() {
- for mount in "$home/mnt" "$home/mnt2"; do
+ for mount in "$client_root/mnt" "$client_root/mnt2"; do
   if mountpoint -q "$mount"; then "$src/scripts/client.sh" stop "$mount" || return 1; fi
  done
 }
@@ -43,7 +43,7 @@ start_nodes() {
 }
 mount_clients() {
  for name in mnt mnt2; do
-  EFS_FUSE_LOG="$work/fuse-$name.log" "$src/scripts/client.sh" "127.0.0.1:$base" "$home/$name"
+  EFS_FUSE_LOG="$work/fuse-$name.log" "$src/scripts/client.sh" "127.0.0.1:$base" "$client_root/$name"
  done
 }
 start_nodes
@@ -64,15 +64,15 @@ import json,sys
 assert not json.load(open(sys.argv[1]))['errors']
 PY
 done
-python3 "$src/tests/posix/posix_2client.py" --local "$home/mnt" "$home/mnt2" --parent rdma-fixed-peer --results "$work/peer.tsv" > "$work/peer.log" 2>&1 || rc=1
-python3 "$src/tests/posix/posix_persist.py" "$home/mnt" --phase prepare --tag rdma-fixed --results "$work/persist-prepare.tsv" > "$work/persist-prepare.log" 2>&1 || rc=1
+python3 "$src/tests/posix/posix_2client.py" --local "$client_root/mnt" "$client_root/mnt2" --parent rdma-fixed-peer --results "$work/peer.tsv" > "$work/peer.log" 2>&1 || rc=1
+python3 "$src/tests/posix/posix_persist.py" "$client_root/mnt" --phase prepare --tag rdma-fixed --results "$work/persist-prepare.tsv" > "$work/persist-prepare.log" 2>&1 || rc=1
 stop_mounts
 stop_nodes
 start_nodes
 mount_clients
-python3 "$src/tests/posix/posix_persist.py" "$home/mnt" --phase verify --tag rdma-fixed --results "$work/persist-verify.tsv" > "$work/persist-verify.log" 2>&1 || rc=1
+python3 "$src/tests/posix/posix_persist.py" "$client_root/mnt" --phase verify --tag rdma-fixed --results "$work/persist-verify.tsv" > "$work/persist-verify.log" 2>&1 || rc=1
 if [ "${EFS_GATE_DEGRADED:-1}" = 1 ]; then
-python3 -u "$src/tests/live/rdma_degraded_read.py" "$src" "$home/mnt" "$work/degraded" --base-port "$base" --pid-root "$work" > "$work/degraded.log" 2>&1 || rc=1
+python3 -u "$src/tests/live/rdma_degraded_read.py" "$src" "$client_root/mnt" "$work/degraded" --base-port "$base" --pid-root "$work" > "$work/degraded.log" 2>&1 || rc=1
 fi
 for log in peer persist-prepare persist-verify degraded; do [ ! -f "$work/$log.log" ] || tail -n 3 "$work/$log.log";done
 printf '%s\n' "$rc" > "$work/exit-code"
