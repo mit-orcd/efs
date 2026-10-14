@@ -268,6 +268,17 @@ int efs_txn_reduce_read_ex(struct efs_kv *kv, const uint8_t *lane_key,
                            struct efs_txn_reduce *out,
                            struct efs_txn_pending *pend);
 
+/* Same reduction, also returning the transactionally visible lane used as
+ * its base. On success *value_rc is OK or NOT_FOUND (then *vlen is zero).
+ * val must fit the whole lane; short-buffer/authority/storage errors fail
+ * the operation. The value belongs only to this first collect: callers must
+ * still perform their independent sequence/fence and pending-set checks. */
+int efs_txn_reduce_read_value_ex(struct efs_kv *kv, const uint8_t *lane_key,
+                                 uint32_t klen, efs_txn_coord_fn coord, void *ctx,
+                                 struct efs_txn_reduce *out,
+                                 struct efs_txn_pending *pend, uint8_t *val,
+                                 uint32_t *vlen, int *value_rc);
+
 /* *moved = 0 iff every recorded txid is STILL undecided, which is what lets
  * a collect claim the values it assembled belong to one instant. Overflow
  * reports moved, because it cannot report otherwise. */

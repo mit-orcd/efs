@@ -188,6 +188,30 @@ static void test_reduce_no_block(void)
               "materialized lane readable");
         CHECK(got.max_end == 500, "committed reduction still dominates");
         CHECK(got.max_mtime == 7 && got.max_ctime == 9, "materialized times");
+        uint8_t visible[64];
+        uint32_t vn = sizeof(visible);
+        int value_rc = EFS_ERR_IO;
+        struct efs_txn_pending pend = {0};
+        CHECK(efs_txn_reduce_read_value_ex(kv, key, klen, coord_ok, &ctx,
+                    &got, &pend, visible, &vn, &value_rc) == EFS_OK &&
+                  value_rc == EFS_OK && vn == sizeof(lv) &&
+                  !memcmp(visible, lv, vn) && got.max_end == 500,
+              "reduction and exact visible lane returned together");
+        vn = 24;
+        CHECK(efs_txn_reduce_read_value_ex(kv, key, klen, coord_ok, &ctx,
+                    &got, &pend, visible, &vn, &value_rc) == EFS_ERR_INVAL,
+              "whole lane must fit, never silently truncate to reduce triple");
+        CHECK(efs_kv_del(kv, key, klen) == EFS_OK, "remove materialized lane");
+        vn = sizeof(visible);
+        CHECK(efs_txn_reduce_read_value_ex(kv, key, klen, coord_ok, &ctx,
+                    &got, &pend, visible, &vn, &value_rc) == EFS_OK &&
+                  value_rc == EFS_ERR_NOT_FOUND && vn == 0 && got.max_end == 500,
+              "absent lane still includes committed pending reductions");
+        ctx.fail = 1;
+        vn = sizeof(visible);
+        CHECK(efs_txn_reduce_read_value_ex(kv, key, klen, coord_ok, &ctx,
+                    &got, &pend, visible, &vn, &value_rc) == EFS_ERR_IO,
+              "reduction authority failure is not a usable lane result");
     }
     efs_kv_mem_free(kv);
 }

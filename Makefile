@@ -769,6 +769,9 @@ tests/faults/fault_sim: tests/faults/fault_sim.c src/sim/sim.o src/sim/sim_raft.
 %: %.c $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ $< $(LIB) $(LDFLAGS)
 
+tests/measure/getattr_lane_smoke: tests/measure/getattr_lane_smoke.c $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(LIB) $(LDFLAGS)
+
 tests/measure/lsm_index_smoke: tests/measure/lsm_index_smoke.c $(LIB) src/kv/kv_lsm_internal.h
 	$(CC) $(CFLAGS) $(INCLUDES) -Isrc/kv -o $@ $< $(LIB) $(LDFLAGS)
 

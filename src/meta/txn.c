@@ -1198,12 +1198,26 @@ int efs_txn_reduce_read_ex(struct efs_kv *kv, const uint8_t *lane_key,
                            struct efs_txn_reduce *out,
                            struct efs_txn_pending *pend)
 {
-    uint8_t pref[KEY_MAX], buf[VAL_MAX];
-    uint32_t pl = 0, n = sizeof(buf);
+    uint8_t buf[VAL_MAX];
+    uint32_t n = sizeof(buf);
+    int value_rc;
+
+    return efs_txn_reduce_read_value_ex(kv, lane_key, klen, coord, ctx, out,
+                                        pend, buf, &n, &value_rc);
+}
+
+int efs_txn_reduce_read_value_ex(struct efs_kv *kv, const uint8_t *lane_key,
+                                 uint32_t klen, efs_txn_coord_fn coord, void *ctx,
+                                 struct efs_txn_reduce *out,
+                                 struct efs_txn_pending *pend, uint8_t *val,
+                                 uint32_t *vlen, int *value_rc)
+{
+    uint8_t pref[KEY_MAX];
+    uint32_t pl = 0;
     struct red_acc a;
     int rc;
 
-    if (!kv || !lane_key || !coord || !out)
+    if (!kv || !lane_key || !coord || !out || !val || !vlen || !value_rc)
         return EFS_ERR_INVAL;
     memset(out, 0, sizeof(*out));
     /* Only the leading reduce triple is this layer's business; the lane's
@@ -1211,16 +1225,19 @@ int efs_txn_reduce_read_ex(struct efs_kv *kv, const uint8_t *lane_key,
      * record even so, because a short buffer is a hard error rather than a
      * truncated read — sizing it to the triple would make every materialized
      * lane unreadable. */
-    rc = efs_txn_read_ex(kv, lane_key, klen, coord, ctx, buf, &n, pend);
-    if (rc == EFS_OK && n >= 24) {
-        out->max_end = rd64(buf);
-        out->max_mtime = rd64(buf + 8);
-        out->max_ctime = rd64(buf + 16);
-        if (n >= 48)
-            out->mtime_gen = rd64(buf + 40);
+    rc = efs_txn_read_ex(kv, lane_key, klen, coord, ctx, val, vlen, pend);
+    *value_rc = rc;
+    if (rc == EFS_OK && *vlen >= 24) {
+        out->max_end = rd64(val);
+        out->max_mtime = rd64(val + 8);
+        out->max_ctime = rd64(val + 16);
+        if (*vlen >= 48)
+            out->mtime_gen = rd64(val + 40);
     } else if (rc != EFS_ERR_NOT_FOUND && rc != EFS_OK) {
         return rc;
     }
+    if (rc == EFS_ERR_NOT_FOUND)
+        *vlen = 0;
     rc = efs_kv_key_reduce_prefix(lane_key, klen, pref, &pl);
     if (rc != EFS_OK)
         return rc;

@@ -6695,6 +6695,7 @@ int efs_meta_apply_getattr(struct efs_kv *kv, efs_ino_t ino,
             uint32_t kl = 0, vn;
             struct efs_txn_reduce red;
             struct lane_rec ln;
+            int value_rc;
 
             rc = efs_kv_key_lane(efs_kv_lane_shard(ino, lanes[i]), ino,
                                  row.generation, lanes[i], key, &kl);
@@ -6705,19 +6706,21 @@ int efs_meta_apply_getattr(struct efs_kv *kv, efs_ino_t ino,
              * gets around to folding it in, so a stat that ignored them
              * could report a size older than a write that already
              * returned. */
-            rc = efs_txn_reduce_read_ex(kv, key, kl, coord, ctx, &red, &pend);
+            /* Reuse only the reduction's first visible lane image. The
+             * second collect below must independently read its sequence. */
+            vn = sizeof(val);
+            rc = efs_txn_reduce_read_value_ex(kv, key, kl, coord, ctx, &red,
+                                               &pend, val, &vn, &value_rc);
             if (rc != EFS_OK)
                 return rc;
-            vn = sizeof(val);
-            rc = efs_txn_read_ex(kv, key, kl, coord, ctx, val, &vn, &pend);
-            if (rc == EFS_OK) {
+            if (value_rc == EFS_OK) {
                 rc = unpack_lane(val, vn, &ln);
                 if (rc != EFS_OK)
                     return rc;
-            } else if (rc == EFS_ERR_NOT_FOUND) {
+            } else if (value_rc == EFS_ERR_NOT_FOUND) {
                 memset(&ln, 0, sizeof(ln));
             } else {
-                return rc;
+                return value_rc;
             }
             seq1[i] = ln.seq;
             if (!is_dir) {
