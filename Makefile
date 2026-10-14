@@ -494,6 +494,7 @@ test: all
 	python3 tests/test_container_flush_tail.py
 	python3 tests/test_posix_timeout_zombie.py
 	python3 tests/test_host_flow.py
+	python3 tests/test_host_pending_entries.py
 	python3 tests/test_raft_slow_sync.py
 	python3 tests/test_host_inbox.py
 	python3 tests/test_host_batch_handoff.py

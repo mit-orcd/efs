@@ -198,6 +198,23 @@ static void admission(void)
  assert(server_raft_host_inbox(p,len,&f)==EFS_OK&&f.status==3&&!h->inbox_work_n);
  retire(h);free(p);free(h);
 }
+static void default_pending(void)
+{
+ /* Both flow-off and inactive-flow hosts must defer prebuilding another
+  * data frame, independently per peer/group. Dequeue reopens admission. */
+ for(int mode=0;mode<2;mode++) {
+  struct efs_raft_host*h=host();struct host_outbox*tx=&h->tx[1];
+  h->flow_enabled=mode;tx->flow.active=0;
+  queue(tx,3,0,1);queue(tx,3,2,1);
+  assert(!host_send_ready(h,1,0)&&!host_send_ready(h,1,2));
+  assert(host_send_ready(h,2,0)&&host_send_ready(h,2,2));
+  uint8_t*b;uint32_t len;
+  host_sender_take(tx,0,0,&b,&len);free(b);
+  assert(host_send_ready(h,1,0)&&!host_send_ready(h,1,2));
+  host_sender_take(tx,0,0,&b,&len);free(b);
+  assert(host_send_ready(h,1,0)&&host_send_ready(h,1,2));free(h);
+ }
+}
 static void selection(void)
 {
  struct efs_raft_host*h=host();struct host_outbox*tx=&h->tx[1];
@@ -334,7 +351,7 @@ static void wire_observation(void)
 }
 
 #endif
-int main(void){codec();admission();selection();slow_lane_fairness();
+int main(void){codec();admission();default_pending();selection();slow_lane_fairness();
 #ifdef __linux__
  asynchronous();wire_observation();
 #endif
