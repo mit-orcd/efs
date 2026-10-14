@@ -836,12 +836,17 @@ void efs_kv_lsm_scan_stats(struct efs_kv_scan_stats *out, int reset)
         memset(&t_scan_stats, 0, sizeof(t_scan_stats));
 }
 
+struct scan_work_bound {
+    uint32_t max_keys, consumed, last_len;
+    uint8_t last[EFS_KV_KEY_MAX];
+};
+
 static int merge_scan(struct kv_lsm *l, int private_read,
                       const uint8_t *prefix, uint32_t plen,
                       const uint8_t *start, uint32_t slen,
                       int (*cb)(void *user, const uint8_t *key, uint32_t klen,
                                 const uint8_t *val, uint32_t vlen),
-                      void *user)
+                      void *user, struct scan_work_bound *bound)
 {
     struct msrc stack_src[KV_LSM_MAX_SEGS * 2 + 3];
     struct msrc *src = stack_src;
@@ -944,6 +949,10 @@ static int merge_scan(struct kv_lsm *l, int private_read,
             break;
         if (!kv_has_prefix(src[win].key, src[win].klen, prefix, plen))
             break; /* ordered, so nothing further can match */
+        if (bound && bound->consumed == bound->max_keys) {
+            rc = 1;
+            goto out;
+        }
         t_scan_stats.keys++;
         if (src[win].op == KV_OP_PUT) {
             t_scan_stats.emitted++;
@@ -953,6 +962,13 @@ static int merge_scan(struct kv_lsm *l, int private_read,
                 goto out;
         } else {
             t_scan_stats.tombstones++;
+        }
+        /* Work includes hidden tombstones. Only consumed keys advance the
+         * work cursor; a callback refusal retains its own live-row cursor. */
+        if (bound) {
+            if (src[win].klen > sizeof(bound->last)) { rc=EFS_ERR_INVAL;goto out; }
+            memcpy(bound->last,src[win].key,src[win].klen);
+            bound->last_len=src[win].klen;bound->consumed++;
         }
         for (i = 0; i < nsrc; i++) {
             if (src[i].done || i == win)
@@ -1183,7 +1199,7 @@ static int lsm_scan_from(void *ctx, const uint8_t *prefix, uint32_t plen,
     if (!l || !cb || (plen > 0 && !prefix) || (slen > 0 && !start))
         return EFS_ERR_INVAL;
     pthread_mutex_lock(&l->mu);
-    rc = merge_scan(l, 0, prefix, plen, start, slen, cb, user);
+    rc = merge_scan(l, 0, prefix, plen, start, slen, cb, user, NULL);
     pthread_mutex_unlock(&l->mu);
     return rc;
 }
@@ -1405,6 +1421,30 @@ static int lsm_flush(struct efs_kv *kv, int wait)
         }
     }
     pthread_mutex_unlock(&l->mu);
+    return rc;
+}
+
+/* Maintenance work pages count merged keys, including deleted winners.
+ * An inclusive cursor is returned only for a work-bound stop; callback stops
+ * keep the caller's callback cursor. No deletion is inferred from a partial scan. */
+int efs_kv_lsm_scan_work(struct efs_kv *kv,const uint8_t *prefix,uint32_t plen,
+    const uint8_t *start,uint32_t slen,uint32_t max_keys,
+    int (*cb)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t),void *user,
+    uint8_t resume[EFS_KV_KEY_MAX],uint32_t *resume_len)
+{
+    if (!kv || !resume || !resume_len || max_keys<2 || !cb ||
+        (plen && !prefix) || (slen && !start)) return EFS_ERR_INVAL;
+    *resume_len=0;
+    if (kv->ops != &lsm_ops)
+        return efs_kv_scan_from(kv,prefix,plen,start,slen,cb,user);
+    struct scan_work_bound bound={.max_keys=max_keys};
+    struct kv_lsm *l=kv->ctx;
+    pthread_mutex_lock(&l->mu);
+    int rc=merge_scan(l,0,prefix,plen,start,slen,cb,user,&bound);
+    pthread_mutex_unlock(&l->mu);
+    if (rc==1 && bound.consumed==max_keys && bound.last_len) {
+        memcpy(resume,bound.last,bound.last_len);*resume_len=bound.last_len;
+    }
     return rc;
 }
 
@@ -1922,7 +1962,7 @@ int efs_kv_lsm_snapshot_scan(struct efs_kv_lsm_snapshot *s,
 {
     if (!s || !cb || (plen && !prefix) || (slen && !start))
         return EFS_ERR_INVAL;
-    return merge_scan(&s->input,1,prefix,plen,start,slen,cb,user);
+    return merge_scan(&s->input,1,prefix,plen,start,slen,cb,user,NULL);
 }
 
 struct snapshot_get {

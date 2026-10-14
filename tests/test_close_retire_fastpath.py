@@ -18,8 +18,11 @@ static int gc_gi(uint8_t group){return group==0?0:1;}
 static uint64_t rd64be(const uint8_t*p){uint64_t v=0;for(unsigned i=0;i<8;i++)v=v<<8|p[i];return v;}
 static uint32_t rd32be(const uint8_t*p){uint32_t v=0;for(unsigned i=0;i<4;i++)v=v<<8|p[i];return v;}
 static void wr64be(uint8_t*p,uint64_t v){for(unsigned i=8;i;i--){p[i-1]=v;v>>=8;}}
-#define efs_kv_scan_from fake_kv_scan_from
-static int fake_kv_scan_from(void *kv,const uint8_t*p,uint32_t pl,const uint8_t*c,uint32_t cl,int(*cb)(void*,const uint8_t*,uint32_t,const uint8_t*,uint32_t),void*ctx){
+#define efs_kv_lsm_scan_work fake_kv_scan_work
+static int work_stop;
+static int fake_kv_scan_work(void *kv,const uint8_t*p,uint32_t pl,const uint8_t*c,uint32_t cl,uint32_t max_keys,int(*cb)(void*,const uint8_t*,uint32_t,const uint8_t*,uint32_t),void*ctx,uint8_t*resume,uint32_t*resume_len){
+ *resume_len=0;assert(max_keys==4096);
+ if(work_stop){memset(resume,0,11);resume[10]=42;*resume_len=11;return 1;}
  (void)kv;(void)c;(void)cl;assert(pl==3&&p[2]==EFS_KV_KIND_CLOSE_STEP);
  uint8_t key[11]={0},value[EFS_CLOSE_STEP_VALUE]={0};key[2]=EFS_KV_KIND_CLOSE_STEP;wr64be(key+3,42);
  wr64be(value,1);value[27]=1;value[35]=1;assert(!cb(ctx,key,sizeof(key),value,sizeof(value)));return 0;
@@ -36,13 +39,17 @@ static void host_gc_close_retire_batch(struct efs_raft_host*h,uint8_t g,const ef
  const uint8_t identities[8][EFS_CLOSE_STEP_VALUE],unsigned n,int*results){
  for(unsigned i=0;i<n;i++) {uint8_t cmd[46]={EFS_MD_CMD_CLOSE_STEP};wr64be(cmd+1,ino[i]);memcpy(cmd+9,identities[i],EFS_CLOSE_STEP_VALUE);cmd[45]=EFS_CLOSE_STEP_RETIRE;results[i]=host_gc_propose(h,g,cmd,sizeof(cmd));}
 }
-'''+s[a:b]+r'''
+'''+s[s.index('static int host_gc_scan_work('):s.index('struct orphan_scan {')]+s[a:b]+r'''
 static void run(int first,int locks,int append){
  struct stats stats={0};struct efs_raft_host h={.s=&stats,.gc_running=1};
  proposals=append_calls=0;initial_rc=first;lock_rc=locks;append_rc=append;
  host_gc_close_step_pass(&h,0,1);assert(!stats.gc_scan_errors);
 }
 int main(void){
+ struct stats st={0};struct efs_raft_host h={.s=&st,.gc_running=1};
+ work_stop=1;host_gc_close_step_pass(&h,0,1);
+ assert(h.close_step_cursor_len[0]==11 && h.close_step_cursor[0][10]==42 && !proposals);
+ work_stop=0;
  run(EFS_OK,0,0);assert(proposals==1&&phases[0]==EFS_CLOSE_STEP_RETIRE&&!append_calls);
  run(EFS_ERR_BUSY,0,0);assert(proposals==3&&phases[0]==EFS_CLOSE_STEP_RETIRE&&phases[1]==EFS_CLOSE_STEP_LOCKS&&phases[2]==EFS_CLOSE_STEP_RETIRE&&append_calls==1);
  run(EFS_ERR_BUSY,EFS_ERR_BUSY,0);assert(proposals==2&&!append_calls);

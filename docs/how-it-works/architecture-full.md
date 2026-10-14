@@ -2398,6 +2398,14 @@ scope changes. It does not authorize further cluster or agent work.
 See [evidence cleanup inventory](../../results/measure/20261012-evidence-cleanup/README.md)
 for consolidated duplicate paths and explicitly pruned historical captures.
 
+[ORCD tiny-file close EIO](../status/orcd-close-eio-20261013.md): all7 jobs failed on
+fc341f00e; correctione8bab210 deployed with original profile/stores. Full native,
+KV ASan/UBSan/leaks and negative control PASS; seven-client140000 close/fsync/
+exact-read/unlink cases PASS. Original seven tiny jobs later FAIL closeEIO after about29minutes and
+265000–279000files each. Sustained-load correctness remainsOPEN; user requests
+restart in fresh directories on same verifiedsource/profile. General .efs
+acceptance staysonhold.
+
 
 ## Appendix 2 — In flight — the current handoff block
 

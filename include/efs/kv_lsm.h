@@ -2,6 +2,7 @@
 #define EFS_KV_LSM_H
 
 #include "efs/kv.h"
+#include "efs/kv_key.h"
 
 /* Durable ordered KV behind efs_kv_ops (architecture.md §10 step 10.5a).
  *
@@ -34,6 +35,16 @@ struct efs_kv_lsm_cfg {
  * WAL tail. A torn trailing record is discarded — it was never ACKed. */
 struct efs_kv *efs_kv_lsm_open(const char *dir, const struct efs_kv_lsm_cfg *cfg);
 void efs_kv_lsm_close(struct efs_kv *kv);
+
+/* Bounded maintenance scan: counts merged keys including tombstones.
+ * rc1 with resume_len>0 is a work stop; resume is the last consumed key.
+ * Restart inclusively and skip that key in the callback. rc0 is exhaustion;
+ * callback stops/errors preserve their ordinary cursor and resume_len0.
+ * This bounds key work, not wall time or segment initialization. */
+int efs_kv_lsm_scan_work(struct efs_kv *,const uint8_t *,uint32_t,
+    const uint8_t *,uint32_t,uint32_t,
+    int (*)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t),void *,
+    uint8_t [EFS_KV_KEY_MAX],uint32_t *);
 
 /* Staged W95 minimum-reader barrier. No current mounted writer calls this.
  * Before publishing format-dependent metadata, every owning/importing store
