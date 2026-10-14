@@ -1,8 +1,166 @@
 # AMD RDMA load deadlines and degraded fragment reads
 
 W106 / [installed deployment baseline](rdma-installed-amd-20261013.md).
-Branch `devel-rdma`; candidate **18be5d0601b0e95a0cb9fb744c5d02250d901105**.
-Status: PARTIAL; degraded-read correctness PASS, loaded deadlines remain FAIL. No TCP control/comparison, no push. Earliercc1/660/b27/402 are intermediate candidates, not the final verdict.
+Branch `devel-rdma`; current candidate **14d6211822907d9f49f2004e279034f3a135d0ab**.
+Status: affected deep/name gates PASS with explicit balancing; full qualification remains PARTIAL.
+Earlier18be below remains PARTIAL (two loaded deep/name timeouts), not erased.
+No TCP control/comparison, no push.
+
+## Explicit files metadata placement follow-up
+
+07bd without balancing passed1512/1512 in42.507s, then failed1507/1512 in54.894s
+and1507/1512 in55.843s (deep/name/mtime15s deadlines). All peer/cold checks still
+passed. The disk-barrier improvement alone does not close loaded acceptance.
+Both installed and private deployments previously left metadata balancing OFF;
+the earlier routing optimization cannot remove remote proof/apply waits when a
+group leader hosts only that group. Random leader placement remains a source of
+variation, not a passing liveness argument.
+
+**14d621182** makes the existing `EFS_METADATA_BALANCE=1` placement option
+independent of the data engine. It prefers one committed voter common to both
+metadata groups, so authoritative component reads can execute at that leader.
+Unknown membership defers handoff; disjoint groups retain actual-voter placement.
+The unchanged2s settling grace, durable catch-up refusal,30s re-election backoff,
+quorum and own-apply predicates remain. Default balancing stays **OFF**; this
+qualification explicitly enables it on installed AMD and fresh fixtures. Do not
+claim that unbalanced/default-OFF load failures disappeared. Containers, packing,
+commands/commands-server and expiry remain OFF. No batch-noop/overlap activation.
+
+The files placement oracle fails on07bd and passes on14d, including unknown/
+disjoint membership, actual voter selection, lag refusal and backoff. Native read authority/routing and core Raft gates PASS before deployment.
+
+| Final14d, explicit balancing1 | Verdict |
+| --- | --- |
+| Deep-directory cases under full mixed load | PASS42/42 across three independent fixtures |
+| Unusual-name directories under full mixed load | PASS21/21 across three independent fixtures |
+| Complete core cohorts (1512 cases each) | 1511/1512 in32.973s;1512/1512 in33.625s;1512/1512 in42.828s |
+| Peer / cold persistence | PASS67/67, prepare27/27, verify27/27 in each fixture |
+| Files durability / overwrite / GC; core Raft / placement / read authority | PASS |
+| Full-common-library ASan/UBSan production durability | PASS; leak checking enabled, no sanitizer diagnostics |
+| Preserved10GiB file | PASS, exact baseline digest and length |
+| Paused shared follower2,32MiB fresh reader | FAIL180s exit124;16MiB returned before stall; follower restored and reader drained |
+
+One core failure remains: first fixture's `dir_times_unlink` returned EBUSY.
+Its cause is not established; neither other passes nor placement settling
+justify dropping it. Next reproduce that ordinary unlink under the same mixed
+load and inspect its mutation/authority refusal. The paused-node2 read requires
+bounded fragment/admission diagnostics: do not borrow the earlier paused-node3
+PASS as proof for this different placement/fault. Retain the unchanged180s gate.
+These remain W106 blockers. Default balancing-OFF loaded failures also remain
+open; the configured target passes do not close unqualified modes or broaderW106.
+
+Installed source/build: full14d SHA above, branchdevel-rdma,
+`efsd 14d621182`, built2026-10-14T02:46:31Z (Oct13 evening local).
+SHA256: `efsd`9f2d5cdebfb1b217bdeb23659d27937646ef4c5c185b19aaa62756aa5cba1a88;
+`efs-fuse`2ca46403aec9d6742b3a798d4125f32f7dd0103bb24f81431755bb2884bb379a;
+`efs-mgmt`e60a2a8177f78c391bf64422e0669667b8cd621d26b47eafb3158a0c8d6af511.
+Raw14d verdicts stay at `/data1/efs/rdma-fixes-14d621182`, intermediate07bd at
+`/data1/efs/rdma-fixes-07bd66e19`. Native build and source export are at the same
+paths described below; installed stores stay17G/node, private fixtures4G/node.
+
+Sanitizer reproduction: fresh exact14d export, then the sanitizer flags and
+options below, substituting target `tests/test_store_durability` and running
+that binary. `/data1/efs/rdma-san-14d621182` instrumented the full common library
+and both included production storage units. Runtime daemons remain native.
+Native build/gates, from exact exported14d source:
+
+```sh
+make -B -j8 EFS_GIT_ID=14d621182 EFS_GIT_DESCRIBE=14d621182 EFS_GIT_BRANCH=devel-rdma efsd efs-fuse efs-mgmt tests/test_store_durability tests/test_store_overwrite tests/test_store_gc tests/test_raft
+for t in store_durability store_overwrite store_gc raft; do tests/test_$t || exit; done
+for t in metadata_balance namespace_leader_route readindex_pair readindex_result; do python3 tests/test_$t.py || exit; done
+```
+
+No TCP control workload.
+
+
+## Files ancestry barrier follow-up
+
+A30s/99Hz CPU profile of all four private AMD daemons under the same seven-client
+core/jobs16 load found31.17% self samples in `native_queued_spin_lock_slowpath`.
+The dominant stack was ext4 journal commit waiting from `sync_fragment_parents`
+(19.40% of all samples in that stack), with another6.70% through the file barrier.
+Metadata diagnostics still show fresh quorum/remote-proof/apply waits; the
+profile establishes substantial shared-disk journal interference rather than
+proving every timeout is caused by that stack. Diagnostic cohort passed; it is
+not quiet acceptance. Raw profile/logs are external at
+`/data1/efs/rdma-timeouts-18be5d060` (55K samples, no lost samples).
+
+**07bd66e19** lets initialized files targets reuse the existing bounded pinned
+inode ancestry proof (128 directory descriptors across all roots). Each PUT
+still fences data/checksum/length and freshly syncs the changed containing
+directory. Only previously proven unchanged ancestors may be skipped. A failed
+barrier admits no hint; pinned descriptors prevent deleted/recreated inode
+reuse; startup/attach seals roots and restart clears runtime hints. Unknown/
+uninitialized roots retain full ancestry barriers. Nested files targets match
+the longest canonical root. This does not enable containers or cache metadata
+read authority; Raft quorum/apply checks and all disabled features stay intact.
+
+`test_store_durability` now uses a real files target and both implementation
+units, so fault injection covers the entire barrier path. The new known-ancestry
+assertion fails on18be; it passes on07bd with file/directory/close failures,
+EINTR/retry, failed unknown ancestry, restart, deletion/recreation, nested root
+selection, direct/bounce writes and32 retired worker threads. Real overwrite and
+two-root GC/failure/accounting gates also PASS. Test fixtures are local native
+files tests, not TCP comparison runs.
+
+| 07bd same-source affected gate | Verdict |
+| --- | --- |
+| Production durability / overwrite / GC regressions | PASS |
+| Quiet07bd without balancing, three independent cohorts | FAIL:1512/1507/1507;10 stock15s deep/name/mtime timeouts |
+| 07bd peer67 / prepare27 / cold verify27 per fixture | PASS all three fixtures |
+| Sanitized production durability regression | PASS on final14d |
+
+Current acceptance rebuilds/exports exact14d tracked source with the same native flags as below,
+changing only build identity to14d621182. Deploy after draining installed clients
+and stopping all four daemons. Require `SOURCE_COMMIT` full14d, files/direct,
+strict RDMA, commands/commands-server/packing/expiry/repair OFF. The committed
+private driver explicitly exports `EFS_METADATA_BALANCE=1`; persist the same
+setting in `/data1/efs/devops/clusters/amd.env` for installed AMD. Run the first fixture with
+`EFS_GATE_DEGRADED=1` to recheck paused-follower reads under the new placement. Run three
+independent fresh fixtures sequentially, retaining each failed verdict:
+
+```sh
+for r in 1 2 3; do
+ degraded=0; [ "$r" != 1 ] || degraded=1
+ EFS_GATE_DEGRADED=$degraded bash tests/live/rdma_four_node_qualification.sh > /data1/efs/rdma-fixes-14d621182/fresh-q$r.log 2>&1
+ echo $? > /data1/efs/rdma-fixes-14d621182/fresh-q$r.exit
+done
+```
+
+Each4G/node fixture keeps the original15s default cases, decorated75s cases and
+180s/client outer budget; seven distinct mounts,16 jobs/client. No profiling,
+other controller or build during quiet acceptance. Driver drains/stops owned
+mounts/daemons before discarding only synthetic stores; logs remain outside Git.
+
+Reproduce the diagnostic separately from acceptance, on an exclusive deployed
+fixture. Copy the driver outside Git, keep its exact workload/budgets and set
+only observation flags (the committed quiet driver deliberately unsets them):
+
+```sh
+python3 - <<'PYDIAG'
+from pathlib import Path
+s=Path('/data1/efs/src/tests/live/rdma_four_node_qualification.sh').read_text()
+s=s.replace('src=$(cd "$(dirname "$0")/../.." && pwd)', 'src=/data1/efs/src')
+s=s.replace('unset EFS_READ_PROF EFS_RPC_PROF EFS_CONTAINER_PATH_PROF EFS_READ_FRAG_PROF',
+            'unset EFS_CONTAINER_PATH_PROF EFS_READ_FRAG_PROF\nexport EFS_READ_PROF=1 EFS_RPC_PROF=1 EFS_RAFT_OBS=1 EFS_BATCH_OBS=1')
+Path('/data1/efs/rdma-diagnostic.sh').write_text(s)
+PYDIAG
+EFS_GATE_DEGRADED=0 bash /data1/efs/rdma-diagnostic.sh > /data1/efs/rdma-diagnostic.log 2>&1
+```
+
+In a second terminal, once the driver's first-line artifact directory contains
+all four PID files and `load1/c0.log`, record only those owned daemon PIDs:
+
+```sh
+work=$(head -1 /data1/efs/rdma-diagnostic.log)
+perf record -F 99 -g -p "$(cat "$work"/efsd-n?.pid | paste -sd,)" -o /data1/efs/rdma-diagnostic-perf.data -- sleep 30
+perf report --stdio --no-children --percent-limit 1 -i /data1/efs/rdma-diagnostic-perf.data
+```
+
+Let the driver finish its original gates and cleanup. Observation overhead makes
+this diagnostic-only. Then run the unmodified driver quietly for acceptance.
+
+The older18be evidence/provenance below is historical and remains traceable.
 
 ## Fixes and demonstrated causes
 
@@ -73,7 +231,7 @@ native Linux asynchronous sender/control/flow checks PASS on final source.
   The files routing regression fails on402 and passes with this change;
   replacement, bounded path authority and ReadIndex negatives also PASS.
 
-## Environment and provenance
+## Historical18be environment and provenance
 
 AMD-395 / Ubuntu, same-host Soft-RoCE rxe0, GID1 over wlp194s0. Installed four
 nodes127.0.0.1:17432–17435; files engine/direct I/O, retained **17G quota/node**.
@@ -127,7 +285,7 @@ Each installed daemon uses files/direct, strict RDMA and the requested OFF flags
 both installed clients also retain OFF flags. Original10GiB digest matches
 `7aa0c22312679872fd8771e222398ee44be40c60ece4ded8e76896c9ef02625b`.
 
-## Gate ledger
+## Historical18be gate ledger
 
 | Gate | Verdict |
 | --- | --- |
@@ -174,7 +332,7 @@ suites had failures, some notrun. **Diagnostic only, not acceptance evidence.**
 Timeout sent SIGINT; its5s detach allowance ended in137. Subsequent process
 inspection found no remaining strace, and all owned clients were drained.
 
-## Remaining work / W106 stays open
+## Historical18be remaining work / W106 stays open
 
 Loaded acceptance remains **FAIL**: two of4,536 final core executions exhausted
 15s in the second cohort. Neither passing repetitions nor isolated passes erase
@@ -213,7 +371,7 @@ raises quota/timeouts nor disables admission, and it matches the intended4G
 qualification fixture. No performance comparison between retained17G and fresh4G
 is claimed. Sustained reuse/GC-pressure liveness remains a separate open issue.
 
-## Exact affected reproduction
+## Historical18be affected reproduction (export18be source first)
 
 Exclusive AMD access; sufficient filesystem reserve; all four nodes healthy.
 Export/build the candidate, drain both installed clients, stop daemons, install

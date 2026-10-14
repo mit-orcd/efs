@@ -119,8 +119,13 @@ sampling affect timing; use an unprofiled repeated comparison for throughput.
 The optimized v1 implementation holds a root directory descriptor and up to
 8 container descriptors per target, with per-operation descriptors for later
 segments. Runtime mapping operations use root-relative paths. Startup persists
-root ancestry; runtime publication/deletion still sync every required directory
-through the root. Mapping temporaries use the record nonce plus O_EXCL; collisions
+root ancestry. Runtime publication/deletion sync the changed containing
+directory on every call and prove unknown ancestry to the root. A bounded
+cache of pinned directory inodes lets both engines skip already-proven unchanged
+ancestors; failed barriers never populate it, restart clears it, and recreated
+directories cannot match the retained old inode. Ordinary-file PUT still
+fences the data/checksum/length before its namespace barrier. Mapping temporaries use the record nonce plus O_EXCL;
+collisions
 fail without modifying an existing temporary or current map. Physical format and
 checksum/durability/lifetime-lock requirements are unchanged.
 
