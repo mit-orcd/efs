@@ -92,3 +92,38 @@ RDMA/direct/files/commands-on profile, then rerun seven simultaneous
 with the original 1,800-second deadline. Concurrent commands, idempotent live
 close, and sustained seven tiny-file writers plus seven MD5 crawlers remain
 required. General 400 GiB acceptance stays on hold.
+
+## Merged Linux qualification and deployment
+
+Exact production source `b65d99dcf280f1a9919688997b65e1413c4d5af5`: full Linux
+`make -j4 test` PASS on fcstor006; seven focused regressions listed above PASS
+with ASan/UBSan and leak detection on fcstor003, including the Linux asynchronous
+sender. The first sanitizer invocation failed because host-flow treats CC as an
+executable rather than a shell command. The second run used a compiler wrapper
+with sanitizer flags; no source fix or relaxed check was involved. Logs are
+`fcstor006/package1-full-native-b65d99dcf280.log` and
+`fcstor003/package1-focused-san-b65d99dcf280-r2.log` under the ORCD scratch base.
+
+All eleven installed hosts match 890 committed code/test inputs. Runtime
+executable hashes, UID246111, native mlx5_2 verbs descriptors, four files/direct
+daemons, seven command-enabled unpacked mounts and disabled expiry/pressure/
+flow experiments PASS. Four-daemon elected/caught-up readiness took 126.871
+seconds. Acknowledged large and 512-byte markers captured before the normal
+stop read back with exact SHA256 on all seven remounted clients. No store was
+erased or forcibly unmounted. This qualifies these markers, not the full
+400 GiB payload inventory, which stays deferred under the existing hold.
+
+Mounted close regression `c51f98d2f21f86a32a9db8c0dae812983e813287` ran privately
+on fcstor007 against this deployment and PASS: three read-only opens of the same
+zero-limit close returned empty bytes in 0.573/0.516/0.505 ms, old-token
+continuation returned the expected mapped STALE/EIO, and a fresh request with
+the same identity acquired a different token and closed successfully. Reproduce
+with `python3 tests/live/query_page_close.py /tmp/efs-mount`, using its committed
+production helper encoder. No raw TCP RPC or fixture writes are used by this
+oracle. Token-close behavior is now verified live; loaded retained-reader and
+concurrent-query gates remain distinct.
+
+The new seven-client finite gate is RUNNING with 20,000 files and 16 workers per
+client, keeping the original 1,800-second controller deadline. Original tiny-file
+and MD5 screen jobs remain stopped until these gates pass. No throughput or
+sustained close-EIO acceptance is claimed yet.

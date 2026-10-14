@@ -1,3 +1,5 @@
+[ORCD merged deployment](orcd-query-name-ordinals-20261013.md): `b65d99dcf` Linux native/sanitizers, installed source/profile, orderly marker restart and mounted token close PASS. Seven-client finite gate RUNNING; concurrent and sustained acceptance OPEN.
+
 [ORCD reviewed merge](orcd-query-name-ordinals-20261013.md): `b65d99dcf` integrates EOF, RDMA routing/read recovery and default ordered-frame bounds. Local regressions PASS; Linux/live merged qualification pending. Prior finite gate FAIL on deadline despite eventual error-free completion.
 
 [devel / RDMA merge](devel-rdma-merge-qualification-20261014.md):

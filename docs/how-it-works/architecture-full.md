@@ -1494,6 +1494,8 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+[ORCD reviewed merge](../status/orcd-query-name-ordinals-20261013.md): `b65d99dcf` integrates EOF, RDMA routing/read recovery and default ordered-frame bounds. Local regressions PASS; Linux/live merged qualification pending. Prior finite gate FAIL on deadline despite eventual error-free completion.
+
 [devel / RDMA merge](../status/devel-rdma-merge-qualification-20261014.md):
 RDMA endpoint e6b6b83f4 and Intel checkpoint1ac603128 integrated into the devel
 candidate; code merged cleanly, status/generated-doc conflicts resolved with
