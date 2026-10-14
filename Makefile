@@ -881,8 +881,8 @@ tests/stress/packed_rpc_gate: tests/stress/packed_rpc_gate.c $(LIB)
 tests/stress/pack_storage_soak: tests/stress/pack_storage_soak.c src/server/packed_fence.h src/server/store.c src/server/server_internal.h src/bench/writer.o src/bench/store_containers.o $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o src/bench/store_containers.o $(LIB) $(LDFLAGS)
 
-tests/test_packed_store: tests/test_packed_store.c src/server/store.c src/server/server_internal.h src/bench/writer.o src/bench/store_containers.o $(LIB)
-	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o src/bench/store_containers.o $(LIB) $(LDFLAGS)
+tests/test_packed_store: tests/test_packed_store.c src/server/store.c src/server/store_containers.c src/server/server_internal.h src/bench/writer.o $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o $(LIB) $(LDFLAGS)
 
 src/server/store.o src/bench/store.o tests/test_packed_store tests/test_store_durability tests/test_store_overwrite tests/test_store_gc tests/test_store_containers: src/server/packed_fence.h
 # Incremental query changes must not fall back solely at 1,025 inode IDs.
