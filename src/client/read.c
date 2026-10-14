@@ -99,11 +99,14 @@ static uint8_t *decode_frag_scratch(uint32_t need)
  * require hashing the received bytes when verification is requested. */
 static pthread_once_t read_verify_once = PTHREAD_ONCE_INIT;
 static int read_verify;
+static int read_frag_prof;
 
 static void read_verify_init(void)
 {
     const char *value = getenv("EFS_READ_VERIFY");
     read_verify = value && *value && strcmp(value, "0") != 0;
+    value = getenv("EFS_READ_FRAG_PROF");
+    read_frag_prof = value && *value && strcmp(value, "0") != 0;
 }
 
 static int fragment_reply_verified(const uint8_t *data, uint32_t len,
@@ -477,6 +480,21 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
                 have[fi] = 1;
                 good++;
             }
+        }
+
+        pthread_once(&read_verify_once, read_verify_init);
+        if (good < 2 && read_frag_prof) {
+            static unsigned failures;
+            if (__atomic_fetch_add(&failures, 1, __ATOMIC_RELAXED) < 64)
+                fprintf(stderr, "read-fragments: ino=%llu ci=%u attempt=%d "
+                        "nodes=%u/%u/%u fi=%d/%d/%d rc=%d/%d/%d "
+                        "len=%u/%u/%u expected=%u deadline=%llu\n",
+                        (unsigned long long)ino, chunk_index, attempt,
+                        jobs[0].node, jobs[1].node, jobs[2].node,
+                        jobs[0].fi, jobs[1].fi, jobs[2].fi,
+                        jobs[0].rc, jobs[1].rc, jobs[2].rc,
+                        jobs[0].len, jobs[1].len, jobs[2].len, frag_len,
+                        (unsigned long long)efs_client_rpc_deadline_ms());
         }
 
         int missing = -1, a = -1, b = -1;
