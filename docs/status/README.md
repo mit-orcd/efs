@@ -1,12 +1,17 @@
 [W100 EOF rounding: missing-size rejection](w100-eof-contract-20261013.md):
-**PASS on 1302ec58 (devel-kimi)** — sizeless REPORT chunk records on live
+**PASS on c3d8ee560 (devel-kimi)** — sizeless REPORT chunk records on live
 inodes are now rejected (fsync EIO, client retains, retry publishes exact
 bytes) instead of committing a chunk-end EOF guess into the grow-only lane
-MAX. Baseline repro retained (512→131072); fixed fixture refuses then
-converges (512, 8 MiB+1 exact, holes intact); posix suite 216/216 on the
-owned Intel fixture. Contract-only gate; W100 aggregate and peer/persist
-suites remain open. Note: earlier EOF/admission candidates (04f4c8c7,
-1b3844d7) were paused on human hold and are a different approach.
+MAX. Client additionally repairs the natural trigger: a missing staged row
+is re-staged via getattr and its size attached when it provably covers the
+batch's dirty extent; unlink-mid-report still skips, lost-dirty-EOF still
+fails visibly. Rejection is a retained-residual failure, not a
+side-effect-free rollback (packed prefix may commit; idempotent on retry).
+Baseline repro retained (512→131072); fixed fixture refuses then converges
+(512, 8 MiB+1 exact, holes intact); posix suite 216/216 on the owned Intel
+fixture. Contract-only gate; W100 aggregate and peer/persist suites remain
+open. Note: earlier EOF/admission candidates (04f4c8c7, 1b3844d7) were
+paused on human hold and are a different approach.
 
 [Merged devel ordinary-file AMD qualification](amd-devel-merged-posix-20261013.md):
 **PASS on 96f40602** — all local branch tips integrated; fresh four-node files/TCP/direct

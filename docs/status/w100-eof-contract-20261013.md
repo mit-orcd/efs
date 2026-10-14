@@ -19,12 +19,13 @@ independent mount. Historical incident: ecopy's mpfr `Makefile.in`,
   build identity `efsd fc341f00-w100-fault (branch devel, built
   2026-10-13T22:30:40Z on intel1)`, deployed at
   `/data1/efs/w100-private/baseline`.
-- Fixed: `1302ec58b` on `devel-kimi` (single commit on `fc341f00`),
-  `efsd v0.3.2-pre-alpha-336-g1302ec58b (branch devel-kimi, built
-  2026-10-13T23:29:55Z on intel1)` / `…T23:32:08Z on intel2`, deployed at
+- Fixed: `c3d8ee560` on `devel-kimi` (`1302ec58b` server rejection +
+  review-follow-up `c3d8ee560` on `fc341f00`),
+  `efsd v0.3.2-pre-alpha-338-gc3d8ee560 (branch devel-kimi, built
+  2026-10-14T00:42:41Z on intel1)` / `…T00:43:26Z on intel2`, deployed at
   `/data1/efs/w100-private/devel-kimi`. SHA256 (intel1 build):
-  efsd `84127d968c3092118fb7bb50890a8e05ddbdc7ef29305ea0e751e5a5dd6ec5e8`,
-  efs-fuse `b94a778b1e3b6392481a69b124192b5223fcfdafa5990c1b25824ab22e8df30a`.
+  efsd `edfb1364aed5e0791b0470e48c1d005754bcd08d730483ff59c8d6a44980fb21`,
+  efs-fuse `1fe2514a5da99e322c7b128af6cbb1cb026a2be32ddb4071189b09fb13e0688d`.
 
 **Fix.** A chunk record without a size record on a *live* inode is
 malformed: the report loop rejects the batch with `EFS_ERR_INVAL`
@@ -32,9 +33,27 @@ malformed: the report loop rejects the batch with `EFS_ERR_INVAL`
 data, fsync fails with EIO, and the next REPORT (with the size record)
 publishes exact bytes. A *deleted* inode is not malformed — publish
 skips it as before (`NOT_FOUND` is answered before size is consulted).
-Zero remains an explicit legal EOF; wire format unchanged. Client change
-is limited to the warning text; the `extra_cap` size-record reservation
-in `src/client/write.c` already covers the mark-ordering race.
+Zero remains an explicit legal EOF; wire format unchanged.
+
+The rejection happens inside the publication loop: records packed before
+the malformed one (and lane activations from preflight) may already have
+committed by the time the batch is refused. That prefix is safe on
+retry — committed records re-pack as already-committed skips — but the
+rejection is a *retained-residual* failure, not a side-effect-free
+rollback, and the peer may observe the committed prefix while the
+client's fsync still fails.
+
+Client side (`src/client/write.c`, review follow-up): a chunk-rec ino
+whose staged row is missing at snapshot time is now repaired after the
+snapshot unlock via a server getattr (`efs_client_stat_ino`). The
+re-staged size is attached only when it covers the batch's highest dirty
+chunk end for that inode; a covering row proves no dirty growth is lost.
+`NOT_FOUND` means unlinked mid-report — the records ship sizeless and
+the server skips them as deleted. A re-staged row below the dirty
+coverage means the dirty EOF was lost with the evicted row: no size
+ships, the server rejects, fsync fails EIO, the snap is retained and
+retried. The remaining natural trigger for that path is eviction of a
+dirty-marked row mid-flight; it is loud, not silent.
 
 **Environment.** Intel1 (`10.0.0.207`) + Intel2 (`10.0.0.209`), Core
 Ultra 7 256V, owned four-daemon fixture on ports 27432/27433 (2 GiB
@@ -67,13 +86,17 @@ authorized_keys, `~/.ssh/config` entry).
 - Baseline, `--expect rounded`: PASS — `small` (512 B written) read back
   EOF 131072 with a zero at offset 512; `sparse` (8 MiB+1) read back EOF
   8519680. fsync succeeded: silent corruption confirmed.
-- Fixed, `--expect refused`: PASS — fsync under the fault fails EIO;
-  peer observes size 0 (nothing fabricated); after the fault clears, a
-  repeated fsync publishes exact EOF 512 / 8388609 with correct payload
-  and holes (`48`/`4c`). Server log shows
-  `REPORT rec ino=<n> ci=<k> has no size record; rejecting batch`.
+- Fixed, `--expect refused`: PASS on both `1302ec58b` and `c3d8ee560` —
+  fsync under the fault fails EIO; peer observes size 0 (nothing
+  fabricated); after the fault clears, a repeated fsync publishes exact
+  EOF 512 / 8388609 with correct payload and holes (`48`/`4c`). Server
+  log shows `REPORT rec ino=<n> ci=<k> has no size record; rejecting
+  batch`.
+- `tests/test_report_zero_eof.py` (extracted production selection
+  block): PASS — explicit zero authoritative, exact sizes pass through,
+  missing record signals `have_size==0` (refusal path).
 - Fixed build, full `tests/posix/posix_suite.py` on the fixture mount:
-  216/216 pass, 0 fail, 0 skip (31.9 s).
+  216/216 pass, 0 fail, 0 skip (34.7 s on `c3d8ee560`).
 
 **Limitations / remaining gates.** This gates the EOF contract only; it
 is not the W100 aggregate repair (concurrent POSIX timeouts and
