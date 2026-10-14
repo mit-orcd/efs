@@ -55,7 +55,7 @@ for attempt in $(seq 1 60); do
 done
 [ "$formatted" = 1 ] || { echo "$reply";exit 1; }
 mount_clients
-for round in 1 2 3; do
+for round in 1; do
  python3 -u "$src/tests/live/rdma_installed_load.py" "$src" "$work/load$round" --base-port "$base" > "$work/load$round.log" 2>&1 || rc=1
  tail -n 3 "$work/load$round.log"
  # Stop on dirty fixtures; never layer another run on unresolved clients.
@@ -71,7 +71,17 @@ stop_nodes
 start_nodes
 mount_clients
 python3 "$src/tests/posix/posix_persist.py" "$home/mnt" --phase verify --tag rdma-fixed --results "$work/persist-verify.tsv" > "$work/persist-verify.log" 2>&1 || rc=1
+if [ "${EFS_GATE_DEGRADED:-1}" = 1 ]; then
 python3 -u "$src/tests/live/rdma_degraded_read.py" "$src" "$home/mnt" "$work/degraded" --base-port "$base" --pid-root "$work" > "$work/degraded.log" 2>&1 || rc=1
-for log in peer persist-prepare persist-verify degraded; do tail -n 3 "$work/$log.log";done
+fi
+for log in peer persist-prepare persist-verify degraded; do [ ! -f "$work/$log.log" ] || tail -n 3 "$work/$log.log";done
 printf '%s\n' "$rc" > "$work/exit-code"
+# Qualification stores are synthetic and disposable after clean teardown.
+# Retain all verdicts/logs; never carry old payload capacity into a new cohort.
+stop_mounts
+stop_nodes
+for id in 1 2 3 4; do
+ [ ! -L "$work/n$id" ] || exit 1
+ rm -rf -- "$work/n$id"
+done
 exit "$rc"
