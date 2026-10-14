@@ -4994,8 +4994,8 @@ Guard1ac603128 is committed/deployed; full native and targeted sanitizer pass
 both hosts. Seven-client rounds1506/1512 and1507/1512 retain only depth60timeouts;
 read-only sample confirms at most one pending ordered frame/group/peer with
 experimental flow off. Paused-daemon writes and exact peer/cold bytes pass; full failure qualification
-passes; final cross-host peer66/67 hits shared-pwrite15s timeout (focused repeat
-pending). Queue bounding alone is not a demonstrated directory-latency correction.
+passes; final cross-host peer66/67 hits shared-pwrite15s timeout. Three focused
+unchanged repeats pass; original failure is retained. Queue bounding alone is not a demonstrated directory-latency correction.
 
 **Earlier Oct14 qualification:** [Merged devel private Intel](../status/intel-devel-merged-qualification-20261013.md).
 Server EOF refusal/client retry repairs are qualified separately. Completed-batch
@@ -5093,6 +5093,14 @@ separate OPEN gate.
 **Governing test policy:** All RDMA work is tested on the AMD cluster using software RDMA, or on `orcd-test` using hardware InfiniBand/RDMA. Select the environment appropriate to the claim; software acceptance does not establish hardware acceptance. This policy applies to RDMA gates throughout the backlog, not just W106.
 
 **Evidence/current state:** AMD software-RXE functional evidence already exists; current-code distributed and hardware acceptance must retain their own named gates. Intel remains the TCP acceptance deployment. Its 5 Gb/s links and absence of exposed RDMA devices/software modules do not block RDMA testing on the designated environments.
+
+**Oct 14 merged devel acceptance:** frozen `a40428d9d` combines RDMA fixes,
+cached EOF ownership and default Raft queued-entry guard. AMD full native,
+four32MiB paused reads/digests, three quiet cores4536/4536, peer/cold/EOF and
+three targeted sanitizers PASS. Quiet/loaded O_EXCL1000 each plus additional
+loaded core1512/1512 PASS; stock deadlines, optional features OFF. Source-specific
+Intel failures and broader/hardware gates remain open. See
+[merged-source evidence/reproduction](../status/devel-rdma-merge-qualification-20261014.md).
 
 **Later Oct 14 AMD read update:** `ade336daf` bounded advisory peer ordering
 passes four full32MiB paused-follower reads/digests at the unchanged180s outer

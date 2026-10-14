@@ -1505,15 +1505,19 @@ and targeted sanitizers pass both hosts; seven-client repeats1506/1512 and
 1507/1512 retain only depth60timeouts. Queue samples respect one pending
 frame/group/peer. Paused-daemon writes/peer bytes and cold verification pass;
 full GC/fencing and two-fsync refusal/recovery pass. Final cross-host peer66/67
-hits shared-pwrite15s step timeout; focused repeat is pending. No latency
+hits shared-pwrite15s step timeout; three focused unchanged repeats pass
+without replacing the failed verdict. No latency
 improvement claim.
 Production Intel untouched; later merged-source AMD qualification is separate.
 
 [devel / RDMA merge](../status/devel-rdma-merge-qualification-20261014.md):
-RDMA endpoint e6b6b83f4 and Intel checkpoint1ac603128 integrated into the devel
-candidate; code merged cleanly, status/generated-doc conflicts resolved with
-both evidence blocks retained. AMD merged qualification pending; earlier
-separate-source passes remain historical. Flags/deadlines unchanged, no push.
+**a40428d9d deployed; affected AMD gates PASS** — RDMA endpoint and clean Intel
+1ac checkpoint integrated, docs conflicts preserve both sites' evidence.
+Full native, four32MiB paused digests, quiet core4536/4536, peer/cold/EOF and
+three targeted sanitizers PASS. O_EXCL quiet1000 + loaded1000 with additional
+core1512/1512 PASS. Four-node files/direct/rxe0, features/deadlines unchanged.
+Later f258 Intel docs/controllers do not alter production code; their peer
+and directory failures remain separate. W106 broader/hardware OPEN; no push.
 
 [Merged devel private Intel qualification](../status/intel-devel-merged-qualification-20261013.md):
 **Concurrent acceptance FAIL; W100 OPEN (Oct14).** Runtime61e5c939d fixes
@@ -2398,7 +2402,7 @@ This index adds traceable IDs to the Intel acceptance follow-ups; it does not ch
 | [W103](#w103) | Investigate intermittent Intel persistence and stats timeouts | Liveness/performance investigation; open. |
 | [W104](#w104) | Decide and gate writable shared mmap support | Feature scope/design follow-up; deferred, currently unsupported by specification. |
 | [W105](#w105) | Stable NFS file handles across EFS client restarts | Gateway acceptance/correctness investigation; open. |
-| [W106](#w106) | RDMA acceptance: AMD software / orcd-test hardware IB/RDMA | Open broader/hardware validation. ade AMD four32MiB paused reads, native and quiet core4536/4536 PASS; see [current ledger](../status/rdma-paused-follower-read-20261014.md). |
+| [W106](#w106) | RDMA acceptance: AMD software / orcd-test hardware IB/RDMA | Open broader/hardware validation. Merged a404 AMD native, paused-read, quiet/load/EOF/peer/cold gates PASS; see [merged ledger](../status/devel-rdma-merge-qualification-20261014.md). |
 
 Pending choices retain their existing homes: W99 cache-only pressure escalation and numeric thresholds; W54 additional live-reference GC guard; W66/W74 metadata mechanism under accepted D36. W104 separately records the deferred shared-mmap scope choice. No new D number or policy acceptance is implied.
 
@@ -7903,8 +7907,8 @@ Guard1ac603128 is committed/deployed; full native and targeted sanitizer pass
 both hosts. Seven-client rounds1506/1512 and1507/1512 retain only depth60timeouts;
 read-only sample confirms at most one pending ordered frame/group/peer with
 experimental flow off. Paused-daemon writes and exact peer/cold bytes pass; full failure qualification
-passes; final cross-host peer66/67 hits shared-pwrite15s timeout (focused repeat
-pending). Queue bounding alone is not a demonstrated directory-latency correction.
+passes; final cross-host peer66/67 hits shared-pwrite15s timeout. Three focused
+unchanged repeats pass; original failure is retained. Queue bounding alone is not a demonstrated directory-latency correction.
 
 **Earlier Oct14 qualification:** [Merged devel private Intel](../status/intel-devel-merged-qualification-20261013.md).
 Server EOF refusal/client retry repairs are qualified separately. Completed-batch
@@ -8002,6 +8006,14 @@ separate OPEN gate.
 **Governing test policy:** All RDMA work is tested on the AMD cluster using software RDMA, or on `orcd-test` using hardware InfiniBand/RDMA. Select the environment appropriate to the claim; software acceptance does not establish hardware acceptance. This policy applies to RDMA gates throughout the backlog, not just W106.
 
 **Evidence/current state:** AMD software-RXE functional evidence already exists; current-code distributed and hardware acceptance must retain their own named gates. Intel remains the TCP acceptance deployment. Its 5 Gb/s links and absence of exposed RDMA devices/software modules do not block RDMA testing on the designated environments.
+
+**Oct 14 merged devel acceptance:** frozen `a40428d9d` combines RDMA fixes,
+cached EOF ownership and default Raft queued-entry guard. AMD full native,
+four32MiB paused reads/digests, three quiet cores4536/4536, peer/cold/EOF and
+three targeted sanitizers PASS. Quiet/loaded O_EXCL1000 each plus additional
+loaded core1512/1512 PASS; stock deadlines, optional features OFF. Source-specific
+Intel failures and broader/hardware gates remain open. See
+[merged-source evidence/reproduction](../status/devel-rdma-merge-qualification-20261014.md).
 
 **Later Oct 14 AMD read update:** `ade336daf` bounded advisory peer ordering
 passes four full32MiB paused-follower reads/digests at the unchanged180s outer
