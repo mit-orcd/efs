@@ -1739,7 +1739,13 @@ os.close(fd)
         print('durable append lost replies, 32 identical RPCs, ACK retirement and exact cold bytes PASS',flush=True)
     if a.full_node:
         endpoint=f'127.0.0.1:{a.port}'
-        result=run([source/'efs-mgmt','shrink-quota',endpoint,str((1<<30)-(64<<10))],capture_output=True,text=True)
+        # Derive the shrink from this owned process's actual launch quota;
+        # --fixture-quota may select 4/16 GiB instead of the default 1 GiB.
+        launch=servers[0].args
+        assert '--quota' in launch, 'full-node gate requires a finite fixture quota'
+        configured=launch[launch.index('--quota')+1]
+        quota_bytes={'1G':1<<30,'4G':4<<30,'16G':16<<30}[configured]
+        result=run([source/'efs-mgmt','shrink-quota',endpoint,str(quota_bytes-(64<<10))],capture_output=True,text=True)
         assert 'Reduced running quota' in result.stdout,result.stdout
         target=mount/'full-node-reroute';block=bytes(range(256))*4096
         with target.open('xb',buffering=0) as out:
