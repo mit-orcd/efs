@@ -3,6 +3,7 @@
 #include "efs/protocol.h"
 #include "efs/network.h"
 #include "efs/rdma.h"
+#include "efs/rdma_message.h"
 #include "efs/checksum.h"
 #include "efs/store.h"
 #include "efs/put_upload.h"
@@ -110,24 +111,24 @@ void server_handle_conn(struct efs_conn *conn)
         }
 
         if (chan == EFS_CONN_RDMA) {
-            /* The payload aliases a QP recv pool buffer; it is reposted
-             * after the switch (every handler consumes it synchronously). */
-            int wr = efs_rdma_recv_wait(conn->rc, -1);
+            /* Complete assembled request remains owned until the synchronous
+             * switch finishes; physical segment buffers are already reposted. */
+            int wr = efs_rdma_message_wait(conn->rc, -1);
             if (wr == EFS_ERR_AGAIN)
                 continue; /* TCP side-channel has a request */
             if (wr != 0)
                 break;
             uint32_t flen = 0;
-            uint8_t *frame = efs_rdma_recv_frame(conn->rc, &flen);
+            uint8_t *frame = efs_rdma_message_frame(conn->rc, &flen);
             if (!frame || flen < 5) {
-                efs_rdma_recv_repost(conn->rc);
+                efs_rdma_message_release(conn->rc);
                 break;
             }
             uint32_t nlen;
             memcpy(&nlen, frame, 4);
             nlen = ntohl(nlen);
-            if (nlen == 0 || nlen > 16 * 1024 * 1024 || flen != 4 + nlen) {
-                efs_rdma_recv_repost(conn->rc);
+            if (nlen == 0 || nlen > efs_rdma_max_frame(conn->rc)-4 || flen != 4 + nlen) {
+                efs_rdma_message_release(conn->rc);
                 break;
             }
             type = frame[4];
@@ -1163,12 +1164,21 @@ send_reply:
             break;
         }
         case EFS_MSG_RDMA_SETUP: {
+            /* Bootstrap is valid only on a not-yet-upgraded TCP connection.
+             * An application envelope cannot reopen setup or emit raw TCP. */
+            if (chan != EFS_CONN_TCP || conn->rc) {
+                if (rdma_frame) efs_rdma_message_release(conn->rc);
+                free(to_free);
+                return;
+            }
             /* Arrived over TCP (the QP does not exist yet); the reply goes
              * back over TCP because recv_chan is TCP for this frame. */
-            struct efs_msg_rdma_setup_reply rep;
+            uint8_t rep[EFS_RMSG_SETUP_BYTES];
             uint32_t rlen = sizeof(rep);
             efs_rdma_server_accept(conn, payload, payload_len, &rep, &rlen);
-            efs_conn_send_msg(conn, EFS_MSG_RDMA_SETUP_REPLY, &rep, rlen);
+            if (efs_send_msg(conn->fd, EFS_MSG_RDMA_SETUP_REPLY, rep, rlen)) {
+                free(to_free); return;
+            }
             if (rdma_first_on()) {
                 /* Tag the peer's port: a QP and the TCP socket that carried
                  * its handshake must belong to the same connection, and that
@@ -1181,7 +1191,7 @@ send_reply:
                 fprintf(stderr,
                         "rdma-first: SETUP done qpn=%u status=%u peer_port=%u "
                         "fd=%d, back to wait\n",
-                        rep.qpn, rep.status, pport, conn->fd);
+                        efs_rdma_qpn(conn->rc), conn->rc ? 0u : 1u, pport, conn->fd);
             }
             break;
         }
@@ -1264,7 +1274,7 @@ send_reply:
         }
 
         if (rdma_frame)
-            efs_rdma_recv_repost(conn->rc);
+            efs_rdma_message_release(conn->rc);
         free(to_free);
     }
 }

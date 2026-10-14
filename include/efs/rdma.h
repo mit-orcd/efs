@@ -6,7 +6,7 @@
 
 /* Two-sided RDMA (RC QP, SEND/RECV) transport for efs, bootstrapped over the
  * existing TCP connection. Identical wire framing (len + type + payload);
- * frames larger than the pool buffer stay on the TCP side-channel. */
+ * all upgraded application messages use bounded segmentation. */
 
 struct efs_conn;         /* network.h */
 struct efs_rdma_conn;    /* opaque, rdma.c */
@@ -17,11 +17,8 @@ struct efs_rdma_conn;    /* opaque, rdma.c */
 #define EFS_TRANSPORT_RDMA 1
 #define EFS_TRANSPORT_TCP  2
 
-/* Pool buffer size: a 64 KiB fragment frame, and a 64-entry GETCHUNKS
- * reply (64 × 1248 B = 79872, plus the reply header). 72 KiB put every
- * window pull on the TCP side channel (Oct 1 1 GiB dd). 84 KiB covers
- * that reply; a 128 KiB frame still does not fit. Bigger frames use the
- * TCP fd. */
+/* Physical registered frame capacity; DATA usable bytes subtract the
+ * segmentation envelope. Logical messages are negotiated separately. */
 #define EFS_RDMA_BUFSZ (84 * 1024)
 
 /* Frames up to this size are sent IBV_SEND_INLINE (no pool buffer). */
@@ -50,23 +47,16 @@ void efs_rdma_conn_destroy(struct efs_rdma_conn *rc);
 
 /* ---- data path (used by the protocol.c dispatchers and handler.c) ---- */
 
-/* Send a full frame (len+type+p1+p2). Inline when small, else a pool send
- * buffer (payload is copied in). Returns EFS_OK or EFS_ERR_NET.
- *
- * W39: when p2 lies inside a region named by efs_rdma_zc_region_add and
- * l2 >= EFS_RDMA_ZC_MIN, the frame is posted as two SGEs (header from
- * the pool buffer, p2 straight from the region) and p2 is NOT copied.
- * The caller must keep p2 untouched until the send completed: a reply
- * received on this conn, or efs_rdma_send_quiesce(), or destroying the
- * conn. Every other payload is copied as before. */
+/* Send one logical frame as copied segments, preserving the original I/O
+ * budget through credit/send-slot waits. Source parts may be reused on return.
+ * Failure poisons the connection; there is no application TCP fallback. */
 int efs_rdma_send_frame(struct efs_rdma_conn *rc, uint8_t type,
                         const void *p1, uint32_t l1,
                         const void *p2, uint32_t l2);
 
 #define EFS_RDMA_ZC_MIN 4096u
 
-/* Name a long-lived buffer region (a client bufpool slab) for zero-copy
- * sends. The region is registered with each HCA's PD on first use. */
+/* Retained client-slab registration API; segmented sends currently copy. */
 int efs_rdma_zc_region_add(void *base, size_t len);
 
 /* Wait (bounded by the send deadline) until every send posted on rc has
@@ -77,9 +67,8 @@ int efs_rdma_send_quiesce(struct efs_rdma_conn *rc);
  * that were eligible by size. */
 void efs_rdma_zc_stats(uint64_t *zc, uint64_t *copied);
 
-/* Zero-copy send for big replies: reserve a pool send buffer, fill the
- * payload area directly, then commit. Reserve returns NULL when no buffer
- * is available for that size (caller falls back to efs_conn_send_msg). */
+/* Direct-fill fast path is currently disabled (returns NULL); generic reply
+ * fallback segments over RDMA and copies before TLS reply storage is reused. */
 void *efs_rdma_send_buf(struct efs_rdma_conn *rc, uint32_t payload_len);
 int efs_rdma_send_commit(struct efs_rdma_conn *rc, void *buf, uint8_t type,
                          uint32_t payload_len);
@@ -104,7 +93,27 @@ int efs_rdma_reply_ready_quick(struct efs_rdma_conn *rc);
 int efs_rdma_reply_ready_us(struct efs_rdma_conn *rc, int budget_us);
 int efs_rdma_reply_fd(struct efs_rdma_conn *rc);
 
-/* Largest frame this conn carries over RDMA (min of both ends' buffers). */
+struct efs_rdma_message_stats {
+    uint64_t data_frames_tx, data_bytes_tx, data_frames_rx, data_bytes_rx;
+    uint64_t app_tx, app_rx, logical_bytes_tx, logical_bytes_rx;
+    uint64_t controls_tx, controls_rx, credit_stalls, tcp_app_rx;
+    uint64_t assembly_bytes, global_assembly_bytes;
+};
+void efs_rdma_message_stats(struct efs_rdma_conn *rc,struct efs_rdma_message_stats *out);
+uint64_t efs_rdma_assembly_bytes(void);
+void efs_rdma_tcp_violation(struct efs_rdma_conn *rc);
+
+/* Complete application messages; borrowed frame until release or take.
+ * One checked-out owner must serialize every send/progress/receive/teardown. */
+int efs_rdma_message_ready(struct efs_rdma_conn *rc);
+int efs_rdma_message_wait(struct efs_rdma_conn *rc,int timeout_ms);
+void *efs_rdma_message_frame(struct efs_rdma_conn *rc,uint32_t *len);
+void efs_rdma_message_release(struct efs_rdma_conn *rc);
+void *efs_rdma_message_take(struct efs_rdma_conn *rc);
+unsigned efs_rdma_message_capacity(struct efs_rdma_conn *rc);
+int efs_rdma_message_poll_ms(struct efs_rdma_conn *rc);
+
+/* Negotiated maximum logical frame, including five-byte application header. */
 uint32_t efs_rdma_max_frame(struct efs_rdma_conn *rc);
 
 /* Local QP number, for diagnostics: a peer that keeps sending to a QP this
@@ -115,11 +124,8 @@ uint32_t efs_rdma_qpn(struct efs_rdma_conn *rc);
 /* Number of live RDMA conns in this process (tests/validation). */
 int efs_rdma_live_conns(void);
 
-/* Recv buffers posted on this conn's QP. Both ends post the same count,
- * so a sender may keep at most this many unacked frames in flight before
- * the peer's RQ runs dry (rnr_retry 7 then stalls the QP, it does not
- * error). Frames the peer has harvested but not yet consumed still hold
- * their buffer, so leave one spare. */
+/* Actual local receive count. Message capacity is a distinct negotiated
+ * application pipeline bound; peer DATA credits use actual peer receives. */
 int efs_rdma_conn_nrecv(struct efs_rdma_conn *rc);
 
 #endif

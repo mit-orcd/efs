@@ -1,6 +1,12 @@
 # Agreed RDMA large-message design — 2026-10-13
 
-**Design agreed; implementation and qualification NOTRUN.** This records the
+**Design agreed; segmented transport integrated and initial AMD Soft-RoCE gates PASS.**
+See [current integration ledger](rdma-soft-roce-integration-20261013.md) for
+exact tested source, remaining acceptance gates and implementation tradeoffs.
+Native cross-host hardware qualification remains NOTRUN.
+See [implementation checkpoint](rdma-implementation-20261013.md) for exact
+source and native/sanitizer evidence. The following review instructions retain their original
+review baseline; current gate verdicts are in the integration ledger. This records the
 human decision following the [ORCD TCP/RDMA investigation](orcd-rdma-tcp-cause-20261013.md).
 No product code, running cluster, network setting or deployment was changed for
 this plan. It is a transport correctness proposal, not performance acceptance.
@@ -85,7 +91,8 @@ the contract without treating unrelated host TCP traffic as EFS traffic.
 This extends the design recorded in `34bb1811`; it does not report implementation
 or runtime qualification. The reviewed transport/handler/Raft files match that
 commit. Concurrent uncommitted client admission edits were outside this review
-and must be preserved. All implementation gates below remain **NOTRUN**.
+and must be preserved. At that review checkpoint all implementation gates were **NOTRUN**; consult
+the current integration ledger for subsequent results.
 
 ### 1. Define and negotiate the transport contract first
 
@@ -289,7 +296,7 @@ bytes AFTER successful setup. Existing benchmarks that reject oversize must be
 extended before using them as evidence. Do not promise a speedup from this code
 review: copy cost, storage barriers and contention need separate measurements.
 
-## Qualification plan (NOTRUN)
+## Qualification matrix (current verdicts in integration ledger)
 
 Use the same candidate source/build identity for RDMA and explicit TCP controls.
 Record binary hashes, device/GID/port, topology, feature flags, storage mode,

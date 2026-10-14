@@ -5,7 +5,7 @@ import subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/server/raft_host.c').read_text();a=s.index('void server_raft_host_lookup(');b=s.index('\n}',a)+2
 code=r'''
-static int host_container_read_leader_hint(void *h,unsigned g){(void)h;(void)g;return -1;}
+static int host_read_leader_hint(void *h,unsigned g){(void)h;(void)g;return -1;}
 
 #include <efs/meta_apply.h>
 #include <efs/protocol.h>

@@ -1,12 +1,8 @@
 /* RDMA (verbs, RC QP) transport for efs.
  *
- * Two-sided SEND/RECV over an RC QP bootstrapped with EFS_MSG_RDMA_SETUP on
- * the existing TCP connection. Wire framing is identical to TCP
- * ([len:4][type:1][payload]); frames bigger than the pool buffer stay on the
- * TCP fd (side-channel). The request/reply discipline guarantees at most one
- * outstanding request per connection, so a tiny fixed recv pool suffices and
- * the peer's reply channel is deterministic: replies follow the request's
- * channel, oversized replies (GET_META) are pinned to TCP by the client.
+ * Versioned setup over TCP, followed by complete messages segmented over
+ * registered physical buffers. One owner services DATA/CREDIT and send CQEs;
+ * successful upgrades never carry application data over the TCP descriptor.
  *
  * All conns share one recv CQ per device, harvested by a single poller
  * thread that fans completions out to per-conn SPSC rings (wr_id encodes
@@ -16,6 +12,7 @@
  * was the top CPU consumer on both client and server under load.
  */
 #include "efs/rdma.h"
+#include "efs/rdma_message.h"
 #include "efs/network.h"
 #include "efs/protocol.h"
 #include "efs/wire.h"
@@ -32,6 +29,7 @@
 #include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <linux/tcp.h>
 #include <poll.h>
 #include <pthread.h>
 #include <sched.h>
@@ -181,14 +179,11 @@ static int spin_us(void)
 
 static int nrecv_bufs(void)
 {
-    static int v = -1;
-    if (v < 0) {
-        const char *e = getenv("EFS_RDMA_BUFS");
-        v = (e && *e) ? atoi(e) : EFS_RDMA_NRECV_DEFAULT;
-        if (v < 2)
-            v = 2;
-        if (v > 64)
-            v = 64;
+    static int v=-1;
+    if (v<0) {
+        const char *e=getenv("EFS_RDMA_BUFS"); char *end=NULL;
+        long n=(e&&*e)?strtol(e,&end,10):EFS_RDMA_NRECV_DEFAULT;
+        v=(n<2 || n>64 || (end&&*end))?0:(int)n;
     }
     return v;
 }
@@ -215,6 +210,9 @@ struct efs_rdma_dev {
     int poller_started;
 };
 
+/* Syntax cap 128MiB covers the maximum 64MiB fragment plus all wire headers.
+ * Raft snapshot transport emits bounded chunks, not a whole image. */
+static struct efs_rmsg_budget g_assembly_budget = {512ull*1024*1024, 0};
 static struct efs_rdma_dev g_devs[4];
 static int g_dev_count;
 static pthread_mutex_t g_dev_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -268,7 +266,7 @@ void efs_rdma_zc_stats(uint64_t *zc, uint64_t *copied)
 
 /* lkey for [p, p+len) on dev, or 0 when the range is not inside one
  * registered region. Registers on first use. */
-static uint32_t zc_lkey(struct efs_rdma_dev *dev, const void *p, uint32_t len)
+static uint32_t __attribute__((unused)) zc_lkey(struct efs_rdma_dev *dev, const void *p, uint32_t len)
 {
     int di = (int)(dev - g_devs);
     if (di < 0 || di >= 4)
@@ -311,7 +309,7 @@ static int g_spinning; /* conn threads currently in the recv-ring spin wait */
  * them to the grave), and without the tag the poller would inject them into
  * whoever reuses the slot. */
 #define EFS_RDMA_MAX_CONNS  4096
-#define EFS_RDMA_PEND_RING  64 /* >= max nrecv bufs per conn */
+#define EFS_RDMA_PEND_RING  128 /* >= max nrecv bufs per conn */
 static struct efs_rdma_conn *g_conn_reg[EFS_RDMA_MAX_CONNS];
 static uint32_t g_reg_gen[EFS_RDMA_MAX_CONNS];
 static pthread_mutex_t g_reg_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -664,6 +662,15 @@ int efs_rdma_available(void)
 /* ---------------- connection ---------------- */
 
 struct efs_rdma_conn {
+    struct efs_rmsg_rx messages;
+    struct efs_rmsg_credits credits;
+    uint64_t tx_id, reposted_data, advertised_data;
+    unsigned peer_outstanding;
+    int64_t assembly_end_us;
+    uint64_t data_frames, data_bytes, app_tx, app_rx, credit_stalls;
+    uint64_t rx_frames,rx_bytes,logical_tx,logical_rx,ctrl_tx,ctrl_rx,tcp_app_rx;
+    uint64_t bootstrap_tx,bootstrap_rx,assembly_peak;
+    int tcp_counted;
     int cq_reserved;
     struct efs_rdma_dev *dev;
     struct ibv_qp *qp;
@@ -954,6 +961,7 @@ static struct efs_rdma_conn *conn_create(struct efs_rdma_dev *dev)
         return NULL;
     rc->dev = dev;
     rc->nrecv = nrecv_bufs();
+    if (!rc->nrecv) { free(rc); return NULL; }
     rc->bufsz = EFS_RDMA_BUFSZ;
     rc->reserved = -1;
     rc->cur_buf = -1;
@@ -1111,141 +1119,94 @@ static int qp_rts(struct efs_rdma_conn *rc)
                          IBV_QP_MAX_QP_RD_ATOMIC);
 }
 
-static enum ibv_mtu mtu_min(enum ibv_mtu a, int b)
+static void setup_local(struct efs_rdma_conn *rc, struct efs_rmsg_setup *s)
 {
-    return (enum ibv_mtu)((int)a < b ? (int)a : b);
+    memset(s,0,sizeof(*s)); s->capabilities=EFS_RMSG_CAP_SEGMENTED;
+    s->physical_cap=rc->bufsz; s->logical_cap=EFS_RMSG_LOGICAL_MAX;
+    s->receives=rc->nrecv; s->outstanding=EFS_RMSG_QUEUE_MAX;
+    s->address_version=rc->dev->roce ? 1 : 0; s->lid=rc->dev->lid;
+    s->qpn=rc->qp->qp_num; s->psn=rc->psn; s->mtu=rc->dev->mtu;
+    if (rc->dev->roce) memcpy(s->gid,rc->dev->gid.raw,16);
 }
-
+static int setup_peer(struct efs_rdma_conn *rc, const struct efs_rmsg_setup *peer)
+{
+    struct efs_rmsg_setup local, n;
+    setup_local(rc,&local);
+    if (efs_rmsg_negotiate(&n,&local,peer) ||
+        efs_rmsg_credit_init(&rc->credits,peer->receives) ||
+        efs_rmsg_rx_init(&rc->messages,&g_assembly_budget,256ull*1024*1024,
+                         n.physical_cap,n.logical_cap,n.outstanding)) return -1;
+    rc->max_frame=n.physical_cap; rc->peer_outstanding=n.outstanding;
+    if (qp_rtr(rc,peer->lid,peer->qpn,peer->psn,(int)n.mtu,
+               rc->dev->roce ? peer->gid : NULL) || qp_rts(rc)) return -1;
+    return 0;
+}
+static int tcp_counts(int fd,uint64_t *tx,uint64_t *rx,int *peer_fin)
+{
+    struct tcp_info info;memset(&info,0,sizeof(info));socklen_t n=sizeof(info);
+    if (getsockopt(fd,IPPROTO_TCP,TCP_INFO,&info,&n) ||
+        n<offsetof(struct tcp_info,tcpi_bytes_sent)+sizeof(info.tcpi_bytes_sent)) return -1;
+    *tx=info.tcpi_bytes_sent;*rx=info.tcpi_bytes_received;
+    *peer_fin=info.tcpi_state==8; /* Linux TCP_CLOSE_WAIT: received FIN counts one octet */
+    return 0;
+}
+static void setup_publish(struct efs_conn *c, struct efs_rdma_conn *rc)
+{
+    c->rc=rc; c->kind=EFS_CONN_RDMA; rc->tcp_fd=c->fd; rc->counted=1;
+    fd_link_now(c->fd,rc->tcp_link,sizeof(rc->tcp_link));
+    int fin=0;
+    rc->tcp_counted=!tcp_counts(c->fd,&rc->bootstrap_tx,&rc->bootstrap_rx,&fin);
+    if (rc->tcp_counted && c->is_server) rc->bootstrap_tx+=5+EFS_RMSG_SETUP_BYTES;
+    __sync_fetch_and_add(&g_live_conns,1);
+    fprintf(stderr,"efs: RDMA transport up segmented-v1 on %s qpn=%u physical=%u logical=%u peer-receives=%u messages=%u\n",
+            rc->dev->name,rc->qp->qp_num,rc->max_frame,rc->messages.logical_cap,
+            rc->credits.capacity+1,rc->peer_outstanding);
+}
 int efs_rdma_client_upgrade(struct efs_conn *c)
 {
-    if (!efs_rdma_available())
-        return -1;
-    struct efs_rdma_dev *dev = dev_for_fd(c->fd);
-    if (!dev)
-        return -1;
-    struct efs_rdma_conn *rc = conn_create(dev);
-    if (!rc)
-        return -1;
-
-    struct efs_msg_rdma_setup req;
-    memset(&req, 0, sizeof(req));
-    req.lid = dev->lid;
-    req.qpn = rc->qp->qp_num;
-    req.psn = rc->psn;
-    req.mtu = (uint32_t)dev->mtu;
-    req.buf_size = rc->bufsz;
-    req.address_version = dev->roce ? 1 : 0;
-    memcpy(req.gid, dev->gid.raw, 16);
-
-    uint8_t type = 0;
-    void *payload = NULL;
-    uint32_t payload_len = 0;
-    struct efs_msg_rdma_setup_reply *rep = NULL;
-    int ok = 0;
-    uint32_t peer_qpn = 0;
-    if (efs_send_msg(c->fd, EFS_MSG_RDMA_SETUP, &req, dev->roce ? sizeof(req) : 20) == 0 &&
-        efs_recv_msg(c->fd, &type, &payload, &payload_len) == 0 &&
-        type == EFS_MSG_RDMA_SETUP_REPLY &&
-        payload_len >= 24) {
-        rep = payload;
-        peer_qpn = rep->qpn;
-        int gid_ok = payload_len >= sizeof(*rep) && rep->address_version == 1;
-        if ((!dev->roce || gid_ok) && rep->status == EFS_RDMA_STATUS_OK &&
-            qp_rtr(rc, rep->lid, rep->qpn, rep->psn,
-                   mtu_min(dev->mtu, (int)rep->mtu), dev->roce ? rep->gid : NULL) == 0 &&
-            qp_rts(rc) == 0) {
-            rc->max_frame = rep->buf_size < rc->bufsz ? rep->buf_size
-                                                      : rc->bufsz;
-            ok = 1;
-        }
-    }
+    if (!efs_rdma_available()) return -1;
+    struct efs_rdma_dev *dev=dev_for_fd(c->fd);
+    if (!dev) return -1;
+    struct efs_rdma_conn *rc=conn_create(dev);
+    if (!rc) return -1;
+    struct efs_rmsg_setup local,peer; uint8_t req[EFS_RMSG_SETUP_BYTES],type=0;
+    void *payload=NULL; uint32_t len=0;
+    setup_local(rc,&local);
+    int ok=!efs_rmsg_setup_encode(req,&local) &&
+        !efs_send_msg(c->fd,EFS_MSG_RDMA_SETUP,req,sizeof(req)) &&
+        !efs_recv_msg(c->fd,&type,&payload,&len) &&
+        type==EFS_MSG_RDMA_SETUP_REPLY && !efs_rmsg_setup_decode(&peer,payload,len) &&
+        !setup_peer(rc,&peer);
     free(payload);
     if (!ok) {
-        efs_rdma_conn_destroy(rc);
-        return -1;
+        fprintf(stderr,"efs: segmented RDMA setup failed or incompatible peer\n");
+        efs_rdma_conn_destroy(rc); return -1;
     }
-    c->rc = rc;
-    c->kind = EFS_CONN_RDMA;
-    rc->tcp_fd = c->fd;
-    rc->counted = 1;
-    fd_link_now(rc->tcp_fd, rc->tcp_link, sizeof(rc->tcp_link));
-    __sync_fetch_and_add(&g_live_conns, 1);
-    static int logged;
-    if (!__sync_lock_test_and_set(&logged, 1))
-        fprintf(stderr, "efs: RDMA transport up on %s port %u "
-                "(lid %u, %u recv + up to %u lazy send slots, %u KiB each)\n",
-                dev->name, dev->port, dev->lid, rc->nrecv, EFS_RDMA_NSEND,
-                rc->bufsz / 1024);
-    if (rdma_first_log()) {
-        struct sockaddr_in la;
-        socklen_t ll = sizeof(la);
-        unsigned lport = 0;
-        if (getsockname(c->fd, (struct sockaddr *)&la, &ll) == 0)
-            lport = ntohs(la.sin_port);
-        fprintf(stderr,
-                "rdma-first: upgrade ok fd=%d qpn=%u dest_qpn=%u local_port=%u "
-                "lid=%u max_frame=%u\n",
-                c->fd, rc->qp->qp_num, peer_qpn, lport, dev->lid,
-                rc->max_frame);
-    }
-    return 0;
+    setup_publish(c,rc); return 0;
 }
-
-int efs_rdma_server_accept(struct efs_conn *c, const void *setup_payload,
-                           uint32_t payload_len, void *reply,
-                           uint32_t *reply_len)
+int efs_rdma_server_accept(struct efs_conn *c, const void *payload,
+                           uint32_t len, void *reply, uint32_t *reply_len)
 {
-    struct efs_msg_rdma_setup_reply *rep = reply;
-    memset(rep, 0, sizeof(*rep));
-    *reply_len = payload_len >= sizeof(struct efs_msg_rdma_setup) ? sizeof(*rep) : 24;
-    rep->status = EFS_RDMA_STATUS_UNSUPPORTED;
-
-    if (payload_len < 20 || c->rc)
-        return -1;
-    if (!efs_rdma_available())
-        return -1;
-    struct efs_rdma_dev *dev = dev_for_fd(c->fd);
-    if (!dev)
-        return -1;
-
-    const struct efs_msg_rdma_setup *req = setup_payload;
-    if (dev->roce && (payload_len < sizeof(*req) || req->address_version != 1)) return -1;
-    struct efs_rdma_conn *rc = conn_create(dev);
-    if (!rc)
-        return -1;
-    if (qp_rtr(rc, req->lid, req->qpn, req->psn,
-               mtu_min(dev->mtu, (int)req->mtu), dev->roce ? req->gid : NULL) != 0 ||
-        qp_rts(rc) != 0) {
-        efs_rdma_conn_destroy(rc);
-        return -1;
-    }
-    rc->max_frame = req->buf_size < rc->bufsz ? req->buf_size : rc->bufsz;
-
-    rep->status = EFS_RDMA_STATUS_OK;
-    rep->lid = dev->lid;
-    rep->qpn = rc->qp->qp_num;
-    rep->psn = rc->psn;
-    rep->mtu = (uint32_t)dev->mtu;
-    rep->buf_size = rc->bufsz;
-    rep->address_version = dev->roce ? 1 : 0;
-    memcpy(rep->gid, dev->gid.raw, 16);
-
-    c->rc = rc;
-    c->kind = EFS_CONN_RDMA;
-    rc->tcp_fd = c->fd;
-    rc->counted = 1;
-    __sync_fetch_and_add(&g_live_conns, 1);
-    static int logged;
-    if (!__sync_lock_test_and_set(&logged, 1))
-        fprintf(stderr, "efsd: RDMA transport up on %s port %u (lid %u)\n",
-                dev->name, dev->port, dev->lid);
-    return 0;
+    /* Failure reply is deliberately not a valid setup record. Bootstrap
+     * callers use the raw TCP send; no application wrapper after publish. */
+    ((uint8_t *)reply)[0]=EFS_RDMA_STATUS_UNSUPPORTED; *reply_len=1;
+    struct efs_rmsg_setup peer,local;
+    if (c->rc || efs_rmsg_setup_decode(&peer,payload,len) || !efs_rdma_available()) return -1;
+    struct efs_rdma_dev *dev=dev_for_fd(c->fd);
+    if (!dev) return -1;
+    struct efs_rdma_conn *rc=conn_create(dev);
+    if (!rc) return -1;
+    if (setup_peer(rc,&peer)) { efs_rdma_conn_destroy(rc);return -1; }
+    setup_local(rc,&local);
+    if (efs_rmsg_setup_encode(reply,&local)) { efs_rdma_conn_destroy(rc);return -1; }
+    *reply_len=EFS_RMSG_SETUP_BYTES; setup_publish(c,rc);return 0;
 }
 
 void efs_rdma_conn_destroy(struct efs_rdma_conn *rc)
 {
     if (!rc)
         return;
+    uint32_t dying_qpn=rc->qp?rc->qp->qp_num:0;
     /* Destroy the QP first so no new recv completions can arrive, then
      * clear the registry slot under the lock: the poller holds g_reg_lock
      * while pushing, so after this it can never touch rc. Bumping the slot
@@ -1276,6 +1237,22 @@ void efs_rdma_conn_destroy(struct efs_rdma_conn *rc)
         rc->dev->recv_reserved -= rc->cq_reserved;
         pthread_mutex_unlock(&g_dev_lock);
     }
+    if (rc->messages.global) efs_rmsg_rx_destroy(&rc->messages);
+    if (rc->counted) {
+        uint64_t tx=0,rx=0;int fin=0;
+        int measured=rc->tcp_counted&&!tcp_counts(rc->tcp_fd,&tx,&rx,&fin);
+        uint64_t extra_tx=measured&&tx>rc->bootstrap_tx?tx-rc->bootstrap_tx:0;
+        uint64_t extra_rx=measured&&rx>rc->bootstrap_rx+(unsigned)fin?rx-rc->bootstrap_rx-(unsigned)fin:0;
+        fprintf(stderr,"efs: RDMA counters qpn=%u fd=%d data_tx=%llu/%llu data_rx=%llu/%llu app_tx=%llu/%llu app_rx=%llu/%llu controls=%llu/%llu peak=%llu stalls=%llu tcp_measured=%d bootstrap=%llu/%llu post_setup_tcp=%llu/%llu violations=%llu\n",
+            dying_qpn,rc->tcp_fd,(unsigned long long)rc->data_frames,(unsigned long long)rc->data_bytes,
+            (unsigned long long)rc->rx_frames,(unsigned long long)rc->rx_bytes,
+            (unsigned long long)rc->app_tx,(unsigned long long)rc->logical_tx,
+            (unsigned long long)rc->app_rx,(unsigned long long)rc->logical_rx,
+            (unsigned long long)rc->ctrl_tx,(unsigned long long)rc->ctrl_rx,
+            (unsigned long long)rc->assembly_peak,(unsigned long long)rc->credit_stalls,
+            measured,(unsigned long long)rc->bootstrap_tx,(unsigned long long)rc->bootstrap_rx,
+            (unsigned long long)extra_tx,(unsigned long long)extra_rx,(unsigned long long)rc->tcp_app_rx);
+    }
     int counted = rc->counted;
     free(rc->arena);
     free(rc->recv_bufs);
@@ -1287,7 +1264,7 @@ void efs_rdma_conn_destroy(struct efs_rdma_conn *rc)
 
 uint32_t efs_rdma_max_frame(struct efs_rdma_conn *rc)
 {
-    return rc->max_frame;
+    return rc->messages.logical_cap;
 }
 
 uint32_t efs_rdma_qpn(struct efs_rdma_conn *rc)
@@ -1384,44 +1361,21 @@ static int send_buf_prepare(struct efs_rdma_conn *rc, int idx)
 
 static int send_buf_pick(struct efs_rdma_conn *rc)
 {
-    if (reap_sends(rc) != 0)
-        return -1;
-    for (int i = 0; i < EFS_RDMA_NSEND; i++) {
-        int idx = (rc->send_rr + i) % EFS_RDMA_NSEND;
-        if (!rc->send_busy[idx] && idx != rc->reserved && rc->send_mrs[idx]) {
-            rc->send_rr = (idx + 1) % EFS_RDMA_NSEND;
-            return idx;
+    if (reap_sends(rc)) return -1;
+    for (int i=0;i<EFS_RDMA_NSEND-1;i++) {
+        int idx=(rc->send_rr+i)%(EFS_RDMA_NSEND-1);
+        if (!rc->send_busy[idx] && rc->send_mrs[idx]) {
+            rc->send_rr=(idx+1)%(EFS_RDMA_NSEND-1); return idx;
         }
     }
-    for (int i = 0; i < EFS_RDMA_NSEND; i++) {
-        int idx = (rc->send_rr + i) % EFS_RDMA_NSEND;
-        if (!rc->send_busy[idx] && idx != rc->reserved) {
-            int result = send_buf_prepare(rc, idx);
-            if (result >= 0)
-                rc->send_rr = (idx + 1) % EFS_RDMA_NSEND;
-            return result;
+    for (int i=0;i<EFS_RDMA_NSEND-1;i++) {
+        int idx=(rc->send_rr+i)%(EFS_RDMA_NSEND-1);
+        if (!rc->send_busy[idx]) {
+            if (send_buf_prepare(rc,idx)<0) return -1;
+            rc->send_rr=(idx+1)%(EFS_RDMA_NSEND-1); return idx;
         }
     }
-    int idx = rc->send_rr;
-    if (idx == rc->reserved)
-        idx = (idx + 1) % EFS_RDMA_NSEND;
-    /* Every usable slot is in flight. Preserve the bounded CQ wait. */
-    int64_t end = now_us() + EFS_RDMA_SEND_WAIT_US;
-    int64_t spin_end = now_us() + 200;
-    while (rc->send_busy[idx]) {
-        if (reap_sends(rc) != 0)
-            return -1;
-        if (!rc->send_busy[idx])
-            break;
-        if (now_us() > end) {
-            rc->broken = 1;
-            return -1;
-        }
-        if (now_us() >= spin_end)
-            sched_yield();
-    }
-    rc->send_rr = (idx + 1) % EFS_RDMA_NSEND;
-    return send_buf_prepare(rc, idx);
+    return -2; /* owner must progress receives as well as send CQ */
 }
 
 /* Describe a send failure. A send that neither completes nor errors leaves
@@ -1459,20 +1413,6 @@ struct send_ident {
     int st;
     uint64_t xmit_pkts;
 };
-
-static void send_ident_take(struct efs_rdma_conn *rc, struct send_ident *id)
-{
-    id->qp = rc->qp;
-    id->cq = rc->send_cq;
-    id->qpn = rc->qp ? rc->qp->qp_num : 0;
-    id->gen = rc->reg_gen;
-    id->st = -2;
-    /* Port-counter and ibv_query_qp stay off this path. Both are kernel
-     * round trips; doing them before every SEND made a same-host raft
-     * AppendEntries ~380us against ~15us on TCP (Sep 27). The failure
-     * dump reads them only after a send has already failed. */
-    id->xmit_pkts = 0;
-}
 
 static void send_fail_dump2(struct efs_rdma_conn *rc, uint8_t type,
                             const char *why, const struct send_ident *id);
@@ -1544,7 +1484,7 @@ static void send_fail_dump2(struct efs_rdma_conn *rc, uint8_t type,
     fprintf(stderr, "efs: RDMA conn sends posted=%llu reaped=%llu %s\n",
             (unsigned long long)rc->n_posted, (unsigned long long)rc->n_reaped,
             rc->n_reaped >= rc->n_posted
-                ? "*** ALL COMPLETIONS ARRIVED: flag was missed ***"
+                ? "(send CQ drained; failure may be credit/peer/protocol wait)"
                 : "(a completion is genuinely outstanding)");
     if (rc->dev)
         fprintf(stderr, "efs: RDMA port_xmit_packets now = %llu\n",
@@ -1597,162 +1537,76 @@ static int post_send(struct efs_rdma_conn *rc, uint64_t wr_id,
     return EFS_OK;
 }
 
-/* W39: header from the pool buffer, payload straight from a registered
- * region. Two SGEs, never inline. */
-static int post_send2(struct efs_rdma_conn *rc, uint64_t wr_id,
-                      const void *hdr, uint32_t hdr_len,
-                      const void *payload, uint32_t payload_len,
-                      uint32_t payload_lkey)
+static int message_progress(struct efs_rdma_conn *rc, unsigned frames);
+static int message_pause(struct efs_rdma_conn *rc, int64_t end);
+static int send_credit(struct efs_rdma_conn *rc)
 {
-    rdma_memcheck_send(hdr, hdr_len);
-    rdma_memcheck_send(payload, payload_len);
-    struct ibv_sge sge[2] = {
-        { .addr = (uintptr_t)hdr, .length = hdr_len, .lkey = rc->send_mrs[wr_id & 0xffu]->lkey },
-        { .addr = (uintptr_t)payload, .length = payload_len,
-          .lkey = payload_lkey },
-    };
-    struct ibv_send_wr wr = {
-        .wr_id = wr_id,
-        .opcode = IBV_WR_SEND,
-        .send_flags = IBV_SEND_SIGNALED,
-        .num_sge = 2,
-        .sg_list = sge,
-    };
-    struct ibv_send_wr *bad = NULL;
-    if (ibv_post_send(rc->qp, &wr, &bad) != 0) {
-        rc->broken = 1;
-        return EFS_ERR_NET;
-    }
-    rc->n_posted++;
-    return EFS_OK;
+    int idx=EFS_RDMA_NSEND-1;
+    if (rc->advertised_data==rc->reposted_data || rc->send_busy[idx]) return 0;
+    if (send_buf_prepare(rc,idx)<0) return -1;
+    struct efs_rmsg_header h={EFS_RMSG_CREDIT,0,rc->reposted_data,0,0,0};
+    if (efs_rmsg_encode(rc->send_bufs[idx],&h) ||
+        post_send(rc,SEND_WRID_POOL|idx,rc->send_bufs[idx],EFS_RMSG_ENVELOPE,0)) return -1;
+    rc->send_busy[idx]=1;rc->send_posted_us[idx]=now_us();
+    rc->advertised_data=rc->reposted_data;rc->ctrl_tx++;return 0;
 }
-
 int efs_rdma_send_quiesce(struct efs_rdma_conn *rc)
 {
-    int64_t end = now_us() + EFS_RDMA_SEND_WAIT_US;
-    for (;;) {
-        if (reap_sends(rc) != 0)
-            return -1;
-        if (rc->n_reaped >= rc->n_posted)
-            return 0;
-        if (now_us() > end) {
-            rc->broken = 1;
-            return -1;
-        }
-        sched_yield();
+    int ms=efs_net_remaining_ms(EFS_RDMA_SEND_WAIT_US/1000);
+    int64_t end=now_us()+(int64_t)ms*1000;
+    while (!rc->broken && rc->n_reaped<rc->n_posted) {
+        if (message_progress(rc,rc->nrecv)<0) return -1;
+        if (rc->n_reaped<rc->n_posted && message_pause(rc,end)<0) return -1;
     }
+    return rc->broken ? -1 : 0;
 }
-
+/* Copy only the current segment into a registered pool slot. Source p1/p2
+ * may be reused on return, even if the last SEND CQE has not arrived. */
 int efs_rdma_send_frame(struct efs_rdma_conn *rc, uint8_t type,
-                        const void *p1, uint32_t l1,
-                        const void *p2, uint32_t l2)
+                        const void *p1, uint32_t l1,const void *p2,uint32_t l2)
 {
-    if (rc->broken) {
-        send_fail_dump(rc, type, "conn already broken");
-        return EFS_ERR_NET;
-    }
-    uint32_t payload = l1 + l2;
-    uint32_t frame = 5 + payload;
-    if (frame > rc->max_frame)
-        return EFS_ERR_NET; /* caller must use the TCP side-channel */
-
-    /* Always copy into a registered send buffer. INLINE from a stack
-     * temporary is rejected on some mlx5 FW; INLINE from the MR is
-     * fine when the frame fits the QP's actual cap. */
-    int idx = send_buf_pick(rc);
-    if (idx < 0) {
-        send_fail_dump(rc, type, "send_buf_pick: unavailable registered slot");
-        return EFS_ERR_NET;
-    }
-    uint8_t *b = rc->send_bufs[idx];
-    if (p2 && l2 >= EFS_RDMA_ZC_MIN && rc->zc_ok) {
-        uint32_t lkey = zc_lkey(rc->dev, p2, l2);
-        if (lkey != 0) {
-            if (efs_wire_frame_header(type, payload, b) != EFS_OK)
-                return EFS_ERR_NET;
-            if (l1 > 0 && p1)
-                memcpy(b + 5, p1, l1);
-            struct send_ident ident;
-            send_ident_take(rc, &ident);
-            if (post_send2(rc, SEND_WRID_POOL | (uint64_t)idx, b, 5 + l1,
-                           p2, l2, lkey) != 0) {
-                send_fail_dump2(rc, type, "ibv_post_send (2 sge)", &ident);
-                return EFS_ERR_NET;
-            }
-            rc->send_busy[idx] = 1;
-            rc->send_posted_us[idx] = now_us();
-            if (__atomic_fetch_add(&g_zc_sent, 1, __ATOMIC_RELAXED) == 0)
-                fprintf(stderr, "efs: RDMA zero-copy send active "
-                        "(type=%u hdr=%u payload=%u)\n", type, l1, l2);
-            return EFS_OK;
+    if (rc->broken || l1>UINT32_MAX-l2 || l1+l2>rc->messages.logical_cap-5 ||
+        (l1&&!p1) || (l2&&!p2) || rc->tx_id==UINT64_MAX) goto fail;
+    uint32_t total=5+l1+l2;uint8_t header[5];
+    if (efs_wire_frame_header(type,l1+l2,header)) goto fail;
+    int ms=efs_net_remaining_ms(EFS_RDMA_SEND_WAIT_US/1000);
+    int64_t end=now_us()+(int64_t)ms*1000;
+    uint64_t id=++rc->tx_id;
+    for (uint32_t off=0;off<total;) {
+        int idx;
+        for (;;) {
+            if (message_progress(rc,rc->nrecv)<0 || now_us()>=end) goto fail;
+            idx=send_buf_pick(rc);if (idx==-1) goto fail;
+            if (idx>=0 && rc->credits.sent-rc->credits.returned<rc->credits.capacity) break;
+            rc->credit_stalls++;
+            if (message_pause(rc,end)<0) goto fail;
         }
-        __atomic_fetch_add(&g_zc_copied, 1, __ATOMIC_RELAXED);
+        uint32_t n=total-off;if (n>rc->max_frame-EFS_RMSG_ENVELOPE) n=rc->max_frame-EFS_RMSG_ENVELOPE;
+        struct efs_rmsg_header h={EFS_RMSG_DATA,off+n==total?EFS_RMSG_FINAL:0,id,total,off,n};
+        uint8_t *b=rc->send_bufs[idx];if (efs_rmsg_encode(b,&h)) goto fail;
+        const void *parts[3]={header,p1,p2};uint32_t lens[3]={5,l1,l2};
+        uint32_t pos=off,left=n,dst=EFS_RMSG_ENVELOPE;
+        for (unsigned i=0;i<3 && left;i++) {
+            if (pos>=lens[i]) {pos-=lens[i];continue;}
+            uint32_t take=lens[i]-pos;if (take>left) take=left;
+            memcpy(b+dst,(const uint8_t *)parts[i]+pos,take);
+            dst+=take;left-=take;pos=0;
+        }
+        if (left || efs_rmsg_credit_take(&rc->credits)!=1 ||
+            post_send(rc,SEND_WRID_POOL|idx,b,n+EFS_RMSG_ENVELOPE,n+EFS_RMSG_ENVELOPE<=rc->max_inline)) goto fail;
+        rc->send_busy[idx]=1;rc->send_posted_us[idx]=now_us();
+        rc->data_frames++;rc->data_bytes+=n+EFS_RMSG_ENVELOPE;off+=n;
     }
-    uint32_t encoded = 0;
-    if (efs_wire_frame_encode(type, p1, l1, p2, l2, b, rc->max_frame,
-                              &encoded) != EFS_OK)
-        return EFS_ERR_NET;
-    if (encoded != frame)
-        return EFS_ERR_NET;
-    int inline_ok = (frame <= rc->max_inline);
-    if (rdma_first_log()) {
-        static int nsend;
-        int n = __sync_fetch_and_add(&nsend, 1);
-        if (n < 6)
-            fprintf(stderr, "rdma-first: send_frame post type=%u frame=%u inline=%d\n",
-                    type, frame, inline_ok);
-    }
-    struct send_ident ident;
-    send_ident_take(rc, &ident);
-    if (post_send(rc, SEND_WRID_POOL | (uint64_t)idx, b, frame, inline_ok) != 0) {
-        send_fail_dump2(rc, type, "ibv_post_send", &ident);
-        return EFS_ERR_NET;
-    }
-    rc->send_busy[idx] = 1;
-    rc->send_posted_us[idx] = now_us();
-    /* W15.4: do not wait for this send's CQE. send_buf_pick reaps on the
-     * next send; the reply wait (efs_rdma_recv_wait / reply_ready*) reaps
-     * before it blocks and turns a send-CQE error, or a send still busy
-     * after EFS_RDMA_SEND_WAIT_US, into EFS_ERR_NET. Waiting here was one
-     * HCA round trip per fragment. */
-    (void)ident;
-    return EFS_OK;
+    rc->app_tx++;rc->logical_tx+=total;return EFS_OK;
+fail:
+    rc->broken=1;send_fail_dump(rc,type,"segmented send failed");return EFS_ERR_NET;
 }
-
-void *efs_rdma_send_buf(struct efs_rdma_conn *rc, uint32_t payload_len)
-{
-    if (rc->broken)
-        return NULL;
-    uint32_t frame = 5 + payload_len;
-    if (frame > rc->max_frame || frame <= EFS_RDMA_INLINE_MAX)
-        return NULL;
-    int idx = send_buf_pick(rc);
-    if (idx < 0)
-        return NULL;
-    rc->reserved = idx;
-    return rc->send_bufs[idx] + 5;
-}
-
-int efs_rdma_send_commit(struct efs_rdma_conn *rc, void *buf, uint8_t type,
-                         uint32_t payload_len)
-{
-    int idx = rc->reserved;
-    rc->reserved = -1;
-    if (idx < 0 || buf != rc->send_bufs[idx] + 5 || rc->broken) {
-        rc->broken = 1;
-        return EFS_ERR_NET;
-    }
-    uint8_t *b = rc->send_bufs[idx];
-    uint32_t nl = htonl(1 + payload_len);
-    memcpy(b, &nl, 4);
-    b[4] = type;
-    if (post_send(rc, SEND_WRID_POOL | (uint64_t)idx, b, 5 + payload_len,
-                  0) != 0)
-        return EFS_ERR_NET;
-    rc->send_busy[idx] = 1;
-    rc->send_posted_us[idx] = now_us();
-    return EFS_OK;
-}
+/* Initially disable direct-fill/W39 sources: every segmented send is copied
+ * so TLS/client-slab lifetimes cannot outlive the operation. */
+void *efs_rdma_send_buf(struct efs_rdma_conn *rc,uint32_t n)
+{ (void)rc;(void)n;return NULL; }
+int efs_rdma_send_commit(struct efs_rdma_conn *rc,void *buf,uint8_t type,uint32_t n)
+{ (void)buf;(void)type;(void)n;rc->broken=1;return EFS_ERR_NET; }
 
 /* ---------------- recv path ---------------- */
 
@@ -1779,6 +1633,119 @@ static void pend_drain_efd(struct efs_rdma_conn *rc)
     if (read(rc->efd, &tmp, sizeof(tmp)) < 0 && errno != EAGAIN)
         rc->broken = 1;
 }
+
+/* Only the checked-out connection owner enters this progress routine.
+ * Poller publishes physical CQEs under g_reg_lock, never assembles or waits. */
+static int message_progress(struct efs_rdma_conn *rc,unsigned frames)
+{
+    if (rc->broken || reap_or_dead(rc)) return -1;
+    if (rc->assembly_end_us && now_us()>=rc->assembly_end_us) goto fail;
+    for (unsigned i=0;i<frames && pend_pop(rc);i++) {
+        uint32_t len=rc->cur_len;uint8_t *p=rc->recv_bufs[rc->cur_buf]+EFS_RDMA_RECV_ALIGN;
+        struct efs_rmsg_header h;
+        if (len>rc->max_frame || efs_rmsg_decode(&h,p,len)) goto fail;
+        if (h.kind==EFS_RMSG_CREDIT) {
+            if (efs_rmsg_credit_return(&rc->credits,h.id)) goto fail;
+            rc->ctrl_rx++;
+        } else {
+            if (!rc->messages.active) rc->assembly_end_us=now_us()+(int64_t)EFS_IO_TIMEOUT_MS*1000;
+            int got=efs_rmsg_rx_feed(&rc->messages,p,len);
+            if (got<0) goto fail;
+            rc->rx_frames++;rc->rx_bytes+=len;
+            if (rc->messages.used>rc->assembly_peak) rc->assembly_peak=rc->messages.used;
+            if (got) {rc->assembly_end_us=0;rc->app_rx++;rc->logical_rx+=h.total;}
+        }
+        if (efs_rdma_recv_repost(rc)) goto fail;
+        if (h.kind==EFS_RMSG_DATA) {
+            if (rc->reposted_data==UINT64_MAX) goto fail;
+            rc->reposted_data++;
+        }
+        if (send_credit(rc)) goto fail;
+    }
+    if (send_credit(rc)) goto fail;
+    return 0;
+fail:
+    rc->broken=1;return -1;
+}
+static int message_pause(struct efs_rdma_conn *rc,int64_t end)
+{
+    if (rc->broken || now_us()>=end) {rc->broken=1;return -1;}
+    struct pollfd pf[2]={{rc->efd,POLLIN,0},{rc->tcp_fd,POLLIN,0}};
+    efd_arm(rc);
+    int n=poll(pf,rc->tcp_fd>=0?2:1,1);efd_disarm(rc);
+    if (n<0 && errno!=EINTR) {rc->broken=1;return -1;}
+    if (rc->tcp_fd>=0 && pf[1].revents) {
+        char byte;ssize_t got=recv(rc->tcp_fd,&byte,1,MSG_PEEK|MSG_DONTWAIT);
+        if (got>=0 || (errno!=EAGAIN && errno!=EWOULDBLOCK && errno!=EINTR)) {
+            if (got>0) rc->tcp_app_rx++;
+            rc->broken=1;return -1; /* TCP app bytes and EOF both retire */
+        }
+    }
+    if (__atomic_load_n(&rc->pr_head,__ATOMIC_ACQUIRE)==rc->pr_tail) pend_drain_efd(rc);
+    return 0;
+}
+int efs_rdma_message_ready(struct efs_rdma_conn *rc)
+{
+    efd_disarm(rc);
+    if (message_progress(rc,1)<0) return -1;
+    /* CREDIT-only and consumed-frame wakes must not leave a permanently ready
+     * eventfd. The caller arms/rechecks the ring before its next poll, so a
+     * concurrent push racing this drain is still observed without a lost wake. */
+    if (__atomic_load_n(&rc->pr_head,__ATOMIC_ACQUIRE)==rc->pr_tail)
+        pend_drain_efd(rc);
+    return rc->broken ? -1 : efs_rmsg_rx_peek(&rc->messages)!=NULL;
+}
+int efs_rdma_message_wait(struct efs_rdma_conn *rc,int timeout_ms)
+{
+    int64_t end=timeout_ms<0?INT64_MAX:now_us()+(int64_t)timeout_ms*1000;
+    while (!efs_rmsg_rx_peek(&rc->messages)) {
+        if (message_progress(rc,rc->nrecv)<0) return EFS_ERR_NET;
+        if (!efs_rmsg_rx_peek(&rc->messages) && message_pause(rc,end)<0)
+            return EFS_ERR_NET;
+    }
+    return rc->broken?EFS_ERR_NET:EFS_OK;
+}
+void *efs_rdma_message_frame(struct efs_rdma_conn *rc,uint32_t *len)
+{
+    const struct efs_rmsg_view *v=efs_rmsg_rx_peek(&rc->messages);
+    if (!v) return NULL;
+    if (len) *len=v->len;
+    return v->frame;
+}
+void efs_rdma_message_release(struct efs_rdma_conn *rc)
+{ efs_rmsg_rx_release(&rc->messages); }
+void *efs_rdma_message_take(struct efs_rdma_conn *rc)
+{
+    struct efs_rmsg_rx *r=&rc->messages;
+    if (!r->count) return NULL;
+    struct efs_rmsg_view *v=&r->queue[r->head];uint8_t *p=v->frame;
+    memmove(p,p+5,v->len-5);
+    r->used-=v->len;__atomic_fetch_sub(&r->global->used,v->len,__ATOMIC_RELAXED);
+    memset(v,0,sizeof(*v));r->head=(r->head+1)%r->capacity;r->count--;
+    return p; /* normal free() ownership; no second full allocation */
+}
+uint64_t efs_rdma_assembly_bytes(void)
+{ return __atomic_load_n(&g_assembly_budget.used,__ATOMIC_RELAXED); }
+void efs_rdma_tcp_violation(struct efs_rdma_conn *rc)
+{ rc->tcp_app_rx++;rc->broken=1; }
+void efs_rdma_message_stats(struct efs_rdma_conn *rc,struct efs_rdma_message_stats *o)
+{
+    *o=(struct efs_rdma_message_stats){rc->data_frames,rc->data_bytes,rc->rx_frames,rc->rx_bytes,
+        rc->app_tx,rc->app_rx,rc->logical_tx,rc->logical_rx,rc->ctrl_tx,rc->ctrl_rx,
+        rc->credit_stalls,rc->tcp_app_rx,rc->messages.used,
+        __atomic_load_n(&g_assembly_budget.used,__ATOMIC_RELAXED)};
+}
+int efs_rdma_message_poll_ms(struct efs_rdma_conn *rc)
+{
+    if (rc->reposted_data!=rc->advertised_data) return 1;
+    if (rc->assembly_end_us) {
+        int64_t left=(rc->assembly_end_us-now_us()+999)/1000;
+        return left<1?0:left>100?100:(int)left;
+    }
+    return -1; /* idle connections still sleep until CQ or TCP lifetime event */
+}
+unsigned efs_rdma_message_capacity(struct efs_rdma_conn *rc)
+{ return rc->peer_outstanding; }
 
 int efs_rdma_recv_wait(struct efs_rdma_conn *rc, int timeout_ms)
 {

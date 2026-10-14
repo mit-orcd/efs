@@ -97,6 +97,7 @@ COMMON_SRCS = src/common/admission.c src/meta/append_plan.c $(COMMON_DIR)/public
               $(COMMON_DIR)/checksum.c \
               $(COMMON_DIR)/network.c \
               $(COMMON_DIR)/rdma.c \
+              $(COMMON_DIR)/rdma_message.c \
               $(BLAKE3_DIR)/blake3.c \
               $(BLAKE3_DIR)/blake3_portable.c \
               $(BLAKE3_DIR)/blake3_dispatch.c \
@@ -113,8 +114,8 @@ COMMON_SRCS = src/common/admission.c src/meta/append_plan.c $(COMMON_DIR)/public
 COMMON_OBJS = $(COMMON_SRCS:.c=.o)
 LIB = libefs.a
 
-TEST_SRCS = tests/test_expiry.c tests/test_repair_job.c tests/test_query_policy.c tests/test_query_refresh.c tests/test_txn_resolve_faults.c tests/test_namespace_session.c tests/test_admission.c tests/test_store_containers.c tests/test_principles_index_fault.c tests/test_principles_index.c tests/test_query_catalog.c tests/test_name_index.c tests/test_append_transaction.c tests/test_store_durability.c tests/test_append_receipt.c tests/test_put_ticket.c tests/test_store_gc.c tests/test_bench_latency.c tests/test_store_overwrite.c tests/test_writer_routing.c tests/test_kv_snapshot_tail.c tests/test_kv_seg_index.c tests/test_mtime_barrier.c tests/test_publication_session.c tests/test_publication_ack.c tests/test_publication_recovery.c tests/test_lane_bootstrap_recovery.c tests/test_fence_view.c tests/test_reply_buffers.c tests/test_bufpool.c tests/test_erasure.c tests/test_placement.c tests/test_rdma_xprt.c tests/test_wire.c tests/test_data.c tests/test_kv.c tests/test_kv_lsm.c tests/test_raft_store.c tests/test_meta_apply.c tests/test_raft.c tests/test_sim.c tests/test_txn.c tests/test_session.c tests/test_lock.c tests/test_stage_evict.c tests/test_conn_fd.c tests/test_query_disk.c tests/test_query_delta.c tests/test_query_disk_io.c
-TEST_BINS = tests/test_expiry tests/test_repair_job tests/test_query_policy tests/test_query_refresh tests/test_txn_resolve_faults tests/test_namespace_session tests/test_admission tests/test_store_containers tests/test_principles_index_fault tests/test_principles_index tests/test_query_catalog tests/test_name_index tests/test_append_transaction tests/test_store_durability tests/test_append_receipt tests/test_put_ticket tests/test_store_gc tests/test_bench_latency tests/test_store_overwrite tests/test_writer_routing tests/test_kv_snapshot_tail tests/test_kv_seg_index tests/test_mtime_barrier tests/test_publication_session tests/test_publication_ack tests/test_publication_recovery tests/test_lane_bootstrap_recovery tests/test_fence_view tests/test_reply_buffers tests/test_bufpool tests/test_erasure tests/test_placement tests/test_rdma_xprt tests/test_wire tests/test_data tests/test_kv tests/test_kv_lsm tests/test_raft_store tests/test_meta_apply tests/test_raft tests/test_sim tests/test_txn tests/test_session tests/test_lock tests/test_stage_evict tests/test_conn_fd tests/test_query_disk tests/test_query_delta tests/test_query_disk_io
+TEST_SRCS = tests/test_rdma_segmented.c tests/test_expiry.c tests/test_repair_job.c tests/test_query_policy.c tests/test_query_refresh.c tests/test_txn_resolve_faults.c tests/test_namespace_session.c tests/test_admission.c tests/test_store_containers.c tests/test_principles_index_fault.c tests/test_principles_index.c tests/test_query_catalog.c tests/test_name_index.c tests/test_append_transaction.c tests/test_store_durability.c tests/test_append_receipt.c tests/test_put_ticket.c tests/test_store_gc.c tests/test_bench_latency.c tests/test_store_overwrite.c tests/test_writer_routing.c tests/test_kv_snapshot_tail.c tests/test_kv_seg_index.c tests/test_mtime_barrier.c tests/test_publication_session.c tests/test_publication_ack.c tests/test_publication_recovery.c tests/test_lane_bootstrap_recovery.c tests/test_fence_view.c tests/test_reply_buffers.c tests/test_bufpool.c tests/test_erasure.c tests/test_placement.c tests/test_rdma_xprt.c tests/test_wire.c tests/test_data.c tests/test_kv.c tests/test_kv_lsm.c tests/test_raft_store.c tests/test_meta_apply.c tests/test_raft.c tests/test_sim.c tests/test_txn.c tests/test_session.c tests/test_lock.c tests/test_stage_evict.c tests/test_conn_fd.c tests/test_query_disk.c tests/test_query_delta.c tests/test_query_disk_io.c
+TEST_BINS = tests/test_rdma_segmented tests/test_expiry tests/test_repair_job tests/test_query_policy tests/test_query_refresh tests/test_txn_resolve_faults tests/test_namespace_session tests/test_admission tests/test_store_containers tests/test_principles_index_fault tests/test_principles_index tests/test_query_catalog tests/test_name_index tests/test_append_transaction tests/test_store_durability tests/test_append_receipt tests/test_put_ticket tests/test_store_gc tests/test_bench_latency tests/test_store_overwrite tests/test_writer_routing tests/test_kv_snapshot_tail tests/test_kv_seg_index tests/test_mtime_barrier tests/test_publication_session tests/test_publication_ack tests/test_publication_recovery tests/test_lane_bootstrap_recovery tests/test_fence_view tests/test_reply_buffers tests/test_bufpool tests/test_erasure tests/test_placement tests/test_rdma_xprt tests/test_wire tests/test_data tests/test_kv tests/test_kv_lsm tests/test_raft_store tests/test_meta_apply tests/test_raft tests/test_sim tests/test_txn tests/test_session tests/test_lock tests/test_stage_evict tests/test_conn_fd tests/test_query_disk tests/test_query_delta tests/test_query_disk_io
 TEST_SRCS += tests/test_pack_cohort.c tests/test_packed_reader.c tests/test_packed_publication.c tests/test_packed_upload.c tests/test_pack_admission.c tests/test_pack_snapshot.c tests/test_pack_mapping.c tests/test_packed_metadata.c tests/test_small_segment.c tests/test_packed_segment.c tests/test_packed_store.c tests/test_pack_ledger.c tests/test_pack_ledger_recovery.c tests/test_kv_reader_gate.c
 TEST_SRCS += tests/test_kv_insertion_buffer.c
 TEST_BINS += tests/test_kv_insertion_buffer
@@ -191,6 +192,8 @@ test-report-pressure:
 	python3 tests/test_connect_deadline.py
 	python3 tests/test_resolver_deadline.py
 	python3 tests/test_rdma_reply_budget.py
+	python3 tests/test_rdma_progress_ready.py
+	python3 tests/test_rdma_setup_reentry.py
 	python3 tests/test_wb_worker_budget.py
 	python3 tests/test_wb_drain_budget.py
 	python3 tests/test_append_flush_budget.py
@@ -200,6 +203,7 @@ test-report-pressure:
 	python3 tests/test_get_pool_startup.py
 	python3 tests/test_get_pool_budget.py
 	python3 tests/test_get_pair_budget.py
+	python3 tests/test_get_pair_readiness.py
 	python3 tests/test_put_retry_budget.py
 	python3 tests/test_put_reply_deadline.py
 	python3 tests/test_put_tcp_frame.py
@@ -377,6 +381,7 @@ test: all
 	python3 tests/test_readindex_completion.py
 	python3 tests/test_readindex_publish.py
 	python3 tests/test_readindex_pair.py
+	python3 tests/test_readindex_tickets.py
 	python3 tests/test_readindex_admission.py
 	python3 tests/test_readindex_result.py
 	python3 tests/test_readindex_coalescer.py
@@ -702,8 +707,8 @@ $(filter src/client/%.o,$(COMMON_OBJS)) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ): src/
 src/client/efs_fuse.o: src/client/reply_buffers.h src/client/stop_control.h
 src/raft/raft_disk.o src/raft/raft_log.o: src/raft/raft_disk_internal.h
 
-tests/test_store_durability: tests/test_store_durability.c src/server/store.c src/server/server_internal.h src/bench/writer.o src/bench/store_containers.o $(LIB)
-	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o src/bench/store_containers.o $(LIB) $(LDFLAGS)
+tests/test_store_durability: tests/test_store_durability.c src/server/store.c src/server/store_containers.c src/server/server_internal.h src/bench/writer.o $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o $(LIB) $(LDFLAGS)
 
 tests/test_store_overwrite: tests/test_store_overwrite.c src/server/store.c src/server/data_pressure.h src/server/server_internal.h src/bench/writer.o src/bench/store_containers.o $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o src/bench/store_containers.o $(LIB) $(LDFLAGS)
@@ -932,3 +937,10 @@ tests/test_repair_worker: tests/test_repair_worker.c src/server/repair_worker.c 
 src/meta/query_catalog.o src/meta/query_disk.o: src/meta/query_walk.h
 # Profiler launches and child retirement share one implementation.
 src/server/efsd.o src/client/efs_fuse.o src/client/efs_bench.o: src/common/recorder_start.h src/common/recorder_stop.h
+
+.PHONY: test-rdma-message
+test-rdma-message:
+	@bin=$$(mktemp /tmp/efs-rdma-message.XXXXXX); trap 'rm -f "$$bin"' EXIT; \
+	$(CC) -std=c99 -O2 -g -Wall -Wextra -Werror -Iinclude tests/test_rdma_message.c src/common/rdma_message.c -pthread -o "$$bin" && "$$bin"
+
+test: test-rdma-message

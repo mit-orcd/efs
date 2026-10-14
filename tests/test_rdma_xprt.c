@@ -12,6 +12,7 @@
 #include "efs/network.h"
 #include "efs/protocol.h"
 #include "efs/rdma.h"
+#include "efs/rdma_message.h"
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -121,7 +122,7 @@ int main(void)
             return 1;
         }
         CHECK(type == EFS_MSG_RDMA_SETUP, "SETUP type");
-        struct efs_msg_rdma_setup_reply rep;
+        uint8_t rep[EFS_RMSG_SETUP_BYTES];
         uint32_t rlen = sizeof(rep);
         CHECK(efs_rdma_server_accept(srv, pl, plen, &rep, &rlen) == 0,
               "server_accept");
@@ -243,7 +244,7 @@ int main(void)
     efs_conn_destroy(srv);
 
     CHECK(sc.saw_rdma >= 2, "server saw RDMA frames");
-    CHECK(sc.saw_tcp_big >= 1, "server saw oversized on TCP");
+    CHECK(sc.saw_tcp_big == 0, "no application TCP after segmented upgrade");
     CHECK(efs_rdma_live_conns() == 0, "live conns back to 0");
 
     printf("PASS: rdma xprt (rdma=%d tcp_big=%d frames=%d)\n",
