@@ -817,6 +817,7 @@ static void write_accept_end(int slot)
  * One chunk is charged twice: its chunk record and companion inode record.
  * This is a conservative REPORT workload budget, separate from data buffers. */
 #define REPORT_PRESSURE_RECORD_BYTES 2048ull
+#define EFS_REPORT_REPAIR_MAX 8
 _Static_assert(sizeof(struct efs_chunk_rec) + sizeof(struct efs_ino_size_rec) +
                sizeof(uint64_t) <= REPORT_PRESSURE_RECORD_BYTES,
                "REPORT admission byte charge must cover a chunk and inode");
@@ -1803,6 +1804,12 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
     uint64_t *cseq = NULL;
     struct efs_ino_size_rec *irecs = NULL;
     uint32_t cn = 0, in = 0;
+    /* Chunk-rec inos whose staged row was missing: repaired by a server
+     * getattr after the snapshot unlock (RPCs do not belong under the
+     * table lock). Bounded; beyond the cap the rec ships without a size
+     * and the server rejects the batch (visible EIO, retained, retried). */
+    efs_ino_t repair[EFS_REPORT_REPAIR_MAX];
+    uint32_t n_repair = 0;
     /* A chunk rec whose ino has no irec is REJECTED by the server
      * (raft_host.c report loop, "pack-nosize"): an EOF guessed from the
      * chunk end would commit to the grow-only lane MAX and a later irec
@@ -1905,15 +1912,11 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
         if (k < in)
             continue;
         if (efs_export_get_inode(&g_client.export, cino, &inode) != 0) {
-            static int logged;
-            if (logged < 10) {
-                logged++;
-                fprintf(stderr,
-                        "efs: report chunk rec ino=%llu ci=%u has no staged "
-                        "row; server rejects the batch, fsync fails and the "
-                        "report is retried\n",
-                        (unsigned long long)cino, crecs[c].chunk_index);
-            }
+            /* Staged row unavailable: the shard tab may not be instantiated
+             * (transient), or the inode was unlinked mid-report. Defer the
+             * decision to the repair pass below the snapshot unlock. */
+            if (n_repair < EFS_REPORT_REPAIR_MAX)
+                repair[n_repair++] = cino;
             continue;
         }
         irecs[in].ino = cino;
@@ -1927,6 +1930,51 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
         extra_cap--;
     }
     report_snapshot_unlock(only_ino);
+
+    /* Repair chunk-rec inos whose staged row was missing at snapshot time.
+     * A server getattr re-stages a transiently absent row (shard tab not
+     * instantiated); NOT_FOUND means the inode was unlinked mid-report —
+     * its recs ship without a size and the server skips them as deleted.
+     * A re-staged row whose size does not cover this batch's highest dirty
+     * chunk end means the dirty EOF was lost with the evicted row: ship no
+     * size and let the server reject the batch (visible EIO; the retained
+     * snap is retried by the next fsync/close). Attaching that smaller
+     * committed size instead would silently publish a short EOF. */
+    for (uint32_t r = 0; r < n_repair; r++) {
+        struct efs_inode ri;
+        uint64_t cover = 0;
+
+        if (efs_client_stat_ino(repair[r], &ri) != EFS_OK)
+            continue;
+        for (uint32_t c = 0; c < cn; c++)
+            if (crecs[c].ino == repair[r]) {
+                uint64_t end = ((uint64_t)crecs[c].chunk_index + 1) *
+                               data_chunk_size();
+                if (end > cover)
+                    cover = end;
+            }
+        if (ri.size < cover) {
+            static int logged;
+            if (logged < 10) {
+                logged++;
+                fprintf(stderr,
+                        "efs: report ino=%llu re-staged size %llu below dirty "
+                        "coverage %llu; server rejects the batch, fsync fails "
+                        "and the report is retried\n",
+                        (unsigned long long)repair[r],
+                        (unsigned long long)ri.size, (unsigned long long)cover);
+            }
+            continue;
+        }
+        irecs[in].ino = repair[r];
+        irecs[in].size = ri.size;
+        irecs[in].mtime = ri.mtime;
+        irecs[in].mtime_nsec = ri.mtime_nsec;
+        if (efs_client_mtime_is_pinned(repair[r]))
+            irecs[in].flags = EFS_INO_REC_F_TIMES;
+        irecs[in].atime = ri.atime;
+        in++;
+    }
 
     /* A flush of a clean fd (the rd() after wr() already published)
      * used to send a sync REPORT with no records. That is a Raft

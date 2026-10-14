@@ -1,8 +1,19 @@
 #!/usr/bin/env python3
 """Cross-host EOF contract oracle using an EFS_FAULTS private client.
 
-Run on Intel1; peer reads run on Intel2. Baseline failure is retained. In fixed
-mode rejected publication must retain bytes for retry after disabling the fault.
+Run on Intel1 (the fixture mount must be local); peer reads run on the peer
+host over ssh. Baseline failure is retained. In fixed mode rejected
+publication must retain bytes for retry after disabling the fault.
+
+Orchestration (fixture start/stop, builds) is driven from the Mac, whose
+intel1_efs/intel2_efs aliases are authoritative. The peer read needs host->
+peer ssh: the alias given by --peer must resolve ON the mount host
+(provisioned 2026-10-13: intel1 efs key authorized on intel2, both
+directions). Example, from the Mac:
+
+  ssh intel1_efs python3 /data1/efs/w100-private/devel-kimi/tests/live/report_eof_contract.py \
+      /data1/efs/w100-private/runtime-devel-kimi/mnt \
+      /data1/efs/w100-private/runtime-devel-kimi/omit-size --expect refused
 """
 import argparse
 import json
@@ -16,6 +27,8 @@ ap=argparse.ArgumentParser(description=__doc__)
 ap.add_argument('mount', type=Path)
 ap.add_argument('fault', type=Path)
 ap.add_argument('--expect', choices=['rounded', 'refused'], required=True)
+ap.add_argument('--peer', default='intel2_efs',
+                help='ssh alias for the peer host, resolved on the mount host')
 args=ap.parse_args()
 if not os.path.ismount(args.mount):ap.error('private mounted fixture required')
 root=Path(tempfile.mkdtemp(prefix='w100-eof-',dir=args.mount))
@@ -31,7 +44,7 @@ try:
 finally:os.close(fd)
 print(json.dumps(dict(size=s,high=high,low=low,past=past)))
 '''
-    return json.loads(subprocess.check_output(['ssh','intel2_efs',shlex.join(['python3','-c',code,str(path),str(size)])],text=True))
+    return json.loads(subprocess.check_output(['ssh',args.peer,shlex.join(['python3','-c',code,str(path),str(size)])],text=True))
 
 
 rows=[]
@@ -64,7 +77,7 @@ try:
                 retry=peer(path,expected);row['after_retry']=retry
                 assert retry['size']==expected and retry['past']=='',row
                 if name=='sparse':assert retry['high']=='48' and retry['low']=='4c',row
-                else:assert subprocess.check_output(['ssh','intel2_efs',shlex.join(['python3','-c',
+                else:assert subprocess.check_output(['ssh',args.peer,shlex.join(['python3','-c',
                     'import pathlib,sys;assert pathlib.Path(sys.argv[1]).read_bytes()==b"S"*512',str(path)])])==b''
             rows.append(row)
         finally:os.close(fd)
