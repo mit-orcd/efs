@@ -380,6 +380,7 @@ test: all
 	python3 tests/test_readindex_completion.py
 	python3 tests/test_readindex_publish.py
 	python3 tests/test_readindex_pair.py
+	python3 tests/test_readindex_tickets.py
 	python3 tests/test_readindex_admission.py
 	python3 tests/test_readindex_result.py
 	python3 tests/test_readindex_coalescer.py
