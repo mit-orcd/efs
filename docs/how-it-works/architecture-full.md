@@ -1494,6 +1494,14 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**PARTIAL onfc2460b19** — all11 reviewed commits integrated/deployed. Full native
+and targeted sanitizers PASS; quiet core1510/1512,1512/1512,1512/1512, deep42/names21
+PASS. Peer/cold and W100 repeated refusal/exact retry PASS in all three fixtures;
+paused-follower2 full32MiB and preserved10GiB digest PASS. Remaining: first-run
+unlink/linkEBUSY; broader W100/W106/sustained ORCD and hardware gates stay OPEN.
+Files/RDMA/direct, balancing1; .efs/packing/containers/expiry OFF. No push.
+
+[Historical AMD RDMA load/fallback fixes](../status/rdma-load-fallback-fixes-20261013.md):
 **PARTIAL on14d621182** — files pinned ancestry barriers and explicit metadata
 balancing1 committed/deployed. Quiet full-load deep42/42 and names21/21 PASS
 across three fresh4G fixtures; core1511/1512,1512/1512,1512/1512. Peer/cold,

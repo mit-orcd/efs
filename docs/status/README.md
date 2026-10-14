@@ -1,4 +1,12 @@
-[AMD RDMA load/fallback fixes](rdma-load-fallback-fixes-20261013.md):
+[Merged AMD RDMA / W100 / maintenance qualification](rdma-merged-qualification-20261013.md):
+**PARTIAL onfc2460b19** — all11 reviewed commits integrated/deployed. Full native
+and targeted sanitizers PASS; quiet core1510/1512,1512/1512,1512/1512, deep42/names21
+PASS. Peer/cold and W100 repeated refusal/exact retry PASS in all three fixtures;
+paused-follower2 full32MiB and preserved10GiB digest PASS. Remaining: first-run
+unlink/linkEBUSY; broader W100/W106/sustained ORCD and hardware gates stay OPEN.
+Files/RDMA/direct, balancing1; .efs/packing/containers/expiry OFF. No push.
+
+[Historical AMD RDMA load/fallback fixes](rdma-load-fallback-fixes-20261013.md):
 **PARTIAL on14d621182** — files pinned ancestry barriers and explicit metadata
 balancing1 committed/deployed. Quiet full-load deep42/42 and names21/21 PASS
 across three fresh4G fixtures; core1511/1512,1512/1512,1512/1512. Peer/cold,

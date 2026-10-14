@@ -1,5 +1,9 @@
 # AMD RDMA load deadlines and degraded fragment reads
 
+Historical14d/earlier qualification. Current merged deployment and reruns are
+in the [merged AMD ledger](rdma-merged-qualification-20261013.md); prior failures
+and passes below remain source-specific evidence.
+
 W106 / [installed deployment baseline](rdma-installed-amd-20261013.md).
 Branch `devel-rdma`; current candidate **14d6211822907d9f49f2004e279034f3a135d0ab**.
 Status: affected deep/name gates PASS with explicit balancing; full qualification remains PARTIAL.
