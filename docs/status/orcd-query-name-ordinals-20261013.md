@@ -300,3 +300,13 @@ its raw-query routing test adapter because that adapter lacks the newly
 explicit timeout keyword. Update the adapter to assert the unchanged default7s
 while retaining all endpoint/identity/lease-owner assertions. This is test-only;
 requalify the combined frozen tree before deployment. Production still90.
+
+Frozen combined sourcefa0ac827f passes clean full Linux `make -j4 test` and
+the targeted ASan/UBSan/leak suite, including target selection, raw endpoint
+routing and the four bounded freshness checks. All11 staged hosts match897
+code/test inputs. Full native log is `fcstor006/package1-full-native-fa0ac827fef6.log`
+and focused sanitizer log is `fcstor003/package1-focused-san-fa0ac827fef6-r2.log`
+under the scratch base. This supersedes the test-adapter failure on3fc but
+does not qualify live workload results yet. Normal all11 deployment is in
+progress, same RDMA/direct/files/commands-on profile, optional features off,
+with no store erase.

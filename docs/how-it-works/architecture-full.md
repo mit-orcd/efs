@@ -1494,6 +1494,8 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+[ORCD query-target starvation](../status/orcd-query-name-ordinals-20261013.md): production90 load remains intermittent/OPEN. Controlled same-fixture readers: first dual follower0/187; eligible dual leader333 successes/five generations. Seed target correction in native qualification; original failures retained, long-running jobs stopped.
+
 [ORCD final production](../status/orcd-query-name-ordinals-20261013.md): `90a1324d1` deployed; full native/sanitizers/source/profile/restart PASS. Command load and exact2,761 payloads PASS; five of six suites PASS. Raw-page positive freshness harness correction under qualification; original BUSY failure retained.
 
 [ORCD loaded results](../status/orcd-query-name-ordinals-20261013.md): `b65d99dcf` finite140,000 files and concurrent21 queries PASS. Broader two-mount commands FAIL5/6; missing-target refusal correction in qualification. Long-running writer/crawler screens remain stopped.
