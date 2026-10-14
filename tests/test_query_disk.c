@@ -270,7 +270,7 @@ int main(void)
         CHECK(manifest_fd>=0);
         if(manifest_fd>=0){
             CHECK(pread(manifest_fd,&version,sizeof(version),8)==sizeof(version));
-            CHECK(version==6);
+            CHECK(version==7);
             uint64_t row_bytes=0;
             CHECK(pread(manifest_fd,&row_bytes,sizeof(row_bytes),24)==sizeof(row_bytes));
             CHECK(row_bytes==312); /* Previously 584: no max-name per regular file. */

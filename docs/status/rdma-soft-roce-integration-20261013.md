@@ -195,4 +195,3 @@ large metadata/snapshot/cold durability and loaded concurrency gates must be
 qualified before rollout. Generic receive-into assembly copying and disabled
 registered reply/W39 fast paths are explicit implementation tradeoffs. No
 speedup conclusion from these correctness test durations.
-

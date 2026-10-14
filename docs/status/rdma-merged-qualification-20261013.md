@@ -14,6 +14,40 @@ No push; no TCP comparison. `.efs` client/server, packing, containers, expiry
 and repair experiment OFF. Files/direct, strict segmented RDMA, Soft-RoCE
 rxe0/GID1 on same-host AMD-395. Explicit metadata balancing1 retained.
 
+## Subsequent branch integration: AMD rerun pending
+
+Integrated reviewed local branch endpoint `devel-orcd-package1`
+`a57437549` and its `devel` ancestor `382d537d6` into `devel-rdma`.
+Seven additional non-merge commits: `13a592056`, `3d279417f`,
+`2f5ea822f`, `ca7f7b2f3`, `75974ba54`, `48cace36b`, `382d537d6`.
+The packed-store and frame-adapter repairs overlap the existing RDMA harness
+fixes; the resulting merge retains those repairs without duplicate definitions.
+Only generated architecture HTML conflicted; regenerate from merged sources.
+
+The shared Raft change `382d537d6` publishes completed progress and releases /
+reacquires the host mutex between fully completed receive batches. It may reduce
+namespace handler admission waits under mixed load, but neither AMD unlink/link
+EBUSY is proven fixed. No receive durability barrier, ordered apply, KV hold or
+credit retirement is removed. Query name-ordinal changes remain inactive with
+commands disabled. Intel cold-policy readiness and instrumentation changes do
+not change AMD workload deadlines or enable any feature.
+
+Local extracted production handoff regression: PASS via
+`python3 tests/test_host_batch_handoff.py` (real waiting mutex owner, successful
+and fenced-error receive batches). Architecture gate: PASS all five checks via
+`python3 docs/gen-architecture-full.py` then `python3 docs/check-architecture.py`.
+Environment: macOS local source checkout; these are not live RDMA acceptance.
+Merged AMD live/native qualification: NOTRUN. The fc2460b19 evidence below stays
+historical exact-source evidence, not a pass for this later integration.
+
+Next: build/deploy the merged source identity on AMD and rerun the same three
+fresh four-node 4G/node seven-client/jobs16 core cohorts using the driver below.
+Keep files/direct/strict RDMA, metadata balancing1 and all disabled features;
+retain stock15/decorated75/outer180 budgets. Correlate any repeated unlink/link
+refusal with namespace/authority/transaction state; then rerun quietly without
+tracing. Until that evidence exists, W106 loaded acceptance remains OPEN and
+neither failure is labelled RDMA-specific. No TCP comparison or push.
+
 ## Integration
 
 Merged exactly the reviewed endpoints:

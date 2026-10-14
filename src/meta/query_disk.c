@@ -46,6 +46,9 @@ static const uint8_t kinds[KINDS]={EFS_KV_KIND_INODE,EFS_KV_KIND_DENTRY,
     EFS_KV_KIND_LANE,EFS_KV_KIND_DSEQ,EFS_KV_KIND_APPEND_CUR,EFS_KV_KIND_PVER};
 struct slot { uint64_t offset;uint32_t key_len,value_len; };
 struct disk_part { uint64_t revision,count,inodes,names,dependencies,begin[KINDS],end[KINDS];uint8_t digest[5][32]; };
+/* Sort carries complete names only in bounded temporary runs. Persistent
+ * name order stores ordinals into the immutable raw dentry family. */
+struct sort_name { struct efs_name_entry entry; uint64_t ordinal; };
 struct disk_alias { efs_ino_t child,parent;uint64_t ordinal; };
 /* Directory names already belong to the immutable alias/raw indexes.
  * Regular files need no directory link, so do not duplicate a max-name
@@ -165,7 +168,7 @@ static int charge_disk(struct efs_query_disk *d,uint64_t bytes)
 static uint64_t derived_charge(uint64_t inodes,uint64_t names)
 {
     return inodes*(sizeof(struct disk_node)+sizeof(efs_ino_t))+
-           names*(sizeof(struct efs_name_entry)+sizeof(struct disk_alias));
+           names*(sizeof(uint64_t)+sizeof(struct disk_alias));
 }
 static int io_at(int fd,void *buf,size_t n,uint64_t off,int write)
 {
@@ -645,7 +648,7 @@ static int merge_names(struct efs_query_disk *d,int fa,int fb,int fo,
 static int names_build(struct efs_query_disk *d,uint32_t shard,char kind)
 {
     uint64_t count=d->part[shard].names;if(!count)return EFS_OK;
-    size_t width=kind=='n'?sizeof(struct efs_name_entry):sizeof(struct disk_alias);
+    size_t width=kind=='n'?sizeof(struct sort_name):sizeof(struct disk_alias);
     int (*compare)(const void *,const void *)=kind=='n'?name_compare:alias_compare;
     if(count>UINT64_MAX/width)return EFS_ERR_OVERFLOW;
     char final[EFS_MAX_PATH];int rc=filename(d,shard,kind,final,sizeof(final));
@@ -654,12 +657,14 @@ static int names_build(struct efs_query_disk *d,uint32_t shard,char kind)
     if(!lstat(final,&existing))return EFS_ERR_PROTO; /* Fresh immutable output only. */
     if(errno!=ENOENT)return EFS_ERR_IO;
     uint8_t *rows=malloc(SORT_ROWS*width);if(!rows)return EFS_ERR_NOMEM;
-    /* Permanent forecast owns one full final file. One extra full partition
-     * covers all original runs plus the largest simultaneous merge output:
-     * their combined bytes never exceed two full files. Merge inputs must be
+    /* Alias forecast owns the full final file, requiring one extra run file.
+     * Compact name ordinals require two full sort files as temporary space.
+     * The original runs and simultaneous merge output fit that bound; the
+     * final ordinal file is already forecast permanently. Merge inputs must be
      * removed before starting another pass. Failure keeps scratch charged
      * until the entire unpublished candidate is destroyed. */
     uint64_t temporary=count*width;
+    if(kind=='n'){if(temporary>UINT64_MAX/2){free(rows);return EFS_ERR_OVERFLOW;}temporary*=2;}
     rc=charge_disk(d,temporary);if(rc){free(rows);return rc;}
     uint64_t runs=0;char path[EFS_MAX_PATH];
     for(uint64_t at=0;at<count && !rc;at+=SORT_ROWS) {
@@ -670,7 +675,7 @@ static int names_build(struct efs_query_disk *d,uint32_t shard,char kind)
             rc=read_record(d,shard,d->part[shard].begin[1]+at+i,&s,key,val);
             struct efs_name_entry entry;
             if(!rc)rc=entry_from(key,s.key_len,val,s.value_len,&entry);
-            if(!rc && kind=='n')memcpy(rows+i*width,&entry,width);
+            if(!rc && kind=='n'){struct sort_name row={.entry=entry,.ordinal=at+i};memcpy(rows+i*width,&row,width);}
             else if(!rc){struct disk_alias alias={entry.dentry.type==EFS_META_DENT_TOMBSTONE?0:entry.dentry.ino,entry.parent,at+i};
                 memcpy(rows+i*width,&alias,width);}
         }
@@ -708,10 +713,41 @@ static int names_build(struct efs_query_disk *d,uint32_t shard,char kind)
     }
     if(!rc) {
         rc=run_path(d,shard,pass,0,path);
-        if(!rc && rename(path,final))rc=EFS_ERR_IO;
+        if(!rc && kind=='n') {
+            int in=open(path,O_RDONLY|O_CLOEXEC),out=-1;
+            if(in<0)rc=EFS_ERR_IO;
+            if(!rc){out=open(final,O_CREAT|O_EXCL|O_RDWR|O_CLOEXEC,0600);if(out<0)rc=EFS_ERR_IO;}
+            for(uint64_t at=0;at<count && !rc;at+=SORT_ROWS){
+                unsigned n=(unsigned)(count-at>SORT_ROWS?SORT_ROWS:count-at);
+                if(cancelled(d)){rc=EFS_ERR_BUSY;break;}
+                rc=io_at(in,rows,n*width,at*width,0);
+                for(unsigned i=0;i<n && !rc;i++){
+                    struct sort_name row;memcpy(&row,rows+i*width,sizeof(row));
+                    if(row.ordinal>=count){rc=EFS_ERR_PROTO;break;}
+                    /* In-place compaction never overwrites the next input. */
+                    memcpy(rows+i*sizeof(uint64_t),&row.ordinal,sizeof(uint64_t));
+                }
+                if(!rc)rc=io_at(out,rows,n*sizeof(uint64_t),at*sizeof(uint64_t),1);
+            }
+            if(in>=0 && close(in) && !rc)rc=EFS_ERR_IO;
+            if(out>=0 && close(out) && !rc)rc=EFS_ERR_IO;
+            if(!rc && unlink(path))rc=EFS_ERR_IO;
+        } else if(!rc && rename(path,final))rc=EFS_ERR_IO;
     }
     if(!rc)d->disk_bytes-=temporary;
     free(rows);return rc;
+}
+/* Persistent ordering is an immutable raw ordinal, not a duplicated name.
+ * Decode through the generation's own validated source, never live metadata. */
+static int name_at(struct efs_query_disk *d,uint32_t shard,uint64_t at,struct efs_name_entry *entry)
+{
+    if(shard>=SHARDS || at>=d->part[shard].names)return EFS_ERR_PROTO;
+    uint64_t ordinal;int rc=disk_io(d,shard,'n',&ordinal,sizeof(ordinal),at*sizeof(ordinal),0);
+    if(rc)return rc;
+    if(ordinal>=d->part[shard].names)return EFS_ERR_PROTO;
+    struct slot slot;uint8_t key[EFS_KV_KEY_MAX],val[VALUE_MAX];
+    rc=read_record(d,shard,d->part[shard].begin[1]+ordinal,&slot,key,val);
+    return rc?rc:entry_from(key,slot.key_len,val,slot.value_len,entry);
 }
 static int node_at(struct efs_query_disk *d,uint32_t shard,uint64_t at,struct disk_node *n,int write)
 {
@@ -967,7 +1003,7 @@ static int file_digest(int fd,uint8_t out[32])
     blake3_hasher_finalize(&h,out,32);return EFS_OK;
 }
 #define PERSIST_WORKERS 4
-_Static_assert(PERSIST_WORKERS*(65536+sizeof(blake3_hasher)+EFS_MAX_PATH)<SORT_ROWS*sizeof(struct efs_name_entry),
+_Static_assert(PERSIST_WORKERS*(65536+sizeof(blake3_hasher)+EFS_MAX_PATH)<SORT_ROWS*sizeof(struct sort_name),
                "parallel digest scratch must fit the already admitted sort scratch");
 struct persist_work {
     struct efs_query_disk *d;
@@ -1143,7 +1179,7 @@ int efs_query_disk_build_checked(const char *root,struct efs_kv_lsm_snapshot *so
     if(failure)failure->pending=0;
     if(times)memset(times,0,sizeof(*times));
     uint64_t phase_start=query_build_clock();
-    uint64_t working=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX+RAW_RECORD_MAX+NODE_BATCH*sizeof(struct disk_node)+sizeof(struct fold_parent)+sizeof(struct incremental)+sizeof(struct raw_sync_batch)+64*sizeof(struct efs_meta_dir_ent)+65536+2*RAW_RECORD_MAX;
+    uint64_t working=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct sort_name)+4*VALUE_MAX+RAW_RECORD_MAX+NODE_BATCH*sizeof(struct disk_node)+sizeof(struct fold_parent)+sizeof(struct incremental)+sizeof(struct raw_sync_batch)+64*sizeof(struct efs_meta_dir_ent)+65536+2*RAW_RECORD_MAX;
     if(!root || !source || !out)return EFS_ERR_INVAL;
     if(max_bytes<working)return EFS_ERR_NOMEM;
     int preflight=orphan_preflight(source,failure,stop,ctx);
@@ -1248,7 +1284,7 @@ int efs_query_disk_build_checked(const char *root,struct efs_kv_lsm_snapshot *so
         if(n<0 || (size_t)n>=sizeof(path))rc=EFS_ERR_NAMETOOLONG;
         int fd=rc?-1:open(path,O_CREAT|O_EXCL|O_RDWR|O_CLOEXEC,0600);
         if(fd<0)rc=EFS_ERR_IO;
-        uint64_t header[]={UINT64_C(0x454653514449534b),6,sizeof(struct slot),sizeof(struct disk_node),d->count,SHARDS,0,0,0,0,d->lineage[0],d->lineage[1]};
+        uint64_t header[]={UINT64_C(0x454653514449534b),7,sizeof(struct slot),sizeof(struct disk_node),d->count,SHARDS,0,0,0,0,d->lineage[0],d->lineage[1]};
         if(!rc)rc=io_at(fd,header,sizeof(header),0,1);
         if(!rc)rc=io_at(fd,d->part,sizeof(d->part),sizeof(header),1);
         if(!rc && fsync(fd))rc=EFS_ERR_IO;
@@ -1351,7 +1387,7 @@ static int name_seek(struct efs_query_disk *d,uint32_t shard,const char *term,ui
     uint64_t lo=0,hi=d->part[shard].names;
     while(lo<hi){
         uint64_t mid=lo+(hi-lo)/2;struct efs_name_entry e;
-        int rc=disk_io(d,shard,'n',&e,sizeof(e),mid*sizeof(e),0);if(rc)return rc;
+        int rc=name_at(d,shard,mid,&e);if(rc)return rc;
         if(strcmp(e.name,term)<0)lo=mid+1;else hi=mid;
     }
     *at=lo;return EFS_OK;
@@ -1454,11 +1490,11 @@ static int subtree_position(struct efs_query_disk *d,uint32_t shard,const struct
     uint64_t lo=0,hi=d->part[shard].names;
     while(lo<hi){
         uint64_t mid=lo+(hi-lo)/2;struct efs_name_entry e;
-        int rc=disk_io(d,shard,'n',&e,sizeof(e),mid*sizeof(e),0);if(rc)return rc;
+        int rc=name_at(d,shard,mid,&e);if(rc)return rc;
         if(name_compare(&e,entry)<0)lo=mid+1;else hi=mid;
     }
     if(lo>=d->part[shard].names || lo>UINT32_MAX)return EFS_ERR_PROTO;
-    struct efs_name_entry e;int rc=disk_io(d,shard,'n',&e,sizeof(e),lo*sizeof(e),0);if(rc)return rc;
+    struct efs_name_entry e;int rc=name_at(d,shard,lo,&e);if(rc)return rc;
     if(name_compare(&e,entry) || memcmp(&e.dentry,&entry->dentry,sizeof(e.dentry)))return EFS_ERR_PROTO;
     *position=((uint64_t)shard<<32)|lo;return EFS_OK;
 }
@@ -1518,7 +1554,7 @@ static int subtree_page(struct efs_query_disk *d,const struct efs_meta_row *root
         if(range->shard==(*position>>32)){
             uint32_t at=(uint32_t)*position;
             if(at>=d->part[range->shard].names)continue;
-            rc=disk_io(d,range->shard,'n',&cursor,sizeof(cursor),(uint64_t)at*sizeof(cursor),0);if(rc)break;
+            rc=name_at(d,range->shard,(uint64_t)at,&cursor);if(rc)break;
             if(strcmp(cursor.name,name)>0)name=cursor.name;
         }
         size_t length=strnlen(name,EFS_MAX_NAME);
@@ -1574,7 +1610,7 @@ int efs_query_disk_page(const struct efs_query_disk *cd,efs_ino_t root,enum efs_
         for(;at<d->part[shard].names;at++) {
             *position=((uint64_t)shard<<32)|at;
             if(!budget || (stop && stop(stop_ctx)))return EFS_OK;
-            struct efs_name_entry e;rc=disk_io(d,shard,'n',&e,sizeof(e),at*sizeof(e),0);if(rc)return rc;
+            struct efs_name_entry e;rc=name_at(d,shard,at,&e);if(rc)return rc;
             budget--;
             if(!matches(e.name,match,term)){
                 if(match==EFS_NAME_EXACT || match==EFS_NAME_PREFIX)break;
@@ -1649,10 +1685,10 @@ int efs_query_disk_ls(const struct efs_query_disk *cd,efs_ino_t root,uint64_t bu
     }
     return EFS_OK;
 }
-/* A rejected v5 current still owns disk space but cannot be a v6 build
+/* A rejected v5/v6 current still owns disk space but cannot be a v7 build
  * input. Capture only its directory identity/header, never decode old rows.
  * The current symlink protects it until replacement; the live-handle registry
- * protects retained readers afterwards. Ordinary v6 retirement stays with its
+ * protects retained readers afterwards. Ordinary v7 retirement stays with its
  * existing catalog owner. */
 static void legacy_checkpoint_pin(const char *current,struct legacy_checkpoint *old)
 {
@@ -1671,8 +1707,8 @@ static void legacy_checkpoint_pin(const char *current,struct legacy_checkpoint *
     int rc=fd<0?EFS_ERR_IO:io_at(fd,header,sizeof(header),0,0);
     if(fd>=0)close(fd);
     uint64_t legacy_row=sizeof(struct disk_node)+sizeof(struct efs_name_entry)-sizeof(struct disk_link);
-    if(rc || header[0]!=UINT64_C(0x454653514449534b) || header[1]!=5 ||
-       header[2]!=sizeof(struct slot) || header[3]!=legacy_row || header[5]!=SHARDS)goto absent;
+    if(rc || header[0]!=UINT64_C(0x454653514449534b) || (header[1]!=5 && header[1]!=6) ||
+       header[2]!=sizeof(struct slot) || header[3]!=(header[1]==5?legacy_row:sizeof(struct disk_node)) || header[5]!=SHARDS)goto absent;
     old->device=st.st_dev;old->inode=st.st_ino;return;
 absent:
     old->path[0]=0;
@@ -1757,7 +1793,7 @@ int efs_query_disk_restore(const char *root,const uint64_t watermark[4],uint64_t
 {
     if(out)*out=NULL;
     if(!root || !out)return EFS_ERR_INVAL;
-    uint64_t bytes=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct efs_name_entry)+4*VALUE_MAX+RAW_RECORD_MAX+NODE_BATCH*sizeof(struct disk_node)+sizeof(struct fold_parent)+sizeof(struct incremental)+64*sizeof(struct efs_meta_dir_ent)+65536+2*RAW_RECORD_MAX;
+    uint64_t bytes=sizeof(struct efs_query_disk)+SORT_ROWS*sizeof(struct sort_name)+4*VALUE_MAX+RAW_RECORD_MAX+NODE_BATCH*sizeof(struct disk_node)+sizeof(struct fold_parent)+sizeof(struct incremental)+64*sizeof(struct efs_meta_dir_ent)+65536+2*RAW_RECORD_MAX;
     if(max_bytes<bytes)return EFS_ERR_NOMEM;
     char current[EFS_MAX_PATH],base[256];int n=snprintf(current,sizeof(current),"%s/current",root);
     if(n<0 || (size_t)n>=sizeof(current))return EFS_ERR_NAMETOOLONG;
@@ -1778,7 +1814,7 @@ int efs_query_disk_restore(const char *root,const uint64_t watermark[4],uint64_t
     int fd=n>0 && (size_t)n<sizeof(manifest)?open(manifest,O_RDONLY|O_CLOEXEC):-1;
     uint64_t header[12];int rc=fd<0?EFS_ERR_IO:io_at(fd,header,sizeof(header),0,0);
     if(!rc && d->disk_bytes>d->disk_limit)rc=EFS_ERR_QUOTA;
-    if(!rc && (header[0]!=UINT64_C(0x454653514449534b) || header[1]!=6 || header[2]!=sizeof(struct slot) ||
+    if(!rc && (header[0]!=UINT64_C(0x454653514449534b) || header[1]!=7 || header[2]!=sizeof(struct slot) ||
        header[3]!=sizeof(struct disk_node) || header[5]!=SHARDS))rc=EFS_ERR_PROTO;
     if(!rc && watermark && memcmp(header+6,watermark,4*sizeof(uint64_t)))rc=EFS_ERR_STALE;
     if(!rc){memcpy(d->lineage,header+10,sizeof(d->lineage));memcpy(d->watermark,header+6,sizeof(d->watermark));}
@@ -1796,7 +1832,7 @@ int efs_query_disk_restore(const char *root,const uint64_t watermark[4],uint64_t
             char path[EFS_MAX_PATH];rc=filename(d,shard,kinds_file[i],path,sizeof(path));if(rc)break;
             fd=open(path,O_RDONLY|O_CLOEXEC);uint8_t digest[32];struct stat st;
             if(fd<0 || fstat(fd,&st))rc=EFS_ERR_IO;
-            uint64_t expected=i==1?p->count*sizeof(struct slot):i==2?p->names*sizeof(struct efs_name_entry):i==3?p->inodes*sizeof(struct disk_node):i==4?p->names*sizeof(struct disk_alias):0;
+            uint64_t expected=i==1?p->count*sizeof(struct slot):i==2?p->names*sizeof(uint64_t):i==3?p->inodes*sizeof(struct disk_node):i==4?p->names*sizeof(struct disk_alias):0;
             if(!rc && expected && (uint64_t)st.st_size!=expected)rc=EFS_ERR_PROTO;
             if(!rc && i==0)rc=charge_disk(d,(uint64_t)st.st_size+p->count*sizeof(struct slot)+
                 derived_charge(p->inodes,p->names));

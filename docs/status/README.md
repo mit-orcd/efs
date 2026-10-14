@@ -1,3 +1,10 @@
+[Latest RDMA branch integration](rdma-merged-qualification-20261013.md):
+all other local branch commits through ORCD `a57437549` / devel `382d537d6`
+integrated; shared Raft receive-batch mutex handoff may reduce admission waits.
+Local handoff regression and doc checks PASS; merged AMD qualification NOTRUN.
+Previous unlink/link EBUSY remain OPEN; earlier fc passes do not qualify this
+merge. Files/RDMA/direct; .efs/packing/containers/expiry OFF, no push.
+
 [Merged AMD RDMA / W100 / maintenance qualification](rdma-merged-qualification-20261013.md):
 **PARTIAL onfc2460b19** — all11 reviewed commits integrated/deployed. Full native
 and targeted sanitizers PASS; quiet core1510/1512,1512/1512,1512/1512, deep42/names21
@@ -918,3 +925,10 @@ exact-read/unlink cases PASS. Original seven tiny jobs later FAIL closeEIO after
 265000–279000files each. Sustained-load correctness remainsOPEN; user requests
 restart in fresh directories on same verifiedsource/profile. General .efs
 acceptance staysonhold.
+
+[ORCD live daemon profile](orcd-live-profile-20261013.md):45s collection PASS
+on exacte8 source with7writers+7MD5crawlers. Global Raft-host mutex/durable
+I/O convoy, failed `.efs` refresh/device contention and LSM point-probe fanout
+are the largest observed priorities. Diagnostic only; sustained closeEIOOPEN.
+
+- [ORCD query name ordinals: candidate, qualification pending](orcd-query-name-ordinals-20261013.md).

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Start/stop an owned two-host W100 fixture; never touch installed EFS stores.
+"""Start/resume/stop an owned two-host W100 fixture; never touch installed EFS stores.
 
 Run locally with Intel SSH aliases. Source must already be built on both hosts.
 Example: python3 scripts/intel_w100_private.py start baseline baseline
@@ -11,9 +11,11 @@ import subprocess
 import time
 
 ap = argparse.ArgumentParser(description=__doc__)
-ap.add_argument('action', choices=['start', 'stop'])
+ap.add_argument('action', choices=['start', 'resume', 'stop'])
 ap.add_argument('run')
 ap.add_argument('source')
+ap.add_argument('--quota', choices=['2G', '16G'], default='2G',
+                help='per-node private fixture quota; stores must be new')
 a = ap.parse_args()
 for label in (a.run, a.source):
     if not label or any(c not in 'abcdefghijklmnopqrstuvwxyz0123456789-' for c in label):
@@ -50,7 +52,9 @@ if a.action == 'stop':
 for host, addr, ids in hosts:
     remote(host, f'''
 import os,pathlib,socket,subprocess,json
-r=pathlib.Path({runtime!r});r.mkdir(parents=True,exist_ok=False)
+r=pathlib.Path({runtime!r})
+if {a.action=='start'!r}:r.mkdir(parents=True,exist_ok=False)
+else:assert r.is_dir(), 'missing owned runtime directory'
 for port in (27432,27433):
     # Match the daemon's bind policy: old TIME_WAIT sockets are not listeners.
     s=socket.socket();s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
@@ -59,26 +63,33 @@ for port in (27432,27433):
 env=os.environ.copy();env.update({env!r})
 for node in {ids!r}:
     storage=f'/data{{1 if node%2 else 2}}/efs/w100-private-{a.run}/n{{node}}'
-    pathlib.Path(storage).mkdir(parents=True,exist_ok=False)
+    if {a.action=='start'!r}:pathlib.Path(storage).mkdir(parents=True,exist_ok=False)
+    else:assert pathlib.Path(storage).is_dir(), 'missing owned storage directory'
     args=[{src+'/efsd'!r},'--node-id',str(node),'--addr',{addr!r},'--port',str(27432+(node%2==0)),
-          '--storage',storage,'--quota','2G','--storage-engine','files','--direct-io']
+          '--storage',storage,'--quota',{a.quota!r},'--storage-engine','files','--direct-io']
     if node!=1:args+=['--join','10.0.0.207:27432']
-    with (r/f'n{{node}}.log').open('wb') as out:
+    with (r/f'n{{node}}.log').open('ab') as out:
         p=subprocess.Popen(args,env=env,stdout=out,stderr=subprocess.STDOUT,start_new_session=True)
     (r/f'n{{node}}.pid').write_text(str(p.pid)+'\\n')
     print(json.dumps(dict(node=node,pid=p.pid,args=args)),flush=True)
 ''')
 
+ready = [src+'/efs-mgmt', 'raft-mkfs', '10.0.0.207:27432'] if a.action=='start' else [src+'/efs-mgmt', 'commands-policy', '10.0.0.207:27432', 'get']
 for attempt in range(45):
-    r = subprocess.run(['ssh', hosts[0][0], shlex.join([src+'/efs-mgmt', 'raft-mkfs', '10.0.0.207:27432'])],
+    r = subprocess.run(['ssh', hosts[0][0], shlex.join(ready)],
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     if r.returncode == 0:
+        if a.action=='resume' and 'mask=0 ' not in r.stdout:
+            raise RuntimeError('owned fixture command policy is not disabled; refusing mount')
         print(r.stdout, flush=True)
         break
     time.sleep(1)
 else:
-    raise RuntimeError('private mkfs failed; preserve logs and stop owned fixture')
-command(hosts[0][0], [src+'/efs-mgmt', 'commands-policy', '10.0.0.207:27432', 'set', '0', '0'])
+    raise RuntimeError('private readiness failed; preserve logs and stop owned fixture')
+if a.action=='start':
+    command(hosts[0][0], [src+'/efs-mgmt', 'commands-policy', '10.0.0.207:27432', 'set', '0', '0'])
+else:
+    command(hosts[0][0], [src+'/efs-mgmt', 'commands-policy', '10.0.0.207:27432', 'get'])
 for host, _, _ in hosts:
     seed = '10.0.0.209:27432' if host == 'intel1_efs' else '10.0.0.207:27432'
     prefix = ['env']+[k+'='+v for k,v in env.items()]
