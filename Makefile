@@ -202,6 +202,7 @@ test-report-pressure:
 	python3 tests/test_put_pool_budget.py
 	python3 tests/test_get_pool_startup.py
 	python3 tests/test_get_pool_budget.py
+	python3 tests/test_read_peer_order.py
 	python3 tests/test_get_pair_budget.py
 	python3 tests/test_get_pair_readiness.py
 	python3 tests/test_put_retry_budget.py
@@ -946,3 +947,6 @@ test-rdma-message:
 	$(CC) -std=c99 -O2 -g -Wall -Wextra -Werror -Iinclude tests/test_rdma_message.c src/common/rdma_message.c -pthread -o "$$bin" && "$$bin"
 
 test: test-rdma-message
+
+# Read routing hints must rebuild the production fragment selector.
+src/client/read.o: src/client/read_peer_order.h

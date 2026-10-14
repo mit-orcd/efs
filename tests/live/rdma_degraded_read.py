@@ -24,7 +24,10 @@ if len(sys.argv)>1 and sys.argv[1]=='--reader':
  path=Path(sys.argv[2]);h=hashlib.sha256();n=0
  with path.open('rb',buffering=0) as f:
   for base in range(0,TOTAL,8<<20):
-   start=time.monotonic();data=f.read(8<<20);assert len(data)==8<<20
+   start=time.monotonic();data=f.read(8<<20)
+   if len(data)!=(8<<20):
+    print(json.dumps(dict(offset=base,requested=8<<20,returned=len(data),read_seconds=time.monotonic()-start)),flush=True)
+   assert len(data)==8<<20, f"short read at {base}: {len(data)} of {8<<20}"
    for off in range(0,len(data),CHUNK):assert data[off:off+CHUNK]==block((base+off)//CHUNK)
    h.update(data);n+=len(data);print(json.dumps(dict(bytes=n,read_seconds=time.monotonic()-start)),flush=True)
   assert not f.read(1)

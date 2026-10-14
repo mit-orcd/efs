@@ -5086,6 +5086,21 @@ separate OPEN gate.
 
 **Evidence/current state:** AMD software-RXE functional evidence already exists; current-code distributed and hardware acceptance must retain their own named gates. Intel remains the TCP acceptance deployment. Its 5 Gb/s links and absence of exposed RDMA devices/software modules do not block RDMA testing on the designated environments.
 
+**Later Oct 14 AMD read update:** `ade336daf` bounded advisory peer ordering
+passes four full32MiB paused-follower reads/digests at the unchanged180s outer
+and30s read/5s pair budgets. Fresh quiet core4536/4536, peer/cold/EOF, clean full
+native and targeted ASan/UBSan PASS. .efs/packing/containers/expiry disabled;
+no TCP comparison. Earlier degraded failures retained. W106 broader/hardware
+scope remains OPEN; see [current source/config/reproduction ledger](../status/rdma-paused-follower-read-20261014.md).
+
+**Oct 14 AMD update:** `a7e2b6b7d` early namespace leader routing qualified
+on files/direct/strict Soft-RoCE with .efs/packing/containers/expiry disabled:
+full native and three unchanged seven-client/jobs16 cores4536/4536 PASS,
+no unlink/link EBUSY or admission refusals. Peer/cold/EOF PASS. Paused-follower
+32MiB read gate FAIL (first8MiB verified, next read-length assertion).
+W106 remains open; hardware acceptance and broader gates are not borrowed.
+See [source/config/reproduction ledger](../status/rdma-namespace-admission-20261014.md).
+
 **Remaining action:** Run relevant current-code software RDMA gates on AMD and hardware IB/RDMA gates on `orcd-test`, retaining actual transport/device, code/build, topology and per-suite verdict evidence. Intel RDMA enablement or NIC/package changes are not part of this task.
 
 **Gate:** Actual cross-host RDMA connection/device evidence plus unchanged POSIX, peer, direct-I/O, persistence and fault gates on the designated environment. Report AMD software and `orcd-test` hardware verdicts separately; neither TCP nor software-only results close hardware-specific obligations.
