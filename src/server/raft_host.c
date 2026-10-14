@@ -1193,9 +1193,9 @@ static int host_send_ready(void *net, int peer, uint8_t group)
 {
     struct efs_raft_host *h=net;
     int ready=1,gi=efs_raft_flow_group(group);
-    if (!h->flow_enabled || gi<0) return 1;
+    if (gi<0) return 1;
     pthread_mutex_lock(&h->outbox_mu);
-    if (h->tx[peer].flow.active && h->tx[peer].pending_entries[gi]) ready=0;
+    if (h->tx[peer].pending_entries[gi]) ready=0;
     pthread_mutex_unlock(&h->outbox_mu);
     if (!ready) BO_COUNT(BO_FLOW_PREBUILD_RETRY);
     return ready;
@@ -1304,7 +1304,14 @@ static int host_send(void *net, const struct efs_raft_msg *msg)
             memcpy(tx->probe_header[gi],heap,EFS_WIRE_RAFT_HDR_LEN);
             tx->probe_valid[gi]=1;
         }
-        if (gi>=0 && tx->flow.active && outbox_entry_lane(heap,len) &&
+    }
+    /* Ordered work already queued for this peer/group will be sent first.
+     * Refuse a redundant attempt even when experimental flow control is off.
+     * Dequeue releases this guard; the transport pipeline remains unchanged.
+     * Refusal earns no Raft acknowledgement and the core retries from its log. */
+    {
+        int gi=efs_raft_flow_group(heap[1]);
+        if (gi>=0 && outbox_entry_lane(heap,len) &&
             tx->pending_entries[gi]) {
             BO_COUNT(BO_FLOW_ENQUEUE_RETRY);
             pthread_mutex_unlock(&h->outbox_mu);
@@ -7965,7 +7972,7 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
     cfg.store = st;
     cfg.store_ctx = st;
     cfg.send = host_send;
-    cfg.send_ready = h->flow_enabled ? host_send_ready : NULL;
+    cfg.send_ready = host_send_ready;
     cfg.preserve_ack_window = h->s && h->s->storage_engine;
     {
         const char *mode = getenv("EFS_RAFT_BATCH_NOOP");
@@ -16599,6 +16606,12 @@ void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
         server_raft_host_rmdir(parent, name, q, out);
         return;
     }
+    /* Route the immutable request before fresh reads/session/txn work.
+     * A proven dual-group leader avoids a follower forwarding the whole
+     * mutation while retaining the client's receipt slot. Unknown or
+     * single-group leaders keep the normal authoritative fallback. */
+    hint=host_namespace_leader_hint(h,efs_raft_shard_group(efs_kv_inode_shard(parent)));
+    if (hint>=0) {set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;}
     /* The unlink may need the inode's group as well as the parent/dentry
      * group (last-link frees the inode row). Forward to a host that has
      * every group this op can touch rather than failing ReadIndex with an
@@ -17514,6 +17527,12 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
+    /* Route the immutable request before fresh reads/session/txn work.
+     * A proven dual-group leader avoids a follower forwarding the whole
+     * mutation while retaining the client's receipt slot. Unknown or
+     * single-group leaders keep the normal authoritative fallback. */
+    hint=host_namespace_leader_hint(h,efs_raft_shard_group(efs_kv_inode_shard(new_parent)));
+    if (hint>=0) {set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;}
     now = now_ns();
     psh = efs_kv_inode_shard(new_parent);
     ish = efs_kv_inode_shard(src_ino);
@@ -17773,6 +17792,12 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         out->status = EFS_INODE_RPC_OK;
         return;
     }
+    /* Route the immutable request before fresh reads/session/txn work.
+     * A proven dual-group leader avoids a follower forwarding the whole
+     * mutation while retaining the client's receipt slot. Unknown or
+     * single-group leaders keep the normal authoritative fallback. */
+    hint=host_namespace_leader_hint(h,efs_raft_shard_group(efs_kv_inode_shard(old_parent)));
+    if (hint>=0) {set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;}
     now = now_ns();
     same = old_parent == new_parent;
     memset(&pd, 0, sizeof(pd));

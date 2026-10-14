@@ -202,6 +202,7 @@ test-report-pressure:
 	python3 tests/test_put_pool_budget.py
 	python3 tests/test_get_pool_startup.py
 	python3 tests/test_get_pool_budget.py
+	python3 tests/test_read_peer_order.py
 	python3 tests/test_get_pair_budget.py
 	python3 tests/test_get_pair_readiness.py
 	python3 tests/test_put_retry_budget.py
@@ -304,6 +305,7 @@ test-wb-runtime:
 	python3 tests/test_report_forward.py
 	python3 tests/test_report_zero_eof.py
 	python3 tests/test_report_retry_eof.py
+	python3 tests/test_inode_pending_eof.py
 	python3 tests/test_report_session_apply.py
 	python3 tests/test_report_activation.py
 	python3 tests/test_report_log_coverage.py
@@ -492,6 +494,7 @@ test: all
 	python3 tests/test_container_flush_tail.py
 	python3 tests/test_posix_timeout_zombie.py
 	python3 tests/test_host_flow.py
+	python3 tests/test_host_pending_entries.py
 	python3 tests/test_raft_slow_sync.py
 	python3 tests/test_host_inbox.py
 	python3 tests/test_host_batch_handoff.py
@@ -945,3 +948,6 @@ test-rdma-message:
 	$(CC) -std=c99 -O2 -g -Wall -Wextra -Werror -Iinclude tests/test_rdma_message.c src/common/rdma_message.c -pthread -o "$$bin" && "$$bin"
 
 test: test-rdma-message
+
+# Read routing hints must rebuild the production fragment selector.
+src/client/read.o: src/client/read_peer_order.h

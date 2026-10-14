@@ -4989,6 +4989,21 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 
 **Class/state:** Correctness/performance investigation; open.
 
+**Oct14 current qualification:** [Merged devel private Intel](../status/intel-devel-merged-qualification-20261013.md).
+Server EOF refusal/client retry repairs are qualified separately. Completed-batch
+host-mutex handoff382d537d6 passes a clean seven-client1512/1512 round, cold
+persistence and peer checks; both the heavier EOF1000/fsync4096 round and
+a final clean repeat retain five depth-60 30s timeouts. The EOF/fsync payload
+oracles pass. Full final native and isolated GC/recovery gates pass on both hosts. Aggregate stays OPEN; historical records below are not
+current reproductions or instructions to redeploy devel-intel.
+A later O_EXCL diagnostic reproduced accepted EOF loss: Intel2 old client
+778/1000 quiet cases pass. Fix61e5c939d preserves EOF while a pending body
+owns bytes, using a coherent dirty-mark/body-pin probe. Targeted native,
+ASan/UBSan and1000 mounted cases per host pass; exact committed-source broad
+qualification now passes full native/core and2000 loaded O_EXCL cases,
+but seven-client1510/1512 retains two directory deadlines. Full recovery/GC rerun passes both hosts; directory deadlines remain a
+separate OPEN gate.
+
 **Evidence/current state:** Original Intel2 private `mtime_monotonic_many_writes` exceeds its unchanged 30-second limit; a bounded diagnostic preserves exact bytes and monotonic timestamps but takes 33.828 seconds. Later production runs on both hosts also retain deep-directory, many-entry and concurrent-append timeout verdicts. Mixed tiny/large private runs intermittently report fsync EIO or exceed the 180-second tiny-worker limit. Successful repeats do not establish a universal repair.
 
 **Remaining action:** Correlate per-operation and quorum/queue timings on current `devel-intel`, repeat both TCP storage modes with the existing tiny writer, and repair demonstrated causes. Bounded REPORT session admission and empty close-marker retirement are implemented with fencing regressions. A partial-host trace demonstrates a foreign transaction coordinator being queried on an unhosted group; routing is repaired and 128 peer mkdir races plus both deep-path cases pass per host/mode in targeted trials. Fresh-quorum BUSY propagation and same-request quorum reuse retain their authority proofs. Contended multi-shard REPORT admission now returns BUSY before side effects instead of spending the request deadline on serial fallback; targeted worker/tiny/cold-byte/fencing/reclamation gates pass on both hosts in both modes. REPORT prepares its durable owner once per batch, retaining all per-shard admission/fencing checks; the exact committed MKDIR attributes avoid a second post-success GETATTR. Both hosts pass full native and 78 standalone checks; Intel1 direct sequential cold bytes and reclamation pass. Deep-path fixture setup now uses directory handles, while final full absolute-path depth-100 operations and the 30-second limit remain. Targeted direct cases pass on both hosts; original quadratic-walk timing failures remain evidence and full corrected direct/buffered acceptance is pending. W52/W53/W97 are related investigations, not established diagnoses.
@@ -5070,6 +5085,21 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 **Governing test policy:** All RDMA work is tested on the AMD cluster using software RDMA, or on `orcd-test` using hardware InfiniBand/RDMA. Select the environment appropriate to the claim; software acceptance does not establish hardware acceptance. This policy applies to RDMA gates throughout the backlog, not just W106.
 
 **Evidence/current state:** AMD software-RXE functional evidence already exists; current-code distributed and hardware acceptance must retain their own named gates. Intel remains the TCP acceptance deployment. Its 5 Gb/s links and absence of exposed RDMA devices/software modules do not block RDMA testing on the designated environments.
+
+**Later Oct 14 AMD read update:** `ade336daf` bounded advisory peer ordering
+passes four full32MiB paused-follower reads/digests at the unchanged180s outer
+and30s read/5s pair budgets. Fresh quiet core4536/4536, peer/cold/EOF, clean full
+native and targeted ASan/UBSan PASS. .efs/packing/containers/expiry disabled;
+no TCP comparison. Earlier degraded failures retained. W106 broader/hardware
+scope remains OPEN; see [current source/config/reproduction ledger](../status/rdma-paused-follower-read-20261014.md).
+
+**Oct 14 AMD update:** `a7e2b6b7d` early namespace leader routing qualified
+on files/direct/strict Soft-RoCE with .efs/packing/containers/expiry disabled:
+full native and three unchanged seven-client/jobs16 cores4536/4536 PASS,
+no unlink/link EBUSY or admission refusals. Peer/cold/EOF PASS. Paused-follower
+32MiB read gate FAIL (first8MiB verified, next read-length assertion).
+W106 remains open; hardware acceptance and broader gates are not borrowed.
+See [source/config/reproduction ledger](../status/rdma-namespace-admission-20261014.md).
 
 **Remaining action:** Run relevant current-code software RDMA gates on AMD and hardware IB/RDMA gates on `orcd-test`, retaining actual transport/device, code/build, topology and per-suite verdict evidence. Intel RDMA enablement or NIC/package changes are not part of this task.
 

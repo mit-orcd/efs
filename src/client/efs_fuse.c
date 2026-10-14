@@ -3240,8 +3240,8 @@ static int efs_ino_has_queued_write(efs_ino_t ino)
 
 static int efs_ino_has_unpublished(efs_ino_t ino)
 {
-    return efs_ino_has_queued_write(ino) || efs_client_ino_is_dirty(ino) ||
-           efs_dcache_ino_pinned(ino);
+    return efs_ino_has_queued_write(ino) ||
+           efs_client_ino_has_unpublished_data(ino);
 }
 
 static int efs_append_flush_report_run(struct fuse_file_info *fi, efs_ino_t ino)

@@ -1,4 +1,5 @@
 #include "client_internal.h"
+#include "read_peer_order.h"
 #include "efs/protocol.h"
 #include "efs/network.h"
 #include "efs/erasure.h"
@@ -331,6 +332,15 @@ static int packed_fetch(void *context, efs_node_id_t node, uint64_t id, uint64_t
     return rc;
 }
 
+static struct efs_read_peer_order read_peer_order;
+
+static uint64_t read_peer_now_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
 /* Reconstruct one logical chunk from any 2 of 3 fragments. The three GETs run
  * concurrently so one slow/dead peer overlaps the others instead of adding a
  * full RTT; decode only needs any two, so we don't serialize on a straggler. */
@@ -425,6 +435,7 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
     for (int attempt = 0; attempt < max_attempts; attempt++) {
         if (efs_client_rpc_past_deadline())
             return EFS_ERR_BUSY;
+        efs_read_peer_prefer(&read_peer_order, nodes, order, read_peer_now_ms());
         int have[EFS_NUM_FRAGMENTS] = {0, 0, 0};
         int good = 0;
 
@@ -456,7 +467,11 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
          * pool's condvar hop was ~16 futex per chunk (Oct 1). */
         get_two_parallel(jobs);
         for (int i = 0; i < 2; i++) {
+            if (jobs[i].rc == EFS_ERR_NET || jobs[i].rc == EFS_ERR_BUSY)
+                efs_read_peer_defer(&read_peer_order, jobs[i].node,
+                    read_peer_now_ms(), efs_client_rpc_deadline_ms());
             if (jobs[i].rc == 0 && jobs[i].len == frag_len && !have[jobs[i].fi]) {
+                efs_read_peer_succeeded(&read_peer_order, jobs[i].node);
                 have[jobs[i].fi] = 1;
                 good++;
             }
@@ -477,6 +492,7 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
             jobs[2].expected_sum = have_ce ? ce.checksums[fi] : NULL;
             frag_get_thread(&jobs[2]); /* single fetch: run inline */
             if (jobs[2].rc == 0 && jobs[2].len == frag_len && !have[fi]) {
+                efs_read_peer_succeeded(&read_peer_order, jobs[2].node);
                 have[fi] = 1;
                 good++;
             }

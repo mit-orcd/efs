@@ -1739,7 +1739,13 @@ os.close(fd)
         print('durable append lost replies, 32 identical RPCs, ACK retirement and exact cold bytes PASS',flush=True)
     if a.full_node:
         endpoint=f'127.0.0.1:{a.port}'
-        result=run([source/'efs-mgmt','shrink-quota',endpoint,str((1<<30)-(64<<10))],capture_output=True,text=True)
+        # Derive the shrink from this owned process's actual launch quota;
+        # --fixture-quota may select 4/16 GiB instead of the default 1 GiB.
+        launch=servers[0].args
+        assert '--quota' in launch, 'full-node gate requires a finite fixture quota'
+        configured=launch[launch.index('--quota')+1]
+        quota_bytes={'1G':1<<30,'4G':4<<30,'16G':16<<30}[configured]
+        result=run([source/'efs-mgmt','shrink-quota',endpoint,str(quota_bytes-(64<<10))],capture_output=True,text=True)
         assert 'Reduced running quota' in result.stdout,result.stdout
         target=mount/'full-node-reroute';block=bytes(range(256))*4096
         with target.open('xb',buffering=0) as out:
@@ -3027,10 +3033,30 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
     offline,fd,offline_ino=create('offline-member');os.close(fd)
     servers[3].kill();servers[3].wait()
     os.unlink(offline);time.sleep(3)
-    remaining=[node for i,node in enumerate(status_available()) if i<3]
-    assert any(group.get('reap_seen',0)>0 for node in remaining for group in node[2:])
-    print('offline fourth member retains reap ledger PASS',flush=True)
-    unmount();stop(crash=True);start()
+    remaining=status_available()
+    # reap_seen is a bounded scan sample, not authoritative marker absence.
+    # Keep the original three-second interval, then use the already-planned
+    # crash to inspect only copies of the stopped surviving replicas' KV.
+    # The exact inode must retain durable REAP ownership, not another fixture.
+    unmount();stop(crash=True)
+    inspector=work/'inspect-reap-retention'
+    run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),
+         source/'tests/live/inspect_reap_retention.c',source/'libefs.a',
+         '-pthread','-lm','-ldl','-libverbs','-o',inspector])
+    inspection=work/'offline-ledger-check';inspection.mkdir()
+    retained=[]
+    for node,checked_root in enumerate(roots[:3],1):
+        copied=inspection/('n'+str(node))
+        shutil.copytree(checked_root/'mdraft/kv',copied)
+        found=subprocess.run([str(inspector),str(copied),str(offline_ino)],
+                             env=env,capture_output=True,text=True,timeout=60)
+        assert found.returncode in (0,1),found.stdout+found.stderr
+        retained.append({'node':node,'rc':found.returncode,'output':found.stdout})
+    (work/'offline-ledger-retention.json').write_text(json.dumps({
+        'ino':offline_ino,'sampled_status':remaining,'stopped_kv_copies':retained},indent=2))
+    assert any(row['rc']==0 for row in retained),retained
+    print('offline fourth member retains exact durable reap ledger PASS',flush=True)
+    start()
     wait(lambda:not files(offline_ino),'rejoined member completes reclamation')
     wait(drained,'queues drain after member rejoins')
     mount_client()

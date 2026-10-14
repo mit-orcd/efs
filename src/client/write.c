@@ -1002,6 +1002,21 @@ int efs_client_ino_is_dirty_locked(efs_ino_t ino)
     return idirty_find(ino) != NULL || pub_has_locked(ino);
 }
 
+/* An inode-only snapshot may retire its mark while a dcache body still
+ * owns accepted bytes. Observe both ownership representations while marks
+ * cannot move: PUT establishes its dirty/publication mark before dropping
+ * the body pin. Separate unlocked probes can miss that handoff entirely.
+ * Lock order matches staging eviction: dirty_mu -> dcache pin mutex. */
+int efs_client_ino_has_unpublished_data(efs_ino_t ino)
+{
+    if (!ino) return 0;
+    pthread_mutex_lock(&g_client.dirty_mu);
+    int owned = efs_client_ino_is_dirty_locked(ino) ||
+                efs_dcache_ino_pinned(ino);
+    pthread_mutex_unlock(&g_client.dirty_mu);
+    return owned;
+}
+
 #define MTIME_PIN_MAX 256
 static efs_ino_t mtime_pin[MTIME_PIN_MAX];
 static int mtime_pin_n;
