@@ -1494,6 +1494,19 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**Deployed devel f6b980a6e; focused native/four-client smoke PASS. Material
+adaptive mounted speedup NOT ESTABLISHED.** Profile/trace identifies repeated
+forwarding under split single-group leaders. Fix learns validated serving-node
+routes, preserves cold leader choice and clears hints on leader changes;
+no attribute/authority cache or retry/TTL tuning. Earlier static prototype
+2.473→2.134 ms/stat (13.7%); after approved preserved-store restart node2 leads
+both groups, so old/new already share the direct route. Matched extended
+comparison 1.739→1.714 ms (1.4%); short sample was 7.9% slower. All four mounts
+pass preserved controls and cross-client fsync/truncate/EOF/mtime smoke.
+TCP/direct/files, optional features OFF; private Intel/AMD-local unchanged.
+Writer and MD5 crawl resumed; full/concurrent/fault/sanitizer suites NOTRUN.
+
+[Intel GETATTR first-lane reuse](../status/intel-getattr-lane-read-20261014.md):
 **Implemented/deployed0d996b33d; bounded correctness smoke PASS.** Reuses the
 reduction's visible lane; independent sequence/inode/decision validation stays.
 Paired actual-LSM fixture11.8–11.9% less time with1lane,21.4–22.9% with8.

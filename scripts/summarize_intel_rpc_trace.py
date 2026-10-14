@@ -50,6 +50,7 @@ def summarize(path, names):
     times = collections.defaultdict(list)
     exchanges = []
     endpoints = collections.defaultdict(list)
+    read_hints = collections.Counter()
     report_shapes = collections.defaultdict(collections.Counter)
     for start, end, body, rc, error in syscalls(path):
         call = re.match(r'(sendmsg|writev|recvfrom)\((\d+)<TCP:\[([^]]+)\]>', body)
@@ -104,8 +105,8 @@ def summarize(path, names):
             if len(state['header']) == 4:
                 state['length'] = int.from_bytes(state['header'], 'big')
             continue
-        if state['body_count'] < 2:
-            need = 2-len(state['prefix'])
+        if state['body_count'] < 3:
+            need = 3-len(state['prefix'])
             state['prefix'].extend(data[:min(need, rc)])
         state['body_count'] += rc
         if state['body_count'] > state['length']:
@@ -126,6 +127,8 @@ def summarize(path, names):
                 report_shapes[shape][str(prefix[1])] += 1
             label = names.get(request, str(request))
             duration = end-state['start']
+            if request in (43,47) and len(prefix) >= 3 and prefix[1] == 0:
+                read_hints[label+' node='+str(prefix[2])] += 1
             statuses[label][str(prefix[1])] += 1
             times[label].append(duration)
             endpoints[label+' '+fd[1]].append(duration)
@@ -135,6 +138,7 @@ def summarize(path, names):
                 replies={k:dict(v) for k,v in statuses.items()},
                 exchange_timings={k:quantiles(v) for k,v in times.items()},
                 by_endpoint={k:quantiles(v) for k,v in endpoints.items()},
+                read_serving_hints=dict(read_hints),
                 report_shapes={k:dict(v) for k,v in report_shapes.items()},
                 diagnostics=dict(counts), pending_at_end=len(live),
                 longest=sorted(exchanges, key=lambda x:x['seconds'], reverse=True)[:12])
