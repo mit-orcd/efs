@@ -872,3 +872,8 @@ exact-read/unlink cases PASS. Original seven tiny jobs later FAIL closeEIO after
 265000–279000files each. Sustained-load correctness remainsOPEN; user requests
 restart in fresh directories on same verifiedsource/profile. General .efs
 acceptance staysonhold.
+
+[ORCD live daemon profile](orcd-live-profile-20261013.md):45s collection PASS
+on exacte8 source with7writers+7MD5crawlers. Global Raft-host mutex/durable
+I/O convoy, failed `.efs` refresh/device contention and LSM point-probe fanout
+are the largest observed priorities. Diagnostic only; sustained closeEIOOPEN.
