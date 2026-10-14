@@ -22,15 +22,15 @@ static int host_local_leader(struct efs_raft_host *h,uint8_t group){(void)h;asse
 static struct host_group *group_slot(struct efs_raft_host *h,uint8_t group){return &h->groups[group>>1];}
 static uint32_t efs_raft_voters(struct efs_raft *r){return r->voters;}
 static int hosts_group(int id,uint32_t voters){return id>=0 && id<32 && (voters&(1u<<id));}
-'''+s[a:b]+s[s.index('static int host_container_read_leader_hint('):s.index('\n}',s.index('static int host_container_read_leader_hint('))+2]+r'''
+'''+s[a:b]+s[s.index('static int host_read_leader_hint('):s.index('\n}',s.index('static int host_read_leader_hint('))+2]+r'''
 int main(void){
  struct efs_raft r[2]={{7},{7}};
  struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.n=3,.raft_id=0,.groups={{&r[0],0},{&r[1],0}}};
  leader=1;assert(host_namespace_leader_hint(&h,2)==1);
  struct efsd_server server={0};h.s=&server;
- assert(host_container_read_leader_hint(&h,2)==-1);
- server.storage_engine=1;assert(host_container_read_leader_hint(&h,2)==1);
- leader=0;assert(host_container_read_leader_hint(&h,2)==-1);
+ assert(host_read_leader_hint(&h,2)==1); /* ordinary files route too */
+ server.storage_engine=1;assert(host_read_leader_hint(&h,2)==1);
+ leader=0;assert(host_read_leader_hint(&h,2)==-1);
  leader=1;
  leader=0;assert(host_namespace_leader_hint(&h,0)==-1);
  leader=-1;assert(host_namespace_leader_hint(&h,0)==-1);
@@ -62,12 +62,12 @@ for name in ['mkdir','rmdir']:
 
 for name in ['lookup','getattr']:
  a=s.index('void server_raft_host_'+name+'(');b=s.index('\n}',a)
- body=s[a:b];route=body.index('host_container_read_leader_hint(')
+ body=s[a:b];route=body.index('host_read_leader_hint(')
  assert route<body.index('host_hosts(')
- assert route<body.index('host_read_')
+ assert route<body.index('host_read_index_pair(' if name=='lookup' else 'host_read_inode_lanes_mask(')
  assert 'set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;' in body
 
-# Batched paths use the same container-only hint before any row/proof read.
+# Batched paths use the same ordinary-file/container hint before any row/proof read.
 a=s.index('void server_raft_host_lookup_path(');body=s[a:s.index('\n}',a)]
-assert body.index('host_container_read_leader_hint(')<body.index('host_hosts(')
-assert body.index('host_container_read_leader_hint(')<body.index('host_read_inode_lanes_reuse(')
+assert body.index('host_read_leader_hint(')<body.index('host_hosts(')
+assert body.index('host_read_leader_hint(')<body.index('host_read_inode_lanes_reuse(')

@@ -15,7 +15,7 @@ code=r'''
 struct efs_raft_host {int running;struct efs_kv *kv;};
 static struct efs_raft_host h={1,NULL},*g_host=&h;
 static int calls[3],fail,unhosted,forwarded,missing,route=-1;
-int host_container_read_leader_hint(struct efs_raft_host *h,uint8_t g){(void)h;(void)g;return route;}
+int host_read_leader_hint(struct efs_raft_host *h,uint8_t g){(void)h;(void)g;return route;}
 static int host_hosts(struct efs_raft_host *h,uint8_t g){(void)h;return !(unhosted && g==2);}
 static int host_read_index(struct efs_raft_host *h,uint8_t g,int *hint){
  (void)h;calls[g]++;*hint=2;return g==2?fail:0;
