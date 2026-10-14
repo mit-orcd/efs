@@ -1521,6 +1521,15 @@ Hardware IB acceptance remains NOTRUN; subsequent cold/load/churn verdicts above
 Historical foundation checkpoint; subsequent verbs/application integration and
 AMD affected results and installed strict-RDMA deployment are in the ledgers above.
 
+[W100 client retry EOF follow-up](../status/w100-client-retry-eof-20261013.md):
+**PASS on devel b872bdc29 (code 842a4c3d9)** — read-only repair avoids adopting
+an unvalidated remote EOF into local staging. Old-code negative control fails;
+two-attempt native regression, targeted ASan/UBSan, full native on both Intel
+hosts, live two-fsync refusal/recovery in both directions, and concurrent mounted
+core 216/216 per host pass. TCP/direct, files; .efs, packing, containers and expiry
+disabled. Historical c3d8ee560 client repair is superseded. W100 aggregate and
+peer/persistence qualification remain OPEN.
+
 [Merged devel ordinary-file AMD qualification](../status/amd-devel-merged-posix-20261013.md):
 **PASS on 96f40602** — all local branch tips integrated; fresh four-node files/TCP/direct
 cluster with .efs, packing, containers and expiry disabled. Core POSIX216/216

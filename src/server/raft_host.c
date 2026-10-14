@@ -19076,10 +19076,32 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
                 }
             }
             /* Zero is an explicit logical EOF, not a missing size record.
-             * Inferring a chunk end here permanently pads the lane MAX;
-             * later grow-only reports cannot undo that fabricated extent. */
-            if (!have_size)
-                sz = ((uint64_t)recs[i].chunk_index + 1) * EFS_MIN_CHUNK_SIZE;
+             * Never GUESS one from the chunk end: that fabricated extent
+             * commits to the grow-only lane MAX and no later report can
+             * shrink it (W100; ecopy padded a 32398-byte Makefile.in to
+             * 131072). A chunk rec without a size record on a LIVE inode
+             * is malformed: reject the batch, the client retains the data
+             * and retries with the size. A deleted inode is not malformed —
+             * pack answers NOT_FOUND with a skip below. */
+            if (!have_size) {
+                struct efs_meta_row srow;
+                int grc = efs_meta_apply_get_inode(h->kv, recs[i].ino, &srow);
+
+                if (grc == EFS_OK) {
+                    fprintf(stderr,
+                            "raft-host: REPORT rec ino=%llu ci=%u has no size record; rejecting batch\n",
+                            (unsigned long long)recs[i].ino, recs[i].chunk_index);
+                    n_inval++;
+                    rc = EFS_ERR_INVAL;
+                    fail_phase = "pack-nosize"; fail_rc = rc;
+                    break;
+                }
+                if (grc != EFS_ERR_NOT_FOUND) {
+                    rc = grc;
+                    fail_phase = "pack-nosize-get"; fail_rc = grc;
+                    break;
+                }
+            }
             for (k = 0; k < nic; k++) {
                 if (ic[k].have && ic[k].ino == recs[i].ino) {
                     cached = &ic[k].row;
