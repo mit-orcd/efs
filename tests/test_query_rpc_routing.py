@@ -15,8 +15,8 @@ base={'EFS_QUERY_TEST_HOST':'node2','EFS_QUERY_TEST_PORT':'17432','EFS_QUERY_TES
 
 def exercise(env, req, replies, expected):
     calls=[]
-    def raw(port,q,*,host):
-        calls.append((host,port));assert q is req
+    def raw(port,q,*,host,timeout=7):
+        calls.append((host,port));assert q is req and timeout==7
         status, owner, body=replies[len(calls)-1]
         return SimpleNamespace(status=status,primary_id=owner),body
     with patch.dict(os.environ,env,clear=True),patch.object(rpc,'query',raw):

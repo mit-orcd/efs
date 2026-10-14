@@ -287,9 +287,16 @@ assertion. Linux/live qualification of this new routing candidate is NOTRUN.
 
 Committed diagnostic reproduction: run `python3 tests/live/efs_query_target_compare.py
 /tmp/efs-mount /tmp/INDEPENDENT_RDMA_PEER_MOUNT --targets 172.16.223.58
-172.16.223.59 --port 17432 --fixture UNIQUE_UNUSED_NAME` on a client,. Redirect stdout/stderr to an owned scratch log
+172.16.223.59 --port 17432 --fixture UNIQUE_UNUSED_NAME` on a client. Redirect stdout/stderr to an owned scratch log
 outside Git. Both mounts must already serve the same export under the required
 profile. It uses the stock14s/eight-writer workload and payload checks, changing
 only reader endpoints and adding bounded header samples; it retains the original
 zero-success assertion. Stop the auxiliary mount normally only after the
 driver's threads exit, preserving failed fixtures.
+
+Linux focused sanitizer qualification on routing source3fc04d2c1 PASS, including
+actual target selection and bounded positive-page retries. Full native FAILS
+its raw-query routing test adapter because that adapter lacks the newly
+explicit timeout keyword. Update the adapter to assert the unchanged default7s
+while retaining all endpoint/identity/lease-owner assertions. This is test-only;
+requalify the combined frozen tree before deployment. Production still90.
