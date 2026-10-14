@@ -27,6 +27,7 @@ static struct efs_conn connection;
 static struct {uint64_t flock_token;unsigned node_count;} g_client={.node_count=4};
 static struct efs_meta_read_routes g_read_routes={.mu=PTHREAD_MUTEX_INITIALIZER};
 static int efs_client_node_is_down(efs_node_id_t n){(void)n;return 0;}
+static void rpc_learn_leader(const struct efs_msg_inode_reply*r){(void)r;}
 static unsigned g_group_leader[2];
 static unsigned mode,sends,begins,ends,pauses;
 static unsigned char original[2048];static uint32_t original_len;
@@ -49,7 +50,6 @@ static void efs_client_node_note_ok(efs_node_id_t n){(void)n;}
 static unsigned rpc_leader_of(unsigned g){return g_group_leader[g>>1];}
 static struct efs_conn *efs_client_conn_get(efs_node_id_t n){assert(n==2);return &connection;}
 static struct efs_conn *raft_voter_conn_skip(uint32_t sh,efs_node_id_t *n,efs_node_id_t skip){(void)sh;(void)skip;*n=1;return &connection;}
-static struct efs_conn *raft_read_voter_conn_skip(uint32_t sh,efs_node_id_t *n,efs_node_id_t skip){return raft_voter_conn_skip(sh,n,skip);}
 static void efs_client_conn_drop(efs_node_id_t n,struct efs_conn *c){(void)n;assert(c==&connection);}
 static void efs_client_conn_release(efs_node_id_t n,struct efs_conn *c){(void)n;assert(c==&connection);}
 uint32_t efs_export_shard_of(efs_ino_t ino,uint32_t bits){return ino&((1u<<bits)-1);}

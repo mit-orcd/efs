@@ -2,6 +2,7 @@
 #define EFS_METADATA_READ_ROUTE_H
 #include "efs/common.h"
 #include <pthread.h>
+#include <string.h>
 
 /* Bounded direct-mapped routing hints, no attributes, decisions or freshness
  * certificates. A collision/stale entry can only add a validated RPC hop.
@@ -31,6 +32,12 @@ static inline void efs_meta_read_route_note(struct efs_meta_read_routes *r,uint6
     unsigned i=(unsigned)key&(EFS_META_READ_ROUTES-1);
     pthread_mutex_lock(&r->mu);
     r->slot[i].key=key;r->slot[i].node=node;
+    pthread_mutex_unlock(&r->mu);
+}
+static inline void efs_meta_read_route_reset(struct efs_meta_read_routes *r)
+{
+    pthread_mutex_lock(&r->mu);
+    memset(r->slot,0,sizeof(r->slot));
     pthread_mutex_unlock(&r->mu);
 }
 #endif

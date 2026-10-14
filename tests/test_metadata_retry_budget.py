@@ -24,6 +24,7 @@ static unsigned mkdir_ready, mkdir_packet_len;
 static unsigned char mkdir_packet[1024];
 static unsigned failover,routing_sends,stale_hint;
 struct efs_conn {unsigned node;};static struct efs_conn connection;
+static void rpc_learn_leader(const struct efs_msg_inode_reply*r){(void)r;}
 static unsigned g_group_leader[2];
 static struct {unsigned node_count;} g_client={4};
 static struct efs_meta_read_routes g_read_routes={.mu=PTHREAD_MUTEX_INITIALIZER};
@@ -40,7 +41,6 @@ static void test_free(void*p){if(p)freed++;free(p);}
 static struct efs_conn *efs_client_conn_get(efs_node_id_t n){connection.node=n;return &connection;}
 static struct efs_conn *raft_voter_conn_skip(uint32_t s,efs_node_id_t*n,efs_node_id_t skip){(void)s;*n=(failover&&skip==2)?3:1;connection.node=*n;return &connection;}
 static struct efs_conn *raft_dual_voter_conn(efs_node_id_t*n,efs_node_id_t skip){return raft_voter_conn_skip(0,n,skip);}
-static struct efs_conn *raft_read_voter_conn_skip(uint32_t s,efs_node_id_t*n,efs_node_id_t skip){return raft_voter_conn_skip(s,n,skip);}
 static void efs_client_conn_drop(efs_node_id_t n,struct efs_conn*c){(void)n;(void)c;drops++;}
 static void efs_client_conn_release(efs_node_id_t n,struct efs_conn*c){(void)n;(void)c;releases++;}
 static int rpc_prof_enabled(void){return 0;}
