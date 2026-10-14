@@ -1176,8 +1176,8 @@ static int finish_shard_write(int fd, size_t bytes, int sync_write, int direct)
 
 #ifndef EFS_BENCH_BUILD
 /* Startup/attach seals each canonical root's ancestry before publishing its
- * initialized target. Runtime PUT still fences every directory below that
- * root and the root itself, including retries after a failed namespace sync.
+ * initialized target. Runtime PUT fences its containing directory every time;
+ * pinned inode proofs may elide only previously sealed, unchanged ancestry.
  * Unknown/uninitialized roots retain the full ancestry barrier. */
 static int sync_fragment_parents(struct efsd_server *s, const char *path)
 {
@@ -1199,6 +1199,11 @@ static int sync_fragment_parents(struct efsd_server *s, const char *path)
         }
         pthread_mutex_unlock(&s->lock);
     }
+    /* Files use the same bounded pinned-inode ancestry proof as metadata
+     * fragments. This never enables the container engine, skips the changed
+     * containing directory, or caches a failed barrier. Root attach/close owns
+     * descriptor lifetime; fallback below covers uninitialized/unknown roots. */
+    if (root[0]) return server_container_sync_parents(s, path);
     memcpy(parent, path, n + 1);
     char *slash = strrchr(parent, '/');
     if (!slash) strcpy(parent, ".");

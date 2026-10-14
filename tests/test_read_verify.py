@@ -24,7 +24,7 @@ source=r'''
 #include <stdio.h>
 static uint8_t bytes[65536], sum[EFS_HASH_SIZE];
 static pthread_once_t read_verify_once=PTHREAD_ONCE_INIT;
-static int read_verify;
+static int read_verify, read_frag_prof;
 int efs_conn_recv_msg_into(struct efs_conn *conn,uint8_t *type,uint8_t *status,
                           void *header,uint32_t hn,void *body,uint32_t bn) {
     (void)conn; assert(hn==EFS_HASH_SIZE && bn==sizeof(bytes));
@@ -57,4 +57,4 @@ with tempfile.TemporaryDirectory(prefix='efs-read-verify-') as directory:
     binary=path.with_suffix('')
     subprocess.run([os.environ.get('CC','cc'),'-std=gnu11','-Wall','-Wextra','-Werror','-pthread',
                     '-I'+str(root/'include'),str(path),str(root/'libefs.a'),'-o',str(binary)],check=True)
-    subprocess.run([str(binary)],env=dict(os.environ,EFS_READ_VERIFY='1'),check=True)
+    subprocess.run([str(binary)],env=dict(os.environ,EFS_READ_VERIFY='1',EFS_READ_FRAG_PROF='0'),check=True)

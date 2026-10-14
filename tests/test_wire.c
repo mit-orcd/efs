@@ -165,8 +165,6 @@ static void test_every_msg_struct(void)
     RT(struct efs_msg_inode_getchunks);
     RT(struct efs_msg_inode_getchunks_reply);
     RT(struct efs_msg_report_chunks);
-    RT(struct efs_msg_rdma_setup);
-    RT(struct efs_msg_rdma_setup_reply);
     RT(struct efs_msg_raft_mkfs_reply);
     RT(struct efs_msg_raft_status_reply);
     RT(struct efs_raft_group_status);

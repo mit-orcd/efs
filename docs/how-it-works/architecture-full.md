@@ -1494,6 +1494,34 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**PARTIAL on14d621182** — files pinned ancestry barriers and explicit metadata
+balancing1 committed/deployed. Quiet full-load deep42/42 and names21/21 PASS
+across three fresh4G fixtures; core1511/1512,1512/1512,1512/1512. Peer/cold,
+durability/fault/overwrite/GC, native Raft/read authority, sanitized durability
+and preserved10GiB digest PASS. Remaining: one unlinkEBUSY; paused-follower2
+read stalled at16MiB/180s; default balancing-OFF load failures remain. W106 OPEN.
+Files/direct, .efs/packing/containers/expiry OFF; no TCP comparisons or push.
+
+[Historical installed AMD strict RDMA baseline](../status/rdma-installed-amd-20261013.md):
+0ec2a869 serial216/216, peer67/67, cold27/27 and48 reconnect cycles PASS;
+loaded deep deadlines and paused-follower read failed. Restored10GiB digest
+PASS. Snapshot630s failed/actual import NOTRUN. Superseded by current fixes above.
+
+[Strict segmented RDMA AMD qualification](../status/rdma-soft-roce-integration-20261013.md):
+**PASS affected gates on a32567d7**, branchdevel-rdma — verbs credit progress,
+complete-message protocol/handler and Raft integration. Soft-RoCE core216/216,
+peer67/67; same-binary TCP216/216+67/67. Full-library ASan/UBSan normal/fault
+transport PASS. All333 upgraded TCP sockets zero post-setup payload;19 live
+connections sent multi-segment filesystem messages. Features .efs/packing/
+containers/expiry OFF. Historical isolated fixtures stopped; installed deployment is now recorded above.
+Hardware IB acceptance remains NOTRUN; subsequent cold/load/churn verdicts above.
+
+[RDMA implementation checkpoint](../status/rdma-implementation-20261013.md):
+`devel-rdma` foundation e6d1ecda native/ASan/UBSan and offset negative control PASS.
+Historical foundation checkpoint; subsequent verbs/application integration and
+AMD affected results and installed strict-RDMA deployment are in the ledgers above.
+
+[W100 client retry EOF follow-up](../status/w100-client-retry-eof-20261013.md):
 **PASS on devel b872bdc29 (code 842a4c3d9)** — read-only repair avoids adopting
 an unvalidated remote EOF into local staging. Old-code negative control fails;
 two-attempt native regression, targeted ASan/UBSan, full native on both Intel
@@ -1520,7 +1548,8 @@ metadata/data/replication messages over bounded RDMA buffers. Strict RDMA uses
 TCP only for setup and rejects incompatible peers. AMD Soft-RoCE then ORCD-test
 native IB qualification required. Code-review instructions now map negotiation,
 credits, complete-message APIs, buffer lifetimes and Raft pipelining to exact
-functions and ordered gates; implementation and tests NOTRUN. No cluster changes.
+functions and ordered gates. Historical plan; current implementation/test
+verdicts are in the segmented RDMA ledger above. No hardware deployment.
 
 [ORCD RDMA/TCP cause investigation](../status/orcd-rdma-tcp-cause-20261013.md):
 matched9b source explicitly sends oversized frames via retained TCP channel;

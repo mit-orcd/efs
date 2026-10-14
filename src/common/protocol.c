@@ -262,7 +262,8 @@ int efs_recv_msg_into(int fd, uint8_t *type, uint8_t *status,
     /* Read the status byte first. A status-only (error) reply is plen==1;
      * a full reply is plen == 1 + hdr_len + body_len. Anything else is a
      * protocol error. */
-    if (plen != 1 && plen != 1 + hdr_len + body_len) {
+    if (hdr_len>UINT32_MAX-1 || body_len>UINT32_MAX-1-hdr_len ||
+        (plen != 1 && plen != 1 + hdr_len + body_len)) {
         uint8_t sink[4096];
         uint32_t left = plen;
         while (left) {
@@ -286,20 +287,10 @@ int efs_recv_msg_into(int fd, uint8_t *type, uint8_t *status,
 
 /* ---------------- struct efs_conn dispatchers (TCP / RDMA) ---------------- */
 
-/* Channel rule (both ends compute it identically):
- *  - server: the reply follows the request's arrival channel, unless the
- *    reply frame exceeds the RDMA pool buffer (then TCP).
- *  - client: RDMA when the frame fits. */
-static int conn_pick_send_chan(struct efs_conn *c, uint32_t frame_len)
-{
-    if (!c->rc)
-        return EFS_CONN_TCP;
-    if (frame_len > efs_rdma_max_frame(c->rc))
-        return EFS_CONN_TCP;
-    if (c->is_server)
-        return c->recv_chan == EFS_CONN_RDMA ? EFS_CONN_RDMA : EFS_CONN_TCP;
-    return EFS_CONN_RDMA;
-}
+/* Upgraded connections have one application channel regardless of size.
+ * auto may fall back only before successful setup. */
+static int conn_pick_send_chan(struct efs_conn *c,uint32_t frame_len)
+{ (void)frame_len;return c->rc?EFS_CONN_RDMA:EFS_CONN_TCP; }
 
 /* True when the TCP fd has a real byte (or peer close). Spurious POLLIN
  * after RDMA upgrade used to send us into efs_recv_all with SO_RCVTIMEO=0,
@@ -350,7 +341,7 @@ int efs_conn_wait_request(struct efs_conn *c)
          * on the eventfd below; the wakeup costs ~2us, nothing next to the
          * per-request work. The client's latency-critical reply path keeps
          * the adaptive spin. */
-        int r = efs_rdma_reply_ready_quick(rc);
+        int r = efs_rdma_message_ready(rc);
         if (r < 0)
             return wait_teardown(c, "rdma conn broken (quick check)");
         if (r > 0)
@@ -364,15 +355,17 @@ int efs_conn_wait_request(struct efs_conn *c)
             int t = tcp_has_request(c->fd);
             if (t < 0)
                 return wait_teardown(c, "tcp_has_request failed (quick)");
-            if (t > 0)
-                return EFS_CONN_TCP;
+            if (t > 0) {
+                efs_rdma_tcp_violation(c->rc);
+                return wait_teardown(c,"unexpected TCP application byte after upgrade");
+            }
         }
         /* Neither channel ready: block on the TCP fd + the CQ eventfd. */
         struct pollfd pf[2] = {
             { .fd = c->fd, .events = POLLIN },
             { .fd = efs_rdma_reply_fd(rc), .events = POLLIN },
         };
-        int br = poll(pf, 2, -1);
+        int br = poll(pf, 2, efs_rdma_message_poll_ms(rc));
         if (br < 0) {
             if (errno == EINTR)
                 continue;
@@ -387,7 +380,7 @@ int efs_conn_wait_request(struct efs_conn *c)
              * frame or a send-side wake. Only take RDMA when a recv is
              * actually queued — otherwise recv_wait(-1) blocks forever
              * and treats a later TCP request as peer death. */
-            int r2 = efs_rdma_reply_ready_quick(rc);
+            int r2 = efs_rdma_message_ready(rc);
             if (r2 < 0)
                 return wait_teardown(c, "rdma conn broken (after efd wake)");
             if (r2 > 0)
@@ -401,8 +394,10 @@ int efs_conn_wait_request(struct efs_conn *c)
             int t = tcp_has_request(c->fd);
             if (t < 0)
                 return wait_teardown(c, "tcp_has_request failed (blocking)");
-            if (t > 0)
-                return EFS_CONN_TCP;
+            if (t > 0) {
+                efs_rdma_tcp_violation(c->rc);
+                return wait_teardown(c,"unexpected TCP application byte after upgrade");
+            }
         }
     }
 }
@@ -447,7 +442,7 @@ int efs_conn_send_msg(struct efs_conn *c, uint8_t type, const void *payload,
 }
 
 /* Wait for one RDMA frame, validate the header, and return the payload
- * pointer into the recv pool buffer (valid until efs_rdma_recv_repost). */
+ * pointer into the recv pool buffer (valid until efs_rdma_message_release). */
 static int conn_rdma_frame(struct efs_conn *c, uint8_t *type,
                            const uint8_t **payload, uint32_t *payload_len)
 {
@@ -455,36 +450,26 @@ static int conn_rdma_frame(struct efs_conn *c, uint8_t *type,
                                       ? c->recv_timeout_ms : EFS_IO_TIMEOUT_MS);
     if (!timeout)
         return EFS_ERR_BUSY;
-    int wr = efs_rdma_recv_wait(c->rc, timeout);
+    int wr = efs_rdma_message_wait(c->rc, timeout);
     if (!efs_net_remaining_ms(INT_MAX)) {
         /* A successful wait owns a pool frame even if the budget expired
          * concurrently. Return that ownership before dropping the reply. */
         if (wr == EFS_OK)
-            efs_rdma_recv_repost(c->rc);
+            efs_rdma_message_release(c->rc);
         return EFS_ERR_BUSY;
     }
-    /* A real byte on the TCP side-channel (reply larger than the RDMA
-     * pool, or a request the server answered on TCP). Caller reads it
-     * with the TCP recv. Anything else is a dead conn. */
-    if (wr == EFS_ERR_AGAIN)
-        return EFS_ERR_AGAIN;
     if (wr != 0)
         return EFS_ERR_NET;
     uint32_t flen = 0;
-    uint8_t *frame = efs_rdma_recv_frame(c->rc, &flen);
+    uint8_t *frame = efs_rdma_message_frame(c->rc, &flen);
     if (!frame || flen < 5) {
-        efs_rdma_recv_repost(c->rc);
+        efs_rdma_message_release(c->rc);
         return EFS_ERR_PROTO;
     }
     int rc = efs_wire_frame_decode(frame, flen, type, payload, payload_len);
     if (rc != EFS_OK) {
-        efs_rdma_recv_repost(c->rc);
+        efs_rdma_message_release(c->rc);
         return rc;
-    }
-    /* An RDMA pool frame can never be this big; keep the cap as a guard. */
-    if (*payload_len + 1u > 16u * 1024 * 1024) {
-        efs_rdma_recv_repost(c->rc);
-        return EFS_ERR_PROTO;
     }
     return EFS_OK;
 }
@@ -492,7 +477,7 @@ static int conn_rdma_frame(struct efs_conn *c, uint8_t *type,
 int efs_conn_recv_msg(struct efs_conn *c, uint8_t *type, void **payload,
                       uint32_t *payload_len)
 {
-    if (!c->rc || c->recv_chan == EFS_CONN_TCP) {
+    if (!c->rc) {
         int rc = efs_recv_msg(c->fd, type, payload, payload_len);
         c->last_recv_chan = EFS_CONN_TCP;
         if (rc == 0)
@@ -503,10 +488,7 @@ int efs_conn_recv_msg(struct efs_conn *c, uint8_t *type, void **payload,
     const uint8_t *pl = NULL;
     uint32_t plen = 0;
     int rc = conn_rdma_frame(c, type, &pl, &plen);
-    if (rc == EFS_ERR_AGAIN) {
-        c->last_recv_chan = EFS_CONN_TCP;
-        return efs_recv_msg(c->fd, type, payload, payload_len);
-    }
+
     if (rc != EFS_OK)
         return rc;
     c->last_recv_chan = EFS_CONN_RDMA;
@@ -515,18 +497,11 @@ int efs_conn_recv_msg(struct efs_conn *c, uint8_t *type, void **payload,
     if (plen == 0 || !payload) {
         if (payload)
             *payload = NULL;
-        efs_rdma_recv_repost(c->rc);
+        efs_rdma_message_release(c->rc);
         efs_conn_note_ok(c);
         return EFS_OK;
     }
-    uint8_t *buf = malloc(plen);
-    if (!buf) {
-        efs_rdma_recv_repost(c->rc);
-        return EFS_ERR_NOMEM;
-    }
-    memcpy(buf, pl, plen);
-    *payload = buf;
-    efs_rdma_recv_repost(c->rc);
+    *payload = efs_rdma_message_take(c->rc);
     efs_conn_note_ok(c);
     return EFS_OK;
 }
@@ -535,7 +510,7 @@ int efs_conn_recv_msg_into(struct efs_conn *c, uint8_t *type, uint8_t *status,
                            void *hdr, uint32_t hdr_len,
                            void *body, uint32_t body_len)
 {
-    if (!c->rc || c->recv_chan == EFS_CONN_TCP) {
+    if (!c->rc) {
         c->last_recv_chan = EFS_CONN_TCP;
         return efs_recv_msg_into(c->fd, type, status, hdr, hdr_len,
                                  body, body_len);
@@ -544,16 +519,13 @@ int efs_conn_recv_msg_into(struct efs_conn *c, uint8_t *type, uint8_t *status,
     const uint8_t *pl = NULL;
     uint32_t plen = 0;
     int rc = conn_rdma_frame(c, type, &pl, &plen);
-    if (rc == EFS_ERR_AGAIN) {
-        c->last_recv_chan = EFS_CONN_TCP;
-        return efs_recv_msg_into(c->fd, type, status, hdr, hdr_len,
-                                 body, body_len);
-    }
+
     if (rc != EFS_OK)
         return rc;
     c->last_recv_chan = EFS_CONN_RDMA;
-    if (plen != 1 && plen != 1 + hdr_len + body_len) {
-        efs_rdma_recv_repost(c->rc);
+    if (hdr_len>UINT32_MAX-1 || body_len>UINT32_MAX-1-hdr_len ||
+        (plen != 1 && plen != 1 + hdr_len + body_len)) {
+        efs_rdma_message_release(c->rc);
         return EFS_ERR_PROTO;
     }
     *status = pl[0];
@@ -563,31 +535,30 @@ int efs_conn_recv_msg_into(struct efs_conn *c, uint8_t *type, uint8_t *status,
         if (body_len > 0)
             memcpy(body, pl + 1 + hdr_len, body_len);
     }
-    efs_rdma_recv_repost(c->rc);
+    efs_rdma_message_release(c->rc);
     return EFS_OK;
 }
 
 int efs_conn_recv_u8_reply(struct efs_conn *c, uint8_t *type, uint8_t *status)
 {
-    if (!c->rc || c->recv_chan == EFS_CONN_TCP)
+    if (!c->rc)
         return efs_recv_u8_reply(c->fd, type, status);
 
     const uint8_t *pl = NULL;
     uint32_t plen = 0;
     int rc = conn_rdma_frame(c, type, &pl, &plen);
-    if (rc == EFS_ERR_AGAIN)
-        return efs_recv_u8_reply(c->fd, type, status);
+
     if (rc != EFS_OK)
         return rc;
     /* plen 1 is status. plen 2 is a PUT reply (status, path); a status-only
      * reader keeps the first byte. */
     if (plen < 1 || plen > 4) {
-        efs_rdma_recv_repost(c->rc);
+        efs_rdma_message_release(c->rc);
         return EFS_ERR_PROTO;
     }
     if (status)
         *status = pl[0];
-    efs_rdma_recv_repost(c->rc);
+    efs_rdma_message_release(c->rc);
     return EFS_OK;
 }
 
@@ -596,7 +567,7 @@ int efs_conn_recv_put_reply(struct efs_conn *c, uint8_t *type, uint8_t *status,
 {
     if (path)
         *path = 0xff;
-    if (!c->rc || c->recv_chan == EFS_CONN_TCP) {
+    if (!c->rc) {
         if (c->put_reply_used) {
             if (c->put_reply_used < 4)
                 return EFS_ERR_PROTO;
@@ -621,31 +592,30 @@ int efs_conn_recv_put_reply(struct efs_conn *c, uint8_t *type, uint8_t *status,
     const uint8_t *pl = NULL;
     uint32_t plen = 0;
     int rc = conn_rdma_frame(c, type, &pl, &plen);
-    if (rc == EFS_ERR_AGAIN)
-        return efs_recv_put_reply(c->fd, type, status, path);
+
     if (rc != EFS_OK)
         return rc;
     if (plen < 1 || plen > 4) {
-        efs_rdma_recv_repost(c->rc);
+        efs_rdma_message_release(c->rc);
         return EFS_ERR_PROTO;
     }
     if (status)
         *status = pl[0];
     if (path && plen >= 2)
         *path = pl[1];
-    efs_rdma_recv_repost(c->rc);
+    efs_rdma_message_release(c->rc);
     return EFS_OK;
 }
 
 int efs_conn_reply_watch(struct efs_conn *c)
 {
-    if (!c->rc || c->recv_chan == EFS_CONN_TCP) {
+    if (!c->rc) {
         struct pollfd p = { .fd = c->fd, .events = POLLIN };
         if (poll(&p, 1, 0) > 0 && (p.revents & (POLLIN | POLLERR | POLLHUP)))
             return EFS_CONN_REPLY_READY;
         return c->fd;
     }
-    int r = efs_rdma_reply_ready(c->rc);
+    int r = efs_rdma_message_ready(c->rc);
     if (r > 0)
         return EFS_CONN_REPLY_READY;
     if (r < 0)
@@ -655,9 +625,9 @@ int efs_conn_reply_watch(struct efs_conn *c)
 
 int efs_conn_reply_watch_quick(struct efs_conn *c)
 {
-    if (!c->rc || c->recv_chan == EFS_CONN_TCP)
+    if (!c->rc)
         return efs_conn_reply_watch(c); /* TCP poll(0) is already spin-free */
-    int r = efs_rdma_reply_ready_quick(c->rc);
+    int r = efs_rdma_message_ready(c->rc);
     if (r > 0)
         return EFS_CONN_REPLY_READY;
     if (r < 0)
@@ -667,9 +637,10 @@ int efs_conn_reply_watch_quick(struct efs_conn *c)
 
 int efs_conn_reply_watch_us(struct efs_conn *c, int budget_us)
 {
-    if (!c->rc || c->recv_chan == EFS_CONN_TCP)
+    (void)budget_us;
+    if (!c->rc)
         return efs_conn_reply_watch(c); /* TCP poll(0) is already spin-free */
-    int r = efs_rdma_reply_ready_us(c->rc, budget_us);
+    int r = efs_rdma_message_ready(c->rc);
     if (r > 0)
         return EFS_CONN_REPLY_READY;
     if (r < 0)
@@ -682,7 +653,7 @@ int efs_conn_reply_watch_us(struct efs_conn *c, int budget_us)
  * turn a readiness notification into a blocking recv across the whole quorum. */
 int efs_conn_put_reply_watch(struct efs_conn *c, int budget_us)
 {
-    if (c->rc && c->recv_chan != EFS_CONN_TCP)
+    if (c->rc)
         return budget_us > 0 ? efs_conn_reply_watch_us(c, budget_us) :
                                efs_conn_reply_watch_quick(c);
     for (;;) {

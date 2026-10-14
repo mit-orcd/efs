@@ -198,7 +198,7 @@ struct host_outbox {
     int npri;
     int nent;
     uint64_t read_probe_context[HOST_NGROUPS],read_probe_term[HOST_NGROUPS],read_probe_boot[HOST_NGROUPS];
-    int preserve_read; /* containers: keep read contexts and replication ACKs distinct */
+    int preserve_read; /* keep fresh-read contexts and replication ACKs distinct */
     uint64_t queued_bytes, queued_bytes_hi;
     struct host_outbox_item pri[HOST_OUTBOX_MAX];
     struct host_outbox_item ent[HOST_OUTBOX_MAX];
@@ -741,7 +741,7 @@ static int host_sender_depth(struct efs_conn *pc)
     int d = HOST_SENDER_PIPE_MAX;
 
     if (pc && pc->kind == EFS_CONN_RDMA && pc->rc) {
-        int n = efs_rdma_conn_nrecv(pc->rc) - 1;
+        int n = (int)efs_rdma_message_capacity(pc->rc);
 
         if (n < d)
             d = n;
@@ -937,21 +937,9 @@ static void *host_sender(void *arg)
          * the frames popped if the conn changed kind. Send what fits. */
         depth = host_sender_depth(pc);
         {
-            /* A frame larger than the RDMA buffer (72 KiB) goes over the
-             * conn's TCP side-channel and its RAFT_REPLY comes back on
-             * TCP; the rest are answered on RDMA. efs_conn_send_msg
-             * leaves recv_chan at the LAST message's channel, so a batch
-             * of [AE_REP (RDMA), big AE (TCP)] used to read TCP only,
-             * leave the RDMA reply in the ring, and time out — every
-             * batch, on the one lane that mixes the two (the dual-group
-             * hosts, fcstor004<->fcstor005: one group's AppendEntries
-             * plus the other group's replies). Under a 100 GiB dd the
-             * publish batches made every AE big, the lane failed at
-             * HOST_SEND_IO_MS forever (fail=2399 in 10 min), and the
-             * follower it fed sat 700 entries behind while every
-             * follower-served read returned BUSY (Sep 30 2026,
-             * results/measure/20260930-060000-dd-wedge). Count the
-             * expected replies per channel and read each on its own. */
+            /* One homogeneous application channel after setup. Count only
+             * complete transport replies; DATA segments/CREDIT records are
+             * consumed internally and never become consensus ACKs. */
             int n_rdma = 0, n_tcp = 0;
             uint64_t read_wire_begin = 0;
             int read_wire_type = 0;
@@ -996,9 +984,8 @@ static void *host_sender(void *arg)
                 void *reply = NULL;
                 uint32_t rlen = 0;
 
-                /* With replies pending on both, the RDMA wait drains the
-                 * ring first and falls through to TCP when a byte is
-                 * there; with only TCP pending, read TCP directly. */
+                /* Channel counts validate complete RPC replies; strict RDMA
+                 * never switches to TCP for an oversized request/reply. */
                 pc->recv_chan = n_rdma > 0 ? EFS_CONN_RDMA : EFS_CONN_TCP;
                 if (efs_conn_recv_msg(pc, &rtype, &reply, &rlen) != 0 ||
                     rtype != EFS_MSG_RAFT_REPLY) {
@@ -1214,7 +1201,7 @@ static int host_send_ready(void *net, int peer, uint8_t group)
     return ready;
 }
 
-/* A fresh container read need not wait for a newly sent data window to
+/* A fresh metadata read need not wait for a newly sent data window to
  * become durable on its follower. Queue one bounded prefix-zero vote probe
  * per peer/group/context alongside, never instead of, the original frame.
  * The core still validates current term/boot/voters and the leader's own
@@ -4344,12 +4331,34 @@ static int host_read_admit(struct efs_raft *r, struct host_read_admission *a,
     return rc;
 }
 
-/* Register before waiting for h->mu. A tracked round may cover this ticket
+/* A ticket admitted before an already completed probe needs its certificate,
+ * not another network round. Late tickets still require their newer round.
+ * Quorum completion is sufficient to stop probing; own apply remains a
+ * separate requirement in host_read_index_admitted. */
+static int host_read_probe_needed(struct efs_raft *r,
+                                   const struct host_read_admission *admission)
+{
+    uint64_t round = 0, index = 0;
+    if (!r || efs_raft_role(r) != EFS_RAFT_LEADER ||
+        efs_raft_term(r) != admission->term)
+        return 1;
+    if (efs_raft_read_proven(r, &round, &index) &&
+        round >= admission->round && index >= admission->want)
+        return 0;
+    if (efs_raft_read_round(r) >= admission->round &&
+        efs_raft_read_quorum(r) &&
+        efs_raft_read_index(r) >= admission->want)
+        return 0;
+    return !efs_raft_read_pending(r) || efs_raft_read_quorum(r);
+}
+
+/* Both storage engines use the same fresh metadata authority. Register
+ * before waiting for h->mu. A tracked round may cover this ticket
  * only if its admission watermark was captured BEFORE any probes were sent.
  * Saturation disables this optimization rather than wrapping authority. */
 static uint64_t host_read_register(struct efs_raft_host *h,uint8_t group)
 {
-    if(!h->s || !h->s->storage_engine)return 0;
+    if(!h->s)return 0;
     struct host_group *g=group_slot(h,group);
     if(!g)return 0;
     uint64_t value=__atomic_load_n(&g->read_admit_count,__ATOMIC_ACQUIRE);
@@ -4365,7 +4374,7 @@ static uint64_t host_read_eligible_round(struct efs_raft_host *h,uint8_t group,
 {
     uint64_t previous=efs_raft_read_round(r);
     struct host_group *g=group_slot(h,group);
-    if(ticket && h->s && h->s->storage_engine && previous && g && g->read_begin_round==previous &&
+    if(ticket && h->s && previous && g && g->read_begin_round==previous &&
        g->read_begin_term==efs_raft_term(r) && ticket<=g->read_begin_admits)
         return previous;
     return previous+1;
@@ -4374,7 +4383,7 @@ static int host_read_begin_tracked(struct efs_raft_host *h,uint8_t group,
                                   struct efs_raft *r)
 {
     struct host_group *g=group_slot(h,group);
-    uint64_t admits=h->s && h->s->storage_engine && g?
+    uint64_t admits=h->s && g?
         __atomic_load_n(&g->read_admit_count,__ATOMIC_ACQUIRE):0;
     uint64_t previous=efs_raft_read_round(r);
     int rc=efs_raft_read_begin(r);
@@ -4454,17 +4463,17 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             int started=0;
             pthread_mutex_lock(&h->mu);
             struct efs_raft *r=group_raft(h,group);
-            if(h->s && h->s->storage_engine) {
+            if(h->s) {
                 rc=(!r || efs_raft_role(r)!=EFS_RAFT_LEADER)?EFS_ERR_NOT_PRIMARY:
                    efs_raft_read_round(r)==UINT64_MAX?EFS_ERR_BUSY:EFS_OK;
                 if(!rc) {
                     fresh=(struct host_read_admission){want,host_read_eligible_round(h,group,r,ticket),efs_raft_term(r)};
-                    if(!efs_raft_read_pending(r) || efs_raft_read_quorum(r)) {
+                    if(host_read_probe_needed(r,&fresh)) {
                         rc=host_read_begin_tracked(h,group,r);started=rc==EFS_OK;
                     }
                 }
             } else rc=host_read_admit(r,&fresh,&started);
-            if(started)host_publish_group(h,group);
+            if(!rc)host_publish_group(h,group);
             pthread_mutex_unlock(&h->mu);
             if(rc==EFS_ERR_NOT_PRIMARY){host_view_get(h,group,&v);continue;}
             if(rc!=EFS_OK)return rc;
@@ -4603,7 +4612,7 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
     struct efs_raft *r[2];struct host_read_admission admission[2];
     uint8_t groups[2]={first,second};int rc=EFS_OK;
     struct host_view admitted[2]={{0}};
-    if(h->s && h->s->storage_engine)
+    if(h->s)
         for(unsigned i=0;i<2;i++)host_view_get(h,groups[i],&admitted[i]);
     pthread_mutex_lock(&h->mu);
     r[0]=group_raft(h,first);r[1]=group_raft(h,second);
@@ -4622,9 +4631,10 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
             pthread_mutex_unlock(&h->mu);return EFS_ERR_BUSY;
         }
         admission[local]=(struct host_read_admission){efs_raft_commit(r[local]),
-            previous+1,efs_raft_term(r[local])};
-        if(!efs_raft_read_pending(r[local]) || efs_raft_read_quorum(r[local]))
-            rc=efs_raft_read_begin(r[local]);
+            host_read_eligible_round(h,groups[local],r[local],tickets[local]),
+            efs_raft_term(r[local])};
+        if(host_read_probe_needed(r[local],&admission[local]))
+            rc=host_read_begin_tracked(h,groups[local],r[local]);
         host_publish_group(h,groups[local]);
         pthread_mutex_unlock(&h->mu);
         host_pump_kick(h);
@@ -4658,7 +4668,7 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
                                                   host_read_eligible_round(h,groups[i],r[i],tickets[i]),efs_raft_term(r[i])};
     }
     for(unsigned i=0;i<2;i++) {
-        if(!efs_raft_read_pending(r[i]) || efs_raft_read_quorum(r[i]))
+        if(host_read_probe_needed(r[i],&admission[i]))
             rc=host_read_begin_tracked(h,groups[i],r[i]);
         host_publish_group(h,groups[i]);
         if(rc!=EFS_OK)break;
@@ -7147,15 +7157,15 @@ static int host_checkpoint_retire(struct efs_raft_host *h, const uint64_t *idx,
     return rc;
 }
 
-/* Containers route inode/dentry reads to leaders hosting both metadata
+/* Namespace reads can route to leaders hosting both metadata
  * groups. Prefer that committed-membership intersection for placement too;
  * choosing a single-group leader forces an extra forwarding hop per lookup.
  * This is only an opt-in placement hint under h->mu, never read authority.
  * Unknown membership postpones handoff; disjoint groups keep their ordinary
- * actual-voter preference. Files retain the original placement policy. */
-static int host_container_balanced_voter(struct efs_raft_host *h,uint32_t voters,unsigned ordinal)
+ * actual-voter preference. This placement is independent of the data engine. */
+static int host_balanced_voter(struct efs_raft_host *h,uint32_t voters,unsigned ordinal)
 {
-    if(!h->s || !h->s->storage_engine)return efs_raft_preferred_voter(voters,ordinal);
+    if(!h->s)return efs_raft_preferred_voter(voters,ordinal);
     uint32_t common=voters;
     for(unsigned i=0;i<HOST_NGROUPS;i++){
         struct host_group *g=group_slot(h,(uint8_t)(i<<1));
@@ -7193,7 +7203,7 @@ static void host_balance_leaders(struct efs_raft_host *h, uint64_t now)
         if (now - g->balance_since_us < 2000000u ||
             (g->balance_attempt_us && now - g->balance_attempt_us < 30000000u))
             continue;
-        target = host_container_balanced_voter(h,voters,(unsigned)i);
+        target = host_balanced_voter(h,voters,(unsigned)i);
         if (target < 0 || target == h->raft_id) continue;
         rc = efs_raft_transfer(g->r, target);
         if (rc == EFS_ERR_BUSY) continue; /* Target not durably caught up yet. */
@@ -7495,7 +7505,7 @@ static void host_container_pending_reads(struct efs_raft_host *h)
 {
     struct pending_read {uint8_t p[EFS_WIRE_RAFT_HDR_LEN];uint8_t *identity;uint64_t queued_us;int slot,consume;};
     struct pending_read frames[HOST_INBOX_MAX];unsigned n=0,consume_n=0;uint8_t published=0;
-    if(!h->s || !h->s->storage_engine)return;
+    if(!h->s)return;
     pthread_mutex_lock(&h->inbox_mu);
     for(int i=0;i<h->inbox_n && i<HOST_INBOX_MAX;i++){
         struct host_inbox_item *item=&h->inbox[i];
@@ -11162,7 +11172,7 @@ int server_raft_host_start(struct efsd_server *s)
         for (i = 0; i < EFS_RAFT_MAX_PEERS; i++) {
             h->tx[i].h = h;
             h->tx[i].peer = i;
-            h->tx[i].preserve_read = s->storage_engine;
+            h->tx[i].preserve_read = 1;
             h->tx[i].flow.sequence=(unsigned)i+1;
             pthread_cond_init(&h->tx[i].cv, &attr);
         }
@@ -11403,7 +11413,7 @@ void server_raft_host_stop(void)
 /* The pump's off-lock durability tail need not park a fresh quorum ACK.
  * Try the existing mutex only. With pending inbox work, replies may note
  * current-term read quorum but MUST still enter normal recv for ordered
- * replication bookkeeping. Container fresh-context requests may note a
+ * replication bookkeeping. Fresh-context requests may note a
  * heartbeat vote while work is pending. Only fully accounted prefix-zero
  * read-only requests can then be consumed; progress stays on ordered recv.
  * The core requires a known current-term leader and matching durable prefix;
@@ -11420,7 +11430,7 @@ static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n
     pthread_mutex_lock(&h->inbox_mu);
     int pending=h->inbox_n;
     pthread_mutex_unlock(&h->inbox_mu);
-    int container_probe=h->s && h->s->storage_engine &&
+    int fresh_probe=h->s &&
         msg.type==EFS_RAFT_MSG_AE_REQ && msg.last_log_index;
     {
         struct efs_raft *r=group_raft(h,msg.group);
@@ -11435,11 +11445,11 @@ static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n
          * no replication/commit/apply work left for FIFO receive. Keeping it
          * there repeats the already sent vote and occupies inbox credits.
          * Every progress-bearing request and every result2 remains ordered. */
-        int pure_probe=container_probe && msg.vote_granted==1 && !msg.success &&
+        int pure_probe=fresh_probe && msg.vote_granted==1 && !msg.success &&
             !msg.prev_index && !msg.prev_term && !msg.leader_commit &&
             !msg.match_index && !msg.last_log_term && !msg.nentries;
         if(pending && handled==1 && msg.type==EFS_RAFT_MSG_AE_REQ && !pure_probe)handled=2;
-        if(handled && h->s && h->s->storage_engine && BO_ON() &&
+        if(handled && h->s && BO_ON() &&
            outbox_pure_read_control(p,n))
             BO_COUNT(msg.type==EFS_RAFT_MSG_AE_REQ ? BO_READ_REQ_INLINE : BO_READ_REPLY_INLINE);
         if (handled && msg.type==EFS_RAFT_MSG_AE_REQ) BO_COUNT(BO_READ_CONTROL_REQUEST);
@@ -12593,14 +12603,14 @@ int server_raft_host_active(void)
     return h && h->running;
 }
 
-/* Container qualification keeps fresh metadata proofs on a known dual-group
+/* Keep fresh metadata proofs on a known dual-group
  * leader when available. A follower would otherwise proxy each component's
  * proof before serving LOOKUP/GETATTR. This is routing only: the recipient
  * still admits a new ReadIndex and rechecks all inode/dentry/lane authority. */
 static int host_namespace_leader_hint(struct efs_raft_host *,uint8_t);
-static int host_container_read_leader_hint(struct efs_raft_host *h,uint8_t group)
+static int host_read_leader_hint(struct efs_raft_host *h,uint8_t group)
 {
-    return h->s && h->s->storage_engine ? host_namespace_leader_hint(h,group) : -1;
+    return h->s ? host_namespace_leader_hint(h,group) : -1;
 }
 
 void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out)
@@ -12626,7 +12636,7 @@ void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out)
 
     {
         uint8_t ig = efs_raft_shard_group(efs_kv_inode_shard(ino));
-        hint=host_container_read_leader_hint(h,ig);
+        hint=host_read_leader_hint(h,ig);
         if(hint>=0){set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;}
         if (!host_hosts(h, ig)) {
             if (prof)
@@ -13145,7 +13155,7 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
 
     psh = efs_kv_inode_shard(parent);
     pg = efs_raft_shard_group(psh);
-    hint=host_container_read_leader_hint(h,pg);
+    hint=host_read_leader_hint(h,pg);
     if(hint>=0){set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;}
     if (!host_hosts(h, pg)) {
         uint8_t need[2];
@@ -19300,7 +19310,7 @@ static int host_publication_committed(struct efs_raft_host *h, uint8_t group,
         if (r && efs_raft_role(r)==EFS_RAFT_LEADER && efs_raft_term(r)==term &&
             (!efs_raft_read_pending(r) || efs_raft_read_quorum(r)) &&
             !(efs_raft_read_round(r)>=round && efs_raft_read_covers(r,want)))
-            rc=efs_raft_read_begin(r);
+            rc=host_read_begin_tracked(h,group,r);
         host_publish_group(h,group);
         pthread_mutex_unlock(&h->mu);
         if (rc!=EFS_OK) return rc;
@@ -20059,7 +20069,7 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
         p++;
     {
         uint8_t sg = efs_raft_shard_group(efs_kv_inode_shard(cur));
-        hint=host_container_read_leader_hint(h,sg);
+        hint=host_read_leader_hint(h,sg);
         if(hint>=0){set_inode_rc((struct efs_msg_inode_reply *)out,EFS_ERR_NOT_PRIMARY,hint);return;}
         if (!host_hosts(h, sg)) {
             uint8_t need[2];

@@ -1293,26 +1293,8 @@ struct efs_msg_report_chunks {
 #define EFS_RDMA_STATUS_OK          0
 #define EFS_RDMA_STATUS_UNSUPPORTED 1
 
-struct efs_msg_rdma_setup {
-    uint32_t lid;      /* sender port LID */
-    uint32_t qpn;      /* sender QP number */
-    uint32_t psn;      /* sender initial PSN */
-    uint32_t mtu;      /* sender active MTU (enum ibv_mtu value) */
-    uint32_t buf_size; /* sender recv buffer size = max RDMA frame accepted */
-    uint32_t address_version; /* 1: Ethernet/RoCE GID extension; 0: legacy IB */
-    uint8_t gid[16];
-};
-
-struct efs_msg_rdma_setup_reply {
-    uint32_t status;   /* EFS_RDMA_STATUS_* */
-    uint32_t lid;
-    uint32_t qpn;
-    uint32_t psn;
-    uint32_t mtu;
-    uint32_t buf_size;
-    uint32_t address_version;
-    uint8_t gid[16];
-};
+/* Segmented setup is explicitly encoded by rdma_message.h, not a native
+ * addressing struct. Exact-version peers only; no legacy 20/44-byte setup. */
 
 /* Send a single message. */
 int efs_send_msg(int fd, uint8_t type, const void *payload, uint32_t payload_len);
@@ -1340,9 +1322,8 @@ int efs_recv_u8_reply(int fd, uint8_t *type, uint8_t *status);
 int efs_recv_put_reply(int fd, uint8_t *type, uint8_t *status, uint8_t *path);
 
 /* ---- transport-dispatching variants (struct efs_conn, network.h) ----
- * Same semantics as the fd-based originals. With a live RDMA QP, frames up
- * to the pool buffer size go over the QP; larger frames (and GET_META /
- * GET_META_ROOT, whose replies are unbounded) use the TCP side-channel.
+ * Same semantics as the fd-based originals. With a live RDMA QP, all supported complete logical frames go over segmented RDMA. TCP is used
+ * only before upgrade, or on explicitly non-upgraded connections.
  * Replies follow the request's channel, so the receiver always knows where
  * to wait (c->recv_chan). */
 struct efs_conn;

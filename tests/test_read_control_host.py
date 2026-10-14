@@ -61,7 +61,7 @@ int main(void) {
  result=0;assert(!host_read_control(&h,p,sizeof(p)) && calls==12 && h.inbox_n==1);
  /* Requests never consume pending frames, even when otherwise accounted;
   * accounted replies consume no queue slot; refusal never publishes progress. */
- struct efsd_server server={.storage_engine=1};h.s=&server;read_context=42;
+ struct efsd_server server={.storage_engine=0};h.s=&server;read_context=42;
  /* Exact read-only prefix-zero probes can retire after result1, without
   * touching queued bytes/credits. All other headers still owe receive. */
  p[2]=1;result=1;
@@ -85,8 +85,8 @@ int main(void) {
  assert(host_read_control(&h,p,sizeof(p)) && counts[BO_READ_REQ_INLINE]==1);
  p[0]=EFS_RAFT_MSG_AE_REP;p[3]=1;assert(host_read_control(&h,p,sizeof(p)) && counts[BO_READ_REPLY_INLINE]==1);
  efs_batch_obs_on=0;assert(host_read_control(&h,p,sizeof(p)) && counts[BO_READ_REPLY_INLINE]==1);
- efs_batch_obs_on=1;server.storage_engine=0;assert(host_read_control(&h,p,sizeof(p)) && counts[BO_READ_REPLY_INLINE]==1);
- server.storage_engine=1;result=0;assert(!host_read_control(&h,p,sizeof(p)) && counts[BO_READ_REPLY_INLINE]==1);
+ efs_batch_obs_on=1;server.storage_engine=0;assert(host_read_control(&h,p,sizeof(p)) && counts[BO_READ_REPLY_INLINE]==2);
+ server.storage_engine=1;result=0;assert(!host_read_control(&h,p,sizeof(p)) && counts[BO_READ_REPLY_INLINE]==2);
  pthread_mutex_destroy(&h.mu);pthread_mutex_destroy(&h.inbox_mu);
  puts("read control host: busy mutex, pending order, frame refusal, early request votes and reply bookkeeping PASS");
 }

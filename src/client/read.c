@@ -99,11 +99,14 @@ static uint8_t *decode_frag_scratch(uint32_t need)
  * require hashing the received bytes when verification is requested. */
 static pthread_once_t read_verify_once = PTHREAD_ONCE_INIT;
 static int read_verify;
+static int read_frag_prof;
 
 static void read_verify_init(void)
 {
     const char *value = getenv("EFS_READ_VERIFY");
     read_verify = value && *value && strcmp(value, "0") != 0;
+    value = getenv("EFS_READ_FRAG_PROF");
+    read_frag_prof = value && *value && strcmp(value, "0") != 0;
 }
 
 static int fragment_reply_verified(const uint8_t *data, uint32_t len,
@@ -144,6 +147,31 @@ static int get_one_reply(struct efs_conn *conn, struct frag_get_job *j)
     return 0;
 }
 
+/* Both preferred peers share the original pair deadline. Reserve admission
+ * time for the second peer and any already-sent reply: a cold blackholed
+ * checkout in either position must not consume the entire pair budget. */
+static int get_pair_start(struct frag_get_job *job, struct efs_conn **conn,
+                          const struct efs_msg_get_chunk *req, int reserve)
+{
+    uint64_t previous = efs_client_rpc_deadline_ms();
+    if (reserve && previous) {
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        uint64_t now = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+        if (previous > now + 1)
+            efs_client_rpc_set_deadline_ms(now + (previous - now) / 2);
+    }
+    *conn = efs_client_conn_get(job->node);
+    if (*conn && efs_conn_send_msg(*conn, EFS_MSG_GET_CHUNK, req,
+                                  sizeof(*req)) != EFS_OK) {
+        efs_client_conn_drop(job->node, *conn);
+        efs_client_node_note_fail(job->node);
+        *conn = NULL;
+    }
+    efs_client_rpc_set_deadline_ms(previous);
+    return *conn != NULL;
+}
+
 static void get_two_parallel_run(struct frag_get_job *jobs)
 {
     struct efs_conn *conns[2] = {NULL, NULL};
@@ -160,9 +188,6 @@ static void get_two_parallel_run(struct frag_get_job *jobs)
         }
         if (jobs[i].node == 0 || efs_client_node_is_down(jobs[i].node))
             continue;
-        conns[i] = efs_client_conn_get(jobs[i].node);
-        if (!conns[i])
-            continue;
         memset(&req, 0, sizeof(req));
         req.export_id = g_client.export_id;
         req.ino = jobs[i].ino;
@@ -171,13 +196,10 @@ static void get_two_parallel_run(struct frag_get_job *jobs)
         if (jobs[i].chunk_generation &&
             jobs[i].chunk_generation != EFS_CHUNK_BASE_UNCOND)
             req.chunk_generation = jobs[i].chunk_generation;
-        if (efs_conn_send_msg(conns[i], EFS_MSG_GET_CHUNK, &req,
-                              sizeof(req)) != 0) {
-            efs_client_conn_drop(jobs[i].node, conns[i]);
-            efs_client_node_note_fail(jobs[i].node);
-            conns[i] = NULL;
+        int reserve = pending[0] || (i == 0 && jobs[1].node != 0 &&
+                                     !efs_client_node_is_down(jobs[1].node));
+        if (!get_pair_start(&jobs[i], &conns[i], &req, reserve))
             continue;
-        }
         pending[i] = 1;
     }
 
@@ -192,7 +214,6 @@ static void get_two_parallel_run(struct frag_get_job *jobs)
             deadline = (int64_t)parent;
         while (pending[0] || pending[1]) {
             struct pollfd pfds[2];
-            int map[2];
             int np = 0;
             int64_t now, left;
             int pr;
@@ -225,7 +246,6 @@ static void get_two_parallel_run(struct frag_get_job *jobs)
                 pfds[np].fd = w;
                 pfds[np].events = POLLIN;
                 pfds[np].revents = 0;
-                map[np] = i;
                 np++;
             }
             if (!pending[0] && !pending[1])
@@ -249,24 +269,10 @@ static void get_two_parallel_run(struct frag_get_job *jobs)
             pr = poll(pfds, (nfds_t)np, left > 2000 ? 2000 : (int)left);
             if (pr <= 0)
                 continue;
-            for (i = 0; i < np; i++) {
-                int k;
-                if (!(pfds[i].revents & (POLLIN | POLLERR | POLLHUP)))
-                    continue;
-                k = map[i];
-                if (!pending[k] || !conns[k])
-                    continue;
-                if (get_one_reply(conns[k], &jobs[k]) != 0) {
-                    efs_client_conn_drop(jobs[k].node, conns[k]);
-                    efs_client_node_note_fail(jobs[k].node);
-                } else {
-                    efs_client_conn_release(jobs[k].node, conns[k]);
-                    if (jobs[k].rc == EFS_OK)
-                        efs_client_node_note_ok(jobs[k].node);
-                }
-                conns[k] = NULL;
-                pending[k] = 0;
-            }
+            /* A physical/CREDIT event is not a complete logical reply.
+             * Recheck both owners at the top before entering blocking receive;
+             * otherwise a control wake on a stalled peer hides a healthy reply. */
+
         }
     }
 }
@@ -474,6 +480,21 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
                 have[fi] = 1;
                 good++;
             }
+        }
+
+        pthread_once(&read_verify_once, read_verify_init);
+        if (good < 2 && read_frag_prof) {
+            static unsigned failures;
+            if (__atomic_fetch_add(&failures, 1, __ATOMIC_RELAXED) < 64)
+                fprintf(stderr, "read-fragments: ino=%llu ci=%u attempt=%d "
+                        "nodes=%u/%u/%u fi=%d/%d/%d rc=%d/%d/%d "
+                        "len=%u/%u/%u expected=%u deadline=%llu\n",
+                        (unsigned long long)ino, chunk_index, attempt,
+                        jobs[0].node, jobs[1].node, jobs[2].node,
+                        jobs[0].fi, jobs[1].fi, jobs[2].fi,
+                        jobs[0].rc, jobs[1].rc, jobs[2].rc,
+                        jobs[0].len, jobs[1].len, jobs[2].len, frag_len,
+                        (unsigned long long)efs_client_rpc_deadline_ms());
         }
 
         int missing = -1, a = -1, b = -1;
