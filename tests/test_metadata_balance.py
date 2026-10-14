@@ -7,7 +7,7 @@ root=Path(__file__).resolve().parents[1]
 s=Path(os.environ.get('EFS_RAFT_HOST_SOURCE',root/'src/server/raft_host.c')).read_text()
 a=s.index('static void host_balance_leaders(')
 fn=s[a:s.index('\n}',a)+2]
-a=s.index('static int host_container_balanced_voter(');helper=s[a:s.index('\n}',a)+2]
+a=s.index('static int host_balanced_voter(');helper=s[a:s.index('\n}',a)+2]
 code=r'''
 #include "efs/raft.h"
 #include <assert.h>
@@ -57,20 +57,24 @@ int main(void) {
  assert(calls==5&&target==2);
  r.role=EFS_RAFT_LEADER;r.voters=0;
  host_balance_leaders(&h,45000000);host_balance_leaders(&h,48000000);assert(calls==5);
- /* Container placement selects committed dual-group voters, including an
+ /* Placement selects committed dual-group voters, including an
   * unhosted local group's committed mask; it never changes the voter set. */
  struct efs_server server={1};struct efs_raft r2={EFS_RAFT_FOLLOWER,7,0xe};
  memset(&h,0,sizeof(h));h.s=&server;h.g[0].r=&r;h.g[1].r=&r2;r.voters=7;
- assert(host_container_balanced_voter(&h,7,0)==2);
- assert(host_container_balanced_voter(&h,0xe,1)==2);
- h.g[1].r=NULL;h.g[1].voters=0xe;assert(host_container_balanced_voter(&h,7,0)==2);
- h.g[1].voters=0;assert(host_container_balanced_voter(&h,7,0)==-1);
- h.g[1].voters=4;r.voters=1;assert(host_container_balanced_voter(&h,1,0)==0);
- assert(host_container_balanced_voter(&h,4,1)==2);
- r.voters=0xf;h.g[1].voters=0xf;assert(host_container_balanced_voter(&h,0xf,0)==1);
- assert(host_container_balanced_voter(&h,0xf,1)==1);
+ assert(host_balanced_voter(&h,7,0)==2);
+ assert(host_balanced_voter(&h,0xe,1)==2);
+ h.g[1].r=NULL;h.g[1].voters=0xe;assert(host_balanced_voter(&h,7,0)==2);
+ h.g[1].voters=0;assert(host_balanced_voter(&h,7,0)==-1);
+ h.g[1].voters=4;r.voters=1;assert(host_balanced_voter(&h,1,0)==0);
+ assert(host_balanced_voter(&h,4,1)==2);
+ r.voters=0xf;h.g[1].voters=0xf;assert(host_balanced_voter(&h,0xf,0)==1);
+ assert(host_balanced_voter(&h,0xf,1)==1);
  server.storage_engine=0;r.voters=7;h.g[1].voters=0xe;
- assert(host_container_balanced_voter(&h,7,0)==0);
+ assert(host_balanced_voter(&h,7,0)==2); /* files use the same metadata placement */
+ h.g[1].voters=0;assert(host_balanced_voter(&h,7,0)==-1);
+ h.g[1].voters=4;r.voters=1;assert(host_balanced_voter(&h,1,0)==0);
+ assert(host_balanced_voter(&h,4,1)==2);
+ r.voters=7;h.g[1].voters=0xe;
  /* Transfer still honors settling, target lag refusal and backoff. */
  server.storage_engine=1;h.balance_enabled=1;h.raft_id=0;r.role=EFS_RAFT_LEADER;
  transfer_rc=EFS_ERR_BUSY;unsigned before=calls;
