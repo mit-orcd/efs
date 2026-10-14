@@ -18,8 +18,12 @@ rxe0/GID1 on same-host AMD-395. Explicit metadata balancing1 retained.
 
 Integrated reviewed local branch endpoint `devel-orcd-package1`
 `a57437549` and its `devel` ancestor `382d537d6` into `devel-rdma`.
-Seven additional non-merge commits: `13a592056`, `3d279417f`,
-`2f5ea822f`, `ca7f7b2f3`, `75974ba54`, `48cace36b`, `382d537d6`.
+Eight additional non-merge commits: `13a592056`, `3d279417f`,
+`2f5ea822f`, `ca7f7b2f3`, `75974ba54`, `48cace36b`, `382d537d6`,
+`5729234b6`. The final test-only commit appeared during integration and was
+merged separately: REPORT session positives carry the exact existing EOF,
+missing-size refusal is explicit, and per-run Intel summaries are retained.
+Integration commits: `1f58de811` and `84887e9c2` (see Git for full identities).
 The packed-store and frame-adapter repairs overlap the existing RDMA harness
 fixes; the resulting merge retains those repairs without duplicate definitions.
 Only generated architecture HTML conflicted; regenerate from merged sources.
