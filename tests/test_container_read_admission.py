@@ -52,9 +52,14 @@ int main(void){
  h.r.round++;assert(host_read_eligible_round(&h,0,&h.r,early)==6);h.r.round--;
  struct host_group before=h.g;h.r.fail=-2;assert(host_read_begin_tracked(&h,0,&h.r)==-2);
  assert(!memcmp(&before,&h.g,sizeof(before)));h.r.fail=0;
- server.storage_engine=0;assert(!host_read_register(&h,0));
+ h.s=NULL;assert(!host_read_register(&h,0));
  assert(host_read_eligible_round(&h,0,&h.r,early)==5);
  assert(!host_read_begin_tracked(&h,0,&h.r));assert(!memcmp(&before,&h.g,sizeof(before)));
+ h.s=&server;server.storage_engine=0;
+ uint64_t file_ticket=host_read_register(&h,0);assert(file_ticket);
+ assert(!host_read_begin_tracked(&h,0,&h.r));
+ assert(host_read_eligible_round(&h,0,&h.r,file_ticket)==h.r.round);
+ assert(host_read_eligible_round(&h,0,&h.r,late)==h.r.round+1);
  server.storage_engine=1;assert(!host_read_register(&h,2));
  h.g.read_admit_count=UINT64_MAX-2;assert(host_read_register(&h,0)==UINT64_MAX-1);
  assert(!host_read_register(&h,0) && !host_read_register(&h,0));
@@ -65,7 +70,7 @@ int main(void){
  for(unsigned i=0;i<4;i++)assert(!pthread_join(threads[i],NULL));
  for(unsigned i=0;i<4;i++)for(unsigned j=0;j<256;j++){uint64_t t=tickets[i][j];assert(t && t<=1024 && !seen[t]);seen[t]=1;}
  assert(h.g.read_admit_count==1024);pthread_mutex_destroy(&h.mu);
- puts("container admission: before mutex/probes, late send exclusion, old/term/untracked refusal, failure/files/saturation, concurrent uniqueness PASS");
+ puts("files/container admission: before mutex/probes, late send exclusion, old/term/untracked refusal, failure/files/saturation, concurrent uniqueness PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-read-admit-') as d:

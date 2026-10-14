@@ -4331,6 +4331,27 @@ static int host_read_admit(struct efs_raft *r, struct host_read_admission *a,
     return rc;
 }
 
+/* A ticket admitted before an already completed probe needs its certificate,
+ * not another network round. Late tickets still require their newer round.
+ * Quorum completion is sufficient to stop probing; own apply remains a
+ * separate requirement in host_read_index_admitted. */
+static int host_read_probe_needed(struct efs_raft *r,
+                                   const struct host_read_admission *admission)
+{
+    uint64_t round = 0, index = 0;
+    if (!r || efs_raft_role(r) != EFS_RAFT_LEADER ||
+        efs_raft_term(r) != admission->term)
+        return 1;
+    if (efs_raft_read_proven(r, &round, &index) &&
+        round >= admission->round && index >= admission->want)
+        return 0;
+    if (efs_raft_read_round(r) >= admission->round &&
+        efs_raft_read_quorum(r) &&
+        efs_raft_read_index(r) >= admission->want)
+        return 0;
+    return !efs_raft_read_pending(r) || efs_raft_read_quorum(r);
+}
+
 /* Both storage engines use the same fresh metadata authority. Register
  * before waiting for h->mu. A tracked round may cover this ticket
  * only if its admission watermark was captured BEFORE any probes were sent.
@@ -4447,12 +4468,12 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
                    efs_raft_read_round(r)==UINT64_MAX?EFS_ERR_BUSY:EFS_OK;
                 if(!rc) {
                     fresh=(struct host_read_admission){want,host_read_eligible_round(h,group,r,ticket),efs_raft_term(r)};
-                    if(!efs_raft_read_pending(r) || efs_raft_read_quorum(r)) {
+                    if(host_read_probe_needed(r,&fresh)) {
                         rc=host_read_begin_tracked(h,group,r);started=rc==EFS_OK;
                     }
                 }
             } else rc=host_read_admit(r,&fresh,&started);
-            if(started)host_publish_group(h,group);
+            if(!rc)host_publish_group(h,group);
             pthread_mutex_unlock(&h->mu);
             if(rc==EFS_ERR_NOT_PRIMARY){host_view_get(h,group,&v);continue;}
             if(rc!=EFS_OK)return rc;
@@ -4612,7 +4633,7 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
         admission[local]=(struct host_read_admission){efs_raft_commit(r[local]),
             host_read_eligible_round(h,groups[local],r[local],tickets[local]),
             efs_raft_term(r[local])};
-        if(!efs_raft_read_pending(r[local]) || efs_raft_read_quorum(r[local]))
+        if(host_read_probe_needed(r[local],&admission[local]))
             rc=host_read_begin_tracked(h,groups[local],r[local]);
         host_publish_group(h,groups[local]);
         pthread_mutex_unlock(&h->mu);
@@ -4647,7 +4668,7 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
                                                   host_read_eligible_round(h,groups[i],r[i],tickets[i]),efs_raft_term(r[i])};
     }
     for(unsigned i=0;i<2;i++) {
-        if(!efs_raft_read_pending(r[i]) || efs_raft_read_quorum(r[i]))
+        if(host_read_probe_needed(r[i],&admission[i]))
             rc=host_read_begin_tracked(h,groups[i],r[i]);
         host_publish_group(h,groups[i]);
         if(rc!=EFS_OK)break;

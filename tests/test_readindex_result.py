@@ -25,6 +25,7 @@ struct host_read_floor {uint64_t index,context;};
 static uint64_t efs_batch_obs_now_us(void){return 0;}
 static uint64_t host_read_register(struct efs_raft_host *h,uint8_t g){(void)h;(void)g;return 0;}
 static uint64_t host_read_eligible_round(struct efs_raft_host *h,uint8_t g,struct efs_raft *r,uint64_t t){(void)h;(void)g;(void)r;(void)t;assert(0);return 0;}
+static int host_read_probe_needed(struct efs_raft *r,const struct host_read_admission*a){(void)r;(void)a;assert(0);return 1;}
 static int host_read_begin_tracked(struct efs_raft_host *h,uint8_t g,struct efs_raft *r){(void)h;(void)g;(void)r;assert(0);return 0;}
 static int delayed_floor;
 static struct host_view current;
