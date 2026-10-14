@@ -5,6 +5,7 @@ Usage: python3 tests/live/query_page_close.py /tmp/efs-mount
 Uses the existing root catalogue and production helper encoder. No files created.
 """
 import argparse
+import errno
 import importlib.util
 import json
 import os
@@ -43,6 +44,7 @@ try:
         helper.read_result(str(directory), name(1, token, cursor))
     except OSError as error:
         stale_errno = error.errno
+        assert stale_errno == errno.EIO, ('expected mapped STALE', error)
     else:
         raise AssertionError('closed-token continuation unexpectedly succeeded')
     new_token, new_cursor = first()
