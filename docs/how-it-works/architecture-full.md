@@ -1500,7 +1500,8 @@ and targeted sanitizers pass both hosts; seven-client repeats1506/1512 and
 1507/1512 retain only depth60timeouts. Queue samples respect one pending
 frame/group/peer. Paused-daemon writes/peer bytes and cold verification pass;
 full GC/fencing and two-fsync refusal/recovery pass. Final cross-host peer66/67
-hits shared-pwrite15s step timeout; focused repeat is pending. No latency
+hits shared-pwrite15s step timeout; three focused unchanged repeats pass
+without replacing the failed verdict. No latency
 improvement claim.
 Production Intel untouched; later merged-source AMD qualification is separate.
 
@@ -7901,8 +7902,8 @@ Guard1ac603128 is committed/deployed; full native and targeted sanitizer pass
 both hosts. Seven-client rounds1506/1512 and1507/1512 retain only depth60timeouts;
 read-only sample confirms at most one pending ordered frame/group/peer with
 experimental flow off. Paused-daemon writes and exact peer/cold bytes pass; full failure qualification
-passes; final cross-host peer66/67 hits shared-pwrite15s timeout (focused repeat
-pending). Queue bounding alone is not a demonstrated directory-latency correction.
+passes; final cross-host peer66/67 hits shared-pwrite15s timeout. Three focused
+unchanged repeats pass; original failure is retained. Queue bounding alone is not a demonstrated directory-latency correction.
 
 **Earlier Oct14 qualification:** [Merged devel private Intel](../status/intel-devel-merged-qualification-20261013.md).
 Server EOF refusal/client retry repairs are qualified separately. Completed-batch

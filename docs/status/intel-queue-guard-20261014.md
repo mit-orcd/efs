@@ -7,7 +7,7 @@ failure regressions pass; normal seven-client repeats finish **1506/1512** and
 **1507/1512**, with only `dir_deep_nesting` exceeding its unchanged 30s budget.
 Bounding the queue is not a demonstrated correction for those deadlines.
 The final cross-host peer suite also fails66/67: `peer_shared_pwrite` sideA
-step1 exceeds its unchanged15s SSH step budget. Focused reproduction is pending.
+step1 exceeds its unchanged15s SSH step budget. Three quiet focused repeats subsequently pass under unchanged limits; the original failed gate remains retained.
 
 ## Source and behavior
 
@@ -59,6 +59,7 @@ Production ports17432/17433 and `/data1/efs/mnt` are not replaced.
 | Cold verification after all four daemons and both clients restart | PASS both128-file fixtures, exact bytes from both hosts |
 | Existing cold persistence suite | PASS27/27 per host |
 | Final cross-host peer | FAIL66/67; shared-pwrite sideA step1 timeout15s |
+| Focused unchanged shared-pwrite repeats | PASS3/3;12.9s,13.3s,12.1s; original full-suite failure retained |
 | Full isolated GC/fencing/crash/recovery, 4GiB/node | PASS complete exit0 both hosts; core216/216 and peer67/67 each |
 | Live two-fsync EOF omission/refusal/recovery, both directions | PASS512B and8MiB+1, two EIO/peerEOF0 then exact recovery after clearing omission |
 
@@ -145,7 +146,9 @@ Raw evidence is outside Git:
 `/Users/mike/Documents/Codex/2026-10-10/n-x20/artifacts/intel-queue-guard-20261014`.
 Remote logs are under `/data1/efs/w100-private` (`1ac-native.log`, `1ac-gc.log`).
 Both staged sources match all1278 non-results committed files with zero mismatch.
-Final deployment manifests include runtime arguments, environment and binary SHA256:
+Actual version RPC confirms build times2026-10-14T05:04:34Z on Intel1 and
+05:04:33Z on Intel2 (Oct14 01:04 EDT), branch devel. Final deployment manifests
+include server/client PIDs, runtime arguments, environment and binary SHA256:
 
 - Intel1 efsd: `b8fdbb441cb28410a848400510f23eb2f7785737773ede5ca2a0403808fd9fa6`.
 - Intel2 efsd: `d2e1008106a9dcea2249f2bafbdd6aeb71a2a9b564efe6cd79e6c8532dac1531`.
@@ -178,5 +181,20 @@ Final cross-host peer raw files `1ac-cross-peer.tsv`/`.log` retain the failure:
 `peer_shared_pwrite`, `ab-a step1`, rc124, SSH timeout15s. This stock case
 performs500 disjoint4KiB pwrite+fsync operations per host against a64MiB file.
 No count/deadline changes were used. The peer round followed fault-client
-qualification; targeted repeat/baseline comparison is pending, so no causal
+qualification; three quiet focused repeats pass; no matched baseline comparison was run, so no causal
 regression/improvement claim is made. This is an additional acceptance blocker.
+
+
+Focused unchanged `peer_shared_pwrite` repeats PASS3/3, with suite durations
+12.9s,13.3s,12.1s. The original full-peer timeout remains FAIL. The cause is not established and
+no queue-guard regression/improvement claim follows from these unmatched runs.
+Reproduce from Intel1 using the same `posix_2client.py --remote` invocation,
+adding `--filter peer_shared_pwrite`, original wrapper15s and unique prepared
+parents `queue1ac-pwrite-{1,2,3}`. Raw logs/TSVs `1ac-pwrite-{1,2,3}` are in the
+artifact directory. No assertion, loop count, timeout or application retry changed.
+
+Final main deployment remains normal1ac603128 with the required disabled
+features. All extra concurrent/fault mounts and standalone GC daemons have
+been drained/stopped; baseline/guard pause files remain for inspection. Production
+PID/start-time/ports/mount evidence is retained in `intel{1,2}_efs-final-processes.txt`.
+The queue controller and sampler are reproducible source assets, not raw captures.

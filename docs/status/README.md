@@ -5,7 +5,8 @@ and targeted sanitizers pass both hosts; seven-client repeats1506/1512 and
 1507/1512 retain only depth60timeouts. Queue samples respect one pending
 frame/group/peer. Paused-daemon writes/peer bytes and cold verification pass;
 full GC/fencing and two-fsync refusal/recovery pass. Final cross-host peer66/67
-hits shared-pwrite15s step timeout; focused repeat is pending. No latency
+hits shared-pwrite15s step timeout; three focused unchanged repeats pass
+without replacing the failed verdict. No latency
 improvement claim.
 Production Intel untouched; later merged-source AMD qualification is separate.
 
