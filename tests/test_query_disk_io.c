@@ -248,8 +248,8 @@ static void sort_budget_test(void)
         snprintf(retained,sizeof(retained),"%s/view-retained",root);CHECK(!mkdir(retained,0700));
         snprintf(oldfile,sizeof(oldfile),"%s/old",retained);int oldfd=open(oldfile,O_CREAT|O_RDWR,0600);
         CHECK(oldfd>=0);if(oldfd>=0){CHECK(!ftruncate(oldfd,65536));close(oldfd);}
-        d->root_bytes=65536;d->root_limit=d->root_bytes+d->disk_bytes+(uint64_t)count*sizeof(struct efs_name_entry);
-        uint64_t baseline=d->disk_bytes,temp=(uint64_t)count*sizeof(struct efs_name_entry);
+        d->root_bytes=65536;d->root_limit=d->root_bytes+d->disk_bytes+2*(uint64_t)count*sizeof(struct sort_name);
+        uint64_t baseline=d->disk_bytes,temp=2*(uint64_t)count*sizeof(struct sort_name);
         if(scenario==1)sort_unlink_fault=1;
         if(scenario==2)sort_rename_fault=1;
         if(scenario==3)sort_rename_fault=2;
@@ -274,9 +274,16 @@ static void sort_budget_test(void)
             int fd=open(path,O_RDONLY);CHECK(fd>=0);
             for(unsigned i=0;i<count && fd>=0;i++){
                 struct efs_name_entry e;char name[32];snprintf(name,sizeof(name),"name-%08u",i);
-                CHECK(pread(fd,&e,sizeof(e),(off_t)i*sizeof(e))==sizeof(e));CHECK(!strcmp(e.name,name));
+                CHECK(!name_at(d,1,i,&e));CHECK(!strcmp(e.name,name));
             }
             if(fd>=0)close(fd);
+            /* Corrupted ordinals cannot escape the immutable dentry family. */
+            close_cache(d);fd=open(path,O_RDWR);CHECK(fd>=0);
+            if(fd>=0){uint64_t good,bad=count;struct efs_name_entry e;
+                CHECK(pread(fd,&good,8,0)==8);CHECK(pwrite(fd,&bad,8,0)==8);
+                CHECK(name_at(d,1,0,&e)==EFS_ERR_PROTO);close_cache(d);
+                CHECK(pwrite(fd,&good,8,0)==8);close(fd);
+            }
             CHECK(!filename(d,1,'a',path,sizeof(path)));fd=open(path,O_RDONLY);CHECK(fd>=0);
             for(unsigned i=0;i<count && fd>=0;i++){
                 struct disk_alias alias;CHECK(pread(fd,&alias,sizeof(alias),(off_t)i*sizeof(alias))==sizeof(alias));
@@ -610,8 +617,8 @@ static void names_peak_test(void)
         }
         CHECK(!writer_flush(&w));close(w.raw);close(w.index);free(w.buffer);
         d->part[0].names=d->part[0].count=count;
-        size_t width=kind?sizeof(struct disk_alias):sizeof(struct efs_name_entry);
-        uint64_t before=d->disk_bytes,temporary=count*width;
+        size_t width=kind?sizeof(struct disk_alias):sizeof(struct sort_name);
+        uint64_t before=d->disk_bytes,temporary=count*width*(kind?1:2);
         /* Exact generation and aggregate boundaries admit; one byte less
          * refuses before any run exists. No global permanent scratch charge. */
         d->disk_limit=before+temporary-(mode==1);
@@ -632,14 +639,22 @@ static void names_peak_test(void)
         CHECK(d->disk_bytes==before+((mode>=3)?temporary:0));
         CHECK(!partial_write && !fail_sort_unlink && !fail_sort_close);
         if(!mode){
-            CHECK(sort_unlinks==4);
+            CHECK(sort_unlinks==(kind?4:5));
             char path[EFS_MAX_PATH];CHECK(!filename(d,0,kind?'a':'n',path,sizeof(path)));
             int fd=open(path,O_RDONLY);CHECK(fd>=0);
             uint8_t previous[sizeof(struct efs_name_entry)],row[sizeof(struct efs_name_entry)];
             for(unsigned i=0;i<count;i++){
-                CHECK(!io_at(fd,row,width,i*width,0));
+                size_t stored=kind?sizeof(struct disk_alias):sizeof(uint64_t);
+                CHECK(!io_at(fd,row,stored,i*stored,0));
+                if(!kind){
+                    uint64_t ordinal;memcpy(&ordinal,row,sizeof(ordinal));CHECK(ordinal<count);
+                    struct slot slot;uint8_t key[EFS_KV_KEY_MAX],value[VALUE_MAX];
+                    CHECK(!read_record(d,0,ordinal,&slot,key,value));
+                    struct efs_name_entry entry;CHECK(!entry_from(key,slot.key_len,value,slot.value_len,&entry));
+                    memcpy(row,&entry,sizeof(entry));stored=sizeof(entry);
+                }
                 if(i)CHECK((kind?alias_compare(previous,row):name_compare(previous,row))<0);
-                memcpy(previous,row,width);
+                memcpy(previous,row,stored);
             }
             close(fd);
         }
@@ -967,7 +982,7 @@ static void legacy_retirement_test(void)
     CHECK(!efs_query_disk_checkpoint(old,wm));
     uint64_t saved=aggregate_limit;aggregate_limit=2*old->disk_bytes+65536;
     char legacy[EFS_MAX_PATH];strcpy(legacy,old->path);tag_legacy(old);
-    /* Deliberately tag the header while retaining v6 test rows: opaque
+    /* Deliberately tag the header while retaining v7 test rows: opaque
      * retirement must never decode the alleged old ABI. Genuine v5 rows are
      * covered by the mounted cross-build transition reproduction. */
     efs_query_disk_free(old);old=NULL;CHECK(!access(legacy,F_OK));
