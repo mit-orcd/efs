@@ -3,6 +3,7 @@
 set -euo pipefail
 src=$(cd "$(dirname "$0")/../.." && pwd)
 export EFS_TRANSPORT=rdma EFS_RDMA_DEV=${EFS_RDMA_DEV:-rxe0} EFS_RDMA_GID_INDEX=${EFS_RDMA_GID_INDEX:-1}
+export EFS_DATA_GC_ADMISSION=1 EFS_GC_BACKLOG_IDLE_MS=20
 export EFS_MD_RAFT_N=4 EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0 EFS_REPAIR_EXPERIMENT=0
 unset EFS_READ_PROF EFS_RPC_PROF EFS_CONTAINER_PATH_PROF EFS_READ_FRAG_PROF
 base=${EFS_GATE_BASE_PORT:-27432}
@@ -48,7 +49,7 @@ mount_clients() {
 start_nodes
 formatted=0
 for attempt in $(seq 1 60); do
- reply=$("$src/efs-mgmt" raft-mkfs "127.0.0.1:$base")
+ reply=$("$src/efs-mgmt" raft-mkfs "127.0.0.1:$base") || true
  if [[ "$reply" == *'rc=0 '* ]]; then formatted=1;break;fi
  sleep .5
 done
