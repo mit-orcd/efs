@@ -1804,8 +1804,8 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
     uint64_t *cseq = NULL;
     struct efs_ino_size_rec *irecs = NULL;
     uint32_t cn = 0, in = 0;
-    /* Chunk-rec inos whose staged row was missing: repaired by a server
-     * getattr after the snapshot unlock (RPCs do not belong under the
+    /* Chunk-rec inos whose staged row was missing: validated by a read-only
+     * server getattr after the snapshot unlock (RPCs do not belong under the
      * table lock). Bounded; beyond the cap the rec ships without a size
      * and the server rejects the batch (visible EIO, retained, retried). */
     efs_ino_t repair[EFS_REPORT_REPAIR_MAX];
@@ -1932,10 +1932,12 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
     report_snapshot_unlock(only_ino);
 
     /* Repair chunk-rec inos whose staged row was missing at snapshot time.
-     * A server getattr re-stages a transiently absent row (shard tab not
-     * instantiated); NOT_FOUND means the inode was unlinked mid-report —
+     * Read the server row without adopting it into the local staging table.
+     * A committed EOF can lag accepted unpublished writes. Staging it before
+     * validation would let the next snapshot bypass this check and publish
+     * that stale EOF. NOT_FOUND means the inode was unlinked mid-report —
      * its recs ship without a size and the server skips them as deleted.
-     * A re-staged row whose size does not cover this batch's highest dirty
+     * A remote row whose size does not cover this batch's highest dirty
      * chunk end means the dirty EOF was lost with the evicted row: ship no
      * size and let the server reject the batch (visible EIO; the retained
      * snap is retried by the next fsync/close). Attaching that smaller
@@ -1944,7 +1946,7 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
         struct efs_inode ri;
         uint64_t cover = 0;
 
-        if (efs_client_stat_ino(repair[r], &ri) != EFS_OK)
+        if (efs_client_rpc_getattr(g_client.export_id, repair[r], &ri) != EFS_OK)
             continue;
         for (uint32_t c = 0; c < cn; c++)
             if (crecs[c].ino == repair[r]) {
@@ -1958,7 +1960,7 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
             if (logged < 10) {
                 logged++;
                 fprintf(stderr,
-                        "efs: report ino=%llu re-staged size %llu below dirty "
+                        "efs: report ino=%llu server size %llu below dirty "
                         "coverage %llu; server rejects the batch, fsync fails "
                         "and the report is retried\n",
                         (unsigned long long)repair[r],

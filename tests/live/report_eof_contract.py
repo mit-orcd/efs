@@ -71,6 +71,14 @@ try:
             else:
                 assert error is not None,row
                 assert observed['size']==0,row
+                # A second fsync under the same omission must not acknowledge
+                # the stale/absent EOF or release its dirty payload ownership.
+                second_error=None
+                try:os.fsync(fd)
+                except OSError as e:second_error=dict(errno=e.errno,error=str(e))
+                second_peer=peer(path,expected)
+                row.update(second_error=second_error,second_peer=second_peer)
+                assert second_error is not None and second_peer['size']==0,row
             args.fault.write_text('OFF\n')
             if args.expect=='refused':
                 os.fsync(fd)

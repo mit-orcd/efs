@@ -299,6 +299,7 @@ test-wb-runtime:
 	python3 tests/test_report_frame_boundary.py
 	python3 tests/test_report_forward.py
 	python3 tests/test_report_zero_eof.py
+	python3 tests/test_report_retry_eof.py
 	python3 tests/test_report_session_apply.py
 	python3 tests/test_report_activation.py
 	python3 tests/test_report_log_coverage.py
