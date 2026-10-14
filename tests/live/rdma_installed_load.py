@@ -19,6 +19,7 @@ p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('source',type=Path)
 p.add_argument('output',type=Path)
 p.add_argument('--filter')
+p.add_argument('--base-port',type=int,default=17432)
 a=p.parse_args()
 assert os.environ.get('EFS_TRANSPORT')=='rdma'
 a.source=a.source.resolve();a.output=a.output.resolve()
@@ -47,7 +48,7 @@ try:
   mount=root/f'c{i}';mount.mkdir();mounts.append(mount)
   log=(a.output/f'c{i}-mount.log').open('w');streams.append(log)
   e=dict(env,EFS_FUSE_LOG=str(a.output/f'c{i}-fuse.log'))
-  subprocess.run([str(a.source/'scripts/client.sh'),'127.0.0.1:17432',str(mount)],env=e,stdout=log,stderr=subprocess.STDOUT,check=True,timeout=90)
+  subprocess.run([str(a.source/'scripts/client.sh'),f'127.0.0.1:{a.base_port}',str(mount)],env=e,stdout=log,stderr=subprocess.STDOUT,check=True,timeout=90)
  start=time.monotonic()
  for i,mount in enumerate(mounts):
   log=(a.output/f'c{i}.log').open('w');streams.append(log)

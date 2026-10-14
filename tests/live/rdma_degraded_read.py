@@ -32,6 +32,7 @@ if len(sys.argv)>1 and sys.argv[1]=='--reader':
  raise SystemExit(0)
 p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('source',type=Path);p.add_argument('mount',type=Path);p.add_argument('output',type=Path)
+p.add_argument('--base-port',type=int,default=17432);p.add_argument('--pid-root',type=Path,default=Path('/data1/efs/logs'))
 a=p.parse_args();assert os.environ.get('EFS_TRANSPORT')=='rdma'
 a.source=a.source.resolve();a.output=a.output.resolve();a.output.mkdir(parents=True,exist_ok=False)
 env=dict(os.environ,EFS_TRANSPORT='rdma',EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_PACKED_WRITES='0',EFS_EXPIRY='0',EFS_REPAIR_EXPERIMENT='0')
@@ -45,11 +46,11 @@ try:
  with path.open('xb') as f:
   for i in range(TOTAL//CHUNK):f.write(block(i))
   f.flush();os.fsync(f.fileno())
- subprocess.run([str(a.source/'scripts/client.sh'),'127.0.0.1:17432',str(reader)],env=dict(env,EFS_FUSE_LOG=str(a.output/'fuse.log')),stdout=mountlog,stderr=subprocess.STDOUT,check=True,timeout=90)
+ subprocess.run([str(a.source/'scripts/client.sh'),f'127.0.0.1:{a.base_port}',str(reader)],env=dict(env,EFS_FUSE_LOG=str(a.output/'fuse.log')),stdout=mountlog,stderr=subprocess.STDOUT,check=True,timeout=90)
  statuses={}
- for node in (2,3):statuses[node]=subprocess.check_output([str(a.source/'efs-mgmt'),'raft-status',f'127.0.0.1:{17431+node}'],text=True,timeout=15)
+ for node in (2,3):statuses[node]=subprocess.check_output([str(a.source/'efs-mgmt'),'raft-status',f'127.0.0.1:{a.base_port+node-1}'],text=True,timeout=15)
  node=next(n for n,s in statuses.items() if s.count('role=FOLLOWER')==2)
- pid=int(Path(f'/data1/efs/logs/efsd-n{node}.pid').read_text())
+ pid=int((a.pid_root/f'efsd-n{node}.pid').read_text())
  cmd=Path(f'/proc/{pid}/cmdline').read_bytes().replace(b'\0',b' ').decode();assert f'--node-id {node} ' in cmd and '--storage-engine files' in cmd
  (a.output/'fixture.json').write_text(json.dumps(dict(node=node,pid=pid,fixture=str(fixture),reader=str(reader),source=(a.source/'SOURCE_COMMIT').read_text().strip(),bytes=TOTAL,outer_seconds=180,statuses=statuses),indent=2)+'\n')
  os.kill(pid,signal.SIGSTOP);paused=True
