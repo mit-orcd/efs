@@ -2361,8 +2361,10 @@ See [evidence cleanup inventory](../../results/measure/20261012-evidence-cleanup
 for consolidated duplicate paths and explicitly pruned historical captures.
 
 [ORCD tiny-file close EIO](../status/orcd-close-eio-20261013.md): all7 jobs failed on
-fc341f00e; REPORT deadline exhaustion proven, tombstone maintenance starvation
-candidate active. Linux and mounted qualification pending; no closure claim.
+fc341f00e; correctione8bab210 deployed with original profile/stores. Full native,
+KV ASan/UBSan/leaks and negative control PASS; seven-client140000 close/fsync/
+exact-read/unlink cases PASS. Original seven tiny jobs RUNNING beyond old
+failure interval; 10million-file targets not complete. General .efs staysonhold.
 
 
 ## Appendix 2 — In flight — the current handoff block
