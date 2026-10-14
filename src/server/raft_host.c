@@ -8518,11 +8518,14 @@ static int host_gc_propose(struct efs_raft_host *h, uint8_t group,
 static int host_gc_scan_work(struct efs_raft_host *h,const uint8_t *prefix,uint32_t plen,
     const uint8_t *start,uint32_t slen,
     int (*cb)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t),void *user,
-    uint8_t *last,uint32_t *last_len)
+    uint8_t *last,uint32_t *last_len,uint32_t last_cap)
 {
     uint8_t resume[EFS_KV_KEY_MAX];uint32_t len=0;
     int rc=efs_kv_lsm_scan_work(h->kv,prefix,plen,start,slen,4096,cb,user,resume,&len);
-    if (rc>0 && len) {memcpy(last,resume,len);*last_len=len;}
+    if (rc>0 && len) {
+        if (len>last_cap) return EFS_ERR_PROTO;
+        memcpy(last,resume,len);*last_len=len;
+    }
     return rc;
 }
 
@@ -8592,7 +8595,7 @@ static void host_gc_close_step_pass(struct efs_raft_host *h,uint8_t group,uint32
     memcpy(scan.skip,h->close_step_cursor[gi],scan.skip_len);
     uint8_t prefix[3]={(uint8_t)(anchor>>8),(uint8_t)anchor,EFS_KV_KIND_CLOSE_STEP};
     int rc=host_gc_scan_work(h,prefix,3,scan.skip_len?scan.skip:NULL,
-        scan.skip_len,close_step_scan_cb,&scan,scan.last,&scan.last_len);
+        scan.skip_len,close_step_scan_cb,&scan,scan.last,&scan.last_len,sizeof(scan.last));
     if(rc<0 || scan.rc!=EFS_OK) {
         __atomic_fetch_add(&h->s->gc_scan_errors,1,__ATOMIC_RELAXED);return;
     }
@@ -8631,7 +8634,7 @@ static void host_gc_close_pass(struct efs_raft_host *h,uint8_t group,uint32_t an
     uint8_t *cursor=h->close_cursor[gi];
     struct orphan_scan scan={.group=group,.skip_len=*len};
     memcpy(scan.skip,cursor,*len);
-    int rc=host_gc_scan_work(h,prefix,sizeof(prefix),*len?cursor:NULL,*len,orphan_scan_cb,&scan,scan.last,&scan.last_len);
+    int rc=host_gc_scan_work(h,prefix,sizeof(prefix),*len?cursor:NULL,*len,orphan_scan_cb,&scan,scan.last,&scan.last_len,sizeof(scan.last));
     if(rc<0) {
         __atomic_fetch_add(&h->s->gc_scan_errors,1,__ATOMIC_RELAXED);
         return;
@@ -8656,7 +8659,7 @@ static void host_gc_orphan_pass(struct efs_raft_host *h, uint8_t group, uint32_t
         struct orphan_scan scan = {.group=group, .discovery=discovery, .skip_len=*len};
         memcpy(scan.skip,cursor,*len);
         int rc = host_gc_scan_work(h, discovery ? NULL : prefix, discovery ? 0 : 3,
-                                   *len ? cursor : NULL, *len, orphan_scan_cb, &scan,scan.last,&scan.last_len);
+                                   *len ? cursor : NULL, *len, orphan_scan_cb, &scan,scan.last,&scan.last_len,sizeof(scan.last));
         if (rc < 0) {
             __atomic_fetch_add(&h->s->gc_scan_errors,1,__ATOMIC_RELAXED); continue;
         }
