@@ -5156,8 +5156,9 @@ See [source/config/reproduction ledger](../status/rdma-namespace-admission-20261
 
 <a id="w108"></a>
 
-**Oct 13 ORCD platform gate remains open:** forced FUSE direct reads and
-concurrent application `fork()` reproduce stale partial private-buffer pages.
+**Oct 13 ORCD platform gate, now tracked separately as W118:** forced FUSE
+direct reads and concurrent application `fork()` reproduce stale partial
+private-buffer pages on that historical ORCD deployment.
 No-fork native controls pass 80,000 files; adding forks fails after seven.
 The W92 oracle's mount validation now uses exact in-process mount IDs so it
 can qualify all bytes without causing that separate platform race. This is
@@ -5511,3 +5512,40 @@ coverage charts, not whole-file recovery or metadata/client availability.
 accessible labels, unknown/partial/stale inventories, identical drive counts with
 different failure domains, and verified rebuild transitions. Measured ORCD
 protection claims require W116 evidence first.
+
+
+<a id="w118"></a>
+
+## W118 · Direct-read/fork application-buffer correctness
+
+**Class/state:** Transport-independent platform correctness; historical ORCD
+failure open, not reproduced on private Intel (Oct 14, 2026). Separate from
+closed W100 and broader RDMA acceptance W106.
+
+**Evidence:** Historical ORCD reads return stale application-buffer bytes when
+another thread forks, despite correct bytes captured before FUSE replies.
+Current private Intel uses matching devel production inputs with TCP/direct I/O,
+`.efs` client/server, packing, containers and expiry disabled. The original
+fork/no-fork controls pass. Intel's loaded FUSE module matches the inspected
+on-disk build and uses direct-I/O page pin/unpin APIs. No kernel version-only
+claim about ORCD vendor backports is justified.
+
+**Implemented:** Oracle/self-test `8adc30ec9` repairs a reproduced false PASS
+when every fork fails, requires measured successful fork/read activity, checks
+exact EOF and adds a child-held disjoint-prefix COW stress control. Native and
+ASan/UBSan/leak self-tests pass on both Intel hosts, including corruption/length
+negative controls; the native fork-failure interposer is correctly rejected.
+Final qualification passes 281600 exact-byte/EOF cycles, mounted core 216/216
+per host and fresh-client 4096-file/1 GiB verification per host. Production/private
+main identities are unchanged; no extra client/test controller remains. This is
+a test correction, not an EFS data-path repair.
+
+**Remaining:** Inspect the loaded FUSE implementation on an actually failing
+host and reproduce there with the strengthened oracle. If page pinning is
+missing, qualify an appropriate vendor kernel fix/equivalent upstream
+`738adade96b2` backport. Do not change cache-coherence behavior or label Intel's
+non-reproduction as a universal fix. ORCD was not changed or requalified here.
+
+**Qualification/reproduction:** [Private Intel fork/read ledger](../status/intel-direct-read-fork-20261014.md).
+The ledger separates source-specific controls, final qualification, historical
+failures and interrupted runs. W100 stays closed by human acceptance.

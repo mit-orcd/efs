@@ -1494,7 +1494,18 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-**Final private Intel TCP/direct matrix PASS; W100 aggregate OPEN.**
+**W118: Intel stale-byte symptom NOT REPRODUCED; historical ORCD gate remains open.**
+Oracle8adc30ec9 repairs a demonstrated false PASS when forks fail, adds exact
+EOF and child-held disjoint-prefix COW checks. Native/sanitizer self-tests pass
+both hosts; final 281600 exact-byte/EOF cycles, core 216/216 each and fresh-client
+4096-file/1 GiB verification each PASS. Final production/private main process
+identities unchanged; test controllers and extra clients/mounts stopped.
+TCP/direct/files; .efs client/server, packing, containers and expiry OFF.
+Intel loaded FUSE pin/unpin calls verified; no EFS data-path or kernel change,
+no ORCD qualification, no W100 reopening.
+
+[Intel older REPORT / newer PUT ownership](../status/intel-report-newer-snapshot-20261014.md):
+**Final private Intel TCP/direct matrix PASS; W100 CLOSED by human acceptance (Oct14).**
 Fix28df9c7eb retains a newer snapshot's bytes/ranges/pin through an older REPORT.
 Both hosts pass full native and targeted ASan/UBSan/leaks; old control fails.
 Mounted2500/2500, final four concurrent rounds6048/6048, physical cross-host
@@ -1502,7 +1513,9 @@ peer67/67, both complete recovery/GC fixtures (core216/216/local peer67/67 each)
 two-fsync and paused-daemon gates pass. Final cold14k earlier tiny files,
 2500 new truncate files, sparse EOF and pause bytes pass from both hosts.
 Production unchanged; only normal private processes remain, optional features
-and tracing OFF. Original ORCD EIO/broader acceptance remains open.
+and tracing OFF. Closure does not establish an original ORCD EIO repair or
+broader profile acceptance. Future observed stalls receive a new issue; older
+W100 OPEN verdicts below are historical and superseded by this closure.
 
 [Intel operation-ID admission and REPORT ownership](../status/intel-opid-report-correctness-20261014.md):
 **Two targeted corrections/native+sanitizers PASS; loaded POSIX FAIL; W100 OPEN.**
@@ -2436,7 +2449,7 @@ This index adds traceable IDs to the Intel acceptance follow-ups; it does not ch
 
 | ID | Task | Recorded state |
 | --- | --- | --- |
-| [W100](#w100) | Intel concurrent POSIX timeouts and mixed-workload EIO | Correctness/performance investigation; open. The preceding trial passed 110 main and 30 canonical gates. Cleanup-repaired `3d69edb4` passed four 214/214 cores but later namespace/compactor fixtures failed; `5abf8e7b` repairs their setup/oracles. Fresh complete fault and production acceptance remain pending. |
+| [W100](#w100) | Intel concurrent POSIX timeouts and mixed-workload EIO | CLOSED by human acceptance, Oct14. Final private Intel TCP/direct matrix passes; see the newer-snapshot qualification above. Historical failures remain recorded; future observed stalls receive a new issue. |
 | [W101](#w101) | Complete and verify the Intel two-million-file workload | Operational acceptance; in progress. |
 | [W102](#w102) | Complete Intel2 private peer and GC acceptance | Validation follow-up; in progress, aggregate acceptance remains open. |
 | [W103](#w103) | Investigate intermittent Intel persistence and stats timeouts | Liveness/performance investigation; open. |
@@ -7940,7 +7953,15 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 
 ### W100 · Intel concurrent POSIX timeouts and mixed-workload EIO
 
-**Class/state:** Correctness/performance investigation; open.
+**Class/state:** Correctness investigation; CLOSED by human acceptance, 2026-10-14.
+
+**Closure decision:** The user accepts W100 as closed on the final private Intel
+TCP/direct qualification. Future stalls encountered through another workload
+or path will be tracked as a new issue with fresh reproduction evidence. This
+closure does not assert that the historical ORCD REPORT BUSY/EIO was reproduced
+and resolved by these Intel fixes, or that untested profiles passed. Historical
+failures and qualification limits below remain evidence; earlier open states,
+remaining actions and gates are superseded for W100 by this decision.
 
 **Oct14 newer-snapshot ownership correction:** [Private Intel follow-up](../status/intel-report-newer-snapshot-20261014.md).
 Fresh qualification reproduces ftruncate EIO on both hosts. An older REPORT can
@@ -7951,8 +7972,9 @@ passes6048/6048 concurrent, physical cross-host67/67, both full recovery/GC
 fixtures (core216/216/local peer67/67 each), two-fsync and daemon pause gates.
 Final cold14k earlier tiny files,2500 new truncate files and sparse/pause bytes
 pass from each host. Production unchanged; no window/deadline/quota tuning.
-Remaining: original ORCD REPORT BUSY/EIO and broader sustained/profile acceptance;
-this Intel TCP/direct matrix does not close the aggregate.
+Qualification limit: original ORCD REPORT BUSY/EIO and broader sustained/profile
+acceptance were not resolved by this Intel matrix. They do not block the human
+closure decision above; a future observed stall receives a new issue.
 
 **Oct14 admission/REPORT correction:** [Private Intel checkpoint](../status/intel-opid-report-correctness-20261014.md).
 Production-code regressions reproduce lease admission's lock dependency and a
@@ -7963,7 +7985,8 @@ REPORTs; all121,319 traced IDs complete. Unchanged clients on the same aged
 stores/running daemons retain37 failures and14 invalid REPORTs. No window,
 deadline, quota or format tuning. Subsequent14k/EOF/pause qualification passes,
 but exposes ftruncate EIO; the newer-snapshot follow-up above records its fix
-and final passing Intel matrix. W100 aggregate/original ORCD EIO remain open.
+and final passing Intel matrix. The earlier open W100 verdict is superseded
+by the closure decision above; no original ORCD root-cause repair is claimed.
 
 **Oct14 default queue guard:** [Intel queue qualification](../status/intel-queue-guard-20261014.md).
 Guard1ac603128 is committed/deployed; full native and targeted sanitizer pass
@@ -8099,8 +8122,9 @@ See [source/config/reproduction ledger](../status/rdma-namespace-admission-20261
 
 <a id="w108"></a>
 
-**Oct 13 ORCD platform gate remains open:** forced FUSE direct reads and
-concurrent application `fork()` reproduce stale partial private-buffer pages.
+**Oct 13 ORCD platform gate, now tracked separately as W118:** forced FUSE
+direct reads and concurrent application `fork()` reproduce stale partial
+private-buffer pages on that historical ORCD deployment.
 No-fork native controls pass 80,000 files; adding forks fails after seven.
 The W92 oracle's mount validation now uses exact in-process mount IDs so it
 can qualify all bytes without causing that separate platform race. This is
@@ -8454,6 +8478,43 @@ coverage charts, not whole-file recovery or metadata/client availability.
 accessible labels, unknown/partial/stale inventories, identical drive counts with
 different failure domains, and verified rebuild transitions. Measured ORCD
 protection claims require W116 evidence first.
+
+
+<a id="w118"></a>
+
+### W118 · Direct-read/fork application-buffer correctness
+
+**Class/state:** Transport-independent platform correctness; historical ORCD
+failure open, not reproduced on private Intel (Oct 14, 2026). Separate from
+closed W100 and broader RDMA acceptance W106.
+
+**Evidence:** Historical ORCD reads return stale application-buffer bytes when
+another thread forks, despite correct bytes captured before FUSE replies.
+Current private Intel uses matching devel production inputs with TCP/direct I/O,
+`.efs` client/server, packing, containers and expiry disabled. The original
+fork/no-fork controls pass. Intel's loaded FUSE module matches the inspected
+on-disk build and uses direct-I/O page pin/unpin APIs. No kernel version-only
+claim about ORCD vendor backports is justified.
+
+**Implemented:** Oracle/self-test `8adc30ec9` repairs a reproduced false PASS
+when every fork fails, requires measured successful fork/read activity, checks
+exact EOF and adds a child-held disjoint-prefix COW stress control. Native and
+ASan/UBSan/leak self-tests pass on both Intel hosts, including corruption/length
+negative controls; the native fork-failure interposer is correctly rejected.
+Final qualification passes 281600 exact-byte/EOF cycles, mounted core 216/216
+per host and fresh-client 4096-file/1 GiB verification per host. Production/private
+main identities are unchanged; no extra client/test controller remains. This is
+a test correction, not an EFS data-path repair.
+
+**Remaining:** Inspect the loaded FUSE implementation on an actually failing
+host and reproduce there with the strengthened oracle. If page pinning is
+missing, qualify an appropriate vendor kernel fix/equivalent upstream
+`738adade96b2` backport. Do not change cache-coherence behavior or label Intel's
+non-reproduction as a universal fix. ORCD was not changed or requalified here.
+
+**Qualification/reproduction:** [Private Intel fork/read ledger](../status/intel-direct-read-fork-20261014.md).
+The ledger separates source-specific controls, final qualification, historical
+failures and interrupted runs. W100 stays closed by human acceptance.
 
 
 ## Appendix 5 — Naming

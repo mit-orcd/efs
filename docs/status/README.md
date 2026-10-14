@@ -1,3 +1,14 @@
+[Private Intel direct-read/fork](intel-direct-read-fork-20261014.md):
+**W118: Intel stale-byte symptom NOT REPRODUCED; historical ORCD gate remains open.**
+Oracle8adc30ec9 repairs a demonstrated false PASS when forks fail, adds exact
+EOF and child-held disjoint-prefix COW checks. Native/sanitizer self-tests pass
+both hosts; final 281600 exact-byte/EOF cycles, core 216/216 each and fresh-client
+4096-file/1 GiB verification each PASS. Final production/private main process
+identities unchanged; test controllers and extra clients/mounts stopped.
+TCP/direct/files; .efs client/server, packing, containers and expiry OFF.
+Intel loaded FUSE pin/unpin calls verified; no EFS data-path or kernel change,
+no ORCD qualification, no W100 reopening.
+
 [Intel older REPORT / newer PUT ownership](intel-report-newer-snapshot-20261014.md):
 **Final private Intel TCP/direct matrix PASS; W100 CLOSED by human acceptance (Oct14).**
 Fix28df9c7eb retains a newer snapshot's bytes/ranges/pin through an older REPORT.
