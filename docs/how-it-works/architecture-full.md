@@ -1494,12 +1494,14 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-**Native PASS; live correction NOTRUN; W100 OPEN.** Synchronous per-group
+**Native and live persistence pause PASS; concurrent FAIL; W100 OPEN.** Synchronous per-group
 persistence fence releases the host mutex only around the owned store call,
 revokes cached read authority and preserves durable ACK/apply. Real old-source
 negative controls reproduce sync-hold ACK and rotation hazards. Full native
-and targeted ASan/UBSan/leaks pass both Intel hosts. Private deployment/load,
-concurrent/failure/cold and live shutdown gates remain pending.
+and targeted ASan/UBSan/leaks pass both Intel hosts. Frozen a58e93942 deployed;14,000 published files plus peer MD5 pass on both
+baseline/correction. Seven-client1475/1512 retains36timeouts and1EBUSY; queue
+bound respects1. Live retained-owner shutdown and128fsync pass. Full failure
+and cold gates remain pending.
 
 [Intel default Raft queue guard](../status/intel-queue-guard-20261014.md):
 **Concurrent acceptance FAIL; W100 OPEN.** Guard1ac603128 deployed privately,
