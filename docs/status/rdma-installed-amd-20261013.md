@@ -1,5 +1,8 @@
 # Installed AMD segmented RDMA qualification
 
+Historical0ec deployment baseline. Current fixes/deployment and affected
+reruns are in the [load/fallback ledger](rdma-load-fallback-fixes-20261013.md).
+
 W106 / [segmented transport contract](rdma-segmented-messages-plan-20261013.md).
 Branch `devel-rdma`; installed runtime **0ec2a869344734176923c1219ac7cd8ef1bf038e**.
 Production transport matches prior a32567d7; subsequent commits add test harnesses.

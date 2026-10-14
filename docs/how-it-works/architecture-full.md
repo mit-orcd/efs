@@ -1494,11 +1494,18 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-**PARTIAL on 0ec2a869** — deployed files/direct with .efs/packing/containers/expiry OFF.
-Serial216/216, peer67/67, cold27/27 and48 reconnect cycles PASS; seven-client
-load1510/1512 has two deep-directory timeouts. Paused-follower existing-file read
-returned EIO; restored10GiB full digest PASS. Snapshot workload FAIL630s;
-actual import NOTRUN. Quiet post-fault core216/216 and peer67/67 PASS. No TCP comparison or push.
+**PARTIAL on18be5d060** — CREDIT wake readiness, both preferred-peer admission
+budgets, ordinary-file fresh tickets/control progress and redundant cohort
+probes and ordinary-file leader routing fixed. Focused native/authority/negative regressions PASS; final full-library ASan/UBSan transport PASS. Fresh32MiB
+paused-follower read PASS; fresh4G loads1512 PASS /1510 FAIL /1512 PASS
+(deep/name15s). Peer/cold all PASS; installed targeted deep14/names7 PASS;
+Preserved10GiB digest PASS; intermediate failures and GC-pressure limitations remain documented.
+Files/direct, .efs/packing/containers/expiry OFF; no TCP comparisons or push.
+
+[Historical installed AMD strict RDMA baseline](../status/rdma-installed-amd-20261013.md):
+0ec2a869 serial216/216, peer67/67, cold27/27 and48 reconnect cycles PASS;
+loaded deep deadlines and paused-follower read failed. Restored10GiB digest
+PASS. Snapshot630s failed/actual import NOTRUN. Superseded by current fixes above.
 
 [Strict segmented RDMA AMD qualification](../status/rdma-soft-roce-integration-20261013.md):
 **PASS affected gates on a32567d7**, branchdevel-rdma — verbs credit progress,
