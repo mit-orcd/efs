@@ -769,6 +769,9 @@ tests/faults/fault_sim: tests/faults/fault_sim.c src/sim/sim.o src/sim/sim_raft.
 %: %.c $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ $< $(LIB) $(LDFLAGS)
 
+tests/measure/lsm_index_smoke: tests/measure/lsm_index_smoke.c $(LIB) src/kv/kv_lsm_internal.h
+	$(CC) $(CFLAGS) $(INCLUDES) -Isrc/kv -o $@ $< $(LIB) $(LDFLAGS)
+
 blake3-bench: $(BLAKE3_OBJS) src/bench/blake3_bench.o FORCE
 	$(CC) $(CFLAGS) $(INCLUDES) \
 		-o blake3-bench tools/blake3-bench.c src/bench/blake3_bench.o $(BLAKE3_OBJS) $(LDFLAGS)
@@ -881,6 +884,7 @@ tests/test_kv_reader_gate: tests/test_kv_reader_gate.c src/kv/kv_lsm.c src/kv/kv
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(LIB) $(LDFLAGS)
 
 src/kv/kv_lsm.o src/kv/kv_wal.o src/kv/kv_compact.o src/kv/kv_seg.o: src/kv/kv_lsm_internal.h
+src/kv/kv_lsm.o: src/kv/kv_candidates.h
 
 tests/test_packed_upload: tests/test_packed_upload.c src/server/packed_upload.c src/server/put_fence.c src/server/packed_fence.h src/server/store.c src/server/server_internal.h include/efs/packed_upload.h src/bench/writer.o src/bench/store_containers.o $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o src/bench/store_containers.o $(LIB) $(LDFLAGS)

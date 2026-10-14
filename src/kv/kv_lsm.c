@@ -320,6 +320,10 @@ static void drop_segs(struct kv_lsm *l)
 {
     uint32_t i;
 
+    free(l->candidate_bits);
+    l->candidate_bits = NULL;
+    l->candidate_words = 0;
+    kv_candidates_changed(l);
     for (i = 0; i < l->n_l0; i++)
         kv_seg_close(l->l0[i].seg);
     for (i = 0; i < l->n_l1; i++)
@@ -620,10 +624,12 @@ static int manifest_load(struct kv_lsm *l)
     }
     if (l->n_l1 > 1)
         qsort(l->l1, l->n_l1, sizeof(l->l1[0]), kv_l1_cmp);
+    kv_candidates_changed(l);
     return EFS_OK;
 }
 
 /* --- reads ----------------------------------------------------------- */
+#include "kv_candidates.h"
 
 /* EFS_OK with *op, or NOT_FOUND when no level speaks about the key.
  * Caller holds l->mu. A segment miss drops the lock around the pread
@@ -650,6 +656,7 @@ static int lookup_mt(struct kv_lsm *l, const uint8_t *key, uint32_t klen,
 struct lsm_view {
     uint32_t n0, n1;
     struct kv_seg *a, *b;
+    uint64_t revision;
 };
 
 static void lsm_view_get(struct kv_lsm *l, struct lsm_view *v)
@@ -658,11 +665,13 @@ static void lsm_view_get(struct kv_lsm *l, struct lsm_view *v)
     v->n1 = l->n_l1;
     v->a = v->n0 ? l->l0[0].seg : NULL;
     v->b = v->n1 ? l->l1[0].seg : NULL;
+    v->revision = l->segment_revision;
 }
 
 static int lsm_view_same(const struct lsm_view *x, const struct lsm_view *y)
 {
-    return x->n0 == y->n0 && x->n1 == y->n1 && x->a == y->a && x->b == y->b;
+    return x->revision == y->revision && x->n0 == y->n0 &&
+           x->n1 == y->n1 && x->a == y->a && x->b == y->b;
 }
 
 static int lookup_locked(struct kv_lsm *l, const uint8_t *key, uint32_t klen,
@@ -674,17 +683,13 @@ static int lookup_locked(struct kv_lsm *l, const uint8_t *key, uint32_t klen,
 
     if (rc != EFS_ERR_NOT_FOUND)
         return rc;
-    for (i = 0; i < l->n_l0; i++) {
-        if (seg_slot_excludes(&l->l0[i], kr))
+    struct kv_candidates candidates;
+    kv_candidates_init(l, &candidates, key, klen, key, klen, 1, 0);
+    while ((i = kv_candidates_next(l, &candidates)) < l->n_l0+l->n_l1) {
+        const struct seg_slot *sl = i < l->n_l0 ? &l->l0[i] : &l->l1[i-l->n_l0];
+        if (seg_slot_excludes(sl, kr))
             continue;
-        rc = kv_seg_get(l->l0[i].seg, key, klen, out, op);
-        if (rc != EFS_ERR_NOT_FOUND)
-            return rc;
-    }
-    for (i = 0; i < l->n_l1; i++) {
-        if (seg_slot_excludes(&l->l1[i], kr))
-            continue;
-        rc = kv_seg_get(l->l1[i].seg, key, klen, out, op);
+        rc = kv_seg_get(sl->seg, key, klen, out, op);
         if (rc != EFS_ERR_NOT_FOUND)
             return rc;
     }
@@ -718,7 +723,9 @@ static int lookup(struct kv_lsm *l, const uint8_t *key, uint32_t klen,
             return rc;
         lsm_view_get(l, &snap);
         n = l->n_l0 + l->n_l1;
-        for (i = 0; i < n; i++) {
+        struct kv_candidates candidates;
+        kv_candidates_init(l, &candidates, key, klen, key, klen, 1, 0);
+        while ((i = kv_candidates_next(l, &candidates)) < n) {
             const struct seg_slot *sl = i < l->n_l0 ? &l->l0[i]
                                                     : &l->l1[i - l->n_l0];
             struct kv_seg *s;
@@ -853,11 +860,14 @@ static int merge_scan(struct kv_lsm *l, int private_read,
     const uint8_t *seek = slen ? start : prefix;
     uint32_t seek_len = slen ? slen : plen;
     uint32_t nsrc = 0, i, cap = KV_LSM_MAX_SEGS * 2 + 3;
-    uint32_t need = l->n_l0 + l->n_l1 + 1 + (l->pending_mt.n != 0) + apply_staging(l);
+    uint32_t need = 1 + (l->pending_mt.n != 0) + apply_staging(l);
+    struct kv_candidates candidates, sizing;
     int src_heap = 0;
     int rc = EFS_OK;
 
     t_scan_stats.scans++;
+    kv_candidates_init(l, &candidates, seek, seek_len, prefix, plen, 0, private_read);
+    sizing = candidates;
     if (private_read) {
         /* Size only relevant sources. The old allocation used every source
          * segment even for a point/prefix lookup and grew with the namespace. */
@@ -870,6 +880,9 @@ static int merge_scan(struct kv_lsm *l, int private_read,
             if(need==KV_LSM_SNAPSHOT_SCAN_SEGS+1)return EFS_ERR_BUSY;
             need++;
         }
+    } else {
+        while (kv_candidates_next(l, &sizing) < l->n_l0+l->n_l1)
+            need++;
     }
     if (need > cap) {
         src = calloc(need, sizeof(*src));
@@ -878,7 +891,7 @@ static int merge_scan(struct kv_lsm *l, int private_read,
         src_heap = 1;
         cap = need;
     } else {
-        memset(src, 0, sizeof(stack_src));
+        memset(src, 0, need * sizeof(*src));
     }
     if (apply_staging(l)) {
         src[nsrc].mt = &apply_scope.mt;
@@ -903,7 +916,7 @@ static int merge_scan(struct kv_lsm *l, int private_read,
         src[nsrc].mi = kv_mtab_pos(&l->mt, seek, seek_len, &found);
     }
     nsrc++;
-    for (i = 0; i < l->n_l0 + l->n_l1; i++) {
+    while ((i = kv_candidates_next(l, &candidates)) < l->n_l0+l->n_l1) {
         struct seg_slot *sl = i < l->n_l0 ? &l->l0[i] : &l->l1[i - l->n_l0];
 
         /* L1 is range-partitioned: a 3-byte txn-record prefix lives in

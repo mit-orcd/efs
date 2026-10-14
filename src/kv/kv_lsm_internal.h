@@ -223,6 +223,12 @@ struct kv_lsm {
     struct seg_slot *l1;
     uint32_t n_l1;
     uint32_t l1_cap;
+    /* Rebuildable, mutex-protected range -> segment bitsets. Positions retain
+     * L0 newest-first then L1 order. Never an authority for private snapshots. */
+    uint64_t *candidate_bits;
+    uint32_t candidate_words;
+    int candidate_valid;
+    uint64_t segment_revision;
     uint64_t next_seq;
     uint32_t required_reader; /* monotonic, versioned authoritative MANIFEST */
     uint32_t durable_reader; /* barriers proven in this process, never inferred */
@@ -253,6 +259,14 @@ struct kv_lsm {
     uint64_t transaction_activity[8]; /* bounded diagnostic hints, not authority */
     struct kv_buf scratch;
 };
+
+/* Call under mu whenever the published segment arrays change, even on a
+ * failed MANIFEST publication. Readers dropping mu must retry that view. */
+static inline void kv_candidates_changed(struct kv_lsm *l)
+{
+    l->candidate_valid = 0;
+    l->segment_revision++;
+}
 
 /* One merge input: the memtable when it holds no iterator, else a segment.
  * Precedence is the array position, newest first. */

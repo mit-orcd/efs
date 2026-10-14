@@ -160,6 +160,7 @@ int kv_flush_locked(struct kv_lsm *l)
     for (i = 0; i < nneu; i++)
         l->l0[i] = neu[nneu - 1 - i];
     l->n_l0 += nneu;
+    kv_candidates_changed(l);
     memcpy(l->query_flushed,l->query_revision,sizeof(l->query_flushed));
     rc = kv_manifest_write(l);
     if (rc != EFS_OK)
@@ -760,6 +761,7 @@ int kv_compact_locked(struct kv_lsm *l, int async)
     }
     if (l->n_l1 > 1)
         qsort(l->l1, l->n_l1, sizeof(l->l1[0]), kv_l1_cmp);
+    kv_candidates_changed(l);
     rc = kv_manifest_write(l);
     if (rc != EFS_OK) {
         /* Outputs are already in the live level. The old MANIFEST still
