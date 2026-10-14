@@ -611,6 +611,7 @@ static int command_script(const char *term)
 static struct {
     int valid;
     uint32_t nlookup;
+    uint32_t nreserve; /* intern -> lookup reply, including failed getattr */
     uint32_t nopen;
     size_t open_size;
     uint64_t version;
@@ -638,13 +639,15 @@ static fuse_ino_t vq_intern(efs_ino_t dir_ino, const char *term,
         if (g_vq[i].valid && g_vq[i].version == version &&
             g_vq[i].open_size == len && g_vq[i].dir_ino == dir_ino &&
             strcmp(g_vq[i].term, term) == 0) {
+            if(g_vq[i].nreserve==UINT32_MAX) { pthread_mutex_unlock(&g_vq_mu);return 0; }
+            g_vq[i].nreserve++;
             id = g_vq[i].nodeid;
             pthread_mutex_unlock(&g_vq_mu);
             return id;
         }
         if (!g_vq[i].valid && empty < 0)
             empty = i;
-        else if (g_vq[i].valid && g_vq[i].nlookup == 0 && !g_vq[i].nopen)
+        else if (g_vq[i].valid && g_vq[i].nlookup == 0 && !g_vq[i].nopen && !g_vq[i].nreserve)
             stale = i;
     }
     slot = empty >= 0 ? empty : stale;
@@ -654,6 +657,7 @@ static fuse_ino_t vq_intern(efs_ino_t dir_ino, const char *term,
         id = EFS_VIRT_QUERY | 1;
     memset(&g_vq[slot], 0, sizeof(g_vq[slot]));
     g_vq[slot].valid = 1;
+    g_vq[slot].nreserve = 1;
     g_vq[slot].nodeid = id;
     g_vq[slot].dir_ino = dir_ino;
     g_vq[slot].version = version;
@@ -661,6 +665,18 @@ static fuse_ino_t vq_intern(efs_ino_t dir_ino, const char *term,
     strncpy(g_vq[slot].term, term, EFS_MAX_NAME - 1);
     pthread_mutex_unlock(&g_vq_mu);
     return id;
+}
+
+/* Release only the temporary intern reservation. Successful lookup_fill
+ * already owns a kernel lookup reference; failed getattr must release too. */
+static void vq_unreserve(fuse_ino_t nodeid)
+{
+    pthread_mutex_lock(&g_vq_mu);
+    for(int i=0;i<EFS_VQ_N;i++) if(g_vq[i].valid && g_vq[i].nodeid==nodeid) {
+        if(g_vq[i].nreserve)g_vq[i].nreserve--;
+        break;
+    }
+    pthread_mutex_unlock(&g_vq_mu);
 }
 
 static int vq_lookup(fuse_ino_t nodeid, efs_ino_t *dir_out, char *term_out,
@@ -5534,7 +5550,8 @@ static int efs_fuse_lookup_at(fuse_ino_t parent, const char *name,
         char term[EFS_MAX_NAME];snprintf(term,sizeof(term),"@%s",name);
         if (!command_script(term)) return -ENOENT;
         fuse_ino_t id=vq_intern(virt_parent(parent),term,virtual_version(efs_command_source,sizeof(efs_command_source)-1),sizeof(efs_command_source)-1);
-        return id ? lookup_fill(id,e,NULL) : -ENOMEM;
+        if(!id)return -ENOMEM;
+        rc=lookup_fill(id,e,NULL);vq_unreserve(id);return rc;
     }
     if (virt_kind(parent) == 2) {
         /* Query children authorize through the server snapshot RPC below.
@@ -5568,7 +5585,7 @@ static int efs_fuse_lookup_at(fuse_ino_t parent, const char *name,
         }
         pthread_mutex_unlock(&g_find_res_mu);
         if (!q) return present ? -ENOMEM : -EAGAIN;
-        return lookup_fill(q, e, NULL);
+        qr=lookup_fill(q,e,NULL);vq_unreserve(q);return qr;
     }
     if (virt_kind(parent))
         return -ENOENT;

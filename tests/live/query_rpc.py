@@ -8,6 +8,7 @@ import socket
 import os
 import struct
 import json
+import time
 class Request(C.Structure):
     _fields_=[('version',C.c_uint32),('operation',C.c_uint32),('root',C.c_uint64),
               ('uid',C.c_uint32),('gid',C.c_uint32),('ngroups',C.c_uint32),('match',C.c_uint32),
@@ -51,9 +52,9 @@ def receive(s,n):
         if not chunk:raise EOFError('short query frame')
         data.extend(chunk)
     return bytes(data)
-def query(port,q,raw=None,*,host=None):
+def query(port,q,raw=None,*,host=None,timeout=7):
     body=bytes(q) if raw is None else raw
-    with socket.create_connection((host or os.environ.get('EFS_QUERY_TEST_HOST','127.0.0.1'),port),7) as s:
+    with socket.create_connection((host or os.environ.get('EFS_QUERY_TEST_HOST','127.0.0.1'),port),timeout) as s:
         s.sendall(struct.pack('!I',len(body)+1)+bytes([123])+body)
         n=struct.unpack('!I',receive(s,4))[0]
         assert 121<=n<=120+(16<<20)+1,n
@@ -76,7 +77,7 @@ def features(port):
     return mask
 
 
-def routed_query(port, q):
+def routed_query(port, q, *, deadline=None):
     """Follow node ownership in local-port or explicit multi-host fixtures.
 
     EFS_QUERY_TEST_NODES is JSON mapping node IDs to [host, port]. Retained
@@ -95,17 +96,42 @@ def routed_query(port, q):
         assert isinstance(host, str) and host and isinstance(target_port, int)
         assert 1 <= target_port <= 65535, target_port
         return host, target_port
+    def send(target):
+        timeout = 7 if deadline is None else min(7, deadline - time.monotonic())
+        if timeout <= 0:
+            raise TimeoutError('query retry window expired')
+        return query(target[1], q, host=target[0], timeout=timeout)
     token = getattr(q, 'token', 0)
     if token:
         host, target_port = endpoint(token >> 56)
-        return query(target_port, q, host=host)
+        return send((host, target_port))
     seen = set()
     target = seed
     for _ in range(len(nodes) if nodes is not None else 4):
         assert target not in seen, ('query redirect loop', target, seen)
         seen.add(target)
-        reply, text = query(target[1], q, host=target[0])
+        reply, text = send(target)
         if reply.status != -15:
             return reply, text
         target = endpoint(reply.primary_id)
     raise AssertionError('query redirect bound exceeded')
+
+
+def accepted_query(port, q):
+    """Positive page oracles allow BUSY inside the helper's existing 8s window.
+
+    Negative budget/permission/status probes use routed_query directly. Hard
+    statuses are returned unchanged; redirects and socket reads share one bound.
+    """
+    deadline = time.monotonic() + 8
+    attempt = 0
+    while True:
+        reply, text = routed_query(port, q, deadline=deadline)
+        if reply.status != -13:
+            return reply, text
+        assert not text, 'busy refusal delivered partial bytes'
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return reply, text
+        attempt += 1
+        time.sleep(min(.025 * attempt, .25, remaining))

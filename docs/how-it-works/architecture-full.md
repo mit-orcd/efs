@@ -1494,6 +1494,7 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+[Intel receive persistence correctness](../status/intel-receive-persistence-20261014.md):
 **Correctness/failure gates PASS; loaded acceptance FAIL; W100 OPEN.**
 Frozen a58e93942 deployed privately, TCP/direct/files, optional features OFF.
 Per-group persistence fence releases host serialization, preserves durable

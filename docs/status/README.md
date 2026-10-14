@@ -1,3 +1,5 @@
+[ORCD live824 qualification](orcd-query-name-ordinals-20261013.md): reviewed devel integrated; six command suites,63 concurrent queries,140,000 finite files and orderly marker restart PASS. Sustained query cohort FAIL7/21; writers plus MD5 crawlers FAIL: close REPORT budget exhaustion and ordinary directory EBUSY remain OPEN. RDMA/direct I/O, .efs on, packing/containers/expiry off.
+
 [Intel receive persistence correctness](intel-receive-persistence-20261014.md):
 **Correctness/failure gates PASS; loaded acceptance FAIL; W100 OPEN.**
 Frozen a58e93942 deployed privately, TCP/direct/files, optional features OFF.

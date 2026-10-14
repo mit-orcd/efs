@@ -10256,7 +10256,10 @@ static int query_page_acquire(const struct efs_msg_query_snapshot_v4 *req,
         if (req->token ? p->token==req->token : !memcmp(&identity,&p->request,sizeof(identity))) { session=p;break; }
     }
     int rc=EFS_OK;
-    if (!session && req->token) rc=EFS_ERR_STALE;
+    /* FUSE may repeat a zero-limit close at LOOKUP/GETATTR/OPEN. Once
+     * gone there is no resource to authorize or allocate. Live tokens still
+     * require exact caller identity and exclusive admission below. */
+    if (!session && req->token) rc=req->limit ? EFS_ERR_STALE : EFS_OK;
     else if (session && memcmp(&identity,&session->request,sizeof(identity))) rc=EFS_ERR_ACCES;
     else if (session && session->busy) rc=EFS_ERR_BUSY;
     else if (!session && !empty) rc=EFS_ERR_BUSY;
@@ -10418,6 +10421,13 @@ static int host_query_policy_authority(uint32_t *mask)
     else rc=host_remote_cmd(g_host,request[0],request+1,1,&reply,-1);
     if(rc){*mask=0;return rc;}
     *mask=reply.rc?0:(uint32_t)reply.salt;return reply.rc;
+}
+/* A missing owner is not a redirect. Authority can change during policy,
+ * ReadIndex or permission checks; preserve refusal as retryable BUSY when
+ * no usable target accompanies it. Never deliver bytes from a failed proof. */
+static int query_reply_status(int rc,uint16_t primary_id)
+{
+    return rc==EFS_ERR_AGAIN || (rc==EFS_ERR_NOT_PRIMARY && !primary_id) ? EFS_ERR_BUSY : rc;
 }
 static int host_query_policy_operation(uint8_t operation)
 {
@@ -10631,6 +10641,12 @@ int server_raft_host_query_read(int (*consume)(void *,const struct efs_server_qu
     int peer=capable ? -1 : host_pick_peer(h,both,2,-1);
     pthread_mutex_unlock(&h->mu);
     if (!capable) {
+        /* A known leader covering both groups is a better query target than
+         * the first dual follower, whose fresh cut can starve under writes.
+         * This is a routing hint only; the receiver repeats every proof. */
+        int leader=host_leader_cover_pick(h,both[0],both,2);
+        if(leader<0)leader=host_leader_cover_pick(h,both[1],both,2);
+        if(leader>=0)peer=leader;
         if (primary_id && peer>=0) *primary_id=(uint16_t)(peer+1);
         return EFS_ERR_NOT_PRIMARY;
     }
@@ -11015,7 +11031,7 @@ int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req,con
         (!req->term[0] && req->match!=EFS_NAME_PREFIX && req->match!=EFS_NAME_CONTAINS)))))
         return EFS_ERR_INVAL;
     int policy_rc=host_query_policy_operation(req->operation);
-    if(policy_rc)return policy_rc;
+    if(policy_rc)return query_reply_status(policy_rc,0);
     if (__atomic_add_fetch(&query_requests,1,__ATOMIC_RELAXED)>8) {
         __atomic_sub_fetch(&query_requests,1,__ATOMIC_RELAXED);return EFS_ERR_BUSY;
     }
@@ -11038,7 +11054,7 @@ int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req,con
     int rc=q.auth ? server_raft_host_query_read(query_consume,&q,&reply->primary_id) : EFS_ERR_NOMEM;
     free(q.auth);
     if(!rc)rc=host_query_policy_operation(req->operation);
-    reply->status=rc;
+    reply->status=query_reply_status(rc,reply->primary_id);
     if (rc) reply->text_len=0; /* never deliver a partial result as success */
     *out=reply;*len=sizeof(*reply)+reply->text_len;
     return EFS_OK;
@@ -11068,7 +11084,7 @@ int server_raft_host_query_page(const struct efs_msg_query_snapshot_v4 *req,void
         req->filters.flags || req->filters.kind || req->filters.min_size || req->filters.max_size ||
         req->filters.after_ns || req->filters.before_ns)) return EFS_ERR_INVAL;
     int policy_rc=host_query_policy_operation(req->base.operation);
-    if(policy_rc && req->limit)return policy_rc;
+    if(policy_rc && req->limit)return query_reply_status(policy_rc,0);
     int created=0;
     struct query_page_session *session=NULL;
     const char *request_stage="page-admission";
@@ -11076,7 +11092,7 @@ int server_raft_host_query_page(const struct efs_msg_query_snapshot_v4 *req,void
     uint16_t primary=0;
     if (!rc && created) { request_stage="page-fresh-capture";rc=server_raft_host_query_read(query_page_capture,session,&primary); }
     /* Even continuations need current quorum/ReadIndex before fresh checks. */
-    if (!rc && !created && session->token && req->limit) {
+    if (!rc && req->limit && !created && session && session->token) {
         request_stage="page-continuation-authority";
         int hint=-1;rc=host_read_index_pair(g_host,g_host->g[0].group,g_host->g[1].group,&hint);
         pthread_mutex_lock(&g_host->mu);
@@ -11117,7 +11133,7 @@ int server_raft_host_query_page(const struct efs_msg_query_snapshot_v4 *req,void
 
     }
     if(rc)efs_query_stage_trace(request_stage,rc,0,req->base.root,session?session->view.generation:0);
-    reply->status=rc;if (rc) reply->text_len=0;
+    reply->status=query_reply_status(rc,reply->primary_id);if (rc) reply->text_len=0;
     *out=reply;*len=sizeof(*reply)+reply->text_len;
     query_page_release(session,(created && rc) || (!rc && !req->limit));
     return EFS_OK;

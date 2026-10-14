@@ -24,6 +24,7 @@ static uint64_t authoritative_ino=42;
 static int virt_kind(fuse_ino_t n){return n==((1ULL<<60)|42)?3:0;}
 static fuse_ino_t virt_parent(fuse_ino_t n){return n;}
 static fuse_ino_t vq_intern(fuse_ino_t n,const char*s,uint64_t version,size_t len){(void)s;(void)version;(void)len;return n;}
+static void vq_unreserve(fuse_ino_t n){(void)n;}
 static int virtual_access(fuse_ino_t n){(void)n;return 0;}
 static int find_query_ensure(fuse_ino_t n,const char*s,const char*name){(void)n;(void)s;(void)name;return EFS_ERR_NOT_FOUND;}
 #define EFS_FIND_RES_N 1
