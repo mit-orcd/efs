@@ -607,6 +607,10 @@ int raft_log_rotate_locked(struct efs_raft_disk *d)
 
     if (d->io_failed)
         return EFS_ERR_IO;
+    /* A sync drops d->mu around fdatasync. Keep its file and byte watermark
+     * stable until completion; another group's append must not rotate them. */
+    if (d->syncing)
+        return EFS_ERR_BUSY;
     writer.buffer = malloc(RAFT_ROTATE_BUFFER_BYTES);
     if (!writer.buffer)
         return EFS_ERR_NOMEM;
@@ -727,6 +731,8 @@ void raft_log_maybe_rotate_locked(struct efs_raft_disk *d)
 {
     uint32_t i;
 
+    if (d->syncing)
+        return; /* Preserve check_at so the next append retries rotation. */
     if (d->bytes < d->check_at)
         return;
     d->live_bytes = 0;

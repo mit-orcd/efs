@@ -132,10 +132,10 @@ struct efs_raft_store {
     int (*save_cfg)(void *ctx, uint32_t cfg_old, uint32_t cfg_new);
     int (*load_cfg)(void *ctx, uint32_t *cfg_old, uint32_t *cfg_new);
     void (*destroy)(void *ctx);
-    /* Optional. One fsync for a multi-entry AppendEntries. NULL means
-     * each append fsyncs on its own. batch_end returns only once this
-     * thread's appends are durable, including when other threads are
-     * still holding the shared log fsync. */
+    /* Optional nested per-thread persistence scope. batch_end proves this
+     * thread's store mutations durable even while other threads hold a shared
+     * log sync. Used by receive cohorts, follower fallback and hard state.
+     * With NULL callbacks each mutation must supply its own durable boundary. */
     int (*batch_begin)(void *ctx);
     int (*batch_end)(void *ctx);
     /* Optional. First index still in the log. Absent means snap_idx+1,
@@ -193,6 +193,16 @@ typedef int (*efs_raft_snap_chunk_fn)(void *app, uint64_t incl,
 typedef int (*efs_raft_admit_fn)(void *app, const struct efs_raft_entry *entries,
                                 uint32_t n, int source);
 
+/* Optional follower receive-persistence handoff. The core freezes this group's Raft
+ * mutation/read authority while the hook runs. Call persist(persist_ctx) exactly
+ * once, synchronously on the receive thread (store deferral can be thread-local),
+ * and return with the caller's serialization restored. The cohort and decoded
+ * command ownership stay on that thread until durable completion/failed fencing.
+ * Other groups may progress; freeing this group still requires joining its owner.
+ */
+typedef int (*efs_raft_recv_persist_fn)(void *net,
+                                      int (*persist)(void *), void *persist_ctx);
+
 struct efs_raft_cfg {
     int id; /* 0 .. EFS_RAFT_MAX_PEERS-1; may be outside voters (learner) */
     int n;  /* bootstrap replica count; voters=0 → (1u<<n)-1 */
@@ -214,6 +224,7 @@ struct efs_raft_cfg {
     void *store_ctx;
     efs_raft_send_fn send;
     efs_raft_send_ready_fn send_ready;
+    efs_raft_recv_persist_fn recv_persist;
     /* Experimental: keep proven no-op AE requests inside an open cohort.
      * Fresh reads and any hard-state/conflict boundary still flush it. */
     int batch_noop;

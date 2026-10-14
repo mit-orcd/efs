@@ -9,12 +9,16 @@ struct recv_replies {
     struct { int to, success, probe; uint64_t match, read; } reply[EFS_RAFT_RECV_MAX];
     uint32_t n;
     uint64_t term, boot;
+    uint64_t commit_before;
     uint64_t obs_started, obs_entries;
 };
 
 struct efs_raft {
     int id;
     struct recv_replies *recv_replies; /* stack-owned, only inside recv_batch */
+    int recv_persisting; /* group frozen while external serialization is handed off */
+    uint64_t recv_stable_commit;
+    efs_raft_recv_persist_fn recv_persist;
     efs_raft_admit_fn admit;
     uint64_t pressure_retry_tick[EFS_RAFT_MAX_PEERS];
     int storage_failed; /* failed deferred persistence requires restart */
@@ -233,6 +237,79 @@ static void read_proof_forget(struct efs_raft *r)
     r->read_applied_cfg_old = r->read_applied_cfg_new = 0;
 }
 
+/* The receive owner retains its cohort or store-call closure on the stack.
+ * The hook only releases external serialization for that synchronous store
+ * operation. Every protocol mutator/read-authority entry is fenced meanwhile;
+ * readonly accounting may still inspect the store under its own lock. */
+static int receive_persist(struct efs_raft *r, int (*persist)(void *), void *ctx,
+                            uint64_t stable_commit)
+{
+    struct recv_replies *owner = r->recv_replies;
+    uint64_t term = r->current_term, boot = r->boot_id;
+    r->recv_stable_commit = stable_commit;
+    r->recv_persisting = 1;
+    int rc = r->recv_persist ? r->recv_persist(r->net, persist, ctx) : persist(ctx);
+    r->recv_persisting = 0;
+    if (r->recv_replies != owner || r->current_term != term || r->boot_id != boot)
+        return EFS_ERR_IO;
+    return rc;
+}
+
+enum receive_store_kind { RECEIVE_APPEND, RECEIVE_TRUNCATE, RECEIVE_END, RECEIVE_HARD };
+struct receive_store_call {
+    struct efs_raft *r;
+    enum receive_store_kind kind;
+    int barrier;
+    uint64_t index, term;
+    int32_t vote;
+    const uint8_t *cmd;
+    uint32_t len;
+};
+static int receive_store_run(void *ctx)
+{
+    struct receive_store_call *c = ctx;
+    struct efs_raft *r = c->r;
+    int rc;
+    if (c->barrier) {
+        rc = r->store->batch_begin(r->store_ctx);
+        if (rc != EFS_OK) return rc;
+    }
+    switch (c->kind) {
+    case RECEIVE_APPEND:
+        rc = r->store->append(r->store_ctx,c->index,c->term,c->cmd,c->len); break;
+    case RECEIVE_TRUNCATE:
+        rc = r->store->truncate_from(r->store_ctx,c->index); break;
+    case RECEIVE_END:
+        rc = r->store->batch_end(r->store_ctx); break;
+    case RECEIVE_HARD:
+        rc = r->store->save_hard(r->store_ctx,c->term,c->vote); break;
+    default: rc = EFS_ERR_INVAL; break;
+    }
+    if (c->barrier) {
+        /* This thread's boundary must prove its bytes even when another
+         * submitter still owns a shared sync hold. Always balance on error. */
+        int ended = r->store->batch_end(r->store_ctx);
+        if (rc == EFS_OK) rc = ended;
+    }
+    return rc;
+}
+
+static int receive_store(struct efs_raft *r, enum receive_store_kind kind,
+                           uint64_t index, uint64_t term, int32_t vote,
+                           const uint8_t *cmd, uint32_t len)
+{
+    int barrier = r->store->batch_begin && r->store->batch_end &&
+        (kind==RECEIVE_HARD || (!r->recv_replies && r->role==EFS_RAFT_FOLLOWER &&
+         (kind==RECEIVE_APPEND || kind==RECEIVE_TRUNCATE)));
+    struct receive_store_call call = {r,kind,barrier,index,term,vote,cmd,len};
+    /* Open cohorts already defer their writes to receive_persist at their
+     * final barrier. Leader/election/configuration/snapshot paths retain their
+     * existing serialization. Ordinary follower fallback owns its own phase. */
+    if (r->recv_persist && r->role==EFS_RAFT_FOLLOWER && !r->recv_replies)
+        return receive_persist(r,receive_store_run,&call,r->commit_index);
+    return receive_store_run(&call);
+}
+
 static void fence_storage(struct efs_raft *r)
 {
     r->storage_failed = 1;
@@ -246,7 +323,7 @@ static void fence_storage(struct efs_raft *r)
 
 static int save_hard(struct efs_raft *r)
 {
-    int rc = r->store->save_hard(r->store_ctx, r->current_term, r->voted_for);
+    int rc = receive_store(r,RECEIVE_HARD,0,r->current_term,r->voted_for,NULL,0);
     if (rc != EFS_OK) fence_storage(r);
     return rc;
 }
@@ -1340,7 +1417,7 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
                  * h->mu, which is how a behind follower fell over. */
                 continue;
             if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND) {
-                if (batch) (void)r->store->batch_end(r->store_ctx);
+                if (batch) (void)receive_store(r,RECEIVE_END,0,0,0,NULL,0);
                 fence_storage(r);
                 return rc;
             }
@@ -1349,32 +1426,32 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
                  * the leader's entry. (Same rule as the single-entry path,
                  * applied per batched entry.) */
                 if (idx <= r->commit_index) {
-                    if (batch) (void)r->store->batch_end(r->store_ctx);
+                    if (batch) (void)receive_store(r,RECEIVE_END,0,0,0,NULL,0);
                     return EFS_ERR_PROTO;
                 }
-                rc = r->store->truncate_from(r->store_ctx, idx);
+                rc = receive_store(r,RECEIVE_TRUNCATE,idx,0,0,NULL,0);
                 if (rc == EFS_OK) rc = reload_cfg_from_log(r);
                 if (rc != EFS_OK) {
-                    if (batch) (void)r->store->batch_end(r->store_ctx);
+                    if (batch) (void)receive_store(r,RECEIVE_END,0,0,0,NULL,0);
                     fence_storage(r);
                     return rc;
                 }
             }
-            rc = r->store->append(r->store_ctx, idx, in->entries[i].term,
-                                  in->entries[i].cmd, in->entries[i].clen);
+            rc = receive_store(r,RECEIVE_APPEND,idx,in->entries[i].term,0,
+                               in->entries[i].cmd,in->entries[i].clen);
             if (rc != EFS_OK) {
                 if (getenv("EFS_RAFT_AE_DBG"))
                     fprintf(stderr, "AE_REQ APPEND FAIL idx=%llu i=%u rc=%d\n",
                             (unsigned long long)idx, i, rc);
                 if (batch)
-                    (void)r->store->batch_end(r->store_ctx);
+                    (void)receive_store(r,RECEIVE_END,0,0,0,NULL,0);
                 fence_storage(r);
                 return rc;
             }
             install_log_cfg(r, in->entries[i].cmd, in->entries[i].clen, idx);
         }
         if (batch) {
-            rc = r->store->batch_end(r->store_ctx);
+            rc = receive_store(r,RECEIVE_END,0,0,0,NULL,0);
             if (rc != EFS_OK) { fence_storage(r); return rc; }
         }
         rc = last_log(r, &last_i, &last_t);
@@ -1754,6 +1831,7 @@ struct efs_raft *efs_raft_new(const struct efs_raft_cfg *cfg)
     r->store_ctx = cfg->store_ctx ? cfg->store_ctx : cfg->store;
     r->send = cfg->send;
     r->send_ready = cfg->send_ready;
+    r->recv_persist = cfg->recv_persist;
     r->batch_noop = cfg->batch_noop;
     r->batch_overlap = cfg->batch_overlap;
     r->preserve_ack_window = cfg->preserve_ack_window;
@@ -1815,6 +1893,7 @@ void efs_raft_free(struct efs_raft *r)
 
 int efs_raft_tick(struct efs_raft *r)
 {
+    if (r && r->recv_persisting) return EFS_ERR_BUSY;
     if (!r)
         return EFS_ERR_INVAL;
     if (r->storage_failed)
@@ -1853,6 +1932,7 @@ static int on_timeout_now(struct efs_raft *r, const struct efs_raft_msg *m)
 
 int efs_raft_recv(struct efs_raft *r, const struct efs_raft_msg *msg)
 {
+    if (r && r->recv_persisting) return EFS_ERR_BUSY;
     uint64_t boot;
 
     if (!r || !msg)
@@ -2030,13 +2110,18 @@ static int recv_batch_finish(struct efs_raft *r, int prior)
         BO_HIST(BH_FOLLOW_ENTRIES, q->obs_entries);
         BO_HIST(BH_FOLLOW_ASSEMBLY_US, efs_batch_obs_now_us()-q->obs_started);
     }
-    int rc = r->store->batch_end(r->store_ctx);
+    /* Prepare: all command/reply ownership stays on this receive stack. The
+     * barrier hook may release external serialization, but no protocol entry point may
+     * mutate this group or grant read authority until completion below. */
+    int rc = receive_persist(r,r->store->batch_end,r->store_ctx,q->commit_before);
+    int owned = r->recv_replies == q;
     if (BO_ON()) BO_HIST(BH_FOLLOW_TOTAL_US, efs_batch_obs_now_us()-q->obs_started);
     r->recv_replies = NULL;
-    if (rc != EFS_OK || prior != EFS_OK) {
+    if (!owned || rc != EFS_OK || prior != EFS_OK || r->current_term != q->term ||
+        r->boot_id != q->boot || r->storage_failed) {
         /* Never allow a later heartbeat to apply an unproven tail. */
         fence_storage(r);
-        return rc != EFS_OK ? rc : prior;
+        return rc != EFS_OK ? rc : prior != EFS_OK ? prior : EFS_ERR_IO;
     }
     /* AppendEntries ACK proves log durability, not completion of local
      * state-machine apply. Holding every ACK behind the whole cohort's KV
@@ -2068,6 +2153,7 @@ static int recv_batch_finish(struct efs_raft *r, int prior)
 int efs_raft_recv_batch(struct efs_raft *r, const struct efs_raft_msg *msgs,
                         uint32_t n)
 {
+    if (r && r->recv_persisting) return EFS_ERR_BUSY;
     struct recv_replies replies = {0};
     uint64_t total = 0;
     int rc;
@@ -2110,6 +2196,7 @@ int efs_raft_recv_batch(struct efs_raft *r, const struct efs_raft_msg *msgs,
             if (rc != EFS_OK) return rc;
             replies.term = r->current_term;
             replies.boot = r->boot_id;
+            replies.commit_before = r->commit_index;
             if (BO_ON()) replies.obs_started = efs_batch_obs_now_us();
             r->recv_replies = &replies;
         }
@@ -2131,6 +2218,7 @@ int efs_raft_recv_batch(struct efs_raft *r, const struct efs_raft_msg *msgs,
 int efs_raft_propose(struct efs_raft *r, const uint8_t *cmd, uint32_t clen,
                      uint64_t *index_out)
 {
+    if (r && r->recv_persisting) return EFS_ERR_BUSY;
     int rc;
     uint64_t ix = 0;
 
@@ -2171,7 +2259,7 @@ void efs_raft_arm_durable(struct efs_raft *r)
 {
     uint64_t last_i = 0, last_t = 0;
 
-    if (!r || r->ae_capped)
+    if (!r || r->recv_persisting || r->ae_capped)
         return;
     if (last_log(r, &last_i, &last_t) != EFS_OK)
         return;
@@ -2183,6 +2271,7 @@ void efs_raft_arm_durable(struct efs_raft *r)
 int efs_raft_propose_local(struct efs_raft *r, const uint8_t *cmd,
                            uint32_t clen, uint64_t *index_out)
 {
+    if (r && r->recv_persisting) return EFS_ERR_BUSY;
     if (!r)
         return EFS_ERR_INVAL;
     if (r->role != EFS_RAFT_LEADER)
@@ -2202,6 +2291,7 @@ int efs_raft_propose_local(struct efs_raft *r, const uint8_t *cmd,
 
 int efs_raft_submit(struct efs_raft *r, uint64_t idx)
 {
+    if (r && r->recv_persisting) return EFS_ERR_BUSY;
     if (!r)
         return EFS_ERR_INVAL;
     if (r->role != EFS_RAFT_LEADER)
@@ -2217,6 +2307,7 @@ int efs_raft_submit(struct efs_raft *r, uint64_t idx)
 
 int efs_raft_flush(struct efs_raft *r)
 {
+    if (r && r->recv_persisting) return EFS_ERR_BUSY;
     int i, rc = EFS_OK;
     uint32_t mask;
 
@@ -2237,6 +2328,7 @@ int efs_raft_flush(struct efs_raft *r)
 
 int efs_raft_note_durable(struct efs_raft *r, uint64_t idx)
 {
+    if (r && r->recv_persisting) return EFS_ERR_BUSY;
     if (!r)
         return EFS_ERR_INVAL;
     if (r->role != EFS_RAFT_LEADER)
@@ -2255,6 +2347,7 @@ int efs_raft_durable(struct efs_raft *r, uint64_t idx)
 
 int efs_raft_change(struct efs_raft *r, uint32_t new_voters)
 {
+    if (r && r->recv_persisting) return EFS_ERR_BUSY;
     uint32_t add;
     uint8_t cmd[9];
     uint64_t last_i = 0, last_t = 0, ix = 0;
@@ -2310,6 +2403,7 @@ int efs_raft_change(struct efs_raft *r, uint32_t new_voters)
 
 int efs_raft_restore_applied(struct efs_raft *r, uint64_t idx)
 {
+    if (r && r->recv_persisting) return EFS_ERR_BUSY;
     uint64_t last_i = 0, last_t = 0;
     int rc;
 
@@ -2332,6 +2426,7 @@ int efs_raft_restore_applied(struct efs_raft *r, uint64_t idx)
 
 int efs_raft_snapshot(struct efs_raft *r)
 {
+    if (r && r->recv_persisting) return EFS_ERR_BUSY;
     uint64_t t = 0;
     int rc;
 
@@ -2384,6 +2479,8 @@ uint64_t efs_raft_term(const struct efs_raft *r)
 
 uint64_t efs_raft_commit(const struct efs_raft *r)
 {
+    if (r && r->recv_persisting && r->recv_stable_commit < r->commit_index)
+        return r->recv_stable_commit;
     return r ? r->commit_index : 0;
 }
 
@@ -2435,6 +2532,7 @@ int efs_raft_joint(const struct efs_raft *r)
 
 int efs_raft_step_down(struct efs_raft *r)
 {
+    if (r && r->recv_persisting) return EFS_ERR_BUSY;
     if (!r)
         return EFS_ERR_INVAL;
     if (r->role == EFS_RAFT_FOLLOWER)
@@ -2450,6 +2548,7 @@ int efs_raft_step_down(struct efs_raft *r)
 
 int efs_raft_transfer(struct efs_raft *r, int target)
 {
+    if (r && r->recv_persisting) return EFS_ERR_BUSY;
     struct efs_raft_msg m = {0};
     uint64_t tail = 0, term = 0, committed_term = 0;
     int rc;
@@ -2481,6 +2580,9 @@ int efs_raft_transfer(struct efs_raft *r, int target)
 
 void efs_raft_allow_campaign(struct efs_raft *r, int on)
 {
+    /* Policy latch only: it cannot campaign while protocol entry points are
+     * fenced by receive persistence. Disable/enable remains effective once
+     * the owner completes; no term, log or read proof changes here. */
     if (r)
         r->allow_campaign = on ? 1 : 0;
 }
@@ -2511,6 +2613,7 @@ static int broadcast_read_probe(struct efs_raft *r)
 
 int efs_raft_read_begin(struct efs_raft *r)
 {
+    if (r && r->recv_persisting) return EFS_ERR_BUSY;
     if (!r)
         return EFS_ERR_INVAL;
     if (r->role != EFS_RAFT_LEADER)
@@ -2569,7 +2672,7 @@ int efs_raft_read_begin(struct efs_raft *r)
 int efs_raft_read_control(struct efs_raft *r,const struct efs_raft_msg *in)
 {
     uint64_t term=0;
-    if (!r || !in || r->storage_failed || r->recv_replies ||
+    if (!r || !in || r->storage_failed || r->recv_persisting || r->recv_replies ||
         in->to!=r->id || in->group!=r->group ||
         in->from<0 || in->from>=EFS_RAFT_MAX_PEERS || in->from==r->id ||
         !r->peer_boot[in->from] ||
@@ -2642,6 +2745,7 @@ int efs_raft_read_control(struct efs_raft *r,const struct efs_raft_msg *in)
 
 int efs_raft_read_ready(const struct efs_raft *r)
 {
+    if (r && r->recv_persisting) return 0;
     if (!r)
         return 0;
     return r->read_in_flight == 2 && r->last_applied >= r->read_index;
@@ -2649,6 +2753,7 @@ int efs_raft_read_ready(const struct efs_raft *r)
 
 int efs_raft_read_current(const struct efs_raft *r)
 {
+    if (r && r->recv_persisting) return 0;
     if (!r || r->role != EFS_RAFT_LEADER)
         return 0;
     return r->read_in_flight == 2 &&
@@ -2658,16 +2763,19 @@ int efs_raft_read_current(const struct efs_raft *r)
 
 int efs_raft_read_pending(const struct efs_raft *r)
 {
+    if (r && r->recv_persisting) return 0;
     return r && r->role == EFS_RAFT_LEADER && r->read_in_flight == 1;
 }
 
 uint64_t efs_raft_read_index(const struct efs_raft *r)
 {
+    if (r && r->recv_persisting) return 0;
     return r ? r->read_index : 0;
 }
 
 uint64_t efs_raft_read_context(const struct efs_raft *r)
 {
+    if (r && r->recv_persisting) return 0;
     if (!r || r->storage_failed || r->role!=EFS_RAFT_LEADER ||
         r->read_epoch==UINT64_MAX)
         return 0;
@@ -2676,6 +2784,7 @@ uint64_t efs_raft_read_context(const struct efs_raft *r)
 
 int efs_raft_read_quorum(const struct efs_raft *r)
 {
+    if (r && r->recv_persisting) return 0;
     uint64_t term=0;
     if (!r || r->storage_failed || r->role!=EFS_RAFT_LEADER ||
         !r->read_in_flight || r->read_cfg_old!=r->log_old ||
@@ -2690,6 +2799,7 @@ int efs_raft_read_proven(const struct efs_raft *r, uint64_t *round,
 {
     if (!round || !index) return 0;
     *round = *index = 0;
+    if (r && r->recv_persisting) return 0;
     if (!r || r->storage_failed || r->role != EFS_RAFT_LEADER) return 0;
     int applied_valid = r->read_applied_round &&
         r->read_applied_term == r->current_term &&
@@ -2719,11 +2829,13 @@ int efs_raft_read_proven(const struct efs_raft *r, uint64_t *round,
 
 int efs_raft_read_done(const struct efs_raft *r)
 {
+    if (r && r->recv_persisting) return 0;
     return r && r->role == EFS_RAFT_LEADER && r->read_in_flight == 2;
 }
 
 int efs_raft_read_covers(const struct efs_raft *r, uint64_t want)
 {
+    if (r && r->recv_persisting) return 0;
     if (!r || r->role != EFS_RAFT_LEADER)
         return 0;
     return r->read_in_flight == 2 && r->read_index >= want &&
@@ -2732,6 +2844,7 @@ int efs_raft_read_covers(const struct efs_raft *r, uint64_t want)
 
 uint64_t efs_raft_read_round(const struct efs_raft *r)
 {
+    if (r && r->recv_persisting) return 0;
     return r ? r->read_round : 0;
 }
 

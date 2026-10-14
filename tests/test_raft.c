@@ -2528,7 +2528,7 @@ static void test_recv_batch(void)
         struct efs_raft_msg msgs[3];memset(msgs,0,sizeof(msgs));
         msgs[0].type=EFS_RAFT_MSG_AE_REQ;msgs[0].from=0;msgs[0].to=1;msgs[0].term=2;
         CHECK(efs_raft_recv(r,&msgs[0])==EFS_OK,"establish stable leader");
-        recv_test.replies=0;
+        recv_test.replies=recv_test.barriers=0;
         for(unsigned i=0;i<3;i++) {
             msgs[i]=msgs[0];msgs[i].prev_index=i;msgs[i].prev_term=i?2:0;
             msgs[i].nentries=1;msgs[i].entries[0].term=2;
@@ -2566,8 +2566,8 @@ static void test_recv_batch(void)
             msgs[1]=msgs[2];msgs[1].prev_index=3;msgs[1].prev_term=2;msgs[1].leader_commit=4;
             msgs[2]=msgs[1];msgs[2].prev_index=4;msgs[2].nentries=0;msgs[2].term=3;
             CHECK(efs_raft_recv_batch(r,msgs,3)==EFS_OK,"flush before duplicate/term boundary");
-            CHECK(recv_test.barriers==barriers+1 && recv_test.applies==4 && recv_test.replies==6,
-                  "boundary ACKs/apply retain order");
+            CHECK(recv_test.barriers==barriers+2 && recv_test.applies==4 && recv_test.replies==6,
+                  "append and higher-term hard state have separate durable boundaries; ACK/apply order retained");
             /* Two 600-KiB requests must not share a >1-MiB hold. */
             uint8_t *big=calloc(1,600*1024);
             CHECK(big!=NULL,"byte-bound fixture");
@@ -2612,7 +2612,7 @@ static void test_recv_batch_noop(void)
         m[0].type=EFS_RAFT_MSG_AE_REQ;m[0].from=0;m[0].to=1;
         m[0].group=2;m[0].term=2;
         CHECK(efs_raft_recv(r,&m[0])==EFS_OK,"noop establish leader");
-        recv_test.replies=0;
+        recv_test.replies=recv_test.barriers=0;
         m[0].nentries=1;m[0].entries[0].term=2;
         m[0].entries[0].cmd=(const uint8_t*)"a";m[0].entries[0].clen=1;
         m[0].leader_commit=1;
@@ -2668,7 +2668,7 @@ static void test_recv_batch_overlap(void)
         struct efs_raft *r=test_raft_new(&cfg);CHECK(r!=NULL,"overlap fixture");
         struct efs_raft_msg m[3];memset(m,0,sizeof(m));
         m[0].type=EFS_RAFT_MSG_AE_REQ;m[0].from=0;m[0].to=1;m[0].group=2;m[0].term=2;m[0].boot_id=2;
-        CHECK(efs_raft_recv(r,m)==EFS_OK,"overlap leader established");recv_test.replies=0;
+        CHECK(efs_raft_recv(r,m)==EFS_OK,"overlap leader established");recv_test.replies=recv_test.barriers=0;
         m[0].nentries=1;m[0].entries[0]=(struct efs_raft_entry){2,1,(const uint8_t*)"a"};m[0].leader_commit=1;
         m[1]=m[0];m[1].nentries=2;m[1].entries[1]=(struct efs_raft_entry){2,1,(const uint8_t*)"b"};m[1].leader_commit=2;
         m[2]=m[0];m[2].prev_index=2;m[2].prev_term=2;m[2].leader_commit=3;

@@ -713,7 +713,8 @@ static void test_raft_on_disk_store(void)
 
 static struct efs_raft_disk *recv_disk;
 static unsigned recv_acks, recv_applies;
-static int recv_crash_before_apply;
+static int recv_crash_at_ack;
+static unsigned recv_ack_target,recv_apply_at_ack;
 static int durable_recv_send(void *ctx,const struct efs_raft_msg *m)
 {
     (void)ctx;
@@ -722,8 +723,8 @@ static int durable_recv_send(void *ctx,const struct efs_raft_msg *m)
                                                    efs_raft_disk_synced_bytes(recv_disk));
         CHECK(m->match_index<=covered,"follower ACK covered despite another group's shared hold");
         recv_acks++;
-        if (recv_crash_before_apply && recv_acks==3) {
-            CHECK(recv_applies==0,"ACK crash precedes all state-machine apply");
+        if (recv_crash_at_ack && recv_acks==recv_ack_target) {
+            CHECK(recv_applies==recv_apply_at_ack,"ACK crash preserves path-specific durable apply ordering");
             CHECK(efs_raft_disk_sync_depth(recv_disk)==1,"ACK crash retains unrelated hold ownership");
             _exit(failures?1:0);
         }
@@ -738,9 +739,9 @@ static int durable_recv_apply(void *ctx,uint64_t index,uint64_t term,
                         efs_raft_disk_synced_bytes(recv_disk)),"follower applies durable bytes");
     recv_applies++;return EFS_OK;
 }
-static void test_recv_batch_crash(int before_apply)
+static void test_recv_batch_crash(int at_ack,int mode)
 {
-    recv_crash_before_apply=before_apply;
+    recv_crash_at_ack=at_ack;recv_ack_target=mode==2?1:3;recv_apply_at_ack=mode?3:0;
     pid_t child=fork();CHECK(child>=0,"fork receive crash");
     if(child==0) {
         recv_disk=efs_raft_disk_open(g_dir,EFS_RAFT_DISK_SYNC);
@@ -762,8 +763,10 @@ static void test_recv_batch_crash(int before_apply)
             msgs[i].entries[0].cmd=(const uint8_t*)"new";msgs[i].entries[0].clen=3;
             msgs[i].leader_commit=i+1;
         }
-        CHECK(efs_raft_recv_batch(r,msgs,3)==EFS_OK,"receive durable batch");
-        CHECK(recv_acks==3 && recv_applies==3,"every successful ACK/apply issued");
+        if(mode==0)CHECK(efs_raft_recv_batch(r,msgs,3)==EFS_OK,"receive durable cohort");
+        else if(mode==1){for(unsigned i=0;i<3;i++)CHECK(efs_raft_recv(r,&msgs[i])==EFS_OK,"single fallback durable despite foreign hold");}
+        else {msgs[0].nentries=3;msgs[0].entries[1]=msgs[0].entries[2]=msgs[0].entries[0];msgs[0].leader_commit=3;CHECK(efs_raft_recv(r,msgs)==EFS_OK,"multi-entry fallback durable despite foreign hold");}
+        CHECK(recv_acks==recv_ack_target && recv_applies==3,"every successful ACK/apply issued");
         CHECK(efs_raft_disk_sync_depth(recv_disk)==1,"does not consume another group's hold");
         _exit(failures?1:0); /* No destructor or shared-hold release can mask the boundary. */
     }
@@ -777,6 +780,39 @@ static void test_recv_batch_crash(int before_apply)
         CHECK(st_check(store,1,2,"other"),"shared barrier retains other group bytes");
         efs_raft_disk_close(disk);
     }
+    rmtree(g_dir);
+}
+
+/* Vote/term persistence cannot borrow another submitter's unclosed hold. */
+static int hard_vote_reply(void *ctx,const struct efs_raft_msg *m)
+{
+    struct efs_raft_disk *disk=ctx;
+    if(m->type==EFS_RAFT_MSG_VOTE_REP && m->vote_granted){
+        CHECK(m->term==3,"vote has persisted current term");
+        CHECK(efs_raft_disk_synced_bytes(disk)==efs_raft_disk_bytes(disk),"vote ACK follows its own durable hard-state boundary");
+        CHECK(efs_raft_disk_sync_depth(disk)==1,"vote does not consume foreign hold");
+        _exit(failures?1:0);
+    }
+    return EFS_OK;
+}
+static void test_hard_state_foreign_hold(void)
+{
+    pid_t child=fork();CHECK(child>=0,"fork held hard-state test");
+    if(child==0){
+        struct efs_raft_disk*d=efs_raft_disk_open(g_dir,EFS_RAFT_DISK_SYNC);if(!d)_exit(1);
+        struct efs_raft_store*st=efs_raft_disk_group(d,EFS_RAFT_GROUP_SHARD);
+        struct efs_raft_cfg cfg={0};cfg.id=1;cfg.n=3;cfg.store=st;cfg.store_ctx=st;cfg.send=hard_vote_reply;cfg.net=d;
+        struct efs_raft*r=efs_raft_new(&cfg);if(!r)_exit(2);
+        CHECK(efs_raft_disk_sync_hold(d)==EFS_OK,"foreign hard-state hold");
+        struct efs_raft_store*other=efs_raft_disk_group(d,EFS_RAFT_GROUP_CTRL);
+        CHECK(st_append(other,1,2,"other")==EFS_OK,"foreign pending bytes before vote");
+        struct efs_raft_msg m={0};m.type=EFS_RAFT_MSG_VOTE_REQ;m.from=2;m.to=1;m.term=3;m.boot_id=2;
+        (void)efs_raft_recv(r,&m);_exit(3); /* successful reply must crash first */
+    }
+    int status=0;if(child>0){waitpid(child,&status,0);CHECK(WIFEXITED(status)&&WEXITSTATUS(status)==0,"hard-state ACK proof child");}
+    struct efs_raft_disk*d=efs_raft_disk_open(g_dir,EFS_RAFT_DISK_SYNC);CHECK(d!=NULL,"cold vote reopen");
+    if(d){uint64_t term=0;int32_t vote=-1;struct efs_raft_store*st=efs_raft_disk_group(d,EFS_RAFT_GROUP_SHARD);
+        CHECK(st->load_hard(st,&term,&vote)==EFS_OK&&term==3&&vote==2,"ACKed term/vote survive crash without releasing other hold");efs_raft_disk_close(d);}
     rmtree(g_dir);
 }
 
@@ -1056,8 +1092,8 @@ int main(void)
     test_bounded_history_cache();
     test_four_voter_permanent_loss();
     test_backlog_byte_accounting();
-    test_recv_batch_crash(0);
-    test_recv_batch_crash(1);
+    for(int mode=0;mode<3;mode++){test_recv_batch_crash(0,mode);test_recv_batch_crash(1,mode);}
+    test_hard_state_foreign_hold();
     test_matches_mem();
     test_hold_covers_batch();
     test_nested_hold_wait();

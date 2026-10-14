@@ -6698,6 +6698,49 @@ static void host_note_queued_reads(struct efs_raft_host *h,
     }
 }
 
+static int host_receive_persist(void *net, int (*persist)(void *), void *ctx)
+{
+    struct efs_raft_host *h = net;
+    /* The core owns and fences the pending group/cohort or store call. Keep the pump's KV
+     * hold and inbox credits; only its fenced store operation leaves h->mu. This is
+     * synchronous on the pump thread so disk deferral TLS stays with its owner.
+     * Stop joins that owner before releasing any Raft or decoded-frame memory. */
+    /* Revoke cached authority before unlocking, including a higher-term
+     * transition whose old published view could still say LEADER. The core
+     * exposes only stable commit/apply frontiers and no read proof in phase. */
+    for (int gi=0; gi<HOST_NGROUPS; gi++)
+        if (h->g[gi].hosted) host_publish_view(h,gi);
+    host_waiters_wake(h);
+    pthread_mutex_unlock(&h->mu);
+#ifdef EFS_FAULTS
+    /* Private qualification only: retain the real cohort at its barrier while
+     * a controller checks unrelated lock progress and graceful shutdown. */
+    const char *pause = getenv("EFS_FAULT_RECV_PERSIST_FILE");
+    if (pause && *pause) {
+        int announced = 0;
+        for (;;) {
+            char mode[16] = {0};
+            FILE *f = fopen(pause, "r");
+            if (f) { (void)fgets(mode, sizeof(mode), f); fclose(f); }
+            if (strcmp(mode, "PAUSE\n") && strcmp(mode, "PAUSE")) break;
+            if (!announced) {
+                char marker[1024];
+                int n = snprintf(marker, sizeof(marker), "%s.entered", pause);
+                if (n > 0 && (size_t)n < sizeof(marker)) {
+                    f = fopen(marker, "w");
+                    if (f) { fprintf(f, "%ld\n", (long)getpid()); fclose(f); }
+                }
+                announced = 1;
+            }
+            usleep(1000);
+        }
+    }
+#endif
+    int rc = persist(ctx);
+    pthread_mutex_lock(&h->mu);
+    return rc;
+}
+
 /* h->mu and the pump's KV hold are owned on entry/return. Only a fully
  * returned recv_batch may hand off: its log barrier, replies and ordered apply
  * have finished (or the core has fenced failure). Publish that completed
@@ -7973,6 +8016,7 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
     cfg.store_ctx = st;
     cfg.send = host_send;
     cfg.send_ready = host_send_ready;
+    cfg.recv_persist = host_receive_persist;
     cfg.preserve_ack_window = h->s && h->s->storage_engine;
     {
         const char *mode = getenv("EFS_RAFT_BATCH_NOOP");

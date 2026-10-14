@@ -13,7 +13,7 @@ code=r'''
 #include <assert.h>
 #include <stdio.h>
 #define EFS_RAFT_LEADER 2
-struct efs_raft {int storage_failed,role,quorum;uint64_t read_round,read_index,current_term,last_applied;
+struct efs_raft {int recv_persisting,storage_failed,role,quorum;uint64_t read_round,read_index,current_term,last_applied;
  uint64_t read_epoch,read_proven_round,read_proven_index,read_proven_term;
  uint32_t read_proven_cfg_old,read_proven_cfg_new,log_old,log_new;
  uint64_t read_applied_round,read_applied_index,read_applied_term;
@@ -58,6 +58,9 @@ int main(void){
  r.role=2;r.storage_failed=1;v=view(&r,60);assert(!v.proven_done);
  r.storage_failed=0;
  r.read_applied_round=11;r.read_applied_index=50;r.read_applied_term=9;r.read_applied_cfg_old=7;
+ r.recv_persisting=1;uint64_t blocked_round=99,blocked_index=99;
+ assert(!efs_raft_read_context(&r)&&!efs_raft_read_proven(&r,&blocked_round,&blocked_index)&&!blocked_round&&!blocked_index);
+ r.recv_persisting=0;
  uint64_t epoch=r.read_epoch;read_proof_forget(&r);assert(r.read_epoch==epoch+1);v=view(&r,60);assert(!v.proven_done);
  assert(!r.read_proven_index && !r.read_proven_term && !r.read_proven_cfg_old && !r.read_proven_cfg_new);
  assert(!r.read_applied_round && !r.read_applied_index && !r.read_applied_term && !r.read_applied_cfg_old && !r.read_applied_cfg_new);
