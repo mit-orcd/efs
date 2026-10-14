@@ -1494,6 +1494,12 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+W106 fix pending AMD qualification. Failed preferred GET peers move behind
+other verified-fragment candidates only until the original read deadline;
+no global health/placement change, window or timeout increase. Focused checks
+PASS; previous degraded failures retained. .efs/packing/containers/expiry OFF.
+
+[AMD RDMA namespace admission](../status/rdma-namespace-admission-20261014.md):
 **a7e2b6b7d deployed; loaded namespace PASS** — early proven dual-group leader
 routing for unlink/link/rename; full native PASS. Three quiet core cohorts each
 1512/1512, zero admission refusals; unlink/link/root-rename21 each, deep42 and
