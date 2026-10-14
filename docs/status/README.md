@@ -1,16 +1,17 @@
 [AMD RDMA namespace admission](rdma-namespace-admission-20261014.md):
-merged ac22 baseline core1512,1512,1509/1512; unlink/root-rename EBUSY and one
-deep15s timeout reproduced, paused follower read failed180s after24MiB.
-Early proven dual-group leader routing extended to unlink/link/rename;
-focused regressions PASS, fixed AMD qualification pending. W106 OPEN.
+**a7e2b6b7d deployed; loaded namespace PASS** — early proven dual-group leader
+routing for unlink/link/rename; full native PASS. Three quiet core cohorts each
+1512/1512, zero admission refusals; unlink/link/root-rename21 each, deep42 and
+crazy-dir21 PASS; peer/cold/EOF all PASS. Paused-follower32MiB gate FAIL after
+first8MiB verified and next read-length assertion; W106 aggregate OPEN.
 Files/RDMA/direct; .efs/packing/containers/expiry OFF, unchanged budgets, no push.
 
-[Latest RDMA branch integration](rdma-merged-qualification-20261013.md):
+[Historical RDMA branch integration](rdma-merged-qualification-20261013.md):
 all other local branch commits through ORCD `a57437549` / devel `382d537d6`
 integrated; shared Raft receive-batch mutex handoff may reduce admission waits.
-Local handoff regression and doc checks PASS; merged AMD qualification NOTRUN.
-Previous unlink/link EBUSY remain OPEN; earlier fc passes do not qualify this
-merge. Files/RDMA/direct; .efs/packing/containers/expiry OFF, no push.
+Local handoff regression and doc checks PASS; subsequent ac22 AMD run
+reproduced unlink/root-rename EBUSY and one deep timeout. Superseded by the
+a7 namespace fix above; earlier fc passes do not qualify that later source. Files/RDMA/direct; .efs/packing/containers/expiry OFF, no push.
 
 [Merged AMD RDMA / W100 / maintenance qualification](rdma-merged-qualification-20261013.md):
 **PARTIAL onfc2460b19** — all11 reviewed commits integrated/deployed. Full native
@@ -860,7 +861,7 @@ This index adds traceable IDs to the Intel acceptance follow-ups; it does not ch
 | [W103](../backlog/work-items.md#w103) | Investigate intermittent Intel persistence and stats timeouts | Liveness/performance investigation; open. |
 | [W104](../backlog/work-items.md#w104) | Decide and gate writable shared mmap support | Feature scope/design follow-up; deferred, currently unsupported by specification. |
 | [W105](../backlog/work-items.md#w105) | Stable NFS file handles across EFS client restarts | Gateway acceptance/correctness investigation; open. |
-| [W106](../backlog/work-items.md#w106) | RDMA acceptance: AMD software / orcd-test hardware IB/RDMA | Open validation; test placement decided. |
+| [W106](../backlog/work-items.md#w106) | RDMA acceptance: AMD software / orcd-test hardware IB/RDMA | Open: a7 AMD loaded namespace4536/4536 PASS; degraded read FAIL; hardware gates remain. See [current ledger](rdma-namespace-admission-20261014.md). |
 
 Pending choices retain their existing homes: W99 cache-only pressure escalation and numeric thresholds; W54 additional live-reference GC guard; W66/W74 metadata mechanism under accepted D36. W104 separately records the deferred shared-mmap scope choice. No new D number or policy acceptance is implied.
 

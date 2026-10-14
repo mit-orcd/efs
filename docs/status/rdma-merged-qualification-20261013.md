@@ -1,5 +1,8 @@
 # AMD merged W100 / maintenance / RDMA qualification
 
+Historical exact-source checkpoint. Subsequent ac22 merged load failures and
+a7 namespace routing fix/results are in the [current AMD ledger](rdma-namespace-admission-20261014.md).
+
 W100 / W106. Branch `devel-rdma`; frozen candidate
 **fc2460b191c30cdccd2346b25433d786b52bbc1a**. Status: PARTIAL; integrated/tested, two loaded mutation refusals remain.
 Normal native build timestamp2026-10-14T03:26:40Z; fault client03:28:55Z,
@@ -14,7 +17,7 @@ No push; no TCP comparison. `.efs` client/server, packing, containers, expiry
 and repair experiment OFF. Files/direct, strict segmented RDMA, Soft-RoCE
 rxe0/GID1 on same-host AMD-395. Explicit metadata balancing1 retained.
 
-## Subsequent branch integration: AMD rerun pending
+## Historical branch integration checkpoint
 
 Integrated reviewed local branch endpoint `devel-orcd-package1`
 `a57437549` and its `devel` ancestor `382d537d6` into `devel-rdma`.
