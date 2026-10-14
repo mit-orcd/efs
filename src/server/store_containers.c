@@ -250,16 +250,21 @@ static int directory_empty(const char *path)
 }
 static struct target *target_at(struct efsd_server *s,const char *path)
 {
+    struct target *best=NULL;size_t longest=0;
     for(unsigned i=0;i<s->storage_path_count;i++){
         struct target *t=s->container_targets[i];
         if(!t)continue;
         size_t n=strlen(t->root);
-        if(!strncmp(path,t->root,n)&&path[n]=='/')return t;
+        /* Files can have nested targets; match the same longest canonical
+         * root as PUT routing, rather than an earlier outer target. */
+        if(n>longest && !strncmp(path,t->root,n) && path[n]=='/'){
+            best=t;longest=n;
+        }
     }
-    return NULL;
+    return best;
 }
-/* Container deployments share the same durable physical hierarchy for their
- * buffered metadata fragments. Files deployments retain their existing path. */
+/* Both engines share this pinned-inode ancestry barrier. Every call still
+ * syncs the changed containing directory; data-file barriers stay separate. */
 int server_container_sync_parents(struct efsd_server *s,const char *path)
 {
     struct target *t=target_at(s,path);

@@ -706,8 +706,8 @@ $(filter src/client/%.o,$(COMMON_OBJS)) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ): src/
 src/client/efs_fuse.o: src/client/reply_buffers.h src/client/stop_control.h
 src/raft/raft_disk.o src/raft/raft_log.o: src/raft/raft_disk_internal.h
 
-tests/test_store_durability: tests/test_store_durability.c src/server/store.c src/server/server_internal.h src/bench/writer.o src/bench/store_containers.o $(LIB)
-	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o src/bench/store_containers.o $(LIB) $(LDFLAGS)
+tests/test_store_durability: tests/test_store_durability.c src/server/store.c src/server/store_containers.c src/server/server_internal.h src/bench/writer.o $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o $(LIB) $(LDFLAGS)
 
 tests/test_store_overwrite: tests/test_store_overwrite.c src/server/store.c src/server/data_pressure.h src/server/server_internal.h src/bench/writer.o src/bench/store_containers.o $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o src/bench/store_containers.o $(LIB) $(LDFLAGS)

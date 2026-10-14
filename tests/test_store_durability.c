@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 static unsigned file_syncs,directory_syncs,sync_opens;
+static int booting;
 static int fail_file,fail_directory,fail_directory_at,interrupt_directory,fail_directory_close;
 static int barrier_open(const char *path,int flags,...)
 {
@@ -24,7 +25,7 @@ static int barrier_sync(int fd)
     struct stat st;assert(!fstat(fd,&st));
     if(S_ISDIR(st.st_mode)) {
         directory_syncs++;
-        assert(file_syncs); /* never publish the name before fencing bytes */
+        assert(booting || file_syncs); /* never publish the name before fencing bytes */
         if(interrupt_directory) {interrupt_directory--;errno=EINTR;return -1;}
         if(fail_directory || directory_syncs==(unsigned)fail_directory_at) {errno=EIO;return -1;}
     } else {
@@ -42,12 +43,22 @@ static int barrier_close(int fd)
 #define open barrier_open
 #define fsync barrier_sync
 #define close barrier_close
+#include "../src/server/store_containers.c"
 #include "../src/server/store.c"
 #undef open
 #undef fsync
 #undef close
 int main(void)
 {
+    /* Files permit nested roots: pinned proof ownership follows longest root. */
+    struct efsd_server *routes=calloc(1,sizeof(*routes));assert(routes);
+    struct target outer={0},inner={0};strcpy(outer.root,"/storage");strcpy(inner.root,"/storage/nested");
+    routes->storage_path_count=2;routes->container_targets[0]=&outer;routes->container_targets[1]=&inner;
+    assert(target_at(routes,"/storage/nested/data/body")==&inner);
+    assert(target_at(routes,"/storage/data/body")==&outer);
+    assert(!target_at(routes,"/storage-other/body"));
+    routes->container_targets[0]=&inner;routes->container_targets[1]=&outer;
+    assert(target_at(routes,"/storage/nested/data/body")==&inner);free(routes);
     char dir[]="/tmp/efs-store-durability-XXXXXX";assert(mkdtemp(dir));
     char path[1024];snprintf(path,sizeof(path),"%s/a/b/body",dir);
     uint8_t *data;assert(!posix_memalign((void **)&data,4096,65536));memset(data,0x37,65536);
@@ -60,25 +71,27 @@ int main(void)
     /* A configured but unsealed root cannot shorten the ACK barrier. */
     file_syncs=directory_syncs=0;shard_io_thread(&a);
     assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==5);
-    /* Startup seals root ancestry before publishing this initialized target.
-     * Two descendant directories and the root remain required on every PUT. */
-    server->container_targets[0]=server;
+    /* Real initialized files target, with an initially empty pinned cache. */
+    booting=1;assert(!server_storage_engine_init(server));booting=0;
+    file_syncs=directory_syncs=0;shard_io_thread(&a);
+    assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==3);
+    file_syncs=directory_syncs=0;shard_io_thread(&a);
+    assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==1);
     for(int direct=0;direct<2;direct++) for(int bounce=0;bounce<2;bounce++) {
         a.direct=direct;a.buf=data+bounce;
         for(int attempt=0;attempt<2;attempt++) {
             file_syncs=directory_syncs=0;shard_io_thread(&a);
-            assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==3 && !sync_opens);
+            assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==1 && !sync_opens);
         }
         file_syncs=directory_syncs=0;fail_file=1;shard_io_thread(&a);
         assert(a.result==EFS_ERR_IO && file_syncs==1 && !directory_syncs);fail_file=0;
         file_syncs=directory_syncs=0;fail_directory=1;shard_io_thread(&a);
         assert(a.result==EFS_ERR_IO && file_syncs==1 && directory_syncs==1);fail_directory=0;
-        file_syncs=directory_syncs=0;fail_directory_at=3;shard_io_thread(&a);
-        assert(a.result==EFS_ERR_IO && file_syncs==1 && directory_syncs==3);fail_directory_at=0;
+
         file_syncs=directory_syncs=0;shard_io_thread(&a);
-        assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==3);
+        assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==1);
         file_syncs=directory_syncs=0;interrupt_directory=1;shard_io_thread(&a);
-        assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==4);
+        assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==2);
         file_syncs=directory_syncs=0;fail_directory_close=1;shard_io_thread(&a);
         assert(a.result==EFS_ERR_IO && file_syncs==1 && directory_syncs==1);fail_directory_close=0;
     }
@@ -89,15 +102,39 @@ int main(void)
         file_syncs=directory_syncs=0;
         assert(!pthread_create(&thread,NULL,shard_io_thread,&a));
         assert(!pthread_join(thread,NULL));
-        assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==3);
+        assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==1);
     }
+    /* Restart discards runtime hints; first publication reproves ancestry. */
+    server_storage_engine_close(server);
+    booting=1;assert(!server_storage_engine_init(server));booting=0;
+    file_syncs=directory_syncs=0;shard_io_thread(&a);
+    assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==3);
+    file_syncs=directory_syncs=0;shard_io_thread(&a);
+    assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==1);
+    /* Failure on an unknown ancestor must not admit any hint. */
+    snprintf(a.path,sizeof(a.path),"%s/new/deep/body",dir);
+    file_syncs=directory_syncs=0;fail_directory_at=3;shard_io_thread(&a);
+    assert(a.result==EFS_ERR_IO && directory_syncs==3);fail_directory_at=0;
+    file_syncs=directory_syncs=0;shard_io_thread(&a);
+    assert(a.result==EFS_OK && directory_syncs==3);
+    file_syncs=directory_syncs=0;shard_io_thread(&a);
+    assert(a.result==EFS_OK && directory_syncs==1);
+    /* A deleted/recreated directory cannot reuse the pinned inode proof. */
+    assert(!unlink(a.path));char sub[1024];snprintf(sub,sizeof(sub),"%s/new/deep",dir);assert(!rmdir(sub));assert(!mkdir(sub,0755));
+    file_syncs=directory_syncs=0;shard_io_thread(&a);
+    assert(a.result==EFS_OK && directory_syncs==2);
+    assert(!unlink(a.path));assert(!rmdir(sub));snprintf(sub,sizeof(sub),"%s/new",dir);assert(!rmdir(sub));
+    strcpy(a.path,path);
     /* A textual prefix is not an initialized ancestor; retain all barriers. */
     server->storage_paths[0][strlen(dir)-1]=0;
     file_syncs=directory_syncs=0;shard_io_thread(&a);
     assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==5);
+    server_storage_engine_close(server);
     assert(!pthread_mutex_destroy(&server->lock));free(server);
     assert(!unlink(path));snprintf(path,sizeof(path),"%s/a/b",dir);assert(!rmdir(path));
-    snprintf(path,sizeof(path),"%s/a",dir);assert(!rmdir(path));assert(!rmdir(dir));free(data);
-    puts("production PUT durability: buffered/direct/bounce file and pathname barriers, retries and fault refusal PASS");
+    snprintf(path,sizeof(path),"%s/a",dir);assert(!rmdir(path));snprintf(path,sizeof(path),"%s/.efs-engine",dir);assert(!unlink(path));
+    snprintf(path,sizeof(path),"%s/.efs-engine-lock",dir);assert(!unlink(path));
+    assert(!rmdir(dir));free(data);
+    puts("production PUT durability: buffered/direct/bounce file and pathname barriers, pinned ancestry, restart/recreation, retries and fault refusal PASS");
     return 0;
 }
