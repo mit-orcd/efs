@@ -1,3 +1,13 @@
+[Intel direct checksum-tail EIO correction](intel-direct-tail-eio-20261014.md):
+**Bounded smoke PASS; devel f76101e8f deployed to main Intel and all four clients.**
+Direct GET now accepts complete32byte buffered-format digest tails as well as
+4KiB padded tails, retaining payload verification. Old control reproduces;
+both Intel focused smokes pass, including corruption/truncation refusal.
+32previous EIO +32controls pass through each client; fsynced four-host bytes/EOF
+pass. Original nine fragments unchanged. TCP/direct/files, optional features
+OFF; independent external clients preserved. Long jobs drained and left stopped;
+no full suites or complete old-tree inventory run.
+
 [Intel live tiny-file strace/perf](intel-live-performance-20261014.md):
 **Diagnostic capture PASS; speedup NOTRUN; old-tree read correctness FAIL.**
 Four main Intel daemons and four clients, TCP/direct/files, optional features

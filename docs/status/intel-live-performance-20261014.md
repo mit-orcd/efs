@@ -6,6 +6,12 @@ the main Intel cluster and its clients, following
 [package 3 deployment readiness](intel-external-clients-deployment-20261014.md).
 This does not reopen W100 or qualify a performance implementation.
 
+Subsequent correction: [direct checksum-tail EIO](intel-direct-tail-eio-20261014.md)
+identifies and fixes the stored buffered-tail/direct-reader incompatibility.
+Main Intel/all four clients redeployed;32previous failures per client pass the
+bounded smoke. Historical observations below remain unchanged; a complete
+old-tree inventory was not rerun.
+
 ## Tested deployment and workload
 
 Frozen running source `85f2a199aa391647a1ac49ab43f1a4f1e5d5880e`, devel,
