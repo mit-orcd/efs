@@ -817,6 +817,7 @@ static void write_accept_end(int slot)
  * One chunk is charged twice: its chunk record and companion inode record.
  * This is a conservative REPORT workload budget, separate from data buffers. */
 #define REPORT_PRESSURE_RECORD_BYTES 2048ull
+#define EFS_REPORT_REPAIR_MAX 8
 _Static_assert(sizeof(struct efs_chunk_rec) + sizeof(struct efs_ino_size_rec) +
                sizeof(uint64_t) <= REPORT_PRESSURE_RECORD_BYTES,
                "REPORT admission byte charge must cover a chunk and inode");
@@ -1803,13 +1804,20 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
     uint64_t *cseq = NULL;
     struct efs_ino_size_rec *irecs = NULL;
     uint32_t cn = 0, in = 0;
-    /* A chunk rec whose ino has no irec makes the server guess the size
-     * as the chunk end ((ci+1) × 128 KiB, raft_host.c "sz == 0"), and a
-     * later irec cannot shrink it: ecopy's mpfr Makefile.in was 32398
-     * bytes on XFS and 131072 on efs (Sep 30 03:18:27, ecopy.strace).
-     * The ino mark trails the chunk mark on every write path, so a
-     * snapshot taken between the two ships the chunk alone. Count the
-     * chunk inos that are not in the ino set and reserve irecs for them. */
+    /* Chunk-rec inos whose staged row was missing: validated by a read-only
+     * server getattr after the snapshot unlock (RPCs do not belong under the
+     * table lock). Bounded; beyond the cap the rec ships without a size
+     * and the server rejects the batch (visible EIO, retained, retried). */
+    efs_ino_t repair[EFS_REPORT_REPAIR_MAX];
+    uint32_t n_repair = 0;
+    /* A chunk rec whose ino has no irec is REJECTED by the server
+     * (raft_host.c report loop, "pack-nosize"): an EOF guessed from the
+     * chunk end would commit to the grow-only lane MAX and a later irec
+     * could not shrink it — ecopy's mpfr Makefile.in was 32398 bytes on
+     * XFS and 131072 on efs (Sep 30 03:18:27, ecopy.strace). The ino mark
+     * trails the chunk mark on every write path, so a snapshot taken
+     * between the two would ship the chunk alone. Count the chunk inos
+     * that are not in the ino set and reserve irecs for them. */
     uint64_t extra_cap = 0;
     for (uint64_t i = 0; i < ds.chunk_count; i++) {
         if (ds.chunk_inos[i] &&
@@ -1904,14 +1912,11 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
         if (k < in)
             continue;
         if (efs_export_get_inode(&g_client.export, cino, &inode) != 0) {
-            static int logged;
-            if (logged < 10) {
-                logged++;
-                fprintf(stderr,
-                        "efs: report chunk rec ino=%llu ci=%u has no staged "
-                        "row; server will size it to the chunk end\n",
-                        (unsigned long long)cino, crecs[c].chunk_index);
-            }
+            /* Staged row unavailable: the shard tab may not be instantiated
+             * (transient), or the inode was unlinked mid-report. Defer the
+             * decision to the repair pass below the snapshot unlock. */
+            if (n_repair < EFS_REPORT_REPAIR_MAX)
+                repair[n_repair++] = cino;
             continue;
         }
         irecs[in].ino = cino;
@@ -1925,6 +1930,53 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
         extra_cap--;
     }
     report_snapshot_unlock(only_ino);
+
+    /* Repair chunk-rec inos whose staged row was missing at snapshot time.
+     * Read the server row without adopting it into the local staging table.
+     * A committed EOF can lag accepted unpublished writes. Staging it before
+     * validation would let the next snapshot bypass this check and publish
+     * that stale EOF. NOT_FOUND means the inode was unlinked mid-report —
+     * its recs ship without a size and the server skips them as deleted.
+     * A remote row whose size does not cover this batch's highest dirty
+     * chunk end means the dirty EOF was lost with the evicted row: ship no
+     * size and let the server reject the batch (visible EIO; the retained
+     * snap is retried by the next fsync/close). Attaching that smaller
+     * committed size instead would silently publish a short EOF. */
+    for (uint32_t r = 0; r < n_repair; r++) {
+        struct efs_inode ri;
+        uint64_t cover = 0;
+
+        if (efs_client_rpc_getattr(g_client.export_id, repair[r], &ri) != EFS_OK)
+            continue;
+        for (uint32_t c = 0; c < cn; c++)
+            if (crecs[c].ino == repair[r]) {
+                uint64_t end = ((uint64_t)crecs[c].chunk_index + 1) *
+                               data_chunk_size();
+                if (end > cover)
+                    cover = end;
+            }
+        if (ri.size < cover) {
+            static int logged;
+            if (logged < 10) {
+                logged++;
+                fprintf(stderr,
+                        "efs: report ino=%llu server size %llu below dirty "
+                        "coverage %llu; server rejects the batch, fsync fails "
+                        "and the report is retried\n",
+                        (unsigned long long)repair[r],
+                        (unsigned long long)ri.size, (unsigned long long)cover);
+            }
+            continue;
+        }
+        irecs[in].ino = repair[r];
+        irecs[in].size = ri.size;
+        irecs[in].mtime = ri.mtime;
+        irecs[in].mtime_nsec = ri.mtime_nsec;
+        if (efs_client_mtime_is_pinned(repair[r]))
+            irecs[in].flags = EFS_INO_REC_F_TIMES;
+        irecs[in].atime = ri.atime;
+        in++;
+    }
 
     /* A flush of a clean fd (the rd() after wr() already published)
      * used to send a sync REPORT with no records. That is a Raft
