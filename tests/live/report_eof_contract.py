@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Cross-host EOF contract oracle using an EFS_FAULTS private client.
 
-Run on Intel1 (the fixture mount must be local); peer reads run on the peer
-host over ssh. Baseline failure is retained. In fixed mode rejected
+Run on a local fixture mount; peer reads use another host over ssh or
+--peer-mount for a separate local FUSE client (AMD Soft-RoCE). Baseline failure is retained. In fixed mode rejected
 publication must retain bytes for retry after disabling the fault.
 
 Orchestration (fixture start/stop, builds) is driven from the Mac, whose
@@ -29,9 +29,18 @@ ap.add_argument('fault', type=Path)
 ap.add_argument('--expect', choices=['rounded', 'refused'], required=True)
 ap.add_argument('--peer', default='intel2_efs',
                 help='ssh alias for the peer host, resolved on the mount host')
+ap.add_argument('--peer-mount', type=Path, help='independent local peer mount; avoids SSH for same-host RDMA fixtures')
 args=ap.parse_args()
+if args.peer_mount and not os.path.ismount(args.peer_mount):ap.error('independent peer mount required')
+if args.peer_mount and args.peer_mount.resolve()==args.mount.resolve():ap.error('peer mount must be distinct')
 if not os.path.ismount(args.mount):ap.error('private mounted fixture required')
 root=Path(tempfile.mkdtemp(prefix='w100-eof-',dir=args.mount))
+
+
+def peer_command(code, path, *extra):
+    target=args.peer_mount/path.relative_to(args.mount) if args.peer_mount else path
+    cmd=['python3','-c',code,str(target),*map(str,extra)]
+    return subprocess.check_output(cmd if args.peer_mount else ['ssh',args.peer,shlex.join(cmd)],text=True)
 
 
 def peer(path, size):
@@ -44,7 +53,7 @@ try:
 finally:os.close(fd)
 print(json.dumps(dict(size=s,high=high,low=low,past=past)))
 '''
-    return json.loads(subprocess.check_output(['ssh',args.peer,shlex.join(['python3','-c',code,str(path),str(size)])],text=True))
+    return json.loads(peer_command(code,path,size))
 
 
 rows=[]
@@ -85,8 +94,7 @@ try:
                 retry=peer(path,expected);row['after_retry']=retry
                 assert retry['size']==expected and retry['past']=='',row
                 if name=='sparse':assert retry['high']=='48' and retry['low']=='4c',row
-                else:assert subprocess.check_output(['ssh',args.peer,shlex.join(['python3','-c',
-                    'import pathlib,sys;assert pathlib.Path(sys.argv[1]).read_bytes()==b"S"*512',str(path)])])==b''
+                else:assert peer_command('import pathlib,sys;assert pathlib.Path(sys.argv[1]).read_bytes()==b"S"*512',path)==''
             rows.append(row)
         finally:os.close(fd)
 finally:

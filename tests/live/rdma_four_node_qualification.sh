@@ -21,7 +21,7 @@ stop_nodes() {
  pids=()
 }
 stop_mounts() {
- for mount in "$client_root/mnt" "$client_root/mnt2"; do
+ for mount in "$client_root/mnt" "$client_root/mnt2" "$client_root/mnt-eof"; do
   if mountpoint -q "$mount"; then "$src/scripts/client.sh" stop "$mount" || return 1; fi
  done
 }
@@ -67,6 +67,19 @@ assert not json.load(open(sys.argv[1]))['errors']
 PY
 done
 python3 "$src/tests/posix/posix_2client.py" --local "$client_root/mnt" "$client_root/mnt2" --parent rdma-fixed-peer --results "$work/peer.tsv" > "$work/peer.log" 2>&1 || rc=1
+# Optional W100 faulted client uses the same source/build ID as native daemons.
+# Only this private mount enables omission; installed clients remain native.
+if [ -n "${EFS_GATE_EOF_SOURCE:-}" ]; then
+ [ "$(cat "$EFS_GATE_EOF_SOURCE/SOURCE_COMMIT")" = "$(cat "$src/SOURCE_COMMIT")" ] || exit 1
+ printf 'OFF\n' > "$work/omit-size"
+ printf 'OFF\n' > "$work/other-faults"
+ mkdir -p "$client_root/mnt-eof"
+ EFS_FUSE_LOG="$work/fuse-eof.log" EFS_FAULT_REPORT_SIZE_FILE="$work/omit-size" EFS_FAULT_REPORT_FILE="$work/other-faults" "$EFS_GATE_EOF_SOURCE/scripts/client.sh" "127.0.0.1:$base" "$client_root/mnt-eof"
+ timeout -k 5 180s python3 "$src/tests/live/report_eof_contract.py" "$client_root/mnt-eof" "$work/omit-size" --expect refused --peer-mount "$client_root/mnt2" > "$work/eof.log" 2>&1 || rc=1
+ printf 'OFF\n' > "$work/omit-size"
+ "$src/scripts/client.sh" stop "$client_root/mnt-eof" || exit 1
+ tail -n 2 "$work/eof.log"
+fi
 python3 "$src/tests/posix/posix_persist.py" "$client_root/mnt" --phase prepare --tag rdma-fixed --results "$work/persist-prepare.tsv" > "$work/persist-prepare.log" 2>&1 || rc=1
 stop_mounts
 stop_nodes
