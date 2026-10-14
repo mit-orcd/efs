@@ -1,7 +1,7 @@
 # Private Intel older REPORT / newer PUT ownership — 2026-10-14
 
 **Private Intel TCP/direct I/O qualification PASS on the listed gates;
-W100 aggregate remains OPEN.** Follow-up to
+W100 CLOSED by human acceptance on 2026-10-14.** Follow-up to
 [operation-ID admission and span REPORT ownership](intel-opid-report-correctness-20261014.md).
 Fix commit `28df9c7ebda450ff30261bce6514f0bb62f3f712` adds the ownership guard and regressions; parent
 `5e3e8f3d260e86e9bb4d5c9f94c593f959292687` contains the preceding corrections.
@@ -256,7 +256,10 @@ test controllers are stopped. `/proc` snapshots verify flags and absent trace
 settings; production PIDs/executable hashes/arguments/mounts are unchanged from
 the pre-deployment inventory. No production redeployment occurred.
 
-The tested Intel matrix now passes. **W100 aggregate remains OPEN** for the
-original ORCD REPORT BUSY/EIO and broader sustained/profile acceptance. No ORCD,
+The tested Intel matrix now passes. **W100 is CLOSED by human acceptance on
+2026-10-14.** The user accepts this qualification and directs that a future
+stall encountered through another path or workload be tracked as a new issue.
+The original ORCD REPORT BUSY/EIO and broader sustained/profile acceptance are
+limitations of this evidence, not outstanding W100 closure gates. No ORCD,
 RDMA, buffered-I/O, optional-feature, universal timeout repair or speedup claim
 is made here. Existing failed checkpoints are preserved, not relabelled PASS.

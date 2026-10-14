@@ -1,5 +1,5 @@
 [Intel older REPORT / newer PUT ownership](intel-report-newer-snapshot-20261014.md):
-**Final private Intel TCP/direct matrix PASS; W100 aggregate OPEN.**
+**Final private Intel TCP/direct matrix PASS; W100 CLOSED by human acceptance (Oct14).**
 Fix28df9c7eb retains a newer snapshot's bytes/ranges/pin through an older REPORT.
 Both hosts pass full native and targeted ASan/UBSan/leaks; old control fails.
 Mounted2500/2500, final four concurrent rounds6048/6048, physical cross-host
@@ -7,7 +7,9 @@ peer67/67, both complete recovery/GC fixtures (core216/216/local peer67/67 each)
 two-fsync and paused-daemon gates pass. Final cold14k earlier tiny files,
 2500 new truncate files, sparse EOF and pause bytes pass from both hosts.
 Production unchanged; only normal private processes remain, optional features
-and tracing OFF. Original ORCD EIO/broader acceptance remains open.
+and tracing OFF. Closure does not establish an original ORCD EIO repair or
+broader profile acceptance. Future observed stalls receive a new issue; older
+W100 OPEN verdicts below are historical and superseded by this closure.
 
 [Intel operation-ID admission and REPORT ownership](intel-opid-report-correctness-20261014.md):
 **Two targeted corrections/native+sanitizers PASS; loaded POSIX FAIL; W100 OPEN.**
@@ -941,7 +943,7 @@ This index adds traceable IDs to the Intel acceptance follow-ups; it does not ch
 
 | ID | Task | Recorded state |
 | --- | --- | --- |
-| [W100](../backlog/work-items.md#w100) | Intel concurrent POSIX timeouts and mixed-workload EIO | Correctness/performance investigation; open. The preceding trial passed 110 main and 30 canonical gates. Cleanup-repaired `3d69edb4` passed four 214/214 cores but later namespace/compactor fixtures failed; `5abf8e7b` repairs their setup/oracles. Fresh complete fault and production acceptance remain pending. |
+| [W100](../backlog/work-items.md#w100) | Intel concurrent POSIX timeouts and mixed-workload EIO | CLOSED by human acceptance, Oct14. Final private Intel TCP/direct matrix passes; see the newer-snapshot qualification above. Historical failures remain recorded; future observed stalls receive a new issue. |
 | [W101](../backlog/work-items.md#w101) | Complete and verify the Intel two-million-file workload | Operational acceptance; in progress. |
 | [W102](../backlog/work-items.md#w102) | Complete Intel2 private peer and GC acceptance | Validation follow-up; in progress, aggregate acceptance remains open. |
 | [W103](../backlog/work-items.md#w103) | Investigate intermittent Intel persistence and stats timeouts | Liveness/performance investigation; open. |

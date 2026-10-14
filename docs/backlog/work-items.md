@@ -4987,7 +4987,15 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 
 ## W100 · Intel concurrent POSIX timeouts and mixed-workload EIO
 
-**Class/state:** Correctness/performance investigation; open.
+**Class/state:** Correctness investigation; CLOSED by human acceptance, 2026-10-14.
+
+**Closure decision:** The user accepts W100 as closed on the final private Intel
+TCP/direct qualification. Future stalls encountered through another workload
+or path will be tracked as a new issue with fresh reproduction evidence. This
+closure does not assert that the historical ORCD REPORT BUSY/EIO was reproduced
+and resolved by these Intel fixes, or that untested profiles passed. Historical
+failures and qualification limits below remain evidence; earlier open states,
+remaining actions and gates are superseded for W100 by this decision.
 
 **Oct14 newer-snapshot ownership correction:** [Private Intel follow-up](../status/intel-report-newer-snapshot-20261014.md).
 Fresh qualification reproduces ftruncate EIO on both hosts. An older REPORT can
@@ -4998,8 +5006,9 @@ passes6048/6048 concurrent, physical cross-host67/67, both full recovery/GC
 fixtures (core216/216/local peer67/67 each), two-fsync and daemon pause gates.
 Final cold14k earlier tiny files,2500 new truncate files and sparse/pause bytes
 pass from each host. Production unchanged; no window/deadline/quota tuning.
-Remaining: original ORCD REPORT BUSY/EIO and broader sustained/profile acceptance;
-this Intel TCP/direct matrix does not close the aggregate.
+Qualification limit: original ORCD REPORT BUSY/EIO and broader sustained/profile
+acceptance were not resolved by this Intel matrix. They do not block the human
+closure decision above; a future observed stall receives a new issue.
 
 **Oct14 admission/REPORT correction:** [Private Intel checkpoint](../status/intel-opid-report-correctness-20261014.md).
 Production-code regressions reproduce lease admission's lock dependency and a
@@ -5010,7 +5019,8 @@ REPORTs; all121,319 traced IDs complete. Unchanged clients on the same aged
 stores/running daemons retain37 failures and14 invalid REPORTs. No window,
 deadline, quota or format tuning. Subsequent14k/EOF/pause qualification passes,
 but exposes ftruncate EIO; the newer-snapshot follow-up above records its fix
-and final passing Intel matrix. W100 aggregate/original ORCD EIO remain open.
+and final passing Intel matrix. The earlier open W100 verdict is superseded
+by the closure decision above; no original ORCD root-cause repair is claimed.
 
 **Oct14 default queue guard:** [Intel queue qualification](../status/intel-queue-guard-20261014.md).
 Guard1ac603128 is committed/deployed; full native and targeted sanitizer pass
