@@ -6,6 +6,8 @@ root=Path(__file__).resolve().parents[1]
 s=(root/'src/server/raft_host.c').read_text()
 a=s.index('int server_raft_host_query_page(')
 b=s.index('\nint server_raft_host_start(',a)
+h=s.index('static int query_reply_status(')
+status=s[h:s.index('\n}',h)+2]
 code=r'''
 #include "efs/protocol.h"
 #include "efs/command_path.h"
@@ -27,9 +29,9 @@ struct query_request {void *h;const struct efs_msg_query_snapshot *req;
  uint64_t page_token,deadline;struct efs_msg_query_snapshot_reply *reply;char *text;struct query_auth *auth;};
 struct query_page_session {uint64_t token;struct efs_server_query_view view;int refresh_error;};
 static struct query_page_session slot={.token=99};
-static int missing_close,fresh=1,captures,barriers,consumed,barrier_rc,consume_rc,capable=1,released,cleared;
+static int policy_rc,missing_close,fresh=1,captures,barriers,consumed,barrier_rc,consume_rc,capable=1,released,cleared;
 static uint64_t query_mono_ms(void){return 100;}
-static int host_query_policy_operation(unsigned op){(void)op;return 0;}
+static int host_query_policy_operation(unsigned op){(void)op;return policy_rc;}
 static int query_page_acquire(const struct efs_msg_query_snapshot_v4 *r,struct query_page_session **p,int *created)
 {(void)r;*p=missing_close?NULL:&slot;*created=missing_close?0:fresh;return 0;}
 static int query_page_capture(void *ctx,const struct efs_server_query_view *v,int error)
@@ -43,7 +45,7 @@ static int query_consume(void *ctx,const struct efs_server_query_view *v,int err
 {struct query_request *q=ctx;assert(q->auth && v==&slot.view && !error);consumed++;return consume_rc;}
 static void query_page_release(struct query_page_session *p,int clear)
 {assert(p==&slot || (missing_close && !p));released++;cleared=clear;}
-'''+s[a:b]+r'''
+'''+status+'\n'+s[a:b]+r'''
 static struct efs_msg_query_snapshot_v4 req={.base={.version=EFS_QUERY_PAGE_VERSION,
  .root=1,.operation=EFS_QUERY_STATS,.max_output=16384,.visit_budget=100,.match=EFS_NAME_PREFIX},.limit=1};
 static int run(void){void *raw=NULL;uint32_t bytes=0;captures=barriers=consumed=released=cleared=0;
@@ -52,8 +54,17 @@ static int run(void){void *raw=NULL;uint32_t bytes=0;captures=barriers=consumed=
  int rc=r->status;struct query_allocation *a=(struct query_allocation *)raw-1;
  query_reply_bytes-=a->bytes;query_requests--;free(a);assert(!query_reply_bytes && !query_requests);return rc;}
 int main(void){host.query_enabled=1;host.g[0].group=0;host.g[1].group=2;pthread_mutex_init(&host.mu,NULL);
+ policy_rc=EFS_ERR_NOT_PRIMARY;void *early=(void*)1;uint32_t early_len=0;
+ assert(server_raft_host_query_page(&req,&early,&early_len)==EFS_ERR_BUSY && !early);
+ policy_rc=EFS_ERR_ACCES;assert(server_raft_host_query_page(&req,&early,&early_len)==EFS_ERR_ACCES && !early);
+ policy_rc=0;
  assert(!run() && captures==1 && barriers==1 && consumed==1 && !cleared);
  fresh=0;req.token=99;assert(!run() && !captures && barriers==1 && consumed==1);
+ barrier_rc=EFS_ERR_NOT_PRIMARY;
+ assert(run()==EFS_ERR_BUSY && !captures && !consumed && !cleared);
+ fresh=1;req.token=0;
+ assert(run()==EFS_ERR_NOT_PRIMARY && captures==1 && !consumed && cleared); /* captured owner2 is usable */
+ fresh=0;req.token=99;
  barrier_rc=EFS_ERR_BUSY;assert(run()==EFS_ERR_BUSY && barriers==1 && !consumed && !cleared);
  fresh=1;req.token=0;assert(run()==EFS_ERR_BUSY && captures==1 && barriers==1 && !consumed && cleared);
  barrier_rc=0;consume_rc=EFS_ERR_ACCES;assert(run()==EFS_ERR_ACCES && consumed==1 && cleared);

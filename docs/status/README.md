@@ -1,3 +1,5 @@
+[ORCD loaded results](orcd-query-name-ordinals-20261013.md): `b65d99dcf` finite140,000 files and concurrent21 queries PASS. Broader two-mount commands FAIL5/6; missing-target refusal correction in qualification. Long-running writer/crawler screens remain stopped.
+
 [ORCD merged deployment](orcd-query-name-ordinals-20261013.md): `b65d99dcf` Linux native/sanitizers, installed source/profile, orderly marker restart and mounted token close PASS. Seven-client finite gate RUNNING; concurrent and sustained acceptance OPEN.
 
 [ORCD reviewed merge](orcd-query-name-ordinals-20261013.md): `b65d99dcf` integrates EOF, RDMA routing/read recovery and default ordered-frame bounds. Linux/native and focused sanitizers PASS; deployed marker/token-close checks PASS. Prior finite gate FAIL on deadline despite eventual error-free completion.

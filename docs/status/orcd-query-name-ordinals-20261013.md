@@ -127,3 +127,49 @@ The new seven-client finite gate is RUNNING with 20,000 files and 16 workers per
 client, keeping the original 1,800-second controller deadline. Original tiny-file
 and MD5 screen jobs remain stopped until these gates pass. No throughput or
 sustained close-EIO acceptance is claimed yet.
+
+## Loaded mounted results and follow-up correction
+
+On installed `b65d99dcf`, the finite seven-client gate PASS: all 140,000 files
+complete with zero reported errors/exit0 in 491.509–492.969 seconds per client,
+within the unchanged1,800-second limit. Each job checks create/write/fsync/close,
+exact32-byte EOF/content and unlink. Concurrent extras/virt_ query cases
+PASS21/21 (seven clients, three jobs/client,30-second case budgets) while the
+finite jobs were active. A bounded read-only200-sample/50-ms queue observation
+found at most one queued ordered frame per peer across all four daemons; it
+does not prove every future queue or latency outcome.
+
+Broader two-independent-mount command qualification FAIL5/6:
+`efs_commands` passes; `efs_command_options` returns BUSY on its raw filtered
+request after mounted filters/formatting pass; `efs_command_pages` and
+`efs_commands_load` encounter NOT_PRIMARY with target0; `virtual_interfaces`
+fails the raw supplementary-group permission gate with NOT_PRIMARY;
+`query_large_delta` verifies both initial1,025-file payload phases, then ordinary
+readdir returns EBUSY on the auxiliary mount. Failed fixtures and all suite logs
+remain at `fcstor007/six-commands-b65d99dcf280` under the scratch base. The
+auxiliary mount subsequently drained and unmounted normally (cleanup exit0).
+No failing case is silently reclassified as a pass. Original seven screen
+writers/crawlers remain stopped pending the open gates.
+
+The retained options fixture `efs-options-gates-1791955799554925371` was probed
+quietly after the finite workers drained: five identical raw filtered requests
+passed in1.7–3.8ms,851-byte replies. This is diagnostic evidence of loaded
+refusal, not replacement qualification of the earlier failed suite. The raw
+wire acceptance harness uses TCP control RPCs; mounted filesystem operations
+remain strict hardware RDMA/direct.
+
+The next candidate normalizes a query NOT_PRIMARY refusal to BUSY only when
+no usable primary target accompanies it, at early policy and final reply
+boundaries. Known targets preserve redirects; failed proofs still emit no
+bytes, retain existing release/accounting rules and never gain authority.
+Actual page-dispatch regression covers missing-target continuation, known-target
+fresh redirect, early policy NOT_PRIMARY/ACCES and existing refusal/close
+paths. Local native and ASan/UBSan PASS for the page-dispatch change; Linux
+and live checks on this new candidate are NOTRUN. The supplementary-group
+harness now uses routed_query instead of a seed-only raw client, retaining
+its credential and expected permission assertions.
+
+Intel was given the ordinary-core readdir failure for its remaining package3
+work on Intel; AMD was given the query-refusal evidence for package2 coordination.
+Root owns the reply normalization draft to avoid duplicate edits. No workload
+deadline, quorum, feature mask, cache limit or data-plane transport was changed.

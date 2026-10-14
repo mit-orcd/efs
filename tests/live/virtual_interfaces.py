@@ -120,7 +120,7 @@ def nested_authorization():
     try:
         # Direct credential-boundary gate: unprivileged subject has only a
         # supplementary group grant. No root/group changes on the host.
-        from query_rpc import request,query as rpc
+        from query_rpc import request,routed_query as rpc
         ports=os.environ.get('EFS_QUERY_TEST_PORT')
         if not ports:raise AssertionError('supplementary-group gate requires explicit private cohost port')
         st=os.stat(group);subject=st.st_uid+10000
