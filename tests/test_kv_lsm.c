@@ -1739,11 +1739,52 @@ static void test_deferred_held_flush(void)
     rmtree(g_dir);
 }
 
+struct work_oracle { unsigned seen;uint8_t skip[4];uint32_t skip_len; };
+static int work_oracle_cb(void *u,const uint8_t *k,uint32_t n,const uint8_t *v,uint32_t vn)
+{
+    struct work_oracle *o=u;
+    if(n==o->skip_len && !memcmp(k,o->skip,n))return 0;
+    CHECK(n==4 && vn==1 && v[0]==42,"bounded scan valid surviving row");
+    o->seen++;return 0;
+}
+static int work_refuse_cb(void *u,const uint8_t *k,uint32_t n,const uint8_t *v,uint32_t vn)
+{ (void)u;(void)k;(void)n;(void)v;(void)vn;return 2; }
+static void test_tombstone_work_pages(void)
+{
+    rmtree(g_dir);
+    struct efs_kv_lsm_cfg cfg={.sync_mode=EFS_KV_LSM_NOSYNC,.memtable_max=16*1024*1024,.l0_max=64};
+    struct efs_kv *kv=efs_kv_lsm_open(g_dir,&cfg);CHECK(kv,"open work-page store");if(!kv)return;
+    uint8_t key[4]={0x31,0,0,0},value=42;
+    for(unsigned i=0;i<10000;i++) {key[2]=i>>8;key[3]=i;CHECK(!efs_kv_put(kv,key,4,&value,1),"seed work row");}
+    CHECK(!efs_kv_lsm_flush(kv),"flush original rows");
+    for(unsigned i=0;i<10000;i++)if(i%1000) {key[2]=i>>8;key[3]=i;CHECK(!efs_kv_del(kv,key,4),"seed hidden tombstone");}
+    CHECK(!efs_kv_lsm_flush(kv),"flush deleted winners");
+    efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(g_dir,&cfg);CHECK(kv,"reopen work-page store");if(!kv)return;
+    struct work_oracle o={0};uint8_t resume[EFS_KV_KEY_MAX],cursor[4];uint32_t clen=0,len;
+    unsigned pages=0;int rc;
+    do {
+        memcpy(o.skip,cursor,clen);o.skip_len=clen;
+        efs_kv_lsm_scan_stats(NULL,1);
+        rc=efs_kv_lsm_scan_work(kv,key,1,clen?cursor:NULL,clen,17,work_oracle_cb,&o,resume,&len);
+        struct efs_kv_scan_stats st;efs_kv_lsm_scan_stats(&st,0);
+        CHECK(rc>=0 && st.keys<=17,"hidden tombstones obey key budget");
+        if(rc>0) {CHECK(len==4,"tombstone-only page advances cursor");if(len!=4)break;
+            CHECK(!clen || memcmp(resume,cursor,4)>0,"cursor strictly advances");memcpy(cursor,resume,4);clen=4;}
+        pages++;CHECK(pages<700,"bounded scan eventually exhausts");
+    } while(rc>0 && pages<700);
+    CHECK(rc==0 && o.seen==10 && pages>500,"all survivors once across tombstone pages");
+    rc=efs_kv_lsm_scan_work(kv,key,1,NULL,0,17,work_refuse_cb,NULL,resume,&len);
+    CHECK(rc==2 && len==0,"callback refusal is not a work continuation");
+    efs_kv_lsm_close(kv);rmtree(g_dir);
+}
+
 int main(void)
 {
     snprintf(g_dir, sizeof(g_dir), "/tmp/efs-kvlsm-%d", (int)getpid());
     rmtree(g_dir);
     if (getenv("EFS_TEST_KV_DEFER_ONLY")) {test_deferred_held_flush();goto report;}
+    test_tombstone_work_pages();
+    if (getenv("EFS_TEST_KV_WORK_ONLY")) goto report;
     test_deferred_held_flush();
     if (getenv("EFS_TEST_KV_APPLY_ONLY")) {test_apply_scope();goto report;}
     if (getenv("EFS_TEST_KV_SNAPSHOT_ONLY")) {

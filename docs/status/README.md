@@ -864,3 +864,7 @@ preserves preceding failed candidates, historical RUNNING/STOP instructions and
 scope changes. It does not authorize further cluster or agent work.
 See [evidence cleanup inventory](../../results/measure/20261012-evidence-cleanup/README.md)
 for consolidated duplicate paths and explicitly pruned historical captures.
+
+[ORCD tiny-file close EIO](orcd-close-eio-20261013.md): all7 jobs failed on
+fc341f00e; REPORT deadline exhaustion proven, tombstone maintenance starvation
+candidate active. Linux and mounted qualification pending; no closure claim.

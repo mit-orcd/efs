@@ -2360,6 +2360,10 @@ scope changes. It does not authorize further cluster or agent work.
 See [evidence cleanup inventory](../../results/measure/20261012-evidence-cleanup/README.md)
 for consolidated duplicate paths and explicitly pruned historical captures.
 
+[ORCD tiny-file close EIO](../status/orcd-close-eio-20261013.md): all7 jobs failed on
+fc341f00e; REPORT deadline exhaustion proven, tombstone maintenance starvation
+candidate active. Linux and mounted qualification pending; no closure claim.
+
 
 ## Appendix 2 — In flight — the current handoff block
 

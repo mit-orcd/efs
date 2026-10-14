@@ -8513,6 +8513,19 @@ static int host_gc_propose(struct efs_raft_host *h, uint8_t group,
 }
 
 
+/* Callback row limits cannot see tombstones. Bound physical merged-key work
+ * while retaining the existing inclusive continuation and validation rules. */
+static int host_gc_scan_work(struct efs_raft_host *h,const uint8_t *prefix,uint32_t plen,
+    const uint8_t *start,uint32_t slen,
+    int (*cb)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t),void *user,
+    uint8_t *last,uint32_t *last_len)
+{
+    uint8_t resume[EFS_KV_KEY_MAX];uint32_t len=0;
+    int rc=efs_kv_lsm_scan_work(h->kv,prefix,plen,start,slen,4096,cb,user,resume,&len);
+    if (rc>0 && len) {memcpy(last,resume,len);*last_len=len;}
+    return rc;
+}
+
 struct orphan_scan {
     uint8_t skip[EFS_KV_KEY_MAX], last[EFS_KV_KEY_MAX];
     uint32_t skip_len, last_len, visited, count;
@@ -8554,7 +8567,7 @@ static int host_session_append_step(struct efs_raft_host *,const uint8_t *,uint3
                                      uint8_t,int *,uint64_t *);
 struct close_step_scan {
     efs_ino_t ino[8];uint8_t identity[8][EFS_CLOSE_STEP_VALUE],skip[11],last[11];
-    uint32_t n,skip_len;int rc;
+    uint32_t n,skip_len,last_len;int rc;
 };
 static int close_step_scan_cb(void *user,const uint8_t *key,uint32_t len,
     const uint8_t *value,uint32_t length)
@@ -8563,7 +8576,7 @@ static int close_step_scan_cb(void *user,const uint8_t *key,uint32_t len,
     if(len!=11 || length!=EFS_CLOSE_STEP_VALUE || !rd64be(value) ||
        !rd32be(value+24) || !rd64be(value+28)) {scan->rc=EFS_ERR_PROTO;return 1;}
     if(scan->skip_len && !memcmp(key,scan->skip,11))return 0;
-    memcpy(scan->last,key,11);scan->ino[scan->n]=rd64be(key+3);
+    memcpy(scan->last,key,11);scan->last_len=11;scan->ino[scan->n]=rd64be(key+3);
     memcpy(scan->identity[scan->n++],value,length);
     return scan->n==8;
 }
@@ -8578,14 +8591,14 @@ static void host_gc_close_step_pass(struct efs_raft_host *h,uint8_t group,uint32
     struct close_step_scan scan={.skip_len=h->close_step_cursor_len[gi]};
     memcpy(scan.skip,h->close_step_cursor[gi],scan.skip_len);
     uint8_t prefix[3]={(uint8_t)(anchor>>8),(uint8_t)anchor,EFS_KV_KIND_CLOSE_STEP};
-    int rc=efs_kv_scan_from(h->kv,prefix,3,scan.skip_len?scan.skip:NULL,
-        scan.skip_len,close_step_scan_cb,&scan);
+    int rc=host_gc_scan_work(h,prefix,3,scan.skip_len?scan.skip:NULL,
+        scan.skip_len,close_step_scan_cb,&scan,scan.last,&scan.last_len);
     if(rc<0 || scan.rc!=EFS_OK) {
         __atomic_fetch_add(&h->s->gc_scan_errors,1,__ATOMIC_RELAXED);return;
     }
     if(!rc)h->close_step_cursor_len[gi]=0;
-    else if(scan.n) {
-        memcpy(h->close_step_cursor[gi],scan.last,11);h->close_step_cursor_len[gi]=11;
+    else if(scan.last_len) {
+        memcpy(h->close_step_cursor[gi],scan.last,scan.last_len);h->close_step_cursor_len[gi]=scan.last_len;
     }
     int results[8];
     if (!__atomic_load_n(&h->gc_running,__ATOMIC_ACQUIRE)) return;
@@ -8618,7 +8631,7 @@ static void host_gc_close_pass(struct efs_raft_host *h,uint8_t group,uint32_t an
     uint8_t *cursor=h->close_cursor[gi];
     struct orphan_scan scan={.group=group,.skip_len=*len};
     memcpy(scan.skip,cursor,*len);
-    int rc=efs_kv_scan_from(h->kv,prefix,sizeof(prefix),*len?cursor:NULL,*len,orphan_scan_cb,&scan);
+    int rc=host_gc_scan_work(h,prefix,sizeof(prefix),*len?cursor:NULL,*len,orphan_scan_cb,&scan,scan.last,&scan.last_len);
     if(rc<0) {
         __atomic_fetch_add(&h->s->gc_scan_errors,1,__ATOMIC_RELAXED);
         return;
@@ -8642,8 +8655,8 @@ static void host_gc_orphan_pass(struct efs_raft_host *h, uint8_t group, uint32_t
         uint32_t *len = discovery ? &h->orphan_discovery_len[gi] : &h->orphan_cursor_len[gi];
         struct orphan_scan scan = {.group=group, .discovery=discovery, .skip_len=*len};
         memcpy(scan.skip,cursor,*len);
-        int rc = efs_kv_scan_from(h->kv, discovery ? NULL : prefix, discovery ? 0 : 3,
-                                   *len ? cursor : NULL, *len, orphan_scan_cb, &scan);
+        int rc = host_gc_scan_work(h, discovery ? NULL : prefix, discovery ? 0 : 3,
+                                   *len ? cursor : NULL, *len, orphan_scan_cb, &scan,scan.last,&scan.last_len);
         if (rc < 0) {
             __atomic_fetch_add(&h->s->gc_scan_errors,1,__ATOMIC_RELAXED); continue;
         }
