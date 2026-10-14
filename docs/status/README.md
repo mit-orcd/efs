@@ -1,12 +1,14 @@
 [Intel receive persistence correctness](intel-receive-persistence-20261014.md):
-**Native and live persistence pause PASS; concurrent FAIL; W100 OPEN.** Synchronous per-group
-persistence fence releases the host mutex only around the owned store call,
-revokes cached read authority and preserves durable ACK/apply. Real old-source
-negative controls reproduce sync-hold ACK and rotation hazards. Full native
-and targeted ASan/UBSan/leaks pass both Intel hosts. Frozen a58e93942 deployed;14,000 published files plus peer MD5 pass on both
-baseline/correction. Seven-client1475/1512 retains36timeouts and1EBUSY; queue
-bound respects1. Live retained-owner shutdown and128fsync pass. Full failure
-and cold gates remain pending.
+**Correctness/failure gates PASS; loaded acceptance FAIL; W100 OPEN.**
+Frozen a58e93942 deployed privately, TCP/direct/files, optional features OFF.
+Per-group persistence fence releases host serialization, preserves durable
+ACK/apply/read authority and pins rotation during sync. Full native and targeted
+ASan/UBSan/leaks pass both hosts; old-source physical durability controls fail.
+Both baseline/correction14,000-file writer/MD5 loads pass; live paused barrier,
+retained-owner shutdown, full GC/recovery, two-fsync,28,000 cold files/host and
+27persistence cases/host pass. Seven-client1475/1512 retains36timeouts and1EBUSY;
+main cross-host peer66/67 retains concurrent-append15s timeout. Queue bound≤1.
+Production untouched; no original ORCD EIO reproduction or speedup claim.
 
 [Intel default Raft queue guard](intel-queue-guard-20261014.md):
 **Concurrent acceptance FAIL; W100 OPEN.** Guard1ac603128 deployed privately,

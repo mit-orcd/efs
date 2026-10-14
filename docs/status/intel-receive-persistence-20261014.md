@@ -1,39 +1,90 @@
 # Intel receive persistence correctness — 2026-10-14
 
-W100 / REPORT BUSY and native close/fsync EIO follow-up. **Native gates PASS;
-private live qualification IN PROGRESS. Concurrent acceptance FAIL; W100 OPEN.**
-Base devel `7659df951` already includes queue guard `1ac603128`; no merge is
-required for that guard. ORCD branch changes are not merged or deployed here.
+**Correctness/failure gates PASS; loaded acceptance FAIL; W100 OPEN.**
+Follow-up to [W100](w100-client-retry-eof-20261013.md) and the
+[queue guard](intel-queue-guard-20261014.md). The queue guard `1ac603128`
+already belongs to devel; no prerequisite merge was needed. This change does
+not merge or deploy ORCD branch changes, touch ORCD, or change production Intel.
 
-## Problem and correction
+## Source and correction
 
-An ORCD observation found many host-mutex waiters while its owner was in
-`fdatasync(raft.log)`. That later sample does not prove that a particular
-8-second REPORT BUSY/EIO was caused by the sampled syscall. Intel qualification
-must distinguish a reproduced native defect from that unproven causal link.
+Base: devel `7659df951`. Core fix:
+`a0daf0ae3db1b0bb6ef72f88e8fcd0d7c92257ee`. Frozen normal private deployment:
+`a58e9394231e5780cb0e3c2c8f98517298683c1e`; controller repair/evidence:
+`b8e50f7ae` (no C/header changes). Version RPC confirms a58e93942/devel,
+both hosts built2026-10-14T10:24:27Z. The four modified native-tested C/header hashes match that
+frozen deployment. No push or rolling upgrade is claimed.
 
-A receive owner now prepares and freezes its group, publishes stable state
-without read authority, releases the host mutex for its synchronous store
-operation, reacquires it and completes ACK/apply only after successful
-persistence. Cohort commands, decoded frames, inbox credits, KV hold and TLS
-deferral remain owned by the same pump stack. Stop joins that owner before free.
-Other groups and handlers may acquire the host mutex during the wait. The pump
-still waits for disk I/O; this is not an asynchronous worker redesign.
+A later ORCD sample found host-mutex waiters while its owner was in
+`fdatasync(raft.log)`. It does not prove that a particular earlier8-second
+REPORT BUSY/native close/fsync EIO was caused by that sampled syscall. Neither
+Intel writer/checksum run below reproduces the original EIO.
 
-Ordinary follower append/conflict and hard-state fallback also require their
-own persistence boundary even if an unrelated submitter owns a shared sync
-hold. Rotation refuses BUSY while a sync pins the active log descriptor and
-watermark. A failed sync fences the group without certifying its uncertain
-suffix. No wire/storage format, queue/window, RPC timeout, retry budget,
-compression, or operational feature policy changes.
+The receive owner freezes its group and publishes stable state with no read
+authority before releasing the host mutex around its synchronous store call.
+It reacquires serialization before ACK/apply, requiring successful persistence
+and unchanged ownership/term/boot. Cohort buffers, inbox credits, KV hold and
+TLS deferral stay on that pump stack; shutdown joins the owner before free.
+Other handlers/groups can acquire the host mutex. The pump itself still waits
+for disk I/O; this is not an asynchronous worker redesign. Leader/election,
+configuration and snapshot paths retain their existing serialization.
 
-## Reproduction and native evidence
+Ordinary follower append/conflict and hard-state fallback now require their
+own persistence boundary even while another submitter owns a shared sync hold.
+Log rotation refuses BUSY while a sync pins the active descriptor/watermark;
+automatic rotation waits for a later append. Failed sync fences without
+certifying its uncertain suffix. No wire/storage format, queue/window,
+RPC deadline, retry budget, compression or operational feature policy changes.
 
-Two Intel hosts, Linux/XFS; candidate source staged separately at
-`/data1/efs/w100-private/receive-persist-candidate`, not running daemon source.
-Build identity `7659df951-persist4` represents the accompanying uncommitted C
-snapshot; the later frozen deployment commit must be recorded separately.
-Full native build/test on both hosts: **PASS**:
+## Environment and results
+
+Private Intel1 .207 nodes1/2 and Intel2 .209 nodes3/4, ports27432/27433,
+two16GiB stores/host under `/data{1,2}/efs/w100-private-merged-aa508c820/nN`.
+Runtime `/data1/efs/w100-private/runtime-merged-aa508c820`; opposite-host main
+mounts at runtime `/mnt`. TCP, direct I/O, storage-engine files (containers
+unused), .efs client/server0, packing0, expiry0, flow default0. Root commands
+policy version1/mask0; synthetic .efs absent on both mounts. No quota increases.
+Standalone recovery fixtures use four loopback nodes/host and4GiB/node.
+
+| Gate | Verdict / evidence |
+|---|---|
+|Full native build + `make test`|PASS both Intel hosts|
+|Targeted ASan/UBSan/leaks|PASS both hosts: actual core/host callback and disk sync/rotation|
+|Old-source negative controls|Old7659 core fails durable ACK/apply and vote-boundary checks; old rotation fails runtime BUSY assertion; old core fails actual host mutex handoff|
+|Seven writers + seven peer MD5 crawlers, baseline7659|PASS14,000 files;316.615s|
+|Same workload, a58 correction|PASS14,000 files;327.871s|
+|Live persistence pause + graceful retained-owner shutdown|PASS; h->mu-taking RAFT_STATUS returns0.219724s over SSH while paused;128fsync files/16workers PASS|
+|Canonical seven-FUSE-client concurrent POSIX|**FAIL1475/1512**,36original30s timeouts and1EBUSY|
+|Read-only queue sample during concurrent run|300samples/node; pending ordered frames/group/peer never exceed1; flow0|
+|Full standalone recovery/GC|PASS both hosts; core216/216 and local peer67/67 each, guarded leases, opid, integrity, namespace, allocation, tiny churn, quota-full reroute, crash/replay, zero inventory/quota and late-PUT fencing|
+|Two-fsync omission/refusal/retry|PASS both host directions;512B and8MiB+1, peer EOF0 for both refused fsyncs, exact recovered EOF/checked bytes after clearing fault|
+|One owned private daemon paused10s|PASS128fsync files, both peers exact bytes; cold checks also PASS|
+|Cold tiny data after all four private daemons restart|PASS28,000 retained files on each host (baseline14k + correction14k), exact EOF/bytes/MD5|
+|Existing persistence cases after restart|PASS27/27 per host|
+|Final real cross-host peer suite|**FAIL66/67**: concurrent append SSH step timeout15s; shared-pwrite passes|
+
+Seven-client failure distribution: names_crazy_dirs7,
+concurrent_appends_two_proc7, mtime_monotonic_many_writes7,
+dir_deep_nesting4, concurrent_creates_same_dir4,
+dir_deep_nesting_beyond_64=3, concurrent_create_unlink_two_proc3,
+names_crazy_roundtrip1 (timeouts); unlink_recreate_new_ino1 (EBUSY).
+No matched7659 seven-client baseline was run; older1ac results do not establish
+causal improvement/regression. Correctness evidence does not close these gates.
+
+Final main peer run lasts67.2s. `peer_concurrent_append`, ab-a step1, rc124,
+SSH timeout15s; shared-pwrite passes (ab step1=10.09s). The earlier runner
+incorrectly created only a parent and omitted `--prepare`, producing missing
+test directories/0of67. That invalid setup is retained separately and makes
+no filesystem-failure claim; the valid run uses all67 prepared directories
+and remounts B before testing. No original deadline/assertion was changed.
+
+## Reproduction
+
+Prerequisites: Intel SSH aliases, existing authorized private firewall ports,
+compiler/make/FUSE3/verbs development packages, healthy owned fixture; preserve
+production17432/17433 processes and `/data1/efs/mnt`. Stage separate normal and
+EFS_FAULTS builds from the frozen source; never relink a running image.
+Use a full checkout's committed fixtures for native tests:
 
 ```sh
 make -j8 EFS_GIT_ID=7659df951-persist4 EFS_GIT_DESCRIBE=7659df951-persist4 EFS_GIT_BRANCH=devel all
@@ -42,105 +93,126 @@ CC='gcc -fsanitize=address,undefined -fno-omit-frame-pointer -g' ASAN_OPTIONS=de
 CC='gcc -fsanitize=address,undefined -fno-omit-frame-pointer -g' ASAN_OPTIONS=detect_leaks=1:abort_on_error=1 UBSAN_OPTIONS=halt_on_error=1 python3 tests/test_raft_sync_rotation.py
 ```
 
-Targeted ASan/UBSan/leaks: **PASS both hosts**. Actual core + actual extracted
-host callback test covers cohort, singleton, multi-entry, conflict and higher-term
-hard-state paths, each success/error; real interloper mutex acquisition, other
-group mutation, rejected frozen-group protocol/read authority and exact ACK/apply.
-Real disk tests check ACK coverage while another sync hold remains outstanding,
-crash at ACK, hard-state vote persistence and cold exact bytes. Actual wrapped
-fdatasync tests pin rotation, preserve watermarks and fence an injected EIO.
+`persist4` is the tested precommit build stamp; its C/header contents match
+a58 exactly (`tested-core-sha256.json`). The receive regression uses actual
+core + extracted actual host callback with typed publication adapters. It
+stalls cohort, singleton, multi-entry, conflict and higher-term hard-state
+paths, each success/error; real mutex interloper and other-group progress,
+blocked frozen-group mutations/read authority, exact ACK/apply. Actual disk
+store tests assert durable coverage with another sync hold outstanding,
+crash at ACK, vote persistence and cold bytes. Linker-wrapped actual fdatasync
+pins rotation and injects EIO without advancing its durable watermark.
+Negative controls substitute7659 core/log source via `EFS_RAFT_CORE_SOURCE`
+and `EFS_RAFT_LOG_SOURCE`; real `test_raft_store.c` is also linked against the
+old core. These compile and execute before assertion failures, not merely
+compile-negative tests. Linux old-source controls from the new test checkout:
 
-Negative controls use base `7659df951` source against the new tests on Intel1:
-old rotation fails its runtime BUSY assertion; old core fails physical durable
-coverage for follower ACK/apply and the vote hard-state ACK. Both compile and
-execute before failing, so these are meaningful regression controls. The old
-core also fails the actual host mutex handoff assertion. Unacknowledged suffix
-survival after process crash is allowed; no power-loss simulation is claimed.
-Earlier native runs exposed test adapter omissions and expected barrier-count
-changes; final full native and sanitizer runs above include their corrections.
+```sh
+git show 7659df951:src/raft/raft.c > /tmp/efs-old-raft.c
+git show 7659df951:src/raft/raft_log.c > /tmp/efs-old-raft-log.c
+EFS_RAFT_CORE_SOURCE=/tmp/efs-old-raft.c python3 tests/test_receive_persist.py
+EFS_RAFT_LOG_SOURCE=/tmp/efs-old-raft-log.c python3 tests/test_raft_sync_rotation.py
+gcc -std=c99 -D_GNU_SOURCE -O1 -Iinclude -Isrc/raft -Ideps/blake3 -ffunction-sections -fdata-sections tests/test_raft_store.c /tmp/efs-old-raft.c src/raft/raft_mem.c src/raft/raft_disk.c src/raft/raft_log.c src/common/checksum.c src/common/batch_obs.c -Wl,--gc-sections -pthread -o /tmp/efs-old-core-store
+/tmp/efs-old-core-store
+```
 
-Raw logs (not committed):
+Each control is expected to exit nonzero at its asserted regression, not to
+pass. Unacknowledged suffix survival after process crash is allowed; no power-loss simulation is claimed. Intermediate test adapters
+were corrected before the final full native/sanitizer runs.
+
+Owned lifecycle (locally), preserving stores, no mkfs or busy-mount discard:
+
+```sh
+python3 scripts/intel_w100_private.py stop merged-aa508c820 CURRENT_SOURCE_LABEL
+python3 scripts/intel_w100_private.py resume merged-aa508c820 NEW_SOURCE_LABEL --quota 16G
+python3 tests/live/tiny_md5_publication.py --source /data1/efs/w100-private/devel-a58e93942 --files 2000 --output OUT
+python3 tests/live/private_intel_receive_persist.py --source /data1/efs/w100-private/devel-a58e93942 --fault-source /data1/efs/w100-private/devel-a58e93942-fault --output OUT
+python3 scripts/intel_package3_tests.py concurrent --run-id UNIQUE --output OUT --source-root /data1/efs/w100-private/devel-a58e93942 --mount /data1/efs/w100-private/runtime-merged-aa508c820/mnt --seed-port 27432 --remote-output-root /data1/efs/w100-private/results --extra-mount-root /data1/efs/w100-private/extra-mounts
+python3 scripts/intel_queue_sample.py --source /data1/efs/w100-private/devel-a58e93942 --seconds 30 --output OUT.json
+```
+
+Writer harness:7writers/7peer crawlers total on two main FUSE clients,128B files,
+O_EXCL.part/write/fsync/close/rename.ready; immutable ready files only are
+checksummed. No app retries,1800s workload bound. This differs from the
+separate seven-FUSE-client POSIX topology (4+3 clients,16jobs/client,
+30s/case,900s outer). Retain all writer fixtures. Cold oracle on **each** host:
+
+```sh
+python3 tests/live/tiny_md5_publication.py --role verify --relative receive-load-6f4520b28e7b --files 2000
+python3 tests/live/tiny_md5_publication.py --role verify --relative receive-load-af3884c49f2c --files 2000
+python3 tests/posix/posix_persist.py /data1/efs/w100-private/runtime-merged-aa508c820/mnt --phase verify --tag merged --results OUT.tsv --keep
+```
+
+New runs use their generated fixture names instead. Cold tiny oracles used
+300s outer bounds per fixture; persistence verifies original case budgets.
+Writer script SHA256 in both runs:
+`ddedf7293f55d1763f6358781ed13d4548b8cdf06e4fc64baba4ce9234c0b0d1`.
+Durations are evidence, not a performance claim; leader/cache/store state differ.
+
+Live persistence controller selects follower-only node3, verifies PID/exe/UID/
+private storage, preserves original arguments, and gates the actual callback
+before persistence after h->mu release. An independent remote10s timer clears
+PAUSE. Management completes while PAUSE still holds;500ms after SIGTERM the
+process remains alive and retirement waits. Timer release permits real store
+completion and shutdown, then normal source restores. Run overlapped separate
+GC fixtures after concurrent POSIX finished. First controller launch had a
+Python f-string NameError before any signal; b8 repairs it and the repeated
+fault gate PASS is `persistence-pause-fixed`, not the initial failed runner.
+The raw aggregate `live-summary.json` retains that initial runner rc1.
+
+Full failure suite on each host, normal frozen build:
+
+```sh
+env EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0 EFS_RAFT_FLOW=0 timeout 1800 python3 tests/live/gc_reclamation.py --mode direct --transport tcp --disable-efs-commands --fixture-quota 4G --posix --posix-jobs 16 --continue-posix-failure --guarded-leases --opid --integrity --namespace --allocation --tiny-churn --full-node
+```
+
+Two-fsync uses temporary opposite-host mounts at runtime `/mnt-eof` from
+EFS_FAULTS clients, `EFS_FAULT_REPORT_SIZE_FILE=runtime/omit-eof` and all disabled
+feature settings. Run `tests/live/report_eof_contract.py MOUNT FAULT --expect
+refused --peer OTHER_HOST` sequentially both directions; resetOFF and drain/
+stop both fault mounts in finally. Sparse validation checks anchors/EOF, not
+every hole byte. No fault client or enabled fault remains running.
+
+`tests/live/private_intel_queue_pause.py --source PRIVATE_SOURCE` pauses only
+verified owned node3 through pidfd, independently resumes after10s, writes
+64files/host and verifies128files from both peers. Retained fixture:
+`queue-pause-19cb98749aa3`; `--verify FULL_FIXTURE_PATH` repeats after cold start.
+
+Final cross-host peer: on Intel1 run `tests/posix/posix_2client.py --prepare
+MOUNT --parent UNIQUE`; drain/remount private B with the same profile. Then
+`tests/posix/posix_2client.py --remote intel1_efs intel2_efs --mnt MOUNT --parent
+UNIQUE --ssh /data1/efs/w100-private/peer-ssh --results OUT.tsv`. The existing
+wrapper/step budget is15s. Final valid parent `persista58-peer-prepared` retained.
+
+## Final state and limits
+
+Final normal private daemons: Intel1 n1=3537538,n2=3537539; Intel2
+n3=3803745,n4=3803746. Main FUSE Intel1=3537778,Intel2=3804544. Both .efs
+entries absent, commands policy mask0. Extra concurrent/fault clients and
+standalone GC daemons all stopped; no workload/controller remains. Fault
+gates resetOFF. Production PID/start-time/executable SHA256/arguments and
+mounts are unchanged from the baseline inventory.
+
+Normal binary SHA256:
+
+| Host | efsd | efs-fuse |
+|---|---|---|
+|Intel1|6b587c66b009096e70ffdcf51c885436138399d901b90bddb92cd426f0d4e663|3a0351440efc6790d4645879dbce043fb0b289c23ff1f224af7910c957cd985d|
+|Intel2|665cfac035000e87b1a50cf52e75502836d56d0e3644e24bc678a15dfec43c30|d8404fc31721fa3fb0300f9c0946a17a0ceaaf7db9fbaf4b86d96fd2a6feb3fb|
+
+Raw artifacts outside Git:
 `/Users/mike/Documents/Codex/2026-10-10/n-x20/artifacts/intel-receive-persist-20261014`.
-See `intel{1,2}_efs-persist4-{build,native,sanitizer}.log`,
-`intel1-old-negative-controls.log` and `old-core-negative.log`.
+Native/sanitizer logs `intel{1,2}_efs-persist4-*`; negative controls
+`intel1-old-negative-controls.log`, `old-core-negative.log`; baseline/correction
+writer directories; `persistence-pause-fixed`; concurrent logs/TSVs and queue
+sample; `intel{1,2}_efs-full-gc.log`, two-fsync and cold logs;
+`cross-peer-prepared.log/.tsv`, initial invalid runner logs; final process JSONs.
+Remote GC roots `/data1/efs/gc-direct-atg56qow` (Intel1) and
+`/data1/efs/gc-direct-5a6ecapa` (Intel2); data2 companion roots are in manifests.
 
-## Private live acceptance plan — pending
-
-Required profile: TCP/direct/files, .efs client/server OFF, packing OFF,
-containers OFF, expiry OFF, flow default OFF. Existing four private nodes,
-16 GiB each, two hosts, ports27432/27433, opposite-host main mounts. Preserve
-all stores and production17432/17433 processes/mounts. Use
-`scripts/intel_w100_private.py stop/resume merged-aa508c820 SOURCE --quota 16G`;
-never mkfs or discard a busy mount. The currently installed source remains
-`1ac603128` until the separately recorded deployment.
-
-`tests/live/tiny_md5_publication.py --source PRIVATE_SOURCE --files 2000
---output OUT` creates seven fsync/close/rename writers and seven opposite-host
-MD5 crawlers on two main FUSE clients. Ready names appear only after successful
-fsync/close; crawlers verify immutable bytes and exact EOF. No app retries.
-All14,000 fixtures are retained; `--role verify --relative FIXTURE --files 2000`
-checks them after a cold private restart on both hosts. A14-file harness smoke
-passed on old1ac; it does not qualify this correction or establish a speedup.
-
-Still required: frozen baseline/candidate load, canonical seven-FUSE-client
-concurrent POSIX, failure/recovery and two-fsync refusal/retry; live persistence
-pause and graceful owner shutdown; cold payload verification; final normal
-profile and production identity checks. Native fault coverage does not replace
-these live gates. Existing queue-guard depth and shared-pwrite deadline FAILs
-remain in [the queue report](intel-queue-guard-20261014.md).
-
-## Frozen live correction checkpoint
-
-Normal private deployment: `a58e93942` (core fix `a0daf0ae3`), built on
-Intel1 at2026-10-14T10:24:27Z and Intel2 as recorded in version RPC artifacts.
-The four tested native C/header SHA256s exactly match the frozen deployment.
-Four16GiB private stores retained, TCP/direct/files; both .efs settings,
-packing and expiry0; containers unused. Production processes unchanged.
-
-Seven writers + seven peer MD5 crawlers,2,000 files/writer, same script SHA256
-`ddedf7293f55d1763f6358781ed13d4548b8cdf06e4fc64baba4ce9234c0b0d1`:
-
-| Source | Verdict | Files | Seconds | Retained fixture |
-|---|---|---:|---:|---|
-|7659df951 baseline|PASS|14,000|316.615|receive-load-6f4520b28e7b|
-|a58e93942 correction|PASS|14,000|327.871|receive-load-af3884c49f2c|
-
-No EIO reproduced in either run. Durations are evidence, not a performance
-improvement claim; fresh prefixes/leader/cache/storage state differ. Neither
-run proves the original ORCD EIO fixed or establishes its syscall cause.
-
-Live persistence pause/shutdown: **PASS**, `tests/live/private_intel_receive_persist.py
---source /data1/efs/w100-private/devel-a58e93942 --fault-source
-/data1/efs/w100-private/devel-a58e93942-fault --output OUT`.
-Normal/fault binaries share identical C; only fault build enables the gate.
-Select follower-only node3, stop through checked private PID/storage identity,
-start fault binary with original arguments and the pause file, then independently
-disarm after10seconds. Marker PID proves the callback entered after publishing
-stable authority/releasing h->mu, before executing its actual persistence call.
-RAFT_STATUS (source takes h->mu) completes in0.219724seconds end-to-end over SSH
-while gate remainsPAUSE. SIGTERM retirement is still waiting/process alive
-500ms later whilePAUSE; timer release lets shutdown complete and normal node3
-restart. The same pump retains ownership until join; this is not a power-loss
-or an unmodified hardware-stall experiment.128 files/16workers fsync oracle
-passes in1.537seconds. This fault run overlapped standalone GC fixtures on the
-hosts, after the seven-client run had finished. First controller launch failed
-with a Python f-string NameError before any signal; corrected and rerun, raw
-first log retained. No daemon correctness failure is hidden by that repair.
-
-Seven-client canonical concurrent POSIX: **FAIL,1475/1512**, seven FUSE clients
-(4+3),16jobs/client, original30s/case,900s outer bound, unique persista58 tags.
-All five extra clients drain/retire. Failures: names_crazy_dirs7,
-concurrent_appends_two_proc7, mtime_monotonic_many_writes7,
-dir_deep_nesting4, concurrent_creates_same_dir4,
-dir_deep_nesting_beyond_64=3, concurrent_create_unlink_two_proc3,
-names_crazy_roundtrip1 (all timeout), unlink_recreate_new_ino1 (EBUSY).
-No budget/assertion/application retry changed. No matched7659 seven-client
-baseline has yet been run; older1ac observations do not establish a causal
-regression/improvement comparison. W100 and loaded acceptance remain OPEN.
-
-Thirty-second read-only /proc queue samples during that concurrent run:
-pending ordered frames/group/peer never exceed1 across all four nodes
-(node2/node3 observed maxima0); max nent1/peer;
-flow remains0. Sampler uses binary-only GDB type inspection, never ptrace
-attach. Queue bounds do not guarantee successful bounded-latency POSIX.
-Full recovery/GC, two-fsync and final cold verification still pending.
+**Acceptance remains blocked:** reproduce/resolve loaded EBUSY and bounded
+operation timeouts without relaxing namespace/read authority, durable ACKs,
+queue/window or deadlines; then qualify affected changes on Intel and the
+original ORCD load separately. ORCD still needs its own stopped-cluster source
+integration/acceptance. This correction neither proves an original EIO cause
+nor removes every possible host-lock I/O wait; no speedup is established.
