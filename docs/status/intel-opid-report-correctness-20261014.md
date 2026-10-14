@@ -169,3 +169,24 @@ Normal executable SHA256:
 |---|---|---|
 |Intel1|`4afaed68afeee91c0c3d1b750da8a7eda1f8929ac9938f011ddb55b74274b46c`|`73fdc620e3f2e8a156621ad35b18d1ce9ce920497340a7a14d405334b3c02e8e`|
 |Intel2|`a3bdb35b7467df262ca5b48753f6c778ffbedaf39b728d902b27224647bd75ae`|`cc17a27bdfceb09c51714babad93a7cff16524ec9264bbbca2cb1d0f1bd36ded`|
+
+## Qualification after the first code checkpoint
+
+On5e3e8f3d/fix1, seven writers plus seven peer MD5 crawlers complete14,000
+fsync/close/rename files in387.707s, all workers PASS. After a private cold
+restart, each host verifies all14,000 exact files PASS. The two-fsync omission
+regression passes both directions (512B and8MiB+1); cold reads on both hosts
+also verify every byte of both sparse fixtures, including holes. One private
+node paused10s:128 fsync files and both peer/cold byte checks PASS.
+
+Cross-host peer POSIX remains66/67: concurrent append exceeds its original15s
+step bound. Fresh isolated four-node recovery/GC on each host completes physical
+reclamation, zero quota/inventory, fencing and crash/replay gates; local peer
+67/67 each. Intel2 core216/216 PASS; Intel1 core215/216 retains a new
+`perm_ftruncate_after_chmod` EIO, so its aggregate is FAIL. Controllers preserve
+that failure while completing independent later gates.
+
+That EIO is reproduced and repaired in the
+[newer-snapshot ownership follow-up](intel-report-newer-snapshot-20261014.md).
+These results qualify the first code checkpoint; the follow-up records its
+own exact-source reruns. Production remains untouched. This does not closeW100.

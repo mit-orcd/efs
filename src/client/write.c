@@ -6551,14 +6551,20 @@ static int dcache_note_committed(efs_ino_t ino, uint32_t ci, uint64_t gen,
          * replay paint the old image over a peer's exclusive range
          * (peer_overlap_pwrite_partial / chunk_straddle). A write that
          * re-dirtied the slot during the report still needs its ranges. */
-        if (hit && !e->dirty && !efs_writer_state_owned(e->writer)) {
+        /* Snapshotting clears dirty before PUT completes. A later snapshot
+         * can therefore own this body while object_seq still names the old
+         * PUT whose REPORT just committed. Keep its ranges and pin until
+         * that newer snapshot's own publication has a verdict. */
+        int owns_body = hit && e->snap_seq <= object_seq && !e->dirty &&
+                        !efs_writer_state_owned(e->writer);
+        if (owns_body) {
             e->nrange = 0;
             dcache_pin_release(e);
         }
         /* D23: the committed full image is the slot's whole content now
          * (base = this object, no ranges of ours outstanding); it moves
          * to the budgeted rdcache and the body is dropped. */
-        if (hit && !e->dirty && !efs_writer_state_owned(e->writer)) {
+        if (owns_body) {
             if (e->object_delta_len || e->base_gen == EFS_CHUNK_BASE_UNCOND) {
                 /* A committed span or full overwrite's local image is not a read-cache base.
                  * It is reconstructible from the published span chain;

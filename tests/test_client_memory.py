@@ -195,7 +195,16 @@ int main(void) {
     assert(dcache_note_committed(1,0,0,9,6));
     assert(e->data==p && e->nrange==1 && dcache_keep_on_drop(e));
     e->dirty=0;
+    /* New snapshot clears dirty before its PUT completes: object_seq
+     * still names the preceding span. Its ACK must not free the newer
+     * truncate-tail body, clear ranges or release its eviction pin. */
+    e->snap_seq=7;e->pin_held=1;
     assert(dcache_note_committed(1,0,0,9,6));
+    assert(e->data==p && e->data[0]==43 && e->nrange==1 && e->pin_held);
+    dcache_drop_locked(1,0,1);assert(e->data==p);
+    e->object_gen=10;e->object_seq=7;
+    assert(!dcache_note_committed(1,0,0,9,6) && e->data==p);
+    assert(dcache_note_committed(1,0,0,10,7));
     assert(!e->data && !e->nrange && !dcache_keep_on_drop(e) && !g_live);
     /* Full-image bytes survive a successful PUT until exact REPORT ACK. */
     p=efs_buf_alloc(EFS_CHUNK_SIZE);assert(p);p[0]=77;

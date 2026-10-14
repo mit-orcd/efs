@@ -4989,6 +4989,13 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 
 **Class/state:** Correctness/performance investigation; open.
 
+**Oct14 newer-snapshot ownership correction:** [Private Intel follow-up](../status/intel-report-newer-snapshot-20261014.md).
+Fresh qualification reproduces ftruncate EIO on both hosts. An older REPORT can
+free a newer snapshot while its PUT is in flight; the guard retains bytes,
+ranges and eviction pin until the matching newer ACK. Full native, sanitizer
+and2500 mounted cases pass; old native assertion fails. Final concurrent and
+recovery reruns remain in progress. No window/deadline/quota tuning.
+
 **Oct14 admission/REPORT correction:** [Private Intel checkpoint](../status/intel-opid-report-correctness-20261014.md).
 Production-code regressions reproduce lease admission's lock dependency and a
 retained partial PUT borrowing a newer dirty UNCOND base. Both corrections pass

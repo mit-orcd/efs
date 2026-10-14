@@ -1494,13 +1494,23 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**Targeted correctness PASS; broad follow-up in progress; W100 OPEN.**
+Fresh recovery/POSIX qualification exposes ftruncate EIO on the first correction.
+Old REPORT completion can release a newer in-flight snapshot's bytes/ranges/pin.
+Guard passes full native and targeted ASan/UBSan/leaks on both hosts; previous
+source fails the executing regression. Mounted2500/2500 pass, including a traced
+500-case run (old trace192/500 EIO). Final concurrent/recovery reruns are pending.
+
+[Intel operation-ID admission and REPORT ownership](../status/intel-opid-report-correctness-20261014.md):
 **Two targeted corrections/native+sanitizers PASS; loaded POSIX FAIL; W100 OPEN.**
 Lease admission no longer waits under the inode edge stripe; partial REPORTs
 retain their PUT base. Old-code regression controls fail on both hosts.
 Three corrected seven-client cohorts4431/4536 pass (83timeouts,22EBUSY),
 zero invalid REPORTs and121,319 completed traced IDs. Unchanged-client aged
-comparison1475/1512 retains37 failures and14 invalid REPORTs. Further byte/fault
-qualification is in progress; no production deployment or ORCD acceptance claim.
+comparison1475/1512 retains37 failures and14 invalid REPORTs. Later byte/fault
+qualification passes14k writer/MD5/cold, two-fsync and pause checks, but exposes
+a separate ftruncate EIO; see the newer-snapshot follow-up. No production or
+ORCD acceptance claim.
 
 [Private Intel seven-client strace/perf](../status/intel-seven-client-profile-20261014.md):
 **Diagnostic capture PASS; core1443/1512 FAIL; W100 OPEN.** Seven matched37ff
@@ -7928,6 +7938,13 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 ### W100 · Intel concurrent POSIX timeouts and mixed-workload EIO
 
 **Class/state:** Correctness/performance investigation; open.
+
+**Oct14 newer-snapshot ownership correction:** [Private Intel follow-up](../status/intel-report-newer-snapshot-20261014.md).
+Fresh qualification reproduces ftruncate EIO on both hosts. An older REPORT can
+free a newer snapshot while its PUT is in flight; the guard retains bytes,
+ranges and eviction pin until the matching newer ACK. Full native, sanitizer
+and2500 mounted cases pass; old native assertion fails. Final concurrent and
+recovery reruns remain in progress. No window/deadline/quota tuning.
 
 **Oct14 admission/REPORT correction:** [Private Intel checkpoint](../status/intel-opid-report-correctness-20261014.md).
 Production-code regressions reproduce lease admission's lock dependency and a
