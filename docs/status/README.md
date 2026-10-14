@@ -1,3 +1,13 @@
+[Intel production and independent external clients](intel-external-clients-deployment-20261014.md):
+**PASS: main Intel upgraded to85f2a199aa39; AMD/xorinox mount at /data1/efs/intel-mnt.**
+Four Intel daemons,400 GiB/node, TCP/direct/files; .efs client/server, packing,
+containers and expiry OFF. External source/config/logs isolated under
+`/data1/efs/intel-client`; AMD's original cluster processes unchanged and its
+stop cleanup scoped to its configured mounts. Preserved512 samples match on
+both external clients; fsynced four-host smoke PASS. Intel source rules and
+AMD exact-path AppArmor rule applied by human; all four TCP endpoints reachable.
+Readiness qualification only; performance workloads have not started.
+
 [Private Intel direct-read/fork](intel-direct-read-fork-20261014.md):
 **W118: Intel stale-byte symptom NOT REPRODUCED; historical ORCD gate remains open.**
 Oracle8adc30ec9 repairs a demonstrated false PASS when forks fail, adds exact
