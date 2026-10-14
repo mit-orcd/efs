@@ -1494,12 +1494,15 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-**Targeted correctness PASS; broad follow-up in progress; W100 OPEN.**
-Fresh recovery/POSIX qualification exposes ftruncate EIO on the first correction.
-Old REPORT completion can release a newer in-flight snapshot's bytes/ranges/pin.
-Guard passes full native and targeted ASan/UBSan/leaks on both hosts; previous
-source fails the executing regression. Mounted2500/2500 pass, including a traced
-500-case run (old trace192/500 EIO). Final concurrent/recovery reruns are pending.
+**Final private Intel TCP/direct matrix PASS; W100 aggregate OPEN.**
+Fix28df9c7eb retains a newer snapshot's bytes/ranges/pin through an older REPORT.
+Both hosts pass full native and targeted ASan/UBSan/leaks; old control fails.
+Mounted2500/2500, final four concurrent rounds6048/6048, physical cross-host
+peer67/67, both complete recovery/GC fixtures (core216/216/local peer67/67 each),
+two-fsync and paused-daemon gates pass. Final cold14k earlier tiny files,
+2500 new truncate files, sparse EOF and pause bytes pass from both hosts.
+Production unchanged; only normal private processes remain, optional features
+and tracing OFF. Original ORCD EIO/broader acceptance remains open.
 
 [Intel operation-ID admission and REPORT ownership](../status/intel-opid-report-correctness-20261014.md):
 **Two targeted corrections/native+sanitizers PASS; loaded POSIX FAIL; W100 OPEN.**
@@ -7943,8 +7946,13 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 Fresh qualification reproduces ftruncate EIO on both hosts. An older REPORT can
 free a newer snapshot while its PUT is in flight; the guard retains bytes,
 ranges and eviction pin until the matching newer ACK. Full native, sanitizer
-and2500 mounted cases pass; old native assertion fails. Final concurrent and
-recovery reruns remain in progress. No window/deadline/quota tuning.
+and2500 mounted cases pass; old native assertion fails. Final28df9c7eb matrix
+passes6048/6048 concurrent, physical cross-host67/67, both full recovery/GC
+fixtures (core216/216/local peer67/67 each), two-fsync and daemon pause gates.
+Final cold14k earlier tiny files,2500 new truncate files and sparse/pause bytes
+pass from each host. Production unchanged; no window/deadline/quota tuning.
+Remaining: original ORCD REPORT BUSY/EIO and broader sustained/profile acceptance;
+this Intel TCP/direct matrix does not close the aggregate.
 
 **Oct14 admission/REPORT correction:** [Private Intel checkpoint](../status/intel-opid-report-correctness-20261014.md).
 Production-code regressions reproduce lease admission's lock dependency and a
@@ -7953,8 +7961,9 @@ full native and targeted ASan/UBSan/leaks on both Intel hosts; old-source contro
 fail. Corrected seven-client4431/4536 retains83timeouts/22EBUSY but zero invalid
 REPORTs; all121,319 traced IDs complete. Unchanged clients on the same aged
 stores/running daemons retain37 failures and14 invalid REPORTs. No window,
-deadline, quota or format tuning. Further byte/fault qualification is in progress;
-W100 aggregate and original ORCD EIO remain open.
+deadline, quota or format tuning. Subsequent14k/EOF/pause qualification passes,
+but exposes ftruncate EIO; the newer-snapshot follow-up above records its fix
+and final passing Intel matrix. W100 aggregate/original ORCD EIO remain open.
 
 **Oct14 default queue guard:** [Intel queue qualification](../status/intel-queue-guard-20261014.md).
 Guard1ac603128 is committed/deployed; full native and targeted sanitizer pass

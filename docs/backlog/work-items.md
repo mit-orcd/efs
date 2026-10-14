@@ -4993,8 +4993,13 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 Fresh qualification reproduces ftruncate EIO on both hosts. An older REPORT can
 free a newer snapshot while its PUT is in flight; the guard retains bytes,
 ranges and eviction pin until the matching newer ACK. Full native, sanitizer
-and2500 mounted cases pass; old native assertion fails. Final concurrent and
-recovery reruns remain in progress. No window/deadline/quota tuning.
+and2500 mounted cases pass; old native assertion fails. Final28df9c7eb matrix
+passes6048/6048 concurrent, physical cross-host67/67, both full recovery/GC
+fixtures (core216/216/local peer67/67 each), two-fsync and daemon pause gates.
+Final cold14k earlier tiny files,2500 new truncate files and sparse/pause bytes
+pass from each host. Production unchanged; no window/deadline/quota tuning.
+Remaining: original ORCD REPORT BUSY/EIO and broader sustained/profile acceptance;
+this Intel TCP/direct matrix does not close the aggregate.
 
 **Oct14 admission/REPORT correction:** [Private Intel checkpoint](../status/intel-opid-report-correctness-20261014.md).
 Production-code regressions reproduce lease admission's lock dependency and a
@@ -5003,8 +5008,9 @@ full native and targeted ASan/UBSan/leaks on both Intel hosts; old-source contro
 fail. Corrected seven-client4431/4536 retains83timeouts/22EBUSY but zero invalid
 REPORTs; all121,319 traced IDs complete. Unchanged clients on the same aged
 stores/running daemons retain37 failures and14 invalid REPORTs. No window,
-deadline, quota or format tuning. Further byte/fault qualification is in progress;
-W100 aggregate and original ORCD EIO remain open.
+deadline, quota or format tuning. Subsequent14k/EOF/pause qualification passes,
+but exposes ftruncate EIO; the newer-snapshot follow-up above records its fix
+and final passing Intel matrix. W100 aggregate/original ORCD EIO remain open.
 
 **Oct14 default queue guard:** [Intel queue qualification](../status/intel-queue-guard-20261014.md).
 Guard1ac603128 is committed/deployed; full native and targeted sanitizer pass

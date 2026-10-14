@@ -1,10 +1,13 @@
 [Intel older REPORT / newer PUT ownership](intel-report-newer-snapshot-20261014.md):
-**Targeted correctness PASS; broad follow-up in progress; W100 OPEN.**
-Fresh recovery/POSIX qualification exposes ftruncate EIO on the first correction.
-Old REPORT completion can release a newer in-flight snapshot's bytes/ranges/pin.
-Guard passes full native and targeted ASan/UBSan/leaks on both hosts; previous
-source fails the executing regression. Mounted2500/2500 pass, including a traced
-500-case run (old trace192/500 EIO). Final concurrent/recovery reruns are pending.
+**Final private Intel TCP/direct matrix PASS; W100 aggregate OPEN.**
+Fix28df9c7eb retains a newer snapshot's bytes/ranges/pin through an older REPORT.
+Both hosts pass full native and targeted ASan/UBSan/leaks; old control fails.
+Mounted2500/2500, final four concurrent rounds6048/6048, physical cross-host
+peer67/67, both complete recovery/GC fixtures (core216/216/local peer67/67 each),
+two-fsync and paused-daemon gates pass. Final cold14k earlier tiny files,
+2500 new truncate files, sparse EOF and pause bytes pass from both hosts.
+Production unchanged; only normal private processes remain, optional features
+and tracing OFF. Original ORCD EIO/broader acceptance remains open.
 
 [Intel operation-ID admission and REPORT ownership](intel-opid-report-correctness-20261014.md):
 **Two targeted corrections/native+sanitizers PASS; loaded POSIX FAIL; W100 OPEN.**
