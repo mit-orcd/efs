@@ -32,6 +32,7 @@ static int fault_unlink(const char *path)
 }
 #define unlink fault_unlink
 #define fsync fault_sync
+#include "../src/server/store_containers.c"
 #include "../src/server/store.c"
 #undef fsync
 #undef unlink
