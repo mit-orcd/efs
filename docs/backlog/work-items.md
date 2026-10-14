@@ -4989,6 +4989,19 @@ These IDs track the previously unnumbered Intel follow-ups. They do not duplicat
 
 **Class/state:** Correctness/performance investigation; open.
 
+**Oct14 current qualification:** [Merged devel private Intel](../status/intel-devel-merged-qualification-20261013.md).
+Server EOF refusal/client retry repairs are qualified separately. Completed-batch
+host-mutex handoff382d537d6 passes a clean seven-client1512/1512 round, cold
+persistence and peer checks; both the heavier EOF1000/fsync4096 round and
+a final clean repeat retain five depth-60 30s timeouts. The EOF/fsync payload
+oracles pass. Full final native and isolated GC/recovery gates pass on both hosts. Aggregate stays OPEN; historical records below are not
+current reproductions or instructions to redeploy devel-intel.
+A later O_EXCL diagnostic reproduced accepted EOF loss: Intel2 old client
+778/1000 quiet cases pass. Fix61e5c939d preserves EOF while a pending body
+owns bytes, using a coherent dirty-mark/body-pin probe. Targeted native,
+ASan/UBSan and1000 mounted cases per host pass; exact committed-source broad
+qualification is pending. Directory deadlines remain a separate OPEN gate.
+
 **Evidence/current state:** Original Intel2 private `mtime_monotonic_many_writes` exceeds its unchanged 30-second limit; a bounded diagnostic preserves exact bytes and monotonic timestamps but takes 33.828 seconds. Later production runs on both hosts also retain deep-directory, many-entry and concurrent-append timeout verdicts. Mixed tiny/large private runs intermittently report fsync EIO or exceed the 180-second tiny-worker limit. Successful repeats do not establish a universal repair.
 
 **Remaining action:** Correlate per-operation and quorum/queue timings on current `devel-intel`, repeat both TCP storage modes with the existing tiny writer, and repair demonstrated causes. Bounded REPORT session admission and empty close-marker retirement are implemented with fencing regressions. A partial-host trace demonstrates a foreign transaction coordinator being queried on an unhosted group; routing is repaired and 128 peer mkdir races plus both deep-path cases pass per host/mode in targeted trials. Fresh-quorum BUSY propagation and same-request quorum reuse retain their authority proofs. Contended multi-shard REPORT admission now returns BUSY before side effects instead of spending the request deadline on serial fallback; targeted worker/tiny/cold-byte/fencing/reclamation gates pass on both hosts in both modes. REPORT prepares its durable owner once per batch, retaining all per-shard admission/fencing checks; the exact committed MKDIR attributes avoid a second post-success GETATTR. Both hosts pass full native and 78 standalone checks; Intel1 direct sequential cold bytes and reclamation pass. Deep-path fixture setup now uses directory handles, while final full absolute-path depth-100 operations and the 30-second limit remain. Targeted direct cases pass on both hosts; original quadratic-walk timing failures remain evidence and full corrected direct/buffered acceptance is pending. W52/W53/W97 are related investigations, not established diagnoses.

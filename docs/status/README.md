@@ -1,3 +1,15 @@
+[Merged devel private Intel qualification](intel-devel-merged-qualification-20261013.md):
+**Concurrent acceptance FAIL; W100 OPEN (Oct 14).** Runtime `382d537d6` and
+fixture corrections through `172e3f502`. New EOF ownership fix `61e5c939d`
+passes targeted native/sanitizer and1000 mounted O_EXCL cases per host; full
+new-source qualification is pending. Old Intel2 client failed222/1000. Full native and isolated GC/recovery
+pass both hosts, peer67/67, persistence27/27 per host, mixed cold bytes and live
+two-fsync refusal/recovery pass. First clean seven-client round1512/1512, but
+both heavier EOF1000/fsync4096 overlap and the final clean repeat retain five
+depth-60 directory timeouts (1507/1512). No deadline/window increases or full
+closure claim. TCP/direct/files; optional features disabled; production
+Intel/ORCD untouched.
+
 [AMD RDMA load/fallback fixes](rdma-load-fallback-fixes-20261013.md):
 **PARTIAL on14d621182** — files pinned ancestry barriers and explicit metadata
 balancing1 committed/deployed. Quiet full-load deep42/42 and names21/21 PASS
