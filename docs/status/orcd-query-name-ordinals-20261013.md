@@ -399,3 +399,29 @@ Full400GiB general acceptance remains human-paused. Next gate is diagnose
 and correct publication stalls under writers plus crawlers, then rerun the
 unchanged profile and sustained workload; .efs cache/query passes alone do
 not close ordinary file acceptance.
+
+
+Subsequent sustained-load query cohort FAIL7/21: each of seven clients passed
+one case and failed .efs stats/find with EBUSY at the existing eight-second
+helper window (30s case timeout unchanged). Earlier63/63 finite-load passes
+remain valid for their recorded workload, not for this sustained profile.
+Both dual publishers continue producing generations:004/005 successful
+builds around3.3–4.8s and about21.58M files; some capture/build refusals also
+appear. Thus the failed helper requests cannot be equated with a permanently
+stopped publisher or a demonstrated quota failure. Raw per-host
+query-concurrent-8249d92e993b-sustained-after-close-failure logs retained.
+
+Read-only10-second mutex sample confirms004 host mutex itself:
+g_host0x7f0d30796010 + offsetof(mu)0x77368 =0x7f0d3080d378,45 waiters.
+Owner3172280 was in fdatasync syscall75 on descriptor767,
+/data1/01/efs-orcd-test-erbmi1/mdraft/log/raft.log. This later sample proves
+the convoy exists; it does not prove that exact sync caused the earlier EIO.
+Source/Intel review confirms follower recv_batch_finish calls batch_end
+under the host mutex. Existing382d537d6 handoffs occur only between completed
+batches;34fd56fa0 moves durable ACK before KV apply;1ac603128 bounds send
+queues. None releases the host mutex across the follower log barrier.
+Safe correction requires owned prepare/persist/complete phases and per-group
+mutation fencing, with ACK/apply withheld until proven durable completion.
+Simply unlocking the current stack-owned receive batch is unsafe. Intel
+coordination requested shared-core implementation and stalled/failed-sync
+qualification on Intel; ORCD retains responsibility for live verification.

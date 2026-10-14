@@ -1,4 +1,4 @@
-[ORCD live824 qualification](orcd-query-name-ordinals-20261013.md): reviewed devel integrated; six command suites,63 concurrent queries,140,000 finite files and orderly marker restart PASS. Sustained writers plus MD5 crawlers FAIL: close REPORT budget exhaustion and ordinary directory EBUSY remain OPEN. RDMA/direct I/O, .efs on, packing/containers/expiry off.
+[ORCD live824 qualification](orcd-query-name-ordinals-20261013.md): reviewed devel integrated; six command suites,63 concurrent queries,140,000 finite files and orderly marker restart PASS. Sustained query cohort FAIL7/21; writers plus MD5 crawlers FAIL: close REPORT budget exhaustion and ordinary directory EBUSY remain OPEN. RDMA/direct I/O, .efs on, packing/containers/expiry off.
 
 [ORCD concurrent inode race](orcd-query-name-ordinals-20261013.md): fa0 six command suites and140,000 finite files PASS; loaded queries FAIL20/21 on one synthetic ENOENT. Actual-cache reservation fix native/sanitizer/old-negative qualified locally; Linux/live pending.
 
