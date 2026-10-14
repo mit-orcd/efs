@@ -1,6 +1,7 @@
 #!/bin/bash
 # Same-user observational profile. Invoke separately on each host, specifying
-# only the Intel deployment's PIDs (not other clusters on the same machine).+# Usage: bash profile_intel_live.sh NEW_OUTPUT_DIR PID[,PID...] [PERF_SECONDS]
+# only the Intel deployment's PIDs (not other clusters on the same machine).
+# Usage: bash profile_intel_live.sh NEW_OUTPUT_DIR PID[,PID...] [PERF_SECONDS]
 set -euo pipefail
 out=${1:?new output directory}; pids=${2:?comma separated PIDs}; seconds=${3:-45}
 [[ $pids =~ ^[0-9]+(,[0-9]+)*$ && $seconds =~ ^[0-9]+$ ]]

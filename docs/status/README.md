@@ -1,3 +1,12 @@
+[Intel post-index live profile](intel-post-index-profile-20261014.md):
+**Diagnostic capture PASS; next optimization NOTRUN.** Existing AMD four-worker
+writer and xorinox four-worker MD5 crawl observed; user jobs remain running.
+GETATTR46–50% of Intel1 user CPU; recommend combining its first lane/reduction
+read while retaining independent second collect and freshness fences. REPORT
+1,597/1,597 OK, max46ms; CREATE probe BUSY is normal protocol, not demonstrated
+retry storm. Real WAL/Raft sync cost; zero host TCP retrans/NIC drop deltas.
+TCP/direct/files, optional features OFF; no runtime changes or new suites.
+
 [Intel LSM metadata candidate indexing](intel-lsm-candidate-index-20261014.md):
 **Implemented/deployed6cbd99e54; bounded smoke PASS; short measurements improve.**
 In-memory coarse-range bitmaps plus binary L1 bounds preserve precedence and
