@@ -1494,6 +1494,12 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+RDMA endpoint e6b6b83f4 and Intel checkpoint1ac603128 integrated into the devel
+candidate; code merged cleanly, status/generated-doc conflicts resolved with
+both evidence blocks retained. AMD merged qualification pending; earlier
+separate-source passes remain historical. Flags/deadlines unchanged, no push.
+
+[Merged devel private Intel qualification](../status/intel-devel-merged-qualification-20261013.md):
 **Concurrent acceptance FAIL; W100 OPEN (Oct14).** Runtime61e5c939d fixes
 accepted EOF loss when an inode-only report retires before its pending body.
 Full native/core, targeted sanitizer,1000 quiet and1000 loaded O_EXCL cases
