@@ -55,4 +55,7 @@ def run(host):
  row={'host':host,'gate':a.gate,'rc':r.returncode,'seconds':round(time.monotonic()-started,3),'args':args}
  print(json.dumps(row),flush=True);return row
 with concurrent.futures.ThreadPoolExecutor(2) as pool:rows=list(pool.map(run,['intel1_efs','intel2_efs']))
-(a.output/(a.gate+'-summary.json')).write_text(json.dumps(rows,indent=2)+'\n');raise SystemExit(any(r['rc'] for r in rows))
+summary=json.dumps(rows,indent=2)+'\n'
+(a.output/(a.gate+'-'+a.run_id+'-summary.json')).write_text(summary)
+(a.output/(a.gate+'-summary.json')).write_text(summary)
+raise SystemExit(any(r['rc'] for r in rows))
