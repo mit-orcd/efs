@@ -1108,7 +1108,12 @@ static int read_file_bytes(const char *path,
             uint8_t *tail = NULL;
             if (posix_memalign((void **)&tail, 4096, 4096) == 0) {
                 ssize_t rn = pread(fd, tail, 4096, (off_t)want_len);
-                if (rn == 4096) {
+                /* Buffered writers persist only the digest, whereas direct
+                 * writers pad it to an aligned page. An aligned O_DIRECT
+                 * read may return a short final page at EOF. Both formats
+                 * carry the same complete digest; require its bytes, not
+                 * padding. The GET handler still verifies the payload hash. */
+                if (rn >= EFS_HASH_SIZE) {
                     memcpy(sum, tail, EFS_HASH_SIZE);
                     *sum_ok = 1;
                 }
