@@ -346,3 +346,56 @@ racing-intern assertion at runtime as expected. Reproduce with
 adapter with the new release hook, keeping every errno assertion. Linux/live
 qualification of this client correction is NOTRUN; sustained screens remain
 stopped.
+
+
+### 8249d92e993b live qualification and sustained failure (2026-10-14)
+
+Active verdict: focused gates PASS, sustained tiny-file acceptance FAIL/OPEN.
+All available local development branch commits are ancestors of the ORCD
+branch after review, including devel endpoint7659df951. No additional merge
+was needed during this review. Production release branches were not changed.
+
+Exact deployed source8249d92e993b79aee98aa75031d784483fe32c8a:
+ORCD-test four servers003–006/seven clients007–013, strict native IB RDMA
+mlx5_2, files storage/direct I/O, .efs enabled, packing/containers/expiry off.
+All11 runtime/profile/nonroot proofs and897 code/test input hashes PASS.
+Full Linux native suite and focused Linux ASan/UBSan/leak checks PASS.
+Normal cold readiness113.095s; acknowledged large and512-byte markers
+verified on all seven remounts. No erase or forced unmount.
+
+Installed six-command harness PASS: commands6.972s, options5.171s, pages7.173s,
+virtual interfaces47.061s, load33.154s, large delta21.490s. Native mounts and
+management CLI used RDMA; raw protocol compatibility probes use TCP.
+Three loaded concurrent cohorts PASS63/63 at unchanged30s case deadlines.
+Finite create/write/fsync/close/read/unlink PASS140,000 files, seven16-worker
+clients ×20,000:413.290–561.364s, within unchanged1800s controller limit.
+Reproduction remains installed scripts/orcd_efs_commands.py, existing
+virt_ extra cases, and tests/live/fsync_admission.py. Raw runs retained under
+/home/erbmi1/orcd/scratch/efs/orcd-test/HOST with revision8249d92e993b.
+These passes do not replace the retained earlier failures.
+
+Seven existing tiny-file screens restarted08:18:50UTC with16 workers/client,
+max depth8,1000 files/folder, target10M/client, unique revision-stamped roots.
+Seven existing MD5 screens restarted08:19:30UTC on/tmp/efs-mount,16 workers,
+original scriptSHA bd70f793aa9bb4ab754ba69df91c035ae0db6b6e38dadbdba8243e214facfa71.
+The longer soak failed:007 and009 writers exited with close EIO;009 completed
+77,248 files in803.7s. At08:29:03UTC both clients logged synchronous REPORT
+BUSY after8016–8024ms, then FLUSH mapped it to EIO. Server REPORT wait/act
+refusals appear in the same window. This establishes a publication deadline
+failure, not its precise blocking cause. Eight-second sync REPORT and other
+budgets remain unchanged; no retry or errno relaxation has been made.
+Crawler manifests include ordinary deep-directory EBUSY errors. The initial
+monitor only searched exception text and missed nonzero progress error counts;
+its early zero-error sample is not a sustained pass. Remaining jobs were left
+running for evidence collection; failed jobs were not silently restarted.
+
+Ten-second pidstat sample08:30:29UTC under the sustained workload:
+003/004/005/006 daemon CPU70.1/146.3/142.6/80.7 percent (100=one core),
+RSS457716/1592359/1431929/955135KiB respectively. This short sample is not
+a peak resource bound or a performance A/B. Client failures, daemon windows,
+manifest errors and sample captures are retained outside Git in local
+operations/devel-efs/soak-*-824-* and the remote revision-stamped logs.
+Full400GiB general acceptance remains human-paused. Next gate is diagnose
+and correct publication stalls under writers plus crawlers, then rerun the
+unchanged profile and sustained workload; .efs cache/query passes alone do
+not close ordinary file acceptance.

@@ -1,3 +1,5 @@
+[ORCD live824 qualification](orcd-query-name-ordinals-20261013.md): reviewed devel integrated; six command suites,63 concurrent queries,140,000 finite files and orderly marker restart PASS. Sustained writers plus MD5 crawlers FAIL: close REPORT budget exhaustion and ordinary directory EBUSY remain OPEN. RDMA/direct I/O, .efs on, packing/containers/expiry off.
+
 [ORCD concurrent inode race](orcd-query-name-ordinals-20261013.md): fa0 six command suites and140,000 finite files PASS; loaded queries FAIL20/21 on one synthetic ENOENT. Actual-cache reservation fix native/sanitizer/old-negative qualified locally; Linux/live pending.
 
 [ORCD routing candidate](orcd-query-name-ordinals-20261013.md): `fa0ac827f` full Linux/native, targeted sanitizers and 897-input staged source checks PASS. Orderly deployment in progress; loaded and sustained gates OPEN.
