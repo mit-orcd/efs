@@ -60,6 +60,16 @@ for name in ['mkdir','rmdir']:
  assert route<body.index('host_command_cohort_begin(')
  assert 'set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;' in body
 
+# File mutations must route before any fresh read, session admission or
+# transaction effect. The client resends its exact identified packet.
+for name in ['unlink','link','rename_at']:
+ a=s.index('void server_raft_host_'+name+'(');body=s[a:s.index('\n}',a)]
+ route=body.index('host_namespace_leader_hint(')
+ assert route<body.index('host_hosts(' if name!='rename_at' else 'host_hosts_all(')
+ assert route<body.index('host_read_index(')
+ assert route<body.index('host_namespace_session_admit')
+ assert 'set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;' in body
+
 for name in ['lookup','getattr']:
  a=s.index('void server_raft_host_'+name+'(');b=s.index('\n}',a)
  body=s[a:b];route=body.index('host_read_leader_hint(')

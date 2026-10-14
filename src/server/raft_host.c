@@ -16596,6 +16596,12 @@ void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
         server_raft_host_rmdir(parent, name, q, out);
         return;
     }
+    /* Route the immutable request before fresh reads/session/txn work.
+     * A proven dual-group leader avoids a follower forwarding the whole
+     * mutation while retaining the client's receipt slot. Unknown or
+     * single-group leaders keep the normal authoritative fallback. */
+    hint=host_namespace_leader_hint(h,efs_raft_shard_group(efs_kv_inode_shard(parent)));
+    if (hint>=0) {set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;}
     /* The unlink may need the inode's group as well as the parent/dentry
      * group (last-link frees the inode row). Forward to a host that has
      * every group this op can touch rather than failing ReadIndex with an
@@ -17511,6 +17517,12 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
+    /* Route the immutable request before fresh reads/session/txn work.
+     * A proven dual-group leader avoids a follower forwarding the whole
+     * mutation while retaining the client's receipt slot. Unknown or
+     * single-group leaders keep the normal authoritative fallback. */
+    hint=host_namespace_leader_hint(h,efs_raft_shard_group(efs_kv_inode_shard(new_parent)));
+    if (hint>=0) {set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;}
     now = now_ns();
     psh = efs_kv_inode_shard(new_parent);
     ish = efs_kv_inode_shard(src_ino);
@@ -17770,6 +17782,12 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         out->status = EFS_INODE_RPC_OK;
         return;
     }
+    /* Route the immutable request before fresh reads/session/txn work.
+     * A proven dual-group leader avoids a follower forwarding the whole
+     * mutation while retaining the client's receipt slot. Unknown or
+     * single-group leaders keep the normal authoritative fallback. */
+    hint=host_namespace_leader_hint(h,efs_raft_shard_group(efs_kv_inode_shard(old_parent)));
+    if (hint>=0) {set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;}
     now = now_ns();
     same = old_parent == new_parent;
     memset(&pd, 0, sizeof(pd));

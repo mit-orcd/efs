@@ -1,3 +1,10 @@
+[AMD RDMA namespace admission](rdma-namespace-admission-20261014.md):
+merged ac22 baseline core1512,1512,1509/1512; unlink/root-rename EBUSY and one
+deep15s timeout reproduced, paused follower read failed180s after24MiB.
+Early proven dual-group leader routing extended to unlink/link/rename;
+focused regressions PASS, fixed AMD qualification pending. W106 OPEN.
+Files/RDMA/direct; .efs/packing/containers/expiry OFF, unchanged budgets, no push.
+
 [Latest RDMA branch integration](rdma-merged-qualification-20261013.md):
 all other local branch commits through ORCD `a57437549` / devel `382d537d6`
 integrated; shared Raft receive-batch mutex handoff may reduce admission waits.
