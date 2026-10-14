@@ -6,16 +6,19 @@ FORGET. The callback recovery path is covered by test_lookup_errno.py.
 """
 from pathlib import Path
 import re
+import os
+import shlex
 import subprocess
 import tempfile
 
 root = Path(__file__).resolve().parents[1]
-source = (root / 'src/client/efs_fuse.c').read_text()
+source = Path(os.environ.get('EFS_FUSE_SOURCE',root / 'src/client/efs_fuse.c')).read_text()
 def function(name):
     match = re.search(r'^static [^\n;]*\b' + name + r'\([^;]+?\)\n\{', source, re.M)
     assert match, name
     return source[match.start():source.index('\n}', match.end()) + 2]
 state = source[source.index('#define EFS_VQ_N'):source.index('static uint64_t virtual_version')]
+reservation=function('vq_unreserve') if 'static void vq_unreserve(' in source else 'static void vq_unreserve(fuse_ino_t id){(void)id;}'
 code = r'''
 #include <assert.h>
 #include <stdint.h>
@@ -27,15 +30,15 @@ typedef uint64_t fuse_ino_t;
 #define EFS_MAX_NAME 256
 #define EFS_VIRT_QUERY (1ULL<<60)
 #define EFS_VIRT_PARENT_MASK ((1ULL<<60)-1)
-''' + state + '\n'.join(function(name) for name in (
+''' + state + reservation + '\n'.join(function(name) for name in (
     'virtual_version', 'vq_intern', 'vq_lookup', 'vq_nlookup_add',
     'vq_nlookup_sub', 'vq_open_size', 'vq_pinned_size', 'vq_version_matches')) + r'''
 int main(void) {
     const char *bytes="original"; size_t length=0;efs_ino_t dir=0;char term[256];
     fuse_ino_t old=vq_intern(42,"v1.stats.nonce",virtual_version(bytes,8),8);
-    assert(old);vq_nlookup_add(old,1);vq_nlookup_sub(old,1);
+    assert(old);vq_nlookup_add(old,1);vq_unreserve(old);vq_nlookup_sub(old,1);
     assert(!vq_lookup(old,&dir,term,sizeof(term)) && dir==42 && !strcmp(term,"v1.stats.nonce"));
-    assert(vq_intern(42,"v1.stats.nonce",virtual_version(bytes,8),8)==old);
+    assert(vq_intern(42,"v1.stats.nonce",virtual_version(bytes,8),8)==old);vq_unreserve(old);
     assert(vq_pinned_size(old,&length,0) && length==8);
     assert(!vq_pinned_size(old,&length,1));
     assert(vq_version_matches(old,bytes,8) && !vq_version_matches(old,"changed!",8));
@@ -44,7 +47,7 @@ int main(void) {
     for(unsigned i=1;i<EFS_VQ_N;i++) {
         char name[64];snprintf(name,sizeof(name),"v1.stats.%u",i);
         fuse_ino_t id=vq_intern(42,name,1,8);assert(id && id!=old);
-        vq_nlookup_add(id,1);
+        vq_nlookup_add(id,1);vq_unreserve(id);
     }
     assert(!vq_intern(42,"overflow",1,8)); /* all 64 lookup/open pins held */
     vq_open_size(old,8,-1);
@@ -55,6 +58,16 @@ int main(void) {
     assert(!vq_lookup(replacement,&dir,term,sizeof(term)) && !strcmp(term,"replacement"));
     assert(vq_pinned_size(replacement,&length,0) && length==9);
     assert(!vq_version_matches(replacement,bytes,8));
+    /* 63 old lookup pins + the new intern must survive another intern before
+     * getattr/LOOKUP reply. Previously the new unreferenced identity recycled. */
+    assert(!vq_intern(42,"racing-intern",3,10));
+    assert(!vq_lookup(replacement,NULL,NULL,0));
+    vq_unreserve(replacement); /* failed getattr: no lookup ref established */
+    fuse_ino_t after=vq_intern(42,"after-failed-lookup",3,10);assert(after && after!=replacement);
+    assert(vq_lookup(replacement,NULL,NULL,0));
+    vq_nlookup_add(after,1);vq_unreserve(after); /* successful lookup transfer */
+    assert(!vq_intern(42,"still-pinned",4,11));
+    vq_nlookup_sub(after,1);assert(vq_intern(42,"after-forget",4,11));
     puts("virtual export handles: FORGET recovery, immutable version/size, open/lookup pins, bounded 64-slot recycling PASS");
     return 0;
 }
@@ -63,6 +76,6 @@ with tempfile.TemporaryDirectory(prefix='efs-virtual-export-') as directory:
     path = Path(directory) / 'test.c'
     path.write_text(code)
     binary = path.with_suffix('')
-    subprocess.run(['cc', '-std=gnu11', '-O2', '-Wall', '-Wextra', '-Werror',
+    subprocess.run(shlex.split(os.environ.get('CC','cc')) + ['-std=gnu11', '-O2', '-Wall', '-Wextra', '-Werror',
                     str(path), '-lpthread', '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True, timeout=10)

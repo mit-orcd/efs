@@ -1,3 +1,5 @@
+[ORCD concurrent inode race](orcd-query-name-ordinals-20261013.md): fa0 six command suites and140,000 finite files PASS; loaded queries FAIL20/21 on one synthetic ENOENT. Actual-cache reservation fix native/sanitizer/old-negative qualified locally; Linux/live pending.
+
 [ORCD routing candidate](orcd-query-name-ordinals-20261013.md): `fa0ac827f` full Linux/native, targeted sanitizers and 897-input staged source checks PASS. Orderly deployment in progress; loaded and sustained gates OPEN.
 
 [ORCD query-target starvation](orcd-query-name-ordinals-20261013.md): production90 load remains intermittent/OPEN. Controlled same-fixture readers: first dual follower0/187; eligible dual leader333 successes/five generations. Seed target correction in native qualification; original failures retained, long-running jobs stopped.

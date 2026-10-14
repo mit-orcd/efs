@@ -310,3 +310,39 @@ under the scratch base. This supersedes the test-adapter failure on3fc but
 does not qualify live workload results yet. Normal all11 deployment is in
 progress, same RDMA/direct/files/commands-on profile, optional features off,
 with no store erase.
+
+## Concurrent synthetic-inode reservation
+
+On installedfa0ac827f, all six command suites PASS and the direct seed probe
+returns NOT_PRIMARY/target3/zero bytes, as intended. The repeated seven-client
+finite gate also PASS140,000 exact files/zero errors in390.59–573.46s per
+client, within1,800s. The simultaneous21-query cohort FAIL20/21: fcstor007
+virt_find_query gets ENOENT opening its v3 synthetic query inode; the other
+six clients pass3/3. Refresh error remains0. Retain the failed case and TSV
+`fcstor007/query-concurrent-fa0ac827fef6` under the scratch base.
+
+Source review finds a deterministic virtual-cache race: vq_intern releases
+the64-slot cache mutex before lookup_fill completes getattr and adds a lookup
+reference. Another intern can recycle that still-unreferenced mapping and
+getattr/open then sees ENOENT. This can explain the observed symptom; the
+precise live failing instruction was not traced, so it remains a causal
+hypothesis rather than a captured stack.
+
+The following candidate reserves the mapping while interning, excludes
+reserved entries from recycling, and releases the temporary reservation after
+lookup_fill on both success and failure. Successful replies already hold
+their kernel lookup reference; failed getattr leaves no reservation. Both
+helper-script and result-inode call sites balance the reservation. The64-slot
+limit, open/lookup pins, immutable bytes, FORGET and invalidation semantics
+remain unchanged.
+
+Actual-cache regression PASS native/local ASan/UBSan:63 pinned old identities
+plus the new pending intern cannot recycle it; release after failed lookup
+permits reuse; successful lookup transfers to its kernel reference, and
+FORGET permits later recycling. Real oldfa0 source compiles and fails the
+racing-intern assertion at runtime as expected. Reproduce with
+`python3 tests/test_virtual_export_handles.py`, optional sanitizer CC, or
+`EFS_FUSE_SOURCE=OLD_SOURCE` for the negative. Update the LOOKUP error test
+adapter with the new release hook, keeping every errno assertion. Linux/live
+qualification of this client correction is NOTRUN; sustained screens remain
+stopped.
