@@ -6,6 +6,11 @@ normal-operation qualification does not pass. This run opens **W119** for the
 reproduced ORCD failures and **W120** for stale qualification fixtures. W100's
 human closure is unchanged; W106/W109/W92 retain their independent scopes.
 
+**Subsequent same-day profile switch:** the [TCP/direct commands-disabled
+rerun](orcd-tcp-direct-disabled-20261015.md) records the later runtime state
+and separate results. The RDMA deployment/final state below is this earlier
+run's dated checkpoint.
+
 ## Source, build and deployment
 
 Frozen from local `~/git/efs` `devel`, clean at capture. Compared with the old

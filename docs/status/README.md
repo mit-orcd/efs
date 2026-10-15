@@ -18,6 +18,13 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[ORCD TCP/direct, `.efs` disabled rerun](orcd-tcp-direct-disabled-20261015.md):
+**FAIL** on the same `b3e93177c138` product source:895 PASS/120 FAIL/520 NOTRUN
+in the seven-client round, peer61/67, clean stop refused. All23 successfully
+prepared persistence cases verify after authorized forced restart; private
+TCP POSIX/peer/GC, faults and memory gates pass. Current ORCD profile is
+TCP/direct/files with commands, packing, containers and expiry disabled.
+
 [ORCD latest-devel qualification, October 15](orcd-devel-qualification-20261015.md): deployment
 PASS on `b3e93177c138`; qualification **FAIL**. Seven-client POSIX, cross-host
 peer, enabled commands and clean stop have failures; W119/W120 track follow-up.

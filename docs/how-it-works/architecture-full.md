@@ -1512,6 +1512,13 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[ORCD TCP/direct, `.efs` disabled rerun](../status/orcd-tcp-direct-disabled-20261015.md):
+**FAIL** on the same `b3e93177c138` product source:895 PASS/120 FAIL/520 NOTRUN
+in the seven-client round, peer61/67, clean stop refused. All23 successfully
+prepared persistence cases verify after authorized forced restart; private
+TCP POSIX/peer/GC, faults and memory gates pass. Current ORCD profile is
+TCP/direct/files with commands, packing, containers and expiry disabled.
+
 [ORCD latest-devel qualification, October 15](../status/orcd-devel-qualification-20261015.md): deployment
 PASS on `b3e93177c138`; qualification **FAIL**. Seven-client POSIX, cross-host
 peer, enabled commands and clean stop have failures; W119/W120 track follow-up.
@@ -1582,7 +1589,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 
 | # | item | class | status | home |
 | --- | --- | --- | --- | --- |
-| orcd-qualification | **W119** · ORCD normal-operation RDMA failures and blocked clean stop | correctness / liveness | OPEN: 150 concurrent failures /846 NOTRUN; cross-host peer59/67; enabled queries EBUSY; retained writes block clean stop. Preserve failures, isolate causes and rerun original gates; W100 stays closed | [evidence and gates](../status/orcd-devel-qualification-20261015.md) · [item](#w119) |
+| orcd-qualification | **W119** · ORCD normal-operation RDMA failures and blocked clean stop | correctness / liveness | OPEN: 150 concurrent failures /846 NOTRUN; cross-host peer59/67; enabled queries EBUSY; retained writes block clean stop. TCP/commands-off rerun also FAILs (120 failures,520 NOTRUN; peer61/67; clean stop refused); all23 successfully prepared cold cases verify after authorized forced restart. [TCP evidence](../status/orcd-tcp-direct-disabled-20261015.md). Preserve failures, isolate causes and rerun original gates; W100 stays closed | [evidence and gates](../status/orcd-devel-qualification-20261015.md) · [item](#w119) |
 | qualification-fixtures | **W120** · stale extracted LOOKUP stub and command cleanup ownership check | verification correctness | OPEN: native stub lacks production host member; options fixture now has a suffix. Correct fixtures and pass semantic/cleanup gates without masking the original failed run | [evidence](../status/orcd-devel-qualification-20261015.md) · [item](#w120) |
 | 0i | **W54** · a fold's GC deletes the live base → read EIO, data loss | correctness | NUC direct/buffered authoritative folds and cold GC/restart pass; real cold IOR/hardscan passes at 4 and 36 ranks, including nine independent NUC FUSE clients; nine physical hosts remain; AMD software-RXE fold/GC gate passes, hardware RDMA remains | [full text](#w54--a-folds-gc-deletes-the-live-base-queue-row-0i) |
 | 0j | **W69** · the client's 50 ms lookup memo returns pre-mutation stats (posix 164/201) | correctness | correctness accepted: real blocked LOOKUP across chmod, immediate stats and full POSIX pass; GNU du samples recorded; unidentified Spark performance gate remains | [full text](#w69) |
@@ -7457,6 +7464,17 @@ failures and interrupted runs. W100 stays closed by human acceptance.
 <a id="w119"></a>
 
 ### W119 · ORCD normal-operation RDMA failures and blocked clean stop
+
+**Same-day TCP/direct, commands-disabled rerun:** same product source
+`b3e93177c138`, verified TCP with no uverbs and no `.efs` on all seven mounts.
+895 PASS /120 FAIL /12 SKIP /520 NOTRUN; cross-host peer61/67. Persistence
+preparation23/27; cold verification25/27 after authorized forced restart,
+including all23 successfully prepared cases. Clean stop refuses unresolved
+writes/leases on008. Fresh private TCP core216/216, peer67/67, physical GC/cold
+cleanup,23 standalone fault checks and selected Valgrind gates PASS. Thus the
+retained multi-host failures are not confined to RDMA or enabled queries; the
+fresh/private and retained/multi-host differences still need isolation. No new
+product fix is implied. [Full TCP configuration, commands, limits and verdicts](../status/orcd-tcp-direct-disabled-20261015.md).
 
 **Class/state:** correctness/liveness investigation; OPEN, October15,2026.
 Source `b3e93177c138` on physical orcd-test, files/direct/native RDMA,

@@ -5569,6 +5569,17 @@ failures and interrupted runs. W100 stays closed by human acceptance.
 
 ## W119 · ORCD normal-operation RDMA failures and blocked clean stop
 
+**Same-day TCP/direct, commands-disabled rerun:** same product source
+`b3e93177c138`, verified TCP with no uverbs and no `.efs` on all seven mounts.
+895 PASS /120 FAIL /12 SKIP /520 NOTRUN; cross-host peer61/67. Persistence
+preparation23/27; cold verification25/27 after authorized forced restart,
+including all23 successfully prepared cases. Clean stop refuses unresolved
+writes/leases on008. Fresh private TCP core216/216, peer67/67, physical GC/cold
+cleanup,23 standalone fault checks and selected Valgrind gates PASS. Thus the
+retained multi-host failures are not confined to RDMA or enabled queries; the
+fresh/private and retained/multi-host differences still need isolation. No new
+product fix is implied. [Full TCP configuration, commands, limits and verdicts](../status/orcd-tcp-direct-disabled-20261015.md).
+
 **Class/state:** correctness/liveness investigation; OPEN, October15,2026.
 Source `b3e93177c138` on physical orcd-test, files/direct/native RDMA,
 `.efs` enabled, packing/containers/expiry disabled. Original seven-client run:
