@@ -4,7 +4,6 @@
 #ifndef EFS_BENCH_BUILD
 #include "directory_sync_group.h"
 #endif
-#include "durable_cohort.h"
 #include "efs/checksum.h"
 #include "efs/kv_key.h"
 #include "efs/protocol.h"
@@ -1139,6 +1138,7 @@ static int read_file_bytes(const char *path,
     return EFS_OK;
 }
 
+struct put_sync_root;
 struct shard_io_arg {
     int sync_write;
     struct efsd_server *s;
@@ -1151,11 +1151,9 @@ struct shard_io_arg {
     int excl;      /* O_CREAT|O_EXCL: EEXIST -> EFS_ERR_EXIST, no second open */
     const uint8_t *sum; /* 32-byte digest; placed in the file, not a sidecar */
     int result;
-    /* Opt-in grouped durability (EFS_PUT_COHORT): a fragment this PUT
-     * created joins its root's cohort instead of a per-file barrier. */
-    struct durable_cohort *cohort;
-    int created;       /* this open created the file (O_CREAT|O_EXCL) */
-    int cohort_joined; /* durable_cohort_join ran for this PUT */
+    /* Data fragments are acknowledged after their write and made durable
+     * by the root's background barrier (put_sync_root). */
+    struct put_sync_root *sync_root;
 };
 
 /* Preserve buffered extents for same-size rewrites, while retaining the exact payload
@@ -1257,42 +1255,15 @@ static int sync_fragment_parents(struct efsd_server *s, const char *path)
     return EFS_OK;
 }
 
-/* EFS_PUT_COHORT=1: per-root grouped durability for newly created data
- * fragments (durable_cohort.h). XFS roots only: syncfs there is one log
- * force that covers every completed create, extent conversion and the
- * O_DIRECT data before it. Other filesystems keep per-file barriers. The
- * root descriptor stays open for the daemon's lifetime so syncfs reports
- * writeback errors raised since the previous barrier.
- * EFS_PUT_COHORT_GATHER_US (default 2000, max 20000) bounds how long a
- * leader waits for PUTs still writing on the same root. */
 #define XFS_SUPER_MAGIC_ 0x58465342
-static struct durable_cohort fragment_cohorts[EFS_MAX_STORAGE_PATHS];
-static int fragment_cohort_state[EFS_MAX_STORAGE_PATHS]; /* 0 unset, 1 on, -1 off */
-static pthread_mutex_t fragment_cohort_mu = PTHREAD_MUTEX_INITIALIZER;
 
-static int fragment_cohort_syncfs(int fd)
+/* Index of the attached storage root containing path (longest prefix), or
+ * -1. root receives its path. */
+static int fragment_root_lookup(struct efsd_server *s, const char *path,
+                                char root[EFS_MAX_PATH])
 {
-    return syncfs(fd);
-}
-
-static int fragment_cohort_enabled(void)
-{
-    static int enabled = -1;
-    if (enabled < 0) {
-        const char *e = getenv("EFS_PUT_COHORT");
-        enabled = e && !strcmp(e, "1");
-    }
-    return enabled;
-}
-
-static struct durable_cohort *fragment_cohort_for(struct efsd_server *s,
-                                                  const char *path)
-{
-    if (!s || s->storage_engine || !fragment_cohort_enabled())
-        return NULL;
     size_t n = strlen(path), best = 0;
     int idx = -1;
-    char root[EFS_MAX_PATH] = {0};
     pthread_mutex_lock(&s->lock);
     for (uint32_t i = 0; i < s->storage_path_count && i < EFS_MAX_STORAGE_PATHS; ++i) {
         const char *candidate = s->storage_paths[i];
@@ -1305,37 +1276,482 @@ static struct durable_cohort *fragment_cohort_for(struct efsd_server *s,
         idx = (int)i;
     }
     pthread_mutex_unlock(&s->lock);
+    return idx;
+}
+
+/* ---- Asynchronous PUT acknowledgement ----------------------------------
+ * The only data-fragment PUT mode: NFS unstable/commit
+ * (docs/status/intel-async-durability-20261015.md). A fragment is ACKed
+ * after its write and close; it joins its root's open epoch. A per-root
+ * syncer runs one barrier when the epoch is EFS_PUT_SYNC_MS old (default
+ * 200, 1..10000), holds EFS_PUT_SYNC_BYTES (default 256 MiB), or a
+ * DATA_COMMIT (client fsync) asks; PUTs wait above twice that byte bound.
+ * Smaller values make durability more aggressive.
+ *
+ * Barrier: syncfs(root) (writeback and journal commit), then the epoch
+ * record <root>/.efs-durable-epoch rewritten and fdatasynced. That
+ * fdatasync of rewritten data issues a device cache flush even when the
+ * journal had nothing to write, which also covers O_DIRECT overwrites
+ * that changed no metadata. The record names the last durable (boot,
+ * seq) and is written only after the fragments it covers are durable.
+ * A failed barrier is sticky until restart: COMMIT and fsync return EIO;
+ * PUTs continue. Shutdown runs a final barrier and marks the record
+ * clean; an unclean restart logs the exposure and verifies the checksum
+ * tails of data fragments modified since the last durable time (report
+ * only: parity reads and scrub repair a bad fragment). Metadata-table
+ * fragments keep their per-file barriers. */
+#define PUT_SYNC_RECORD ".efs-durable-epoch"
+#define PUT_SYNC_RECORD_LEN 192
+struct put_sync_root {
+    char root[EFS_MAX_PATH];
+    int fd, record_fd;
+    pthread_mutex_t mu;
+    pthread_cond_t cv;
+    pthread_t thread, scanner;
+    int thread_started, scanner_started;
+    uint32_t boot;
+    uint64_t seq, durable_seq;            /* open epoch, last durable epoch */
+    uint64_t cur_bytes, cur_frags, cur_first_ns;
+    uint64_t inflight_bytes, inflight_frags, inflight_first_ns;
+    int want_now, stop, error;
+    uint64_t acked_bytes, synced_bytes, barriers, failures;
+    uint64_t last_barrier_ns, last_barrier_us;
+    uint32_t prev_clean;
+    uint64_t prev_durable_ns;
+    uint64_t scanned, bad;
+    int scan_done;
+};
+static struct put_sync_root put_sync_roots[EFS_MAX_STORAGE_PATHS];
+static int put_sync_state[EFS_MAX_STORAGE_PATHS]; /* 0 unset, 1 async, -1 not async */
+static pthread_mutex_t put_sync_mu = PTHREAD_MUTEX_INITIALIZER;
+static uint64_t put_sync_window_ms = 200, put_sync_window_bytes = 256ull << 20;
+
+static uint64_t put_sync_now_ns(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+}
+
+static uint64_t put_sync_wall_ns(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+}
+
+static void put_sync_config(void)
+{
+    static int done;
+    if (!done) {
+        done = 1;
+        const char *w = getenv("EFS_PUT_SYNC_MS");
+        if (w && *w) {
+            unsigned long v = strtoul(w, NULL, 10);
+            if (v >= 1 && v <= 10000) put_sync_window_ms = v;
+        }
+        const char *b = getenv("EFS_PUT_SYNC_BYTES");
+        if (b && *b) {
+            unsigned long long v = strtoull(b, NULL, 10);
+            if (v >= (1ull << 20) && v <= (16ull << 30)) put_sync_window_bytes = v;
+        }
+    }
+}
+
+/* Fixed-size text record, one sector, rewritten in place. */
+static int put_sync_record_write(struct put_sync_root *r, uint64_t seq, int clean)
+{
+    char rec[PUT_SYNC_RECORD_LEN];
+    memset(rec, ' ', sizeof(rec));
+    int n = snprintf(rec, sizeof(rec),
+                     "efs-durable-epoch v1 boot=%u seq=%llu time_ns=%llu clean=%d",
+                     r->boot, (unsigned long long)seq,
+                     (unsigned long long)put_sync_wall_ns(), clean);
+    if (n < 0 || n >= (int)sizeof(rec)) return EFS_ERR_IO;
+    rec[n] = ' ';
+    rec[sizeof(rec) - 1] = '\n';
+    ssize_t w;
+    do { w = pwrite(r->record_fd, rec, sizeof(rec), 0); } while (w < 0 && errno == EINTR);
+    if (w != (ssize_t)sizeof(rec)) return EFS_ERR_IO;
+    int rc;
+    do { rc = fdatasync(r->record_fd); } while (rc < 0 && errno == EINTR);
+    return rc ? EFS_ERR_IO : EFS_OK;
+}
+
+/* One barrier for everything acknowledged before it started. Called by the
+ * syncer only, with mu held; drops mu during I/O. */
+static void put_sync_barrier_locked(struct put_sync_root *r)
+{
+    uint64_t target = r->seq;
+    r->inflight_bytes = r->cur_bytes;
+    r->inflight_frags = r->cur_frags;
+    r->inflight_first_ns = r->cur_first_ns;
+    r->cur_bytes = r->cur_frags = r->cur_first_ns = 0;
+    r->seq++;
+    r->want_now = 0;
+    pthread_mutex_unlock(&r->mu);
+    uint64_t t0 = put_sync_now_ns();
+    int rc = syncfs(r->fd) == 0 ? EFS_OK : EFS_ERR_IO;
+    if (rc == EFS_OK)
+        rc = put_sync_record_write(r, target, 0);
+    uint64_t t1 = put_sync_now_ns();
+    pthread_mutex_lock(&r->mu);
+    r->barriers++;
+    r->last_barrier_ns = t1;
+    r->last_barrier_us = (t1 - t0) / 1000;
+    if (rc == EFS_OK) {
+        r->durable_seq = target;
+        r->synced_bytes += r->inflight_bytes;
+    } else {
+        /* Durability of these writes is unknown: keep counting them as
+         * unsynced and stop acknowledging asynchronously. */
+        r->failures++;
+        if (!r->error)
+            fprintf(stderr, "store: put sync root=%s barrier failed seq=%llu; "
+                    "COMMIT and fsync return EIO until restart\n",
+                    r->root, (unsigned long long)target);
+        r->error = 1;
+        r->cur_bytes += r->inflight_bytes;
+        r->cur_frags += r->inflight_frags;
+        if (r->inflight_first_ns && (!r->cur_first_ns || r->inflight_first_ns < r->cur_first_ns))
+            r->cur_first_ns = r->inflight_first_ns;
+    }
+    r->inflight_bytes = r->inflight_frags = r->inflight_first_ns = 0;
+    pthread_cond_broadcast(&r->cv);
+}
+
+static void *put_sync_thread(void *arg)
+{
+    struct put_sync_root *r = arg;
+    pthread_mutex_lock(&r->mu);
+    for (;;) {
+        uint64_t now = put_sync_now_ns();
+        int due = r->cur_frags &&
+                  (r->want_now || r->cur_bytes >= put_sync_window_bytes ||
+                   now - r->cur_first_ns >= put_sync_window_ms * 1000000ull);
+        if (due) {
+            put_sync_barrier_locked(r);
+            continue;
+        }
+        if (r->want_now && !r->cur_frags) {
+            r->want_now = 0; /* nothing open; waiters are already covered */
+            pthread_cond_broadcast(&r->cv);
+        }
+        if (r->stop)
+            break;
+        struct timespec until;
+        clock_gettime(CLOCK_REALTIME, &until);
+        uint64_t wait_ns = r->cur_frags
+            ? put_sync_window_ms * 1000000ull - (now - r->cur_first_ns)
+            : 1000000000ull;
+        until.tv_sec += (time_t)(wait_ns / 1000000000ull);
+        until.tv_nsec += (long)(wait_ns % 1000000000ull);
+        if (until.tv_nsec >= 1000000000L) { until.tv_sec++; until.tv_nsec -= 1000000000L; }
+        pthread_cond_timedwait(&r->cv, &r->mu, &until);
+    }
+    pthread_mutex_unlock(&r->mu);
+    return NULL;
+}
+
+/* Count an acknowledged-but-unsynced fragment. Waits only while the root
+ * holds more than twice the byte window (bounded exposure). */
+static void put_sync_note(struct put_sync_root *r, uint64_t bytes)
+{
+    pthread_mutex_lock(&r->mu);
+    if (!r->cur_frags)
+        r->cur_first_ns = put_sync_now_ns();
+    r->cur_bytes += bytes;
+    r->cur_frags++;
+    r->acked_bytes += bytes;
+    if (r->cur_bytes >= put_sync_window_bytes)
+        pthread_cond_broadcast(&r->cv);
+    while (r->cur_bytes + r->inflight_bytes > 2 * put_sync_window_bytes &&
+           !r->stop && !(r->error && !r->inflight_frags))
+        pthread_cond_wait(&r->cv, &r->mu);
+    pthread_mutex_unlock(&r->mu);
+}
+
+/* Wait until everything acknowledged before this call is durable. */
+static int put_sync_commit_root(struct put_sync_root *r)
+{
+    pthread_mutex_lock(&r->mu);
+    uint64_t want = r->cur_frags ? r->seq
+                  : r->inflight_frags ? r->seq - 1 : r->durable_seq;
+    if (r->cur_frags) {
+        r->want_now = 1;
+        pthread_cond_broadcast(&r->cv);
+    }
+    while (r->durable_seq < want && !r->error && !r->stop)
+        pthread_cond_wait(&r->cv, &r->mu);
+    int rc = r->durable_seq >= want && !r->error ? EFS_OK : EFS_ERR_IO;
+    pthread_mutex_unlock(&r->mu);
+    return rc;
+}
+
+/* Report-only verification after an unclean stop: data fragments modified
+ * since the last durable barrier (minus a margin) must still carry a valid
+ * checksum tail. A missing or torn fragment is served from parity on read
+ * and rebuilt by scrub; this pass bounds and reports the exposure. */
+static void put_sync_scan_dir(struct put_sync_root *r, const char *dir,
+                              uint64_t since_ns, int depth)
+{
+    DIR *d = opendir(dir);
+    if (!d || depth > 32) { if (d) closedir(d); return; }
+    struct dirent *e;
+    while ((e = readdir(d))) {
+        if (e->d_name[0] == '.')
+            continue;
+        char path[8192];
+        snprintf(path, sizeof(path), "%s/%s", dir, e->d_name);
+        struct stat st;
+        if (lstat(path, &st) != 0)
+            continue;
+        if (S_ISDIR(st.st_mode)) {
+            put_sync_scan_dir(r, path, since_ns, depth + 1);
+            continue;
+        }
+        if (!S_ISREG(st.st_mode))
+            continue;
+        uint64_t mt = (uint64_t)st.st_mtim.tv_sec * 1000000000ull + (uint64_t)st.st_mtim.tv_nsec;
+        if (mt < since_ns)
+            continue;
+        uint64_t payload = 0;
+        int ok = 0;
+        if (fragment_payload_bytes((uint64_t)st.st_size, &payload) == EFS_OK &&
+            payload <= (64ull << 20)) {
+            uint8_t *buf = malloc((size_t)st.st_size);
+            int fd = buf ? open(path, O_RDONLY | O_CLOEXEC) : -1;
+            if (fd >= 0) {
+                ssize_t got = pread(fd, buf, (size_t)st.st_size, 0);
+                close(fd);
+                uint8_t sum[EFS_HASH_SIZE];
+                if (got == (ssize_t)st.st_size) {
+                    efs_hash(buf, (size_t)payload, sum);
+                    ok = !memcmp(sum, buf + payload, EFS_HASH_SIZE);
+                }
+            }
+            free(buf);
+        }
+        pthread_mutex_lock(&r->mu);
+        r->scanned++;
+        if (!ok) {
+            r->bad++;
+            if (r->bad <= 64)
+                fprintf(stderr, "store: put sync recovery bad fragment %s\n", path);
+        }
+        pthread_mutex_unlock(&r->mu);
+    }
+    closedir(d);
+}
+
+static void *put_sync_scan_thread(void *arg)
+{
+    struct put_sync_root *r = arg;
+    char data[EFS_MAX_PATH + 8];
+    snprintf(data, sizeof(data), "%s/data", r->root);
+    uint64_t margin = 5000000000ull;
+    uint64_t since = r->prev_durable_ns > margin ? r->prev_durable_ns - margin : 0;
+    put_sync_scan_dir(r, data, since, 0);
+    pthread_mutex_lock(&r->mu);
+    r->scan_done = 1;
+    fprintf(stderr, "store: put sync recovery root=%s scanned=%llu bad=%llu\n", r->root,
+            (unsigned long long)r->scanned, (unsigned long long)r->bad);
+    pthread_mutex_unlock(&r->mu);
+    return NULL;
+}
+
+/* Attach one root. Reads the previous record, starts a new boot, and on an
+ * unclean previous stop starts the verification scan. */
+static void put_sync_attach(struct put_sync_root *r, const char *root)
+{
+    snprintf(r->root, sizeof(r->root), "%s", root);
+    pthread_mutex_init(&r->mu, NULL);
+    pthread_cond_init(&r->cv, NULL);
+    r->fd = open(root, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    struct statfs fs;
+    if (r->fd < 0 || fstatfs(r->fd, &fs) != 0) {
+        if (r->fd >= 0) close(r->fd);
+        r->fd = -1;
+        return;
+    }
+    char path[EFS_MAX_PATH + 32];
+    snprintf(path, sizeof(path), "%s/%s", root, PUT_SYNC_RECORD);
+    int existed = access(path, F_OK) == 0;
+    r->record_fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0644);
+    if (r->record_fd < 0) {
+        close(r->fd);
+        r->fd = -1;
+        return;
+    }
+    char rec[PUT_SYNC_RECORD_LEN + 1] = {0};
+    unsigned prev_boot = 0, clean = 1;
+    unsigned long long prev_seq = 0, prev_ns = 0;
+    if (existed && pread(r->record_fd, rec, PUT_SYNC_RECORD_LEN, 0) > 0)
+        (void)sscanf(rec, "efs-durable-epoch v1 boot=%u seq=%llu time_ns=%llu clean=%u",
+                     &prev_boot, &prev_seq, &prev_ns, &clean);
+    r->prev_clean = !existed || clean;
+    r->prev_durable_ns = prev_ns;
+    r->boot = prev_boot + 1;
+    r->seq = 1;
+    r->durable_seq = 0;
+    if (put_sync_record_write(r, 0, 0) != EFS_OK) {
+        close(r->record_fd);
+        close(r->fd);
+        r->fd = -1;
+        return;
+    }
+    if (!existed) {
+        int rc;
+        do { rc = fsync(r->fd); } while (rc < 0 && errno == EINTR);
+    }
+    if (!r->prev_clean) {
+        fprintf(stderr, "store: put sync root=%s unclean previous stop: writes acknowledged "
+                "after boot=%u seq=%llu were not durable; verifying fragments modified since\n",
+                root, prev_boot, prev_seq);
+        r->scanner_started = pthread_create(&r->scanner, NULL, put_sync_scan_thread, r) == 0;
+    } else {
+        r->scan_done = 1;
+    }
+    r->thread_started = pthread_create(&r->thread, NULL, put_sync_thread, r) == 0;
+    if (!r->thread_started) {
+        close(r->record_fd);
+        close(r->fd);
+        r->fd = -1;
+        return;
+    }
+    fprintf(stderr, "store: put sync root=%s async boot=%u window_ms=%llu window_bytes=%llu fs=%s\n",
+            root, r->boot, (unsigned long long)put_sync_window_ms,
+            (unsigned long long)put_sync_window_bytes,
+            (unsigned long)fs.f_type == XFS_SUPER_MAGIC_ ? "xfs" : "other");
+}
+
+static struct put_sync_root *put_sync_root_for(struct efsd_server *s, const char *path)
+{
+    if (!s || s->storage_engine)
+        return NULL;
+    put_sync_config();
+    char root[EFS_MAX_PATH] = {0};
+    int idx = fragment_root_lookup(s, path, root);
     if (idx < 0)
         return NULL;
-    pthread_mutex_lock(&fragment_cohort_mu);
-    if (!fragment_cohort_state[idx]) {
-        struct durable_cohort *c = &fragment_cohorts[idx];
-        struct statfs fs;
-        int fd = open(root, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-        int xfs = fd >= 0 && fstatfs(fd, &fs) == 0 &&
-                  (unsigned long)fs.f_type == XFS_SUPER_MAGIC_;
-        const char *g = getenv("EFS_PUT_COHORT_GATHER_US");
-        unsigned long gather = g && *g ? strtoul(g, NULL, 10) : 2000;
-        if (gather > 20000)
-            gather = 20000;
-        if (xfs) {
-            pthread_mutex_init(&c->mu, NULL);
-            pthread_cond_init(&c->cv, NULL);
-            c->fd = fd;
-            c->gather_us = (unsigned)gather;
-            c->barrier = fragment_cohort_syncfs;
-            fragment_cohort_state[idx] = 1;
-        } else {
-            if (fd >= 0)
-                close(fd);
-            fragment_cohort_state[idx] = -1;
-        }
-        fprintf(stderr, "store: put cohort root=%s %s gather_us=%lu\n", root,
-                xfs ? "enabled" : "disabled (not xfs)", gather);
+    pthread_mutex_lock(&put_sync_mu);
+    if (!put_sync_state[idx]) {
+        put_sync_attach(&put_sync_roots[idx], root);
+        put_sync_state[idx] = put_sync_roots[idx].fd >= 0 ? 1 : -1;
+        if (put_sync_state[idx] < 0)
+            fprintf(stderr, "store: put sync root=%s cannot attach (epoch record "
+                    "unavailable)\n", root);
     }
-    struct durable_cohort *c = fragment_cohort_state[idx] > 0 ? &fragment_cohorts[idx] : NULL;
-    pthread_mutex_unlock(&fragment_cohort_mu);
-    return c;
+    struct put_sync_root *r = put_sync_state[idx] > 0 ? &put_sync_roots[idx] : NULL;
+    pthread_mutex_unlock(&put_sync_mu);
+    return r;
+}
+
+/* Attach every root at startup so an unclean previous stop is detected and
+ * reported before the first PUT. A root that cannot attach stops startup:
+ * there is no other data PUT mode to fall back to. */
+int server_put_sync_init(struct efsd_server *s)
+{
+    if (!s || s->storage_engine)
+        return EFS_OK;
+    for (uint32_t i = 0; i < s->storage_path_count && i < EFS_MAX_STORAGE_PATHS; ++i) {
+        char probe[EFS_MAX_PATH + 16];
+        snprintf(probe, sizeof(probe), "%s/data/x", s->storage_paths[i]);
+        if (!put_sync_root_for(s, probe))
+            return EFS_ERR_IO;
+    }
+    return EFS_OK;
+}
+
+int server_put_sync_commit(struct efsd_server *s, uint32_t *roots)
+{
+    (void)s;
+    int rc = EFS_OK;
+    uint32_t n = 0;
+    for (uint32_t i = 0; i < EFS_MAX_STORAGE_PATHS; ++i) {
+        pthread_mutex_lock(&put_sync_mu);
+        int on = put_sync_state[i] > 0;
+        pthread_mutex_unlock(&put_sync_mu);
+        if (!on)
+            continue;
+        n++;
+        if (put_sync_commit_root(&put_sync_roots[i]) != EFS_OK)
+            rc = EFS_ERR_IO;
+    }
+    if (roots)
+        *roots = n;
+    return rc;
+}
+
+void server_put_sync_stats(struct efsd_server *s, struct efs_msg_sync_stats_reply *out)
+{
+    memset(out, 0, sizeof(*out));
+    out->sync_window_ms = (uint32_t)put_sync_window_ms;
+    out->sync_window_bytes = put_sync_window_bytes;
+    uint64_t now = put_sync_now_ns();
+    for (uint32_t i = 0; s && i < s->storage_path_count && i < EFS_MAX_STORAGE_PATHS &&
+                         out->count < EFS_SYNC_STATS_ROOTS; ++i) {
+        struct efs_sync_root_stats *o = &out->roots[out->count++];
+        snprintf(o->root, sizeof(o->root), "%s", s->storage_paths[i]);
+        pthread_mutex_lock(&put_sync_mu);
+        int st = put_sync_state[i];
+        pthread_mutex_unlock(&put_sync_mu);
+        if (st <= 0) {
+            o->mode = 0;
+            continue;
+        }
+        struct put_sync_root *r = &put_sync_roots[i];
+        pthread_mutex_lock(&r->mu);
+        o->mode = 2;
+        o->error = (uint32_t)r->error;
+        o->unsynced_bytes = r->cur_bytes + r->inflight_bytes;
+        o->unsynced_fragments = r->cur_frags + r->inflight_frags;
+        uint64_t first = r->inflight_first_ns ? r->inflight_first_ns : r->cur_first_ns;
+        o->oldest_unsynced_ms = first ? (now - first) / 1000000 : 0;
+        o->acked_bytes = r->acked_bytes;
+        o->synced_bytes = r->synced_bytes;
+        o->boot = r->boot;
+        o->prev_clean = r->prev_clean;
+        o->current_seq = r->seq;
+        o->durable_seq = r->durable_seq;
+        o->barriers = r->barriers;
+        o->barrier_failures = r->failures;
+        o->last_barrier_ms_ago = r->last_barrier_ns ? (now - r->last_barrier_ns) / 1000000 : 0;
+        o->last_barrier_us = r->last_barrier_us;
+        o->recovery_scanned = r->scanned;
+        o->recovery_bad = r->bad;
+        o->recovery_done = (uint32_t)r->scan_done;
+        pthread_mutex_unlock(&r->mu);
+    }
+}
+
+/* Final barrier, then mark every async root clean. */
+void server_put_sync_stop(struct efsd_server *s)
+{
+    (void)s;
+    for (uint32_t i = 0; i < EFS_MAX_STORAGE_PATHS; ++i) {
+        pthread_mutex_lock(&put_sync_mu);
+        int on = put_sync_state[i] > 0;
+        pthread_mutex_unlock(&put_sync_mu);
+        if (!on)
+            continue;
+        struct put_sync_root *r = &put_sync_roots[i];
+        int ok = put_sync_commit_root(r) == EFS_OK;
+        pthread_mutex_lock(&r->mu);
+        r->stop = 1;
+        pthread_cond_broadcast(&r->cv);
+        pthread_mutex_unlock(&r->mu);
+        if (r->thread_started)
+            pthread_join(r->thread, NULL);
+        if (r->scanner_started)
+            pthread_join(r->scanner, NULL);
+        int clean = ok && !r->error &&
+                    syncfs(r->fd) == 0 &&
+                    put_sync_record_write(r, r->durable_seq, 1) == EFS_OK;
+        fprintf(stderr, "store: put sync root=%s stopped %s durable_seq=%llu\n", r->root,
+                clean ? "clean" : "UNCLEAN (barrier failed)",
+                (unsigned long long)r->durable_seq);
+    }
 }
 #endif
 
@@ -1348,15 +1764,14 @@ static int finish_fragment_put(struct shard_io_arg *a, int fd, size_t bytes)
     /* Production PUT ACKs must be durable for both buffered and direct I/O.
      * Production does not open O_SYNC, so always establish an explicit file
      * barrier, including same-length direct writes and checksum tails. */
-    if (a->cohort && a->created) {
-        /* New file on an XFS root: the cohort's syncfs forces the log,
-         * covering this data, create, directory entry and any new parent
-         * directories; ACK only after that barrier succeeds. */
-        int rc = finish_shard_write(fd, bytes, 0, 1);
+    if (a->sync_root) {
+        /* Acknowledged now; durable at the root's next barrier or when a
+         * client COMMIT (fsync) asks for one. */
+        int rc = finish_shard_write(fd, bytes, 0, a->direct);
         if (rc != EFS_OK)
             return rc;
-        a->cohort_joined = 1;
-        return durable_cohort_join(a->cohort);
+        put_sync_note(a->sync_root, bytes);
+        return EFS_OK;
     }
     int rc = finish_shard_write(fd, bytes, 1, 0);
     return rc == EFS_OK ? sync_fragment_parents(a->s, a->path) : rc;
@@ -1416,15 +1831,7 @@ static void *shard_io_thread(void *arg)
             flags |= O_EXCL;
         if (a->direct)
             flags |= O_DIRECT;
-        /* Cohort members must have created their file; an existing name is
-         * an overwrite and keeps the per-file barrier. */
-        if (a->cohort && !a->no_create)
-            flags |= O_EXCL;
         int fd = open(a->path, flags, 0644);
-        if (fd < 0 && errno == EEXIST && a->cohort && !a->excl) {
-            flags &= ~O_EXCL;
-            fd = open(a->path, flags, 0644);
-        }
         if (fd < 0 && errno == EEXIST && a->excl) {
             a->result = EFS_ERR_EXIST; /* caller: overwrite, do not charge */
             return NULL;
@@ -1436,16 +1843,11 @@ static void *shard_io_thread(void *arg)
         if (fd < 0 && errno == ENOENT) {
             make_dir_for_file(a->path);
             fd = open(a->path, flags, 0644);
-            if (fd < 0 && errno == EEXIST && a->cohort && !a->excl) {
-                flags &= ~O_EXCL;
-                fd = open(a->path, flags, 0644);
-            }
         }
         if (fd < 0) {
             a->result = EFS_ERR_IO;
             return NULL;
         }
-        a->created = (flags & O_EXCL) != 0;
         size_t written = 0;
         if (a->direct) {
             uint32_t alloc = (a->len + 4095u) & ~4095u;
@@ -1594,23 +1996,6 @@ static void *shard_io_thread(void *arg)
             memset(a->buf + got, 0, a->len - got);
     }
     return NULL;
-}
-
-/* A PUT that may create its file under a cohort counts as writing until it
- * joins; if it never joins (open/write/close failed, or it overwrote), the
- * count is released here so a gathering leader stops waiting for it. */
-static void shard_io_put(struct shard_io_arg *a)
-{
-    if (!a->cohort || a->no_create) {
-        shard_io_thread(a);
-        return;
-    }
-    a->created = 0;
-    a->cohort_joined = 0;
-    durable_cohort_begin(a->cohort);
-    shard_io_thread(a);
-    if (!a->cohort_joined)
-        durable_cohort_abort(a->cohort);
 }
 
 /* Resolved-location cache for multi-root reads. Adaptive write
@@ -2247,8 +2632,8 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
     memcpy(arg.path, path, plen);
     arg.path[plen] = '\0';
 #ifndef EFS_BENCH_BUILD
-    if (arg.direct)
-        arg.cohort = fragment_cohort_for(s, arg.path);
+    if (!efs_ino_is_meta_table(ino))
+        arg.sync_root = put_sync_root_for(s, arg.path);
 #endif
 
     int do_charge = 0;
@@ -2269,7 +2654,7 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
             arg.excl = 1;
             arg.no_create = 0;
             arg.result = EFS_ERR_IO;
-            shard_io_put(&arg);
+            shard_io_thread(&arg);
             if (arg.result == EFS_OK)
                 do_charge = 1; /* created; charge below, do not write again */
             else if (arg.result != EFS_ERR_EXIST)
@@ -2279,7 +2664,7 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
             arg.excl = 0;
             arg.no_create = 1;
             arg.result = EFS_ERR_IO;
-            shard_io_put(&arg);
+            shard_io_thread(&arg);
             if (arg.result == EFS_OK)
                 return EFS_OK; /* overwrite: no charge */
             if (!under)
@@ -2355,7 +2740,7 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
     /* One full fragment on the writer-selected storage root. */
     arg.no_create = 0;
     arg.result = EFS_ERR_IO;
-    shard_io_put(&arg);
+    shard_io_thread(&arg);
     if (arg.result != EFS_OK) {
         if (charge_quota) {
             pthread_mutex_lock(&s->lock);

@@ -2655,6 +2655,7 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                 continue;
             }
         }
+        efs_client_commit_note(nodes[i]);
         if (efs_conn_send_msg_parts(conns[i], EFS_MSG_PUT_CHUNK,
                                     &hdrs[i], (uint32_t)sizeof(hdrs[i]),
                                     fragments[i], frag_len) != 0) {

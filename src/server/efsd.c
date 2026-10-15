@@ -386,6 +386,7 @@ int main(int argc, char **argv)
         mkdir_p(subdir);
     }
     if (server_storage_engine_init(&server) != EFS_OK) return 1;
+    if (server_put_sync_init(&server) != EFS_OK) return 1;
     fprintf(stderr, "storage-engine=%s direct_io=%s\n",
             server.storage_engine ? "containers" : "files", server.direct_io ? "on" : "off");
     if (server.meta_storage[0] &&
@@ -725,6 +726,7 @@ int main(int argc, char **argv)
     }
 
     server_writer_pool_stop(&server);
+    server_put_sync_stop(&server);
     server_usage_flush_dirty(&server);
 
     /* Nothing to replay on the way down: the Raft log is the durability

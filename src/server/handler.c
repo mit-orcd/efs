@@ -721,6 +721,24 @@ send_reply:
             efs_conn_send_msg(conn, EFS_MSG_STATUS_REPLY, &reply, sizeof(reply));
             break;
         }
+        case EFS_MSG_DATA_COMMIT: {
+            /* NFS COMMIT: everything this server acknowledged before the
+             * request is durable when the reply is OK. */
+            struct efs_msg_data_commit_reply reply;
+            memset(&reply, 0, sizeof(reply));
+            reply.rc = server_put_sync_commit(g_server, &reply.roots);
+            efs_conn_send_msg(conn, EFS_MSG_DATA_COMMIT_REPLY, &reply, sizeof(reply));
+            break;
+        }
+        case EFS_MSG_SYNC_STATS: {
+            struct efs_msg_sync_stats_reply *reply = calloc(1, sizeof(*reply));
+            if (!reply)
+                break;
+            server_put_sync_stats(g_server, reply);
+            efs_conn_send_msg(conn, EFS_MSG_SYNC_STATS_REPLY, reply, sizeof(*reply));
+            free(reply);
+            break;
+        }
         case EFS_MSG_HEAL_STATUS: {
             /* The KV has no heal state: nothing rebuilds a table. */
             struct efs_msg_heal_status_reply reply;

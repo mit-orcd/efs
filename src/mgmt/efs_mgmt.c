@@ -2743,6 +2743,114 @@ static int cmd_raft_publish(int argc, char **argv)
     return 0;
 }
 
+/* sync-status <node:port>...: per-root durability state of each node
+ * (mode, unsynced bytes/fragments, oldest age, synced %, epochs, barriers,
+ * unclean-restart verification). */
+static int cmd_sync_status(int argc, char **argv)
+{
+    static const char *modes[] = {"not attached", "?", "async"};
+    int rc_all = 0;
+    if (argc < 1) {
+        fprintf(stderr, "Usage:\n  efs-mgmt sync-status <node:port>...\n");
+        return 1;
+    }
+    for (int a = 0; a < argc; a++) {
+        char host[64];
+        uint16_t port;
+        if (parse_host_port(argv[a], host, sizeof(host), &port) != 0) {
+            fprintf(stderr, "Invalid address: %s\n", argv[a]);
+            return 1;
+        }
+        int fd = efs_connect_tcp(host, port);
+        if (fd < 0) {
+            printf("%s: unreachable\n", argv[a]);
+            rc_all = 1;
+            continue;
+        }
+        efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+        efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+        uint8_t type = 0;
+        void *reply = NULL;
+        uint32_t len = 0;
+        if (send_recv(fd, EFS_MSG_SYNC_STATS, NULL, 0, &type, &reply, &len) != 0 ||
+            type != EFS_MSG_SYNC_STATS_REPLY || len != sizeof(struct efs_msg_sync_stats_reply)) {
+            printf("%s: sync-status unsupported or failed\n", argv[a]);
+            free(reply);
+            close(fd);
+            rc_all = 1;
+            continue;
+        }
+        close(fd);
+        const struct efs_msg_sync_stats_reply *r = reply;
+        printf("%s: window %u ms / %llu MiB\n", argv[a], r->sync_window_ms,
+               (unsigned long long)(r->sync_window_bytes >> 20));
+        for (uint32_t i = 0; i < r->count && i < EFS_SYNC_STATS_ROOTS; i++) {
+            const struct efs_sync_root_stats *o = &r->roots[i];
+            const char *m = o->mode < 3 ? modes[o->mode] : "?";
+            if (o->mode != 2) {
+                printf("  %s: %s\n", o->root, m);
+                continue;
+            }
+            double pct = o->acked_bytes
+                ? 100.0 * (double)(o->acked_bytes - o->unsynced_bytes) / (double)o->acked_bytes : 100.0;
+            printf("  %s: async%s unsynced=%.1f MiB (%llu fragments, oldest %llu ms) synced=%.2f%% "
+                   "of %.1f MiB acked\n",
+                   o->root, o->error ? " ERROR(barrier failed)" : "",
+                   o->unsynced_bytes / 1048576.0, (unsigned long long)o->unsynced_fragments,
+                   (unsigned long long)o->oldest_unsynced_ms, pct, o->acked_bytes / 1048576.0);
+            printf("    epoch boot=%u seq=%llu durable=%llu barriers=%llu failures=%llu "
+                   "last=%llu ms ago (%llu us)\n",
+                   o->boot, (unsigned long long)o->current_seq, (unsigned long long)o->durable_seq,
+                   (unsigned long long)o->barriers, (unsigned long long)o->barrier_failures,
+                   (unsigned long long)o->last_barrier_ms_ago, (unsigned long long)o->last_barrier_us);
+            if (!o->prev_clean)
+                printf("    previous stop UNCLEAN: recovery %s scanned=%llu bad=%llu\n",
+                       o->recovery_done ? "done" : "running",
+                       (unsigned long long)o->recovery_scanned, (unsigned long long)o->recovery_bad);
+            if (o->error || o->recovery_bad)
+                rc_all = 1;
+        }
+        free(reply);
+    }
+    return rc_all;
+}
+
+/* data-commit <node:port>...: make everything each node acknowledged durable. */
+static int cmd_data_commit(int argc, char **argv)
+{
+    int rc_all = 0;
+    if (argc < 1) {
+        fprintf(stderr, "Usage:\n  efs-mgmt data-commit <node:port>...\n");
+        return 1;
+    }
+    for (int a = 0; a < argc; a++) {
+        char host[64];
+        uint16_t port;
+        if (parse_host_port(argv[a], host, sizeof(host), &port) != 0) {
+            fprintf(stderr, "Invalid address: %s\n", argv[a]);
+            return 1;
+        }
+        int fd = efs_connect_tcp(host, port);
+        if (fd < 0) { printf("%s: unreachable\n", argv[a]); rc_all = 1; continue; }
+        efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+        efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+        uint8_t type = 0;
+        void *reply = NULL;
+        uint32_t len = 0;
+        int ok = send_recv(fd, EFS_MSG_DATA_COMMIT, NULL, 0, &type, &reply, &len) == 0 &&
+                 type == EFS_MSG_DATA_COMMIT_REPLY &&
+                 len == sizeof(struct efs_msg_data_commit_reply);
+        close(fd);
+        const struct efs_msg_data_commit_reply *r = reply;
+        printf("%s: data-commit %s roots=%u\n", argv[a],
+               !ok ? "failed" : r->rc == EFS_OK ? "ok" : "EIO", ok ? r->roots : 0);
+        if (!ok || r->rc != EFS_OK)
+            rc_all = 1;
+        free(reply);
+    }
+    return rc_all;
+}
+
 static int cmd_raft_getchunks(int argc, char **argv)
 {
     char host[64];
@@ -2838,6 +2946,10 @@ int main(int argc, char **argv)
     const char *cmd = argv[1];
     if (strcmp(cmd, "status") == 0)
         return cmd_status(argc - 2, argv + 2);
+    if (strcmp(cmd, "sync-status") == 0)
+        return cmd_sync_status(argc - 2, argv + 2);
+    if (strcmp(cmd, "data-commit") == 0)
+        return cmd_data_commit(argc - 2, argv + 2);
     if (strcmp(cmd, "add-node") == 0)
         return cmd_add_node(argc - 2, argv + 2);
     if (strcmp(cmd, "shrink-quota") == 0)

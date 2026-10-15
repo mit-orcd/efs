@@ -208,6 +208,11 @@ enum efs_msg_type {
     EFS_MSG_REPAIR_TARGET_REPLY = 148,
     EFS_MSG_REPAIR_REQUEST = 149, /* default-off experimental selector; no caller data/receipts */
     EFS_MSG_REPAIR_REQUEST_REPLY = 150,
+    /* Asynchronous PUT durability: COMMIT (client fsync) and stats. */
+    EFS_MSG_DATA_COMMIT = 151,
+    EFS_MSG_DATA_COMMIT_REPLY = 152,
+    EFS_MSG_SYNC_STATS = 153,
+    EFS_MSG_SYNC_STATS_REPLY = 154,
 };
 
 /* Storage session seal/check. Reply echoes the exact identity and floor.
@@ -508,6 +513,40 @@ struct efs_msg_status_reply {
     uint64_t capacity_bytes;
     uint64_t available_bytes;
     uint64_t capacity_valid;
+};
+
+/* DATA_COMMIT: make every data fragment this server acknowledged before
+ * the request durable (NFS COMMIT). Empty request. */
+struct efs_msg_data_commit_reply {
+    int32_t rc;           /* EFS_OK or EFS_ERR_IO (a durability barrier failed) */
+    uint32_t roots;       /* async roots covered */
+};
+
+/* SYNC_STATS: per storage root durability state. Empty request.
+ * mode: 2 asynchronous acknowledgement; 0 root not attached. */
+#define EFS_SYNC_STATS_ROOTS 8
+struct efs_sync_root_stats {
+    char root[160];
+    uint32_t mode;
+    uint32_t error;               /* a barrier failed; COMMIT returns EIO until restart */
+    uint64_t unsynced_bytes;      /* acknowledged, not yet durable */
+    uint64_t unsynced_fragments;
+    uint64_t oldest_unsynced_ms;  /* age of the oldest unsynced fragment */
+    uint64_t acked_bytes;         /* since start, async acknowledgements */
+    uint64_t synced_bytes;        /* of those, made durable */
+    uint32_t boot;                /* epoch = (boot, seq) */
+    uint32_t prev_clean;          /* previous run stopped cleanly */
+    uint64_t current_seq, durable_seq;
+    uint64_t barriers, barrier_failures;
+    uint64_t last_barrier_ms_ago, last_barrier_us;
+    uint64_t recovery_scanned, recovery_bad;  /* after an unclean restart */
+    uint32_t recovery_done, reserved;
+};
+struct efs_msg_sync_stats_reply {
+    uint32_t count;
+    uint32_t sync_window_ms;
+    uint64_t sync_window_bytes;
+    struct efs_sync_root_stats roots[EFS_SYNC_STATS_ROOTS];
 };
 
 /* IO_STATS reply: one row per op class (0 = GET_CHUNK handler, 1 =

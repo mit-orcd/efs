@@ -16,6 +16,7 @@ uint64_t efs_client_rpc_deadline_ms(void){return deadline;}
 void efs_client_rpc_set_deadline_ms(uint64_t d){deadline=d;}
 int efs_client_rpc_past_deadline(void){return expired||(deadline==1);}
 struct efs_conn *efs_client_conn_get(efs_node_id_t id){assert(id==1);return &connection;}
+void efs_client_commit_note(efs_node_id_t id){(void)id;}
 void efs_client_conn_release(efs_node_id_t id,struct efs_conn *c){assert(id==1&&c==&connection);releases++;}
 void efs_client_conn_drop(efs_node_id_t id,struct efs_conn *c){assert(id==1&&c==&connection);drops++;}
 int efs_conn_send_msg_parts(struct efs_conn *c,uint8_t type,const void *header,uint32_t hl,const void *data,uint32_t dl)

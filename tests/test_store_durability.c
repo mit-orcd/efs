@@ -10,6 +10,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <sys/vfs.h>
 static unsigned file_syncs,directory_syncs,sync_opens;
 static int booting;
 static int fail_file,fail_directory,fail_directory_at,interrupt_directory,fail_directory_close;
@@ -40,13 +41,6 @@ static int barrier_close(int fd)
     if(fail_directory_close && S_ISDIR(st.st_mode)) {errno=EIO;return -1;}
     return rc;
 }
-static unsigned cohort_barriers;
-static int cohort_fail;
-static int test_cohort_barrier(int fd)
-{
-    (void)fd;cohort_barriers++;
-    return cohort_fail?-1:0;
-}
 #define open barrier_open
 #define fsync barrier_sync
 #define close barrier_close
@@ -55,6 +49,88 @@ static int test_cohort_barrier(int fd)
 #undef open
 #undef fsync
 #undef close
+/* Async acknowledgement on a real XFS directory ($TMPDIR): syncfs and the
+ * epoch record need a real filesystem. Returns 0 when not XFS (SKIP). */
+static int async_put(struct put_sync_root *r, const char *path, uint8_t *data)
+{
+    uint8_t sum[EFS_HASH_SIZE];efs_hash(data,4096,sum);
+    struct shard_io_arg a={.buf=data,.len=4096,.is_write=1,.sum=sum,.direct=1,.sync_root=r};
+    strcpy(a.path,path);shard_io_thread(&a);
+    return a.result;
+}
+static int test_async_durability(uint8_t *data)
+{
+    const char *tmp=getenv("TMPDIR");char root[1024],path[1100],rec[1100];
+    snprintf(root,sizeof(root),"%s/efs-async-XXXXXX",tmp&&*tmp?tmp:"/tmp");assert(mkdtemp(root));
+    struct statfs fs;assert(!statfs(root,&fs));
+    if((unsigned long)fs.f_type!=XFS_SUPER_MAGIC_){assert(!rmdir(root));return 0;}
+    put_sync_window_ms=100;put_sync_window_bytes=1ull<<20;
+    struct put_sync_root *r=&put_sync_roots[0];
+    booting=1;put_sync_attach(r,root);booting=0;
+    assert(r->fd>=0 && r->boot==1 && r->prev_clean && r->seq==1 && !r->durable_seq);
+    put_sync_state[0]=1;
+    snprintf(rec,sizeof(rec),"%s/%s",root,PUT_SYNC_RECORD);assert(!access(rec,F_OK));
+    /* New fragment: acknowledged with no fsync, counted unsynced. */
+    snprintf(path,sizeof(path),"%s/data/a/f1",root);
+    file_syncs=directory_syncs=0;assert(async_put(r,path,data)==EFS_OK);
+    assert(!file_syncs && !directory_syncs && r->cur_frags+r->inflight_frags==1);
+    /* COMMIT: one barrier makes it durable. */
+    assert(put_sync_commit_root(r)==EFS_OK && r->durable_seq>=1 && !r->cur_frags && !r->inflight_frags);
+    uint64_t b=r->barriers;assert(b>=1);
+    /* Nothing new: COMMIT returns without a barrier. */
+    assert(put_sync_commit_root(r)==EFS_OK && r->barriers==b);
+    /* Overwrite of an existing name is asynchronous too; the barrier's
+     * record fdatasync flushes the device cache for it. */
+    file_syncs=directory_syncs=0;assert(async_put(r,path,data)==EFS_OK);
+    assert(!file_syncs && !directory_syncs && r->cur_frags+r->inflight_frags==1);
+    assert(put_sync_commit_root(r)==EFS_OK && !r->cur_frags && !r->inflight_frags);
+    b=r->barriers;
+    /* The window alone triggers a barrier (no COMMIT). */
+    snprintf(path,sizeof(path),"%s/data/a/f2",root);assert(async_put(r,path,data)==EFS_OK);
+    for(int i=0;i<200 && (r->cur_frags||r->inflight_frags);i++)usleep(10000);
+    assert(!r->cur_frags && !r->inflight_frags && r->barriers>b && r->synced_bytes==r->acked_bytes);
+    /* Clean stop marks the record clean. */
+    server_put_sync_stop(NULL);
+    char text[256]={0};int fd=open(rec,O_RDONLY);assert(fd>=0 && read(fd,text,sizeof(text)-1)>0);close(fd);
+    assert(strstr(text,"boot=1") && strstr(text,"clean=1"));
+    close(r->fd);close(r->record_fd);memset(r,0,sizeof(*r));put_sync_state[0]=0;
+    /* Restart after a clean stop: next boot, no scan. */
+    booting=1;put_sync_attach(r,root);booting=0;
+    assert(r->fd>=0 && r->boot==2 && r->prev_clean && r->scan_done);
+    put_sync_state[0]=1;
+    /* A failed barrier is sticky until restart: COMMIT fails even after a
+     * later barrier succeeds; PUTs stay asynchronous. */
+    snprintf(path,sizeof(path),"%s/data/a/f3",root);assert(async_put(r,path,data)==EFS_OK);
+    int saved=r->fd;r->fd=-1;
+    assert(put_sync_commit_root(r)==EFS_ERR_IO && r->error && r->failures>=1);
+    r->fd=saved;
+    snprintf(path,sizeof(path),"%s/data/a/f4",root);
+    file_syncs=directory_syncs=0;assert(async_put(r,path,data)==EFS_OK);
+    assert(!file_syncs && !directory_syncs);
+    assert(put_sync_commit_root(r)==EFS_ERR_IO);
+    server_put_sync_stop(NULL);
+    close(r->fd);close(r->record_fd);memset(r,0,sizeof(*r));put_sync_state[0]=0;
+    /* Unclean previous stop (the failed barrier left clean=0): the scan
+     * verifies fragments modified since and reports a corrupted one. */
+    snprintf(path,sizeof(path),"%s/data/a/f5",root);
+    {   /* f5: a valid fragment, then its payload corrupted */
+        uint8_t sum[EFS_HASH_SIZE];efs_hash(data,4096,sum);
+        struct shard_io_arg a={.buf=data,.len=4096,.is_write=1,.sum=sum,.direct=1};
+        strcpy(a.path,path);file_syncs=0;shard_io_thread(&a);assert(a.result==EFS_OK);
+        int cf=open(path,O_WRONLY);assert(cf>=0 && pwrite(cf,"X",1,0)==1);close(cf);
+    }
+    booting=1;put_sync_attach(r,root);booting=0;
+    assert(r->fd>=0 && r->boot==3 && !r->prev_clean && r->scanner_started);
+    pthread_join(r->scanner,NULL);r->scanner_started=0;
+    assert(r->scan_done && r->scanned>=4 && r->bad==1);
+    put_sync_state[0]=1;server_put_sync_stop(NULL);
+    close(r->fd);close(r->record_fd);memset(r,0,sizeof(*r));put_sync_state[0]=0;
+    for(int i=1;i<=5;i++){snprintf(path,sizeof(path),"%s/data/a/f%d",root,i);unlink(path);}
+    snprintf(path,sizeof(path),"%s/data/a",root);assert(!rmdir(path));
+    snprintf(path,sizeof(path),"%s/data",root);assert(!rmdir(path));
+    assert(!unlink(rec));assert(!rmdir(root));
+    return 1;
+}
 int main(void)
 {
     /* Files permit nested roots: pinned proof ownership follows longest root. */
@@ -132,32 +208,6 @@ int main(void)
     assert(a.result==EFS_OK && directory_syncs==2);
     assert(!unlink(a.path));assert(!rmdir(sub));snprintf(sub,sizeof(sub),"%s/new",dir);assert(!rmdir(sub));
     strcpy(a.path,path);
-    /* Opt-in grouped durability: a fragment this PUT creates joins its
-     * root's cohort with no file or directory fsync; an existing name keeps
-     * both. A failed cohort barrier fails the PUT; its retry overwrites. */
-    {
-        struct durable_cohort tc=DURABLE_COHORT_INIT;tc.barrier=test_cohort_barrier;
-        char cpath[1024],cdir[1024];snprintf(cpath,sizeof(cpath),"%s/cohort/x/body",dir);
-        struct shard_io_arg ca={.buf=data,.len=4096,.is_write=1,.sum=sum,.direct=1,.s=server,.cohort=&tc};
-        strcpy(ca.path,cpath);
-        file_syncs=directory_syncs=0;shard_io_put(&ca);
-        assert(ca.result==EFS_OK && ca.created && ca.cohort_joined && !file_syncs && !directory_syncs);
-        assert(cohort_barriers==1 && tc.members==1 && !tc.writing);
-        file_syncs=directory_syncs=0;shard_io_put(&ca);
-        assert(ca.result==EFS_OK && !ca.created && !ca.cohort_joined && file_syncs==1 && directory_syncs>=1);
-        assert(cohort_barriers==1 && !tc.writing);
-        assert(!unlink(cpath));cohort_fail=1;file_syncs=directory_syncs=0;shard_io_put(&ca);
-        assert(ca.result==EFS_ERR_IO && ca.created && !file_syncs && cohort_barriers==2 && tc.failures==1 && !tc.writing);
-        cohort_fail=0;file_syncs=directory_syncs=0;shard_io_put(&ca);
-        assert(ca.result==EFS_OK && !ca.created && file_syncs==1 && cohort_barriers==2);
-        /* An open failure never joins; its writing count is released. */
-        snprintf(ca.path,sizeof(ca.path),"%s/under-a-file",cpath);
-        shard_io_put(&ca);assert(ca.result==EFS_ERR_IO && !ca.cohort_joined && !tc.writing && cohort_barriers==2);
-        /* No root is selected without EFS_PUT_COHORT=1. */
-        assert(!getenv("EFS_PUT_COHORT") && !fragment_cohort_for(server,cpath));
-        assert(!unlink(cpath));snprintf(cdir,sizeof(cdir),"%s/cohort/x",dir);assert(!rmdir(cdir));
-        snprintf(cdir,sizeof(cdir),"%s/cohort",dir);assert(!rmdir(cdir));
-    }
     /* A textual prefix is not an initialized ancestor; retain all barriers. */
     server->storage_paths[0][strlen(dir)-1]=0;
     file_syncs=directory_syncs=0;shard_io_thread(&a);
@@ -167,7 +217,10 @@ int main(void)
     assert(!unlink(path));snprintf(path,sizeof(path),"%s/a/b",dir);assert(!rmdir(path));
     snprintf(path,sizeof(path),"%s/a",dir);assert(!rmdir(path));snprintf(path,sizeof(path),"%s/.efs-engine",dir);assert(!unlink(path));
     snprintf(path,sizeof(path),"%s/.efs-engine-lock",dir);assert(!unlink(path));
-    assert(!rmdir(dir));free(data);
-    puts("production PUT durability: buffered/direct/bounce file and pathname barriers, pinned ancestry, restart/recreation, retries, fault refusal and opt-in cohort PASS");
+    assert(!rmdir(dir));
+    int async_ran=test_async_durability(data);
+    if(!async_ran)puts("async durability: SKIP (TMPDIR is not XFS)");
+    free(data);
+    puts("production PUT durability: buffered/direct/bounce file and pathname barriers, pinned ancestry, restart/recreation, retries, fault refusal and asynchronous acknowledgement PASS");
     return 0;
 }

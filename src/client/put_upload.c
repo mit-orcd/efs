@@ -34,6 +34,7 @@ int efs_client_put_fragment(struct efs_client_put_request *owner,uint32_t fragme
     if(rc!=EFS_OK)goto out;
     conn=efs_client_conn_get(ticket.nodes[fragment]);
     if(!conn){rc=EFS_ERR_NET;goto out;}
+    efs_client_commit_note(ticket.nodes[fragment]);
     uint8_t type=0;void *reply=NULL;uint32_t bytes=0;
     if(efs_conn_send_msg_parts(conn,EFS_MSG_PUT_TICKETED,header,sizeof(header),data,len) ||
        efs_conn_recv_msg(conn,&type,&reply,&bytes)) {
@@ -55,3 +56,4 @@ out:
     efs_client_rpc_set_deadline_ms(saved);
     return rc;
 }
+

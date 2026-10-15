@@ -540,4 +540,11 @@ int server_read_packed_fragment(struct efsd_server *, efs_export_id_t,
                                 uint32_t fragment_len, uint8_t *, uint32_t *capacity,
                                 uint8_t sum[EFS_HASH_SIZE]);
 
+/* Asynchronous PUT acknowledgement and durability barriers (store.c). */
+struct efs_msg_sync_stats_reply;
+int server_put_sync_init(struct efsd_server *s);
+int server_put_sync_commit(struct efsd_server *s, uint32_t *roots);
+void server_put_sync_stats(struct efsd_server *s, struct efs_msg_sync_stats_reply *out);
+void server_put_sync_stop(struct efsd_server *s);
+
 #endif
