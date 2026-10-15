@@ -1,3 +1,9 @@
+[AMD sequential read profile](intel-amd-read-profile-20261015.md):
+**Read-only repeat completes 10GiB at104.28MiB/s; no deployment change.**
+No daemon fsync/fdatasync in read capture; CPU, device and network headroom.
+Read-pair coordination and per-node health/connection locking are investigation
+leads, not a proven root cause. Existing read prefetch/parallelism confirmed.
+
 [Intel eight-writer default and AMD dd profile](intel-default-eight-writers-20261015.md):
 **Deployed bb22e9559337; native, preserved-file and mounted smoke PASS.**
 Default eight writers, barriers unchanged; matching four clients deployed.
