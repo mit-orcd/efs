@@ -5462,6 +5462,8 @@ static void efs_fuse_init(void *userdata, struct fuse_conn_info *conn)
     /* Timeouts are per lookup/getattr reply (always 0). There is no
      * fuse_config on the low-level API. */
     if (conn) {
+        /* libfuse requires this to match the max_read mount option. */
+        conn->max_read = 512u << 10;
         uint32_t cs = fuse_chunk_size();
         uint32_t want = (uint32_t)EFS_WRITE_PIPELINE * cs;
         if (want < (1u << 20))
