@@ -1,5 +1,10 @@
 # Grouped fragment durability: design and local benchmark — 2026-10-15
 
+**Superseded the same day by [asynchronous PUT
+acknowledgement](intel-async-durability-20261015.md) (`d8af2c325`), which
+removed the `EFS_PUT_COHORT` mode described below.** The measurements remain
+valid evidence for why per-fragment barriers limited writes.
+
 **Update, same day: implemented as an opt-in flag in `5cef06ac4` (scoped PASS,
 crash qualification NOTRUN).** With `EFS_PUT_COHORT=1` on the Intel cluster,
 four concurrent 4 GiB writers from xorinox reach 119–132 MiB/s versus

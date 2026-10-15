@@ -18,8 +18,14 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
-[Grouped fragment durability](intel-cohort-durability-20261015.md): opt-in
-`EFS_PUT_COHORT=1` in `5cef06ac4`, scoped **PASS**. On Intel with the xorinox
+[Asynchronous PUT acknowledgement](intel-async-durability-20261015.md):
+**scoped PASS** on `d8af2c325`, now the only data PUT mode. Durable on client
+`fsync` (COMMIT) and within a per-root window; `efs-mgmt sync-status` reports
+unsynced data. 2 GiB writes 151 → 176 MiB/s, with fsync 141 → 175 MiB/s; reads
+unchanged. Crash/power-loss qualification NOTRUN.
+
+[Grouped fragment durability](intel-cohort-durability-20261015.md) (superseded):
+opt-in `EFS_PUT_COHORT=1` in `5cef06ac4`, removed by `d8af2c325`. On Intel with the xorinox
 client, four concurrent writers 94–101 → 119–132 MiB/s and single-stream
 146–149 → 169–170 MiB/s, with half the device flushes per MiB; local model
 2.5–3x. Crash/power-loss qualification NOTRUN; the cluster runs with the flag off.
