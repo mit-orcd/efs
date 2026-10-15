@@ -1,3 +1,11 @@
+[Intel/AMD read coordination](intel-read-coordination-20261015.md):
+**Measurement PASS; no code/runtime changes.** One/two/four streams reach
+111/161/195 MiB/s. FUSE splits 1 MiB reads into 1 MiB-minus-16 and 16 bytes;
+repeated fragment fetches and metadata reply traffic measured. Range refreshes
+cost much more than connection locking; four streams approach AMD link capacity.
+Recommend qualifying aligned requests and safe read-cache reuse, not dropping
+coherence checks. Historical regression attribution and implementation NOTRUN.
+
 [AMD sequential read profile](intel-amd-read-profile-20261015.md):
 **Read-only repeat completes 10GiB at104.28MiB/s; no deployment change.**
 No daemon fsync/fdatasync in read capture; CPU, device and network headroom.
