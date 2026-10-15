@@ -1512,6 +1512,20 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[Grouped fragment durability](../status/intel-cohort-durability-20261015.md): opt-in
+`EFS_PUT_COHORT=1` in `5cef06ac4`, scoped **PASS**. On Intel with the xorinox
+client, four concurrent writers 94–101 → 119–132 MiB/s and single-stream
+146–149 → 169–170 MiB/s, with half the device flushes per MiB; local model
+2.5–3x. Crash/power-loss qualification NOTRUN; the cluster runs with the flag off.
+
+[Intel read metadata and read-cache fixes](../status/intel-read-metadata-cache-20261015.md):
+**PASS (scoped)** on `b3e93177c138` (compact GETCHUNKS replies) and
+`49d721a4f180` (read-cache admission past the speculative budget), Intel
+cluster with the xorinox client. Wire bytes per byte read 1.24→1.08 (1 MiB)
+and 10.49→1.15 (32 KiB); single-stream 1 MiB 124→218 MiB/s, 32 KiB 12→43 MiB/s.
+POSIX/peer/persistence/fault qualification NOTRUN; old clients reject the new
+servers, so the AMD Intel-export client is stopped.
+
 [ORCD TCP/direct, `.efs` disabled rerun](../status/orcd-tcp-direct-disabled-20261015.md):
 **FAIL** on the same `b3e93177c138` product source:895 PASS/120 FAIL/520 NOTRUN
 in the seven-client round, peer61/67, clean stop refused. All23 successfully
@@ -1533,8 +1547,8 @@ running clusters. Newer source commits do not inherit earlier test verdicts.
 
 | Area | Evidence and limits |
 | --- | --- |
-| Intel/AMD sequential reads | [October 15 read coordination](../status/intel-read-coordination-20261015.md) and [AMD read profile](../status/intel-amd-read-profile-20261015.md). Measurement evidence; subsequent read-cache/FUSE fixes require their own qualification. |
-| Intel write path | [Eight-writer deployment](../status/intel-default-eight-writers-20261015.md), [pressure draining](../status/intel-pressure-drain-20261014.md), [sync batching](../status/intel-sync-batching-20261014.md). Scoped smoke/native results; observations do not establish universal throughput gains. |
+| Intel/AMD sequential reads | [October 15 read coordination](../status/intel-read-coordination-20261015.md) and [AMD read profile](../status/intel-amd-read-profile-20261015.md) are measurement evidence. [Read metadata and read-cache fixes](../status/intel-read-metadata-cache-20261015.md) record scoped PASS for `b3e93177c138`/`49d721a4f180`; full qualification of those sources remains NOTRUN. |
+| Intel write path | [Eight-writer deployment](../status/intel-default-eight-writers-20261015.md), [pressure draining](../status/intel-pressure-drain-20261014.md), [sync batching](../status/intel-sync-batching-20261014.md). Scoped smoke/native results; observations do not establish universal throughput gains. [Grouped durability design](../status/intel-cohort-durability-20261015.md) is a local model only. |
 | REPORT / W100 | [Newer-snapshot report](../status/intel-report-newer-snapshot-20261014.md): W100 closed by scoped human acceptance October 14. Older OPEN entries are historical; this does not establish the cause or resolution of the original ORCD EIO. |
 | Integrated RDMA source | [Merged devel qualification](../status/devel-rdma-merge-qualification-20261014.md). AMD software-RDMA evidence does not replace ORCD hardware gates. |
 | `.efs` functional versus scale work | [Three work packages and feature matrix](../status/three-work-packages-20261013.md), [AMD package 2](../status/amd-package2-query-20261013.md), [ORCD package 1](../status/orcd-package1-20261013.md), [later query fixes](../status/orcd-query-name-ordinals-20261013.md). General 400 GiB acceptance remains recorded as on hold; targeted fixes and marker checks do not close it. |
