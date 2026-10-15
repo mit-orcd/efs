@@ -12,8 +12,9 @@ static int host_read_leader_hint(void *h,unsigned g){(void)h;(void)g;return -1;}
 #include <efs/raft.h>
 #include <assert.h>
 #include <string.h>
-struct efs_raft_host {int running;struct efs_kv *kv;};
-static struct efs_raft_host h={1,0},*g_host=&h;
+struct lookup_server {efs_node_id_t id;};
+struct efs_raft_host {int running;struct efs_kv *kv;struct lookup_server *s;};
+static struct efs_raft_host h={.running=1},*g_host=&h;
 static struct {uint64_t lk_fwd,lk_total,lk_ri_parent,lk_kv,lk_lanes,lk_getattr;} g_read_prof;
 static int missing_name,missing_inode,forward,read_error,pending_phase,coord_error,forwarded_lookups,pair_error,plan_other;
 static int read_prof_on(void){return 0;}
@@ -44,6 +45,10 @@ int main(void){struct efs_msg_inode_reply r;
   missing_name=1;server_raft_host_lookup(1,"absent",&r);assert(r.status==EFS_INODE_RPC_NOT_FOUND);
   read_error=EFS_ERR_IO;server_raft_host_lookup(1,"replacement",&r);assert(r.status==EFS_INODE_RPC_ERROR);read_error=0;
  }
+ forward=0;missing_name=missing_inode=0;
+ server_raft_host_lookup(1,"identity",&r);assert(r.status==EFS_INODE_RPC_OK&&r.read_node_id==0);
+ struct lookup_server server={.id=3};h.s=&server;
+ server_raft_host_lookup(1,"identity",&r);assert(r.status==EFS_INODE_RPC_OK&&r.read_node_id==3);h.s=0;
  forward=1;missing_name=missing_inode=0;
  for(pending_phase=1;pending_phase<=2;pending_phase++){
   int old=forwarded_lookups;server_raft_host_lookup(1,"pending",&r);
