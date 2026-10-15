@@ -1,5 +1,17 @@
+[Intel sync and metadata publication batching](intel-sync-batching-20261014.md):
+**Deployed devel2256f1a34; native/sanitizer and four-client smoke PASS.**
+Directory barriers share only operations queued before the barrier starts;
+per-fragment file syncs remain. Background REPORTs coalesce for10ms; explicit
+fsync/close bypass batching. Lifetime-counter flush storm removed. Three verified
+512MiB dd/fsync trials: AMD median61.44→78.68MiB/s (+28.0%),
+Intel1 57.80→72.07MiB/s (+24.7%). Restart changed group0 leadership, so this is
+observed deployment improvement, not isolated code-only attribution. All64
+preserved controls/client match; TCP/direct/files, optional features OFF.
+Private Intel unchanged; external clients independent; xorinox crawl restarted
+with prior output preserved. Full POSIX/live crash acceptance NOTRUN.
+
 [AMD dd throughput diagnosis](intel-amd-dd-profile-20261014.md):
-**Read-only capture PASS; optimization NOTRUN.** AMD physical link is 2.5 Gb/s:
+**Historical read-only capture PASS; batching follow-up above is deployed.** AMD physical link is 2.5 Gb/s:
 298 MiB/s raw, about 199 MiB/s logical ceiling with 2+1 payload overhead.
 Observed dd34.2 MiB/s, wire52.6 MiB/s; client not CPU-bound. All captured PUT/
 REPORT replies OK; no retry storm, negligible host retransmissions. Per-fragment

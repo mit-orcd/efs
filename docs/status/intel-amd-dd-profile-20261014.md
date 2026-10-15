@@ -1,6 +1,8 @@
 # AMD dd to Intel — 2026-10-14 EDT
 
-**Diagnostic capture PASS; performance fix/A-B qualification NOTRUN.**
+**Historical diagnostic capture PASS.** Subsequent implementation and smoke
+measurements are in the [batching deployment report](intel-sync-batching-20261014.md).
+At this capture, performance fix/A-B qualification was NOTRUN.
 Investigate the reported approximately 50 MiB/s single-file write. No source,
 configuration, mount, workload or service changes were made. This is performance
 evidence, not a filesystem acceptance verdict.
