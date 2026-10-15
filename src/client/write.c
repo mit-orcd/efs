@@ -2509,6 +2509,8 @@ static int put_recv_reply(efs_node_id_t nid, struct efs_conn *conn,
         return -1;
     }
     if (status == EFS_PUT_CHUNK_OK) {
+        /* Acknowledged (not yet durable): fsync must COMMIT this node. */
+        efs_client_commit_note(nid);
 #if EFS_FAULTS
         if (put_reply_fault(nid, ino, ci, fi)) {
             efs_client_conn_drop(nid, conn);
@@ -2655,7 +2657,6 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                 continue;
             }
         }
-        efs_client_commit_note(nodes[i]);
         if (efs_conn_send_msg_parts(conns[i], EFS_MSG_PUT_CHUNK,
                                     &hdrs[i], (uint32_t)sizeof(hdrs[i]),
                                     fragments[i], frag_len) != 0) {

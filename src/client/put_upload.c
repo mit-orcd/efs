@@ -34,7 +34,6 @@ int efs_client_put_fragment(struct efs_client_put_request *owner,uint32_t fragme
     if(rc!=EFS_OK)goto out;
     conn=efs_client_conn_get(ticket.nodes[fragment]);
     if(!conn){rc=EFS_ERR_NET;goto out;}
-    efs_client_commit_note(ticket.nodes[fragment]);
     uint8_t type=0;void *reply=NULL;uint32_t bytes=0;
     if(efs_conn_send_msg_parts(conn,EFS_MSG_PUT_TICKETED,header,sizeof(header),data,len) ||
        efs_conn_recv_msg(conn,&type,&reply,&bytes)) {
@@ -46,7 +45,9 @@ int efs_client_put_fragment(struct efs_client_put_request *owner,uint32_t fragme
     else {
         rc=(int32_t)efs_put_upload_rd32(reply);
         if(rc>EFS_OK || rc<EFS_ERR_ILSEQ)rc=EFS_ERR_PROTO;
-        if(rc==EFS_OK)*path_used=((uint8_t *)reply)[4];
+        /* Acknowledged (not yet durable): fsync must COMMIT this node,
+         * even if the reply arrives after the caller's deadline. */
+        if(rc==EFS_OK){*path_used=((uint8_t *)reply)[4];efs_client_commit_note(ticket.nodes[fragment]);}
     }
     free(reply);
     /* Late success is ambiguous to the caller's deadline; retain the owner. */

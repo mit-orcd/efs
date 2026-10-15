@@ -238,6 +238,51 @@ cmd_stop() {
     fi
     local mnt=$1
 
+    # A process still using the mount (open file, cwd or root) would lose it:
+    # between two writes there may be nothing pending, so the drain below
+    # does not protect it (Oct 15: a running dd was cut off by a client
+    # restart). Refuse unless loss is explicitly accepted. Only processes
+    # this account may inspect are seen.
+    if [ "$force" -eq 0 ]; then
+        local users
+        users=$(python3 - "$mnt" <<'PY'
+import os, sys
+mnt = os.path.realpath(sys.argv[1])
+found = []
+for pid in os.listdir('/proc'):
+    if not pid.isdigit() or int(pid) == os.getpid():
+        continue
+    try:
+        comm = open('/proc/%s/comm' % pid).read().strip()
+    except OSError:
+        continue
+    if comm == 'efs-fuse':
+        continue
+    paths = []
+    for name in ('cwd', 'root'):
+        try:
+            paths.append(os.readlink('/proc/%s/%s' % (pid, name)))
+        except OSError:
+            pass
+    try:
+        for fd in os.listdir('/proc/%s/fd' % pid):
+            try:
+                paths.append(os.readlink('/proc/%s/fd/%s' % (pid, fd)))
+            except OSError:
+                pass
+    except OSError:
+        pass
+    if any(p == mnt or p.startswith(mnt + '/') for p in paths):
+        found.append('%s(%s)' % (comm, pid))
+print(' '.join(found))
+PY
+)
+        if [ -n "$users" ]; then
+            echo "ERROR: $mnt is in use by: $users; stop refused (stop --force-discard accepts loss)" >&2
+            return 1
+        fi
+    fi
+
     # Do not trust [ -e ] / [ -d ]: a dead FUSE mount returns ENOTCONN and
     # those tests look like "does not exist" even though /proc/mounts lists it.
     local listed=0
