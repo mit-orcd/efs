@@ -75,6 +75,7 @@ Complete navigation to top-level status ledgers as of October 15, 2026. Grouping
 - [Intel post-index live profile — 2026-10-14](intel-post-index-profile-20261014.md)
 - [Intel post-pressure-index throughput diagnosis — 2026-10-15](intel-post-pressure-profile-20261015.md)
 - [Intel/AMD read coordination — 2026-10-15](intel-read-coordination-20261015.md)
+- [Intel read metadata and read-cache fixes — 2026-10-15](intel-read-metadata-cache-20261015.md)
 - [Private Intel seven-client strace/perf investigation — 2026-10-14](intel-seven-client-profile-20261014.md)
 - [NUC tiny-file creation — seven iterations, Oct 8, 2026](nuc-tiny-file-create-20261008.md)
 - [ORCD live daemon performance profile — 2026-10-13](orcd-live-profile-20261013.md)

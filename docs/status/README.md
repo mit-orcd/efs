@@ -18,6 +18,14 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Intel read metadata and read-cache fixes](intel-read-metadata-cache-20261015.md):
+**PASS (scoped)** on `b3e93177c138` (compact GETCHUNKS replies) and
+`49d721a4f180` (read-cache admission past the speculative budget), Intel
+cluster with the xorinox client. Wire bytes per byte read 1.24→1.08 (1 MiB)
+and 10.49→1.15 (32 KiB); single-stream 1 MiB 124→218 MiB/s, 32 KiB 12→43 MiB/s.
+POSIX/peer/persistence/fault qualification NOTRUN; old clients reject the new
+servers, so the AMD Intel-export client is stopped.
+
 [ORCD TCP/direct, `.efs` disabled rerun](orcd-tcp-direct-disabled-20261015.md):
 **FAIL** on the same `b3e93177c138` product source:895 PASS/120 FAIL/520 NOTRUN
 in the seven-client round, peer61/67, clean stop refused. All23 successfully
@@ -39,7 +47,7 @@ running clusters. Newer source commits do not inherit earlier test verdicts.
 
 | Area | Evidence and limits |
 | --- | --- |
-| Intel/AMD sequential reads | [October 15 read coordination](intel-read-coordination-20261015.md) and [AMD read profile](intel-amd-read-profile-20261015.md). Measurement evidence; subsequent read-cache/FUSE fixes require their own qualification. |
+| Intel/AMD sequential reads | [October 15 read coordination](intel-read-coordination-20261015.md) and [AMD read profile](intel-amd-read-profile-20261015.md) are measurement evidence. [Read metadata and read-cache fixes](intel-read-metadata-cache-20261015.md) record scoped PASS for `b3e93177c138`/`49d721a4f180`; full qualification of those sources remains NOTRUN. |
 | Intel write path | [Eight-writer deployment](intel-default-eight-writers-20261015.md), [pressure draining](intel-pressure-drain-20261014.md), [sync batching](intel-sync-batching-20261014.md). Scoped smoke/native results; observations do not establish universal throughput gains. |
 | REPORT / W100 | [Newer-snapshot report](intel-report-newer-snapshot-20261014.md): W100 closed by scoped human acceptance October 14. Older OPEN entries are historical; this does not establish the cause or resolution of the original ORCD EIO. |
 | Integrated RDMA source | [Merged devel qualification](devel-rdma-merge-qualification-20261014.md). AMD software-RDMA evidence does not replace ORCD hardware gates. |
