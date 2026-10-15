@@ -18,6 +18,10 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[October 15 open-item reconciliation](open-item-reconciliation-20261015.md) identifies superseded
+implementation claims, existing closures, deferred work and gates that remain.
+It includes current-source checks; it is not new runtime qualification.
+
 These are entry points to exact-source reports, not claims about the currently
 running clusters. Newer source commits do not inherit earlier test verdicts.
 

@@ -2931,6 +2931,8 @@ fix; claiming migration/repair from an IN_PROGRESS enum name alone.
 
 ## W71 · Fragment PUT success is not a durable persistence acknowledgement (queue row spec1)
 
+**October 15 review:** The original missing-production-barrier evidence below is historical. Current production PUTs have file and parent barriers; later barrier grouping is implemented. Remaining hardware qualification is distinct from reimplementing durability. See [reconciliation](../status/open-item-reconciliation-20261015.md).
+
 **Class:** durability correctness. **Status:** implemented, hardware acceptance open.
 
 **Oct 8:** `e77e1f13` establishes a production file barrier and ancestor
@@ -3094,6 +3096,8 @@ hardware power-loss proof.
 
 ## W74 · Configurable protection profiles, debt and automatic repair remain absent (queue row spec4)
 
+**October 15 review:** The inactive-only October 12 checkpoint and “both repair GAPs stay open” below are superseded by the ordinary-fragment standalone repair qualification, whose implementation is now in devel ancestry. Automatic/unplanned recovery, packed repair and D36 profile protection remain deferred/open, not accepted. See [reconciliation](../status/open-item-reconciliation-20261015.md).
+
 **Class:** protection/recovery feature gap. **Status:** accepted design, absent
 public control-plane/data-plane integration. **D36 (Oct 9) supersedes the
 former protection ladder:** three nodes minimum/2+1, four nodes maximum
@@ -3127,6 +3131,8 @@ replacing the accepted four-node target with a five-node minimum/f=3 ladder.
 <a id="w75"></a>
 
 ## W75 · Integrity evidence is payload-only and missing evidence is accepted (queue row spec5)
+
+**October 15 review:** The title retains the original defect. Missing/corrupt evidence now fails closed; identity-bound format and broader integrity requirements remain separate. See [reconciliation](../status/open-item-reconciliation-20261015.md).
 
 **Class:** integrity correctness. **Status:** open, inspected source gap to I25;
 no corruption experiment was run in this documentation review.
@@ -5069,6 +5075,8 @@ separate OPEN gate.
 
 ## W102 · Complete Intel2 private peer and GC acceptance
 
+**October 15 review:** W100 is closed by human acceptance. Its October 14 final Intel report includes both-host recovery/GC and cross-host peer PASS. Reconcile those exact fixtures and modes with this item before closing; do not keep “after W100 is repaired” as a current dependency. See [reconciliation](../status/open-item-reconciliation-20261015.md).
+
 **Class/state:** Validation follow-up; in progress, aggregate acceptance remains open.
 
 **Evidence/current state:** Initial Intel2 private attempts stopped after the 213/214 core verdict, leaving later gates NOTRUN. Independent rounds now preserve per-round verdicts while continuing, and the current combined harness continues after core failure without changing its failed aggregate. The offline inspector now scopes markers/reservations to every owned fixture inode; unrelated production-style markers remain diagnostic. Earlier global-marker false failures remain recorded. Production wired peer passed 66/66 direct, with a later buffered append timeout retained; neither substitutes for full private acceptance.
@@ -5167,6 +5175,8 @@ not a general fork-safety fix or W106 closure. See the
 
 ## W108 · Resolve owner names in directory-local long listings
 
+**October 15 review:** Recorded scoped acceptance supersedes the numeric-only implementation description below; that description is retained as the historical trigger. See [reconciliation](../status/open-item-reconciliation-20261015.md).
+
 **Class/state:** Command usability; closed (rebuilt ORCD rollout PASS Oct 12).
 
 **Oct 12 acceptance:** `devel-efs` source `0dd2a7c7` passes all seven rebuilt
@@ -5232,6 +5242,8 @@ directory during initial query build. See
 <a id="w110"></a>
 
 ## W110 · ORCD communication-loss diagnosis across EFS, IB and TCP
+
+**October 15 review:** The oversized-frame TCP fallback statement below describes the old deployed source. Current devel uses segmented RDMA for application traffic on upgraded connections regardless of frame size (39d93093a). TCP setup and hardware loss/stall attribution remain separate; this is not W106 hardware closure. See [reconciliation](../status/open-item-reconciliation-20261015.md).
 
 **Class/state:** transport observability/validation investigation; open.
 **Assigned cluster:** `orcd-test` — native hardware IB/RDMA and TCP side-channel.
@@ -5356,6 +5368,8 @@ See the [current status and evidence index](../status/w111-nuc-persistence-inves
 
 
 ### W112 — ordinary full overwrite loses acknowledged bytes on STALE replay
+
+**October 15 review:** The closure at 02b9918b is the recorded scoped verdict. The older “close only after” sentence below preserves its original gate, not a reopened implementation task. See [reconciliation](../status/open-item-reconciliation-20261015.md).
 
 **Status:** closed at `02b9918b` for the reproduced canonical full-overwrite replay defect. **Cluster:** AMD/TCP, direct and buffered.
 **Owner:** release integration; coordinate with NUC/writeback owner.

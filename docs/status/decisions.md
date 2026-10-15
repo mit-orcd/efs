@@ -1,5 +1,7 @@
 # Decisions — taken and pending (register D1–D36)
 
+**October 15 reconciliation:** [Review of stale claims and remaining gates](open-item-reconciliation-20261015.md). Read these annotations before treating dated implementation descriptions as current tasks. No new global acceptance or deployment is implied.
+
 **Accepted October 12, 2026 — container testing scope:** the container backend remains experimental; all container-specific testing, comparison and qualification is excluded from required work, including future releases, until explicitly reauthorized by the user. Files and files-backed packing tests remain required. [Binding policy](container-testing-policy-20261012.md).
 
 **Decided means the design was accepted; it does not mean implementation or

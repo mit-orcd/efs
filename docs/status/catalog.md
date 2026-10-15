@@ -255,3 +255,5 @@ Complete navigation to top-level status ledgers as of October 15, 2026. Grouping
 - [W97 solution investigation — 2026-10-09](w97-solution-investigation-20261009.md)
 - [W97: matched three-node NVMe-only and SATA-only tests — Oct 10](w97-three-drive-20261010.md)
 - [Replay/writeback hour — Oct 8, 2026](writeback-hour-20261008.md)
+
+- [Open-item reconciliation — October 15, 2026](open-item-reconciliation-20261015.md)
