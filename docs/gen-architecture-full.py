@@ -30,9 +30,10 @@ NORMATIVE = "normative protocol"
 PLAN = "operational plan"
 HISTORY = "historical evidence"
 APPENDICES = [
-    ("status/README.md", "Status — the task right now and the work queue", PLAN),
+    ("status/README.md", "Status — current index and acceptance entry points", PLAN),
+    ("status/work-queue.md", "Work queue — ordered items and source findings", PLAN),
     ("status/in-flight.md", "In flight — the current handoff block", PLAN),
-    ("status/decisions.md", "Decisions — taken and pending (register D1–D31)", PLAN),
+    ("status/decisions.md", "Decisions — taken and pending (register D1–D36)", PLAN),
     ("backlog/work-items.md", "Work items — long-form text for the open W items and the queue rows", PLAN + " (status blocks) + " + HISTORY + " (dated record)"),
     ("how-it-works/naming.md", "Naming", NORMATIVE),
     ("how-it-works/design-rationale.md", "Design rationale", "rationale (explains the index; never overrides it)"),

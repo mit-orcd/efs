@@ -257,3 +257,5 @@ Complete navigation to top-level status ledgers as of October 15, 2026. Grouping
 - [Replay/writeback hour — Oct 8, 2026](writeback-hour-20261008.md)
 
 - [Open-item reconciliation — October 15, 2026](open-item-reconciliation-20261015.md)
+
+- [ORCD devel qualification — October 15, 2026](orcd-devel-qualification-20261015.md)

@@ -18,6 +18,11 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[ORCD latest-devel qualification, October 15](orcd-devel-qualification-20261015.md): deployment
+PASS on `b3e93177c138`; qualification **FAIL**. Seven-client POSIX, cross-host
+peer, enabled commands and clean stop have failures; W119/W120 track follow-up.
+Valgrind and the standalone native-RDMA fault suite pass their selected scopes.
+
 [October 15 open-item reconciliation](open-item-reconciliation-20261015.md) identifies superseded
 implementation claims, existing closures, deferred work and gates that remain.
 It includes current-source checks; it is not new runtime qualification.

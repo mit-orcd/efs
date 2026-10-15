@@ -5563,3 +5563,45 @@ non-reproduction as a universal fix. ORCD was not changed or requalified here.
 **Qualification/reproduction:** [Private Intel fork/read ledger](../status/intel-direct-read-fork-20261014.md).
 The ledger separates source-specific controls, final qualification, historical
 failures and interrupted runs. W100 stays closed by human acceptance.
+
+
+<a id="w119"></a>
+
+## W119 · ORCD normal-operation RDMA failures and blocked clean stop
+
+**Class/state:** correctness/liveness investigation; OPEN, October15,2026.
+Source `b3e93177c138` on physical orcd-test, files/direct/native RDMA,
+`.efs` enabled, packing/containers/expiry disabled. Original seven-client run:
+550 PASS,150 FAIL,1 SKIP,846 NOTRUN. Cross-host peer59/67. EIO on ordinary
+append/CREATE/attributes, EBUSY in enabled query paths, and timed-out workers
+remain. Clean stop refuses unresolved writes/leases on fcstor007; post-restart
+persistence verification is NOTRUN. Private GC also retains physical files
+after a failed POSIX cleanup; its causal interpretation is unestablished.
+
+**Next/gate:** isolate each reproduced cause on current source, preserving
+request outcomes, fixture ownership, exact bytes and existing deadlines. Pass
+full concurrent/peer/query gates and orderly drain/restart/payload verification;
+prove owned physical cleanup independently of a zero queue estimate. Keep
+W106 hardware, W109/W92 query and W118 platform scopes distinct. This new
+observed failure does not reopen human-closed W100 or attribute its root cause.
+[Configuration, commands and evidence](../status/orcd-devel-qualification-20261015.md).
+
+<a id="w120"></a>
+
+## W120 · Qualification fixtures drifted from production source and unique names
+
+**Class/state:** verification correctness; OPEN, October15,2026.
+At `b3e93177c138`, `test_lookup_replacement.py`'s extracted host stub lacks
+production `h->s`, so the test cannot compile. The enabled-command GC harness
+also rejects the options script's new `efs-options-gates-<suffix>` name after
+its command assertions pass. Later physical cleanup is NOTRUN. The same native
+run records stale generated architecture outputs after status restructuring;
+those outputs are regenerated in the subsequent documentation commit, without
+changing that historical FAIL or repairing the two fixture defects.
+
+**Next/gate:** update the stub with faithful required production context and
+safe ownership validation for the uniquely named options fixture. Require the
+existing semantic positives/negative controls, complete command cleanup,
+`make test` and docs-check to pass on the repaired integrated source. Do not
+replace asserted behavior with a skip or merely suppress the failing command.
+[Original failures and reproduction](../status/orcd-devel-qualification-20261015.md).
