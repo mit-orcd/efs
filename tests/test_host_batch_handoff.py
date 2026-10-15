@@ -38,7 +38,7 @@ struct efs_raft_msg {int group;};
 struct host_inbox_item {uint8_t *buf;uint32_t len;uint64_t queued_us;};
 struct host_drain_view {uint64_t applied,term;int leader,ready;};
 struct efs_raft_host {pthread_mutex_t mu;int group_drain;struct {struct efs_raft*r;int hosted;}g[2];};
-static unsigned batches,handoffs,published,wakes,active,fail_batch;
+static unsigned batches,handoffs,published,wakes,active,fail_batch,probe_batches;
 static atomic_int observer_seen;
 static int kv_hold=1;
 static uint64_t efs_batch_obs_now_us(void){return 0;}
@@ -48,6 +48,9 @@ static uint64_t efs_raft_commit(struct efs_raft*r){(void)r;return 0;}
 static uint64_t efs_raft_term(struct efs_raft*r){(void)r;return 1;}
 static int efs_raft_leader(struct efs_raft*r){(void)r;return 0;}
 static int efs_raft_role(struct efs_raft*r){(void)r;return 0;}
+static void __attribute__((unused)) host_container_pending_reads(struct efs_raft_host*h){
+ (void)h;assert(!active && kv_hold && batches==probe_batches+1);probe_batches++;
+}
 static void __attribute__((unused)) host_publish_view(struct efs_raft_host*h,int gi){(void)h;assert(!active && kv_hold && gi>=0 && gi<2);published|=1u<<gi;}
 static void __attribute__((unused)) host_waiters_wake(struct efs_raft_host*h){(void)h;assert(published==3 && !active);wakes=batches;}
 static void host_inbox_order(const struct host_inbox_item*i,unsigned n,const struct host_drain_view*v,unsigned*o){(void)i;(void)v;for(unsigned j=0;j<n;j++)o[j]=j;}
@@ -77,10 +80,10 @@ static void *observe(void*p){struct efs_raft_host*h=p;assert(!pthread_mutex_lock
 int main(void){
  for(unsigned fault=0;fault<2;fault++){
   struct efs_raft r[2]={{0},{2}};struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.g={{&r[0],1},{&r[1],1}}};
-  batches=handoffs=published=wakes=active=0;fail_batch=fault?2:0;atomic_store(&observer_seen,0);
+  batches=handoffs=published=wakes=active=probe_batches=0;fail_batch=fault?2:0;atomic_store(&observer_seen,0);
   assert(!pthread_mutex_lock(&h.mu));pthread_t t;assert(!pthread_create(&t,NULL,observe,&h));
   unsigned n=0;uint64_t bytes=0;drain_inbox(&h,&n,&bytes);
-  assert(batches==5 && handoffs==4 && n==5 && bytes==25 && kv_hold);
+  assert(batches==5 && handoffs==4 && probe_batches==4 && n==5 && bytes==25 && kv_hold);
   assert(!pthread_mutex_unlock(&h.mu));assert(!pthread_join(t,NULL));pthread_mutex_destroy(&h.mu);
  }
  puts("inbox handoff: complete success/fenced failure before admission, published progress, real waiting owner, unchanged KV hold and credits PASS");

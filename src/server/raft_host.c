@@ -6752,6 +6752,9 @@ static int host_receive_persist(void *net, int (*persist)(void *), void *ctx)
     return rc;
 }
 
+static void
+host_container_pending_reads(struct efs_raft_host *h);
+
 /* h->mu and the pump's KV hold are owned on entry/return. Only a fully
  * returned recv_batch may hand off: its log barrier, replies and ordered apply
  * have finished (or the core has fenced failure). Publish that completed
@@ -6761,6 +6764,11 @@ static int host_receive_persist(void *net, int (*persist)(void *), void *ctx)
  * valid across handler/read-control admission between complete batches. */
 static void host_inbox_batch_handoff(struct efs_raft_host *h)
 {
+    /* Probes arriving during this batch's log barrier missed the network
+     * trylock/frozen core. Service them now, before another group's disk I/O.
+     * The completed batch owns all persistence/apply; the unchanged control
+     * helper grants only eligible votes and retains ordered receive/credits. */
+    host_container_pending_reads(h);
     for (int gi=0; gi<HOST_NGROUPS; gi++)
         if (h->g[gi].hosted) host_publish_view(h,gi);
     host_waiters_wake(h);
