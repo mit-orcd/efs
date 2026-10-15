@@ -17,8 +17,12 @@ The trim path takes 64 shard locks instead of 65,536 per-slot lock pairs.
 This is a bounded slot index, not a dynamically allocated per-inode registry.
 
 One joinable background worker consumes a coalesced wakeup, at most 16 inode
-selections per pass, with the existing 30-second per-drain deadline. It invokes
-the existing queued-write/append-lock/PUT/REPORT path under drain credit.
+selections per pass, with the existing 30-second per-drain deadline. Each background operation uses the append lock and existing snapshot/PUT/REPORT
+ownership path under drain credit. It flushes at most `EFS_WRITE_PIPELINE` chunks
+(currently 32), then publishes completed records without waiting for future
+writeback jobs or all future PUT windows. It never consumes foreground writeback
+errors. Explicit fsync still drains queued writes, every dirty chunk and all
+prior PUT windows.
 Successful foreground reservations remain reserved and can proceed at the early
 high-water threshold; actual budget refusal retains bounded foreground draining
 and errors. Worker creation failure also falls back to the foreground path.
@@ -34,6 +38,9 @@ Production-extraction tests:
 python3 tests/test_pressure_index.py
 python3 tests/test_pressure_background.py
 python3 tests/test_pressure_admission.py
+python3 tests/test_pressure_cohort.py
+python3 tests/test_wb_drain_budget.py
+python3 tests/test_append_flush_budget.py
 EXTRA_CFLAGS='-fsanitize=address,undefined -g' python3 tests/test_pressure_index.py
 EXTRA_CFLAGS='-fsanitize=address,undefined -g' python3 tests/test_pressure_background.py
 EXTRA_CFLAGS='-fsanitize=address,undefined -g' python3 tests/test_pressure_admission.py
@@ -58,3 +65,17 @@ Isolated native build: `/data1/efs/pressure-work-20261014` on Intel1.
 Mounted rollout, exact release identity, final smoke and paired throughput results
 will be recorded before this task is complete. Full POSIX/crash acceptance is not
 part of the requested smoke rollout.
+
+## Rejected first candidate
+
+Initial implementation `843c1e2ae` passed mounted data/EOF checks but used the
+foreground whole-inode drain in its worker. Three initial AMD trials were
+61.16, 58.35 and 66.18 MiB/s; three warm repeats were 66.97, 69.95 and 69.03 MiB/s
+(the raw JSON is authoritative for exact values). Buffers repeatedly reached
+real hard-budget refusal. This did not improve the 77.08 MiB/s baseline median.
+Source review also found that the foreground writeback wait consumes its sticky
+error, inappropriate for background use. The follow-up replaces that path with
+a fixed dirty cohort; the worker does not call the writeback wait at all.
+Native `test_pressure_cohort.py` verifies the limit, full explicit pass, failure
+handling and restored deadlines. The original foreground error and wait behavior
+is unchanged and covered by the WB/append drain tests.

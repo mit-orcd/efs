@@ -3311,8 +3311,31 @@ static int efs_append_flush_report(struct fuse_file_info *fi, efs_ino_t ino)
     return rc;
 }
 
+/* Background publication is not fsync: flush a fixed dirty cohort, then
+ * publish completed PUTs. Do not wait for subsequently accepted WB jobs or all
+ * of the inode's future PUT windows, and never consume a foreground WB error.
+ * The regular fsync/close path still drains every prior write and window. */
+static int fuse_pressure_flush(efs_ino_t ino)
+{
+    uint64_t previous = efs_client_rpc_deadline_ms();
+    uint64_t deadline = stats_now_ms() + 30000;
+    if (previous && previous < deadline)
+        deadline = previous;
+    efs_client_rpc_set_deadline_ms(deadline);
+    pthread_mutex_t *amu = append_mu(ino);
+    int rc = wb_lock_budget(amu);
+    if (rc == EFS_OK) {
+        rc = efs_dcache_flush_pressure_ino(ino);
+        if (rc == EFS_OK)
+            rc = efs_client_report_dirty_ino(ino, 1);
+        pthread_mutex_unlock(amu);
+    }
+    efs_client_rpc_set_deadline_ms(previous);
+    return rc;
+}
+
 /* One coalesced pressure wakeup, no payload/entry ownership in the queue.
- * The existing ordered drain owns all data and errors. Successful admission
+ * The existing snapshot/PUT/REPORT path owns each cohort. Successful admission
  * keeps its reservation; only real budget refusal takes the foreground path.
  * Shutdown joins this worker before writeback or client state is destroyed. */
 static struct {
@@ -3351,7 +3374,7 @@ static void *fuse_pressure_main(void *unused)
                 break;
             after = ino;
             efs_buf_drain_enter();
-            int rc = efs_append_flush_report(NULL, ino);
+            int rc = fuse_pressure_flush(ino);
             efs_buf_drain_leave();
             if (rc != EFS_OK) {
                 /* No success acknowledgement or retirement on failure. The

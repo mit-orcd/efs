@@ -6409,7 +6409,7 @@ static int dcache_dirty_cis_of(efs_ino_t ino, uint32_t **out)
  * every slot once the file was 8 GiB; it was 36.9 % of the client's
  * cycles during an ecopy --verify. Now it costs the inode's dirty
  * entries, which at close are the few the writeback did not take. */
-static int dcache_flush_ino_pass(efs_ino_t ino)
+static int dcache_flush_ino_pass(efs_ino_t ino, uint32_t max_chunks)
 {
     struct flush_pipe pipe;
     uint32_t *cis = NULL;
@@ -6422,7 +6422,7 @@ static int dcache_flush_ino_pass(efs_ino_t ino)
     if (ncis == 0)
         return EFS_OK;
     flush_pipe_init(&pipe);
-    for (i = 0; i < ncis && pipe.rc == EFS_OK; i++) {
+    for (i = 0; i < ncis && (!max_chunks || (uint32_t)i < max_chunks) && pipe.rc == EFS_OK; i++) {
         uint32_t ci = cis[i];
 
         if (efs_client_rpc_deadline_ms() &&
@@ -6451,10 +6451,20 @@ static int dcache_flush_ino_pass(efs_ino_t ino)
     return pipe.rc;
 }
 
+/* Pressure publishes a bounded cohort while later writers keep running.
+ * Reuse the same snapshot/PUT ownership path and existing pipeline size. Do
+ * not wait for unrelated/future PUT windows: REPORT snapshots only completed
+ * records; in-flight and failed entries remain charged and indexed. */
+int efs_dcache_flush_pressure_ino(efs_ino_t ino)
+{
+    int rc = efs_client_pack_flush(ino);
+    return rc != EFS_OK ? rc : dcache_flush_ino_pass(ino, EFS_WRITE_PIPELINE);
+}
+
 int efs_dcache_flush_ino(efs_ino_t ino)
 {
     int rc=efs_client_pack_flush(ino);if(rc)return rc;
-    rc = dcache_flush_ino_pass(ino);
+    rc = dcache_flush_ino_pass(ino, 0);
     int w;
 
     if (rc != EFS_OK)
@@ -6468,7 +6478,7 @@ int efs_dcache_flush_ino(efs_ino_t ino)
     if (w == EFS_ERR_BUSY)
         return EFS_ERR_BUSY;
     if (w == 1)
-        rc = dcache_flush_ino_pass(ino);
+        rc = dcache_flush_ino_pass(ino, 0);
     return rc;
 }
 

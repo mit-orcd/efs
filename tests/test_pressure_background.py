@@ -21,8 +21,8 @@ static void efs_buf_drain_enter(void) {entered++;}
 static void efs_buf_drain_leave(void) {entered--;}
 static void efs_rdcache_trim(void) {}
 static void efs_dcache_trim_metadata(void) {}
-static int efs_append_flush_report(void *fi,efs_ino_t ino) {
-(void)fi;assert(ino==42 && entered==1);pthread_mutex_lock(&mu);
+static int fuse_pressure_flush(efs_ino_t ino) {
+assert(ino==42 && entered==1);pthread_mutex_lock(&mu);
 calls++;active++;if(active>peak)peak=active;pthread_cond_broadcast(&cv);
 while(release_call<calls)pthread_cond_wait(&cv,&mu);
 int rc=result;if(!rc)owned=0;active--;completed++;pthread_cond_broadcast(&cv);
