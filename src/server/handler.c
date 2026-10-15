@@ -1159,8 +1159,13 @@ send_reply:
                     r.status = EFS_INODE_RPC_ERROR; r.count = 0; break;
                 }
             }
+            if (r.count > EFS_GETCHUNKS_MAX) {
+                r.status = EFS_INODE_RPC_ERROR; r.count = 0;
+            }
+            /* Header + count records, not the 98 KiB fixed struct: a
+             * one-chunk lookup used to ship 63 empty records. */
             efs_conn_send_msg(conn, type == EFS_MSG_GETCHUNKS_PACKED ? EFS_MSG_GETCHUNKS_PACKED_REPLY : EFS_MSG_INODE_GETCHUNKS_REPLY, &r,
-                              sizeof(r));
+                              efs_getchunks_reply_len(r.count));
             break;
         }
         case EFS_MSG_RDMA_SETUP: {

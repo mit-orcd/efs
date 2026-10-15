@@ -2001,8 +2001,9 @@ int efs_client_rpc_getchunks_fileid(efs_export_id_t export_id, efs_ino_t ino,
             return EFS_ERR_BUSY;
         }
         rpc_prof_add(EFS_MSG_INODE_GETCHUNKS, t1 - t0, t2 - t1, t3 - t2, 0);
+        /* Variable length: only recs[0..count) are present and read. */
         if (rtype != EFS_MSG_GETCHUNKS_PACKED_REPLY ||
-            plen != sizeof(struct efs_msg_inode_getchunks_reply)) {
+            efs_getchunks_reply_len_ok(payload, plen) != EFS_OK) {
             free(payload);
             return EFS_ERR_PROTO;
         }

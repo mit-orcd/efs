@@ -46,7 +46,11 @@ static void rpc(unsigned node,uint8_t type,const void *req,uint32_t qlen,
     int fd=connect_node(node);assert(!efs_send_msg(fd,type,req,qlen));
     void *data=NULL;uint8_t got;uint32_t len;
     assert(!efs_recv_msg(fd,&got,&data,&len));close(fd);
-    assert(got==expected && len==olen);memcpy(out,data,len);free(data);
+    /* GETCHUNKS replies carry only `count` records; zero-extend them. */
+    if(got==EFS_MSG_INODE_GETCHUNKS_REPLY&&olen==sizeof(struct efs_msg_inode_getchunks_reply))
+        assert(efs_getchunks_reply_len_ok(data,len)==EFS_OK&&len<=olen);
+    else assert(got==expected && len==olen);
+    assert(got==expected);memset(out,0,olen);memcpy(out,data,len);free(data);
 }
 static struct efs_chunk_rec observed(const struct efs_msg_publication *req)
 {

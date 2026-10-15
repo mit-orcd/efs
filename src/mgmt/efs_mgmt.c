@@ -2778,7 +2778,7 @@ static int cmd_raft_getchunks(int argc, char **argv)
     if (send_recv(fd, EFS_MSG_INODE_GETCHUNKS, &req, sizeof(req), &reply_type,
                   &reply, &reply_len) != 0 ||
         reply_type != EFS_MSG_INODE_GETCHUNKS_REPLY ||
-        reply_len != sizeof(*r)) {
+        efs_getchunks_reply_len_ok(reply, reply_len) != EFS_OK) {
         fprintf(stderr, "Failed to raft-getchunks\n");
         free(reply);
         close(fd);

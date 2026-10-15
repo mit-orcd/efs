@@ -355,6 +355,51 @@ static void test_getchunks_reply_validation(void)
     free(r);
 }
 
+/* Replies carry header + count records; the full fixed struct is still
+ * accepted from older servers. A short reply is validated in place, so it
+ * is held in an exact-size buffer (ASan/Valgrind catch any over-read). */
+static void test_getchunks_reply_length(void)
+{
+    const uint32_t hdr = EFS_GETCHUNKS_REPLY_HDR_LEN;
+    const uint32_t rec = (uint32_t)sizeof(struct efs_chunk_rec);
+    const uint32_t full = (uint32_t)sizeof(struct efs_msg_inode_getchunks_reply);
+    struct efs_msg_inode_getchunks req = {0};
+    struct efs_msg_inode_getchunks_reply *r = calloc(1, full);
+    assert(r);
+
+    CHECK(efs_getchunks_reply_len(0) == hdr, "GETCHUNKS empty reply is header only");
+    CHECK(efs_getchunks_reply_len(1) == hdr + rec, "GETCHUNKS one-record reply");
+    CHECK(efs_getchunks_reply_len(EFS_GETCHUNKS_MAX) <= full, "GETCHUNKS max reply fits struct");
+    CHECK(efs_getchunks_reply_len(1) < full / 32, "GETCHUNKS one-record reply is small");
+
+    CHECK(efs_getchunks_reply_len_ok(r, hdr) == EFS_OK, "GETCHUNKS header-only length");
+    CHECK(efs_getchunks_reply_len_ok(r, full) == EFS_OK, "GETCHUNKS legacy full length");
+    CHECK(efs_getchunks_reply_len_ok(r, hdr - 1) == EFS_ERR_PROTO, "GETCHUNKS truncated header");
+    CHECK(efs_getchunks_reply_len_ok(NULL, hdr) == EFS_ERR_PROTO, "GETCHUNKS null reply");
+    r->count = 2;
+    CHECK(efs_getchunks_reply_len_ok(r, hdr + rec) == EFS_ERR_PROTO, "GETCHUNKS missing record");
+    CHECK(efs_getchunks_reply_len_ok(r, hdr + 3 * rec) == EFS_ERR_PROTO, "GETCHUNKS trailing record");
+    CHECK(efs_getchunks_reply_len_ok(r, hdr + 2 * rec) == EFS_OK, "GETCHUNKS exact two records");
+    CHECK(efs_getchunks_reply_len_ok(r, full) == EFS_OK, "GETCHUNKS legacy full two records");
+    r->count = EFS_GETCHUNKS_MAX + 1;
+    CHECK(efs_getchunks_reply_len_ok(r, full) == EFS_ERR_PROTO, "GETCHUNKS count above max");
+
+    /* Short one-record reply in an exact-size buffer validates in place. */
+    req.ino = 123; req.start = 5; req.max = 1;
+    memset(r, 0, full);
+    r->ino = req.ino; r->generation = 7; r->count = 1;
+    r->recs[0].ino = 123; r->recs[0].chunk_index = 5;
+    r->recs[0].read_view.chunk_size = EFS_MIN_CHUNK_SIZE; r->recs[0].read_view.count = 1;
+    uint32_t len = efs_getchunks_reply_len(1);
+    struct efs_msg_inode_getchunks_reply *wire = malloc(len);
+    assert(wire);
+    memcpy(wire, r, len);
+    CHECK(efs_getchunks_reply_len_ok(wire, len) == EFS_OK, "GETCHUNKS short reply length");
+    CHECK(efs_getchunks_reply_valid(&req, wire) == EFS_OK, "GETCHUNKS short reply validates in place");
+    free(wire);
+    free(r);
+}
+
 static void test_writer_view_reply(void)
 {
     struct efs_msg_inode_writer_view req = {123, 456, 17, 0};
@@ -394,6 +439,7 @@ int main(void)
 {
     test_writer_view_reply();
     test_getchunks_reply_validation();
+    test_getchunks_reply_length();
     test_frame_roundtrip();
     test_frame_reject();
     test_status_offset();

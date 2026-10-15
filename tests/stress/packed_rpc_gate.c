@@ -104,7 +104,7 @@ static void verify(void)
         struct efs_chunk_rec record; int ok = 0;
         for (unsigned round = 0; !ok && round < 12; round++) for (unsigned node = 0; !ok && node < 4; node++) {
             void *raw = NULL; uint32_t len;
-            if (!rpc(node, EFS_MSG_GETCHUNKS_PACKED, &req, sizeof(req), EFS_MSG_GETCHUNKS_PACKED_REPLY, &raw, &len) && len == sizeof(struct efs_msg_inode_getchunks_reply)) {
+            if (!rpc(node, EFS_MSG_GETCHUNKS_PACKED, &req, sizeof(req), EFS_MSG_GETCHUNKS_PACKED_REPLY, &raw, &len) && efs_getchunks_reply_len_ok(raw, len) == EFS_OK) {
                 struct efs_msg_inode_getchunks_reply *r = raw;
                 if (!r->status) { assert(!efs_getchunks_reply_valid(&req, r) && r->count == 1); record = r->recs[0]; ok = 1; }
             }

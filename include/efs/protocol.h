@@ -1221,6 +1221,40 @@ struct efs_msg_inode_getchunks_reply {
     struct efs_chunk_rec recs[EFS_GETCHUNKS_MAX];
 };
 
+/* On the wire a GETCHUNKS reply is the header plus its `count` records
+ * (each record is 1536 bytes; the full struct is 98 KiB). Receivers also
+ * accept the full fixed struct sent by older servers. Fields past
+ * recs[count] are never read, so a short reply may be used in place or
+ * zero-extended into a full struct. */
+#define EFS_GETCHUNKS_REPLY_HDR_LEN \
+    ((uint32_t)offsetof(struct efs_msg_inode_getchunks_reply, recs))
+
+static inline uint32_t efs_getchunks_reply_len(uint32_t count)
+{
+    if (count > EFS_GETCHUNKS_MAX)
+        count = EFS_GETCHUNKS_MAX;
+    return EFS_GETCHUNKS_REPLY_HDR_LEN +
+           count * (uint32_t)sizeof(struct efs_chunk_rec);
+}
+
+/* Length check before any field of a received reply is trusted. */
+static inline int efs_getchunks_reply_len_ok(const void *reply, uint32_t len)
+{
+    uint32_t count;
+
+    if (!reply || len < EFS_GETCHUNKS_REPLY_HDR_LEN)
+        return EFS_ERR_PROTO;
+    memcpy(&count, (const uint8_t *)reply +
+                   offsetof(struct efs_msg_inode_getchunks_reply, count),
+           sizeof(count));
+    if (count > EFS_GETCHUNKS_MAX)
+        return EFS_ERR_PROTO;
+    if (len != efs_getchunks_reply_len(count) &&
+        len != (uint32_t)sizeof(struct efs_msg_inode_getchunks_reply))
+        return EFS_ERR_PROTO;
+    return EFS_OK;
+}
+
 /* Validate the whole fixed reply before exposing any records to the cache. */
 static inline int efs_getchunks_reply_valid(
     const struct efs_msg_inode_getchunks *req,

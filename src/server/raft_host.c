@@ -5329,6 +5329,17 @@ static int host_inode_rpc_peer(struct efs_raft_host *h, int rid, uint8_t req_typ
         server_peer_conn_drop(host, port, pc);
         return -1;
     }
+    /* GETCHUNKS replies are variable length (header + count records);
+     * zero-extend them into the caller's full struct. */
+    if (rtype == reply_type && reply_type == EFS_MSG_GETCHUNKS_PACKED_REPLY &&
+        outlen == sizeof(struct efs_msg_inode_getchunks_reply) &&
+        efs_getchunks_reply_len_ok(reply, rlen) == EFS_OK) {
+        memset(out, 0, outlen);
+        memcpy(out, reply, rlen);
+        free(reply);
+        server_peer_conn_release(host, port, pc);
+        return 0;
+    }
     if (rtype != reply_type || rlen < outlen) {
         free(reply);
         server_peer_conn_drop(host, port, pc);
