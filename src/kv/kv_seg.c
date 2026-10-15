@@ -6,6 +6,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#if defined(__x86_64__) && defined(__SSE4_2__)
+#include <nmmintrin.h>
+#endif
 
 static void put_u32(uint8_t *p, uint32_t v)
 {
@@ -701,10 +704,43 @@ static int search_block_binary(const struct seg_cslot *c, const uint8_t *key,
  * only an accelerator: every occupied-bucket hit verifies length and bytes. */
 static uint64_t block_key_hash(const uint8_t *key, uint32_t klen)
 {
-    uint64_t h = UINT64_C(14695981039346656037);
+#if defined(__x86_64__) && defined(__SSE4_2__)
+    /* Native builds may use CRC instructions; this is an in-memory routing
+     * hash, never a persisted checksum or an equality decision. */
+    uint64_t h = klen;
+    while (klen >= 8) {
+        uint64_t word; memcpy(&word, key, sizeof(word));
+        h = _mm_crc32_u64(h, word); key += 8; klen -= 8;
+    }
+    if (klen >= 4) {
+        uint32_t word; memcpy(&word, key, sizeof(word));
+        h = _mm_crc32_u32((uint32_t)h, word); key += 4; klen -= 4;
+    }
+    if (klen >= 2) {
+        uint16_t word; memcpy(&word, key, sizeof(word));
+        h = _mm_crc32_u16((uint32_t)h, word); key += 2; klen -= 2;
+    }
+    if (klen) h = _mm_crc32_u8((uint32_t)h, *key);
+    return h;
+#else
+    const uint64_t m = UINT64_C(0xc6a4a7935bd1e995);
+    uint64_t h = UINT64_C(0x9e3779b97f4a7c15) ^ ((uint64_t)klen * m);
+    /* memcpy makes unaligned full-word loads defined on every architecture.
+     * Unlike byte-at-a-time hashing this also keeps long lane keys cheap. */
+    while (klen >= 8) {
+        uint64_t word;
+        memcpy(&word, key, sizeof(word));
+        word *= m; word ^= word >> 47; word *= m;
+        h ^= word; h *= m;
+        key += 8; klen -= 8;
+    }
+    uint64_t tail = 0;
     for (uint32_t i = 0; i < klen; ++i)
-        h = (h ^ key[i]) * UINT64_C(1099511628211);
-    return h ^ (h >> 32);
+        tail |= (uint64_t)key[i] << (8 * i);
+    h ^= tail; h *= m;
+    h ^= h >> 47; h *= m; h ^= h >> 47;
+    return h;
+#endif
 }
 
 /* Called only after complete block and inter-block ordering validation.

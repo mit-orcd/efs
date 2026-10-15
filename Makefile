@@ -973,3 +973,6 @@ test: test-rdma-message
 src/client/read.o: src/client/read_peer_order.h
 
 tests/test_kv_block_hash: src/kv/kv_seg.c src/kv/kv_lsm_internal.h
+
+tests/measure/kv_block_hash_smoke: tests/measure/kv_block_hash_smoke.c $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(LIB) $(LDFLAGS)

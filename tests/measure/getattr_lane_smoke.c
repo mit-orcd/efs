@@ -97,7 +97,7 @@ static void checks(void)
 }
 static uint64_t ns(void)
 { struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return (uint64_t)t.tv_sec*1000000000+t.tv_nsec; }
-static void measure(unsigned lanes)
+static void measure(unsigned lanes, unsigned iterations)
 {
     char dir[]="/tmp/efs-getattr-lane-XXXXXX";assert(mkdtemp(dir));
     struct efs_kv_lsm_cfg cfg={.sync_mode=EFS_KV_LSM_NOSYNC,.memtable_max=64u<<20,.l0_max=64};
@@ -111,12 +111,12 @@ static void measure(unsigned lanes)
     struct efs_kv kv={.ops=&ops,.ctx=&o};struct efs_meta_stat st;
     for(unsigned r=0;r<5;r++){
         o.gets=o.scans=0;uint64_t a=ns();
-        for(unsigned i=0;i<10000;i++){
+        for(unsigned i=0;i<iterations;i++){
             assert(!efs_meta_apply_getattr(&kv,o.ino,coord,&o,&st));
             assert(st.size==128 && st.alloc==lanes && st.attempts==1);
         }
         printf("{\"lanes\":%u,\"round\":%u,\"ns_per_stat\":%.1f,\"gets_per_stat\":%.1f,\"scans_per_stat\":%.1f}\n",
-               lanes,r,(ns()-a)/10000.,o.gets/10000.,o.scans/10000.);
+               lanes,r,(ns()-a)/(double)iterations,o.gets/(double)iterations,o.scans/(double)iterations);
     }
     efs_kv_lsm_close(o.inner);DIR *d=opendir(dir);assert(d);struct dirent *e;char p[1024];
     while((e=readdir(d)))if(strcmp(e->d_name,".")&&strcmp(e->d_name,"..")){
@@ -126,6 +126,11 @@ static void measure(unsigned lanes)
 }
 int main(int argc,char **argv)
 {
-    if(argc==2 && !strcmp(argv[1],"--measure")){measure(1);measure(8);return 0;}
+    if((argc==2 || argc==3) && !strcmp(argv[1],"--measure")){
+        unsigned iterations=10000;
+        if(argc==3){char *end;unsigned long n=strtoul(argv[2],&end,10);
+            assert(*argv[2] && !*end && n>=1000 && n<=1000000);iterations=(unsigned)n;}
+        measure(1,iterations);measure(8,iterations);return 0;
+    }
     assert(argc==1);checks();return 0;
 }
