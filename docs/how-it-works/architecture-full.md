@@ -1494,6 +1494,13 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**20 mounted GiB writes and 49,152 local records verified PASS.**
+Eight writers measured ~1.8x and sixteen ~2.1x per-client throughput versus four.
+Local durable grouping adds throughput with higher completion latency; gains are
+not additive to production grouping. No EFS code or production changes; original
+private fixture restored. Sustained/fairness/crash qualification remains open.
+
+[Intel /data1 durability isolation](../status/intel-durable-isolation-20261015.md):
 **72 cases / 294,912 records verified PASS; no EFS runtime changes.**
 Shared-directory durable writes scale from ~34 MiB/s at four workers to ~63 at
 eight and ~92 at sixteen on both hosts. Stat-only load shows no measured penalty;
