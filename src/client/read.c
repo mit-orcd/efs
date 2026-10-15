@@ -1670,6 +1670,20 @@ static int rdcache_hit(efs_ino_t ino, uint32_t ci)
     return hit;
 }
 
+/* Opportunity hint only: the authoritative refresh and generation-checked
+ * pins still decide whether bytes can be served. Do not pay that refresh
+ * twice when the ordinary read path must fetch an absent/pending image. */
+static int rdcache_ready(efs_ino_t ino, uint32_t ci, uint32_t len)
+{
+    uint32_t s = rdcache_slot(ino, ci);
+    pthread_mutex_t *mu = rdcache_mu(s);
+    pthread_mutex_lock(mu);
+    struct rdcache_ent *e = rdcache_find(s, ino, ci);
+    int ready = e && e->data && !e->pending && e->len >= len;
+    pthread_mutex_unlock(mu);
+    return ready;
+}
+
 /* 0 = dst filled from a finished entry. 1 = this caller owns the fetch
  * and must efs_rdcache_put or efs_rdcache_cancel. A second caller for a
  * key that is already pending waits and then copies. */
@@ -1893,6 +1907,9 @@ int efs_client_read_refs(efs_ino_t ino, uint64_t offset, size_t size,
     pthread_mutex_unlock(&g_client.idx_mu);
     if (!have_row || offset + size > inode.size)
         return 0;
+    for (uint32_t i = 0; i < size / cs; ++i)
+        if (!rdcache_ready(ino, (uint32_t)(offset / cs) + i, cs))
+            return 0;
     if (efs_client_pull_chunks_range(ino, (uint32_t)(offset / cs),
             (uint32_t)((offset + size - 1) / cs) + 1) != EFS_OK)
         return 0;

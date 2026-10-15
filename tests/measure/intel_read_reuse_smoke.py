@@ -39,7 +39,7 @@ def actor(path):
                 got=libc.pread(fd,addr,n,q.get('offset',0))
                 if got<0:raise OSError(ctypes.get_errno(),'pread')
                 data=ctypes.string_at(addr,got)
-                print(json.dumps({'ok':True,'length':got,'sha256':hashlib.sha256(data).hexdigest()}),flush=True);continue
+                print(json.dumps({'ok':True,'length':got,'sha256':hashlib.sha256(data).hexdigest(),'samples':{str(o):data[o:o+32].hex() for o in [0,131056,131072,131089,131104,1048560]}}),flush=True);continue
             elif op=='unlink':os.unlink(path)
             elif op=='close':
                 if fd is not None:os.close(fd);fd=None
@@ -74,9 +74,15 @@ def main(a):
         for off,n,val in [(131070,9,198),(0,131072,37),(1048560,32,99)]:
             call(w,op='patch',offset=off,length=n,byte=val);content[off:off+n]=bytes([val])*n
             for repeat in range(2):read(0,2*1024*1024)
+        if a.close_before_truncate:call(r,op='close')
+        if a.settle_seconds:time.sleep(a.settle_seconds)
         call(w,op='truncate',size=131089);del content[131089:]
+        if a.refresh_after_truncate:call(r,op='close')
         read(0,2*1024*1024);read(131089,4096)
+        if a.close_before_truncate:call(r,op='close')
+        if a.settle_seconds:time.sleep(a.settle_seconds)
         call(w,op='truncate',size=2*1024*1024);content.extend(bytes(2*1024*1024-len(content)))
+        if a.refresh_after_truncate:call(r,op='close')
         for alignment in [0,16,4095]:read(0,2*1024*1024,alignment)
         # Preserve an open reader across unlink; no stale-data resurrection.
         call(w,op='unlink');created=False;read(0,2*1024*1024)
@@ -87,5 +93,5 @@ def main(a):
         for p in [w,r]:p.stdin.close();assert p.wait(timeout=30)==0
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--actor');p.add_argument('--writer-host',default='intel1_efs');p.add_argument('--reader-host',default='amd_efs');p.add_argument('--writer-mount',default='/data1/efs/mnt');p.add_argument('--reader-mount',default='/data1/efs/intel-mnt');a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--actor');p.add_argument('--close-before-truncate',action='store_true');p.add_argument('--settle-seconds',type=float,default=0);p.add_argument('--refresh-after-truncate',action='store_true');p.add_argument('--writer-host',default='intel1_efs');p.add_argument('--reader-host',default='amd_efs');p.add_argument('--writer-mount',default='/data1/efs/mnt');p.add_argument('--reader-mount',default='/data1/efs/intel-mnt');a=p.parse_args()
     actor(a.actor) if a.actor else main(a)

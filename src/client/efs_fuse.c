@@ -7901,7 +7901,7 @@ static int efs_fuse_parse_cmdline(struct fuse_args *args,
          * offset. A 1 MiB malloc buffer at offset 16 otherwise becomes
          * 1 MiB-16 plus 16 bytes. Half-MiB requests fit with page headroom
          * and divide ordinary 1 MiB reads into chunk-aligned requests.
-         * max_read is a mount option and initializes conn->max_read too. */
+         * max_read is a mount option and must match conn->max_read in init. */
         if(i==0 && fuse_opt_add_arg(&configured,
             "-omax_read=524288,max_threads=32,max_idle_threads=8")!=0)goto failed;
     }
