@@ -62,7 +62,7 @@ int efs_client_publication_id(uint64_t seq,struct efs_opid *out) {
 #define DCACHE_SHARDS 64
 #define DTRACE(...) ((void)0)
 '''+block(w, 'struct dcache_ent {')+r'''
-static struct { struct dcache_ent e[DCACHE_SLOTS]; pthread_mutex_t shard[DCACHE_SHARDS]; } g_dcache;
+static struct { struct dcache_ent e[DCACHE_SLOTS]; pthread_mutex_t shard[DCACHE_SHARDS]; uint64_t pressure_slots[DCACHE_SHARDS][16], chain_slots[DCACHE_SHARDS][16]; } g_dcache;
 static uint64_t dirty_bytes;
 static void dcache_ensure(void) {}
 static void dcache_pin_add(struct dcache_ent *e) { e->pin_held=1; }
@@ -70,7 +70,7 @@ static void wb_error_record_resolve(efs_ino_t ino) { (void)ino; }
 static void dcache_pin_release(struct dcache_ent *e) { e->pin_held=0; }
 static void dcache_dirty_unlink(struct dcache_ent *e, uint32_t s) { (void)s; e->on_dirty=0; }
 static void dcache_dirty_link(struct dcache_ent *e, uint32_t s) { (void)s; e->on_dirty=1; }
-static void dcache_set_dirty(struct dcache_ent *e, uint32_t s) { e->dirty=1; dcache_dirty_link(e,s); }
+
 static void dcache_note_dirty_bytes(int64_t n) { dirty_bytes+=n; }
 static uint64_t dcache_seq_now(void) { return 1; }
 static uint64_t dcache_seq_next(struct dcache_ent *e) { return ++e->snap_seq; }
@@ -78,6 +78,8 @@ static void dcache_account_extra(efs_ino_t ino, uint32_t ci) { (void)ino;(void)c
 static void dcache_add_range(struct dcache_ent *e,uint32_t off,uint32_t len) { e->nrange=1;e->roff[0]=off;e->rlen[0]=len; }
 void efs_export_present_add(struct efs_export *ex,efs_ino_t ino,int which,int delta) { (void)ex;(void)ino;(void)which;(void)delta; }
 '''
+source += '\n'+(function(w,'dcache_index_set') if 'static void dcache_index_set(' in w else 'static void dcache_index_set(uint64_t a[64][16],uint32_t s){(void)a;(void)s;}')
+source += '\n'+function(w,'dcache_set_dirty')
 ticket_source=(root/'src/meta/put_ticket.c').read_text()
 for name in ['wr32','wr64','ticket_shard','ticket_key','efs_put_ticket_encode','efs_put_ticket_from_pub']:
     source+='\n'+function(ticket_source,name)
@@ -117,6 +119,9 @@ static uint64_t stats_now_ms(void) {struct timespec t;clock_gettime(CLOCK_MONOTO
 int efs_client_rpc_past_deadline(void) {return deadline&&stats_now_ms()>=deadline;}
 static uint32_t fuse_chunk_size(void) { return EFS_CHUNK_SIZE; }
 static int flush_error, drains, trims;
+/* Exercise the foreground fallback with background startup unavailable. The
+ * worker/admission harnesses separately cover successful asynchronous startup. */
+static int fuse_pressure_kick(void) { return 0; }
 void efs_rdcache_trim(void) { trims++; }
 static int efs_append_flush_report(void *fi, efs_ino_t ino) {
     (void)fi;
@@ -279,7 +284,7 @@ int main(void) {
     dcache_drop_locked(1,0,0);assert(!owned->writer && !g_metadata);
     struct dcache_ent *idle=efs_buf_metadata_alloc(sizeof(*idle));assert(idle);
     idle->writer=efs_writer_state_alloc(EFS_CHUNK_SIZE);assert(idle->writer);
-    owned->next=idle;
+    owned->next=idle;dcache_index_set(g_dcache.chain_slots,owned_slot);
     assert(dcache_chain_reuse(owned_slot)==idle && !idle->writer);
     assert(g_metadata==sizeof(*idle));
     idle->writer=efs_writer_state_alloc(EFS_CHUNK_SIZE);assert(idle->writer);
@@ -580,7 +585,7 @@ int main(void) {
         if (!n) break;
         n->ino=77;n->object_gen=9;n->object_seq=2;
         n->committed_object=9;n->committed_seq=2;
-        n->next=head->next;head->next=n;
+        n->next=head->next;head->next=n;dcache_index_set(g_dcache.chain_slots,0);
     }
     struct dcache_ent *pending=head->next;
     struct dcache_ent *stalled=pending->next;

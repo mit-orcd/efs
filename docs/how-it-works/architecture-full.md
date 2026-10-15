@@ -1494,14 +1494,19 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-**Implementation qualification in progress; mounted deployment pending.**
+**Deployed devel 2e935cea0; native/sanitizer and four-client smoke PASS.**
 Fixed shard-owned slot bitmaps replace full cache/chain walks. One coalesced
-worker runs the existing ordered drain while successful writes keep their
-reservations; hard budget refusal retains bounded foreground fallback.
-Focused native/sanitizer and EOF/REPORT regression checks pass locally.
+worker drains fixed PUT cohorts and publishes completed records without consuming
+foreground writeback errors or waiting for future writes. Hard caps and explicit
+fsync remain unchanged. Initial whole-inode worker regressed and was replaced.
+All 64 preserved controls/client match; concurrent 64 MiB writers pass repeated
+fsync/shrink/regrow/EOF/content checks. TCP/direct/files, optional features OFF.
+AMD durable dd baseline median 77.08 MiB/s; final six-trial median 77.28 MiB/s:
+**sustained throughput gain NOT ESTABLISHED**. Xorinox crawl restarted with prior
+output preserved. Private Intel unchanged. Full POSIX/live crash acceptance NOTRUN.
 
 [Intel post-batching live profile](../status/intel-post-sync-profile-20261014.md):
-**Read-only capture PASS; next optimization proposed, NOT IMPLEMENTED.**
+**Historical read-only capture PASS; bounded-cohort follow-up above is deployed.**
 User AMD dd observed at about 71 MiB/s with xorinox crawl active. Client
 write admission accounts for 66.4% of sampled user cycles, including full-cache
 metadata trim and pressure selection; client uses only about 16% of one core.

@@ -31,6 +31,9 @@ source = r'''
 #include <string.h>
 #include <pthread.h>
 #define DCACHE_NR 32
+#define DCACHE_SLOTS 65536
+#define DCACHE_SHARDS 64
+static struct {uint64_t pressure_slots[64][16];} g_dcache;
 #define DTRACE(...) ((void)0)
 #define CS EFS_MIN_CHUNK_SIZE
 struct efs_client g_client;
@@ -134,7 +137,7 @@ static void putid_note(efs_ino_t ino,uint32_t ci,uint64_t obj,uint64_t seq,
 void efs_client_mark_chunk_dirty(efs_ino_t ino,uint32_t ci) { (void)ino;(void)ci;++dirty_marks; }
 void efs_client_mark_ino_dirty(efs_ino_t ino) { (void)ino; }
 static void report_landed_note(efs_ino_t ino) { (void)ino; }
-''' + "\n".join(function(name) for name in ["chunk_obs_has_live_spans",
+''' + "\n".join(function(name) for name in (["dcache_index_set"] if "static void dcache_index_set(" in write else []) + ["chunk_obs_has_live_spans",
     "dcache_install_image", "dcache_flush_keep", "dcache_replay_stale_ex_budgeted",
     "dcache_put_now_budgeted"]) + r'''
 static void reset(void) {
