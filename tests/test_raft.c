@@ -883,8 +883,8 @@ static void test_read_probe_committed_prefix(void)
         for(int i=0;i<3;i++)if(i!=lid) {
             struct efs_raft_msg *p=n.read_req[i];
             CHECK(p && !p->nentries && p->vote_granted && p->prev_index<=committed &&
-                  !p->prev_index && !p->prev_term && p->leader_commit==committed &&
-                  p->last_log_index==efs_raft_read_round(n.r[lid]),"fresh contact carries an empty prefix and an unchanged applied read floor");
+                  !p->prev_index && !p->prev_term && !p->leader_commit &&
+                  p->last_log_index==efs_raft_read_round(n.r[lid]),"leadership-only contact carries no follower commit work");
             if(p && !p->nentries) {
                 CHECK(efs_raft_read_control(n.r[i],p)>0,"known durable prefix votes without new log work");
                 struct efs_raft_msg *reply=n.read_reply[i];

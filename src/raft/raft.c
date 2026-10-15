@@ -2601,7 +2601,12 @@ static int broadcast_read_probe(struct efs_raft *r)
         m.type=EFS_RAFT_MSG_AE_REQ; m.to=to;
         m.vote_granted=1; /* Never clear an outstanding data batch. */
         /* Universal empty prefix grants only a fresh leadership vote. */
-        m.leader_commit=r->read_index;
+        /* This is a leadership vote, not replication or follower apply work.
+         * The read floor remains r->read_index and the leader must apply it.
+         * Ordinary data/commit heartbeats continue on their existing timer.
+         * Keeping the wire prefix entirely zero also lets the host coalesce
+         * superseded contexts and retire fully handled read-only probes. */
+        m.leader_commit=0;
         int rc;
         rc=send_msg(r,&m); /* stamps this newly admitted read-round context */
         if (rc!=EFS_OK) return rc;
