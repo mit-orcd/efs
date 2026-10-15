@@ -18,6 +18,12 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Grouped fragment durability](intel-cohort-durability-20261015.md): design plus
+local model **PASS** on both Intel `/data1` roots. One `syncfs`+flush barrier per
+cohort: 157–164 MiB/s at 8 writers and 282–301 at 16, versus 64–66 and 93–95 for
+the production per-file fsync model, with lower latency. Not implemented in EFS;
+crash and end-to-end gates NOTRUN.
+
 [Intel read metadata and read-cache fixes](intel-read-metadata-cache-20261015.md):
 **PASS (scoped)** on `b3e93177c138` (compact GETCHUNKS replies) and
 `49d721a4f180` (read-cache admission past the speculative budget), Intel
@@ -48,7 +54,7 @@ running clusters. Newer source commits do not inherit earlier test verdicts.
 | Area | Evidence and limits |
 | --- | --- |
 | Intel/AMD sequential reads | [October 15 read coordination](intel-read-coordination-20261015.md) and [AMD read profile](intel-amd-read-profile-20261015.md) are measurement evidence. [Read metadata and read-cache fixes](intel-read-metadata-cache-20261015.md) record scoped PASS for `b3e93177c138`/`49d721a4f180`; full qualification of those sources remains NOTRUN. |
-| Intel write path | [Eight-writer deployment](intel-default-eight-writers-20261015.md), [pressure draining](intel-pressure-drain-20261014.md), [sync batching](intel-sync-batching-20261014.md). Scoped smoke/native results; observations do not establish universal throughput gains. |
+| Intel write path | [Eight-writer deployment](intel-default-eight-writers-20261015.md), [pressure draining](intel-pressure-drain-20261014.md), [sync batching](intel-sync-batching-20261014.md). Scoped smoke/native results; observations do not establish universal throughput gains. [Grouped durability design](intel-cohort-durability-20261015.md) is a local model only. |
 | REPORT / W100 | [Newer-snapshot report](intel-report-newer-snapshot-20261014.md): W100 closed by scoped human acceptance October 14. Older OPEN entries are historical; this does not establish the cause or resolution of the original ORCD EIO. |
 | Integrated RDMA source | [Merged devel qualification](devel-rdma-merge-qualification-20261014.md). AMD software-RDMA evidence does not replace ORCD hardware gates. |
 | `.efs` functional versus scale work | [Three work packages and feature matrix](three-work-packages-20261013.md), [AMD package 2](amd-package2-query-20261013.md), [ORCD package 1](orcd-package1-20261013.md), [later query fixes](orcd-query-name-ordinals-20261013.md). General 400 GiB acceptance remains recorded as on hold; targeted fixes and marker checks do not close it. |
