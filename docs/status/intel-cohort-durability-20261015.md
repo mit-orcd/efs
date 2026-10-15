@@ -1,6 +1,14 @@
 # Grouped fragment durability: design and local benchmark — 2026-10-15
 
-**Local model PASS; EFS implementation NOTRUN.** On both Intel `/data1` roots,
+**Update, same day: implemented as an opt-in flag in `5cef06ac4` (scoped PASS,
+crash qualification NOTRUN).** With `EFS_PUT_COHORT=1` on the Intel cluster,
+four concurrent 4 GiB writers from xorinox reach 119–132 MiB/s versus
+94–101 MiB/s without it, with less than half the device flushes per MiB;
+single-stream writes 169–170 versus 146–149 MiB/s. See
+[end-to-end results](#end-to-end-5cef06ac4). The cluster was returned to the
+flag-off state afterwards.
+
+**Local model PASS.** On both Intel `/data1` roots,
 one filesystem barrier per cohort of fragment files (group commit with a short
 gather window) gives **157–164 MiB/s at 8 writers and 282–301 MiB/s at 16**,
 against 64–66 and 93–95 MiB/s for the production barrier model, with lower
@@ -32,7 +40,7 @@ grouped directory barrier (`sync_fragment_parents`,
 `fragment_directory_group_barrier`). Each file fsync forces the XFS log and a
 device cache flush.
 
-## Proposed design (not implemented)
+## Design (implemented in `5cef06ac4`, opt-in)
 
 **Per-root durable cohort (group commit).** For a PUT that created a new
 fragment file:
@@ -59,6 +67,16 @@ case. The pair is one or two flushes per cohort instead of one or more per
 fragment. `syncfs` reports writeback errors through the superblock error
 sequence (Linux 5.8+), sampled per open file, so the root descriptor must stay
 open for the daemon's lifetime and be checked on every barrier.
+
+**As implemented.** `src/server/durable_cohort.h` holds the group commit;
+`store.c` adds `fragment_cohort_for` (per-root lookup, XFS check, persistent
+root descriptor, one log line per root) and `shard_io_put` (pairs every
+`durable_cohort_begin` with exactly one join or abort). Differences from the
+proposal: the barrier is `syncfs(root_fd)` alone, because only files this PUT
+created join, so every cohort has journalled creates and the log force always
+writes (and flushes); no probe file is needed. Cohort PUTs open with `O_EXCL`
+and fall back to the unchanged per-file barrier when the name exists.
+`EFS_PUT_COHORT_GATHER_US` (default 2000, max 20000) sets the gather window.
 
 **Scope limits for a first implementation.**
 
@@ -136,6 +154,55 @@ saturated by barriers. Batch mode, which keeps a fsync per file, gains only
 40–45% and multiplies latency. Two runs of each case agree within 6% except
 intel2 batch at 16 writers (99.0/109.8).
 
+## End-to-end (`5cef06ac4`)
+
+Release `5cef06ac45a0` (built 17:42Z; efsd SHA-256 intel1
+`a3a872dcefdf7a0ca4883ac3e348abd8dff3a6aea4a98d0250d3f316c3c84f30`, intel2
+`119ee53c72806830a92c7943379245f45e238c9f802317495cfbc7693c540ed2`; xorinox
+efs-fuse `ae7f6c752dee581dea44a96028a2f6c14a12db46b8ec7fd962043d58c8e18443`)
+was rolled out to intel1, intel2 and xorinox with the standard procedure
+(64-sample preserved-file control checks before and after, all passing), first
+without the flag, then with `EFS_PUT_COHORT=1` in the daemons' launch
+environment (confirmed in `/proc/<pid>/environ`; each daemon logged
+`store: put cohort root=... enabled gather_us=2000` for its root; all four
+roots, including the `/data2` home-LV roots, are XFS). Same binaries, same
+client, idle cluster otherwise. Workloads from xorinox with GNU dd
+`bs=1M conv=fsync,excl` from a 4 GiB random fixture; every output verified by
+SHA-256 and removed.
+
+| Workload | Flag off | Flag on |
+| --- | --- | --- |
+| One 4 GiB writer, three runs | 145.8 / 149.0 / 148.7 MiB/s | 135.3 / 170.3 / 168.9 MiB/s |
+| Four concurrent 4 GiB writers, two runs | 100.5 / 94.3 MiB/s aggregate | **132.1 / 119.5 MiB/s** |
+| Device flushes, all four roots, per MiB written (4 writers) | 32.7 / 34.3 | **14.9 / 16.0** |
+| `/data1` flushes per run, n1 / n3 | 120.5k–125.2k / 124.3k–129.2k | 42.5k–44.0k / 47.3k–51.1k |
+| `/data1` busy, n1 / n3 | 89.6–91.6% / 95.0–95.5% | 85.1–86.1% / 88.6–89.0% |
+
+The first flag-on single-stream run (135.3) followed the restart; the next two
+were 14–15% faster than flag off. With four writers the gain is 30% (medians
+97.4 → 125.8 MiB/s). Four writers still total less than one stream and `/data1`
+stays 85–89% busy, so something besides fragment barriers limits concurrent
+writes next (not isolated here; per-cohort sizes were not logged).
+
+Raw (not in Git): `~/git/devops/profiling/runs/20261015-cohort-e2e/`
+`off/write-baseline.jsonl` (`b634a85ac78d4dfc983b7c23749a5809c4a2b7c610c24ac6aaeb68dd027dc6c6`),
+`off/write-parallel.jsonl` (`8c805b31bf2a0da080874fa14485267da1cc4b286a16c70ebd3213c7e0933576`),
+`on/write-baseline.jsonl` (`3f80786d70a5e9ec38318d544a823dcf4fddb518864926ffdb8c1dcfb091ae57`),
+`on/write-parallel.jsonl` (`6fa7f67c67fed268e483e885a2ebf7428e950c833024c6184a1464cdcd39a121`);
+rollout logs under `20261015-rollout-5cef06ac45a0/` (`cohort-off`, `cohort-on`,
+`cohort-off-restore`). Driver: `~/git/devops/profiling/efs_dd_profile.py
+write-baseline` and `write-parallel --streams 4` with `EFS_PROF_CLIENT=xorinox_efs`.
+
+**Tests.** `tests/test_durable_cohort.c` (group commit, a failed barrier fails
+only its own cohort, arrivals during a barrier form the next set, early and
+bounded gather, abort; clean under ASan/UBSan and ThreadSanitizer) and new cases
+in `tests/test_store_durability.c` on the production PUT path with an injected
+barrier (new file: no fsync and one cohort barrier; existing name: per-file
+barriers; failed barrier fails the PUT and its retry overwrites; open failure
+releases its count; no root without the flag). All 317 `make test` commands
+pass on xorinox except the two pre-existing failures
+(`tests/test_lookup_replacement.py`, architecture regeneration).
+
 ## Limitations
 
 - A model, not EFS: no network, checksum verification, quota, metadata REPORT or
@@ -145,8 +212,10 @@ intel2 batch at 16 writers (99.0/109.8).
   load varies; the "close when every active writer has joined" rule must be
   measured with uneven arrival.
 - No concurrent buffered writer on the same filesystem during `syncfs`.
-- No crash, power-loss or barrier-failure testing. The durability argument above
-  is from XFS and Linux behaviour, not from a test on these devices.
+- No crash or power-loss testing; barrier failure is tested only with an
+  injected failure. The durability argument above is from XFS and Linux
+  behaviour, not from a test on these devices. Keep the flag off on clusters
+  holding data that matters until the crash gates pass.
 - Shared devices with idle daemons; small-sample medians.
 
 ## Reproduce

@@ -18,11 +18,11 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
-[Grouped fragment durability](intel-cohort-durability-20261015.md): design plus
-local model **PASS** on both Intel `/data1` roots. One `syncfs`+flush barrier per
-cohort: 157–164 MiB/s at 8 writers and 282–301 at 16, versus 64–66 and 93–95 for
-the production per-file fsync model, with lower latency. Not implemented in EFS;
-crash and end-to-end gates NOTRUN.
+[Grouped fragment durability](intel-cohort-durability-20261015.md): opt-in
+`EFS_PUT_COHORT=1` in `5cef06ac4`, scoped **PASS**. On Intel with the xorinox
+client, four concurrent writers 94–101 → 119–132 MiB/s and single-stream
+146–149 → 169–170 MiB/s, with half the device flushes per MiB; local model
+2.5–3x. Crash/power-loss qualification NOTRUN; the cluster runs with the flag off.
 
 [Intel read metadata and read-cache fixes](intel-read-metadata-cache-20261015.md):
 **PASS (scoped)** on `b3e93177c138` (compact GETCHUNKS replies) and
