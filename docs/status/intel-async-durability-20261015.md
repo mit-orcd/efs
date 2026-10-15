@@ -111,6 +111,71 @@ Raw (not in Git): `~/git/devops/profiling/runs/20261015-cohort-e2e/`
 (`b3be36969c463556501506254b777d39ad9c8d264abca78fb61f76edd7e9ce68`);
 rollout logs in `20261015-rollout-d8af2c325c21/`.
 
+## Follow-up, same day: COMMIT race fix, read freshness, merge (`4a47f89b5`)
+
+**COMMIT accounting (`18b58078a`).** Review of `d8af2c325` found that
+concurrent `fsync` calls shared one dirty-node mask: the first cleared it
+before waiting, so a second could return success while the only COMMIT
+covering its data was pending or had failed. The client now counts, per node,
+PUTs the server acknowledged and the highest acknowledged count a successful
+COMMIT covered; every `fsync` sends its own COMMIT to each node that is
+behind, and the committed count advances only after a successful reply.
+`tests/test_data_commit.c` reproduces the race against the old code (it
+fails at exactly that check) and passes now. `scripts/client.sh stop` also
+refuses while a process uses the mount (a running dd was cut off by a
+client restart during this work).
+
+**Read freshness (`b99a451d0`, `4a47f89b5`).** Every read request refreshed
+its chunk mappings: a sequential 1 MiB reader sent 379 GETCHUNKS/s, 89.5% for
+mappings fetched within the previous second (median 153 ms earlier). Reads now
+trust a mapping pulled within `EFS_READ_MAP_TTL_MS` (default 200; another
+client's publication can stay invisible for up to that long, own writes are
+always visible), and a sequential reader's refresh covers up to 64 chunks
+ahead. A repeated 2 GiB read on one client instance sent 257 GETCHUNKS instead
+of 4,097. Prefetch depth 32 was measured and not adopted.
+
+**Merge (`f99b4e151`).** `devel-amd-posix-20261015` (Raft scheduling and
+ACK-window fixes, AMD RDMA POSIX evidence) merged cleanly apart from the
+status index; its AMD qualification predates asynchronous acknowledgement.
+
+**Release `4a47f89b5187`** (built 20:40Z; efsd SHA-256 intel1
+`a74ddabdfc159cbbaccefed999e3933a28b4f937c6cec483df70fe2e10b61cc9`, intel2
+`4c3ff95b502c7585f261860b38ce5c0ed0918364887e4c67c4abcbabba52450c`; xorinox
+efs-fuse `8f521f153ff73f3b6e7dd50518c3ca7b4f6fc507e46d83dc6701b5aa8b4324a0`) on
+intel1, intel2 and xorinox, rolled out with an in-use guard and the 64-sample
+control checks (all passing). All 318 `make test` commands pass on xorinox
+except the stale architecture regeneration; `tests/test_storage_ranges.py`
+timed out once under the full run and passed alone (container engine,
+untouched here).
+
+| 2 GiB, xorinox (2.5 GbE) | Per-file barriers (`5cef06ac45a0`) | `4a47f89b5187` |
+| --- | --- | --- |
+| Write | 150.5 / 151.6 / 94.0 MiB/s | 176.7 / 170.9 / 175.6 |
+| Write + fsync | 140.1 / 141.5 / 78.7 MiB/s | 175.2 / 177.5 / 174.0 |
+| Read (right after writes) | 225.7 / 223.9 / 221.0 MiB/s | 236.7 / 235.9 / 237.4 (241.9 / 237.9 / 237.0 again) |
+| Read, idle, repeated on one client | 251.3 (TTL 200 only) | 255.0 |
+| Four concurrent 4 GiB writers (`conv=fsync`, verified) | 94.3–100.5 MiB/s total | **172.6** (one writer: 173.6) |
+
+With four writers the client sends 257.5 MiB/s (2.5 GbE is about 283 MiB/s of
+TCP payload) while the Intel devices are 13.5–21.9% busy at 1.03 flushes per
+MiB written (was 33–34). Writes are therefore network-bound: 2+1 erasure
+coding sends 1.5 bytes per byte, so about 188 MiB/s is the logical ceiling for
+one 2.5 GbE client; reaching line rate in logical bytes would need parity
+computed on the servers. Reads move 1.06 bytes per byte (about 255–270 MiB/s on
+the wire at 240–255 MiB/s logical).
+
+Raw (not in Git): `~/git/devops/profiling/runs/`
+`20261015-final-4a47/write-parallel.jsonl`
+(`afd535604f7d47f415f07ec90055fbdab421cecff40d84382d0a55834f722dac`),
+`20261015-final-4a47/put-durability.txt`
+(`2a18fd2412daa152b27d080e088efea38afce6f286fc0b172cbb4c0d7ea19e45`),
+`20261015-cohort-e2e/read-refresh-ahead.txt`
+(`b01ff636699a129ed2c38463ca0e2a966b3cd71dc5cec5bb57212d199a67b7fb`),
+`20261015-cohort-e2e/read-matrix-exp.txt`
+(`e3293bdafbc01d49387cacdccc48f35a27823986b753cc7107afdc15e7e3b4e6`),
+`20261015-getchunks-dup/send2.trace`
+(`453ccf747f78486e5f9ed5ec4c0ffd118fda57c16be0231c6ed57cfebfef0439`).
+
 ## Limitations and remaining gates
 
 - No crash or power-loss test; the unclean-restart path is tested only with a
@@ -124,7 +189,9 @@ rollout logs in `20261015-rollout-d8af2c325c21/`.
   fragments of a chunk.
 - The AMD client still runs `b3e93177c138` stopped; it predates COMMIT and must
   not be started against these servers without upgrading.
-- No four-writer, small-file or POSIX/peer/persistence qualification yet.
+- No small-file or POSIX/peer/persistence qualification of these sources
+  yet; the read TTL changes cross-client visibility (up to 200 ms) and the
+  two-client peer suites must be rerun against it.
 
 ## Reproduce
 

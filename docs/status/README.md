@@ -19,10 +19,11 @@ full acceptance are separate states.
 ## Recent evidence and remaining acceptance
 
 [Asynchronous PUT acknowledgement](intel-async-durability-20261015.md):
-**scoped PASS** on `d8af2c325`, now the only data PUT mode. Durable on client
-`fsync` (COMMIT) and within a per-root window; `efs-mgmt sync-status` reports
-unsynced data. 2 GiB writes 151 → 176 MiB/s, with fsync 141 → 175 MiB/s; reads
-unchanged. Crash/power-loss qualification NOTRUN.
+**scoped PASS** on `4a47f89b5` (async ACK from `d8af2c325`, concurrent-fsync
+COMMIT fix, 200 ms read-mapping TTL with refresh-ahead), now the only data PUT
+mode. On Intel/xorinox 2 GiB writes 151 → 176 MiB/s, with fsync 141 → 175,
+four writers 94–101 → 173 (network-bound); reads 236–255 MiB/s.
+Crash/power-loss and peer-visibility qualification NOTRUN.
 
 [AMD ordinary RDMA/direct POSIX](amd-rdma-posix-20261015.md): **FAIL loaded,
 scoped functional PASS** on `c8d057391`, branch `devel-amd-posix-20261015`
