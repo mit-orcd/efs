@@ -1556,7 +1556,7 @@ AMD durable dd baseline median 77.08 MiB/s; final six-trial median 77.28 MiB/s:
 **sustained throughput gain NOT ESTABLISHED**. Xorinox crawl restarted with prior
 output preserved. Private Intel unchanged. Full POSIX/live crash acceptance NOTRUN.
 
-[Intel post-batching live profile](../status/intel-post-sync-profile-20261014.md):
+[Intel post-batching live profile](../status/archive/intel-post-sync-profile-20261014.md):
 **Historical read-only capture PASS; bounded-cohort follow-up above is deployed.**
 User AMD dd observed at about 71 MiB/s with xorinox crawl active. Client
 write admission accounts for 66.4% of sampled user cycles, including full-cache
@@ -1579,7 +1579,7 @@ preserved controls/client match; TCP/direct/files, optional features OFF.
 Private Intel unchanged; external clients independent; xorinox crawl restarted
 with prior output preserved. Full POSIX/live crash acceptance NOTRUN.
 
-[AMD dd throughput diagnosis](../status/intel-amd-dd-profile-20261014.md):
+[AMD dd throughput diagnosis](../status/archive/intel-amd-dd-profile-20261014.md):
 **Historical read-only capture PASS; batching follow-up above is deployed.** AMD physical link is 2.5 Gb/s:
 298 MiB/s raw, about 199 MiB/s logical ceiling with 2+1 payload overhead.
 Observed dd34.2 MiB/s, wire52.6 MiB/s; client not CPU-bound. All captured PUT/
@@ -1600,7 +1600,7 @@ features OFF. AMD writer completed 1M files; xorinox crawl resumed. Pre-existing
 directory EBUSY spot-check passed but intermittent issue is not declared closed.
 Private Intel/AMD-local unchanged; full filesystem acceptance NOTRUN.
 
-[Intel post-route live profile](../status/intel-post-route-profile-20261014.md):
+[Intel post-route live profile](../status/archive/intel-post-route-profile-20261014.md):
 **Historical capture PASS; recommendation now implemented in the block-index
 report above.** Existing four-worker AMD writer and
 xorinox read/hash crawl remain running on f6b980a6e, TCP/direct/files with optional

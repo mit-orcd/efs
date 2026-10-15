@@ -5,7 +5,7 @@ Observed median AMD dd/fsync throughput improves 28.0%; Intel1 improves 24.7%.
 These are three-trial before/after deployment measurements, not isolated
 code-only attribution or full filesystem acceptance.
 
-Follow-up to [AMD dd diagnosis](intel-amd-dd-profile-20261014.md).
+Follow-up to [AMD dd diagnosis](archive/intel-amd-dd-profile-20261014.md).
 Scope: ordinary files, TCP/direct-I/O, `.efs` client/server, packing,
 containers and expiry disabled. Full POSIX/concurrent/crash acceptance is not
 claimed by this smoke/performance task.

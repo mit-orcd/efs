@@ -6,7 +6,7 @@ protocol; staged engine foundation tested on AMD**. W66 is indexed in the
 status queue. Default production topology remains unchanged; active-client
 capacity and the D36 recovery contract are not yet proved.
 
-[Status queue](README.md#1a-the-work-queue) ·
+[Status queue](work-queue.md#1a-the-work-queue) ·
 [Architecture §7.1](../how-it-works/architecture.md#71-sharded-raft-and-linearizable-reads)
 
 ## D36 protection obligation — Oct 9

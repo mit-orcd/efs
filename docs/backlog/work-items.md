@@ -2450,7 +2450,7 @@ historical command labels; future measurements use `efs-bench`. See
 
 **Current checkpoint (Oct 7):** production-backend tools are implemented;
 corrected latency/window and metadata validation checkpoints are indexed in
-[queue row P3](../status/README.md#1a-the-work-queue). The named fcstor six-NVMe
+[queue row P3](../status/work-queue.md#1a-the-work-queue). The named fcstor six-NVMe
 curve and two-host client ladder remain owed. The original design/evidence below
 is retained as history: its old “what exists” pwrite-loop description and
 “what to add” instructions are not a claim that the current tool is missing.

@@ -2,7 +2,7 @@
 
 **Implemented, committed and deployed; native and mounted smoke PASS.
 Controlled LSM point-read time reduced 54.8%; mounted speedup NOT ESTABLISHED.**
-Follows the [live profile recommendation](intel-post-route-profile-20261014.md).
+Follows the [live profile recommendation](archive/intel-post-route-profile-20261014.md).
 Scope: implement bounded metadata block indexing, deploy main Intel and its
 four clients, smoke test and measure. Full POSIX/concurrent acceptance is not
 claimed by this work.

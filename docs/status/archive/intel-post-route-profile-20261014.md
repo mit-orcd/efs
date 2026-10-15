@@ -1,8 +1,8 @@
 # Intel live profile after serving-route deployment — 2026-10-14
 
 **Historical observational capture PASS.** The recommendation was subsequently
-[implemented and smoke-qualified](intel-block-hash-index-20261014.md). Follow-up to
-[the mounted-stat routing report](intel-mounted-stat-routing-20261014.md).
+[implemented and smoke-qualified](../intel-block-hash-index-20261014.md). Follow-up to
+[the mounted-stat routing report](../intel-mounted-stat-routing-20261014.md).
 Goal: identify the next performance change with the human tiny-file workloads
 running. No code/deployment/configuration change, restart, remount or workload
 pause occurred. All main and unrelated process inventories remain identical.

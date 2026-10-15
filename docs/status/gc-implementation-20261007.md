@@ -2,7 +2,7 @@
 
 [Status](README.md) · [Incident review](gc-reclamation-review.md) · [Decisions](decisions.md)
 
-Review routing: [W61/W62/W63](README.md#1a-the-work-queue) identify the
+Review routing: [W61/W62/W63](work-queue.md#1a-the-work-queue) identify the
 committed repairs (`3a1b4a52`); [W86](../backlog/work-items.md#w86) tracks staged
 PUT tickets, [D31](decisions.md#d31--recorded-abandoned-upload-policy) indexes
 the policy recorded below, and [W87](../backlog/work-items.md#w87) retains the

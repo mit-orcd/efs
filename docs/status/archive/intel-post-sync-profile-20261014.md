@@ -1,9 +1,9 @@
 # Intel post-batching live profile — 2026-10-14 EDT
 
 **Historical read-only capture PASS.** The recommendation was subsequently
-implemented and smoke-qualified in [indexed pressure draining](intel-pressure-drain-20261014.md).
+implemented and smoke-qualified in [indexed pressure draining](../intel-pressure-drain-20261014.md).
 The analysis below records what was known before that implementation.
-Follow-up to [sync batching](intel-sync-batching-20261014.md). The next promising
+Follow-up to [sync batching](../intel-sync-batching-20261014.md). The next promising
 throughput target is foreground write-pressure draining, with two expensive cache
 walks as a directly measured CPU cost. The capture does not establish the speedup
 that changing this path would deliver. No deployment, mount, configuration, or

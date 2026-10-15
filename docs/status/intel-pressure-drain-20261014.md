@@ -2,7 +2,7 @@
 
 **Deployed; focused native/sanitizer and four-client smoke PASS.**
 Final paired throughput evidence is below; full POSIX/crash acceptance NOTRUN.
-Follow-up to [live pressure profiling](intel-post-sync-profile-20261014.md).
+Follow-up to [live pressure profiling](archive/intel-post-sync-profile-20261014.md).
 Scope: devel, Intel TCP/direct-I/O, ordinary files; .efs client/server, packing,
 containers and expiry disabled. Preserve storage and independent external clients.
 

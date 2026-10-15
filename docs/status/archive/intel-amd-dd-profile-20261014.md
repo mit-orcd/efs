@@ -1,7 +1,7 @@
 # AMD dd to Intel — 2026-10-14 EDT
 
 **Historical diagnostic capture PASS.** Subsequent implementation and smoke
-measurements are in the [batching deployment report](intel-sync-batching-20261014.md).
+measurements are in the [batching deployment report](../intel-sync-batching-20261014.md).
 At this capture, performance fix/A-B qualification was NOTRUN.
 Investigate the reported approximately 50 MiB/s single-file write. No source,
 configuration, mount, workload or service changes were made. This is performance
@@ -11,7 +11,7 @@ evidence, not a filesystem acceptance verdict.
 
 Deployed source `c775fb15e2530399e052cf48432d6e495a039fb0`, build ID
 `c775fb15e253`, build timestamp `2026-10-15T02:09:33Z`; see the
-[deployment report](intel-block-hash-index-20261014.md). Four files-engine
+[deployment report](../intel-block-hash-index-20261014.md). Four files-engine
 daemons on two Intel hosts, two 400 GiB quota nodes per host; TCP/direct-I/O,
 `.efs` client/server, packing, containers and expiry disabled. Independent
 AMD-local and private Intel clusters were not targeted.
