@@ -2,7 +2,7 @@
 """Actual zero-copy read cannot expose cached bytes after a failed PUT-window wait."""
 from pathlib import Path
 import subprocess,tempfile
-root=Path(__file__).resolve().parents[1];s=(root/'src/client/read.c').read_text();a=s.index('int efs_client_read_refs(');b=s.index('\n}',a)+2
+root=Path(__file__).resolve().parents[1];s=(root/'src/client/read.c').read_text();a=s.index('/* End of the mapping refresh for a read');b=s.index('\n}',s.index('int efs_client_read_refs(',a))+2
 code=r'''
 #include "client_internal.h"
 #include "efs/write_extent.h"

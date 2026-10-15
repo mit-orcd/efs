@@ -1971,6 +1971,25 @@ static __thread efs_ino_t t_seq_ino;
 static __thread uint64_t t_seq_next;
 static __thread int t_seq_run;
 
+/* End of the mapping refresh for a read of chunks [ci0, ci1). A sequential
+ * reader also refreshes the chunks it will read next (up to one GETCHUNKS,
+ * within the file), so its following requests find their mappings fresh
+ * (EFS_READ_MAP_TTL_MS) instead of paying a round trip each: with mappings
+ * already local, layout prefetch does not pull them, and each 512 KiB FUSE
+ * request refreshed its own 4 chunks (2 GETCHUNKS per MiB, Oct 15 Intel). */
+static uint32_t refresh_end(uint32_t ci0, uint32_t ci1, int sequential,
+                            uint64_t file_size)
+{
+    uint32_t cs = data_chunk_size();
+    if (!sequential || !cs)
+        return ci1;
+    uint64_t file_chunks = (file_size + cs - 1) / cs;
+    uint64_t end = (uint64_t)ci0 + EFS_GETCHUNKS_MAX;
+    if (end > file_chunks)
+        end = file_chunks;
+    return end > ci1 ? (uint32_t)end : ci1;
+}
+
 int efs_client_read_refs(efs_ino_t ino, uint64_t offset, size_t size,
                          struct efs_read_ref *refs, int max_refs)
 {
@@ -1995,8 +2014,10 @@ int efs_client_read_refs(efs_ino_t ino, uint64_t offset, size_t size,
         if (!rdcache_ready(ino, (uint32_t)(offset / cs) + i, cs))
             return 0;
     uint32_t rci0 = (uint32_t)(offset / cs), rci1 = (uint32_t)((offset + size - 1) / cs) + 1;
+    int sequential = size >= cs || (t_seq_ino == ino && offset == t_seq_next);
     if (!efs_client_map_fresh(ino, rci0, rci1) &&
-        efs_client_pull_chunks_range(ino, rci0, rci1) != EFS_OK)
+        efs_client_pull_chunks_range(ino, rci0,
+            refresh_end(rci0, rci1, sequential, inode.size)) != EFS_OK)
         return 0;
     int window_rc = efs_dcache_put_win_wait(ino);
     if (window_rc < 0)
@@ -2241,7 +2262,8 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
                 }
             }
             if (miss0 != UINT32_MAX) {
-                int prc = efs_client_pull_chunks_range(ino, miss0, miss1 + 1);
+                int prc = efs_client_pull_chunks_range(ino, miss0,
+                    refresh_end(miss0, miss1 + 1, want_pf, file_size));
                 pthread_mutex_lock(&g_client.idx_mu);
                 if (prc != EFS_OK) {
                     int cached = 1;
