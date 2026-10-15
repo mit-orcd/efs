@@ -272,7 +272,7 @@ int main(int argc, char **argv)
     memset(&server, 0, sizeof(server));
     server.persist_nodes = 1;
     server.direct_io = 0; /* default: page cache; opt in with --direct-io */
-    server.nwriters = -1; /* auto: helper reservation with a bounded I/O-worker floor */
+    server.nwriters = EFS_DEFAULT_WRITERS; /* eight durable I/O workers; --writers overrides */
     server.listen_fd = -1;
     g_server = &server;
     pthread_mutex_init(&server.lock, NULL);

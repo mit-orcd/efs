@@ -28,11 +28,12 @@ void server_peer_conn_release(const char *host, uint16_t port, struct efs_conn *
 /* Close and discard a broken conn (net/protocol error). */
 void server_peer_conn_drop(const char *host, uint16_t port, struct efs_conn *c);
 /* Shared PUT writer pool (one queue, all --storage paths). --writers n is
- * the total; n=0 is inline; n<0 (startup default) means auto from nproc. */
+ * the total; n=0 is inline; n<0 requests CPU-based sizing for internal callers.
+ * Production startup defaults to EFS_DEFAULT_WRITERS. */
 #define EFS_WRITERS_RESERVED         4  /* main + heartbeat + migrate + catchup */
 #define EFS_MAX_WRITERS              64
 #define EFS_MAX_WRITERS_PER_PATH     EFS_MAX_WRITERS /* CLI / bench alias */
-#define EFS_DEFAULT_WRITERS          8               /* bench fallback */
+#define EFS_DEFAULT_WRITERS          8               /* daemon default / bench fallback */
 #define EFS_WRITERS_PER_PATH_DEFAULT EFS_DEFAULT_WRITERS
 
 /* RAM-only open-fd + flock state. Never serialized. */
