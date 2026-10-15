@@ -1494,6 +1494,14 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**Measurement and three 4 GiB hash checks PASS; no EFS rollout/change.**
+Four concurrent writers/fsyncs per daemon confirmed. n1/n3 file fsync averages
+8.7 ms versus 2.6–2.9 ms on n2/n4, with admission waits 25.5/56.1 ms on the
+slow roots. Most waiting coincides with four busy workers. Loaded dd 37.55 MiB/s,
+traced 37.21, crawl-paused 46.46 (single trials). Crawl resumed, probes removed.
+Pipeline redesign remains unproven; investigate slow-root durable service first.
+
+[Intel post-pressure throughput diagnosis](../status/intel-post-pressure-profile-20261015.md):
 **Two 4 GiB content checks PASS; diagnosis only, no rollout.** Client cache scans
 are no longer dominant. PUT durability waits and concurrent metadata/flush work
 remain; no evidence of network saturation or a retry storm. Recommend qualifying
