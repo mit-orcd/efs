@@ -1494,6 +1494,13 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**Two 4 GiB content checks PASS; diagnosis only, no rollout.** Client cache scans
+are no longer dominant. PUT durability waits and concurrent metadata/flush work
+remain; no evidence of network saturation or a retry storm. Recommend qualifying
+a bounded staged server PUT pipeline, with exact durability and error ownership.
+Native per-stage attribution and untraced improvement remain unproven.
+
+[Intel indexed pressure/background draining](../status/intel-pressure-drain-20261014.md):
 **Deployed devel 2e935cea0; native/sanitizer and four-client smoke PASS.**
 Fixed shard-owned slot bitmaps replace full cache/chain walks. One coalesced
 worker drains fixed PUT cohorts and publishes completed records without consuming
