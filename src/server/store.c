@@ -4,6 +4,7 @@
 #ifndef EFS_BENCH_BUILD
 #include "directory_sync_group.h"
 #endif
+#include "durable_cohort.h"
 #include "efs/checksum.h"
 #include "efs/kv_key.h"
 #include "efs/protocol.h"
@@ -17,6 +18,7 @@
 #include <dirent.h>
 #include <pthread.h>
 #include <sys/uio.h>
+#include <sys/vfs.h>
 
 /* writev until every iovec is consumed. O_DIRECT needs each remaining
  * iovec base/len aligned; a short write that is not a 4 KiB multiple
@@ -1149,6 +1151,11 @@ struct shard_io_arg {
     int excl;      /* O_CREAT|O_EXCL: EEXIST -> EFS_ERR_EXIST, no second open */
     const uint8_t *sum; /* 32-byte digest; placed in the file, not a sidecar */
     int result;
+    /* Opt-in grouped durability (EFS_PUT_COHORT): a fragment this PUT
+     * created joins its root's cohort instead of a per-file barrier. */
+    struct durable_cohort *cohort;
+    int created;       /* this open created the file (O_CREAT|O_EXCL) */
+    int cohort_joined; /* durable_cohort_join ran for this PUT */
 };
 
 /* Preserve buffered extents for same-size rewrites, while retaining the exact payload
@@ -1249,6 +1256,87 @@ static int sync_fragment_parents(struct efsd_server *s, const char *path)
     }
     return EFS_OK;
 }
+
+/* EFS_PUT_COHORT=1: per-root grouped durability for newly created data
+ * fragments (durable_cohort.h). XFS roots only: syncfs there is one log
+ * force that covers every completed create, extent conversion and the
+ * O_DIRECT data before it. Other filesystems keep per-file barriers. The
+ * root descriptor stays open for the daemon's lifetime so syncfs reports
+ * writeback errors raised since the previous barrier.
+ * EFS_PUT_COHORT_GATHER_US (default 2000, max 20000) bounds how long a
+ * leader waits for PUTs still writing on the same root. */
+#define XFS_SUPER_MAGIC_ 0x58465342
+static struct durable_cohort fragment_cohorts[EFS_MAX_STORAGE_PATHS];
+static int fragment_cohort_state[EFS_MAX_STORAGE_PATHS]; /* 0 unset, 1 on, -1 off */
+static pthread_mutex_t fragment_cohort_mu = PTHREAD_MUTEX_INITIALIZER;
+
+static int fragment_cohort_syncfs(int fd)
+{
+    return syncfs(fd);
+}
+
+static int fragment_cohort_enabled(void)
+{
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char *e = getenv("EFS_PUT_COHORT");
+        enabled = e && !strcmp(e, "1");
+    }
+    return enabled;
+}
+
+static struct durable_cohort *fragment_cohort_for(struct efsd_server *s,
+                                                  const char *path)
+{
+    if (!s || s->storage_engine || !fragment_cohort_enabled())
+        return NULL;
+    size_t n = strlen(path), best = 0;
+    int idx = -1;
+    char root[EFS_MAX_PATH] = {0};
+    pthread_mutex_lock(&s->lock);
+    for (uint32_t i = 0; i < s->storage_path_count && i < EFS_MAX_STORAGE_PATHS; ++i) {
+        const char *candidate = s->storage_paths[i];
+        size_t length = strlen(candidate);
+        if (!s->container_targets[i] || !length || length <= best ||
+            length >= n || strncmp(path, candidate, length) ||
+            (length != 1 && path[length] != '/')) continue;
+        memcpy(root, candidate, length + 1);
+        best = length;
+        idx = (int)i;
+    }
+    pthread_mutex_unlock(&s->lock);
+    if (idx < 0)
+        return NULL;
+    pthread_mutex_lock(&fragment_cohort_mu);
+    if (!fragment_cohort_state[idx]) {
+        struct durable_cohort *c = &fragment_cohorts[idx];
+        struct statfs fs;
+        int fd = open(root, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+        int xfs = fd >= 0 && fstatfs(fd, &fs) == 0 &&
+                  (unsigned long)fs.f_type == XFS_SUPER_MAGIC_;
+        const char *g = getenv("EFS_PUT_COHORT_GATHER_US");
+        unsigned long gather = g && *g ? strtoul(g, NULL, 10) : 2000;
+        if (gather > 20000)
+            gather = 20000;
+        if (xfs) {
+            pthread_mutex_init(&c->mu, NULL);
+            pthread_cond_init(&c->cv, NULL);
+            c->fd = fd;
+            c->gather_us = (unsigned)gather;
+            c->barrier = fragment_cohort_syncfs;
+            fragment_cohort_state[idx] = 1;
+        } else {
+            if (fd >= 0)
+                close(fd);
+            fragment_cohort_state[idx] = -1;
+        }
+        fprintf(stderr, "store: put cohort root=%s %s gather_us=%lu\n", root,
+                xfs ? "enabled" : "disabled (not xfs)", gather);
+    }
+    struct durable_cohort *c = fragment_cohort_state[idx] > 0 ? &fragment_cohorts[idx] : NULL;
+    pthread_mutex_unlock(&fragment_cohort_mu);
+    return c;
+}
 #endif
 
 static int finish_fragment_put(struct shard_io_arg *a, int fd, size_t bytes)
@@ -1260,6 +1348,16 @@ static int finish_fragment_put(struct shard_io_arg *a, int fd, size_t bytes)
     /* Production PUT ACKs must be durable for both buffered and direct I/O.
      * Production does not open O_SYNC, so always establish an explicit file
      * barrier, including same-length direct writes and checksum tails. */
+    if (a->cohort && a->created) {
+        /* New file on an XFS root: the cohort's syncfs forces the log,
+         * covering this data, create, directory entry and any new parent
+         * directories; ACK only after that barrier succeeds. */
+        int rc = finish_shard_write(fd, bytes, 0, 1);
+        if (rc != EFS_OK)
+            return rc;
+        a->cohort_joined = 1;
+        return durable_cohort_join(a->cohort);
+    }
     int rc = finish_shard_write(fd, bytes, 1, 0);
     return rc == EFS_OK ? sync_fragment_parents(a->s, a->path) : rc;
 #endif
@@ -1318,7 +1416,15 @@ static void *shard_io_thread(void *arg)
             flags |= O_EXCL;
         if (a->direct)
             flags |= O_DIRECT;
+        /* Cohort members must have created their file; an existing name is
+         * an overwrite and keeps the per-file barrier. */
+        if (a->cohort && !a->no_create)
+            flags |= O_EXCL;
         int fd = open(a->path, flags, 0644);
+        if (fd < 0 && errno == EEXIST && a->cohort && !a->excl) {
+            flags &= ~O_EXCL;
+            fd = open(a->path, flags, 0644);
+        }
         if (fd < 0 && errno == EEXIST && a->excl) {
             a->result = EFS_ERR_EXIST; /* caller: overwrite, do not charge */
             return NULL;
@@ -1330,11 +1436,16 @@ static void *shard_io_thread(void *arg)
         if (fd < 0 && errno == ENOENT) {
             make_dir_for_file(a->path);
             fd = open(a->path, flags, 0644);
+            if (fd < 0 && errno == EEXIST && a->cohort && !a->excl) {
+                flags &= ~O_EXCL;
+                fd = open(a->path, flags, 0644);
+            }
         }
         if (fd < 0) {
             a->result = EFS_ERR_IO;
             return NULL;
         }
+        a->created = (flags & O_EXCL) != 0;
         size_t written = 0;
         if (a->direct) {
             uint32_t alloc = (a->len + 4095u) & ~4095u;
@@ -1483,6 +1594,23 @@ static void *shard_io_thread(void *arg)
             memset(a->buf + got, 0, a->len - got);
     }
     return NULL;
+}
+
+/* A PUT that may create its file under a cohort counts as writing until it
+ * joins; if it never joins (open/write/close failed, or it overwrote), the
+ * count is released here so a gathering leader stops waiting for it. */
+static void shard_io_put(struct shard_io_arg *a)
+{
+    if (!a->cohort || a->no_create) {
+        shard_io_thread(a);
+        return;
+    }
+    a->created = 0;
+    a->cohort_joined = 0;
+    durable_cohort_begin(a->cohort);
+    shard_io_thread(a);
+    if (!a->cohort_joined)
+        durable_cohort_abort(a->cohort);
 }
 
 /* Resolved-location cache for multi-root reads. Adaptive write
@@ -2118,6 +2246,10 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
         plen = sizeof(arg.path) - 1;
     memcpy(arg.path, path, plen);
     arg.path[plen] = '\0';
+#ifndef EFS_BENCH_BUILD
+    if (arg.direct)
+        arg.cohort = fragment_cohort_for(s, arg.path);
+#endif
 
     int do_charge = 0;
     if (may_charge && !first_write) {
@@ -2137,7 +2269,7 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
             arg.excl = 1;
             arg.no_create = 0;
             arg.result = EFS_ERR_IO;
-            shard_io_thread(&arg);
+            shard_io_put(&arg);
             if (arg.result == EFS_OK)
                 do_charge = 1; /* created; charge below, do not write again */
             else if (arg.result != EFS_ERR_EXIST)
@@ -2147,7 +2279,7 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
             arg.excl = 0;
             arg.no_create = 1;
             arg.result = EFS_ERR_IO;
-            shard_io_thread(&arg);
+            shard_io_put(&arg);
             if (arg.result == EFS_OK)
                 return EFS_OK; /* overwrite: no charge */
             if (!under)
@@ -2223,7 +2355,7 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
     /* One full fragment on the writer-selected storage root. */
     arg.no_create = 0;
     arg.result = EFS_ERR_IO;
-    shard_io_thread(&arg);
+    shard_io_put(&arg);
     if (arg.result != EFS_OK) {
         if (charge_quota) {
             pthread_mutex_lock(&s->lock);

@@ -40,6 +40,13 @@ static int barrier_close(int fd)
     if(fail_directory_close && S_ISDIR(st.st_mode)) {errno=EIO;return -1;}
     return rc;
 }
+static unsigned cohort_barriers;
+static int cohort_fail;
+static int test_cohort_barrier(int fd)
+{
+    (void)fd;cohort_barriers++;
+    return cohort_fail?-1:0;
+}
 #define open barrier_open
 #define fsync barrier_sync
 #define close barrier_close
@@ -125,6 +132,32 @@ int main(void)
     assert(a.result==EFS_OK && directory_syncs==2);
     assert(!unlink(a.path));assert(!rmdir(sub));snprintf(sub,sizeof(sub),"%s/new",dir);assert(!rmdir(sub));
     strcpy(a.path,path);
+    /* Opt-in grouped durability: a fragment this PUT creates joins its
+     * root's cohort with no file or directory fsync; an existing name keeps
+     * both. A failed cohort barrier fails the PUT; its retry overwrites. */
+    {
+        struct durable_cohort tc=DURABLE_COHORT_INIT;tc.barrier=test_cohort_barrier;
+        char cpath[1024],cdir[1024];snprintf(cpath,sizeof(cpath),"%s/cohort/x/body",dir);
+        struct shard_io_arg ca={.buf=data,.len=4096,.is_write=1,.sum=sum,.direct=1,.s=server,.cohort=&tc};
+        strcpy(ca.path,cpath);
+        file_syncs=directory_syncs=0;shard_io_put(&ca);
+        assert(ca.result==EFS_OK && ca.created && ca.cohort_joined && !file_syncs && !directory_syncs);
+        assert(cohort_barriers==1 && tc.members==1 && !tc.writing);
+        file_syncs=directory_syncs=0;shard_io_put(&ca);
+        assert(ca.result==EFS_OK && !ca.created && !ca.cohort_joined && file_syncs==1 && directory_syncs>=1);
+        assert(cohort_barriers==1 && !tc.writing);
+        assert(!unlink(cpath));cohort_fail=1;file_syncs=directory_syncs=0;shard_io_put(&ca);
+        assert(ca.result==EFS_ERR_IO && ca.created && !file_syncs && cohort_barriers==2 && tc.failures==1 && !tc.writing);
+        cohort_fail=0;file_syncs=directory_syncs=0;shard_io_put(&ca);
+        assert(ca.result==EFS_OK && !ca.created && file_syncs==1 && cohort_barriers==2);
+        /* An open failure never joins; its writing count is released. */
+        snprintf(ca.path,sizeof(ca.path),"%s/under-a-file",cpath);
+        shard_io_put(&ca);assert(ca.result==EFS_ERR_IO && !ca.cohort_joined && !tc.writing && cohort_barriers==2);
+        /* No root is selected without EFS_PUT_COHORT=1. */
+        assert(!getenv("EFS_PUT_COHORT") && !fragment_cohort_for(server,cpath));
+        assert(!unlink(cpath));snprintf(cdir,sizeof(cdir),"%s/cohort/x",dir);assert(!rmdir(cdir));
+        snprintf(cdir,sizeof(cdir),"%s/cohort",dir);assert(!rmdir(cdir));
+    }
     /* A textual prefix is not an initialized ancestor; retain all barriers. */
     server->storage_paths[0][strlen(dir)-1]=0;
     file_syncs=directory_syncs=0;shard_io_thread(&a);
@@ -135,6 +168,6 @@ int main(void)
     snprintf(path,sizeof(path),"%s/a",dir);assert(!rmdir(path));snprintf(path,sizeof(path),"%s/.efs-engine",dir);assert(!unlink(path));
     snprintf(path,sizeof(path),"%s/.efs-engine-lock",dir);assert(!unlink(path));
     assert(!rmdir(dir));free(data);
-    puts("production PUT durability: buffered/direct/bounce file and pathname barriers, pinned ancestry, restart/recreation, retries and fault refusal PASS");
+    puts("production PUT durability: buffered/direct/bounce file and pathname barriers, pinned ancestry, restart/recreation, retries, fault refusal and opt-in cohort PASS");
     return 0;
 }
