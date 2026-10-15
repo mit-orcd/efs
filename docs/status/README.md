@@ -1,3 +1,12 @@
+[AMD dd throughput diagnosis](intel-amd-dd-profile-20261014.md):
+**Read-only capture PASS; optimization NOTRUN.** AMD physical link is 2.5 Gb/s:
+298 MiB/s raw, about 199 MiB/s logical ceiling with 2+1 payload overhead.
+Observed dd34.2 MiB/s, wire52.6 MiB/s; client not CPU-bound. All captured PUT/
+REPORT replies OK; no retry storm, negligible host retransmissions. Per-fragment
+file/directory durability and frequent small REPORTs/backpressure are the
+strongest bottleneck hypothesis. Recommend correctness-preserving bounded
+batching, pending controlled A/B; no cluster/workload changes.
+
 [Intel metadata block hash index](intel-block-hash-index-20261014.md):
 **Deployed devel c775fb15e; native and four-client smoke PASS.** Full-key index
 uses exact collision verification, tombstones, binary-search fallback and
