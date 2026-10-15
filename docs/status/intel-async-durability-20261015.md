@@ -10,6 +10,8 @@ from client `fsync`/`fdatasync` through a new `DATA_COMMIT` RPC (the NFS
 unstable/commit model). This replaces the per-fragment `fsync` and the
 opt-in grouped cohort from [grouped durability](intel-cohort-durability-20261015.md),
 which is removed. Crash and power-loss qualification is **NOTRUN**.
+Current release `3edc7b846` (follow-ups below: COMMIT race fix, read-mapping
+TTL with close-to-open, two-client peer suite 67/67 PASS, reads 237–255 MiB/s).
 
 ## Contract
 
@@ -176,6 +178,78 @@ Raw (not in Git): `~/git/devops/profiling/runs/`
 `20261015-getchunks-dup/send2.trace`
 (`453ccf747f78486e5f9ed5ec4c0ffd118fda57c16be0231c6ed57cfebfef0439`).
 
+## Follow-up: close-to-open and peer visibility (`3edc7b846`)
+
+**Purpose.** Qualify the 200 ms read-mapping TTL for cross-client visibility
+(gate left open above) and remove remaining hot paths. Verdict: **PASS**
+(two-client peer suite and 2 GiB throughput, scoped as below).
+
+**Change (`3edc7b846`).** An `open()` stamps a per-inode open epoch (4,096
+untagged hashed slots, monotonic ms); a mapping pulled before the open, or in
+the same millisecond, is not fresh. A reader that opens after a peer closes
+therefore refetches the mapping, as NFS close-to-open does; the TTL now only
+covers reads through an already-open descriptor. `tests/test_map_fresh_open.py`
+runs the production table against a fake clock (TTL expiry, inode and chunk
+tags, open epoch, same-millisecond pull).
+
+**Release `3edc7b846289`** (`v0.3.2-pre-alpha-513-g3edc7b846`, built
+20:55:15Z on each host with `-O3 -march=native`; efsd SHA-256 intel1
+`a47dfe2681b9cb9fe3f903bca04b353d2b0d870b2b979e0e9e4ee4a9a40b740e`, intel2
+`bf4ac7db4c1d3fc11cb9b63f5e2476cd6b12b99bdacf3d6bb0c627a40c55a3e0`; xorinox
+efs-fuse `46f39a4a9de0f7d57de877f3d96f345b67ded22e9eebedf3917b1b7308b3dbf1`).
+Same environment as above: 4 efsd (2 per Intel host), TCP, O_DIRECT, async
+PUT acknowledgement (200 ms / 256 MiB window), `EFS_READ_MAP_TTL_MS` default.
+Rolled out with the in-use guard; the 64-sample control checks pass on all
+three mounts; `test_wire`, `test_writer_routing`, `test_data_commit`,
+`test_map_fresh_open` and `test_store_durability` pass on each host.
+
+**Two-client peer suite** (`tests/posix/posix_2client.py`, clients on
+intel1 and intel2, `/data1/efs/mnt`): **67/67 PASS** on `4a47f89b5187` (TTL
+without close-to-open, 92.5 s) and **67/67 PASS** on `3edc7b846289` (77.2 s).
+
+| 2 GiB, xorinox, `3edc7b846289` | Run 1 | Run 2 | Run 3 |
+| --- | --- | --- | --- |
+| Write | 165.5 | 179.6 | 172.5 MiB/s |
+| Write + fsync | 178.5 | 175.7 | 178.5 MiB/s |
+| Read | 240.0 | 243.2 | 236.9 MiB/s |
+
+**Where the remaining time goes.** The `enp2s0` counters (r8169, MTU 1500;
+a full 2.5 Gb/s link shows about 98% in these counters) show:
+
+| Workload | Rate | Wire utilization |
+| --- | --- | --- |
+| One 2 GiB reader | 247.4 MiB/s logical, 262.3 MiB/s received | 88.0% |
+| Two readers | 259.2 MiB/s logical, 275.1 MiB/s received | 92.3% |
+| One writer | 169.1 MiB/s logical, 255.1 MiB/s sent | 85.6% |
+
+efs-fuse uses 36% of one core while reading at 240 MiB/s (perf: kernel copy
+and socket paths at the top, no user-space hot spot) and 40% while writing at
+177 MiB/s; neither direction is CPU-bound. Per MiB, a strace of the client
+shows 16 GET_CHUNK (8 chunks × 2 data fragments) and 0.39 GETCHUNKS for
+reads (strace slows dd to 44 MiB/s, so the TTL lapses more often than
+untraced), 24 PUT_CHUNK and 0.40 REPORT_CHUNKS for writes, and 4 DATA_COMMIT
+per fsync. The remaining read gap is single-stream pipelining (about 4% to two
+streams). The write gap is the 1.5× erasure-coding traffic on one client
+link: only parity computed on the servers would raise logical writes above
+about 188 MiB/s. A raw TCP baseline (iperf3) was NOTRUN because the host
+firewalls block non-EFS ports; it was not changed.
+
+Raw (not in Git): `~/git/devops/profiling/runs/20261015-final-3edc/`
+`peer-suite.out` (`f088ab60911e40e29f46920adbaba109f68b93dc3823609770261a141f361a15`),
+`put-durability.txt` (`7edc0e24067dfc5ecb13a582ec4f8cb5be736c0d8edc5248938fa812116e6368`);
+`~/git/devops/nuc-efs/logs/intel-posix2-1792097887339551000.tsv`
+(`c6392520887db0fe17c4b50bf095e633670b4337998dc6832dded05e4a54e2ee`, `3edc`)
+and `intel-posix2-1792097590759404000.tsv`
+(`af8415f769f7cc1bd53e32354036ee7e14e7ce04d7c57c68d52c56f518b5e384`, `4a47`);
+xorinox `/data1/efs/intel-client/ddprof-20261015/{rpc-3edc,perf-3edc}`.
+
+Reproduce: build and roll out as in Reproduce below
+(`~/git/devops/profiling/runs/20261015-rollout-next/rollout.py RELEASE_ID`,
+which aborts if a mount is in use), then from `~/git/devops/nuc-efs` run
+`python3 intel-smoke2.py ""` (whole two-client suite; it writes only under a
+new `intel-posix2-*` directory) and `scripts/measure_put_durability.sh` on
+xorinox as below.
+
 ## Limitations and remaining gates
 
 - No crash or power-loss test; the unclean-restart path is tested only with a
@@ -189,9 +263,10 @@ Raw (not in Git): `~/git/devops/profiling/runs/`
   fragments of a chunk.
 - The AMD client still runs `b3e93177c138` stopped; it predates COMMIT and must
   not be started against these servers without upgrading.
-- No small-file or POSIX/peer/persistence qualification of these sources
-  yet; the read TTL changes cross-client visibility (up to 200 ms) and the
-  two-client peer suites must be rerun against it.
+- The two-client peer suite passes (above); seven-client POSIX,
+  small-file and persistence qualification of these sources is NOTRUN.
+  Reads through a descriptor opened before a peer's write can see the old
+  mapping for up to 200 ms (close-to-open still holds).
 
 ## Reproduce
 
