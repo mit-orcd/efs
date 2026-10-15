@@ -915,6 +915,65 @@ static struct rdcache_ent *rdcache_find(uint32_t s, efs_ino_t ino, uint32_t ci)
     return NULL;
 }
 
+/* Cached bodies are speculative allocations, admitted only below half the
+ * buffer budget. Once the cache itself holds that much, every refused
+ * allocation dropped the store, so new chunks were never cached and each
+ * 32 KiB read refetched its whole chunk (Oct 15 Intel: 2 fragment GETs per
+ * read once ~160 MiB was cached, 1 per chunk on a fresh client).
+ *
+ * Take the body of the least recently used clean way instead: unpinned,
+ * not pending, exactly `len` bytes (its charge moves with it, no free or
+ * alloc). Scans 64-slot windows from a rotating cursor until a window has
+ * a candidate, at most one pass. Holds one stripe at a time and re-checks
+ * the way before detaching it, so it must be called with no stripe held. */
+#define RDCACHE_STEAL_WINDOW 64
+static uint32_t g_rdcache_steal_cursor;
+
+static uint8_t *rdcache_steal_body(uint32_t len)
+{
+    uint32_t start = __atomic_fetch_add(&g_rdcache_steal_cursor,
+                                        RDCACHE_STEAL_WINDOW, __ATOMIC_RELAXED);
+    uint32_t best_s = 0, best_tick = 0, best_ci = 0;
+    efs_ino_t best_ino = 0;
+    int best_w = -1;
+    uint8_t *body = NULL;
+
+    rdcache_ensure();
+    for (uint32_t i = 0; i < RDCACHE_SLOTS; i++) {
+        uint32_t s = (start + i) & (RDCACHE_SLOTS - 1);
+        pthread_mutex_t *mu = &g_rdcache.mu[s & (RDCACHE_STRIPES - 1)];
+
+        if (best_w >= 0 && i % RDCACHE_STEAL_WINDOW == 0)
+            break;
+        pthread_mutex_lock(mu);
+        for (int w = 0; w < RDCACHE_WAYS; w++) {
+            struct rdcache_ent *e = &g_rdcache.e[s][w];
+            if (!e->data || e->pending || e->pins > 0 || e->len != len)
+                continue;
+            if (best_w < 0 || (int32_t)(e->tick - best_tick) < 0) {
+                best_s = s;
+                best_w = w;
+                best_tick = e->tick;
+                best_ino = e->ino;
+                best_ci = e->ci;
+            }
+        }
+        pthread_mutex_unlock(mu);
+    }
+    if (best_w < 0)
+        return NULL;
+    pthread_mutex_t *mu = &g_rdcache.mu[best_s & (RDCACHE_STRIPES - 1)];
+    pthread_mutex_lock(mu);
+    struct rdcache_ent *e = &g_rdcache.e[best_s][best_w];
+    if (e->data && !e->pending && e->pins == 0 && e->len == len &&
+        e->ino == best_ino && e->ci == best_ci && e->tick == best_tick) {
+        body = e->data;
+        memset(e, 0, sizeof(*e));
+    }
+    pthread_mutex_unlock(mu);
+    return body;
+}
+
 /* Generation the local chunk map names. 0 = no row. Taken without the
  * rdcache lock: idx_mu must not be acquired under an rdcache stripe. */
 static uint64_t rdcache_map_gen(efs_ino_t ino, uint32_t ci)
@@ -1098,6 +1157,9 @@ static int rdcache_put_inner(efs_ino_t ino, uint32_t ci, const uint8_t *src,
         tg = observed; /* never label captured bytes with a later map */
     uint32_t s = rdcache_slot(ino, ci);
     pthread_mutex_t *mu = rdcache_mu(s);
+    uint8_t *spare = NULL; /* body taken by rdcache_steal_body */
+    int stole = 0;
+retry:
     pthread_mutex_lock(mu);
     /* The way rdcache_acquire marked pending for this key first: it may
      * have no data yet (a fresh way), and rdcache_find skips those. A put
@@ -1118,6 +1180,8 @@ static int rdcache_put_inner(efs_ino_t ino, uint32_t ci, const uint8_t *src,
          * entry is current for its gen; a newer gen of the same chunk
          * is fetched again by the next reader (the gen check fails). */
         pthread_mutex_unlock(mu);
+        if (spare)
+            efs_buf_free(spare, len);
         return 0;
     }
     if (!e) {
@@ -1136,6 +1200,8 @@ static int rdcache_put_inner(efs_ino_t ino, uint32_t ci, const uint8_t *src,
         }
         if (!e) {
             pthread_mutex_unlock(mu);
+            if (spare)
+                efs_buf_free(spare, len);
             return 0;
         }
     }
@@ -1157,6 +1223,20 @@ static int rdcache_put_inner(efs_ino_t ino, uint32_t ci, const uint8_t *src,
         if (!e->data) {
             /* Pool buffers are EFS_CHUNK_SIZE-capacity; allocate once per way. */
             e->data = efs_buf_alloc_prefetch(len);
+            if (!e->data && spare) {
+                e->data = spare;
+                spare = NULL;
+            }
+            if (!e->data && !stole) {
+                /* Speculative budget exhausted, often by this cache's own
+                 * bodies: reuse an LRU body and choose the victim again
+                 * (state may change while unlocked). A pending mark here
+                 * is still ours; its waiters keep waiting. */
+                pthread_mutex_unlock(mu);
+                spare = rdcache_steal_body(len);
+                stole = 1;
+                goto retry;
+            }
             if (!e->data) {
                 /* Release the mark or its waiters never wake. */
                 if (e->pending) {
@@ -1179,6 +1259,8 @@ static int rdcache_put_inner(efs_ino_t ino, uint32_t ci, const uint8_t *src,
     e->tick = ++g_rdcache.tick;
     pthread_cond_broadcast(&g_rdcache.cv[s & (RDCACHE_STRIPES - 1)]);
     pthread_mutex_unlock(mu);
+    if (spare)
+        efs_buf_free(spare, len);
     return took;
 }
 
@@ -1824,6 +1906,8 @@ static void prefetch_ahead(efs_ino_t ino, uint32_t from_ci, uint64_t file_size)
         if (!job)
             return;
         job->chunk = efs_buf_alloc_prefetch(cs);
+        if (!job->chunk)
+            job->chunk = rdcache_steal_body(cs); /* budget held by the cache */
         if (!job->chunk) {
             free(job);
             return;

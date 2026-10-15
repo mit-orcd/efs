@@ -66,6 +66,8 @@ static pthread_mutex_t *rdcache_mu(uint32_t s) {(void)s;return &cache_mu;}
 void *efs_buf_alloc(uint32_t len) {return malloc(len);}
 void *efs_buf_alloc_prefetch(uint32_t len) {return efs_buf_alloc(len);}
 void efs_buf_free(void *p,uint32_t len) {(void)len;free(p);}
+/* Allocation never fails here; budget reuse is tests/test_rdcache_steal.py. */
+static uint8_t *rdcache_steal_body(uint32_t len) {(void)len;return NULL;}
 '''+function('rdcache_map_gen')+'\n'+function('rdcache_put_inner')+r'''
 int main(void) {
     assert(!pthread_mutex_init(&g_client.idx_mu,NULL));

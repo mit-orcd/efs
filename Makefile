@@ -477,6 +477,7 @@ test: all
 	./tests/test_reply_buffers key-failure
 	./tests/test_bufpool
 	python3 tests/test_read_admission.py
+	python3 tests/test_rdcache_steal.py
 	python3 tests/test_read_failure_admission.py
 	python3 tests/test_read_refs_window.py
 	python3 tests/test_query_capacity_mount.py
