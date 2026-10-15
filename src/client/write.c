@@ -1101,9 +1101,6 @@ void efs_client_mark_ino_dirty(efs_ino_t ino)
         r->ino_marked = 1;
         g_client.dirty_ino_count++;
     }
-    int stripe = (int)efs_ino_lock_slot(ino, EFS_DIR_LOCKS);
-    g_client.last_dirty_stripe = stripe;
-    g_client.dirty_stripe_ops[stripe]++;
     pthread_mutex_unlock(&g_client.dirty_mu);
 }
 
@@ -2259,6 +2256,16 @@ static void meta_flush_enqueue(efs_ino_t ino)
         return;
     }
     pthread_mutex_lock(&g_client.meta_flush_mu);
+    if (!g_client.meta_flush_qn) {
+        /* Background-only coalescing. Later kicks never move this boundary.
+         * Explicit fsync/close and pressure drains bypass this queue. */
+        clock_gettime(CLOCK_MONOTONIC, &g_client.meta_flush_ready);
+        g_client.meta_flush_ready.tv_nsec += 10000000; /* 10 ms */
+        if (g_client.meta_flush_ready.tv_nsec >= 1000000000) {
+            g_client.meta_flush_ready.tv_nsec -= 1000000000;
+            g_client.meta_flush_ready.tv_sec++;
+        }
+    }
     for (i = 0; i < g_client.meta_flush_qn; i++) {
         unsigned k = (g_client.meta_flush_qh + i) % EFS_META_FLUSH_QLEN;
 
@@ -2294,6 +2301,22 @@ static void *meta_flush_main(void *arg)
                               &g_client.meta_flush_mu);
         if (g_client.meta_flush_stop)
             break;
+        /* Keep the inode queued while collecting a burst, so duplicate kicks
+         * coalesce. All workers share the first kick's deadline. A condition
+         * signal/spurious wake cannot extend it or force premature dispatch. */
+        while (g_client.meta_flush_qn && !g_client.meta_flush_stop) {
+            struct timespec now, until = g_client.meta_flush_ready;
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            if (now.tv_sec > until.tv_sec ||
+                (now.tv_sec == until.tv_sec && now.tv_nsec >= until.tv_nsec))
+                break;
+            /* Copy before unlocking: another worker may empty the queue and
+             * the next kick install a NEW deadline while this wait expires. */
+            pthread_cond_timedwait(&g_client.meta_flush_cv,
+                                   &g_client.meta_flush_mu, &until);
+        }
+        if (g_client.meta_flush_stop) break;
+        if (!g_client.meta_flush_qn) continue;
         ino = g_client.meta_flush_q[g_client.meta_flush_qh];
         g_client.meta_flush_qh = (g_client.meta_flush_qh + 1) %
                                  EFS_META_FLUSH_QLEN;
@@ -2320,7 +2343,11 @@ void efs_client_enable_meta_batch(uint32_t every_n_ops)
 
     if (!g_client.meta_flush_started) {
         pthread_mutex_init(&g_client.meta_flush_mu, NULL);
-        pthread_cond_init(&g_client.meta_flush_cv, NULL);
+        pthread_condattr_t attr;
+        pthread_condattr_init(&attr);
+        pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
+        pthread_cond_init(&g_client.meta_flush_cv, &attr);
+        pthread_condattr_destroy(&attr);
         g_client.meta_flush_qh = 0;
         g_client.meta_flush_qn = 0;
         g_client.meta_flush_stop = 0;
@@ -2380,11 +2407,10 @@ int efs_client_note_meta_change(int force)
     g_client.meta_dirty_ops++;
     uint32_t ops = g_client.meta_dirty_ops;
     uint32_t thresh = g_client.meta_batch_ops ? g_client.meta_batch_ops : 4096;
-    int stripe = g_client.last_dirty_stripe;
-    if (stripe < 0 || stripe >= EFS_DIR_LOCKS)
-        stripe = 0;
-    uint32_t stripe_ops = g_client.dirty_stripe_ops[stripe];
-    int flush = (ops >= thresh) || (stripe_ops >= thresh);
+    /* stripe_ops counted lifetime marks and was never reset by snapshots:
+     * after 4096 marks every write forced a whole-set background REPORT.
+     * Use the snapshot-owned operation count, restored on failure. */
+    int flush = ops >= thresh;
     pthread_mutex_unlock(&g_client.dirty_mu);
 
     /* Batched threshold flush: hand off to the dedicated flush thread so the

@@ -169,6 +169,7 @@ struct efs_client {
     pthread_cond_t meta_flush_cv;
     efs_ino_t meta_flush_q[EFS_META_FLUSH_QLEN];
     unsigned meta_flush_qh, meta_flush_qn;
+    struct timespec meta_flush_ready; /* first kick's fixed coalescing boundary */
     int meta_flush_stop;
     int meta_flush_started;
     int meta_flush_force; /* next flush does a full serialize */
@@ -180,8 +181,6 @@ struct efs_client {
     int meta_cap_blocked;  /* last flush hit the page cap; skip until shrink */
     int last_err;          /* EFS_ERR_* from the last mutating client op */
     int write_readonly;    /* mount is read-only (no write path enabled) */
-    uint32_t dirty_stripe_ops[EFS_DIR_LOCKS];
-    int last_dirty_stripe;
 
     /* Phase 2b: sticky flag set when a dirty-report RPC fails (so fsync can
      * report EIO). The dirty set itself is the pending-report queue (reused

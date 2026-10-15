@@ -1,6 +1,9 @@
 #include "server_internal.h"
 #include "store_containers.h"
 #include "data_pressure.h"
+#ifndef EFS_BENCH_BUILD
+#include "directory_sync_group.h"
+#endif
 #include "efs/checksum.h"
 #include "efs/kv_key.h"
 #include "efs/protocol.h"
@@ -1180,6 +1183,20 @@ static int finish_shard_write(int fd, size_t bytes, int sync_write, int direct)
 }
 
 #ifndef EFS_BENCH_BUILD
+static struct directory_sync_group fragment_directory_syncs = DIRECTORY_SYNC_GROUP_INIT;
+static int fragment_directory_barrier(void *context, int fd)
+{
+    (void)context;
+    int rc;
+    do { rc=fsync(fd); } while (rc<0 && errno==EINTR);
+    return rc<0 ? EFS_ERR_IO : EFS_OK;
+}
+static int fragment_directory_group_barrier(void *context, int fd)
+{
+    (void)context;
+    return directory_sync_group_run(&fragment_directory_syncs, fd,
+                                    fragment_directory_barrier, NULL);
+}
 /* Startup/attach seals each canonical root's ancestry before publishing its
  * initialized target. Runtime PUT fences its containing directory every time;
  * pinned inode proofs may elide only previously sealed, unchanged ancestry.
@@ -1208,7 +1225,8 @@ static int sync_fragment_parents(struct efsd_server *s, const char *path)
      * fragments. This never enables the container engine, skips the changed
      * containing directory, or caches a failed barrier. Root attach/close owns
      * descriptor lifetime; fallback below covers uninitialized/unknown roots. */
-    if (root[0]) return server_container_sync_parents(s, path);
+    if (root[0]) return server_container_sync_parents_with(s, path,
+                                      fragment_directory_group_barrier, NULL);
     memcpy(parent, path, n + 1);
     char *slash = strrchr(parent, '/');
     if (!slash) strcpy(parent, ".");
