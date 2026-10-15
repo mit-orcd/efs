@@ -197,24 +197,6 @@ static uint32_t fuse_chunk_size(void)
     return efs_chunk_size_valid(cs) ? cs : EFS_DEFAULT_CHUNK_SIZE;
 }
 
-static uint32_t fuse_io_limit(void)
-{
-    uint32_t cs = fuse_chunk_size();
-    uint32_t want = (uint32_t)EFS_WRITE_PIPELINE * cs;
-    if (want < (1u << 20))
-        want = (1u << 20);
-    if (want > (16u << 20))
-        want = (16u << 20);
-    /* max_write also determines FUSE_MAX_PAGES in libfuse. A malloc
-     * buffer may start inside a page: 1 MiB at page offset 16 needs
-     * 257 pages, otherwise Linux splits it into 1 MiB-16 and 16 bytes.
-     * Reserve one extra page without exceeding our 16 MiB bound. */
-    long page = sysconf(_SC_PAGESIZE);
-    if (page > 0 && (uint64_t)want + (uint64_t)page <= (16u << 20))
-        want += (uint32_t)page;
-    return want;
-}
-
 static void stat_set_size_blocks(struct stat *stbuf, uint64_t size,
                                  uint64_t allocated)
 {
@@ -5480,10 +5462,14 @@ static void efs_fuse_init(void *userdata, struct fuse_conn_info *conn)
     /* Timeouts are per lookup/getattr reply (always 0). There is no
      * fuse_config on the low-level API. */
     if (conn) {
-        uint32_t want = fuse_io_limit();
-        /* Set the requested limit, rather than retaining libfuse's smaller
-         * default. libfuse/kernel clamp unsupported buffer/page capacities. */
-        conn->max_write = want;
+        uint32_t cs = fuse_chunk_size();
+        uint32_t want = (uint32_t)EFS_WRITE_PIPELINE * cs;
+        if (want < (1u << 20))
+            want = (1u << 20);
+        if (want > (16u << 20))
+            want = (16u << 20);
+        if (conn->max_write == 0 || conn->max_write > want)
+            conn->max_write = want;
         if (conn->max_readahead == 0 || conn->max_readahead > (16u << 20))
             conn->max_readahead = 16u << 20;
         if (conn->max_background < 128)
@@ -7909,8 +7895,13 @@ static int efs_fuse_parse_cmdline(struct fuse_args *args,
     struct fuse_args configured=FUSE_ARGS_INIT(0,NULL);
     for(int i=0;i<args->argc;i++) {
         if(fuse_opt_add_arg(&configured,args->argv[i])!=0)goto failed;
+        /* Linux's default 256-page limit includes the user's first-page
+         * offset. A 1 MiB malloc buffer at offset 16 otherwise becomes
+         * 1 MiB-16 plus 16 bytes. Half-MiB requests fit with page headroom
+         * and divide ordinary 1 MiB reads into chunk-aligned requests.
+         * max_read is a mount option and initializes conn->max_read too. */
         if(i==0 && fuse_opt_add_arg(&configured,
-            "-omax_threads=32,max_idle_threads=8")!=0)goto failed;
+            "-omax_read=524288,max_threads=32,max_idle_threads=8")!=0)goto failed;
     }
     fuse_opt_free_args(args);
     *args=configured;

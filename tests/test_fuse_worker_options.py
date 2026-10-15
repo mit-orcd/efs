@@ -4,7 +4,6 @@ from pathlib import Path
 import os,shlex,subprocess,tempfile,sys
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/client/efs_fuse.c').read_text()
-a=s.index('static uint32_t fuse_io_limit(');limit=s[a:s.index('\n}',a)+2]
 a=s.index('static int efs_fuse_parse_cmdline(');f=s[a:s.index('\n}',a)+2]
 try:
  flags=shlex.split(subprocess.check_output(['pkg-config','--cflags','--libs','fuse3'],text=True,stderr=subprocess.DEVNULL))
@@ -16,23 +15,17 @@ code=r'''
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
-#include <unistd.h>
-#define EFS_WRITE_PIPELINE 8
-static uint32_t fuse_chunk_size(void) {return 131072;}
-'''+limit+'\n'+f+r'''
+'''+f+r'''
 static void check(int argc,char **argv,unsigned max,unsigned idle){
  struct fuse_args a=FUSE_ARGS_INIT(argc,argv);struct fuse_cmdline_opts o;
  assert(!efs_fuse_parse_cmdline(&a,&o));
  assert(o.max_threads==max && o.max_idle_threads==idle);
+ struct fuse_lowlevel_ops ops={0};
+ struct fuse_session *se=fuse_session_new(&a,&ops,sizeof(ops),NULL);
+ assert(se);fuse_session_destroy(se);
  free(o.mountpoint);fuse_opt_free_args(&a);
 }
 int main(void){
- unsigned page=(unsigned)sysconf(_SC_PAGESIZE);
- unsigned limit=fuse_io_limit();
- assert(limit==1048576+page);
- for(unsigned off=0;off<page;off++)
-   assert((1048576+off+page-1)/page <= (limit+page-1)/page);
  char *plain[]={"efs-fuse","/tmp"};check(2,plain,32,8);
  char *explicit[]={"efs-fuse","-o","max_threads=4,max_idle_threads=1","/tmp"};check(4,explicit,4,1);
  char *zero[]={"efs-fuse","-omax_threads=0,max_idle_threads=0","/tmp"};check(3,zero,0,0);
