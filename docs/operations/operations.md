@@ -237,11 +237,11 @@ node — that is what the smoke scripts under `tests/stress/` use.
 
 ## Writer threads and direct I/O
 
-One writer pool is shared across all `--storage` paths; the default thread
-count is `nproc` minus four standing helper threads, with an I/O-worker floor
-of `min(nproc, 4)` and a cap of64. This permits overlapping durable writes on
-small VMs instead of serializing all PUTs through one worker. `--writers <n>` sets it,
-`--writers 0` runs PUTs inline on the connection thread. New fragments go to
+One writer pool is shared across all `--storage` paths; each daemon defaults
+to eight writer workers, independent of CPU count. These workers overlap durable
+file and directory I/O; increasing their count does not weaken durability.
+`--writers <n>` overrides the total (maximum 64), and `--writers 0` runs PUTs
+inline on the connection thread. New fragments go to
 the path with the shortest writer queue. Each writer slot
 preserves FIFO within a file and rotates that file’s queued chunks behind other
 queued files after service. Busy streams cannot monopolize admission ahead of

@@ -1494,6 +1494,13 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**Deployed bb22e9559337; native, preserved-file and mounted smoke PASS.**
+Default eight writers, barriers unchanged; matching four clients deployed.
+AMD untraced median91.43MiB/s, variable70.03–112.73; no paired baseline claim.
+Warm profile shows CPU/network headroom and substantial durability waits.
+Next candidate: bounded durable cohorts; no additional optimization enabled.
+
+[Private Intel writer overlap and grouped durability](../status/intel-private-overlap-20261015.md):
 **20 mounted GiB writes and 49,152 local records verified PASS.**
 Eight writers measured ~1.8x and sixteen ~2.1x per-client throughput versus four.
 Local durable grouping adds throughput with higher completion latency; gains are
