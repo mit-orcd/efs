@@ -1,3 +1,14 @@
+[Intel post-batching live profile](intel-post-sync-profile-20261014.md):
+**Read-only capture PASS; next optimization proposed, NOT IMPLEMENTED.**
+User AMD dd observed at about 71 MiB/s with xorinox crawl active. Client
+write admission accounts for 66.4% of sampled user cycles, including full-cache
+metadata trim and pressure selection; client uses only about 16% of one core.
+Early 32 MiB pressure drains can synchronously wait for inode PUT/publication.
+Recommend bounded background pressure draining with indexed candidates,
+preserving hard caps, uncertain ownership, EOF and fsync semantics. All matched
+PUT/REPORT replies OK; negligible retransmissions; file durability remains
+material. No cluster/settings/workload changes; throughput gain NOT ESTABLISHED.
+
 [Intel sync and metadata publication batching](intel-sync-batching-20261014.md):
 **Deployed devel2256f1a34; native/sanitizer and four-client smoke PASS.**
 Directory barriers share only operations queued before the barrier starts;

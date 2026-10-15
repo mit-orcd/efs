@@ -1494,6 +1494,17 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**Read-only capture PASS; next optimization proposed, NOT IMPLEMENTED.**
+User AMD dd observed at about 71 MiB/s with xorinox crawl active. Client
+write admission accounts for 66.4% of sampled user cycles, including full-cache
+metadata trim and pressure selection; client uses only about 16% of one core.
+Early 32 MiB pressure drains can synchronously wait for inode PUT/publication.
+Recommend bounded background pressure draining with indexed candidates,
+preserving hard caps, uncertain ownership, EOF and fsync semantics. All matched
+PUT/REPORT replies OK; negligible retransmissions; file durability remains
+material. No cluster/settings/workload changes; throughput gain NOT ESTABLISHED.
+
+[Intel sync and metadata publication batching](../status/intel-sync-batching-20261014.md):
 **Deployed devel2256f1a34; native/sanitizer and four-client smoke PASS.**
 Directory barriers share only operations queued before the barrier starts;
 per-fragment file syncs remain. Background REPORTs coalesce for10ms; explicit
