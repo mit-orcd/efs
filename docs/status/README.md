@@ -18,6 +18,14 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[AMD ordinary RDMA/direct POSIX](amd-rdma-posix-20261015.md): **FAIL loaded,
+scoped functional PASS** on `c8d057391`, branch `devel-amd-posix-20261015`
+from devel `761c91c42`. Full native/strict transport, serial216/216, peer67/67,
+cold27/27 and paused-follower32MiB pass. One-mount jobs16 is215/216:
+unusual-name directories still exceed15s. Fresh-read scheduling/log-lock and
+ACK-window fixes are committed; the loaded gate stays open. Queries, packing,
+containers, expiry and seven-client load are excluded.
+
 [Grouped fragment durability](intel-cohort-durability-20261015.md): opt-in
 `EFS_PUT_COHORT=1` in `5cef06ac4`, scoped **PASS**. On Intel with the xorinox
 client, four concurrent writers 94–101 → 119–132 MiB/s and single-stream
