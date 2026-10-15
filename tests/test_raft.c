@@ -856,6 +856,14 @@ static void test_readindex_outstanding_batch(void)
     }
 }
 
+static unsigned read_term_gets;
+static int (*read_term_get_original)(void *,uint64_t,uint64_t *,uint8_t *,uint32_t *);
+static int read_term_get_count(void *ctx,uint64_t i,uint64_t *t,uint8_t *c,uint32_t *n)
+{
+    read_term_gets++;
+    return read_term_get_original(ctx,i,t,c,n);
+}
+
 /* Read quorum contacts must not require persisting the next write suffix.
  * Read storms also must not keep resetting the ordinary replication timer. */
 static void test_read_probe_committed_prefix(void)
@@ -883,8 +891,8 @@ static void test_read_probe_committed_prefix(void)
         for(int i=0;i<3;i++)if(i!=lid) {
             struct efs_raft_msg *p=n.read_req[i];
             CHECK(p && !p->nentries && p->vote_granted && p->prev_index<=committed &&
-                  !p->prev_index && !p->prev_term && p->leader_commit==committed &&
-                  p->last_log_index==efs_raft_read_round(n.r[lid]),"fresh contact carries an empty prefix and an unchanged applied read floor");
+                  !p->prev_index && !p->prev_term && !p->leader_commit &&
+                  p->last_log_index==efs_raft_read_round(n.r[lid]),"leadership-only contact carries no follower commit work");
             if(p && !p->nentries) {
                 CHECK(efs_raft_read_control(n.r[i],p)>0,"known durable prefix votes without new log work");
                 struct efs_raft_msg *reply=n.read_reply[i];
@@ -901,6 +909,19 @@ static void test_read_probe_committed_prefix(void)
               "fresh committed-prefix quorum serves already applied rows");
         CHECK(efs_raft_commit(n.r[lid])==committed && app[lid].n==applied,
               "fresh contact neither commits nor applies unrelated write tail");
+        read_term_get_original=st[lid]->get;st[lid]->get=read_term_get_count;read_term_gets=0;
+        for(unsigned repeat=0;repeat<1000;repeat++) {
+            uint64_t round=0,floor=0;
+            CHECK(efs_raft_read_quorum(n.r[lid]) &&
+                  efs_raft_read_proven(n.r[lid],&round,&floor) && floor==committed,
+                  "completed current-term certificate retains committed fact");
+        }
+        CHECK(!read_term_gets,"read proof inspection avoids unrelated disk-log serialization");
+        CHECK(efs_raft_read_begin(n.r[lid])==EFS_OK &&
+              !efs_raft_read_quorum(n.r[lid]) && !efs_raft_read_ready(n.r[lid]),
+              "retained own-term fact cannot replace fresh majority contact");
+        CHECK(!read_term_gets,"new admission reuses only committed term evidence");
+        st[lid]->get=read_term_get_original;
         /* Keep starting read rounds just before ticks. Data progress must
          * still happen by the ordinary heartbeat interval, not be postponed. */
         for(int t=0;t<4;t++) {

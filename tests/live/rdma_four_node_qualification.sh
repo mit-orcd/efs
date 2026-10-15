@@ -57,6 +57,18 @@ for attempt in $(seq 1 60); do
 done
 [ "$formatted" = 1 ] || { echo "$reply";exit 1; }
 mount_clients
+# single runs ordinary serial and one-mount parallel POSIX, never seven clients.
+case "${EFS_GATE_LOAD_MODE:-seven}" in
+ single)
+  for jobs in 1 16; do
+   python3 -u "$src/tests/posix/posix_suite.py" "$client_root/mnt" --suite core --jobs "$jobs" --tag "rdma-single-$jobs" --results "$work/core-$jobs.tsv" > "$work/core-$jobs.log" 2>&1 || rc=1
+   tail -n 3 "$work/core-$jobs.log"
+   # A live timed-out worker makes further mutation unsafe.
+   if grep -q 'worker.*still alive' "$work/core-$jobs.log"; then exit 1;fi
+  done
+  python3 "$src/tests/posix/posix_extras.py" "$client_root/mnt" --results "$work/extras.tsv" > "$work/extras.log" 2>&1 || rc=1
+  ;;
+ seven)
 for round in 1; do
  python3 -u "$src/tests/live/rdma_installed_load.py" "$src" "$work/load$round" --base-port "$base" > "$work/load$round.log" 2>&1 || rc=1
  tail -n 3 "$work/load$round.log"
@@ -66,6 +78,9 @@ import json,sys
 assert not json.load(open(sys.argv[1]))['errors']
 PY
 done
+  ;;
+ *) echo 'EFS_GATE_LOAD_MODE must be single or seven' >&2;exit 2;;
+esac
 python3 "$src/tests/posix/posix_2client.py" --local "$client_root/mnt" "$client_root/mnt2" --parent rdma-fixed-peer --results "$work/peer.tsv" > "$work/peer.log" 2>&1 || rc=1
 # Optional W100 faulted client uses the same source/build ID as native daemons.
 # Only this private mount enables omission; installed clients remain native.

@@ -60,6 +60,10 @@ Complete navigation to top-level status ledgers as of October 15, 2026. Grouping
 - [Running the POSIX expiry suite (W90 / D33)](posix-expiry-suite.md)
 - [Scratch expiry and the virtual .efs command interface](scratch-expiry-interface.md)
 
+## AMD ordinary POSIX qualification
+
+- [AMD RDMA/direct POSIX, native fixture repair and fresh-read scheduling — October 15](amd-rdma-posix-20261015.md)
+
 ## Performance and benchmarks
 
 - [W93 internal batching and queue measurement — 2026-10-09](batch-internals-profile-20261009.md)

@@ -24,11 +24,20 @@ full acceptance are separate states.
 unsynced data. 2 GiB writes 151 → 176 MiB/s, with fsync 141 → 175 MiB/s; reads
 unchanged. Crash/power-loss qualification NOTRUN.
 
+[AMD ordinary RDMA/direct POSIX](amd-rdma-posix-20261015.md): **FAIL loaded,
+scoped functional PASS** on `c8d057391`, branch `devel-amd-posix-20261015`
+from devel `761c91c42`. Full native/strict transport, serial216/216, peer67/67,
+cold27/27 and paused-follower32MiB pass. One-mount jobs16 is215/216:
+unusual-name directories still exceed15s. Fresh-read scheduling/log-lock and
+ACK-window fixes are committed; the loaded gate stays open. Queries, packing,
+containers, expiry and seven-client load are excluded. This predates
+asynchronous PUT acknowledgement (`d8af2c325`) and does not qualify it.
+
 [Grouped fragment durability](intel-cohort-durability-20261015.md) (superseded):
 opt-in `EFS_PUT_COHORT=1` in `5cef06ac4`, removed by `d8af2c325`. On Intel with the xorinox
 client, four concurrent writers 94–101 → 119–132 MiB/s and single-stream
 146–149 → 169–170 MiB/s, with half the device flushes per MiB; local model
-2.5–3x. Crash/power-loss qualification NOTRUN; the cluster runs with the flag off.
+2.5–3x. Kept as evidence for why per-fragment barriers limited writes.
 
 [Intel read metadata and read-cache fixes](intel-read-metadata-cache-20261015.md):
 **PASS (scoped)** on `b3e93177c138` (compact GETCHUNKS replies) and

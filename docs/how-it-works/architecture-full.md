@@ -1512,6 +1512,28 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[AMD ordinary RDMA/direct POSIX](../status/amd-rdma-posix-20261015.md): **FAIL loaded,
+scoped functional PASS** on `c8d057391`, branch `devel-amd-posix-20261015`
+from devel `761c91c42`. Full native/strict transport, serial216/216, peer67/67,
+cold27/27 and paused-follower32MiB pass. One-mount jobs16 is215/216:
+unusual-name directories still exceed15s. Fresh-read scheduling/log-lock and
+ACK-window fixes are committed; the loaded gate stays open. Queries, packing,
+containers, expiry and seven-client load are excluded.
+
+[Grouped fragment durability](../status/intel-cohort-durability-20261015.md): opt-in
+`EFS_PUT_COHORT=1` in `5cef06ac4`, scoped **PASS**. On Intel with the xorinox
+client, four concurrent writers 94–101 → 119–132 MiB/s and single-stream
+146–149 → 169–170 MiB/s, with half the device flushes per MiB; local model
+2.5–3x. Crash/power-loss qualification NOTRUN; the cluster runs with the flag off.
+
+[Intel read metadata and read-cache fixes](../status/intel-read-metadata-cache-20261015.md):
+**PASS (scoped)** on `b3e93177c138` (compact GETCHUNKS replies) and
+`49d721a4f180` (read-cache admission past the speculative budget), Intel
+cluster with the xorinox client. Wire bytes per byte read 1.24→1.08 (1 MiB)
+and 10.49→1.15 (32 KiB); single-stream 1 MiB 124→218 MiB/s, 32 KiB 12→43 MiB/s.
+POSIX/peer/persistence/fault qualification NOTRUN; old clients reject the new
+servers, so the AMD Intel-export client is stopped.
+
 [ORCD TCP/direct, `.efs` disabled rerun](../status/orcd-tcp-direct-disabled-20261015.md):
 **FAIL** on the same `b3e93177c138` product source:895 PASS/120 FAIL/520 NOTRUN
 in the seven-client round, peer61/67, clean stop refused. All23 successfully
@@ -1533,8 +1555,8 @@ running clusters. Newer source commits do not inherit earlier test verdicts.
 
 | Area | Evidence and limits |
 | --- | --- |
-| Intel/AMD sequential reads | [October 15 read coordination](../status/intel-read-coordination-20261015.md) and [AMD read profile](../status/intel-amd-read-profile-20261015.md). Measurement evidence; subsequent read-cache/FUSE fixes require their own qualification. |
-| Intel write path | [Eight-writer deployment](../status/intel-default-eight-writers-20261015.md), [pressure draining](../status/intel-pressure-drain-20261014.md), [sync batching](../status/intel-sync-batching-20261014.md). Scoped smoke/native results; observations do not establish universal throughput gains. |
+| Intel/AMD sequential reads | [October 15 read coordination](../status/intel-read-coordination-20261015.md) and [AMD read profile](../status/intel-amd-read-profile-20261015.md) are measurement evidence. [Read metadata and read-cache fixes](../status/intel-read-metadata-cache-20261015.md) record scoped PASS for `b3e93177c138`/`49d721a4f180`; full qualification of those sources remains NOTRUN. |
+| Intel write path | [Eight-writer deployment](../status/intel-default-eight-writers-20261015.md), [pressure draining](../status/intel-pressure-drain-20261014.md), [sync batching](../status/intel-sync-batching-20261014.md). Scoped smoke/native results; observations do not establish universal throughput gains. [Grouped durability design](../status/intel-cohort-durability-20261015.md) is a local model only. |
 | REPORT / W100 | [Newer-snapshot report](../status/intel-report-newer-snapshot-20261014.md): W100 closed by scoped human acceptance October 14. Older OPEN entries are historical; this does not establish the cause or resolution of the original ORCD EIO. |
 | Integrated RDMA source | [Merged devel qualification](../status/devel-rdma-merge-qualification-20261014.md). AMD software-RDMA evidence does not replace ORCD hardware gates. |
 | `.efs` functional versus scale work | [Three work packages and feature matrix](../status/three-work-packages-20261013.md), [AMD package 2](../status/amd-package2-query-20261013.md), [ORCD package 1](../status/orcd-package1-20261013.md), [later query fixes](../status/orcd-query-name-ordinals-20261013.md). General 400 GiB acceptance remains recorded as on hold; targeted fixes and marker checks do not close it. |
@@ -1589,8 +1611,8 @@ separate states. Close only when the item's named acceptance gates are recorded.
 
 | # | item | class | status | home |
 | --- | --- | --- | --- | --- |
-| orcd-qualification | **W119** · ORCD normal-operation RDMA failures and blocked clean stop | correctness / liveness | OPEN: 150 concurrent failures /846 NOTRUN; cross-host peer59/67; enabled queries EBUSY; retained writes block clean stop. TCP/commands-off rerun also FAILs (120 failures,520 NOTRUN; peer61/67; clean stop refused); all23 successfully prepared cold cases verify after authorized forced restart. [TCP evidence](../status/orcd-tcp-direct-disabled-20261015.md). Preserve failures, isolate causes and rerun original gates; W100 stays closed | [evidence and gates](../status/orcd-devel-qualification-20261015.md) · [item](#w119) |
-| qualification-fixtures | **W120** · stale extracted LOOKUP stub and command cleanup ownership check | verification correctness | OPEN: native stub lacks production host member; options fixture now has a suffix. Correct fixtures and pass semantic/cleanup gates without masking the original failed run | [evidence](../status/orcd-devel-qualification-20261015.md) · [item](#w120) |
+| orcd-qualification | **W119** · ORCD normal-operation RDMA failures and blocked clean stop | correctness / liveness | OPEN: 150 concurrent failures /846 NOTRUN; cross-host peer59/67; enabled queries EBUSY; retained writes block clean stop. TCP/commands-off rerun also FAILs (120 failures,520 NOTRUN; peer61/67; clean stop refused); all23 successfully prepared cold cases verify after authorized forced restart. [TCP evidence](../status/orcd-tcp-direct-disabled-20261015.md). Preserve failures, isolate causes and rerun original gates; W100 stays closed. [AMD follow-up](../status/amd-rdma-posix-20261015.md): native/serial/peer/cold/degraded PASS at `c8d057391`; one-mount jobs16 remains215/216 with unusual-name timeout | [evidence and gates](../status/orcd-devel-qualification-20261015.md) · [item](#w119) |
+| qualification-fixtures | **W120** · stale extracted LOOKUP stub and command cleanup ownership check | verification correctness | OPEN (partial fix): AMD `f6235bb73` repairs the LOOKUP host context and checks reader identity; native/docs PASS at `85a9ad6b5`. Enabled-command cleanup ownership remains NOTRUN here and still needs correction/acceptance. [AMD evidence](../status/amd-rdma-posix-20261015.md); preserve original failures | [evidence](../status/orcd-devel-qualification-20261015.md) · [item](#w120) |
 | 0i | **W54** · a fold's GC deletes the live base → read EIO, data loss | correctness | NUC direct/buffered authoritative folds and cold GC/restart pass; real cold IOR/hardscan passes at 4 and 36 ranks, including nine independent NUC FUSE clients; nine physical hosts remain; AMD software-RXE fold/GC gate passes, hardware RDMA remains | [full text](#w54--a-folds-gc-deletes-the-live-base-queue-row-0i) |
 | 0j | **W69** · the client's 50 ms lookup memo returns pre-mutation stats (posix 164/201) | correctness | correctness accepted: real blocked LOOKUP across chmod, immediate stats and full POSIX pass; GNU du samples recorded; unidentified Spark performance gate remains | [full text](#w69) |
 | 0k | **W55** · span committed to raft, fragment PUTs never landed → read EIO, data loss | correctness | open — [follow-up](../status/known-bugs-create-negative-verdict-20261008.md): partial/directory barrier and quorum cold-byte gates pass after resumption; Linux NFS 20-copy cold bytes pass, broad NFS still fails (179/212); macOS plain cp fails attribute copy; cp -X 20/20 cold Mac pass; 640 publication stress operations, 184 peer byte checks and 331 exact-fragment quorum checks pass; Mac broad POSIX fails (166/212), including setup EIO and namespace/locking behavior; original macOS NFS trigger remains unisolated; [validation and POSIX suite split](../status/known-bugs-validation-20261008.md) | [full text](#w55--span-committed-to-raft-fragment-puts-never-landed--read-eio-data-loss-queue-row-0k) |
@@ -7512,6 +7534,14 @@ existing semantic positives/negative controls, complete command cleanup,
 `make test` and docs-check to pass on the repaired integrated source. Do not
 replace asserted behavior with a skip or merely suppress the failing command.
 [Original failures and reproduction](../status/orcd-devel-qualification-20261015.md).
+
+
+**October 15 AMD follow-up (isolated branch):** `f6235bb73` repairs the LOOKUP
+stub and tests both null and present reader identity. `85a9ad6b5` regenerates
+architecture outputs and passes full native testing on AMD. Subsequent Raft
+changes have separate acceptance in the [AMD RDMA/direct ledger](../status/amd-rdma-posix-20261015.md).
+Enabled-command cleanup ownership remains NOTRUN in this commands-disabled
+profile; W120 is not closed and the earlier frozen-source FAIL is retained.
 
 
 ## Appendix 6 — Naming

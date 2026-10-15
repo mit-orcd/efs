@@ -13,7 +13,7 @@ code=r'''
 #include <string.h>
 #include <unistd.h>
 #define HOST_NGROUPS 2
-struct efs_raft_host {pthread_mutex_t mu;struct efs_raft *r[2];struct {int hosted;} g[2];unsigned acks[2],votes[2],applies[2],published,woken;uint64_t published_commit[2];};
+struct efs_raft_host {pthread_mutex_t mu;struct efs_raft *r[2];struct {int hosted;} g[2];unsigned acks[2],votes[2],applies[2],published,woken,read_votes;int fail_read_vote;uint64_t published_commit[2];};
 static void host_publish_view(struct efs_raft_host*h,int i){h->published++;h->published_commit[i]=efs_raft_commit(h->r[i]);}
 static void host_waiters_wake(struct efs_raft_host*h){h->woken++;}
 '''+hook+r'''
@@ -32,6 +32,7 @@ static int end(void *ctx){struct gate*g=gate(ctx);
 }
 static int send(void *ctx,const struct efs_raft_msg*m){struct efs_raft_host*h=ctx;int i=m->group==2;
  if(m->type==EFS_RAFT_MSG_AE_REP && m->success && m->match_index){assert(m->match_index<=gates[i].durable);h->acks[i]++;}
+ if(m->type==EFS_RAFT_MSG_AE_REP && m->vote_granted && m->success && !m->match_index && m->last_log_index){if(h->fail_read_vote)return EFS_ERR_IO;h->read_votes++;}
  if(m->type==EFS_RAFT_MSG_VOTE_REP&&m->vote_granted)h->votes[i]++;
  return EFS_OK;
 }
@@ -54,7 +55,8 @@ static void blocked(struct efs_raft*r,struct efs_raft_msg*m,uint64_t expected_te
  assert(efs_raft_snapshot(r)==EFS_ERR_BUSY&&efs_raft_step_down(r)==EFS_ERR_BUSY);
  assert(efs_raft_transfer(r,0)==EFS_ERR_BUSY&&efs_raft_read_begin(r)==EFS_ERR_BUSY);
  efs_raft_arm_durable(r); /* void entry cannot change durable/send coverage */
- assert(!efs_raft_read_control(r,m));
+ struct efs_raft_msg ordinary=*m;ordinary.leader_commit=1;
+ assert(!efs_raft_read_control(r,&ordinary));
  assert(!efs_raft_read_ready(r)&&!efs_raft_read_current(r)&&!efs_raft_read_pending(r));
  assert(!efs_raft_read_quorum(r)&&!efs_raft_read_done(r)&&!efs_raft_read_covers(r,0));
  assert(!efs_raft_read_proven(r,&round,&index)&&!round&&!index);
@@ -80,6 +82,20 @@ int main(void){for(int mode=0;mode<5;mode++)for(int failure=0;failure<2;failure+
   assert(h.published&&h.woken&&!h.published_commit[0]);
   assert(!h.acks[0]&&!h.votes[0]&&!h.applies[0]);struct efs_raft_msg probe=x.m[0];probe.nentries=0;probe.prev_index=probe.prev_term=probe.leader_commit=0;probe.last_log_index=42;probe.vote_granted=1;probe.term=mode==4?3:2;
   blocked(h.r[0],&probe,probe.term);
+  h.fail_read_vote=1;assert(!efs_raft_read_control(h.r[0],&probe)&&!h.read_votes);h.fail_read_vote=0;
+  assert(efs_raft_read_control(h.r[0],&probe)==(mode<=2));
+  assert(h.read_votes==(unsigned)(mode<=2));
+  const unsigned fields[]={0,1,2,3,4,5,6,7};
+  for(unsigned j=0;j<sizeof(fields)/sizeof(fields[0]);j++){
+   struct efs_raft_msg bad=probe;
+   switch(fields[j]){case 0:bad.term++;break;case 1:bad.boot_id++;break;
+    case 2:bad.from=2;break;case 3:bad.prev_index=1;break;
+    case 4:bad.leader_commit=1;break;case 5:bad.vote_granted=0;break;
+    case 6:bad.last_log_index=0;break;default:bad.group=2;break;}
+   assert(!efs_raft_read_control(h.r[0],&bad));
+  }
+  assert(h.read_votes==(unsigned)(mode<=2) && !h.acks[0] && !h.applies[0]);
+  assert(!efs_raft_read_ready(h.r[0]) && !efs_raft_read_quorum(h.r[0]));
   struct efs_raft_msg other[2]={x.m[0],x.m[1]};other[0].group=other[1].group=2;
   assert(efs_raft_recv_batch(h.r[1],other,2)==EFS_OK&&h.acks[1]==2&&h.applies[1]==2);
   assert(!h.acks[0]&&!h.applies[0]);pthread_mutex_unlock(&h.mu);

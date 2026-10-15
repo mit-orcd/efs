@@ -6752,6 +6752,9 @@ static int host_receive_persist(void *net, int (*persist)(void *), void *ctx)
     return rc;
 }
 
+static void
+host_container_pending_reads(struct efs_raft_host *h);
+
 /* h->mu and the pump's KV hold are owned on entry/return. Only a fully
  * returned recv_batch may hand off: its log barrier, replies and ordered apply
  * have finished (or the core has fenced failure). Publish that completed
@@ -6761,6 +6764,11 @@ static int host_receive_persist(void *net, int (*persist)(void *), void *ctx)
  * valid across handler/read-control admission between complete batches. */
 static void host_inbox_batch_handoff(struct efs_raft_host *h)
 {
+    /* Probes arriving during this batch's log barrier missed the network
+     * trylock/frozen core. Service them now, before another group's disk I/O.
+     * The completed batch owns all persistence/apply; the unchanged control
+     * helper grants only eligible votes and retains ordered receive/credits. */
+    host_container_pending_reads(h);
     for (int gi=0; gi<HOST_NGROUPS; gi++)
         if (h->g[gi].hosted) host_publish_view(h,gi);
     host_waiters_wake(h);
@@ -8028,7 +8036,10 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
     cfg.send = host_send;
     cfg.send_ready = host_send_ready;
     cfg.recv_persist = host_receive_persist;
-    cfg.preserve_ack_window = h->s && h->s->storage_engine;
+    /* Duplicate prefix ACKs cannot retire a newer outstanding batch, for
+     * either engine. Keeping the window avoids redundant durable rewrites;
+     * ordinary partial progress, negative replies and retry age are unchanged. */
+    cfg.preserve_ack_window = 1;
     {
         const char *mode = getenv("EFS_RAFT_BATCH_NOOP");
         if (mode && strcmp(mode, "0") && strcmp(mode, "1"))

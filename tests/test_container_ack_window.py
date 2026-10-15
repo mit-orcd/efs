@@ -4,6 +4,8 @@ from pathlib import Path
 import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 source=(root/'src/raft/raft.c').read_text()
+host=(root/'src/server/raft_host.c').read_text()
+assert 'cfg.preserve_ack_window = 1;' in host, 'ordinary files must retain the tested ACK-window protection'
 guard="""if (!r->preserve_ack_window || !in->success ||
             in->match_index >= r->ae_inflight[in->from])"""
 assert guard in source

@@ -17,6 +17,7 @@ struct efs_raft {
     int id;
     struct recv_replies *recv_replies; /* stack-owned, only inside recv_batch */
     int recv_persisting; /* group frozen while external serialization is handed off */
+    int recv_vote_safe; /* stable ordinary append: leadership contact only */
     uint64_t recv_stable_commit;
     efs_raft_recv_persist_fn recv_persist;
     efs_raft_admit_fn admit;
@@ -305,8 +306,12 @@ static int receive_store(struct efs_raft *r, enum receive_store_kind kind,
     /* Open cohorts already defer their writes to receive_persist at their
      * final barrier. Leader/election/configuration/snapshot paths retain their
      * existing serialization. Ordinary follower fallback owns its own phase. */
-    if (r->recv_persist && r->role==EFS_RAFT_FOLLOWER && !r->recv_replies)
-        return receive_persist(r,receive_store_run,&call,r->commit_index);
+    if (r->recv_persist && r->role==EFS_RAFT_FOLLOWER && !r->recv_replies) {
+        r->recv_vote_safe = kind==RECEIVE_APPEND && !is_cfg_cmd(cmd,len);
+        int rc=receive_persist(r,receive_store_run,&call,r->commit_index);
+        r->recv_vote_safe = 0;
+        return rc;
+    }
     return receive_store_run(&call);
 }
 
@@ -486,6 +491,27 @@ static void maybe_leave(struct efs_raft *r)
     }
 }
 
+/* Once a current-term certificate has proved an own-term commit, that
+ * committed fact survives newer ordinary suffix writes. Reuse only this fact,
+ * never its quorum contact for a new read. Context/configuration transitions
+ * already clear these certificates; index bounds reject a restored lower floor.
+ * In particular, view publication must not take the disk-log mutex behind an
+ * unrelated fsync just to rediscover the same immutable committed term. */
+static int read_own_term_committed(struct efs_raft *r)
+{
+    if (!r || r->storage_failed || r->role!=EFS_RAFT_LEADER) return 0;
+    if ((r->read_in_flight==2 && r->read_cfg_old==r->log_old &&
+         r->read_cfg_new==r->log_new && r->read_index<=r->commit_index) ||
+        (r->read_applied_round && r->read_applied_term==r->current_term &&
+         r->read_applied_cfg_old==r->log_old && r->read_applied_cfg_new==r->log_new &&
+         r->read_applied_index<=r->commit_index) ||
+        (r->read_proven_round && r->read_proven_term==r->current_term &&
+         r->read_proven_cfg_old==r->log_old && r->read_proven_cfg_new==r->log_new &&
+         r->read_proven_index<=r->commit_index)) return 1;
+    uint64_t term=0;
+    return log_term(r,r->commit_index,&term)==EFS_OK && term==r->current_term;
+}
+
 static int apply_committed(struct efs_raft *r)
 {
     if (r->recv_replies)
@@ -541,10 +567,8 @@ static int apply_committed(struct efs_raft *r)
         r->read_in_flight = 0;
     if (r->read_in_flight == 1 && r->role == EFS_RAFT_LEADER &&
         r->last_applied >= r->read_index && quorum_ok(r, r->read_acks)) {
-        uint64_t committed_term = 0;
         /* A leader must first commit an entry in its own term. */
-        if (log_term(r, r->commit_index, &committed_term) == EFS_OK &&
-            committed_term == r->current_term)
+        if (read_own_term_committed(r))
             r->read_in_flight = 2;
     }
     return EFS_OK;
@@ -2112,8 +2136,11 @@ static int recv_batch_finish(struct efs_raft *r, int prior)
     }
     /* Prepare: all command/reply ownership stays on this receive stack. The
      * barrier hook may release external serialization, but no protocol entry point may
-     * mutate this group or grant read authority until completion below. */
+     * mutate this group or grant local read authority until completion below.
+     * A prefix-zero leadership vote alone may use its stable prior context. */
+    r->recv_vote_safe = prior==EFS_OK && q->term==r->current_term && q->boot==r->boot_id;
     int rc = receive_persist(r,r->store->batch_end,r->store_ctx,q->commit_before);
+    r->recv_vote_safe = 0;
     int owned = r->recv_replies == q;
     if (BO_ON()) BO_HIST(BH_FOLLOW_TOTAL_US, efs_batch_obs_now_us()-q->obs_started);
     r->recv_replies = NULL;
@@ -2601,7 +2628,12 @@ static int broadcast_read_probe(struct efs_raft *r)
         m.type=EFS_RAFT_MSG_AE_REQ; m.to=to;
         m.vote_granted=1; /* Never clear an outstanding data batch. */
         /* Universal empty prefix grants only a fresh leadership vote. */
-        m.leader_commit=r->read_index;
+        /* This is a leadership vote, not replication or follower apply work.
+         * The read floor remains r->read_index and the leader must apply it.
+         * Ordinary data/commit heartbeats continue on their existing timer.
+         * Keeping the wire prefix entirely zero also lets the host coalesce
+         * superseded contexts and retire fully handled read-only probes. */
+        m.leader_commit=0;
         int rc;
         rc=send_msg(r,&m); /* stamps this newly admitted read-round context */
         if (rc!=EFS_OK) return rc;
@@ -2672,6 +2704,31 @@ int efs_raft_read_begin(struct efs_raft *r)
 int efs_raft_read_control(struct efs_raft *r,const struct efs_raft_msg *in)
 {
     uint64_t term=0;
+    /* A stable ordinary append cohort cannot change its already durable
+     * term/boot/configuration. A single ordinary append has the same stable
+     * context. While its suffix fsync is off-lock, acknowledge
+     * ONLY prefix-zero leadership contact from the same known leader. No log
+     * access, timer mutation, replication ACK, apply or local read authority.
+     * Send directly: send_msg would append this vote to the cohort's deferred
+     * replication replies. Hard-state/truncate/configuration phases stay frozen. */
+    if (r && in && r->recv_persisting && r->recv_vote_safe &&
+        !r->storage_failed && r->role==EFS_RAFT_FOLLOWER &&
+        !r->log_new && !r->app_new && r->log_old==r->app_old &&
+        in->type==EFS_RAFT_MSG_AE_REQ && in->to==r->id && in->group==r->group &&
+        in->from>=0 && in->from<EFS_RAFT_MAX_PEERS && in->from!=r->id &&
+        in->from==r->leader && in->term==r->current_term &&
+        r->peer_boot[in->from] &&
+        (in->boot_id?in->boot_id:1)==r->peer_boot[in->from] &&
+        is_voter(r,in->from) && is_voter(r,r->id) &&
+        in->last_log_index && in->vote_granted==1 && !in->success &&
+        !in->prev_index && !in->prev_term && !in->leader_commit &&
+        !in->match_index && !in->last_log_term && !in->nentries) {
+        struct efs_raft_msg reply={0};
+        reply.type=EFS_RAFT_MSG_AE_REP;reply.from=r->id;reply.to=in->from;
+        reply.group=r->group;reply.term=r->current_term;reply.boot_id=r->boot_id;
+        reply.success=1;reply.vote_granted=1;reply.last_log_index=in->last_log_index;
+        return r->send && r->send(r->net,&reply)==EFS_OK ? 1 : 0;
+    }
     if (!r || !in || r->storage_failed || r->recv_persisting || r->recv_replies ||
         in->to!=r->id || in->group!=r->group ||
         in->from<0 || in->from>=EFS_RAFT_MAX_PEERS || in->from==r->id ||
@@ -2737,7 +2794,7 @@ int efs_raft_read_control(struct efs_raft *r,const struct efs_raft_msg *in)
     if (current) {
         r->read_acks|=1u<<in->from;
         if (r->last_applied>=r->read_index && quorum_ok(r,r->read_acks) &&
-            log_term(r,r->commit_index,&term)==EFS_OK && term==r->current_term)
+            read_own_term_committed(r))
             r->read_in_flight=2;
     }
     return accounted ? 1 : 2; /* Progress-bearing replies still need recv. */
@@ -2785,13 +2842,11 @@ uint64_t efs_raft_read_context(const struct efs_raft *r)
 int efs_raft_read_quorum(const struct efs_raft *r)
 {
     if (r && r->recv_persisting) return 0;
-    uint64_t term=0;
     if (!r || r->storage_failed || r->role!=EFS_RAFT_LEADER ||
         !r->read_in_flight || r->read_cfg_old!=r->log_old ||
         r->read_cfg_new!=r->log_new || !quorum_ok(r,r->read_acks)) return 0;
     /* The same own-term commitment required by normal ReadIndex. */
-    return log_term((struct efs_raft *)r,r->commit_index,&term)==EFS_OK &&
-           term==r->current_term;
+    return read_own_term_committed((struct efs_raft *)r);
 }
 
 int efs_raft_read_proven(const struct efs_raft *r, uint64_t *round,

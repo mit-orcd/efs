@@ -5616,3 +5616,11 @@ existing semantic positives/negative controls, complete command cleanup,
 `make test` and docs-check to pass on the repaired integrated source. Do not
 replace asserted behavior with a skip or merely suppress the failing command.
 [Original failures and reproduction](../status/orcd-devel-qualification-20261015.md).
+
+
+**October 15 AMD follow-up (isolated branch):** `f6235bb73` repairs the LOOKUP
+stub and tests both null and present reader identity. `85a9ad6b5` regenerates
+architecture outputs and passes full native testing on AMD. Subsequent Raft
+changes have separate acceptance in the [AMD RDMA/direct ledger](../status/amd-rdma-posix-20261015.md).
+Enabled-command cleanup ownership remains NOTRUN in this commands-disabled
+profile; W120 is not closed and the earlier frozen-source FAIL is retained.
