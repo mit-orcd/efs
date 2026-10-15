@@ -48,35 +48,60 @@ struct efs_chunk_entry {
     struct efs_pack_ref packed; /* segment_id zero means ordinary base */
 };
 
-/* Decoded bytes depend on masks as well as immutable object names. */
+/* A late fetch retains the identity it captured. Include every byte/view
+ * dependency, not only the newest span, so an old completion cannot match a
+ * changed mapping merely because the base generation stayed the same. */
 static inline uint64_t efs_chunk_read_key(const struct efs_chunk_entry *ce)
 {
-    uint64_t g = ce->generation;
-    if (ce->packed.segment_id) {
-        g = (g ^ ce->packed.segment_id) * 1099511628211ull;
-        g = (g ^ ce->packed.segment_generation) * 1099511628211ull;
-        g = (g ^ ce->packed.offset) * 1099511628211ull;
-        g = (g ^ ce->packed.len) * 1099511628211ull;
-        for (unsigned i = 0; i < EFS_HASH_SIZE; i++) g = (g ^ ce->packed.digest[i]) * 1099511628211ull;
+    uint64_t g = 14695981039346656037ull;
+    if (ce->ndelta > EFS_CHUNK_DELTA_MAX ||
+        ce->read_view.count > EFS_FENCE_PART_MAX)
+        return 0;
+#define EFS_READ_KEY_VALUE(v) do { g = (g ^ (uint64_t)(v)) * 1099511628211ull; } while (0)
+    EFS_READ_KEY_VALUE(ce->ino);
+    EFS_READ_KEY_VALUE(ce->chunk_index);
+    EFS_READ_KEY_VALUE(ce->generation);
+    for (unsigned i = 0; i < EFS_NUM_FRAGMENTS; ++i) {
+        EFS_READ_KEY_VALUE(ce->fragment_nodes[i]);
+        for (unsigned j = 0; j < EFS_HASH_SIZE; ++j)
+            EFS_READ_KEY_VALUE(ce->checksums[i][j]);
     }
-    if (ce->ndelta) {
-        g ^= (uint64_t)ce->ndelta * 0x9E3779B97F4A7C15ULL;
-        g ^= ce->deltas[ce->ndelta - 1].generation;
-        g ^= ce->delta_seq;
-    }
-    if (ce->read_view.count) {
-        g = (g ^ ce->read_view.fence_epoch) * 1099511628211ull;
-        g = (g ^ ce->read_view.revision) * 1099511628211ull;
-        g = (g ^ ce->read_view.chunk_size) * 1099511628211ull;
-        g = (g ^ ce->read_view.count) * 1099511628211ull;
-        for (uint32_t i = 0; i < ce->read_view.count; ++i) {
-            const struct efs_fence_part *p = &ce->read_view.parts[i];
-            g = (g ^ p->epoch) * 1099511628211ull;
-            g = (g ^ p->off) * 1099511628211ull;
-            g = (g ^ p->len) * 1099511628211ull;
+    EFS_READ_KEY_VALUE(ce->ndelta);
+    EFS_READ_KEY_VALUE(ce->delta_seq);
+    for (uint32_t i = 0; i < ce->ndelta; ++i) {
+        const struct efs_chunk_delta *d = &ce->deltas[i];
+        EFS_READ_KEY_VALUE(d->off); EFS_READ_KEY_VALUE(d->len);
+        EFS_READ_KEY_VALUE(d->generation); EFS_READ_KEY_VALUE(d->seq);
+        for (unsigned j = 0; j < EFS_NUM_FRAGMENTS; ++j) {
+            EFS_READ_KEY_VALUE(d->nodes[j]);
+            for (unsigned k = 0; k < EFS_HASH_SIZE; ++k)
+                EFS_READ_KEY_VALUE(d->checksums[j][k]);
         }
     }
-    return g;
+    EFS_READ_KEY_VALUE(ce->packed.segment_id);
+    if (ce->packed.segment_id) {
+        EFS_READ_KEY_VALUE(ce->packed.ino);
+        EFS_READ_KEY_VALUE(ce->packed.inode_generation);
+        EFS_READ_KEY_VALUE(ce->packed.content_epoch);
+        EFS_READ_KEY_VALUE(ce->packed.record_generation);
+        EFS_READ_KEY_VALUE(ce->packed.segment_generation);
+        EFS_READ_KEY_VALUE(ce->packed.geometry);
+        EFS_READ_KEY_VALUE(ce->packed.publication_group);
+        EFS_READ_KEY_VALUE(ce->packed.offset); EFS_READ_KEY_VALUE(ce->packed.len);
+        for (unsigned i = 0; i < EFS_HASH_SIZE; ++i)
+            EFS_READ_KEY_VALUE(ce->packed.digest[i]);
+    }
+    EFS_READ_KEY_VALUE(ce->read_view.fence_epoch);
+    EFS_READ_KEY_VALUE(ce->read_view.revision);
+    EFS_READ_KEY_VALUE(ce->read_view.chunk_size);
+    EFS_READ_KEY_VALUE(ce->read_view.count);
+    for (uint32_t i = 0; i < ce->read_view.count; ++i) {
+        EFS_READ_KEY_VALUE(ce->read_view.parts[i].epoch);
+        EFS_READ_KEY_VALUE(ce->read_view.parts[i].off);
+        EFS_READ_KEY_VALUE(ce->read_view.parts[i].len);
+    }
+#undef EFS_READ_KEY_VALUE
+    return g ? g : 1;
 }
 
 struct efs_inode {

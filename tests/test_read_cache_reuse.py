@@ -43,6 +43,16 @@ int main(void) {
     CHANGE(changed.read_view.parts[2].off++);
     CHANGE(changed.packed.segment_id++); CHANGE(changed.packed.record_generation++);
     CHANGE(changed.packed.digest[0]++);
+    struct efs_chunk_entry copy;
+    uint64_t key=efs_chunk_read_key(&ce);
+#define KEY_CHANGE(expr) do {copy=ce;expr;assert(efs_chunk_read_key(&copy)!=key);} while(0)
+    KEY_CHANGE(copy.deltas[0].generation++);
+    KEY_CHANGE(copy.deltas[0].seq++); KEY_CHANGE(copy.deltas[0].off++);
+    KEY_CHANGE(copy.deltas[0].len++); KEY_CHANGE(copy.deltas[0].nodes[1]++);
+    KEY_CHANGE(copy.deltas[0].checksums[1][0]++);
+    KEY_CHANGE(copy.fragment_nodes[2]++); KEY_CHANGE(copy.checksums[2][31]++);
+    KEY_CHANGE(copy.read_view.parts[1].epoch++);
+    KEY_CHANGE(copy.read_view.parts[1].len++);
     changed=r;changed.deltas[7].len++;assert(chunk_rec_same_read(&ce,&changed));
     changed=r;changed.chunk_generation=0;changed.base_gen=91;
     assert(chunk_rec_same_read(&ce,&changed));
