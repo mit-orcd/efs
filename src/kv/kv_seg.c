@@ -44,6 +44,9 @@ struct blk_ref {
  * paid the disk again. Slots keep those blocks resident. Each block is
  * about 8 KiB, so this is a couple of megabytes per segment. */
 #define KV_SEG_CACHE_SLOTS 256
+/* Optional indexes are bounded independently of block/value size. */
+#define KV_BLOCK_HASH_BYTES_MAX (16u * 1024u)
+#define KV_SEG_HASH_BYTES_MAX (128u * 1024u)
 
 struct seg_cslot {
     uint32_t bi;
@@ -52,6 +55,8 @@ struct seg_cslot {
     uint8_t *blk;
     uint32_t *entries; /* offsets of validated sorted records in blk */
     uint32_t nentries;
+    uint32_t *hash; /* record offset + 1; zero is an empty bucket */
+    uint32_t hash_slots;
     int valid;
 };
 
@@ -74,6 +79,7 @@ struct kv_seg {
     uint32_t refs;
     char *path; /* open path; a private reopen for export */
     char *doom; /* unlink this path when refs hits 0 */
+    uint32_t hash_bytes; /* protected by the owning LSM mutex */
     struct seg_cslot cslot[KV_SEG_CACHE_SLOTS];
 };
 
@@ -490,6 +496,7 @@ static void seg_free(struct kv_seg *s)
     for (i = 0; i < KV_SEG_CACHE_SLOTS; i++) {
         free(s->cslot[i].blk);
         free(s->cslot[i].entries);
+        free(s->cslot[i].hash);
     }
     if (s->fd >= 0)
         close(s->fd);
@@ -671,7 +678,7 @@ static int index_block(const uint8_t *blk, uint32_t len,
     return EFS_OK;
 }
 
-static int search_block(const struct seg_cslot *c, const uint8_t *key,
+static int search_block_binary(const struct seg_cslot *c, const uint8_t *key,
                          uint32_t klen, struct kv_buf *val, uint8_t *op)
 {
     uint32_t lo = 0, hi = c->nentries;
@@ -686,6 +693,63 @@ static int search_block(const struct seg_cslot *c, const uint8_t *key,
             *op = c->blk[off];
             return kv_buf_set(val, c->blk + off + 9 + kl, get_u32(c->blk + off + 5));
         }
+    }
+    return EFS_ERR_NOT_FOUND;
+}
+
+/* Full keys include embedded zeros and shared inode/lane prefixes. This is
+ * only an accelerator: every occupied-bucket hit verifies length and bytes. */
+static uint64_t block_key_hash(const uint8_t *key, uint32_t klen)
+{
+    uint64_t h = UINT64_C(14695981039346656037);
+    for (uint32_t i = 0; i < klen; ++i)
+        h = (h ^ key[i]) * UINT64_C(1099511628211);
+    return h ^ (h >> 32);
+}
+
+/* Called only after complete block and inter-block ordering validation.
+ * Keep binary search for small/oversized blocks, budget or allocation refusal.
+ * The table has at least twice as many buckets as records, so probing ends. */
+static uint32_t block_hash_build(struct seg_cslot *c, uint32_t available)
+{
+    if (c->nentries < 8 || c->nentries > KV_BLOCK_HASH_BYTES_MAX / 8)
+        return 0;
+    uint32_t slots = 16;
+    while (slots < 2 * c->nentries)
+        slots *= 2;
+    uint32_t bytes = slots * sizeof(uint32_t);
+    if (bytes > available)
+        return 0;
+    uint32_t *table = calloc(slots, sizeof(*table));
+    if (!table)
+        return 0;
+    for (uint32_t i = 0; i < c->nentries; ++i) {
+        uint32_t off = c->entries[i], kl = get_u32(c->blk + off + 1);
+        uint32_t at = (uint32_t)block_key_hash(c->blk + off + 9, kl) & (slots - 1);
+        while (table[at])
+            at = (at + 1) & (slots - 1);
+        table[at] = off + 1;
+    }
+    c->hash = table;
+    c->hash_slots = slots;
+    return bytes;
+}
+
+static int search_block(const struct seg_cslot *c, const uint8_t *key,
+                        uint32_t klen, struct kv_buf *val, uint8_t *op)
+{
+    if (!c->hash)
+        return search_block_binary(c, key, klen, val, op);
+    uint32_t at = (uint32_t)block_key_hash(key, klen) & (c->hash_slots - 1);
+    while (c->hash[at]) {
+        uint32_t off = c->hash[at] - 1;
+        if (get_u32(c->blk + off + 1) == klen &&
+            !memcmp(c->blk + off + 9, key, klen)) {
+            *op = c->blk[off];
+            return kv_buf_set(val, c->blk + off + 9 + klen,
+                              get_u32(c->blk + off + 5));
+        }
+        at = (at + 1) & (c->hash_slots - 1);
     }
     return EFS_ERR_NOT_FOUND;
 }
@@ -775,13 +839,16 @@ int kv_seg_install(struct kv_seg *s, const struct kv_seg_io *io, uint8_t *blk,
     }
     if (rc != EFS_OK) { free(entries); free(blk); return rc; }
     c = &s->cslot[io->bi % KV_SEG_CACHE_SLOTS];
-    free(c->blk); free(c->entries);
+    s->hash_bytes -= c->hash_slots * sizeof(uint32_t);
+    free(c->blk); free(c->entries); free(c->hash);
+    c->hash = NULL; c->hash_slots = 0;
     c->entries = entries; c->nentries = count;
     c->blk = blk;
     c->bi = io->bi;
     c->len = io->len;
     c->off = io->off;
     c->valid = 1;
+    s->hash_bytes += block_hash_build(c, KV_SEG_HASH_BYTES_MAX - s->hash_bytes);
     if (io->bi + 1 == s->nblocks) {
         uint32_t tail = entries[count - 1];
         seg_note_last(s, blk + tail + 9, get_u32(blk + tail + 1));

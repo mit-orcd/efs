@@ -21,14 +21,12 @@
  *   index:     nblocks × (u32 klen · key · u64 off · u32 len)  -- first key
  *   footer:    u64 index_off · u32 index_len · u32 nblocks · u32 magic
  *              u32 version · u32 crc32(first 24B) · u32 pad
- * Only the index is resident, so RAM per segment is one key per block. */
+ * The block index is resident; live readers also use bounded cached blocks. */
 
-/* A block is searched linearly (search_block, kv_msrc_advance). At 64 KiB
- * that memcmp was half of efsd's CPU on a dual-host replica under the
- * 144-way mkdir hammer (perf, Sep 26). 8 KiB is 8x fewer compares per
- * get/scan for ~8 MB of resident index per GiB of table. Readers take
- * any block size, so old segments stay valid until compaction rewrites
- * them. */
+/* The historical linear get/scan path made 64 KiB blocks expensive under
+ * the 144-way mkdir workload. Point reads now index cached records; scans
+ * still traverse records. Retain the 8 KiB target and existing disk format.
+ * Readers accept older block sizes until compaction rewrites them. */
 #define KV_LSM_BLOCK_TARGET (8u * 1024u)
 #define KV_LSM_MEM_DEFAULT  (4u * 1024u * 1024u)
 #define KV_LSM_L0_DEFAULT   4u
