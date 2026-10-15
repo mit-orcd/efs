@@ -5481,8 +5481,9 @@ static void efs_fuse_init(void *userdata, struct fuse_conn_info *conn)
      * fuse_config on the low-level API. */
     if (conn) {
         uint32_t want = fuse_io_limit();
-        if (conn->max_write == 0 || conn->max_write > want)
-            conn->max_write = want;
+        /* Set the requested limit, rather than retaining libfuse's smaller
+         * default. libfuse/kernel clamp unsupported buffer/page capacities. */
+        conn->max_write = want;
         if (conn->max_readahead == 0 || conn->max_readahead > (16u << 20))
             conn->max_readahead = 16u << 20;
         if (conn->max_background < 128)
@@ -7906,11 +7907,8 @@ static int efs_fuse_parse_cmdline(struct fuse_args *args,
 {
     if(!args || args->argc<1 || !args->argv)return -1;
     struct fuse_args configured=FUSE_ARGS_INIT(0,NULL);
-    char io_option[64];
-    snprintf(io_option, sizeof(io_option), "-omax_write=%u", fuse_io_limit());
     for(int i=0;i<args->argc;i++) {
         if(fuse_opt_add_arg(&configured,args->argv[i])!=0)goto failed;
-        if(i==0 && fuse_opt_add_arg(&configured,io_option)!=0)goto failed;
         if(i==0 && fuse_opt_add_arg(&configured,
             "-omax_threads=32,max_idle_threads=8")!=0)goto failed;
     }
