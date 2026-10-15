@@ -313,9 +313,85 @@ static uint32_t pull_group_end(uint32_t start, uint32_t end)
     return next > end ? end : (uint32_t)next;
 }
 
+/* Read-mapping freshness (EFS_READ_MAP_TTL_MS, default 200, 0 = refresh on
+ * every read, max 10000). A read refreshes its chunks' mappings because a
+ * peer's span can change a chunk without moving its base generation. A
+ * mapping pulled successfully within the last TTL ms is trusted: reads skip
+ * the GETCHUNKS round trip, and another client's publication can stay
+ * invisible to this client for up to TTL ms (NFS-style attribute caching).
+ * This client's own writes update the local map and are always visible.
+ * A sequential 1 MiB reader re-asked for mappings a median 153 ms after
+ * prefetch fetched them (Oct 15 Intel trace, 89.5% of its GETCHUNKS).
+ * Direct-mapped per (ino, ci); a collision only costs a refresh. */
+#define MAP_FRESH_SLOTS 65536u
+#define MAP_FRESH_STRIPES 64u
+static struct { efs_ino_t ino; uint32_t ci; uint64_t ms; } map_fresh[MAP_FRESH_SLOTS];
+static pthread_mutex_t map_fresh_mu[MAP_FRESH_STRIPES];
+static pthread_once_t map_fresh_once = PTHREAD_ONCE_INIT;
+static uint32_t map_fresh_ttl;
+
+static void map_fresh_init(void)
+{
+    for (uint32_t i = 0; i < MAP_FRESH_STRIPES; i++)
+        pthread_mutex_init(&map_fresh_mu[i], NULL);
+    const char *e = getenv("EFS_READ_MAP_TTL_MS");
+    unsigned long v = e && *e ? strtoul(e, NULL, 10) : 200;
+    map_fresh_ttl = v > 10000 ? 10000 : (uint32_t)v;
+}
+
+static uint64_t map_fresh_now_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000;
+}
+
+static uint32_t map_fresh_slot(efs_ino_t ino, uint32_t ci)
+{
+    uint64_t h = (uint64_t)ino * 0x9E3779B97F4A7C15ULL ^ (uint64_t)ci * 0xC2B2AE3D27D4EB4FULL;
+    return (uint32_t)(h >> 40) & (MAP_FRESH_SLOTS - 1);
+}
+
+/* Stamp [ci0, ci1) as pulled at `ms` (taken before the pull started). */
+static void map_fresh_mark(efs_ino_t ino, uint32_t ci0, uint32_t ci1, uint64_t ms)
+{
+    pthread_once(&map_fresh_once, map_fresh_init);
+    if (!map_fresh_ttl)
+        return;
+    for (uint32_t ci = ci0; ci < ci1; ci++) {
+        uint32_t s = map_fresh_slot(ino, ci);
+        pthread_mutex_t *mu = &map_fresh_mu[s & (MAP_FRESH_STRIPES - 1)];
+        pthread_mutex_lock(mu);
+        map_fresh[s].ino = ino;
+        map_fresh[s].ci = ci;
+        map_fresh[s].ms = ms;
+        pthread_mutex_unlock(mu);
+    }
+}
+
+int efs_client_map_fresh(efs_ino_t ino, uint32_t ci0, uint32_t ci1)
+{
+    pthread_once(&map_fresh_once, map_fresh_init);
+    if (!map_fresh_ttl || ci0 >= ci1)
+        return 0;
+    uint64_t now = map_fresh_now_ms();
+    for (uint32_t ci = ci0; ci < ci1; ci++) {
+        uint32_t s = map_fresh_slot(ino, ci);
+        pthread_mutex_t *mu = &map_fresh_mu[s & (MAP_FRESH_STRIPES - 1)];
+        pthread_mutex_lock(mu);
+        int ok = map_fresh[s].ino == ino && map_fresh[s].ci == ci &&
+                 now - map_fresh[s].ms < map_fresh_ttl;
+        pthread_mutex_unlock(mu);
+        if (!ok)
+            return 0;
+    }
+    return 1;
+}
+
 static int pull_chunks_range(efs_ino_t ino, uint32_t start_ci, uint32_t end_ci,
                              struct pull_absent *ab)
 {
+    uint64_t pulled_ms = map_fresh_now_ms();
     if (!ino || start_ci >= end_ci)
         return EFS_OK;
     uint32_t start = start_ci;
@@ -361,6 +437,7 @@ static int pull_chunks_range(efs_ino_t ino, uint32_t start_ci, uint32_t end_ci,
         }
         start = group_end;
     }
+    map_fresh_mark(ino, start_ci, end_ci, pulled_ms);
     return EFS_OK;
 }
 

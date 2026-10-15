@@ -1994,8 +1994,9 @@ int efs_client_read_refs(efs_ino_t ino, uint64_t offset, size_t size,
     for (uint32_t i = 0; i < size / cs; ++i)
         if (!rdcache_ready(ino, (uint32_t)(offset / cs) + i, cs))
             return 0;
-    if (efs_client_pull_chunks_range(ino, (uint32_t)(offset / cs),
-            (uint32_t)((offset + size - 1) / cs) + 1) != EFS_OK)
+    uint32_t rci0 = (uint32_t)(offset / cs), rci1 = (uint32_t)((offset + size - 1) / cs) + 1;
+    if (!efs_client_map_fresh(ino, rci0, rci1) &&
+        efs_client_pull_chunks_range(ino, rci0, rci1) != EFS_OK)
         return 0;
     int window_rc = efs_dcache_put_win_wait(ino);
     if (window_rc < 0)
@@ -2140,7 +2141,8 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
          * from our own fold stays "current" and hides them. The batch
          * path paints spans onto a decoded-cache hit; this 2 KiB path
          * must not return that hit raw (peer_overlap_pwrite_chunk_straddle). */
-        int prc = efs_client_pull_chunks_range(ino, ci, ci + 1);
+        int prc = efs_client_map_fresh(ino, ci, ci + 1) ? EFS_OK
+                : efs_client_pull_chunks_range(ino, ci, ci + 1);
         if (prc != EFS_OK && prc != EFS_ERR_NOT_FOUND)
             return prc;
         if (efs_dcache_copy(ino, ci, off, (uint8_t *)buf, (uint32_t)size) == 0) {
@@ -2207,17 +2209,17 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
 
         /* Index lookup is idx_mu, not the table lock — g_client.lock is held
          * across serialize/snapshot and would stall every multi-job read. */
+        int fresh = batch && efs_client_map_fresh(ino, jobs[0].ci, jobs[batch - 1].ci + 1);
         pthread_mutex_lock(&g_client.idx_mu);
         for (uint32_t i = 0; i < batch; i++) {
             struct efs_chunk_entry ce;
             int got = efs_export_get_chunk(&g_client.export, jobs[i].ino,
                                            jobs[i].ci, &ce) == EFS_OK;
-            (void)got;
-            (void)ce;
             /* A peer span does not move the base generation. A local
-             * row with ndelta==0 is not proof the map is complete.
-             * Re-pull before painting. */
-            jobs[i].have_ce = 0;
+             * row with ndelta==0 is not proof the map is complete:
+             * re-pull before painting, unless this client pulled the
+             * mapping within EFS_READ_MAP_TTL_MS. */
+            jobs[i].have_ce = got && fresh;
         }
         pthread_mutex_unlock(&g_client.idx_mu);
 

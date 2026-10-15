@@ -20,6 +20,8 @@ void efs_client_rpc_set_deadline_ms(uint64_t d) {deadline=d;}
 int efs_client_rpc_past_deadline(void) {return 0;}
 static void pull_absent_mark(struct pull_absent *ab,uint32_t lo,uint32_t hi) {(void)ab;assert(lo>=lower&&hi<=upper&&lo<hi);}
 static void apply_chunk_recs(efs_ino_t ino,const struct efs_chunk_rec *r,uint32_t n) {(void)ino;(void)r;(void)n;}
+static uint64_t map_fresh_now_ms(void) {return 7;}
+static void map_fresh_mark(efs_ino_t ino,uint32_t a,uint32_t b,uint64_t ms) {(void)ino;assert(a>=lower&&b<=upper&&a<b&&ms==7);}
 static int fake_view(const struct efs_chunk_rec *r) {(void)r;return EFS_OK;}
 #define efs_chunk_rec_view_valid fake_view
 int efs_client_rpc_getchunks(efs_export_id_t ex,efs_ino_t ino,uint32_t start,struct efs_chunk_rec *r,uint32_t *n) {(void)ex;(void)ino;(void)r;assert(start>=lower&&start<upper&&*n>0&&*n<=64);__sync_fetch_and_add(&calls,1);*n=0;return EFS_OK;}
