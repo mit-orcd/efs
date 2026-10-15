@@ -1,3 +1,10 @@
+[Intel indexed pressure/background draining](intel-pressure-drain-20261014.md):
+**Implementation qualification in progress; mounted deployment pending.**
+Fixed shard-owned slot bitmaps replace full cache/chain walks. One coalesced
+worker runs the existing ordered drain while successful writes keep their
+reservations; hard budget refusal retains bounded foreground fallback.
+Focused native/sanitizer and EOF/REPORT regression checks pass locally.
+
 [Intel post-batching live profile](intel-post-sync-profile-20261014.md):
 **Read-only capture PASS; next optimization proposed, NOT IMPLEMENTED.**
 User AMD dd observed at about 71 MiB/s with xorinox crawl active. Client

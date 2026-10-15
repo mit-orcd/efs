@@ -1494,6 +1494,13 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**Implementation qualification in progress; mounted deployment pending.**
+Fixed shard-owned slot bitmaps replace full cache/chain walks. One coalesced
+worker runs the existing ordered drain while successful writes keep their
+reservations; hard budget refusal retains bounded foreground fallback.
+Focused native/sanitizer and EOF/REPORT regression checks pass locally.
+
+[Intel post-batching live profile](../status/intel-post-sync-profile-20261014.md):
 **Read-only capture PASS; next optimization proposed, NOT IMPLEMENTED.**
 User AMD dd observed at about 71 MiB/s with xorinox crawl active. Client
 write admission accounts for 66.4% of sampled user cycles, including full-cache

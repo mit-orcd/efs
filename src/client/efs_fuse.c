@@ -3311,6 +3311,95 @@ static int efs_append_flush_report(struct fuse_file_info *fi, efs_ino_t ino)
     return rc;
 }
 
+/* One coalesced pressure wakeup, no payload/entry ownership in the queue.
+ * The existing ordered drain owns all data and errors. Successful admission
+ * keeps its reservation; only real budget refusal takes the foreground path.
+ * Shutdown joins this worker before writeback or client state is destroyed. */
+static struct {
+    pthread_mutex_t mu;
+    pthread_cond_t cv;
+    pthread_t thread;
+    int started, pending, stop;
+} g_pressure = { .mu = PTHREAD_MUTEX_INITIALIZER,
+                 .cv = PTHREAD_COND_INITIALIZER };
+
+static void *fuse_pressure_main(void *unused)
+{
+    efs_ino_t after = 0;
+    (void)unused;
+    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+    pthread_mutex_lock(&g_pressure.mu);
+    for (;;) {
+        while (!g_pressure.pending && !g_pressure.stop)
+            pthread_cond_wait(&g_pressure.cv, &g_pressure.mu);
+        if (g_pressure.stop)
+            break;
+        g_pressure.pending = 0;
+        pthread_mutex_unlock(&g_pressure.mu);
+        for (int n = 0; n < 16 && efs_buf_should_drain(); ++n) {
+            pthread_mutex_lock(&g_pressure.mu);
+            int stop = g_pressure.stop;
+            pthread_mutex_unlock(&g_pressure.mu);
+            if (stop)
+                break;
+            efs_ino_t ino = efs_dcache_pressure_ino(after);
+            if (!ino && after) {
+                after = 0;
+                ino = efs_dcache_pressure_ino(0);
+            }
+            if (!ino)
+                break;
+            after = ino;
+            efs_buf_drain_enter();
+            int rc = efs_append_flush_report(NULL, ino);
+            efs_buf_drain_leave();
+            if (rc != EFS_OK) {
+                /* No success acknowledgement or retirement on failure. The
+                 * existing drain retains data and uncertain REPORT ownership;
+                 * fsync/close/next pressure must resolve it in the usual way. */
+                fprintf(stderr, "background-pressure ino=%llu rc=%d retained\n",
+                        (unsigned long long)ino, rc);
+                break;
+            }
+            efs_rdcache_trim();
+            efs_dcache_trim_metadata();
+        }
+        pthread_mutex_lock(&g_pressure.mu);
+    }
+    pthread_mutex_unlock(&g_pressure.mu);
+    return NULL;
+}
+
+static int fuse_pressure_kick(void)
+{
+    pthread_mutex_lock(&g_pressure.mu);
+    int ready = !g_pressure.stop;
+    if (ready && !g_pressure.started) {
+        ready = pthread_create(&g_pressure.thread, NULL, fuse_pressure_main, NULL) == 0;
+        g_pressure.started = ready;
+    }
+    if (ready) {
+        g_pressure.pending = 1;
+        pthread_cond_signal(&g_pressure.cv);
+    }
+    pthread_mutex_unlock(&g_pressure.mu);
+    return ready;
+}
+
+static void fuse_pressure_stop(void)
+{
+    pthread_mutex_lock(&g_pressure.mu);
+    g_pressure.stop = 1;
+    pthread_cond_broadcast(&g_pressure.cv);
+    int started = g_pressure.started;
+    pthread_mutex_unlock(&g_pressure.mu);
+    if (started)
+        pthread_join(g_pressure.thread, NULL);
+    pthread_mutex_lock(&g_pressure.mu);
+    g_pressure.started = 0;
+    pthread_mutex_unlock(&g_pressure.mu);
+}
+
 /* utimens(mtime) on an inode with buffered writes: publish them first
  * (the same flush+REPORT close would run) so the SETATTR that follows
  * is the later event on the server. Clean inode: nothing. */
@@ -3594,7 +3683,8 @@ static int fuse_write_admit(size_t size)
     bytes = chunks * 4 * unit;
     admission = efs_buf_reserve_request(bytes, chunks * EFS_DCACHE_ENTRY_BUDGET);
     int early_drain = admission == 0;
-    if (admission == 0 && !efs_buf_should_drain())
+    if (admission == 0 &&
+        (!efs_buf_should_drain() || fuse_pressure_kick()))
         return 0;
     if (admission == 0) {
         efs_buf_unreserve();
@@ -3620,7 +3710,7 @@ static int fuse_write_admit(size_t size)
     efs_dcache_trim_metadata();
     admission = efs_buf_reserve_request(bytes, chunks * EFS_DCACHE_ENTRY_BUDGET);
     if (admission == 0) {
-        if (!efs_buf_should_drain() || !efs_dcache_pressure_ino(0))
+        if (!efs_buf_should_drain() || fuse_pressure_kick() || !efs_dcache_pressure_ino(0))
             return 0;
         efs_buf_unreserve();
         admission = EFS_ERR_BUSY;
@@ -4858,6 +4948,7 @@ static int efs_control_drain(uint64_t deadline, int force)
 static void efs_fuse_destroy(void *userdata)
 {
     (void)userdata;
+    fuse_pressure_stop();
     int wrc = efs_wb_sync();
     int drc = efs_dcache_flush_all();
     efs_client_pack_stop();

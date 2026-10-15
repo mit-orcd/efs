@@ -3555,6 +3555,11 @@ static struct {
     pthread_mutex_t shard_io[DCACHE_SHARDS];
     struct dcache_ent e[DCACHE_SLOTS];
     struct dcache_ent *dirty_head[DCACHE_SHARDS];
+    /* Conservative slot indexes, owned by the slot's shard lock. Set before
+     * dirty/PUT publication or chain insertion; clear only after revalidation.
+     * Stale bits are harmless. No allocation or entry pointers escape locks. */
+    uint64_t pressure_slots[DCACHE_SHARDS][DCACHE_SLOTS / DCACHE_SHARDS / 64];
+    uint64_t chain_slots[DCACHE_SHARDS][DCACHE_SLOTS / DCACHE_SHARDS / 64];
     int inited;
     uint64_t dirty_bytes;
 } g_dcache;
@@ -3618,6 +3623,14 @@ static pthread_mutex_t *dcache_io_mu(uint32_t slot)
     return &g_dcache.shard_io[slot & (DCACHE_SHARDS - 1)];
 }
 
+/* Caller holds the slot shard. Each shard owns independent bitmap words. */
+static void dcache_index_set(uint64_t index[DCACHE_SHARDS][DCACHE_SLOTS / DCACHE_SHARDS / 64],
+                             uint32_t slot)
+{
+    uint32_t bit = slot / DCACHE_SHARDS;
+    index[slot % DCACHE_SHARDS][bit / 64] |= UINT64_C(1) << (bit % 64);
+}
+
 /* Caller holds the shard mutex for `slot`. */
 static void dcache_dirty_link(struct dcache_ent *e, uint32_t slot)
 {
@@ -3656,6 +3669,7 @@ static void dcache_dirty_unlink(struct dcache_ent *e, uint32_t slot)
 
 static void dcache_set_dirty(struct dcache_ent *e, uint32_t slot)
 {
+    dcache_index_set(g_dcache.pressure_slots, slot);
     e->dirty = 1;
     dcache_dirty_link(e, slot);
 }
@@ -3825,6 +3839,7 @@ static int dcache_put_now_budgeted(efs_ino_t ino, uint32_t ci, const uint8_t *ch
         pthread_mutex_lock(dcache_mu(sl));
         de = dcache_find_meta(sl, ino, ci);
         if (de && (!snap_seq || snap_seq >= de->object_seq)) {
+            dcache_index_set(g_dcache.pressure_slots, sl);
             de->object_gen = obj;
             de->object_seq = snap_seq;
             de->object_span_base_gen = base_gen;
@@ -3918,21 +3933,30 @@ static struct dcache_ent *dcache_chain_reuse(uint32_t s)
 void efs_dcache_trim_metadata(void)
 {
     dcache_ensure();
-    for (uint32_t s = 0; s < DCACHE_SLOTS; ++s) {
-        pthread_mutex_t *mu = dcache_mu(s);
-        pthread_mutex_lock(mu);
-        struct dcache_ent *prev = &g_dcache.e[s];
-        while (prev->next) {
-            struct dcache_ent *e = prev->next;
-            if (dcache_metadata_idle(e)) {
-                prev->next = e->next;
-                efs_writer_state_free(e->writer);
-                efs_buf_metadata_free(e, sizeof(*e));
-            } else {
-                prev = e;
+    for (uint32_t sh = 0; sh < DCACHE_SHARDS; ++sh) {
+        pthread_mutex_lock(&g_dcache.shard[sh]);
+        for (uint32_t w = 0; w < DCACHE_SLOTS / DCACHE_SHARDS / 64; ++w) {
+            uint64_t bits = g_dcache.chain_slots[sh][w];
+            while (bits) {
+                unsigned bit = (unsigned)__builtin_ctzll(bits);
+                uint32_t s = (w * 64 + bit) * DCACHE_SHARDS + sh;
+                struct dcache_ent *prev = &g_dcache.e[s];
+                while (prev->next) {
+                    struct dcache_ent *e = prev->next;
+                    if (dcache_metadata_idle(e)) {
+                        prev->next = e->next;
+                        efs_writer_state_free(e->writer);
+                        efs_buf_metadata_free(e, sizeof(*e));
+                    } else {
+                        prev = e;
+                    }
+                }
+                if (!g_dcache.e[s].next)
+                    g_dcache.chain_slots[sh][w] &= ~(UINT64_C(1) << bit);
+                bits &= bits - 1;
             }
         }
-        pthread_mutex_unlock(mu);
+        pthread_mutex_unlock(&g_dcache.shard[sh]);
     }
 }
 
@@ -4967,12 +4991,25 @@ efs_ino_t efs_dcache_pressure_ino(efs_ino_t after)
     dcache_ensure();
     for (uint32_t sh = 0; sh < DCACHE_SHARDS; sh++) {
         pthread_mutex_lock(&g_dcache.shard[sh]);
-        for (uint32_t s = sh; s < DCACHE_SLOTS; s += DCACHE_SHARDS)
-            for (struct dcache_ent *e = &g_dcache.e[s]; e; e = e->next)
-                if (e->ino > after && (e->data || e->object_gen) &&
-                    dcache_keep_on_drop(e) &&
-                    (!found || e->ino < found))
-                    found = e->ino;
+        for (uint32_t w = 0; w < DCACHE_SLOTS / DCACHE_SHARDS / 64; ++w) {
+            uint64_t bits = g_dcache.pressure_slots[sh][w];
+            while (bits) {
+                unsigned bit = (unsigned)__builtin_ctzll(bits);
+                uint32_t s = (w * 64 + bit) * DCACHE_SHARDS + sh;
+                int retained = 0;
+                for (struct dcache_ent *e = &g_dcache.e[s]; e; e = e->next) {
+                    if ((e->data || e->object_gen) && dcache_keep_on_drop(e)) {
+                        retained = 1;
+                        if (e->ino > after && (!found || e->ino < found))
+                            found = e->ino;
+                    }
+                }
+                /* Never clear just because this inode is before the cursor. */
+                if (!retained)
+                    g_dcache.pressure_slots[sh][w] &= ~(UINT64_C(1) << bit);
+                bits &= bits - 1;
+            }
+        }
         pthread_mutex_unlock(&g_dcache.shard[sh]);
     }
     return found;
@@ -5454,6 +5491,7 @@ static int dcache_store(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
     if (!reused) {
         n->next = head->next;
         head->next = n;
+        dcache_index_set(g_dcache.chain_slots, s);
     }
     pthread_mutex_unlock(mu);
     dcache_account_extra(ino, ci);
@@ -5519,6 +5557,7 @@ static int dcache_store_owned_locked(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
     if (!reused) {
         n->next = head->next;
         head->next = n;
+        dcache_index_set(g_dcache.chain_slots, s);
     }
     return 0;
 }
