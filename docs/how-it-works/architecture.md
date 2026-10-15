@@ -244,8 +244,17 @@ this list, before it ships.
   publication machine; both callbacks explicitly publish before replying).
   Mount `-o sync` acceptance remains separately owed under W73. An
   `fsync` drains this client's pending publishes of the file that precede
-  it — one in flight, or retrying on contention, is awaited; it never
-  waits for another client's writes. A transient failure of that drain
+  it — one in flight, or retrying on contention, is awaited. It then sends
+  DATA_COMMIT to every current storage node, covering already-acknowledged
+  peer data too; it does not drain another client's unpublished buffer.
+  PUT acknowledgement is asynchronous. PUT and COMMIT carry a nonzero
+  per-process boot verifier: losing an unresolved verifier returns sticky
+  EIO, because the client may no longer retain retransmission bytes.
+  An unclean storage-root restart fences COMMIT even for a fresh client;
+  a checksum scan alone cannot prove that every published create survived.
+  This fence persists across orderly restarts until verified recovery or
+  a fresh format; no automatic recovery is implemented by this change.
+  See [AMD durability fixes](../status/amd-async-durability-20261015.md). A transient failure of that drain
   (transport, RPC budget, node down) returns EIO from that call with the
   bytes retained as pending; the next `fsync` retries. If a publish of
   the file has been classified **stalled** (D27, [decisions.md](../status/decisions.md): repeated

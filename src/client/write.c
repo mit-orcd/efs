@@ -2502,15 +2502,16 @@ static int put_recv_reply(efs_node_id_t nid, struct efs_conn *conn,
                           efs_ino_t ino, uint32_t ci, uint8_t fi)
 {
     uint8_t reply_type = 0, status = 0, path = 0xff;
-    if (efs_conn_recv_put_reply(conn, &reply_type, &status, &path) != 0 ||
-        reply_type != EFS_MSG_PUT_CHUNK_REPLY) {
+    uint64_t epoch = 0;
+    if (efs_conn_recv_put_reply(conn, &reply_type, &status, &path, &epoch) != 0 ||
+        reply_type != EFS_MSG_PUT_CHUNK_REPLY || !epoch) {
         efs_client_conn_drop(nid, conn);
         efs_client_node_note_fail(nid);
         return -1;
     }
     if (status == EFS_PUT_CHUNK_OK) {
         /* Acknowledged (not yet durable): fsync must COMMIT this node. */
-        efs_client_commit_note(nid);
+        efs_client_commit_note(nid, epoch);
 #if EFS_FAULTS
         if (put_reply_fault(nid, ino, ci, fi)) {
             efs_client_conn_drop(nid, conn);

@@ -16,7 +16,7 @@ uint64_t efs_client_rpc_deadline_ms(void){return deadline;}
 void efs_client_rpc_set_deadline_ms(uint64_t d){deadline=d;}
 int efs_client_rpc_past_deadline(void){return expired||(deadline==1);}
 struct efs_conn *efs_client_conn_get(efs_node_id_t id){assert(id==1);return &connection;}
-void efs_client_commit_note(efs_node_id_t id){(void)id;}
+void efs_client_commit_note(efs_node_id_t id,uint64_t epoch){assert(id==1&&epoch==123);}
 void efs_client_conn_release(efs_node_id_t id,struct efs_conn *c){assert(id==1&&c==&connection);releases++;}
 void efs_client_conn_drop(efs_node_id_t id,struct efs_conn *c){assert(id==1&&c==&connection);drops++;}
 int efs_conn_send_msg_parts(struct efs_conn *c,uint8_t type,const void *header,uint32_t hl,const void *data,uint32_t dl)
@@ -29,9 +29,9 @@ int efs_conn_send_msg_parts(struct efs_conn *c,uint8_t type,const void *header,u
 int efs_conn_recv_msg(struct efs_conn *c,uint8_t *type,void **payload,uint32_t *bytes)
 {
  assert(c==&connection);*payload=NULL;if(recv_fail)return -1;
- uint8_t *p=malloc(5);assert(p);efs_put_upload_wr32(p,(uint32_t)reply_rc);p[4]=2;
+ uint8_t *p=malloc(EFS_PUT_UPLOAD_REPLY_LEN);assert(p);efs_put_upload_wr32(p,(uint32_t)reply_rc);p[4]=2;efs_put_epoch_write(p+5,123);
  if(expire_on_reply)expired=1;
- *payload=p;*type=malformed?EFS_MSG_PUT_CHUNK_REPLY:EFS_MSG_PUT_TICKETED_REPLY;*bytes=5;return 0;
+ *payload=p;*type=malformed?EFS_MSG_PUT_CHUNK_REPLY:EFS_MSG_PUT_TICKETED_REPLY;*bytes=EFS_PUT_UPLOAD_REPLY_LEN;return 0;
 }
 int main(void)
 {

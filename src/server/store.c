@@ -1314,6 +1314,7 @@ struct put_sync_root {
     uint64_t cur_bytes, cur_frags, cur_first_ns;
     uint64_t inflight_bytes, inflight_frags, inflight_first_ns;
     int want_now, stop, error;
+    int recovery_uncertain; /* persists until verified recovery or fresh format */
     uint64_t acked_bytes, synced_bytes, barriers, failures;
     uint64_t last_barrier_ns, last_barrier_us;
     uint32_t prev_clean;
@@ -1483,7 +1484,7 @@ static int put_sync_commit_root(struct put_sync_root *r)
     }
     while (r->durable_seq < want && !r->error && !r->stop)
         pthread_cond_wait(&r->cv, &r->mu);
-    int rc = r->durable_seq >= want && !r->error ? EFS_OK : EFS_ERR_IO;
+    int rc = r->durable_seq >= want && !r->error && !r->recovery_uncertain ? EFS_OK : EFS_ERR_IO;
     pthread_mutex_unlock(&r->mu);
     return rc;
 }
@@ -1586,10 +1587,17 @@ static void put_sync_attach(struct put_sync_root *r, const char *root)
     char rec[PUT_SYNC_RECORD_LEN + 1] = {0};
     unsigned prev_boot = 0, clean = 1;
     unsigned long long prev_seq = 0, prev_ns = 0;
-    if (existed && pread(r->record_fd, rec, PUT_SYNC_RECORD_LEN, 0) > 0)
-        (void)sscanf(rec, "efs-durable-epoch v1 boot=%u seq=%llu time_ns=%llu clean=%u",
-                     &prev_boot, &prev_seq, &prev_ns, &clean);
+    if (existed && (pread(r->record_fd, rec, PUT_SYNC_RECORD_LEN, 0) <= 0 ||
+        sscanf(rec, "efs-durable-epoch v1 boot=%u seq=%llu time_ns=%llu clean=%u",
+               &prev_boot, &prev_seq, &prev_ns, &clean) != 4 || clean > 1)) {
+        fprintf(stderr, "store: invalid durability record root=%s; refusing startup\n", root);
+        close(r->record_fd); close(r->fd); r->fd = -1; return;
+    }
     r->prev_clean = !existed || clean;
+    r->recovery_uncertain = !r->prev_clean;
+    /* A checksum scan cannot find lost creates. Until recovery has a durable
+     * per-file inventory, an unclean epoch must not certify old data to a
+     * fresh client. Keep clean=0 across subsequent orderly restarts too. */
     r->prev_durable_ns = prev_ns;
     r->boot = prev_boot + 1;
     r->seq = 1;
@@ -1603,8 +1611,12 @@ static void put_sync_attach(struct put_sync_root *r, const char *root)
     if (!existed) {
         int rc;
         do { rc = fsync(r->fd); } while (rc < 0 && errno == EINTR);
+        if (rc) {
+            close(r->record_fd); close(r->fd); r->fd = -1; return;
+        }
     }
     if (!r->prev_clean) {
+        fprintf(stderr, "store: root=%s recovery uncertain; COMMIT returns EIO until verified recovery or fresh format\n", root);
         fprintf(stderr, "store: put sync root=%s unclean previous stop: writes acknowledged "
                 "after boot=%u seq=%llu were not durable; verifying fragments modified since\n",
                 root, prev_boot, prev_seq);
@@ -1652,8 +1664,14 @@ static struct put_sync_root *put_sync_root_for(struct efsd_server *s, const char
  * there is no other data PUT mode to fall back to. */
 int server_put_sync_init(struct efsd_server *s)
 {
-    if (!s || s->storage_engine)
-        return EFS_OK;
+    if (!s) return EFS_ERR_INVAL;
+    int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return EFS_ERR_IO;
+    ssize_t n;
+    do { n = read(fd, &s->put_boot_epoch, sizeof(s->put_boot_epoch)); } while (n < 0 && errno == EINTR);
+    close(fd);
+    if (n != sizeof(s->put_boot_epoch) || !s->put_boot_epoch) return EFS_ERR_IO;
+    if (s->storage_engine) return EFS_OK;
     for (uint32_t i = 0; i < s->storage_path_count && i < EFS_MAX_STORAGE_PATHS; ++i) {
         char probe[EFS_MAX_PATH + 16];
         snprintf(probe, sizeof(probe), "%s/data/x", s->storage_paths[i]);
@@ -1703,7 +1721,7 @@ void server_put_sync_stats(struct efsd_server *s, struct efs_msg_sync_stats_repl
         struct put_sync_root *r = &put_sync_roots[i];
         pthread_mutex_lock(&r->mu);
         o->mode = 2;
-        o->error = (uint32_t)r->error;
+        o->error = (uint32_t)(r->error || r->recovery_uncertain);
         o->unsynced_bytes = r->cur_bytes + r->inflight_bytes;
         o->unsynced_fragments = r->cur_frags + r->inflight_frags;
         uint64_t first = r->inflight_first_ns ? r->inflight_first_ns : r->cur_first_ns;

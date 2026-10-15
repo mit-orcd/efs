@@ -482,6 +482,7 @@ send_reply:
             uint8_t reply[EFS_PUT_UPLOAD_REPLY_LEN],path=0xff;
             int result=server_put_upload(g_server,payload,payload_len,&path);
             efs_put_upload_wr32(reply,(uint32_t)result);reply[4]=path;
+            efs_put_epoch_write(reply+5,g_server->put_boot_epoch);
             efs_conn_send_msg(conn,EFS_MSG_PUT_TICKETED_REPLY,reply,sizeof(reply));
             efs_iostats_add(EFS_IOSTAT_PUT,result==EFS_OK?payload_len-EFS_PUT_UPLOAD_HEADER_LEN:0,
                 efs_iostats_now_us()-start,result!=EFS_OK);
@@ -557,14 +558,15 @@ send_reply:
                 }
                 server_export_put(g_server, ex);
                 {
-                    uint8_t rep[2];
+                    uint8_t rep[EFS_PUT_REPLY_LEN];
                     rep[0] = reply;
                     rep[1] = (efs_tls_path_used >= 0 &&
                               efs_tls_path_used < 256)
                                  ? (uint8_t)efs_tls_path_used
                                  : 0xff;
                     efs_tls_path_used = -1;
-                    efs_conn_send_msg(conn, EFS_MSG_PUT_CHUNK_REPLY, rep, 2);
+                    efs_put_epoch_write(rep+2,g_server->put_boot_epoch);
+                    efs_conn_send_msg(conn, EFS_MSG_PUT_CHUNK_REPLY, rep, sizeof(rep));
                 }
                 efs_iostats_add(EFS_IOSTAT_PUT,
                                 reply == EFS_PUT_CHUNK_OK ? req->data_len : 0,
@@ -727,6 +729,7 @@ send_reply:
             struct efs_msg_data_commit_reply reply;
             memset(&reply, 0, sizeof(reply));
             reply.rc = server_put_sync_commit(g_server, &reply.roots);
+            reply.boot_epoch = g_server->put_boot_epoch;
             efs_conn_send_msg(conn, EFS_MSG_DATA_COMMIT_REPLY, &reply, sizeof(reply));
             break;
         }

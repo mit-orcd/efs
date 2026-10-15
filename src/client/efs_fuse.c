@@ -4191,7 +4191,7 @@ static int efs_fuse_fsync_ino(fuse_ino_t ino, int isdatasync,
     rc = efs_append_flush_report(fi, file);
     rc = efs_file_sync_error(fi, file, was_stalled, rc);
     /* Published is not durable when servers acknowledge asynchronously:
-     * COMMIT every node this client sent data to. */
+     * COMMIT every storage node, including data published by peer clients. */
     if (rc == EFS_OK)
         rc = efs_client_data_commit();
     t1 = stats_now_ms();

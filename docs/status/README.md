@@ -18,6 +18,13 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[AMD asynchronous durability fixes](amd-async-durability-20261015.md):
+implementation on `devel-amd-durability-20261015` from `84ffe7a68`, qualification
+pending. Early PUT ACKs retained; fsync commits all storage nodes, compares
+boot verifiers and rejects uncertain unclean recovery. The two review holes
+are covered by focused regressions; live RDMA/direct qualification follows.
+
+
 [Asynchronous PUT acknowledgement](intel-async-durability-20261015.md):
 **scoped PASS** on `3edc7b846` (async ACK from `d8af2c325`, concurrent-fsync
 COMMIT fix, 200 ms read-mapping TTL with refresh-ahead and close-to-open), now

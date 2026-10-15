@@ -2,6 +2,8 @@
 
 Complete navigation to top-level status ledgers as of October 15, 2026. Grouping is for discovery, not priority or acceptance. A dated report can contain open failures; read its exact-source verdict and later amendments. See the [queue](work-queue.md), [current index](README.md) and [archived records](archive/README.md).
 
+- [AMD asynchronous durability fixes and RDMA/direct qualification](amd-async-durability-20261015.md)
+
 ## Query commands and metadata
 
 - [W98 — from fixed placement to distributed metadata capacity](all-node-metadata-queries-20261009.md)

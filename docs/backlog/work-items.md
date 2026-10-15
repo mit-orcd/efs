@@ -2931,6 +2931,13 @@ fix; claiming migration/repair from an IN_PROGRESS enum name alone.
 
 ## W71 · Fragment PUT success is not a durable persistence acknowledgement (queue row spec1)
 
+**October 15 contract update:** asynchronous PUT acknowledgement from
+`d8af2c325` supersedes the historical per-PUT barrier below. The user explicitly
+retained early acknowledgements. [AMD durability follow-up](../status/amd-async-durability-20261015.md)
+adds all-node COMMIT, boot verifiers and fail-closed unclean recovery; its
+exact-source qualification is separate from these older barrier passes.
+
+
 **October 15 review:** The original missing-production-barrier evidence below is historical. Current production PUTs have file and parent barriers; later barrier grouping is implemented. Remaining hardware qualification is distinct from reimplementing durability. See [reconciliation](../status/open-item-reconciliation-20261015.md).
 
 **Class:** durability correctness. **Status:** implemented, hardware acceptance open.

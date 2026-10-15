@@ -274,8 +274,17 @@ this list, before it ships.
   publication machine; both callbacks explicitly publish before replying).
   Mount `-o sync` acceptance remains separately owed under W73. An
   `fsync` drains this client's pending publishes of the file that precede
-  it — one in flight, or retrying on contention, is awaited; it never
-  waits for another client's writes. A transient failure of that drain
+  it — one in flight, or retrying on contention, is awaited. It then sends
+  DATA_COMMIT to every current storage node, covering already-acknowledged
+  peer data too; it does not drain another client's unpublished buffer.
+  PUT acknowledgement is asynchronous. PUT and COMMIT carry a nonzero
+  per-process boot verifier: losing an unresolved verifier returns sticky
+  EIO, because the client may no longer retain retransmission bytes.
+  An unclean storage-root restart fences COMMIT even for a fresh client;
+  a checksum scan alone cannot prove that every published create survived.
+  This fence persists across orderly restarts until verified recovery or
+  a fresh format; no automatic recovery is implemented by this change.
+  See [AMD durability fixes](../status/amd-async-durability-20261015.md). A transient failure of that drain
   (transport, RPC budget, node down) returns EIO from that call with the
   bytes retained as pending; the next `fsync` retries. If a publish of
   the file has been classified **stalled** (D27, [decisions.md](../status/decisions.md): repeated
@@ -1512,19 +1521,35 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[AMD asynchronous durability fixes](../status/amd-async-durability-20261015.md):
+implementation on `devel-amd-durability-20261015` from `84ffe7a68`, qualification
+pending. Early PUT ACKs retained; fsync commits all storage nodes, compares
+boot verifiers and rejects uncertain unclean recovery. The two review holes
+are covered by focused regressions; live RDMA/direct qualification follows.
+
+
+[Asynchronous PUT acknowledgement](../status/intel-async-durability-20261015.md):
+**scoped PASS** on `3edc7b846` (async ACK from `d8af2c325`, concurrent-fsync
+COMMIT fix, 200 ms read-mapping TTL with refresh-ahead and close-to-open), now
+the only data PUT mode. On Intel/xorinox 2 GiB writes 151 → 166–180 MiB/s,
+with fsync 141 → 176–179, four writers 94–101 → 173 (network-bound: 1.5×
+erasure-coded bytes on 2.5 GbE); reads 237–255 MiB/s (88–92% of the link).
+Two-client peer suite 67/67 PASS. Crash/power-loss qualification NOTRUN.
+
 [AMD ordinary RDMA/direct POSIX](../status/amd-rdma-posix-20261015.md): **FAIL loaded,
 scoped functional PASS** on `c8d057391`, branch `devel-amd-posix-20261015`
 from devel `761c91c42`. Full native/strict transport, serial216/216, peer67/67,
 cold27/27 and paused-follower32MiB pass. One-mount jobs16 is215/216:
 unusual-name directories still exceed15s. Fresh-read scheduling/log-lock and
 ACK-window fixes are committed; the loaded gate stays open. Queries, packing,
-containers, expiry and seven-client load are excluded.
+containers, expiry and seven-client load are excluded. This predates
+asynchronous PUT acknowledgement (`d8af2c325`) and does not qualify it.
 
-[Grouped fragment durability](../status/intel-cohort-durability-20261015.md): opt-in
-`EFS_PUT_COHORT=1` in `5cef06ac4`, scoped **PASS**. On Intel with the xorinox
+[Grouped fragment durability](../status/intel-cohort-durability-20261015.md) (superseded):
+opt-in `EFS_PUT_COHORT=1` in `5cef06ac4`, removed by `d8af2c325`. On Intel with the xorinox
 client, four concurrent writers 94–101 → 119–132 MiB/s and single-stream
 146–149 → 169–170 MiB/s, with half the device flushes per MiB; local model
-2.5–3x. Crash/power-loss qualification NOTRUN; the cluster runs with the flag off.
+2.5–3x. Kept as evidence for why per-fragment barriers limited writes.
 
 [Intel read metadata and read-cache fixes](../status/intel-read-metadata-cache-20261015.md):
 **PASS (scoped)** on `b3e93177c138` (compact GETCHUNKS replies) and
@@ -1666,7 +1691,7 @@ positions do not assign an execution order or override the active handoff.
 
 | review ID | finding | classification | review state | evidence / gate |
 | --- | --- | --- | --- | --- |
-| spec1 | **W71** · fragment PUT lacks a production persistence barrier | durability correctness | implemented barrier — file and pathname fsync before production PUT ACK; fault/live gates pass, hardware power-loss gate owed | [evidence and gate](#w71) |
+| spec1 | **W71** · fragment PUT lacks a production persistence barrier | durability correctness | historical per-PUT barrier superseded by asynchronous ACK; all-node COMMIT/verifier and unclean-recovery fencing under qualification ([AMD follow-up](../status/amd-async-durability-20261015.md)); hardware power-loss gate owed | [evidence and gate](#w71) |
 | spec2 | **W72** · production mount session lifecycle / I23 integration | fencing integration | partial — full mount UUID/epoch shared by append/HOLD/FLOCK; retained FUSE CREATE/adoption and sequenced OPEN/CLOSE plus proven-revocation recovery pass AMD direct/TCP; namespace shard admission and fenced replay/effect checks are AMD gated; Oct 11 merged REGISTER verdict mismatch repaired; before/after proof retained; REGISTER/ESTABLISH verdict regressions and final captured `90a47313` full normal/fault native plus direct/buffered TCP cold namespace/APPEND/sync gates pass ([follow-up](../status/amd-integration-20261011.md#w72-register-verdict-mismatch--reproduced-and-repaired)); REPORT mapping/activation/completion session fences pass AMD direct/TCP; staged typed per-publication recovery/newer-range ownership passes AMD; production flush/PUT-ticket integration remain open | [evidence and gate](#w72) · [Oct9 mounted-client gates](../status/dependency-package-20261009.md#terminal-retained-identity-recovery--implementedgated) |
 | spec3 | **W73** · synchronous application-write publication | integration | Closed supported software integration: application sync and mount-sync direct/buffered × TCP/RXE gates accepted; hardware power-loss acceptance remains W71 ([Oct9 closure](../status/amd-rxe-gate-closure-20261009.md)) | [evidence and gate](#w73) |
 | spec4 | **W74** · protection profiles, debt and automatic repair | recovery feature gap | ordinary-fragment standalone repair qualified ([ledger](../status/orcd-default-repair-20261012.md)); automatic/unplanned and packed repair deferred; protection/profile cutover remain unclosed | [evidence and gate](#w74) |
@@ -4848,6 +4873,13 @@ fix; claiming migration/repair from an IN_PROGRESS enum name alone.
 <a id="w71"></a>
 
 ### W71 · Fragment PUT success is not a durable persistence acknowledgement (queue row spec1)
+
+**October 15 contract update:** asynchronous PUT acknowledgement from
+`d8af2c325` supersedes the historical per-PUT barrier below. The user explicitly
+retained early acknowledgements. [AMD durability follow-up](../status/amd-async-durability-20261015.md)
+adds all-node COMMIT, boot verifiers and fail-closed unclean recovery; its
+exact-source qualification is separate from these older barrier passes.
+
 
 **October 15 review:** The original missing-production-barrier evidence below is historical. Current production PUTs have file and parent barriers; later barrier grouping is implemented. Remaining hardware qualification is distinct from reimplementing durability. See [reconciliation](../status/open-item-reconciliation-20261015.md).
 

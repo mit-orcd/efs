@@ -726,7 +726,7 @@ int efs_client_rpc_query_snapshot_v4_at(const struct efs_msg_query_snapshot_v4 *
                                        struct efs_msg_query_snapshot_reply *reply,char **text);
 /* Async server durability: COMMIT every node a data PUT was sent to since
  * the last successful commit (put_upload.c). */
-void efs_client_commit_note(efs_node_id_t node);
+void efs_client_commit_note(efs_node_id_t node, uint64_t epoch);
 int efs_client_data_commit(void);
 
 /* Read-mapping freshness (ops.c, EFS_READ_MAP_TTL_MS). */

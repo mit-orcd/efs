@@ -47,7 +47,8 @@ int efs_client_put_fragment(struct efs_client_put_request *owner,uint32_t fragme
         if(rc>EFS_OK || rc<EFS_ERR_ILSEQ)rc=EFS_ERR_PROTO;
         /* Acknowledged (not yet durable): fsync must COMMIT this node,
          * even if the reply arrives after the caller's deadline. */
-        if(rc==EFS_OK){*path_used=((uint8_t *)reply)[4];efs_client_commit_note(ticket.nodes[fragment]);}
+        if(rc==EFS_OK && !efs_put_epoch_read((uint8_t *)reply+5))rc=EFS_ERR_PROTO;
+        if(rc==EFS_OK){*path_used=((uint8_t *)reply)[4];efs_client_commit_note(ticket.nodes[fragment],efs_put_epoch_read((uint8_t *)reply+5));}
     }
     free(reply);
     /* Late success is ambiguous to the caller's deadline; retain the owner. */
@@ -57,4 +58,3 @@ out:
     efs_client_rpc_set_deadline_ms(saved);
     return rc;
 }
-

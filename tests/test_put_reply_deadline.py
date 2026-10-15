@@ -38,8 +38,8 @@ int efs_conn_reply_watch_us(struct efs_conn *c,int budget){(void)budget;return e
 int efs_conn_put_reply_watch(struct efs_conn *c,int budget){(void)budget;return efs_conn_reply_watch_quick(c);}
 static void path_hint_put(efs_node_id_t n,efs_ino_t ino,uint32_t ci,uint8_t fi,uint8_t path){(void)n;(void)ino;(void)ci;(void)fi;(void)path;}
 static void efs_client_node_note_ok(efs_node_id_t n){(void)n;}
-static void efs_client_commit_note(efs_node_id_t n){(void)n;}
-int efs_conn_recv_put_reply(struct efs_conn *c,uint8_t *t,uint8_t *status,uint8_t *path){(void)c;*t=EFS_MSG_PUT_CHUNK_REPLY;*status=mode==6 && c==&conns[2]?EFS_PUT_CHUNK_BUSY:mode==7 && c!=&conns[0]?EFS_PUT_CHUNK_BUSY:mode==4?EFS_PUT_CHUNK_QUOTA_EXCEEDED:mode==5?EFS_PUT_CHUNK_BUSY:EFS_PUT_CHUNK_OK;*path=0xff;return 0;}
+static void efs_client_commit_note(efs_node_id_t n,uint64_t epoch){(void)n;assert(epoch==123);}
+int efs_conn_recv_put_reply(struct efs_conn *c,uint8_t *t,uint8_t *status,uint8_t *path,uint64_t *epoch){(void)c;*epoch=123;*t=EFS_MSG_PUT_CHUNK_REPLY;*status=mode==6 && c==&conns[2]?EFS_PUT_CHUNK_BUSY:mode==7 && c!=&conns[0]?EFS_PUT_CHUNK_BUSY:mode==4?EFS_PUT_CHUNK_QUOTA_EXCEEDED:mode==5?EFS_PUT_CHUNK_BUSY:EFS_PUT_CHUNK_OK;*path=0xff;return 0;}
 '''+reply_fn+f+r'''
 int main(void){
  int pp[2];assert(!pipe(pp));

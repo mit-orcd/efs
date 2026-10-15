@@ -4,37 +4,27 @@
 #include <stdlib.h>
 #include <time.h>
 
-/* Servers acknowledge data PUTs before they are durable (NFS unstable
- * writes); fsync must COMMIT every node holding this client's acknowledged
- * data. Per node, `acked` counts PUTs the server acknowledged and
- * `committed` is the highest acked count a successful COMMIT covered.
- *
- * fsync snapshots each node's acked count after the file's PUTs were
- * acknowledged and before sending COMMIT, so the COMMIT (which covers
- * everything the server acknowledged before it arrived) covers the snapshot.
- * Every fsync sends its own COMMIT to each node that is behind; the server
- * folds concurrent ones into one barrier. `committed` only advances after a
- * successful reply, so a concurrent, slow or failed COMMIT never lets
- * another fsync return before its own data is durable, and a failed node is
- * committed again by the next fsync. */
-static uint64_t node_acked[64], node_committed[64];
+/* Every fsync covers all current storage nodes, including peer writes and
+ * a newly mounted client. A PUT verifier belongs to one server process.
+ * Never silently forget an acknowledged-but-uncommitted incarnation: the
+ * payload may already have been released, so a changed verifier is sticky EIO.
+ * The server separately fences uncertain unclean recovery for fresh clients. */
+static pthread_mutex_t commit_mu = PTHREAD_MUTEX_INITIALIZER;
+static struct { uint64_t acked, committed, epoch; int lost; } node_commit[64];
 
-void efs_client_commit_note(efs_node_id_t node)
+void efs_client_commit_note(efs_node_id_t node, uint64_t epoch)
 {
-    if (node < 64)
-        __atomic_add_fetch(&node_acked[node], 1, __ATOMIC_ACQ_REL);
+    if (node >= 64) return;
+    pthread_mutex_lock(&commit_mu);
+    if (!epoch || (node_commit[node].epoch != epoch &&
+                   node_commit[node].acked > node_commit[node].committed))
+        node_commit[node].lost = 1;
+    node_commit[node].epoch = epoch;
+    ++node_commit[node].acked;
+    pthread_mutex_unlock(&commit_mu);
 }
 
-static void committed_advance(efs_node_id_t node, uint64_t to)
-{
-    uint64_t cur = __atomic_load_n(&node_committed[node], __ATOMIC_ACQUIRE);
-    while (cur < to &&
-           !__atomic_compare_exchange_n(&node_committed[node], &cur, to, 0,
-                                        __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE))
-        ;
-}
-
-struct commit_job { efs_node_id_t node; uint64_t target, deadline; int rc; };
+struct commit_job { efs_node_id_t node; uint64_t target, epoch, deadline; int rc; };
 
 static void *commit_one(void *arg)
 {
@@ -53,15 +43,24 @@ static void *commit_one(void *arg)
             if (type == EFS_MSG_DATA_COMMIT_REPLY &&
                 bytes == sizeof(struct efs_msg_data_commit_reply)) {
                 const struct efs_msg_data_commit_reply *r = reply;
-                j->rc = r->rc == EFS_OK ? EFS_OK : EFS_ERR_IO;
+                j->rc = r->rc == EFS_OK && r->boot_epoch ? EFS_OK : EFS_ERR_IO;
+                pthread_mutex_lock(&commit_mu);
+                /* Even another successful fsync cannot erase a mismatch for
+                 * this call's own snapshot. A later PUT must not hide it. */
+                if (j->target && j->epoch != r->boot_epoch) {
+                    node_commit[j->node].lost = 1;
+                    j->rc = EFS_ERR_IO;
+                }
+                if (node_commit[j->node].lost) j->rc = EFS_ERR_IO;
+                if (j->rc == EFS_OK && j->target > node_commit[j->node].committed)
+                    node_commit[j->node].committed = j->target;
+                pthread_mutex_unlock(&commit_mu);
             } else {
                 j->rc = EFS_ERR_PROTO;
             }
         }
         free(reply);
     }
-    if (j->rc == EFS_OK)
-        committed_advance(j->node, j->target);
     efs_client_rpc_set_deadline_ms(saved);
     return NULL;
 }
@@ -78,12 +77,29 @@ int efs_client_data_commit(void)
     uint64_t parent = efs_client_rpc_deadline_ms();
     if (parent && parent < deadline)
         deadline = parent;
+    uint64_t mask = 0;
+    pthread_mutex_lock(&g_client.lock);
+    for (uint32_t i=0; i<g_client.node_count; i++) {
+        efs_node_id_t id = g_client.nodes[i].id;
+        if (id >= 64) { pthread_mutex_unlock(&g_client.lock); return EFS_ERR_IO; }
+        mask |= 1ull << id;
+    }
+    pthread_mutex_unlock(&g_client.lock);
+    pthread_mutex_lock(&commit_mu);
+    for (efs_node_id_t node=0; node<64; node++) {
+        if (node_commit[node].lost) { pthread_mutex_unlock(&commit_mu); return EFS_ERR_IO; }
+        if (node_commit[node].acked > node_commit[node].committed) mask |= 1ull << node;
+    }
+    pthread_mutex_unlock(&commit_mu);
+    if (!mask) return EFS_ERR_IO; /* no topology is not a durability proof */
     for (efs_node_id_t node = 0; node < 64; node++) {
-        uint64_t target = __atomic_load_n(&node_acked[node], __ATOMIC_ACQUIRE);
-        if (target <= __atomic_load_n(&node_committed[node], __ATOMIC_ACQUIRE))
-            continue;
+        if (!(mask & (1ull << node))) continue;
+        pthread_mutex_lock(&commit_mu);
+        uint64_t target = node_commit[node].acked > node_commit[node].committed
+                            ? node_commit[node].acked : 0;
         jobs[n] = (struct commit_job){ .node = node, .target = target,
-                                       .deadline = deadline, .rc = EFS_ERR_NET };
+            .epoch = node_commit[node].epoch, .deadline = deadline, .rc = EFS_ERR_NET };
+        pthread_mutex_unlock(&commit_mu);
         started[n] = pthread_create(&th[n], NULL, commit_one, &jobs[n]) == 0;
         if (!started[n])
             commit_one(&jobs[n]);

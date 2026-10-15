@@ -131,9 +131,9 @@ int efs_recv_u8_reply(int fd, uint8_t *type, uint8_t *status)
     nlen = ntohl(be);
     /* nlen 2 is [type][status]. nlen 3 is a PUT reply with a path byte,
      * which a status-only reader ignores. */
-    if (efs_wire_frame_check_nlen(nlen) != EFS_OK || nlen < 2 || nlen > 4)
+    if (efs_wire_frame_check_nlen(nlen) != EFS_OK || (nlen < 2 || (nlen > 4 && nlen != 1 + EFS_PUT_REPLY_LEN)))
         return EFS_ERR_PROTO;
-    uint8_t raw[4];
+    uint8_t raw[1 + EFS_PUT_REPLY_LEN];
     if (efs_recv_all(fd, raw, nlen) != 0)
         return EFS_ERR_NET;
     if (type)
@@ -143,7 +143,7 @@ int efs_recv_u8_reply(int fd, uint8_t *type, uint8_t *status)
     return EFS_OK;
 }
 
-int efs_recv_put_reply(int fd, uint8_t *type, uint8_t *status, uint8_t *path)
+int efs_recv_put_reply(int fd, uint8_t *type, uint8_t *status, uint8_t *path, uint64_t *epoch)
 {
     uint32_t be;
     uint32_t nlen;
@@ -152,17 +152,18 @@ int efs_recv_put_reply(int fd, uint8_t *type, uint8_t *status, uint8_t *path)
     if (efs_recv_all(fd, &be, sizeof(be)) != 0)
         return EFS_ERR_NET;
     nlen = ntohl(be);
-    if (efs_wire_frame_check_nlen(nlen) != EFS_OK || nlen < 2 || nlen > 4)
+    if (efs_wire_frame_check_nlen(nlen) != EFS_OK || nlen != 1 + EFS_PUT_REPLY_LEN)
         return EFS_ERR_PROTO;
-    uint8_t raw[4];
+    uint8_t raw[1 + EFS_PUT_REPLY_LEN];
     if (efs_recv_all(fd, raw, nlen) != 0)
         return EFS_ERR_NET;
     if (type)
         *type = raw[0];
     if (status)
         *status = raw[1];
-    if (path && nlen >= 3)
+    if (path)
         *path = raw[2];
+    if (epoch) *epoch = efs_put_epoch_read(raw + 3);
     return EFS_OK;
 }
 
@@ -552,7 +553,7 @@ int efs_conn_recv_u8_reply(struct efs_conn *c, uint8_t *type, uint8_t *status)
         return rc;
     /* plen 1 is status. plen 2 is a PUT reply (status, path); a status-only
      * reader keeps the first byte. */
-    if (plen < 1 || plen > 4) {
+    if (plen < 1 || (plen > 4 && plen != EFS_PUT_REPLY_LEN)) {
         efs_rdma_message_release(c->rc);
         return EFS_ERR_PROTO;
     }
@@ -563,7 +564,7 @@ int efs_conn_recv_u8_reply(struct efs_conn *c, uint8_t *type, uint8_t *status)
 }
 
 int efs_conn_recv_put_reply(struct efs_conn *c, uint8_t *type, uint8_t *status,
-                            uint8_t *path)
+                            uint8_t *path, uint64_t *epoch)
 {
     if (path)
         *path = 0xff;
@@ -574,19 +575,20 @@ int efs_conn_recv_put_reply(struct efs_conn *c, uint8_t *type, uint8_t *status,
             uint32_t be;
             memcpy(&be, c->put_reply, sizeof(be));
             uint32_t nlen = ntohl(be);
-            if (nlen < 2 || nlen > 4 || c->put_reply_used != 4 + nlen)
+            if (nlen != 1 + EFS_PUT_REPLY_LEN || c->put_reply_used != 4 + nlen)
                 return EFS_ERR_PROTO;
             if (type)
                 *type = c->put_reply[4];
             if (status)
                 *status = c->put_reply[5];
-            if (path && nlen >= 3)
+            if (path)
                 *path = c->put_reply[6];
+            if (epoch) *epoch = efs_put_epoch_read(c->put_reply + 7);
             c->put_reply_used = 0;
             efs_conn_note_ok(c);
             return EFS_OK;
         }
-        return efs_recv_put_reply(c->fd, type, status, path);
+        return efs_recv_put_reply(c->fd, type, status, path, epoch);
     }
 
     const uint8_t *pl = NULL;
@@ -595,14 +597,15 @@ int efs_conn_recv_put_reply(struct efs_conn *c, uint8_t *type, uint8_t *status,
 
     if (rc != EFS_OK)
         return rc;
-    if (plen < 1 || plen > 4) {
+    if (plen != EFS_PUT_REPLY_LEN) {
         efs_rdma_message_release(c->rc);
         return EFS_ERR_PROTO;
     }
     if (status)
         *status = pl[0];
-    if (path && plen >= 2)
+    if (path)
         *path = pl[1];
+    if (epoch) *epoch = efs_put_epoch_read(pl + 2);
     efs_rdma_message_release(c->rc);
     return EFS_OK;
 }
@@ -662,7 +665,7 @@ int efs_conn_put_reply_watch(struct efs_conn *c, int budget_us)
             uint32_t be;
             memcpy(&be, c->put_reply, sizeof(be));
             uint32_t nlen = ntohl(be);
-            if (nlen < 2 || nlen > 4)
+            if (nlen != 1 + EFS_PUT_REPLY_LEN)
                 return -1;
             target += nlen;
         }

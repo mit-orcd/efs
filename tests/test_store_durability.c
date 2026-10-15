@@ -123,11 +123,24 @@ static int test_async_durability(uint8_t *data)
     assert(r->fd>=0 && r->boot==3 && !r->prev_clean && r->scanner_started);
     pthread_join(r->scanner,NULL);r->scanner_started=0;
     assert(r->scan_done && r->scanned>=4 && r->bad==1);
+    /* A fresh client must not mistake an empty new-boot counter for durable
+     * old data. Even a successful new barrier cannot clear uncertainty. */
+    assert(r->recovery_uncertain && put_sync_commit_root(r)==EFS_ERR_IO);
+    assert(async_put(r,path,data)==EFS_OK);
+    assert(put_sync_commit_root(r)==EFS_ERR_IO);
+    put_sync_state[0]=1;server_put_sync_stop(NULL);
+    close(r->fd);close(r->record_fd);memset(r,0,sizeof(*r));put_sync_state[0]=0;
+    booting=1;put_sync_attach(r,root);booting=0;
+    assert(r->fd>=0 && !r->prev_clean && r->recovery_uncertain);
+    assert(put_sync_commit_root(r)==EFS_ERR_IO);
     put_sync_state[0]=1;server_put_sync_stop(NULL);
     close(r->fd);close(r->record_fd);memset(r,0,sizeof(*r));put_sync_state[0]=0;
     for(int i=1;i<=5;i++){snprintf(path,sizeof(path),"%s/data/a/f%d",root,i);unlink(path);}
     snprintf(path,sizeof(path),"%s/data/a",root);assert(!rmdir(path));
     snprintf(path,sizeof(path),"%s/data",root);assert(!rmdir(path));
+    /* A truncated epoch record cannot default to a clean predecessor. */
+    int badfd=open(rec,O_WRONLY|O_TRUNC);assert(badfd>=0);assert(write(badfd,"bad",3)==3);close(badfd);
+    put_sync_attach(r,root);assert(r->fd<0);
     assert(!unlink(rec));assert(!rmdir(root));
     return 1;
 }

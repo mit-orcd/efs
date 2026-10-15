@@ -3,9 +3,9 @@
 #include "efs/put_ticket.h"
 /* New opcode, fixed-endian header: export, fragment index, immutable ticket.
  * Exact fragment bytes follow. No NEW path hint: an ambiguous retry must probe
- * every storage root before choosing a destination. Reply: signed rc + path. */
+ * every storage root before choosing a destination. Reply: signed rc + path + big-endian boot verifier. */
 #define EFS_PUT_UPLOAD_HEADER_LEN (8u + EFS_PUT_TICKET_WIRE_LEN)
-#define EFS_PUT_UPLOAD_REPLY_LEN 5u
+#define EFS_PUT_UPLOAD_REPLY_LEN 13u
 static inline void efs_put_upload_wr32(uint8_t *p,uint32_t value)
 {for(unsigned i=0;i<4;i++)p[i]=(uint8_t)(value>>(24-8*i));}
 static inline uint32_t efs_put_upload_rd32(const uint8_t *p)

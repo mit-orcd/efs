@@ -2795,7 +2795,7 @@ static int cmd_sync_status(int argc, char **argv)
                 ? 100.0 * (double)(o->acked_bytes - o->unsynced_bytes) / (double)o->acked_bytes : 100.0;
             printf("  %s: async%s unsynced=%.1f MiB (%llu fragments, oldest %llu ms) synced=%.2f%% "
                    "of %.1f MiB acked\n",
-                   o->root, o->error ? " ERROR(barrier failed)" : "",
+                   o->root, o->error ? " ERROR(barrier failure or uncertain recovery)" : "",
                    o->unsynced_bytes / 1048576.0, (unsigned long long)o->unsynced_fragments,
                    (unsigned long long)o->oldest_unsynced_ms, pct, o->acked_bytes / 1048576.0);
             printf("    epoch boot=%u seq=%llu durable=%llu barriers=%llu failures=%llu "
