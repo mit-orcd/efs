@@ -1,5 +1,18 @@
+[Intel metadata block hash index](intel-block-hash-index-20261014.md):
+**Deployed devel c775fb15e; native and four-client smoke PASS.** Full-key index
+uses exact collision verification, tombstones, binary-search fallback and
+16 KiB/block / 128 KiB/segment caps. Native/portable ASan+UBSan pass.
+Exact-release actual-LSM fixture 1.533→0.693 µs/read (54.8% less time).
+Mounted speedup NOT ESTABLISHED: xorinox 1.658→1.677 ms, AMD 1.714→1.905 ms;
+restart changed group2 leader from node2 to node4. All 64 controls/client and
+four-way fsync/shrink/regrow/EOF/mtime smoke pass. TCP/direct/files, optional
+features OFF. AMD writer completed 1M files; xorinox crawl resumed. Pre-existing
+directory EBUSY spot-check passed but intermittent issue is not declared closed.
+Private Intel/AMD-local unchanged; full filesystem acceptance NOTRUN.
+
 [Intel post-route live profile](intel-post-route-profile-20261014.md):
-**Capture PASS; next optimization NOTRUN.** Existing four-worker AMD writer and
+**Historical capture PASS; recommendation now implemented in the block-index
+report above.** Existing four-worker AMD writer and
 xorinox read/hash crawl remain running on f6b980a6e, TCP/direct/files with optional
 features OFF. Metadata leader n2 uses 105% of one CPU; GETATTR 42–47%, LSM get
 35–39% of Intel1 sampled user cycles. Recommend bounded exact-key indexing of
