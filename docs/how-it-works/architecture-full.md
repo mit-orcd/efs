@@ -1494,6 +1494,14 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+**72 cases / 294,912 records verified PASS; no EFS runtime changes.**
+Shared-directory durable writes scale from ~34 MiB/s at four workers to ~63 at
+eight and ~92 at sixteen on both hosts. Stat-only load shows no measured penalty;
+loaded/quiet drift prevents assigning the earlier slowdown to metadata alone.
+Next candidate: qualify existing `--writers 8` on private Intel before a pipeline
+rewrite. Production stays at four; all scratch data cleaned and crawl resumed.
+
+[Intel PUT stage and overlap measurement](../status/intel-put-stages-20261015.md):
 **Measurement and three 4 GiB hash checks PASS; no EFS rollout/change.**
 Four concurrent writers/fsyncs per daemon confirmed. n1/n3 file fsync averages
 8.7 ms versus 2.6–2.9 ms on n2/n4, with admission waits 25.5/56.1 ms on the

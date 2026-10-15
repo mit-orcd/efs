@@ -5,6 +5,9 @@ Follow-up to [post-pressure diagnosis](intel-post-pressure-profile-20261015.md).
 configuration or deployment change.** This narrows the performance investigation,
 not a new correctness or full POSIX acceptance gate.
 
+Follow-up: [durability isolation](intel-durable-isolation-20261015.md) now measures
+shared-directory concurrency scaling and limits causal metadata attribution.
+
 ## Conclusion
 
 The largest measured end-to-end server delay is writer admission on n1/n3.

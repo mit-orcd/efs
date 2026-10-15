@@ -1,3 +1,11 @@
+[Intel /data1 durability isolation](intel-durable-isolation-20261015.md):
+**72 cases / 294,912 records verified PASS; no EFS runtime changes.**
+Shared-directory durable writes scale from ~34 MiB/s at four workers to ~63 at
+eight and ~92 at sixteen on both hosts. Stat-only load shows no measured penalty;
+loaded/quiet drift prevents assigning the earlier slowdown to metadata alone.
+Next candidate: qualify existing `--writers 8` on private Intel before a pipeline
+rewrite. Production stays at four; all scratch data cleaned and crawl resumed.
+
 [Intel PUT stage and overlap measurement](intel-put-stages-20261015.md):
 **Measurement and three 4 GiB hash checks PASS; no EFS rollout/change.**
 Four concurrent writers/fsyncs per daemon confirmed. n1/n3 file fsync averages
