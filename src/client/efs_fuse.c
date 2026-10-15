@@ -6859,6 +6859,7 @@ static void ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
         fuse_reply_err(req, EBUSY);
         return;
     }
+    efs_client_map_opened((efs_ino_t)ino);
     ll_open_run(req, ino, fi);
     efs_stop_mutation_leave();
 }

@@ -731,5 +731,6 @@ int efs_client_data_commit(void);
 
 /* Read-mapping freshness (ops.c, EFS_READ_MAP_TTL_MS). */
 int efs_client_map_fresh(efs_ino_t ino, uint32_t ci0, uint32_t ci1);
+void efs_client_map_opened(efs_ino_t ino);
 
 #endif

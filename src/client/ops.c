@@ -322,13 +322,19 @@ static uint32_t pull_group_end(uint32_t start, uint32_t end)
  * This client's own writes update the local map and are always visible.
  * A sequential 1 MiB reader re-asked for mappings a median 153 ms after
  * prefetch fetched them (Oct 15 Intel trace, 89.5% of its GETCHUNKS).
- * Direct-mapped per (ino, ci); a collision only costs a refresh. */
+ * Direct-mapped per (ino, ci); a collision only costs a refresh.
+ * Close-to-open: an open() stamps the inode's open epoch, and a mapping
+ * pulled before it is no longer fresh, so a reader that opens after a
+ * peer's close sees the peer's data, as on NFS. The epoch table is hashed
+ * by inode without tags; a collision only costs a refresh. */
 #define MAP_FRESH_SLOTS 65536u
 #define MAP_FRESH_STRIPES 64u
 static struct { efs_ino_t ino; uint32_t ci; uint64_t ms; } map_fresh[MAP_FRESH_SLOTS];
 static pthread_mutex_t map_fresh_mu[MAP_FRESH_STRIPES];
 static pthread_once_t map_fresh_once = PTHREAD_ONCE_INIT;
 static uint32_t map_fresh_ttl;
+#define MAP_OPEN_SLOTS 4096u
+static uint64_t map_open_ms[MAP_OPEN_SLOTS];
 
 static void map_fresh_init(void)
 {
@@ -369,18 +375,31 @@ static void map_fresh_mark(efs_ino_t ino, uint32_t ci0, uint32_t ci1, uint64_t m
     }
 }
 
+static uint64_t *map_open_slot(efs_ino_t ino)
+{
+    return &map_open_ms[(uint32_t)(((uint64_t)ino * 0x9E3779B97F4A7C15ULL) >> 52) &
+                        (MAP_OPEN_SLOTS - 1)];
+}
+
+void efs_client_map_opened(efs_ino_t ino)
+{
+    __atomic_store_n(map_open_slot(ino), map_fresh_now_ms(), __ATOMIC_RELEASE);
+}
+
 int efs_client_map_fresh(efs_ino_t ino, uint32_t ci0, uint32_t ci1)
 {
     pthread_once(&map_fresh_once, map_fresh_init);
     if (!map_fresh_ttl || ci0 >= ci1)
         return 0;
     uint64_t now = map_fresh_now_ms();
+    /* Strictly after the open: a pull in the same millisecond may predate it. */
+    uint64_t opened = __atomic_load_n(map_open_slot(ino), __ATOMIC_ACQUIRE);
     for (uint32_t ci = ci0; ci < ci1; ci++) {
         uint32_t s = map_fresh_slot(ino, ci);
         pthread_mutex_t *mu = &map_fresh_mu[s & (MAP_FRESH_STRIPES - 1)];
         pthread_mutex_lock(mu);
         int ok = map_fresh[s].ino == ino && map_fresh[s].ci == ci &&
-                 now - map_fresh[s].ms < map_fresh_ttl;
+                 map_fresh[s].ms > opened && now - map_fresh[s].ms < map_fresh_ttl;
         pthread_mutex_unlock(mu);
         if (!ok)
             return 0;
