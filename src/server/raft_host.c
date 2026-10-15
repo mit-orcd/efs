@@ -8036,7 +8036,10 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
     cfg.send = host_send;
     cfg.send_ready = host_send_ready;
     cfg.recv_persist = host_receive_persist;
-    cfg.preserve_ack_window = h->s && h->s->storage_engine;
+    /* Duplicate prefix ACKs cannot retire a newer outstanding batch, for
+     * either engine. Keeping the window avoids redundant durable rewrites;
+     * ordinary partial progress, negative replies and retry age are unchanged. */
+    cfg.preserve_ack_window = 1;
     {
         const char *mode = getenv("EFS_RAFT_BATCH_NOOP");
         if (mode && strcmp(mode, "0") && strcmp(mode, "1"))
