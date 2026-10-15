@@ -199,6 +199,9 @@ typedef int (*efs_raft_admit_fn)(void *app, const struct efs_raft_entry *entries
  * and return with the caller's serialization restored. The cohort and decoded
  * command ownership stay on that thread until durable completion/failed fencing.
  * Other groups may progress; freeing this group still requires joining its owner.
+ * Stable ordinary append persistence may answer prefix-zero leadership contact in
+ * its already durable term/configuration. This grants no local read authority
+ * and acknowledges none of the cohort's pending log bytes.
  */
 typedef int (*efs_raft_recv_persist_fn)(void *net,
                                       int (*persist)(void *), void *persist_ctx);
@@ -335,7 +338,8 @@ int efs_raft_read_begin(struct efs_raft *r);
 /* Same serialization as recv. Pure stable read control only: 0 fallback,
  * 1 fully accounted request/reply handled, 2 fresh read control noted
  * (request commit/apply or reply replication bookkeeping still needs recv).
- * Caller must preserve pending inbox order; never bypass deferred log writes. */
+ * Caller must preserve pending inbox order and deferred log durability. A pure
+ * leadership vote during a stable ordinary cohort does not retire log work. */
 int efs_raft_read_control(struct efs_raft *r, const struct efs_raft_msg *msg);
 int efs_raft_read_ready(const struct efs_raft *r);
 /* Inspection of the most recently begun round, not authority for a new
