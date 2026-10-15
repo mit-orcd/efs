@@ -213,12 +213,37 @@ int efs_client_ensure_meta_room(uint64_t extra_inodes, uint64_t extra_chunks)
 }
 
 
+/* idx_mu protects the comparison and installation. Equality is deliberately
+ * conservative: even padding differences may evict, but no changed mapping
+ * may retain decoded bytes or a pending prefetch claim. This does not replace
+ * the authoritative GETCHUNKS refresh. */
+static int chunk_rec_same_read(const struct efs_chunk_entry *ce,
+                               const struct efs_chunk_rec *r)
+{
+    uint64_t gen = r->chunk_generation ? r->chunk_generation : r->base_gen;
+    if (ce->ino != r->ino || ce->chunk_index != r->chunk_index ||
+        ce->generation != gen || ce->ndelta != r->delta_base_n ||
+        ce->ndelta > EFS_CHUNK_DELTA_MAX ||
+        ce->delta_seq != r->delta_base_seq ||
+        memcmp(ce->fragment_nodes, r->nodes, sizeof(r->nodes)) ||
+        memcmp(ce->checksums, r->checksums, sizeof(r->checksums)) ||
+        memcmp(&ce->packed, &r->packed, sizeof(r->packed)) ||
+        memcmp(&ce->read_view, &r->read_view, sizeof(r->read_view)))
+        return 0;
+    return memcmp(ce->deltas, r->deltas,
+                  ce->ndelta * sizeof(ce->deltas[0])) == 0;
+}
+
 static void apply_chunk_recs(efs_ino_t lock_ino, const struct efs_chunk_rec *recs,
                              uint32_t n)
 {
     efs_client_lock_dir(lock_ino);
     pthread_mutex_lock(&g_client.idx_mu);
     for (uint32_t i = 0; i < n; i++) {
+        struct efs_chunk_entry old;
+        int same = efs_export_get_chunk(&g_client.export, recs[i].ino,
+                                        recs[i].chunk_index, &old) == EFS_OK &&
+                   chunk_rec_same_read(&old, &recs[i]);
         (void)efs_client_set_chunk(&g_client.export, recs[i].ino,
                                    recs[i].chunk_index, recs[i].nodes,
                                    recs[i].checksums);
@@ -240,7 +265,8 @@ static void apply_chunk_recs(efs_ino_t lock_ino, const struct efs_chunk_rec *rec
                                          recs[i].chunk_index, &recs[i].packed);
         (void)efs_export_set_chunk_view(&g_client.export, recs[i].ino,
                                         recs[i].chunk_index, &recs[i].read_view);
-        efs_rdcache_invalidate(recs[i].ino, recs[i].chunk_index);
+        if (!same)
+            efs_rdcache_invalidate(recs[i].ino, recs[i].chunk_index);
         efs_client_stage_touch(recs[i].ino);
     }
     pthread_mutex_unlock(&g_client.idx_mu);

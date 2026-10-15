@@ -261,6 +261,7 @@ tests/test_fence_view: tests/test_fence_view.c include/efs/fence_view.h
 
 test-fence-read:
 	python3 tests/test_fence_read.py
+	python3 tests/test_read_cache_reuse.py
 
 test-fence-view: tests/test_fence_view
 	./tests/test_fence_view

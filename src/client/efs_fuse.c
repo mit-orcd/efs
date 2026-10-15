@@ -197,6 +197,24 @@ static uint32_t fuse_chunk_size(void)
     return efs_chunk_size_valid(cs) ? cs : EFS_DEFAULT_CHUNK_SIZE;
 }
 
+static uint32_t fuse_io_limit(void)
+{
+    uint32_t cs = fuse_chunk_size();
+    uint32_t want = (uint32_t)EFS_WRITE_PIPELINE * cs;
+    if (want < (1u << 20))
+        want = (1u << 20);
+    if (want > (16u << 20))
+        want = (16u << 20);
+    /* max_write also determines FUSE_MAX_PAGES in libfuse. A malloc
+     * buffer may start inside a page: 1 MiB at page offset 16 needs
+     * 257 pages, otherwise Linux splits it into 1 MiB-16 and 16 bytes.
+     * Reserve one extra page without exceeding our 16 MiB bound. */
+    long page = sysconf(_SC_PAGESIZE);
+    if (page > 0 && (uint64_t)want + (uint64_t)page <= (16u << 20))
+        want += (uint32_t)page;
+    return want;
+}
+
 static void stat_set_size_blocks(struct stat *stbuf, uint64_t size,
                                  uint64_t allocated)
 {
@@ -5462,12 +5480,7 @@ static void efs_fuse_init(void *userdata, struct fuse_conn_info *conn)
     /* Timeouts are per lookup/getattr reply (always 0). There is no
      * fuse_config on the low-level API. */
     if (conn) {
-        uint32_t cs = fuse_chunk_size();
-        uint32_t want = (uint32_t)EFS_WRITE_PIPELINE * cs;
-        if (want < (1u << 20))
-            want = (1u << 20);
-        if (want > (16u << 20))
-            want = (16u << 20);
+        uint32_t want = fuse_io_limit();
         if (conn->max_write == 0 || conn->max_write > want)
             conn->max_write = want;
         if (conn->max_readahead == 0 || conn->max_readahead > (16u << 20))
@@ -7893,8 +7906,11 @@ static int efs_fuse_parse_cmdline(struct fuse_args *args,
 {
     if(!args || args->argc<1 || !args->argv)return -1;
     struct fuse_args configured=FUSE_ARGS_INIT(0,NULL);
+    char io_option[64];
+    snprintf(io_option, sizeof(io_option), "-omax_write=%u", fuse_io_limit());
     for(int i=0;i<args->argc;i++) {
         if(fuse_opt_add_arg(&configured,args->argv[i])!=0)goto failed;
+        if(i==0 && fuse_opt_add_arg(&configured,io_option)!=0)goto failed;
         if(i==0 && fuse_opt_add_arg(&configured,
             "-omax_threads=32,max_idle_threads=8")!=0)goto failed;
     }
