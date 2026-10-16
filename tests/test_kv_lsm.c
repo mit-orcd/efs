@@ -1299,9 +1299,12 @@ static void test_snapshot_scan_bounds(void)
     rmtree(g_dir);struct efs_kv *kv=open_store(EFS_KV_LSM_NOSYNC,0);
     CHECK(kv!=NULL,"open bounded scan source");if(!kv)return;
     CHECK(!put_s(kv,"p/a","value") && !efs_kv_lsm_flush(kv) && !efs_kv_lsm_compact(kv) && !efs_kv_lsm_quiesce(kv),"persist bounded source");
-    struct kv_lsm *live=kv->ctx,mock=*live;
+    struct kv_lsm *live=kv->ctx,mock={0};
+    /* A live engine contains pthread locks: copying it can strand a copied
+     * view_rw in the compactor's locked state. Build only the synthetic
+     * snapshot input and give it independent synchronization objects. */
     struct kv_seg *seg=live->n_l0?live->l0[0].seg:live->l1[0].seg;
-    memset(&mock.mu,0,sizeof(mock.mu));pthread_mutex_init(&mock.mu,NULL);
+    pthread_mutex_init(&mock.mu,NULL);pthread_rwlock_init(&mock.view_rw,NULL);
     mock.l0=calloc(KV_LSM_SNAPSHOT_SCAN_SEGS+1,sizeof(*mock.l0));mock.n_l1=0;mock.l1=NULL;
     CHECK(mock.l0!=NULL,"allocate white-box fan-in boundary");
     if(mock.l0){
@@ -1320,7 +1323,7 @@ static void test_snapshot_scan_bounds(void)
         }
         free(mock.l0);
     }
-    pthread_mutex_destroy(&mock.mu);
+    pthread_rwlock_destroy(&mock.view_rw);pthread_mutex_destroy(&mock.mu);
     uint32_t size=KV_LSM_SNAPSHOT_BLOCK_MAX+1;uint8_t *large=malloc(size),*got=malloc(size);
     CHECK(large && got,"allocate oversized-block test input");
     if(large && got){
@@ -1359,16 +1362,14 @@ static void test_full_snapshot(void)
     CHECK(efs_kv_lsm_snapshot_pin(kv,1,&failed)==EFS_ERR_BUSY && !failed,
           "snapshot budget is explicit");
     struct kv_lsm *budget_store=kv->ctx;
-    pthread_mutex_lock(&budget_store->mu);
-    struct kv_lsm overflow_store=*budget_store;
-    pthread_mutex_unlock(&budget_store->mu);
+    struct kv_lsm overflow_store={0};
     /* Never expose deliberately invalid counts to the live compactor. */
-    memset(&overflow_store.mu,0,sizeof(overflow_store.mu));pthread_mutex_init(&overflow_store.mu,NULL);
+    pthread_mutex_init(&overflow_store.mu,NULL);pthread_rwlock_init(&overflow_store.view_rw,NULL);
     overflow_store.n_l0=UINT32_MAX;overflow_store.n_l1=1;
     struct efs_kv overflow_kv={kv->ops,&overflow_store};
     CHECK(efs_kv_lsm_snapshot_pin(&overflow_kv,UINT64_MAX,&failed)==EFS_ERR_BUSY && !failed,
           "overflowed segment count refuses before touching segment pointers");
-    pthread_mutex_destroy(&overflow_store.mu);
+    pthread_rwlock_destroy(&overflow_store.view_rw);pthread_mutex_destroy(&overflow_store.mu);
     CHECK(efs_kv_lsm_snapshot_pin(kv,1<<20,&s)==EFS_OK,"pin unflushed state");
     if (!s) { efs_kv_lsm_close(kv);return; }
     uint64_t snapshot_bytes=efs_kv_lsm_snapshot_bytes(s);

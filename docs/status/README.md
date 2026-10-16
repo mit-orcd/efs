@@ -18,6 +18,15 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[ORCD Raft/KV decisions](orcd-raft-kv-20261016.md): mixed correctness **PASS**
+(297,651 exact readbacks; 57,935 queries), loaded POSIX **FAIL** (seven
+15-second timeouts). Keep Raft batching, 100 ms checkpoint interval, concurrent
+KV readers and 32 cache stripes; scan-seek cache benefit remains unproven here.
+Copied-lock snapshot test fixtures fixed; 40/40 repeated KV runs PASS.
+Orderly restart, 49 cross-client markers, 224 fixed payloads and seven cold
+queries PASS; quiet POSIX reruns 21/21 PASS do not close loaded timeouts.
+W121 remains open with kernel remediation deferred.
+
 [orcd-mini truncate](orcd-mini-truncate-20261016.md): **scoped PASS
 (functional).** A staged DEL's garbage vlen wedged one replica's apply
 (`apply lane-fence rc=-5` forever; truncate EIO, mkdir/rm EBUSY), fixed in

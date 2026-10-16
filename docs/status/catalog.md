@@ -6,6 +6,8 @@ Complete navigation to top-level status ledgers as of October 15, 2026. Grouping
 
 - [W121 — ORCD FUSE fork/read kernel gate](orcd-w121-fork-read-20261016.md)
 
+- [ORCD Raft/KV comparisons and snapshot-fixture timeout](orcd-raft-kv-20261016.md)
+
 ## Query commands and metadata
 
 - [W98 — from fixed placement to distributed metadata capacity](all-node-metadata-queries-20261009.md)

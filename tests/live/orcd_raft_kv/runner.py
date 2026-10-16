@@ -109,7 +109,7 @@ mount=pathlib.Path(%r);hosts=%r
 for host in hosts:
  p=mount/('rk-cold-'+%r+'-'+host)
  assert p.read_bytes()==hashlib.sha256(host.encode()).digest()*65536,str(p)
-fixture=pathlib.Path(json.loads(pathlib.Path(%r).read_text())['root'])/'fixed'
+fixture=mount/('qvote-'+json.loads(pathlib.Path(%r).read_text())['host'].split('.')[0])/'fixed'
 for i in range(32):assert (fixture/('f%%03d'%%i)).read_bytes()==bytes([i])*512
 r=subprocess.run(['python3',str(fixture/'.efs/ls'),'--json'],capture_output=True,timeout=30)
 assert r.returncode==0,(r.returncode,r.stderr)

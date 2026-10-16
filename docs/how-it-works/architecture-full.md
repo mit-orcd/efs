@@ -1528,6 +1528,23 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[ORCD Raft/KV decisions](../status/orcd-raft-kv-20261016.md): mixed correctness **PASS**
+(297,651 exact readbacks; 57,935 queries), loaded POSIX **FAIL** (seven
+15-second timeouts). Keep Raft batching, 100 ms checkpoint interval, concurrent
+KV readers and 32 cache stripes; scan-seek cache benefit remains unproven here.
+Copied-lock snapshot test fixtures fixed; 40/40 repeated KV runs PASS.
+Orderly restart, 49 cross-client markers, 224 fixed payloads and seven cold
+queries PASS; quiet POSIX reruns 21/21 PASS do not close loaded timeouts.
+W121 remains open with kernel remediation deferred.
+
+[orcd-mini truncate](../status/orcd-mini-truncate-20261016.md): **scoped PASS
+(functional).** A staged DEL's garbage vlen wedged one replica's apply
+(`apply lane-fence rc=-5` forever; truncate EIO, mkdir/rm EBUSY), fixed in
+`502277d19`. Truncating files over ~1 GiB returned EIO (32-chunk lane-fence
+cap); `4d6530dd8` pages the fence and reads the TRUNCATE verdict. A 100 GiB
+`dd if=/dev/null` now completes in 4.3 s; data/regrow checks PASS. Crash
+during paging NOTRUN.
+
 [ORCD queued-read-vote comparison](../status/orcd-queued-read-vote-20261016.md):
 **NO—keep reverted.** Frozen `fa29f9277`, native RDMA/direct, `.efs` enabled,
 no packing/containers/expiry; OFF–ON–ON–OFF across seven clients. POSIX
@@ -1699,7 +1716,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 
 | # | item | class | status | home |
 | --- | --- | --- | --- | --- |
-| orcd-qualification | **W119** · ORCD normal-operation RDMA failures and blocked clean stop | correctness / liveness | OPEN: 150 concurrent failures /846 NOTRUN; cross-host peer59/67; enabled queries EBUSY; retained writes block clean stop. TCP/commands-off rerun also FAILs (120 failures,520 NOTRUN; peer61/67; clean stop refused); all23 successfully prepared cold cases verify after authorized forced restart. [TCP evidence](../status/orcd-tcp-direct-disabled-20261015.md). Preserve failures, isolate causes and rerun original gates; W100 stays closed. [AMD follow-up](../status/amd-rdma-posix-20261015.md): native/serial/peer/cold/degraded PASS at `c8d057391`; one-mount jobs16 remains215/216 with unusual-name timeout. [Async durability follow-up](../status/amd-async-durability-20261015.md) at `c4178ea81`: scoped durability/native/serial/peer/cold/degraded PASS; jobs16 FAIL214/216 (unusual names, concurrent creates,15s) | [evidence and gates](../status/orcd-devel-qualification-20261015.md) · [item](#w119) |
+| orcd-qualification | **W119** · ORCD normal-operation RDMA failures and blocked clean stop | correctness / liveness | OPEN: 150 concurrent failures /846 NOTRUN; cross-host peer59/67; enabled queries EBUSY; retained writes block clean stop. TCP/commands-off rerun also FAILs (120 failures,520 NOTRUN; peer61/67; clean stop refused); all23 successfully prepared cold cases verify after authorized forced restart. [TCP evidence](../status/orcd-tcp-direct-disabled-20261015.md). Preserve failures, isolate causes and rerun original gates; W100 stays closed. [AMD follow-up](../status/amd-rdma-posix-20261015.md): native/serial/peer/cold/degraded PASS at `c8d057391`; one-mount jobs16 remains215/216 with unusual-name timeout. [Async durability follow-up](../status/amd-async-durability-20261015.md) at `c4178ea81`: scoped durability/native/serial/peer/cold/degraded PASS; jobs16 FAIL214/216 (unusual names, concurrent creates,15s) | [Raft/KV follow-up](../status/orcd-raft-kv-20261016.md) · [evidence and gates](../status/orcd-devel-qualification-20261015.md) · [item](#w119) |
 | immediate-readback | **W121** · successful fsync followed by previous-file payload | data correctness | OPEN: 255/123,932 exact readbacks failed across both queued-vote variants on ORCD native RDMA/direct with enabled `.efs`; unique512-byte files, no packing/containers/expiry. Diagnosed FUSE kernel fork/read page-pinning defect; kernel remediation deferred by user. Fork-isolated experiments do not close W121 | [diagnosis](../status/orcd-w121-fork-read-20261016.md) · [experiment](../status/orcd-queued-read-vote-20261016.md) · [item](#w121) |
 | qualification-fixtures | **W120** · stale extracted LOOKUP stub and command cleanup ownership check | verification correctness | OPEN (partial fix): AMD `f6235bb73` repairs the LOOKUP host context and checks reader identity; native/docs PASS at `85a9ad6b5`. Enabled-command cleanup ownership remains NOTRUN here and still needs correction/acceptance. [AMD evidence](../status/amd-rdma-posix-20261015.md); preserve original failures | [evidence](../status/orcd-devel-qualification-20261015.md) · [item](#w120) |
 | 0i | **W54** · a fold's GC deletes the live base → read EIO, data loss | correctness | NUC direct/buffered authoritative folds and cold GC/restart pass; real cold IOR/hardscan passes at 4 and 36 ranks, including nine independent NUC FUSE clients; nine physical hosts remain; AMD software-RXE fold/GC gate passes, hardware RDMA remains | [full text](#w54--a-folds-gc-deletes-the-live-base-queue-row-0i) |

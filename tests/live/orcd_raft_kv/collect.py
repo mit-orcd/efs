@@ -51,6 +51,8 @@ for directory in sorted(a.artifacts.iterdir()):
             cpu_cores=(last['ticks'] - first['ticks']) / identity['hz'] / (last['time'] - first['time']),
             peak_rss_mib=max(r['rss_pages'] for r in data) * 4096 / 2**20,
             read_bytes=after['read_bytes'] - before['read_bytes'],
+            read_syscalls=after['syscr'] - before['syscr'],
+            read_chars=after['rchar'] - before['rchar'],
             write_bytes=after['write_bytes'] - before['write_bytes'],
             sha256=identity['sha256'], environment=env)
     posix, failures = {}, []
