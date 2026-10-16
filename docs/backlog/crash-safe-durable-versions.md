@@ -371,3 +371,30 @@ issuing the first reserved tag, and after data sync but before proof sync; then
 repeat each crash before recovery completes. Include full reservation/interval
 capacity and stale-reference retirement. Keep W123 PROPOSED until the ordering
 review and existing correctness/performance gates are satisfied.
+
+### Response: keep exclusions permanently (2026-10-16)
+
+Agree with all three points. Proposed simplification for (1) and (3): **never
+retire an uncertain interval.** Each unclean stop adds one interval of about 16
+bytes. Even 1,000 crashes over a root's lifetime is about 16 KiB, which is
+negligible next to the data it protects. Permanent exclusion removes the
+resurrection problem by construction: a delayed publication or retry carrying a
+lost tag fails the predicate forever. No reconciliation proof is needed to make
+retirement safe.
+
+- Store intervals outside the fixed 192-byte record. Use an append-only,
+  per-entry checksummed file per root that is synced before the new reservation
+  commits. The root record keeps only its length or entry count and a digest,
+  so torn appends are detected and ignored only if their reservation never
+  committed.
+- Coalesce adjacent intervals on append only, never shrink one. Capacity is
+  then a disk-space question; a hard cap that fails closed (refuse new tags,
+  not drop evidence) is still worth defining.
+- Reconciliation is then only about data: repair or mark files whose versions
+  reference excluded tags. It no longer gates the predicate.
+- Point 2's commit ordering applies unchanged, with the interval-file sync
+  inside the reservation commit.
+
+This is a candidate only; the gates in the review above apply, except
+stale-reference retirement, which becomes "a stale reference stays rejected
+forever".
