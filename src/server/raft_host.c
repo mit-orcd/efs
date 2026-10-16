@@ -6709,9 +6709,6 @@ static void host_note_queued_reads(struct efs_raft_host *h,
     }
 }
 
-static void
-host_container_pending_reads(struct efs_raft_host *h);
-
 static int host_receive_persist(void *net, int (*persist)(void *), void *ctx)
 {
     struct efs_raft_host *h = net;
@@ -6719,12 +6716,6 @@ static int host_receive_persist(void *net, int (*persist)(void *), void *ctx)
      * hold and inbox credits; only its fenced store operation leaves h->mu. This is
      * synchronous on the pump thread so disk deferral TLS stays with its owner.
      * Stop joins that owner before releasing any Raft or decoded-frame memory. */
-    /* A probe already queued while apply held h->mu otherwise waits through
-     * this next disk barrier even though a newly arriving probe can vote
-     * during it. Service that backlog through the same fenced read-control
-     * helper before leaving the mutex. Only stable leadership votes qualify;
-     * ordinary replication, term/config changes and credits stay ordered. */
-    host_container_pending_reads(h);
     /* Revoke cached authority before unlocking, including a higher-term
      * transition whose old published view could still say LEADER. The core
      * exposes only stable commit/apply frontiers and no read proof in phase. */
@@ -6761,6 +6752,8 @@ static int host_receive_persist(void *net, int (*persist)(void *), void *ctx)
     return rc;
 }
 
+static void
+host_container_pending_reads(struct efs_raft_host *h);
 
 /* h->mu and the pump's KV hold are owned on entry/return. Only a fully
  * returned recv_batch may hand off: its log barrier, replies and ordered apply

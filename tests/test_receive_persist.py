@@ -13,17 +13,9 @@ code=r'''
 #include <string.h>
 #include <unistd.h>
 #define HOST_NGROUPS 2
-struct efs_raft_host {pthread_mutex_t mu;struct efs_raft *r[2];struct {int hosted;} g[2];unsigned acks[2],votes[2],applies[2],published,woken,read_votes;int fail_read_vote,queued_probe,queued_noted;uint64_t published_commit[2];};
+struct efs_raft_host {pthread_mutex_t mu;struct efs_raft *r[2];struct {int hosted;} g[2];unsigned acks[2],votes[2],applies[2],published,woken,read_votes;int fail_read_vote;uint64_t published_commit[2];};
 static void host_publish_view(struct efs_raft_host*h,int i){h->published++;h->published_commit[i]=efs_raft_commit(h->r[i]);}
 static void host_waiters_wake(struct efs_raft_host*h){h->woken++;}
-static void host_container_pending_reads(struct efs_raft_host*h){
- if(!h->queued_probe)return;
- h->queued_probe=0;
- struct efs_raft_msg probe={0};probe.type=EFS_RAFT_MSG_AE_REQ;
- probe.from=0;probe.to=1;probe.group=0;probe.term=2;probe.boot_id=9;
- probe.last_log_index=41;probe.vote_granted=1;
- h->queued_noted=efs_raft_read_control(h->r[0],&probe);
-}
 '''+hook+r'''
 struct gate {struct efs_raft_store *mem,ops;int enabled,started,release,fail;uint64_t durable;};
 static struct gate gates[2];
@@ -83,12 +75,10 @@ int main(void){for(int mode=0;mode<5;mode++)for(int failure=0;failure<2;failure+
   if(!i)for(int j=0;j<2;j++){x.m[j]=m;x.m[j].prev_index=j;x.m[j].prev_term=j?2:0;x.m[j].nentries=1;x.m[j].entries[0]=(struct efs_raft_entry){2,1,(uint8_t*)"x"};x.m[j].leader_commit=j+1;x.m[j].last_log_index=10+j;}
  }
  if(mode==3)assert(gates[0].mem->append(gates[0].mem,1,1,(uint8_t*)"x",1)==EFS_OK);
- h.published=h.woken=0;h.queued_probe=1;gates[0].enabled=1;gates[0].fail=failure;pthread_t tid;assert(!pthread_create(&tid,NULL,receive,&x));
+ h.published=h.woken=0;gates[0].enabled=1;gates[0].fail=failure;pthread_t tid;assert(!pthread_create(&tid,NULL,receive,&x));
  int began=0;for(int n=0;n<1000;n++){pthread_mutex_lock(&wait_mu);began=gates[0].started;pthread_mutex_unlock(&wait_mu);if(began)break;usleep(1000);}assert(began);
  int entered=0;for(int n=0;n<1000;n++){if(!pthread_mutex_trylock(&h.mu)){entered=1;break;}usleep(1000);}
  if(entered){
-  assert(!h.queued_probe && h.queued_noted==(mode<=2));
-  assert(h.read_votes==(unsigned)(mode<=2));h.read_votes=0;
   assert(h.published&&h.woken&&!h.published_commit[0]);
   assert(!h.acks[0]&&!h.votes[0]&&!h.applies[0]);struct efs_raft_msg probe=x.m[0];probe.nentries=0;probe.prev_index=probe.prev_term=probe.leader_commit=0;probe.last_log_index=42;probe.vote_granted=1;probe.term=mode==4?3:2;
   blocked(h.r[0],&probe,probe.term);
