@@ -10,8 +10,9 @@ weighing on current work.
 - Tag **`archive/packing-containers-20261016`** and branch **`packing-containers`**
   point at `6c274f47f`, the last devel commit with both features, their tests,
   scripts and docs.
-- To resume: branch from current `devel` and `git revert` the removal commits
-  (or cherry-pick from the archive), then re-qualify. Do not develop on the
+- The removal is the single commit `5ded11179`. To resume: branch from
+  current `devel` and `git revert 5ded11179` (or cherry-pick from the
+  archive), resolve against whatever changed since, then re-qualify. Do not develop on the
   archive branch in parallel with `devel`; it would drift.
 
 ## What was removed

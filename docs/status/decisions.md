@@ -41,7 +41,7 @@ and branch `packing-containers`. Devel is files-engine only. Stores that ever
 held packed rows (KVLSM2 MANIFEST), container-engine roots (engine marker 1),
 packed snapshot imports and retired packing log entries are refused with an
 explicit message, never misread. Resume by branching from current devel and
-reverting the removal commits. [Removal record](packing-containers-removal-20261016.md).
+reverting removal commit `5ded11179`. [Removal record](packing-containers-removal-20261016.md).
 This supersedes the October 12 container-testing scope note for current work.
 
 ## D36 — node-count protection contract (accepted Oct 9)
