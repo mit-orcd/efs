@@ -1941,6 +1941,11 @@ uint32_t efs_client_open_map_count(uint64_t size)
  * normal generation-checked cache pin; this only overlaps the fetch. */
 void efs_client_prefetch_open(efs_ino_t ino, uint64_t size)
 {
+    /* Below one chunk a read fetches only the fragment range it needs;
+     * a whole-chunk prefetch would add RPCs (Oct 16 smoke: 4 GET_CHUNK per
+     * 61-byte file instead of 1). */
+    if (size < data_chunk_size())
+        return;
     prefetch_ahead(ino, 0, size);
 }
 
