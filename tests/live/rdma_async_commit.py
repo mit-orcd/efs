@@ -93,10 +93,25 @@ try:
     assert all(int(n)==0 for n in re.findall(r'\((\d+) fragments',after)), after
     assert (b/'peer.bin').read_bytes()==payload
     checks.append('peer fsync commits previously unstable data on all nodes')
+    # The writer remains mounted with unresolved PUT accounting. Every clean
+    # daemon stop drains its data and persists the same durability verifier.
+    for cycle in range(2):
+        (a/'clean.bin').write_bytes(payload)
+        record=work/'n4'/'.efs-durable-epoch'
+        old=record.read_bytes();assert old[:8]==b'EFSDUR02'
+        verifier=int.from_bytes(old[40:48],'big');assert verifier
+        nodes[4].terminate();nodes[4].wait(timeout=30);start(4)
+        assert int.from_bytes(record.read_bytes()[40:48],'big')==verifier
+        fsync_file(a/'clean.bin',0)
+        fsync_file(b/'clean.bin',0)
+        assert (b/'clean.bin').read_bytes()==payload
+    checks.append('mounted writer and peer fsync survive two clean daemon restarts')
     (a/'restart.bin').write_bytes(payload)
     stats('before-crash')
+    old_verifier=int.from_bytes(record.read_bytes()[40:48],'big')
     nodes[4].kill();nodes[4].wait(timeout=10)
     start(4)
+    assert int.from_bytes(record.read_bytes()[40:48],'big')!=old_verifier
     # The old writer must refuse; the server also protects new clients that
     # cannot compare an old verifier. No data corruption is required here.
     fsync_file(a/'restart.bin',errno.EIO)

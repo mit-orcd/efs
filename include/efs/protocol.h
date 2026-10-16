@@ -527,7 +527,7 @@ struct efs_msg_status_reply {
 struct efs_msg_data_commit_reply {
     int32_t rc;           /* EFS_OK or EFS_ERR_IO (a durability barrier failed) */
     uint32_t roots;       /* async roots covered */
-    uint64_t boot_epoch;  /* nonzero process incarnation; never reused */
+    uint64_t boot_epoch;  /* nonzero durability verifier; retained only after all-root clean stop */
 };
 
 /* SYNC_STATS: per storage root durability state. Empty request.

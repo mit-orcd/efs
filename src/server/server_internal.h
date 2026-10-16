@@ -48,7 +48,7 @@ struct efs_ino_hold {
 };
 
 struct efsd_server {
-    uint64_t put_boot_epoch; /* random verifier for this server process */
+    uint64_t put_boot_epoch; /* durability verifier, stable across proven clean restarts */
     efs_node_id_t id;
     int repair_experiment; /* explicit default-off single-root FILES experiment */
     char addr[64];

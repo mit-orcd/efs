@@ -7,7 +7,7 @@
 #include <unistd.h>
 
 static struct efs_conn conns[8];
-static int commits[8], fail_io[8], fail_net[8];
+static int commits[8], fail_io[8], fail_net[8], fail_net_once[8];
 static int hold[8];          /* reply withheld while set */
 struct efs_client g_client;
 static __thread uint64_t deadline;
@@ -22,6 +22,7 @@ int efs_conn_send_msg(struct efs_conn *c, uint8_t type, const void *p, uint32_t 
     int id = (int)(c - conns);
     assert(type == EFS_MSG_DATA_COMMIT && !p && !n);
     __atomic_fetch_add(&commits[id], 1, __ATOMIC_ACQ_REL);
+    if(__atomic_exchange_n(&fail_net_once[id],0,__ATOMIC_ACQ_REL))return -1;
     return __atomic_load_n(&fail_net[id], __ATOMIC_ACQUIRE) ? -1 : 0;
 }
 int efs_conn_recv_msg(struct efs_conn *c, uint8_t *type, void **p, uint32_t *n)
@@ -57,6 +58,8 @@ int main(void)
         reset(); assert(efs_client_data_commit()==EFS_OK);
         for(int i=1;i<=4;i++) assert(commits[i]==1);
     }
+    reset();fail_net_once[2]=1;assert(efs_client_data_commit()==EFS_OK);
+    assert(commits[2]==2 && commits[1]==1 && commits[3]==1 && commits[4]==1);
     /* Peer writes: no local notes, but a peer's failed barrier is visible. */
     fail_io[3]=1; assert(efs_client_data_commit()==EFS_ERR_IO); fail_io[3]=0;
     fail_net[2]=1; assert(efs_client_data_commit()==EFS_ERR_NET); fail_net[2]=0;
@@ -82,7 +85,14 @@ int main(void)
     pthread_join(a.t,NULL);pthread_join(b.t,NULL);
     assert(a.rc==EFS_ERR_IO && b.rc==EFS_ERR_IO);
     fail_io[1]=0;assert(efs_client_data_commit()==EFS_OK);
-    /* A clean restart AFTER committed data is not an unresolved epoch. */
+    /* A clean stop drains prior PUTs and preserves the all-root verifier.
+     * An unresolved client therefore survives repeated clean restarts and
+     * new PUTs without needing to remount or clear any loss flag. */
+    efs_client_commit_note(1,101);
+    assert(efs_client_data_commit()==EFS_OK);
+    efs_client_commit_note(1,101);efs_client_commit_note(1,101);
+    assert(efs_client_data_commit()==EFS_OK && !node_commit[1].lost);
+    /* A restart AFTER committed data is not an unresolved epoch. */
     epochs[1]=102;assert(efs_client_data_commit()==EFS_OK);
     efs_client_commit_note(1,102);assert(efs_client_data_commit()==EFS_OK);
     deadline=12345;assert(efs_client_data_commit()==EFS_OK && deadline==12345);deadline=0;

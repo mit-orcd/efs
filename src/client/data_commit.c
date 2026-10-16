@@ -5,7 +5,8 @@
 #include <time.h>
 
 /* Every fsync covers all current storage nodes, including peer writes and
- * a newly mounted client. A PUT verifier belongs to one server process.
+ * a newly mounted client. A PUT verifier identifies a continuous durable server history.
+ * Clean restarts preserve it only after all roots prove a final barrier.
  * Never silently forget an acknowledged-but-uncommitted incarnation: the
  * payload may already have been released, so a changed verifier is sticky EIO.
  * The server separately fences uncertain unclean recovery for fresh clients. */
@@ -32,34 +33,40 @@ static void *commit_one(void *arg)
     uint64_t saved = efs_client_rpc_deadline_ms();
     efs_client_rpc_set_deadline_ms(j->deadline);
     j->rc = EFS_ERR_NET;
-    struct efs_conn *conn = efs_client_conn_get(j->node);
-    if (conn) {
-        uint8_t type = 0; void *reply = NULL; uint32_t bytes = 0;
-        if (efs_conn_send_msg(conn, EFS_MSG_DATA_COMMIT, NULL, 0) ||
-            efs_conn_recv_msg(conn, &type, &reply, &bytes)) {
-            efs_client_conn_drop(j->node, conn);
-        } else {
-            efs_client_conn_release(j->node, conn);
-            if (type == EFS_MSG_DATA_COMMIT_REPLY &&
-                bytes == sizeof(struct efs_msg_data_commit_reply)) {
-                const struct efs_msg_data_commit_reply *r = reply;
-                j->rc = r->rc == EFS_OK && r->boot_epoch ? EFS_OK : EFS_ERR_IO;
-                pthread_mutex_lock(&commit_mu);
-                /* Even another successful fsync cannot erase a mismatch for
-                 * this call's own snapshot. A later PUT must not hide it. */
-                if (j->target && j->epoch != r->boot_epoch) {
-                    node_commit[j->node].lost = 1;
-                    j->rc = EFS_ERR_IO;
-                }
-                if (node_commit[j->node].lost) j->rc = EFS_ERR_IO;
-                if (j->rc == EFS_OK && j->target > node_commit[j->node].committed)
-                    node_commit[j->node].committed = j->target;
-                pthread_mutex_unlock(&commit_mu);
+    /* COMMIT is idempotent. A planned restart leaves an old pooled socket;
+     * retry transport failure once with a new connection, inside the same
+     * deadline and acknowledged snapshot. Never retry a verifier/error reply. */
+    for(unsigned attempt=0;attempt<2;attempt++) {
+        struct efs_conn *conn = efs_client_conn_get(j->node);
+        if (conn) {
+            uint8_t type = 0; void *reply = NULL; uint32_t bytes = 0;
+            if (efs_conn_send_msg(conn, EFS_MSG_DATA_COMMIT, NULL, 0) ||
+                efs_conn_recv_msg(conn, &type, &reply, &bytes)) {
+                efs_client_conn_drop(j->node, conn);
             } else {
-                j->rc = EFS_ERR_PROTO;
+                efs_client_conn_release(j->node, conn);
+                if (type == EFS_MSG_DATA_COMMIT_REPLY &&
+                    bytes == sizeof(struct efs_msg_data_commit_reply)) {
+                    const struct efs_msg_data_commit_reply *r = reply;
+                    j->rc = r->rc == EFS_OK && r->boot_epoch ? EFS_OK : EFS_ERR_IO;
+                    pthread_mutex_lock(&commit_mu);
+                    /* Even another successful fsync cannot erase a mismatch for
+                     * this call's own snapshot. A later PUT must not hide it. */
+                    if (j->target && j->epoch != r->boot_epoch) {
+                        node_commit[j->node].lost = 1;
+                        j->rc = EFS_ERR_IO;
+                    }
+                    if (node_commit[j->node].lost) j->rc = EFS_ERR_IO;
+                    if (j->rc == EFS_OK && j->target > node_commit[j->node].committed)
+                        node_commit[j->node].committed = j->target;
+                    pthread_mutex_unlock(&commit_mu);
+                } else {
+                    j->rc = EFS_ERR_PROTO;
+                }
             }
+            free(reply);
         }
-        free(reply);
+        if(j->rc!=EFS_ERR_NET)break;
     }
     efs_client_rpc_set_deadline_ms(saved);
     return NULL;
