@@ -1537,6 +1537,13 @@ Orderly restart, 49 cross-client markers, 224 fixed payloads and seven cold
 queries PASS; quiet POSIX reruns 21/21 PASS do not close loaded timeouts.
 W121 remains open with kernel remediation deferred.
 
+[RDMA credit overrun](../status/orcd-mini-rdma-credit-20261016.md): **scoped PASS;
+orcd-mini rollout NOTRUN.** DATA plus CREDIT frames could exceed a peer's
+posted receives; the RNR retry turned 30 µs request/reply rounds into 2 ms
+and Raft commits into 26 ms on orcd-mini. `e84d42cbb` bounds credits at half
+the receives (6 by default). Private 3-node RDMA cluster: 16-thread creates
+348–388 → 2,625–2,675 files/s; stat p90 2.3–4.5 → 0.3 ms.
+
 [orcd-mini truncate](../status/orcd-mini-truncate-20261016.md): **scoped PASS
 (functional).** A staged DEL's garbage vlen wedged one replica's apply
 (`apply lane-fence rc=-5` forever; truncate EIO, mkdir/rm EBUSY), fixed in
