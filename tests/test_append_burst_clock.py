@@ -19,6 +19,7 @@ typedef uint64_t efs_ino_t;
 struct efs_open_ref {efs_ino_t ino;unsigned append_publishing,append_burst;
  uint64_t append_burst_ms,append_handoff_ms;struct efs_open_ref *next;};
 static struct efs_open_ref entry={.ino=42},*g_open_refs=&entry;
+static struct efs_open_ref *open_ref_find(efs_ino_t ino){for(struct efs_open_ref *r=g_open_refs;r;r=r->next)if(r->ino==ino)return r;return NULL;}
 static pthread_mutex_t g_open_mu=PTHREAD_MUTEX_INITIALIZER;
 static uint64_t clock_ms=100,delay;static unsigned flushes;static int result;
 static uint64_t stats_now_ms(void){return clock_ms;}

@@ -26,6 +26,7 @@ static pthread_mutex_t stripe=PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t g_open_mu=PTHREAD_MUTEX_INITIALIZER;
 struct efs_open_ref {efs_ino_t ino;uint32_t append_burst;uint64_t append_burst_ms,append_handoff_ms;int append_publishing;struct efs_open_ref *next;};
 static struct efs_open_ref open_ref={.ino=1},*g_open_refs=&open_ref;
+static struct efs_open_ref *open_ref_find(efs_ino_t ino){for(struct efs_open_ref *r=g_open_refs;r;r=r->next)if(r->ino==ino)return r;return NULL;}
 static uint64_t cached_size;
 static int flush_calls,flush_rc,clear_publish_on_sleep;
 static uint64_t now,deadline;static unsigned calls,begins,ends,sleeps,last_sleep;
