@@ -244,8 +244,21 @@ this list, before it ships.
   publication machine; both callbacks explicitly publish before replying).
   Mount `-o sync` acceptance remains separately owed under W73. An
   `fsync` drains this client's pending publishes of the file that precede
-  it — one in flight, or retrying on contention, is awaited; it never
-  waits for another client's writes. A transient failure of that drain
+  it — one in flight, or retrying on contention, is awaited. It then sends
+  DATA_COMMIT to every current storage node, covering already-acknowledged
+  peer data too; it does not drain another client's unpublished buffer.
+  PUT acknowledgement is asynchronous. PUT and COMMIT carry a nonzero
+  durability-history verifier. Proven clean restarts preserve it only when
+  every configured root has a checksummed clean record agreeing on the
+  verifier and root count. Other restarts rotate it: losing an unresolved
+  verifier returns sticky client-wide EIO, because the client may no longer
+  retain retransmission bytes. COMMIT retries a failed transport once within
+  its original deadline.
+  An unclean storage-root restart fences COMMIT even for a fresh client;
+  a checksum scan alone cannot prove that every published create survived.
+  This fence persists across orderly restarts until verified recovery or
+  a fresh format; no automatic recovery is implemented by this change.
+  See [AMD durability fixes](../status/amd-async-durability-20261015.md). A transient failure of that drain
   (transport, RPC budget, node down) returns EIO from that call with the
   bytes retained as pending; the next `fsync` retries. If a publish of
   the file has been classified **stalled** (D27, [decisions.md](../status/decisions.md): repeated
@@ -270,7 +283,10 @@ this list, before it ships.
   (`fsync`, `flush`, `O_SYNC`, or a landed-PUT REPORT — D24). Within one
   client, read-your-writes hold via the dcache. This resembles NFS
   close-to-open consistency (publication at `flush`, visibility on the
-  next open/read elsewhere) and only that: client-side buffering does
+  next open/read elsewhere). Reads on an already-open description may retain
+  a chunk mapping for `EFS_READ_MAP_TTL_MS` (default 200 ms, zero disables
+  this cache); a new open invalidates mapping freshness. This is only
+  close-to-open consistency: client-side buffering does
   not by itself imply weak coherence — lock- or lease-based PFSs recall
   buffered data to make it visible, and EFS has no such recall. It is a
   consistency deviation separate from the durability rule above and is

@@ -26,6 +26,51 @@ creates 77 → 345/s, busy-follower pump drains 12–16 → 1.3–1.6 ms. Same d
 retained-close fix and hashed open table (`ae3a49d8a`), concurrent LSM reads
 (`3fba43af7`). Default commit not yet deployed; qualification NOTRUN.
 
+[ORCD fresh-store read/close baseline](orcd-read-close-baseline-20261016.md):
+W119 native RDMA/direct baseline on frozen852caf1ae, features disabled,
+exclusive after graceful crawler/service stop. Three fresh-store core runs
+216/216 PASS (11.3/11.0/11.1s), local peer67/67 PASS; no seven-client run. TCP leg pending scope clarification;
+no A/B conclusion or AMD timeout closure.
+
+[AMD asynchronous durability fixes](amd-async-durability-20261015.md):
+**durability scoped PASS, loaded POSIX FAIL** on `c4178ea81`, branch
+`devel-amd-durability-20261015` from `84ffe7a68`. Early ACKs retained; all-node
+COMMIT, boot verifiers and persistent unclean-recovery refusal pass focused
+and live RDMA/direct gates. Native, serial216/216, peer67/67 and cold27/27
+pass; jobs16 is214/216 (`names_crazy_dirs`, `concurrent_creates_same_dir`
+time out at15s). Follow-up `1a009c5ab` retains the memtable-prefix and
+REPORT owner-preparation fixes (full native PASS); two quiet jobs16 runs
+remain214/216; the restored follow-up is213/216 with an additional mtime
+timeout, while peer passes67/67. Measured delay is principally fresh quorum waiting, not
+connection checkout. A queued-vote scheduling experiment worsened loaded
+results and was reverted. Clean-restart follow-up `b6454a7f8` passes focused
+and live RDMA/direct durability tests: mounted writer/peer survive two clean
+daemon restarts. Unclean recovery still fences COMMIT indefinitely; verified
+recovery and per-file loss tracking remain missing. W71/W119 stay open; no
+seven-client run or power-cut claim. Deployed follow-up `e53d20aa1`: core
+serial216/216, peer67/67 and cold27/27 PASS; jobs16 remains FAIL215/216
+(`names_crazy_dirs`, unchanged15s). Extras1 PASS/4 SKIP. No independent
+reviewed commits met the selected merge scope; dependent changes deferred.
+Single-case strace/perf follow-up `f62519501` removes the measured512-slot
+wake scan; focused safety/sanitizer tests PASS. Isolated names case passes,
+but quiet jobs16 remains215/216 then214/216: names still times out at15s.
+W119 stays OPEN. Jobs16 correlation now reproduces the names timeout during
+create/read/list: LOOKUP averages5.98ms,5.95ms in parent ReadIndex; follower
+queued probes average8.89–9.48ms. Open/close dominate the traced case, not
+directory enumeration. Follow-up close phases identify append-lock and REPORT
+waits (one names close:53ms lock,56ms REPORT). Opportunistic queued-probe
+draining and wider append stripes were not retained; the stripe comparison
+was confounded by an independent AMD build. Original scheduling/64 stripes
+restored; opt-in timing and deadline regressions retained. W119 remains OPEN;
+no accepted timeout fix. Restored jobs16 FAIL205/216 (ten timeouts, one
+unlink EBUSY); independent Intel-client storage benchmarks prevent claiming
+a quiet isolated comparison. User moved the investigation to exclusive NUC: source852caf1ae build and
+seven focused units PASS. User subsequently authorized TCP/direct on NUC:
+clean four-node baseline core216/216 twice (16.9/21.2s) and peer67/67 PASS; isolated names0.8s
+and deep>64 1.5s PASS, original deadlines/features unchanged. NUC RDMA remains
+NOTRUN (no device/Soft-RoCE kernel); AMD timeout closure is not claimed.
+
+
 [Asynchronous PUT acknowledgement](intel-async-durability-20261015.md):
 **scoped PASS** on `3edc7b846` (async ACK from `d8af2c325`, concurrent-fsync
 COMMIT fix, 200 ms read-mapping TTL with refresh-ahead and close-to-open), now

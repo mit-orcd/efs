@@ -22,6 +22,13 @@
  * chunked/streamed variant. */
 #define EFS_MSG_MAX_LEN (3072u * 1024 * 1024)
 
+/* Ordinary PUT body: status + path + 64-bit verifier, fixed endian. */
+#define EFS_PUT_REPLY_LEN 10u
+static inline uint64_t efs_put_epoch_read(const uint8_t *p)
+{ uint64_t v=0; for(unsigned i=0;i<8;i++) v=(v<<8)|p[i]; return v; }
+static inline void efs_put_epoch_write(uint8_t *p, uint64_t v)
+{ for(unsigned i=0;i<8;i++) p[i]=(uint8_t)(v>>(56-8*i)); }
+
 enum efs_msg_type {
     EFS_MSG_HEARTBEAT = 0,
     EFS_MSG_HEARTBEAT_ACK = 1,
@@ -520,6 +527,7 @@ struct efs_msg_status_reply {
 struct efs_msg_data_commit_reply {
     int32_t rc;           /* EFS_OK or EFS_ERR_IO (a durability barrier failed) */
     uint32_t roots;       /* async roots covered */
+    uint64_t boot_epoch;  /* nonzero durability verifier; retained only after all-root clean stop */
 };
 
 /* SYNC_STATS: per storage root durability state. Empty request.
@@ -528,7 +536,7 @@ struct efs_msg_data_commit_reply {
 struct efs_sync_root_stats {
     char root[160];
     uint32_t mode;
-    uint32_t error;               /* a barrier failed; COMMIT returns EIO until restart */
+    uint32_t error;               /* barrier failed or recovery uncertain; COMMIT returns EIO */
     uint64_t unsynced_bytes;      /* acknowledged, not yet durable */
     uint64_t unsynced_fragments;
     uint64_t oldest_unsynced_ms;  /* age of the oldest unsynced fragment */
@@ -1396,7 +1404,7 @@ int efs_recv_msg_into(int fd, uint8_t *type, uint8_t *status,
 /* Hot-path helper: receive a 1-byte status reply without malloc.
  * On success sets *type and *status. Returns EFS_OK or an error. */
 int efs_recv_u8_reply(int fd, uint8_t *type, uint8_t *status);
-int efs_recv_put_reply(int fd, uint8_t *type, uint8_t *status, uint8_t *path);
+int efs_recv_put_reply(int fd, uint8_t *type, uint8_t *status, uint8_t *path, uint64_t *epoch);
 
 /* ---- transport-dispatching variants (struct efs_conn, network.h) ----
  * Same semantics as the fd-based originals. With a live RDMA QP, all supported complete logical frames go over segmented RDMA. TCP is used
@@ -1416,10 +1424,9 @@ int efs_conn_recv_msg_into(struct efs_conn *c, uint8_t *type, uint8_t *status,
                            void *hdr, uint32_t hdr_len,
                            void *body, uint32_t body_len);
 int efs_conn_recv_u8_reply(struct efs_conn *c, uint8_t *type, uint8_t *status);
-/* PUT reply: status byte, then an optional storage-root index (0xff = none).
- * A one-byte reply leaves *path as 0xff. */
+/* PUT reply: status, root index, and mandatory big-endian boot verifier. */
 int efs_conn_recv_put_reply(struct efs_conn *c, uint8_t *type, uint8_t *status,
-                            uint8_t *path);
+                            uint8_t *path, uint64_t *epoch);
 
 /* Wait for the next request on either channel. Returns EFS_CONN_TCP /
  * EFS_CONN_RDMA, or -1 on error / peer close. Pure-TCP conns return

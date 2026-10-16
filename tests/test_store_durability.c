@@ -58,6 +58,50 @@ static int async_put(struct put_sync_root *r, const char *path, uint8_t *data)
     strcpy(a.path,path);shard_io_thread(&a);
     return a.result;
 }
+/* The verifier is a clean durability lineage, not just process identity.
+ * Every configured root must agree before any new running record is written. */
+static void test_clean_verifier_selection(void)
+{
+    char base[]="/tmp/efs-verifier-XXXXXX";assert(mkdtemp(base));
+    struct efsd_server *server=calloc(1,sizeof(*server));assert(server);
+    server->storage_path_count=2;
+    struct put_sync_root roots[2]={0};
+    char paths[2][EFS_MAX_PATH+32];uint64_t epoch=77;
+    for(unsigned i=0;i<2;i++) {
+        snprintf(server->storage_paths[i],EFS_MAX_PATH,"%s/r%u",base,i);
+        assert(!mkdir(server->storage_paths[i],0755));
+        snprintf(paths[i],sizeof(paths[i]),"%s/%s",server->storage_paths[i],PUT_SYNC_RECORD);
+        roots[i].record_fd=open(paths[i],O_CREAT|O_RDWR,0644);assert(roots[i].record_fd>=0);
+        roots[i].boot=1;roots[i].verifier=101;roots[i].root_count=2;
+        assert(!put_sync_record_write(&roots[i],3,1));
+    }
+    assert(!put_sync_reuse_epoch(server,&epoch) && epoch==101);
+    roots[0].boot++;roots[1].boot++; /* arbitrarily many clean restarts */
+    assert(!put_sync_record_write(&roots[0],4,1));assert(!put_sync_record_write(&roots[1],4,1));
+    assert(!put_sync_reuse_epoch(server,&epoch) && epoch==101);
+    assert(!put_sync_record_write(&roots[1],4,0));
+    assert(!put_sync_reuse_epoch(server,&epoch) && !epoch);
+    assert(!put_sync_record_write(&roots[1],4,1));
+    server->storage_path_count=1;assert(!put_sync_reuse_epoch(server,&epoch) && !epoch);
+    server->storage_path_count=2;roots[1].verifier=102;
+    assert(!put_sync_record_write(&roots[1],4,1));assert(!put_sync_reuse_epoch(server,&epoch) && !epoch);
+    roots[1].verifier=101;assert(!put_sync_record_write(&roots[1],4,1));
+    uint8_t byte;assert(pread(roots[1].record_fd,&byte,1,23)==1);byte^=1;
+    assert(pwrite(roots[1].record_fd,&byte,1,23)==1);
+    assert(put_sync_reuse_epoch(server,&epoch)==EFS_ERR_IO && !epoch);
+    assert(!put_sync_record_write(&roots[1],4,1));
+    assert(!ftruncate(roots[1].record_fd,80));assert(put_sync_reuse_epoch(server,&epoch)==EFS_ERR_IO);
+    char legacy[PUT_SYNC_RECORD_LEN];memset(legacy,' ',sizeof(legacy));
+    int n=snprintf(legacy,sizeof(legacy),"efs-durable-epoch v1 boot=1 seq=3 time_ns=4 clean=1");
+    legacy[n]=' ';legacy[sizeof(legacy)-1]='\n';
+    assert(pwrite(roots[1].record_fd,legacy,sizeof(legacy),0)==sizeof(legacy));
+    assert(!put_sync_reuse_epoch(server,&epoch) && !epoch);
+    for(unsigned i=0;i<2;i++){close(roots[i].record_fd);assert(!unlink(paths[i]));}
+    assert(!put_sync_reuse_epoch(server,&epoch) && !epoch);
+    for(unsigned i=0;i<2;i++)assert(!rmdir(server->storage_paths[i]));
+    free(server);assert(!rmdir(base));
+}
+
 static int test_async_durability(uint8_t *data)
 {
     const char *tmp=getenv("TMPDIR");char root[1024],path[1100],rec[1100];
@@ -66,7 +110,7 @@ static int test_async_durability(uint8_t *data)
     if((unsigned long)fs.f_type!=XFS_SUPER_MAGIC_){assert(!rmdir(root));return 0;}
     put_sync_window_ms=100;put_sync_window_bytes=1ull<<20;
     struct put_sync_root *r=&put_sync_roots[0];
-    booting=1;put_sync_attach(r,root);booting=0;
+    booting=1;put_sync_attach(r,root,101,1);booting=0;
     assert(r->fd>=0 && r->boot==1 && r->prev_clean && r->seq==1 && !r->durable_seq);
     put_sync_state[0]=1;
     snprintf(rec,sizeof(rec),"%s/%s",root,PUT_SYNC_RECORD);assert(!access(rec,F_OK));
@@ -91,11 +135,12 @@ static int test_async_durability(uint8_t *data)
     assert(!r->cur_frags && !r->inflight_frags && r->barriers>b && r->synced_bytes==r->acked_bytes);
     /* Clean stop marks the record clean. */
     server_put_sync_stop(NULL);
-    char text[256]={0};int fd=open(rec,O_RDONLY);assert(fd>=0 && read(fd,text,sizeof(text)-1)>0);close(fd);
-    assert(strstr(text,"boot=1") && strstr(text,"clean=1"));
+    struct put_sync_record record;int fd=open(rec,O_RDONLY);assert(fd>=0);
+    assert(!put_sync_record_read(fd,&record));close(fd);
+    assert(record.boot==1 && record.clean && record.verifier==101 && record.roots==1);
     close(r->fd);close(r->record_fd);memset(r,0,sizeof(*r));put_sync_state[0]=0;
     /* Restart after a clean stop: next boot, no scan. */
-    booting=1;put_sync_attach(r,root);booting=0;
+    booting=1;put_sync_attach(r,root,101,1);booting=0;
     assert(r->fd>=0 && r->boot==2 && r->prev_clean && r->scan_done);
     put_sync_state[0]=1;
     /* A failed barrier is sticky until restart: COMMIT fails even after a
@@ -119,20 +164,34 @@ static int test_async_durability(uint8_t *data)
         strcpy(a.path,path);file_syncs=0;shard_io_thread(&a);assert(a.result==EFS_OK);
         int cf=open(path,O_WRONLY);assert(cf>=0 && pwrite(cf,"X",1,0)==1);close(cf);
     }
-    booting=1;put_sync_attach(r,root);booting=0;
+    booting=1;put_sync_attach(r,root,101,1);booting=0;
     assert(r->fd>=0 && r->boot==3 && !r->prev_clean && r->scanner_started);
     pthread_join(r->scanner,NULL);r->scanner_started=0;
     assert(r->scan_done && r->scanned>=4 && r->bad==1);
+    /* A fresh client must not mistake an empty new-boot counter for durable
+     * old data. Even a successful new barrier cannot clear uncertainty. */
+    assert(r->recovery_uncertain && put_sync_commit_root(r)==EFS_ERR_IO);
+    assert(async_put(r,path,data)==EFS_OK);
+    assert(put_sync_commit_root(r)==EFS_ERR_IO);
+    put_sync_state[0]=1;server_put_sync_stop(NULL);
+    close(r->fd);close(r->record_fd);memset(r,0,sizeof(*r));put_sync_state[0]=0;
+    booting=1;put_sync_attach(r,root,101,1);booting=0;
+    assert(r->fd>=0 && !r->prev_clean && r->recovery_uncertain);
+    assert(put_sync_commit_root(r)==EFS_ERR_IO);
     put_sync_state[0]=1;server_put_sync_stop(NULL);
     close(r->fd);close(r->record_fd);memset(r,0,sizeof(*r));put_sync_state[0]=0;
     for(int i=1;i<=5;i++){snprintf(path,sizeof(path),"%s/data/a/f%d",root,i);unlink(path);}
     snprintf(path,sizeof(path),"%s/data/a",root);assert(!rmdir(path));
     snprintf(path,sizeof(path),"%s/data",root);assert(!rmdir(path));
+    /* A truncated epoch record cannot default to a clean predecessor. */
+    int badfd=open(rec,O_WRONLY|O_TRUNC);assert(badfd>=0);assert(write(badfd,"bad",3)==3);close(badfd);
+    put_sync_attach(r,root,101,1);assert(r->fd<0);
     assert(!unlink(rec));assert(!rmdir(root));
     return 1;
 }
 int main(void)
 {
+    test_clean_verifier_selection();
     /* Files permit nested roots: pinned proof ownership follows longest root. */
     struct efsd_server *routes=calloc(1,sizeof(*routes));assert(routes);
     struct target outer={0},inner={0};strcpy(outer.root,"/storage");strcpy(inner.root,"/storage/nested");

@@ -1,5 +1,9 @@
 # Asynchronous PUT acknowledgement — 2026-10-15
 
+**Later correction:** the [AMD durability follow-up](amd-async-durability-20261015.md)
+addresses cross-client COMMIT and restart verification. Results below remain
+historical evidence for their exact source, not qualification of those fixes.
+
 **Scoped PASS: `d8af2c325` makes asynchronous acknowledgement the only
 data-fragment PUT mode.** On the Intel cluster with the xorinox client, 2 GiB
 writes rise from 151 to 176 MiB/s and 2 GiB writes with `fsync` from 141 to

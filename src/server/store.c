@@ -1309,11 +1309,13 @@ struct put_sync_root {
     pthread_cond_t cv;
     pthread_t thread, scanner;
     int thread_started, scanner_started;
-    uint32_t boot;
+    uint32_t boot, root_count;
+    uint64_t verifier; /* retained only across a proven all-root clean stop */
     uint64_t seq, durable_seq;            /* open epoch, last durable epoch */
     uint64_t cur_bytes, cur_frags, cur_first_ns;
     uint64_t inflight_bytes, inflight_frags, inflight_first_ns;
     int want_now, stop, error;
+    int recovery_uncertain; /* persists until verified recovery or fresh format */
     uint64_t acked_bytes, synced_bytes, barriers, failures;
     uint64_t last_barrier_ns, last_barrier_us;
     uint32_t prev_clean;
@@ -1358,24 +1360,80 @@ static void put_sync_config(void)
     }
 }
 
-/* Fixed-size text record, one sector, rewritten in place. */
+/* V2 is a fixed, checksummed record. Clean-restart reuse must not trust a
+ * torn combination of old clean state and a new verifier. A malformed record
+ * fails closed; the v1 reader is migration-only and cannot authorize reuse. */
+struct put_sync_record {
+    uint32_t boot, clean, roots;
+    uint64_t seq, time_ns, verifier;
+};
+static int put_sync_record_read(int fd, struct put_sync_record *out)
+{
+    uint8_t rec[PUT_SYNC_RECORD_LEN + 1]={0};
+    ssize_t n;
+    do { n=pread(fd,rec,PUT_SYNC_RECORD_LEN+1,0); } while(n<0 && errno==EINTR);
+    if(n!=PUT_SYNC_RECORD_LEN)return EFS_ERR_IO;
+    memset(out,0,sizeof(*out));
+    if(!memcmp(rec,"EFSDUR02",8)) {
+        if(efs_put_epoch_read(rec+184)!=efs_crc32(rec,184))return EFS_ERR_IO;
+        uint64_t boot=efs_put_epoch_read(rec+8),clean=efs_put_epoch_read(rec+16);
+        uint64_t roots=efs_put_epoch_read(rec+48);
+        if(!boot || boot>=UINT32_MAX || clean>1 || !roots || roots>EFS_MAX_STORAGE_PATHS ||
+           !efs_put_epoch_read(rec+40))return EFS_ERR_IO;
+        out->boot=(uint32_t)boot;out->clean=(uint32_t)clean;out->roots=(uint32_t)roots;
+        out->seq=efs_put_epoch_read(rec+24);out->time_ns=efs_put_epoch_read(rec+32);
+        out->verifier=efs_put_epoch_read(rec+40);
+        return EFS_OK;
+    }
+    unsigned boot=0,clean=0;unsigned long long seq=0,ns=0;int used=0;
+    if(sscanf((char *)rec,"efs-durable-epoch v1 boot=%u seq=%llu time_ns=%llu clean=%u%n",
+              &boot,&seq,&ns,&clean,&used)!=4 || !boot || boot>=UINT32_MAX || clean>1)
+        return EFS_ERR_IO;
+    for(int i=used;i<PUT_SYNC_RECORD_LEN;i++)
+        if(rec[i]!=' ' && rec[i]!='\n')return EFS_ERR_IO;
+    out->boot=boot;out->clean=clean;out->seq=seq;out->time_ns=ns;
+    return EFS_OK;
+}
+
 static int put_sync_record_write(struct put_sync_root *r, uint64_t seq, int clean)
 {
-    char rec[PUT_SYNC_RECORD_LEN];
-    memset(rec, ' ', sizeof(rec));
-    int n = snprintf(rec, sizeof(rec),
-                     "efs-durable-epoch v1 boot=%u seq=%llu time_ns=%llu clean=%d",
-                     r->boot, (unsigned long long)seq,
-                     (unsigned long long)put_sync_wall_ns(), clean);
-    if (n < 0 || n >= (int)sizeof(rec)) return EFS_ERR_IO;
-    rec[n] = ' ';
-    rec[sizeof(rec) - 1] = '\n';
+    uint8_t rec[PUT_SYNC_RECORD_LEN]={0};
+    if(!r->verifier || !r->root_count)return EFS_ERR_IO;
+    memcpy(rec,"EFSDUR02",8);
+    efs_put_epoch_write(rec+8,r->boot);efs_put_epoch_write(rec+16,clean);
+    efs_put_epoch_write(rec+24,seq);efs_put_epoch_write(rec+32,put_sync_wall_ns());
+    efs_put_epoch_write(rec+40,r->verifier);efs_put_epoch_write(rec+48,r->root_count);
+    efs_put_epoch_write(rec+184,efs_crc32(rec,184));
     ssize_t w;
     do { w = pwrite(r->record_fd, rec, sizeof(rec), 0); } while (w < 0 && errno == EINTR);
     if (w != (ssize_t)sizeof(rec)) return EFS_ERR_IO;
     int rc;
     do { rc = fdatasync(r->record_fd); } while (rc < 0 && errno == EINTR);
     return rc ? EFS_ERR_IO : EFS_OK;
+}
+
+/* Inspect ALL roots before marking any of them running. Reuse is safe only
+ * when every previous root was clean, agrees on the verifier, and the root
+ * count is unchanged. Missing/replaced/removed/legacy/unclean roots rotate it.
+ * No retained process verifier is a claim that uncertain recovery succeeded. */
+static int put_sync_reuse_epoch(struct efsd_server *s,uint64_t *epoch)
+{
+    uint64_t saved=0;int reusable=s->storage_path_count>0;
+    *epoch=0;
+    if(s->storage_path_count>EFS_MAX_STORAGE_PATHS)return EFS_ERR_INVAL;
+    for(uint32_t i=0;i<s->storage_path_count;i++) {
+        char path[EFS_MAX_PATH+32];
+        snprintf(path,sizeof(path),"%s/%s",s->storage_paths[i],PUT_SYNC_RECORD);
+        int fd=open(path,O_RDONLY|O_CLOEXEC);
+        if(fd<0){if(errno==ENOENT){reusable=0;continue;}return EFS_ERR_IO;}
+        struct put_sync_record rec;int rc=put_sync_record_read(fd,&rec);close(fd);
+        if(rc)return rc;
+        if(!rec.clean || !rec.verifier || rec.roots!=s->storage_path_count)reusable=0;
+        if(saved && saved!=rec.verifier)reusable=0;
+        if(!saved)saved=rec.verifier;
+    }
+    if(reusable)*epoch=saved;
+    return EFS_OK;
 }
 
 /* One barrier for everything acknowledged before it started. Called by the
@@ -1483,7 +1541,7 @@ static int put_sync_commit_root(struct put_sync_root *r)
     }
     while (r->durable_seq < want && !r->error && !r->stop)
         pthread_cond_wait(&r->cv, &r->mu);
-    int rc = r->durable_seq >= want && !r->error ? EFS_OK : EFS_ERR_IO;
+    int rc = r->durable_seq >= want && !r->error && !r->recovery_uncertain ? EFS_OK : EFS_ERR_IO;
     pthread_mutex_unlock(&r->mu);
     return rc;
 }
@@ -1562,7 +1620,8 @@ static void *put_sync_scan_thread(void *arg)
 
 /* Attach one root. Reads the previous record, starts a new boot, and on an
  * unclean previous stop starts the verification scan. */
-static void put_sync_attach(struct put_sync_root *r, const char *root)
+static void put_sync_attach(struct put_sync_root *r, const char *root,
+                            uint64_t verifier, uint32_t roots)
 {
     snprintf(r->root, sizeof(r->root), "%s", root);
     pthread_mutex_init(&r->mu, NULL);
@@ -1583,15 +1642,18 @@ static void put_sync_attach(struct put_sync_root *r, const char *root)
         r->fd = -1;
         return;
     }
-    char rec[PUT_SYNC_RECORD_LEN + 1] = {0};
-    unsigned prev_boot = 0, clean = 1;
-    unsigned long long prev_seq = 0, prev_ns = 0;
-    if (existed && pread(r->record_fd, rec, PUT_SYNC_RECORD_LEN, 0) > 0)
-        (void)sscanf(rec, "efs-durable-epoch v1 boot=%u seq=%llu time_ns=%llu clean=%u",
-                     &prev_boot, &prev_seq, &prev_ns, &clean);
-    r->prev_clean = !existed || clean;
-    r->prev_durable_ns = prev_ns;
-    r->boot = prev_boot + 1;
+    struct put_sync_record previous={.clean=1};
+    if (existed && put_sync_record_read(r->record_fd,&previous)!=EFS_OK) {
+        fprintf(stderr, "store: invalid durability record root=%s; refusing startup\n", root);
+        close(r->record_fd); close(r->fd); r->fd = -1; return;
+    }
+    r->prev_clean = !existed || previous.clean;
+    r->recovery_uncertain = !r->prev_clean;
+    /* A checksum scan cannot find lost creates. Keep clean=0 until verified
+     * recovery, including across later orderly shutdowns. */
+    r->prev_durable_ns = previous.time_ns;
+    r->boot = previous.boot + 1;
+    r->verifier=verifier;r->root_count=roots;
     r->seq = 1;
     r->durable_seq = 0;
     if (put_sync_record_write(r, 0, 0) != EFS_OK) {
@@ -1603,11 +1665,15 @@ static void put_sync_attach(struct put_sync_root *r, const char *root)
     if (!existed) {
         int rc;
         do { rc = fsync(r->fd); } while (rc < 0 && errno == EINTR);
+        if (rc) {
+            close(r->record_fd); close(r->fd); r->fd = -1; return;
+        }
     }
     if (!r->prev_clean) {
+        fprintf(stderr, "store: root=%s recovery uncertain; COMMIT returns EIO until verified recovery or fresh format\n", root);
         fprintf(stderr, "store: put sync root=%s unclean previous stop: writes acknowledged "
                 "after boot=%u seq=%llu were not durable; verifying fragments modified since\n",
-                root, prev_boot, prev_seq);
+                root, previous.boot, (unsigned long long)previous.seq);
         r->scanner_started = pthread_create(&r->scanner, NULL, put_sync_scan_thread, r) == 0;
     } else {
         r->scan_done = 1;
@@ -1636,7 +1702,7 @@ static struct put_sync_root *put_sync_root_for(struct efsd_server *s, const char
         return NULL;
     pthread_mutex_lock(&put_sync_mu);
     if (!put_sync_state[idx]) {
-        put_sync_attach(&put_sync_roots[idx], root);
+        put_sync_attach(&put_sync_roots[idx], root, s->put_boot_epoch, s->storage_path_count);
         put_sync_state[idx] = put_sync_roots[idx].fd >= 0 ? 1 : -1;
         if (put_sync_state[idx] < 0)
             fprintf(stderr, "store: put sync root=%s cannot attach (epoch record "
@@ -1652,8 +1718,18 @@ static struct put_sync_root *put_sync_root_for(struct efsd_server *s, const char
  * there is no other data PUT mode to fall back to. */
 int server_put_sync_init(struct efsd_server *s)
 {
-    if (!s || s->storage_engine)
-        return EFS_OK;
+    if (!s) return EFS_ERR_INVAL;
+    int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return EFS_ERR_IO;
+    ssize_t n;
+    do { n = read(fd, &s->put_boot_epoch, sizeof(s->put_boot_epoch)); } while (n < 0 && errno == EINTR);
+    close(fd);
+    if (n != sizeof(s->put_boot_epoch) || !s->put_boot_epoch) return EFS_ERR_IO;
+    if (s->storage_engine) return EFS_OK;
+    uint64_t retained=0;
+    int rc=put_sync_reuse_epoch(s,&retained);
+    if(rc!=EFS_OK)return rc;
+    if(retained)s->put_boot_epoch=retained;
     for (uint32_t i = 0; i < s->storage_path_count && i < EFS_MAX_STORAGE_PATHS; ++i) {
         char probe[EFS_MAX_PATH + 16];
         snprintf(probe, sizeof(probe), "%s/data/x", s->storage_paths[i]);
@@ -1703,7 +1779,7 @@ void server_put_sync_stats(struct efsd_server *s, struct efs_msg_sync_stats_repl
         struct put_sync_root *r = &put_sync_roots[i];
         pthread_mutex_lock(&r->mu);
         o->mode = 2;
-        o->error = (uint32_t)r->error;
+        o->error = (uint32_t)(r->error || r->recovery_uncertain);
         o->unsynced_bytes = r->cur_bytes + r->inflight_bytes;
         o->unsynced_fragments = r->cur_frags + r->inflight_frags;
         uint64_t first = r->inflight_first_ns ? r->inflight_first_ns : r->cur_first_ns;

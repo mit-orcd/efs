@@ -3340,6 +3340,8 @@ static int efs_append_flush_report_run(struct fuse_file_info *fi, efs_ino_t ino)
 {
     pthread_mutex_t *amu;
     int rc;
+    int profile = getenv("EFS_RPC_PROF") != NULL;
+    uint64_t t0=profile?stats_now_ms():0,t1=0,t2=0,t3=0;
 
     (void)fi;
     if (!ino || virt_kind(ino))
@@ -3358,14 +3360,26 @@ static int efs_append_flush_report_run(struct fuse_file_info *fi, efs_ino_t ino)
     rc = efs_wb_sync_ino(ino);
     if (rc != EFS_OK)
         return rc;
+    if(profile)t1=stats_now_ms();
     amu = append_mu(ino);
     rc = wb_lock_budget(amu);
     if (rc != EFS_OK)
         return rc;
+    if(profile)t2=stats_now_ms();
     rc = efs_dcache_flush_ino(ino);
+    if(profile)t3=stats_now_ms();
     if (rc == EFS_OK)
         rc = efs_client_report_dirty_ino(ino, 1);
     pthread_mutex_unlock(amu);
+    if(profile) {
+        uint64_t end=stats_now_ms();
+        if(end-t0>=100)
+            fprintf(stderr,"CLOSE-PROF ino=%llu mono_ms=%llu total_ms=%llu wb_ms=%llu append_lock_ms=%llu put_ms=%llu report_ms=%llu rc=%d\n",
+                (unsigned long long)ino,(unsigned long long)end,
+                (unsigned long long)(end-t0),(unsigned long long)(t1-t0),
+                (unsigned long long)(t2-t1),(unsigned long long)(t3-t2),
+                (unsigned long long)(end-t3),rc);
+    }
     return rc;
 }
 
@@ -4259,7 +4273,7 @@ static int efs_fuse_fsync_ino(fuse_ino_t ino, int isdatasync,
     rc = efs_append_flush_report(fi, file);
     rc = efs_file_sync_error(fi, file, was_stalled, rc);
     /* Published is not durable when servers acknowledge asynchronously:
-     * COMMIT every node this client sent data to. */
+     * COMMIT every storage node, including data published by peer clients. */
     if (rc == EFS_OK)
         rc = efs_client_data_commit();
     t1 = stats_now_ms();
