@@ -103,3 +103,30 @@ PUT reply that preceded `c4178ea81`. It now checks the 11-byte reply
   blocked until W71 verified recovery exists. The harnesses also need
   per-case fresh clusters, or an expectation of the fence.
 - The LeakSanitizer gate needs a host where LSan works.
+
+## Redeploy of devel `f4a373b13` — 2026-10-16 22:42Z
+
+**Deployed; smoke PASS.** orcd-mini moved from `8391950f0` to `f4a373b13dc0`
+(version `v0.3.2-pre-alpha-592-gf4a373b13`). The only runtime change is the
+per-thread KV read-buffer leak fix (`49167f2cf`); the other commits since
+`8391950f0` change docs and tests only.
+
+- **Builds** (clean `git archive`, shared build ID):
+  - node9901 `/data1/efs/releases/f4a373b13dc0`: efsd
+    `22decf7e6b2d09fcfa7b0c7e607e6a9666b3a01aa817cfb0808a9f025d7b2bd7`,
+    efs-fuse `339b4696d42f5d438d22c4d6c9b2366b6bf903fb4ef4e1900cd10b7ba9302117`.
+  - node9900 `/data1/efs/orcd-mini-client/releases/f4a373b13dc0`: efs-fuse
+    `19e4050c59f0eda3177eb2bc53e36f02faf29b6d4287ab926766e0b0231ed38c`.
+- **Procedure** (as above):
+  1. `fuser -m` showed no users on either mount.
+  2. node9900 client stop, then cluster `stop.sh`. All three roots logged
+     `stopped clean`, so the W71 fence was not triggered.
+  3. Switch both `src` symlinks, `start.sh` (storage preserved), node9900
+     `client.sh start`.
+- **Checks:**
+  - No `recovery uncertain` lines; RDMA up on the daemons and the node9900
+    client; 421.92 GiB per node readable.
+  - `smoke.sh` POSIX **216/216 PASS** (14.1 s).
+  - A 200-file probe on the idle node9900 mount: create / stat / open /
+    unlink p50 0.83 / 0.35 / 0.49 / 0.48 ms.
+  - The idle probe is not comparable with the loaded probes above.

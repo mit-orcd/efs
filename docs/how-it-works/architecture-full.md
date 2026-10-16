@@ -1541,17 +1541,22 @@ Annotated RDMA unit rechecks PASS. Kernel W121 and automatic recovery W71
 remain open; this is not large-namespace/400-GiB acceptance.
 
 [ReadIndex admission without `h->mu`](../status/orcd-mini-readindex-lock-20261016.md):
-**PASS (scoped, private cluster); orcd-mini deployment NOTRUN.** Fresh
-metadata readers admit themselves from the published view plus a per-group
-`ri_begun` (raised before probes leave). The pump starts requested rounds, so
-LOOKUP/GETATTR no longer queue on the Raft host mutex. Private 3-node RDMA
-loaded run, 3 base vs 2 new: ReadIndex-caller mutex waits −90%; all mutex
-waits 16.4% → 12.1% of switches; stat p50 1.06 → 0.87 ms; negative lookup
-p50 0.68 → 0.54 ms.
+**deployed to orcd-mini (`8391950f0`); PASS under the user's tiny-file
+workload** (POSIX smoke 216/216). Fresh metadata readers admit themselves from
+the published view plus a per-group `ri_begun`, raised before probes leave.
+The pump starts requested rounds, so LOOKUP and GETATTR no longer queue on
+the Raft host mutex. orcd-mini, 2 runs before and 2 after:
+- ReadIndex lock waits 8.4% → 1.4% of efsd context switches;
+- node9900 stat p50 2.34 → 1.70–1.82 ms;
+- writer 1,420–1,506 → 1,793–1,797 files/s.
+
+The private-cluster A/B agrees. One run after the change had a create p99
+spike of 24–27 ms, which is not explained.
 
 [W123 — automatic crash recovery](../backlog/crash-safe-durable-versions.md): **proposed new feature; source review only.** Reuse root barrier watermarks if epoch history, exact write tags and retained file versions prove recovery. No extra fsync-time metadata commit remains a hypothesis; eight-byte/zero-I/O cost claims are unproven. Implementation and acceptance NOTRUN; W71 remains open.
 
-[orcd-mini deployment of `09f8af09c`](../status/orcd-mini-deploy-09f8af09c-20261016.md):
+[orcd-mini deployment of `09f8af09c`](../status/orcd-mini-deploy-09f8af09c-20261016.md)
+(now running `f4a373b13`, KV buffer leak fix; smoke POSIX 216/216 PASS):
 **deployed; live POSIX 216/216, two-client 67/67, durability 27/27 PASS.**
 `make test` has 4 environmental failures. GC crash-restart and fault-suite
 integration FAIL on the known W71 uncertain-recovery fence, the same as the

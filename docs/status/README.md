@@ -45,7 +45,8 @@ spike of 24–27 ms, which is not explained.
 
 [W123 — automatic crash recovery](../backlog/crash-safe-durable-versions.md): **proposed new feature; source review only.** Reuse root barrier watermarks if epoch history, exact write tags and retained file versions prove recovery. No extra fsync-time metadata commit remains a hypothesis; eight-byte/zero-I/O cost claims are unproven. Implementation and acceptance NOTRUN; W71 remains open.
 
-[orcd-mini deployment of `09f8af09c`](orcd-mini-deploy-09f8af09c-20261016.md):
+[orcd-mini deployment of `09f8af09c`](orcd-mini-deploy-09f8af09c-20261016.md)
+(now running `f4a373b13`, KV buffer leak fix; smoke POSIX 216/216 PASS):
 **deployed; live POSIX 216/216, two-client 67/67, durability 27/27 PASS.**
 `make test` has 4 environmental failures. GC crash-restart and fault-suite
 integration FAIL on the known W71 uncertain-recovery fence, the same as the
