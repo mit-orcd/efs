@@ -717,3 +717,40 @@ Installed binaries (efsd reused the baseline build; FUSE label
 | efsd | `dd131fa5f3cda9133f4e17365c1fc7bd3adfb9e1c006facfa1bf42c22833213a` |
 | efs-fuse | `d279ddb52c0a0998fe5191d3db9c3ec41e00770a253c1d5042f2666b4b128095` |
 | efs-mgmt | `8df0869f1934abdbeb757ee29de48a25c09d57846cc855acbc9d534078a99ea6` |
+
+
+## Move to exclusive NUC — October 15–16, 2026
+
+User reassigned this investigation to NUC; AMD was left untouched. Source
+`852caf1ae` built successfully in `/data1/efs/nuc-read-close-852caf1ae/src`
+with `make -j4 EFS_GIT_ID=852caf1ae EFS_GIT_DESCRIBE=852caf1ae
+EFS_GIT_BRANCH=devel-amd-durability-20261015 efsd efs-fuse efs-mgmt`.
+Environment: Intel i5-1135G7, Rocky Linux10.2, XFS `/data1`, kernel
+`6.12.0-211.64.1.el10_2.x86_64`. Build log is external at
+`/data1/efs/nuc-read-close-852caf1ae/build.log`.
+
+**Build PASS; seven focused regressions PASS; live RDMA POSIX NOTRUN/BLOCKED.**
+Run the following from that source directory with `python3 tests/NAME.py`:
+`test_append_flush_budget`, `test_append_reserve_budget`,
+`test_inode_lock_stripes`, `test_read_control_host`,
+`test_container_pending_reads`, `test_receive_persist`, `test_read_waiters`.
+The pending-read unit name covers shared host logic; no container service was
+activated. These are unit checks, not live transport qualification.
+
+`rdma link show` and `/sys/class/infiniband` show no devices; `modinfo rdma_rxe`
+reports module missing, and `/boot/config-$(uname -r)` explicitly says
+`# CONFIG_RDMA_RXE is not set`. Kernel modules-extra is already installed.
+Both `efs` and `maik` SSH accounts require a password for sudo. Verbs headers
+and libraries are installed, so compilation succeeds but does not resolve
+runtime availability. NUC needs a Soft-RoCE-capable kernel or usable RDMA NIC
+before the unchanged RDMA/direct workload can run. No TCP substitution,
+seven-client test, service start, data wipe or timeout change was performed.
+The user was asked to resolve this prerequisite. Once available, deploy this
+staged build and repeat the preceding disabled-feature baseline/profiling
+procedure; W119 remains open.
+
+| NUC binary | SHA256 |
+| --- | --- |
+| efsd | `8d4f7d56efd66a765f76cbd45bd0a6bc454383f11f9fd3c564382574076fca2c` |
+| efs-fuse | `73bb9c169fa029178fcdee293943562de78b1bff533ecc8fb53059948148b963` |
+| efs-mgmt | `3d5bb9226fcf0b64942f0051f090307c2087c02ca70208547873bc5782f06222` |

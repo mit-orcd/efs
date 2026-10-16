@@ -50,7 +50,9 @@ was confounded by an independent AMD build. Original scheduling/64 stripes
 restored; opt-in timing and deadline regressions retained. W119 remains OPEN;
 no accepted timeout fix. Restored jobs16 FAIL205/216 (ten timeouts, one
 unlink EBUSY); independent Intel-client storage benchmarks prevent claiming
-a quiet isolated comparison. Stop competing workload before qualification.
+a quiet isolated comparison. User moved the investigation to exclusive NUC: source852caf1ae build and
+seven focused units PASS. Live RDMA tests BLOCKED/NOTRUN: NUC has no RDMA
+device and its kernel disables Soft-RoCE; a capable kernel/NIC is required.
 
 
 [Asynchronous PUT acknowledgement](intel-async-durability-20261015.md):
