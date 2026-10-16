@@ -18,6 +18,8 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Native LMCache versus NIXL for AMD/NVIDIA GPU transfers](efs-kv-gpu-api-comparison-20261016.md): **API review only; implementation and hardware tests NOTRUN.** Prefer NIXL/UCX data movement plus EFS cache control and a GPU-aware adapter extension. Both current LMCache L2 paths use host buffers.
+
 [LMCache through native NIXL: EFS integration direction](efs-lmcache-nixl-direction-20261016.md): **design only; implementation and performance NOTRUN.** Target native asynchronous EFS transfers; AMD GPU-direct support and shared publication/eviction require qualification.
 
 [ORCD Raft/KV decisions](orcd-raft-kv-20261016.md): mixed correctness **PASS**

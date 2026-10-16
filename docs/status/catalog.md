@@ -10,6 +10,8 @@ Complete navigation to top-level status ledgers as of October 15, 2026. Grouping
 
 ## AI KV-cache integration
 
+- [Native LMCache versus NIXL: dual-vendor GPU API comparison](efs-kv-gpu-api-comparison-20261016.md)
+
 - [LMCache through native NIXL: EFS integration direction](efs-lmcache-nixl-direction-20261016.md)
 
 ## Query commands and metadata

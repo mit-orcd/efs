@@ -1,5 +1,7 @@
 # EFS KV-cache integration direction — 2026-10-16
 
+**Updated recommendation:** See [the native API / dual-vendor GPU comparison](efs-kv-gpu-api-comparison-20261016.md). Prefer NIXL/UCX for GPU transfers with an EFS control protocol and a GPU-aware LMCache extension; neither existing L2 adapter is a drop-in GPU-direct path.
+
 **Design recommendation recorded; implementation, interoperability and performance NOTRUN.**
 Human request: target the fastest practical native mechanism with a documented
 cache integration contract, rather than first implementing a mounted-filesystem
@@ -8,11 +10,12 @@ claim or authorization to change a running cluster. No W/D number allocated.
 Repository reference at documentation time: `fcacf6a0ae90654724ad253c1cf9a8d4d36cab33`
 (devel); no tested binary, runtime change, fixture or benchmark in this review.
 
-## Why target LMCache through NIXL
+## Initial recommendation — superseded by the API review
 
-Recommend LMCache as the initial cache manager and a native EFS NIXL plugin as
-the integration boundary. Keep EFS payload transfer in native code, bypassing
-FUSE and S3. Desired path:
+The initial recommendation below proposed a custom storage plugin. The later
+API review instead favors the existing NIXL/UCX memory transport with EFS cache
+control and a GPU-aware adapter extension for both NVIDIA and AMD. This older
+path is retained for context, not as the implementation recommendation:
 
 ```text
 Inference engine / LMCache
