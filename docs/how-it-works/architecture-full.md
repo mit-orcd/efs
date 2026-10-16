@@ -1534,9 +1534,19 @@ packing/containers removed. Live core POSIX 1,512/1,512, cross-host 67/67,
 cold durability 189/189, 109,452 exact mixed cycles and 4,715 queries PASS.
 Faults 24/24 PASS; private GC passes on unchanged repeat after a peer-startup
 proof race. Remaining gates: Valgrind KV/query/daemon leaks and two instrumented
-deadlines; .efs cleanup wrapper rejects its timestamped fixture name.
+deadlines. The .efs cleanup-wrapper name mismatch now has a focused PASS
+with the existing pending one-line correction, including physical cleanup.
 Annotated RDMA unit rechecks PASS. Kernel W121 and automatic recovery W71
 remain open; this is not large-namespace/400-GiB acceptance.
+
+[ReadIndex admission without `h->mu`](../status/orcd-mini-readindex-lock-20261016.md):
+**PASS (scoped, private cluster); orcd-mini deployment NOTRUN.** Fresh
+metadata readers admit themselves from the published view plus a per-group
+`ri_begun` (raised before probes leave). The pump starts requested rounds, so
+LOOKUP/GETATTR no longer queue on the Raft host mutex. Private 3-node RDMA
+loaded run, 3 base vs 2 new: ReadIndex-caller mutex waits −90%; all mutex
+waits 16.4% → 12.1% of switches; stat p50 1.06 → 0.87 ms; negative lookup
+p50 0.68 → 0.54 ms.
 
 [W123 — automatic crash recovery](../backlog/crash-safe-durable-versions.md): **proposed new feature; source review only.** Reuse root barrier watermarks if epoch history, exact write tags and retained file versions prove recovery. No extra fsync-time metadata commit remains a hypothesis; eight-byte/zero-I/O cost claims are unproven. Implementation and acceptance NOTRUN; W71 remains open.
 
