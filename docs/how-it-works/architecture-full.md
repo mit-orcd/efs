@@ -1543,7 +1543,10 @@ results and was reverted. Clean-restart follow-up `b6454a7f8` passes focused
 and live RDMA/direct durability tests: mounted writer/peer survive two clean
 daemon restarts. Unclean recovery still fences COMMIT indefinitely; verified
 recovery and per-file loss tracking remain missing. W71/W119 stay open; no
-seven-client run or power-cut claim.
+seven-client run or power-cut claim. Deployed follow-up `e53d20aa1`: core
+serial216/216, peer67/67 and cold27/27 PASS; jobs16 remains FAIL215/216
+(`names_crazy_dirs`, unchanged15s). Extras1 PASS/4 SKIP. No independent
+reviewed commits met the selected merge scope; dependent changes deferred.
 
 
 [Asynchronous PUT acknowledgement](../status/intel-async-durability-20261015.md):

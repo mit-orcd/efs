@@ -392,3 +392,69 @@ Raw build/validation/manifest evidence is outside Git at
 `/data1/efs/clean-verifier-20261015`; live logs and result are at
 `/data1/efs/async-commit-0myw7wuf`. Existing metadata-load failures above remain
 open and unchanged. No TCP comparison, seven-client or excluded-feature run.
+
+
+## Reviewed-commit deployment and POSIX rerun — October 15, 2026
+
+User selected only independent changes requiring no additional integration
+qualification. No merge was warranted: `1136dae89` (Bloom/seek optimization)
+and `768bac2ae` (OPEN mapping/prefetch) are deferred for review fixes;
+`a8ddb4b6f`, `2b7efdf8a`, `25c1fc458` depend on that deferred OPEN change.
+`8e8f1d47c` and `2fa460db4` duplicate fixes already present. `e71fdfa56`
+reintroduces the rejected read-vote experiment and remains excluded.
+
+Deployed branch `devel-amd-durability-20261015` at
+`e53d20aa19403aed2c9133e92954142cfefbaf2f` (product source `b6454a7f8`).
+All949 source/build inputs match the committed manifest; installed binaries
+have the three SHA256 identities recorded in the clean-verifier section above.
+Four daemons and both managed FUSE clients were verified with open verbs
+handles, RDMA/direct, files engine and commands/packing/expiry/repair disabled.
+AMD topology and XFS are unchanged,17G quota per node, existing namespace
+retained; async PUT uses its default200ms/256MiB window. No profilers or timing
+instrumentation were enabled, and no timeouts were increased.
+
+| Gate | Result | Wall time |
+| --- | --- | --- |
+| Core, jobs16 | FAIL:215/216; `names_crazy_dirs`15s timeout | 46.9s |
+| Core, jobs1 | PASS216/216 | 103.5s |
+| Extras | PASS1, SKIP4, FAIL0 | 0.3s |
+| Two-client peer | PASS67/67 | 42.8s |
+| Cold prepare | PASS27/27 | 17.6s |
+| Cold verify after all managed clients/daemons restart | PASS27/27 | 13.6s |
+
+Extras skips: unsupported writable mmap and three disabled `.efs` checks.
+Loaded concurrent creates and mtime passed on this run; this is not enough to
+close their earlier intermittent failures. W119 remains OPEN. Crash-recovery
+availability limitations in the preceding section also remain OPEN.
+
+Reproduce from the installed source root, using the explicit profile above:
+
+```sh
+out=/data1/efs/posix-reviewed-e53d20aa1
+mkdir -p "$out"
+for jobs in 16 1; do
+  python3 -u tests/posix/posix_suite.py /data1/efs/mnt --suite core \
+    --jobs "$jobs" --tag "reviewed-$jobs" --results "$out/core-$jobs.tsv"
+done
+python3 -u tests/posix/posix_extras.py /data1/efs/mnt --results "$out/extras.tsv"
+python3 -u tests/posix/posix_2client.py --local /data1/efs/mnt /data1/efs/mnt2 \
+  --parent reviewed-peer --results "$out/peer.tsv"
+python3 -u tests/posix/posix_persist.py /data1/efs/mnt --phase prepare \
+  --tag reviewed-cold --results "$out/cold-prepare.tsv"
+# Normally drain each managed client first; abort if either mount remains.
+scripts/client.sh stop /data1/efs/mnt
+scripts/client.sh stop /data1/efs/mnt2
+EFS_CLUSTER=amd /data1/efs/devops/stop.sh
+EFS_CLUSTER=amd /data1/efs/devops/start.sh
+python3 -u tests/posix/posix_persist.py /data1/efs/mnt --phase verify \
+  --tag reviewed-cold --results "$out/cold-verify.tsv"
+```
+
+Record individual exits; ordinary completed test failure does not imply later
+gates were skipped. Stop if workers remain or drain refuses. Raw results,
+logs and binary hashes are retained outside Git under the `out` directory.
+Both deployment and cold restart drained cleanly: no forced discard/SIGKILL.
+Installed service remains running with both mounts; final sync-status reports
+zero unsynced fragments and zero barrier failures on all four nodes.
+Independent Intel client untouched. No seven-client test, TCP comparison,
+excluded-feature qualification or push.
