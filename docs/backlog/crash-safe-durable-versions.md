@@ -230,8 +230,72 @@ watermarks:
   rather than refusing startup. The durable value only grows, so a second crash
   during recovery loses nothing.
 
-This needs one record and no history or new I/O, while staying correct if the
-crash bound is proven. Proving that bound against the barrier code (`seq++`
+**Hypothesis, not an established property:** one record without history or
+additional I/O was proposed. The follow-up review below identifies correctness
+requirements that this representation does not yet meet. Proving that bound against the barrier code (`seq++`
 before `syncfs`, record write after) is part of the ordering review.
 Points 3–5 (wire encoding, complete-version history, GC/fold retention and
 end-to-end publication durability) are unaffected and still required.
+
+
+### Review of monotonic root sequences (`5bc66cf1f`) — 2026-10-16
+
+**Verdict: useful ingredients, but the proposed simplification is unsafe as
+specified.** Keep stable root incarnation IDs and investigate alternating
+records; do not approve a single monotonically increasing durable watermark
+without addressing the following. Source/API review only; no implementation,
+runtime changes or crash tests. W123 remains proposed; W71 remains open.
+
+1. **A high watermark cannot represent permanently uncertain holes.** Suppose
+   the durable record is 100; the crashed run issued 101 and 102. Restart skips
+   to 103, writes new data and persists 103. The predicate `seq <= durable_seq`
+   now falsely certifies 101/102, even if their data never reached storage.
+   Sequence uniqueness and data durability are different facts. Preserve
+   durable interval/incarnation evidence, or complete a crash-safe reconciliation
+   that eliminates/replaces every uncertain reference before allowing a
+   contiguous-watermark predicate again. That includes snapshots, receipts,
+   retained versions, delayed retries and readers, not just current mappings.
+
+2. **The claimed small distance is not bounded by today's failure loop.**
+   `put_sync_barrier_locked` increments `r->seq` before I/O. On failure it sets
+   `r->error` and requeues the inflight counts without advancing `durable_seq`.
+   `put_sync_thread` does not gate its `due` branch on `r->error`; it can retry
+   barriers, incrementing sequence numbers repeatedly while the persisted
+   watermark stays unchanged. Consequently, an open-plus-inflight bound only
+   describes a failure-free interval, not all executions. The proof must cover
+   data-barrier failures, record-write failures, retries, admission after errors
+   and sequence exhaustion; do not derive a crash bound from the success path.
+
+3. **Skipping an inferred range does not survive repeated crashes by itself.**
+   Starting from stored 100, one run skips to 103, acknowledges a PUT tagged 103,
+   then dies before persisting anything. The next run still sees 100 and may
+   issue 103 again. A newly persisted 103 can then certify the earlier lost
+   object. Before issuing tags, either durably reserve a disjoint range / run
+   identity or finish a durable recovery handoff that prevents aliasing. The
+   current startup record write might be repurposed, but its ordering, bounds
+   and preservation of old proof must be designed. Allocation high-water and
+   proven-durable high-water must never be conflated.
+
+4. **Two slots improve record resilience; they are not a complete proof.**
+   Specify slot generations/checksums, root identity, independent failure units,
+   selection rules and successful sync before acknowledging the covered writes.
+   A torn unacknowledged update can fall back to an older intact proof. However,
+   that fallback is not permission to lose a previously acknowledged durability
+   boundary; corrupted acknowledged proof requires explicit error handling.
+   Test reused-slot tearing, crash after write before sync, and repeated crashes.
+   The root must retain old proof until the new recovery state is durable.
+
+Recommended next design comparison: (A) root incarnation plus durable run/epoch
+proof retained until references are checkpointed away; (B) monotonic allocation
+with persisted reservation state and explicit durable/uncertain intervals or a
+completed recovery normalization. Either may reuse existing startup/barrier
+writes, but neither is yet proven history-free or I/O-free. Keep the original
+per-file recovery and GC/fold retention requirements. Do not add a payload
+journal or weaken fsync guarantees merely to simplify the proof.
+
+Add deterministic counterexample gates: durable100 -> lost101/102 -> durable103
+must not certify the holes; repeated failed barriers must not defeat allocation
+bounds; crash twice before the first new successful barrier must never reuse an
+issued identity. Include a fresh client that holds or discovers an old reference
+and verify it cannot obtain a false durability success. Implement no fence
+removal before these representation and ordering questions are resolved.
