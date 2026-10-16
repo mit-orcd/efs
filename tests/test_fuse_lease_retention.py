@@ -22,6 +22,7 @@ source=r'''
 #include <errno.h>
 static uint64_t stats_now_ms(void);
 #include "client_internal.h"
+static __thread uint64_t t_open_read_size;
 uint32_t efs_client_open_map_count(uint64_t s){(void)s;return 1;}
 uint64_t efs_client_map_clock(void){return 1;}
 void efs_client_map_install(efs_ino_t i,const struct efs_chunk_rec *r,uint32_t n,uint64_t u){(void)i;(void)r;(void)n;(void)u;}

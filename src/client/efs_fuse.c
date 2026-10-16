@@ -1923,9 +1923,6 @@ static pthread_mutex_t *open_edge_mu(efs_ino_t ino)
     return &g_open_edge_mu[efs_ino_lock_slot(ino, OPEN_EDGE_SHARDS)];
 }
 
-/* Size of the regular file a read-only open is acquiring (0 otherwise). */
-static __thread uint64_t t_open_read_size;
-
 /* Returns 1 when this is the first open (caller must acquire the HOLD). */
 static int efs_open_note(efs_ino_t ino)
 {
@@ -1951,6 +1948,9 @@ static int efs_open_note(efs_ino_t ino)
     pthread_mutex_unlock(&g_open_mu);
     return first;
 }
+
+/* Size of the regular file a read-only open is acquiring (0 otherwise). */
+static __thread uint64_t t_open_read_size;
 
 static void efs_open_set_leased(efs_ino_t ino)
 {
