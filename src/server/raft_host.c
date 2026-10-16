@@ -11310,6 +11310,10 @@ int server_raft_host_start(struct efsd_server *s)
         snprintf(logdir, sizeof(logdir), "%s/log", dir);
         memset(&kcfg, 0, sizeof(kcfg));
         kcfg.sync_mode = EFS_KV_LSM_SYNC;
+        {
+            const char *bloom = getenv("EFS_KV_BLOOM");
+            efs_kv_lsm_bloom_enable(!(bloom && !strcmp(bloom, "0")));
+        }
         h->kv = efs_kv_lsm_open(kvdir, &kcfg);
         if (!h->kv) {
             fprintf(stderr, "raft-host: kv_lsm_open %s failed\n", kvdir);

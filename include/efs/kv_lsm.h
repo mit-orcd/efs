@@ -34,6 +34,9 @@ struct efs_kv_lsm_cfg {
 /* Creates dir if absent, else recovers from it: load segments, replay the
  * WAL tail. A torn trailing record is discarded — it was never ACKed. */
 struct efs_kv *efs_kv_lsm_open(const char *dir, const struct efs_kv_lsm_cfg *cfg);
+/* Per-segment point-get filters, built in the background for live
+ * segments opened after this call. Off unless a server enables it. */
+void efs_kv_lsm_bloom_enable(int on);
 void efs_kv_lsm_close(struct efs_kv *kv);
 
 /* Bounded maintenance scan: counts merged keys including tombstones.

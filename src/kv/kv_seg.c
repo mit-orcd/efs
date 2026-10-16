@@ -1,10 +1,12 @@
 #include "kv_lsm_internal.h"
 
 #include <errno.h>
+#include <pthread.h>
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #if defined(__x86_64__) && defined(__SSE4_2__)
 #include <nmmintrin.h>
@@ -63,6 +65,19 @@ struct seg_cslot {
     int valid;
 };
 
+/* Point-get filter over every record key (PUTs and tombstones) of an
+ * immutable segment. A getattr is several point gets, half of them for
+ * keys that exist in no segment (intent keys), and each miss used to
+ * binary-search a block in every overlapping segment under the LSM lock
+ * (Oct 15 Intel profile: getattr was a third of efsd CPU). Built off the
+ * request path from the segment file itself; until it is published the
+ * probe behaves exactly as before. A false positive only costs the probe. */
+struct seg_bloom {
+    uint64_t mask; /* bits - 1, bits a power of two */
+    uint64_t w[];
+};
+#define SEG_BLOOM_K 6
+
 struct kv_seg {
     int fd;
     struct blk_ref *idx;
@@ -84,6 +99,7 @@ struct kv_seg {
     char *doom; /* unlink this path when refs hits 0 */
     uint32_t hash_bytes; /* protected by the owning LSM mutex */
     struct seg_cslot cslot[KV_SEG_CACHE_SLOTS];
+    struct seg_bloom *bloom; /* published once, read lock-free */
 };
 
 /* --- writer ---------------------------------------------------------- */
@@ -503,6 +519,7 @@ static void seg_free(struct kv_seg *s)
     }
     if (s->fd >= 0)
         close(s->fd);
+    free(s->bloom);
     free(s->path);
     free(s->doom);
     free(s);
@@ -790,6 +807,179 @@ static int search_block(const struct seg_cslot *c, const uint8_t *key,
     return EFS_ERR_NOT_FOUND;
 }
 
+static uint64_t seg_bloom_hash(const uint8_t *k, uint32_t n)
+{
+    uint64_t h = 0x9E3779B97F4A7C15ULL ^ n;
+    uint32_t i = 0;
+
+    for (; i + 8 <= n; i += 8) {
+        uint64_t v;
+        memcpy(&v, k + i, 8);
+        h = (h ^ v) * 0xff51afd7ed558ccdULL;
+        h ^= h >> 32;
+    }
+    for (; i < n; i++)
+        h = (h ^ k[i]) * 0x100000001b3ULL;
+    h ^= h >> 33;
+    h *= 0xc4ceb9fe1a85ec53ULL;
+    h ^= h >> 33;
+    return h;
+}
+
+static int seg_bloom_may(const struct seg_bloom *b, uint64_t h)
+{
+    uint64_t h1 = h, h2 = (h >> 32) | 1;
+
+    for (uint32_t i = 0; i < SEG_BLOOM_K; i++) {
+        uint64_t bit = (h1 + i * h2) & b->mask;
+        if (!(b->w[bit >> 6] & (1ULL << (bit & 63))))
+            return 0;
+    }
+    return 1;
+}
+
+/* Reads every block of a pinned segment with its own preads (the block
+ * index and fd are immutable while pinned; the shared block cache is not
+ * touched). Any failure leaves the segment unfiltered. */
+static void seg_bloom_build(struct kv_seg *s)
+{
+    uint64_t *hs = NULL, n = 0, cap = 0;
+    uint8_t *blk = NULL;
+    uint32_t blk_cap = 0;
+
+    for (uint32_t bi = 0; bi < s->nblocks; bi++) {
+        const struct blk_ref *r = &s->idx[bi];
+        uint32_t *entries = NULL, count = 0;
+
+        if (r->len > blk_cap) {
+            uint8_t *p = realloc(blk, r->len);
+            if (!p)
+                goto out;
+            blk = p;
+            blk_cap = r->len;
+        }
+        if (pread_all(s->fd, blk, r->len, r->off) != EFS_OK ||
+            index_block(blk, r->len, &entries, &count) != EFS_OK)
+            goto out;
+        if (n + count > cap) {
+            uint64_t nc = cap ? cap * 2 : 4096;
+            while (nc < n + count)
+                nc *= 2;
+            uint64_t *p = realloc(hs, nc * sizeof(*hs));
+            if (!p) {
+                free(entries);
+                goto out;
+            }
+            hs = p;
+            cap = nc;
+        }
+        for (uint32_t i = 0; i < count; i++)
+            hs[n++] = seg_bloom_hash(blk + entries[i] + 9,
+                                     get_u32(blk + entries[i] + 1));
+        free(entries);
+    }
+    {
+        uint64_t bits = 1024;
+        while (bits < n * 10)
+            bits <<= 1;
+        struct seg_bloom *b = calloc(1, sizeof(*b) + bits / 8);
+        if (!b)
+            goto out;
+        b->mask = bits - 1;
+        for (uint64_t i = 0; i < n; i++) {
+            uint64_t h1 = hs[i], h2 = (hs[i] >> 32) | 1;
+            for (uint32_t k = 0; k < SEG_BLOOM_K; k++) {
+                uint64_t bit = (h1 + k * h2) & b->mask;
+                b->w[bit >> 6] |= 1ULL << (bit & 63);
+            }
+        }
+        struct seg_bloom *none = NULL;
+        if (!__atomic_compare_exchange_n(&s->bloom, &none, b, 0,
+                                         __ATOMIC_RELEASE, __ATOMIC_RELAXED))
+            free(b);
+    }
+out:
+    free(hs);
+    free(blk);
+}
+
+/* One process-wide builder, newest request first (a fresh flush or
+ * compaction output is the segment lookups probe first). */
+static pthread_mutex_t g_bloom_mu = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t g_bloom_cv = PTHREAD_COND_INITIALIZER;
+static struct kv_seg **g_bloom_q;
+static uint32_t g_bloom_n, g_bloom_cap;
+static int g_bloom_on, g_bloom_started;
+
+static void *seg_bloom_main(void *arg)
+{
+    (void)arg;
+    for (;;) {
+        pthread_mutex_lock(&g_bloom_mu);
+        while (!g_bloom_n)
+            pthread_cond_wait(&g_bloom_cv, &g_bloom_mu);
+        struct kv_seg *s = g_bloom_q[--g_bloom_n];
+        pthread_mutex_unlock(&g_bloom_mu);
+        if (!__atomic_load_n(&s->bloom, __ATOMIC_ACQUIRE))
+            seg_bloom_build(s);
+        kv_seg_unpin(s);
+    }
+    return NULL;
+}
+
+void kv_seg_bloom_enable(int on)
+{
+    pthread_mutex_lock(&g_bloom_mu);
+    g_bloom_on = on;
+    pthread_mutex_unlock(&g_bloom_mu);
+}
+
+void kv_seg_bloom_request(struct kv_seg *s)
+{
+    if (!s || __atomic_load_n(&s->bloom, __ATOMIC_ACQUIRE))
+        return;
+    pthread_mutex_lock(&g_bloom_mu);
+    if (!g_bloom_on)
+        goto out;
+    if (!g_bloom_started) {
+        pthread_t t;
+        pthread_attr_t a;
+        pthread_attr_init(&a);
+        pthread_attr_setdetachstate(&a, PTHREAD_CREATE_DETACHED);
+        if (pthread_create(&t, &a, seg_bloom_main, NULL) != 0) {
+            pthread_attr_destroy(&a);
+            goto out;
+        }
+        pthread_attr_destroy(&a);
+        g_bloom_started = 1;
+    }
+    if (g_bloom_n == g_bloom_cap) {
+        uint32_t nc = g_bloom_cap ? g_bloom_cap * 2 : 64;
+        struct kv_seg **q = realloc(g_bloom_q, nc * sizeof(*q));
+        if (!q)
+            goto out;
+        g_bloom_q = q;
+        g_bloom_cap = nc;
+    }
+    kv_seg_pin(s);
+    g_bloom_q[g_bloom_n++] = s;
+    pthread_cond_signal(&g_bloom_cv);
+out:
+    pthread_mutex_unlock(&g_bloom_mu);
+}
+
+/* Test hook: build synchronously. */
+void kv_seg_bloom_build_now(struct kv_seg *s)
+{
+    if (s && !__atomic_load_n(&s->bloom, __ATOMIC_ACQUIRE))
+        seg_bloom_build(s);
+}
+
+int kv_seg_has_bloom(const struct kv_seg *s)
+{
+    return s && __atomic_load_n(&s->bloom, __ATOMIC_ACQUIRE) != NULL;
+}
+
 int kv_seg_probe(struct kv_seg *s, const uint8_t *key, uint32_t klen,
                  struct kv_buf *val, uint8_t *op, int *need_io,
                  struct kv_seg_io *io)
@@ -816,6 +1006,12 @@ int kv_seg_probe(struct kv_seg *s, const uint8_t *key, uint32_t klen,
     if (s->nblocks > 0 &&
         kv_key_cmp(key, klen, s->idx[0].key, s->idx[0].klen) < 0)
         return EFS_ERR_NOT_FOUND;
+    {
+        const struct seg_bloom *b = __atomic_load_n(&s->bloom, __ATOMIC_ACQUIRE);
+
+        if (b && !seg_bloom_may(b, seg_bloom_hash(key, klen)))
+            return EFS_ERR_NOT_FOUND;
+    }
     bi = block_for(s, key, klen);
     if (bi < 0)
         return EFS_ERR_NOT_FOUND;
@@ -994,6 +1190,9 @@ struct kv_seg_iter {
     uint8_t *blk;
     uint32_t blk_len;
     int loaded;
+    /* blk is a cached slot's block, not ours: shared iterators run under
+     * the LSM lock, as does every install that could replace the slot. */
+    int borrowed;
     /* Sequential readahead for compaction and snapshot export, enabled
      * by kv_seg_iter_set_seq. A prefix scan under the LSM lock reads
      * one block: with the 1 MiB window on every iterator, one stat of a
@@ -1035,9 +1234,21 @@ void kv_seg_iter_close(struct kv_seg_iter *it)
 {
     if (!it)
         return;
-    free(it->blk);
+    if (!it->borrowed)
+        free(it->blk);
     free(it->ra);
     free(it);
+}
+
+static struct seg_cslot *iter_cached(struct kv_seg_iter *it,
+                                     const struct blk_ref *r)
+{
+    struct seg_cslot *c = &it->s->cslot[it->bi % KV_SEG_CACHE_SLOTS];
+
+    if (c->valid && c->bi == it->bi && c->len == r->len &&
+        c->off == r->off && c->blk && c->entries)
+        return c;
+    return NULL;
 }
 
 static int iter_load(struct kv_seg_iter *it)
@@ -1049,24 +1260,31 @@ static int iter_load(struct kv_seg_iter *it)
         return EFS_ERR_NOT_FOUND;
     r = &it->s->idx[it->bi];
     if(it->private_read && r->len>KV_LSM_SNAPSHOT_BLOCK_MAX)return EFS_ERR_BUSY;
-    p = realloc(it->blk, r->len);
-    if (!p)
-        return EFS_ERR_NOMEM;
-    it->blk = p;
     /* A block a point get just read is in the segment's slots; iterators
-     * run under the LSM lock like the install that filled them. */
+     * run under the LSM lock like the install that filled them, so read
+     * it in place instead of copying it per scan. */
     if (!it->private_read) {
-        struct seg_cslot *c = &it->s->cslot[it->bi % KV_SEG_CACHE_SLOTS];
+        struct seg_cslot *c = iter_cached(it, r);
 
-        if (c->valid && c->bi == it->bi && c->len == r->len &&
-            c->off == r->off && c->blk) {
-            memcpy(it->blk, c->blk, r->len);
+        if (c) {
+            if (!it->borrowed)
+                free(it->blk);
+            it->blk = c->blk;
+            it->borrowed = 1;
             it->blk_len = r->len;
             it->off = 0;
             it->loaded = 1;
             return EFS_OK;
         }
     }
+    if (it->borrowed) {
+        it->blk = NULL;
+        it->borrowed = 0;
+    }
+    p = realloc(it->blk, r->len);
+    if (!p)
+        return EFS_ERR_NOMEM;
+    it->blk = p;
     if (it->ra && r->off >= it->ra_off &&
         r->off + r->len <= it->ra_off + it->ra_len) {
         memcpy(it->blk, it->ra + (uint32_t)(r->off - it->ra_off), r->len);
@@ -1110,6 +1328,26 @@ int kv_seg_iter_seek(struct kv_seg_iter *it, const uint8_t *seek, uint32_t plen)
     }
     bi = block_for(it->s, seek, plen);
     it->bi = bi < 0 ? 0 : (uint32_t)bi;
+    /* A cached block has its record index: start at the first record >=
+     * seek instead of stepping (and comparing) every record before it.
+     * The merge skips exactly those records anyway. */
+    if (!it->private_read && it->bi < it->s->nblocks) {
+        struct seg_cslot *c = iter_cached(it, &it->s->idx[it->bi]);
+
+        if (c && iter_load(it) == EFS_OK && it->borrowed) {
+            uint32_t lo = 0, hi = c->nentries;
+            while (lo < hi) {
+                uint32_t mid = lo + (hi - lo) / 2;
+                uint32_t eo = c->entries[mid];
+                if (kv_key_cmp(c->blk + eo + 9, get_u32(c->blk + eo + 1),
+                               seek, plen) < 0)
+                    lo = mid + 1;
+                else
+                    hi = mid;
+            }
+            it->off = lo < c->nentries ? c->entries[lo] : it->blk_len;
+        }
+    }
     return EFS_OK;
 }
 

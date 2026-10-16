@@ -1146,6 +1146,11 @@ static int lsm_put(void *ctx, const uint8_t *key, uint32_t klen,
     return lsm_batch(ctx, &it, 1);
 }
 
+void efs_kv_lsm_bloom_enable(int on)
+{
+    kv_seg_bloom_enable(on);
+}
+
 static int lsm_get(void *ctx, const uint8_t *key, uint32_t klen, uint8_t *val,
                    uint32_t *vlen)
 {
