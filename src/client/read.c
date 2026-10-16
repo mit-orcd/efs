@@ -1926,6 +1926,24 @@ static void prefetch_ahead(efs_ino_t ino, uint32_t from_ci, uint64_t file_size)
     }
 }
 
+/* Chunk records a read-only open asks for with its FileID GETCHUNKS. */
+uint32_t efs_client_open_map_count(uint64_t size)
+{
+    uint32_t cs = data_chunk_size();
+    uint64_t n = cs ? (size + cs - 1) / cs : 1;
+    if (n < 1)
+        n = 1;
+    return n > EFS_GETCHUNKS_MAX ? EFS_GETCHUNKS_MAX : (uint32_t)n;
+}
+
+/* A read-only open starts its first chunks while its OPEN lease edge is
+ * committing. Bytes are served only after open returns, through the
+ * normal generation-checked cache pin; this only overlaps the fetch. */
+void efs_client_prefetch_open(efs_ino_t ino, uint64_t size)
+{
+    prefetch_ahead(ino, 0, size);
+}
+
 static void maybe_prefetch(int want, efs_ino_t ino, uint64_t end_off,
                            uint64_t file_size)
 {

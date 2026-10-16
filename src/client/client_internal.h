@@ -732,5 +732,10 @@ int efs_client_data_commit(void);
 /* Read-mapping freshness (ops.c, EFS_READ_MAP_TTL_MS). */
 int efs_client_map_fresh(efs_ino_t ino, uint32_t ci0, uint32_t ci1);
 void efs_client_map_opened(efs_ino_t ino);
+uint64_t efs_client_map_clock(void);
+void efs_client_map_install(efs_ino_t ino, const struct efs_chunk_rec *recs,
+                            uint32_t n, uint64_t pulled_us);
+uint32_t efs_client_open_map_count(uint64_t size);
+void efs_client_prefetch_open(efs_ino_t ino, uint64_t size);
 
 #endif

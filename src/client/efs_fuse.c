@@ -1923,6 +1923,9 @@ static pthread_mutex_t *open_edge_mu(efs_ino_t ino)
     return &g_open_edge_mu[efs_ino_lock_slot(ino, OPEN_EDGE_SHARDS)];
 }
 
+/* Size of the regular file a read-only open is acquiring (0 otherwise). */
+static __thread uint64_t t_open_read_size;
+
 /* Returns 1 when this is the first open (caller must acquire the HOLD). */
 static int efs_open_note(efs_ino_t ino)
 {
@@ -2203,9 +2206,22 @@ static int efs_open_acquire_fileid_run(efs_ino_t ino, uint64_t create_generation
         /* A completed retained CREATE supplies authoritative FileID. Other
          * opens fetch it; cached attrs must not invent a generation. The
          * guarded OPEN validates that FileID across truncate/recovery. */
-        if (!generation)
+        if (!generation) {
+            /* The FileID reply carries chunk records too: keep them as the
+             * read's mapping (a read-only open asks for its first window). */
+            uint32_t want = t_open_read_size ?
+                efs_client_open_map_count(t_open_read_size) : 1;
+            struct efs_chunk_rec *recs = malloc(want * sizeof(*recs));
+            uint64_t pulled = efs_client_map_clock();
+            count = recs ? want : 1;
             rc = efs_client_rpc_getchunks_fileid(g_client.export_id, ino, 0, 0,
-                                               NULL, &count, &generation);
+                                               recs, &count, &generation);
+            if (rc == EFS_OK && recs && count)
+                efs_client_map_install(ino, recs, count, pulled);
+            free(recs);
+            if (rc == EFS_OK && t_open_read_size)
+                efs_client_prefetch_open(ino, t_open_read_size);
+        }
         if (rc == EFS_OK && !generation) rc = EFS_ERR_PROTO;
         struct efs_open_ref *owner = NULL;
         pthread_mutex_lock(&g_open_mu);
@@ -2599,7 +2615,10 @@ static int efs_fuse_open_ino(fuse_ino_t ino, struct fuse_file_info *fi)
             return frc;
     }
     if (fi && !efs_mode_is_dir(row.mode)) {
+        t_open_read_size = (fi->flags & O_ACCMODE) == O_RDONLY && S_ISREG(row.mode) &&
+            !row.pack_ino ? row.size : 0;
         int hrc = efs_open_acquire(row.ino);
+        t_open_read_size = 0;
         if (hrc != EFS_OK) {
             efs_file_close(fi);
             return fuse_stat_errno(hrc);

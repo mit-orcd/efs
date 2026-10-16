@@ -329,12 +329,12 @@ static uint32_t pull_group_end(uint32_t start, uint32_t end)
  * by inode without tags; a collision only costs a refresh. */
 #define MAP_FRESH_SLOTS 65536u
 #define MAP_FRESH_STRIPES 64u
-static struct { efs_ino_t ino; uint32_t ci; uint64_t ms; } map_fresh[MAP_FRESH_SLOTS];
+static struct { efs_ino_t ino; uint32_t ci; uint64_t us; } map_fresh[MAP_FRESH_SLOTS];
 static pthread_mutex_t map_fresh_mu[MAP_FRESH_STRIPES];
 static pthread_once_t map_fresh_once = PTHREAD_ONCE_INIT;
-static uint32_t map_fresh_ttl;
+static uint64_t map_fresh_ttl; /* microseconds */
 #define MAP_OPEN_SLOTS 4096u
-static uint64_t map_open_ms[MAP_OPEN_SLOTS];
+static uint64_t map_open_us[MAP_OPEN_SLOTS];
 
 static void map_fresh_init(void)
 {
@@ -342,14 +342,16 @@ static void map_fresh_init(void)
         pthread_mutex_init(&map_fresh_mu[i], NULL);
     const char *e = getenv("EFS_READ_MAP_TTL_MS");
     unsigned long v = e && *e ? strtoul(e, NULL, 10) : 200;
-    map_fresh_ttl = v > 10000 ? 10000 : (uint32_t)v;
+    map_fresh_ttl = (v > 10000 ? 10000 : (uint64_t)v) * 1000;
 }
 
-static uint64_t map_fresh_now_ms(void)
+/* Microseconds: an open and the pull that follows it usually fall in the
+ * same millisecond, and a same-tick pull must count as possibly older. */
+static uint64_t map_fresh_now_us(void)
 {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000;
+    return (uint64_t)ts.tv_sec * 1000000 + (uint64_t)ts.tv_nsec / 1000;
 }
 
 static uint32_t map_fresh_slot(efs_ino_t ino, uint32_t ci)
@@ -358,8 +360,8 @@ static uint32_t map_fresh_slot(efs_ino_t ino, uint32_t ci)
     return (uint32_t)(h >> 40) & (MAP_FRESH_SLOTS - 1);
 }
 
-/* Stamp [ci0, ci1) as pulled at `ms` (taken before the pull started). */
-static void map_fresh_mark(efs_ino_t ino, uint32_t ci0, uint32_t ci1, uint64_t ms)
+/* Stamp [ci0, ci1) as pulled at `us` (taken before the pull started). */
+static void map_fresh_mark(efs_ino_t ino, uint32_t ci0, uint32_t ci1, uint64_t us)
 {
     pthread_once(&map_fresh_once, map_fresh_init);
     if (!map_fresh_ttl)
@@ -370,20 +372,20 @@ static void map_fresh_mark(efs_ino_t ino, uint32_t ci0, uint32_t ci1, uint64_t m
         pthread_mutex_lock(mu);
         map_fresh[s].ino = ino;
         map_fresh[s].ci = ci;
-        map_fresh[s].ms = ms;
+        map_fresh[s].us = us;
         pthread_mutex_unlock(mu);
     }
 }
 
 static uint64_t *map_open_slot(efs_ino_t ino)
 {
-    return &map_open_ms[(uint32_t)(((uint64_t)ino * 0x9E3779B97F4A7C15ULL) >> 52) &
+    return &map_open_us[(uint32_t)(((uint64_t)ino * 0x9E3779B97F4A7C15ULL) >> 52) &
                         (MAP_OPEN_SLOTS - 1)];
 }
 
 void efs_client_map_opened(efs_ino_t ino)
 {
-    __atomic_store_n(map_open_slot(ino), map_fresh_now_ms(), __ATOMIC_RELEASE);
+    __atomic_store_n(map_open_slot(ino), map_fresh_now_us(), __ATOMIC_RELEASE);
 }
 
 int efs_client_map_fresh(efs_ino_t ino, uint32_t ci0, uint32_t ci1)
@@ -391,15 +393,15 @@ int efs_client_map_fresh(efs_ino_t ino, uint32_t ci0, uint32_t ci1)
     pthread_once(&map_fresh_once, map_fresh_init);
     if (!map_fresh_ttl || ci0 >= ci1)
         return 0;
-    uint64_t now = map_fresh_now_ms();
-    /* Strictly after the open: a pull in the same millisecond may predate it. */
+    uint64_t now = map_fresh_now_us();
+    /* Strictly after the open: a pull in the same tick may predate it. */
     uint64_t opened = __atomic_load_n(map_open_slot(ino), __ATOMIC_ACQUIRE);
     for (uint32_t ci = ci0; ci < ci1; ci++) {
         uint32_t s = map_fresh_slot(ino, ci);
         pthread_mutex_t *mu = &map_fresh_mu[s & (MAP_FRESH_STRIPES - 1)];
         pthread_mutex_lock(mu);
         int ok = map_fresh[s].ino == ino && map_fresh[s].ci == ci &&
-                 map_fresh[s].ms > opened && now - map_fresh[s].ms < map_fresh_ttl;
+                 map_fresh[s].us > opened && now - map_fresh[s].us < map_fresh_ttl;
         pthread_mutex_unlock(mu);
         if (!ok)
             return 0;
@@ -410,7 +412,7 @@ int efs_client_map_fresh(efs_ino_t ino, uint32_t ci0, uint32_t ci1)
 static int pull_chunks_range(efs_ino_t ino, uint32_t start_ci, uint32_t end_ci,
                              struct pull_absent *ab)
 {
-    uint64_t pulled_ms = map_fresh_now_ms();
+    uint64_t pulled_us = map_fresh_now_us();
     if (!ino || start_ci >= end_ci)
         return EFS_OK;
     uint32_t start = start_ci;
@@ -456,8 +458,29 @@ static int pull_chunks_range(efs_ino_t ino, uint32_t start_ci, uint32_t end_ci,
         }
         start = group_end;
     }
-    map_fresh_mark(ino, start_ci, end_ci, pulled_ms);
+    map_fresh_mark(ino, start_ci, end_ci, pulled_us);
     return EFS_OK;
+}
+
+uint64_t efs_client_map_clock(void)
+{
+    return map_fresh_now_us();
+}
+
+/* Records an open's FileID GETCHUNKS already carried: apply them like a
+ * pull and stamp exactly those chunks fresh as of `pulled_us`, so the
+ * first read does not ask the same owner for the same mapping again. */
+void efs_client_map_install(efs_ino_t ino, const struct efs_chunk_rec *recs,
+                            uint32_t n, uint64_t pulled_us)
+{
+    if (!ino || !recs || !n)
+        return;
+    for (uint32_t i = 0; i < n; ++i)
+        if (efs_chunk_rec_view_valid(&recs[i]) != EFS_OK)
+            return;
+    apply_chunk_recs(ino, recs, n);
+    for (uint32_t i = 0; i < n; ++i)
+        map_fresh_mark(ino, recs[i].chunk_index, recs[i].chunk_index + 1, pulled_us);
 }
 
 /* One GETCHUNKS per chunk group, concurrent. A 1 GiB file is 128 groups;

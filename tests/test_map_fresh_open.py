@@ -5,30 +5,30 @@ from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[1];s=(root/'src/client/ops.c').read_text()
 a=s.index('#define MAP_FRESH_SLOTS');b=s.index('static int pull_chunks_range')
-block=s[a:b].replace('static uint64_t map_fresh_now_ms(void)\n{','static uint64_t map_fresh_now_ms_real(void)\n{')
+block=s[a:b].replace('static uint64_t map_fresh_now_us(void)\n{','static uint64_t map_fresh_now_us_real(void)\n{')
 code=r'''
 #include "client_internal.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <time.h>
-static uint64_t now_ms=1000;
-static uint64_t map_fresh_now_ms(void);
+static uint64_t now_us=1000000;
+static uint64_t map_fresh_now_us(void);
 '''+block+r'''
-static uint64_t map_fresh_now_ms(void) {return now_ms;}
+static uint64_t map_fresh_now_us(void) {return now_us;}
 int main(void) {
- (void)map_fresh_now_ms_real;
- map_fresh_mark(5,0,4,now_ms);
- now_ms+=150;assert(efs_client_map_fresh(5,0,4));
+ (void)map_fresh_now_us_real;
+ map_fresh_mark(5,0,4,now_us);
+ now_us+=150000;assert(efs_client_map_fresh(5,0,4));
  assert(!efs_client_map_fresh(5,0,5));      /* ci 4 never pulled */
  assert(!efs_client_map_fresh(6,0,1));      /* other inode */
- now_ms+=60;assert(!efs_client_map_fresh(5,0,1)); /* past 200 ms */
- map_fresh_mark(5,0,4,now_ms);now_ms+=1;assert(efs_client_map_fresh(5,0,4));
+ now_us+=60000;assert(!efs_client_map_fresh(5,0,1)); /* past 200 ms */
+ map_fresh_mark(5,0,4,now_us);now_us+=1;assert(efs_client_map_fresh(5,0,4));
  efs_client_map_opened(5);                  /* close-to-open */
  assert(!efs_client_map_fresh(5,0,1));
- map_fresh_mark(5,0,4,now_ms);              /* same ms as the open */
+ map_fresh_mark(5,0,4,now_us);              /* same tick as the open */
  assert(!efs_client_map_fresh(5,0,1));
- map_fresh_mark(9,0,1,now_ms-5);now_ms+=1;
- map_fresh_mark(5,0,4,now_ms);assert(efs_client_map_fresh(5,0,4));
+ now_us+=1;map_fresh_mark(5,0,4,now_us);    /* one microsecond later */
+ assert(efs_client_map_fresh(5,0,4));
  return 0;
 }
 '''
