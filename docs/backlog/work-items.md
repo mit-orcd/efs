@@ -2458,7 +2458,7 @@ Use `efs-bench --bench` for local storage measurements.
 
 **What.** One server, its six NVMe, the code `efsd` already uses, driven until the disk is the limit. Two workloads: data-fragment read and write, and metadata read and write (KV segments, the KV WAL, the Raft log — metadata is not an EC fragment). The same run records the hot path, so the next edit is the symbol that is on CPU while the disk is not full.
 
-**What exists.** `efsd --bench <path>` (`src/server/bench_local.c`) `pwrite`s zeroed `EFS_FRAGMENT_SIZE` buffers into one `.efs-bench` file, rotating 1024 offsets, then deletes the dir. No `fsync`, no read, one path, and it never calls the fragment store, the writer pool, the KV, or the Raft log. That number is not a storage-engine result. **Replace it; do not keep it as a second line next to the real one.** `results/nvme/` is the per-host ceiling (16.7–21.4 GB/s) and is the bar.
+**What exists.** `efsd --bench <path>` (`src/server/bench_local.c`) `pwrite`s zeroed `EFS_FRAGMENT_SIZE` buffers into one `.efs-bench` file, rotating 1024 offsets, then deletes the dir. No `fsync`, no read, one path, and it never calls the fragment store, the writer pool, the KV, or the Raft log. That number is not a storage result. **Replace it; do not keep it as a second line next to the real one.** `results/nvme/` is the per-host ceiling (16.7–21.4 GB/s) and is the bar.
 
 **What to add.**
 
@@ -3757,7 +3757,7 @@ The [retained fixture](../archive/round6-span-replay-repro.c) uses the actual me
 
 <a id="w89"></a>
 
-## W89 · W23 TSV field packing corrupts derived acceptance metrics
+## W89 · W23 TSV field merging corrupts derived acceptance metrics
 
 **Acceptance update (Oct 7, three-package round):** the unchanged production
 1 GiB L0 cap is reached in a NUC engine experiment. Deferred memtable idle

@@ -26,8 +26,7 @@ observability (`EFS_BATCH_OBS=1`) on the four daemons showed:
   pump drains of 16–32 ms (p50 bin 16 ms) and inbox ages of 25 ms (n1) and
   125 ms (n3) mean. 311,754 receive batches on n1 were refused as
   `tail_behind` — AEs overlapping entries the follower already had, which the
-  files storage never batched because `EFS_RAFT_BATCH_OVERLAP` and
-  `EFS_RAFT_BATCH_NOOP` defaulted on only for the container engine.
+  files storage never batched because `EFS_RAFT_BATCH_OVERLAP` and `EFS_RAFT_BATCH_NOOP` default off.
 - The n3 pump thread was ~16% on CPU and blocked almost entirely in
   `fdatasync` (page writeback and device cache flush).
 

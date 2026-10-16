@@ -1799,7 +1799,7 @@ positions do not assign an execution order or override the active handoff.
 | gc-own | **W86** · durable PUT ticket integration | feature / safe reclamation | metadata ledger, budgeted retained admission and ticket-bound durable publication receipts implemented (`22c8c1f9`, `70daa5a4`); AMD same/cross-group lost replies, leader death, cold replay, collision and revocation pass; default PUT/flush, storage fences and all-member abandoned collection remain staged | [evidence and gate](#w86) · [D31](#d31--recorded-abandoned-upload-policy) |
 | append-load | **W87** · buffered concurrent append loses records under load | correctness investigation | failure recorded in private GC fixture; isolated repeats pass; full traced acceptance owed | [evidence and gate](#w87) |
 | replay-span | **W88** · folded span retry resurrects after bounded history eviction | publication/retry correctness | partial — actual cross-group typed cache/host replay preserves peer bytes and cold mappings on AMD direct/TCP; production flush/ticket integration and full replay gates remain open | [evidence and gate](#w88) · [Oct9 checkpoint](../status/dependency-package-20261009.md#retained-typed-publication-writeback--staged-amd-gated) |
-| measure-fields | **W89** · W23 TSV field packing shifts derived metrics | verification correctness | Closed measurement defect: explicit schema and raw-field identity regressions pass; fresh AMD real-cap/quorum/recovery/cold-value gate passes (276 observations); D30/W23 bounds remain open | [closure and limits](../status/amd-non-rdma-20261010.md#w89) |
+| measure-fields | **W89** · W23 TSV field merging shifts derived metrics | verification correctness | Closed measurement defect: explicit schema and raw-field identity regressions pass; fresh AMD real-cap/quorum/recovery/cold-value gate passes (276 observations); D30/W23 bounds remain open | [closure and limits](../status/amd-non-rdma-20261010.md#w89) |
 
 The [specification/public-path review](../status/spec-implementation.md) separates accepted
 contracts from current capabilities (W71–W77). These findings add no deployment
@@ -4489,7 +4489,7 @@ Use `efs-bench --bench` for local storage measurements.
 
 **What.** One server, its six NVMe, the code `efsd` already uses, driven until the disk is the limit. Two workloads: data-fragment read and write, and metadata read and write (KV segments, the KV WAL, the Raft log — metadata is not an EC fragment). The same run records the hot path, so the next edit is the symbol that is on CPU while the disk is not full.
 
-**What exists.** `efsd --bench <path>` (`src/server/bench_local.c`) `pwrite`s zeroed `EFS_FRAGMENT_SIZE` buffers into one `.efs-bench` file, rotating 1024 offsets, then deletes the dir. No `fsync`, no read, one path, and it never calls the fragment store, the writer pool, the KV, or the Raft log. That number is not a storage-engine result. **Replace it; do not keep it as a second line next to the real one.** `results/nvme/` is the per-host ceiling (16.7–21.4 GB/s) and is the bar.
+**What exists.** `efsd --bench <path>` (`src/server/bench_local.c`) `pwrite`s zeroed `EFS_FRAGMENT_SIZE` buffers into one `.efs-bench` file, rotating 1024 offsets, then deletes the dir. No `fsync`, no read, one path, and it never calls the fragment store, the writer pool, the KV, or the Raft log. That number is not a storage result. **Replace it; do not keep it as a second line next to the real one.** `results/nvme/` is the per-host ceiling (16.7–21.4 GB/s) and is the bar.
 
 **What to add.**
 
@@ -5788,7 +5788,7 @@ The [retained fixture](../archive/round6-span-replay-repro.c) uses the actual me
 
 <a id="w89"></a>
 
-### W89 · W23 TSV field packing corrupts derived acceptance metrics
+### W89 · W23 TSV field merging corrupts derived acceptance metrics
 
 **Acceptance update (Oct 7, three-package round):** the unchanged production
 1 GiB L0 cap is reached in a NUC engine experiment. Deferred memtable idle
