@@ -18,6 +18,8 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[LMCache through native NIXL: EFS integration direction](efs-lmcache-nixl-direction-20261016.md): **design only; implementation and performance NOTRUN.** Target native asynchronous EFS transfers; AMD GPU-direct support and shared publication/eviction require qualification.
+
 [ORCD Raft/KV decisions](orcd-raft-kv-20261016.md): mixed correctness **PASS**
 (297,651 exact readbacks; 57,935 queries), loaded POSIX **FAIL** (seven
 15-second timeouts). Keep Raft batching, 100 ms checkpoint interval, concurrent

@@ -8,6 +8,10 @@ Complete navigation to top-level status ledgers as of October 15, 2026. Grouping
 
 - [ORCD Raft/KV comparisons and snapshot-fixture timeout](orcd-raft-kv-20261016.md)
 
+## AI KV-cache integration
+
+- [LMCache through native NIXL: EFS integration direction](efs-lmcache-nixl-direction-20261016.md)
+
 ## Query commands and metadata
 
 - [W98 — from fixed placement to distributed metadata capacity](all-node-metadata-queries-20261009.md)
