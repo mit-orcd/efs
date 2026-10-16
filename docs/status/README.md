@@ -24,6 +24,13 @@ full acceptance are separate states.
 integration FAIL on the known W71 uncertain-recovery fence, the same as the
 previous deployment `4d6530dd8`. Includes the RDMA credit fix.
 
+[Crash-path gates under the W71 fence](crash-gate-fence-fixtures-20261016.md):
+**PASS (scoped), test-only change.** The fault suite uses a fresh cluster for
+each server kill and asserts fsync EIO after restart: 24/24 PASS (RDMA
+mlx5_0, direct). The GC gate asserts the EIO after its four-server crash, then
+fresh-formats before POSIX and the offline-member section: PASS, with POSIX
+216/216 and two-client 67/67. The W71 recovery blocker stays open.
+
 [W122 — effective settings discovery](../backlog/work-items.md#w122): **PROPOSED**
 read-only settings catalogs for `efsd` and `efs-fuse`, exposed through management
 and the portal with defaults, effective values and startup/runtime scope. The

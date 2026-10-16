@@ -581,6 +581,38 @@ def chunk_state(ino, allow_absent=False):
         time.sleep(.1)
     raise AssertionError('no authoritative chunk state: '+str(ino))
 
+
+def fresh_format(label):
+    """Discard every owned store and initialize a new fixture.
+
+    An unclean stop leaves recovery_uncertain on each crashed root and COMMIT
+    (fsync) returns EIO until verified recovery or fresh format (W71). There
+    is no verified recovery, so later fsync-dependent gates use a fresh format
+    rather than clearing the fence on retained data.
+    """
+    unmount();stop(crash=True)
+    for root in roots:shutil.rmtree(root)
+    start()
+    run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
+    mount_client()
+    print('fresh format of all four stores for '+label,flush=True)
+
+def assert_commit_fenced(label):
+    """After an unclean stop a new fsync must fail with EIO."""
+    probe=mount/('fence-probe-'+label)
+    fd=os.open(probe,os.O_CREAT|os.O_EXCL|os.O_RDWR,0o600)
+    try:
+        assert os.write(fd,b'f'*65536)==65536
+        try:os.fsync(fd)
+        except OSError as error:
+            assert error.errno==errno.EIO,('fence errno',error.errno)
+        else:raise AssertionError('fsync acknowledged after unclean stop: '+label)
+    finally:
+        try:os.close(fd)
+        except OSError:pass
+    os.unlink(probe)
+    print('fsync EIO after unclean stop ('+label+') PASS',flush=True)
+
 try:
     query_work_observer=PosixPhaseCollector(work,env.get('EFS_QUERY_WORK_TRACE')=='1',name='query-capture-work',limit=2048)
     query_work_observer.__enter__()
@@ -2930,43 +2962,14 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
     assert hashlib.sha256(sentinel.read_bytes()).hexdigest()==expected
     assert (mount/'peer-fold').read_bytes()==model
     print('cold two-peer fold and live-base reads after GC PASS',flush=True)
+    assert_commit_fenced('four-server crash')
     os.unlink(mount/'peer-fold')
     wait(lambda:not files(fino),'fold fragments physically reclaimed')
-    # Reclamation must retain its durable ledger when one configured member
-    # is unavailable, even if the remaining three can still form a quorum.
-    offline,fd,offline_ino=create('offline-member');os.close(fd)
-    servers[3].kill();servers[3].wait()
-    os.unlink(offline);time.sleep(3)
-    remaining=status_available()
-    # reap_seen is a bounded scan sample, not authoritative marker absence.
-    # Keep the original three-second interval, then use the already-planned
-    # crash to inspect only copies of the stopped surviving replicas' KV.
-    # The exact inode must retain durable REAP ownership, not another fixture.
-    unmount();stop(crash=True)
-    inspector=work/'inspect-reap-retention'
-    run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),
-         source/'tests/live/inspect_reap_retention.c',source/'libefs.a',
-         '-pthread','-lm','-ldl','-libverbs','-o',inspector])
-    inspection=work/'offline-ledger-check';inspection.mkdir()
-    retained=[]
-    for node,checked_root in enumerate(roots[:3],1):
-        copied=inspection/('n'+str(node))
-        shutil.copytree(checked_root/'mdraft/kv',copied)
-        found=subprocess.run([str(inspector),str(copied),str(offline_ino)],
-                             env=env,capture_output=True,text=True,timeout=60)
-        assert found.returncode in (0,1),found.stdout+found.stderr
-        retained.append({'node':node,'rc':found.returncode,'output':found.stdout})
-    (work/'offline-ledger-retention.json').write_text(json.dumps({
-        'ino':offline_ino,'sampled_status':remaining,'stopped_kv_copies':retained},indent=2))
-    assert any(row['rc']==0 for row in retained),retained
-    print('offline fourth member retains exact durable reap ledger PASS',flush=True)
-    start()
-    wait(lambda:not files(offline_ino),'rejoined member completes reclamation')
-    wait(drained,'queues drain after member rejoins')
-    mount_client()
     os.unlink(sentinel)
     wait(lambda:not files(sino),'sentinel physically reclaimed')
-    wait(drained,'all fixture GC records retired')
+    wait(drained,'crashed fixture GC records retired')
+    # Every root is now fenced; fsync-dependent gates need a fresh format.
+    fresh_format('POSIX, append and offline-member gates')
     if a.posix:
         posix_checkpoint = totals(status())
         try:
@@ -3063,6 +3066,42 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
         (work/'append-cold-audit.json').write_text(json.dumps(evidence,indent=2))
         path.unlink();wait(drained,'append audit physical deletion drained',180)
         print('mixed concurrent append/GC and exact 800 cold records PASS',flush=True)
+    # Reclamation must retain its durable ledger when one configured member
+    # is unavailable, even if the remaining three can still form a quorum.
+    # Its crashes fence COMMIT, so it runs after this fixture's fsync gates.
+    offline,fd,offline_ino=create('offline-member');os.close(fd)
+    servers[3].kill();servers[3].wait()
+    os.unlink(offline);time.sleep(3)
+    remaining=status_available()
+    # reap_seen is a bounded scan sample, not authoritative marker absence.
+    # Keep the original three-second interval, then use the already-planned
+    # crash to inspect only copies of the stopped surviving replicas' KV.
+    # The exact inode must retain durable REAP ownership, not another fixture.
+    unmount();stop(crash=True)
+    inspector=work/'inspect-reap-retention'
+    run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),
+         source/'tests/live/inspect_reap_retention.c',source/'libefs.a',
+         '-pthread','-lm','-ldl','-libverbs','-o',inspector])
+    inspection=work/'offline-ledger-check';inspection.mkdir()
+    retained=[]
+    for node,checked_root in enumerate(roots[:3],1):
+        copied=inspection/('n'+str(node))
+        shutil.copytree(checked_root/'mdraft/kv',copied)
+        found=subprocess.run([str(inspector),str(copied),str(offline_ino)],
+                             env=env,capture_output=True,text=True,timeout=60)
+        assert found.returncode in (0,1),found.stdout+found.stderr
+        retained.append({'node':node,'rc':found.returncode,'output':found.stdout})
+    (work/'offline-ledger-retention.json').write_text(json.dumps({
+        'ino':offline_ino,'sampled_status':remaining,'stopped_kv_copies':retained},indent=2))
+    assert any(row['rc']==0 for row in retained),retained
+    print('offline fourth member retains exact durable reap ledger PASS',flush=True)
+    start()
+    wait(lambda:not files(offline_ino),'rejoined member completes reclamation')
+    wait(drained,'queues drain after member rejoins')
+    mount_client()
+    wait(drained,'all fixture GC records retired')
+    # The tail late-PUT check targets this fixture's retired inode.
+    ino=offline_ino
     unmount();stop()
     start()
     # No user fragment remains, even on a restart. Physical scan is independent

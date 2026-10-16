@@ -12,6 +12,8 @@ This process only signals PIDs it started. It refuses ports 19810 and
 19820 and any storage path under /data1.
 """
 import argparse
+import errno
+import functools
 import hashlib
 import json
 import os
@@ -582,6 +584,43 @@ def timed_read(mount, name, journal, work, timeout=OP_TIMEOUT_S):
 
 
 
+_FENCE_CHILD = (
+    "import errno, os, sys\n"
+    "path, result = sys.argv[1], sys.argv[2]\n"
+    "fd = os.open(path, os.O_CREAT | os.O_TRUNC | os.O_WRONLY, 0o644)\n"
+    "os.write(fd, b'fence' * 1024)\n"
+    "try:\n"
+    "    os.fsync(fd)\n"
+    "    err = 0\n"
+    "except OSError as e:\n"
+    "    err = e.errno\n"
+    "try:\n"
+    "    os.close(fd)\n"
+    "except OSError:\n"
+    "    pass\n"
+    "open(result, 'w').write('%d\\n' % err)\n"
+)
+
+
+def fsync_errno(mount, name, journal, work, timeout=OP_TIMEOUT_S):
+    """fsync a new file; return 0 on success, its errno, or "timeout"."""
+    result = os.path.join(work, name + ".fence")
+    try:
+        os.unlink(result)
+    except OSError:
+        pass
+    try:
+        rc = _run_child(
+            [sys.executable, "-c", _FENCE_CHILD, os.path.join(mount, name), result],
+            timeout, journal, "fence-fsync", name)
+    except TimeoutError:
+        return "timeout"
+    text = open(result).read().strip() if os.path.isfile(result) else ""
+    err = int(text) if text else "rc=%s" % rc
+    journal.record("fence-fsync-result", name=name, errno=err)
+    return err
+
+
 def recovered_read(mount, name, journal, work):
     """Require exact bytes after bounded election/connection recovery."""
     deadline = time.monotonic() + 20
@@ -606,86 +645,103 @@ def row(case, status, **fields):
     return out
 
 
-def case_one_server_lost(cluster, seed):
+def case_one_server_lost(cluster, seed, node_id):
+    """Kill one server; SIGKILL is an unclean stop.
+
+    Since c4178ea81 the restarted root keeps recovery_uncertain and refuses
+    COMMIT (fsync EIO) until verified recovery or fresh format, and every
+    fsync commits every current node. Each node therefore gets its own fresh
+    cluster; after restart the expected refusal is asserted, not bypassed.
+    """
     results = []
-    mount_a = cluster.mounts[0][0]
-    mount_b = cluster.mounts[1][0]
-    for node_id in (1, 2, 3, 4):
-        mount_a, mount_b = (item[0] for item in cluster.mounts)
-        name = "lost-%d" % node_id
-        data = pattern(seed, name, 4096)
-        before = cluster.snapshot_exports()
-        timed_publish(mount_a, name, data, cluster.journal, cluster.work)
-        leader = cluster.leader_node_id()
-        srv = cluster.server(node_id)
-        srv.stop()
+    mount_a, mount_b = (item[0] for item in cluster.mounts)
+    name = "lost-%d" % node_id
+    data = pattern(seed, name, 4096)
+    before = cluster.snapshot_exports()
+    timed_publish(mount_a, name, data, cluster.journal, cluster.work)
+    leader = cluster.leader_node_id()
+    srv = cluster.server(node_id)
+    srv.stop()
+    try:
         try:
-            try:
-                got, err = recovered_read(mount_b, name, cluster.journal, cluster.work)
-            except TimeoutError:
-                got, err = b"", "timeout"
-            fresh = pattern(seed, "new-%d" % node_id, 4096)
+            got, err = recovered_read(mount_b, name, cluster.journal, cluster.work)
+        except TimeoutError:
+            got, err = b"", "timeout"
+        fresh = pattern(seed, "new-%d" % node_id, 4096)
+        pub = "error"
+        before_fresh = cluster.snapshot_exports()
+        try:
+            timed_publish(mount_b, "new-%d" % node_id, fresh, cluster.journal,
+                          cluster.work)
+            pub = "ok"
+        except TimeoutError:
+            pub = "timeout"
+        except OSError:
             pub = "error"
-            before_fresh = cluster.snapshot_exports()
-            try:
-                timed_publish(mount_b, "new-%d" % node_id, fresh, cluster.journal,
-                              cluster.work)
-                pub = "ok"
-            except TimeoutError:
-                pub = "timeout"
-            except OSError:
-                pub = "error"
-            status = "PASS"
-            detail = "readable after killing node %d (metadata leader=%d); new fsync=%s" % (
-                node_id, leader, pub)
-            if err is not None or got != data:
+        status = "PASS"
+        detail = "readable after killing node %d (metadata leader=%d); new fsync=%s" % (
+            node_id, leader, pub)
+        if err is not None or got != data:
+            status = "FAIL"
+            detail = "read after kill node %d errno=%s sha=%s" % (
+                node_id, err, sha256(got))
+        elif pub == "ok":
+            # The production contract permits degraded two-ACK writes
+            # (docs/operations/operations.md). Verify the two actual
+            # generation-matched holders and bytes, never claim repair.
+            fragments = data_fragment_set(before_fresh, cluster.snapshot_exports(), minimum=2)
+            if not fragments or any(p.startswith(srv.storage + os.sep) for p in fragments.values()):
                 status = "FAIL"
-                detail = "read after kill node %d errno=%s sha=%s" % (
-                    node_id, err, sha256(got))
-            elif pub == "ok":
-                # The production contract permits degraded two-ACK writes
-                # (docs/operations/operations.md). Verify the two actual
-                # generation-matched holders and bytes, never claim repair.
-                fragments = data_fragment_set(before_fresh, cluster.snapshot_exports(), minimum=2)
-                if not fragments or any(p.startswith(srv.storage + os.sep) for p in fragments.values()):
+                detail = "fsync succeeded without two live fragment holders (node %d down)" % node_id
+            else:
+                fresh_got, fresh_err = timed_read(mount_a, "new-%d" % node_id,
+                    cluster.journal, cluster.work)
+                if fresh_err is not None or fresh_got != fresh:
                     status = "FAIL"
-                    detail = "fsync succeeded without two live fragment holders (node %d down)" % node_id
-                else:
-                    fresh_got, fresh_err = timed_read(mount_a, "new-%d" % node_id,
-                        cluster.journal, cluster.work)
-                    if fresh_err is not None or fresh_got != fresh:
-                        status = "FAIL"
-                        detail = "acknowledged replacement stripe was not readable"
-            elif pub == "timeout":
-                status = "FAIL"
-                detail = "fsync hung while node %d was down" % node_id
-            results.append(row(
-                "one_server_lost", status, readable=(status == "PASS"),
-                detail=detail, node_id=node_id, leader=leader,
-                expected_sha256=sha256(data), actual_sha256=sha256(got),
-                fragments=sorted(p for p in (cluster.snapshot_exports() - before)
-                                 if not p.endswith(".sum"))))
-        finally:
-            srv.start()
-        # Cold clients prove acknowledged bytes after restart and prevent
-        # a previous fault's cooldown/cache from contaminating the next one.
-        cluster.reset_clients()
-        mount_a, mount_b = (item[0] for item in cluster.mounts)
-        got2, err2 = recovered_read(mount_b, name, cluster.journal, cluster.work)
-        if err2 is not None or got2 != data:
-            results.append(row(
-                "restart", "FAIL", readable=False,
-                detail="read after restart of node %d errno=%s" % (node_id, err2),
-                node_id=node_id, expected_sha256=sha256(data),
-                actual_sha256=sha256(got2)))
-        else:
-            st = os.stat(os.path.join(mount_b, name))
-            results.append(row(
-                "restart", "PASS", readable=True,
-                detail="name and bytes survived restart of node %d size=%d" % (
-                    node_id, st.st_size),
-                node_id=node_id, expected_sha256=sha256(data),
-                actual_sha256=sha256(got2)))
+                    detail = "acknowledged replacement stripe was not readable"
+        elif pub == "timeout":
+            status = "FAIL"
+            detail = "fsync hung while node %d was down" % node_id
+        results.append(row(
+            "one_server_lost", status, readable=(status == "PASS"),
+            detail=detail, node_id=node_id, leader=leader,
+            expected_sha256=sha256(data), actual_sha256=sha256(got),
+            fragments=sorted(p for p in (cluster.snapshot_exports() - before)
+                             if not p.endswith(".sum"))))
+    finally:
+        srv.start()
+    # Cold clients prove acknowledged bytes after restart and prevent
+    # a previous fault's cooldown/cache from contaminating the next one.
+    cluster.reset_clients()
+    mount_a, mount_b = (item[0] for item in cluster.mounts)
+    got2, err2 = recovered_read(mount_b, name, cluster.journal, cluster.work)
+    if err2 is not None or got2 != data:
+        results.append(row(
+            "restart", "FAIL", readable=False,
+            detail="read after restart of node %d errno=%s" % (node_id, err2),
+            node_id=node_id, expected_sha256=sha256(data),
+            actual_sha256=sha256(got2)))
+    else:
+        st = os.stat(os.path.join(mount_b, name))
+        results.append(row(
+            "restart", "PASS", readable=True,
+            detail="name and bytes survived restart of node %d size=%d" % (
+                node_id, st.st_size),
+            node_id=node_id, expected_sha256=sha256(data),
+            actual_sha256=sha256(got2)))
+    # Fail-closed W71 contract: the uncertain root must refuse COMMIT.
+    err3 = fsync_errno(mount_a, "fence-%d" % node_id, cluster.journal, cluster.work)
+    if err3 == errno.EIO:
+        results.append(row(
+            "restart_fence", "PASS", readable=None,
+            detail="fsync EIO after unclean stop of node %d (recovery uncertain)" % node_id,
+            node_id=node_id))
+    else:
+        results.append(row(
+            "restart_fence", "FAIL", readable=None,
+            detail="fsync after unclean stop of node %d returned %s, want EIO" % (
+                node_id, err3),
+            node_id=node_id))
     return results
 
 
@@ -853,43 +909,60 @@ def case_crash_fsync(cluster, seed):
 
 
 
+def fixtures():
+    """(name, cases) per disposable cluster. An unclean server stop fences
+    COMMIT on that cluster permanently, so it ends its fixture."""
+    out = []
+    for node_id in (1, 2, 3, 4):
+        out.append(("lost-%d" % node_id,
+                    [functools.partial(case_one_server_lost, node_id=node_id)]))
+    # These cases kill clients or edit fragments; no server stops uncleanly.
+    out.append(("shared", [case_corrupt_one, case_missing_checksum, case_crash_fsync]))
+    return out
+
+
+def case_name(fn):
+    return getattr(fn, "__name__", None) or fn.func.__name__
+
+
 def integrate(work, binary_dir, seed, mode="buffered", transport="tcp", device=None):
     signal.signal(signal.SIGTERM, _on_signal)
     signal.signal(signal.SIGINT, _on_signal)
-    cluster = Cluster(work, binary_dir, mode, transport, device)
     results = []
-    try:
-        cluster.start()
-        build = ""
-        log = open(cluster.servers[0].log_path, errors="replace").read()
-        m = re.search(r"build=([^\s]+)", log)
-        if m:
-            build = m.group(1)
-        for fn in (case_one_server_lost, case_corrupt_one,
-                   case_missing_checksum, case_crash_fsync):
-            t0 = time.monotonic()
-            try:
-                part = fn(cluster, seed)
-            except Exception as e:
-                part = [row(fn.__name__, "FAIL", detail="%s: %s" % (type(e).__name__, e))]
-            elapsed = time.monotonic() - t0
-            for item in part:
-                item["elapsed_s"] = round(elapsed, 3)
-                item["build"] = build
-                item["seed"] = seed
-                if elapsed > CASE_BUDGET_S and item["status"] == "PASS":
-                    item["status"] = "FAIL"
-                    item["detail"] = "deadline exceeded: " + item.get("detail", "")
-            results.extend(part)
-            if any(item["status"] == "FAIL" for item in part):
-                cluster.keep = True
-    except Exception as e:
-        cluster.keep = True
-        results.append(row(
-            "startup", "FAIL",
-            detail="%s: %s" % (type(e).__name__, e)))
-    finally:
-        cluster.close()
+    for fixture, cases in fixtures():
+        cluster = Cluster(os.path.join(work, fixture), binary_dir, mode, transport, device)
+        try:
+            cluster.start()
+            build = ""
+            log = open(cluster.servers[0].log_path, errors="replace").read()
+            m = re.search(r"build=([^\s]+)", log)
+            if m:
+                build = m.group(1)
+            for fn in cases:
+                t0 = time.monotonic()
+                try:
+                    part = fn(cluster, seed)
+                except Exception as e:
+                    part = [row(case_name(fn), "FAIL", detail="%s: %s" % (type(e).__name__, e))]
+                elapsed = time.monotonic() - t0
+                for item in part:
+                    item["elapsed_s"] = round(elapsed, 3)
+                    item["build"] = build
+                    item["seed"] = seed
+                    item["fixture"] = fixture
+                    if elapsed > CASE_BUDGET_S and item["status"] == "PASS":
+                        item["status"] = "FAIL"
+                        item["detail"] = "deadline exceeded: " + item.get("detail", "")
+                results.extend(part)
+                if any(item["status"] == "FAIL" for item in part):
+                    cluster.keep = True
+        except Exception as e:
+            cluster.keep = True
+            results.append(row(
+                "startup", "FAIL", fixture=fixture,
+                detail="%s: %s" % (type(e).__name__, e)))
+        finally:
+            cluster.close()
     for item in results:
         item["transport"] = transport
     return results
