@@ -54,6 +54,7 @@ static int check_access(const struct efs_inode *row,uid_t uid,gid_t gid,int mask
 static int efs_fuse_truncate_ino(uint64_t ino,off_t size,struct fuse_file_info *fi){(void)ino;(void)size;(void)fi;mutations++;return 0;}
 static int file_opens,lease_opens,file_closes,lease_rc;
 static int efs_file_open(struct fuse_file_info *fi,uint64_t ino){fi->fh=ino;file_opens++;return 0;}
+static __thread uint64_t t_open_read_size;
 static int efs_open_acquire(uint64_t ino){(void)ino;lease_opens++;return lease_rc;}
 static void efs_file_close(struct fuse_file_info *fi){fi->fh=0;file_closes++;}
 '''+function('fuse_stat_errno')+function('efs_rc_to_errno')+function('fuse_fi_direct_io')+function('efs_fuse_open_ino')+function('efs_fuse_chown_ino')+function('efs_fuse_link_at')+r'''

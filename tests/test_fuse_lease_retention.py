@@ -22,6 +22,10 @@ source=r'''
 #include <errno.h>
 static uint64_t stats_now_ms(void);
 #include "client_internal.h"
+uint32_t efs_client_open_map_count(uint64_t s){(void)s;return 1;}
+uint64_t efs_client_map_clock(void){return 1;}
+void efs_client_map_install(efs_ino_t i,const struct efs_chunk_rec *r,uint32_t n,uint64_t u){(void)i;(void)r;(void)n;(void)u;}
+void efs_client_prefetch_open(efs_ino_t i,uint64_t s){(void)i;(void)s;}
 #include "efs/session.h"
 struct efs_client g_client;
 struct fuse_file_info {int flags;};

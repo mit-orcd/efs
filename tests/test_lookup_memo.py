@@ -38,6 +38,7 @@ source = r'''
 #include <time.h>
 typedef uint64_t fuse_ino_t;
 typedef void *fuse_req_t;
+static __thread uint64_t t_open_read_size;
 struct fuse_file_info { uint64_t fh; int flags; };
 struct fuse_bufvec { int unused; };
 struct fuse_entry_param { int unused; };
