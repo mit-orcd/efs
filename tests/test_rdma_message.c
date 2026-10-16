@@ -140,12 +140,17 @@ static void failures(void)
 static void credits(void)
 {
     struct efs_rmsg_credits c;
-    assert(efs_rmsg_credit_init(&c,1)==-1);
-    assert(efs_rmsg_credit_init(&c,65)==-1);
-    for(unsigned n=2;n<=64;n++) {
-        assert(!efs_rmsg_credit_init(&c,n));
-        /* Half the peer's receives: the rest absorb our CREDIT frames. */
-        unsigned cap=n/2;
+    assert(efs_rmsg_credit_init(&c,1,8)==-1);
+    assert(efs_rmsg_credit_init(&c,65,8)==-1);
+    assert(efs_rmsg_credit_init(&c,8,1)==-1);
+    assert(efs_rmsg_credit_init(&c,8,65)==-1);
+    for(unsigned n=2;n<=64;n++) for(unsigned m=2;m<=64;m++) {
+        assert(!efs_rmsg_credit_init(&c,n,m));
+        /* Half the smaller pool, the same on both ends: each side's
+         * receives fit the peer's DATA plus the peer's CREDITs for ours. */
+        unsigned cap=(n<m?n:m)/2;
+        struct efs_rmsg_credits peer;assert(!efs_rmsg_credit_init(&peer,m,n));
+        assert(peer.capacity==cap && cap+peer.capacity<=n && cap+peer.capacity<=m);
         for(unsigned i=0;i<cap;i++) assert(efs_rmsg_credit_take(&c)==1);
         assert(!efs_rmsg_credit_take(&c));
         assert(efs_rmsg_credit_return(&c,cap+1)==-1); /* inflation */

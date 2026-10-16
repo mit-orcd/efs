@@ -165,18 +165,24 @@ int efs_rmsg_rx_feed(struct efs_rmsg_rx *r, const void *frame, size_t len)
 }
 const struct efs_rmsg_view *efs_rmsg_rx_peek(const struct efs_rmsg_rx *r)
 { return r->count ? &r->queue[r->head] : NULL; }
-/* The peer's posted receives hold our DATA frames and our CREDIT frames
- * alike, and a CREDIT stays in its buffer until the peer's owner thread
- * pops it. We send at most one CREDIT per peer DATA frame consumed, and the
- * peer sends at most `capacity` DATA frames before it must pop ours, so a
- * peer needs 2 x capacity receives. receives-1 overran that: the send met
- * no posted receive, was RNR-NAKed and retried by the NIC 0.64 ms later
- * with no completion to wake anyone, so request/reply rounds took 1-2 ms
- * instead of 30 us (orcd-mini Raft AppendEntries, Oct 16). */
-int efs_rmsg_credit_init(struct efs_rmsg_credits *c, uint32_t peer_receives)
+/* A side's posted receives hold the peer's DATA frames and the peer's
+ * CREDIT frames alike, and a CREDIT stays in its buffer until that side's
+ * owner thread pops it. The peer sends at most one CREDIT per DATA frame of
+ * ours it consumed, and we send at most our window of DATA before popping
+ * them, so a side with R receives needs peer_window + our_window <= R.
+ * peer_receives-1 overran that even with equal pools; peer_receives/2 still
+ * did with unequal ones (2 vs 7: 1 + 3 into 2 receives). An overrun send met
+ * no posted receive, was RNR-NAKed and retried by the NIC 0.64 ms later with
+ * no completion to wake anyone: request/reply rounds took 1-2 ms instead of
+ * 30 us (orcd-mini Raft AppendEntries, Oct 16). Both ends derive the same
+ * window from the two advertised counts. */
+int efs_rmsg_credit_init(struct efs_rmsg_credits *c, uint32_t peer_receives,
+                         uint32_t local_receives)
 {
-    if (!c || peer_receives<2 || peer_receives>64) return -1;
-    c->sent=c->returned=0; c->capacity=peer_receives/2; return 0;
+    if (!c || peer_receives<2 || peer_receives>64 ||
+        local_receives<2 || local_receives>64) return -1;
+    uint32_t pool=peer_receives<local_receives ? peer_receives : local_receives;
+    c->sent=c->returned=0; c->capacity=pool/2; return 0;
 }
 int efs_rmsg_credit_take(struct efs_rmsg_credits *c)
 {

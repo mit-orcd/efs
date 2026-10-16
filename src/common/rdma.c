@@ -53,8 +53,8 @@ static inline void cpu_relax(void)
 #endif
 }
 
-#define EFS_RDMA_NRECV_DEFAULT 6 /* posted recv buffers per QP; half carry data
-                                  (efs_rmsg_credit_init), so 3 in flight as before */
+#define EFS_RDMA_NRECV_DEFAULT 6 /* posted recv buffers per QP; half the smaller
+                                  pool carries data (efs_rmsg_credit_init): 3 */
 /* One buffer per in-flight send on this QP. The write pipeline posts
  * EFS_WRITE_PIPELINE chunks; with 2 buffers the third send spun in
  * send_buf_pick (W14 step 5 / W15 step 4). */
@@ -1135,7 +1135,7 @@ static int setup_peer(struct efs_rdma_conn *rc, const struct efs_rmsg_setup *pee
     struct efs_rmsg_setup local, n;
     setup_local(rc,&local);
     if (efs_rmsg_negotiate(&n,&local,peer) ||
-        efs_rmsg_credit_init(&rc->credits,peer->receives) ||
+        efs_rmsg_credit_init(&rc->credits,peer->receives,local.receives) ||
         efs_rmsg_rx_init(&rc->messages,&g_assembly_budget,256ull*1024*1024,
                          n.physical_cap,n.logical_cap,n.outstanding)) return -1;
     rc->max_frame=n.physical_cap; rc->peer_outstanding=n.outstanding;

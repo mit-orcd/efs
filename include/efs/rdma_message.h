@@ -69,7 +69,11 @@ void efs_rmsg_rx_destroy(struct efs_rmsg_rx *r);
 
 struct efs_rmsg_credits { uint64_t sent, returned; uint32_t capacity; };
 /* One receive is reserved for control. Local SEND completion never adds credit. */
-int efs_rmsg_credit_init(struct efs_rmsg_credits *c, uint32_t peer_receives);
+/* DATA window for one direction: half the smaller receive pool, identical
+ * on both ends, so either side's receives hold the peer's DATA plus the
+ * peer's CREDIT frames (at most one per DATA frame we sent). */
+int efs_rmsg_credit_init(struct efs_rmsg_credits *c, uint32_t peer_receives,
+                         uint32_t local_receives);
 int efs_rmsg_credit_take(struct efs_rmsg_credits *c);
 int efs_rmsg_credit_return(struct efs_rmsg_credits *c, uint64_t cumulative);
 #endif

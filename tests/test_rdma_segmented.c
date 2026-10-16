@@ -82,7 +82,10 @@ int main(int argc,char **argv)
     if (!strcmp(mode,"churn")) return reconnect_churn();
     int sv[2];OK(!socketpair(AF_UNIX,SOCK_STREAM,0,sv));
     pid_t pid=fork();OK(pid>=0);int server=pid==0;
-    if (strcmp(mode,"burst")) setenv("EFS_RDMA_BUFS",server?"2":"7",1);
+    /* burst-asym: the sender has the small pool, so the peer's CREDIT
+     * frames for our DATA land in two receives. */
+    if (!strcmp(mode,"burst-asym")) setenv("EFS_RDMA_BUFS",server?"7":"2",1);
+    else if (strcmp(mode,"burst")) setenv("EFS_RDMA_BUFS",server?"2":"7",1);
     if (!efs_rdma_available()) {
         if (!server) { int st;waitpid(pid,&st,0);puts("SKIP: no usable RDMA device; segmented gate NOTRUN"); }
         return 0;
@@ -103,11 +106,11 @@ int main(int argc,char **argv)
         if (!server) {int st;OK(waitpid(pid,&st,0)==pid && WIFEXITED(st)&&WEXITSTATUS(st)==0);puts("PASS: interrupted assembly/credit wait releases all ownership");}
         return 0;
     }
-    if (!strcmp(mode,"burst")) {
-        /* Default pools, three small requests in flight per round. When
-         * DATA plus CREDIT frames could exceed the peer's posted receives,
-         * the NIC RNR-retried the overflow 0.64 ms later with no completion
-         * to wake either side: rounds took ~2 ms instead of ~30 us. */
+    if (!strcmp(mode,"burst") || !strcmp(mode,"burst-asym")) {
+        /* Three small requests in flight per round, default or 2/7 pools.
+         * When DATA plus CREDIT frames could exceed a peer's posted
+         * receives, the NIC RNR-retried the overflow 0.64 ms later with no
+         * completion to wake either side: rounds took ~2 ms, not ~30 us. */
         enum { ROUNDS=400, DEPTH=3 };
         if (server) {
             for (;;) {
@@ -132,7 +135,7 @@ int main(int argc,char **argv)
         double ms=(b.tv_sec-a.tv_sec)*1e3+(b.tv_nsec-a.tv_nsec)/1e6;
         efs_conn_destroy(c);
         int st;OK(waitpid(pid,&st,0)==pid && WIFEXITED(st)&&WEXITSTATUS(st)==0);
-        printf("burst: %u rounds of %u requests in %.1f ms (%.1f us/round)\n",ROUNDS,DEPTH,ms,1e3*ms/ROUNDS);
+        printf("%s: %u rounds of %u requests in %.1f ms (%.1f us/round)\n",mode,ROUNDS,DEPTH,ms,1e3*ms/ROUNDS);
         OK(ms<250.0); /* RNR-retried rounds took ~2 ms each, ~800 ms in total */
         puts("PASS: pipelined small requests never wait out an RNR retry");
         return 0;
