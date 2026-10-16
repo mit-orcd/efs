@@ -593,6 +593,7 @@ test: all
 	python3 tests/test_close_retire_batch.py
 	python3 tests/test_store_tls.py
 	python3 tests/test_report_session_admission.py
+	python3 tests/test_report_owner_prepare.py
 	python3 tests/test_namespace_owner_once.py
 	python3 tests/test_gc_backlog_idle.py
 	python3 tests/test_gc_fragment_backlog.py

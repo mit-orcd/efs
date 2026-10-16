@@ -13429,14 +13429,36 @@ static int host_namespace_session_command(struct efs_raft_host *h,uint8_t group,
     if(reply.leader_hint>=0)*hint=reply.leader_hint;
     return rc;
 }
+/* REPORT preparation must not append an idempotent owner CREATE for every
+ * newly touched file. A fresh owner read can prove that preparation already
+ * exists. This proof is scoped to this call: each participant still performs
+ * its original REGISTER/ESTABLISH and ACTIVE/epoch checks. */
 static int host_namespace_session_prepare_owner(struct efs_raft_host *h,
     const struct efs_opid_req *q,int *hint)
 {
     if(!q || !efs_opid_req_valid(q) || !q->id.session_epoch)return EFS_OK;
     if(q->ack>=q->id.seq)return EFS_ERR_INVAL;
-    uint8_t cmd[HOST_SESS_CREATE_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_CREATE};
-    memcpy(cmd+2,q->id.client_uuid,16);wr32be(cmd+18,q->id.session_epoch);
+    uint8_t cmd[HOST_SESS_CREATE_LEN]={EFS_MD_CMD_SESSION,HOST_SESS_GET};
+    memcpy(cmd+2,q->id.client_uuid,16);
     uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(q->id.client_uuid));
+    uint64_t session=0;
+    int rc;
+    if(host_hosts(h,owner))
+        rc=host_session_get_covered(h,cmd,HOST_SESS_HDR_LEN,owner,hint,&session,0);
+    else {
+        struct efs_msg_raft_mkfs_reply reply={0};
+        rc=host_remote_cmd(h,owner,cmd,HOST_SESS_HDR_LEN,&reply,-1);
+        if(reply.leader_hint>=0)*hint=reply.leader_hint;
+        if(rc==EFS_OK)session=reply.salt;
+    }
+    if(rc==EFS_OK) {
+        if((uint32_t)session!=q->id.session_epoch)return EFS_ERR_STALE;
+        uint8_t state=(uint8_t)(session>>32);
+        if(state==EFS_SESSION_FENCING)return EFS_ERR_BUSY;
+        return state==EFS_SESSION_ACTIVE?EFS_OK:EFS_ERR_PROTO;
+    }
+    if(rc!=EFS_ERR_NOT_FOUND)return rc;
+    cmd[1]=EFS_MD_SESS_CREATE;wr32be(cmd+18,q->id.session_epoch);
     return host_namespace_session_command(h,owner,cmd,sizeof(cmd),hint);
 }
 static int host_namespace_session_admit_covered(struct efs_raft_host *h,uint32_t shard,
