@@ -18,6 +18,14 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[orcd-mini truncate](orcd-mini-truncate-20261016.md): **scoped PASS
+(functional).** A staged DEL's garbage vlen wedged one replica's apply
+(`apply lane-fence rc=-5` forever; truncate EIO, mkdir/rm EBUSY), fixed in
+`502277d19`. Truncating files over ~1 GiB returned EIO (32-chunk lane-fence
+cap); `4d6530dd8` pages the fence and reads the TRUNCATE verdict. A 100 GiB
+`dd if=/dev/null` now completes in 4.3 s; data/regrow checks PASS. Crash
+during paging NOTRUN.
+
 [ORCD queued-read-vote comparison](orcd-queued-read-vote-20261016.md):
 **NO—keep reverted.** Frozen `fa29f9277`, native RDMA/direct, `.efs` enabled,
 no packing/containers/expiry; OFF–ON–ON–OFF across seven clients. POSIX
