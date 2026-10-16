@@ -54,7 +54,16 @@ python3 scripts/server_processes.py record {d}/efsd.pid {root}
   time.sleep(1)
  else:raise RuntimeError('cluster not ready')
  if fresh:
-  print(c.run(c.SERVERS[0],env+f'cd {S}; ./efs-mgmt raft-mkfs {c.SEED}; ./efs-mgmt raft-setattr {c.SEED} 1 6 0 "$(id -u)" "$(id -g)" 2; ./efs-mgmt commands-policy {c.SEED} get'),flush=True)
+  # Membership UP can precede a leader. MKFS is idempotent and preserves
+  # the committed salt; retry only explicit startup NOT_PRIMARY/BUSY.
+  for bootstrap in range(20):
+   try:
+    print(c.run(c.SERVERS[0],env+f'cd {S}; ./efs-mgmt raft-mkfs {c.SEED}; ./efs-mgmt raft-setattr {c.SEED} 1 6 0 "$(id -u)" "$(id -g)" 2; ./efs-mgmt commands-policy {c.SEED} get'),flush=True)
+    break
+   except RuntimeError as error:
+    if not any(code in str(error) for code in ('rc=-15','rc=-13')):raise
+    if bootstrap==19:raise
+    print('Waiting for bootstrap leader:',str(error),flush=True);time.sleep(1)
  par(c.CLIENTS,lambda h:c.run(h,env+f'cd {S}; mkdir -p {B}/{label}/{h}; EFS_FUSE_LOG={B}/{label}/{h}/fuse'+('-restart' if not fresh else '')+f'.log bash scripts/client.sh {c.SEED} {M}',120))
  STATE.write_text(json.dumps(dict(label=label,variant=variant,noop=noop,overlap=overlap,interval=interval)))
 
