@@ -104,9 +104,10 @@ ordering review, aimed at the no-slowdown gate:
   item 2's "persist durable-version metadata before fsync success" may reduce
   to today's data barrier, provided the published metadata itself is already
   Raft-durable at publication. Verify that first.
-- Cost would be about 8 bytes more per PUT reply and per fragment reference
-  (a wire change; `EFS_PUT_REPLY_LEN` is 10 today), with no additional disk
-  I/O. Recovery reads only metadata plus the per-root records.
+- Initial cost hypothesis: reuse existing barrier writes and carry compact tags
+  in PUT replies and fragment references. **The 8-byte estimate and zero-extra-I/O
+  claim are not established; see the source review below.** Recovery may also
+  need data validation and retained version/dependency history.
 - This also closes the fresh-client hole without client verifiers: uncertain
   fragments are identified from the stored tags, not from whichever client
   happens to remember an old verifier.
@@ -115,3 +116,91 @@ ordering review, aimed at the no-slowdown gate:
   check multi-root nodes and a barrier failure (`r->error`) inside a boot.
 - This still covers only fragments with recorded tags. Old-format and
   already-fenced stores still need the migration rule in this plan.
+
+
+## Source review of barrier-epoch proposal — 2026-10-16
+
+Reviewed `086c8e4a05ba19e4a2e688221c92e9409a87d1e7` on devel.
+**Verdict: retain as the preferred optimization hypothesis, with the following
+required corrections.** Source review only; implementation/performance tests
+NOTRUN. Unrelated working changes to Raft read admission were left untouched.
+
+1. **Persist recovery evidence across boots before reusing the record.**
+   `put_sync_attach` reads the previous record, increments `boot`, resets
+   `seq=1`/`durable_seq=0`, then writes `(new boot, seq=0, clean=0)` to the same
+   record. It retains only the prior wall-clock time for the scan, not a durable
+   history of old watermarks. A second crash during recovery would lose the
+   previous boot's numerical proof. Define an atomic, repeatable handoff of old
+   watermarks or a persistent sequence/incarnation scheme. Keep proof until all
+   surviving fragment/version references have been safely covered. Do not infer
+   that all writes from an older boot were durable. The current in-place record
+   checksum detects a tear but does not provide a previous valid recovery slot;
+   define recoverable record update behavior without falsely clearing fences.
+
+2. **Bind tags to exact completed writes and stable root identity.**
+   `finish_fragment_put` calls `put_sync_note` after `finish_shard_write` succeeds.
+   Under `r->mu`, the barrier captures `target=r->seq`, moves the batch and
+   increments the sequence before dropping the mutex for syncfs. A future tag
+   must capture the assigned epoch while enrolling that completed write under
+   the same lock, before any backpressure wait can release it. Never read the
+   current sequence later while forming the reply. Include storage-root identity
+   and incarnation, plus a non-ambiguous epoch/sequence; a path index alone must
+   not survive root replacement/reordering as false proof. Specify overflow,
+   retries/deduplication, normal/ticketed PUTs and barrier failures. Failed data
+   or record barriers must not advance the proven watermark; a later successful
+   barrier may cover prior work only with a demonstrated ordering argument.
+
+3. **The existing reply does not already contain that tag.**
+   `handler.c` emits 10 bytes: status, path index and an eight-byte
+   `put_boot_epoch` verifier. The verifier can survive a clean restart while
+   per-root boot/sequence changes. Appending only a sequence would therefore
+   alias histories unless the identity scheme changes. A `(boot,seq)` tag alone
+   also needs its root/incarnation context. Determine the encoding after the
+   model is specified; neither an eight-byte increase nor a specific final wire
+   size is approved. Carry tags through publication, base/span references,
+   snapshots, compaction and replay, not only the wire reply.
+
+4. **Fragment proof does not replace recoverable file-version history.**
+   The predicate is valid only for the matching root/incarnation/epoch and the
+   immutable object actually enrolled. Recovery must select a complete file
+   version, including size, required base/spans and namespace contract. If the
+   latest published version is uncertain, its durable predecessor and its data
+   must still exist. A latest-only mapping plus watermarks cannot restore a
+   discarded predecessor. GC/fold retention remains necessary even when no new
+   fsync-time marker is introduced. Persisted proof can close the fresh-client
+   hole only with these complete-version and retention rules.
+
+5. **No additional fsync-time metadata operation is plausible, not proven.**
+   Raft already distinguishes locally durable log progress (`durable_idx` in
+   `raft.c`), and the publication endpoint uses proposal/apply waits and durable
+   receipts (`server_raft_host_publication`). This supports exploring reuse of
+   existing metadata publication. It is not an end-to-end proof for every
+   REPORT/publication, inode-size, namespace, snapshot and recovery path.
+   Demonstrate that the exact tagged version and necessary predecessor history
+   are recoverably committed before success. The root barrier can then supply
+   the data-durability proof without a second per-file metadata commit, provided
+   that proof survives restart. Larger publication records and retained versions
+   still add memory/storage/replication/compaction costs; avoiding an extra
+   barrier does not mean zero extra I/O or unchanged latency.
+
+Required ordering refinement (alternative to an explicit per-file durable marker):
+
+```text
+completed immutable PUT -> capture root/incarnation/epoch tag under root lock
+-> recoverably publish exact tagged file version and preserve dependencies
+-> ensure each required root watermark covers its captured tags
+-> fsync success
+```
+
+Background barriers may finish before metadata publication; that is safe only
+when both proofs exist before fsync success. An explicit durable-version marker
+and a durability predicate derived from persisted tags are alternative designs;
+choose after proving crash recovery, not from the wire-size estimate.
+
+Additional review gates: crash after reading the old record but before/after
+marking a new boot; crash again during recovery; clean restart with verifier
+reuse and sequence reset; root replacement/reordering; concurrent PUT enrollment
+and barrier capture; barrier/record failure and torn records; deduplicated PUT
+retries; metadata leader change/snapshot; latest uncertain version with an older
+successful fsync; folds/GC racing both. Record byte-for-byte preservation and
+actual wire/storage overhead. No fence removal is authorized by this review.

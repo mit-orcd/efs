@@ -1538,7 +1538,7 @@ deadlines; .efs cleanup wrapper rejects its timestamped fixture name.
 Annotated RDMA unit rechecks PASS. Kernel W121 and automatic recovery W71
 remain open; this is not large-namespace/400-GiB acceptance.
 
-[W123 — automatic crash recovery](../backlog/crash-safe-durable-versions.md): **proposed new feature; design review before implementation.** Separate visible/durable file versions, protect GC/fold dependencies, preserve fsync and recover without node rebuild. Migration, correctness and no-slowdown acceptance NOTRUN; W71 remains open.
+[W123 — automatic crash recovery](../backlog/crash-safe-durable-versions.md): **proposed new feature; source review only.** Reuse root barrier watermarks if epoch history, exact write tags and retained file versions prove recovery. No extra fsync-time metadata commit remains a hypothesis; eight-byte/zero-I/O cost claims are unproven. Implementation and acceptance NOTRUN; W71 remains open.
 
 [orcd-mini deployment of `09f8af09c`](../status/orcd-mini-deploy-09f8af09c-20261016.md):
 **deployed; live POSIX 216/216, two-client 67/67, durability 27/27 PASS.**
