@@ -1603,6 +1603,16 @@ static void test_apply_scope(void)
  CHECK(efs_kv_lsm_apply_end(kv,&cursor)==EFS_OK,"effects/cursor atomically committed");
  pthread_join(t,NULL);
  CHECK(get_is(kv,"cursor","1")==EFS_OK && get_is(kv,"a","new")==EFS_OK,"committed view");
+ /* A staged DEL with garbage val/vlen (scan-callback items) must stage
+  * and commit, not poison the scope with INVAL (LANE_FENCE wedge). */
+ CHECK(put_s(kv,"g","gone")==EFS_OK,"garbage-del baseline");
+ CHECK(efs_kv_lsm_apply_begin(kv)==EFS_OK,"begin garbage-del scope");
+ {
+  struct efs_kv_item del={EFS_KV_DEL,(const uint8_t *)"g",1,(const uint8_t *)0xdeadbeef,0xffffffffu};
+  CHECK(efs_kv_batch(kv,&del,1)==EFS_OK,"staged del ignores val/vlen");
+ }
+ CHECK(efs_kv_lsm_apply_end(kv,&cursor)==EFS_OK,"garbage-vlen del commits");
+ CHECK(get_is(kv,"g","")==EFS_ERR_NOT_FOUND,"staged garbage-vlen del applied");
  CHECK(efs_kv_lsm_apply_begin(kv)==EFS_OK && put_s(kv,"a","abort")==EFS_OK,"stage aborted change");
  CHECK(efs_kv_lsm_apply_end(kv,NULL)==EFS_OK && get_is(kv,"a","new")==EFS_OK,"abort exposes no changes");
  CHECK(efs_kv_lsm_apply_begin(kv)==EFS_OK && put_s(kv,"a","failed")==EFS_OK,"stage rejected commit");

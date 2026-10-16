@@ -1114,10 +1114,13 @@ static int lsm_batch(void *ctx, const struct efs_kv_item *items, uint32_t n)
         if (apply_scope.failed) return apply_scope.failed;
         for (uint32_t i=0; i<n; i++) {
             const struct efs_kv_item *it=&items[i];
+            /* As in the WAL encoder: a DEL's val/vlen are uninitialised
+             * scan-callback stack bytes, never validated. Checking them made
+             * a truncate's LANE_FENCE fail INVAL on one replica only, and
+             * the sticky scope failure retried that index forever. */
             if (!it->key || !it->klen || it->klen>KV_LSM_KLEN_MAX ||
-                it->vlen>KV_LSM_VLEN_MAX ||
                 (it->op!=EFS_KV_PUT && it->op!=EFS_KV_DEL) ||
-                (it->op==EFS_KV_PUT && it->vlen && !it->val))
+                (it->op==EFS_KV_PUT && (it->vlen>KV_LSM_VLEN_MAX || (it->vlen && !it->val))))
                 return apply_scope.failed=EFS_ERR_INVAL;
             int found;
             uint32_t at=kv_mtab_pos(&apply_scope.mt,it->key,it->klen,&found);
