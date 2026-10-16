@@ -278,8 +278,12 @@ this list, before it ships.
   DATA_COMMIT to every current storage node, covering already-acknowledged
   peer data too; it does not drain another client's unpublished buffer.
   PUT acknowledgement is asynchronous. PUT and COMMIT carry a nonzero
-  per-process boot verifier: losing an unresolved verifier returns sticky
-  EIO, because the client may no longer retain retransmission bytes.
+  durability-history verifier. Proven clean restarts preserve it only when
+  every configured root has a checksummed clean record agreeing on the
+  verifier and root count. Other restarts rotate it: losing an unresolved
+  verifier returns sticky client-wide EIO, because the client may no longer
+  retain retransmission bytes. COMMIT retries a failed transport once within
+  its original deadline.
   An unclean storage-root restart fences COMMIT even for a fresh client;
   a checksum scan alone cannot prove that every published create survived.
   This fence persists across orderly restarts until verified recovery or
@@ -1535,7 +1539,11 @@ REPORT owner-preparation fixes (full native PASS); two quiet jobs16 runs
 remain214/216; the restored follow-up is213/216 with an additional mtime
 timeout, while peer passes67/67. Measured delay is principally fresh quorum waiting, not
 connection checkout. A queued-vote scheduling experiment worsened loaded
-results and was reverted. W119 remains open; no seven-client run or power-cut claim.
+results and was reverted. Clean-restart follow-up `b6454a7f8` passes focused
+and live RDMA/direct durability tests: mounted writer/peer survive two clean
+daemon restarts. Unclean recovery still fences COMMIT indefinitely; verified
+recovery and per-file loss tracking remain missing. W71/W119 stay open; no
+seven-client run or power-cut claim.
 
 
 [Asynchronous PUT acknowledgement](../status/intel-async-durability-20261015.md):

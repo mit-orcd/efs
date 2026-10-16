@@ -29,7 +29,11 @@ REPORT owner-preparation fixes (full native PASS); two quiet jobs16 runs
 remain214/216; the restored follow-up is213/216 with an additional mtime
 timeout, while peer passes67/67. Measured delay is principally fresh quorum waiting, not
 connection checkout. A queued-vote scheduling experiment worsened loaded
-results and was reverted. W119 remains open; no seven-client run or power-cut claim.
+results and was reverted. Clean-restart follow-up `b6454a7f8` passes focused
+and live RDMA/direct durability tests: mounted writer/peer survive two clean
+daemon restarts. Unclean recovery still fences COMMIT indefinitely; verified
+recovery and per-file loss tracking remain missing. W71/W119 stay open; no
+seven-client run or power-cut claim.
 
 
 [Asynchronous PUT acknowledgement](intel-async-durability-20261015.md):

@@ -248,8 +248,12 @@ this list, before it ships.
   DATA_COMMIT to every current storage node, covering already-acknowledged
   peer data too; it does not drain another client's unpublished buffer.
   PUT acknowledgement is asynchronous. PUT and COMMIT carry a nonzero
-  per-process boot verifier: losing an unresolved verifier returns sticky
-  EIO, because the client may no longer retain retransmission bytes.
+  durability-history verifier. Proven clean restarts preserve it only when
+  every configured root has a checksummed clean record agreeing on the
+  verifier and root count. Other restarts rotate it: losing an unresolved
+  verifier returns sticky client-wide EIO, because the client may no longer
+  retain retransmission bytes. COMMIT retries a failed transport once within
+  its original deadline.
   An unclean storage-root restart fences COMMIT even for a fresh client;
   a checksum scan alone cannot prove that every published create survived.
   This fence persists across orderly restarts until verified recovery or

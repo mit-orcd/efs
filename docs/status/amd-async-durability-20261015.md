@@ -315,3 +315,80 @@ source inputs to `1a009c5ab`; all six managed processes have verbs handles,
 files/direct flags and all excluded features off, with timing variables
 unset. No profiler or test controller is left running; independent Intel
 services were untouched. This checkpoint is not loaded qualification.
+
+
+## Review follow-up: clean restart versus uncertain recovery
+
+Source `b6454a7f85f28757730927ce51b6e738dad1e314`, on
+`devel-amd-durability-20261015`: **focused durability PASS**, not full loaded
+qualification. Review of `c4178ea81` agrees with the clean-restart false EIO
+and permanent crash-fence concerns, with one qualification: the client becomes
+sticky only when a changed verifier encounters unresolved acknowledgements,
+not after every restart. The sticky state is currently node/client-wide, not
+per-file. Wire incompatibility requires coordinated server/client upgrades.
+
+The fix retains the durability verifier across clean restarts. All configured
+roots must have valid checksummed clean records, matching verifier and root
+count, before any is marked running. Missing, legacy, unclean or disagreeing
+roots force a new verifier; corrupt records refuse startup. Clean shutdown
+still drains handlers and barriers before recording clean. The v2 record is
+192 bytes with a CRC; legacy clean records can migrate but cannot authorize
+verifier reuse. COMMIT retries one transport failure on a new connection,
+inside the same deadline and captured acknowledgement snapshot. Early PUT
+acknowledgement and grouped disk barriers remain unchanged.
+
+**Remaining W71 recovery blocker:** after an unclean stop, COMMIT still fails
+on the uncertain root, even after a later clean stop. A checksum scan cannot
+find completely missing fragments or lost creates. No verified-recovery or
+safe operator-clear command exists. Do not remove the record or clear the
+flag on retained data: this would falsely certify acknowledged bytes. A
+proper follow-up needs a durable authoritative publication/fragment inventory,
+reconciliation and repair of every required fragment, then a persisted recovery
+completion checkpoint. Per-file acknowledgement/loss tracking is also needed
+to contain genuine losses instead of poisoning unrelated fsync calls. Fresh
+format discards data and is not recovery. This fix addresses clean restart
+availability only; it does not close this blocker or hardware power-loss gates.
+
+### Reproduction and evidence
+
+AMD Ryzen AI MAX+395, Linux7.0.0-38, XFS `/data1`, Soft-RoCE `rxe0` GID1.
+Private four-daemon fixture, ports28432–28435, 4G quota per node, two mounted
+clients; files/RDMA/direct. Commands, packing, containers, expiry and repair
+remain disabled. The live script uses a 10s background PUT window to expose
+unresolved acknowledgements; command deadlines remain30s, overall180s. Its
+payload is2MiB. This is a process-crash test, not physical power loss.
+
+From the source checkout, with build dependencies, FUSE and Soft-RoCE ready:
+
+```sh
+make -j8 EFS_GIT_ID=metadata-candidate EFS_GIT_DESCRIBE=metadata-candidate \
+  EFS_GIT_BRANCH=devel-amd-durability-20261015 \
+  efsd efs-fuse efs-mgmt tests/test_store_durability tests/test_data_commit
+./tests/test_data_commit
+TMPDIR=/data1/efs timeout 30 ./tests/test_store_durability
+timeout -k 5 180s python3 tests/live/rdma_async_commit.py "$PWD"
+```
+
+PASS: client snapshot/concurrent-fsync/error regressions, bounded reconnect,
+and clean verifier handling; real-XFS buffered/direct/bounce durability,
+all-root clean selection, missing/conflicting/removed/legacy roots, truncated
+and checksum-invalid records, barrier failure and persistent crash fencing.
+Live PASS: peer fsync commits unstable bytes; writer and peer fsync/read verify
+after two clean daemon restarts; SIGKILL changes the verifier and both old
+and fresh clients reject uncertain durability; another orderly restart does
+not erase the fence. The script drains its clients, stops only owned daemons,
+and removes its synthetic stores, preserving logs. Installed AMD service and
+the independent Intel mount are untouched. No installed-service deployment
+or new loaded-POSIX pass is claimed for this follow-up.
+
+All949 tested source/build inputs match the committed source manifest.
+Build label is `metadata-candidate`; identify binaries by SHA256:
+
+- efsd: `0943c01bff1dbde630f6e12699c06f7e9082bf8e8b4e2019dd69d025f82fbf5c`
+- efs-fuse: `dc0be330d52363dd0da7f42eba653f0a0b07aaae454e5256354e41bdea4e43bf`
+- efs-mgmt: `8df0869f1934abdbeb757ee29de48a25c09d57846cc855acbc9d534078a99ea6`
+
+Raw build/validation/manifest evidence is outside Git at
+`/data1/efs/clean-verifier-20261015`; live logs and result are at
+`/data1/efs/async-commit-0myw7wuf`. Existing metadata-load failures above remain
+open and unchanged. No TCP comparison, seven-client or excluded-feature run.
