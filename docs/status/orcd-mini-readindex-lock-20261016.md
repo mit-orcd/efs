@@ -1,6 +1,7 @@
 # ReadIndex admission without the Raft host mutex — 2026-10-16
 
-**PASS (scoped: private cluster performance and unit tests).** Readers of
+**PASS: deployed to orcd-mini as `8391950f0`, confirmed under the user's
+tiny-file workload** (POSIX smoke 216/216). Readers of
 LOOKUP, GETATTR and other fresh metadata reads no longer lock `h->mu` to admit
 themselves or to start a ReadIndex round. On a private 3-daemon RDMA cluster
 under a tiny-file load:
@@ -9,7 +10,11 @@ under a tiny-file load:
 - loaded stat p50 fell from 1.06 to 0.87 ms, negative lookup p50 from 0.68 to
   0.54 ms.
 
-Not deployed to orcd-mini; that needs the user's word.
+On orcd-mini under the user's workload (two runs before and two after):
+- ReadIndex-caller waits fell from 8.4/8.3% to 1.4/1.3% of efsd context
+  switches;
+- node9900 stat p50 fell from 2.34 to 1.70–1.82 ms;
+- the 16-worker writer rose from 1,420–1,506 to 1,793–1,797 files/s.
 
 Linked item: the next bottleneck named in the
 [RDMA credit fix](orcd-mini-rdma-credit-20261016.md#orcd-mini-under-the-users-workload-deployed-09f8af09c).
@@ -161,10 +166,83 @@ device `mlx5_0`, and the private libfuse for efs-fuse. Run baseline and
 candidate alternately; each run formats, measures and removes its own cluster
 (about 3 minutes). Never point it at orcd-mini (17432–17434) or w100.
 
+## orcd-mini under the user's workload (deployed `8391950f0`)
+
+**PASS.** Deployed 2026-10-16 at about 22:13Z with the user's approval.
+- **Pre-checks.** No users on either mount (`fuser -m`); the user's workload
+  screens were idle.
+- **Order.** node9900 `client.sh stop`; node9901
+  `EFS_CLUSTER=orcd-mini ./stop.sh` (clean stop of all three efsd); repoint
+  both `src` symlinks; `start.sh` ("already formatted; preserving existing
+  storage"); node9900 `client.sh start`. RDMA came up on mlx5_0 for the
+  daemons and both clients.
+- **Builds.** A clean `git archive` of `8391950f0`, build ID `8391950f089a`,
+  version `v0.3.2-pre-alpha-584-g8391950f0`, built 2026-10-16T21:59:48Z.
+  - node9901 `/data1/efs/releases/8391950f089a`: efsd
+    `e81c3fc5a8d5c5ba7c9c68e5a6bbecf213594a70dbfb8bc0bd3b00476792d403`,
+    efs-fuse `d7e8b59fe57f93fb21baf761709ea5ce6e328fd56c87e670b25fa5606fe38cd9`,
+    efs-mgmt `4012506845669b237bb80ac33d4c97fe5bbe58dad1ab676b9ab100fe503ddcc3`.
+  - node9900 `/data1/efs/orcd-mini-client/releases/8391950f089a`: efs-fuse
+    `2d456fc0a8439c51614fbdba1956adc0169195556e25911e9b2346cc624d9c24`,
+    efs-mgmt `c6a375b9e90a54851c7dd3d92fdd94e8021dc6449aa341d991aed35039808083`.
+- **POSIX.** node9901 `EFS_CLUSTER=orcd-mini ./smoke.sh`: 216/216 PASS in
+  13.9 s (`/data1/efs/logs/posix-20261016-181416.tsv`).
+
+**Workload and method.** `scripts/orcd_mini_workload_profile.sh` runs the
+user's recipe from the node9900 shell history, all on the node9900 client:
+- writer: `tiny_files.py --max-depth 8 --max-files-per-folder 1000
+  --workers 16` into a new `tiny-files-prof-<label>` directory;
+- reader: `tiny_files_md5.py tiny-files1 --workers 16`;
+- crawler: `ecrawl --no-write` over the mount.
+
+After a 60 s warm-up it samples all three efsd with `perf -e cs -g` for 10 s
+and runs the 200-file probe (from the earlier orcd-mini profile) on both
+mounts at the same time. It then measures efsd CPU over 15 s and stops the
+workload at about 105 s.
+
+The baseline runs (`base09f8b`, `base09f8c`) used the same script on the
+previous deployment `09f8af09c` just before the switch. Runs `base09f8` and
+`new8391b` are discarded: their samples fell after the workload had finished
+(a launcher stall; the cluster was idle).
+
+| Measure | before `09f8af09c` (b / c) | after `8391950f0` (a / c) |
+| --- | --- | --- |
+| ReadIndex-caller mutex waits, share of efsd context switches | 8.4 / 8.3% | 1.4 / 1.3% |
+| All mutex waits | 21.0 / 20.4% | 15.7 / 15.6% |
+| `server_raft_host_lookup` / `host_read_inode_lanes_reuse` waits | 5.1 / 3.1%, 5.1 / 3.0% | 0.8 / 0.5%, 0.7 / 0.5% |
+| node9900 probe p50 create / stat / open / unlink ms | 4.86 / 2.34 / 3.70 / 3.45, 4.94 / 2.34 / 3.52 / 3.08 | 4.24 / 1.70 / 2.57 / 2.56, 4.02 / 1.82 / 2.72 / 2.30 |
+| node9901 probe p50 create / stat ms | 3.25 / 0.94, 3.49 / 1.00 | 3.15 / 0.91, 2.97 / 0.92 |
+| Writer files/s at about 105 s | 1,420 / 1,506 | 1,793 / 1,797 |
+| md5 reader hashes/s | 1,196 / 1,379 | 1,510 / 1,638 |
+| efsd CPU, three daemons | 9.4 / 9.9 cores | 11.0 / 11.3 cores |
+
+- **Remaining mutex waits after the change:** `host_propose_wait_idx_impl`
+  about 1.9%; create/report proposals; unresolved libc-only stacks about
+  6.6%.
+- **Tails.** Run `new8391c` had a create p99 of 24–27 ms (max 39 ms) on both
+  probes, against 11–13 ms before. The other run (`new8391a`) did not show it
+  on node9901 (7.3 ms). It lies in the write path and is not explained here.
+- **md5 errors.** The reader logged 22–28 errors per run, before and after.
+  These are interrupted reads at the forced stop.
+
+Raw captures stay outside Git:
+- node9901 `/data1/efs/prof/wl-<label>/`: `cs.data` sha256 prefixes
+  base09f8b `c2e78f14a827a77f`, base09f8c `0094a8d1672ac53e`, new8391a
+  `69711e6fa9fa6774`, new8391c `e8cde289a0a371e3`; plus `probe.txt`.
+- node9900 `/data1/efs/orcd-mini-client/prof/wl-<label>/`: workload logs, md5
+  manifests and `probe.txt` (prefixes `197f84831c7d3787`, `6ffbb78c0ef7a2af`,
+  `50d7b4676e665d63`, `100a72189d3e82de`).
+
+The writer directories `tiny-files-prof-*` (about 1.4 million files in all)
+remain on the orcd-mini mount until the user decides to delete them.
+
 ## Limitations and remaining gates
 
-- Private-cluster load only. orcd-mini under the user's workload is NOTRUN
-  until the user approves a deployment.
+- On orcd-mini the workload was the user's recipe run by
+  `orcd_mini_workload_profile.sh`, not the user's own long run. The two
+  before/after pairs were 15–25 minutes apart on the same data set.
+- The two-client POSIX suite and the durability suite were not rerun for this
+  deployment. The single-mount POSIX smoke test passed.
 - The fresh-read pump hand-off adds at most one pump wake when `h->mu` is
   idle. No idle-latency regression was seen (idle stat p50 0.18–0.19 ms
   against 0.20–0.22 ms).
