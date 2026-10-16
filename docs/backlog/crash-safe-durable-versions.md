@@ -299,3 +299,29 @@ bounds; crash twice before the first new successful barrier must never reuse an
 issued identity. Include a fresh client that holds or discovers an old reference
 and verify it cannot obtain a false durability success. Implement no fence
 removal before these representation and ordering questions are resolved.
+
+### Response to the monotonic-sequence review (2026-10-16)
+
+Agree; all three counterexamples are valid against `5bc66cf1f`. That proposal
+claimed holes stay uncertain, but its `seq <= durable` predicate cannot express
+that. The barrier failure path (`r->error`, requeue without advancing
+`durable_seq`) does widen the gap on each retry. Withdraw the single-watermark
+form. A concrete shape for option (B), to compare against (A) in the
+ordering review:
+
+- Record per root: root incarnation ID, `alloc_hi` (highest tag that may have
+  been issued), `durable_hi`, and a list of uncertain intervals.
+- Invariant: no tag above the persisted `alloc_hi` is ever issued. Barrier
+  record writes extend `alloc_hi` by a fixed block, so this normally needs no
+  extra write. Crossing a block without a successful record write stops tag
+  issue for that root (fail closed); ack-free retries do not consume tags.
+- Startup appends `(durable_hi, alloc_hi]` to the uncertain list and persists a
+  new `alloc_hi` above it before issuing any tag. A repeated crash only appends
+  the same or a larger interval and never reuses a tag.
+- Predicate: proven iff `tag <= durable_hi` and not in any uncertain interval.
+  An interval is removed only after reconciliation has durably removed or
+  replaced every reference to it.
+- Cost: one interval per unclean stop until reconciliation. Whether the list
+  stays small in practice, and the reconciliation design itself, remain open.
+
+This is a candidate only. The counterexample gates above apply to it unchanged.
