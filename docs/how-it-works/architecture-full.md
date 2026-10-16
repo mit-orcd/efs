@@ -1528,6 +1528,12 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[orcd-mini profile on `f4a373b13`](../status/orcd-mini-profile-f4a373b13-20261016.md):
+**profiling only.** Under the user's workload, LOOKUP ReadIndex lock waits
+stay at 0.8% (9.1% before the fix). The leader's top lock wait (45%) is woken
+waiters re-acquiring `cv_mu` after `host_waiters_wake` signals while holding
+it; proposals on `h->mu` come next.
+
 [ORCD-test devel qualification `48644535f`](../status/orcd-test-beta-48644535f-20261016.md):
 **deployed; overall FAIL.** RDMA/direct-I/O, .efs enabled, expiry off;
 packing/containers removed. Live core POSIX 1,512/1,512, cross-host 67/67,
