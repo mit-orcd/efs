@@ -116,6 +116,25 @@ for chunk 0 only; `3fba43af7` made LSM point gets and scans run concurrently
 With these, the earlier ~43-thread queue on the metadata leader's KV mutex is
 gone.
 
+## Review follow-up (2026-10-16)
+
+A review of this session's commits found a deadlock introduced by
+`3fba43af7`: scan callbacks read the same KV (getattr's reduce scan asks the
+transaction coordinator, which reads the decision key), and a nested shared
+acquisition of the writer-preferring lock blocks behind a queued Raft apply
+that waits for the outer one. `tests/test_kv_lsm_concurrent` (nested gets in
+scan callbacks under a writer, with an alarm) deadlocks against `d24b17feb`
+on its first 10 s run and passes with `6b5c34624` (per-thread shared depth;
+only the outermost reader drops the hold around a pread). `d24b17feb` and
+`3fba43af7`/`511968299` carry this hazard; the fix is deployed with the
+merge release below. Also: the queued-vote experiment cherry-picked as
+`e71fdfa56` is reverted (`f1ae5b7a8`, as on the AMD branch: loaded POSIX
+worsened, ~37% of a busy follower pump's CPU on Intel); a release's CLOSE
+identity wait is bounded to 250 ms (`bfe654266`); `devel-amd-durability-20261015`
+is merged (`d23da0951`: all-node COMMIT with boot verifiers and verified
+clean-restart verifier reuse). Full `make test` on the merged tree: 1,346
+commands, only the stale architecture regeneration failing (regenerated here).
+
 ## Limitations and remaining gates
 
 - The default commit itself is not deployed or measured; the measurement used

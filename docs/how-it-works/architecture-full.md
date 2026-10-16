@@ -1528,6 +1528,16 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[Raft follower batching default](../status/intel-raft-follower-batching-20261016.md):
+**scoped PASS (performance)** measured on `3fba43af7` with the opt-in bundle
+(`EFS_RAFT_BATCH_OVERLAP=1`, `EFS_RAFT_BATCH_NOOP=1`, 100 ms applied interval),
+now the default for both engines: lease edges 25 → 3.7–3.9 ms, AMD small-file
+creates 77 → 345/s, busy-follower pump drains 12–16 → 1.3–1.6 ms. Same day:
+retained-close fix and hashed open table (`ae3a49d8a`), concurrent LSM reads
+(`3fba43af7`). Review found and fixed a nested-read deadlock in the
+concurrent reads (`6b5c34624`); merged with the AMD durability branch.
+Qualification NOTRUN.
+
 [ORCD fresh-store read/close baseline](../status/orcd-read-close-baseline-20261016.md):
 W119 native RDMA/direct baseline on frozen852caf1ae, features disabled,
 exclusive after graceful crawler/service stop. Three fresh-store core runs
