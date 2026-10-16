@@ -5631,3 +5631,24 @@ architecture outputs and passes full native testing on AMD. Subsequent Raft
 changes have separate acceptance in the [AMD RDMA/direct ledger](../status/amd-rdma-posix-20261015.md).
 Enabled-command cleanup ownership remains NOTRUN in this commands-disabled
 profile; W120 is not closed and the earlier frozen-source FAIL is retained.
+
+
+<a id="w121"></a>
+
+## W121 · Immediate read after successful fsync returns the previous file's payload
+
+**Class/state:** normal-operation data correctness; OPEN, October16,2026.
+On `fa29f9277` ORCD native RDMA/direct, `.efs` enabled, files engine,
+packing/containers/expiry disabled: seven clients, eight writers and two query
+threads each. Unique512-byte file: create/write/fsync/close, exact readback,
+unlink. Four90s rounds reproduced255 mismatches in123,932 cycles, although
+all write/fsync/close and unlink operations returned success. Both unmodified
+devel and the restored queued-read-vote candidate fail; this is not isolated
+to that scheduling change. Examples return the prior file's512-byte value.
+
+**Next/gate:** preserve mismatching files and compare same-client, independent
+client and cold reads; instrument FileID/generation, mapping/cache identities
+and upload ownership to locate reuse. Require zero exact-byte mismatches under
+the original concurrency, plus ordinary POSIX/peer and clean-restart gates.
+No cause or fix is established. Unplanned recovery remains deferred.
+[Reproduction, source identities and results](../status/orcd-queued-read-vote-20261016.md).

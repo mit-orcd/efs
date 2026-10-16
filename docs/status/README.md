@@ -18,6 +18,14 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[ORCD queued-read-vote comparison](orcd-queued-read-vote-20261016.md):
+**NO—keep reverted.** Frozen `fa29f9277`, native RDMA/direct, `.efs` enabled,
+no packing/containers/expiry; OFF–ON–ON–OFF across seven clients. POSIX
+failures15/0/10/0;22,182 mounted queries PASS, no repeatable net benefit.
+**W121 OPEN:**255 immediate readbacks returned wrong bytes after successful
+fsync across both variants. W119 remains open; this is not full acceptance.
+
+
 [Raft follower batching default](intel-raft-follower-batching-20261016.md):
 **scoped PASS (performance)** measured on `3fba43af7` with the opt-in bundle
 (`EFS_RAFT_BATCH_OVERLAP=1`, `EFS_RAFT_BATCH_NOOP=1`, 100 ms applied interval),

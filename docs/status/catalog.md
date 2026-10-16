@@ -271,3 +271,5 @@ Complete navigation to top-level status ledgers as of October 15, 2026. Grouping
 - [ORCD devel qualification — October 15, 2026](orcd-devel-qualification-20261015.md)
 
 - [ORCD TCP/direct-I/O, commands disabled — October 15, 2026](orcd-tcp-direct-disabled-20261015.md)
+
+- [ORCD queued-read-vote OFF/ON decision and W121 readback finding](orcd-queued-read-vote-20261016.md) — October16; keep experiment reverted.
