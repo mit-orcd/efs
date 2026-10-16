@@ -1532,7 +1532,7 @@ full acceptance are separate states.
 **NO—keep reverted.** Frozen `fa29f9277`, native RDMA/direct, `.efs` enabled,
 no packing/containers/expiry; OFF–ON–ON–OFF across seven clients. POSIX
 failures15/0/10/0;22,182 mounted queries PASS, no repeatable net benefit.
-**W121 OPEN:**255 immediate readbacks returned wrong bytes after successful
+**W121 OPEN, kernel remediation deferred:** [fork/read diagnosis](../status/orcd-w121-fork-read-20261016.md). Correct daemon replies can reach stale application pages on ORCD; the performance harness now isolates query-launch processes. Original evidence: 255 immediate readbacks returned wrong bytes after successful
 fsync across both variants. W119 remains open; this is not full acceptance.
 
 
@@ -1700,7 +1700,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | # | item | class | status | home |
 | --- | --- | --- | --- | --- |
 | orcd-qualification | **W119** · ORCD normal-operation RDMA failures and blocked clean stop | correctness / liveness | OPEN: 150 concurrent failures /846 NOTRUN; cross-host peer59/67; enabled queries EBUSY; retained writes block clean stop. TCP/commands-off rerun also FAILs (120 failures,520 NOTRUN; peer61/67; clean stop refused); all23 successfully prepared cold cases verify after authorized forced restart. [TCP evidence](../status/orcd-tcp-direct-disabled-20261015.md). Preserve failures, isolate causes and rerun original gates; W100 stays closed. [AMD follow-up](../status/amd-rdma-posix-20261015.md): native/serial/peer/cold/degraded PASS at `c8d057391`; one-mount jobs16 remains215/216 with unusual-name timeout. [Async durability follow-up](../status/amd-async-durability-20261015.md) at `c4178ea81`: scoped durability/native/serial/peer/cold/degraded PASS; jobs16 FAIL214/216 (unusual names, concurrent creates,15s) | [evidence and gates](../status/orcd-devel-qualification-20261015.md) · [item](#w119) |
-| immediate-readback | **W121** · successful fsync followed by previous-file payload | data correctness | OPEN: 255/123,932 exact readbacks failed across both queued-vote variants on ORCD native RDMA/direct with enabled `.efs`; unique512-byte files, no packing/containers/expiry. Isolate stale lifetime/cache/buffer reuse before optimization | [experiment](../status/orcd-queued-read-vote-20261016.md) · [item](#w121) |
+| immediate-readback | **W121** · successful fsync followed by previous-file payload | data correctness | OPEN: 255/123,932 exact readbacks failed across both queued-vote variants on ORCD native RDMA/direct with enabled `.efs`; unique512-byte files, no packing/containers/expiry. Diagnosed FUSE kernel fork/read page-pinning defect; kernel remediation deferred by user. Fork-isolated experiments do not close W121 | [diagnosis](../status/orcd-w121-fork-read-20261016.md) · [experiment](../status/orcd-queued-read-vote-20261016.md) · [item](#w121) |
 | qualification-fixtures | **W120** · stale extracted LOOKUP stub and command cleanup ownership check | verification correctness | OPEN (partial fix): AMD `f6235bb73` repairs the LOOKUP host context and checks reader identity; native/docs PASS at `85a9ad6b5`. Enabled-command cleanup ownership remains NOTRUN here and still needs correction/acceptance. [AMD evidence](../status/amd-rdma-posix-20261015.md); preserve original failures | [evidence](../status/orcd-devel-qualification-20261015.md) · [item](#w120) |
 | 0i | **W54** · a fold's GC deletes the live base → read EIO, data loss | correctness | NUC direct/buffered authoritative folds and cold GC/restart pass; real cold IOR/hardscan passes at 4 and 36 ranks, including nine independent NUC FUSE clients; nine physical hosts remain; AMD software-RXE fold/GC gate passes, hardware RDMA remains | [full text](#w54--a-folds-gc-deletes-the-live-base-queue-row-0i) |
 | 0j | **W69** · the client's 50 ms lookup memo returns pre-mutation stats (posix 164/201) | correctness | correctness accepted: real blocked LOOKUP across chmod, immediate stats and full POSIX pass; GNU du samples recorded; unidentified Spark performance gate remains | [full text](#w69) |
@@ -7653,11 +7653,17 @@ all write/fsync/close and unlink operations returned success. Both unmodified
 devel and the restored queued-read-vote candidate fail; this is not isolated
 to that scheduling change. Examples return the prior file's512-byte value.
 
-**Next/gate:** preserve mismatching files and compare same-client, independent
-client and cold reads; instrument FileID/generation, mapping/cache identities
-and upload ownership to locate reuse. Require zero exact-byte mismatches under
-the original concurrency, plus ordinary POSIX/peer and clean-restart gates.
-No cause or fix is established. Unplanned recovery remains deferred.
+**Diagnosis/gate, October 16:** correct bytes reach the FUSE reply, but
+concurrent fork causes stale application buffers on ORCD's unpinned FUSE
+kernel read path. Fixed-file reproduction: 86,629/433,368 failures with fork,
+0/486,164 with posix_spawn. The installed module uses iov_iter_get_pages2;
+upstream fix 738adade96b2 pins these pages. Kernel remediation is deferred
+by the user; W121 remains OPEN. Isolate query subprocesses from reader
+address spaces for performance experiments, without treating that workaround
+as application correctness acceptance. Require a fixed-kernel fork/read
+rerun plus original mixed load, peer and clean-restart checks.
+[Diagnosis and regression](../status/orcd-w121-fork-read-20261016.md).
+Unplanned recovery remains deferred.
 [Reproduction, source identities and results](../status/orcd-queued-read-vote-20261016.md).
 
 

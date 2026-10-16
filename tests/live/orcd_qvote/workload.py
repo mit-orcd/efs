@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Mounted read-vote A/B workload. Raw JSON stays in caller-owned output directory."""
-import argparse,concurrent.futures,json,os,socket,subprocess,threading,time
+import multiprocessing,argparse,concurrent.futures,json,os,socket,subprocess,threading,time
 from pathlib import Path
 p=argparse.ArgumentParser();p.add_argument('mount');p.add_argument('output');p.add_argument('--seconds',type=int,default=90);p.add_argument('--start',type=float,default=0);a=p.parse_args()
 root=Path(a.mount)/('qvote-'+socket.gethostname().split('.')[0]);root.mkdir(exist_ok=True)
@@ -48,9 +48,25 @@ def query(w):
    if kind in ('ls','find'):assert len(d['entries'])==32,('wrong count',len(d['entries']))
   except Exception as e:err=repr(e)
   record(kind,time.monotonic()-st,err)
-with concurrent.futures.ThreadPoolExecutor(max_workers=10) as ex:
- fs=[ex.submit(writer,i) for i in range(8)]+[ex.submit(query,i) for i in range(2)]
+# Fork query workers before starting any mounted-I/O threads. FUSE direct-I/O
+# on kernels without 738adade96b2 can return stale application-buffer bytes
+# when another thread forks while a read is in flight (W121). Query subprocesses
+# must run in a separate address space; this does NOT qualify that kernel bug.
+def query_process(w):
+ query(w)
+ Path(a.output+'.query%d.json'%w).write_text(json.dumps(rows))
+ctx=multiprocessing.get_context('fork')
+queries=[ctx.Process(target=query_process,args=(i,)) for i in range(2)]
+for process in queries:process.start()
+with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
+ fs=[ex.submit(writer,i) for i in range(8)]
  for f in fs:f.result()
+for i,process in enumerate(queries):
+ process.join(timeout=65)
+ if process.is_alive():
+  process.terminate();process.join();raise RuntimeError('query process timed out')
+ if process.exitcode:raise RuntimeError('query process failed: %d'%process.exitcode)
+ rows.extend(json.loads(Path(a.output+'.query%d.json'%i).read_text()))
 summary={}
 for op in sorted({r['op'] for r in rows}):
  r=[x for x in rows if x['op']==op];v=sorted(x['ms'] for x in r)

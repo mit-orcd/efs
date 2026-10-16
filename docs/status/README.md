@@ -22,7 +22,7 @@ full acceptance are separate states.
 **NO—keep reverted.** Frozen `fa29f9277`, native RDMA/direct, `.efs` enabled,
 no packing/containers/expiry; OFF–ON–ON–OFF across seven clients. POSIX
 failures15/0/10/0;22,182 mounted queries PASS, no repeatable net benefit.
-**W121 OPEN:**255 immediate readbacks returned wrong bytes after successful
+**W121 OPEN, kernel remediation deferred:** [fork/read diagnosis](orcd-w121-fork-read-20261016.md). Correct daemon replies can reach stale application pages on ORCD; the performance harness now isolates query-launch processes. Original evidence: 255 immediate readbacks returned wrong bytes after successful
 fsync across both variants. W119 remains open; this is not full acceptance.
 
 

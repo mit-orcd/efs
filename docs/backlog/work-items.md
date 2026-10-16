@@ -5646,9 +5646,15 @@ all write/fsync/close and unlink operations returned success. Both unmodified
 devel and the restored queued-read-vote candidate fail; this is not isolated
 to that scheduling change. Examples return the prior file's512-byte value.
 
-**Next/gate:** preserve mismatching files and compare same-client, independent
-client and cold reads; instrument FileID/generation, mapping/cache identities
-and upload ownership to locate reuse. Require zero exact-byte mismatches under
-the original concurrency, plus ordinary POSIX/peer and clean-restart gates.
-No cause or fix is established. Unplanned recovery remains deferred.
+**Diagnosis/gate, October 16:** correct bytes reach the FUSE reply, but
+concurrent fork causes stale application buffers on ORCD's unpinned FUSE
+kernel read path. Fixed-file reproduction: 86,629/433,368 failures with fork,
+0/486,164 with posix_spawn. The installed module uses iov_iter_get_pages2;
+upstream fix 738adade96b2 pins these pages. Kernel remediation is deferred
+by the user; W121 remains OPEN. Isolate query subprocesses from reader
+address spaces for performance experiments, without treating that workaround
+as application correctness acceptance. Require a fixed-kernel fork/read
+rerun plus original mixed load, peer and clean-restart checks.
+[Diagnosis and regression](../status/orcd-w121-fork-read-20261016.md).
+Unplanned recovery remains deferred.
 [Reproduction, source identities and results](../status/orcd-queued-read-vote-20261016.md).

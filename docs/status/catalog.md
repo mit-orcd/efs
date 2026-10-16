@@ -4,6 +4,8 @@ Complete navigation to top-level status ledgers as of October 15, 2026. Grouping
 
 - [AMD asynchronous durability fixes and RDMA/direct qualification](amd-async-durability-20261015.md)
 
+- [W121 — ORCD FUSE fork/read kernel gate](orcd-w121-fork-read-20261016.md)
+
 ## Query commands and metadata
 
 - [W98 — from fixed placement to distributed metadata capacity](all-node-metadata-queries-20261009.md)
