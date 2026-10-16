@@ -754,3 +754,72 @@ procedure; W119 remains open.
 | efsd | `8d4f7d56efd66a765f76cbd45bd0a6bc454383f11f9fd3c564382574076fca2c` |
 | efs-fuse | `73bb9c169fa029178fcdee293943562de78b1bff533ecc8fb53059948148b963` |
 | efs-mgmt | `3d5bb9226fcf0b64942f0051f090307c2087c02ca70208547873bc5782f06222` |
+
+
+## Authorized NUC TCP/direct baseline — October 15–16, 2026
+
+The user explicitly changed NUC testing to TCP after the RDMA prerequisite
+was identified. This supersedes the transport blocker for this NUC work;
+it does not qualify RDMA or establish a controlled TCP/RDMA comparison.
+Exact tested source: `852caf1ae5c96482c5439c2ffb12968a8e70ddde`; the next
+checkpoint `1d5c0fa8d` contains documentation only. Binary hashes are the NUC
+hashes above. No new product fix was needed to start this baseline.
+
+Deployment uses clean scoped stores, with no old store deletion:
+`/data1/efs/nuc-read-close-852caf1ae/n1` and `n2`, and
+`/data2/efs/nuc-read-close-852caf1ae/n3` and `n4`. Source/logs/mounts live
+under `/data1/efs/nuc-read-close-852caf1ae`; `/data2/efs` resolves to
+`/home/efs/additional-work-dir`. Four files-engine daemons use localhost
+ports17432–17435 and17G per-node quota. Both mounts are `mnt`/`mnt2` under
+that base. Runtime inspection verified TCP/direct and disabled commands,
+server commands, packed writes and expiry on all six processes; profiling
+variables were absent. AMD remained untouched.
+
+Reproduce on idle NUC, as user `efs`, with binaries built as above. Use the
+existing `/data1/efs/devops/start.sh` with a scoped cluster configuration
+`clusters/nuc-read-close.env` containing:
+
+```sh
+HOST=nuc_efs
+BASE=/data1/efs/nuc-read-close-852caf1ae
+PORTS=(17432 17433 17434 17435)
+STORDIRS=(/data1/efs/nuc-read-close-852caf1ae/n1 /data1/efs/nuc-read-close-852caf1ae/n2 /data2/efs/nuc-read-close-852caf1ae/n3 /data2/efs/nuc-read-close-852caf1ae/n4)
+QUOTA=17G
+```
+
+Ensure ports are free and `BASE/src` has the tested build; create `BASE/devops`
+for the helper's logrotate file. Start with:
+
+```sh
+EFS_CLUSTER=nuc-read-close EFS_TRANSPORT=tcp EFS_DIRECT_IO=1 EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0 EFS_REPAIR_EXPERIMENT=0 EFS_METADATA_BALANCE=1 EFS_DATA_GC_ADMISSION=1 EFS_GC_BACKLOG_IDLE_MS=20 /data1/efs/devops/start.sh
+```
+
+From that source directory, choose new output paths and run sequentially:
+
+```sh
+base=/data1/efs/nuc-read-close-852caf1ae
+python3 -u tests/posix/posix_suite.py "$base/mnt" --suite core --jobs 1 --filter names_crazy_dirs --tag names-isolated --results "$base/names.tsv"
+python3 -u tests/posix/posix_suite.py "$base/mnt" --suite core --jobs 1 --filter dir_deep_nesting_beyond_64 --tag deep-isolated --results "$base/deep.tsv"
+python3 -u tests/posix/posix_suite.py "$base/mnt" --suite core --jobs 16 --tag nuc-tcp-baseline --results "$base/core.tsv"
+python3 -u tests/posix/posix_2client.py --local "$base/mnt" "$base/mnt2" --parent nuc-tcp-peer --results "$base/peer.tsv"
+```
+
+Default deadlines are unchanged (including15s names/deep cases). No seven-client
+workload, packing, containers, expiry or `.efs` activation. Raw baseline
+outputs remain outside Git at `BASE/quiet`. Normally drain each scoped mount
+using `BASE/src/scripts/client.sh stop MOUNT`; if a mount is retained, abort
+cleanup rather than force-discard. Then SIGTERM only the four scoped daemon
+PIDs and wait for orderly exit. The deployment is left running for follow-up.
+
+Initial results: isolated names **PASS0.8s**, deep>64 **PASS1.5s**;
+loaded jobs16 core **PASS216/216 in16.9s**, no skip/notrun. This is NUC TCP on
+clean stores, not proof that the previously failing AMD RDMA workload is fixed.
+
+Two-client peer **PASS67/67 in27.5s**, exit0. No runtime code changes were
+made for the transport switch.
+
+After the peer suite, a second quiet core jobs16 run with tag
+`nuc-tcp-repeat` passed **216/216 in21.2s**, zero skip/notrun, exit0; raw
+`BASE/quiet/core-repeat.{log,tsv}`. Both loaded runs retain the original
+timeouts. W119 remains open for its earlier failing configuration; no
+queued-read scheduling or append-lock experiment is accepted on this basis.
