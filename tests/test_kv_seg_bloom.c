@@ -41,6 +41,25 @@ int main(void)
     assert(kv_seg_has_bloom(s));
     struct kv_buf out = {0};
     uint8_t op;
+    /* A shared scan's seek caches its block: a later point probe in that
+     * block needs no I/O (getattr's reduce-prefix probes re-read it). */
+    {
+        uint8_t sk[16];
+        uint32_t sl = key_for(2 * 3001, sk);
+        struct kv_seg_io io;
+        int need = 0;
+        assert(kv_seg_probe(s, sk, sl, &out, &op, &need, &io) == EFS_OK && need);
+        struct kv_seg_iter *it;
+        assert(kv_seg_iter_open(s, &it) == EFS_OK);
+        assert(kv_seg_iter_seek(it, sk, sl) == EFS_OK);
+        const uint8_t *k, *v;
+        uint32_t kl2, vl;
+        assert(kv_seg_iter_next(it, &k, &kl2, &v, &vl, &op) == EFS_OK);
+        assert(kl2 == sl && !memcmp(k, sk, sl));
+        kv_seg_iter_close(it);
+        need = 1;
+        assert(kv_seg_probe(s, sk, sl, &out, &op, &need, &io) == EFS_OK && !need);
+    }
     for (unsigned j = 0; j < N; j++) {
         unsigned i = (j * 2711) % N;
         uint32_t kl = key_for(i * 2, key);
@@ -99,6 +118,6 @@ int main(void)
     kv_buf_free(&out);
     kv_seg_close(s);
     unlink(path);
-    puts("segment bloom: hits, tombstones, misses; cached-block seeks exact, gaps, end PASS");
+    puts("segment bloom: hits, tombstones, misses; seek caches its block; cached-block seeks exact, gaps, end PASS");
     return 0;
 }

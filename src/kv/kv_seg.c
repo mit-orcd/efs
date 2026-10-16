@@ -1055,12 +1055,54 @@ int kv_seg_read(const struct kv_seg_io *io, uint8_t **blk)
     return EFS_OK;
 }
 
+/* Validate a freshly read block against the segment index (records sorted,
+ * first key = index key, last key < next block's first key). Frees blk and
+ * returns an error on corruption. */
+static int seg_block_index(struct kv_seg *s, uint32_t bi, uint8_t *blk, uint32_t len,
+                           uint32_t **entries, uint32_t *count)
+{
+    int rc = index_block(blk, len, entries, count);
+    if (rc == EFS_OK && kv_key_cmp(blk + 9, get_u32(blk + 1),
+                                   s->idx[bi].key, s->idx[bi].klen))
+        rc = EFS_ERR_PROTO;
+    if (rc == EFS_OK && bi + 1 < s->nblocks) {
+        uint32_t tail = (*entries)[*count - 1];
+        if (kv_key_cmp(blk + tail + 9, get_u32(blk + tail + 1),
+                        s->idx[bi + 1].key, s->idx[bi + 1].klen) >= 0)
+            rc = EFS_ERR_PROTO;
+    }
+    if (rc != EFS_OK) { free(*entries); *entries = NULL; free(blk); }
+    return rc;
+}
+
+/* Caller holds s->cmu. Takes ownership of blk and entries. */
+static struct seg_cslot *seg_slot_install_locked(struct kv_seg *s, uint32_t bi,
+                                                 uint8_t *blk, uint32_t *entries,
+                                                 uint32_t count)
+{
+    const struct blk_ref *r = &s->idx[bi];
+    struct seg_cslot *c = &s->cslot[bi % KV_SEG_CACHE_SLOTS];
+    s->hash_bytes -= c->hash_slots * sizeof(uint32_t);
+    free(c->blk); free(c->entries); free(c->hash);
+    c->hash = NULL; c->hash_slots = 0;
+    c->entries = entries; c->nentries = count;
+    c->blk = blk;
+    c->bi = bi;
+    c->len = r->len;
+    c->off = r->off;
+    c->valid = 1;
+    s->hash_bytes += block_hash_build(c, KV_SEG_HASH_BYTES_MAX - s->hash_bytes);
+    if (bi + 1 == s->nblocks) {
+        uint32_t tail = entries[count - 1];
+        seg_note_last(s, blk + tail + 9, get_u32(blk + tail + 1));
+    }
+    return c;
+}
+
 int kv_seg_install(struct kv_seg *s, const struct kv_seg_io *io, uint8_t *blk,
                    const uint8_t *key, uint32_t klen, struct kv_buf *val,
                    uint8_t *op)
 {
-    struct seg_cslot *c;
-
     if (!s || !io || !blk || !key || !val || !op)
         return EFS_ERR_INVAL;
     if (io->bi >= s->nblocks || s->idx[io->bi].off != io->off ||
@@ -1069,33 +1111,10 @@ int kv_seg_install(struct kv_seg *s, const struct kv_seg_io *io, uint8_t *blk,
         return EFS_ERR_AGAIN;
     }
     uint32_t *entries = NULL, count = 0;
-    int rc = index_block(blk, io->len, &entries, &count);
-    if (rc == EFS_OK && kv_key_cmp(blk + 9, get_u32(blk + 1),
-                                   s->idx[io->bi].key, s->idx[io->bi].klen))
-        rc = EFS_ERR_PROTO;
-    if (rc == EFS_OK && io->bi + 1 < s->nblocks) {
-        uint32_t tail = entries[count - 1];
-        if (kv_key_cmp(blk + tail + 9, get_u32(blk + tail + 1),
-                        s->idx[io->bi + 1].key, s->idx[io->bi + 1].klen) >= 0)
-            rc = EFS_ERR_PROTO;
-    }
-    if (rc != EFS_OK) { free(entries); free(blk); return rc; }
+    int rc = seg_block_index(s, io->bi, blk, io->len, &entries, &count);
+    if (rc != EFS_OK) return rc;
     pthread_mutex_lock(&s->cmu);
-    c = &s->cslot[io->bi % KV_SEG_CACHE_SLOTS];
-    s->hash_bytes -= c->hash_slots * sizeof(uint32_t);
-    free(c->blk); free(c->entries); free(c->hash);
-    c->hash = NULL; c->hash_slots = 0;
-    c->entries = entries; c->nentries = count;
-    c->blk = blk;
-    c->bi = io->bi;
-    c->len = io->len;
-    c->off = io->off;
-    c->valid = 1;
-    s->hash_bytes += block_hash_build(c, KV_SEG_HASH_BYTES_MAX - s->hash_bytes);
-    if (io->bi + 1 == s->nblocks) {
-        uint32_t tail = entries[count - 1];
-        seg_note_last(s, blk + tail + 9, get_u32(blk + tail + 1));
-    }
+    struct seg_cslot *c = seg_slot_install_locked(s, io->bi, blk, entries, count);
     rc = search_block(c, key, klen, val, op);
     pthread_mutex_unlock(&s->cmu);
     return rc;
@@ -1360,8 +1379,29 @@ int kv_seg_iter_seek(struct kv_seg_iter *it, const uint8_t *seek, uint32_t plen)
     }
     bi = block_for(it->s, seek, plen);
     it->bi = bi < 0 ? 0 : (uint32_t)bi;
-    if (!it->private_read && it->bi < it->s->nblocks)
-        (void)iter_load_cached(it, &it->s->idx[it->bi], seek, plen);
+    if (!it->private_read && it->bi < it->s->nblocks &&
+        !iter_load_cached(it, &it->s->idx[it->bi], seek, plen) && !it->seq) {
+        /* A prefix scan (getattr's reduce-record probe, usually empty)
+         * re-read its seek block from disk on every call: the block cache
+         * was filled only by point gets (Oct 16 Intel: ~8% of the metadata
+         * leader's CPU in scan preads). Cache the seek block like a point
+         * get would; later blocks of a long scan stay uncached. */
+        const struct blk_ref *r = &it->s->idx[it->bi];
+        uint8_t *blk = malloc(r->len);
+        uint32_t *entries = NULL, count = 0;
+        if (blk && pread_all(it->s->fd, blk, r->len, r->off) != EFS_OK) {
+            free(blk); /* the ordinary load reports the I/O error */
+            blk = NULL;
+        }
+        /* seg_block_index frees blk itself on a malformed block; the scan
+         * then reads it uncached exactly as before. */
+        if (blk && seg_block_index(it->s, it->bi, blk, r->len, &entries, &count) == EFS_OK) {
+            pthread_mutex_lock(&it->s->cmu);
+            (void)seg_slot_install_locked(it->s, it->bi, blk, entries, count);
+            pthread_mutex_unlock(&it->s->cmu);
+            (void)iter_load_cached(it, r, seek, plen);
+        }
+    }
     return EFS_OK;
 }
 
