@@ -470,8 +470,9 @@ def transport_proof(processes):
     if a.transport == 'rdma':
         # Fail instead of silently accepting a TCP fallback. Check the active
         # clients and servers, including each cold restart in this harness.
-        proof=[]
-        for proc in processes:
+        # Connections open on first use: poll briefly, never accept a process
+        # that still has no verbs descriptor at the deadline.
+        def verbs(proc):
             devices=[]
             for fd in (Path('/proc')/str(proc.pid)/'fd').iterdir():
                 try:
@@ -480,6 +481,13 @@ def transport_proof(processes):
                     continue
                 if '/dev/infiniband/uverbs' in target:
                     devices.append(target)
+            return devices
+        proof=[]
+        for proc in processes:
+            deadline=time.time()+20
+            devices=verbs(proc)
+            while not devices and time.time()<deadline and proc.poll() is None:
+                time.sleep(0.2);devices=verbs(proc)
             assert devices, ('RDMA process has no verbs device',proc.pid)
             proof.append({'pid':proc.pid,'verbs_devices':sorted(set(devices))})
         with (work/'rdma-runtime.jsonl').open('a') as out:
@@ -814,6 +822,9 @@ try:
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
         peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
         wait(lambda:subprocess.run(['mountpoint','-q',str(peer_mount)]).returncode==0,'peer mounted',40)
+        # Mount registration can precede the first verbs connection; a served
+        # GETATTR opens the peer's connections before the proof.
+        wait(lambda:subprocess.run(['timeout','2','stat',str(peer_mount)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0,'peer serving',40)
         transport_proof([peer])
         for iteration in range(8):
             run(['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,
@@ -833,6 +844,9 @@ try:
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
         peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
         wait(lambda:subprocess.run(['mountpoint','-q',str(peer_mount)]).returncode==0,'peer mounted',40)
+        # Mount registration can precede the first verbs connection; a served
+        # GETATTR opens the peer's connections before the proof.
+        wait(lambda:subprocess.run(['timeout','2','stat',str(peer_mount)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0,'peer serving',40)
         transport_proof([peer])
         for iteration in range(20):
             run(['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,
@@ -2983,6 +2997,9 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
         peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
         wait(lambda:subprocess.run(['mountpoint','-q',str(peer_mount)]).returncode==0,'peer mounted',40)
+        # Mount registration can precede the first verbs connection; a served
+        # GETATTR opens the peer's connections before the proof.
+        wait(lambda:subprocess.run(['timeout','2','stat',str(peer_mount)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0,'peer serving',40)
         transport_proof([peer])
         try:
             run(['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,'--parent','gc-posix-peer','--results',work/'posix2.tsv'],timeout=600)

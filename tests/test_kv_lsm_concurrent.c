@@ -127,7 +127,11 @@ static void *reader(void *arg)
 int main(int argc, char **argv)
 {
     unsigned secs = argc > 1 ? (unsigned)atoi(argv[1]) : 4;
-    alarm(secs + 120); /* a lock deadlock fails the test instead of hanging */
+    /* A lock deadlock fails the test instead of hanging. Instrumented runs
+     * (Valgrind) scale the shutdown grace with EFS_TEST_DEADLINE_SCALE. */
+    const char *scale_env = getenv("EFS_TEST_DEADLINE_SCALE");
+    unsigned scale = scale_env && atoi(scale_env) > 0 ? (unsigned)atoi(scale_env) : 1;
+    alarm(secs + 120 * (scale > 30 ? 30 : scale));
     char dir[] = "/tmp/efs-kv-concurrent-XXXXXX";
     const char *tmp = getenv("TMPDIR");
     char path[512];

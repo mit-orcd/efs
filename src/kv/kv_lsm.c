@@ -23,8 +23,27 @@ static __thread struct {
 } apply_scope;
 __thread struct lsm_owner lsm_owned[LSM_OWNER_SLOTS];
 __thread struct lsm_owner lsm_reading[LSM_OWNER_SLOTS];
-/* Per-thread value buffer for point gets (was l->scratch under l->mu). */
+/* Per-thread value buffer for point gets (was l->scratch under l->mu).
+ * A key destructor frees it when a worker thread exits; without one each
+ * short-lived reader leaked its grown buffer. */
 static __thread struct kv_buf t_get_buf;
+static __thread int t_get_buf_owned;
+static pthread_key_t t_get_buf_key;
+static pthread_once_t t_get_buf_once = PTHREAD_ONCE_INIT;
+static int t_get_buf_key_ok;
+static void t_get_buf_release(void *p) { kv_buf_free(p); }
+static void t_get_buf_key_init(void)
+{ t_get_buf_key_ok = !pthread_key_create(&t_get_buf_key, t_get_buf_release); }
+static struct kv_buf *get_buf(void)
+{
+    if (!t_get_buf_owned) {
+        pthread_once(&t_get_buf_once, t_get_buf_key_init);
+        /* Without a key the buffer still works; it is only not reclaimed. */
+        if (t_get_buf_key_ok) pthread_setspecific(t_get_buf_key, &t_get_buf);
+        t_get_buf_owned = 1;
+    }
+    return &t_get_buf;
+}
 static int apply_staging(struct kv_lsm *l)
 { return apply_scope.owner == l && !apply_scope.committing; }
 
@@ -1167,19 +1186,20 @@ static int lsm_get(void *ctx, const uint8_t *key, uint32_t klen, uint8_t *val,
 
     if (!l || !key || klen == 0 || !vlen)
         return EFS_ERR_INVAL;
+    struct kv_buf *buf = get_buf();
     int shared = lsm_rlock(l);
-    rc = lookup(l, key, klen, &t_get_buf, &op);
+    rc = lookup(l, key, klen, buf, &op);
     if (rc == EFS_OK && op == KV_OP_DEL)
         rc = EFS_ERR_NOT_FOUND;
     if (rc == EFS_OK) {
-        uint32_t need = t_get_buf.len;
+        uint32_t need = buf->len;
 
         if (*vlen < need || (need > 0 && !val)) {
             *vlen = need;
             rc = EFS_ERR_INVAL;
         } else {
             if (need)
-                memcpy(val, t_get_buf.p, need);
+                memcpy(val, buf->p, need);
             *vlen = need;
         }
     }
@@ -1197,7 +1217,7 @@ static int lsm_del(void *ctx, const uint8_t *key, uint32_t klen)
     if (!l || !key || klen == 0)
         return EFS_ERR_INVAL;
     int shared = lsm_rlock(l);
-    rc = lookup(l, key, klen, &t_get_buf, &op);
+    rc = lookup(l, key, klen, get_buf(), &op);
     lsm_runlock(l, shared);
     if (rc == EFS_OK && op == KV_OP_DEL)
         rc = EFS_ERR_NOT_FOUND;

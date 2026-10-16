@@ -77,6 +77,14 @@ if [ -n "${EFS_VG_RDMA_RUNTIME:-}" ]; then
     export C_INCLUDE_PATH="$EFS_VG_RDMA_RUNTIME/vg-headers:${C_INCLUDE_PATH:-}"
     VG_BUILD_ARGS=(-B EFS_MEMCHECK=1)
 fi
+# Memcheck cannot execute AVX-512 (SIGILL); a -march=native build on such a
+# host must be rebuilt without it. The BLAKE3 AVX-512 kernel is selected at
+# runtime and Memcheck's CPUID hides AVX-512, so dispatch avoids it.
+if grep -qw avx512f /proc/cpuinfo 2>/dev/null; then
+    args=(-B)
+    for x in "${VG_BUILD_ARGS[@]}"; do [ "$x" = -B ] || args+=("$x"); done
+    VG_BUILD_ARGS=("${args[@]}" "EXTRA_DEFS=${EXTRA_DEFS:-} -mno-avx512f")
+fi
 OWN_PIDS=()
 VG="valgrind --error-exitcode=99 --errors-for-leak-kinds=definite,indirect --leak-check=full --show-leak-kinds=definite,indirect,possible"
 # Current unit suite (the old-engine tests were deleted in step 11 inc 2).
@@ -84,8 +92,13 @@ VG="valgrind --error-exitcode=99 --errors-for-leak-kinds=definite,indirect --lea
 UNIT_TESTS=$(python3 - "$HERE/Makefile" <<'PY_UNITS'
 from pathlib import Path
 import sys
-line=next(line for line in Path(sys.argv[1]).read_text().splitlines() if line.startswith('TEST_BINS ='))
-print(' '.join(Path(p).name for p in line.split('=',1)[1].split()))
+# Every TEST_BINS assignment and += addition, in Makefile order.
+names=[]
+for line in Path(sys.argv[1]).read_text().splitlines():
+    if line.startswith(('TEST_BINS =','TEST_BINS +=')):
+        names+=[Path(p).name for p in line.split('=',1)[1].split()]
+assert names and len(names)==len(set(names)),names
+print(' '.join(names))
 PY_UNITS
 )
 
@@ -352,7 +365,16 @@ for t in $UNIT_TESTS; do
             note "unit/$t: parent leak gate; deliberate crash-child leaks EXCLUDED (access-error exits still gated)"
             ;;
     esac
-    timeout --signal=TERM --kill-after=10 300 $unit_vg --log-file="$log" "./tests/$t" >"$WORK-unit-$t.out" 2>&1
+    # Per-unit budgets: test_meta_apply needs ~250 s under Memcheck even on a
+    # quiet Zen 4 (9 s native); the concurrency test needs fair scheduling so
+    # spinning readers cannot starve its writer, and a scaled shutdown grace.
+    limit=${EFS_VG_UNIT_TIMEOUT:-300}
+    case "$t" in
+        test_meta_apply) limit=$((limit * 4)) ;;
+        test_kv_lsm_concurrent) limit=$((limit * 3)); unit_vg="$unit_vg --fair-sched=yes" ;;
+    esac
+    EFS_TEST_DEADLINE_SCALE=${EFS_TEST_DEADLINE_SCALE:-6} \
+    timeout --signal=TERM --kill-after=10 "$limit" $unit_vg --log-file="$log" "./tests/$t" >"$WORK-unit-$t.out" 2>&1
     rc=$?
     [ "$rc" = 0 ] || fail "unit/$t: process exit $rc"
     gate "$log" "unit/$t"

@@ -1533,8 +1533,9 @@ full acceptance are separate states.
 packing/containers removed. Live core POSIX 1,512/1,512, cross-host 67/67,
 cold durability 189/189, 109,452 exact mixed cycles and 4,715 queries PASS.
 Faults 24/24 PASS; private GC passes on unchanged repeat after a peer-startup
-proof race. Remaining gates: Valgrind KV/query/daemon leaks and two instrumented
-deadlines. The .efs cleanup-wrapper name mismatch now has a focused PASS
+proof race. Follow-up on node9901 fixes the Valgrind KV/query/daemon leaks
+(per-thread KV buffer; daemon 5,160 → 0 B), both instrumented deadlines, the
+missed `TEST_BINS +=` units and the GC peer proof race; ORCD-test rerun pending. The .efs cleanup-wrapper name mismatch now has a focused PASS
 with the committed cleanup-name correction, including physical cleanup.
 Annotated RDMA unit rechecks PASS. Kernel W121 and automatic recovery W71
 remain open; this is not large-namespace/400-GiB acceptance.
