@@ -4,6 +4,7 @@
 #include "efs/checksum.h"
 #include <time.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include "efs/kv.h"
 #include "efs/kv_lsm.h"
 #include <pthread.h>
@@ -286,21 +287,32 @@ static inline void kv_candidates_changed(struct kv_lsm *l)
 struct lsm_owner { const struct kv_lsm *l; unsigned depth; };
 #define LSM_OWNER_SLOTS 4
 extern __thread struct lsm_owner lsm_owned[LSM_OWNER_SLOTS];
+/* Shared-side depth. Scan callbacks read the same KV (transaction
+ * coordinator decision gets inside getattr's reduce scan, session close
+ * probes): a nested reader must join the hold it already has. A second
+ * rdlock would deadlock behind a queued writer (writer preference). */
+extern __thread struct lsm_owner lsm_reading[LSM_OWNER_SLOTS];
 
-static inline struct lsm_owner *lsm_owner_slot(const struct kv_lsm *l, int add)
+static inline struct lsm_owner *lsm_slot_in(struct lsm_owner *t,
+                                            const struct kv_lsm *l, int add)
 {
     struct lsm_owner *free_slot = NULL;
     for (unsigned i = 0; i < LSM_OWNER_SLOTS; i++) {
-        if (lsm_owned[i].l == l && lsm_owned[i].depth)
-            return &lsm_owned[i];
-        if (!lsm_owned[i].depth && !free_slot)
-            free_slot = &lsm_owned[i];
+        if (t[i].l == l && t[i].depth)
+            return &t[i];
+        if (!t[i].depth && !free_slot)
+            free_slot = &t[i];
     }
     if (add && free_slot) {
         free_slot->l = l;
         return free_slot;
     }
     return NULL;
+}
+
+static inline struct lsm_owner *lsm_owner_slot(const struct kv_lsm *l, int add)
+{
+    return lsm_slot_in(lsm_owned, l, add);
 }
 
 static inline int lsm_writer_owned(const struct kv_lsm *l)
@@ -310,6 +322,12 @@ static inline int lsm_writer_owned(const struct kv_lsm *l)
 
 static inline void lsm_lock(struct kv_lsm *l)
 {
+    /* A write inside this thread's own read section can never acquire
+     * view_rw; fail loudly rather than hang (no such caller is known). */
+    if (lsm_slot_in(lsm_reading, l, 0)) {
+        fprintf(stderr, "kv-lsm: writer requested inside a read section\n");
+        abort();
+    }
     pthread_mutex_lock(&l->mu);
     struct lsm_owner *o = lsm_owner_slot(l, 1);
     if (!o) abort(); /* more than LSM_OWNER_SLOTS LSMs held by one thread */
@@ -344,19 +362,41 @@ static inline int lsm_cond_timedwait(struct kv_lsm *l, pthread_cond_t *cv,
     return rc;
 }
 
-/* Returns 1 when the shared lock was taken (release with lsm_runlock). */
+/* Nonzero when this call joined the shared side (release with
+ * lsm_runlock). Writers read without it; nested readers only count. */
 static inline int lsm_rlock(struct kv_lsm *l)
 {
     if (lsm_writer_owned(l))
         return 0;
+    struct lsm_owner *r = lsm_slot_in(lsm_reading, l, 0);
+    if (r) {
+        r->depth++;
+        return 1;
+    }
+    r = lsm_slot_in(lsm_reading, l, 1);
+    if (!r) abort(); /* more than LSM_OWNER_SLOTS LSMs read by one thread */
     pthread_rwlock_rdlock(&l->view_rw);
+    r->depth = 1;
     return 1;
 }
 
 static inline void lsm_runlock(struct kv_lsm *l, int taken)
 {
-    if (taken)
+    if (!taken)
+        return;
+    struct lsm_owner *r = lsm_slot_in(lsm_reading, l, 0);
+    if (r && --r->depth == 0) {
+        r->l = NULL;
         pthread_rwlock_unlock(&l->view_rw);
+    }
+}
+
+/* Only the outermost shared reader may drop its hold around a pread: a
+ * nested lookup runs under an outer scan's iterators. */
+static inline int lsm_reader_outermost(const struct kv_lsm *l)
+{
+    struct lsm_owner *r = lsm_slot_in(lsm_reading, l, 0);
+    return r && r->depth == 1;
 }
 
 /* One merge input: the memtable when it holds no iterator, else a segment.

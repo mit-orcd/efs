@@ -22,6 +22,7 @@ static __thread struct {
     int failed, committing;
 } apply_scope;
 __thread struct lsm_owner lsm_owned[LSM_OWNER_SLOTS];
+__thread struct lsm_owner lsm_reading[LSM_OWNER_SLOTS];
 /* Per-thread value buffer for point gets (was l->scratch under l->mu). */
 static __thread struct kv_buf t_get_buf;
 static int apply_staging(struct kv_lsm *l)
@@ -748,9 +749,9 @@ static int lookup(struct kv_lsm *l, const uint8_t *key, uint32_t klen,
                 continue;
             }
             kv_seg_pin(s);
-            /* Only a shared reader drops its lock around the pread; a
-             * thread inside a writer section stays exclusive. */
-            int shared = !lsm_writer_owned(l);
+            /* Only the outermost shared reader drops its lock around the
+             * pread; writers and nested readers stay held. */
+            int shared = !lsm_writer_owned(l) && lsm_reader_outermost(l);
             if (shared)
                 pthread_rwlock_unlock(&l->view_rw);
             rc = kv_seg_read(&io, &blk);

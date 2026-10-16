@@ -76,6 +76,16 @@ static int scan_cb(void *u, const uint8_t *key, uint32_t klen, const uint8_t *v,
     }
     memcpy(a->last, key, klen); a->last_len = klen; a->have = 1; a->n++;
     (void)check_value(v, vlen);
+    /* Nested read from inside the scan, as getattr's reduce scan does via
+     * the transaction coordinator. With a writer queued, a second shared
+     * acquisition would deadlock. */
+    if (a->n % 4 == 0) {
+        uint8_t k[8], val[VLEN];
+        uint32_t kl = key_of(a->n % NKEYS, 0, k), n = VLEN;
+        int rc = efs_kv_get(kv, k, kl, val, &n);
+        assert(rc == EFS_OK || rc == EFS_ERR_NOT_FOUND);
+        if (rc == EFS_OK) (void)check_value(val, n);
+    }
     return 0;
 }
 
@@ -117,6 +127,7 @@ static void *reader(void *arg)
 int main(int argc, char **argv)
 {
     unsigned secs = argc > 1 ? (unsigned)atoi(argv[1]) : 4;
+    alarm(secs + 120); /* a lock deadlock fails the test instead of hanging */
     char dir[] = "/tmp/efs-kv-concurrent-XXXXXX";
     const char *tmp = getenv("TMPDIR");
     char path[512];
@@ -143,7 +154,7 @@ int main(int argc, char **argv)
     snprintf(cmd, sizeof(cmd), "rm -rf '%s'", d);
     (void)system(cmd);
     printf("kv concurrent: %llu writes, %llu gets, %llu scans with flush/compaction; "
-           "monotonic gets, well-formed values, ordered scans PASS\n",
+           "monotonic gets, well-formed values, ordered scans, nested gets in scans PASS\n",
            (unsigned long long)writes, (unsigned long long)reads, (unsigned long long)scans);
     return 0;
 }
