@@ -68,8 +68,10 @@ failures: LeakSanitizer is broken on that host (a trivial leak program fails
 too; the three affected tests pass with `detect_leaks=0`), and
 `check-architecture` needs the omitted `results/` (5/5 on the checkout).
 
-[RDMA credit overrun](orcd-mini-rdma-credit-20261016.md): **scoped PASS;
-deployed to orcd-mini with `09f8af09c`.** DATA plus CREDIT frames could exceed a peer's
+[RDMA credit overrun](orcd-mini-rdma-credit-20261016.md): **PASS on
+orcd-mini under the user's workload** (`09f8af09c`): group-2 commits 229 →
+~6,500/s; loaded create/stat p50 71/21 → 6.1/2.7 ms. Next bottleneck: LOOKUP
+ReadIndex on the Raft host mutex. DATA plus CREDIT frames could exceed a peer's
 posted receives; the RNR retry turned 30 µs request/reply rounds into 2 ms
 and Raft commits into 26 ms on orcd-mini. `e84d42cbb` plus the
 review fix `bbebedea8` bound each window at half the smaller receive pool

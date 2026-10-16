@@ -117,10 +117,59 @@ on free ports (`--direct-io`, `--join` the first), then
 256-byte files in threads and time stat/create/open. Stop the daemons and
 remove the stores afterwards.
 
+## orcd-mini under the user's workload (deployed `09f8af09c`)
+
+**PASS (production confirmation).** Measured 2026-10-16 between 21:15 and
+21:25Z, about 20 minutes after the deployment. The user's tiny-file
+workload ran from the node9900 client:
+- `tiny_files.py` with 16 workers;
+- `tiny_files_md5.py` reading `tiny-files1`;
+- an `ecrawl --no-write` walk.
+
+The baseline is the same profile at 15:49Z on `4d6530dd8`. Profiling was
+passive: `perf` as a non-root user on the existing PIDs. The probe added 200
+files per mount.
+
+| Measure | before (`4d6530dd8`) | after (`09f8af09c`) |
+| --- | --- | --- |
+| Group 2 commits (`efs-mgmt raft-status`, 30–60 s deltas) | 229/s | 6,125–6,876/s |
+| Probe on node9900 (workload's own client): create / stat / open / unlink p50 | 71.5 / 21.0 / 67.3 / 48.3 ms | 6.1 / 2.7 / 4.2 / 3.6 ms |
+| Probe p90 create / stat | 109 / 29 ms | 8.2 / 3.6 ms |
+| Probe on node9901 (separate client): create / stat p50 | — | 3.4 / 1.1 ms |
+| efsd CPU, three daemons (`/proc` stat delta, 15 s) | 1.5 cores | 12.7 cores |
+| efs-fuse CPU, node9900 | 0.36 cores | 2.3 cores |
+| Query-catalog rebuild share of efsd CPU (`perf` children) | 37% | 9% |
+
+The writer finished within about ten minutes of the profile. The client log
+had no errors, and the daemons logged only `rc=0` slow-report lines. Raft
+terms (group 0: 24, group 2: 22) stayed fixed under load. Their rise from 6
+happened at the restart, when node 1 campaigned alone for 13 s before nodes
+2 and 3 started.
+
+**Next bottleneck.** Context-switch sampling (`perf record -e cs -g`, 10 s,
+509,575 switches) shows lock waits on the Raft host mutex `h->mu`:
+- 9.1% of switches come from LOOKUP's paired ReadIndex
+  (`host_read_index_pair`, `raft_host.c:12354`);
+- 1.2% come from GETATTR's `host_read_index`;
+- 1.0% come from `host_propose_wait_idx_impl`.
+
+In the baseline the LOOKUP share was 1.8%, behind the 2 ms transport waits.
+Call sites were resolved with `addr2line` on the deployed `efsd`.
+
+Raw captures are kept outside Git:
+- Mac `~/git/devops/profiling/runs/20261016-orcd-tiny-09f8af09c/`:
+  `server-cs.txt` `7b25682a199d8cf1…`, `probe-node9900.txt`
+  `69a991fb3deb16c7…`, `raft-rate.txt` `b53fe89bfabc8906…`, plus the
+  `orcd_prof.sh`/`cs_prof.sh` scripts used;
+- node9901 `/data1/efs/prof/cs-09f8/cs.data`.
+
+The node9900 context-switch capture was truncated and is not used.
+Workload syscall tracing is not permitted (ptrace) on node9900.
+
 ## Limitations and remaining gates
 
-- Not measured yet on orcd-mini under the user's workload; the rollout needs
-  daemon and client restarts.
+- The workload was not controlled, so absolute files/s are not compared.
+  The probe and commit-rate comparisons ran under the same kind of load.
 - The orcd-test seven-client runs ([Raft/KV decisions](orcd-raft-kv-20261016.md))
   used the same transport. Their 15-second POSIX timeouts are not shown to be
   related.

@@ -1534,6 +1534,13 @@ full acceptance are separate states.
 integration FAIL on the known W71 uncertain-recovery fence, the same as the
 previous deployment `4d6530dd8`. Includes the RDMA credit fix.
 
+[Crash-path gates under the W71 fence](../status/crash-gate-fence-fixtures-20261016.md):
+**PASS (scoped), test-only change.** The fault suite uses a fresh cluster for
+each server kill and asserts fsync EIO after restart: 24/24 PASS (RDMA
+mlx5_0, direct). The GC gate asserts the EIO after its four-server crash, then
+fresh-formats before POSIX and the offline-member section: PASS, with POSIX
+216/216 and two-client 67/67. The W71 recovery blocker stays open.
+
 [W122 — effective settings discovery](#w122): **PROPOSED**
 read-only settings catalogs for `efsd` and `efs-fuse`, exposed through management
 and the portal with defaults, effective values and startup/runtime scope. The
@@ -1571,8 +1578,10 @@ failures: LeakSanitizer is broken on that host (a trivial leak program fails
 too; the three affected tests pass with `detect_leaks=0`), and
 `check-architecture` needs the omitted `results/` (5/5 on the checkout).
 
-[RDMA credit overrun](../status/orcd-mini-rdma-credit-20261016.md): **scoped PASS;
-deployed to orcd-mini with `09f8af09c`.** DATA plus CREDIT frames could exceed a peer's
+[RDMA credit overrun](../status/orcd-mini-rdma-credit-20261016.md): **PASS on
+orcd-mini under the user's workload** (`09f8af09c`): group-2 commits 229 →
+~6,500/s; loaded create/stat p50 71/21 → 6.1/2.7 ms. Next bottleneck: LOOKUP
+ReadIndex on the Raft host mutex. DATA plus CREDIT frames could exceed a peer's
 posted receives; the RNR retry turned 30 µs request/reply rounds into 2 ms
 and Raft commits into 26 ms on orcd-mini. `e84d42cbb` plus the
 review fix `bbebedea8` bound each window at half the smaller receive pool
