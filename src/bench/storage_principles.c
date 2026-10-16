@@ -423,6 +423,11 @@ int efs_bench_principles_main(int argc, char **argv)
             if (snprintf(w[i].path,sizeof(w[i].path),"%s/container",w[i].dir)>=4096) goto done;
             w[i].fd=open(w[i].path,(e.recover?O_RDONLY:O_RDWR|O_CREAT|O_EXCL)|(e.direct && strcmp(e.rw,"delete") ? O_DIRECT:0),0600);
             if (w[i].fd<0) goto done;
+            /* Size the container up front, as store_containers segments are
+             * (ftruncate to SEG_BYTES): records then never extend EOF, so XFS
+             * speculative preallocation (allocsize=128m on ORCD) cannot
+             * leave post-EOF blocks that no record punch reclaims. */
+            if (!e.recover && ftruncate(w[i].fd,(off_t)w[i].count*e.stride)) goto done;
             if (!strcmp(e.policy,"overwrite")) { int err=posix_fallocate(w[i].fd,0,(off_t)w[i].count*e.stride); if(err) {errno=err;goto done;} }
         }
         if (prepare) for (unsigned j=0;j<w[i].count;j++) {
