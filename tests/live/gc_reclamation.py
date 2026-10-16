@@ -2909,7 +2909,8 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
     path,fd,ino=create('fault');os.close(fd)
     for node in range(4):
         reply=valid_put(node,ino)
-        assert len(reply) in (2,3) and reply[:2]==bytes([7,0]),reply
+        # PUT_REPLY: status, path and 64-bit verifier (EFS_PUT_REPLY_LEN 10).
+        assert len(reply)==11 and reply[:2]==bytes([7,0]),reply
     print('valid late-PUT control accepted on live inode by every member PASS',flush=True)
     blocked=files(ino)[0];blocked.chmod(0);blocked.parent.chmod(0o500)
     errors=sum(n[1]['delete_errors'] for n in status())
@@ -3109,7 +3110,7 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
     # restart. The wire uses native C headers inside its big-endian framing.
     for i in range(4):
         reply=valid_put(i,ino)
-        assert len(reply) in (2,3) and reply[:2]==bytes([7,1]),reply
+        assert len(reply)==11 and reply[:2]==bytes([7,1]),reply
     assert not files(ino)
     print('restart quota zero and late PUT fenced on every member PASS',flush=True)
     (work/'final-status.json').write_text(json.dumps(final,indent=2))

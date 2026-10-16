@@ -1,7 +1,8 @@
 # RDMA credit overrun: 2 ms request/reply rounds — 2026-10-16
 
-**PASS (scoped, performance and transport tests); orcd-mini rollout NOTRUN**
-(awaiting the user's go-ahead, because their workloads use the mounts).
+**PASS (scoped, performance and transport tests).** Deployed to orcd-mini on
+October 16 with devel `09f8af09c` ([deployment](orcd-mini-deploy-09f8af09c-20261016.md));
+the user's workload is not re-measured yet.
 
 Commits `e84d42cbb` and `bbebedea8` (review fix) fix a transport defect behind orcd-mini's slow metadata.
 Raft commits waited ~26 ms p50 (37–55 ms tail) while disks fsynced in 0.05 ms
