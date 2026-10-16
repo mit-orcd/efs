@@ -1528,6 +1528,8 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[W123 — automatic crash recovery](../backlog/crash-safe-durable-versions.md): **proposed new feature; design review before implementation.** Separate visible/durable file versions, protect GC/fold dependencies, preserve fsync and recover without node rebuild. Migration, correctness and no-slowdown acceptance NOTRUN; W71 remains open.
+
 [orcd-mini deployment of `09f8af09c`](../status/orcd-mini-deploy-09f8af09c-20261016.md):
 **deployed; live POSIX 216/216, two-client 67/67, durability 27/27 PASS.**
 `make test` has 4 environmental failures. GC crash-restart and fault-suite
@@ -1767,6 +1769,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | # | item | class | status | home |
 | --- | --- | --- | --- | --- |
 | settings-discovery | **W122** · effective daemon/client settings and portal catalog | product observability | PROPOSED: role-specific supported settings, defaults, effective values and startup/runtime scope; backend implementation and acceptance NOTRUN | [feature and gates](#w122) |
+| crash-recovery-feature | **W123** · automatic crash recovery through per-file durable versions | new feature / durability recovery | PROPOSED: design review before code; implementation, migration and acceptance NOTRUN; W71 remains open | [feature and gates](../backlog/crash-safe-durable-versions.md) |
 | orcd-qualification | **W119** · ORCD normal-operation RDMA failures and blocked clean stop | correctness / liveness | OPEN: 150 concurrent failures /846 NOTRUN; cross-host peer59/67; enabled queries EBUSY; retained writes block clean stop. TCP/commands-off rerun also FAILs (120 failures,520 NOTRUN; peer61/67; clean stop refused); all23 successfully prepared cold cases verify after authorized forced restart. [TCP evidence](../status/orcd-tcp-direct-disabled-20261015.md). Preserve failures, isolate causes and rerun original gates; W100 stays closed. [AMD follow-up](../status/amd-rdma-posix-20261015.md): native/serial/peer/cold/degraded PASS at `c8d057391`; one-mount jobs16 remains215/216 with unusual-name timeout. [Async durability follow-up](../status/amd-async-durability-20261015.md) at `c4178ea81`: scoped durability/native/serial/peer/cold/degraded PASS; jobs16 FAIL214/216 (unusual names, concurrent creates,15s) | [Raft/KV follow-up](../status/orcd-raft-kv-20261016.md) · [evidence and gates](../status/orcd-devel-qualification-20261015.md) · [item](#w119) |
 | immediate-readback | **W121** · successful fsync followed by previous-file payload | data correctness | OPEN: 255/123,932 exact readbacks failed across both queued-vote variants on ORCD native RDMA/direct with enabled `.efs`; unique512-byte files, no expiry. Diagnosed FUSE kernel fork/read page-pinning defect; kernel remediation deferred by user. Fork-isolated experiments do not close W121 | [diagnosis](../status/orcd-w121-fork-read-20261016.md) · [experiment](../status/orcd-queued-read-vote-20261016.md) · [item](#w121) |
 | qualification-fixtures | **W120** · stale extracted LOOKUP stub and command cleanup ownership check | verification correctness | OPEN (partial fix): AMD `f6235bb73` repairs the LOOKUP host context and checks reader identity; native/docs PASS at `85a9ad6b5`. Enabled-command cleanup ownership remains NOTRUN here and still needs correction/acceptance. [AMD evidence](../status/amd-rdma-posix-20261015.md); preserve original failures | [evidence](../status/orcd-devel-qualification-20261015.md) · [item](#w120) |
@@ -7585,6 +7588,12 @@ separate daemon and client targets; disabled `.efs`; access denial/redaction;
 mixed/older builds; stale portal observations. Run focused integration on AMD
 or Intel with a small cluster and two clients; ORCD scale is not required.
 No live configuration editor or automatic rollout is included in this item.
+
+
+<a id="w123"></a>
+### W123 — Automatic crash recovery through per-file durable versions
+
+**New feature; proposed 2026-10-16.** Design/ordering review first; implementation and acceptance NOTRUN. Recover committed state without node format/rebuild while retaining immediate visibility, grouped barriers and fsync guarantees. Related W71 stays open. [Canonical feature plan and gates](../backlog/crash-safe-durable-versions.md).
 
 
 ## Appendix 6 — Naming

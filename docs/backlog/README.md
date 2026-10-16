@@ -15,3 +15,5 @@ active queue item; it has no priority beyond what the status index/handoff says.
   filesystem you could run (audited capability inventory).
 - [ideas.md](ideas.md) — parked ideas and landed scaling history; never
   instructions.
+
+- [W123: automatic crash recovery](crash-safe-durable-versions.md) — proposed new feature; per-file visible/durable versions, recovery ordering and acceptance gates.

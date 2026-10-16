@@ -5518,3 +5518,9 @@ separate daemon and client targets; disabled `.efs`; access denial/redaction;
 mixed/older builds; stale portal observations. Run focused integration on AMD
 or Intel with a small cluster and two clients; ORCD scale is not required.
 No live configuration editor or automatic rollout is included in this item.
+
+
+<a id="w123"></a>
+## W123 — Automatic crash recovery through per-file durable versions
+
+**New feature; proposed 2026-10-16.** Design/ordering review first; implementation and acceptance NOTRUN. Recover committed state without node format/rebuild while retaining immediate visibility, grouped barriers and fsync guarantees. Related W71 stays open. [Canonical feature plan and gates](crash-safe-durable-versions.md).

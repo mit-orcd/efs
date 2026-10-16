@@ -18,6 +18,8 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[W123 — automatic crash recovery](../backlog/crash-safe-durable-versions.md): **proposed new feature; design review before implementation.** Separate visible/durable file versions, protect GC/fold dependencies, preserve fsync and recover without node rebuild. Migration, correctness and no-slowdown acceptance NOTRUN; W71 remains open.
+
 [orcd-mini deployment of `09f8af09c`](orcd-mini-deploy-09f8af09c-20261016.md):
 **deployed; live POSIX 216/216, two-client 67/67, durability 27/27 PASS.**
 `make test` has 4 environmental failures. GC crash-restart and fault-suite
