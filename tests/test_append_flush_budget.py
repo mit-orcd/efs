@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Actual append flush refuses expired work even when its stripe is free."""
 from pathlib import Path
-import subprocess,tempfile
+import os,subprocess,tempfile
 root=Path(__file__).resolve().parents[1];s=(root/'src/client/efs_fuse.c').read_text()
 def fn(p):
  a=s.index(p);return s[a:s.index('\n}',a)+2]
 code=r'''
 #include "client_internal.h"
 #include <errno.h>
+#include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
 #include <assert.h>
@@ -15,6 +16,8 @@ struct fuse_file_info{int unused;};
 static uint64_t deadline;static int dirty,sync_rc,flush_rc,expire_sync;static unsigned flushes,reports,syncs;
 static pthread_mutex_t stripe=PTHREAD_MUTEX_INITIALIZER;
 static uint64_t now_ms(void){struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return (uint64_t)t.tv_sec*1000+t.tv_nsec/1000000;}
+/* Deterministic phase clock; RPC deadlines still use the real monotonic clock. */
+static uint64_t stats_now_ms(void){static uint64_t t;return t+=40;}
 uint64_t efs_client_rpc_deadline_ms(void){return deadline;}
 int efs_client_rpc_past_deadline(void){return deadline&&now_ms()>=deadline;}
 static int virt_kind(efs_ino_t n){(void)n;return 0;}
@@ -36,5 +39,10 @@ int main(void){reset();deadline=now_ms();assert(efs_append_flush_report_run(NULL
 with tempfile.TemporaryDirectory(prefix='efs-append-flush-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(['cc','-std=gnu11','-pthread','-Wall','-Wextra','-Werror','-I'+str(root/'include'),'-I'+str(root/'src/client'),str(p),'-o',str(p.with_suffix(''))],check=True)
- subprocess.run([str(p.with_suffix(''))],check=True,timeout=5)
+ env=dict(os.environ);env.pop('EFS_RPC_PROF',None)
+ quiet=subprocess.run([str(p.with_suffix(''))],check=True,timeout=5,env=env,capture_output=True,text=True)
+ assert 'CLOSE-PROF' not in quiet.stderr
+ prof=subprocess.run([str(p.with_suffix(''))],check=True,timeout=5,env=dict(env,EFS_RPC_PROF='1'),capture_output=True,text=True)
+ assert prof.stderr.count('CLOSE-PROF')==2,prof.stderr
+ assert 'total_ms=160 wb_ms=40 append_lock_ms=40 put_ms=40 report_ms=40' in prof.stderr,prof.stderr
 print('append flush: expired/free/contended stripe, post-drain expiry and failed-flush retention PASS')

@@ -1553,7 +1553,14 @@ but quiet jobs16 remains215/216 then214/216: names still times out at15s.
 W119 stays OPEN. Jobs16 correlation now reproduces the names timeout during
 create/read/list: LOOKUP averages5.98ms,5.95ms in parent ReadIndex; follower
 queued probes average8.89–9.48ms. Open/close dominate the traced case, not
-directory enumeration. No new product fix accepted from these diagnostic runs.
+directory enumeration. Follow-up close phases identify append-lock and REPORT
+waits (one names close:53ms lock,56ms REPORT). Opportunistic queued-probe
+draining and wider append stripes were not retained; the stripe comparison
+was confounded by an independent AMD build. Original scheduling/64 stripes
+restored; opt-in timing and deadline regressions retained. W119 remains OPEN;
+no accepted timeout fix. Restored jobs16 FAIL205/216 (ten timeouts, one
+unlink EBUSY); independent Intel-client storage benchmarks prevent claiming
+a quiet isolated comparison. Stop competing workload before qualification.
 
 
 [Asynchronous PUT acknowledgement](../status/intel-async-durability-20261015.md):

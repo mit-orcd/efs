@@ -599,3 +599,121 @@ Raw first/second output and copied runtime logs remain outside Git in
 `/data1/efs/names-loaded-complete-20261015`. Both controllers restored quiet
 service after normal drains. No seven-client test, TCP comparison, feature
 activation or push. No new code optimization was accepted from these captures.
+
+
+## Queued-probe and close follow-up — October 15–16, 2026
+
+W119 remains **OPEN / loaded POSIX FAIL**. Base source is
+`aeaee172049af6f286e9df961a876f6205a51be5`. The retained change in this
+checkpoint is opt-in `EFS_RPC_PROF` phase timing in
+`efs_append_flush_report_run`, plus a deterministic regression checking
+profiling on/off, unchanged deadlines and failed-PUT publication retention.
+It changes neither scheduling nor append exclusion. The diagnostic measures
+this shared flush/publication helper, including fsync callers; it is not
+exclusively a close counter. Only operations reaching the final return and
+lasting at least100ms are logged; earlier error returns are not timed.
+
+AMD configuration remains four files-engine daemons, ports17432–17435,
+17G per-node quota, two managed mounts, Soft-RoCE rxe0/GID1 and direct I/O.
+`.efs`, packing, containers, expiry and repair experiments remain disabled.
+Existing stores were retained between repetitions. This is the core suite,
+not the seven-client4G fixture. No deadline changes, TCP comparison or push.
+
+### Findings and rejected experiments
+
+- A network-handler experiment opportunistically drained eligible queued
+  read controls when a new pure probe acquired the Raft mutex. It reused the
+  existing term/boot/configuration checks and retained durable receive and
+  flow-credit ownership. Focused read-control, queued-control, persistence,
+  waiter and real Raft tests passed (read-control also ASan/UBSan). Isolated
+  names passed1.7s, but quiet jobs16 remained FAIL212/216 then215/216. This
+  change was removed; no quorum-latency improvement is claimed.
+- With original scheduling, opt-in close tracing measured one workload-wide
+  operation at2153ms: writeback0, append lock1700, PUT60, REPORT393ms. This
+  operation was not identified as the names case. A matching names-case
+  close took114.9ms in strace and115ms in phase logging: writeback0,
+  append lock53, PUT6, REPORT56ms. Both append serialization and metadata
+  publication contribute. This does not justify removing the lock: it
+  protects O_APPEND/write versus PUT/REPORT publication correctness.
+- A1024-stripe append-lock experiment (baseline64) passed focused lock and
+  deadline tests. Isolated names passed3.3s; jobs16 was FAIL213/216 then
+  FAIL207/216; peer67/67 passed82.2s. An independent Intel-client deployment
+  and native build under `/data1/efs/intel-client` was discovered during
+  these runs. Therefore these are confounded comparisons, not evidence that
+  widening the table caused the regressions. The experiment was removed and
+  the original64-stripe service restored. Independent processes were untouched.
+- The original-scheduler diagnostic core run was FAIL213/216; its subsequent
+  uninstrumented run was FAIL215/216 (names). No product optimization from
+  this follow-up is accepted as closing the timeout.
+
+Raw outputs remain outside Git under `/data1/efs/queued-read-candidate-20261015`,
+`/data1/efs/close-phase-20261015`,
+`/data1/efs/close-phase-controller-20261015`,
+`/data1/efs/append-stripes-candidate-20261015`, and
+`/data1/efs/close-phase-restored-20261015`.
+
+### Reproduce and next work
+
+Use exclusive AMD with no competing build or test controller. Deploy this
+checkpoint with the explicit disabled-feature RDMA/direct environment above.
+For diagnostic capture only, set `EFS_RPC_PROF=1 EFS_READ_PROF=1 EFS_BATCH_OBS=1`
+on managed service startup, then use the committed observer:
+
+```sh
+python3 tests/measure/amd_names_loaded.py /data1/efs/NEW_CLOSE_CAPTURE
+python3 tests/test_append_flush_budget.py
+python3 tests/test_append_reserve_budget.py
+python3 tests/test_inode_lock_stripes.py
+```
+
+Correlate `CLOSE-PROF` inode/monotonic time with syscall and FUSE logs; compare
+append_lock_ms, put_ms and report_ms, rather than calling total close time a
+single RPC wait. Normally drain both managed clients and stop daemons; abort
+if a client refuses to drain. Restart without profiling variables, then run:
+
+```sh
+python3 -u tests/posix/posix_suite.py /data1/efs/mnt --suite core --jobs 16 --tag close-followup --results /data1/efs/NEW_CORE.tsv
+```
+
+Keep the default15s case deadlines and existing longer per-case overrides.
+Next: establish a controlled baseline without competing deployments, identify
+which queued probes are refused versus merely delayed around follower sync,
+and attribute long append-lock holders by inode before another scheduling or
+locking change. Preserve fresh-read proof and atomic PUT/REPORT exclusion.
+The opt-in diagnostics are progress toward attribution, not a timeout fix.
+
+
+### Restored service verdict
+
+Original64-stripe/scheduler source plus the diagnostics above: **FAIL205/216**
+in89.8s, zero skipped/notrun. Failures: `dir_readdir_listing`,
+`dir_deep_nesting`, `dir_readdir_while_unlink`, `names_crazy_roundtrip`,
+`names_crazy_dirs`, `dir_deep_nesting_beyond_64`, `concurrent_creates_same_dir`,
+`concurrent_write_and_readdir`, `mtime_monotonic_many_writes` (15s), and
+`concurrent_appends_two_proc` (existing30s); `concurrent_create_unlink_two_proc`
+returned unlink EBUSY. These failures remain recorded, not dismissed as passes.
+
+No compiler/make/tar was seen in the two-second build sampler during that
+run. However, a subsequent process snapshot found an independent
+`/data1/efs/intel-client/scratch-hot/efs-bench --bench churn ... --direct-io`
+running. Build-only sampling was insufficient to establish exclusive load;
+this run is uninstrumented but **not qualified as a quiet isolated comparison**.
+The unrelated Intel-client controller and mount were left untouched. Reliable
+performance comparison is blocked on stopping or coordinating that workload.
+No causal claim that the restored code worsened performance is made.
+
+Focused append flush/reservation/stripe tests PASS locally; flush/stripe
+PASS on AMD; architecture gate5/5 PASS. Runtime environment inspection
+confirmed all four managed daemons and two managed clients use RDMA/direct
+and disabled features, with profiling variables absent. Service is left up.
+The independent Intel client is outside this qualification and remains TCP;
+no TCP comparison was run.
+
+Installed binaries (efsd reused the baseline build; FUSE label
+`close-phase-baseline`; source base plus diagnostic-only diff as above):
+
+| Binary | SHA256 |
+| --- | --- |
+| efsd | `dd131fa5f3cda9133f4e17365c1fc7bd3adfb9e1c006facfa1bf42c22833213a` |
+| efs-fuse | `d279ddb52c0a0998fe5191d3db9c3ec41e00770a253c1d5042f2666b4b128095` |
+| efs-mgmt | `8df0869f1934abdbeb757ee29de48a25c09d57846cc855acbc9d534078a99ea6` |
