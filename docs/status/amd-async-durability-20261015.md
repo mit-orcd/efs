@@ -524,3 +524,78 @@ Isolated tracing alone cannot establish which loaded phase consumes15s.
 Do not increase the deadline, skip this case, or equate a local CPU cleanup
 with loaded acceptance. Broader native/peer/cold gates were not repeated for
 this small follow-up; their earlier passes do not constitute new qualification.
+
+
+## Jobs16 metadata/quorum correlation — October 15, 2026
+
+**FAIL; W119 remains OPEN. No additional product fix claimed in this round.**
+Product source `f625195011102cfd1646499df584983f95888894`, documentation parent
+`b1683ee88`; same installed binary hashes and AMD profile as above. Both
+captures run all216 core cases/jobs16 with unchanged15s per-case deadlines;
+only the `names_crazy_dirs` worker gets strace attachment, selected by the
+existing nonblocking phase datagram. perf99Hz userspace/DWARF covers all four
+daemons and both managed clients; counters use EFS_READ_PROF/EFS_RPC_PROF/
+EFS_BATCH_OBS. These are diagnostic, instrumented outcomes, not quiet acceptance.
+
+First run FAIL214/216: names and deep nesting time out; controller56.36s.
+Second run FAIL215/216: names alone times out; controller43.68s. In both,
+names stays in create/read/list, never reaches removal. The second extends
+syscall capture to getdents64/fstat/lseek to avoid misattributing omitted calls.
+Its completed syscall totals: openat76/7.159s/max309ms; close75/2.116s/max1.146s;
+mkdir25/1.229s/max146ms; getdents64 50/70ms; read50/66ms; fstat75/53ms.
+These do not account for every instant of wall time: attachment begins after
+the phase event, plus untraced calls, scheduling, Python and tracing overhead.
+
+The first loaded C profile has23K samples and zero lost samples. Across the
+managed processes, daemon spin locks11.36%, mutex locks8.76%, memmove6.92%,
+memcmp6.22%, BLAKE3 vector hashing4.42%, merge_scan3.89%, drain_inbox3.77%,
+recv_poller3.59%, kv_mtab_pos2.62%. These are genuine CPU hot paths, not proof
+that optimizing them alone closes the names-case deadline; unrelated jobs
+and background maintenance share this profile.
+
+At a late first-run RPC snapshot,27218 calls accumulate272.318s receive wait,
+47.542ms connection checkout,80.365ms send and50.052ms BUSY backoff. These are
+summed overlapping handlers, not wall time. The serving node's final LOOKUP
+snapshot averages5975us total,5954us parent ReadIndex,10us KV. Fresh-read
+quorum sleep accounts for156.574s at an earlier snapshot; apply sleep is0.
+Do not subtract these asynchronously sampled aggregates as an exact case trace.
+
+Second-run per-node final batch counters (count/average us/max us):
+
+| Node | Log sync | Queued accepted read-request wait |
+| --- | --- | --- |
+| 1 | 8890/4428/29508 | 24570/8888/48097 |
+| 2 | 9275/4423/31152 | 17053/9483/65667 |
+| 3 | 6236/4734/34920 | 390/8454/43175 |
+| 4 | 582/5456/36840 | 145/3937/12915 |
+
+Leader sender read-request queues average19us; pump-lock averages are at most
+1.2us. This supports investigating queued probes around follower persistence,
+not connection checkout or directory enumeration. It does not prove every
+queued probe was eligible for the safe bypass: the existing core refuses
+unsafe term/boot/config/storage contexts. The pre-persistence scheduling
+experiment previously regressed acceptance and remains reverted. Next code
+work must distinguish queue timing from core refusal/context transitions,
+and separately explain the1.146s close before altering scheduling. Keep
+fresh-read proofs, durable suffix ACKs and apply barriers intact.
+
+Reproduce with exclusive AMD and no competing test controller:
+
+1. Normally drain both managed clients; abort if either refuses. Stop managed
+   daemons using the existing scoped helper, preserving independent clients.
+2. Start with the ordinary explicit disabled-feature RDMA/direct profile and
+   `EFS_READ_PROF=1 EFS_RPC_PROF=1 EFS_BATCH_OBS=1`. The original capture also
+   set `EFS_CONTAINER_PATH_PROF=1` (diagnostic only; containers stay disabled),
+   whose dNN selector does not identify this case; no names conclusion relies
+   on its callback samples.
+3. Run `python3 tests/measure/amd_names_loaded.py /data1/efs/NEW_DIRECTORY`.
+   The committed observer preserves suite order/jobs/deadlines and detaches
+   its profilers. Save the new daemon/FUSE log interval externally.
+4. Normally drain/stop and restart without profiling variables. Do not widen
+   deadlines or force-discard as a passing substitute for clean shutdown.
+
+Raw first/second output and copied runtime logs remain outside Git in
+`/data1/efs/names-loaded-20261015` and
+`/data1/efs/names-loaded-complete-20261015`. Both controllers restored quiet
+service after normal drains. No seven-client test, TCP comparison, feature
+activation or push. No new code optimization was accepted from these captures.

@@ -1550,7 +1550,10 @@ reviewed commits met the selected merge scope; dependent changes deferred.
 Single-case strace/perf follow-up `f62519501` removes the measured512-slot
 wake scan; focused safety/sanitizer tests PASS. Isolated names case passes,
 but quiet jobs16 remains215/216 then214/216: names still times out at15s.
-W119 stays OPEN; next diagnostic must capture this case under competing load.
+W119 stays OPEN. Jobs16 correlation now reproduces the names timeout during
+create/read/list: LOOKUP averages5.98ms,5.95ms in parent ReadIndex; follower
+queued probes average8.89–9.48ms. Open/close dominate the traced case, not
+directory enumeration. No new product fix accepted from these diagnostic runs.
 
 
 [Asynchronous PUT acknowledgement](../status/intel-async-durability-20261015.md):
