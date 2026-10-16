@@ -21,6 +21,9 @@ static __thread struct {
     struct kv_mtab mt;
     int failed, committing;
 } apply_scope;
+__thread struct lsm_owner lsm_owned[LSM_OWNER_SLOTS];
+/* Per-thread value buffer for point gets (was l->scratch under l->mu). */
+static __thread struct kv_buf t_get_buf;
 static int apply_staging(struct kv_lsm *l)
 { return apply_scope.owner == l && !apply_scope.committing; }
 
@@ -745,9 +748,14 @@ static int lookup(struct kv_lsm *l, const uint8_t *key, uint32_t klen,
                 continue;
             }
             kv_seg_pin(s);
-            pthread_mutex_unlock(&l->mu);
+            /* Only a shared reader drops its lock around the pread; a
+             * thread inside a writer section stays exclusive. */
+            int shared = !lsm_writer_owned(l);
+            if (shared)
+                pthread_rwlock_unlock(&l->view_rw);
             rc = kv_seg_read(&io, &blk);
-            pthread_mutex_lock(&l->mu);
+            if (shared)
+                pthread_rwlock_rdlock(&l->view_rw);
             if (rc != EFS_OK) {
                 kv_seg_unpin(s);
                 return rc;
@@ -1041,17 +1049,17 @@ static int lsm_batch_committed(void *ctx, const struct efs_kv_item *items, uint3
 
     if (!l || (n > 0 && !items))
         return EFS_ERR_INVAL;
-    pthread_mutex_lock(&l->mu);
+    lsm_lock(l);
     if (l->fail_next_batch) {
         l->fail_next_batch = 0;
-        pthread_mutex_unlock(&l->mu);
+        lsm_unlock(l);
         return EFS_ERR_IO;
     }
     if (l->io_failed) {
-        pthread_mutex_unlock(&l->mu);
+        lsm_unlock(l);
         return EFS_ERR_IO;
     }
-    pthread_mutex_unlock(&l->mu);
+    lsm_unlock(l);
     if (n == 0)
         return EFS_OK;
     /* Durable first unless a sync-hold is open: then the record is written
@@ -1060,13 +1068,13 @@ static int lsm_batch_committed(void *ctx, const struct efs_kv_item *items, uint3
     arc = kv_wal_append(l->wal, items, n, &seq);
     if (arc != EFS_OK && seq == 0)
         return arc;
-    pthread_mutex_lock(&l->mu);
+    lsm_lock(l);
     /* Apply in log order: a crash replays the WAL, so the visible order must
      * be the logged order even when several batches shared one fsync. */
     while (l->apply_next != seq && !l->io_failed)
-        pthread_cond_wait(&l->cv, &l->mu);
+        lsm_cond_wait(l, &l->cv);
     if (l->apply_next != seq) {
-        pthread_mutex_unlock(&l->mu);
+        lsm_unlock(l);
         return EFS_ERR_IO;
     }
     if (arc != EFS_OK)
@@ -1093,7 +1101,7 @@ static int lsm_batch_committed(void *ctx, const struct efs_kv_item *items, uint3
     if (rc == EFS_OK)
         rc = kv_maybe_flush_locked(l);
     pthread_cond_broadcast(&l->cv);
-    pthread_mutex_unlock(&l->mu);
+    lsm_unlock(l);
     return rc;
 }
 
@@ -1159,23 +1167,23 @@ static int lsm_get(void *ctx, const uint8_t *key, uint32_t klen, uint8_t *val,
 
     if (!l || !key || klen == 0 || !vlen)
         return EFS_ERR_INVAL;
-    pthread_mutex_lock(&l->mu);
-    rc = lookup(l, key, klen, &l->scratch, &op);
+    int shared = lsm_rlock(l);
+    rc = lookup(l, key, klen, &t_get_buf, &op);
     if (rc == EFS_OK && op == KV_OP_DEL)
         rc = EFS_ERR_NOT_FOUND;
     if (rc == EFS_OK) {
-        uint32_t need = l->scratch.len;
+        uint32_t need = t_get_buf.len;
 
         if (*vlen < need || (need > 0 && !val)) {
             *vlen = need;
             rc = EFS_ERR_INVAL;
         } else {
             if (need)
-                memcpy(val, l->scratch.p, need);
+                memcpy(val, t_get_buf.p, need);
             *vlen = need;
         }
     }
-    pthread_mutex_unlock(&l->mu);
+    lsm_runlock(l, shared);
     return rc;
 }
 
@@ -1188,9 +1196,9 @@ static int lsm_del(void *ctx, const uint8_t *key, uint32_t klen)
 
     if (!l || !key || klen == 0)
         return EFS_ERR_INVAL;
-    pthread_mutex_lock(&l->mu);
-    rc = lookup(l, key, klen, &l->scratch, &op);
-    pthread_mutex_unlock(&l->mu);
+    int shared = lsm_rlock(l);
+    rc = lookup(l, key, klen, &t_get_buf, &op);
+    lsm_runlock(l, shared);
     if (rc == EFS_OK && op == KV_OP_DEL)
         rc = EFS_ERR_NOT_FOUND;
     if (rc != EFS_OK)
@@ -1215,9 +1223,9 @@ static int lsm_scan_from(void *ctx, const uint8_t *prefix, uint32_t plen,
 
     if (!l || !cb || (plen > 0 && !prefix) || (slen > 0 && !start))
         return EFS_ERR_INVAL;
-    pthread_mutex_lock(&l->mu);
+    int shared = lsm_rlock(l);
     rc = merge_scan(l, 0, prefix, plen, start, slen, cb, user, NULL);
-    pthread_mutex_unlock(&l->mu);
+    lsm_runlock(l, shared);
     return rc;
 }
 
@@ -1260,6 +1268,8 @@ static void lsm_destroy(void *ctx)
     pthread_cond_destroy(&l->cv);
     pthread_mutex_destroy(&l->mu);
     pthread_rwlock_destroy(&l->writers);
+    pthread_rwlock_destroy(&l->view_rw);
+    pthread_mutex_destroy(&l->cand_mu);
     free(l);
 }
 
@@ -1352,6 +1362,24 @@ struct efs_kv *efs_kv_lsm_open(const char *dir, const struct efs_kv_lsm_cfg *cfg
         pthread_mutex_destroy(&l->mu);
         free(kv); free(l); return NULL;
     }
+    {
+        pthread_rwlockattr_t ra;
+        pthread_rwlockattr_init(&ra);
+#ifdef __GLIBC__
+        /* Raft apply must not starve behind a stream of metadata reads. */
+        pthread_rwlockattr_setkind_np(&ra, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
+#endif
+        if (pthread_rwlock_init(&l->view_rw, &ra) != 0 ||
+            pthread_mutex_init(&l->cand_mu, NULL) != 0) {
+            pthread_rwlockattr_destroy(&ra);
+            pthread_rwlock_destroy(&l->writers);
+            pthread_cond_destroy(&l->compact_cv);
+            pthread_cond_destroy(&l->cv);
+            pthread_mutex_destroy(&l->mu);
+            free(kv); free(l); return NULL;
+        }
+        pthread_rwlockattr_destroy(&ra);
+    }
     if (manifest_load(l) != EFS_OK) {
         lsm_destroy(l);
         free(kv);
@@ -1394,7 +1422,7 @@ static int lsm_flush(struct efs_kv *kv, int wait)
     if (!kv || !kv->ctx)
         return EFS_ERR_INVAL;
     l = kv->ctx;
-    pthread_mutex_lock(&l->mu);
+    lsm_lock(l);
     /* A flush emits at most one L0 file per key[0]. Counting those runs
      * walks the memtable. The raft pump calls this on every snapshot
      * open; refuse before the walk when a full memtable cannot fit. */
@@ -1403,7 +1431,7 @@ static int lsm_flush(struct efs_kv *kv, int wait)
             l->compact_req = 1;
             pthread_cond_signal(&l->compact_cv);
         }
-        pthread_mutex_unlock(&l->mu);
+        lsm_unlock(l);
         return EFS_ERR_BUSY;
     }
     /* Snapshot flush only needs the memtable durable. Compaction is the
@@ -1414,18 +1442,18 @@ static int lsm_flush(struct efs_kv *kv, int wait)
             if (!l->compact_started) {
                 rc = kv_compact_locked(l, 0);
                 if (rc != EFS_OK) {
-                    pthread_mutex_unlock(&l->mu);
+                    lsm_unlock(l);
                     return rc;
                 }
                 break;
             }
             l->compact_req = 1;
             pthread_cond_signal(&l->compact_cv);
-            pthread_cond_wait(&l->cv, &l->mu);
+            lsm_cond_wait(l, &l->cv);
         }
     }
     if (l->io_failed) {
-        pthread_mutex_unlock(&l->mu);
+        lsm_unlock(l);
         return EFS_ERR_IO;
     }
     rc = kv_flush_locked(l);
@@ -1437,7 +1465,7 @@ static int lsm_flush(struct efs_kv *kv, int wait)
             pthread_cond_signal(&l->compact_cv);
         }
     }
-    pthread_mutex_unlock(&l->mu);
+    lsm_unlock(l);
     return rc;
 }
 
@@ -1456,9 +1484,9 @@ int efs_kv_lsm_scan_work(struct efs_kv *kv,const uint8_t *prefix,uint32_t plen,
         return efs_kv_scan_from(kv,prefix,plen,start,slen,cb,user);
     struct scan_work_bound bound={.max_keys=max_keys};
     struct kv_lsm *l=kv->ctx;
-    pthread_mutex_lock(&l->mu);
+    int shared=lsm_rlock(l);
     int rc=merge_scan(l,0,prefix,plen,start,slen,cb,user,&bound);
-    pthread_mutex_unlock(&l->mu);
+    lsm_runlock(l,shared);
     if (rc==1 && bound.consumed==max_keys && bound.last_len) {
         memcpy(resume,bound.last,bound.last_len);*resume_len=bound.last_len;
     }
@@ -1483,14 +1511,14 @@ int efs_kv_lsm_compact(struct efs_kv *kv)
     if (!kv || !kv->ctx)
         return EFS_ERR_INVAL;
     l = kv->ctx;
-    pthread_mutex_lock(&l->mu);
+    lsm_lock(l);
     while (l->compact_busy)
-        pthread_cond_wait(&l->cv, &l->mu);
+        lsm_cond_wait(l, &l->cv);
     l->compact_busy = 1;
     rc = kv_compact_locked(l, 0);
     l->compact_busy = 0;
     pthread_cond_broadcast(&l->cv);
-    pthread_mutex_unlock(&l->mu);
+    lsm_unlock(l);
     return rc;
 }
 
@@ -1502,9 +1530,9 @@ int efs_kv_lsm_l0_hot(struct efs_kv *kv)
     if (!kv || !kv->ctx)
         return 0;
     l = kv->ctx;
-    pthread_mutex_lock(&l->mu);
+    lsm_lock(l);
     hot = kv_l0_bytes(l) >= KV_LSM_L0_BYTES;
-    pthread_mutex_unlock(&l->mu);
+    lsm_unlock(l);
     return hot;
 }
 
@@ -1515,12 +1543,12 @@ int efs_kv_lsm_seg_count(struct efs_kv *kv, uint32_t *l0, uint32_t *l1)
     if (!kv || !kv->ctx)
         return EFS_ERR_INVAL;
     l = kv->ctx;
-    pthread_mutex_lock(&l->mu);
+    lsm_lock(l);
     if (l0)
         *l0 = l->n_l0;
     if (l1)
         *l1 = l->n_l1;
-    pthread_mutex_unlock(&l->mu);
+    lsm_unlock(l);
     return EFS_OK;
 }
 
@@ -1533,12 +1561,12 @@ int efs_kv_lsm_stats(struct efs_kv *kv, struct efs_kv_lsm_stats *out)
     l = kv->ctx;
     if (l->magic != KV_LSM_MAGIC)
         return EFS_ERR_INVAL;
-    pthread_mutex_lock(&l->mu);
+    lsm_lock(l);
     out->mt_bytes = kv_memtable_bytes(l);
     out->l0_bytes = kv_l0_bytes(l);
     out->n_l0 = l->n_l0;
     out->n_l1 = l->n_l1;
-    pthread_mutex_unlock(&l->mu);
+    lsm_unlock(l);
     return EFS_OK;
 }
 
@@ -1551,13 +1579,13 @@ int efs_kv_lsm_require_reader(struct efs_kv *kv,uint32_t required)
      * barrier is deliberately durable even when its later KV batch aborts. */
     int owned=apply_scope.owner==l;
     if(!owned)pthread_rwlock_wrlock(&l->writers);
-    pthread_mutex_lock(&l->mu);
+    lsm_lock(l);
     if((l->durable_reader & required)==required) {
-        pthread_mutex_unlock(&l->mu);
+        lsm_unlock(l);
         if(!owned)pthread_rwlock_unlock(&l->writers);
         return EFS_OK;
     }
-    while(l->compact_busy)pthread_cond_wait(&l->cv,&l->mu);
+    while(l->compact_busy)lsm_cond_wait(l, &l->cv);
     l->required_reader|=required;
     /* Never roll back in-memory requirements on failure: rename may already
      * have succeeded. Retrying must re-establish, not infer, durability. */
@@ -1571,7 +1599,7 @@ int efs_kv_lsm_require_reader(struct efs_kv *kv,uint32_t required)
         }
     }
     if(!rc)l->durable_reader=l->required_reader;
-    pthread_mutex_unlock(&l->mu);
+    lsm_unlock(l);
     if(!owned)pthread_rwlock_unlock(&l->writers);
     return rc;
 }
@@ -1587,7 +1615,7 @@ int efs_kv_lsm_pressure(struct efs_kv *kv, struct efs_kv_lsm_pressure *out)
     if (l->magic != KV_LSM_MAGIC)
         return EFS_ERR_INVAL;
     memset(&p, 0, sizeof(p));
-    pthread_mutex_lock(&l->mu);
+    lsm_lock(l);
     p.shape.mt_bytes = kv_memtable_bytes(l);
     p.shape.l0_bytes = kv_l0_bytes(l);
     p.shape.n_l0 = l->n_l0;
@@ -1599,7 +1627,7 @@ int efs_kv_lsm_pressure(struct efs_kv *kv, struct efs_kv_lsm_pressure *out)
     p.hard = p.io_failed || p.shape.l0_bytes >= p.l0_hard_bytes ||
              p.shape.mt_bytes >= 2 * p.memtable_target;
     p.soft = p.hard || p.shape.l0_bytes >= p.l0_soft_bytes;
-    pthread_mutex_unlock(&l->mu);
+    lsm_unlock(l);
     *out = p;
     return EFS_OK;
 }
@@ -1645,10 +1673,10 @@ int efs_kv_lsm_defer_held_flush(struct efs_kv *kv,int enabled)
     if(!kv || kv->ops!=&lsm_ops || !kv->ctx)return EFS_ERR_INVAL;
     struct kv_lsm *l=kv->ctx;
     if(l->magic!=KV_LSM_MAGIC)return EFS_ERR_INVAL;
-    pthread_mutex_lock(&l->mu);
+    lsm_lock(l);
     int rc=l->flush_holds?EFS_ERR_BUSY:EFS_OK;
     if(!rc)__atomic_store_n(&l->defer_held_flush,!!enabled,__ATOMIC_RELEASE);
-    pthread_mutex_unlock(&l->mu);
+    lsm_unlock(l);
     return rc;
 }
 
@@ -1664,9 +1692,9 @@ int efs_kv_lsm_sync_hold(struct efs_kv *kv)
     int rc=kv_wal_hold(l->wal,1);
     if(!__atomic_load_n(&l->defer_held_flush,__ATOMIC_ACQUIRE))return rc;
     if(rc==EFS_OK) {
-        pthread_mutex_lock(&l->mu);
+        lsm_lock(l);
         if(l->defer_held_flush)l->flush_holds++;
-        pthread_mutex_unlock(&l->mu);
+        lsm_unlock(l);
     }
     return rc;
 }
@@ -1682,7 +1710,7 @@ int efs_kv_lsm_sync_release(struct efs_kv *kv)
         return EFS_OK;
     int rc=kv_wal_hold(l->wal,0);
     if(!__atomic_load_n(&l->defer_held_flush,__ATOMIC_ACQUIRE))return rc;
-    pthread_mutex_lock(&l->mu);
+    lsm_lock(l);
     if(l->defer_held_flush && l->flush_holds) {
         l->flush_holds--;
         if(rc!=EFS_OK)l->io_failed=1;
@@ -1691,7 +1719,7 @@ int efs_kv_lsm_sync_release(struct efs_kv *kv)
             if(rc!=EFS_OK)l->io_failed=1;
         }
     }
-    pthread_mutex_unlock(&l->mu);
+    lsm_unlock(l);
     return rc;
 }
 
@@ -1739,11 +1767,11 @@ int efs_kv_lsm_view_pin(struct efs_kv *kv, struct efs_kv_lsm_view **out)
     v = calloc(1, sizeof(*v));
     if (!v)
         return EFS_ERR_NOMEM;
-    pthread_mutex_lock(&l->mu);
+    lsm_lock(l);
     v->seg = calloc(l->n_l0 + l->n_l1 ? l->n_l0 + l->n_l1 : 1,
                     sizeof(*v->seg));
     if (!v->seg) {
-        pthread_mutex_unlock(&l->mu);
+        lsm_unlock(l);
         free(v);
         return EFS_ERR_NOMEM;
     }
@@ -1757,7 +1785,7 @@ int efs_kv_lsm_view_pin(struct efs_kv *kv, struct efs_kv_lsm_view **out)
         kv_seg_pin(v->seg[v->n]);
         v->n++;
     }
-    pthread_mutex_unlock(&l->mu);
+    lsm_unlock(l);
     *out = v;
     return EFS_OK;
 }
@@ -1852,7 +1880,7 @@ int efs_kv_lsm_snapshot_pin(struct efs_kv *kv, uint64_t mt_limit,
     if(mt_limit<sizeof(*s))return EFS_ERR_BUSY;
     s=calloc(1,sizeof(*s));
     if (!s) return EFS_ERR_NOMEM;
-    pthread_mutex_lock(&l->mu);
+    lsm_lock(l);
     if (l->io_failed) { rc=EFS_ERR_IO; goto unlock; }
     /* The copied source includes segment metadata, not just live values.
      * Refuse before allocating/pinning if its complete retained footprint
@@ -1895,7 +1923,7 @@ int efs_kv_lsm_snapshot_pin(struct efs_kv *kv, uint64_t mt_limit,
         if (rc!=EFS_OK) break;
     }
 unlock:
-    pthread_mutex_unlock(&l->mu);
+    lsm_unlock(l);
     if (rc!=EFS_OK) { efs_kv_lsm_snapshot_release(s); return rc; }
     *out=s;
     return EFS_OK;
@@ -1905,9 +1933,9 @@ void efs_kv_lsm_query_tracking(struct efs_kv *kv,int enabled)
 {
     if (!kv || kv->ops!=&lsm_ops || !kv->ctx) return;
     struct kv_lsm *l=kv->ctx;
-    pthread_mutex_lock(&l->mu);
+    lsm_lock(l);
     l->query_tracking=enabled!=0;
-    pthread_mutex_unlock(&l->mu);
+    lsm_unlock(l);
 }
 
 int efs_kv_lsm_metadata_revisions(struct efs_kv *kv, uint64_t *out, uint32_t n)
@@ -1915,11 +1943,11 @@ int efs_kv_lsm_metadata_revisions(struct efs_kv *kv, uint64_t *out, uint32_t n)
     if (!kv || kv->ops!=&lsm_ops || !kv->ctx || !out || n<4096)
         return EFS_ERR_INVAL;
     struct kv_lsm *l=kv->ctx;
-    pthread_mutex_lock(&l->mu);
+    lsm_lock(l);
     int rc=l->io_failed ? EFS_ERR_IO : EFS_OK;
     for(unsigned i=0;i<4096 && !rc;i++)if(l->metadata_revision[i]==UINT64_MAX)rc=EFS_ERR_OVERFLOW;
     if (rc==EFS_OK) memcpy(out,l->metadata_revision,sizeof(l->metadata_revision));
-    pthread_mutex_unlock(&l->mu);
+    lsm_unlock(l);
     return rc;
 }
 int efs_kv_lsm_snapshot_revisions(struct efs_kv_lsm_snapshot *s,
@@ -1944,19 +1972,19 @@ int efs_kv_lsm_transaction_revision(struct efs_kv *kv,uint64_t *out)
 {
     if (!kv || kv->ops!=&lsm_ops || !kv->ctx || !out) return EFS_ERR_INVAL;
     struct kv_lsm *l=kv->ctx;
-    pthread_mutex_lock(&l->mu);
+    lsm_lock(l);
     int rc=l->io_failed ? EFS_ERR_IO : l->transaction_revision==UINT64_MAX ? EFS_ERR_BUSY : EFS_OK;
     *out=l->transaction_revision;
-    pthread_mutex_unlock(&l->mu);
+    lsm_unlock(l);
     return rc;
 }
 int efs_kv_lsm_transaction_activity(struct efs_kv *kv,uint64_t out[8])
 {
     if(!kv || kv->ops!=&lsm_ops || !kv->ctx || !out)return EFS_ERR_INVAL;
-    struct kv_lsm *l=kv->ctx;pthread_mutex_lock(&l->mu);
+    struct kv_lsm *l=kv->ctx;lsm_lock(l);
     int rc=l->io_failed?EFS_ERR_IO:EFS_OK;
     memcpy(out,l->transaction_activity,sizeof(l->transaction_activity));
-    pthread_mutex_unlock(&l->mu);return rc;
+    lsm_unlock(l);return rc;
 }
 int efs_kv_lsm_snapshot_transaction_activity(struct efs_kv_lsm_snapshot *s,uint64_t out[8])
 {
@@ -2394,19 +2422,19 @@ int efs_kv_lsm_quiesce(struct efs_kv *kv)
     if (!kv || kv->ops != &lsm_ops || !kv->ctx)
         return EFS_ERR_INVAL;
     l = kv->ctx;
-    pthread_mutex_lock(&l->mu);
+    lsm_lock(l);
     l0max = l->cfg.l0_max ? l->cfg.l0_max : KV_LSM_L0_DEFAULT;
     while (!l->io_failed && (l->compact_busy || l->n_l0 >= l0max)) {
         if (!l->compact_started) {
             int rc = kv_compact_locked(l, 0);
 
-            pthread_mutex_unlock(&l->mu);
+            lsm_unlock(l);
             return rc;
         }
         l->compact_req = 1;
         pthread_cond_signal(&l->compact_cv);
-        pthread_cond_wait(&l->cv, &l->mu);
+        lsm_cond_wait(l, &l->cv);
     }
-    pthread_mutex_unlock(&l->mu);
+    lsm_unlock(l);
     return l->io_failed ? EFS_ERR_IO : EFS_OK;
 }

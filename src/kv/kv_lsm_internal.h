@@ -2,6 +2,8 @@
 #define EFS_KV_LSM_INTERNAL_H
 
 #include "efs/checksum.h"
+#include <time.h>
+#include <stdlib.h>
 #include "efs/kv.h"
 #include "efs/kv_lsm.h"
 #include <pthread.h>
@@ -234,6 +236,11 @@ struct kv_lsm {
     uint32_t durable_reader; /* barriers proven in this process, never inferred */
     pthread_mutex_t mu;
     pthread_rwlock_t writers; /* ordinary batches share; staged apply excludes */
+    /* Readers (point gets, scans) share view_rw. Every mu holder also owns
+     * it exclusively, taken after mu on the thread's first (outermost) mu
+     * acquisition; see lsm_lock. */
+    pthread_rwlock_t view_rw;
+    pthread_mutex_t cand_mu; /* lazy candidate-index build by readers */
     pthread_cond_t cv;
     /* Compaction runs on compact_thr so a full-L1 rewrite never holds mu
      * (and therefore never holds the raft apply lock). compact_cv wakes
@@ -264,8 +271,92 @@ struct kv_lsm {
  * failed MANIFEST publication. Readers dropping mu must retry that view. */
 static inline void kv_candidates_changed(struct kv_lsm *l)
 {
-    l->candidate_valid = 0;
+    __atomic_store_n(&l->candidate_valid, 0, __ATOMIC_RELEASE);
     l->segment_revision++;
+}
+
+/* Concurrent metadata reads. l->mu (recursive) serialises writers and
+ * structure changes as before; view_rw lets point gets and scans run in
+ * parallel. A writer owns view_rw exclusively from its outermost mu
+ * acquisition to its last release, so everything a reader touches is
+ * stable while readers hold it shared. A thread that already owns the
+ * writer side (recursive callers, apply) reads without the shared lock.
+ * Order: mu, then view_rw; readers never take mu. Oct 16 Intel profile:
+ * ~43 metadata threads queued on mu on the leader. */
+struct lsm_owner { const struct kv_lsm *l; unsigned depth; };
+#define LSM_OWNER_SLOTS 4
+extern __thread struct lsm_owner lsm_owned[LSM_OWNER_SLOTS];
+
+static inline struct lsm_owner *lsm_owner_slot(const struct kv_lsm *l, int add)
+{
+    struct lsm_owner *free_slot = NULL;
+    for (unsigned i = 0; i < LSM_OWNER_SLOTS; i++) {
+        if (lsm_owned[i].l == l && lsm_owned[i].depth)
+            return &lsm_owned[i];
+        if (!lsm_owned[i].depth && !free_slot)
+            free_slot = &lsm_owned[i];
+    }
+    if (add && free_slot) {
+        free_slot->l = l;
+        return free_slot;
+    }
+    return NULL;
+}
+
+static inline int lsm_writer_owned(const struct kv_lsm *l)
+{
+    return lsm_owner_slot(l, 0) != NULL;
+}
+
+static inline void lsm_lock(struct kv_lsm *l)
+{
+    pthread_mutex_lock(&l->mu);
+    struct lsm_owner *o = lsm_owner_slot(l, 1);
+    if (!o) abort(); /* more than LSM_OWNER_SLOTS LSMs held by one thread */
+    if (o->depth++ == 0)
+        pthread_rwlock_wrlock(&l->view_rw);
+}
+
+static inline void lsm_unlock(struct kv_lsm *l)
+{
+    struct lsm_owner *o = lsm_owner_slot(l, 0);
+    if (o && --o->depth == 0) {
+        pthread_rwlock_unlock(&l->view_rw);
+        o->l = NULL;
+    }
+    pthread_mutex_unlock(&l->mu);
+}
+
+/* Callers wait at depth 1 (a recursive mutex releases one level). */
+static inline void lsm_cond_wait(struct kv_lsm *l, pthread_cond_t *cv)
+{
+    pthread_rwlock_unlock(&l->view_rw);
+    pthread_cond_wait(cv, &l->mu);
+    pthread_rwlock_wrlock(&l->view_rw);
+}
+
+static inline int lsm_cond_timedwait(struct kv_lsm *l, pthread_cond_t *cv,
+                                     const struct timespec *ts)
+{
+    pthread_rwlock_unlock(&l->view_rw);
+    int rc = pthread_cond_timedwait(cv, &l->mu, ts);
+    pthread_rwlock_wrlock(&l->view_rw);
+    return rc;
+}
+
+/* Returns 1 when the shared lock was taken (release with lsm_runlock). */
+static inline int lsm_rlock(struct kv_lsm *l)
+{
+    if (lsm_writer_owned(l))
+        return 0;
+    pthread_rwlock_rdlock(&l->view_rw);
+    return 1;
+}
+
+static inline void lsm_runlock(struct kv_lsm *l, int taken)
+{
+    if (taken)
+        pthread_rwlock_unlock(&l->view_rw);
 }
 
 /* One merge input: the memtable when it holds no iterator, else a segment.

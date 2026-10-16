@@ -229,9 +229,9 @@ static uint64_t take_seq(struct kv_lsm *l)
     uint64_t s;
 
     /* Recursive mutex: a synchronous compact already holds l->mu. */
-    pthread_mutex_lock(&l->mu);
+    lsm_lock(l);
     s = l->next_seq++;
-    pthread_mutex_unlock(&l->mu);
+    lsm_unlock(l);
     return s;
 }
 
@@ -554,7 +554,7 @@ int kv_compact_locked(struct kv_lsm *l, int async)
     fprintf(stderr, "kv-compact: start l0=%u inputs=%u range=%d l0only=%d\n",
             n_l0_in, n_drop, wide ? -1 : chosen, l0_only);
     if (async) {
-        pthread_mutex_unlock(&l->mu);
+        lsm_unlock(l);
         held = 0;
     }
     for (i = 0; i < n_drop; i++) {
@@ -640,7 +640,7 @@ int kv_compact_locked(struct kv_lsm *l, int async)
         seg_slot_set(&c.out[i], c.out[i].seg);
     }
     if (!held) {
-        pthread_mutex_lock(&l->mu);
+        lsm_lock(l);
         held = 1;
     }
     for (i = 0; i < n_drop; i++) {
@@ -820,7 +820,7 @@ out:
         }
     }
     if (!held)
-        pthread_mutex_lock(&l->mu);
+        lsm_lock(l);
     fprintf(stderr, "kv-compact: end bytes=%llu ms=%llu rc=%d\n",
             (unsigned long long)c.bytes, (unsigned long long)(mono_ms() - t0),
             rc);
@@ -925,9 +925,9 @@ static void *compactor_main(void *arg)
                 fault_parked = 1;
             }
             usleep(100 * 1000);
-            pthread_mutex_lock(&l->mu);
+            lsm_lock(l);
             stop = l->compact_stop;
-            pthread_mutex_unlock(&l->mu);
+            lsm_unlock(l);
             if (stop)
                 break;
         }
@@ -936,7 +936,7 @@ static void *compactor_main(void *arg)
             fault_parked = 0;
         }
 #endif
-        pthread_mutex_lock(&l->mu);
+        lsm_lock(l);
         l0max = l->cfg.l0_max ? l->cfg.l0_max : KV_LSM_L0_DEFAULT;
         while (!l->compact_stop && !l->compact_req && l->n_l0 < l0max) {
 #if EFS_FAULTS
@@ -952,35 +952,35 @@ static void *compactor_main(void *arg)
                     ts.tv_sec++;
                     ts.tv_nsec -= 1000000000;
                 }
-                pthread_cond_timedwait(&l->compact_cv, &l->mu, &ts);
+                lsm_cond_timedwait(l, &l->compact_cv, &ts);
                 if (access(fault_compact_file(), F_OK) == 0)
                     break;
                 continue;
             }
 #endif
-            pthread_cond_wait(&l->compact_cv, &l->mu);
+            lsm_cond_wait(l, &l->compact_cv);
         }
 #if EFS_FAULTS
         if (fault_stall && !l->compact_stop &&
             access(fault_compact_file(), F_OK) == 0) {
-            pthread_mutex_unlock(&l->mu);
+            lsm_unlock(l);
             continue;
         }
 #endif
         if (l->compact_stop) {
-            pthread_mutex_unlock(&l->mu);
+            lsm_unlock(l);
             break;
         }
         l->compact_req = 0;
         if (l->n_l0 == 0 || l->io_failed) {
             pthread_cond_broadcast(&l->cv);
-            pthread_mutex_unlock(&l->mu);
+            lsm_unlock(l);
             continue;
         }
         while (l->compact_busy && !l->compact_stop)
-            pthread_cond_wait(&l->cv, &l->mu);
+            lsm_cond_wait(l, &l->cv);
         if (l->compact_stop) {
-            pthread_mutex_unlock(&l->mu);
+            lsm_unlock(l);
             break;
         }
         l->compact_busy = 1;
@@ -997,8 +997,8 @@ static void *compactor_main(void *arg)
         pthread_cond_broadcast(&l->cv);
         /* A failed merge must not spin. The next flush or quiesce kicks. */
         if (rc != EFS_OK && !l->compact_stop && !l->compact_req)
-            pthread_cond_wait(&l->compact_cv, &l->mu);
-        pthread_mutex_unlock(&l->mu);
+            lsm_cond_wait(l, &l->compact_cv);
+        lsm_unlock(l);
     }
     return NULL;
 }
@@ -1016,11 +1016,11 @@ void kv_compactor_stop(struct kv_lsm *l)
 {
     if (!l || !l->compact_started)
         return;
-    pthread_mutex_lock(&l->mu);
+    lsm_lock(l);
     l->compact_stop = 1;
     pthread_cond_signal(&l->compact_cv);
     pthread_cond_broadcast(&l->cv);
-    pthread_mutex_unlock(&l->mu);
+    lsm_unlock(l);
     pthread_join(l->compact_thr, NULL);
     l->compact_started = 0;
 }

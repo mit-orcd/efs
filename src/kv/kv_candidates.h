@@ -1,5 +1,5 @@
 /* Live LSM candidate selection. No disk-format change; unknown bounds and
- * allocation refusal retain the full search. All calls hold l->mu. */
+ * allocation refusal retain the full search. Calls hold l->mu or view_rw. */
 #ifndef EFS_KV_CANDIDATES_H
 #define EFS_KV_CANDIDATES_H
 
@@ -13,13 +13,22 @@ static void kv_candidates_prepare(struct kv_lsm *l)
 {
     uint64_t n = (uint64_t)l->n_l0 + l->n_l1;
     uint64_t words = (n + 63) / 64;
-    if (l->candidate_valid || !words)
+    if (__atomic_load_n(&l->candidate_valid, __ATOMIC_ACQUIRE) || !words)
         return;
     if (words > KV_CANDIDATE_BYTES_MAX / (KV_RANGE_N * sizeof(uint64_t)))
         return;
-    uint64_t *bits = realloc(l->candidate_bits, (size_t)words * KV_RANGE_N * sizeof(*bits));
-    if (!bits)
+    /* Shared readers may race to build; the segment arrays cannot change
+     * under them (writers hold view_rw exclusively), so one builds. */
+    pthread_mutex_lock(&l->cand_mu);
+    if (__atomic_load_n(&l->candidate_valid, __ATOMIC_ACQUIRE)) {
+        pthread_mutex_unlock(&l->cand_mu);
         return;
+    }
+    uint64_t *bits = realloc(l->candidate_bits, (size_t)words * KV_RANGE_N * sizeof(*bits));
+    if (!bits) {
+        pthread_mutex_unlock(&l->cand_mu);
+        return;
+    }
     l->candidate_bits = bits;
     l->candidate_words = (uint32_t)words;
     memset(bits, 0, (size_t)words * KV_RANGE_N * sizeof(*bits));
@@ -33,7 +42,8 @@ static void kv_candidates_prepare(struct kv_lsm *l)
         for (int r = lo; r <= hi; r++)
             bits[(size_t)r * words + i/64] |= UINT64_C(1) << (i%64);
     }
-    l->candidate_valid = 1;
+    __atomic_store_n(&l->candidate_valid, 1, __ATOMIC_RELEASE);
+    pthread_mutex_unlock(&l->cand_mu);
 }
 
 /* L1 is sorted and disjoint. First keys are immutable resident block-index
@@ -51,7 +61,7 @@ static void kv_candidates_init(struct kv_lsm *l, struct kv_candidates *c,
     c->range = lo;
     if (!private_read && lo == hi) {
         kv_candidates_prepare(l);
-        c->indexed = l->candidate_valid;
+        c->indexed = __atomic_load_n(&l->candidate_valid, __ATOMIC_ACQUIRE);
     }
     if (private_read || !slen || !l->n_l1)
         return;
