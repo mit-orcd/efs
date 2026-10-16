@@ -234,7 +234,8 @@ Raw captures stay outside Git:
   `50d7b4676e665d63`, `100a72189d3e82de`).
 
 The writer directories `tiny-files-prof-*` (about 1.4 million files in all)
-remain on the orcd-mini mount until the user decides to delete them.
+were deleted from the orcd-mini mount at the user's request (done 22:38Z).
+The user's own data was not touched.
 
 ## Limitations and remaining gates
 
