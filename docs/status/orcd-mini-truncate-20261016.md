@@ -15,7 +15,7 @@ deployed on orcd-mini.
    refusals were answered OK and left the old size.
 
 Linked item: user-reported bug (dd truncate EIO on orcd-mini); follows the
-[orcd-mini deployment](../../../cluster/ORCD.md) of `fa29f9277`.
+orcd-mini deployment of `fa29f9277` (cluster repo `ORCD.md`).
 
 ## Cause and change
 
