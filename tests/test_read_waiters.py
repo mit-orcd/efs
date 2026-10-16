@@ -19,14 +19,14 @@ code = r'''
 #define V_LOAD(x) (x)
 ''' + structure('host_view') + section('struct host_read_floor {', 'struct host_waiter {') + structure('host_waiter') + r'''
 struct host_group {int v_has; uint64_t v_stamp,v_applied;};
-struct efs_raft_host {pthread_mutex_t cv_mu;struct host_waiter waiters[HOST_WAITERS];
+struct efs_raft_host {pthread_mutex_t cv_mu;struct host_waiter waiters[HOST_WAITERS];uint64_t waiter_active[HOST_WAITERS/64];
  struct host_group g[HOST_NGROUPS];struct host_view view,other_view;uint32_t waiter_hint;int cv_overflow;pthread_cond_t applied_cv;};
 static struct host_group *group_slot(struct efs_raft_host *h,uint8_t group){return group==0?&h->g[0]:group==2?&h->g[1]:NULL;}
 static unsigned view_calls;
 static void host_view_get(struct efs_raft_host *h,uint8_t group,struct host_view *v){view_calls++;*v=group? h->other_view:h->view;}
 static unsigned signals,broadcasts;
 static struct efs_raft_host *registration;
-static int wait_mock(pthread_cond_t *cv,pthread_mutex_t *mu,const struct timespec *end){(void)end;assert(mu==&registration->cv_mu && cv==&registration->waiters[0].cv);struct host_waiter *w=&registration->waiters[0];assert(w->active && !w->notified && w->any==2 && w->idx==50 && w->round==11 && w->term==9 && w->proof_only);return 0;}
+static int wait_mock(pthread_cond_t *cv,pthread_mutex_t *mu,const struct timespec *end){(void)end;assert(mu==&registration->cv_mu && cv==&registration->waiters[0].cv);struct host_waiter *w=&registration->waiters[0];assert(registration->waiter_active[0]==1);assert(w->active && !w->notified && w->any==2 && w->idx==50 && w->round==11 && w->term==9 && w->proof_only);return 0;}
 #define pthread_cond_timedwait wait_mock
 static int signal_mock(pthread_cond_t *cv){(void)cv;signals++;return 0;}
 static int broadcast_mock(pthread_cond_t *cv){(void)cv;broadcasts++;return 0;}
@@ -34,6 +34,7 @@ static int broadcast_mock(pthread_cond_t *cv){(void)cv;broadcasts++;return 0;}
 #define pthread_cond_broadcast broadcast_mock
 ''' + section('static int host_view_covers(', '/* Sleep until') + section('static void host_waiter_sleep(', '/* Pump side:') + section('static void host_waiters_wake(', 'static int host_hosts(') + r'''
 static void reset(struct efs_raft_host *h){
+ h->waiter_active[0]=1;
  h->waiters[0]=(struct host_waiter){.active=1,.any=2,.idx=50,.round=11,.term=9};
  h->view=(struct host_view){.has=1,.role=2,.term=9,.read_pending=1,.read_round=10,.applied=50,.commit=50};
  signals=0;view_calls=0;
@@ -97,6 +98,7 @@ int main(void){
  /* Cache one coherent view per group instead of 512 separate snapshots. */
  reset(&h);h.cv_overflow=0;
  for(unsigned i=0;i<HOST_WAITERS;i++)h.waiters[i]=h.waiters[0];
+ for(unsigned i=0;i<HOST_WAITERS/64;i++)h.waiter_active[i]=UINT64_MAX;
  for(unsigned i=0;i<1000;i++){h.view.commit++;h.g[0].v_stamp++;host_waiters_wake(&h);}
  assert(!signals && view_calls==1000);
  h.view.proven_done=1;h.view.proven_round=11;h.view.proven_index=50;
@@ -109,10 +111,21 @@ int main(void){
  assert(signals==HOST_WAITERS+1 && view_calls==before+2 && !h.waiters[1].notified);
  /* Reused notified slots must reset registration before entering wait. */
  for(unsigned i=0;i<HOST_WAITERS;i++)h.waiters[i].active=0;
+ for(unsigned i=0;i<HOST_WAITERS/64;i++)h.waiter_active[i]=0;
  h.waiter_hint=0;h.waiters[0].notified=1;registration=&h;
  struct timespec end={0};pthread_mutex_lock(&h.cv_mu);
  host_waiter_sleep(&h,0,2,50,0,&end,11,9,1,NULL);
- pthread_mutex_unlock(&h.cv_mu);assert(!h.waiters[0].active && !h.waiters[0].notified);
+ pthread_mutex_unlock(&h.cv_mu);assert(!h.waiter_active[0]);assert(!h.waiters[0].active && !h.waiters[0].notified);
+ /* Sparse high slots and empty words must not lose wakeups. */
+ for(unsigned i=0;i<HOST_WAITERS/64;i++)h.waiter_active[i]=0;
+ for(unsigned i=0;i<HOST_WAITERS;i++)h.waiters[i].active=0;
+ unsigned slots[]={63,64,255,511}; signals=0;
+ for(unsigned i=0;i<4;i++){
+  unsigned k=slots[i];h.waiters[k]=(struct host_waiter){.active=1,.any=0,.idx=60};
+  h.waiter_active[k/64]|=UINT64_C(1)<<(k%64);
+ }
+ h.g[0].v_applied=60;host_waiters_wake(&h);assert(signals==4);
+ host_waiters_wake(&h);assert(signals==4);
  puts("read waiters: fresh proof, pending apply, old round, invalidation and single signal PASS");
 }
 '''

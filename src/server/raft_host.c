@@ -470,6 +470,7 @@ struct efs_raft_host {
      * signals only the slots whose predicate the fresh view satisfies.
      * applied_cv stays as the overflow path when every slot is taken. */
     struct host_waiter waiters[HOST_WAITERS];
+    uint64_t waiter_active[HOST_WAITERS / 64]; /* cv_mu: occupied slots */
     uint32_t waiter_hint;
     uint32_t cv_overflow; /* waiters sleeping on applied_cv (under cv_mu) */
     /* Per-peer send outboxes. host_send runs under h->mu (pump ticks and
@@ -3673,8 +3674,11 @@ static void host_waiter_sleep(struct efs_raft_host *h, uint8_t group, int any,
     w->floor = floor ? *floor : (struct host_read_floor){0};
     w->notified = 0;
     w->active = 1;
+    uint32_t slot = (uint32_t)(w - h->waiters);
+    h->waiter_active[slot / 64] |= UINT64_C(1) << (slot % 64);
     pthread_cond_timedwait(&w->cv, &h->cv_mu, end);
     w->active = 0;
+    h->waiter_active[slot / 64] &= ~(UINT64_C(1) << (slot % 64));
     if(floor)*floor=w->floor;
 }
 
@@ -3682,12 +3686,17 @@ static void host_waiter_sleep(struct efs_raft_host *h, uint8_t group, int any,
  * whose predicate that view satisfies, and only those. */
 static void host_waiters_wake(struct efs_raft_host *h)
 {
-    uint32_t k;
     struct host_view view[HOST_NGROUPS];
     uint8_t loaded = 0;
 
     pthread_mutex_lock(&h->cv_mu);
-    for (k = 0; k < HOST_WAITERS; k++) {
+    /* Registration/removal and this snapshot share cv_mu. Scan occupied
+     * slots only; notified readers still need their first proof captured. */
+    for (uint32_t word = 0; word < HOST_WAITERS / 64; word++) {
+      uint64_t active = h->waiter_active[word];
+      while (active) {
+        uint32_t k = word * 64 + (uint32_t)__builtin_ctzll(active);
+        active &= active - 1;
         struct host_waiter *w = &h->waiters[k];
         struct host_group *g;
         int wake;
@@ -3714,6 +3723,7 @@ static void host_waiters_wake(struct efs_raft_host *h)
             w->notified = 1;
             pthread_cond_signal(&w->cv);
         }
+    }
     }
     if (h->cv_overflow)
         pthread_cond_broadcast(&h->applied_cv);
