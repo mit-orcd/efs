@@ -325,3 +325,49 @@ ordering review:
   stays small in practice, and the reconciliation design itself, remain open.
 
 This is a candidate only. The counterexample gates above apply to it unchanged.
+
+### Review of reservation and interval candidate (2026-10-16)
+
+Reviewed `c8bec0041` against `src/server/store.c` (`put_sync_record_write`,
+`put_sync_barrier_locked`, `put_sync_note`). The reservation and exception set
+address the three earlier counterexamples in principle. This is design review,
+not implementation acceptance; runtime and crash qualification remain NOTRUN.
+Resolve these details before choosing option (B):
+
+1. **Retiring an interval must prevent reference resurrection.** Suppose lost
+   tag 101 is excluded, later `durable_hi` reaches 200, and reconciliation
+   removes all stored references to 101. Deleting its interval now makes 101
+   satisfy the predicate again. A delayed client publication or retry can
+   reintroduce it. Retirement therefore needs a durable admission rule that
+   rejects these obsolete references permanently, or must retain the exclusion.
+   A scan finding no current references is insufficient. Include retained file
+   versions, snapshots/readers, pending publications and replay paths in the
+   proof. Test a stale publication both before and after another restart.
+
+2. **Specify the two commit points explicitly.** Reservation commits only when
+   the coherent root record (identity, allocation ceiling, durability boundary
+   and complete exclusion set) has successfully reached stable storage. Startup
+   must issue strictly above the *previous* allocation ceiling, and only after
+   that new reservation commits. Durability commits only after the data barrier
+   succeeds and its corresponding proof record is durable; reserved capacity is
+   never proof of data persistence. Install the resulting state under the root
+   lock before admitting dependent acknowledgements. A failed/torn update must
+   neither authorize its new reservation nor advance its durability boundary.
+   Preserve the earlier two-slot recovery rules and per-file metadata commit
+   requirement before successful fsync. Failed barrier retries must keep the
+   enrolled object identities stable rather than allocate replacement tags.
+
+3. **Bound the representation without discarding evidence.** The current record
+   is fixed at 192 bytes and has no interval list. Specify interval coalescing,
+   capacity, overflow refusal and crash-safe checkpoint/retirement, including
+   repeated crashes before reconciliation completes. A clean restart must also
+   avoid reusing previously reserved tags. Reusing existing barrier writes may
+   amortize reservation I/O, but startup, reservation exhaustion and interval
+   storage/checkpoint costs still need measurement; no zero-extra-I/O or
+   no-slowdown result follows from this sketch.
+
+Add gates for a crash immediately before/after reservation persistence, after
+issuing the first reserved tag, and after data sync but before proof sync; then
+repeat each crash before recovery completes. Include full reservation/interval
+capacity and stale-reference retirement. Keep W123 PROPOSED until the ordering
+review and existing correctness/performance gates are satisfied.
