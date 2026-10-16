@@ -737,7 +737,8 @@ try:
         for script in ('efs_commands.py','efs_command_options.py'):
             run(['python3',source/'tests/live'/script,mount,peer_mount],timeout=180)
         created={p.name for p in mount.iterdir()}-before
-        assert created and all(n.startswith('efs-command-gates-') or n=='efs-options-gates' for n in created),created
+        # Gate fixtures use numeric PID or time_ns suffixes.
+        assert created and all(re.fullmatch(r'efs-(command|options)-gates-[0-9]+',n) for n in created),created
         for name in created:shutil.rmtree(mount/name)
         wait(drained,'enabled command trees GC drained',180)
         wait(lambda:totals(status())['data_usage_bytes']==0,'enabled command tree quota zero',180)

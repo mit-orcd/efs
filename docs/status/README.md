@@ -25,7 +25,7 @@ cold durability 189/189, 109,452 exact mixed cycles and 4,715 queries PASS.
 Faults 24/24 PASS; private GC passes on unchanged repeat after a peer-startup
 proof race. Remaining gates: Valgrind KV/query/daemon leaks and two instrumented
 deadlines. The .efs cleanup-wrapper name mismatch now has a focused PASS
-with the existing pending one-line correction, including physical cleanup.
+with the committed cleanup-name correction, including physical cleanup.
 Annotated RDMA unit rechecks PASS. Kernel W121 and automatic recovery W71
 remain open; this is not large-namespace/400-GiB acceptance.
 
