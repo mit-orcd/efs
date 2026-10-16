@@ -9,7 +9,7 @@ interpret a fork-isolated benchmark PASS as a W121 fix.
 
 Baseline source `fa29f9277eb604f7212bad164b283df85697c9a0`, four storage
 servers fcstor003–006 and seven FUSE clients fcstor007–013, native RDMA
-mlx5_2, files engine/direct I/O, `.efs` enabled; packing, containers, expiry
+mlx5_2/direct I/O, `.efs` enabled; expiry
 and repair experiment disabled. Fresh experiment stores had a 17 GiB quota
 per server. Client OS: RHEL 9.8, kernel `5.14.0-687.39.1.el9_8.x86_64`,
 Python 3.9.25, private libfuse 3.16.2. All EFS processes ran as erbmi1.

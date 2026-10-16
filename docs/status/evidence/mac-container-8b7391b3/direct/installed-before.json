@@ -1,6 +1,0 @@
-{
-  "192.168.2.11": "10553 /tmp/efs/efsd --node-id 1 --addr 192.168.2.11 --port 17432 --storage /data1/mac-container-8b7391b3/store --quota 2G --writers 2 --storage-engine containers --no-direct-io\n",
-  "192.168.2.12": "6487 /tmp/efs/efsd --node-id 2 --addr 192.168.2.12 --port 17432 --storage /data1/mac-container-8b7391b3/store --quota 2G --writers 2 --storage-engine containers --no-direct-io --join 192.168.2.11:17432\n",
-  "192.168.2.13": "6530 /tmp/efs/efsd --node-id 3 --addr 192.168.2.13 --port 17432 --storage /data1/mac-container-8b7391b3/store --quota 2G --writers 2 --storage-engine containers --no-direct-io --join 192.168.2.11:17432\n",
-  "192.168.2.14": "4721 /tmp/efs/efs-fuse 192.168.2.11:17432 fs /tmp/efsmac -o allow_other\n"
-}

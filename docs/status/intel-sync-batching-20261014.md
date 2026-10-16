@@ -6,8 +6,8 @@ These are three-trial before/after deployment measurements, not isolated
 code-only attribution or full filesystem acceptance.
 
 Follow-up to [AMD dd diagnosis](archive/intel-amd-dd-profile-20261014.md).
-Scope: ordinary files, TCP/direct-I/O, `.efs` client/server, packing,
-containers and expiry disabled. Full POSIX/concurrent/crash acceptance is not
+Scope: ordinary files, TCP/direct-I/O, `.efs` client/server and
+expiry disabled. Full POSIX/concurrent/crash acceptance is not
 claimed by this smoke/performance task.
 
 ## Implementation and durability boundary
@@ -25,8 +25,8 @@ Source `2256f1a34fc1006e3ecb9ab356a46a0341f0b605` on devel; build ID
   while its stack-owned waiter is linked. Fixed 64-bucket scheduling state,
   no per-request heap allocation and no cached successful durability outcome.
   Distinct inode identities sharing a hash bucket never share a barrier.
-- Only the initialized **files-engine** parent-sync path uses this grouping.
-  Unknown ancestry still gets its existing proof/barriers. Containers, GC
+- Only the initialized parent-sync path uses this grouping.
+  Unknown ancestry still gets its existing proof/barriers. GC
   callback accounting, and startup ancestry sealing retain their paths.
   **Every fragment still receives its own file fsync before entering the
   directory group.** No acknowledgement skips data persistence or namespace

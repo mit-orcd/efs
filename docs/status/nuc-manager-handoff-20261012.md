@@ -20,7 +20,7 @@ exist; no shared devel/main mutation or push is authorized here.
   subsequent evidence/scheduler commits; W112 minimal repair **`627958bd`**
   (same patch as release `fdfbd9c4`); minimal isolated live fixture **`444cd4f0`**;
   required pre-promotion ordinary gates **`101598d2`**. Keep both existing
-  packing fixtures and the ported ordinary gate on integration.
+  the ported ordinary gate on integration.
 - `63c9cb15` removes two accidentally copied binary Raft logs from current HEAD,
   retains original paths/hashes and leaves history intact. Do not resurrect
   their copies when reconciling evidence. No compiled binaries are tracked in
@@ -56,7 +56,7 @@ metadata groups and ABBA base/root/root/base (eight cells ×600 seconds).
 Nothing in that matrix has run; no throughput improvement is claimed.
 
 Repaired builds use frozen **`101598d2`**, including W112 identically in both
-variants. Only `store.c`, `packed_fence.h` and the corresponding durability test
+variants. Only `store.c`, a fence header and the corresponding durability test
 differ. Build IDs: `101598d2-w52-nuc` / `101598d2-root-nuc`. Isolated staging:
 `/data1/efs/devel-nuc-20261011/catchup-w112-native-staging`.
 [Input manifest and running build receipt](../../results/measure/20261012-nuc-manager-handoff/)
@@ -131,13 +131,13 @@ why promotion was held.
    no SLC-cache/NAND/hardware-ceiling claim follows from the existing evidence.
 4. Durable metadata allocation: ORCD45–51; **APPEND_CATCHUP52**; Mac53/54 are
    owner allocations in release, not implemented by this branch. Transport
-   IDs141/142 and143/144 are separately reserved by packing owners. No reuse.
+   IDs141–144 are separately reserved. No reuse.
    Verify final canonical-header namespace and all decoders after merging.
    All voting servers must understand52 before admission. Wire38/58 bytes,
    bounded32766 reservation scope; no persistent-row format change. Never
    automatically downgrade a log containing uncheckpointed52 to an old binary.
 5. Preserve IO/NOMEM committed-entry retry/no-applied-marker semantics, ordered
-   owner/inode/lane guards, exact-image lane retirement and packing consumers
+   owner/inode/lane guards, exact-image lane retirement consumers
    during conflict resolution. Do not regress single-entry completion to the
    older per-reservation/small-cohort completion loops.
 

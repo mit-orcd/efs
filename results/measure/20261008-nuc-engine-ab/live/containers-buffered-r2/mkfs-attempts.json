@@ -1,7 +1,0 @@
-[
-  {
-    "returncode": 0,
-    "stdout": "raft-mkfs rc=0 leader_hint=1 index=2 salt=17621520379347465855\n",
-    "stderr": "Note: legacy label 'fs' is ignored; initializes the single cluster export.\n"
-  }
-]

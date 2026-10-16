@@ -31,7 +31,7 @@ regressions, full native/fault gates, unpaced direct/buffered cold-byte and
 physical-reclamation checks, bounded charged usage, and small-file progress
 before selecting it; all these bounded AMD gates now pass. A new BUSY reply is safely rejected by older clients;
 coordinated candidate clients are required for retry semantics. No D25/RDMA,
-packing, consensus change or push. W94/W97 retain their broader open gates; see the final verdict below.
+consensus change or push. W94/W97 retain their broader open gates; see the final verdict below.
 
 ## Candidate implementation and initial gates
 
@@ -39,8 +39,8 @@ The current 20-ms unpaced direct baseline reproduces ENOSPC at fsync, and
 restores both established mounts (exit zero). This baseline still lacks its
 own failed-run cold oracle; its workload refusal is not a data-loss claim.
 `EFS_DATA_GC_ADMISSION=1` now enables the proposed 90%/recent-deletion experiment
-for the ordinary files engine. Default is disabled; invalid values refuse
-startup. Containers/packed-data pressure policy is outside this candidate.
+for the ordinary files storage. Default is disabled; invalid values refuse
+startup.
 A BUSY PUT is not a receipt or publication success. Metadata, GC, existing
 fragments and actual quota rules are preserved. Retried generations and
 placement remain fixed, connections remain reusable, and retries are limited

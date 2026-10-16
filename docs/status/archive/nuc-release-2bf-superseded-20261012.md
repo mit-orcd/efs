@@ -12,8 +12,8 @@ corrected `def46109909c793e58ae2c453c5de537cdb2c627` while this gate was active.
 Active measurement left undisturbed. Before its completion, next isolated root
 was deliberately created with `QUEUED-LAUNCH-BLOCKED` marker. Existing launcher
 refused that root before another child could start. Its final FileExistsError
-is the intentional freeze barrier, not a product/test failure. Queued2bf packing
-and seven-client gates were **NOT RUN**. No fixture/daemon remained active.
+is the intentional freeze barrier, not a product/test failure. Queued2bf
+seven-client gates were **NOT RUN**. No fixture/daemon remained active.
 
 Earlier controller path refusal before any live launch is retained too.
 No source modifications. Exact2bf results are not automatically transferred to

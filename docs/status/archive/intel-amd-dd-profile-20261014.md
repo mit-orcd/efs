@@ -13,7 +13,7 @@ Deployed source `c775fb15e2530399e052cf48432d6e495a039fb0`, build ID
 `c775fb15e253`, build timestamp `2026-10-15T02:09:33Z`; see the
 [deployment report](../intel-block-hash-index-20261014.md). Four files-engine
 daemons on two Intel hosts, two 400 GiB quota nodes per host; TCP/direct-I/O,
-`.efs` client/server, packing, containers and expiry disabled. Independent
+`.efs` client/server and expiry disabled. Independent
 AMD-local and private Intel clusters were not targeted.
 
 Existing human command, observed without restarting it:
@@ -63,12 +63,11 @@ Separate ten-second header trace, all paired complete replies:
 |RPC|Count|Mean|p95|Status|
 |PUT_CHUNK|8,272|16.89 ms|48.36 ms|all OK|
 |REPORT_CHUNKS|1,340|5.34 ms|14.88 ms|all OK|
-|GETCHUNKS_PACKED|299|1.83 ms|4.40 ms|all OK|
+|GETCHUNKS|299|1.83 ms|4.40 ms|all OK|
 
 No captured exchange exceeded one second. This does not establish an EFS retry
 storm: no paired error replies were seen. 86 receives lacked a captured send;
 33,541 nonblocking EAGAIN returns are not failed RPCs. Tracing adds latency.
-The GETCHUNKS_PACKED opcode name does not mean file packing is enabled.
 606 REPORTs carried zero chunk records (inode metadata), 160 one, 149 two,
 135 three; larger batches were uncommon. These are not proven duplicate RPCs.
 

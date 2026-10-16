@@ -386,7 +386,7 @@ Not in this step: cutting over the live `efs-test` table, step 11.
 
 **10.5c-26 — SYMLINK as CREATE + publish.** FUSE already creates
 `S_IFLNK` and stores the target as ordinary chunk bytes. Host
-CREATE packed that mode; publish/GETCHUNKS wrongly required
+CREATE encoded that mode; publish/GETCHUNKS wrongly required
 `S_ISREG`. Both now accept files and symlinks (directories stay
 INVAL). No new opcode, no target column. Flag off is a no-op.
 Gate: same smoke — create `raft-smoke-s` mode=0120777, publish

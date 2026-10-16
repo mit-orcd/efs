@@ -1,6 +1,6 @@
 # Dead and unused code review
 
-**Release update:** [Branch revalidation and release disposition](release-disposition-20261011.md) supersedes removal recommendations for newer packing/query consumers. Counts below describe the original pinned base.
+**Release update:** [Branch revalidation and release disposition](release-disposition-20261011.md) supersedes removal recommendations for newer query consumers. Counts below describe the original pinned base.
 
 Prepared October 11, 2026 for the later-today review.
 
@@ -9,7 +9,7 @@ The [extended structural review](structural-code-review-20261011.md) examines du
 - Review branch: `devel-code-review`.
 - Base: integrated `devel`, commit `48a2719d19fb5a6b0464935c70a967a1f1a86236`.
 - Scope: tracked first-party C code, headers, build wiring, tests, scripts, current design/backlog/status documents, and selected symbol history.
-- Result: one clearly unreachable legacy implementation, ten uncalled API/helper candidates, one active no-op guard, and one retired CLI requiring a product decision. No implementation was removed or changed.
+- Result: one clearly unreachable legacy implementation, nine uncalled API/helper candidates, one active no-op guard, and one retired CLI requiring a product decision. No implementation was removed or changed.
 
 The strongest immediate cleanup is the old FUSE `.find` parser/runner. Other findings establish **no in-tree caller at this commit**, not that an exported API has no external consumer or could never be useful. No finite search proves future non-use. Existing experiments with tests, measurements, or explicit integration plans are separated below and are not classified as abandoned.
 
@@ -23,13 +23,12 @@ The strongest immediate cleanup is the old FUSE `.find` parser/runner. Other fin
 | R4 | Metadata chunk-slot accessor | High: no in-tree callers; public header | Remove accessor after API-consumer check |
 | R5 | Query snapshot v3 client wrapper | High: no in-tree callers; internal header | Remove wrapper, preserve v3 wire compatibility |
 | R6 | Old client convenience wrappers, three functions | High: no in-tree callers; internal header | Remove wrappers and correct stale comments |
-| R7 | Container mapping-info helper | High: superseded, historically measured | Remove helper, retain engine |
 | R8 | RDMA stats accessor and explicit send-quiesce API | High: no in-tree callers; public contract | Decide separately; retain lifetime guarantees |
 | R9 | Reserved-name guard that always returns false | High: executable no-op, intentional behavior | Simplify call sites after test-harness adjustments |
 | R10 | `efs-query` executable | High: retired operation, still tested compatibility behavior | Keep sentinel or explicitly retire binary |
-| K1–K4 | Container engine, W95, D25, test/simulator seams | Evidence of use or explicit remaining work | Retain; do not blanket-delete |
+| K3–K4 | D25, test/simulator seams | Evidence of use or explicit remaining work | Retain; do not blanket-delete |
 
-Suggested order: decide R1 first, then internal wrappers R5–R7, then public APIs R2–R4/R8, then R9/R10. Treat any removal as a separate implementation change with its own tests. There is no proposed disk-format change, protocol renumbering, or durability change.
+Suggested order: decide R1 first, then internal wrappers R5–R6, then public APIs R2–R4/R8, then R9/R10. Treat any removal as a separate implementation change with its own tests. There is no proposed disk-format change, protocol renumbering, or durability change.
 
 ## R1 — Unreachable legacy `.find` implementation
 
@@ -103,16 +102,6 @@ Each has only a definition and prototype when exact tokens in executable code ar
 
 **Validation after removal:** client build, fence-read/client-memory/report-pressure tests, replay/fan-budget coverage, mounted read-after-write and publication/recovery gates. Source-extraction test harnesses may need boundary updates; that does not establish runtime use.
 
-## R7 — Container helper left after an optimization
-
-**Locations:** `src/server/store_containers.c:263–274`; `src/server/store_containers.h:12`.
-
-`server_container_info` has no current code caller or test. Unlike an abandoned experiment, it has affirmative historical evidence of use: `docs/status/container-profiling-rounds7-8-20261008.md:18` records it in a measured overwrite profile. That report then explains the replacement: container PUT reads one validated mapping for both quota admission and extent retirement instead of reading it twice.
-
-**Proposed scope:** remove the unused mapping-info wrapper and declaration. Retain mapping readers, quota reconciliation, replacement logic and all container-engine code. Do not rewrite historical profiling evidence to make the old symbol disappear.
-
-**Validation after removal:** container build/tests, overwrite quota shrink/growth/failure checks, corruption and replacement mapping-read checks. Historical profiling explains why this helper is leftover, not why the engine should be removed.
-
 ## R8 — Unused RDMA public helpers
 
 **Locations:** `efs_rdma_zc_stats` at `src/common/rdma.c:260–266`, prototype `include/efs/rdma.h:78`; `efs_rdma_send_quiesce` at `rdma.c:1621–1635`, prototype `rdma.h:74`.
@@ -153,18 +142,6 @@ It is **not unreachable or untested**. `tests/test_query_unavailable.py`, `tests
 
 ## Code that does not qualify as abandoned
 
-### K1 — Container storage engine: retain
-
-`src/server/store_containers.c` is a selectable daemon backend (`--storage-engine files|containers`), compiled into the server and local bench. It has `tests/test_store_containers.c`, A/B scripts, restart/hash/deletion evidence, and current operator documentation in `docs/operations/storage-engines.md` and `docs/status/container-engine-20261008.md`.
-
-Defaulting to files does not make the container engine dead. Module extraction is a documented proposal in `docs/status/storage-engine-modules-proposal-20261008.md`; implementation had not started in that proposal, so there is no abandoned plugin loader to delete. R7 concerns one residual helper only.
-
-### K2 — W95 indexed-packing model: retain as an experiment
-
-`src/bench/principles_index.c/.h` and the indexed mode of `storage_principles.c` are benchmark/test code, not production storage. The Makefile wires them to benchmark targets and `test_principles_index`/`test_principles_index_fault`; `tests/measure/principles_churn.c` also uses them.
-
-`docs/status/w95-indexed-model-20261008.md` records implemented, accepted finite experimental gates. W95 and `docs/backlog/storage-engine-v2.md` record continuing work. This is evidence of actual use and evaluation even without production adoption. Consider build isolation only if default test/build cost is a concern; do not classify the model as dead.
-
 ### K3 — D25 logical resize and typed publication: retain pending integration
 
 `server_raft_host_logical_resize` at `src/server/raft_host.c:11672` has only a definition/prototype in this tree. Nevertheless `docs/status/in-flight.md:52–68` explicitly stages public logical truncate disabled, documents completed internal work, and lists the remaining admission, authority, materialization and acceptance sequence. `docs/status/d25-admission-routing.md` owns the contract.
@@ -188,7 +165,7 @@ git rev-parse HEAD
 git grep -n -w -e find_parse_query -e find_run_query -e find_out_add -e find_match -- src include tests scripts
 git grep -n -w -e efs_kv_group_import_file -e efs_export_format_stats_ex -e efs_export_chunk_slot -- src include tests scripts
 git grep -n -w -e efs_client_rpc_query_snapshot_v3 -e efs_rdcache_put -e efs_client_kick_meta_flush -e efs_dcache_replay_stale -- src include tests scripts
-git grep -n -w -e server_container_info -e efs_rdma_zc_stats -e efs_rdma_send_quiesce -- src include tests scripts
+git grep -n -w -e efs_rdma_zc_stats -e efs_rdma_send_quiesce -- src include tests scripts
 git log --oneline -S 'find_run_query' -- src/client/efs_fuse.c
 git log --oneline -S 'efs_client_rpc_query_snapshot_v3' -- src/client/inode_rpc.c
 python3 docs/check-architecture.py
@@ -206,14 +183,14 @@ These are physical source lines at the pinned base, including comments/blank lin
 | Scope | Physical lines | Conditions |
 |---|---:|---|
 | R1 private dead implementation | 99 | Three function bodies (93), output struct (5), enum (1); about 108 with adjacent comments/spacing |
-| R2–R8 ten uncalled function bodies | 148 | Public API and RDMA contract decisions remain |
+| R2–R8 nine uncalled function bodies | 136 | Public API and RDMA contract decisions remain |
 | R9 always-false helper body | 5 | Caller branches and test-stub changes additional |
 | R10 retired CLI source | 90 | Requires explicit retirement and replacement of compatibility tests |
-| Total of these bounded source units | **342** | Upper candidate total, not an approved deletion |
+| Total of these bounded source units | **330** | Upper candidate total, not an approved deletion |
 
-The low-risk first step is therefore about **108 lines**, not thousands. Removing all candidates would be roughly **350+ lines** once declarations/guards/build cleanup are included, before replacement tests or compatibility code offset any savings. D25 and the container/indexed-packing implementations are excluded from this estimate.
+The low-risk first step is therefore about **108 lines**, not thousands. Removing all candidates would be roughly **350+ lines** once declarations/guards/build cleanup are included, before replacement tests or compatibility code offset any savings. D25 is excluded from this estimate.
 
-Body counts for R2–R8: KV importer 51; stats formatter 32; chunk-slot accessor 12; v3 RPC wrapper 7; read-cache put wrapper 4; meta-flush kick wrapper 4; stale-replay wrapper 4; container info 12; RDMA stats 7; RDMA quiesce 15.
+Body counts for R2–R8: KV importer 51; stats formatter 32; chunk-slot accessor 12; v3 RPC wrapper 7; read-cache put wrapper 4; meta-flush kick wrapper 4; stale-replay wrapper 4; RDMA stats 7; RDMA quiesce 15.
 
 ## Recommendations for recorded test data
 
@@ -224,14 +201,6 @@ Tracked `results/` contains **13,434 files / 703,244,433 bytes (670.7 MiB)** of 
 Large result formats are uncompressed JSONL (231.5 MiB), uncompressed logs (121.2 MiB), compressed logs (114.0 MiB), strace captures (54.4 MiB), JSON (40.6 MiB), text (28.2 MiB), and `.data` files (26.5 MiB). Extensions are not a deletion rule: `.data` may be profiling evidence, and JSONL may contain the only time-series evidence of a failure.
 
 The existing [results retention policy](../../results/README.md) already permits removal of superseded/debug captures after findings are recorded, while retaining recent gates, current investigations, reference baselines and active citations. When raw evidence is pruned, retain the summary and explicitly identify what was removed. Apply that policy rather than deleting `results/` wholesale.
-
-### D1 — First review target: old container profiling captures
-
-`results/measure/20261008-container-six-rounds` is the largest single run tree: **1,070 files / 72.75 MiB**. Of that, 24 `.strace.gz` files occupy **54.44 MiB**, and 120 `.calls.gz` files occupy **8.76 MiB**. Raw tracing already being compressed means another gzip pass will not solve this.
-
-Recommend reviewing early-round/repeated captures for removal once their extracted findings and final comparison are retained. Keep `matched-summary.json`, source/version/config identities, checksum manifest, extracted reports, verification/restart/deletion results, and a representative before/after capture for each claim that still needs raw inspection. Retain final guard evidence. The profiling status document actively cites this tree, so this is a **selective raw-data reduction**, not deletion of the run directory.
-
-**Potential pool to inspect: 63.2 MiB of trace/call captures; actual approved savings will be smaller after representative evidence is selected.** The follow-up `20261008-container-rounds7-8` is another 10.59 MiB, including 3.24 MiB of call captures and 6.44 MiB of compressed logs. Apply the same selective approach there, preserving its matched validation and corruption/quota evidence.
 
 ### D2 — Keep current W93/W97 and durability investigations intact for now
 
@@ -272,4 +241,4 @@ Prepare a deletion manifest with path, bytes, reason, active citations, retained
 
 Normal Git deletions reduce fresh checkouts and file-count overhead, but old blobs remain in repository history. Do not promise Git-history size reduction from a pruning commit. History rewriting should be a separate coordinated project because these coding branches are actively shared.
 
-**Recommendation for today's review:** approve a selective manifest for the container profiling traces first; retain current W93/W97/durability evidence; agree on external raw-output defaults for future runs. No test data has been deleted by this report update.
+**Recommendation for today's review:** retain current W93/W97/durability evidence; agree on external raw-output defaults for future runs. No test data has been deleted by this report update.

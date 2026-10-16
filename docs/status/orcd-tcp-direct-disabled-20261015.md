@@ -23,10 +23,10 @@ RAM per host. Tests run as nonroot erbmi1/UID246111.
 | Setting | Verified value |
 | --- | --- |
 | Transport | `EFS_TRANSPORT=tcp`; no uverbs descriptors on any of the eleven main service processes |
-| Server I/O and engine | `--direct-io --storage-engine files`; all six existing roots and automatic safe quota per node |
+| Server I/O and engine | `--direct-io`; all six existing roots and automatic safe quota per node |
 | Commands | `EFS_COMMANDS_SERVER=0`, `EFS_COMMANDS=0`; no virtual `.efs` directory on all seven mounts; effective feature mask0 from server |
-| Packing / expiry | `EFS_PACKED_WRITES=0`, `EFS_EXPIRY=0` |
-| Containers / live repair | Containers unused; `EFS_REPAIR_EXPERIMENT=0`, `EFS_REPAIR_INIT_STORE=0` |
+| Expiry | `EFS_EXPIRY=0` |
+| Live repair | `EFS_REPAIR_EXPERIMENT=0`, `EFS_REPAIR_INIT_STORE=0` |
 
 The human explicitly authorized data discard for this switch. Unresolved old
 client state was discarded; some remaining detached client processes required
@@ -68,7 +68,7 @@ Original per-host concurrent results:
 NOTRUN records the harness's safety abort after a timed-out worker remained
 alive. No failing concurrent result is replaced by the later separate extras
 or passing private fixture. A skip is expected feature scope, not enabled
-command qualification. Packing/container/expiry mounted gates and the held
+command qualification. Expiry mounted gates and the held
 400GiB acceptance run are outside this profile. Bundled native component tests
 remain regression checks and do not enable excluded features on the cluster.
 
@@ -143,7 +143,7 @@ The source archive and earlier manifests remain in the parent scratch directory.
 All reproduction code is in the frozen repository or the cluster controller;
 raw captures are not prerequisites for running the tests. Failed main fixtures
 and original stores are preserved. All four daemons are running and seven clients are mounted on TCP/direct/files,
-commands/packing/containers/expiry disabled. Post-restart profile and sampled
+commands/expiry disabled. Post-restart profile and sampled
 acknowledged bytes pass on all seven clients. Six previously active MD5
 crawlers are resumed in their existing screens with new external output paths
 `fcstor007–012/md5-after-tcp-b3e93177c138-20261015/`. No tiny-file writer was

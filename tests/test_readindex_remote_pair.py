@@ -13,7 +13,7 @@ code=r'''
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
-struct efsd_server {int storage_engine;};
+struct efsd_server {int unused;};
 struct efs_raft_host {struct efsd_server *s;pthread_mutex_t mu;pthread_cond_t cv;unsigned entered[3];
  int wait,first_rc,second_rc,done,result,hint;uint64_t deadline;};
 static __thread uint64_t scope;
@@ -64,7 +64,7 @@ int main(int argc,char **argv)
  assert(HOST_READ_PAIR_WORKERS==32 && HOST_READ_PAIR_STACK<=(128u<<10));
  struct efsd_server server={argc>2?atoi(argv[2]):0};
  struct efs_raft_host fixture={.s=&server};g_host=&fixture;
- unsigned limit=8;assert(host_read_pair_capacity()==limit); /* files only (containers removed) */
+ unsigned limit=8;assert(host_read_pair_capacity()==limit);
  g_host=NULL;assert(host_read_pair_capacity()==8);g_host=&fixture;
  if(argc>1)deny_after=atoi(argv[1]);
  struct efs_raft_host h;init(&h,777);h.wait=deny_after?1:0;

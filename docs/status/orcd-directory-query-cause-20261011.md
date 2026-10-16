@@ -15,7 +15,7 @@ refusal would overstate the evidence.
 
 ## Reproduced event relationships
 
-[Read-only analysis JSON](../../results/measure/20261011-orcd-coalescing-rollout/d485-directory-query-analysis/analysis.json)
+[Read-only analysis JSON](../../results/measure/20261011-orcd-rollout/d485-directory-query-analysis/analysis.json)
 records hashes of exact input logs/TSVs, root/generation retry counts, publication
 timestamps and case results. Copied publisher stage logs retain their original
 UTC timestamps (October12 UTC corresponds to October11 EDT). Upstream raw log

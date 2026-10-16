@@ -48,7 +48,7 @@ trace32k() { # label skip_mib
     echo "trace $1 4MiB@32K $(timed_dd 4 32K "$2") requests(GETCHUNKS GET_CHUNK)=$(
         sleep 0.5; kill -INT "$st"; wait "$st" 2>/dev/null || true
         python3 "$here/summarize_intel_rpc_trace.py" "$out/rpc-$1.trace" | python3 -c \
-            'import json,sys; s=json.load(sys.stdin)["sent"]; print(s.get("EFS_MSG_GETCHUNKS_PACKED",0), s.get("EFS_MSG_GET_CHUNK",0))')"
+            'import json,sys; s=json.load(sys.stdin)["sent"]; print(s.get("EFS_MSG_INODE_GETCHUNKS",0), s.get("EFS_MSG_GET_CHUNK",0))')"
 }
 
 trace32k current 5100

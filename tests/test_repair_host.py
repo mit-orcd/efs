@@ -24,7 +24,7 @@ code=r'''
 #define HOST_LOCK_LEN 99
 #define HOST_SESS_CREATE_LEN 100
 #define EFS_FAULTS 0
-struct server {int storage_engine;uint32_t id;int repair_experiment;};
+struct server {uint32_t id;int repair_experiment;};
 struct efs_raft_host {pthread_mutex_t mu;struct server *s;void *kv;int running,snap_batch;uint64_t apply_extra,obs_apply_cnt,obs_apply_cycle_us;};
 struct host_group {struct efs_raft_host *host;int import_block;void *r;uint8_t group;uint64_t arc_idx[8],arc_term[8],arc_extra[8];int arc_rc[8];};
 struct efs_msg_raft_mkfs_reply {int rc,leader_hint;};

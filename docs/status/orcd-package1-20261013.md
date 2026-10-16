@@ -13,7 +13,7 @@ are being qualified on AMD; ordinary-file Intel work is independent.
 Frozen committed source `19b14609fe4d9881648d120fa76ce13a4bd5d385` built on
 all eleven ORCD nodes. Source input checks, actual native RDMA descriptors,
 server direct-I/O/files arguments and client/server command flags pass.
-`EFS_EXPIRY=0` and `EFS_PACKED_WRITES=0` are explicit; no container backend.
+`EFS_EXPIRY=0` are explicit.
 Four servers fcstor003–006, seven FUSE clients fcstor007–013, mlx5_2 hardware
 RDMA. Site account erbmi1 UID/GID246111, no root operations. Existing budgets
 and deadlines are unchanged. The complete 400 GiB fixture is preserved.
@@ -55,13 +55,12 @@ proposed correction inventories each root once, shares the same observed counts
 for both decisions, and overlaps ordinary-file roots with at most three helper
 threads plus the caller. Every helper is joined before returning, accepting
 counts or exposing an endpoint. Unknown results and counter overflow refuse
-startup; helper creation failure falls back to caller work. Container scan
-policy remains serial. No cached counter replaces a scan and no durability
+startup; helper creation failure falls back to caller work. No cached counter replaces a scan and no durability
 barrier or quota reserve is removed.
 
 Actual extracted helper regression PASS locally: zero/default, one, two, six
 and maximum roots; exact once per root, max4 overlap, complete join, unknown
-root/error and overflow refusal, serial containers, and first/partial helper
+root/error and overflow refusal, and first/partial helper
 creation failures. The serial negative fails the overlap oracle.
 
 Isolated ORCD fcstor006 Linux native qualification **PASS** at startup correction
@@ -191,7 +190,7 @@ commands, default/human/JSON stats and owner names on seven clients, concurrent
 full-catalogue query/I/O, same-source normal cold restart, every one of1,638,400
 payloads and exported paths (429,496,729,600 logical bytes), loaded latency and
 resource measurements. Historical passes do not transfer to the new source.
-Expiry, packing, containers and unplanned-event repair remain deferred/excluded.
+Expiry and unplanned-event repair remain deferred/excluded.
 
 Raw stage/source/runtime proofs, workload/holder/paused-shell records, startup
 failure, daemon diagnostics and resource samples remain outside Git under
@@ -208,7 +207,7 @@ remain active. The Intel helper tuning and read-admission experiment are absent.
 Budgets and cache format are unchanged from the compact-index correction.
 
 All eleven hosts match the 858 committed build inputs and requested live
-RDMA/direct-I/O/files profile, with commands enabled and packing/expiry disabled.
+RDMA/direct-I/O/files profile, with commands enabled and expiry disabled.
 Full native `make -j4 test` and six full-library query ASan/UBSan/leak checks,
 plus the inventory helper sanitizer, PASS on ORCD. Orderly deployment and seven
 acknowledged-byte markers PASS; initial server readiness is 92.003 seconds.
@@ -328,7 +327,7 @@ deleted or truncated. Seven clients drain/unmount normally before four daemons
 stop. Installed/startup/profile, remount and acknowledged large/512-byte marker
 verification PASS on all7. Initial server readiness88.131s. Actual profile is
 native RDMA/mlx5_2, server direct-I/O/files, client/server commands enabled,
-packing/containers/expiry disabled. Real400GiB subtree stats is exact with
+expiry disabled. Real400GiB subtree stats is exact with
 refresh_error0; full payload verification is still NOTRUN.
 
 | Focused suite on f7e3c81e | Verdict | Seconds |
@@ -365,8 +364,7 @@ safely, preserve candidates/evidence, document their exact status and pause the
 coordinated work. Their wrap-up commits are not yet received or integrated.
 
 Last deployed source remains f7e3c81e2d5bd4715b6c6dc86debb10b093c0d03, with
-the RDMA/direct-I/O/files profile and `.efs` client/server enabled; packing,
-containers and expiry disabled. The running cluster and preserved stores are
+the RDMA/direct-I/O/files profile and `.efs` client/server enabled; expiry disabled. The running cluster and preserved stores are
 left intact. Resource/cache observers receive their normal stop flags; no
 daemons are killed or storage erased. Seven tiny-file launchers remain paused;
 seven DD processes were stopped cleanly and their partial outputs preserved.

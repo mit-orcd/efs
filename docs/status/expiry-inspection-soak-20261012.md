@@ -102,8 +102,7 @@ bash tests/run_tests.sh posix expiry /data1/efs/mnt \
   --port 24410 --jobs 4 --clock-fault --soak-seconds 1800
 ```
 
-The suite enforces TCP/direct I/O, FILES storage, `.efs` disabled, no containers
-and no packing. A single `--root` places both node pairs in fresh subdirectories
+The suite enforces TCP/direct I/O, FILES storage, `.efs` disabled. A single `--root` places both node pairs in fresh subdirectories
 beneath that parent; two roots may be supplied for separate drives. It first runs
 lifecycle/inspection/status/clock-fault gates, then four workers across two mounts
 for at least 1,800 seconds, then core/peer POSIX and ordinary GC/cold cleanup.
@@ -140,7 +139,7 @@ run is qualified at its recorded source; it is not mislabeled as a later build.
 NUC: Intel i5-1135G7 (4 cores / 8 threads), x86_64, Linux
 `6.12.0-211.64.1.el10_2.x86_64`, `/data1` on `/dev/sda`, XFS. Four local nodes,
 two metadata groups, two mounts, ports 24410..24413, 1-GiB/node private quotas;
-TCP/direct, FILES engine, `.efs` disabled, no containers/packing. The normal
+TCP/direct, FILES storage, `.efs` disabled. The normal
 build was prepared during early long-soak rounds; this is correctness/resource
 headroom evidence, not an isolated performance benchmark or hardware ceiling.
 

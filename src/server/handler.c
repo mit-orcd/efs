@@ -366,9 +366,7 @@ void server_handle_conn(struct efs_conn *conn)
                             out_len = 1;
                             goto send_reply;
                         }
-                        /* Containers already verified the complete payload and its
-                         * mapping/header before copying it into this reply. */
-                        if (sum_ok && sum_ok != EFS_STORE_SUM_VERIFIED &&
+                        if (sum_ok &&
                             !efs_ino_is_meta_table(req->ino)) {
                             uint8_t vh[EFS_HASH_SIZE];
                             efs_hash(dptr, data_len, vh);

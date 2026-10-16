@@ -1,2 +1,0 @@
-STRACE_PASS baseline {"write": 1, "pread64": 29833, "pwrite64": 29856, "fstat": 59712, "fallocate": 29856, "fsync": 2803}
-STRACE_PASS round5-final {"write": 1, "pwrite64": 44008, "pread64": 43856, "fstat": 5508, "fallocate": 44008, "fsync": 2754}

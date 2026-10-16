@@ -48,7 +48,7 @@ Specific resolutions, rather than choosing one whole branch:
 The compact query-link prototype remains in the named pre-merge stash and is
 not part of these committed inputs. This merge does not resolve query ENOSPC,
 original ORCD 5.569/22.044-second stalls or full-scale/platform acceptance by
-ancestry alone. `.efs` on/RDMA/direct/no packing/no containers remains a separate
+ancestry alone. `.efs` on/RDMA/direct remains a separate
 qualification profile; release branches and existing deployments are untouched.
 
 ## Validation
@@ -94,7 +94,7 @@ Reproduce on an isolated Linux source checkout:
 
 ```sh
 make -j2 all
-EFS_EXPIRY=0 EFS_PACKED_WRITES=0 EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 make -j2 test
+EFS_EXPIRY=0 EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 make -j2 test
 ```
 
 Individual tests deliberately enable feature-specific synthetic cases; these

@@ -1,14 +1,14 @@
 # v0.3.0-pre-alpha integration and acceptance
 
-**Latest exact-source result:** `4e239d029029b8105a6e07f0e69a26fdc449de32` passes AMD ordinary-files qualification after the deep-directory fix; packing/containers/.efs remain disabled. [Report](v030-deep-directory-fix-20261012.md). No push or tag. Earlier failed checkpoints below are historical.
+**Latest exact-source result:** `4e239d029029b8105a6e07f0e69a26fdc449de32` passes AMD ordinary-files qualification after the deep-directory fix; .efs remain disabled. [Report](v030-deep-directory-fix-20261012.md). No push or tag. Earlier failed checkpoints below are historical.
 
-**Latest alpha scope:** ordinary files/TCP/direct only, `EFS_PACKED_WRITES=0`, `EFS_COMMANDS=0`, `EFS_COMMANDS_SERVER=0`. Small-file packing is excluded alongside containers, `.efs`, RDMA, buffered and dedicated repair/recovery. Earlier packing qualification requirements below are historical. [Binding packing exclusion](v030-packing-exclusion-20261012.md).
+**Latest alpha scope:** ordinary files/TCP/direct only, `EFS_COMMANDS=0`, `EFS_COMMANDS_SERVER=0`. `.efs`, RDMA, buffered and dedicated repair/recovery are excluded.
 
 Latest integrated-source verdict: **1e3a46384e897a47751871b15e82ead86c9d0abd** is not accepted. Native/fault/sanitizers, peer/teardown and ordinary cold/reclamation PASS; seven-client deep-directory30s failures remain. [Final qualification](v030-final-qualification-1e3a4638-20261012.md).
 
-Status: qualification STOPPED/checkpointed; incomplete and unaccepted. Planned alpha scope is TCP/direct I/O/files with `.efs` disabled; containers and dedicated repair/recovery deferred. Nothing tagged or pushed. User authorization, Oct 11: create an isolated integration
+Status: qualification STOPPED/checkpointed; incomplete and unaccepted. Planned alpha scope is TCP/direct I/O/files with `.efs` disabled; dedicated repair/recovery deferred. Nothing tagged or pushed. User authorization, Oct 11: create an isolated integration
 branch, coordinate all agents, add and test all improvements, prioritize
-small-file packing and code-review findings. Release owner: agent 2 / AMD.
+code-review findings. Release owner: agent 2 / AMD.
 [Operator-facing candidate notes](../using/v030-candidate.md) summarize included
 changes, opt-in flags, upgrade constraints and unaccepted scopes.
 
@@ -21,7 +21,7 @@ America/New_York; no schedule or push is created by this checkpoint.
 
 ## Current authoritative checkpoint
 
-Current pending frozen candidate is `03bd89fb7de56c2c6af44ab3bd26c54caf4b8274`. Qualification remains stopped. The latest human decision excludes `.efs` features from the planned alpha; clients and daemons must disable the interface and query-cache work explicitly. [Scope and gate contract](v030-release-scope-20261012.md) and [source-specific results](v030-tcp-direct-qualification-20261012.md) govern. AMD native gates pass, but broad live tests with `.efs` enabled failed; they do not qualify the new disabled-feature scope. Deep paths, ordinary I/O refusals and packing acceptance remain unresolved.
+Current pending frozen candidate is `03bd89fb7de56c2c6af44ab3bd26c54caf4b8274`. Qualification remains stopped. The latest human decision excludes `.efs` features from the planned alpha; clients and daemons must disable the interface and query-cache work explicitly. [Scope and gate contract](v030-release-scope-20261012.md) and [source-specific results](v030-tcp-direct-qualification-20261012.md) govern. AMD native gates pass, but broad live tests with `.efs` enabled failed; they do not qualify the new disabled-feature scope. Deep paths and ordinary I/O refusals remain unresolved.
 
 The source410/frozen28 and multi-mode rollout statements below are historical;
 older passes do not qualify the next merged candidate. No resumption, push, tag
@@ -42,7 +42,7 @@ integrated explicitly; moving branch tips are not test identities.
 | Owner / branch | Submitted checkpoint | Integration state | Acceptance limits |
 | --- | --- | --- | --- |
 | AMD / devel-amd | `19f7efb3` | merged in `eff8d05a` | W94 CREATE/adoption closed; normal/fault native and both-mode full lifecycle pass. W97 repeated pressure comparisons continue; feedback stays opt-in. |
-| ORCD / devel-orcd | code `79551691`, evidence `8d07b45a` | base merged in `ea5f5dc4`; exact-rejection repair in `8a7fd9be` | Full native and packed private lifecycle evidence; mounted concurrent POSIX times out. Pinned-stats, cold/shared-GC pass on ORCD; concurrent retest still times out. Bounded receipt-retirement `627d48ba` merged in `d1197381`; mounted acceptance remains pending. |
+| ORCD / devel-orcd | code `79551691`, evidence `8d07b45a` | base merged in `ea5f5dc4`; exact-rejection repair in `8a7fd9be` | Full native and private lifecycle evidence; mounted concurrent POSIX times out. Pinned-stats, cold/shared-GC pass on ORCD; concurrent retest still times out. Bounded receipt-retirement `627d48ba` merged in `d1197381`; mounted acceptance remains pending. |
 | Intel / devel-intel | `5f03ec76` plus fixture corrections through `5abf8e7b` (C source `3d69edb4`) | base merged in `22056d9b`; corrected fixtures integrated | Both-host native and complete direct/buffered private fixtures pass; supplemental fault matrix, remaining canonical/cold gates and retained-data deployment still pending. Production remains `7bde5f43`. |
 | Review / devel-code-review | reports `1b0c6b7c`, fixes through `3ac828cd` | base merged in `5e381545`; further repairs in `9260d8a1` and `9acea823` | Reproduced use-after-free fixed; focused merged regression passes. Capacity accounting, recorder reap and incoming-chunk re-dirty fixes included; private find/flush/walker cleanup included. Full merged/Linux/live acceptance required. |
 | NUC / devel-nuc | revised `ba73f304` | merged in `5cbe0ce4` | APPEND_CATCHUP tag52; focused merged gates pass. New-tag native rebuild, live/fault/cold/20k and measured W97 acceptance pending. Production remains `f52cd2dd-nuc`; preserved writer must finish before restart. |
@@ -50,52 +50,25 @@ integrated explicitly; moving branch tips are not test identities.
 
 Submitted checkpoints are implementation inputs, not release certification.
 Some are already contained by another branch; Git ancestry and source diffs
-must determine overlap. The detached ancestry audit confirms bench, storage-engine, known-bugs,
+must determine overlap. The detached ancestry audit confirms bench, known-bugs,
 find-stats, RDMA, gate-closure, compaction-pressure and primary checkout commits
 are already contained. Old find-stats has four modified historical log files
 and no uncommitted code; retain them untouched. No improvement is silently
 dropped merely because its branch name was retired.
 
-## Priority 1: mounted tiny-file packing
-
-[ORCD packing](orcd-tiny-packing-20261011.md) targets actual tiny logical payloads.
-[Mounted coalescing checkpoint and failed gates](orcd-mounted-coalescing-20261011.md)
-records the deployed implementation separately from its pending acceptance.
-The ordinary 512-byte sample occupies 208,896 fragment bytes (408 times payload).
-Containers pack existing padded fragments; that is a separate optimization.
-Keep both implementations and evidence, without treating containers as proof
-that logical payload packing is active.
-
-Require mounted cohort writes, singleton/deadline/fsync/close sealing, aggregate
-memory/admission bounds, exact retained retry identities, per-record durable
-publication, mixed ordinary/packed reads, overwrite/growth/truncate/unlink,
-shared-object GC, cold restart and relevant lost-reply/partial-PUT/persistence/
-coordinator/fencing fault gates. Missing members or transport replies never
-substitute for durable proof. All applicable POSIX/peer gates must finish with
-actual verdicts; known unsupported mmap and independently tracked repair gaps
-must be named, not hidden by a blanket skip.
-
-Compare alternating baseline/candidate runs with identical workload, durability,
-placement policy, engine/I/O/transport configuration and observation settings.
-Record files/s and durable close tails, cohort occupancy/deadlines, logical live
-bytes, fragment and index/WAL writes, allocated bytes, CPU/RSS and post-delete
-physical reclamation. Code inclusion does not activate a default. Mounted
-packing remains unaccepted until these gates pass; a timeout blocks its release
-acceptance and requires a repair/retest, not an optimistic performance claim.
-
-## Priority 2: code-review correctness
+## Priority: code-review correctness
 
 [Review disposition](../reviews/release-disposition-20261011.md) protects active
-packing/query consumers and public/native/wire compatibility. Integrate bounded
+query consumers and public/native/wire compatibility. Integrate bounded
 correctness fixes first: rollup allocation ownership, retained queue accounting
 and recorder stop/reap. Each needs focused failure/boundary tests plus relevant
 merged native and mounted gates. Broad refactors and API deletion must have
 explicit consumer/contract validation; a base-specific unused-symbol scan is
-not sufficient. Retain the independent packing model and RAM query oracle.
+not sufficient. Retain the RAM query oracle.
 
 ## Integration conflicts and protocol allocation
 
-ORCD packing uses command/request tags45–51. NUC's undeployed tag45 collision
+Command/request tags45–51 are reserved. NUC's undeployed tag45 collision
 was corrected to APPEND_CATCHUP52 in `ba73f304`; tag45 native results are historical
 and cannot certify52. Mac single-shard APPEND now uses53 in the merged candidate; do not reuse that
 number elsewhere. Acceptance and rollout remain separately gated. Run the actual canonical-header
@@ -105,7 +78,7 @@ and document cold replay/rollback restrictions before rollout.
 
 Resolved ORCD harness conflict retains both command-only and synthetic-pressure
 options. Generated architecture is regenerated from source documents. NUC
-persistence-refusal merge preserves every packed command and APPEND_CATCHUP
+persistence-refusal merge preserves every APPEND_CATCHUP
 IO/NOMEM retry case; neither may advance past undurable state. The append
 PREPARE regression retains physical-cohort checks while obsolete REPORT
 completion assertions move to the actual new catch-up host regression.
@@ -125,7 +98,7 @@ log whitespace; source/current-doc whitespace gates are checked separately.
    evidence distinct. VM storage timing is not hardware performance proof.
 4. Complete full POSIX, peer/concurrent/extras, cold acknowledged bytes,
    retry/fencing/publication, fault recovery, physical GC and retained-data
-   verification, including new packed/ordinary mixed workloads. Track normal
+   verification. Track normal
    service restoration and source/binary/configuration identity independently.
 5. Summarize accepted improvements, opt-in flags, known unsupported features,
    blockers and wire/store/client/server upgrade/rollback requirements in release
@@ -134,7 +107,7 @@ log whitespace; source/current-doc whitespace gates are checked separately.
    two-loss protection guarantee.
 6. Only after merged acceptance, promote that exact commit to devel/main, create
    annotated `v0.3.0-pre-alpha`, then push main/tag in the authorized out-of-hours
-   window. No failed packing gate, branch-native pass or earlier deployment
+   window. No failed gate, branch-native pass or earlier deployment
    proves that the final merged release passes.
 
 ## Initial release-branch gates (historical)
@@ -146,10 +119,7 @@ mounted, performance or release acceptance. The release ledger will be updated
 with exact final test/build identities and raw evidence before promotion.
 
 The [integration checkpoint evidence](../../results/measure/20261011-v030-release-integration/focused-checkpoint.json)
-records ten passed local focused gates. The packed-retry invocation exits1
-because the fresh local worktree has no built libefs.a; retain that setup
-failure and rerun after the Linux build. It establishes no production defect
-or pass. The [detached ancestry audit](../../results/measure/20261011-v030-release-integration/detached-ancestry.json)
+records ten passed local focused gates. The [detached ancestry audit](../../results/measure/20261011-v030-release-integration/detached-ancestry.json)
 records exact worktree commits and tracked-change counts.
 
 ## AMD merged qualification — October 11
@@ -167,20 +137,14 @@ are retained failed gate verdicts, not release acceptance.
 
 AMD builds use isolated `/data1/efs/release-v030-20261011`; normal stores and
 installed binaries remain intact. Preceding W97 comparisons and service
-restoration exited0 before release builds began. A new private
-`--mounted-packing-only --posix` gate explicitly enables packing and commands,
-requires physical packed fragments, verifies peer/cold bytes through overwrite,
-growth/truncate/unlink, runs core/extras and peer POSIX, and requires physical
-packed reclamation. It preserves failed POSIX verdicts while collecting the
-independent cold/GC checks. Its live verdict remains pending.
+restoration exited0 before release builds began.
 
 The merged native `bdee0d1c` run reached the late namespace-owner regression
 but failed obsolete REGISTER-proof shortcut expectations. `f1d25b3e` retains
 exact production proof-emitter error/fencing coverage and expands the actual
 fresh-admission helper tests across command refusals, floor errors and fencing.
 ORCD `627d48ba` is included in frozen candidate `d1197381`; full normal/fault
-AMD native tests and serialized direct/buffered packed mounted gates are
-running. Input hashes cover929 build/test/documentation files, with no
+AMD native tests are running. Input hashes cover929 build/test/documentation files, with no
 synchronization mismatches. NUC reports both tag52 native builds pass on
 `ba73f304`; new-tag live/cold/20k acceptance remains pending.
 
@@ -191,23 +155,11 @@ in both normal and EFS_FAULTS=1 builds on AMD. Both native exit markers and
 the controlling build exit are0. All929 hashed build/test/documentation inputs
 match the frozen source. [Native logs, source verification and binary identities](../../results/measure/20261011-v030-merged-native/d1197381/acceptance-summary.json)
 retain the exact artifact identity. Normal binaries identify as
-`d1197381-release-normal`; fault artifacts are separate. Mounted direct and
-buffered packing, final sanitizer and later parser checkpoint acceptance are
+`d1197381-release-normal`; fault artifacts are separate. Final sanitizer and later parser checkpoint acceptance are
 still pending. This native pass does not close ORCD's quiet concurrent
 directory/query timeouts or certify a tagged release.
 
-## Two-client packed mounted gate on AMD
-
-Both direct and buffered TCP at frozen `d1197381` exit0, followed by clean
-normal-mount restoration. Per mode: POSIX core+extras220 PASS/0 FAIL/1 SKIP
-(unsupported mmap)/0 NOTRUN, peer67 PASS/0 FAIL/0 SKIP. Actual mounted
-64 x 512-byte first writes produce30 physical packed fragments, preserve neighbor
-bytes through ordinary growth/truncate/unlink, and pass acknowledged cold
-hashes, physical packed disappearance and metadata-queue drain.
-[Raw results and exact manifest](../../results/measure/20261011-v030-mounted-packing/d1197381/acceptance-summary.json)
-retain the implementation and gate identity. Initial fragment-file lengths sum
-to245760 bytes direct and123840 buffered for32768 payload bytes. These are file
-lengths, not a filesystem allocated-block or performance benchmark.
+## Seven-client workload on AMD
 
 Two mounts/four daemons on one AMD host do not certify ORCD's seven-client
 multihost workload. ORCD `627d48ba` fails even with fresh stores: directory/query
@@ -223,159 +175,23 @@ checks. Full normal/fault native plus allocation/pipeline/parser sanitizers
 precede direct and buffered seven-client runs. Completed native/sanitizer and
 seven-client outcomes are recorded below.
 
-Protocol coordination reserves **transport** EFS_MSG141/142 for ORCD's
-undeployed bounded packed-RPC batching proposal. Checked free in this release
-header; all other owners notified. Wire handlers were integrated in `dcf2f918` after native-qualified owner
-submission; mounted acceptance remains open.
-Durable metadata tags45-51/52/53 are separate. Any future batch must preserve
-capability fallback, exact per-record verdicts, retry identities and durable
-receipt/GC/fresh-authority checks.
+## Native qualification of f1c322e1, bbb84e41 and f0bb0208
 
-## AMD seven-client packed GC backlog (Oct 11)
-
-Frozen `f1c322e1` passes full Linux normal and fault-native suites and four
-ASan/UBSan gates (client memory, rollup allocation, rollup budget, address parser).
-The seven-client fixture initially encountered an AppArmor mount-path refusal;
-`39b4297b` uses permitted private `/tmp` mounts. Its 205 production/build inputs
-and normal binaries are identical to the qualified candidate.
-
-Both direct and buffered seven-client runs complete all primary POSIX cases:
-220 PASS, zero FAIL, one unsupported mmap SKIP per client. Peer checks and exact
-acknowledged cold hashes pass. Both fail physical packed reclamation's original
-180-second deadline; normal mounts are restored successfully. This is a release
-blocker, separate from ORCD directory/query timeouts, which AMD did not reproduce.
-
-Offline copies of stopped direct metadata contain 425 and 1,479 packed-object
-rows on n1 and n2, all RECLAIMING, with zero LIVE/PENDING references,
-zero orphan rows and zero upload-stream rows. No original stores were opened
-for mutation by this diagnostic. The packed pass omitted its full-page and
-elapsed-budget signal from the GC backlog scheduler. The candidate now includes
-that signal; the existing acceleration still requires actual local physical
-deletion progress, with bounded work and normal backoff for blocked/fence-only
-passes. Focused extracted-production scheduler regressions pass. Full merged
-native and unchanged mounted deadline verification of this fix remain pending.
-W95/P4.1 production acceptance remains open; these results do not certify other
-hosts, multi-host timings or engine/container configurations.
-
-The scheduler repair is `6146f264`; reviewed FUSE error propagation `0ae7e480`
-is integrated as `1bd41ded`. Exact merged AMD candidate `bbb84e41` includes both,
-ORCD atomic older-receipt retirement `8eb35446`, and Intel both-mode tooling
-`236121dc`. Full normal/fault native, sanitizers and gated seven-client runs are
-in progress. The first attempt failed the documentation link gate because the
-staged checkout omitted historical linked evidence; those actual linked files
-and directory layout were restored, the five doc gates pass, and full testing
-restarted. This infrastructure failure is retained separately from runtime gates.
-
-[Seven-client raw gates and diagnostic inventories](../../results/measure/20261011-v030-seven-packing/39b4297b/acceptance-summary.json)
-retain failed reclamation and successful restoration, rather than reporting an
-overall pass. [Full parser-era native qualification](../../results/measure/20261011-v030-merged-native/f1c322e1/acceptance-summary.json)
-preserves the earlier full passing normal/fault/sanitizer candidate.
-ORCD bounded transport batch `e5a38553` passes its native/focused gates but its
-seven-client live run is 209 PASS/4 FAIL/1 SKIP/7 NOTRUN per client. A packing-OFF
-control is in progress. That checkpoint is integrated in `dcf2f918`; IDs141/142 are capability-negotiated
-transport handlers. Native/fault/sanitizer qualification of the new merged source
-and both-mode seven-client jobs16 acceptance are next. AMD jobs4 results must
-not be represented as the ORCD jobs16 workload.
-
-ORCD same-revision packing-OFF control passes all seven clients at jobs16:
-220 PASS/0 FAIL/1 expected SKIP/0 NOTRUN, versus packing-ON 209/4/1/7. This
-narrows the unresolved workload failure to enabled packing. Global per-group
-packing context waits and repeated authority/admission RPCs are diagnostic
-candidates, not established causes. Review owner is examining the submitted
-batch for correctness independently of the performance acceptance.
-
-### AMD scheduler repair accepted in both-mode jobs4 gate
-
-`bbb84e41` passes the complete merged normal/fault native suites and all four
-sanitizer gates; post-native verification confirms all 940 frozen inputs remain
-unchanged. [Exact native evidence](../../results/measure/20261011-v030-merged-native/bbb84e41/acceptance-summary.json).
-The corrected runner passes seven concurrent clients at jobs4 in direct and
-buffered TCP, unchanged 30-second cases and 180-second packed physical deadline:
-all clients 220 PASS/0 FAIL/1 expected mmap SKIP/0 NOTRUN; peer and acknowledged
-cold hashes pass. Physical packs are empty and GC queue estimates drain. Offline
-copies of stopped n1/n2 stores contain zero packed-object rows in both modes,
-zero orphans and zero upload streams. Normal mount restoration is successful.
-[Raw both-mode acceptance and inventories](../../results/measure/20261011-v030-seven-packing/bbb84e41/acceptance-summary.json).
-
-This closes the reproduced AMD jobs4 packed reclamation timeout under the
-existing opt-in 20ms backlog setting. It does not close W95/P4.1, certify ORCD
-jobs16 or prove throughput improvement. The newer batch-integrated `f0bb0208`
-is separately staged with all source and linked documentation inputs verified;
-full merged normal/fault/sanitizer qualification is running, followed serially
-by direct/buffered seven-client jobs16 acceptance. Nothing is tagged or pushed.
-
-Protocol coordination also reserves transport IDs143/144 for ORCD's proposed
-read-only packed upload authority envelope; verified free and all owners
-notified. The submitted implementation is now integrated through `b579bee2`, including level3 capability preflight. Acceptance is pending. A successful exact whole-cohort proof replaces repeated per-file checks; fresh group barriers and durable local storage/session/object guards remain mandatory. This reservation is independent of durable metadata command tags.
-
-### Latest batch-integrated qualification and jobs16 blocker
-
-`f0bb0208` passes full merged normal/fault Linux `all test` plus seven ASan/UBSan
-gates: client memory, rollup allocation, rollup budget, address parser,
-publication batch RPC, mounted packed batch ownership and packed GC budget.
-Post-native verification confirms all 1,305 staged source/linked-evidence inputs
-remain unchanged. [Exact native gates](../../results/measure/20261011-v030-merged-native/f0bb0208/acceptance-summary.json).
-
+Frozen `f1c322e1`, `bbb84e41` and `f0bb0208` each pass full Linux normal and
+fault-native suites and their ASan/UBSan gates
+([f1c322e1](../../results/measure/20261011-v030-merged-native/f1c322e1/acceptance-summary.json),
+[bbb84e41](../../results/measure/20261011-v030-merged-native/bbb84e41/acceptance-summary.json),
+[f0bb0208](../../results/measure/20261011-v030-merged-native/f0bb0208/acceptance-summary.json)).
 The original higher-pressure seven-client/jobs16 gate reproduces the ORCD
-failure on AMD. All direct clients are 209 PASS/4 FAIL/1 SKIP/7 NOTRUN in
-44.5-45.5 seconds; private extra-client stop refuses live-worker mounts, so the
-later cold/GC gate is NOTRUN. Buffered has six failing clients and one passing
-client, but completes exact cold bytes, physical packed reclamation and queue
-drain before rejecting the client failures. Normal mount restoration passes.
-[Raw failed gates, individual cases and phase scope](../../results/measure/20261011-v030-seven-packing/f0bb0208/acceptance-summary.json).
-This is the open packing timeout blocker, distinct from the repaired jobs4
-physical GC backlog. It cannot be closed by native passes or lower pressure.
-
-A separate 35-second process-only diagnostic samples all four private daemons
-and seven FUSE clients. 41,174 samples, 1,603 lost (roughly 4%), limit precise
-comparisons; CPU samples show copying/KV work, synchronization and networking,
-not a proven wall-time cause. Reports and identities are retained in
-[diagnostic evidence](../../results/measure/20261011-v030-packing-profile/f0bb0208/capture-identities.json);
-raw perf data remains on AMD. An unchanged-code quiet receiver-feedback-ON
-jobs16 comparison is running; its direct gate also fails. Defaults, original
-case deadlines, authority checks and durable barriers remain unchanged.
-The independent review of the batch remains pending; release promotion is blocked.
-
-### Reviewed old-peer downgrade stall repair
-
-[Packed batch review](../reviews/packed-batch-20261011/README.md), pinned to
-`e5a38553`, reproduces an availability defect: an active cohort retains batch
-mode after an older peer ignores the unsupported opcode, causing repeated NET
-retries. Immutable ownership was retained; no false durable verdict was found.
-The release now applies the supplied production fix and actual-function
-regression: after NET, a fresh successful scalar-only capability probe enables
-exact scalar replay for publication and retirement. Failed probes and all-modern
-peers retain the original batch request/ownership. Focused normal and ASan/UBSan
-gates pass; a new full merged qualification is still required. This correction
-is separate from the reproduced modern-peer jobs16 timeout and does not close it.
-
-The quiet feedback-ON jobs16 direct run also fails. Buffered's final physical
-wait fails with legitimate retained namespace: stopped metadata copies show
-n1 has 1,733 ACTIVE object rows, 2,330 LIVE reference rows and 4,182 linked
-inode rows; n2 has 3,435 ACTIVE object rows, 4,648 LIVE reference rows and
-8,375 linked inode rows. Both have zero RECLAIMING/PENDING rows. Replica
-samples overlap (n2 hosts both groups); summing them is not a unique-object
-or logical-file count. Deleting these live packs would
-be wrong. This is not a recurrence of the repaired RECLAIMING backlog; the
-failed high-pressure test left linked files. Normal mounts are restored.
+directory/query failures on AMD. Nothing is tagged or pushed.
 
 ### Authority and Mac reconciliation: latest merged candidate
 
-The release branch now includes submitted `b579bee2`: whole-cohort read-only
-upload authority (transport143/144), level3 compatibility preflight, Mac
+The release branch now includes submitted `b579bee2`: Mac
 single-shard APPEND tag53, CREATE adoption and coverage-aware leader routing.
 General cross-shard APPEND retains ordered session/inode guards and tag52
 completion. All voters must understand tag53 before admitting those commands;
 an older binary is not a safe rollback after durable new commands.
-
-Independent review [6307ca63](../reviews/packed-authority-20261011/README.md)
-identified a missing read-only reply unnecessarily blocking fresh legacy
-validation. The production caller now falls back on NET as well as PROTO;
-semantic BUSY/STALE verdicts still refuse, and fallback requires fresh exact
-ACTIVE admission, every FileID/content epoch and the durable local session
-guard. The actual-caller regression passes normally and with ASan/UBSan and
-is part of the full native gate. This is a compatibility fix, not evidence
-that modern packing overload is resolved.
 
 The earlier `66c237c8` full native attempt failed in an extracted retry fixture;
 `1c6cc5b6` corrects its dependency mock. The final merged source requires new
@@ -400,15 +216,14 @@ then pass. Independent review disposition `ba33c3f1` reports no additional
 concrete authority/batch finding in its bounded source/control-flow review.
 
 The same quiet seven-client/jobs16 direct/buffered gate ran after all
-qualification passes and failed both modes. This native result does not certify mounted packing
-or the unfinished NUC/Intel owner gates; no release promotion or push.
+qualification passes and failed both modes. This native result does not certify
+the unfinished NUC/Intel owner gates; no release promotion or push.
 
 AMD `cfa103dc` quiet jobs16: every client in both modes reports
 209 PASS/4 FAIL/1 SKIP/7 NOTRUN (44.3–45.8s). Directory deep nesting times out,
 many-files is killed, stats times out with a live worker and find is blocked
 after stats. Extra-client stop refuses the busy mount; later cold bytes and
 physical GC are NOTRUN. Fixture cleanup and normal mount restoration pass.
-[Fourteen exact client records and phase limits](../../results/measure/20261011-v030-seven-packing/cfa103dc/acceptance-summary.json).
 ORCD's independent directory improvement is therefore not reproduced on AMD.
 
 A separate diagnostic captures all four daemons and seven FUSE processes for
@@ -417,7 +232,6 @@ observation logging: 500 samples, zero lost. Caller stacks now resolve Raft
 apply, transaction resolution, KV batch and memmove; many captured threads
 wait in futex/socket paths. This bounded CPU sample does not establish the
 wall-time blocker or justify removing durability barriers.
-[Profile and thread waits](../../results/measure/20261011-v030-packing-profile/cfa103dc/perf-inclusive.txt).
 Normal mounts are restored after this diagnostic as well.
 
 ORCD submitted `bbe8b475` for bounded transaction-cut recapture (at most four
@@ -437,9 +251,9 @@ Independent [query safety review](../reviews/query-cut-retry-20261011.md) finds
 no additional concrete defect within its bounded scope.
 
 Buffered seven-client/jobs16 now passes every client220/0/1/0, exact cold
-mixed bytes, physical packed reclamation within180s and metadata queue drain.
+bytes, physical reclamation within180s and metadata queue drain.
 Direct still fails: six209/4/1/7 and one210/3/1/7, with directory/query cases
-and later cold/GC NOTRUN. [Raw modes and phases](../../results/measure/20261011-v030-seven-packing/d9d39acc/acceptance-summary.json).
+and later cold/GC NOTRUN.
 Normal mounts restore successfully.
 
 Ordinary-write pressure controls pass all seven suites in both modes on the
@@ -448,10 +262,10 @@ are case-only controls, not cold/GC or identical mixed-mutation warm-up proof.
 The initial helper-import failure is not an I/O result. Mixed-mutation OFF
 controls instead expose [W112](w112-full-overwrite-replay-20261012.md): ordinary
 full overwrite loses first-chunk bytes despite successful fsync, including
-cold reads. It blocks release independently of packing timeouts. A bounded
+cold reads. It blocks release independently of the pressure timeouts. A bounded
 actual-code repair and focused regressions pass; full/live qualification is next.
 
-### W112 qualified; packing pressure remains open
+### W112 qualified; pressure remains open
 
 Frozen `02b9918b` passes complete AMD normal/fault native and eleven sanitizer
 gates with all1,335 source/linked inputs unchanged. Both ordinary-overwrite
@@ -478,7 +292,7 @@ cases; only eligible completion uses tag54. All voters must understand53/54 befo
 admitting these commands; old binaries are unsafe rollback targets. New frozen
 merged full AMD qualification and both-mode pressure are pending.
 
-Latest `02b9918b` packing gate fails both modes (direct six209/4/1/7, one210/3/1/7;
+Latest `02b9918b` pressure gate fails both modes (direct six209/4/1/7, one210/3/1/7;
 buffered seven209/4/1/7), cold/GC NOTRUN after busy extra-client stop, restore0.
 Frozen `d26e6874` full merged AMD qualification is active after correcting an
 imported Mac fixture mismatch in `6819c127`. [Manager handoff](v030-amd-handoff-20261012.md)
@@ -495,7 +309,6 @@ queue cleanup, restore0; [raw both-mode evidence](../../results/measure/20261012
 Original seven-client/jobs16 pressure fails both modes: direct seven209/4/1/7;
 buffered six209/4/1/7, one210/3/1/7 (PASS/FAIL/SKIP/NOTRUN).
 Busy extra-client stop aborts later cold/GC phases; round1, restore0.
-[Exact14 client records and41 hash-verified raw artifacts](../../results/measure/20261012-v030-seven-packing/d26e6874/acceptance-summary.json).
 No release acceptance.
 
 Frozen Mac/ORCD/review/NUC owner ancestry and evidence are reconciled; root core
@@ -554,11 +367,11 @@ fix or quiet ON/OFF acceptance. Mac/ORCD now own bounded design/admission analys
 
 ### Second diagnostic checkpoint, 95d3f1b1
 
-[Exact evidence](v030-query-stage-diagnostic-20261012.md#second-frozen-amd-diagnostic-95d3f1b1) records full normal/fault/17 focused sanitizer/real-LSM sanitizer PASS and both-mode ordinary overwrite PASS on unchanged inputs. One instrumented direct seven-client run remains failing. Fourteen roots absent from retained generation 2 explain the logged query refusals; 145 cut mismatches and 47–48 second publication gaps are measured. Foreground deep-nesting causation remains unresolved. Cold packing/GC NOTRUN, mounts restored, no jobs, no release acceptance. Intel's newly diagnosed older-source namespace fixture incorrectly crossed the participant bound before its ancestry oracle; its test-only repair requires separate integration/qualification, never retroactive acceptance.
+[Exact evidence](v030-query-stage-diagnostic-20261012.md#second-frozen-amd-diagnostic-95d3f1b1) records full normal/fault/17 focused sanitizer/real-LSM sanitizer PASS and both-mode ordinary overwrite PASS on unchanged inputs. One instrumented direct seven-client run remains failing. Fourteen roots absent from retained generation 2 explain the logged query refusals; 145 cut mismatches and 47–48 second publication gaps are measured. Foreground deep-nesting causation remains unresolved. Cold/GC NOTRUN, mounts restored, no jobs, no release acceptance. Intel's newly diagnosed older-source namespace fixture incorrectly crossed the participant bound before its ancestry oracle; its test-only repair requires separate integration/qualification, never retroactive acceptance.
 
 ### Superseded quiet candidate, b239dc7d
 
-Full normal/fault/18 focused sanitizer/real-LSM sanitizer gates and direct/buffered ordinary warm/peer/cold/physical gates PASS on unchanged frozen inputs. One quiet original-budget direct seven-client packing attempt remains FAIL (all seven 209/4/1/7). The reviewed shorter cut-only capture retry does not close acceptance; publication gaps remain approximately 46.5 s. Buffered packing and cold/shared-GC gates NOTRUN, mounts restored/no jobs. [Exact evidence](v030-query-stage-diagnostic-20261012.md#reviewed-candidate-quiet-result-b239dc7d-still-blocked). Next is phase/in-flight evidence, with no unchanged repeat, deadline increase or stale-snapshot fallback.
+Full normal/fault/18 focused sanitizer/real-LSM sanitizer gates and direct/buffered ordinary warm/peer/cold/physical gates PASS on unchanged frozen inputs. One quiet original-budget direct seven-client attempt remains FAIL (all seven 209/4/1/7). The reviewed shorter cut-only capture retry does not close acceptance; publication gaps remain approximately 46.5 s. Buffered and cold/shared-GC gates NOTRUN, mounts restored/no jobs. [Exact evidence](v030-query-stage-diagnostic-20261012.md#reviewed-candidate-quiet-result-b239dc7d-still-blocked). Next is phase/in-flight evidence, with no unchanged repeat, deadline increase or stale-snapshot fallback.
 
 ## Supersession of earlier running/next checkpoints
 

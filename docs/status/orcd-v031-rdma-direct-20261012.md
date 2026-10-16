@@ -6,12 +6,12 @@ AMD TCP results and previous ORCD candidates do not transfer their verdicts.
 
 The live profile uses four physical storage hosts (fcstor003–006), six storage
 roots each, seven client hosts (fcstor007–013), native RDMA on `mlx5_2`, and
-explicit `--direct-io --storage-engine files`. Server commands, client
-commands and packed writes are explicitly zero. Experimental repair stays
+explicit `--direct-io`. Server and client
+commands are explicitly zero. Experimental repair stays
 zero. The existing stores were preserved and previous source trees retained
 at `/tmp/efs-before-profile-40f4509dff74`.
 
-Small-file packing, containers, `.efs` commands/queries and dedicated
+Small-file `.efs` commands/queries and dedicated
 unplanned-event repair/recovery are excluded from mounted qualification.
 Native bundled component checks do not certify those disabled features.
 The historical TCP-only standalone repair/fault harness is not an RDMA
@@ -46,7 +46,7 @@ subsequently drained and unmounted without force/lazy detach; all four servers
 stopped through the identity-checked SIGTERM path without SIGKILL. All seven
 restarted mounts read identical fsynced ordinary bytes. Real payload/checksum
 files existed before unlink and disappeared across all 24 storage roots.
-This is ordinary-object physical GC, not shared packed GC.
+This is ordinary-object physical GC.
 
 The post-restart core repeat again passed **1,512/1,512**, with no failures,
 skips or NOTRUN; whole-suite times were approximately 21 seconds per client.

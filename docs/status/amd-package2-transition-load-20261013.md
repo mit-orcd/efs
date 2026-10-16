@@ -43,7 +43,7 @@ never by interpreting its 584-byte rows as v6.
 
 Environment: AMD-395 bare metal, four localhost daemons 17432–17435, two native
 FUSE mounts, one NVMe/ext4 filesystem. Files/TCP/direct I/O; commands and server
-queries on; packing, containers, expiry and repair experiment off. Persisted
+queries on; expiry and repair experiment off. Persisted
 command policy remains version 0 / mask 3. Initial runs use 20 GiB/node logical
 data quotas; later retained fixtures lowered safe startup maximum to 19.42 GiB,
 so the final configuration uses 18 GiB/node. This changes capacity admission,
@@ -142,7 +142,7 @@ ASAN_OPTIONS=detect_leaks=1 ./tests/test_query_refresh
 
 AMD handoff checks above are complete on the final source. Final running
 four daemons and both FUSE clients match the tested binary hashes and the enabled
-commands/files/TCP/direct profile, with packing/expiry/repair off and no private
+commands/files/TCP/direct profile, with expiry/repair off and no private
 query-budget overrides. Persisted GET remains version 0 / mask 3.
 
 850 source/test inputs match frozen `3409e0c6` across native, sanitizer and live
@@ -165,7 +165,7 @@ and all authoritative stores remain.
 pressure, full-size same-source cold ≤300s, complete 400 GiB payload/export,
 seven-client loaded query and hardware-RDMA gates. The original W91/W92/W109
 scale/pressure work remains open; W108's historical implementation closure is
-not reopened by these new-source rollout checks. Containers, packing, expiry
+not reopened by these new-source rollout checks. expiry
 and unplanned-event repair are outside this package.
 
 ## W92 follow-up: sort scratch accounting and unchecked deletion
@@ -244,7 +244,7 @@ not reduce the physical size of an already-built v6 generation or change its ABI
 
 Environment: AMD-395, four `efs`-owned local daemons on 17432–17435, two FUSE
 mounts /data1/efs/mnt and mnt2; files/TCP/direct, client/server commands enabled,
-packing/containers/expiry/repair experiment disabled, persisted policy version 0
+expiry/repair experiment disabled, persisted policy version 0
 mask 3. Query limits remain 16 GiB/generation and 32 GiB/root, no live overrides.
 Actual daemon arguments/environment and installed candidate binary hashes were
 checked. The synthetic data quota is now **17 GiB/node**: the first transition
@@ -285,7 +285,7 @@ On the exclusive AMD `efs` account with prebuilt genuine 19b14609 baseline:
 
 ```sh
 export EFS_CLUSTER=amd EFS_COMMANDS=1 EFS_COMMANDS_SERVER=1
-export EFS_PACKED_WRITES=0 EFS_EXPIRY=0 EFS_REPAIR_EXPERIMENT=0
+export EFS_EXPIRY=0 EFS_REPAIR_EXPERIMENT=0
 export EFS_TRANSPORT=tcp EFS_DIRECT_IO=1
 export EFS_QUERY_TEST_HOST=127.0.0.1 EFS_QUERY_TEST_PORT=17432
 python3 tests/measure/amd_query_cache_transition.py /data1/efs/package2-v5-src /data1/efs/amd-package2-src /data1/efs/transition-fresh

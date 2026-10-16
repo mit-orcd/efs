@@ -1,2 +1,0 @@
-[ perf record: Woken up 1 times to write data ]
-[ perf record: Captured and wrote 0.067 MB /data1/efs/bench/container-round4-20261008/containers-buffered-r1/profile-delete.data (274 samples) ]

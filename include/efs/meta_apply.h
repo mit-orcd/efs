@@ -338,9 +338,8 @@ int efs_meta_execute_resize(const struct efs_meta_resize_plan *plan,
                              const struct efs_meta_resize_ops *ops, void *ctx);
 
 #define EFS_META_PROFILE_K2F1 1u
-/* 2 was the packed K2F1 profile (removed 2026-10-16): such rows are
- * refused, never read as a plain base (archive/packing-containers-20261016). */
-#define EFS_META_PROFILE_RETIRED_PACK 2u
+/* 2 is reserved: such rows are refused, never read as a plain base. */
+#define EFS_META_PROFILE_RESERVED 2u
 
 #define EFS_META_LAYOUT_LOCAL     0
 #define EFS_META_LAYOUT_SPLITTING 1

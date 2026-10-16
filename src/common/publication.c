@@ -35,7 +35,7 @@ int efs_publication_digest(const struct efs_meta_pub *r, uint8_t out[EFS_HASH_SI
     if (!nonzero || !r->publication_id.seq || !r->publication_id.session_epoch)
         return EFS_ERR_INVAL;
     uint8_t buf[160 + EFS_NUM_FRAGMENTS * (4 + EFS_HASH_SIZE)], *p = buf;
-    put(&p, r->ticketed ? 3 : r->fresh_object ? 2 : 1, 4); /* 4 was packed */
+    put(&p, r->ticketed ? 3 : r->fresh_object ? 2 : 1, 4); /* 4 is reserved */
     memcpy(p, r->publication_id.client_uuid, EFS_OPID_UUID_LEN);
     p += EFS_OPID_UUID_LEN;
     put(&p, r->publication_id.session_epoch, 4);
@@ -76,7 +76,7 @@ int efs_publication_from_rec(const struct efs_chunk_rec *r, uint64_t size,
     uint64_t epoch;
     if (!r || !p) return EFS_ERR_INVAL;
     struct efs_chunk_rec authority = *r;
-    if ((r->publish_flags & EFS_CHUNK_REC_F_RETIRED_PACKED) ||
+    if ((r->publish_flags & EFS_CHUNK_REC_F_RESERVED) ||
         !(r->publish_flags & EFS_CHUNK_REC_F_CAPTURED_FILEID) ||
         efs_chunk_publish_authority(&authority, r->file_generation, r->publish_epoch, &epoch) != EFS_OK)
         return EFS_ERR_INVAL;

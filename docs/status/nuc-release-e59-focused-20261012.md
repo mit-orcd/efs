@@ -10,7 +10,7 @@ executable hashes and versions recorded. No candidate source edits.
 Authorized resource-weighted NUC scope: lightweight correctness, not broad
 matrix. Four direct/TCP/FILES daemons with4G quota each; seven clients.
 Actual4+7 `/proc` environments and mapped images verify EFS_COMMANDS0,
-EFS_COMMANDS_SERVER0, EFS_PACKED_WRITES1, flow/earlyretire/groupdrain0, repair0.
+EFS_COMMANDS_SERVER0, flow/earlyretire/groupdrain0, repair0.
 `.efs` absent by actual listing/existence checks. No compiler/profiler/other
 EFS daemon during measurement. Isolated `/data1/efs/nuc-e59-focus` roots,
 ports24410–24413. Existing case assertions and30-second budgets unchanged.
@@ -40,7 +40,7 @@ No causal attribution from this pass to READDIR change or query disable; no
 claim that heavy CREATE-stage timeout is fixed. Prior ecdc focusedpass already
 showed fast deepcases, and broad priorfailures remain retained. AMD owns heavy
 full lifecycle and finalnative. W97 comparison/fulloriginalW52/bothmodeW112 are
-not closed. Containers/RDMA/repair deferred. No pushes/tags/promotions.
+not closed. RDMA/repair deferred. No pushes/tags/promotions.
 
 Raw complete source/build manifest, actual image/config proof, external runner,
 commands/exit/timing, all21cases in14complete TSVs/logs and result/cleanup:

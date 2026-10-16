@@ -1,6 +1,6 @@
 # W108 · Resolve owner names in directory-local long listings
 
-**Status:** implemented and candidate-gated; rebuilt-client rollout pending — now in the `devel-orcd` queue after the first-priority packing work, under the user's explicit ORCD ownership authorization (October 11, 2026).
+**Status:** implemented and candidate-gated; rebuilt-client rollout pending — now in the `devel-orcd` queue, under the user's explicit ORCD ownership authorization (October 11, 2026).
 
 ## Report and cause
 
@@ -66,7 +66,7 @@ All 29 command regressions pass, including independent fallback, name escaping,
 repeated-lookup caching, its bound, numeric mode, and source/header identity.
 A private candidate source on fcstor007 reads the actual mounted query snapshot:
 `-l` prints `erbmi1:erbmi1`, `-n` prints `246111:246111`, and JSON retains numeric
-246111. [Live candidate output](../../results/measure/20261011-orcd-tiny-packing/w108-candidate-live.txt).
+246111.
 This does not replace the running embedded command. Keep W108 open until the
 rebuilt clients serve these bytes and shared find/ls live gates pass.
 
@@ -76,8 +76,8 @@ rebuilt clients serve these bytes and shared find/ls live gates pass.
 **PASS** on `devel-efs` source `0dd2a7c7912b4fec4b2ee6f6237075f2a7d3e5b5`:
 rebuilt embedded `ls` and `find` print `erbmi1:erbmi1` on all seven ORCD clients,
 warm and after orderly restart; numeric mode and JSON retain UID/GID246111.
-The 29 native formatter regressions pass. RDMA/direct-I/O/files engine,
-commands enabled, packing/containers disabled, expiry deferred. W108's formatter
+The 29 native formatter regressions pass. RDMA/direct-I/O/files storage,
+commands enabled, expiry deferred. W108's formatter
 rollout gate is satisfied. [Reproduction and exact-source qualification](devel-efs-query-20261012.md)
 records binary identities, concurrent query passes and remaining broader gates.
 The preceding private-candidate checkpoint is historical.

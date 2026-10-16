@@ -1912,7 +1912,7 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
         if (efs_client_mtime_is_pinned(ds.ino_keys[i]))
             irecs[in].flags = EFS_INO_REC_F_TIMES;
         irecs[in].atime = inode.atime;
-        /* pack fields stay zero: there is no packing. */
+        /* reserved fields stay zero. */
         in++;
     }
     /* Every chunk rec travels with its ino's size (see extra_cap). Inos in

@@ -1,8 +1,0 @@
-| 64 KiB | 95% | 1 | direct | punch | PASS | 1898 | 0.248 | 1.599 | 0.00 | 0 |
-Thu Oct  8 05:49:40 AM UTC 2026
-ELAPSED %CPU S WCHAN                    COMMAND
-    646  0.0 S futex_do_wait            efs-bench
-     77  1.2 D xlog_wait                efs-bench
-     77  1.2 D xlog_wait_on_iclog       efs-bench
-     77  1.2 D xlog_wait_on_iclog       efs-bench
-     77  1.2 D xlog_wait_on_iclog       efs-bench

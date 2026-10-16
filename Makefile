@@ -114,9 +114,9 @@ COMMON_SRCS = src/common/admission.c src/meta/append_plan.c $(COMMON_DIR)/public
 COMMON_OBJS = $(COMMON_SRCS:.c=.o)
 LIB = libefs.a
 
-TEST_SRCS = tests/test_rdma_segmented.c tests/test_expiry.c tests/test_repair_job.c tests/test_query_policy.c tests/test_query_refresh.c tests/test_txn_resolve_faults.c tests/test_namespace_session.c tests/test_admission.c tests/test_principles_index_fault.c tests/test_principles_index.c tests/test_query_catalog.c tests/test_name_index.c tests/test_append_transaction.c tests/test_store_durability.c tests/test_append_receipt.c tests/test_put_ticket.c tests/test_store_gc.c tests/test_bench_latency.c tests/test_store_overwrite.c tests/test_writer_routing.c tests/test_kv_snapshot_tail.c tests/test_kv_seg_index.c tests/test_kv_seg_bloom.c tests/test_kv_lsm_concurrent.c tests/test_kv_block_hash.c tests/test_mtime_barrier.c tests/test_publication_session.c tests/test_publication_ack.c tests/test_publication_recovery.c tests/test_lane_bootstrap_recovery.c tests/test_fence_view.c tests/test_reply_buffers.c tests/test_bufpool.c tests/test_erasure.c tests/test_placement.c tests/test_rdma_xprt.c tests/test_wire.c tests/test_data.c tests/test_kv.c tests/test_kv_lsm.c tests/test_raft_store.c tests/test_meta_apply.c tests/test_raft.c tests/test_sim.c tests/test_txn.c tests/test_session.c tests/test_lock.c tests/test_stage_evict.c tests/test_conn_fd.c tests/test_query_disk.c tests/test_query_delta.c tests/test_query_disk_io.c
-TEST_BINS = tests/test_rdma_segmented tests/test_expiry tests/test_repair_job tests/test_query_policy tests/test_query_refresh tests/test_txn_resolve_faults tests/test_namespace_session tests/test_admission tests/test_principles_index_fault tests/test_principles_index tests/test_query_catalog tests/test_name_index tests/test_append_transaction tests/test_store_durability tests/test_append_receipt tests/test_put_ticket tests/test_store_gc tests/test_bench_latency tests/test_store_overwrite tests/test_writer_routing tests/test_kv_snapshot_tail tests/test_kv_seg_index tests/test_kv_seg_bloom tests/test_kv_lsm_concurrent tests/test_kv_block_hash tests/test_mtime_barrier tests/test_publication_session tests/test_publication_ack tests/test_publication_recovery tests/test_lane_bootstrap_recovery tests/test_fence_view tests/test_reply_buffers tests/test_bufpool tests/test_erasure tests/test_placement tests/test_rdma_xprt tests/test_wire tests/test_data tests/test_kv tests/test_kv_lsm tests/test_raft_store tests/test_meta_apply tests/test_raft tests/test_sim tests/test_txn tests/test_session tests/test_lock tests/test_stage_evict tests/test_conn_fd tests/test_query_disk tests/test_query_delta tests/test_query_disk_io
-TEST_SRCS += tests/test_small_segment.c tests/test_kv_reader_gate.c
+TEST_SRCS = tests/test_rdma_segmented.c tests/test_expiry.c tests/test_repair_job.c tests/test_query_policy.c tests/test_query_refresh.c tests/test_txn_resolve_faults.c tests/test_namespace_session.c tests/test_admission.c tests/test_query_catalog.c tests/test_name_index.c tests/test_append_transaction.c tests/test_store_durability.c tests/test_append_receipt.c tests/test_put_ticket.c tests/test_store_gc.c tests/test_bench_latency.c tests/test_store_overwrite.c tests/test_writer_routing.c tests/test_kv_snapshot_tail.c tests/test_kv_seg_index.c tests/test_kv_seg_bloom.c tests/test_kv_lsm_concurrent.c tests/test_kv_block_hash.c tests/test_mtime_barrier.c tests/test_publication_session.c tests/test_publication_ack.c tests/test_publication_recovery.c tests/test_lane_bootstrap_recovery.c tests/test_fence_view.c tests/test_reply_buffers.c tests/test_bufpool.c tests/test_erasure.c tests/test_placement.c tests/test_rdma_xprt.c tests/test_wire.c tests/test_data.c tests/test_kv.c tests/test_kv_lsm.c tests/test_raft_store.c tests/test_meta_apply.c tests/test_raft.c tests/test_sim.c tests/test_txn.c tests/test_session.c tests/test_lock.c tests/test_stage_evict.c tests/test_conn_fd.c tests/test_query_disk.c tests/test_query_delta.c tests/test_query_disk_io.c
+TEST_BINS = tests/test_rdma_segmented tests/test_expiry tests/test_repair_job tests/test_query_policy tests/test_query_refresh tests/test_txn_resolve_faults tests/test_namespace_session tests/test_admission tests/test_query_catalog tests/test_name_index tests/test_append_transaction tests/test_store_durability tests/test_append_receipt tests/test_put_ticket tests/test_store_gc tests/test_bench_latency tests/test_store_overwrite tests/test_writer_routing tests/test_kv_snapshot_tail tests/test_kv_seg_index tests/test_kv_seg_bloom tests/test_kv_lsm_concurrent tests/test_kv_block_hash tests/test_mtime_barrier tests/test_publication_session tests/test_publication_ack tests/test_publication_recovery tests/test_lane_bootstrap_recovery tests/test_fence_view tests/test_reply_buffers tests/test_bufpool tests/test_erasure tests/test_placement tests/test_rdma_xprt tests/test_wire tests/test_data tests/test_kv tests/test_kv_lsm tests/test_raft_store tests/test_meta_apply tests/test_raft tests/test_sim tests/test_txn tests/test_session tests/test_lock tests/test_stage_evict tests/test_conn_fd tests/test_query_disk tests/test_query_delta tests/test_query_disk_io
+TEST_SRCS += tests/test_kv_reader_gate.c
 TEST_SRCS += tests/test_directory_sync_group.c
 TEST_BINS += tests/test_directory_sync_group
 TEST_SRCS += tests/test_kv_insertion_buffer.c
@@ -124,7 +124,7 @@ TEST_BINS += tests/test_kv_insertion_buffer
 TEST_SRCS += tests/test_retained_namespace_audit.c
 TEST_BINS += tests/test_retained_namespace_audit
 
-TEST_BINS += tests/test_small_segment tests/test_kv_reader_gate
+TEST_BINS += tests/test_kv_reader_gate
 
 SERVER_SRCS = src/server/repair_worker.c src/server/repair_upload.c src/server/put_fence.c src/server/put_upload.c src/server/efsd.c src/server/store.c src/server/store_nvme.c src/server/storage_roots.c \
               src/server/handler.c \
@@ -142,7 +142,7 @@ CLIENT_OBJS = $(CLIENT_SRCS:.c=.o)
 SIM_OBJS = $(patsubst %.c,%.o,$(wildcard src/sim/sim*.c))
 $(SIM_OBJS): $(wildcard include/efs/*.h) src/sim/sim_internal.h .build_id.stamp
 
-BENCH_CLIENT_SRC = src/client/efs_bench.c src/bench/bench_local.c src/bench/blake3_bench.c src/bench/io_bench.c src/bench/storage_principles.c src/bench/principles_index.c src/bench/storage_churn.c src/bench/storage_ranges.c
+BENCH_CLIENT_SRC = src/client/efs_bench.c src/bench/bench_local.c src/bench/blake3_bench.c src/bench/io_bench.c src/bench/storage_principles.c
 # Reuse production storage/writer code without linking daemon/network startup.
 # Separate sectioned objects let the linker discard unrelated server functions.
 BENCH_STORE_OBJS = src/bench/store.o src/bench/store_nvme.o src/bench/storage_roots.o \
@@ -153,11 +153,8 @@ src/bench/%.o: src/server/%.c .build_id.stamp
 BENCH_CLIENT_OBJ = $(BENCH_CLIENT_SRC:.c=.o)
 src/bench/bench_local.o src/bench/io_bench.o: src/bench/perf_control.h
 src/bench/bench_local.o: src/bench/latency.h
-src/bench/principles_index.o: src/bench/principles_index.h
-src/bench/storage_principles.o: src/bench/principles_index.h src/bench/storage_principles.h src/bench/perf_control.h src/bench/latency.h
-src/bench/storage_churn.o: src/bench/storage_churn.h src/bench/latency.h src/bench/perf_control.h
-src/bench/storage_ranges.o: src/bench/storage_ranges.h src/bench/latency.h
-src/client/efs_bench.o: src/bench/storage_principles.h src/bench/storage_churn.h src/bench/storage_ranges.h
+src/bench/storage_principles.o: src/bench/storage_principles.h src/bench/perf_control.h src/bench/latency.h
+src/client/efs_bench.o: src/bench/storage_principles.h
 src/common/admission.o tests/test_admission: include/efs/admission.h
 
 $(BENCH_CLIENT_OBJ): src/bench/bench_local.h src/bench/blake3_bench.h src/bench/io_bench.h
@@ -396,8 +393,8 @@ test: all
 	python3 tests/test_lookup_path_authority.py
 	python3 tests/test_read_control_host.py
 	python3 tests/test_queued_read_control.py
-	python3 tests/test_container_ack_window.py
-	python3 tests/test_container_pending_reads.py
+	python3 tests/test_raft_ack_window.py
+	python3 tests/test_raft_pending_reads.py
 	python3 tests/test_prepare_cohort.py
 	python3 tests/test_append_cohort.py
 	python3 tests/test_atomic_append_host.py
@@ -448,13 +445,7 @@ test: all
 	python3 tests/test_tiny_fragment_audit.py
 	python3 tests/test_bench_cli.py
 	python3 tests/test_bench_profile.py
-	./tests/test_principles_index
-	./tests/test_principles_index_fault
 	python3 tests/test_storage_principles.py
-	python3 tests/test_bench_ranges.py
-	python3 tests/test_storage_ranges.py
-	python3 tests/test_storage_churn.py
-	python3 tests/test_bench_churn.py
 	python3 docs/check-architecture.py
 	$(MAKE) test-fence-read
 	$(MAKE) test-fence-view
@@ -490,8 +481,8 @@ test: all
 	python3 tests/test_metadata_balance.py
 	python3 tests/test_host_pressure.py
 	python3 tests/test_host_outbox.py
-	python3 tests/test_container_read_probe.py
-	python3 tests/test_container_read_admission.py
+	python3 tests/test_raft_read_probe.py
+	python3 tests/test_raft_read_admission.py
 	python3 tests/test_posix_timeout_zombie.py
 	python3 tests/test_host_flow.py
 	python3 tests/test_host_pending_entries.py
@@ -621,7 +612,6 @@ test: all
 	./tests/test_namespace_session
 	./tests/test_session
 	./tests/test_erasure
-	./tests/test_small_segment
 	./tests/test_kv_reader_gate
 	./tests/test_placement
 	./tests/test_lock
@@ -768,7 +758,7 @@ clean:
 	rm -f src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_ns.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o src/sim/sim_disk.o src/sim/opid.o
 	rm -f $(LIB) efsd efs-fuse efs-bench efs-mgmt efs-query blake3-bench
 	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim
-	rm -f $(TEST_BINS) tests/faults/repair_request tests/test_repair_worker tests/test_repair_inode_gc_race tests/test_repair_store_identity tests/test_repair_file_atomic tests/test_repair_receiver tests/test_repair_storage_fence tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_upload_client tests/principles_index_fault.o
+	rm -f $(TEST_BINS) tests/faults/repair_request tests/test_repair_worker tests/test_repair_inode_gc_race tests/test_repair_store_identity tests/test_repair_file_atomic tests/test_repair_receiver tests/test_repair_storage_fence tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_upload_client
 	rm -f .build_id.stamp
 
 $(BLAKE3_DIR)/blake3_sse2.o: $(BLAKE3_DIR)/blake3_sse2.c
@@ -786,9 +776,6 @@ $(BLAKE3_DIR)/blake3_avx512.o: $(BLAKE3_DIR)/blake3_avx512.c
 %.o: %.c
 	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
 
-tests/test_principles_index: tests/test_principles_index.c src/bench/principles_index.o $(LIB)
-	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ $^ $(LDFLAGS)
-
 tests/test_bench_latency: tests/test_bench_latency.c src/bench/latency.h
 	$(CC) $(CFLAGS) -o $@ $<
 
@@ -802,13 +789,6 @@ test-gc-live: all
 tests/test_put_ticket: tests/test_put_ticket.o $(LIB)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-# Compile an isolated model with test-only syscall indirection; normal bench
-# objects and production libraries never contain these hooks.
-tests/principles_index_fault.o: src/bench/principles_index.c src/bench/principles_index.h
-	$(CC) $(CFLAGS) $(INCLUDES) -Dfsync=efs_index_test_fsync -Dpwrite=efs_index_test_pwrite -Dreaddir=efs_index_test_readdir -c -o $@ $<
-
-tests/test_principles_index_fault: tests/test_principles_index_fault.c tests/principles_index_fault.o $(LIB)
-	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ tests/test_principles_index_fault.c tests/principles_index_fault.o $(LIB) $(LDFLAGS)
 src/server/store.o src/server/storage_roots.o src/server/efsd.o src/bench/store.o src/bench/storage_roots.o: src/server/storage_roots.h
 
 # Both sides must rebuild together when GET checksum provenance changes.
@@ -853,8 +833,6 @@ tests/test_kv_snapshot_tail: src/kv/kv_seg.c src/kv/kv_lsm_internal.h
 
 src/meta/query_catalog.o src/meta/query_disk.o tests/test_query_disk_io: src/meta/query_build_time.h
 
-tests/test_small_segment: tests/test_small_segment.c src/data/erasure.c include/efs/erasure.h
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ tests/test_small_segment.c src/data/erasure.c
 
 
 

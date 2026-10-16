@@ -18,7 +18,6 @@ Earlier dated statements below describe the gates outstanding at that time.
 |---|---|---|
 | W93 | Bounded batching, durability/fault/cold/full Linux/live gates and balanced long controls | Preserve regression coverage; W53 close tails remain separate |
 | W94 | Atomic server lease, rejected replies, pending ownership/atomic CREATE, bounded sequenced-edge and cold tests | Client ownership/recovery integration, production runtime sessions and activation gates |
-| W95 | Tiny/durable timing, independent indexed recovery/GC model, finite-create comparisons and production churn | P4.1 production-layout selection/migration; no format activation |
 | W96 | Tail/interior-damage recovery, reservation/fallback/fault, full live and isolated NUC two-device acceptance | Closed Oct11; preserve regressions, conditional performance benefit and separate hardware-power-loss obligations |
 
 ## W96 recovery prerequisite
@@ -51,8 +50,6 @@ KV preallocation and its performance/recovery gates remain separate work.
 - W93: bounded cross-request follower batching, with ACK/apply/read visibility
   gated by persistence; measurement and faults before acceptance.
 - W94: atomic CREATE/open lease, safe adoption and all namespace paths/retries.
-- W95: extend existing independent storage experiments for true tiny logical
-  payloads, durable completion latency and mixed churn; keep production separate.
 - W96: bounded KV preallocation, recovery/reset/compaction/fault gates and matched
   performance measurements after the recovery prerequisite.
 
@@ -120,30 +117,6 @@ last-close-before-adoption race. Production legacy mount sessions also lack
 durable revocation integration, so new orphanable CREATE claims must not be
 introduced as a shortcut.
 
-## W95 independent tiny-file principles
-
-The existing independent benchmark now accepts 1-byte through 1-MiB physical
-payloads and separately models tiny logical content inside full fragments.
-Pattern generation is safe below eight bytes; direct/punch records stay aligned.
-Packed buffered containers and conditional tombstones are explicit experiments;
-tombstoned allocation is retained until actual reclamation, never reported freed.
-Directory sync topology can include every ancestor to model current production
-cost. Fixture-directory entries are persisted outside timing before operations.
-
-Every modified record's latency reaches its cohort's successful durability
-barrier; earlier records no longer omit their batch wait. Results/reports expose
-logical/physical geometry, topology, p50/p95/p99 and latency semantics. Existing
-profile harness generates valid tiny/packed cases and rejects invalid direct
-packing/punch combinations. Nine benchmark contract tests, 20 profile tests,
-24 geometry/persistence cases, 12 packed read/write/delete cases and AMD
-ASan/UBSan pass. Eight separate baseline/perf/strace runs produced all three
-requested perf report types. Sampled hot paths are mainly filesystem/locking;
-CPU sample percentages are not wall-time attribution. No production format port.
-
-[Evidence and remaining gates](../../results/measure/20261008-w93-w96-implementation/w95-principles/README.md).
-Mixed churn and durable index/body/ACK/GC crash-phase recovery remain before
-W95 closure. Packing is not an approved backend migration.
-
 ## W96 NUC two-device performance follow-up
 
 Three matched pairs on each NUC device improve single-writer rates, but QD8
@@ -181,7 +154,7 @@ The full Linux regression suite also passes in an isolated generated-doc tree.
 This fixes a lifecycle leak; it does not enable CREATE lease piggybacking.
 Client adoption and ambiguous CREATE/lease-close recovery remain open.
 
-## W93 durable ACK ordering and W95 production churn
+## W93 durable ACK ordering and production churn
 
 Follower cross-request ACKs now follow successful log durability without waiting
 for the whole cohort's state-machine/KV apply. Inbox processing still completes
@@ -193,12 +166,12 @@ rejected descriptor replies, append/replay/fsync/shutdown and repeated WAL/GC
 cold recovery. Installed service restored. Mixed-load performance acceptance
 for this ordering is being measured separately.
 
-W95's new production churn gate fsyncs 300 create/overwrite/delete/recreate
+The new production churn gate fsyncs 300 create/overwrite/delete/recreate
 generations across 100 files, payloads 1/17/128/512/65536 bytes. It verifies
 every final generation after abrupt private-daemon restart, then proves
 physical deletion and queue drain. This is functional correctness evidence,
-not an independent packed-index crash test or a power-loss claim.
-[Evidence](../../results/measure/20261008-w93-w96-implementation/w95-live-churn/live.log).
+not a power-loss claim.
+[Evidence](../../results/measure/20261008-w93-w96-implementation/live-churn/live.log).
 
 ## W93 / W53 end-to-end mixed-load finding
 
@@ -209,16 +182,6 @@ acceptance despite lower median latency in some samples. A four-request bound
 experiment did not establish a fix, so no default-bound change was made.
 [All samples and contamination limits](../../results/measure/20261008-w93-w96-implementation/w93-mixed-load/README.md).
 The subsequent durable-ACK-before-apply change is being measured separately.
-
-## W95 independent cold-process verification
-
-The principles benchmark can now retain successful durable write fixtures and
-verify them read-only from another process with exact geometry seals. Default
-empty-root cleanup is unchanged. Failed recovery preserves evidence; corrupt,
-truncated, missing and mismatched records cannot produce BENCH_OK. Seal sync
-failure reports failure and cleans only the owned incomplete fixture. Ten
-contract tests and twelve two-root sanitizer cases pass.
-[Evidence and limits](../../results/measure/20261008-w93-w96-implementation/w95-cold-principles/README.md).
 
 ## W94 remaining activation prerequisite
 
@@ -245,17 +208,6 @@ still repair. AMD KV/compaction, Raft/disk tests and Linux/Mac sanitizers pass.
 This is not a general corruption salvage guarantee. The final guard's full
 live cold rerun is pending after isolated timing.
 [Evidence](../../results/measure/20261008-w93-w96-implementation/w96-interior-damage/README.md).
-
-## W95 independent process-crash phases
-
-Twelve independent file/container cases now crash after body write/sync,
-fixture-seal sync/parent publication, printed acknowledgement and GC unlink.
-Incomplete unsealed fixtures are rejected read-only; complete sealed data
-survives cold verification, and every printed success is recoverable. Evidence
-is preserved after failed recovery. All eleven contract tests pass.
-[Evidence and model limits](../../results/measure/20261008-w93-w96-implementation/w95-crash-phases/README.md).
-This covers the existing fixed-geometry principles model, not a production
-packed-index protocol or a selected/migrated backend.
 
 ## W94 staged combined ownership primitive
 
@@ -369,8 +321,8 @@ Remaining W94 activation dependencies are real runtime mount sessions, atomic
 pending ownership on every namespace transaction path, bounded retention and
 resolution of ambiguous client outcomes, and safe local descriptor adoption.
 Do not enable the CREATE flag merely because server primitive gates pass.
-W95 indexed packing semantics/experiments and W96 quiet NUC acceptance remain
-open; NUC still runs unrelated tiny-file and storage-engine experiments.
+W96 quiet NUC acceptance remains
+open; NUC still runs unrelated tiny-file experiments.
 
 
 The corrected cross-group admission/window-retirement repeat
@@ -403,25 +355,6 @@ This verifies server ownership semantics; production client adoption remains
 inactive pending its session and bounded ambiguous-outcome integration.
 
 
-W95 now has an independent immutable-body/atomic-manifest prototype, with
-versioned conditional deletion, quota admission, checksum-validated recovery,
-recovery stabilization before GC and bounded physical garbage gates. Eighteen
-process-exit cases and 4,800 churn operations pass, alongside shared-segment,
-corruption, stale-delete and read-only recovery checks. The model remains outside
-production EFS storage. The 36 balanced AMD buffered measurements show slower
-individual publications and faster cohorts of 32; sustained comparative churn
-and production format selection remain open. Details and raw measurements:
-[w95-indexed-model-20261008.md](w95-indexed-model-20261008.md).
-
-
-AMD-only follow-up: sustained W95 tiny/mixed conditional churn passed all 24
-samples (184,320 operations), with GC costs, allocation and read-only reopened
-bytes/generations checked. Four publication barrier failures, ten short-write/
-ENOSPC cuts, GC sync failure and directory inventory errors pass focused AMD
-normal and ASan/UBSan gates. The full regression suite is repeated after adding
-these gates. W95 still selects no production layout; that migration remains P4.1.
-Current implementation/testing uses AMD as requested. The earlier NUC comparison
-is historical evidence and does not change the current test target.
 
 
 W94 transaction ownership follow-up: a staged exact-value session-row intent

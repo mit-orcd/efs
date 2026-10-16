@@ -19,59 +19,17 @@ class PrinciplesTests(unittest.TestCase):
         if not ok:
             return p
         row = next(line for line in p.stdout.splitlines() if line.startswith('BENCH_OK '))
-        result=dict(re.findall(r'(\w+)=([^\s]+)', row))
-        for line in p.stdout.splitlines():
-            if line.startswith('BENCH_NOTE index_protocol='):
-                result.update(re.findall(r'(\w+)=([^\s]+)',line))
-        return result
+        return dict(re.findall(r'(\w+)=([^\s]+)', row))
 
-    def test_indexed_durable_geometry_and_cold_read_only(self):
-        for size,persist in itertools.product([1,17,512,65536],['each','batch']):
-            with self.subTest(size=size,persist=persist), tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
-                common=['--storage',a,'--storage',b,'--layout','container','--container-alignment','1',
-                        '--indexed','--objects','16','--qd','2','--payload-size',str(size),'--logical-size','1','--no-direct-io']
-                row=self.run_case(*common,'--rw','write','--policy','allocating','--persist',persist,'--batch-size','4','--retain')
-                self.assertEqual(row['layout'],'indexed')
-                self.assertEqual(row['record_bytes'],str(size+52))
-                self.assertEqual(row['latency_samples'],'16')
-                self.assertEqual(row['latency'],'operation_to_durable_completion')
-                self.assertEqual(row['verified_objects'],'16')
-                self.assertGreater(int(row['syncs']),0)
-                cohorts=16 if persist=='each' else 4
-                self.assertEqual(int(row['body_written_bytes']),16*(size+52)+24*cohorts)
-                self.assertEqual(int(row['index_written_bytes']),(48+8*80+32)*cohorts)
-                self.assertEqual(int(row['garbage_bytes']),0)
-                def evidence():
-                    return {str(p):(p.read_bytes(),p.stat().st_mtime_ns) for root in (a,b) for p in Path(root).rglob('*') if p.is_file()}
-                before=evidence()
-                cold=self.run_case(*common,'--rw','read','--policy','populated','--persist','none','--recover-existing')
-                self.assertEqual(cold['verified_objects'],'16')
-                self.assertEqual(cold['syncs'],'0')
-                self.assertEqual(evidence(),before,'cold verification must not rewrite, collect or repair')
-
-    def test_indexed_cleanup_and_refused_modes(self):
-        with tempfile.TemporaryDirectory() as root:
-            base=['--storage',root,'--layout','container','--container-alignment','1','--indexed',
-                  '--objects','16','--qd','2','--payload-size','512']
-            self.run_case(*base,'--rw','write','--policy','allocating','--persist','batch')
-            self.assertEqual(list(Path(root).iterdir()),[])
-            for bad in [('--direct-io',),('--persist','none'),('--layout','files'),
-                        ('--container-alignment','4096'),('--policy','overwrite'),
-                        ('--rw','delete','--policy','tombstone'),('--objects','65537'),
-                        ('--objects','256','--qd','256','--payload-size','1048576')]:
-                self.run_case(*base,'--rw','write','--policy','allocating','--persist','batch',*bad,ok=False)
-                self.assertEqual(list(Path(root).iterdir()),[])
-
-    def test_all_layouts_persistence_and_direct_formats(self):
-        for layout, direct in itertools.product(['files', 'container'], [False, True]):
+    def test_persistence_and_direct_formats(self):
+        for direct in [False, True]:
             variants = [('read', 'populated', 'none')]
             variants += [('write', p, s) for p in ['allocating', 'overwrite'] for s in ['none', 'each', 'batch']]
-            variants += [('delete', p, s) for p in (['unlink'] if layout == 'files' else ['punch', 'release'])
-                         for s in ['none', 'each', 'batch']]
+            variants += [('delete', 'unlink', s) for s in ['none', 'each', 'batch']]
             for rw, policy, persist in variants:
-                with self.subTest(layout=layout, direct=direct, rw=rw, policy=policy, persist=persist):
+                with self.subTest(direct=direct, rw=rw, policy=policy, persist=persist):
                     with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
-                        row = self.run_case('--storage', a, '--storage', b, '--layout', layout,
+                        row = self.run_case('--storage', a, '--storage', b,
                                             '--rw', rw, '--policy', policy, '--persist', persist,
                                             '--objects', '8', '--payload-size', '4096', '--qd', '2',
                                             '--batch-size', '4', '--direct-io' if direct else '--no-direct-io')
@@ -82,7 +40,7 @@ class PrinciplesTests(unittest.TestCase):
                         self.assertEqual(row['errors'], '0')
                         self.assertEqual(row['idle_workers'], '0')
                         self.assertEqual(row['syncs'] == '0', persist == 'none')
-                        self.assertEqual(row['record_bytes'], '8192' if direct or layout == 'container' else '4128')
+                        self.assertEqual(row['record_bytes'], '8192' if direct else '4128')
                         if rw == 'delete':
                             self.assertEqual(row['allocated_after'], '0')
                             self.assertGreater(int(row['reclaimed_allocated_bytes']), 0)
@@ -90,15 +48,15 @@ class PrinciplesTests(unittest.TestCase):
                         self.assertEqual(list(Path(b).iterdir()), [])
 
     def test_tiny_logical_payloads_and_physical_fragments(self):
-        for size,logical,layout,direct in itertools.product([1,17,512,65536], [1], ['files','container'], [False,True]):
-            with self.subTest(size=size,layout=layout,direct=direct), tempfile.TemporaryDirectory() as root:
+        for size,logical,direct in itertools.product([1,17,512,65536], [1], [False,True]):
+            with self.subTest(size=size,direct=direct), tempfile.TemporaryDirectory() as root:
                 row=self.run_case('--storage',root,'--rw','write','--policy','allocating',
                                   '--persist','batch','--objects','8','--qd','2','--batch-size','4',
-                                  '--layout',layout,'--payload-size',str(size),'--logical-size',str(logical),
+                                  '--payload-size',str(size),'--logical-size',str(logical),
                                   '--direct-io' if direct else '--no-direct-io')
                 self.assertEqual(int(row['payload_bytes']),size)
                 self.assertEqual(int(row['logical_payload_bytes']),logical)
-                expected=(size+32+4095)//4096*4096 if direct or layout=='container' else size+32
+                expected=(size+32+4095)//4096*4096 if direct else size+32
                 self.assertEqual(int(row['record_bytes']),expected)
                 self.assertEqual(row['latency_samples'],'8')
                 self.assertEqual(row['latency'],'operation_to_durable_completion')
@@ -123,7 +81,7 @@ int fsync(int fd) {
             c=Path(temp)/'delay.c';so=Path(temp)/'delay.so';c.write_text(code)
             subprocess.run(['gcc','-shared','-fPIC',str(c),'-ldl','-o',str(so)],check=True)
             env=dict(os.environ,LD_PRELOAD=str(so))
-            row=self.run_case('--storage',root,'--layout','container','--rw','write',
+            row=self.run_case('--storage',root,'--rw','write',
                               '--policy','allocating','--persist','batch','--objects','8','--qd','1',
                               '--batch-size','4','--payload-size','1',env=env)
             self.assertEqual(row['latency_samples'],'8')
@@ -131,33 +89,16 @@ int fsync(int fd) {
             self.assertGreaterEqual(int(row['p50_us']),20000)
             self.assertGreaterEqual(int(row['p95_us']),int(row['p50_us']))
 
-    def test_buffered_packed_records_and_conditional_tombstones(self):
-        for rw,policy in [('write','allocating'),('read','populated'),('delete','tombstone'),('delete','release')]:
-            with self.subTest(rw=rw,policy=policy), tempfile.TemporaryDirectory() as root:
-                row=self.run_case('--storage',root,'--layout','container','--container-alignment','1',
-                                  '--rw',rw,'--policy',policy,'--persist','none' if rw=='read' else 'batch',
-                                  '--objects','128','--qd','2','--batch-size','16','--payload-size','1')
-                self.assertEqual(row['record_bytes'],'33')
-                self.assertEqual(row['verified_objects'],'128')
-                if policy=='tombstone':self.assertGreater(int(row['allocated_after']),0)
-                if policy=='release':self.assertEqual(row['allocated_after'],'0')
-                self.assertEqual(list(Path(root).iterdir()),[])
-        for flags in [('--direct-io',),('--rw','delete','--policy','punch')]:
-            with tempfile.TemporaryDirectory() as root:
-                self.run_case('--storage',root,'--layout','container','--container-alignment','1',*flags,ok=False)
-                self.assertEqual(list(Path(root).iterdir()),[])
-
     def test_production_ancestor_barriers_are_explicit(self):
         rows=[]
         for topology in ['worker','ancestors']:
             with tempfile.TemporaryDirectory() as root:
-                rows.append(self.run_case('--storage',root,'--layout','container','--rw','write',
+                rows.append(self.run_case('--storage',root,'--rw','write',
                                           '--policy','allocating','--persist','batch','--objects','8',
                                           '--qd','1','--batch-size','8','--payload-size','512',
                                           '--directory-sync',topology))
         self.assertEqual(rows[0]['directory_sync'],'worker')
         self.assertEqual(rows[1]['directory_sync'],'ancestors')
-        self.assertEqual(rows[0]['syncs'],'2')
         self.assertGreater(int(rows[1]['syncs']),int(rows[0]['syncs']))
         self.assertEqual(rows[0]['latency_samples'],rows[1]['latency_samples'])
 
@@ -231,9 +172,9 @@ ssize_t pread(int fd, void *buf, size_t n, off_t off) {
                 self.assertEqual(list(Path(root).iterdir()),[])
 
     def test_retained_durable_fixture_cold_verification(self):
-        for layout,direct in itertools.product(['files','container'],[False,True]):
-            with self.subTest(layout=layout,direct=direct), tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
-                flags=['--storage',a,'--storage',b,'--layout',layout,'--payload-size','512',
+        for direct in [False,True]:
+            with self.subTest(direct=direct), tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
+                flags=['--storage',a,'--storage',b,'--payload-size','512',
                        '--objects','12','--qd','4','--direct-io' if direct else '--no-direct-io']
                 self.run_case(*flags,'--rw','write','--policy','allocating','--persist','batch','--retain')
                 before={str(p):p.read_bytes() for root in [a,b] for p in Path(root).rglob('*') if p.is_file()}
@@ -283,7 +224,7 @@ ssize_t pwrite(int fd,const void *buf,size_t n,off_t off) {
 int fsync(int fd) {
  int (*real)(int)=dlsym(RTLD_NEXT,"fsync");int rc=real(fd);char path[512];
  if(!rc&&path_of(fd,path,sizeof(path))) {
-  if(worker()&&(strstr(path,".frag")||strstr(path,"/container"))&&phase("body-sync"))_exit(88);
+  if(worker()&&strstr(path,".frag")&&phase("body-sync"))_exit(88);
   if(strstr(path,"/.efs-principles-complete")) {sealed=1;if(phase("seal-sync"))_exit(88);}
   else if(sealed&&!worker()&&phase("seal-dir-sync"))_exit(88);
  }
@@ -312,13 +253,13 @@ int __printf_chk(int flag,const char *fmt,...) {
         with tempfile.TemporaryDirectory() as temp:
             c=Path(temp)/'crash.c';so=Path(temp)/'crash.so';c.write_text(code)
             subprocess.run(['gcc','-shared','-fPIC','-Wall','-Wextra','-Werror',str(c),'-ldl','-o',str(so)],check=True)
-            for layout,phase in itertools.product(['files','container'],['body-write','body-sync','seal-sync','seal-dir-sync','ack','gc-unlink']):
-                with self.subTest(layout=layout,phase=phase),tempfile.TemporaryDirectory() as root:
-                    flags=['--storage',root,'--layout',layout,'--payload-size','512','--objects','8','--qd','1']
+            for phase in ['body-write','body-sync','seal-sync','seal-dir-sync','ack','gc-unlink']:
+                with self.subTest(phase=phase),tempfile.TemporaryDirectory() as root:
+                    flags=['--storage',root,'--payload-size','512','--objects','8','--qd','1']
                     env=dict(os.environ,LD_PRELOAD=str(so),CRASH_PHASE=phase)
                     if phase=='gc-unlink':
-                        # Container release is one unlink; file delete checks each identity first.
-                        operation=['--rw','delete','--policy','release' if layout=='container' else 'unlink','--persist','batch']
+                        # File delete checks each identity before its unlink.
+                        operation=['--rw','delete','--policy','unlink','--persist','batch']
                     else:operation=['--rw','write','--policy','allocating','--persist','batch','--retain']
                     p=self.run_case(*flags,*operation,ok=False,env=env)
                     self.assertEqual(p.returncode,88,p.stdout+p.stderr)
@@ -332,7 +273,7 @@ int __printf_chk(int flag,const char *fmt,...) {
         with tempfile.TemporaryDirectory() as root:
             for args in [('--objects', '1', '--qd', '2'), ('--payload-size', '0'),
                          ('--persist', 'bad'), ('--rw', 'delete', '--policy', 'punch'),
-                         ('--layout', 'container', '--rw', 'delete', '--policy', 'unlink'),
+                         ('--layout', 'files'), ('--indexed',),
                          ('--storage', root), ('--time', '1')]:
                 self.run_case('--storage', root, *args, ok=False)
                 self.assertEqual(list(Path(root).iterdir()), [])

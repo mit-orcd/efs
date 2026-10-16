@@ -15,7 +15,7 @@ code=r'''
 #include <assert.h>
 #define HOST_READ_TRIES 1
 #define HOST_TICK_US 5000
-struct server {int storage_engine;};
+struct server {int unused;};
 struct efs_raft_host {struct server *s;pthread_mutex_t mu,cv_mu;int raft_id,n;};
 struct host_read_admission {uint64_t want,round,term;};
 struct read_prof_acc {int unused;};

@@ -17,7 +17,7 @@ copies of existing W items or close their broader gates.
 Exact tested and deployed source: `419aa90f367ace783bce790f4a2f4d580320077f`
 on `devel-efs`, based on `release-v0.3.2-pre-alpha`. ORCD uses four servers
 (fcstor003–006), seven clients (fcstor007–013), native hardware RDMA through
-mlx5_2, direct-I/O files storage, `.efs` enabled and packing/containers disabled.
+mlx5_2, direct-I/O files storage, `.efs` enabled.
 Processes run as the site's nonroot erbmi1 account. Budgets and deadlines are
 unchanged. Expiry and unplanned-event repair/recovery remain deferred.
 
@@ -87,8 +87,7 @@ metadata or ordinary-file payload format change is proposed here.
 
 The [three-package feature matrix](three-work-packages-20261013.md) now assigns
 this enabled `.efs` development to AMD and final scale acceptance to ORCD.
-Intel handles ordinary-file work with `.efs` client/server disabled. Packing,
-containers and expiry are disabled in all three packages.
+Intel handles ordinary-file work with `.efs` client/server disabled. Expiry is disabled in all three packages.
 
 All rows below remain required and OPEN. This is a development/acceptance
 assignment, not evidence that AMD or Intel has run or passed these gates.
@@ -110,7 +109,7 @@ experiments may establish algorithmic correctness but do not qualify ORCD's
 hardware transport. These assignments do not authorize changing another
 cluster's active workload or imply that RDMA is currently available there.
 
-Keep `.efs` enabled, ordinary files, packing and containers disabled throughout
+Keep `.efs` enabled, ordinary files throughout
 this package. Expiry and unplanned-event recovery remain deferred. The broader
 CLOSE/EOF, fork/read and snapshot/log-rotation findings above can also be
 developed on Intel with `.efs` disabled, but their loaded/platform acceptance remains

@@ -1,6 +1,6 @@
 # Structural code review
 
-**Release update:** [Branch revalidation and release disposition](release-disposition-20261011.md) supersedes removal recommendations for newer packing/query consumers. Counts below describe the original pinned base.
+**Release update:** [Branch revalidation and release disposition](release-disposition-20261011.md) supersedes removal recommendations for newer query consumers. Counts below describe the original pinned base.
 
 October 11, 2026. Extended review of duplicated logic, parallel implementations, compatibility layers and dependencies of unnecessary code.
 
@@ -17,7 +17,7 @@ The larger parallel implementations are a maintenance concern, but their entire 
 | S1 | Recursive client-cache stats and deferred rollup queue | Likely superseded; preserve immediate child counts and wire layout | 350–450 |
 | S2 | Pipelined flush `drop_body` mode | Constant false in all production call paths; one test manufactures the old mode | 25–35 |
 | S3 | Disabled permission mode in benchmark path walker | Only entry point passes false; private access helper supports that mode alone | 45–65 |
-| S4 | Retired `pack_ino/off/len` behavior and dead inode allocator stores | No current producer of nonzero pack state; preserve reserved wire fields | 35–55 |
+| S4 | Reserved inode-field behavior and dead inode allocator stores | No current producer of nonzero reserved state; preserve reserved wire fields | 35–55 |
 | S5 | Duplicate cache patch primitives | Same executable work except trace label | 20–25 |
 | S6 | Four profiling launcher/stop implementations | Live duplication; keep lifecycle differences explicit | 150–200 |
 | S7 | Six address parsers | Five identical, one stricter; choose one checked contract | 32–42 after overlap with R10 |
@@ -44,7 +44,7 @@ The current `.efs/stats` path at `src/client/efs_fuse.c:232–239` submits a ser
 
 **Follow-up implementation:** remove the unused formatter with this chain; replace rollup add/sub with clearly named immediate-child bookkeeping; eliminate deferred size/time queues and `*_norollup` branching once consumers are checked; remove saved/restored tree/time fields in hardlink copying. Keep public inode fields reserved/zeroed until a separate ABI decision. Do not shrink native RPC structs incidentally.
 
-**Private row layout:** a separate layout-only probe measured `efs_inode_mem` at 200 bytes on the local 64-bit ABI, 136 bytes after removing the eight recursive/byte/time rollup fields while retaining immediate counters, and 120 bytes if the private pack fields are also retired. Row slabs allocate `EFS_INO_SLAB_ROWS * sizeof(efs_inode_mem)`, so these fields affect row payload allocation. This is a potential 64-byte reduction per row for S1, or 80 bytes for S1+S4; names, indexes, chunk state and other cache allocations remain. The behavioral scratch test kept the old structs and does not validate this layout change. Public `efs_inode` must keep its native wire layout separately.
+**Private row layout:** a separate layout-only probe measured `efs_inode_mem` at 200 bytes on the local 64-bit ABI, 136 bytes after removing the eight recursive/byte/time rollup fields while retaining immediate counters, and 120 bytes if the private reserved fields are also retired. Row slabs allocate `EFS_INO_SLAB_ROWS * sizeof(efs_inode_mem)`, so these fields affect row payload allocation. This is a potential 64-byte reduction per row for S1, or 80 bytes for S1+S4; names, indexes, chunk state and other cache allocations remain. The behavioral scratch test kept the old structs and does not validate this layout change. Public `efs_inode` must keep its native wire layout separately.
 
 **Extra risk in the old chain:** `pending_rollup_note` at `:1609–1617` reallocates three arrays before updating their owners. On partial allocation failure it frees successful new allocations but leaves old owner pointers unchanged. Once an old allocation has moved, those owner pointers are dangling. An isolated probe extracted the exact function, forced the first/third reallocations to move and the second to fail, then performed ordinary owner cleanup. AddressSanitizer reported a double-free, as expected from the dangling owner pointers. This is a deterministic allocation-failure demonstration, not a live-cluster crash diagnosis. Fix this error path if the queue remains; removing the queue removes the failure mode.
 
@@ -78,13 +78,13 @@ This mode describes an older ownership policy in which a snapshot stole the body
 
 **Validation:** shallow/deep benchmark paths, slash normalization, missing/non-directory components and batch failure fallback. Keep the live LOOKUP_PATH handler and protocol: server code uses it too.
 
-## S4 — Old pack layout behavior has no current source of state
+## S4 — Old reserved-field layout behavior has no current source of state
 
 **Source:** `src/client/ops.c:430–447`, `:568–573`, `:654–660`, `:873–875`; `src/client/efs_fuse.c:1381–1382`, `:4922–4927`; metadata row copy sites near `:334–336`, `:369–371`.
 
-The remaining pack fields are copied between local/native inode objects, but no current first-party source generates nonzero values. Server replies are zero-initialized by `stat_to_inode`; authoritative `efs_meta_row` has no pack fields. The write path at `src/client/write.c:7444` explicitly states there is no pack staging. This makes `pull_file_layout`'s 18-line pack branch and the pack-specific allocation/seek/overlay logic likely leftovers from the old metadata engine.
+The remaining reserved inode fields are copied between local/native inode objects, but no current first-party source generates nonzero values. Server replies are zero-initialized by `stat_to_inode`; authoritative `efs_meta_row` has no such fields. This makes `pull_file_layout`'s 18-line branch and the field-specific allocation/seek/overlay logic likely leftovers from the old metadata engine.
 
-**Recommendation:** retire pack-specific runtime behavior and stale comments after checking downstream/native wire consumers. Retain the public fields as reserved slots until protocol/layout retirement is explicit. Active W95 indexed packing is a different storage model with tests and a plan; these old inode fields are not evidence that W95 can be deleted.
+**Recommendation:** retire the field-specific runtime behavior and stale comments after checking downstream/native wire consumers. Retain the public fields as reserved slots until protocol/layout retirement is explicit.
 
 `g_client.ino_namespace` and `ino_counter` also have only two assignments (`ops.c:1612–1613`) and declarations, with no readers. Remove those fields/stores separately. Keep `efs_client_setup_ino_namespace`'s live initialization of `flock_token` from the mount UUID; the function name is misleading, but its whole body is not dead.
 

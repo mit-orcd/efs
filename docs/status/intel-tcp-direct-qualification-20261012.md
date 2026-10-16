@@ -1,6 +1,6 @@
 # Intel TCP/direct qualification — October12,2026
 
-Current assigned scope is files engine, TCP/direct I/O, original-budget seven-client packing/query acceptance (group2). AMD coordinates one frozen candidate across AMD/Intel/NUC. The human resumed this assignment after the confirmed stop; earlier stop evidence and failed candidates remain historical evidence. Containers, buffered/RDMA and dedicated repair/recovery qualification are deferred by the centrally documented release scope. No release acceptance, push, tag or production deployment has occurred in this Intel work.
+Current assigned scope is files storage, TCP/direct I/O, original-budget seven-client query acceptance (group2). AMD coordinates one frozen candidate across AMD/Intel/NUC. The human resumed this assignment after the confirmed stop; earlier stop evidence and failed candidates remain historical evidence. Buffered/RDMA and dedicated repair/recovery qualification are deferred by the centrally documented release scope. No release acceptance, push, tag or production deployment has occurred in this Intel work.
 
 | Exact candidate | Intel prerequisite | Quiet seven-client result | Dependent gates |
 | --- | --- | --- | --- |
@@ -19,6 +19,6 @@ Separate same-source diagnostics are not quiet acceptance.52 traces show no admi
 
 Private6b097303 takes at most8FIFO messages per pump, retains older tails ahead of arrivals, accounts only taken bytes/messages for the existing post-KV durability retirement and immediately polls when a queued tail remains. Decode/ACK/commit/apply/term/config/read authority code is unchanged. A single message/storageoperation can still block; no hard time bound is claimed. The actual-source scheduler test checks prefix size, FIFO arrivals, byte totals, no premature work-credit release, backlog wake and existing control/configuration fences. Removing the bound or restoring backlog sleep produces assertion failures. Central safety/native/live review is pending.
 
-Global packed-empty assertions after failed POSIX runs are potentially confounded by deliberately retained live test trees. Raw FAIL remains FAIL. Separate isolated64-file physical reclamation is NUC's assigned gate, so this Intel failure alone does not demonstrate a GC defect.
+Global physical-empty assertions after failed POSIX runs are potentially confounded by deliberately retained live test trees. Raw FAIL remains FAIL. Separate isolated64-file physical reclamation is NUC's assigned gate, so this Intel failure alone does not demonstrate a GC defect.
 
 Evidence checkpoints: e41ff7d6 (52quiet), b854b0c8 (52diagnostic),6304ba42 (2bfprerequisite),b2d310ea (defquiet+phase). See [52evidence](../../results/measure/20261012-intel-common52/README.md) and [defevidence](../../results/measure/20261012-intel-commondef/README.md). Historical stop checkpoint1cd9876b retains production identities/mounts/ports and512payloadsamples. No additional old-binary compatibility/restoration or inventory work is planned under the newer narrowed scope.

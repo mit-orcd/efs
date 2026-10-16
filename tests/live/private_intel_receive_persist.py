@@ -48,8 +48,8 @@ args=[os.fsdecode(x) for x in (q/'cmdline').read_bytes().split(b'\\0') if x]
 assert os.readlink(q/'exe')=={a.source+'/efsd'!r}
 assert args[args.index('--storage')+1]=={storage!r}
 env=dict(os.fsdecode(x).split('=',1) for x in (q/'environ').read_bytes().split(b'\\0') if x and b'=' in x)
-assert all(env.get(k)=='0' for k in ['EFS_COMMANDS','EFS_COMMANDS_SERVER','EFS_PACKED_WRITES','EFS_EXPIRY'])
-assert env.get('EFS_TRANSPORT')=='tcp' and '--direct-io' in args and args[args.index('--storage-engine')+1]=='files'
+assert all(env.get(k)=='0' for k in ['EFS_COMMANDS','EFS_COMMANDS_SERVER','EFS_EXPIRY'])
+assert env.get('EFS_TRANSPORT')=='tcp' and '--direct-io' in args
 env={{k:v for k,v in env.items() if k.startswith('EFS_') or k in ('PATH','HOME','LANG')}}
 print(json.dumps(dict(pid=pid,args=args,env=env)))
 ''',capture_output=True).stdout

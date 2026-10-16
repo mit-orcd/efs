@@ -314,7 +314,7 @@ read-only/write-only rounds, and the QD ladder. QD is the number of concurrent
 synchronous workers, one file per worker. Roots distribute workers round-robin
 across devices. The bounded per-worker window cycles offsets; no production
 fragment format, metadata engine, writer pool or checksum-policy changes are
-involved. Actual storage-engine `data` and `meta` modes remain in the default
+involved. Actual EFS storage `data` and `meta` modes remain in the default
 matrix as separate measurements.
 
 Buffers and read files are prepared before timing. Successful writes/reads
@@ -526,15 +526,3 @@ older numbers as historical measurements; use the corrected method for a new
 steady-state tail-latency gate. CPU samples and aggregate syscall time do not
 measure the fraction of wall time waiting.
 
-
-## Independent mixed storage churn
-
-The [W114 storage churn guide](storage-churn.md) documents 1 GiB container versus
-small-file comparisons, matched persistence, bounded 50/80/95-percent model
-occupancy, verification and result interpretation. This is an independent
-benchmark with a volatile index, not production GC or a recovery acceptance gate.
-
-The independent [shared-container range suite](storage-ranges.md) separates
-disjoint lanes, concurrent immutable reads, locked hot-record updates and unsafe
-diagnostics. It reports lock and I/O/sync delays; it does not establish a durable
-or distributed storage protocol.

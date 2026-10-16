@@ -3,31 +3,29 @@
 This is the manager-assigned diagnosis from retained frozen evidence. No new
 cluster run, staging, deployment or production repair was performed for this
 disposition. Source remains `83cff804`; live deployment remains `4fe291b0`.
-W109 and combined mounted packing acceptance remain unresolved.
+W109 acceptance remains unresolved.
 
 ## Controls and repeatability
 
 The machine-readable
-[wave matrix](../../results/measure/20261011-orcd-coalescing-rollout/starvation-disposition-20261012/frozen-wave-matrix.json)
+[wave matrix](../../results/measure/20261011-orcd-rollout/starvation-disposition-20261012/frozen-wave-matrix.json)
 contains all seven hosts for six retained runs, with input TSV SHA-256 and exit
 codes. Each full quiet run uses the original jobs16 and 30-second case budgets.
 
-At **one fixed source e5a385530223**, packing ON failed exactly
+At **one fixed source e5a385530223**, the full wave failed exactly
 `dir_deep_nesting`, `dir_many_files`, `virt_stats_readable`, `virt_find_query`
-on all seven clients: each 209 pass/4 fail/1 skip/7 cancelled. The subsequent
-packing OFF control passed all seven: each 220/0/1/0. This isolates a
-packing-associated pressure effect on that source, not a faulty small-file byte
-oracle. Runs are sequential in one namespace; the control does not remove
-ordering/cache/history effects or prove an individual mechanism. It is not a
-same-source OFF control for later bbe/83/release candidates.
+on all seven clients: each 209 pass/4 fail/1 skip/7 cancelled. A subsequent
+control wave passed all seven: each 220/0/1/0. Runs are sequential in one
+namespace; the control does not remove ordering/cache/history effects or prove
+an individual mechanism. It is not a control for later bbe/83/release candidates.
 
-b579's full packing wave failed stats/find on every host, while its separate
+b579's full wave failed stats/find on every host, while its separate
 three-query-case run passed all seven in 0.6–1.0s. That query-only run included
 GDB attachment and is a diagnostic workload contrast, not quiet full-pressure
 acceptance. bbe's first quiet wave had two deepnest timeouts but all queries
 passed; its second had three stats and one find timeout, with all deepnest
-passing. The surviving failures move between directory and query cases. No
-ORCD seven-client full wave has passed with packing ON. Do not infer that all
+passing. The surviving failures move between directory and query cases. No later
+ORCD seven-client full wave has passed. Do not infer that all
 four cases share one bug or that the first bbe wave closed query starvation.
 
 ## Concrete capture observations
@@ -36,13 +34,13 @@ In b579's instrumented full-pressure capture, publisher004 and005 each show
 `$1 = 0` (`query_requests`) and all 16 page sessions token0/not busy. The FUSE
 capture shows two `query_snapshot_rpc` callers in `rpc_writer_retry_pause`,
 through `find_query_ensure`. The same capture has ordinary CREATE/mkdir and
-append-flush waiters, plus packed authority callers in ReadIndex. These locate
+append-flush waiters. These locate
 competing work and retry boundaries; GDB pauses the daemon and cannot establish
 quiet latency, causality, or sustained slot availability from one instant.
 A query slot leak/saturation was not observed at those capture instants.
 
 Retained timestamped publisher logs are copied unchanged into
-[diagnostic timing evidence](../../results/measure/20261011-orcd-coalescing-rollout/starvation-disposition-20261012/fcstor004-query-timing.log)
+[diagnostic timing evidence](../../results/measure/20261011-orcd-rollout/starvation-disposition-20261012/fcstor004-query-timing.log)
 and the adjacent005 file. At004 the last successful publication was
 23:45:16.157; BUSY refresh logs appeared23:45:18.064 and23:45:48.336; the next
 publication was23:45:58.352 (build8015ms). This is a42.195s publication gap.
@@ -92,7 +90,7 @@ remains experimental until the same merged candidate passes full gates.**
 Directory deep/many-file cases operate through normal metadata CREATE/LOOKUP,
 not solely the synthetic query builder. Their pressure timeouts require a
 separate foreground waiter/admission/proposal diagnosis if they recur. Do not
-present faster query publication as closure of directory scaling or packed
+present faster query publication as closure of directory scaling or
 publication throughput. Existing selected shared-GC cold/physical proof also
 does not certify those paths.
 
@@ -100,7 +98,7 @@ does not certify those paths.
 
 Mac owns the larger coherent-cut/pending-transaction query-builder design; ORCD
 has asked Mac for its evidence and ownership disposition, not requested new
-code. ORCD owns mounted packing, exact byte/receipt/physical/cold gates and the
+code. ORCD owns exact byte/receipt/physical/cold gates and the
 bounded follower prototype. Manager owns priorities; AMD alone edits and tests
 the release candidate. No overlapping builder repair was started here.
 

@@ -2395,7 +2395,7 @@ census the nodeids before reading a single-process trace as the load.
   77 s; every REPORT but the last `fail=wait/-13` — the host had
   committed every record and then its apply-wait hit the deadline, so
   the client resent the identical REPORT to the other dual host, which
-  packed it again (0.3–15 s) and found `skip=all`. Publish ≈ 2.7 k
+  encoded it again (0.3–15 s) and found `skip=all`. Publish ≈ 2.7 k
   rec/s against PUT ≈ 5 k chunks/s: the dirty set grows for the whole
   write and the last `close()` pays 74.6 s. D24 (REPORT every 8192
   landed) bounds a close only when REPORTs drain faster than PUTs land.
@@ -2484,7 +2484,7 @@ deletes them). What it found, in order of weight:
    100–133 µs each under `l0=100–170`) up to 42.9 s; push up to 77 s;
    every REPORT but the last ended `fail=wait/-13` (committed, then the
    apply-wait deadline → BUSY) and the client resent it byte-identical
-   to the other dual host, which packed it again and found `skip=all`.
+   to the other dual host, which encoded it again and found `skip=all`.
    Publish ≈ 2.7 k rec/s vs PUT ≈ 5 k chunks/s, so the dirty set grows
    for the whole write and the last close pays it. D24 bounds a close
    only when REPORTs drain faster than PUTs land. → W41 (decided) is
@@ -5887,7 +5887,7 @@ Hard-fail on definite/indirect leaks, uninit-on-wire, invalid rw;
 possibly-lost only flagged when the direct caller is efs code. RDMA phase is
 leaks-only (ibverbs/DMA fills structs valgrind can't track → uninit
 false-positives by design). RDMA exercised via eager upgrade on connect +
-metadata/packed + chunk PUT/GET ops. Verified PASS
+metadata/small-file + chunk PUT/GET ops. Verified PASS
 on fcstor003: 0 definite / 0 indirect everywhere.
 NOTE: valgrind on efsd needs a clean exit for full leak stacks (SIGTERM gives
 summary only). **vgdb / LSan / `strace -p` / `gdb -p` all WORK — do not ask
@@ -9335,7 +9335,7 @@ code-complete (bits=0 live path). Re-run `20260821-010553`: 1 flake
 **posix2 12/12** (`results/posix2/20260821-010629`, A=007 B=008).
 **Test suite committed (d52287e)**: reusable POSIX + perf suites, results
 tracked in git under `results/`. See "Test suite" section below.
-**2 client data-path fixes (7fa99e8)**: packed-file overwrite/append + rename/
+**2 client data-path fixes (7fa99e8)**: small-file overwrite/append + rename/
 link data loss (see "Root causes" below). POSIX suite 64/69 (was 16 fail).
 **5 POSIX gaps fixed (7e442fa) → suite 69/69**: daemon-side permission checks
 (access/open via check_access), rmdir ENOTEMPTY, ENAMETOOLONG, serialized
@@ -9462,14 +9462,14 @@ posix|posix2|perf|setup|all`. `setup` rsyncs+builds+mounts the 9 pure clients.
 
 <a id="ph-posix-gaps-vs-xfs-suite-aug-20--all-fixed-144144-9cd874"></a>
 ## POSIX gaps vs XFS (suite, Aug 20) — ALL FIXED, 144/144
-FIXED (7fa99e8): packed-file overwrite/append + rename/link data loss (see
+FIXED (7fa99e8): small-file overwrite/append + rename/link data loss (see
 "Root causes" below). All data-path tests pass (basic_append, basic_oappend,
 basic_overwrite_middle, basic_terminal_cp_cat, basic_dd_rw, dir_rename_*,
 hardlink_*, unlink_open_file).
 **unlink-open investigated — NOT reproducing**: the theoretical concern
 (efs_export_unlink_name removes inode+chunks on nlink->0, breaking open-fd
 reads) does NOT manifest. Reads via the open fd succeed for buffered AND
-O_DIRECT, small packed AND large chunked, flushed AND unflushed. No fix needed.
+O_DIRECT, small AND large chunked, flushed AND unflushed. No fix needed.
 FIXED (7e442fa) — the last 5:
 - **O_APPEND atomicity** (concurrent_appends): serialized daemon-side
   (g_append_mu + re-read true end) AND the underlying concurrent-write dcache
@@ -9508,8 +9508,8 @@ FIXED (7e442fa) — the last 5:
   `rpc_send_recv_primary`. `adopt_rpc_inode` upserts new rows only; merge
   remote size/pack when the primary grew (or newer+shrink). GETCHUNKS is
   indexed (`start` = chunk_index) — never scan `ex->chunks[]` (387k-row
-  scan under `g_server->lock` stalled the cluster). Packed files: pull
-  only the pack_off window. `posix2` 12/12. Single-client POSIX 135/144
+  scan under `g_server->lock` stalled the cluster). Small files: pull
+  only their inline window. `posix2` 12/12. Single-client POSIX 135/144
   (4 same-fd zeros — see Test suite).
 - **2c full-table gen-check cache**: **skip, never needed.** One-gen/one-blob
   cache would be ripped out for Phase 3. The *idea* (don't RPC every stat)
@@ -9636,7 +9636,7 @@ FIXED (7e442fa) — the last 5:
   unflushed RPC ops ("dirty under rebuild"); the rebuild then fetched cis
   the primary's own flushes had long superseded (GC'd → unrecoverable).
   mc_stress symptoms: cross-client appends vanished (appfile 100/200, all
-  one client's), packed files read size 0 on the peer, rwfile chunks
+  one client's), small files read size 0 on the peer, rwfile chunks
   missing. Fix: extras commits keep the main gen; receivers compare shard-0
   page checksums — identical ⇒ extras-only refresh, merge descriptors
   without fencing (per-shard single-writer makes gen-compare safe; dirty
@@ -9669,7 +9669,7 @@ FIXED (7e442fa) — the last 5:
   a correct file size. Fix: per-shard shard_io mutex held across the whole
   flush (base-read + PUT). Lock order shard_io → dcache_mu; the base-read's
   efs_client_read only takes dcache_mu, so no deadlock.
-- **Packed-file overwrite/append = rdcache staleness (FIXED, 7fa99e8)**:
+- **Small-file overwrite/append = rdcache staleness (FIXED, 7fa99e8)**:
   dcache_put_now wrote the merged chunk to the servers but never invalidated
   the rdcache entry that the flush's have_base=0 merge-base read had populated
   with the OLD published chunk → a later read served the stale rdcache copy

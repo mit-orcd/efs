@@ -18,15 +18,9 @@
 /* REPORT envelope: [tag][uuid:16][epoch:4][legacy PUBLISH:202]*N.
  * Fences every mapping at serialized apply without reusing delta fields. */
 /* Internal coordinator commands; public control RPC cannot forge ACKs. */
-/* 45-51 were packing commands/requests, removed 2026-10-16
- * (archive/packing-containers-20261016). Never reuse; apply refuses them. */
-#define EFS_MD_CMD_RETIRED_PACK_ADMIT 45
-#define EFS_MD_REQ_RETIRED_PACK_STATUS 46
-#define EFS_MD_CMD_RETIRED_PACK_UPLOAD_RETIRE 47
-#define EFS_MD_CMD_RETIRED_PACK_GC_ACK 48
-#define EFS_MD_CMD_RETIRED_PACK_CANCEL 49
-#define EFS_MD_CMD_RETIRED_PACK_GC_RETIRE 50
-#define EFS_MD_REQ_RETIRED_PACK_GC_VIEW 51
+/* 45-51 are reserved: never reuse. Apply halts on them; submit refuses. */
+#define EFS_MD_CMD_RESERVED_MIN 45
+#define EFS_MD_CMD_RESERVED_MAX 51
 /* Exact single-shard APPEND image envelope; no replica-local EOF selection. */
 #define EFS_MD_APPEND_COMPLETE_ATOMIC_LEN 101u
 #define EFS_MD_REQ_EXPIRY_CLOCK 63 /* local clock health only */

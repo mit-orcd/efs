@@ -393,34 +393,34 @@ int main(void) {
     free(cached_base);free(cached_copy);
 
     dcache_drop_locked(1,0,0);assert(!owned->writer && !g_metadata && !g_live);
-    /* A publication carrying the retired packed flag (packing removed) is
-     * refused without disturbing ownership; the plain path then completes. */
+    /* A publication carrying the reserved flag is refused without
+     * disturbing ownership; the plain path then completes. */
     cached_view=(struct efs_msg_lane_writer_view_reply){.view={.ino=777,.generation=7},
         .chunk_size=EFS_MIN_CHUNK_SIZE};
     assert(!efs_dcache_admit_lane_write(777,7,0,&cached_view,0,patch,4));
-    struct dcache_ent *retired_entry=dcache_find_meta(dcache_slot(777,0),777,0);
-    struct efs_msg_inode_getchunks_reply *retired_base=calloc(1,sizeof(*retired_base));assert(retired_base);
-    retired_base->ino=777;retired_base->generation=7;
-    uint8_t retired_image[EFS_MIN_CHUNK_SIZE];struct efs_writer_plan retired_plan;
-    assert(!efs_dcache_snapshot_publication(777,7,0,&cached_view,retired_base,
-        &retired_plan,retired_image,sizeof(retired_image)));
-    sequence=retired_plan.cache_sequence;
-    struct efs_chunk_rec retired_put={.ino=777,.chunk_generation=77,
-        .publish_flags=EFS_CHUNK_REC_F_FRESH_OBJECT|EFS_CHUNK_REC_F_RETIRED_PACKED};
-    for(unsigned i=0;i<3;i++)retired_put.nodes[i]=i+1;
-    assert(!efs_dcache_begin_publication(777,7,0,&retired_plan,77));
-    assert(efs_dcache_finish_publication(777,7,0,77,sequence,EFS_OK,&retired_put)==EFS_ERR_INVAL);
-    assert(!retired_entry->writer->publication_ready && retired_entry->dirty &&
-        retired_entry->writer->ranges.bytes.count && !memcmp(retired_entry->data,patch,4));
-    struct efs_chunk_rec plain_put=retired_put;plain_put.publish_flags=EFS_CHUNK_REC_F_FRESH_OBJECT;
+    struct dcache_ent *reserved_entry=dcache_find_meta(dcache_slot(777,0),777,0);
+    struct efs_msg_inode_getchunks_reply *reserved_base=calloc(1,sizeof(*reserved_base));assert(reserved_base);
+    reserved_base->ino=777;reserved_base->generation=7;
+    uint8_t reserved_image[EFS_MIN_CHUNK_SIZE];struct efs_writer_plan reserved_plan;
+    assert(!efs_dcache_snapshot_publication(777,7,0,&cached_view,reserved_base,
+        &reserved_plan,reserved_image,sizeof(reserved_image)));
+    sequence=reserved_plan.cache_sequence;
+    struct efs_chunk_rec reserved_put={.ino=777,.chunk_generation=77,
+        .publish_flags=EFS_CHUNK_REC_F_FRESH_OBJECT|EFS_CHUNK_REC_F_RESERVED};
+    for(unsigned i=0;i<3;i++)reserved_put.nodes[i]=i+1;
+    assert(!efs_dcache_begin_publication(777,7,0,&reserved_plan,77));
+    assert(efs_dcache_finish_publication(777,7,0,77,sequence,EFS_OK,&reserved_put)==EFS_ERR_INVAL);
+    assert(!reserved_entry->writer->publication_ready && reserved_entry->dirty &&
+        reserved_entry->writer->ranges.bytes.count && !memcmp(reserved_entry->data,patch,4));
+    struct efs_chunk_rec plain_put=reserved_put;plain_put.publish_flags=EFS_CHUNK_REC_F_FRESH_OBJECT;
     assert(!efs_dcache_finish_publication(777,7,0,77,sequence,EFS_OK,&plain_put));
     assert(!efs_dcache_publication_request(777,7,0,77,sequence,4,&request));
-    assert(!(request.rec.publish_flags&EFS_CHUNK_REC_F_RETIRED_PACKED));
+    assert(!(request.rec.publish_flags&EFS_CHUNK_REC_F_RESERVED));
     outcome=(struct efs_msg_publication_reply){.state=EFS_PUBLICATION_COMMITTED};
-    memcpy(outcome.digest,retired_entry->writer->publication.result_digest,EFS_HASH_SIZE);
+    memcpy(outcome.digest,reserved_entry->writer->publication.result_digest,EFS_HASH_SIZE);
     assert(!efs_dcache_publication_result(777,7,0,77,sequence,&outcome));
-    assert(!retired_entry->dirty && !retired_entry->pin_held && !retired_entry->data);
-    free(retired_base);dcache_drop_locked(777,0,0);assert(!g_metadata && !g_live);
+    assert(!reserved_entry->dirty && !reserved_entry->pin_held && !reserved_entry->data);
+    free(reserved_base);dcache_drop_locked(777,0,0);assert(!g_metadata && !g_live);
     /* Fresh typed admission reserves exact sparse ownership; gaps never become
      * readable just because the body exists. Failure cannot adopt legacy bytes. */
     cached_view=(struct efs_msg_lane_writer_view_reply){.view={.ino=555,.generation=7,.chunk_index=0}};

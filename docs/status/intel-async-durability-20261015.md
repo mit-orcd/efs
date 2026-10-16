@@ -82,7 +82,7 @@ and xorinox with the standard rollout: 64-sample preserved-file control checks
 on all three mounts before and after, both passing. All four roots attached
 async (`boot=1`, 200 ms / 256 MiB window, XFS). Environment otherwise as in
 [the read fixes page](intel-read-metadata-cache-20261015.md): TCP, direct I/O,
-files engine, `.efs` commands/packing/expiry off; xorinox client, GNU dd 9.5,
+files storage, `.efs` commands/expiry off; xorinox client, GNU dd 9.5,
 PCIe 2.5 GbE.
 
 `scripts/measure_put_durability.sh`, three runs each, 2 GiB, `bs=1M`, from a
@@ -150,9 +150,7 @@ status index; its AMD qualification predates asynchronous acknowledgement.
 efs-fuse `8f521f153ff73f3b6e7dd50518c3ca7b4f6fc507e46d83dc6701b5aa8b4324a0`) on
 intel1, intel2 and xorinox, rolled out with an in-use guard and the 64-sample
 control checks (all passing). All 318 `make test` commands pass on xorinox
-except the stale architecture regeneration; `tests/test_storage_ranges.py`
-timed out once under the full run and passed alone (container engine,
-untouched here).
+except the stale architecture regeneration.
 
 | 2 GiB, xorinox (2.5 GbE) | Per-file barriers (`5cef06ac45a0`) | `4a47f89b5187` |
 | --- | --- | --- |

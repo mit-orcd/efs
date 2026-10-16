@@ -18,9 +18,9 @@ Intel1 10.0.0.207 and Intel2 10.0.0.209, Core Ultra 7 256V, 8 CPUs and about
 15 GiB RAM each, Rocky Linux 10.2 / 6.12.0-211.64.1.el10_2.x86_64.
 Four private daemons (two per host), ports 27432/27433, files storage,
 **TCP/direct I/O**, 2 GiB quota per node on data1/data2. Both clients mount
-against the opposite host. `.efs` client/server, packing, containers and expiry
+against the opposite host. `.efs` client/server and expiry
 are disabled: `EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0
-EFS_PACKED_WRITES=0 EFS_EXPIRY=0`, daemon `--direct-io --storage-engine files`.
+EFS_EXPIRY=0`, daemon `--direct-io`.
 Runtime process environments and absent `.efs` were verified on both hosts.
 
 Private binaries under `/data1/efs/w100-private/retry-fix` were built with
@@ -51,7 +51,7 @@ Run on each host from `/data1/efs/w100-private/retry-normal`:
 
 ```sh
 make -j8 -B EFS_GIT_ID=b872bdc29 EFS_GIT_DESCRIBE=b872bdc29 EFS_GIT_BRANCH=devel efsd efs-fuse efs-mgmt
-EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0 make -j8 EFS_GIT_ID=b872bdc29 EFS_GIT_DESCRIBE=b872bdc29 EFS_GIT_BRANCH=devel test
+EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0 make -j8 EFS_GIT_ID=b872bdc29 EFS_GIT_DESCRIBE=b872bdc29 EFS_GIT_BRANCH=devel test
 CC='gcc -fsanitize=address,undefined -fno-omit-frame-pointer -g -O1 -no-pie' ASAN_OPTIONS=detect_leaks=1 python3 tests/test_report_retry_eof.py
 ```
 

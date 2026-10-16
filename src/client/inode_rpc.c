@@ -151,8 +151,7 @@ static int rpc_status_to_efs(uint8_t st)
     case EFS_INODE_RPC_NOT_FOUND:   return EFS_ERR_NOT_FOUND;
     case EFS_INODE_RPC_EXIST:       return EFS_ERR_EXIST;
     case EFS_INODE_RPC_QUOTA:       return EFS_ERR_QUOTA;
-    case EFS_INODE_RPC_BUSY:
-    case EFS_INODE_RPC_ADMISSION_BUSY: return EFS_ERR_BUSY;
+    case EFS_INODE_RPC_BUSY:        return EFS_ERR_BUSY;
     case EFS_INODE_RPC_INVAL:       return EFS_ERR_INVAL;
     case EFS_INODE_RPC_NOT_PRIMARY: return EFS_ERR_NOT_PRIMARY;
     case EFS_INODE_RPC_NOT_EMPTY:   return EFS_ERR_NOT_EMPTY;
@@ -776,8 +775,7 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
             rpc_learn_leader(r);
             efs_meta_read_route_note(&g_read_routes,read_key,r->read_node_id);
         }
-        if (r->status == EFS_INODE_RPC_BUSY ||
-            r->status == EFS_INODE_RPC_ADMISSION_BUSY) {
+        if (r->status == EFS_INODE_RPC_BUSY) {
             saw_busy = 1;
             /* INODE_APPEND uses BUSY as the unflushed-reservation barrier.
              * The caller must flush + report before retrying; spinning here

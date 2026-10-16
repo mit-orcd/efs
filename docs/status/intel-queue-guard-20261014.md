@@ -37,12 +37,12 @@ these Intel results. The merge/status history remains separate in
 
 Intel1 `10.0.0.207`, Intel2 `10.0.0.209`, Core Ultra 7 256V, eight CPUs/~15GiB
 per host, Rocky Linux 10.2 / 6.12.0-211.64.1.el10_2.x86_64. Four cross-host
-private daemons, two per host, ports27432/27433, files engine/direct I/O,
+private daemons, two per host, ports27432/27433/direct I/O,
 16GiB quota/node. Existing stores retained without mkfs. Opposite-host seeds;
 main mount `/data1/efs/w100-private/runtime-merged-aa508c820/mnt` on each host.
 
-`EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0
-EFS_EXPIRY=0 EFS_MD_RAFT_N=4`; files engine disables containers. Experimental
+`EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0
+EFS_EXPIRY=0 EFS_MD_RAFT_N=4`; files storage disables containers. Experimental
 Raft flow remains off, confirmed from the actual host structures during sampling.
 Production ports17432/17433 and `/data1/efs/mnt` are not replaced.
 
@@ -93,7 +93,7 @@ needed by native documentation gates. Supply explicit identity to every make:
 
 ```sh
 make -j8 EFS_GIT_ID=1ac603128 EFS_GIT_DESCRIBE=1ac603128 EFS_GIT_BRANCH=devel all
-EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0 EFS_RAFT_FLOW=0 make -j8 EFS_GIT_ID=1ac603128 EFS_GIT_DESCRIBE=1ac603128 EFS_GIT_BRANCH=devel test
+EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0 EFS_RAFT_FLOW=0 make -j8 EFS_GIT_ID=1ac603128 EFS_GIT_DESCRIBE=1ac603128 EFS_GIT_BRANCH=devel test
 CC='cc -fsanitize=address,undefined -fno-omit-frame-pointer' ASAN_OPTIONS=detect_leaks=1 python3 tests/test_host_pending_entries.py
 CC=cc EFS_TEST_CFLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer' ASAN_OPTIONS=detect_leaks=1 python3 tests/test_host_flow.py
 ```
@@ -130,7 +130,7 @@ Concurrent driver-created clients drain/stop in its finally block.
 On each Intel host, from the frozen source, isolated failure qualification is:
 
 ```sh
-EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0 EFS_RAFT_FLOW=0 timeout 1800 python3 tests/live/gc_reclamation.py --mode direct --transport tcp --disable-efs-commands --fixture-quota 4G --posix --posix-jobs 16 --continue-posix-failure --guarded-leases --opid --integrity --namespace --allocation --tiny-churn --full-node
+EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0 EFS_RAFT_FLOW=0 timeout 1800 python3 tests/live/gc_reclamation.py --mode direct --transport tcp --disable-efs-commands --fixture-quota 4G --posix --posix-jobs 16 --continue-posix-failure --guarded-leases --opid --integrity --namespace --allocation --tiny-churn --full-node
 ```
 
 These are separate four-daemon loopback fixtures per host, not cross-host

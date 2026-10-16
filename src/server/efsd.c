@@ -304,14 +304,6 @@ int main(int argc, char **argv)
                 usage(argv[0]);
                 return 1;
             }
-        } else if (strcmp(argv[i], "--storage-engine") == 0 && i + 1 < argc) {
-            const char *engine = argv[++i];
-            if (!strcmp(engine, "containers")) {
-                fprintf(stderr, "the containers storage engine was removed; "
-                        "use archive/packing-containers-20261016\n");
-                return 2;
-            }
-            if (strcmp(engine, "files")) { fprintf(stderr, "unknown storage engine: %s\n", engine); return 2; }
         } else if (strcmp(argv[i], "--direct-io") == 0) {
             server.direct_io = 1;
         } else if (strcmp(argv[i], "--no-direct-io") == 0) {
@@ -390,7 +382,7 @@ int main(int argc, char **argv)
     }
     if (server_storage_roots_init(&server) != EFS_OK) return 1;
     if (server_put_sync_init(&server) != EFS_OK) return 1;
-    fprintf(stderr, "storage-engine=files direct_io=%s\n", server.direct_io ? "on" : "off");
+    fprintf(stderr, "direct_io=%s\n", server.direct_io ? "on" : "off");
     if (server.meta_storage[0] &&
         mkdir_p(server.meta_storage) != 0 && errno != EEXIST) {
         fprintf(stderr, "mkdir meta-storage %s: %s\n", server.meta_storage,

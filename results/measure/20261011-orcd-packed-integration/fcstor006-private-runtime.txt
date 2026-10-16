@@ -1,6 +1,0 @@
-uid=246111 user=erbmi1
-e5fa2c2c69585a790c5f2dd72d33eb7677bcb0bf66479f4bf2c4245221217d9e  /tmp/efs-packed-rpc-20261011-bin/efsd
-ffbd0cae8bb78e7fbb19723751b711a149d655c48662ee7374f6b8353df1f9f0  /tmp/efs-packed-rpc-20261011-bin/efs-fuse
-node 4 root=0 salt=17918403828329696220 groups=2
-  group 0 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0x7 joint=0
-  group 2 hosted=1 role=FOLLOWER leader=2 term=29 commit=35 applied=35 voters=0xe joint=0

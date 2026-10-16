@@ -40,10 +40,10 @@ for directory in sorted(a.artifacts.iterdir()):
         first, last = data[0], data[-1]
         env = identity['env']
         assert identity['verbs'] and env['EFS_TRANSPORT'] == 'rdma'
-        assert env['EFS_PACKED_WRITES'] == '0' and env['EFS_EXPIRY'] == '0'
+        assert env['EFS_EXPIRY'] == '0'
         assert env['EFS_COMMANDS'] == '1' and env['EFS_COMMANDS_SERVER'] == '1'
         if f.parent.name in ('fcstor003', 'fcstor004', 'fcstor005', 'fcstor006'):
-            assert '--direct-io' in identity['args'] and '--storage-engine files' in identity['args']
+            assert '--direct-io' in identity['args']
         def io(record):
             return {k: int(v) for k, v in (line.split(':') for line in record['io'].splitlines())}
         before, after = io(first), io(last)

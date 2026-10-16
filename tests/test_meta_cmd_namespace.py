@@ -16,9 +16,9 @@ def validate(text):
 
 header = (Path(__file__).resolve().parents[1] / 'include/efs/meta_cmd.h').read_text()
 current = validate(header)
-# Independent packing commands may coexist with this completion command.
+# Reserved commands may coexist with this completion command.
 assert current[52] == 'EFS_MD_CMD_APPEND_CATCHUP'
-coexist = header if 45 in current else header + '\n#define EFS_MD_CMD_PACK_ADMIT 45\n'
+coexist = header if 45 in current else header + '\n#define EFS_MD_CMD_RESERVED_MIN 45\n'
 validate(coexist)
 for bad in (coexist.replace('EFS_MD_CMD_APPEND_CATCHUP 52', 'EFS_MD_CMD_APPEND_CATCHUP 45'),
             header + '\n#define EFS_MD_CMD_BAD_WIDTH 256\n'):
@@ -28,4 +28,4 @@ for bad in (coexist.replace('EFS_MD_CMD_APPEND_CATCHUP 52', 'EFS_MD_CMD_APPEND_C
         pass
     else:
         raise AssertionError('invalid namespace accepted')
-print('metadata command namespace: actual header unique; packing/completion collision and byte overflow rejected PASS')
+print('metadata command namespace: actual header unique; reserved/completion collision and byte overflow rejected PASS')

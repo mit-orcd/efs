@@ -1,6 +1,6 @@
 # ORCD Valgrind fixes — October 12, 2026
 
-The four Valgrind gate failures observed on frozen `8b7391b3` are resolved on the isolated `fix-orcd-valgrind-8b7391b3` branch. The complete corrected suite returned **exit 0**, with all 48 unit gates and its private TCP/direct-I/O and native-RDMA/direct-I/O daemon/client phases passing. This is a tooling qualification; it does not close the separate seven-client packing/query failures or repair implementation gaps.
+The four Valgrind gate failures observed on frozen `8b7391b3` are resolved on the isolated `fix-orcd-valgrind-8b7391b3` branch. The complete corrected suite returned **exit 0**, with all 48 unit gates and its private TCP/direct-I/O and native-RDMA/direct-I/O daemon/client phases passing. This is a tooling qualification; it does not close the separate seven-client query failures or repair implementation gaps.
 
 `test_repair_job` deliberately forks and calls `_exit` without freeing child allocations to verify durable cold replay. It was missing from the harness's existing abrupt-child policy list. It now uses that same explicit policy: crash-child lifetime leaks are excluded, memory-access failures still make the child exit nonzero, and the completed parent's leaks remain gated. The actual unit passes with zero parent errors/leaks. Empty/truncated reports, genuine leaks and unrelated-process cleanup regressions still pass their refusal checks.
 

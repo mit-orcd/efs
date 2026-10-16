@@ -51,8 +51,8 @@ source trees `/data1/efs/w100-private/devel-opid-{diag1,fix1,fault1}` on both
 Intel hosts. Intel1 `.207` serves nodes1/2; Intel2 `.209` nodes3/4,
 ports27432/27433. Two 16 GiB files-engine stores per host under
 `/data{1,2}/efs/w100-private-deadline-posix/nN`, direct I/O. TCP;
-`.efs` client/server OFF, command policy version1/mask0, packing OFF,
-containers unused, expiry OFF. Main mounts seed the opposite physical host.
+`.efs` client/server OFF, command policy version1/mask0,
+expiry OFF. Main mounts seed the opposite physical host.
 Production ports17432/17433, processes, stores and mounts are outside this work.
 
 ## Qualification
@@ -116,7 +116,7 @@ No payloads, daemon logs or copied source dumps are committed.
 On each host from the frozen candidate source:
 
 ```sh
-EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0 make -j8 EFS_GIT_ID=5d580e3c-fix1 EFS_GIT_DESCRIBE=5d580e3c-fix1 EFS_GIT_BRANCH=devel test
+EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0 make -j8 EFS_GIT_ID=5d580e3c-fix1 EFS_GIT_DESCRIBE=5d580e3c-fix1 EFS_GIT_BRANCH=devel test
 python3 tests/test_lease_admission_lock.py
 python3 tests/test_report_span_base.py
 python3 tests/test_open_busy.py

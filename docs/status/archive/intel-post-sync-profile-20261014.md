@@ -16,10 +16,10 @@ Deployed devel source `2256f1a34fc1006e3ecb9ab356a46a0341f0b605`, build ID
 `2026-10-15T02:57:30Z`. Documentation HEAD before capture: `12e49ff07`.
 Four file-storage daemons on Intel1 (`10.0.0.207`, n1/n2) and Intel2
 (`10.0.0.209`, n3/n4), ports 17432/17433, 400 GiB quota per daemon.
-Daemon arguments retain `--direct-io --storage-engine files`; relevant process
+Daemon arguments retain `--direct-io`; relevant process
 environment retains `EFS_TRANSPORT=tcp`, `EFS_COMMANDS=0`,
-`EFS_COMMANDS_SERVER=0`, `EFS_PACKED_WRITES=0`, `EFS_EXPIRY=0`.
-Thus .efs client/server, packing, containers and expiry remain disabled.
+`EFS_COMMANDS_SERVER=0`, `EFS_EXPIRY=0`.
+Thus .efs client/server and expiry remain disabled.
 
 Profiled PIDs: Intel1 3873880/3873887, Intel2 4142560/4142567,
 AMD FUSE 3885731, user dd 3907299. Existing Intel mounts remain at
@@ -133,7 +133,7 @@ Implement **bounded background pressure draining with indexed candidates**:
 Start with the indexed-walk change as a separately measurable, lower-risk step.
 The background-drain change is the larger throughput hypothesis and requires
 correctness design before implementation. Do not remove fragment fsyncs or
-introduce packing/containers to obtain a benchmark improvement.
+introduce new storage formats to obtain a benchmark improvement.
 
 Qualification should include native and sanitizer tests of eligibility/credit
 transitions, multiwriter races, delayed/failed PUT and REPORT, cancellation,

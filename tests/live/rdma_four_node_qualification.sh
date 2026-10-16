@@ -4,10 +4,10 @@ set -euo pipefail
 src=$(cd "$(dirname "$0")/../.." && pwd)
 export EFS_TRANSPORT=rdma EFS_RDMA_DEV=${EFS_RDMA_DEV:-rxe0} EFS_RDMA_GID_INDEX=${EFS_RDMA_GID_INDEX:-1}
 export EFS_DATA_GC_ADMISSION=1 EFS_GC_BACKLOG_IDLE_MS=20
-# Explicit placement qualification; does not enable the container engine.
+# Explicit placement qualification.
 export EFS_METADATA_BALANCE=1
-export EFS_MD_RAFT_N=4 EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0 EFS_REPAIR_EXPERIMENT=0
-unset EFS_READ_PROF EFS_RPC_PROF EFS_CONTAINER_PATH_PROF EFS_READ_FRAG_PROF
+export EFS_MD_RAFT_N=4 EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0 EFS_REPAIR_EXPERIMENT=0
+unset EFS_READ_PROF EFS_RPC_PROF EFS_DEEP_PATH_PROF EFS_READ_FRAG_PROF
 base=${EFS_GATE_BASE_PORT:-27432}
 work=$(mktemp -d /data1/efs/rdma-qualification-XXXXXX)
 client_root=$(mktemp -d /home/efs/rdma-qualification-XXXXXX)
@@ -32,7 +32,7 @@ trap cleanup EXIT
 start_nodes() {
  for id in 1 2 3 4; do
   join=();[ "$id" = 1 ] || join=(--join "127.0.0.1:$base")
-  "$src/efsd" --node-id "$id" --addr 127.0.0.1 --port "$((base+id-1))" --storage "$work/n$id" --storage-engine files --quota 4G --direct-io "${join[@]}" >> "$work/n$id.log" 2>&1 &
+  "$src/efsd" --node-id "$id" --addr 127.0.0.1 --port "$((base+id-1))" --storage "$work/n$id" --quota 4G --direct-io "${join[@]}" >> "$work/n$id.log" 2>&1 &
   pids+=("$!");printf '%s\n' "$!" > "$work/efsd-n$id.pid"
   ready=0
   for attempt in $(seq 1 60); do

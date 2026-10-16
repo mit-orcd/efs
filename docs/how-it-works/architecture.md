@@ -558,7 +558,7 @@ node hosts many.
 log to a **local, embedded, ordered key-value store** on NVMe. RAM is a
 bounded cache, not the store. Each shard has an isolated ordered
 applied-state *namespace*; the implementation multiplexes many shard
-namespaces into one local storage engine via a shard-prefix key (at 64 nodes
+namespaces into one local KV store via a shard-prefix key (at 64 nodes
 a node hosts ~192 shard replicas at RF=3, ~448 at RF=7 — while *leaders*
 stay ~64/node at any RF, which is what matters for write scheduling).
 Ordered keys make readdir a range scan. A log + KV is the durability

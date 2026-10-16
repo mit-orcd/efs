@@ -727,9 +727,7 @@ static pthread_rwlock_t *inode_gc_lock(efs_export_id_t eid, efs_ino_t ino)
     return &inode_gc_locks[efs_ino_lock_slot(ino ^ ((uint64_t)eid << 32),
                                            FRAG_LOCKS)];
 }
-/* Container inodes share low shard bits. Include their ordinal so unrelated
- * PUT/read/GC operations do not collapse onto one writer guard. All paths
- * for the exact inode/export use this same selection; files stay unchanged. */
+/* All PUT/read/GC paths for the exact inode/export use this same guard. */
 static pthread_rwlock_t *server_inode_gc_lock(struct efsd_server *s,
                                             efs_export_id_t eid,efs_ino_t ino)
 {
@@ -1178,9 +1176,9 @@ static int sync_fragment_parents(struct efsd_server *s, const char *path)
         }
         pthread_mutex_unlock(&s->lock);
     }
-    /* Files use the same bounded pinned-inode ancestry proof as metadata
-     * fragments. This never enables the container engine, skips the changed
-     * containing directory, or caches a failed barrier. Root attach/close owns
+    /* Fragments use the same bounded pinned-inode ancestry proof as metadata
+     * fragments. This never skips the changed containing directory or caches
+     * a failed barrier. Root attach/close owns
      * descriptor lifetime; fallback below covers uninitialized/unknown roots. */
     if (root[0]) return server_storage_sync_parents_with(s, path,
                                       fragment_directory_group_barrier, NULL);
@@ -2093,8 +2091,7 @@ static void frag_loc_note(efs_export_id_t export_id, efs_ino_t ino,
 /* Combined fragment+checksum read. Single probe pass per GET: the data
  * open() itself is the probe, and the digest is the 4 KiB tail of that
  * file. Roots are probed low to high, same as server_find_fragment_root.
- * *sum_ok uses efs_store_sum_state: PRESENT requires caller verification;
- * containers can return VERIFIED for a complete checked payload. */
+ * *sum_ok uses efs_store_sum_state: PRESENT requires caller verification. */
 static int read_fragment_impl(struct efsd_server *s, struct efs_export *ex,
                                   efs_ino_t ino, uint32_t chunk_index,
                                   uint32_t fragment_index, uint8_t *data,

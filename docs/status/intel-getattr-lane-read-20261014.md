@@ -42,8 +42,8 @@ AMD Ubuntu/Linux7.0/fuse3.18.2. External physical AMD Ryzen AI MAX+395 and
 xorinox Ryzen9 7940HS clients each have2.5Gb/s links.
 
 Every main process verified with TCP and `EFS_COMMANDS=0`,
-`EFS_COMMANDS_SERVER=0`, `EFS_PACKED_WRITES=0`, `EFS_EXPIRY=0`.
-Daemons use files engine and `--direct-io`; containers unused; `.efs` absent
+`EFS_COMMANDS_SERVER=0`, `EFS_EXPIRY=0`.
+Daemons use `--direct-io`; `.efs` absent
 on all four mounts. Eight process argument/environment/hash checks pass.
 
 |Host|efsd SHA256|Intel-client efs-fuse SHA256|

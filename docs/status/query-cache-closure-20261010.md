@@ -62,7 +62,7 @@ misclassify changed metadata as unchanged.
 Source snapshot admission now charges its fixed object, copied memtable entries
 and both segment/pin arrays, with checked segment-count addition. The existing
 64 MiB host source budget remains. `efs_kv_lsm_snapshot_bytes` exposes this retained
-footprint; borrowed storage-engine segment objects and temporary per-reader scan
+footprint; borrowed KV-engine segment objects and temporary per-reader scan
 iterators remain separate audit items. Tests cover exact admission, one byte below
 it, impossible segment counts, finite retained views and counter exhaustion.
 KV durability, incremental differential and complete native gates pass.

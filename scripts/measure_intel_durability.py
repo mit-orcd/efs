@@ -36,7 +36,7 @@ if a.phase in ('loaded-before','quiet'): cases += [('batch16-q4',4,'batch','allo
 for name,qd,persist,policy,batch in cases:
     root=a.scratch/name;root.mkdir()
     cmd=[str(binary),'--bench','principles','--storage',str(root),
-        '--layout','files','--rw','write','--policy',policy,'--persist',persist,
+        '--rw','write','--policy',policy,'--persist',persist,
         '--directory-sync','worker','--objects','4096','--payload-size','65536',
         '--qd',str(qd),'--batch-size',str(batch),'--direct-io']
     before=Path('/proc/diskstats').read_text();start=time.time()

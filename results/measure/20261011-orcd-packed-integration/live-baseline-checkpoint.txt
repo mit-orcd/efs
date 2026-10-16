@@ -1,5 +1,0 @@
-legacy benchmark last lines:
-1,038,209/10,000,000 files (10.4%), 5616.5 s, 185 files/s
-1,038,427/10,000,000 files (10.4%), 5617.5 s, 185 files/s
-1,038,555/10,000,000 files (10.4%), 5618.5 s, 185 files/s
-1564996    01:33:39 python -u /home/erbmi1/orcd/scratch/efs/orcd-test/tiny_files-merged-c52a464391a6.py --max-depth 8 --max-files-per-folder 1000 --max-files 10000000 --workers 16 /tmp/efs-mount/tiny-files-merged-c52a464391a6

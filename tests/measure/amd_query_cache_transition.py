@@ -23,7 +23,7 @@ assert os.getuid() != 0 and os.environ.get('USER') == 'efs'
 assert base.is_dir() and a.baseline.resolve() != a.candidate.resolve()
 a.output.mkdir(parents=True, exist_ok=False)
 env = dict(os.environ, EFS_CLUSTER='amd', EFS_COMMANDS='1', EFS_COMMANDS_SERVER='1',
-           EFS_PACKED_WRITES='0', EFS_EXPIRY='0', EFS_REPAIR_EXPERIMENT='0',
+           EFS_EXPIRY='0', EFS_REPAIR_EXPERIMENT='0',
            EFS_TRANSPORT='tcp', EFS_DIRECT_IO='1')
 if a.private_budget: env.update(EFS_QUERY_DISK_MAX_MIB='64',EFS_QUERY_DISK_TOTAL_MIB='80')
 

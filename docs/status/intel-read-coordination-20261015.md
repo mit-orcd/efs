@@ -3,7 +3,7 @@
 **Measurement PASS; optimization and historical regression attribution NOTRUN.**
 Follow-up to [the read profile](intel-amd-read-profile-20261015.md), not a new
 correctness acceptance gate. No EFS code, configuration, mounts or deployment
-changed. TCP/direct/files; .efs client/server, packing, containers and expiry
+changed. TCP/direct/files; .efs client/server and expiry
 OFF. Tested source `bb22e9559337a836856dce1720b739743f0ef2d7`, build
 `bb22e9559337`, timestamp `2026-10-15T12:10:00Z`. Binary hashes, Intel storage
 and deployment details: [eight-writer deployment](intel-default-eight-writers-20261015.md).
@@ -63,8 +63,7 @@ Independent eight-second RPC trace: 2473 complete chunk-map exchanges average
 1.149 ms (p95 1.397 ms); 14953 complete fragment GET exchanges average 2.964 ms
 (p95 4.108 ms, max 128.312 ms). All these replies have status zero. No exchange
 exceeds one second. Nonblocking recv EAGAIN is not an EFS failure. Timings include
-ptrace overhead. `GETCHUNKS_PACKED` is the metadata wire opcode and does not
-mean small-file packing is enabled.
+ptrace overhead.
 
 ## Concrete split and redundant traffic
 

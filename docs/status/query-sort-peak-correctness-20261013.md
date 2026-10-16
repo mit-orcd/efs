@@ -34,7 +34,7 @@ manifest version changed.
 Environment: Intel1, Linux/GCC, isolated native tree
 `/data1/efs/query-peak-correctness-20261013`. No mounted command activation or
 production deployment. Intel production remains ordinary files/TCP/direct,
-`.efs` client/server, packing, containers and expiry disabled. Native synthetic
+`.efs` client/server and expiry disabled. Native synthetic
 query fixtures exercise excluded live features without enabling them.
 Source began at `328153c9`; all five changed code/test files were replaced by
 the committed `5f8ec779` versions. Force rebuild used the identity below.
@@ -121,7 +121,7 @@ existing 16/32 GiB limits. Full-size rebuild/refresh, six focused mounted comman
 suites, concurrent queries, retained paging/readers and next refresh, followed
 by same-source cold readiness and complete acknowledged payload verification
 remain **NOTRUN for this fix**. Preserve the native RDMA/direct/files profile,
-`.efs` client/server on, packing/containers/expiry off. Native correctness and
+`.efs` client/server on, expiry off. Native correctness and
 peak evidence do not replace these mounted hardware/scale gates or establish
 that ORCD's observed ENOSPC is fully resolved. If refusal remains, record
 actual retained/final/temporary peak bytes before changing code; no further

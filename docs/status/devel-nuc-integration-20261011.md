@@ -16,7 +16,7 @@ ORCD, capacity branch, remote refs and detached worktree heads are ancestors
 of that baseline. Other branch tips and worktrees are not moved, and active
 branches are not repeatedly merged during measurements.
 
-README conflicts retain both devel's new W95 packing progress and this branch's
+README conflicts retain both devel's new progress and this branch's
 W96 closure. Generated architecture Markdown/HTML are regenerated from source
 rather than choosing one side of their merge conflicts. All five architecture
 checks pass after integration.

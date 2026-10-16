@@ -12,7 +12,7 @@ case "${1:-start}" in
         }
         mkdir -p "$client_base/logs"
         exec env EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 \
-            EFS_PACKED_WRITES=0 EFS_EXPIRY=0 \
+            EFS_EXPIRY=0 \
             EFS_FUSE_LOG="$client_base/logs/efs-fuse-intel-mnt.log" \
             "$client_base/src/scripts/client.sh" "$client_seed" "$client_mount"
         ;;

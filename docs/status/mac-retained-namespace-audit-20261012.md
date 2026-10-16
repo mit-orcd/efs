@@ -24,7 +24,7 @@ This is a local snapshot audit primitive, not a distributed audit certificate or
 
 For installed inode 4091, a coherent audit still needs a read-only server-side pin taken under the existing authoritative cut protocol, all owning-group applied vectors and replica coverage, then identity-aware session/lease/PUT-ticket/orphan/reap/GC decoding. Concurrent prepared transactions must be resolved or leave the result inconclusive. Repeated point RPCs cannot substitute for this cut. Provenance must include build/HELLO identities, store identities, authority/applied vectors, capture interval and limits. Any resource error, missing group, unsettled owner, unknown schema or inconsistent cut forbids repair.
 
-A repair proposal needs the actual writer cause, generation/parent/backlink preconditions, transaction and session fence proof, complete children coverage, replay identity, crash recovery and compatible-reader rollout proof. No such proof exists yet; no guarded repair is implemented or authorized. Retained 4091 and the original-budget packing acceptance failures remain open independently of these passing fixtures.
+A repair proposal needs the actual writer cause, generation/parent/backlink preconditions, transaction and session fence proof, complete children coverage, replay identity, crash recovery and compatible-reader rollout proof. No such proof exists yet; no guarded repair is implemented or authorized. Retained 4091 and the original-budget acceptance failures remain open independently of these passing fixtures.
 
 ## Partial transaction discriminator
 

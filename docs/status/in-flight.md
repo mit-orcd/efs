@@ -18,7 +18,7 @@ restructure changes no feature defaults, deployment or acceptance verdict.
 | Other work | [Queue](work-queue.md) and [topic catalog](catalog.md); no assignment is created by listing an item. |
 
 The three-package matrix records `.efs` enabled for ORCD/AMD and disabled for
-Intel, with packing, containers and expiry disabled throughout. ORCD uses native
+Intel, with expiry disabled throughout. ORCD uses native
 RDMA/direct I/O; record AMD/Intel's actual transport rather than assuming it.
 Unplanned-event repair/recovery remains deferred in that scope. Other historical
 packing/expiry test profiles have separate evidence and are not these packages.

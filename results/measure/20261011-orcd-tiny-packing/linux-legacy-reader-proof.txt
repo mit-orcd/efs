@@ -1,4 +1,0 @@
-LEGACY_READER source=5a5caee9ceb1 rc=77 (77=refused)
-NEW_READER dev_overlay=/tmp/efs-w95-fence-dev-1791697475 cold_open=PASS
-KVLSM2 1 1
-PRIVATE_FIXTURE=/tmp/efs-reader-proof-TGv0ro

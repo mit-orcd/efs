@@ -73,8 +73,8 @@ outside Git. On refused drain it retains the fixture for explicit cleanup.
 Installed-cluster tests use the previous
 [AMD commands](amd-rdma-posix-20261015.md#reproduction), same 15/75s core and
 30s persistence budgets, jobs 1 and 16 on one mount, extras and two-client peer.
-Use `EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0`,
-files engine, RDMA/direct, repair disabled. Seven-client tests are NOTRUN.
+Use `EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0`,
+files storage, RDMA/direct, repair disabled. Seven-client tests are NOTRUN.
 
 ## Results
 
@@ -353,7 +353,7 @@ availability only; it does not close this blocker or hardware power-loss gates.
 
 AMD Ryzen AI MAX+395, Linux7.0.0-38, XFS `/data1`, Soft-RoCE `rxe0` GID1.
 Private four-daemon fixture, ports28432–28435, 4G quota per node, two mounted
-clients; files/RDMA/direct. Commands, packing, containers, expiry and repair
+clients; files/RDMA/direct. Commands, expiry and repair
 remain disabled. The live script uses a 10s background PUT window to expose
 unresolved acknowledgements; command deadlines remain30s, overall180s. Its
 payload is2MiB. This is a process-crash test, not physical power loss.
@@ -408,7 +408,7 @@ Deployed branch `devel-amd-durability-20261015` at
 All949 source/build inputs match the committed manifest; installed binaries
 have the three SHA256 identities recorded in the clean-verifier section above.
 Four daemons and both managed FUSE clients were verified with open verbs
-handles, RDMA/direct, files engine and commands/packing/expiry/repair disabled.
+handles, RDMA/direct and commands/expiry/repair disabled.
 AMD topology and XFS are unchanged,17G quota per node, existing namespace
 retained; async PUT uses its default200ms/256MiB window. No profilers or timing
 instrumentation were enabled, and no timeouts were increased.
@@ -465,7 +465,7 @@ excluded-feature qualification or push.
 **W119 remains OPEN.** Baseline product `b6454a7f8` (deployed documentation
 checkpoint `e53d20aa1`), candidate
 `f625195011102cfd1646499df584983f95888894`. Same AMD four-node files/RDMA/direct
-profile,17G/node, default200ms async window, commands/packing/containers/expiry
+profile,17G/node, default200ms async window, commands/expiry
 and repair disabled. No seven-client test, timeout changes or TCP comparison.
 
 Reproduce the isolated capture as the efs user with perf/strace attach
@@ -585,7 +585,7 @@ Reproduce with exclusive AMD and no competing test controller:
    daemons using the existing scoped helper, preserving independent clients.
 2. Start with the ordinary explicit disabled-feature RDMA/direct profile and
    `EFS_READ_PROF=1 EFS_RPC_PROF=1 EFS_BATCH_OBS=1`. The original capture also
-   set `EFS_CONTAINER_PATH_PROF=1` (diagnostic only; containers stay disabled),
+   set `EFS_DEEP_PATH_PROF=1` (diagnostic only),
    whose dNN selector does not identify this case; no names conclusion relies
    on its callback samples.
 3. Run `python3 tests/measure/amd_names_loaded.py /data1/efs/NEW_DIRECTORY`.
@@ -615,7 +615,7 @@ lasting at least100ms are logged; earlier error returns are not timed.
 
 AMD configuration remains four files-engine daemons, ports17432–17435,
 17G per-node quota, two managed mounts, Soft-RoCE rxe0/GID1 and direct I/O.
-`.efs`, packing, containers, expiry and repair experiments remain disabled.
+`.efs`, expiry and repair experiments remain disabled.
 Existing stores were retained between repetitions. This is the core suite,
 not the seven-client4G fixture. No deadline changes, TCP comparison or push.
 
@@ -733,9 +733,8 @@ Environment: Intel i5-1135G7, Rocky Linux10.2, XFS `/data1`, kernel
 Run the following from that source directory with `python3 tests/NAME.py`:
 `test_append_flush_budget`, `test_append_reserve_budget`,
 `test_inode_lock_stripes`, `test_read_control_host`,
-`test_container_pending_reads`, `test_receive_persist`, `test_read_waiters`.
-The pending-read unit name covers shared host logic; no container service was
-activated. These are unit checks, not live transport qualification.
+`test_raft_pending_reads`, `test_receive_persist`, `test_read_waiters`.
+These are unit checks, not live transport qualification.
 
 `rdma link show` and `/sys/class/infiniband` show no devices; `modinfo rdma_rxe`
 reports module missing, and `/boot/config-$(uname -r)` explicitly says
@@ -772,7 +771,7 @@ under `/data1/efs/nuc-read-close-852caf1ae`; `/data2/efs` resolves to
 `/home/efs/additional-work-dir`. Four files-engine daemons use localhost
 ports17432–17435 and17G per-node quota. Both mounts are `mnt`/`mnt2` under
 that base. Runtime inspection verified TCP/direct and disabled commands,
-server commands, packed writes and expiry on all six processes; profiling
+server commands and expiry on all six processes; profiling
 variables were absent. AMD remained untouched.
 
 Reproduce on idle NUC, as user `efs`, with binaries built as above. Use the
@@ -791,7 +790,7 @@ Ensure ports are free and `BASE/src` has the tested build; create `BASE/devops`
 for the helper's logrotate file. Start with:
 
 ```sh
-EFS_CLUSTER=nuc-read-close EFS_TRANSPORT=tcp EFS_DIRECT_IO=1 EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0 EFS_REPAIR_EXPERIMENT=0 EFS_METADATA_BALANCE=1 EFS_DATA_GC_ADMISSION=1 EFS_GC_BACKLOG_IDLE_MS=20 /data1/efs/devops/start.sh
+EFS_CLUSTER=nuc-read-close EFS_TRANSPORT=tcp EFS_DIRECT_IO=1 EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0 EFS_REPAIR_EXPERIMENT=0 EFS_METADATA_BALANCE=1 EFS_DATA_GC_ADMISSION=1 EFS_GC_BACKLOG_IDLE_MS=20 /data1/efs/devops/start.sh
 ```
 
 From that source directory, choose new output paths and run sequentially:
@@ -805,7 +804,7 @@ python3 -u tests/posix/posix_2client.py --local "$base/mnt" "$base/mnt2" --paren
 ```
 
 Default deadlines are unchanged (including15s names/deep cases). No seven-client
-workload, packing, containers, expiry or `.efs` activation. Raw baseline
+workload, expiry or `.efs` activation. Raw baseline
 outputs remain outside Git at `BASE/quiet`. Normally drain each scoped mount
 using `BASE/src/scripts/client.sh stop MOUNT`; if a mount is retained, abort
 cleanup rather than force-discard. Then SIGTERM only the four scoped daemon

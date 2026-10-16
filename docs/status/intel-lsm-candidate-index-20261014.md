@@ -38,7 +38,7 @@ no CPU, transport, durability, retry/window or format tuning.
   tombstones, pinned lifetimes and transaction/read freshness are preserved.
 
 The change does not implement lane-result reuse, long-lived attribute caching,
-different on-disk indexing, small-file packing, containers or deferred durable
+different on-disk indexing, or deferred durable
 acknowledgements. The prior digest-tail read fix remains included.
 
 ## Environment and deployment
@@ -52,9 +52,9 @@ Intel/xorinox use Rocky10.2/Linux6.12/libfuse3.16.2; AMD uses Ubuntu/Linux7.0/
 libfuse3.18.2. External client links negotiate2.5Gb/s; AMD is Ryzen AI MAX+395
 and xorinox Ryzen9 7940HS. Private Intel and AMD-local clusters remain running.
 
-TCP, daemon `--direct-io`, files engine. All eight main processes have
-`EFS_COMMANDS=0`, `EFS_COMMANDS_SERVER=0`, `EFS_PACKED_WRITES=0`, `EFS_EXPIRY=0`,
-`EFS_TRANSPORT=tcp`. Containers unused; persisted commands policy version1/mask0;
+TCP, daemon `--direct-io`. All eight main processes have
+`EFS_COMMANDS=0`, `EFS_COMMANDS_SERVER=0`, `EFS_EXPIRY=0`,
+`EFS_TRANSPORT=tcp`; persisted commands policy version1/mask0;
 `.efs` absent on all four mounts. No root policy/package change needed.
 
 |Host|Deployed efsd SHA256|Deployed Intel-client efs-fuse SHA256|

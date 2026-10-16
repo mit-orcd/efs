@@ -18,7 +18,7 @@ code=r'''
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
-struct test_server {int storage_engine;};
+struct test_server {int unused;};
 struct efs_raft_host {struct efs_kv *kv;struct test_server *s;};
 static int verdict,calls;
 static uint64_t rd64be(const uint8_t *p){uint64_t v=0;for(unsigned i=0;i<8;i++)v=v<<8|p[i];return v;}
@@ -41,11 +41,11 @@ static void classify(struct efs_raft_host *h,int rc,struct efs_msg_inode_reply *
 int main(void)
 {
  struct test_server server={1};struct efs_raft_host host={.s=&server};struct efs_msg_inode_reply out;
- classify(&host,EFS_ERR_BUSY,&out);assert(out.status==EFS_INODE_RPC_BUSY); /* container admission status removed */
+ classify(&host,EFS_ERR_BUSY,&out);assert(out.status==EFS_INODE_RPC_BUSY);
  classify(&host,EFS_ERR_AGAIN,&out);assert(out.status==EFS_INODE_RPC_BUSY);
  classify(&host,EFS_ERR_NOLCK,&out);assert(out.status==EFS_INODE_RPC_BUSY);
  classify(&host,EFS_ERR_NOT_PRIMARY,&out);assert(out.status==EFS_INODE_RPC_NOT_PRIMARY);
- server.storage_engine=0;classify(&host,EFS_ERR_BUSY,&out);assert(out.status==EFS_INODE_RPC_BUSY);
+ server.unused=0;classify(&host,EFS_ERR_BUSY,&out);assert(out.status==EFS_INODE_RPC_BUSY);
  host.s=NULL;classify(&host,EFS_ERR_BUSY,&out);assert(out.status==EFS_INODE_RPC_BUSY);
  struct efs_raft_host h={0};uint8_t cmd[HOST_LOCK_LEN]={EFS_MD_CMD_LOCK,EFS_MD_LOCK_GRANT};
  cmd[8]=16;cmd[9]=1;cmd[17]=8;cmd[HOST_LOCK_LEN-1]=1;

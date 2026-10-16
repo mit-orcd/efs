@@ -15,7 +15,6 @@ source=r'''
 #include "efs/raft.h"
 #include "efs/meta_cmd.h"
 #include "efs/session.h"
-int efs_segment_geometry(size_t n, size_t *out) { (void)n; (void)out; return EFS_ERR_INVAL; }
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
@@ -23,7 +22,6 @@ int efs_segment_geometry(size_t n, size_t *out) { (void)n; (void)out; return EFS
 #define HOST_PUBLICATION_LEN 230
 #define HOST_PUBLICATION_TICKET_LEN 266
 #define HOST_PUB_F_TICKETED 4
-#define HOST_PUB_F_RETIRED_PACKED 8
 #define HOST_PUB_F_LANE_LOCAL 1
 #define HOST_PUB_F_FRESH_OBJECT 2
 #define APPLY_LOG(...) ((void)0)

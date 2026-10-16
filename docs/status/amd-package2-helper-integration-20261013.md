@@ -32,7 +32,7 @@ other chat are not counted as independently executed AMD evidence.
 
 AMD-395, four localhost daemons 17432–17435/two FUSE mounts, account efs;
 commands client/server on, policy version 0/mask 3, files/TCP/direct,
-packing/containers/expiry/repair experiment off. Data quota 17 GiB/node;
+expiry/repair experiment off. Data quota 17 GiB/node;
 query caps 16/32 GiB and applicable 30/60-second mounted budgets unchanged.
 Normal drain/install/start retained authoritative test stores; no wipe,
 profiling, competing controller or production helper-count change.

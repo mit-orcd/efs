@@ -1,3 +1,0 @@
-minimum reader: legacy preservation, durable retries, apply abort, cold recovery and unknown-format refusal PASS
-pack ledger: neighbors, pending retention, replay fences, captured-member GC, corruption and atomic mapping batch PASS
-pack ledger: durable mapping cohort, abrupt WAL recovery, cold compaction, neighbor retention and GC ACK replay PASS

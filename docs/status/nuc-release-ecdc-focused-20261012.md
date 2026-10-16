@@ -2,7 +2,7 @@
 
 Actual direct human resume verified in AMD manager chat: resource-weighted
 split, same frozen commit, `.efs` disabled. NUC owns lightweight configuration
-and focused deep concurrency; AMD owns broad seven-client packed lifecycle,
+and focused deep concurrency; AMD owns broad seven-client lifecycle,
 peer/cold/physical/shutdown. Earlier stop is superseded for this assignment.
 
 Exact source `ecdc8c6034b610a2bf69e7a79664d8a5e990de84`, central
@@ -20,7 +20,7 @@ External focused runner, not a replacement of the existing case assertions:
 four private direct/TCP/FILES daemons, **4G per node**, seven FUSE clients.
 Actual `/proc/PID/environ`, executable image hashes and command lines captured
 for all4+7 processes. Each verifies `EFS_COMMANDS=0`,
-`EFS_COMMANDS_SERVER=0`, `EFS_PACKED_WRITES=1`, flow/earlyretire/groupdrain0,
+`EFS_COMMANDS_SERVER=0`, flow/earlyretire/groupdrain0,
 repair0. `.efs` absent in actual root listing and existence lookup PASS.
 No build/profiler/other EFS daemons during measurements.
 
@@ -57,7 +57,7 @@ flags and background workload. This result does not isolate `.efs` causality,
 does not prove the broad seven-client deadlines are fixed, and does not close
 W97 sustained slowdown or original fullW52/bothmodeW112. The manager's AMD
 full workload is the required next confirmation. Prior failed broad evidence
-07fc366c remains intact. Containers, RDMA and repair deferred.
+07fc366c remains intact. RDMA and repair deferred.
 
 Raw: `results/measure/20261012-nuc-ecdc-focused/raw/`: full source manifest,
 build log/executable hashes, external focused runner, exact test commands,

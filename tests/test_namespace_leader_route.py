@@ -15,7 +15,7 @@ code=r'''
 #define HOST_NGROUPS 2
 struct efs_raft {uint32_t voters;};
 struct host_group {struct efs_raft *r;uint32_t voters;};
-struct efsd_server {int storage_engine;};
+struct efsd_server {int unused;};
 struct efs_raft_host {pthread_mutex_t mu;int n,raft_id;struct host_group groups[2];struct efsd_server *s;};
 static int leader=-1;
 static int host_local_leader(struct efs_raft_host *h,uint8_t group){(void)h;assert(group==0 || group==2);return leader;}
@@ -29,7 +29,7 @@ int main(void){
  leader=1;assert(host_namespace_leader_hint(&h,2)==1);
  struct efsd_server server={0};h.s=&server;
  assert(host_read_leader_hint(&h,2)==1); /* ordinary files route too */
- server.storage_engine=1;assert(host_read_leader_hint(&h,2)==1);
+ assert(host_read_leader_hint(&h,2)==1);
  leader=0;assert(host_read_leader_hint(&h,2)==-1);
  leader=1;
  leader=0;assert(host_namespace_leader_hint(&h,0)==-1);
@@ -77,7 +77,7 @@ for name in ['lookup','getattr']:
  assert route<body.index('host_read_index_pair(' if name=='lookup' else 'host_read_inode_lanes_mask(')
  assert 'set_inode_rc(out,EFS_ERR_NOT_PRIMARY,hint);return;' in body
 
-# Batched paths use the same ordinary-file/container hint before any row/proof read.
+# Batched paths use the same leader hint before any row/proof read.
 a=s.index('void server_raft_host_lookup_path(');body=s[a:s.index('\n}',a)]
 assert body.index('host_read_leader_hint(')<body.index('host_hosts(')
 assert body.index('host_read_leader_hint(')<body.index('host_read_inode_lanes_reuse(')

@@ -127,8 +127,8 @@ cc -std=gnu11 -O1 -ffunction-sections -fdata-sections -Iinclude -Ideps/blake3 \
 For an ELF toolchain use its section-GC linker option instead of Darwin's
 `-dead_strip`. Actual host/FUSE acceptance, exact bytes, physical old-object
 availability and lost-ACK/restart tests remain owed. `host_pub_pack` permits a
-first span with base_gen zero after `chunk_holds` loses its history; legacy
-packing carries no durable publication receipt/floor. Staged receipt/retirement
+first span with base_gen zero after `chunk_holds` loses its history; the legacy
+path carries no durable publication receipt/floor. Staged receipt/retirement
 primitives do not prove that production REPORT activates them.
 
 ## Final concurrent checkpoint

@@ -16,13 +16,9 @@
 #define EFS_KV_KIND_EXPIRY_INDEX 44 /* group anchor/deadline/FileID: revision */
 #define EFS_KV_KIND_REPAIR_JOB 40 /* staged group-anchor / job UUID: durable debt */
 #define EFS_KV_KIND_REPAIR_FLOOR 41 /* terminal job UUID/epoch revocation; retained */
-/* 36-39 held packing state (object, stream, floor, reader capability).
- * Retired with packing on 2026-10-16; never reuse. Snapshot import refuses
- * them (archive/packing-containers-20261016). */
-#define EFS_KV_KIND_RETIRED_PACK_OBJECT 36
-#define EFS_KV_KIND_RETIRED_PACK_STREAM 37
-#define EFS_KV_KIND_RETIRED_PACK_FLOOR 38
-#define EFS_KV_KIND_RETIRED_PACK_READER 39
+/* 36-39 are reserved: never reuse. Snapshot import refuses them. */
+#define EFS_KV_KIND_RESERVED_MIN 36
+#define EFS_KV_KIND_RESERVED_MAX 39
 #define EFS_KV_KIND_QUERY_POLICY 35 /* root export: version:8, mask:4 */
 #define EFS_KV_KIND_CLOSE_STEP 34 /* staged replay-identified bounded close obligation */
 #define EFS_KV_KIND_CLOSE_CLEANUP 33 /* durable deferred final-close effects */

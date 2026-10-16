@@ -19,7 +19,7 @@ struct host_group {
  uint64_t balance_term,balance_since_us,balance_attempt_us;
  uint32_t balance_voters,voters;struct efs_raft *r;int kv_incomplete;uint8_t group;
 };
-struct efs_server {int storage_engine;};
+struct efs_server {int unused;};
 struct efs_raft_host {int balance_enabled,raft_id;struct efs_server *s;struct host_group g[2];};
 static struct host_group *group_slot(struct efs_raft_host *h,uint8_t group){return group==0?&h->g[0]:group==2?&h->g[1]:NULL;}
 static unsigned calls;static int target,transfer_rc;
@@ -69,14 +69,14 @@ int main(void) {
  assert(host_balanced_voter(&h,4,1)==2);
  r.voters=0xf;h.g[1].voters=0xf;assert(host_balanced_voter(&h,0xf,0)==1);
  assert(host_balanced_voter(&h,0xf,1)==1);
- server.storage_engine=0;r.voters=7;h.g[1].voters=0xe;
+ server.unused=0;r.voters=7;h.g[1].voters=0xe;
  assert(host_balanced_voter(&h,7,0)==2); /* files use the same metadata placement */
  h.g[1].voters=0;assert(host_balanced_voter(&h,7,0)==-1);
  h.g[1].voters=4;r.voters=1;assert(host_balanced_voter(&h,1,0)==0);
  assert(host_balanced_voter(&h,4,1)==2);
  r.voters=7;h.g[1].voters=0xe;
  /* Transfer still honors settling, target lag refusal and backoff. */
- server.storage_engine=1;h.balance_enabled=1;h.raft_id=0;r.role=EFS_RAFT_LEADER;
+ h.balance_enabled=1;h.raft_id=0;r.role=EFS_RAFT_LEADER;
  transfer_rc=EFS_ERR_BUSY;unsigned before=calls;
  host_balance_leaders(&h,60000000);host_balance_leaders(&h,62000000);
  assert(calls==before+1&&target==2&&!h.g[0].balance_attempt_us);

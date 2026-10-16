@@ -18,7 +18,7 @@ nodes,400GiB quota/node, approximately99GiB occupied/node,5Gb/s Ethernet.
 Two external physical clients have2.5Gb/s links: AMD Ryzen AI MAX+395 and
 xorinox Ryzen9 7940HS. Four Intel main daemons and all four Intel-export FUSE
 clients retain TCP, daemon direct I/O, `EFS_COMMANDS=0`,
-`EFS_COMMANDS_SERVER=0`, `EFS_PACKED_WRITES=0`, `EFS_EXPIRY=0`; containers unused.
+`EFS_COMMANDS_SERVER=0`, `EFS_EXPIRY=0`;
 Independent AMD-local and private Intel processes were excluded from profiling.
 
 Observed existing human jobs, each with four workers:
@@ -79,12 +79,11 @@ complete TCP request/reply frames and validates reply type. AMD completed:
 - 3,076 LOOKUP replies:2,273 OK,803 NOT_FOUND, consistent with creating new
   names. No NOT_PRIMARY or STALE reply statuses in the decoded sample.
 
-xorinox completed2,972 GETATTR,5,818 LOOKUP,2,743 GETCHUNKS_PACKED,
+xorinox completed2,972 GETATTR,5,818 LOOKUP,2,743 GETCHUNKS,
 1,825 GET_CHUNK,1,832 RAFT_MKFS and161 READDIR exchanges, all OK.
 No fully captured exchange on either external client exceeded one second.
 `RAFT_MKFS` is also the session-command envelope, not evidence of formatting;
-`GETCHUNKS_PACKED` is also the normal extended chunk-map opcode, not evidence
-of enabled packing. First/last boundary exchanges are excluded:20 orphan
+First/last boundary exchanges are excluded:20 orphan
 receives/client,6 pending AMD and4 xorinox. No reply-type mismatch, partial
 send or malformed framing found. EAGAIN receives are ordinary nonblocking I/O.
 Only8 bytes/buffer were captured; operation identity/payload replay cannot be
@@ -145,7 +144,7 @@ removing retained-create probes. Do not widen windows, raise retry budgets,
 weaken syncs or change visibility to manufacture throughput.
 Client fixed128KiB chunk hashing/encoding is another CPU cost for tiny writes,
 but6.3% total writer CPU makes it a lower-priority latency target here. No
-packing, containers, checksum removal or expiry feature is proposed.
+checksum removal or expiry feature is proposed.
 
 ## Reproduction and retained evidence
 

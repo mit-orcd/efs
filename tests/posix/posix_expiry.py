@@ -52,7 +52,7 @@ def command(argv):
         cmd.extend(('--expiry-backlog-files',str(args.backlog_files)))
     if args.clock_fault:
         cmd.append('--expiry-clock-fault')
-    env = dict(os.environ, EFS_PACKED_WRITES='0', EFS_COMMANDS='0',
+    env = dict(os.environ, EFS_COMMANDS='0',
                EFS_COMMANDS_SERVER='0', EFS_TRANSPORT='tcp')
     return cmd, env
 

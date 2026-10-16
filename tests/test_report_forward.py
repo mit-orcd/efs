@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise production REPORT forwarding with unequal packed delta chains."""
+"""Exercise production REPORT forwarding with unequal delta chains."""
 from pathlib import Path
 import subprocess
 import tempfile
@@ -57,4 +57,4 @@ with tempfile.TemporaryDirectory(prefix='efs-report-forward-') as d:
     p.write_text(code)
     subprocess.run(['cc', '-std=gnu11', '-Wall', '-Wextra', '-Werror', '-I'+str(root/'include'), str(p), '-o', str(p.with_suffix(''))], check=True)
     subprocess.run([str(p.with_suffix(''))], check=True, timeout=5)
-print('REPORT forwarding: packed unequal chains, inode boundary, peer retry and impossible counts PASS')
+print('REPORT forwarding: unequal chains, inode boundary, peer retry and impossible counts PASS')

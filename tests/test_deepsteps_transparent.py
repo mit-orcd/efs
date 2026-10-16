@@ -3,7 +3,7 @@
 from pathlib import Path
 import importlib.util,os,socket,sys,tempfile,subprocess
 root=Path(__file__).resolve().parents[1]
-source=Path(os.environ.get('EFS_DEEPSTEPS_SOURCE',root/'scripts/container_deepsteps_sitecustomize.py'))
+source=Path(os.environ.get('EFS_DEEPSTEPS_SOURCE',root/'scripts/deepsteps_sitecustomize.py'))
 names=('mkdir','stat','open','lstat','fstat','rmdir','unlink','scandir')
 saved={n:getattr(os,n) for n in names}
 capabilities={n:set(getattr(os,n)) for n in ('supports_fd','supports_dir_fd','supports_follow_symlinks','supports_effective_ids')}

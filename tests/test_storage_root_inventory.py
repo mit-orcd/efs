@@ -14,7 +14,7 @@ code=r'''
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-struct efsd_server {unsigned storage_path_count;int storage_engine;const char *storage_paths[EFS_MAX_STORAGE_PATHS];};
+struct efsd_server {unsigned storage_path_count;const char *storage_paths[EFS_MAX_STORAGE_PATHS];};
 static pthread_mutex_t gate=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cv=PTHREAD_COND_INITIALIZER;
 static unsigned active,peak,entered,target,attempts,fail_on,visits[EFS_MAX_STORAGE_PATHS];
@@ -36,10 +36,10 @@ static int fixture_create(pthread_t *t,const pthread_attr_t *a,void *(*fn)(void 
 '''+s[a:b]+r'''
 #undef pthread_create
 static void reset(unsigned expected){active=peak=entered=attempts=released=0;target=expected;error_root=-1;overflow=0;memset(visits,0,sizeof(visits));}
-static void check(unsigned count,int containers,unsigned failure){
- struct efsd_server server={.storage_path_count=count,.storage_engine=containers};
+static void check(unsigned count,unsigned failure){
+ struct efsd_server server={.storage_path_count=count};
  char names[EFS_MAX_STORAGE_PATHS][16];uint64_t values[EFS_MAX_STORAGE_PATHS];
- unsigned actual=count?count:1,helpers=containers?0:actual<4?actual-1:3;
+ unsigned actual=count?count:1,helpers=actual<4?actual-1:3;
  if(failure && failure<=helpers)helpers=failure-1;
  for(unsigned i=0;i<actual;i++){snprintf(names[i],sizeof(names[i]),"%u",i);server.storage_paths[i]=names[i];}
  reset(helpers+1);fail_on=failure;
@@ -52,8 +52,8 @@ static void check(unsigned count,int containers,unsigned failure){
  assert(server_compute_local_usage(&server)==(actual>1?UINT64_MAX:UINT64_MAX-1) && !active);
 }
 int main(void){
- check(0,0,0);check(1,0,0);check(2,0,0);check(6,0,0);check(EFS_MAX_STORAGE_PATHS,0,0);
- check(6,0,1);check(6,0,2);check(6,0,3);
+ check(0,0);check(1,0);check(2,0);check(6,0);check(EFS_MAX_STORAGE_PATHS,0);
+ check(6,1);check(6,2);check(6,3);
  uint64_t values[EFS_MAX_STORAGE_PATHS];struct efsd_server invalid={.storage_path_count=EFS_MAX_STORAGE_PATHS+1};
  assert(server_compute_roots_usage(NULL,values)==EFS_ERR_INVAL);
  assert(server_compute_roots_usage(&invalid,values)==EFS_ERR_INVAL);

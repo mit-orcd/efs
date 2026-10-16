@@ -13,7 +13,7 @@ samefc source/build identity, branchdevel-rdma. Installed SHA256:
 - efs-mgmt: `266275482a111593c106dd2d216a7a157b0afe28dfa6b0c13c9e20ba62a4f29a`
 - private fault efs-fuse: `50f2f34b0140a74da3b6a72bd2a3b7ac0647cd5107ad01596b8333115fd75045`
 
-No push; no TCP comparison. `.efs` client/server, packing, containers, expiry
+No push; no TCP comparison. `.efs` client/server, expiry
 and repair experiment OFF. Files/direct, strict segmented RDMA, Soft-RoCE
 rxe0/GID1 on same-host AMD-395. Explicit metadata balancing1 retained.
 
@@ -27,7 +27,7 @@ Eight additional non-merge commits: `13a592056`, `3d279417f`,
 merged separately: REPORT session positives carry the exact existing EOF,
 missing-size refusal is explicit, and per-run Intel summaries are retained.
 Integration commits: `1f58de811` and `84887e9c2` (see Git for full identities).
-The packed-store and frame-adapter repairs overlap the existing RDMA harness
+The store and frame-adapter repairs overlap the existing RDMA harness
 fixes; the resulting merge retains those repairs without duplicate definitions.
 Only generated architecture HTML conflicted; regenerate from merged sources.
 
@@ -68,7 +68,7 @@ Production changes merged without textual conflicts. Status/index entries from
 both parents were retained; conflicting generated architecture documents were
 regenerated and all five doc gates passed. Earlier RDMA readiness, fragment
 admission, fresh-read/control, files ancestry and opt-in placement fixes remain.
-No defaults were enabled for containers, query, expiry or repair.
+No defaults were enabled for query, expiry or repair.
 
 The W100 series must remain together: missing-size live records are rejected,
 explicit EOF0 remains valid, missing staged EOF uses bounded read-only repair,
@@ -104,12 +104,12 @@ completed from the same frozen commit; neither failed attempt counts as PASS.
 The documentation link check additionally needed473 exact committed historical
 link targets (6.6MiB), exported without placeholders or large raw bundles.
 A remaining-recipes audit ran174 native commands; its only failure was the
-packed-storage fault harness, which had stopped intercepting the now-shared
+storage fault harness, which had stopped intercepting the now-shared
 ancestry directory barrier. `fc2460b19` includes both implementation units under
 the fault hooks, keeping all barrier/error/retry assertions. It also replaces
 an obsolete physical-repost stub in the standalone frame watcher with logical
 message release. These are harness repairs, not changes to production behavior.
-The packed fault harness now PASSes; full native is rerun on the final frozen
+The storage fault harness now PASSes; full native is rerun on the final frozen
 source. Raw failed2eee/ddf attempts remain outside Git, never counted as PASS.
 
 ## Gates and remaining work

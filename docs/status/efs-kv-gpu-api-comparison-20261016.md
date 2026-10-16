@@ -112,7 +112,7 @@ explicit per-host budget split/shared across daemons; pinned, loading and
 registered resident memory count against it. Admission refuses or backpressures
 before exhaustion. Retain immutable versions across active readers. Evict RAM
 without deleting persistent data. Cache eviction is separate from logical KV
-object deletion. No implicit expiry, packing, container or durability changes.
+object deletion. No implicit expiry or durability changes.
 
 Prefer reusable aligned pools and transfer from the resident payload buffer.
 For cold misses, read into the eventual cache allocation where possible.

@@ -10,11 +10,11 @@ qualification or closure of the original ORCD incident.
 
 AMD `amd-395`, Ryzen AI MAX+395 / Radeon8060S,122108MiB RAM, Ubuntu
 kernel7.0.0-38-generic and XFS backing storage; four same-host daemons on 127.0.0.1:17432–17435,
-files engine, direct storage I/O, rxe0/GID1 strict segmented RDMA. Installed
+files storage, direct storage I/O, rxe0/GID1 strict segmented RDMA. Installed
 stores have 17 GiB logical quota per node and were erased before initial
 deployment with the user's authorization. Two installed mounts are
 `/data1/efs/mnt` and `/data1/efs/mnt2`. Commands are disabled on clients AND
-servers; packing, containers, expiry, experimental repair and grouped PUT
+servers; expiry, experimental repair and grouped PUT
 cohorts are off. Metadata balancing and the existing AMD GC-admission
 experiment remain explicit. No application TCP comparison is performed.
 
@@ -107,10 +107,10 @@ make -j8 EFS_GIT_ID=c8d057391 EFS_GIT_DESCRIBE=c8d057391 \
   EFS_GIT_BRANCH=devel-amd-posix-20261015 efsd efs-fuse efs-mgmt test
 export EFS_CLUSTER=amd EFS_TRANSPORT=rdma EFS_RDMA_DEV=rxe0
 export EFS_RDMA_GID_INDEX=1 EFS_DIRECT_IO=1 EFS_MD_RAFT_N=4
-export EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0
+export EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0
 export EFS_EXPIRY=0 EFS_REPAIR_EXPERIMENT=0 EFS_PUT_COHORT=0
 export EFS_METADATA_BALANCE=1 EFS_DATA_GC_ADMISSION=1 EFS_GC_BACKLOG_IDLE_MS=20
-unset EFS_RPC_PROF EFS_READ_PROF EFS_BATCH_OBS EFS_CONTAINER_PATH_PROF
+unset EFS_RPC_PROF EFS_READ_PROF EFS_BATCH_OBS EFS_DEEP_PATH_PROF
 ```
 
 On the installed cluster, run core with `--jobs 16` and `--jobs 1`, each
@@ -173,8 +173,7 @@ synthetic stores only after normal drain. Do not discard failed test evidence.
 Focused model checks are `tests/test_host_batch_handoff.py`,
 `tests/test_read_control_host.py`, `tests/test_queued_read_control.py`,
 `tests/test_receive_persist.py`, `tests/test_raft` and
-`tests/test_container_ack_window.py` (a Raft policy regression; it does not
-enable containers). For the barrier sanitizer check set
+`tests/test_raft_ack_window.py` (a Raft policy regression). For the barrier sanitizer check set
 `CC='cc -fsanitize=address,undefined -fno-omit-frame-pointer'` when invoking
 `test_receive_persist.py`. The receive and handoff scripts support prior-source
 negative overrides `EFS_RAFT_CORE_SOURCE` and `EFS_HANDOFF_SOURCE_REF`.
@@ -247,5 +246,5 @@ W120's extracted LOOKUP defect is repaired; enabled-command cleanup ownership
 is NOTRUN here because commands are excluded. W120 remains open for that
 independent gate. W119's original ORCD failures and W106 hardware/cross-host
 obligations are not closed by AMD software-RDMA evidence. Seven-client load,
-queries, packing, containers, expiry and grouped fragment durability are
+queries, expiry and grouped fragment durability are
 explicitly NOTRUN/out of scope.

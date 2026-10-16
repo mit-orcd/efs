@@ -6,7 +6,7 @@ October 11, 2026. New correctness finding while reviewing S2 constant-false body
 
 A snapshot for the next chunk is already copied and its dirty bit cleared before `flush_pipe_add` notices that the 32-job pipe is full. If draining those queued jobs fails, the incoming job never reaches PUT. Previously the error branch invoked `dcache_flush_keep` only when `drop_body` was true. Production always supplies false, so it freed the incoming snapshot and closed its window without re-dirtying the retained local body. That chunk could be skipped by a subsequent dirty-set retry even though its bytes remained in the cache.
 
-The failure branch now always invokes the existing failed-PUT retention helper with the actual ownership mode before freeing the snapshot. Current retained bodies are re-dirtied/pinned in place; legacy stolen bodies, while that mode still exists, retain the existing ownership return behavior. The returned pipeline error and already queued jobs are unchanged. No public API, wire/native format, authoritative stats or packed consumer is removed.
+The failure branch now always invokes the existing failed-PUT retention helper with the actual ownership mode before freeing the snapshot. Current retained bodies are re-dirtied/pinned in place; legacy stolen bodies, while that mode still exists, retain the existing ownership return behavior. The returned pipeline error and already queued jobs are unchanged. No public API, wire/native format, or authoritative stats consumer is removed.
 
 ## Reproduction and validation
 

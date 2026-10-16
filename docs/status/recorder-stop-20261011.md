@@ -22,4 +22,4 @@ Client benchmark and daemon full-file syntax checks pass locally. The local benc
 
 All four original stop bodies are byte-identical in inspected ORCD `8d07b45adac9c6aa24ba46f7e8e1d4cc163f4da5`, NUC `3538213cfe793dbdb9025c3e0f65cc96eb97149a`, and MAC `b2c01fa05afa1287cd358f352ebfbc831b570e31` relative to the review baseline. The embedded FUSE benchmark uses the same helper without changing report generation. No other worktree/branch was edited.
 
-Coordinator still owns full merged Linux builds and real recorder exec failure/early exit/normal shutdown/timeout acceptance, with profiling overhead reported separately. Packed/query compatibility gates remain required. This checkpoint resolves the reproduced stop-after-reap defect; it is not mounted filesystem validation.
+Coordinator still owns full merged Linux builds and real recorder exec failure/early exit/normal shutdown/timeout acceptance, with profiling overhead reported separately. Query compatibility gates remain required. This checkpoint resolves the reproduced stop-after-reap defect; it is not mounted filesystem validation.

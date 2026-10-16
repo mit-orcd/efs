@@ -59,7 +59,7 @@ The W97 control uses three independent 64 KiB writers, each with a 256 MiB
 file and a SHAKE-derived full-length body with an eight-byte counter. Growing
 mode truncates and durably resets at the boundary; ring mode
 preallocates before timing and overwrites slots. It measures allocation/rotation
-costs; it neither implements an alternative EFS storage engine nor establishes
+costs; it neither implements an alternative EFS storage format nor establishes
 NAND-cache occupancy. These controls use ordinary buffered file I/O plus
 fdatasync, not O_DIRECT. Their64KiB body relates to a physical fragment, but
 they do not model fragment/checksum files, parent-directory barriers, metadata
@@ -229,7 +229,7 @@ firmware guarantees, power-loss protection or NAND-cache exhaustion. Device
 settings, APST, cache, filesystem mount options and durability calls are unchanged.
 
 `closure/allocation-summary.json` reproduces the complete matrix. Rings offer
-an overwrite benefit here; they are not a compatible production WAL/container
+an overwrite benefit here; they are not a compatible production WAL
 format. Earlier three-node EFS SATA runs also slowed, so stable raw SATA cells
 do not establish that EFS's SATA slowdown is repaired. W97 remains open.
 
@@ -278,8 +278,7 @@ failure is hidden or manufactured. Exact executed source is retained separately
 as `profile-controller-executed.py`; later harness changes are not production
 code or a claim they ran in the completed profiles.
 
-These observations strengthen W95's case for an independently specified,
-durable packing/reuse experiment. They do not permit skipping file/parent
+These observations do not permit skipping file/parent
 barriers, replacing checksums/ownership/publication, migrating installed stores
 or calling W97 fixed. Fully written-ring controls are the final follow-up.
 
@@ -305,8 +304,7 @@ kernel/block scheduling. The reversed NVMe repeat remains in progress.
 
 Next W97 discrimination should record block dispatch/completion and drive
 health during matched idle/active repeats, then actual direct-I/O fragment and
-ancestor-barrier geometry. W95 can test a specified bounded indexed-packing
-candidate at equal durability. Neither an unsupported format change nor cache/
+ancestor-barrier geometry. Neither an unsupported format change nor cache/
 power setting changes are adopted from these file controls.
 
 ## Final written-ring matrix and service state

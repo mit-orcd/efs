@@ -55,9 +55,9 @@ still fails visibly rather than inventing a chunk-rounded size.
 
 **Environment.** Intel1 (`10.0.0.207`) + Intel2 (`10.0.0.209`), Core
 Ultra 7 256V, owned four-daemon fixture on ports 27432/27433 (2 GiB
-quota per node, files engine, direct I/O, TCP), per
+quota per node, direct I/O, TCP), per
 `scripts/intel_w100_private.py`; features `EFS_COMMANDS=0`,
-`EFS_COMMANDS_SERVER=0`, `EFS_PACKED_WRITES=0`, `EFS_EXPIRY=0`,
+`EFS_COMMANDS_SERVER=0`, `EFS_EXPIRY=0`,
 `EFS_MD_RAFT_N=4`. Fault client env `EFS_FAULT_REPORT_SIZE_FILE` (the
 `OMIT_SIZE <ino>` hook drops one size record after valid construction).
 Peer reads via Intel2's independent mount. Production stores and the

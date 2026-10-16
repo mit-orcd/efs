@@ -4,22 +4,22 @@
 There is no repeatable net benefit in this comparison. Both variants fail
 the immediate-readback correctness gate; neither is fully qualified.
 Linked gates: W119 normal-operation qualification; W121 immediate readback
-correctness. This experiment does not qualify packing, containers, expiry,
+correctness. This experiment does not qualify expiry,
 power-loss recovery, the retained multi-million-file namespace or 400 GiB.
 
 ## Frozen source and comparison
 
 Base: `fa29f9277eb604f7212bad164b283df85697c9a0` on `devel`.
 ON restores only the source/test diff from `e71fdfa567e517d365261361993a40cf1b487bec`
-(the reverted `14339f47d` experiment): call `host_container_pending_reads()`
+(the reverted `14339f47d` experiment): call `host_pending_reads()`
 before the receive-persistence callback releases the host mutex. The ordinary
 post-batch read service remains in both variants. No product change is merged
 back by this experiment. ON has an experiment build label; client binaries
 are identical within each host across all four rounds.
 
 Four physical storage hosts fcstor003–006, seven physical clients
-fcstor007–013. Native IB `mlx5_2`, RDMA, direct I/O, files engine,
-`.efs` enabled on server and client, packing/containers/expiry disabled.
+fcstor007–013. Native IB `mlx5_2`, RDMA, direct I/O,
+`.efs` enabled on server and client, expiry disabled.
 Each round starts four new empty local stores under `/data1/01`, one per
 server, **17 GiB per-node quota**, port17432. The old six-root namespace and
 preceding qualification stores are preserved. All processes run as site
@@ -29,13 +29,13 @@ uverbs descriptors, flags and binary SHA256 on all eleven hosts.
 ```
 EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_2
 EFS_COMMANDS=1 EFS_COMMANDS_SERVER=1
-EFS_PACKED_WRITES=0 EFS_EXPIRY=0 EFS_REPAIR_EXPERIMENT=0 EFS_MD_RAFT_N=4
+EFS_EXPIRY=0 EFS_REPAIR_EXPERIMENT=0 EFS_MD_RAFT_N=4
 ```
 
 Persisted commands policy on each fresh store: version0/mask3. No query,
 read-index, POSIX timeout or tuning override; current devel follower batching
 defaults are identical in both variants. Each daemon uses
-`--storage-engine files --quota 17G --direct-io`, node IDs1–4, addresses
+`--quota 17G --direct-io`, node IDs1–4, addresses
 172.16.223.57–60, seed172.16.223.57:17432.
 
 ## Workload and decision rule
@@ -130,7 +130,7 @@ no errno is required to expose this defect.
 **Theory, not established cause:** stale data/buffer/cache reuse across file
 lifetimes. The next investigation must distinguish kernel page-cache identity,
 client mapping/body cache, upload buffer lifetime and server content. No
-power-loss event or deferred expiry/packing/container feature is involved.
+power-loss event or deferred expiry feature is involved.
 The failed files were unlinked by the workload; do not infer persistent disk
 corruption or claim these255 specific payloads were cold-verified.
 

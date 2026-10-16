@@ -1,9 +1,0 @@
-{
-  "cold_verified": true,
-  "physical_packed_empty": true,
-  "failures": [],
-  "source_sha256": "3551e93196a08cf4393e86a21848a5e7760e410257695c81aeb15bdfb0d386ce",
-  "clients": 7,
-  "mode": "buffered",
-  "transport": "tcp"
-}

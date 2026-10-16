@@ -4,7 +4,7 @@ User requested merging all known branch commits into `release-v0.3.1-pre-alpha` 
 
 All captured branch tips, including the93 previously unmerged unique local commits, are ancestors of this branch. [Exact branch snapshot](v031-branch-integration-20261012.json). Remote-tracking refs were already contained. Uncommitted work is not imported. Historical evidence remains source-specific; merging it does not transfer passes to this candidate.
 
-Conflict resolutions retain the newer staged ReadIndex completion implementation, the qualified32-frame bounded FIFO prefix, and the latest user packing exclusion. The older superseded read-proof and receive-limit variants do not replace them. NUC's historical receiver is reconciled with the newer default-off ORCD manual coordinator. Opt-in phase profiling measures each bounded parallel fragment PUT without reverting parallel uploads. Experimental query/packing/repair code is present but remains outside live qualification scope.
+Conflict resolutions retain the newer staged ReadIndex completion implementation, the qualified32-frame bounded FIFO prefix, and the latest user scope. The older superseded read-proof and receive-limit variants do not replace them. NUC's historical receiver is reconciled with the newer default-off ORCD manual coordinator. Opt-in phase profiling measures each bounded parallel fragment PUT without reverting parallel uploads. Experimental query/repair code is present but remains outside live qualification scope.
 
 ## Required frozen-source checks
 
@@ -12,7 +12,7 @@ Conflict resolutions retain the newer staged ReadIndex completion implementation
 - Four AMD daemons with explicit4G quotas each, files/TCP/direct, seven clients/jobs16, original216-case core suite and30-second per-case budget; peer and clean shutdown checks.
 - Ordinary span-to-full overwrite, primary/peer/fsync/cold exact bytes and physical fragment/metadata queue reclamation; not dedicated repair/recovery qualification.
 
-Every live process uses `EFS_PACKED_WRITES=0`, client `EFS_COMMANDS=0`, daemon `EFS_COMMANDS_SERVER=0`, and `EFS_REPAIR_EXPERIMENT=0`. Containers, packing, .efs, RDMA, buffered and dedicated repair/recovery remain excluded. No profilers/builds overlap quiet live tests. Private fresh fixtures leave unrelated AMD services untouched.
+Every live process uses client `EFS_COMMANDS=0`, daemon `EFS_COMMANDS_SERVER=0`, and `EFS_REPAIR_EXPERIMENT=0`. .efs, RDMA, buffered and dedicated repair/recovery remain excluded. No profilers/builds overlap quiet live tests. Private fresh fixtures leave unrelated AMD services untouched.
 
 ## Final frozen-source verdict: PASS
 
@@ -34,12 +34,12 @@ Exact tested source: **15e2a5310df1dd0fd4e307a9508c95d513d14672**. Integration a
 
 The full quiet live fixture took63.733s including setup, suites, peer and shutdown; individual case deadlines were unchanged. Isolated overwrite/cold/reclamation took17.361s. This is controlled cold restart byte validation, not dedicated repair/recovery qualification. Its external wrapper records `acceptance:false` for broader acceptance, while the focused checks pass.
 
-All **28,065 regular tracked source inputs** matched before and after testing. Normal/fault binary hashes retained. **101 raw evidence/controller files** verified against independently computed remote SHA256 hashes. Runtime configuration records verify packing0, commands0/server0 and experimentalrepair0. Servers explicitly select files and direct I/O. Root worked alone; no profilers/builds overlapped quiet measurements. All private processes/mounts stopped and unrelated AMD services left untouched.
+All **28,065 regular tracked source inputs** matched before and after testing. Normal/fault binary hashes retained. **101 raw evidence/controller files** verified against independently computed remote SHA256 hashes. Runtime configuration records verify commands0/server0 and experimentalrepair0. Servers explicitly select files and direct I/O. Root worked alone; no profilers/builds overlapped quiet measurements. All private processes/mounts stopped and unrelated AMD services left untouched.
 
-[Raw evidence](../../results/measure/20261012-v031-15e2a531/README.md). No push, tag or main/devel promotion. No passing result is claimed for excluded containers, packing, .efs, RDMA, buffered or dedicated repair/recovery. Historical failed/excluded experiments remain preserved and source-labelled.
+[Raw evidence](../../results/measure/20261012-v031-15e2a531/README.md). No push, tag or main/devel promotion. No passing result is claimed for excluded .efs, RDMA, buffered or dedicated repair/recovery. Historical failed/excluded experiments remain preserved and source-labelled.
 
 The all-branch snapshot excludes uncommitted work and the existing generated-document stash (not a branch tip). No stash was applied or dropped.
 
 ## Additional user-requested TCP/buffered rerun
 
-[Buffered report](v031-buffered-qualification-20261012.md): same frozen **15e2a5310df1dd0fd4e307a9508c95d513d14672**, ordinary files with packing/.efs/experimentalrepair disabled, full normal/fault native and sanitizers PASS, core1512/1512, deep7/7, peer67/67, seven stops and ordinary cold/reclamation PASS. Explicit4G fixtures and original deadlines unchanged. Initial disk-headroom startup refusals retained; completed private build/store cleanup restored headroom before fresh passing retries. No code changes, pushes or tags. This later request adds mode-specific buffered validation to the original direct-I/O qualification; it does not qualify other excluded features.
+[Buffered report](v031-buffered-qualification-20261012.md): same frozen **15e2a5310df1dd0fd4e307a9508c95d513d14672**, ordinary files with .efs/experimentalrepair disabled, full normal/fault native and sanitizers PASS, core1512/1512, deep7/7, peer67/67, seven stops and ordinary cold/reclamation PASS. Explicit4G fixtures and original deadlines unchanged. Initial disk-headroom startup refusals retained; completed private build/store cleanup restored headroom before fresh passing retries. No code changes, pushes or tags. This later request adds mode-specific buffered validation to the original direct-I/O qualification; it does not qualify other excluded features.

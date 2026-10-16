@@ -193,9 +193,7 @@ enum efs_msg_type {
     EFS_MSG_STORAGE_SESSION_FENCE_REPLY = 128,
     EFS_MSG_PUT_TICKETED = 129,
     EFS_MSG_PUT_TICKETED_REPLY = 130,
-    /* 131-144 were packing messages (packed PUT/GET/GETCHUNKS/GC, pack
-     * capabilities, publication batch, pack authority), removed 2026-10-16
-     * (archive/packing-containers-20261016). Reserved: never reuse. */
+    /* 131-144 are reserved: never reuse. */
     /* Narrow default-off repair experiment; exact version/build envelope is
      * mandatory. No legacy reinterpretation or RPC store initializer. */
     EFS_MSG_REPAIR_STORE_ID = 145,
@@ -708,9 +706,6 @@ struct efs_msg_query_stats_reply {
 #define EFS_INODE_RPC_NODATA    12
 /* Explicit metadata/output capacity refusal; never transient BUSY. */
 #define EFS_INODE_RPC_OVERFLOW  13
-/* Container FLOCK transient admission; BUSY retains immediate lock conflict.
- * Requires coordinated server/client upgrade; reply layout is unchanged. */
-#define EFS_INODE_RPC_ADMISSION_BUSY 14
 
 struct efs_msg_inode_lookup {
     efs_export_id_t export_id;
@@ -983,8 +978,8 @@ struct efs_msg_inode_flock {
 #define EFS_CHUNK_REC_F_CAPTURED_EPOCH 1u
 #define EFS_CHUNK_REC_F_CAPTURED_FILEID 2u
 #define EFS_CHUNK_REC_F_FRESH_OBJECT 4u
-/* 8u was PACKED_BASE (packing removed 2026-10-16): reserved, always refused. */
-#define EFS_CHUNK_REC_F_RETIRED_PACKED 8u
+/* 8u is reserved: always refused. */
+#define EFS_CHUNK_REC_F_RESERVED 8u
 struct efs_chunk_rec {
     efs_ino_t ino;
     uint32_t chunk_index;
@@ -1080,7 +1075,7 @@ static inline int efs_chunk_publish_authority(const struct efs_chunk_rec *r,
 static inline int efs_chunk_rec_view_valid(const struct efs_chunk_rec *r)
 {
     const struct efs_fence_view *v = &r->read_view;
-    if (r->publish_flags & EFS_CHUNK_REC_F_RETIRED_PACKED) return EFS_ERR_PROTO;
+    if (r->publish_flags & EFS_CHUNK_REC_F_RESERVED) return EFS_ERR_PROTO;
     if (r->delta_base_n > EFS_CHUNK_DELTA_MAX ||
         v->count != r->delta_base_n + 1 ||
         v->fence_epoch > v->revision ||
@@ -1189,9 +1184,9 @@ struct efs_ino_size_rec {
      * size despite an older mtime. ecopy futimens pins times locally and
      * piggybacks them on the close REPORT instead of a SETATTR RPC. */
     uint32_t flags;
-    efs_ino_t pack_ino;
-    uint32_t pack_off;
-    uint32_t pack_len;
+    efs_ino_t reserved_ino;
+    uint32_t reserved_off;
+    uint32_t reserved_len;
     uint64_t atime;
 };
 

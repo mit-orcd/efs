@@ -115,11 +115,8 @@ p.add_argument('--transport', choices=('tcp', 'rdma'), default='tcp',
 p.add_argument('--root', action='append', default=[])
 p.add_argument('--mount', type=Path, help='existing empty, unmounted path allowed by host FUSE policy')
 p.add_argument('--peer-mount', type=Path, help='existing empty, unmounted second policy-allowed mount')
-p.add_argument('--packing-clients',type=int,choices=(2,7),default=2,help='two or seven mounted clients for the isolated packing gate')
 p.add_argument('--ordinary-overwrite-only',action='store_true',help='ordinary span-to-full overwrite, immediate primary/peer bytes, cold restart and physical cleanup')
-p.add_argument('--disable-efs-commands', action='store_true', help='disable client/server .efs query work; use core POSIX qualification while retaining packed writes')
-p.add_argument('--mounted-packing-only', action='store_true', help='opt-in mounted tiny coalescing, mixed mutation, peer/cold hashes, POSIX and physical packed reclamation')
-p.add_argument('--packing-crash-after-fsync',action='store_true',help='additional mounted-packing gate: SIGKILL all four daemons after acknowledged fsync and client drain, then verify cold bytes and reclamation')
+p.add_argument('--disable-efs-commands', action='store_true', help='disable client/server .efs query work; use core POSIX qualification')
 p.add_argument('--posix', action='store_true')
 p.add_argument('--posix-jobs', type=int, default=4, help='parallel POSIX cases (default: 4); each case retains its own concurrent writers')
 p.add_argument('--storage-session-fence-fault',action='store_true',help='private certificate fsync EIO: revocation must remain incomplete, then recover and survive cold restart; requires --guarded-leases')
@@ -210,8 +207,6 @@ p.add_argument('--idle-seconds',type=int,default=0,help='measure live-table idle
 p.add_argument('--full-node',action='store_true',help='one node quota exhausted while three fragment targets remain writable')
 p.add_argument('--port', type=int, default=20190)
 a = p.parse_args()
-if a.packing_crash_after_fsync and not a.mounted_packing_only:
-    p.error('--packing-crash-after-fsync requires --mounted-packing-only')
 if not 0 <= a.tiny_sustained_large_mib_s <= 64:p.error('--tiny-sustained-large-mib-s must be 0..64')
 if not 0 <= a.tiny_sustained_seconds <= 1800:p.error('--tiny-sustained-seconds must be 0..1800')
 if not 1<=a.append_loaded_rounds<=20:p.error('--append-loaded-rounds must be 1..20')
@@ -275,7 +270,7 @@ if a.expiry_soak_seconds:
     assert a.expiry and 60 <= a.expiry_soak_seconds <= 7200
 if a.expiry:
     assert a.mode=='direct' and a.transport=='tcp' and a.disable_efs_commands
-    env.update(EFS_EXPIRY='1',EFS_PACKED_WRITES='0')
+    env.update(EFS_EXPIRY='1')
     if a.expiry_clock_fault:env['EFS_FAULT_EXPIRY_CLOCK_FILE']=str(work/'expiry-clock-uncertain')
 if a.replication_pressure:
     assert a.tiny_sustained_seconds>=120, 'pressure requires a sustained recovery window'
@@ -283,12 +278,6 @@ if a.replication_pressure:
     run_preload=work/'raft-slow-sync.so'
     subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-shared','-fPIC',source/'tests/live/raft_slow_sync.c','-ldl','-o',run_preload],check=True)
     env.update(LD_PRELOAD=str(run_preload),EFS_TEST_RAFT_SLOW_FILE=str(work/'raft-slow-armed'))
-# Packing qualification is independent of the optional command/query service.
-# Force core POSIX even when a caller inherited commands-enabled environment.
-if a.mounted_packing_only:
-    env.update(EFS_PACKED_WRITES='1',EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0')
-    a.disable_efs_commands=True
-if a.ordinary_overwrite_only:env['EFS_PACKED_WRITES']='0'
 if a.efs_commands_only:env.update(EFS_COMMANDS='1',EFS_COMMANDS_SERVER='1',EFS_QUERY_TEST_PORT=str(a.port))
 if a.disable_efs_commands:
     assert not a.efs_commands_only, 'command-only gate conflicts with disabled .efs'
@@ -398,7 +387,6 @@ def start(prefer_single_host=False):
         root.mkdir(exist_ok=True)
         log=open(work/f'n{i+1}.log','ab');handles.append(log)
         cmd=[a.server_binary or source/'efsd','--node-id',str(i+1),'--addr','127.0.0.1','--port',str(a.port+i),'--storage',root,'--quota',a.fixture_quota or ('16G' if (a.ior_binary or a.gc_bulk_gib) else ('4G' if a.compactor_pressure else '1G')),'--'+('direct-io' if a.mode=='direct' else 'no-direct-io')]
-        if a.expiry:cmd += ['--storage-engine','files']
         if a.fixture_quota == '0':
             quota_arg = cmd.index('--quota');del cmd[quota_arg:quota_arg+2]
         if a.storage_roots==2:
@@ -614,10 +602,10 @@ try:
             base=Path('/proc')/str(proc.pid)
             command=(base/'cmdline').read_bytes().split(b'\0')
             values=dict(item.split(b'=',1) for item in (base/'environ').read_bytes().split(b'\0') if b'=' in item)
-            for key,value in ((b'EFS_COMMANDS',b'0'),(b'EFS_COMMANDS_SERVER',b'0'),(b'EFS_PACKED_WRITES',b'0'),(b'EFS_TRANSPORT',b'tcp')):
+            for key,value in ((b'EFS_COMMANDS',b'0'),(b'EFS_COMMANDS_SERVER',b'0'),(b'EFS_TRANSPORT',b'tcp')):
                 assert values.get(key)==value,(proc.pid,key,values.get(key))
             if proc in servers:
-                assert b'--direct-io' in command and b'--storage-engine' in command and b'files' in command
+                assert b'--direct-io' in command
                 assert values.get(b'EFS_EXPIRY')==b'1'
             runtime.append({'pid':proc.pid,'command':[item.decode() for item in command if item],
                 'environment':{key.decode():values[key].decode() for key in values if key.startswith(b'EFS_')},
@@ -708,91 +696,6 @@ try:
         for name in expected:(mount/name).unlink()
         wait(lambda:physically_drained(inodes),'ordinary overwrite physical fragments and queues drained',180)
         print('ordinary span-to-full overwrite: primary/peer/cold exact bytes and physical cleanup PASS',flush=True)
-        raise SystemExit(0)
-    if a.mounted_packing_only:
-        peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
-        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
-        wait(lambda:os.path.ismount(peer_mount),'packing peer mounted',40)
-        tree=mount/'mounted-pack';tree.mkdir()
-        expected={}
-        def tiny_file(i):
-            name='tiny-'+str(i);body=hashlib.sha256(name.encode()).digest()*16
-            with (tree/name).open('xb',buffering=0) as fd:
-                assert fd.write(body)==len(body);os.fsync(fd.fileno())
-            return name,body
-        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
-            expected=dict(pool.map(tiny_file,range(64)))
-        def packed_files():
-            return [x for root in data_roots for x in (root/'data/packs-v1/1').rglob('*') if x.is_file() and not x.name.endswith('.sum')]
-        packed=packed_files();assert packed,'opt-in mounted writes produced no physical packed fragments'
-        (work/'mounted-pack-before.json').write_text(json.dumps({'files':len(expected),'logical_bytes':sum(map(len,expected.values())),
-            'physical_files':len(packed),'physical_bytes':sum(x.stat().st_size for x in packed)},indent=2))
-        for name,body in expected.items():assert (peer_mount/'mounted-pack'/name).read_bytes()==body,name
-        # Transition real packed bases through ordinary overwrite, growth and
-        # truncate; unrelated neighbors must retain their exact bytes.
-        path=tree/'tiny-0';body=b'ordinary-growth:'+(bytes(range(256))*1024)
-        with path.open('r+b',buffering=0) as fd:assert fd.write(body)==len(body);os.fsync(fd.fileno())
-        expected['tiny-0']=body
-        path=tree/'tiny-1'
-        with path.open('r+b',buffering=0) as fd:fd.truncate(19);os.fsync(fd.fileno())
-        expected['tiny-1']=expected['tiny-1'][:19]
-        (tree/'tiny-2').unlink();del expected['tiny-2']
-        for name,body in expected.items():assert (peer_mount/'mounted-pack'/name).read_bytes()==body,name
-        failures=[]
-        if a.posix and a.packing_clients==7:
-            mounts=[mount,peer_mount]
-            for i in range(2,a.packing_clients):
-                target=Path(tempfile.mkdtemp(prefix='efs-pack-client-'+str(i)+'-',dir=tempfile.gettempdir()))
-                log=open(work/('pack-client-'+str(i)+'.log'),'ab');handles.append(log)
-                proc=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(target),'-f'],env=env,stdout=log,stderr=log)
-                extra_clients.append((proc,target));mounts.append(target)
-                wait(lambda:os.path.ismount(target),'packing extra client '+str(i)+' mounted',40)
-            def concurrent_posix(item):
-                i,target=item
-                command=['python3',source/'tests/posix/posix_suite.py',target,'--suite',('core' if a.disable_efs_commands else 'all'),'--jobs',str(a.posix_jobs),'--timeout-s','30',
-                         '--tag','pack-'+str(i),'--results',work/('posix-client-'+str(i)+'.tsv')]
-                with (work/('posix-client-'+str(i)+'.log')).open('wb') as output:
-                    result=subprocess.run(list(map(str,command)),env=phase_observer.environment(env,i),stdout=output,stderr=subprocess.STDOUT,timeout=600)
-                print('packing concurrent POSIX client '+str(i)+' exit='+str(result.returncode),flush=True)
-                return {'gate':'posix-client-'+str(i),'returncode':result.returncode}
-            with PosixPhaseCollector(work, env.get("EFS_POSIX_PHASE_TRACE") == "1") as phase_observer:
-                with concurrent.futures.ThreadPoolExecutor(max_workers=a.packing_clients) as pool:
-                    failures.extend(r for r in pool.map(concurrent_posix,enumerate(mounts)) if r['returncode'])
-            for proc,target in extra_clients:
-                run([source/'scripts/client.sh','stop',target]);proc.wait(timeout=15);target.rmdir()
-            extra_clients.clear()
-        if a.posix:
-            for label,command in (
-                ('posix',['python3',source/'tests/posix/posix_suite.py',mount,'--suite',('core' if a.disable_efs_commands else 'all'),'--jobs',str(a.posix_jobs),'--timeout-s','30','--results',work/'posix.tsv']),
-                ('peer',['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,'--parent','pack-posix-peer','--results',work/'posix2.tsv'])):
-                if label=='posix' and a.packing_clients==7:continue
-                result=subprocess.run(list(map(str,command)),env=env,timeout=600)
-                if result.returncode:failures.append({'gate':label,'returncode':result.returncode})
-        run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
-        unmount()
-        if a.packing_crash_after_fsync:
-            victims=list(servers);stop(crash=True)
-            assert len(victims)==4 and all(proc.returncode==-signal.SIGKILL for proc in victims), 'all four daemons must actually die by SIGKILL'
-            print('all four daemons killed after acknowledged fsync PASS',flush=True)
-        else:stop(strict=True)
-        start();mount_client()
-        for name,body in expected.items():assert (mount/'mounted-pack'/name).read_bytes()==body,name
-        assert not (mount/'mounted-pack'/'tiny-2').exists()
-        print('mounted packed/ordinary mutations and acknowledged cold hashes PASS',flush=True)
-        shutil.rmtree(mount/'mounted-pack')
-        # Only this isolated fixture owns these objects. Last-reference GC
-        # must delete physical objects as well as retire metadata queues.
-        wait(lambda:not packed_files(),'mounted packed physical fragments reclaimed',180)
-        wait(drained,'mounted packing metadata queues drained',180)
-        report={'cold_verified':True,'physical_packed_empty':True,'failures':failures,
-                'source_sha256':digest.hexdigest(),'clients':a.packing_clients,'mode':a.mode,'transport':a.transport,
-                'packed_writes':env['EFS_PACKED_WRITES'],'commands':env.get('EFS_COMMANDS'),
-                'commands_server':env.get('EFS_COMMANDS_SERVER'),
-                'restart':('all four daemons SIGKILL after acknowledged fsync and client drain' if a.packing_crash_after_fsync else 'orderly; four status-zero daemons, no forced kill')}
-        (work/'mounted-packing.json').write_text(json.dumps(report,indent=2))
-        assert not failures,failures
-        unmount();stop(strict=True)
-        print('mounted packing '+a.mode+' PASS',flush=True)
         raise SystemExit(0)
     if a.efs_commands_only:
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)

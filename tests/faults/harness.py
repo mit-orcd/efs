@@ -226,7 +226,6 @@ def fixture_env(transport="tcp", device=None, initialize=None):
     env = transport_env(transport, device)
     env.pop("EFS_REPAIR_EXPERIMENT", None)
     env.pop("EFS_REPAIR_INIT_STORE", None)
-    env["EFS_PACKED_WRITES"] = "0"  # matrix qualifies ordinary base fragments
     if initialize is not None:
         env["EFS_REPAIR_EXPERIMENT"] = "1"
         env["EFS_REPAIR_INIT_STORE"] = "1" if initialize else "0"
@@ -1132,7 +1131,6 @@ def self_test():
     try:
         os.environ["EFS_REPAIR_EXPERIMENT"] = "0"
         os.environ["EFS_REPAIR_INIT_STORE"] = "1"
-        os.environ["EFS_PACKED_WRITES"] = "1"
         first = fixture_env(initialize=True)
         cold = fixture_env(initialize=False)
         client = fixture_env()
@@ -1141,8 +1139,7 @@ def self_test():
                 cold.get("EFS_REPAIR_EXPERIMENT") != "1" or
                 cold.get("EFS_REPAIR_INIT_STORE") != "0" or
                 "EFS_REPAIR_EXPERIMENT" in client or
-                "EFS_REPAIR_INIT_STORE" in client or
-                client.get("EFS_PACKED_WRITES") != "0"):
+                "EFS_REPAIR_INIT_STORE" in client):
             fails.append("fixture activation leaked or cold restart reinitialized store")
         if os.environ["EFS_REPAIR_EXPERIMENT"] != "0":
             fails.append("fixture mutated caller environment")

@@ -5909,7 +5909,7 @@ static struct deep_callback_sample deep_callback_begin(fuse_req_t req, const cha
     static pid_t callers[128];
     int state = __atomic_load_n(&enabled, __ATOMIC_ACQUIRE);
     if (!state) {
-        state = getenv("EFS_RPC_PROF") && getenv("EFS_CONTAINER_PATH_PROF") ? 2 : 1;
+        state = getenv("EFS_RPC_PROF") && getenv("EFS_DEEP_PATH_PROF") ? 2 : 1;
         __atomic_store_n(&enabled, state, __ATOMIC_RELEASE);
     }
     if (state != 2)

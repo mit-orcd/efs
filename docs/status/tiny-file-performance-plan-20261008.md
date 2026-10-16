@@ -1,17 +1,17 @@
-# Tiny-file performance follow-up — W93–W96
+# Tiny-file performance follow-up — W93, W94 and W96
 
-**Historical implementation checkpoint (Oct 8):** The review below describes the pre-merge baseline. W93 batching/fault fixes, W94 atomic server leases, W95 tiny principles/durable timing, and W96 tail repair/reservation are now implemented and tested in focused portions. Client adoption, churn/recovery experiments and remaining performance acceptance are still open. [Current checkpoint](w93-w96-implementation-20261008.md).
+**Historical implementation checkpoint (Oct 8):** The review below describes the pre-merge baseline. W93 batching/fault fixes, W94 atomic server leases and W96 tail repair/reservation are now implemented and tested in focused portions. Client adoption, recovery experiments and remaining performance acceptance are still open. [Current checkpoint](w93-w96-implementation-20261008.md).
 
 
 **Current status:** W93 closed Oct 10 under [its final acceptance](w93-atomic-apply-20261010.md); W94–W96 retain separate obligations in the work queue. The review and WAL failure below describe the dated pre-merge source, not current defects.
 
 Registered Oct 8, 2026 after seven NUC profiling/implementation rounds.
-All four items are **open investigations/experiments**, not completed fixes.
+All three items are **open investigations/experiments**, not completed fixes.
 The round-7 experimental code and its retained evidence were committed as
 `e6926d85` and merged into `devel` as `d4e70492` on Oct 8. The import includes
 CREATE reply reuse, WAL/Raft `fdatasync`, already-durable Raft barrier avoidance,
 and bounded Linux Raft preallocation. These are now part of devel; this does
-not close W93–W96 or fix the W96 invalid-tail recovery defect.
+not close W93, W94 or W96 or fix the W96 invalid-tail recovery defect.
 
 The source review below deliberately records the **pre-merge** `cde67dca`
 baseline. Its statements that those optimizations were absent/unmerged are
@@ -30,14 +30,13 @@ WAL recovery reproduction; no new cluster performance results are claimed.
 |---|---|---|
 | [W93](../backlog/work-items.md#w93) | Leader proposal holds, disk sync coalescing, multi-entry follower AppendEntries batching, and KV apply holds. | Measure the remaining serialized follower request barriers; design bounded cross-request durability/visibility gating. |
 | [W94](../backlog/work-items.md#w94) | CREATE/HOLD flag and first-open/last-close lease serialization, but FUSE still creates with flags 0 then acquires HOLD. | Audit replay and hashed-directory lease atomicity, then prove safe client adoption. CREATE reply reuse is a separate unmerged precursor. |
-| [W95](../backlog/work-items.md#w95) | Independent file/container read/write/delete principles with persistence modes, plus durable production PUTs. | Extend the existing experiments for sub-4-KiB logical payloads, physical fragment geometry, durable completion latency and sustained churn. |
 | [W96](../backlog/work-items.md#w96) | KV WAL group commit and holds; O_APPEND; no KV or Raft preallocation in this branch. | Fix recovery-tail handling first, then measure bounded reservation without confusing allocation, logical EOF and durability. |
 
 **Priority correction:** fix and gate the W96 recovery prerequisite below
 before storage-performance changes. Then scope W94's reply reuse and atomic
 lease work, and measure W93's follower barrier cost before choosing a batching
-protocol. W95 can proceed independently with the benchmark owner; KV
-preallocation remains an experiment after recovery is correct. All four
+protocol. KV
+preallocation remains an experiment after recovery is correct. All three
 packages remain open. W90–W92 retain their existing scopes.
 
 ### Baseline and code findings
@@ -49,7 +48,7 @@ packages remain open. W90–W92 retain their existing scopes.
    `efs_fuse_create_at`, which obtains attributes through the ordinary path;
    `efs_client_create_result` discards the returned inode after staging it.
    Reusing the CREATE reply is not present. The subsequent devel deadline
-   fixes do not implement any of W93–W96. The old NUC numbers describe the
+   fixes do not implement any of W93, W94 or W96. The old NUC numbers describe the
    experimental source patch, not measured current-develop performance.
 2. **W93 must extend existing batching.** `host_propose` already uses shared
    disk holds, quiet local append and a bounded yield loop before release;
@@ -70,21 +69,7 @@ packages remain open. W90–W92 retain their existing scopes.
    opens/closes, but does not itself cover a CREATE reply before adoption.
    Also close local/server resources if post-create attribute lookup or the
    FUSE reply fails. Test ordinary and first-use cross-group paths separately.
-4. **W95 has substantial benchmark infrastructure already.**
-   [storage_principles.c](../../src/bench/storage_principles.c) implements the
-   file/container and persistence comparisons; its payload parser currently
-   rejects nonmultiples of 4096, so 1–512-byte logical files need an explicit
-   workload model. The production span writer still encodes export-sized
-   fragment bodies (64 KiB at default geometry), with 32-byte buffered or
-   4-KiB direct checksum tails. Count zero-fragment suppression and actual PUTs
-   rather than inferring three physical writes per application write.
-   Production `finish_fragment_put` syncs the body and every ancestor directory;
-   the principle driver syncs its worker directory, so document that geometry
-   difference. Batch-mode operation latency includes sync only at a batch
-   boundary; it does not measure each earlier record's time to durable completion.
-   Add that measurement before claiming durable p99 improvement, plus mixed
-   churn and cold-recovery experiments. Keep the engines independent.
-5. **W96 has a correctness prerequisite, reproduced locally.**
+4. **W96 has a correctness prerequisite, reproduced locally.**
    `kv_wal_replay` stops at an invalid/truncated record without repairing the
    tail or returning the valid byte end; `kv_wal_open` then appends at physical
    EOF. The LSM open path invokes exactly replay followed by open. A focused
@@ -166,7 +151,7 @@ an unrelated generator sample to invent operations-per-file ratios.
 
 Baseline round-7 private gates passed POSIX 216/0/1 (16.0 s), peer 64/64
 (10.4 s), nine virtual-interface gates and persisted restart. They are
-regression evidence for the prior candidate, not acceptance of W93–W96.
+regression evidence for the prior candidate, not acceptance of W93, W94 or W96.
 
 ## Evidence
 

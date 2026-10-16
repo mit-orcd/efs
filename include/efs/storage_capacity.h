@@ -6,7 +6,7 @@
 #include <sys/statvfs.h>
 /* Startup policy: reserve 20% (at least 1 GiB) on every filesystem,
  * then budget only 7/8 of remaining space for fragment payloads. The extra
- * allowance covers allocation padding and container/checksum overhead. This
+ * allowance covers allocation padding and checksum overhead. This
  * is a startup estimate, not a reservation against unrelated disk writers. */
 static inline int efs_storage_quota_budget(uint64_t total, uint64_t available,
                                           uint64_t used, uint64_t *budget)

@@ -112,7 +112,7 @@ mismatch was regenerated; original failed logs and passing retries are retained.
 
 W92 remains open for eliminating full discovery scans, aggregate retained-cache
 capacity control and billion-file scale/fault acceptance. Cold restart is a process
-restart test, not a hardware power-loss claim. No pushes, wipes, container changes,
+restart test, not a hardware power-loss claim. No pushes, wipes,
 D25 or authoritative checkpoint-cadence activation were performed.
 
 [Raw logs, drivers, exact variants and summaries](../../results/measure/20261010-w92-incremental)

@@ -27,7 +27,7 @@ base=Path('/data1/efs');root=base/'mnt/package2-deterministic-lifecycle'
 assert os.getuid()!=0 and os.environ.get('USER')=='efs' and root.is_dir()
 os.environ['EFS_QUERY_TEST_HOST']='127.0.0.1'
 env=dict(os.environ,EFS_CLUSTER='amd',EFS_COMMANDS='1',EFS_COMMANDS_SERVER='1',
-         EFS_PACKED_WRITES='0',EFS_EXPIRY='0',EFS_REPAIR_EXPERIMENT='0',EFS_TRANSPORT='tcp')
+         EFS_EXPIRY='0',EFS_REPAIR_EXPERIMENT='0',EFS_TRANSPORT='tcp')
 def feature_state(port):
     with socket.create_connection(('127.0.0.1',port),7) as conn:
         body=b'package2'.ljust(256,b'\0')
@@ -85,7 +85,7 @@ finally:
         with (base/('logs/efsd-n%d.log'%n)).open('ab') as log:
             child=subprocess.Popen([str(base/'src/efsd'),'--node-id',str(n),
                 '--addr','127.0.0.1','--port',str(17431+n),'--storage',str(base/('n%d'%n)),
-                '--storage-engine','files','--quota',quota,'--direct-io']+
+                '--quota',quota,'--direct-io']+
                 (['--join','127.0.0.1:17432'] if n>1 else []),
                 env=env,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
         pidfile.write_text(str(child.pid)+'\n')

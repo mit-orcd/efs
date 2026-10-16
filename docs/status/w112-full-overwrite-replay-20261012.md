@@ -46,8 +46,7 @@ physical cleanup. Its Linux both-mode qualification passes at `02b9918b`.
 
 Pass new ordinary-overwrite live gate in both modes, full merged normal/fault
 native and sanitizer gates, and retain exact source/binary/configuration
-identity. Review the canonical ownership boundary independently. Packing
-jobs16/direct and other owners' unfinished acceptance remain separate release
+identity. Review the canonical ownership boundary independently. Other owners' unfinished acceptance remain separate release
 blockers even after this repair. No push, tag or promotion.
 
 ## Qualified closure checkpoint
@@ -63,5 +62,4 @@ include 41 retrieved artifacts verified against their SHA256 manifest.
 Independent [boundary review](../reviews/w112-overwrite-20261011/README.md)
 reproduces the old-source failure and passes fixed generation/fence, partial
 range and retained-span probes normally and under sanitizers. This closes the
-reproduced ownership defect; it does not certify unrelated writeback paths or
-packing load acceptance. Direct seven-client/jobs16 still fails separately.
+reproduced ownership defect; it does not certify unrelated writeback paths. Direct seven-client/jobs16 still fails separately.

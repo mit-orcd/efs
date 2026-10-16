@@ -4,7 +4,7 @@ Manager-assigned bounded source/evidence diagnosis; no deployment, release workt
 
 ## What is established
 
-ORCD's same-source e5a385530223 packing ON full wave failed deep nesting, many files, stats and find on all seven clients; subsequent OFF wave passed. Sequential namespace history remains a confounder. Later bbe failures moved between directory and query cases. Instantaneously free query/page slots do not prove sustained capacity, but a leak was not observed there. The retained publication gap is 42.195 seconds, followed by an 8.015-second build. None of these measurements labels the rejecting stage for an individual failed request.
+ORCD's same-source e5a385530223 full wave failed deep nesting, many files, stats and find on all seven clients. Sequential namespace history remains a confounder. Later bbe failures moved between directory and query cases. Instantaneously free query/page slots do not prove sustained capacity, but a leak was not observed there. The retained publication gap is 42.195 seconds, followed by an 8.015-second build. None of these measurements labels the rejecting stage for an individual failed request.
 
 Release host_query_source_once pins under host mutex, collects the pinned transaction revision, obtains a fresh group pair barrier, rechecks capability/import generations and compares current transaction revision. It explicitly returns transaction_changed only for a revision mismatch. host_query_source retries that case up to four captures; this does not resolve pending transactions. Ordinary atomic metadata writes do not advance the transaction fence. Existing test_query_catalog.c tests ordinary-write noninvalidation, transaction marker invalidation, immutable captured revision, pending refusal and preservation of the old catalog. Do not weaken those guards.
 
@@ -20,7 +20,7 @@ AMD has offered to implement bounded opt-in stage diagnostics on its exact froze
 
 Use a separate instrumented original-budget seven-client/jobs16 pressure run on the manager-approved exact source, preserving mode/source identities and complete existing query-disk logs. A same-source ON/OFF control is still required. If capture collisions dominate, correlate captured/live revisions and barrier duration before proposing coherent-cut changes. If pending refusal dominates, identify marker lifecycle age/participant and resolution progress before changing builder behavior. If build/lock delay dominates, use phase timings to select a specific repair. Foreground CREATE/LOOKUP directory timeouts need a separate waiter/admission/proposal discriminator, not automatic attribution to the query builder.
 
-Any eventual repair needs a negative control reproducing the demonstrated stage and quiet full-pressure acceptance with unchanged budgets. Existing evidence supports no safe production fix yet. No IDs reserved, no authority/import/transaction/receipt/durability fences relaxed. Mac native 216/216 remains the previous native gate, not seven-client packing acceptance.
+Any eventual repair needs a negative control reproducing the demonstrated stage and quiet full-pressure acceptance with unchanged budgets. Existing evidence supports no safe production fix yet. No IDs reserved, no authority/import/transaction/receipt/durability fences relaxed. Mac native 216/216 remains the previous native gate, not seven-client acceptance.
 
 
 ## Follow-up: observed cut collisions and safe design constraints

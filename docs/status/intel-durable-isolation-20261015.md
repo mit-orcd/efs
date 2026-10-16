@@ -37,8 +37,8 @@ namespace metadata and production daemon/background contention remain possible.
 ## Identity and scope
 
 The production source remains `2e935cea075dfec45d25385bc8626c49fee67ba3`,
-TCP/direct I/O, ordinary files, 400 GiB per node. `.efs` client/server, packing,
-containers and expiry remain disabled. Intel1 n1/n2 PIDs 3880449/3880456;
+TCP/direct I/O, ordinary files, 400 GiB per node. `.efs` client/server and
+expiry remain disabled. Intel1 n1/n2 PIDs 3880449/3880456;
 Intel2 n3/n4 4146981/4146988, ports 17432/17433, unchanged. Private Intel services
 were left running and untouched. AMD's independent client was not redeployed.
 
@@ -64,12 +64,11 @@ commit plus archive SHA-256, not that embedded string.
 ## Existing benchmark: durability and contention
 
 Each case writes 4,096 independent records: 64 KiB nonzero payload plus a 4 KiB
-BLAKE3 checksum tail, 272 MiB physical data/256 MiB payload. `--layout files
---direct-io --rw write --policy allocating --persist each --directory-sync worker`.
+BLAKE3 checksum tail, 272 MiB physical data/256 MiB payload. `--direct-io --rw write --policy allocating --persist each --directory-sync worker`.
 Every file is synced, and its worker directory synced, before operation completion:
 8,192 sync calls/case. Verification reads/checksums and cleanup are outside timing.
 Two repetitions per concurrency level with reversed/counterbalanced order.
-No containers, packed objects, expiry or network data path are exercised.
+No expiry or network data path are exercised.
 
 Payload MiB/s medians of two repetitions:
 

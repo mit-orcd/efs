@@ -233,8 +233,9 @@ struct efs_raft_cfg {
     int batch_noop;
     /* Experimental: verified overlap may start/extend a suffix-only hold. */
     int batch_overlap;
-    /* Container host: a successful ACK below the outstanding window's
-     * first index cannot retire that newer window. Default0 preserves files. */
+    /* A successful ACK below the outstanding window's first index cannot
+     * retire that newer window. The server host enables it; 0 keeps the
+     * original retirement for the core tests. */
     int preserve_ack_window;
     void *net;
     efs_raft_apply_fn apply;

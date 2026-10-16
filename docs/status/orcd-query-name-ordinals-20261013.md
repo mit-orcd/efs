@@ -10,7 +10,7 @@ At the profiled approximately 17.9 million names this removes approximately 5 Gi
 
 Qualification required: all six native query suites; failure injection and cancellation; actual temporary peak accounting and its negative control; ASan/UBSan; genuine version-6 cold migration, failed publication rollback and retirement; loaded concurrent queries and sustained seven-client close/fsync jobs exceeding the previous approximately 29-minute failure window. Reproduce native query checks with `make -j4 tests/test_query_catalog tests/test_query_disk tests/test_query_delta tests/test_query_disk_io tests/test_query_policy tests/test_query_refresh` and run each executable. Use a private Linux build and temporary test directories; no live stores are erased. Mac compilation is blocked by the existing Linux-only `fopencookie` logging implementation.
 
-The deployment target remains ORCD-test, four native IB servers fcstor003–006 and seven clients fcstor007–013, RDMA/direct I/O, files storage, `.efs` enabled, packing/containers/expiry disabled. Live deployment and large-namespace verdict are NOTRUN. Keep profiler/build outputs outside Git under the existing scratch qualification paths.
+The deployment target remains ORCD-test, four native IB servers fcstor003–006 and seven clients fcstor007–013, RDMA/direct I/O, files storage, `.efs` enabled, expiry disabled. Live deployment and large-namespace verdict are NOTRUN. Keep profiler/build outputs outside Git under the existing scratch qualification paths.
 
 ## Private native results
 
@@ -36,8 +36,7 @@ The commit adding this paragraph makes zero-limit close idempotent when the toke
 
 ## Reviewed integration and outstanding loaded gate — October 14
 
-Reviewed every local development branch against package 1. `devel-container`,
-`devel-expiry`, `devel-efs` and `devel-kimi` have no missing commits;
+Reviewed every local development branch against package 1. `devel-expiry`, `devel-efs` and `devel-kimi` have no missing commits;
 `devel-rdma` is contained in reviewed `devel` endpoint `a40428d9d`. Merge
 `b65d99dcf280f1a9919688997b65e1413c4d5af5` incorporates that endpoint while
 retaining the query token-close correction `850168c66`. Production merged
@@ -357,7 +356,7 @@ was needed during this review. Production release branches were not changed.
 
 Exact deployed source8249d92e993b79aee98aa75031d784483fe32c8a:
 ORCD-test four servers003–006/seven clients007–013, strict native IB RDMA
-mlx5_2, files storage/direct I/O, .efs enabled, packing/containers/expiry off.
+mlx5_2, files storage/direct I/O, .efs enabled, expiry off.
 All11 runtime/profile/nonroot proofs and897 code/test input hashes PASS.
 Full Linux native suite and focused Linux ASan/UBSan/leak checks PASS.
 Normal cold readiness113.095s; acknowledged large and512-byte markers

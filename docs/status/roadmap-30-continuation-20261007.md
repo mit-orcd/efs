@@ -21,7 +21,7 @@ Transaction/session/publication view and configuration-change gates remain.
 
 ## Round 2 — W89 measurement serialization
 
-Replaced packed KV metrics with validated twelve-column TSV serialization and
+Replaced combined KV metrics with validated twelve-column TSV serialization and
 strict reduction. Missing observations remain NA rather than becoming zero;
 malformed rows stop acceptance, and counter peaks survive reset.
 NUC: four schema/regression tests pass; driver bash syntax passes.

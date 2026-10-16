@@ -41,7 +41,7 @@ struct efs_raft_host {int raft_id,tx_running,flow_enabled;pthread_mutex_t outbox
 static void *host_sender(void*p){return p;}
 static int efsd_pthread_create(pthread_t*t,void*(*f)(void*),void*p){(void)t;(void)f;(void)p;return 1;}
 int efs_wire_raft_encode(const struct efs_raft_msg*m,uint8_t*b,uint32_t c,uint32_t*n){(void)m;(void)b;(void)c;(void)n;abort();}
-'''+ '\n'.join(fn(n) for n in ['outbox_nentries','outbox_entry_lane','outbox_is_heartbeat','outbox_is_ae_rep','outbox_pure_read_control','outbox_pri_replace','host_fill_ae_hdr','host_wire_taken','host_send_ready','host_container_read_probe','host_send','host_sender_take'])+r'''
+'''+ '\n'.join(fn(n) for n in ['outbox_nentries','outbox_entry_lane','outbox_is_heartbeat','outbox_is_ae_rep','outbox_pure_read_control','outbox_pri_replace','host_fill_ae_hdr','host_wire_taken','host_send_ready','host_read_probe','host_send','host_sender_take'])+r'''
 static struct efs_raft_msg message(int type,int group,int peer){
  struct efs_raft_msg m={0};m.type=type;m.group=group;m.to=peer;m.term=7;m.boot_id=9;m.prev_index=10;
  m.nentries=type==EFS_RAFT_MSG_AE_REQ?1:0;m.wire_len=m.nentries?93:80;m.wire=calloc(1,m.wire_len);assert(m.wire);m.wire[m.wire_len-1]='x';return m;

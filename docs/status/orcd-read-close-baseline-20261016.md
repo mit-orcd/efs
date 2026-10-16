@@ -37,7 +37,7 @@ No other agents were messaged or scheduled. AMD and NUC were untouched.
 Four physical storage hosts fcstor003–006, addresses172.16.223.57–60,
 port17432, one fresh local root per host per round:
 `/data1/01/efs-transport-852caf1ae-erbmi1-rdma-N`. Each starts with zero usage,
-files engine,17G quota, direct I/O. Two mounts on fcstor007 use
+files storage,17G quota, direct I/O. Two mounts on fcstor007 use
 `/tmp/efs-transport-rdma-N-mnt1` and `mnt2`. This is not a seven-client run.
 The existing six-root namespace is not used for these tests.
 
@@ -45,15 +45,15 @@ Environment for daemons, management and clients:
 
 ```sh
 EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_2 EFS_DIRECT_IO=1
-EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0
+EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0
 EFS_REPAIR_EXPERIMENT=0 EFS_MD_RAFT_N=4 EFS_METADATA_BALANCE=1
 EFS_DATA_GC_ADMISSION=1 EFS_GC_BACKLOG_IDLE_MS=20
 ```
 
 mlx5_2 is active native InfiniBand, unlike AMD Soft-RoCE. Runtime inspection
 of all six processes verifies the explicit environment and native uverbs
-file descriptors. No profiling variables, extra barriers, timeout overrides,
-packing, containers or `.efs` features were enabled. One client/jobs16
+file descriptors. No profiling variables, extra barriers, timeout overrides
+or `.efs` features were enabled. One client/jobs16
 preserves the workload concurrency of the preceding AMD/NUC core runs.
 Hardware, topology and retained-store state still differ from historical AMD;
 this is not a controlled AMD-versus-ORCD transport experiment.
@@ -63,7 +63,7 @@ this is not a controlled AMD-versus-ORCD transport experiment.
 After verifying exclusivity, build the frozen source on each participating
 host as above. For each round choose a **new** root suffix; require its path
 not to exist. Start node IDs1–4 with their configured address, port17432,
-`--storage ROOT --storage-engine files --quota 17G --direct-io`; nodes2–4
+`--storage ROOT --quota 17G --direct-io`; nodes2–4
 also use `--join 172.16.223.57:17432`. Export the environment above. Record
 PIDs and logs under the evidence directory, wait for listening, then run
 `efs-mgmt raft-mkfs 172.16.223.57:17432`. On fcstor007 mount twice using

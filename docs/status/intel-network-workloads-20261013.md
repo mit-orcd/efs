@@ -17,7 +17,7 @@ Intel1 binaries built2026-10-13T16:54:57Z; Intel2 built16:55:09Z.
 Two Core Ultra7 256V hosts,8 CPUs/~15GiB RAM each; Intel1 `10.0.0.207`,
 Intel2 `10.0.0.209`. Each runs two logical EFS daemons, ports17432/17433,
 400G per node, `/data1/efs/n1|n3` and `/data2/efs/n2|n4`. Ordinary files,
-TCP/direct-I/O; `.efs` client/server, packing, containers and expiry OFF.
+TCP/direct-I/O; `.efs` client/server and expiry OFF.
 Actual daemon/client `/proc` profiles and disabled command policy mask0 PASS
 before/after. Both original mounts `/data1/efs/mnt` remain intact.
 

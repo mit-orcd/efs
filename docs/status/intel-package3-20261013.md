@@ -7,29 +7,26 @@ main mounts restored. Candidate mounted/loaded qualification remains NOTRUN.
 
 W97/D30/W106 and shared-core dependencies remain OPEN. User explicitly assigned
 Intel the disabled-feature profile in [the three packages](three-work-packages-20261013.md).
-This supersedes the experimental container sprint on this cluster.
 
 ## Deployment and native prerequisites
 
 Exact deployed product: `1a737143e5437e0f4315e86b7ef51e38a989b811` (`devel`).
 Intel1/Intel2 Core Ultra 7 256V, eight CPUs and approximately 15 GiB RAM per host;
-Rocky Linux10.2, two storage roots per host. Four files-engine daemons at
+Rocky Linux10.2, two storage roots per host. Four files-storage daemons at
 10.0.0.207/209 ports17432/17433; quotas400G each. `/data1/efs/mnt` on each host
 seeds the opposite host17432. Existing roughly92GiB/node payload and metadata
-were preserved. No reset, force-unmount or root change. The separate four-node
-container fixture and its seven mounts were cleanly stopped, stores retained.
+were preserved. No reset, force-unmount or root change.
 
-TCP/direct I/O, explicit `--storage-engine files`. Actual `/proc` args/environment
+TCP/direct I/O. Actual `/proc` args/environment
 on all four daemons and both clients verify `EFS_COMMANDS=0`,
-`EFS_COMMANDS_SERVER=0`, `EFS_PACKED_WRITES=0`, `EFS_EXPIRY=0`.
+`EFS_COMMANDS_SERVER=0`, `EFS_EXPIRY=0`.
 Client virtual `.efs` absent; durable administrator command mask changed from
 3/version0 to0/version1 and verified after orderly restart. Ordinary operational
 deadlines remain active; disabling expiry means the optional expiry-date feature.
 
 Devops correction `a45dbfc`: Intel defaults commands off; validated feature
-settings exported and forwarded in every distributed startup phase; daemon
-storage engine explicit files; idempotent startup refuses changed daemon server
-command/expiry or client command/packing settings instead of silently accepting
+settings exported and forwarded in every distributed startup phase; idempotent
+startup refuses changed daemon server command/expiry or client command settings instead of silently accepting
 an old process. `test_start_mode.py` and identity checks PASS locally (Linux
 /proc part skipped locally); actual startup-mode integration PASS on both Intel
 hosts. Final client idempotence extension uses the same inspected environment;
@@ -57,7 +54,7 @@ entire-product claim.
 
 Deploy a clean `devel` snapshot using the corrected `devops/nuc-efs` scripts:
 `EFS_CLUSTER=intel EFS_TRANSPORT=tcp EFS_DIRECT_IO=1 EFS_COMMANDS=0
-EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0 EFS_START_TIMEOUT=300`.
+EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0 EFS_START_TIMEOUT=300`.
 Build both hosts before stopping services. Globally drain both clients before
 stopping any daemon, then activate the built source and run `start.sh`.
 Do not remove storage or rerun formatting on existing stores.
@@ -95,7 +92,7 @@ This smaller diagnostic does not close original ORCD scale/platform acceptance.
 
 Mounted POSIX, peer, snapshot/rotation latency, loaded EOF, fork/direct-read,
 physical GC and complete deterministic cold integrity gates are in progress or
-NOTRUN; no passing verdict is inherited from earlier container/AMD/ORCD tests.
+NOTRUN; no passing verdict is inherited from earlier AMD/ORCD tests.
 No push, merge, release promotion or excluded-feature activation.
 
 Raw evidence outside Git:
@@ -132,18 +129,17 @@ Warm deterministic256x512KiB/4worker lifecycle PASS: create2.903s; read30.016s/
 read integrity PASS. The test does not inventory all pre-existing production
 payloads, for which this chat has no immutable historical baseline.
 
-Candidate: use pre-mutex read admission tracking for ordinary files as well as
-containers. Files previously registered no ticket and could not share a probe
+Candidate: use pre-mutex read admission tracking for ordinary files. Files previously registered no ticket and could not share a probe
 sent AFTER their request arrived while waiting for the mutex; they conservatively
 waited for another round. Registration watermark is captured before sends;
 late arrivals still require a new round. Term/round/own-apply/quorum predicates,
 RPC/case deadlines, voters, durable storage and core batch flags unchanged.
 Counter saturation falls back to the existing conservative admission path.
-No inbox consumption, storage-engine activation or query permission changes.
+No inbox consumption or query permission changes.
 This is a plausible shared metadata-latency improvement, not a measured fix yet.
 
-Local `test_container_read_admission.py` normal+ASan/UBSan PASS, extended to
-files early/late admission while retaining container, term/round/failure/
+Local `test_raft_read_admission.py` normal+ASan/UBSan PASS, extended to
+files early/late admission while retaining term/round/failure/
 saturation and1024 concurrent-ticket uniqueness controls. Exact1a737143 old
 production helper fails intended file_ticket==4 assertion with the new fixture.
 `test_readindex_pair.py` (including existing sanitizer/negative controls) and
@@ -237,7 +233,7 @@ other packages; freeze and qualify its exact full inputs rather than silently
 treating it as the old1a737143 image.
 
 Actual production pool fixture `test_readindex_remote_pair.py` normal+ASan/UBSan
-PASS locally for files and containers, full32 occupancy, overflow scalar path,
+PASS locally, full32 occupancy, overflow scalar path,
 partial/failed initialization, distinct deadlines, first-proof failure waiting
 for bounded second task, no growth during reuse and128KiB stack bound. Old
 1a737143 production capacity fails the new files-capacity assertion. Both-host

@@ -1,6 +1,6 @@
 # AMD deep-directory timeout — fixed and regressed
 
-Frozen release source: **4e239d029029b8105a6e07f0e69a26fdc449de32** on `release-v0.3.0-pre-alpha`. Root worked alone. No push, tag or shared branch promotion. Scope remains ordinary files/TCP/direct, `EFS_PACKED_WRITES=0`, `EFS_COMMANDS=0`, `EFS_COMMANDS_SERVER=0`; containers, packing, .efs and dedicated repair/recovery remain excluded.
+Frozen release source: **4e239d029029b8105a6e07f0e69a26fdc449de32** on `release-v0.3.0-pre-alpha`. Root worked alone. No push, tag or shared branch promotion. Scope remains ordinary files/TCP/direct, `EFS_COMMANDS=0`, `EFS_COMMANDS_SERVER=0`; .efs and dedicated repair/recovery remain excluded.
 
 ## Finding and fix
 

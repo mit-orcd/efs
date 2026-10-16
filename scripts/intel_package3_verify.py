@@ -12,13 +12,13 @@ for proc in pathlib.Path('/proc').iterdir():
   env=dict(x.decode().split('=',1) for x in (proc/'environ').read_bytes().split(b'\0') if b'=' in x)
   assert proc.stat().st_uid==os.getuid()
   assert env.get('EFS_TRANSPORT')=='tcp',(args,env.get('EFS_TRANSPORT'))
-  for k in ('EFS_COMMANDS','EFS_COMMANDS_SERVER','EFS_PACKED_WRITES','EFS_EXPIRY'):assert env.get(k)=='0',(args,k,env.get(k))
+  for k in ('EFS_COMMANDS','EFS_COMMANDS_SERVER','EFS_EXPIRY'):assert env.get(k)=='0',(args,k,env.get(k))
   assert pathlib.Path(os.readlink(proc/'exe')).parent==root/'src',args
   if pathlib.Path(args[0]).name=='efsd':
-   assert '--direct-io' in args and args[args.index('--storage-engine')+1]=='files',args
+   assert '--direct-io' in args,args
    assert args[args.index('--quota')+1]=='400G'
   else:assert args[3]==str(root/'mnt'),args
-  rows.append({'pid':int(proc.name),'args':args,'features':{k:env[k] for k in ('EFS_TRANSPORT','EFS_COMMANDS','EFS_COMMANDS_SERVER','EFS_PACKED_WRITES','EFS_EXPIRY')}})
+  rows.append({'pid':int(proc.name),'args':args,'features':{k:env[k] for k in ('EFS_TRANSPORT','EFS_COMMANDS','EFS_COMMANDS_SERVER','EFS_EXPIRY')}})
  except (FileNotFoundError,ProcessLookupError,PermissionError):continue
 assert len(rows)==3,rows
 assert os.path.ismount(root/'mnt')

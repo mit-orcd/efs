@@ -35,7 +35,7 @@ and a 100 GiB file about 12,800, which exceeds even the apply scope's
 32,768-key bound. The change:
 
 - `efs_meta_apply_lane_fence` deletes one heap page (4,096 items, with
-  reserve for the stamp and a packed plan). After committing it, it answers
+  reserve for the stamp and an encoded plan). After committing it, it answers
   `EFS_META_FENCE_MORE` (a ring verdict, never a Raft retry).
 - An equal fenced epoch resumes the delete; an older fence stays a no-op.
 - The scan seeks past the new size and skips rows whose `content_epoch` is
@@ -52,9 +52,9 @@ and a 100 GiB file about 12,800, which exceeds even the apply scope's
 - orcd-mini: three efsd on node9901 (RHEL 9.7, AMD EPYC 9474F, 376 GB),
   ports 17432–17434, storage `/data1/efs/n{1,2,3}` on one xiRAID XFS
   (`allocsize=131072k`), 800 GiB quota each.
-- Files engine, `--direct-io`, native IB RDMA (`EFS_TRANSPORT=rdma`,
+- Files storage, `--direct-io`, native IB RDMA (`EFS_TRANSPORT=rdma`,
   `EFS_RDMA_DEV=mlx5_0`), `.efs` commands on (`EFS_COMMANDS=1`,
-  `EFS_COMMANDS_SERVER=1`), `EFS_PACKED_WRITES=0`, `EFS_EXPIRY=0`.
+  `EFS_COMMANDS_SERVER=1`), `EFS_EXPIRY=0`.
 - Clients: node9901 `/data1/efs/mnt` and node9900 `/data1/efs/orcd-mini-mnt`.
   libfuse 3.16.2 private build with rpath.
 - Builds:
@@ -84,7 +84,7 @@ unlinks predates this change.
 
 Full `make test` on node9901 from the working tree of `4d6530dd8` (1,346
 commands, 449 s, `ASAN_OPTIONS=detect_leaks=0` because `ptrace_scope=2`):
-1 failure, `test_storage_principles` (6 container punch cases). That failure
+1 failure, `test_storage_principles` (6 punch cases). That failure
 is node9901's `allocsize=128M`; the test passes 13/13 on node9900 with the
 same tree, as with `fa29f9277`.
 

@@ -30,4 +30,4 @@ The old function is byte-identical in the inspected commits `a48076c4e9373ea47c1
 
 ## Remaining release acceptance
 
-Coordinator must run Linux builds, merged acceptance and mounted create/link/rename/unlink/hardlink tests with the current release source. Recheck intervening changes when integrating. Separate findings remain open: pending queue capacity accounting, recorder successful-reap shutdown behavior, and packed/query compatibility gates. No broad rollup removal, wire shrink, test-data pruning, main merge or push is included.
+Coordinator must run Linux builds, merged acceptance and mounted create/link/rename/unlink/hardlink tests with the current release source. Recheck intervening changes when integrating. Separate findings remain open: pending queue capacity accounting, recorder successful-reap shutdown behavior, and query compatibility gates. No broad rollup removal, wire shrink, test-data pruning, main merge or push is included.

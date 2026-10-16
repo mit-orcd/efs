@@ -1,4 +1,4 @@
-# ORCD branch integration and packed writer checkpoint — October 11, 2026
+# ORCD branch integration and writer checkpoint — October 11, 2026
 
 Starting at `4534b3be`, the integration candidate `fd83b30d` includes 104 newly
 reachable commits (83 non-merge commits). The last captured branch tips are
@@ -18,13 +18,7 @@ and a non-void fragment-GC function missing its return. No POSIX oracle or
 step deadline was weakened.
 
 The complete Linux gate passes for `fd83b30d`; 635 tracked build/gate sources
-match that exact committed snapshot. W95 additionally charges packed-read
-scratch to the shared body pool and retains the exact packed PUT record in
-the budgeted writer token. The actual cache gate rejects invalid packed
-identities/extents without releasing accepted bytes and preserves the same
-reference/digest through retries even when cache placement changes. These
-changes do not activate mounted small-file coalescing. Scheduler/upload
-ownership and distributed shared-object GC still need integration.
+match that exact committed snapshot.
 
 ## Retained-data regression evidence
 
@@ -63,8 +57,7 @@ roots on each of four servers to the corresponding
 `efs-orcd-test-erbmi1-before-fd83b30d7e4a-validation` sibling. Initialize fresh
 canonical test roots only after every old client and server stops cleanly.
 This is an authorized test reset, with old benchmark data retained offline;
-a clean-namespace pass cannot establish loaded-query scaling or packing
-activation. The backup ledger lists every old and active root.
+a clean-namespace pass cannot establish loaded-query scaling. The backup ledger lists every old and active root.
 
 The final eleven-host rollout runs `fd83b30d`, native RDMA/direct I/O on the
 normal namespace, with command policy mask 3/version 0 (fresh defaults).
@@ -80,7 +73,6 @@ All runtime process/executable/revision checks pass.
 | Quiet query/extras control | 4 pass, 1 mmap skip, complete |
 | Seven clients concurrently | 1,527 pass, 6 query failures, 7 skips, 7 NOTRUN; fail |
 | Final four-server cold persistence | 27 prepare + 27 verify pass |
-| Private packed cold RPC/FUSE | 16 mapping/receipt checks and 28 exact packed reads pass; retained mixed lifecycle pass |
 | Live long/numeric owner listings | `erbmi1:erbmi1` by default; `246111:246111` with `-n` |
 
 The simultaneous query failures occur even while the small fresh catalog
@@ -92,7 +84,7 @@ attributes the peer improvement solely to code: the dataset was reset as well.
 
 The active namespace is the fresh test namespace. All old stores remain offline
 in the backup ledger; neither this reset nor these passing ordinary suites
-establishes mounted packing activation or loaded-query scaling.
+establishes loaded-query scaling.
 
 Evidence: [passing per-client suites](../../results/measure/20261011-orcd-branch-integration/fd83b30d7e4a/sequential-summary.json),
 [concurrent failure verdict](../../results/measure/20261011-orcd-branch-integration/fd83b30d7e4a/concurrent-summary.json),
@@ -106,14 +98,9 @@ Retained mounted/peer/persistence TSVs are under
 
 The finite ordinary-write baseline created 10,000 fixed 512-byte files with
 16 workers in 21.0 seconds (476 files/s), exit 0. This fresh-namespace run is
-not a matched comparison with the earlier large dataset or a packed-write
-measurement. For sampled inode 942415, GETCHUNKS identifies one 512-byte span
+not a matched comparison with the earlier large dataset. For sampled inode 942415, GETCHUNKS identifies one 512-byte span
 on nodes 4, 1 and 2. Each exact fragment consumes 69,632 allocated bytes:
 208,896 bytes total, **408×** the application payload, excluding metadata.
-Ordinary mounted writes therefore still use the old format. W95 remains open
-for upload/coalescing integration, aggregate memory charges and distributed
-shared-fragment garbage collection before activation and matched A/B tests.
 
 Evidence: [finite baseline](../../results/measure/20261011-orcd-branch-integration/fd83b30d7e4a/baseline-summary.json),
-[exact physical allocation](../../results/measure/20261011-orcd-branch-integration/fd83b30d7e4a/baseline-sample.json),
-[packed cold mounted reads](../../results/measure/20261011-orcd-branch-integration/fd83b30d7e4a/private-packed-cold-fuse.json).
+[exact physical allocation](../../results/measure/20261011-orcd-branch-integration/fd83b30d7e4a/baseline-sample.json).

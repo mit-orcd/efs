@@ -75,8 +75,7 @@ See [vLLM prefix identity](https://docs.vllm.ai/en/latest/design/prefix_caching/
 Chunk size and tensor organization determine file sizes; there is no rule that
 a token equals a file. Conceptually a stored object may contain K and V arrays
 for a token block and a subset of layers/ranks. An adapter may use individual
-files or an allocator over larger files. Neither implies EFS containers or
-small-file packing must be enabled.
+files or an allocator over larger files. Neither requires a new EFS storage format.
 
 For a conventional uniform attention model, uncompressed payload size is:
 `tokens * layers * KV_heads * head_dimension * 2(K,V) * bytes_per_element`.
@@ -94,7 +93,7 @@ other attention architectures change the result.
 - Resolve file-mode host filesystem assumptions and object-mode deletion before
   advertising shared-cache support. A plugin alone may not suffice; an adapter
   extension may be necessary. Do not bypass authoritative EFS metadata.
-- Keep `.efs`, packing, containers and expiry disabled. Cache-manager capacity
+- Keep `.efs` and expiry disabled. Cache-manager capacity
   eviction does not require EFS expiry. Do not weaken barriers implicitly.
 - Pin LMCache/NIXL/ROCm/inference-engine commits and build a contract test before
   implementation claims. Validate failures, cancellation, publication races,

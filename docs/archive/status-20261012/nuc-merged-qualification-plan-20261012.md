@@ -18,7 +18,7 @@ assigned cluster; regular f52 service and all existing stores/data are preserved
    not permission to skip the gate. Retain both failed attempts; repair the
    bundle without changing approved engine bytes and rerun full native when
    assigned. Recheck generated docs, link references and namespace gate.
-3. Verify durable command namespace45–51 packing,52 APPEND_CATCHUP, Mac53/54
+3. Verify durable command namespace45–51 reserved,52 APPEND_CATCHUP, Mac53/54
    allocations and transport141–144 against the actual merged canonical
    headers. Verify decoder/apply and pressure classification on every voter.
    Confirm native client/server layouts remain compatible.
@@ -62,7 +62,7 @@ For each mode, direct then buffered, on the same approved source:
   zero131072-byte full overwrite and323-byte partial replacement preserving
   suffix. Require successful write/fsync/flush/close, immediate exact primary
   and peer bytes, private-daemon crash/cold exact bytes and physical/queue drain.
-  Packing is explicitly disabled. Retain each expected/actual hash and size;
+  Retain each expected/actual hash and size;
   correct stat size alone cannot certify contents.
 - Full recipe: `--fresh-namespace --posix --continue-posix-failure
   --append-burst 2000 --sync-writes --sync-write-fault --append-sync-boundary
@@ -107,7 +107,7 @@ not grounds to kill it or discard a WAL. Diagnose/record readiness separately.
 
 No measured root-barrier benefit is established. After a specific performance
 assignment, freeze matched builds with identical merged W52/W112 code and only
-store.c/packed_fence.h root-scope differences (+corresponding native test).
+store.c root-scope differences (+corresponding native test).
 Both variants require functional acceptance first. Three voters, SATA metadata,
 SATA thenNVMe data, fixed sampled leader placement, base/root/root/base twice
 per device; eight600-second cells with identical workloads/configuration.

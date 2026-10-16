@@ -15,8 +15,8 @@ inputs match on all four hosts. Normal native GCC builds use the Makefile's
 host binary hashes do not imply differing source. The external launcher and
 this documentation add no EFS C/data-path changes to that frozen release.
 
-TCP, files engine, daemon direct I/O. `EFS_COMMANDS=0`,
-`EFS_COMMANDS_SERVER=0`, `EFS_PACKED_WRITES=0`, `EFS_EXPIRY=0`.
+TCP, daemon direct I/O. `EFS_COMMANDS=0`,
+`EFS_COMMANDS_SERVER=0`, `EFS_EXPIRY=0`.
 Containers are unused. Persisted command policy remains version1/mask0;
 `.efs` is absent through every mount checked.
 

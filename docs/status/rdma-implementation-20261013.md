@@ -11,8 +11,8 @@ Contract: [segmented transport plan](rdma-segmented-messages-plan-20261013.md).
 The new shared module is in the common build, but existing setup/data paths do
 not call it yet. This commit does not eliminate oversized TCP fallback and must
 not be deployed or described as strict segmented RDMA. AMD's four-node working
-files/TCP/direct deployment at96f40602 remains unchanged; commands, packing,
-containers and expiry remain disabled. No push or native IB deployment.
+files/TCP/direct deployment at96f40602 remains unchanged; commands and expiry
+remain disabled. No push or native IB deployment.
 
 ## Implemented
 

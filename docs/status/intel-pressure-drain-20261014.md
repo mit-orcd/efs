@@ -3,8 +3,8 @@
 **Deployed; focused native/sanitizer and four-client smoke PASS.**
 Final paired throughput evidence is below; full POSIX/crash acceptance NOTRUN.
 Follow-up to [live pressure profiling](archive/intel-post-sync-profile-20261014.md).
-Scope: devel, Intel TCP/direct-I/O, ordinary files; .efs client/server, packing,
-containers and expiry disabled. Preserve storage and independent external clients.
+Scope: devel, Intel TCP/direct-I/O, ordinary files; .efs client/server and
+expiry disabled. Preserve storage and independent external clients.
 
 ## Change
 
@@ -95,8 +95,8 @@ Intel1 `.207` runs n1/n2, Intel2 `.209` runs n3/n4, ports 17432/17433,
 are `/data1/efs/releases/2e935cea075d`; AMD/xorinox clients are independent under
 `/data1/efs/intel-client/releases/2e935cea075d`. All four daemons and all four
 clients have verified executable identity and `EFS_TRANSPORT=tcp`,
-`EFS_COMMANDS=0`, `EFS_COMMANDS_SERVER=0`, `EFS_PACKED_WRITES=0`, `EFS_EXPIRY=0`.
-Daemons use `--direct-io --storage-engine files`. Intel mounts are
+`EFS_COMMANDS=0`, `EFS_COMMANDS_SERVER=0`, `EFS_EXPIRY=0`.
+Daemons use `--direct-io`. Intel mounts are
 `/data1/efs/mnt`, external mounts `/data1/efs/intel-mnt`.
 Private Intel PIDs, executable hashes and profile match the pre-rollout inventory.
 

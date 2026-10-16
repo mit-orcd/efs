@@ -24,8 +24,7 @@ Prior def and52 failures preserved separately. No candidate fixes or promotion.
 | Existing direct/TCP `gc_reclamation.py --posix` core/peer/physical | PASS,exit0 | 95.543 |
 | Core | 216PASS,0FAIL,0SKIP,0NOTRUN | 20.3 |
 | Peer | 67PASS,0FAIL,0SKIP | 11.3 |
-| Separate isolated `--mounted-packing-only`, noPOSIX | PASS,exit0 | 18.323 |
-| Quiet `--mounted-packing-only --posix --packing-clients 7 --posix-jobs 16 --fixture-quota 4G` | **FAIL**,exit1 | 174.267 |
+| Quiet seven-client mounted fixture, `--posix --posix-jobs 16 --fixture-quota 4G` | **FAIL**,exit1 | 174.267 |
 | Peer after seven suites | 67PASS,0FAIL | 21.2 |
 | Existing native actual storeGC, after live cleanup | PASS,exit0 | Raw log |
 
@@ -47,11 +46,10 @@ failures. Bounded inbox slicing alone does not eliminate the observed deep
 case deadline here. No drive-latency/hardware-ceiling/W97improvement inference.
 
 Core actual physical deletion, retry ledger, reclamation, queue/counter advance,
-restart empty inventory/zeroquota and latePUT controls PASS. Isolated2packing
-mixed mutations/cold hashes/physical reclamation/queue drain PASS. Seven-client
-run likewise completed acknowledged cold hashes, actual packed-fragment
-reclamation and metadata queue drain PASS; report has cold_verified=true,
-physical_packed_empty=true and seven failing POSIX client entries. FinalFAIL
+restart empty inventory/zeroquota and latePUT controls PASS. Seven-client
+run likewise completed acknowledged cold hashes, actual fragment
+reclamation and metadata queue drain PASS; report has cold_verified=true
+and seven failing POSIX client entries. FinalFAIL
 correctly comes from case failures. No global physical inventory confound or
 client-stop failure in this run. Existing cold correctness check is not standalone
 recovery qualification. Native two-root/format/checksum/quota/syscall/idempotence
@@ -110,11 +108,11 @@ Raw marked trace, reference script, counts and exit retained with gate evidence.
 
 `results/measure/20261012-nuc-03bd-group3/controller/` retains full inputmanifest,
 build/images, command/env/source/exit/timing, logs and post-cleanup reference.
-`fixtures/` retains complete TSVs, manifests and physical/packing reports.
+`fixtures/` retains complete TSVs, manifests and physical reports.
 Collected archives retained. Remote `/home/efs/nuc-03bd-group3`, isolated stores
 `/data1/efs/nuc-03bd-group3`.
 All owned daemons and mounts stopped; no EFS cluster currently running. No
 old-binary/data retention/backwards qualification or unrelated host-service
 changes. Manager received exact failures and implementation analysis. Prior
 W52/fullbothmodeW112 and W97sustainedcomparison are not closed by these narrowed
-gates; containers/RDMA/repair remain deferred. No pushes/tags/promotions.
+gates; RDMA/repair remain deferred. No pushes/tags/promotions.

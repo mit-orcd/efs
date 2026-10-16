@@ -15,12 +15,11 @@ inputs match its preceding implementation commit
 EFS_GIT_BRANCH=devel-amd-package2` (default O3, frame pointers, AMD-native tuning).
 
 AMD-395 Linux bare metal, four localhost daemons on 17432–17435, one NVMe/ext4
-filesystem; two FUSE clients `/data1/efs/mnt` and `mnt2`. Ordinary files engine,
+filesystem; two FUSE clients `/data1/efs/mnt` and `mnt2`. Ordinary files storage,
 TCP/direct I/O, 20 GiB logical quota per daemon. Actual six-process profiles were
-checked: `EFS_COMMANDS=1`, `EFS_COMMANDS_SERVER=1`, `EFS_PACKED_WRITES=0`,
-`EFS_EXPIRY=0`; repair experiment disabled. Persisted policy GET returns
+checked: `EFS_COMMANDS=1`, `EFS_COMMANDS_SERVER=1`, `EFS_EXPIRY=0`; repair experiment disabled. Persisted policy GET returns
 version 0 / mask 3 before and after restart. All daemons explicitly use
-`--storage-engine files --direct-io`. No query-budget overrides on live daemons:
+`--direct-io`. No query-budget overrides on live daemons:
 16 GiB generation / 32 GiB aggregate and existing deadlines retained.
 
 Final installed SHA256:

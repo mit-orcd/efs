@@ -119,7 +119,7 @@ zero quota and late PUT fencing PASS. Clock-fault lifecycle 25/25, core 216/216 
 Same NUC Intel i5-1135G7, four cores/eight threads, Linux
 6.12.0-211.64.1.el10_2.x86_64; /data1=/dev/sda XFS. Four fresh private 1 GiB-quota
 nodes, TCP/direct-I/O/FILES, EFS_EXPIRY=1 except deliberate off phase;
-EFS_COMMANDS=0/EFS_COMMANDS_SERVER=0/EFS_PACKED_WRITES=0. No containers or packing.
+EFS_COMMANDS=0/EFS_COMMANDS_SERVER=0.
 Primary mount for backlog; peer mount for regression. Existing stores untouched.
 
 ```sh
@@ -216,7 +216,7 @@ Build `/home/efs/devel-expiry-afbce294-fault`; build/run logs
 `/home/efs/expiry-afbce294-fault-build.log` and
 `/home/efs/expiry-afbce294-fault.log`; primary evidence
 `/data1/efs/expiry-afbce294-fault/gc-direct-taw4w_rg`. Same host, four-node quota,
-TCP/direct/FILES, disabled `.efs` and packing configuration. Clock fault lifecycle
+TCP/direct/FILES, disabled `.efs` configuration. Clock fault lifecycle
 25/25 PASS, including pause, operator reset and resumed physical reclamation.
 Aggregate PASS: core 216/216 (23.4s), peer 67/67 (11.5s), independent GC,
 cold inventory, drained queues, zero quota and late-PUT fencing. Normal core

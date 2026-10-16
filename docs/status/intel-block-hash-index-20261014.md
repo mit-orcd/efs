@@ -92,9 +92,9 @@ Same physical Intel/AMD/xorinox topology as the linked deployment reports:
 four files-engine nodes, two per Intel host, 400 GiB quota/node,
 about 145 GiB occupied/node at final status; Intel 5 Gb/s,
 external clients 2.5 Gb/s. Rocky10.2/Linux6.12 on Intel/xorinox, Ubuntu/Linux7
-on AMD. Main daemon flags `--storage-engine files --direct-io`;
+on AMD. Main daemon flags `--direct-io`;
 EFS_TRANSPORT=tcp, EFS_COMMANDS=0, EFS_COMMANDS_SERVER=0,
-EFS_PACKED_WRITES=0, EFS_EXPIRY=0. Containers unused.
+EFS_EXPIRY=0.
 
 AMD's existing writer completed its target before rollout: **1,000,000 files**,
 368,612 preserved and 631,388 newly created in that resume session. It was not

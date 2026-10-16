@@ -10,8 +10,8 @@ Full tracked-input manifest verified before build and after gates. Normal build
 identifier `52bcfd35-group3-normal`; exact executable hashes/version and build
 commands are retained. No competing build during mounted measurement.
 
-Scope: TCP, direct I/O, default FILES engine; Raft flow, early retirement and
-group drain disabled; repair activation disabled. Containers, RDMA, dedicated
+Scope: TCP, direct I/O, default FILES storage; Raft flow, early retirement and
+group drain disabled; repair activation disabled. RDMA, dedicated
 repair/recovery matrix and backwards compatibility are not qualification claims.
 No source fixes, branch promotion, push or tag occurred.
 
@@ -22,11 +22,10 @@ No source fixes, branch promotion, push or tag occurred.
 | Existing `gc_reclamation.py --mode direct --transport tcp --posix` | PASS, exit 0 | 96.290 s |
 | POSIX core within that fixture | 216 PASS, 0 FAIL, 0 SKIP, 0 NOT RUN | 20.9 s |
 | Two-client peer within that fixture | 67 PASS, 0 FAIL, 0 SKIP | 12.1 s |
-| Separate `--mounted-packing-only`, without `--posix` | PASS, exit 0 | 18.323 s |
 | Existing native `tests/test_store_gc` | PASS, exit 0 | See raw log |
 
 Assertions and case deadlines unchanged; top-level fixture deadline 1800 s.
-Core includes mixed mutation and packed growth cases. Physical oracle observed
+Core includes mixed mutation and growth cases. Physical oracle observed
 closed-unlinked allocation 15,249,408 bytes → zero, actual fragment presence,
 late PUT live controls accepted by every member, failed-delete visibility and
 retained fragments, offline-member ledger retention and rejoin completion,
@@ -35,10 +34,7 @@ fragment inventory, zero quota and late PUT fencing on every member after the
 helper's existing restart. This is the existing correctness assertion, not a
 standalone recovery qualification.
 
-Packing was isolated from retained POSIX fixture data. Report:
-`cold_verified=true`, `physical_packed_empty=true`, `failures=[]`, two clients,
-direct/TCP. Actual packed/ordinary mutations, acknowledged cold hashes and
-metadata queue drain passed. Native GC covers two roots, buffered/direct format
+Native GC covers two roots, buffered/direct format
 switch, quota recount, checksum protection, syscall failures and idempotence;
 its buffered primitive coverage does not qualify mounted buffered mode.
 
@@ -47,7 +43,7 @@ its buffered primitive coverage does not qualify mounted buffered mode.
 Raw evidence: `results/measure/20261012-nuc-52-group3/`.
 `controller/` retains exact source-input manifest, normal executable hashes,
 build log, command environments, per-gate exit/timing and logs.
-`fixtures/` retains POSIX TSVs, fixture manifests and packing JSON. Archives are
+`fixtures/` retains POSIX TSVs, fixture manifests and fixture JSON. Archives are
 also retained as collected. Remote source/controller:
 `/home/efs/nuc-52-group3`; isolated stores:
 `/data1/efs/nuc-52-group3`. Private ports 24210–24213.

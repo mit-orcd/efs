@@ -9,7 +9,7 @@ fc341f00e3ac2a8decddd408ef47aeb2c7e02e34. Current installed correction is
 e8bab21014bad21e5ea2198141e4df3a45d3dc3d, verified on all11 hosts.
 Gate: normal-operation close/fsync publication, preserving W17.1 deadlines.
 Four servers/seven clients, native mlx5_2 RDMA, files/direct I/O, `.efs` enabled;
-packing, containers and expiry disabled. All seven tiny-file runs failed with
+expiry disabled. All seven tiny-file runs failed with
 EIO during close after39–146s, using16workers each and10million-file targets.
 Logs and failed payloads are preserved in ORCD scratch, per-host
 `tiny-files-fc341-20261013-210651.log`; local identity/progress summaries are

@@ -44,7 +44,7 @@ Four EFS nodes: Intel1 `.207` nodes1/2, Intel2 `.209` nodes3/4,
 ports27432/27433. Two16GiB files-engine stores per host under
 `/data{1,2}/efs/w100-private-deadline-posix/nN`; direct I/O.
 Both hosts have eight CPUs and approximately15GiB RAM, Rocky Linux10.2.
-TCP; `.efs` client/server0, packing0, expiry0, files engine (containers unused).
+TCP; `.efs` client/server0, expiry0.
 The private command policy remains version1/mask0. Actual `/proc` arguments,
 environment, executable hashes and absent synthetic `.efs` were checked.
 

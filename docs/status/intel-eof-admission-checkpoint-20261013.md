@@ -45,9 +45,9 @@ masking or performance tuning was applied.
 Both hosts: Core Ultra 7 256V, eight CPUs, approximately 15 GiB RAM,
 Rocky Linux10.2, kernel `6.12.0-211.64.1.el10_2.x86_64` on both hosts.
 Four daemons: n1/n2 on Intel1 (10.0.0.207), n3/n4 on Intel2 (10.0.0.209), ports
-17432/17433; files engine, direct I/O, 400G quota per daemon, existing stores.
+17432/17433; files storage, direct I/O, 400G quota per daemon, existing stores.
 Each `/data1/efs/mnt` seeds the opposite host17432. TCP; `.efs` client/server,
-packing and expiry disabled; no running container fixture. Runtime `/proc`
+expiry disabled. Runtime `/proc`
 profile and persistent command policy version1/mask0 verified after restoration.
 
 Installed source remains `1a737143e5437e0f4315e86b7ef51e38a989b811`:
@@ -81,7 +81,7 @@ The loaded round also overlapped native testing and the extra EOF/fsync oracles;
 it is stress evidence, not a controlled claim about the fix's effect.
 
 Two retained payload controls are checked after restoring mounts: the original
-1024×256 KiB fork fixture and256×512 KiB `engine-ab` fixture, exact contents and
+1024×256 KiB fork fixture and a 256×512 KiB fixture, exact contents and
 EOF from each host. An earlier fork check overlapped mount draining and hit
 EBUSY; that attempt is invalid for payload correctness. Intel2's first engine
 check lacked its local state file; the original Intel1 oracle state was copied
@@ -98,7 +98,7 @@ failed cases and remove successful owned fixtures; failures are retained:
 python3 tests/live/concurrent_extend_eof.py /data1/efs/mnt --cases 160 --workers 16
 python3 tests/live/fsync_admission.py /data1/efs/mnt --files 1025 --workers 16
 python3 scripts/intel_package3_tests.py concurrent --run-id UNIQUE --output /OUTSIDE/GIT
-EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0 make -j8 test
+EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0 make -j8 test
 python3 tests/test_opid_admission.py
 python3 tests/test_report_zero_eof.py
 ```

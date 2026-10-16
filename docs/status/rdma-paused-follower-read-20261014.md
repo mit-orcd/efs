@@ -3,7 +3,7 @@
 W106; `devel-rdma`. Fixed-source AMD affected gates PASS; hardware and
 broader W106 acceptance remain OPEN. Files/direct,
 strict segmented RDMA/rxe0/GID1 on AMD-395, four same-host nodes.
-`.efs` client/server, packing, containers, expiry and repair experiment OFF;
+`.efs` client/server, expiry and repair experiment OFF;
 metadata balancing1. No TCP comparison or push.
 
 ## Fixed-source qualification
@@ -61,7 +61,7 @@ cohort client and main fixture logs have post-setup TCP bytes0/0 and violations0
 TCP setup/bootstrap is permitted; no payload fallback or TCP comparison occurred.
 No trace/profiler/build overlapped quiet measurement. All six actual installed
 process environments audited RDMA/rxe0/GID1 and commands client/server0,
-packing0, expiry0, balancing1; all four daemon args files/17G/direct. `.efs`
+expiry0, balancing1; all four daemon args files/17G/direct. `.efs`
 is absent on installed mount. Only installed mnt/mnt2 and four nonpaused daemons
 remain. All owned faults cleared, readers drained, followers restored; synthetic
 fixture stores deleted only after clean shutdown. Installed namespace retained.
@@ -123,7 +123,7 @@ allow concurrent chunk workers to share this scheduling observation.
 This is neither global node-health state nor a new placement/quorum decision.
 If the two preferred candidates fail, the deferred candidate is still attempted.
 Every fragment still checks generation, length, captured digest and payload
-hash; reconstruction still requires two good fragments. Packed reads unchanged.
+hash; reconstruction still requires two good fragments.
 Read30s, preferred pair5s, admission5s, cooldown30s and outer180/k5 unchanged.
 The existing strict four8MiB reader assertions are retained; short read failures
 now log the actual returned count and offset before raising.

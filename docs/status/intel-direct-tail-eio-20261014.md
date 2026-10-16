@@ -42,7 +42,7 @@ retained with the run. Builds completed before stopping production services.
 Environment/topology remain those in the linked performance and
 [deployment report](intel-external-clients-deployment-20261014.md): two Core
 Ultra7 256V Intel hosts, four daemons,400GiB/node, TCP/direct/files. `.efs`
-client/server, packing and expiry=0; containers unused. Intel links5Gb/s,
+client/server and expiry=0; Intel links5Gb/s,
 external AMD/xorinox links2.5Gb/s. Final `/proc` checks confirm all eight main
 processes use this release and the exact optional-off environment; all four
 daemons have `--direct-io`. Persisted commands policy is version1/mask0.

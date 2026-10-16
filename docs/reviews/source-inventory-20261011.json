@@ -283,26 +283,6 @@
       "code": 27
     },
     {
-      "path": "src/bench/principles_index.c",
-      "physical": 735,
-      "code": 727
-    },
-    {
-      "path": "src/bench/principles_index.h",
-      "physical": 36,
-      "code": 33
-    },
-    {
-      "path": "src/bench/storage_churn.c",
-      "physical": 639,
-      "code": 615
-    },
-    {
-      "path": "src/bench/storage_churn.h",
-      "physical": 5,
-      "code": 4
-    },
-    {
       "path": "src/bench/storage_principles.c",
       "physical": 539,
       "code": 524
@@ -310,16 +290,6 @@
     {
       "path": "src/bench/storage_principles.h",
       "physical": 5,
-      "code": 4
-    },
-    {
-      "path": "src/bench/storage_ranges.c",
-      "physical": 258,
-      "code": 254
-    },
-    {
-      "path": "src/bench/storage_ranges.h",
-      "physical": 4,
       "code": 4
     },
     {
@@ -716,16 +686,6 @@
       "path": "src/server/store.c",
       "physical": 2295,
       "code": 2007
-    },
-    {
-      "path": "src/server/store_containers.c",
-      "physical": 721,
-      "code": 691
-    },
-    {
-      "path": "src/server/store_containers.h",
-      "physical": 20,
-      "code": 18
     },
     {
       "path": "src/server/store_nvme.c",

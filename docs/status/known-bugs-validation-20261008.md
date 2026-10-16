@@ -23,7 +23,7 @@ Added focused regressions:
   ordinary and pending CREATE apply paths. The initial negative replay test
   covered pending CREATE only; it retains EEXIST after name reuse and preserves
   the replacement. The follow-up above adds ordinary negative CREATE coverage.
-- Production CREATE construction, suffix packing, routing retry loop and error
+- Production CREATE construction, suffix encoding, routing retry loop and error
   mapping preserve one byte-identical request through send/receive loss, BUSY
   and leader redirects for files and directories. Exhausted BUSY remains BUSY;
   genuine EEXIST is terminal. Network responses and identity allocation are
@@ -42,7 +42,7 @@ Added focused regressions:
 ## Environment and evidence
 
 Runs on **xefs1, a Xorinox Fedora VM**, four private loopback daemons plus FUSE,
-files engine / direct I/O / TCP, 1 GiB quotas, separate private stores beneath
+files storage / direct I/O / TCP, 1 GiB quotas, separate private stores beneath
 `/data1/efs-known-bugs`. This is an isolated fixture inside the cluster VM,
 not a distributed three-VM deployment or a claim about independent failure domains.
 Installed daemon PID 2153663 on port 17432 was preserved. Test ports are 28320–23

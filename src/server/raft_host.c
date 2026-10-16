@@ -126,7 +126,6 @@ static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
 #define HOST_PUBLICATION_LEN (HOST_PUBLISH_LEN + 28u)
 #define HOST_PUBLICATION_TICKET_LEN (HOST_PUBLICATION_LEN + 36u)
 #define HOST_PUB_F_TICKETED 4
-#define HOST_PUB_F_RETIRED_PACKED 8 /* packing removed 2026-10-16: invalid */
 #define HOST_PUB_TAIL_TRIES  4 /* cross-group truncate tail CAS retries */
 #define HOST_ACTIVATE_LANE_LEN 10 /* tag + ino:8 + lane:1 */
 #define HOST_ACTIVATE_MASK_LEN 17 /* tag + ino:8 + mask:8 */
@@ -157,7 +156,7 @@ struct host_inbox_item {
 struct host_outbox_item {
     uint8_t *buf;
     uint32_t len;
-    uint64_t queued_us; /* Pure container read observation, never wire/credits. */
+    uint64_t queued_us; /* Local read observation only, never wire/credits. */
 };
 
 /* Per-peer send queue + its lazily-spawned sender thread. All fields are
@@ -1124,8 +1123,8 @@ static int outbox_pri_replace(struct host_outbox *tx,
         }
         /* An early probe does not retire an entry batch. Nor may a delayed
          * queued reply erase a newer read round or a different proven prefix.
-         * Keep exact class/status, term/boot/read context and ACK prefix for
-         * containers; otherwise the original bounded enqueue owns the frame.
+         * Keep exact class/status, term/boot/read context and ACK prefix;
+         * otherwise the original bounded enqueue owns the frame.
          * Votes still evict heartbeats at capacity via the existing path. */
         if(tx->preserve_read && !read_vote && tx->pri[i].buf[0]==buf[0] &&
            (buf[0]==EFS_RAFT_MSG_AE_REQ || buf[0]==EFS_RAFT_MSG_AE_REP) &&
@@ -1205,7 +1204,7 @@ static int host_send_ready(void *net, int peer, uint8_t group)
  * The core still validates current term/boot/voters and the leader's own
  * applied ReadIndex; class 1 grants no replication progress/window credit.
  * This shares the existing priority lane and its byte/count bounds. */
-static void host_container_read_probe(struct host_outbox *tx,uint8_t *p,uint32_t len)
+static void host_read_probe(struct host_outbox *tx,uint8_t *p,uint32_t len)
 {
     if(!tx->preserve_read || len<EFS_WIRE_RAFT_HDR_LEN || p[0]!=EFS_RAFT_MSG_AE_REQ)return;
     int gi=efs_raft_flow_group(p[1]);
@@ -1395,7 +1394,7 @@ static int host_send(void *net, const struct efs_raft_msg *msg)
             }
         }
     }
-    host_container_read_probe(tx,heap,len);
+    host_read_probe(tx,heap,len);
     pthread_cond_signal(&tx->cv);
     pthread_mutex_unlock(&h->outbox_mu);
     host_wire_taken(msg);
@@ -2499,7 +2498,7 @@ static int host_publication_command_valid(const uint8_t *cmd, uint32_t len)
         (cmd[0] != EFS_MD_CMD_PUBLICATION && cmd[0] != EFS_MD_CMD_PUBLICATION_ADMIT &&
          cmd[0] != EFS_MD_CMD_PUBLICATION_RETIRE)) return 0;
     uint8_t flags = cmd[HOST_PUBLISH_LEN - 1];
-    /* A packed publication (HOST_PUB_F_RETIRED_PACKED) is never valid. */
+    /* Unknown flags, including reserved bit 8, are never valid. */
     if (flags & ~(HOST_PUB_F_LANE_LOCAL | HOST_PUB_F_FRESH_OBJECT | HOST_PUB_F_TICKETED)) return 0;
     return !!(flags & HOST_PUB_F_TICKETED) == (len == HOST_PUBLICATION_TICKET_LEN) &&
         (!(flags & HOST_PUB_F_TICKETED) || (flags & HOST_PUB_F_FRESH_OBJECT));
@@ -3315,12 +3314,10 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         if (!host_publication_command_valid(cmd,clen)) return EFS_ERR_PROTO;
         return apply_one_publish(h,cmd,index,term,group);
     }
-    if(cmd[0]==EFS_MD_CMD_RETIRED_PACK_GC_ACK || cmd[0]==EFS_MD_CMD_RETIRED_PACK_CANCEL ||
-       cmd[0]==EFS_MD_CMD_RETIRED_PACK_GC_RETIRE || cmd[0]==EFS_MD_CMD_RETIRED_PACK_ADMIT ||
-       cmd[0]==EFS_MD_CMD_RETIRED_PACK_UPLOAD_RETIRE) {
-        /* Packing was removed (archive/packing-containers-20261016). Halting
-         * here, not skipping, keeps a packed log from being half-applied. */
-        fprintf(stderr,"raft-host: packing command %u at index %llu group %u; this build cannot apply it\n",
+    if(cmd[0]>=EFS_MD_CMD_RESERVED_MIN && cmd[0]<=EFS_MD_CMD_RESERVED_MAX) {
+        /* Halting here, not skipping, keeps such a log from being
+         * half-applied. */
+        fprintf(stderr,"raft-host: reserved command %u at index %llu group %u; this build cannot apply it\n",
                 cmd[0],(unsigned long long)index,group);
         return EFS_ERR_PROTO;
     }
@@ -4354,7 +4351,7 @@ static int host_read_probe_needed(struct efs_raft *r,
     return !efs_raft_read_pending(r) || efs_raft_read_quorum(r);
 }
 
-/* Both storage engines use the same fresh metadata authority. Register
+/* Fresh metadata reads share one authority. Register
  * before waiting for h->mu. A tracked round may cover this ticket
  * only if its admission watermark was captured BEFORE any probes were sent.
  * Saturation disables this optimization rather than wrapping authority. */
@@ -4581,7 +4578,7 @@ static int host_read_index(struct efs_raft_host *h,uint8_t group,int *hint)
     return host_read_index_admitted(h,group,hint,NULL,NULL,0);
 }
 
-/* Container directory walks can overlap both metadata groups on every
+/* Directory walks can overlap both metadata groups on every
  * component. Eight blocked proof helpers otherwise force other admitted
  * reads to serialize independent rounds. Eight persistent 128KiB helpers
  * (1MiB of stacks).
@@ -6748,7 +6745,7 @@ static int host_receive_persist(void *net, int (*persist)(void *), void *ctx)
 }
 
 static void
-host_container_pending_reads(struct efs_raft_host *h);
+host_pending_reads(struct efs_raft_host *h);
 
 /* h->mu and the pump's KV hold are owned on entry/return. Only a fully
  * returned recv_batch may hand off: its log barrier, replies and ordered apply
@@ -6763,7 +6760,7 @@ static void host_inbox_batch_handoff(struct efs_raft_host *h)
      * trylock/frozen core. Service them now, before another group's disk I/O.
      * The completed batch owns all persistence/apply; the unchanged control
      * helper grants only eligible votes and retains ordered receive/credits. */
-    host_container_pending_reads(h);
+    host_pending_reads(h);
     for (int gi=0; gi<HOST_NGROUPS; gi++)
         if (h->g[gi].hosted) host_publish_view(h,gi);
     host_waiters_wake(h);
@@ -7599,7 +7596,7 @@ static int host_kv_stop(struct host_kv_worker *w)
  * the unchanged core checks term/boot/voters/leader/persisted prefix. Every
  * progress-bearing frame still enters normal recv in order and retains its
  * admission credits; fully handled canonical requests may retire without flow. */
-static void host_container_pending_reads(struct efs_raft_host *h)
+static void host_pending_reads(struct efs_raft_host *h)
 {
     struct pending_read {uint8_t p[EFS_WIRE_RAFT_HDR_LEN];uint8_t *identity;uint64_t queued_us;int slot,consume;};
     struct pending_read frames[HOST_INBOX_MAX];unsigned n=0,consume_n=0;uint8_t published=0;
@@ -7710,7 +7707,7 @@ static void *host_pump(void *arg)
                     (void)efs_raft_step_down(g->r);
             }
         }
-        host_container_pending_reads(h);
+        host_pending_reads(h);
         /* One AppendEntries for everything appended since the last
          * send. Proposers only raise the send ceiling; doing the send
          * under their lock shipped a single entry and the next mkdir
@@ -7749,7 +7746,7 @@ static void *host_pump(void *arg)
          * Account eligible new read-only votes before the KV durability
          * tail; their unchanged core checks do not apply replication work.
          * Progress-bearing/refused frames retain FIFO and durable credits. */
-        host_container_pending_reads(h);
+        host_pending_reads(h);
         if (batch_obs) BO_HIST(BH_PUMP_DRAIN_US, efs_batch_obs_now_us() - phase_us);
         if (obs) {
             t_drain = now_us_() - c0;
@@ -11921,8 +11918,8 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     if(clen && cmd[0]==EFS_MD_CMD_REPAIR_JOB) {
         out->rc=EFS_ERR_ACCES;return;
     }
-    /* Packing was removed: never propose its retired commands/requests. */
-    if(clen && cmd[0]>=EFS_MD_CMD_RETIRED_PACK_ADMIT && cmd[0]<=EFS_MD_REQ_RETIRED_PACK_GC_VIEW) {
+    /* Never propose reserved commands/requests. */
+    if(clen && cmd[0]>=EFS_MD_CMD_RESERVED_MIN && cmd[0]<=EFS_MD_CMD_RESERVED_MAX) {
         out->rc=EFS_ERR_PROTO;return;
     }
     if(clen && (cmd[0]==EFS_MD_REQ_REPAIR_WRITE_AUTHORITY || cmd[0]==EFS_MD_REQ_REPAIR_SEAL_AUTHORITY)) {
@@ -14011,7 +14008,7 @@ static int host_command_cohort_end(struct host_command_cohort *c,int prior,
                                      int *hint)
 {
     host_command_capture=NULL;
-    /* A packing/capture failure leaves no accepted promise for remaining
+    /* An encoding/capture failure leaves no accepted promise for remaining
      * buffered commands. Already flushed PREPs retain normal abort cleanup. */
     if (prior!=EFS_OK) {c->n=0;return prior;}
     return host_command_cohort_flush(c,hint);

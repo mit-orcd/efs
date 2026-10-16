@@ -56,7 +56,7 @@ the native NUC build is the supported verification environment.
 ## Required live configuration and acceptance scope
 
 Use NUC with TCP, direct I/O, FILES storage, `EFS_COMMANDS=0`,
-`EFS_COMMANDS_SERVER=0`, `EFS_PACKED_WRITES=0`; no containers or packing.
+`EFS_COMMANDS_SERVER=0`.
 Verify actual daemon/client environments and mapped executable hashes.
 Private test stores belong under `/data1/efs`; leave unrelated services alone.
 
@@ -70,7 +70,7 @@ No universal TTL is selected. Explicit operator policy enables expiry.
 ## First committed-source live baseline
 
 Commit `70ba0424` (foundation, before live integration) passed on NUC with four
-1-GiB-quota nodes, TCP/direct I/O, FILES default, `.efs` and packing disabled.
+1-GiB-quota nodes, TCP/direct I/O, FILES default, `.efs` disabled.
 Stores were private under `/data1/efs/expiry-foundation-70ba0424/`, with both
 policy-approved mounts. Core POSIX: **216/216, 0 failures** (21.8 seconds).
 Peer POSIX: **67/67, 0 failures** (11.6 seconds). Graceful shutdown/restart,
@@ -81,7 +81,7 @@ this is regression evidence, not full expiry acceptance.
 Reproduce from that commit on NUC:
 
 ```sh
-env EFS_PACKED_WRITES=0 EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_TRANSPORT=tcp \
+env EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_TRANSPORT=tcp \
   python3 tests/live/gc_reclamation.py --mode direct --transport tcp \
   --disable-efs-commands \
   --root /data1/efs/expiry-foundation-70ba0424 \
@@ -149,7 +149,7 @@ clock uncertainty latch/reset and 144-file bounded-page backlog. Core POSIX
 **216/216, 0 fail/skip/notrun (24.6s)**; peer **67/67, 0 fail (12.7s)**.
 Ordinary physical-GC gates, cold empty fragment inventory and zero quotas pass.
 Four nodes, 1-GiB quota each, native NUC Linux/XFS/SATA, TCP/direct/FILES,
-`.efs` and packing disabled; isolated stores and permitted mounts.
+`.efs` disabled; isolated stores and permitted mounts.
 Daemons during final POSIX used roughly 11–19 MiB RSS; this observation is not
 an independent global RSS ceiling. Worker page/attempt bounds are explicit.
 
@@ -243,8 +243,8 @@ Exact source: `0e975936ce3c4496883fa9ee192aa20c34439853`, branch
 normal `EFS_FAULTS=0` and fault `EFS_FAULTS=1`. Both unit executables
 `tests/test_expiry` and `tests/test_meta_apply` pass on both builds.
 Four private 1-GiB-quota nodes span two metadata groups on one NUC, XFS,
-TCP/direct I/O, FILES storage, two FUSE mounts, `.efs` disabled, no containers,
-no small-file packing. The live backlog is 144 files; this is correctness and
+TCP/direct I/O, FILES storage, two FUSE mounts, `.efs` disabled.
+The live backlog is 144 files; this is correctness and
 bounded-page validation, not a billion-file capacity or hardware-ceiling claim.
 
 | Matrix | Core POSIX | Two-client POSIX | Expiry/recovery/physical GC |
@@ -269,7 +269,7 @@ from the exact source above (use separate build directories for each variant):
 make -j4 EFS_FAULTS=0 efsd efs-fuse efs-mgmt tests/test_expiry tests/test_meta_apply
 ./tests/test_expiry
 ./tests/test_meta_apply
-env EFS_PACKED_WRITES=0 EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_TRANSPORT=tcp \
+env EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_TRANSPORT=tcp \
   python3 tests/live/gc_reclamation.py --expiry --mode direct --transport tcp \
   --disable-efs-commands --root /data1/efs/expiry-repro-normal \
   --root /data1/efs/expiry-repro-normal --mount /data1/efs/mnt \

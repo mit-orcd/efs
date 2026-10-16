@@ -31,11 +31,9 @@ Orderly restart, 49 cross-client markers, 224 fixed payloads and seven cold
 queries PASS; quiet POSIX reruns 21/21 PASS do not close loaded timeouts.
 W121 remains open with kernel remediation deferred.
 
-[Packing and container engine removed](packing-containers-removal-20261016.md):
-**D37.** All packing and the experimental container engine are out of devel,
-preserved at tag `archive/packing-containers-20261016` (branch
-`packing-containers`). Old packed stores, container roots, packed imports and
-retired log entries are refused explicitly. Files engine only.
+Experimental tiny-file packing and container-storage work was removed from
+devel on October 16; its code, tests and records are kept at tag
+`archive/packing-containers-20261016` (branch `packing-containers`).
 
 [RDMA credit overrun](orcd-mini-rdma-credit-20261016.md): **scoped PASS;
 orcd-mini rollout NOTRUN.** DATA plus CREDIT frames could exceed a peer's
@@ -55,7 +53,7 @@ during paging NOTRUN.
 
 [ORCD queued-read-vote comparison](orcd-queued-read-vote-20261016.md):
 **NO—keep reverted.** Frozen `fa29f9277`, native RDMA/direct, `.efs` enabled,
-no packing/containers/expiry; OFF–ON–ON–OFF across seven clients. POSIX
+no expiry; OFF–ON–ON–OFF across seven clients. POSIX
 failures15/0/10/0;22,182 mounted queries PASS, no repeatable net benefit.
 **W121 OPEN, kernel remediation deferred:** [fork/read diagnosis](orcd-w121-fork-read-20261016.md). Correct daemon replies can reach stale application pages on ORCD; the performance harness now isolates query-launch processes. Original evidence: 255 immediate readbacks returned wrong bytes after successful
 fsync across both variants. W119 remains open; this is not full acceptance.
@@ -129,8 +127,8 @@ scoped functional PASS** on `c8d057391`, branch `devel-amd-posix-20261015`
 from devel `761c91c42`. Full native/strict transport, serial216/216, peer67/67,
 cold27/27 and paused-follower32MiB pass. One-mount jobs16 is215/216:
 unusual-name directories still exceed15s. Fresh-read scheduling/log-lock and
-ACK-window fixes are committed; the loaded gate stays open. Queries, packing,
-containers, expiry and seven-client load are excluded. This predates
+ACK-window fixes are committed; the loaded gate stays open. Queries, expiry
+and seven-client load are excluded. This predates
 asynchronous PUT acknowledgement (`d8af2c325`) and does not qualify it.
 
 [Grouped fragment durability](intel-cohort-durability-20261015.md) (superseded):
@@ -152,7 +150,7 @@ servers, so the AMD Intel-export client is stopped.
 in the seven-client round, peer61/67, clean stop refused. All23 successfully
 prepared persistence cases verify after authorized forced restart; private
 TCP POSIX/peer/GC, faults and memory gates pass. Current ORCD profile is
-TCP/direct/files with commands, packing, containers and expiry disabled.
+TCP/direct/files with commands and expiry disabled.
 
 [ORCD latest-devel qualification, October 15](orcd-devel-qualification-20261015.md): deployment
 PASS on `b3e93177c138`; qualification **FAIL**. Seven-client POSIX, cross-host
@@ -174,7 +172,6 @@ running clusters. Newer source commits do not inherit earlier test verdicts.
 | Integrated RDMA source | [Merged devel qualification](devel-rdma-merge-qualification-20261014.md). AMD software-RDMA evidence does not replace ORCD hardware gates. |
 | `.efs` functional versus scale work | [Three work packages and feature matrix](three-work-packages-20261013.md), [AMD package 2](amd-package2-query-20261013.md), [ORCD package 1](orcd-package1-20261013.md), [later query fixes](orcd-query-name-ordinals-20261013.md). General 400 GiB acceptance remains recorded as on hold; targeted fixes and marker checks do not close it. |
 | Small-cluster follow-ups | [ORCD findings reproducible on AMD/Intel](orcd-small-cluster-followups-20261013.md). Preserve unresolved ordinary-I/O and scale obligations separately. |
-| Packing and containers | **Removed from devel October 16 ([D37](decisions.md), [removal](packing-containers-removal-20261016.md)); preserved at tag `archive/packing-containers-20261016`.** Historical: [packing ledger](packing-tcp-direct-20261012.md), [container testing policy](container-testing-policy-20261012.md). |
 | Expiry | [Implementation](expiry-implementation-20261012.md) and [foreground fairness](expiry-foreground-latency-20261013.md) retain scoped evidence. Expiry stays excluded from the three-package profiles. |
 
 The full chronological index is [preserved intact](archive/status-index-before-restructure-20261015.md).

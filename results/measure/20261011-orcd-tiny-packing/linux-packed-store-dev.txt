@@ -1,7 +1,0 @@
-Private uncommitted development overlay, based on 72b1a88fbf09
-STAGE=/tmp/efs-w95-store-dev-1791695774
-PACK_CONTROL direct=0 records=16 payload=8192 legacy_allocated_bytes=3342336 packed_allocated_bytes=36864 reduction=90.666667
-PACK_STORE direct=0 records=16 payload=8192 fragment_payload_bytes=24576 allocated_bytes=36864
-PACK_CONTROL direct=1 records=16 payload=8192 legacy_allocated_bytes=3342336 packed_allocated_bytes=36864 reduction=90.666667
-PACK_STORE direct=1 records=16 payload=8192 fragment_payload_bytes=24576 allocated_bytes=36864
-packed store: explicit geometry, immutable retries, barriers, cold EC reads, quota and inode-GC isolation PASS

@@ -245,11 +245,11 @@
     "latest_frozen_amd_test_source": "b239dc7de104ff8437e49d9333a529790601464c",
     "latest_frozen_amd_input_count": 1517,
     "frozen_source_archive_sha256": "24f6ca3ec7d509a24c74de4b6a746d033bef872b7145eec9beb2e387a5caa548",
-    "diagnostic_source_disposition": "b239 full normal/fault +18focus +sanitizedLSM PASS1517unchanged; ordinarybothmodePASS; quietdirect7/jobs16 FAIL209/4/1/7 allseven, restore0/nojobs, buffered/coldpackingGCNOTRUN. Short retry does not close pressure gate.",
+    "diagnostic_source_disposition": "b239 full normal/fault +18focus +sanitizedLSM PASS1517unchanged; ordinarybothmodePASS; quietdirect7/jobs16 FAIL209/4/1/7 allseven, restore0/nojobs, buffered/coldGCNOTRUN. Short retry does not close pressure gate.",
     "next_diagnostic_proposal": "No unchanged pressure repeat; peer-reviewed safe catalog freshness remedy with baseline-failing controlled oracle, plus separate foreground phase discriminator; no fence removal or stale subtree fallback.",
     "held_scope": [
       "Any new post-handoff branch commits excluded until submitted/reviewed; frozen tips fixed above.",
-      "Latest b239 quiet original-budget direct packing fails; buffered/cold packing/shared GC NOTRUN. No release promotion or inherited cross-host acceptance."
+      "Latest b239 quiet original-budget direct run fails; buffered/cold/shared GC NOTRUN. No release promotion or inherited cross-host acceptance."
     ]
   },
   "frozen_source_manifest_sha256": "8939a4e679f5a431e4fb72a76248abc1867b5ec45a19fdf3d1e7c921f0b7bee6",

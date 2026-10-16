@@ -1,4 +1,0 @@
-test_raft: OK
-test_raft: OK
-completed ReadIndex: eligible waiter, post-send/new-commit refusal, apply, term/config/role/storage fences PASS
-actual host publish/get: raw publication quorum, admitted completion, missing replica and coherent concurrent snapshots PASS

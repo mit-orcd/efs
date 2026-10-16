@@ -253,8 +253,6 @@ struct kv_lsm {
     int bp_logged;
     uint64_t apply_next; /* WAL seq whose turn it is to hit the memtable */
     int io_failed;
-    int defer_held_flush;
-    unsigned flush_holds; /* under mu; paired with successful WAL holds */
     int fail_next_batch;
     /* Process-local dirty hints, not Raft watermarks. Incremented under mu
      * by applied metadata-key writes, including transaction resolve/import. */

@@ -56,7 +56,7 @@ explicit access confirmation remains pending. Agent 3 independently reports
 NUC is also unreachable; shared power/network failure is only a hypothesis. No installed service or mount was
 changed, and no exclusive access approval is claimed.
 
-Last observed installed xefs1 daemon: PID 2153663, files engine, port 17432,
+Last observed installed xefs1 daemon: PID 2153663, port 17432,
 `--no-direct-io`, TCP. Installed services were preserved, so the requested
 restored direct-I/O service and disabled `.efs` state cannot yet be verified.
 The prepared private fixture uses direct I/O/TCP, ports 28420–23 and separate
@@ -118,7 +118,7 @@ The normal build (EFS_FAULTS disabled) was deployed after draining all installed
 clients and stopping storage services without forced discard. Source digest
 matches the final tested fixture; production binary hashes are retained. Both
 rsynced builds report unknown Git metadata, so the source/binary digests identify
-them. Existing stores were retained; all three daemons start with files engine,
+them. Existing stores were retained; all three daemons start with files storage,
 `--direct-io` and TCP. Startup of the populated stores takes roughly a minute per
 node; services start sequentially.
 

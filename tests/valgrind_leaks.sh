@@ -343,7 +343,7 @@ for t in $UNIT_TESTS; do
     log="$WORK-unit-$t.vg"
     unit_vg=$VG
     case "$t" in
-        test_namespace_session|test_principles_index|test_append_transaction|test_append_receipt|test_put_ticket|test_mtime_barrier|test_publication_session|test_publication_recovery|test_lane_bootstrap_recovery|test_kv_lsm|test_raft_store|test_session|test_repair_job)
+        test_namespace_session|test_append_transaction|test_append_receipt|test_put_ticket|test_mtime_barrier|test_publication_session|test_publication_recovery|test_lane_bootstrap_recovery|test_kv_lsm|test_raft_store|test_session|test_repair_job)
             # These fixtures deliberately _exit in children before destruction.
             # Keep their crash/recovery assertions and memory-access error exit
             # checks; gate clean parent leaks separately. Abrupt child allocation
@@ -446,11 +446,11 @@ else
     else
         # The upgrade can land well after the mount under memcheck (~30x
         # slowdown), so check it AFTER the workload, not here.
-        # metadata + packed-file ops (no chunk PUT -> no broken-data-path hang)
+        # metadata + small-file ops (no chunk PUT -> no broken-data-path hang)
         mkdir -p "$MNT/r1"
         for i in $(seq 1 20); do echo "rdma-$i" >"$MNT/r1/f$i"; done
         for i in $(seq 1 20); do cat "$MNT/r1/f$i" >/dev/null 2>&1; done
-        # Chunk PUT/GET (128 KiB+ is not packed).
+        # Chunk PUT/GET (128 KiB+).
         dd if=/dev/urandom of="$MNT/r1/chunk" bs=256k count=1 status=none
         dd if="$MNT/r1/chunk" of=/dev/null bs=256k status=none
         for i in $(seq 1 10); do mv "$MNT/r1/f$i" "$MNT/r1/g$i"; done

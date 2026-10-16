@@ -11,7 +11,7 @@ Private Intel1/Intel2 (Core Ultra 7 256V, eight CPUs/host), Rocky Linux 10.2,
 kernel `6.12.0-211.64.1.el10_2.x86_64`, fuse3-libs 3.16.2-5.el10.
 Four files-engine daemons, two per host, ports 27432/27433, 16 GiB/node.
 TCP/direct I/O; `.efs` client/server0, command policy version 1/mask 0,
-packing0, containers unused, expiry0. The main mount on each host seeds the
+expiry0. The main mount on each host seeds the
 opposite physical host. Production ports 17432/17433 and processes are untouched.
 
 Base `devel` commit `789fe00b5` contains production code from
@@ -171,7 +171,7 @@ For unchanged loaded core qualification run `tests/posix/posix_suite.py MOUNT
 --suite core --jobs 16 --timeout-s 30 --tag UNIQUE --results OUT.tsv` on both
 hosts under a 900s outer cap. Fresh-client verification mounts the same export
 through `scripts/client.sh` with `EFS_TRANSPORT=tcp`, `EFS_COMMANDS=0`,
-`EFS_COMMANDS_SERVER=0`, `EFS_PACKED_WRITES=0` and `EFS_EXPIRY=0`, verifies the full 4096-file fixture using
+`EFS_COMMANDS_SERVER=0` and `EFS_EXPIRY=0`, verifies the full 4096-file fixture using
 `intel_package3_fork_fixture.py verify ROOT --count 512`, then drains only those
 owned temporary clients. It is client-cache independence, not a daemon restart.
 

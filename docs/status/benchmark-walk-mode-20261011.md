@@ -12,7 +12,7 @@ The old access helper, batch walker, component walker and public lookup body are
 - `devel-nuc`: `cf28905456d0f2d7a55136abd23d1cbd8d867b87`
 - `devel-mac`: `b2c01fa05afa1287cd358f352ebfbc831b570e31`
 
-This does not alter FUSE/kernel permission enforcement or server query credentials. Preserves owner lookups, adoption/local size overlays, deep path batching, ancestor-count validation and root-based fallback when batch RPCs fail or truncate. Batch errors were already translated to fallback when the disabled mode was false. Public/native/wire API and packing/stats consumers remain intact.
+This does not alter FUSE/kernel permission enforcement or server query credentials. Preserves owner lookups, adoption/local size overlays, deep path batching, ancestor-count validation and root-based fallback when batch RPCs fail or truncate. Batch errors were already translated to fallback when the disabled mode was false. Public/native/wire API and stats consumers remain intact.
 
 ## Regression evidence
 

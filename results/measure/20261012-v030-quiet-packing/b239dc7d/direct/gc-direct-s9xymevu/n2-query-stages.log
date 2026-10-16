@@ -1,7 +1,0 @@
-2026-10-12T01:21:35.873Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=404
-2026-10-12T01:21:37.886Z query-publish: generation=1 g0=1 g2=1 rebuilt=4096 refolded=0 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=6 root_rc=-3 files=0 dirs=0 logical=0
-2026-10-12T01:21:39.898Z query-publish: generation=2 g0=11 g2=630 rebuilt=3 refolded=66 edge_reused=0 bytes=3858492 pin_ms=0 build_ms=7 root_rc=0 files=64 dirs=1 logical=32768
-2026-10-12T01:21:41.943Z query-refresh: rc=-13 cap_mib=256 initial=0 elapsed_ms=32
-2026-10-12T01:22:12.088Z query-refresh: rc=-13 cap_mib=256 initial=0 elapsed_ms=39
-2026-10-12T01:22:26.432Z query-publish: generation=3 g0=69575 g2=58601 rebuilt=2464 refolded=7676 edge_reused=0 bytes=6316092 pin_ms=6 build_ms=10063 root_rc=0 files=4531 dirs=3282 logical=123925106
-2026-10-12T01:22:26.896Z query-publish: generation=4 g0=78341 g2=63226 rebuilt=36 refolded=972 edge_reused=0 bytes=3858492 pin_ms=3 build_ms=363 root_rc=0 files=5486 dirs=3282 logical=123926095

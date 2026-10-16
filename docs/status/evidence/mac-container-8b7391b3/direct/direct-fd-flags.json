@@ -1,8 +1,0 @@
-[
-  {
-    "pid": 11022,
-    "path": "/data1/efs/bench/mac-container-8b7391b3-direct-20261012/containers-direct-r1/store/.efs-containers/0000000000000000.dat",
-    "flags": "0o2700002",
-    "O_DIRECT": true
-  }
-]

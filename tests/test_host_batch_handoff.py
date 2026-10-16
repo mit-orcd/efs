@@ -48,7 +48,7 @@ static uint64_t efs_raft_commit(struct efs_raft*r){(void)r;return 0;}
 static uint64_t efs_raft_term(struct efs_raft*r){(void)r;return 1;}
 static int efs_raft_leader(struct efs_raft*r){(void)r;return 0;}
 static int efs_raft_role(struct efs_raft*r){(void)r;return 0;}
-static void __attribute__((unused)) host_container_pending_reads(struct efs_raft_host*h){
+static void __attribute__((unused)) host_pending_reads(struct efs_raft_host*h){
  (void)h;assert(!active && kv_hold && batches==probe_batches+1);probe_batches++;
 }
 static void __attribute__((unused)) host_publish_view(struct efs_raft_host*h,int gi){(void)h;assert(!active && kv_hold && gi>=0 && gi<2);published|=1u<<gi;}

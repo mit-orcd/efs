@@ -105,7 +105,7 @@ same production functions additionally proves:
 - Hard current-read IO remains IO through the `root-live-txn` label.
 
 The reproducer is
-[the retained boundary harness](../../results/measure/20261011-orcd-coalescing-rollout/1fb5339f-label-review/test_root_label_limits.py).
+[the retained boundary harness](../../results/measure/20261011-orcd-rollout/1fb5339f-label-review/test_root_label_limits.py).
 Set `EFS_REVIEW_SNAPSHOT` to an archive of 1fb5339f and run with
 `CC='cc -fsanitize=address,undefined -fno-omit-frame-pointer'`.
 It extracts production helpers and supplies controlled endpoints; it does not

@@ -5,7 +5,7 @@ Material mounted speedup for the final adaptive client NOT ESTABLISHED.**
 Investigates the slower mounted samples in the
 [GETATTR lane-read deployment](intel-getattr-lane-read-20261014.md).
 Human scope: profile/trace, isolate, fix, smoke and commit; TCP/direct/files,
-`.efs` client/server, packing, containers and expiry disabled throughout.
+`.efs` client/server and expiry disabled throughout.
 
 ## Diagnosis and evidence
 
@@ -214,8 +214,8 @@ Same physical Intel environment as the linked lane-read report: four files
 nodes,400GiB/node, about110GiB occupied/node at initial status,5Gb/s Intel
 links; physical AMD and xorinox export clients at2.5Gb/s. Rocky10.2/Linux6.12
 on Intel/xorinox; Ubuntu/Linux7.0 on AMD. All main processes use TCP with
-EFS_COMMANDS, EFS_COMMANDS_SERVER, EFS_PACKED_WRITES, EFS_EXPIRY all0;
-daemons `--storage-engine files --direct-io`. Containers unused. No root change.
+EFS_COMMANDS, EFS_COMMANDS_SERVER, EFS_EXPIRY all0;
+daemons `--direct-io`. No root change.
 
 Build as efs with the immutable source/build metadata above:
 

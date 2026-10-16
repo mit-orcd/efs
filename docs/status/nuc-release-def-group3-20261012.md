@@ -23,8 +23,7 @@ qualification. No source fixes, push, tag or promotion.
 | `gc_reclamation.py --mode direct --transport tcp --posix` | PASS, exit0 | 97.540s |
 | POSIX core within that fixture | 216PASS,0FAIL,0SKIP,0NOTRUN | 21.2s |
 | Peer within that fixture | 67PASS,0FAIL,0SKIP | 12.3s |
-| Separate `--mounted-packing-only`, noPOSIX | PASS, exit0 | 18.327s |
-| `--mounted-packing-only --posix --packing-clients 7 --posix-jobs 16 --fixture-quota 4G` | **FAIL**, exit1 | 170.051s |
+| Seven-client mounted fixture, `--posix --posix-jobs 16 --fixture-quota 4G` | **FAIL**, exit1 | 170.051s |
 | Peer after seven concurrent suites | 67PASS,0FAIL | 18.3s |
 | Existing native `tests/test_store_gc`, after mounted measurements | PASS, exit0 | Raw log |
 
@@ -51,28 +50,25 @@ workload failure, not its root cause, drive latency ceiling, or W97 improvement.
 Core physical oracle passed actual closed-unlinked reclamation, failed-delete
 retention, offline-member retry ledger/rejoin completion, deletion-driven GC
 passes/removal counters, restart empty inventory/zeroquota and latePUT fencing.
-Isolated2 packing passed actual mixed packed/ordinary mutations, cold hashes,
-physical fragment reclamation and metadata queue drain.
 
 Seven-client run also completed actual acknowledged cold hashes, physical
-packed-fragment reclamation and metadata queue drain **PASS**. Its final report
-has `cold_verified=true`, `physical_packed_empty=true`, and seven POSIX client
-failure entries. Final assertion correctly returnedFAIL from those suites.
+fragment reclamation and metadata queue drain **PASS**. Its final report
+has `cold_verified=true` and seven POSIX client failure entries. Final assertion correctly returnedFAIL from those suites.
 There is no global physical-inventory confound or client-stop failure in this
-finaldef run. Do not report seven-client packing as overallPASS simply because
+finaldef run. Do not report the seven-client run as overallPASS simply because
 its physical/data oracles passed. Existing helper cold assertion is a correctness
 check, not standalone recovery qualification.
 
 Native GC passed actual two-root/format-switch, buffered/direct primitive,
 quota recount, checksum, syscall failure and idempotence coverage; this is not
-mounted buffered qualification. Containers, RDMA and repair remain deferred.
+mounted buffered qualification. RDMA and repair remain deferred.
 Full originalW52/both-modeW112 and sustainedW97comparison are not closed here.
 
 ## Evidence and final host state
 
 Raw source/build/command/exit/timing evidence:
 `results/measure/20261012-nuc-def-group3/controller/`.
-Complete TSVs, manifests, GC JSON, client logs and packing reports:
+Complete TSVs, manifests, GC JSON, client logs and fixture reports:
 `results/measure/20261012-nuc-def-group3/fixtures/`. Collected archives retained.
 Remote source/controller `/home/efs/nuc-def-group3`; identified test stores
 `/data1/efs/nuc-def-group3`. Final matrix exit0 means controller queue completed;

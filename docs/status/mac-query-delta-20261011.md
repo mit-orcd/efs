@@ -509,8 +509,7 @@ latency improvement. Durable namespace writes are the remaining measured lead.
 
 A bounded prepare collector now groups at most eight ordinary PREP entries,
 preserving order and every exact index/term verdict. Only contiguous locally
-led nonsolo groups share the existing checked log fsync barrier. Packing
-failures discard unsubmitted commands, leadership changes fail locally instead
+led nonsolo groups share the existing checked log fsync barrier. Encoding failures discard unsubmitted commands, leadership changes fail locally instead
 of forwarding inside a hold, and persistence failure overrides admission
 failure. Every hold closes before remote calls or apply waits; COMMIT still
 requires all original PREP verdicts. MKDIR and RMDIR use the collector. There is
@@ -563,7 +562,7 @@ failed fsync or a missing verdict retains the finisher and propagates failure.
 The production collector/commit regression covers all 144 participants,
 ordering across groups, undecided refusal, ambiguous decision, partial batch,
 failed barrier and failed verdict. Linux Raft disk/core, transaction recovery,
-apply retry, namespace fencing and packing-capacity gates pass. The live deep
+apply retry, namespace fencing and cohort-capacity gates pass. The live deep
 pair still failed 0/2 in 37.4 seconds, normally cleaned. Phase samples still
 show 106–188 ms transaction commit and 88–214 ms session admission under this
 load. This is not evidence of a latency improvement. Repeated failed query
@@ -1007,8 +1006,7 @@ with no partial effect, exact replay after completion/cold cuts and revocation.
 Host tests cover wrong-group refusal, error/offset propagation and local-only
 submission across leadership change. Mac full/cold peer gates remain pending.
 
-Tag 53 is reserved for APPEND_ATOMIC: release integration already uses
-45–51 for packing and reports 52 assigned to another append endpoint. The
+Tag 53 is reserved for APPEND_ATOMIC: release integration reserves 45–51 and reports 52 assigned to another append endpoint. The
 first private unit build used tentative tag 45; it was never deployed or
 logged on installed stores. All subsequent wire gates must use tag 53. This
 adds a log command, so all daemons need support before use and downgrade

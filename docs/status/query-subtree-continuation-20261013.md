@@ -71,7 +71,7 @@ timeouts. The existing sort-scratch measured-peak negative control also passes.
 
 AMD-395; four localhost `efs` daemons 17432–17435, two native FUSE mounts;
 files/TCP/direct, `.efs` client/server enabled, policy version 0/mask 3;
-packing/containers/expiry/repair experiment disabled. Data quota 17 GiB/node,
+expiry/repair experiment disabled. Data quota 17 GiB/node,
 query caps 16/32 GiB unchanged and no live cap overrides. Installed binaries are
 the frozen source, not an uncommitted shared-checkout mixture. The later
 reported ORCD helper retry-window fix is **not included** in these results.

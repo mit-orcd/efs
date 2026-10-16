@@ -83,10 +83,10 @@ Existing principles binary/archive identity and physical disk details are in the
 linked isolation report; the same binaries were reused without recompilation.
 
 Four private nodes, 16 GiB quota each, two per Intel host on `/data1` and `/data2`,
-ports 27432/27433. `--storage-engine files --direct-io --writers N`.
+ports 27432/27433. `--direct-io --writers N`.
 Client/server environment: `EFS_TRANSPORT=tcp EFS_COMMANDS=0
-EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0 EFS_MD_RAFT_N=4`.
-Cluster commands policy was set to mask zero. No containers or expiry feature.
+EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0 EFS_MD_RAFT_N=4`.
+Cluster commands policy was set to mask zero. No expiry feature.
 
 Use `scripts/intel_w100_private.py` with a fresh run label and existing production
 release, adding the existing daemon argument `--writers N` to its launch list.
@@ -103,7 +103,7 @@ conv=fsync,excl status=none`. Keep the fixture unchanged across phases.
 For local grouping, create an empty owned directory per case and run:
 
 ```sh
-efs-bench --bench principles --storage EMPTY_OWNED_DIR --layout files --rw write --policy allocating --persist batch --directory-sync worker --objects 4096 --payload-size 65536 --qd 8 --batch-size N --direct-io
+efs-bench --bench principles --storage EMPTY_OWNED_DIR --rw write --policy allocating --persist batch --directory-sync worker --objects 4096 --payload-size 65536 --qd 8 --batch-size N --direct-io
 ```
 
 Use `--persist each --batch-size 1` for the baseline. Require BENCH_OK,

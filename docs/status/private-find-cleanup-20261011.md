@@ -10,7 +10,7 @@ Exact symbols in committed src/include/tests/scripts on the following branch sna
 - `devel-nuc`: `3538213cfe793dbdb9025c3e0f65cc96eb97149a`
 - `devel-mac`: `b2c01fa05afa1287cd358f352ebfbc831b570e31`
 
-The live `find_query_ensure`, `virtual_access`, `stats_compute` and `query_credentials` function bodies are byte-identical before/after cleanup. Live v4 query callbacks, server-owned stats, unversioned snapshot RPC, authorization and newline-safe current command paths are preserved. Newer packing/query consumers are outside this deletion.
+The live `find_query_ensure`, `virtual_access`, `stats_compute` and `query_credentials` function bodies are byte-identical before/after cleanup. Live v4 query callbacks, server-owned stats, unversioned snapshot RPC, authorization and newline-safe current command paths are preserved. Newer query consumers are outside this deletion.
 
 ## Focused gates
 

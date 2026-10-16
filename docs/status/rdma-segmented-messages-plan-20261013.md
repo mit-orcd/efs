@@ -309,7 +309,7 @@ part of this work.
 | Native/protocol | Isolated build/test environment | Boundary lengths, malformed envelopes, overflow/offset checks, partial delivery, allocation failures, deadline/cancellation cleanup, connection generations and explicit version mismatch. ASan/UBSan and negative controls. |
 | Software RDMA | AMD Soft-RoCE | Private stores, ports, processes and mounts; non-skipped RDMA device preflight. Small request/large reply and large request/small reply, concurrent bidirectional transfers, minimum receive credits, slow receivers, interrupted transfers and repeated reconnect/teardown. |
 | Hardware RDMA | ORCD-test native IB | Isolated candidate after authorization, actual cross-host traffic. Large GET_CHUNK replies, metadata batches and server/server replication, including concurrent load; exact contents, EOF, persistence and transport counters. |
-| Filesystem acceptance | Both | Same-source TCP baseline, full POSIX, peer and concurrent suites; ORCD additionally runs all required `.efs` gates. Packing, containers and expiry disabled; direct I/O. AMD ordinary-file gates use `.efs` disabled, with feature-specific tests explicitly identified. |
+| Filesystem acceptance | Both | Same-source TCP baseline, full POSIX, peer and concurrent suites; ORCD additionally runs all required `.efs` gates. Expiry disabled; direct I/O. AMD ordinary-file gates use `.efs` disabled, with feature-specific tests explicitly identified. |
 
 Test complete frames immediately below, at and above the negotiated 84 KiB
 limit, accounting for both envelope and application headers. Exercise 128 KiB,

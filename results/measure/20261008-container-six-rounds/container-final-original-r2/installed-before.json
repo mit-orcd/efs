@@ -1,6 +1,0 @@
-{
-  "192.168.122.111": "2153663 /tmp/efs/efsd --node-id 1 --addr 192.168.122.111 --port 17432 --storage /data1 --quota 100G --no-direct-io\n",
-  "192.168.122.112": "1928390 /tmp/efs/efsd --node-id 2 --addr 192.168.122.112 --port 17432 --storage /data1 --quota 100G --no-direct-io --join 192.168.122.111:17432\n",
-  "192.168.122.113": "1931136 /tmp/efs/efsd --node-id 3 --addr 192.168.122.113 --port 17432 --storage /data1 --quota 100G --no-direct-io --join 192.168.122.111:17432\n",
-  "192.168.122.114": "1478776 ./efs-fuse 192.168.122.111:17432 fs /mnt/efs -o allow_other\n"
-}

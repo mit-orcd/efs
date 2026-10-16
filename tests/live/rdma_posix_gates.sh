@@ -5,7 +5,7 @@ src=$(cd "$(dirname "$0")/../.." && pwd)
 mode=${EFS_TRANSPORT:-rdma}
 case "$mode" in tcp|rdma) ;; *) echo 'Use explicit tcp or rdma' >&2; exit 2;; esac
 export EFS_TRANSPORT=$mode EFS_MD_RAFT_N=4
-export EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0 EFS_REPAIR_EXPERIMENT=0
+export EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0 EFS_REPAIR_EXPERIMENT=0
 export EFS_RDMA_DEV=${EFS_RDMA_DEV:-rxe0}
 if [ "$mode" = rdma ]; then
     test -d "/sys/class/infiniband/$EFS_RDMA_DEV" || { echo 'RDMA device missing; gates NOT RUN' >&2; exit 77; }
@@ -31,7 +31,7 @@ cleanup() {
 trap cleanup EXIT
 for id in 1 2 3 4; do
     port=$((27431+id)); join=(); [ "$id" = 1 ] || join=(--join 127.0.0.1:27432)
-    "$src/efsd" --node-id "$id" --addr 127.0.0.1 --port "$port" --storage "$run/n$id" --storage-engine files --quota 4G --direct-io "${join[@]}" > "$run/n$id.log" 2>&1 &
+    "$src/efsd" --node-id "$id" --addr 127.0.0.1 --port "$port" --storage "$run/n$id" --quota 4G --direct-io "${join[@]}" > "$run/n$id.log" 2>&1 &
     pids+=("$!")
     ready=0
     for attempt in $(seq 1 60); do

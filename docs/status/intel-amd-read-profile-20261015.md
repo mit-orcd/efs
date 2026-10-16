@@ -3,7 +3,7 @@
 **Observed/reproduced: 10 GiB dd read completes at109 MB/s (104.28 MiB/s).**
 Read-only investigation of the running eight-writer deployment
 `bb22e9559337a836856dce1720b739743f0ef2d7`; no source, settings, mount or daemon
-changes. TCP/direct, ordinary files; .efs client/server, packing, containers and
+changes. TCP/direct, ordinary files; .efs client/server and
 expiry disabled. See [deployment identity](intel-default-eight-writers-20261015.md).
 
 ## Workload and observation

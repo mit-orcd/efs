@@ -27,8 +27,8 @@ Unknown membership defers handoff; disjoint groups retain actual-voter placement
 The unchanged2s settling grace, durable catch-up refusal,30s re-election backoff,
 quorum and own-apply predicates remain. Default balancing stays **OFF**; this
 qualification explicitly enables it on installed AMD and fresh fixtures. Do not
-claim that unbalanced/default-OFF load failures disappeared. Containers, packing,
-commands/commands-server and expiry remain OFF. No batch-noop/overlap activation.
+claim that unbalanced/default-OFF load failures disappeared. Commands/commands-server
+and expiry remain OFF. No batch-noop/overlap activation.
 
 The files placement oracle fails on07bd and passes on14d, including unknown/
 disjoint membership, actual voter selection, lag refusal and backoff. Native read authority/routing and core Raft gates PASS before deployment.
@@ -96,7 +96,7 @@ directory. Only previously proven unchanged ancestors may be skipped. A failed
 barrier admits no hint; pinned descriptors prevent deleted/recreated inode
 reuse; startup/attach seals roots and restart clears runtime hints. Unknown/
 uninitialized roots retain full ancestry barriers. Nested files targets match
-the longest canonical root. This does not enable containers or cache metadata
+the longest canonical root. This does not cache metadata
 read authority; Raft quorum/apply checks and all disabled features stay intact.
 
 `test_store_durability` now uses a real files target and both implementation
@@ -117,7 +117,7 @@ files tests, not TCP comparison runs.
 Current acceptance rebuilds/exports exact14d tracked source with the same native flags as below,
 changing only build identity to14d621182. Deploy after draining installed clients
 and stopping all four daemons. Require `SOURCE_COMMIT` full14d, files/direct,
-strict RDMA, commands/commands-server/packing/expiry/repair OFF. The committed
+strict RDMA, commands/commands-server/expiry/repair OFF. The committed
 private driver explicitly exports `EFS_METADATA_BALANCE=1`; persist the same
 setting in `/data1/efs/devops/clusters/amd.env` for installed AMD. Run the first fixture with
 `EFS_GATE_DEGRADED=1` to recheck paused-follower reads under the new placement. Run three
@@ -145,8 +145,8 @@ python3 - <<'PYDIAG'
 from pathlib import Path
 s=Path('/data1/efs/src/tests/live/rdma_four_node_qualification.sh').read_text()
 s=s.replace('src=$(cd "$(dirname "$0")/../.." && pwd)', 'src=/data1/efs/src')
-s=s.replace('unset EFS_READ_PROF EFS_RPC_PROF EFS_CONTAINER_PATH_PROF EFS_READ_FRAG_PROF',
-            'unset EFS_CONTAINER_PATH_PROF EFS_READ_FRAG_PROF\nexport EFS_READ_PROF=1 EFS_RPC_PROF=1 EFS_RAFT_OBS=1 EFS_BATCH_OBS=1')
+s=s.replace('unset EFS_READ_PROF EFS_RPC_PROF EFS_DEEP_PATH_PROF EFS_READ_FRAG_PROF',
+            'unset EFS_DEEP_PATH_PROF EFS_READ_FRAG_PROF\nexport EFS_READ_PROF=1 EFS_RPC_PROF=1 EFS_RAFT_OBS=1 EFS_BATCH_OBS=1')
 Path('/data1/efs/rdma-diagnostic.sh').write_text(s)
 PYDIAG
 EFS_GATE_DEGRADED=0 bash /data1/efs/rdma-diagnostic.sh > /data1/efs/rdma-diagnostic.log 2>&1
@@ -181,12 +181,12 @@ The older18be evidence/provenance below is historical and remains traceable.
   No peer-health cooldown is invented for a local admission cancellation.
 - **cc1cf8cc:** ordinary files bypassed pre-probe admission tracking, making
   queued readers demand a later proof even when admitted before the current
-  probe. Use the same bounded tickets for files and containers. Only tickets
+  probe. Use the bounded tickets for files too. Only tickets
   registered before a probe watermark may use its round; later arrivals,
   changed terms and saturation retain refusal/new-proof behavior. Mixed local/
   remote pairs also track their locally started round. Own applied-index checks,
   fresh authority and zero FUSE entry/attribute cache timeouts remain intact.
-  This does not enable containers or reuse completed authority for later RPCs.
+  This does not reuse completed authority for later RPCs.
 
 New regressions failed on the corresponding old production blocks before the
 fixes: `test_get_pair_readiness.py` covers CREDIT-only wakes and a cold stalled
@@ -238,9 +238,9 @@ native Linux asynchronous sender/control/flow checks PASS on final source.
 ## Historical18be environment and provenance
 
 AMD-395 / Ubuntu, same-host Soft-RoCE rxe0, GID1 over wlp194s0. Installed four
-nodes127.0.0.1:17432–17435; files engine/direct I/O, retained **17G quota/node**.
+nodes127.0.0.1:17432–17435; files storage/direct I/O, retained **17G quota/node**.
 Original10GiB file and tiny-files namespace retained. Every daemon/client strict
-`EFS_TRANSPORT=rdma`; `.efs` client/server, packing, containers, expiry and repair
+`EFS_TRANSPORT=rdma`; `.efs` client/server, expiry and repair
 experiment OFF. Existing filesystem reserve checks unchanged. Test source lives
 at `/data1/efs/src`, native build at `/data1/efs/rdma-deploy-src`.
 
@@ -386,7 +386,7 @@ for strict RDMA, files/direct and all disabled flags before starting.
 ```sh
 cd /data1/efs/src
 export EFS_TRANSPORT=rdma EFS_RDMA_DEV=rxe0 EFS_RDMA_GID_INDEX=1
-export EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0 EFS_REPAIR_EXPERIMENT=0
+export EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0 EFS_REPAIR_EXPERIMENT=0
 for mode in normal interrupt tcp-violation deadline churn; do timeout 45s /data1/efs/rdma-deploy-src/tests/test_rdma_segmented "$mode" || exit; done
 # tcp-violation injects a forbidden byte after RDMA setup; it is not a TCP comparison.
 for t in get_pair_readiness get_pair_budget rdma_progress_ready rdma_reply_budget readindex_tickets readindex_pair readindex_admission readindex_result readindex_coalescer read_waiters; do python3 tests/test_$t.py || exit; done

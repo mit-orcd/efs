@@ -2,7 +2,7 @@
 
 User-requested `devel-rdma` -> `devel` integration. Status: merged candidate;
 AMD affected qualification PASS on frozen source a40428d9d. No push. Scope files/direct/strict RDMA on exclusive
-AMD Soft-RoCE rxe0/GID1; .efs client/server, packing, containers, expiry and
+AMD Soft-RoCE rxe0/GID1; .efs client/server, expiry and
 repair experiment disabled. Metadata balancing1; original deadlines retained.
 
 ## Frozen merged-source results
@@ -52,7 +52,7 @@ close original lost-EOF or hardware obligations.
 4624 observed upgraded connection counter rows in reader/main/load logs have
 post-setup TCP bytes0/0 and violations0; no payload fallback or TCP comparison.
 All actual installed processes audited RDMA/rxe0/GID1, command client/server0,
-packing0, expiry0, balancing1, daemon args files/17G/direct. `.efs` absent on
+expiry0, balancing1, daemon args files/17G/direct. `.efs` absent on
 installed mount. No diagnostic/profiler/build alongside quiet measurement.
 Only installed mnt/mnt2 and four nonpaused daemons remain. All owned followers
 restored, faults cleared, reader/fault mounts drained; synthetic private stores

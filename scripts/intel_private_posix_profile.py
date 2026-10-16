@@ -65,7 +65,6 @@ def remote(a):
                 label = 'node-' + args[args.index('--node-id') + 1]
                 assert args[args.index('--port') + 1] in ('27432', '27433')
                 assert '--direct-io' in args
-                assert args[args.index('--storage-engine') + 1] == 'files'
                 assert args[args.index('--quota') + 1] == '16G'
             else:
                 continue
@@ -77,7 +76,7 @@ def remote(a):
             if kind == 'efs-fuse':
                 assert a.expected_commit in version, version
             env = dict(x.decode().split('=', 1) for x in (d / 'environ').read_bytes().split(b'\0') if b'=' in x)
-            keys = ['EFS_TRANSPORT', 'EFS_COMMANDS', 'EFS_COMMANDS_SERVER', 'EFS_PACKED_WRITES', 'EFS_EXPIRY']
+            keys = ['EFS_TRANSPORT', 'EFS_COMMANDS', 'EFS_COMMANDS_SERVER', 'EFS_EXPIRY']
             assert env.get('EFS_TRANSPORT') == 'tcp'
             for key in keys[1:]:
                 assert env.get(key) == '0', (label, key, env.get(key))

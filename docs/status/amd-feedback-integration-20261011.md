@@ -3,7 +3,7 @@
 Status: W94 CREATE/adoption closed; W97 acceptance in progress on `devel-amd`.
 Normal AMD stores are retained. This starts
 from admission closure `31337fee` and documentation scope split `70538988`.
-No W111 NUC work, RDMA, D25 activation, production packing or pushes.
+No W111 NUC work, RDMA, D25 activation or pushes.
 
 W94 CREATE/adoption closes with measured savings, sequenced lease edges,
 cold/reply-loss/negative verdicts and sustained AMD admission acceptance,

@@ -52,8 +52,8 @@ Build label `5e3e8f3d-fix2`, frozen directory
 `-O3 -g -fno-omit-frame-pointer -march=native -mtune=native` builds.
 
 Same four-node private two-host Intel fixture/16 GiB per-node quotas as the
-linked report: ports27432/27433, files engine/direct I/O, TCP;
-`.efs` client/server, packing, containers and expiry disabled. The corrected
+linked report: ports27432/27433/direct I/O, TCP;
+`.efs` client/server and expiry disabled. The corrected
 four daemons/two main clients reuse the same stores; production is untouched.
 Normal live trace is optional operation-ID logging; a separate owned client
 uses dcache tracing. Diagnostic clients are drained after their workloads.
@@ -156,7 +156,7 @@ substituting `devel-opid-fix2` and fresh run IDs. On each Intel host, the isolat
 combined controller is:
 
 ```sh
-env EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0 EFS_RAFT_FLOW=0 timeout --kill-after=10s 1800s python3 tests/live/gc_reclamation.py --mode direct --transport tcp --disable-efs-commands --fixture-quota 4G --posix --posix-jobs 16 --continue-posix-failure --guarded-leases --opid --integrity --namespace --allocation --tiny-churn --full-node
+env EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0 EFS_RAFT_FLOW=0 timeout --kill-after=10s 1800s python3 tests/live/gc_reclamation.py --mode direct --transport tcp --disable-efs-commands --fixture-quota 4G --posix --posix-jobs 16 --continue-posix-failure --guarded-leases --opid --integrity --namespace --allocation --tiny-churn --full-node
 ```
 
 The pause controller now accepts the owned runtime explicitly and validates its
@@ -198,7 +198,7 @@ The post-stability diagnostic window contains127,236 completed traced operation
 IDs, none still outstanding at collection, maximum1.231s; this window also
 includes the subsequent peer fixture preparation. Both bounded final captures
 have zero final operation-ID admission BUSY, invalid REPORT, pub-reject,
-pack-invalid, pack-nosize, report-loop exhaustion, stale-generation error or
+report-loop exhaustion, stale-generation error or
 stalled-publication events. Transient local admission retries are not counted.
 These are observations of the captured windows, not a guarantee of every future
 workload's latency or an isolation of the cause of every historical timeout.

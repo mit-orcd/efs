@@ -17,8 +17,8 @@ two per Intel Core Ultra7 256V host (eight logical CPUs/host), 400 GiB/node,
 about 116 GiB used/node at the preceding deployment. Intel links 5 Gb/s;
 physical AMD and xorinox clients use 2.5 Gb/s Ethernet. Rocky10.2/Linux6.12
 on Intel/xorinox, Ubuntu/Linux7 on AMD. TCP/direct I/O;
-EFS_COMMANDS=0, EFS_COMMANDS_SERVER=0, EFS_PACKED_WRITES=0, EFS_EXPIRY=0.
-Containers unused. Private Intel and AMD-local clusters excluded from capture.
+EFS_COMMANDS=0, EFS_COMMANDS_SERVER=0, EFS_EXPIRY=0.
+ Private Intel and AMD-local clusters excluded from capture.
 
 Existing jobs, four workers each:
 
@@ -79,7 +79,7 @@ mean 0.675 ms; 2,722 GET_CHUNK replies all OK, mean 2.091 ms. All other
 completed decoded replies succeeded. No fully captured RPC on either client
 exceeded one second. Partial exchanges are excluded by the summarizer.
 `RAFT_MKFS` is also the session-command envelope; its appearance is not a format
-operation. `GETCHUNKS_PACKED` is a protocol opcode, not proof packing is enabled.
+operation.
 
 ## Recommended next change
 

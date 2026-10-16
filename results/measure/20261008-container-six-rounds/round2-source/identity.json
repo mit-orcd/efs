@@ -1,9 +1,0 @@
-{
-  "baseline_commit": "175fcf98",
-  "change": "avoid existing mkdir chains; sync publication ancestors through durable storage root",
-  "source_sha256": {
-    "src/server/store_containers.c": "9211c441182e3c0bc0b67d64955aae413e0d4b175d0acdb2adeecba553b26d40",
-    "tests/test_store_containers.c": "d081292550cbe2478c562761cd91b5975b8faae4eaec870ccf3971ec0ce60132"
-  },
-  "daemon_sha256": "4fa847d9d5d161cd4d455274158d2ce60d51ba4f8669ee948044e8270b38fe12"
-}

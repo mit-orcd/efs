@@ -110,12 +110,10 @@ struct efs_inode {
     uint64_t imm_files, imm_dirs, tree_files, tree_dirs;
     uint64_t imm_bytes, tree_bytes;
     uint64_t imm_tmin, imm_tmax, tree_tmin, tree_tmax;
-    /* Reserved: the EFSM v5 small-file pack was removed with packing on
-     * 2026-10-16 (archive/packing-containers-20261016). Always zero; kept so
-     * the EFSM and inode wire layouts are unchanged. */
-    efs_ino_t pack_ino;
-    uint32_t pack_off;
-    uint32_t pack_len;
+    /* Reserved: always zero; keeps the EFSM and inode wire layouts. */
+    efs_ino_t reserved_ino;
+    uint32_t reserved_off;
+    uint32_t reserved_len;
     /* D17: server-side present-chunk count (the lane stamps reduced at
      * getattr). Zero on rows answered without a lane collect (fresh
      * create) and on locally synthesized rows. */
@@ -149,9 +147,9 @@ struct efs_inode_mem {
     uint64_t imm_files, imm_dirs, tree_files, tree_dirs;
     uint64_t imm_bytes, tree_bytes;
     uint64_t imm_tmin, imm_tmax, tree_tmin, tree_tmax;
-    efs_ino_t pack_ino;
-    uint32_t pack_off;
-    uint32_t pack_len;
+    efs_ino_t reserved_ino;
+    uint32_t reserved_off;
+    uint32_t reserved_len;
     /* W20: chunks in this client's table, plus dirty dcache chunks that
      * are not in the table yet. st_blocks reads the sum. Not serialized. */
     uint32_t present_chunks;

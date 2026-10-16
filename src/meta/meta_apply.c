@@ -3729,10 +3729,9 @@ static int unpack_chunk(const uint8_t *p, uint32_t n, struct efs_meta_chunk *ch)
         ch->nodes[i] = rd32(p + CHUNK_HDR + (uint32_t)i * 4u);
     memcpy(ch->checksums, p + CHUNK_HDR + 4 * EFS_NUM_FRAGMENTS,
            EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
-    /* Packed rows (archive/packing-containers-20261016) are not readable
-     * here; such stores also carry a KVLSM2 reader requirement and are
-     * refused at open. Never interpret their extension as a plain base. */
-    if (ch->coding_profile_id == EFS_META_PROFILE_RETIRED_PACK)
+    /* Rows with the reserved profile are not readable here; never
+     * interpret their extension as a plain base. */
+    if (ch->coding_profile_id == EFS_META_PROFILE_RESERVED)
         return EFS_ERR_PROTO;
     return EFS_OK;
 }

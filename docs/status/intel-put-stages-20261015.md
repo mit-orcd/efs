@@ -36,9 +36,9 @@ n4 4146988. Ports 17432/17433, 400 GiB/root, approximately 160 GiB used/root.
 AMD `.205`: independent Intel-export client PID 3989623 at `/data1/efs/intel-mnt`.
 Main Intel has two hosts with four daemon nodes; private Intel is untouched.
 
-Verified `--direct-io --storage-engine files` and `EFS_TRANSPORT=tcp`,
-`EFS_COMMANDS=0`, `EFS_COMMANDS_SERVER=0`, `EFS_PACKED_WRITES=0`, `EFS_EXPIRY=0`.
-Thus .efs client/server, packing, containers and expiry are disabled.
+Verified `--direct-io` and `EFS_TRANSPORT=tcp`,
+`EFS_COMMANDS=0`, `EFS_COMMANDS_SERVER=0`, `EFS_EXPIRY=0`.
+Thus .efs client/server and expiry are disabled.
 Intel daemon binary SHA-256:
 
 * Intel1: `3b65b51830ff63e21d1271d5f439a9bc688cbd4111435797ca2b0295c760f8ec`
@@ -132,8 +132,7 @@ instrumented measurements, not native latency guarantees.
 
 AMD strace matched 9,318 PUT replies, all OK: mean 47.65 ms, median 44.43,
 p95 95.87, max 243.52. Five REPORTs all OK: mean 30.53 ms, max 43.37.
-269 GETCHUNKS_PACKED mapping queries also succeeded; the message name does not
-enable small-file packing. RPC timing includes client ptrace/scheduling and
+269 GETCHUNKS mapping queries also succeeded. RPC timing includes client ptrace/scheduling and
 excludes checkout; do not subtract aggregate server means from these different
 sample populations or compare timestamps across hosts. Unmatched exchanges at
 capture boundaries are not classified as failures.

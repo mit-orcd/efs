@@ -62,7 +62,6 @@ __pycache__/
 
 /tests/test_bench_latency
 
-/tests/test_store_containers
 
 /tests/test_put_storage_fence
 

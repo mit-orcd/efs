@@ -2367,7 +2367,7 @@ static void test_ae_duplicate_ack_preserves_newer_window(void)
         before=n.batches[follower];uint64_t committed=efs_raft_commit(n.r[leader]);
         CHECK(efs_raft_recv(n.r[leader],&reply)==EFS_OK,"duplicate older ACK received");
         CHECK(protect ? n.batches[follower]==before : n.batches[follower]>before,
-              "container duplicate preserves newer window; files retain legacy default");
+              "duplicate preserves newer window when enabled; default retires");
         CHECK(efs_raft_commit(n.r[leader])==committed,"duplicate does not advance commit");
         before=n.batches[follower];
         CHECK(efs_raft_tick(n.r[leader])==EFS_OK && n.batches[follower]>before,

@@ -11,7 +11,7 @@ that report remains historical evidence for the explicitly selected fixture.
 The user has deferred repair and recovery work for unplanned events, including
 power loss, abrupt crashes, interrupted repair and failover/leader takeover.
 The current focus is normal operations, clean shutdown and orderly restart.
-Automatic background repair and packed-segment failure repair are deferred under
+Automatic background repair is deferred under
 this decision. Existing durability safeguards, implemented repair mechanisms,
 fault tests and their evidence remain in place; this scope change does not
 establish new failure-recovery guarantees or disable existing checks.
@@ -88,7 +88,7 @@ The post-test audit verifies **1,603 supplied source/evidence inputs** against
 SHA256 fingerprints with no mismatches. All eleven original ORCD processes
 retain their PIDs, binary hashes, arguments, relevant environment, source commit
 `8b7391b3f3edcf9fc99440d9aad3c240325acb83` and mounted state. Four remain direct-I/O
-storage daemons and seven remain packed-write clients, all with live native
+storage daemons and seven clients, all with live native
 RDMA and site UID 246111. No private test daemon/client or mount remains.
 No command in this task changes, merges, deploys or stops the release worktree
 or its live services; the shared release ref may advance independently.
@@ -109,7 +109,7 @@ intentionally refused.
 
 This closes the standalone simulator and real-process missing ordinary base-role
 repair cases on single-root FILES with 2+1 protection. Repair remains a manually
-requested operation. Automatic scanning, packed files, delta spans, containers,
+requested operation. Automatic scanning, delta spans,
 spare relocation, empty replacement stores, damaged existing-role replacement,
 and interrupted-job leader takeover are not qualified by this work. W74 is not
 claimed globally complete. The physical integration tests use their own four

@@ -18,4 +18,4 @@ The allocation-failure regression remains passing under ASan/UBSan after adding 
 
 ## Integration boundary
 
-Rechecked ORCD `8d07b45adac9c6aa24ba46f7e8e1d4cc163f4da5`, NUC `3538213cfe793dbdb9025c3e0f65cc96eb97149a` and MAC `b2c01fa05afa1287cd358f352ebfbc831b570e31`: the old queue function, staged estimator and evictor target parser are byte-identical to the inspected original baseline. These queue/staging APIs remain separate from active packed mappings and server query catalogs. This patch touches local cache accounting and optional deferred work only. Apply after the allocation ownership fix; recheck later branch changes before integration.
+Rechecked ORCD `8d07b45adac9c6aa24ba46f7e8e1d4cc163f4da5`, NUC `3538213cfe793dbdb9025c3e0f65cc96eb97149a` and MAC `b2c01fa05afa1287cd358f352ebfbc831b570e31`: the old queue function, staged estimator and evictor target parser are byte-identical to the inspected original baseline. These queue/staging APIs remain separate from server query catalogs. This patch touches local cache accounting and optional deferred work only. Apply after the allocation ownership fix; recheck later branch changes before integration.

@@ -1,7 +1,0 @@
-node=2 stage=0 group=0 exports=1 passes=59 elapsed_ms=0 last_pass_age_ms=578 last_delete_age_ms=5385
-data_usage_bytes=0 removed_fragments=1122 unlinked_file_bytes=82722816 reclaimed_payload_bytes=73531392 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0
-group=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615
-group=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615
-gc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0
-gc_io=unlink ops=0 bytes=0 errors=0 us_sum=0 avg_us=0
-gc_io=dir_sync ops=1901 bytes=0 errors=0 us_sum=423630 avg_us=222

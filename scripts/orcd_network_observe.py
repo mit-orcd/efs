@@ -15,7 +15,7 @@ def processes():
    args=[x.decode() for x in (p/'cmdline').read_bytes().split(b'\0') if x]
    if p.stat().st_uid!=uid or not args or pathlib.Path(args[0]).name not in ('efsd','efs-fuse'):continue
    env=dict(x.decode().split('=',1) for x in (p/'environ').read_bytes().split(b'\0') if b'=' in x)
-   keys=('EFS_TRANSPORT','EFS_RDMA_DEV','EFS_COMMANDS','EFS_COMMANDS_SERVER','EFS_PACKED_WRITES','EFS_EXPIRY','EFS_RPC_PROF')
+   keys=('EFS_TRANSPORT','EFS_RDMA_DEV','EFS_COMMANDS','EFS_COMMANDS_SERVER','EFS_EXPIRY','EFS_RPC_PROF')
    log=os.readlink(p/'fd/2');pos=None
    if not log.endswith(' (deleted)'):
     try:

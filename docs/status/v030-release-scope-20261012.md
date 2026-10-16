@@ -1,28 +1,27 @@
 # v0.3.0-pre-alpha scope decision — October 12, 2026
 
-User decision: “the container stuff is not needed for this release”; “repair and
-recovery is not needed for this release”; “we only focus on tcp/directio”.
+User decision: “repair and recovery is not needed for this release”; “we only focus on tcp/directio”.
 
-Release qualification targets the files storage engine over TCP with direct I/O.
-Containers, buffered-I/O and RDMA qualification, and repair/recovery implementation
+Release qualification targets files storage over TCP with direct I/O.
+Buffered-I/O and RDMA qualification, and repair/recovery implementation
 and acceptance are deferred beyond this release. Their existing failures, gaps
 and work items remain open; this scope decision does not close them or transfer
 older passes to a new source. Existing inactive repair prerequisites already
 integrated need not be removed, but unintegrated experimental repair stages are
 excluded from the release plan and activation remains disabled.
 
-Small-file packing and `.efs` features are excluded from this alpha. Use `EFS_PACKED_WRITES=0`, client `EFS_COMMANDS=0` and daemon `EFS_COMMANDS_SERVER=0`. [Latest packing decision](v030-packing-exclusion-20261012.md) supersedes historical packing assignments below. Root alone runs the following required gate groups:
+`.efs` features are excluded from this alpha. Use client `EFS_COMMANDS=0` and daemon `EFS_COMMANDS_SERVER=0`. Root alone runs the following required gate groups:
 
 | Gate group | Owner / cluster | Required coverage |
 | --- | --- | --- |
 | Read-progress safety | Root / AMD | Actual Raft/context-fence regressions, fresh arrivals, own-apply checks and affected sanitizers. |
-| Ordinary files correctness | Root / AMD | Core POSIX, seven-client concurrency, deep paths, ordinary writes/fsync/reopen, peer behavior and clean teardown; packing disabled. |
+| Ordinary files correctness | Root / AMD | Core POSIX, seven-client concurrency, deep paths, ordinary writes/fsync/reopen, peer behavior and clean teardown. |
 | Ordinary durability/reclamation | Root / AMD | Acknowledged ordinary bytes after cold restart and ordinary deletion/reclamation using an unconfounded oracle. |
 | Final merged qualification | Root / AMD | One frozen merged source, normal/fault native, affected sanitizers and in-scope live results. |
 
 ## Common source and parallel execution contract
 
-Historical assignment record: later root-only and packing-exclusion decisions above supersede the parallel owners and packing requirements in this section.
+Historical assignment record: later root-only decisions above supersede the parallel owners in this section.
 
 All three agents start from release baseline
 `8b7391b3f3edcf9fc99440d9aad3c240325acb83` on `release-v0.3.0-pre-alpha`.
@@ -54,7 +53,7 @@ The user subsequently said “start and evert 15 minutes report back progress”
 
 Retain existing durability protections and normal regression coverage that
 checks acknowledged-write correctness. Dedicated repair, crash-recovery,
-second-loss and container qualification are not release blockers under this
+second-loss qualification are not release blockers under this
 scope. Recovery has not been declared safe or complete; candidate notes must
 state these unqualified capabilities explicitly. NFS-specific acceptance is
 outside TCP/direct-I/O qualification and remains tracked separately.
@@ -98,8 +97,8 @@ qualification. Do not substitute earlier sourcepasses for these reruns.
 
 The human says “remove .efs features from this alpha tag”. The planned v0.3.0-pre-alpha excludes the virtual `.efs` command/query interface, including stats/find, and its disk-backed derived query-cache service. Qualification/deployment must set **EFS_COMMANDS=0** on FUSE clients and **EFS_COMMANDS_SERVER=0** on every daemon. Explicit server configuration is necessary: the current server enables query work when the variable is absent. Keep implementation/history for later releases; this decision does not close query work items or authorize deletion of unrelated correctness code.
 
-Remove `.efs` cases from this alpha's acceptance matrix with explicit excluded/not-qualified labels; do not relabel old failures as PASS. The current mounted packing harness automatically enables both command variables, so its future alpha recipe must be adapted to disable them while preserving packed writes, seven clients/jobs16,4G quota,30/75/180s applicable deadlines, peer checks, acknowledged bytes and physical reclamation. Existing WITH-query broad failures do not establish WITHOUT-query acceptance. Deep-directory, ordinary POSIX, EIO/EBUSY, flush and packing correctness remain blockers pending clean feature-disabled qualification. Work remains stopped except this authorized scope/documentation review; no testing restart, push or tag. Current pending candidate03bd89fb is unaccepted.
+Remove `.efs` cases from this alpha's acceptance matrix with explicit excluded/not-qualified labels; do not relabel old failures as PASS. Existing WITH-query broad failures do not establish WITHOUT-query acceptance. Deep-directory, ordinary POSIX, EIO/EBUSY, flush correctness remain blockers pending clean feature-disabled qualification. Work remains stopped except this authorized scope/documentation review; no testing restart, push or tag. Current pending candidate03bd89fb is unaccepted.
 
 ## Resumed resource-weighted split
 
-Latest direct human instruction resumes testing and15-minute progress reports. Frozen common source **ecdc8c6034b610a2bf69e7a79664d8a5e990de84**, qualification-v030-tcp-direct. Only harness changes vs03bd: explicit --disable-efs-commands sets both flags0, retains packed writes and chooses core POSIX (optional extras excluded, not passed). AMD: full seven-client/jobs16/4G POSIX and packing lifecycle, peer/cold/physical/shutdown plus final native/sanitizers. Intel: focused ordinary EIO/EBUSY/flush/fsync/reopen/seek and teardown, targeted concurrent confirmation. NUC: configuration, focused concurrent deep-directory and affected lightweight checks. Same SHA, files/TCP/direct, original deadlines; all command/query work disabled. No full broad matrix duplication on Intel/NUC, no push/tag/promotion/deferred work.
+Latest direct human instruction resumes testing and15-minute progress reports. Frozen common source **ecdc8c6034b610a2bf69e7a79664d8a5e990de84**, qualification-v030-tcp-direct. Only harness changes vs03bd: explicit --disable-efs-commands sets both flags0 and chooses core POSIX (optional extras excluded, not passed). AMD: full seven-client/jobs16/4G POSIX lifecycle, peer/cold/physical/shutdown plus final native/sanitizers. Intel: focused ordinary EIO/EBUSY/flush/fsync/reopen/seek and teardown, targeted concurrent confirmation. NUC: configuration, focused concurrent deep-directory and affected lightweight checks. Same SHA, files/TCP/direct, original deadlines; all command/query work disabled. No full broad matrix duplication on Intel/NUC, no push/tag/promotion/deferred work.

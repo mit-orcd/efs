@@ -16,9 +16,9 @@ Initial merge `aa508c820` includes the 37 reviewed devel-rdma commits. Correctio
 
 - `3d279417f`: TCP PUT-frame extracted-code harness now supplies the complete
   message-release adapter; parameterized Intel driver targets private paths.
-- `ca7f7b2f3`: packed-store unit faults intercept the shared files-parent
+- `ca7f7b2f3`: store unit faults intercept the shared files-parent
   synchronization helper. Original durability/refusal/accounting assertions
-  remain unchanged; no runtime packing is enabled.
+  remain unchanged.
 - `48cace36b`: private cold resume waits for authoritative disabled policy
   within its existing 45-attempt budget instead of treating a listening
   raft-status endpoint as proof of leader readiness. Resume never calls mkfs.
@@ -40,8 +40,8 @@ private daemons, two per host on ports 27432/27433, 16 GiB quota each:
 `/data1/efs/w100-private/runtime-merged-aa508c820/mnt` on each host.
 
 Required runtime profile: `EFS_TRANSPORT=tcp EFS_COMMANDS=0
-EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0 EFS_MD_RAFT_N=4`,
-daemon `--storage-engine files --direct-io`; containers disabled by files
+EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0 EFS_MD_RAFT_N=4`,
+daemon `--direct-io`; by files
 engine. No placement/cache/deadline tuning. All four policy masks were 0 and
 raw query requests refused with status -3; `.efs` absent from both mounts.
 
@@ -58,8 +58,8 @@ staging is `/data1/efs/w100-private/devel-382d537d6` (1,273 non-results files).
 | Gate | Source / conditions | Result |
 | --- | --- | --- |
 | Initial full native, both hosts | aa508c820 | FAIL: missing `efs_rdma_message_release` test adapter |
-| Full native rerun, both hosts | 3d279417f | FAIL late in packed-store unit: directory-sync hook missed shared helper |
-| Unchanged packed-store assertions + remaining native tail | ca7f7b2f3, both hosts | PASS |
+| Full native rerun, both hosts | 3d279417f | FAIL late in a store unit: directory-sync hook missed shared helper |
+| Unchanged store assertions + remaining native tail | ca7f7b2f3, both hosts | PASS |
 | EOF retry, zero/missing EOF, TCP PUT frame ASan/UBSan + leak detection | Both Intel hosts, extracted production blocks | PASS; not full-library sanitizer coverage |
 | Mounted core, two simultaneous clients | Initial merged runtime | 216/216 per host |
 | Extras, two hosts | Disabled commands | 1/5 PASS, 4 expected skips per host: three disabled .efs checks and unsupported writable shared mmap |
@@ -132,7 +132,7 @@ source from Git outside existing installed trees, retain known historical
 
 ```sh
 make -j8 EFS_GIT_ID=382d537d6 EFS_GIT_DESCRIBE=382d537d6 EFS_GIT_BRANCH=devel all
-EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0 make -j8 EFS_GIT_ID=382d537d6 EFS_GIT_DESCRIBE=382d537d6 EFS_GIT_BRANCH=devel test
+EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0 make -j8 EFS_GIT_ID=382d537d6 EFS_GIT_DESCRIBE=382d537d6 EFS_GIT_BRANCH=devel test
 ```
 
 For fresh private stores, run locally:
@@ -185,7 +185,7 @@ the cross-host four-node deployment; they do not establish cross-host traffic
 by themselves. Each ran this unchanged-limit command with the corrected fixtures:
 
 ```sh
-EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0 timeout 1800 python3 tests/live/gc_reclamation.py --mode direct --transport tcp --disable-efs-commands --fixture-quota 4G --posix --posix-jobs 16 --continue-posix-failure --guarded-leases --opid --integrity --namespace --allocation --tiny-churn --full-node
+EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0 timeout 1800 python3 tests/live/gc_reclamation.py --mode direct --transport tcp --disable-efs-commands --fixture-quota 4G --posix --posix-jobs 16 --continue-posix-failure --guarded-leases --opid --integrity --namespace --allocation --tiny-churn --full-node
 ```
 
 It includes discarded/exact-retry REPORT/session bodies, revoked and delayed
@@ -285,7 +285,7 @@ cache policy have not been relaxed. Latest loaded raw files are
 Post-deploy policy probes from both hosts return version1/mask0 through n1,
 n2 and n3; direct n4 endpoint returns NOT_PRIMARY(-15), not a successful
 policy read. Its raft-status confirms it does not host group0 (group2 follower,
-commit/applied equal). All four process environments disable commands, packing
+commit/applied equal). All four process environments disable commands
 and expiry, and both mounted `.efs` paths are absent. This n4 refusal is retained
 in `61e5-disabled-policy.json`; it is not counted as four successful policy reads.
 

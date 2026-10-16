@@ -1,4 +1,4 @@
-# ORCD packing and query handoff — 2026-10-12
+# ORCD query handoff — 2026-10-12
 
 Recorded for the documentation-first coordination requested by Mike in
 `efs-coding 6 - mgr`. No main promotion or pushes. No subagents exist for this
@@ -49,7 +49,7 @@ Live source/binaries on all eleven hosts:
 Installed `/tmp/efs`; each prior tree retained at
 `/tmp/efs-before-orcd-test-4fe291b0218b`.
 Runtime checks prove exact revision/executable identity, UID 246111 (`erbmi1`,
-non-root), RDMA `mlx5_2`, seven clients with packing enabled and four direct-I/O
+non-root), RDMA `mlx5_2`, seven clients and four direct-I/O
 servers. The site-owned ORCD account is erbmi1; these deployments do not claim
 the separate Linux account named efs exists at this site.
 
@@ -88,7 +88,7 @@ these isolated jobs, preserve their status and manifests, then await assignment.
 
 ## Exact evidence and remaining blockers
 
-Evidence base: `results/measure/20261011-orcd-coalescing-rollout/`.
+Evidence base: `results/measure/20261011-orcd-rollout/`.
 Full original limits remain seven clients/jobs16/30 seconds; no relaxation.
 
 | Checkpoint / gate | Result and scope |
@@ -96,49 +96,24 @@ Full original limits remain seven clients/jobs16/30 seconds; no relaxation.
 | b579 normal native | PASS, 710 exact tracked inputs |
 | bbe normal + fault native | PASS, 713 exact inputs each |
 | 4fe normal + fault native | PASS, 717 exact inputs each, complete logs/manifests committed |
-| 4fe canonical deploy + runtime | PASS all eleven; non-root, exact binary, native RDMA, pack1/direct |
+| 4fe canonical deploy + runtime | PASS all eleven; non-root, exact binary, native RDMA, direct |
 | 4fe cold retained shared fixture | PASS all 61 expected SHA-256/inodes/sizes; all three selected removed refs absent |
 | bbe quiet wave 1 | FAIL: five clients220/0/1, two219/1/1; two deepnest timeouts |
 | bbe quiet wave 2 | FAIL: three220/0/1, four219/1/1; three stats and one find timeout, every deepnest passed |
 | b163/83 focused production regressions | PASS local normal/ASan/UBSan; reviewer reproduces prior100ms→400ms/61expiredRPC defect and verifies correction |
 | 83 full normal / ten builds | IN PROGRESS at initial handoff; preserve final result separately |
 | 83 full fault / mounted / peer / persistence | NOT RUN |
-| Matched six10k packingOFF/ON benchmark + cold oracle | NOT RUN; helpers prepared, no throughput or physical-amplification claim |
-| Real ORCD W112 immediate/warmed-peer/fresh-mount/cold OFF+ON | NOT RUN; fix included, AMD's ordinary OFF both-mode proof is separate |
+| Real ORCD W112 immediate/warmed-peer/fresh-mount/cold | NOT RUN; fix included, AMD's ordinary OFF both-mode proof is separate |
 
-The selected shared GC object is pack ID `794803526968288485`, generation
-`8280623438628253995`, fixture tag `e5a385530223`. Partial unlink preserved
-neighbors and cold exact bytes. Last three LIVE refs (inodes 306005,293717,301909)
-were removed with member 4 offline: all three physical fragments remained while
-members 1–3 durably recorded exact 64-byte `EFSDEAD1` identity fences. Restoring
-member 4 completed all four fences and deleted all three fragments within the
-unchanged 180-second gate. Cold all-node restart proved zero selected fragments
-and all four durable fences across all 24 roots. Selected-object shared GC is
-**PASS**, including offline hold, replay and cold verification. This is not a
-claim that unrelated LIVE objects or global replica ledgers are zero.
-Empty pack directories remain; the six-level packs-v1 layout is unchanged.
-
-Release remains blocked by mounted packing/query pressure failures. No full
+Release remains blocked by mounted query pressure failures. No full
 quiet seven-client wave has passed on ORCD. W109 concurrent queries remain open.
 W106's large 11-million-entry query/10-million-file workload is not closed.
-Mounted coalescing, packed reads, receipts and selected GC have concrete fixture
-proofs, but final combined-pressure/cold/regression acceptance is unfinished.
-Do not present the unit geometry result (16×512 B in 36,864 fragment bytes,
-90.67× below the legacy unit path) as measured mounted application throughput or
-total allocation. Data/parity accounting excludes metadata/WAL/query/directory
-allocation. Matched mounted measurement remains required to substantiate removal
-of the reported 408× total application-payload overhead.
 
 ## Protocol and upgrade constraints
 
-Reserved packed packets 131–138: PUT/GET/GETCHUNKS/GC request/reply pairs.
-139/140 capabilities; 141/142 bounded publication/retirement batch;
-143/144 manifest-bound read-only authority. Capability level 3 is preflighted
-using the existing service before sending 143 to older peers. Legacy fallback
-must independently revalidate ACTIVE session, every exact FileID/content epoch,
-and durable local guard; NET never grants inferred authority.
+Wire messages 131–144 are reserved.
 
-Durable packing tags45–51, NUC catch-up52, Mac atomic APPEND53 remain reserved.
+Durable reserved tags45–51, NUC catch-up52, Mac atomic APPEND53 remain reserved.
 Stores containing tag53 need a tag53-capable reader; no old-binary rollback
 compatibility is established. The current ORCD snapshot does not contain the
 subsequent Mac tag54 completion work being reconciled by AMD/manager.
@@ -146,8 +121,8 @@ No wire/durable IDs were added by the read-barrier/deadline changes.
 
 Recommended stability assignment after release reconciliation: qualify its
 exact source on ORCD, preserve original quiet seven-client limits, then peer67,
-persistence27 and mixed mutation/cold OFF+ON gates; collect matched packing
-throughput plus exact data/parity allocation. Coordinate larger coherent-cut
+persistence27 and mixed mutation/cold gates; collect exact data/parity
+allocation. Coordinate larger coherent-cut
 and pending-transaction design with Mac rather than weakening snapshot,
 authority, deadlines, admission or durability to force a pass.
 

@@ -3,7 +3,7 @@
 Collection PASS on fcstor003–006. This is a live diagnostic, not qualification
 or a closure of sustained close EIO. Sourcee8bab21014bad21e5ea2198141e4df3a45d3dc3d
 is installed; native RDMA/mlx5_2, files/direct-I/O, `.efs` client/server enabled,
-packing/containers/expiry disabled, nonroot siteUID246111. Four24-core EPYC
+expiry disabled, nonroot siteUID246111. Four24-core EPYC
 7402P hosts, six NVMe stores each. Existing namespace about17.9million rows,
 including the retained400GiB fixture and successive failed benchmark fixtures.
 Seven16-worker tiny-file writers and seven16-worker MD5 crawlers were confirmed
@@ -82,7 +82,7 @@ RSS is modest against about251GiB RAM/host.
 4. **Fragment checksumming is a significant CPU cost, lower priority than
    blocking.** efs_hash inclusive8.1%/16.3%/18.4%/10.9%; leaf AVX2 BLAKE3
    5.8%/13.8%/14.2%/8.8%. Stack paths are server_handle_conn fragment work.
-   No packing is enabled, so tiny logical files still exercise full fragment
+   Tiny logical files exercise full fragment
    storage/verification. These are CPU proportions, not wall-time latency
    or an argument that integrity checks are optional.
 

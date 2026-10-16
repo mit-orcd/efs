@@ -42,7 +42,7 @@ NUC Intel i5-1135G7, four cores/eight threads, x86_64 Linux
 6.12.0-211.64.1.el10_2.x86_64; /data1=/dev/sda XFS, rw/noatime. Four private
 nodes with 1 GiB quota each, two Raft groups. Primary FUSE mount during backlog;
 second mount for peer qualification. TCP/direct-I/O/FILES; EFS_COMMANDS=0,
-EFS_COMMANDS_SERVER=0, EFS_PACKED_WRITES=0. No containers/packing. EFS_EXPIRY=1
+EFS_COMMANDS_SERVER=0. EFS_EXPIRY=1
 except the deliberate global disabled phase. Actual commands/environments and
 mapped executable hashes are retained in expiry-runtime.json. About 204 GiB free
 at start. Existing stores and the primary devel checkout were untouched.

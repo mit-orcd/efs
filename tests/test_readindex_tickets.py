@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Files and containers share admission-before-probe ticket correctness."""
+"""Admission-before-probe ticket correctness."""
 from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_text()
@@ -10,7 +10,7 @@ code=r'''
 #include <string.h>
 struct efs_raft {uint64_t round,term;};
 struct host_group {uint64_t read_admit_count,read_begin_admits,read_begin_round,read_begin_term;};
-struct server {int storage_engine;};
+struct server {int unused;};
 struct efs_raft_host {struct server *s;struct host_group g;};
 static struct host_group *group_slot(struct efs_raft_host*h,uint8_t g){assert(g==0);return &h->g;}
 static uint64_t efs_raft_read_round(struct efs_raft*r){return r->round;}
@@ -32,4 +32,4 @@ with tempfile.TemporaryDirectory(prefix='efs-read-tickets-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror',str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=5)
-print('Read admission: files/containers pre-probe cohort, late admission requires next round, term and saturation refusal PASS')
+print('Read admission: pre-probe cohort, late admission requires next round, term and saturation refusal PASS')

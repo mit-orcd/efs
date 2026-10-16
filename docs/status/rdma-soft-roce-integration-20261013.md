@@ -20,7 +20,7 @@ below, without borrowing earlier verdicts for a changed handler.
 
 No push, tag, devel merge, installed AMD deployment or hardware-IB deployment.
 AMD's original four-node96f40602 files/TCP/direct cluster remains running,
-commands/packing/containers/expiry disabled. Test fixtures use separate ports,
+commands/expiry disabled. Test fixtures use separate ports,
 stores, processes and mounts and are stopped after qualification.
 
 ## Integrated behavior
@@ -70,10 +70,10 @@ stores, processes and mounts and are stopped after qualification.
 
 AMD-395, Ubuntu, native build on same host; Soft-RoCE `rxe0/1 ACTIVE LINK_UP`,
 GID index1, backing netdevwlp194s0, same-host RC QPs (not native cross-host IB).
-Four private daemons127.0.0.1:27432–27435, files engine/direct I/O,4G quota each,
+Four private daemons127.0.0.1:27432–27435/direct I/O,4G quota each,
 two FUSE mounts under `/home/efs/efs-rdma/gate-{rdma,tcp}-*`.
-Every fixture inherits `EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0
-EFS_EXPIRY=0 EFS_REPAIR_EXPERIMENT=0`; containers OFF via files engine.
+Every fixture inherits `EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0
+EFS_EXPIRY=0 EFS_REPAIR_EXPERIMENT=0`; containers OFF via files storage.
 Core is serial, default15s minimum and original longer per-case budgets; peer
 suite uses original defaults. No timeout or credit-window tuning.
 

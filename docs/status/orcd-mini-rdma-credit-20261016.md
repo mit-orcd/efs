@@ -61,7 +61,7 @@ the lease-edge work in [Raft follower batching](intel-raft-follower-batching-202
 | 8 MB | 1.66 ms | 1.53 ms (8 recv: 1.00 ms) |
 
 **Private 3-daemon cluster.** Run with `/tmp/ab_cluster.sh`, reproduced below:
-ports 17631–17633, files engine, `--direct-io`, RDMA, fresh stores on the same
+ports 17631–17633, `--direct-io`, RDMA, fresh stores on the same
 array as orcd-mini, one FUSE client on node9900's peer, run alongside the
 user's orcd-mini load. Two runs per release, in alternating order.
 
@@ -111,7 +111,7 @@ EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_0 ./tests/test_rdma_segmented burst-asym
 ```
 
 For the cluster A/B: start three efsd with `EFS_TRANSPORT=rdma EFS_MD_RAFT_N=3`
-on free ports (`--storage-engine files --direct-io`, `--join` the first), then
+on free ports (`--direct-io`, `--join` the first), then
 `efs-mgmt raft-mkfs`. Mount with `scripts/client.sh`, then create 16 × 150
 256-byte files in threads and time stat/create/open. Stop the daemons and
 remove the stores afterwards.
@@ -130,4 +130,4 @@ remove the stores afterwards.
   - the client op-ID window of 16 and its 1 ms sleep spins;
   - 32 FUSE worker threads against 30–48 queued requests;
   - the query-catalog rebuild at 37% of efsd CPU;
-  - the files engine's per-fragment link/unlink.
+  - the files storage's per-fragment link/unlink.

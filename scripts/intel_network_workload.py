@@ -9,7 +9,7 @@ import subprocess, sys, time
 HOSTS=['intel1_efs','intel2_efs']
 IPS=['10.0.0.207','10.0.0.209']
 FLAGS={'EFS_TRANSPORT':'tcp','EFS_COMMANDS':'0','EFS_COMMANDS_SERVER':'0',
-       'EFS_PACKED_WRITES':'0','EFS_EXPIRY':'0','EFS_RPC_PROF':'1'}
+       'EFS_EXPIRY':'0','EFS_RPC_PROF':'1'}
 def command(args,**kwargs):
     return subprocess.run(args,check=True,**kwargs)
 def dump(path,value):

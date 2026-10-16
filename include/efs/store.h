@@ -26,13 +26,11 @@ struct efs_frag_id {
 };
 
 /* GET checksum provenance, internal to the storage API (never on the wire).
- * VERIFIED covers exactly the complete returned payload, checked against its
- * stored digest by the backend. A partial read with a stored digest reports
- * PRESENT; a read without one reports NONE. */
+ * A read with a stored digest reports PRESENT; a read without one reports
+ * NONE. */
 enum efs_store_sum_state {
     EFS_STORE_SUM_NONE = 0,
     EFS_STORE_SUM_PRESENT = 1,
-    EFS_STORE_SUM_VERIFIED = 2,
 };
 
 struct efs_store_ops {

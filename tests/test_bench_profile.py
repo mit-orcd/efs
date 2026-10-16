@@ -32,7 +32,7 @@ class ProfileTests(unittest.TestCase):
             self.assertEqual(c['args'][c['args'].index('--payload-size') + 1], '65536')
             self.assertLessEqual(len(c['root_indices']), int(c['args'][c['args'].index('--qd') + 1]))
         deletes = [c for c in cases if '--rw' in c['args'] and c['args'][c['args'].index('--rw') + 1] == 'delete']
-        self.assertEqual({c['args'][c['args'].index('--policy') + 1] for c in deletes}, {'unlink', 'punch', 'release'})
+        self.assertEqual({c['args'][c['args'].index('--policy') + 1] for c in deletes}, {'unlink'})
         self.assertEqual({c['args'][c['args'].index('--persist') + 1] for c in deletes}, {'none', 'each', 'batch'})
         for args in [['--principles-objects', '1'], ['--principles-batch', '0'],
                      ['--principles-sizes', '2M'], ['--seed', 'host:1'], ['--modes', 'data']]:
@@ -49,18 +49,17 @@ class ProfileTests(unittest.TestCase):
             bench.cases_for(bench.parser().parse_args(['--storage-principles','--principles-sizes','1',
                                                        '--principles-logical-size','2']),4)
 
-    def test_packed_principles_do_not_schedule_invalid_direct_punches(self):
-        a=bench.parser().parse_args(['--storage-principles','--principles-container-alignment','1',
-                                    '--principles-sizes','1','--principles-directory-sync','ancestors','--qds','1'])
+    def test_principles_cases_are_files_only(self):
+        a=bench.parser().parse_args(['--storage-principles','--principles-sizes','1',
+                                    '--principles-directory-sync','ancestors','--qds','1'])
         cases=bench.cases_for(a,4)
-        containers=[c for c in cases if c['args'][c['args'].index('--layout')+1]=='container']
-        self.assertTrue(containers)
-        for c in containers:
-            self.assertIn('--no-direct-io',c['args'])
-            self.assertEqual(c['args'][c['args'].index('--container-alignment')+1],'1')
+        self.assertTrue(cases)
+        for c in cases:
+            self.assertNotIn('--layout',c['args'])
             self.assertEqual(c['args'][c['args'].index('--directory-sync')+1],'ancestors')
-            self.assertNotIn('punch',c['args'])
-        self.assertTrue(any('tombstone' in c['args'] for c in containers))
+        deletes=[c for c in cases if c['args'][c['args'].index('--rw')+1]=='delete']
+        self.assertTrue(deletes)
+        for c in deletes:self.assertEqual(c['args'][c['args'].index('--policy')+1],'unlink')
 
     def test_data_sync_is_opt_in(self):
         for enabled in [False, True]:

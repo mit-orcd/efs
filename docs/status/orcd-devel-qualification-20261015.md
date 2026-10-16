@@ -42,10 +42,9 @@ All service processes run as the nonroot ORCD account erbmi1, UID246111.
 | Setting | Verified live value |
 | --- | --- |
 | Transport | `EFS_TRANSPORT=rdma`, `EFS_RDMA_DEV=mlx5_2`; native uverbs descriptors on all eleven processes |
-| Storage | `--storage-engine files --direct-io`; six roots per server, automatic safe quota, no test quota override |
+| Storage | `--direct-io`; six roots per server, automatic safe quota, no test quota override |
 | `.efs` | Server `EFS_COMMANDS_SERVER=1`, client `EFS_COMMANDS=1`; persisted policy GET rc0/version4/mask3 |
-| Packing | `EFS_PACKED_WRITES=0` |
-| Containers | Files engine; containers not enabled |
+| Storage | Files storage |
 | Expiry | `EFS_EXPIRY=0` |
 | Experimental live repair | `EFS_REPAIR_EXPERIMENT=0`, `EFS_REPAIR_INIT_STORE=0` |
 
@@ -166,7 +165,7 @@ Then attempt controller `stop`; run start/mount and persistence verify only if
 all drains succeed. Do not silently force-discard on refusal.
 
 Private suites use fresh source trees, private storage and unused ports, with
-`EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_2 EFS_PACKED_WRITES=0 EFS_EXPIRY=0`:
+`EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_2 EFS_EXPIRY=0`:
 
 ```sh
 python3 -u tests/live/gc_reclamation.py --mode direct --transport rdma \
@@ -205,5 +204,5 @@ no forced detach, forced discard or destructive repair was used. Six previously
 active MD5 crawlers were resumed in their existing screens with new external
 output paths `fcstor007–012/md5-after-devel-b3e93177c138-20261015/`; the old
 already-failed tiny writers were not restarted. Full400GiB acceptance remains
-on hold; packing, containers, expiry, NFS, other clusters and a complete
+on hold; expiry, NFS, other clusters and a complete
 hardware loss matrix are not qualified by this run.

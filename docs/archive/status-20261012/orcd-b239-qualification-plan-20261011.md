@@ -30,17 +30,16 @@ executable inode, source identity, UID, mounts, group/leader configuration and
 store roots. Build every daemon, client and management tool with the same
 EFS_GIT_ID; mixed deployments fail the HELLO gate. Keep RAFT_FLOW,
 EARLY_RETIRE and GROUP_DRAIN disabled. In private fixtures enable
-PACKED_WRITES, COMMANDS and COMMANDS_SERVER as appropriate. Quiet acceptance
+COMMANDS and COMMANDS_SERVER as appropriate. Quiet acceptance
 leaves diagnostic tracing unset. Foreground phase instrumentation is not yet
 implemented in b239; request it from AMD if an unresolved timeout recurs.
 Prevent concurrent benchmarks or debugger pauses during acceptance.
-Packing OFF and ON are separate recorded waves on this identical source,
-seven clients/jobs16 and original case deadlines. Include bounded foreground
+Run seven clients/jobs16 and original case deadlines. Include bounded foreground
 phase evidence when a case fails; do not infer that a whole-test timeout is a
 single MKDIR wait or that catalog absence caused it.
 
-Run full POSIX and concurrent .efs queries, then real-mount coalescing/packed
-read and ordinary overwrite oracles. Retain expected bytes before mutation and
+Run full POSIX and concurrent .efs queries, then real-mount ordinary
+overwrite oracles. Retain expected bytes before mutation and
 verify cross-client inode/size/SHA-256 before and after a cold restart. Exercise
 partial and last-reference unlink, shared surviving neighbors, unavailable-peer
 deletion fences, peer restoration and physical deletion. Inspect every storage

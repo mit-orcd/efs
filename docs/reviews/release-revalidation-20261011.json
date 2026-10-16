@@ -38,10 +38,6 @@
         "a48076c4e9373ea47c143c231e2b3cdb3c1e20fe:src/client/client_internal.h:372:int efs_dcache_replay_stale(efs_ino_t ino, uint32_t ci);",
         "a48076c4e9373ea47c143c231e2b3cdb3c1e20fe:src/client/write.c:6450:int efs_dcache_replay_stale(efs_ino_t ino, uint32_t ci)"
       ],
-      "server_container_info": [
-        "a48076c4e9373ea47c143c231e2b3cdb3c1e20fe:src/server/store_containers.c:263:int server_container_info(struct efsd_server *s,const char *path,uint32_t *len,uint8_t *sum)",
-        "a48076c4e9373ea47c143c231e2b3cdb3c1e20fe:src/server/store_containers.h:12:int server_container_info(struct efsd_server *s, const char *path,"
-      ],
       "efs_rdma_zc_stats": [
         "a48076c4e9373ea47c143c231e2b3cdb3c1e20fe:include/efs/rdma.h:78:void efs_rdma_zc_stats(uint64_t *zc, uint64_t *copied);",
         "a48076c4e9373ea47c143c231e2b3cdb3c1e20fe:src/common/rdma.c:260:void efs_rdma_zc_stats(uint64_t *zc, uint64_t *copied)"
@@ -93,10 +89,6 @@
         "1f1037a6aa001546982defcb4e5e3997d694076f:src/client/client_internal.h:365:int efs_dcache_replay_stale(efs_ino_t ino, uint32_t ci);",
         "1f1037a6aa001546982defcb4e5e3997d694076f:src/client/write.c:6449:int efs_dcache_replay_stale(efs_ino_t ino, uint32_t ci)"
       ],
-      "server_container_info": [
-        "1f1037a6aa001546982defcb4e5e3997d694076f:src/server/store_containers.c:263:int server_container_info(struct efsd_server *s,const char *path,uint32_t *len,uint8_t *sum)",
-        "1f1037a6aa001546982defcb4e5e3997d694076f:src/server/store_containers.h:12:int server_container_info(struct efsd_server *s, const char *path,"
-      ],
       "efs_rdma_zc_stats": [
         "1f1037a6aa001546982defcb4e5e3997d694076f:include/efs/rdma.h:78:void efs_rdma_zc_stats(uint64_t *zc, uint64_t *copied);",
         "1f1037a6aa001546982defcb4e5e3997d694076f:src/common/rdma.c:260:void efs_rdma_zc_stats(uint64_t *zc, uint64_t *copied)"
@@ -147,10 +139,6 @@
       "efs_dcache_replay_stale": [
         "b2c01fa05afa1287cd358f352ebfbc831b570e31:src/client/client_internal.h:365:int efs_dcache_replay_stale(efs_ino_t ino, uint32_t ci);",
         "b2c01fa05afa1287cd358f352ebfbc831b570e31:src/client/write.c:6449:int efs_dcache_replay_stale(efs_ino_t ino, uint32_t ci)"
-      ],
-      "server_container_info": [
-        "b2c01fa05afa1287cd358f352ebfbc831b570e31:src/server/store_containers.c:263:int server_container_info(struct efsd_server *s,const char *path,uint32_t *len,uint8_t *sum)",
-        "b2c01fa05afa1287cd358f352ebfbc831b570e31:src/server/store_containers.h:12:int server_container_info(struct efsd_server *s, const char *path,"
       ],
       "efs_rdma_zc_stats": [
         "b2c01fa05afa1287cd358f352ebfbc831b570e31:include/efs/rdma.h:78:void efs_rdma_zc_stats(uint64_t *zc, uint64_t *copied);",

@@ -119,7 +119,7 @@ Retained precursor evidence includes:
 ## Remaining capability limits
 
 This is bounded experimental ordinary **missing base-role**, same-incarnation,
-same-target repair. Packed objects, delta spans, containers, spare relocation,
+same-target repair. Delta spans, spare relocation,
 empty replacement stores, damaged existing-role replacement, automatic repair,
 interrupted-job leader takeover and comprehensive distributed pending-GC/late
 writer races remain unqualified. Errors retain debt; explicit debt cancellation
@@ -129,5 +129,5 @@ markers. The private driver is not an installed user administration interface.
 
 Default standalone integration still reports its named repair GAP. The explicit
 experimental command is the new restored-role acceptance path. This does not
-close broad production repair/recovery work, existing packing/query failures,
+close broad production repair/recovery work, existing query failures,
 or extend release scheduling scope.

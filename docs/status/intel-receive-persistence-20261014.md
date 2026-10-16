@@ -41,8 +41,7 @@ RPC deadline, retry budget, compression or operational feature policy changes.
 Private Intel1 .207 nodes1/2 and Intel2 .209 nodes3/4, ports27432/27433,
 two16GiB stores/host under `/data{1,2}/efs/w100-private-merged-aa508c820/nN`.
 Runtime `/data1/efs/w100-private/runtime-merged-aa508c820`; opposite-host main
-mounts at runtime `/mnt`. TCP, direct I/O, storage-engine files (containers
-unused), .efs client/server0, packing0, expiry0, flow default0. Root commands
+mounts at runtime `/mnt`. TCP, direct I/O, files storage, .efs client/server0, expiry0, flow default0. Root commands
 policy version1/mask0; synthetic .efs absent on both mounts. No quota increases.
 Standalone recovery fixtures use four loopback nodes/host and4GiB/node.
 
@@ -88,7 +87,7 @@ Use a full checkout's committed fixtures for native tests:
 
 ```sh
 make -j8 EFS_GIT_ID=7659df951-persist4 EFS_GIT_DESCRIBE=7659df951-persist4 EFS_GIT_BRANCH=devel all
-env EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0 EFS_RAFT_FLOW=0 make -j8 EFS_GIT_ID=7659df951-persist4 EFS_GIT_DESCRIBE=7659df951-persist4 EFS_GIT_BRANCH=devel test
+env EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0 EFS_RAFT_FLOW=0 make -j8 EFS_GIT_ID=7659df951-persist4 EFS_GIT_DESCRIBE=7659df951-persist4 EFS_GIT_BRANCH=devel test
 CC='gcc -fsanitize=address,undefined -fno-omit-frame-pointer -g' ASAN_OPTIONS=detect_leaks=1:abort_on_error=1 UBSAN_OPTIONS=halt_on_error=1 python3 tests/test_receive_persist.py
 CC='gcc -fsanitize=address,undefined -fno-omit-frame-pointer -g' ASAN_OPTIONS=detect_leaks=1:abort_on_error=1 UBSAN_OPTIONS=halt_on_error=1 python3 tests/test_raft_sync_rotation.py
 ```
@@ -163,7 +162,7 @@ The raw aggregate `live-summary.json` retains that initial runner rc1.
 Full failure suite on each host, normal frozen build:
 
 ```sh
-env EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0 EFS_RAFT_FLOW=0 timeout 1800 python3 tests/live/gc_reclamation.py --mode direct --transport tcp --disable-efs-commands --fixture-quota 4G --posix --posix-jobs 16 --continue-posix-failure --guarded-leases --opid --integrity --namespace --allocation --tiny-churn --full-node
+env EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0 EFS_RAFT_FLOW=0 timeout 1800 python3 tests/live/gc_reclamation.py --mode direct --transport tcp --disable-efs-commands --fixture-quota 4G --posix --posix-jobs 16 --continue-posix-failure --guarded-leases --opid --integrity --namespace --allocation --tiny-churn --full-node
 ```
 
 Two-fsync uses temporary opposite-host mounts at runtime `/mnt-eof` from

@@ -39,8 +39,8 @@ int efs_client_publication_admit_write(struct efs_publication_ack_queue **slot,
     *slot=queue;return EFS_OK;
 }
 
-/* Always recover using the admitted immutable request. Packed admission
- * already established the producer session; submit itself reads the exact
+/* Always recover using the admitted immutable request. Admission already
+ * established the producer session; submit itself reads the exact
  * durable outcome before proposing. Unknown state or command commitment
  * never proves that the mapping CAS succeeded. */
 int efs_client_publication_progress(struct efs_publication_ack_queue *queue,

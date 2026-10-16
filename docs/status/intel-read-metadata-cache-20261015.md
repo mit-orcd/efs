@@ -54,7 +54,7 @@ its whole chunk.
 | Item | Value |
 | --- | --- |
 | Cluster | Intel main cluster: intel1 (10.0.0.207) n1/n2, intel2 (10.0.0.209) n3/n4, ports 17432/17433, Core Ultra 7 256V, Rocky Linux 10.2 kernel 6.12.0-211, 400 GiB quota/node. Private w100 cluster (ports 27432/27433) untouched. |
-| Profile | TCP, `--direct-io`, `--storage-engine files`, `EFS_COMMANDS=0`, `EFS_COMMANDS_SERVER=0`, `EFS_PACKED_WRITES=0`, `EFS_EXPIRY=0`; eight writers (default). |
+| Profile | TCP, `--direct-io`, `EFS_COMMANDS=0`, `EFS_COMMANDS_SERVER=0`, `EFS_EXPIRY=0`; eight writers (default). |
 | After client | xorinox (10.0.0.201): Ryzen 9 7940HS, 60 GiB, Rocky 10.2, PCIe RTL8125 2.5 GbE (`r8169`, `enp2s0`), GNU dd 9.5, independent client at `/data1/efs/intel-mnt`. Its libvirt VMs were shut down. |
 | Before client | amd_efs (10.0.0.205): Ubuntu 26.04 kernel 7.0.0-38, USB RTL8156 2.5 GbE (`r8152`), uutils dd 0.10.0, build `4f5fca5dda9e`. |
 | Fixtures | Existing stable 10 GiB `001.dat` (reads); per-client 4 GiB random fixture with a `.sha256` sidecar (writes). |

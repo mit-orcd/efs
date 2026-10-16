@@ -12,7 +12,6 @@ source=r'''
 #include "efs/publication.h"
 #include "efs/kv_key.h"
 #include "efs/raft.h"
-int efs_segment_geometry(size_t n, size_t *out) { (void)n; (void)out; return EFS_ERR_INVAL; }
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>

@@ -16,7 +16,7 @@ Build ID `bb22e9559337`, branch devel, build timestamp `2026-10-15T12:10:00Z`;
 native GCC -O3 -g -fno-omit-frame-pointer -march=native -mtune=native.
 
 Intel main nodes retain 400 GiB/node, TCP/direct, ordinary files, ports17432/17433,
-/data1 and /data2 roots. `.efs` client/server, packing, containers and expiry OFF.
+/data1 and /data2 roots. `.efs` client/server and expiry OFF.
 Four matching clients: Intel1/Intel2 /data1/efs/mnt; AMD and physical xorinox
 /data1/efs/intel-mnt with independent /data1/efs/intel-client deployments.
 All daemon startup logs confirm `writers=8 shared` without an explicit override.
@@ -106,7 +106,7 @@ EFS_GIT_BRANCH=devel EFS_BUILD_TIME=2026-10-15T12:10:00Z efsd efs-fuse efs-mgmt
 tests/test_writer_routing`, then `./tests/test_writer_routing`.
 Production uses unchanged Intel devops launch scripts and independent external
 client wrapper, with EFS_TRANSPORT=tcp, EFS_DIRECT_IO=1, EFS_COMMANDS=0,
-EFS_COMMANDS_SERVER=0, EFS_PACKED_WRITES=0, EFS_EXPIRY=0.
+EFS_COMMANDS_SERVER=0, EFS_EXPIRY=0.
 
 On AMD: `python3 tests/measure/intel_dd_sync_batch.py /data1/efs/intel-mnt
 /data1/efs/intel-client/default8-measure candidate --mib 1024 --repeats 3`.

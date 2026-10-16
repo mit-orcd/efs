@@ -3,7 +3,7 @@
 These are explicit, disruptive live-cluster phases for the dedicated ORCD
 scratch cluster. They use four daemons (fcstor003–006) and seven clients
 (fcstor007–013), RDMA mlx5_2, files engine with server direct I/O, `.efs`
-enabled, packing/containers/expiry disabled. Run as the site user, never root.
+enabled, expiry disabled. Run as the site user, never root.
 SSH agent forwarding through `erbmi1@orcd-login.mit.edu` and the private
 libfuse prefix used by `orcd_qvote/control.py` must work first.
 

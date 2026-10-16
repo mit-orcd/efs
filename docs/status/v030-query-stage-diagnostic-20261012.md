@@ -1,8 +1,8 @@
-# Packing query stage diagnostic — d485afbf
+# Query stage diagnostic — d485afbf
 
 **Status precedence:** This page is a chronological diagnostic ledger. Earlier running/next/pending statements are source-specific history. Current shared qualification is410afed4/v2, stopped; AMD full normal/fault and sanitizer prerequisites PASS, mounted CREATE/cold and targeted query transcript NOTRUN centrally. c2 query deadlines and Mac mounted timeouts remain unresolved. See the [final checkpoint](../archive/status-20261012/v030-stop-checkpoint-20261011.md).
 
-Status: diagnosis, no additional correctness fix; packing closure remains open.
+Status: diagnosis, no additional correctness fix; pressure closure remains open.
 AMD isolated four-daemon TCP/direct fixture, seven clients/jobs16, original30s
 case and180s GC budgets. Source `d485afbf`, instrumentation only; normal production
 stores/source unchanged. Full normal/fault native and sixteen ASan/UBSan gates
@@ -48,7 +48,7 @@ collision is concrete, but every request's reason is not yet established.
 All seven clients209PASS/4FAIL/1unsupported-mmapSKIP/7NOTRUN in44.3–45.3s.
 Failed cases: deep nesting timeout; many-files worker killed; stats timeout with
 live worker; find blocked after stats. Busy extra-client stop prevents later
-packed cold/physical phases; round1, restore0. Foreground directory creation is
+cold/physical phases; round1, restore0. Foreground directory creation is
 not served by the catalog alone. No same-source d485 OFF quiet control or new
 foreground stack capture was collected. Prior OFF controls and CPU captures
 have different source/workload scope and cannot establish this run's causality.
@@ -132,7 +132,7 @@ The repaired fixture candidate passed full normal and fault-enabled `make all te
 
 Both direct and buffered ordinary overwrite prerequisites passed all four primary/peer/cold byte checks and physical fragment/queue drain; round and mount restoration exited zero. [Ordinary raw evidence](../../results/measure/20261012-v030-ordinary-overwrite/95d3f1b1/mounted/progress.log).
 
-One instrumented direct seven-client/jobs16 run then reproduced the original-budget failure. Every client reports 209 PASS, 4 FAIL, 1 mmap SKIP, 7 NOTRUN, lasting 44.6–45.1 seconds. Deep nesting and stats timed out; many-files was terminated and find remained blocked behind the stats worker. These are not four independent 30-second timeouts. Busy extra-client teardown aborted the fixture; cold packing/GC were NOTRUN. Round exit 1, normal mount restoration exit 0; no detached jobs remained. [Stage summary](../../results/measure/20261012-v030-query-stage-diagnostic/95d3f1b1/direct/stage-summary.json). All 37 native, 13 ordinary and 28 diagnostic artifacts were retrieved and hash verified, excluding binaries/store data.
+One instrumented direct seven-client/jobs16 run then reproduced the original-budget failure. Every client reports 209 PASS, 4 FAIL, 1 mmap SKIP, 7 NOTRUN, lasting 44.6–45.1 seconds. Deep nesting and stats timed out; many-files was terminated and find remained blocked behind the stats worker. These are not four independent 30-second timeouts. Busy extra-client teardown aborted the fixture; cold/GC checks were NOTRUN. Round exit 1, normal mount restoration exit 0; no detached jobs remained. [Stage summary](../../results/measure/20261012-v030-query-stage-diagnostic/95d3f1b1/direct/stage-summary.json). All 37 native, 13 ordinary and 28 diagnostic artifacts were retrieved and hash verified, excluding binaries/store data.
 
 | Observation | n2 | n3 |
 |---|---:|---:|
@@ -149,7 +149,7 @@ One instrumented direct seven-client/jobs16 run then reproduced the original-bud
 
 All root leaf refusals cover fourteen requested roots, each itself absent from retained generation 2 while the fresh transaction-aware inode read succeeded; leaf lookup duration is at most 3 ms. This directly explains these query refusals, not the foreground deep-nesting timeout or the entire pressure failure. No pending-record callback was logged. GUARD and REDUCE PUT/DEL activity also changed; aggregate counters cannot identify a specific transaction, namespace operation, participant coverage or durable acknowledgement. Counter samples and their deltas are diagnostic hints with the peer-reviewed sampling limits. A one-millisecond initial lock event occurred on unhosted n4, not the capable publishers; absent events mean below measurement resolution. Nested wrapper errors are not additional failures.
 
-The source remains diagnostic-only. Quiet packing acceptance is blocked. A safe next hypothesis is to improve opportunities for a fresh coherent cut after cheap pre-build contention while preserving every post-pin authority/import/transaction check and the four-cut bound; separate costly build/checkpoint failure backoff remains necessary. Any scheduling remedy must first have a baseline-failing controlled oracle and bounded peer review. Foreground admission/proposal attribution still requires its own discriminator. No further unchanged live pressure run is warranted.
+The source remains diagnostic-only. Quiet acceptance is blocked. A safe next hypothesis is to improve opportunities for a fresh coherent cut after cheap pre-build contention while preserving every post-pin authority/import/transaction check and the four-cut bound; separate costly build/checkpoint failure backoff remains necessary. Any scheduling remedy must first have a baseline-failing controlled oracle and bounded peer review. Foreground admission/proposal attribution still requires its own discriminator. No further unchanged live pressure run is warranted.
 
 ## Local scheduling remedy proposal, not deployed
 
@@ -167,7 +167,7 @@ The immutable candidate is `b239dc7de104ff8437e49d9333a529790601464c`, including
 
 Mac review `0e24f213` and manager review found no additional correctness defect within the bounded scheduler change; full Linux/live qualification is separate. NUC and ORCD received exact bundle/runtime/ABI requirements for independent qualification, preserving original stores, certificates and services. All daemons, clients and management binaries in a fixture must have the same build identity; old readers cannot safely consume new tag53/tag54 records. Use isolated stores or stopped verified copies and preserve old untouched service data for restoration.
 
-AMD full native/fault/sanitizer prerequisites run on frozen b239 inputs. Authorized mounted plan is both-mode ordinary overwrite warm/peer/cold/physical gates followed by one quiet direct seven-client/jobs16 run with original case budgets and cold/physical gates. Buffered packing runs only after direct passes. Tracing is unset; no noisy diagnostic result is quiet acceptance. A direct failure stops unchanged repeats and preserves existing case evidence. NUC W52/W112 and controlled W97 and ORCD coalescing/shared-GC remain independently source-specific.
+AMD full native/fault/sanitizer prerequisites run on frozen b239 inputs. Authorized mounted plan is both-mode ordinary overwrite warm/peer/cold/physical gates followed by one quiet direct seven-client/jobs16 run with original case budgets and cold/physical gates. Buffered runs only after direct passes. Tracing is unset; no noisy diagnostic result is quiet acceptance. A direct failure stops unchanged repeats and preserves existing case evidence. NUC W52/W112 and controlled W97 and ORCD shared-GC remain independently source-specific.
 
 A separate test-only next checkpoint moves the scheduler oracle after unchanged mixed-cut safety checks, matching independently tested Mac artifact `ce328004`. This makes the fence-removal negative control fail at the intended actual mixed-cut refusal, rather than first tripping the scheduling oracle. Normal/ASan checks pass and the fence negative fails the intended assertion. [Local evidence](../../results/measure/20261012-v030-mixed-cut-oracle-isolation/fence-negative.log). Executing/frozen b239 inputs remain unchanged; this test-order checkpoint does not alter production behavior or retroactively replace frozen qualification.
 
@@ -177,11 +177,11 @@ Full normal and fault-enabled Linux suites, eighteen focused ASan/UBSan scripts 
 
 Both direct and buffered ordinary prerequisites again pass all four primary/peer/cold overwrite byte checks and physical fragment/queue cleanup; round/restore zero. [Ordinary evidence](../../results/measure/20261012-v030-ordinary-overwrite/b239dc7d/mounted/progress.log), 13 artifacts verified.
 
-The single authorized QUIET direct seven-client/jobs16 packing run with original case budgets still fails. All seven report 209 PASS, 4 FAIL, 1 mmap SKIP, 7 NOTRUN in 45.1–45.3 seconds. Deep60 and stats time out, many-files is terminated, and find remains blocked after stats. The trace environment was unset. [Quiet raw result](../../results/measure/20261012-v030-quiet-packing/b239dc7d/direct/stage-summary.json), 28 artifacts verified; empty stage counters are expected with tracing disabled, not proof of absent cut churn.
+The single authorized QUIET direct seven-client/jobs16 run with original case budgets still fails. All seven report 209 PASS, 4 FAIL, 1 mmap SKIP, 7 NOTRUN in 45.1–45.3 seconds. Deep60 and stats time out, many-files is terminated, and find remains blocked after stats. The trace environment was unset. 28 artifacts verified; empty stage counters are expected with tracing disabled, not proof of absent cut churn.
 
-Retained generation 2 → 3 publication gaps are 46.534 s on n2 and 46.656 s on n3. The generation-3 logged total build/attempt durations are 10.063 s and 9.347 s, not exclusive fsync or proof durations. The shorter retry therefore does not close original-budget quiet packing acceptance. No causal throughput/load improvement is claimed from unmatched previous instrumented runs. No noisy baseline load comparison or unchanged repeat was run.
+Retained generation 2 → 3 publication gaps are 46.534 s on n2 and 46.656 s on n3. The generation-3 logged total build/attempt durations are 10.063 s and 9.347 s, not exclusive fsync or proof durations. The shorter retry therefore does not close original-budget quiet acceptance. No causal throughput/load improvement is claimed from unmatched previous instrumented runs. No noisy baseline load comparison or unchanged repeat was run.
 
-Round exit 1, restore exit 0; normal mounts verified and all detached jobs finished. Buffered packing is NOTRUN because direct failed. Cold packing and physical/shared GC are NOTRUN after busy extra-client teardown. Original stores remain intact. NUC/ORCD independent same-source qualification may continue within their narrower gates; it must not inherit AMD pressure acceptance.
+Round exit 1, restore exit 0; normal mounts verified and all detached jobs finished. Buffered is NOTRUN because direct failed. Cold and physical/shared GC checks are NOTRUN after busy extra-client teardown. Original stores remain intact. NUC/ORCD independent same-source qualification may continue within their narrower gates; it must not inherit AMD pressure acceptance.
 
 Next evidence needed is the exact foreground case phase and in-flight operation: the failing 60-level absolute-path test includes recursive cleanup, while the passing 100-level case uses directory handles and does not include recursive cleanup. Quiet existing logs do not identify which phase consumed the deadline. A minimal opt-in phase discriminator and bounded capture/cohort/proof work counters require review before another instrumented live run. No safety fence or timeout relaxation is justified by this failure.
 
@@ -219,13 +219,13 @@ All five owners must test one immutable shared source after safely draining/rest
 
 The five-owner shared source is `31abdd5e03be224fb95ca484ddbf3fa9dfd2899b` (1,557 inputs, 52 directories). Mac Linux Python 3.13 rejects the phase fixture's canonical AST hash before its socket checks: newer Python adds an empty `type_params` field and changes whether empty fields appear in `ast.dump`. This is a test-schema portability defect, not a filesystem result. Its failed gate remains failed; frozen executing inputs are unchanged. Central AMD full normal/fault and sanitizer gates have started on that exact source.
 
-The next-candidate test-only repair asserts that generic parameters are empty, excludes that new empty field, and requests explicit empty fields when the interpreter supports that option. The original canonical workload hash and case operations remain unchanged. The complete observer/cleanup regression passes locally on Python 3.9 and independently in a separate AMD staging directory on Python 3.14. Mac peer review passes Python 3.9/3.13; a depth 60-to-59 mutation still fails the unchanged hash assertion. The next coordinated freeze remains pending. No old candidate result certifies the new source, and no new mounted packing diagnostic has started.
+The next-candidate test-only repair asserts that generic parameters are empty, excludes that new empty field, and requests explicit empty fields when the interpreter supports that option. The original canonical workload hash and case operations remain unchanged. The complete observer/cleanup regression passes locally on Python 3.9 and independently in a separate AMD staging directory on Python 3.14. Mac peer review passes Python 3.9/3.13; a depth 60-to-59 mutation still fails the unchanged hash assertion. The next coordinated freeze remains pending. No old candidate result certifies the new source, and no new mounted diagnostic has started.
 
 ## Common c2bfb9e9 AMD prerequisites
 
 Execution remains frozen at `c2bfb9e9a281aae33dfaa01689e61866ccf60af8`; subsequent evidence commits do not change that target. The reviewed Python AST portability repair and Mac retained-namespace audit regression are test-only changes. AMD full `make all test` normal/fault gates, twenty focused ASan/UBSan gates, and fully sanitized real-LSM catalog/namespace audit pass. Post-test verification finds no mismatch among 1,557 inputs; saved normal daemon/client/management/library hashes match. [Compact raw full-gate evidence](../../results/measure/20261012-v030-merged-native/c2bfb9e9/acceptance-summary.json).
 
-Original private direct and buffered ordinary overwrite checks pass all four scenarios with primary/peer/cold exact bytes and drained physical fragments/queues. Both-mode fixture exit and normal-mount restoration are zero. [Raw overwrite evidence](../../results/measure/20261012-v030-ordinary-overwrite/c2bfb9e9/artifact-sha256.json). The one original direct seven-client/jobs16/30-second phase/work diagnostic has started; its final result is pending. Legacy synchronous stage tracing is disabled. These prerequisites do not certify packing-pressure acceptance or repair the retained Mac orphan.
+Original private direct and buffered ordinary overwrite checks pass all four scenarios with primary/peer/cold exact bytes and drained physical fragments/queues. Both-mode fixture exit and normal-mount restoration are zero. [Raw overwrite evidence](../../results/measure/20261012-v030-ordinary-overwrite/c2bfb9e9/artifact-sha256.json). The one original direct seven-client/jobs16/30-second phase/work diagnostic has started; its final result is pending. Legacy synchronous stage tracing is disabled. These prerequisites do not certify pressure acceptance or repair the retained Mac orphan.
 
 ## c2bfb9e9 original-budget phase/work result: FAIL
 

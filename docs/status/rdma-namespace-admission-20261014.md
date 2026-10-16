@@ -6,8 +6,7 @@ passes four full32MiB reads and repeats all quiet core/peer/cold/EOF gates.
 The a7 degraded failure below remains historical failed evidence.
 
 W106. Branch `devel-rdma`. Files/direct/strict segmented RDMA, Soft-RoCE
-rxe0/GID1 on AMD-395; four same-host nodes. `.efs` client/server, packing,
-containers, expiry and repair experiment OFF; metadata balancing1.
+rxe0/GID1 on AMD-395; four same-host nodes. `.efs` client/server, expiry and repair experiment OFF; metadata balancing1.
 Status: namespace load PASS on fixed source; degraded read FAIL; W106 aggregate
 OPEN. No push or TCP comparison.
 
@@ -17,7 +16,7 @@ Code commit **`a7e2b6b7d0b57336850c6850f9f669139c6765a3`** is deployed on
 AMD. Normal native build timestamp 2026-10-14T04:21:00Z (Oct 14 00:21 EDT),
 branch `devel-rdma`. Full clean native `make test` PASS, exit0. All six installed
 process environments were audited: RDMA/rxe0/GID1, commands client/server0,
-packing0, expiry0, balancing1; all four daemons use files/17G/direct. `.efs`
+expiry0, balancing1; all four daemons use files/17G/direct. `.efs`
 is absent on the installed mount. The durable policy's default mask3/version0
 is retained, but server startup ceiling0 disables features/raw queries and
 query tracking/workers; do not confuse stored policy with effective enablement.

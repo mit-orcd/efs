@@ -206,7 +206,7 @@ struct efs_writer_publication {
     uint64_t result_size;
     uint8_t result_digest[EFS_HASH_SIZE];
     int result_bound; /* immutable RPC intent, bound after PUT and before send */
-    /* Exact completed PUT, including a packed reference. Charged with the
+    /* Exact completed PUT. Charged with the
      * writer sidecar; mutable cache placement cannot rewrite a retry. */
     struct efs_chunk_rec put_result;
 };

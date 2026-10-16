@@ -17,8 +17,8 @@ binaries are built from `c99491567b429af78c791d3e69afd0f7c07c1b71`; its
 The snapshot fixture correction described below changes tests only.
 
 ORCD: four storage nodes fcstor003–006, seven clients fcstor007–013;
-site user erbmi1 (UID 246111), native RDMA (`mlx5_2`), files storage engine
-with server direct I/O, `.efs` enabled, packing/containers/expiry disabled,
+site user erbmi1 (UID 246111), native RDMA (`mlx5_2`), files storage
+with server direct I/O, `.efs` enabled, expiry disabled,
 four metadata nodes. Each round used fresh stores with a 17 GiB quota per
 server. These are short fresh-namespace comparisons, not 10M-file or 400 GiB
 qualification. Unplanned recovery remains out of scope.
@@ -155,7 +155,7 @@ all checks were rerun on the already restarted stores.
 Final `/proc` inventory verifies exactly one owned EFS process per host,
 UID 246111 throughout, `/tmp/efs/efsd` or `/tmp/efs/efs-fuse`, RDMA device
 handles and requested feature environment. All four daemons have the staged
-standard SHA256 below and `--storage-engine files --direct-io`. No ablation
+standard SHA256 below and `--direct-io`. No ablation
 binary or diagnostic FUSE binary remains active. `cold-restart.json` and
 `final-runtime.json` retain the detailed verification and identities.
 

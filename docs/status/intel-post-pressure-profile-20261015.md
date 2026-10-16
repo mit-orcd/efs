@@ -12,9 +12,9 @@ Main Intel n1/n2 on intel1 (10.0.0.207), n3/n4 on intel2 (.209), ports
 3880449, 3880456, 4146981, 4146988; AMD (.205) client PID 3989623.
 Deployed source `2e935cea075dfec45d25385bc8626c49fee67ba3`, build ID
 `2e935cea075d`, build timestamp `2026-10-15T03:42:00Z`; documentation checkout
-`6231df267`. TCP, daemon `--direct-io --storage-engine files`,
-`EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0`.
-Thus .efs client/server, packing, containers and expiry remain disabled.
+`6231df267`. TCP, daemon `--direct-io`,
+`EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0`.
+Thus .efs client/server and expiry remain disabled.
 AMD independent mount `/data1/efs/intel-mnt` uses the same release.
 Intel NICs 5 Gbps; AMD 2.5 Gbps. Intel /data1 uses PCIe SSD, XFS/noatime;
 second roots use EXT X200E SSD, XFS/relatime on the host home logical volume.
@@ -92,8 +92,7 @@ execution and the crawl is concurrent.
   a latency/barrier-heavy workload rather than streaming bandwidth saturation.
 * Valid write trace: 9,208 matched PUT replies, all OK, mean 33.88 ms,
   median 12.76 ms, p95 122.53 ms, maximum 407.00 ms. Five REPORT replies,
-  all OK, mean 19.42 ms, maximum 31.97 ms. 375 GETCHUNKS_PACKED replies all OK
-  (this protocol name is a batched mapping query, not small-file packing).
+  all OK, mean 19.42 ms, maximum 31.97 ms. 375 GETCHUNKS replies all OK.
   9,250 PUT sends were captured; unmatched boundary exchanges are not failures.
   These timings include ptrace and scheduling overhead, exclude connection
   checkout, and do not establish a native latency distribution.
@@ -133,8 +132,8 @@ submission, completion of each required file barrier, and grouped directory
 publication. Allow a bounded cohort of independent fragment writes to reach the
 filesystem before waiting on their barriers, so file I/O can overlap and directory
 barriers can cover more completed members. Preserve fixed byte/descriptor limits,
-fairness and backpressure. This is a code change to scheduling, not enabling
-containers or packing, widening retry budgets, or acknowledging volatile data.
+fairness and backpressure. This is a code change to scheduling, not widening
+retry budgets, or acknowledging volatile data.
 Existing concurrent writer slots may already achieve much of this overlap, so
 an improvement is a hypothesis, not a promised multiplier.
 

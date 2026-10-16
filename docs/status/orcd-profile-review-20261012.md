@@ -1,11 +1,9 @@
 # ORCD reviewed ordinary-file profile — 2026-10-12
 
 The requested deployment profile is native RDMA (`mlx5_2`), direct I/O,
-`--storage-engine files`, `EFS_COMMANDS_SERVER=0`, `EFS_COMMANDS=0`, and
-`EFS_PACKED_WRITES=0`. “EFS disabled” is interpreted as the `.efs` command
+`EFS_COMMANDS_SERVER=0`, `EFS_COMMANDS=0`. “EFS disabled” is interpreted as the `.efs` command
 interface being disabled; the filesystem itself remains mounted.
 
-The isolated `fix-orcd-packing-stress` branch preserves the release branch.
 The review covered newer local commits across all refs since 08:00 on
 2026-10-12, with source-path review separating duplicate cherry-picks from
 new implementation changes. Integrated fixes retain bounded admitted read
@@ -15,41 +13,24 @@ request-local readdir fence, and overlap fresh cross-group LOOKUP fences
 using cached placement hints. Cached names are never authoritative results.
 The first source snapshot was `f7e8475e`; the revised candidate is `8a91cde3`.
 
-Optional packing trace diagnostics were not imported into the ordinary-file
-profile. Repair prerequisites already present on the branch remain inactive
+Repair prerequisites already present on the branch remain inactive
 by default. Documentation-only qualification checkpoints and duplicate
 patches do not require repeated implementation imports. Unplanned-event
 repair/recovery remains deferred; normal operations and orderly stop/restart
 are the current acceptance scope.
 
-## Packing work retained separately
-
-`b85e687c` adds bounded concurrent upload of the three packed fragment roles,
-retains successful role acknowledgements on retry, and permits faster GC
-polling only when a capped packed page made durable deletion progress.
-The packing-only cold test now requires an orderly shutdown with zero exit
-statuses rather than counting a forced kill as successful restart.
-
-The earlier private candidate passed the complete seven-client root-filesystem
-fixture: 1,540 supported POSIX cases, 67 peer cases, clean unmounts, orderly
-restart, packed cold reads, and physical shared-fragment reclamation. This
-is not proof of the final snapshot or the physical NVMe deployment. The
-NVMe packing stress still produced timeouts and a busy client unmount;
-its later phases were not run. Packing therefore remains disabled in the
-requested deployment and is not marked complete.
-
 ## Qualification state
 
 The initial private full native run stopped at a hard-coded `cc` sanitizer
 link because the host GCC expected a missing `/usr/lib64/libubsan.so.1.0.0`.
-The focused packed retry and GC sanitizer tests passed using the supplied
+The focused GC sanitizer tests passed using the supplied
 runtime. The native rerun uses that compiler wrapper through `PATH` too.
 Deployment and live qualification results will be appended after verification.
 
-The user explicitly confirmed that small-file packing, containers, and `.efs`
+The user explicitly confirmed that `.efs`
 features are outside the current deployed-profile test scope. Disabled
 feature cases are exclusions or skips, never counted as successful feature
-qualification. Earlier private packing evidence is historical only. Native
+qualification. Native
 prerequisite tests can exercise component code, but do not qualify these
 disabled features for this deployment.
 
@@ -63,8 +44,8 @@ stopped with SIGTERM. Existing source trees were retained at
 All eleven running processes were audited against the exact source revision
 and binary hashes. Every process is owned by UID 246111 (`erbmi1`), has RDMA
 verbs device descriptors and `EFS_TRANSPORT=rdma`/`EFS_RDMA_DEV=mlx5_2`.
-All four servers specify `--direct-io --storage-engine files` and disable
-server commands; all seven clients have commands and packed writes zero.
+All four servers specify `--direct-io` and disable
+server commands; all seven clients have commands zero.
 All seven mounts read the same fsynced pre-stop data and `.efs` is absent.
 
 Seven-client POSIX and cross-host peer qualification is in progress.
@@ -105,14 +86,14 @@ and all four servers stopped through the identity-checked SIGTERM path
 without SIGKILL. After restart all seven mounts read the exact fsynced
 ordinary-file bytes. Physical payload and checksum files existed before
 unlink, and every owned target file disappeared across the four hosts'
-24 storage roots. This tests **ordinary-object** GC, not shared packed GC.
+24 storage roots. This tests **ordinary-object** GC.
 
 The post-restart concurrent core repeat again passed **1,512/1,512** at the
 same deadlines. The peer repeat also passed **67/67**. All eleven running binary
 hashes match the staged manifest, source markers match the frozen revision,
 and the disabled-feature/RDMA/direct-I/O audit passed again after restart.
 
-Small-file packing, containers, `.efs` queries/commands, and dedicated
+Small-file `.efs` queries/commands, and dedicated
 unplanned-event repair/recovery are **excluded**, not passed. The filesystem
 is running and all seven clients remain mounted. Existing stores and prior
 source trees are retained. This work has not modified, merged, tagged or

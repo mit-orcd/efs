@@ -5,8 +5,6 @@
 #include "../bench/blake3_bench.h"
 #include "../bench/io_bench.h"
 #include "../bench/storage_principles.h"
-#include "../bench/storage_churn.h"
-#include "../bench/storage_ranges.h"
 #include "efs/checksum.h"
 #include "efs/common.h"
 #include "efs/metadata.h"
@@ -1101,10 +1099,6 @@ int main(int argc, char **argv)
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--bench")) {
-            if (i + 1 < argc && !strcmp(argv[i + 1], "ranges"))
-                return efs_bench_ranges_main(argc, argv);
-            if (i + 1 < argc && !strcmp(argv[i + 1], "churn"))
-                return efs_bench_churn_main(argc, argv);
             if (i + 1 < argc && !strcmp(argv[i + 1], "principles"))
                 return efs_bench_principles_main(argc, argv);
             if (i + 1 < argc && (!strcmp(argv[i + 1], "io") || !strcmp(argv[i + 1], "io-blake3")))

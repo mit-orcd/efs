@@ -1,17 +1,15 @@
 # Intel buffered qualification — 2026-10-11 EDT
 
-Human authorization in the AMD chat explicitly resumed a three-way test split after the earlier stop. Intel owns only the 48 buffered TCP first-stage invocations from the approved runner. Exact source branch is `release-v0.3.0-pre-alpha`, commit `28b2089be6a5df835cc7bb46b9c2a9e2f10df190`; private qualification branch is `qualification-intel-28b2089b`. Subsequent human coordination authorized investigation of packing failures on a separate private branch. No implementation change or shared branch movement occurred.
+Human authorization in the AMD chat explicitly resumed a three-way test split after the earlier stop. Intel owns only the 48 buffered TCP first-stage invocations from the approved runner. Exact source branch is `release-v0.3.0-pre-alpha`, commit `28b2089be6a5df835cc7bb46b9c2a9e2f10df190`; private qualification branch is `qualification-intel-28b2089b`. No implementation change or shared branch movement occurred.
 
 Both hosts independently verified all 21,738 tracked inputs against the frozen manifest and archive SHA256 `2ade76f798a2bbeac2f2647f6bd9b956a939a61126986deefc2c7c458e4f1454`. Fresh matching normal/fault builds of daemon, FUSE client, management tools and `libefs.a` passed on both hosts. AMD owns the full native/sanitizer evidence; these prerequisite builds do not duplicate or claim those suites on Intel.
 
-Intel1 owns 26 normal scenarios, including core/peer POSIX and exclusive seven-client/jobs16 packing. Intel2 owns 22 fault/worker/integration/Valgrind scenarios. Each fixture uses private stores, loopback ports and `/tmp` mounts. D25 remains inactive and experimental raft flags are OFF. Existing test assertions and timeouts are retained. No automatic failure retries, direct-I/O, poststage or RDMA scenarios belong to this report.
+Intel1 owns 26 normal scenarios, including core/peer POSIX. Intel2 owns 22 fault/worker/integration/Valgrind scenarios. Each fixture uses private stores, loopback ports and `/tmp` mounts. D25 remains inactive and experimental raft flags are OFF. Existing test assertions and timeouts are retained. No automatic failure retries, direct-I/O, poststage or RDMA scenarios belong to this report.
 
-**Stopped at the user’s request on 2026-10-12 UTC.** No further scenarios launch. Final original assignment: 23 PASS, one FAIL, 24 NOTRUN. Intel1 stopped after seven scenarios; Intel2 finished its active namespace-max fault scenario and stopped after 17. The separate profiled packing diagnostic also failed; it is not an additional original-assignment scenario. Production is retained at its original source and mounts; immutable original tiny-file samples were verified before launch. The system screen socket directory has incorrect permissions; private user-owned SCREENDIR avoids a root change.
+**Stopped at the user’s request on 2026-10-12 UTC.** No further scenarios launch. Final original assignment: 23 PASS, 24 NOTRUN. Intel1 stopped after seven scenarios; Intel2 finished its active namespace-max fault scenario and stopped after 17. Production is retained at its original source and mounts; immutable original tiny-file samples were verified before launch. The system screen socket directory has incorrect permissions; private user-owned SCREENDIR avoids a root change.
 
 [Exact assignment inventory](../../results/measure/20261011-intel-buffered-28b2089b/intel-28b2089b-inventory.json) and [source proof](../../results/measure/20261011-intel-buffered-28b2089b/intel-28b2089b-local-source-proof.json) preserve the source and original approved commands. Adaptations affect only host paths, port allocations, disjoint scheduling and runner evidence/cleanup.
 
-
-The original packing case failed at 434.778s: POSIX timeout failures and retained timed-out-worker trees preceded failure of the unchanged 180s physical packed-empty assertion. Peer POSIX passed 67/67 and acknowledged cold hashes passed. This remains unresolved; no deadline, concurrency, assertion, or read-coherence shortcut was changed. The separate profiled run failed at 380.563s at the same physical-reclaim assertion; peer POSIX and cold hashes again passed. No packing fix is committed or deployed.
 
 Both original controllers and the profiling observer retired. All private fixture processes/mounts and ports 34210–34213/34410–34413 are idle. Final source checks matched all 21,738 tracked files in both variants on both hosts. Production process identities, argv, environment, live and installed binary hashes, versions, and mounts exactly match their pre-launch baseline. All four production ports are reachable from each host. All 256 saved original tiny-file payload samples match from each host (512 checks). This does not claim a complete two-million-file inventory/content check. Production remains at `7bde5f432b6a6c069eeabaa6a753648c481ab4e5`.
 
@@ -22,7 +20,6 @@ Automatic approval review rejected notifying the AMD chat of this stop request, 
 | Host | Scenario | Status | Seconds |
 |---|---|---|---|
 | intel1_efs | gc-posix-buffered | PASS | 275.762 |
-| intel1_efs | packing-seven-buffered | FAIL | 434.778 |
 | intel1_efs | ordinary-overwrite-buffered | PASS | 18.104 |
 | intel1_efs | query-buffered | PASS | 88.309 |
 | intel1_efs | large-delta-buffered | PASS | 51.285 |

@@ -27,7 +27,7 @@ After each timed interval, the private servers crash and restart. All 512 tiny
 survivors and all four large files must match exact expected bytes. Unlink must
 then produce both empty GC queues and empty physical fragment inventories.
 The harness drains/restores the two installed mounts with TCP and commands off.
-No RDMA, D25 activation, production packing or pushes are part of this gate.
+No RDMA, D25 activation or pushes are part of this gate.
 
 [Reproducible runner](../../results/measure/20261011-amd-sustained/run.sh).
 Acceptance and remaining blockers will be recorded after the actual verdicts.
@@ -70,43 +70,6 @@ pacing does not repair or close this overload behavior. W94 full sustained
 acceptance and W97 pressure/reclamation work remain open.
 
 
-## W95 retained AMD experiment review completed
-
-All 24 balanced samples / 184,320 operations are reconciled against the raw
-CHURN_OK logs; every captured field and expected model/cohort/mixed/repetition
-cell matches. Indexed manifest accounting independently matches the format:
-48-byte header + 128 × 80-byte entries + 32-byte checksum = **10,320 bytes**
-per publication. Cohort 1 writes 10,320 index bytes per operation; cohort 32
-writes 322.5. Those index writes are additional to body writes, not payload.
-[Reproducible audit](../../results/measure/20261011-amd-sustained/review-w95.py) /
-[derived review](../../results/measure/20261011-amd-sustained/w95-reviewed.json).
-
-| Cohort | Payload mix | Files mean ops/s | Indexed mean ops/s | Indexed maximum sampled allocation |
-|---|---|---:|---:|---:|
-| 1 | tiny | 1,790 | 756 | 540,672 B |
-| 1 | tiny + 64 KiB | 1,781 | 753 | 1,130,496 B |
-| 32 | tiny | 4,290 | 27,030 | 53,248 B |
-| 32 | tiny + 64 KiB | 4,259 | 25,284 | 708,608 B |
-
-Source review confirms body fsync and parent durability precede checksummed
-manifest fsync/rename/parent durability, with ACK afterward. A failed writer
-cannot continue publication/collection before reopening; writable recovery
-stabilizes validated authority before collecting. Generation-conditional
-updates, root identity and live segment references prevent stale deletion and
-neighbor reclamation in this independent model. Existing actual-source fault
-and process-exit regressions passed in the captured full native AMD gate.
-
-The experimental review obligation is complete. Carry forward immutable bodies,
-versioned checksummed authority, cohort durability accounting and reference-
-based reclamation. Do **not** port the full-snapshot index as a scaling claim:
-its index cost grows linearly with capacity even for one changed object. At its
-65,536-entry limit, a snapshot is 5,242,960 bytes, before body writes. A bounded
-journal or equivalent delta format needs its own recovery/compaction gates.
-The current index is serial and not a distributed production session/GC ledger.
-Sampled allocation excludes transient manifest replacement; pre-publication
-admission is a separate check. Process crashes do not prove hardware power-loss
-safety. W95 stays open for mounted/shared-object production integration and P4.1
-format/compatibility decisions, already assigned to ORCD; no packing is enabled.
 
 ## Opt-in GC scheduling candidate
 
@@ -158,7 +121,7 @@ An additional cold/no-writer diagnostic exits zero: all four physical fragment
 inventories reach zero files/allocated bytes at the 30-second sample and remain
 empty through 60 seconds. This proves eventual reclamation of this retained
 fixture, not a pass of its original deadline. Installed service restoration
-passes independently. W94/W95/W97 remain open; the default idle is unchanged.
+passes independently. W94/W97 remain open; the default idle is unchanged.
 [Recovery evidence](../../results/measure/20261011-amd-sustained/evidence/candidate/live/cold-gc-recovery.json).
 
 ## Fragment-backlog scheduling follow-up
@@ -243,7 +206,7 @@ service keeps the default idle; private acceptance uses explicit 100 ms.
 [Exclusive AMD queue](../../results/measure/20261011-amd-sustained/fanout-queue.sh)
 may restart the four installed daemons while retaining stores;
 [long runner](../../results/measure/20261011-amd-sustained/fanout-long.sh) borrows
-and restores the two mounts. W94/W97 remain open; W95 production work stays ORCD.
+and restores the two mounts. W94/W97 remain open.
 
 ## Ten-minute direct failure and 20-ms-yield follow-up
 
@@ -318,5 +281,5 @@ and [deployment identity](../../results/measure/20261011-amd-sustained/evidence/
 AMD restart defaults were tested with a clean environment and explicit override
 checks; TCP/direct and commands-off defaults pass, while explicit overrides
 remain supported. The original profile is retained with the evidence. W94/W97
-remain open for their integration/overload gates; W95 production packing remains
-owned by ORCD. No RDMA, D25, container, shared-devel change or push occurred.
+remain open for their integration/overload gates. No RDMA, D25, shared-devel
+change or push occurred.

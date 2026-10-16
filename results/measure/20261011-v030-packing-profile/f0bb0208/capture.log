@@ -1,7 +1,0 @@
-[ perf record: Woken up 783 times to write data ]
-Warning:
-Processed 55619 events and lost 34 chunks!
-
-Check IO/CPU overload!
-
-[ perf record: Captured and wrote 336.296 MB /data1/efs/release-v030-profile-20261011-f0bb0208/perf.data (41174 samples) ]

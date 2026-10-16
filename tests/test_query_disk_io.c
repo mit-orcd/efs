@@ -1410,6 +1410,6 @@ int main(void)
         }
         efs_query_disk_free(old);efs_kv_lsm_snapshot_release(source);efs_kv_lsm_close(kv);
     }
-    printf("query disk I/O: windows, lookup, packed records, partial ENOSPC, FD reuse and fsync refusal %s\n",failures?"FAIL":"PASS");
+    printf("query disk I/O: windows, lookup, encoded records, partial ENOSPC, FD reuse and fsync refusal %s\n",failures?"FAIL":"PASS");
     return failures?1:0;
 }

@@ -30,7 +30,7 @@ retain debt; old owner/term or incarnation cannot be silently replaced. Fragment
 and whole-inode GC use the experimental debt guards. One worker per daemon can
 execute at a time; ordinary/default-off GC does not scan repair debt.
 
-Packed objects, delta spans, containers, spare relocation, empty replacement
+Delta spans, spare relocation, empty replacement
 stores, automatic repair, and interrupted-job leadership takeover are not
 qualified here. A short-write delta fixture was refused and retained as failure
 evidence; the passing fixture writes a full ordinary base chunk. The private

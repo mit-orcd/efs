@@ -1,9 +1,0 @@
-{
-  "round": 6,
-  "daemon_sha256": "25b527dc4fcb1988f9fbab441b68df3be7fcc57271e7221bdbf6529b56d76d98",
-  "source_sha256": {
-    "src/server/store_containers.c": "863ff0f005c867c3d752459e1b78e0402f5e1805dfe51ac678c67cf429425a2b",
-    "tests/test_store_containers.c": "9f5b66b6b03d9691fe327dd9007bb5e4a0c5f9c1257837366440078445b4b8c7",
-    "Makefile": "d2d4601fdfc9f22cc3f8cf119e68b557a262eb0437f078b5a4ed6d32acb6389e"
-  }
-}

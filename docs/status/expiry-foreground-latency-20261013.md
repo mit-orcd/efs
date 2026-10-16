@@ -61,8 +61,8 @@ result requires BOTH latency improvement and preserved physical cleanup speed.
 Same NUC Intel i5-1135G7, four cores/eight threads, Linux
 6.12.0-211.64.1.el10_2.x86_64; `/data1` SATA XFS. Four private fresh 1 GiB-quota
 nodes, two Raft groups, mounts `/data1/efs/mnt` and `/data1/efs/mnt2`, TCP/direct
-I/O/FILES. EFS_COMMANDS=0, EFS_COMMANDS_SERVER=0, EFS_PACKED_WRITES=0;
-EFS_EXPIRY=1 except deliberate disabled phases. No containers or packing.
+I/O/FILES. EFS_COMMANDS=0, EFS_COMMANDS_SERVER=0;
+EFS_EXPIRY=1 except deliberate disabled phases.
 Both mount paths must initially be empty and unmounted, approved by FUSE policy;
 ports 24410–24413 must be free. Never attach this destructive fixture lifecycle
 to user stores.

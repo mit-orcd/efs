@@ -21,7 +21,7 @@ def start(label,variant):
 ! ss -ltn | grep -q ':17432 '
 test ! -e {root}; mkdir {root}; mkdir -p {c.BASE}/{label}/{h}
 cp efsd-{variant} efsd
-nohup ./efsd --node-id {i} --addr 172.16.223.{i+56} --port 17432 --storage {root} --storage-engine files --quota 17G --direct-io {'--join '+c.SEED if i>1 else ''} >{c.BASE}/{label}/{h}/efsd.log 2>&1 </dev/null &
+nohup ./efsd --node-id {i} --addr 172.16.223.{i+56} --port 17432 --storage {root} --quota 17G --direct-io {'--join '+c.SEED if i>1 else ''} >{c.BASE}/{label}/{h}/efsd.log 2>&1 </dev/null &
 echo $! > {c.BASE}/{label}/{h}/efsd.pid
 python3 scripts/server_processes.py record {c.BASE}/{label}/{h}/efsd.pid {root}
 '''

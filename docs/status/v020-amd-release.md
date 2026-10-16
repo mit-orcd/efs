@@ -5,7 +5,7 @@ newer split-LOOKUP correctness fix and completed TCP evidence; temporary
 fault traces and obsolete open states were not restored. RDMA adds versioned
 RoCE GID routing and RXE CQ capacity admission. The branch also contains its
 existing storage benchmark prototype snapshot; this does not activate a new
-storage-engine format or D25 publication. D25 remains staged.
+storage format or D25 publication. D25 remains staged.
 
 Clean merged source `2ba0d7cc` builds and passes full Linux `make test` on
 AMD.349 tracked build/test files match the deployed sources exactly.

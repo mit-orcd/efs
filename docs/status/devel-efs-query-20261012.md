@@ -16,9 +16,9 @@ normal running binaries. These prerequisites do not activate failure recovery.
 Environment: ORCD physical storage fcstor003–006 (four metadata/storage nodes),
 six direct-I/O roots per server, seven native FUSE clients fcstor007–013 at
 `/tmp/efs-mount`. Native RDMA uses `mlx5_2`; processes run as site account
-`erbmi1` (UID 246111). Servers explicitly select `--storage-engine files
---direct-io`, `EFS_COMMANDS_SERVER=1`, `EFS_PACKED_WRITES=0`; clients use
-`EFS_COMMANDS=1`, `EFS_PACKED_WRITES=0`. Containers and packing are excluded.
+`erbmi1` (UID 246111). Servers explicitly select
+`--direct-io`, `EFS_COMMANDS_SERVER=1`; clients use
+`EFS_COMMANDS=1`.
 The existing ordinary-file export is preserved; no new export/quota is created.
 Default query disk budgets remain 16 GiB per generation / 32 GiB total,
 with the default reserve. Actual catalog/namespace size varies with fixture
@@ -168,7 +168,7 @@ Final raw evidence uses tag `0dd2a7c7912b` in the same external locations above;
 local `focused-fresh.log`, `concurrent-candidate.log`, `repeat1.log`, `repeat2.log`,
 `restart-final.log`, `capacity-verify.log`, `cold-policy.log`, runtime/source
 manifests and prerequisite logs retain the complete run. These are functional
-ordinary-file results: no packing/container/expiry implementation, unplanned
+ordinary-file results: no expiry implementation, unplanned
 recovery, NFS platform, 400 GiB or billion-entry qualification is asserted.
 W108 rollout and the reproduced ORCD W109 gate are satisfied; broader W91/W92,
 W97/W98/W110 acceptance retains its independently documented scope.

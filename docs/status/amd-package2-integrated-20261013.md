@@ -12,7 +12,7 @@ introduced during this qualification.
 ## Profile and source proof
 
 AMD-395, four `efs`-owned daemons on 17432–17435, two FUSE mounts, files/TCP/direct;
-client/server `.efs` enabled, policy version 0/mask 3, packing/containers/expiry and
+client/server `.efs` enabled, policy version 0/mask 3, expiry and
 repair experiment disabled. Data quota 17 GiB/node, query caps 16/32 GiB unchanged,
 no query-limit overrides in actual daemon environments. Installed efsd reports
 9b2fac55, branch devel, build 2026-10-13T18:54:41Z on amd-395.

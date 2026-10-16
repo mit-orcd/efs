@@ -2,10 +2,10 @@
 
 Exact source `52bcfd3570b0a59076c225caad9157b0825954d8`, same previously
 verified normal binaries. Additional diagnostic, separate from completed
-passing group3 core/peer and isolated two-client packing qualification.
+passing group3 core/peer qualification.
 
 Command: existing `tests/live/gc_reclamation.py --mode direct --transport tcp
---mounted-packing-only --posix --packing-clients 7 --posix-jobs 16` plus private
+--posix --posix-jobs 16` with seven clients plus private
 root/mount/port arguments recorded in raw command JSON. FILES; flow, early
 retirement, group drain and repair disabled. No build/profiling/loaders or
 other daemons during this quiet measurement. Unique clean stores.
@@ -38,7 +38,7 @@ The deep-directory deadline failure remains a recorded failure.
 
 Helper then refused normal stop control and timed out after its existing
 60 seconds while stopping extra client2. Later peer, cold-byte and physical
-packing cleanup assertions were **NOT RUN**, not PASS. No final packing JSON.
+cleanup assertions were **NOT RUN**, not PASS. No final fixture JSON.
 Its existing finally cleanup completed: both policy mounts unmounted and no
 efsd processes. Original service was normally drained before this quiet run;
 no additional old-binary/data preservation or backward compatibility effort.

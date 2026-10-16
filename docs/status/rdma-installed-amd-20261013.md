@@ -17,10 +17,9 @@ instruction. No push, merge into devel, tag or hardware-IB acceptance.
 
 AMD-395 / Ubuntu, same-host Soft-RoCE rxe0, port1 ACTIVE, GID1, backed by
 wlp194s0. Four installed daemons 127.0.0.1:17432–17435, `/data1/efs/n1..n4`;
-files engine, direct I/O, **17G quota per node**, retained namespace. Both FUSE
+files storage, direct I/O, **17G quota per node**, retained namespace. Both FUSE
 mounts `/data1/efs/mnt` and `mnt2` use strict `EFS_TRANSPORT=rdma`.
-Client `EFS_COMMANDS=0`, server `EFS_COMMANDS_SERVER=0`, `EFS_PACKED_WRITES=0`,
-`EFS_EXPIRY=0`, `EFS_REPAIR_EXPERIMENT=0`; containers OFF. Defaults persisted
+Client `EFS_COMMANDS=0`, server `EFS_COMMANDS_SERVER=0`, `EFS_EXPIRY=0`, `EFS_REPAIR_EXPERIMENT=0`; containers OFF. Defaults persisted
 in `/data1/efs/devops/clusters/amd.env`. No timeout/window/snapshot-threshold
 changes. This retained 17G fixture is not the historical fresh 4G load fixture.
 
@@ -114,7 +113,7 @@ Use fresh external result directory `$out`, not under a FUSE mount.
 ```sh
 cd /data1/efs/src
 export EFS_TRANSPORT=rdma EFS_RDMA_DEV=rxe0 EFS_RDMA_GID_INDEX=1
-export EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0 EFS_REPAIR_EXPERIMENT=0
+export EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0 EFS_REPAIR_EXPERIMENT=0
 make test-rdma-message
 python3 tests/test_rdma_reply_budget.py
 python3 tests/test_rdma_setup_reentry.py

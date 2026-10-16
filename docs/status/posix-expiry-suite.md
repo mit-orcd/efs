@@ -10,7 +10,7 @@ mount, whereas expiry deliberately restarts and faults its own cluster.
 
 Run locally on Linux (NUC qualification host), from this branch's source tree.
 Install FUSE and permit the invoking user to mount both paths. Build native
-binaries first; no containers are used. Both mount directories must be empty
+binaries first. Both mount directories must be empty
 and unmounted, four ports must be free, and storage roots must be private to
 this test. Missing private root parents are created; each run creates fresh
 fixture subdirectories within them. Do not stop or attach to an unrelated running user cluster.
@@ -42,8 +42,7 @@ python3 tests/posix/posix_suite.py /data1/efs/mnt --suite expiry \
 ```
 
 View options with `python3 tests/posix/posix_suite.py /data1/efs/mnt --suite expiry
---help`. The wrapper enforces TCP, direct I/O, FILES storage, `.efs` disabled
-and packing disabled. Operator expiry controls run through `efs-mgmt`, so the
+--help`. The wrapper enforces TCP, direct I/O, FILES storage, `.efs` disabled. Operator expiry controls run through `efs-mgmt`, so the
 suite does not require `.efs` commands. `--jobs` controls core POSIX concurrency;
 it does not parallelize restart/fault lifecycle phases.
 
@@ -105,8 +104,8 @@ companion scripts came from a clean archive of the runner commit.
 
 The clock-fault command above was used with root
 `/data1/efs/expiry-posix-runner-5b41b8d3` repeated twice. Four private 1-GiB-quota
-nodes, two mounts, XFS, TCP/direct I/O, FILES storage, `.efs` disabled, no
-containers/packing; core concurrency four. All expiry lifecycle/fault gates,
+nodes, two mounts, XFS, TCP/direct I/O, FILES storage, `.efs` disabled,
+core concurrency four. All expiry lifecycle/fault gates,
 ordinary physical GC, cold empty inventory, drained queues and zero quotas
 passed. Core POSIX **216/216, 0 fail/skip/notrun (24.4s)**; peer
 **67/67, 0 fail (13.0s)**. Orchestrator returned zero. Both mounts and owned

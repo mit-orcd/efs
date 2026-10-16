@@ -35,9 +35,9 @@ static int key_in_group(const uint8_t *key, uint32_t klen, uint8_t group)
 }
 
 /* Inspect the entire incoming image, including unchanged rows omitted from
- * the diff. Packed rows (capability, object, stream, floor kinds or a chunk
- * with the retired PACK profile) come only from a store this build cannot
- * read since packing was removed: refuse the import before anything lands. */
+ * the diff. Reserved KV kinds or a chunk with the reserved coding profile
+ * come from a store this build cannot read: refuse the import before
+ * anything lands. */
 static int import_reader_barrier(struct efs_kv *kv,
     const struct efs_kv_item *items, uint32_t count)
 {
@@ -46,12 +46,10 @@ static int import_reader_barrier(struct efs_kv *kv,
         const struct efs_kv_item *it = &items[i];
         if (it->klen < 3) continue;
         uint8_t kind = it->key[2];
-        if (kind == EFS_KV_KIND_RETIRED_PACK_READER || kind == EFS_KV_KIND_RETIRED_PACK_OBJECT ||
-            kind == EFS_KV_KIND_RETIRED_PACK_STREAM || kind == EFS_KV_KIND_RETIRED_PACK_FLOOR ||
+        if ((kind >= EFS_KV_KIND_RESERVED_MIN && kind <= EFS_KV_KIND_RESERVED_MAX) ||
             (kind == EFS_KV_KIND_CHUNK && it->vlen >= 12 &&
              !it->val[8] && !it->val[9] && !it->val[10] && it->val[11] == 2)) {
-            fprintf(stderr, "kv-snap: import holds packed rows; refusing "
-                            "(packing removed, archive/packing-containers-20261016)\n");
+            fprintf(stderr, "kv-snap: import holds reserved rows; refusing\n");
             return EFS_ERR_PROTO;
         }
     }

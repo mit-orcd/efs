@@ -12,8 +12,8 @@ per host,13 samples at nominal10s intervals. All11 process identities stayed
 unchanged; all versions were `9b2fac55fc69` on `devel`. Servers built18:39:13Z
 or18:39:29Z, clients18:39:29Z–18:40:02Z on2026-10-13. Actual `/proc` environment
 selects strict `rdma` and `mlx5_2`; server argv selects files/direct-I/O. Existing
-server/client commands enabled, packing/expiry OFF. Nothing was toggled to
-match Intel's disabled-command profile. Containers are not selected by servers.
+server/client commands enabled, expiry OFF. Nothing was toggled to
+match Intel's disabled-command profile.
 
 Active fabric `mlx5_2/1`: native InfiniBand,200Gb/sec (4X HDR), ACTIVE/LINK_UP.
 All four HCA devices were read; interpretation below selects the configured

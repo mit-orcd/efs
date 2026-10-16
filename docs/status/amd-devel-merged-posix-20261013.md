@@ -13,10 +13,9 @@ branch and was retained. No push, tag or release promotion.
 
 AMD-395, Ubuntu, four same-host daemons at 127.0.0.1:17432–17435,
 17G logical quota each, two FUSE mounts `/data1/efs/mnt` and `/data1/efs/mnt2`.
-Files engine, TCP, direct storage I/O. All six process environments verified:
-`EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0
-EFS_REPAIR_EXPERIMENT=0 EFS_TRANSPORT=tcp`. Containers disabled by
-`--storage-engine files`. Existing GC admission=1 and idle=20ms retained.
+Files storage, TCP, direct storage I/O. All six process environments verified:
+`EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0
+EFS_REPAIR_EXPERIMENT=0 EFS_TRANSPORT=tcp`. Existing GC admission=1 and idle=20ms retained.
 
 Export `git archive 96f40602b7bfc87d2837b1bd9e5cdaecc97c203c` to
 `/data1/efs/devel-merged-src` on AMD. Compile there:
@@ -50,7 +49,7 @@ python3 tests/posix/posix_suite.py /data1/efs/mnt --suite core --jobs 1 --result
 ```
 
 Expected: zero FAIL/NOTRUN, successful exit. Runner cleans its owned test
-fixtures; leave the cluster running. No extras/query, packing, container,
+fixtures; leave the cluster running. No extras/query,
 expiry, dedicated recovery or loaded seven-client acceptance is implied.
 
 ## Verdict

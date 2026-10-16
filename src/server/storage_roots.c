@@ -1,11 +1,8 @@
-/* Files-engine storage roots: exclusive root locks, the engine marker and
- * a pinned-inode ancestry barrier for namespace durability. The container
- * engine that once shared this code was removed on 2026-10-16
- * (archive/packing-containers-20261016); its roots are refused. */
+/* Storage roots: exclusive root locks, the root format marker and a
+ * pinned-inode ancestry barrier for namespace durability. */
 #include "storage_roots.h"
 #include "efs/checksum.h"
 #include "efs/store.h"
-#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -197,21 +194,6 @@ static int marker_read(const char *root,uint8_t page[128])
     if(rc||memcmp(page,"EFSENG01",8)||page[8]>1||memcmp(page+96,h,32))return EFS_ERR_IO;
     return EFS_OK;
 }
-static int directory_empty(const char *path)
-{
-    DIR *d=opendir(path);
-    if(!d)return errno==ENOENT?1:-1;
-    int empty=1;
-    struct dirent *e;
-    errno=0;
-    while((e=readdir(d)))if(strcmp(e->d_name,".")&&strcmp(e->d_name,"..")){
-        empty=0;
-        break;
-    }
-    if(!e&&errno)empty=-1;
-    if(closedir(d))empty=-1;
-    return empty;
-}
 int server_storage_root_mode(const char *root)
 {
     uint8_t page[128]={0};
@@ -299,12 +281,8 @@ int server_storage_roots_init(struct efsd_server *s)
         uint8_t marker[128]={0};
         int rc=marker_read(t->root,marker);
         if(rc==EFS_ERR_NOT_FOUND){
-            /* A container-engine root always has a marker; an unmarked root
-             * with its directory is damaged or foreign: never adopt it. */
-            snprintf(p,sizeof(p),"%s/.efs-containers",t->root);
-            if(directory_empty(p)!=1)goto fail;
             memcpy(marker,"EFSENG01",8);
-            marker[8]=0; /* files engine */
+            marker[8]=0; /* root format 0 */
             if(getrandom(marker+16,16,0)!=16)goto fail;
             efs_hash(marker,96,marker+96);
             snprintf(p,sizeof(p),"%s/.efs-engine",t->root);
@@ -313,8 +291,8 @@ int server_storage_roots_init(struct efsd_server *s)
         }
         else if(rc)goto fail;
         else if(marker[8]!=0){
-            fprintf(stderr,"storage-engine: %s was formatted by the removed container "
-                    "engine; use archive/packing-containers-20261016\n",t->root);
+            fprintf(stderr,"storage: %s has unsupported format %u; refusing\n",
+                    t->root,(unsigned)marker[8]);
             goto fail;
         }
         /* Existing roots may have been configured at a new pathname; persist
@@ -326,7 +304,7 @@ int server_storage_roots_init(struct efsd_server *s)
     }
     strcpy(s->storage_path, s->storage_paths[0]);
     return EFS_OK;
-    fail:fprintf(stderr,"storage-engine: incompatible, busy or corrupt root; refusing startup\n");
+    fail:fprintf(stderr,"storage: incompatible, busy or corrupt root; refusing startup\n");
     server_storage_roots_close(s);
     return EFS_ERR_IO;
 }
@@ -344,7 +322,7 @@ void server_storage_roots_close(struct efsd_server *s)
     }
 }
 
-/* Dynamic addition keeps exclusive root locks and the engine marker check. */
+/* Dynamic addition keeps exclusive root locks and the root marker check. */
 int server_storage_files_attach(struct efsd_server *s, const char *root, unsigned index)
 {
     if (index >= EFS_MAX_STORAGE_PATHS || s->storage_roots[index]) return EFS_ERR_INVAL;

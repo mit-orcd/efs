@@ -26,7 +26,7 @@ def run(host):
  if a.gate=='concurrent':
   if a.phase_observer:
    observer=root+'/observer';subprocess.run(['ssh',host,shlex.join(['mkdir','-p',observer])],check=True)
-   subprocess.run(['scp',str(Path(__file__).with_name('container_deepsteps_sitecustomize.py')),host+':'+observer+'/sitecustomize.py'],check=True)
+   subprocess.run(['scp',str(Path(__file__).with_name('deepsteps_sitecustomize.py')),host+':'+observer+'/sitecustomize.py'],check=True)
    subprocess.run(['scp',str(Path(__file__).with_name('posix_phase_runner.py')),host+':'+root+'/phase-runner.py'],check=True)
   mounts=[a.mount];created=[]
   seed=('10.0.0.209' if host=='intel1_efs' else '10.0.0.207')+':'+str(a.seed_port)
@@ -34,7 +34,7 @@ def run(host):
    for client in range(1,4 if host=='intel1_efs' else 3):
     mount=a.extra_mount_root+'/'+a.run_id+'-'+str(client)
     diag='EFS_OPID_TRACE=1 EFS_OPID_TRACE_VERBOSE=1 EFS_RPC_PROF=1 ' if a.opid_trace else ''
-    cmd=diag+'EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_PACKED_WRITES=0 EFS_EXPIRY=0 '+shlex.join([src+'/scripts/client.sh',seed,mount])
+    cmd=diag+'EFS_TRANSPORT=tcp EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0 '+shlex.join([src+'/scripts/client.sh',seed,mount])
     created.append(mount);subprocess.run(['ssh',host,cmd],check=True,timeout=75);mounts.append(mount)
    def worker(pair):
     client,mount=pair;tag=name+'-'+str(client)+('-r'+str(current_round) if a.rounds>1 else '');args=['python3',src+'/tests/posix/posix_suite.py',mount,'--suite','core','--jobs','16','--timeout-s','30','--tag',tag,'--results',root+'/'+tag+'.tsv'];started=time.monotonic()

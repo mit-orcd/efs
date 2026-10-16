@@ -2,7 +2,7 @@
 """Ordinary-file .efs gates on two existing native FUSE mounts.
 
 Run on an ORCD client. Both mounts must use the same export and have commands
-on, packing off; servers must use files/RDMA/direct IO. This runner does not
+on; servers must use RDMA/direct IO. This runner does not
 change cluster policy or start/stop daemons. Logs go outside the repository.
 """
 import argparse,json,os,subprocess,time
@@ -17,7 +17,7 @@ assert os.path.ismount(a.mount) and os.path.ismount(a.peer)
 a.output.mkdir(parents=True,exist_ok=False)
 repo=Path(__file__).resolve().parents[1]
 env=dict(os.environ,EFS_QUERY_TEST_HOST=a.query_host,EFS_QUERY_TEST_PORT=str(a.query_port),
-         EFS_PACKED_WRITES="0", EFS_EXPIRY="0",
+         EFS_EXPIRY="0",
          EFS_QUERY_TEST_NODES=json.dumps({str(i):["172.16.223."+str(56+i),a.query_port] for i in range(1,5)}),EFS_QUERY_TEST_FIXTURE="devel-efs-load-"+str(time.time_ns()))
 rows=[]
 for name,extra,budget in [

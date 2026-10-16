@@ -27,7 +27,7 @@ src = base + '/' + a.source
 runtime = base + '/runtime-' + a.run
 hosts = [('intel1_efs', '10.0.0.207', [1, 2]), ('intel2_efs', '10.0.0.209', [3, 4])]
 env = dict(EFS_TRANSPORT='tcp', EFS_COMMANDS='0', EFS_COMMANDS_SERVER='0',
-           EFS_PACKED_WRITES='0', EFS_EXPIRY='0', EFS_MD_RAFT_N='4',
+           EFS_EXPIRY='0', EFS_MD_RAFT_N='4',
            EFS_FAULT_REPORT_SIZE_FILE=runtime+'/omit-size',
            EFS_FAULT_REPORT_FILE=runtime+'/other-faults')
 if a.opid_trace:
@@ -70,7 +70,7 @@ for node in {ids!r}:
     if {a.action=='start'!r}:pathlib.Path(storage).mkdir(parents=True,exist_ok=False)
     else:assert pathlib.Path(storage).is_dir(), 'missing owned storage directory'
     args=[{src+'/efsd'!r},'--node-id',str(node),'--addr',{addr!r},'--port',str(27432+(node%2==0)),
-          '--storage',storage,'--quota',{a.quota!r},'--storage-engine','files','--direct-io']
+          '--storage',storage,'--quota',{a.quota!r},'--direct-io']
     if node!=1:args+=['--join','10.0.0.207:27432']
     with (r/f'n{{node}}.log').open('ab') as out:
         p=subprocess.Popen(args,env=env,stdout=out,stderr=subprocess.STDOUT,start_new_session=True)

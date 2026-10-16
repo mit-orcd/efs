@@ -1,6 +1,0 @@
-{'PASS': 56, 'OBSERVATION': 10}
-24 churn cases, 32 safe range cases, 10 unsafe diagnostics.
-Every source manifest matched an archived epoch; candidate archive matches final local source.
-All scratch roots removed after completion.
-44 unittest methods plus benchmark CLI gate PASS.
-Both candidate benchmark and efsd builds completed; no compiler warnings in build logs.

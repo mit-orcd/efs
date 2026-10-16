@@ -1,7 +1,0 @@
-Events disabled
-Events enabled
-BENCH_PHASE begin
-BENCH_PHASE end
-Events disabled
-[ perf record: Woken up 3 times to write data ]
-[ perf record: Captured and wrote 0.452 MB /data1/efs/bench/w90-perf5-20261008/round1-word-fill-fixed/perf.data (2177 samples) ]

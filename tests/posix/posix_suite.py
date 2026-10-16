@@ -3010,7 +3010,7 @@ def flock_second_fd_exclusive(d):
 
 
 # ==========================================================================
-# O_DIRECT, vectored I/O, packed→chunked grow, two-fd visibility
+# O_DIRECT, vectored I/O, small→chunked grow, two-fd visibility
 # ==========================================================================
 _DIO_ALIGN = 4096
 
@@ -3097,10 +3097,10 @@ def direct_rmw_4k_in_chunk(d):
 
 
 @test
-def packed_then_grow_past_chunk(d):
-    """Small (packed) file must keep its prefix after growing past 128 KiB."""
+def small_then_grow_past_chunk(d):
+    """A small file must keep its prefix after growing past 128 KiB."""
     p = os.path.join(d, "f")
-    prefix = b"PACKED-HEAD"
+    prefix = b"SMALL-HEAD"
     wr(p, prefix)
     fd = os.open(p, os.O_RDWR)
     try:
@@ -3111,7 +3111,7 @@ def packed_then_grow_past_chunk(d):
     finally:
         os.close(fd)
     data = rd(p)
-    eq(data[:len(prefix)], prefix, "packed prefix survived grow")
+    eq(data[:len(prefix)], prefix, "small prefix survived grow")
     eq(data[len(prefix):], b"M" * _CHUNK, "grown tail")
 
 

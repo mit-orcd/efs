@@ -21,7 +21,7 @@ availability, Python and noexec requirements. Each command's `--help` has its
 own options/examples. Reading any command still returns source and performs
 no query. Query/storage/permission/durability behavior is unchanged.
 
-Python is not a storage-engine or query-protocol requirement. FUSE returns file
+Python is not a storage or query-protocol requirement. FUSE returns file
 bytes and has no execute(argv) callback. The client OS must run an interpreter
 or native program to parse `find PATTERN` and encode a query path. The selected
 self-contained scripts use Python 3 for portable argument/JSON/raw-filename

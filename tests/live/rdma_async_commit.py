@@ -25,8 +25,7 @@ print(work, flush=True)
 env = os.environ.copy()
 env.update(EFS_TRANSPORT='rdma', EFS_RDMA_DEV='rxe0', EFS_RDMA_GID_INDEX='1',
            EFS_MD_RAFT_N='4', EFS_METADATA_BALANCE='1', EFS_DIRECT_IO='1',
-           EFS_COMMANDS='0', EFS_COMMANDS_SERVER='0', EFS_PACKED_WRITES='0',
-           EFS_EXPIRY='0', EFS_REPAIR_EXPERIMENT='0', EFS_PUT_SYNC_MS='10000',
+           EFS_COMMANDS='0', EFS_COMMANDS_SERVER='0',            EFS_EXPIRY='0', EFS_REPAIR_EXPERIMENT='0', EFS_PUT_SYNC_MS='10000',
            EFS_DATA_GC_ADMISSION='1', EFS_GC_BACKLOG_IDLE_MS='20')
 for key in ('EFS_RPC_PROF','EFS_READ_PROF','EFS_BATCH_OBS'):
     env.pop(key, None)
@@ -43,7 +42,7 @@ def start(i):
     log = open(work / ('n%d.log' % i), 'ab'); logs.append(log)
     args = [str(src/'efsd'),'--node-id',str(i),'--addr','127.0.0.1',
             '--port',str(base+i-1),'--storage',str(work/('n%d'%i)),
-            '--storage-engine','files','--quota','4G','--direct-io']
+            '--quota','4G','--direct-io']
     if i != 1: args += ['--join','127.0.0.1:%d'%base]
     p = sp.Popen(args, env=env, stdout=log, stderr=log); nodes[i]=p
     until=time.monotonic()+30

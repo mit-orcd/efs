@@ -38,7 +38,7 @@ p.add_argument('source',type=Path);p.add_argument('mount',type=Path);p.add_argum
 p.add_argument('--base-port',type=int,default=17432);p.add_argument('--pid-root',type=Path,default=Path('/data1/efs/logs'))
 a=p.parse_args();assert os.environ.get('EFS_TRANSPORT')=='rdma'
 a.source=a.source.resolve();a.output=a.output.resolve();a.output.mkdir(parents=True,exist_ok=False)
-env=dict(os.environ,EFS_TRANSPORT='rdma',EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_PACKED_WRITES='0',EFS_EXPIRY='0',EFS_REPAIR_EXPERIMENT='0')
+env=dict(os.environ,EFS_TRANSPORT='rdma',EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_EXPIRY='0',EFS_REPAIR_EXPERIMENT='0')
 name='rdma-degraded-'+uuid.uuid4().hex;fixture=a.mount/name;fixture.mkdir();path=fixture/'payload'
 reader=Path(tempfile.mkdtemp(prefix='rdma-degraded-',dir='/home/efs'))
 paused=False;child=None;pid=None;rc=None
@@ -54,7 +54,7 @@ try:
  for node in (2,3):statuses[node]=subprocess.check_output([str(a.source/'efs-mgmt'),'raft-status',f'127.0.0.1:{a.base_port+node-1}'],text=True,timeout=15)
  node=next(n for n,s in statuses.items() if s.count('role=FOLLOWER')==2)
  pid=int((a.pid_root/f'efsd-n{node}.pid').read_text())
- cmd=Path(f'/proc/{pid}/cmdline').read_bytes().replace(b'\0',b' ').decode();assert f'--node-id {node} ' in cmd and '--storage-engine files' in cmd
+ cmd=Path(f'/proc/{pid}/cmdline').read_bytes().replace(b'\0',b' ').decode();assert f'--node-id {node} ' in cmd
  (a.output/'fixture.json').write_text(json.dumps(dict(node=node,pid=pid,fixture=str(fixture),reader=str(reader),source=(a.source/'SOURCE_COMMIT').read_text().strip(),bytes=TOTAL,outer_seconds=180,statuses=statuses),indent=2)+'\n')
  os.kill(pid,signal.SIGSTOP);paused=True
  print(f'Paused follower node={node} pid={pid}',flush=True)

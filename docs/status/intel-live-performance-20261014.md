@@ -25,7 +25,7 @@ build ID `85f2a199aa39`, build time `2026-10-14T18:23:50Z`. Native GCC
 hardware/OS and topology are recorded in the linked deployment report and
 rechecked through `/proc/PID/exe` in each capture. Intel1/2 each run two
 400 GiB files-engine daemons on ports17432/17433 and one main FUSE client.
-Daemon direct I/O, TCP; `.efs` client/server, packing, containers and expiry OFF.
+Daemon direct I/O, TCP; `.efs` client/server and expiry OFF.
 AMD/xorinox use their independent `/data1/efs/intel-client` releases and
 `/data1/efs/intel-mnt`. Intel clients use `/data1/efs/mnt`.
 
@@ -180,7 +180,7 @@ Two follow-ups, in priority order:
    file; about768x the mean256byte payload). Tiny-file close also publishes
    metadata. Evaluate exact byte/flush/RPC counts first; safe durability
    coalescing or a future right-sized ordinary fragment design needs separate
-   correctness/recovery design. Do not enable packing/containers, skip durable
+   correctness/recovery design. Do not skip durable
    acknowledgements, or increase retry windows as a performance fix.
 
 ## Read correctness discovered during observation
