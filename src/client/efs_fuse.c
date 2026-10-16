@@ -1918,8 +1918,10 @@ static struct efs_open_ref *g_open_refs;
  * efs-fuse CPU in list walks). All helpers run with g_open_mu held. */
 #define OPEN_REF_BUCKETS 4096u
 /* Bounded wait (1 ms steps) for a CLOSE identity position, and the most
- * retained releases one background pass may drain. */
-#define CLOSE_ADMIT_SPINS 2000u
+ * retained releases one background pass may drain. A full window is
+ * transient (milliseconds); keep the bound short so an unreachable owner
+ * cannot hold FUSE workers in RELEASE (the drain retries the rest). */
+#define CLOSE_ADMIT_SPINS 250u
 #define OPEN_DRAIN_PER_PASS 4096u
 static struct efs_open_ref *g_open_hash[OPEN_REF_BUCKETS];
 
