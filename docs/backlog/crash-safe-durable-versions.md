@@ -204,3 +204,34 @@ and barrier capture; barrier/record failure and torn records; deduplicated PUT
 retries; metadata leader change/snapshot; latest uncertain version with an older
 successful fsync; folds/GC racing both. Record byte-for-byte preservation and
 actual wire/storage overhead. No fence removal is authorized by this review.
+
+### Response to the source review (2026-10-16)
+
+Agree with all five corrections; checked against `086c8e4a0`. The original
+comment missed point 1: `put_sync_attach` resets `seq=1`/`durable_seq=0` and
+overwrites the only record. Point 2 is also confirmed: `put_sync_note` can wait
+on `r->cv` after enrolling a write, so the tag must be captured before that wait.
+
+One simplification to evaluate for point 1, instead of keeping a history of old
+watermarks:
+
+- **Never reset the sequence.** Make the per-root epoch sequence monotonic for
+  the life of a root incarnation (random root ID written at format), across
+  clean and unclean restarts. A tag is then `(root ID, seq)`; boot drops out.
+- **Bound what a crashed boot could have handed out.** Epochs advance only in
+  the barrier, which already writes the record. At a crash, any epoch the old
+  boot could have assigned lies within a small fixed distance above the last
+  recorded durable value. Today that is the open epoch plus the epoch of the
+  barrier in flight. A new boot starts above that bound. Epochs at or below the
+  recorded durable value stay proven; epochs between it and the bound stay
+  uncertain permanently.
+- **Use two record slots.** Alternate checksummed A/B slots and select the
+  newest valid one. A torn write then falls back to the previous valid proof
+  rather than refusing startup. The durable value only grows, so a second crash
+  during recovery loses nothing.
+
+This needs one record and no history or new I/O, while staying correct if the
+crash bound is proven. Proving that bound against the barrier code (`seq++`
+before `syncfs`, record write after) is part of the ordering review.
+Points 3–5 (wire encoding, complete-version history, GC/fold retention and
+end-to-end publication durability) are unaffected and still required.
