@@ -1528,6 +1528,12 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[ORCD fresh-store read/close baseline](../status/orcd-read-close-baseline-20261016.md):
+W119 native RDMA/direct baseline on frozen852caf1ae, features disabled,
+exclusive after graceful crawler/service stop. Three fresh-store core runs
+216/216 PASS (11.3/11.0/11.1s), local peer67/67 PASS; no seven-client run. TCP leg pending scope clarification;
+no A/B conclusion or AMD timeout closure.
+
 [AMD asynchronous durability fixes](../status/amd-async-durability-20261015.md):
 **durability scoped PASS, loaded POSIX FAIL** on `c4178ea81`, branch
 `devel-amd-durability-20261015` from `84ffe7a68`. Early ACKs retained; all-node
