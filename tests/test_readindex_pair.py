@@ -11,14 +11,15 @@ code=r'''
 #include <pthread.h>
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 #define EFS_RAFT_LEADER 2
 struct efs_raft {int role,pending,fail,quorum;uint64_t round,term,commit,read_index;};
-struct host_group {uint64_t read_admit_count,read_begin_admits,read_begin_round,read_begin_term;};
+struct host_group {uint64_t ri_begun,ri_request;};
 struct server {int unused;};
 struct efs_raft_host {pthread_mutex_t mu;struct efs_raft core[3];struct host_group g[3];struct server *s;int absent;};
 static struct host_group *group_slot(struct efs_raft_host *h,uint8_t group){return &h->g[group];}
 struct host_read_admission {uint64_t want,round,term;};
-struct host_view {int has,role;uint64_t commit,term;};
+struct host_view {int has,role;uint64_t commit,term,read_round;};
 static int begun,waits,scalar,kicks,published,wait_error;
 static uint64_t expected[3],expected_want[3];
 static int late_commit,regressed,view_mode;
@@ -37,7 +38,7 @@ static int efs_raft_read_quorum(struct efs_raft*r){return r->quorum;}
 static int efs_raft_read_begin(struct efs_raft*r){begun++;if(r->fail)return r->fail;r->read_index=r->commit;r->round++;r->pending=1;r->quorum=0;return 0;}
 static int host_read_begin_tracked(struct efs_raft_host *h,uint8_t group,struct efs_raft *r);
 static void host_view_get(struct efs_raft_host *h,uint8_t g,struct host_view *v){
- v->has=1;v->role=h->core[g].role;v->term=h->core[g].term;v->commit=h->core[g].commit;
+ v->has=h->absent!=g+1;v->role=h->core[g].role;v->term=h->core[g].term;v->commit=h->core[g].commit;v->read_round=h->core[g].round;
  if(g==2 && late_commit){
   assert(!host_read_begin_tracked(h,0,&h->core[0]));assert(!host_read_begin_tracked(h,2,&h->core[2]));
   if(late_commit==2)h->core[0].quorum=h->core[2].quorum=1;
@@ -53,14 +54,20 @@ static void host_pump_kick(struct efs_raft_host*h){(void)h;kicks++;}
 static int host_read_index(struct efs_raft_host*h,uint8_t g,int*hint){(void)h;(void)g;(void)hint;__atomic_add_fetch(&scalar,1,__ATOMIC_RELAXED);return wait_error;}
 static int host_read_index_admitted(struct efs_raft_host*h,uint8_t g,int*hint,const struct host_read_admission*a,uint64_t *proof,int proof_only){assert(!proof && !proof_only);
  (void)hint;assert(a->round==expected[g]+1 && a->term==h->core[g].term && a->want==expected_want[g]);
- /* Both rounds must already be pending before the first wait. Their old
-  * contexts are less than the captured minimum eligible round. */
- assert(h->core[g].pending);
- if(h->core[0].role==2 && h->core[2].role==2)
-  assert(h->core[0].pending && h->core[2].pending);
+ /* Both rounds must already be pending (locked path) or requested from
+  * the pump (server mode) before the first wait. */
+ if(h->s){
+  assert(group_slot(h,g)->ri_request>=a->round);
+  if(h->core[0].role==2 && h->core[2].role==2)
+   assert(h->g[0].ri_request && h->g[2].ri_request);
+ } else {
+  assert(h->core[g].pending);
+  if(h->core[0].role==2 && h->core[2].role==2)
+   assert(h->core[0].pending && h->core[2].pending);
+ }
  waits++;return wait_error;
 }
-''' + s[s.index('static int host_read_probe_needed('):s.index('/* Fresh metadata reads share one authority',s.index('static int host_read_probe_needed('))] + s[s.index('static uint64_t host_read_register('):s.index('static int host_read_index_admitted(')] + (root/'src/server/read_index_pair_remote.h').read_text() + s[a:b]+r'''
+''' + s[s.index('static int host_read_probe_needed('):s.index('static unsigned host_read_start_requested(')] + (root/'src/server/read_index_pair_remote.h').read_text() + s[a:b]+r'''
 static void host_need_both(uint8_t groups[2]){groups[0]=0;groups[1]=2;}
 static int host_hosts(struct efs_raft_host*h,uint8_t g){return h->absent!=g+1;}
 static int host_pick_peer(struct efs_raft_host*h,const uint8_t*g,unsigned n,int avoid){(void)h;assert(g[0]==0 && g[1]==2 && n==2 && avoid==-1);return 7;}
@@ -69,20 +76,33 @@ static void reset(struct efs_raft_host*h){
  h->absent=0;h->core[0]=(struct efs_raft){.role=2,.round=7,.term=11,.commit=40,.read_index=40};
  h->core[2]=(struct efs_raft){.role=2,.round=17,.term=21,.commit=90,.read_index=90};
  expected[0]=7;expected[2]=17;expected_want[0]=40;expected_want[2]=90;late_commit=regressed=view_mode=0;begun=waits=scalar=kicks=published=wait_error=0;
+ memset(h->g,0,sizeof(h->g));
 }
 int main(void){struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER};int hint=-1;
- struct server server={1};h.s=&server;reset(&h);late_commit=1;
+ /* Server mode: lock-free admission from the view and ri_begun; the pump
+  * starts the requested rounds, so this RPC begins nothing itself. */
+ struct server server={1};h.s=&server;reset(&h);
+ assert(!host_read_index_pair(&h,0,2,&hint) && waits==2 && !begun && kicks==2);
+ assert(h.g[0].ri_request==8 && h.g[2].ri_request==18);
+ assert(!pthread_mutex_trylock(&h.mu));pthread_mutex_unlock(&h.mu);
+ /* Rounds begun after the first view but before admission cannot cover
+  * this RPC; its floor is the commit seen before them. */
+ reset(&h);late_commit=1;expected[0]=8;expected[2]=18;
  assert(!host_read_index_pair(&h,0,2,&hint) && waits==2 && begun==2);
- assert(h.core[0].commit==50 && h.core[2].commit==100);
- server.unused=0;reset(&h);late_commit=2;
- assert(!host_read_index_pair(&h,0,2,&hint) && waits==2 && begun==2); /* pre-admitted completed cohort owes no redundant probes */
- 
- reset(&h);regressed=1;assert(host_read_index_pair(&h,0,2,&hint)==EFS_ERR_BUSY && !waits && !begun);
- for(int mode=1;mode<=3;mode++){
-  reset(&h);view_mode=mode;late_commit=1;expected_want[0]=50;expected_want[2]=100;
-  assert(!host_read_index_pair(&h,0,2,&hint) && waits==2 && begun==2);
- }
- h.s=NULL;
+ assert(h.core[0].commit==50 && h.core[2].commit==100 && h.g[0].ri_request==9 && h.g[2].ri_request==19);
+ /* Split leadership: request the local round, prove the remote group,
+  * then wait for the local proof. */
+ reset(&h);h.core[2].role=0;
+ assert(!host_read_index_pair(&h,0,2,&hint) && scalar==1 && waits==1 && !begun && h.g[0].ri_request==8 && !h.g[2].ri_request);
+ reset(&h);h.core[0].role=0;wait_error=EFS_ERR_NOT_PRIMARY;
+ assert(host_read_index_pair(&h,0,2,&hint)==EFS_ERR_NOT_PRIMARY && scalar==1 && !waits && h.g[2].ri_request==18);
+ reset(&h);h.absent=3;assert(!host_read_index_pair(&h,0,2,&hint) && scalar==2 && !waits && !h.g[0].ri_request);
+ reset(&h);view_mode=1;assert(!host_read_index_pair(&h,0,2,&hint) && scalar==2 && !waits);
+ reset(&h);h.g[2].ri_begun=UINT64_MAX-1;
+ assert(host_read_index_pair(&h,0,2,&hint)==EFS_ERR_BUSY && !waits && !h.g[0].ri_request);
+ reset(&h);wait_error=EFS_ERR_NOT_PRIMARY;
+ assert(host_read_index_pair(&h,0,2,&hint)==EFS_ERR_NOT_PRIMARY && waits==1);
+ server.unused=0;h.s=NULL;
  reset(&h);h.absent=3;
  assert(host_append_authority(&h,&hint)==EFS_ERR_NOT_PRIMARY && hint==7 && !begun && !scalar);
  reset(&h);assert(!host_append_authority(&h,&hint) && begun==2 && waits==2);
@@ -119,6 +139,11 @@ int main(void){struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER};int hint=-
  assert(host_read_index_pair(&h,0,2,&hint)==EFS_ERR_IO && begun==2 && !waits && kicks==1);
  reset(&h);wait_error=EFS_ERR_NOT_PRIMARY;
  assert(host_read_index_pair(&h,0,2,&hint)==EFS_ERR_NOT_PRIMARY && waits==1);
+ /* Server mode, neither group led here: overlapped remote proofs. */
+ h.s=&server;
+ reset(&h);h.core[0].role=h.core[2].role=0;
+ assert(!host_read_index_pair(&h,0,2,&hint) && scalar==2 && !begun && !waits);
+ reset(&h);view_mode=2;assert(!host_read_index_pair(&h,0,2,&hint) && scalar==2 && !waits);
  assert(!pthread_mutex_trylock(&h.mu));pthread_mutex_unlock(&h.mu);pthread_mutex_destroy(&h.mu);
  puts("ReadIndex pair: pre-send fresh admissions, pending rounds, independent requests, routing, overflow and failures PASS");
 }
@@ -137,11 +162,13 @@ with tempfile.TemporaryDirectory(prefix='efs-read-pair-') as d:
  sanitized=Path(d)/'sanitized'
  subprocess.run(['cc','-std=gnu11','-pthread','-fsanitize=address,undefined','-fno-omit-frame-pointer','-I'+str(root/'include'),str(p),'-o',str(sanitized)],check=True)
  subprocess.run([str(sanitized)],check=True)
- negative=Path(d)/'late-floor.c'
- negative.write_text(code.replace('want=admitted[i].commit;', 'want=efs_raft_commit(r[i]);'))
+ negative=Path(d)/'late-round.c'
+ old='uint64_t begun=__atomic_load_n(&g->ri_begun,__ATOMIC_SEQ_CST);'
+ assert old in code
+ negative.write_text(code.replace(old,'uint64_t begun=v->read_round;'))
  subprocess.run(['cc','-std=gnu11','-pthread','-I'+str(root/'include'),str(negative),'-o',str(negative.with_suffix(''))],check=True)
  result=subprocess.run([str(negative.with_suffix(''))],capture_output=True)
- assert result.returncode != 0, 'late-floor negative unexpectedly passed'
+ assert result.returncode != 0, 'unpublished-begin negative unexpectedly passed'
  late_probe=Path(d)/'late-probe.c'
  assert 'efs_raft_read_round(r) >= admission->round &&' in code
  late_probe.write_text(code.replace('efs_raft_read_round(r) >= admission->round &&','1 &&'))
@@ -149,4 +176,4 @@ with tempfile.TemporaryDirectory(prefix='efs-read-pair-') as d:
  result=subprocess.run([str(late_probe.with_suffix(''))],capture_output=True)
  assert result.returncode != 0, 'late-admission probe negative unexpectedly passed'
  print('ReadIndex late-admission negative: an earlier completed round cannot suppress the required fresh probe PASS')
- print('ReadIndex paired floor: unknown/follower/term fallback, ASan/UBSan and late-floor negative PASS')
+ print('ReadIndex paired floor: lock-free server admission, unknown/follower fallback, ASan/UBSan and unpublished-begin negative PASS')

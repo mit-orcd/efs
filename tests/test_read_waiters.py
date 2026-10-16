@@ -48,6 +48,19 @@ int main(void){
  for(unsigned i=0;i<1000;i++)host_waiters_wake(&h);
  assert(signals==1); /* no repeated signals before the waiter reacquires cv_mu */
  reset(&h);h.view.read_pending=0;host_waiters_wake(&h);assert(signals==1); /* old round done: start next */
+ /* Delegated readers (any=3): the pump starts rounds, so an idle or
+  * completed older round is no reason to wake; proof, apply and term or
+  * role changes still are. */
+ reset(&h);h.waiters[0].any=3;h.view.read_context=7;h.view.read_pending=0;
+ host_waiters_wake(&h);assert(signals==0);
+ h.view.read_done=1;h.view.read_round=10;h.view.read_index=60;h.view.applied=40;
+ host_waiters_wake(&h);assert(signals==0 && !h.waiters[0].floor.index); /* older round */
+ h.view.read_round=11;host_waiters_wake(&h);assert(signals==0 && h.waiters[0].floor.index==60);
+ h.view.applied=60;host_waiters_wake(&h);assert(signals==1);
+ reset(&h);h.waiters[0].any=3;h.view.term++;host_waiters_wake(&h);assert(signals==1);
+ reset(&h);h.waiters[0].any=3;h.view.role=1;host_waiters_wake(&h);assert(signals==1);
+ reset(&h);h.waiters[0].any=3;h.view.proven_done=1;h.view.proven_round=11;h.view.proven_index=50;
+ host_waiters_wake(&h);assert(signals==1);
  reset(&h);h.view.read_pending=0;h.view.read_done=1;h.view.read_round=11;h.view.read_index=60;
  host_waiters_wake(&h);assert(signals==0); /* fresh quorum still owes apply */
  h.view.applied=60;host_waiters_wake(&h);assert(signals==1);
@@ -70,7 +83,7 @@ int main(void){
  h.view.read_round=12;h.view.read_index=900;
  h.view.proven_done=1;h.view.proven_round=10;h.view.proven_index=55;h.view.applied=60;
  host_waiters_wake(&h);assert(signals==1 && h.waiters[0].floor.index==60);
- assert(host_read_floor_ready(&h.view,&h.waiters[0].floor,50,11,9,0));
+ assert(host_read_floor_ready(&h.view,&h.waiters[0].floor,50,11,9,0,0));
  reset(&h);h.view.read_context=7;h.view.read_done=1;h.view.read_round=11;h.view.read_index=60;
  host_waiters_wake(&h);assert(!signals && h.waiters[0].floor.context==7);
  h.view.read_context=8;host_waiters_wake(&h);assert(signals==1); /* refuse changed cfg */
@@ -126,7 +139,7 @@ int main(void){
  }
  h.g[0].v_applied=60;host_waiters_wake(&h);assert(signals==4);
  host_waiters_wake(&h);assert(signals==4);
- puts("read waiters: fresh proof, pending apply, old round, invalidation and single signal PASS");
+ puts("read waiters: fresh proof, pending apply, old round, delegated rounds, invalidation and single signal PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-read-waiters-') as d:

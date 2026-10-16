@@ -29,6 +29,10 @@ static struct efs_raft *group_raft(struct efs_raft_host *h,uint8_t g){(void)h;(v
 int efs_raft_read_control(struct efs_raft *r,const struct efs_raft_msg *m){(void)r;(void)m;calls++;return result;}
 static void host_publish_group(struct efs_raft_host *h,uint8_t g){(void)h;(void)g;published++;}
 static void host_waiters_wake(struct efs_raft_host *h){(void)h;woken++;}
+/* A handled ACK may free the next requested read round; it is started
+ * before the publish, under the h->mu this path already holds. */
+static int starts;
+static unsigned host_read_start_requested(struct efs_raft_host *h){assert(pthread_mutex_trylock(&h->mu)!=0);starts++;return 0;}
 static uint64_t rd64be(const uint8_t*p){uint64_t v=0;for(int i=0;i<8;i++)v=(v<<8)|p[i];return v;}
 '''+source[pure:pure_end]+helper+r'''
 int main(void) {
@@ -76,7 +80,7 @@ int main(void) {
  p[2]=2;assert(!host_read_control(&h,p,sizeof(p)));p[2]=0;
  assert(!host_read_control(&h,p,sizeof(p)));p[2]=1;
  assert(host_read_control(&h,p,sizeof(p)) && h.inbox_n==1);
- assert(published==4 && woken==4);
+ assert(published==4 && woken==4 && starts==4);
  h.inbox_n=0;
  assert(!pthread_mutex_trylock(&h.mu));pthread_mutex_unlock(&h.mu);
  assert(!pthread_mutex_trylock(&h.inbox_mu));pthread_mutex_unlock(&h.inbox_mu);

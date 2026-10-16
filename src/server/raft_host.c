@@ -214,7 +214,12 @@ struct host_fin_item {
 #define HOST_APPLY_RC_MASK (HOST_APPLY_RC_RING - 1)
 
 struct host_group {
-    uint64_t read_admit_count,read_begin_admits,read_begin_round,read_begin_term;
+    /* Lock-free ReadIndex admission (host_read_admit_view). ri_begun is the
+     * highest core read round that may have sent probes; it is raised under
+     * h->mu BEFORE efs_raft_read_begin sends anything. ri_request is the
+     * highest round a reader waits for; the pump (and the read-ack path)
+     * starts it under h->mu, so readers never queue on h->mu. */
+    uint64_t ri_begun, ri_request;
     uint64_t balance_term, balance_since_us, balance_attempt_us;
     uint32_t balance_voters;
     uint8_t group;
@@ -3464,9 +3469,11 @@ static int host_view_wait_apply(const struct host_view *v, uint64_t want,
           v->read_index >= want && v->applied < v->read_index));
 }
 
+/* delegated: the pump starts rounds (host_read_start_requested), so an
+ * idle round is not a reason to wake this reader. */
 static int host_read_wait_ready(const struct host_view *v,
                                  uint64_t want, uint64_t round, uint64_t term,
-                                 int proof_only)
+                                 int proof_only, int delegated)
 {
     uint64_t proof;
     if (!v->has || v->role != EFS_RAFT_LEADER || v->term != term)
@@ -3478,7 +3485,7 @@ static int host_read_wait_ready(const struct host_view *v,
         return 1;
     /* A future admission can start after the old quorum completes even if
      * that old round still awaits own apply. Its data rows remain fenced. */
-    return (!v->read_pending || v->read_done) &&
+    return !delegated && (!v->read_pending || v->read_done) &&
            !host_view_wait_apply(v, want, round, term);
 }
 
@@ -3488,7 +3495,7 @@ static int host_read_wait_ready(const struct host_view *v,
 static int host_read_floor_ready(const struct host_view *v,
                                  struct host_read_floor *floor,
                                  uint64_t want,uint64_t round,uint64_t term,
-                                 int proof_only)
+                                 int proof_only,int delegated)
 {
     if(floor->context && v->read_context!=floor->context)return 1;
     if(!floor->context)floor->context=v->read_context;
@@ -3498,7 +3505,7 @@ static int host_read_floor_ready(const struct host_view *v,
         return !v->has || v->role!=EFS_RAFT_LEADER || v->term!=term ||
                v->read_context!=floor->context || proof_only ||
                v->applied>=floor->index;
-    return host_read_wait_ready(v,want,round,term,proof_only);
+    return host_read_wait_ready(v,want,round,term,proof_only,delegated);
 }
 
 /* Sleep until the pump wakes this waiter or `end` passes. cv_mu HELD by
@@ -3507,7 +3514,8 @@ static int host_read_floor_ready(const struct host_view *v,
  * wake when the group's applied >= idx (or the replica goes away); any=1:
  * wake when the group's view stamp moves past `seen`. Falls back to the
  * shared applied_cv when all slots are busy. any=2 wakes for actionable
- * fresh proof progress. Returns with cv_mu held. */
+ * fresh proof progress; any=3 is the same for a reader whose rounds the
+ * pump starts (never woken just because no round is pending). Returns with cv_mu held. */
 static void host_waiter_sleep(struct efs_raft_host *h, uint8_t group, int any,
                               uint64_t idx, uint64_t seen,
                               const struct timespec *end, uint64_t round, uint64_t term,
@@ -3568,19 +3576,19 @@ static void host_waiters_wake(struct efs_raft_host *h)
         int wake;
 
         if (!w->active || (w->notified &&
-            (w->any!=2 || w->floor.index || !w->floor.context)))
+            (w->any<2 || w->floor.index || !w->floor.context)))
             continue;
         g = group_slot(h, w->group);
         if (!g || !V_LOAD(g->v_has))
             wake = 1;
-        else if (w->any == 2) {
+        else if (w->any >= 2) {
             unsigned gi = (unsigned)(g - h->g);
             if (!(loaded & (1u << gi))) {
                 host_view_get(h, w->group, &view[gi]);
                 loaded |= (uint8_t)(1u << gi);
             }
             wake = host_read_floor_ready(&view[gi], &w->floor, w->idx, w->round, w->term,
-                                         w->proof_only);
+                                         w->proof_only, w->any == 3);
         } else if (w->any)
             wake = V_LOAD(g->v_stamp) != w->seen;
         else
@@ -4167,12 +4175,16 @@ static int host_remote_read_index(struct efs_raft_host *h, uint8_t group,
  * queues for the next round if one is pending, and is satisfied by any
  * finished round begun after admission, whose read_index >= want with
  * applied >= read_index. Previously completed rounds cannot cover new reads. It
- * reads all of that from the published view; h->mu is taken only by the
- * one reader that finds no round pending and none covering it, to
- * read_begin. Waiting is on applied_cv under cv_mu (the pump broadcasts
- * after every cycle), never on h->mu — the pump must keep its heartbeat
- * cadence under 100+ concurrent handlers. Not the leader: forward
- * (blocking peer RPC, no host lock held). */
+ * reads all of that from the published view. In server mode the reader
+ * never takes h->mu: it admits itself from the view and ri_begun, raises
+ * ri_request, and the pump (or the read-ACK path, which already holds
+ * h->mu) begins that round once the previous one has its quorum. Under the
+ * orcd-mini tiny-file workload the per-reader h->mu admission/begin was
+ * 9-11% of all efsd context switches (docs/status/orcd-mini-readindex-
+ * lock-20261016.md). Waiting is on a per-reader slot under cv_mu, never
+ * on h->mu — the pump must keep its heartbeat cadence under 100+
+ * concurrent handlers. Not the leader: forward (blocking peer RPC, no
+ * host lock held). */
 /* An authoritative remote read succeeded, but this follower cannot apply
  * its index in time. Route the caller to that leader instead of repeatedly
  * timing out the same stale local view. This is a hint, never read permission. */
@@ -4235,49 +4247,84 @@ static int host_read_probe_needed(struct efs_raft *r,
     return !efs_raft_read_pending(r) || efs_raft_read_quorum(r);
 }
 
-/* Fresh metadata reads share one authority. Register
- * before waiting for h->mu. A tracked round may cover this ticket
- * only if its admission watermark was captured BEFORE any probes were sent.
- * Saturation disables this optimization rather than wrapping authority. */
-static uint64_t host_read_register(struct efs_raft_host *h,uint8_t group)
+/* h->mu held. Raise ri_begun to the round read_begin is about to start
+ * before any of its probes can leave. A reader that loads N from ri_begun
+ * and then requires round N+1 can only be covered by probes sent after its
+ * load, i.e. after it arrived. Monotone: a failed begin only makes later
+ * admissions require a later round. recv_persisting reports round 0 and
+ * refuses the begin, so the max keeps the real value. */
+static void host_read_note_begin(struct efs_raft_host *h,uint8_t group,
+                                 struct efs_raft *r)
 {
-    if(!h->s)return 0;
     struct host_group *g=group_slot(h,group);
-    if(!g)return 0;
-    uint64_t value=__atomic_load_n(&g->read_admit_count,__ATOMIC_ACQUIRE);
-    for(;;){
-        if(value>=UINT64_MAX-1)return 0;
-        if(__atomic_compare_exchange_n(&g->read_admit_count,&value,value+1,0,
-                __ATOMIC_ACQ_REL,__ATOMIC_ACQUIRE))return value+1;
-    }
-}
-/* h->mu held. The existing round/proof predicates still decide authority. */
-static uint64_t host_read_eligible_round(struct efs_raft_host *h,uint8_t group,
-                                        struct efs_raft *r,uint64_t ticket)
-{
-    uint64_t previous=efs_raft_read_round(r);
-    struct host_group *g=group_slot(h,group);
-    if(ticket && h->s && previous && g && g->read_begin_round==previous &&
-       g->read_begin_term==efs_raft_term(r) && ticket<=g->read_begin_admits)
-        return previous;
-    return previous+1;
+    uint64_t next=efs_raft_read_round(r);
+    if(!g || next>=UINT64_MAX-1)return;
+    next++;
+    if(next>__atomic_load_n(&g->ri_begun,__ATOMIC_RELAXED))
+        __atomic_store_n(&g->ri_begun,next,__ATOMIC_SEQ_CST);
 }
 static int host_read_begin_tracked(struct efs_raft_host *h,uint8_t group,
                                   struct efs_raft *r)
 {
-    struct host_group *g=group_slot(h,group);
-    uint64_t admits=h->s && g?
-        __atomic_load_n(&g->read_admit_count,__ATOMIC_ACQUIRE):0;
-    uint64_t previous=efs_raft_read_round(r);
-    int rc=efs_raft_read_begin(r);
-    if(!rc && admits && efs_raft_read_round(r)>previous){
-        g->read_begin_admits=admits;
-        g->read_begin_round=efs_raft_read_round(r);
-        g->read_begin_term=efs_raft_term(r);
-    }
-    return rc;
+    host_read_note_begin(h,group,r);
+    return efs_raft_read_begin(r);
 }
 
+/* Fresh-read admission without h->mu. The view supplies role, term and
+ * the commit floor; ri_begun supplies the first round whose probes cannot
+ * precede this arrival. The proof itself is still the core's quorum round
+ * for that term, checked by host_read_index_admitted. */
+static int host_read_admit_view(struct efs_raft_host *h,uint8_t group,
+                                const struct host_view *v,
+                                struct host_read_admission *a)
+{
+    struct host_group *g=group_slot(h,group);
+    if(!g || !v->has || v->role!=EFS_RAFT_LEADER)return EFS_ERR_NOT_PRIMARY;
+    uint64_t begun=__atomic_load_n(&g->ri_begun,__ATOMIC_SEQ_CST);
+    /* Defense in depth: a published round is begun even if a future
+     * caller started it without host_read_begin_tracked. */
+    if(v->read_round>begun)begun=v->read_round;
+    if(begun>=UINT64_MAX-1)return EFS_ERR_BUSY;
+    *a=(struct host_read_admission){v->commit,begun+1,v->term};
+    return EFS_OK;
+}
+
+/* Ask for round `round` without h->mu: raise ri_request and wake the pump.
+ * Many readers share one raise and one probe round. */
+static void host_read_request(struct efs_raft_host *h,uint8_t group,
+                              uint64_t round)
+{
+    struct host_group *g=group_slot(h,group);
+    if(!g)return;
+    uint64_t cur=__atomic_load_n(&g->ri_request,__ATOMIC_ACQUIRE);
+    while(cur<round)
+        if(__atomic_compare_exchange_n(&g->ri_request,&cur,round,0,
+                __ATOMIC_ACQ_REL,__ATOMIC_ACQUIRE)){
+            host_pump_kick(h);return;
+        }
+}
+
+/* h->mu held: start the round readers asked for once the previous round
+ * has its quorum (one round in flight per group, as before). Returns the
+ * groups whose view needs publishing. */
+static unsigned host_read_start_requested(struct efs_raft_host *h)
+{
+    unsigned started=0;
+    if(!h->s)return 0;
+    for(unsigned i=0;i<HOST_NGROUPS;i++){
+        struct host_group *g=&h->g[i];
+        struct efs_raft *r=g->r;
+        uint64_t want=__atomic_load_n(&g->ri_request,__ATOMIC_ACQUIRE);
+        if(!want || !g->hosted || !r || efs_raft_role(r)!=EFS_RAFT_LEADER ||
+           efs_raft_read_round(r)>=want ||
+           (efs_raft_read_pending(r) && !efs_raft_read_quorum(r)))
+            continue;
+        if(host_read_begin_tracked(h,g->group,r)==EFS_OK){
+            host_publish_view(h,(int)i);started|=1u<<i;
+        }
+    }
+    return started;
+}
 
 static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
                            int *leader_hint,const struct host_read_admission *admission,
@@ -4289,8 +4336,9 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
     uint64_t want, round = 0, admitted_term = 0;
     int prof = read_prof_on();
     uint64_t p0 = prof ? now_us_() : 0;
-    int first = 1;
-    uint64_t ticket=admission?0:host_read_register(h,group);
+    int first = 1, requested = 0;
+    /* Server mode: admission and round starts never take h->mu. */
+    int delegated=h->s!=NULL;
 
     if (proof_index)
         *proof_index = 0;
@@ -4344,31 +4392,31 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
              * Readers arriving during an existing round queue for the next. */
             struct host_read_admission fresh;
             int started=0;
-            pthread_mutex_lock(&h->mu);
-            struct efs_raft *r=group_raft(h,group);
-            if(h->s) {
-                rc=(!r || efs_raft_role(r)!=EFS_RAFT_LEADER)?EFS_ERR_NOT_PRIMARY:
-                   efs_raft_read_round(r)==UINT64_MAX?EFS_ERR_BUSY:EFS_OK;
-                if(!rc) {
-                    fresh=(struct host_read_admission){want,host_read_eligible_round(h,group,r,ticket),efs_raft_term(r)};
-                    if(host_read_probe_needed(r,&fresh)) {
-                        rc=host_read_begin_tracked(h,group,r);started=rc==EFS_OK;
-                    }
-                }
-            } else rc=host_read_admit(r,&fresh,&started);
-            if(!rc)host_publish_group(h,group);
-            pthread_mutex_unlock(&h->mu);
+            if(delegated) {
+                rc=host_read_admit_view(h,group,&v,&fresh);
+            } else {
+                pthread_mutex_lock(&h->mu);
+                rc=host_read_admit(group_raft(h,group),&fresh,&started);
+                if(!rc)host_publish_group(h,group);
+                pthread_mutex_unlock(&h->mu);
+            }
             if(rc==EFS_ERR_NOT_PRIMARY){host_view_get(h,group,&v);continue;}
             if(rc!=EFS_OK)return rc;
             want=fresh.want;round=fresh.round;admitted_term=fresh.term;
             if(started)host_pump_kick(h);
             host_view_get(h,group,&v);
         }
+        if (delegated && !requested) {
+            /* The pump starts the round under h->mu; every reader that
+             * needs the same round shares it. */
+            host_read_request(h,group,round);
+            requested=1;
+        }
         if (v.term != admitted_term) {
             if (prof) fprintf(stderr,"raft-host: admitted-read-term group=%u admitted_term=%llu term=%llu admitted_round=%llu raw_round=%llu proven_round=%llu role=%d leader=%d\n",group,(unsigned long long)admitted_term,(unsigned long long)v.term,(unsigned long long)round,(unsigned long long)v.read_round,(unsigned long long)v.proven_round,v.role,v.leader);
             return EFS_ERR_NOT_PRIMARY;
         }
-        (void)host_read_floor_ready(&v,&floor,want,round,admitted_term,proof_only);
+        (void)host_read_floor_ready(&v,&floor,want,round,admitted_term,proof_only,delegated);
         if(floor.context && v.read_context!=floor.context)return EFS_ERR_NOT_PRIMARY;
         if(floor.index) {
             if(proof_only || v.applied>=floor.index) {
@@ -4395,7 +4443,7 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
             return EFS_OK;
         }
         first = 0;
-        if (!floor.index && (!v.read_pending || v.read_done) &&
+        if (!delegated && !floor.index && (!v.read_pending || v.read_done) &&
             !host_view_wait_apply(&v, want, round, admitted_term)) {
             /* Begin a round — under h->mu, re-validated against the core
              * (another reader may have begun one since the view). */
@@ -4435,11 +4483,11 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
         /* Registration and wake use the same predicate under cv_mu. A
          * quorum arriving just before registration must not park an already
          * satisfied proof RPC until another pump/view change. */
-        if (!host_read_floor_ready(&v, &floor, want, round, admitted_term, proof_only)) {
+        if (!host_read_floor_ready(&v, &floor, want, round, admitted_term, proof_only, delegated)) {
             int waiting_apply = prof && host_view_wait_apply(&v, want, round, admitted_term);
             uint64_t sleep_begin = prof ? efs_batch_obs_now_us() : 0;
             uint64_t s0 = now_us_();
-            host_waiter_sleep(h, group, 2, want, v.stamp, &end,
+            host_waiter_sleep(h, group, delegated ? 3 : 2, want, v.stamp, &end,
                               round, admitted_term, proof_only, &floor);
             s0 = now_us_() - s0;
             if (prof) read_prof_add(waiting_apply ? &g_read_prof.ri_sleep_apply :
@@ -4491,12 +4539,34 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
                                 uint8_t second,int *hint)
 {
     if(first==second)return host_read_index(h,first,hint);
-    uint64_t tickets[2]={host_read_register(h,first),host_read_register(h,second)};
     struct efs_raft *r[2];struct host_read_admission admission[2];
     uint8_t groups[2]={first,second};int rc=EFS_OK;
-    struct host_view admitted[2]={{0}};
-    if(h->s)
-        for(unsigned i=0;i<2;i++)host_view_get(h,groups[i],&admitted[i]);
+    if(h->s) {
+        /* Server mode: admit both from the published view and ri_begun
+         * before either round is requested; no h->mu. */
+        struct host_view v[2];int lead[2];
+        for(unsigned i=0;i<2;i++){
+            host_view_get(h,groups[i],&v[i]);
+            lead[i]=v[i].has && v[i].role==EFS_RAFT_LEADER;
+        }
+        if(!v[0].has || !v[1].has)
+            return host_read_index_scalar_pair(h,first,second,hint);
+        if(!lead[0] && !lead[1])
+            return host_read_index_remote_pair(h,first,second,hint);
+        for(unsigned i=0;i<2;i++){
+            if(!lead[i])continue;
+            rc=host_read_admit_view(h,groups[i],&v[i],&admission[i]);
+            if(rc!=EFS_OK)return rc;
+        }
+        for(unsigned i=0;i<2;i++)
+            if(lead[i])host_read_request(h,groups[i],admission[i].round);
+        for(unsigned i=0;i<2;i++){
+            rc=lead[i]?host_read_index_admitted(h,groups[i],hint,&admission[i],NULL,0):
+                       host_read_index(h,groups[i],hint);
+            if(rc!=EFS_OK)return rc;
+        }
+        return EFS_OK;
+    }
     pthread_mutex_lock(&h->mu);
     r[0]=group_raft(h,first);r[1]=group_raft(h,second);
     if(r[0] && r[1] &&
@@ -4514,8 +4584,7 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
             pthread_mutex_unlock(&h->mu);return EFS_ERR_BUSY;
         }
         admission[local]=(struct host_read_admission){efs_raft_commit(r[local]),
-            host_read_eligible_round(h,groups[local],r[local],tickets[local]),
-            efs_raft_term(r[local])};
+            previous+1,efs_raft_term(r[local])};
         if(host_read_probe_needed(r[local],&admission[local]))
             rc=host_read_begin_tracked(h,groups[local],r[local]);
         host_publish_group(h,groups[local]);
@@ -4538,17 +4607,8 @@ static int host_read_index_pair(struct efs_raft_host *h,uint8_t first,
         if(previous==UINT64_MAX) {
             pthread_mutex_unlock(&h->mu);return EFS_ERR_BUSY;
         }
-        uint64_t want=efs_raft_commit(r[i]);
-        /* This request's floor precedes mutex waiting. The chosen core round
-         * still captures its full commit index and requires own apply through
-         * that index; concurrent later commits are not new read dependencies. */
-        if(admitted[i].has && admitted[i].role==EFS_RAFT_LEADER &&
-           admitted[i].term==efs_raft_term(r[i])){
-            if(want<admitted[i].commit){pthread_mutex_unlock(&h->mu);return EFS_ERR_BUSY;}
-            want=admitted[i].commit;
-        }
-        admission[i]=(struct host_read_admission){want,
-                                                  host_read_eligible_round(h,groups[i],r[i],tickets[i]),efs_raft_term(r[i])};
+        admission[i]=(struct host_read_admission){efs_raft_commit(r[i]),
+                                                  previous+1,efs_raft_term(r[i])};
     }
     for(unsigned i=0;i<2;i++) {
         if(host_read_probe_needed(r[i],&admission[i]))
@@ -7260,6 +7320,8 @@ static void *host_pump(void *arg)
             c0 = now_us_();
         }
         host_pending_reads(h);
+        /* Readers queued for a fresh round since the last cycle. */
+        (void)host_read_start_requested(h);
         /* One AppendEntries for everything appended since the last
          * send. Proposers only raise the send ceiling; doing the send
          * under their lock shipped a single entry and the next mkdir
@@ -7299,6 +7361,9 @@ static void *host_pump(void *arg)
          * tail; their unchanged core checks do not apply replication work.
          * Progress-bearing/refused frames retain FIFO order. */
         host_pending_reads(h);
+        /* A quorum completed above frees the next requested round now,
+         * not after this cycle's tick and publish. */
+        (void)host_read_start_requested(h);
         if (batch_obs) BO_HIST(BH_PUMP_DRAIN_US, efs_batch_obs_now_us() - phase_us);
         if (obs) {
             t_drain = now_us_() - c0;
@@ -7346,6 +7411,7 @@ static void *host_pump(void *arg)
          * (host_wait_applied / host_read_index) that view satisfies.
          * Waiters check the view under cv_mu before sleeping, so the
          * publish-then-wake order here rules out a lost wakeup. */
+        (void)host_read_start_requested(h);
         for (i = 0; i < HOST_NGROUPS; i++)
             if (h->g[i].hosted)
                 host_publish_view(h, i);
@@ -10889,6 +10955,9 @@ static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n
         if (handled && msg.type==EFS_RAFT_MSG_AE_REQ) BO_COUNT(BO_READ_CONTROL_REQUEST);
         if (handled && msg.type==EFS_RAFT_MSG_AE_REP) BO_COUNT(BO_READ_CONTROL_REPLY);
         if (handled && msg.type==EFS_RAFT_MSG_AE_REP) {
+            /* This ACK may complete the in-flight round; start the one
+             * queued readers asked for while h->mu is already held. */
+            (void)host_read_start_requested(h);
             host_publish_group(h,msg.group);
             host_waiters_wake(h);
         }

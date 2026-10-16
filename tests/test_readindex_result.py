@@ -23,9 +23,8 @@ static struct {struct read_prof_acc ri_remote,ri_remote_wait,ri_leader_covered,r
 '''+view+r'''
 struct host_read_floor {uint64_t index,context;};
 static uint64_t efs_batch_obs_now_us(void){return 0;}
-static uint64_t host_read_register(struct efs_raft_host *h,uint8_t g){(void)h;(void)g;return 0;}
-static uint64_t host_read_eligible_round(struct efs_raft_host *h,uint8_t g,struct efs_raft *r,uint64_t t){(void)h;(void)g;(void)r;(void)t;assert(0);return 0;}
-static int host_read_probe_needed(struct efs_raft *r,const struct host_read_admission*a){(void)r;(void)a;assert(0);return 1;}
+static int host_read_admit_view(struct efs_raft_host *h,uint8_t g,const struct host_view *v,struct host_read_admission *a){(void)h;(void)g;(void)v;(void)a;assert(0);return 0;}
+static void host_read_request(struct efs_raft_host *h,uint8_t g,uint64_t round){(void)h;(void)g;(void)round;assert(0);}
 static int host_read_begin_tracked(struct efs_raft_host *h,uint8_t g,struct efs_raft *r){(void)h;(void)g;(void)r;assert(0);return 0;}
 static int delayed_floor;
 static struct host_view current;
@@ -61,7 +60,7 @@ int main(void){
  struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.cv_mu=PTHREAD_MUTEX_INITIALIZER,.n=4};
  struct host_read_admission a={101,11,2};int hint;uint64_t proof=9999;
  current=(struct host_view){.has=1,.role=EFS_RAFT_LEADER,.leader=0,.term=2,.commit=1000,.applied=900,.proven_done=1,.proven_index=110,.proven_round=11,.read_pending=1};
- assert(host_read_wait_ready(&current,101,11,2,0));
+ assert(host_read_wait_ready(&current,101,11,2,0,0));
  assert(host_read_index_admitted(&h,0,&hint,&a,&proof,0)==EFS_OK&&proof==110); /* concurrent suffix never extends this proof target */
  current.proven_round=10;assert(host_read_index_admitted(&h,0,&hint,&a,&proof,0)==EFS_ERR_BUSY&&proof==0);
  current.proven_round=11;current.proven_done=0;assert(host_read_index_admitted(&h,0,&hint,&a,&proof,0)==EFS_ERR_BUSY&&proof==0);assert(host_read_index_admitted(&h,0,&hint,&a,&proof,1)==EFS_ERR_BUSY&&proof==0);
