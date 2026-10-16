@@ -458,3 +458,69 @@ Installed service remains running with both mounts; final sync-status reports
 zero unsynced fragments and zero barrier failures on all four nodes.
 Independent Intel client untouched. No seven-client test, TCP comparison,
 excluded-feature qualification or push.
+
+
+## Single-case strace and C profile — October 15, 2026
+
+**W119 remains OPEN.** Baseline product `b6454a7f8` (deployed documentation
+checkpoint `e53d20aa1`), candidate
+`f625195011102cfd1646499df584983f95888894`. Same AMD four-node files/RDMA/direct
+profile,17G/node, default200ms async window, commands/packing/containers/expiry
+and repair disabled. No seven-client test, timeout changes or TCP comparison.
+
+Reproduce the isolated capture as the efs user with perf/strace attach
+permissions, idle installed services, and a new output directory:
+
+```sh
+python3 tests/measure/amd_names_profile.py /data1/efs/names-profile-new
+perf report --stdio --no-children --sort comm,symbol --percent-limit 1 \
+  -i /data1/efs/names-profile-new/names.perf.data
+```
+
+The committed script runs only `names_crazy_dirs`: quiet once, three times
+under199Hz userspace cycles/DWARF profiling, then once with Python syscall
+tracing and per-process syscall summaries for four daemons and both managed
+clients. Profilers are detached in finally blocks. Independent Intel services
+are excluded. Raw output must remain outside Git.
+
+Baseline isolated PASS2.15s; profiled PASS2.45/2.10/2.52s; straced PASS3.73s.
+No perf samples lost. Aggregate sampled cycles: daemon spin lock8.95%,
+mutex unlock8.35%, recv_poller5.93%, kv_mtab_pos5.69%, host_waiters_wake3.65%.
+These include background work and are not foreground wall-time proportions.
+Python trace (including harness setup) attributes1.405s to315 openat calls,
+max41.7ms; mkdir277ms total,max24.5ms; unlink246ms; close229ms; rmdir225ms.
+Daemon futex/poll and disk-barrier syscall totals overlap across threads and
+include idle waits; do not sum them into test elapsed time. This isolated
+capture does not reproduce the loaded15s timeout.
+
+The candidate replaces the512-slot wake scan with an eight-word occupancy
+bitmap under the existing cv_mu. Registration/removal updates it before/after
+wait, including timeout/spurious returns. Only occupied slots are inspected;
+notified readers remain eligible for first-proof capture. Freshness, quorum,
+apply, term/config/storage fencing and overflow broadcasts are unchanged.
+Focused read-waiter, read-index completion and read-control tests PASS on AMD;
+local waiter ASan/UBSan PASS. Regression includes sparse slots at63/64/255/511,
+full occupancy, reused slots, one signal and preserved proof floors.
+
+Quiet candidate isolated PASS1.7s. Quiet full core jobs16 reruns, using the
+same command/timeout as the preceding section: FAIL215/216 in47.6s, then
+FAIL214/216 in47.6s. `names_crazy_dirs` still times out at15s in both;
+`concurrent_creates_same_dir` also times out in the second. Follow-up isolated
+quiet PASS2.03s, profiled PASS6.61/2.43/2.10s; no lost samples. The wake symbol
+is no longer prominent as a standalone sample, but timing and other profile
+shares vary substantially: no controlled overall speedup or closure claimed.
+
+Raw evidence: `/data1/efs/names-only-20261015` (baseline),
+`/data1/efs/names-waiter-candidate-20261015` (build/quiet reruns), and
+`/data1/efs/names-after-20261015` (follow-up profile). All950 installed source
+inputs match the committed manifest. Candidate efsd SHA256:
+`3e8c4b1bdb701a0b5d4fe3d843f74676eed9bab2423c2c06d4b0231703de73e0`;
+FUSE/mgmt hashes remain those in the clean-verifier section. Build label
+`names-waiter-candidate`. Service remains deployed, profilers detached.
+
+Next: capture per-phase CREATE/OPEN/REPORT and fresh-quorum waits for this
+case while the ordinary jobs16 suite supplies its original competing load.
+Isolated tracing alone cannot establish which loaded phase consumes15s.
+Do not increase the deadline, skip this case, or equate a local CPU cleanup
+with loaded acceptance. Broader native/peer/cold gates were not repeated for
+this small follow-up; their earlier passes do not constitute new qualification.
