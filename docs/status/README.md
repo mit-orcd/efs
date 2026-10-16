@@ -18,6 +18,12 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[W122 — effective settings discovery](../backlog/work-items.md#w122): **PROPOSED**
+read-only settings catalogs for `efsd` and `efs-fuse`, exposed through management
+and the portal with defaults, effective values and startup/runtime scope. The
+portal launch-environment draft is partial; backend implementation and acceptance
+are NOTRUN. Small-cluster AMD/Intel qualification is sufficient.
+
 [Native LMCache versus NIXL for AMD/NVIDIA GPU transfers](efs-kv-gpu-api-comparison-20261016.md): **API review only; implementation and hardware tests NOTRUN.** Prefer NIXL/UCX data movement plus EFS cache control and a GPU-aware adapter extension. Both current LMCache L2 paths use host buffers.
 
 [LMCache through native NIXL: EFS integration direction](efs-lmcache-nixl-direction-20261016.md): **design only; implementation and performance NOTRUN.** Target native asynchronous EFS transfers; AMD GPU-direct support and shared publication/eviction require qualification.

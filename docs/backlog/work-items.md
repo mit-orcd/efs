@@ -5468,3 +5468,53 @@ rerun plus original mixed load, peer and clean-restart checks.
 [Diagnosis and regression](../status/orcd-w121-fork-read-20261016.md).
 Unplanned recovery remains deferred.
 [Reproduction, source identities and results](../status/orcd-queued-read-vote-20261016.md).
+
+
+<a id="w122"></a>
+
+## W122 · Discoverable effective settings for efsd, efs-fuse and the portal
+
+**Class/state:** product observability feature; PROPOSED, October 16, 2026.
+Requested for the stable beta product. This item records the feature; backend
+implementation and end-to-end acceptance are NOTRUN. It does not restore
+archived experimental features or enable expiry.
+
+**Problem:** binary help lists command-line options and efs-mgmt offers
+individual status/policy commands, but there is no complete machine-readable
+catalog of supported startup settings and runtime controls, or their effective
+values. The portal's process argument/environment probe can show explicit
+launch overrides only. An unset variable is not proof of a disabled feature;
+version defaults, normalization and later policy changes remain invisible.
+The current portal Settings draft is partial observability, not completion.
+
+**Proposed behavior:**
+
+- Maintain role-specific catalogs for `efsd` and `efs-fuse`, shared by help,
+  validation and introspection where practical. Include CLI options, supported
+  environment settings and existing mutable runtime policies. Do not expose
+  fault-injection controls as supported beta configuration.
+- Provide a versioned JSON interface, provisionally `efs-mgmt settings --json`,
+  identifying the target process/role and build. Daemon lookup and FUSE-client
+  lookup need distinct explicit targets: the daemon cannot infer client state.
+  Define an authenticated/authorized read-only client introspection mechanism
+  independent of whether `.efs` commands are enabled.
+- For every supported setting report name, description, type, unit, valid
+  range/choices, build-specific default, effective value, value source and
+  applicability. Sources distinguish CLI, environment, default and runtime
+  policy. Report restart/remount-required versus live-changeable, and identify
+  any existing supported setter without adding a universal mutation endpoint.
+- Read normalized active state rather than presenting environment text as
+  effective configuration. Mark unavailable, unsupported, redacted and unset
+  states distinctly. Never disclose credentials or arbitrary environment data.
+- Near the bottom of the portal, show a read-only Settings section with a
+  process selector, daemon/client scope, build identity and observation time.
+  Distinguish stale/disconnected data and mixed builds. Keep a clearly labelled
+  partial fallback for older binaries; never invent defaults for them.
+
+**Acceptance gates:** catalog coverage of supported startup/runtime controls;
+CLI/environment precedence and validation; defaults versus explicit overrides;
+normalized/effective values; live policy updates; restart/remount semantics;
+separate daemon and client targets; disabled `.efs`; access denial/redaction;
+mixed/older builds; stale portal observations. Run focused integration on AMD
+or Intel with a small cluster and two clients; ORCD scale is not required.
+No live configuration editor or automatic rollout is included in this item.

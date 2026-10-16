@@ -1528,6 +1528,12 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[W122 — effective settings discovery](#w122): **PROPOSED**
+read-only settings catalogs for `efsd` and `efs-fuse`, exposed through management
+and the portal with defaults, effective values and startup/runtime scope. The
+portal launch-environment draft is partial; backend implementation and acceptance
+are NOTRUN. Small-cluster AMD/Intel qualification is sufficient.
+
 [Native LMCache versus NIXL for AMD/NVIDIA GPU transfers](../status/efs-kv-gpu-api-comparison-20261016.md): **API review only; implementation and hardware tests NOTRUN.** Prefer NIXL/UCX data movement plus EFS cache control and a GPU-aware adapter extension. Both current LMCache L2 paths use host buffers.
 
 [LMCache through native NIXL: EFS integration direction](../status/efs-lmcache-nixl-direction-20261016.md): **design only; implementation and performance NOTRUN.** Target native asynchronous EFS transfers; AMD GPU-direct support and shared publication/eviction require qualification.
@@ -1745,6 +1751,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 
 | # | item | class | status | home |
 | --- | --- | --- | --- | --- |
+| settings-discovery | **W122** · effective daemon/client settings and portal catalog | product observability | PROPOSED: role-specific supported settings, defaults, effective values and startup/runtime scope; backend implementation and acceptance NOTRUN | [feature and gates](#w122) |
 | orcd-qualification | **W119** · ORCD normal-operation RDMA failures and blocked clean stop | correctness / liveness | OPEN: 150 concurrent failures /846 NOTRUN; cross-host peer59/67; enabled queries EBUSY; retained writes block clean stop. TCP/commands-off rerun also FAILs (120 failures,520 NOTRUN; peer61/67; clean stop refused); all23 successfully prepared cold cases verify after authorized forced restart. [TCP evidence](../status/orcd-tcp-direct-disabled-20261015.md). Preserve failures, isolate causes and rerun original gates; W100 stays closed. [AMD follow-up](../status/amd-rdma-posix-20261015.md): native/serial/peer/cold/degraded PASS at `c8d057391`; one-mount jobs16 remains215/216 with unusual-name timeout. [Async durability follow-up](../status/amd-async-durability-20261015.md) at `c4178ea81`: scoped durability/native/serial/peer/cold/degraded PASS; jobs16 FAIL214/216 (unusual names, concurrent creates,15s) | [Raft/KV follow-up](../status/orcd-raft-kv-20261016.md) · [evidence and gates](../status/orcd-devel-qualification-20261015.md) · [item](#w119) |
 | immediate-readback | **W121** · successful fsync followed by previous-file payload | data correctness | OPEN: 255/123,932 exact readbacks failed across both queued-vote variants on ORCD native RDMA/direct with enabled `.efs`; unique512-byte files, no expiry. Diagnosed FUSE kernel fork/read page-pinning defect; kernel remediation deferred by user. Fork-isolated experiments do not close W121 | [diagnosis](../status/orcd-w121-fork-read-20261016.md) · [experiment](../status/orcd-queued-read-vote-20261016.md) · [item](#w121) |
 | qualification-fixtures | **W120** · stale extracted LOOKUP stub and command cleanup ownership check | verification correctness | OPEN (partial fix): AMD `f6235bb73` repairs the LOOKUP host context and checks reader identity; native/docs PASS at `85a9ad6b5`. Enabled-command cleanup ownership remains NOTRUN here and still needs correction/acceptance. [AMD evidence](../status/amd-rdma-posix-20261015.md); preserve original failures | [evidence](../status/orcd-devel-qualification-20261015.md) · [item](#w120) |
@@ -7513,6 +7520,56 @@ rerun plus original mixed load, peer and clean-restart checks.
 [Diagnosis and regression](../status/orcd-w121-fork-read-20261016.md).
 Unplanned recovery remains deferred.
 [Reproduction, source identities and results](../status/orcd-queued-read-vote-20261016.md).
+
+
+<a id="w122"></a>
+
+### W122 · Discoverable effective settings for efsd, efs-fuse and the portal
+
+**Class/state:** product observability feature; PROPOSED, October 16, 2026.
+Requested for the stable beta product. This item records the feature; backend
+implementation and end-to-end acceptance are NOTRUN. It does not restore
+archived experimental features or enable expiry.
+
+**Problem:** binary help lists command-line options and efs-mgmt offers
+individual status/policy commands, but there is no complete machine-readable
+catalog of supported startup settings and runtime controls, or their effective
+values. The portal's process argument/environment probe can show explicit
+launch overrides only. An unset variable is not proof of a disabled feature;
+version defaults, normalization and later policy changes remain invisible.
+The current portal Settings draft is partial observability, not completion.
+
+**Proposed behavior:**
+
+- Maintain role-specific catalogs for `efsd` and `efs-fuse`, shared by help,
+  validation and introspection where practical. Include CLI options, supported
+  environment settings and existing mutable runtime policies. Do not expose
+  fault-injection controls as supported beta configuration.
+- Provide a versioned JSON interface, provisionally `efs-mgmt settings --json`,
+  identifying the target process/role and build. Daemon lookup and FUSE-client
+  lookup need distinct explicit targets: the daemon cannot infer client state.
+  Define an authenticated/authorized read-only client introspection mechanism
+  independent of whether `.efs` commands are enabled.
+- For every supported setting report name, description, type, unit, valid
+  range/choices, build-specific default, effective value, value source and
+  applicability. Sources distinguish CLI, environment, default and runtime
+  policy. Report restart/remount-required versus live-changeable, and identify
+  any existing supported setter without adding a universal mutation endpoint.
+- Read normalized active state rather than presenting environment text as
+  effective configuration. Mark unavailable, unsupported, redacted and unset
+  states distinctly. Never disclose credentials or arbitrary environment data.
+- Near the bottom of the portal, show a read-only Settings section with a
+  process selector, daemon/client scope, build identity and observation time.
+  Distinguish stale/disconnected data and mixed builds. Keep a clearly labelled
+  partial fallback for older binaries; never invent defaults for them.
+
+**Acceptance gates:** catalog coverage of supported startup/runtime controls;
+CLI/environment precedence and validation; defaults versus explicit overrides;
+normalized/effective values; live policy updates; restart/remount semantics;
+separate daemon and client targets; disabled `.efs`; access denial/redaction;
+mixed/older builds; stale portal observations. Run focused integration on AMD
+or Intel with a small cluster and two clients; ORCD scale is not required.
+No live configuration editor or automatic rollout is included in this item.
 
 
 ## Appendix 6 — Naming
