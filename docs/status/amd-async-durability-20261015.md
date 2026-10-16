@@ -156,3 +156,162 @@ budgets or replacing the failed mixed result with isolated passes. Existing
 historical timeouts remain recorded in the earlier AMD report. Hardware
 power-loss and verified recovery of an uncertain root remain separate gates;
 this change provides refusal, not automatic repair or lost-data replay.
+
+## Metadata/create wait follow-up (October 15–16)
+
+W119 remains subject to the loaded gates below. Source candidate
+`cf7f2798b7f8e3ec888a45529064a7b698422084` on the same branch contains:
+
+- `e1292d3a1`: extend the sorted memtable's in-memory cached key prefix from
+  eight to sixteen bytes. The old prefix excluded low inode bits, forcing
+  repeated full-key loads within a metadata shard. Full byte/length comparison
+  still resolves ties; disk encoding is unchanged. Memory accounting includes
+  the additional eight bytes per entry. Empty keys no longer shift a 64-bit
+  value by 64. Tests independently check lower bounds, absent keys, lengths
+  0–24, embedded zeros, exact common-prefix comparison counts, batch merges,
+  tombstones and allocation refusal.
+- `cf7f2798b`: REPORT first-touch preparation reads fresh authoritative session
+  owner state before submitting CREATE. Existing ACTIVE owners avoid an
+  otherwise redundant durable CREATE. Missing owners retain replicated CREATE;
+  errors, stale epochs and fencing refuse. Each participant retains its own
+  REGISTER/ESTABLISH admission, so this does not cache authority across RPCs or
+  remove data/metadata barriers. Local and remote-owner regressions cover both
+  paths and refusal/error propagation.
+
+### Measured baseline
+
+On `c4178ea81`, isolated unusual-name directories passed in 2.07s and eight
+threads creating 160 files in one directory passed in 4.38s. Core jobs16 under
+99Hz userspace CPU sampling reproduced exactly those two 15s timeouts,
+214/216 in 48.45s. Across all four daemons and both managed clients,
+`kv_mtab_pos` accounted for 17.83% of samples, memmove 12.36% combined, and
+server spin locks 4.65%, principally completion polling. These are whole-suite
+CPU shares, not percentages of a timed-out case's wall time.
+
+A separate full strace of Python, FUSE and all four daemons perturbed the
+suite to 209/216 in 144.35s; its five additional failures are not acceptance
+results. Concurrent create open calls reached 449ms versus 209ms isolated;
+the unusual-name worker was still creating/reading directories when killed.
+Aggregated syscall wall times overlap across threads and include idle waits.
+
+The lower-overhead `EFS_RPC_PROF=1 EFS_READ_PROF=1` baseline again failed
+214/216 in 48.1s with the same two cases. The final client sample records
+267.91 thread-seconds receiving replies, 38.6ms connection checkout, 89.0ms
+sending and 200.2ms BUSY backoff. CREATE averaged 27.2ms and REPORT 24.3ms.
+The serving node's loaded sample shows LOOKUP averaging 4.758ms, parent
+ReadIndex 4.741ms and KV lookup 8µs. Final read-phase counters record
+118.76 thread-seconds sleeping for quorum, 329ms mutex acquisition and
+18.7ms starting rounds, with no apply-sleep samples. These counters identify
+fresh quorum waiting as the main read delay; they do not prove a single
+cause for all CREATE/publication latency or justify dropping durability.
+
+### Reproduce the follow-up
+
+Use the same four-node AMD files/RDMA/direct deployment described above,
+17G per node, default sync window, all four excluded features disabled on
+both daemons and clients. Compile with libibverbs and libfuse3 on AMD:
+
+```sh
+make -j8 EFS_GIT_ID=metadata-candidate EFS_GIT_DESCRIBE=metadata-candidate \
+  EFS_GIT_BRANCH=devel-amd-durability-20261015 efsd efs-fuse efs-mgmt
+make EFS_GIT_ID=metadata-candidate EFS_GIT_DESCRIBE=metadata-candidate \
+  EFS_GIT_BRANCH=devel-amd-durability-20261015 test
+python3 tests/test_report_owner_prepare.py
+python3 tests/test_kv_mtab_batch.py
+CC='cc -fsanitize=address,undefined -fno-omit-frame-pointer' \
+  python3 tests/test_report_owner_prepare.py
+CC='cc -fsanitize=address,undefined -fno-omit-frame-pointer' \
+  python3 tests/test_kv_mtab_batch.py
+```
+
+For one timing run, cleanly restart only the managed AMD services with
+`EFS_READ_PROF=1 EFS_RPC_PROF=1 EFS_BATCH_OBS=1`. Then run from the deployed
+source (choose an external output directory):
+
+```sh
+python3 tests/posix/posix_suite.py /data1/efs/mnt --suite core --jobs 16 \
+  --tag metadata-timing --results "$OUT/timing.tsv"
+```
+
+Retain daemon/client logs externally. Cleanly restart with those three
+profiling variables **unset**, then run the identical command with unique
+`metadata-quiet-1` and `metadata-quiet-2` tags/results. Do not run builds,
+profilers or another workload concurrently. The harness retains its original
+15s ordinary / 75s decorated case deadlines; it owns synthetic tree cleanup.
+Never stop or unmount the independent Intel client. This is one mount/jobs16,
+not the excluded seven-client gate.
+
+Raw captures stay outside Git at `/data1/efs/timeout-diag-20261015` and
+`/data1/efs/metadata-waits-20261015`. The latter contains an exact 952-input
+SHA256 manifest, binary hashes, build/native logs, timing logs and quiet
+results. Build identity is explicitly `metadata-candidate`; source identity
+comes from the verified manifest, not that descriptive binary string.
+
+### Candidate results and rejected experiment
+
+The two retained fixes (`cf7f2798b`) pass the complete native `make test`
+through `test_conn_fd`, architecture checks and focused ASan/UBSan tests.
+Earlier native attempts stopped on incomplete transferred test assets and
+Mac `._` archive sidecars picked up as C sources; these packaging failures
+were corrected before the full passing run and remain in external logs.
+
+| Candidate/run | Core jobs16 result | Meaning |
+| --- | --- | --- |
+| Baseline `c4178ea81`, timing counters | FAIL214/216,48.1s | Both original15s timeouts |
+| Retained fixes `cf7f2798b`, timing counters | FAIL215/216,43.4s | Concurrent creates passes once; unusual directories time out |
+| Retained fixes, quiet1 | FAIL214/216,49.3s | Both original timeouts |
+| Retained fixes, quiet2 | FAIL214/216,51.0s | Both original timeouts |
+| Scheduling experiment `14339f47d`, timing | FAIL210/216,49.2s | Additional name/deep timeouts and unlink EBUSY |
+| Scheduling experiment, quiet1 | FAIL212/216,50.3s | Deep nesting and unusual-name roundtrip also time out |
+| Scheduling experiment, quiet2 | FAIL213/216,52.2s | Still fails; experiment reverted |
+| Restored `1a009c5ab`, quiet | FAIL213/216,56.7s | Original two plus `mtime_monotonic_many_writes`, all15s timeouts |
+| Restored, two-client peer | PASS67/67,61.6s | Quiet, same profile |
+
+The retained candidate's timing sample reduces mean CREATE receive latency
+from27.2 to21.6ms and REPORT from24.3 to15.8ms, but lookup/quorum delay worsens
+in that run. These sequential runs retain metadata history and may rebalance
+leaders; this is not a controlled throughput speedup claim. The unchanged
+quiet acceptance failures take precedence over one improved timing sample.
+
+Batch timing identifies follower queued read probes averaging8.96–10.45ms,
+while log sync averages4.43–4.78ms on the busy nodes. Sender queues average
+microseconds, and pump mutex acquisition is small. This supports the next
+investigation of quorum/replication scheduling under mutation load, not
+removal of fsync or reuse of stale read authority.
+
+The experiment serviced already queued read-only votes before a receive-side
+persistence callback, through the existing stable-term/boot/voter checks.
+Real-core tests, stalled-sync/failure cases, ASan/UBSan and queued-control
+regressions passed. Queued-probe averages fell to1.94–4.86ms, but live overall
+acceptance worsened, so commit `1a009c5ab93bc92e8c80cb6ba0474a21ce1b8e44`
+**reverts it**. Final src/include/tests/Makefile content is byte-identical to
+`cf7f2798b`; the experiment is not part of the retained implementation.
+The failed experiment's raw evidence remains separately under
+`/data1/efs/metadata-waits-final-20261015`, despite that historical directory
+name. Restored validation is under `/data1/efs/metadata-waits-restored-20261015`.
+
+W119 is **OPEN**. Do not infer timeout closure from the memtable regression,
+reduced REPORT latency or the scheduling experiment's safety tests. Next:
+measure CREATE/adoption, REPORT session admission and committed-verdict waits
+per phase alongside the quorum counters; distinguish useful vote progress
+from replication/apply contention. Preserve existing deadlines, fresh-read
+rules, durable publication and original failure evidence. Seven-client,
+physical power-loss and all excluded-feature qualification remain NOTRUN.
+
+Restored binary SHA256 identities:
+
+- efsd: `64351f9a8f4a8c234d4c8d2edc2fddc41430ab7db026bddbb82174e4cac8701c`
+- efs-fuse: `7b14623e43ce053356f6fcd3fd0aa4b342ea69d40cd590c69eff60893363207e`
+- efs-mgmt: `24a9f2793bcaf2eaaca132d7951e9b652340bdb2febdda394e10983e631d960d`
+
+The restored run's extra mtime timeout is retained as an unresolved load
+failure. A revert does not by itself imply a restored pass. No aggregate
+loaded performance improvement or W119 closure is claimed.
+
+Restored cold persistence: prepare PASS27/27 in29.7s, orderly stop/restart of
+all four daemons and both managed clients, verify PASS27/27 in29.3s. No
+force-discard was substituted. Final verification matches all952 installed
+source inputs to `1a009c5ab`; all six managed processes have verbs handles,
+files/direct flags and all excluded features off, with timing variables
+unset. No profiler or test controller is left running; independent Intel
+services were untouched. This checkpoint is not loaded qualification.

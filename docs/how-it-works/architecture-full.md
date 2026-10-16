@@ -1530,7 +1530,12 @@ full acceptance are separate states.
 COMMIT, boot verifiers and persistent unclean-recovery refusal pass focused
 and live RDMA/direct gates. Native, serial216/216, peer67/67 and cold27/27
 pass; jobs16 is214/216 (`names_crazy_dirs`, `concurrent_creates_same_dir`
-time out at15s). W119 remains open; no seven-client run or power-cut claim.
+time out at15s). Follow-up `1a009c5ab` retains the memtable-prefix and
+REPORT owner-preparation fixes (full native PASS); two quiet jobs16 runs
+remain214/216; the restored follow-up is213/216 with an additional mtime
+timeout, while peer passes67/67. Measured delay is principally fresh quorum waiting, not
+connection checkout. A queued-vote scheduling experiment worsened loaded
+results and was reverted. W119 remains open; no seven-client run or power-cut claim.
 
 
 [Asynchronous PUT acknowledgement](../status/intel-async-durability-20261015.md):
