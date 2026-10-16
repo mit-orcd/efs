@@ -173,10 +173,10 @@ int main(void) {
  struct efs_open_ref *unallocated=calloc(1,sizeof(*unallocated));assert(unallocated);
  unallocated->ino=43;unallocated->close_pending=1;
  unallocated->retry_order=efs_open_retry_order(unallocated);
- unallocated->next=g_open_refs;g_open_refs=unallocated;
+ open_ref_link(unallocated);
  close_rc=0;assert(efs_open_drain_pending()==EFS_ERR_BUSY);
  assert(g_open_refs==unallocated && !unallocated->next && !server_hold);
- g_open_refs=NULL;free(unallocated);
+ open_ref_unlink(unallocated);free(unallocated);
  /* Adoption's identity also owns admission even when edge is empty. */
  struct efs_open_ref adoption_only={0};adoption_only.adoption.active=1;
  adoption_only.adoption.q.id.seq=7;
@@ -192,9 +192,9 @@ int main(void) {
  pthread_mutex_unlock(open_edge_mu(42));mock_deadline=0;
  g_open_refs->retry_order=1;g_open_refs->retry_turn=0;
  struct efs_open_ref *newer=calloc(1,sizeof(*newer));assert(newer);
- newer->ino=43;newer->close_pending=1;newer->retry_order=99;newer->next=g_open_refs;g_open_refs=newer;
+ newer->ino=43;newer->close_pending=1;newer->retry_order=99;open_ref_link(newer);
  assert(efs_open_drain_pending()==EFS_ERR_BUSY&&g_open_refs==newer&&!newer->next);
- g_open_refs=NULL;free(newer);
+ open_ref_unlink(newer);free(newer);
  /* One unrecoverable/unknown old close cannot starve another retained
   * identity until the mount's shared ACK window fills. Neither is dropped. */
  assert(!efs_open_acquire(42));assert(efs_close_note(42,&leased));
@@ -206,7 +206,7 @@ int main(void) {
  newer->ino=43;newer->close_pending=1;newer->leased=1;
  newer->lease_generation=99;newer->retry_order=99;
  newer->edge=(struct efs_client_lease_request){.ino=43,.generation=99,.flags=EFS_LEASE_EDGE_CLOSE,.active=1};
- newer->edge.q.id.seq=70;newer->next=g_open_refs;g_open_refs=newer;
+ newer->edge.q.id.seq=70;open_ref_link(newer);
  assert(efs_open_drain_pending()==EFS_ERR_NET&&g_open_refs==newer&&newer->next&&server_hold);
  assert(efs_open_drain_pending()==EFS_ERR_BUSY&&g_open_refs->ino==42&&!g_open_refs->next&&server_hold);
  close_rc=0;assert(efs_open_drain_pending()==EFS_ERR_BUSY&&!g_open_refs&&!server_hold);
@@ -291,8 +291,8 @@ with tempfile.TemporaryDirectory(prefix='efs-lease-retention-') as d:
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=15)
 
  # Reject the old scheduling key that never published newly allocated CLOSE.
- legacy=re.sub(r'^            r->retry_order = efs_open_retry_order\(r\);$',
-               '            (void)efs_open_retry_order(r);',source,flags=re.M)
+ legacy=re.sub(r'^        r->retry_order = efs_open_retry_order\(r\);$',
+               '        (void)efs_open_retry_order(r);',source,flags=re.M)
  assert legacy!=source
  p.write_text(legacy)
  subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-pthread','-I'+str(root/'include'),'-I'+str(root/'src/client'),str(p),'-o',str(p.with_suffix(''))],check=True)

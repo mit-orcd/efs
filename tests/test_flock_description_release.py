@@ -35,6 +35,10 @@ static pthread_mutex_t *open_edge_mu(efs_ino_t i){assert(i==4097);return &edge;}
 static int efs_close_note(efs_ino_t i,int*leased){assert(i==4097);*leased=1;return last;}
 static int efs_open_release_pending(efs_ino_t i){assert(i==4097);holds++;return 0;}
 static void efs_client_stage_evict_ino(efs_ino_t i){assert(i==4097);evicts++;}
+#define CLOSE_ADMIT_SPINS 2000u
+static int usleep(unsigned u){(void)u;return 0;}
+static int efs_client_rpc_past_deadline(void){return 0;}
+static int efs_open_close_unadmitted(efs_ino_t i){(void)i;return 0;}
 static int efs_wb_inode_stalled(efs_ino_t i){(void)i;return 0;}
 static int efs_append_flush_report(struct fuse_file_info*f,efs_ino_t i){(void)f;(void)i;return EFS_OK;}
 static int efs_file_sync_error(struct fuse_file_info*f,efs_ino_t i,int stalled,int rc){(void)f;(void)i;(void)stalled;return rc;}

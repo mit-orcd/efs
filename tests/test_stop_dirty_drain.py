@@ -93,6 +93,8 @@ static uint64_t now,deadline;static unsigned rounds,flight_rounds;static int bod
 static uint64_t stats_now_ms(void) {return now;}
 static uint64_t efs_client_rpc_deadline_ms(void) {return deadline;}
 static void efs_client_rpc_set_deadline_ms(uint64_t value) {deadline=value;}
+#define OPEN_DRAIN_PER_PASS 4096u
+static int efs_client_rpc_past_deadline(void) {return deadline && now>=deadline;}
 static void usleep(unsigned micros) {now+=(micros+999)/1000;}
 static void efs_buf_drain_enter(void) {}
 static void efs_buf_drain_leave(void) {}

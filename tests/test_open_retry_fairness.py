@@ -12,11 +12,13 @@ code=r'''
 #define EFS_OK 0
 #define EFS_ERR_BUSY -13
 static uint64_t now, budget;
-static int creates, leases, consume, create_rc;
+static int creates, leases, consume, create_rc, backlog;
 static uint64_t stats_now_ms(void){return now;}
 static uint64_t efs_client_rpc_deadline_ms(void){return budget;}
 static void efs_client_rpc_set_deadline_ms(uint64_t v){budget=v;}
-static int efs_open_drain_pending(void){leases++;if(consume){now=budget;return EFS_ERR_BUSY;}return EFS_OK;}
+#define OPEN_DRAIN_PER_PASS 4096u
+static int efs_client_rpc_past_deadline(void){return budget && now>=budget;}
+static int efs_open_drain_pending(void){leases++;if(consume){now=budget;return EFS_ERR_BUSY;}if(backlog){backlog--;return EFS_ERR_BUSY;}return EFS_OK;}
 static int efs_pending_create_drain(void){creates++;assert(now<budget);return create_rc;}
 '''+s[a:b]+r'''
 int main(void) {
@@ -30,6 +32,9 @@ int main(void) {
  now=100;budget=0;consume=0;create_rc=EFS_ERR_BUSY;
  assert(efs_open_retry_pass(1100)==EFS_ERR_BUSY);
  create_rc=0;assert(efs_open_retry_pass(1100)==EFS_OK);
+ /* One pass drains a whole retained backlog, not one row per pass. */
+ now=100;budget=0;consume=0;create_rc=0;leases=0;backlog=50;
+ assert(efs_open_retry_pass(1100)==EFS_OK && !backlog && leases==51);
  puts("retry fairness: exhausted lease budget leaves CREATE proof time; inherited deadline/result preserved PASS");
 }
 '''

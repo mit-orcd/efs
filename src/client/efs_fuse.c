@@ -1905,9 +1905,65 @@ struct efs_open_ref {
     uint64_t retry_turn; /* fair retry visits, protected by g_open_mu */
     struct efs_client_lease_request edge; /* immutable OPEN or CLOSE identity */
     struct efs_client_lease_request adoption; /* clear pending before CLOSE */
-    struct efs_open_ref *next;
+    struct efs_open_ref *next, *prev; /* every row, for retry scans */
+    struct efs_open_ref *hnext; /* inode hash chain */
 };
 static struct efs_open_ref *g_open_refs;
+
+/* At most one row per inode. Rows retained for an unconfirmed last close
+ * stay until the CLOSE edge is proven, so the table can hold far more rows
+ * than open files; every per-inode lookup (getattr, open, release and the
+ * cache evictor's per-inode pin test) goes through the hash, never a walk
+ * of the table under g_open_mu (Oct 16 xorinox: 20,308 rows, ~80% of
+ * efs-fuse CPU in list walks). All helpers run with g_open_mu held. */
+#define OPEN_REF_BUCKETS 4096u
+/* Bounded wait (1 ms steps) for a CLOSE identity position, and the most
+ * retained releases one background pass may drain. */
+#define CLOSE_ADMIT_SPINS 2000u
+#define OPEN_DRAIN_PER_PASS 4096u
+static struct efs_open_ref *g_open_hash[OPEN_REF_BUCKETS];
+
+static uint32_t open_ref_bucket(efs_ino_t ino)
+{
+    return (uint32_t)(((uint64_t)ino * 0x9E3779B97F4A7C15ULL) >> 52) &
+           (OPEN_REF_BUCKETS - 1);
+}
+
+static struct efs_open_ref *open_ref_find(efs_ino_t ino)
+{
+    for (struct efs_open_ref *r = g_open_hash[open_ref_bucket(ino)]; r; r = r->hnext)
+        if (r->ino == ino)
+            return r;
+    return NULL;
+}
+
+static void open_ref_link(struct efs_open_ref *r)
+{
+    uint32_t b = open_ref_bucket(r->ino);
+    r->prev = NULL;
+    r->next = g_open_refs;
+    if (g_open_refs)
+        g_open_refs->prev = r;
+    g_open_refs = r;
+    r->hnext = g_open_hash[b];
+    g_open_hash[b] = r;
+}
+
+static void open_ref_unlink(struct efs_open_ref *r)
+{
+    struct efs_open_ref **pp = &g_open_hash[open_ref_bucket(r->ino)];
+    if (r->prev)
+        r->prev->next = r->next;
+    else if (g_open_refs == r)
+        g_open_refs = r->next;
+    if (r->next)
+        r->next->prev = r->prev;
+    while (*pp && *pp != r)
+        pp = &(*pp)->hnext;
+    if (*pp)
+        *pp = r->hnext;
+    r->next = r->prev = r->hnext = NULL;
+}
 
 #define OPEN_EDGE_SHARDS 64
 static pthread_mutex_t g_open_edge_mu[OPEN_EDGE_SHARDS];
@@ -1930,15 +1986,12 @@ static int efs_open_note(efs_ino_t ino)
     int first = EFS_ERR_NOMEM;
 
     pthread_mutex_lock(&g_open_mu);
-    for (r = g_open_refs; r; r = r->next)
-        if (r->ino == ino)
-            break;
+    r = open_ref_find(ino);
     if (!r) {
         r = calloc(1, sizeof(*r));
         if (r) {
             r->ino = ino;
-            r->next = g_open_refs;
-            g_open_refs = r;
+            open_ref_link(r);
         }
     }
     if (r) {
@@ -1957,11 +2010,8 @@ static void efs_open_set_leased(efs_ino_t ino)
     struct efs_open_ref *r;
 
     pthread_mutex_lock(&g_open_mu);
-    for (r = g_open_refs; r; r = r->next)
-        if (r->ino == ino) {
-            r->leased = 1;
-            break;
-        }
+    if ((r = open_ref_find(ino)))
+        r->leased = 1;
     pthread_mutex_unlock(&g_open_mu);
 }
 
@@ -1980,30 +2030,27 @@ static uint64_t efs_open_retry_order(const struct efs_open_ref *r)
 
 static int efs_close_note(efs_ino_t ino, int *leased)
 {
-    struct efs_open_ref **pp, *r;
+    struct efs_open_ref *r;
     int last = 0;
 
     if (leased)
         *leased = 0;
     pthread_mutex_lock(&g_open_mu);
-    for (pp = &g_open_refs; (r = *pp); pp = &r->next) {
-        if (r->ino == ino) {
-            if (r->n > 0)
-                r->n--;
-            if (r->n == 0) {
-                if (leased)
-                    *leased = r->leased;
-                if (r->leased) {
-                    r->close_pending = 1;
-                    r->retry_order = efs_open_retry_order(r);
-                    r->retry_turn = 0;
-                } else {
-                    *pp = r->next;
-                    free(r);
-                }
-                last = 1;
+    if ((r = open_ref_find(ino))) {
+        if (r->n > 0)
+            r->n--;
+        if (r->n == 0) {
+            if (leased)
+                *leased = r->leased;
+            if (r->leased) {
+                r->close_pending = 1;
+                r->retry_order = efs_open_retry_order(r);
+                r->retry_turn = 0;
+            } else {
+                open_ref_unlink(r);
+                free(r);
             }
-            break;
+            last = 1;
         }
     }
     pthread_mutex_unlock(&g_open_mu);
@@ -2016,8 +2063,7 @@ static int efs_open_release_pending_run(efs_ino_t ino)
 {
     struct efs_open_ref *owner = NULL;
     pthread_mutex_lock(&g_open_mu);
-    for (struct efs_open_ref *r = g_open_refs; r; r = r->next)
-        if (r->ino == ino) { owner = r; break; }
+    owner = open_ref_find(ino);
     pthread_mutex_unlock(&g_open_mu);
     if (!owner || !owner->close_pending) return EFS_OK;
     /* The stripe keeps this row stable. Resolve a possibly committed OPEN
@@ -2074,15 +2120,10 @@ static int efs_open_release_pending_run(efs_ino_t ino)
         (void)efs_client_lease_reset(request);
     }
     pthread_mutex_lock(&g_open_mu);
-    struct efs_open_ref **pp = &g_open_refs;
-    while (*pp) {
-        struct efs_open_ref *r = *pp;
-        if (r->ino == ino && !r->n && r->close_pending) {
-            *pp = r->next;
-            free(r);
-            break;
-        }
-        pp = &r->next;
+    struct efs_open_ref *done = open_ref_find(ino);
+    if (done && !done->n && done->close_pending) {
+        open_ref_unlink(done);
+        free(done);
     }
     pthread_mutex_unlock(&g_open_mu);
     return EFS_OK;
@@ -2096,13 +2137,22 @@ static int efs_open_release_pending(efs_ino_t ino)
 {
     int rc = efs_open_release_pending_run(ino);
     pthread_mutex_lock(&g_open_mu);
-    for (struct efs_open_ref *r = g_open_refs; r; r = r->next)
-        if (r->ino == ino && r->close_pending) {
-            r->retry_order = efs_open_retry_order(r);
-            break;
-        }
+    struct efs_open_ref *r = open_ref_find(ino);
+    if (r && r->close_pending)
+        r->retry_order = efs_open_retry_order(r);
     pthread_mutex_unlock(&g_open_mu);
     return rc;
+}
+
+/* A retained last close whose CLOSE edge could not take an identity
+ * position (none allocated yet). Caller holds the inode stripe. */
+static int efs_open_close_unadmitted(efs_ino_t ino)
+{
+    pthread_mutex_lock(&g_open_mu);
+    struct efs_open_ref *r = open_ref_find(ino);
+    int waiting = r && !r->n && r->close_pending && r->leased && !r->edge.active;
+    pthread_mutex_unlock(&g_open_mu);
+    return waiting;
 }
 
 static int wb_lock_budget(pthread_mutex_t *mu)
@@ -2225,8 +2275,7 @@ static int efs_open_acquire_fileid_run(efs_ino_t ino, uint64_t create_generation
         if (rc == EFS_OK && !generation) rc = EFS_ERR_PROTO;
         struct efs_open_ref *owner = NULL;
         pthread_mutex_lock(&g_open_mu);
-        for (struct efs_open_ref *r = g_open_refs; r; r = r->next)
-            if (r->ino == ino) { owner = r; break; }
+        owner = open_ref_find(ino);
         pthread_mutex_unlock(&g_open_mu);
         if (rc == EFS_OK) {
             /* First CREATE adoption can establish normal ownership and clear
@@ -2307,8 +2356,7 @@ static int efs_open_adopt(efs_ino_t ino,uint64_t generation,uint64_t token,
         if(lock_rc!=EFS_OK)return lock_rc;
         struct efs_open_ref *owner=NULL;
         pthread_mutex_lock(&g_open_mu);
-        for(struct efs_open_ref *r=g_open_refs;r;r=r->next)
-            if(r->ino==ino){owner=r;break;}
+        owner=open_ref_find(ino);
         pthread_mutex_unlock(&g_open_mu);
         rc=EFS_ERR_STALE;
         int terminal=0;
@@ -2453,7 +2501,14 @@ static int efs_open_retry_pass(uint64_t deadline)
         share = 500;
     uint64_t split = now + share;
     efs_client_rpc_set_deadline_ms(split);
-    int lease_rc = efs_open_drain_pending();
+    /* Drain as many retained releases as the share allows; one per pass
+     * (10/s) could never keep up with a stream of failed last closes. */
+    int lease_rc = EFS_OK;
+    for (unsigned i = 0; i < OPEN_DRAIN_PER_PASS && !efs_client_rpc_past_deadline(); i++) {
+        lease_rc = efs_open_drain_pending();
+        if (lease_rc == EFS_OK)
+            break; /* nothing retained */
+    }
     efs_client_rpc_set_deadline_ms(deadline);
     int create_rc = efs_pending_create_drain();
     efs_client_rpc_set_deadline_ms(previous);
@@ -2493,11 +2548,8 @@ int efs_client_ino_is_open(efs_ino_t ino)
     int open = 0;
 
     pthread_mutex_lock(&g_open_mu);
-    for (r = g_open_refs; r; r = r->next)
-        if (r->ino == ino) {
-            open = 1;
-            break;
-        }
+    r = open_ref_find(ino);
+    open = r != NULL;
     pthread_mutex_unlock(&g_open_mu);
     return open;
 }
@@ -3507,10 +3559,8 @@ static int append_publication_wait(efs_ino_t ino,int *held)
     for (;;) {
         uint64_t until=0,now=stats_now_ms();int publishing=0;
         pthread_mutex_lock(&g_open_mu);
-        for(struct efs_open_ref *r=g_open_refs;r;r=r->next) {
-            if(r->ino!=ino)continue;
-            publishing=r->append_publishing;until=r->append_handoff_ms;break;
-        }
+        struct efs_open_ref *r=open_ref_find(ino);
+        if(r){publishing=r->append_publishing;until=r->append_handoff_ms;}
         pthread_mutex_unlock(&g_open_mu);
         if(!publishing && until<=now)return EFS_OK;
         unsigned delay=publishing?2000u:(unsigned)((until-now)*1000u);
@@ -3650,8 +3700,7 @@ static int append_publish_burst(efs_ino_t ino)
     int publish = 0;
     uint64_t now = stats_now_ms();
     pthread_mutex_lock(&g_open_mu);
-    for (struct efs_open_ref *r = g_open_refs; r; r = r->next) {
-        if (r->ino != ino)continue;
+    for (struct efs_open_ref *r = open_ref_find(ino); r; r = NULL) {
         if(r->append_publishing)break;
         if (!r->append_burst_ms)r->append_burst_ms = now;
         if (r->append_burst >= 32 || now - r->append_burst_ms >= 1000) {
@@ -3668,8 +3717,7 @@ static int append_publish_burst(efs_ino_t ino)
     int rc=efs_append_flush_report(NULL,ino);
     uint64_t completed_ms=stats_now_ms();
     pthread_mutex_lock(&g_open_mu);
-    for(struct efs_open_ref *r=g_open_refs;r;r=r->next) {
-        if(r->ino!=ino)continue;
+    for(struct efs_open_ref *r=open_ref_find(ino);r;r=NULL) {
         r->append_publishing=0;
         /* BUSY backoff caps at 64 ms. Leave a 100 ms admission window
          * after durable publication so a competing client can retry. */
@@ -4929,8 +4977,23 @@ static int efs_fuse_release_ino(fuse_ino_t ino, struct fuse_file_info *fi)
     }
     efs_file_close(fi);
     if (efs_close_note(fh, &leased)) {
-        if (leased)
-            (void)efs_open_release_pending(fh);
+        if (leased) {
+            int rc = efs_open_release_pending(fh);
+            /* Identity admission is a 16-position window shared by every
+             * thread; a momentarily full window is not a refusal. Wait for a
+             * position like OPEN does, outside the stripe (an older owner on
+             * a colliding stripe may need it to finish). Giving up left the
+             * release to the background drain, and under a busy open/close
+             * stream retained rows grew without bound (Oct 16 xorinox: +40/s,
+             * 23,455 rows). A reopen meanwhile clears close_pending. */
+            for (unsigned spin = 0; rc == EFS_ERR_BUSY && spin < CLOSE_ADMIT_SPINS &&
+                 !efs_client_rpc_past_deadline() && efs_open_close_unadmitted(fh); spin++) {
+                pthread_mutex_unlock(edge);
+                usleep(1000);
+                pthread_mutex_lock(edge);
+                rc = efs_open_release_pending(fh);
+            }
+        }
         efs_client_stage_evict_ino(fh);
     }
     pthread_mutex_unlock(edge);

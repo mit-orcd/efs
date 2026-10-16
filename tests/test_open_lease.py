@@ -33,12 +33,14 @@ struct fuse_file_info { uint64_t fh, lock_owner;unsigned flock_release; };
 typedef uint64_t fuse_ino_t;
 static pthread_mutex_t gate = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cv = PTHREAD_COND_INITIALIZER;
-static int holds, drops, fail, block, entered, unblock, fileid_calls;
+static int holds, drops, fail, block, entered, unblock, fileid_calls, close_busy;
 int efs_client_rpc_getchunks_fileid(efs_export_id_t ex,efs_ino_t ino,uint64_t gen,uint32_t start,struct efs_chunk_rec *recs,uint32_t *count,uint64_t *out) {
  fileid_calls++;(void)ex;(void)ino;(void)gen;(void)start;(void)recs;(void)count;*out=99;return EFS_OK;
 }
 int efs_client_lease_begin(struct efs_client_lease_request *r,efs_ino_t ino,uint64_t gen,unsigned flags,uint64_t token) {
- assert(!r->active&&gen==99&&!token);*r=(struct efs_client_lease_request){.ino=ino,.generation=gen,.flags=flags,.active=1};return EFS_OK;
+ assert(!r->active&&gen==99&&!token);
+ if(!(flags&EFS_LEASE_EDGE_OPEN)&&close_busy){close_busy--;return EFS_ERR_BUSY;}
+ *r=(struct efs_client_lease_request){.ino=ino,.generation=gen,.flags=flags,.active=1};return EFS_OK;
 }
 int efs_client_lease_resume(struct efs_client_lease_request *r,int probe) {
  assert(!probe&&r->active);if(r->complete)return r->result;
@@ -67,7 +69,7 @@ static int efs_rc_to_errno(int rc){return rc?-EIO:0;}
 int efs_client_rpc_flock(efs_export_id_t ex, efs_ino_t ino, uint32_t op, uint64_t owner) {
     (void)ex; (void)ino; (void)op; (void)owner; return EFS_OK;
 }
-""" + refs + '\n'.join(function(n) for n in ['efs_open_note', 'efs_open_set_leased', 'efs_open_retry_order', 'efs_close_note', 'efs_open_release_pending_run', 'efs_open_release_pending', 'wb_lock_budget','efs_open_lease_resume_wait','efs_open_acquire_fileid_run','efs_open_acquire_fileid_mode','efs_open_acquire_fileid','efs_open_acquire', 'efs_fuse_release_ino']) + r"""
+""" + refs + '\n'.join(function(n) for n in ['efs_open_note', 'efs_open_set_leased', 'efs_open_retry_order', 'efs_close_note', 'efs_open_release_pending_run', 'efs_open_release_pending', 'efs_open_close_unadmitted', 'wb_lock_budget','efs_open_lease_resume_wait','efs_open_acquire_fileid_run','efs_open_acquire_fileid_mode','efs_open_acquire_fileid','efs_open_acquire', 'efs_fuse_release_ino']) + r"""
 static void release(void) { struct fuse_file_info fi = {.fh = 42}; assert(!efs_fuse_release_ino(42, &fi)); }
 static void *opener(void *arg) { (void)arg; assert(efs_open_acquire(42) == EFS_OK); return NULL; }
 static void *closer(void *arg) { (void)arg; release(); return NULL; }
@@ -79,6 +81,7 @@ static void wait_entered(void) {
 static void resume(void) {
     pthread_mutex_lock(&gate); unblock = 1; pthread_cond_broadcast(&cv); pthread_mutex_unlock(&gate);
 }
+static int efs_client_ino_is_open_test(efs_ino_t ino){pthread_mutex_lock(&g_open_mu);int r=open_ref_find(ino)!=NULL;pthread_mutex_unlock(&g_open_mu);return r;}
 int main(void) {
     struct fuse_file_info query = {.fh = 1ULL << 60};
     assert(!efs_fuse_release_ino(query.fh, &query));
@@ -106,7 +109,20 @@ int main(void) {
     assert(!efs_open_acquire_fileid(42,99));
     assert(fileid_calls==fetched && g_open_refs->leased);
     release(); assert(!g_open_refs);
-    puts("open leases: shared opens, failed HOLD, acquire/release serialization PASS");
+    /* A momentarily full identity window on the last close is waited out
+     * at release (not left to the 10/s background drain). */
+    assert(!efs_open_acquire(42)); close_busy = 3; int before_drops = drops;
+    release(); assert(!close_busy && drops == before_drops + 1 && !g_open_refs);
+    /* Many inodes, colliding hash buckets: every row found, all removed. */
+    for (efs_ino_t i = 1; i <= 20000; i++) assert(!efs_open_acquire(i * 4096));
+    for (efs_ino_t i = 1; i <= 20000; i++) assert(efs_client_ino_is_open_test(i * 4096));
+    for (efs_ino_t i = 1; i <= 20000; i++) {
+        struct fuse_file_info fi = {.fh = i * 4096};
+        assert(!efs_fuse_release_ino(fi.fh, &fi));
+    }
+    assert(!g_open_refs);
+    for (unsigned b = 0; b < OPEN_REF_BUCKETS; b++) assert(!g_open_hash[b]);
+    puts("open leases: shared opens, failed HOLD, acquire/release serialization, CLOSE admission wait, hashed table PASS");
 }
 """
 with tempfile.TemporaryDirectory(prefix='efs-open-lease-') as directory:
