@@ -1,5 +1,13 @@
 # Experimental storage engine selection
 
+**Removed from devel on October 16, 2026 ([D37](../status/decisions.md)).**
+`efsd` now has only the files engine: `--storage-engine files` is still
+accepted, `--storage-engine containers` is refused, and a root formatted by the
+container engine (engine marker byte 1) refuses startup. Everything below is
+historical. The code, its scripts and tests are preserved at tag
+`archive/packing-containers-20261016` (branch `packing-containers`); see the
+[removal record](../status/packing-containers-removal-20261016.md).
+
 **Standing policy (October 12, 2026): containers are experimental and excluded from required testing and release qualification.** The container commands and A/B/profiling procedures below are historical reference, not required work or authorization to run them. Use files for required qualification. [Binding scope and exceptions](../status/container-testing-policy-20261012.md).
 
 On `devel-storage-engine`, `efsd` accepts `--storage-engine files|containers`.

@@ -227,7 +227,6 @@ static int chunk_rec_same_read(const struct efs_chunk_entry *ce,
         ce->delta_seq != r->delta_base_seq ||
         memcmp(ce->fragment_nodes, r->nodes, sizeof(r->nodes)) ||
         memcmp(ce->checksums, r->checksums, sizeof(r->checksums)) ||
-        memcmp(&ce->packed, &r->packed, sizeof(r->packed)) ||
         memcmp(&ce->read_view, &r->read_view, sizeof(r->read_view)))
         return 0;
     return memcmp(ce->deltas, r->deltas,
@@ -261,8 +260,6 @@ static void apply_chunk_recs(efs_ino_t lock_ino, const struct efs_chunk_rec *rec
                                           recs[i].chunk_index,
                                           recs[i].deltas, recs[i].delta_base_n,
                                           recs[i].delta_base_seq);
-        (void)efs_export_set_chunk_packed(&g_client.export, recs[i].ino,
-                                         recs[i].chunk_index, &recs[i].packed);
         (void)efs_export_set_chunk_view(&g_client.export, recs[i].ino,
                                         recs[i].chunk_index, &recs[i].read_view);
         if (!same)
@@ -597,17 +594,6 @@ static void pull_file_layout(const struct efs_inode *rpc)
 {
     if ((rpc->mode & S_IFMT) != S_IFREG)
         return;
-    if (rpc->pack_ino && rpc->pack_ino != rpc->ino) {
-        uint32_t cs = data_chunk_size();
-        uint64_t span = rpc->pack_len ? rpc->pack_len : rpc->size;
-        uint32_t c0 = cs ? (uint32_t)(rpc->pack_off / cs) : 0;
-        uint32_t c1 = c0 + 1;
-        if (cs && span) {
-            uint64_t hi = (uint64_t)rpc->pack_off + span;
-            c1 = (uint32_t)((hi - 1) / cs) + 1;
-        }
-        pull_chunks_range(rpc->pack_ino, c0, c1, NULL);
-    }
     /* D2: a regular file adopts the inode row only. pull_layout_miss
      * is the chunk-map path. The 64-lane size stat stays at open. */
 }
@@ -731,12 +717,6 @@ int efs_client_pull_layout_miss(efs_ino_t ino, uint32_t ci0, uint32_t ci1)
 static void invalidate_file_layout(const struct efs_inode *rpc, int drop_dcache)
 {
     uint32_t cs = data_chunk_size();
-    if (rpc->pack_ino && rpc->pack_ino != rpc->ino) {
-        uint32_t c0 = cs ? (uint32_t)(rpc->pack_off / cs) : 0;
-        efs_rdcache_invalidate(rpc->pack_ino, c0);
-        if (drop_dcache)
-            efs_dcache_drop_if_clean(rpc->pack_ino, c0);
-    }
     uint32_t nci = 0;
     if (cs && rpc->size)
         nci = (uint32_t)((rpc->size + cs - 1) / cs);
@@ -818,16 +798,8 @@ static void adopt_rpc_inode(const struct efs_inode *rpc)
          * it as a data-layout change. */
         int nlink_changed = rpc->nlink != local.nlink;
         if (grow || (take_mtime && same) || shrink || nlink_changed) {
-            if (grow || shrink) {
+            if (grow || shrink)
                 local.size = rpc->size;
-                local.pack_ino = rpc->pack_ino;
-                local.pack_off = rpc->pack_off;
-                local.pack_len = rpc->pack_len;
-            } else if (same && take_mtime) {
-                local.pack_ino = rpc->pack_ino;
-                local.pack_off = rpc->pack_off;
-                local.pack_len = rpc->pack_len;
-            }
             if (take_mtime) {
                 local.mtime = rpc->mtime;
                 local.mtime_nsec = rpc->mtime_nsec;
@@ -1039,9 +1011,6 @@ static void overlay_local_size(struct efs_inode *child, int more)
     } else if (have && local.size > child->size &&
                !inode_mtime_older(&local, child)) {
         child->size = local.size;
-        child->pack_ino = local.pack_ino;
-        child->pack_off = local.pack_off;
-        child->pack_len = local.pack_len;
     }
 }
 

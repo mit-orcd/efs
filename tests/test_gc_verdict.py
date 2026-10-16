@@ -25,7 +25,7 @@ struct efs_raft {int leader;};
 struct server {uint64_t gc_sweep_errors,gc_reap_errors,gc_ack_errors;int storage_engine,repair_experiment;};
 struct efs_raft_host {int gc_running;pthread_mutex_t mu;struct efs_raft r;struct server *s;struct efs_kv *kv;};
 static int verdict, waits, forwards, durable;
-static int allow_private=1,cohort_calls,cohort_rc,settled_calls,settled_rc;
+static int cohort_calls,cohort_rc,settled_calls,settled_rc;
 static uint32_t voters=7;static uint64_t expected_index=41,expected_term=7;
 static uint32_t efs_raft_voters(struct efs_raft*r){(void)r;return voters;}
 static struct efs_raft *group_raft(struct efs_raft_host*h,uint8_t g){(void)g;return &h->r;}
@@ -130,20 +130,8 @@ int main(void){
  assert(core_result(EFS_MD_CMD_APPEND_RSV,EFS_ERR_NOMEM,53)==EFS_ERR_NOMEM);
  assert(core_result(EFS_MD_CMD_APPEND_RSV,EFS_ERR_BUSY,53)==EFS_OK);
  assert(core_result(EFS_MD_CMD_APPEND_RSV,EFS_ERR_IO,45)==EFS_OK);
- /* Container-only multi-voter leaders use the actual cohort call site
-  * outside the mutex, preserving exact entry identity/verdict and errors. */
- s.storage_engine=1;allow_private=0;expected_index=42;expected_term=9;
- for(unsigned j=0;j<sizeof(values)/sizeof(values[0]);j++){
-  verdict=values[j];int before=waits;
-  assert(host_bg_propose(&h,0,cmd,18,1)==verdict && waits==before+1);
- }
- settled_rc=EFS_ERR_NOT_PRIMARY;
- assert(host_bg_propose(&h,0,cmd,18,0)==settled_rc&&settled_calls==1);
- int before=waits;cohort_rc=EFS_ERR_IO;
- assert(host_bg_propose(&h,0,cmd,18,1)==EFS_ERR_IO&&waits==before);
- cohort_rc=EFS_ERR_NOT_PRIMARY;
- assert(host_bg_propose(&h,0,cmd,18,1)==EFS_ERR_NOT_PRIMARY&&waits==before);
- cohort_rc=0;allow_private=1;expected_index=41;expected_term=7;verdict=0;
+ /* The container-only cleanup cohort was removed: no path joins it. */
+ verdict=0;
  int count=cohort_calls;
  s.repair_experiment=1;assert(!host_bg_propose(&h,0,cmd,18,1));s.repair_experiment=0;
  voters=1;assert(!host_bg_propose(&h,0,cmd,18,1));voters=0;assert(!host_bg_propose(&h,0,cmd,18,1));voters=7;

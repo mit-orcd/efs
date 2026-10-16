@@ -99,8 +99,7 @@ struct efsd_server {
     uint64_t gc_missing_exports;
     struct efs_gc_io_stats gc_io[EFS_GC_IO_CLASSES];
     uint32_t gc_stage, gc_group, gc_sampled_mask, gc_reap_capped[2];
-    int storage_engine; /* 0 files (default), 1 experimental containers */
-    void *container_targets[EFS_MAX_STORAGE_PATHS]; /* engine identity/locks */
+    void *storage_roots[EFS_MAX_STORAGE_PATHS]; /* root identity/locks (storage_roots.c) */
     int direct_io; /* use O_DIRECT for fragment reads/writes */
     int bench_sync; /* benchmark-only O_SYNC; daemon store builds ignore it */
     /* Shared writer-pool size (0 = inline, <0 = auto from nproc at start). */
@@ -478,10 +477,6 @@ void server_raft_host_lane_bootstrap_rpc(const struct efs_msg_lane_bootstrap *,
                                           struct efs_msg_lane_writer_view_reply *);
 void server_raft_host_publication(const struct efs_msg_publication *, int query_only, /* 0 submit, 1 status, 2 exact retirement */
                                   struct efs_msg_publication_reply *);
-void server_raft_host_publication_batch(const struct efs_msg_publication_batch *,
-                                        struct efs_msg_publication_batch_reply *);
-void server_raft_host_pack_authority(const uint8_t *,uint32_t,
-                                    struct efs_msg_pack_authority_reply *);
 void server_raft_host_lane_writer_view(const struct efs_msg_lane_writer_view *,
                                         struct efs_msg_lane_writer_view_reply *);
 /* Internal cold coordinator; not enabled in application write admission yet. */
@@ -516,30 +511,6 @@ void server_load_nodes(struct efsd_server *s);
 
 /* Try to rejoin the cluster using any persisted peer. Returns 0 on success. */
 int server_rejoin_cluster(struct efsd_server *s);
-
-/* Staged W95 files-backend objects; no RPC selects these until upload
- * authority/shared lifetime integration is complete. Explicit geometry. */
-int server_packed_fragment_path(struct efsd_server *, uint32_t root, efs_export_id_t,
-                                uint64_t id, uint64_t generation, uint32_t fi,
-                                char *, size_t);
-/* Internal only: caller verifies authoritative shared-ledger retirement.
- * ACK persists a typed, generation-specific upload fence; no bytes deleted. */
-int server_fence_packed_object(struct efsd_server *, efs_export_id_t,
-                               uint64_t id, uint64_t generation);
-/* Caller proves authoritative all-member fencing before deletion. */
-int server_delete_packed_fragment(struct efsd_server *, efs_export_id_t,
-    uint64_t id, uint64_t generation, uint32_t fi, uint32_t fragment_len,
-    const uint8_t expected_sum[EFS_HASH_SIZE]);
-int server_packed_gc(struct efsd_server *, const uint8_t *, uint32_t);
-int server_packed_upload(struct efsd_server *, const uint8_t *, uint32_t);
-int server_packed_get(struct efsd_server *, const uint8_t *, uint32_t, uint8_t *, uint32_t, uint32_t *);
-int server_write_packed_fragment(struct efsd_server *, efs_export_id_t,
-                                 uint64_t id, uint64_t generation, uint32_t fi,
-                                 const uint8_t *, uint32_t fragment_len, const uint8_t sum[EFS_HASH_SIZE]);
-int server_read_packed_fragment(struct efsd_server *, efs_export_id_t,
-                                uint64_t id, uint64_t generation, uint32_t fi,
-                                uint32_t fragment_len, uint8_t *, uint32_t *capacity,
-                                uint8_t sum[EFS_HASH_SIZE]);
 
 /* Asynchronous PUT acknowledgement and durability barriers (store.c). */
 struct efs_msg_sync_stats_reply;

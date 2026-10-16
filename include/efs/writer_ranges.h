@@ -295,29 +295,10 @@ static inline int efs_writer_plan_report(const struct efs_writer_plan *plan,
         !plan->surviving.count || !put->chunk_generation || put->delta_len ||
         put->ino!=plan->ino || put->chunk_index!=plan->chunk_index ||
         (put->publish_flags & ~(EFS_CHUNK_REC_F_CAPTURED_EPOCH|
-          EFS_CHUNK_REC_F_CAPTURED_FILEID|EFS_CHUNK_REC_F_FRESH_OBJECT|
-          EFS_CHUNK_REC_F_PACKED_BASE)))
+          EFS_CHUNK_REC_F_CAPTURED_FILEID|EFS_CHUNK_REC_F_FRESH_OBJECT)))
         return EFS_ERR_INVAL;
     for (unsigned i=0;i<EFS_NUM_FRAGMENTS;i++)
         if (!put->nodes[i]) return EFS_ERR_INVAL;
-    if (put->publish_flags & EFS_CHUNK_REC_F_PACKED_BASE) {
-        const struct efs_pack_ref *p=&put->packed;
-        /* Initial packing admits only a complete fresh tiny-file image.
-         * Sparse overlays and existing bases need the ordinary merge path. */
-        if (!plan->base_absent || plan->chunk_index ||
-            !(put->publish_flags & EFS_CHUNK_REC_F_FRESH_OBJECT) ||
-            plan->surviving.count!=1 || plan->surviving.ranges[0].off ||
-            plan->surviving.ranges[0].len!=p->len ||
-            p->ino!=plan->ino || p->inode_generation!=plan->generation ||
-            p->content_epoch!=plan->publish_epoch ||
-            p->record_generation!=put->chunk_generation ||
-            !p->segment_id || !p->segment_generation || !p->len ||
-            p->len>EFS_PACK_MAX_PAYLOAD || p->geometry<EFS_SEGMENT_ALIGNMENT ||
-            p->geometry>EFS_SEGMENT_MAX_SIZE || p->geometry%EFS_SEGMENT_ALIGNMENT ||
-            p->offset<EFS_PACK_HEADER_BYTES+EFS_PACK_RECORD_BYTES ||
-            (uint64_t)p->offset+p->len+EFS_HASH_SIZE>p->geometry)
-            return EFS_ERR_INVAL;
-    } else if (put->packed.segment_id) return EFS_ERR_INVAL;
     struct efs_chunk_rec r={0};
     r.ino=plan->ino;r.chunk_index=plan->chunk_index;
     r.chunk_generation=put->chunk_generation;
@@ -327,8 +308,7 @@ static inline int efs_writer_plan_report(const struct efs_writer_plan *plan,
     r.delta_base_n=plan->base_delta_count;r.delta_base_seq=plan->base_sequence;
     r.file_generation=plan->generation;r.publish_epoch=plan->publish_epoch;
     r.publish_flags=EFS_CHUNK_REC_F_CAPTURED_EPOCH|EFS_CHUNK_REC_F_CAPTURED_FILEID|
-        (put->publish_flags & (EFS_CHUNK_REC_F_FRESH_OBJECT|EFS_CHUNK_REC_F_PACKED_BASE));
-    if (r.publish_flags & EFS_CHUNK_REC_F_PACKED_BASE) r.packed=put->packed;
+        (put->publish_flags & EFS_CHUNK_REC_F_FRESH_OBJECT);
     *out=r;
     return EFS_OK;
 }

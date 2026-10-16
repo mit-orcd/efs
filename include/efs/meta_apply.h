@@ -1,6 +1,5 @@
 #ifndef EFS_META_APPLY_H
 #define EFS_META_APPLY_H
-#include "efs/packed_segment.h"
 #include "efs/expiry.h"
 
 #include "efs/common.h"
@@ -339,7 +338,9 @@ int efs_meta_execute_resize(const struct efs_meta_resize_plan *plan,
                              const struct efs_meta_resize_ops *ops, void *ctx);
 
 #define EFS_META_PROFILE_K2F1 1u
-#define EFS_META_PROFILE_PACK_K2F1 2u
+/* 2 was the packed K2F1 profile (removed 2026-10-16): such rows are
+ * refused, never read as a plain base (archive/packing-containers-20261016). */
+#define EFS_META_PROFILE_RETIRED_PACK 2u
 
 #define EFS_META_LAYOUT_LOCAL     0
 #define EFS_META_LAYOUT_SPLITTING 1
@@ -410,7 +411,6 @@ struct efs_meta_chunk {
     uint64_t content_epoch;
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
     uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
-    struct efs_pack_ref packed; /* profile PACK_K2F1 only; canonical persisted extension */
 };
 
 /* CAS publication: expected_gen 0 means the slot is empty. candidate_gen

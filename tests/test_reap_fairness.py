@@ -22,7 +22,7 @@ code=r'''
 #define REAP_KEY_LEN 11u
 #define GC_FRAG_BUDGET_US 200000
 #define HOST_WAITERS 512
-struct fake_server {pthread_mutex_t lock;int storage_engine,repair_experiment;uint64_t quota,gc_scan_errors,gc_reap_seen[2],gc_reap_capped[2],gc_first_reap[2],gc_first_seen_us[2];};
+struct fake_server {pthread_mutex_t lock;int repair_experiment;uint64_t quota,gc_scan_errors,gc_reap_seen[2],gc_reap_capped[2],gc_first_reap[2],gc_first_seen_us[2];};
 struct efs_raft_host {struct fake_server *s;struct efs_kv *kv;pthread_mutex_t cv_mu,wait_mu;void *wait_head;struct {uint8_t active;} waiters[HOST_WAITERS];int gc_running,running;uint8_t reap_cursor[2][11];uint32_t reap_cursor_len[2];};
 struct reap_times {uint64_t scan,sweep,fence,done;};
 static struct efs_node node;static int missing_node,scan_error,physical_failure,lane_failure;
@@ -56,8 +56,6 @@ int efs_kv_scan_from(struct efs_kv *kv,const uint8_t *prefix,uint32_t pn,const u
  return EFS_OK;
 }
 int efs_kv_scan_prefix(struct efs_kv *kv,const uint8_t *p,uint32_t n,visit_fn cb,void *u){return efs_kv_scan_from(kv,p,n,NULL,0,cb,u);}
-static int host_container_gc_lane_empty(struct efs_raft_host *h,efs_ino_t ino,uint64_t gen,uint8_t lane,uint8_t *covered){(void)h;(void)ino;(void)gen;(void)lane;(void)covered;assert(!h->s->storage_engine);return 0;}
-static void host_gc_container_fences(struct efs_raft_host *h,const struct reap_scan_ctx *scan,const unsigned char *ready,int *result){(void)h;(void)scan;(void)ready;(void)result;assert(0);}
 '''+helper+'\n'+finish+'\n'+function('static void host_gc_reap_pass(')+r'''
 static void reset(struct efs_raft_host *h){memset(acks,0,sizeof(acks));memset(dead,0,sizeof(dead));memset(lanes,0,sizeof(lanes));memset(h->reap_cursor_len,0,sizeof(h->reap_cursor_len));clock_us=attempts=0;scan_error=physical_failure=lane_failure=missing_node=0;node.used=100;h->wait_head=NULL;memset(h->waiters,0,sizeof(h->waiters));h->waiters[HOST_WAITERS-1].active=1;h->gc_running=h->running=1;h->s->quota=1000;}
 int main(void){struct fake_server server={0};struct efs_raft_host h={.s=&server};pthread_mutex_init(&server.lock,NULL);pthread_mutex_init(&h.cv_mu,NULL);pthread_mutex_init(&h.wait_mu,NULL);

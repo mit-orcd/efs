@@ -2,6 +2,7 @@
 #include "efs/kv_key.h"
 #include "efs/kv_lsm.h"
 #include "efs/raft.h"
+#include <stdio.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,32 +35,27 @@ static int key_in_group(const uint8_t *key, uint32_t klen, uint8_t group)
 }
 
 /* Inspect the entire incoming image, including unchanged rows omitted from
- * the diff. The MANIFEST barrier must be durable before format-dependent rows
- * become visible. A failed import may conservatively retain this requirement. */
+ * the diff. Packed rows (capability, object, stream, floor kinds or a chunk
+ * with the retired PACK profile) come only from a store this build cannot
+ * read since packing was removed: refuse the import before anything lands. */
 static int import_reader_barrier(struct efs_kv *kv,
     const struct efs_kv_item *items, uint32_t count)
 {
-    int packed = 0;
+    (void)kv;
     for (uint32_t i = 0; i < count; i++) {
         const struct efs_kv_item *it = &items[i];
         if (it->klen < 3) continue;
         uint8_t kind = it->key[2];
-        if (kind == EFS_KV_KIND_PACK_READER) {
-            if (it->klen != 3 || it->key[0] || (it->key[1] != 1 && it->key[1] != 2) ||
-                it->vlen != 4 || !it->val ||
-                it->val[0] || it->val[1] || it->val[2] ||
-                it->val[3] != EFS_KV_READER_PACK_V1) return EFS_ERR_PROTO;
-            packed = 1;
-        } else if (kind == EFS_KV_KIND_PACK_OBJECT ||
-                   kind == EFS_KV_KIND_PACK_STREAM || kind == EFS_KV_KIND_PACK_FLOOR) {
-            packed = 1;
-        } else if (kind == EFS_KV_KIND_CHUNK && it->vlen >= 12 &&
-                   !it->val[8] && !it->val[9] && !it->val[10] && it->val[11] == 2) {
-            /* Also protect partial/repaired images lacking a capability row. */
-            packed = 1;
+        if (kind == EFS_KV_KIND_RETIRED_PACK_READER || kind == EFS_KV_KIND_RETIRED_PACK_OBJECT ||
+            kind == EFS_KV_KIND_RETIRED_PACK_STREAM || kind == EFS_KV_KIND_RETIRED_PACK_FLOOR ||
+            (kind == EFS_KV_KIND_CHUNK && it->vlen >= 12 &&
+             !it->val[8] && !it->val[9] && !it->val[10] && it->val[11] == 2)) {
+            fprintf(stderr, "kv-snap: import holds packed rows; refusing "
+                            "(packing removed, archive/packing-containers-20261016)\n");
+            return EFS_ERR_PROTO;
         }
     }
-    return packed ? efs_kv_lsm_require_reader(kv, EFS_KV_READER_PACK_V1) : EFS_OK;
+    return EFS_OK;
 }
 
 struct exp_acc {

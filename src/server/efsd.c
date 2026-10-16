@@ -6,7 +6,7 @@
 #include "efs/network.h"
 #include "efs/version.h"
 #include "server_internal.h"
-#include "store_containers.h"
+#include "storage_roots.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -306,9 +306,12 @@ int main(int argc, char **argv)
             }
         } else if (strcmp(argv[i], "--storage-engine") == 0 && i + 1 < argc) {
             const char *engine = argv[++i];
-            if (!strcmp(engine, "files")) server.storage_engine = 0;
-            else if (!strcmp(engine, "containers")) server.storage_engine = 1;
-            else { fprintf(stderr, "unknown storage engine: %s\n", engine); return 2; }
+            if (!strcmp(engine, "containers")) {
+                fprintf(stderr, "the containers storage engine was removed; "
+                        "use archive/packing-containers-20261016\n");
+                return 2;
+            }
+            if (strcmp(engine, "files")) { fprintf(stderr, "unknown storage engine: %s\n", engine); return 2; }
         } else if (strcmp(argv[i], "--direct-io") == 0) {
             server.direct_io = 1;
         } else if (strcmp(argv[i], "--no-direct-io") == 0) {
@@ -385,10 +388,9 @@ int main(int argc, char **argv)
         snprintf(subdir, sizeof(subdir), "%s/log", server.storage_paths[pi]);
         mkdir_p(subdir);
     }
-    if (server_storage_engine_init(&server) != EFS_OK) return 1;
+    if (server_storage_roots_init(&server) != EFS_OK) return 1;
     if (server_put_sync_init(&server) != EFS_OK) return 1;
-    fprintf(stderr, "storage-engine=%s direct_io=%s\n",
-            server.storage_engine ? "containers" : "files", server.direct_io ? "on" : "off");
+    fprintf(stderr, "storage-engine=files direct_io=%s\n", server.direct_io ? "on" : "off");
     if (server.meta_storage[0] &&
         mkdir_p(server.meta_storage) != 0 && errno != EEXIST) {
         fprintf(stderr, "mkdir meta-storage %s: %s\n", server.meta_storage,
@@ -423,7 +425,7 @@ int main(int argc, char **argv)
         }
     }
     if (server.repair_experiment) {
-        if (server.storage_engine || server.storage_path_count!=1) {
+        if (server.storage_path_count!=1) {
             fprintf(stderr,"repair experiment requires single-root FILES storage\n");return 1;
         }
         uint8_t store_uuid[16];
@@ -733,7 +735,7 @@ int main(int argc, char **argv)
      * boundary and recovery is WAL replay at next start. */
     server_raft_host_stop();
     server_peer_pool_shutdown();
-    server_storage_engine_close(&server);
+    server_storage_roots_close(&server);
     pthread_mutex_destroy(&server.lock);
     for (uint32_t i = 0; i < server.export_count; i++)
         efs_export_free(&server.exports[i]);

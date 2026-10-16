@@ -233,8 +233,6 @@ struct kv_lsm {
     int candidate_valid;
     uint64_t segment_revision;
     uint64_t next_seq;
-    uint32_t required_reader; /* monotonic, versioned authoritative MANIFEST */
-    uint32_t durable_reader; /* barriers proven in this process, never inferred */
     pthread_mutex_t mu;
     pthread_rwlock_t writers; /* ordinary batches share; staged apply excludes */
     /* Readers (point gets, scans) share view_rw. Every mu holder also owns

@@ -133,7 +133,7 @@ with tempfile.TemporaryDirectory(prefix='efs-publication-rpc-') as d:
     p=Path(d)/'test.c';p.write_text(source)
     cmd=shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include')]
     cmd+=shlex.split(os.environ.get('WRITER_RPC_TEST_CFLAGS',''))
-    subprocess.run(cmd+[str(p),str(root/'src/kv/kv_key.c'),str(root/'src/common/publication.c'),str(root/'src/common/packed_segment.c'),
+    subprocess.run(cmd+[str(p),str(root/'src/kv/kv_key.c'),str(root/'src/common/publication.c'),
         str(root/'src/common/checksum.c'),str(root/'deps/blake3/blake3.c'),
         str(root/'deps/blake3/blake3_dispatch.c'),str(root/'deps/blake3/blake3_portable.c'),
         '-I'+str(root/'deps/blake3'),'-DBLAKE3_NO_SSE2','-DBLAKE3_NO_SSE41','-DBLAKE3_NO_AVX2','-DBLAKE3_NO_AVX512','-DBLAKE3_USE_NEON=0',

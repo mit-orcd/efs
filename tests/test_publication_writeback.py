@@ -21,7 +21,6 @@ void efs_hash(const void *src,size_t n,uint8_t out[EFS_HASH_SIZE]) {
 int efs_segment_geometry(size_t n, size_t *out) { (void)n; (void)out; return EFS_ERR_INVAL; }
 #define put packed_put
 #define get packed_get
-#include "packed_segment.c"
 #undef put
 #undef get
 #include "publication.c"

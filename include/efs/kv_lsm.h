@@ -49,15 +49,9 @@ int efs_kv_lsm_scan_work(struct efs_kv *,const uint8_t *,uint32_t,
     int (*)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t),void *,
     uint8_t [EFS_KV_KEY_MAX],uint32_t *);
 
-/* Staged W95 minimum-reader barrier. No current mounted writer calls this.
- * Before publishing format-dependent metadata, every owning/importing store
- * must durably require its reader capability. Requirements only increase;
- * disabling new-format writes never makes an existing store downgrade-safe.
- * This guards cold legacy readers through a versioned MANIFEST; live peer
- * build negotiation and snapshot/import activation remain separate gates.
- * Only success establishes durability. Retry after an uncertain failure. */
-#define EFS_KV_READER_PACK_V1 1u
-int efs_kv_lsm_require_reader(struct efs_kv *,uint32_t required);
+/* A KVLSM2 MANIFEST (reader requirement PACK_V1) belongs to a store that held
+ * packed rows; open refuses it since packing was removed. Reader-requirement
+ * barriers are gone with it (archive/packing-containers-20261016). */
 
 /* Test/maintenance hooks. flush makes the memtable an L0 segment; compact
  * merges L0 plus the overlapping L1 into a new L1. */

@@ -95,7 +95,7 @@ int efs_repair_capture(struct efs_kv *kv,const struct efs_repair_job *sel,struct
     rc=efs_meta_get_chunk_view(kv,j.ino,j.inode_gen,j.ci,j.fragment_len*2u,&view);
     if(rc)return rc;
     ch=view.base;n=view.ndelta;const struct efs_meta_delta *ds=view.deltas;
-    if(n>EFS_CHUNK_DELTA_MAX || ch.packed.segment_id || ch.coding_profile_id!=EFS_META_PROFILE_K2F1)return EFS_ERR_INVAL;
+    if(n>EFS_CHUNK_DELTA_MAX || ch.coding_profile_id!=EFS_META_PROFILE_K2F1)return EFS_ERR_INVAL;
     int found=0;
     if(!j.span_len && ch.generation==j.object && view.bytes.parts[0].len){memcpy(j.nodes,ch.nodes,sizeof(j.nodes));memcpy(j.sums,ch.checksums,sizeof(j.sums));found=1;}
     for(uint32_t i=0;i<n && !found;i++)if(j.span_len && ds[i].generation==j.object && ds[i].off==j.span_off && ds[i].len==j.span_len && view.bytes.parts[i+1].len){

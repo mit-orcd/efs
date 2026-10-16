@@ -18,7 +18,7 @@ int server_repair_receive(struct efsd_server *s,const uint8_t *body,uint32_t byt
     struct efs_repair_job j;int rc=efs_repair_job_decode(body+4,EFS_REPAIR_JOB_BYTES,&j);
     if(rc)return rc;
     if(eid!=1 || j.state!=EFS_REPAIR_ADMITTED || j.flags || j.nodes[j.fi]!=s->id ||
-       j.span_len || j.span_off || s->storage_engine || s->storage_path_count!=1 ||
+       j.span_len || j.span_off || s->storage_path_count!=1 ||
        bytes!=4+EFS_REPAIR_JOB_BYTES+(seal?0:j.fragment_len))return EFS_ERR_INVAL;
     rc=server_repair_store_matches(s,j.target_store);if(rc)return rc;
     const uint8_t *data=body+4+EFS_REPAIR_JOB_BYTES;

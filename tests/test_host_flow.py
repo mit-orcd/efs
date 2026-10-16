@@ -51,7 +51,7 @@ uint64_t efs_batch_obs_now_us(void) {
 static uint64_t now_us_(void) {return efs_batch_obs_now_us();}
 static int raft_obs_on(void) {return 1;}
 '''+struct('host_inbox_item')+'\n'+struct('host_outbox_item')+'\n'+struct('host_outbox')+r'''
-struct efsd_server {int storage_engine;};
+struct efsd_server {int unused;};
 struct efs_raft_host {
  struct efsd_server *s;
  pthread_mutex_t inbox_mu,outbox_mu;
@@ -70,7 +70,7 @@ static int host_read_control(struct efs_raft_host *h,const uint8_t*p,uint32_t n)
 static int outbox_nentries(const uint8_t*p,uint32_t n) {return n<80?-1:(int)efs_raft_flow_rd32(p+76);}
 static int env_on(const char *name){(void)name;return 0;}
 static uint64_t rd64be(const uint8_t *p){return efs_raft_flow_rd64(p);}
-'''+(function('outbox_pure_read_control')+'\n'+function('host_inbox_duplicate_read')+'\n' if 'static int host_inbox_duplicate_read(' in s else '')+function('server_raft_host_inbox')+'\n'+function('host_inbox_retire')+r'''
+'''+function('outbox_pure_read_control')+'\n'+function('server_raft_host_inbox')+'\n'+function('host_inbox_retire')+r'''
 static int peer_addr(struct efs_raft_host*h,int peer,char*host,size_t cap,uint16_t*port)
 {(void)h;(void)peer;snprintf(host,cap,"fixture");*port=1;return 0;}
 static struct efs_conn *server_peer_conn_new(const char*h,uint16_t port)

@@ -14,8 +14,6 @@
 #include "efs/query_filters.h"
 #include "efs/publication.h"
 #include "efs/put_ticket.h"
-#include "efs/pack_admission.h"
-#include "efs/packed_upload.h"
 #include "efs/meta_cmd.h"
 #include "efs/dir_layout.h"
 #include "efs/dir_spread.h"
@@ -128,8 +126,7 @@ static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
 #define HOST_PUBLICATION_LEN (HOST_PUBLISH_LEN + 28u)
 #define HOST_PUBLICATION_TICKET_LEN (HOST_PUBLICATION_LEN + 36u)
 #define HOST_PUB_F_TICKETED 4
-#define HOST_PUB_F_PACKED 8
-#define HOST_PUBLICATION_PACK_LEN (HOST_PUBLICATION_LEN + EFS_PACK_REF_BYTES)
+#define HOST_PUB_F_RETIRED_PACKED 8 /* packing removed 2026-10-16: invalid */
 #define HOST_PUB_TAIL_TRIES  4 /* cross-group truncate tail CAS retries */
 #define HOST_ACTIVATE_LANE_LEN 10 /* tag + ino:8 + lane:1 */
 #define HOST_ACTIVATE_MASK_LEN 17 /* tag + ino:8 + mask:8 */
@@ -2498,17 +2495,13 @@ static int apply_lock_cmd(struct efs_raft_host *h, const uint8_t *cmd,
  * tail). clen may be N * HOST_PUBLISH_LEN — one Raft entry, many pubs. */
 static int host_publication_command_valid(const uint8_t *cmd, uint32_t len)
 {
-    if (!cmd || (len != HOST_PUBLICATION_LEN && len != HOST_PUBLICATION_TICKET_LEN && len != HOST_PUBLICATION_PACK_LEN) ||
+    if (!cmd || (len != HOST_PUBLICATION_LEN && len != HOST_PUBLICATION_TICKET_LEN) ||
         (cmd[0] != EFS_MD_CMD_PUBLICATION && cmd[0] != EFS_MD_CMD_PUBLICATION_ADMIT &&
          cmd[0] != EFS_MD_CMD_PUBLICATION_RETIRE)) return 0;
     uint8_t flags = cmd[HOST_PUBLISH_LEN - 1];
-    if (flags & ~(HOST_PUB_F_LANE_LOCAL | HOST_PUB_F_FRESH_OBJECT | HOST_PUB_F_TICKETED | HOST_PUB_F_PACKED)) return 0;
-    if (flags & HOST_PUB_F_PACKED) {
-        struct efs_pack_ref ref;
-        return len == HOST_PUBLICATION_PACK_LEN && !(flags & (HOST_PUB_F_TICKETED | HOST_PUB_F_LANE_LOCAL)) &&
-            (flags & HOST_PUB_F_FRESH_OBJECT) && !efs_pack_ref_decode(cmd + HOST_PUBLICATION_LEN, EFS_PACK_REF_BYTES, &ref);
-    }
-    return len != HOST_PUBLICATION_PACK_LEN && !!(flags & HOST_PUB_F_TICKETED) == (len == HOST_PUBLICATION_TICKET_LEN) &&
+    /* A packed publication (HOST_PUB_F_RETIRED_PACKED) is never valid. */
+    if (flags & ~(HOST_PUB_F_LANE_LOCAL | HOST_PUB_F_FRESH_OBJECT | HOST_PUB_F_TICKETED)) return 0;
+    return !!(flags & HOST_PUB_F_TICKETED) == (len == HOST_PUBLICATION_TICKET_LEN) &&
         (!(flags & HOST_PUB_F_TICKETED) || (flags & HOST_PUB_F_FRESH_OBJECT));
 }
 
@@ -2549,8 +2542,6 @@ static void unpack_publication(const uint8_t *cmd, struct efs_meta_pub *p,
         memcpy(p->publication_id.client_uuid,cmd+HOST_PUBLISH_LEN,EFS_OPID_UUID_LEN);
         p->publication_id.session_epoch=rd32be(cmd+HOST_PUBLISH_LEN+16);
         p->publication_id.seq=rd64be(cmd+HOST_PUBLISH_LEN+20);
-        if (q[16] & HOST_PUB_F_PACKED)
-            (void)efs_pack_ref_decode(cmd + HOST_PUBLICATION_LEN, EFS_PACK_REF_BYTES, &p->ch.packed);
         if (q[16] & HOST_PUB_F_TICKETED) {
             p->ticketed=1;
             memcpy(p->put_id.client_uuid,cmd+HOST_PUBLICATION_LEN,EFS_OPID_UUID_LEN);
@@ -2863,7 +2854,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_APPEND_RES || cmd[0] == EFS_MD_CMD_APPEND_CATCHUP ||
            cmd[0] == EFS_MD_CMD_CREATE || cmd[0] == EFS_MD_CMD_PUBLISH ||
            cmd[0] == EFS_MD_CMD_REPORT_PUBLISH ||
-           cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT || cmd[0] == EFS_MD_CMD_PACK_GC_ACK || cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_GC_RETIRE || cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_UPLOAD_RETIRE || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
+           cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
            cmd[0] == EFS_MD_CMD_XATTR || cmd[0] == EFS_MD_CMD_SALT ||
            cmd[0] == EFS_MD_CMD_LOCK ||
            cmd[0] == EFS_MD_CMD_UNLINK || cmd[0] == EFS_MD_CMD_SETATTR ||
@@ -2904,7 +2895,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
          cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
          cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_CREATE ||
-         cmd[0] == EFS_MD_CMD_APPEND_RES || cmd[0] == EFS_MD_CMD_APPEND_CATCHUP || cmd[0] == EFS_MD_CMD_PACK_GC_ACK || cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_GC_RETIRE || cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_UPLOAD_RETIRE || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
+         cmd[0] == EFS_MD_CMD_APPEND_RES || cmd[0] == EFS_MD_CMD_APPEND_CATCHUP || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
          cmd[0] == EFS_MD_CMD_REPORT_PUBLISH || cmd[0] == EFS_MD_CMD_ACTIVATE_LANE ||
          cmd[0] == EFS_MD_CMD_PUBLISH || cmd[0] == EFS_MD_CMD_PUBLICATION ||
          cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE ||
@@ -2932,10 +2923,6 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         uint64_t elapsed=now_us_()-a0;
         h->obs_apply_cnt++;
         h->obs_apply_cycle_us += elapsed;
-        if(h->s && h->s->storage_engine && elapsed>=20000)
-            fprintf(stderr,"container-apply-prof: group=%u index=%llu term=%llu tag=%u bytes=%u us=%llu rc=%d\n",
-                    g->group,(unsigned long long)index,(unsigned long long)term,
-                    cmd[0],clen,(unsigned long long)elapsed,rc);
     }
     /* Record the apply verdict BEFORE the raft core bumps last_applied, so a
      * waiter that observes applied >= index always finds the slot. The pump
@@ -3328,23 +3315,14 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         if (!host_publication_command_valid(cmd,clen)) return EFS_ERR_PROTO;
         return apply_one_publish(h,cmd,index,term,group);
     }
-    if(cmd[0]==EFS_MD_CMD_PACK_GC_ACK || cmd[0]==EFS_MD_CMD_PACK_CANCEL || cmd[0]==EFS_MD_CMD_PACK_GC_RETIRE) {
-        if(clen<7 || cmd[1]>1)return EFS_ERR_INVAL;
-        struct efs_pack_object object;
-        int rc=efs_pack_object_decode(cmd+6,clen-6,&object);if(rc)return rc;
-        if(group!=object.ledger.publication_group)return EFS_ERR_INVAL;
-        if(cmd[0]==EFS_MD_CMD_PACK_GC_ACK)
-            return efs_pack_admission_ack(h->kv,&object,rd32be(cmd+2),cmd[1]);
-        if(cmd[1] || rd32be(cmd+2))return EFS_ERR_INVAL;
-        return cmd[0]==EFS_MD_CMD_PACK_CANCEL ? efs_pack_admission_cancel_verified(h->kv,&object) :
-            efs_pack_admission_retire(h->kv,&object);
-    }
-    if (cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_UPLOAD_RETIRE) {
-        struct efs_pack_object object; struct efs_pack_ref refs[EFS_PACK_MAX_RECORDS]; uint32_t count;
-        int rc = efs_pack_upload_decode(cmd + 1, clen - 1, &object, refs, EFS_PACK_MAX_RECORDS, &count);
-        if (rc) return rc;
-        if (group != object.ledger.publication_group) return EFS_ERR_INVAL;
-        return cmd[0] == EFS_MD_CMD_PACK_UPLOAD_RETIRE ? efs_pack_upload_retire(h->kv, &object) : efs_pack_admit(h->kv, &object, refs, count);
+    if(cmd[0]==EFS_MD_CMD_RETIRED_PACK_GC_ACK || cmd[0]==EFS_MD_CMD_RETIRED_PACK_CANCEL ||
+       cmd[0]==EFS_MD_CMD_RETIRED_PACK_GC_RETIRE || cmd[0]==EFS_MD_CMD_RETIRED_PACK_ADMIT ||
+       cmd[0]==EFS_MD_CMD_RETIRED_PACK_UPLOAD_RETIRE) {
+        /* Packing was removed (archive/packing-containers-20261016). Halting
+         * here, not skipping, keeps a packed log from being half-applied. */
+        fprintf(stderr,"raft-host: packing command %u at index %llu group %u; this build cannot apply it\n",
+                cmd[0],(unsigned long long)index,group);
+        return EFS_ERR_PROTO;
     }
     if(cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT || cmd[0]==EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED) {
         struct efs_put_ticket ticket;
@@ -4605,12 +4583,12 @@ static int host_read_index(struct efs_raft_host *h,uint8_t group,int *hint)
 
 /* Container directory walks can overlap both metadata groups on every
  * component. Eight blocked proof helpers otherwise force other admitted
- * reads to serialize independent rounds. Bound containers at 32 persistent
- * 128KiB helpers (4MiB total stacks); ordinary files retain eight (1MiB).
+ * reads to serialize independent rounds. Eight persistent 128KiB helpers
+ * (1MiB of stacks).
  * Saturation/init failure still falls back, never queues or reuses a proof. */
 static unsigned host_read_pair_capacity(void)
 {
-    return g_host && g_host->s && g_host->s->storage_engine ? 32u : 8u;
+    return 8u;
 }
 static void host_read_pair_note(int parallel)
 {
@@ -5348,7 +5326,7 @@ static int host_inode_rpc_peer(struct efs_raft_host *h, int rid, uint8_t req_typ
     }
     /* GETCHUNKS replies are variable length (header + count records);
      * zero-extend them into the caller's full struct. */
-    if (rtype == reply_type && reply_type == EFS_MSG_GETCHUNKS_PACKED_REPLY &&
+    if (rtype == reply_type && reply_type == EFS_MSG_INODE_GETCHUNKS_REPLY &&
         outlen == sizeof(struct efs_msg_inode_getchunks_reply) &&
         efs_getchunks_reply_len_ok(reply, rlen) == EFS_OK) {
         memset(out, 0, outlen);
@@ -5704,8 +5682,8 @@ static void host_fwd_getchunks(struct efs_raft_host *h, efs_export_id_t export_i
         rid = host_pick_peer(h, groups, ng, skip);
         if (rid < 0)
             return;
-        if (host_inode_rpc_peer(h, rid, EFS_MSG_GETCHUNKS_PACKED, &req,
-                                sizeof(req), EFS_MSG_GETCHUNKS_PACKED_REPLY,
+        if (host_inode_rpc_peer(h, rid, EFS_MSG_INODE_GETCHUNKS, &req,
+                                sizeof(req), EFS_MSG_INODE_GETCHUNKS_REPLY,
                                 out, sizeof(*out)) != 0) {
             skip = rid;
             out->status = EFS_INODE_RPC_NOT_PRIMARY;
@@ -8575,25 +8553,6 @@ static int host_bg_propose(struct efs_raft_host *h, uint8_t group,
     uint64_t idx = 0, term = 0;
     int rc, lid = -1;
 
-    /* Container cleanup must not introduce a private append fsync under
-     * the read/propose mutex. Join the existing foreground cohort only for
-     * a hosted multi-voter leader; preserve files, repair, solo and forwarding
-     * policy. A role change after this snapshot fails normally, never lends
-     * another entry's verdict or advertises an unflushed append. */
-    if (h->s && h->s->storage_engine && !h->s->repair_experiment) {
-        pthread_mutex_lock(&h->mu);
-        r = group_raft(h, group);
-        uint32_t voters = r ? efs_raft_voters(r) : 0;
-        int local_multi = r && efs_raft_role(r) == EFS_RAFT_LEADER &&
-                          voters && (voters & (voters-1));
-        pthread_mutex_unlock(&h->mu);
-        if (local_multi) {
-            rc = host_propose_impl(h, group, cmd, clen, &idx, &term, NULL, 1);
-            if (rc != EFS_OK) return rc;
-            return verdict ? host_wait_verdict(h, group, idx, term, NULL) :
-                             host_wait_settled(h, group, idx, term, NULL);
-        }
-    }
 
     pthread_mutex_lock(&h->mu);
     r = group_raft(h, group);
@@ -9183,47 +9142,6 @@ static void host_gc_record(struct efs_raft_host *h, struct efs_export *ex,
     }
 }
 
-/* A bounded page of independent durable fragment deletes. Each record owns
- * its ACK buffer; metadata remains on the caller after every helper joins.
- * The export and scan are pinned for that whole lifetime. Files and repair
- * retain the serial path; failed deletes never gain an acknowledgement. */
-#define HOST_GC_RECORD_BATCH 32
-struct host_gc_record_batch {
-    struct efs_raft_host *h;
-    struct efs_export *ex;
-    struct gc_scan_ctx *scan;
-    int first, count;
-    unsigned next;
-    struct efs_gc_ack_item acks[HOST_GC_RECORD_BATCH][EFS_NUM_FRAGMENTS];
-    int nack[HOST_GC_RECORD_BATCH];
-};
-static void *host_gc_record_worker(void *arg)
-{
-    struct host_gc_record_batch *b=arg;
-    for(;;){
-        unsigned i=__atomic_fetch_add(&b->next,1,__ATOMIC_RELAXED);
-        if(i>=(unsigned)b->count)break;
-        if(!__atomic_load_n(&b->h->gc_running,__ATOMIC_ACQUIRE) ||
-           !__atomic_load_n(&b->h->running,__ATOMIC_ACQUIRE))continue;
-        int record=b->first+(int)i;
-        host_gc_record(b->h,b->ex,b->scan->keys[record],b->scan->vals[record],
-                       b->acks[i],&b->nack[i]);
-    }
-    return NULL;
-}
-static void host_gc_records_join(struct host_gc_record_batch *b)
-{
-    pthread_t workers[3];int n=0;
-    if(b->count<=0 || b->count>HOST_GC_RECORD_BATCH ||
-       !__atomic_load_n(&b->h->gc_running,__ATOMIC_ACQUIRE) ||
-       !__atomic_load_n(&b->h->running,__ATOMIC_ACQUIRE))return;
-    while(n<3 && n+1<b->count){
-        if(pthread_create(&workers[n],NULL,host_gc_record_worker,b))break;
-        n++;
-    }
-    host_gc_record_worker(b);
-    for(int i=0;i<n;i++)pthread_join(workers[i],NULL);
-}
 
 /* REAP pass over one group's anchor shard: sweep every active lane of
  * each dead inode, then finish the reap on the inode's group. A failed
@@ -9253,29 +9171,6 @@ static int host_gc_metadata_waiting(struct efs_raft_host *h)
     return !pressured;
 }
 
-/* A partial reap retries all originally active lanes. Containers need no
- * new durable no-op to clear a lane already absent under a fresh group
- * proof. The unfenced key check is only a scheduling hint; both absence
- * and an empty source prefix are rechecked after request-local ReadIndex.
- * Physical inode fencing and final REAP retirement remain mandatory. */
-static int host_container_gc_lane_empty(struct efs_raft_host *h,efs_ino_t ino,
-                                       uint64_t gen,uint8_t lane,uint8_t *covered)
-{
-    uint8_t key[EFS_KV_KEY_MAX],value[1];uint32_t kl,vl=sizeof(value);
-    uint8_t group=efs_raft_shard_group(efs_kv_lane_shard(ino,lane));
-    if(!h->s->storage_engine || !host_hosts(h,group) ||
-       efs_kv_key_lane(efs_kv_lane_shard(ino,lane),ino,gen,lane,key,&kl)!=EFS_OK ||
-       efs_kv_get(h->kv,key,kl,value,&vl)!=EFS_ERR_NOT_FOUND)return 0;
-    if(!(*covered&(1u<<group))){
-        int hint=-1;
-        if(host_read_index(h,group,&hint)!=EFS_OK)return 0;
-        *covered|=(uint8_t)(1u<<group);
-    }
-    vl=sizeof(value);
-    if(efs_kv_get(h->kv,key,kl,value,&vl)!=EFS_ERR_NOT_FOUND)return 0;
-    uint32_t indices[EFS_META_SWEEP_BATCH_MAX],n;
-    return efs_meta_lane_sweep_select(h->kv,ino,gen,lane,indices,&n)==EFS_OK && !n;
-}
 
 static void host_gc_reap_finish(struct efs_raft_host *h,efs_ino_t ino,uint64_t gen,
                                 uint64_t lanes,struct reap_times *times)
@@ -9304,38 +9199,6 @@ static void host_gc_reap_finish(struct efs_raft_host *h,efs_ino_t ino,uint64_t g
                 (unsigned long long)lanes, drc);
 }
 
-/* At most four independent physical inode fences; no metadata work runs
- * in helpers. Caller joins every helper before retiring any REAP marker or
- * returning its stack/host. Creation failure reduces concurrency only. */
-struct host_gc_fence_batch {
-    struct efs_raft_host *h;
-    const struct reap_scan_ctx *scan;
-    const unsigned char *ready;
-    int *result;
-    unsigned next;
-};
-static void *host_gc_fence_worker(void *arg)
-{
-    struct host_gc_fence_batch *b=arg;
-    for(;;){
-        unsigned i=__atomic_fetch_add(&b->next,1,__ATOMIC_RELAXED);
-        if(i>=(unsigned)b->scan->n)break;
-        if(!b->ready[i] || !__atomic_load_n(&b->h->gc_running,__ATOMIC_ACQUIRE) || !__atomic_load_n(&b->h->running,__ATOMIC_ACQUIRE))continue;
-        b->result[i]=host_gc_inode_nodes(b->h,b->scan->ino[i],b->scan->gen[i]);
-    }
-    return NULL;
-}
-static void host_gc_container_fences(struct efs_raft_host *h,
-        const struct reap_scan_ctx *scan,const unsigned char *ready,int *result)
-{
-    struct host_gc_fence_batch b={.h=h,.scan=scan,.ready=ready,.result=result};
-    pthread_t workers[3];unsigned n=0,count=0;
-    for(int i=0;i<scan->n;i++){result[i]=EFS_ERR_BUSY;count+=!!ready[i];}
-    if(!count || !h->gc_running || !h->running)return;
-    while(n<3 && n+1<count){if(pthread_create(&workers[n],NULL,host_gc_fence_worker,&b))break;n++;}
-    host_gc_fence_worker(&b);
-    for(unsigned i=0;i<n;i++)pthread_join(workers[i],NULL);
-}
 
 static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
                               uint32_t anchor, struct reap_times *times)
@@ -9345,9 +9208,6 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
     uint32_t plen = 0;
     int i, lane;
 
-    unsigned char ready[REAP_SCAN_MAX]={0};
-    int results[REAP_SCAN_MAX];
-    int parallel=h->s->storage_engine && !h->s->repair_experiment;
     int prc, src;
     uint64_t started = now_us_();
 
@@ -9393,7 +9253,6 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
         uint8_t cmd[18 + 32 * EFS_META_REAP_BATCH_MAX];
         int lanes_ok = 1;
         int lrc = 0;
-        uint8_t empty_covered=0; /* This inode reap attempt only. */
 
         started = now_us_();
         for (lane = 0; lane < EFS_META_LANES; lane++) {
@@ -9413,7 +9272,6 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
             cmd[17] = (uint8_t)lane;
             if (host_hosts(h,efs_raft_shard_group(lshard))) {
                 uint32_t indices[EFS_META_SWEEP_BATCH_MAX], n;
-                if(host_container_gc_lane_empty(h,c.ino[i],c.gen[i],(uint8_t)lane,&empty_covered))continue;
                 lrc=efs_meta_lane_sweep_select(h->kv,c.ino[i],c.gen[i],(uint8_t)lane,indices,&n);
                 if (lrc != EFS_OK) { lanes_ok=0; break; }
                 cmd[0] = EFS_MD_CMD_LANE_SWEEP_BATCH;
@@ -9444,8 +9302,6 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
                         (unsigned long long)c.ino[i], lrc);
             continue;
         }
-        ready[i]=1;
-        if(parallel)continue;
         /* Include losing/never-published PUT objects. Namespace deletion
          * alone is insufficient evidence of physical reclamation. */
         started = now_us_();
@@ -9455,14 +9311,6 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
             continue;
         host_gc_reap_finish(h,c.ino[i],c.gen[i],c.lanes[i],times);
 
-    }
-    if(parallel){
-        started=now_us_();
-        host_gc_container_fences(h,&c,ready,results);
-        times->fence+=now_us_()-started;
-        for(i=0;i<c.n && h->gc_running && h->running;i++)
-            if(ready[i] && results[i]==EFS_OK)
-                host_gc_reap_finish(h,c.ino[i],c.gen[i],c.lanes[i],times);
     }
 }
 
@@ -9592,33 +9440,14 @@ static int host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
             break;
         }
         i=0;
-        if(h->s->storage_engine && !h->s->repair_experiment){
-            for(int first=0;first<c.n && __atomic_load_n(&h->gc_running,__ATOMIC_ACQUIRE) && h->running;
-                first+=HOST_GC_RECORD_BATCH){
-                if(recs && now_us_()-t0>=GC_FRAG_BUDGET_US){budget_capped=1;break;}
-                struct host_gc_record_batch batch={.h=h,.ex=ex,.scan=&c,.first=first,
-                    .count=c.n-first<HOST_GC_RECORD_BATCH?c.n-first:HOST_GC_RECORD_BATCH};
-                host_gc_records_join(&batch);
-                for(int record=0;record<batch.count;record++){
-                    if(nack+EFS_NUM_FRAGMENTS>GC_ACK_MAX){
-                        if(host_gc_ack_flush(h,group,acks,&nack)!=EFS_OK)goto out;
-                        ack_progress=1;
-                    }
-                    memcpy(acks+nack,batch.acks[record],
-                           (size_t)batch.nack[record]*sizeof(acks[0]));
-                    nack+=batch.nack[record];recs++;i=first+record+1;
-                }
+        for(i=0;i<c.n && __atomic_load_n(&h->gc_running,__ATOMIC_ACQUIRE) && h->running;i++){
+            if(recs && now_us_()-t0>=GC_FRAG_BUDGET_US){budget_capped=1;break;}
+            if(nack+EFS_NUM_FRAGMENTS>GC_ACK_MAX){
+                if(host_gc_ack_flush(h,group,acks,&nack)!=EFS_OK)goto out;
+                ack_progress=1;
             }
-        } else {
-            for(i=0;i<c.n && __atomic_load_n(&h->gc_running,__ATOMIC_ACQUIRE) && h->running;i++){
-                if(recs && now_us_()-t0>=GC_FRAG_BUDGET_US){budget_capped=1;break;}
-                if(nack+EFS_NUM_FRAGMENTS>GC_ACK_MAX){
-                    if(host_gc_ack_flush(h,group,acks,&nack)!=EFS_OK)goto out;
-                    ack_progress=1;
-                }
-                host_gc_record(h, ex, c.keys[i], c.vals[i], acks, &nack);
-                recs++;
-            }
+            host_gc_record(h, ex, c.keys[i], c.vals[i], acks, &nack);
+            recs++;
         }
         /* Unattempted records must remain ahead of the cursor. Failed
          * attempts stay in the ledger and are retried on the normal wrap. */
@@ -9893,7 +9722,6 @@ static void host_snap_import_pass(struct efs_raft_host *h)
     }
 }
 
-#include "packed_gc.h"
 
 static int host_gc_backlog_config(const char *value, unsigned *ms)
 {
@@ -9916,13 +9744,6 @@ static unsigned host_gc_backlog_idle(unsigned configured, int capped,
     /* No acceleration for idle scans, blocked/offline deletion or counter
      * reset. Keep all per-group work/ACK budgets and a >=20ms fair yield. */
     return capped && removed_after > removed_before ? configured : GC_LOOP_MS;
-}
-
-/* Both saturation and a durable packed deletion ACK are required. Unlike a
- * local unlink counter, this proof also covers a non-placement leader. */
-static unsigned host_gc_packed_idle(unsigned ordinary, int capped, int deleted)
-{
-    return capped && deleted ? 20 : ordinary;
 }
 
 
@@ -10054,7 +9875,7 @@ static void *host_gc_thread(void *arg)
         struct reap_times reap_times = {0};
         uint64_t removed_before = __atomic_load_n(&h->s->gc_removed_fragments, __ATOMIC_RELAXED);
         int backlog_capped = 0;
-        int packed_capped = 0, packed_deleted = 0, expiry_progress=0;
+        int expiry_progress=0;
 
         __atomic_store_n(&h->s->gc_pass_start_us, efs_iostats_now_us(), __ATOMIC_RELAXED);
         __atomic_store_n(&h->s->gc_stage, 1, __ATOMIC_RELAXED);
@@ -10097,11 +9918,6 @@ static void *host_gc_thread(void *arg)
                 host_gc_close_pass(h, h->g[g].group, anchor);
                 host_gc_orphan_pass(h, h->g[g].group, anchor);
             }
-            int pack_deleted = 0;
-            int pack_capped = host_gc_pack_pass(h,h->g[g].group,anchor,&pack_deleted);
-            packed_capped |= pack_capped && pack_deleted;
-            packed_deleted |= pack_deleted;
-            backlog_capped |= pack_capped;
             t_orphan += now_us_() - ta;
             ta = now_us_();
             host_gc_reap_pass(h, h->g[g].group, anchor, &reap_times);
@@ -10177,11 +9993,6 @@ static void *host_gc_thread(void *arg)
         __atomic_store_n(&h->s->gc_pass_start_us, 0, __ATOMIC_RELAXED);
         uint64_t removed_after = __atomic_load_n(&h->s->gc_removed_fragments, __ATOMIC_RELAXED);
         unsigned idle_ms = host_gc_backlog_idle(h->gc_backlog_idle_ms, backlog_capped, removed_before, removed_after);
-        /* Small objects can leave thousands of retired packs. Keep the same
-         * eight-object/200ms pass budgets and a fair yield, but do not spend
-         * a full second asleep after a saturated page made durable deletion
-         * progress. This also covers remote-only placement. */
-        idle_ms = host_gc_packed_idle(idle_ms, packed_capped, packed_deleted);
         idle_ms = host_gc_expiry_idle(idle_ms, expiry_progress);
         if (idle_ms < GC_LOOP_MS && env_on("EFS_RAFT_OBS"))
             fprintf(stderr, "raft-host: gc-backlog-idle ms=%u removed=%llu\n", idle_ms,
@@ -11349,8 +11160,6 @@ int server_raft_host_start(struct efsd_server *s)
             free(h);
             return EFS_ERR_IO;
         }
-        if(s->storage_engine)
-            (void)efs_kv_lsm_defer_held_flush(h->kv,1);
         h->disk = efs_raft_disk_open(logdir, EFS_RAFT_DISK_SYNC);
         if (!h->disk) {
             fprintf(stderr, "raft-host: raft_disk_open %s failed\n", logdir);
@@ -11601,32 +11410,6 @@ static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n
     return handled==1;
 }
 
-/* Candidate container optimization, opt-in until loaded qualification.
- * Only an identical queued read-only frame can be folded; do not substitute
- * a newer read context or cross an ordinary/progress/configuration frame.
- * The newest arrival stays at the tail, so every retained frame keeps order.
- * Flow admission owns durability credits and is deliberately excluded. */
-static int host_inbox_duplicate_read(struct efs_raft_host *h,
-                                      const uint8_t *payload, uint32_t plen)
-{
-    if (!h->s || !h->s->storage_engine || h->flow_enabled ||
-        !env_on("EFS_CONTAINER_INBOX_FOLD") ||
-        !outbox_pure_read_control(payload, plen))
-        return -1;
-    for (int i = h->inbox_n - 1; i >= 0; --i) {
-        struct host_inbox_item *item = &h->inbox[i];
-        if (!outbox_pure_read_control(item->buf, item->len))
-            break;
-        if (!memcmp(item->buf, payload, plen))
-            return i;
-        /* A different context, peer, boot or term in this group is also
-         * a fence; do not fold around a possible role/liveness transition. */
-        if (item->buf[1] == payload[1])
-            break;
-    }
-    return -1;
-}
-
 int server_raft_host_inbox(const uint8_t *payload, uint32_t plen,
                            struct efs_raft_flow_reply *feedback)
 {
@@ -11666,20 +11449,10 @@ int server_raft_host_inbox(const uint8_t *payload, uint32_t plen,
             h->inbox_work_n>=HOST_INBOX_MAX || plen>HOST_INBOX_BYTES-h->inbox_work_bytes)
             goto busy;
     }
-    int duplicate=host_inbox_duplicate_read(h,payload,plen);
-    if (duplicate<0 && (h->inbox_n>=HOST_INBOX_MAX ||
-                        plen>HOST_INBOX_BYTES-h->inbox_bytes)) goto busy;
+    if (h->inbox_n>=HOST_INBOX_MAX || plen>HOST_INBOX_BYTES-h->inbox_bytes) goto busy;
     copy = malloc(plen);
     if (!copy) { pthread_mutex_unlock(&h->inbox_mu); return EFS_ERR_NOMEM; }
     memcpy(copy,payload,plen);
-    if (duplicate>=0) {
-        BO_COUNT(BO_INBOX_READ_DUPLICATE);
-        free(h->inbox[duplicate].buf);
-        h->inbox_bytes-=h->inbox[duplicate].len;
-        memmove(h->inbox+duplicate,h->inbox+duplicate+1,
-                (size_t)(h->inbox_n-duplicate-1)*sizeof(h->inbox[0]));
-        h->inbox_n--;
-    }
     h->inbox_bytes+=plen;
     if (h->inbox_bytes>h->inbox_bytes_hi) h->inbox_bytes_hi=h->inbox_bytes;
     h->inbox[h->inbox_n].buf=copy; h->inbox[h->inbox_n].len=plen;
@@ -12145,8 +11918,12 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     clen = plen - 1;
     /* Only the local verified GC coordinator may emit mutation proofs.
      * Public/forwarded control cannot supply a fabricated member ACK. */
-    if(clen && (cmd[0]==EFS_MD_CMD_REPAIR_JOB || cmd[0]==EFS_MD_CMD_PACK_GC_ACK || cmd[0]==EFS_MD_CMD_PACK_CANCEL || cmd[0]==EFS_MD_CMD_PACK_GC_RETIRE)) {
+    if(clen && cmd[0]==EFS_MD_CMD_REPAIR_JOB) {
         out->rc=EFS_ERR_ACCES;return;
+    }
+    /* Packing was removed: never propose its retired commands/requests. */
+    if(clen && cmd[0]>=EFS_MD_CMD_RETIRED_PACK_ADMIT && cmd[0]<=EFS_MD_REQ_RETIRED_PACK_GC_VIEW) {
+        out->rc=EFS_ERR_PROTO;return;
     }
     if(clen && (cmd[0]==EFS_MD_REQ_REPAIR_WRITE_AUTHORITY || cmd[0]==EFS_MD_REQ_REPAIR_SEAL_AUTHORITY)) {
         if(!h->s || !h->s->repair_experiment){out->rc=EFS_ERR_ACCES;return;}
@@ -12165,19 +11942,6 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         if(!local_leader){rc=host_remote_cmd(h,group,cmd,clen,out,-1);if(rc)out->rc=rc;return;}
         rc=host_repair_write_read(h,group,&expected,cmd[0]==EFS_MD_REQ_REPAIR_SEAL_AUTHORITY,&hint);
         out->rc=rc;out->leader_hint=hint;return;
-    }
-    if(clen && cmd[0]==EFS_MD_REQ_PACK_GC_VIEW) {
-        struct efs_pack_object expected,current;
-        rc=efs_pack_object_decode(cmd+1,clen-1,&expected);
-        if(rc || group!=expected.ledger.publication_group){out->rc=rc?rc:EFS_ERR_INVAL;return;}
-        if(!host_hosts(h,group)) {
-            rc=host_remote_cmd(h,group,cmd,clen,out,-1);if(rc)out->rc=rc;return;
-        }
-        rc=host_read_index(h,group,&hint);
-        if(!rc)rc=efs_pack_lifetime_get(h->kv,&expected,&current);
-        out->rc=rc;out->leader_hint=hint;
-        if(!rc)out->salt=current.ledger.phase|((uint64_t)current.ledger.fence_acks<<32);
-        return;
     }
     if(clen && (cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK || cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK_RESET)) {
         if(clen!=(cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK?1u:5u)) {out->rc=EFS_ERR_INVAL;return;}
@@ -12327,55 +12091,6 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
        (clen!=46 || !rd64be(cmd+1) ||
         group!=efs_raft_shard_group(efs_kv_inode_shard(rd64be(cmd+1))))) {
         out->rc=EFS_ERR_INVAL;return;
-    }
-    if (clen && (cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_REQ_PACK_STATUS || cmd[0] == EFS_MD_CMD_PACK_UPLOAD_RETIRE)) {
-        struct efs_pack_object object, current; struct efs_pack_ref refs[EFS_PACK_MAX_RECORDS]; uint32_t count;
-        rc = efs_pack_upload_decode(cmd + 1, clen - 1, &object, refs, EFS_PACK_MAX_RECORDS, &count);
-        if (rc || group != object.ledger.publication_group) { out->rc = rc ? rc : EFS_ERR_INVAL; return; }
-        if (cmd[0] == EFS_MD_CMD_PACK_ADMIT && object.ledger.member_mask != ((1u << h->n) - 1u)) {
-            out->rc = EFS_ERR_INVAL; return;
-        }
-        /* Storage PUT checks status locally on every placement member. Keep
-         * follower ReadIndex and unhosted status forwarding for those checks. */
-        if (cmd[0]==EFS_MD_REQ_PACK_STATUS && !host_hosts(h,group)) {
-            rc=host_remote_cmd(h,group,cmd,clen,out,-1);
-            if (rc) out->rc=rc;
-            return;
-        }
-        /* Like policy/session commands, packed lifecycle RPCs must not form
-         * nested follower forwarding chains. The caller retries the leader;
-         * only that leader performs fresh owner admission and proposal. */
-        struct host_view view;host_view_get(h,group,&view);
-        if (cmd[0]!=EFS_MD_REQ_PACK_STATUS && (!view.has || view.role!=EFS_RAFT_LEADER)) {
-            out->rc=EFS_ERR_NOT_PRIMARY;
-            out->leader_hint=view.has ? view.leader : host_pick_peer(h,&group,1,-1);
-            return;
-        }
-        uint32_t shard = group == EFS_RAFT_GROUP_SHARD ? 1 : 2;
-        uint8_t admission[HOST_SESS_REG_LEN] = {EFS_MD_CMD_SESSION, EFS_MD_SESS_ESTABLISH};
-        memcpy(admission + 2, object.ledger.owner.client_uuid, 16);
-        wr32be(admission + 18, object.ledger.owner.session_epoch); wr32be(admission + 22, shard);
-        rc = host_session_establish_admit(h, admission, sizeof(admission), group, &hint);
-        if (rc) { out->rc = rc; out->leader_hint = hint; return; }
-        if (cmd[0] != EFS_MD_REQ_PACK_STATUS) rc = host_propose_wait_idx(h, group, cmd, clen, &hint, &idx);
-        if (rc == EFS_OK || rc == EFS_ERR_BUSY || rc == EFS_ERR_STALE) {
-            int proof = host_read_index(h, group, &hint);
-            if (!proof) proof = efs_session_accept(h->kv, shard, object.ledger.owner.client_uuid, object.ledger.owner.session_epoch);
-            if (!proof && cmd[0] == EFS_MD_CMD_PACK_UPLOAD_RETIRE) {
-                int retired = 0; proof = efs_pack_upload_is_retired(h->kv, &object, &retired);
-                if (!proof && !retired) proof = EFS_ERR_BUSY;
-                if (!proof) { out->rc = EFS_OK; out->salt = EFS_PACK_UPLOAD_RETIRED;
-                    out->index = idx; out->leader_hint = hint; return; }
-            }
-            if (!proof) proof = efs_pack_admission_get(h->kv, &object, &current);
-            if (!proof && current.ledger.phase != EFS_PACK_ACTIVE) proof = EFS_ERR_STALE;
-            for (uint32_t i = 0; !proof && i < current.ledger.count; i++)
-                if (current.ledger.state[i] > EFS_PACK_LIVE) proof = EFS_ERR_STALE;
-            if (!proof) { rc = EFS_OK; salt = EFS_PACK_ACTIVE; }
-            else if (rc == EFS_OK || proof != EFS_ERR_NOT_FOUND) rc = proof;
-        }
-        out->rc = rc; out->salt = rc == EFS_OK ? salt : 0; out->index = idx; out->leader_hint = hint;
-        return;
     }
     if(clen && (cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT || cmd[0]==EFS_MD_REQ_PUT_TICKET_STATUS ||
                cmd[0]==EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED)) {
@@ -13240,8 +12955,6 @@ void server_raft_host_flock(efs_ino_t ino, uint32_t op, uint64_t owner,
     set_inode_rc(out, rc, hint);
     /* A fresh authority/proposal refusal is not a competing lock. Keep
      * real AGAIN conflicts immediate, including nonblocking grants. */
-    if (rc == EFS_ERR_BUSY && h->s && h->s->storage_engine)
-        out->status = EFS_INODE_RPC_ADMISSION_BUSY;
     if (is_getlk && rc == EFS_OK) {
         out->inode.nlink = hit.type;
         out->inode.size = hit.start;
@@ -19575,7 +19288,7 @@ static int host_publication_committed(struct efs_raft_host *h, uint8_t group,
     uint64_t applied=efs_raft_applied(r),top=v.read_index;
     rc=EFS_ERR_BUSY;
     for (unsigned n=0;store && top>applied && n<64;n++,top--) {
-        uint8_t cmd[HOST_PUBLICATION_PACK_LEN],got_digest[EFS_HASH_SIZE];
+        uint8_t cmd[HOST_PUBLICATION_TICKET_LEN],got_digest[EFS_HASH_SIZE];
         uint32_t len=sizeof(cmd);uint64_t entry_term=0;
         int grc=store->get(store,top,&entry_term,cmd,&len);
         if ((grc==EFS_ERR_INVAL && len>sizeof(cmd)) || grc==EFS_ERR_NOT_FOUND) continue;
@@ -19629,7 +19342,7 @@ void server_raft_host_publication(const struct efs_msg_publication *req, int que
          * must have a replicated terminal result, and retries use that result. */
         p.now=now_ns();p.durable_result=1;
         p.lane_local=group!=efs_raft_shard_group(efs_kv_inode_shard(p.ino));
-        uint8_t cmd[HOST_PUBLICATION_PACK_LEN];uint32_t len=0;
+        uint8_t cmd[HOST_PUBLICATION_TICKET_LEN];uint32_t len=0;
         rc=pack_publish_cmd(cmd,&len,&p);
         if(rc==EFS_OK) {
             cmd[0]=query_only==2?EFS_MD_CMD_PUBLICATION_RETIRE:EFS_MD_CMD_PUBLICATION;
@@ -19643,15 +19356,7 @@ void server_raft_host_publication(const struct efs_msg_publication *req, int que
                 wr32be(cmd+len+28,p.put_fragment_len);wr32be(cmd+len+32,p.put_member_mask);
                 len+=36;
             }
-            if (p.coding_profile_id == EFS_META_PROFILE_PACK_K2F1) {
-                cmd[HOST_PUBLISH_LEN - 1] |= HOST_PUB_F_PACKED;
-                rc = efs_pack_ref_encode(&p.ch.packed, cmd + len); len += EFS_PACK_REF_BYTES;
-            }
-            /* Packed objects already have a durable admission and immutable
-             * PENDING record manifest. Apply can atomically install the mapping,
-             * LIVE reference and terminal receipt without an extra per-file
-             * PENDING proposal. Unknown outcomes still retain client ownership. */
-            if(!query_only && rc==EFS_OK && p.coding_profile_id!=EFS_META_PROFILE_PACK_K2F1) {
+            if(!query_only && rc==EFS_OK) {
                 /* Pending is issued only after replicated admission is visible
                  * under fresh authority, never from a proposed index/term. */
                 cmd[0]=EFS_MD_CMD_PUBLICATION_ADMIT;
@@ -19709,92 +19414,6 @@ void server_raft_host_publication(const struct efs_msg_publication *req, int que
 /* Bounded transport cohort; every item is still an ordinary durable command.
  * A partial proposal, CAS rejection or lost reply is resolved by the exact
  * receipt, never by the cohort's applied index alone. */
-void server_raft_host_publication_batch(const struct efs_msg_publication_batch *req,
-                                      struct efs_msg_publication_batch_reply *out)
-{
-    struct efs_raft_host *h=g_host;
-    struct efs_meta_pub pubs[EFS_PUBLICATION_BATCH_MAX];
-    struct host_idx_ref refs[EFS_PUBLICATION_BATCH_MAX];
-    int hint=-1,rc,nrefs=0;
-    memset(out,0,sizeof(*out));out->rpc.status=EFS_INODE_RPC_INVAL;
-    if(!h || !h->running || !req || req->version!=EFS_PUBLICATION_BATCH_VERSION ||
-       (req->mode!=0 && req->mode!=2) || (req->group!=0 && req->group!=2) ||
-       !req->count || req->count>EFS_PUBLICATION_BATCH_MAX)return;
-    for(uint32_t i=0;i<req->count;i++) {
-        if(efs_publication_from_request(&req->records[i],&pubs[i]) ||
-           pubs[i].coding_profile_id!=EFS_META_PROFILE_PACK_K2F1 || pubs[i].chunk_index ||
-           efs_raft_shard_group(efs_kv_lane_shard(pubs[i].ino,0))!=req->group)return;
-        for(uint32_t j=0;j<i;j++)if(pubs[i].ino==pubs[j].ino)return;
-        if(efs_publication_digest(&pubs[i],out->records[i].digest))return;
-    }
-    out->version=req->version;out->mode=req->mode;out->group=req->group;out->count=req->count;
-    if(!host_hosts(h,req->group) || !host_is_leader(h,req->group)) {
-        hint=host_leader_hint(h,req->group);
-        if(hint<0)hint=host_pick_peer(h,(const uint8_t[]){req->group},1,-1);
-        set_inode_rc(&out->rpc,EFS_ERR_NOT_PRIMARY,hint);return;
-    }
-    rc=host_read_index(h,req->group,&hint);
-    if(rc){set_inode_rc(&out->rpc,rc,hint);return;}
-    struct host_command_cohort cohort;
-    host_command_cohort_begin(&cohort,h);
-    for(uint32_t i=0;i<req->count && rc==EFS_OK;i++) {
-        struct efs_meta_pub *p=&pubs[i];int verdict=0;
-        uint32_t shard=efs_kv_lane_shard(p->ino,0);
-        int one=efs_session_accept(h->kv,shard,req->records[i].id.client_uuid,
-                                  req->records[i].id.session_epoch);
-        if(one)continue;
-        one=efs_meta_publication_result(h->kv,p,&verdict);
-        int propose=(!req->mode && (one==EFS_ERR_NOT_FOUND ||
-            (!one && verdict==EFS_META_PUBLICATION_PENDING))) ||
-            (req->mode==2 && !one && verdict!=EFS_META_PUBLICATION_RETIRED);
-        if(!propose)continue; /* Final authoritative lookup below reports every item. */
-        p->now=now_ns();p->durable_result=1;
-        p->lane_local=req->group!=efs_raft_shard_group(efs_kv_inode_shard(p->ino));
-        uint8_t cmd[HOST_PUBLICATION_PACK_LEN];uint32_t len=0;
-        rc=pack_publish_cmd(cmd,&len,p);
-        if(rc)break;
-        cmd[0]=req->mode==2?EFS_MD_CMD_PUBLICATION_RETIRE:EFS_MD_CMD_PUBLICATION;
-        memcpy(cmd+len,p->publication_id.client_uuid,EFS_OPID_UUID_LEN);
-        wr32be(cmd+len+16,p->publication_id.session_epoch);wr64be(cmd+len+20,p->publication_id.seq);len+=28;
-        if(p->ticketed) {
-            cmd[HOST_PUBLISH_LEN-1]|=HOST_PUB_F_TICKETED;
-            memcpy(cmd+len,p->put_id.client_uuid,EFS_OPID_UUID_LEN);
-            wr32be(cmd+len+16,p->put_id.session_epoch);wr64be(cmd+len+20,p->put_id.seq);
-            wr32be(cmd+len+28,p->put_fragment_len);wr32be(cmd+len+32,p->put_member_mask);len+=36;
-        }
-        cmd[HOST_PUBLISH_LEN-1]|=HOST_PUB_F_PACKED;
-        rc=efs_pack_ref_encode(&p->ch.packed,cmd+len);len+=EFS_PACK_REF_BYTES;
-        if(rc)break;
-        refs[nrefs]=(struct host_idx_ref){.group=req->group};
-        rc=host_command_cohort_add(h,&refs[nrefs++],cmd,len,&hint);
-    }
-    rc=host_command_cohort_end(&cohort,rc,&hint);
-    if(!rc)rc=host_wait_refs(h,refs,nrefs,&hint);
-    /* Only retryable apply uncertainty can be resolved by durable receipts.
-     * Failed persistence never supplies an acceptance proof. */
-    if(rc && rc!=EFS_ERR_STALE && rc!=EFS_ERR_BUSY) {
-        set_inode_rc(&out->rpc,rc,hint);return;
-    }
-    rc=host_read_index(h,req->group,&hint);
-    if(rc){set_inode_rc(&out->rpc,rc,hint);return;}
-    set_inode_rc(&out->rpc,EFS_OK,hint);
-    for(uint32_t i=0;i<req->count;i++) {
-        struct efs_msg_publication_reply *r=&out->records[i];int verdict=0;
-        struct efs_publication_locator locator={0};
-        rc=efs_session_accept(h->kv,efs_kv_lane_shard(pubs[i].ino,0),
-            req->records[i].id.client_uuid,req->records[i].id.session_epoch);
-        if(!rc)rc=efs_meta_publication_receipt(h->kv,&pubs[i],&verdict,&locator);
-        if(!rc && req->mode==2 && verdict!=EFS_META_PUBLICATION_RETIRED)rc=EFS_ERR_BUSY;
-        set_inode_rc(&r->rpc,rc,hint);
-        if(rc)continue;
-        r->receipt_group=locator.group;r->receipt_index=locator.index;r->receipt_term=locator.term;
-        r->verdict=verdict;
-        r->state=verdict==EFS_META_PUBLICATION_PENDING?EFS_PUBLICATION_PENDING:
-            verdict==EFS_META_PUBLICATION_RETIRED?EFS_PUBLICATION_RETIRED:
-            verdict==EFS_OK?EFS_PUBLICATION_COMMITTED:EFS_PUBLICATION_REJECTED;
-    }
-}
-
 void server_raft_host_lane_bootstrap_rpc(const struct efs_msg_lane_bootstrap *req,
                                           struct efs_msg_lane_writer_view_reply *out)
 {
@@ -19973,7 +19592,6 @@ void server_raft_host_writer_view(const struct efs_msg_inode_writer_view *req,
     server_raft_host_writer_view_reuse(req, out, &covered);
 }
 
-#include "pack_authority.h"
 
 void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32_t start, uint32_t max, uint64_t generation,
                                 struct efs_msg_inode_getchunks_reply *out)
@@ -20086,11 +19704,6 @@ void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32
                    sizeof(out->recs[out->count].nodes));
             memcpy(out->recs[out->count].checksums, ch.checksums,
                    sizeof(out->recs[out->count].checksums));
-            if (ch.coding_profile_id == EFS_META_PROFILE_PACK_K2F1) {
-                out->recs[out->count].publish_flags = EFS_CHUNK_REC_F_PACKED_BASE;
-                out->recs[out->count].packed = ch.packed;
-                out->recs[out->count].file_generation = ch.packed.inode_generation;
-            }
             out->recs[out->count].base_gen = ch.generation;
             out->recs[out->count].chunk_generation = ch.generation;
             out->recs[out->count].delta_off = 0;

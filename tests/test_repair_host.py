@@ -5,7 +5,7 @@ import subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/server/raft_host.c').read_text()
 b=s.index('static int host_apply(void');apply=s[b:s.index('\n}',b)+2]
-b=s.index('void server_raft_host_submit(');end=s.index('    if(clen && cmd[0]==EFS_MD_REQ_PACK_GC_VIEW)',b)
+b=s.index('void server_raft_host_submit(');end=s.index('    if(clen && (cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK || cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK_RESET)) {',b)
 public=s[b:end]+'}\n'
 a=s.index('static int host_repair_write_read(');fresh=s[a:s.index('\n}',a)+2]
 code=r'''

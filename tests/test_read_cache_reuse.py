@@ -41,8 +41,6 @@ int main(void) {
     CHANGE(changed.read_view.chunk_size*=2); CHANGE(changed.read_view.count--);
     CHANGE(changed.read_view.parts[0].len--); CHANGE(changed.read_view.parts[1].epoch++);
     CHANGE(changed.read_view.parts[2].off++);
-    CHANGE(changed.packed.segment_id++); CHANGE(changed.packed.record_generation++);
-    CHANGE(changed.packed.digest[0]++);
     struct efs_chunk_entry copy;
     uint64_t key=efs_chunk_read_key(&ce);
 #define KEY_CHANGE(expr) do {copy=ce;expr;assert(efs_chunk_read_key(&copy)!=key);} while(0)
@@ -58,7 +56,7 @@ int main(void) {
     assert(chunk_rec_same_read(&ce,&changed));
     ce.ndelta=changed.delta_base_n=EFS_CHUNK_DELTA_MAX+1;
     assert(!chunk_rec_same_read(&ce,&changed));
-    puts("read cache identity: unchanged, placement, checksums, spans, fences, packed identity PASS");
+    puts("read cache identity: unchanged, placement, checksums, spans, fences PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-read-reuse-') as d:

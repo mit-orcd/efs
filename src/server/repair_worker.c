@@ -67,7 +67,7 @@ static int target(struct efsd_server *s,const struct efs_repair_job *j,
 int server_repair_run(struct efsd_server *s,const struct efs_repair_job *selector)
 {
     if(!s || !selector)return EFS_ERR_INVAL;
-    if(!s->repair_experiment || s->storage_engine || s->storage_path_count!=1)
+    if(!s->repair_experiment || s->storage_path_count!=1)
         return EFS_ERR_ACCES;
     if(pthread_mutex_trylock(&repair_worker_mu))return EFS_ERR_BUSY;
     const char *phase="capture";

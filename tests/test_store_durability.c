@@ -44,7 +44,7 @@ static int barrier_close(int fd)
 #define open barrier_open
 #define fsync barrier_sync
 #define close barrier_close
-#include "../src/server/store_containers.c"
+#include "../src/server/storage_roots.c"
 #include "../src/server/store.c"
 #undef open
 #undef fsync
@@ -195,11 +195,11 @@ int main(void)
     /* Files permit nested roots: pinned proof ownership follows longest root. */
     struct efsd_server *routes=calloc(1,sizeof(*routes));assert(routes);
     struct target outer={0},inner={0};strcpy(outer.root,"/storage");strcpy(inner.root,"/storage/nested");
-    routes->storage_path_count=2;routes->container_targets[0]=&outer;routes->container_targets[1]=&inner;
+    routes->storage_path_count=2;routes->storage_roots[0]=&outer;routes->storage_roots[1]=&inner;
     assert(target_at(routes,"/storage/nested/data/body")==&inner);
     assert(target_at(routes,"/storage/data/body")==&outer);
     assert(!target_at(routes,"/storage-other/body"));
-    routes->container_targets[0]=&inner;routes->container_targets[1]=&outer;
+    routes->storage_roots[0]=&inner;routes->storage_roots[1]=&outer;
     assert(target_at(routes,"/storage/nested/data/body")==&inner);free(routes);
     char dir[]="/tmp/efs-store-durability-XXXXXX";assert(mkdtemp(dir));
     char path[1024];snprintf(path,sizeof(path),"%s/a/b/body",dir);
@@ -214,7 +214,7 @@ int main(void)
     file_syncs=directory_syncs=0;shard_io_thread(&a);
     assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==5);
     /* Real initialized files target, with an initially empty pinned cache. */
-    booting=1;assert(!server_storage_engine_init(server));booting=0;
+    booting=1;assert(!server_storage_roots_init(server));booting=0;
     file_syncs=directory_syncs=0;shard_io_thread(&a);
     assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==3);
     file_syncs=directory_syncs=0;shard_io_thread(&a);
@@ -247,8 +247,8 @@ int main(void)
         assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==1);
     }
     /* Restart discards runtime hints; first publication reproves ancestry. */
-    server_storage_engine_close(server);
-    booting=1;assert(!server_storage_engine_init(server));booting=0;
+    server_storage_roots_close(server);
+    booting=1;assert(!server_storage_roots_init(server));booting=0;
     file_syncs=directory_syncs=0;shard_io_thread(&a);
     assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==3);
     file_syncs=directory_syncs=0;shard_io_thread(&a);
@@ -271,7 +271,7 @@ int main(void)
     server->storage_paths[0][strlen(dir)-1]=0;
     file_syncs=directory_syncs=0;shard_io_thread(&a);
     assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==5);
-    server_storage_engine_close(server);
+    server_storage_roots_close(server);
     assert(!pthread_mutex_destroy(&server->lock));free(server);
     assert(!unlink(path));snprintf(path,sizeof(path),"%s/a/b",dir);assert(!rmdir(path));
     snprintf(path,sizeof(path),"%s/a",dir);assert(!rmdir(path));snprintf(path,sizeof(path),"%s/.efs-engine",dir);assert(!unlink(path));

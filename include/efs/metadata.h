@@ -6,7 +6,6 @@
 
 #include "efs/common.h"
 #include "efs/fence_view.h"
-#include "efs/packed_segment.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -45,7 +44,6 @@ struct efs_chunk_entry {
     uint64_t delta_seq; /* newest delta seq; 0 if ndelta == 0 */
     struct efs_fence_view read_view; /* authoritative GETCHUNKS masks; count 0 = local row */
     struct efs_chunk_delta deltas[EFS_CHUNK_DELTA_MAX];
-    struct efs_pack_ref packed; /* segment_id zero means ordinary base */
 };
 
 /* A late fetch retains the identity it captured. Include every byte/view
@@ -77,19 +75,6 @@ static inline uint64_t efs_chunk_read_key(const struct efs_chunk_entry *ce)
             for (unsigned k = 0; k < EFS_HASH_SIZE; ++k)
                 EFS_READ_KEY_VALUE(d->checksums[j][k]);
         }
-    }
-    EFS_READ_KEY_VALUE(ce->packed.segment_id);
-    if (ce->packed.segment_id) {
-        EFS_READ_KEY_VALUE(ce->packed.ino);
-        EFS_READ_KEY_VALUE(ce->packed.inode_generation);
-        EFS_READ_KEY_VALUE(ce->packed.content_epoch);
-        EFS_READ_KEY_VALUE(ce->packed.record_generation);
-        EFS_READ_KEY_VALUE(ce->packed.segment_generation);
-        EFS_READ_KEY_VALUE(ce->packed.geometry);
-        EFS_READ_KEY_VALUE(ce->packed.publication_group);
-        EFS_READ_KEY_VALUE(ce->packed.offset); EFS_READ_KEY_VALUE(ce->packed.len);
-        for (unsigned i = 0; i < EFS_HASH_SIZE; ++i)
-            EFS_READ_KEY_VALUE(ce->packed.digest[i]);
     }
     EFS_READ_KEY_VALUE(ce->read_view.fence_epoch);
     EFS_READ_KEY_VALUE(ce->read_view.revision);
@@ -125,8 +110,9 @@ struct efs_inode {
     uint64_t imm_files, imm_dirs, tree_files, tree_dirs;
     uint64_t imm_bytes, tree_bytes;
     uint64_t imm_tmin, imm_tmax, tree_tmin, tree_tmax;
-    /* Small-file pack (EFSM v5): pack_ino==0 means this file has its own
-     * chunks. Otherwise payload lives in pack_ino's data at [off, off+len). */
+    /* Reserved: the EFSM v5 small-file pack was removed with packing on
+     * 2026-10-16 (archive/packing-containers-20261016). Always zero; kept so
+     * the EFSM and inode wire layouts are unchanged. */
     efs_ino_t pack_ino;
     uint32_t pack_off;
     uint32_t pack_len;
@@ -499,7 +485,6 @@ int efs_export_set_chunk_gen(struct efs_export *ex, efs_ino_t ino,
                              uint32_t chunk_index, uint64_t generation);
 /* Replace the chunk's delta list. n == 0 clears it. Does not touch the
  * base generation or its fragment set. */
-int efs_export_set_chunk_packed(struct efs_export *, efs_ino_t, uint32_t, const struct efs_pack_ref *);
 int efs_export_set_chunk_view(struct efs_export *ex, efs_ino_t ino,
                                uint32_t ci, const struct efs_fence_view *view);
 int efs_export_set_chunk_deltas(struct efs_export *ex, efs_ino_t ino,

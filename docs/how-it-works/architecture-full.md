@@ -1539,6 +1539,12 @@ Orderly restart, 49 cross-client markers, 224 fixed payloads and seven cold
 queries PASS; quiet POSIX reruns 21/21 PASS do not close loaded timeouts.
 W121 remains open with kernel remediation deferred.
 
+[Packing and container engine removed](../status/packing-containers-removal-20261016.md):
+**D37.** All packing and the experimental container engine are out of devel,
+preserved at tag `archive/packing-containers-20261016` (branch
+`packing-containers`). Old packed stores, container roots, packed imports and
+retired log entries are refused explicitly. Files engine only.
+
 [RDMA credit overrun](../status/orcd-mini-rdma-credit-20261016.md): **scoped PASS;
 orcd-mini rollout NOTRUN.** DATA plus CREDIT frames could exceed a peer's
 posted receives; the RNR retry turned 30 µs request/reply rounds into 2 ms
@@ -1676,7 +1682,7 @@ running clusters. Newer source commits do not inherit earlier test verdicts.
 | Integrated RDMA source | [Merged devel qualification](../status/devel-rdma-merge-qualification-20261014.md). AMD software-RDMA evidence does not replace ORCD hardware gates. |
 | `.efs` functional versus scale work | [Three work packages and feature matrix](../status/three-work-packages-20261013.md), [AMD package 2](../status/amd-package2-query-20261013.md), [ORCD package 1](../status/orcd-package1-20261013.md), [later query fixes](../status/orcd-query-name-ordinals-20261013.md). General 400 GiB acceptance remains recorded as on hold; targeted fixes and marker checks do not close it. |
 | Small-cluster follow-ups | [ORCD findings reproducible on AMD/Intel](../status/orcd-small-cluster-followups-20261013.md). Preserve unresolved ordinary-I/O and scale obligations separately. |
-| Packing and containers | [Packing ledger](../status/packing-tcp-direct-20261012.md) retains its own unfinished gates; [container testing policy](../status/container-testing-policy-20261012.md) excludes container qualification until explicitly reauthorized. Neither is enabled by this index. |
+| Packing and containers | **Removed from devel October 16 ([D37](#appendix-4--decisions--taken-and-pending-register-d1d36), [removal](../status/packing-containers-removal-20261016.md)); preserved at tag `archive/packing-containers-20261016`.** Historical: [packing ledger](../status/packing-tcp-direct-20261012.md), [container testing policy](../status/container-testing-policy-20261012.md). |
 | Expiry | [Implementation](../status/expiry-implementation-20261012.md) and [foreground fairness](../status/expiry-foreground-latency-20261013.md) retain scoped evidence. Expiry stays excluded from the three-package profiles. |
 
 The full chronological index is [preserved intact](../status/archive/status-index-before-restructure-20261015.md).
@@ -1758,11 +1764,11 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | P2.2 | **D26** · the GC pass | performance | in tree + gated (dev cluster, Oct 4): per-anchor pending-GC watermark maintained in the apply, derived once per recovery/import, `zero_if` clamp on a drained pass; `test_gc_watermark`; live: 514 records/pass drain, 10 idle min with no `gc-pass` line; Oct 7 10-GiB physical reclamation passes; retained-table active GC latency regression remains (1393-ms pass); idle-hour/committed-tail results in the acceptance ledger | [full text](#p22--d26--the-gc-pass-performance-plan-row) · [D26](#appendix-4--decisions--taken-and-pending-register-d1d36) |
 | P2.3 | **W23** · stalled-compactor test | performance | strict W89 samples pass; NUC engine reaches production 1 GiB L0 cap; deferred idle drain and unapplied WAL-tail durability repaired; universal follower memory/lag bound remains open | [full text](#p23--w23--the-stalled-compactor-test-performance-plan-row) · [run](../../results/measure/20261005-040810-w23-stalled-compactor/SUMMARY.txt) |
 | P3 | `efs-bench --bench data/meta`, then `efs-fuse --bench` | performance | tools implemented; Oct 7 corrected histogram/window coverage and metadata result validation are recorded in the latency/benchmark checkpoints; named six-NVMe fcstor storage curve and two-host client ladder remain owed | [server plan](#single-node-storage-bench-efsd---bench--asked-oct-2-2026-user-queue-position-after-w41--d23--d17--d26-in-plan-after-the-oct-1-2200z-review-its-number-decides-the-fragment-layout-w40-and-zero-copy-receive) · [client plan](#client-bench-efs-fuse---bench--asked-oct-2-2026-user-after-efsd---bench) · [original run](../../results/measure/20261005-045140-p3-benches/SUMMARY.txt) · [latency validation](../../results/measure/20261007-latency-validation/SUMMARY.md) · [benchmark validation](../../results/measure/20261007-bench-hot-path-review/SUMMARY.md) |
-| container-profiling | **P4.1** · container tracing/CPU profiling | storage enhancement | 8 rounds complete on `devel-storage-engine`; 12 additional VM cases and clean Linux suite pass; duplicate mapping/hash work removed; buffered-write median +2.8% in two repeats, other rates mixed; metadata stalls unresolved; files default | [rounds 1–6](../status/container-profiling-20261008.md) · [rounds 7–8](../status/container-profiling-rounds7-8-20261008.md) |
+| container-profiling | **P4.1** · container tracing/CPU profiling | storage enhancement | PARKED: code removed from devel on 2026-10-16 ([removal](../status/packing-containers-removal-20261016.md); tag `archive/packing-containers-20261016`, branch `packing-containers`). Earlier status: 8 rounds complete on `devel-storage-engine`; 12 additional VM cases and clean Linux suite pass; duplicate mapping/hash work removed; buffered-write median +2.8% in two repeats, other rates mixed; metadata stalls unresolved; files default | [rounds 1–6](../status/container-profiling-20261008.md) · [rounds 7–8](../status/container-profiling-rounds7-8-20261008.md) |
 | metadata-group-perf | **P4.1 / W66** · metadata-placement performance split | investigation / benchmark enhancement | open follow-up; Oct 8 live probes reproduce group-2 reads at 16.5–18.7 ms median versus 1.4–1.6 ms for group 0; direct leader contact remains slow; quorum/pump durability candidate, causal isolation pending | [follow-up](../status/metadata-group-perf-followup-20261008.md) |
-| nuc-storage-engine | **P4.1** · bare-metal NUC files/containers A/B | storage validation | 8 cases + full native suite pass; 64 daemon launches verified; installed services preserved; group-2 versus group-0 inode placement splits rates and blocks engine ranking | [checkpoint](../status/nuc-storage-engine-ab-20261008.md) |
+| nuc-storage-engine | **P4.1** · bare-metal NUC files/containers A/B | storage validation | PARKED: code removed from devel on 2026-10-16 ([removal](../status/packing-containers-removal-20261016.md); tag `archive/packing-containers-20261016`, branch `packing-containers`). Earlier status: 8 cases + full native suite pass; 64 daemon launches verified; installed services preserved; group-2 versus group-0 inode placement splits rates and blocks engine ranking | [checkpoint](../status/nuc-storage-engine-ab-20261008.md) |
 | storage-engine-modules | **P4.1** · built-in engine modules | architecture enhancement proposal | documented, not implemented; shared coordination plus opaque physical-engine contexts; estimated 18–34 hours; dynamic loading deferred | [proposal](../status/storage-engine-modules-proposal-20261008.md) |
-| container-engine | **P4.1** · experimental daemon files/containers selector and VM A/B | storage feature | implemented experimentally on `devel-storage-engine`; 16 VM A/B cases and full Linux suite pass; files remains default; read-index waits limit read-speed attribution | [checkpoint](../status/container-engine-20261008.md) |
+| container-engine | **P4.1** · experimental daemon files/containers selector and VM A/B | storage feature | PARKED: code removed from devel on 2026-10-16 ([removal](../status/packing-containers-removal-20261016.md); tag `archive/packing-containers-20261016`, branch `packing-containers`). Earlier status: implemented experimentally on `devel-storage-engine`; 16 VM A/B cases and full Linux suite pass; files remains default; read-index waits limit read-speed attribution | [checkpoint](../status/container-engine-20261008.md) |
 | bench-churn | **W114** · independent steady-state storage churn benchmark | benchmark enhancement | implemented on `devel-bench`; functional gates pass; initial matched 50/80/95-percent evidence; 64 KiB scaling, shared ranges and five profiling rounds recorded; bounded punch batching retained; merged into isolated `devel-storage-engine`; matched simulator comparison validated; 8 longer cases favor punch at 95%/QD4 (same-device roots); no production changes | [work item](#w114) · [ranges](../status/bench-scaling-ranges-20261008.md) · [profiles](../status/bench-perf-five-rounds-20261008.md) · [comparison](../status/bench-layout-comparison-20261008.md) |
 | P4.1–P4.4 | fragment on-disk layout (**wipe**), W40 FUSE write copy, RDMA zero-copy receive, 9-client scaling | performance | deferred until P3's numbers | [full text](#p4--deferred-until-p3s-numbers-long-one-is-a-wipe) |
 | meta-scale | **W66** · metadata leadership distribution and topology-independent routing | scalability | open — Oct 10 AMD unhosted namespace-coordinator read routing repaired and direct/buffered 128-race cold gates pass ([checkpoint](../status/amd-non-rdma-20261010.md#w66--unresolved-namespace-coordinator-routing)); four-voter host/engine, persistence/failover and staged leadership distribution pass; prolonged preferred-peer loss has no read errors/term churn; default two-group topology unchanged; D36 commit authority/recovery choice, routing/migration and scale remain | [evidence, phases and gates](../status/metadata-scaling.md) |
@@ -1770,7 +1776,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | tiny-create | **W94** · atomic CREATE plus open lease | performance / lifecycle | **Closed Oct 11: CREATE/adoption scope approved by user.** Measured lease/throughput savings, actual allocation/competing-OPEN barriers, both-mode full native/live/fault/cold and sustained admission acceptance pass. Broader production flush/PUT-ticket integration remains W72/W86/W88; no D25 activation | [closure](../status/amd-feedback-integration-20261011.md#w94--createadoption-closed-by-user-scoped-decision) · [work item](#w94) |
 | scratch-expiry | **W90** · scratch-file expiry metadata and safe lifecycle | feature | closed D33 initial scope and inspection/status follow-up; normal 24/24 and fault 25/25 expiry gates PASS; 30-minute two-mount soak, 1,644 expirations/six restarts PASS on NUC TCP/direct, `.efs` disabled, no containers/packing; each core 216/216 and peer 67/67; readable duration arguments and 30,000-file backlog/restart/off-on PASS; Oct 13 bounded-history/cadence fixes: 212–218s per 10,000 and 60–72 MiB sampled node RSS; follow-up p95 reduced 20–40% with physical drain 153–165s; maximum outliers remain | [work item](#w90) · [design](../status/scratch-expiry-interface.md) · [implementation](../status/expiry-implementation-20261012.md) · [POSIX expiry runner](../status/posix-expiry-suite.md) · [inspection and soak](../status/expiry-inspection-soak-20261012.md) · [large backlog and arguments](../status/expiry-backlog-20261012.md) · [RSS and cleanup](../status/expiry-rss-cleanup-20261013.md) · [foreground fairness](../status/expiry-foreground-latency-20261013.md) |
 | virtual-commands | **W91** · directory-local virtual `.efs/` command interface | usability feature | design accepted D34; `.efs/` commands and bounded query paths; implementation/compatibility gates remain | [work item](#w91) · [design](../status/scratch-expiry-interface.md) · [implementation](../status/expiry-implementation-20261012.md) |
-| tiny-data | **W95** · tiny-file data persistence and packing | performance experiment | partial — independent indexed packing, publication/GC fault and 24-sample AMD churn gates pass; retained raw-field/index-cost review completed ([review](../status/amd-sustained-20261011.md#w95-retained-amd-experiment-review-completed)); P4.1 production-format and migration decision remain; [TCP/direct with .efs disabled](../status/packing-tcp-direct-20261012.md): exact8151debe normal/fault native, nineteen focused/actual-core sanitizer gates, three quiet1512/1512+67/67 rounds and focused fsync-crash/cold all PASS; directory-timeout acceptance closed on AMD; [next](../status/packing-tcp-direct-20261012.md#next-work-toward-w95-closure--oct-13): matched A/B, lifecycle evidence audit/gaps, P4.1 format/rollout decision; fresh-store-only opt-in policy recommended, unapproved | [work item](#w95) |
+| tiny-data | **W95** · tiny-file data persistence and packing | performance experiment | PARKED: code removed from devel on 2026-10-16 ([removal](../status/packing-containers-removal-20261016.md); tag `archive/packing-containers-20261016`, branch `packing-containers`). Earlier status: partial — independent indexed packing, publication/GC fault and 24-sample AMD churn gates pass; retained raw-field/index-cost review completed ([review](../status/amd-sustained-20261011.md#w95-retained-amd-experiment-review-completed)); P4.1 production-format and migration decision remain; [TCP/direct with .efs disabled](../status/packing-tcp-direct-20261012.md): exact8151debe normal/fault native, nineteen focused/actual-core sanitizer gates, three quiet1512/1512+67/67 rounds and focused fsync-crash/cold all PASS; directory-timeout acceptance closed on AMD; [next](../status/packing-tcp-direct-20261012.md#next-work-toward-w95-closure--oct-13): matched A/B, lifecycle evidence audit/gaps, P4.1 format/rollout decision; fresh-store-only opt-in policy recommended, unapproved | [work item](#w95) |
 | tiny-kv | **W96** · bounded KV WAL preallocation | performance experiment | Closed Oct11: isolated SATA/NVMe repeated matrix, exact replay/reset/reservation, full native/POSIX/peer/fault/cold and WAL sanitizer gates pass; conditional benefit and SATA tails retained | [closure](../status/devel-nuc-closure-20261010.md) |
 | decisions | **D28** client-death loss policy · **D29** durable publication receipts · **D30** bounded admission/pacing | accepted design | accepted Oct 8: salvage deferred; D29/W88 implementation first, then D30/W23/W89; implementation and acceptance remain open | [contracts and gates](#d28d30--accepted-oct-8-2026) |
 | op1 | **W70** · shrink-quota falsely reports background migration | operator observability bug | Closed Oct11: current NUC direct/buffered × one/two-root accepted/refused reductions, truthful running quota and exact retained bytes pass; no migration/persistence claim | [closure](../status/devel-nuc-closure-20261010.md) |
@@ -1852,7 +1858,7 @@ items before implementation. ASK rows remain unresolved design choices.**
 
 ---
 
-##### Decisions — taken and pending (register D1–D36)
+##### Decisions — taken and pending (register D1–D37)
 
 Each row is a choice the spec did not make. A row marked **decided**
 was accepted by the user and is now part of the design; implement it
@@ -1869,6 +1875,19 @@ The user limits this release to TCP/direct I/O/files and defers containers and
 repair/recovery qualification. This is a release scheduling decision, not a
 change to the numbered architectural protection contracts. [Exact decision,
 remaining gates and limits](../status/v030-release-scope-20261012.md). Execution stays stopped.
+
+### D37 — packing and the container engine removed from devel (accepted Oct 16)
+
+The user removed all packing (tiny-file packed segments, ledger, mapping,
+admission, packed upload/read/GC, publication batch) and the experimental
+container storage engine from devel, to be resumed later. The last devel
+commit with both is preserved as tag `archive/packing-containers-20261016`
+and branch `packing-containers`. Devel is files-engine only. Stores that ever
+held packed rows (KVLSM2 MANIFEST), container-engine roots (engine marker 1),
+packed snapshot imports and retired packing log entries are refused with an
+explicit message, never misread. Resume by branching from current devel and
+reverting the removal commits. [Removal record](../status/packing-containers-removal-20261016.md).
+This supersedes the October 12 container-testing scope note for current work.
 
 ### D36 — node-count protection contract (accepted Oct 9)
 
@@ -6462,6 +6481,11 @@ open latency as a measured saving.
 <a id="w95"></a>
 
 ### W95 · Tiny-file data persistence and packing principles
+
+**Parked October 16, 2026 ([D37](#appendix-4--decisions--taken-and-pending-register-d1d36)):** packing code was
+removed from devel and preserved at tag `archive/packing-containers-20261016`
+([removal](../status/packing-containers-removal-20261016.md)). The text below is
+the record up to that point.
 
 **Current checkpoint — Oct 13:** exact8151debe on AMD/files/TCP/direct with
 `.efs` disabled passes full normal/fault native, nineteen focused normal and

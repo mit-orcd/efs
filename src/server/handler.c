@@ -7,7 +7,6 @@
 #include "efs/checksum.h"
 #include "efs/store.h"
 #include "efs/put_upload.h"
-#include "efs/packed_upload.h"
 #include "efs/opid.h"
 #include "efs/version.h"
 #include "efs/storage_capacity.h"
@@ -439,43 +438,6 @@ send_reply:
             }
             efs_put_upload_wr32(reply,(uint32_t)rc);
             efs_conn_send_msg(conn,EFS_MSG_REPAIR_TARGET_REPLY,reply,sizeof(reply));break;
-        }
-        case EFS_MSG_PACK_AUTHORITY: {
-            struct efs_msg_pack_authority_reply reply={.rc=EFS_ERR_INVAL};
-            if(server_raft_host_active())server_raft_host_pack_authority(payload,payload_len,&reply);
-            efs_conn_send_msg(conn,EFS_MSG_PACK_AUTHORITY_REPLY,&reply,sizeof(reply));break;
-        }
-        case EFS_MSG_PACK_CAPABILITIES: {
-            uint8_t reply[4];efs_put_upload_wr32(reply,
-                !g_server->storage_engine && server_raft_host_active()?
-                (!payload_len?1:payload_len==4 && efs_put_upload_rd32(payload)==2?2:
-                 payload_len==4 && efs_put_upload_rd32(payload)==3?3:0):0);
-            efs_conn_send_msg(conn,EFS_MSG_PACK_CAPABILITIES_REPLY,reply,sizeof(reply));break;
-        }
-        case EFS_MSG_GC_PACKED: {
-            uint8_t reply[4];int rc=server_packed_gc(g_server,payload,payload_len);
-            efs_put_upload_wr32(reply,(uint32_t)rc);
-            efs_conn_send_msg(conn,EFS_MSG_GC_PACKED_REPLY,reply,sizeof(reply));break;
-        }
-        case EFS_MSG_PUT_PACKED: {
-            uint64_t start = efs_iostats_now_us(); uint8_t reply[4];
-            int rc = server_packed_upload(g_server, payload, payload_len);
-            efs_put_upload_wr32(reply, (uint32_t)rc);
-            efs_conn_send_msg(conn, EFS_MSG_PUT_PACKED_REPLY, reply, sizeof(reply));
-            efs_iostats_add(EFS_IOSTAT_PUT, rc ? 0 : payload_len, efs_iostats_now_us() - start, rc != EFS_OK);
-            break;
-        }
-        case EFS_MSG_GET_PACKED: {
-            uint64_t start = efs_iostats_now_us();
-            uint8_t *reply = malloc(EFS_PACKED_GET_REPLY + EFS_SEGMENT_MAX_SIZE / 2); uint32_t len = 0;
-            int rc = reply ? server_packed_get(g_server, payload, payload_len, reply,
-                EFS_PACKED_GET_REPLY + EFS_SEGMENT_MAX_SIZE / 2, &len) : EFS_ERR_NOMEM;
-            if (rc) { uint8_t error[EFS_PACKED_GET_REPLY] = {0}; efs_put_upload_wr32(error, (uint32_t)rc);
-                efs_conn_send_msg(conn, EFS_MSG_GET_PACKED_REPLY, error, sizeof(error)); }
-            else efs_conn_send_msg(conn, EFS_MSG_GET_PACKED_REPLY, reply, len);
-            int result = rc ? rc : (int32_t)efs_put_upload_rd32(reply);
-            free(reply); efs_iostats_add(EFS_IOSTAT_GET, result ? 0 : len - EFS_PACKED_GET_REPLY,
-                efs_iostats_now_us() - start, result != EFS_OK); break;
         }
         case EFS_MSG_PUT_TICKETED: {
             uint64_t start=efs_iostats_now_us();
@@ -1115,19 +1077,6 @@ send_reply:
                               sizeof(r));
             break;
         }
-        case EFS_MSG_PUBLICATION_BATCH: {
-            struct efs_msg_publication_batch_reply r={0};
-            r.rpc.status=EFS_INODE_RPC_INVAL;
-            if(server_raft_host_active() && payload_len>=offsetof(struct efs_msg_publication_batch,records)) {
-                const struct efs_msg_publication_batch *b=payload;
-                if(b->count && b->count<=EFS_PUBLICATION_BATCH_MAX &&
-                   payload_len==efs_publication_batch_bytes(b->count))
-                    server_raft_host_publication_batch(b,&r);
-            }
-            efs_conn_send_msg(conn,EFS_MSG_PUBLICATION_BATCH_REPLY,&r,
-                (uint32_t)efs_publication_batch_reply_bytes(r.count));
-            break;
-        }
         case EFS_MSG_PUBLICATION:
         case EFS_MSG_PUBLICATION_STATUS:
         case EFS_MSG_PUBLICATION_RETIRE: {
@@ -1165,8 +1114,7 @@ send_reply:
             efs_conn_send_msg(conn, EFS_MSG_INODE_WRITER_VIEW_REPLY, &r, sizeof(r));
             break;
         }
-        case EFS_MSG_INODE_GETCHUNKS:
-        case EFS_MSG_GETCHUNKS_PACKED: {
+        case EFS_MSG_INODE_GETCHUNKS: {
             struct efs_msg_inode_getchunks_reply r;
             memset(&r, 0, sizeof(r));
             r.status = EFS_INODE_RPC_ERROR;
@@ -1175,17 +1123,12 @@ send_reply:
                 struct efs_msg_inode_getchunks *req = payload;
                 server_raft_host_getchunks(req->export_id, req->ino, req->start, req->max, req->generation, &r);
             }
-            if (type == EFS_MSG_INODE_GETCHUNKS) {
-                for (uint32_t i = 0; i < r.count; i++) if (r.recs[i].publish_flags & EFS_CHUNK_REC_F_PACKED_BASE) {
-                    r.status = EFS_INODE_RPC_ERROR; r.count = 0; break;
-                }
-            }
             if (r.count > EFS_GETCHUNKS_MAX) {
                 r.status = EFS_INODE_RPC_ERROR; r.count = 0;
             }
             /* Header + count records, not the 98 KiB fixed struct: a
              * one-chunk lookup used to ship 63 empty records. */
-            efs_conn_send_msg(conn, type == EFS_MSG_GETCHUNKS_PACKED ? EFS_MSG_GETCHUNKS_PACKED_REPLY : EFS_MSG_INODE_GETCHUNKS_REPLY, &r,
+            efs_conn_send_msg(conn, EFS_MSG_INODE_GETCHUNKS_REPLY, &r,
                               efs_getchunks_reply_len(r.count));
             break;
         }

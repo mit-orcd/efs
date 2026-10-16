@@ -4429,6 +4429,11 @@ open latency as a measured saving.
 
 ## W95 · Tiny-file data persistence and packing principles
 
+**Parked October 16, 2026 ([D37](../status/decisions.md)):** packing code was
+removed from devel and preserved at tag `archive/packing-containers-20261016`
+([removal](../status/packing-containers-removal-20261016.md)). The text below is
+the record up to that point.
+
 **Current checkpoint — Oct 13:** exact8151debe on AMD/files/TCP/direct with
 `.efs` disabled passes full normal/fault native, nineteen focused normal and
 sanitizer checks, actual-core sanitizers, three quiet seven-client/jobs16 rounds

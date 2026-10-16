@@ -39,13 +39,6 @@ int efs_client_publication_admit_write(struct efs_publication_ack_queue **,
     efs_ino_t, uint64_t generation, uint32_t ci,
     const struct efs_msg_lane_writer_view_reply *, uint32_t off,
     const uint8_t *src, uint32_t len);
-int efs_client_pack_enabled(void);
-int efs_client_pack_write(efs_ino_t,uint64_t,uint32_t,const uint8_t *);
-int efs_client_pack_flush(efs_ino_t);
-int efs_client_pack_drain(void);
-void efs_client_pack_stop(void);
-void efs_dcache_note_packed_size(efs_ino_t,uint64_t);
-int efs_dcache_abort_pack_admission(efs_ino_t,uint64_t);
 int efs_client_publication_progress(struct efs_publication_ack_queue *, uint64_t,
     struct efs_msg_publication_reply *);
 int efs_client_publication_writeback(struct efs_publication_ack_queue *,
@@ -352,8 +345,6 @@ int efs_client_rpc_put_ticket(const struct efs_put_ticket *,int probe_only,uint3
 int efs_client_rpc_put_ticket_retire(const struct efs_put_ticket *);
 int efs_client_rpc_publication(const struct efs_msg_publication *, int query_only, /* 0 submit, 1 status, 2 exact retirement */
                                struct efs_msg_publication_reply *);
-int efs_client_rpc_publication_batch(const struct efs_msg_publication_batch *,
-                                     struct efs_msg_publication_batch_reply *);
 int efs_client_rpc_lane_writer_view(efs_ino_t ino, uint64_t generation,
                                      uint32_t ci, uint32_t chunk_size,
                                      struct efs_msg_lane_writer_view_reply *out);

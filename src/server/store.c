@@ -1,5 +1,5 @@
 #include "server_internal.h"
-#include "store_containers.h"
+#include "storage_roots.h"
 #include "data_pressure.h"
 #ifndef EFS_BENCH_BUILD
 #include "directory_sync_group.h"
@@ -439,10 +439,6 @@ int server_unlink_fragment_files(struct efsd_server *s, struct efs_export *ex,
                                   efs_ino_t ino, uint32_t chunk_index,
                                   uint32_t fragment_index)
 {
-    if (s->storage_engine && !efs_ino_is_meta_table(ino)) {
-        /* Unconditional vtable deletion still uses the existing lifetime lock. */
-        return server_delete_fragment_if_sum(s, ex, ino, chunk_index, fragment_index, NULL);
-    }
     char path[8192];
     char sum_path[8200];
     uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
@@ -537,8 +533,6 @@ static int gc_sync_directory(struct efsd_server *s, int fd)
     errno = saved_errno;
     return rc;
 }
-static int gc_parent_barrier(void *context,int fd)
-{ return gc_sync_directory(context,fd)==0?EFS_OK:EFS_ERR_IO; }
 static int gc_unlink_file(struct efsd_server *s, const char *path)
 {
     uint64_t start = gc_clock_us();
@@ -631,36 +625,13 @@ int server_delete_fragment_if_sum(struct efsd_server *s, struct efs_export *ex,
                                   uint32_t fragment_index,
                                   const uint8_t expect_sum[EFS_HASH_SIZE])
 {
-    if (!s || !ex || (!expect_sum && !s->storage_engine))
+    if (!s || !ex || !expect_sum)
         return EFS_ERR_INVAL;
     char path[8192];
     uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
     int live = 0, rc = EFS_OK;
     pthread_mutex_t *mu = fragment_mutex(ex->id, ino, chunk_index, fragment_index);
     pthread_mutex_lock(mu);
-    if (s->storage_engine && !efs_ino_is_meta_table(ino)) {
-        for (uint32_t ri = 0; ri < n; ri++) {
-            fragment_path_at(s, ri, ex, ino, chunk_index, fragment_index, path, sizeof(path));
-            uint64_t payload = 0, bytes = 0;
-            int dr = server_container_delete(s, path, expect_sum, &payload, &bytes);
-            if (bytes) {
-                __atomic_fetch_add(&s->gc_removed_fragments, 1, __ATOMIC_RELAXED);
-                __atomic_fetch_add(&s->gc_removed_file_bytes, bytes, __ATOMIC_RELAXED);
-                __atomic_fetch_add(&s->gc_removed_payload_bytes, payload, __ATOMIC_RELAXED);
-                pthread_mutex_lock(&s->lock);
-                struct efs_node *ln = server_local_node(s);
-                if (ln) ln->used = ln->used >= payload ? ln->used - payload : 0;
-                pthread_mutex_unlock(&s->lock);
-                server_usage_mark_dirty(s);
-                __atomic_store_n(&s->gc_last_delete_us, gc_clock_us(), __ATOMIC_RELAXED);
-            }
-            if (dr == EFS_ERR_EXIST) { live = 1; __atomic_fetch_add(&s->gc_mismatches, 1, __ATOMIC_RELAXED); }
-            else if (dr != EFS_OK) { rc = dr; break; }
-        }
-        pthread_mutex_unlock(mu);
-        if (rc != EFS_OK) __atomic_fetch_add(&s->gc_delete_errors, 1, __ATOMIC_RELAXED);
-        return rc != EFS_OK ? rc : live ? EFS_ERR_EXIST : EFS_OK;
-    }
     for (uint32_t ri = 0; ri < n; ri++) {
         struct stat st;
         uint8_t got[EFS_HASH_SIZE];
@@ -762,10 +733,8 @@ static pthread_rwlock_t *inode_gc_lock(efs_export_id_t eid, efs_ino_t ino)
 static pthread_rwlock_t *server_inode_gc_lock(struct efsd_server *s,
                                             efs_export_id_t eid,efs_ino_t ino)
 {
-    if(!s || !s->storage_engine)return inode_gc_lock(eid,ino);
-    pthread_once(&frag_locks_once,frag_locks_init);
-    uint64_t key=ino ^ (ino >> EFS_KV_SHARD_BITS) ^ (ino >> 32) ^ eid;
-    return &inode_gc_locks[key & (FRAG_LOCKS-1)];
+    (void)s;
+    return inode_gc_lock(eid,ino);
 }
 
 #define DEATH_PAGE_BYTES 2048u
@@ -892,14 +861,9 @@ static int inode_death_set(struct efsd_server *s, efs_export_id_t eid, efs_ino_t
     __atomic_fetch_add(&inode_gc_epoch, 1, __ATOMIC_RELEASE);
     /* Repeat all parent syncs even after a previous rename succeeded but
      * its directory sync failed. Newly-created ancestors must survive too. */
-    if (rc == EFS_OK && s->storage_engine)
-        /* One complete ancestry proof seals new directories and retries the
-         * containing-directory barrier. Extra independent ancestor calls
-         * would repeat barriers already covered by the pinned proof. */
-        rc=server_container_sync_parents_with(s,path,gc_parent_barrier,s);
-    else if (rc == EFS_OK)
+    if (rc == EFS_OK)
         rc = fragment_parent_sync(s, path);
-    if (rc == EFS_OK && !s->storage_engine) {
+    if (rc == EFS_OK) {
         char parent[8192];
         strcpy(parent, path);
         *strrchr(parent, '/') = '\0';
@@ -929,15 +893,7 @@ static void gc_account_removed(struct efsd_server *s,uint64_t count,
  * sweeps. These bodies include losing CAS attempts absent from chunk rows. */
 static int gc_dead_directory(struct efsd_server *s, const char *path, unsigned *left, unsigned depth)
 {
-    if(s->storage_engine && depth==1){
-        uint64_t count,payload,bytes;
-        int rc=server_container_gc_directory(s,path,left,&count,&payload,&bytes);
-        gc_account_removed(s,count,payload,bytes);
-        if(rc)return rc;
-        if(rmdir(path) && errno!=ENOENT)return EFS_ERR_IO;
-        return fragment_parent_sync(s,path);
-    }
-
+    (void)depth;
     int dfd = open(path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
     if (dfd < 0)
         return errno == ENOENT ? fragment_parent_sync(s, path) : EFS_ERR_IO;
@@ -980,17 +936,14 @@ static int gc_dead_directory(struct efsd_server *s, const char *path, unsigned *
                 break;
             }
             uint64_t payload = 0, stored_bytes = (uint64_t)st.st_size;
-            if (s->storage_engine) {
-                int cr = server_container_delete(s, child, NULL, &payload, &stored_bytes);
-                if (cr != EFS_OK) { rc = cr; break; }
-            } else if (gc_unlink_file(s, child)) {
+            if (gc_unlink_file(s, child)) {
                 if (errno == ENOENT)
                     continue;
                 rc = EFS_ERR_IO;
                 break;
             }
             (*left)--;
-            if (!s->storage_engine && fragment_payload_bytes((uint64_t)st.st_size, &payload) != EFS_OK)
+            if (fragment_payload_bytes((uint64_t)st.st_size, &payload) != EFS_OK)
                 payload = (uint64_t)st.st_size;
             gc_account_removed(s,1,payload,stored_bytes);
         } else {
@@ -1208,7 +1161,6 @@ static int fragment_directory_group_barrier(void *context, int fd)
  * Unknown/uninitialized roots retain the full ancestry barrier. */
 static int sync_fragment_parents(struct efsd_server *s, const char *path)
 {
-    if (s && s->storage_engine) return server_container_sync_parents(s,path);
     char parent[8192], root[EFS_MAX_PATH] = {0};
     size_t n = strlen(path);
     if (!n || n >= sizeof(parent)) return EFS_ERR_INVAL;
@@ -1218,7 +1170,7 @@ static int sync_fragment_parents(struct efsd_server *s, const char *path)
         for (uint32_t i = 0; i < s->storage_path_count; ++i) {
             const char *candidate = s->storage_paths[i];
             size_t length = strlen(candidate);
-            if (!s->container_targets[i] || !length || length <= best ||
+            if (!s->storage_roots[i] || !length || length <= best ||
                 length >= n || strncmp(path, candidate, length) ||
                 (length != 1 && path[length] != '/')) continue;
             memcpy(root, candidate, length + 1);
@@ -1230,7 +1182,7 @@ static int sync_fragment_parents(struct efsd_server *s, const char *path)
      * fragments. This never enables the container engine, skips the changed
      * containing directory, or caches a failed barrier. Root attach/close owns
      * descriptor lifetime; fallback below covers uninitialized/unknown roots. */
-    if (root[0]) return server_container_sync_parents_with(s, path,
+    if (root[0]) return server_storage_sync_parents_with(s, path,
                                       fragment_directory_group_barrier, NULL);
     memcpy(parent, path, n + 1);
     char *slash = strrchr(parent, '/');
@@ -1268,7 +1220,7 @@ static int fragment_root_lookup(struct efsd_server *s, const char *path,
     for (uint32_t i = 0; i < s->storage_path_count && i < EFS_MAX_STORAGE_PATHS; ++i) {
         const char *candidate = s->storage_paths[i];
         size_t length = strlen(candidate);
-        if (!s->container_targets[i] || !length || length <= best ||
+        if (!s->storage_roots[i] || !length || length <= best ||
             length >= n || strncmp(path, candidate, length) ||
             (length != 1 && path[length] != '/')) continue;
         memcpy(root, candidate, length + 1);
@@ -1693,7 +1645,7 @@ static void put_sync_attach(struct put_sync_root *r, const char *root,
 
 static struct put_sync_root *put_sync_root_for(struct efsd_server *s, const char *path)
 {
-    if (!s || s->storage_engine)
+    if (!s)
         return NULL;
     put_sync_config();
     char root[EFS_MAX_PATH] = {0};
@@ -1725,7 +1677,6 @@ int server_put_sync_init(struct efsd_server *s)
     do { n = read(fd, &s->put_boot_epoch, sizeof(s->put_boot_epoch)); } while (n < 0 && errno == EINTR);
     close(fd);
     if (n != sizeof(s->put_boot_epoch) || !s->put_boot_epoch) return EFS_ERR_IO;
-    if (s->storage_engine) return EFS_OK;
     uint64_t retained=0;
     int rc=put_sync_reuse_epoch(s,&retained);
     if(rc!=EFS_OK)return rc;
@@ -2152,15 +2103,6 @@ static int read_fragment_impl(struct efsd_server *s, struct efs_export *ex,
 {
     *sum_ok = 0;
     uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
-    if (s->storage_engine && !efs_ino_is_meta_table(ino)) {
-        char path[8192];
-        for (uint32_t ri = 0; ri < n; ri++) {
-            fragment_path_at(s, ri, ex, ino, chunk_index, fragment_index, path, sizeof(path));
-            int rc = server_container_get(s, path, data, data_len, checksum, sum_ok);
-            if (rc != EFS_ERR_NOT_FOUND) return rc;
-        }
-        return EFS_ERR_NOT_FOUND;
-    }
     if (n != 1) {
         uint32_t want = server_frag_len(ex, ino);
         int direct = s->direct_io && !efs_ino_is_meta_table(ino);
@@ -2230,19 +2172,10 @@ int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
                                   efs_ino_t ino, uint32_t ci, uint32_t fi,
                                   uint8_t *data, uint32_t *len, uint8_t sum[EFS_HASH_SIZE], int *sum_ok)
 {
-    if (!s->storage_engine || efs_ino_is_meta_table(ino))
-        return read_fragment_impl(s, ex, ino, ci, fi, data, len, sum, sum_ok);
-    pthread_rwlock_t *im = server_inode_gc_lock(s,ex->id,ino);
-    pthread_mutex_t *mu = fragment_mutex(ex->id, ino, ci, fi);
-    pthread_rwlock_rdlock(im);
-    pthread_mutex_lock(mu);
-    int rc = read_fragment_impl(s, ex, ino, ci, fi, data, len, sum, sum_ok);
-    pthread_mutex_unlock(mu);
-    pthread_rwlock_unlock(im);
-    return rc;
+    return read_fragment_impl(s, ex, ino, ci, fi, data, len, sum, sum_ok);
 }
 
-static uint64_t compute_dir_usage(const char *path, int containers, size_t root_len)
+static uint64_t compute_dir_usage(const char *path, size_t root_len)
 {
     uint64_t total = 0;
     DIR *d = opendir(path);
@@ -2272,7 +2205,7 @@ static uint64_t compute_dir_usage(const char *path, int containers, size_t root_
         snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
 
         /* Sharded: skip the meta-table inode leaf and everything under it. */
-        if (server_container_metadata_path(full_path + root_len))
+        if (server_storage_metadata_path(full_path + root_len))
             continue;
 
         struct stat st;
@@ -2282,12 +2215,10 @@ static uint64_t compute_dir_usage(const char *path, int containers, size_t root_
         }
         uint64_t bytes = 0;
         if (S_ISDIR(st.st_mode)) {
-            bytes = compute_dir_usage(full_path, containers, root_len);
+            bytes = compute_dir_usage(full_path, root_len);
         } else if (S_ISREG(st.st_mode)) {
             uint64_t payload;
-            if (containers) {
-                bytes = server_container_payload(full_path, &payload) == EFS_OK ? payload : UINT64_MAX;
-            } else bytes = fragment_payload_bytes((uint64_t)st.st_size, &payload) == EFS_OK
+            bytes = fragment_payload_bytes((uint64_t)st.st_size, &payload) == EFS_OK
                 ? payload : (uint64_t)st.st_size;
         }
         if (bytes == UINT64_MAX || bytes > UINT64_MAX - total) {
@@ -2304,7 +2235,7 @@ uint64_t server_compute_usage(const char *path)
     char data_path[8192];
     snprintf(data_path, sizeof(data_path), "%s/data", path);
     int mode = server_storage_root_mode(path);
-    return mode < 0 ? UINT64_MAX : compute_dir_usage(data_path, mode, strlen(path));
+    return mode != 0 ? UINT64_MAX : compute_dir_usage(data_path, strlen(path));
 }
 
 /* Full inventory remains mandatory. Ordinary-file roots are independent;
@@ -2335,8 +2266,7 @@ int server_compute_roots_usage(struct efsd_server *s, uint64_t *usage)
     struct usage_scan_batch batch = { .server = s, .usage = usage, .count = count };
     pthread_t helpers[3];
     unsigned created = 0;
-    /* Container allocation accounting keeps its existing serial policy. */
-    while (!s->storage_engine && created < 3 && created + 1 < count) {
+    while (created < 3 && created + 1 < count) {
         if (pthread_create(&helpers[created], NULL, usage_scan_worker, &batch)) break;
         created++;
     }
@@ -2422,7 +2352,7 @@ static int prepare_storage_root(const char *root)
 int server_add_storage_paths(struct efsd_server *s, const char *csv,
                              uint32_t *count_out)
 {
-    if (!s || !csv || !*csv || s->storage_engine)
+    if (!s || !csv || !*csv)
         return EFS_ADD_STORAGE_INVALID;
 
     char buf[EFS_MAX_PATH];
@@ -2673,10 +2603,6 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
                                          const char *path,
                                          const uint8_t *checksum)
 {
-    if (s->storage_engine && !efs_ino_is_meta_table(ino)) {
-        int published = 0;
-        return server_container_put(s, path, data, data_len, checksum, &published);
-    }
     /* Quota charges logical fragment size once per fragment. A first
      * write (EFS_PATH_HINT_SKIP: the name cannot exist) creates in one
      * open. Any other PUT tries O_CREAT|O_EXCL first — success is a new
@@ -2888,7 +2814,7 @@ int server_repair_file_atomic(struct efsd_server *s,struct efs_export *ex,
     (void)s;(void)ex;(void)ino;(void)ci;(void)fi;(void)object;(void)data;(void)len;(void)sum;
     return EFS_ERR_INVAL;
 #else
-    if(!s || !ex || s->storage_engine || s->storage_path_count!=1 ||
+    if(!s || !ex || s->storage_path_count!=1 ||
        !efs_chunk_size_valid(ex->chunk_size) || ex->id!=1 || efs_ino_is_meta_table(ino) ||
        ino<=EFS_ROOT_INO || !object || fi>=EFS_NUM_FRAGMENTS || !data || !sum ||
        len!=server_frag_len(ex,ino))return EFS_ERR_INVAL;
@@ -3116,149 +3042,3 @@ int server_rejoin_cluster(struct efsd_server *s)
     fprintf(stderr, "Could not rejoin any of the %u persisted peer(s)\n", node_count - 1);
     return -1;
 }
-
-/* W95 staged packed-object storage. Separate names prevent ordinary per-inode
- * cleanup from removing neighbors in a pack. Files backend only initially;
- * activation/upload authority and shared-object reclamation are still owed. */
-int server_packed_fragment_path(struct efsd_server *s, uint32_t root,
-                                efs_export_id_t export_id, uint64_t id,
-                                uint64_t generation, uint32_t fi,
-                                char *path, size_t capacity)
-{
-    if (!s || !export_id || !id || !generation || fi >= EFS_NUM_FRAGMENTS ||
-        !path || root >= (s->storage_path_count ? s->storage_path_count : 1))
-        return EFS_ERR_INVAL;
-    char seg[EFS_INO_PATH_SEGS][5];
-    efs_ino_path_segments(id, seg);
-    const char *base = s->storage_path_count ? s->storage_paths[root] : s->storage_path;
-    int n = snprintf(path, capacity, "%s/data/packs-v1/%u/%s/%s/%s/%s/%s/%llu/%u",
-                     base, export_id, seg[4], seg[3], seg[2], seg[1], seg[0],
-                     (unsigned long long)generation, fi);
-    return n < 0 || (size_t)n >= capacity ? EFS_ERR_OVERFLOW : EFS_OK;
-}
-static int packed_fragment_length_valid(uint32_t len)
-{
-    return len >= 4096 && len <= EFS_MIN_CHUNK_SIZE / 2 && len % 4096 == 0;
-}
-/* Caller owns the object lifetime. These data-plane helpers grant no publish
- * permission and must only be exposed behind an authoritative upload ticket. */
-int server_read_packed_fragment(struct efsd_server *s, efs_export_id_t eid,
-                                uint64_t id, uint64_t generation, uint32_t fi,
-                                uint32_t fragment_len, uint8_t *data,
-                                uint32_t *capacity, uint8_t sum[EFS_HASH_SIZE])
-{
-    if (!s || s->storage_engine || !data || !capacity || !sum ||
-        !packed_fragment_length_valid(fragment_len) || *capacity < fragment_len)
-        return EFS_ERR_INVAL;
-    *capacity = 0;
-    uint32_t roots = s->storage_path_count ? s->storage_path_count : 1;
-    unsigned found = 0;
-    char selected[8192];
-    for (uint32_t root = 0; root < roots; root++) {
-        char path[8192]; struct stat st;
-        int rc = server_packed_fragment_path(s, root, eid, id, generation, fi, path, sizeof(path));
-        if (rc != EFS_OK) return rc;
-        if (lstat(path, &st)) {
-            if (errno == ENOENT) continue;
-            return EFS_ERR_IO;
-        }
-        if (!S_ISREG(st.st_mode) ||
-            (st.st_size != (off_t)fragment_len + EFS_HASH_SIZE &&
-             st.st_size != (off_t)fragment_len + 4096)) return EFS_ERR_IO;
-        if (++found > 1) return EFS_ERR_IO;
-        strcpy(selected, path);
-    }
-    if (!found) return EFS_ERR_NOT_FOUND;
-    uint32_t got = 0; int present = 0;
-    int rc = read_file_bytes(selected, data, fragment_len, &got, s->direct_io, sum, &present);
-    if (rc != EFS_OK) return rc;
-    if (got != fragment_len || !present) return EFS_ERR_IO;
-    uint8_t actual[EFS_HASH_SIZE]; efs_hash(data, fragment_len, actual);
-    if (memcmp(actual, sum, EFS_HASH_SIZE)) return EFS_ERR_CHECKSUM;
-    *capacity = got;
-    return EFS_OK;
-}
-static int write_packed_fragment_unfenced(struct efsd_server *s, efs_export_id_t eid,
-                                 uint64_t id, uint64_t generation, uint32_t fi,
-                                 const uint8_t *data, uint32_t fragment_len,
-                                 const uint8_t sum[EFS_HASH_SIZE])
-{
-#ifdef EFS_BENCH_BUILD
-    (void)s; (void)eid; (void)id; (void)generation; (void)fi;
-    (void)data; (void)fragment_len; (void)sum;
-    return EFS_ERR_INVAL;
-#else
-    if (!s || s->storage_engine || !data || !sum ||
-        !packed_fragment_length_valid(fragment_len)) return EFS_ERR_INVAL;
-    uint32_t root = write_root_index(s, 0);
-    struct shard_io_arg arg;
-    memset(&arg, 0, sizeof(arg));
-    int rc = server_packed_fragment_path(s, root, eid, id, generation, fi, arg.path, sizeof(arg.path));
-    if (rc != EFS_OK) return rc;
-    uint8_t actual[EFS_HASH_SIZE]; efs_hash(data, fragment_len, actual);
-    if (memcmp(actual, sum, EFS_HASH_SIZE)) return EFS_ERR_CHECKSUM;
-    pthread_mutex_t *mu = fragment_mutex(eid, id, 0, fi);
-    pthread_mutex_lock(mu);
-    uint8_t *existing = malloc(fragment_len);
-    if (!existing) { pthread_mutex_unlock(mu); return EFS_ERR_NOMEM; }
-    uint32_t capacity = fragment_len; uint8_t oldsum[EFS_HASH_SIZE];
-    rc = server_read_packed_fragment(s,eid,id,generation,fi,fragment_len,existing,&capacity,oldsum);
-    if (rc != EFS_ERR_NOT_FOUND) {
-        if (rc == EFS_OK && (memcmp(oldsum,sum,EFS_HASH_SIZE) || memcmp(existing,data,fragment_len)))
-            rc = EFS_ERR_STALE;
-        if (rc == EFS_OK) {
-            /* A prior attempt may have written valid bytes and failed its
-             * barrier. Byte equality alone is never a durable PUT receipt. */
-            uint32_t roots = s->storage_path_count ? s->storage_path_count : 1;
-            int synced = 0;
-            for (uint32_t i = 0; i < roots; i++) {
-                char path[8192];
-                rc = server_packed_fragment_path(s,i,eid,id,generation,fi,path,sizeof(path));
-                if (rc != EFS_OK) break;
-                int fd;
-                do { fd = open(path,O_RDONLY|O_CLOEXEC|O_NOFOLLOW); } while(fd < 0 && errno == EINTR);
-                if (fd < 0) {
-                    if (errno == ENOENT) continue;
-                    rc = EFS_ERR_IO; break;
-                }
-                int sr; do { sr = fsync(fd); } while (sr < 0 && errno == EINTR);
-                int cr = close(fd);
-                rc = sr < 0 || cr < 0 ? EFS_ERR_IO : sync_fragment_parents(s, path);
-                synced = rc == EFS_OK;
-                break;
-            }
-            if (rc == EFS_OK && !synced) rc = EFS_ERR_NOT_FOUND;
-        }
-        free(existing); pthread_mutex_unlock(mu); return rc;
-    }
-    free(existing);
-    pthread_mutex_lock(&s->lock);
-    struct efs_node *local = server_local_node(s);
-    if (!local || local->used > UINT64_MAX - fragment_len ||
-        (s->quota && (local->used > s->quota || fragment_len > s->quota - local->used))) {
-        pthread_mutex_unlock(&s->lock); pthread_mutex_unlock(mu);
-        return local ? EFS_ERR_QUOTA : EFS_ERR_INVAL;
-    }
-    local->used += fragment_len; /* reserve atomically across concurrent objects */
-    pthread_mutex_unlock(&s->lock);
-    arg.s=s; arg.buf=(uint8_t *)data; arg.len=fragment_len;
-    arg.is_write=1; arg.direct=s->direct_io; arg.excl=1; arg.sum=sum;
-    shard_io_thread(&arg);
-    rc=arg.result;
-    /* Retain charges for uncertain/partial objects. Only proven absence permits
-     * rollback. Recovery re-inventories the separate packed namespace. */
-    if (rc != EFS_OK) {
-        struct stat st;
-        if (lstat(arg.path,&st) < 0 && errno == ENOENT) {
-            pthread_mutex_lock(&s->lock); local=server_local_node(s);
-            if (local) local->used -= fragment_len;
-            pthread_mutex_unlock(&s->lock);
-        }
-    }
-    server_usage_mark_dirty(s);
-    pthread_mutex_unlock(mu);
-    return rc;
-#endif
-}
-
-#include "packed_fence.h"

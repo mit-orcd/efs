@@ -53,19 +53,20 @@ static void check(unsigned count,int containers,unsigned failure){
 }
 int main(void){
  check(0,0,0);check(1,0,0);check(2,0,0);check(6,0,0);check(EFS_MAX_STORAGE_PATHS,0,0);
- check(6,1,0);check(6,0,1);check(6,0,2);check(6,0,3);
+ check(6,0,1);check(6,0,2);check(6,0,3);
  uint64_t values[EFS_MAX_STORAGE_PATHS];struct efsd_server invalid={.storage_path_count=EFS_MAX_STORAGE_PATHS+1};
  assert(server_compute_roots_usage(NULL,values)==EFS_ERR_INVAL);
  assert(server_compute_roots_usage(&invalid,values)==EFS_ERR_INVAL);
  assert(server_compute_local_usage(&invalid)==UINT64_MAX);
  invalid.storage_path_count=1;assert(server_compute_roots_usage(&invalid,NULL)==EFS_ERR_INVAL);
- puts("root inventory: exact once, max4 walks, full join, fallback, unknown-root refusal, overflow and serial containers PASS");
+ puts("root inventory: exact once, max4 walks, full join, fallback, unknown-root refusal, overflow PASS");
 }
 '''
 flags=shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-D_GNU_SOURCE','-Wall','-Wextra','-Werror','-pthread','-I'+str(root/'include')]
 with tempfile.TemporaryDirectory(prefix='efs-root-inventory-') as td:
  p=Path(td)/'test.c';p.write_text(code);binary=p.with_suffix('');subprocess.run(flags+[str(p),'-o',str(binary)],check=True);subprocess.run([str(binary)],check=True,timeout=15)
- p.write_text(code.replace('while (!s->storage_engine && created < 3 && created + 1 < count)', 'while (0)'))
+ assert 'while (created < 3 && created + 1 < count)' in code
+ p.write_text(code.replace('while (created < 3 && created + 1 < count)', 'while (0)'))
  subprocess.run(flags+[str(p),'-o',str(binary)],check=True)
  try:
   result=subprocess.run([str(binary)],capture_output=True,timeout=2)

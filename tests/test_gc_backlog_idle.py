@@ -28,11 +28,6 @@ int main(void) {
   assert(host_gc_backlog_idle(ms,1,2,1)==1000);
   assert(host_gc_backlog_idle(ms,1,1,2)==ms);
  }
- assert(host_gc_packed_idle(1000,0,0)==1000);
- assert(host_gc_packed_idle(1000,1,0)==1000);
- assert(host_gc_packed_idle(1000,0,1)==1000);
- assert(host_gc_packed_idle(1000,1,1)==20);
- assert(host_gc_packed_idle(40,1,0)==40);
  assert(host_gc_expiry_idle(1000,0)==1000);
  assert(host_gc_expiry_idle(1000,1)==100);
  assert(host_gc_expiry_idle(20,1)==20);
@@ -46,8 +41,6 @@ thread=s[s.index('static void *host_gc_thread(',b):s.index('/* W92 query publica
 assert 'host_gc_reap_pass(h, h->g[g].group' in thread
 assert 'backlog_capped |= __atomic_load_n' in thread
 assert 'backlog_capped |= host_gc_frag_pass(' in thread
-assert 'pack_capped = host_gc_pack_pass(' in thread
-assert 'host_gc_packed_idle(idle_ms, packed_capped, packed_deleted)' in thread
 assert 'expiry_progress |= host_gc_expiry_pass(' in thread
 assert 'idle_ms = host_gc_expiry_idle(idle_ms, expiry_progress)' in thread
 assert 'expiry_progress = host_gc_expiry_groups(h)' in thread

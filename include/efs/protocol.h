@@ -193,20 +193,9 @@ enum efs_msg_type {
     EFS_MSG_STORAGE_SESSION_FENCE_REPLY = 128,
     EFS_MSG_PUT_TICKETED = 129,
     EFS_MSG_PUT_TICKETED_REPLY = 130,
-    EFS_MSG_PUT_PACKED = 131,
-    EFS_MSG_PUT_PACKED_REPLY = 132,
-    EFS_MSG_GET_PACKED = 133,
-    EFS_MSG_GET_PACKED_REPLY = 134,
-    EFS_MSG_GETCHUNKS_PACKED = 135,
-    EFS_MSG_GETCHUNKS_PACKED_REPLY = 136,
-    EFS_MSG_GC_PACKED = 137,
-    EFS_MSG_GC_PACKED_REPLY = 138,
-    EFS_MSG_PACK_CAPABILITIES = 139,
-    EFS_MSG_PACK_CAPABILITIES_REPLY = 140,
-    EFS_MSG_PUBLICATION_BATCH = 141,
-    EFS_MSG_PUBLICATION_BATCH_REPLY = 142,
-    EFS_MSG_PACK_AUTHORITY = 143,
-    EFS_MSG_PACK_AUTHORITY_REPLY = 144,
+    /* 131-144 were packing messages (packed PUT/GET/GETCHUNKS/GC, pack
+     * capabilities, publication batch, pack authority), removed 2026-10-16
+     * (archive/packing-containers-20261016). Reserved: never reuse. */
     /* Narrow default-off repair experiment; exact version/build envelope is
      * mandatory. No legacy reinterpretation or RPC store initializer. */
     EFS_MSG_REPAIR_STORE_ID = 145,
@@ -994,7 +983,8 @@ struct efs_msg_inode_flock {
 #define EFS_CHUNK_REC_F_CAPTURED_EPOCH 1u
 #define EFS_CHUNK_REC_F_CAPTURED_FILEID 2u
 #define EFS_CHUNK_REC_F_FRESH_OBJECT 4u
-#define EFS_CHUNK_REC_F_PACKED_BASE 8u /* packed base, exact immutable reference */
+/* 8u was PACKED_BASE (packing removed 2026-10-16): reserved, always refused. */
+#define EFS_CHUNK_REC_F_RETIRED_PACKED 8u
 struct efs_chunk_rec {
     efs_ino_t ino;
     uint32_t chunk_index;
@@ -1019,7 +1009,6 @@ struct efs_chunk_rec {
     uint64_t delta_base_seq;
     struct efs_fence_view read_view; /* GETCHUNKS only; REPORT leaves zero */
     struct efs_chunk_delta deltas[EFS_CHUNK_DELTA_MAX];
-    struct efs_pack_ref packed;
 };
 
 /* Per-publication transport status is separate from its durable verdict.
@@ -1050,37 +1039,6 @@ struct efs_msg_publication_reply {
      * Never authorize fsync or byte release from these fields alone. */
     uint32_t receipt_group;
     uint64_t receipt_index, receipt_term;
-};
-
-/* Transport batching only: each record retains its existing durable command,
- * immutable identity and independent terminal/retirement proof. Never infer a
- * record's success from the envelope status or an omitted record. */
-#define EFS_PUBLICATION_BATCH_MAX 16u
-#define EFS_PUBLICATION_BATCH_VERSION 1u
-struct efs_msg_publication_batch {
-    uint32_t version, mode, group, count; /* mode: 0 publication, 2 retirement */
-    struct efs_msg_publication records[EFS_PUBLICATION_BATCH_MAX];
-};
-struct efs_msg_publication_batch_reply {
-    struct efs_msg_inode_reply rpc;
-    uint32_t version, mode, group, count;
-    struct efs_msg_publication_reply records[EFS_PUBLICATION_BATCH_MAX];
-};
-static inline size_t efs_publication_batch_bytes(uint32_t count)
-{ return offsetof(struct efs_msg_publication_batch,records)+count*sizeof(struct efs_msg_publication); }
-static inline size_t efs_publication_batch_reply_bytes(uint32_t count)
-{ return offsetof(struct efs_msg_publication_batch_reply,records)+count*sizeof(struct efs_msg_publication_reply); }
-
-/* Read-only upload authority: [version:1][group:1][canonical EFSUPLD1].
- * The digest binds the entire envelope; OK means every record's current
- * FileID/content epoch and the exact durable admission were checked. Storage
- * must still take its local durable session and object-fence guards. */
-#define EFS_PACK_AUTHORITY_VERSION 1u
-#define EFS_PACK_AUTHORITY_MAX 16u
-struct efs_msg_pack_authority_reply {
-    uint32_t version,group,count;
-    int32_t rc;
-    uint8_t digest[EFS_HASH_SIZE];
 };
 
 /* Resolve the publication epoch before any registration/proposal side effect.
@@ -1122,16 +1080,7 @@ static inline int efs_chunk_publish_authority(const struct efs_chunk_rec *r,
 static inline int efs_chunk_rec_view_valid(const struct efs_chunk_rec *r)
 {
     const struct efs_fence_view *v = &r->read_view;
-    if (r->publish_flags & EFS_CHUNK_REC_F_PACKED_BASE) {
-        const struct efs_pack_ref *p = &r->packed;
-        if (r->chunk_index || !p->segment_id || !p->segment_generation || p->ino != r->ino ||
-            p->inode_generation != r->file_generation || p->record_generation != r->chunk_generation ||
-            !p->len || p->len > EFS_PACK_MAX_PAYLOAD || p->geometry < EFS_SEGMENT_ALIGNMENT ||
-            p->geometry > EFS_SEGMENT_MAX_SIZE || p->geometry % EFS_SEGMENT_ALIGNMENT ||
-            !p->inode_generation || !p->record_generation ||
-            p->offset < EFS_PACK_HEADER_BYTES + EFS_PACK_RECORD_BYTES ||
-            (uint64_t)p->offset + p->len + EFS_HASH_SIZE > p->geometry) return EFS_ERR_PROTO;
-    } else if (r->packed.segment_id) return EFS_ERR_PROTO;
+    if (r->publish_flags & EFS_CHUNK_REC_F_RETIRED_PACKED) return EFS_ERR_PROTO;
     if (r->delta_base_n > EFS_CHUNK_DELTA_MAX ||
         v->count != r->delta_base_n + 1 ||
         v->fence_epoch > v->revision ||

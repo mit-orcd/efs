@@ -37,7 +37,7 @@ int main(void)
  uint8_t *data=malloc(len),sum[32];assert(data);memset(data,77,len);efs_hash(data,len,sum);
  ex.chunk_size=0;assert(server_repair_file_atomic(s,&ex,4097,0,0,101,data,len,sum)==EFS_ERR_INVAL);ex.chunk_size=EFS_MIN_CHUNK_SIZE;
  assert(server_repair_file_atomic(s,&ex,4097,0,3,101,data,len,sum)==EFS_ERR_INVAL);
- s->storage_engine=1;assert(server_repair_file_atomic(s,&ex,4097,0,0,101,data,len,sum)==EFS_ERR_INVAL);s->storage_engine=0;
+
  for(int direct=0;direct<2;direct++){
   s->direct_io=direct;s->quota=len;s->nodes[0].used=0;
   efs_tls_chunk_gen=101;char path[8192];server_fragment_path(s,&ex,4097,0,0,path,sizeof(path));efs_tls_chunk_gen=0;

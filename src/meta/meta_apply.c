@@ -6,8 +6,6 @@
 #include "efs/kv_key.h"
 #include "efs/session.h"
 #include "efs/put_ticket.h"
-#include "efs/pack_mapping.h"
-#include "efs/pack_admission.h"
 #include "efs/kv_lsm.h"
 #include "efs/checksum.h"
 #include "efs/publication.h"
@@ -31,7 +29,7 @@
  * the short value again and the list is gone. */
 #define DELTA_REC 140
 #define DELTA_HDR 4
-#define CHUNK_VAL_MAX (CHUNK_VAL + EFS_PACK_REF_BYTES + DELTA_HDR + \
+#define CHUNK_VAL_MAX (CHUNK_VAL + DELTA_HDR + \
                        EFS_CHUNK_DELTA_MAX * DELTA_REC)
 
 /* All ordinary metadata mutations honor prepared EXCL images. REDUCEs
@@ -48,7 +46,6 @@ static int meta_write_check(struct efs_kv *kv, const uint8_t *key, uint32_t kl)
     case EFS_KV_KIND_LANE:
     case EFS_KV_KIND_CONTENT_FENCE:
     case EFS_KV_KIND_LANE_AUTHORITY:
-    case EFS_KV_KIND_PACK_OBJECT:
         return efs_txn_key_exclusive(kv, key, kl);
     case EFS_KV_KIND_CHUNK:
         if (kl != 24)
@@ -3701,8 +3698,8 @@ int efs_meta_apply_orphan_reclaim(struct efs_kv *kv, efs_ino_t ino, uint64_t gen
 
 static uint32_t chunk_header_size(const uint8_t *p, uint32_t n)
 {
-    if (!p || n < CHUNK_VAL) return CHUNK_VAL;
-    return CHUNK_VAL + (rd32(p + 8) == EFS_META_PROFILE_PACK_K2F1 ? EFS_PACK_REF_BYTES : 0);
+    (void)p; (void)n;
+    return CHUNK_VAL;
 }
 
 static void pack_chunk(uint8_t *p, const struct efs_meta_chunk *ch)
@@ -3716,8 +3713,6 @@ static void pack_chunk(uint8_t *p, const struct efs_meta_chunk *ch)
         be32(p + CHUNK_HDR + (uint32_t)i * 4u, ch->nodes[i]);
     memcpy(p + CHUNK_HDR + 4 * EFS_NUM_FRAGMENTS, ch->checksums,
            EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
-    if (ch->coding_profile_id == EFS_META_PROFILE_PACK_K2F1)
-        (void)efs_pack_ref_encode(&ch->packed, p + CHUNK_VAL);
 }
 
 static int unpack_chunk(const uint8_t *p, uint32_t n, struct efs_meta_chunk *ch)
@@ -3734,36 +3729,12 @@ static int unpack_chunk(const uint8_t *p, uint32_t n, struct efs_meta_chunk *ch)
         ch->nodes[i] = rd32(p + CHUNK_HDR + (uint32_t)i * 4u);
     memcpy(ch->checksums, p + CHUNK_HDR + 4 * EFS_NUM_FRAGMENTS,
            EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
-    if (ch->coding_profile_id == EFS_META_PROFILE_PACK_K2F1) {
-        uint32_t hdr = CHUNK_VAL + EFS_PACK_REF_BYTES;
-        if (n < hdr ||
-            efs_pack_ref_decode(p + CHUNK_VAL, EFS_PACK_REF_BYTES, &ch->packed) != EFS_OK ||
-            ch->generation != ch->packed.record_generation ||
-            ch->content_epoch != ch->packed.content_epoch)
-            return EFS_ERR_PROTO;
-        /* A damaged extension/trailer must never masquerade as a base-only
-         * image. Legacy values retain their existing compatibility rules. */
-        if (n != hdr) {
-            if (n < hdr + DELTA_HDR || p[hdr + 2] || p[hdr + 3])
-                return EFS_ERR_PROTO;
-            uint32_t count = rd16(p + hdr);
-            if (!count || count > EFS_CHUNK_DELTA_MAX ||
-                n != hdr + DELTA_HDR + count * DELTA_REC)
-                return EFS_ERR_PROTO;
-        }
-    }
+    /* Packed rows (archive/packing-containers-20261016) are not readable
+     * here; such stores also carry a KVLSM2 reader requirement and are
+     * refused at open. Never interpret their extension as a plain base. */
+    if (ch->coding_profile_id == EFS_META_PROFILE_RETIRED_PACK)
+        return EFS_ERR_PROTO;
     return EFS_OK;
-}
-
-static int chunk_identity_ok(const struct efs_meta_chunk *ch, efs_ino_t ino,
-                             uint64_t inode_gen, uint32_t ci)
-{
-    if (ch->coding_profile_id != EFS_META_PROFILE_PACK_K2F1)
-        return EFS_OK;
-    const struct efs_pack_ref *r = &ch->packed;
-    return ci == 0 && r->ino == ino && r->inode_generation == inode_gen &&
-        r->publication_group == efs_raft_shard_group(efs_kv_lane_shard(ino, 0))
-        ? EFS_OK : EFS_ERR_PROTO;
 }
 
 /* Delta record: off:4 len:4 gen:8 epoch:8 seq:8 nodes:12 cks:96 = 140. */
@@ -3835,8 +3806,7 @@ static uint32_t pack_chunk_value(uint8_t *dst, const struct efs_meta_chunk *ch,
                                  const struct efs_meta_delta *deltas,
                                  uint32_t n)
 {
-    uint32_t i, hdr = CHUNK_VAL +
-        (ch->coding_profile_id == EFS_META_PROFILE_PACK_K2F1 ? EFS_PACK_REF_BYTES : 0);
+    uint32_t i, hdr = CHUNK_VAL;
 
     pack_chunk(dst, ch);
     if (n == 0)
@@ -3859,14 +3829,6 @@ static uint32_t pack_chunk_value(uint8_t *dst, const struct efs_meta_chunk *ch,
 static int chunk_aliases(const struct efs_meta_chunk *a,
                          const struct efs_meta_chunk *b)
 {
-    if (a->coding_profile_id == EFS_META_PROFILE_PACK_K2F1 ||
-        b->coding_profile_id == EFS_META_PROFILE_PACK_K2F1) {
-        uint8_t ar[EFS_PACK_REF_BYTES], br[EFS_PACK_REF_BYTES];
-        if (a->coding_profile_id != b->coding_profile_id ||
-            efs_pack_ref_encode(&a->packed, ar) != EFS_OK ||
-            efs_pack_ref_encode(&b->packed, br) != EFS_OK ||
-            memcmp(ar, br, sizeof(ar))) return 0;
-    }
     return memcmp(a->nodes, b->nodes, sizeof(a->nodes)) == 0 &&
            memcmp(a->checksums, b->checksums, sizeof(a->checksums)) == 0;
 }
@@ -4011,10 +3973,6 @@ static int gc_queue(struct efs_kv_item *it, uint32_t *n, uint32_t cap,
     uint32_t kg = 0, anch;
     int rc;
 
-    /* Shared objects require ledger retirement, never per-inode GC. Fail
-     * closed until the atomic mapping/ledger adapter is installed. */
-    if (dead->coding_profile_id == EFS_META_PROFILE_PACK_K2F1)
-        return EFS_ERR_BUSY;
     if (*n >= cap)
         return EFS_ERR_NOMEM;
     anch = efs_kv_anchor_shard(efs_kv_lane_shard(ino, lane));
@@ -4042,10 +4000,7 @@ static int evidence_ok(const struct efs_meta_pub *p)
 
     if (!p || p->candidate_gen == 0)
         return EFS_ERR_INVAL;
-    if (p->coding_profile_id == EFS_META_PROFILE_PACK_K2F1) {
-        uint8_t digest[EFS_HASH_SIZE];
-        if (!p->durable_result || p->lane_local || efs_publication_digest(p, digest)) return EFS_ERR_INVAL;
-    } else if (p->coding_profile_id != EFS_META_PROFILE_K2F1) return EFS_ERR_STALE;
+    if (p->coding_profile_id != EFS_META_PROFILE_K2F1) return EFS_ERR_STALE;
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         if (p->ch.nodes[i] == 0)
             return EFS_ERR_INVAL;
@@ -4268,20 +4223,9 @@ int efs_meta_apply_publication_retire(struct efs_kv *kv,const struct efs_meta_pu
     if(!scan.count || scan.first!=p->publication_id.seq)return EFS_ERR_BUSY;
     uint8_t key[51],fk[51],value[12];publication_key(p,key);memcpy(fk,key,sizeof(fk));
     fk[2]=EFS_KV_KIND_PUBLICATION_FLOOR;be32(value,1);be64(value+4,p->publication_id.seq);
-    struct efs_kv_item items[3]={{EFS_KV_DEL,key,sizeof(key),NULL,0},
+    struct efs_kv_item items[2]={{EFS_KV_DEL,key,sizeof(key),NULL,0},
         {EFS_KV_PUT,fk,43,value,sizeof(value)}};
-    struct efs_pack_mapping_plan rejected={0};unsigned count=2;
-    if((verdict==EFS_ERR_STALE || verdict==EFS_ERR_INVAL) &&
-        p->coding_profile_id==EFS_META_PROFILE_PACK_K2F1) {
-        /* Older writers may have a durable rejection but a pending lifetime
-         * reference. Do not erase that exact proof before cancelling its slot.
-         * Already-cancelled/live/retired objects remain unchanged. */
-        rc=efs_pack_mapping_reject(kv,p,&rejected);
-        if(rc!=EFS_OK && rc!=EFS_ERR_INVAL && rc!=EFS_ERR_STALE && rc!=EFS_ERR_NOT_FOUND)return rc;
-        if(!rc)items[count++]=rejected.items[0];
-    }
-    rc=meta_write_batch(kv,items,count);efs_pack_mapping_plan_free(&rejected);
-    return rc;
+    return meta_write_batch(kv,items,2);
 }
 int efs_meta_publication_receipt(struct efs_kv *kv, const struct efs_meta_pub *p, int *verdict,
                                   struct efs_publication_locator *locator)
@@ -4341,21 +4285,6 @@ static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
     rc = evidence_ok(p);
     if (rc != EFS_OK)
         return rc;
-    if (p->coding_profile_id == EFS_META_PROFILE_PACK_K2F1) {
-        const struct efs_pack_ref *ref = &p->ch.packed;
-        struct efs_pack_object object, authority;
-        rc = efs_pack_object_get(kv, ref->publication_group, ref->segment_id, ref->segment_generation, &object);
-        if (rc) return rc;
-        if (memcmp(object.ledger.owner.client_uuid, p->publication_id.client_uuid, EFS_OPID_UUID_LEN) ||
-            object.ledger.owner.session_epoch != p->publication_id.session_epoch ||
-            p->candidate_gen != efs_meta_candidate_gen(p->publication_id.client_uuid,
-                p->publication_id.session_epoch, p->publication_id.seq, 0, 0)) return EFS_ERR_INVAL;
-        rc = efs_pack_admission_get(kv, &object, &authority); if (rc) return rc;
-        if (authority.ledger.phase != EFS_PACK_ACTIVE) return EFS_ERR_STALE;
-        /* Snapshot/min-reader requirements are monotonic even on later CAS
-         * rejection. Never publish new format to a downgrade-compatible store. */
-        rc = efs_kv_lsm_require_reader(kv, EFS_KV_READER_PACK_V1); if (rc) return rc;
-    }
     if (p->durable_result && p->lane_local) {
         uint8_t ak[EFS_KV_KEY_MAX],av[EFS_META_LANE_AUTHORITY_BYTES];
         uint32_t kl=0,vl=sizeof(av),cs;uint64_t epoch,floor;
@@ -4658,7 +4587,6 @@ static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
      * aliases the old fragment set (truncate tail stub), in which case the
      * fragments are shared with the live row and nothing is dead. */
     if (!appending && committed != 0 &&
-        got.coding_profile_id != EFS_META_PROFILE_PACK_K2F1 &&
         got.generation != stored.generation &&
         (p->fresh_object || !chunk_aliases(&stored, &got))) {
         rc = gc_queue(it, &n, (uint32_t)(sizeof(it) / sizeof(it[0])),
@@ -4705,24 +4633,6 @@ static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
         n++;
     }
     if (receipt) it[n++] = *receipt;
-    if (got.coding_profile_id == EFS_META_PROFILE_PACK_K2F1 ||
-        stored.coding_profile_id == EFS_META_PROFILE_PACK_K2F1) {
-        /* The old image is already held by this CAS: no additional mapping
-         * lookup or work on the legacy hot path. Ledger and receipt share
-         * the exact batch that replaces/preserves this packed reference. */
-        struct efs_pack_mapping_change change = {p->ino, inode_gen,
-            p->chunk_index, had_row ? &got : NULL, &stored};
-        struct efs_pack_mapping_plan plan = {0};
-        rc = efs_pack_mapping_plan(kv, &change, 1, &plan);
-        if (rc != EFS_OK) return rc;
-        if (n + plan.count > sizeof(it) / sizeof(it[0])) {
-            efs_pack_mapping_plan_free(&plan); return EFS_ERR_NOMEM;
-        }
-        memcpy(it + n, plan.items, plan.count * sizeof(it[0]));
-        rc = meta_write_batch(kv, it, n + plan.count);
-        efs_pack_mapping_plan_free(&plan);
-        return rc;
-    }
     return meta_write_batch(kv, it, n);
 }
 
@@ -4751,7 +4661,7 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     if(found==EFS_OK && verdict!=EFS_META_PUBLICATION_PENDING)return verdict;
     if(found!=EFS_ERR_NOT_FOUND && found!=EFS_OK)return found;
     be32(value+4,rc==EFS_OK?1:rc==EFS_ERR_STALE?2:3);
-    struct efs_kv_item completed[3] = {receipt}; unsigned completed_n = 1;
+    struct efs_kv_item completed[2] = {receipt}; unsigned completed_n = 1;
     uint8_t tk[EFS_PUT_TICKET_KEY_LEN], tv[EFS_PUT_TICKET_VAL_LEN];
     if (p->ticketed && rc == EFS_OK) {
         struct efs_put_ticket ticket;
@@ -4760,17 +4670,7 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
         if (trc != EFS_OK) return trc;
         completed_n++;
     }
-    struct efs_pack_mapping_plan rejected={0};
-    if(rc!=EFS_OK && p->coding_profile_id==EFS_META_PROFILE_PACK_K2F1) {
-        int prc=efs_pack_mapping_reject(kv,p,&rejected);
-        /* Invalid/unbound requests cannot cancel another admitted reference.
-         * Their exact terminal receipt is still recorded. Storage uncertainty
-         * must retain both the pending receipt and its lifetime reference. */
-        if(prc!=EFS_OK && prc!=EFS_ERR_INVAL && prc!=EFS_ERR_STALE && prc!=EFS_ERR_NOT_FOUND)return prc;
-        if(!prc)completed[completed_n++]=rejected.items[0];
-    }
     int written=meta_write_batch(kv,completed,completed_n);
-    efs_pack_mapping_plan_free(&rejected);
     return written==EFS_OK?rc:written;
 }
 
@@ -5845,31 +5745,6 @@ static int fence_lane_bits(struct efs_kv *kv, efs_ino_t ino,
                            void *arg, struct efs_kv_item *it, uint32_t *n,
                            uint8_t k_ln[][EFS_KV_KEY_MAX],
                            uint8_t v_ln[][LANE_VAL]);
-/* A packed file currently owns one base at chunk zero. Capture its checked
- * image without side effects; the final batch retires that reference together
- * with the mapping/fence/EOF update. Early validation failures allocate nothing. */
-struct packed_retirement {
-    struct efs_meta_chunk before, after;
-    uint8_t present, has_after;
-};
-static int packed_retirement_commit(struct efs_kv *kv, efs_ino_t ino,
-    uint64_t gen, struct packed_retirement *retirement,
-    struct efs_kv_item *it, uint32_t n, uint32_t cap)
-{
-    if (!retirement->present) return meta_write_batch(kv, it, n);
-    struct efs_pack_mapping_change change = {ino, gen, 0,
-        &retirement->before, retirement->has_after ? &retirement->after : NULL};
-    struct efs_pack_mapping_plan plan = {0};
-    int rc = efs_pack_mapping_plan(kv, &change, 1, &plan);
-    if (rc == EFS_OK && plan.count > cap - n) rc = EFS_ERR_NOMEM;
-    if (rc == EFS_OK) {
-        memcpy(it + n, plan.items, plan.count * sizeof(it[0]));
-        rc = meta_write_batch(kv, it, n + plan.count);
-    }
-    efs_pack_mapping_plan_free(&plan);
-    return rc;
-}
-
 static int truncate_lane_range_del(struct efs_kv *kv, efs_ino_t ino,
                                    uint64_t gen, uint8_t lane, uint64_t size,
                                    uint32_t tail_ci, uint8_t has_tail,
@@ -5878,7 +5753,7 @@ static int truncate_lane_range_del(struct efs_kv *kv, efs_ino_t ino,
                                    uint8_t (*gc_keys)[EFS_KV_KEY_MAX],
                                    uint8_t (*gc_vals)[EFS_META_GC_VAL],
                                    uint32_t *n, uint32_t cap,
-                                   uint32_t *dropped, struct packed_retirement *retirement,
+                                   uint32_t *dropped,
                                    uint64_t epoch_below, int *full);
 
 /* Subtract what a truncate's range delete dropped from the lane's staged
@@ -5932,7 +5807,7 @@ static void append_lane_authority_fence(struct efs_kv_item *it,uint32_t *n,
 
 /* One page of a lane fence's range delete. Heap-backed: a page is far
  * larger than a pump stack frame should carry. */
-#define LANE_FENCE_RESERVE (1u + EFS_PACK_MAPPING_OBJECT_MAX)
+#define LANE_FENCE_RESERVE 1u
 struct lane_fence_page {
     struct efs_kv_item it[EFS_META_LANE_FENCE_ITEMS];
     uint8_t del_keys[EFS_META_LANE_FENCE_ITEMS][EFS_KV_KEY_MAX];
@@ -5953,7 +5828,6 @@ static int lane_fence_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
     uint32_t nfence, dropped = 0;
     struct lane_rec ln = {0};
     struct lane_authority_fence overlay;
-    struct packed_retirement retirement = {0};
     int rc, full = 0, resume = 0;
 
     /* Idempotency: a replay of an already-applied fence must not zero
@@ -5990,12 +5864,11 @@ static int lane_fence_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
         if (overlay.present && !nfence) return EFS_ERR_BUSY;
         append_lane_authority_fence(it,&n,&overlay);
     }
-    /* Reserve the resumed stamp's slot and the packed retirement plan's
-     * items before the page fills. */
+    /* Reserve the resumed stamp's slot before the page fills. */
     rc = truncate_lane_range_del(kv, ino, gen, lane, size, tail_ci, has_tail,
                                  it, pg->del_keys, pg->gc_keys, pg->gc_vals, &n,
                                  EFS_META_LANE_FENCE_ITEMS - LANE_FENCE_RESERVE,
-                                 &dropped, &retirement, new_epoch, &full);
+                                 &dropped, new_epoch, &full);
     if (rc != EFS_OK)
         return rc;
     if (dropped && nfence)
@@ -6007,7 +5880,7 @@ static int lane_fence_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
     }
     if (n == 0)
         return EFS_OK;
-    rc = packed_retirement_commit(kv, ino, gen, &retirement, it, n, EFS_META_LANE_FENCE_ITEMS);
+    rc = meta_write_batch(kv, it, n);
     return rc == EFS_OK && full ? EFS_META_FENCE_MORE : rc;
 }
 
@@ -6044,29 +5917,13 @@ struct sweep_scan {
     uint32_t n;
     uint32_t cap;
     uint32_t chunks;
-    struct efs_meta_chunk packed_dead;
-    uint32_t packed_ci;
-    int has_packed;
     int full;
     int rc;
 };
 
-/* The supported packed profile has exactly one base, at chunk zero. Keep its
- * reference retirement in the same atomic batch as the authoritative delete. */
 static int sweep_commit(struct efs_kv *kv, struct sweep_scan *ss)
 {
-    if (!ss->has_packed) return meta_write_batch(kv, ss->it, ss->n);
-    struct efs_pack_mapping_change change = {ss->ino, ss->gen,
-        ss->packed_ci, &ss->packed_dead, NULL};
-    struct efs_pack_mapping_plan plan = {0};
-    int rc = efs_pack_mapping_plan(kv, &change, 1, &plan);
-    if (rc == EFS_OK && plan.count > ss->cap - ss->n) rc = EFS_ERR_NOMEM;
-    if (rc == EFS_OK) {
-        memcpy(ss->it + ss->n, plan.items, plan.count * sizeof(ss->it[0]));
-        rc = meta_write_batch(kv, ss->it, ss->n + plan.count);
-    }
-    efs_pack_mapping_plan_free(&plan);
-    return rc;
+    return meta_write_batch(kv, ss->it, ss->n);
 }
 
 /* Reserve every dead identity before queuing its only reference's deletion. */
@@ -6116,7 +5973,7 @@ static int sweep_cb(void *user, const uint8_t *key, uint32_t klen,
         ss->rc = chunk_gc_slots(val, vlen, &dead, &need);
     if (ss->rc != EFS_OK)
         return 1;
-    if (need > ss->cap - ss->n - (ss->has_packed ? 1u : 0u)) {
+    if (need > ss->cap - ss->n) {
         ss->full = 1;
         return 1;
     }
@@ -6127,10 +5984,7 @@ static int sweep_cb(void *user, const uint8_t *key, uint32_t klen,
     ss->it[ss->n].val = NULL; /* `it` is an uninitialised stack array */
     ss->it[ss->n].vlen = 0;
     ss->n++;
-    if (dead.coding_profile_id == EFS_META_PROFILE_PACK_K2F1) {
-        if (ci || lane || ss->has_packed) { ss->rc = EFS_ERR_PROTO; return 1; }
-        ss->packed_dead = dead; ss->packed_ci = ci; ss->has_packed = 1;
-    } else if (dead.generation != 0) {
+    if (dead.generation != 0) {
         ss->rc = gc_queue(ss->it, &ss->n, ss->cap, ss->keys, ss->gc_vals,
                           ino, lane, ci, &dead);
         if (ss->rc != EFS_OK)
@@ -6912,7 +6766,6 @@ static int epoch_lane_upd(struct lane_rec *ln, void *arg)
 }
 
 struct trunc_scan {
-    struct packed_retirement *retirement;
     struct efs_kv *kv;
     efs_ino_t ino;
     uint64_t gen;
@@ -6987,10 +6840,7 @@ del:
     ts->n++;
     ts->dropped++;
     /* The chunk key dies here; its fragment set must not (L7). */
-    if (dead.coding_profile_id == EFS_META_PROFILE_PACK_K2F1) {
-        if (ci || lane || ts->retirement->present) { ts->rc = EFS_ERR_PROTO; return 1; }
-        ts->retirement->before = dead; ts->retirement->present = 1;
-    } else if (dead.generation != 0) {
+    if (dead.generation != 0) {
         ts->rc = gc_queue(ts->it, &ts->n, ts->cap, ts->gc_keys, ts->gc_vals,
                           ino, lane, ci, &dead);
         if (ts->rc != EFS_OK)
@@ -7031,7 +6881,7 @@ static int truncate_lane_range_del(struct efs_kv *kv, efs_ino_t ino,
                                    uint8_t (*gc_keys)[EFS_KV_KEY_MAX],
                                    uint8_t (*gc_vals)[EFS_META_GC_VAL],
                                    uint32_t *n, uint32_t cap,
-                                   uint32_t *dropped, struct packed_retirement *retirement,
+                                   uint32_t *dropped,
                                    uint64_t epoch_below, int *full)
 {
     uint8_t pref[EFS_KV_KEY_MAX], start[EFS_KV_KEY_MAX];
@@ -7051,7 +6901,7 @@ static int truncate_lane_range_del(struct efs_kv *kv, efs_ino_t ino,
         return rc;
     plen = 20;
     memset(&ts, 0, sizeof(ts));
-    ts.kv = kv; ts.retirement = retirement;
+    ts.kv = kv;
     ts.ino = ino;
     ts.gen = gen;
     ts.size = size;
@@ -7083,7 +6933,7 @@ static int truncate_publish_tail(struct efs_kv *kv, struct efs_meta_row *row,
                                  uint8_t (*k_gc)[EFS_KV_KEY_MAX],
                                  uint8_t (*v_gc)[EFS_META_GC_VAL],
                                  uint8_t k_ln[][EFS_KV_KEY_MAX],
-                                 uint8_t v_ln[][LANE_VAL], struct packed_retirement *retirement)
+                                 uint8_t v_ln[][LANE_VAL])
 {
     struct efs_meta_pub p;
     struct efs_meta_chunk got;
@@ -7098,9 +6948,6 @@ static int truncate_publish_tail(struct efs_kv *kv, struct efs_meta_row *row,
 
     if (!tail)
         return EFS_OK;
-    /* New packed publication is restricted to fresh files. A truncate tail
-     * promotes to an ordinary chunk, preserving legacy proof requirements. */
-    if (tail->coding_profile_id == EFS_META_PROFILE_PACK_K2F1) return EFS_ERR_INVAL;
     p = *tail;
     p.ino = row->ino;
     p.new_size = tail->new_size;
@@ -7187,11 +7034,7 @@ static int truncate_publish_tail(struct efs_kv *kv, struct efs_meta_row *row,
      * generation it replaces is dead from this commit on (L7) — unless the
      * stub aliases the old row's fragment set, in which case the fragments
      * are shared with the live row and nothing is dead. */
-    if (had_row && got.coding_profile_id == EFS_META_PROFILE_PACK_K2F1) {
-        if (p.chunk_index || retirement->present) return EFS_ERR_PROTO;
-        retirement->before = got; retirement->after = stored;
-        retirement->present = retirement->has_after = 1;
-    } else if (committed != 0 && !chunk_aliases(&stored, &got)) {
+    if (committed != 0 && !chunk_aliases(&stored, &got)) {
         rc = gc_queue(it, n, cap, k_gc, v_gc, row->ino, lane,
                       p.chunk_index, &got);
         if (rc != EFS_OK)
@@ -7259,7 +7102,6 @@ static int truncate_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
                           uint8_t (*gc_vals)[EFS_META_GC_VAL])
 {
     struct efs_meta_row row;
-    struct packed_retirement retirement = {0};
     uint8_t k_ino[EFS_KV_KEY_MAX];
     uint8_t v_ino[INO_VAL];
     uint8_t k_cur[EFS_KV_KEY_MAX];uint32_t kc=0;
@@ -7267,7 +7109,7 @@ static int truncate_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
     uint8_t k_ln[EFS_META_LANES][EFS_KV_KEY_MAX];
     uint8_t v_ln[EFS_META_LANES][LANE_VAL];
     struct lane_authority_fence overlay[EFS_META_LANES];
-    uint8_t k_tail[EFS_KV_KEY_MAX], v_tail[CHUNK_VAL + EFS_PACK_REF_BYTES];
+    uint8_t k_tail[EFS_KV_KEY_MAX], v_tail[CHUNK_VAL];
     uint32_t ki = 0, n = 0, i, tail_ci = 0;
     uint64_t new_epoch;
     uint8_t has_tail = 0;
@@ -7336,7 +7178,7 @@ static int truncate_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
         rc = truncate_lane_range_del(kv, ino, row.generation, (uint8_t)i,
                                    t->size, tail_ci, has_tail, it, del_keys,
                                    gc_keys, gc_vals, &n, TRUNC_IT_CAP,
-                                   &dropped, &retirement, 0, NULL);
+                                   &dropped, 0, NULL);
         if (rc != EFS_OK)
             return rc;
         if (dropped && nf > n0)
@@ -7348,7 +7190,7 @@ static int truncate_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
          * buffers here would be scribbled on at offset *n. */
         rc = truncate_publish_tail(kv, &row, now, t->tail, it, &n,
                                    TRUNC_IT_CAP, k_tail, v_tail,
-                                   gc_keys, gc_vals, k_ln, v_ln, &retirement);
+                                   gc_keys, gc_vals, k_ln, v_ln);
         if (rc != EFS_OK)
             return rc;
     }
@@ -7370,7 +7212,7 @@ static int truncate_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
      * append takes max(old watermark,new EOF) and creates a zero gap. */
     it[n++]=(struct efs_kv_item){EFS_KV_DEL,k_cur,kc,NULL,0};
     (void)touch_inode;
-    return packed_retirement_commit(kv, ino, row.generation, &retirement, it, n, TRUNC_IT_CAP);
+    return meta_write_batch(kv, it, n);
 }
 
 int efs_meta_apply_truncate(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
@@ -8752,7 +8594,6 @@ int efs_meta_apply_chunk_holds(struct efs_kv *kv, efs_ino_t ino,
     rc = unpack_chunk(val, vlen, &ch);
     if (rc != EFS_OK)
         return rc;
-    rc = chunk_identity_ok(&ch, ino, inode_gen, chunk_index);
     if (rc != EFS_OK) return rc;
     if (committed)
         *committed = ch.generation;
@@ -8805,7 +8646,6 @@ int efs_meta_apply_get_chunk_deltas(struct efs_kv *kv, efs_ino_t ino,
         return rc;
     struct efs_meta_chunk base;
     rc = unpack_chunk(val, vlen, &base);
-    if (rc == EFS_OK) rc = chunk_identity_ok(&base, ino, row.generation, chunk_index);
     if (rc != EFS_OK) return rc;
     nd = trailer_n(val, vlen);
     wr = nd < cap ? nd : cap;
@@ -8852,7 +8692,7 @@ int efs_meta_apply_get_chunk(struct efs_kv *kv, efs_ino_t ino, uint32_t chunk_in
     if (rc != EFS_OK)
         return rc;
     rc = unpack_chunk(val, vlen, out);
-    return rc == EFS_OK ? chunk_identity_ok(out, ino, row.generation, chunk_index) : rc;
+    return rc;
 }
 
 /* One KV get for the image and the span trailer, keyed by a row the
@@ -8885,7 +8725,6 @@ int efs_meta_apply_get_chunk_row(struct efs_kv *kv, efs_ino_t ino,
     if (rc != EFS_OK)
         return rc;
     rc = unpack_chunk(val, vlen, out);
-    if (rc == EFS_OK) rc = chunk_identity_ok(out, ino, inode_gen, chunk_index);
     if (rc != EFS_OK)
         return rc;
     nd = trailer_n(val, vlen);
@@ -9005,13 +8844,12 @@ int efs_meta_apply_sweep_chunk(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
                                const struct efs_meta_chunk *replacement)
 {
     struct efs_meta_chunk_view live;
-    struct packed_retirement retirement = {0};
     struct lane_rec lane;
     enum { CAP = 3 + EFS_CHUNK_DELTA_MAX };
     struct efs_kv_item items[CAP] = {0};
     uint8_t gk[CAP][EFS_KV_KEY_MAX], gv[CAP][EFS_META_GC_VAL];
     uint8_t ck[EFS_KV_KEY_MAX], lk[EFS_KV_KEY_MAX], lv[LANE_VAL];
-    uint8_t expected[CHUNK_VAL_MAX], actual[CHUNK_VAL_MAX], value[CHUNK_VAL + EFS_PACK_REF_BYTES];
+    uint8_t expected[CHUNK_VAL_MAX], actual[CHUNK_VAL_MAX], value[CHUNK_VAL];
     uint32_t ckl = 0, lkl = 0, lvl = sizeof(lv), n = 0, en, an;
     uint8_t authority = (uint8_t)(ci % EFS_META_LANES);
     int rc;
@@ -9064,11 +8902,7 @@ int efs_meta_apply_sweep_chunk(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
         items[n++] = (struct efs_kv_item){EFS_KV_DEL, ck, ckl, NULL, 0};
     }
     items[n++] = (struct efs_kv_item){EFS_KV_PUT, lk, lkl, lv, LANE_VAL};
-    if (live.base.coding_profile_id == EFS_META_PROFILE_PACK_K2F1) {
-        if (ci) return EFS_ERR_PROTO;
-        retirement.before = live.base; retirement.present = 1;
-        if (replacement) { retirement.after = *replacement; retirement.has_after = 1; }
-    } else if (live.base.generation && (!replacement ||
+    if (live.base.generation && (!replacement ||
         (live.base.generation != replacement->generation &&
          !chunk_aliases(&live.base, replacement)))) {
         rc = gc_queue(items, &n, CAP, gk, gv, ino, authority, ci, &live.base);
@@ -9090,7 +8924,7 @@ int efs_meta_apply_sweep_chunk(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
         if (rc != EFS_OK)
             return rc;
     }
-    return packed_retirement_commit(kv, ino, gen, &retirement, items, n, CAP);
+    return meta_write_batch(kv, items, n);
 }
 
 struct check_scan {

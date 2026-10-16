@@ -41,7 +41,7 @@ static void classify(struct efs_raft_host *h,int rc,struct efs_msg_inode_reply *
 int main(void)
 {
  struct test_server server={1};struct efs_raft_host host={.s=&server};struct efs_msg_inode_reply out;
- classify(&host,EFS_ERR_BUSY,&out);assert(out.status==EFS_INODE_RPC_ADMISSION_BUSY && out.primary_id==3);
+ classify(&host,EFS_ERR_BUSY,&out);assert(out.status==EFS_INODE_RPC_BUSY); /* container admission status removed */
  classify(&host,EFS_ERR_AGAIN,&out);assert(out.status==EFS_INODE_RPC_BUSY);
  classify(&host,EFS_ERR_NOLCK,&out);assert(out.status==EFS_INODE_RPC_BUSY);
  classify(&host,EFS_ERR_NOT_PRIMARY,&out);assert(out.status==EFS_INODE_RPC_NOT_PRIMARY);

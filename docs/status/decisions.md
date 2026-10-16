@@ -1,4 +1,4 @@
-# Decisions — taken and pending (register D1–D36)
+# Decisions — taken and pending (register D1–D37)
 
 **October 15 reconciliation:** [Review of stale claims and remaining gates](open-item-reconciliation-20261015.md). Read these annotations before treating dated implementation descriptions as current tasks. No new global acceptance or deployment is implied.
 
@@ -13,7 +13,7 @@ items before implementation. ASK rows remain unresolved design choices.**
 
 ---
 
-#### Decisions — taken and pending (register D1–D36)
+#### Decisions — taken and pending (register D1–D37)
 
 Each row is a choice the spec did not make. A row marked **decided**
 was accepted by the user and is now part of the design; implement it
@@ -30,6 +30,19 @@ The user limits this release to TCP/direct I/O/files and defers containers and
 repair/recovery qualification. This is a release scheduling decision, not a
 change to the numbered architectural protection contracts. [Exact decision,
 remaining gates and limits](v030-release-scope-20261012.md). Execution stays stopped.
+
+## D37 — packing and the container engine removed from devel (accepted Oct 16)
+
+The user removed all packing (tiny-file packed segments, ledger, mapping,
+admission, packed upload/read/GC, publication batch) and the experimental
+container storage engine from devel, to be resumed later. The last devel
+commit with both is preserved as tag `archive/packing-containers-20261016`
+and branch `packing-containers`. Devel is files-engine only. Stores that ever
+held packed rows (KVLSM2 MANIFEST), container-engine roots (engine marker 1),
+packed snapshot imports and retired packing log entries are refused with an
+explicit message, never misread. Resume by branching from current devel and
+reverting the removal commits. [Removal record](packing-containers-removal-20261016.md).
+This supersedes the October 12 container-testing scope note for current work.
 
 ## D36 — node-count protection contract (accepted Oct 9)
 

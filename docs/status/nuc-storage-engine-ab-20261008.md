@@ -6,7 +6,7 @@ comparison on the NUC. It does not close P4.1 or change the default engine.
 ## Deployment and topology
 
 Source baseline: `73eb7fd5`, plus the dedicated
-[`ab_storage_engines_nuc.py`](../../scripts/ab_storage_engines_nuc.py) runner.
+`ab_storage_engines_nuc.py` (at tag `archive/packing-containers-20261016`) runner.
 The deployed tracked source and runner are verified by SHA-256. Native compilation
 uses the NUC's CPU instruction set. Source, binaries and tests are deployed into
 `/data1/efs/bench/nuc-engine-ab-20261008/src`; installed binaries and services

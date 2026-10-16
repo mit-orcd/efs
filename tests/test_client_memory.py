@@ -45,14 +45,6 @@ void efs_hash(const void *input,size_t n,uint8_t out[EFS_HASH_SIZE]) {
     const uint8_t *p=input;memset(out,0,EFS_HASH_SIZE);
     for(size_t i=0;i<n;i++)out[i%EFS_HASH_SIZE]=(uint8_t)((out[i%EFS_HASH_SIZE]*33)^p[i]);
 }
-/* Packed record encoding uses the real canonical codec; this legacy-only
- * ownership harness does not create segment bodies. */
-int efs_segment_geometry(size_t n, size_t *out) { (void)n; (void)out; return EFS_ERR_INVAL; }
-#define put packed_put
-#define get packed_get
-#include "packed_segment.c"
-#undef put
-#undef get
 #include "publication.c"
 int efs_client_publication_id(uint64_t seq,struct efs_opid *out) {
     memset(out,0,sizeof(*out));out->client_uuid[0]=1;out->session_epoch=1;out->seq=seq;return EFS_OK;
@@ -401,82 +393,34 @@ int main(void) {
     free(cached_base);free(cached_copy);
 
     dcache_drop_locked(1,0,0);assert(!owned->writer && !g_metadata && !g_live);
-    /* The actual retained publication adapter must not strip a packed mapping
-     * or reconstruct its retry from mutable cache placement. */
+    /* A publication carrying the retired packed flag (packing removed) is
+     * refused without disturbing ownership; the plain path then completes. */
     cached_view=(struct efs_msg_lane_writer_view_reply){.view={.ino=777,.generation=7},
         .chunk_size=EFS_MIN_CHUNK_SIZE};
     assert(!efs_dcache_admit_lane_write(777,7,0,&cached_view,0,patch,4));
-    struct dcache_ent *packed_entry=dcache_find_meta(dcache_slot(777,0),777,0);
-    struct efs_msg_inode_getchunks_reply *packed_base=calloc(1,sizeof(*packed_base));assert(packed_base);
-    packed_base->ino=777;packed_base->generation=7;
-    uint8_t packed_image[EFS_MIN_CHUNK_SIZE];struct efs_writer_plan packed_plan;
-    assert(!efs_dcache_snapshot_publication(777,7,0,&cached_view,packed_base,
-        &packed_plan,packed_image,sizeof(packed_image)));
-    sequence=packed_plan.cache_sequence;
-    struct efs_chunk_rec packed_put={.ino=777,.chunk_generation=77,
-        .publish_flags=EFS_CHUNK_REC_F_FRESH_OBJECT|EFS_CHUNK_REC_F_PACKED_BASE};
-    for(unsigned i=0;i<3;i++)packed_put.nodes[i]=i+1;
-    packed_put.packed=(struct efs_pack_ref){.ino=777,.inode_generation=7,.record_generation=77,
-        .segment_id=9,.segment_generation=10,.geometry=8192,.offset=4096,.len=4,.publication_group=2};
-    packed_put.packed.digest[0]=1;
-    assert(!efs_dcache_begin_publication(777,7,0,&packed_plan,77));
-    packed_put.packed.content_epoch=1;
-    assert(efs_dcache_finish_publication(777,7,0,77,sequence,EFS_OK,&packed_put)==EFS_ERR_INVAL);
-    assert(!packed_entry->writer->publication_ready && packed_entry->dirty);
-    packed_put.packed.content_epoch=0;
-    struct efs_chunk_rec good_pack_put=packed_put;
-    for(unsigned bad=0;bad<6;bad++) {
-        packed_put=good_pack_put;
-        if(bad==0)packed_put.packed.inode_generation++;
-        if(bad==1)packed_put.packed.record_generation++;
-        if(bad==2)packed_put.packed.len++;
-        if(bad==3)packed_put.packed.offset=8191;
-        if(bad==4)packed_put.publish_flags &= ~EFS_CHUNK_REC_F_FRESH_OBJECT;
-        if(bad==5)packed_put.publish_flags |= 16u;
-        assert(efs_dcache_finish_publication(777,7,0,77,sequence,EFS_OK,&packed_put)==EFS_ERR_INVAL);
-        assert(!packed_entry->writer->publication_ready && packed_entry->dirty &&
-            packed_entry->writer->ranges.bytes.count && !memcmp(packed_entry->data,patch,4));
-    }
-    packed_put=good_pack_put;
-    assert(!efs_dcache_finish_publication(777,7,0,77,sequence,EFS_OK,&packed_put));
-    memset(packed_entry->object_nodes,0,sizeof(packed_entry->object_nodes));
-    packed_entry->object_publish_flags=0;
-    assert(!efs_dcache_publication_report(777,7,0,77,sequence,&report));
-    assert(report.publish_flags==15 && report.nodes[0]==1 &&
-        !memcmp(&report.packed,&packed_put.packed,sizeof(report.packed)));
+    struct dcache_ent *retired_entry=dcache_find_meta(dcache_slot(777,0),777,0);
+    struct efs_msg_inode_getchunks_reply *retired_base=calloc(1,sizeof(*retired_base));assert(retired_base);
+    retired_base->ino=777;retired_base->generation=7;
+    uint8_t retired_image[EFS_MIN_CHUNK_SIZE];struct efs_writer_plan retired_plan;
+    assert(!efs_dcache_snapshot_publication(777,7,0,&cached_view,retired_base,
+        &retired_plan,retired_image,sizeof(retired_image)));
+    sequence=retired_plan.cache_sequence;
+    struct efs_chunk_rec retired_put={.ino=777,.chunk_generation=77,
+        .publish_flags=EFS_CHUNK_REC_F_FRESH_OBJECT|EFS_CHUNK_REC_F_RETIRED_PACKED};
+    for(unsigned i=0;i<3;i++)retired_put.nodes[i]=i+1;
+    assert(!efs_dcache_begin_publication(777,7,0,&retired_plan,77));
+    assert(efs_dcache_finish_publication(777,7,0,77,sequence,EFS_OK,&retired_put)==EFS_ERR_INVAL);
+    assert(!retired_entry->writer->publication_ready && retired_entry->dirty &&
+        retired_entry->writer->ranges.bytes.count && !memcmp(retired_entry->data,patch,4));
+    struct efs_chunk_rec plain_put=retired_put;plain_put.publish_flags=EFS_CHUNK_REC_F_FRESH_OBJECT;
+    assert(!efs_dcache_finish_publication(777,7,0,77,sequence,EFS_OK,&plain_put));
     assert(!efs_dcache_publication_request(777,7,0,77,sequence,4,&request));
-    struct efs_msg_publication immutable_pack_request=request;
-    packed_put.packed.segment_id++;
-    assert(efs_dcache_finish_publication(777,7,0,77,sequence,EFS_OK,&packed_put)==EFS_ERR_BUSY);
-    assert(!efs_dcache_publication_request(777,7,0,77,sequence,999,&request));
-    assert(!memcmp(&request,&immutable_pack_request,sizeof(request)));
-    /* Exactly rejected packed publication releases its old token, while the
-     * accepted body, sparse ownership and cache charge remain for rebase. */
-    outcome=(struct efs_msg_publication_reply){.state=EFS_PUBLICATION_REJECTED,.verdict=EFS_ERR_STALE};
-    memcpy(outcome.digest,packed_entry->writer->publication.result_digest,EFS_HASH_SIZE);
-    int packed_consumed=0;outcome.digest[0]^=1;
-    assert(efs_dcache_consume_publication(777,7,0,77,sequence,&outcome,&packed_consumed)==EFS_ERR_STALE&&!packed_consumed);
-    assert(packed_entry->writer->has_publication&&packed_entry->dirty&&packed_entry->pin_held);
-    outcome.digest[0]^=1;
-    assert(efs_dcache_consume_publication(777,7,0,77,sequence,&outcome,&packed_consumed)==EFS_ERR_STALE&&packed_consumed);
-    assert(!packed_entry->writer->has_publication&&packed_entry->dirty&&packed_entry->pin_held&&
-        packed_entry->writer->ranges.bytes.count&&!memcmp(packed_entry->data,patch,4));
-    assert(!efs_dcache_snapshot_publication(777,7,0,&cached_view,packed_base,
-        &packed_plan,packed_image,sizeof(packed_image))&&!memcmp(packed_image,patch,4));
-    sequence=packed_plan.cache_sequence;
-    struct efs_chunk_rec rebased_put={.ino=777,.chunk_generation=78,
-        .publish_flags=EFS_CHUNK_REC_F_FRESH_OBJECT};
-    memcpy(rebased_put.nodes,good_pack_put.nodes,sizeof(rebased_put.nodes));
-    assert(!efs_dcache_begin_publication(777,7,0,&packed_plan,78));
-    assert(!efs_dcache_finish_publication(777,7,0,78,sequence,EFS_OK,&rebased_put));
-    assert(!efs_dcache_publication_request(777,7,0,78,sequence,4,&request));
-    assert(!(request.rec.publish_flags&EFS_CHUNK_REC_F_PACKED_BASE));
-    assert(memcmp(&request.id,&immutable_pack_request.id,sizeof(request.id)));
+    assert(!(request.rec.publish_flags&EFS_CHUNK_REC_F_RETIRED_PACKED));
     outcome=(struct efs_msg_publication_reply){.state=EFS_PUBLICATION_COMMITTED};
-    memcpy(outcome.digest,packed_entry->writer->publication.result_digest,EFS_HASH_SIZE);
-    assert(!efs_dcache_publication_result(777,7,0,78,sequence,&outcome));
-    assert(!packed_entry->dirty && !packed_entry->pin_held && !packed_entry->data);
-    free(packed_base);dcache_drop_locked(777,0,0);assert(!g_metadata && !g_live);
+    memcpy(outcome.digest,retired_entry->writer->publication.result_digest,EFS_HASH_SIZE);
+    assert(!efs_dcache_publication_result(777,7,0,77,sequence,&outcome));
+    assert(!retired_entry->dirty && !retired_entry->pin_held && !retired_entry->data);
+    free(retired_base);dcache_drop_locked(777,0,0);assert(!g_metadata && !g_live);
     /* Fresh typed admission reserves exact sparse ownership; gaps never become
      * readable just because the body exists. Failure cannot adopt legacy bytes. */
     cached_view=(struct efs_msg_lane_writer_view_reply){.view={.ino=555,.generation=7,.chunk_index=0}};

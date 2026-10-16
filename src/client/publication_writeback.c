@@ -51,22 +51,15 @@ int efs_client_publication_progress(struct efs_publication_ack_queue *queue,
     int rc=efs_publication_ack_request(queue,sequence,&request);
     if (rc!=EFS_OK) return rc;
     struct efs_msg_publication_reply reply={0};
-    if (request.rec.publish_flags & EFS_CHUNK_REC_F_PACKED_BASE) {
-        /* This is an idempotent exact-body submission, including after a lost
-         * reply. The host rechecks session/FileID fences and durable receipts.
-         * Do not manufacture success or discard ownership on uncertainty. */
+    rc=efs_client_rpc_publication(&request,1,&reply);
+    if (rc==EFS_ERR_NOT_FOUND || rc==EFS_ERR_BUSY) {
+        uint32_t shard=efs_kv_lane_shard(request.rec.ino,
+                                       request.rec.chunk_index%EFS_META_LANES);
+        rc=efs_client_rpc_publication_session(shard,&request.id);
+        if (rc!=EFS_OK) return rc;
         rc=efs_client_rpc_publication(&request,0,&reply);
-    } else {
-        rc=efs_client_rpc_publication(&request,1,&reply);
-        if (rc==EFS_ERR_NOT_FOUND || rc==EFS_ERR_BUSY) {
-            uint32_t shard=efs_kv_lane_shard(request.rec.ino,
-                                           request.rec.chunk_index%EFS_META_LANES);
-            rc=efs_client_rpc_publication_session(shard,&request.id);
-            if (rc!=EFS_OK) return rc;
-            rc=efs_client_rpc_publication(&request,0,&reply);
-        } else if (rc==EFS_OK && reply.state==EFS_PUBLICATION_PENDING) {
-            rc=efs_client_rpc_publication(&request,0,&reply);
-        }
+    } else if (rc==EFS_OK && reply.state==EFS_PUBLICATION_PENDING) {
+        rc=efs_client_rpc_publication(&request,0,&reply);
     }
     if (rc!=EFS_OK) return rc;
     *out=reply;

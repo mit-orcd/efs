@@ -343,7 +343,7 @@ for t in $UNIT_TESTS; do
     log="$WORK-unit-$t.vg"
     unit_vg=$VG
     case "$t" in
-        test_namespace_session|test_store_containers|test_principles_index|test_append_transaction|test_append_receipt|test_put_ticket|test_mtime_barrier|test_publication_session|test_publication_recovery|test_lane_bootstrap_recovery|test_kv_lsm|test_raft_store|test_session|test_repair_job)
+        test_namespace_session|test_principles_index|test_append_transaction|test_append_receipt|test_put_ticket|test_mtime_barrier|test_publication_session|test_publication_recovery|test_lane_bootstrap_recovery|test_kv_lsm|test_raft_store|test_session|test_repair_job)
             # These fixtures deliberately _exit in children before destruction.
             # Keep their crash/recovery assertions and memory-access error exit
             # checks; gate clean parent leaks separately. Abrupt child allocation
