@@ -2257,13 +2257,14 @@ static int efs_open_acquire_fileid_run(efs_ino_t ino, uint64_t create_generation
          * opens fetch it; cached attrs must not invent a generation. The
          * guarded OPEN validates that FileID across truncate/recovery. */
         if (!generation) {
-            /* The FileID reply carries chunk records too: keep them as the
-             * read's mapping (a read-only open asks for its first window). */
-            uint32_t want = t_open_read_size ?
-                efs_client_open_map_count(t_open_read_size) : 1;
-            struct efs_chunk_rec *recs = malloc(want * sizeof(*recs));
+            /* The FileID reply carries chunk 0's record: keep it as the
+             * read's mapping. Asking for a 64-chunk window here moved
+             * sequential readers' refresh-ahead into every open (98 KB
+             * replies, 64 chunk rows read under the metadata leader's KV
+             * lock per open; Oct 16 Intel profile). */
+            struct efs_chunk_rec *recs = malloc(sizeof(*recs));
             uint64_t pulled = efs_client_map_clock();
-            count = recs ? want : 1;
+            count = 1;
             rc = efs_client_rpc_getchunks_fileid(g_client.export_id, ino, 0, 0,
                                                recs, &count, &generation);
             if (rc == EFS_OK && recs && count)
