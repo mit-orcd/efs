@@ -53,7 +53,8 @@ static inline void cpu_relax(void)
 #endif
 }
 
-#define EFS_RDMA_NRECV_DEFAULT 4 /* posted recv buffers per QP */
+#define EFS_RDMA_NRECV_DEFAULT 6 /* posted recv buffers per QP; half carry data
+                                  (efs_rmsg_credit_init), so 3 in flight as before */
 /* One buffer per in-flight send on this QP. The write pipeline posts
  * EFS_WRITE_PIPELINE chunks; with 2 buffers the third send spun in
  * send_buf_pick (W14 step 5 / W15 step 4). */
@@ -65,6 +66,7 @@ static inline void cpu_relax(void)
  * under a 9-client write load without costing throughput). */
 #define EFS_RDMA_SPIN_MIN      16
 #define EFS_RDMA_SEND_WAIT_US  (5 * 1000 * 1000) /* a stuck send = dead QP */
+#define EFS_RDMA_CREDIT_SPIN_US 200 /* reap a busy control slot before deferring */
 
 /* Recv SGEs are posted this far into each recv buffer so the fragment data
  * of a PUT_CHUNK (5-byte frame header + efs_msg_put_chunk) lands exactly on
@@ -1542,7 +1544,20 @@ static int message_pause(struct efs_rdma_conn *rc, int64_t end);
 static int send_credit(struct efs_rdma_conn *rc)
 {
     int idx=EFS_RDMA_NSEND-1;
-    if (rc->advertised_data==rc->reposted_data || rc->send_busy[idx]) return 0;
+    if (rc->advertised_data==rc->reposted_data) return 0;
+    /* The control slot's previous CREDIT completes within microseconds.
+     * Deferring the new one left only the 1 ms wait timeout to send it, and
+     * a peer out of credits slept with us: request/reply round trips of
+     * 30 us became 1-2 ms steps (orcd-mini Raft AppendEntries, Oct 16). */
+    if (rc->send_busy[idx]) {
+        int64_t end=now_us()+EFS_RDMA_CREDIT_SPIN_US;
+        while (rc->send_busy[idx]) {
+            if (reap_sends(rc)) return -1;
+            if (!rc->send_busy[idx] || now_us()>=end) break;
+            cpu_relax();
+        }
+        if (rc->send_busy[idx]) return 0; /* the timed retry remains */
+    }
     if (send_buf_prepare(rc,idx)<0) return -1;
     struct efs_rmsg_header h={EFS_RMSG_CREDIT,0,rc->reposted_data,0,0,0};
     if (efs_rmsg_encode(rc->send_bufs[idx],&h) ||

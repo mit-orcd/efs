@@ -144,11 +144,13 @@ static void credits(void)
     assert(efs_rmsg_credit_init(&c,65)==-1);
     for(unsigned n=2;n<=64;n++) {
         assert(!efs_rmsg_credit_init(&c,n));
-        for(unsigned i=0;i<n-1;i++) assert(efs_rmsg_credit_take(&c)==1);
+        /* Half the peer's receives: the rest absorb our CREDIT frames. */
+        unsigned cap=n/2;
+        for(unsigned i=0;i<cap;i++) assert(efs_rmsg_credit_take(&c)==1);
         assert(!efs_rmsg_credit_take(&c));
-        assert(efs_rmsg_credit_return(&c,n)==-1); /* inflation */
-        assert(!efs_rmsg_credit_return(&c,n-1));
-        assert(efs_rmsg_credit_return(&c,n-1)==-1); /* replay */
+        assert(efs_rmsg_credit_return(&c,cap+1)==-1); /* inflation */
+        assert(!efs_rmsg_credit_return(&c,cap));
+        assert(efs_rmsg_credit_return(&c,cap)==-1); /* replay */
         assert(efs_rmsg_credit_take(&c)==1);
     }
     c.sent=c.returned=UINT64_MAX;assert(efs_rmsg_credit_take(&c)==-1);

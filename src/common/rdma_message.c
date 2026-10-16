@@ -165,10 +165,18 @@ int efs_rmsg_rx_feed(struct efs_rmsg_rx *r, const void *frame, size_t len)
 }
 const struct efs_rmsg_view *efs_rmsg_rx_peek(const struct efs_rmsg_rx *r)
 { return r->count ? &r->queue[r->head] : NULL; }
+/* The peer's posted receives hold our DATA frames and our CREDIT frames
+ * alike, and a CREDIT stays in its buffer until the peer's owner thread
+ * pops it. We send at most one CREDIT per peer DATA frame consumed, and the
+ * peer sends at most `capacity` DATA frames before it must pop ours, so a
+ * peer needs 2 x capacity receives. receives-1 overran that: the send met
+ * no posted receive, was RNR-NAKed and retried by the NIC 0.64 ms later
+ * with no completion to wake anyone, so request/reply rounds took 1-2 ms
+ * instead of 30 us (orcd-mini Raft AppendEntries, Oct 16). */
 int efs_rmsg_credit_init(struct efs_rmsg_credits *c, uint32_t peer_receives)
 {
     if (!c || peer_receives<2 || peer_receives>64) return -1;
-    c->sent=c->returned=0; c->capacity=peer_receives-1; return 0;
+    c->sent=c->returned=0; c->capacity=peer_receives/2; return 0;
 }
 int efs_rmsg_credit_take(struct efs_rmsg_credits *c)
 {

@@ -82,7 +82,7 @@ int main(int argc,char **argv)
     if (!strcmp(mode,"churn")) return reconnect_churn();
     int sv[2];OK(!socketpair(AF_UNIX,SOCK_STREAM,0,sv));
     pid_t pid=fork();OK(pid>=0);int server=pid==0;
-    setenv("EFS_RDMA_BUFS",server?"2":"7",1);
+    if (strcmp(mode,"burst")) setenv("EFS_RDMA_BUFS",server?"2":"7",1);
     if (!efs_rdma_available()) {
         if (!server) { int st;waitpid(pid,&st,0);puts("SKIP: no usable RDMA device; segmented gate NOTRUN"); }
         return 0;
@@ -101,6 +101,40 @@ int main(int argc,char **argv)
         }
         efs_conn_destroy(c);OK(!efs_rdma_assembly_bytes() && !efs_rdma_live_conns());
         if (!server) {int st;OK(waitpid(pid,&st,0)==pid && WIFEXITED(st)&&WEXITSTATUS(st)==0);puts("PASS: interrupted assembly/credit wait releases all ownership");}
+        return 0;
+    }
+    if (!strcmp(mode,"burst")) {
+        /* Default pools, three small requests in flight per round. When
+         * DATA plus CREDIT frames could exceed the peer's posted receives,
+         * the NIC RNR-retried the overflow 0.64 ms later with no completion
+         * to wake either side: rounds took ~2 ms instead of ~30 us. */
+        enum { ROUNDS=400, DEPTH=3 };
+        if (server) {
+            for (;;) {
+                int chan=efs_conn_wait_request(c);if (chan<0) break;
+                c->recv_chan=chan;
+                uint8_t t;void *p=NULL;uint32_t n=0;
+                if (efs_conn_recv_msg(c,&t,&p,&n)) break;
+                free(p);uint8_t status=0;OK(!efs_conn_send_msg(c,44,&status,1));
+            }
+            efs_conn_destroy(c);return 0;
+        }
+        uint8_t req[48]={0};struct timespec a,b;
+        clock_gettime(CLOCK_MONOTONIC,&a);
+        for (unsigned r=0;r<ROUNDS;r++) {
+            for (unsigned i=0;i<DEPTH;i++) OK(!efs_conn_send_msg(c,42,req,sizeof(req)));
+            for (unsigned i=0;i<DEPTH;i++) {
+                uint8_t t;void *p=NULL;uint32_t n=0;
+                OK(!efs_conn_recv_msg(c,&t,&p,&n) && t==44);free(p);
+            }
+        }
+        clock_gettime(CLOCK_MONOTONIC,&b);
+        double ms=(b.tv_sec-a.tv_sec)*1e3+(b.tv_nsec-a.tv_nsec)/1e6;
+        efs_conn_destroy(c);
+        int st;OK(waitpid(pid,&st,0)==pid && WIFEXITED(st)&&WEXITSTATUS(st)==0);
+        printf("burst: %u rounds of %u requests in %.1f ms (%.1f us/round)\n",ROUNDS,DEPTH,ms,1e3*ms/ROUNDS);
+        OK(ms<250.0); /* RNR-retried rounds took ~2 ms each, ~800 ms in total */
+        puts("PASS: pipelined small requests never wait out an RNR retry");
         return 0;
     }
     if (!strcmp(mode,"tcp-violation")) {
