@@ -18,6 +18,13 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Waiter wake-up outside `cv_mu`](orcd-mini-waiter-wake-20261016.md):
+**private RDMA A/B PASS; not deployed.** `host_waiters_wake` decides under
+`cv_mu` and signals after unlocking. Leader lock waits that are condvar
+re-acquire 21.4% → 2.2% (3 runs each), leader lock-wait switches −18%;
+creates/s and stat/create latency unchanged within noise. The top waits are
+now proposals on `h->mu`. orcd-mini effect NOTRUN.
+
 [orcd-mini profile on `f4a373b13`](orcd-mini-profile-f4a373b13-20261016.md):
 **profiling only.** Under the user's workload, LOOKUP ReadIndex lock waits
 stay at 0.8% (9.1% before the fix). The leader's top lock wait (45%) is woken

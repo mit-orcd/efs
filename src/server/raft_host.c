@@ -3557,10 +3557,23 @@ static void host_waiter_sleep(struct efs_raft_host *h, uint8_t group, int any,
 }
 
 /* Pump side: after publishing every hosted group's view, wake the waiters
- * whose predicate that view satisfies, and only those. */
+ * whose predicate that view satisfies, and only those.
+ *
+ * The scan decides under cv_mu (notified=1, floors captured) but signals
+ * after unlocking. glibc has no wait morphing: a waiter signalled under
+ * cv_mu wakes only to block on cv_mu until the scan ends, and that
+ * re-acquisition was 45 % of leader lock waits (orcd-mini profile on
+ * f4a373b13). No wakeup is lost: each chosen waiter registered and parked
+ * under cv_mu before this scan took it, so it is either still blocked on
+ * its cv (the late signal reaches it) or has already left by timeout and
+ * re-checks the view itself. A slot freed and reused before the late
+ * signal gets one spurious wakeup; every sleeper re-checks its predicate
+ * in a loop, and slot condvars live until host teardown. */
 static void host_waiters_wake(struct efs_raft_host *h)
 {
     struct host_view view[HOST_NGROUPS];
+    uint16_t sig[HOST_WAITERS];
+    uint32_t nsig = 0, overflow;
     uint8_t loaded = 0;
 
     pthread_mutex_lock(&h->cv_mu);
@@ -3595,13 +3608,16 @@ static void host_waiters_wake(struct efs_raft_host *h)
             wake = V_LOAD(g->v_applied) >= w->idx;
         if (wake && !w->notified) {
             w->notified = 1;
-            pthread_cond_signal(&w->cv);
+            sig[nsig++] = (uint16_t)k;
         }
     }
     }
-    if (h->cv_overflow)
-        pthread_cond_broadcast(&h->applied_cv);
+    overflow = h->cv_overflow;
     pthread_mutex_unlock(&h->cv_mu);
+    for (uint32_t i = 0; i < nsig; i++)
+        pthread_cond_signal(&h->waiters[sig[i]].cv);
+    if (overflow)
+        pthread_cond_broadcast(&h->applied_cv);
 }
 
 static int host_hosts(struct efs_raft_host *h, uint8_t group)

@@ -12,10 +12,14 @@
 #      while the same probe runs in the foreground; perf -e cs -g samples
 #      all three efsd for PERF_SECONDS (default 10) in the middle.
 # Prints probe percentiles, the load's files/s and the context-switch
-# share that waits on a mutex (__lll_lock_wait) by caller.
+# share that waits on a mutex (__lll_lock_wait) by caller. With
+# DWARF_SECONDS>0 (default 3) it then takes a DWARF-unwound capture of the
+# group-0 leader (perf -e cs --call-graph dwarf) and splits its lock waits
+# into condvar wake-up re-acquisition (__pthread_mutex_cond_lock, i.e.
+# cv_mu in host_waiter_sleep) and plain pthread_mutex_lock, by caller.
 # Raw perf data stays under $AB (outside Git); the summary is on stdout.
 set -u
-REL=$1; L=$2; LOAD=${3:-40}; PERF_SECONDS=${PERF_SECONDS:-10}
+REL=$1; L=$2; LOAD=${3:-40}; PERF_SECONDS=${PERF_SECONDS:-10}; DWARF_SECONDS=${DWARF_SECONDS:-3}
 AB=/data1/efs/prof/ab/$L
 rm -rf "$AB"; mkdir -p "$AB"/{n1,n2,n3,logs,mnt,perf}
 export EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_0 EFS_MD_RAFT_N=3
@@ -125,6 +129,32 @@ print("  cs switches %d, mutex waits %d (%.1f%%), ReadIndex-caller waits %d (%.1
 for k,v in by.most_common(10): print("    %5.1f%% of switches  %s"%(100.0*v/max(tot,1),k[:160]))
 EOF
 
+cat > "$AB/cs_dwarf.py" <<'EOF'
+# perf script (DWARF) -> lock-wait switches split into condvar re-acquire
+# vs plain lock, top sites by the first three non-libc callers.
+import sys,collections
+lw=0; cond=0; by=collections.Counter(); st=[]
+libc=("__lll","___pthread","__pthread","pthread_","lll_","futex","__futex","__GI_","[unknown]","syscall")
+def flush():
+    global lw,cond
+    w=[i for i,f in enumerate(st) if "lll_lock_wait" in f]
+    if not w: return
+    lw+=1
+    c=len(st)>w[0]+1 and "__pthread_mutex_cond_lock" in st[w[0]+1]
+    cond+=c
+    callers=[f for f in st[w[0]+1:] if not f.startswith(libc)]
+    by[("cond-reacquire " if c else "lock ")+" <- ".join(callers[:3])]+=1
+for l in sys.stdin:
+    l=l.rstrip()
+    if not l: flush(); st=[]; continue
+    if not l.startswith(("\t"," ")): continue
+    p=l.split()
+    if len(p)>1: st.append(p[1].split("+")[0])
+flush()
+print("  leader lock-wait switches %d, cond re-acquire %d (%.1f%%)"%(lw,cond,100.0*cond/max(lw,1)))
+for k,v in by.most_common(12): print("    %5.1f%%  %s"%(100.0*v/max(lw,1),k[:170]))
+EOF
+
 echo "-- idle probe"
 python3 "$AB/probe.py" "$AB/mnt/idle" 200
 echo "-- loaded (${LOAD}s: 16 writers + reader + crawler)"
@@ -136,6 +166,17 @@ perf record -e cs -g -p "$pids" -o "$AB/perf/cs.data" -- sleep "$PERF_SECONDS" >
 PP=$!
 python3 "$AB/probe.py" "$AB/mnt/probe" 200
 wait $PP
+if [ "$DWARF_SECONDS" -gt 0 ]; then
+  lid=$("$REL/efs-mgmt" raft-status 10.1.99.1:17631 2>&1 | sed -n 's/^  group 0 .* leader=\([1-3]\) .*/\1/p' | head -1)
+  lid=${lid:-1}
+  perf record -e cs --call-graph dwarf,16384 -p "$(cat "$AB/logs/n$lid.pid")" -o "$AB/perf/cs-dwarf.data" \
+    -- sleep "$DWARF_SECONDS" > /dev/null 2>&1
+  DW="leader n$lid"
+fi
 wait $LP; cat "$AB/logs/load.out"
 perf script -i "$AB/perf/cs.data" 2>/dev/null | python3 "$AB/cs_lock.py"
 grep -h "read-sleep" "$AB"/logs/efsd-n*.log | wc -l | sed 's/^/  read-sleep(>20ms) lines: /'
+if [ "$DWARF_SECONDS" -gt 0 ]; then
+  echo "  DWARF capture: $DW, ${DWARF_SECONDS}s"
+  perf script -i "$AB/perf/cs-dwarf.data" 2>/dev/null | python3 "$AB/cs_dwarf.py"
+fi

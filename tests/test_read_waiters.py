@@ -28,8 +28,12 @@ static unsigned signals,broadcasts;
 static struct efs_raft_host *registration;
 static int wait_mock(pthread_cond_t *cv,pthread_mutex_t *mu,const struct timespec *end){(void)end;assert(mu==&registration->cv_mu && cv==&registration->waiters[0].cv);struct host_waiter *w=&registration->waiters[0];assert(registration->waiter_active[0]==1);assert(w->active && !w->notified && w->any==2 && w->idx==50 && w->round==11 && w->term==9 && w->proof_only);return 0;}
 #define pthread_cond_timedwait wait_mock
-static int signal_mock(pthread_cond_t *cv){(void)cv;signals++;return 0;}
-static int broadcast_mock(pthread_cond_t *cv){(void)cv;broadcasts++;return 0;}
+/* Signals go out after cv_mu is released (no wait morphing in glibc). */
+static struct efs_raft_host *waker;
+static pthread_cond_t *signalled[HOST_WAITERS+8];
+static void assert_unlocked(void){if(waker){assert(pthread_mutex_trylock(&waker->cv_mu)==0);pthread_mutex_unlock(&waker->cv_mu);}}
+static int signal_mock(pthread_cond_t *cv){assert_unlocked();if(signals<HOST_WAITERS+8)signalled[signals]=cv;signals++;return 0;}
+static int broadcast_mock(pthread_cond_t *cv){(void)cv;assert_unlocked();broadcasts++;return 0;}
 #define pthread_cond_signal signal_mock
 #define pthread_cond_broadcast broadcast_mock
 ''' + section('static int host_view_covers(', '/* Sleep until') + section('static void host_waiter_sleep(', '/* Pump side:') + section('static void host_waiters_wake(', 'static int host_hosts(') + r'''
@@ -40,8 +44,8 @@ static void reset(struct efs_raft_host *h){
  signals=0;view_calls=0;
 }
 int main(void){
- struct efs_raft_host h={.cv_mu=PTHREAD_MUTEX_INITIALIZER,.g={{.v_has=1}}};
- reset(&h);
+ static struct efs_raft_host h={.cv_mu=PTHREAD_MUTEX_INITIALIZER,.g={{.v_has=1}}};
+ waker=&h;reset(&h);
  for(unsigned i=0;i<1000;i++){h.view.commit++;h.g[0].v_stamp++;host_waiters_wake(&h);}
  assert(signals==0); /* unrelated commits cannot complete a pending fresh proof */
  h.view.proven_done=1;h.view.proven_round=11;h.view.proven_index=50;
@@ -138,8 +142,9 @@ int main(void){
   h.waiter_active[k/64]|=UINT64_C(1)<<(k%64);
  }
  h.g[0].v_applied=60;host_waiters_wake(&h);assert(signals==4);
+ for(unsigned i=0;i<4;i++)assert(signalled[i]==&h.waiters[slots[i]].cv); /* each its own slot */
  host_waiters_wake(&h);assert(signals==4);
- puts("read waiters: fresh proof, pending apply, old round, delegated rounds, invalidation and single signal PASS");
+ puts("read waiters: fresh proof, pending apply, old round, delegated rounds, invalidation, single signal and signal after unlock PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-read-waiters-') as d:
