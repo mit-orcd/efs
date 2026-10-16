@@ -3432,6 +3432,129 @@ static void test_cross_group_lane(void)
     efs_kv_mem_free(kv);
 }
 
+/* A lane with more rows past the new size than one LANE_FENCE page:
+ * the first entry fences and deletes a page, re-proposals of the same
+ * command resume (EFS_META_FENCE_MORE) until the lane is drained, rows
+ * below the size stay, and a resume never deletes a row written under
+ * the new epoch. Before paging this was NOMEM and the truncate EIO. */
+static void lane_fence_fill(struct efs_kv *kv, efs_ino_t ino, uint8_t lane,
+                            uint32_t rows)
+{
+    struct efs_meta_row r;
+    struct efs_meta_pub p;
+    struct efs_meta_chunk ch;
+    int ok = 1;
+
+    CHECK(efs_meta_apply_activate_lane(kv, ino, lane) == EFS_OK, "activate");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "row");
+    fill_ch(&ch);
+    for (uint32_t j = 0; j < rows; j++) {
+        memset(&p, 0, sizeof(p));
+        p.ino = ino;
+        p.chunk_index = lane + EFS_META_LANES * j;
+        p.new_size = ((uint64_t)p.chunk_index + 1) * EFS_MIN_CHUNK_SIZE;
+        p.candidate_gen = 0x10000 + j;
+        p.coding_profile_id = EFS_META_PROFILE_K2F1;
+        p.now = T0 + 1;
+        p.ch = ch;
+        p.lane_local = 1;
+        p.inode_gen = r.generation;
+        p.mtime_gen = r.mtime_gen;
+        ok &= efs_meta_apply_publish(kv, &p) == EFS_OK;
+    }
+    CHECK(ok, "fill lane");
+}
+
+static int lane_fence_drain(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                            uint8_t lane, uint64_t epoch, uint64_t size,
+                            uint32_t *pages)
+{
+    int rc;
+
+    *pages = 0;
+    do {
+        rc = efs_meta_apply_lane_fence(kv, ino, gen, lane, epoch, size, 0, 0);
+        ++*pages;
+    } while (rc == EFS_META_FENCE_MORE && *pages < 1000);
+    return rc;
+}
+
+static void test_lane_fence_paged(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_row r;
+    struct efs_meta_chunk got, ch;
+    struct efs_meta_pub p;
+    struct efs_meta_stat st;
+    struct coord_ctx cc;
+    efs_ino_t ino = 0, ino2 = 0;
+    const uint8_t lane = 1;
+    const uint32_t rows = 3 * EFS_META_LANE_FENCE_ITEMS / 2;
+    uint32_t pages = 0, keep = rows / 3;
+
+    CHECK(kv != NULL, "kv");
+    memset(&cc, 0, sizeof(cc));
+    cc.kv = kv;
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "big", &ino) == EFS_OK, "create");
+    lane_fence_fill(kv, ino, lane, rows);
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "row");
+    CHECK(efs_meta_apply_lane_fence(kv, ino, r.generation, lane, 1, 0, 0, 0)
+              == EFS_META_FENCE_MORE, "first page committed, more remain");
+    CHECK(lane_fence_drain(kv, ino, r.generation, lane, 1, 0, &pages) == EFS_OK &&
+              pages >= 2, "resumed pages drain the lane");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, lane, &got) == EFS_ERR_NOT_FOUND &&
+              efs_meta_apply_get_chunk(kv, ino, lane + EFS_META_LANES * (rows - 1),
+                                       &got) == EFS_ERR_NOT_FOUND,
+          "every row deleted");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.alloc == 0, "present count follows every page");
+    /* A publish under the new epoch survives a late resume of the fence. */
+    fill_ch(&ch);
+    memset(&p, 0, sizeof(p));
+    p.ino = ino;
+    p.chunk_index = lane;
+    p.new_size = 2ULL * EFS_MIN_CHUNK_SIZE;
+    p.candidate_gen = 0xF7;
+    p.coding_profile_id = EFS_META_PROFILE_K2F1;
+    p.content_epoch = 1;
+    p.now = T0 + 2;
+    p.ch = ch;
+    p.lane_local = 1;
+    p.inode_gen = r.generation;
+    p.mtime_gen = r.mtime_gen;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "post-fence publish");
+    CHECK(efs_meta_apply_lane_fence(kv, ino, r.generation, lane, 1, 0, 0, 0)
+              == EFS_OK &&
+              efs_meta_apply_get_chunk(kv, ino, lane, &got) == EFS_OK &&
+              got.generation == 0xF7,
+          "late resume keeps the new-epoch row");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.alloc == 1, "late resume does not subtract");
+
+    /* Partial truncate: rows below the size stay, rows from it are paged. */
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "big2", &ino2) == EFS_OK, "create 2");
+    lane_fence_fill(kv, ino2, lane, rows);
+    CHECK(efs_meta_apply_get_inode(kv, ino2, &r) == EFS_OK, "row 2");
+    CHECK(lane_fence_drain(kv, ino2, r.generation, lane, 1,
+                           (uint64_t)(lane + EFS_META_LANES * keep) * EFS_MIN_CHUNK_SIZE,
+                           &pages) == EFS_OK && pages >= 2,
+          "partial truncate pages");
+    CHECK(efs_meta_apply_get_chunk(kv, ino2, lane + EFS_META_LANES * (keep - 1),
+                                   &got) == EFS_OK &&
+              efs_meta_apply_get_chunk(kv, ino2, lane + EFS_META_LANES * keep,
+                                       &got) == EFS_ERR_NOT_FOUND &&
+              efs_meta_apply_get_chunk(kv, ino2, lane + EFS_META_LANES * (rows - 1),
+                                       &got) == EFS_ERR_NOT_FOUND,
+          "rows below the size kept, the rest deleted");
+    CHECK(efs_meta_apply_getattr(kv, ino2, coord_fn, &cc, &st) == EFS_OK &&
+              st.alloc == keep, "partial present count");
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
+    efs_kv_mem_free(kv);
+}
+
 /* ---- data-plane GC (L7): records, acks, lane sweep, reap ---- */
 
 static uint64_t gc_rd64(const uint8_t *p)
@@ -5999,6 +6122,7 @@ int main(void)
     test_writer_authority_view();
     test_writer_lane_authority();
     test_lane_local_writer_views();
+    test_lane_fence_paged();
     test_sparse_grow_tail_epoch();
     test_truncate_range_del();
     test_cross_group_lane();

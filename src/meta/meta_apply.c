@@ -5878,7 +5878,8 @@ static int truncate_lane_range_del(struct efs_kv *kv, efs_ino_t ino,
                                    uint8_t (*gc_keys)[EFS_KV_KEY_MAX],
                                    uint8_t (*gc_vals)[EFS_META_GC_VAL],
                                    uint32_t *n, uint32_t cap,
-                                   uint32_t *dropped, struct packed_retirement *retirement);
+                                   uint32_t *dropped, struct packed_retirement *retirement,
+                                   uint64_t epoch_below, int *full);
 
 /* Subtract what a truncate's range delete dropped from the lane's staged
  * stamp (packed by fence_lane_bits earlier in the same batch). Clamped: a
@@ -5929,33 +5930,36 @@ static void append_lane_authority_fence(struct efs_kv_item *it,uint32_t *n,
     it[(*n)++]=(struct efs_kv_item){EFS_KV_PUT,out->ak,out->akl,out->av,sizeof(out->av)};
 }
 
-int efs_meta_apply_lane_fence(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
-                              uint8_t lane, uint64_t new_epoch, uint64_t size,
-                              uint32_t tail_ci, uint8_t has_tail)
-{
-    /* One lane fence plus optional history/authority PUTs and up to 32
-     * chunk DELs, each with a GC record.
-     * gc_queue indexes by the global item number, so all arrays share the
-     * same bound. */
+/* One page of a lane fence's range delete. Heap-backed: a page is far
+ * larger than a pump stack frame should carry. */
+#define LANE_FENCE_RESERVE (1u + EFS_PACK_MAPPING_OBJECT_MAX)
+struct lane_fence_page {
     struct efs_kv_item it[EFS_META_LANE_FENCE_ITEMS];
     uint8_t del_keys[EFS_META_LANE_FENCE_ITEMS][EFS_KV_KEY_MAX];
     uint8_t gc_keys[EFS_META_LANE_FENCE_ITEMS][EFS_KV_KEY_MAX];
     uint8_t gc_vals[EFS_META_LANE_FENCE_ITEMS][EFS_META_GC_VAL];
     uint8_t k_ln[EFS_META_LANES][EFS_KV_KEY_MAX];
     uint8_t v_ln[EFS_META_LANES][LANE_VAL];
-    uint8_t key[EFS_KV_KEY_MAX], old[LANE_VAL];
+};
+
+static int lane_fence_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                            uint8_t lane, uint64_t new_epoch, uint64_t size,
+                            uint32_t tail_ci, uint8_t has_tail,
+                            struct lane_fence_page *pg)
+{
+    struct efs_kv_item *it = pg->it;
+    uint8_t key[EFS_KV_KEY_MAX], old[LANE_VAL], v_resume[LANE_VAL];
     uint32_t n = 0, klen = 0, vn;
     uint32_t nfence, dropped = 0;
     struct lane_rec ln = {0};
     struct lane_authority_fence overlay;
     struct packed_retirement retirement = {0};
-    int rc;
+    int rc, full = 0, resume = 0;
 
-    if (!kv || ino == 0 || lane >= EFS_META_LANES)
-        return EFS_ERR_INVAL;
-    /* Idempotency: a replay of an already-applied fence (same or older
-     * epoch) must not zero max_end again — a publish that landed after the
-     * first apply would be silently dropped from the size collect. */
+    /* Idempotency: a replay of an already-applied fence must not zero
+     * max_end again — a publish that landed after the first apply would be
+     * silently dropped from the size collect. An equal epoch resumes the
+     * paged range delete only; an older one is a no-op. */
     rc = efs_kv_key_lane(efs_kv_lane_shard(ino, lane), ino, gen, lane,
                          key, &klen);
     if (rc != EFS_OK)
@@ -5966,32 +5970,63 @@ int efs_meta_apply_lane_fence(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
         rc = unpack_lane(old, vn, &ln);
         if (rc != EFS_OK)
             return rc;
-        if (ln.fenced_epoch >= new_epoch)
+        if (ln.fenced_epoch > new_epoch)
             return EFS_OK;
+        resume = ln.fenced_epoch == new_epoch;
     } else if (rc != EFS_ERR_NOT_FOUND) {
         return rc;
     }
-    /* Legacy truncate advances stamp/history/authority in one durable batch. */
-    rc=stage_lane_authority_fence(kv,ino,gen,lane,ln.fenced_epoch,new_epoch,size,&overlay);
-    if (rc!=EFS_OK) return rc;
-    rc = fence_lane_bits(kv, ino, gen, 1ULL << lane, epoch_lane_upd,
-                         &new_epoch, it, &n, k_ln, v_ln);
-    if (rc != EFS_OK)
-        return rc;
-    nfence = n; /* nonzero means the lane stamp is staged for patching */
-    if (overlay.present && !nfence) return EFS_ERR_BUSY;
-    append_lane_authority_fence(it,&n,&overlay);
+    if (resume) {
+        nfence = 0;
+    } else {
+        /* Legacy truncate advances stamp/history/authority in one durable batch. */
+        rc=stage_lane_authority_fence(kv,ino,gen,lane,ln.fenced_epoch,new_epoch,size,&overlay);
+        if (rc!=EFS_OK) return rc;
+        rc = fence_lane_bits(kv, ino, gen, 1ULL << lane, epoch_lane_upd,
+                             &new_epoch, it, &n, pg->k_ln, pg->v_ln);
+        if (rc != EFS_OK)
+            return rc;
+        nfence = n; /* nonzero means the lane stamp is staged for patching */
+        if (overlay.present && !nfence) return EFS_ERR_BUSY;
+        append_lane_authority_fence(it,&n,&overlay);
+    }
+    /* Reserve the resumed stamp's slot and the packed retirement plan's
+     * items before the page fills. */
     rc = truncate_lane_range_del(kv, ino, gen, lane, size, tail_ci, has_tail,
-                                 it, del_keys, gc_keys, gc_vals, &n,
-                                 (uint32_t)(sizeof(it) / sizeof(it[0])),
-                                 &dropped, &retirement);
+                                 it, pg->del_keys, pg->gc_keys, pg->gc_vals, &n,
+                                 EFS_META_LANE_FENCE_ITEMS - LANE_FENCE_RESERVE,
+                                 &dropped, &retirement, new_epoch, &full);
     if (rc != EFS_OK)
         return rc;
     if (dropped && nfence)
-        lane_present_sub(v_ln[lane], dropped);
+        lane_present_sub(pg->v_ln[lane], dropped);
+    if (dropped && resume) {
+        ln.present = ln.present >= dropped ? ln.present - dropped : 0;
+        pack_lane(v_resume, &ln);
+        it[n++] = (struct efs_kv_item){EFS_KV_PUT, key, klen, v_resume, LANE_VAL};
+    }
     if (n == 0)
         return EFS_OK;
-    return packed_retirement_commit(kv, ino, gen, &retirement, it, n, EFS_META_LANE_FENCE_ITEMS);
+    rc = packed_retirement_commit(kv, ino, gen, &retirement, it, n, EFS_META_LANE_FENCE_ITEMS);
+    return rc == EFS_OK && full ? EFS_META_FENCE_MORE : rc;
+}
+
+int efs_meta_apply_lane_fence(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                              uint8_t lane, uint64_t new_epoch, uint64_t size,
+                              uint32_t tail_ci, uint8_t has_tail)
+{
+    struct lane_fence_page *pg;
+    int rc;
+
+    if (!kv || ino == 0 || lane >= EFS_META_LANES)
+        return EFS_ERR_INVAL;
+    pg = malloc(sizeof(*pg));
+    if (!pg)
+        return EFS_ERR_NOMEM;
+    rc = lane_fence_apply(kv, ino, gen, lane, new_epoch, size, tail_ci,
+                          has_tail, pg);
+    free(pg);
+    return rc;
 }
 
 /* Lane sweep batch: 64 chunk keys per KV batch (each a DEL + a GC record),
@@ -6891,6 +6926,8 @@ struct trunc_scan {
     uint32_t n;
     uint32_t cap;
     uint32_t dropped; /* chunk rows deleted — the lane's present count */
+    uint64_t epoch_below; /* nonzero: only rows with content_epoch below it */
+    int *full;            /* non-NULL: stop at the cap instead of NOMEM */
     int rc;
 };
 
@@ -6924,7 +6961,17 @@ del:
         ts->rc = chunk_gc_slots(val, vlen, &dead, &need);
     if (ts->rc != EFS_OK)
         return 1;
+    /* A resumed or replayed fence must never delete what was written
+     * under the new epoch after the truncate committed. */
+    if (ts->epoch_below && dead.content_epoch >= ts->epoch_below)
+        return 0;
     if (need > ts->cap - ts->n) {
+        /* Paged caller: commit this page, the next entry resumes. A row
+         * that alone exceeds an empty page is still a hard NOMEM. */
+        if (ts->full && ts->dropped) {
+            *ts->full = 1;
+            return 1;
+        }
         ts->rc = EFS_ERR_NOMEM;
         return 1;
     }
@@ -6984,15 +7031,22 @@ static int truncate_lane_range_del(struct efs_kv *kv, efs_ino_t ino,
                                    uint8_t (*gc_keys)[EFS_KV_KEY_MAX],
                                    uint8_t (*gc_vals)[EFS_META_GC_VAL],
                                    uint32_t *n, uint32_t cap,
-                                   uint32_t *dropped, struct packed_retirement *retirement)
+                                   uint32_t *dropped, struct packed_retirement *retirement,
+                                   uint64_t epoch_below, int *full)
 {
-    uint8_t pref[EFS_KV_KEY_MAX];
-    uint32_t plen = 0;
+    uint8_t pref[EFS_KV_KEY_MAX], start[EFS_KV_KEY_MAX];
+    uint32_t plen = 0, slen = 0;
+    uint64_t first = size ? (size + EFS_MIN_CHUNK_SIZE - 1) / EFS_MIN_CHUNK_SIZE : 0;
     struct trunc_scan ts;
     int rc;
 
+    if (first > UINT32_MAX)
+        return EFS_OK; /* no chunk index lies past this size */
     rc = efs_kv_key_chunk(efs_kv_lane_shard(ino, lane), ino, gen, lane, 0,
                           pref, &plen);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_chunk(efs_kv_lane_shard(ino, lane), ino, gen, lane,
+                              (uint32_t)first, start, &slen);
     if (rc != EFS_OK)
         return rc;
     plen = 20;
@@ -7009,9 +7063,14 @@ static int truncate_lane_range_del(struct efs_kv *kv, efs_ino_t ino,
     ts.gc_vals = gc_vals;
     ts.n = *n;
     ts.cap = cap;
-    rc = efs_kv_scan_prefix(kv, pref, plen, trunc_del_cb, &ts);
+    ts.epoch_below = epoch_below;
+    ts.full = full;
+    /* Seek past the kept rows: a paged truncate rescans per page. */
+    rc = efs_kv_scan_from(kv, pref, plen, start, slen, trunc_del_cb, &ts);
     if (ts.rc != EFS_OK)
         return ts.rc;
+    if (full && *full)
+        rc = EFS_OK; /* the callback stopped the scan at the page cap */
     *n = ts.n;
     *dropped = ts.dropped;
     return rc;
@@ -7277,7 +7336,7 @@ static int truncate_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
         rc = truncate_lane_range_del(kv, ino, row.generation, (uint8_t)i,
                                    t->size, tail_ci, has_tail, it, del_keys,
                                    gc_keys, gc_vals, &n, TRUNC_IT_CAP,
-                                   &dropped, &retirement);
+                                   &dropped, &retirement, 0, NULL);
         if (rc != EFS_OK)
             return rc;
         if (dropped && nf > n0)

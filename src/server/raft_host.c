@@ -1870,6 +1870,13 @@ static int apply_lane_fence_cmd(struct efs_raft_host *h, const uint8_t *cmd,
      * an IO error must stop the truncate before the inode-group entry
      * advances the epoch over chunks that are still there. Ring-only in
      * host_apply. */
+    if (rc == EFS_META_FENCE_MORE) {
+        /* A committed page; the proposer re-proposes the same fence. */
+        APPLY_LOG("raft-host: applied lane-fence page index=%llu ino=%llu lane=%u more\n",
+                  (unsigned long long)index, (unsigned long long)ino,
+                  (unsigned)cmd[17]);
+        return rc;
+    }
     if (rc != EFS_OK) {
         fprintf(stderr, "raft-host: apply lane-fence rc=%d index=%llu ino=%llu\n",
                 rc, (unsigned long long)index, (unsigned long long)ino);
@@ -16998,6 +17005,34 @@ collect:
  * client-stamped time when the caller sent SIZE|MTIME (the client's truncate
  * always does — it marks the truncate newer than any in-flight REPORT), or
  * 0 to stamp now. */
+/* Fence one lane at new_epoch and drain its rows past size: each LANE_FENCE
+ * entry deletes one bounded page and answers EFS_META_FENCE_MORE while rows
+ * remain. Re-proposing the same command resumes (idempotent at an equal
+ * epoch), so a failed or retried truncate converges. */
+static int host_lane_fence_drain(struct efs_raft_host *h, uint8_t group,
+                                 efs_ino_t ino, uint64_t gen, uint8_t lane,
+                                 uint64_t new_epoch, uint64_t size,
+                                 uint32_t tci, uint8_t has_tail, int *hint)
+{
+    uint8_t fcmd[HOST_LANE_FENCE_LEN];
+    uint32_t flen = 0, pages = 0;
+    int rc = pack_lane_fence_cmd(fcmd, &flen, ino, gen, lane, new_epoch, size,
+                                 tci, has_tail);
+
+    while (rc == EFS_OK) {
+        rc = host_propose_wait(h, group, fcmd, flen, hint);
+        pages++;
+        if (rc != EFS_META_FENCE_MORE)
+            break;
+        rc = EFS_OK;
+    }
+    if (pages > 1)
+        fprintf(stderr, "raft-host: truncate ino=%llu lane=%u epoch=%llu pages=%u rc=%d\n",
+                (unsigned long long)ino, (unsigned)lane,
+                (unsigned long long)new_epoch, pages, rc);
+    return rc;
+}
+
 static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
                           uint32_t mtime_nsec,
                           struct efs_msg_inode_reply *out)
@@ -17144,15 +17179,10 @@ static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
         int k;
 
         for (k = 0; k < ncross && rc == EFS_OK; k++) {
-            uint8_t fcmd[HOST_LANE_FENCE_LEN];
-            uint32_t flen = 0;
             uint8_t fg = efs_raft_shard_group(efs_kv_lane_shard(ino, cross[k]));
 
-            rc = pack_lane_fence_cmd(fcmd, &flen, ino, row.generation,
-                                     cross[k], new_epoch, size, tci,
-                                     has_tail);
-            if (rc == EFS_OK)
-                rc = host_propose_wait(h, fg, fcmd, flen, &hint);
+            rc = host_lane_fence_drain(h, fg, ino, row.generation, cross[k],
+                                       new_epoch, size, tci, has_tail, &hint);
         }
     }
     now = now_ns();
@@ -17166,8 +17196,28 @@ static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
         rc = EFS_ERR_INVAL;
     if (rc == EFS_OK)
         rc = host_propose(h, g, cmd, clen, &idx, &term, &hint);
+    /* The verdict, not just the index: a TRUNCATE that refused (NOMEM past
+     * its item cap, BUSY with open append reservations) wrote nothing, and
+     * answering OK left the old size behind a successful truncate. */
     if (rc == EFS_OK)
-        rc = host_wait_settled(h, g, idx, term, &hint);
+        rc = host_wait_verdict(h, g, idx, term, &hint);
+    if (rc == EFS_ERR_NOMEM && same_mask) {
+        /* Too many rows for one entry: fence and drain the same-group lanes
+         * page by page first (same epoch as the TRUNCATE), then the TRUNCATE
+         * finds them fenced with nothing left past the new size. */
+        uint64_t new_epoch = row.content_epoch + 1;
+
+        rc = EFS_OK;
+        for (i = 0; i < EFS_META_LANES && rc == EFS_OK; i++)
+            if (same_mask & (1ULL << i))
+                rc = host_lane_fence_drain(h, g, ino, row.generation,
+                                           (uint8_t)i, new_epoch, size, tci,
+                                           has_tail, &hint);
+        if (rc == EFS_OK)
+            rc = host_propose(h, g, cmd, clen, &idx, &term, &hint);
+        if (rc == EFS_OK)
+            rc = host_wait_verdict(h, g, idx, term, &hint);
+    }
     /* Cross-group tail: the fence on its lane already kept tail_ci and
      * rejects old-epoch publishes, so the zero-filled tail candidate goes
      * up as a lane-local publish under the NEW epoch after the commit.

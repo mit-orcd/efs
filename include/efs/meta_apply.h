@@ -18,7 +18,15 @@
 
 #define EFS_META_LANES 64
 /* Shared with admission accounting; changing apply capacity changes its charge. */
-#define EFS_META_LANE_FENCE_ITEMS (3u + 32u + 32u)
+/* One LANE_FENCE entry's page: the stamp, history and authority PUTs plus
+ * chunk DELs with their GC records. A lane with more rows past the new
+ * size is fenced by the first entry and drained by re-proposals of the same
+ * command; efs_meta_apply_lane_fence answers EFS_META_FENCE_MORE until done.
+ * Far below the KV apply scope's 32768-key bound. */
+#define EFS_META_LANE_FENCE_ITEMS 4096u
+/* Positive apply verdict: the fence committed a full page; propose the same
+ * command again. Never a Raft-level retry of the index. */
+#define EFS_META_FENCE_MORE 1
 #define EFS_META_TRUNCATE_ITEMS (EFS_META_LANES + 1u + EFS_META_LANES * 32u * 2u + 3u)
 #define EFS_META_INO_BYTES   128
 #define EFS_META_DENT_BYTES  20
