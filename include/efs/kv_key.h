@@ -14,11 +14,9 @@
 #define EFS_KV_KIND_EXPIRY_POLICY 42 /* directory FileID: operator policy */
 #define EFS_KV_KIND_EXPIRY 43 /* FileID: fixed deadline and monotonic revision */
 #define EFS_KV_KIND_EXPIRY_INDEX 44 /* group anchor/deadline/FileID: revision */
-#define EFS_KV_KIND_REPAIR_JOB 40 /* staged group-anchor / job UUID: durable debt */
-#define EFS_KV_KIND_REPAIR_FLOOR 41 /* terminal job UUID/epoch revocation; retained */
-/* 36-39 are reserved: never reuse. Snapshot import refuses them. */
+/* 36-41 are reserved: never reuse. Snapshot import refuses them. */
 #define EFS_KV_KIND_RESERVED_MIN 36
-#define EFS_KV_KIND_RESERVED_MAX 39
+#define EFS_KV_KIND_RESERVED_MAX 41
 #define EFS_KV_KIND_QUERY_POLICY 35 /* root export: version:8, mask:4 */
 #define EFS_KV_KIND_CLOSE_STEP 34 /* staged replay-identified bounded close obligation */
 #define EFS_KV_KIND_CLOSE_CLEANUP 33 /* durable deferred final-close effects */

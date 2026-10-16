@@ -35,6 +35,20 @@ Experimental tiny-file packing and container-storage work was removed from
 devel on October 16; its code, tests and records are kept at tag
 `archive/packing-containers-20261016` (branch `packing-containers`).
 
+Experimental group A was removed from devel on October 16: the manual repair
+experiment, the staged D25 logical resize, data-GC admission, Raft admission
+pressure, receiver feedback with early retire and group drain, and
+`EFS_SKIP_META_FLUSH`. The last commit with them is tag
+`archive/experimental-group-a-20261016` (`d57da8af6`). Their durable numbers
+fail closed: Raft tags 45–51/55–57 halt apply and are refused on submit, KV
+kinds 36–41 and wire messages 131–150 stay reserved, PREPARE kind 9 is
+refused, and daemons refuse roots carrying repair markers
+(`tests/test_retired_root_markers.py`). **Removal PASS (scoped):** node9901
+`make all tests` clean; `make test` 765 commands with 4 environmental
+failures: LeakSanitizer is broken on that host (a trivial leak program fails
+too; the three affected tests pass with `detect_leaks=0`), and
+`check-architecture` needs the omitted `results/` (5/5 on the checkout).
+
 [RDMA credit overrun](orcd-mini-rdma-credit-20261016.md): **scoped PASS;
 orcd-mini rollout NOTRUN.** DATA plus CREDIT frames could exceed a peer's
 posted receives; the RNR retry turned 30 µs request/reply rounds into 2 ms

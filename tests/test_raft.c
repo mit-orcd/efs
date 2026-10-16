@@ -85,9 +85,6 @@ struct app {
     int n;
     int park_apply;
     uint64_t apply_limit;
-    unsigned pressure_mask;
-    struct efs_raft *owner;
-    uint64_t pending_limit;
     uint8_t last;
     uint64_t snap_at;
     int wide; /* 40-byte snapshot so a small chunk size spans ≥ 3 chunks */
@@ -1308,7 +1305,6 @@ static void test_grow_3_to_5(void)
     free_n(&n, st, 5);
 }
 
-static int pressure_admit(void *app, const struct efs_raft_entry *e, uint32_t n, int source);
 
 static void test_leadership_transfer(void)
 {
@@ -1423,28 +1419,20 @@ static void test_leadership_transfer(void)
               "rejoined caught-up peer becomes eligible after fresh response");
         free_n(&n,st,3);
     }
-    for (int fence = 0; fence < 3; fence++) {
+    for (int fence = 0; fence < 3; fence += 2) {
         struct net n;struct efs_raft_store *st[3];struct app app[3];struct efs_raft_cfg cfg;
         int lid,target;uint64_t term;
         boot_n(&n,st,app,&cfg,3,0x7);elect(&n,30);lid=leader_id(&n);
         if(lid<0){CHECK(0,"fenced transfer leader");free_n(&n,st,3);return;}
         target=(lid+1)%3;term=efs_raft_term(n.r[target]);
         if(fence==0)efs_raft_allow_campaign(n.r[target],0);
-        if(fence==1){
-            /* Reopen the caught-up target with the production admission callback. */
-            efs_raft_free(n.r[target]);
-            cfg.id=target;cfg.store=st[target];cfg.app=&app[target];cfg.admit=pressure_admit;
-            n.r[target]=test_raft_new(&cfg);app[target].owner=n.r[target];
-            elect(&n,2);app[target].pressure_mask=1u<<EFS_RAFT_ADMIT_LEAD;
-            term=efs_raft_term(n.r[target]);
-        }
         if(fence==2)n.refuse_transfer=1;
         CHECK(efs_raft_transfer(n.r[lid],target)==(fence==2?EFS_ERR_IO:EFS_OK),
               "transfer observes transport refusal or submits fenced trigger");
         CHECK(efs_raft_role(n.r[lid])==EFS_RAFT_FOLLOWER && !efs_raft_read_ready(n.r[lid]),
               "ambiguous or fenced trigger cannot restore source authority");
         CHECK(efs_raft_term(n.r[target])==term && efs_raft_role(n.r[target])==EFS_RAFT_FOLLOWER,
-              "transfer respects campaign and pressure fences");
+              "transfer respects campaign fence");
         CHECK(elect(&n,60)==1,"normal quorum election recovers fenced transfer");
         free_n(&n,st,3);
     }
@@ -2663,29 +2651,20 @@ static void test_recv_batch_noop(void)
     }
 }
 
-static uint32_t overlap_admitted;
-static uint32_t overlap_admit_max;
-static int overlap_refuse;
-static int overlap_admit(void *app,const struct efs_raft_entry *e,uint32_t n,int source)
-{
-    (void)app;(void)e;(void)source;overlap_admitted=n;
-    if(n>overlap_admit_max)overlap_admit_max=n;
-    return overlap_refuse?EFS_ERR_BUSY:EFS_OK;
-}
-
 /* Ordinary data + matching old prefix/new suffix must retain one barrier.
  * Exercise starting and extending holds, fresh reads, conflicts and EIO. */
 static void test_recv_batch_overlap(void)
 {
     for (unsigned enabled=0;enabled<2;enabled++)
     for (unsigned kind=0;kind<10;kind++) {
-        memset(&recv_test,0,sizeof(recv_test));overlap_admitted=overlap_admit_max=0;overlap_refuse=kind==6;
+        if(kind==6)continue; /* former admission-refusal case */
+        memset(&recv_test,0,sizeof(recv_test));
         struct efs_raft_store *store=efs_raft_mem_create();
         struct efs_raft_store ops=*store;recv_test.original=ops;
         ops.append=recv_test_append;ops.batch_begin=recv_test_begin;ops.batch_end=recv_test_end;
         struct efs_raft_cfg cfg={0};cfg.id=1;cfg.n=3;cfg.group=2;cfg.election_ticks=10;cfg.heartbeat_ticks=1;
         cfg.store=&ops;cfg.store_ctx=store;cfg.send=recv_test_send;cfg.apply=recv_test_apply;
-        cfg.batch_overlap=(int)enabled;cfg.admit=overlap_admit;
+        cfg.batch_overlap=(int)enabled;
         struct efs_raft *r=test_raft_new(&cfg);CHECK(r!=NULL,"overlap fixture");
         struct efs_raft_msg m[3];memset(m,0,sizeof(m));
         m[0].type=EFS_RAFT_MSG_AE_REQ;m[0].from=0;m[0].to=1;m[0].group=2;m[0].term=2;m[0].boot_id=2;
@@ -2714,95 +2693,16 @@ static void test_recv_batch_overlap(void)
         if(kind==2)CHECK(rc==EFS_ERR_PROTO,"overlap never hides committed conflict");
         else if(kind==3){CHECK(rc==EFS_ERR_IO && !recv_test.replies && !recv_test.applies,"overlap failed sync sends no ACK/apply");CHECK(efs_raft_tick(r)==EFS_ERR_IO,"overlap sync failure fenced");}
         else if(kind==5)CHECK(rc==EFS_OK,"changed term uses normal conflict path");
-        else if(kind==6){uint64_t last,term;CHECK(rc==EFS_OK && ops.last(store,&last,&term)==EFS_OK && last==0,"refused suffix never persisted");}
         else if(kind==7){uint64_t last,term;CHECK(rc==EFS_OK && ops.last(store,&last,&term)==EFS_OK && last==1 && recv_test.applies==1,"retired boot frame cannot enter cohort or advance log");}
         else if(kind==8)CHECK(rc==EFS_OK && recv_test.barriers==3 && recv_test.applies==3,"uncommitted conflict keeps separate persistence/truncation boundaries");
         else {
             CHECK(rc==EFS_OK && recv_test.applies==3,"overlap applies exact committed suffix");
             CHECK(recv_test.barriers==(enabled?((kind==1||kind==9)?2u:1u):(kind==4?2u:3u)),"only verified non-read overlap joins durable boundaries");
-            CHECK(overlap_admitted==1 && overlap_admit_max==1,"only novel suffix admitted");
         }
         CHECK(!recv_test.depth,"overlap releases every hold");
         efs_raft_free(r);efs_raft_mem_free(store);
         free(big);
     }
-    overlap_refuse=0;
-}
-
-static int pressure_admit(void *app, const struct efs_raft_entry *e,
-                           uint32_t n, int source)
-{
-    struct app *a=app;
-    uint64_t count,bytes,logs;
-    (void)e;
-    if (a->pressure_mask & (1u<<source)) return EFS_ERR_BUSY;
-    if (source==EFS_RAFT_ADMIT_LOCAL && a->pending_limit) {
-        if (efs_raft_backlog(a->owner,&count,&bytes,&logs) != EFS_OK) return EFS_ERR_IO;
-        if (count+n>a->pending_limit) return EFS_ERR_BUSY;
-    }
-    return EFS_OK;
-}
-
-static uint64_t pressure_command_work(const uint8_t *cmd, uint32_t n)
-{
-    return n && cmd[0]==42 ? 65536 : n;
-}
-
-static void test_pressure_quorum_and_owned_backlog(void)
-{
-    struct net net={.n=3};
-    struct app app[3]={{0}};
-    struct efs_raft_store *store[3];
-    struct efs_raft_cfg cfg={0};
-    int leader,follower;
-    uint8_t cmd=42;
-    uint64_t index=0,count=0,bytes=0,logs=0,last=0,term=0;
-    cfg.n=3;cfg.send=send_now;cfg.net=&net;cfg.apply=apply_cmd;cfg.admit=pressure_admit;
-    for (int i=0;i<3;i++) {
-        store[i]=efs_raft_mem_create();cfg.id=i;cfg.store=store[i];cfg.store_ctx=store[i];
-        cfg.app=&app[i];cfg.election_ticks=4+i*4;cfg.heartbeat_ticks=2;
-        net.r[i]=test_raft_new(&cfg);app[i].owner=net.r[i];
-    }
-    CHECK(elect(&net,40)==1,"pressure cluster elects");
-    leader=leader_id(&net);follower=(leader+1)%3;
-    CHECK(leader>=0,"pressure cluster leader");
-    app[follower].pressure_mask=(1u<<EFS_RAFT_ADMIT_RECV)|(1u<<EFS_RAFT_ADMIT_LEAD);
-    CHECK(store[follower]->last(store[follower],&last,&term)==EFS_OK,"paused follower tail");
-    int batches=net.batches[follower];
-    for (int i=0;i<100;i++) CHECK(efs_raft_propose(net.r[leader],&cmd,1,&index)==EFS_OK,
-                                 "healthy quorum progresses with pressure follower");
-    CHECK(efs_raft_applied(net.r[leader])==index,"healthy quorum applies all acknowledged work");
-    CHECK(efs_raft_applied(net.r[follower])<=last,"pressure accepts no new suffix");
-    CHECK(net.batches[follower]-batches<=2,"pressure backoff avoids per-proposal data storm");
-    CHECK(elect(&net,80)==1 && leader_id(&net)==leader,"pressure follower does not disrupt healthy quorum");
-    app[follower].pressure_mask=0;
-    CHECK(elect(&net,40)==1,"released follower recovers");
-    CHECK(efs_raft_applied(net.r[follower])==efs_raft_commit(net.r[leader]),"released follower converges");
-    CHECK(app[follower].last==cmd,"recovery preserves command bytes");
-    app[leader].pressure_mask=1u<<EFS_RAFT_ADMIT_LOCAL;
-    CHECK(store[leader]->last(store[leader],&last,&term)==EFS_OK,"leader tail before refusal");
-    CHECK(efs_raft_propose(net.r[leader],&cmd,1,&index)==EFS_ERR_BUSY,"pre-proposal refusal is explicit");
-    uint64_t after;
-    CHECK(store[leader]->last(store[leader],&after,&term)==EFS_OK && after==last,"refusal appended nothing");
-    app[leader].pressure_mask=0;app[leader].pending_limit=3;
-    for (int i=0;i<3;i++) if(i!=leader) net.drop[i]=1;
-    for (int i=0;i<3;i++) CHECK(efs_raft_propose(net.r[leader],&cmd,1,&index)==EFS_OK,"accepted outstanding work");
-    CHECK(efs_raft_backlog(net.r[leader],&count,&bytes,&logs)==EFS_OK && count==3 && bytes==3,
-          "accepted log owns exact pending bytes independently of RPC lifetime");
-    uint64_t work=0;
-    CHECK(efs_raft_backlog_charge(net.r[leader],pressure_command_work,UINT64_MAX,&work)==EFS_OK && work==3*65536,
-          "pending tiny commands retain expanded work independently of RPC lifetime");
-    CHECK(efs_raft_propose(net.r[leader],&cmd,1,&index)==EFS_ERR_BUSY,"unapplied work consumes capacity");
-    for (int i=0;i<3;i++) net.drop[i]=0;
-    CHECK(elect(&net,40)==1,"quorum returns");
-    CHECK(efs_raft_backlog(net.r[leader],&count,&bytes,&logs)==EFS_OK && !count && !bytes,
-          "actual apply releases accepted capacity");
-    CHECK(efs_raft_backlog_charge(net.r[leader],pressure_command_work,UINT64_MAX,&work)==EFS_OK && !work,
-          "actual apply releases expanded pending work");
-    app[leader].pressure_mask=1u<<EFS_RAFT_ADMIT_LEAD;
-    CHECK(efs_raft_step_down(net.r[leader])==EFS_OK,"pressured leader relinquishes role");
-    CHECK(elect(&net,80)==1 && leader_id(&net)!=leader,"healthy capacity wins leadership");
-    for(int i=0;i<3;i++){efs_raft_free(net.r[i]);efs_raft_mem_free(store[i]);}
 }
 
 int main(void)
@@ -2812,7 +2712,6 @@ int main(void)
         test_readindex_control();
         test_read_quorum_before_apply();
         test_read_applied_floor();
-        test_pressure_quorum_and_owned_backlog();
         test_follower_apply_retry();
         test_recv_batch();
         test_recv_batch_noop();

@@ -71,21 +71,6 @@ struct efs_kv_lsm_stats {
     uint32_t n_l1;
 };
 int efs_kv_lsm_stats(struct efs_kv *kv, struct efs_kv_lsm_stats *out);
-/* D30 observation only: never rejects or waits for already committed apply.
- * Thresholds describe this engine, not a process RSS or Raft log bound.
- * soft starts at 3/4 of the unchanged production L0 cap; hard marks deferred
- * flush or an oversized memtable. The admission owner must additionally
- * reserve concurrent/in-flight work and recovery capacity before proposing. */
-struct efs_kv_lsm_pressure {
-    struct efs_kv_lsm_stats shape;
-    uint64_t memtable_target;
-    uint64_t l0_soft_bytes;
-    uint64_t l0_hard_bytes;
-    int soft;
-    int hard;
-    int io_failed;
-};
-int efs_kv_lsm_pressure(struct efs_kv *kv, struct efs_kv_lsm_pressure *out);
 
 /* 1 when L0 is within one flush of the file cap. Publish admission
  * returns BUSY; the apply path does not wait. */

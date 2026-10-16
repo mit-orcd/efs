@@ -32,7 +32,7 @@ for tag in tags:
             rows=[json.loads(l) for l in path.read_text().splitlines()]
             before=min(rows,key=lambda r:abs(r['mono_us']/1e6-origin-lo['seconds']))
             after=min(rows,key=lambda r:abs(r['mono_us']/1e6-origin-hi['seconds']))
-            counts={k:after['counters'][k]-before['counters'][k] for k in ('sync','sync_error','inbox_drop','drop_data','drop_empty','drop_other','flow_busy')}
+            counts={k:after['counters'][k]-before['counters'][k] for k in ('sync','sync_error','inbox_drop','drop_data','drop_empty','drop_other')}
             h={key:dict(n=after['hist'][key]['n']-before['hist'][key]['n'],
                 sum=after['hist'][key]['sum']-before['hist'][key]['sum']) for key in ('sync_us','wal_entries','kv_release_us','applied_persist_us')}
             assert all(v>=0 for v in counts.values()) and all(v['n']>=0 and v['sum']>=0 for v in h.values()),'counter reset inside timed window'

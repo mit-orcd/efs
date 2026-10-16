@@ -1519,54 +1519,6 @@ static void test_metadata_dirty_hints(void)
     }
 }
 
-static void test_pressure_observation(void)
-{
-    struct efs_kv_lsm_pressure p;
-    struct efs_kv *kv, *mem;
-    struct kv_lsm *l;
-    uint64_t saved_bytes;
-
-    rmtree(g_dir);
-    kv = open_store(EFS_KV_LSM_SYNC, 1024);
-    CHECK(kv != NULL, "pressure store opens");
-    if (!kv) return;
-    CHECK(efs_kv_lsm_pressure(kv, &p) == EFS_OK && !p.soft && !p.hard,
-          "empty engine is not pressured");
-    CHECK(p.memtable_target == 1024 && p.l0_hard_bytes == (1ull << 30) &&
-          p.l0_soft_bytes == (768ull << 20), "explicit unchanged cap and early watermark");
-    l = kv->ctx;
-    pthread_mutex_lock(&l->mu);
-    saved_bytes = l->mt.bytes;
-    l->mt.bytes = 2048;
-    pthread_mutex_unlock(&l->mu);
-    CHECK(efs_kv_lsm_pressure(kv, &p) == EFS_OK && p.soft && p.hard,
-          "deferred oversized memtable reports pressure");
-    pthread_mutex_lock(&l->mu);
-    l->mt.bytes = saved_bytes;
-    l->io_failed = 1;
-    pthread_mutex_unlock(&l->mu);
-    CHECK(efs_kv_lsm_pressure(kv, &p) == EFS_OK && p.io_failed && p.hard,
-          "poisoned persistence cannot report healthy capacity");
-    pthread_mutex_lock(&l->mu);
-    l->io_failed = 0;
-    pthread_mutex_unlock(&l->mu);
-    CHECK(efs_kv_lsm_pressure(kv, &p) == EFS_OK && !p.hard,
-          "observation follows recovered state");
-    CHECK(put_s(kv, "pressure", "committed") == EFS_OK,
-          "observation does not alter apply semantics");
-    efs_kv_lsm_close(kv);
-    kv = open_store(EFS_KV_LSM_SYNC, 1024);
-    CHECK(kv && get_is(kv, "pressure", "committed") == EFS_OK,
-          "observed engine retains exact durable bytes");
-    if (kv) efs_kv_lsm_close(kv);
-    mem = efs_kv_mem_create();
-    CHECK(efs_kv_lsm_pressure(mem, &p) == EFS_ERR_INVAL,
-          "non-LSM engine is unavailable rather than zero pressure");
-    efs_kv_mem_free(mem);
-    CHECK(efs_kv_lsm_pressure(NULL, &p) == EFS_ERR_INVAL &&
-          efs_kv_lsm_pressure(NULL, NULL) == EFS_ERR_INVAL, "invalid pressure inputs");
-}
-
 
 /* Recovery relies on a cursor sharing the exact atomic WAL record, not a
  * later file sync. Test staged reads/scans, exclusion, abort and real exits. */
@@ -1748,7 +1700,6 @@ int main(void)
     }
 
     test_apply_scope();
-    test_pressure_observation();
     rmtree(g_dir);
     test_semantics();
     test_reopen_wal();

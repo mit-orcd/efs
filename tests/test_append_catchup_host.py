@@ -7,11 +7,6 @@ source = (root / 'src/server/raft_host.c').read_text()
 def function(name):
     begin = source.index('static int ' + name + '(')
     return source[begin:source.index('\n}', begin) + 2]
-pressure=source[source.index('static uint64_t host_pressure_add('):source.index('static int host_pressure_recovery(')]
-# This minimal adapter fixture owns tag52 only. Tag53's real plan size and
-# admission policy are compiled against production headers in host_pressure.
-pressure,n=re.subn(r'    case EFS_MD_CMD_APPEND_ATOMIC:\n.*?        break;\n','',pressure,flags=re.S)
-assert n==1
 code = r'''
 #include <stdint.h>
 #include "efs/meta_cmd.h"
@@ -96,7 +91,7 @@ static int host_complete_single_append(struct efs_raft_host *h,efs_ino_t ino,uin
  const struct efs_meta_row *row,const struct efs_opid *owner,int *hint,int *handled){
  (void)h;(void)ino;(void)sz;(void)row;(void)owner;(void)hint;*handled=0;return 0;
 }
-''' + pressure + function('host_resolve_caught_up') + '\n' + function('apply_append_catchup_cmd') + r'''
+''' + function('host_resolve_caught_up') + '\n' + function('apply_append_catchup_cmd') + r'''
 static void reset(void){
  watermark=80000;remaining=20000;completed=proposals=retirements=authorities=apply_calls=0;
  state_error=authority_error=inode_error=proposal_error=retirement_error=metadata_error=0;
@@ -123,12 +118,6 @@ int main(void){
   reset();state_error=EFS_ERR_IO;assert(host_resolve_caught_up(&h,11,80000,owned?&id:NULL,&hint)==EFS_ERR_IO&&!proposals);
   reset();watermark=0;assert(!host_resolve_caught_up(&h,11,80000,owned?&id:NULL,&hint)&&!proposals&&!authorities);
  }
- uint8_t charge_cmd[38]={EFS_MD_CMD_APPEND_CATCHUP};
- wr32be(charge_cmd+33,1);uint64_t small=host_pressure_command_charge(charge_cmd,38);
- wr32be(charge_cmd+33,20000);uint64_t large=host_pressure_command_charge(charge_cmd,38);
- wr32be(charge_cmd+33,EFS_META_APPEND_CATCHUP_MAX);uint64_t maximum=host_pressure_command_charge(charge_cmd,38);
- assert(small<16384&&large>small&&maximum>large);
- assert(host_pressure_command_charge(charge_cmd,37)>=maximum);
  puts("append catchup host: one completion proposal for 20k, strict route/wire, failed verdicts, partial REPORT and interrupted retirement retry PASS");
 }
 '''

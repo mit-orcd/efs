@@ -38,7 +38,7 @@ def samples():
     assert files,'no preserved nonempty payload samples found'
     return dict(root_first64_names=root,visited_directories=seen,samples=files,scope='Bounded sample, not full namespace inventory or full-payload acceptance')
 stopped=False;changed=False
-env=dict(os.environ,EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_TRANSPORT='tcp',EFS_CLUSTER='nuc',EFS_DIRECT_IO='1',EFS_MD_RAFT_N='4',EFS_RAFT_FLOW='1',EFS_RAFT_FLOW_EARLY_RETIRE='0',EFS_RAFT_BATCH_OVERLAP='0',EFS_RAFT_BATCH_NOOP='0',EFS_RAFT_GROUP_DRAIN='0',EFS_RAFT_APPLIED_INTERVAL_MS='10',EFS_BATCH_OBS='0')
+env=dict(os.environ,EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_TRANSPORT='tcp',EFS_CLUSTER='nuc',EFS_DIRECT_IO='1',EFS_MD_RAFT_N='4',EFS_RAFT_BATCH_OVERLAP='0',EFS_RAFT_BATCH_NOOP='0',EFS_RAFT_APPLIED_INTERVAL_MS='10',EFS_BATCH_OBS='0')
 def start(label):
     with (out/(label+'.log')).open('w') as log:
         rc=subprocess.run(['bash','/data1/efs/w97-latest-20261010/start-preserved.sh'],env=env,stdout=log,stderr=subprocess.STDOUT,timeout=300).returncode

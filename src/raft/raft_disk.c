@@ -125,8 +125,6 @@ void raft_group_install(struct raft_disk_group *g, uint64_t index,
                         uint64_t term, uint8_t *cmd, uint32_t clen)
 {
     uint32_t off = (uint32_t)(index - (g->log_base + 1));
-    uint64_t old = off < g->n ? g->log[off].clen : 0;
-    uint64_t origin = g->n ? g->log[0].prefix_bytes - g->log[0].clen : 0;
 
     if (off < g->n) {
         g->bytes_all -= g->log[off].clen;
@@ -145,11 +143,6 @@ void raft_group_install(struct raft_disk_group *g, uint64_t index,
     g->log[off].clen = clen;
     g->log[off].cmd = cmd;g->log[off].payload_off=0;
     if(cmd)g->cache_bytes+=clen;
-    g->log[off].prefix_bytes = (off ? g->log[off-1].prefix_bytes : origin) + clen;
-    for (uint32_t j=off+1; j<g->n; j++) {
-        if (clen >= old) g->log[j].prefix_bytes += clen-old;
-        else g->log[j].prefix_bytes -= old-clen;
-    }
     cache_trim(g,index);
 }
 
@@ -584,36 +577,6 @@ static uint64_t disk_log_floor(void *ctx)
     return floor;
 }
 
-static uint64_t disk_log_charge_after(void *ctx, uint64_t index,
-                                      efs_raft_charge_fn charge, uint64_t limit)
-{
-    struct raft_disk_group *m = group_of(ctx);
-    uint64_t total = 0;
-    pthread_mutex_lock(&m->d->mu);
-    uint64_t first = index > m->log_base ? index-m->log_base : 0;
-    for (uint64_t i=first; i<m->n && total<limit; i++) {
-        uint64_t next = charge(m->log[i].cmd,m->log[i].clen);
-        total = next >= limit-total ? limit : total+next;
-    }
-    pthread_mutex_unlock(&m->d->mu);
-    return total;
-}
-
-static uint64_t disk_log_bytes_after(void *ctx, uint64_t index)
-{
-    struct raft_disk_group *g = group_of(ctx);
-    uint64_t n = 0;
-    pthread_mutex_lock(&g->d->mu);
-    if (g->n && index < g->log_base + g->n) {
-        uint64_t base = g->log[0].prefix_bytes - g->log[0].clen;
-        if (index > g->log_base)
-            base = g->log[index-g->log_base-1].prefix_bytes;
-        n = g->log[g->n-1].prefix_bytes - base;
-    }
-    pthread_mutex_unlock(&g->d->mu);
-    return n;
-}
-
 static uint64_t disk_log_new_bytes(void *ctx)
 {
     struct raft_disk_group *g = group_of(ctx);
@@ -643,8 +606,6 @@ static const struct efs_raft_store disk_ops = {
     .batch_end = disk_batch_end,
     .log_floor = disk_log_floor,
     .log_new_bytes = disk_log_new_bytes,
-    .log_bytes_after = disk_log_bytes_after,
-    .log_charge_after = disk_log_charge_after,
 };
 
 /* --- open / close ---------------------------------------------------- */

@@ -46,7 +46,7 @@
 #define EFS_TXN_EXCL_VALUE 7
 #define EFS_TXN_CONTENT_FENCE 8 /* atomic inode/lane stamp + history pair */
 #define EFS_TXN_LANE_BOOTSTRAP 10 /* inode guard + lane authority adoption */
-#define EFS_TXN_CONTENT_RESIZE 9 /* coordinated shrink or epoch-preserving extension */
+#define EFS_TXN_RESERVED_9 9 /* reserved: PREPARE refuses it; never reuse */
 
 #define EFS_TXN_UNDECIDED 0
 #define EFS_TXN_COMMIT    1
@@ -148,8 +148,7 @@ int efs_txn_prepare_excl_pair(struct efs_kv *kv, const struct efs_txid *t,
                               const struct efs_txn_parts *p,
                               const struct efs_txn_value_cas *requests,
                               uint32_t count);
-/* Same atomic validation, up to three distinct keys on one shard. The
- * resize inode authority can include retirement of a closed append cursor. */
+/* Same atomic validation, up to three distinct keys on one shard. */
 int efs_txn_prepare_excl_batch(struct efs_kv *kv, const struct efs_txid *t,
                                const struct efs_txn_parts *p,
                                const struct efs_txn_value_cas *requests,

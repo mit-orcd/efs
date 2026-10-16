@@ -27,7 +27,7 @@ base=Path('/data1/efs');root=base/'mnt/package2-deterministic-lifecycle'
 assert os.getuid()!=0 and os.environ.get('USER')=='efs' and root.is_dir()
 os.environ['EFS_QUERY_TEST_HOST']='127.0.0.1'
 env=dict(os.environ,EFS_CLUSTER='amd',EFS_COMMANDS='1',EFS_COMMANDS_SERVER='1',
-         EFS_EXPIRY='0',EFS_REPAIR_EXPERIMENT='0',EFS_TRANSPORT='tcp')
+         EFS_EXPIRY='0',EFS_TRANSPORT='tcp')
 def feature_state(port):
     with socket.create_connection(('127.0.0.1',port),7) as conn:
         body=b'package2'.ljust(256,b'\0')
@@ -77,7 +77,7 @@ try:
 finally:
     # Restore daemons before touching FUSE mounts. The generic start script's
     # mkdir -p on a degraded mounted root can fail or block before node launch.
-    env.update(EFS_MD_RAFT_N='4',EFS_DATA_GC_ADMISSION='1',EFS_GC_BACKLOG_IDLE_MS='20')
+    env.update(EFS_MD_RAFT_N='4',EFS_GC_BACKLOG_IDLE_MS='20')
     for n in a.stop_nodes:
         pidfile=base/('logs/efsd-n%d.pid'%n)
         old=int(pidfile.read_text())

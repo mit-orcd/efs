@@ -127,8 +127,7 @@ enum efs_msg_type {
      * efs_wire_raft_encode (wire.h); the reply is a delivery ack only —
      * Raft tolerates loss, so processing is asynchronous. */
     EFS_MSG_RAFT = 93,
-    /* Legacy empty transport reply, or EFS_RAFT_FLOW_LEN admission bytes
-     * defined in raft_flow.h. Neither form is a durable consensus ACK. */
+    /* Empty transport reply; never a durable consensus ACK. */
     EFS_MSG_RAFT_REPLY = 94,
     /* Propose on a group leader (scratch/mgmt + host cross-group submit).
      * Empty payload: idempotent MKFS on the ROOT group's leader (not the
@@ -193,15 +192,7 @@ enum efs_msg_type {
     EFS_MSG_STORAGE_SESSION_FENCE_REPLY = 128,
     EFS_MSG_PUT_TICKETED = 129,
     EFS_MSG_PUT_TICKETED_REPLY = 130,
-    /* 131-144 are reserved: never reuse. */
-    /* Narrow default-off repair experiment; exact version/build envelope is
-     * mandatory. No legacy reinterpretation or RPC store initializer. */
-    EFS_MSG_REPAIR_STORE_ID = 145,
-    EFS_MSG_REPAIR_STORE_ID_REPLY = 146,
-    EFS_MSG_REPAIR_TARGET = 147,
-    EFS_MSG_REPAIR_TARGET_REPLY = 148,
-    EFS_MSG_REPAIR_REQUEST = 149, /* default-off experimental selector; no caller data/receipts */
-    EFS_MSG_REPAIR_REQUEST_REPLY = 150,
+    /* 131-150 are reserved: never reuse. */
     /* Asynchronous PUT durability: COMMIT (client fsync) and stats. */
     EFS_MSG_DATA_COMMIT = 151,
     EFS_MSG_DATA_COMMIT_REPLY = 152,

@@ -63,6 +63,6 @@ int main(void)
  assert(!server_put_upload(&server,frame,bytes,&path)&&stores==3); /* exact retry */
  race_fence=1;assert(server_put_upload(&server,frame,bytes,&path)==EFS_ERR_STALE&&stores==3&&!export_refs);
  race_fence=0;assert(server_put_upload(&server,frame,bytes,&path)==EFS_ERR_STALE&&stores==3);
- free(frame);char cert[EFS_MAX_PATH+80];pthread_mutex_t *mu;assert(!storage_fence_path(&server,0,expected.id.client_uuid,cert,&mu));assert(!unlink(cert));*strrchr(cert,'/')=0;assert(!rmdir(cert));*strrchr(cert,'/')=0;assert(!rmdir(cert));assert(!rmdir(root));
+ free(frame);char cert[EFS_MAX_PATH+80];pthread_mutex_t *mu;assert(!storage_fence_path(&server,expected.id.client_uuid,cert,&mu));assert(!unlink(cert));*strrchr(cert,'/')=0;assert(!rmdir(cert));*strrchr(cert,'/')=0;assert(!rmdir(cert));assert(!rmdir(root));
  puts("ticketed PUT receiver: exact frame/checksum/FileID, ADMITTED-only authority, IO retention, exact retry and revoke-before-store floor PASS");
 }

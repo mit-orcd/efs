@@ -25,8 +25,8 @@ print(work, flush=True)
 env = os.environ.copy()
 env.update(EFS_TRANSPORT='rdma', EFS_RDMA_DEV='rxe0', EFS_RDMA_GID_INDEX='1',
            EFS_MD_RAFT_N='4', EFS_METADATA_BALANCE='1', EFS_DIRECT_IO='1',
-           EFS_COMMANDS='0', EFS_COMMANDS_SERVER='0',            EFS_EXPIRY='0', EFS_REPAIR_EXPERIMENT='0', EFS_PUT_SYNC_MS='10000',
-           EFS_DATA_GC_ADMISSION='1', EFS_GC_BACKLOG_IDLE_MS='20')
+           EFS_COMMANDS='0', EFS_COMMANDS_SERVER='0',            EFS_EXPIRY='0', EFS_PUT_SYNC_MS='10000',
+           EFS_GC_BACKLOG_IDLE_MS='20')
 for key in ('EFS_RPC_PROF','EFS_READ_PROF','EFS_BATCH_OBS'):
     env.pop(key, None)
 base = 28432

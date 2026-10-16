@@ -1545,6 +1545,20 @@ Experimental tiny-file packing and container-storage work was removed from
 devel on October 16; its code, tests and records are kept at tag
 `archive/packing-containers-20261016` (branch `packing-containers`).
 
+Experimental group A was removed from devel on October 16: the manual repair
+experiment, the staged D25 logical resize, data-GC admission, Raft admission
+pressure, receiver feedback with early retire and group drain, and
+`EFS_SKIP_META_FLUSH`. The last commit with them is tag
+`archive/experimental-group-a-20261016` (`d57da8af6`). Their durable numbers
+fail closed: Raft tags 45–51/55–57 halt apply and are refused on submit, KV
+kinds 36–41 and wire messages 131–150 stay reserved, PREPARE kind 9 is
+refused, and daemons refuse roots carrying repair markers
+(`tests/test_retired_root_markers.py`). **Removal PASS (scoped):** node9901
+`make all tests` clean; `make test` 765 commands with 4 environmental
+failures: LeakSanitizer is broken on that host (a trivial leak program fails
+too; the three affected tests pass with `detect_leaks=0`), and
+`check-architecture` needs the omitted `results/` (5/5 on the checkout).
+
 [RDMA credit overrun](../status/orcd-mini-rdma-credit-20261016.md): **scoped PASS;
 orcd-mini rollout NOTRUN.** DATA plus CREDIT frames could exceed a peer's
 posted receives; the RNR retry turned 30 µs request/reply rounds into 2 ms
@@ -1753,7 +1767,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | 0e | **W38** · ior-hard fold tombstone without the span's bytes | correctness | code present; dated Oct 5 checkpoint — replay preserves live spans; folds require byte observations; deterministic regression + ASan/UBSan pass; traced real IOR-hard + independent cold hardscan pass (108000 records, bad=0, short=0); nine physical hosts remain; AMD software-RXE fold/GC gate passes, hardware RDMA remains | [full text](#w38--ior-hard-fold-tombstone-without-the-spans-bytes-queue-row-0e) |
 | 2a | **W42** · `df` / `efs-mgmt status` report the 3-node capacity model on any node count | correctness | capacity helper is used by both clients; NUC four-node status/df record 500 GiB for 4 × 187.5 GiB quotas; NUC limited-member write/cold-read/reclaim gate passes; [ORCD unlimited-capacity correction](../status/orcd-capacity-tests-20261011.md) passes live capacity/POSIX and private native-RDMA GC gates; protection debt/repair and named 19810 capacity acceptance remain open | [full text](#w42--df--efs-mgmt-status-report-the-3-node-capacity-model-on-any-node-count-queue-row-2a) |
 | 0b | **W27** · REPORT identity from the staging table | correctness | closed: owned-PUT predicate shared by both builders; nonzero unowned observations rejected; 2048-file cold copy/trace and GC/restart pass | [full text](#w27--report-identity-from-the-staging-table-queue-row-0b) |
-| 0g | **W43** · large truncate is refused; logical truncate = **D25** (decided) | correctness | explicit failure is implemented; `3a1b4a52` makes oversized legacy truncate fail atomically; D25 metadata/read/resize foundations exist, but FUSE publication, live-file sweep and public activation remain open | [full text](#w43--truncateo_trunc-of-a-file-with--32-chunks-in-a-lane-is-a-silent-no-op-queue-row-0g) · [D25](#appendix-4--decisions--taken-and-pending-register-d1d36) |
+| 0g | **W43** · large truncate is refused; logical truncate = **D25** (decided) | correctness | explicit failure is implemented; `3a1b4a52` makes oversized legacy truncate fail atomically; D25 logical resize removed from devel 2026-10-16 (tag `archive/experimental-group-a-20261016`); metadata/read foundations exist, but resize, FUSE publication, live-file sweep and public activation remain open | [full text](#w43--truncateo_trunc-of-a-file-with--32-chunks-in-a-lane-is-a-silent-no-op-queue-row-0g) · [D25](#appendix-4--decisions--taken-and-pending-register-d1d36) |
 | 0a | STALE replay that never converges; remedy = **D27** (decided) | correctness | runtime foundations present; strict timing, fault/recovery/contention and RSS gates remain in handoff | [full text](#0a--stale-replay-that-never-converges-queue-row-0a) · [D27](#appendix-4--decisions--taken-and-pending-register-d1d36) |
 | 0h | **W44** · the leader's GC frag pass scans the whole prefix every 1.2 s; remedy = **D26** | performance | D26 in tree + gated (dev cluster, Oct 4): watermark gates the scan, cursor bounds the pass; idle leaders logged no `gc-pass` line for 10 min; a 5120-record `rm` drained at ~514 records/pass; Oct 7 10-GiB physical reclamation passes; retained-table active GC latency regression remains (1393-ms pass); idle-hour/committed-tail results in the acceptance ledger | [full text](#w44--the-group-leaders-gc-frag-pass-scans-the-whole-prefix-every-12-s-queue-row-0h) · [D26](#appendix-4--decisions--taken-and-pending-register-d1d36) |
 | 12 | **W48** · four of the 16 dd streams ended early | investigation | investigate — evidence only | [full text](#w48--four-of-the-16-dd-streams-ended-early--investigate-plan-row-12) |
@@ -1784,7 +1798,7 @@ positions do not assign an execution order or override the active handoff.
 | spec1 | **W71** · fragment PUT lacks a production persistence barrier | durability correctness | historical per-PUT barrier superseded by asynchronous ACK; all-node COMMIT/verifier and unclean-recovery refusal pass AMD scoped gates on c4178ea81 ([AMD follow-up](../status/amd-async-durability-20261015.md)); hardware power-loss gate owed | [evidence and gate](#w71) |
 | spec2 | **W72** · production mount session lifecycle / I23 integration | fencing integration | partial — full mount UUID/epoch shared by append/HOLD/FLOCK; retained FUSE CREATE/adoption and sequenced OPEN/CLOSE plus proven-revocation recovery pass AMD direct/TCP; namespace shard admission and fenced replay/effect checks are AMD gated; Oct 11 merged REGISTER verdict mismatch repaired; before/after proof retained; REGISTER/ESTABLISH verdict regressions and final captured `90a47313` full normal/fault native plus direct/buffered TCP cold namespace/APPEND/sync gates pass ([follow-up](../status/amd-integration-20261011.md#w72-register-verdict-mismatch--reproduced-and-repaired)); REPORT mapping/activation/completion session fences pass AMD direct/TCP; staged typed per-publication recovery/newer-range ownership passes AMD; production flush/PUT-ticket integration remain open | [evidence and gate](#w72) · [Oct9 mounted-client gates](../status/dependency-package-20261009.md#terminal-retained-identity-recovery--implementedgated) |
 | spec3 | **W73** · synchronous application-write publication | integration | Closed supported software integration: application sync and mount-sync direct/buffered × TCP/RXE gates accepted; hardware power-loss acceptance remains W71 ([Oct9 closure](../status/amd-rxe-gate-closure-20261009.md)) | [evidence and gate](#w73) |
-| spec4 | **W74** · protection profiles, debt and automatic repair | recovery feature gap | ordinary-fragment standalone repair qualified ([ledger](../status/orcd-default-repair-20261012.md)); automatic/unplanned repair deferred; protection/profile cutover remain unclosed | [evidence and gate](#w74) |
+| spec4 | **W74** · protection profiles, debt and automatic repair | recovery feature gap | repair experiment removed from devel 2026-10-16 (tag `archive/experimental-group-a-20261016`); earlier ordinary-fragment standalone repair qualification ([ledger](../status/orcd-default-repair-20261012.md)) applies only to that tag; no repair path in devel; automatic/unplanned repair deferred; protection/profile cutover remain unclosed | [evidence and gate](#w74) |
 | spec5 | **W75** · fragment integrity trust / missing checksum fallback | integrity correctness | missing/corrupt evidence fails closed; captured metadata digest and PUT validation gates pass on NUC; identity-bound format remains open | [evidence and gate](#w75) |
 | spec6 | **W76** · opid table exhaustion sends unprotected namespace retries | conditional correctness | Closed: bounded identity admission refuses saturation safely; Oct9 reserves receipt capacity with16 unacknowledged positions (512 tracker slots); all four lost-reply mutations replay across leader death/restart with one effect | [evidence and gate](#w76) |
 | spec7 | **W77** · atomic multi-chunk public publication/observation | integration gap | per-group REPORT/per-chunk publication; request-wide decision/read-validation gate unestablished | [evidence and gate](#w77) |
@@ -1936,7 +1950,7 @@ Read the relevant contract before changing its component.
 
 | ID | Accepted choice | Current state / gates |
 | --- | --- | --- |
-| D25 / W43 | Logical truncate with per-part epoch histories; deferred versioned reclamation, safe history retirement and bounded apply | Metadata/read/resize/publication primitives staged; FUSE integration, live-file sweep and public activation remain. [Contract](../backlog/decision-contracts.md#d25--logical-truncate), [handoff](#appendix-3--in-flight--the-current-handoff-block), [routing](../status/d25-admission-routing.md) |
+| D25 / W43 | Logical truncate with per-part epoch histories; deferred versioned reclamation, safe history retirement and bounded apply | Metadata/read/publication primitives staged; the staged resize was removed from devel Oct 16 (tag `archive/experimental-group-a-20261016`); resize, FUSE integration, live-file sweep and public activation remain. [Contract](../backlog/decision-contracts.md#d25--logical-truncate), [handoff](#appendix-3--in-flight--the-current-handoff-block), [routing](../status/d25-admission-routing.md) |
 | D26 / W44 | Pending-GC watermark plus bounded resumable scan | Historical development gate recorded; current reclamation correctness/diagnostics are W61–W63. [Contract](../backlog/decision-contracts.md#d26--bounded-gc-scan) |
 | D27 / 0a | Bound recovery attempts, retain unresolved bytes, sticky inode errors and refuse ordinary teardown before unresolved drain | Runtime foundations present; strict timing, contention/fault/recovery/RSS gates remain. [Contract](../backlog/decision-contracts.md#d27--retained-failed-writeback), [handoff](#appendix-3--in-flight--the-current-handoff-block) |
 
@@ -4197,6 +4211,8 @@ nonzero-node staging-identity fallback remains; this is not a complete W27 close
 
 ### W43 · truncate/O_TRUNC of a file with > 32 chunks in a lane is a silent no-op (queue row 0g)
 
+**Removed from devel October 16, 2026:** the staged D25 logical resize (PREPARE kind 9, the resize capture/execute path). PREPARE kind 9 stays reserved and is refused; oversized truncate keeps its explicit failure. The code is preserved at tag `archive/experimental-group-a-20261016`; the text below is the record up to that point.
+
 **Current checkpoint (Oct 7):** the original silent-success bug is historical.
 Explicit failure is implemented; `3a1b4a52` also makes oversized legacy truncate
 reject atomically, preserving all fragment references on capacity failure
@@ -5124,6 +5140,8 @@ hardware power-loss proof.
 <a id="w74"></a>
 
 ### W74 · Configurable protection profiles, debt and automatic repair remain absent (queue row spec4)
+
+**Removed from devel October 16, 2026:** the manual repair experiment (coordinator, worker, debt guards, `EFS_REPAIR_EXPERIMENT`/`EFS_REPAIR_INIT_STORE`). Daemons refuse roots that carry its markers, its Raft tags 55–57, KV kinds 40–41 and wire messages 145–150 stay reserved. No repair path exists in devel; the W74 gap is open again. The code is preserved at tag `archive/experimental-group-a-20261016`; the text below is the record up to that point.
 
 **October 15 review:** The inactive-only October 12 checkpoint and “both repair GAPs stay open” below are superseded by the ordinary-fragment standalone repair qualification, whose implementation is now in devel ancestry. Automatic/unplanned recovery and D36 profile protection remain deferred/open, not accepted. See [reconciliation](../status/open-item-reconciliation-20261015.md).
 
@@ -6509,6 +6527,8 @@ or present the Raft improvement as measured KV acceptance.
 <a id="w97"></a>
 
 ### W97 · Replication inbox pressure and sustained service admission
+
+**Removed from devel October 16, 2026:** receiver feedback (`EFS_RAFT_FLOW`), early checkpoint retire, group drain (`EFS_RAFT_GROUP_DRAIN`), Raft admission pressure (`EFS_ADMISSION_PRESSURE`) and data-GC admission (`EFS_DATA_GC_ADMISSION`). Inbox frames are acknowledged with an empty reply; W97 has no candidate in devel. The code is preserved at tag `archive/experimental-group-a-20261016`; the text below is the record up to that point.
 
 **Scope split (Oct 11):** The AMD bounded unpaced overload/admission gate is
 **closed**, with deployed and independently audited exact artifacts. NUC

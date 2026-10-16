@@ -3,7 +3,7 @@
 from pathlib import Path
 import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/server/raft_host.c').read_text();a=s.index('static int host_read_inode_lanes_reuse(');b=s.index('\n/* Stable per-group order',a)
+s=(root/'src/server/raft_host.c').read_text();a=s.index('static int host_read_inode_lanes_reuse(');b=s.index('\n/* Process a bounded FIFO prefix',a)
 code=r'''
 #include <stdint.h>
 #include <sys/stat.h>

@@ -104,7 +104,7 @@ int efs_meta_apply_lane_bootstrap(struct efs_kv *kv, const struct efs_txid *t,
 /* Regular-file mtime barrier. Capture under authoritative views of every
  * participant, then freeze the inode FIRST and each active lane with exact
  * image CAS. Missing active stamps are created with the current content epoch.
- * Ordinary publication/bootstrap/resize honor these EXCL intents. The durable
+ * Ordinary publication/bootstrap honor these EXCL intents. The durable
  * decision and per-shard resolution use the existing recovery machinery. */
 struct efs_meta_mtime_image {
     uint8_t key[EFS_KV_KEY_MAX];
@@ -294,48 +294,6 @@ int efs_meta_apply_fence_prepare(struct efs_kv *kv, const struct efs_txid *t,
                                  const struct efs_txn_parts *parts,
                                  const uint8_t *key, uint32_t klen,
                                  const uint8_t *payload, uint32_t plen);
-
-#define EFS_META_RESIZE_SHRINK 1u
-#define EFS_META_RESIZE_EXTEND 2u
-#define EFS_META_RESIZE_PREPARE_BYTES 74u
-struct efs_meta_resize_prepare {
-    struct efs_meta_fence_prepare fence;
-    uint64_t epoch; /* inode's global target; separate from lane's observed epoch */
-    uint8_t action;
-};
-int efs_meta_encode_resize_prepare(const struct efs_meta_resize_prepare *q,
-                                   uint8_t *key, uint32_t *klen,
-                                   uint8_t pay[EFS_META_RESIZE_PREPARE_BYTES]);
-int efs_meta_apply_resize_prepare(struct efs_kv *kv, const struct efs_txid *t,
-                                  const struct efs_txn_parts *parts,
-                                  const uint8_t *key, uint32_t klen,
-                                  const uint8_t *pay, uint32_t plen);
-
-struct efs_meta_resize_plan {
-    struct efs_txn_parts parts;
-    uint32_t count;
-    struct efs_meta_resize_prepare requests[EFS_META_LANES + 1];
-};
-/* Handler-only capture under established authority on every relevant shard.
- * Committed intents are visible; double collect and decision validation bound
- * retries. PREPARE revalidates the bitmap/base size and every lane sequence.
- * Open append reservations return BUSY. Output stays unchanged on failure. */
-int efs_meta_capture_resize(struct efs_kv *kv, efs_ino_t ino, uint64_t size,
-                             uint64_t now, efs_txn_coord_fn coord, void *ctx,
-                             struct efs_meta_resize_plan *out);
-struct efs_meta_resize_ops {
-    int (*prepare)(void *, const struct efs_txid *, const struct efs_txn_parts *,
-                     const struct efs_meta_resize_prepare *);
-    int (*decide)(void *, const struct efs_txid *, const struct efs_txn_parts *, int);
-    int (*resolve)(void *, const struct efs_txid *, const struct efs_txn_parts *, int);
-};
-/* Fresh txid per capture/attempt. Freeze inode first, then active lanes;
- * durable COMMIT precedes resolution. A failed/ambiguous PREPARE requires
- * durable ABORT before resolution. An ambiguous COMMIT is never aborted or
- * dropped here: retain the intents for the existing transaction recovery. */
-int efs_meta_execute_resize(const struct efs_meta_resize_plan *plan,
-                             const struct efs_txid *t,
-                             const struct efs_meta_resize_ops *ops, void *ctx);
 
 #define EFS_META_PROFILE_K2F1 1u
 /* 2 is reserved: such rows are refused, never read as a plain base. */

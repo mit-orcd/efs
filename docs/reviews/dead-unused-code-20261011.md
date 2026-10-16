@@ -144,6 +144,8 @@ It is **not unreachable or untested**. `tests/test_query_unavailable.py`, `tests
 
 ### K3 — D25 logical resize and typed publication: retain pending integration
 
+**October 16, 2026:** the logical resize entry point was removed from devel (tag `archive/experimental-group-a-20261016`); publication/history/lane machinery stays.
+
 `server_raft_host_logical_resize` at `src/server/raft_host.c:11672` has only a definition/prototype in this tree. Nevertheless `docs/status/in-flight.md:52–68` explicitly stages public logical truncate disabled, documents completed internal work, and lists the remaining admission, authority, materialization and acceptance sequence. `docs/status/d25-admission-routing.md` owns the contract.
 
 This is a dormant entry point with a concrete plan, not an ownerless relic. Do not delete publication/history/lane machinery because one public wiring step is disabled. If the team abandons D25 later, first map persistence formats, replay paths, tests and current shared users.

@@ -2166,6 +2166,8 @@ nonzero-node staging-identity fallback remains; this is not a complete W27 close
 
 ## W43 · truncate/O_TRUNC of a file with > 32 chunks in a lane is a silent no-op (queue row 0g)
 
+**Removed from devel October 16, 2026:** the staged D25 logical resize (PREPARE kind 9, the resize capture/execute path). PREPARE kind 9 stays reserved and is refused; oversized truncate keeps its explicit failure. The code is preserved at tag `archive/experimental-group-a-20261016`; the text below is the record up to that point.
+
 **Current checkpoint (Oct 7):** the original silent-success bug is historical.
 Explicit failure is implemented; `3a1b4a52` also makes oversized legacy truncate
 reject atomically, preserving all fragment references on capacity failure
@@ -3093,6 +3095,8 @@ hardware power-loss proof.
 <a id="w74"></a>
 
 ## W74 · Configurable protection profiles, debt and automatic repair remain absent (queue row spec4)
+
+**Removed from devel October 16, 2026:** the manual repair experiment (coordinator, worker, debt guards, `EFS_REPAIR_EXPERIMENT`/`EFS_REPAIR_INIT_STORE`). Daemons refuse roots that carry its markers, its Raft tags 55–57, KV kinds 40–41 and wire messages 145–150 stay reserved. No repair path exists in devel; the W74 gap is open again. The code is preserved at tag `archive/experimental-group-a-20261016`; the text below is the record up to that point.
 
 **October 15 review:** The inactive-only October 12 checkpoint and “both repair GAPs stay open” below are superseded by the ordinary-fragment standalone repair qualification, whose implementation is now in devel ancestry. Automatic/unplanned recovery and D36 profile protection remain deferred/open, not accepted. See [reconciliation](../status/open-item-reconciliation-20261015.md).
 
@@ -4478,6 +4482,8 @@ or present the Raft improvement as measured KV acceptance.
 <a id="w97"></a>
 
 ## W97 · Replication inbox pressure and sustained service admission
+
+**Removed from devel October 16, 2026:** receiver feedback (`EFS_RAFT_FLOW`), early checkpoint retire, group drain (`EFS_RAFT_GROUP_DRAIN`), Raft admission pressure (`EFS_ADMISSION_PRESSURE`) and data-GC admission (`EFS_DATA_GC_ADMISSION`). Inbox frames are acknowledged with an empty reply; W97 has no candidate in devel. The code is preserved at tag `archive/experimental-group-a-20261016`; the text below is the record up to that point.
 
 **Scope split (Oct 11):** The AMD bounded unpaced overload/admission gate is
 **closed**, with deployed and independently audited exact artifacts. NUC

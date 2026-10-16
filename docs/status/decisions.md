@@ -98,7 +98,7 @@ Read the relevant contract before changing its component.
 
 | ID | Accepted choice | Current state / gates |
 | --- | --- | --- |
-| D25 / W43 | Logical truncate with per-part epoch histories; deferred versioned reclamation, safe history retirement and bounded apply | Metadata/read/resize/publication primitives staged; FUSE integration, live-file sweep and public activation remain. [Contract](../backlog/decision-contracts.md#d25--logical-truncate), [handoff](in-flight.md), [routing](d25-admission-routing.md) |
+| D25 / W43 | Logical truncate with per-part epoch histories; deferred versioned reclamation, safe history retirement and bounded apply | Metadata/read/publication primitives staged; the staged resize was removed from devel Oct 16 (tag `archive/experimental-group-a-20261016`); resize, FUSE integration, live-file sweep and public activation remain. [Contract](../backlog/decision-contracts.md#d25--logical-truncate), [handoff](in-flight.md), [routing](d25-admission-routing.md) |
 | D26 / W44 | Pending-GC watermark plus bounded resumable scan | Historical development gate recorded; current reclamation correctness/diagnostics are W61–W63. [Contract](../backlog/decision-contracts.md#d26--bounded-gc-scan) |
 | D27 / 0a | Bound recovery attempts, retain unresolved bytes, sticky inode errors and refuse ordinary teardown before unresolved drain | Runtime foundations present; strict timing, contention/fault/recovery/RSS gates remain. [Contract](../backlog/decision-contracts.md#d27--retained-failed-writeback), [handoff](in-flight.md) |
 

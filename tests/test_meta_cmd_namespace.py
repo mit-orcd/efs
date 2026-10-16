@@ -16,6 +16,12 @@ def validate(text):
 
 header = (Path(__file__).resolve().parents[1] / 'include/efs/meta_cmd.h').read_text()
 current = validate(header)
+# Retired feature tags stay reserved: no live tag may land inside 45-51/55-57.
+bounds = {name: tag for tag, name in current.items() if 'RESERVED' in name}
+assert bounds == {'EFS_MD_CMD_RESERVED_MIN': 45, 'EFS_MD_CMD_RESERVED_MAX': 51,
+                  'EFS_MD_CMD_RESERVED2_MIN': 55, 'EFS_MD_CMD_RESERVED2_MAX': 57}, bounds
+for tag, name in current.items():
+    assert 'RESERVED' in name or not (45 <= tag <= 51 or 55 <= tag <= 57), ('reserved tag reused', tag, name)
 # Reserved commands may coexist with this completion command.
 assert current[52] == 'EFS_MD_CMD_APPEND_CATCHUP'
 coexist = header if 45 in current else header + '\n#define EFS_MD_CMD_RESERVED_MIN 45\n'
@@ -28,4 +34,4 @@ for bad in (coexist.replace('EFS_MD_CMD_APPEND_CATCHUP 52', 'EFS_MD_CMD_APPEND_C
         pass
     else:
         raise AssertionError('invalid namespace accepted')
-print('metadata command namespace: actual header unique; reserved/completion collision and byte overflow rejected PASS')
+print('metadata command namespace: actual header unique, 45-51/55-57 stay reserved; reserved/completion collision and byte overflow rejected PASS')

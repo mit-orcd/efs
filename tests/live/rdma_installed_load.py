@@ -25,7 +25,7 @@ assert os.environ.get('EFS_TRANSPORT')=='rdma'
 a.source=a.source.resolve();a.output=a.output.resolve()
 a.output.mkdir(parents=True,exist_ok=False)
 env=dict(os.environ,EFS_TRANSPORT='rdma',EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',
-         EFS_EXPIRY='0',EFS_REPAIR_EXPERIMENT='0')
+         EFS_EXPIRY='0')
 root=Path(tempfile.mkdtemp(prefix='rdma-seven-',dir='/home/efs'))
 (a.output/'mount-root.txt').write_text(str(root)+'\n')
 sockdir=Path(tempfile.mkdtemp(prefix='rdma-phases-',dir='/tmp'))

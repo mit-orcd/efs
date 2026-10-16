@@ -38,7 +38,7 @@ p.add_argument('source',type=Path);p.add_argument('mount',type=Path);p.add_argum
 p.add_argument('--base-port',type=int,default=17432);p.add_argument('--pid-root',type=Path,default=Path('/data1/efs/logs'))
 a=p.parse_args();assert os.environ.get('EFS_TRANSPORT')=='rdma'
 a.source=a.source.resolve();a.output=a.output.resolve();a.output.mkdir(parents=True,exist_ok=False)
-env=dict(os.environ,EFS_TRANSPORT='rdma',EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_EXPIRY='0',EFS_REPAIR_EXPERIMENT='0')
+env=dict(os.environ,EFS_TRANSPORT='rdma',EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_EXPIRY='0')
 name='rdma-degraded-'+uuid.uuid4().hex;fixture=a.mount/name;fixture.mkdir();path=fixture/'payload'
 reader=Path(tempfile.mkdtemp(prefix='rdma-degraded-',dir='/home/efs'))
 paused=False;child=None;pid=None;rc=None

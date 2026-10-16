@@ -1,6 +1,5 @@
 #include "server_internal.h"
 #include "storage_roots.h"
-#include "data_pressure.h"
 #ifndef EFS_BENCH_BUILD
 #include "directory_sync_group.h"
 #endif
@@ -986,18 +985,15 @@ static int gc_dead_ancestors(struct efsd_server *s, const char *inode_path)
     return EFS_OK;
 }
 
-int server_gc_inode_checked(struct efsd_server *s, efs_export_id_t eid, efs_ino_t ino,
-                    uint64_t generation,int (*authority)(void *,efs_ino_t),void *context)
+int server_gc_inode(struct efsd_server *s, efs_export_id_t eid, efs_ino_t ino,
+                    uint64_t generation)
 {
     if (!s || !eid || ino <= EFS_ROOT_INO || efs_ino_is_meta_table(ino) || !generation)
         return EFS_ERR_INVAL;
     pthread_rwlock_t *mu = server_inode_gc_lock(s,eid,ino);
     pthread_rwlock_wrlock(mu);
-    /* Keep the exact inode write guard across nonblocking repair-debt recheck and
-     * durable death. An ADMIT racing after that proof cannot publish a DATA
-     * receipt: its read guard waits, then sees persistent inode death. */
-    int rc=authority?authority(context,ino):EFS_OK;
-    if(!rc)rc=inode_death_set(s,eid,ino);
+    /* Keep the exact inode write guard across durable death. */
+    int rc=inode_death_set(s,eid,ino);
     unsigned left = 128;
     for (uint32_t r = 0;
          rc == EFS_OK && r < (s->storage_path_count ? s->storage_path_count : 1); r++) {
@@ -1011,11 +1007,6 @@ int server_gc_inode_checked(struct efsd_server *s, efs_export_id_t eid, efs_ino_
     if (rc != EFS_OK && rc != EFS_ERR_BUSY)
         __atomic_fetch_add(&s->gc_delete_errors, 1, __ATOMIC_RELAXED);
     return rc;
-}
-
-int server_gc_inode(struct efsd_server *s,efs_export_id_t eid,efs_ino_t ino,uint64_t generation)
-{
-    return server_gc_inode_checked(s,eid,ino,generation,NULL,NULL);
 }
 
 /* direct: caller decides per-ino — data fragments only. Metadata pages
@@ -2575,21 +2566,6 @@ int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export
                                         const uint8_t *data, uint32_t data_len,
                                         const uint8_t checksum[EFS_HASH_SIZE]);
 
-static int server_data_gc_busy(struct efsd_server *s, uint64_t used, uint64_t charge)
-{
-    if (!s->data_gc_admission) return 0;
-    int busy = efs_data_gc_pressure(1, s->quota, used, charge,
-        __atomic_load_n(&s->gc_last_delete_us, __ATOMIC_RELAXED), gc_clock_us());
-    if (busy) {
-        uint64_t count = __atomic_add_fetch(&s->data_gc_busy, 1, __ATOMIC_RELAXED);
-        if (count == 1 || !(count % 1024))
-            fprintf(stderr, "data-gc-admission busy=%llu used=%llu quota=%llu\n",
-                (unsigned long long)count, (unsigned long long)used,
-                (unsigned long long)s->quota);
-    }
-    return busy;
-}
-
 /* path must be the server_fragment_path() result for this fragment.
  * checksum, when non-NULL, is stored in the file (4 KiB tail under
  * O_DIRECT, 32 bytes otherwise). */
@@ -2637,7 +2613,7 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
 
     int do_charge = 0;
     if (may_charge && !first_write) {
-        int under, pressured;
+        int under;
         pthread_mutex_lock(&s->lock);
         struct efs_node *local = server_local_node(s);
         if (!local) {
@@ -2646,8 +2622,6 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
         }
         under = data_len <= UINT64_MAX - local->used &&
                 (!s->quota || (local->used <= s->quota && data_len <= s->quota - local->used));
-        pressured = server_data_gc_busy(s, local->used, data_len);
-        under = under && !pressured;
         pthread_mutex_unlock(&s->lock);
         if (under) {
             arg.excl = 1;
@@ -2667,7 +2641,7 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
             if (arg.result == EFS_OK)
                 return EFS_OK; /* overwrite: no charge */
             if (!under)
-                return pressured ? EFS_ERR_BUSY : EFS_ERR_QUOTA;
+                return EFS_ERR_QUOTA;
             if (arg.result != EFS_ERR_NOT_FOUND)
                 return EFS_ERR_IO;
             do_charge = 1;
@@ -2717,10 +2691,6 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
                 (s->quota && (local->used > s->quota || data_len > s->quota - local->used))) {
             pthread_mutex_unlock(&s->lock);
             return EFS_ERR_QUOTA;
-        }
-        if (server_data_gc_busy(s, local->used, data_len)) {
-            pthread_mutex_unlock(&s->lock);
-            return EFS_ERR_BUSY;
         }
         local->used += data_len;
         /* Persist at most every ~64 MiB charged (writer thread, not heartbeat). */
@@ -2798,87 +2768,6 @@ int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export
     pthread_mutex_unlock(mu);
     pthread_rwlock_unlock(im);
     return rc;
-}
-
-/* Inactive missing-role primitive: anonymous bytes cannot leak named partial
- * fragments on crash. Corrupt existing roles require a separate COW lifecycle
- * and are refused here. Caller must hold verified repair storage authority. */
-int server_repair_file_atomic(struct efsd_server *s,struct efs_export *ex,
-                             efs_ino_t ino,uint32_t ci,uint32_t fi,uint64_t object,
-                             const uint8_t *data,uint32_t len,const uint8_t sum[EFS_HASH_SIZE])
-{
-#if defined(EFS_BENCH_BUILD) || !defined(O_TMPFILE)
-    (void)s;(void)ex;(void)ino;(void)ci;(void)fi;(void)object;(void)data;(void)len;(void)sum;
-    return EFS_ERR_INVAL;
-#else
-    if(!s || !ex || s->storage_path_count!=1 ||
-       !efs_chunk_size_valid(ex->chunk_size) || ex->id!=1 || efs_ino_is_meta_table(ino) ||
-       ino<=EFS_ROOT_INO || !object || fi>=EFS_NUM_FRAGMENTS || !data || !sum ||
-       len!=server_frag_len(ex,ino))return EFS_ERR_INVAL;
-    uint8_t actual[EFS_HASH_SIZE];efs_hash(data,len,actual);
-    if(memcmp(actual,sum,EFS_HASH_SIZE))return EFS_ERR_CHECKSUM;
-    uint64_t saved_gen=efs_tls_chunk_gen;efs_tls_chunk_gen=object;
-    char path[8192],dir[8192];server_fragment_path(s,ex,ino,ci,fi,path,sizeof(path));
-    efs_tls_chunk_gen=saved_gen;strcpy(dir,path);char *slash=strrchr(dir,'/');
-    if(!slash)return EFS_ERR_INVAL;
-    *slash=0;
-    pthread_rwlock_t *im=server_inode_gc_lock(s,ex->id,ino);pthread_rwlock_rdlock(im);
-    int dead=inode_is_dead(s,ex->id,ino);
-    if(dead){pthread_rwlock_unlock(im);return dead>0?EFS_ERR_STALE:EFS_ERR_IO;}
-    pthread_mutex_t *mu=fragment_mutex(ex->id,ino,ci,fi);pthread_mutex_lock(mu);
-    struct stat st;int rc=EFS_OK,reserved=0,published=0,fd=-1;uint8_t *bytes=NULL;
-    if(!lstat(path,&st)){
-        uint64_t payload=0;
-        if(!S_ISREG(st.st_mode) || st.st_size<0 || fragment_payload_bytes((uint64_t)st.st_size,&payload) || payload!=len){rc=EFS_ERR_IO;goto out;}
-        uint8_t *existing=malloc(len),oldsum[EFS_HASH_SIZE];uint32_t got=0;int present=0;
-        if(!existing){rc=EFS_ERR_NOMEM;goto out;}
-        rc=read_file_bytes(path,existing,len,&got,s->direct_io,oldsum,&present);
-        if(!rc){efs_hash(existing,got,actual);
-            if(got!=len || !present || memcmp(oldsum,sum,EFS_HASH_SIZE) || memcmp(actual,sum,EFS_HASH_SIZE) || memcmp(existing,data,len))rc=EFS_ERR_CHECKSUM;}
-        free(existing);if(rc)goto out;
-        /* Lost reply/name-sync retry: actual healthy bytes still need fresh
-         * barriers. Equality alone is never a durable target receipt. */
-        fd=open(path,O_RDONLY|O_CLOEXEC|O_NOFOLLOW);
-        if(fd<0){rc=EFS_ERR_IO;goto out;}
-        int sr;do{sr=fsync(fd);}while(sr<0 && errno==EINTR);
-        if(sr<0)rc=EFS_ERR_IO;else rc=sync_fragment_parents(s,path);
-        goto out;
-    }
-    if(errno!=ENOENT){rc=EFS_ERR_IO;goto out;}
-    pthread_mutex_lock(&s->lock);struct efs_node *local=server_local_node(s);
-    if(!local)rc=EFS_ERR_INVAL;
-    else if(local->used>UINT64_MAX-len || (s->quota && (local->used>s->quota || len>s->quota-local->used)))rc=EFS_ERR_QUOTA;
-    else if(server_data_gc_busy(s,local->used,len))rc=EFS_ERR_BUSY;
-    else {local->used+=len;reserved=1;}
-    pthread_mutex_unlock(&s->lock);if(rc)goto out;
-    make_dir_for_file(path);
-    fd=open(dir,O_TMPFILE|O_RDWR|O_CLOEXEC|(s->direct_io?O_DIRECT:0),0644);
-    if(fd<0){rc=(errno==EOPNOTSUPP || errno==EINVAL || errno==EISDIR)?EFS_ERR_INVAL:EFS_ERR_IO;goto out;}
-    size_t total=(size_t)len+(s->direct_io?4096u:EFS_HASH_SIZE);
-    if(posix_memalign((void **)&bytes,4096,total)){rc=EFS_ERR_NOMEM;goto out;}
-    memcpy(bytes,data,len);memset(bytes+len,0,total-len);memcpy(bytes+len,sum,EFS_HASH_SIZE);
-    size_t off=0;
-    while(off<total){ssize_t n=pwrite(fd,bytes+off,total-off,(off_t)off);
-        if(n<0 && errno==EINTR)continue;
-        if(n<=0){rc=EFS_ERR_IO;goto out;}off+=(size_t)n;}
-    int sr;do{sr=fsync(fd);}while(sr<0 && errno==EINTR);
-    if(sr<0){rc=EFS_ERR_IO;goto out;}
-    /* proc-fd linkage avoids AT_EMPTY_PATH's privileged capability requirement.
-     * O_TMPFILE has no name until its complete durable inode is linked once. */
-    char proc[64];snprintf(proc,sizeof(proc),"/proc/self/fd/%d",fd);
-    if(linkat(AT_FDCWD,proc,AT_FDCWD,path,AT_SYMLINK_FOLLOW)){rc=EFS_ERR_IO;goto out;}
-    published=1;rc=sync_fragment_parents(s,path);
-out:
-    free(bytes);if(fd>=0 && close(fd))rc=EFS_ERR_IO;
-    if(reserved && !published){
-        /* Only proven absence permits charge rollback on an ambiguous link. */
-        if(lstat(path,&st) && errno==ENOENT){pthread_mutex_lock(&s->lock);struct efs_node *ln=server_local_node(s);
-            if(ln)ln->used=ln->used>=len?ln->used-len:0;
-            pthread_mutex_unlock(&s->lock);}
-    }
-    if(reserved)server_usage_mark_dirty(s);
-    pthread_mutex_unlock(mu);pthread_rwlock_unlock(im);return rc;
-#endif
 }
 
 #define EFS_NODES_MAGIC "EFSN"

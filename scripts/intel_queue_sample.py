@@ -11,7 +11,7 @@ for pf in sorted(r.glob('n*.pid')):
  pid=int(pf.read_text());proc=pathlib.Path('/proc')/str(pid)
  assert proc.stat().st_uid==os.getuid() and os.readlink(proc/'exe')==src+'/efsd'
  exe=str(proc/'exe');data=(proc/'exe').read_bytes();typ=struct.unpack('<H',data[16:18])[0]
- expr=['p/x &g_host','p/x &((struct efs_raft_host*)0)->tx','p/x sizeof(struct host_outbox)','p/x &((struct host_outbox*)0)->pending_entries','p/x &((struct host_outbox*)0)->npri','p/x &((struct host_outbox*)0)->nent','p/x &((struct efs_raft_host*)0)->flow_enabled']
+ expr=['p/x &g_host','p/x &((struct efs_raft_host*)0)->tx','p/x sizeof(struct host_outbox)','p/x &((struct host_outbox*)0)->pending_entries','p/x &((struct host_outbox*)0)->npri','p/x &((struct host_outbox*)0)->nent']
  args=['gdb','-nx','-batch',exe]
  for e in expr:args+=['-ex',e]
  text=subprocess.check_output(args,text=True);vals=[int(v,16) for v in re.findall(r'\\$\\d+ = (0x[0-9a-f]+)',text)];assert len(vals)==7,text
@@ -25,8 +25,7 @@ for pf in sorted(r.glob('n*.pid')):
 try:
  for i in range(SECONDS*10):
   for d in result:
-   _,tx,stride,poff,npri,nent,flow=d['offsets'];fd=d['fd'];host=d['host'];peers=[]
-   assert struct.unpack('i',os.pread(fd,4,host+flow))[0]==0,'experimental flow unexpectedly enabled'
+   _,tx,stride,poff,npri,nent=d['offsets'];fd=d['fd'];host=d['host'];peers=[]
    for peer in range(7):
     addr=host+tx+stride*peer
     pending=struct.unpack('II',os.pread(fd,8,addr+poff))

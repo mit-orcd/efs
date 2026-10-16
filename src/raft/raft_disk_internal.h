@@ -54,7 +54,6 @@
 
 struct raft_log_ent {
     uint64_t term;
-    uint64_t prefix_bytes; /* cumulative command bytes; local index, not disk format */
     uint64_t end_off; /* file offset after this record; 0 = replayed */
     uint64_t payload_off; /* log position, distinct from durable end_off */
     uint32_t clen;

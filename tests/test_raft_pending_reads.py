@@ -22,7 +22,7 @@ int efs_batch_obs_on;
 void efs_batch_obs_count(enum efs_batch_counter c){(void)c;}
 struct server{int unused;};
 struct host_inbox_item{uint8_t*buf;uint32_t len;uint64_t queued_us;int read_noted;};
-struct efs_raft_host{struct server*s;pthread_mutex_t inbox_mu;int inbox_n,flow_enabled;uint64_t inbox_bytes,inbox_work_n,inbox_work_bytes;struct host_inbox_item inbox[HOST_INBOX_MAX];struct{uint8_t group;}g[2];};
+struct efs_raft_host{struct server*s;pthread_mutex_t inbox_mu;int inbox_n;uint64_t inbox_bytes;struct host_inbox_item inbox[HOST_INBOX_MAX];struct{uint8_t group;}g[2];};
 static struct efs_raft_host *current;
 static int calls,decoded,published,woken,expected_result,forced_result=-1,append_race;
 static struct host_inbox_item arrival;
@@ -38,7 +38,7 @@ static void host_publish_group(struct efs_raft_host*h,uint8_t g){assert(h==curre
 static void host_waiters_wake(struct efs_raft_host*h){assert(h==current);woken++;}
 '''+s[pure:pure_end]+s[a:b]+r'''
 int main(int argc,char **argv){
- struct server s={argc>1?atoi(argv[1]):0};struct efs_raft_host h={.s=&s,.inbox_n=7,.inbox_bytes=572,.inbox_work_n=7,.inbox_work_bytes=572};current=&h;h.g[1].group=2;
+ struct server s={argc>1?atoi(argv[1]):0};struct efs_raft_host h={.s=&s,.inbox_n=7,.inbox_bytes=572};current=&h;h.g[1].group=2;
  assert(!pthread_mutex_init(&h.inbox_mu,NULL));uint8_t (*p)[92]=calloc(HOST_INBOX_MAX,92),saved[HOST_INBOX_MAX][92];assert(p);
  for(int i=0;i<7;i++){p[i][0]=EFS_RAFT_MSG_AE_REQ;p[i][3]=1;p[i][35]=7;h.inbox[i]=(struct host_inbox_item){p[i],80,(uint64_t)i,0};}
  p[1][0]=EFS_RAFT_MSG_AE_REP;p[1][1]=2;p[1][3]=2;
@@ -51,7 +51,7 @@ int main(int argc,char **argv){
  h.s=NULL;host_pending_reads(&h);assert(!calls&&!decoded&&!published&&!woken);h.s=&s;
  host_pending_reads(&h);assert(calls==3&&decoded==4&&published==1&&woken==1);
  assert(h.inbox[0].read_noted&&h.inbox[1].read_noted&&!h.inbox[6].read_noted);
- assert(h.inbox_n==7&&h.inbox_bytes==572&&h.inbox_work_n==7&&h.inbox_work_bytes==572);
+ assert(h.inbox_n==7&&h.inbox_bytes==572);
  assert(!memcmp(p,saved,sizeof(saved)));
  for(int i=0;i<7;i++)assert(h.inbox[i].buf==p[i]&&h.inbox[i].queued_us==(uint64_t)i);
  host_pending_reads(&h);assert(calls==4&&published==1&&woken==1); /* accepted votes do not repeat while retained */
@@ -65,7 +65,7 @@ int main(int argc,char **argv){
  }
  host_pending_reads(&h);assert(calls==HOST_INBOX_MAX&&decoded==HOST_INBOX_MAX&&!published&&!woken);
  for(int i=0;i<HOST_INBOX_MAX;i++)assert(h.inbox[i].read_noted&&h.inbox[i].buf==p[i]);
- assert(h.inbox_n==HOST_INBOX_MAX&&h.inbox_work_n==7&&h.inbox_work_bytes==572);
+ assert(h.inbox_n==HOST_INBOX_MAX);
  /* Accepted queued controls are timed once; refusal and diagnostics off
   * must not consume a sample or clock, and bytes/credits stay untouched. */
  h.inbox_n=1;h.inbox_bytes=80;uint8_t *canonical=calloc(1,92);assert(canonical);
@@ -82,13 +82,9 @@ int main(int argc,char **argv){
  efs_batch_obs_on=0;h.inbox[0].read_noted=0;host_pending_reads(&h);assert(clocks==2);
  efs_batch_obs_on=1;canonical[67]=1;h.inbox[0].read_noted=0;host_pending_reads(&h);assert(clocks==2);
  canonical[67]=0;h.inbox[0].queued_us=0;h.inbox[0].read_noted=0;host_pending_reads(&h);assert(clocks==2);
- /* Active flow preserves admitted frames/credits, including canonical ones. */
- h.flow_enabled=1;canonical[0]=EFS_RAFT_MSG_AE_REQ;canonical[3]=0;
- h.inbox[0].read_noted=0;host_pending_reads(&h);
- assert(h.inbox_n==1&&h.inbox_bytes==80&&discarded==1);
- assert(h.inbox_work_n==7&&h.inbox_work_bytes==572);
+ canonical[0]=EFS_RAFT_MSG_AE_REQ;canonical[3]=0;
  /* Partially handled canonical requests still owe normal receive/apply. */
- h.flow_enabled=0;h.inbox[0].read_noted=0;forced_result=2;
+ h.inbox[0].read_noted=0;forced_result=2;
  host_pending_reads(&h);assert(h.inbox_n==1&&h.inbox_bytes==80&&discarded==1);
  uint8_t *partial=canonical;
  /* Compact multiple completed requests exactly once, preserving an old
@@ -101,7 +97,6 @@ int main(int argc,char **argv){
  host_pending_reads(&h);
  assert(!append_race&&discarded==3&&h.inbox_n==2&&h.inbox_bytes==184);
  assert(h.inbox[0].buf==p[1]&&h.inbox[1].buf==p[2]&&!h.inbox[0].read_noted&&!h.inbox[1].read_noted);
- assert(h.inbox_work_n==7&&h.inbox_work_bytes==572);
  /* A canonical request arriving during the first bounded pass is owned
   * only by the next pass; ordinary data and credits keep their order. */
  uint8_t *late=calloc(1,80),*first=calloc(1,80);assert(late&&first);
@@ -117,7 +112,6 @@ int main(int argc,char **argv){
  assert(calls==before+2&&discarded==5&&h.inbox_n==1&&h.inbox_bytes==92);
  assert(h.inbox[0].buf==p[1]&&!h.inbox[0].read_noted);
  host_pending_reads(&h);assert(calls==before+2&&discarded==5);
- assert(h.inbox_work_n==7&&h.inbox_work_bytes==572);
 #undef free
  free(partial);free(p);pthread_mutex_destroy(&h.inbox_mu);
  return 0;
@@ -132,4 +126,4 @@ with tempfile.TemporaryDirectory(prefix='efs-raft-pending-read-') as d:
  negative=subprocess.run([str(binary)],capture_output=True,text=True)
  assert negative.returncode and 'h.inbox_n' in negative.stderr, 'retained complete-request negative did not expose intended duplicate'
  print('retained fully handled request negative refused as expected')
-print('raft pending reads: bounded headers, core refusal/retry, retained FIFO/credits, single note and no inbox lock across core PASS')
+print('raft pending reads: bounded headers, core refusal/retry, retained FIFO, single note and no inbox lock across core PASS')

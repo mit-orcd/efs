@@ -2392,9 +2392,6 @@ void efs_client_stop_meta_flush(void)
 
 int efs_client_note_meta_change(int force)
 {
-    const char *skip = getenv("EFS_SKIP_META_FLUSH");
-    if (skip && *skip && strcmp(skip, "0") != 0)
-        return EFS_OK;
     if (force)
         g_client.meta_flush_force = 1;
     if (!g_client.meta_batch || force)

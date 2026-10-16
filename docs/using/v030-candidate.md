@@ -45,9 +45,8 @@ Select fragment I/O with `--direct-io` or `--no-direct-io`, and transport with
 `EFS_TRANSPORT=tcp|rdma|auto`. RDMA and GPU-device DMA have separate
 acceptance scopes.
 
-Receiver feedback remains opt-in with `EFS_RAFT_FLOW=1`; completed AMD
-comparisons show throughput gains with variable tails and drain times. They
-do not close all W97 obligations. No D25 or staged ticketed data-plane
+Receiver feedback (`EFS_RAFT_FLOW`) and the staged D25 logical resize were
+removed from devel on October 16, 2026. No staged ticketed data-plane
 activation is implied by this release integration.
 
 ## Historical gates and continuing limits

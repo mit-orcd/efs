@@ -22,7 +22,7 @@ source = '#define HOST_LOCK_LEN '+lock_len+'\n#define HOST_APPEND_RSV_LEN '+appe
 #include <string.h>
 #define EFS_RAFT_LEADER 1
 struct efs_raft {int leader;};
-struct server {uint64_t gc_sweep_errors,gc_reap_errors,gc_ack_errors;int repair_experiment;};
+struct server {uint64_t gc_sweep_errors,gc_reap_errors,gc_ack_errors;};
 struct efs_raft_host {int gc_running;pthread_mutex_t mu;struct efs_raft r;struct server *s;struct efs_kv *kv;};
 static int verdict, waits, forwards, durable;
 static int cohort_calls,cohort_rc,settled_calls,settled_rc;
@@ -133,7 +133,6 @@ int main(void){
  /* No background proposal joins a cleanup cohort. */
  verdict=0;
  int count=cohort_calls;
- s.repair_experiment=1;assert(!host_bg_propose(&h,0,cmd,18,1));s.repair_experiment=0;
  voters=1;assert(!host_bg_propose(&h,0,cmd,18,1));voters=0;assert(!host_bg_propose(&h,0,cmd,18,1));voters=7;
  h.r.leader=0;assert(!host_bg_propose(&h,0,cmd,18,1));h.r.leader=1;
  assert(!host_bg_propose(&h,0,cmd,18,1));

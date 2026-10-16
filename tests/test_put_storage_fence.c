@@ -33,7 +33,7 @@ int main(void)
     pthread_mutex_lock(&progress_mu);while(!started)pthread_cond_wait(&progress_cv,&progress_mu);assert(!finished);pthread_mutex_unlock(&progress_mu);
     /* A fence cannot seal while the old write owns the guard. */
     char path[EFS_MAX_PATH+80];pthread_mutex_t *mu;uint32_t floor=99;
-    assert(!storage_fence_path(&server,0,uuid,path,&mu));assert(!storage_fence_read(path,0,uuid,&floor)&&!floor);
+    assert(!storage_fence_path(&server,uuid,path,&mu));assert(!storage_fence_read(path,uuid,&floor)&&!floor);
     server_put_session_end(&guard);server_put_session_end(&guard);assert(!pthread_join(thread,NULL));assert(finished&&!fence_rc);
     assert(server_put_session_begin(&server,uuid,1,&guard)==EFS_ERR_STALE&&!guard.locked);
     assert(!server_put_session_begin(&server,uuid,2,&guard));server_put_session_end(&guard);
@@ -43,10 +43,10 @@ int main(void)
     assert(server_put_session_begin(&cold,uuid,1,&guard)==EFS_ERR_STALE);
     /* Failed certificate-file sync leaves the old floor, and cannot ACK. */
     fail_sync=sync_calls+2;assert(server_put_session_fence(&server,uuid,3)==EFS_ERR_IO);fail_sync=0;
-    assert(!storage_fence_read(path,0,uuid,&floor)&&floor==2);
+    assert(!storage_fence_read(path,uuid,&floor)&&floor==2);
     /* Rename may succeed before directory sync fails. Repeat must seal it. */
     fail_sync=sync_calls+3;assert(server_put_session_fence(&server,uuid,3)==EFS_ERR_IO);fail_sync=0;
-    assert(!storage_fence_read(path,0,uuid,&floor)&&floor==3);
+    assert(!storage_fence_read(path,uuid,&floor)&&floor==3);
     assert(!server_put_session_fence(&server,uuid,3));
     assert(server_put_session_begin(&cold,uuid,2,&guard)==EFS_ERR_STALE);
     /* Configured roots may deliberately be symlinks to a storage volume. */

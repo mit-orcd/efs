@@ -11,8 +11,8 @@ out = base / (args.variant + '-live')
 out.mkdir(exist_ok=False)
 installed = Path('/data1/efs/src')
 env = dict(os.environ, EFS_COMMANDS='0', EFS_COMMANDS_SERVER='0', EFS_TRANSPORT='tcp',
-           EFS_MD_RAFT_N='4', EFS_RAFT_FLOW='1', EFS_RAFT_FLOW_EARLY_RETIRE='0',
-           EFS_RAFT_BATCH_OVERLAP='0', EFS_RAFT_BATCH_NOOP='0', EFS_RAFT_GROUP_DRAIN='0',
+           EFS_MD_RAFT_N='4',
+           EFS_RAFT_BATCH_OVERLAP='0', EFS_RAFT_BATCH_NOOP='0',
            EFS_RAFT_APPLIED_INTERVAL_MS='10', EFS_BATCH_OBS='0')
 def digest(path): return hashlib.sha256(path.read_bytes()).hexdigest()
 def listening(port):

@@ -61,8 +61,8 @@ static int meta_write_check(struct efs_kv *kv, const uint8_t *key, uint32_t kl)
             return EFS_ERR_INVAL;
         memcpy(inode_key, key, sizeof(inode_key));
         inode_key[2] = EFS_KV_KIND_INODE;
-        /* A resize's inode intent freezes reservation creation/resolution
-         * even when its closed cursor was absent at PREPARE. */
+        /* An inode intent freezes reservation creation/resolution even when
+         * the closed cursor was absent at PREPARE. */
         return efs_txn_key_exclusive(kv, inode_key, sizeof(inode_key));
     }
     default:
@@ -4821,13 +4821,13 @@ static int resize_nonempty_lane(void *ctx, const uint8_t *key, uint32_t kl,
     return EFS_ERR_PROTO;
 }
 
-static int prepare_content_resize(struct efs_kv *kv, const struct efs_txid *t,
+int efs_meta_prepare_content_fence(struct efs_kv *kv, const struct efs_txid *t,
                                    const struct efs_txn_parts *parts,
                                    efs_ino_t ino, uint64_t gen, uint8_t authority,
                                    uint64_t expected_epoch, uint64_t expected_seq,
                                    uint64_t expected_active_lanes,
                                    uint64_t expected_base_size,
-                                   uint64_t epoch, uint64_t size, uint64_t now, uint8_t action)
+                                   uint64_t epoch, uint64_t size, uint64_t now)
 {
     struct efs_fence_history history;
     struct efs_meta_row row;
@@ -4843,22 +4843,11 @@ static int prepare_content_resize(struct efs_kv *kv, const struct efs_txid *t,
     uint32_t auth_kl = 0, auth_len = sizeof(auth_old), auth_cs = 0;
     uint64_t auth_epoch = 0, auth_floor = 0;
     int has_authority = 0;
-    uint8_t ak[EFS_KV_KEY_MAX], av[APPEND_CUR_VAL];
-    uint32_t akl = 0, avl = sizeof(av), count = 1;
-    struct append_cur cursor = {0};
-    int has_cursor = 0;
+    uint32_t count = 1;
     int rc;
     if (!kv || !t || !parts || !parts->n || parts->n > EFS_TXN_MAX_PART ||
         !ino || !gen || authority > EFS_META_FENCE_INODE ||
-        (action != 0 && action != EFS_META_RESIZE_SHRINK &&
-         action != EFS_META_RESIZE_EXTEND) ||
-        (action == 0 && (expected_epoch == UINT64_MAX || epoch != expected_epoch + 1)) ||
-        (action == EFS_META_RESIZE_SHRINK &&
-         (epoch <= expected_epoch || (authority == EFS_META_FENCE_INODE &&
-                                     epoch != expected_epoch + 1))) ||
-        (action == EFS_META_RESIZE_EXTEND &&
-         (epoch < expected_epoch || (authority == EFS_META_FENCE_INODE &&
-                                    epoch != expected_epoch))))
+        expected_epoch == UINT64_MAX || epoch != expected_epoch + 1)
         return EFS_ERR_INVAL;
     if (authority == EFS_META_FENCE_INODE)
         rc = efs_kv_key_inode(efs_kv_inode_shard(ino), ino, key, &kl);
@@ -4884,23 +4873,6 @@ static int prepare_content_resize(struct efs_kv *kv, const struct efs_txid *t,
             return EFS_ERR_STALE;
         if (!S_ISREG(row.mode))
             return EFS_ERR_INVAL;
-        if (action) {
-            if (action == EFS_META_RESIZE_EXTEND && size < row.base_size)
-                return EFS_ERR_STALE;
-            rc = efs_kv_key_append_cur(efs_kv_inode_shard(ino), ino, gen, ak, &akl);
-            if (rc == EFS_OK)
-                rc = efs_kv_get(kv, ak, akl, av, &avl);
-            if (rc == EFS_OK) {
-                rc = unpack_append_cur(av, avl, &cursor);
-                has_cursor = 1;
-            } else if (rc == EFS_ERR_NOT_FOUND) {
-                rc = EFS_OK;
-            }
-            if (rc != EFS_OK)
-                return rc;
-            if (cursor.nopen)
-                return EFS_ERR_BUSY;
-        }
         for (uint32_t i = 0; i < EFS_META_LANES; ++i) {
             int member = 0;
             uint32_t shard;
@@ -4930,26 +4902,7 @@ static int prepare_content_resize(struct efs_kv *kv, const struct efs_txid *t,
             return rc;
         }
     }
-    if (authority != EFS_META_FENCE_INODE && action) {
-        if (lane.append_bar)
-            return EFS_ERR_BUSY;
-        if (action == EFS_META_RESIZE_EXTEND && lane.max_end > size)
-            return EFS_ERR_STALE;
-        if (lane.seq == UINT64_MAX)
-            return EFS_ERR_PROTO;
-        if (expected_epoch < epoch - (action == EFS_META_RESIZE_SHRINK)) {
-            uint8_t prefix[EFS_KV_KEY_MAX];
-            uint32_t plen = 0;
-            rc = efs_kv_key_chunk(efs_kv_lane_shard(ino, authority), ino, gen,
-                                  authority, 0, prefix, &plen);
-            if (rc != EFS_OK)
-                return rc;
-            rc = efs_kv_scan_prefix(kv, prefix, plen - 4, resize_nonempty_lane, NULL);
-            if (rc != EFS_OK)
-                return rc;
-        }
-    }
-    if (action != EFS_META_RESIZE_EXTEND) {
+    {
         rc = content_fence_key(ino, gen, authority, hk, &hkl);
         if (rc != EFS_OK)
             return rc;
@@ -4980,8 +4933,7 @@ static int prepare_content_resize(struct efs_kv *kv, const struct efs_txid *t,
         vl = INO_VAL;
     } else {
         lane.fenced_epoch = epoch;
-        if (action != EFS_META_RESIZE_EXTEND)
-            lane.max_end = 0;
+        lane.max_end = 0;
         lane.max_mtime = max_u64(lane.max_mtime, now);
         lane.max_ctime = max_u64(lane.max_ctime, now);
         ++lane.seq;
@@ -4990,36 +4942,15 @@ static int prepare_content_resize(struct efs_kv *kv, const struct efs_txid *t,
     }
     requests[0] = (struct efs_txn_value_cas){key, kl, old, old_len,
                                             EFS_TXN_PUT, value, vl};
-    if (action != EFS_META_RESIZE_EXTEND)
-        requests[count++] = (struct efs_txn_value_cas){hk, hkl, old_history, old_hlen,
-                                                       EFS_TXN_PUT, new_history, hlen};
+    requests[count++] = (struct efs_txn_value_cas){hk, hkl, old_history, old_hlen,
+                                                   EFS_TXN_PUT, new_history, hlen};
     if (has_authority) {
-        uint64_t floor = action == EFS_META_RESIZE_EXTEND ?
-                         (epoch == auth_epoch ? auth_floor : epoch) :
-                         writer_history_floor(epoch, &history);
-        floor = max_u64(floor, auth_floor);
+        uint64_t floor = max_u64(writer_history_floor(epoch, &history), auth_floor);
         pack_lane_authority(auth_new, auth_cs, epoch, floor);
         requests[count++] = (struct efs_txn_value_cas){auth_key, auth_kl,
             auth_old, auth_len, EFS_TXN_PUT, auth_new, sizeof(auth_new)};
     }
-    if (has_cursor)
-        requests[count++] = (struct efs_txn_value_cas){ak, akl, av, avl,
-                                                       EFS_TXN_DEL, NULL, 0};
     return efs_txn_prepare_excl_batch(kv, t, parts, requests, count);
-}
-
-int efs_meta_prepare_content_fence(struct efs_kv *kv, const struct efs_txid *t,
-                                   const struct efs_txn_parts *parts,
-                                   efs_ino_t ino, uint64_t gen, uint8_t authority,
-                                   uint64_t expected_epoch, uint64_t expected_seq,
-                                   uint64_t expected_active_lanes,
-                                   uint64_t expected_base_size,
-                                   uint64_t epoch, uint64_t size, uint64_t now)
-{
-    return prepare_content_resize(kv, t, parts, ino, gen, authority,
-                                    expected_epoch, expected_seq,
-                                    expected_active_lanes, expected_base_size,
-                                    epoch, size, now, 0);
 }
 
 int efs_meta_encode_fence_prepare(const struct efs_meta_fence_prepare *q,
@@ -5071,77 +5002,6 @@ int efs_meta_apply_fence_prepare(struct efs_kv *kv, const struct efs_txid *t,
                                            q.expected_seq, q.expected_active_lanes,
                                            q.expected_base_size,
                                            q.expected_epoch + 1, q.size, q.now);
-}
-
-static int resize_request_valid(const struct efs_meta_resize_prepare *q)
-{
-    const struct efs_meta_fence_prepare *f;
-    if (!q)
-        return EFS_ERR_INVAL;
-    f = &q->fence;
-    if (!f->ino || !f->generation || f->authority > EFS_META_FENCE_INODE)
-        return EFS_ERR_INVAL;
-    if (q->action == EFS_META_RESIZE_SHRINK) {
-        if (q->epoch <= f->expected_epoch ||
-            (f->authority == EFS_META_FENCE_INODE &&
-             q->epoch != f->expected_epoch + 1))
-            return EFS_ERR_INVAL;
-    } else if (q->action == EFS_META_RESIZE_EXTEND) {
-        if (q->epoch < f->expected_epoch ||
-            (f->authority == EFS_META_FENCE_INODE && q->epoch != f->expected_epoch))
-            return EFS_ERR_INVAL;
-    } else {
-        return EFS_ERR_INVAL;
-    }
-    return EFS_OK;
-}
-
-int efs_meta_encode_resize_prepare(const struct efs_meta_resize_prepare *q,
-                                   uint8_t *key, uint32_t *kl,
-                                   uint8_t pay[EFS_META_RESIZE_PREPARE_BYTES])
-{
-    const struct efs_meta_fence_prepare *f;
-    int rc = resize_request_valid(q);
-    if (rc != EFS_OK || !key || !kl || !pay)
-        return EFS_ERR_INVAL;
-    f = &q->fence;
-    if (f->authority == EFS_META_FENCE_INODE)
-        rc = efs_kv_key_inode(efs_kv_inode_shard(f->ino), f->ino, key, kl);
-    else
-        rc = efs_kv_key_lane(efs_kv_lane_shard(f->ino, f->authority), f->ino,
-                              f->generation, f->authority, key, kl);
-    if (rc != EFS_OK)
-        return rc;
-    be64(pay, f->ino); be64(pay + 8, f->generation);
-    pay[16] = f->authority;
-    be64(pay + 17, f->expected_epoch); be64(pay + 25, f->expected_seq);
-    be64(pay + 33, f->expected_active_lanes); be64(pay + 41, f->expected_base_size);
-    be64(pay + 49, f->size); be64(pay + 57, f->now);
-    be64(pay + 65, q->epoch); pay[73] = q->action;
-    return EFS_OK;
-}
-
-int efs_meta_apply_resize_prepare(struct efs_kv *kv, const struct efs_txid *t,
-                                  const struct efs_txn_parts *parts,
-                                  const uint8_t *key, uint32_t kl,
-                                  const uint8_t *pay, uint32_t plen)
-{
-    struct efs_meta_resize_prepare q;
-    uint8_t expected[EFS_KV_KEY_MAX], encoded[EFS_META_RESIZE_PREPARE_BYTES];
-    uint32_t len = 0;
-    if (!key || !pay || plen != EFS_META_RESIZE_PREPARE_BYTES)
-        return EFS_ERR_PROTO;
-    q.fence = (struct efs_meta_fence_prepare){rd64(pay), rd64(pay + 8), pay[16],
-        rd64(pay + 17), rd64(pay + 25), rd64(pay + 33), rd64(pay + 41),
-        rd64(pay + 49), rd64(pay + 57)};
-    q.epoch = rd64(pay + 65); q.action = pay[73];
-    if (efs_meta_encode_resize_prepare(&q, expected, &len, encoded) != EFS_OK ||
-        kl != len || memcmp(key, expected, kl))
-        return EFS_ERR_PROTO;
-    return prepare_content_resize(kv, t, parts, q.fence.ino, q.fence.generation,
-        q.fence.authority, q.fence.expected_epoch, q.fence.expected_seq,
-        q.fence.expected_active_lanes, q.fence.expected_base_size,
-        q.epoch, q.fence.size, q.fence.now, q.action);
 }
 
 static int resize_parts_add(struct efs_txn_parts *parts, uint32_t shard)
@@ -5459,152 +5319,6 @@ int efs_meta_get_writer_chunk_view_tx(struct efs_kv *kv, efs_ino_t ino,
         return EFS_OK;
     }
     return EFS_ERR_BUSY;
-}
-
-int efs_meta_capture_resize(struct efs_kv *kv, efs_ino_t ino, uint64_t size,
-                             uint64_t now, efs_txn_coord_fn coord, void *ctx,
-                             struct efs_meta_resize_plan *out)
-{
-    if (!kv || !ino || !coord || !out)
-        return EFS_ERR_INVAL;
-    for (unsigned attempt = 0; attempt < 4; ++attempt) {
-        struct efs_meta_resize_plan plan = {0};
-        struct efs_txn_pending pend = {0};
-        struct efs_meta_row row, again;
-        struct append_cur cursor, after_cursor;
-        struct lane_rec lanes[EFS_META_LANES];
-        uint8_t before[EFS_META_LANES][LANE_VAL], after[LANE_VAL];
-        uint32_t lens[EFS_META_LANES];
-        uint64_t eof;
-        int moved = 0, stable = 1, rc;
-        rc = inode_read_tx(kv, ino, coord, ctx, &pend, &row);
-        if (rc != EFS_OK)
-            return rc;
-        if (!S_ISREG(row.mode))
-            return EFS_ERR_INVAL;
-        rc = load_append_cur(kv, ino, row.generation, &cursor);
-        if (rc != EFS_OK)
-            return rc;
-        if (cursor.nopen)
-            return EFS_ERR_BUSY;
-        eof = row.base_size;
-        for (uint8_t lane = 0; lane < EFS_META_LANES; ++lane) {
-            struct efs_txn_reduce red;
-            uint8_t key[EFS_KV_KEY_MAX];
-            uint32_t kl = 0;
-            if (!(row.active_lanes & (1ull << lane)))
-                continue;
-            rc = resize_lane_read(kv, ino, row.generation, lane, coord, ctx,
-                                    &pend, before[lane], &lens[lane], &lanes[lane]);
-            if (rc == EFS_OK)
-                rc = efs_kv_key_lane(efs_kv_lane_shard(ino, lane), ino,
-                                      row.generation, lane, key, &kl);
-            if (rc == EFS_OK)
-                rc = efs_txn_reduce_read_ex(kv, key, kl, coord, ctx, &red, &pend);
-            if (rc != EFS_OK)
-                return rc;
-            if (lanes[lane].append_bar)
-                return EFS_ERR_BUSY;
-            eof = max_u64(eof, red.max_end);
-        }
-        for (uint8_t lane = 0; lane < EFS_META_LANES && stable; ++lane) {
-            struct lane_rec stamp;
-            uint32_t len;
-            if (!(row.active_lanes & (1ull << lane)))
-                continue;
-            rc = resize_lane_read(kv, ino, row.generation, lane, coord, ctx,
-                                    &pend, after, &len, &stamp);
-            if (rc != EFS_OK)
-                return rc;
-            if (len != lens[lane] || memcmp(before[lane], after, len))
-                stable = 0;
-        }
-        rc = inode_read_tx(kv, ino, coord, ctx, &pend, &again);
-        if (rc == EFS_OK)
-            rc = load_append_cur(kv, ino, row.generation, &after_cursor);
-        if (rc == EFS_OK)
-            rc = efs_txn_pending_recheck(&pend, coord, ctx, &moved);
-        if (rc != EFS_OK)
-            return rc;
-        if (!stable || moved || memcmp(&row, &again, sizeof(row)) ||
-            cursor.watermark != after_cursor.watermark ||
-            cursor.frontier != after_cursor.frontier || after_cursor.nopen)
-            continue;
-        uint8_t action = size < eof ? EFS_META_RESIZE_SHRINK : EFS_META_RESIZE_EXTEND;
-        if (action == EFS_META_RESIZE_SHRINK && row.content_epoch == UINT64_MAX)
-            return EFS_ERR_INVAL;
-        uint64_t epoch = row.content_epoch + (action == EFS_META_RESIZE_SHRINK);
-        plan.requests[plan.count++] = (struct efs_meta_resize_prepare){
-            {ino, row.generation, EFS_META_FENCE_INODE, row.content_epoch, 0,
-             row.active_lanes, row.base_size, size, now}, epoch, action};
-        rc = resize_parts_add(&plan.parts, efs_kv_inode_shard(ino));
-        for (uint8_t lane = 0; lane < EFS_META_LANES && rc == EFS_OK; ++lane) {
-            if (!(row.active_lanes & (1ull << lane)))
-                continue;
-            if (lanes[lane].fenced_epoch > row.content_epoch)
-                return EFS_ERR_PROTO;
-            plan.requests[plan.count++] = (struct efs_meta_resize_prepare){
-                {ino, row.generation, lane, lanes[lane].fenced_epoch,
-                 lanes[lane].seq, 0, 0, size, now}, epoch, action};
-            rc = resize_parts_add(&plan.parts, efs_kv_lane_shard(ino, lane));
-        }
-        if (rc != EFS_OK)
-            return rc;
-        *out = plan;
-        return EFS_OK;
-    }
-    return EFS_ERR_BUSY;
-}
-
-int efs_meta_execute_resize(const struct efs_meta_resize_plan *plan,
-                             const struct efs_txid *t,
-                             const struct efs_meta_resize_ops *ops, void *ctx)
-{
-    struct efs_txn_parts expected = {0};
-    uint64_t lanes = 0;
-    int rc;
-    if (!plan || !t || !ops || !ops->prepare || !ops->decide || !ops->resolve ||
-        !plan->count || plan->count > EFS_META_LANES + 1)
-        return EFS_ERR_INVAL;
-    const struct efs_meta_resize_prepare *inode = &plan->requests[0];
-    if (inode->fence.authority != EFS_META_FENCE_INODE)
-        return EFS_ERR_INVAL;
-    for (uint32_t i = 0; i < plan->count; ++i) {
-        const struct efs_meta_resize_prepare *q = &plan->requests[i];
-        if (resize_request_valid(q) != EFS_OK || q->fence.ino != inode->fence.ino ||
-            q->fence.generation != inode->fence.generation || q->epoch != inode->epoch ||
-            q->action != inode->action || q->fence.size != inode->fence.size ||
-            q->fence.now != inode->fence.now)
-            return EFS_ERR_INVAL;
-        if (i) {
-            if (q->fence.authority >= EFS_META_LANES ||
-                (lanes & (1ull << q->fence.authority)))
-                return EFS_ERR_INVAL;
-            lanes |= 1ull << q->fence.authority;
-        }
-        rc = resize_parts_add(&expected, i ?
-            efs_kv_lane_shard(q->fence.ino, q->fence.authority) :
-            efs_kv_inode_shard(q->fence.ino));
-        if (rc != EFS_OK)
-            return rc;
-    }
-    if (lanes != inode->fence.expected_active_lanes || expected.n != plan->parts.n ||
-        memcmp(expected.shard, plan->parts.shard, expected.n * sizeof(expected.shard[0])))
-        return EFS_ERR_INVAL;
-    for (uint32_t i = 0; i < plan->count; ++i) {
-        rc = ops->prepare(ctx, t, &plan->parts, &plan->requests[i]);
-        if (rc != EFS_OK) {
-            int abort_rc = ops->decide(ctx, t, &plan->parts, EFS_TXN_ABORT);
-            if (abort_rc != EFS_OK)
-                return abort_rc; /* unresolved holds survive for durable recovery */
-            (void)ops->resolve(ctx, t, &plan->parts, EFS_TXN_ABORT);
-            return rc;
-        }
-    }
-    rc = ops->decide(ctx, t, &plan->parts, EFS_TXN_COMMIT);
-    if (rc != EFS_OK)
-        return rc; /* COMMIT may be in flight: never change it to ABORT */
-    return ops->resolve(ctx, t, &plan->parts, EFS_TXN_COMMIT);
 }
 
 int efs_meta_capture_mtime(struct efs_kv *kv, efs_ino_t ino, uint64_t now,

@@ -19,7 +19,7 @@ code=r'''
 #define GC_FRAG_BUDGET_US 100000
 #define efs_kv_scan_from fake_scan_from
 #define efs_kv_inode_shard fake_inode_shard
-struct server {int repair_experiment;uint64_t gc_scan_errors,gc_reap_seen[2],gc_reap_capped[2],gc_first_reap[2],gc_first_seen_us[2];};
+struct server {uint64_t gc_scan_errors,gc_reap_seen[2],gc_reap_capped[2],gc_first_reap[2],gc_first_seen_us[2];};
 struct efs_raft_host {struct efs_kv *kv;struct server *s;int gc_running,running;uint8_t reap_cursor[2][REAP_KEY_LEN];uint32_t reap_cursor_len[2];};
 struct reap_times {uint64_t scan,sweep,fence,done;};
 '''+ctx+r'''

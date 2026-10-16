@@ -10,7 +10,7 @@ pure_helper=''
 if 'outbox_pure_read_control' in fn:
  start=s.index('static int outbox_pure_read_control(');pure_helper=s[start:s.index('\n}',start)+2]
 code=r'''
-#include "efs/raft_flow.h"
+#include "efs/raft_frame.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -18,7 +18,7 @@ code=r'''
 #define HOST_OUTBOX_MAX 4
 #define HOST_OUTBOX_BYTES 512
 #define EFS_WIRE_RAFT_HDR_LEN 80
-#define rd64be efs_raft_flow_rd64
+#define rd64be efs_raft_frame_rd64
 static int observer_on;
 #define BO_ON() observer_on
 #define efs_batch_obs_now_us() UINT64_C(42)
@@ -27,7 +27,7 @@ struct host_outbox {int preserve_read,npri,nent;uint64_t queued_bytes,queued_byt
 static int fail_alloc;
 static void *probe_alloc(size_t n){return fail_alloc?NULL:malloc(n);}
 #define malloc probe_alloc
-'''+('static int outbox_nentries(const uint8_t*p,uint32_t n){return n<80?-1:(int)efs_raft_flow_rd32(p+76);}' if 'outbox_nentries' in fn else '')+pure_helper+fn+r'''
+'''+('static int outbox_nentries(const uint8_t*p,uint32_t n){return n<80?-1:(int)efs_raft_frame_rd32(p+76);}' if 'outbox_nentries' in fn else '')+pure_helper+fn+r'''
 #undef malloc
 int main(void){
  struct host_outbox tx={0};uint8_t p[100],original[100];memset(p,0,sizeof(p));

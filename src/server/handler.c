@@ -1,4 +1,3 @@
-#include "efs/repair_job.h"
 #include "efs/common.h"
 #include "efs/protocol.h"
 #include "efs/network.h"
@@ -399,44 +398,6 @@ send_reply:
             }
             break;
         }
-        case EFS_MSG_REPAIR_STORE_ID: {
-            uint8_t reply[28+EFS_BUILD_ID_LEN]={0};int rc=EFS_ERR_ACCES;
-            const uint8_t *request=payload;
-            if(g_server->repair_experiment && server_raft_host_active()) {
-                if(payload_len!=4+EFS_BUILD_ID_LEN || efs_put_upload_rd32(request)!=EFS_VERSION_PACK ||
-                   strncmp((const char *)request+4,EFS_BUILD_ID,EFS_BUILD_ID_LEN))rc=EFS_ERR_PROTO;
-                else rc=server_repair_store_identity(g_server,reply+12);
-            }
-            efs_put_upload_wr32(reply,(uint32_t)rc);
-            if(!rc){efs_put_upload_wr32(reply+4,1);efs_put_upload_wr32(reply+8,g_server->id);strncpy((char *)reply+28,EFS_BUILD_ID,EFS_BUILD_ID_LEN-1);}
-            efs_conn_send_msg(conn,EFS_MSG_REPAIR_STORE_ID_REPLY,reply,sizeof(reply));break;
-        }
-        case EFS_MSG_REPAIR_REQUEST: {
-            uint8_t reply[4]={0};int rc=EFS_ERR_ACCES;
-            const uint8_t *request=payload;uint32_t header=4+EFS_BUILD_ID_LEN;
-            if(g_server->repair_experiment && server_raft_host_active()) {
-                struct efs_repair_job selector;
-                if(payload_len!=header+EFS_REPAIR_JOB_BYTES ||
-                   efs_put_upload_rd32(request)!=EFS_VERSION_PACK ||
-                   strncmp((const char *)request+4,EFS_BUILD_ID,EFS_BUILD_ID_LEN))rc=EFS_ERR_PROTO;
-                else {rc=efs_repair_job_decode(request+header,EFS_REPAIR_JOB_BYTES,&selector);
-                    if(!rc)rc=server_repair_run(g_server,&selector);}
-            }
-            efs_put_upload_wr32(reply,(uint32_t)rc);
-            efs_conn_send_msg(conn,EFS_MSG_REPAIR_REQUEST_REPLY,reply,sizeof(reply));break;
-        }
-        case EFS_MSG_REPAIR_TARGET: {
-            uint8_t reply[4+EFS_REPAIR_RECEIPT_BYTES]={0};int rc=EFS_ERR_ACCES;
-            const uint8_t *request=payload;uint32_t header=4+EFS_BUILD_ID_LEN;
-            if(g_server->repair_experiment && server_raft_host_active()) {
-                if(payload_len<header+1 || efs_put_upload_rd32(request)!=EFS_VERSION_PACK ||
-                   strncmp((const char *)request+4,EFS_BUILD_ID,EFS_BUILD_ID_LEN))rc=EFS_ERR_PROTO;
-                else if(request[header]!=1 && request[header]!=2)rc=EFS_ERR_INVAL;
-                else rc=server_repair_receive(g_server,request+header+1,payload_len-header-1,request[header]==2,reply+4);
-            }
-            efs_put_upload_wr32(reply,(uint32_t)rc);
-            efs_conn_send_msg(conn,EFS_MSG_REPAIR_TARGET_REPLY,reply,sizeof(reply));break;
-        }
         case EFS_MSG_PUT_TICKETED: {
             uint64_t start=efs_iostats_now_us();
             uint8_t reply[EFS_PUT_UPLOAD_REPLY_LEN],path=0xff;
@@ -540,9 +501,7 @@ send_reply:
             struct efs_msg_gc_inode_reply rep = {.rc=EFS_ERR_PROTO};
             if (payload_len == sizeof(struct efs_msg_gc_inode)) {
                 const struct efs_msg_gc_inode *req=payload;
-                rep.rc=g_server->repair_experiment?
-                    server_repair_gc_inode(g_server,req->export_id,req->ino,req->generation):
-                    server_gc_inode(g_server,req->export_id,req->ino,req->generation);
+                rep.rc=server_gc_inode(g_server,req->export_id,req->ino,req->generation);
             }
             efs_iostats_add(EFS_IOSTAT_GC_DELETE, 0, efs_iostats_now_us() - start,
                             rep.rc != EFS_OK && rep.rc != EFS_ERR_BUSY);
@@ -582,10 +541,6 @@ send_reply:
                 struct efs_export *ex =
                     server_export_acquire_or_create_locked(g_server, req->export_id);
                 pthread_mutex_unlock(&g_server->lock);
-                if (ex) {
-                    grc=g_server->repair_experiment?server_raft_host_repair_gc_ready(req->ino,req->chunk_index,req->chunk_generation):EFS_OK;
-                    if(grc!=EFS_OK){server_export_put(g_server,ex);ex=NULL;}
-                }
                 if (ex) {
                     fid.export_id = ex->id;
                     fid.ino = req->ino;
@@ -1162,20 +1117,11 @@ send_reply:
             }
             break;
         }
-        case EFS_MSG_RAFT: {
-            struct efs_raft_flow_reply feedback;
-            uint8_t status[EFS_RAFT_FLOW_LEN];
-            int rc=server_raft_host_inbox(payload, payload_len, &feedback);
-            if (feedback.status==3) /* explicit same-code baseline mode */
-                efs_conn_send_msg(conn, EFS_MSG_RAFT_REPLY, NULL, 0);
-            else {
-                feedback.status=rc==EFS_OK ? EFS_RAFT_FLOW_OK :
-                    (rc==EFS_ERR_BUSY || rc==EFS_ERR_NOMEM) ? EFS_RAFT_FLOW_BUSY : EFS_RAFT_FLOW_ERROR;
-                efs_raft_flow_encode(status,&feedback);
-                efs_conn_send_msg(conn, EFS_MSG_RAFT_REPLY, status, sizeof(status));
-            }
+        case EFS_MSG_RAFT:
+            /* The empty reply is transport only, never a consensus ACK. */
+            (void)server_raft_host_inbox(payload, payload_len);
+            efs_conn_send_msg(conn, EFS_MSG_RAFT_REPLY, NULL, 0);
             break;
-        }
         case EFS_MSG_RAFT_MKFS: {
             struct efs_msg_raft_mkfs_reply r;
             if (payload_len >= 1)

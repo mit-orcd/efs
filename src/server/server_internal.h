@@ -6,7 +6,7 @@
 #include "efs/network.h"
 #include "efs/protocol.h"
 #include "efs/query_catalog.h"
-#include "efs/raft_flow.h"
+#include "efs/raft_frame.h"
 #include <pthread.h>
 #include <time.h>
 
@@ -50,7 +50,6 @@ struct efs_ino_hold {
 struct efsd_server {
     uint64_t put_boot_epoch; /* durability verifier, stable across proven clean restarts */
     efs_node_id_t id;
-    int repair_experiment; /* explicit default-off single-root FILES experiment */
     char addr[64];
     uint16_t port;
 
@@ -72,8 +71,6 @@ struct efsd_server {
      * moves an existing mdraft on its own. */
     char meta_storage[EFS_MAX_PATH];
     uint64_t quota; /* local storage quota in bytes; 0 = unlimited */
-    int data_gc_admission; /* opt-in transient logical-quota pressure */
-    uint64_t data_gc_busy;
 
     struct efs_node nodes[EFS_MAX_NODES];
     uint32_t node_count;
@@ -134,24 +131,6 @@ int server_put_session_fence(struct efsd_server *, const uint8_t uuid[16],
                              uint32_t reject_below);
 
 
-/* Inactive repair-only certificate domain. Authority must be checked before
- * taking this guard, and GC must wait for committed seal receipt. These are
- * local storage barriers, never repair admission or durable data receipts. */
-struct efs_repair_job;
-/* Trusted local coordinator only; not an RPC endpoint. */
-int server_raft_host_repair_gc_ready(efs_ino_t,uint32_t,uint64_t);
-int server_raft_host_repair_gc_inode_local_ready(efs_ino_t);
-int server_raft_host_repair_prepare(const struct efs_repair_job *,struct efs_repair_job *,uint8_t *,uint8_t *);
-int server_repair_run(struct efsd_server *,const struct efs_repair_job *);
-int server_raft_host_repair_record(unsigned,const struct efs_repair_job *,uint32_t,const uint8_t *,uint32_t);
-int server_repair_receive(struct efsd_server *,const uint8_t *,uint32_t,int seal,uint8_t *receipt);
-int server_repair_activation(struct efsd_server *,int trusted_create);
-int server_repair_store_matches(struct efsd_server *,const uint8_t expected[16]);
-int server_repair_store_identity(struct efsd_server *,uint8_t uuid[16]);
-int server_repair_store_initialize(struct efsd_server *,int trusted_existing,uint8_t uuid[16]);
-int server_repair_storage_begin(struct efsd_server *, const uint8_t uuid[16],
-                               uint32_t epoch, struct efs_put_storage_guard *);
-int server_repair_storage_seal(struct efsd_server *, const uint8_t uuid[16],uint32_t floor);
 
 /* Get export by id. */
 struct efs_export *server_get_export(struct efsd_server *s, efs_export_id_t id);
@@ -261,8 +240,6 @@ int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export
                                         const uint8_t *data, uint32_t data_len,
                                         const uint8_t checksum[EFS_HASH_SIZE]);
 
-int server_repair_file_atomic(struct efsd_server *,struct efs_export *,efs_ino_t,
-    uint32_t ci,uint32_t fi,uint64_t object,const uint8_t *,uint32_t,const uint8_t sum[EFS_HASH_SIZE]);
 
 /* Queue fragment write onto the writer pool (or run inline if pool is off). */
 /* Fragment data + checksum sidecar as one pooled job. */
@@ -304,9 +281,6 @@ void efs_iostats_dump(int force);
 
 /* Append local storage roots without restart. csv is comma-separated
  * absolute paths. Existing roots are skipped. count_out is the new total. */
-int server_gc_inode_checked(struct efsd_server *,efs_export_id_t,efs_ino_t,uint64_t,
-                            int (*authority)(void *,efs_ino_t),void *context);
-int server_repair_gc_inode(struct efsd_server *,efs_export_id_t,efs_ino_t,uint64_t);
 int server_gc_inode(struct efsd_server *s, efs_export_id_t eid, efs_ino_t ino,
                      uint64_t generation);
 void server_gc_status(struct efsd_server *s, struct efs_msg_gc_status_reply *out);
@@ -375,10 +349,8 @@ void server_start_heartbeat(struct efsd_server *s);
 int server_raft_host_start(struct efsd_server *s);
 void server_raft_host_stop(void);
 /* Copy one encoded efs_raft_msg into the pump inbox. Delivery ack is the
- * caller's job (EFS_MSG_RAFT_REPLY). Feedback reports bounded queue admission,
- * never consensus authority. BUSY accepts no frame; Raft retries. */
-int server_raft_host_inbox(const uint8_t *payload, uint32_t plen,
-                           struct efs_raft_flow_reply *feedback);
+ * caller's job (EFS_MSG_RAFT_REPLY). BUSY accepts no frame; Raft retries. */
+int server_raft_host_inbox(const uint8_t *payload, uint32_t plen);
 void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out);
 /* Non-empty RAFT_MKFS payload: group byte + command (or group-only =
  * ReadIndex). Leader-only; NOT_PRIMARY otherwise. */
@@ -439,10 +411,6 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
                               uint64_t mtime, uint32_t mtime_nsec,
                               uint64_t atime, uint32_t atime_nsec,
                               struct efs_msg_inode_reply *out);
-/* D25 coordinator, not selected by public SETATTR yet. Requires the client
- * fence-view/cache and epoch-preserving publication integration first. */
-int server_raft_host_logical_resize(efs_ino_t ino, uint64_t size, uint64_t now,
-                                    int *leader_hint);
 struct efs_expiry_due;
 /* Staged conditional transaction. Not connected to RPC or a live worker. */
 void server_raft_host_expire(efs_ino_t parent,const char *name,

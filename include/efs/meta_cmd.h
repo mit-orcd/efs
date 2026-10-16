@@ -18,9 +18,15 @@
 /* REPORT envelope: [tag][uuid:16][epoch:4][legacy PUBLISH:202]*N.
  * Fences every mapping at serialized apply without reusing delta fields. */
 /* Internal coordinator commands; public control RPC cannot forge ACKs. */
-/* 45-51 are reserved: never reuse. Apply halts on them; submit refuses. */
+/* 45-51 and 55-57 are reserved: never reuse. Apply halts on them; submit
+ * refuses. */
 #define EFS_MD_CMD_RESERVED_MIN 45
 #define EFS_MD_CMD_RESERVED_MAX 51
+#define EFS_MD_CMD_RESERVED2_MIN 55
+#define EFS_MD_CMD_RESERVED2_MAX 57
+#define EFS_MD_CMD_IS_RESERVED(c) \
+    (((c) >= EFS_MD_CMD_RESERVED_MIN && (c) <= EFS_MD_CMD_RESERVED_MAX) || \
+     ((c) >= EFS_MD_CMD_RESERVED2_MIN && (c) <= EFS_MD_CMD_RESERVED2_MAX))
 /* Exact single-shard APPEND image envelope; no replica-local EOF selection. */
 #define EFS_MD_APPEND_COMPLETE_ATOMIC_LEN 101u
 #define EFS_MD_REQ_EXPIRY_CLOCK 63 /* local clock health only */
@@ -36,9 +42,6 @@
 #define EFS_MD_CMD_EXPIRY_RENEW 59 /* ino/gen/uid/expected/leader-now/deadline:45 */
 #define EFS_MD_REQ_EXPIRY_POLICY 60 /* root/gen:17; fresh revision/TTL/max */
 #define EFS_MD_REQ_EXPIRY_RECORD 61 /* ino/gen:17; fresh revision/deadline/root */
-#define EFS_MD_REQ_REPAIR_SEAL_AUTHORITY 57 /* ReadIndex-only exact eligible job; no seal receipt */
-#define EFS_MD_REQ_REPAIR_WRITE_AUTHORITY 56 /* ReadIndex-only canonical job; never a data receipt */
-#define EFS_MD_CMD_REPAIR_JOB 55 /* staged: op1, canonical job260, arg4; no RPC/worker admission */
 #define EFS_MD_CMD_APPEND_COMPLETE_ATOMIC 54 /* ino/gen/offset/UUID/epoch/content epoch/reservation: 101 bytes */
 #define EFS_MD_CMD_APPEND_ATOMIC 53
 #define EFS_MD_CMD_QUERY_POLICY 43 /* expected version:8, mask:4 */

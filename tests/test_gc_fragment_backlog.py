@@ -21,7 +21,7 @@ source=r'''
 #define GC_FRAG_YIELD_US 0
 struct efs_gc_ack_item {int unused;};
 struct efs_export {int unused;};
-struct fake_server {int repair_experiment;uint64_t gc_scan_errors,gc_pending[2],gc_sampled_mask,gc_missing_exports;};
+struct fake_server {uint64_t gc_scan_errors,gc_pending[2],gc_sampled_mask,gc_missing_exports;};
 struct efs_raft_host {void *kv;struct fake_server *s;int gc_running,running;};
 '''+ctx+r'''
 

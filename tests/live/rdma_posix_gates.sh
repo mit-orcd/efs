@@ -5,7 +5,7 @@ src=$(cd "$(dirname "$0")/../.." && pwd)
 mode=${EFS_TRANSPORT:-rdma}
 case "$mode" in tcp|rdma) ;; *) echo 'Use explicit tcp or rdma' >&2; exit 2;; esac
 export EFS_TRANSPORT=$mode EFS_MD_RAFT_N=4
-export EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0 EFS_REPAIR_EXPERIMENT=0
+export EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0
 export EFS_RDMA_DEV=${EFS_RDMA_DEV:-rxe0}
 if [ "$mode" = rdma ]; then
     test -d "/sys/class/infiniband/$EFS_RDMA_DEV" || { echo 'RDMA device missing; gates NOT RUN' >&2; exit 77; }

@@ -1570,34 +1570,6 @@ int efs_kv_lsm_stats(struct efs_kv *kv, struct efs_kv_lsm_stats *out)
     return EFS_OK;
 }
 
-int efs_kv_lsm_pressure(struct efs_kv *kv, struct efs_kv_lsm_pressure *out)
-{
-    struct kv_lsm *l;
-    struct efs_kv_lsm_pressure p;
-
-    if (!kv || kv->ops != &lsm_ops || !kv->ctx || !out)
-        return EFS_ERR_INVAL;
-    l = kv->ctx;
-    if (l->magic != KV_LSM_MAGIC)
-        return EFS_ERR_INVAL;
-    memset(&p, 0, sizeof(p));
-    lsm_lock(l);
-    p.shape.mt_bytes = kv_memtable_bytes(l);
-    p.shape.l0_bytes = kv_l0_bytes(l);
-    p.shape.n_l0 = l->n_l0;
-    p.shape.n_l1 = l->n_l1;
-    p.memtable_target = l->cfg.memtable_max ? l->cfg.memtable_max : KV_LSM_MEM_DEFAULT;
-    p.l0_hard_bytes = KV_LSM_L0_BYTES;
-    p.l0_soft_bytes = KV_LSM_L0_BYTES - KV_LSM_L0_BYTES / 4;
-    p.io_failed = l->io_failed;
-    p.hard = p.io_failed || p.shape.l0_bytes >= p.l0_hard_bytes ||
-             p.shape.mt_bytes >= 2 * p.memtable_target;
-    p.soft = p.hard || p.shape.l0_bytes >= p.l0_soft_bytes;
-    lsm_unlock(l);
-    *out = p;
-    return EFS_OK;
-}
-
 int efs_kv_lsm_apply_begin(struct efs_kv *kv)
 {
     if (!kv || kv->ops!=&lsm_ops || !kv->ctx) return EFS_ERR_INVAL;

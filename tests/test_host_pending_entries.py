@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Actual host enqueue refusal preserves ordered work with flow control off."""
+"""Actual host enqueue refusal preserves ordered work."""
 from pathlib import Path
 import os, shlex, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
@@ -13,7 +13,7 @@ def struct(name):
 code=r'''
 #define _GNU_SOURCE
 #include "efs/raft.h"
-#include "efs/raft_flow.h"
+#include "efs/raft_frame.h"
 #include "efs/wire.h"
 #include "efs/batch_obs.h"
 #include <assert.h>
@@ -33,11 +33,11 @@ code=r'''
 #define HOST_OUTBOX_BYTES (1u<<20)
 #define HOST_ENCODE_STACK 1024
 uint64_t efs_batch_obs_now_us(void){return 1;}
-static uint64_t rd64be(const uint8_t*p){return efs_raft_flow_rd64(p);}
+static uint64_t rd64be(const uint8_t*p){return efs_raft_frame_rd64(p);}
 static void wr32be(uint8_t*p,uint32_t n){for(int i=3;i>=0;i--){p[i]=n;n>>=8;}}
 static void wr64be(uint8_t*p,uint64_t n){for(int i=7;i>=0;i--){p[i]=n;n>>=8;}}
 '''+struct('host_outbox_item')+'\n'+struct('host_outbox')+r'''
-struct efs_raft_host {int raft_id,tx_running,flow_enabled;pthread_mutex_t outbox_mu;struct host_outbox tx[7];};
+struct efs_raft_host {int raft_id,tx_running;pthread_mutex_t outbox_mu;struct host_outbox tx[7];};
 static void *host_sender(void*p){return p;}
 static int efsd_pthread_create(pthread_t*t,void*(*f)(void*),void*p){(void)t;(void)f;(void)p;return 1;}
 int efs_wire_raft_encode(const struct efs_raft_msg*m,uint8_t*b,uint32_t c,uint32_t*n){(void)m;(void)b;(void)c;(void)n;abort();}
@@ -48,9 +48,9 @@ static struct efs_raft_msg message(int type,int group,int peer){
 }
 static int send(struct efs_raft_host*h,int type,int group,int peer){struct efs_raft_msg m=message(type,group,peer);int rc=host_send(h,&m);assert(!m.wire);return rc;}
 int main(void){
- for(int mode=0;mode<3;mode++){
-  struct efs_raft_host*h=calloc(1,sizeof(*h));assert(h);pthread_mutex_init(&h->outbox_mu,NULL);h->tx_running=1;h->flow_enabled=mode!=0;
-  for(int p=0;p<7;p++){h->tx[p].started=1;h->tx[p].flow.active=mode==2;pthread_cond_init(&h->tx[p].cv,NULL);}
+ {
+  struct efs_raft_host*h=calloc(1,sizeof(*h));assert(h);pthread_mutex_init(&h->outbox_mu,NULL);h->tx_running=1;
+  for(int p=0;p<7;p++){h->tx[p].started=1;pthread_cond_init(&h->tx[p].cv,NULL);}
   struct host_outbox*tx=&h->tx[1];
   assert(send(h,EFS_RAFT_MSG_AE_REQ,0,1)==EFS_OK);
   uint8_t saved[93];memcpy(saved,tx->ent[0].buf,93);
@@ -72,7 +72,7 @@ int main(void){
   for(int p=0;p<7;p++){for(int i=0;i<h->tx[p].nent;i++)free(h->tx[p].ent[i].buf);for(int i=0;i<h->tx[p].npri;i++)free(h->tx[p].pri[i].buf);pthread_cond_destroy(&h->tx[p].cv);}
   pthread_mutex_destroy(&h->outbox_mu);free(h);
  }
- puts("host pending entries: default/inactive/active guard, independent groups/peers, control escape, snapshot FIFO and failed admission PASS");
+ puts("host pending entries: guard, independent groups/peers, control escape, snapshot FIFO and failed admission PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-host-pending-') as d:

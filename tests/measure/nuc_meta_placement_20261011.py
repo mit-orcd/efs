@@ -30,7 +30,7 @@ elif args.vary=='data':
   time.sleep(1)
 base=session/('meta-placement' if args.vary=='metadata' else 'data-placement');base.mkdir(exist_ok=False)
 src=Path('/data1/efs/src');port=26770;meta_roots=[]
-flags=dict(EFS_MD_RAFT_N='3',EFS_RAFT_FLOW='1',EFS_RAFT_FLOW_EARLY_RETIRE='0',EFS_RAFT_BATCH_OVERLAP='0',EFS_RAFT_BATCH_NOOP='0',EFS_RAFT_GROUP_DRAIN='0',EFS_RAFT_APPLIED_INTERVAL_MS='10',EFS_COMMANDS_SERVER='0',EFS_COMMANDS='0',EFS_TRANSPORT='tcp',EFS_BATCH_OBS='1')
+flags=dict(EFS_MD_RAFT_N='3',EFS_RAFT_BATCH_OVERLAP='0',EFS_RAFT_BATCH_NOOP='0',EFS_RAFT_APPLIED_INTERVAL_MS='10',EFS_COMMANDS_SERVER='0',EFS_COMMANDS='0',EFS_TRANSPORT='tcp',EFS_BATCH_OBS='1')
 env=dict(os.environ,**flags);mount=base/'mnt';mount.mkdir(exist_ok=True);servers=[];handles=[];loader=None;counters=None;profilers=[]
 # Record actual identities; installed engine is frozen for both cells.
 identity={n:dict(sha256=hashlib.sha256((src/n).read_bytes()).hexdigest(),version=subprocess.check_output([str(src/n),'--version'],text=True)) for n in ('efsd','efs-fuse','efs-mgmt')}

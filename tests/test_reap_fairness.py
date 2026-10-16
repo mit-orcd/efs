@@ -22,7 +22,7 @@ code=r'''
 #define REAP_KEY_LEN 11u
 #define GC_FRAG_BUDGET_US 200000
 #define HOST_WAITERS 512
-struct fake_server {pthread_mutex_t lock;int repair_experiment;uint64_t quota,gc_scan_errors,gc_reap_seen[2],gc_reap_capped[2],gc_first_reap[2],gc_first_seen_us[2];};
+struct fake_server {pthread_mutex_t lock;uint64_t quota,gc_scan_errors,gc_reap_seen[2],gc_reap_capped[2],gc_first_reap[2],gc_first_seen_us[2];};
 struct efs_raft_host {struct fake_server *s;struct efs_kv *kv;pthread_mutex_t cv_mu,wait_mu;void *wait_head;struct {uint8_t active;} waiters[HOST_WAITERS];int gc_running,running;uint8_t reap_cursor[2][11];uint32_t reap_cursor_len[2];};
 struct reap_times {uint64_t scan,sweep,fence,done;};
 static struct efs_node node;static int missing_node,scan_error,physical_failure,lane_failure;

@@ -73,8 +73,8 @@ int main(int argc,char **argv) {
 (work/'fault.c').write_text(shim);(work/'reader.c').write_text(reader)
 subprocess.run(['cc','-Wall','-Wextra','-Werror','-shared','-fPIC',work/'fault.c','-ldl','-o',work/'fault.so'],check=True)
 subprocess.run(['cc','-I'+str(source/'include'),work/'reader.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',work/'reader'],check=True)
-env=dict(os.environ,EFS_TRANSPORT='tcp',EFS_MD_RAFT_N='3',EFS_COMMANDS_SERVER='0',EFS_RAFT_FLOW='1',
-         EFS_RAFT_BATCH_NOOP='1',EFS_RAFT_GROUP_DRAIN='1')
+env=dict(os.environ,EFS_TRANSPORT='tcp',EFS_MD_RAFT_N='3',EFS_COMMANDS_SERVER='0',
+         EFS_RAFT_BATCH_NOOP='1')
 servers=[];logs=[];generation=0
 def mgmt(node,cmd,*args):
     return subprocess.check_output([str(source/'efs-mgmt'),cmd,f'127.0.0.1:{base+node}',*[str(x) for x in args]],text=True,timeout=10)

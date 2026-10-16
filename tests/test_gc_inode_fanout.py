@@ -16,7 +16,7 @@ code=r'''
 #define EFS_MSG_GC_INODE 1
 #define EFS_MSG_GC_INODE_REPLY 2
 struct efs_conn { int kind,fd; };
-struct server { pthread_mutex_t lock; unsigned node_count; struct efs_node nodes[EFS_MAX_NODES]; efs_node_id_t id; int repair_experiment; };
+struct server { pthread_mutex_t lock; unsigned node_count; struct efs_node nodes[EFS_MAX_NODES]; efs_node_id_t id; };
 struct efs_raft_host { struct server *s; int n; };
 struct efs_msg_gc_inode { unsigned export_id; efs_ino_t ino; uint64_t generation; };
 struct efs_msg_gc_inode_reply { int rc; };
@@ -34,8 +34,6 @@ static int efs_conn_send_msg(struct efs_conn *c,int type,const void *v,unsigned 
 static int server_gc_inode(struct server *s,unsigned eid,efs_ino_t ino,uint64_t gen) {
  (void)s;assert(sent==expected_sends-(missing>=1&&missing<=3));assert(eid==1&&ino==77&&gen==99);assert(!received);local_done=1;return local_rc;
 }
-static int server_raft_host_repair_gc_ready(efs_ino_t ino,uint32_t ci,uint64_t obj){(void)ino;(void)ci;(void)obj;assert(0);return EFS_ERR_ACCES;}
-static int server_repair_gc_inode(struct server *s,unsigned eid,efs_ino_t ino,uint64_t gen){(void)s;(void)eid;(void)ino;(void)gen;assert(0);return EFS_ERR_ACCES;}
 static int efs_conn_recv_msg(struct efs_conn *c,uint8_t *type,void **v,uint32_t *n) {
  assert(local_done);received++;if(c->fd==failed_recv)return -1;
  struct efs_msg_gc_inode_reply *r=malloc(sizeof(*r));assert(r);r->rc=c->fd==busy?EFS_ERR_BUSY:EFS_OK;
