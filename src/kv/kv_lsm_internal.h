@@ -175,7 +175,7 @@ struct kv_ent {
 /* Sorted by key; binary search, single insertion or committed batch merge. */
 struct kv_mtab {
     struct kv_ent **e;
-    uint64_t *pfx;  /* first 8 key bytes of e[i], big-endian, zero-padded */
+    __uint128_t *pfx; /* first 16 key bytes, big-endian, zero-padded */
     uint32_t n;
     uint32_t cap;
     uint64_t bytes;

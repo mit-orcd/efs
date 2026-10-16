@@ -13,7 +13,11 @@ pre = r'''
 #include <stdlib.h>
 #include <string.h>
 static long refuse=-1, allocations;
-static size_t moved;
+static size_t moved, comparisons;
+static int counted_cmp(const uint8_t *a,uint32_t al,const uint8_t *b,uint32_t bl) {
+ comparisons++;return kv_key_cmp(a,al,b,bl);
+}
+#define kv_key_cmp counted_cmp
 static int denied(void) { return refuse>=0 && allocations++==refuse; }
 static void *probe_malloc(size_t n) {return denied()?NULL:malloc(n);}
 static void *probe_calloc(size_t n,size_t s) {return denied()?NULL:calloc(n,s);}
@@ -42,6 +46,34 @@ static uint32_t rnd=42;
 static uint32_t next(void) {rnd=rnd*1664525u+1013904223u;return rnd;}
 int main(void) {
  struct kv_mtab a={0},b={0};
+ /* Independent sorted-byte oracle, including zero-length keys, all prefix
+  * boundaries, and equal zero-padded prefixes of different lengths. */
+ for(unsigned length=0;length<=24;length++) {
+  uint8_t key[24]={0};
+  assert(!kv_mtab_set(&a,KV_OP_PUT,key,length,NULL,0));
+  if(length){key[length-1]=1;assert(!kv_mtab_set(&a,KV_OP_PUT,key,length,NULL,0));}
+ }
+ for(unsigned length=0;length<=24;length++)for(unsigned tail=0;tail<3;tail++) {
+  uint8_t key[24]={0};if(length)key[length-1]=(uint8_t)tail;
+  unsigned at=0;while(at<a.n && kv_key_cmp(a.e[at]->key,a.e[at]->klen,key,length)<0)at++;
+  int expected=at<a.n && !kv_key_cmp(a.e[at]->key,a.e[at]->klen,key,length),found;
+  assert(kv_mtab_pos(&a,key,length,&found)==at && found==expected);
+ }
+ kv_mtab_clear(&a);
+ /* Common metadata prefixes must not dereference full keys at every level
+  * of the binary search. Lookup equality still checks the exact bytes. */
+ for(unsigned i=0;i<4096;i++) {
+  uint8_t key[11]={0,1,2};key[9]=(uint8_t)(i>>8);key[10]=(uint8_t)i;
+  assert(!kv_mtab_set(&a,KV_OP_PUT,key,sizeof(key),NULL,0));
+ }
+ comparisons=0;
+ for(unsigned i=0;i<4096;i++) {
+  uint8_t key[11]={0,1,2};key[9]=(uint8_t)(i>>8);key[10]=(uint8_t)i;int found;
+  assert(kv_mtab_pos(&a,key,sizeof(key),&found)==i && found);
+ }
+ assert(comparisons==4096);
+ kv_mtab_clear(&a);
+
  uint8_t keys[16][10],values[16][8];struct efs_kv_item items[16];
  for(unsigned round=0;round<2000;round++) {
   unsigned n=round%17;
