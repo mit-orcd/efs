@@ -87,3 +87,31 @@ removing a fence and specify repeatable restart during recovery itself.
 
 This is a design record only. Reference devel at recording: `c1c1bc570`.
 No binaries built, tests of implementation run, or cluster changes made.
+
+## Review feedback (2026-10-16)
+
+Agree with the direction, ordering list and gates. One design input for the
+ordering review, aimed at the no-slowdown gate:
+
+- **Derive fragment durability from the existing barrier epochs instead of a
+  new per-fsync metadata write.** Each root already persists its barrier
+  progress: `put_sync_barrier_locked` runs `syncfs` and then writes
+  `(boot, durable seq, verifier)` to `.efs-durable-epoch` (`src/server/store.c`).
+  If every PUT acknowledgement also carried its root's `(boot, seq)` and the
+  published version recorded that tag per fragment, recovery could classify
+  each fragment as durable (`seq <= durable seq` recorded for that boot) or
+  uncertain. A version is then durable when all its fragments are. Ordering
+  item 2's "persist durable-version metadata before fsync success" may reduce
+  to today's data barrier, provided the published metadata itself is already
+  Raft-durable at publication. Verify that first.
+- Cost would be about 8 bytes more per PUT reply and per fragment reference
+  (a wire change; `EFS_PUT_REPLY_LEN` is 10 today), with no additional disk
+  I/O. Recovery reads only metadata plus the per-root records.
+- This also closes the fresh-client hole without client verifiers: uncertain
+  fragments are identified from the stored tags, not from whichever client
+  happens to remember an old verifier.
+- To check: a PUT must be assigned to an epoch only after its write is
+  complete, so that a barrier never certifies a write still in flight. Also
+  check multi-root nodes and a barrier failure (`r->error`) inside a boot.
+- This still covers only fragments with recorded tags. Old-format and
+  already-fenced stores still need the migration rule in this plan.
