@@ -20,7 +20,8 @@ Python 3.9.25, private libfuse 3.16.2. All EFS processes ran as erbmi1.
   retry and all retained-file reads from fcstor007 matched the expected bytes.
 - Temporary client-only tracing on fcstor007, otherwise unchanged source:
   13 mismatches in 5,422 cycles. Every affected request had the **correct**
-  payload at both `efs_client_read` completion and `fuse_reply_buf` entry.
+  distinguishing payload prefix at both `efs_client_read` completion and
+  `fuse_reply_buf` entry.
   The application nevertheless observed its previous payload.
 - Minimal fixed-file test, eight reader threads, 30 seconds, each destination
   prefilled with `?`: concurrent `fork()` produced **86,629 failures out of
@@ -74,6 +75,9 @@ Raw evidence is outside Git:
 `*-before.json`, `fcstor007-diag.json`, `fuse-diag.log`, `fork.json`,
 `posix-spawn.json`, `*-spawn2.json`. The `*-spawn.json` exploratory run is
 excluded: its script upload raced process startup and it overlapped another
-diagnostic workload. Diagnostic source copies are retained there. Earlier
+diagnostic workload. Diagnostic source copies are retained there. The temporary fcstor007 FUSE
+binary SHA-256 is `2e3f972b194ee8682f265daa83ba0060dede1b1faebd0317cdfc127e4043e9b2`;
+its only changes log read-source/reply prefixes. It was removed from service
+before the Raft/KV matrix. Earlier
 binary identities and original four-round results are in the
 [queued-read-vote evidence](orcd-queued-read-vote-20261016.md).
