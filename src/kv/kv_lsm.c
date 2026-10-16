@@ -93,20 +93,19 @@ void kv_mtab_clear(struct kv_mtab *m)
     m->bytes = 0;
 }
 
-/* First 8 key bytes as a big-endian integer, zero-padded. Ordered like
- * kv_key_cmp except that a key shorter than 8 bytes ties with a longer
- * key whose tail is zeros; a tie falls through to the full compare. The
- * memtable keeps these in a contiguous side array so a binary search
- * probes ~200 KiB of L2-resident integers and touches an entry (one
- * cache miss) only on a prefix tie. */
-static uint64_t key_pfx(const uint8_t *key, uint32_t klen)
+/* Metadata keys start with shard/kind followed by a big-endian inode.
+ * Eight bytes omit the low inode bits, causing full pointer/key loads for
+ * most comparisons within a shard. Sixteen bytes distinguish those keys
+ * while retaining ordered search and the exact fallback for longer keys,
+ * embedded zeros and different lengths. This is only an in-memory index. */
+static __uint128_t key_pfx(const uint8_t *key, uint32_t klen)
 {
-    uint64_t v = 0;
-    uint32_t i, n = klen < 8 ? klen : 8;
+    __uint128_t v = 0;
+    uint32_t n = klen < 16 ? klen : 16;
 
-    for (i = 0; i < n; i++)
-        v = (v << 8) | key[i];
-    return v << (8 * (8 - n));
+    for (uint32_t i = 0; i < n; i++)
+        v |= (__uint128_t)key[i] << (120 - 8 * i);
+    return v;
 }
 
 /* Index of key, or the insertion point with *found = 0. */
@@ -114,12 +113,12 @@ uint32_t kv_mtab_pos(const struct kv_mtab *m, const uint8_t *key,
                          uint32_t klen, int *found)
 {
     uint32_t lo = 0, hi = m->n;
-    uint64_t kp = key_pfx(key, klen);
+    __uint128_t kp = key_pfx(key, klen);
 
     *found = 0;
     while (lo < hi) {
         uint32_t mid = lo + (hi - lo) / 2;
-        uint64_t mp = m->pfx[mid];
+        __uint128_t mp = m->pfx[mid];
         int c = mp < kp ? -1 : mp > kp ? 1 :
                 kv_key_cmp(m->e[mid]->key, m->e[mid]->klen, key, klen);
         if (c == 0) {
@@ -165,7 +164,7 @@ int kv_mtab_set(struct kv_mtab *m, uint8_t op, const uint8_t *key,
     if (m->n == m->cap) {
         uint32_t cap = m->cap ? m->cap * 2 : 64;
         struct kv_ent **p = realloc(m->e, cap * sizeof(*p));
-        uint64_t *q;
+        __uint128_t *q;
         if (!p)
             return EFS_ERR_NOMEM;
         m->e = p;
@@ -223,7 +222,7 @@ int kv_mtab_merge(struct kv_mtab *m, struct kv_mtab *pending)
         uint32_t cap = m->cap && m->cap <= UINT32_MAX / 2 ? m->cap * 2 : total;
         if (cap < total) cap = total;
         struct kv_ent **e = malloc((size_t)cap * sizeof(*e));
-        uint64_t *pfx = malloc((size_t)cap * sizeof(*pfx));
+        __uint128_t *pfx = malloc((size_t)cap * sizeof(*pfx));
         if (!e || !pfx) {
             free(e);
             free(pfx);
