@@ -6870,7 +6870,24 @@ static void applied_path(struct efs_raft_host *h, uint8_t group,
  * guarantee. Entries without a cursor (no-op/config/legacy) retain the bounded
  * complement-record fallback. The worker consumes only the published durable
  * floor; it must never inspect a newer, unflushed in-memory cursor. */
-#define HOST_APPLIED_PERSIST_US 10000ull
+/* Default applied-index checkpoint interval. 100 ms (was 10 ms) on both
+ * engines: recovery replays from the atomic cursor, so a longer interval
+ * only lengthens replay after a crash. EFS_RAFT_APPLIED_INTERVAL_MS
+ * (10..1000) overrides it. */
+#define HOST_APPLIED_PERSIST_US 100000ull
+
+/* Follower receive batching of no-op and overlapping AppendEntries
+ * (prefix/term/suffix/admission/byte/config validated in raft.c). On by
+ * default for both engines: without it a follower synced every overlapping
+ * AE separately (Oct 16 Intel files engine: 1.1 entries per sync, 12-16 ms
+ * pump drains, ~25 ms lease edges; with it 3.7-3.9 ms). "0" disables. */
+static int host_batch_flag(const char *mode, int *out)
+{
+    if (!mode) { *out = 1; return EFS_OK; }
+    if (strcmp(mode, "0") && strcmp(mode, "1")) return EFS_ERR_INVAL;
+    *out = !strcmp(mode, "1");
+    return EFS_OK;
+}
 #define HOST_APPLIED_MAX_TAIL 1024ull
 
 /* Checkpoints are replay hints, never ACK watermarks. Keep the historical
@@ -8047,15 +8064,9 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
      * either engine. Keeping the window avoids redundant durable rewrites;
      * ordinary partial progress, negative replies and retry age are unchanged. */
     cfg.preserve_ack_window = 1;
-    {
-        const char *mode = getenv("EFS_RAFT_BATCH_NOOP");
-        if (mode && strcmp(mode, "0") && strcmp(mode, "1"))
-            return EFS_ERR_INVAL;
-        cfg.batch_noop = mode ? !strcmp(mode, "1") : (h->s && h->s->storage_engine);
-        mode=getenv("EFS_RAFT_BATCH_OVERLAP");
-        if (mode && strcmp(mode,"0") && strcmp(mode,"1")) return EFS_ERR_INVAL;
-        cfg.batch_overlap=mode ? !strcmp(mode,"1") : (h->s && h->s->storage_engine);
-    }
+    if (host_batch_flag(getenv("EFS_RAFT_BATCH_NOOP"), &cfg.batch_noop) != EFS_OK ||
+        host_batch_flag(getenv("EFS_RAFT_BATCH_OVERLAP"), &cfg.batch_overlap) != EFS_OK)
+        return EFS_ERR_INVAL;
     cfg.net = h;
     cfg.apply = host_apply;
     cfg.admit = h->pressure_enabled ? host_pressure_admit : NULL;

@@ -18,6 +18,14 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Raft follower batching default](intel-raft-follower-batching-20261016.md):
+**scoped PASS (performance)** measured on `3fba43af7` with the opt-in bundle
+(`EFS_RAFT_BATCH_OVERLAP=1`, `EFS_RAFT_BATCH_NOOP=1`, 100 ms applied interval),
+now the default for both engines: lease edges 25 → 3.7–3.9 ms, AMD small-file
+creates 77 → 345/s, busy-follower pump drains 12–16 → 1.3–1.6 ms. Same day:
+retained-close fix and hashed open table (`ae3a49d8a`), concurrent LSM reads
+(`3fba43af7`). Default commit not yet deployed; qualification NOTRUN.
+
 [Asynchronous PUT acknowledgement](intel-async-durability-20261015.md):
 **scoped PASS** on `3edc7b846` (async ACK from `d8af2c325`, concurrent-fsync
 COMMIT fix, 200 ms read-mapping TTL with refresh-ahead and close-to-open), now

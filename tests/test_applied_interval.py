@@ -16,7 +16,6 @@ code=r'''
 #include <sys/types.h>
 #include "efs/common.h"
 #define BO_COUNT(key) ((void)0)
-#define HOST_APPLIED_PERSIST_US 10000ull
 #define HOST_APPLIED_MAX_TAIL 1024ull
 struct group {int hosted;void*r;uint64_t applied_saved,applied_saved_us;int applied_fd;uint8_t group;uint64_t cursor_durable;};
 struct efs_raft_host {struct group g[2];uint64_t applied_persist_us;};
@@ -32,10 +31,15 @@ static int fdatasync(int fd){(void)fd;syncs++;return fail_sync?-1:0;}
 static int close(int fd){(void)fd;closes++;return 0;}
 static void applied_path(struct efs_raft_host*h,uint8_t g,char*p,size_t n){(void)h;(void)g;snprintf(p,n,"marker");}
 static void wr64be(uint8_t*p,uint64_t v){for(int i=7;i>=0;i--){p[i]=v&255;v>>=8;}}
-'''+fn('host_applied_interval')+fn('persist_applied')+r'''
+'''+s[s.index('#define HOST_APPLIED_PERSIST_US'):s.index('\n',s.index('#define HOST_APPLIED_PERSIST_US'))+1]+fn('host_batch_flag')+fn('host_applied_interval')+fn('persist_applied')+r'''
 int main(void){
  uint64_t us;
- assert(host_applied_interval(NULL,&us)==EFS_OK&&us==10000);
+ assert(host_applied_interval(NULL,&us)==EFS_OK&&us==100000); /* 100 ms default */
+ int flag=-1;
+ assert(host_batch_flag(NULL,&flag)==EFS_OK&&flag==1); /* on by default */
+ assert(host_batch_flag("0",&flag)==EFS_OK&&flag==0);
+ assert(host_batch_flag("1",&flag)==EFS_OK&&flag==1);
+ assert(host_batch_flag("",&flag)==EFS_ERR_INVAL&&host_batch_flag("yes",&flag)==EFS_ERR_INVAL);
  const char*bad[]={"","0","9","1001","-10","+10","1e2","100ms"," 100","999999999999999999999"};
  for(unsigned i=0;i<sizeof(bad)/sizeof(*bad);i++)assert(host_applied_interval(bad[i],&us)==EFS_ERR_INVAL);
  assert(host_applied_interval("1000",&us)==EFS_OK&&us==1000000);
