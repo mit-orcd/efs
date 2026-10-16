@@ -309,7 +309,10 @@ this list, before it ships.
   (`fsync`, `flush`, `O_SYNC`, or a landed-PUT REPORT — D24). Within one
   client, read-your-writes hold via the dcache. This resembles NFS
   close-to-open consistency (publication at `flush`, visibility on the
-  next open/read elsewhere) and only that: client-side buffering does
+  next open/read elsewhere). Reads on an already-open description may retain
+  a chunk mapping for `EFS_READ_MAP_TTL_MS` (default 200 ms, zero disables
+  this cache); a new open invalidates mapping freshness. This is only
+  close-to-open consistency: client-side buffering does
   not by itself imply weak coherence — lock- or lease-based PFSs recall
   buffered data to make it visible, and EFS has no such recall. It is a
   consistency deviation separate from the durability rule above and is
@@ -1522,10 +1525,12 @@ full acceptance are separate states.
 ### Recent evidence and remaining acceptance
 
 [AMD asynchronous durability fixes](../status/amd-async-durability-20261015.md):
-implementation on `devel-amd-durability-20261015` from `84ffe7a68`, qualification
-pending. Early PUT ACKs retained; fsync commits all storage nodes, compares
-boot verifiers and rejects uncertain unclean recovery. The two review holes
-are covered by focused regressions; live RDMA/direct qualification follows.
+**durability scoped PASS, loaded POSIX FAIL** on `c4178ea81`, branch
+`devel-amd-durability-20261015` from `84ffe7a68`. Early ACKs retained; all-node
+COMMIT, boot verifiers and persistent unclean-recovery refusal pass focused
+and live RDMA/direct gates. Native, serial216/216, peer67/67 and cold27/27
+pass; jobs16 is214/216 (`names_crazy_dirs`, `concurrent_creates_same_dir`
+time out at15s). W119 remains open; no seven-client run or power-cut claim.
 
 
 [Asynchronous PUT acknowledgement](../status/intel-async-durability-20261015.md):
@@ -1636,7 +1641,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 
 | # | item | class | status | home |
 | --- | --- | --- | --- | --- |
-| orcd-qualification | **W119** · ORCD normal-operation RDMA failures and blocked clean stop | correctness / liveness | OPEN: 150 concurrent failures /846 NOTRUN; cross-host peer59/67; enabled queries EBUSY; retained writes block clean stop. TCP/commands-off rerun also FAILs (120 failures,520 NOTRUN; peer61/67; clean stop refused); all23 successfully prepared cold cases verify after authorized forced restart. [TCP evidence](../status/orcd-tcp-direct-disabled-20261015.md). Preserve failures, isolate causes and rerun original gates; W100 stays closed. [AMD follow-up](../status/amd-rdma-posix-20261015.md): native/serial/peer/cold/degraded PASS at `c8d057391`; one-mount jobs16 remains215/216 with unusual-name timeout | [evidence and gates](../status/orcd-devel-qualification-20261015.md) · [item](#w119) |
+| orcd-qualification | **W119** · ORCD normal-operation RDMA failures and blocked clean stop | correctness / liveness | OPEN: 150 concurrent failures /846 NOTRUN; cross-host peer59/67; enabled queries EBUSY; retained writes block clean stop. TCP/commands-off rerun also FAILs (120 failures,520 NOTRUN; peer61/67; clean stop refused); all23 successfully prepared cold cases verify after authorized forced restart. [TCP evidence](../status/orcd-tcp-direct-disabled-20261015.md). Preserve failures, isolate causes and rerun original gates; W100 stays closed. [AMD follow-up](../status/amd-rdma-posix-20261015.md): native/serial/peer/cold/degraded PASS at `c8d057391`; one-mount jobs16 remains215/216 with unusual-name timeout. [Async durability follow-up](../status/amd-async-durability-20261015.md) at `c4178ea81`: scoped durability/native/serial/peer/cold/degraded PASS; jobs16 FAIL214/216 (unusual names, concurrent creates,15s) | [evidence and gates](../status/orcd-devel-qualification-20261015.md) · [item](#w119) |
 | qualification-fixtures | **W120** · stale extracted LOOKUP stub and command cleanup ownership check | verification correctness | OPEN (partial fix): AMD `f6235bb73` repairs the LOOKUP host context and checks reader identity; native/docs PASS at `85a9ad6b5`. Enabled-command cleanup ownership remains NOTRUN here and still needs correction/acceptance. [AMD evidence](../status/amd-rdma-posix-20261015.md); preserve original failures | [evidence](../status/orcd-devel-qualification-20261015.md) · [item](#w120) |
 | 0i | **W54** · a fold's GC deletes the live base → read EIO, data loss | correctness | NUC direct/buffered authoritative folds and cold GC/restart pass; real cold IOR/hardscan passes at 4 and 36 ranks, including nine independent NUC FUSE clients; nine physical hosts remain; AMD software-RXE fold/GC gate passes, hardware RDMA remains | [full text](#w54--a-folds-gc-deletes-the-live-base-queue-row-0i) |
 | 0j | **W69** · the client's 50 ms lookup memo returns pre-mutation stats (posix 164/201) | correctness | correctness accepted: real blocked LOOKUP across chmod, immediate stats and full POSIX pass; GNU du samples recorded; unidentified Spark performance gate remains | [full text](#w69) |
@@ -1691,7 +1696,7 @@ positions do not assign an execution order or override the active handoff.
 
 | review ID | finding | classification | review state | evidence / gate |
 | --- | --- | --- | --- | --- |
-| spec1 | **W71** · fragment PUT lacks a production persistence barrier | durability correctness | historical per-PUT barrier superseded by asynchronous ACK; all-node COMMIT/verifier and unclean-recovery fencing under qualification ([AMD follow-up](../status/amd-async-durability-20261015.md)); hardware power-loss gate owed | [evidence and gate](#w71) |
+| spec1 | **W71** · fragment PUT lacks a production persistence barrier | durability correctness | historical per-PUT barrier superseded by asynchronous ACK; all-node COMMIT/verifier and unclean-recovery refusal pass AMD scoped gates on c4178ea81 ([AMD follow-up](../status/amd-async-durability-20261015.md)); hardware power-loss gate owed | [evidence and gate](#w71) |
 | spec2 | **W72** · production mount session lifecycle / I23 integration | fencing integration | partial — full mount UUID/epoch shared by append/HOLD/FLOCK; retained FUSE CREATE/adoption and sequenced OPEN/CLOSE plus proven-revocation recovery pass AMD direct/TCP; namespace shard admission and fenced replay/effect checks are AMD gated; Oct 11 merged REGISTER verdict mismatch repaired; before/after proof retained; REGISTER/ESTABLISH verdict regressions and final captured `90a47313` full normal/fault native plus direct/buffered TCP cold namespace/APPEND/sync gates pass ([follow-up](../status/amd-integration-20261011.md#w72-register-verdict-mismatch--reproduced-and-repaired)); REPORT mapping/activation/completion session fences pass AMD direct/TCP; staged typed per-publication recovery/newer-range ownership passes AMD; production flush/PUT-ticket integration remain open | [evidence and gate](#w72) · [Oct9 mounted-client gates](../status/dependency-package-20261009.md#terminal-retained-identity-recovery--implementedgated) |
 | spec3 | **W73** · synchronous application-write publication | integration | Closed supported software integration: application sync and mount-sync direct/buffered × TCP/RXE gates accepted; hardware power-loss acceptance remains W71 ([Oct9 closure](../status/amd-rxe-gate-closure-20261009.md)) | [evidence and gate](#w73) |
 | spec4 | **W74** · protection profiles, debt and automatic repair | recovery feature gap | ordinary-fragment standalone repair qualified ([ledger](../status/orcd-default-repair-20261012.md)); automatic/unplanned and packed repair deferred; protection/profile cutover remain unclosed | [evidence and gate](#w74) |

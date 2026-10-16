@@ -19,10 +19,12 @@ full acceptance are separate states.
 ## Recent evidence and remaining acceptance
 
 [AMD asynchronous durability fixes](amd-async-durability-20261015.md):
-implementation on `devel-amd-durability-20261015` from `84ffe7a68`, qualification
-pending. Early PUT ACKs retained; fsync commits all storage nodes, compares
-boot verifiers and rejects uncertain unclean recovery. The two review holes
-are covered by focused regressions; live RDMA/direct qualification follows.
+**durability scoped PASS, loaded POSIX FAIL** on `c4178ea81`, branch
+`devel-amd-durability-20261015` from `84ffe7a68`. Early ACKs retained; all-node
+COMMIT, boot verifiers and persistent unclean-recovery refusal pass focused
+and live RDMA/direct gates. Native, serial216/216, peer67/67 and cold27/27
+pass; jobs16 is214/216 (`names_crazy_dirs`, `concurrent_creates_same_dir`
+time out at15s). W119 remains open; no seven-client run or power-cut claim.
 
 
 [Asynchronous PUT acknowledgement](intel-async-durability-20261015.md):
