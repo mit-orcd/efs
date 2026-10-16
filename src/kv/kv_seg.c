@@ -49,6 +49,8 @@ struct blk_ref {
  * paid the disk again. Slots keep those blocks resident. Each block is
  * about 8 KiB, so this is a couple of megabytes per segment. */
 #define KV_SEG_CACHE_SLOTS 256
+/* Divides KV_SEG_CACHE_SLOTS, so a slot always maps to one stripe. */
+#define KV_SEG_CMU_STRIPES 32
 /* Optional indexes are bounded independently of block/value size. */
 #define KV_BLOCK_HASH_BYTES_MAX (16u * 1024u)
 #define KV_SEG_HASH_BYTES_MAX (128u * 1024u)
@@ -97,13 +99,20 @@ struct kv_seg {
     uint32_t refs;
     char *path; /* open path; a private reopen for export */
     char *doom; /* unlink this path when refs hits 0 */
-    uint32_t hash_bytes; /* protected by cmu */
+    uint32_t hash_bytes; /* soft budget across slots; atomic */
     struct seg_cslot cslot[KV_SEG_CACHE_SLOTS];
-    /* Shared LSM readers probe, install and copy cached blocks in parallel;
-     * cmu guards cslot and hash_bytes. */
-    pthread_mutex_t cmu;
+    /* Shared LSM readers probe, install and copy cached blocks in parallel.
+     * cmu[bi % KV_SEG_CMU_STRIPES] guards the slot(s) of block bi; one lock
+     * per segment serialized every reader of a hot segment (Oct 16 Intel:
+     * ~14k waits per 10 s in scan seeks on the metadata leader). */
+    pthread_mutex_t cmu[KV_SEG_CMU_STRIPES];
     struct seg_bloom *bloom; /* published once, read lock-free */
 };
+
+static pthread_mutex_t *seg_cmu(struct kv_seg *s, uint32_t bi)
+{
+    return &s->cmu[bi % KV_SEG_CMU_STRIPES];
+}
 
 /* --- writer ---------------------------------------------------------- */
 
@@ -405,7 +414,8 @@ int kv_seg_open(const char *path, struct kv_seg **out)
     if (!s)
         return EFS_ERR_NOMEM;
     s->refs = 1;
-    pthread_mutex_init(&s->cmu, NULL);
+    for (unsigned i = 0; i < KV_SEG_CMU_STRIPES; i++)
+        pthread_mutex_init(&s->cmu[i], NULL);
     s->path = strdup(path);
     if (!s->path) {
         free(s);
@@ -524,7 +534,8 @@ static void seg_free(struct kv_seg *s)
     if (s->fd >= 0)
         close(s->fd);
     free(s->bloom);
-    pthread_mutex_destroy(&s->cmu);
+    for (unsigned i = 0; i < KV_SEG_CMU_STRIPES; i++)
+        pthread_mutex_destroy(&s->cmu[i]);
     free(s->path);
     free(s->doom);
     free(s);
@@ -1022,14 +1033,15 @@ int kv_seg_probe(struct kv_seg *s, const uint8_t *key, uint32_t klen,
         return EFS_ERR_NOT_FOUND;
     r = &s->idx[bi];
     c = &s->cslot[(uint32_t)bi % KV_SEG_CACHE_SLOTS];
-    pthread_mutex_lock(&s->cmu);
+    pthread_mutex_t *mu = seg_cmu(s, (uint32_t)bi);
+    pthread_mutex_lock(mu);
     if (c->valid && c->bi == (uint32_t)bi && c->len == r->len &&
         c->off == r->off && c->blk) {
         int rc = search_block(c, key, klen, val, op);
-        pthread_mutex_unlock(&s->cmu);
+        pthread_mutex_unlock(mu);
         return rc;
     }
-    pthread_mutex_unlock(&s->cmu);
+    pthread_mutex_unlock(mu);
     io->fd = s->fd;
     io->off = r->off;
     io->len = r->len;
@@ -1075,14 +1087,15 @@ static int seg_block_index(struct kv_seg *s, uint32_t bi, uint8_t *blk, uint32_t
     return rc;
 }
 
-/* Caller holds s->cmu. Takes ownership of blk and entries. */
+/* Caller holds seg_cmu(s, bi). Takes ownership of blk and entries. */
 static struct seg_cslot *seg_slot_install_locked(struct kv_seg *s, uint32_t bi,
                                                  uint8_t *blk, uint32_t *entries,
                                                  uint32_t count)
 {
     const struct blk_ref *r = &s->idx[bi];
     struct seg_cslot *c = &s->cslot[bi % KV_SEG_CACHE_SLOTS];
-    s->hash_bytes -= c->hash_slots * sizeof(uint32_t);
+    __atomic_sub_fetch(&s->hash_bytes, c->hash_slots * (uint32_t)sizeof(uint32_t),
+                       __ATOMIC_RELAXED);
     free(c->blk); free(c->entries); free(c->hash);
     c->hash = NULL; c->hash_slots = 0;
     c->entries = entries; c->nentries = count;
@@ -1091,7 +1104,11 @@ static struct seg_cslot *seg_slot_install_locked(struct kv_seg *s, uint32_t bi,
     c->len = r->len;
     c->off = r->off;
     c->valid = 1;
-    s->hash_bytes += block_hash_build(c, KV_SEG_HASH_BYTES_MAX - s->hash_bytes);
+    {
+        uint32_t used = __atomic_load_n(&s->hash_bytes, __ATOMIC_RELAXED);
+        uint32_t avail = used < KV_SEG_HASH_BYTES_MAX ? KV_SEG_HASH_BYTES_MAX - used : 0;
+        __atomic_add_fetch(&s->hash_bytes, block_hash_build(c, avail), __ATOMIC_RELAXED);
+    }
     if (bi + 1 == s->nblocks) {
         uint32_t tail = entries[count - 1];
         seg_note_last(s, blk + tail + 9, get_u32(blk + tail + 1));
@@ -1113,10 +1130,11 @@ int kv_seg_install(struct kv_seg *s, const struct kv_seg_io *io, uint8_t *blk,
     uint32_t *entries = NULL, count = 0;
     int rc = seg_block_index(s, io->bi, blk, io->len, &entries, &count);
     if (rc != EFS_OK) return rc;
-    pthread_mutex_lock(&s->cmu);
+    pthread_mutex_t *mu = seg_cmu(s, io->bi);
+    pthread_mutex_lock(mu);
     struct seg_cslot *c = seg_slot_install_locked(s, io->bi, blk, entries, count);
     rc = search_block(c, key, klen, val, op);
-    pthread_mutex_unlock(&s->cmu);
+    pthread_mutex_unlock(mu);
     return rc;
 }
 
@@ -1268,7 +1286,7 @@ void kv_seg_iter_close(struct kv_seg_iter *it)
     free(it);
 }
 
-/* Caller holds it->s->cmu. */
+/* Caller holds seg_cmu(it->s, it->bi). */
 static struct seg_cslot *iter_cached(struct kv_seg_iter *it,
                                      const struct blk_ref *r)
 {
@@ -1285,15 +1303,16 @@ static struct seg_cslot *iter_cached(struct kv_seg_iter *it,
 static int iter_load_cached(struct kv_seg_iter *it, const struct blk_ref *r,
                             const uint8_t *seek, uint32_t slen)
 {
-    pthread_mutex_lock(&it->s->cmu);
+    pthread_mutex_t *mu = seg_cmu(it->s, it->bi);
+    pthread_mutex_lock(mu);
     struct seg_cslot *c = iter_cached(it, r);
     if (!c) {
-        pthread_mutex_unlock(&it->s->cmu);
+        pthread_mutex_unlock(mu);
         return 0;
     }
     uint8_t *p = realloc(it->blk, r->len);
     if (!p) {
-        pthread_mutex_unlock(&it->s->cmu);
+        pthread_mutex_unlock(mu);
         return 0;
     }
     it->blk = p;
@@ -1316,7 +1335,7 @@ static int iter_load_cached(struct kv_seg_iter *it, const struct blk_ref *r,
         it->off = lo < c->nentries ? c->entries[lo] : it->blk_len;
     }
     it->loaded = 1;
-    pthread_mutex_unlock(&it->s->cmu);
+    pthread_mutex_unlock(mu);
     return 1;
 }
 
@@ -1396,9 +1415,9 @@ int kv_seg_iter_seek(struct kv_seg_iter *it, const uint8_t *seek, uint32_t plen)
         /* seg_block_index frees blk itself on a malformed block; the scan
          * then reads it uncached exactly as before. */
         if (blk && seg_block_index(it->s, it->bi, blk, r->len, &entries, &count) == EFS_OK) {
-            pthread_mutex_lock(&it->s->cmu);
+            pthread_mutex_lock(seg_cmu(it->s, it->bi));
             (void)seg_slot_install_locked(it->s, it->bi, blk, entries, count);
-            pthread_mutex_unlock(&it->s->cmu);
+            pthread_mutex_unlock(seg_cmu(it->s, it->bi));
             (void)iter_load_cached(it, r, seek, plen);
         }
     }
