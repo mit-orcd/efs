@@ -48,19 +48,19 @@ static int run(unsigned deadline){struct efs_msg_query_snapshot req={.root=42};s
  return rc;}
 int main(void){
  assert(!run(1000)&&reads==4);
- cached_rc=EFS_ERR_NOT_FOUND;assert(run(1000)==EFS_ERR_BUSY&&reads==2);
+ cached_rc=EFS_ERR_NOT_FOUND;assert(run(1000)==EFS_ERR_NODATA&&reads==2);
  fresh_rc=EFS_ERR_BUSY;assert(run(1000)==EFS_ERR_BUSY&&reads==2);fresh_rc=cached_rc=0;
  cached_rc=EFS_ERR_IO;assert(run(1000)==EFS_ERR_IO&&reads==1);cached_rc=0;
  fresh_rc=EFS_ERR_BUSY;assert(run(1000)==EFS_ERR_BUSY&&reads==2);fresh_rc=0;
- wrong_generation=1;assert(run(1000)==EFS_ERR_BUSY&&reads==2);wrong_generation=0;
- wrong_parent=1;assert(run(1000)==EFS_ERR_BUSY&&reads==2);wrong_parent=0;
+ wrong_generation=1;assert(run(1000)==EFS_ERR_NODATA&&reads==2);wrong_generation=0;
+ wrong_parent=1;assert(run(1000)==EFS_ERR_NODATA&&reads==2);wrong_parent=0;
  link_rc=EFS_ERR_BUSY;assert(run(1000)==EFS_ERR_BUSY&&reads==3);link_rc=0;
- lookup_rc=EFS_ERR_NOT_FOUND;assert(run(1000)==EFS_ERR_BUSY&&reads==4);
+ lookup_rc=EFS_ERR_NOT_FOUND;assert(run(1000)==EFS_ERR_NODATA&&reads==4);
  lookup_rc=EFS_ERR_BUSY;assert(run(1000)==EFS_ERR_BUSY&&reads==4);lookup_rc=0;
- wrong_binding=1;assert(run(1000)==EFS_ERR_BUSY&&reads==4);wrong_binding=0;
+ wrong_binding=1;assert(run(1000)==EFS_ERR_NODATA&&reads==4);wrong_binding=0;
  assert(run(99)==EFS_ERR_BUSY&&!reads);
  access_rc=EFS_ERR_ACCES;assert(run(1000)==EFS_ERR_ACCES&&reads==4);
- puts("root refusal: cached new root, live TXN, catalog IO, parent/generation, binding missing/TXN/mismatch, expiry and permission retain exact refusal without output PASS");
+ puts("root refusal: unpublished/moved root NODATA, cached new root, live TXN, catalog IO, parent/generation, binding missing/TXN/mismatch, expiry and permission retain exact refusal without output PASS");
 }
 '''
 code='#include "'+str(root/'src/common/query_stage_trace.h')+'"\n'+code

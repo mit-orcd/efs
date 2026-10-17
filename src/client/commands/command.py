@@ -579,9 +579,27 @@ def main(argv=None, script_path=None):
     return 0
 
 
-if __name__ == "__main__":
+# EX_TEMPFAIL: the request was valid but the catalog has not caught up yet.
+NOT_INDEXED_EXIT = 75
+
+
+def run(argv=None):
     try:
-        sys.exit(main())
-    except (OSError, ValueError) as error:
+        return main(argv)
+    except OSError as error:
+        if error.errno == errno.ENODATA:
+            # The server proved the published catalog older than this
+            # directory (created, renamed or moved after the snapshot).
+            print("efs command: not indexed yet: this directory was created, renamed or "
+                  "moved after the published catalog snapshot; retry after the next "
+                  "background refresh.", file=sys.stderr)
+            return NOT_INDEXED_EXIT
         print("efs command: " + safe_text(str(error)), file=sys.stderr)
-        sys.exit(1)
+        return 1
+    except ValueError as error:
+        print("efs command: " + safe_text(str(error)), file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(run())

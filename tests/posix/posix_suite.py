@@ -2797,9 +2797,41 @@ def concurrent_write_and_readdir(d):
 # ==========================================================================
 # Virtual .stats / .find (efs FUSE extras; skip if feature off)
 # ==========================================================================
+# Exit status of an .efs command whose directory is newer than the published
+# catalog snapshot ("not indexed yet"; see command.py NOT_INDEXED_EXIT).
+EFS_NOT_INDEXED_EXIT = 75
+
+
+def efs_command_output(argv, deadline):
+    """Run an .efs command; wait out "not indexed yet" until the case deadline.
+    A catalog refresh interval longer than the case budget is reported as
+    SKIP with that reason, not as a command failure."""
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise Fail(".efs command exceeded the configured case budget")
+        try:
+            return subprocess.check_output(argv, timeout=min(30, remaining))
+        except subprocess.CalledProcessError as error:
+            if error.returncode != EFS_NOT_INDEXED_EXIT:
+                raise
+        if time.monotonic() + .5 >= deadline:
+            raise Fail("not indexed yet within the case budget (catalog refresh "
+                       "interval is longer)", soft=True)
+        time.sleep(.5)
+
+
+def efs_case_deadline():
+    # Leave the case alarm (same budget) room to see the soft result.
+    budget_s = float(os.environ.get("EFS_POSIX_CASE_TIMEOUT_S", "10"))
+    budget_s = budget_s if budget_s > 0 else 10
+    return time.monotonic() + budget_s - min(2.0, budget_s / 4)
+
+
 @extra
 def virt_stats_readable(d):
     import json
+    deadline = efs_case_deadline()
     wr(os.path.join(d, "a"), b"x")
     p = os.path.join(d, ".efs", "stats")
     if not os.path.exists(p):
@@ -2807,7 +2839,7 @@ def virt_stats_readable(d):
     st = os.lstat(p)
     assert statmod.S_ISREG(st.st_mode) and st.st_mode & 0o111
     assert rd(p).startswith(b"#!/usr/bin/env python3"), "stats is readable source"
-    out = subprocess.check_output([sys.executable, p, "--json"], timeout=30)
+    out = efs_command_output([sys.executable, p, "--json"], deadline)
     result = json.loads(out)
     assert result["complete"] is True and "tree_bytes" in result["stats"], result
     expect_err((errno.EPERM, errno.EACCES, errno.ENOENT, errno.EIO, errno.ENOTDIR), os.unlink, p)
@@ -2819,8 +2851,7 @@ def virt_find_query(d):
     # A published snapshot may legitimately predate this write. Use the case's
     # configured wall budget instead of a hidden shorter visibility cutoff;
     # the parent still kills the whole process group at the original deadline.
-    budget_s = float(os.environ.get("EFS_POSIX_CASE_TIMEOUT_S", "10"))
-    deadline = time.monotonic() + (budget_s if budget_s > 0 else 10)
+    deadline = efs_case_deadline()
     wr(os.path.join(d, "report.txt"), b"x")
     p = os.path.join(d, ".efs", "find")
     if not os.path.exists(p):
@@ -2829,8 +2860,7 @@ def virt_find_query(d):
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise Fail(".efs/find missed report.txt within the configured case budget")
-        out = subprocess.check_output([sys.executable, p, "report", "--json"],
-                                      timeout=min(30, remaining))
+        out = efs_command_output([sys.executable, p, "report", "--json"], deadline)
         if time.monotonic() >= deadline:
             raise Fail(".efs/find exceeded the configured case budget")
         result = json.loads(out)

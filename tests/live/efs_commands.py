@@ -86,7 +86,7 @@ def open_query(path):
         try:
             return open(path,'rb')
         except OSError as error:
-            if error.errno not in (errno.ESTALE,errno.EAGAIN,errno.EBUSY) or attempt==7:
+            if error.errno not in (errno.ESTALE,errno.EAGAIN,errno.EBUSY,errno.ENODATA) or attempt==7:
                 raise
             time.sleep(.025*(attempt+1))
 

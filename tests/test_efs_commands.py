@@ -57,6 +57,31 @@ class Commands(unittest.TestCase):
             self.assertIs(refused.exception, error)
             self.assertEqual(opened.call_count, 1)
 
+    def test_not_indexed_is_reported_without_retry(self):
+        # ENODATA: the server proved the catalog older than this directory.
+        # Retrying inside the 8 s window cannot help; report it at once.
+        error = OSError(errno.ENODATA, "No data available")
+        with patch("builtins.open", side_effect=error) as opened, \
+                patch.object(commands.time, "sleep") as sleep:
+            with self.assertRaises(OSError) as refused:
+                commands.read_result(self.directory, "stats")
+            self.assertIs(refused.exception, error)
+            self.assertEqual(opened.call_count, 1)
+            sleep.assert_not_called()
+        import contextlib, io
+        for raised, code, text in ((error, commands.NOT_INDEXED_EXIT, "not indexed yet"),
+                                   (OSError(errno.EBUSY, "Device or resource busy"), 1,
+                                    "Device or resource busy"),
+                                   (ValueError("unsupported or incomplete query result"), 1,
+                                    "unsupported")):
+            stderr = io.StringIO()
+            with patch.object(commands, "main", side_effect=raised), \
+                    contextlib.redirect_stderr(stderr):
+                self.assertEqual(commands.run([]), code)
+            self.assertIn(text, stderr.getvalue())
+            self.assertTrue(stderr.getvalue().startswith("efs command: "))
+        self.assertEqual(commands.NOT_INDEXED_EXIT, 75)
+
     def test_short_transient_refusal_still_recovers(self):
         stream = mock_open(read_data=b"{}").return_value
         with patch("builtins.open", side_effect=[OSError(errno.EAGAIN, "retry"), stream]) as opened, \

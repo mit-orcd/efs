@@ -41,4 +41,36 @@ class QueryBudget(unittest.TestCase):
         with self.assertRaises((suite.Fail,subprocess.TimeoutExpired)):
             self.run_query(5,20)
 
+    def run_not_indexed(self,budget,indexed_after):
+        # Exit 75 = "not indexed yet": wait within the case budget, then SKIP.
+        now=[0.0];calls=[0]
+        def output(args,timeout):
+            self.assertLessEqual(timeout,budget-now[0]+1e-9);calls[0]+=1;now[0]+=.2
+            if indexed_after is None or now[0]<indexed_after:
+                raise subprocess.CalledProcessError(suite.EFS_NOT_INDEXED_EXIT,args)
+            return json.dumps({'entries':[{'path_hex':b'report.txt'.hex()}]}).encode()
+        with tempfile.TemporaryDirectory() as td:
+            path=Path(td)/'.efs';path.mkdir();(path/'find').touch()
+            with patch.dict(os.environ,{'EFS_POSIX_CASE_TIMEOUT_S':str(budget)}), \
+                 patch.object(suite.time,'monotonic',side_effect=lambda:now[0]), \
+                 patch.object(suite.time,'sleep',side_effect=lambda n:now.__setitem__(0,now[0]+n)), \
+                 patch.object(suite.subprocess,'check_output',side_effect=output):
+                suite.virt_find_query(td)
+        self.assertLess(now[0],budget);return calls[0]
+    def test_not_indexed_then_indexed_passes(self):
+        self.assertGreater(self.run_not_indexed(30,5),1)
+    def test_never_indexed_is_soft_skip_before_case_alarm(self):
+        with self.assertRaises(suite.Fail) as refused:
+            self.run_not_indexed(30,None)
+        self.assertTrue(refused.exception.soft)
+        self.assertIn('not indexed yet',str(refused.exception))
+    def test_other_command_failure_stays_hard(self):
+        def output(args,timeout):
+            raise subprocess.CalledProcessError(1,args)
+        with tempfile.TemporaryDirectory() as td:
+            path=Path(td)/'.efs';path.mkdir();(path/'find').touch()
+            with patch.object(suite.subprocess,'check_output',side_effect=output):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    suite.virt_find_query(td)
+
 if __name__=='__main__':unittest.main()

@@ -10168,6 +10168,10 @@ static int query_access(const struct efs_msg_query_snapshot *q,const struct efs_
     uint32_t perm=q->uid==r->uid ? (r->mode>>6)&7 : group ? (r->mode>>3)&7 : r->mode&7;
     return (perm & (uint32_t)mask)==(uint32_t)mask ? EFS_OK : EFS_ERR_ACCES;
 }
+/* NODATA: the published catalog is older than the live namespace for this
+ * directory (created, moved or renamed after the snapshot). Retrying before
+ * the next refresh cannot succeed; commands report "not indexed yet". BUSY
+ * stays for refusals a retry can clear (live transactions, admission). */
 static int query_directory_binding(struct query_request *q,efs_ino_t ino)
 {
     if (ino==EFS_ROOT_INO) return EFS_OK;
@@ -10181,14 +10185,14 @@ static int query_directory_binding(struct query_request *q,efs_ino_t ino)
     struct efs_meta_dentry current;
     rc=efs_meta_apply_lookup_tx(q->h->kv,link.parent,link.name,host_txn_coord,q->h,&current);
     if(rc==EFS_ERR_NOT_FOUND) {
-        efs_query_root_stage_trace("binding-missing",EFS_ERR_BUSY,query_mono_ms()-started,q->req->root,q->view->generation,ino);
-        return EFS_ERR_BUSY;
+        efs_query_root_stage_trace("binding-missing",EFS_ERR_NODATA,query_mono_ms()-started,q->req->root,q->view->generation,ino);
+        return EFS_ERR_NODATA;
     }
     if(rc) {
         efs_query_root_stage_trace("binding-live-txn",rc,query_mono_ms()-started,q->req->root,q->view->generation,ino);
         return rc;
     }
-    rc=current.ino==ino && current.generation==link.dentry.generation ? EFS_OK : EFS_ERR_BUSY;
+    rc=current.ino==ino && current.generation==link.dentry.generation ? EFS_OK : EFS_ERR_NODATA;
     if(rc)efs_query_root_stage_trace("binding-mismatch",rc,query_mono_ms()-started,q->req->root,q->view->generation,ino);
     return rc;
 }
@@ -10209,10 +10213,10 @@ static int query_auth_dir(struct query_request *q,efs_ino_t ino,int mask,struct 
             if (rc==EFS_ERR_NOT_FOUND) {
                 struct efs_meta_row fresh;
                 rc=efs_meta_apply_get_inode_tx(q->h->kv,ino,host_txn_coord,q->h,&fresh);
-                int refused=rc?rc:EFS_ERR_BUSY;
+                int refused=rc?rc:EFS_ERR_NODATA;
                 efs_query_root_stage_trace(rc?"root-live-txn":"root-catalog-absent",refused,
                     query_mono_ms()-started,q->req->root,q->view->generation,ino);
-                return refused; /* New directory waits for publication. */
+                return refused; /* New directory: not indexed until published. */
             }
             if(rc) {
                 efs_query_root_stage_trace("root-catalog-read",rc,query_mono_ms()-started,q->req->root,q->view->generation,ino);
@@ -10225,8 +10229,8 @@ static int query_auth_dir(struct query_request *q,efs_ino_t ino,int mask,struct 
             }
             if (!S_ISDIR(a->row.mode) || !a->row.nlink) return EFS_ERR_NOT_FOUND;
             if (a->row.generation!=cached.generation || a->row.parent!=cached.parent) {
-                efs_query_root_stage_trace("root-parent-generation",EFS_ERR_BUSY,query_mono_ms()-started,q->req->root,q->view->generation,ino);
-                return EFS_ERR_BUSY;
+                efs_query_root_stage_trace("root-parent-generation",EFS_ERR_NODATA,query_mono_ms()-started,q->req->root,q->view->generation,ino);
+                return EFS_ERR_NODATA;
             }
             rc=query_directory_binding(q,ino);
             if (rc) return rc;
