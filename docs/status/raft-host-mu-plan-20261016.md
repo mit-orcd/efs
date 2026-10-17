@@ -5,7 +5,8 @@ measured.** Follows [waiter wake-up outside `cv_mu`](orcd-mini-waiter-wake-20261
 (deployed as `4aff22c62`). Its leader profile under the user's workload put
 ~72% of lock waits on `h->mu`: proposals 29%, verdict reads 17% and
 leader-cover picks 14%. Source references are to `src/server/raft_host.c` at
-`619f5297e`.
+`619f5297e`; rechecked at `d68d9a58a` (see [Code and baseline
+update](#code-and-baseline-update-2026-10-17)).
 
 ## How the plan was reached
 
@@ -45,7 +46,7 @@ leader-cover picks 14%. Source references are to `src/server/raft_host.c` at
 
    Readers need bounded retries and a safe fallback. Current readers:
    `host_apply_rc_locked` (line 4915) and its extra variant, the term check
-   near line 4998, and the batch check near line 18150.
+   near line 4998, and the batch check in `host_pub_batch_wait` near line 18166.
 2. **Targeted tests in addition to existing ones:** slot wraparound,
    concurrent replacement, term mismatch, reset, and `rc` always matching its
    own `extra`. Keep each reader's existing BUSY/STALE/NOT_PRIMARY behavior;
@@ -70,6 +71,48 @@ Also from the review:
   `sched_yield` batching in `host_propose_impl`. Current evidence does not
   justify it.
 
+## Code and baseline update (2026-10-17)
+
+**Code.** Rechecked at `d68d9a58a`. Since `598e9f51d`, `raft_host.c` changed
+only in query code, so every finding above still holds. The batch reader moved
+from near line 18150 to near line 18166; this page now uses the new number.
+`8ad79fcd5` moved Raft log rotation off the metadata path (`src/raft/raft_log.c`).
+Rotation used to run from `save_snap` with the pump holding `h->mu`
+([rotation stall](raft-rotate-stall-20261017.md)). The `4aff22c62` figures
+above were taken before that fix.
+
+**Live baseline.** [orcd-mini profile on `9099380f3`](orcd-mini-profile-9099380f3-20261017.md),
+3 s DWARF context-switch capture of the leader efsd, 2026-10-17 21:20Z:
+- Lock waits are 15.6% of leader switches (13,688 of 87,487), nearly all
+  `h->mu`. The cv_mu wake-up re-acquire is no longer in the top 12.
+- Load: ~9,800 commits/s, efsd at 12.8 cores. Clients spend ~49% of their
+  switches waiting for RPC replies.
+- Workload: two `tiny_files` writers (933 and 745 writes/s) plus `edelete`,
+  `ecrawl` and an md5 reader.
+
+| Share of leader lock waits | Path |
+| --- | --- |
+| 27.9% | submit (`host_propose_impl` 15.5%, propose-wait 12.4%) |
+| 13.9% | REPORT |
+| 12.7% | retained CREATE (`host_leader_cover_pick` 8.9%, `host_wait_verdict` 3.8%) |
+| 7.7% | unlink (propose 4.3%, verdict 3.4%) |
+| 4.8% | `host_pub_batch_propose` |
+| 3.9% | `host_create` |
+| 3.2% | LOOKUP |
+| 2.3% | GETATTR lanes |
+| 2.2% | `host_pump` |
+
+This is not a before/after comparison with `4aff22c62`. The workload
+differs, and the ~72% figure was the `h->mu` share of lock waits, not of
+leader switches. Proposals are still the largest site. REPORT is now
+roughly as large as the leader-cover picks, so its conditional step 5 may
+matter more than the earlier profile suggested. Step 4 decides that.
+
+This is a lock-wait mix only, so step 1 is still NOTRUN. perf cannot split
+time into queueing, lock acquisition, local persistence, quorum ack, apply
+and reply. That still needs step 1's instrumentation, plus throughput,
+CPU per operation and p50/p95/p99 under a controlled workload.
+
 ## Agreed sequence
 
 | Step | Work | Gate before the next step |
@@ -87,5 +130,6 @@ more owners alone would not remove those waits.
 
 ## Remaining gates
 
-All steps are NOTRUN. No environment, build or workload applies yet. Each
-step's evidence page must record those details per AGENTS.md.
+All steps are NOTRUN. The `9099380f3` profile is a lock-wait baseline, not
+step 1's per-phase measurement. Each step's evidence page must record its
+environment, build and workload per AGENTS.md.
