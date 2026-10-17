@@ -1528,6 +1528,14 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[orcd-mini deploy `8ad79fcd5` and full POSIX qualification](../status/orcd-mini-deploy-8ad79fcd5-20261017.md):
+**deployed; core POSIX PASS.** smoke 216/216, XFS comparison PASS,
+two-client 67/67, persist 27/27, private GC + POSIX TCP and RDMA PASS.
+- `posix_extras` fails 2/5: `.efs` stats/find on a just-created directory
+  return EBUSY under the 60 s catalog refresh default.
+- `posix_expiry` fails in its fixture ("different inode group"),
+  identically on the previous release `4aff22c62f9f`.
+
 [Raft log rotation off the metadata path](../status/raft-rotate-stall-20261017.md):
 **implementation, unit and private-cluster A/B PASS; orcd-mini live
 NOTRUN (needs a deploy).**
