@@ -1587,7 +1587,9 @@ defect); the 60 s cap and exact dependencies carry the gain.
 **NOTRUN; plan only.** Measure per-phase timing → routing snapshot →
 race-free result-ring reads → reassess → conditional REPORT change →
 proposal queue only if justified. Routing and the result ring are A/B'd
-separately.
+separately. Rechecked at `d68d9a58a`: the code findings still hold. The
+`9099380f3` profile is the live lock-wait baseline: submit 27.9%, REPORT
+13.9%, leader-cover picks 8.9%. Per-phase timing is still NOTRUN.
 
 [Client staging evictor: O(1) LRU](../status/orcd-mini-stage-evict-20261017.md):
 **deployed to both orcd-mini clients (`155695ccd`); PASS under the
