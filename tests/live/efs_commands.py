@@ -65,7 +65,7 @@ def find_gate():
                ('index_ns', 'stats_ns', 'persist_ns')), build
     else:
         assert build['index_ns'] > 0 and build['stats_ns'] > 0 and build['restore_ns'] == 0, build
-    assert result['snapshot']['refresh_ms'] == 2000, result
+    assert result['snapshot']['refresh_ms'] == int(os.environ.get('EFS_QUERY_REFRESH_MS', '60000')), result
 eventually(find_gate)
 result = command(other, 'find', '.txt', '--match', 'suffix', '-0')
 assert set(result.stdout.split(b'\0')[:-1]) == {os.fsencode(other) + b'/' + p for p in expected}

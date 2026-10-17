@@ -32,6 +32,8 @@ io_flag='--direct-io' if args.mode=='direct' else '--no-direct-io'
 work.mkdir(parents=True,exist_ok=False)
 logs=[];procs=[];fuse_procs=[];mounts=[];held_stream=None
 env=dict(os.environ,EFS_MD_RAFT_N='4',EFS_TRANSPORT='tcp')
+# Publication gates expect a fresh catalog within seconds; production defaults to 60 s.
+env.setdefault('EFS_QUERY_REFRESH_MS','2000')
 if os.environ.get('EFS_QUERY_FUSE')=='1': env['EFS_COMMANDS']='1'
 # Reserve consecutive candidates while checking; no unrelated process is killed.
 for base in range(24800,25000,4):

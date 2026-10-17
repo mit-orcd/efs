@@ -25,8 +25,8 @@ full acceptance are separate states.
   itself was about 1–3%.
 - Change: reap cleanup of unlinked inodes no longer schedules a refresh.
   Unchanged shards are rescanned only when a shard they actually read changed
-  (exact 4096-shard sets). New `EFS_QUERY_REFRESH_MS`, default unchanged at
-  2000.
+  (exact 4096-shard sets). New `EFS_QUERY_REFRESH_MS`; its default changes
+  from 2 s to 60 s.
 - GC schedule untouched.
 
 [`h->mu` contention plan and review](raft-host-mu-plan-20261016.md):

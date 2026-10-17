@@ -9624,7 +9624,7 @@ static void *host_gc_thread(void *arg)
 #include "query_refresh.h"
 #include "query_export_lease.h"
 #define HOST_QUERY_N 256
-#define HOST_QUERY_T_MS 2000 /* default; EFS_QUERY_REFRESH_MS overrides */
+#define HOST_QUERY_T_MS 60000 /* default; EFS_QUERY_REFRESH_MS overrides */
 /* Set once by the query publisher before its first view; read-only after. */
 static unsigned host_query_interval_ms=HOST_QUERY_T_MS;
 #define HOST_QUERY_BUILD_MS 10000

@@ -93,9 +93,15 @@ sha256 prefixes:
      `query-publish` and `query-disk: incremental`.
 3. **`EFS_QUERY_REFRESH_MS`.**
    - Minimum time between refresh attempts and the reported overdue age.
-     Default **2000 (unchanged)**, range 200..3600000.
-   - Invalid values keep the default and log `query-config`.
-   - Changing the default is pending the user's decision.
+     Range 200..3600000; invalid values keep the default and log
+     `query-config`.
+   - **The default is now 60000 (was 2000)**, at the user's direction: a
+     catalog minutes behind is acceptable. A ~1.3 s rebuild at most once a
+     minute is about 2% of a core instead of about 60%.
+   - The live gates (`tests/live/gc_reclamation.py`,
+     `tests/live/query_publication.py`) pin 2000 unless the caller sets it,
+     because they assert freshness within seconds. `tests/live/efs_commands.py`
+     checks `refresh_ms` against the configured value.
 
 ## Tests
 
@@ -134,6 +140,9 @@ change's files overlaid, built with `EFS_GIT_ID=qcat00000001`.
       was not copied to the test tree, and its `regen-diff` check fails on the
       unmodified release too. In the repository checkout all 5 checks pass.
   - Build: efsd sha256 `d40c2d07fe593a656f9ae79e16b3110d2dbfeff02179a4d5e48f6992cd191e22`.
+  - Repeated with the 60 s default and the live-gate pins: 765 commands, the
+    same 4 environmental failures. efsd sha256
+    `500d658f4b0eb84ef317b198994c1dd4d681322c0719d2ccb92421405e19210c`.
 - **NOTRUN:** `tests/live/gc_reclamation.py`. It starts private daemons, and
   the user asked for no extra clusters. GC scheduling and GC deletion code
   are unchanged; only the KV revision accounting for reap writes changed.

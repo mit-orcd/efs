@@ -264,6 +264,8 @@ for path in sorted(inputs):
                       for name in ('efsd','efs-fuse','efs-mgmt')},
 },indent=2))
 env = dict(os.environ, EFS_MD_RAFT_N='4', EFS_TRANSPORT=a.transport)
+# Query gates expect a fresh catalog within seconds; production defaults to 60 s.
+env.setdefault('EFS_QUERY_REFRESH_MS', '2000')
 if a.expiry_backlog_files:
     assert a.expiry and 1000 <= a.expiry_backlog_files <= 100000
 if a.expiry_soak_seconds:
