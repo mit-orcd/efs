@@ -1528,6 +1528,21 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[`h->mu` contention plan and review](../status/raft-host-mu-plan-20261016.md):
+**NOTRUN; plan only.** Measure per-phase timing → routing snapshot →
+race-free result-ring reads → reassess → conditional REPORT change →
+proposal queue only if justified. Routing and the result ring are A/B'd
+separately.
+
+[Waiter wake-up outside `cv_mu`](../status/orcd-mini-waiter-wake-20261016.md):
+**deployed to orcd-mini (`4aff22c62`); smoke 216/216 PASS.**
+`host_waiters_wake` decides under `cv_mu` and signals after unlocking.
+- Under the user's workload, condvar re-acquire is 6.8% of the leader's lock
+  waits (45.1% on `f4a373b13`).
+- The leader's lock waits are now ~72% `h->mu`: proposals 29%, verdict
+  reads 17%, leader-cover picks 14%.
+- Private A/B: 21.4% → 2.2%; creates/s and latency unchanged within noise.
+
 [orcd-mini profile on `f4a373b13`](../status/orcd-mini-profile-f4a373b13-20261016.md):
 **profiling only.** Under the user's workload, LOOKUP ReadIndex lock waits
 stay at 0.8% (9.1% before the fix). The leader's top lock wait (45%) is woken
@@ -1562,7 +1577,7 @@ spike of 24–27 ms, which is not explained.
 [W123 — automatic crash recovery](../backlog/crash-safe-durable-versions.md): **proposed new feature; source review only.** Reuse root barrier watermarks if epoch history, exact write tags and retained file versions prove recovery. No extra fsync-time metadata commit remains a hypothesis; eight-byte/zero-I/O cost claims are unproven. Implementation and acceptance NOTRUN; W71 remains open.
 
 [orcd-mini deployment of `09f8af09c`](../status/orcd-mini-deploy-09f8af09c-20261016.md)
-(now running `f4a373b13`, KV buffer leak fix; smoke POSIX 216/216 PASS):
+(now running `4aff22c62`, waiter wake-up outside `cv_mu`; smoke POSIX 216/216 PASS):
 **deployed; live POSIX 216/216, two-client 67/67, durability 27/27 PASS.**
 `make test` has 4 environmental failures. GC crash-restart and fault-suite
 integration FAIL on the known W71 uncertain-recovery fence, the same as the
