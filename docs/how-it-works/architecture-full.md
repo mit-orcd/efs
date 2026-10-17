@@ -1528,6 +1528,17 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[orcd-mini deploy `9099380f3`: "not indexed yet"](../status/orcd-mini-deploy-9099380f3-20261017.md):
+**deployed; every POSIX suite PASS, no failures.** smoke 216/216, XFS
+comparison PASS, extras 0 fail (the `.efs` freshness checks SKIP with "not
+indexed yet"), two-client 67/67, persist 27/27, private GC + POSIX gates
+TCP and RDMA PASS.
+- `.efs` commands on a directory newer than the catalog now exit 75 with
+  "not indexed yet" in 34 ms; before, they returned EBUSY after retries.
+- All other temp clusters on node9900/node9901 are stopped. Old raw
+  captures under `/tmp`, `/data1/efs/prof/ab`, `/data1/efs/work` and
+  `/data1/efs/testsuite` were deleted at the user's direction.
+
 [orcd-mini deploy `8ad79fcd5` and full POSIX qualification](../status/orcd-mini-deploy-8ad79fcd5-20261017.md):
 **deployed; core POSIX PASS.** smoke 216/216, XFS comparison PASS,
 two-client 67/67, persist 27/27, private GC + POSIX TCP and RDMA PASS.
