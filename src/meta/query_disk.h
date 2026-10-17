@@ -10,6 +10,7 @@ int efs_query_disk_build_checked(const char *,struct efs_kv_lsm_snapshot *,
 void efs_query_disk_free(struct efs_query_disk *);
 uint64_t efs_query_disk_bytes(const struct efs_query_disk *);
 uint32_t efs_query_disk_refolded(const struct efs_query_disk *);
+uint32_t efs_query_disk_walked(const struct efs_query_disk *);
 uint32_t efs_query_disk_rebuilt(const struct efs_query_disk *);
 int efs_query_disk_inode(const struct efs_query_disk *,efs_ino_t,struct efs_meta_row *,struct efs_meta_stat *);
 int efs_query_disk_stats(const struct efs_query_disk *,efs_ino_t,struct efs_query_rollup *);

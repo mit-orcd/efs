@@ -1460,6 +1460,43 @@ static void test_durable_query_hints(void)
     if(kv){CHECK(!durable_hints(kv,id,r) && memcmp(id,saved,sizeof(id)),"missing sidecar forces a fresh lineage");efs_kv_lsm_close(kv);}
 }
 
+/* Dead-inode cleanup: its INODE/LANE/APPEND_CUR deletes advance the query
+ * revision (exact shard reuse) but not the refresh-trigger revision. */
+static void test_cleanup_scope_hints(void)
+{
+    rmtree(g_dir);
+    struct efs_kv *kv=open_store(EFS_KV_LSM_NOSYNC,0);
+    CHECK(kv!=NULL,"open cleanup hints");
+    if (!kv) return;
+    uint8_t inode[]={0,5,EFS_KV_KIND_INODE,1},lane[]={0,6,EFS_KV_KIND_LANE,1},
+            cur[]={0,7,EFS_KV_KIND_APPEND_CUR,1},dent[]={0,8,EFS_KV_KIND_DENTRY,1};
+    const uint8_t *keys[]={inode,lane,cur,dent};
+    for(unsigned i=0;i<4;i++)CHECK(!efs_kv_put(kv,keys[i],4,(const uint8_t *)"v",1),"cleanup fixture put");
+    uint64_t m0[4096],m1[4096],q0[4096],q1[4096],id[2];
+    CHECK(!efs_kv_lsm_metadata_revisions(kv,m0,4096) && !durable_hints(kv,id,q0),"cleanup baseline");
+    efs_kv_lsm_cleanup_scope(1);efs_kv_lsm_cleanup_scope(1);
+    struct efs_kv_item dels[]={{EFS_KV_DEL,inode,4,NULL,0},{EFS_KV_DEL,lane,4,NULL,0},{EFS_KV_DEL,cur,4,NULL,0}};
+    CHECK(!efs_kv_batch(kv,dels,3),"cleanup deletes");
+    efs_kv_lsm_cleanup_scope(0);
+    CHECK(!efs_kv_lsm_metadata_revisions(kv,m1,4096) && !durable_hints(kv,id,q1),"cleanup revisions");
+    CHECK(!memcmp(m0,m1,sizeof(m0)),"cleanup deletes do not schedule a refresh");
+    CHECK(q1[5]==q0[5]+1 && q1[6]==q0[6]+1 && q1[7]==q0[7]+1,"cleanup deletes still invalidate shard reuse");
+    CHECK(efs_kv_lsm_cleanup_deferred(kv)==3,"deferred cleanup counted");
+    /* Still inside the outer scope: names and puts are never deferred. */
+    CHECK(!efs_kv_del(kv,dent,4),"dentry delete in scope");
+    CHECK(!efs_kv_put(kv,inode,4,(const uint8_t *)"w",1),"inode put in scope");
+    CHECK(!efs_kv_lsm_metadata_revisions(kv,m1,4096) && m1[8]==m0[8]+1 && m1[5]==m0[5]+1,
+          "name deletes and puts schedule a refresh inside the scope");
+    efs_kv_lsm_cleanup_scope(0);efs_kv_lsm_cleanup_scope(0);
+    CHECK(!efs_kv_del(kv,inode,4),"inode delete outside scope");
+    CHECK(!efs_kv_lsm_metadata_revisions(kv,m0,4096) && m0[5]==m1[5]+1,"ordinary deletes schedule a refresh");
+    CHECK(efs_kv_lsm_cleanup_deferred(kv)==3,"only scoped deletes deferred");
+    struct efs_kv *mem=efs_kv_mem_create();
+    CHECK(mem && efs_kv_lsm_cleanup_deferred(mem)==0,"non-LSM store reports none");
+    if(mem)efs_kv_mem_free(mem);
+    efs_kv_lsm_close(kv);
+}
+
 static void test_metadata_dirty_hints(void)
 {
     rmtree(g_dir);
@@ -1695,6 +1732,7 @@ int main(void)
         test_full_snapshot();
         test_snapshot_batch_cut();
         test_metadata_dirty_hints();
+        test_cleanup_scope_hints();
         test_durable_query_hints();
         goto report;
     }
@@ -1718,6 +1756,7 @@ int main(void)
     test_full_snapshot();
     test_snapshot_batch_cut();
     test_metadata_dirty_hints();
+    test_cleanup_scope_hints();
     test_durable_query_hints();
     test_compact_crash();
     test_sync_hold();

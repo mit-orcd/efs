@@ -94,6 +94,24 @@ static int meta_write_del(struct efs_kv *kv, const uint8_t *key, uint32_t kl)
     return rc == EFS_OK ? efs_kv_del(kv, key, kl) : rc;
 }
 
+/* Rows of an inode that no name references: the query catalog picks the
+ * deletion up at its next rebuild instead of scheduling one (kv_lsm.h). */
+static int meta_cleanup_del(struct efs_kv *kv, const uint8_t *key, uint32_t kl)
+{
+    efs_kv_lsm_cleanup_scope(1);
+    int rc = meta_write_del(kv, key, kl);
+    efs_kv_lsm_cleanup_scope(0);
+    return rc;
+}
+static int meta_cleanup_batch(struct efs_kv *kv, const struct efs_kv_item *items,
+                              uint32_t count)
+{
+    efs_kv_lsm_cleanup_scope(1);
+    int rc = meta_write_batch(kv, items, count);
+    efs_kv_lsm_cleanup_scope(0);
+    return rc;
+}
+
 static void be16(uint8_t *p, uint16_t v)
 {
     p[0] = (uint8_t)(v >> 8);
@@ -5779,8 +5797,9 @@ int efs_meta_apply_lane_sweep(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
             break;
     }
     /* The lane key itself is the last thing to go. A replay finds no
-     * chunks and re-deletes an absent lane key, which is a no-op. */
-    rc = meta_write_del(kv, k_ln, kl);
+     * chunks and re-deletes an absent lane key, which is a no-op. Only the
+     * reaper sweeps lanes, after the last name of the inode is gone. */
+    rc = meta_cleanup_del(kv, k_ln, kl);
     if (rc == EFS_ERR_NOT_FOUND)
         rc = EFS_OK;
     return rc;
@@ -5859,7 +5878,7 @@ int efs_meta_apply_lane_sweep_batch(struct efs_kv *kv, efs_ino_t ino, uint64_t g
     if (count) return EFS_ERR_BUSY;
     rc=efs_kv_key_lane(efs_kv_lane_shard(ino,lane),ino,gen,lane,key,&kl);
     if (rc != EFS_OK) return rc;
-    rc=meta_write_del(kv,key,kl);
+    rc=meta_cleanup_del(kv,key,kl);
     return rc == EFS_ERR_NOT_FOUND ? EFS_OK : rc;
 }
 
@@ -6098,7 +6117,8 @@ int efs_meta_apply_reap_done(struct efs_kv *kv, efs_ino_t ino, uint64_t gen)
             for(uint32_t i=0;i<expiry_change.count;i++)it[n++]=expiry_change.items[i];
         }
     }
-    return meta_write_batch(kv, it, n);
+    /* The row is absent or has nlink 0 and no lease (checked above). */
+    return meta_cleanup_batch(kv, it, n);
 }
 
 struct gc_ack_scratch {

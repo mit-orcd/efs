@@ -601,6 +601,7 @@ struct efs_query_build_times efs_query_catalog_build_times(const struct efs_quer
 { return c ? c->times : (struct efs_query_build_times){0}; }
 uint64_t efs_query_catalog_bytes(const struct efs_query_catalog *c) { return c ? c->bytes : 0; }
 uint32_t efs_query_catalog_refolded(const struct efs_query_catalog *c) { return c ? (c->disk?efs_query_disk_refolded(c->disk):c->refolded) : 0; }
+uint32_t efs_query_catalog_walked(const struct efs_query_catalog *c) { return c && c->disk ? efs_query_disk_walked(c->disk) : 0; }
 uint32_t efs_query_catalog_reused_edges(const struct efs_query_catalog *c) { return c ? c->reused_edges : 0; }
 uint32_t efs_query_catalog_rebuilt(const struct efs_query_catalog *c) { return c ? c->rebuilt : 0; }
 int efs_query_catalog_inode(const struct efs_query_catalog *c, efs_ino_t ino,

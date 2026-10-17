@@ -53,6 +53,23 @@ int main(void)
     assert(efs_query_refresh_due(52000,1000,50000,10000,0,0,256,2000));
     /* A slow completed build has already used the interval; no added delay. */
     assert(efs_query_refresh_due(5000,1001,1000,256,0,0,256,2000));
+    /* EFS_QUERY_REFRESH_MS: unset keeps the default; out of range or
+     * malformed keeps it and reports INVAL. The bound applies to the
+     * existing start-to-start coalescing above, whatever the backlog. */
+    {
+        unsigned ms=0;
+        assert(!efs_query_refresh_interval_config(NULL,2000,&ms) && ms==2000);
+        assert(!efs_query_refresh_interval_config("60000",2000,&ms) && ms==60000);
+        assert(!efs_query_refresh_interval_config("200",2000,&ms) && ms==200);
+        assert(!efs_query_refresh_interval_config("3600000",2000,&ms) && ms==3600000);
+        const char *bad[]={"","199","3600001","99999999999999999999","60s","-1"," 60000","6e4"};
+        for(unsigned i=0;i<sizeof(bad)/sizeof(bad[0]);i++){
+            ms=0;assert(efs_query_refresh_interval_config(bad[i],2000,&ms)==EFS_ERR_INVAL && ms==2000);
+        }
+        /* With a 60 s interval a saturated backlog still waits for it. */
+        assert(!efs_query_refresh_due(59999,0,1,10000,0,0,256,60000));
+        assert(efs_query_refresh_due(60001,0,1,10000,0,0,256,60000));
+    }
     assert(efs_query_refresh_poll_ms(1)==20 && efs_query_refresh_admit_ms(1)==20);
     assert(efs_query_refresh_poll_ms(0)==100 && efs_query_refresh_admit_ms(0)==200);
     /* Only cheap final cut refusals retry early; authority/costly failures wait. */

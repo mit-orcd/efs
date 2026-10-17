@@ -10,7 +10,10 @@
 #include "efs/txn.h"
 #include "efs/session.h"
 #include "efs/common.h"
+#include "efs/kv_lsm.h"
 #include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
 #include <sys/stat.h>
 
@@ -5604,8 +5607,54 @@ static void test_reap_bounded_exact_keys(void)
     efs_kv_mem_free(kv);
 }
 
+/* Reaping an unreferenced inode never schedules a query refresh: its
+ * lane, inode and append-cursor deletes advance only the query revisions
+ * that make the next (otherwise triggered) rebuild of those shards exact. */
+static void test_reap_cleanup_deferred(void)
+{
+    char dir[]="/tmp/efs-meta-reap-cleanup-XXXXXX";
+    CHECK(mkdtemp(dir) != NULL,"cleanup store dir");
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};
+    struct efs_kv *kv=efs_kv_lsm_open(dir,&cfg);
+    CHECK(kv != NULL,"cleanup store");if(!kv)return;
+    efs_ino_t ino=0;struct efs_meta_row row;
+    uint8_t key[EFS_KV_KEY_MAX],value[EFS_META_INO_BYTES],lane[EFS_META_LANE_BYTES]={0},cur[24]={0};
+    uint8_t marker[EFS_META_REAP_VAL];uint32_t kl;
+    CHECK(efs_meta_apply_init(kv,T0)==EFS_OK,"cleanup init");
+    CHECK(efs_meta_apply_create_file(kv,&g_at,EFS_ROOT_INO,S_IFREG|0644,"z",&ino)==EFS_OK,"cleanup create");
+    CHECK(efs_meta_apply_get_inode(kv,ino,&row)==EFS_OK,"cleanup row");
+    uint32_t ish=efs_kv_inode_shard(ino),lsh=efs_kv_lane_shard(ino,1);
+    CHECK(ish!=lsh,"lane 1 in another shard");
+    /* The state an unlink leaves for the reaper: nlink 0 row, marker. */
+    row.nlink=0;row.active_lanes=2;
+    efs_kv_key_inode(ish,ino,key,&kl);efs_meta_pack_inode(&row,value,sizeof(value));
+    CHECK(efs_kv_put(kv,key,kl,value,sizeof(value))==EFS_OK,"dead row");
+    efs_kv_key_lane(lsh,ino,row.generation,1,key,&kl);
+    CHECK(efs_kv_put(kv,key,kl,lane,sizeof(lane))==EFS_OK,"dead lane");
+    efs_kv_key_append_cur(ish,ino,row.generation,key,&kl);
+    CHECK(efs_kv_put(kv,key,kl,cur,sizeof(cur))==EFS_OK,"dead cursor");
+    efs_kv_key_reap(efs_kv_anchor_shard(ish),ino,key,&kl);efs_meta_pack_reap(marker,row.generation,2);
+    CHECK(efs_kv_put(kv,key,kl,marker,sizeof(marker))==EFS_OK,"reap marker");
+    static uint64_t m0[4096],m1[4096],q0[4096],q1[4096];uint64_t id[2];
+    struct efs_kv_lsm_snapshot *snap=NULL;
+    CHECK(efs_kv_lsm_metadata_revisions(kv,m0,4096)==EFS_OK,"trigger before");
+    CHECK(efs_kv_lsm_snapshot_pin(kv,1<<20,&snap)==EFS_OK && efs_kv_lsm_snapshot_query_revisions(snap,id,q0)==EFS_OK,"content before");
+    efs_kv_lsm_snapshot_release(snap);snap=NULL;
+    uint64_t deferred=efs_kv_lsm_cleanup_deferred(kv);
+    CHECK(efs_meta_apply_lane_sweep_batch(kv,ino,row.generation,1,NULL,0)==EFS_OK,"sweep dead lane");
+    CHECK(efs_meta_apply_reap_done(kv,ino,row.generation)==EFS_OK,"reap dead inode");
+    CHECK(efs_meta_apply_get_inode(kv,ino,&row)==EFS_ERR_NOT_FOUND,"dead row removed");
+    CHECK(efs_kv_lsm_metadata_revisions(kv,m1,4096)==EFS_OK && !memcmp(m0,m1,sizeof(m0)),
+          "reap schedules no query refresh");
+    CHECK(efs_kv_lsm_snapshot_pin(kv,1<<20,&snap)==EFS_OK && efs_kv_lsm_snapshot_query_revisions(snap,id,q1)==EFS_OK,"content after");
+    efs_kv_lsm_snapshot_release(snap);
+    CHECK(q1[ish]>q0[ish] && q1[lsh]>q0[lsh],"reaped shards still invalidate catalog reuse");
+    CHECK(efs_kv_lsm_cleanup_deferred(kv)>=deferred+3,"lane, row and cursor deletes deferred");
+    efs_kv_lsm_close(kv);
+}
 int main(void)
 {
+    test_reap_cleanup_deferred();
     test_create_negative_replay();
     test_gc_last_close_before_resolve();
     test_orphan_unlink();

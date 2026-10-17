@@ -123,9 +123,93 @@ static void test_restart_catchup(void)
     if(next && memory)compare(source,memory,next,EFS_ROOT_INO);
     efs_query_catalog_free(next);efs_query_catalog_free(memory);efs_kv_lsm_snapshot_release(source);efs_kv_lsm_close(kv);
 }
+/* Lane row with big-endian EOF, one commit and one allocated chunk. */
+static void lane_put(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,unsigned lane,uint64_t eof)
+{
+    uint8_t key[EFS_KV_KEY_MAX],value[EFS_META_LANE_BYTES]={0};uint32_t kn;
+    for(unsigned i=0;i<8;i++)value[i]=(uint8_t)(eof>>(56-8*i));
+    value[31]=1;value[63]=1;
+    CHECK(!efs_kv_key_lane(efs_kv_lane_shard(ino,(uint8_t)lane),ino,gen,(uint8_t)lane,key,&kn));
+    CHECK(!efs_kv_put(kv,key,kn,value,sizeof(value)));
+}
+static void same_stat(struct efs_kv_lsm_snapshot *source,struct efs_query_catalog *disk,efs_ino_t ino)
+{
+    struct efs_query_catalog *memory=NULL;struct efs_meta_row a,b;struct efs_meta_stat sa,sb;
+    CHECK(!efs_query_catalog_build(source,NULL,32<<20,NULL,NULL,&memory));if(!memory || !disk)return;
+    CHECK(!efs_query_catalog_inode(memory,ino,&a,&sa) && !efs_query_catalog_inode(disk,ino,&b,&sb));
+    CHECK(!memcmp(&a,&b,sizeof(a)) && !memcmp(&sa,&sb,sizeof(sa)));
+    efs_query_catalog_free(memory);
+}
+/* Exact cross-shard dependencies: only partitions whose inodes read a changed
+ * partition are rescanned. One-lane files depend on their own shard only, so
+ * an unrelated edit, even one colliding modulo 64 with a real dependency,
+ * walks nothing; the real dependency is still refreshed. A restored
+ * generation has no exact rows and keeps the conservative filter. */
+static void test_dependency_rows(void)
+{
+    char store[]="/tmp/efs-query-deps-kv-XXXXXX",root[]="/tmp/efs-query-deps-cache-XXXXXX";
+    CHECK(mkdtemp(store));CHECK(mkdtemp(root));
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
+    CHECK(kv);if(!kv)return;
+    struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t dir,ids[600];
+    CHECK(!efs_meta_apply_init(kv,100));
+    CHECK(!efs_meta_apply_mkdir(kv,&attrs,EFS_ROOT_INO,S_IFDIR|0755,"deps",&dir));
+    for(unsigned i=0;i<600;i++){
+        char name[32];snprintf(name,sizeof(name),"f%04u",i);
+        CHECK(!efs_meta_apply_create_file(kv,&attrs,dir,S_IFREG|0644,name,&ids[i]));
+    }
+    /* X: two lanes, lane 1 in another shard L. */
+    efs_ino_t x=ids[0];struct efs_meta_row row;CHECK(!efs_meta_apply_get_inode(kv,x,&row));
+    uint32_t xs=efs_kv_inode_shard(x),lshard=efs_kv_lane_shard(x,1);CHECK(lshard!=xs);
+    row.active_lanes=3;
+    {uint8_t key[EFS_KV_KEY_MAX],value[EFS_META_INO_BYTES];uint32_t kn;
+     CHECK(!efs_kv_key_inode(xs,x,key,&kn));CHECK(!efs_meta_pack_inode(&row,value,sizeof(value)));
+     CHECK(!efs_kv_put(kv,key,kn,value,sizeof(value)));}
+    lane_put(kv,x,row.generation,0,8192);lane_put(kv,x,row.generation,1,8192);
+    /* Y: an unrelated (unreferenced) inode whose shard collides with L
+     * modulo 64. Allocation clusters by directory, so place it directly. */
+    efs_ino_t y=0;
+    for(uint32_t ys=lshard%64;ys<4096 && !y;ys+=64)
+        if(ys!=lshard && ys!=xs)y=(UINT64_C(7000001)<<12)|ys;
+    CHECK(y && efs_kv_inode_shard(y)%64==lshard%64 && efs_kv_inode_shard(y)!=lshard);
+    if(!y){efs_kv_lsm_close(kv);return;}
+    struct efs_kv_lsm_snapshot *source=NULL;struct efs_query_catalog *d0=NULL,*d1=NULL,*d2=NULL,*r=NULL,*d3=NULL;
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));
+    CHECK(!efs_query_catalog_build_disk(root,source,NULL,16<<20,NULL,NULL,&d0));
+    same_stat(source,d0,x);efs_kv_lsm_snapshot_release(source);source=NULL;
+    /* Lane 1 grows: only L changes; X's shard must be rescanned and refolded. */
+    lane_put(kv,x,row.generation,1,1<<20);
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));
+    CHECK(!efs_query_catalog_build_disk(root,source,d0,16<<20,NULL,NULL,&d1));
+    CHECK(efs_query_catalog_rebuilt(d1)==1 && efs_query_catalog_walked(d1)==1 && efs_query_catalog_refolded(d1)==1);
+    same_stat(source,d1,x);
+    {struct efs_meta_row a;struct efs_meta_stat st;CHECK(d1 && !efs_query_catalog_inode(d1,x,&a,&st) && st.size>8192);}
+    efs_kv_lsm_snapshot_release(source);source=NULL;
+    /* Y's shard collides with L in the 64-bit filter but is not an input. */
+    {struct efs_meta_row yr=row;uint8_t key[EFS_KV_KEY_MAX],value[EFS_META_INO_BYTES];uint32_t kn;
+     yr.ino=y;yr.nlink=0;yr.active_lanes=0;yr.base_size=77;
+     CHECK(!efs_kv_key_inode(efs_kv_inode_shard(y),y,key,&kn));CHECK(!efs_meta_pack_inode(&yr,value,sizeof(value)));
+     CHECK(!efs_kv_put(kv,key,kn,value,sizeof(value)));}
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));
+    CHECK(!efs_query_catalog_build_disk(root,source,d1,16<<20,NULL,NULL,&d2));
+    CHECK(efs_query_catalog_rebuilt(d2)==1 && efs_query_catalog_walked(d2)==0 && efs_query_catalog_refolded(d2)==1);
+    same_stat(source,d2,x);
+    /* Restored generations fall back to the persisted filter, still exact. */
+    uint64_t wm[4]={5,6,7,8};CHECK(d2 && !efs_query_catalog_checkpoint(d2,wm));
+    CHECK(!efs_query_catalog_restore_disk(root,source,wm,16<<20,&r));
+    efs_kv_lsm_snapshot_release(source);source=NULL;
+    lane_put(kv,x,row.generation,1,2<<20);
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));
+    CHECK(r && !efs_query_catalog_build_disk(root,source,r,16<<20,NULL,NULL,&d3));
+    CHECK(efs_query_catalog_walked(d3)>=1);
+    same_stat(source,d3,x);
+    efs_query_catalog_free(d3);efs_query_catalog_free(r);efs_query_catalog_free(d2);
+    efs_query_catalog_free(d1);efs_query_catalog_free(d0);
+    efs_kv_lsm_snapshot_release(source);efs_kv_lsm_close(kv);
+}
 int main(void)
 {
-    if(!getenv("EFS_QUERY_TEST_QUOTA") && !getenv("EFS_QUERY_TEST_NOSPACE")){test_restart_catchup();test_catchup_retirement();}
+    if(!getenv("EFS_QUERY_TEST_QUOTA") && !getenv("EFS_QUERY_TEST_NOSPACE")){test_restart_catchup();test_catchup_retirement();test_dependency_rows();}
     char store[256],root[256];snprintf(store,sizeof(store),"/tmp/efs-query-disk-kv-%d",getpid());snprintf(root,sizeof(root),"/tmp/efs-query-disk-cache-%d",getpid());
     struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);CHECK(kv);if(!kv)return 1;
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t dir,sub,file;

@@ -63,6 +63,9 @@ uint64_t efs_query_catalog_bytes(const struct efs_query_catalog *catalog);
 /* Per-build work counters; dependency reuse includes inode and active lane
  * partitions and assumes the same transaction-safe source contract above. */
 uint32_t efs_query_catalog_refolded(const struct efs_query_catalog *catalog);
+/* Disk builder only: unchanged partitions rescanned because an input
+ * partition they depend on changed (0 for RAM catalogs). */
+uint32_t efs_query_catalog_walked(const struct efs_query_catalog *catalog);
 uint32_t efs_query_catalog_reused_edges(const struct efs_query_catalog *catalog);
 uint32_t efs_query_catalog_rebuilt(const struct efs_query_catalog *catalog);
 int efs_query_catalog_inode(const struct efs_query_catalog *catalog, efs_ino_t ino,

@@ -148,6 +148,15 @@ uint64_t efs_kv_lsm_snapshot_bytes(const struct efs_kv_lsm_snapshot *s);
 /* Startup-only host policy; enabling requires a fresh full catalog build. */
 void efs_kv_lsm_query_tracking(struct efs_kv *kv,int enabled);
 int efs_kv_lsm_metadata_revisions(struct efs_kv *kv, uint64_t *out, uint32_t n);
+/* Dead-inode cleanup scope for the calling thread (nestable; 1 enters,
+ * 0 leaves). Inside it, deletes of INODE, LANE and APPEND_CUR rows still
+ * advance the shard's query revision, so the next catalog build rebuilds
+ * that shard exactly, but not the metadata revision above: removing rows of
+ * an inode that no name references never schedules a refresh by itself.
+ * Puts and every other family count as before. Process-local and
+ * saturating, efs_kv_lsm_cleanup_deferred counts the deferred deletes. */
+void efs_kv_lsm_cleanup_scope(int enter);
+uint64_t efs_kv_lsm_cleanup_deferred(struct efs_kv *kv);
 /* Process-local transaction activity fence. Snapshot value is captured under
  * the same KV lock as the metadata image. Saturation refuses comparisons. */
 int efs_kv_lsm_transaction_revision(struct efs_kv *kv,uint64_t *out);

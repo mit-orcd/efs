@@ -72,6 +72,27 @@ static inline int efs_query_refresh_preflight_retry(int rc,int pending,uint64_t 
 {
     return rc==EFS_ERR_BUSY && pending && build_ms<EFS_QUERY_PENDING_CHEAP_MS;
 }
+/* EFS_QUERY_REFRESH_MS: minimum time between catalog refresh attempts and
+ * the pending age reported as overdue. Unset keeps the default; invalid text
+ * or a value outside 200..3600000 keeps it and returns EFS_ERR_INVAL. A
+ * longer interval trades catalog freshness for fewer full-shard rebuilds. */
+#define EFS_QUERY_REFRESH_MIN_MS 200u
+#define EFS_QUERY_REFRESH_MAX_MS 3600000u
+static inline int efs_query_refresh_interval_config(const char *text,unsigned fallback,
+                                                    unsigned *ms)
+{
+    *ms=fallback;
+    if(!text)return EFS_OK;
+    unsigned long long v=0;
+    if(!*text)return EFS_ERR_INVAL;
+    for(const char *p=text;*p;p++){
+        if(*p<'0' || *p>'9')return EFS_ERR_INVAL;
+        v=v*10+(unsigned)(*p-'0');
+        if(v>EFS_QUERY_REFRESH_MAX_MS)return EFS_ERR_INVAL;
+    }
+    if(v<EFS_QUERY_REFRESH_MIN_MS)return EFS_ERR_INVAL;
+    *ms=(unsigned)v;return EFS_OK;
+}
 static inline int efs_query_refresh_due_reason(uint64_t now,uint64_t pending_since,
     uint64_t last_attempt,uint64_t dirty,int initial,int failed,int cut_retry,
     uint64_t trigger,uint64_t interval)

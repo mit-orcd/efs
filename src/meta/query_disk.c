@@ -87,10 +87,16 @@ struct efs_query_disk {
     uint8_t shared_names[SHARDS]; /* Proven unchanged immutable n/a files. */
     uint8_t shared_d[SHARDS]; /* Immutable old generation link until first write. */
     uint8_t fd_index[SHARDS][5]; /* Slot plus one; zero means absent. */
+    /* Exact cross-shard getattr inputs of each shard's inodes (lane shards
+     * other than the inode's own; directories' used shards), one 4096-bit
+     * row per shard. In memory only: a recovered generation knows none and
+     * falls back to the persisted 64-bit filter until a shard is walked. */
+    uint64_t (*deps)[SHARDS/64];
+    uint8_t deps_known[SHARDS];
     pthread_mutex_t mutex;
     uint64_t tick,count,bytes,limit,disk_bytes,disk_limit,root_bytes,root_limit;
     int budget_fd;
-    uint32_t rebuilt,refolded;
+    uint32_t rebuilt,refolded,walked; /* walked: unchanged shards rescanned for inputs */
     uint64_t watermark[4],lineage[2];
     struct efs_kv kv;
     int (*stop)(void *);void *stop_ctx;
@@ -370,6 +376,7 @@ void efs_query_disk_free(struct efs_query_disk *d)
     pthread_mutex_unlock(&live_mutex);
     if(d->legacy_published)(void)legacy_checkpoint_retire(&d->legacy);
     if(d->budget_fd>=0)close(d->budget_fd);
+    free(d->deps);
     pthread_mutex_destroy(&d->mutex);free(d);
 }
 /* Acquire once per host worker, before opening any generation. The lease
@@ -827,18 +834,32 @@ static int overlay_from(void *ctx,const uint8_t *p,uint32_t pn,const uint8_t *k,
     int (*cb)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t),void *u)
 { return raw_scan(((struct inode_overlay *)ctx)->d,p,pn,k,kn,cb,u); }
 static const struct efs_kv_ops overlay_ops={.get=overlay_get,.scan_prefix=overlay_prefix,.scan_from=overlay_from};
-/* Conservative fixed-size dependency filter. Hash collisions only cause
- * extra scans; no lane-dependent inode can be skipped after a source change. */
-static uint64_t dependency_bits(const struct efs_meta_row *row)
+/* Record which other shards an inode's getattr reads. The persisted 64-bit
+ * filter is conservative: hash collisions only cause extra scans. The exact
+ * row, when allocated, has no collisions. The inode's own shard is omitted
+ * from both: a shard whose revision changed is always walked in full, and an
+ * unchanged one cannot invalidate its own rows. Lane 0 lives in the inode
+ * shard, so one-lane files and local directories add nothing. */
+static void dependency_note(struct efs_query_disk *d,uint32_t shard,const struct efs_meta_row *row)
 {
-    uint64_t lanes=S_ISDIR(row->mode)?(row->layout==EFS_META_LAYOUT_LOCAL?0:row->used_shards):row->active_lanes,bits=0;
+    uint64_t lanes=S_ISDIR(row->mode)?(row->layout==EFS_META_LAYOUT_LOCAL?0:row->used_shards):row->active_lanes;
     while(lanes){unsigned lane=(unsigned)__builtin_ctzll(lanes);lanes&=lanes-1;
-        bits|=UINT64_C(1)<<(efs_kv_lane_shard(row->ino,(uint8_t)lane)%64);}
-    return bits;
+        uint32_t dep=efs_kv_lane_shard(row->ino,(uint8_t)lane);
+        if(dep==shard)continue;
+        d->part[shard].dependencies|=UINT64_C(1)<<(dep%64);
+        if(d->deps)d->deps[shard][dep/64]|=UINT64_C(1)<<(dep%64);
+    }
+}
+/* Start a shard's exact row over; it becomes known once fully walked. */
+static void dependency_reset(struct efs_query_disk *d,uint32_t shard)
+{
+    d->deps_known[shard]=0;
+    if(d->deps)memset(d->deps[shard],0,sizeof(d->deps[shard]));
 }
 static int nodes_build(struct efs_query_disk *d,uint32_t shard)
 {
-    if(!d->part[shard].inodes)return EFS_OK;
+    dependency_reset(d,shard);
+    if(!d->part[shard].inodes){d->deps_known[shard]=d->deps!=NULL;return EFS_OK;}
     int fd=make_file(d,shard,'d');if(fd<0)return EFS_ERR_IO;
     int rc=EFS_OK;efs_ino_t previous=0;
     struct disk_node batch[NODE_BATCH];unsigned used=0;
@@ -852,7 +873,7 @@ static int nodes_build(struct efs_query_disk *d,uint32_t shard)
         if(!rc)for(unsigned k=3;k<11;k++)encoded=(encoded<<8)|key[k];
         if(!rc && (encoded!=n.row.ino || efs_kv_inode_shard(encoded)!=shard || (i && encoded<=previous)))rc=EFS_ERR_PROTO;
         previous=encoded;
-        if(!rc)d->part[shard].dependencies|=dependency_bits(&n.row);
+        if(!rc)dependency_note(d,shard,&n.row);
         if(!rc){
             struct inode_overlay overlay={d,key,val,s.value_len};
             struct efs_kv kv={&overlay_ops,&overlay};
@@ -870,6 +891,7 @@ static int nodes_build(struct efs_query_disk *d,uint32_t shard)
         }
     }
     if(rc)fprintf(stderr,"query-disk: nodes shard=%u previous=%llu rc=%d\n",shard,(unsigned long long)previous,rc);
+    else d->deps_known[shard]=d->deps!=NULL;
     close(fd);return rc;
 }
 /* Count and byte additions are independent 64-bit fields. Refuse a bad
@@ -1196,6 +1218,10 @@ int efs_query_disk_build_checked(const char *root,struct efs_kv_lsm_snapshot *so
     d->disk_bytes=sizeof(d->part)+12*sizeof(uint64_t);
     if(d->disk_bytes>d->disk_limit){free(d);return EFS_ERR_QUOTA;}
     d->bytes=working;d->limit=max_bytes;d->stop=stop;d->stop_ctx=ctx;d->failure=failure;
+    /* 2 MiB of exact dependency rows when the memory budget allows; without
+     * them every shard keeps the conservative persisted filter. */
+    if(d->limit-d->bytes>=SHARDS*sizeof(*d->deps) && (d->deps=calloc(SHARDS,sizeof(*d->deps))))
+        d->bytes+=SHARDS*sizeof(*d->deps);
     d->kv=(struct efs_kv){.ops=&raw_ops,.ctx=d};pthread_mutex_init(&d->mutex,NULL);
     for(int i=0;i<FD_CACHE;i++)d->fds[i].fd=-1;
     int admitted=root_budget_acquire(d,root);
@@ -1264,7 +1290,7 @@ int efs_query_disk_build_checked(const char *root,struct efs_kv_lsm_snapshot *so
     else if(!rc)rc=INCREMENTAL_FULL;
     if(rc==INCREMENTAL_FULL){
         rc=EFS_OK;
-        close_cache(d);memset(d->shared_d,0,sizeof(d->shared_d));d->refolded=0;
+        close_cache(d);memset(d->shared_d,0,sizeof(d->shared_d));d->refolded=0;d->walked=0;
         for(uint32_t shard=0;old && shard<SHARDS;shard++){
             char path[EFS_MAX_PATH];rc=filename(d,shard,'d',path,sizeof(path));
             if(rc)break;
@@ -1315,6 +1341,7 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
 uint64_t efs_query_disk_bytes(const struct efs_query_disk *d){return d?d->bytes:0;}
 uint32_t efs_query_disk_rebuilt(const struct efs_query_disk *d){return d?d->rebuilt:0;}
 uint32_t efs_query_disk_refolded(const struct efs_query_disk *d){return d?d->refolded:0;}
+uint32_t efs_query_disk_walked(const struct efs_query_disk *d){return d?d->walked:0;}
 int efs_query_disk_inode(const struct efs_query_disk *cd,efs_ino_t ino,struct efs_meta_row *row,struct efs_meta_stat *stat)
 {
     struct disk_node n;int rc=locate((struct efs_query_disk *)cd,ino,&n,NULL);

@@ -18,6 +18,17 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[GC backlog CPU is query-catalog rebuilds](orcd-mini-gc-query-catalog-20261017.md):
+**implementation and unit PASS; live NOTRUN (needs a deploy).**
+- In a passive orcd-mini profile during a GC backlog, 90% of efsd CPU was the
+  query-catalog publisher rebuilding an unchanged catalog every ~2.3 s. GC
+  itself was about 1–3%.
+- Change: reap cleanup of unlinked inodes no longer schedules a refresh.
+  Unchanged shards are rescanned only when a shard they actually read changed
+  (exact 4096-shard sets). New `EFS_QUERY_REFRESH_MS`, default unchanged at
+  2000.
+- GC schedule untouched.
+
 [`h->mu` contention plan and review](raft-host-mu-plan-20261016.md):
 **NOTRUN; plan only.** Measure per-phase timing → routing snapshot →
 race-free result-ring reads → reassess → conditional REPORT change →

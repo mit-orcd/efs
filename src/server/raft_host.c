@@ -9624,7 +9624,9 @@ static void *host_gc_thread(void *arg)
 #include "query_refresh.h"
 #include "query_export_lease.h"
 #define HOST_QUERY_N 256
-#define HOST_QUERY_T_MS 2000
+#define HOST_QUERY_T_MS 2000 /* default; EFS_QUERY_REFRESH_MS overrides */
+/* Set once by the query publisher before its first view; read-only after. */
+static unsigned host_query_interval_ms=HOST_QUERY_T_MS;
 #define HOST_QUERY_BUILD_MS 10000
 static uint64_t query_mono_ms(void)
 {
@@ -9911,6 +9913,13 @@ static void *host_query_thread(void *ctx)
             pthread_rwlock_unlock(&h->query_lock);return NULL;
         }
     }
+    unsigned interval_ms;
+    if(efs_query_refresh_interval_config(getenv("EFS_QUERY_REFRESH_MS"),HOST_QUERY_T_MS,&interval_ms))
+        fprintf(stderr,"query-config: invalid EFS_QUERY_REFRESH_MS; using %u (allowed %u..%u)\n",
+                HOST_QUERY_T_MS,EFS_QUERY_REFRESH_MIN_MS,EFS_QUERY_REFRESH_MAX_MS);
+    else if(interval_ms!=HOST_QUERY_T_MS)
+        fprintf(stderr,"query-config: refresh interval %u ms\n",interval_ms);
+    __atomic_store_n(&host_query_interval_ms,interval_ms,__ATOMIC_RELAXED);
     const char *budget=getenv("EFS_QUERY_CATALOG_MIB");
     if (budget && *budget) {
         char *end=NULL;errno=0;
@@ -9952,8 +9961,8 @@ static void *host_query_thread(void *ctx)
         pthread_rwlock_wrlock(&h->query_lock);
         uint64_t lag_lock_ms=query_mono_ms()-lag_lock_start;
         struct efs_server_query_view *lag=&h->query_view;
-        int was_overdue=lag->pending_changes && lag->lag_sample_ms-lag->pending_since_ms>=HOST_QUERY_T_MS;
-        int overdue=dirty && now-first_dirty>=HOST_QUERY_T_MS;
+        int was_overdue=lag->pending_changes && lag->lag_sample_ms-lag->pending_since_ms>=host_query_interval_ms;
+        int overdue=dirty && now-first_dirty>=host_query_interval_ms;
         if (lag->pending_changes!=dirty || was_overdue!=overdue) {
             lag->pending_changes=dirty;lag->pending_since_ms=first_dirty;
             lag->lag_sample_ms=now;lag->lag_sample_ns=now_ns();
@@ -9961,7 +9970,7 @@ static void *host_query_thread(void *ctx)
         pthread_rwlock_unlock(&h->query_lock);
         if(lag_lock_ms)efs_query_stage_trace("lag-lock",0,lag_lock_ms,0,0);
         if (!efs_query_refresh_due_reason(now,first_dirty,last_attempt,dirty,initial,failed,cut_retry,
-                                   HOST_QUERY_N,HOST_QUERY_T_MS)) continue;
+                                   HOST_QUERY_N,host_query_interval_ms)) continue;
         last_attempt=now;
         struct efs_kv_lsm_snapshot *source=NULL;
         struct efs_server_query_view view={0};
@@ -10034,7 +10043,7 @@ static void *host_query_thread(void *ctx)
         pthread_rwlock_wrlock(&h->query_lock);
         uint64_t publication_lock_ms=query_mono_ms()-publication_wait;
         h->query_error=rc;failed=(int)efs_query_refresh_failures((unsigned)failed,last_error,rc);
-        if(work_enabled)work.policy_interval_ms=failed?efs_query_refresh_retry((unsigned)failed,HOST_QUERY_T_MS):HOST_QUERY_T_MS;
+        if(work_enabled)work.policy_interval_ms=failed?efs_query_refresh_retry((unsigned)failed,host_query_interval_ms):host_query_interval_ms;
         /* A failed disk build can itself exceed the retry interval. Start
          * its backoff at completion, otherwise a retained invalid namespace
          * immediately launches another full disk build. Successful refreshes
@@ -10057,9 +10066,11 @@ static void *host_query_thread(void *ctx)
             h->query_view=view;
             struct efs_query_rollup root={0};
             int root_rc=efs_query_catalog_stats(candidate,EFS_ROOT_INO,&root);
-            fprintf(stderr,"query-publish: generation=%llu g0=%llu g2=%llu rebuilt=%u refolded=%u edge_reused=%u bytes=%llu pin_ms=%llu build_ms=%llu root_rc=%d files=%llu dirs=%llu logical=%llu\n",
+            fprintf(stderr,"query-publish: generation=%llu g0=%llu g2=%llu rebuilt=%u refolded=%u walked=%u edge_reused=%u deferred_cleanup=%llu bytes=%llu pin_ms=%llu build_ms=%llu root_rc=%d files=%llu dirs=%llu logical=%llu\n",
                 (unsigned long long)view.generation,(unsigned long long)view.applied[0],
-                (unsigned long long)view.applied[1],efs_query_catalog_rebuilt(candidate),efs_query_catalog_refolded(candidate),efs_query_catalog_reused_edges(candidate),
+                (unsigned long long)view.applied[1],efs_query_catalog_rebuilt(candidate),efs_query_catalog_refolded(candidate),
+                efs_query_catalog_walked(candidate),efs_query_catalog_reused_edges(candidate),
+                (unsigned long long)efs_kv_lsm_cleanup_deferred(h->kv),
                 (unsigned long long)efs_query_catalog_bytes(candidate),(unsigned long long)view.pin_ms,
                 (unsigned long long)view.build_ms,root_rc,(unsigned long long)root.tree_files,
                 (unsigned long long)root.tree_dirs,(unsigned long long)root.tree_bytes);
@@ -10253,6 +10264,7 @@ static int query_command_begin(struct query_request *q)
     const char *op=q->req->operation==EFS_QUERY_STATS ? "stats" : q->req->operation==EFS_QUERY_LS ? "ls" : "find";
     char header[1024];
     uint64_t pending_age=v->pending_since_ms && v->lag_sample_ms>=v->pending_since_ms ? v->lag_sample_ms-v->pending_since_ms : 0;
+    unsigned interval_ms=__atomic_load_n(&host_query_interval_ms,__ATOMIC_RELAXED);
     int n=snprintf(header,sizeof(header),
         "{\"version\":1,\"operation\":\"%s\",\"complete\":true,\"expiry\":\"unavailable\","
         "\"snapshot\":{\"boot_id\":%llu,\"generation\":%llu,\"source_ns\":%llu,\"built_ns\":%llu,"
@@ -10262,9 +10274,9 @@ static int query_command_begin(struct query_request *q)
         (unsigned long long)v->source_ns,(unsigned long long)v->built_ns,
         (unsigned long long)v->applied[0],(unsigned long long)v->applied[1],
         (unsigned long long)v->terms[0],(unsigned long long)v->terms[1],q->reply->refresh_error,
-        HOST_QUERY_N,HOST_QUERY_T_MS,HOST_QUERY_T_MS,(unsigned long long)v->pending_changes,
+        HOST_QUERY_N,(int)interval_ms,(int)interval_ms,(unsigned long long)v->pending_changes,
         (unsigned long long)pending_age,(unsigned long long)v->lag_sample_ns,
-        v->pending_changes && pending_age>=HOST_QUERY_T_MS ? "true" : "false");
+        v->pending_changes && pending_age>=interval_ms ? "true" : "false");
     if (n<0 || (size_t)n>=sizeof(header)) return EFS_ERR_OVERFLOW;
     int rc=query_append(q,header,(size_t)n);
     if (!rc) {

@@ -8,6 +8,7 @@ struct dirty_dir { struct disk_node node;uint64_t at;unsigned pending,done; };
 struct stat_change_range { efs_ino_t first,last; };
 struct incremental {
     uint64_t changed_partitions,changes,change_bytes;
+    uint64_t changed_shards[SHARDS/64]; /* exact set behind changed_partitions */
     int changes_fd;
     unsigned buffered,count,capacity;
     struct dirty_dir *dirs;
@@ -195,6 +196,22 @@ static int file_stat_same(struct efs_query_disk *d,struct efs_query_disk *old,
     }
     return rc;
 }
+/* Whether an unchanged shard may hold a node whose getattr inputs changed.
+ * Exact when the old generation knows the shard's dependency row; the
+ * 64-bit filter otherwise. The candidate inherits a known row. */
+static int dependencies_changed(struct efs_query_disk *d,struct efs_query_disk *old,
+                                const struct incremental *s,uint32_t shard)
+{
+    if(d->deps && old->deps && old->deps_known[shard]){
+        memcpy(d->deps[shard],old->deps[shard],sizeof(d->deps[shard]));
+        d->deps_known[shard]=1;
+        for(unsigned w=0;w<SHARDS/64;w++)if(d->deps[shard][w]&s->changed_shards[w])return 1;
+        return 0;
+    }
+    /* An empty filter is exact: the zeroed row becomes known. */
+    if(!old->part[shard].dependencies){d->deps_known[shard]=d->deps!=NULL;return 0;}
+    return (old->part[shard].dependencies&s->changed_partitions)!=0;
+}
 static int incremental_nodes(struct efs_query_disk *d,struct efs_query_disk *old,struct incremental *s,uint32_t shard)
 {
     int same=d->part[shard].revision==old->part[shard].revision;
@@ -205,7 +222,11 @@ static int incremental_nodes(struct efs_query_disk *d,struct efs_query_disk *old
         if(!rc && link(from,to))rc=EFS_ERR_IO;
         if(!rc)d->shared_d[shard]=1;
     } else if(d->part[shard].inodes){fd=make_file(d,shard,'d');if(fd<0)rc=EFS_ERR_IO;}
-    if(same && !(old->part[shard].dependencies&s->changed_partitions))return rc;
+    if(rc)return rc;
+    if(same && !dependencies_changed(d,old,s,shard))return rc;
+    if(same && d->walked<UINT32_MAX)d->walked++;
+    /* Walked in full below: recompute the exact row from every node. */
+    dependency_reset(d,shard);
     if(!same)d->part[shard].dependencies=0;
     efs_ino_t previous=0;uint64_t old_at=0;
     for(uint64_t i=0;i<d->part[shard].inodes && !rc;i++){
@@ -251,7 +272,7 @@ static int incremental_nodes(struct efs_query_disk *d,struct efs_query_disk *old
                 if(row_only && !memcmp(&n.row,&before.row,sizeof(n.row)))fold=0;
             }
         }
-        if(!rc && !same)d->part[shard].dependencies|=dependency_bits(&n.row);
+        if(!rc)dependency_note(d,shard,&n.row);
         if(!rc && fold && found && S_ISREG(n.row.mode) && !memcmp(&n.row,&before.row,sizeof(n.row))){
             int unchanged=0;rc=file_stat_same(d,old,s,&n.row,&unchanged);
             if(!rc && unchanged)fold=0;
@@ -269,6 +290,7 @@ static int incremental_nodes(struct efs_query_disk *d,struct efs_query_disk *old
         struct disk_node removed;rc=node_at(old,shard,old_at++,&removed,0);
         if(!rc)rc=changed_add(d,s,removed.row.ino);
     }
+    if(!rc)d->deps_known[shard]=d->deps!=NULL;
     if(fd>=0)close(fd);
     return rc;
 }
@@ -501,7 +523,10 @@ static int incremental_build(struct efs_query_disk *d,struct efs_query_disk *old
      * stacks, including the callers and KV/read buffers. */
     struct incremental *s=calloc(1,sizeof(*s));if(!s)return EFS_ERR_NOMEM;
     s->changes_fd=-1;s->capacity=DIRTY_MAX;s->dirs=s->initial;int rc=EFS_OK;
-    for(uint32_t shard=0;shard<SHARDS;shard++)if(d->part[shard].revision!=old->part[shard].revision)s->changed_partitions|=UINT64_C(1)<<(shard%64);
+    for(uint32_t shard=0;shard<SHARDS;shard++)if(d->part[shard].revision!=old->part[shard].revision){
+        s->changed_partitions|=UINT64_C(1)<<(shard%64);
+        s->changed_shards[shard/64]|=UINT64_C(1)<<(shard%64);
+    }
     for(uint32_t shard=0;shard<SHARDS && !rc;shard++){
         if(d->part[shard].revision==old->part[shard].revision)continue;
         for(unsigned family=0;family<3 && !rc;family++)rc=stat_family_changes(d,old,s,shard,family);
@@ -605,13 +630,13 @@ static int incremental_build(struct efs_query_disk *d,struct efs_query_disk *old
     if(s->heap_bytes)free(s->dirs);
     uint64_t finished=query_build_clock();
     if(finished-started>=UINT64_C(1000000000))
-        fprintf(stderr,"query-disk: incremental rc=%d ranges_ms=%llu nodes_ms=%llu edges_ms=%llu aliases_ms=%llu folds_ms=%llu changes=%llu dirs=%u\n",
+        fprintf(stderr,"query-disk: incremental rc=%d ranges_ms=%llu nodes_ms=%llu edges_ms=%llu aliases_ms=%llu folds_ms=%llu changes=%llu dirs=%u walked=%u\n",
             rc,(unsigned long long)((ranges_done-started)/1000000),
             (unsigned long long)((nodes_done-ranges_done)/1000000),
             (unsigned long long)((edges_done-nodes_done)/1000000),
             (unsigned long long)((aliases_done-edges_done)/1000000),
             (unsigned long long)((finished-aliases_done)/1000000),
-            (unsigned long long)s->changes,s->count);
+            (unsigned long long)s->changes,s->count,d->walked);
     free(s);
     return rc;
 }

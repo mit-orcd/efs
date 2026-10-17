@@ -145,6 +145,14 @@ catalogs. Adding storage nodes does not automatically add full publishers.
 Set `EFS_QUERY_BACKEND=ram` at daemon startup to use the comparison backend, or
 `disk` for the default backend. `EFS_QUERY_CATALOG_MIB` remains a per-candidate
 allocation budget; it is not a process RSS limit.
+`EFS_QUERY_REFRESH_MS` (default 2000, range 200..3600000) is the minimum time
+between catalog refresh attempts. It also sets the pending age that is reported
+as overdue (`refresh_ms` / `refresh_overdue`). A longer interval keeps the
+catalog further behind the namespace and needs fewer rebuilds. An invalid
+value keeps the default and logs `query-config`.
+Garbage collection of already-unlinked files (lane sweep and reap) does not
+schedule a refresh by itself: those rows reference no name. The next refresh
+caused by another change still rebuilds the affected partitions exactly.
 `EFS_QUERY_DISK_RESERVE_MIB` defaults to 64 and guards cache writes against low
 filesystem free space; it does not reserve capacity against other writers or
 provide a cache quota.

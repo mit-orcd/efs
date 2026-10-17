@@ -1031,6 +1031,14 @@ out:
 
 /* --- efs_kv_ops ------------------------------------------------------ */
 
+/* Depth of the calling thread's dead-inode cleanup scope; see kv_lsm.h. */
+static __thread unsigned lsm_cleanup_depth;
+void efs_kv_lsm_cleanup_scope(int enter)
+{
+    if (enter) lsm_cleanup_depth++;
+    else if (lsm_cleanup_depth) lsm_cleanup_depth--;
+}
+
 static void metadata_dirty(struct kv_lsm *l, const uint8_t *key, uint32_t len,uint8_t op)
 {
     if (len<3) return;
@@ -1050,6 +1058,14 @@ static void metadata_dirty(struct kv_lsm *l, const uint8_t *key, uint32_t len,ui
     case EFS_KV_KIND_DECISION: case EFS_KV_KIND_PVER: case EFS_KV_KIND_DSEQ:
     case EFS_KV_KIND_EXPORT: case EFS_KV_KIND_APPEND_CUR:
         if(l->query_revision[shard]!=UINT64_MAX)l->query_revision[shard]++;
+        /* Cleanup of an already-unlinked inode changes no published name.
+         * The query revision above still forces an exact rebuild of this
+         * shard; only the refresh trigger waits for another change. */
+        if(lsm_cleanup_depth && op==EFS_KV_DEL && (key[2]==EFS_KV_KIND_INODE ||
+           key[2]==EFS_KV_KIND_LANE || key[2]==EFS_KV_KIND_APPEND_CUR)) {
+            if(l->query_tracking && l->cleanup_deferred!=UINT64_MAX)l->cleanup_deferred++;
+            break;
+        }
         if(l->query_tracking && l->metadata_revision[shard]!=UINT64_MAX)l->metadata_revision[shard]++;
         break;
     default: break;
@@ -1862,6 +1878,14 @@ void efs_kv_lsm_query_tracking(struct efs_kv *kv,int enabled)
     lsm_lock(l);
     l->query_tracking=enabled!=0;
     lsm_unlock(l);
+}
+
+uint64_t efs_kv_lsm_cleanup_deferred(struct efs_kv *kv)
+{
+    if(!kv || kv->ops!=&lsm_ops || !kv->ctx)return 0;
+    struct kv_lsm *l=kv->ctx;
+    lsm_lock(l);uint64_t n=l->cleanup_deferred;lsm_unlock(l);
+    return n;
 }
 
 int efs_kv_lsm_metadata_revisions(struct efs_kv *kv, uint64_t *out, uint32_t n)
