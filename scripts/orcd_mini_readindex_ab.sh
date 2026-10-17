@@ -167,8 +167,11 @@ PP=$!
 python3 "$AB/probe.py" "$AB/mnt/probe" 200
 wait $PP
 if [ "$DWARF_SECONDS" -gt 0 ]; then
-  lid=$("$REL/efs-mgmt" raft-status 10.1.99.1:17631 2>&1 | sed -n 's/^  group 0 .* leader=\([1-3]\) .*/\1/p' | head -1)
-  lid=${lid:-1}
+  # raft-status leader= is a 0-based peer index; ask each node for its role.
+  lid=1
+  for i in 1 2 3; do
+    "$REL/efs-mgmt" raft-status 10.1.99.1:$((17630+i)) 2>/dev/null | grep -q '^  group 0 .*role=LEADER' && lid=$i
+  done
   perf record -e cs --call-graph dwarf,16384 -p "$(cat "$AB/logs/n$lid.pid")" -o "$AB/perf/cs-dwarf.data" \
     -- sleep "$DWARF_SECONDS" > /dev/null 2>&1
   DW="leader n$lid"
