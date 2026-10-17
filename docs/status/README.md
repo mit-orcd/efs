@@ -18,6 +18,12 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[`h->mu` contention plan and review](raft-host-mu-plan-20261016.md):
+**NOTRUN; plan only.** Measure per-phase timing → routing snapshot →
+race-free result-ring reads → reassess → conditional REPORT change →
+proposal queue only if justified. Routing and the result ring are A/B'd
+separately.
+
 [Waiter wake-up outside `cv_mu`](orcd-mini-waiter-wake-20261016.md):
 **deployed to orcd-mini (`4aff22c62`); smoke 216/216 PASS.**
 `host_waiters_wake` decides under `cv_mu` and signals after unlocking.
