@@ -18,6 +18,20 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Raft log rotation off the metadata path](raft-rotate-stall-20261017.md):
+**implementation, unit and private-cluster A/B PASS; orcd-mini live
+NOTRUN (needs a deploy).**
+- orcd-mini's ~14 s stall on all three daemons was rotation rewriting
+  1.5 GB under `d->mu`, called from `save_snap` with the pump's `h->mu`
+  held.
+- Rotation now runs on its own thread: chunked image copy, unlocked suffix
+  copy, short locked swap, logical offsets, 8 MiB write-behind.
+- Private RDMA cluster, 128 MiB snapshots:
+  - longest `d->mu` hold went from the whole rotation (5.3 s) to 1.1–3.8 ms;
+  - longest metadata stall went from 5.46 s to 4.36 s.
+- What remains is the snapshot export (3.6–4.7 s here, all three replicas at
+  once). That is the next gate.
+
 [GC backlog CPU is query-catalog rebuilds](orcd-mini-gc-query-catalog-20261017.md):
 **deployed to orcd-mini (`859b2b9eb320`); all live suites PASS** (smoke
 216/216, two-client 67/67, persist 27/27, private GC gate TCP and RDMA).

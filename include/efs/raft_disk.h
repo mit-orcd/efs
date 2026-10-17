@@ -52,8 +52,9 @@ struct efs_raft_store *efs_raft_disk_group(struct efs_raft_disk *d,
                                            uint32_t group);
 
 /* Rewrites the log with only live records, dropping what snapshots and
- * truncations made dead. Called automatically as the log grows; exposed for
- * tests. */
+ * truncations made dead. Called automatically as the log grows (on a
+ * background thread in SYNC mode); exposed for tests. Holds the disk lock
+ * only in short steps, never for the bulk copy. */
 int efs_raft_disk_rotate(struct efs_raft_disk *d);
 /* Valid record bytes, excluding any preallocated zero tail. */
 uint64_t efs_raft_disk_bytes(const struct efs_raft_disk *d);
@@ -66,7 +67,10 @@ int efs_raft_disk_sync_hold(struct efs_raft_disk *d);
 int efs_raft_disk_sync_release(struct efs_raft_disk *d);
 int efs_raft_disk_sync_release_wait(struct efs_raft_disk *d);
 int efs_raft_disk_sync_depth(struct efs_raft_disk *d);
-/* File offset covered by the last completed fsync. */
+/* Log position covered by the last completed fsync. Logical, not a file
+ * offset: it keeps growing across rotations, so a value read before a
+ * rotation never covers a record appended after it. Equals the file offset
+ * until the first rotation. */
 uint64_t efs_raft_disk_synced_bytes(struct efs_raft_disk *d);
 /* Highest log index of `group` whose record ends at or before `synced`.
  * A replayed entry (no offset) counts as covered. 0 if the group is empty. */

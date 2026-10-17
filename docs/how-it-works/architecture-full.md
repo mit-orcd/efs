@@ -1528,15 +1528,33 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[Raft log rotation off the metadata path](../status/raft-rotate-stall-20261017.md):
+**implementation, unit and private-cluster A/B PASS; orcd-mini live
+NOTRUN (needs a deploy).**
+- orcd-mini's ~14 s stall on all three daemons was rotation rewriting
+  1.5 GB under `d->mu`, called from `save_snap` with the pump's `h->mu`
+  held.
+- Rotation now runs on its own thread: chunked image copy, unlocked suffix
+  copy, short locked swap, logical offsets, 8 MiB write-behind.
+- Private RDMA cluster, 128 MiB snapshots:
+  - longest `d->mu` hold went from the whole rotation (5.3 s) to 1.1–3.8 ms;
+  - longest metadata stall went from 5.46 s to 4.36 s.
+- What remains is the snapshot export (3.6–4.7 s here, all three replicas at
+  once). That is the next gate.
+
 [GC backlog CPU is query-catalog rebuilds](../status/orcd-mini-gc-query-catalog-20261017.md):
-**implementation and unit PASS; live NOTRUN (needs a deploy).**
+**deployed to orcd-mini (`859b2b9eb320`); all live suites PASS** (smoke
+216/216, two-client 67/67, persist 27/27, private GC gate TCP and RDMA).
+During a GC-only backlog, efsd CPU fell from about 52% to 3–7% per node.
+The cleanup deferral does not take effect under Raft apply buffering (open
+defect); the 60 s cap and exact dependencies carry the gain.
 - In a passive orcd-mini profile during a GC backlog, 90% of efsd CPU was the
   query-catalog publisher rebuilding an unchanged catalog every ~2.3 s. GC
   itself was about 1–3%.
 - Change: reap cleanup of unlinked inodes no longer schedules a refresh.
   Unchanged shards are rescanned only when a shard they actually read changed
-  (exact 4096-shard sets). New `EFS_QUERY_REFRESH_MS`, default unchanged at
-  2000.
+  (exact 4096-shard sets). New `EFS_QUERY_REFRESH_MS`; its default changes
+  from 2 s to 60 s.
 - GC schedule untouched.
 
 [`h->mu` contention plan and review](../status/raft-host-mu-plan-20261016.md):

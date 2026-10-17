@@ -518,6 +518,7 @@ test: all
 	./tests/test_raft_store
 	python3 tests/test_raft_replay_reads.py
 	python3 tests/test_raft_append_offsets.py
+	python3 tests/test_raft_rotate_stall.py
 	./tests/test_mtime_barrier
 	./tests/test_publication_session
 	./tests/test_publication_ack

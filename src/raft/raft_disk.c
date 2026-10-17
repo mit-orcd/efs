@@ -127,6 +127,8 @@ void raft_group_install(struct raft_disk_group *g, uint64_t index,
     uint32_t off = (uint32_t)(index - (g->log_base + 1));
 
     if (off < g->n) {
+        if (index < g->rot_low)
+            g->rot_low = index;
         g->bytes_all -= g->log[off].clen;
         if (index <= g->snap_idx)
             g->bytes_old -= g->log[off].clen;
@@ -141,7 +143,7 @@ void raft_group_install(struct raft_disk_group *g, uint64_t index,
     g->log[off].term = term;
     g->log[off].end_off = 0;
     g->log[off].clen = clen;
-    g->log[off].cmd = cmd;g->log[off].payload_off=0;
+    g->log[off].cmd = cmd;g->log[off].payload_off=0;g->log[off].img_off=0;
     if(cmd)g->cache_bytes+=clen;
     cache_trim(g,index);
 }
@@ -188,6 +190,8 @@ int raft_group_truncate(struct raft_disk_group *g, uint64_t index)
     off = (uint32_t)(index - (g->log_base + 1));
     if (off >= g->n)
         return EFS_OK;
+    if (index < g->rot_low)
+        g->rot_low = index;
     for (i = off; i < g->n; i++) {
         g->bytes_all -= g->log[i].clen;
         if (g->log_base + 1 + i <= g->snap_idx)
@@ -263,10 +267,11 @@ int raft_group_snap(struct raft_disk_group *g, uint64_t last_index,
     return EFS_OK;
 }
 
+/* O(1): bytes_all is the running clen sum of log[]. A walk here touched
+ * every cold index page under d->mu on each rotation check. */
 uint64_t raft_group_live_bytes(const struct raft_disk_group *g)
 {
     uint64_t n = 0;
-    uint32_t i;
 
     if (g->term || g->voted_for != -1)
         n += REC_OVERHEAD + 12;
@@ -274,9 +279,7 @@ uint64_t raft_group_live_bytes(const struct raft_disk_group *g)
         n += REC_OVERHEAD + 16;
     if (g->have_cfg)
         n += REC_OVERHEAD + 8;
-    for (i = 0; i < g->n; i++)
-        n += REC_OVERHEAD + 20 + g->log[i].clen;
-    return n;
+    return n + (uint64_t)g->n * (REC_OVERHEAD + 20) + g->bytes_all;
 }
 
 /* --- store callbacks ------------------------------------------------- */
@@ -289,6 +292,7 @@ static int disk_save_hard(void *ctx, uint64_t current_term, int32_t voted_for)
     if (!g)
         return EFS_ERR_INVAL;
     pthread_mutex_lock(&g->d->mu);
+    raft_mut_begin(g->d);
     rc = raft_log_append(g->d, RAFT_REC_HARD, g, current_term,
                          (uint32_t)voted_for, NULL, 0, NULL, NULL);
     if (rc == EFS_OK) {
@@ -296,6 +300,7 @@ static int disk_save_hard(void *ctx, uint64_t current_term, int32_t voted_for)
         g->voted_for = voted_for;
         raft_log_maybe_rotate_locked(g->d);
     }
+    raft_mut_end(g->d);
     pthread_mutex_unlock(&g->d->mu);
     return rc;
 }
@@ -332,6 +337,7 @@ static int disk_append(void *ctx, uint64_t index, uint64_t term,
         memcpy(copy, cmd, clen);
     }
     pthread_mutex_lock(&g->d->mu);
+    raft_mut_begin(g->d);
     if (!index_ok(g, index)) {
         rc = EFS_ERR_INVAL;
         goto out;
@@ -355,6 +361,7 @@ static int disk_append(void *ctx, uint64_t index, uint64_t term,
     copy = NULL;
     raft_log_maybe_rotate_locked(g->d);
 out:
+    raft_mut_end(g->d);
     pthread_mutex_unlock(&g->d->mu);
     free(copy);
     return rc;
@@ -368,12 +375,15 @@ static int disk_truncate_from(void *ctx, uint64_t index)
     if (!g)
         return EFS_ERR_INVAL;
     pthread_mutex_lock(&g->d->mu);
+    raft_mut_begin(g->d);
     if (index <= g->snap_idx || index < g->log_base + 1) {
+        raft_mut_end(g->d);
         pthread_mutex_unlock(&g->d->mu);
         return EFS_ERR_INVAL;
     }
     /* Beyond the end is a no-op, and logging one would only grow the file. */
     if (index - (g->log_base + 1) >= (uint64_t)g->n) {
+        raft_mut_end(g->d);
         pthread_mutex_unlock(&g->d->mu);
         return EFS_OK;
     }
@@ -382,6 +392,7 @@ static int disk_truncate_from(void *ctx, uint64_t index)
         rc = raft_group_truncate(g, index);
         raft_log_maybe_rotate_locked(g->d);
     }
+    raft_mut_end(g->d);
     pthread_mutex_unlock(&g->d->mu);
     return rc;
 }
@@ -461,6 +472,7 @@ static int disk_save_snap(void *ctx, uint64_t last_index, uint64_t last_term)
     if (!g)
         return EFS_ERR_INVAL;
     pthread_mutex_lock(&g->d->mu);
+    raft_mut_begin(g->d);
     /* Only a backwards snapshot is invalid. A snapshot AHEAD of the log end
      * is the whole point of InstallSnapshot onto a behind/fresh follower:
      * raft_group_snap clamps the drop to what the log actually holds (same
@@ -470,6 +482,7 @@ static int disk_save_snap(void *ctx, uint64_t last_index, uint64_t last_term)
      * prefix (on_snap_req got INVAL after a successful snap_put and
      * returned without replying — the leader retried forever). */
     if (last_index < g->snap_idx) {
+        raft_mut_end(g->d);
         pthread_mutex_unlock(&g->d->mu);
         return EFS_ERR_INVAL;
     }
@@ -483,6 +496,7 @@ static int disk_save_snap(void *ctx, uint64_t last_index, uint64_t last_term)
         g->d->check_at = 0;
         raft_log_maybe_rotate_locked(g->d);
     }
+    raft_mut_end(g->d);
     pthread_mutex_unlock(&g->d->mu);
     return rc;
 }
@@ -508,6 +522,7 @@ static int disk_save_cfg(void *ctx, uint32_t cfg_old, uint32_t cfg_new)
     if (!g)
         return EFS_ERR_INVAL;
     pthread_mutex_lock(&g->d->mu);
+    raft_mut_begin(g->d);
     rc = raft_log_append(g->d, RAFT_REC_CFG, g, cfg_old, cfg_new, NULL, 0, NULL, NULL);
     if (rc == EFS_OK) {
         g->cfg_old = cfg_old;
@@ -515,6 +530,7 @@ static int disk_save_cfg(void *ctx, uint32_t cfg_old, uint32_t cfg_new)
         g->have_cfg = 1;
         raft_log_maybe_rotate_locked(g->d);
     }
+    raft_mut_end(g->d);
     pthread_mutex_unlock(&g->d->mu);
     return rc;
 }
@@ -624,7 +640,7 @@ struct raft_disk_group *raft_group_get(struct efs_raft_disk *d, uint32_t group)
     g->ops = disk_ops;
     g->d = d;
     g->group = group;
-    g->voted_for = -1;g->index_fd=-1;
+    g->voted_for = -1;g->index_fd=-1;g->rot_low=UINT64_MAX;
     d->g[group] = g;
     return g;
 }
@@ -690,7 +706,8 @@ struct efs_raft_disk *efs_raft_disk_open(const char *dir, int sync_mode)
     d->sync_mode = sync_mode;
     d->check_at = RAFT_ROTATE_MIN_BYTES;
     if (pthread_mutex_init(&d->mu, NULL) != 0 ||
-        pthread_cond_init(&d->cv, NULL) != 0) {
+        pthread_cond_init(&d->cv, NULL) != 0 ||
+        pthread_cond_init(&d->rot_cv, NULL) != 0) {
         free(d->rec);
         free(d);
         return NULL;
@@ -708,6 +725,11 @@ struct efs_raft_disk *efs_raft_disk_open(const char *dir, int sync_mode)
         return NULL;
     }
     d->synced_bytes = d->bytes;
+    /* Production rotates on its own thread so no caller lock (the host
+     * pump holds h->mu across save_snap) waits for the rewrite. NOSYNC
+     * (tests, simulator) keeps the deterministic inline rotation. */
+    if (sync_mode == EFS_RAFT_DISK_SYNC)
+        (void)raft_log_rotator_start(d);
     return d;
 }
 
@@ -717,6 +739,7 @@ void efs_raft_disk_close(struct efs_raft_disk *d)
 
     if (!d)
         return;
+    raft_log_rotator_stop(d);
     for (i = 0; i < RAFT_DISK_MAX_GROUPS; i++) {
         struct raft_disk_group *g = d->g[i];
 
@@ -736,6 +759,7 @@ void efs_raft_disk_close(struct efs_raft_disk *d)
         close(d->fd);
     pthread_mutex_destroy(&d->mu);
     pthread_cond_destroy(&d->cv);
+    pthread_cond_destroy(&d->rot_cv);
     free(d->rec);
     free(d);
 }
@@ -747,6 +771,8 @@ int efs_raft_disk_rotate(struct efs_raft_disk *d)
     if (!d)
         return EFS_ERR_INVAL;
     pthread_mutex_lock(&d->mu);
+    while (d->rotating)
+        pthread_cond_wait(&d->cv, &d->mu);
     rc = raft_log_rotate_locked(d);
     pthread_mutex_unlock(&d->mu);
     return rc;
@@ -764,7 +790,7 @@ uint64_t efs_raft_disk_synced_bytes(struct efs_raft_disk *d)
     if (!d)
         return 0;
     pthread_mutex_lock(&d->mu);
-    n = d->synced_bytes;
+    n = d->base + d->synced_bytes;
     pthread_mutex_unlock(&d->mu);
     return n;
 }

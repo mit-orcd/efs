@@ -36,6 +36,11 @@
 #define RAFT_REC_SNAP  4
 #define RAFT_REC_CFG   5
 
+/* Framed lengths of the fixed records a rotation writes. */
+#define REC_LEN_HARD      25u
+#define REC_LEN_SNAP_BASE 37u
+#define REC_LEN_CFG       21u
+
 /* raft_group_snap base_hint for "no retained-window base": a live
  * save_snap and the replay of a pre-window 16-byte SNAP record. A
  * rotated 24-byte record carries the real log_base, which is 0 while
@@ -59,7 +64,21 @@ struct raft_log_ent {
     uint32_t clen;
     uint32_t record_crc; /* immutable entry frame checksum; no disk format change */
     uint8_t *cmd;
+    /* Payload position in a rotation image: gen << RAFT_IMG_POS_BITS |
+     * (physical offset + 1). Valid only while gen == d->gen; 0 = none.
+     * Lets a swap relocate every imaged entry without walking them. */
+    uint64_t img_off;
 };
+
+/* Offsets are logical: physical + d->base, which never moves backwards
+ * across a rotation, so a watermark read before a swap can never cover a
+ * record written after it. payload_off with RAFT_OFF_IMAGE set is instead
+ * a physical offset inside the current file's image (set when a rotation
+ * attempt reads an entry that the previous rotation imaged). */
+#define RAFT_OFF_IMAGE     (1ull << 63)
+#define RAFT_IMG_POS_BITS  40
+#define RAFT_IMG_POS_MASK  ((1ull << RAFT_IMG_POS_BITS) - 1)
+#define RAFT_IMG_GEN_MASK  0xFFFFFFu
 
 /* One Raft group's persistent state. `ops` is first so the store pointer and
  * the ctx pointer are the same thing, as in raft_mem.c. */
@@ -88,6 +107,9 @@ struct raft_disk_group {
     uint64_t cache_bytes,cache_cursor;
     int index_fd; /* unlinked, derived index backing; never recovery authority */
     uint64_t index_advised;
+    /* Lowest index overwritten or truncated since a rotation captured the
+     * group. A rotation still reading that range must start over. */
+    uint64_t rot_low;
 };
 
 #define RAFT_COMMAND_CACHE_BYTES (2u << 20)
@@ -117,7 +139,48 @@ struct efs_raft_disk {
     unsigned obs_waiters;
     int io_failed;
     uint8_t *rec; /* append scratch, RAFT_REC_MAX */
+    /* Rotation runs off the caller's locks (see raft_log.c). base maps
+     * physical to logical offsets; gen names the current file's image. */
+    uint64_t base;
+    uint32_t gen, gen_seq;
+    int rotating, rot_want, rot_stop, rot_thread_on;
+    /* Store mutators between logging a record and applying it to RAM.
+     * raft_log_append can drop d->mu inside that window (fdatasync), and
+     * a rotation capture there would find the record in the file but not
+     * in RAM. rot_capturing holds new mutators off while capture drains. */
+    unsigned applying;
+    int rot_capturing;
+    pthread_t rot_thread;
+    pthread_cond_t rot_cv;
+    uint64_t rotations;
+    uint64_t rot_hold_max_us; /* longest d->mu hold by the last rotation */
+    uint64_t rot_final_us;    /* its final swap, under d->mu */
 };
+
+/* Bracket a store mutation (log append + RAM apply). d->mu held. */
+static inline void raft_mut_begin(struct efs_raft_disk *d)
+{
+    while (d->rot_capturing)
+        pthread_cond_wait(&d->cv, &d->mu);
+    d->applying++;
+}
+
+static inline void raft_mut_end(struct efs_raft_disk *d)
+{
+    if (--d->applying == 0 && d->rot_capturing)
+        pthread_cond_broadcast(&d->cv);
+}
+
+/* Physical payload offset of e in the current file (d->fd). d->mu held. */
+static inline uint64_t raft_ent_phys(const struct efs_raft_disk *d,
+                                     const struct raft_log_ent *e)
+{
+    if (e->img_off && (uint32_t)(e->img_off >> RAFT_IMG_POS_BITS) == d->gen)
+        return (e->img_off & RAFT_IMG_POS_MASK) - 1;
+    if (e->payload_off & RAFT_OFF_IMAGE)
+        return e->payload_off & ~RAFT_OFF_IMAGE;
+    return e->payload_off - d->base;
+}
 
 /* Callers hold d->mu. Appends one record and, in SYNC mode, returns only once
  * it is durable; concurrent appends across groups share one fsync. */
@@ -133,6 +196,10 @@ int raft_log_read_command(struct raft_disk_group *,uint32_t,int,uint8_t *);
 void raft_group_index_trim(struct raft_disk_group *);
 int raft_log_rotate_locked(struct efs_raft_disk *d);
 void raft_log_maybe_rotate_locked(struct efs_raft_disk *d);
+int raft_log_rotator_start(struct efs_raft_disk *d);
+void raft_log_rotator_stop(struct efs_raft_disk *d);
+/* Tests only: called unlocked between a rotation's copy steps. */
+extern void (*raft_log_rotate_hook)(struct efs_raft_disk *d, int step);
 
 /* raft_disk.c, needed by replay. */
 struct raft_disk_group *raft_group_get(struct efs_raft_disk *d, uint32_t group);

@@ -46,10 +46,11 @@ int raft_log_read_command(struct raft_disk_group *g,uint32_t slot,int fd,uint8_t
 {
     struct raft_log_ent e=g->log[slot];
     if(!e.clen)return EFS_OK;
-    if(!out || e.payload_off<33 || e.clen>RAFT_CMD_MAX)return EFS_ERR_PROTO;
+    uint64_t phys=raft_ent_phys(g->d,&e);
+    if(!out || phys<33 || e.clen>RAFT_CMD_MAX)return EFS_ERR_PROTO;
     uint32_t size=33+e.clen,done=0;uint8_t *record=g->d->rec;
     while(done<size) {
-        ssize_t n=pread(fd,record+done,size-done,(off_t)(e.payload_off-33+done));
+        ssize_t n=pread(fd,record+done,size-done,(off_t)(phys-33+done));
         if(n<0 && errno==EINTR)continue;
         if(n<=0)return EFS_ERR_IO;
         done+=(uint32_t)n;
@@ -61,13 +62,13 @@ int raft_log_read_command(struct raft_disk_group *g,uint32_t slot,int fd,uint8_t
     memcpy(out,record+33,e.clen);return EFS_OK;
 }
 
-/* Serialize one record into d->rec; returns total length, 0 if too big. */
-static uint32_t rec_encode(struct efs_raft_disk *d, uint8_t type,
+/* Serialize one record into p (RAFT_REC_MAX bytes, or 64 for a record
+ * without a command); returns total length, 0 if too big. */
+static uint32_t rec_encode(uint8_t *p, uint8_t type,
                            uint32_t group, uint64_t a, uint64_t b,
                            const uint8_t *cmd, uint32_t clen,
                            const uint32_t *record_crc)
 {
-    uint8_t *p = d->rec;
     uint32_t off = 8;
 
     p[off++] = type;
@@ -259,8 +260,7 @@ static void log_reserve_locked(struct efs_raft_disk *d, uint64_t end)
 #endif
 }
 
-/* Write without making it durable. Only rotation may use this directly: it
- * writes many records and pays one fsync at the end. */
+/* Write without making it durable; raft_log_append decides when to sync. */
 static int log_write_locked(struct efs_raft_disk *d, uint8_t type,
                             uint32_t group, uint64_t a, uint64_t b,
                             const uint8_t *cmd, uint32_t clen)
@@ -270,7 +270,7 @@ static int log_write_locked(struct efs_raft_disk *d, uint8_t type,
 
     if (d->io_failed)
         return EFS_ERR_IO;
-    len = rec_encode(d, type, group, a, b, cmd, clen, NULL);
+    len = rec_encode(d->rec, type, group, a, b, cmd, clen, NULL);
     if (len == 0)
         return EFS_ERR_INVAL;
     log_reserve_locked(d, d->bytes + len);
@@ -304,7 +304,7 @@ int raft_log_append(struct efs_raft_disk *d, uint8_t type,
      * replaces d->rec. Commands are immutable until removed from the log. */
     if (record_crc)
         *record_crc = get_u32(d->rec);
-    if(record_end)*record_end=d->bytes;
+    if(record_end)*record_end=d->base+d->bytes;
     /* Count new append requests, not old records copied during rotation. */
     if (BO_ON() && type == RAFT_REC_ENTRY)
         efs_batch_obs_command(clen ? cmd[0] : 0);
@@ -537,213 +537,642 @@ int raft_log_replay(struct efs_raft_disk *d)
 
 /* --- rotation -------------------------------------------------------- */
 
-/* Rotation is synchronous under the disk and host locks. Coalesce small
- * framed records into bounded writes instead of one syscall per retained
- * entry. The encoding and final fsync/rename barriers are unchanged. Large
- * records bypass this scratch buffer after flushing all earlier records. */
+/* Rotation writes the live records to raft.log.new and renames it over
+ * raft.log, so a crash mid-rotation leaves the previous log intact.
+ *
+ * It used to run whole under d->mu, from save_snap, while the host pump
+ * held h->mu: on orcd-mini a 5.8 GB log with 1.5 GB live stalled every
+ * proposal, read and apply on all three replicas for 12-15 s
+ * (docs/status/raft-rotate-stall-20261017.md). Now d->mu is held only in
+ * short steps and production runs it on its own thread. The new file is:
+ *
+ *   image   the live state as of the capture point X (old-file bytes
+ *           [0, X)): per group HARD, SNAP(+base), CFG and every entry.
+ *           Entry frames are copied verbatim and CRC-checked from the old
+ *           file. Their metadata is read under d->mu RAFT_ROTATE_CHUNK
+ *           entries at a time; frames are read and written unlocked.
+ *   suffix  old-file bytes [X, end), copied raw. Replaying them on top of
+ *           the image is the same fold that took the state at X to the
+ *           current state, so image + suffix replays to what RAM holds.
+ *           Copied unlocked until the remainder is small; the last piece,
+ *           fdatasync, rename and directory fsync run under d->mu, then
+ *           the fd swaps.
+ *
+ * If an entry not yet imaged is truncated, overwritten or compacted away,
+ * the attempt ends with EFS_ERR_STALE and the old file stays authoritative.
+ *
+ * Offsets: suffix records keep their logical offsets (d->base becomes
+ * old_base + X - image_len, modulo 2^64), so end_off/payload_off of every
+ * record appended after X stay valid and durable watermarks never move
+ * backwards. Imaged entries are tagged with their image position under
+ * the attempt's gen; the swap makes the tags current without a walk. */
 #define RAFT_ROTATE_BUFFER_BYTES (1024u * 1024u)
-struct rotation_writer {
-    uint8_t *buffer;
-    size_t used;
+#define RAFT_ROTATE_CHUNK        8192u
+#define RAFT_ROTATE_TAIL_LOCKED  (256u * 1024u)
+#define RAFT_ROTATE_TAIL_PASSES  16
+#define RAFT_ROTATE_RETRIES      3
+#define RAFT_ROTATE_WRITEBACK    (8u * 1024u * 1024u)
+
+void (*raft_log_rotate_hook)(struct efs_raft_disk *d, int step);
+
+struct rot_group {
+    struct raft_disk_group *g;
+    uint64_t term, snap_idx, snap_term, log_base, last;
+    int32_t voted_for;
+    uint32_t cfg_old, cfg_new;
+    int have_hard, have_cfg;
 };
 
-static int rotation_flush(struct efs_raft_disk *d, struct rotation_writer *w)
+struct rot_meta {
+    uint64_t term, phys;
+    uint32_t clen, crc;
+};
+
+/* Write the new file back in RAFT_ROTATE_WRITEBACK steps. A rotation
+ * that leaves hundreds of MB dirty until its fdatasync makes every Raft
+ * log fsync on the same device queue behind that flush; this keeps at most
+ * one step in flight and paces the copy at device speed. */
+static void rot_writeback(int fd, uint64_t *done, uint64_t upto)
+{
+#ifdef __linux__
+    if (upto - *done < RAFT_ROTATE_WRITEBACK)
+        return;
+    (void)sync_file_range(fd, (off_t)*done, (off_t)(upto - *done),
+                          SYNC_FILE_RANGE_WAIT_BEFORE | SYNC_FILE_RANGE_WRITE |
+                          SYNC_FILE_RANGE_WAIT_AFTER);
+    *done = upto;
+#else
+    (void)fd;
+    (void)done;
+    (void)upto;
+#endif
+}
+
+/* Buffered sequential writer for the new file. */
+struct rot_out {
+    int fd;
+    uint8_t *buf;
+    size_t used;
+    uint64_t off; /* file offset of buf[0] */
+    uint64_t written_back;
+};
+
+static int rot_flush(struct rot_out *o)
 {
     int rc;
-    if (!w->used)
+
+    if (!o->used)
         return EFS_OK;
-    log_reserve_locked(d, d->bytes);
-    rc = write_all(d->fd, w->buffer, w->used, d->bytes - w->used);
-    if (rc == EFS_OK)
-        w->used = 0;
+    rc = write_all(o->fd, o->buf, o->used, o->off);
+    if (rc == EFS_OK) {
+        o->off += o->used;
+        o->used = 0;
+        rot_writeback(o->fd, &o->written_back, o->off);
+    }
     return rc;
 }
 
-static int rotation_record(struct efs_raft_disk *d, struct rotation_writer *w,
-                           uint8_t type, uint32_t group, uint64_t a, uint64_t b,
-                           const uint8_t *cmd, uint32_t clen,
-                           const uint32_t *record_crc)
+static int rot_put(struct rot_out *o, const uint8_t *p, size_t n)
 {
-    uint32_t len = rec_encode(d, type, group, a, b, cmd, clen, record_crc);
     int rc;
-    if (!len)
-        return EFS_ERR_INVAL;
-    if (len > RAFT_ROTATE_BUFFER_BYTES - w->used) {
-        rc = rotation_flush(d, w);
+
+    if (n > RAFT_ROTATE_BUFFER_BYTES - o->used) {
+        rc = rot_flush(o);
         if (rc != EFS_OK)
             return rc;
     }
-    if (len > RAFT_ROTATE_BUFFER_BYTES) {
-        log_reserve_locked(d, d->bytes + len);
-        rc = write_all(d->fd, d->rec, len, d->bytes);
-        if (rc != EFS_OK)
-            return rc;
-    } else {
-        memcpy(w->buffer + w->used, d->rec, len);
-        w->used += len;
+    if (n > RAFT_ROTATE_BUFFER_BYTES) {
+        rc = write_all(o->fd, p, n, o->off);
+        if (rc == EFS_OK) {
+            o->off += n;
+            rot_writeback(o->fd, &o->written_back, o->off);
+        }
+        return rc;
     }
-    d->bytes += len;
-    if (BO_ON() && type == RAFT_REC_ENTRY)
-        d->obs_entries++;
-    if (d->allocated_bytes < d->bytes && !w->used)
-        d->allocated_bytes = d->bytes;
+    memcpy(o->buf + o->used, p, n);
+    o->used += n;
     return EFS_OK;
 }
 
-/* Writes every group's live state to a fresh file and renames it over the
- * old one, so a crash mid-rotation leaves the previous log intact. */
-int raft_log_rotate_locked(struct efs_raft_disk *d)
+/* Window over the old file: live frames are mostly in file order. Never
+ * caches at or past `limit`, the valid-record end the caller read under
+ * d->mu: past it the file may be preallocated zeros that a later append
+ * overwrites, while bytes below it never change. */
+struct rot_in {
+    int fd;
+    uint8_t *buf;
+    size_t cap, len;
+    uint64_t base;
+};
+
+static int rot_read(struct rot_in *r, uint64_t off, size_t n, uint64_t limit,
+                    const uint8_t **out)
+{
+    size_t got = 0, want;
+
+    if (off >= r->base && off + n <= r->base + r->len) {
+        *out = r->buf + (off - r->base);
+        return EFS_OK;
+    }
+    if (n > r->cap) {
+        uint8_t *nb = realloc(r->buf, n);
+
+        if (!nb)
+            return EFS_ERR_NOMEM;
+        r->buf = nb;
+        r->cap = n;
+    }
+    if (off + n > limit)
+        return EFS_ERR_PROTO;
+    want = limit - off < r->cap ? (size_t)(limit - off) : r->cap;
+    r->len = 0;
+    while (got < n) {
+        ssize_t k = pread(r->fd, r->buf + got, want - got,
+                          (off_t)(off + got));
+
+        if (k < 0 && errno == EINTR)
+            continue;
+        if (k <= 0)
+            return EFS_ERR_IO;
+        got += (size_t)k;
+    }
+    r->base = off;
+    r->len = got;
+    *out = r->buf;
+    return EFS_OK;
+}
+
+/* Raw copy of old-file bytes [from, to) to dst in the new file. */
+static int rot_copy(struct rot_in *r, int fd, uint64_t from, uint64_t to,
+                    uint64_t dst)
+{
+    uint64_t written_back = dst;
+
+    while (from < to) {
+        size_t n = to - from > RAFT_ROTATE_BUFFER_BYTES
+                       ? RAFT_ROTATE_BUFFER_BYTES : (size_t)(to - from);
+        const uint8_t *p;
+        int rc = rot_read(r, from, n, to, &p);
+
+        if (rc == EFS_OK)
+            rc = write_all(fd, p, n, dst);
+        if (rc != EFS_OK)
+            return rc;
+        from += n;
+        dst += n;
+        rot_writeback(fd, &written_back, dst);
+    }
+    return EFS_OK;
+}
+
+/* Lock bookkeeping. `drop` 0 keeps d->mu for the whole rotation (inline
+ * NOSYNC callers that already own the store's state). */
+struct rot_lock {
+    struct efs_raft_disk *d;
+    int drop, held;
+    uint64_t since;
+};
+
+static void rot_note_hold(struct rot_lock *l)
+{
+    uint64_t held = efs_batch_obs_now_us() - l->since;
+
+    if (l->drop && held > l->d->rot_hold_max_us)
+        l->d->rot_hold_max_us = held;
+}
+
+static void rot_unlock(struct rot_lock *l)
+{
+    if (!l->drop || !l->held)
+        return;
+    rot_note_hold(l);
+    l->held = 0;
+    pthread_mutex_unlock(&l->d->mu);
+}
+
+static void rot_relock(struct rot_lock *l)
+{
+    if (l->held)
+        return;
+    pthread_mutex_lock(&l->d->mu);
+    l->held = 1;
+    l->since = efs_batch_obs_now_us();
+}
+
+static void rot_hook(struct rot_lock *l, int *step)
+{
+    if (l->drop && raft_log_rotate_hook)
+        raft_log_rotate_hook(l->d, (*step)++);
+}
+
+/* Read up to RAFT_ROTATE_CHUNK entries' metadata from index `next` and
+ * tag them with their image position. d->mu held. */
+static int rot_chunk(struct efs_raft_disk *d, struct rot_group *r,
+                     uint64_t next, uint64_t hi, uint64_t pos, uint32_t gen,
+                     struct rot_meta *meta)
+{
+    struct raft_disk_group *g = r->g;
+    uint64_t index;
+
+    if (d->rot_stop)
+        return EFS_ERR_STALE;
+    if (d->io_failed)
+        return EFS_ERR_IO;
+    if (next <= g->log_base || g->rot_low <= hi ||
+        hi > g->log_base + g->n)
+        return EFS_ERR_STALE;
+    for (index = next; index <= hi; index++) {
+        struct raft_log_ent *e = &g->log[index - g->log_base - 1];
+        struct rot_meta *m = &meta[index - next];
+
+        m->term = e->term;
+        m->clen = e->clen;
+        m->crc = e->record_crc;
+        m->phys = 0;
+        if (e->clen) {
+            m->phys = raft_ent_phys(d, e);
+            if (pos + 34 + e->clen > RAFT_IMG_POS_MASK)
+                return EFS_ERR_INVAL;
+            /* Keep the current location readable without this tag. */
+            if (e->img_off &&
+                (uint32_t)(e->img_off >> RAFT_IMG_POS_BITS) == d->gen)
+                e->payload_off = RAFT_OFF_IMAGE | m->phys;
+            e->img_off = ((uint64_t)gen << RAFT_IMG_POS_BITS) | (pos + 34);
+        }
+        pos += 33 + (uint64_t)e->clen;
+    }
+    return EFS_OK;
+}
+
+/* Called with d->mu held; returns with it held. */
+static int rotate_run(struct efs_raft_disk *d, int drop)
 {
     char tmp[RAFT_DISK_PATH_MAX + 32];
     char final[RAFT_DISK_PATH_MAX + 32];
-    uint8_t hdr[RAFT_DISK_HDR_LEN];
-    int fd, dfd, old_fd;
-    struct rotation_writer writer = {0};
-    uint64_t old_bytes, old_allocated, reserve_bytes;
-    uint32_t i;
-    int rc = EFS_OK;
-    uint64_t started = efs_batch_obs_now_us();
-    uint8_t *scratch=NULL;uint32_t scratch_cap=0;
+    uint8_t small[64];
+    struct rot_lock l = {d, drop, 1, efs_batch_obs_now_us()};
+    struct rot_group *rg = NULL;
+    struct rot_meta *meta = NULL;
+    struct rot_out out = {.fd = -1};
+    struct rot_in in = {.fd = -1};
+    uint64_t started = l.since, final_start = 0;
+    uint64_t x = 0, old_base, image_len, copied, end = 0, old_bytes = 0;
+    uint32_t ng = 0, i, gen;
+    int old_fd, rc = EFS_OK, step = 0, renamed = 0;
 
     if (d->io_failed)
         return EFS_ERR_IO;
-    /* A sync drops d->mu around fdatasync. Keep its file and byte watermark
-     * stable until completion; another group's append must not rotate them. */
-    if (d->syncing)
-        return EFS_ERR_BUSY;
-    writer.buffer = malloc(RAFT_ROTATE_BUFFER_BYTES);
-    if (!writer.buffer)
-        return EFS_ERR_NOMEM;
-    snprintf(tmp, sizeof(tmp), "%s/raft.log.new", d->dir);
-    snprintf(final, sizeof(final), "%s/raft.log", d->dir);
-    fd = open(tmp, O_RDWR | O_CREAT | O_TRUNC, 0644);
-    if (fd < 0) {
-        free(writer.buffer);
-        return EFS_ERR_IO;
+    d->rotating = 1;
+    d->rot_hold_max_us = 0;
+    d->rot_final_us = 0;
+    gen = d->gen_seq;
+    do {
+        gen = (gen + 1) & RAFT_IMG_GEN_MASK;
+    } while (!gen || gen == d->gen);
+    d->gen_seq = gen;
+    rg = calloc(RAFT_DISK_MAX_GROUPS, sizeof(*rg));
+    meta = malloc(RAFT_ROTATE_CHUNK * sizeof(*meta));
+    out.buf = malloc(RAFT_ROTATE_BUFFER_BYTES);
+    in.buf = malloc(RAFT_ROTATE_BUFFER_BYTES);
+    in.cap = RAFT_ROTATE_BUFFER_BYTES;
+    if (!rg || !meta || !out.buf || !in.buf) {
+        rc = EFS_ERR_NOMEM;
+        goto done;
     }
-    put_u32(hdr, RAFT_DISK_MAGIC);
-    put_u32(hdr + 4, RAFT_DISK_VERSION);
-    rc = write_all(fd, hdr, sizeof(hdr), 0);
-    /* Swap the fd so raft_log_append writes into the new file. */
-    old_fd = d->fd;
-    old_bytes = d->bytes;
-    old_allocated = d->allocated_bytes;
-    d->fd = fd;
-    d->bytes = RAFT_DISK_HDR_LEN;
-    d->allocated_bytes = RAFT_DISK_HDR_LEN;
-    /* Reserve the complete immutable live image once. Repeating fallocate
-     * for each MiB added avoidable metadata I/O to this locked rewrite. */
-    reserve_bytes = RAFT_DISK_HDR_LEN;
-    for (i = 0; i < RAFT_DISK_MAX_GROUPS; i++) {
-        if (d->g[i]) {
-            reserve_bytes += raft_group_live_bytes(d->g[i]);
-            if (d->g[i]->snap_idx)
-                reserve_bytes += 8; /* retained-window base in rotated SNAP */
+    /* Capture X. Everything about the image is fixed here, and it must
+     * be the fold of exactly the records in [0, X): wait out mutators that
+     * logged a record but have not applied it yet (they drop d->mu for
+     * fdatasync in between). Inline callers are such a mutator themselves,
+     * past their own apply. */
+    if (drop) {
+        d->rot_capturing = 1;
+        while (d->applying) {
+            rot_note_hold(&l);
+            pthread_cond_wait(&d->cv, &d->mu);
+            l.since = efs_batch_obs_now_us();
         }
+    } else if (d->applying > 1) {
+        rc = EFS_ERR_STALE;
+        goto done;
     }
-    if (rc == EFS_OK)
-        log_reserve_locked(d, reserve_bytes);
-    for (i = 0; rc == EFS_OK && i < RAFT_DISK_MAX_GROUPS; i++) {
+    x = old_bytes = d->bytes;
+    old_base = d->base;
+    old_fd = in.fd = d->fd;
+    image_len = RAFT_DISK_HDR_LEN;
+    for (i = 0; i < RAFT_DISK_MAX_GROUPS; i++) {
         struct raft_disk_group *g = d->g[i];
-        uint32_t k;
+        struct rot_group *r;
 
         if (!g)
             continue;
-        if (g->term || g->voted_for != -1)
-            rc = rotation_record(d, &writer, RAFT_REC_HARD, g->group, g->term,
-                                  (uint32_t)g->voted_for, NULL, 0, NULL);
-        if (rc == EFS_OK && g->snap_idx)
-            rc = rotation_record(d, &writer, RAFT_REC_SNAP, g->group, g->snap_idx,
-                                  g->snap_term,
-                                  (const uint8_t *)&g->log_base, 8, NULL);
-        if (rc == EFS_OK && g->have_cfg)
-            rc = rotation_record(d, &writer, RAFT_REC_CFG, g->group, g->cfg_old,
-                                  g->cfg_new, NULL, 0, NULL);
-        for (k = 0; rc == EFS_OK && k < g->n; k++) {
-            const uint8_t *command=g->log[k].cmd;uint32_t len=g->log[k].clen;
-            if(len && !command) {
-                if(len>scratch_cap) {
-                    uint8_t *p=realloc(scratch,len);
-                    if(!p){rc=EFS_ERR_NOMEM;break;}scratch=p;scratch_cap=len;
+        r = &rg[ng++];
+        r->g = g;
+        r->term = g->term;
+        r->voted_for = g->voted_for;
+        r->have_hard = g->term || g->voted_for != -1;
+        r->snap_idx = g->snap_idx;
+        r->snap_term = g->snap_term;
+        r->log_base = g->log_base;
+        r->last = g->log_base + g->n;
+        r->have_cfg = g->have_cfg;
+        r->cfg_old = g->cfg_old;
+        r->cfg_new = g->cfg_new;
+        g->rot_low = UINT64_MAX;
+        image_len += (r->have_hard ? REC_LEN_HARD : 0) +
+                     (r->snap_idx ? REC_LEN_SNAP_BASE : 0) +
+                     (r->have_cfg ? REC_LEN_CFG : 0) +
+                     (uint64_t)g->n * 33 + g->bytes_all;
+    }
+    if (d->rot_capturing) {
+        d->rot_capturing = 0;
+        pthread_cond_broadcast(&d->cv);
+    }
+    rot_unlock(&l);
+
+    snprintf(tmp, sizeof(tmp), "%s/raft.log.new", d->dir);
+    snprintf(final, sizeof(final), "%s/raft.log", d->dir);
+    out.fd = open(tmp, O_RDWR | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+    if (out.fd < 0) {
+        rc = EFS_ERR_IO;
+        goto done;
+    }
+    put_u32(small, RAFT_DISK_MAGIC);
+    put_u32(small + 4, RAFT_DISK_VERSION);
+    rc = rot_put(&out, small, RAFT_DISK_HDR_LEN);
+    for (i = 0; rc == EFS_OK && i < ng; i++) {
+        struct rot_group *r = &rg[i];
+        uint32_t group = r->g->group, len;
+        uint64_t next = r->log_base + 1;
+
+        if (r->have_hard) {
+            len = rec_encode(small, RAFT_REC_HARD, group, r->term,
+                             (uint32_t)r->voted_for, NULL, 0, NULL);
+            rc = rot_put(&out, small, len);
+        }
+        if (rc == EFS_OK && r->snap_idx) {
+            len = rec_encode(small, RAFT_REC_SNAP, group, r->snap_idx,
+                             r->snap_term, (const uint8_t *)&r->log_base,
+                             8, NULL);
+            rc = rot_put(&out, small, len);
+        }
+        if (rc == EFS_OK && r->have_cfg) {
+            len = rec_encode(small, RAFT_REC_CFG, group, r->cfg_old,
+                             r->cfg_new, NULL, 0, NULL);
+            rc = rot_put(&out, small, len);
+        }
+        while (rc == EFS_OK && next <= r->last) {
+            uint64_t hi = r->last - next >= RAFT_ROTATE_CHUNK
+                              ? next + RAFT_ROTATE_CHUNK - 1 : r->last;
+            uint64_t index;
+
+            rot_hook(&l, &step);
+            rot_relock(&l);
+            rc = rot_chunk(d, r, next, hi, out.off + out.used, gen, meta);
+            rot_unlock(&l);
+            for (index = next; rc == EFS_OK && index <= hi; index++) {
+                const struct rot_meta *m = &meta[index - next];
+                const uint8_t *f;
+                uint32_t size = 33 + m->clen;
+
+                if (!m->clen) {
+                    len = rec_encode(small, RAFT_REC_ENTRY, group, index,
+                                     m->term, NULL, 0, &m->crc);
+                    rc = rot_put(&out, small, len);
+                    continue;
                 }
-                rc=raft_log_read_command(g,k,old_fd,scratch);
-                if(rc)break;
-                command=scratch;
+                if (m->phys < RAFT_DISK_HDR_LEN + 33)
+                    rc = EFS_ERR_PROTO;
+                else
+                    rc = rot_read(&in, m->phys - 33, size, x, &f);
+                if (rc == EFS_OK &&
+                    (get_u32(f) != m->crc || get_u32(f + 4) != size - 8 ||
+                     f[8] != RAFT_REC_ENTRY || get_u32(f + 9) != group ||
+                     get_u64(f + 13) != index || get_u64(f + 21) != m->term ||
+                     get_u32(f + 29) != m->clen ||
+                     efs_crc32(f + 8, size - 8) != m->crc)) {
+                    fprintf(stderr, "raft-log: rotate bad frame group=%u "
+                            "index=%llu off=%llu\n", group,
+                            (unsigned long long)index,
+                            (unsigned long long)m->phys);
+                    rc = EFS_ERR_PROTO;
+                }
+                if (rc == EFS_OK)
+                    rc = rot_put(&out, f, size);
             }
-            rc=rotation_record(d,&writer,RAFT_REC_ENTRY,g->group,g->log_base+1+k,
-                               g->log[k].term,command,len,&g->log[k].record_crc);
+            next = hi + 1;
         }
     }
     if (rc == EFS_OK)
-        rc = rotation_flush(d, &writer);
-    free(writer.buffer);
-    free(scratch);scratch=NULL;
-    if (rc == EFS_OK && fsync(fd) != 0)
+        rc = rot_flush(&out);
+    if (rc == EFS_OK && out.off != image_len) {
+        fprintf(stderr, "raft-log: rotate image %llu != planned %llu\n",
+                (unsigned long long)out.off, (unsigned long long)image_len);
+        rc = EFS_ERR_PROTO;
+    }
+    if (rc == EFS_OK && fdatasync(out.fd) != 0)
+        rc = EFS_ERR_IO;
+
+    /* Suffix, unlocked while the remainder is large. */
+    copied = x;
+    for (int pass = 0; rc == EFS_OK; pass++) {
+        rot_hook(&l, &step);
+        rot_relock(&l);
+        if (d->rot_stop)
+            rc = EFS_ERR_STALE;
+        else if (d->io_failed)
+            rc = EFS_ERR_IO;
+        end = d->bytes;
+        if (rc != EFS_OK || !drop || end - copied <= RAFT_ROTATE_TAIL_LOCKED ||
+            pass >= RAFT_ROTATE_TAIL_PASSES)
+            break;
+        rot_unlock(&l);
+        rc = rot_copy(&in, out.fd, copied, end, image_len + copied - x);
+        if (rc == EFS_OK && fdatasync(out.fd) != 0)
+            rc = EFS_ERR_IO;
+        copied = end;
+    }
+    if (rc != EFS_OK)
+        goto done;
+
+    /* Final step, under d->mu. A sync drops d->mu around fdatasync on the
+     * old fd and then advances synced_bytes for it: never swap under it. */
+    final_start = efs_batch_obs_now_us();
+    while (d->syncing && !d->rot_stop && !d->io_failed) {
+        rot_note_hold(&l);
+        pthread_cond_wait(&d->cv, &d->mu);
+        l.since = final_start = efs_batch_obs_now_us();
+    }
+    if (d->rot_stop || d->io_failed) {
+        rc = d->io_failed ? EFS_ERR_IO : EFS_ERR_STALE;
+        goto done;
+    }
+    end = d->bytes;
+    rc = rot_copy(&in, out.fd, copied, end, image_len + copied - x);
+    if (rc == EFS_OK && fdatasync(out.fd) != 0)
         rc = EFS_ERR_IO;
     if (rc == EFS_OK && rename(tmp, final) != 0)
         rc = EFS_ERR_IO;
-    if (rc != EFS_OK) {
-        d->fd = old_fd;
-        d->bytes = old_bytes;
-        d->allocated_bytes = old_allocated;
-        close(fd);
-        unlink(tmp);
-        d->io_failed = 1;
-        return rc;
+    if (rc != EFS_OK)
+        goto done;
+    renamed = 1;
+    {
+        int dfd = open(d->dir, O_RDONLY | O_CLOEXEC);
+
+        /* Appends after the swap land only in the new inode. If the rename
+         * is not durable they could vanish behind the old name: fence. */
+        if (dfd < 0 || fsync(dfd) != 0)
+            d->io_failed = 1;
+        if (dfd >= 0)
+            close(dfd);
     }
-    close(old_fd);
-    dfd = open(d->dir, O_RDONLY);
-    if (dfd >= 0) {
-        fsync(dfd);
-        close(dfd);
-    }
-    d->live_bytes = d->bytes;
+    d->fd = out.fd;
+    out.fd = -1;
+    d->bytes = image_len + (end - x);
+    d->allocated_bytes = d->bytes;
     d->synced_bytes = d->bytes;
+    d->base = old_base + x - image_len;
+    d->gen = gen;
+    d->rotations++;
+    d->live_bytes = 0;
+    for (i = 0; i < RAFT_DISK_MAX_GROUPS; i++)
+        if (d->g[i])
+            d->live_bytes += raft_group_live_bytes(d->g[i]);
+    d->check_at = d->bytes * 2;
+    if (d->check_at < RAFT_ROTATE_MIN_BYTES)
+        d->check_at = RAFT_ROTATE_MIN_BYTES;
     if (BO_ON()) d->obs_synced_entries = d->obs_entries;
     BO_COUNT(BO_ROTATE);
-    /* The rewritten file is synced. Offsets recorded against the old
-     * file would look past synced_bytes and hide every later append
-     * from the durable scan. Zero means "already in a synced file". */
-    uint64_t position=RAFT_DISK_HDR_LEN;
-    for (i=0;i<RAFT_DISK_MAX_GROUPS;i++) {
-        struct raft_disk_group *g=d->g[i];if(!g)continue;
-        if(g->term || g->voted_for!=-1)position+=25;
-        if(g->snap_idx)position+=37;
-        if(g->have_cfg)position+=21;
-        for(uint32_t k=0;k<g->n;k++) {
-            g->log[k].end_off=0;
-            g->log[k].payload_off=g->log[k].clen?position+33:0;
-            position+=33+g->log[k].clen;
-        }
-        g->index_advised=0;raft_group_index_trim(g);
+    d->rot_final_us = efs_batch_obs_now_us() - final_start;
+    old_bytes = end;
+    /* Closing the old inode frees its blocks: keep that off d->mu. */
+    rot_unlock(&l);
+    close(old_fd);
+
+done:
+    rot_unlock(&l);
+    if (out.fd >= 0) {
+        close(out.fd);
+        if (!renamed)
+            unlink(tmp);
     }
-    uint64_t elapsed = efs_batch_obs_now_us() - started;
-    if (elapsed > 20000)
-        fprintf(stderr, "raft-log: rotate old_bytes=%llu live_bytes=%llu elapsed_us=%llu\n",
-                (unsigned long long)old_bytes, (unsigned long long)d->bytes,
-                (unsigned long long)elapsed);
-    return EFS_OK;
+    free(rg);
+    free(meta);
+    free(out.buf);
+    free(in.buf);
+    rot_relock(&l);
+    if (drop) {
+        uint64_t held = efs_batch_obs_now_us() - l.since;
+
+        if (held > d->rot_hold_max_us)
+            d->rot_hold_max_us = held;
+    } else {
+        d->rot_hold_max_us = efs_batch_obs_now_us() - started;
+    }
+    d->rotating = 0;
+    pthread_cond_broadcast(&d->cv);
+    {
+        uint64_t elapsed = efs_batch_obs_now_us() - started;
+
+        if ((rc == EFS_OK && elapsed > 20000) ||
+            (rc != EFS_OK && rc != EFS_ERR_STALE))
+            fprintf(stderr, "raft-log: rotate old_bytes=%llu live_bytes=%llu "
+                    "elapsed_us=%llu hold_max_us=%llu final_us=%llu rc=%d\n",
+                    (unsigned long long)old_bytes,
+                    (unsigned long long)(rc == EFS_OK ? d->bytes : 0),
+                    (unsigned long long)elapsed,
+                    (unsigned long long)d->rot_hold_max_us,
+                    (unsigned long long)d->rot_final_us, rc);
+    }
+    return rc;
 }
 
-/* Recomputing the live size is O(live entries), so only do it once per
- * doubling of the file: the check itself must not become the cost. */
+/* Explicit rotation (efs_raft_disk_rotate). d->mu held. */
+int raft_log_rotate_locked(struct efs_raft_disk *d)
+{
+    int rc, tries = 0;
+
+    if (d->io_failed)
+        return EFS_ERR_IO;
+    /* Keep the in-flight sync's file and watermark stable. */
+    if (d->syncing)
+        return EFS_ERR_BUSY;
+    do {
+        rc = rotate_run(d, 1);
+    } while (rc == EFS_ERR_STALE && !d->rot_stop && ++tries < RAFT_ROTATE_RETRIES);
+    return rc;
+}
+
+/* Recomputing the live size is O(groups); it still runs only once per
+ * doubling of the file. */
 void raft_log_maybe_rotate_locked(struct efs_raft_disk *d)
 {
     uint32_t i;
 
-    if (d->syncing)
-        return; /* Preserve check_at so the next append retries rotation. */
+    if (d->syncing || d->rotating)
+        return; /* Preserve check_at so a later append retries. */
     if (d->bytes < d->check_at)
         return;
     d->live_bytes = 0;
     for (i = 0; i < RAFT_DISK_MAX_GROUPS; i++)
         if (d->g[i])
             d->live_bytes += raft_group_live_bytes(d->g[i]);
-    if (d->bytes >= d->live_bytes * RAFT_ROTATE_RATIO)
-        (void)raft_log_rotate_locked(d);
+    if (d->bytes >= d->live_bytes * RAFT_ROTATE_RATIO) {
+        if (d->rot_thread_on) {
+            d->rot_want = 1;
+            pthread_cond_signal(&d->rot_cv);
+        } else {
+            (void)rotate_run(d, 0);
+        }
+    }
     d->check_at = d->bytes * 2;
     if (d->check_at < RAFT_ROTATE_MIN_BYTES)
         d->check_at = RAFT_ROTATE_MIN_BYTES;
+}
+
+static void *rotator_main(void *arg)
+{
+    struct efs_raft_disk *d = arg;
+
+    pthread_mutex_lock(&d->mu);
+    while (!d->rot_stop) {
+        int rc;
+
+        if (!d->rot_want) {
+            pthread_cond_wait(&d->rot_cv, &d->mu);
+            continue;
+        }
+        d->rot_want = 0;
+        if (d->rotating || d->io_failed)
+            continue;
+        rc = rotate_run(d, 1);
+        /* The state moved under the capture (a snapshot compacted it,
+         * a leader change truncated it): try again soon, not after the
+         * file doubles. */
+        if (rc == EFS_ERR_STALE && !d->rot_stop)
+            d->check_at = d->bytes + RAFT_ROTATE_MIN_BYTES;
+    }
+    pthread_mutex_unlock(&d->mu);
+    return NULL;
+}
+
+int raft_log_rotator_start(struct efs_raft_disk *d)
+{
+    if (pthread_create(&d->rot_thread, NULL, rotator_main, d) != 0)
+        return EFS_ERR_NOMEM; /* inline rotation still works */
+    d->rot_thread_on = 1;
+    return EFS_OK;
+}
+
+void raft_log_rotator_stop(struct efs_raft_disk *d)
+{
+    if (!d->rot_thread_on)
+        return;
+    pthread_mutex_lock(&d->mu);
+    d->rot_stop = 1;
+    pthread_cond_broadcast(&d->rot_cv);
+    pthread_mutex_unlock(&d->mu);
+    pthread_join(d->rot_thread, NULL);
+    d->rot_thread_on = 0;
 }
 
 int efs_raft_disk_sync_hold(struct efs_raft_disk *d)
@@ -816,7 +1245,7 @@ int efs_raft_disk_sync_release_wait(struct efs_raft_disk *d)
         BO_COUNT(BO_HOLD_CLOSE);
         d->obs_hold_started = 0;
     }
-    mine = d->bytes;
+    mine = d->base + d->bytes; /* logical: survives a rotation swap */
     if (d->sync_mode != EFS_RAFT_DISK_SYNC) {
         pthread_mutex_unlock(&d->mu);
         return EFS_OK;
@@ -831,7 +1260,7 @@ int efs_raft_disk_sync_release_wait(struct efs_raft_disk *d)
             rc = log_sync_locked(d, 1);
             break;
         }
-        if (d->synced_bytes >= mine)
+        if (d->base + d->synced_bytes >= mine)
             break;
         if (d->sync_hold == 0)
             break;

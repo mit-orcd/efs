@@ -244,7 +244,8 @@ on both nodes, and node9901 `/data1/efs/logs/efsd-n{1,2,3}.log` around
 
 - **Raft log rotation stalls metadata for about 14 s on all three nodes at
   once.** Client requests then exhaust their 10.3 s retry budget, and
-  applications see EBUSY or EIO. This needs its own fix.
+  applications see EBUSY or EIO. Fix (not yet deployed):
+  [Raft log rotation off the metadata path](raft-rotate-stall-20261017.md).
 - **The first-minutes drop is open.** About 35% within 4 minutes, with
   eviction disabled too. It needs a server-side profile; growing
   directories are the first suspect.
