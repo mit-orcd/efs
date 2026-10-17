@@ -5,6 +5,7 @@
 #include "efs/raft.h"
 #include "efs/batch_obs.h"
 #include "write_prof.h"
+#include "apply_ring.h"
 #include "efs/raft_disk.h"
 #include "efs/kv.h"
 #include "efs/kv_lsm.h"
@@ -289,12 +290,10 @@ struct host_group {
      * its own. For a txn coordinator that was "DECIDE COMMIT applied" →
      * RESOLVE COMMIT on one participant while the decision never existed
      * → recovery ABORTed the rest = the half-applied rmdir/unlink rows of
-     * Sep 21 (I17: child row gone, dentry + parent counts kept). */
-    uint64_t arc_idx[HOST_APPLY_RC_RING];
-    uint64_t arc_term[HOST_APPLY_RC_RING];
-    int32_t arc_rc[HOST_APPLY_RC_RING];
-    uint64_t arc_extra[HOST_APPLY_RC_RING];
-    uint64_t arc_apply_us[HOST_APPLY_RC_RING]; /* EFS_WRITE_PROF apply time */
+     * Sep 21 (I17: child row gone, dentry + parent counts kept).
+     * Each slot is a seqlock with atomic fields (apply_ring.h): written
+     * under h->mu by host_apply, read by verdict waiters without it. */
+    struct efs_arc_slot arc[HOST_APPLY_RC_RING];
     /* EFS_RAFT_OBS: last logged term/role, for election-churn timing. */
     uint64_t obs_term;
     int obs_role;
@@ -2751,11 +2750,8 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         return EFS_ERR_BUSY;
     if (!h || !h->kv || !cmd || clen == 0) {
         /* Still stamp the slot: a waiter must never find "never written". */
-        g->arc_idx[index & HOST_APPLY_RC_MASK] = index;
-        g->arc_term[index & HOST_APPLY_RC_MASK] = term;
-        g->arc_rc[index & HOST_APPLY_RC_MASK] = EFS_OK;
-        g->arc_extra[index & HOST_APPLY_RC_MASK] = 0;
-        g->arc_apply_us[index & HOST_APPLY_RC_MASK] = 0;
+        efs_arc_store(&g->arc[index & HOST_APPLY_RC_MASK], index, term,
+                      EFS_OK, 0, 0);
         return EFS_OK;
     }
 #if EFS_FAULTS
@@ -2879,21 +2875,17 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         h->obs_apply_cycle_us += elapsed;
     }
     /* Record the apply verdict BEFORE the raft core bumps last_applied, so a
-     * waiter that observes applied >= index always finds the slot. The pump
-     * holds h->mu across apply_committed, and host_propose_wait reads the
-     * ring under h->mu, so this is race-free. */
-    g->arc_idx[index & HOST_APPLY_RC_MASK] = index;
-    g->arc_term[index & HOST_APPLY_RC_MASK] = term;
-    g->arc_rc[index & HOST_APPLY_RC_MASK] = rc;
-    g->arc_extra[index & HOST_APPLY_RC_MASK] = h->apply_extra;
+     * waiter that observes applied >= index always finds the slot: the
+     * slot's release store precedes the view publish that carries applied.
+     * The pump holds h->mu across apply_committed, so slot writers are
+     * serialized; readers copy the slot lock-free (host_arc_read). */
+    uint64_t apply_us = 0;
     if (wp0) {
-        uint64_t done = wprof_now();
-
-        wprof_add(WP_APPLY, done - wp0);
-        g->arc_apply_us[index & HOST_APPLY_RC_MASK] = done;
-    } else {
-        g->arc_apply_us[index & HOST_APPLY_RC_MASK] = 0;
+        apply_us = wprof_now();
+        wprof_add(WP_APPLY, apply_us - wp0);
     }
+    efs_arc_store(&g->arc[index & HOST_APPLY_RC_MASK], index, term, rc,
+                  h->apply_extra, apply_us);
     return ret;
 }
 
@@ -4821,7 +4813,7 @@ static int host_mark_durable_covered(struct efs_raft_host *h, uint8_t group,
 
 /* Saturate observations: overflow must close admission, never create capacity. */
 /* Propose one command. *idx / *term identify the log entry: a waiter must
- * match BOTH against the apply ring (host_apply_rc_locked) — the same index
+ * match BOTH against the apply ring (host_arc_verdict) — the same index
  * carries a different entry after a leader change. term is 0 when the
  * command was forwarded: the leader matched (idx, term) itself before it
  * replied and its reply rc is the verdict; the local wait on rep.index is
@@ -5025,9 +5017,43 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
     return EFS_OK;
 }
 
-/* h->mu held. The apply layer's verdict for the log entry (idx, term), read
- * from the group's apply-result ring, after host_wait_applied said
- * applied >= idx.
+/* Bounded lock-free attempts before a verdict read takes h->mu. */
+#define HOST_ARC_READ_TRIES 64
+
+/* Coherent copy of the apply-ring slot for idx, without h->mu. Returns 0
+ * when the group is not hosted here (no local ring: a forwarded command's
+ * verdict was the leader's reply). A reader that loses to the writer
+ * HOST_ARC_READ_TRIES times takes h->mu, which every slot writer holds,
+ * and copies the slot there (counted in write-phase-prof arc_fallback).
+ * The slot may hold another index (overwritten) or another term
+ * (truncated); callers classify that with their own semantics. */
+static int host_arc_read(struct efs_raft_host *h, uint8_t group, uint64_t idx,
+                         struct efs_arc_view *v)
+{
+    struct host_group *g = group_slot(h, group);
+    const struct efs_arc_slot *slot;
+
+    memset(v, 0, sizeof(*v));
+    if (!g || !__atomic_load_n(&g->hosted, __ATOMIC_ACQUIRE))
+        return 0;
+    slot = &g->arc[idx & HOST_APPLY_RC_MASK];
+    if (!efs_arc_load(slot, v, HOST_ARC_READ_TRIES)) {
+        __atomic_fetch_add(&g_wprof_arc_fallback, 1, __ATOMIC_RELAXED);
+        pthread_mutex_lock(&h->mu);
+        while (!efs_arc_load(slot, v, HOST_ARC_READ_TRIES))
+            ;
+        pthread_mutex_unlock(&h->mu);
+    }
+    return 1;
+}
+
+/* The apply layer's verdict for the log entry (idx, term), from a slot copy
+ * taken after host_wait_applied said applied >= idx.
+ *   - not hosted: the leader's submit reply carried the verdict. The slot
+ *     exists for every group (attach_group sets g->group and hosted=0), so
+ *     test hosted, not the pointer: on a single-group host the unhosted
+ *     slot's empty ring answered every forwarded host_propose_wait with
+ *     BUSY (raft-mkfs's SALT step, Oct 1 07:20Z, arc_miss +1 per call).
  *   - slot holds idx with the same term: the verdict (OK / BUSY / STALE /
  *     ...). term 0 = forwarded command, the index alone identifies it (the
  *     leader already matched its own term before replying).
@@ -5040,111 +5066,97 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
  *     wait window): the verdict is unknown. EFS_ERR_BUSY, never OK —
  *     the old "OK on miss" turned a rejected PREP into a phantom success.
  *     obs_arc_miss counts these. */
-static int host_apply_rc_locked(struct efs_raft_host *h, uint8_t group,
-                                uint64_t idx, uint64_t term)
+static int host_arc_verdict(struct efs_raft_host *h, int hosted,
+                            const struct efs_arc_view *v, uint64_t idx,
+                            uint64_t term)
 {
-    struct host_group *g = group_slot(h, group);
-    uint64_t s;
-
-    /* Not hosted: the leader's submit reply carried the verdict. The
-     * slot exists for every group (attach_group sets g->group and
-     * hosted=0), so test hosted, not the pointer: on a single-group
-     * host the unhosted slot's empty ring answered every forwarded
-     * host_propose_wait with BUSY (raft-mkfs's SALT step, Oct 1 07:20Z,
-     * arc_miss +1 per call). */
-    if (!g || !g->hosted)
+    if (!hosted)
         return EFS_OK;
-    s = idx & HOST_APPLY_RC_MASK;
-    if (g->arc_idx[s] != idx) {
-        h->obs_arc_miss++;
+    if (v->idx != idx) {
+        __atomic_fetch_add(&h->obs_arc_miss, 1, __ATOMIC_RELAXED);
         return EFS_ERR_BUSY;
     }
-    if (term && g->arc_term[s] != term) {
-        h->obs_arc_term_miss++;
+    if (term && v->term != term) {
+        __atomic_fetch_add(&h->obs_arc_term_miss, 1, __ATOMIC_RELAXED);
         return EFS_ERR_NOT_PRIMARY;
     }
-    return g->arc_rc[s];
+    return v->rc;
 }
 
-static int host_apply_extra_locked(struct efs_raft_host *h, uint8_t group,
-                                   uint64_t idx, uint64_t term,
-                                   uint64_t *extra_out)
+/* The entry's extra (APPEND_RSV's reserved offset) from the same slot copy
+ * as its verdict, so rc and extra always belong to one apply. */
+static int host_arc_extra(struct efs_raft_host *h, int hosted,
+                          const struct efs_arc_view *v, uint64_t idx,
+                          uint64_t term, uint64_t *extra_out)
 {
-    struct host_group *g = group_slot(h, group);
-    uint64_t s;
-
-    if (!g || !g->hosted)
+    if (!hosted)
         return EFS_ERR_BUSY; /* no local ring; the extra is not on the wire */
-    s = idx & HOST_APPLY_RC_MASK;
-    if (g->arc_idx[s] != idx) {
-        h->obs_arc_miss++;
+    if (v->idx != idx) {
+        __atomic_fetch_add(&h->obs_arc_miss, 1, __ATOMIC_RELAXED);
         return EFS_ERR_BUSY;
     }
-    if (term && g->arc_term[s] != term) {
-        h->obs_arc_term_miss++;
+    if (term && v->term != term) {
+        __atomic_fetch_add(&h->obs_arc_term_miss, 1, __ATOMIC_RELAXED);
         return EFS_ERR_NOT_PRIMARY;
     }
     if (extra_out)
-        *extra_out = g->arc_extra[s];
+        *extra_out = v->extra;
     return EFS_OK;
 }
 
-/* h->mu held. EFS_WRITE_PROF apply stamp of idx's slot, 0 if unknown. */
-static uint64_t host_apply_us_locked(struct efs_raft_host *h, uint8_t group,
-                                     uint64_t idx)
+static int host_apply_rc(struct efs_raft_host *h, uint8_t group, uint64_t idx,
+                         uint64_t term)
 {
-    struct host_group *g = group_slot(h, group);
-    uint64_t s = idx & HOST_APPLY_RC_MASK;
+    struct efs_arc_view v;
+    int hosted = host_arc_read(h, group, idx, &v);
 
-    if (!g || !g->hosted || g->arc_idx[s] != idx)
-        return 0;
-    return g->arc_apply_us[s];
+    return host_arc_verdict(h, hosted, &v, idx, term);
+}
+
+/* EFS_WRITE_PROF apply stamp of a slot copy for idx, 0 if unknown. */
+static uint64_t host_arc_apply_us(int hosted, const struct efs_arc_view *v,
+                                  uint64_t idx)
+{
+    return hosted && v->idx == idx ? v->apply_us : 0;
 }
 
 /* Wait for (idx, term) to apply and return the apply layer's verdict. */
 static int host_wait_verdict(struct efs_raft_host *h, uint8_t group,
                              uint64_t idx, uint64_t term, int *hint)
 {
-    uint64_t wp0 = write_prof_on() ? wprof_now() : 0, seen = 0, apply_us = 0;
-    int rc;
+    uint64_t wp0 = write_prof_on() ? wprof_now() : 0, seen = 0;
+    struct efs_arc_view v;
+    int rc, hosted;
 
     rc = host_wait_applied(h, group, idx, hint);
     if (rc != EFS_OK)
         return rc;
     if (wp0) seen = wprof_now();
-    pthread_mutex_lock(&h->mu);
-    rc = host_apply_rc_locked(h, group, idx, term);
-    if (wp0) apply_us = host_apply_us_locked(h, group, idx);
-    pthread_mutex_unlock(&h->mu);
-    if (wp0) wprof_verdict(wp0, seen, apply_us);
+    hosted = host_arc_read(h, group, idx, &v);
+    rc = host_arc_verdict(h, hosted, &v, idx, term);
+    if (wp0) wprof_verdict(wp0, seen, host_arc_apply_us(hosted, &v, idx));
     return rc;
 }
 
 /* Wait for (idx, term) to apply; only checks that OUR entry is the one that
- * applied (NOT_PRIMARY otherwise). The verdict itself is not returned.
+ * applied (NOT_PRIMARY otherwise). The verdict itself is not returned, and
+ * an overwritten slot is not an error here.
  * CREATE must not use this: its apply rejects with BUSY (alloc intent)
  * and EXIST (lost the name), and ignoring those answered the client
  * NOT_FOUND (EIO) or OK (both O_EXCL winners). */
 static int host_wait_settled(struct efs_raft_host *h, uint8_t group,
                              uint64_t idx, uint64_t term, int *hint)
 {
-    struct host_group *g;
+    struct efs_arc_view v;
     int rc = EFS_OK;
 
     rc = host_wait_applied(h, group, idx, hint);
     if (rc != EFS_OK || !term)
         return rc;
-    pthread_mutex_lock(&h->mu);
-    g = group_slot(h, group);
-    if (g && g->hosted) {
-        uint64_t s = idx & HOST_APPLY_RC_MASK;
-
-        if (g->arc_idx[s] == idx && g->arc_term[s] != term) {
-            h->obs_arc_term_miss++;
-            rc = EFS_ERR_NOT_PRIMARY;
-        }
+    if (host_arc_read(h, group, idx, &v) && v.idx == idx && v.term != term) {
+        __atomic_fetch_add(&h->obs_arc_term_miss, 1, __ATOMIC_RELAXED);
+        rc = EFS_ERR_NOT_PRIMARY;
     }
-    pthread_mutex_unlock(&h->mu);
     return rc;
 }
 
@@ -5207,17 +5219,18 @@ static int host_propose_wait_ex_impl(struct efs_raft_host *h, uint8_t group,
     rc = host_propose_impl(h, group, cmd, clen, &idx, &term, hint, 0);
     if (rc != EFS_OK)
         return rc;
-    uint64_t wp0 = write_prof_on() ? wprof_now() : 0, seen = 0, apply_us = 0;
+    uint64_t wp0 = write_prof_on() ? wprof_now() : 0, seen = 0;
+    struct efs_arc_view v;
+    int hosted;
     rc = host_wait_applied(h, group, idx, hint);
     if (rc != EFS_OK)
         return rc;
     if (wp0) seen = wprof_now();
-    pthread_mutex_lock(&h->mu);
-    rc = host_apply_rc_locked(h, group, idx, term);
-    erc = host_apply_extra_locked(h, group, idx, term, extra_out);
-    if (wp0) apply_us = host_apply_us_locked(h, group, idx);
-    pthread_mutex_unlock(&h->mu);
-    if (wp0) wprof_verdict(wp0, seen, apply_us);
+    /* One slot copy: the verdict and the reserved offset of the same apply. */
+    hosted = host_arc_read(h, group, idx, &v);
+    rc = host_arc_verdict(h, hosted, &v, idx, term);
+    erc = host_arc_extra(h, hosted, &v, idx, term, extra_out);
+    if (wp0) wprof_verdict(wp0, seen, host_arc_apply_us(hosted, &v, idx));
     if (rc == EFS_OK && extra_out)
         rc = erc;
     return rc;
@@ -6960,7 +6973,9 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
                 (unsigned long long)(tx->st_get_max_us / 1000ull));
     }
     if (any || h->obs_wait_timeouts || h->obs_pump_hold_max_us ||
-        h->obs_arc_miss || h->obs_arc_term_miss || h->obs_opid_replay ||
+        __atomic_load_n(&h->obs_arc_miss, __ATOMIC_RELAXED) ||
+        __atomic_load_n(&h->obs_arc_term_miss, __ATOMIC_RELAXED) ||
+        h->obs_opid_replay ||
         __atomic_load_n(&h->inbox_drop, __ATOMIC_RELAXED) ||
         __atomic_load_n(&h->obs_pub_n, __ATOMIC_RELAXED)) {
         uint64_t pub_n = __atomic_load_n(&h->obs_pub_n, __ATOMIC_RELAXED);
@@ -7001,8 +7016,8 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
                 (unsigned long long)h->obs_apply_max_us,
                 (unsigned long long)h->obs_persist_max_us,
                 (unsigned long long)h->obs_apply_max_cnt,
-                (unsigned long long)h->obs_arc_miss,
-                (unsigned long long)h->obs_arc_term_miss,
+                (unsigned long long)__atomic_load_n(&h->obs_arc_miss, __ATOMIC_RELAXED),
+                (unsigned long long)__atomic_load_n(&h->obs_arc_term_miss, __ATOMIC_RELAXED),
                 (unsigned long long)__atomic_load_n(&h->obs_opid_replay,
                                                     __ATOMIC_RELAXED),
                 (unsigned long long)h->fin_queued,
@@ -7846,7 +7861,7 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
     if (!h->g[gi].r)
         return EFS_ERR_NOMEM;
     efs_raft_arm_durable(h->g[gi].r);
-    h->g[gi].hosted = 1;
+    __atomic_store_n(&h->g[gi].hosted, 1, __ATOMIC_RELEASE);
     __atomic_store_n(&h->g[gi].voters, efs_raft_voters(h->g[gi].r),
                      __ATOMIC_RELEASE);
     {
@@ -7872,7 +7887,7 @@ static int attach_group(struct efs_raft_host *h, int gi, uint8_t group)
     h->g[gi].group = group;
     __atomic_store_n(&h->g[gi].voters, boot, __ATOMIC_RELEASE);
     h->g[gi].host = h;
-    h->g[gi].hosted = 0;
+    __atomic_store_n(&h->g[gi].hosted, 0, __ATOMIC_RELEASE);
     h->g[gi].snap_fd = -1;
     h->g[gi].part_fd = -1;
     h->g[gi].applied_fd = -1;
@@ -7881,8 +7896,10 @@ static int attach_group(struct efs_raft_host *h, int gi, uint8_t group)
     h->g[gi].snap_ready = 0;
     h->g[gi].r = NULL;
     V_STORE(h->g[gi].v_has, 0);
-    memset(h->g[gi].arc_idx, 0, sizeof(h->g[gi].arc_idx));
-    memset(h->g[gi].arc_rc, 0, sizeof(h->g[gi].arc_rc));
+    /* Clear every field of every slot through the slot protocol; index 0
+     * is never a log entry, so no waiter can match a cleared slot. */
+    for (int s = 0; s < HOST_APPLY_RC_RING; s++)
+        efs_arc_store(&h->g[gi].arc[s], 0, 0, 0, 0, 0);
     want = load_desired(h, group, boot);
     h->g[gi].desired = want;
     if (!hosts_group(h->raft_id, boot) && !hosts_group(h->raft_id, want))
@@ -13498,10 +13515,7 @@ static int host_wait_refs(struct efs_raft_host *h, struct host_idx_ref *refs,
     }
     rc = EFS_OK;
     for (i = 0; i < n; i++) {
-        pthread_mutex_lock(&h->mu);
-        one = host_apply_rc_locked(h, refs[i].group, refs[i].idx,
-                                   refs[i].term);
-        pthread_mutex_unlock(&h->mu);
+        one = host_apply_rc(h, refs[i].group, refs[i].idx, refs[i].term);
         if (one != EFS_OK && rc == EFS_OK)
             rc = one;
     }
@@ -18306,36 +18320,34 @@ static int host_pub_batch_wait(struct efs_raft_host *h, struct host_pub_batch *b
     if (idx)
         rc = host_wait_applied(h, b->group, idx, hint);
     if (rc == EFS_OK && idx) {
-        struct host_group *g;
-
         if (wp0) seen = wprof_now();
-        pthread_mutex_lock(&h->mu);
-        if (wp0) apply_us = host_apply_us_locked(h, b->group, idx);
-        g = group_slot(h, b->group);
-        if (g && !g->hosted)
-            g = NULL; /* forwarded batch: the leader's reply was the verdict */
-        for (i = 0; i < b->nidx && g; i++) {
-            uint64_t s = b->idxs[i] & HOST_APPLY_RC_MASK;
+        for (i = 0; i < b->nidx; i++) {
+            struct efs_arc_view v;
             int erc;
 
-            if (g->arc_idx[s] != b->idxs[i]) {
-                h->obs_arc_miss++;
+            /* Not hosted: a forwarded batch; the leader's reply was the
+             * verdict. Hosting is fixed at attach, so this is all or none. */
+            if (!host_arc_read(h, b->group, b->idxs[i], &v))
+                break;
+            if (v.idx != b->idxs[i]) {
+                __atomic_fetch_add(&h->obs_arc_miss, 1, __ATOMIC_RELAXED);
                 erc = EFS_ERR_STALE;
-            } else if (b->terms[i] && g->arc_term[s] != b->terms[i]) {
+            } else if (b->terms[i] && v.term != b->terms[i]) {
                 /* Our entry was truncated by a leader change; a stranger
                  * applied at this index. The publish did not happen:
                  * STALE makes the client re-pull and replay the range. */
-                h->obs_arc_term_miss++;
+                __atomic_fetch_add(&h->obs_arc_term_miss, 1, __ATOMIC_RELAXED);
                 erc = EFS_ERR_STALE;
             } else {
-                erc = g->arc_rc[s];
+                erc = v.rc;
+                if (b->idxs[i] == idx)
+                    apply_us = v.apply_us;
             }
             if (erc == EFS_ERR_STALE)
                 saw_stale = 1;
             else if (erc != EFS_OK && rc == EFS_OK)
                 rc = erc;
         }
-        pthread_mutex_unlock(&h->mu);
         if (wp0) wprof_verdict(wp0, seen, apply_us);
         /* !g (group not hosted) cannot happen here: the report path
          * requires every group it publishes to be local (checked above). */

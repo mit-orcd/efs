@@ -16,8 +16,10 @@ source = r'''
 #include <assert.h>
 #include <pthread.h>
 #include <stdio.h>
+#include "apply_ring.h"
+#include <string.h>
 #define HOST_APPLY_RC_MASK 7
-struct host_group { int hosted; uint64_t arc_idx[8], arc_term[8], arc_apply_us[8]; int arc_rc[8]; };
+struct host_group { int hosted; struct efs_arc_slot arc[8]; };
 struct efs_raft_host { pthread_mutex_t mu; struct host_group group; uint64_t obs_arc_miss, obs_arc_term_miss; };
 static struct host_group *group_slot(struct efs_raft_host *h, uint8_t group) { (void)group; return &h->group; }
 static int host_wait_applied(struct efs_raft_host *h, uint8_t group, uint64_t idx, int *hint) {
@@ -26,13 +28,15 @@ static int host_wait_applied(struct efs_raft_host *h, uint8_t group, uint64_t id
 static int write_prof_on(void) { return 0; }
 static uint64_t wprof_now(void) { return 0; }
 static void wprof_verdict(uint64_t t0, uint64_t seen, uint64_t apply_us) { (void)t0; (void)seen; (void)apply_us; }
-''' + function('host_apply_rc_locked') + '\n' + function('host_apply_us_locked') + '\n' + function(wait) + r'''
+static uint64_t g_wprof_arc_fallback;
+#define HOST_ARC_READ_TRIES 64
+''' + function('host_arc_read') + '\n' + function('host_arc_verdict') + '\n' + function('host_arc_apply_us') + '\n' + function(wait) + r'''
 int main(void) {
     struct efs_raft_host h = {.mu = PTHREAD_MUTEX_INITIALIZER};
-    h.group.hosted = 1; h.group.arc_idx[3] = 11; h.group.arc_term[3] = 7;
+    h.group.hosted = 1;
     int verdicts[] = {EFS_OK, EFS_ERR_NOT_FOUND, EFS_ERR_BUSY, EFS_ERR_STALE};
     for (unsigned i = 0; i < sizeof(verdicts)/sizeof(verdicts[0]); ++i) {
-        h.group.arc_rc[3] = verdicts[i];
+        efs_arc_store(&h.group.arc[3], 11, 7, verdicts[i], 0, 0);
         assert(WAIT(&h, 0, 11, 7, NULL) == verdicts[i]);
     }
     assert(WAIT(&h, 0, 11, 8, NULL) == EFS_ERR_NOT_PRIMARY);
@@ -43,6 +47,6 @@ int main(void) {
 '''.replace('WAIT(', wait + '(')
 with tempfile.TemporaryDirectory(prefix='efs-unlink-verdict-') as directory:
     path = Path(directory) / 'test.c'; path.write_text(source)
-    command = shlex.split(os.environ.get('CC', 'cc')) + ['-std=gnu11', '-Wall', '-Wextra', '-Werror', '-pthread', '-I' + str(root / 'include')]
+    command = shlex.split(os.environ.get('CC', 'cc')) + ['-std=gnu11', '-Wall', '-Wextra', '-Werror', '-pthread', '-I' + str(root / 'include'), '-I' + str(root / 'src/server')]
     subprocess.run(command + [str(path), '-o', str(path.with_suffix(''))], check=True)
     subprocess.run([str(path.with_suffix(''))], check=True)

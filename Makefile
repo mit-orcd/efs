@@ -381,6 +381,7 @@ test: all
 	python3 tests/test_readindex_coalescer.py
 	python3 tests/test_read_waiters.py
 	python3 tests/test_write_prof.py
+	python3 tests/test_apply_ring.py
 	python3 tests/test_readindex_remote_pair.py
 	python3 tests/test_read_retry_budget.py
 	python3 tests/test_host_read_deadline.py
@@ -807,7 +808,7 @@ tests/test_put_upload_client: tests/test_put_upload_client.c src/client/put_uplo
 # Publication coalescing is shared by the real worker and its policy gate.
 src/server/raft_host.o tests/test_query_refresh: src/server/query_refresh.h src/server/query_export_lease.h
 src/server/raft_host.o: src/server/read_index_pair_remote.h
-src/server/raft_host.o: src/server/write_prof.h
+src/server/raft_host.o: src/server/write_prof.h src/server/apply_ring.h
 
 # Ticket wire changes must rebuild both endpoints and their actual handler.
 src/client/put_upload.o src/server/put_upload.o src/server/handler.o: include/efs/put_upload.h include/efs/put_ticket.h
