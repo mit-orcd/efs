@@ -18,6 +18,16 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[orcd-mini `e04a80f63`: deferral, expiry fixtures, refused-startup fence](orcd-mini-open-items-e04a80f63-20261017.md):
+**deployed; core, extras, two-client, persist and private GC POSIX PASS;
+`posix_expiry` 2/4 (intermittent).**
+- Cleanup deferral now works live: `deferred_cleanup` climbs, and there
+  are no catalog publishes while only GC runs.
+- A startup refused before serving no longer fences the roots. orcd-mini
+  was fenced by exactly that (quota check after `/data1` filled). It was
+  repaired with the user's approval (orderly stop, syncfs, records set
+  clean), and the quota lowered to 720 GiB.
+
 [orcd-mini profile on `9099380f3`](orcd-mini-profile-9099380f3-20261017.md):
 **profiling only.** Under two writers, a delete and two crawlers, the cv_mu
 wake-up waits are gone from the leader's top lock waits (45% on
