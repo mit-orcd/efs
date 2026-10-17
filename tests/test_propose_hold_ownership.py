@@ -24,6 +24,7 @@ int efs_raft_disk_sync_hold(struct efs_raft_disk*d){if(d->hold_rc)return d->hold
 static int release(struct efs_raft_disk*d){assert(!pthread_mutex_trylock(&test_host->mu));pthread_mutex_unlock(&test_host->mu);assert(d->depth>0);d->depth--;held_sync++;return 0;}
 int efs_raft_disk_sync_release(struct efs_raft_disk*d){return release(d);}
 int efs_raft_disk_sync_release_wait(struct efs_raft_disk*d){assert(d->depth==1);return release(d);}
+enum{WP_HOLD,WP_MU,WP_APPEND,WP_SPIN,WP_PERSIST,WP_MU_AFTER,WP_PROPOSE,WP_COMMIT_APPLY,WP_WAKE,WP_VERDICT,WP_APPLY,WP_COVER,WP_REPORT_MU};__attribute__((unused)) static inline int write_prof_on(void){return 0;}__attribute__((unused)) static inline uint64_t wprof_now(void){return 0;}__attribute__((unused)) static inline void wprof_add(int p,uint64_t us){(void)p;(void)us;}__attribute__((unused)) static inline void wprof_tick(void){}
 static void propose_q_add(void){} static void propose_q_sub(void){} static int propose_q_busy(void){return 0;}
 static struct efs_raft *group_raft(struct efs_raft_host*h,uint8_t g){(void)g;return h->r;}
 uint32_t efs_raft_voters(const struct efs_raft*r){return r->voters;}

@@ -4,6 +4,7 @@
 #include "efs/checksum.h"
 #include "efs/raft.h"
 #include "efs/batch_obs.h"
+#include "write_prof.h"
 #include "efs/raft_disk.h"
 #include "efs/kv.h"
 #include "efs/kv_lsm.h"
@@ -293,6 +294,7 @@ struct host_group {
     uint64_t arc_term[HOST_APPLY_RC_RING];
     int32_t arc_rc[HOST_APPLY_RC_RING];
     uint64_t arc_extra[HOST_APPLY_RC_RING];
+    uint64_t arc_apply_us[HOST_APPLY_RC_RING]; /* EFS_WRITE_PROF apply time */
     /* EFS_RAFT_OBS: last logged term/role, for election-churn timing. */
     uint64_t obs_term;
     int obs_role;
@@ -619,6 +621,65 @@ static int raft_dbg_on(void)
 }
 
 #define APPLY_LOG(...) do { if (raft_dbg_on()) fprintf(stderr, __VA_ARGS__); } while (0)
+
+/* EFS_WRITE_PROF=1: write-path phase histograms (write_prof.h), one
+ * "write-phase-prof" stderr line per 10,000 local-leader proposals.
+ * Monotonic microseconds; relaxed atomics; clock reads only when on. */
+static struct efs_wprof_hist g_wprof[WP_N];
+static uint64_t g_wprof_ticks;
+static uint64_t g_wprof_arc_fallback; /* result-ring reads that took h->mu */
+
+static int write_prof_on(void)
+{
+    static int v = -1;
+    int on = __atomic_load_n(&v, __ATOMIC_RELAXED);
+
+    if (on < 0) {
+        on = env_on("EFS_WRITE_PROF");
+        __atomic_store_n(&v, on, __ATOMIC_RELAXED);
+    }
+    return on;
+}
+
+static uint64_t wprof_now(void)
+{
+    return efs_batch_obs_now_us();
+}
+
+static void wprof_add(int phase, uint64_t us)
+{
+    efs_wprof_add(&g_wprof[phase], us);
+}
+
+static void wprof_tick(void)
+{
+    char line[2048];
+    uint64_t t = __atomic_add_fetch(&g_wprof_ticks, 1, __ATOMIC_RELAXED);
+
+    if (t % 10000 != 0)
+        return;
+    if (efs_wprof_format(line, sizeof(line), g_wprof, wprof_now(),
+                         __atomic_load_n(&g_wprof_arc_fallback,
+                                         __ATOMIC_RELAXED)) > 0)
+        fprintf(stderr, "%s\n", line);
+}
+
+/* A verdict wait that began at t0 (propose returned), saw the entry applied
+ * at seen and had the verdict at the end. apply_us is the ring's apply
+ * stamp for that entry (0: unknown). An entry applied before t0 waited
+ * for nothing: commit_apply is 0 and wake is the wait itself. */
+static void wprof_verdict(uint64_t t0, uint64_t seen, uint64_t apply_us)
+{
+    uint64_t end = wprof_now();
+
+    wprof_add(WP_VERDICT, end - seen);
+    if (!apply_us)
+        return;
+    if (apply_us < t0)
+        apply_us = t0;
+    wprof_add(WP_COMMIT_APPLY, apply_us - t0);
+    wprof_add(WP_WAKE, seen > apply_us ? seen - apply_us : 0);
+}
 
 static uint64_t now_us_(void)
 {
@@ -2680,6 +2741,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
     struct host_group *g = app;
     struct efs_raft_host *h = g->host;
     uint64_t a0 = 0;
+    uint64_t wp0 = write_prof_on() ? wprof_now() : 0;
     int rc, ret;
 
     if (g && __atomic_load_n(&g->import_block, __ATOMIC_ACQUIRE))
@@ -2692,6 +2754,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         g->arc_term[index & HOST_APPLY_RC_MASK] = term;
         g->arc_rc[index & HOST_APPLY_RC_MASK] = EFS_OK;
         g->arc_extra[index & HOST_APPLY_RC_MASK] = 0;
+        g->arc_apply_us[index & HOST_APPLY_RC_MASK] = 0;
         return EFS_OK;
     }
 #if EFS_FAULTS
@@ -2822,6 +2885,14 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
     g->arc_term[index & HOST_APPLY_RC_MASK] = term;
     g->arc_rc[index & HOST_APPLY_RC_MASK] = rc;
     g->arc_extra[index & HOST_APPLY_RC_MASK] = h->apply_extra;
+    if (wp0) {
+        uint64_t done = wprof_now();
+
+        wprof_add(WP_APPLY, done - wp0);
+        g->arc_apply_us[index & HOST_APPLY_RC_MASK] = done;
+    } else {
+        g->arc_apply_us[index & HOST_APPLY_RC_MASK] = 0;
+    }
     return ret;
 }
 
@@ -3734,6 +3805,7 @@ static int host_leader_cover_pick(struct efs_raft_host *h,uint8_t group,
 {
     if(!need || count<1 || count>HOST_NGROUPS)return -1;
     int peer=-1;
+    uint64_t wp0=write_prof_on()?wprof_now():0;
     pthread_mutex_lock(&h->mu);
     struct efs_raft *r=group_raft(h,group);
     int leader=r?efs_raft_leader(r):-1;
@@ -3747,6 +3819,7 @@ static int host_leader_cover_pick(struct efs_raft_host *h,uint8_t group,
         }
     }
     pthread_mutex_unlock(&h->mu);
+    if(wp0)wprof_add(WP_COVER,wprof_now()-wp0);
     return peer;
 }
 
@@ -4744,6 +4817,7 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
     int lid = -1;
     int quiet = 0;
     uint64_t myidx = 0;
+    uint64_t wp0 = write_prof_on() ? wprof_now() : 0, wpt = 0;
     struct efs_msg_raft_mkfs_reply rep;
 
     if (term)
@@ -4758,9 +4832,16 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
         rc=efs_raft_disk_sync_hold(h->disk);
         if(rc!=EFS_OK)return rc;
         quiet=nested?2:1;
+        if (wp0) wprof_add(WP_HOLD, wprof_now() - wp0);
     }
     propose_q_add();
+    if (wp0) wpt = wprof_now();
     pthread_mutex_lock(&h->mu);
+    if (wp0) {
+        uint64_t t = wprof_now();
+        wprof_add(WP_MU, t - wpt);
+        wpt = t;
+    }
     r = group_raft(h, group);
     if (r) {
         uint32_t voters = efs_raft_voters(r);
@@ -4808,11 +4889,13 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
             if (rc == EFS_OK)
                 rc = efs_raft_submit(r, myidx);
             host_publish_group(h, group);
+            if (wp0) wprof_add(WP_APPEND, wprof_now() - wpt);
             pthread_mutex_unlock(&h->mu);
             propose_q_sub();
             if (quiet == 1 && rc == EFS_OK) {
                 int spins = 0;
 
+                if (wp0) wpt = wprof_now();
                 /* Threads already inside host_propose are in propose_q.
                  * Let them append before the fsync; a continuous arrival
                  * of new calls is cut off by the spin cap. */
@@ -4821,9 +4904,20 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
                 BO_HIST(BH_SPINS, spins);
                 if (spins > 10000) BO_COUNT(BO_SPIN_CAP);
                 host_pump_kick(h);
+                if (wp0) {
+                    uint64_t t = wprof_now();
+                    wprof_add(WP_SPIN, t - wpt);
+                    wpt = t;
+                }
                 rc = efs_raft_disk_sync_release_wait(h->disk);
+                if (wp0) {
+                    uint64_t t = wprof_now();
+                    wprof_add(WP_PERSIST, t - wpt);
+                    wpt = t;
+                }
                 if (rc == EFS_OK) {
                     pthread_mutex_lock(&h->mu);
+                    if (wp0) wprof_add(WP_MU_AFTER, wprof_now() - wpt);
                     r = group_raft(h, group);
                     if (!r || efs_raft_role(r) != EFS_RAFT_LEADER)
                         rc = EFS_ERR_NOT_PRIMARY;
@@ -4835,19 +4929,30 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
                     pthread_mutex_unlock(&h->mu);
                 }
             } else if (quiet) {
+                if (wp0) wpt = wprof_now();
                 int sync_rc=efs_raft_disk_sync_release(h->disk);
+                if (wp0) {
+                    uint64_t t = wprof_now();
+                    wprof_add(WP_PERSIST, t - wpt);
+                    wpt = t;
+                }
                 if(rc==EFS_OK)rc=sync_rc;
                 if(rc==EFS_OK) {
                     /* This may have closed the last hold, or an outer
                      * owner may still owe the tail. Publish only the
                      * completed disk watermark, never our bare index. */
                     pthread_mutex_lock(&h->mu);
+                    if (wp0) wprof_add(WP_MU_AFTER, wprof_now() - wpt);
                     host_note_durable_synced(h);
                     host_publish_group(h,group);
                     pthread_mutex_unlock(&h->mu);
                 }
             }
             host_pump_kick(h);
+            if (wp0) {
+                wprof_add(WP_PROPOSE, wprof_now() - wp0);
+                wprof_tick();
+            }
             return rc;
         }
         if (efs_raft_role(r) == EFS_RAFT_LEADER) {
@@ -4858,11 +4963,16 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
             if (rc == EFS_OK && idx)
                 rc = host_mark_durable_covered(h, group, r, *idx);
             host_publish_group(h, group);
+            if (wp0) wprof_add(WP_APPEND, wprof_now() - wpt);
             pthread_mutex_unlock(&h->mu);
             propose_q_sub();
             if (quiet)
                 (void)efs_raft_disk_sync_release(h->disk);
             host_pump_kick(h);
+            if (wp0) {
+                wprof_add(WP_PROPOSE, wprof_now() - wp0);
+                wprof_tick();
+            }
             return rc;
         }
     }
@@ -4961,18 +5071,34 @@ static int host_apply_extra_locked(struct efs_raft_host *h, uint8_t group,
     return EFS_OK;
 }
 
+/* h->mu held. EFS_WRITE_PROF apply stamp of idx's slot, 0 if unknown. */
+static uint64_t host_apply_us_locked(struct efs_raft_host *h, uint8_t group,
+                                     uint64_t idx)
+{
+    struct host_group *g = group_slot(h, group);
+    uint64_t s = idx & HOST_APPLY_RC_MASK;
+
+    if (!g || !g->hosted || g->arc_idx[s] != idx)
+        return 0;
+    return g->arc_apply_us[s];
+}
+
 /* Wait for (idx, term) to apply and return the apply layer's verdict. */
 static int host_wait_verdict(struct efs_raft_host *h, uint8_t group,
                              uint64_t idx, uint64_t term, int *hint)
 {
+    uint64_t wp0 = write_prof_on() ? wprof_now() : 0, seen = 0, apply_us = 0;
     int rc;
 
     rc = host_wait_applied(h, group, idx, hint);
     if (rc != EFS_OK)
         return rc;
+    if (wp0) seen = wprof_now();
     pthread_mutex_lock(&h->mu);
     rc = host_apply_rc_locked(h, group, idx, term);
+    if (wp0) apply_us = host_apply_us_locked(h, group, idx);
     pthread_mutex_unlock(&h->mu);
+    if (wp0) wprof_verdict(wp0, seen, apply_us);
     return rc;
 }
 
@@ -5063,13 +5189,17 @@ static int host_propose_wait_ex_impl(struct efs_raft_host *h, uint8_t group,
     rc = host_propose_impl(h, group, cmd, clen, &idx, &term, hint, 0);
     if (rc != EFS_OK)
         return rc;
+    uint64_t wp0 = write_prof_on() ? wprof_now() : 0, seen = 0, apply_us = 0;
     rc = host_wait_applied(h, group, idx, hint);
     if (rc != EFS_OK)
         return rc;
+    if (wp0) seen = wprof_now();
     pthread_mutex_lock(&h->mu);
     rc = host_apply_rc_locked(h, group, idx, term);
     erc = host_apply_extra_locked(h, group, idx, term, extra_out);
+    if (wp0) apply_us = host_apply_us_locked(h, group, idx);
     pthread_mutex_unlock(&h->mu);
+    if (wp0) wprof_verdict(wp0, seen, apply_us);
     if (rc == EFS_OK && extra_out)
         rc = erc;
     return rc;
@@ -18122,7 +18252,9 @@ static int host_report_release(struct efs_raft_host *h, int held)
 {
     int rc = held ? efs_raft_disk_sync_release_wait(h->disk) : EFS_OK;
     if (rc != EFS_OK) return rc;
+    uint64_t wp0 = write_prof_on() ? wprof_now() : 0;
     pthread_mutex_lock(&h->mu);
+    if (wp0) wprof_add(WP_REPORT_MU, wprof_now() - wp0);
     host_note_durable_synced(h);
     pthread_mutex_unlock(&h->mu);
     host_pump_kick(h);
@@ -18150,12 +18282,15 @@ static int host_pub_batch_wait(struct efs_raft_host *h, struct host_pub_batch *b
     uint64_t idx = b->last_idx;
     uint32_t i;
 
+    uint64_t wp0 = idx && write_prof_on() ? wprof_now() : 0, seen = 0, apply_us = 0;
     if (idx)
         rc = host_wait_applied(h, b->group, idx, hint);
     if (rc == EFS_OK && idx) {
         struct host_group *g;
 
+        if (wp0) seen = wprof_now();
         pthread_mutex_lock(&h->mu);
+        if (wp0) apply_us = host_apply_us_locked(h, b->group, idx);
         g = group_slot(h, b->group);
         if (g && !g->hosted)
             g = NULL; /* forwarded batch: the leader's reply was the verdict */
@@ -18181,6 +18316,7 @@ static int host_pub_batch_wait(struct efs_raft_host *h, struct host_pub_batch *b
                 rc = erc;
         }
         pthread_mutex_unlock(&h->mu);
+        if (wp0) wprof_verdict(wp0, seen, apply_us);
         /* !g (group not hosted) cannot happen here: the report path
          * requires every group it publishes to be local (checked above). */
         if (b->overflow)

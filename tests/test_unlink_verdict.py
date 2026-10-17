@@ -17,13 +17,16 @@ source = r'''
 #include <pthread.h>
 #include <stdio.h>
 #define HOST_APPLY_RC_MASK 7
-struct host_group { int hosted; uint64_t arc_idx[8], arc_term[8]; int arc_rc[8]; };
+struct host_group { int hosted; uint64_t arc_idx[8], arc_term[8], arc_apply_us[8]; int arc_rc[8]; };
 struct efs_raft_host { pthread_mutex_t mu; struct host_group group; uint64_t obs_arc_miss, obs_arc_term_miss; };
 static struct host_group *group_slot(struct efs_raft_host *h, uint8_t group) { (void)group; return &h->group; }
 static int host_wait_applied(struct efs_raft_host *h, uint8_t group, uint64_t idx, int *hint) {
     (void)h; (void)group; (void)idx; (void)hint; return EFS_OK;
 }
-''' + function('host_apply_rc_locked') + '\n' + function(wait) + r'''
+static int write_prof_on(void) { return 0; }
+static uint64_t wprof_now(void) { return 0; }
+static void wprof_verdict(uint64_t t0, uint64_t seen, uint64_t apply_us) { (void)t0; (void)seen; (void)apply_us; }
+''' + function('host_apply_rc_locked') + '\n' + function('host_apply_us_locked') + '\n' + function(wait) + r'''
 int main(void) {
     struct efs_raft_host h = {.mu = PTHREAD_MUTEX_INITIALIZER};
     h.group.hosted = 1; h.group.arc_idx[3] = 11; h.group.arc_term[3] = 7;

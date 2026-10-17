@@ -20,6 +20,7 @@ static struct host_group *group_slot(struct efs_raft_host*h,uint8_t g){return g=
 static struct efs_raft *group_raft(struct efs_raft_host*h,uint8_t g){struct host_group*s=group_slot(h,g);return s?s->r:NULL;}
 static uint32_t group_voters(uint8_t g,int n){return n<=3?(1u<<n)-1:g==0?7:14;}
 static int hosts_group(int id,uint32_t voters){return id>=0 && id<32 && (voters&(1u<<id));}
+enum{WP_COVER};static int write_prof_on(void){return 0;}static uint64_t wprof_now(void){return 0;}static void wprof_add(int p,uint64_t us){(void)p;(void)us;}
 int efs_raft_leader(const struct efs_raft*r){assert(pthread_mutex_trylock(&active->mu)==EBUSY);return leaders[(uintptr_t)r-1];}
 uint32_t efs_raft_voters(const struct efs_raft*r){assert(pthread_mutex_trylock(&active->mu)==EBUSY);return masks[(uintptr_t)r-1];}
 """+s[a:b]+r"""

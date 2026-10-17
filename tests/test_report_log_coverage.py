@@ -19,6 +19,7 @@ code=r'''
 struct efs_raft_disk {int unused;};struct efs_raft {int unused;};
 struct efs_raft_host {struct efs_raft_disk *disk;pthread_mutex_t mu;};
 static uint64_t covered,synced=1000,last_marked;static unsigned marks,releases,kicks,broadcasts,applies;static int release_rc,durable_rc;
+enum{WP_HOLD,WP_MU,WP_APPEND,WP_SPIN,WP_PERSIST,WP_MU_AFTER,WP_PROPOSE,WP_COMMIT_APPLY,WP_WAKE,WP_VERDICT,WP_APPLY,WP_COVER,WP_REPORT_MU};__attribute__((unused)) static inline int write_prof_on(void){return 0;}__attribute__((unused)) static inline uint64_t wprof_now(void){return 0;}__attribute__((unused)) static inline void wprof_add(int p,uint64_t us){(void)p;(void)us;}__attribute__((unused)) static inline void wprof_tick(void){}
 static uint64_t efs_raft_disk_synced_bytes(struct efs_raft_disk*d){assert(d);return synced;}
 static uint64_t efs_raft_disk_covered_index(struct efs_raft_disk*d,uint32_t g,uint64_t end){assert(d && g==2 && end==synced);return covered;}
 static int efs_raft_durable(struct efs_raft*r,uint64_t i){assert(r);marks++;applies++;last_marked=i;return durable_rc;}

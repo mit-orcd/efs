@@ -36,6 +36,7 @@ static int efs_raft_leader(struct efs_raft*r){return r->leader;}
 static uint32_t efs_raft_voters(struct efs_raft*r){return r->voters;}
 static uint32_t group_voters(uint8_t g,int n){(void)g;(void)n;return 0;}
 static int hosts_group(int id,uint32_t voters){return id>=0&&id<32&&(voters&(1u<<id));}
+enum{WP_HOLD,WP_MU,WP_APPEND,WP_SPIN,WP_PERSIST,WP_MU_AFTER,WP_PROPOSE,WP_COMMIT_APPLY,WP_WAKE,WP_VERDICT,WP_APPLY,WP_COVER,WP_REPORT_MU};__attribute__((unused)) static inline int write_prof_on(void){return 0;}__attribute__((unused)) static inline uint64_t wprof_now(void){return 0;}__attribute__((unused)) static inline void wprof_add(int p,uint64_t us){(void)p;(void)us;}__attribute__((unused)) static inline void wprof_tick(void){}
 static int host_fwd_leader_pick(struct efs_raft_host*h,uint8_t g,int skip){(void)h;(void)g;(void)skip;return -1;}
 static void host_need_both(uint8_t *g){g[0]=0;g[1]=2;}
 static int host_query_capable(struct efs_raft_host*h){return h->capable;}
