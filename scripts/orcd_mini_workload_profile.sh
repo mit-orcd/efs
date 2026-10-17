@@ -4,7 +4,7 @@
 # Run from the Mac. Starts the user's orcd-mini tiny-file workload on the
 # node9900 client, then profiles the deployed orcd-mini daemons under it:
 #   - writer: tiny_files.py, 16 workers, into a new tiny-files-prof-LABEL dir;
-#   - reader: tiny_files_md5.py, 16 workers, over tiny-files1;
+#   - reader: tiny_files_md5.py, 16 workers, over MD5_DIR (default tiny-files1);
 #   - crawler: ecrawl --no-write over the mount.
 # After a 60 s warm-up it records context-switch samples of all three efsd
 # (10 s, mutex waits by caller), the 200-file latency probe on both mounts
@@ -16,7 +16,7 @@
 # same probe.py on node9900, and ssh wrappers in N99 and N00. Afterwards remove
 # the writer's tiny-files-prof-LABEL directory if it is not wanted.
 set -u
-L=$1; T=${2:-180}
+L=$1; T=${2:-180}; MD5_DIR=${MD5_DIR:-tiny-files1}
 N99=${N99:?ssh wrapper for node9901}; N00=${N00:?ssh wrapper for node9900}
 M=/data1/efs/orcd-mini-mnt; CD=/data1/efs/orcd-mini-client/prof/wl-$L; SD=/data1/efs/prof/wl-$L
 $N00 "mkdir -p $CD && cat > $CD/launch.sh" <<EOF
@@ -24,7 +24,7 @@ cd $CD
 timeout $T python3 /data1/efs/testing/tiny_files.py --max-depth 8 --max-files-per-folder 1000 \
   --max-files 2000000 --workers 16 $M/tiny-files-prof-$L > writer.log 2>&1 < /dev/null &
 echo \$! > pids
-timeout $T python3 /data1/efs/testing/tiny_files_md5.py $M/tiny-files1 --workers 16 \
+timeout $T python3 /data1/efs/testing/tiny_files_md5.py $M/$MD5_DIR --workers 16 \
   --output $CD/md5.jsonl > md5.log 2>&1 < /dev/null &
 echo \$! >> pids
 timeout $T \$HOME/git/ereport/ecrawl --no-write --progress $M/ > crawl.log 2>&1 < /dev/null &
