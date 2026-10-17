@@ -73,6 +73,14 @@ defect); the 60 s cap and exact dependencies carry the gain.
   from 2 s to 60 s.
 - GC schedule untouched.
 
+[`h->mu` plan steps 1–3](raft-host-mu-steps-20261017.md): **branch
+`raft-host-mu`; private RDMA A/B PASS, `make test` PASS; orcd-mini
+deployment NOTRUN (waiting for go-ahead).**
+- Verdict reads and leader-cover picks no longer wait for `h->mu`
+  (79 → 0.2 µs and 113 → 0.1 µs mean).
+- Leader lock-wait share fell 16.7% → 12.6%. Creates/s, CPU per create and
+  latency are unchanged within noise.
+
 [`h->mu` contention plan and review](raft-host-mu-plan-20261016.md):
 **NOTRUN; plan only.** Measure per-phase timing → routing snapshot →
 race-free result-ring reads → reassess → conditional REPORT change →

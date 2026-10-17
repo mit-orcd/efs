@@ -1,7 +1,8 @@
 # `h->mu` contention plan and design review — 2026-10-16
 
-**Verdict: NOTRUN. Plan and review record only; no code changed and nothing
-measured.** Follows [waiter wake-up outside `cv_mu`](orcd-mini-waiter-wake-20261016.md)
+**Verdict: steps 1–3 implemented on branch `raft-host-mu` with a private
+A/B PASS ([steps 1–3](raft-host-mu-steps-20261017.md)); orcd-mini
+deployment and steps 5–6 NOTRUN.** Originally a plan and review record only. Follows [waiter wake-up outside `cv_mu`](orcd-mini-waiter-wake-20261016.md)
 (deployed as `4aff22c62`). Its leader profile under the user's workload put
 ~72% of lock waits on `h->mu`: proposals 29%, verdict reads 17% and
 leader-cover picks 14%. Source references are to `src/server/raft_host.c` at
@@ -114,6 +115,12 @@ and reply. That still needs step 1's instrumentation, plus throughput,
 CPU per operation and p50/p95/p99 under a controlled workload.
 
 ## Agreed sequence
+
+Status on 2026-10-17 ([steps 1–3](raft-host-mu-steps-20261017.md)):
+- Steps 1–3 are done on branch `raft-host-mu`.
+- Step 4: REPORT's `h->mu` acquisition (~190 µs mean) is now the third
+  lock site, so step 5 is the next candidate, after its audit.
+- Step 6 is not justified yet.
 
 | Step | Work | Gate before the next step |
 | --- | --- | --- |
