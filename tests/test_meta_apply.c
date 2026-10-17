@@ -5641,8 +5641,16 @@ static void test_reap_cleanup_deferred(void)
     CHECK(efs_kv_lsm_snapshot_pin(kv,1<<20,&snap)==EFS_OK && efs_kv_lsm_snapshot_query_revisions(snap,id,q0)==EFS_OK,"content before");
     efs_kv_lsm_snapshot_release(snap);snap=NULL;
     uint64_t deferred=efs_kv_lsm_cleanup_deferred(kv);
+    /* As Raft apply does: each command stages in an apply scope and commits
+     * at apply_end, after the cleanup scope inside the apply has closed. */
+    uint8_t ck[]={'c','u','r'},cv[]={1};
+    struct efs_kv_item cursor={EFS_KV_PUT,ck,sizeof(ck),cv,sizeof(cv)};
+    CHECK(efs_kv_lsm_apply_begin(kv)==EFS_OK,"sweep apply scope");
     CHECK(efs_meta_apply_lane_sweep_batch(kv,ino,row.generation,1,NULL,0)==EFS_OK,"sweep dead lane");
+    CHECK(efs_kv_lsm_apply_end(kv,&cursor)==EFS_OK,"sweep committed");
+    CHECK(efs_kv_lsm_apply_begin(kv)==EFS_OK,"reap apply scope");
     CHECK(efs_meta_apply_reap_done(kv,ino,row.generation)==EFS_OK,"reap dead inode");
+    CHECK(efs_kv_lsm_apply_end(kv,&cursor)==EFS_OK,"reap committed");
     CHECK(efs_meta_apply_get_inode(kv,ino,&row)==EFS_ERR_NOT_FOUND,"dead row removed");
     CHECK(efs_kv_lsm_metadata_revisions(kv,m1,4096)==EFS_OK && !memcmp(m0,m1,sizeof(m0)),
           "reap schedules no query refresh");

@@ -1497,6 +1497,60 @@ static void test_cleanup_scope_hints(void)
     efs_kv_lsm_close(kv);
 }
 
+/* Raft apply stages writes and commits them at apply_end, after the cleanup
+ * scope closed: the mark must travel with the staged key. */
+static void test_cleanup_scope_apply(void)
+{
+    rmtree(g_dir);
+    struct efs_kv *kv=open_store(EFS_KV_LSM_NOSYNC,0);
+    CHECK(kv!=NULL,"open cleanup apply");
+    if (!kv) return;
+    uint8_t inode[]={0,9,EFS_KV_KIND_INODE,1},lane[]={0,10,EFS_KV_KIND_LANE,1},
+            cur[]={0,11,EFS_KV_KIND_APPEND_CUR,1},lane2[]={0,12,EFS_KV_KIND_LANE,1};
+    const uint8_t *keys[]={inode,lane,cur,lane2};
+    for(unsigned i=0;i<4;i++)CHECK(!efs_kv_put(kv,keys[i],4,(const uint8_t *)"v",1),"apply cleanup fixture");
+    struct efs_kv_item cursor={EFS_KV_PUT,(const uint8_t *)"cursor",6,(const uint8_t *)"1",1};
+    uint64_t m0[4096],m1[4096],q0[4096],q1[4096],id[2];
+    CHECK(!efs_kv_lsm_metadata_revisions(kv,m0,4096) && !durable_hints(kv,id,q0),"apply cleanup baseline");
+    uint64_t deferred=efs_kv_lsm_cleanup_deferred(kv);
+    /* Entry 1: lane and cursor deleted in the scope; commit after it closed. */
+    CHECK(efs_kv_lsm_apply_begin(kv)==EFS_OK,"begin cleanup entry");
+    efs_kv_lsm_cleanup_scope(1);
+    struct efs_kv_item dels[]={{EFS_KV_DEL,lane,4,NULL,0},{EFS_KV_DEL,cur,4,NULL,0}};
+    CHECK(!efs_kv_batch(kv,dels,2),"stage cleanup deletes");
+    efs_kv_lsm_cleanup_scope(0);
+    CHECK(efs_kv_lsm_apply_end(kv,&cursor)==EFS_OK,"commit cleanup entry");
+    CHECK(!efs_kv_lsm_metadata_revisions(kv,m1,4096) && !durable_hints(kv,id,q1),"apply cleanup after");
+    CHECK(!memcmp(m0,m1,sizeof(m0)),"committed cleanup schedules no refresh");
+    CHECK(q1[10]==q0[10]+1 && q1[11]==q0[11]+1,"committed cleanup invalidates shard reuse");
+    CHECK(efs_kv_lsm_cleanup_deferred(kv)==deferred+2,"committed cleanup counted");
+    /* Entry 2: a later ordinary write of the same key in the entry wins. */
+    CHECK(efs_kv_lsm_apply_begin(kv)==EFS_OK,"begin overridden entry");
+    efs_kv_lsm_cleanup_scope(1);
+    CHECK(!efs_kv_del(kv,inode,4),"stage cleanup inode delete");
+    efs_kv_lsm_cleanup_scope(0);
+    CHECK(!efs_kv_put(kv,inode,4,(const uint8_t *)"w",1),"stage ordinary inode put");
+    CHECK(efs_kv_lsm_apply_end(kv,&cursor)==EFS_OK,"commit overridden entry");
+    CHECK(!efs_kv_lsm_metadata_revisions(kv,m1,4096) && m1[9]==m0[9]+1,"last ordinary write schedules a refresh");
+    /* Same for a later ordinary delete of a key first deleted as cleanup. */
+    CHECK(efs_kv_lsm_apply_begin(kv)==EFS_OK,"begin delete-override entry");
+    efs_kv_lsm_cleanup_scope(1);CHECK(!efs_kv_del(kv,lane2,4),"stage cleanup lane delete");efs_kv_lsm_cleanup_scope(0);
+    {struct efs_kv_item again={EFS_KV_DEL,lane2,4,NULL,0};
+     CHECK(!efs_kv_batch(kv,&again,1),"stage ordinary lane delete");}
+    CHECK(efs_kv_lsm_apply_end(kv,&cursor)==EFS_OK,"commit delete-override entry");
+    CHECK(!efs_kv_lsm_metadata_revisions(kv,m0,4096) && m0[12]==m1[12]+1,"last ordinary delete schedules a refresh");
+    memcpy(m1,m0,sizeof(m1));
+    /* Entry 3: aborted entry leaves no mark behind for the next one. */
+    CHECK(efs_kv_lsm_apply_begin(kv)==EFS_OK,"begin aborted entry");
+    efs_kv_lsm_cleanup_scope(1);CHECK(!efs_kv_del(kv,inode,4),"stage aborted cleanup");efs_kv_lsm_cleanup_scope(0);
+    CHECK(efs_kv_lsm_apply_end(kv,NULL)==EFS_OK,"abort entry");
+    CHECK(efs_kv_lsm_apply_begin(kv)==EFS_OK,"begin after abort");
+    CHECK(!efs_kv_del(kv,inode,4),"ordinary delete after abort");
+    CHECK(efs_kv_lsm_apply_end(kv,&cursor)==EFS_OK,"commit after abort");
+    CHECK(!efs_kv_lsm_metadata_revisions(kv,m0,4096) && m0[9]==m1[9]+1,"no stale mark after an aborted entry");
+    efs_kv_lsm_close(kv);
+}
+
 static void test_metadata_dirty_hints(void)
 {
     rmtree(g_dir);
@@ -1733,6 +1787,7 @@ int main(void)
         test_snapshot_batch_cut();
         test_metadata_dirty_hints();
         test_cleanup_scope_hints();
+        test_cleanup_scope_apply();
         test_durable_query_hints();
         goto report;
     }
@@ -1757,6 +1812,7 @@ int main(void)
     test_snapshot_batch_cut();
     test_metadata_dirty_hints();
     test_cleanup_scope_hints();
+    test_cleanup_scope_apply();
     test_durable_query_hints();
     test_compact_crash();
     test_sync_hold();

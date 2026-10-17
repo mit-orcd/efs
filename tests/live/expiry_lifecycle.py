@@ -82,11 +82,16 @@ def exercise(mount,port,work,wait,physical_files,restart,offline,forward_group,c
     wait(lambda:not born.exists(),'expiry removes eligible birth',40)
     wait(lambda:not physical_files(ino),'expiry physical reclamation',90);mark('namespace and physical reclamation')
     # Force inheritance across the two actual metadata groups, rather than
-    # relying on whatever name hashing the seed happens to choose.
+    # relying on whatever name hashing the seed happens to choose. Nested
+    # mkdir keeps the parent's group (mkdir group affinity), so a child of
+    # base never crosses groups. Root-level directories are scattered: make
+    # one in the other group and rename it under base; the inode keeps it.
     directories=[];cross=None
     for i in range(32):
-        candidate=base/('cross-policy-'+str(i));candidate.mkdir();directories.append(candidate)
-        if (candidate.stat().st_ino&1)!=(base.stat().st_ino&1):cross=candidate;break
+        candidate=mount/('cross-policy-'+str(i));candidate.mkdir()
+        if (candidate.stat().st_ino&1)!=(base.stat().st_ino&1):
+            cross=base/'cross-policy';candidate.rename(cross);directories.append(cross);break
+        directories.append(candidate)
     assert cross is not None,'fixture failed to choose a different inode group'
     cross_id=subprocess.run([str(Path(__file__).resolve().parents[2]/'efs-mgmt'),'expiry-id',f'127.0.0.1:{port}',str(cross.stat().st_ino)],capture_output=True,text=True,check=True)
     assert 'generation=1' in cross_id.stdout,cross_id.stdout
@@ -186,9 +191,14 @@ def exercise(mount,port,work,wait,physical_files,restart,offline,forward_group,c
     finally:rejoin()
     wait(lambda:not physical_files(ino),'offline expiry reclamation after rejoin',90);mark('offline storage retains debt until rejoin')
     group=forward_group();coordinator_dirs=[];coordinator_dir=None
+    # As above: nested mkdir keeps base's group, so pick a scattered
+    # root-level directory in the forwarding group and move it under base.
     for i in range(32):
-        directory=base/('coordinator-'+str(i));directory.mkdir();coordinator_dirs.append(directory)
-        if (0 if directory.stat().st_ino&1 else 2)==group:coordinator_dir=directory;break
+        directory=mount/('coordinator-'+str(i));directory.mkdir()
+        if (0 if directory.stat().st_ino&1 else 2)==group:
+            coordinator_dir=base/'coordinator';directory.rename(coordinator_dir)
+            coordinator_dirs.append(coordinator_dir);break
+        coordinator_dirs.append(directory)
     assert coordinator_dir is not None
     routed=coordinator_dir/'routed';ino=created(routed);rejoin=offline(node_id=2)
     try:wait(lambda:not routed.exists(),'expiry progresses with first coordinator offline',45)

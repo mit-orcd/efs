@@ -654,8 +654,12 @@ try:
                 'mapped_exe_sha256':hashlib.sha256((base/'exe').read_bytes()).hexdigest()})
         (work/'expiry-runtime.json').write_text(json.dumps(runtime,indent=2))
         assert not (mount/'.efs').exists(),'synthetic commands must be disabled'
+        # Clean stops: after a SIGKILL every storage root fails COMMIT closed
+        # (W71 "recovery uncertain") until verified recovery exists, and the
+        # expiry gates write new files after each restart/rejoin. Restarts
+        # still prove the durable expiry index across a cold daemon start.
         def expiry_restart(enabled=None):
-            unmount();stop(crash=True)
+            unmount();stop(crash=False)
             if enabled is not None:env['EFS_EXPIRY']='1' if enabled else '0'
             start();mount_client()
         def expiry_offline(group=None,storage_ino=None,node_id=None):
@@ -678,7 +682,9 @@ try:
                 assert elected is not None,'no current group leader found'
                 node=elected
                 (work/'expiry-killed-leader.txt').write_text(status+'killed_raft_id='+str(node)+'\n')
-            proc=servers[node];proc.kill();proc.wait(timeout=10)
+            proc=servers[node];proc.terminate()
+            try:proc.wait(timeout=20)
+            except subprocess.TimeoutExpired:proc.kill();proc.wait(timeout=10)
             def rejoin():
                 log=open(work/f'n{node+1}.log','ab');handles.append(log)
                 servers[node]=subprocess.Popen(proc.args,env=env,stdout=log,stderr=log)

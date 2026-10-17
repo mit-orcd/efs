@@ -16,11 +16,19 @@
 #define KV_APPLY_KEYS 32768u
 #define KV_APPLY_BYTES (64ull << 20)
 /* Private to the apply thread, never exported as a snapshot/committed view. */
+struct apply_cleanup_key { uint32_t klen; uint8_t *key; };
 static __thread struct {
     struct kv_lsm *owner;
     struct kv_mtab mt;
     int failed, committing;
+    /* Staged keys whose last write in this scope was a cleanup delete
+     * (efs_kv_lsm_cleanup_scope). The commit at apply_end runs after the
+     * caller's cleanup scope closed, so the mark travels with the key. */
+    struct apply_cleanup_key *cleanup;
+    uint32_t ncleanup, cleanup_cap;
 } apply_scope;
+/* Per-item cleanup marks for the batch apply_end is committing. */
+static __thread const uint8_t *lsm_commit_cleanup;
 __thread struct lsm_owner lsm_owned[LSM_OWNER_SLOTS];
 __thread struct lsm_owner lsm_reading[LSM_OWNER_SLOTS];
 /* Per-thread value buffer for point gets (was l->scratch under l->mu).
@@ -1039,7 +1047,14 @@ void efs_kv_lsm_cleanup_scope(int enter)
     else if (lsm_cleanup_depth) lsm_cleanup_depth--;
 }
 
-static void metadata_dirty(struct kv_lsm *l, const uint8_t *key, uint32_t len,uint8_t op)
+static int cleanup_kind(const uint8_t *key, uint32_t len, uint8_t op)
+{
+    return len>=3 && op==EFS_KV_DEL && (key[2]==EFS_KV_KIND_INODE ||
+           key[2]==EFS_KV_KIND_LANE || key[2]==EFS_KV_KIND_APPEND_CUR);
+}
+
+static void metadata_dirty(struct kv_lsm *l, const uint8_t *key, uint32_t len,uint8_t op,
+                           int cleanup)
 {
     if (len<3) return;
     uint32_t shard=((uint32_t)key[0]<<8)|key[1];
@@ -1061,8 +1076,7 @@ static void metadata_dirty(struct kv_lsm *l, const uint8_t *key, uint32_t len,ui
         /* Cleanup of an already-unlinked inode changes no published name.
          * The query revision above still forces an exact rebuild of this
          * shard; only the refresh trigger waits for another change. */
-        if(lsm_cleanup_depth && op==EFS_KV_DEL && (key[2]==EFS_KV_KIND_INODE ||
-           key[2]==EFS_KV_KIND_LANE || key[2]==EFS_KV_KIND_APPEND_CUR)) {
+        if((lsm_cleanup_depth || cleanup) && cleanup_kind(key,len,op)) {
             if(l->query_tracking && l->cleanup_deferred!=UINT64_MAX)l->cleanup_deferred++;
             break;
         }
@@ -1125,7 +1139,8 @@ static int lsm_batch_committed(void *ctx, const struct efs_kv_item *items, uint3
         l->io_failed = 1;
     else
         for (i = 0; i < n; i++)
-            metadata_dirty(l, items[i].key, items[i].klen, items[i].op);
+            metadata_dirty(l, items[i].key, items[i].klen, items[i].op,
+                           lsm_commit_cleanup ? lsm_commit_cleanup[i] : 0);
     /* mu prevents the next batch from applying until this flush returns.
      * Publish the fully applied WAL watermark first, so reset cannot erase
      * another thread's durable-but-not-yet-applied record. */
@@ -1135,6 +1150,43 @@ static int lsm_batch_committed(void *ctx, const struct efs_kv_item *items, uint3
     pthread_cond_broadcast(&l->cv);
     lsm_unlock(l);
     return rc;
+}
+
+/* The last staged write to a key decides whether it is a cleanup delete. */
+static int apply_cleanup_find(const uint8_t *key, uint32_t klen)
+{
+    for (uint32_t i=0;i<apply_scope.ncleanup;i++)
+        if (apply_scope.cleanup[i].klen==klen && !memcmp(apply_scope.cleanup[i].key,key,klen))
+            return (int)i;
+    return -1;
+}
+static int apply_cleanup_note(const uint8_t *key, uint32_t klen, int cleanup)
+{
+    int at=apply_cleanup_find(key,klen);
+    if (!cleanup) {
+        if (at>=0) {
+            free(apply_scope.cleanup[at].key);
+            apply_scope.cleanup[at]=apply_scope.cleanup[--apply_scope.ncleanup];
+        }
+        return EFS_OK;
+    }
+    if (at>=0) return EFS_OK;
+    if (apply_scope.ncleanup==apply_scope.cleanup_cap) {
+        uint32_t cap=apply_scope.cleanup_cap?apply_scope.cleanup_cap*2:16;
+        struct apply_cleanup_key *grown=realloc(apply_scope.cleanup,cap*sizeof(*grown));
+        if (!grown) return EFS_ERR_NOMEM;
+        apply_scope.cleanup=grown;apply_scope.cleanup_cap=cap;
+    }
+    uint8_t *copy=malloc(klen);
+    if (!copy) return EFS_ERR_NOMEM;
+    memcpy(copy,key,klen);
+    apply_scope.cleanup[apply_scope.ncleanup++]=(struct apply_cleanup_key){klen,copy};
+    return EFS_OK;
+}
+static void apply_cleanup_clear(void)
+{
+    for (uint32_t i=0;i<apply_scope.ncleanup;i++) free(apply_scope.cleanup[i].key);
+    free(apply_scope.cleanup);
 }
 
 static int lsm_batch(void *ctx, const struct efs_kv_item *items, uint32_t n)
@@ -1162,6 +1214,9 @@ static int lsm_batch(void *ctx, const struct efs_kv_item *items, uint32_t n)
             if ((!found && apply_scope.mt.n==KV_APPLY_KEYS) || bytes>KV_APPLY_BYTES)
                 return apply_scope.failed=EFS_ERR_NOMEM;
             int rc=kv_mtab_set(&apply_scope.mt,it->op,it->key,it->klen,it->val,it->vlen);
+            if (rc!=EFS_OK) return apply_scope.failed=rc;
+            rc=apply_cleanup_note(it->key,it->klen,lsm_cleanup_depth &&
+                                  cleanup_kind(it->key,it->klen,it->op));
             if (rc!=EFS_OK) return apply_scope.failed=rc;
         }
         return EFS_OK;
@@ -1328,7 +1383,7 @@ static int replay_item(void *user, uint8_t op, const uint8_t *key,
     if (op != KV_OP_PUT && op != KV_OP_DEL)
         return EFS_ERR_PROTO;
     int rc=kv_mtab_set(&l->mt, op, key, klen, val, vlen);
-    if(!rc){int enabled=l->query_tracking;l->query_tracking=0;metadata_dirty(l,key,klen,op==KV_OP_PUT?EFS_KV_PUT:EFS_KV_DEL);l->query_tracking=enabled;}
+    if(!rc){int enabled=l->query_tracking;l->query_tracking=0;metadata_dirty(l,key,klen,op==KV_OP_PUT?EFS_KV_PUT:EFS_KV_DEL,0);l->query_tracking=enabled;}
     return rc;
 }
 
@@ -1624,18 +1679,23 @@ int efs_kv_lsm_apply_end(struct efs_kv *kv,const struct efs_kv_item *cursor)
     if (cursor && rc==EFS_OK) {
         uint32_t n=apply_scope.mt.n;
         struct efs_kv_item *items=calloc((size_t)n+1,sizeof(*items));
-        if (!items) rc=EFS_ERR_NOMEM;
+        uint8_t *cleanup=apply_scope.ncleanup?calloc((size_t)n+1,1):NULL;
+        if (!items || (apply_scope.ncleanup && !cleanup)) rc=EFS_ERR_NOMEM;
         else {
             for (uint32_t i=0;i<n;i++) {
                 struct kv_ent *e=apply_scope.mt.e[i];
                 items[i]=(struct efs_kv_item){e->op,e->key,e->klen,e->val,e->vlen};
+                if (cleanup) cleanup[i]=apply_cleanup_find(e->key,e->klen)>=0;
             }
             items[n]=*cursor;
             apply_scope.committing=1;
+            lsm_commit_cleanup=cleanup;
             rc=lsm_batch(l,items,n+1);
-            free(items);
+            lsm_commit_cleanup=NULL;
         }
+        free(items);free(cleanup);
     }
+    apply_cleanup_clear();
     kv_mtab_clear(&apply_scope.mt);
     memset(&apply_scope,0,sizeof(apply_scope));
     pthread_rwlock_unlock(&l->writers);
