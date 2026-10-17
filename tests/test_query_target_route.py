@@ -32,7 +32,9 @@ static struct efs_raft_host *g_host;
 static int barriers,consumed,barrier_rc,lose_capability;
 static struct host_group *group_slot(struct efs_raft_host*h,uint8_t g){assert(g==0||g==2);return &h->groups[g>>1];}
 static struct efs_raft *group_raft(struct efs_raft_host*h,uint8_t g){return group_slot(h,g)->r;}
-static int efs_raft_leader(struct efs_raft*r){return r->leader;}
+struct host_view {int has,leader;uint32_t voters;};
+/* Published routing snapshot of a local replica. */
+static void host_view_get(struct efs_raft_host*h,uint8_t g,struct host_view*v){struct efs_raft*r=group_raft(h,g);v->has=r!=NULL;v->leader=r?r->leader:-1;v->voters=r?r->voters:0;}
 static uint32_t efs_raft_voters(struct efs_raft*r){return r->voters;}
 static uint32_t group_voters(uint8_t g,int n){(void)g;(void)n;return 0;}
 static int hosts_group(int id,uint32_t voters){return id>=0&&id<32&&(voters&(1u<<id));}
@@ -44,7 +46,7 @@ static int host_read_index_pair(struct efs_raft_host*h,uint8_t a,uint8_t b,int *
 {assert(a==0&&b==2);(void)hint;barriers++;if(lose_capability)h->capable=0;return barrier_rc;}
 static int consume(void *ctx,const struct efs_server_query_view*v,int error)
 {assert(ctx==g_host&&v==&g_host->query_view&&!error);consumed++;return 0;}
-"""+fn('host_pick_peer')+fn('host_leader_cover_pick')+fn('server_raft_host_query_read')+r"""
+"""+fn('host_pick_peer')+s[s.index('static uint32_t host_route_voters('):s.index('\n}',s.index('static uint32_t host_route_voters('))+2]+fn('host_leader_cover_pick')+fn('server_raft_host_query_read')+r"""
 int main(void){struct efs_raft r[2]={{2,7},{3,14}};
  struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.query_lock=PTHREAD_RWLOCK_INITIALIZER,.n=4,.raft_id=0,.query_enabled=1,.groups={{&r[0],0},{&r[1],0}},.query_view={(void*)1}};
  g_host=&h;uint16_t target=0;uint8_t need[2]={0,2};

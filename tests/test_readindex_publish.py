@@ -28,6 +28,7 @@ static uint64_t efs_raft_applied(struct efs_raft*r){return r->applied;}
 static uint64_t efs_raft_term(struct efs_raft*r){return r->current_term;}
 static int efs_raft_role(struct efs_raft*r){return r->role;}
 static int efs_raft_leader(struct efs_raft*r){return r->leader;}
+static uint32_t efs_raft_voters(struct efs_raft*r){(void)r;return 7;}
 static uint64_t efs_raft_read_index(struct efs_raft*r){return r->recv_persisting?0:r->read_index;}
 static uint64_t efs_raft_read_round(struct efs_raft*r){return r->recv_persisting?0:r->read_round;}
 static int efs_raft_read_pending(struct efs_raft*r){return !r->recv_persisting&&r->pending;}

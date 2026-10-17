@@ -312,6 +312,7 @@ struct host_group {
     uint64_t v_proven_index, v_proven_round, v_read_context;
     int v_has;          /* 1 when a local replica exists */
     int v_role, v_leader;
+    uint32_t v_voters;  /* committed voting membership (routing hint) */
     int v_read_pending, v_read_done, v_proven_done;
     uint64_t v_stamp;   /* bumped by every publish that changed a field */
 };
@@ -3389,6 +3390,7 @@ static void host_publish_view(struct efs_raft_host *h, int gi)
     struct efs_raft *r = g->r;
 
     uint64_t commit, applied, term, ridx, round, proven_index, proven_round;
+    uint32_t voters;
     int role, leader, rpend, rdone, proven_done, changed;
 
     if (!r) {
@@ -3409,6 +3411,7 @@ static void host_publish_view(struct efs_raft_host *h, int gi)
     term = efs_raft_term(r);
     role = (int)efs_raft_role(r);
     leader = efs_raft_leader(r);
+    voters = efs_raft_voters(r);
     ridx = efs_raft_read_index(r);
     round = efs_raft_read_round(r);
     rpend = efs_raft_read_pending(r);
@@ -3418,6 +3421,7 @@ static void host_publish_view(struct efs_raft_host *h, int gi)
     changed = V_LOAD(g->v_read_context)!=read_context || !V_LOAD(g->v_has) || V_LOAD(g->v_commit) != commit ||
               V_LOAD(g->v_applied) != applied || V_LOAD(g->v_term) != term ||
               V_LOAD(g->v_role) != role || V_LOAD(g->v_leader) != leader ||
+              V_LOAD(g->v_voters) != voters ||
               V_LOAD(g->v_read_index) != ridx || V_LOAD(g->v_read_round) != round ||
               V_LOAD(g->v_read_pending) != rpend ||
               V_LOAD(g->v_read_done) != rdone ||
@@ -3437,6 +3441,7 @@ static void host_publish_view(struct efs_raft_host *h, int gi)
     V_STORE(g->v_term, term);
     V_STORE(g->v_role, role);
     V_STORE(g->v_leader, leader);
+    V_STORE(g->v_voters, voters);
     V_STORE(g->v_read_index, ridx);
     V_STORE(g->v_read_round, round);
     V_STORE(g->v_read_pending, rpend);
@@ -3462,6 +3467,7 @@ static void host_publish_group(struct efs_raft_host *h, uint8_t group)
 /* Coherent snapshot: round, term and completion must come from one publish. */
 struct host_view {
     int has, role, leader, read_pending, read_done, proven_done;
+    uint32_t voters;
     uint64_t commit, applied, read_index, read_round, term;
     uint64_t proven_index, proven_round, read_context;
     uint64_t stamp; /* wake generation from the same coherent publish */
@@ -3493,6 +3499,7 @@ retry:
     v->term = V_LOAD(g->v_term);
     v->role = V_LOAD(g->v_role);
     v->leader = V_LOAD(g->v_leader);
+    v->voters = V_LOAD(g->v_voters);
     v->read_pending = V_LOAD(g->v_read_pending);
     v->read_done = V_LOAD(g->v_read_done);
     v->proven_done = V_LOAD(g->v_proven_done);
@@ -3796,29 +3803,40 @@ static int host_pick_peer(struct efs_raft_host *h, const uint8_t *groups, int ng
     return -1;
 }
 
+/* Routing view of a group's committed voters, without h->mu: the published
+ * view for a local replica, else the slot's last stored set (atomic), else
+ * the static layout. A hint only, at most one pump cycle old. */
+static uint32_t host_route_voters(struct efs_raft_host *h,uint8_t group)
+{
+    struct host_group *g=group_slot(h,group);
+    struct host_view v;
+    if(!g)return group_voters(group,h->n);
+    host_view_get(h,group,&v);
+    if(v.has)return v.voters;
+    return __atomic_load_n(&g->voters,__ATOMIC_ACQUIRE);
+}
+
 /* Prefer the operation's leader only if its committed voting membership
  * covers every required group. Otherwise a single-group leader would bounce
  * the whole operation back to a dual-host coordinator. Routing is not an
- * authority proof: the receiver still establishes fresh views and guards. */
+ * authority proof: the receiver still establishes fresh views and guards.
+ * Reads the published routing snapshot (leader, voters) instead of h->mu:
+ * on the leader this only learns that the leader is itself. */
 static int host_leader_cover_pick(struct efs_raft_host *h,uint8_t group,
     const uint8_t *need,int count)
 {
     if(!need || count<1 || count>HOST_NGROUPS)return -1;
     int peer=-1;
     uint64_t wp0=write_prof_on()?wprof_now():0;
-    pthread_mutex_lock(&h->mu);
-    struct efs_raft *r=group_raft(h,group);
-    int leader=r?efs_raft_leader(r):-1;
+    struct host_view v;
+    host_view_get(h,group,&v);
+    int leader=v.has?v.leader:-1;
     if(leader>=0 && leader<h->n && leader!=h->raft_id) {
         peer=leader;
         for(int i=0;i<count;i++) {
-            struct host_group *g=group_slot(h,need[i]);
-            uint32_t voters=(g && g->r)?efs_raft_voters(g->r):
-                (g?g->voters:group_voters(need[i],h->n));
-            if(!hosts_group(leader,voters)){peer=-1;break;}
+            if(!hosts_group(leader,host_route_voters(h,need[i]))){peer=-1;break;}
         }
     }
-    pthread_mutex_unlock(&h->mu);
     if(wp0)wprof_add(WP_COVER,wprof_now()-wp0);
     return peer;
 }
@@ -7548,7 +7566,8 @@ static void *host_pump(void *arg)
                                  ? efs_raft_applied(h->g[i].r) : 0;
             (void)host_maybe_snapshot(h, i);
             if (h->g[i].r)
-                h->g[i].voters = efs_raft_voters(h->g[i].r);
+                __atomic_store_n(&h->g[i].voters, efs_raft_voters(h->g[i].r),
+                                 __ATOMIC_RELEASE);
         }
         for(i=0;i<HOST_NGROUPS;i++)
             cursor_now[i]=host_capture_cursor(h,i,applied_now[i]);
@@ -7828,7 +7847,8 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
         return EFS_ERR_NOMEM;
     efs_raft_arm_durable(h->g[gi].r);
     h->g[gi].hosted = 1;
-    h->g[gi].voters = efs_raft_voters(h->g[gi].r);
+    __atomic_store_n(&h->g[gi].voters, efs_raft_voters(h->g[gi].r),
+                     __ATOMIC_RELEASE);
     {
         uint64_t applied = 0;
         int recovered=load_applied(h,gi,&applied);
@@ -7850,7 +7870,7 @@ static int attach_group(struct efs_raft_host *h, int gi, uint8_t group)
     uint32_t want;
 
     h->g[gi].group = group;
-    h->g[gi].voters = boot;
+    __atomic_store_n(&h->g[gi].voters, boot, __ATOMIC_RELEASE);
     h->g[gi].host = h;
     h->g[gi].hosted = 0;
     h->g[gi].snap_fd = -1;
@@ -7935,7 +7955,7 @@ static int host_cfg(struct efs_raft_host *h, uint8_t group,
             *hint = lid;
         if (efs_raft_role(r) == EFS_RAFT_LEADER) {
             rc = efs_raft_change(r, voters);
-            s->voters = efs_raft_voters(r);
+            __atomic_store_n(&s->voters, efs_raft_voters(r), __ATOMIC_RELEASE);
             pthread_mutex_unlock(&h->mu);
             host_pump_kick(h);
             return rc;
