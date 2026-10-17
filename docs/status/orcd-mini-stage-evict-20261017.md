@@ -1,7 +1,10 @@
 # Client staging evictor: O(1) LRU — 2026-10-17
 
-**Verdict: PASS on the private RDMA A/B; orcd-mini deployment and the
-user-workload check follow below.** With the staging table over its cap,
+**Verdict: PASS.** Private RDMA A/B, then deployed to both orcd-mini clients
+(`155695ccd`; POSIX smoke 216/216). Under the user's workload shape, the
+node9900 writer held about 1,000 and then about 1,900 files/s, where the
+old client had decayed to about 50. A 14 s Raft log rotation on all three
+daemons (pre-existing; see below) failed one close with EIO. With the staging table over its cap,
 the old evictor's cost grew with every inode the client had seen. The new
 one holds create throughput flat after warm-up. A separate first-minutes
 drop remains with eviction disabled too, so it is not this bug.
@@ -165,10 +168,83 @@ META_MB=65536 scripts/orcd_mini_stage_evict_ab.sh <daemon-rel> <new-client> long
   - `evict-iso.log` `82a197be…`
   - `evict-test.log` `3979dd4a…`
 
+## orcd-mini deployment of `155695ccd` (clients only) — 2026-10-17 06:30Z
+
+The fix is client-only, so only the two efs-fuse mounts were restarted. The
+user's workloads had stopped, and `fuser -m` was empty on both mounts.
+
+- **Builds:** clean `git archive`, build ID `155695ccdd27`, version
+  `v0.3.2-pre-alpha-600-g155695ccd`, built 2026-10-17T06:29:09Z.
+  - node9901 `/data1/efs/releases/155695ccdd27`: efs-fuse
+    `1e53c8982ad5786f5880653737edd7c58e3c21cbc3e30178df08c2396c042d3d`.
+  - node9900 `/data1/efs/orcd-mini-client/releases/155695ccdd27`: efs-fuse
+    `6edfdc2e149bcc8ddf51b8e164a3cf6ef0981c13a4a836d0c2c8a5447ae54299`.
+- **node9900:** `client.sh stop`, repoint `src`, `client.sh start`.
+- **node9901:** `client.sh stop /data1/efs/mnt`, then the new release's
+  `client.sh`, with the running client's environment (`EFS_TRANSPORT=rdma
+  EFS_RDMA_DEV=mlx5_0 EFS_COMMANDS=1 EFS_COMMANDS_SERVER=1 EFS_EXPIRY=0
+  EFS_CLUSTER=orcd-mini`).
+- **Left on purpose:**
+  - **`/data1/efs/src` still points to `4aff22c62f9f`, which the three
+    daemons run.** If one daemon restarted alone from a new `src`, its build
+    ID would not match its peers and its HELLO would be refused.
+  - **A full daemon restart is blocked anyway:** `/data1` is below efsd's
+    startup check of 20% free space.
+  - **Effect on devops:** until the next full deploy, `start.sh` would
+    object that the node9901 mount is served by a different binary than
+    `src`.
+- **Checks:** RDMA up on both clients; `smoke.sh` POSIX **216/216 PASS**.
+
+### Under the user's workload shape
+
+The workload was the user's commands, and its files are kept, as the user
+asked:
+- **node9900:** `tiny_files.py --max-depth 8 --max-files-per-folder 10000
+  --max-files 1000000 --workers 16`, `tiny_files_md5.py` over `tiny-files4`,
+  and `ecrawl --no-write`.
+- **node9901:** `tiny_files_md5.py` over `tiny-files2` and `ecrawl`.
+- **Probe:** a 50-file serial create every 5 minutes into
+  `tiny-files-evict-probe/`.
+
+The writers wrote into `tiny-files-evict-20261017-0635` and, chained after
+the first one ended, `…-0635-b`.
+
+| | Old client, 2026-10-16 | New, writer 1 | New, writer 2 |
+| --- | --- | --- | --- |
+| Rate over time | 271 files/s average at 35 min; about 50/s at the end | 1,001 / 993 / 1,003 files/s (6 / 11 / 14 min) | 1,825 / 1,904 / 1,907 files/s (3 / 5 / 9 min) |
+| Files | 585k in 37 min | 848,962 in 14 min, ended by the EIO below | 1,000,000 in 8.7 min |
+| efs-fuse | evictor thread 94% CPU, 4.0 GB RSS | hottest thread ≤ 27%, 0.7–1.0 GB | same |
+| Serial create p50 | 207 ms | 13.9 / 8.7 / 5.6 ms | 5.6 ms |
+
+Writer 2 ran after the node9900 md5 reader had finished (1,000,000 files at
+1,096/s), so its load was lighter. The old run also had a writer on
+node9901. These are not identical loads; the comparison that matters is
+that each new run kept its rate flat.
+
+**EIO, and why it is not this change.**
+- **The stall:** at 06:46:55–06:47:10 all three daemons snapshotted
+  group 2. Then each rotated its Raft log (5.8 GB old, 1.5 GB live): 14.0 s
+  on the leader, 12.7–12.8 s on the followers.
+- **What the client saw:** BUSY, until the inode-RPC retry budget ran out
+  (16 retries, 10.3 s) and returned EBUSY.
+- **What failed:** one `tiny_files_md5.py` read (`errors=1`), and a
+  metadata flush for an open file (`flush-meta: resource busy`). That flush
+  surfaced as EIO on close in `tiny_files.py`, which stopped the writer.
+- **Not new:** the same 14–15 s rotation hit all three daemons at
+  2026-10-16T23:17Z under the previous build. It recurs whenever the log
+  reaches about 5.8 GB. It is a separate server-side gate.
+
+Raw output (outside Git): node9900
+`/data1/efs/orcd-mini-client/prof/evict-wl-20261017-0635/`
+(`writer.log`, `writer2.log`, `md5.jsonl`, `crawl.log`), the efs-fuse logs
+on both nodes, and node9901 `/data1/efs/logs/efsd-n{1,2,3}.log` around
+06:47Z.
+
 ## Limitations and remaining gates
 
-- **Not yet deployed:** orcd-mini deployment and the user-workload check are
-  recorded below once done.
+- **Raft log rotation stalls metadata for about 14 s on all three nodes at
+  once.** Client requests then exhaust their 10.3 s retry budget, and
+  applications see EBUSY or EIO. This needs its own fix.
 - **The first-minutes drop is open.** About 35% within 4 minutes, with
   eviction disabled too. It needs a server-side profile; growing
   directories are the first suspect.

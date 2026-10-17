@@ -1546,7 +1546,9 @@ proposal queue only if justified. Routing and the result ring are A/B'd
 separately.
 
 [Client staging evictor: O(1) LRU](../status/orcd-mini-stage-evict-20261017.md):
-**private RDMA A/B PASS; orcd-mini deployment pending.**
+**deployed to both orcd-mini clients (`155695ccd`); PASS under the
+user's workload shape:** the node9900 writer held about 1,000 and then
+about 1,900 files/s, against about 50 before.
 - Once over its 256 MB cap, the old evictor scanned the whole LRU table for
   every 64 evictions, so its cost grew with every inode the client had
   seen. On node9900, creates fell to about 50 files/s, at 207 ms each.
@@ -1556,6 +1558,8 @@ separately.
   (1,319/s at 10 min, against 1,127/s still falling for the old one).
   Client mutex waits fell from 25% to 10%.
 - A first-minutes drop also happens with eviction disabled; it is open.
+- Separate, pre-existing: a 14 s Raft log rotation on all three daemons
+  exhausted the client retry budget and failed one close with EIO.
 
 [Waiter wake-up outside `cv_mu`](../status/orcd-mini-waiter-wake-20261016.md):
 **deployed to orcd-mini (`4aff22c62`); smoke 216/216 PASS.**
@@ -1600,7 +1604,7 @@ spike of 24–27 ms, which is not explained.
 [W123 — automatic crash recovery](../backlog/crash-safe-durable-versions.md): **proposed new feature; source review only.** Reuse root barrier watermarks if epoch history, exact write tags and retained file versions prove recovery. No extra fsync-time metadata commit remains a hypothesis; eight-byte/zero-I/O cost claims are unproven. Implementation and acceptance NOTRUN; W71 remains open.
 
 [orcd-mini deployment of `09f8af09c`](../status/orcd-mini-deploy-09f8af09c-20261016.md)
-(now running `4aff22c62`, waiter wake-up outside `cv_mu`; smoke POSIX 216/216 PASS):
+(daemons `4aff22c62`, clients `155695ccd`; smoke POSIX 216/216 PASS):
 **deployed; live POSIX 216/216, two-client 67/67, durability 27/27 PASS.**
 `make test` has 4 environmental failures. GC crash-restart and fault-suite
 integration FAIL on the known W71 uncertain-recovery fence, the same as the
