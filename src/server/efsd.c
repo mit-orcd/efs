@@ -382,6 +382,9 @@ int main(int argc, char **argv)
     }
     if (server_storage_roots_init(&server) != EFS_OK) return 1;
     if (server_put_sync_init(&server) != EFS_OK) return 1;
+    /* Any refusal below exits before serving; it must not leave the roots
+     * marked as an unclean boot (that fences COMMIT until W71 recovery). */
+    atexit(server_put_sync_abandon);
     fprintf(stderr, "direct_io=%s\n", server.direct_io ? "on" : "off");
     if (server.meta_storage[0] &&
         mkdir_p(server.meta_storage) != 0 && errno != EEXIST) {
@@ -547,6 +550,7 @@ int main(int argc, char **argv)
         sigaction(SIGINT, &sa, NULL);
         sigaction(SIGTERM, &sa, NULL);
     }
+    server_put_sync_serving();
     server.running = 1;
     if (server_writer_pool_start(&server) != 0) {
         fprintf(stderr, "Failed to start writer pool (%d threads, %u paths)\n",

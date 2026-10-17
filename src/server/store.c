@@ -1263,9 +1263,14 @@ struct put_sync_root {
     uint64_t prev_durable_ns;
     uint64_t scanned, bad;
     int scan_done;
+    /* The record as found at attach, restored if startup is abandoned
+     * before this boot could acknowledge any PUT (see put_sync_abandon). */
+    uint8_t prev_record[PUT_SYNC_RECORD_LEN];
+    int prev_existed, prev_record_ok;
 };
 static struct put_sync_root put_sync_roots[EFS_MAX_STORAGE_PATHS];
 static int put_sync_state[EFS_MAX_STORAGE_PATHS]; /* 0 unset, 1 async, -1 not async */
+static int put_sync_serving, put_sync_stopped; /* under put_sync_mu */
 static pthread_mutex_t put_sync_mu = PTHREAD_MUTEX_INITIALIZER;
 static uint64_t put_sync_window_ms = 200, put_sync_window_bytes = 256ull << 20;
 
@@ -1584,6 +1589,12 @@ static void put_sync_attach(struct put_sync_root *r, const char *root,
         return;
     }
     struct put_sync_record previous={.clean=1};
+    r->prev_existed=existed;
+    if (existed) {
+        ssize_t n;
+        do { n=pread(r->record_fd,r->prev_record,sizeof(r->prev_record),0); } while(n<0 && errno==EINTR);
+        r->prev_record_ok = n==(ssize_t)sizeof(r->prev_record);
+    }
     if (existed && put_sync_record_read(r->record_fd,&previous)!=EFS_OK) {
         fprintf(stderr, "store: invalid durability record root=%s; refusing startup\n", root);
         close(r->record_fd); close(r->fd); r->fd = -1; return;
@@ -1741,10 +1752,73 @@ void server_put_sync_stats(struct efsd_server *s, struct efs_msg_sync_stats_repl
     }
 }
 
+/* From here PUTs may be acknowledged; an exit can no longer prove that
+ * this boot changed nothing, so put_sync_abandon becomes a no-op. */
+void server_put_sync_serving(void)
+{
+    pthread_mutex_lock(&put_sync_mu);
+    put_sync_serving = 1;
+    pthread_mutex_unlock(&put_sync_mu);
+}
+
+/* Startup refused after the roots were attached (quota, listen, join...).
+ * Attach already rewrote each record as this boot, unclean; left so, the
+ * next start would fence every root (recovery uncertain, COMMIT EIO) for a
+ * boot that wrote nothing. Before serving, no PUT can have been accepted:
+ * restore each untouched root's previous record verbatim (or remove a
+ * record this boot created). A crash runs no exit handler and stays
+ * unclean; a boot that acknowledged any PUT is never restored. */
+void server_put_sync_abandon(void)
+{
+    pthread_mutex_lock(&put_sync_mu);
+    int skip = put_sync_serving || put_sync_stopped;
+    put_sync_stopped = 1;
+    pthread_mutex_unlock(&put_sync_mu);
+    if (skip)
+        return;
+    for (uint32_t i = 0; i < EFS_MAX_STORAGE_PATHS; ++i) {
+        if (put_sync_state[i] <= 0)
+            continue;
+        struct put_sync_root *r = &put_sync_roots[i];
+        pthread_mutex_lock(&r->mu);
+        int touched = r->acked_bytes || r->cur_frags || r->inflight_frags ||
+                      r->durable_seq;
+        r->stop = 1;
+        pthread_cond_broadcast(&r->cv);
+        pthread_mutex_unlock(&r->mu);
+        if (r->thread_started)
+            pthread_join(r->thread, NULL);
+        if (touched || (r->prev_existed && !r->prev_record_ok))
+            continue;
+        int ok;
+        if (r->prev_existed) {
+            ssize_t w;
+            do { w = pwrite(r->record_fd, r->prev_record, sizeof(r->prev_record), 0); }
+            while (w < 0 && errno == EINTR);
+            int rc;
+            do { rc = fdatasync(r->record_fd); } while (rc < 0 && errno == EINTR);
+            ok = w == (ssize_t)sizeof(r->prev_record) && !rc;
+        } else {
+            char path[EFS_MAX_PATH + 32];
+            snprintf(path, sizeof(path), "%s/%s", r->root, PUT_SYNC_RECORD);
+            int rc;
+            ok = !unlink(path);
+            do { rc = fsync(r->fd); } while (rc < 0 && errno == EINTR);
+            ok = ok && !rc;
+        }
+        fprintf(stderr, "store: put sync root=%s startup abandoned before serving; "
+                "previous durability record %s\n", r->root,
+                ok ? (r->prev_existed ? "restored" : "removed") : "NOT restored");
+    }
+}
+
 /* Final barrier, then mark every async root clean. */
 void server_put_sync_stop(struct efsd_server *s)
 {
     (void)s;
+    pthread_mutex_lock(&put_sync_mu);
+    put_sync_stopped = 1;
+    pthread_mutex_unlock(&put_sync_mu);
     for (uint32_t i = 0; i < EFS_MAX_STORAGE_PATHS; ++i) {
         pthread_mutex_lock(&put_sync_mu);
         int on = put_sync_state[i] > 0;

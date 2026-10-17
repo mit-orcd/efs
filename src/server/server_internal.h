@@ -485,5 +485,9 @@ int server_put_sync_init(struct efsd_server *s);
 int server_put_sync_commit(struct efsd_server *s, uint32_t *roots);
 void server_put_sync_stats(struct efsd_server *s, struct efs_msg_sync_stats_reply *out);
 void server_put_sync_stop(struct efsd_server *s);
+/* Mark the start of serving; before it, an exit restores each untouched
+ * root's previous durability record (server_put_sync_abandon, atexit). */
+void server_put_sync_serving(void);
+void server_put_sync_abandon(void);
 
 #endif

@@ -102,6 +102,69 @@ static void test_clean_verifier_selection(void)
     free(server);assert(!rmdir(base));
 }
 
+/* A startup refused after attach (quota, listen, join...) must not leave
+ * the roots marked as an unclean boot: that fences COMMIT (EIO) until W71
+ * recovery, for a boot that wrote nothing. Before serving, the exit
+ * handler restores the previous record; a touched or serving boot does not. */
+static void reattach(struct put_sync_root *r,const char *root)
+{
+    close(r->fd);close(r->record_fd);memset(r,0,sizeof(*r));put_sync_state[0]=0;
+    booting=1;put_sync_attach(r,root,101,1);booting=0;assert(r->fd>=0);put_sync_state[0]=1;
+}
+static void abandon_reset(void){put_sync_serving=0;put_sync_stopped=0;}
+static void test_startup_abandon(uint8_t *data)
+{
+    const char *tmp=getenv("TMPDIR");char root[1024],path[1100],rec[1100];
+    snprintf(root,sizeof(root),"%s/efs-abandon-XXXXXX",tmp&&*tmp?tmp:"/tmp");assert(mkdtemp(root));
+    snprintf(rec,sizeof(rec),"%s/%s",root,PUT_SYNC_RECORD);
+    struct put_sync_root *r=&put_sync_roots[0];struct put_sync_record record;int fd;
+    /* Fresh root: abandoning the first boot removes the record it created. */
+    abandon_reset();booting=1;put_sync_attach(r,root,101,1);booting=0;put_sync_state[0]=1;
+    assert(r->fd>=0 && !r->prev_existed && !access(rec,F_OK));
+    server_put_sync_abandon();assert(access(rec,F_OK) && errno==ENOENT);
+    /* Clean predecessor (boot 1 stopped clean), then a refused boot 2. */
+    abandon_reset();reattach(r,root);server_put_sync_stop(NULL);
+    fd=open(rec,O_RDONLY);assert(fd>=0 && !put_sync_record_read(fd,&record));close(fd);
+    assert(record.boot==1 && record.clean);
+    abandon_reset();reattach(r,root);assert(r->boot==2 && r->prev_clean);
+    fd=open(rec,O_RDONLY);assert(fd>=0 && !put_sync_record_read(fd,&record));close(fd);
+    assert(record.boot==2 && !record.clean); /* attach marked boot 2 running */
+    server_put_sync_abandon();
+    fd=open(rec,O_RDONLY);assert(fd>=0 && !put_sync_record_read(fd,&record));close(fd);
+    assert(record.boot==1 && record.clean);
+    abandon_reset();reattach(r,root);
+    assert(r->prev_clean && !r->recovery_uncertain && r->boot==2);
+    /* Serving began: an exit is no longer provably write-free. */
+    server_put_sync_serving();server_put_sync_abandon();
+    abandon_reset();reattach(r,root);assert(!r->prev_clean && r->recovery_uncertain);
+    /* Restore an honest clean lineage for the next case (fresh record). */
+    close(r->fd);close(r->record_fd);memset(r,0,sizeof(*r));put_sync_state[0]=0;assert(!unlink(rec));
+    abandon_reset();booting=1;put_sync_attach(r,root,101,1);booting=0;put_sync_state[0]=1;
+    server_put_sync_stop(NULL);abandon_reset();reattach(r,root);
+    /* A boot that acknowledged a PUT is never restored, even before serving. */
+    snprintf(path,sizeof(path),"%s/data/a/g1",root);
+    snprintf(path+strlen(root),sizeof(path)-strlen(root),"/data");mkdir(path,0755);
+    snprintf(path,sizeof(path),"%s/data/a",root);mkdir(path,0755);
+    snprintf(path,sizeof(path),"%s/data/a/g1",root);
+    assert(async_put(r,path,data)==EFS_OK);
+    server_put_sync_abandon();
+    abandon_reset();reattach(r,root);assert(!r->prev_clean && r->recovery_uncertain);
+    /* An orderly stop makes the exit handler a no-op. */
+    put_sync_state[0]=1;server_put_sync_stop(NULL);server_put_sync_abandon();
+    abandon_reset();reattach(r,root);assert(r->recovery_uncertain);
+    /* A corrupt previous record is never resurrected as clean. */
+    close(r->fd);close(r->record_fd);memset(r,0,sizeof(*r));put_sync_state[0]=0;
+    fd=open(rec,O_WRONLY|O_TRUNC);assert(fd>=0 && write(fd,"bad",3)==3);close(fd);
+    abandon_reset();booting=1;put_sync_attach(r,root,101,1);booting=0;assert(r->fd<0);
+    server_put_sync_abandon();
+    char got[4]={0};fd=open(rec,O_RDONLY);assert(fd>=0 && read(fd,got,3)==3);close(fd);
+    assert(!memcmp(got,"bad",3));
+    unlink(path);snprintf(path,sizeof(path),"%s/data/a",root);rmdir(path);
+    snprintf(path,sizeof(path),"%s/data",root);rmdir(path);
+    assert(!unlink(rec));assert(!rmdir(root));abandon_reset();
+    puts("store durability: refused startup restores the previous record; touched, serving or stopped boots stay fenced PASS");
+}
+
 static int test_async_durability(uint8_t *data)
 {
     const char *tmp=getenv("TMPDIR");char root[1024],path[1100],rec[1100];
@@ -278,6 +341,7 @@ int main(void)
     snprintf(path,sizeof(path),"%s/.efs-engine-lock",dir);assert(!unlink(path));
     assert(!rmdir(dir));
     int async_ran=test_async_durability(data);
+    test_startup_abandon(data);
     if(!async_ran)puts("async durability: SKIP (TMPDIR is not XFS)");
     free(data);
     puts("production PUT durability: buffered/direct/bounce file and pathname barriers, pinned ancestry, restart/recreation, retries, fault refusal and asynchronous acknowledgement PASS");
