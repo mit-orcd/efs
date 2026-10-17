@@ -1528,11 +1528,34 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[GC backlog CPU is query-catalog rebuilds](../status/orcd-mini-gc-query-catalog-20261017.md):
+**implementation and unit PASS; live NOTRUN (needs a deploy).**
+- In a passive orcd-mini profile during a GC backlog, 90% of efsd CPU was the
+  query-catalog publisher rebuilding an unchanged catalog every ~2.3 s. GC
+  itself was about 1–3%.
+- Change: reap cleanup of unlinked inodes no longer schedules a refresh.
+  Unchanged shards are rescanned only when a shard they actually read changed
+  (exact 4096-shard sets). New `EFS_QUERY_REFRESH_MS`, default unchanged at
+  2000.
+- GC schedule untouched.
+
 [`h->mu` contention plan and review](../status/raft-host-mu-plan-20261016.md):
 **NOTRUN; plan only.** Measure per-phase timing → routing snapshot →
 race-free result-ring reads → reassess → conditional REPORT change →
 proposal queue only if justified. Routing and the result ring are A/B'd
 separately.
+
+[Client staging evictor: O(1) LRU](../status/orcd-mini-stage-evict-20261017.md):
+**private RDMA A/B PASS; orcd-mini deployment pending.**
+- Once over its 256 MB cap, the old evictor scanned the whole LRU table for
+  every 64 evictions, so its cost grew with every inode the client had
+  seen. On node9900, creates fell to about 50 files/s, at 207 ms each.
+- Now the LRU is ordered: passes are O(batch), and the evictor drains to a
+  7/8 watermark.
+- In 10-minute runs the new client holds creates flat after warm-up
+  (1,319/s at 10 min, against 1,127/s still falling for the old one).
+  Client mutex waits fell from 25% to 10%.
+- A first-minutes drop also happens with eviction disabled; it is open.
 
 [Waiter wake-up outside `cv_mu`](../status/orcd-mini-waiter-wake-20261016.md):
 **deployed to orcd-mini (`4aff22c62`); smoke 216/216 PASS.**

@@ -594,6 +594,7 @@ test: all
 	./tests/test_placement
 	./tests/test_lock
 	./tests/test_stage_evict
+	python3 tests/test_stage_evict_lru.py
 	./tests/test_conn_fd
 
 # Rebuild when public headers change (struct layouts in metadata.h, etc.).

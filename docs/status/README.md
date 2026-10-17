@@ -35,6 +35,18 @@ race-free result-ring reads → reassess → conditional REPORT change →
 proposal queue only if justified. Routing and the result ring are A/B'd
 separately.
 
+[Client staging evictor: O(1) LRU](orcd-mini-stage-evict-20261017.md):
+**private RDMA A/B PASS; orcd-mini deployment pending.**
+- Once over its 256 MB cap, the old evictor scanned the whole LRU table for
+  every 64 evictions, so its cost grew with every inode the client had
+  seen. On node9900, creates fell to about 50 files/s, at 207 ms each.
+- Now the LRU is ordered: passes are O(batch), and the evictor drains to a
+  7/8 watermark.
+- In 10-minute runs the new client holds creates flat after warm-up
+  (1,319/s at 10 min, against 1,127/s still falling for the old one).
+  Client mutex waits fell from 25% to 10%.
+- A first-minutes drop also happens with eviction disabled; it is open.
+
 [Waiter wake-up outside `cv_mu`](orcd-mini-waiter-wake-20261016.md):
 **deployed to orcd-mini (`4aff22c62`); smoke 216/216 PASS.**
 `host_waiters_wake` decides under `cv_mu` and signals after unlocking.

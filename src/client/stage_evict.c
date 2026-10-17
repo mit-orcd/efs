@@ -46,14 +46,29 @@
 #include <time.h>
 
 /* ---------------- LRU side table: ino -> last-touch tick ----------------
- * Open-addressing, power-of-two, 0 = empty, backward-shift delete. Every
- * access under g_lru_mu (a leaf lock). One entry per staged ino; entries
- * for unlinked rows are removed when the row goes (eviction, ghost reclaim)
- * or when a pass finds them unstaged. */
+ * A node per staged ino on a doubly linked list in touch order (oldest
+ * first), plus an open-addressing index ino -> node (power of two, 0 =
+ * empty, backward-shift delete). Every access under g_lru_mu (a leaf lock).
+ * Touch, remove and lookup are O(1); a pass reads its candidates from the
+ * head. The previous table kept only ticks and every pass scanned all of
+ * it under g_lru_mu for 256 candidates: with a crawler staging millions of
+ * inos that scan ran back to back, every touch queued behind it and node9900
+ * creates went from 11 ms to 207 ms (Oct 16 2026). Entries for unlinked rows
+ * are removed when the row goes (eviction, ghost reclaim) or when a pass
+ * finds them unstaged. */
+
+struct lru_node {
+    uint64_t ino;
+    uint64_t tick;  /* touch tick (monotonic counter) */
+    uint32_t prev, next; /* node 0 is the list sentinel; free nodes chain on next */
+};
 
 static pthread_mutex_t g_lru_mu = PTHREAD_MUTEX_INITIALIZER;
-static uint64_t *g_lru_keys;  /* ino */
-static uint64_t *g_lru_ticks; /* touch tick (monotonic counter) */
+static struct lru_node *g_lru_nodes;
+static uint32_t g_lru_ncap;   /* nodes allocated, sentinel included */
+static uint32_t g_lru_nused;  /* nodes ever handed out, sentinel included */
+static uint32_t g_lru_free;   /* free-list head, 0 = none */
+static uint32_t *g_lru_slots; /* node index, 0 = empty */
 static uint64_t g_lru_mask;
 static uint64_t g_lru_count;
 static uint64_t g_lru_clock;
@@ -85,66 +100,114 @@ static int stage_ino_has_plock(efs_ino_t ino)
     return g_pin_has_plock_fn ? g_pin_has_plock_fn(ino) : 0;
 }
 
+static uint64_t lru_hash(uint64_t k)
+{
+    k ^= k >> 33;
+    k *= UINT64_C(0xff51afd7ed558ccd);
+    k ^= k >> 33;
+    return k & g_lru_mask;
+}
+
+/* Caller holds g_lru_mu. Slot holding ino, or -1. */
+static int64_t lru_slot_locked(efs_ino_t ino)
+{
+    if (!g_lru_slots)
+        return -1;
+    uint64_t i = lru_hash((uint64_t)ino);
+    for (uint64_t n = 0; n <= g_lru_mask; n++) {
+        uint32_t x = g_lru_slots[i];
+        if (!x)
+            return -1;
+        if (g_lru_nodes[x].ino == (uint64_t)ino)
+            return (int64_t)i;
+        i = (i + 1) & g_lru_mask;
+    }
+    return -1;
+}
+
+static void lru_unlink(uint32_t x)
+{
+    struct lru_node *n = &g_lru_nodes[x];
+    g_lru_nodes[n->prev].next = n->next;
+    g_lru_nodes[n->next].prev = n->prev;
+}
+
+static void lru_link_tail(uint32_t x)
+{
+    struct lru_node *n = &g_lru_nodes[x];
+    n->prev = g_lru_nodes[0].prev;
+    n->next = 0;
+    g_lru_nodes[n->prev].next = x;
+    g_lru_nodes[0].prev = x;
+}
+
+/* Room for one more node and an index at most half full. */
 static int lru_ensure(uint64_t need)
 {
-    if (g_lru_keys && need * 2 <= g_lru_mask + 1)
+    if (!g_lru_nodes) {
+        g_lru_nodes = calloc(1024, sizeof(*g_lru_nodes));
+        if (!g_lru_nodes)
+            return -1;
+        g_lru_ncap = 1024;
+        g_lru_nused = 1; /* sentinel: empty circular list */
+    }
+    if (!g_lru_free && g_lru_nused == g_lru_ncap) {
+        if (g_lru_ncap > UINT32_MAX / 2)
+            return -1;
+        struct lru_node *nn =
+            realloc(g_lru_nodes, (size_t)g_lru_ncap * 2 * sizeof(*nn));
+        if (!nn)
+            return -1;
+        g_lru_nodes = nn;
+        g_lru_ncap *= 2;
+    }
+    if (g_lru_slots && need * 2 <= g_lru_mask + 1)
         return 0;
-    uint64_t old_mask = g_lru_mask;
-    uint64_t *old_keys = g_lru_keys;
-    uint64_t *old_ticks = g_lru_ticks;
     uint64_t cap = g_lru_mask ? g_lru_mask + 1 : 4096;
     while (cap < need * 4)
         cap *= 2;
-    uint64_t *nk = calloc(cap, sizeof(*nk));
-    uint64_t *nt = calloc(cap, sizeof(*nt));
-    if (!nk || !nt) {
-        free(nk);
-        free(nt);
+    uint32_t *ns = calloc(cap, sizeof(*ns));
+    if (!ns)
         return -1;
-    }
-    g_lru_keys = nk;
-    g_lru_ticks = nt;
+    free(g_lru_slots);
+    g_lru_slots = ns;
     g_lru_mask = cap - 1;
-    if (old_keys) {
-        for (uint64_t i = 0; i <= old_mask; i++) {
-            uint64_t k = old_keys[i];
-            if (!k)
-                continue;
-            uint64_t j = k & g_lru_mask;
-            while (g_lru_keys[j])
-                j = (j + 1) & g_lru_mask;
-            g_lru_keys[j] = k;
-            g_lru_ticks[j] = old_ticks[i];
-        }
-        free(old_keys);
-        free(old_ticks);
+    for (uint32_t x = g_lru_nodes[0].next; x; x = g_lru_nodes[x].next) {
+        uint64_t j = lru_hash(g_lru_nodes[x].ino);
+        while (g_lru_slots[j])
+            j = (j + 1) & g_lru_mask;
+        g_lru_slots[j] = x;
     }
     return 0;
 }
 
-/* Record a use of ino. Called from the staging/read/write paths; cheap
- * hash upsert under a leaf lock, safe with any other locks held. */
+/* Record a use of ino. Called from the staging/read/write paths; O(1)
+ * under a leaf lock, safe with any other locks held. */
 void efs_client_stage_touch(efs_ino_t ino)
 {
     if (!ino)
         return;
     pthread_mutex_lock(&g_lru_mu);
-    if (lru_ensure(g_lru_count + 1) == 0) {
-        uint64_t tick = ++g_lru_clock;
-        uint64_t i = (uint64_t)ino & g_lru_mask;
-        for (;;) {
-            if (g_lru_keys[i] == (uint64_t)ino) {
-                g_lru_ticks[i] = tick;
-                break;
-            }
-            if (!g_lru_keys[i]) {
-                g_lru_keys[i] = (uint64_t)ino;
-                g_lru_ticks[i] = tick;
-                g_lru_count++;
-                break;
-            }
-            i = (i + 1) & g_lru_mask;
-        }
+    int64_t i = lru_slot_locked(ino);
+    if (i >= 0) {
+        uint32_t x = g_lru_slots[i];
+        g_lru_nodes[x].tick = ++g_lru_clock;
+        lru_unlink(x);
+        lru_link_tail(x);
+    } else if (lru_ensure(g_lru_count + 1) == 0) {
+        uint32_t x = g_lru_free;
+        if (x)
+            g_lru_free = g_lru_nodes[x].next;
+        else
+            x = g_lru_nused++;
+        g_lru_nodes[x].ino = (uint64_t)ino;
+        g_lru_nodes[x].tick = ++g_lru_clock;
+        lru_link_tail(x);
+        uint64_t j = lru_hash((uint64_t)ino);
+        while (g_lru_slots[j])
+            j = (j + 1) & g_lru_mask;
+        g_lru_slots[j] = x;
+        g_lru_count++;
     }
     pthread_mutex_unlock(&g_lru_mu);
 }
@@ -152,33 +215,67 @@ void efs_client_stage_touch(efs_ino_t ino)
 /* Caller holds g_lru_mu. */
 static void lru_remove_locked(efs_ino_t ino)
 {
-    if (!g_lru_keys)
+    int64_t s = lru_slot_locked(ino);
+    if (s < 0)
         return;
-    uint64_t i = (uint64_t)ino & g_lru_mask;
-    for (uint64_t n = 0; n <= g_lru_mask; n++) {
-        if (!g_lru_keys[i])
-            return;
-        if (g_lru_keys[i] != (uint64_t)ino) {
-            i = (i + 1) & g_lru_mask;
-            continue;
+    uint64_t i = (uint64_t)s;
+    uint32_t x = g_lru_slots[i];
+    lru_unlink(x);
+    g_lru_nodes[x].ino = 0;
+    g_lru_nodes[x].next = g_lru_free;
+    g_lru_free = x;
+    g_lru_count--;
+    /* Backward-shift delete (same scheme as the dcache pin table). */
+    g_lru_slots[i] = 0;
+    uint64_t j = (i + 1) & g_lru_mask;
+    while (g_lru_slots[j]) {
+        uint64_t h = lru_hash(g_lru_nodes[g_lru_slots[j]].ino);
+        int in_gap = (i < j) ? (h > i && h <= j) : (h > i || h <= j);
+        if (!in_gap) {
+            g_lru_slots[i] = g_lru_slots[j];
+            g_lru_slots[j] = 0;
+            i = j;
         }
-        /* Backward-shift delete (same scheme as the dcache pin table). */
-        g_lru_keys[i] = 0;
-        g_lru_count--;
-        uint64_t j = (i + 1) & g_lru_mask;
-        while (g_lru_keys[j]) {
-            uint64_t h = g_lru_keys[j] & g_lru_mask;
-            int in_gap = (i < j) ? (h > i && h <= j) : (h > i || h <= j);
-            if (!in_gap) {
-                g_lru_keys[i] = g_lru_keys[j];
-                g_lru_ticks[i] = g_lru_ticks[j];
-                g_lru_keys[j] = 0;
-                i = j;
-            }
-            j = (j + 1) & g_lru_mask;
-        }
-        return;
+        j = (j + 1) & g_lru_mask;
     }
+}
+
+/* Caller holds g_lru_mu. Tick of a listed ino; 0 if not listed. */
+static uint64_t lru_tick_locked(efs_ino_t ino)
+{
+    int64_t i = lru_slot_locked(ino);
+    return i < 0 ? 0 : g_lru_nodes[g_lru_slots[i]].tick;
+}
+
+/* Copy up to max of the oldest entries, oldest first. O(max). */
+static uint32_t lru_oldest(struct lru_node *out, uint32_t max)
+{
+    uint32_t n = 0;
+    pthread_mutex_lock(&g_lru_mu);
+    if (g_lru_nodes)
+        for (uint32_t x = g_lru_nodes[0].next; x && n < max;
+             x = g_lru_nodes[x].next)
+            out[n++] = g_lru_nodes[x];
+    pthread_mutex_unlock(&g_lru_mu);
+    return n;
+}
+
+/* Second chance for a pinned candidate: move it to the newest end unless
+ * a touch already did. Pinned rows are in use; leaving them at the head
+ * made every pass re-read the same pinned prefix. */
+static void lru_requeue(efs_ino_t ino, uint64_t tick)
+{
+    pthread_mutex_lock(&g_lru_mu);
+    int64_t i = lru_slot_locked(ino);
+    if (i >= 0) {
+        uint32_t x = g_lru_slots[i];
+        if (g_lru_nodes[x].tick == tick) {
+            g_lru_nodes[x].tick = ++g_lru_clock;
+            lru_unlink(x);
+            lru_link_tail(x);
+        }
+    }
+    pthread_mutex_unlock(&g_lru_mu);
 }
 
 /* ------------------------- evictor thread ------------------------- */
@@ -205,9 +302,6 @@ static void evict_idle_clear(void)
 {
     __atomic_store_n(&g_evict_idle_until, 0, __ATOMIC_RELAXED);
 }
-/* Oldest tick already proven pinned this drain. The next wake starts
- * here instead of rescanning that prefix. */
-static uint64_t g_evict_cursor;
 /* Last staged-bytes reading, refreshed by every pass. Read lock-free by
  * the kick path so a create burst only wakes the evictor when the table
  * is actually over the cap. */
@@ -356,18 +450,17 @@ static int stage_op_pinned(efs_ino_t ino)
 }
 
 
-/* Scan collects SCAN_BATCH oldest candidates per pass; up to EVICT_BATCH
- * of them (unpinned) are evicted. The 4x scan ratio keeps a pass
- * productive when part of the oldest cohort is pinned (open files of a
- * long-running writer). Bounded so a pass never holds locks for long;
- * FUSE ops interleave between passes. */
+/* A pass reads the SCAN_BATCH oldest entries off the list head and evicts
+ * up to EVICT_BATCH unpinned ones; pinned ones go to the newest end. A
+ * wake runs passes until the reading is under the low watermark (7/8 of
+ * the cap), nothing is left to evict, or WAKE_BUDGET_MS of work is spent.
+ * evict_one takes and drops its locks per ino, so FUSE ops interleave. */
 #define EVICT_BATCH 64
 #define SCAN_BATCH  256
-
-struct evict_cand {
-    efs_ino_t ino;
-    uint64_t tick;
-};
+#define WAKE_BUDGET_MS 20
+/* Rows dropped between compactions within one wake: removal leaves slab
+ * capacity counted until compaction, so the reading lags without it. */
+#define COMPACT_EVERY 4096
 
 /* Pin check WITHOUT the table lock (cheap pre-filter). The authoritative
  * re-check happens under the locks in evict_one(). */
@@ -403,22 +496,8 @@ static int evict_one(efs_ino_t ino, uint64_t tick)
         stage_ino_has_plock(ino))
         goto out;
     pthread_mutex_lock(&g_lru_mu);
-    uint64_t cur_tick = 0;
-    int listed = 0;
-    if (g_lru_keys) {
-        uint64_t i = (uint64_t)ino & g_lru_mask;
-        for (uint64_t n = 0; n <= g_lru_mask; n++) {
-            if (!g_lru_keys[i])
-                break;
-            if (g_lru_keys[i] == (uint64_t)ino) {
-                listed = 1;
-                cur_tick = g_lru_ticks[i];
-                break;
-            }
-            i = (i + 1) & g_lru_mask;
-        }
-    }
-    if (listed && cur_tick != tick) {
+    uint64_t cur_tick = lru_tick_locked(ino);
+    if (cur_tick && cur_tick != tick) {
         /* Touched since the scan — no longer among the oldest. */
         pthread_mutex_unlock(&g_lru_mu);
         goto out;
@@ -443,13 +522,7 @@ out:
     return dropped;
 }
 
-/* One pass: if over the cap, evict up to EVICT_BATCH unpinned inos
- * among the SCAN_BATCH oldest whose touch tick is greater than
- * min_tick. A fully pinned oldest window used to end the drain, so a
- * client that still held a few dirty files never reached the clean
- * ones behind them and the table grew without a bound. *band_full is
- * 1 when that window was full (newer entries may exist). *band_max is
- * the newest tick in the window. Returns the staged-bytes reading. */
+/* Staged-bytes reading under the table lock, published for the kick path. */
 static uint64_t stage_bytes_now(void)
 {
     uint64_t bytes;
@@ -460,70 +533,37 @@ static uint64_t stage_bytes_now(void)
     return bytes;
 }
 
-static uint64_t evict_pass(uint64_t cap, int *evicted, uint64_t min_tick,
-                           int *band_full, uint64_t *band_max, uint64_t bytes)
+/* One pass over the SCAN_BATCH oldest entries. Returns the number dropped;
+ * *requeued counts pinned candidates moved to the newest end. */
+static int evict_pass(int *requeued)
 {
-    *evicted = 0;
-    *band_full = 0;
-    *band_max = min_tick;
+    static struct lru_node cand[SCAN_BATCH];
+    uint32_t nc = lru_oldest(cand, SCAN_BATCH);
+    int evicted = 0;
 
-    if (bytes <= cap)
-        return bytes;
-
-    /* Collect the SCAN_BATCH oldest entries (unsorted array + running
-     * worst; replace-worst only when a strictly older tick appears). */
-    static struct evict_cand cand[SCAN_BATCH];
-    uint32_t nc = 0;
-    uint64_t worst = 0; /* max tick currently in cand[] */
-    pthread_mutex_lock(&g_lru_mu);
-    if (g_lru_keys) {
-        for (uint64_t i = 0; i <= g_lru_mask; i++) {
-            uint64_t k = g_lru_keys[i];
-            if (!k)
-                continue;
-            uint64_t t = g_lru_ticks[i];
-            if (t <= min_tick)
-                continue;
-            if (nc < SCAN_BATCH) {
-                cand[nc].ino = (efs_ino_t)k;
-                cand[nc].tick = t;
-                if (t > worst)
-                    worst = t;
-                nc++;
-            } else if (t < worst && t > min_tick) {
-                uint32_t w = 0;
-                for (uint32_t j = 1; j < nc; j++)
-                    if (cand[j].tick > cand[w].tick)
-                        w = j;
-                cand[w].ino = (efs_ino_t)k;
-                cand[w].tick = t;
-                worst = cand[0].tick;
-                for (uint32_t j = 1; j < nc; j++)
-                    if (cand[j].tick > worst)
-                        worst = cand[j].tick;
-            }
-        }
-    }
-    pthread_mutex_unlock(&g_lru_mu);
-    *band_full = nc == SCAN_BATCH;
-    for (uint32_t i = 0; i < nc; i++)
-        if (cand[i].tick > *band_max)
-            *band_max = cand[i].tick;
-
-    uint32_t evicted_n = 0;
-    for (uint32_t i = 0; i < nc && evicted_n < EVICT_BATCH; i++) {
-        if (stage_pinned(cand[i].ino))
+    *requeued = 0;
+    for (uint32_t i = 0; i < nc && evicted < EVICT_BATCH; i++) {
+        if (stage_pinned((efs_ino_t)cand[i].ino)) {
+            lru_requeue((efs_ino_t)cand[i].ino, cand[i].tick);
+            (*requeued)++;
             continue;
-        if (evict_one(cand[i].ino, cand[i].tick)) {
-            (*evicted)++;
-            evicted_n++;
         }
+        if (evict_one((efs_ino_t)cand[i].ino, cand[i].tick))
+            evicted++;
     }
-    if (evicted_n && getenv("EFS_STAGE_DBG"))
-        fprintf(stderr,
-                "stage-evict: pass bytes=%lluMB cand=%u evicted=%u\n",
-                (unsigned long long)(bytes >> 20), nc, evicted_n);
-    return bytes;
+    if (evicted && getenv("EFS_STAGE_DBG"))
+        fprintf(stderr, "stage-evict: pass cand=%u evicted=%d requeued=%d\n",
+                nc, evicted, *requeued);
+    return evicted;
+}
+
+static void stage_compact(void)
+{
+    efs_client_table_lock();
+    pthread_mutex_lock(&g_client.idx_mu);
+    efs_export_compact(&g_client.export);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_table_unlock();
 }
 
 /* ---------------- D18: whole-tab eviction (Oct 1 2026) ----------------
@@ -626,54 +666,60 @@ static void *stage_evict_main(void *arg)
         g_evict_kick = 0;
         pthread_mutex_unlock(&g_evict_mu);
 
-        /* One staged-bytes reading per wake. A pinned oldest window is
-         * skipped by at most a few bands; if those are also pinned, the
-         * cursor is kept for the next wake instead of rescanning the
-         * LRU hundreds of times in this one. */
+        /* Over the cap: drain rows oldest first down to the low
+         * watermark, within a time budget per wake. */
         uint64_t bytes = stage_bytes_now();
-        int evicted_total = 0;
+        uint64_t low = cap - cap / 8;
+        int evicted_total = 0, since_compact = 0;
         if (bytes > cap) {
-            for (int bands = 0; bands < 4; bands++) {
-                int evicted = 0;
-                int band_full = 0;
-                uint64_t band_max = 0;
-                evict_pass(cap, &evicted, g_evict_cursor, &band_full,
-                           &band_max, bytes);
-                evicted_total += evicted;
-                if (evicted > 0 || !band_full) {
-                    if (evicted == 0)
-                        g_evict_cursor = 0;
+            int64_t deadline = evict_now_ms() + WAKE_BUDGET_MS;
+            uint64_t visited = 0, listed;
+            pthread_mutex_lock(&g_lru_mu);
+            listed = g_lru_count;
+            pthread_mutex_unlock(&g_lru_mu);
+            while (bytes > low && visited < listed &&
+                   evict_now_ms() < deadline) {
+                int requeued = 0;
+                int evicted = evict_pass(&requeued);
+                if (!evicted && !requeued)
                     break;
+                visited += (uint64_t)evicted + (uint64_t)requeued;
+                evicted_total += evicted;
+                since_compact += evicted;
+                if (since_compact >= COMPACT_EVERY) {
+                    stage_compact();
+                    since_compact = 0;
                 }
-                g_evict_cursor = band_max;
+                bytes = stage_bytes_now();
             }
-        } else {
-            g_evict_cursor = 0;
+            if (since_compact) {
+                stage_compact();
+                since_compact = 0;
+                bytes = stage_bytes_now();
+            }
         }
-        if (evicted_total > 0)
-            g_evict_cursor = 0;
         if (bytes > cap) {
             /* Rows alone cannot reach the cap once the tab floor is
              * above it (D18): drop the coldest unpinned tabs until the
              * reading is under, so the kick path goes quiet instead of
              * re-arming this thread on every staging op. */
-            uint64_t after = stage_bytes_now();
+            int tabs = evict_cold_tabs(low, &bytes);
 
-            if (after > cap) {
-                int tabs = evict_cold_tabs(cap, &after);
-
-                evicted_total += tabs;
-                bytes = after;
-                __atomic_store_n(&g_stage_bytes_seen, after,
-                                 __ATOMIC_RELAXED);
+            evicted_total += tabs;
+            if (tabs) {
+                stage_compact();
+                bytes = stage_bytes_now();
             }
+            __atomic_store_n(&g_stage_bytes_seen, bytes, __ATOMIC_RELAXED);
         }
+        if (bytes <= cap)
+            logged_grow = 0;
         if (bytes > cap && evicted_total == 0) {
             __atomic_store_n(&g_evict_idle_until, evict_now_ms() + 1000,
                              __ATOMIC_RELAXED);
-            /* Every band we looked at is pinned (or the table is
-             * already under the next reading). Log once and sleep. */
-            if (!logged_grow && g_evict_cursor == 0) {
+            /* Everything we looked at is pinned. Log once per episode
+             * and sleep. */
+            if (!logged_grow) {
                 logged_grow = 1;
                 fprintf(stderr,
                         "efs-fuse: staging table over EFS_CLIENT_META_MB "
@@ -682,13 +728,15 @@ static void *stage_evict_main(void *arg)
                         (unsigned long long)(cap >> 20));
                 fflush(stderr);
             }
-        }
-        if (evicted_total > 0) {
-            efs_client_table_lock();
-            pthread_mutex_lock(&g_client.idx_mu);
-            efs_export_compact(&g_client.export);
-            pthread_mutex_unlock(&g_client.idx_mu);
-            efs_client_table_unlock();
+        } else if (bytes > cap) {
+            /* Progress but still over: run again after a pause as long
+             * as the budget, so FUSE ops get the table locks at least
+             * half the time. */
+            pthread_mutex_lock(&g_evict_mu);
+            g_evict_kick = 1;
+            pthread_mutex_unlock(&g_evict_mu);
+            struct timespec pause = {0, WAKE_BUDGET_MS * 1000000L};
+            nanosleep(&pause, NULL);
         }
 
         pthread_mutex_lock(&g_evict_mu);
