@@ -1528,6 +1528,13 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[orcd-mini profile on `9099380f3`](../status/orcd-mini-profile-9099380f3-20261017.md):
+**profiling only.** Under two writers, a delete and two crawlers, the cv_mu
+wake-up waits are gone from the leader's top lock waits (45% on
+`f4a373b13`). Lock waits are 15.6% of leader switches, nearly all `h->mu`
+on submit, REPORT, retained CREATE and unlink. This is the live step-1
+baseline for the [Raft host mutex plan](../status/raft-host-mu-plan-20261016.md).
+
 [orcd-mini deploy `9099380f3`: "not indexed yet"](../status/orcd-mini-deploy-9099380f3-20261017.md):
 **deployed; every POSIX suite PASS, no failures.** smoke 216/216, XFS
 comparison PASS, extras 0 fail (the `.efs` freshness checks SKIP with "not
