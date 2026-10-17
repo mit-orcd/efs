@@ -19,7 +19,11 @@ full acceptance are separate states.
 ## Recent evidence and remaining acceptance
 
 [GC backlog CPU is query-catalog rebuilds](orcd-mini-gc-query-catalog-20261017.md):
-**implementation and unit PASS; live NOTRUN (needs a deploy).**
+**deployed to orcd-mini (`859b2b9eb320`); all live suites PASS** (smoke
+216/216, two-client 67/67, persist 27/27, private GC gate TCP and RDMA).
+During a GC-only backlog, efsd CPU fell from about 52% to 3–7% per node.
+The cleanup deferral does not take effect under Raft apply buffering (open
+defect); the 60 s cap and exact dependencies carry the gain.
 - In a passive orcd-mini profile during a GC backlog, 90% of efsd CPU was the
   query-catalog publisher rebuilding an unchanged catalog every ~2.3 s. GC
   itself was about 1–3%.

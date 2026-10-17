@@ -1,11 +1,15 @@
 # GC backlog CPU: query-catalog rebuilds — 2026-10-17
 
-**Implementation and unit tests PASS; live verification NOTRUN (needs a
-deploy).** On orcd-mini, the daemons' ~40% (or more) CPU during a long GC
-backlog was not GC work. It was the query-catalog publisher rebuilding an
-unchanged catalog every ~2.3 s, because GC's cleanup of already-unlinked
-inodes counted as namespace changes. GC passes, budgets, cadence and ordering
-are unchanged.
+**Deployed to orcd-mini as `859b2b9eb320`. All live suites PASS. Goal met:
+efsd CPU during a GC-only backlog fell from about 52% to 3–7% of a core per
+node.** One part did not work: the cleanup deferral has no effect in the
+daemon (see "Deferral defect"). The 60 s cap and the exact dependency set
+carry the gain. GC passes, budgets, cadence and ordering are unchanged.
+
+On orcd-mini, the daemons' ~40% (or more) CPU during a long GC backlog was
+not GC work. It was the query-catalog publisher rebuilding an unchanged
+catalog every ~2.3 s, because GC's cleanup of already-unlinked inodes counted
+as namespace changes.
 
 Linked item: the user's report that, after deleting about 1.4M profiling files,
 each efsd spent about 40% CPU "on GC" for a long time.
@@ -147,6 +151,121 @@ change's files overlaid, built with `EFS_GIT_ID=qcat00000001`.
   the user asked for no extra clusters. GC scheduling and GC deletion code
   are unchanged; only the KV revision accounting for reap writes changed.
 
+## Deploy and live results (orcd-mini, 2026-10-17)
+
+### Deploy
+
+- **Build:** `859b2b9eb320` (`v0.3.2-pre-alpha-602-g859b2b9eb`), from a clean
+  `git archive` without `results/`, built 2026-10-17T15:57:33Z with the
+  private libfuse.
+  - node9901 `/data1/efs/releases/859b2b9eb320`:
+    - efsd `06878171369ba8c01b4aee6c4aa654dfd80d3525c566a07eb0f8c012f765506b`;
+    - efs-fuse `c993131b910e7bef3beaf433e8f0ed4c7639c71eb9d76b187e17875da84b68c7`.
+  - node9900 `/data1/efs/orcd-mini-client/releases/859b2b9eb320`:
+    - efs-fuse `7d1d7b905e84af318e34f417ce5f09e5242d6a1440967176fc637f1f50e800af`.
+  - The first node9900 build missed `PKG_CONFIG_PATH`, compiled against the
+    system libfuse headers and failed. It was rebuilt with the private
+    libfuse.
+- **Before:** daemons `4aff22c62f9f`, clients `155695ccd`.
+- **Order:**
+  1. `fuser -m` on both mounts: no users.
+  2. Synced devops `4de926a` (`start.sh`, `test_start_mode.py`).
+  3. Stopped the node9900 client, then `EFS_CLUSTER=orcd-mini ./stop.sh`.
+  4. Switched both `src` symlinks, then `start.sh` and `client.sh start`.
+- **After start:** the catalog was restored from disk (`query-restore rc=0`),
+  with no full rebuild.
+
+### Suites
+
+| Suite | Result |
+| --- | --- |
+| `smoke.sh` POSIX, one mount | **PASS 216/216** (15.3 s) |
+| `scripts/orcd_mini_posix2.py`, node9901 + node9900 | **PASS 67/67** (450 s) |
+| `smoke-persist.sh` prepare/remount/verify | **PASS 27/27** |
+| `tests/live/gc_reclamation.py --mode direct --posix`, TCP, private, 2 `/tmp` roots | **PASS** (71 PASS lines, physical inventory empty after restart) |
+| Same with `--transport rdma`, `EFS_RDMA_DEV=mlx5_0` | **PASS** (71 PASS lines) |
+
+The `gc_reclamation` gate had failed at `offline-member` (fsync EIO) on
+`09f8af09c` and `4d6530dd8`; it passed here in both transports.
+
+### Catalog and CPU
+
+Pre-deploy baseline on `4aff22c62f9f` (passive, 20 s):
+- each efsd at about 52% CPU, 86% of it in `host_query_thread`, 1.6% in GC;
+- `query-publish` every ~2.8 s, `rebuilt=13–14`, `build_ms≈500`, 8.99M
+  files.
+
+The pending-GC estimate showed 1.93M records. That estimate only
+overshoots; the real remaining backlog was about 8k fragments, reclaimed in
+the first ~9 minutes after the restart.
+
+Live test on `859b2b9eb320`, run with `scripts/orcd_mini_gc_delete_live.sh`
+on node9900 and `scripts/orcd_mini_efsd_sampler.sh` on node9901 (30 s
+samples):
+- **Create:** 200,000 × 256 B files by 16 writers in 89.7 s, 2,229 files/s.
+- **Delete:** `rm -rf` by 16 threads in 27.1 s, 7,382 files/s. Unlink p50
+  1.81 ms, p90 2.37 ms, p99 12.2 ms, max 101 ms.
+- **CPU while creating and deleting:** n1 (leader of both groups) about 380%,
+  n2/n3 about 185%.
+  - A 20 s on-CPU sample during the deletes: 75% in `host_query_thread`, 4%
+    in GC.
+  - Each 60 s publish absorbed real changes (`changes` 52k–197k), taking
+    0.8–4.5 s per node per minute.
+- **GC-only backlog**, 16:45:30–17:10 UTC, reaping the 200k inodes at the
+  unchanged ~30 inodes/s:
+  - **efsd CPU 3–7% per node**;
+  - `query-publish` once per 60 s, `build_ms` 287–312, `walked` 0–1.
+- Draining all 200k inodes at the unchanged schedule takes about 1.9 h; the
+  test observed 25 minutes of it.
+
+### Deferral defect (found live, not fixed)
+
+`deferred_cleanup` stayed 0 on all nodes, and `rebuilt` grew 26 → 64 shards
+per publish while only reaps ran.
+
+- **Cause:** Raft apply buffers each entry's KV writes
+  (`efs_kv_lsm_apply_begin`/`apply_end`, `raft_host.c` around 2706/2803) and
+  commits them after the apply function returns. The commit is where
+  `metadata_dirty` runs, and the cleanup scope opened in
+  `efs_meta_apply_lane_sweep*`/`reap_done` has already closed by then.
+- **Why the tests missed it:** the unit tests write to the KV directly and
+  never use the apply scope.
+- **Impact:** small with the 60 s cap and exact dependencies. Reap-dirtied
+  shards are rebuilt once a minute at about 300 ms.
+- **Possible fix, not implemented** per the user's instruction: carry the
+  cleanup mark into the buffered apply entries (a flag on the apply-scope
+  memtable entry) and honor it at commit. Add a unit test that applies a
+  reap through `efs_kv_lsm_apply_begin/end`.
+
+### ior (node9900, 8 local ranks, OpenMPI 5.0.10)
+
+Run with `scripts/orcd_mini_ior_node9900.sh` (geometry from
+`tests/perf/io500/run.sh`):
+
+| Test | Write | Read |
+| --- | --- | --- |
+| IOR easy: `-F -e -t 1m -b 2048m`, 16 GiB | 1,499 MiB/s | 5,784 MiB/s |
+| IOR hard: `-e -t 47008 -b 47008 -s 2000`, one 717 MiB shared file | 41.1 MiB/s | 157 MiB/s |
+
+- Single node, no `-C` reordering, so reads may hit the client cache.
+- IOR hard matches the known ~45 MiB/s shared-file write wall (W6).
+- No previous orcd-mini ior baseline exists. The io500 runbook targets
+  fcstor007 with 9 clients.
+
+Raw captures stay outside Git. sha256 prefixes:
+- node9901 `/data1/efs/prof/qcat-live/`:
+  - `pre/cpu.data` `f88bc7f006b53d77`;
+  - `post/cpu.data` `44a81d4554334cad`;
+  - `sampler.tsv` `986fa1d586fa90b7`;
+  - `gcr/tcp.txt` `0e2226096ccb340f`;
+  - `gcr/rdma.txt` `c05f62c24b0e0754`.
+- node9900 `/data1/efs/orcd-mini-client/prof/qcat/`:
+  - `ior/easy.txt` `424112214725fb5a`;
+  - `ior/hard.txt` `e78839512e1b1f11`;
+  - `summary.txt` `6b7f6ee3c05c25d4`.
+
+All test directories on the mounts and the gate roots were removed.
+
 ## Reproduce
 
 Build the tree as above. Then:
@@ -164,9 +283,9 @@ cadence) before and after.
 
 ## Remaining
 
-- **Live verification NOTRUN.** It needs a deploy to orcd-mini, which needs
-  the user's go-ahead. Expected result during a GC-only backlog: no
-  `query-publish` lines and a query thread near idle.
+- **Deferral defect.** Reap writes still schedule refreshes (see above).
+- **No larger-namespace test yet.** The user plans one at a larger scale
+  (2^32 files) later.
 - **User deletes still trigger refreshes.** A real `rm -rf` of many files is a
   real namespace change and still triggers refreshes. Each one is now cheaper
   (exact walks); `EFS_QUERY_REFRESH_MS` bounds how often they run.
