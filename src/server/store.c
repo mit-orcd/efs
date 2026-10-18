@@ -798,7 +798,8 @@ void server_inode_gc_epoch_bump(void)
  * journal failed verification refuses every data write until recovery. */
 static int inode_is_dead(struct efsd_server *s, efs_export_id_t eid, efs_ino_t ino)
 {
-    if (__atomic_load_n(&s->reclaim_fail_closed, __ATOMIC_ACQUIRE))
+    /* Metadata tables are never reclaimed through the journal. */
+    if (__atomic_load_n(&s->reclaim_fail_closed, __ATOMIC_ACQUIRE) && !efs_ino_is_meta_table(ino))
         return -1;
     if (server_reclaim_fenced(eid, ino))
         return 1;

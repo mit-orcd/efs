@@ -8321,7 +8321,12 @@ static void host_gc_inode_nodes_batch(struct efs_raft_host *h, const efs_ino_t *
         if (!nodes[i].id || nodes[i].id > (uint32_t)h->n) return;
         present |= 1u << (nodes[i].id - 1);
     }
-    if (present != ((1u << h->n) - 1u)) return;
+    if (present != ((1u << h->n) - 1u)) {
+        if (env_on("EFS_GC_DBG"))
+            fprintf(stderr, "raft-host: gc reclaim batch refused: members=%u present=%x n=%d\n",
+                    count, present, h->n);
+        return;
+    }
     size_t req_len = sizeof(struct efs_msg_gc_inode_batch) + (size_t)n * 16u;
     struct efs_msg_gc_inode_batch *req = calloc(1, req_len);
     struct efs_reclaim_item *items = calloc(n, sizeof(*items));
@@ -8356,6 +8361,8 @@ static void host_gc_inode_nodes_batch(struct efs_raft_host *h, const efs_ino_t *
     for (uint32_t i = 0; i < n; i++) local_rc[i] = EFS_ERR_BUSY;
     (void)server_reclaim_accept(h->s, items, n, local_rc);
     for (uint32_t i = 0; i < n; i++) ok[i] = local_rc[i] == EFS_OK;
+    if (env_on("EFS_GC_DBG"))
+        fprintf(stderr, "raft-host: gc reclaim batch local rc0=%d failed=%d\n", n ? local_rc[0] : 0, failed);
     for (uint32_t i = 0; i < count; i++) {
         struct efs_conn *pc = pending[i];
         if (!pc) continue;
@@ -8366,6 +8373,9 @@ static void host_gc_inode_nodes_batch(struct efs_raft_host *h, const efs_ino_t *
                    type == EFS_MSG_GC_INODE_BATCH_REPLY &&
                    len == sizeof(struct efs_msg_gc_inode_batch_reply) + (size_t)n * 4u &&
                    ((struct efs_msg_gc_inode_batch_reply *)reply)->count == n;
+        if (env_on("EFS_GC_DBG"))
+            fprintf(stderr, "raft-host: gc reclaim batch node=%u good=%d type=%u len=%u n=%u\n",
+                    nodes[i].id, good, type, len, n);
         if (good) {
             const struct efs_msg_gc_inode_batch_reply *r = reply;
             for (uint32_t k = 0; k < n; k++) if (r->rc[k] != EFS_OK) ok[k] = 0;
@@ -9045,6 +9055,9 @@ static void reap_multi_flush(struct efs_raft_host *h, struct reap_multi *m)
     m->buf[2] = (uint8_t)m->count;
     int rc = host_gc_propose(h, m->group, m->buf, m->len);
     if (rc != EFS_OK) m->rc = rc;
+    if (env_on("EFS_GC_DBG"))
+        fprintf(stderr, "raft-host: gc reap entry kind=%u group=%u items=%u bytes=%u rc=%d\n",
+                m->kind, m->group, m->count, m->len, rc);
     m->len = 3;
     m->count = 0;
 }
@@ -9187,6 +9200,13 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
     }
     for (int i = 0; i < n; i++)
         if (host_reap_left[i]) host_reap_swept[i] = 0;
+    if (env_on("EFS_GC_DBG")) {
+        int swept = 0;
+        for (int i = 0; i < n; i++) swept += host_reap_swept[i];
+        fprintf(stderr, "raft-host: gc reap group=%u markers=%d swept=%d first=%llu lanes=%llx left=%llx\n",
+                group, n, swept, (unsigned long long)cp->ino[0], (unsigned long long)cp->lanes[0],
+                (unsigned long long)host_reap_left[0]);
+    }
     times->sweep += now_us_() - started;
 
     /* 2. Storage acceptance by every member. */
@@ -9201,6 +9221,11 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
     }
     host_gc_inode_nodes_batch(h, host_reap_inos, host_reap_gens, m, host_reap_ok);
     times->fence += now_us_() - started;
+    if (env_on("EFS_GC_DBG")) {
+        uint32_t accepted = 0;
+        for (uint32_t k = 0; k < m; k++) accepted += host_reap_ok[k];
+        fprintf(stderr, "raft-host: gc reap group=%u handed=%u accepted=%u\n", group, m, accepted);
+    }
 
     /* 3. REAP completion for accepted inodes only. */
     if (!__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) || !h->running) return;
