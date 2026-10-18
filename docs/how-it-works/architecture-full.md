@@ -1528,6 +1528,43 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[orcd-mini deploy `5d673efa8`](../status/orcd-mini-deploy-5d673efa8-20261018.md):
+**deployed from branch `raft-host-mu`; every suite PASS, private
+`posix_expiry` 6/6 (was 4/6).**
+- `h->mu` steps 1–3, plus a fix for creates that failed fsync with EIO for
+  up to 30 s after a storage member restarted (client and server connect
+  cooldowns).
+- User's tiny-file workload: writer +10%, efsd CPU −6%, context switches
+  −17%, reader unchanged.
+- Open: the intermittent `expiry show` failure (now names its step);
+  creates still fail while a member is down (product gap §1.2).
+
+[`h->mu` plan steps 1–3](../status/raft-host-mu-steps-20261017.md): **branch
+`raft-host-mu`; private RDMA A/B PASS, `make test` PASS; deployed in
+`5d673efa8`.**
+- Verdict reads and leader-cover picks no longer wait for `h->mu`
+  (79 → 0.2 µs and 113 → 0.1 µs mean).
+- Leader lock-wait share fell 16.7% → 12.6%. Creates/s, CPU per create and
+  latency are unchanged within noise.
+
+[`h->mu` contention plan and review](../status/raft-host-mu-plan-20261016.md):
+**NOTRUN; plan only.** Measure per-phase timing → routing snapshot →
+race-free result-ring reads → reassess → conditional REPORT change →
+proposal queue only if justified. Routing and the result ring are A/B'd
+separately. Rechecked at `d68d9a58a`: the code findings still hold. The
+`9099380f3` profile is the live lock-wait baseline: submit 27.9%, REPORT
+13.9%, leader-cover picks 8.9%. Per-phase timing is still NOTRUN.
+
+[orcd-mini `e04a80f63`: deferral, expiry fixtures, refused-startup fence](../status/orcd-mini-open-items-e04a80f63-20261017.md):
+**deployed; core, extras, two-client, persist and private GC POSIX PASS;
+`posix_expiry` 2/4 (intermittent).**
+- Cleanup deferral now works live: `deferred_cleanup` climbs, and there
+  are no catalog publishes while only GC runs.
+- A startup refused before serving no longer fences the roots. orcd-mini
+  was fenced by exactly that (quota check after `/data1` filled). It was
+  repaired with the user's approval (orderly stop, syncfs, records set
+  clean), and the quota lowered to 720 GiB.
+
 [orcd-mini profile on `9099380f3`](../status/orcd-mini-profile-9099380f3-20261017.md):
 **profiling only.** Under two writers, a delete and two crawlers, the cv_mu
 wake-up waits are gone from the leader's top lock waits (45% on
@@ -1582,33 +1619,6 @@ defect); the 60 s cap and exact dependencies carry the gain.
   (exact 4096-shard sets). New `EFS_QUERY_REFRESH_MS`; its default changes
   from 2 s to 60 s.
 - GC schedule untouched.
-
-[orcd-mini deploy `5d673efa8`](../status/orcd-mini-deploy-5d673efa8-20261018.md):
-**deployed from branch `raft-host-mu`; every suite PASS, private
-`posix_expiry` 6/6 (was 4/6).**
-- `h->mu` steps 1–3, plus a fix for creates that failed fsync with EIO for
-  up to 30 s after a storage member restarted (client and server connect
-  cooldowns).
-- User's tiny-file workload: writer +10%, efsd CPU −6%, context switches
-  −17%, reader unchanged.
-- Open: the intermittent `expiry show` failure (now names its step);
-  creates still fail while a member is down (product gap §1.2).
-
-[`h->mu` plan steps 1–3](../status/raft-host-mu-steps-20261017.md): **branch
-`raft-host-mu`; private RDMA A/B PASS, `make test` PASS; deployed in
-`5d673efa8`.**
-- Verdict reads and leader-cover picks no longer wait for `h->mu`
-  (79 → 0.2 µs and 113 → 0.1 µs mean).
-- Leader lock-wait share fell 16.7% → 12.6%. Creates/s, CPU per create and
-  latency are unchanged within noise.
-
-[`h->mu` contention plan and review](../status/raft-host-mu-plan-20261016.md):
-**NOTRUN; plan only.** Measure per-phase timing → routing snapshot →
-race-free result-ring reads → reassess → conditional REPORT change →
-proposal queue only if justified. Routing and the result ring are A/B'd
-separately. Rechecked at `d68d9a58a`: the code findings still hold. The
-`9099380f3` profile is the live lock-wait baseline: submit 27.9%, REPORT
-13.9%, leader-cover picks 8.9%. Per-phase timing is still NOTRUN.
 
 [Client staging evictor: O(1) LRU](../status/orcd-mini-stage-evict-20261017.md):
 **deployed to both orcd-mini clients (`155695ccd`); PASS under the
