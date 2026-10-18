@@ -42,7 +42,7 @@ disposition:
 | Packed reads | `src/common/packed_reader.c` (56), `src/client/read.c` changes | Fetch a segment fragment, decode, verify the reference digest | **Keep.** |
 | Storage node | `src/server/packed_upload.c` (110), `packed_fence.h` (160), `packed_gc.h` (115), `pack_authority.h` (102), `store.c` and `handler.c` parts | PUT, GET and GC of packed objects, authority checks, per-object fences | **Keep and change:** packed GC uses W124's batched, journal-first node protocol, not its own per-object `GC_PACKED` round trips (P2). |
 | Metadata apply | `src/meta/meta_apply.c` (234 lines removed), Raft tags 45–51 | Packed publication, PACK profile, packed chunk extension, packed retirement | **Keep.** Restore the reserved numbers' names. |
-| Wire | `include/efs/protocol.h`: messages 131–144, chunk flag `EFS_CHUNK_REC_F_PACKED_BASE` (8) | PUT, GET, GETCHUNKS, GC, capabilities and authority messages | **Keep.** Numbers are still reserved on devel ("131-150 are reserved"). Wire capability negotiation is redundant, because the HELLO build-ID gate (`src/server/handler.c`) already refuses any client or peer of a different build. On-disk format versions still need explicit checks (gap 8). |
+| Wire | `include/efs/protocol.h`: messages 131–144, chunk flag `EFS_CHUNK_REC_F_PACKED_BASE` (8) | PUT, GET, GETCHUNKS, GC, capabilities and authority messages | **Keep.** Numbers are still reserved on devel ("131-150 are reserved"). Keep the capability negotiation, or replace it with an enforced client handshake (gap 8), because clients are **not** build-gated today. |
 | Tests | 46 packing/container tests, 2 stress tests | Unit, mounted and stress | **Restore** the packing ones (list in P1–P3). Drop the container-only ones and those testing the opt-in switch. |
 
 Devel keeps fail-closed checks for stores these features wrote: the KVLSM2
@@ -91,22 +91,38 @@ misread.
      cohort its predecessor's close is waiting on.
    - The target workload looks exactly like that (`tiny_files.py` workers
      write and close one file at a time).
-   - P0 must define what close has to publish, and whether closes can be
-     coalesced across concurrent writers and directories within a bounded
-     window. This is the largest practical risk (see P0.0).
+   - A longer window cannot help that writer. Its next file only exists
+     after its close returns, so waiting longer only adds latency.
+   - Coalescing must come from *concurrent* writers or directories in the
+     same publication group, or from accepting singleton segments and
+     merging them later by compaction.
+   - P0 must choose explicitly (see P0.0). Any change that lets close
+     return before publication needs defined cross-client visibility,
+     error reporting and fsync semantics.
 8. **Format compatibility.**
-   - Removing the switch does not remove version checks. The build-ID gate
-     covers clients and peers, but not stores: an older or newer build may
-     meet a store written with the restored or extended format.
+   - Removing the switch does not remove version checks.
+   - **Clients are not gated today.** `EFS_MSG_HELLO` is sent only by
+     daemons joining the cluster (`src/server/cluster.c`), and the build-ID
+     check in `src/server/handler.c` applies to those. efs-fuse sends no
+     HELLO and only logs its build ID. So an old client can meet a new
+     server, and the reverse.
+   - The port therefore keeps protocol and format rejection for clients:
+     either the archived capability negotiation, or a new enforced client
+     handshake at mount and on each connection that refuses an
+     incompatible protocol version.
+   - Old-client against new-server and new-client against old-server
+     combinations are tested before any negotiation is removed.
+   - Stores are not gated either: an older or newer build may meet a store
+     written with the restored or extended format.
    - Every on-disk format the port touches carries a version and is
      refused, fail closed, by a build that does not support it. That
      covers the segment record-size limit, the ledger extension
      (live-byte counters, compaction phase, cold marker) and the reserved
      KV kinds.
    - Raising the record-size limit and extending the ledger get an explicit
-     audit. Upgrades are coordinated, with all daemons and clients on one
-     build (the gate enforces that), and downgrades across a format change
-     are refused.
+     audit. Upgrades are coordinated: daemons by the build-ID gate, clients
+     by the handshake or negotiation above. Downgrades across a format
+     change are refused.
 9. **Drift since 2026-10-16.** The port must reconcile with devel changes
    made after the archive:
    - `h->mu` steps 1–3 (apply-ring seqlock, routing view, write-path
@@ -122,25 +138,41 @@ misread.
 
 ### P0 — Decisions and measurements (no product code)
 
-0. **Occupancy go/no-go (before any port work).** Prove that the ordinary
-   create, write and close workload coalesces well before investing in
-   P1–P7.
-   - **Capture:** record per-file create/close times, sizes, directories
-     and writer sessions under the actual `tiny_files.py` recipe. Cover:
-     - 16 workers;
-     - a single writer;
-     - a writer that fsyncs frequently;
-     - the user's mixed workload.
+0. **Allocation and cost go/no-go (before any port work).** Prove that
+   ordinary create, write and close gets a real space win at acceptable
+   cost before investing in P1–P7.
+   - **Model causality, not replayed timestamps.**
+     - Each worker is a closed loop: create, write, then close, and its next
+       file starts only after its close returns.
+     - Under "close waits for publication", a close's latency includes
+       waiting for its segment to seal and publish.
+     - Replaying timestamps from today's faster baseline would invent
+       batching that cannot happen, so the model (or a prototype) feeds
+       per-worker service times from a capture of the actual
+       `tiny_files.py` recipe: 16 workers, a single writer, frequent
+       fsync, and the user's mixed workload.
+     - Use a trace option in a throwaway build or an equivalent capture,
+       not a change to devel.
+   - **Choose the close contract explicitly:**
+     - **(a)** close waits for publication, sealing on a short window
+       shared by concurrent writers. Singleton segments are accepted for
+       sequential writers, and merged later by compaction.
+     - **(b)** close returns earlier, which needs defined cross-client
+       visibility, error reporting and fsync behaviour before it can be
+       chosen.
+   - **Decision metrics, not occupancy alone.** Segments are variable-size
+     (8 KiB alignment), so a singleton need not allocate a full stripe. A
+     256 B file alone in a segment takes roughly 4 KiB per node plus the
+     store tail, against 69,632 bytes today. Measure:
+     - allocated bytes per file, initially and after compaction settles;
+     - metadata (Raft) operations per file, including publication, ledger
+       and compaction switches;
+     - close latency p50/p99;
+     - compaction traffic (bytes copied and Raft entries per file).
 
-     Use a trace option in a throwaway build or an equivalent capture, not
-     a change to devel.
-   - **Simulate:** segment occupancy for candidate close semantics (close
-     waits for publication, versus close publishes into a bounded window
-     shared across writers), windows, grouping keys and thresholds.
-   - **Gate:** a target median occupancy, and the added close latency, at
-     which packing pays for its extra Raft and compaction traffic. If the
-     single-writer case cannot reach it within an acceptable close latency,
-     revisit the close contract before porting.
+     Go only if allocated bytes improve substantially and close latency and
+     metadata cost stay within agreed limits. Low occupancy can still save
+     space, and high occupancy can still be too expensive.
 
 1. **Threshold:** for record sizes of 256 B, 1, 4, 8, 16, 32 and 64 KiB,
    measure:
@@ -321,9 +353,11 @@ readers.
 
 ## Risks
 
-- **Low segment occupancy (largest practical risk):** if ordinary
-  create/write/close does not coalesce, packing adds Raft publication and
-  compaction traffic without the space win. P0.0 is the go/no-go gate.
+- **Cost per file (largest practical risk):** if ordinary create/write/close
+  yields mostly singleton segments, the space win may survive (variable
+  segment size), but the extra Raft publication and compaction traffic, or
+  the close latency, may not be acceptable. P0.0 decides from allocated
+  bytes, metadata operations, close latency and compaction traffic.
 
 - **Port size:** about 4,000 lines of archived packing code plus the new
   compaction, crossing client, server, metadata and the wire. Phases P1–P3
@@ -348,10 +382,18 @@ in devel (`handler.c`).
 | Keep publication-group ownership in the grouping key; cold compaction keeps it. | **Accepted.** Confirmed: one cohort per metadata group, and every segment belongs to one publication group. The key is now (publication group, directory, session, window). |
 | The threshold correction is a hypothesis; the 4 KiB validator limit is the real format constraint. | **Accepted.** P0.1 measures 4–64 KiB for allocation, fill, read amplification and metadata cost. Raising the limit is a format decision (gap 8). |
 | Close-triggered sealing may defeat the target workload. | **Accepted, and made the go/no-go.** Confirmed that the archived close waits for durable publication (10 ms deadline), which gives one file per segment for a sequential writer. P0.0 measures occupancy under the real `tiny_files.py` recipe (16 workers, one writer, frequent fsync) before the port. |
-| Removing the switch does not remove compatibility checks. | **Partly accepted.** Wire capability negotiation stays dropped: the HELLO build-ID gate already refuses mismatched clients and peers. On-disk formats get explicit versions and fail-closed refusal, with coordinated upgrades and refused downgrades (gap 8). |
+| Removing the switch does not remove compatibility checks. | **Accepted.** My first answer kept negotiation dropped on the grounds that HELLO gates clients. That was wrong (see the follow-up below). On-disk formats get explicit versions and fail-closed refusal, with coordinated upgrades and refused downgrades (gap 8). |
 | The compaction CAS must identify the exact old mapping; test racing compactors. | **Accepted.** The CAS is on the exact source reference, with destination ownership and source release in one batch. A two-compactor race test is added. |
 | Replace the source-only landing guard with behavioural coverage. | **Accepted.** P6 checks persisted mappings and the physical inventory for fresh files, large files, transitions, legacy reads and modification, and empty files. Legacy reads stay. |
 | Tag the actual pre-merge devel and compare against it after integration. | **Accepted.** Rebase before the final A/B; that same commit is the baseline and the tag. |
+
+### Follow-up review (2026-10-18)
+
+| Finding | Disposition |
+| --- | --- |
+| HELLO does not gate clients. | **Accepted; my error.** Verified: only daemons send `EFS_MSG_HELLO` (`cluster.c`); the client only logs its build ID. Gap 8 now keeps capability negotiation, or an enforced client handshake, plus old/new client-server tests. |
+| The P0 simulation must keep workload causality; a longer window cannot help a sequential writer. | **Accepted.** P0.0 models closed-loop workers and requires an explicit close contract: (a) singletons plus compaction, or (b) early close with defined semantics. |
+| Occupancy alone is not the metric. | **Accepted.** P0.0 decides on allocated bytes per file (variable segment size), metadata operations, close latency and compaction traffic. |
 
 ## Open questions
 

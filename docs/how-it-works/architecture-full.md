@@ -1565,8 +1565,8 @@ revised after design review; proceed with parts 1–2, then W125.**
 **proposed; starts after W124 parts 1–2.**
 - Files below a packing threshold (measured in P0, candidates 4–64 KiB)
   packed into shared fragments; no data in metadata rows.
-- An occupancy go/no-go (P0.0) must show ordinary create/write/close
-  coalesces before the port starts.
+- A go/no-go (P0.0) on allocated bytes, metadata operations, close latency
+  and compaction traffic comes before the port starts.
 - [Implementation plan](../backlog/small-file-packing-plan.md): P0
   decisions, port P1–P3, compaction P4, transitions P5, old-path removal
   P6, qualification and landing P7.

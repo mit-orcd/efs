@@ -199,13 +199,17 @@ segment or whole-fragment granularity, after compaction has emptied it.
      concurrent writers.
    - The archived writer makes close wait for durable publication, which
      gives one file per segment for a sequential writer.
-   - Decided from the plan's P0.0 occupancy go/no-go measurement.
+   - Decided from the plan's P0.0 go/no-go, a closed-loop model judged on
+     allocated bytes, metadata operations, close latency and compaction
+     traffic, not on occupancy alone.
 3. **Format compatibility.**
    - Versioned on-disk formats for the segment (including any raised
      record limit) and the extended ledger.
    - Builds that do not support a format refuse it, fail closed.
    - Coordinated upgrades; downgrades across a format change are refused.
-   - The HELLO build-ID gate already covers clients and peers.
+   - Clients are not build-gated today: only daemons send HELLO. Client
+     compatibility needs capability negotiation or an enforced client
+     handshake, tested old against new in both directions.
 4. **Growth across the threshold.**
    - A packed file that grows past the threshold moves to per-file
      fragments as a new immutable generation, as re-striping does; the
