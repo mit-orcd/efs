@@ -1346,19 +1346,39 @@ static int expiry_lookup(const char *host,uint16_t port,const char *path,struct 
     struct efs_msg_inode_lookup_path req={0};
     if(strlen(path)>=sizeof(req.path))return EFS_ERR_OVERFLOW;
     memcpy(req.path,path,strlen(path)+1);
-    int fd=efs_connect_tcp(host,port);if(fd<0)return EFS_ERR_IO;
-    efs_set_recv_timeout(fd,EFS_IO_TIMEOUT_MS);efs_set_send_timeout(fd,EFS_IO_TIMEOUT_MS);
-    uint8_t type;void *payload=NULL;uint32_t len=0;
-    int rc=send_recv(fd,EFS_MSG_INODE_LOOKUP_PATH,&req,sizeof(req),&type,&payload,&len);
-    close(fd);
-    if(rc || type!=EFS_MSG_INODE_LOOKUP_PATH_REPLY || len!=sizeof(struct efs_msg_inode_lookup_path_reply)) {
-        free(payload);return EFS_ERR_IO;
+    char target[64];snprintf(target,sizeof(target),"%s",host);uint16_t target_port=port;
+    int rc=EFS_ERR_NOT_PRIMARY;
+    /* A node that is not the namespace leader answers NOT_PRIMARY with the
+     * leader as primary_id (host_namespace_leader_hint); follow it within
+     * the same budget as sess_rpc. Not following it failed `expiry show`
+     * whenever the seed was not leader (posix_expiry, after mkfs). A read
+     * is idempotent; transport failures stay terminal. */
+    for(unsigned attempt=0;attempt<8;attempt++) {
+        int fd=efs_connect_tcp(target,target_port);if(fd<0)return EFS_ERR_IO;
+        efs_set_recv_timeout(fd,EFS_IO_TIMEOUT_MS);efs_set_send_timeout(fd,EFS_IO_TIMEOUT_MS);
+        uint8_t type;void *payload=NULL;uint32_t len=0;
+        rc=send_recv(fd,EFS_MSG_INODE_LOOKUP_PATH,&req,sizeof(req),&type,&payload,&len);
+        close(fd);
+        if(rc || type!=EFS_MSG_INODE_LOOKUP_PATH_REPLY || len!=sizeof(struct efs_msg_inode_lookup_path_reply)) {
+            free(payload);return EFS_ERR_IO;
+        }
+        struct efs_msg_inode_lookup_path_reply *r=payload;
+        rc=r->status==EFS_INODE_RPC_OK?EFS_OK:r->status==EFS_INODE_RPC_NOT_FOUND?EFS_ERR_NOT_FOUND:
+           r->status==EFS_INODE_RPC_NOT_PRIMARY?EFS_ERR_NOT_PRIMARY:EFS_ERR_BUSY;
+        if(!rc)*inode=r->inode;
+        int leader=r->primary_id?(int)r->primary_id-1:-1;
+        free(payload);
+        if(rc!=EFS_ERR_NOT_PRIMARY)return rc;
+        if(leader<0) {
+            /* No leader known yet (election): retry the seed. */
+            snprintf(target,sizeof(target),"%s",host);target_port=port;
+            usleep(50000);
+            continue;
+        }
+        rc=sess_leader_address(host,port,leader,target,&target_port);
+        if(rc!=EFS_OK)return rc;
     }
-    struct efs_msg_inode_lookup_path_reply *r=payload;
-    rc=r->status==EFS_INODE_RPC_OK?EFS_OK:r->status==EFS_INODE_RPC_NOT_FOUND?EFS_ERR_NOT_FOUND:
-       r->status==EFS_INODE_RPC_NOT_PRIMARY?EFS_ERR_NOT_PRIMARY:EFS_ERR_BUSY;
-    if(!rc)*inode=r->inode;
-    free(payload);return rc;
+    return EFS_ERR_NOT_PRIMARY; /* budget spent while still redirected */
 }
 
 static int cmd_expiry_show(int argc,char **argv)
