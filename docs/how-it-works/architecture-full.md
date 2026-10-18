@@ -589,9 +589,13 @@ small, is stored as k+f full fragments: 69,632-byte files on orcd-mini, a
 64 KiB payload plus header and digest. A sub-KiB file therefore costs about
 800× its size in raw disk, and one fragment per node to reclaim on delete.
 Small-file packing will replace this as the only small-file storage:
-- inline in the inode row up to a small threshold;
-- packed erasure-coded segments up to about 64 KiB;
+- files up to about 64 KiB packed into shared segments, each one stripe of
+  standard fragments;
 - per-file fragments above that.
+
+File data is never stored in metadata rows. Segments track live bytes, and
+survivors of mostly-deleted segments are compacted forward, so no fragment
+stays pinned while mostly dead.
 
 There will be no switch between the two; the old way is preserved as a Git
 tag. It was removed from devel in D37 and returns under
@@ -1556,8 +1560,10 @@ design review before implementation.**
 
 [W125 — small-file packing as the only small-file storage](../backlog/small-file-packing-default.md):
 **proposed; starts after W124 parts 1–2.**
-- Inline storage up to ~1–2 KiB, packed segments up to ~64 KiB, fragments
-  above.
+- Files up to ~64 KiB packed into shared fragments; no data in metadata
+  rows.
+- Lifetime grouping plus live-byte compaction keep mostly-dead fragments
+  from being pinned (overhead ≤1/t).
 - Replaces the current ~800× raw amplification for sub-KiB files (298 GiB
   per node on orcd-mini for ~1–1.5 GB of data).
 - No switch in the code: the old way is preserved as a tag before packing
@@ -7828,7 +7834,7 @@ No live configuration editor or automatic rollout is included in this item.
 <a id="w125"></a>
 ### W125 — Small-file packing as the only small-file storage
 
-**Capacity/performance; proposed 2026-10-18; starts after W124 parts 1–2.** Size classes: inline in the inode row up to ~1–2 KiB, packed erasure-coded segments up to ~64 KiB, per-file fragments above. No runtime or build switch: tag the last per-file-fragment devel commit (`archive/unpacked-small-files-<date>`), then land packing with the old small-file path removed; comparisons build the tag. Ported from `archive/packing-containers-20261016` (D37) without the container engine or `EFS_PACKED_WRITES`. Motivated by ~800× raw amplification for sub-KiB files on orcd-mini. [Canonical proposal and gates](../backlog/small-file-packing-default.md).
+**Capacity/performance; proposed 2026-10-18; starts after W124 parts 1–2.** Files up to ~64 KiB are packed into shared segments of ordinary fragments (no data in metadata rows); larger files keep per-file fragments. Fragmentation is designed out from the start: pack files that die together, count live bytes per segment, and compact survivors forward below a live-share threshold (bounded overhead ≤1/t). No runtime or build switch: tag the last per-file-fragment devel commit (`archive/unpacked-small-files-<date>`), then land packing with the old small-file path removed; comparisons build the tag. Ported from `archive/packing-containers-20261016` (D37) without the container engine or `EFS_PACKED_WRITES`. Motivated by ~800× raw amplification for sub-KiB files on orcd-mini. [Canonical proposal and gates](../backlog/small-file-packing-default.md).
 
 
 ## Appendix 6 — Naming

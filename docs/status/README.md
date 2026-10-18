@@ -32,8 +32,10 @@ design review before implementation.**
 
 [W125 — small-file packing as the only small-file storage](../backlog/small-file-packing-default.md):
 **proposed; starts after W124 parts 1–2.**
-- Inline storage up to ~1–2 KiB, packed segments up to ~64 KiB, fragments
-  above.
+- Files up to ~64 KiB packed into shared fragments; no data in metadata
+  rows.
+- Lifetime grouping plus live-byte compaction keep mostly-dead fragments
+  from being pinned (overhead ≤1/t).
 - Replaces the current ~800× raw amplification for sub-KiB files (298 GiB
   per node on orcd-mini for ~1–1.5 GB of data).
 - No switch in the code: the old way is preserved as a tag before packing

@@ -131,9 +131,15 @@ fragment per node to reclaim when it is deleted. The 298 GiB per node of live
 tiny files above would become a few GiB.
 
 The user wants packing to be the default:
-- files up to about 1–2 KiB stored inline in the inode's KV row;
-- up to about 64 KiB in packed segments;
+- files up to about 64 KiB packed into shared segments of ordinary
+  fragments, never stored in metadata rows;
 - larger files unchanged.
+
+Its fragmentation rules are designed in from the start:
+- pack files that die together;
+- count live bytes per segment;
+- compact survivors forward below a live-share threshold, so no fragment
+  stays pinned while mostly dead.
 
 It is restored from the archived implementation (D37, tag
 `archive/packing-containers-20261016`) after parts 1–2. Packing replaces
@@ -145,7 +151,7 @@ gates are in [W125](small-file-packing-default.md).
 ### 4. Fragment slot reuse (re-assess after W125)
 
 Every fragment file is the same size (69,632 bytes on orcd-mini), so a dead
-fragment is a ready-made slot. Once W125 packs or inlines small files, most
+fragment is a ready-made slot. Once W125 packs small files, most
 tiny-file fragments disappear. Then decide whether reuse is still worth it,
 mainly for large files.
 - **Pool:** after the death is durable (the point where step 1 may delete),

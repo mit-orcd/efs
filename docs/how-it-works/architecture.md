@@ -559,9 +559,13 @@ small, is stored as k+f full fragments: 69,632-byte files on orcd-mini, a
 64 KiB payload plus header and digest. A sub-KiB file therefore costs about
 800× its size in raw disk, and one fragment per node to reclaim on delete.
 Small-file packing will replace this as the only small-file storage:
-- inline in the inode row up to a small threshold;
-- packed erasure-coded segments up to about 64 KiB;
+- files up to about 64 KiB packed into shared segments, each one stripe of
+  standard fragments;
 - per-file fragments above that.
+
+File data is never stored in metadata rows. Segments track live bytes, and
+survivors of mostly-deleted segments are compacted forward, so no fragment
+stays pinned while mostly dead.
 
 There will be no switch between the two; the old way is preserved as a Git
 tag. It was removed from devel in D37 and returns under
