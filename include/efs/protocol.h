@@ -239,8 +239,6 @@ struct efs_msg_gc_inode_batch_reply {
 struct efs_gc_io_stats {
     uint64_t ops, bytes, errors, us_sum;
 };
-/* Process-local observations, reset on restart. Namespace bytes are logical
- * metadata bytes observed at deletion, never physical reclaimed bytes. */
 /* W124 node reclaim. accepted/deleted/checkpointed count inodes since start;
  * journal_* describe unretired journal state; pending_bytes were credited to
  * quota at acceptance but are still on disk. fail_closed=1: journal loss was
@@ -252,6 +250,8 @@ struct efs_reclaim_status {
     uint32_t fail_closed, recovering;
     uint64_t recovered;
 };
+/* Process-local observations, reset on restart. Namespace bytes are logical
+ * metadata bytes observed at deletion, never physical reclaimed bytes. */
 struct efs_expiry_status {
     uint32_t available, enabled, healthy, uncertain, leader_mask, sampled_mask;
     uint64_t removed_files, namespace_bytes, size_unknown_files, refused, errors, passes;

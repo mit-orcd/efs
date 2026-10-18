@@ -9095,6 +9095,7 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
     int prc, src;
     uint64_t started = now_us_();
     unsigned gi = group == 0 ? 0 : 1;
+    if (!__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) || !h->running) return;
     struct reap_scan_ctx *cp = &host_reap_ctx[gi];
     memset(cp, 0, sizeof(*cp));
     cp->skip_len = h->reap_cursor_len[gi];
