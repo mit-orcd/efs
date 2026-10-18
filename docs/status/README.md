@@ -18,22 +18,21 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
-[W124 — fast delete](../backlog/fast-delete-reclaim.md): **proposed;
-revised after design review; proceed with parts 1–2, then W125.**
-- POSIX deletes never wait for reclaim.
-- Logical quota is credited exactly once when removal is final.
-  Reclaim-pending bytes and physical availability (with atomic
-  per-filesystem reservations) are reported separately.
-- Reclaim moves from inode-at-a-time to bounded batches per owning group,
-  with a journal-first node protocol: accepted for reclaim before the
-  acknowledgement, physically reclaimed later.
-- The achievable rate is a hypothesis for the A/B (today: 48–57
-  fragments/s per node).
-- Slot reuse (needs reader retirement) and subtree delete are deferred.
-- All gates NOTRUN.
+[W124 — fast delete](../backlog/fast-delete-reclaim.md): **parts 1–2
+implemented and deployed on orcd-mini (`de0c856b4`);**
+[evidence](w124-reclaim-20261018.md).
+- Batched journal-first node reclaim replaces the per-inode reaper (removed,
+  no switch); quota is credited at member acceptance and settled exactly
+  at deletion; journal loss fails closed.
+- orcd-mini drained a 5.58 M-inode backlog per node in ~18 min (old
+  reaper: 48–57 fragments/s); usage after a cold restart equals the
+  running count on all three nodes.
+- Unit, `make test`, private GC/expiry/SIGKILL gates and all orcd-mini
+  POSIX suites PASS; see the evidence page for the mixed-workload test.
+- Slot reuse and subtree delete stay deferred.
 
 [W125 — small-file packing as the only small-file storage](../backlog/small-file-packing-default.md):
-**proposed; starts after W124 parts 1–2.**
+**proposed; W124 parts 1–2 are done, W125 can start.**
 - Files below a packing threshold (measured in P0, candidates 4–64 KiB)
   packed into shared fragments; no data in metadata rows.
 - A go/no-go (P0.0) on allocated bytes, metadata operations, close latency
