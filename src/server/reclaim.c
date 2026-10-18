@@ -56,7 +56,7 @@
 #define RJ_CAP (1u << 18)       /* unretired records per node */
 #define RJ_DELETERS 4
 #define RJ_DELETE_BATCH 64u
-#define RJ_CHECKPOINT_BATCH 8192u
+#define RJ_CHECKPOINT_BATCH RJ_CAP /* two syncfs per checkpoint: take everything pending */
 #define RJ_JOURNAL_MIN (256ull << 20) /* physical floor kept for journal/checkpoints */
 
 struct rj_rec {

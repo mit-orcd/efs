@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 static int fault;
 static int gc_fsync(int fd){if(fault==5){errno=EIO;return -1;}return fsync(fd);}
+static int gc_syncfs(int fd){if(fault==5){errno=EIO;return -1;}return syncfs(fd);}
 static int gc_open(const char *p,int f,...){int m=0;if(f&O_CREAT){va_list a;va_start(a,f);m=va_arg(a,int);va_end(a);}if(fault==1&&f==O_RDONLY){errno=EACCES;return -1;}return open(p,f,m);}
 static ssize_t gc_pread(int f,void*b,size_t n,off_t o){if(fault==2){errno=EIO;return -1;}if(fault==3)return 1;return pread(f,b,n,o);}
 static int gc_unlink(const char*p){if(fault==4){errno=EACCES;return -1;}return unlink(p);}
@@ -15,12 +16,14 @@ static int gc_unlink(const char*p){if(fault==4){errno=EACCES;return -1;}return u
 #define pread gc_pread
 #define unlink gc_unlink
 #define fsync gc_fsync
+#define syncfs gc_syncfs
 #include "../src/server/store.c"
 #include "../src/server/reclaim.c"
 #undef open
 #undef pread
 #undef unlink
 #undef fsync
+#undef syncfs
 /* No Raft host exists in this physical-store fixture. */
 void server_raft_host_expiry_status(struct efs_expiry_status *out){memset(out,0,sizeof(*out));}
 int server_raft_host_active(void){return 0;}

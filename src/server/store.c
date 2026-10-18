@@ -962,47 +962,19 @@ static int death_ref_cmp(const void *a, const void *b)
     if (x->page != y->page) return x->page < y->page ? -1 : 1;
     return (x->ino > y->ino) - (x->ino < y->ino);
 }
-/* Unchanged pages still repeat every parent sync: a previous rename may
- * have succeeded while its directory sync failed. */
-static int death_page_write(struct efsd_server *s, const char *path,
-                            const uint8_t page[DEATH_PAGE_BYTES], int changed)
+/* All changed pages are written as temp files, made durable with one syncfs,
+ * renamed into place, and the renames made durable with a second syncfs:
+ * two filesystem syncs per checkpoint however many pages it touches (orcd-mini
+ * spreads inodes over ~4096 shard pages). Only the reclaim checkpoint thread
+ * writes pages; death_page_mu still serialises each page's read-modify-write. */
+struct death_pending { char *tmp, *path; };
+static int death_sync_meta(struct efsd_server *s)
 {
-    char tmp[8192];
-    uint8_t bytes[DEATH_PAGE_BYTES + EFS_HASH_SIZE];
-    int rc = EFS_OK;
-    if (!changed) goto sync_parents;
-    memcpy(bytes, page, DEATH_PAGE_BYTES);
-    efs_hash(page, DEATH_PAGE_BYTES, bytes + DEATH_PAGE_BYTES);
-    make_dir_for_file(path);
-    if (snprintf(tmp, sizeof(tmp), "%s.tmp.XXXXXX", path) >= (int)sizeof(tmp))
-        return EFS_ERR_IO;
-    int fd = mkstemp(tmp);
-    if (fd < 0)
-        return EFS_ERR_IO;
-    if (fcntl(fd, F_SETFD, FD_CLOEXEC) < 0) rc = EFS_ERR_IO;
-    size_t off = 0;
-    while (rc == EFS_OK && off < sizeof(bytes)) {
-        ssize_t n = write(fd, bytes + off, sizeof(bytes) - off);
-        if (n < 0 && errno == EINTR) continue;
-        if (n <= 0) { rc = EFS_ERR_IO; break; }
-        off += (size_t)n;
-    }
-    int sr;
-    do { sr = fsync(fd); } while (sr < 0 && errno == EINTR);
-    if (close(fd) || sr < 0) rc = EFS_ERR_IO;
-    if (rc == EFS_OK && rename(tmp, path)) rc = EFS_ERR_IO;
-    if (rc != EFS_OK) { unlink(tmp); return rc; }
-sync_parents:
-    rc = fragment_parent_sync(s, path);
-    if (rc == EFS_OK) {
-        char parent[8192];
-        snprintf(parent, sizeof(parent), "%s", path);
-        *strrchr(parent, '/') = '\0';
-        rc = fragment_parent_sync(s, parent);
-        *strrchr(parent, '/') = '\0';
-        if (rc == EFS_OK) rc = fragment_parent_sync(s, parent);
-    }
-    return rc;
+    int fd = open(s->storage_paths[0], O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (fd < 0) return EFS_ERR_IO;
+    int rc = syncfs(fd);
+    close(fd);
+    return rc ? EFS_ERR_IO : EFS_OK;
 }
 int server_gc_death_set_many(struct efsd_server *s, efs_export_id_t eid,
                              const efs_ino_t *inos, uint32_t n)
@@ -1011,7 +983,8 @@ int server_gc_death_set_many(struct efsd_server *s, efs_export_id_t eid,
     if (!n) return EFS_OK;
     pthread_once(&frag_locks_once, frag_locks_init);
     struct death_ref *refs = malloc((size_t)n * sizeof(*refs));
-    if (!refs) return EFS_ERR_NOMEM;
+    struct death_pending *pend = calloc(n, sizeof(*pend));
+    if (!refs || !pend) { free(refs); free(pend); return EFS_ERR_NOMEM; }
     for (uint32_t i = 0; i < n; i++) {
         refs[i].shard = (uint32_t)(inos[i] & EFS_KV_SHARD_MASK);
         refs[i].page = (inos[i] >> EFS_KV_SHARD_BITS) / DEATH_PAGE_BITS;
@@ -1019,6 +992,7 @@ int server_gc_death_set_many(struct efsd_server *s, efs_export_id_t eid,
     }
     qsort(refs, n, sizeof(*refs), death_ref_cmp);
     int rc = EFS_OK;
+    uint32_t np = 0;
     for (uint32_t i = 0; rc == EFS_OK && i < n;) {
         uint32_t j = i;
         while (j < n && refs[j].shard == refs[i].shard && refs[j].page == refs[i].page) j++;
@@ -1036,12 +1010,44 @@ int server_gc_death_set_many(struct efsd_server *s, efs_export_id_t eid,
                 changed = 1;
             }
         }
-        if (rc == EFS_OK)
-            rc = death_page_write(s, path, page, changed);
-        __atomic_fetch_add(&inode_gc_epoch, 1, __ATOMIC_RELEASE);
+        if (rc == EFS_OK && changed) {
+            char tmp[8192];
+            uint8_t bytes[DEATH_PAGE_BYTES + EFS_HASH_SIZE];
+            memcpy(bytes, page, DEATH_PAGE_BYTES);
+            efs_hash(page, DEATH_PAGE_BYTES, bytes + DEATH_PAGE_BYTES);
+            make_dir_for_file(path);
+            int fd = snprintf(tmp, sizeof(tmp), "%s.tmp.XXXXXX", path) < (int)sizeof(tmp) ? mkstemp(tmp) : -1;
+            if (fd < 0) rc = EFS_ERR_IO;
+            else {
+                size_t off = 0;
+                while (rc == EFS_OK && off < sizeof(bytes)) {
+                    ssize_t w = write(fd, bytes + off, sizeof(bytes) - off);
+                    if (w < 0 && errno == EINTR) continue;
+                    if (w <= 0) rc = EFS_ERR_IO; else off += (size_t)w;
+                }
+                if (close(fd)) rc = EFS_ERR_IO;
+                pend[np].tmp = strdup(tmp);
+                pend[np].path = strdup(path);
+                if (!pend[np].tmp || !pend[np].path) rc = EFS_ERR_NOMEM;
+                np++;
+                if (rc != EFS_OK) unlink(tmp);
+            }
+        }
         pthread_mutex_unlock(mu);
         i = j;
     }
+    /* Page bodies durable, then every rename, then the renames durable. An
+     * unchanged page needs no rename: the final sync still covers a rename a
+     * failed earlier checkpoint left undurable. */
+    if (rc == EFS_OK) rc = death_sync_meta(s);
+    for (uint32_t k = 0; k < np; k++) {
+        if (rc == EFS_OK && rename(pend[k].tmp, pend[k].path)) rc = EFS_ERR_IO;
+        if (rc != EFS_OK && pend[k].tmp) unlink(pend[k].tmp);
+    }
+    if (rc == EFS_OK) rc = death_sync_meta(s);
+    __atomic_fetch_add(&inode_gc_epoch, 1, __ATOMIC_RELEASE);
+    for (uint32_t k = 0; k < np; k++) { free(pend[k].tmp); free(pend[k].path); }
+    free(pend);
     free(refs);
     return rc;
 }
