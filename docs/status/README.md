@@ -18,6 +18,18 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[W124 — fast delete](../backlog/fast-delete-reclaim.md): **proposed;
+design review before implementation.**
+- Space returns to quota when a delete commits; POSIX deletes never wait for
+  reclaim.
+- Reclaim moves from a serial per-inode protocol to batched, node-local
+  deletion, from ~50 to a targeted 50–100 K fragments/s per node.
+- Dead fragment files are reused as fixed-size slots for new data, with
+  scheduled deletion of the excess.
+- Inline small files (currently ~800× raw amplification) and instant subtree
+  delete follow.
+- All gates NOTRUN.
+
 [orcd-mini deletes, GC and crawl on `5d673efa8`](orcd-mini-gc-delete-profile-5d673efa8-20261018.md):
 **profiling only.**
 - GC reclaim is schedule-bound: 0.18–0.21 GiB/min per node, one pass per

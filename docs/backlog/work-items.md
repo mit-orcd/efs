@@ -5524,3 +5524,8 @@ No live configuration editor or automatic rollout is included in this item.
 ## W123 — Automatic crash recovery through per-file durable versions
 
 **New feature; proposed 2026-10-16.** Design/ordering review first; implementation and acceptance NOTRUN. Recover committed state without node format/rebuild while retaining immediate visibility, grouped barriers and fsync guarantees. Related W71 stays open. [Canonical feature plan and gates](crash-safe-durable-versions.md).
+
+<a id="w124"></a>
+## W124 — Fast delete: immediate space, batched reclaim and fragment slot reuse
+
+**Performance/capacity; proposed 2026-10-18.** Design review first; implementation, private A/B and orcd-mini acceptance NOTRUN. POSIX delete stays metadata-only. Space returns to quota when the delete commits, guarded by physical free space. Reclaim is batched (one Raft entry and one node fsync per batch, node-local threaded deletion) instead of 2–3 proposals and ~8 fsyncs per inode. Dead fragment files can be reused as fixed-size slots for new writes. Inline small files and instant subtree delete follow separately. Motivated by 0.18–0.21 GiB/min reclaim and a 398 GiB-per-node backlog on orcd-mini. [Canonical proposal and gates](fast-delete-reclaim.md).
