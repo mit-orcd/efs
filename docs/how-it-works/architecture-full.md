@@ -589,9 +589,9 @@ small, is stored as k+f full fragments: 69,632-byte files on orcd-mini, a
 64 KiB payload plus header and digest. A sub-KiB file therefore costs about
 800× its size in raw disk, and one fragment per node to reclaim on delete.
 Small-file packing will replace this as the only small-file storage:
-- files below a threshold well below the 128 KiB maximum segment (likely
-  4–16 KiB) packed into shared segments, each one stripe of standard
-  fragments;
+- files below a packing threshold, measured before implementation (candidates
+  4–64 KiB; a segment holds at most 128 KiB of body), packed into shared
+  segments, each one stripe of standard fragments;
 - per-file fragments above that.
 
 File data is never stored in metadata rows. Segments track live bytes, and
@@ -1563,8 +1563,10 @@ revised after design review; proceed with parts 1–2, then W125.**
 
 [W125 — small-file packing as the only small-file storage](../backlog/small-file-packing-default.md):
 **proposed; starts after W124 parts 1–2.**
-- Files below a packing threshold (likely 4–16 KiB; segments are at most
-  128 KiB) packed into shared fragments; no data in metadata rows.
+- Files below a packing threshold (measured in P0, candidates 4–64 KiB)
+  packed into shared fragments; no data in metadata rows.
+- An occupancy go/no-go (P0.0) must show ordinary create/write/close
+  coalesces before the port starts.
 - [Implementation plan](../backlog/small-file-packing-plan.md): P0
   decisions, port P1–P3, compaction P4, transitions P5, old-path removal
   P6, qualification and landing P7.
@@ -7840,7 +7842,7 @@ No live configuration editor or automatic rollout is included in this item.
 <a id="w125"></a>
 ### W125 — Small-file packing as the only small-file storage
 
-**Capacity/performance; proposed 2026-10-18; starts after W124 parts 1–2.** Files below a packing threshold (well below the 128 KiB maximum segment, likely 4–16 KiB) are packed into shared segments of ordinary fragments (no data in metadata rows); larger files keep per-file fragments. Fragmentation is designed out from the start: pack files that die together, count live bytes per segment, and compact survivors forward below a live-share threshold (bounded overhead ≤1/t). No runtime or build switch: tag the last per-file-fragment devel commit (`archive/unpacked-small-files-<date>`), then land packing with the old small-file path removed; comparisons build the tag. Ported from `archive/packing-containers-20261016` (D37) without the container engine or `EFS_PACKED_WRITES`. Motivated by ~800× raw amplification for sub-KiB files on orcd-mini. [Canonical proposal and gates](../backlog/small-file-packing-default.md) · [implementation plan](../backlog/small-file-packing-plan.md).
+**Capacity/performance; proposed 2026-10-18; starts after W124 parts 1–2.** Files below a packing threshold (measured in plan phase P0, candidates 4–64 KiB) are packed into shared segments of ordinary fragments (no data in metadata rows); larger files keep per-file fragments. Fragmentation is designed out from the start: pack files that die together, count live bytes per segment, and compact survivors forward below a live-share threshold (bounded overhead ≤1/t). No runtime or build switch: tag the last per-file-fragment devel commit (`archive/unpacked-small-files-<date>`), then land packing with the old small-file path removed; comparisons build the tag. Ported from `archive/packing-containers-20261016` (D37) without the container engine or `EFS_PACKED_WRITES`. Motivated by ~800× raw amplification for sub-KiB files on orcd-mini. [Canonical proposal and gates](../backlog/small-file-packing-default.md) · [implementation plan](../backlog/small-file-packing-plan.md).
 
 
 ## Appendix 6 — Naming

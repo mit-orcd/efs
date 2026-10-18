@@ -76,7 +76,7 @@ payload.
 
 | Size | Storage |
 | --- | --- |
-| up to the packing threshold: well below the 128 KiB maximum segment size, likely 4–16 KiB, decided in [plan](small-file-packing-plan.md) phase P0 | packed: many files' payloads in shared packed segments, each segment one erasure-coded stripe of standard fragments |
+| up to the packing threshold, measured in [plan](small-file-packing-plan.md) phase P0 (candidates 4–64 KiB; a 128 KiB segment holds at most one 64 KiB record; the archived validator allows 4 KiB) | packed: many files' payloads in shared packed segments, each segment one erasure-coded stripe of standard fragments |
 | larger | today's per-file chunk fragments |
 
 A packed segment is one stripe: k data fragments plus f parity fragments,
@@ -93,9 +93,11 @@ unmanaged scheme degrades towards today's waste. Three rules, required from
 the start:
 
 1. **Pack files that die together (lifetime grouping).**
-   - An open packing segment accepts files only from the same directory,
-     the same writer session and a short creation window (milliseconds to
-     seconds, bounded by fsync).
+   - An open packing segment accepts files only from the same publication
+     group (every segment belongs to exactly one, as the archived ledger
+     requires), the same directory, the same writer session and a short
+     creation window (milliseconds to seconds, bounded by fsync).
+   - Cold compaction preserves the publication-group boundary.
    - Real tiny-file workloads fill a directory and later delete the whole
      tree (`tiny_files.py`, then `edelete`), so files packed together are
      usually deleted together. The segment then empties completely and is
@@ -117,8 +119,13 @@ the start:
      packing segment, so survivors are not mixed back with fresh data. The
      new copy is durable before any switch.
    - **Switch:** each survivor's location is switched with a Raft
-     compare-and-swap on its generation, so a concurrent overwrite or
-     delete wins and the copy is discarded.
+     compare-and-swap on its exact expected source reference: segment id
+     and generation, offset, length and digest. A generation alone is not
+     enough, because relocation keeps the content generation.
+   - In the same atomic batch, the destination ledger takes ownership and
+     the source ledger releases the record.
+   - A concurrent overwrite, delete or second compactor wins, and the copy
+     is discarded.
    - **Retire:** when the old segment's live count reaches zero, the whole
      stripe goes to W124's batched reclaim, to be deleted or reused as a
      whole-fragment slot.
@@ -178,37 +185,50 @@ segment or whole-fragment granularity, after compaction has emptied it.
 
 ## Required design decisions (each recorded before code)
 
-1. **Thresholds and limits.** Choose the packing threshold (likely 4–16 KiB:
-   a segment holds at most 128 KiB of body, so "about 64 KiB" would pack
-   only one or two files per segment), the compaction threshold *t*, the dead-bytes limit, and the
+1. **Thresholds and limits.** Choose the packing threshold from measured
+   allocation, fill, read amplification and metadata cost (candidates 4–64
+   KiB). A 128 KiB segment holds at most one 64 KiB record, and the
+   archived validator's 4 KiB limit is the actual format constraint.
+   Also choose the compaction threshold *t*, the dead-bytes limit, and the
    per-node caps on candidate backlog and retained segments. Base them on
    measured space, compaction write cost, read latency and the physical
    reserve.
-2. **Grouping key and window.** Decide the exact grouping key (directory,
-   session, window) and how fsync and close seal an open segment.
-3. **Growth across the threshold.**
+2. **Grouping key, window and close contract.**
+   - The exact key (publication group, directory, session, window).
+   - What close must publish, and whether closes coalesce across
+     concurrent writers.
+   - The archived writer makes close wait for durable publication, which
+     gives one file per segment for a sequential writer.
+   - Decided from the plan's P0.0 occupancy go/no-go measurement.
+3. **Format compatibility.**
+   - Versioned on-disk formats for the segment (including any raised
+     record limit) and the extended ledger.
+   - Builds that do not support a format refuse it, fail closed.
+   - Coordinated upgrades; downgrades across a format change are refused.
+   - The HELLO build-ID gate already covers clients and peers.
+4. **Growth across the threshold.**
    - A packed file that grows past the threshold moves to per-file
      fragments as a new immutable generation, as re-striping does; the
      same applies when shrinking below it.
    - Truncate and sparse files follow the same rule.
    - Shared segments are never mutated in place.
-4. **Segment accounting and reclaim.**
+5. **Segment accounting and reclaim.**
    - The live-byte counter's key and update path.
    - Compaction scheduling and its foreground budget.
    - Whole-segment retirement through W124's batched, node-local reclaim.
    - W124 part 2 (quota credit at delete commit) applies to packed bytes.
-5. **Durability and fsync.**
+6. **Durability and fsync.**
    - fsync of a packed file gives the same guarantee as today's per-file
      durable ACKs, including grouped barriers.
    - A compaction copy is durable before its location switch.
    - Interaction with W123 (durable versions) must be stated.
-6. **Recovery and integrity.**
+7. **Recovery and integrity.**
    - Segment checksums and each file's identity within its segment, so a
      packed read verifies exactly its bytes (I25).
    - Orphan-segment safety (I15), covering a compaction copy that never
      switched.
    - Generation coherence (I13).
-7. **Which archived parts to keep.**
+8. **Which archived parts to keep.**
    - Port the packing code only, and re-check it against the rules above.
      The container storage engine stays out unless separately decided.
    - Reconcile with everything that changed after 2026-10-16: the `h->mu`
@@ -223,11 +243,13 @@ segment or whole-fragment granularity, after compaction has emptied it.
 3. Port packing from `packing-containers` onto a work branch from devel,
    without the switch. Add lifetime grouping, live-byte accounting and
    compaction, and restore its tests.
-4. Qualify the branch on a private node9901 cluster, comparing its build
-   against a build of the devel commit it branched from (the commit step 5
-   tags). Then qualify it on orcd-mini with the user's go-ahead.
+4. Rebase the branch onto the then-current devel. Qualify it on a private
+   node9901 cluster against a build of exactly that devel commit, so
+   concurrent fixes are on both sides. Then qualify it on orcd-mini with
+   the user's go-ahead.
 5. Once the gates pass:
-   - tag the current devel as `archive/unpacked-small-files-<date>`;
+   - tag that same pre-merge devel commit, the final A/B baseline, as
+     `archive/unpacked-small-files-<date>`;
    - land packing on devel with the old small-file path removed, so there
      is no switch.
 6. Re-assess W124 part 4 (fragment slot reuse). With small files packed,
@@ -274,8 +296,15 @@ All gates are NOTRUN.
    All must PASS.
 6. **Landing:**
    - the tag exists;
-   - devel contains no unpacked small-file path and no packing switch
-     (checked by a source test);
+   - behavioural tests through persisted mappings and a physical fragment
+     inventory:
+     - fresh sub-threshold files are packed, with no per-file fragments;
+     - large files keep chunks;
+     - threshold transitions work;
+     - legacy per-file small files stay readable and are rewritten packed
+       when modified;
+     - empty files create no segment;
+     - no packing switch exists;
    - a recorded evidence page;
    - D37's register entry updated.
 

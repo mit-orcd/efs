@@ -37,12 +37,12 @@ disposition:
 | Lifetime ledger | `include/efs/pack_ledger.h`, `src/common/pack_ledger.c` (144) | Per-segment KV object: per-record state (PENDING, LIVE, RELEASED, CANCELLED), phases ACTIVE, RECLAIMING, RETIRED, member fence and delete ACKs | **Keep and extend:** live-byte and live-count fields and a compaction phase (P4). Today a segment retires only when every record is released, which is the pinned-hole problem. |
 | Mapping planner | `include/efs/pack_mapping.h`, `src/meta/pack_mapping.c` (229) | Applies chunk-map changes to packed references together with ledger updates in one KV batch, under mapping CAS | **Keep.** It is the basis for compaction's location switch. |
 | Upload admission | `include/efs/pack_admission.h`, `src/meta/pack_admission.c` (270) | Upload manifests, session authority, upload floors, cancellation, ACKs | **Keep.** Re-check against the current session and fence code. |
-| Client coalescing | `include/efs/pack_cohort.h`, `src/common/pack_cohort.c` (56) | Fixed-capacity cohort (128 records), deadline, seal, immutable retry | **Keep and change:** group by lifetime key, not only publication group (P3). |
+| Client coalescing | `include/efs/pack_cohort.h`, `src/common/pack_cohort.c` (56) | Fixed-capacity cohort (128 records), deadline, seal, immutable retry | **Keep and change:** keep its one-publication-group ownership, and add the lifetime key inside it (P3). |
 | Client writer | `src/client/pack_write.c` (666) | Mounted packed write path behind `EFS_PACKED_WRITES` | **Port without the switch.** It becomes the only path for files under the threshold. |
 | Packed reads | `src/common/packed_reader.c` (56), `src/client/read.c` changes | Fetch a segment fragment, decode, verify the reference digest | **Keep.** |
 | Storage node | `src/server/packed_upload.c` (110), `packed_fence.h` (160), `packed_gc.h` (115), `pack_authority.h` (102), `store.c` and `handler.c` parts | PUT, GET and GC of packed objects, authority checks, per-object fences | **Keep and change:** packed GC uses W124's batched, journal-first node protocol, not its own per-object `GC_PACKED` round trips (P2). |
 | Metadata apply | `src/meta/meta_apply.c` (234 lines removed), Raft tags 45–51 | Packed publication, PACK profile, packed chunk extension, packed retirement | **Keep.** Restore the reserved numbers' names. |
-| Wire | `include/efs/protocol.h`: messages 131–144, chunk flag `EFS_CHUNK_REC_F_PACKED_BASE` (8) | PUT, GET, GETCHUNKS, GC, capabilities and authority messages | **Keep.** Numbers are still reserved on devel ("131-150 are reserved"). Drop the capabilities negotiation, which only served the switch. |
+| Wire | `include/efs/protocol.h`: messages 131–144, chunk flag `EFS_CHUNK_REC_F_PACKED_BASE` (8) | PUT, GET, GETCHUNKS, GC, capabilities and authority messages | **Keep.** Numbers are still reserved on devel ("131-150 are reserved"). Wire capability negotiation is redundant, because the HELLO build-ID gate (`src/server/handler.c`) already refuses any client or peer of a different build. On-disk format versions still need explicit checks (gap 8). |
 | Tests | 46 packing/container tests, 2 stress tests | Unit, mounted and stress | **Restore** the packing ones (list in P1–P3). Drop the container-only ones and those testing the opt-in switch. |
 
 Devel keeps fail-closed checks for stores these features wrote: the KVLSM2
@@ -54,24 +54,60 @@ misread.
 
 ## Gaps between the archive and W125
 
-1. **Packing threshold.** W125 says "about 64 KiB", but a segment is at
-   most 128 KiB of body, so a 64 KiB threshold would pack only one or two
-   files per segment. The threshold must sit well below the segment size;
-   the archive used 4 KiB. **P0.1 decides it (likely 4–16 KiB) and
-   corrects W125.** Larger files keep per-file chunks.
+1. **Packing threshold.** It is a hypothesis to measure, not a format
+   necessity.
+   - A 128 KiB segment cannot hold two 64 KiB records once headers, the
+     record table and digests are included, so 64 KiB packs at most one
+     file per segment.
+   - The real format constraint is the archived validator's 4 KiB record
+     limit (`EFS_PACK_MAX_PAYLOAD`, checked in `packed_segment.c`). Raising
+     it is a format and compatibility decision (gap 8).
+   - **P0.1 measures 4, 8, 16, 32 and 64 KiB candidates** and decides.
+     Larger files keep per-file chunks.
 2. **Fragmentation.** The archive has no live-byte accounting and no
    compaction (W125 rules 2 and 3). This is the largest new component (P4).
-3. **Lifetime grouping.** The archive's cohort groups by publication
-   group. W125 rule 1 needs a key of directory, writer session and creation
-   window (P3).
+3. **Lifetime grouping.**
+   - The archive keeps one cohort per metadata (publication) group, and
+     every segment belongs to exactly one publication group: its ledger
+     and references assume it.
+   - The grouping key must therefore be (publication group, directory,
+     writer session, creation window), with the lifetime key added
+     *inside* the group boundary.
+   - Cold compaction must preserve the boundary too, unless cross-group
+     ledger updates get a separate protocol (out of scope).
 4. **Reclaim path.** Archived packed GC drives per-object, per-member RPCs.
    W125 requires W124's batched journal-first protocol (P2).
 5. **Accounting.** Packed bytes must use W124 part 2's logical quota,
    reclaim-pending and physical reservation, at record granularity for the
    logical quota and segment granularity for physical space (P2, P4).
-6. **No switch.** The opt-in, the capability negotiation and every
-   unpacked small-file path go away (P3, P6).
-7. **Drift since 2026-10-16.** The port must reconcile with devel changes
+6. **No switch.** The opt-in and every unpacked small-file *write* path go
+   away (P3, P6). Legacy reads stay: existing stores hold per-file small
+   fragments.
+7. **Close-time coalescing.** The archived writer makes close and fsync
+   wait for durable publication (`pack_write.c`: "Close/fsync require
+   consumed durable publication"), with a 10 ms cohort deadline.
+   - A single writer doing create, write and close in sequence therefore
+     publishes one file per segment, because the next file cannot join a
+     cohort its predecessor's close is waiting on.
+   - The target workload looks exactly like that (`tiny_files.py` workers
+     write and close one file at a time).
+   - P0 must define what close has to publish, and whether closes can be
+     coalesced across concurrent writers and directories within a bounded
+     window. This is the largest practical risk (see P0.0).
+8. **Format compatibility.**
+   - Removing the switch does not remove version checks. The build-ID gate
+     covers clients and peers, but not stores: an older or newer build may
+     meet a store written with the restored or extended format.
+   - Every on-disk format the port touches carries a version and is
+     refused, fail closed, by a build that does not support it. That
+     covers the segment record-size limit, the ledger extension
+     (live-byte counters, compaction phase, cold marker) and the reserved
+     KV kinds.
+   - Raising the record-size limit and extending the ledger get an explicit
+     audit. Upgrades are coordinated, with all daemons and clients on one
+     build (the gate enforces that), and downgrades across a format change
+     are refused.
+9. **Drift since 2026-10-16.** The port must reconcile with devel changes
    made after the archive:
    - `h->mu` steps 1–3 (apply-ring seqlock, routing view, write-path
      profiler);
@@ -86,12 +122,43 @@ misread.
 
 ### P0 — Decisions and measurements (no product code)
 
-1. **Threshold:** measure segment fill, read latency and space for 256 B,
-   1 KiB, 4 KiB, 8 KiB and 16 KiB records. Choose the packing threshold
-   and the per-segment record cap, and correct W125.
-2. **Grouping key and window:** the exact key (directory inode, session,
-   window), and what seals a segment early (fsync, close, deadline,
-   capacity, memory pressure).
+0. **Occupancy go/no-go (before any port work).** Prove that the ordinary
+   create, write and close workload coalesces well before investing in
+   P1–P7.
+   - **Capture:** record per-file create/close times, sizes, directories
+     and writer sessions under the actual `tiny_files.py` recipe. Cover:
+     - 16 workers;
+     - a single writer;
+     - a writer that fsyncs frequently;
+     - the user's mixed workload.
+
+     Use a trace option in a throwaway build or an equivalent capture, not
+     a change to devel.
+   - **Simulate:** segment occupancy for candidate close semantics (close
+     waits for publication, versus close publishes into a bounded window
+     shared across writers), windows, grouping keys and thresholds.
+   - **Gate:** a target median occupancy, and the added close latency, at
+     which packing pays for its extra Raft and compaction traffic. If the
+     single-writer case cannot reach it within an acceptable close latency,
+     revisit the close contract before porting.
+
+1. **Threshold:** for record sizes of 256 B, 1, 4, 8, 16, 32 and 64 KiB,
+   measure:
+   - physical allocation per logical byte;
+   - segment fill;
+   - read amplification (bytes fetched per byte read);
+   - metadata cost per file.
+
+   Choose the packing threshold and the per-segment record cap. That
+   includes whether to raise the archived 4 KiB validator limit (gap 8).
+   Correct W125.
+2. **Grouping key, window and close contract:**
+   - the exact key (publication group, directory, session, window);
+   - what close must publish for visibility and the fsync contract;
+   - whether closes coalesce across concurrent writers;
+   - what seals a segment (deadline, capacity, fsync, memory pressure).
+
+   Use P0.0's results.
 3. **Compaction parameters:** the threshold *t*, the dead-bytes limit, the
    candidate-backlog and retained-segment caps per node, and the
    backpressure delay.
@@ -140,9 +207,10 @@ written by a test driver.
 - **Port the writer:** `pack_write.c` and `packed_reader`, without
   `EFS_PACKED_WRITES` and capability negotiation. Every file under the
   threshold at publication time is packed.
-- **Lifetime grouping in the cohort:** one open cohort per (directory,
-  session), sealed by window deadline, capacity, fsync or close, or
-  memory pressure.
+- **Lifetime grouping in the cohort:** one open cohort per (publication
+  group, directory, session), with close semantics as decided in P0.2.
+  Sealing is by window deadline, capacity, fsync or memory pressure, not
+  by every close unless P0 shows that is acceptable.
 - **fsync:** fsync of a packed file seals and makes durable its cohort,
   with the same contract as today's per-file durable ACKs, including
   grouped barriers.
@@ -167,9 +235,15 @@ packing only. POSIX core PASS on a private cluster.
   - read the survivors and pack them into cold segments (never mixed with
     fresh data);
   - make the copies durable;
-  - switch each survivor's reference with the mapping planner's CAS on
-    its generation (a concurrent overwrite or delete wins, and the copy is
-    cancelled through admission).
+  - switch each survivor's reference with the mapping planner's CAS on the
+    **exact expected source reference** (source segment id and generation,
+    offset, length, digest). A generation alone is not enough, because
+    relocation preserves the content generation.
+  - In the same atomic batch, the destination segment's ledger takes
+    ownership of the record and the source's ledger releases it.
+  - A concurrent overwrite, delete or second compactor that already moved
+    the record makes the CAS fail. The copy is then cancelled through
+    admission.
 - **Retire:** the old segment's live count reaches zero, readers and
   leases that could reach it drain, and it goes to P2's batched reclaim.
 - **Merging:** several underfilled sealed segments are compacted together
@@ -183,6 +257,8 @@ packing only. POSIX core PASS on a private cluster.
   - crash injection before the copy is durable, after it, before the
     switch, after it, and before retirement;
   - concurrent overwrite or delete against compaction;
+  - two compactors racing on the same record: exactly one switch wins,
+    and the loser's copy is cancelled and reclaimed;
   - the fragmentation gate (random 15-of-16 deletes, whole-tree deletes,
     overload) on a private cluster.
 
@@ -205,20 +281,30 @@ readers.
 
 ### P6 — Remove the old small-file path
 
-- **Remove:** every code path that stores a sub-threshold file as
-  per-file fragments, and any remaining packing opt-in or capability
-  code.
-- **Guard test:** a source test asserts there is no such path and no
-  switch (W125 landing gate).
+- **Remove:** every code path that *writes* a sub-threshold file as
+  per-file fragments, and any remaining packing opt-in. Legacy reads of
+  existing per-file small fragments stay, as do large-file writes.
+- **Behavioural landing tests**, checked through persisted mappings and a
+  physical fragment inventory on a private cluster (a source scan is at
+  most a supplementary hint):
+  - fresh sub-threshold files are packed, and no per-file fragment is
+    created;
+  - files above the threshold get per-file chunks;
+  - threshold transitions in both directions;
+  - legacy per-file small files are still readable, and a modification
+    rewrites them packed;
+  - empty files create no segment.
 - **Docs:** update `architecture.md` (the small-file paragraph and
   placement table) and `protocols/data.md` to the packed design.
 
-**Exit:** `make test` PASS, with the source test included.
+**Exit:** `make test` PASS, plus the behavioural landing tests.
 
 ### P7 — Qualification and landing
 
-1. **Private node9901 A/B:** the branch build against a build of its base
-   commit. Run W125's space, fragmentation, performance (the user's
+1. **Private node9901 A/B:** first rebase the branch onto the then-current
+   devel, so concurrent fixes are on both sides. Then compare the branch
+   build against a build of exactly that devel commit, which step 3 tags.
+   An older base would conflate packing with unrelated changes. Run W125's space, fragmentation, performance (the user's
    tiny-file recipe), reclaim and correctness gates, including crash
    injection at every handoff. Evidence page per AGENTS.md.
 2. **orcd-mini,** with the user's go-ahead. Existing stores hold today's
@@ -228,11 +314,16 @@ readers.
    Then the POSIX, two-client, durability, GC and expiry suites, and the
    user's workloads.
 3. **Landing:**
-   - tag the base devel commit `archive/unpacked-small-files-<date>`;
+   - tag the actual pre-merge devel commit, the same one the final A/B
+     used as its baseline, as `archive/unpacked-small-files-<date>`;
    - merge the branch;
    - update D37's register entry, the W125 status and the status index.
 
 ## Risks
+
+- **Low segment occupancy (largest practical risk):** if ordinary
+  create/write/close does not coalesce, packing adds Raft publication and
+  compaction traffic without the space win. P0.0 is the go/no-go gate.
 
 - **Port size:** about 4,000 lines of archived packing code plus the new
   compaction, crossing client, server, metadata and the wire. Phases P1–P3
@@ -245,6 +336,22 @@ readers.
   Without migration, those keep their cost until they are deleted.
 - **Memory:** client cohorts hold up to 128 KiB of payload each. The
   budget and the seal-on-pressure rules matter for many open directories.
+
+## Review (2026-10-18)
+
+Review of `2e9a6d186` against the archived segment format and writer.
+Claims were checked in the archive (`pack_write.c`, `packed_segment.c`) and
+in devel (`handler.c`).
+
+| Finding | Disposition |
+| --- | --- |
+| Keep publication-group ownership in the grouping key; cold compaction keeps it. | **Accepted.** Confirmed: one cohort per metadata group, and every segment belongs to one publication group. The key is now (publication group, directory, session, window). |
+| The threshold correction is a hypothesis; the 4 KiB validator limit is the real format constraint. | **Accepted.** P0.1 measures 4–64 KiB for allocation, fill, read amplification and metadata cost. Raising the limit is a format decision (gap 8). |
+| Close-triggered sealing may defeat the target workload. | **Accepted, and made the go/no-go.** Confirmed that the archived close waits for durable publication (10 ms deadline), which gives one file per segment for a sequential writer. P0.0 measures occupancy under the real `tiny_files.py` recipe (16 workers, one writer, frequent fsync) before the port. |
+| Removing the switch does not remove compatibility checks. | **Partly accepted.** Wire capability negotiation stays dropped: the HELLO build-ID gate already refuses mismatched clients and peers. On-disk formats get explicit versions and fail-closed refusal, with coordinated upgrades and refused downgrades (gap 8). |
+| The compaction CAS must identify the exact old mapping; test racing compactors. | **Accepted.** The CAS is on the exact source reference, with destination ownership and source release in one batch. A two-compactor race test is added. |
+| Replace the source-only landing guard with behavioural coverage. | **Accepted.** P6 checks persisted mappings and the physical inventory for fresh files, large files, transitions, legacy reads and modification, and empty files. Legacy reads stay. |
+| Tag the actual pre-merge devel and compare against it after integration. | **Accepted.** Rebase before the final A/B; that same commit is the baseline and the tag. |
 
 ## Open questions
 

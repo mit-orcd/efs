@@ -34,8 +34,10 @@ revised after design review; proceed with parts 1–2, then W125.**
 
 [W125 — small-file packing as the only small-file storage](../backlog/small-file-packing-default.md):
 **proposed; starts after W124 parts 1–2.**
-- Files below a packing threshold (likely 4–16 KiB; segments are at most
-  128 KiB) packed into shared fragments; no data in metadata rows.
+- Files below a packing threshold (measured in P0, candidates 4–64 KiB)
+  packed into shared fragments; no data in metadata rows.
+- An occupancy go/no-go (P0.0) must show ordinary create/write/close
+  coalesces before the port starts.
 - [Implementation plan](../backlog/small-file-packing-plan.md): P0
   decisions, port P1–P3, compaction P4, transitions P5, old-path removal
   P6, qualification and landing P7.
