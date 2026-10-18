@@ -197,10 +197,38 @@ node9900 in the background; its completion marker is
 - The private A/B, gate and reproduction clusters under node9901 `/tmp`
   were removed. No other clusters run on node9900 or node9901.
 
+## `efs-mgmt` update to `a8bb97750` (2026-10-18 15:26Z)
+
+At the user's request, only `efs-mgmt` was replaced; daemons and both
+mounts stayed up on `5d673efa8fca`.
+- **Build:** `make efs-mgmt` from a clean `git archive` of `a8bb97750`,
+  giving `v0.3.2-pre-alpha-624-ga8bb97750`. `efs-mgmt` sends no HELLO, so
+  its build ID is not checked by the cluster.
+- **Install:** `efs-mgmt` inside each `5d673efa8fca` release directory.
+  The previous binary is kept as `efs-mgmt.5d673efa8fca`, and
+  `EFS-MGMT-OVERRIDE.txt` records the swap.
+
+| Node | New sha256 | Previous sha256 |
+| --- | --- | --- |
+| node9901 `/data1/efs/releases/5d673efa8fca/efs-mgmt` | `1016221a96ab7b3e…` | `8f83d5a9d906d511…` |
+| node9900 `/data1/efs/orcd-mini-client/releases/5d673efa8fca/efs-mgmt` | `296ce7037aef5293…` | `aa220c462fcf61be…` |
+
+**Live check:** `expiry show /` (read-only), with n3 leading both groups:
+- The previous binary fails through n1 and n2 at `step: lookup, status
+  -15` (NOT_PRIMARY, the bug).
+- The new one passes the lookup through all three nodes.
+- Both then stop at `step: file id, status -16` (EFS_ERR_ACCES), as does
+  any query to the leader. orcd-mini runs `EFS_EXPIRY=0`, so the server
+  refuses expiry reads by design. A full `expiry show` therefore cannot
+  succeed on orcd-mini until expiry is enabled.
+
+To roll back: `mv efs-mgmt.5d673efa8fca efs-mgmt` in each release
+directory.
+
 ## Remaining
 
 - `expiry_lifecycle.py:66` intermittent `expiry show` failure: fixed on
-  devel in `a8bb97750`, not deployed. `expiry_lookup` did not follow the
+  devel in `a8bb97750`; `efs-mgmt` deployed, see below. `expiry_lookup` did not follow the
   namespace leader's NOT_PRIMARY hint, so it failed whenever the seed node
   followed the root's group.
   - Confirmed on a private 4-node cluster: through the two group-0
