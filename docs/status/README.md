@@ -31,6 +31,17 @@ implemented and deployed on orcd-mini (`de0c856b4`);**
   POSIX suites PASS; see the evidence page for the mixed-workload test.
 - Slot reuse and subtree delete stay deferred.
 
+[W125 P0: allocation and cost go/no-go](w125-p0-20261018.md): **conditional
+GO for option (a) with singleton segments and merge compaction.**
+- A packed singleton costs 8,749 B per node on XFS against 71,241 today
+  (8.1× less, measured), and about 175 B per file after merging
+  (modelled).
+- Seal windows only hurt this workload (one sequential writer per folder).
+- Condition: a singleton's publication must cost no more than today's
+  close (at 1.5× of it, throughput falls 16%).
+- Metadata is +1 Raft entry per file (today about 4.0) unless admission
+  and publication are fused.
+
 [W125 — small-file packing as the only small-file storage](../backlog/small-file-packing-default.md):
 **proposed; W124 parts 1–2 are done, W125 can start.**
 - Files below a packing threshold (measured in P0, candidates 4–64 KiB)

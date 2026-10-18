@@ -150,6 +150,12 @@ misread.
 
 ### P0 — Decisions and measurements (no product code)
 
+**Status 2026-10-18:** measurements done; decisions proposed and awaiting
+review ([evidence](../status/w125-p0-20261018.md)). The result is a
+conditional GO for option (a) with singleton segments, no seal window and
+merge compaction. The condition is that a singleton's publication costs no
+more than today's close, to be measured first on the prototype.
+
 0. **Allocation and cost go/no-go (before any port work).** Prove that
    ordinary create, write and close gets a real space win at acceptable
    cost before investing in P1–P7.
