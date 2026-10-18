@@ -1,8 +1,9 @@
 # `h->mu` contention plan and design review — 2026-10-16
 
 **Verdict: steps 1–3 implemented on branch `raft-host-mu` with a private
-A/B PASS ([steps 1–3](raft-host-mu-steps-20261017.md)); orcd-mini
-deployment and steps 5–6 NOTRUN.** Originally a plan and review record only. Follows [waiter wake-up outside `cv_mu`](orcd-mini-waiter-wake-20261016.md)
+A/B PASS ([steps 1–3](raft-host-mu-steps-20261017.md)) and deployed to
+orcd-mini as `5d673efa8fca` ([deploy](orcd-mini-deploy-5d673efa8-20261018.md));
+steps 5–6 NOTRUN.** Originally a plan and review record only. Follows [waiter wake-up outside `cv_mu`](orcd-mini-waiter-wake-20261016.md)
 (deployed as `4aff22c62`). Its leader profile under the user's workload put
 ~72% of lock waits on `h->mu`: proposals 29%, verdict reads 17% and
 leader-cover picks 14%. Source references are to `src/server/raft_host.c` at
@@ -137,6 +138,7 @@ more owners alone would not remove those waits.
 
 ## Remaining gates
 
-All steps are NOTRUN. The `9099380f3` profile is a lock-wait baseline, not
-step 1's per-phase measurement. Each step's evidence page must record its
+Steps 1–3 are done and deployed. Steps 5–6 are NOTRUN. Step 1's
+instrumentation exists (`EFS_WRITE_PROF=1`) but is off on orcd-mini;
+`start.sh` does not pass it through. Each step's evidence page must record its
 environment, build and workload per AGENTS.md.

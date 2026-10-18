@@ -1,7 +1,8 @@
 # `h->mu` plan steps 1–3: phase timing, routing snapshot, lock-free verdicts — 2026-10-17
 
-**Verdict: PASS for implementation and private A/B; orcd-mini deployment
-NOTRUN (waiting for the user's go-ahead).**
+**Verdict: PASS for implementation and private A/B. Deployed to orcd-mini
+on 2026-10-18 (`5d673efa8fca`); see the
+[deploy page](orcd-mini-deploy-5d673efa8-20261018.md).**
 - Both targeted `h->mu` waits are gone: verdict reads went from 79 µs to
   0.2 µs mean, and leader-cover picks from 113 µs to 0.1 µs. The leader's
   lock-wait share of its context switches fell from 16.7% to 12.6%.
@@ -238,13 +239,13 @@ Prerequisites:
 The script removes the stores on exit. Remove `/tmp/efs-mu-ab` and
 `/tmp/efs-mu-arm` when done.
 
-Raw output (outside Git) is on node9901:
-- `/tmp/efs-mu-ab/results.txt`, the input to the tables above.
-- The per-run daemon logs under `/tmp/efs-mu-ab/<label>/logs/`.
-- The DWARF captures under `/tmp/efs-mu-ab/<label>/perf/`.
-- The full test log `/tmp/efs-mu-full.test.log`.
+Raw output (outside Git) is on node9901 in `/data1/efs/prof/mu-live/`:
+- `ab-results.txt` (sha256 prefix `7a2ed74bf7e0a9b9`), the input to the
+  tables above;
+- `make-test-d377478c3.log`, the full test log.
 
-`/tmp` is not durable, so the summary above is the record.
+The per-run daemon logs and DWARF captures under `/tmp/efs-mu-ab` were
+deleted after the summary; they cannot be re-read.
 
 ## Limitations and remaining gates
 
@@ -257,8 +258,8 @@ Raw output (outside Git) is on node9901:
 - **Coverage gaps:** follower persistence and the RPC reply are not
   instrumented.
 - **Remaining gates:**
-  - Deployment to orcd-mini and a profile under the user's workload:
-    NOTRUN, waiting for the user's go-ahead.
+  - Deployment to orcd-mini and the user's workload: done
+    ([deploy page](orcd-mini-deploy-5d673efa8-20261018.md)).
   - Step 5: the REPORT audit (single-voter, waiter wakeups, pump
     scheduling, orderly shutdown) is NOTRUN.
   - Step 6: not started.

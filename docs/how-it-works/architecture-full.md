@@ -1583,9 +1583,20 @@ defect); the 60 s cap and exact dependencies carry the gain.
   from 2 s to 60 s.
 - GC schedule untouched.
 
+[orcd-mini deploy `5d673efa8`](../status/orcd-mini-deploy-5d673efa8-20261018.md):
+**deployed from branch `raft-host-mu`; every suite PASS, private
+`posix_expiry` 6/6 (was 4/6).**
+- `h->mu` steps 1–3, plus a fix for creates that failed fsync with EIO for
+  up to 30 s after a storage member restarted (client and server connect
+  cooldowns).
+- User's tiny-file workload: writer +10%, efsd CPU −6%, context switches
+  −17%, reader unchanged.
+- Open: the intermittent `expiry show` failure (now names its step);
+  creates still fail while a member is down (product gap §1.2).
+
 [`h->mu` plan steps 1–3](../status/raft-host-mu-steps-20261017.md): **branch
-`raft-host-mu`; private RDMA A/B PASS, `make test` PASS; orcd-mini
-deployment NOTRUN (waiting for go-ahead).**
+`raft-host-mu`; private RDMA A/B PASS, `make test` PASS; deployed in
+`5d673efa8`.**
 - Verdict reads and leader-cover picks no longer wait for `h->mu`
   (79 → 0.2 µs and 113 → 0.1 µs mean).
 - Leader lock-wait share fell 16.7% → 12.6%. Creates/s, CPU per create and
