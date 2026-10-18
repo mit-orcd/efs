@@ -554,6 +554,20 @@ node hosts many.
 | membership / desired placement | control-plane group | — | control metadata authority (§2; current Raft baseline) |
 | file data | k+f distinct failure domains by placement | `(FileID, chunk_index, candidate_generation, fragment_index, coding_profile_id)` | k+f EC fragments |
 
+**Small files: current cost and planned packing.** Today every chunk, however
+small, is stored as k+f full fragments: 69,632-byte files on orcd-mini, a
+64 KiB payload plus header and digest. A sub-KiB file therefore costs about
+800× its size in raw disk, and one fragment per node to reclaim on delete.
+Small-file packing will replace this as the only small-file storage:
+- inline in the inode row up to a small threshold;
+- packed erasure-coded segments up to about 64 KiB;
+- per-file fragments above that.
+
+There will be no switch between the two; the old way is preserved as a Git
+tag. It was removed from devel in D37 and returns under
+[W125](../backlog/small-file-packing-default.md), after
+[W124](../backlog/fast-delete-reclaim.md)'s batched reclaim.
+
 **Applied state: a logical ordered KV per shard.** Each replica applies its
 log to a **local, embedded, ordered key-value store** on NVMe. RAM is a
 bounded cache, not the store. Each shard has an isolated ordered

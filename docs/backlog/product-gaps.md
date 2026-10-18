@@ -210,3 +210,22 @@ is unambiguous that a benchmark stopping at a software serialization point
 is by definition an EFS bug; the current levers are listed in [the status page](../status/README.md)
 (read-side zero-copy receive, the per-client `report_mu`, IOR-hard's
 shared-chunk publish rate).
+
+### 4.1 Small files and deletes (measured 2026-10-18)
+
+Two capacity costs dominate a tiny-file workload:
+- **Small files take a full fragment each.** Every file, however small, is
+  at least one 69,632-byte fragment per node, so a sub-KiB file uses about
+  800× its size in raw disk. On orcd-mini, 4.6 M live tiny files (about
+  1–1.5 GB of data) occupy about 298 GiB per node.
+  - The packing implementation was removed in D37. It returns as the only
+    small-file storage under
+    [W125](small-file-packing-default.md).
+- **Deleted space comes back slowly.** Reclaim runs at 0.18–0.21 GiB/min
+  per node, a serial per-inode protocol of 32 inodes per one-second pass,
+  so a large delete keeps the quota full for hours. About 398 GiB per node
+  was waiting on 2026-10-18.
+  - [W124](fast-delete-reclaim.md) proposes quota credit at delete commit
+    and batched, node-local reclaim.
+
+Evidence: [orcd-mini deletes, GC and crawl](../status/orcd-mini-gc-delete-profile-5d673efa8-20261018.md).

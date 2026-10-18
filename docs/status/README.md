@@ -12,7 +12,7 @@ full acceptance are separate states.
 | --- | --- |
 | Ordered work and unresolved source findings | [Work queue](work-queue.md), preserving existing order and recorded verdicts |
 | Execution handoff and scope caveats | [Handoff](in-flight.md) |
-| Accepted architecture and pending decisions | [Decision register D1–D36](decisions.md), [specification/public-path review](spec-implementation.md) |
+| Accepted architecture and pending decisions | [Decision register D1–D37](decisions.md), [specification/public-path review](spec-implementation.md) |
 | Find a feature, platform or dated test report | [Complete topic catalog](catalog.md) |
 | Earlier assignments, chronology and superseded captures | [Status archive](archive/README.md), [project archive](../archive/README.md) |
 
@@ -26,9 +26,19 @@ design review before implementation.**
   deletion, from ~50 to a targeted 50–100 K fragments/s per node.
 - Dead fragment files are reused as fixed-size slots for new data, with
   scheduled deletion of the excess.
-- Inline small files (currently ~800× raw amplification) and instant subtree
-  delete follow.
+- Small-file packing (W125) follows, then slot reuse (re-assessed) and
+  instant subtree delete.
 - All gates NOTRUN.
+
+[W125 — small-file packing as the only small-file storage](../backlog/small-file-packing-default.md):
+**proposed; starts after W124 parts 1–2.**
+- Inline storage up to ~1–2 KiB, packed segments up to ~64 KiB, fragments
+  above.
+- Replaces the current ~800× raw amplification for sub-KiB files (298 GiB
+  per node on orcd-mini for ~1–1.5 GB of data).
+- No switch in the code: the old way is preserved as a tag before packing
+  lands.
+- Ported from `archive/packing-containers-20261016`. All gates NOTRUN.
 
 [orcd-mini deletes, GC and crawl on `5d673efa8`](orcd-mini-gc-delete-profile-5d673efa8-20261018.md):
 **profiling only.**
@@ -233,8 +243,10 @@ queries PASS; quiet POSIX reruns 21/21 PASS do not close loaded timeouts.
 W121 remains open with kernel remediation deferred.
 
 Experimental tiny-file packing and container-storage work was removed from
-devel on October 16; its code, tests and records are kept at tag
+devel on October 16 (D37); its code, tests and records are kept at tag
 `archive/packing-containers-20261016` (branch `packing-containers`).
+Packing is to return as the only small-file storage under
+[W125](../backlog/small-file-packing-default.md).
 
 Experimental group A was removed from devel on October 16: the manual repair
 experiment, the staged D25 logical resize, data-GC admission, Raft admission

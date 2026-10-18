@@ -79,7 +79,12 @@ fragments), not counted directly. The orphan scan reports none.
 
 ## Proposal
 
-The four parts are independent and listed in implementation order.
+The parts are listed in implementation order:
+1. batched reclaim;
+2. quota credit at delete commit;
+3. default small-file packing, tracked as W125;
+4. fragment slot reuse, re-assessed after packing;
+5. instant subtree delete.
 
 ### 1. Batched, node-local reclaim
 
@@ -118,10 +123,31 @@ Replace the per-inode serial chain with batches.
 - **Effect:** users get space back as soon as the delete returns, whatever
   the state of reclaim.
 
-### 3. Fragment slot reuse
+### 3. Small-file packing as the default (W125)
+
+Every file, however small, currently gets at least one full fragment per node.
+A 200-byte file therefore costs about 800× its size in raw disk, and one
+fragment per node to reclaim when it is deleted. The 298 GiB per node of live
+tiny files above would become a few GiB.
+
+The user wants packing to be the default:
+- files up to about 1–2 KiB stored inline in the inode's KV row;
+- up to about 64 KiB in packed segments;
+- larger files unchanged.
+
+It is restored from the archived implementation (D37, tag
+`archive/packing-containers-20261016`) after parts 1–2. Packing replaces
+the current small-file path outright, with no switch; the old way is kept
+only as a tag. Its segment
+compaction reuses part 1's batched reclaim. Design decisions, order and
+gates are in [W125](small-file-packing-default.md).
+
+### 4. Fragment slot reuse (re-assess after W125)
 
 Every fragment file is the same size (69,632 bytes on orcd-mini), so a dead
-fragment is a ready-made slot.
+fragment is a ready-made slot. Once W125 packs or inlines small files, most
+tiny-file fragments disappear. Then decide whether reuse is still worth it,
+mainly for large files.
 - **Pool:** after the death is durable (the point where step 1 may delete),
   a node may move a dead fragment file into a per-node free-slot pool
   directory instead of unlinking it.
@@ -150,19 +176,6 @@ fragment is a ready-made slot.
   directory placement, or can be renamed across the inode scaffolding. The
   latter is preferred, and needs one rename plus a directory fsync batched
   with the write barrier.
-
-### 4. Small files stored inline in metadata (follow-up, separate design)
-
-- **Problem:** a 200-byte file costs one 69,632-byte fragment per node,
-  about 800× its size in raw disk. The 298 GiB per node of live tiny files
-  above would become about 2 GiB inline.
-- **Proposal:** store file data below a threshold (a few KiB) in the
-  inode's KV row. Deleting such a file is then a pure metadata operation
-  with nothing to reclaim.
-- **Scope:** this touches the write, read, truncate, replication and
-  recovery paths. It needs its own design and decision before
-  implementation. The packing/container work removed in D37 is the
-  historical comparison.
 
 ### 5. Instant subtree delete (optional)
 
@@ -199,16 +212,19 @@ must be committed before it is cited.
    reported with its distinct reason and the disk is never overfilled.
 5. `make test`, plus the private GC, POSIX and expiry suites, PASS.
 
-**Part 3:** the same, plus:
+**Part 3:** see [W125](small-file-packing-default.md).
+
+**Part 4:** the same as parts 1 and 2, plus:
 - write latency and throughput into reused slots versus fresh files;
 - stale-reader and digest-mismatch tests;
 - pool cap and scheduled deletion behaviour.
 
-**Parts 4 and 5:** to be defined in their own designs.
+**Part 5:** to be defined in its own design.
 
 ## Non-goals
 
 - Changing POSIX semantics of unlink, open-unlinked files or leases.
-- Reintroducing the container engine (D37).
+- Reintroducing the container engine (D37). Packing returns separately
+  under W125.
 - Weakening durability: no fragment is reused or deleted before its death
   is durable on that node.

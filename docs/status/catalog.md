@@ -202,7 +202,7 @@ Complete navigation to top-level status ledgers as of October 15, 2026. Grouping
 - [Allocation, GC and fold acceptance — Oct 7, 2026](allocation-gc-fold-gates-20261007.md)
 - [D30/W23/W89 — Mac pressure foundations, Oct 8, 2026](compaction-pressure-20261008.md)
 - [D25 writer admission routing — accepted: lane-local authority, Oct 6 2026](d25-admission-routing.md)
-- [Decisions — taken and pending (register D1–D36)](decisions.md)
+- [Decisions — taken and pending (register D1–D37)](decisions.md)
 - [devel-efs work scope — October 12, 2026](devel-efs-20261012.md)
 - [Reviewed devel branch integration — October 13, 2026](devel-reviewed-integration-20261013.md)
 - [W92 large find result refusal — October 8, 2026 New York](find-output-overflow-20261009.md)

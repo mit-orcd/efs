@@ -584,6 +584,20 @@ node hosts many.
 | membership / desired placement | control-plane group | — | control metadata authority (§2; current Raft baseline) |
 | file data | k+f distinct failure domains by placement | `(FileID, chunk_index, candidate_generation, fragment_index, coding_profile_id)` | k+f EC fragments |
 
+**Small files: current cost and planned packing.** Today every chunk, however
+small, is stored as k+f full fragments: 69,632-byte files on orcd-mini, a
+64 KiB payload plus header and digest. A sub-KiB file therefore costs about
+800× its size in raw disk, and one fragment per node to reclaim on delete.
+Small-file packing will replace this as the only small-file storage:
+- inline in the inode row up to a small threshold;
+- packed erasure-coded segments up to about 64 KiB;
+- per-file fragments above that.
+
+There will be no switch between the two; the old way is preserved as a Git
+tag. It was removed from devel in D37 and returns under
+[W125](../backlog/small-file-packing-default.md), after
+[W124](../backlog/fast-delete-reclaim.md)'s batched reclaim.
+
 **Applied state: a logical ordered KV per shard.** Each replica applies its
 log to a **local, embedded, ordered key-value store** on NVMe. RAM is a
 bounded cache, not the store. Each shard has an isolated ordered
@@ -1522,7 +1536,7 @@ full acceptance are separate states.
 | --- | --- |
 | Ordered work and unresolved source findings | [Work queue](#appendix-2--work-queue--ordered-items-and-source-findings), preserving existing order and recorded verdicts |
 | Execution handoff and scope caveats | [Handoff](#appendix-3--in-flight--the-current-handoff-block) |
-| Accepted architecture and pending decisions | [Decision register D1–D36](#appendix-4--decisions--taken-and-pending-register-d1d36), [specification/public-path review](../status/spec-implementation.md) |
+| Accepted architecture and pending decisions | [Decision register D1–D37](#appendix-4--decisions--taken-and-pending-register-d1d36), [specification/public-path review](../status/spec-implementation.md) |
 | Find a feature, platform or dated test report | [Complete topic catalog](../status/catalog.md) |
 | Earlier assignments, chronology and superseded captures | [Status archive](../status/archive/README.md), [project archive](../archive/README.md) |
 
@@ -1536,9 +1550,19 @@ design review before implementation.**
   deletion, from ~50 to a targeted 50–100 K fragments/s per node.
 - Dead fragment files are reused as fixed-size slots for new data, with
   scheduled deletion of the excess.
-- Inline small files (currently ~800× raw amplification) and instant subtree
-  delete follow.
+- Small-file packing (W125) follows, then slot reuse (re-assessed) and
+  instant subtree delete.
 - All gates NOTRUN.
+
+[W125 — small-file packing as the only small-file storage](../backlog/small-file-packing-default.md):
+**proposed; starts after W124 parts 1–2.**
+- Inline storage up to ~1–2 KiB, packed segments up to ~64 KiB, fragments
+  above.
+- Replaces the current ~800× raw amplification for sub-KiB files (298 GiB
+  per node on orcd-mini for ~1–1.5 GB of data).
+- No switch in the code: the old way is preserved as a tag before packing
+  lands.
+- Ported from `archive/packing-containers-20261016`. All gates NOTRUN.
 
 [orcd-mini deletes, GC and crawl on `5d673efa8`](../status/orcd-mini-gc-delete-profile-5d673efa8-20261018.md):
 **profiling only.**
@@ -1743,8 +1767,10 @@ queries PASS; quiet POSIX reruns 21/21 PASS do not close loaded timeouts.
 W121 remains open with kernel remediation deferred.
 
 Experimental tiny-file packing and container-storage work was removed from
-devel on October 16; its code, tests and records are kept at tag
+devel on October 16 (D37); its code, tests and records are kept at tag
 `archive/packing-containers-20261016` (branch `packing-containers`).
+Packing is to return as the only small-file storage under
+[W125](../backlog/small-file-packing-default.md).
 
 Experimental group A was removed from devel on October 16: the manual repair
 experiment, the staged D25 logical resize, data-GC admission, Raft admission
@@ -1950,7 +1976,8 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | --- | --- | --- | --- | --- |
 | settings-discovery | **W122** · effective daemon/client settings and portal catalog | product observability | PROPOSED: role-specific supported settings, defaults, effective values and startup/runtime scope; backend implementation and acceptance NOTRUN | [feature and gates](#w122) |
 | crash-recovery-feature | **W123** · automatic crash recovery through per-file durable versions | new feature / durability recovery | PROPOSED: design review before code; implementation, migration and acceptance NOTRUN; W71 remains open | [feature and gates](../backlog/crash-safe-durable-versions.md) |
-| fast-delete | **W124** · fast delete: quota credit at commit, batched reclaim, fragment slot reuse | performance / capacity | PROPOSED: design review before code; implementation, private A/B and orcd-mini acceptance NOTRUN | [proposal and gates](../backlog/fast-delete-reclaim.md) · [evidence](../status/orcd-mini-gc-delete-profile-5d673efa8-20261018.md) |
+| fast-delete | **W124** · fast delete: batched reclaim, quota credit at commit, then packing (W125) | performance / capacity | PROPOSED: design review before code; implementation, private A/B and orcd-mini acceptance NOTRUN | [proposal and gates](../backlog/fast-delete-reclaim.md) · [evidence](../status/orcd-mini-gc-delete-profile-5d673efa8-20261018.md) |
+| small-file-packing | **W125** · small-file packing as the only small-file storage | capacity / performance | PROPOSED: after W124 parts 1–2; no switch, old way kept as a tag; design, port and acceptance NOTRUN | [proposal and gates](../backlog/small-file-packing-default.md) · [D37](#appendix-4--decisions--taken-and-pending-register-d1d36) |
 | orcd-qualification | **W119** · ORCD normal-operation RDMA failures and blocked clean stop | correctness / liveness | OPEN: 150 concurrent failures /846 NOTRUN; cross-host peer59/67; enabled queries EBUSY; retained writes block clean stop. TCP/commands-off rerun also FAILs (120 failures,520 NOTRUN; peer61/67; clean stop refused); all23 successfully prepared cold cases verify after authorized forced restart. [TCP evidence](../status/orcd-tcp-direct-disabled-20261015.md). Preserve failures, isolate causes and rerun original gates; W100 stays closed. [AMD follow-up](../status/amd-rdma-posix-20261015.md): native/serial/peer/cold/degraded PASS at `c8d057391`; one-mount jobs16 remains215/216 with unusual-name timeout. [Async durability follow-up](../status/amd-async-durability-20261015.md) at `c4178ea81`: scoped durability/native/serial/peer/cold/degraded PASS; jobs16 FAIL214/216 (unusual names, concurrent creates,15s) | [Raft/KV follow-up](../status/orcd-raft-kv-20261016.md) · [evidence and gates](../status/orcd-devel-qualification-20261015.md) · [item](#w119) |
 | immediate-readback | **W121** · successful fsync followed by previous-file payload | data correctness | OPEN: 255/123,932 exact readbacks failed across both queued-vote variants on ORCD native RDMA/direct with enabled `.efs`; unique512-byte files, no expiry. Diagnosed FUSE kernel fork/read page-pinning defect; kernel remediation deferred by user. Fork-isolated experiments do not close W121 | [diagnosis](../status/orcd-w121-fork-read-20261016.md) · [experiment](../status/orcd-queued-read-vote-20261016.md) · [item](#w121) |
 | qualification-fixtures | **W120** · stale extracted LOOKUP stub and command cleanup ownership check | verification correctness | OPEN (partial fix): AMD `f6235bb73` repairs the LOOKUP host context and checks reader identity; native/docs PASS at `85a9ad6b5`. Enabled-command cleanup ownership remains NOTRUN here and still needs correction/acceptance. [AMD evidence](../status/amd-rdma-posix-20261015.md); preserve original failures | [evidence](../status/orcd-devel-qualification-20261015.md) · [item](#w120) |
@@ -2069,7 +2096,7 @@ items before implementation. ASK rows remain unresolved design choices.**
 
 ---
 
-##### Decisions — taken and pending (register D1–D36)
+##### Decisions — taken and pending (register D1–D37)
 
 Each row is a choice the spec did not make. A row marked **decided**
 was accepted by the user and is now part of the design; implement it
@@ -2086,6 +2113,23 @@ The user limits this release to TCP/direct I/O/files and defers containers and
 repair/recovery qualification. This is a release scheduling decision, not a
 change to the numbered architectural protection contracts. [Exact decision,
 remaining gates and limits](../status/v030-release-scope-20261012.md). Execution stays stopped.
+
+### D37 — packing and container engine removed from devel (taken Oct 16)
+
+**Taken 2026-10-16 at the user's request:** all tiny-file packing code and
+the experimental container storage engine left devel (commit `5ded11179`), to
+be resumed later. The last commit with both is `6c274f47f`, at tag
+`archive/packing-containers-20261016` (branch `packing-containers`).
+
+**Follow-up direction (user, 2026-10-18):** small-file packing is to return
+as the only small-file storage.
+- No runtime or build switch, and no unpacked fallback.
+- Immediately before it lands, the last per-file-fragment state is
+  preserved as a tag (`archive/unpacked-small-files-<date>`).
+- The container engine stays out unless separately decided.
+
+Work and gates: [W125](../backlog/small-file-packing-default.md), after
+[W124](../backlog/fast-delete-reclaim.md) parts 1–2.
 
 ### D36 — node-count protection contract (accepted Oct 9)
 
@@ -7779,7 +7823,12 @@ No live configuration editor or automatic rollout is included in this item.
 <a id="w124"></a>
 ### W124 — Fast delete: immediate space, batched reclaim and fragment slot reuse
 
-**Performance/capacity; proposed 2026-10-18.** Design review first; implementation, private A/B and orcd-mini acceptance NOTRUN. POSIX delete stays metadata-only. Space returns to quota when the delete commits, guarded by physical free space. Reclaim is batched (one Raft entry and one node fsync per batch, node-local threaded deletion) instead of 2–3 proposals and ~8 fsyncs per inode. Dead fragment files can be reused as fixed-size slots for new writes. Inline small files and instant subtree delete follow separately. Motivated by 0.18–0.21 GiB/min reclaim and a 398 GiB-per-node backlog on orcd-mini. [Canonical proposal and gates](../backlog/fast-delete-reclaim.md).
+**Performance/capacity; proposed 2026-10-18.** Design review first; implementation, private A/B and orcd-mini acceptance NOTRUN. POSIX delete stays metadata-only. Space returns to quota when the delete commits, guarded by physical free space. Reclaim is batched (one Raft entry and one node fsync per batch, node-local threaded deletion) instead of 2–3 proposals and ~8 fsyncs per inode. Then small-file packing (W125), fragment slot reuse (re-assessed after W125) and instant subtree delete. Motivated by 0.18–0.21 GiB/min reclaim and a 398 GiB-per-node backlog on orcd-mini. [Canonical proposal and gates](../backlog/fast-delete-reclaim.md).
+
+<a id="w125"></a>
+### W125 — Small-file packing as the only small-file storage
+
+**Capacity/performance; proposed 2026-10-18; starts after W124 parts 1–2.** Size classes: inline in the inode row up to ~1–2 KiB, packed erasure-coded segments up to ~64 KiB, per-file fragments above. No runtime or build switch: tag the last per-file-fragment devel commit (`archive/unpacked-small-files-<date>`), then land packing with the old small-file path removed; comparisons build the tag. Ported from `archive/packing-containers-20261016` (D37) without the container engine or `EFS_PACKED_WRITES`. Motivated by ~800× raw amplification for sub-KiB files on orcd-mini. [Canonical proposal and gates](../backlog/small-file-packing-default.md).
 
 
 ## Appendix 6 — Naming

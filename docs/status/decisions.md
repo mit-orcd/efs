@@ -1,4 +1,4 @@
-# Decisions — taken and pending (register D1–D36)
+# Decisions — taken and pending (register D1–D37)
 
 **October 15 reconciliation:** [Review of stale claims and remaining gates](open-item-reconciliation-20261015.md). Read these annotations before treating dated implementation descriptions as current tasks. No new global acceptance or deployment is implied.
 
@@ -11,7 +11,7 @@ items before implementation. ASK rows remain unresolved design choices.**
 
 ---
 
-#### Decisions — taken and pending (register D1–D36)
+#### Decisions — taken and pending (register D1–D37)
 
 Each row is a choice the spec did not make. A row marked **decided**
 was accepted by the user and is now part of the design; implement it
@@ -28,6 +28,23 @@ The user limits this release to TCP/direct I/O/files and defers containers and
 repair/recovery qualification. This is a release scheduling decision, not a
 change to the numbered architectural protection contracts. [Exact decision,
 remaining gates and limits](v030-release-scope-20261012.md). Execution stays stopped.
+
+## D37 — packing and container engine removed from devel (taken Oct 16)
+
+**Taken 2026-10-16 at the user's request:** all tiny-file packing code and
+the experimental container storage engine left devel (commit `5ded11179`), to
+be resumed later. The last commit with both is `6c274f47f`, at tag
+`archive/packing-containers-20261016` (branch `packing-containers`).
+
+**Follow-up direction (user, 2026-10-18):** small-file packing is to return
+as the only small-file storage.
+- No runtime or build switch, and no unpacked fallback.
+- Immediately before it lands, the last per-file-fragment state is
+  preserved as a tag (`archive/unpacked-small-files-<date>`).
+- The container engine stays out unless separately decided.
+
+Work and gates: [W125](../backlog/small-file-packing-default.md), after
+[W124](../backlog/fast-delete-reclaim.md) parts 1–2.
 
 ## D36 — node-count protection contract (accepted Oct 9)
 
