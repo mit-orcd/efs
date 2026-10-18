@@ -529,8 +529,10 @@ int server_gc_inode_payload(struct efsd_server *s, efs_export_id_t eid, efs_ino_
                             uint64_t *payload);
 /* Delete every fragment of a fenced inode on all roots. counted == NULL debits
  * `used` per unlink; otherwise removed payload is added to *counted (also on
- * failure) and the caller settles quota. */
+ * failure) and the caller settles quota. durable == 0 skips directory syncs:
+ * the caller must server_gc_sync_roots before relying on the removal. */
 int server_gc_inode_delete(struct efsd_server *s, efs_export_id_t eid, efs_ino_t ino,
-                           uint64_t *counted);
+                           uint64_t *counted, int durable);
+int server_gc_sync_roots(struct efsd_server *s);
 
 #endif

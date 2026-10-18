@@ -28,7 +28,7 @@ int server_raft_host_inode_reaped(efs_ino_t ino,int *dead){(void)ino;*dead=0;ret
 /* The reclaim deleter's two durable steps: death bit, then whole-inode delete. */
 static int gc_inode(struct efsd_server *s,efs_export_id_t eid,efs_ino_t ino){
  int rc=server_gc_death_set_many(s,eid,&ino,1);
- return rc!=EFS_OK?rc:server_gc_inode_delete(s,eid,ino,NULL);
+ return rc!=EFS_OK?rc:server_gc_inode_delete(s,eid,ino,NULL,1);
 }
 
 int main(int argc,char **argv){
@@ -96,7 +96,7 @@ int main(int argc,char **argv){
  }
  { efs_ino_t dead=84; assert(server_gc_death_set_many(&s,1,&dead,1)==EFS_OK); }
  assert(server_write_fragment_with_sum_sync(&s,&ex,84,71,0,body,EFS_FRAGMENT_SIZE,sum)==EFS_ERR_STALE);
- assert(server_gc_inode_delete(&s,1,84,NULL)==EFS_OK && s.nodes[0].used==0); /* 140 files, beyond one 128-entry slice */
+ assert(server_gc_inode_delete(&s,1,84,NULL,1)==EFS_OK && s.nodes[0].used==0); /* 140 files, beyond one 128-entry slice */
  assert(gc_inode(&s,1,84)==EFS_OK);
  assert(gc_inode(&s,1,84)==EFS_OK);
  efs_tls_write_root=0;

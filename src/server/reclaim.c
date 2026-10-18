@@ -522,8 +522,9 @@ static void *deleter_main(void *arg)
             struct rj_rec copy = *r;
             pthread_mutex_unlock(&rj.mu);
             uint64_t counted = 0;
+            /* Directory syncs are deferred to retirement (retire_some). */
             int rc = server_gc_inode_delete(rj.s, copy.eid, copy.ino,
-                                            copy.credited ? &counted : NULL);
+                                            copy.credited ? &counted : NULL, 0);
             pthread_mutex_lock(&rj.mu);
             r = rec_at(ids[k]);
             r->removed += counted;
@@ -580,9 +581,12 @@ static void checkpoint_some(void)
     free(ids);
 }
 
-/* Retire sealed segments whose records are all checkpointed and deleted. */
+/* Retire sealed segments whose records are all checkpointed and deleted.
+ * The deleters skip directory syncs, so one syncfs per filesystem makes all
+ * of a segment's unlinks durable before its records may disappear. */
 static void retire_some(void)
 {
+    int synced = 0;
     pthread_mutex_lock(&rj.mu);
     for (;;) {
         if (!rj.nseg) break;
@@ -595,9 +599,20 @@ static void retire_some(void)
             all = r->checkpointed && r->deleted;
         }
         if (!all) break;
+        if (current && idle < 1000000) break;
+        if (!synced) {
+            /* Outside rj.mu: completed records stay completed. Every deletion
+             * observed above finished before this sync started. */
+            pthread_mutex_unlock(&rj.mu);
+            int src = server_gc_sync_roots(rj.s);
+            pthread_mutex_lock(&rj.mu);
+            if (src != EFS_OK) break;
+            synced = 1;
+            continue; /* re-evaluate segs[0] under the lock */
+        }
+        current = rj.seg_fd >= 0 && sg->seq == rj.seg_seq;
         if (current) {
             /* Seal an idle, completed current segment so it can retire. */
-            if (idle < 1000000) break;
             close(rj.seg_fd);
             rj.seg_fd = -1;
         }

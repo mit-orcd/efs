@@ -474,9 +474,13 @@ mainly for large files.
   is about 84% used. The startup quota check keeps its 20% reserve. The
   guard is per filesystem: it is sampled every 500 ms and charged
   atomically under the server lock at both PUT charge sites.
-- **Directory durability** is still one directory sync per inode
-  directory, not one per touched directory per round. This is the
-  remaining per-inode cost; it is measured on orcd-mini.
+- **Directory durability is deferred further than the plan's "one fsync
+  per touched directory per round":** the deleters skip directory syncs
+  entirely, and `retire_some` runs one `syncfs` per storage filesystem
+  before a segment's records may retire. A crash before that sync can
+  bring unlinked files back; their records are still in the journal, so
+  replay deletes them again and re-credits them against the startup
+  inventory.
 - **Compaction headroom** does not apply until W125.
 
 ## Acceptance gates

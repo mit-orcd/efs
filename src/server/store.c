@@ -831,6 +831,10 @@ static int inode_is_dead(struct efsd_server *s, efs_export_id_t eid, efs_ino_t i
  * to quota at acceptance. Its unlinks only count removed payload here; the
  * reclaim deleter settles quota once the whole inode is gone. */
 static __thread uint64_t *t_gc_counted;
+/* W124: set while the reclaim deleter runs. Directory syncs are skipped; the
+ * journal makes the unlinks durable with server_gc_sync_roots before it
+ * retires their records, and replays the deletion after a crash. */
+static __thread int t_gc_defer_sync;
 static void gc_account_removed(struct efsd_server *s,uint64_t count,
                                uint64_t payload,uint64_t stored_bytes)
 {
@@ -856,7 +860,7 @@ static int gc_dead_directory(struct efsd_server *s, const char *path, unsigned *
     (void)depth;
     int dfd = open(path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
     if (dfd < 0)
-        return errno == ENOENT ? fragment_parent_sync(s, path) : EFS_ERR_IO;
+        return errno == ENOENT ? (t_gc_defer_sync ? EFS_OK : fragment_parent_sync(s, path)) : EFS_ERR_IO;
     DIR *dir = fdopendir(dfd);
     if (!dir) { close(dfd); return EFS_ERR_IO; }
     int rc = EFS_OK;
@@ -914,7 +918,7 @@ static int gc_dead_directory(struct efsd_server *s, const char *path, unsigned *
     /* Sync even a partial pass; no successful RPC may retire an undurable
      * unlink. An absent-file retry also syncs the containing directory. */
     int fd = dirfd(dir), sr;
-    sr = gc_sync_directory(s, fd);
+    sr = t_gc_defer_sync ? 0 : gc_sync_directory(s, fd);
     if (sr < 0)
         rc = EFS_ERR_IO;
     if (closedir(dir))
@@ -922,7 +926,7 @@ static int gc_dead_directory(struct efsd_server *s, const char *path, unsigned *
     if (rc == EFS_OK) {
         if (rmdir(path) && errno != ENOENT)
             rc = EFS_ERR_IO;
-        if (rc == EFS_OK)
+        if (rc == EFS_OK && !t_gc_defer_sync)
             rc = fragment_parent_sync(s, path);
     }
     return rc;
@@ -942,7 +946,7 @@ static int gc_dead_ancestors(struct efsd_server *s, const char *inode_path)
             if (errno == ENOTEMPTY || errno == EEXIST) return EFS_OK;
             return EFS_ERR_IO;
         }
-        int rc = fragment_parent_sync(s, path);
+        int rc = t_gc_defer_sync ? EFS_OK : fragment_parent_sync(s, path);
         if (rc != EFS_OK) return rc;
     }
     return EFS_OK;
@@ -1094,11 +1098,12 @@ int server_gc_inode_payload(struct efsd_server *s, efs_export_id_t eid, efs_ino_
  * before acceptance) already refuses every later PUT, and a PUT that held the
  * guard before the fence finished first. Idempotent. */
 int server_gc_inode_delete(struct efsd_server *s, efs_export_id_t eid, efs_ino_t ino,
-                           uint64_t *counted)
+                           uint64_t *counted, int durable)
 {
     if (!s || !eid || ino <= EFS_ROOT_INO || efs_ino_is_meta_table(ino)) return EFS_ERR_INVAL;
     int rc = EFS_OK;
     t_gc_counted = counted;
+    t_gc_defer_sync = !durable;
     for (uint32_t r = 0;
          rc == EFS_OK && r < (s->storage_path_count ? s->storage_path_count : 1); r++) {
         char path[8192];
@@ -1111,9 +1116,35 @@ int server_gc_inode_delete(struct efsd_server *s, efs_export_id_t eid, efs_ino_t
         if (rc == EFS_OK) rc = gc_dead_ancestors(s, path);
     }
     t_gc_counted = NULL;
+    t_gc_defer_sync = 0;
     if (rc != EFS_OK)
         __atomic_fetch_add(&s->gc_delete_errors, 1, __ATOMIC_RELAXED);
     return rc;
+}
+
+/* W124: make every unlink and rmdir on the storage roots durable, one
+ * syncfs per distinct filesystem. */
+int server_gc_sync_roots(struct efsd_server *s)
+{
+    uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
+    dev_t seen[EFS_MAX_STORAGE_PATHS];
+    uint32_t nseen = 0;
+    for (uint32_t r = 0; r < n; r++) {
+        struct stat st;
+        if (stat(s->storage_paths[r], &st)) return EFS_ERR_IO;
+        uint32_t j;
+        for (j = 0; j < nseen && seen[j] != st.st_dev; j++) {}
+        if (j < nseen) continue;
+        seen[nseen++] = st.st_dev;
+        int fd = open(s->storage_paths[r], O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+        if (fd < 0) return EFS_ERR_IO;
+        uint64_t start = gc_clock_us();
+        int rc = syncfs(fd);
+        gc_io_add(s, 2, start, 0, rc < 0);
+        close(fd);
+        if (rc) return EFS_ERR_IO;
+    }
+    return EFS_OK;
 }
 
 /* direct: caller decides per-ino — data fragments only. Metadata pages
