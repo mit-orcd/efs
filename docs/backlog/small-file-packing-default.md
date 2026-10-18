@@ -1,7 +1,8 @@
 # W125 — Small-file packing as the default
 
 **Class:** capacity / performance. **Recorded:** 2026-10-18.
-**Status:** PROPOSED; to start after W124 parts 1–2. The user wants packing to
+**Status:** PROPOSED; to start after W124 parts 1–2.
+[Implementation plan](small-file-packing-plan.md) (phases P0–P7). The user wants packing to
 become the only small-file storage. The previous way is preserved by a tag,
 not by a switch in the code.
 Design (size classes, reclaim), port, qualification and landing:
@@ -75,7 +76,7 @@ payload.
 
 | Size | Storage |
 | --- | --- |
-| up to the packing threshold (about 64 KiB, to be measured) | packed: many files' payloads in shared packed segments, each segment one erasure-coded stripe of standard fragments |
+| up to the packing threshold: well below the 128 KiB maximum segment size, likely 4–16 KiB, decided in [plan](small-file-packing-plan.md) phase P0 | packed: many files' payloads in shared packed segments, each segment one erasure-coded stripe of standard fragments |
 | larger | today's per-file chunk fragments |
 
 A packed segment is one stripe: k data fragments plus f parity fragments,
@@ -174,8 +175,9 @@ segment or whole-fragment granularity, after compaction has emptied it.
 
 ## Required design decisions (each recorded before code)
 
-1. **Thresholds and limits.** Choose the packing threshold (about
-   64 KiB), the compaction threshold *t*, the dead-bytes limit, and the
+1. **Thresholds and limits.** Choose the packing threshold (likely 4–16 KiB:
+   a segment holds at most 128 KiB of body, so "about 64 KiB" would pack
+   only one or two files per segment), the compaction threshold *t*, the dead-bytes limit, and the
    per-node caps on candidate backlog and retained segments. Base them on
    measured space, compaction write cost, read latency and the physical
    reserve.

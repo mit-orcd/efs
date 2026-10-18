@@ -18,4 +18,5 @@ active queue item; it has no priority beyond what the status index/handoff says.
 
 - [W123: automatic crash recovery](crash-safe-durable-versions.md) — proposed new feature; per-file visible/durable versions, recovery ordering and acceptance gates.
 - [W124: fast delete](fast-delete-reclaim.md) — proposed; batched node-local reclaim, quota credit at delete commit, then packing (W125), re-assessed slot reuse and subtree delete.
+- [W125 implementation plan](small-file-packing-plan.md) — phases P0–P7: decisions, port from the archive, compaction, size transitions, old-path removal, qualification.
 - [W125: small-file packing](small-file-packing-default.md) — proposed; packing into shared fragments (no data in metadata rows) as the only small-file storage, with lifetime grouping and compaction against pinned holes; old way kept as a tag; after W124 parts 1–2.

@@ -212,7 +212,7 @@ fragment per node to reclaim when it is deleted. The 298 GiB per node of live
 tiny files above would become a few GiB.
 
 The user wants packing to be the default:
-- files up to about 64 KiB packed into shared segments of ordinary
+- files below a threshold well below the 128 KiB maximum segment (likely 4–16 KiB, decided in plan phase P0) packed into shared segments of ordinary
   fragments, never stored in metadata rows;
 - larger files unchanged.
 
