@@ -56,6 +56,7 @@
  * becomes a 30s/message drip. Restore the pool timeout before release so
  * bounce RPCs keep the long budget. */
 #define HOST_SEND_IO_MS    250
+#define HOST_GC_BATCH_IO_MS 10000 /* W124 reclaim batch acceptance reply */
 #define HOST_INBOX_MAX     256
 /* Bound lock-held receive work: completed read proofs must be published
  * between short FIFO prefixes, not hidden behind thirty-two durable frames. */
@@ -1871,10 +1872,12 @@ static int host_pack_sweep_next(struct efs_raft_host *h, uint8_t group,
                                       request[17],indices,&n);
     if (rc != EFS_OK) return rc;
     if (n > EFS_META_SWEEP_BATCH_MAX) return EFS_ERR_PROTO;
-    memcpy(cmd,request,18);
-    cmd[0]=EFS_MD_CMD_LANE_SWEEP_BATCH;cmd[18]=(uint8_t)n;
-    for (uint32_t i=0; i<n; i++) wr32be(cmd+19+4*i,indices[i]);
-    *clen=19+4*n;
+    /* W124: a reaped inode's fragments are reclaimed whole by the members'
+     * reclaim journals, so the sweep emits no per-chunk GC records. */
+    cmd[0]=EFS_MD_CMD_LANE_SWEEP_MULTI;cmd[1]=0;cmd[2]=1;
+    memcpy(cmd+3,request+1,17);cmd[20]=(uint8_t)n;
+    for (uint32_t i=0; i<n; i++) wr32be(cmd+21+4*i,indices[i]);
+    *clen=21+4*n;
     return EFS_OK;
 }
 
@@ -1900,6 +1903,67 @@ static int apply_lane_sweep_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         fprintf(stderr, "raft-host: apply lane-sweep rc=%d index=%llu ino=%llu\n",
                 rc, (unsigned long long)index, (unsigned long long)ino);
     return rc;
+}
+
+/* W124 LANE_SWEEP_MULTI: independent reaped-inode lane sweeps, one entry per
+ * owning group. A refused item (BUSY: chunks remain) leaves its lane key and
+ * so its REAP marker; storage failures retry the whole entry, and every item
+ * is idempotent (deleted chunk keys read NOT_FOUND, an absent lane key is OK).
+ * A one-item entry (a remote SWEEP_NEXT) returns the item's rc so the
+ * unhosted reaper learns whether the lane is gone (OK) or not (BUSY). */
+static int apply_lane_sweep_multi_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                                      uint32_t clen, uint64_t index)
+{
+    if (clen < 3) return EFS_ERR_PROTO;
+    uint32_t count = ((uint32_t)cmd[1] << 8) | cmd[2], off = 3;
+    for (uint32_t k = 0; k < count; k++) {
+        if (clen - off < 18) return EFS_ERR_PROTO;
+        efs_ino_t ino = rd64be(cmd + off);
+        uint64_t gen = rd64be(cmd + off + 8);
+        uint8_t lane = cmd[off + 16], n = cmd[off + 17];
+        uint32_t indices[EFS_META_SWEEP_BATCH_MAX];
+        if (n > EFS_META_SWEEP_BATCH_MAX || clen - off - 18 < 4u * n) return EFS_ERR_PROTO;
+        for (uint32_t i = 0; i < n; i++) indices[i] = rd32be(cmd + off + 18 + 4 * i);
+        off += 18u + 4u * n;
+        int rc = efs_meta_apply_lane_sweep_reaped(h->kv, ino, gen, lane, indices, n);
+        if (rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM) {
+            fprintf(stderr, "raft-host: apply lane-sweep-multi rc=%d index=%llu ino=%llu\n",
+                    rc, (unsigned long long)index, (unsigned long long)ino);
+            return rc;
+        }
+        if (count == 1 && off == clen) return rc;
+    }
+    return off == clen ? EFS_OK : EFS_ERR_PROTO;
+}
+
+/* W124 REAP_MULTI: independent reap completions for inodes every member has
+ * accepted for reclaim. Each item rechecks the inode (generation, nlink,
+ * leases) exactly as REAP_BATCH does; a refused item keeps its marker. */
+static int apply_reap_multi_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                                uint32_t clen, uint64_t index)
+{
+    if (clen < 3) return EFS_ERR_PROTO;
+    uint32_t count = ((uint32_t)cmd[1] << 8) | cmd[2], off = 3;
+    for (uint32_t k = 0; k < count; k++) {
+        if (clen - off < 17) return EFS_ERR_PROTO;
+        efs_ino_t ino = rd64be(cmd + off);
+        uint64_t gen = rd64be(cmd + off + 8);
+        uint8_t n = cmd[off + 16];
+        struct efs_meta_reap_key keys[EFS_META_REAP_BATCH_MAX];
+        if (n > EFS_META_REAP_BATCH_MAX || clen - off - 17 < 32u * n) return EFS_ERR_PROTO;
+        for (uint32_t i = 0; i < n; i++) {
+            keys[i].len = cmd[off + 17 + 32 * i];
+            memcpy(keys[i].key, cmd + off + 18 + 32 * i, EFS_META_REAP_KEY_MAX);
+        }
+        off += 17u + 32u * n;
+        int rc = efs_meta_apply_reap_batch(h->kv, ino, gen, keys, n);
+        if (rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM) {
+            fprintf(stderr, "raft-host: apply reap-multi rc=%d index=%llu ino=%llu\n",
+                    rc, (unsigned long long)index, (unsigned long long)ino);
+            return rc;
+        }
+    }
+    return off == clen ? EFS_OK : EFS_ERR_PROTO;
 }
 
 static int apply_orphan_reap_cmd(struct efs_raft_host *h, const uint8_t *cmd,
@@ -2813,6 +2877,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_LANE_FENCE ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE || cmd[0] == EFS_MD_CMD_REAP_BATCH ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
+           cmd[0] == EFS_MD_CMD_LANE_SWEEP_MULTI || cmd[0] == EFS_MD_CMD_REAP_MULTI ||
            cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
            cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP)
               ? EFS_OK
@@ -2843,6 +2908,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
          cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP ||
          cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE || cmd[0] == EFS_MD_CMD_REAP_BATCH ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
+         cmd[0] == EFS_MD_CMD_LANE_SWEEP_MULTI || cmd[0] == EFS_MD_CMD_REAP_MULTI ||
          cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
          cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_CREATE ||
          cmd[0] == EFS_MD_CMD_APPEND_RES || cmd[0] == EFS_MD_CMD_APPEND_CATCHUP || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
@@ -3322,6 +3388,10 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         return apply_lock_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH)
         return apply_lane_sweep_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_LANE_SWEEP_MULTI)
+        return apply_lane_sweep_multi_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_REAP_MULTI)
+        return apply_reap_multi_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_CLOSE_STEP) {
         if(clen!=46)return EFS_ERR_INVAL;
         return efs_close_step_apply(h->kv,rd64be(cmd+1),cmd+9,cmd[45]);
@@ -8017,7 +8087,8 @@ static int host_cfg(struct efs_raft_host *h, uint8_t group,
  * while the scan is full and the budget lasts, yielding the lock between
  * scans; an entry carries 128 acks (3+22*128 = 2819 B, no wire cap). */
 #define GC_SCAN_MAX   256 /* records collected per scan */
-#define REAP_SCAN_MAX 32  /* markers collected per REAP pass */
+#define REAP_SCAN_MAX 512 /* W124: markers collected per REAP pass */
+#define REAP_ENTRY_BYTES (48u * 1024u) /* bound on one multi entry's apply work */
 #define GC_ACK_MAX    EFS_META_GC_ACK_MAX /* 128 items per GC_ACK entry */
 #define GC_LOOP_MS    1000
 #define GC_FRAG_BUDGET_US 200000 /* frag work per group per loop */
@@ -8228,73 +8299,91 @@ static int host_gc_remote_finish(struct host_gc_delete *job)
  * All members must install a death fence and finish their bounded inventory
  * before REAP_DONE removes that ledger. Never use the live-inode collector. */
 
-static int host_gc_inode_nodes(struct efs_raft_host *h, efs_ino_t ino, uint64_t gen)
+/* W124: hand a batch of swept inodes to every member's reclaim journal.
+ * ok[i] = 1 only when every current member durably accepted item i (journal
+ * fsynced, fence installed). Requests go to all remote members before the
+ * local acceptance runs; replies are then collected. Missing membership never
+ * proves anything: the whole batch is refused and the REAP markers stay. */
+static void host_gc_inode_nodes_batch(struct efs_raft_host *h, const efs_ino_t *inos,
+                                      const uint64_t *gens, uint32_t n, uint8_t *ok)
 {
     struct efs_node nodes[EFS_MAX_NODES];
     struct efs_conn *pending[EFS_MAX_NODES] = {0};
-    int status[EFS_MAX_NODES];
     uint32_t count;
+    for (uint32_t i = 0; i < n; i++) ok[i] = 0;
+    if (!n) return;
     pthread_mutex_lock(&h->s->lock);
     count = h->s->node_count;
     memcpy(nodes, h->s->nodes, count * sizeof(nodes[0]));
     pthread_mutex_unlock(&h->s->lock);
     uint32_t present = 0;
     for (uint32_t i = 0; i < count; i++) {
-        if (!nodes[i].id || nodes[i].id > (uint32_t)h->n)
-            return EFS_ERR_BUSY;
+        if (!nodes[i].id || nodes[i].id > (uint32_t)h->n) return;
         present |= 1u << (nodes[i].id - 1);
     }
-    /* Missing membership/address never proves an orphan is gone. */
-    int result = present == ((1u << h->n) - 1u) ? EFS_OK : EFS_ERR_BUSY;
-    /* Pipeline independent storage fences before waiting for disk durability.
-     * Connections stay exclusively borrowed until their reply is consumed.
-     * Every member must still finish; BUSY/errors retain the durable REAP. */
+    if (present != ((1u << h->n) - 1u)) return;
+    size_t req_len = sizeof(struct efs_msg_gc_inode_batch) + (size_t)n * 16u;
+    struct efs_msg_gc_inode_batch *req = calloc(1, req_len);
+    struct efs_reclaim_item *items = calloc(n, sizeof(*items));
+    int32_t *local_rc = calloc(n, sizeof(*local_rc));
+    if (!req || !items || !local_rc) { free(req); free(items); free(local_rc); return; }
+    req->export_id = 1;
+    req->count = n;
+    for (uint32_t i = 0; i < n; i++) {
+        req->items[i].ino = inos[i];
+        req->items[i].generation = gens[i];
+        items[i] = (struct efs_reclaim_item){.export_id = 1, .ino = inos[i], .generation = gens[i]};
+    }
+    int failed = 0;
     for (uint32_t i = 0; i < count; i++) {
-        status[i] = EFS_ERR_IO;
-        if (nodes[i].id == h->s->id)
-            continue;
+        if (nodes[i].id == h->s->id) continue;
         struct efs_conn *pc = server_peer_conn_get(nodes[i].addr, nodes[i].port);
-        if (!pc)
-            continue;
+        if (!pc) { failed = 1; continue; }
+        /* A member's acceptance fsyncs its journal and scans each inode's
+         * directories for the credit: allow it seconds, not the per-inode
+         * RPC's 250 ms. */
         if (pc->kind == EFS_CONN_TCP) {
-            efs_set_recv_timeout(pc->fd, HOST_SEND_IO_MS);
+            efs_set_recv_timeout(pc->fd, HOST_GC_BATCH_IO_MS);
             efs_set_send_timeout(pc->fd, HOST_SEND_IO_MS);
         }
-        struct efs_msg_gc_inode req = {
-            .export_id = 1, .ino = ino, .generation = gen};
-        if (efs_conn_send_msg(pc, EFS_MSG_GC_INODE, &req, sizeof(req))) {
+        if (efs_conn_send_msg(pc, EFS_MSG_GC_INODE_BATCH, req, (uint32_t)req_len)) {
             server_peer_conn_drop(nodes[i].addr, nodes[i].port, pc);
+            failed = 1;
             continue;
         }
         pending[i] = pc;
     }
-    for (uint32_t i = 0; i < count; i++)
-        if (nodes[i].id == h->s->id)
-            status[i] = server_gc_inode(h->s,1,ino,gen);
+    for (uint32_t i = 0; i < n; i++) local_rc[i] = EFS_ERR_BUSY;
+    (void)server_reclaim_accept(h->s, items, n, local_rc);
+    for (uint32_t i = 0; i < n; i++) ok[i] = local_rc[i] == EFS_OK;
     for (uint32_t i = 0; i < count; i++) {
         struct efs_conn *pc = pending[i];
-        if (pc) {
-            uint8_t type;
-            void *reply = NULL;
-            uint32_t len = 0;
-            if (!efs_conn_recv_msg(pc, &type, &reply, &len) &&
-                type == EFS_MSG_GC_INODE_REPLY &&
-                len == sizeof(struct efs_msg_gc_inode_reply))
-                status[i] = ((struct efs_msg_gc_inode_reply *)reply)->rc;
-            free(reply);
-            if (status[i] == EFS_OK || status[i] == EFS_ERR_BUSY) {
-                if (pc->kind == EFS_CONN_TCP) {
-                    efs_set_recv_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
-                    efs_set_send_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
-                }
-                server_peer_conn_release(nodes[i].addr, nodes[i].port, pc);
-            } else
-                server_peer_conn_drop(nodes[i].addr, nodes[i].port, pc);
+        if (!pc) continue;
+        uint8_t type;
+        void *reply = NULL;
+        uint32_t len = 0;
+        int good = !efs_conn_recv_msg(pc, &type, &reply, &len) &&
+                   type == EFS_MSG_GC_INODE_BATCH_REPLY &&
+                   len == sizeof(struct efs_msg_gc_inode_batch_reply) + (size_t)n * 4u &&
+                   ((struct efs_msg_gc_inode_batch_reply *)reply)->count == n;
+        if (good) {
+            const struct efs_msg_gc_inode_batch_reply *r = reply;
+            for (uint32_t k = 0; k < n; k++) if (r->rc[k] != EFS_OK) ok[k] = 0;
+            if (pc->kind == EFS_CONN_TCP) {
+                efs_set_recv_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
+                efs_set_send_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
+            }
+            server_peer_conn_release(nodes[i].addr, nodes[i].port, pc);
+        } else {
+            failed = 1;
+            server_peer_conn_drop(nodes[i].addr, nodes[i].port, pc);
         }
-        if (status[i] != EFS_OK)
-            result = status[i];
+        free(reply);
     }
-    return result;
+    if (failed) for (uint32_t i = 0; i < n; i++) ok[i] = 0;
+    free(req);
+    free(items);
+    free(local_rc);
 }
 
 /* Propose one GC command and wait for it to apply. The reaper walks the
@@ -8357,9 +8446,9 @@ static int host_gc_propose(struct efs_raft_host *h, uint8_t group,
     if (!__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE))
         return EFS_ERR_BUSY;
     int rc = host_bg_propose(h, group, cmd, clen, 1);
-    if (rc != EFS_OK && !(rc == EFS_ERR_BUSY && (cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH || cmd[0] == EFS_MD_CMD_REAP_BATCH || cmd[0] == EFS_MD_REQ_SWEEP_NEXT || cmd[0] == EFS_MD_CMD_CLOSE_STEP))) {
-        uint64_t *counter = (cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH || cmd[0] == EFS_MD_REQ_SWEEP_NEXT) ? &h->s->gc_sweep_errors :
-                            (cmd[0] == EFS_MD_CMD_REAP_DONE || cmd[0] == EFS_MD_CMD_REAP_BATCH || cmd[0] == EFS_MD_CMD_ORPHAN_REAP || cmd[0] == EFS_MD_CMD_CLOSE_STEP) ? &h->s->gc_reap_errors :
+    if (rc != EFS_OK && !(rc == EFS_ERR_BUSY && (cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH || cmd[0] == EFS_MD_CMD_REAP_BATCH || cmd[0] == EFS_MD_REQ_SWEEP_NEXT || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_LANE_SWEEP_MULTI))) {
+        uint64_t *counter = (cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH || cmd[0] == EFS_MD_REQ_SWEEP_NEXT || cmd[0] == EFS_MD_CMD_LANE_SWEEP_MULTI) ? &h->s->gc_sweep_errors :
+                            (cmd[0] == EFS_MD_CMD_REAP_DONE || cmd[0] == EFS_MD_CMD_REAP_BATCH || cmd[0] == EFS_MD_CMD_ORPHAN_REAP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_REAP_MULTI) ? &h->s->gc_reap_errors :
                             &h->s->gc_ack_errors;
         __atomic_fetch_add(counter, 1, __ATOMIC_RELAXED);
     }
@@ -8932,146 +9021,211 @@ static int host_gc_metadata_waiting(struct efs_raft_host *h)
 }
 
 
-static void host_gc_reap_finish(struct efs_raft_host *h,efs_ino_t ino,uint64_t gen,
-                                uint64_t lanes,struct reap_times *times)
+/* W124 multi-entry builder: items appended until REAP_ENTRY_BYTES, then the
+ * entry is proposed to its group and waited for (host_gc_propose). */
+struct reap_multi {
+    uint8_t group, kind;
+    uint8_t buf[REAP_ENTRY_BYTES];
+    uint32_t len, count;
+    int rc;
+};
+static void reap_multi_init(struct reap_multi *m, uint8_t group, uint8_t kind)
 {
-    uint8_t cmd[18 + 32 * EFS_META_REAP_BATCH_MAX];
-    int drc;uint64_t started;
-    struct efs_meta_reap_key keys[EFS_META_REAP_BATCH_MAX]; uint32_t count;
-    drc=efs_meta_reap_select(h->kv,ino,gen,keys,&count);
-    if (drc != EFS_OK) return;
-    cmd[0] = EFS_MD_CMD_REAP_BATCH;
-    wr64be(cmd + 1, ino);
-    wr64be(cmd + 9, gen);
-    cmd[17]=(uint8_t)count;
-    for (uint32_t j=0; j<count; j++) {
-        cmd[18+32*j]=keys[j].len;
-        memcpy(cmd+19+32*j,keys[j].key,EFS_META_REAP_KEY_MAX);
-    }
-    started = now_us_();
-    drc = host_gc_propose(h,
-                          efs_raft_shard_group(efs_kv_inode_shard(ino)),
-                          cmd, 18+32*count);
-    times->done += now_us_() - started;
-    if (env_on("EFS_GC_DBG"))
-        fprintf(stderr, "raft-host: gc reap ino=%llu lanes=%llx sweep ok, reap_done rc=%d\n",
-                (unsigned long long)ino,
-                (unsigned long long)lanes, drc);
+    m->group = group;
+    m->kind = kind;
+    m->len = 3;
+    m->count = 0;
+    m->rc = EFS_OK;
+}
+static void reap_multi_flush(struct efs_raft_host *h, struct reap_multi *m)
+{
+    if (!m->count) return;
+    m->buf[0] = m->kind;
+    m->buf[1] = (uint8_t)(m->count >> 8);
+    m->buf[2] = (uint8_t)m->count;
+    int rc = host_gc_propose(h, m->group, m->buf, m->len);
+    if (rc != EFS_OK) m->rc = rc;
+    m->len = 3;
+    m->count = 0;
+}
+static void reap_multi_add(struct efs_raft_host *h, struct reap_multi *m,
+                           const uint8_t *item, uint32_t ilen)
+{
+    if (m->len + ilen > REAP_ENTRY_BYTES || m->count == 0xffffu) reap_multi_flush(h, m);
+    memcpy(m->buf + m->len, item, ilen);
+    m->len += ilen;
+    m->count++;
 }
 
+/* A lane is swept once its lane key is gone (the sweep deletes it last, only
+ * after every chunk key). Read on the local replica of the lane's group,
+ * which host_gc_propose has already applied through. */
+static int host_gc_lane_swept(struct efs_raft_host *h, efs_ino_t ino, uint64_t gen, uint8_t lane)
+{
+    static uint8_t val[65536];
+    uint8_t key[EFS_KV_KEY_MAX];
+    uint32_t kl = 0, vl = sizeof(val);
+    if (efs_kv_key_lane(efs_kv_lane_shard(ino, lane), ino, gen, lane, key, &kl) != EFS_OK)
+        return 0;
+    return efs_kv_get(h->kv, key, kl, val, &vl) == EFS_ERR_NOT_FOUND;
+}
 
+static struct reap_scan_ctx host_reap_ctx[HOST_NGROUPS];
+static struct reap_multi host_reap_sweep[HOST_NGROUPS], host_reap_done[HOST_NGROUPS];
+static efs_ino_t host_reap_inos[REAP_SCAN_MAX];
+static uint64_t host_reap_gens[REAP_SCAN_MAX];
+static uint8_t host_reap_swept[REAP_SCAN_MAX], host_reap_ok[REAP_SCAN_MAX];
+static uint64_t host_reap_left[REAP_SCAN_MAX];
+static uint64_t host_reap_completed; /* inodes handed to REAP_MULTI (gc thread) */
+#define REAP_SWEEP_ROUNDS 32 /* chunk batches per lane per pass (8 chunks each) */
+
+/* W124 batched REAP pass (gc thread only, so the static buffers are private):
+ *   1. sweep every active lane of up to REAP_SCAN_MAX dead inodes, as bounded
+ *      LANE_SWEEP_MULTI entries per owning group (unhosted lanes keep the
+ *      single SWEEP_NEXT request to their leader);
+ *   2. hand the fully swept inodes to every member's reclaim journal in one
+ *      batch RPC per member (host_gc_inode_nodes_batch);
+ *   3. complete only inodes every member accepted, as bounded REAP_MULTI
+ *      entries. Everything else keeps its REAP marker for a later pass. */
 static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
                               uint32_t anchor, struct reap_times *times)
 {
-    struct reap_scan_ctx c;
     uint8_t prefix[3];
     uint32_t plen = 0;
-    int i, lane;
-
     int prc, src;
     uint64_t started = now_us_();
-
-    unsigned gi=group==0?0:1;
-    uint64_t pass_started=now_us_();
-    memset(&c,0,sizeof(c));
-    c.skip_len=h->reap_cursor_len[gi];
-    memcpy(c.skip,h->reap_cursor[gi],c.skip_len);
+    unsigned gi = group == 0 ? 0 : 1;
+    struct reap_scan_ctx *cp = &host_reap_ctx[gi];
+    memset(cp, 0, sizeof(*cp));
+    cp->skip_len = h->reap_cursor_len[gi];
+    memcpy(cp->skip, h->reap_cursor[gi], cp->skip_len);
     prc = efs_kv_key_reap_prefix(anchor, prefix, &plen);
     src = (prc == EFS_OK)
-          ? efs_kv_scan_from(h->kv,prefix,plen,c.skip_len?c.skip:NULL,
-                             c.skip_len,reap_scan_cb,&c)
+          ? efs_kv_scan_from(h->kv, prefix, plen, cp->skip_len ? cp->skip : NULL,
+                             cp->skip_len, reap_scan_cb, cp)
           : -999;
     times->scan += now_us_() - started;
-    if (env_on("EFS_GC_DBG"))
-        fprintf(stderr, "raft-host: gc reap pass group=%u anchor=%u prc=%d src=%d markers=%d kv=%p\n",
-                group, anchor, prc, src, c.n, (void *)h->kv);
-    /* src > 0 is the scan callback's "batch full, stop" signal (merge_scan
-     * propagates it), NOT an error — process the partial batch and pick up
-     * the rest next pass. Only a negative rc is a real KV failure. */
     if (prc != EFS_OK || src < 0) {
         __atomic_fetch_add(&h->s->gc_scan_errors, 1, __ATOMIC_RELAXED);
         return;
     }
-    if(!c.n)h->reap_cursor_len[gi]=0;
-    __atomic_store_n(&h->s->gc_reap_seen[gi], c.n, __ATOMIC_RELAXED);
+    int n = cp->n;
+    if (!n) h->reap_cursor_len[gi] = 0;
+    __atomic_store_n(&h->s->gc_reap_seen[gi], n, __ATOMIC_RELAXED);
     __atomic_store_n(&h->s->gc_reap_capped[gi], src > 0, __ATOMIC_RELAXED);
-    uint64_t first = c.n ? c.ino[0] : 0;
+    uint64_t first = n ? cp->ino[0] : 0;
     if (__atomic_load_n(&h->s->gc_first_reap[gi], __ATOMIC_RELAXED) != first) {
         __atomic_store_n(&h->s->gc_first_reap[gi], first, __ATOMIC_RELAXED);
         __atomic_store_n(&h->s->gc_first_seen_us[gi], first ? efs_iostats_now_us() : 0, __ATOMIC_RELAXED);
     }
-    for (i = 0; i < c.n && __atomic_load_n(&h->gc_running,__ATOMIC_ACQUIRE) && h->running; i++) {
-        if(i && now_us_()-pass_started>=GC_FRAG_BUDGET_US &&
-           host_gc_metadata_waiting(h)) {
-            __atomic_store_n(&h->s->gc_reap_capped[gi],1,__ATOMIC_RELAXED);
+    if (!n) return;
+    /* Round robin: the next pass starts after this batch, so a stuck inode
+     * (BUSY lane, unreachable member) never starves the markers behind it. */
+    memcpy(h->reap_cursor[gi], cp->keys[n - 1], REAP_KEY_LEN);
+    h->reap_cursor_len[gi] = src > 0 ? REAP_KEY_LEN : 0;
+
+    /* 1. Lane sweeps, in rounds: each round sweeps up to
+     * EFS_META_SWEEP_BATCH_MAX chunks of every unfinished hosted lane, then
+     * rereads which lane keys are gone. Unhosted lanes are requested once per
+     * pass from their leader. host_reap_swept[i] means every lane is gone. */
+    started = now_us_();
+    for (int i = 0; i < n; i++) {
+        host_reap_left[i] = cp->lanes[i];
+        host_reap_swept[i] = 1;
+    }
+    for (int round = 0; round < REAP_SWEEP_ROUNDS; round++) {
+        int queued = 0;
+        if (round && now_us_() - started >= GC_FRAG_BUDGET_US && host_gc_metadata_waiting(h)) {
+            __atomic_store_n(&h->s->gc_reap_capped[gi], 1, __ATOMIC_RELAXED);
             break;
         }
-        /* Attempted BUSY/error rows remain in the ledger. A round-robin
-         * cursor gives later small inodes a turn before retrying that row. */
-        memcpy(h->reap_cursor[gi],c.keys[i],REAP_KEY_LEN);
-        h->reap_cursor_len[gi]=REAP_KEY_LEN;
-        uint8_t cmd[18 + 32 * EFS_META_REAP_BATCH_MAX];
-        int lanes_ok = 1;
-        int lrc = 0;
-
-        started = now_us_();
-        for (lane = 0; lane < EFS_META_LANES; lane++) {
-            uint32_t lshard;
-
-            /* One inode may span all64 lanes. Stop between proposals instead
-             * of consuming64 apply timeouts after the peers have stopped.
-             * The durable reap marker retains all unfinished work. */
-            if (!__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE))
-                return;
-
-            if (!(c.lanes[i] & (1ull << lane)))
-                continue;
-            lshard = efs_kv_lane_shard(c.ino[i], (uint8_t)lane);
-            wr64be(cmd + 1, c.ino[i]);
-            wr64be(cmd + 9, c.gen[i]);
-            cmd[17] = (uint8_t)lane;
-            if (host_hosts(h,efs_raft_shard_group(lshard))) {
-                uint32_t indices[EFS_META_SWEEP_BATCH_MAX], n;
-                lrc=efs_meta_lane_sweep_select(h->kv,c.ino[i],c.gen[i],(uint8_t)lane,indices,&n);
-                if (lrc != EFS_OK) { lanes_ok=0; break; }
-                cmd[0] = EFS_MD_CMD_LANE_SWEEP_BATCH;
-                cmd[18] = (uint8_t)n;
-                for (uint32_t j=0; j<n; j++) wr32be(cmd+19+4*j,indices[j]);
-                lrc = host_gc_propose(h, efs_raft_shard_group(lshard), cmd, 19+4*n);
-            } else {
-                /* Selection occurs at the remote lane leader; never scan an
-                 * unhosted KV or submit historical whole-lane work. */
-                cmd[0] = EFS_MD_REQ_SWEEP_NEXT;
-                lrc = host_gc_propose(h,efs_raft_shard_group(lshard),cmd,18);
-            }
-            if (lrc != EFS_OK) {
-                lanes_ok = 0;
-                /* A bounded batch made partial progress. Advance the other
-                 * lanes this pass rather than serializing a large delete
-                 * behind one lane. Keep the marker until every lane is done. */
-                if (lrc == EFS_ERR_BUSY) continue;
-                break; /* storage/authority failure: retry next pass */
+        for (unsigned g = 0; g < HOST_NGROUPS; g++)
+            reap_multi_init(&host_reap_sweep[g], (uint8_t)(g << 1), EFS_MD_CMD_LANE_SWEEP_MULTI);
+        for (int i = 0; i < n; i++) {
+            for (int lane = 0; lane < EFS_META_LANES; lane++) {
+                if (!(host_reap_left[i] & (1ull << lane))) continue;
+                if (!__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) || !h->running) return;
+                uint8_t lg = efs_raft_shard_group(efs_kv_lane_shard(cp->ino[i], (uint8_t)lane));
+                if (host_hosts(h, lg)) {
+                    uint32_t indices[EFS_META_SWEEP_BATCH_MAX], cnt = 0;
+                    if (efs_meta_lane_sweep_select(h->kv, cp->ino[i], cp->gen[i], (uint8_t)lane,
+                                                   indices, &cnt) != EFS_OK) {
+                        host_reap_left[i] &= ~(1ull << lane);
+                        host_reap_swept[i] = 0;
+                        continue;
+                    }
+                    uint8_t item[18 + 4 * EFS_META_SWEEP_BATCH_MAX];
+                    wr64be(item, cp->ino[i]);
+                    wr64be(item + 8, cp->gen[i]);
+                    item[16] = (uint8_t)lane;
+                    item[17] = (uint8_t)cnt;
+                    for (uint32_t j = 0; j < cnt; j++) wr32be(item + 18 + 4 * j, indices[j]);
+                    reap_multi_add(h, &host_reap_sweep[lg >> 1], item, 18 + 4 * cnt);
+                    queued = 1;
+                } else {
+                    uint8_t cmd[18];
+                    cmd[0] = EFS_MD_REQ_SWEEP_NEXT;
+                    wr64be(cmd + 1, cp->ino[i]);
+                    wr64be(cmd + 9, cp->gen[i]);
+                    cmd[17] = (uint8_t)lane;
+                    /* OK means the remote lane is gone; BUSY means chunks remain. */
+                    if (host_gc_propose(h, lg, cmd, 18) != EFS_OK) host_reap_swept[i] = 0;
+                    host_reap_left[i] &= ~(1ull << lane);
+                }
             }
         }
-        times->sweep += now_us_() - started;
-        if (!__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE))
-            return;
-        if (!lanes_ok) {
-            if (env_on("EFS_GC_DBG"))
-                fprintf(stderr, "raft-host: gc reap ino=%llu lane_sweep rc=%d (retry)\n",
-                        (unsigned long long)c.ino[i], lrc);
-            continue;
-        }
-        /* Include losing/never-published PUT objects. Namespace deletion
-         * alone is insufficient evidence of physical reclamation. */
-        started = now_us_();
-        int frc = host_gc_inode_nodes(h,c.ino[i],c.gen[i]);
-        times->fence += now_us_() - started;
-        if (frc != EFS_OK)
-            continue;
-        host_gc_reap_finish(h,c.ino[i],c.gen[i],c.lanes[i],times);
-
+        for (unsigned g = 0; g < HOST_NGROUPS; g++) reap_multi_flush(h, &host_reap_sweep[g]);
+        if (!queued) break;
+        /* Completion is read back from the applied replica, never inferred
+         * from an entry's rc. */
+        for (int i = 0; i < n; i++)
+            for (int lane = 0; lane < EFS_META_LANES; lane++)
+                if ((host_reap_left[i] & (1ull << lane)) &&
+                    host_gc_lane_swept(h, cp->ino[i], cp->gen[i], (uint8_t)lane))
+                    host_reap_left[i] &= ~(1ull << lane);
     }
+    for (int i = 0; i < n; i++)
+        if (host_reap_left[i]) host_reap_swept[i] = 0;
+    times->sweep += now_us_() - started;
+
+    /* 2. Storage acceptance by every member. */
+    if (!__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) || !h->running) return;
+    started = now_us_();
+    uint32_t m = 0;
+    for (int i = 0; i < n; i++) {
+        if (!host_reap_swept[i]) continue;
+        host_reap_inos[m] = cp->ino[i];
+        host_reap_gens[m] = cp->gen[i];
+        m++;
+    }
+    host_gc_inode_nodes_batch(h, host_reap_inos, host_reap_gens, m, host_reap_ok);
+    times->fence += now_us_() - started;
+
+    /* 3. REAP completion for accepted inodes only. */
+    if (!__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) || !h->running) return;
+    started = now_us_();
+    for (unsigned g = 0; g < HOST_NGROUPS; g++)
+        reap_multi_init(&host_reap_done[g], (uint8_t)(g << 1), EFS_MD_CMD_REAP_MULTI);
+    for (uint32_t k = 0; k < m; k++) {
+        if (!host_reap_ok[k]) continue;
+        struct efs_meta_reap_key keys[EFS_META_REAP_BATCH_MAX];
+        uint32_t cnt = 0;
+        if (efs_meta_reap_select(h->kv, host_reap_inos[k], host_reap_gens[k], keys, &cnt) != EFS_OK)
+            continue;
+        uint8_t item[17 + 32 * EFS_META_REAP_BATCH_MAX];
+        wr64be(item, host_reap_inos[k]);
+        wr64be(item + 8, host_reap_gens[k]);
+        item[16] = (uint8_t)cnt;
+        for (uint32_t j = 0; j < cnt; j++) {
+            item[17 + 32 * j] = keys[j].len;
+            memcpy(item + 18 + 32 * j, keys[j].key, EFS_META_REAP_KEY_MAX);
+        }
+        uint8_t ig = efs_raft_shard_group(efs_kv_inode_shard(host_reap_inos[k]));
+        reap_multi_add(h, &host_reap_done[ig >> 1], item, 17 + 32 * cnt);
+        host_reap_completed++;
+    }
+    for (unsigned g = 0; g < HOST_NGROUPS; g++) reap_multi_flush(h, &host_reap_done[g]);
+    times->done += now_us_() - started;
 }
 
 
@@ -9483,9 +9637,13 @@ static void host_snap_import_pass(struct efs_raft_host *h)
 }
 
 
+/* W124: a capped pass that made progress runs again after this idle by
+ * default (EFS_GC_BACKLOG_IDLE_MS overrides, 20..1000); an idle or blocked
+ * pass still waits GC_LOOP_MS. */
+#define GC_BACKLOG_IDLE_DEFAULT_MS 20u
 static int host_gc_backlog_config(const char *value, unsigned *ms)
 {
-    *ms = GC_LOOP_MS;
+    *ms = GC_BACKLOG_IDLE_DEFAULT_MS;
     if (!value) return EFS_OK;
     if (!*value) return EFS_ERR_INVAL;
     for (const char *p = value; *p; p++)
@@ -9633,7 +9791,10 @@ static void *host_gc_thread(void *arg)
         uint64_t t0, t_orphan = 0, t_reap = 0, t_frag = 0, t_spread, t_rec, t_all;
         struct efs_kv_scan_stats sc_frag, sc_all;
         struct reap_times reap_times = {0};
-        uint64_t removed_before = __atomic_load_n(&h->s->gc_removed_fragments, __ATOMIC_RELAXED);
+        /* Progress: fragments this node removed, plus W124 reap completions
+         * (members delete asynchronously, after the pass). */
+        uint64_t removed_before = __atomic_load_n(&h->s->gc_removed_fragments, __ATOMIC_RELAXED) +
+                                  host_reap_completed;
         int backlog_capped = 0;
         int expiry_progress=0;
 
@@ -9751,7 +9912,8 @@ static void *host_gc_thread(void *arg)
         __atomic_fetch_add(&h->s->gc_passes, 1, __ATOMIC_RELAXED);
         __atomic_store_n(&h->s->gc_stage, 0, __ATOMIC_RELAXED);
         __atomic_store_n(&h->s->gc_pass_start_us, 0, __ATOMIC_RELAXED);
-        uint64_t removed_after = __atomic_load_n(&h->s->gc_removed_fragments, __ATOMIC_RELAXED);
+        uint64_t removed_after = __atomic_load_n(&h->s->gc_removed_fragments, __ATOMIC_RELAXED) +
+                                 host_reap_completed;
         unsigned idle_ms = host_gc_backlog_idle(h->gc_backlog_idle_ms, backlog_capped, removed_before, removed_after);
         idle_ms = host_gc_expiry_idle(idle_ms, expiry_progress);
         if (idle_ms < GC_LOOP_MS && env_on("EFS_RAFT_OBS"))
@@ -11520,7 +11682,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     uint8_t group;
     const uint8_t *cmd;
     uint8_t storage_finish_cmd[HOST_SESS_CREATE_LEN];
-    uint8_t sweep_cmd[19+4*EFS_META_SWEEP_BATCH_MAX];
+    uint8_t sweep_cmd[21+4*EFS_META_SWEEP_BATCH_MAX];
     uint8_t cleanup_cmd[27+66*EFS_SESSION_CLEANUP_MAX];
     uint32_t clen;
     uint64_t idx = 0, term = 0;
@@ -12052,6 +12214,38 @@ int server_raft_host_active(void)
 {
     struct efs_raft_host *h = g_host;
     return h && h->running;
+}
+
+/* W124 fail-closed recovery: *dead = 1 only on proof that ino was deleted.
+ * A linearizable read (ReadIndex on the inode's group, then the local
+ * replica) must show the row absent while the key carries transaction
+ * history (inode numbers are never reallocated) and no pending intent.
+ * Any doubt is an error, so the caller never fences a live file: INVAL when
+ * the inode's group is not hosted here, otherwise retryable. */
+int server_raft_host_inode_reaped(efs_ino_t ino, int *dead)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_meta_row row;
+    uint8_t key[EFS_KV_KEY_MAX];
+    uint32_t kl = 0;
+    uint64_t version = 0;
+    int hint = -1, rc;
+    *dead = 0;
+    if (!h || !h->running || !h->kv || ino <= EFS_ROOT_INO) return EFS_ERR_NOT_PRIMARY;
+    uint8_t group = efs_raft_shard_group(efs_kv_inode_shard(ino));
+    if (!host_hosts(h, group)) return EFS_ERR_INVAL; /* cannot judge here */
+    rc = host_read_index(h, group, &hint);
+    if (rc != EFS_OK) return rc;
+    rc = efs_meta_apply_get_inode(h->kv, ino, &row);
+    if (rc == EFS_OK) return EFS_OK;
+    if (rc != EFS_ERR_NOT_FOUND) return rc;
+    rc = efs_kv_key_inode(efs_kv_inode_shard(ino), ino, key, &kl);
+    if (rc == EFS_OK) rc = efs_txn_key_busy(h->kv, key, kl);
+    if (rc != EFS_OK) return rc;
+    rc = efs_txn_ver_get(h->kv, key, kl, &version);
+    if (rc != EFS_OK) return rc;
+    *dead = version > 0;
+    return EFS_OK;
 }
 
 /* Keep fresh metadata proofs on a known dual-group

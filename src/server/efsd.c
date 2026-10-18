@@ -485,6 +485,14 @@ int main(int argc, char **argv)
             (double)server.quota / quota_scale, quota_unit,
             (double)safe_quota / maximum_scale, maximum_unit);
 
+    /* W124: the reclaim journal is verified and replayed (fences installed,
+     * pending bytes credited against the fresh inventory) before any fragment
+     * write can arrive. A damaged journal fails closed, not startup. */
+    if (server_reclaim_init(&server) != EFS_OK) {
+        fprintf(stderr, "reclaim: cannot initialize reclaim journal; refusing startup\n");
+        return 1;
+    }
+
     /* Start listening first. If the configured address/port cannot be bound,
        fail immediately before contacting peers. */
     server.listen_fd = efs_listen_tcp(server.addr, server.port, EFS_LISTEN_BACKLOG);
@@ -692,6 +700,7 @@ int main(int argc, char **argv)
 
     server_writer_pool_stop(&server);
     server_put_sync_stop(&server);
+    server_reclaim_shutdown(&server);
     server_usage_flush_dirty(&server);
 
     /* Nothing to replay on the way down: the Raft log is the durability

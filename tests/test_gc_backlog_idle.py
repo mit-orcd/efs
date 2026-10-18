@@ -13,10 +13,11 @@ code='''#include "efs/common.h"
 #include <stdint.h>
 #include <stdio.h>
 #define GC_LOOP_MS 1000
+#define GC_BACKLOG_IDLE_DEFAULT_MS 20u
 '''+s[a:b]+'''
 int main(void) {
  unsigned ms;
- assert(host_gc_backlog_config(NULL,&ms)==EFS_OK && ms==1000);
+ assert(host_gc_backlog_config(NULL,&ms)==EFS_OK && ms==20); /* W124: capped progress reruns fast */
  const char *invalid[]={"", "0", "19", "1001", "-100", "+100", " 100", "100x", "999999999999999999999999"};
  for(unsigned i=0;i<sizeof(invalid)/sizeof(*invalid);i++)
   assert(host_gc_backlog_config(invalid[i],&ms)==EFS_ERR_INVAL);
@@ -52,6 +53,7 @@ assert 'if (maintenance) host_dir_spread_pass(h)' in thread
 assert 'i<2 && h->gc_running' in s
 assert 'expiry_at = efs_iostats_now_us() +\n                            20000' in thread
 assert 'removed_before' in thread and 'removed_after' in thread
+assert thread.count('host_reap_completed')==2 # reap completions count as progress
 assert 'host_snap_export_pass(h)' in thread and 'if (sleep_us > 20000) sleep_us = 20000' in thread
 with tempfile.TemporaryDirectory(prefix='efs-gc-idle-') as temp:
  p=Path(temp)/'test.c';p.write_text(code)

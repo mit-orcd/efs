@@ -34,6 +34,13 @@
 #define EFS_MD_REQ_EXPIRY_POLICY_INFO 68 /* policy read; OK hint carries enabled/clear flags */
 #define EFS_MD_REQ_EXPIRY_ORIGIN 69 /* record root-generation/policy-revision/max; OK hint=clear */
 #define EFS_MD_REQ_EXPIRY_PARENT 70 /* inode read: parent/generation/mode */
+/* W124 batched reclaim, one entry per owning group:
+ * LANE_SWEEP_MULTI [count:2] then per item [ino:8][gen:8][lane:1][n:1][ci:4]*n
+ *   (reaped-inode sweep: no per-chunk GC records);
+ * REAP_MULTI [count:2] then per item [ino:8][gen:8][n:1][len:1,key:31]*n.
+ * Items apply independently; a refused item keeps its REAP marker. */
+#define EFS_MD_CMD_LANE_SWEEP_MULTI 71
+#define EFS_MD_CMD_REAP_MULTI 72
 #define EFS_MD_REQ_EXPIRY_ID 67 /* inode8; authoritative generation/uid/mode/links */
 #define EFS_MD_REQ_EXPIRY_ENABLE 66 /* renewal prefix + parent/name; absent-record CAS */
 #define EFS_MD_REQ_EXPIRY_DELETE 65 /* guarded due FileID/name; receiver owns clock */

@@ -5660,8 +5660,49 @@ static void test_reap_cleanup_deferred(void)
     CHECK(efs_kv_lsm_cleanup_deferred(kv)>=deferred+3,"lane, row and cursor deletes deferred");
     efs_kv_lsm_close(kv);
 }
+/* W124: a reaped inode's lane sweep deletes its chunk rows and then the lane
+ * key, but queues no per-chunk GC record: the members' reclaim journals
+ * delete the inode's fragments whole. */
+static void test_reaped_sweep_no_gc(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    efs_ino_t ino = 0; struct efs_meta_row row;
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "W124 init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "reaped", &ino) == EFS_OK, "W124 create");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK, "W124 row");
+    for (unsigned c = 0; c < 20; c++) {
+        uint32_t ci = c * EFS_META_LANES;
+        pub(kv, ino, ci, (uint64_t)(ci + 1) * EFS_MIN_CHUNK_SIZE, 0x7100 + c, 0, T0 + 1, "W124 chunk");
+    }
+    CHECK(efs_meta_apply_unlink(kv, EFS_ROOT_INO, "reaped", T0 + 2) == EFS_OK, "W124 unlink");
+    uint32_t sel[EFS_META_SWEEP_BATCH_MAX], n = 0;
+    int rc = EFS_ERR_BUSY, rounds = 0;
+    while (rc == EFS_ERR_BUSY && rounds++ < 10) {
+        CHECK(efs_meta_lane_sweep_select(kv, ino, row.generation, 0, sel, &n) == EFS_OK, "W124 select");
+        rc = efs_meta_apply_lane_sweep_reaped(kv, ino, row.generation, 0, sel, n);
+        if (rc == EFS_OK)
+            CHECK(efs_meta_apply_lane_sweep_reaped(kv, ino, row.generation, 0, sel, n) == EFS_OK,
+                  "W124 replay of the last batch is idempotent");
+    }
+    CHECK(rc == EFS_OK && rounds == 3, "W124 twenty chunks drain in three bounded batches");
+    for (unsigned c = 0; c < 20; c++)
+        CHECK(!chunk_present(kv, ino, row.generation, c * EFS_META_LANES), "W124 chunk row deleted");
+    uint8_t key[EFS_KV_KEY_MAX], val[EFS_META_LANE_BYTES]; uint32_t kl, vl = sizeof(val);
+    efs_kv_key_lane(efs_kv_lane_shard(ino, 0), ino, row.generation, 0, key, &kl);
+    CHECK(efs_kv_get(kv, key, kl, val, &vl) == EFS_ERR_NOT_FOUND, "W124 lane key deleted last");
+    for (unsigned anchor = 1; anchor <= 2; anchor++) {
+        struct gc_probe none; uint8_t pre[EFS_KV_KEY_MAX]; uint32_t plen = 0;
+        memset(&none, 0, sizeof(none));
+        CHECK(efs_kv_key_gc_prefix(anchor, pre, &plen) == EFS_OK &&
+              efs_kv_scan_prefix(kv, pre, plen, gc_probe_cb, &none) == EFS_OK && !none.n,
+              "W124 no per-chunk GC record");
+    }
+    efs_kv_mem_free(kv);
+}
 int main(void)
 {
+    test_reaped_sweep_no_gc();
     test_reap_cleanup_deferred();
     test_create_negative_replay();
     test_gc_last_close_before_resolve();

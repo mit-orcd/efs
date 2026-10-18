@@ -16,12 +16,20 @@ static int gc_unlink(const char*p){if(fault==4){errno=EACCES;return -1;}return u
 #define unlink gc_unlink
 #define fsync gc_fsync
 #include "../src/server/store.c"
+#include "../src/server/reclaim.c"
 #undef open
 #undef pread
 #undef unlink
 #undef fsync
 /* No Raft host exists in this physical-store fixture. */
 void server_raft_host_expiry_status(struct efs_expiry_status *out){memset(out,0,sizeof(*out));}
+int server_raft_host_active(void){return 0;}
+int server_raft_host_inode_reaped(efs_ino_t ino,int *dead){(void)ino;*dead=0;return EFS_ERR_NOT_PRIMARY;}
+/* The reclaim deleter's two durable steps: death bit, then whole-inode delete. */
+static int gc_inode(struct efsd_server *s,efs_export_id_t eid,efs_ino_t ino){
+ int rc=server_gc_death_set_many(s,eid,&ino,1);
+ return rc!=EFS_OK?rc:server_gc_inode_delete(s,eid,ino,NULL);
+}
 
 int main(int argc,char **argv){
  assert(argc==1 || (argc==2 && !strcmp(argv[1],"unlimited")));
@@ -53,7 +61,7 @@ int main(int argc,char **argv){
   s.nodes[0].used=123456;server_init_local_usage(&s);
   assert(s.nodes[0].used==0); /* crash snapshot cannot resurrect quota charges */
   struct efs_msg_gc_status_reply status;server_gc_status(&s,&status);
-  assert(status.version==3&&status.removed_fragments==removed+2&&status.delete_errors>0);
+  assert(status.version==4&&status.removed_fragments==removed+2&&status.delete_errors>0);
   assert(status.last_delete_age_ms<10000);
   assert(status.io[0].ops && status.io[0].bytes && status.io[0].errors);
   assert(status.io[1].ops && !status.io[1].bytes && status.io[1].errors);
@@ -79,30 +87,30 @@ int main(int argc,char **argv){
  assert(!server_write_fragment_with_sum_sync(&s,&ex,777,0,0,body,EFS_FRAGMENT_SIZE,sum));
  assert(s.nodes[0].used==EFS_FRAGMENT_SIZE&&server_compute_local_usage(&s)==EFS_FRAGMENT_SIZE);
  char duplicate[8192];fragment_path_at(&s,1,&ex,777,0,0,duplicate,sizeof(duplicate));assert(access(duplicate,F_OK));
- assert(server_gc_inode(&s,1,777,99)==EFS_OK&&s.nodes[0].used==0);
+ assert(gc_inode(&s,1,777)==EFS_OK&&s.nodes[0].used==0);
  efs_tls_path_hint=-1;
  s.direct_io=0;ex.chunk_size=EFS_DEFAULT_CHUNK_SIZE;efs_tls_chunk_gen=200;
  for(int root=0;root<2;root++)for(unsigned ci=0;ci<70;ci++){
   efs_tls_write_root=root;
   assert(!server_write_fragment_with_sum_sync(&s,&ex,84,ci,0,body,EFS_FRAGMENT_SIZE,sum));
  }
- assert(server_gc_inode(&s,1,84,9)==EFS_ERR_BUSY); /* bounded physical orphan pass */
+ { efs_ino_t dead=84; assert(server_gc_death_set_many(&s,1,&dead,1)==EFS_OK); }
  assert(server_write_fragment_with_sum_sync(&s,&ex,84,71,0,body,EFS_FRAGMENT_SIZE,sum)==EFS_ERR_STALE);
- assert(server_gc_inode(&s,1,84,9)==EFS_OK && s.nodes[0].used==0);
- assert(server_gc_inode(&s,1,84,9)==EFS_OK);
- assert(server_gc_inode(&s,1,84,9)==EFS_OK);
+ assert(server_gc_inode_delete(&s,1,84,NULL)==EFS_OK && s.nodes[0].used==0); /* 140 files, beyond one 128-entry slice */
+ assert(gc_inode(&s,1,84)==EFS_OK);
+ assert(gc_inode(&s,1,84)==EFS_OK);
  efs_tls_write_root=0;
  assert(!server_write_fragment_with_sum_sync(&s,&ex,4180,0,0,body,EFS_FRAGMENT_SIZE,sum));
- assert(server_gc_inode(&s,1,4180,10)==EFS_OK); /* adjacent bitmap bit preserves old fence */
+ assert(gc_inode(&s,1,4180)==EFS_OK); /* adjacent bitmap bit preserves old fence */
  server_init_local_usage(&s);assert(s.nodes[0].used==0);
  assert(server_write_fragment_with_sum_sync(&s,&ex,84,71,0,body,EFS_FRAGMENT_SIZE,sum)==EFS_ERR_STALE);
  /* A failed death-fence sync preserves physical bytes for a durable retry. */
  efs_tls_write_root=0;
  assert(!server_write_fragment_with_sum_sync(&s,&ex,126,0,0,body,EFS_FRAGMENT_SIZE,sum));
- fault=5;assert(server_gc_inode(&s,1,126,11)==EFS_ERR_IO);fault=0;
+ fault=5;assert(gc_inode(&s,1,126)==EFS_ERR_IO);fault=0;
  assert(s.nodes[0].used==EFS_FRAGMENT_SIZE);
- assert(server_gc_inode(&s,1,126,11)==EFS_OK && !s.nodes[0].used);
- assert(server_gc_inode(&s,1,42,7)==EFS_OK);
+ assert(gc_inode(&s,1,126)==EFS_OK && !s.nodes[0].used);
+ assert(gc_inode(&s,1,42)==EFS_OK);
  /* Empty sharded path scaffolding must not accumulate after file deletion. */
  for(unsigned root=0;root<2;root++) {
   char path[8192];snprintf(path,sizeof(path),"%s/data/exports/1",s.storage_paths[root]);

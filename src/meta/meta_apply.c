@@ -5650,6 +5650,7 @@ struct sweep_scan {
     uint32_t chunks;
     int full;
     int rc;
+    int nogc; /* W124 reaped inode: node fences delete the whole inode dir */
 };
 
 static int sweep_commit(struct efs_kv *kv, struct sweep_scan *ss)
@@ -5715,13 +5716,13 @@ static int sweep_cb(void *user, const uint8_t *key, uint32_t klen,
     ss->it[ss->n].val = NULL; /* `it` is an uninitialised stack array */
     ss->it[ss->n].vlen = 0;
     ss->n++;
-    if (dead.generation != 0) {
+    if (dead.generation != 0 && !ss->nogc) {
         ss->rc = gc_queue(ss->it, &ss->n, ss->cap, ss->keys, ss->gc_vals,
                           ino, lane, ci, &dead);
         if (ss->rc != EFS_OK)
             return 1;
     }
-    {
+    if (!ss->nogc) {
         uint32_t di, nd = trailer_n(val, vlen);
 
         for (di = 0; di < nd; di++) {
@@ -5839,15 +5840,15 @@ int efs_meta_lane_sweep_select(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
 /* Unlike a scan-and-delete step, the immutable command names exactly the
  * keys it may remove. A storage/apply-marker retry therefore cannot advance
  * into another batch. All source deletes and GC references commit together. */
-int efs_meta_apply_lane_sweep_batch(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
-                                    uint8_t lane, const uint32_t *indices,
-                                    uint32_t n)
+static int lane_sweep_batch(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                            uint8_t lane, const uint32_t *indices,
+                            uint32_t n, int nogc)
 {
     struct efs_kv_item it[SWEEP_CHUNKS * 2];
     uint8_t keys[SWEEP_CHUNKS * 2][EFS_KV_KEY_MAX];
     uint8_t gc_vals[SWEEP_CHUNKS * 2][EFS_META_GC_VAL];
     struct sweep_scan ss = {.ino=ino, .gen=gen, .it=it, .keys=keys,
-        .gc_vals=gc_vals, .cap=SWEEP_CHUNKS * 2};
+        .gc_vals=gc_vals, .cap=SWEEP_CHUNKS * 2, .nogc=nogc};
     uint8_t key[EFS_KV_KEY_MAX]; uint32_t kl;
     if (!kv || !ino || lane >= EFS_META_LANES || n > EFS_META_SWEEP_BATCH_MAX ||
         (n && !indices)) return EFS_ERR_INVAL;
@@ -5880,6 +5881,23 @@ int efs_meta_apply_lane_sweep_batch(struct efs_kv *kv, efs_ino_t ino, uint64_t g
     if (rc != EFS_OK) return rc;
     rc=meta_cleanup_del(kv,key,kl);
     return rc == EFS_ERR_NOT_FOUND ? EFS_OK : rc;
+}
+
+int efs_meta_apply_lane_sweep_batch(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                                    uint8_t lane, const uint32_t *indices,
+                                    uint32_t n)
+{
+    return lane_sweep_batch(kv, ino, gen, lane, indices, n, 0);
+}
+/* W124: sweep a reaped inode's lane without queuing per-chunk GC records.
+ * Every member's reclaim fence deletes the whole inode directory, including
+ * fragments of losing or never-published PUTs, so the records would only add
+ * per-fragment delete RPCs and acks for files already being removed. */
+int efs_meta_apply_lane_sweep_reaped(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                                     uint8_t lane, const uint32_t *indices,
+                                     uint32_t n)
+{
+    return lane_sweep_batch(kv, ino, gen, lane, indices, n, 1);
 }
 
 struct rsv_purge {

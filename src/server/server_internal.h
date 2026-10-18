@@ -96,6 +96,16 @@ struct efsd_server {
     uint64_t gc_sweep_errors, gc_reap_errors, gc_ack_errors, gc_scan_errors;
     uint64_t gc_reap_seen[2], gc_orphan_seen[2], gc_pending[2], gc_first_reap[2], gc_first_seen_us[2];
     uint64_t gc_missing_exports;
+    /* W124 node reclaim (reclaim.c). Bytes credited back to quota at
+     * acceptance but still on disk; physical admission guard state. */
+    uint64_t reclaim_pending_bytes;
+    int reclaim_fail_closed; /* journal loss detected: refuse data PUTs */
+    /* Per filesystem: usable bytes at the last sample, bytes admitted since.
+     * phys_fs[r] maps storage root r to its filesystem slot + 1 (0 = not
+     * sampled yet: admitted). */
+    uint64_t phys_avail[EFS_MAX_STORAGE_PATHS], phys_charged[EFS_MAX_STORAGE_PATHS];
+    uint8_t phys_fs[EFS_MAX_STORAGE_PATHS];
+    uint64_t phys_refused;
     struct efs_gc_io_stats gc_io[EFS_GC_IO_CLASSES];
     uint32_t gc_stage, gc_group, gc_sampled_mask, gc_reap_capped[2];
     void *storage_roots[EFS_MAX_STORAGE_PATHS]; /* root identity/locks (storage_roots.c) */
@@ -283,8 +293,6 @@ void efs_iostats_dump(int force);
 
 /* Append local storage roots without restart. csv is comma-separated
  * absolute paths. Existing roots are skipped. count_out is the new total. */
-int server_gc_inode(struct efsd_server *s, efs_export_id_t eid, efs_ino_t ino,
-                     uint64_t generation);
 void server_gc_status(struct efsd_server *s, struct efs_msg_gc_status_reply *out);
 
 int server_add_storage_paths(struct efsd_server *s, const char *csv,
@@ -361,6 +369,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
 void server_raft_host_expiry_status(struct efs_expiry_status *out);
 void server_raft_host_status(struct efs_msg_raft_status_reply *out);
 int server_raft_host_active(void);
+int server_raft_host_inode_reaped(efs_ino_t ino, int *dead);
 /* Borrowed immutable query image; group slots are 0 and 2. Only background
  * refresh builds catalogs. The callback must enforce fresh authorization and
  * never retain pointers. Failed refresh preserves source/build watermarks. */
@@ -491,5 +500,37 @@ void server_put_sync_stop(struct efsd_server *s);
  * root's previous durability record (server_put_sync_abandon, atexit). */
 void server_put_sync_serving(void);
 void server_put_sync_abandon(void);
+
+
+/* ---- W124 node reclaim (src/server/reclaim.c) ----
+ * Batched, journal-first acceptance of dead inodes for physical reclaim. */
+struct efs_reclaim_item {
+    uint32_t export_id;
+    efs_ino_t ino;
+    uint64_t generation; /* 0 = derived by recovery */
+};
+int server_reclaim_init(struct efsd_server *s); /* after the usage inventory */
+void server_reclaim_shutdown(struct efsd_server *s);
+/* Journal, fence, credit; rc[i] = EFS_OK (accepted) or EFS_ERR_BUSY. */
+int server_reclaim_accept(struct efsd_server *s, const struct efs_reclaim_item *items,
+                          uint32_t n, int32_t *rc);
+int server_reclaim_fenced(efs_export_id_t eid, efs_ino_t ino); /* 1 = fenced */
+void server_reclaim_status(struct efsd_server *s, struct efs_reclaim_status *out);
+/* Physical admission guard for a fragment at `path`, called with s->lock
+ * held. 0 = admitted (and charged to that filesystem). */
+int server_phys_admit_locked(struct efsd_server *s, const char *path, uint64_t bytes);
+void server_phys_sample(struct efsd_server *s);
+/* store.c helpers used by reclaim.c. */
+pthread_rwlock_t *server_inode_guard(efs_export_id_t eid, efs_ino_t ino);
+void server_inode_gc_epoch_bump(void);
+int server_gc_death_set_many(struct efsd_server *s, efs_export_id_t eid,
+                             const efs_ino_t *inos, uint32_t n);
+int server_gc_inode_payload(struct efsd_server *s, efs_export_id_t eid, efs_ino_t ino,
+                            uint64_t *payload);
+/* Delete every fragment of a fenced inode on all roots. counted == NULL debits
+ * `used` per unlink; otherwise removed payload is added to *counted (also on
+ * failure) and the caller settles quota. */
+int server_gc_inode_delete(struct efsd_server *s, efs_export_id_t eid, efs_ino_t ino,
+                           uint64_t *counted);
 
 #endif

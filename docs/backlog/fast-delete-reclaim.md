@@ -1,9 +1,11 @@
 # W124 — Fast delete: quota at delete, batched reclaim and fragment slot reuse
 
 **Class:** performance / capacity management. **Recorded:** 2026-10-18.
-**Status:** PROPOSED; revised after design review (2026-10-18, see
-[Review](#review-2026-10-18)). Implementation, private A/B and orcd-mini
-acceptance: **NOTRUN**.
+**Status:** parts 1 and 2 IMPLEMENTED on branch `w124-reclaim`
+(2026-10-18, see [Implementation](#implementation-2026-10-18)); the old
+per-inode leader path is removed, not kept behind a switch. Unit gates
+PASS; private and orcd-mini acceptance: see the evidence page linked from
+[status](../status/README.md). Design reviews: [Review](#review-2026-10-18).
 - **Proceed:** part 1 (bounded batched reclaim) and part 2 (explicit
   accounting), then W125.
 - **Deferred:** parts 4 (slot reuse) and 5 (subtree delete).
@@ -407,6 +409,75 @@ mainly for large files.
 - **Deferred** until subtree accounting (what the trash holds, how hard
   links and leases retain it, when credit happens) and retention semantics
   are defined.
+
+## Implementation (2026-10-18)
+
+**Code:**
+- **Leader** (`src/server/raft_host.c`, `host_gc_reap_pass`): up to 512
+  REAP markers per group per pass. Lane sweeps go out as bounded
+  `LANE_SWEEP_MULTI` (MD 71) entries, one per owning group and at most
+  48 KiB each, for up to 32 rounds of 8 chunks per lane per pass. A lane
+  counts as swept only when its lane key reads absent on the applied
+  replica. Unhosted lanes send one `SWEEP_NEXT` per pass to their leader,
+  which packs a one-item `LANE_SWEEP_MULTI`. Fully swept inodes then go to
+  every member in one `GC_INODE_BATCH` (wire 155/156) per member; the
+  remote requests are sent before the local acceptance runs.
+  `REAP_MULTI` (MD 72) entries complete only the inodes every member
+  accepted, each on its inode's own group. Every item rechecks the inode
+  as `REAP_BATCH` does, and a refused item keeps its marker. A capped pass
+  that made progress reruns after 20 ms (`EFS_GC_BACKLOG_IDLE_MS`
+  overrides).
+- **Reaped sweeps queue no GC records** (`efs_meta_apply_lane_sweep_reaped`).
+  The inode's fragments are deleted whole by the members' journals, so the
+  per-chunk `GC_FRAGMENT` round trips are gone from the delete path.
+- **Node** (`src/server/reclaim.c`): implements steps 1–7 above.
+  - **Acceptance:** dedupe, then the cap check (BUSY above it), then the
+    journal append and fsync, then the fences installed under each inode's
+    write guard, then the credit; only then the reply.
+  - **Background work:** a deleter pool of 4; bitmap checkpoints with one
+    update per touched page (`server_gc_death_set_many`); whole-segment
+    retirement, where an idle current segment is sealed after 1 s.
+  - **Startup:** verification and replay run before `listen`. Fail-closed
+    recovery fences only inodes that metadata proves dead: a ReadIndex,
+    then a row that is absent while the key keeps transaction history and
+    no intent.
+  - **Removed:** the old synchronous `server_gc_inode`. `GC_INODE` (121) is
+    now a one-item acceptance.
+- **Accounting:** `used` is debited at acceptance by the inode's on-disk
+  payload, recomputed from disk, which also makes replay credit exactly
+  once against the startup inventory. `reclaim_pending_bytes` carries the
+  same bytes until deletion. Deletion only counts what it removes, and
+  settles once per inode: if another path (the chunk GC pass) removed part
+  of the credited bytes meanwhile, `used` gets those back, so nothing is
+  debited twice.
+- **Status:** `gc-status` is version 4 and adds a `reclaim_*` line:
+  accepted, deleted, checkpointed, retired, BUSY, journal records,
+  segments and epoch, pending and credited bytes, physical availability
+  and refusals, and the fail-closed state.
+
+**Deviations from the plan, and why:**
+- **One journal per node:** it lives on `storage_paths[0]`, not one per
+  root. Records carry (export, inode) and deletion covers every root, so a
+  batch costs one fsync per node. On a node whose roots are on different
+  filesystems, the journal shares a filesystem with the first root only.
+- **The state record lives outside `meta/`,** at
+  `<root>/.efs-reclaim-state`. Restoring an older but self-consistent
+  `meta/` then shows missing segments and fails closed; a unit test covers
+  this.
+- **Credit point:** the credit lands at member acceptance, seconds after
+  the final unlink or close, not inside the Raft entry that finalises
+  removal. Quota is per node, so the node that holds the bytes is where
+  the credit can be exact.
+- **Physical floor:** 5% of each filesystem (at least 1 GiB) plus a
+  256 MiB journal and checkpoint minimum, not the 20% startup reserve. A
+  20% runtime floor would refuse every write on orcd-mini, whose `/data1`
+  is about 84% used. The startup quota check keeps its 20% reserve. The
+  guard is per filesystem: it is sampled every 500 ms and charged
+  atomically under the server lock at both PUT charge sites.
+- **Directory durability** is still one directory sync per inode
+  directory, not one per touched directory per round. This is the
+  remaining per-inode cost; it is measured on orcd-mini.
+- **Compaction headroom** does not apply until W125.
 
 ## Acceptance gates
 

@@ -198,6 +198,9 @@ enum efs_msg_type {
     EFS_MSG_DATA_COMMIT_REPLY = 152,
     EFS_MSG_SYNC_STATS = 153,
     EFS_MSG_SYNC_STATS_REPLY = 154,
+    /* W124: batched journal-first reclaim acceptance (one per node per batch). */
+    EFS_MSG_GC_INODE_BATCH = 155,
+    EFS_MSG_GC_INODE_BATCH_REPLY = 156,
 };
 
 /* Storage session seal/check. Reply echoes the exact identity and floor.
@@ -212,6 +215,18 @@ struct efs_msg_gc_inode {
     uint64_t ino, generation;
 };
 struct efs_msg_gc_inode_reply { int32_t rc; };
+/* Request: header then count items; reply: count int32 results in order.
+ * EFS_OK = durably journalled and fenced (accepted for reclaim); BUSY = not
+ * accepted (journal full, fail-closed or recovering), retry later. */
+#define EFS_GC_INODE_BATCH_MAX 1024u
+struct efs_msg_gc_inode_batch {
+    uint32_t export_id, count;
+    struct { uint64_t ino, generation; } items[];
+};
+struct efs_msg_gc_inode_batch_reply {
+    uint32_t count, reserved;
+    int32_t rc[];
+};
 
 /* Runtime counters, reset on restart. Queue samples cover leader groups only;
  * reap_capped means reap_seen is a lower bound. Ages are monotonic durations,
@@ -226,6 +241,17 @@ struct efs_gc_io_stats {
 };
 /* Process-local observations, reset on restart. Namespace bytes are logical
  * metadata bytes observed at deletion, never physical reclaimed bytes. */
+/* W124 node reclaim. accepted/deleted/checkpointed count inodes since start;
+ * journal_* describe unretired journal state; pending_bytes were credited to
+ * quota at acceptance but are still on disk. fail_closed=1: journal loss was
+ * detected and data PUTs are refused until recovery completes. */
+struct efs_reclaim_status {
+    uint64_t accepted, deleted, checkpointed, retired, busy;
+    uint64_t journal_records, journal_segments, journal_epoch;
+    uint64_t pending_bytes, credited_bytes, phys_avail_bytes, phys_refused;
+    uint32_t fail_closed, recovering;
+    uint64_t recovered;
+};
 struct efs_expiry_status {
     uint32_t available, enabled, healthy, uncertain, leader_mask, sampled_mask;
     uint64_t removed_files, namespace_bytes, size_unknown_files, refused, errors, passes;
@@ -246,6 +272,8 @@ struct efs_msg_gc_status_reply {
     struct efs_gc_io_stats io[EFS_GC_IO_CLASSES];
     /* Version 3 appends expiry; prior offsets remain stable. */
     struct efs_expiry_status expiry;
+    /* Version 4 appends W124 node reclaim state. */
+    struct efs_reclaim_status reclaim;
 };
 
 /* D25 read authority for write admission, including holes and new lanes.

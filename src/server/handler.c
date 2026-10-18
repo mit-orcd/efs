@@ -497,15 +497,52 @@ send_reply:
             break;
         }
         case EFS_MSG_GC_INODE: {
+            /* W124: a single-inode request is a one-item reclaim acceptance. */
             uint64_t start = efs_iostats_now_us();
             struct efs_msg_gc_inode_reply rep = {.rc=EFS_ERR_PROTO};
             if (payload_len == sizeof(struct efs_msg_gc_inode)) {
                 const struct efs_msg_gc_inode *req=payload;
-                rep.rc=server_gc_inode(g_server,req->export_id,req->ino,req->generation);
+                struct efs_reclaim_item it={.export_id=req->export_id,.ino=req->ino,
+                                            .generation=req->generation};
+                int32_t rc=EFS_ERR_BUSY;
+                (void)server_reclaim_accept(g_server,&it,1,&rc);
+                rep.rc=rc;
             }
             efs_iostats_add(EFS_IOSTAT_GC_DELETE, 0, efs_iostats_now_us() - start,
                             rep.rc != EFS_OK && rep.rc != EFS_ERR_BUSY);
             efs_conn_send_msg(conn,EFS_MSG_GC_INODE_REPLY,&rep,sizeof(rep));
+            break;
+        }
+        case EFS_MSG_GC_INODE_BATCH: {
+            /* W124: journal-first acceptance of a reaped-inode batch. Each
+             * rc is OK only once the record is fsynced and its fence set. */
+            uint64_t start = efs_iostats_now_us();
+            const struct efs_msg_gc_inode_batch *req=payload;
+            uint32_t cnt = payload_len >= sizeof(*req) ? req->count : 0;
+            int ok = payload_len >= sizeof(*req) && cnt && cnt <= EFS_GC_INODE_BATCH_MAX &&
+                     payload_len == sizeof(*req) + (size_t)cnt * 16u;
+            size_t rlen = sizeof(struct efs_msg_gc_inode_batch_reply) + (size_t)(ok ? cnt : 0) * 4u;
+            struct efs_msg_gc_inode_batch_reply *rep = calloc(1, rlen);
+            struct efs_reclaim_item *items = ok ? calloc(cnt, sizeof(*items)) : NULL;
+            if (!rep || (ok && !items)) {
+                free(rep); free(items);
+                struct efs_msg_gc_inode_batch_reply e={0};
+                efs_conn_send_msg(conn,EFS_MSG_GC_INODE_BATCH_REPLY,&e,sizeof(e));
+                break;
+            }
+            if (ok) {
+                rep->count = cnt;
+                for (uint32_t i = 0; i < cnt; i++) {
+                    items[i] = (struct efs_reclaim_item){.export_id=req->export_id,
+                        .ino=req->items[i].ino,.generation=req->items[i].generation};
+                    rep->rc[i] = EFS_ERR_BUSY;
+                }
+                (void)server_reclaim_accept(g_server, items, cnt, rep->rc);
+            }
+            efs_iostats_add(EFS_IOSTAT_GC_DELETE, 0, efs_iostats_now_us() - start, !ok);
+            efs_conn_send_msg(conn,EFS_MSG_GC_INODE_BATCH_REPLY,rep,(uint32_t)rlen);
+            free(items);
+            free(rep);
             break;
         }
         case EFS_MSG_STORAGE_SESSION_FENCE: {

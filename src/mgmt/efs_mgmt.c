@@ -720,6 +720,7 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
     close(fd);
     if (rc || type != EFS_MSG_GC_STATUS_REPLY ||
         (len != sizeof(struct efs_msg_gc_status_reply) &&
+         len != offsetof(struct efs_msg_gc_status_reply, reclaim) &&
          len != offsetof(struct efs_msg_gc_status_reply, expiry) &&
          len != offsetof(struct efs_msg_gc_status_reply, io))) {
         fprintf(stderr, "GC status unavailable (server upgrade may be required)\n");
@@ -729,7 +730,8 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
     struct efs_msg_gc_status_reply *g = payload;
     if (!((g->version == 1 && len == offsetof(struct efs_msg_gc_status_reply, io)) ||
           (g->version == 2 && len == offsetof(struct efs_msg_gc_status_reply, expiry)) ||
-          (g->version == 3 && len == sizeof(*g)))) {
+          (g->version == 3 && len == offsetof(struct efs_msg_gc_status_reply, reclaim)) ||
+          (g->version == 4 && len == sizeof(*g)))) {
         free(payload);
         return 1;
     }
@@ -797,6 +799,20 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
         for(unsigned i=0;i<2;i++)printf("expiry_group=%u expiry_sampled=%u overdue_lower_bound=%llu "
                "overdue_capped=%u expiry_sample_age_ms=%llu\n",i*2,(e->sampled_mask>>i)&1,
                (unsigned long long)e->due_lower_bound[i],e->due_capped[i],(unsigned long long)e->sample_age_ms[i]);
+    }
+    if(g->version>=4) {
+        const struct efs_reclaim_status *c=&g->reclaim;
+        printf("reclaim_state=%s reclaim_accepted=%llu reclaim_deleted=%llu reclaim_checkpointed=%llu "
+               "reclaim_retired=%llu reclaim_busy=%llu journal_records=%llu journal_segments=%llu "
+               "journal_epoch=%016llx reclaim_pending_bytes=%llu reclaim_credited_bytes=%llu "
+               "phys_avail_bytes=%llu phys_refused=%llu reclaim_recovered=%llu\n",
+               c->fail_closed?(c->recovering?"fail_closed_recovering":"fail_closed"):"ok",
+               (unsigned long long)c->accepted,(unsigned long long)c->deleted,
+               (unsigned long long)c->checkpointed,(unsigned long long)c->retired,(unsigned long long)c->busy,
+               (unsigned long long)c->journal_records,(unsigned long long)c->journal_segments,
+               (unsigned long long)c->journal_epoch,(unsigned long long)c->pending_bytes,
+               (unsigned long long)c->credited_bytes,(unsigned long long)c->phys_avail_bytes,
+               (unsigned long long)c->phys_refused,(unsigned long long)c->recovered);
     }
     if (g->version >= 2) {
         const char *names[] = {"checksum_read", "unlink", "dir_sync"};
