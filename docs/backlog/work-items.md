@@ -5526,9 +5526,9 @@ No live configuration editor or automatic rollout is included in this item.
 **New feature; proposed 2026-10-16.** Design/ordering review first; implementation and acceptance NOTRUN. Recover committed state without node format/rebuild while retaining immediate visibility, grouped barriers and fsync guarantees. Related W71 stays open. [Canonical feature plan and gates](crash-safe-durable-versions.md).
 
 <a id="w124"></a>
-## W124 — Fast delete: immediate space, batched reclaim and fragment slot reuse
+## W124 — Fast delete: quota at delete, batched reclaim and fragment slot reuse
 
-**Performance/capacity; proposed 2026-10-18.** Design review first; implementation, private A/B and orcd-mini acceptance NOTRUN. POSIX delete stays metadata-only. Space returns to quota when the delete commits, guarded by physical free space. Reclaim is batched (one Raft entry and one node fsync per batch, node-local threaded deletion) instead of 2–3 proposals and ~8 fsyncs per inode. Then small-file packing (W125), fragment slot reuse (re-assessed after W125) and instant subtree delete. Motivated by 0.18–0.21 GiB/min reclaim and a 398 GiB-per-node backlog on orcd-mini. [Canonical proposal and gates](fast-delete-reclaim.md).
+**Performance/capacity; proposed 2026-10-18.** Design review first; implementation, private A/B and orcd-mini acceptance NOTRUN. POSIX delete stays metadata-only. Revised after design review: logical quota is credited exactly once when removal is final, with reclaim-pending bytes and physical availability (atomic per-filesystem reservations) reported separately. Reclaim moves from inode-at-a-time processing (2–3 proposals and ~8 fsyncs per inode) to bounded batches per owning group, with a journal-first node protocol (accepted for reclaim before the acknowledgement, physically reclaimed later). Rate targets are hypotheses for the A/B. Then small-file packing (W125). Slot reuse (needs reader retirement) and subtree delete are deferred. Motivated by 0.18–0.21 GiB/min reclaim and a 398 GiB-per-node backlog on orcd-mini. [Canonical proposal and gates](fast-delete-reclaim.md).
 
 <a id="w125"></a>
 ## W125 — Small-file packing as the only small-file storage

@@ -129,12 +129,29 @@ the start:
    - **The 15-of-16 case:** one survivor (1/16 of the segment) is copied,
      and the 15/16 is freed.
 
-**Bounds this gives:**
-- every segment that is not a candidate is at least *t* live, so packed
-  space overhead is at most 1/*t* (2× at *t* = 50%) on top of erasure
-  coding, plus open and in-flight segments;
-- compaction rewrites at most 1/(1−*t*) times the deleted bytes;
-- today's overhead for sub-KiB files is about 800×.
+**Bounds this gives, and what they exclude:**
+- **Sealed segments that are not candidates** are each at least *t* live,
+  so their overhead is at most 1/*t* (2× at *t* = 50%) on top of erasure
+  coding.
+- **Excluded from that bound:**
+  - segments queued for compaction;
+  - old segments retained after a switch until readers and leases retire;
+  - open and partially filled segments.
+
+  With rate-limited compaction these can accumulate, so the 1/*t* figure
+  alone is not a hard bound on total space.
+- **Hard bound, via backlog and headroom limits:**
+  - the candidate backlog (dead bytes awaiting compaction) and the
+    retained-segment bytes are capped per node;
+  - when a cap is near, compaction gets priority over its normal
+    foreground budget, and new packing is throttled before the physical
+    reserve (W124 part 2) is reached.
+
+  Total packed space is then at most 1/*t* × live bytes, plus the two caps,
+  plus open segments.
+- **Copy cost:** compaction rewrites at most 1/(1−*t*) times the deleted
+  bytes.
+- **Today:** overhead for sub-KiB files is about 800×.
 
 **Partially filled segments:** an fsync or the creation window can seal a
 segment early. An underfilled sealed segment is just a low-live segment.
@@ -148,9 +165,11 @@ segment or whole-fragment granularity, after compaction has emptied it.
 
 ## Required design decisions (each recorded before code)
 
-1. **Thresholds.** Choose the packing threshold (about 64 KiB), the
-   compaction threshold *t* and the dead-bytes limit from measured space,
-   compaction write cost and read latency.
+1. **Thresholds and limits.** Choose the packing threshold (about
+   64 KiB), the compaction threshold *t*, the dead-bytes limit, and the
+   per-node caps on candidate backlog and retained segments. Base them on
+   measured space, compaction write cost, read latency and the physical
+   reserve.
 2. **Grouping key and window.** Decide the exact grouping key (directory,
    session, window) and how fsync and close seal an open segment.
 3. **Growth across the threshold.**
@@ -211,7 +230,9 @@ All gates are NOTRUN.
 2. **Fragmentation:**
    - **Random deletion:** create 1 M files, then delete a random 15 of
      every 16. Packed overhead must settle within the 1/*t* bound, and
-     compaction must move only the survivors.
+     compaction must move only the survivors. Candidate backlog and
+     retained segments stay within their caps, including at the maximum
+     delete rate.
    - **Whole trees:** delete whole trees. Segments must retire with no
      copying.
    - **Churn:** 24 h of mixed create and delete churn. Overhead stays

@@ -1547,15 +1547,17 @@ full acceptance are separate states.
 ### Recent evidence and remaining acceptance
 
 [W124 — fast delete](../backlog/fast-delete-reclaim.md): **proposed;
-design review before implementation.**
-- Space returns to quota when a delete commits; POSIX deletes never wait for
-  reclaim.
-- Reclaim moves from a serial per-inode protocol to batched, node-local
-  deletion, from ~50 to a targeted 50–100 K fragments/s per node.
-- Dead fragment files are reused as fixed-size slots for new data, with
-  scheduled deletion of the excess.
-- Small-file packing (W125) follows, then slot reuse (re-assessed) and
-  instant subtree delete.
+revised after design review; proceed with parts 1–2, then W125.**
+- POSIX deletes never wait for reclaim.
+- Logical quota is credited exactly once when removal is final.
+  Reclaim-pending bytes and physical availability (with atomic
+  per-filesystem reservations) are reported separately.
+- Reclaim moves from inode-at-a-time to bounded batches per owning group,
+  with a journal-first node protocol: accepted for reclaim before the
+  acknowledgement, physically reclaimed later.
+- The achievable rate is a hypothesis for the A/B (today: 48–57
+  fragments/s per node).
+- Slot reuse (needs reader retirement) and subtree delete are deferred.
 - All gates NOTRUN.
 
 [W125 — small-file packing as the only small-file storage](../backlog/small-file-packing-default.md):
@@ -7827,9 +7829,9 @@ No live configuration editor or automatic rollout is included in this item.
 **New feature; proposed 2026-10-16.** Design/ordering review first; implementation and acceptance NOTRUN. Recover committed state without node format/rebuild while retaining immediate visibility, grouped barriers and fsync guarantees. Related W71 stays open. [Canonical feature plan and gates](../backlog/crash-safe-durable-versions.md).
 
 <a id="w124"></a>
-### W124 — Fast delete: immediate space, batched reclaim and fragment slot reuse
+### W124 — Fast delete: quota at delete, batched reclaim and fragment slot reuse
 
-**Performance/capacity; proposed 2026-10-18.** Design review first; implementation, private A/B and orcd-mini acceptance NOTRUN. POSIX delete stays metadata-only. Space returns to quota when the delete commits, guarded by physical free space. Reclaim is batched (one Raft entry and one node fsync per batch, node-local threaded deletion) instead of 2–3 proposals and ~8 fsyncs per inode. Then small-file packing (W125), fragment slot reuse (re-assessed after W125) and instant subtree delete. Motivated by 0.18–0.21 GiB/min reclaim and a 398 GiB-per-node backlog on orcd-mini. [Canonical proposal and gates](../backlog/fast-delete-reclaim.md).
+**Performance/capacity; proposed 2026-10-18.** Design review first; implementation, private A/B and orcd-mini acceptance NOTRUN. POSIX delete stays metadata-only. Revised after design review: logical quota is credited exactly once when removal is final, with reclaim-pending bytes and physical availability (atomic per-filesystem reservations) reported separately. Reclaim moves from inode-at-a-time processing (2–3 proposals and ~8 fsyncs per inode) to bounded batches per owning group, with a journal-first node protocol (accepted for reclaim before the acknowledgement, physically reclaimed later). Rate targets are hypotheses for the A/B. Then small-file packing (W125). Slot reuse (needs reader retirement) and subtree delete are deferred. Motivated by 0.18–0.21 GiB/min reclaim and a 398 GiB-per-node backlog on orcd-mini. [Canonical proposal and gates](../backlog/fast-delete-reclaim.md).
 
 <a id="w125"></a>
 ### W125 — Small-file packing as the only small-file storage
