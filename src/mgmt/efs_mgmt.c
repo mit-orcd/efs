@@ -1370,6 +1370,7 @@ static int cmd_expiry_show(int argc,char **argv)
           "Inspection is sampled across RPCs, not an atomic namespace snapshot.\n");return 1;
     }
     char host[64];uint16_t port;if(parse_host_port(argv[0],host,sizeof(host),&port))return 1;
+    const char *step="path";int why=0;
     char *local=NULL,*mount=NULL;const char *path=argv[2];struct stat st={0};
     if(argc==5) {
         local=realpath(argv[2],NULL);mount=realpath(argv[4],NULL);
@@ -1379,9 +1380,11 @@ static int cmd_expiry_show(int argc,char **argv)
         path=local+n;if(!*path)path="/";
     }
     struct efs_inode inode,verify;int rc=expiry_lookup(host,port,path,&inode);
+    step="lookup";why=rc;
     if(rc || (local && inode.ino!=(uint64_t)st.st_ino))goto bad;
     struct efs_msg_raft_mkfs_reply id,r,origin;
-    if(expiry_read(host,port,EFS_MD_REQ_EXPIRY_ID,inode.ino,0,&id))goto bad;
+    step="file id";
+    if((why=expiry_read(host,port,EFS_MD_REQ_EXPIRY_ID,inode.ino,0,&id)))goto bad;
     uint64_t gen=id.index;
     printf("path: %s\nfile_id: %llu:%llu\n",argv[2],(unsigned long long)inode.ino,(unsigned long long)gen);
     if(S_ISDIR(inode.mode)) {
@@ -1390,8 +1393,10 @@ static int cmd_expiry_show(int argc,char **argv)
             for(unsigned i=0;i<count;i++)if(seen[i]==current)goto bad;
             seen[count++]=current;
             struct efs_msg_raft_mkfs_reply parent;
-            if(expiry_read(host,port,EFS_MD_REQ_EXPIRY_PARENT,current,0,&parent) ||
-               expiry_read(host,port,EFS_MD_REQ_EXPIRY_POLICY_INFO,current,parent.salt,&r))goto bad;
+            step="folder parent";
+            if((why=expiry_read(host,port,EFS_MD_REQ_EXPIRY_PARENT,current,0,&parent)))goto bad;
+            step="folder policy";
+            if((why=expiry_read(host,port,EFS_MD_REQ_EXPIRY_POLICY_INFO,current,parent.salt,&r)))goto bad;
             if(r.index) {
                 char ttl[80],max[80];expiry_duration(r.salt,ttl,sizeof(ttl));expiry_duration(r.term,max,sizeof(max));
                 printf("folder_expiry: none (folders do not expire)\nfuture_file_policy: %s\ndefault_ttl: %s\nmaximum_retention: %s\n"
@@ -1406,8 +1411,10 @@ static int cmd_expiry_show(int argc,char **argv)
         }
         if(!current || count==EFS_TXN_NAMESPACE_MAX_PART)goto bad;
     } else {
-        if(expiry_read(host,port,EFS_MD_REQ_EXPIRY_RECORD,inode.ino,gen,&r) ||
-           expiry_read(host,port,EFS_MD_REQ_EXPIRY_ORIGIN,inode.ino,gen,&origin))goto bad;
+        step="file record";
+        if((why=expiry_read(host,port,EFS_MD_REQ_EXPIRY_RECORD,inode.ino,gen,&r)))goto bad;
+        step="file origin";
+        if((why=expiry_read(host,port,EFS_MD_REQ_EXPIRY_ORIGIN,inode.ino,gen,&origin)))goto bad;
         if(!r.salt)printf("expiry: none%s\n",r.index?" (cleared)":"");
         else {
             time_t seconds=(time_t)(r.salt/1000000000ull);struct tm tm;char date[80],zone[16],relative[80];
@@ -1424,15 +1431,18 @@ static int cmd_expiry_show(int argc,char **argv)
                    (unsigned long long)origin.index,(unsigned long long)origin.salt);
         }
         struct efs_msg_raft_mkfs_reply after;
-        if(expiry_read(host,port,EFS_MD_REQ_EXPIRY_RECORD,inode.ino,gen,&after) ||
+        step="record recheck";
+        if((why=expiry_read(host,port,EFS_MD_REQ_EXPIRY_RECORD,inode.ino,gen,&after)) ||
            after.index!=r.index || after.salt!=r.salt)goto bad;
     }
-    if(expiry_lookup(host,port,path,&verify) || verify.ino!=inode.ino ||
-       expiry_read(host,port,EFS_MD_REQ_EXPIRY_ID,inode.ino,0,&id) || id.index!=gen)goto bad;
+    step="path recheck";
+    if((why=expiry_lookup(host,port,path,&verify)) || verify.ino!=inode.ino)goto bad;
+    step="id recheck";
+    if((why=expiry_read(host,port,EFS_MD_REQ_EXPIRY_ID,inode.ino,0,&id)) || id.index!=gen)goto bad;
     printf("inspection: sampled now; namespace/policy may change after this read\n");
     free(local);free(mount);return 0;
 bad:
-    fprintf(stderr,"Expiry inspection failed: missing/mismatched path, concurrent change, unavailable server or inspection limit.\n");
+    fprintf(stderr,"Expiry inspection failed: missing/mismatched path, concurrent change, unavailable server or inspection limit (step: %s, status %d).\n",step,why);
     free(local);free(mount);return 1;
 }
 
