@@ -134,6 +134,8 @@ struct efs_client {
      * cooldown so one dead peer cannot stall every chunk PUT (2+1 quorum). */
     int node_fail_streak[EFS_MAX_NODES];
     int64_t node_down_until_ms[EFS_MAX_NODES]; /* CLOCK_MONOTONIC ms; 0 = up */
+    int64_t node_probe_after_ms[EFS_MAX_NODES]; /* next background reprobe while down */
+    int node_probe_inflight[EFS_MAX_NODES];
 
     /* When non-zero, metadata replication is coalesced: changes only mark
      * dirty and flush every meta_batch_ops operations (or when forced on

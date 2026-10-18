@@ -38,6 +38,9 @@ static int fake_close(int fd) {assert(fd==42);closed++;return 0;}
 #define close fake_close
 #define EFS_NODE_DOWN_FAILS 4
 #define EFS_NODE_DOWN_MS 30000
+static int probes;
+/* Background reprobe (tests/test_node_reprobe.py): never in the caller. */
+static void node_probe_maybe_start(int idx,int64_t now) {(void)now;assert(idx==0);probes++;}
 '''+f+note+r'''
 static void *wake(void *p) {(void)p;for(int i=0;i<3;i++){usleep(1000);pthread_mutex_lock(&g_client.conn_lock[0]);__atomic_fetch_add(&advance,2000,__ATOMIC_RELAXED);pthread_cond_broadcast(&g_client.conn_cv[0]);pthread_mutex_unlock(&g_client.conn_lock[0]);}return NULL;}
 int main(void) {
@@ -80,6 +83,8 @@ int main(void) {
  assert(g_client.node_fail_streak[0]==EFS_NODE_DOWN_FAILS&&g_client.node_down_until_ms[0]>monotonic_ms());
  int64_t cooldown=g_client.node_down_until_ms[0];efs_client_node_note_fail(1);
  assert(g_client.node_down_until_ms[0]==cooldown);
+ /* In cooldown a checkout refuses at once and only asks for a reprobe. */
+ late=0;start=real_ms();assert(!efs_client_conn_get(1)&&probes==1&&real_ms()-start<50&&!g_client.conn_busy[0][0]);
  return 0;
 }
 '''

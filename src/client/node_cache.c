@@ -26,6 +26,13 @@
  * Keep this longer than a typical blackhole connect timeout so small-file
  * meta flushes are not stalled every few seconds by re-probes. */
 #define EFS_NODE_DOWN_MS    30000
+/* While a peer is in that cooldown, one detached thread per peer retries a
+ * plain TCP connect at most this often and ends the cooldown when it
+ * succeeds. Callers never wait on it, so a blackholed peer still costs no
+ * foreground connect timeout, but a restarted peer is used again within
+ * about a second instead of after the rest of the 30 s (a create's fsync
+ * returned EIO for that remainder whenever placement included the peer). */
+#define EFS_NODE_PROBE_MS   1000
 
 static int64_t monotonic_ms(void)
 {
@@ -240,6 +247,61 @@ static int conn_fd_is_dead(struct efs_conn *c)
     return 0;
 }
 
+struct node_probe {
+    int idx;
+    char host[64];
+    uint16_t port;
+};
+
+static void *node_probe_run(void *arg)
+{
+    struct node_probe *p = arg;
+    int fd = efs_connect_tcp(p->host, p->port);
+    if (fd >= 0)
+        close(fd);
+    pthread_mutex_lock(&g_client.conn_lock[p->idx]);
+    if (fd >= 0 && g_client.node_down_until_ms[p->idx] > 0) {
+        /* Listening again: let the next checkout make a real connection.
+         * A peer that accepts but cannot serve fails that checkout and
+         * re-enters the cooldown through the usual failure streak. */
+        g_client.node_down_until_ms[p->idx] = 0;
+        g_client.node_fail_streak[p->idx] = 0;
+    }
+    g_client.node_probe_inflight[p->idx] = 0;
+    pthread_cond_broadcast(&g_client.conn_cv[p->idx]);
+    pthread_mutex_unlock(&g_client.conn_lock[p->idx]);
+    free(p);
+    return NULL;
+}
+
+/* conn_lock[idx] held, peer in cooldown: start at most one background
+ * reprobe per EFS_NODE_PROBE_MS. Best effort; a failed start just waits. */
+static void node_probe_maybe_start(int idx, int64_t now)
+{
+    if (g_client.node_probe_inflight[idx] ||
+        now < g_client.node_probe_after_ms[idx])
+        return;
+    struct node_probe *p = calloc(1, sizeof(*p));
+    if (!p)
+        return;
+    p->idx = idx;
+    p->port = g_client.nodes[idx].port;
+    strncpy(p->host, g_client.nodes[idx].addr, sizeof(p->host) - 1);
+    g_client.node_probe_after_ms[idx] = now + EFS_NODE_PROBE_MS;
+    pthread_attr_t attr;
+    pthread_t t;
+    if (pthread_attr_init(&attr) != 0) {
+        free(p);
+        return;
+    }
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    if (pthread_create(&t, &attr, node_probe_run, p) == 0)
+        g_client.node_probe_inflight[idx] = 1;
+    else
+        free(p);
+    pthread_attr_destroy(&attr);
+}
+
 struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
 {
     int idx = node_index_for_id(node_id);
@@ -254,6 +316,7 @@ struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
     pthread_mutex_lock(&g_client.conn_lock[idx]);
     int64_t now = monotonic_ms();
     if (g_client.node_down_until_ms[idx] > now) {
+        node_probe_maybe_start(idx, now);
         pthread_mutex_unlock(&g_client.conn_lock[idx]);
         return NULL;
     }

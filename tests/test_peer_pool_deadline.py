@@ -60,6 +60,15 @@ int main(void){struct efs_conn owners[EFS_PEER_CONNS_PER_NODE];
  assert(destroys==1 && !p->conn[EFS_PEER_DATA_CONNS] && !p->busy[EFS_PEER_DATA_CONNS] && last_signal==&p->read_cv);
  assert(!server_peer_read_conn_get("127.0.0.1",17432) && connects==1 && !p->busy[EFS_PEER_DATA_CONNS]);
  for(int i=0;i<EFS_PEER_DATA_CONNS;i++)assert(p->busy[i] && p->conn[i]==&owners[i]);
+ /* A peer in its connect cooldown is refused without a connect until the
+  * heartbeat reaches it; server_peer_note_up then ends the cooldown. */
+ p->fail_streak=EFS_PEER_DOWN_FAILS;p->down_until_ms=peer_now_ms()+EFS_PEER_DOWN_MS;
+ before=connects;assert(!server_peer_read_conn_get("127.0.0.1",17432) && connects==before);
+ server_peer_note_up("127.0.0.1",17433);assert(p->down_until_ms);  /* other peer, no slot made */
+ for(int i=0;i<EFS_MAX_NODES;i++)assert(!(g_peers[i].in_use && g_peers[i].port==17433));
+ server_peer_note_up("127.0.0.1",17432);assert(!p->down_until_ms && !p->fail_streak);
+ assert(!server_peer_read_conn_get("127.0.0.1",17432) && connects==before+1);
+ puts("peer pool: heartbeat ends a connect cooldown without creating slots PASS");
  puts("peer pool: scoped wait12ms, unchanged unscoped5s, expired refusal, retained slot ownership and live checkout/release, saturated mutation pool, two isolated proof slots and class wakes PASS");}
 '''
 with tempfile.TemporaryDirectory(prefix='efs-peer-deadline-') as t:

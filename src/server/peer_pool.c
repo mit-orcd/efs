@@ -125,6 +125,34 @@ static struct peer_slot *peer_slot_for(const char *host, uint16_t port)
     return free_slot;
 }
 
+/* The heartbeat reached host:port. End a connect cooldown early: the
+ * 10 s skip exists for peers that keep failing, and a restarted peer that
+ * answers heartbeats was otherwise refused for the rest of it (a client
+ * fsync after a member restart returned EIO). Stale pooled connections
+ * are still found and dropped on use. Never creates a slot. */
+void server_peer_note_up(const char *host, uint16_t port)
+{
+    struct peer_slot *p = NULL;
+
+    if (!host || !*host || port == 0 || !g_peers_inited)
+        return;
+    pthread_mutex_lock(&g_peers_mu);
+    for (uint32_t i = 0; i < EFS_MAX_NODES; i++) {
+        if (g_peers[i].in_use && g_peers[i].port == port &&
+            strcmp(g_peers[i].host, host) == 0) {
+            p = &g_peers[i];
+            break;
+        }
+    }
+    pthread_mutex_unlock(&g_peers_mu);
+    if (!p)
+        return;
+    pthread_mutex_lock(&p->lock);
+    p->fail_streak = 0;
+    p->down_until_ms = 0;
+    pthread_mutex_unlock(&p->lock);
+}
+
 static struct efs_conn *peer_connect(const char *host, uint16_t port)
 {
     int fd = efs_connect_tcp(host, port);

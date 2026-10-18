@@ -305,6 +305,8 @@ static void *heartbeat_thread(void *arg)
             if (nodes[i].id == self)
                 continue;
             int ok = (send_heartbeat(i, nodes[i].addr, nodes[i].port) == 0);
+            if (ok)
+                server_peer_note_up(nodes[i].addr, nodes[i].port);
 
             /* Record outcome under the lock by node id (indices may shift). */
             pthread_mutex_lock(&s->lock);
