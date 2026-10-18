@@ -125,8 +125,11 @@ carrying the batch's (inode, generation) list. The node:
    journal file, and a directory sync when the journal file is created.
    This is the commit point. No multi-page bitmap update is claimed to be
    covered by "one fsync".
-2. Establishes the write fences for every inode in the batch in memory:
-   new PUTs for those inodes are refused from this point.
+2. Establishes the write fences for every inode in the batch. As
+   `server_gc_inode` does today, each fence is installed under that inode's
+   write guard (`server_inode_gc_lock`), so a PUT already inside the guard
+   finishes before the fence, and every later PUT is refused. The guard is
+   held only briefly per inode.
 3. Acknowledges. The node has now **accepted the batch for reclaim**, which
    is not yet **physically reclaimed**. The two are tracked and reported
    separately.
@@ -143,6 +146,11 @@ carrying the batch's (inode, generation) list. The node:
    and its physical reclaim (step 6) are durable. The record is what lets a
    restart resume both, so neither alone may retire it.
 
+**Journal bound.** The journal has a per-node cap on accepted but not yet
+retired records. Above it the node answers BUSY to new batches, so the leader
+keeps their REAP markers and retries later, rather than letting a slow disk
+grow the journal without limit.
+
 **Which state permits `REAP_DONE`: acceptance, not completion.** The leader
 proposes `REAP_DONE` for an inode once every cluster member has accepted it,
 that is, journalled it durably with fences installed (step 3).
@@ -157,10 +165,32 @@ that is, journalled it durably with fences installed (step 3).
     gain, because quota is already credited when removal is final (part 2).
 - **Risk accepted:** if a node's journal is lost, so is that node's disk
   and its fragments. Rebuild or the orphan scan remain the backstop.
+- **Invariant this relies on: a reaped inode number is never reallocated.**
+  The node deletes the whole inode directory regardless of generation
+  (`gc_dead_directory`). If the number came back while deletion was
+  pending, the new file's fragments could be deleted. The invariant holds
+  today in two ways:
+  - the allocator skips any inode that keeps durable transaction history
+    (`alloc_inode_unused`, `src/meta/meta_apply.c`);
+  - the per-inode death bit is permanent, so a reused number would be
+    refused writes anyway.
+
+  The implementation must keep it, and a test pins it.
+- **Where reclaim-pending lives:** after `REAP_DONE`, metadata no longer
+  records which inodes await physical deletion. Each node's journal does,
+  so the cluster's reclaim-pending figure (part 2) is the sum of the nodes'
+  journal totals, reported by `gc-status`.
 
 **After restart:** the node replays the journal before it accepts any
 writes. That re-establishes the fences for all accepted inodes, then
 resumes checkpointing and deletion. Every step is idempotent.
+
+**Scope:** part 1 batches the REAP path, which handles whole-inode deaths
+(unlinks). Fragments freed by truncates and overwrites go through the
+separate GC-record pass (`host_gc_frag_pass`), which already batches 128
+acks per `GC_ACK` entry under a time budget. That pass is not redesigned
+here. It is measured in the A/B, and batched further if it turns out to be
+the next limit.
 
 **Rate:** batching is expected to raise reclaim far above today's 48–57
 fragments/s, but the achievable rate is a hypothesis to measure. A bare
@@ -327,6 +357,12 @@ must be committed before it is cited.
      idempotent restart, with only failed inodes retried;
    - a node down during a batch: no `REAP_DONE` for its inodes until it
      accepts;
+   - a PUT racing the fence: it completes before the fence or is refused,
+     never lands afterwards;
+   - the journal cap reached: the node answers BUSY, and markers stay and
+     are retried;
+   - inode-number reuse: a reaped number is never reallocated, including
+     after replay and a leader change.
    - an open-unlinked file keeps its data until last close, and is
      credited exactly once, at final lease release.
 4. Accounting:
@@ -387,6 +423,18 @@ New points, dispositions:
 | W125: admission behaviour under sustained churn. | **Accepted.** W125 now throttles new packed writes with a bounded delay as the caps approach, then returns ENOSPC with the reason. |
 | Subtree delete: concurrent mutations. | **Accepted;** added to its deferral conditions. |
 | Gate correctness at every handoff, then measure durable throughput with p99. | **Accepted;** gate order added. |
+
+### Self-review (2026-10-18)
+
+Re-reading the plan after the second review, with these findings:
+
+| Finding | Disposition |
+| --- | --- |
+| `REAP_DONE` on acceptance lets metadata forget an inode while its fragments still await deletion. The node deletes the whole inode directory regardless of generation, so a reallocated number would be hit. | **Checked:** numbers are not reallocated today (`alloc_inode_unused`; permanent death bits). Recorded as an invariant the implementation must keep, with a test. |
+| Fence installation must exclude in-flight PUTs. | **Added:** the per-inode write guard, as in today's `server_gc_inode`. |
+| The journal had no size bound. | **Added:** a per-node cap; above it, BUSY and the markers stay. |
+| Reclaim-pending had no defined owner after `REAP_DONE`. | **Added:** the sum of the nodes' journal totals. |
+| Scope against truncate and overwrite reclaim (GC records) was unstated. | **Added:** that pass is not redesigned here, but is measured. |
 
 ## Non-goals
 
