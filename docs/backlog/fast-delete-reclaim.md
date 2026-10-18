@@ -121,15 +121,32 @@ Replace inode-at-a-time processing with bounded batches, per owning group.
 
 **Node side: a journal-first protocol.** One RPC per node per batch,
 carrying the batch's (inode, generation) list. The node:
-1. Appends the batch to a local reclaim journal: one write, fsync of the
-   journal file, and a directory sync when the journal file is created.
-   This is the commit point. No multi-page bitmap update is claimed to be
-   covered by "one fsync".
-2. Establishes the write fences for every inode in the batch. As
-   `server_gc_inode` does today, each fence is installed under that inode's
-   write guard (`server_inode_gc_lock`), so a PUT already inside the guard
-   finishes before the fence, and every later PUT is refused. The guard is
-   held only briefly per inode.
+1. Appends the batch to the current journal segment (format below): one
+   write and an fsync of that segment, plus a directory sync when a new
+   segment file is created. This is the commit point. No multi-page bitmap
+   update is claimed to be covered by "one fsync".
+2. Establishes the write fences for every inode in the batch, draining
+   writers that are already in flight:
+   - **Under the guard:** each fence is installed under that inode's write
+     guard (`server_inode_gc_lock`), as `server_gc_inode` does today. A PUT
+     already holding the guard finishes before the fence. Its fragment is
+     then simply part of what step 5 deletes.
+   - **Check inside the guard:** the only fragment write paths
+     (`server_write_fragment_sync` and
+     `server_write_fragment_with_sum_sync`, `src/server/store.c`) already
+     check `inode_is_dead` and write while holding the guard. That must
+     stay, so a PUT that passed authority checks earlier, or was paused
+     before taking the guard, still sees the fence. No write path may check
+     death outside the guard.
+   - **The check must see fences not yet checkpointed:** `inode_is_dead` reads
+     the bitmap pages from disk, but those are checkpointed *after*
+     acceptance (step 4). It must also consult an in-memory fence set
+     populated at step 2 and rebuilt from the journal on restart.
+     Otherwise a write between acceptance and checkpoint would be
+     admitted.
+   - **No late publication:** a fragment written after reclaim began would
+     be an orphan. Its publication is refused anyway, because the inode is
+     dead in metadata. The fence prevents the write itself.
 3. Acknowledges. The node has now **accepted the batch for reclaim**, which
    is not yet **physically reclaimed**. The two are tracked and reported
    separately.
@@ -142,9 +159,28 @@ carrying the batch's (inode, generation) list. The node:
 6. Marks an inode **physically reclaimed** only after its unlinks and their
    directory syncs are durable. Physical-reclaim credit comes from this
    step.
-7. Retires a journal record only after both its bitmap checkpoint (step 4)
-   and its physical reclaim (step 6) are durable. The record is what lets a
-   restart resume both, so neither alone may retire it.
+7. Retires journal records only after both their bitmap checkpoint (step 4)
+   and their physical reclaim (step 6) are durable, and only a whole
+   segment at a time (format below). The record is what lets a restart
+   resume both, so neither alone may retire it.
+
+**Journal format and retirement.**
+- **Segments:** the journal is a sequence of segment files, each with a
+  checksummed header (node id, root, journal epoch, segment sequence) and
+  checksummed records (batch id, inode, generation). A segment is sealed
+  when it reaches a size or record limit.
+- **No truncation:** records complete out of order, so nothing is ever
+  truncated past an unfinished record. A segment file is deleted only when
+  every record in it has completed steps 4 and 6. That deletion is followed
+  by a directory sync, and replaces no other state.
+- **Completion is not persisted:** per-record completion is tracked in
+  memory only. After a restart, the node re-runs checkpointing and
+  deletion for every record in every surviving segment; both are
+  idempotent (bitmap bits already set; unlinks of absent files are
+  skipped). This avoids rewriting segment files to mark progress.
+- **Where it lives:** in each storage root's `meta/`, next to the
+  `gc-dead` bitmaps, so the journal and the root it describes share a
+  filesystem.
 
 **Journal bound.** The journal has a per-node cap on accepted but not yet
 retired records. Above it the node answers BUSY to new batches, so the leader
@@ -157,14 +193,20 @@ that is, journalled it durably with fences installed (step 3).
 - **All members:** as today's presence check in `host_gc_inode_nodes`,
   every member must accept. A down or unreachable node keeps the REAP
   marker, and the inode is retried.
-- **Why not wait for completion:**
-  - after acceptance, the node's durable journal owns the remaining
-    physical work and replays it after a crash;
-  - waiting for completed deletion would bring back a per-inode leader
-    round trip and keep metadata markers for minutes, with no user-visible
-    gain, because quota is already credited when removal is final (part 2).
-- **Risk accepted:** if a node's journal is lost, so is that node's disk
-  and its fragments. Rebuild or the orphan scan remain the backstop.
+- **Why acceptance:**
+  - acceptance transfers durable responsibility for the remaining physical
+    work to the node's journal, which is verified and replayed after a
+    crash;
+  - it lets the replicated metadata drop the marker sooner, which reduces
+    retained metadata and REAP-scan work.
+
+  Completion could also be batched, so it does not inherently cost
+  per-inode round trips. Physical capacity also matters to users, which
+  is why physical reclaim is tracked and reported separately (part 2).
+- **Risk and mitigation:** with the marker gone, a lost or corrupt journal
+  would leave fragments behind and fences missing. That is why journal loss
+  is detected and fails closed (above). It is not assumed to coincide with
+  losing the disk.
 - **Invariant this relies on: a reaped inode number is never reallocated.**
   The node deletes the whole inode directory regardless of generation
   (`gc_dead_directory`). If the number came back while deletion was
@@ -181,8 +223,34 @@ that is, journalled it durably with fences installed (step 3).
   so the cluster's reclaim-pending figure (part 2) is the sum of the nodes'
   journal totals, reported by `gc-status`.
 
-**After restart:** the node replays the journal before it accepts any
-writes. That re-establishes the fences for all accepted inodes, then
+**Journal loss or corruption: detect and fail closed.** A journal is not
+lost only together with its disk. Corruption, accidental truncation or
+deletion, restoring an older copy of `meta/`, or losing a separate journal
+device can all leave fragments intact while records are gone. After
+`REAP_DONE` there is no replicated marker left to retry, and the orphan scan
+does not restore write fences.
+- **Detection:**
+  - every segment and record is checksummed;
+  - each root persists the journal epoch and the next expected segment
+    sequence in a small durable per-root record (written with fsync and a
+    directory sync, next to `.efs-durable-epoch`), updated whenever a
+    segment is created or retired;
+  - at startup, a missing segment in the sequence, a checksum failure, an
+    epoch or sequence going backwards, or a missing journal while the
+    epoch record expects one is a detected loss.
+- **Fail closed:** on a detected loss the root refuses all data PUTs, the
+  same posture as today's "recovery uncertain" fence. Reads of live data
+  continue.
+- **Recovery** happens before writes are re-admitted:
+  - scan the root's fragment directories;
+  - for every inode present on disk, ask metadata whether it is live;
+  - journal and fence every inode that is not;
+  - checkpoint, then clear the fence.
+
+  This rebuilds the fences, which the orphan scan alone does not.
+
+**After restart:** the node verifies and replays the journal (rebuilding the
+in-memory fence set) before it accepts any writes. That re-establishes the fences for all accepted inodes, then
 resumes checkpointing and deletion. Every step is idempotent.
 
 **Scope:** part 1 batches the REAP path, which handles whole-inode deaths
@@ -223,11 +291,30 @@ Three quantities, each reported separately in `gc-status` and
   (the old generation's bytes are credited when the new generation
   publishes) and the final lease release. The credit is part of the Raft
   entry that finalises removal, so replays are idempotent.
-- **Headroom for recovery work:** a fixed physical headroom, below the
-  reserve, is kept for the reclaim journal and for W125's compaction
-  copies. Compaction copies survivors before it frees segments, so without
-  this headroom a nearly full disk could block its own recovery. Plain
-  deletion needs almost no space.
+- **Recovery headroom, per filesystem, with a progress argument:**
+  - **Two reservations:** each filesystem holding storage roots keeps two
+    atomically reserved amounts below the physical reserve:
+    - a **journal and checkpoint minimum**, used only by reclaim journal
+      segments and bitmap checkpoints, and never by compaction;
+    - a **compaction headroom**, used only by W125 compaction copies.
+  - **Why journal space is enough:** plain deletion needs only journal and
+    checkpoint space, so reclaim always progresses from the minimum. Every
+    completed segment retirement frees journal space again, and every
+    physical reclaim frees fragment space.
+  - **Why compaction progresses:**
+    - compaction copies are admitted against the compaction headroom with
+      atomic reservations, like writes;
+    - the number of concurrent compaction jobs is capped, so the headroom
+      is sized for the worst case: the cap times one segment's fragments on
+      this filesystem;
+    - compaction only selects segments whose old copy can be released
+      once the switch is done: none pinned by an open lease or an active
+      reader. Pinned segments are counted as pinned bytes, not as
+      compaction candidates, so headroom spent on a copy is always repaid
+      by a release.
+  - **Pinned bytes are a separate limit:** they are bounded by open files
+    and reported. If they keep a filesystem at its limits, writes see
+    ENOSPC with that reason; compaction does not spin on them.
 - **Honest effect:** users see quota freed as soon as the delete is final.
   Whether new data can be written immediately depends on physical
   availability, which falls behind while reclaim is pending. If physical
@@ -359,22 +446,43 @@ must be committed before it is cited.
      accepts;
    - a PUT racing the fence: it completes before the fence or is refused,
      never lands afterwards;
+   - a PUT paused after its authority checks but before taking the guard,
+     resumed after acceptance: refused, with no fragment written;
+   - a PUT after acceptance but before the bitmap checkpoint: refused by
+     the in-memory fence set, including after a restart in that window;
+   - crashes during journal segment retirement: between the last record's
+     completion and the segment file's deletion, and between the deletion
+     and its directory sync. Replay is idempotent, and the durable sequence
+     record agrees with the surviving segments;
    - the journal cap reached: the node answers BUSY, and markers stay and
      are retried;
    - inode-number reuse: a reaped number is never reallocated, including
      after replay and a leader change.
    - an open-unlinked file keeps its data until last close, and is
      credited exactly once, at final lease release.
-4. Accounting:
+4. Journal loss detection (fail closed):
+   - a corrupted segment (checksum), a truncated or deleted segment, a gap
+     in the sequence, and an older copy of `meta/` restored over a newer
+     one are each detected at startup;
+   - the root then refuses data PUTs;
+   - recovery rebuilds the fences from a fragment scan against metadata
+     before writes resume;
+   - a dead inode's fragments are eventually deleted, and no live inode's
+     fragments are touched.
+5. Accounting:
    - logical quota, reclaim-pending and physical availability are reported
      separately and agree with on-disk counts after reclaim;
    - exactly-once credit across replay, overwrite and lease release.
-5. Physical guard:
+6. Physical guard and headroom:
    - concurrent writers race for the last physical space: reservations
      never over-admit;
    - fill to the reserve while reclaim lags: ENOSPC is reported with the
-     physical reason, and the disk is never overfilled.
-6. `make test`, plus the private GC, POSIX and expiry suites, PASS.
+     physical reason, and the disk is never overfilled;
+   - with the disk at its limit, reclaim still progresses from the journal
+     and checkpoint minimum, and compaction never consumes that minimum;
+   - a segment pinned by an open lease or reader is not selected for
+     compaction, and is reported as pinned bytes.
+7. `make test`, plus the private GC, POSIX and expiry suites, PASS.
 
 **Part 3:** see [W125](small-file-packing-default.md).
 
@@ -435,6 +543,20 @@ Re-reading the plan after the second review, with these findings:
 | The journal had no size bound. | **Added:** a per-node cap; above it, BUSY and the markers stay. |
 | Reclaim-pending had no defined owner after `REAP_DONE`. | **Added:** the sum of the nodes' journal totals. |
 | Scope against truncate and overwrite reclaim (GC records) was unstated. | **Added:** that pass is not redesigned here, but is measured. |
+
+### Fourth review (2026-10-18)
+
+Review of `d1e64549c`. It judged acceptance-based `REAP_DONE` a reasonable
+durable ownership transfer, and raised implementation-contract gaps. All
+were accepted:
+
+| Finding | Disposition |
+| --- | --- |
+| "A lost journal means a lost disk" is wrong: corruption, truncation, an older restored `meta/` or a separate journal device leave fragments intact, the replicated marker is gone after `REAP_DONE`, and the orphan scan does not restore fences. | **Accepted.** The claim is removed. Checksummed segments, a durable per-root sequence and epoch record, detection at startup, fail-closed refusal of data PUTs, and fence-rebuilding recovery from a fragment scan against metadata. |
+| Acceptance must drain writers that already passed their checks. | **Accepted.** The death check stays inside the per-inode guard, as today's two write paths already do. New finding while checking it: `inode_is_dead` reads the on-disk bitmap, which is now checkpointed after acceptance, so it must also consult an in-memory fence set rebuilt from the journal. Paused-PUT and pre-checkpoint race gates added. |
+| Recovery headroom needs a progress argument. | **Accepted.** Per-filesystem atomic reservations; a journal and checkpoint minimum compaction cannot use; capped concurrent compaction sized into the headroom; pinned segments excluded from selection and reported. |
+| Journal retirement needs an on-disk protocol; never truncate past an unfinished record. | **Accepted.** A segmented journal, deleted one whole segment at a time, with completion recomputed by idempotent replay rather than persisted. Crash gates during retirement added. |
+| The `REAP_DONE` rationale was wrong: completion can be batched, and physical capacity matters. | **Accepted; corrected.** Acceptance is justified by the transfer of durable responsibility and reduced retained metadata. |
 
 ## Non-goals
 

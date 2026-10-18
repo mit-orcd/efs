@@ -154,8 +154,11 @@ the start:
   - If a cap is still exceeded after that, the write fails with ENOSPC and
     the reason (compaction backlog), never by exceeding the physical
     reserve.
-  - Compaction copies use the recovery headroom reserved by W124 part 2, so
-    a full disk can still compact.
+  - Compaction copies use the compaction headroom reserved by W124 part 2.
+    With concurrent compaction jobs capped and segments pinned by open
+    leases or readers excluded from selection, every copy is repaid by a
+    release, so a full disk can still compact. The journal and checkpoint
+    minimum is not available to compaction.
 
   Total packed space is then at most 1/*t* × live bytes, plus the two caps,
   plus open segments.
