@@ -86,6 +86,8 @@ static int64_t monotonic_ms(void) {return (int64_t)resolver_now_ms();}
 static int node_index_for_id(efs_node_id_t id) {assert(id==1);return 0;}
 static int pool_size(void) {return 1;}
 static int conn_fd_is_dead(struct efs_conn *c) {(void)c;assert(0);return 0;}
+/* Background reprobe (tests/test_node_reprobe.py) is not under test here. */
+__attribute__((unused)) static void node_probe_maybe_start(int idx,int64_t now) {(void)idx;(void)now;}
 uint64_t efs_client_rpc_deadline_ms(void) {return efs_net_deadline_ms();}
 void efs_client_rpc_set_deadline_ms(uint64_t d) {efs_net_set_deadline_ms(d);}
 int efs_set_recv_timeout(int fd,int ms) {(void)fd;(void)ms;assert(0);return -1;}
