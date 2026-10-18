@@ -1528,6 +1528,16 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[orcd-mini profile on `5d673efa8`](../status/orcd-mini-profile-5d673efa8-20261018.md):
+**profiling only; no new hot path.**
+- Leader lock waits are 11.6% of its switches (15.6% on `9099380f3`).
+- The cover-pick and verdict waits stay gone. What remains is proposals
+  (44% of lock waits), `host_pump` (11%) and REPORT (7%).
+- CPU: LOOKUP/GETATTR KV reads (`lsm_get` 7–8%, `kv_mtab_pos` 3–4%), and
+  the 60 s catalog refresh (8% while it runs).
+- The test's writer filled orcd-mini's quota. The tree is deleted; GC is
+  reclaiming at ~0.23 GiB/min per node.
+
 [orcd-mini deploy `5d673efa8`](../status/orcd-mini-deploy-5d673efa8-20261018.md):
 **deployed from branch `raft-host-mu`; every suite PASS, private
 `posix_expiry` 6/6 (was 4/6).**

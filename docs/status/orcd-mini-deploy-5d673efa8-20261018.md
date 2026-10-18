@@ -84,7 +84,7 @@ does not change that.
 - `test_peer_pool_deadline.py`: the heartbeat ends the cooldown without
   creating slots.
 
-### `expiry_lifecycle.py:66` (open)
+### `expiry_lifecycle.py:66` (fixed after this deploy in `a8bb97750`)
 
 `efs-mgmt expiry show` sometimes exits 1 right after a create: 1/6 runs on
 each of the old and new builds. The message covered eight RPCs. It now
@@ -199,8 +199,15 @@ node9900 in the background; its completion marker is
 
 ## Remaining
 
-- `expiry_lifecycle.py:66` intermittent `expiry show` failure: root cause
-  unknown; the next occurrence will name its step.
+- `expiry_lifecycle.py:66` intermittent `expiry show` failure: fixed on
+  devel in `a8bb97750`, not deployed. `expiry_lookup` did not follow the
+  namespace leader's NOT_PRIMARY hint, so it failed whenever the seed node
+  followed the root's group.
+  - Confirmed on a private 4-node cluster: through the two group-0
+    followers, the old binary fails with `step: lookup, status -15` and
+    the new one passes.
+  - `posix_expiry` 4/4 PASS with it.
+  - Deploying it touches only `efs-mgmt`.
 - Creates fail while a member is down: degraded publication is not
   implemented (product gaps §1.2, W71/W74).
 - `start.sh`'s default 180 s start timeout is shorter than these roots'
