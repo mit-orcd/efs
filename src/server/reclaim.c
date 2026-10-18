@@ -549,8 +549,21 @@ static void *deleter_main(void *arg)
     return NULL;
 }
 
+/* Each checkpoint costs two syncfs on the shared filesystem: run one when
+ * RJ_CHECKPOINT_MIN records wait, the oldest waited 1 s, or the journal is
+ * half full (retirement must keep up with the cap). */
+#define RJ_CHECKPOINT_MIN 8192u
+static uint64_t last_checkpoint_us;
 static void checkpoint_some(void)
 {
+    pthread_mutex_lock(&rj.mu);
+    if (rj.checkpoint_cursor < rj.head) rj.checkpoint_cursor = rj.head;
+    uint64_t waiting = rj.tail - rj.checkpoint_cursor, live = rj.tail - rj.head;
+    pthread_mutex_unlock(&rj.mu);
+    uint64_t t = now_us();
+    if (!waiting || (waiting < RJ_CHECKPOINT_MIN && t - last_checkpoint_us < 1000000 && live < RJ_CAP / 2))
+        return;
+    last_checkpoint_us = t;
     efs_ino_t *inos = malloc(RJ_CHECKPOINT_BATCH * sizeof(*inos));
     uint64_t *ids = malloc(RJ_CHECKPOINT_BATCH * sizeof(*ids));
     if (!inos || !ids) { free(inos); free(ids); return; }
