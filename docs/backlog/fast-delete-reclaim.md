@@ -132,14 +132,31 @@ carrying the batch's (inode, generation) list. The node:
    separately.
 4. Checkpoints the death-bitmap pages from the journal asynchronously,
    using the existing write-temp, fsync, rename and parent-sync sequence,
-   once per touched page rather than once per inode. Journal records are
-   truncated only after their pages are durable.
+   once per touched page rather than once per inode.
 5. Deletes fragment directories with a small bounded thread pool. Directory
    durability is batched: one fsync per touched directory per round.
    Empty scaffolding directories are removed by a periodic sweep.
 6. Marks an inode **physically reclaimed** only after its unlinks and their
    directory syncs are durable. Physical-reclaim credit comes from this
    step.
+7. Retires a journal record only after both its bitmap checkpoint (step 4)
+   and its physical reclaim (step 6) are durable. The record is what lets a
+   restart resume both, so neither alone may retire it.
+
+**Which state permits `REAP_DONE`: acceptance, not completion.** The leader
+proposes `REAP_DONE` for an inode once every cluster member has accepted it,
+that is, journalled it durably with fences installed (step 3).
+- **All members:** as today's presence check in `host_gc_inode_nodes`,
+  every member must accept. A down or unreachable node keeps the REAP
+  marker, and the inode is retried.
+- **Why not wait for completion:**
+  - after acceptance, the node's durable journal owns the remaining
+    physical work and replays it after a crash;
+  - waiting for completed deletion would bring back a per-inode leader
+    round trip and keep metadata markers for minutes, with no user-visible
+    gain, because quota is already credited when removal is final (part 2).
+- **Risk accepted:** if a node's journal is lost, so is that node's disk
+  and its fragments. Rebuild or the orphan scan remain the backstop.
 
 **After restart:** the node replays the journal before it accepts any
 writes. That re-establishes the fences for all accepted inodes, then
@@ -176,6 +193,11 @@ Three quantities, each reported separately in `gc-status` and
   (the old generation's bytes are credited when the new generation
   publishes) and the final lease release. The credit is part of the Raft
   entry that finalises removal, so replays are idempotent.
+- **Headroom for recovery work:** a fixed physical headroom, below the
+  reserve, is kept for the reclaim journal and for W125's compaction
+  copies. Compaction copies survivors before it frees segments, so without
+  this headroom a nearly full disk could block its own recovery. Plain
+  deletion needs almost no space.
 - **Honest effect:** users see quota freed as soon as the delete is final.
   Whether new data can be written immediately depends on physical
   availability, which falls behind while reclaim is pending. If physical
@@ -262,6 +284,8 @@ mainly for large files.
   - Files renamed into trash are still linked.
   - Hard links elsewhere in the namespace, and open files, can keep their
     data.
+  - Concurrent mutations (writes, renames, new links into the subtree)
+    while it is being detached or emptied need defined semantics.
   - Part 2 credits quota only when each inode's removal is final.
 - **Deferred** until subtree accounting (what the trash holds, how hard
   links and leases retain it, when credit happens) and retention semantics
@@ -271,6 +295,15 @@ mainly for large files.
 
 All gates are NOTRUN. Each step gets an evidence page per AGENTS.md before
 orcd-mini.
+
+**Order:**
+1. Correctness at every handoff boundary: the leader batch entry, the node
+   acceptance, the bitmap checkpoint, physical deletion, journal
+   retirement and `REAP_DONE`. Use crash injection at each boundary.
+2. Only then performance: durable reclaim throughput (fragments durably
+   reclaimed per second, not bare unlinks), measured together with
+   foreground p50/p99 under the same load. The 50–100 K fragments/s figure
+   is an experiment target, not inferred capacity.
 
 **Parts 1 and 2:** private 3-node RDMA cluster on node9901, using a
 delete/reclaim A/B script committed under `scripts/` with the change. A
@@ -286,11 +319,14 @@ must be committed before it is cited.
    throughput with reclaim running versus idle, within agreed limits.
 3. Crash tests:
    - kill a storage node after the journal fsync but before the
-     acknowledgement, during checkpoint and during deletion. The journal
+     acknowledgement, during checkpoint, during deletion, and between
+     deletion and journal retirement. The journal
      replays before writes are accepted; nothing is lost, double-deleted
      or left writable;
    - change the leader mid-batch, and inject a partial batch failure: an
      idempotent restart, with only failed inodes retried;
+   - a node down during a batch: no `REAP_DONE` for its inodes until it
+     accepts;
    - an open-unlinked file keeps its data until last close, and is
      credited exactly once, at final lease release.
 4. Accounting:
@@ -330,6 +366,27 @@ against the code, and the plan above reflects them.
 | P2 | Subtree delete cannot claim quota credit: renamed files stay linked, and hard links or open files retain data. | **Accepted.** Part 5 is deferred until accounting and retention semantics are defined. |
 | — | 50–100 K fragments/s was presented as capacity. | **Accepted.** It is now a hypothesis for the A/B to measure. |
 | — | W125's 1/*t* bound excludes queued candidates and retained segments. | **Accepted.** W125 now states the bound for sealed non-candidate segments and adds backlog and headroom limits. |
+
+### Second review (2026-10-18)
+
+Most findings repeated the first review and were already addressed:
+- journal-first handoff;
+- three-way accounting with atomic reservations;
+- batching per owning group;
+- reader quiescence and rename durability;
+- subtree deferral;
+- the rate figure as a hypothesis.
+
+New points, dispositions:
+
+| Finding | Disposition |
+| --- | --- |
+| Journal retirement must follow durable deletion. | **Accepted; it was a bug in the revision.** Records were to be truncated after the bitmap checkpoint, which would lose pending deletions on a crash. They now retire only after both the checkpoint and the physical reclaim are durable (part 1 step 7). |
+| Specify whether "accepted" or "complete" permits `REAP_DONE`. | **Decided: acceptance by every member.** Rationale in part 1. This takes a position rather than waiting for completion, which would re-introduce per-inode round trips without user-visible benefit. |
+| Preserve headroom for reclaim and packing compaction. | **Partly accepted.** Plain deletion needs almost no space beyond the small journal. Compaction does need room, because it copies before freeing, so a recovery headroom is reserved below the physical reserve (part 2). |
+| W125: admission behaviour under sustained churn. | **Accepted.** W125 now throttles new packed writes with a bounded delay as the caps approach, then returns ENOSPC with the reason. |
+| Subtree delete: concurrent mutations. | **Accepted;** added to its deferral conditions. |
+| Gate correctness at every handoff, then measure durable throughput with p99. | **Accepted;** gate order added. |
 
 ## Non-goals
 

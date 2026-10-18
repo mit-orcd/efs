@@ -146,6 +146,15 @@ the start:
   - when a cap is near, compaction gets priority over its normal
     foreground budget, and new packing is throttled before the physical
     reserve (W124 part 2) is reached.
+- **Admission under sustained churn:** if deletes and overwrites create
+  dead space faster than compaction can absorb it, the caps bind.
+  - New packed writes are first delayed with a bounded backpressure, for
+    example up to a few hundred ms per write.
+  - If a cap is still exceeded after that, the write fails with ENOSPC and
+    the reason (compaction backlog), never by exceeding the physical
+    reserve.
+  - Compaction copies use the recovery headroom reserved by W124 part 2, so
+    a full disk can still compact.
 
   Total packed space is then at most 1/*t* × live bytes, plus the two caps,
   plus open segments.
@@ -237,6 +246,9 @@ All gates are NOTRUN.
      copying.
    - **Churn:** 24 h of mixed create and delete churn. Overhead stays
      within the bound throughout.
+   - **Overload:** churn faster than compaction. Backpressure engages, then
+     ENOSPC with the backlog reason. The physical reserve is never crossed,
+     and compaction still progresses from the recovery headroom.
 3. **Performance:** create, write, read, stat and delete p50/p99 and
    throughput for the same sets, comparing the new build against the
    `archive/unpacked-small-files-<date>` build, under the user's tiny-file
