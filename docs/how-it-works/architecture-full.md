@@ -1528,6 +1528,15 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[orcd-mini deletes, GC and crawl on `5d673efa8`](../status/orcd-mini-gc-delete-profile-5d673efa8-20261018.md):
+**profiling only.**
+- GC reclaim is schedule-bound: 0.18–0.21 GiB/min per node, one pass per
+  second capped at 32 reap markers per group, the GC thread idle about
+  2/3 of the time.
+- A read-only open/close costs ~2 Raft commits (lease edges).
+- The crawl runs at 49.0 K stat ops/s, CPU-bound in the LOOKUP KV read
+  (`kv_mtab_pos`).
+
 [orcd-mini profile on `5d673efa8`](../status/orcd-mini-profile-5d673efa8-20261018.md):
 **profiling only; no new hot path.**
 - Leader lock waits are 11.6% of its switches (15.6% on `9099380f3`).
