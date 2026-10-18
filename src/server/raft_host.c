@@ -9942,6 +9942,13 @@ static void *host_gc_thread(void *arg)
                                  host_reap_completed;
         unsigned idle_ms = host_gc_backlog_idle(h->gc_backlog_idle_ms, backlog_capped, removed_before, removed_after);
         idle_ms = host_gc_expiry_idle(idle_ms, expiry_progress);
+        /* W124: capped reclaim reruns after a short idle. When foreground
+         * metadata is waiting (and capacity is not pressed), idle at least as
+         * long as this pass took, so reclaim holds at most half the Raft time. */
+        if (idle_ms < GC_LOOP_MS && host_gc_metadata_waiting(h)) {
+            uint64_t pass_ms = t_all / 1000;
+            if (pass_ms > idle_ms) idle_ms = pass_ms > GC_LOOP_MS ? GC_LOOP_MS : (unsigned)pass_ms;
+        }
         if (idle_ms < GC_LOOP_MS && env_on("EFS_RAFT_OBS"))
             fprintf(stderr, "raft-host: gc-backlog-idle ms=%u removed=%llu\n", idle_ms,
                     (unsigned long long)(removed_after - removed_before));

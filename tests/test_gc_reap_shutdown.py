@@ -34,6 +34,7 @@ static unsigned remaining[NI][64]; /* chunk rows left per (inode, lane) */
 static unsigned per_lane,proposals,remote,multi_entries,fenced,reaped,stop_after,refuse;
 static int hosted;
 static uint64_t now_us_(void) {return 1;}
+static int env_on(const char *s){(void)s;return 0;}
 static uint64_t efs_iostats_now_us(void) {return 1;}
 static int host_gc_metadata_waiting(struct efs_raft_host *h){(void)h;return 0;}
 static uint64_t rd64(const uint8_t *p){uint64_t x=0;for(int i=0;i<8;i++)x=x<<8|p[i];return x;}

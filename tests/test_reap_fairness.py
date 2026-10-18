@@ -37,6 +37,7 @@ static struct efs_node node;static int missing_node,scan_error,refuse,busy_lane;
 static uint64_t clock_us;static unsigned handed[4],reaped[4],dead[4],chunks[4],rounds_of[4];
 static struct efs_node * __attribute__((unused)) server_local_node(struct fake_server *s){(void)s;return missing_node?NULL:&node;}
 static uint64_t now_us_(void){return clock_us;}
+static int env_on(const char *s){(void)s;return 0;}
 uint64_t efs_iostats_now_us(void){return clock_us;}
 static uint64_t rd64be(const uint8_t *p){uint64_t v=0;for(unsigned i=0;i<8;i++)v=v*256+p[i];return v;}
 static void wr64be(uint8_t *p,uint64_t v){for(unsigned i=0;i<8;i++)p[i]=(uint8_t)(v>>(56-i*8));}

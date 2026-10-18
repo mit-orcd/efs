@@ -56,6 +56,7 @@ static int efs_conn_recv_msg(struct efs_conn *c,uint8_t *type,void **v,uint32_t 
 }
 static void server_peer_conn_drop(const char *a,unsigned p,struct efs_conn *c) { (void)a;(void)p;(void)c;dropped++; }
 static void server_peer_conn_release(const char *a,unsigned p,struct efs_conn *c) { (void)a;(void)p;(void)c;released++; }
+static int env_on(const char *s){(void)s;return 0;}
 '''+s[a:b]+r'''
 static efs_ino_t inos[N]={70,71,72,73,74};
 static uint64_t gens[N]={90,91,92,93,94};
