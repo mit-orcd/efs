@@ -207,9 +207,11 @@ segment or whole-fragment granularity, after compaction has emptied it.
      record limit) and the extended ledger.
    - Builds that do not support a format refuse it, fail closed.
    - Coordinated upgrades; downgrades across a format change are refused.
-   - Clients are not build-gated today: only daemons send HELLO. Client
-     compatibility needs capability negotiation or an enforced client
-     handshake, tested old against new in both directions.
+   - Clients are not build-gated today: only daemons send HELLO.
+     Compatibility is enforced by the server on every client connection,
+     pooled or reconnected: a version declaration is the first message,
+     and no data read or mutation is served before it. Old against new is
+     tested in both directions.
 4. **Growth across the threshold.**
    - A packed file that grows past the threshold moves to per-file
      fragments as a new immutable generation, as re-striping does; the

@@ -106,12 +106,24 @@ misread.
      check in `src/server/handler.c` applies to those. efs-fuse sends no
      HELLO and only logs its build ID. So an old client can meet a new
      server, and the reverse.
-   - The port therefore keeps protocol and format rejection for clients:
-     either the archived capability negotiation, or a new enforced client
-     handshake at mount and on each connection that refuses an
-     incompatible protocol version.
+   - **Enforcement point: the server, on every connection.** A client-side
+     capability query only protects a new client meeting an old server; an
+     old client never asks. So:
+     - every client connection, including pooled connections and
+       reconnects, must send a protocol-version declaration as its first
+       message;
+     - the server serves no data read or mutation (GET, GETCHUNKS, PUT,
+       publication, packed or not) on a connection until a compatible
+       version is declared;
+     - an undeclared or incompatible connection is refused with a distinct
+       error and closed, so an old client fails cleanly instead of misreading
+       packed references or writing per-file small fragments;
+     - a new client meeting an old server gets an unknown-message error to
+       its declaration and refuses to proceed.
    - Old-client against new-server and new-client against old-server
-     combinations are tested before any negotiation is removed.
+     combinations are tested, including the pool reusing a connection and
+     reconnecting after a server restart. The archived capability
+     negotiation is only replaced once these tests pass.
    - Stores are not gated either: an older or newer build may meet a store
      written with the restored or extended format.
    - Every on-disk format the port touches carries a version and is
@@ -156,15 +168,29 @@ misread.
    - **Choose the close contract explicitly:**
      - **(a)** close waits for publication, sealing on a short window
        shared by concurrent writers. Singleton segments are accepted for
-       sequential writers, and merged later by compaction.
+       sequential writers, and merged later by compaction. **The first
+       experiment uses (a),** keeping today's close contract, so that
+       packing's storage benefit is measured separately from any change to
+       visibility and error semantics.
      - **(b)** close returns earlier, which needs defined cross-client
        visibility, error reporting and fsync behaviour before it can be
        chosen.
    - **Decision metrics, not occupancy alone.** Segments are variable-size
-     (8 KiB alignment), so a singleton need not allocate a full stripe. A
-     256 B file alone in a segment takes roughly 4 KiB per node plus the
-     store tail, against 69,632 bytes today. Measure:
-     - allocated bytes per file, initially and after compaction settles;
+     (8 KiB alignment), so a singleton need not allocate a full stripe.
+     - **Estimate for a 256 B file alone in a segment:** an 8 KiB segment
+       gives a 4 KiB fragment per node, plus the 4 KiB digest and alignment
+       tail that direct-I/O fragment files carry (today's 69,632-byte files
+       are 65,536 + 4,096). That is 8 KiB per node and 24 KiB across three
+       nodes, before filesystem metadata.
+     - That is about 8.5× smaller than 69,632 bytes per node, but still
+       about 96× the 256-byte payload.
+     - This is an estimate. Measure the real cost.
+
+     Measure:
+     - allocated bytes per file from `st_blocks` and filesystem allocation
+       (`df` or XFS free-space deltas), not fragment payload length,
+       initially and after compaction settles. Include the ledger, the
+       reclaim journal and segment metadata;
      - metadata (Raft) operations per file, including publication, ledger
        and compaction switches;
      - close latency p50/p99;
@@ -386,6 +412,14 @@ in devel (`handler.c`).
 | The compaction CAS must identify the exact old mapping; test racing compactors. | **Accepted.** The CAS is on the exact source reference, with destination ownership and source release in one batch. A two-compactor race test is added. |
 | Replace the source-only landing guard with behavioural coverage. | **Accepted.** P6 checks persisted mappings and the physical inventory for fresh files, large files, transitions, legacy reads and modification, and empty files. Legacy reads stay. |
 | Tag the actual pre-merge devel and compare against it after integration. | **Accepted.** Rebase before the final A/B; that same commit is the baseline and the tag. |
+
+### Third review (2026-10-18)
+
+| Finding | Disposition |
+| --- | --- |
+| The singleton estimate omits the direct-I/O tail: 8 KiB per node, not 4 KiB. | **Accepted; my error.** Verified that fragment files carry a 4 KiB digest and alignment tail (69,632 = 65,536 + 4,096). P0.0 now measures `st_blocks` and filesystem allocation, including ledger and journal. |
+| Negotiation must exclude incompatible clients on the server, including pooled connections and reconnects. | **Accepted.** Gap 8 now requires a version declaration as the first message on every client connection, and no data read or mutation before it, with old/new tests that include pool reuse and reconnects. |
+| The first experiment keeps the existing close contract. | **Accepted.** P0.0's first experiment uses option (a). |
 
 ### Follow-up review (2026-10-18)
 
