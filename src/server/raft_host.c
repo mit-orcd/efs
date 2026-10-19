@@ -19721,12 +19721,6 @@ void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32
             if (rc != EFS_OK)
                 break;
             ch = view.base;
-            /* Packed rows need the packed reference and the client
-             * handshake (W125 P3); never serve one as an ordinary base. */
-            if (ch.coding_profile_id == EFS_META_PROFILE_PACK) {
-                rc = EFS_ERR_PROTO;
-                break;
-            }
             nd = view.ndelta;
             newest = view.delta_seq;
             memcpy(ds, view.deltas, nd * sizeof(*ds));
@@ -19739,6 +19733,15 @@ void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32
                    sizeof(out->recs[out->count].checksums));
             out->recs[out->count].base_gen = ch.generation;
             out->recs[out->count].chunk_generation = ch.generation;
+            /* W125: a packed base names its record; the client reads it
+             * from the segment (nodes/checksums are the segment's). */
+            if (ch.coding_profile_id == EFS_META_PROFILE_PACK) {
+                if (efs_pack_ref_encode(&ch.packed, out->recs[out->count].packed_ref) != EFS_OK) {
+                    rc = EFS_ERR_PROTO;
+                    break;
+                }
+                out->recs[out->count].publish_flags |= EFS_CHUNK_REC_F_PACKED;
+            }
             out->recs[out->count].delta_off = 0;
             out->recs[out->count].delta_len = 0;
             if (nd > 0) {

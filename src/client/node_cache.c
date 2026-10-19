@@ -405,6 +405,20 @@ struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
                     efs_conn_destroy(nc);
                     nc = NULL;
                 }
+                /* W125: declare the protocol before any request; a server
+                 * that does not accept it is never used. */
+                if (nc) {
+                    int drc = efs_conn_declare(nc);
+                    if (drc != EFS_OK) {
+                        static int warned;
+                        if (__sync_fetch_and_add(&warned, 1) < 5)
+                            fprintf(stderr, "efs-fuse: node %u refused or did not answer the "
+                                    "protocol %u declaration (rc=%d): incompatible server\n",
+                                    node_id, EFS_PROTOCOL_VERSION, drc);
+                        efs_conn_destroy(nc);
+                        nc = NULL;
+                    }
+                }
             }
             efs_client_rpc_set_deadline_ms(previous);
             if (!nc) {

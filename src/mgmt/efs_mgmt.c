@@ -2929,6 +2929,11 @@ static int cmd_raft_getchunks(int argc, char **argv)
     }
     efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
     efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    if (efs_fd_declare(fd) != EFS_OK) {
+        fprintf(stderr, "%s:%u refused the protocol %u declaration\n", host, port, EFS_PROTOCOL_VERSION);
+        close(fd);
+        return 1;
+    }
     if (send_recv(fd, EFS_MSG_INODE_GETCHUNKS, &req, sizeof(req), &reply_type,
                   &reply, &reply_len) != 0 ||
         reply_type != EFS_MSG_INODE_GETCHUNKS_REPLY ||

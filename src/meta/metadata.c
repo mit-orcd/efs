@@ -3384,11 +3384,28 @@ int efs_export_set_chunk_gen(struct efs_export *ex, efs_ino_t ino,
     if (chunk_idx_get(ex, ino, chunk_index, &pos) != 0)
         return EFS_ERR_NOT_FOUND;
     ex->chunks[pos].generation = generation;
+    memset(&ex->chunks[pos].packed, 0, sizeof(ex->chunks[pos].packed));
     memset(&ex->chunks[pos].read_view, 0, sizeof(ex->chunks[pos].read_view));
     /* A new base retires deltas patched onto the previous image. */
     ex->chunks[pos].ndelta = 0;
     ex->chunks[pos].delta_seq = 0;
     return EFS_OK;
+}
+
+int efs_export_set_chunk_packed(struct efs_export *ex, efs_ino_t ino, uint32_t ci, const struct efs_pack_ref *ref)
+{
+    if (!ex || !ref) return EFS_ERR_INVAL;
+    if (export_is_sharded_root(ex)) {
+        struct efs_export *tab = chunk_tab_peek(ex, ino, ci);
+        if (tab && tab != ex) return efs_export_set_chunk_packed(tab, ino, ci, ref);
+    }
+    uint64_t pos; if (chunk_idx_get(ex, ino, ci, &pos)) return EFS_ERR_NOT_FOUND;
+    if (ref->segment_id) {
+        uint8_t wire[EFS_PACK_REF_BYTES];
+        if (ci || ref->ino != ino || ref->record_generation != ex->chunks[pos].generation ||
+            efs_pack_ref_encode(ref, wire)) return EFS_ERR_PROTO;
+    }
+    ex->chunks[pos].packed = *ref; return EFS_OK;
 }
 
 int efs_export_set_chunk_view(struct efs_export *ex, efs_ino_t ino,

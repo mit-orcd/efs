@@ -6,6 +6,7 @@
 #include "efs/checksum.h"
 #include "efs/placement.h"
 #include "efs/write_extent.h"
+#include "efs/packed_reader.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -306,6 +307,57 @@ static uint64_t read_peer_now_ms(void)
     return (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
+/* W125: one fragment of a packed segment (GET_SEGMENT). The group rides
+ * in the reference; the fetch reader checks the length and the hash. */
+struct packed_fetch_ctx { uint32_t group; };
+static int packed_fetch(void *context, efs_node_id_t node, uint64_t id, uint64_t generation,
+                        uint32_t fi, uint32_t geometry, uint8_t *out, uint32_t capacity)
+{
+    const struct packed_fetch_ctx *pc = context;
+    if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
+    if (efs_client_node_is_down(node)) return EFS_ERR_NET;
+    struct efs_conn *conn = efs_client_conn_get(node);
+    if (!conn) return EFS_ERR_NET;
+    uint8_t req[EFS_SEGMENT_GET_HEADER];
+    memset(req, 0, sizeof(req));
+    req[0] = (uint8_t)pc->group; req[1] = (uint8_t)fi;
+    for (int i = 0; i < 4; i++) req[4 + i] = (uint8_t)(geometry >> (24 - 8 * i));
+    for (int i = 0; i < 8; i++) {
+        req[8 + i] = (uint8_t)(id >> (56 - 8 * i));
+        req[16 + i] = (uint8_t)(generation >> (56 - 8 * i));
+    }
+    uint8_t type = 0;
+    void *payload = NULL;
+    uint32_t len = 0;
+    if (efs_conn_send_msg(conn, EFS_MSG_GET_SEGMENT, req, sizeof(req)) ||
+        efs_conn_recv_msg(conn, &type, &payload, &len)) {
+        free(payload);
+        efs_client_conn_drop(node, conn);
+        efs_client_node_note_fail(node);
+        return EFS_ERR_NET;
+    }
+    int rc = EFS_ERR_PROTO;
+    if (type == EFS_MSG_GET_SEGMENT_REPLY && len >= EFS_SEGMENT_GET_REPLY) {
+        const uint8_t *p = payload;
+        uint32_t status = ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | p[3];
+        uint32_t bytes = ((uint32_t)p[4] << 24) | ((uint32_t)p[5] << 16) | ((uint32_t)p[6] << 8) | p[7];
+        rc = (int32_t)status;
+        if (rc) { if (bytes || len != EFS_SEGMENT_GET_REPLY) rc = EFS_ERR_PROTO; }
+        else if (bytes != geometry / 2 || bytes != capacity || len != EFS_SEGMENT_GET_REPLY + bytes) rc = EFS_ERR_PROTO;
+        else {
+            uint8_t hash[EFS_HASH_SIZE];
+            efs_hash(p + EFS_SEGMENT_GET_REPLY, bytes, hash);
+            if (memcmp(hash, p + 8, sizeof(hash))) rc = EFS_ERR_CHECKSUM;
+            else memcpy(out, p + EFS_SEGMENT_GET_REPLY, bytes);
+        }
+    }
+    free(payload);
+    efs_client_conn_release(node, conn);
+    if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
+    if (!rc) efs_client_node_note_ok(node);
+    return rc;
+}
+
 /* Reconstruct one logical chunk from any 2 of 3 fragments. The three GETs run
  * concurrently so one slow/dead peer overlaps the others instead of adding a
  * full RTT; decode only needs any two, so we don't serialize on a straggler. */
@@ -353,6 +405,23 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
         have_ce = (efs_export_get_chunk(&g_client.export, ino, chunk_index,
                                         &ce) == 0);
         pthread_mutex_unlock(&g_client.idx_mu);
+    }
+    /* W125: a packed base is decoded from its segment and verified against
+     * the record reference; spans are overlaid by the caller as usual. */
+    if (have_ce && ce.packed.segment_id) {
+        if (chunk_index || ce.packed.ino != ino || ce.packed.record_generation != ce.generation)
+            return EFS_ERR_PROTO;
+        size_t needed = efs_packed_read_scratch_size(&ce.packed);
+        if (!needed || needed > UINT32_MAX) return EFS_ERR_PROTO;
+        if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
+        void *scratch = efs_buf_alloc((uint32_t)needed);
+        if (!scratch) return EFS_ERR_BUSY;
+        struct packed_fetch_ctx pctx = {ce.packed.publication_group};
+        int prc = efs_packed_read_base_scratch(&ce.packed, ce.fragment_nodes,
+            (const uint8_t (*)[EFS_HASH_SIZE])ce.checksums, packed_fetch, &pctx,
+            chunk_out, chunk_size, scratch, needed);
+        efs_buf_free(scratch, (uint32_t)needed);
+        return prc;
     }
     if (have_ce) {
         uint8_t zck[EFS_HASH_SIZE];

@@ -688,3 +688,42 @@ int efs_conn_put_reply_watch(struct efs_conn *c, int budget_us)
         return -1;
     }
 }
+
+static int declare_check(uint8_t type, const void *reply, uint32_t len)
+{
+    const struct efs_msg_client_hello_reply *r = reply;
+    if (type != EFS_MSG_CLIENT_HELLO_REPLY || len != sizeof(*r)) return EFS_ERR_PROTO;
+    if (r->rc != EFS_OK) return r->rc;
+    return r->version >= EFS_PROTOCOL_MIN_VERSION ? EFS_OK : EFS_ERR_PROTO;
+}
+int efs_conn_declare(struct efs_conn *c)
+{
+    struct efs_msg_client_hello h = {{'E', 'F', 'S', 'P'}, EFS_PROTOCOL_VERSION, 0};
+    uint8_t type = 0;
+    void *reply = NULL;
+    uint32_t len = 0;
+    if (!c) return EFS_ERR_INVAL;
+    if (efs_conn_send_msg(c, EFS_MSG_CLIENT_HELLO, &h, sizeof(h)) ||
+        efs_conn_recv_msg(c, &type, &reply, &len)) {
+        free(reply);
+        return EFS_ERR_NET;
+    }
+    int rc = declare_check(type, reply, len);
+    free(reply);
+    return rc;
+}
+int efs_fd_declare(int fd)
+{
+    struct efs_msg_client_hello h = {{'E', 'F', 'S', 'P'}, EFS_PROTOCOL_VERSION, 0};
+    uint8_t type = 0;
+    void *reply = NULL;
+    uint32_t len = 0;
+    if (efs_send_msg(fd, EFS_MSG_CLIENT_HELLO, &h, sizeof(h)) ||
+        efs_recv_msg(fd, &type, &reply, &len)) {
+        free(reply);
+        return EFS_ERR_NET;
+    }
+    int rc = declare_check(type, reply, len);
+    free(reply);
+    return rc;
+}

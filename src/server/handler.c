@@ -84,10 +84,23 @@ static int rdma_first_on(void)
  * See efs_conn_wait_request (protocol.c) — kept out of this file so the
  * xprt test cannot drift from the server conn thread. */
 
+/* W125: an undeclared connection asked for chunk maps or segments. */
+static int undeclared_refuse(uint8_t type)
+{
+    static uint64_t refused;
+    uint64_t n = __atomic_add_fetch(&refused, 1, __ATOMIC_RELAXED);
+    if (n <= 10 || !(n % 1000))
+        fprintf(stderr, "handler: refused message %u on a connection without a protocol "
+                        "declaration (client older than protocol %u); closing (%llu so far)\n",
+                type, EFS_PROTOCOL_VERSION, (unsigned long long)n);
+    return 1;
+}
+
 void server_handle_conn(struct efs_conn *conn)
 {
     int fd = conn->fd;
-    while (1) {
+    int declared = 0, close_conn = 0;
+    while (!close_conn) {
         uint8_t type = 0;
         void *payload = NULL;
         uint32_t payload_len = 0;
@@ -170,7 +183,25 @@ void server_handle_conn(struct efs_conn *conn)
             }
         }
 
+        /* Chunk maps and segments only after a protocol declaration. */
+        if (!declared && (type == EFS_MSG_INODE_GETCHUNKS || type == EFS_MSG_GET_SEGMENT ||
+                          type == EFS_MSG_PUT_SEGMENT)) {
+            close_conn = undeclared_refuse(type);
+            type = 0; /* falls to default: no reply */
+        }
         switch (type) {
+        case EFS_MSG_CLIENT_HELLO: {
+            struct efs_msg_client_hello_reply rep = {EFS_ERR_PROTO, EFS_PROTOCOL_VERSION};
+            const struct efs_msg_client_hello *h = payload;
+            if (payload_len == sizeof(*h) && !memcmp(h->magic, "EFSP", 4) &&
+                h->version >= EFS_PROTOCOL_MIN_VERSION) {
+                rep.rc = EFS_OK;
+                declared = 1;
+            }
+            efs_conn_send_msg(conn, EFS_MSG_CLIENT_HELLO_REPLY, &rep, sizeof(rep));
+            if (!declared) close_conn = 1;
+            break;
+        }
         case EFS_MSG_HEARTBEAT: {
             efs_conn_send_msg(conn, EFS_MSG_HEARTBEAT_ACK, NULL, 0);
             break;

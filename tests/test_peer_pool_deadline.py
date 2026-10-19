@@ -32,6 +32,7 @@ struct efs_conn *efs_conn_wrap_tcp(int fd,int server){(void)fd;(void)server;retu
 void efs_conn_destroy(struct efs_conn *conn){(void)conn;destroys++;}
 int efs_rdma_available(void){return 0;}
 int efs_rdma_client_upgrade(struct efs_conn *conn){(void)conn;return -1;}
+int efs_conn_declare(struct efs_conn *c){(void)c;return 0;}
 int efs_rdma_transport(void){return EFS_TRANSPORT_TCP;}
 int main(void){struct efs_conn owners[EFS_PEER_CONNS_PER_NODE];
  struct peer_slot *p=peer_slot_for("127.0.0.1",17432);assert(p);

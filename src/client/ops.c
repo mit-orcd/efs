@@ -229,8 +229,31 @@ static int chunk_rec_same_read(const struct efs_chunk_entry *ce,
         memcmp(ce->checksums, r->checksums, sizeof(r->checksums)) ||
         memcmp(&ce->read_view, &r->read_view, sizeof(r->read_view)))
         return 0;
+    {
+        struct efs_pack_ref ref;
+        memset(&ref, 0, sizeof(ref));
+        if ((r->publish_flags & EFS_CHUNK_REC_F_PACKED) &&
+            efs_pack_ref_decode(r->packed_ref, sizeof(r->packed_ref), &ref) != EFS_OK)
+            return 0;
+        uint8_t a[EFS_PACK_REF_BYTES] = {0}, b[EFS_PACK_REF_BYTES] = {0};
+        if (ce->packed.segment_id) (void)efs_pack_ref_encode(&ce->packed, a);
+        if (ref.segment_id) (void)efs_pack_ref_encode(&ref, b);
+        if (memcmp(a, b, sizeof(a))) return 0;
+    }
     return memcmp(ce->deltas, r->deltas,
                   ce->ndelta * sizeof(ce->deltas[0])) == 0;
+}
+
+/* Structural view checks plus, for a packed base, a full decode of its
+ * reference: a reply that cannot be trusted is refused as a whole. */
+static int chunk_rec_valid(const struct efs_chunk_rec *r)
+{
+    struct efs_pack_ref ref;
+    if (efs_chunk_rec_view_valid(r) != EFS_OK) return EFS_ERR_PROTO;
+    if ((r->publish_flags & EFS_CHUNK_REC_F_PACKED) &&
+        efs_pack_ref_decode(r->packed_ref, sizeof(r->packed_ref), &ref) != EFS_OK)
+        return EFS_ERR_PROTO;
+    return EFS_OK;
 }
 
 static void apply_chunk_recs(efs_ino_t lock_ino, const struct efs_chunk_rec *recs,
@@ -262,6 +285,15 @@ static void apply_chunk_recs(efs_ino_t lock_ino, const struct efs_chunk_rec *rec
                                           recs[i].delta_base_seq);
         (void)efs_export_set_chunk_view(&g_client.export, recs[i].ino,
                                         recs[i].chunk_index, &recs[i].read_view);
+        /* W125: a packed base carries its record reference. A malformed
+         * one leaves the entry unpacked and the read fails its checksum
+         * rather than misreading a segment as a chunk. */
+        if (recs[i].publish_flags & EFS_CHUNK_REC_F_PACKED) {
+            struct efs_pack_ref ref;
+            if (efs_pack_ref_decode(recs[i].packed_ref, sizeof(recs[i].packed_ref), &ref) == EFS_OK)
+                (void)efs_export_set_chunk_packed(&g_client.export, recs[i].ino,
+                                                  recs[i].chunk_index, &ref);
+        }
         if (!same)
             efs_rdcache_invalidate(recs[i].ino, recs[i].chunk_index);
         efs_client_stage_touch(recs[i].ino);
@@ -441,7 +473,7 @@ static int pull_chunks_range(efs_ino_t ino, uint32_t start_ci, uint32_t end_ci,
                 }
             }
             for (uint32_t i = 0; i < n; ++i)
-                if (efs_chunk_rec_view_valid(&recs[i]) != EFS_OK)
+                if (chunk_rec_valid(&recs[i]) != EFS_OK)
                     return EFS_ERR_PROTO;
             apply_chunk_recs(ino, recs, n);
             uint32_t next = recs[n - 1].chunk_index + 1;
@@ -473,7 +505,7 @@ void efs_client_map_install(efs_ino_t ino, const struct efs_chunk_rec *recs,
     if (!ino || !recs || !n)
         return;
     for (uint32_t i = 0; i < n; ++i)
-        if (efs_chunk_rec_view_valid(&recs[i]) != EFS_OK)
+        if (chunk_rec_valid(&recs[i]) != EFS_OK)
             return;
     apply_chunk_recs(ino, recs, n);
     for (uint32_t i = 0; i < n; ++i)

@@ -12,6 +12,7 @@
 #define EFS_PACK_HEADER_BYTES 96u
 #define EFS_PACK_RECORD_BYTES 72u
 #define EFS_PACK_REF_BYTES 96u
+_Static_assert(EFS_PACK_REF_BYTES == 96u, "chunk record packed_ref size");
 #define EFS_PACK_MAX_RECORDS 512u
 #define EFS_PACK_MAX_PAYLOAD 16384u
 struct efs_pack_record {

@@ -212,7 +212,28 @@ enum efs_msg_type {
     /* W125: journal-first acceptance of superseded fragments (GC records). */
     EFS_MSG_GC_FRAG_BATCH = 163,
     EFS_MSG_GC_FRAG_BATCH_REPLY = 164,
+    /* W125: protocol declaration, the first message of a connection that
+     * reads chunk maps or segments. */
+    EFS_MSG_CLIENT_HELLO = 165,
+    EFS_MSG_CLIENT_HELLO_REPLY = 166,
 };
+
+/* W125 connection handshake. A connection must declare a compatible
+ * protocol version before the server answers GETCHUNKS or any segment
+ * message: chunk maps may carry packed references that an older client
+ * would misread. An undeclared request is refused by closing the
+ * connection (logged), so an old client fails cleanly; a new client
+ * meeting an old server gets no reply to its declaration and refuses the
+ * connection. The write path (PUT, REPORT, publications) is unchanged and
+ * not gated. Version 2 = packed references in GETCHUNKS. */
+#define EFS_PROTOCOL_VERSION 2u
+#define EFS_PROTOCOL_MIN_VERSION 2u
+struct efs_msg_client_hello { uint8_t magic[4]; uint32_t version; uint64_t features; };
+struct efs_msg_client_hello_reply { int32_t rc; uint32_t version; };
+/* Send the declaration and check the reply; 0 when accepted. */
+struct efs_conn;
+int efs_conn_declare(struct efs_conn *c);
+int efs_fd_declare(int fd);
 
 /* W125 segment messages, big-endian byte layouts:
  * PUT   [group:1][fragment:1][0:2][geometry:4][id:8][generation:8][checksum:32]
@@ -1027,6 +1048,11 @@ struct efs_msg_inode_flock {
 #define EFS_CHUNK_REC_F_FRESH_OBJECT 4u
 /* 8u is reserved: always refused. */
 #define EFS_CHUNK_REC_F_RESERVED 8u
+/* GETCHUNKS only (W125): the base is a packed record; packed_ref holds its
+ * canonical reference and nodes/checksums are the segment's placement.
+ * Never valid in a publication or REPORT. */
+#define EFS_CHUNK_REC_F_PACKED 16u
+#define EFS_CHUNK_REC_PACKED_REF_BYTES 96u
 struct efs_chunk_rec {
     efs_ino_t ino;
     uint32_t chunk_index;
@@ -1051,6 +1077,9 @@ struct efs_chunk_rec {
     uint64_t delta_base_seq;
     struct efs_fence_view read_view; /* GETCHUNKS only; REPORT leaves zero */
     struct efs_chunk_delta deltas[EFS_CHUNK_DELTA_MAX];
+    /* GETCHUNKS with EFS_CHUNK_REC_F_PACKED only. After deltas[], so the
+     * variable-length REPORT encoding never carries it. */
+    uint8_t packed_ref[EFS_CHUNK_REC_PACKED_REF_BYTES];
 };
 
 /* Per-publication transport status is separate from its durable verdict.
@@ -1123,6 +1152,18 @@ static inline int efs_chunk_rec_view_valid(const struct efs_chunk_rec *r)
 {
     const struct efs_fence_view *v = &r->read_view;
     if (r->publish_flags & EFS_CHUNK_REC_F_RESERVED) return EFS_ERR_PROTO;
+    if (r->publish_flags & EFS_CHUNK_REC_F_PACKED) {
+        /* A packed base names exactly this file's chunk zero record: the
+         * reference's inode (bytes 0-7) and record generation (24-31),
+         * big-endian. The client decodes and validates the rest before use. */
+        uint64_t ino = 0, gen = 0;
+        for (int i = 0; i < 8; i++) {
+            ino = ino << 8 | r->packed_ref[i];
+            gen = gen << 8 | r->packed_ref[24 + i];
+        }
+        if (r->chunk_index || ino != r->ino || gen != r->chunk_generation)
+            return EFS_ERR_PROTO;
+    }
     if (r->delta_base_n > EFS_CHUNK_DELTA_MAX ||
         v->count != r->delta_base_n + 1 ||
         v->fence_epoch > v->revision ||
