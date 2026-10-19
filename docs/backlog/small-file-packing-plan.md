@@ -295,8 +295,8 @@ core PASS on a private cluster.
 read back byte for byte; old clients on new daemons refused cleanly. The
 gate covers GETCHUNKS and segment messages only (the write path is
 unchanged, so PUT, REPORT and publications stay ungated), narrower than gap
-8. Not yet run: POSIX core on a private cluster; fast failure of new
-clients against old daemons.
+8. Not yet run: POSIX core on a private cluster. (Fast failure of new
+clients against old daemons: done in P5.)
 
 ### P4 — The packer (new): candidates, copy, switch, compaction
 
@@ -371,6 +371,13 @@ threshold stays per-file. Tests cover every case, crashes mid-modification,
 and concurrent readers.
 
 **Exit:** the modification matrix PASS.
+
+**Status 2026-10-19: done on `w125-packing` (`2fb0a0148`)**
+([evidence](../status/w125-p5-20261019.md)): ten-case matrix PASS
+(including repack after modification); hole punch is EOPNOTSUPP for every
+efs file; new clients refuse to mount clusters that do not accept their
+protocol. Backward compatibility is not a goal (user, 2026-10-19). Crash
+and concurrent-reader cases move to P7.
 
 ### P6 — Landing checks
 

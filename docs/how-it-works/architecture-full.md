@@ -1564,6 +1564,13 @@ implemented and deployed on orcd-mini (`de0c856b4`);**
   POSIX suites PASS; see the evidence page for the mixed-workload test.
 - Slot reuse and subtree delete stay deferred.
 
+[W125 P5: modifying packed files](../status/w125-p5-20261019.md): **matrix PASS.**
+- Overwrite, mid-file write, append, shrink, truncate to zero, extend and
+  shrink-then-extend all read back correctly, are repacked, and survive a
+  remount; files grown past 16 KiB move to per-file fragments.
+- Hole punch is EOPNOTSUPP for every efs file. New clients refuse to mount
+  daemons that do not accept their protocol (no backward compatibility).
+
 [W125 P3: client read path and handshake](../status/w125-p3-20261019.md):
 **packed read-back PASS; old clients on new daemons refused PASS; new
 clients on old daemons refused but hang until their deadline.**
@@ -1630,9 +1637,9 @@ GO for option (a) with singleton segments and merge compaction.**
   per node on orcd-mini for ~1–1.5 GB of data).
 - One write path and no switch that disables the packer; the prior state
   is preserved as a tag before it lands. All gates NOTRUN.
-- P1–P3 and most of P4 (packer, budget, compaction, backfill) done on
-  branch `w125-packing`, `make test` PASS on node9901, private-cluster
-  checks PASS; P5–P7 open; not merged or deployed.
+- P1–P3, P5 and most of P4 (packer, budget, compaction, backfill) done
+  on branch `w125-packing`, `make test` PASS on node9901, private-cluster
+  checks PASS; P6–P7 open; not merged or deployed.
 
 [orcd-mini deletes, GC and crawl on `5d673efa8`](../status/orcd-mini-gc-delete-profile-5d673efa8-20261018.md):
 **profiling only.**
