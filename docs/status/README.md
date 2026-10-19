@@ -31,14 +31,19 @@ implemented and deployed on orcd-mini (`de0c856b4`);**
   POSIX suites PASS; see the evidence page for the mixed-workload test.
 - Slot reuse and subtree delete stay deferred.
 
+[W125 on orcd-mini: fresh deploy of `e6771854e`](w125-orcd-mini-deploy-e6771854e-20261019.md):
+**PASS.** orcd-mini wiped and redeployed with `w125-packing`; smoke
+216/216, XFS comparison, extras 0 fail, persist 27/27, two-client 67/67.
+- 20,000 small files: 1,337 MB → 78 MB per node, verified from the other
+  client, fully reclaimed after delete. User workload profile not run.
+
 [W125 P7: node9901 qualification](w125-p7-node9901-20261019.md):
 **crash injection, two-client, durability, GC and expiry PASS;
 one-writer −10.9% while packing.**
 - Found and fixed: segments placed on non-voters in 4-node clusters.
 - Found and fixed: fsync EIO when a node restarted inside the client's
   down cooldown (COMMIT now reprobes; latent in base). Expiry gate with
-  the packer active 8/8 PASS (8 of 13 before). orcd-mini needs the
-  user's go-ahead.
+  the packer active 8/8 PASS (8 of 13 before). orcd-mini: see above.
 
 [W125 P6: landing checks and POSIX core](w125-p6-20261019.md): **PASS.**
 - Behavioural landing checks 7/7 (packing, retirement, large and empty
