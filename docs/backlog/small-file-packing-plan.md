@@ -290,6 +290,14 @@ written by a test driver, and retire a superseded per-file generation.
 **Exit:** a mounted client reads packed and per-file small files; POSIX
 core PASS on a private cluster.
 
+**Status 2026-10-19: read path and handshake on `w125-packing`
+(`de3823c29`)** ([evidence](../status/w125-p3-20261019.md)): packed files
+read back byte for byte; old clients on new daemons refused cleanly. The
+gate covers GETCHUNKS and segment messages only (the write path is
+unchanged, so PUT, REPORT and publications stay ungated), narrower than gap
+8. Not yet run: POSIX core on a private cluster; fast failure of new
+clients against old daemons.
+
 ### P4 — The packer (new): candidates, copy, switch, compaction
 
 - **Candidate index:** recorded in the publication's Raft entry for closed

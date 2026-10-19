@@ -31,6 +31,14 @@ implemented and deployed on orcd-mini (`de0c856b4`);**
   POSIX suites PASS; see the evidence page for the mixed-workload test.
 - Slot reuse and subtree delete stay deferred.
 
+[W125 P3: client read path and handshake](w125-p3-20261019.md):
+**packed read-back PASS; old clients on new daemons refused PASS; new
+clients on old daemons refused but hang until their deadline.**
+- 3,000 packed files (1 B–16 KiB) verified byte for byte, also after a
+  remount.
+- Base-build client: GETCHUNKS refused and logged, EIO on packed reads,
+  writes still work.
+
 [W125 P4: packer budget, compaction and backfill](w125-p4-budget-20261019.md):
 **foreground impact while packing PASS; compaction and backfill PASS;
 read-back NOTRUN (P3).**
@@ -89,9 +97,9 @@ GO for option (a) with singleton segments and merge compaction.**
   per node on orcd-mini for ~1–1.5 GB of data).
 - One write path and no switch that disables the packer; the prior state
   is preserved as a tag before it lands. All gates NOTRUN.
-- P1, P2 and most of P4 (packer, budget, compaction, backfill) done on
+- P1–P3 and most of P4 (packer, budget, compaction, backfill) done on
   branch `w125-packing`, `make test` PASS on node9901, private-cluster
-  checks PASS; P3 (read path), P5–P7 open; not merged or deployed.
+  checks PASS; P5–P7 open; not merged or deployed.
 
 [orcd-mini deletes, GC and crawl on `5d673efa8`](orcd-mini-gc-delete-profile-5d673efa8-20261018.md):
 **profiling only.**
