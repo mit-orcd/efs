@@ -1601,6 +1601,8 @@ GO for option (a) with singleton segments and merge compaction.**
   per node on orcd-mini for ~1–1.5 GB of data).
 - One write path and no switch that disables the packer; the prior state
   is preserved as a tag before it lands. All gates NOTRUN.
+- P1 (format, metadata, switch apply) done on branch `w125-packing`,
+  `make test` PASS on node9901; not merged or deployed.
 
 [orcd-mini deletes, GC and crawl on `5d673efa8`](../status/orcd-mini-gc-delete-profile-5d673efa8-20261018.md):
 **profiling only.**

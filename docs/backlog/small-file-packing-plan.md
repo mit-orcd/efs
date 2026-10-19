@@ -218,6 +218,24 @@ misread.
 
 **Exit:** `make test` PASS. Nothing creates packed data yet.
 
+**Status 2026-10-18: done on branch `w125-packing`** (`e4bec5ce8`,
+`155aac909`; not merged, not deployed).
+- Segment v2 (16 KiB records), ledger v2 (record lengths, derived
+  live/dead counters, cold flag), segment codec.
+- Packed chunk profile 3 and segment object kind 45 (the retired profile 2
+  and kinds 36–41 stay refused); release planner on every path that drops
+  or replaces a packed row.
+- MD 73–75 (admit, switch with the exact-source CAS, cancel); the store
+  requires reader PACK_V2 before the first packed row.
+- GETCHUNKS and truncate-tail planning refuse packed rows until P3/P5.
+- node9901: full `make test` PASS (`ASAN_OPTIONS=detect_leaks=0`, because
+  node9901's `ptrace_scope=2` stops LeakSanitizer). Log outside Git:
+  `/tmp/w125-p1/maketest2.log`, sha256 prefix `ad5aaf2ead91a5bb`.
+- Restored archive tests not ported yet: `test_pack_mapping`,
+  `test_pack_admission`, `test_packed_metadata`, `test_pack_snapshot`
+  (their client-publication cases no longer apply). `test_pack_switch`
+  covers switch, cancel, overwrite and sweep release.
+
 ### P2 — Storage node and reclaim integration
 
 - **Restore:** `PUT_PACKED`, `GET_PACKED` and `GETCHUNKS_PACKED`, the
