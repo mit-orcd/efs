@@ -1564,6 +1564,16 @@ implemented and deployed on orcd-mini (`de0c856b4`);**
   POSIX suites PASS; see the evidence page for the mixed-workload test.
 - Slot reuse and subtree delete stay deferred.
 
+[W125 P4: packer budget, compaction and backfill](../status/w125-p4-budget-20261019.md):
+**foreground impact while packing PASS; compaction and backfill PASS;
+read-back NOTRUN (P3).**
+- Packing concurrently: −1.2% (16 workers), −4.3% (one writer), three
+  runs each; packer idle within noise.
+- 60,000 files packed 45 s after the workload; 152 segments, 10.5 MB per
+  node against 4.18 GB.
+- 15-of-16 random delete: 10 segments compacted to 3; a base-build store
+  is backfilled and packed after upgrade (its MANIFEST becomes KVLSM2).
+
 [W125 P4 early: background packer on a private cluster](../status/w125-p4-early-20261018.md):
 **packing works end to end; space PASS; foreground impact while packing
 FAILS the 10% target (not tuned yet).**
@@ -1612,10 +1622,9 @@ GO for option (a) with singleton segments and merge compaction.**
   per node on orcd-mini for ~1–1.5 GB of data).
 - One write path and no switch that disables the packer; the prior state
   is preserved as a tag before it lands. All gates NOTRUN.
-- P1 (format, metadata, switch apply) and P2 (segment store, journal
-  kinds, retirement, batched superseded GC) done on branch `w125-packing`,
-  `make test` PASS on node9901; cluster check pending the packer (P4);
-  not merged or deployed.
+- P1, P2 and most of P4 (packer, budget, compaction, backfill) done on
+  branch `w125-packing`, `make test` PASS on node9901, private-cluster
+  checks PASS; P3 (read path), P5–P7 open; not merged or deployed.
 
 [orcd-mini deletes, GC and crawl on `5d673efa8`](../status/orcd-mini-gc-delete-profile-5d673efa8-20261018.md):
 **profiling only.**

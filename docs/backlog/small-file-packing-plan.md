@@ -333,8 +333,14 @@ core PASS on a private cluster.
 **Exit:** the packing-rate, fragmentation and space-pressure gates PASS on
 a private cluster.
 
-**Status 2026-10-18: first packer on `w125-packing` (`6df0a4d3c`);
-compaction, backfill and tuning not done.** Candidate index (KV kind 46,
+**Status 2026-10-19: packer with budget, compaction and backfill on
+`w125-packing` (`1b7f0d7d2`):** foreground within 10% while packing
+(−1.2% / −4.3%, three runs), compaction and backfill checked on a private
+cluster ([evidence](../status/w125-p4-budget-20261019.md)). Remaining in
+P4: crash injection at each packer step, leader change mid-pass, the
+24 h churn and space-pressure gates, tighter small-segment merging.
+
+**Earlier (2026-10-18): first packer (`6df0a4d3c`).** Candidate index (KV kind 46,
 MD 77 UNINDEX), packer thread, private-cluster check and
 [early measurement](../status/w125-p4-early-20261018.md): 60,000 tiny files
 in 156 segments (395× less space), whole-tree deletes retire segments
