@@ -150,11 +150,18 @@ misread.
 
 ### P0 — Decisions and measurements (no product code)
 
-**Status 2026-10-18:** measurements done; decisions proposed and awaiting
-review ([evidence](../status/w125-p0-20261018.md)). The result is a
-conditional GO for option (a) with singleton segments, no seal window and
-merge compaction. The condition is that a singleton's publication costs no
-more than today's close, to be measured first on the prototype.
+**Status 2026-10-18:** measurements done ([evidence](../status/w125-p0-20261018.md)).
+**Decisions accepted by the user:**
+- option (a): close waits for publication, with no seal window;
+- singleton segments plus merge compaction, with lifetime grouping applied
+  when merging;
+- an initial packing threshold of 16 KiB, which raises the archived 4 KiB
+  record limit as a versioned format change;
+- admission and publication fused into one entry for singletons.
+
+The GO is conditional on a singleton's publication costing no more than
+today's close. That is measured as early as possible in the port, before
+P4.
 
 0. **Allocation and cost go/no-go (before any port work).** Prove that
    ordinary create, write and close gets a real space win at acceptable
