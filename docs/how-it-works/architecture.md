@@ -553,29 +553,32 @@ node hosts many.
 | transaction decision | `participant[hash(txid) % participant_count]` | `(txid)` | shard Raft |
 | membership / desired placement | control-plane group | — | control metadata authority (§2; current Raft baseline) |
 | file data | k+f distinct failure domains by placement | `(FileID, chunk_index, candidate_generation, fragment_index, coding_profile_id)` | k+f EC fragments |
+| packed segment (small files) | k+f nodes chosen by the packer; object row on the publication group's anchor shard | `(group, segment_id, segment_generation, fragment_index)`; files reference `(segment, offset, length, digest)` | k+f EC fragments, ledger in shard Raft |
 
-**Small files: current cost and planned packing.** Today every chunk, however
-small, is stored as k+f full fragments: 69,632-byte files on orcd-mini, a
-64 KiB payload plus header and digest. A sub-KiB file therefore costs about
-800× its size in raw disk, and one fragment per node to reclaim on delete.
-Planned: background small-file packing.
-- Files are still written as today, with per-file fragments and an
-  unchanged close.
-- An always-on background packer moves closed files below the packing
-  threshold (initially 16 KiB) into shared segments, each one stripe of
-  standard fragments (at most 128 KiB of body).
-- It retires their per-file fragments through batched reclaim.
-- Larger files keep per-file fragments.
+**Small files: background packing.** Files are written as before, with
+per-file chunk fragments and an unchanged close and fsync. A per-file
+fragment costs a full 69,632-byte fragment file per node, so an always-on
+background packer then moves every closed file of at most 16 KiB into a
+shared packed segment:
+- **Segments:** one stripe of standard fragments (at most 128 KiB of body),
+  owned by its publication group and stored outside every inode directory.
+  The file's chunk row then names its record (coding profile 3); file data
+  is never stored in metadata rows.
+- **Switch:** one Raft entry moves up to 128 files into an admitted
+  segment, each with a compare-and-swap on the exact source row; a file
+  changed, opened or deleted meanwhile stays as it was.
+- **Reclaim:** the superseded per-file fragments, and later emptied
+  segments, go to the nodes' batched reclaim journals.
+- **Lifetime:** files are grouped by creation epoch and directory, so tree
+  deletes empty whole segments; segments track live bytes, and survivors of
+  mostly-dead segments are compacted forward.
+- **Budget:** packing yields to foreground load (token bucket per group,
+  cluster-wide busy signal). Modified packed files are written per file and
+  repacked; files that grow past 16 KiB keep per-file fragments.
 
-File data is never stored in metadata rows. Segments track live bytes, and
-survivors of mostly-deleted segments are compacted forward by the same
-packer, so no fragment stays pinned while mostly dead.
-
-There will be no switch that disables the packer; the state before it is
-preserved as a Git tag. Packing was removed from devel in D37 and returns
-under
-[W125](../backlog/small-file-packing-default.md), after
-[W124](../backlog/fast-delete-reclaim.md)'s batched reclaim.
+There is no switch that disables the packer. The protocol is in
+[data plane: packed small files](protocols/data.md#packed-small-files-w125);
+work and gates in [W125](../backlog/small-file-packing-default.md).
 
 **Applied state: a logical ordered KV per shard.** Each replica applies its
 log to a **local, embedded, ordered key-value store** on NVMe. RAM is a
