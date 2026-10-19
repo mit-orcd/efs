@@ -91,6 +91,29 @@ static void wr64(uint8_t *p, uint64_t v) { for (int i = 7; i >= 0; i--) { p[i] =
 static uint64_t rd64(const uint8_t *p) { uint64_t v = 0; for (int i = 0; i < 8; i++) v = (v << 8) | p[i]; return v; }
 #define STAT_ADD(f, n) __atomic_fetch_add(&pk.st.f, (n), __ATOMIC_RELAXED)
 
+/* Crash injection (EFS_FAULTS builds only; production has no such hook):
+ * EFS_PACK_CRASH=<point> and EFS_PACK_CRASH_NODE=<id> make that daemon
+ * exit as if killed the first time it reaches the point. Points:
+ * admitted (before any PUT), uploaded (fragments durable, before the
+ * switch), switched (before unindex), retire_accepted (segments in the
+ * journals, before PACK_RETIRE), gc_accepted (superseded fragments in the
+ * journals, before GC_ACK). */
+void server_pack_crash_point(const char *point)
+{
+#ifdef EFS_FAULTS
+    static int fired;
+    const char *want = getenv("EFS_PACK_CRASH"), *node = getenv("EFS_PACK_CRASH_NODE");
+    if (fired || !want || strcmp(want, point) || !pk.s) return;
+    if (node && (uint32_t)strtoul(node, NULL, 10) != pk.s->id) return;
+    fired = 1;
+    fprintf(stderr, "packer: injected crash at %s\n", point);
+    fflush(stderr);
+    _exit(137);
+#else
+    (void)point;
+#endif
+}
+
 void server_packer_status(struct efs_packer_status *out)
 {
     pthread_mutex_lock(&pk.mu);
@@ -384,6 +407,7 @@ static uint32_t pk_segment(uint8_t group, uint64_t term, const struct efs_node *
         STAT_ADD(admit_errors, 1);
         goto out;
     }
+    server_pack_crash_point("admitted");
     for (uint32_t i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         memset(body, 0, EFS_SEGMENT_PUT_HEADER);
         body[0] = group; body[1] = (uint8_t)i;
@@ -399,6 +423,7 @@ static uint32_t pk_segment(uint8_t group, uint64_t term, const struct efs_node *
         }
     }
     STAT_ADD(segments, 1);
+    server_pack_crash_point("uploaded");
     for (uint32_t off = 0; off < n; off += EFS_PACK_SWITCH_MAX) {
         uint32_t m = n - off < EFS_PACK_SWITCH_MAX ? n - off : EFS_PACK_SWITCH_MAX;
         sw->group = group; sw->segment_id = id; sw->segment_generation = gen; sw->count = m;
@@ -414,6 +439,7 @@ static uint32_t pk_segment(uint8_t group, uint64_t term, const struct efs_node *
             break;
         (void)pk_propose(group, swire, (uint32_t)(1 + wl));
     }
+    server_pack_crash_point("switched");
     /* Whatever did not switch stays a candidate; the rest are done. The
      * ledger, not the proposal verdict, says which members became live. */
     struct efs_pack_object *cur = calloc(1, sizeof(*cur));
@@ -695,7 +721,22 @@ static void pk_group(uint8_t group, uint64_t term)
     count = pk.s->node_count;
     memcpy(nodes, pk.s->nodes, count * sizeof(nodes[0]));
     pthread_mutex_unlock(&pk.s->lock);
-    if (count < EFS_NUM_FRAGMENTS) return;
+    /* Segments live on voters of their group (the nodes that can check a
+     * PUT and a reclaim against the object), and only on live ones: the
+     * first EFS_NUM_FRAGMENTS of them are moved to the front. */
+    {
+        uint32_t voters = server_raft_host_group_voters(group), m = 0;
+        for (uint32_t i = 0; i < count; i++) {
+            uint32_t id = nodes[i].id;
+            int voter = id && id <= EFS_MAX_NODES && (voters & (1u << (id - 1)));
+            int up = id == pk.s->id || !nodes[i].down_until_ms;
+            if (voter && up) { struct efs_node t = nodes[m]; nodes[m] = nodes[i]; nodes[i] = t; m++; }
+        }
+        if (m < EFS_NUM_FRAGMENTS) {
+            pk_abandon(kv, group, term);
+            return; /* not enough live voters to place a segment */
+        }
+    }
     pk_abandon(kv, group, term);
     pk_backfill(kv, group);
 

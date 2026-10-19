@@ -8444,84 +8444,81 @@ static int host_gc_propose(struct efs_raft_host *h, uint8_t group,
 /* W125: hand retired segments to every member's reclaim journal. ok[i] = 1
  * only when every current member durably accepted item i. Same membership
  * rule as host_gc_inode_nodes_batch: missing members prove nothing. */
+/* W125: hand retired segments to the reclaim journals of their placement
+ * nodes (the only nodes a PUT_SEGMENT could ever reach). ok[i] = 1 only when
+ * every node in members[i] durably accepted item i; a member that is not in
+ * the membership list, unreachable or refusing leaves the item for a later
+ * pass. One request per node carries just the items placed on it. */
 static void host_gc_segment_nodes_batch(struct efs_raft_host *h, uint8_t group,
                                         const uint64_t *ids, const uint64_t *gens,
-                                        uint32_t n, uint8_t *ok)
+                                        const uint32_t *members, uint32_t n, uint8_t *ok)
 {
     struct efs_node nodes[EFS_MAX_NODES];
-    struct efs_conn *pending[EFS_MAX_NODES] = {0};
-    uint32_t count, present = 0;
-    for (uint32_t i = 0; i < n; i++) ok[i] = 0;
-    if (!n || n > EFS_GC_SEGMENT_BATCH_MAX) return;
+    uint32_t count, present = 0, want = 0;
+    for (uint32_t i = 0; i < n; i++) { ok[i] = 1; want |= members[i]; }
+    if (!n || n > EFS_GC_SEGMENT_BATCH_MAX) { for (uint32_t i = 0; i < n; i++) ok[i] = 0; return; }
     pthread_mutex_lock(&h->s->lock);
     count = h->s->node_count;
     memcpy(nodes, h->s->nodes, count * sizeof(nodes[0]));
     pthread_mutex_unlock(&h->s->lock);
-    for (uint32_t i = 0; i < count; i++) {
-        if (!nodes[i].id || nodes[i].id > (uint32_t)h->n) return;
-        present |= 1u << (nodes[i].id - 1);
-    }
-    if (present != ((1u << h->n) - 1u)) return;
-    size_t req_len = 8u + (size_t)n * 16u;
-    uint8_t *req = calloc(1, req_len);
+    for (uint32_t i = 0; i < count; i++)
+        if (nodes[i].id && nodes[i].id <= EFS_MAX_NODES) present |= 1u << (nodes[i].id - 1);
+    for (uint32_t i = 0; i < n; i++) if (members[i] & ~present) ok[i] = 0;
+    uint8_t *req = calloc(1, 8u + (size_t)n * 16u);
     struct efs_reclaim_item *items = calloc(n, sizeof(*items));
-    int32_t *local_rc = calloc(n, sizeof(*local_rc));
-    if (!req || !items || !local_rc) { free(req); free(items); free(local_rc); return; }
-    req[0] = group;
-    wr32be(req + 4, n);
-    for (uint32_t i = 0; i < n; i++) {
-        wr64be(req + 8 + 16 * i, ids[i]);
-        wr64be(req + 16 + 16 * i, gens[i]);
-        items[i] = (struct efs_reclaim_item){.export_id = EFS_RECLAIM_SEGMENT_EID(group),
-            .ino = ids[i], .generation = gens[i], .kind = EFS_RECLAIM_SEGMENT};
+    int32_t *rc = calloc(n, sizeof(*rc));
+    uint32_t *pick = calloc(n, sizeof(*pick));
+    if (!req || !items || !rc || !pick) {
+        for (uint32_t i = 0; i < n; i++) ok[i] = 0;
+        goto out;
     }
-    int failed = 0;
-    for (uint32_t i = 0; i < count; i++) {
-        if (nodes[i].id == h->s->id) continue;
-        struct efs_conn *pc = server_peer_conn_get(nodes[i].addr, nodes[i].port);
-        if (!pc) { failed = 1; continue; }
-        if (pc->kind == EFS_CONN_TCP) {
-            efs_set_recv_timeout(pc->fd, HOST_GC_BATCH_IO_MS);
-            efs_set_send_timeout(pc->fd, HOST_SEND_IO_MS);
+    for (uint32_t ni = 0; ni < count; ni++) {
+        uint32_t bit = 1u << (nodes[ni].id - 1), m = 0;
+        if (!nodes[ni].id || nodes[ni].id > EFS_MAX_NODES || !(want & bit)) continue;
+        for (uint32_t i = 0; i < n; i++) if ((members[i] & bit) && ok[i]) pick[m++] = i;
+        if (!m) continue;
+        req[0] = group;
+        wr32be(req + 4, m);
+        for (uint32_t k = 0; k < m; k++) {
+            uint32_t i = pick[k];
+            wr64be(req + 8 + 16 * k, ids[i]);
+            wr64be(req + 16 + 16 * k, gens[i]);
+            items[k] = (struct efs_reclaim_item){.export_id = EFS_RECLAIM_SEGMENT_EID(group),
+                .ino = ids[i], .generation = gens[i], .kind = EFS_RECLAIM_SEGMENT};
+            rc[k] = EFS_ERR_BUSY;
         }
-        if (efs_conn_send_msg(pc, EFS_MSG_GC_SEGMENT_BATCH, req, (uint32_t)req_len)) {
-            server_peer_conn_drop(nodes[i].addr, nodes[i].port, pc);
-            failed = 1;
-            continue;
-        }
-        pending[i] = pc;
-    }
-    for (uint32_t i = 0; i < n; i++) local_rc[i] = EFS_ERR_BUSY;
-    (void)server_reclaim_accept(h->s, items, n, local_rc);
-    for (uint32_t i = 0; i < n; i++) ok[i] = local_rc[i] == EFS_OK;
-    for (uint32_t i = 0; i < count; i++) {
-        struct efs_conn *pc = pending[i];
-        if (!pc) continue;
-        uint8_t type;
-        void *reply = NULL;
-        uint32_t len = 0;
-        int good = !efs_conn_recv_msg(pc, &type, &reply, &len) &&
-                   type == EFS_MSG_GC_SEGMENT_BATCH_REPLY &&
-                   len == sizeof(struct efs_msg_gc_inode_batch_reply) + (size_t)n * 4u &&
-                   ((struct efs_msg_gc_inode_batch_reply *)reply)->count == n;
-        if (good) {
-            const struct efs_msg_gc_inode_batch_reply *r = reply;
-            for (uint32_t k = 0; k < n; k++) if (r->rc[k] != EFS_OK) ok[k] = 0;
-            if (pc->kind == EFS_CONN_TCP) {
-                efs_set_recv_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
-                efs_set_send_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
-            }
-            server_peer_conn_release(nodes[i].addr, nodes[i].port, pc);
+        if (nodes[ni].id == h->s->id) {
+            (void)server_reclaim_accept(h->s, items, m, rc);
         } else {
-            failed = 1;
-            server_peer_conn_drop(nodes[i].addr, nodes[i].port, pc);
+            struct efs_conn *pc = server_peer_conn_get(nodes[ni].addr, nodes[ni].port);
+            uint8_t type = 0;
+            void *reply = NULL;
+            uint32_t len = 0;
+            if (pc && pc->kind == EFS_CONN_TCP) {
+                efs_set_recv_timeout(pc->fd, HOST_GC_BATCH_IO_MS);
+                efs_set_send_timeout(pc->fd, HOST_SEND_IO_MS);
+            }
+            int good = pc && !efs_conn_send_msg(pc, EFS_MSG_GC_SEGMENT_BATCH, req, 8u + 16u * m) &&
+                       !efs_conn_recv_msg(pc, &type, &reply, &len) &&
+                       type == EFS_MSG_GC_SEGMENT_BATCH_REPLY &&
+                       len == sizeof(struct efs_msg_gc_inode_batch_reply) + (size_t)m * 4u &&
+                       ((struct efs_msg_gc_inode_batch_reply *)reply)->count == m;
+            if (good) {
+                memcpy(rc, ((struct efs_msg_gc_inode_batch_reply *)reply)->rc, m * sizeof(*rc));
+                if (pc->kind == EFS_CONN_TCP) {
+                    efs_set_recv_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
+                    efs_set_send_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
+                }
+                server_peer_conn_release(nodes[ni].addr, nodes[ni].port, pc);
+            } else if (pc) {
+                server_peer_conn_drop(nodes[ni].addr, nodes[ni].port, pc);
+            }
+            free(reply);
         }
-        free(reply);
+        for (uint32_t k = 0; k < m; k++) if (rc[k] != EFS_OK) ok[pick[k]] = 0;
     }
-    if (failed) for (uint32_t i = 0; i < n; i++) ok[i] = 0;
-    free(req);
-    free(items);
-    free(local_rc);
+out:
+    free(req); free(items); free(rc); free(pick);
 }
 
 /* W125 segment retirement: every reclaiming segment object on this group's
@@ -8529,6 +8526,7 @@ static void host_gc_segment_nodes_batch(struct efs_raft_host *h, uint8_t group,
  * journals, then one PACK_RETIRE entry forgets the accepted ones. */
 struct pack_retire_scan {
     uint64_t ids[EFS_GC_SEGMENT_BATCH_MAX], gens[EFS_GC_SEGMENT_BATCH_MAX];
+    uint32_t members[EFS_GC_SEGMENT_BATCH_MAX];
     uint32_t n;
     struct efs_pack_object o;
 };
@@ -8541,6 +8539,10 @@ static int pack_retire_cb(void *user, const uint8_t *key, uint32_t klen,
     if (ps->o.ledger.phase == EFS_PACK_ACTIVE) return 0;
     ps->ids[ps->n] = ps->o.ledger.segment_id;
     ps->gens[ps->n] = ps->o.ledger.segment_generation;
+    ps->members[ps->n] = 0;
+    for (unsigned f = 0; f < EFS_NUM_FRAGMENTS; f++)
+        if (ps->o.nodes[f] && ps->o.nodes[f] <= EFS_MAX_NODES)
+            ps->members[ps->n] |= 1u << (ps->o.nodes[f] - 1);
     return ++ps->n == EFS_GC_SEGMENT_BATCH_MAX;
 }
 static void host_pack_retire_pass(struct efs_raft_host *h, uint8_t group, uint32_t anchor)
@@ -8551,7 +8553,7 @@ static void host_pack_retire_pass(struct efs_raft_host *h, uint8_t group, uint32
     if (!ps) return;
     if (efs_kv_scan_prefix(h->kv, prefix, sizeof(prefix), pack_retire_cb, ps) >= 0 && ps->n) {
         uint8_t ok[EFS_GC_SEGMENT_BATCH_MAX];
-        host_gc_segment_nodes_batch(h, group, ps->ids, ps->gens, ps->n, ok);
+        host_gc_segment_nodes_batch(h, group, ps->ids, ps->gens, ps->members, ps->n, ok);
         uint8_t *cmd = malloc(4u + 16u * ps->n);
         uint32_t m = 0;
         if (cmd) {
@@ -8562,6 +8564,7 @@ static void host_pack_retire_pass(struct efs_raft_host *h, uint8_t group, uint32
                 m++;
             }
             if (m) {
+                server_pack_crash_point("retire_accepted");
                 cmd[0] = EFS_MD_CMD_PACK_RETIRE;
                 cmd[1] = group;
                 cmd[2] = (uint8_t)(m >> 8);
@@ -9136,6 +9139,7 @@ static void host_gc_records(struct efs_raft_host *h, struct efs_export *ex,
                 lrc[j] = EFS_ERR_BUSY;
             }
             (void)server_reclaim_accept(h->s, items, npick[i], lrc);
+            server_pack_crash_point("gc_accepted");
             for (uint32_t j = 0; j < npick[i]; j++) rc[pick[i][j]] = lrc[j];
         }
         free(items);
@@ -12508,6 +12512,18 @@ uint64_t server_raft_host_group_commit(uint8_t group)
     if (r) c = efs_raft_commit(r);
     pthread_mutex_unlock(&h->mu);
     return c;
+}
+/* Voters of a hosted group as a node mask (bit id-1, as Raft id + 1). */
+uint32_t server_raft_host_group_voters(uint8_t group)
+{
+    struct efs_raft_host *h = g_host;
+    uint32_t v = 0;
+    if (!h || !h->running) return 0;
+    pthread_mutex_lock(&h->mu);
+    struct efs_raft *r = group_raft(h, group);
+    if (r) v = efs_raft_voters(r);
+    pthread_mutex_unlock(&h->mu);
+    return v;
 }
 struct efs_kv *server_raft_host_kv(void)
 {

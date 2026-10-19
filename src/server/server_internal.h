@@ -575,6 +575,7 @@ int server_raft_host_pack_object(uint32_t group, uint64_t id, uint64_t gen,
 int server_raft_host_pack_leader(uint8_t group, uint64_t *term, uint64_t *commit);
 struct efs_kv *server_raft_host_kv(void);
 uint64_t server_raft_host_group_commit(uint8_t group);
+uint32_t server_raft_host_group_voters(uint8_t group);
 int server_raft_host_members(void);
 /* Propose a packer command to its group and wait for this replica's apply
  * verdict. */
@@ -588,5 +589,7 @@ struct efs_packer_status {
              busy_passes, budget_waits, compacted, backfilled;
 };
 void server_packer_status(struct efs_packer_status *out);
+/* Crash injection points (no-op unless built with EFS_FAULTS=1). */
+void server_pack_crash_point(const char *point);
 
 #endif
