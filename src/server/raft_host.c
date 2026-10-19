@@ -11,6 +11,7 @@
 #include "efs/kv_lsm.h"
 #include "efs/kv_snap.h"
 #include "efs/meta_apply.h"
+#include "efs/pack_mapping.h"
 #include "efs/query_filters.h"
 #include "efs/publication.h"
 #include "efs/put_ticket.h"
@@ -1966,6 +1967,36 @@ static int apply_reap_multi_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return off == clen ? EFS_OK : EFS_ERR_PROTO;
 }
 
+/* W125 packer commands. Per-member refusals are recorded in the segment
+ * ledger (cancelled records), so only storage failures retry the entry. */
+static int apply_pack_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                          uint32_t clen, uint64_t index)
+{
+    int rc;
+    if (clen < 2) return EFS_ERR_PROTO;
+    if (cmd[0] == EFS_MD_CMD_PACK_ADMIT) {
+        struct efs_pack_object *o = malloc(sizeof(*o));
+        if (!o) return EFS_ERR_NOMEM;
+        rc = efs_pack_object_decode(cmd + 2, clen - 2, o);
+        if (rc == EFS_OK) rc = efs_meta_apply_pack_admit(h->kv, cmd[1], o);
+        free(o);
+    } else if (cmd[0] == EFS_MD_CMD_PACK_SWITCH) {
+        struct efs_pack_switch *s = malloc(sizeof(*s));
+        uint32_t live = 0;
+        if (!s) return EFS_ERR_NOMEM;
+        rc = efs_pack_switch_decode(cmd + 1, clen - 1, s);
+        if (rc == EFS_OK) rc = efs_meta_apply_pack_switch(h->kv, s, &live);
+        free(s);
+    } else {
+        if (clen != 18) return EFS_ERR_PROTO;
+        rc = efs_meta_apply_pack_cancel(h->kv, cmd[1], rd64be(cmd + 2), rd64be(cmd + 10));
+    }
+    if (rc != EFS_OK && rc != EFS_ERR_STALE)
+        fprintf(stderr, "raft-host: apply pack cmd=%u rc=%d index=%llu\n",
+                cmd[0], rc, (unsigned long long)index);
+    return rc;
+}
+
 static int apply_orphan_reap_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                                   uint32_t len, uint64_t index)
 {
@@ -2878,6 +2909,8 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE || cmd[0] == EFS_MD_CMD_REAP_BATCH ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_MULTI || cmd[0] == EFS_MD_CMD_REAP_MULTI ||
+           cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_SWITCH ||
+           cmd[0] == EFS_MD_CMD_PACK_CANCEL ||
            cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
            cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP)
               ? EFS_OK
@@ -2909,6 +2942,8 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
          cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE || cmd[0] == EFS_MD_CMD_REAP_BATCH ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
          cmd[0] == EFS_MD_CMD_LANE_SWEEP_MULTI || cmd[0] == EFS_MD_CMD_REAP_MULTI ||
+         cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_SWITCH ||
+         cmd[0] == EFS_MD_CMD_PACK_CANCEL ||
          cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
          cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_CREATE ||
          cmd[0] == EFS_MD_CMD_APPEND_RES || cmd[0] == EFS_MD_CMD_APPEND_CATCHUP || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
@@ -3392,6 +3427,11 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         return apply_lane_sweep_multi_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_REAP_MULTI)
         return apply_reap_multi_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_SWITCH ||
+        cmd[0] == EFS_MD_CMD_PACK_CANCEL)
+        /* A segment belongs to exactly one publication group: never apply
+         * one group's packer entry to another group's rows. */
+        return clen >= 2 && cmd[1] == group ? apply_pack_cmd(h, cmd, clen, index) : EFS_ERR_PROTO;
     if (cmd[0] == EFS_MD_CMD_CLOSE_STEP) {
         if(clen!=46)return EFS_ERR_INVAL;
         return efs_close_step_apply(h->kv,rd64be(cmd+1),cmd+9,cmd[45]);
@@ -16593,6 +16633,11 @@ static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
             rc = efs_meta_apply_get_chunk(h->kv, ino, tci, &got);
             if (rc == EFS_ERR_NOT_FOUND)
                 rc = EFS_OK;
+            /* A tail stub aliases the live fragments as an ordinary chunk;
+             * a packed segment must never be aliased that way. Truncating
+             * packed files arrives with W125 P5. */
+            if (rc == EFS_OK && got.coding_profile_id == EFS_META_PROFILE_PACK)
+                rc = EFS_ERR_PROTO;
         }
         if (rc == EFS_OK && !tail_ext) {
             memset(&tail, 0, sizeof(tail));
@@ -16720,6 +16765,9 @@ static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
                 rc = efs_meta_apply_get_chunk(h->kv, ino, tci, &got);
                 if (rc == EFS_ERR_NOT_FOUND)
                     rc = EFS_OK;
+                /* Never alias a packed segment as a tail stub (W125 P5). */
+                if (rc == EFS_OK && got.coding_profile_id == EFS_META_PROFILE_PACK)
+                    rc = EFS_ERR_PROTO;
             }
             if (rc != EFS_OK)
                 break;
@@ -19466,6 +19514,12 @@ void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32
             if (rc != EFS_OK)
                 break;
             ch = view.base;
+            /* Packed rows need the packed reference and the client
+             * handshake (W125 P3); never serve one as an ordinary base. */
+            if (ch.coding_profile_id == EFS_META_PROFILE_PACK) {
+                rc = EFS_ERR_PROTO;
+                break;
+            }
             nd = view.ndelta;
             newest = view.delta_seq;
             memcpy(ds, view.deltas, nd * sizeof(*ds));

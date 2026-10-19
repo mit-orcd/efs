@@ -81,7 +81,7 @@ COMMON_SRCS = src/meta/append_plan.c $(COMMON_DIR)/publication.c $(COMMON_DIR)/p
               src/meta/query_catalog.c src/meta/query_disk.c src/meta/query_policy.c src/meta/expiry.c \
               src/meta/name_index.c \
               src/meta/metadata.c \
-              src/meta/meta_apply.c \
+              src/meta/meta_apply.c src/meta/pack_mapping.c \
               src/meta/txn.c \
               src/meta/session.c \
               src/meta/put_ticket.c \
@@ -118,8 +118,8 @@ TEST_SRCS = tests/test_rdma_segmented.c tests/test_expiry.c tests/test_query_pol
 TEST_BINS = tests/test_rdma_segmented tests/test_expiry tests/test_query_policy tests/test_query_refresh tests/test_txn_resolve_faults tests/test_namespace_session tests/test_query_catalog tests/test_name_index tests/test_append_transaction tests/test_store_durability tests/test_append_receipt tests/test_put_ticket tests/test_store_gc tests/test_reclaim tests/test_bench_latency tests/test_store_overwrite tests/test_writer_routing tests/test_kv_snapshot_tail tests/test_kv_seg_index tests/test_kv_seg_bloom tests/test_kv_lsm_concurrent tests/test_kv_block_hash tests/test_mtime_barrier tests/test_publication_session tests/test_publication_ack tests/test_publication_recovery tests/test_lane_bootstrap_recovery tests/test_fence_view tests/test_reply_buffers tests/test_bufpool tests/test_erasure tests/test_placement tests/test_rdma_xprt tests/test_wire tests/test_data tests/test_kv tests/test_kv_lsm tests/test_raft_store tests/test_meta_apply tests/test_raft tests/test_sim tests/test_txn tests/test_session tests/test_lock tests/test_stage_evict tests/test_conn_fd tests/test_query_disk tests/test_query_delta tests/test_query_disk_io
 TEST_SRCS += tests/test_kv_reader_gate.c
 TEST_SRCS += tests/test_directory_sync_group.c
-TEST_SRCS += tests/test_small_segment.c tests/test_packed_segment.c tests/test_pack_ledger.c tests/test_pack_ledger_recovery.c
-TEST_BINS += tests/test_small_segment tests/test_packed_segment tests/test_pack_ledger tests/test_pack_ledger_recovery
+TEST_SRCS += tests/test_small_segment.c tests/test_packed_segment.c tests/test_pack_ledger.c tests/test_pack_ledger_recovery.c tests/test_pack_switch.c
+TEST_BINS += tests/test_small_segment tests/test_packed_segment tests/test_pack_ledger tests/test_pack_ledger_recovery tests/test_pack_switch
 TEST_BINS += tests/test_directory_sync_group
 TEST_SRCS += tests/test_kv_insertion_buffer.c
 TEST_BINS += tests/test_kv_insertion_buffer
@@ -602,6 +602,7 @@ test: all
 	./tests/test_packed_segment
 	./tests/test_pack_ledger
 	./tests/test_pack_ledger_recovery
+	./tests/test_pack_switch
 	./tests/test_kv_reader_gate
 	./tests/test_placement
 	./tests/test_lock
@@ -886,7 +887,8 @@ tests/test_small_segment: tests/test_small_segment.c src/data/erasure.c include/
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ tests/test_small_segment.c src/data/erasure.c
 src/common/packed_segment.o: include/efs/packed_segment.h include/efs/erasure.h
 src/common/pack_ledger.o: include/efs/pack_ledger.h include/efs/packed_segment.h
-tests/test_packed_segment tests/test_pack_ledger tests/test_pack_ledger_recovery: %: %.c $(LIB)
+src/meta/pack_mapping.o: include/efs/pack_mapping.h include/efs/pack_ledger.h include/efs/meta_apply.h include/efs/kv_key.h
+tests/test_packed_segment tests/test_pack_ledger tests/test_pack_ledger_recovery tests/test_pack_switch: %: %.c $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS)
 
 tests/test_directory_sync_group: tests/test_directory_sync_group.c src/server/directory_sync_group.h

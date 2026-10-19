@@ -437,7 +437,9 @@ int kv_manifest_write(struct kv_lsm *l)
     f = fopen(tmp, "wb");
     if (!f)
         return EFS_ERR_IO;
-    int header=fprintf(f,"KVLSM1 %llu\n",(unsigned long long)l->next_seq);
+    int header=l->required_reader ?
+        fprintf(f,"KVLSM2 %llu %u\n",(unsigned long long)l->next_seq,l->required_reader) :
+        fprintf(f,"KVLSM1 %llu\n",(unsigned long long)l->next_seq);
     if (header < 0)
         goto fail;
     for (i = 0; i < l->n_l0; i++)
@@ -585,12 +587,21 @@ static int manifest_load(struct kv_lsm *l)
         return EFS_ERR_PROTO;
     }
     if(sscanf(line,"KVLSM1 %llu %c",&ns,&extra)!=1) {
-        /* KVLSM2 carries reader requirements this build does not
-         * implement: refuse rather than misread. */
-        if(sscanf(line,"KVLSM2 %llu %u %c",&ns,&requirements,&extra)==2)
-            fprintf(stderr,"kv-lsm: %s/MANIFEST requires unsupported reader "
-                    "capability %u; refusing\n",l->dir,requirements);
-        fclose(f);return EFS_ERR_PROTO;
+        /* KVLSM2 carries reader requirements. This build reads W125 packed
+         * rows (PACK_V2) only; capability 1 was the archived packing
+         * format (archive/packing-containers-20261016). Refuse anything
+         * else rather than misread it. */
+        char canonical[128];
+        if(sscanf(line,"KVLSM2 %llu %u %c",&ns,&requirements,&extra)!=2 ||
+           requirements!=EFS_KV_READER_PACK_V2) {
+            if(sscanf(line,"KVLSM2 %llu %u",&ns,&requirements)==2)
+                fprintf(stderr,"kv-lsm: %s/MANIFEST has an unsupported or malformed "
+                        "reader requirement (%u); refusing\n",l->dir,requirements);
+            fclose(f);return EFS_ERR_PROTO;
+        }
+        snprintf(canonical,sizeof(canonical),"KVLSM2 %llu %u\n",ns,requirements);
+        if(strcmp(line,canonical)){fclose(f);return EFS_ERR_PROTO;}
+        l->required_reader=l->durable_reader=requirements;
     }
     l->next_seq = ns;
     while (fgets(line, sizeof(line), f)) {
@@ -1610,6 +1621,43 @@ int efs_kv_lsm_compact(struct efs_kv *kv)
     l->compact_busy = 0;
     pthread_cond_broadcast(&l->cv);
     lsm_unlock(l);
+    return rc;
+}
+
+int efs_kv_lsm_require_reader(struct efs_kv *kv,uint32_t required)
+{
+    if(!kv || required!=EFS_KV_READER_PACK_V2)
+        return EFS_ERR_INVAL;
+    /* An in-memory store (tests, simulator) has no on-disk format to gate. */
+    if(kv->ops!=&lsm_ops)return EFS_OK;
+    if(!kv->ctx)return EFS_ERR_INVAL;
+    struct kv_lsm *l=kv->ctx;
+    /* The serialized apply owner already holds writers exclusively. This
+     * barrier is deliberately durable even when its later KV batch aborts. */
+    int owned=apply_scope.owner==l;
+    if(!owned)pthread_rwlock_wrlock(&l->writers);
+    lsm_lock(l);
+    if((l->durable_reader & required)==required) {
+        lsm_unlock(l);
+        if(!owned)pthread_rwlock_unlock(&l->writers);
+        return EFS_OK;
+    }
+    while(l->compact_busy)lsm_cond_wait(l, &l->cv);
+    l->required_reader|=required;
+    /* Never roll back in-memory requirements on failure: rename may already
+     * have succeeded. Retrying must re-establish, not infer, durability. */
+    int rc=kv_manifest_write(l);
+    if(!rc) {
+        int fd;do{fd=open(l->dir,O_RDONLY|O_DIRECTORY|O_CLOEXEC);}while(fd<0 && errno==EINTR);
+        if(fd<0)rc=EFS_ERR_IO;
+        else {
+            int sr;do{sr=fsync(fd);}while(sr<0 && errno==EINTR);
+            int cr=close(fd);if(sr<0 || cr<0)rc=EFS_ERR_IO;
+        }
+    }
+    if(!rc)l->durable_reader=l->required_reader;
+    lsm_unlock(l);
+    if(!owned)pthread_rwlock_unlock(&l->writers);
     return rc;
 }
 

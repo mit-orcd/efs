@@ -49,7 +49,15 @@ int efs_kv_lsm_scan_work(struct efs_kv *,const uint8_t *,uint32_t,
     int (*)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t),void *,
     uint8_t [EFS_KV_KEY_MAX],uint32_t *);
 
-/* A KVLSM2 MANIFEST (unsupported reader requirements) is refused at open. */
+/* Minimum-reader barrier (W125). Before the first format-dependent row
+ * (a packed segment or packed chunk) becomes visible, the store durably
+ * requires PACK_V2, writing a KVLSM2 MANIFEST that builds without packing
+ * refuse to open. Requirements only increase. Capability 1 was the archived
+ * packing format and is refused, as is any other KVLSM2 requirement. Only
+ * success establishes durability; retry after an uncertain failure. An
+ * in-memory KV has no on-disk format and always succeeds. */
+#define EFS_KV_READER_PACK_V2 2u
+int efs_kv_lsm_require_reader(struct efs_kv *, uint32_t required);
 
 /* Test/maintenance hooks. flush makes the memtable an L0 segment; compact
  * merges L0 plus the overlapping L1 into a new L1. */

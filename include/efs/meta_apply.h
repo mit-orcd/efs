@@ -1,5 +1,6 @@
 #ifndef EFS_META_APPLY_H
 #define EFS_META_APPLY_H
+#include "efs/packed_segment.h"
 #include "efs/expiry.h"
 
 #include "efs/common.h"
@@ -296,6 +297,10 @@ int efs_meta_apply_fence_prepare(struct efs_kv *kv, const struct efs_txid *t,
                                  const uint8_t *payload, uint32_t plen);
 
 #define EFS_META_PROFILE_K2F1 1u
+/* 3 is a packed small file (W125): chunk zero's row carries the segment's
+ * fragment placement and checksums plus a persisted packed reference. Only
+ * the background packer's switch creates such rows. */
+#define EFS_META_PROFILE_PACK 3u
 /* 2 is reserved: such rows are refused, never read as a plain base. */
 #define EFS_META_PROFILE_RESERVED 2u
 
@@ -368,6 +373,7 @@ struct efs_meta_chunk {
     uint64_t content_epoch;
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
     uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
+    struct efs_pack_ref packed; /* profile PACK only; canonical persisted extension */
 };
 
 /* CAS publication: expected_gen 0 means the slot is empty. candidate_gen
