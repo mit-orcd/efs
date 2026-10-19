@@ -244,6 +244,28 @@ static int pk_get_d1(const struct efs_node *nodes, uint32_t count, const struct 
     if (rc == EFS_OK) for (uint32_t i = 0; i < flen; i++) a[i] ^= b[i];
     return rc;
 }
+static int pk_read_segment(const struct efs_node *nodes, uint32_t count, const struct efs_pack_object *o,
+                           uint8_t *image);
+/* A packed base's bytes: its record, read back from the segment. */
+static int pk_read_packed_base(const struct efs_node *nodes, uint32_t count, struct pk_file *f)
+{
+    struct efs_kv *kv = server_raft_host_kv();
+    const struct efs_pack_ref *r = &f->c.base.packed;
+    struct efs_pack_object *o = malloc(sizeof(*o));
+    uint8_t *image = malloc(EFS_SEGMENT_MAX_SIZE);
+    int rc = kv && o && image ? EFS_OK : EFS_ERR_NOMEM;
+    if (rc == EFS_OK) rc = efs_pack_object_get(kv, r->publication_group, r->segment_id, r->segment_generation, o);
+    if (rc == EFS_OK) rc = pk_read_segment(nodes, count, o, image);
+    if (rc == EFS_OK) {
+        const uint8_t *data;
+        uint32_t len;
+        rc = efs_pack_read(image, o->ledger.geometry, r, &data, &len);
+        if (rc == EFS_OK) memcpy(f->data, data, len < f->c.size ? len : f->c.size);
+    }
+    free(o);
+    free(image);
+    return rc;
+}
 /* A small file lies wholly in data fragment 0. Its bytes are the base
  * image (absent when the base generation is 0) overlaid by each span's
  * published range, in order, exactly as a client read assembles them. */
@@ -256,7 +278,9 @@ static int pk_read_file(const struct efs_node *nodes, uint32_t count, struct pk_
         f->data = calloc(1, f->c.size);
         if (!f->data) rc = EFS_ERR_NOMEM;
     }
-    if (rc == EFS_OK && f->c.base.generation) {
+    if (rc == EFS_OK && f->c.base.coding_profile_id == EFS_META_PROFILE_PACK) {
+        rc = pk_read_packed_base(nodes, count, f);
+    } else if (rc == EFS_OK && f->c.base.generation) {
         struct pk_object o = {f->c.base.nodes, (const uint8_t (*)[EFS_HASH_SIZE])f->c.base.checksums,
                               f->c.base.generation};
         rc = pk_get_d1(nodes, count, &f->c, &o, a, b, flen);
@@ -690,7 +714,8 @@ static void pk_group(uint8_t group, uint64_t term)
         int rc = efs_meta_pack_candidate(kv, sc.e[i].ino, sc.e[i].gen, &f->c);
         int never = rc == EFS_ERR_STALE || (rc == EFS_OK &&
             (!S_ISREG(f->c.mode) || !f->c.nlink || !f->c.size || f->c.size > EFS_PACK_THRESHOLD ||
-             f->c.base.coding_profile_id != EFS_META_PROFILE_K2F1 ||
+             (f->c.base.coding_profile_id != EFS_META_PROFILE_K2F1 &&
+              !(f->c.base.coding_profile_id == EFS_META_PROFILE_PACK && f->c.ndelta)) ||
              (f->c.active_lanes & ~1ull) ||
              efs_raft_shard_group(efs_kv_lane_shard(f->c.ino, 0)) != group));
         if (never) {

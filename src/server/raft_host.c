@@ -16840,13 +16840,17 @@ static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
             rc = efs_meta_apply_get_chunk(h->kv, ino, tci, &got);
             if (rc == EFS_ERR_NOT_FOUND)
                 rc = EFS_OK;
-            /* A tail stub aliases the live fragments as an ordinary chunk;
-             * a packed segment must never be aliased that way. Truncating
-             * packed files arrives with W125 P5. */
-            if (rc == EFS_OK && got.coding_profile_id == EFS_META_PROFILE_PACK)
-                rc = EFS_ERR_PROTO;
         }
-        if (rc == EFS_OK && !tail_ext) {
+        /* W125: a packed base is never aliased as an ordinary tail stub.
+         * Keep the row, exactly as for a span chain: the new size and the
+         * committed epoch fence hide its bytes past EOF, including after a
+         * later extension; truncating to zero deletes the row and releases
+         * the record. */
+        if (rc == EFS_OK && !tail_ext && got.coding_profile_id == EFS_META_PROFILE_PACK) {
+            has_tail = 0;
+            tp = NULL;
+            keep_tail = 1;
+        } else if (rc == EFS_OK && !tail_ext) {
             memset(&tail, 0, sizeof(tail));
             memset(uuid, 0, sizeof(uuid));
             tail.ino = ino;
@@ -16972,11 +16976,12 @@ static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
                 rc = efs_meta_apply_get_chunk(h->kv, ino, tci, &got);
                 if (rc == EFS_ERR_NOT_FOUND)
                     rc = EFS_OK;
-                /* Never alias a packed segment as a tail stub (W125 P5). */
-                if (rc == EFS_OK && got.coding_profile_id == EFS_META_PROFILE_PACK)
-                    rc = EFS_ERR_PROTO;
             }
             if (rc != EFS_OK)
+                break;
+            /* W125: a packed tail is kept like a span chain (same rule as
+             * the same-group branch). */
+            if (got.coding_profile_id == EFS_META_PROFILE_PACK)
                 break;
             if (!got.generation) {
                 struct efs_meta_delta deltas[EFS_CHUNK_DELTA_MAX];

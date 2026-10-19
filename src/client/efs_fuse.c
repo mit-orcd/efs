@@ -7194,6 +7194,42 @@ static int efs_fuse_main_mt(int argc, char *argv[]);
  * (kv_key.h / raft.h), so all it needs from the cluster is confirmation that
  * the Raft export exists (kv_has_root) plus a local shell export to route by.
  * Poll RAFT_STATUS on the discovered nodes until one reports kv_has_root. */
+/* W125: refuse to mount a cluster whose daemons do not accept this
+ * client's protocol declaration, instead of mounting and then failing
+ * every read. A node that refuses is incompatible; one that does not
+ * answer within 3 s is an older daemon or down. At least one node must
+ * accept and none may refuse. */
+static int protocol_check(void)
+{
+    uint32_t accepted = 0, refused = 0;
+    for (uint32_t i = 0; i < g_client.node_count; i++) {
+        int fd = efs_connect_tcp(g_client.nodes[i].addr, g_client.nodes[i].port);
+        if (fd < 0)
+            continue;
+        efs_set_recv_timeout(fd, 3000);
+        efs_set_send_timeout(fd, 3000);
+        int rc = efs_fd_declare(fd);
+        close(fd);
+        if (rc == EFS_OK) {
+            accepted++;
+        } else if (rc != EFS_ERR_NET) {
+            refused++;
+            fprintf(stderr, "node %s:%u refused protocol %u (rc=%d)\n", g_client.nodes[i].addr,
+                    g_client.nodes[i].port, EFS_PROTOCOL_VERSION, rc);
+        } else {
+            fprintf(stderr, "node %s:%u did not answer the protocol %u declaration "
+                    "(older daemon or down)\n", g_client.nodes[i].addr,
+                    g_client.nodes[i].port, EFS_PROTOCOL_VERSION);
+        }
+    }
+    if (!accepted || refused) {
+        fprintf(stderr, "Cluster does not support client protocol %u: upgrade the daemons "
+                "before this client\n", EFS_PROTOCOL_VERSION);
+        return EFS_ERR_PROTO;
+    }
+    return EFS_OK;
+}
+
 static int raft_bootstrap_metadata(void)
 {
     for (int attempt = 0; attempt < 50; attempt++) {
@@ -7854,6 +7890,8 @@ int main(int argc, char **argv)
      * for kv_has_root, then a local shell export — the client has the
      * shard->group->voter mapping compiled in (include/efs/kv_key.h,
      * include/efs/raft.h) and routes by it. No table is fetched. */
+    if (protocol_check() != EFS_OK)
+        return 1;
     printf("fetching metadata...\n");
     fflush(stdout);
     int rc = raft_bootstrap_metadata();

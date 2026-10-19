@@ -4687,9 +4687,12 @@ static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
         n++;
     }
     if (receipt) it[n++] = *receipt;
-    /* W125: a small file becomes a packing candidate in the same batch. */
+    /* W125: a small file becomes a packing candidate in the same batch;
+     * so does a packed file a span publication just modified (it is
+     * repacked with the span folded in). */
     if (p->chunk_index == 0 && p->new_size && p->new_size <= EFS_PACK_THRESHOLD &&
-        stored.coding_profile_id == EFS_META_PROFILE_K2F1 &&
+        (stored.coding_profile_id == EFS_META_PROFILE_K2F1 ||
+         stored.coding_profile_id == EFS_META_PROFILE_PACK) &&
         efs_pack_candidate_key(efs_kv_anchor_shard(lsh), p->now / 1000000000ull / EFS_PACK_EPOCH_S,
                                p->ino, k_cand) == EFS_OK) {
         be64(v_cand, inode_gen);
@@ -6899,6 +6902,20 @@ static int truncate_publish_tail(struct efs_kv *kv, struct efs_meta_row *row,
     it[*n].val = v_ch;
     it[*n].vlen = pack_chunk_value(v_ch, &stored, NULL, 0);
     (*n)++;
+    /* W125: a truncate republishes chunk zero's tail as a per-file base: it
+     * becomes a packing candidate like any publication.
+     * Apply is serialized per group, so per-thread key buffers suffice. */
+    {
+        static __thread uint8_t k_cand[EFS_PACK_CANDIDATE_KEY_BYTES], v_cand[8];
+        /* The tail's own new_size need not be the file size; the packer
+         * re-validates the size, so any chunk-zero tail is indexed. */
+        if (p.chunk_index == 0 && stored.coding_profile_id == EFS_META_PROFILE_K2F1 && *n < cap &&
+            efs_pack_candidate_key(efs_kv_anchor_shard(lsh), now / 1000000000ull / EFS_PACK_EPOCH_S,
+                                   row->ino, k_cand) == EFS_OK) {
+            be64(v_cand, row->generation);
+            it[(*n)++] = (struct efs_kv_item){EFS_KV_PUT, k_cand, sizeof(k_cand), v_cand, sizeof(v_cand)};
+        }
+    }
     /* The straddling tail is CAS-published inside the truncate txn; the
      * generation it replaces is dead from this commit on (L7) — unless the
      * stub aliases the old row's fragment set, in which case the fragments
