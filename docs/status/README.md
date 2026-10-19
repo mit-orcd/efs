@@ -31,6 +31,15 @@ implemented and deployed on orcd-mini (`de0c856b4`);**
   POSIX suites PASS; see the evidence page for the mixed-workload test.
 - Slot reuse and subtree delete stay deferred.
 
+[W125 on devel: merge, full regression and busy-rate default](w125-devel-20261019.md):
+**PASS.** W125 merged into devel (`1b2c3b638`); devel `27c20cd4b` passes
+`make test`, crash points, two-client, durability, GC, expiry 6/6, landing
+8/8 and the P5 matrix; orcd-mini runs it (smoke 216/216, two-client 67/67,
+persist 27/27, live packing PASS).
+- Busy rate 50 files/s by default: packing during the workload −0.2%
+  (16 workers) and +0.4% (one writer) against base.
+- Stale uncommitted Raft/KV edits saved unmerged on `raft-rotate-wip`.
+
 [W125 on orcd-mini: fresh deploy of `e6771854e`](w125-orcd-mini-deploy-e6771854e-20261019.md):
 **PASS.** orcd-mini wiped and redeployed with `w125-packing`; smoke
 216/216, XFS comparison, extras 0 fail, persist 27/27, two-client 67/67.
