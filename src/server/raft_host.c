@@ -1990,6 +1990,15 @@ static int apply_pack_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     } else if (cmd[0] == EFS_MD_CMD_PACK_CANCEL) {
         if (clen != 18) return EFS_ERR_PROTO;
         rc = efs_meta_apply_pack_cancel(h->kv, cmd[1], rd64be(cmd + 2), rd64be(cmd + 10));
+    } else if (cmd[0] == EFS_MD_CMD_PACK_INDEX) {
+        struct efs_pack_index_item items[EFS_PACK_INDEX_MAX];
+        if (clen < 9) return EFS_ERR_PROTO;
+        uint32_t n = ((uint32_t)cmd[2] << 8) | cmd[3];
+        if (n > EFS_PACK_INDEX_MAX || clen != 9u + 24u * n) return EFS_ERR_PROTO;
+        for (uint32_t i = 0; i < n; i++)
+            items[i] = (struct efs_pack_index_item){rd64be(cmd + 9 + 24 * i), rd64be(cmd + 17 + 24 * i),
+                                                    rd64be(cmd + 25 + 24 * i)};
+        rc = efs_meta_apply_pack_index(h->kv, cmd[1], rd32be(cmd + 4), cmd[8], items, n);
     } else if (cmd[0] == EFS_MD_CMD_PACK_UNINDEX) {
         uint64_t epochs[EFS_PACK_UNINDEX_MAX];
         efs_ino_t inos[EFS_PACK_UNINDEX_MAX];
@@ -2931,7 +2940,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_MULTI || cmd[0] == EFS_MD_CMD_REAP_MULTI ||
            cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_SWITCH ||
-           cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX ||
+           cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX || cmd[0] == EFS_MD_CMD_PACK_INDEX ||
            cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
            cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP)
               ? EFS_OK
@@ -2964,7 +2973,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
          cmd[0] == EFS_MD_CMD_LANE_SWEEP_MULTI || cmd[0] == EFS_MD_CMD_REAP_MULTI ||
          cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_SWITCH ||
-         cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX ||
+         cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX || cmd[0] == EFS_MD_CMD_PACK_INDEX ||
          cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
          cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_CREATE ||
          cmd[0] == EFS_MD_CMD_APPEND_RES || cmd[0] == EFS_MD_CMD_APPEND_CATCHUP || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
@@ -3449,7 +3458,7 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
     if (cmd[0] == EFS_MD_CMD_REAP_MULTI)
         return apply_reap_multi_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_SWITCH ||
-        cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX)
+        cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX || cmd[0] == EFS_MD_CMD_PACK_INDEX)
         /* A segment belongs to exactly one publication group: never apply
          * one group's packer entry to another group's rows. */
         return clen >= 2 && cmd[1] == group ? apply_pack_cmd(h, cmd, clen, index) : EFS_ERR_PROTO;
@@ -12476,7 +12485,7 @@ int server_raft_host_pack_object(uint32_t group, uint64_t id, uint64_t gen,
 /* W125 packer support. The packer runs only where this node leads a group;
  * its reads are local-replica hints, and every decision is re-checked by
  * the group's apply (admit, exact-source switch). */
-int server_raft_host_pack_leader(uint8_t group, uint64_t *term)
+int server_raft_host_pack_leader(uint8_t group, uint64_t *term, uint64_t *commit)
 {
     struct efs_raft_host *h = g_host;
     if (!h || !h->running || !h->kv || !efs_pack_group_anchor(group)) return 0;
@@ -12484,8 +12493,21 @@ int server_raft_host_pack_leader(uint8_t group, uint64_t *term)
     struct efs_raft *r = group_raft(h, group);
     int lead = r && efs_raft_role(r) == EFS_RAFT_LEADER;
     if (lead && term) *term = efs_raft_term(r);
+    if (lead && commit) *commit = efs_raft_commit(r);
     pthread_mutex_unlock(&h->mu);
     return lead;
+}
+/* Commit index of a group hosted here, leader or not; 0 when not hosted. */
+uint64_t server_raft_host_group_commit(uint8_t group)
+{
+    struct efs_raft_host *h = g_host;
+    uint64_t c = 0;
+    if (!h || !h->running) return 0;
+    pthread_mutex_lock(&h->mu);
+    struct efs_raft *r = group_raft(h, group);
+    if (r) c = efs_raft_commit(r);
+    pthread_mutex_unlock(&h->mu);
+    return c;
 }
 struct efs_kv *server_raft_host_kv(void)
 {

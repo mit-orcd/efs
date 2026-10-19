@@ -22,10 +22,21 @@
  * The switch, not this code, is the authority: any file that changed after
  * selection is cancelled there and stays a candidate.
  *
+ * Budget: each group has a token bucket of files. Tokens accrue at the idle
+ * rate, or at the busy rate while the cluster's foreground commit rate
+ * (commits of every hosted group not proposed by the packer) exceeds the
+ * busy threshold: the groups share the same nodes, so foreground work in
+ * either group makes packing in both yield. A segment is built only when
+ * the bucket holds its file count, so segments stay full.
+ *
  * Tunables (environment, read at start): EFS_PACK_MIN_AGE_MS (default
- * 60000), EFS_PACK_INTERVAL_MS (1000), EFS_PACK_SEGMENTS_PER_PASS (8). None
- * of them turns the packer off: values below 1 are raised to 1 (the minimum
- * age may be 0 for tests). */
+ * 60000), EFS_PACK_INTERVAL_MS (1000), EFS_PACK_SEGMENTS_PER_PASS (8),
+ * EFS_PACK_FILES_PER_S (5000), EFS_PACK_BUSY_FILES_PER_S (200),
+ * EFS_PACK_BUSY_COMMITS_PER_S (100), EFS_PACK_BACKFILL_SHARDS (64 inode
+ * shards scanned per pass until the group's backfill is done). None of
+ * them turns the packer off:
+ * rates and counts below 1 are raised to 1 (the minimum age may be 0 for
+ * tests). */
 #include "server_internal.h"
 #include "efs/checksum.h"
 #include "efs/erasure.h"
@@ -50,6 +61,13 @@ static struct {
     int started, stop;
     uint64_t min_age_ns, interval_ms;
     uint32_t segments_per_pass;
+    double idle_rate, busy_rate, busy_commits;
+    uint32_t backfill_shards;
+    struct {
+        uint64_t last_commit, last_ns, own;
+        double tokens, fg_rate;
+        int busy;
+    } g[2];
     struct efs_packer_status st;
     pthread_mutex_t mu;
 } pk = {.mu = PTHREAD_MUTEX_INITIALIZER};
@@ -109,12 +127,19 @@ static int pk_abandon_cb(void *u, const uint8_t *k, uint32_t kl, const uint8_t *
     a->gens[a->n] = a->o.ledger.segment_generation;
     return ++a->n == 64;
 }
+static int pk_gi(uint8_t group) { return group == EFS_RAFT_GROUP_SHARD ? 0 : 1; }
+/* Packer proposals are excluded from the foreground commit rate. */
+static int pk_propose(uint8_t group, const uint8_t *cmd, uint32_t len)
+{
+    __atomic_fetch_add(&pk.g[pk_gi(group)].own, 1, __ATOMIC_RELAXED);
+    return server_raft_host_pack_propose(group, cmd, len);
+}
 static void pk_cancel(uint8_t group, uint64_t id, uint64_t gen)
 {
     uint8_t cmd[18];
     cmd[0] = EFS_MD_CMD_PACK_CANCEL; cmd[1] = group;
     wr64(cmd + 2, id); wr64(cmd + 10, gen);
-    (void)server_raft_host_pack_propose(group, cmd, sizeof(cmd));
+    (void)pk_propose(group, cmd, sizeof(cmd));
 }
 static void pk_abandon(struct efs_kv *kv, uint8_t group, uint64_t term)
 {
@@ -135,6 +160,7 @@ static int pk_scan_cb(void *u, const uint8_t *k, uint32_t kl, const uint8_t *v, 
 {
     struct pk_scan *sc = u;
     if (kl != EFS_PACK_CANDIDATE_KEY_BYTES || k[2] != EFS_KV_KIND_PACK_CANDIDATE || vl != 8) return 0;
+    if (rd64(k + 3) == EFS_PACK_CURSOR_EPOCH) return 0; /* backfill cursor */
     sc->e[sc->n++] = (struct pk_entry){rd64(k + 3), rd64(k + 11), rd64(v)};
     return sc->n == PK_SCAN_MAX;
 }
@@ -282,7 +308,7 @@ static void pk_unindex(uint8_t group, const struct pk_entry *e, uint32_t n)
         cmd[0] = EFS_MD_CMD_PACK_UNINDEX; cmd[1] = group;
         cmd[2] = (uint8_t)(m >> 8); cmd[3] = (uint8_t)m;
         for (uint32_t i = 0; i < m; i++) { wr64(cmd + 4 + 16 * i, e[i].epoch); wr64(cmd + 12 + 16 * i, e[i].ino); }
-        if (server_raft_host_pack_propose(group, cmd, 4u + 16u * m) == EFS_OK) STAT_ADD(unindexed, m);
+        if (pk_propose(group, cmd, 4u + 16u * m) == EFS_OK) STAT_ADD(unindexed, m);
         free(cmd);
         e += m;
         n -= m;
@@ -292,7 +318,8 @@ static void pk_unindex(uint8_t group, const struct pk_entry *e, uint32_t n)
 /* Pack files[0..n) (already read) into one segment. Returns the number of
  * files switched; *done receives the index entries to drop. */
 static uint32_t pk_segment(uint8_t group, uint64_t term, const struct efs_node *nodes, uint32_t count,
-                           struct pk_file *files, uint32_t n, struct pk_entry *done, uint32_t *ndone)
+                           struct pk_file *files, uint32_t n, struct pk_entry *done, uint32_t *ndone,
+                           uint32_t flags)
 {
     uint32_t live_total = 0;
     struct efs_pack_record *rec = calloc(n, sizeof(*rec));
@@ -325,11 +352,11 @@ static uint32_t pk_segment(uint8_t group, uint64_t term, const struct efs_node *
         members |= 1u << (nodes[i].id - 1);
         efs_hash(f[i], flen, o->checksums[i]);
     }
-    if (efs_pack_ledger_init(image, geometry, refs, n, &owner, members, 0, &o->ledger) != EFS_OK) goto out;
+    if (efs_pack_ledger_init(image, geometry, refs, n, &owner, members, flags, &o->ledger) != EFS_OK) goto out;
     size_t olen;
     cmd[0] = EFS_MD_CMD_PACK_ADMIT; cmd[1] = group;
     if (efs_pack_object_encode(o, cmd + 2, EFS_PACK_OBJECT_MAX_BYTES, &olen) != EFS_OK ||
-        server_raft_host_pack_propose(group, cmd, (uint32_t)(2 + olen)) != EFS_OK) {
+        pk_propose(group, cmd, (uint32_t)(2 + olen)) != EFS_OK) {
         STAT_ADD(admit_errors, 1);
         goto out;
     }
@@ -361,7 +388,7 @@ static uint32_t pk_segment(uint8_t group, uint64_t term, const struct efs_node *
         swire[0] = EFS_MD_CMD_PACK_SWITCH;
         if (efs_pack_switch_encode(sw, swire + 1, 19u + EFS_PACK_SWITCH_MAX * EFS_MD_PACK_SWITCH_MEMBER_BYTES, &wl) != EFS_OK)
             break;
-        (void)server_raft_host_pack_propose(group, swire, (uint32_t)(1 + wl));
+        (void)pk_propose(group, swire, (uint32_t)(1 + wl));
     }
     /* Whatever did not switch stays a candidate; the rest are done. The
      * ledger, not the proposal verdict, says which members became live. */
@@ -372,7 +399,7 @@ static uint32_t pk_segment(uint8_t group, uint64_t term, const struct efs_node *
             unsigned at;
             if (efs_pack_ledger_slot(&cur->ledger, &refs[i], &at) == EFS_OK &&
                 cur->ledger.state[at] == EFS_PACK_LIVE) {
-                done[(*ndone)++] = (struct pk_entry){files[i].epoch, files[i].c.ino, 0};
+                if (done) done[(*ndone)++] = (struct pk_entry){files[i].epoch, files[i].c.ino, 0};
                 live_total++;
             }
         }
@@ -387,6 +414,253 @@ out:
     return live_total;
 }
 
+/* ---- compaction: copy survivors of mostly-dead segments forward ---- */
+#define PK_COMPACT_MAX 64u
+#define PK_DEAD_LIMIT (32u * 1024u)   /* dead payload that alone makes a candidate */
+#define PK_SMALL_BYTES (8u * 1024u)   /* underfilled: merged with other small ones */
+struct pk_seg {
+    struct efs_pack_object o;
+    double score;
+};
+struct pk_cscan { struct pk_seg *s; uint32_t n, small; struct efs_pack_object tmp; };
+static int pk_cscan_cb(void *u, const uint8_t *k, uint32_t kl, const uint8_t *v, uint32_t vl)
+{
+    struct pk_cscan *c = u;
+    if (kl != EFS_PACK_OBJECT_KEY_BYTES || k[2] != EFS_KV_KIND_PACK_SEGMENT) return 0;
+    if (efs_pack_object_decode(v, vl, &c->tmp) != EFS_OK || c->tmp.ledger.phase != EFS_PACK_ACTIVE) return 0;
+    struct efs_pack_ledger_usage u2;
+    efs_pack_ledger_usage(&c->tmp.ledger, &u2);
+    if (u2.pending || !u2.live) return 0;
+    int holes = u2.live_bytes * 2 < u2.total_bytes || u2.dead_bytes >= PK_DEAD_LIMIT;
+    int small = u2.live_bytes < PK_SMALL_BYTES;
+    if (!holes && !small) return 0;
+    c->s[c->n].o = c->tmp;
+    /* Most dead space per byte copied first; small ones after holes. */
+    c->s[c->n].score = holes ? (double)u2.dead_bytes / (double)(u2.live_bytes ? u2.live_bytes : 1) : -1.0;
+    c->small += !holes;
+    return ++c->n == PK_COMPACT_MAX;
+}
+static int pk_seg_cmp(const void *a, const void *b)
+{
+    const struct pk_seg *x = a, *y = b;
+    return x->score < y->score ? 1 : x->score > y->score ? -1 : 0;
+}
+static int pk_get_segfrag(const struct efs_node *nodes, uint32_t count, const struct efs_pack_object *o,
+                          uint32_t fi, uint8_t *out, uint32_t len)
+{
+    uint32_t id = o->nodes[fi], group = o->ledger.publication_group;
+    uint8_t sum[EFS_HASH_SIZE];
+    int rc;
+    if (id == pk.s->id) {
+        rc = server_segment_read(pk.s, group, o->ledger.segment_id, o->ledger.segment_generation,
+                                 fi, len, out, sum);
+    } else {
+        const struct efs_node *n = pk_node(nodes, count, id);
+        if (!n) return EFS_ERR_IO;
+        struct efs_conn *pc = server_peer_conn_get(n->addr, n->port);
+        if (!pc) return EFS_ERR_NET;
+        uint8_t req[EFS_SEGMENT_GET_HEADER] = {0};
+        req[0] = (uint8_t)group; req[1] = (uint8_t)fi;
+        uint32_t g = o->ledger.geometry;
+        req[4] = (uint8_t)(g >> 24); req[5] = (uint8_t)(g >> 16); req[6] = (uint8_t)(g >> 8); req[7] = (uint8_t)g;
+        wr64(req + 8, o->ledger.segment_id); wr64(req + 16, o->ledger.segment_generation);
+        uint8_t type;
+        void *reply = NULL;
+        uint32_t rlen = 0;
+        if (efs_conn_send_msg(pc, EFS_MSG_GET_SEGMENT, req, sizeof(req)) ||
+            efs_conn_recv_msg(pc, &type, &reply, &rlen)) {
+            server_peer_conn_drop(n->addr, n->port, pc);
+            free(reply);
+            return EFS_ERR_NET;
+        }
+        server_peer_conn_release(n->addr, n->port, pc);
+        const uint8_t *r = reply;
+        rc = type == EFS_MSG_GET_SEGMENT_REPLY && rlen == EFS_SEGMENT_GET_REPLY + len &&
+             !r[0] && !r[1] && !r[2] && !r[3] ? EFS_OK : EFS_ERR_IO;
+        if (rc == EFS_OK) { memcpy(sum, r + 8, EFS_HASH_SIZE); memcpy(out, r + EFS_SEGMENT_GET_REPLY, len); }
+        free(reply);
+    }
+    if (rc != EFS_OK) return rc;
+    uint8_t h[EFS_HASH_SIZE];
+    efs_hash(out, len, h);
+    return memcmp(h, o->checksums[fi], EFS_HASH_SIZE) || memcmp(sum, o->checksums[fi], EFS_HASH_SIZE)
+           ? EFS_ERR_CHECKSUM : EFS_OK;
+}
+/* Any two of the three fragments; the image is validated. */
+static int pk_read_segment(const struct efs_node *nodes, uint32_t count, const struct efs_pack_object *o,
+                           uint8_t *image)
+{
+    uint32_t g = o->ledger.geometry, flen = g / 2;
+    uint8_t *buf = malloc((size_t)flen * EFS_NUM_FRAGMENTS);
+    if (!buf) return EFS_ERR_NOMEM;
+    uint8_t *f[EFS_NUM_FRAGMENTS] = {buf, buf + flen, buf + 2 * flen};
+    int have[EFS_NUM_FRAGMENTS] = {0}, n = 0;
+    for (uint32_t fi = 0; fi < EFS_NUM_FRAGMENTS && n < 2; fi++)
+        if (pk_get_segfrag(nodes, count, o, fi, f[fi], flen) == EFS_OK) { have[fi] = 1; n++; }
+    int a = -1, b = -1, missing = -1;
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        if (!have[i]) { if (missing < 0) missing = i; }
+        else if (a < 0) a = i; else if (b < 0) b = i;
+    }
+    int rc = n == 2 && missing >= 0 ? efs_decode_segment(f, g, a, b, missing, image, g) : EFS_ERR_DECODE;
+    if (rc == EFS_OK) rc = efs_pack_validate(image, g);
+    free(buf);
+    return rc;
+}
+static void pk_compact(struct efs_kv *kv, uint8_t group, uint64_t term,
+                       const struct efs_node *nodes, uint32_t count)
+{
+    struct pk_cscan sc;
+    memset(&sc, 0, sizeof(sc));
+    sc.s = calloc(PK_COMPACT_MAX, sizeof(struct pk_seg));
+    struct pk_file *files = calloc(EFS_PACK_MAX_RECORDS, sizeof(*files));
+    uint8_t **images = calloc(PK_COMPACT_MAX, sizeof(*images));
+    uint32_t nfiles = 0, used = EFS_PACK_HEADER_BYTES + EFS_HASH_SIZE;
+    if (!sc.s || !files || !images) goto out;
+    uint32_t anchor = efs_pack_group_anchor(group);
+    uint8_t prefix[3] = {(uint8_t)(anchor >> 8), (uint8_t)anchor, EFS_KV_KIND_PACK_SEGMENT};
+    if (efs_kv_scan_prefix(kv, prefix, 3, pk_cscan_cb, &sc) < 0 || !sc.n) goto out;
+    /* A lone underfilled segment has nothing to merge with. */
+    if (sc.n == 1 && sc.small == 1) goto out;
+    qsort(sc.s, sc.n, sizeof(sc.s[0]), pk_seg_cmp);
+    struct efs_pack_candidate *c = calloc(1, sizeof(*c));
+    if (!c) goto out;
+    uint32_t used_segs = 0;
+    for (uint32_t si = 0; si < sc.n && nfiles < EFS_PACK_MAX_RECORDS; si++) {
+        const struct efs_pack_object *o = &sc.s[si].o;
+        images[si] = malloc(EFS_SEGMENT_MAX_SIZE);
+        if (!images[si] || pk_read_segment(nodes, count, o, images[si]) != EFS_OK) {
+            STAT_ADD(read_errors, 1);
+            continue;
+        }
+        uint32_t nrec;
+        if (efs_pack_record_count(images[si], o->ledger.geometry, &nrec) != EFS_OK) continue;
+        uint32_t before = nfiles;
+        for (uint32_t r = 0; r < nrec && nfiles < EFS_PACK_MAX_RECORDS; r++) {
+            struct efs_pack_ref ref;
+            unsigned at;
+            if (efs_pack_record_at(images[si], o->ledger.geometry, r, &ref) != EFS_OK ||
+                efs_pack_ledger_slot(&o->ledger, &ref, &at) != EFS_OK ||
+                o->ledger.state[at] != EFS_PACK_LIVE) continue;
+            if (used + EFS_PACK_RECORD_BYTES + ref.len > EFS_SEGMENT_MAX_SIZE) break;
+            /* The file must still point at exactly this record. */
+            uint8_t x[EFS_PACK_REF_BYTES], y[EFS_PACK_REF_BYTES];
+            if (efs_meta_pack_candidate(kv, ref.ino, ref.inode_generation, c) != EFS_OK ||
+                c->base.coding_profile_id != EFS_META_PROFILE_PACK || c->ndelta || !c->nlink ||
+                efs_pack_ref_encode(&c->base.packed, x) != EFS_OK ||
+                efs_pack_ref_encode(&ref, y) != EFS_OK || memcmp(x, y, sizeof(x)) ||
+                efs_lease_any(kv, ref.ino, ref.inode_generation) != 0) continue;
+            struct pk_file *f = &files[nfiles];
+            f->c = *c;
+            f->c.size = ref.len;
+            f->data = malloc(ref.len);
+            if (!f->data) break;
+            memcpy(f->data, images[si] + ref.offset, ref.len);
+            used += EFS_PACK_RECORD_BYTES + ref.len;
+            nfiles++;
+        }
+        if (nfiles > before) used_segs++;
+    }
+    free(c);
+    /* Merging is worth a copy only if it frees at least one segment. */
+    /* Worth a copy: it frees a segment with holes, or merges at least two
+     * underfilled ones. */
+    int worth = used_segs >= 2 || (used_segs == 1 && sc.s[0].score >= 0);
+    if (nfiles && worth) {
+        if (pk.g[pk_gi(group)].tokens >= (double)nfiles) {
+            pk.g[pk_gi(group)].tokens -= (double)nfiles;
+            qsort(files, nfiles, sizeof(*files), pk_file_cmp);
+            uint32_t moved = pk_segment(group, term, nodes, count, files, nfiles, NULL, NULL,
+                                        EFS_PACK_LEDGER_F_COLD);
+            STAT_ADD(compacted, moved);
+            fprintf(stderr, "packer: compact group=%u sources=%u moved=%u/%u\n", group, used_segs, moved, nfiles);
+        } else {
+            STAT_ADD(budget_waits, 1);
+        }
+    }
+out:
+    if (files) for (uint32_t i = 0; i < EFS_PACK_MAX_RECORDS; i++) free(files[i].data);
+    if (images) for (uint32_t i = 0; i < PK_COMPACT_MAX; i++) free(images[i]);
+    free(images);
+    free(files);
+    free(sc.s);
+}
+
+/* ---- backfill: index small files written before the packer ---- */
+struct pk_inos { efs_ino_t *v; uint32_t n, cap; };
+static int pk_inos_cb(void *u, const uint8_t *k, uint32_t kl, const uint8_t *v, uint32_t vl)
+{
+    struct pk_inos *a = u;
+    (void)v; (void)vl;
+    if (kl != 11 || k[2] != EFS_KV_KIND_INODE) return 0;
+    if (a->n == a->cap) {
+        uint32_t cap = a->cap ? a->cap * 2 : 1024;
+        efs_ino_t *nv = realloc(a->v, cap * sizeof(*nv));
+        if (!nv) return 1;
+        a->v = nv; a->cap = cap;
+    }
+    a->v[a->n++] = rd64(k + 3);
+    return 0;
+}
+static int pk_index_flush(uint8_t group, struct efs_pack_index_item *items, uint32_t n,
+                          uint32_t next_shard, int done)
+{
+    uint8_t *cmd = malloc(9u + 24u * n);
+    if (!cmd) return EFS_ERR_NOMEM;
+    cmd[0] = EFS_MD_CMD_PACK_INDEX; cmd[1] = group;
+    cmd[2] = (uint8_t)(n >> 8); cmd[3] = (uint8_t)n;
+    cmd[4] = (uint8_t)(next_shard >> 24); cmd[5] = (uint8_t)(next_shard >> 16);
+    cmd[6] = (uint8_t)(next_shard >> 8); cmd[7] = (uint8_t)next_shard; cmd[8] = done ? 1 : 0;
+    for (uint32_t i = 0; i < n; i++) {
+        wr64(cmd + 9 + 24 * i, items[i].epoch); wr64(cmd + 17 + 24 * i, items[i].ino);
+        wr64(cmd + 25 + 24 * i, items[i].inode_generation);
+    }
+    int rc = pk_propose(group, cmd, 9u + 24u * n);
+    free(cmd);
+    if (rc == EFS_OK) STAT_ADD(backfilled, n);
+    return rc;
+}
+static void pk_backfill(struct efs_kv *kv, uint8_t group)
+{
+    uint32_t next = 0;
+    int done = 0;
+    if (efs_meta_pack_backfill_cursor(kv, group, &next, &done) != EFS_OK || done) return;
+    struct efs_pack_index_item *items = calloc(EFS_PACK_INDEX_MAX, sizeof(*items));
+    struct efs_pack_candidate *c = calloc(1, sizeof(*c));
+    struct pk_inos a = {0};
+    uint32_t n = 0, end = next + pk.backfill_shards;
+    if (end > EFS_KV_SHARD_MASK + 1u) end = EFS_KV_SHARD_MASK + 1u;
+    if (!items || !c) goto out;
+    for (uint32_t s = next; s < end; s++) {
+        if (efs_raft_shard_group(s) != group) continue;
+        uint8_t prefix[3] = {(uint8_t)(s >> 8), (uint8_t)s, EFS_KV_KIND_INODE};
+        a.n = 0;
+        if (efs_kv_scan_prefix(kv, prefix, 3, pk_inos_cb, &a) < 0) goto out;
+        for (uint32_t i = 0; i < a.n; i++) {
+            struct efs_meta_row row;
+            if (efs_meta_apply_get_inode(kv, a.v[i], &row) != EFS_OK || !S_ISREG(row.mode)) continue;
+            if (efs_meta_pack_candidate(kv, a.v[i], row.generation, c) != EFS_OK) continue;
+            if (!c->nlink || !c->size || c->size > EFS_PACK_THRESHOLD || (c->active_lanes & ~1ull) ||
+                c->base.coding_profile_id != EFS_META_PROFILE_K2F1) continue;
+            items[n++] = (struct efs_pack_index_item){c->mtime / 1000000000ull / EFS_PACK_EPOCH_S,
+                                                      c->ino, c->inode_generation};
+            if (n == EFS_PACK_INDEX_MAX) {
+                /* The cursor stays at this shard until its last batch. */
+                if (pk_index_flush(group, items, n, s, 0) != EFS_OK) goto out;
+                n = 0;
+            }
+        }
+    }
+    (void)pk_index_flush(group, items, n, end, end > EFS_KV_SHARD_MASK);
+    if (end > EFS_KV_SHARD_MASK)
+        fprintf(stderr, "packer: backfill group=%u complete, %llu files indexed\n", group,
+                (unsigned long long)__atomic_load_n(&pk.st.backfilled, __ATOMIC_RELAXED));
+out:
+    free(a.v);
+    free(items);
+    free(c);
+}
+
 static void pk_group(uint8_t group, uint64_t term)
 {
     struct efs_kv *kv = server_raft_host_kv();
@@ -399,6 +673,7 @@ static void pk_group(uint8_t group, uint64_t term)
     pthread_mutex_unlock(&pk.s->lock);
     if (count < EFS_NUM_FRAGMENTS) return;
     pk_abandon(kv, group, term);
+    pk_backfill(kv, group);
 
     struct pk_scan sc = {calloc(PK_SCAN_MAX, sizeof(struct pk_entry)), 0};
     struct pk_file *files = calloc(PK_SCAN_MAX, sizeof(*files));
@@ -438,7 +713,7 @@ static void pk_group(uint8_t group, uint64_t term)
     uint32_t segs = 0, i = 0;
     while (i < nfiles && segs < pk.segments_per_pass && !__atomic_load_n(&pk.stop, __ATOMIC_ACQUIRE)) {
         uint64_t t;
-        if (!server_raft_host_pack_leader(group, &t) || t != term) break;
+        if (!server_raft_host_pack_leader(group, &t, NULL) || t != term) break;
         /* Fill one segment: record and byte caps. */
         uint32_t j = i, used = EFS_PACK_HEADER_BYTES + EFS_HASH_SIZE;
         while (j < nfiles && j - i < EFS_PACK_MAX_RECORDS &&
@@ -446,6 +721,9 @@ static void pk_group(uint8_t group, uint64_t term)
             used += EFS_PACK_RECORD_BYTES + (uint32_t)files[j].c.size;
             j++;
         }
+        /* Budget: build the segment only when the bucket holds its files. */
+        if (pk.g[pk_gi(group)].tokens < (double)(j - i)) { STAT_ADD(budget_waits, 1); break; }
+        pk.g[pk_gi(group)].tokens -= (double)(j - i);
         /* Read; a file that cannot be read stays a candidate. */
         uint32_t k = i;
         for (uint32_t x = i; x < j; x++) {
@@ -459,15 +737,18 @@ static void pk_group(uint8_t group, uint64_t term)
             k++;
         }
         if (k > i) {
-            (void)pk_segment(group, term, nodes, count, files + i, k - i, drop, &ndrop);
+            (void)pk_segment(group, term, nodes, count, files + i, k - i, drop, &ndrop, 0);
             segs++;
         }
         i = j;
     }
     pk_unindex(group, drop, ndrop);
+    /* Compaction runs after packing, on what the budget leaves. */
+    if (!__atomic_load_n(&pk.stop, __ATOMIC_ACQUIRE)) pk_compact(kv, group, term, nodes, count);
     if (segs || ndrop)
-        fprintf(stderr, "packer: group=%u term=%llu candidates=%u eligible=%u segments=%u unindexed=%u packed_total=%llu\n",
-                group, (unsigned long long)term, sc.n, nfiles, segs, ndrop,
+        fprintf(stderr, "packer: group=%u term=%llu busy=%d fg_commits_per_s=%.0f candidates=%u eligible=%u segments=%u unindexed=%u packed_total=%llu\n",
+                group, (unsigned long long)term, pk.g[pk_gi(group)].busy, pk.g[pk_gi(group)].fg_rate,
+                sc.n, nfiles, segs, ndrop,
                 (unsigned long long)__atomic_load_n(&pk.st.files_packed, __ATOMIC_RELAXED));
 out:
     if (files) for (uint32_t x = 0; x < PK_SCAN_MAX; x++) free(files[x].data);
@@ -481,9 +762,37 @@ static void *pk_main(void *arg)
     (void)arg;
     while (!__atomic_load_n(&pk.stop, __ATOMIC_ACQUIRE)) {
         static const uint8_t groups[2] = {EFS_RAFT_GROUP_SHARD, EFS_RAFT_GROUP_SHARD2};
+        /* Foreground load over all hosted groups: commits in the last
+         * interval that were not the packer's own proposals. */
+        uint64_t now = pk_now_ns();
+        double fg_total = 0, dt = 0;
+        int measured = 0;
+        for (int g = 0; g < 2; g++) {
+            uint64_t commit = server_raft_host_group_commit(groups[g]);
+            uint64_t own = __atomic_exchange_n(&pk.g[g].own, 0, __ATOMIC_RELAXED);
+            if (pk.g[g].last_ns && now > pk.g[g].last_ns && commit >= pk.g[g].last_commit) {
+                dt = (double)(now - pk.g[g].last_ns) / 1e9;
+                double fg = (double)(commit - pk.g[g].last_commit) - (double)own;
+                pk.g[g].fg_rate = fg > 0 ? fg / dt : 0;
+                fg_total += pk.g[g].fg_rate;
+                measured = 1;
+            }
+            pk.g[g].last_ns = commit ? now : 0;
+            pk.g[g].last_commit = commit;
+        }
+        int busy = fg_total > pk.busy_commits;
+        if (measured && busy) STAT_ADD(busy_passes, 1);
         for (int g = 0; g < 2; g++) {
             uint64_t term = 0;
-            if (server_raft_host_pack_leader(groups[g], &term)) pk_group(groups[g], term);
+            pk.g[g].busy = busy;
+            if (!server_raft_host_pack_leader(groups[g], &term, NULL)) continue;
+            if (measured) {
+                double rate = busy ? pk.busy_rate : pk.idle_rate;
+                double cap = rate * 2.0 > 2.0 * EFS_PACK_MAX_RECORDS ? rate * 2.0 : 2.0 * EFS_PACK_MAX_RECORDS;
+                pk.g[g].tokens += rate * dt;
+                if (pk.g[g].tokens > cap) pk.g[g].tokens = cap;
+            }
+            pk_group(groups[g], term);
         }
         STAT_ADD(passes, 1);
         for (uint64_t w = 0; w < pk.interval_ms && !__atomic_load_n(&pk.stop, __ATOMIC_ACQUIRE); w += 50)
@@ -499,11 +808,16 @@ int server_packer_start(struct efsd_server *s)
     pk.min_age_ns = env_u64("EFS_PACK_MIN_AGE_MS", 60000, 0) * 1000000ull;
     pk.interval_ms = env_u64("EFS_PACK_INTERVAL_MS", 1000, 1);
     pk.segments_per_pass = (uint32_t)env_u64("EFS_PACK_SEGMENTS_PER_PASS", 8, 1);
+    pk.idle_rate = (double)env_u64("EFS_PACK_FILES_PER_S", 5000, 1);
+    pk.busy_rate = (double)env_u64("EFS_PACK_BUSY_FILES_PER_S", 200, 1);
+    pk.busy_commits = (double)env_u64("EFS_PACK_BUSY_COMMITS_PER_S", 100, 1);
+    pk.backfill_shards = (uint32_t)env_u64("EFS_PACK_BACKFILL_SHARDS", 64, 1);
     if (pthread_create(&pk.tid, NULL, pk_main, NULL)) return -1;
     pk.started = 1;
-    fprintf(stderr, "packer: started min_age_ms=%llu interval_ms=%llu segments_per_pass=%u\n",
+    fprintf(stderr, "packer: started min_age_ms=%llu interval_ms=%llu segments_per_pass=%u "
+            "files_per_s=%.0f busy_files_per_s=%.0f busy_commits_per_s=%.0f\n",
             (unsigned long long)(pk.min_age_ns / 1000000ull), (unsigned long long)pk.interval_ms,
-            pk.segments_per_pass);
+            pk.segments_per_pass, pk.idle_rate, pk.busy_rate, pk.busy_commits);
     return 0;
 }
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-# w125_p4_measure.sh BASE_REL PACK_REL OUT [PORT]
+# w125_p4_measure.sh BASE_REL PACK_REL OUT [PORT] [REPS]
 #
 # W125 P4 early measurement on a private node9901 cluster (never orcd-mini or
 # w100). Three configurations, each on a fresh 3-daemon cluster started by
@@ -14,9 +14,11 @@
 # After the workload, PA waits until every candidate is packed (or 600 s).
 # Per configuration OUT/<cfg>/ gets the capture CSVs and rates, store
 # snapshots (file/dir counts and bytes per node), packer log lines and
-# raft status. Raw output stays outside Git.
+# raft status. With REPS > 1 the three configurations run round-robin REPS
+# times (OUT/<cfg>-<rep>/), so drift affects all of them alike. Raw output
+# stays outside Git.
 set -u
-BASE=$1; PACK=$2; OUT=$3; PORT=${4:-17680}
+BASE=$1; PACK=$2; OUT=$3; PORT=${4:-17680}; REPS=${5:-1}
 HERE=$(cd "$(dirname "$0")" && pwd)
 RUN=/tmp/w125-p4-run
 snap() { # cfg tag
@@ -28,8 +30,10 @@ snap() { # cfg tag
       "$(find $d -type d 2>/dev/null | wc -l)"
   done >> "$OUT/$1/snap.txt"
 }
-for cfg in B PI PA; do
-  case $cfg in
+for rep in $(seq "$REPS"); do
+for base_cfg in B PI PA; do
+  cfg=$base_cfg; [ "$REPS" -gt 1 ] && cfg=$base_cfg-$rep
+  case $base_cfg in
     B) REL=$BASE; AGE=0 ;;
     PI) REL=$PACK; AGE=3600000 ;;
     PA) REL=$PACK; AGE=2000 ;;
@@ -42,7 +46,7 @@ for cfg in B PI PA; do
   python3 "$HERE/w125_p0_capture.py" "$RUN/mnt/r2" --workers 1 --max-files 10000 --out "$OUT/$cfg/r2.csv" > "$OUT/$cfg/r2.txt" 2>&1
   t1=$(date +%s.%N)
   snap $cfg after-write
-  if [ $cfg = PA ]; then
+  if [ $base_cfg = PA ]; then
     for t in $(seq 600); do
       n=$(grep -h 'packed_total=' $RUN/logs/efsd-n*.log | sed 's/.*packed_total=//' | sort -n | tail -1)
       [ "${n:-0}" -ge 60000 ] && break; sleep 1
@@ -55,6 +59,7 @@ for cfg in B PI PA; do
   grep -h 'packer:' $RUN/logs/efsd-n*.log > "$OUT/$cfg/packer.log" 2>/dev/null
   "$REL/efs-mgmt" raft-status 10.1.99.1:$((PORT+1)) > "$OUT/$cfg/raft.txt" 2>&1
   "$HERE/w125_p0_cluster.sh" stop "$REL" "$RUN" "$PORT" > /dev/null 2>&1
+done
 done
 rm -rf "$RUN"
 echo done

@@ -84,12 +84,25 @@ int main(void)
         assert(efs_meta_apply_pack_unindex(kv, EFS_RAFT_GROUP_SHARD, &ep, &ino[N - 1], 1) == EFS_OK);
         cand = 0;
         assert(efs_kv_scan_prefix(kv, p, 3, count_cb, &cand) >= 0 && cand == N - 1);
+        /* Backfill: INDEX adds candidates and moves the cursor, which
+         * candidate scans must skip. */
+        uint32_t next = 9; int done = 1;
+        assert(efs_meta_pack_backfill_cursor(kv, EFS_RAFT_GROUP_SHARD, &next, &done) == EFS_OK && !next && !done);
+        struct efs_pack_index_item bi = {.epoch = 5, .ino = ino[N - 1], .inode_generation = gen[N - 1]};
+        assert(efs_meta_apply_pack_index(kv, EFS_RAFT_GROUP_SHARD, 2048, 0, &bi, 1) == EFS_OK);
+        assert(efs_meta_pack_backfill_cursor(kv, EFS_RAFT_GROUP_SHARD, &next, &done) == EFS_OK && next == 2048 && !done);
+        assert(efs_meta_apply_pack_index(kv, EFS_RAFT_GROUP_SHARD, 4096, 1, NULL, 0) == EFS_OK);
+        assert(efs_meta_pack_backfill_cursor(kv, EFS_RAFT_GROUP_SHARD, &next, &done) == EFS_OK && next == 4096 && done);
+        cand = 0;
+        assert(efs_kv_scan_prefix(kv, p, 3, count_cb, &cand) >= 0 && cand == N + 1); /* N-1 + backfilled + cursor row */
+        bi.epoch = EFS_PACK_CURSOR_EPOCH;
+        assert(efs_meta_apply_pack_index(kv, EFS_RAFT_GROUP_SHARD, 4096, 1, &bi, 1) == EFS_ERR_INVAL);
         /* A file above the threshold is no candidate. */
         efs_ino_t big = create(kv, "big");
         if (efs_raft_shard_group(efs_kv_lane_shard(big, 0)) == EFS_RAFT_GROUP_SHARD) {
             publish(kv, big, 0, 0x777, EFS_PACK_THRESHOLD + 1);
             cand = 0;
-            assert(efs_kv_scan_prefix(kv, p, 3, count_cb, &cand) >= 0 && cand == N - 1);
+            assert(efs_kv_scan_prefix(kv, p, 3, count_cb, &cand) >= 0 && cand == N + 1);
         }
     }
 
@@ -218,6 +231,6 @@ int main(void)
 
     free(image); free(o); free(sw); free(wire); free(back); free(cur);
     efs_kv_mem_free(kv);
-    puts("pack switch: admit, exact-source CAS, cancel, replay, overwrite release, sweep release, retire, candidate index PASS");
+    puts("pack switch: admit, exact-source CAS, cancel, replay, overwrite release, sweep release, retire, candidate index, backfill cursor PASS");
     return 0;
 }

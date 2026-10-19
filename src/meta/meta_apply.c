@@ -9303,3 +9303,47 @@ int efs_meta_apply_pack_unindex(struct efs_kv *kv, uint32_t group, const uint64_
     }
     return EFS_OK;
 }
+
+int efs_meta_apply_pack_index(struct efs_kv *kv, uint32_t group, uint32_t next_shard, int done,
+                              const struct efs_pack_index_item *items, uint32_t n)
+{
+    uint32_t anchor = efs_pack_group_anchor(group);
+    if (!kv || !anchor || (n && !items) || n > EFS_PACK_INDEX_MAX ||
+        next_shard > EFS_KV_SHARD_MASK + 1u) return EFS_ERR_INVAL;
+    struct efs_kv_item *it = calloc(n + 1, sizeof(*it));
+    uint8_t (*keys)[EFS_PACK_CANDIDATE_KEY_BYTES] = calloc(n + 1, EFS_PACK_CANDIDATE_KEY_BYTES);
+    uint8_t (*vals)[8] = calloc(n + 1, 8);
+    int rc = it && keys && vals ? EFS_OK : EFS_ERR_NOMEM;
+    for (uint32_t i = 0; rc == EFS_OK && i < n; i++) {
+        if (items[i].epoch == EFS_PACK_CURSOR_EPOCH || items[i].ino <= EFS_ROOT_INO) { rc = EFS_ERR_INVAL; break; }
+        rc = efs_pack_candidate_key(anchor, items[i].epoch, items[i].ino, keys[i]);
+        be64(vals[i], items[i].inode_generation);
+        it[i] = (struct efs_kv_item){EFS_KV_PUT, keys[i], EFS_PACK_CANDIDATE_KEY_BYTES, vals[i], 8};
+    }
+    if (rc == EFS_OK) rc = efs_pack_candidate_key(anchor, EFS_PACK_CURSOR_EPOCH, 1, keys[n]);
+    if (rc == EFS_OK) {
+        be32(vals[n], next_shard);
+        vals[n][4] = done ? 1 : 0;
+        it[n] = (struct efs_kv_item){EFS_KV_PUT, keys[n], EFS_PACK_CANDIDATE_KEY_BYTES, vals[n], 5};
+        rc = meta_write_batch(kv, it, n + 1);
+    }
+    free(it); free(keys); free(vals);
+    return rc;
+}
+
+int efs_meta_pack_backfill_cursor(struct efs_kv *kv, uint32_t group, uint32_t *next_shard, int *done)
+{
+    uint8_t key[EFS_PACK_CANDIDATE_KEY_BYTES], v[8];
+    uint32_t vl = sizeof(v);
+    uint32_t anchor = efs_pack_group_anchor(group);
+    if (!kv || !anchor || !next_shard || !done) return EFS_ERR_INVAL;
+    *next_shard = 0; *done = 0;
+    int rc = efs_pack_candidate_key(anchor, EFS_PACK_CURSOR_EPOCH, 1, key);
+    if (rc == EFS_OK) rc = efs_kv_get(kv, key, sizeof(key), v, &vl);
+    if (rc == EFS_ERR_NOT_FOUND) return EFS_OK;
+    if (rc != EFS_OK) return rc;
+    if (vl != 5) return EFS_ERR_PROTO;
+    *next_shard = rd32(v);
+    *done = v[4] != 0;
+    return EFS_OK;
+}

@@ -132,6 +132,17 @@ int efs_meta_pack_candidate(struct efs_kv *, efs_ino_t ino, uint64_t inode_gener
     struct efs_pack_candidate *);
 int efs_meta_apply_pack_unindex(struct efs_kv *, uint32_t group, const uint64_t *epochs,
     const efs_ino_t *inos, uint32_t n);
+/* Backfill of stores written before the packer: INDEX adds candidates
+ * found by the leader's scan and advances the group's backfill cursor,
+ * kept at the reserved candidate key (epoch UINT64_MAX, inode 1) as
+ * [next shard:4][done:1]. Candidate scans skip that key. */
+#define EFS_PACK_CURSOR_EPOCH UINT64_MAX
+#define EFS_PACK_INDEX_MAX 512u
+struct efs_pack_index_item { uint64_t epoch; efs_ino_t ino; uint64_t inode_generation; };
+int efs_meta_apply_pack_index(struct efs_kv *, uint32_t group, uint32_t next_shard, int done,
+    const struct efs_pack_index_item *, uint32_t n);
+/* 0 and *next_shard 0 when no cursor exists yet. */
+int efs_meta_pack_backfill_cursor(struct efs_kv *, uint32_t group, uint32_t *next_shard, int *done);
 
 /* Raft command payloads, after the command byte:
  *   ADMIT  [group:1][object]
@@ -139,7 +150,9 @@ int efs_meta_apply_pack_unindex(struct efs_kv *, uint32_t group, const uint64_t 
  *          [ino:8][inode generation:8][source digest:32][reference:96]
  *   CANCEL [group:1][id:8][generation:8]
  *   RETIRE [group:1][count:2] then count [id:8][generation:8]
- *   UNINDEX [group:1][count:2] then count [epoch:8][ino:8] */
+ *   UNINDEX [group:1][count:2] then count [epoch:8][ino:8]
+ *   INDEX  [group:1][count:2][next shard:4][done:1] then count
+ *          [epoch:8][ino:8][inode generation:8] */
 int efs_pack_switch_encode(const struct efs_pack_switch *, uint8_t *, size_t, size_t *);
 int efs_pack_switch_decode(const uint8_t *, size_t, struct efs_pack_switch *);
 #endif

@@ -163,3 +163,27 @@ int efs_pack_read(const uint8_t *image, size_t size, const struct efs_pack_ref *
     }
     return EFS_ERR_STALE;
 }
+int efs_pack_record_count(const uint8_t *image, size_t size, uint32_t *count)
+{
+    if (!count) return EFS_ERR_INVAL;
+    int rc = efs_pack_validate(image, size);
+    if (rc == EFS_OK) *count = (uint32_t)get(image + 24, 4);
+    return rc;
+}
+int efs_pack_record_at(const uint8_t *image, size_t size, uint32_t i, struct efs_pack_ref *out)
+{
+    uint32_t count;
+    if (!out) return EFS_ERR_INVAL;
+    int rc = efs_pack_record_count(image, size, &count);
+    if (rc != EFS_OK) return rc;
+    if (i >= count) return EFS_ERR_INVAL;
+    const uint8_t *p = image + EFS_PACK_HEADER_BYTES + i * EFS_PACK_RECORD_BYTES;
+    memset(out, 0, sizeof(*out));
+    out->ino = get(p, 8); out->inode_generation = get(p + 8, 8);
+    out->content_epoch = get(p + 16, 8); out->record_generation = get(p + 24, 8);
+    out->offset = (uint32_t)get(p + 32, 4); out->len = (uint32_t)get(p + 36, 4);
+    memcpy(out->digest, p + 40, EFS_HASH_SIZE);
+    out->segment_id = get(image + 32, 8); out->segment_generation = get(image + 40, 8);
+    out->publication_group = (uint32_t)get(image + 48, 4); out->geometry = (uint32_t)size;
+    return EFS_OK;
+}

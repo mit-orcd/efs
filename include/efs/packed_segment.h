@@ -41,6 +41,10 @@ int efs_pack_validate(const uint8_t *image, size_t geometry);
  * No bytes escape on wrong identity, epoch, digest, or malformed geometry. */
 int efs_pack_read(const uint8_t *image, size_t geometry,
                   const struct efs_pack_ref *, const uint8_t **data, uint32_t *len);
+/* Records of a validated image, by table index (compaction enumerates a
+ * segment's records to find the files it still holds). */
+int efs_pack_record_count(const uint8_t *image, size_t geometry, uint32_t *count);
+int efs_pack_record_at(const uint8_t *image, size_t geometry, uint32_t i, struct efs_pack_ref *out);
 int efs_pack_ref_encode(const struct efs_pack_ref *, uint8_t out[EFS_PACK_REF_BYTES]);
 int efs_pack_ref_decode(const uint8_t *, size_t len, struct efs_pack_ref *);
 #endif
