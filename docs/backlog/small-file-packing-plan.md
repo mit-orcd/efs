@@ -398,6 +398,11 @@ packed write path or opt-in was ported.
 
 **Exit:** `make test` PASS, plus the behavioural landing tests.
 
+**Status 2026-10-19: done on `w125-packing` (`79013a2c0`)**
+([evidence](../status/w125-p6-20261019.md)): landing checks 7/7 PASS,
+POSIX core 216/216 in three runs with the packer active, architecture and
+protocol docs updated on the branch. There was no old write path to remove.
+
 ### P7 — Qualification and landing
 
 1. **Private node9901 A/B:** first rebase the branch onto the then-current
