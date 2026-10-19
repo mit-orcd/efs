@@ -201,7 +201,35 @@ enum efs_msg_type {
     /* W124: batched journal-first reclaim acceptance (one per node per batch). */
     EFS_MSG_GC_INODE_BATCH = 155,
     EFS_MSG_GC_INODE_BATCH_REPLY = 156,
+    /* W125 packed segments (packer to storage node, and reads). */
+    EFS_MSG_PUT_SEGMENT = 157,
+    EFS_MSG_PUT_SEGMENT_REPLY = 158,
+    EFS_MSG_GET_SEGMENT = 159,
+    EFS_MSG_GET_SEGMENT_REPLY = 160,
+    /* W125: journal-first reclaim acceptance of retired segments. */
+    EFS_MSG_GC_SEGMENT_BATCH = 161,
+    EFS_MSG_GC_SEGMENT_BATCH_REPLY = 162,
+    /* W125: journal-first acceptance of superseded fragments (GC records). */
+    EFS_MSG_GC_FRAG_BATCH = 163,
+    EFS_MSG_GC_FRAG_BATCH_REPLY = 164,
 };
+
+/* W125 segment messages, big-endian byte layouts:
+ * PUT   [group:1][fragment:1][0:2][geometry:4][id:8][generation:8][checksum:32]
+ *       then geometry/2 payload bytes; reply efs_msg_gc_inode_reply (rc).
+ * GET   [group:1][fragment:1][0:2][geometry:4][id:8][generation:8];
+ *       reply [rc:4][payload bytes:4][checksum:32] then the payload.
+ * GC    [group:1][0:3][count:4] then count [id:8][generation:8];
+ *       reply efs_msg_gc_inode_batch_reply (one rc per item).
+ * FRAG  [export:4][count:4] then count
+ *       [ino:8][generation:8][chunk:4][fragment:1][0:3][checksum:32];
+ *       reply efs_msg_gc_inode_batch_reply. */
+#define EFS_SEGMENT_PUT_HEADER 56u
+#define EFS_SEGMENT_GET_HEADER 24u
+#define EFS_SEGMENT_GET_REPLY 40u
+#define EFS_GC_SEGMENT_BATCH_MAX 256u
+#define EFS_GC_FRAG_BATCH_MAX 1024u
+#define EFS_GC_FRAG_ITEM_BYTES 56u
 
 /* Storage session seal/check. Reply echoes the exact identity and floor.
  * check_only never writes; missing/corrupt certificates are not success. */

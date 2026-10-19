@@ -95,12 +95,18 @@ int efs_meta_apply_pack_admit(struct efs_kv *, uint32_t group, const struct efs_
 /* *switched (optional) counts the members that became LIVE. */
 int efs_meta_apply_pack_switch(struct efs_kv *, const struct efs_pack_switch *, uint32_t *switched);
 int efs_meta_apply_pack_cancel(struct efs_kv *, uint32_t group, uint64_t id, uint64_t generation);
+/* RETIRE forgets segments that are no longer ACTIVE once every member's
+ * reclaim journal has durably accepted them (W124 journal, kind SEGMENT). */
+#define EFS_PACK_RETIRE_MAX 256u
+int efs_meta_apply_pack_retire(struct efs_kv *, uint32_t group, const uint64_t *ids,
+                               const uint64_t *gens, uint32_t n, uint32_t *retired);
 
 /* Raft command payloads, after the command byte:
  *   ADMIT  [group:1][object]
  *   SWITCH [group:1][id:8][generation:8][count:2] then count members of
  *          [ino:8][inode generation:8][source digest:32][reference:96]
- *   CANCEL [group:1][id:8][generation:8] */
+ *   CANCEL [group:1][id:8][generation:8]
+ *   RETIRE [group:1][count:2] then count [id:8][generation:8] */
 int efs_pack_switch_encode(const struct efs_pack_switch *, uint8_t *, size_t, size_t *);
 int efs_pack_switch_decode(const uint8_t *, size_t, struct efs_pack_switch *);
 #endif

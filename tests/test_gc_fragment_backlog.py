@@ -42,7 +42,7 @@ static int efs_kv_scan_prefix(void *kv,const uint8_t *p,uint32_t n,cb_t cb,void 
 static int efs_kv_scan_from(void *kv,const uint8_t *p,uint32_t pn,const uint8_t *start,uint32_t sn,cb_t cb,void *ctx){(void)kv;(void)p;(void)pn;(void)start;(void)sn;(void)cb;scan_calls++;struct gc_scan_ctx *c=ctx;c->n=records;c->full=full;for(int i=0;i<records;i++)c->keys[i][GC_KEY_LEN-1]=(uint8_t)(i+1);return scan_error;}
 static struct efs_export *host_gc_export(struct efs_raft_host *h){(void)h;return missing_export?NULL:&export;}
 static void server_export_put(struct fake_server *s,struct efs_export *ex){(void)s;(void)ex;}
-static void host_gc_record(struct efs_raft_host *h,struct efs_export *ex,const uint8_t *k,const uint8_t *v,struct efs_gc_ack_item *acks,int *n){(void)h;(void)ex;(void)k;(void)v;(void)acks;attempts++;clock_us+=record_cost;if(acks_enabled)(*n)+=3;}
+static void host_gc_records(struct efs_raft_host *h,struct efs_export *ex,const uint8_t (*k)[GC_KEY_LEN],const uint8_t (*v)[EFS_META_GC_VAL],int n,struct efs_gc_ack_item *acks,int *nack){(void)h;(void)ex;(void)k;(void)v;(void)acks;attempts+=(unsigned)n;clock_us+=record_cost*(uint64_t)n;if(acks_enabled)(*nack)+=3*n;}
 static int host_gc_ack_flush(struct efs_raft_host *h,uint8_t g,struct efs_gc_ack_item *acks,int *n){(void)h;(void)g;(void)acks;flush_calls++;clock_us+=GC_FRAG_BUDGET_US+1;if(flush_error)return flush_error;*n=0;return 0;}
 '''+s[a:b]+r'''
 static void reset(void){clock_us=record_cost=attempts=0;pending=100;full=1;records=1;scan_error=flush_error=missing_export=scan_calls=flush_calls=0;acks_enabled=1;memset(g_gc_cur_len,0,sizeof(g_gc_cur_len));}
@@ -53,8 +53,9 @@ int main(void){struct fake_server server={0};struct efs_raft_host h={.s=&server,
   reset();records=4;record_cost=150000;
   assert(host_gc_frag_pass(&h,group,1)==1&&attempts==2&&flush_calls==1&&scan_calls==1);
   assert(g_gc_cur_len[gc_gi(group)]==GC_KEY_LEN&&g_gc_cur[gc_gi(group)][GC_KEY_LEN-1]==2);
+  /* A window (two records here) is attempted as one batch. */
   reset();records=4;record_cost=250000;acks_enabled=0;
-  assert(!host_gc_frag_pass(&h,group,1)&&attempts==1&&g_gc_cur[gc_gi(group)][GC_KEY_LEN-1]==1);
+  assert(!host_gc_frag_pass(&h,group,1)&&attempts==2&&g_gc_cur[gc_gi(group)][GC_KEY_LEN-1]==2);
   reset();pending=0;assert(!host_gc_frag_pass(&h,group,1) && !scan_calls);
   reset();full=0;assert(!host_gc_frag_pass(&h,group,1));
   reset();acks_enabled=0;assert(!host_gc_frag_pass(&h,group,1));

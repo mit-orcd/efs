@@ -67,6 +67,7 @@ static ssize_t test_writev(int fd, const struct iovec *iov, int n)
 #define writev test_writev
 #include "../src/server/store.c"
 #include "../src/server/reclaim.c"
+#include "../src/server/segment_store.c"
 #undef close
 #undef open
 #undef fsync

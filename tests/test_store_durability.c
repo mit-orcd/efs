@@ -47,6 +47,7 @@ static int barrier_close(int fd)
 #include "../src/server/storage_roots.c"
 #include "../src/server/store.c"
 #include "../src/server/reclaim.c"
+#include "../src/server/segment_store.c"
 #undef open
 #undef fsync
 #undef close

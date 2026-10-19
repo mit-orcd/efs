@@ -16,7 +16,11 @@
  *   storage_paths[0]/.efs-reclaim-state  epoch, oldest and next segment
  *       sequence (checksummed), outside meta/ on purpose;
  *   storage_paths[0]/meta/gc-journal/<seq:016llx>.seg  64-byte header +
- *       64-byte records, each checksummed.
+ *       records, each checksummed: version 1 (W124) 64-byte inode records,
+ *       version 2 (W125) 128-byte records with a kind: a dead inode, a
+ *       retired packed segment (its fence keys EFS_RECLAIM_SEGMENT_EID) or
+ *       one superseded fragment of a live inode.
+ *       New segments are version 2; version 1 segments still replay.
  * Segments [oldest, next) must all exist. Retirement advances `oldest` in the
  * state record before deleting the segment file, so a crash in between leaves
  * only a leftover file below `oldest`, which startup removes. Completion is not
@@ -30,6 +34,7 @@
  * (row absent with durable history) before writes are re-admitted. */
 #include "server_internal.h"
 #include "efs/checksum.h"
+#include "efs/pack_mapping.h"
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -44,9 +49,12 @@
 
 #define RJ_HDR_MAGIC "EFSRJNL1"
 #define RJ_STATE_MAGIC "EFSRJST1"
-#define RJ_VERSION 1u
+#define RJ_VERSION 2u
 #define RJ_HDR_BYTES 64u
-#define RJ_REC_BYTES 64u
+#define RJ_REC_V1_BYTES 64u
+#define RJ_REC_BYTES 128u
+#define RJ_REC_DATA 96u
+#define RJ_REC2_TAG 0x52524532u /* "RRE2" */
 #define RJ_STATE_BYTES 72u
 /* The state record lives in the storage root, outside meta/, so restoring
  * an older (self-consistent) copy of meta/ shows up as missing segments. */
@@ -60,6 +68,10 @@
 #define RJ_JOURNAL_MIN (256ull << 20) /* physical floor kept for journal/checkpoints */
 
 struct rj_rec {
+    uint8_t kind; /* EFS_RECLAIM_INODE, _SEGMENT or _SUPERSEDED */
+    uint8_t fi;   /* SUPERSEDED: fragment index */
+    uint32_t ci;  /* SUPERSEDED: chunk index */
+    uint8_t sum[EFS_HASH_SIZE]; /* SUPERSEDED: the fragment's checksum */
     uint32_t eid;
     efs_ino_t ino;
     uint64_t gen;
@@ -260,28 +272,60 @@ static int state_read(void)
     return 1;
 }
 
+/* Version 2: tag:4 kind:1 fragment:1 0:2 eid:4 chunk:4 ino:8 gen:8 seq:8
+ * checksum:32 0:24, then hash:32 over the first 96 bytes. */
 static void rec_encode(uint8_t *b, const struct rj_rec *r)
 {
     memset(b, 0, RJ_REC_BYTES);
-    put32(b, RJ_REC_TAG);
-    put32(b + 4, r->eid);
-    put64(b + 8, r->ino);
-    put64(b + 16, r->gen);
-    put64(b + 24, r->seg);
-    efs_hash(b, 32, b + 32);
+    put32(b, RJ_REC2_TAG);
+    b[4] = r->kind;
+    b[5] = r->fi;
+    put32(b + 8, r->eid);
+    put32(b + 12, r->ci);
+    put64(b + 16, r->ino);
+    put64(b + 24, r->gen);
+    put64(b + 32, r->seg);
+    memcpy(b + 40, r->sum, EFS_HASH_SIZE);
+    efs_hash(b, RJ_REC_DATA, b + RJ_REC_DATA);
 }
-static int rec_decode(const uint8_t *b, uint64_t seq, struct rj_rec *r)
+static int rec_valid(const struct rj_rec *r)
+{
+    if (r->kind == EFS_RECLAIM_SEGMENT)
+        return (r->eid & 0x80000000u) && r->ino && r->gen;
+    if (r->kind == EFS_RECLAIM_SUPERSEDED)
+        return r->eid && !(r->eid & 0x80000000u) && r->ino > EFS_ROOT_INO && r->gen &&
+               r->fi < EFS_NUM_FRAGMENTS;
+    return r->kind == EFS_RECLAIM_INODE && r->eid && !(r->eid & 0x80000000u) &&
+           r->ino > EFS_ROOT_INO;
+}
+static int rec_decode(const uint8_t *b, uint32_t version, uint64_t seq, struct rj_rec *r)
 {
     uint8_t h[EFS_HASH_SIZE];
-    efs_hash(b, 32, h);
-    if (memcmp(h, b + 32, EFS_HASH_SIZE) || get32(b) != RJ_REC_TAG || get64(b + 24) != seq)
-        return -1;
     memset(r, 0, sizeof(*r));
-    r->eid = get32(b + 4);
-    r->ino = get64(b + 8);
-    r->gen = get64(b + 16);
+    if (version == 1) {
+        efs_hash(b, 32, h);
+        if (memcmp(h, b + 32, EFS_HASH_SIZE) || get32(b) != RJ_REC_TAG || get64(b + 24) != seq)
+            return -1;
+        r->kind = EFS_RECLAIM_INODE;
+        r->eid = get32(b + 4);
+        r->ino = get64(b + 8);
+        r->gen = get64(b + 16);
+    } else {
+        efs_hash(b, RJ_REC_DATA, h);
+        if (memcmp(h, b + RJ_REC_DATA, EFS_HASH_SIZE) || get32(b) != RJ_REC2_TAG || get64(b + 32) != seq)
+            return -1;
+        for (int i = 6; i < 8; i++) if (b[i]) return -1;
+        for (unsigned i = 72; i < RJ_REC_DATA; i++) if (b[i]) return -1;
+        r->kind = b[4];
+        r->fi = b[5];
+        r->eid = get32(b + 8);
+        r->ci = get32(b + 12);
+        r->ino = get64(b + 16);
+        r->gen = get64(b + 24);
+        memcpy(r->sum, b + 40, EFS_HASH_SIZE);
+    }
     r->seg = seq;
-    return r->eid && r->ino > EFS_ROOT_INO ? 0 : -1;
+    return rec_valid(r) ? 0 : -1;
 }
 
 /* Open a fresh segment: advance the durable state first. rj.mu held. */
@@ -336,8 +380,10 @@ static int journal_append_locked(const struct efs_reclaim_item *items, const uin
         if (!buf) return EFS_ERR_NOMEM;
         for (uint32_t k = 0; k < take; k++) {
             const struct efs_reclaim_item *it = &items[pick[done + k]];
-            struct rj_rec r = {.eid = it->export_id, .ino = it->ino, .gen = it->generation,
-                               .seg = rj.seg_seq};
+            struct rj_rec r = {.kind = it->kind, .fi = it->fragment, .ci = it->chunk,
+                               .eid = it->export_id, .ino = it->ino,
+                               .gen = it->generation, .seg = rj.seg_seq};
+            memcpy(r.sum, it->sum, EFS_HASH_SIZE);
             rec_encode(buf + (size_t)k * RJ_REC_BYTES, &r);
         }
         int rc = write_all(rj.seg_fd, buf, (size_t)take * RJ_REC_BYTES);
@@ -362,11 +408,18 @@ static int journal_append_locked(const struct efs_reclaim_item *items, const uin
             const struct efs_reclaim_item *it = &items[pick[done + k]];
             struct rj_rec *r = rec_at(rj.tail++);
             memset(r, 0, sizeof(*r));
+            r->kind = it->kind;
+            r->fi = it->fragment;
+            r->ci = it->chunk;
+            memcpy(r->sum, it->sum, EFS_HASH_SIZE);
             r->eid = it->export_id;
             r->ino = it->ino;
             r->gen = it->generation;
             r->seg = rj.seg_seq;
             r->claimed = 1; /* deleters wait until its credit is applied */
+            /* A segment has no death-bitmap entry: its object is gone or
+             * no longer ACTIVE, which refuses every later PUT. */
+            r->checkpointed = it->kind != EFS_RECLAIM_INODE;
         }
         rj.seg_count += take;
         rj.segs[rj.nseg - 1].count += take;
@@ -379,7 +432,11 @@ static int journal_append_locked(const struct efs_reclaim_item *items, const uin
 static void credit_record(struct rj_rec *r)
 {
     uint64_t payload = 0;
-    if (server_gc_inode_payload(rj.s, r->eid, r->ino, &payload) != EFS_OK)
+    if (r->kind == EFS_RECLAIM_SUPERSEDED)
+        payload = 0; /* its deletion debits `used` itself */
+    else if (r->kind == EFS_RECLAIM_SEGMENT)
+        payload = server_segment_payload(rj.s, r->eid & 0xffu, r->ino, r->gen);
+    else if (server_gc_inode_payload(rj.s, r->eid, r->ino, &payload) != EFS_OK)
         payload = 0; /* uncredited: deletion then debits `used` directly */
     pthread_mutex_lock(&rj.s->lock);
     struct efs_node *ln = server_local_node(rj.s);
@@ -394,33 +451,65 @@ static void credit_record(struct rj_rec *r)
     __atomic_fetch_add(&rj.credited, payload, __ATOMIC_RELAXED);
 }
 
+/* A segment may be accepted only once this node can prove, by a
+ * linearizable read of its group, that the object is retired or no longer
+ * ACTIVE: states never return to ACTIVE, so after the fence retires no PUT
+ * can pass its authority check again. */
+static int segment_acceptable(const struct efs_reclaim_item *it)
+{
+    struct efs_pack_object *o = malloc(sizeof(*o));
+    if (!o) return EFS_ERR_NOMEM;
+    int rc = server_raft_host_pack_object(it->export_id & 0xffu, it->ino, it->generation, o);
+    if (rc == EFS_OK && o->ledger.phase == EFS_PACK_ACTIVE) rc = EFS_ERR_BUSY;
+    if (rc == EFS_ERR_NOT_FOUND) rc = EFS_OK;
+    free(o);
+    return rc;
+}
+
 static int accept_internal(const struct efs_reclaim_item *items, uint32_t n, int32_t *rc_out,
                            int bypass)
 {
     for (uint32_t i = 0; i < n; i++) rc_out[i] = EFS_ERR_BUSY;
     if (!rj.ready) return EFS_ERR_BUSY;
+    /* Segment authority first, outside the journal lock (ReadIndex). */
+    uint8_t *refused = calloc(n ? n : 1, 1);
+    if (!refused) return EFS_ERR_NOMEM;
+    for (uint32_t i = 0; i < n; i++)
+        if (items[i].kind == EFS_RECLAIM_SEGMENT && segment_acceptable(&items[i]) != EFS_OK)
+            refused[i] = 1;
     if (!bypass && (rj.recovering ||
                     __atomic_load_n(&rj.s->reclaim_fail_closed, __ATOMIC_ACQUIRE))) {
         __atomic_fetch_add(&rj.busy, n, __ATOMIC_RELAXED);
+        free(refused);
         return EFS_ERR_BUSY;
     }
     uint32_t *pick = malloc((size_t)(n ? n : 1) * sizeof(*pick));
-    if (!pick) return EFS_ERR_NOMEM;
+    if (!pick) { free(refused); return EFS_ERR_NOMEM; }
     uint32_t np = 0;
     pthread_mutex_lock(&rj.mu);
     if (rj.wedged || rj.tail - rj.head + n > RJ_CAP) {
         pthread_mutex_unlock(&rj.mu);
-        free(pick);
+        free(pick); free(refused);
         __atomic_fetch_add(&rj.busy, n, __ATOMIC_RELAXED);
         return EFS_ERR_BUSY;
     }
     for (uint32_t i = 0; i < n; i++) {
-        int dup = !items[i].export_id || items[i].ino <= EFS_ROOT_INO ||
-                  efs_ino_is_meta_table(items[i].ino);
+        struct rj_rec probe = {.kind = items[i].kind, .eid = items[i].export_id,
+                               .ino = items[i].ino, .gen = items[i].generation};
+        int dup = !rec_valid(&probe) ||
+                  (items[i].kind == EFS_RECLAIM_INODE && efs_ino_is_meta_table(items[i].ino)) ||
+                  (items[i].kind == EFS_RECLAIM_SEGMENT && !efs_pack_group_anchor(items[i].export_id & 0xffu));
         if (dup) { rc_out[i] = EFS_ERR_INVAL; continue; }
+        if (refused[i]) continue; /* stays BUSY */
+        /* A fenced inode or segment is already owned; for a superseded
+         * fragment that means its whole inode is being reclaimed. */
         if (server_reclaim_fenced(items[i].export_id, items[i].ino)) { rc_out[i] = EFS_OK; continue; }
-        for (uint32_t j = 0; j < np && !dup; j++)
-            dup = items[pick[j]].ino == items[i].ino && items[pick[j]].export_id == items[i].export_id;
+        for (uint32_t j = 0; j < np && !dup; j++) {
+            const struct efs_reclaim_item *a = &items[pick[j]], *b = &items[i];
+            dup = a->kind == b->kind && a->ino == b->ino && a->export_id == b->export_id &&
+                  (b->kind != EFS_RECLAIM_SUPERSEDED ||
+                   (a->generation == b->generation && a->chunk == b->chunk && a->fragment == b->fragment));
+        }
         if (dup) { rc_out[i] = EFS_OK; continue; }
         pick[np++] = i;
     }
@@ -428,15 +517,20 @@ static int accept_internal(const struct efs_reclaim_item *items, uint32_t n, int
     int rc = journal_append_locked(items, pick, np);
     if (rc != EFS_OK) {
         pthread_mutex_unlock(&rj.mu);
-        free(pick);
+        free(pick); free(refused);
         __atomic_fetch_add(&rj.busy, n, __ATOMIC_RELAXED);
         for (uint32_t i = 0; i < n; i++) if (rc_out[i] == EFS_OK) rc_out[i] = EFS_ERR_BUSY;
         return rc;
     }
-    /* Fences: under each inode's write guard, after the journal is durable. */
+    /* Fences: under each inode's write guard, after the journal is durable.
+     * A superseded fragment needs none: its generation is never written
+     * again, and its deletion is checksum-guarded. */
     for (uint32_t k = 0; k < np; k++) {
         const struct efs_reclaim_item *it = &items[pick[k]];
-        pthread_rwlock_t *g = server_inode_guard(it->export_id, it->ino);
+        if (it->kind == EFS_RECLAIM_SUPERSEDED) continue;
+        pthread_rwlock_t *g = it->kind == EFS_RECLAIM_SEGMENT
+            ? server_segment_guard(it->export_id & 0xffu, it->ino)
+            : server_inode_guard(it->export_id, it->ino);
         pthread_rwlock_wrlock(g);
         pthread_rwlock_wrlock(&fence_mu);
         fence_insert_locked(it->export_id, it->ino);
@@ -458,7 +552,7 @@ static int accept_internal(const struct efs_reclaim_item *items, uint32_t n, int
     pthread_mutex_unlock(&rj.mu);
     for (uint32_t k = 0; k < np; k++) rc_out[pick[k]] = EFS_OK;
     __atomic_fetch_add(&rj.accepted, np, __ATOMIC_RELAXED);
-    free(pick);
+    free(pick); free(refused);
     return EFS_OK;
 }
 
@@ -523,8 +617,25 @@ static void *deleter_main(void *arg)
             pthread_mutex_unlock(&rj.mu);
             uint64_t counted = 0;
             /* Directory syncs are deferred to retirement (retire_some). */
-            int rc = server_gc_inode_delete(rj.s, copy.eid, copy.ino,
+            int rc;
+            if (copy.kind == EFS_RECLAIM_SUPERSEDED) {
+                rc = server_gc_superseded_delete(rj.s, copy.eid, copy.ino, copy.ci, copy.fi,
+                                                 copy.gen, copy.sum);
+            } else if (copy.kind == EFS_RECLAIM_SEGMENT) {
+                rc = server_segment_delete(rj.s, copy.eid & 0xffu, copy.ino, copy.gen, &counted);
+                if (!copy.credited && counted) {
+                    /* Uncredited: debit what was unlinked directly. */
+                    pthread_mutex_lock(&rj.s->lock);
+                    struct efs_node *ln = server_local_node(rj.s);
+                    if (ln) ln->used = ln->used >= counted ? ln->used - counted : 0;
+                    pthread_mutex_unlock(&rj.s->lock);
+                    server_usage_mark_dirty(rj.s);
+                    counted = 0;
+                }
+            } else {
+                rc = server_gc_inode_delete(rj.s, copy.eid, copy.ino,
                                             copy.credited ? &counted : NULL, 0);
+            }
             pthread_mutex_lock(&rj.mu);
             r = rec_at(ids[k]);
             r->removed += counted;
@@ -637,7 +748,8 @@ static void retire_some(void)
         (void)fsync_dir(rj.dir);
         pthread_rwlock_wrlock(&fence_mu);
         for (uint64_t i = sg->first; i < sg->first + sg->count; i++)
-            fence_remove_locked(rec_at(i)->eid, rec_at(i)->ino);
+            if (rec_at(i)->kind != EFS_RECLAIM_SUPERSEDED) /* installed no fence */
+                fence_remove_locked(rec_at(i)->eid, rec_at(i)->ino);
         pthread_rwlock_unlock(&fence_mu);
         rj.head = sg->first + sg->count;
         rj.retired += sg->count;
@@ -736,37 +848,42 @@ static int load_segment(uint64_t seq, int last)
     uint8_t h[RJ_HDR_BYTES], hh[EFS_HASH_SIZE];
     if (pread(fd, h, sizeof(h), 0) != (ssize_t)sizeof(h)) { close(fd); return -1; }
     efs_hash(h, 32, hh);
-    if (memcmp(h, RJ_HDR_MAGIC, 8) || get32(h + 8) != RJ_VERSION || get64(h + 16) != rj.epoch ||
+    uint32_t version = get32(h + 8);
+    if (memcmp(h, RJ_HDR_MAGIC, 8) || (version != 1 && version != RJ_VERSION) ||
+        get64(h + 16) != rj.epoch ||
         get64(h + 24) != seq || memcmp(hh, h + 32, EFS_HASH_SIZE)) { close(fd); return -1; }
-    uint64_t bytes = (uint64_t)st.st_size - RJ_HDR_BYTES, nrec = bytes / RJ_REC_BYTES;
-    if (!last && bytes % RJ_REC_BYTES) { close(fd); return -1; }
+    /* A version 1 segment is sealed: appends always open a new segment. */
+    uint32_t rsz = version == 1 ? RJ_REC_V1_BYTES : RJ_REC_BYTES;
+    uint64_t bytes = (uint64_t)st.st_size - RJ_HDR_BYTES, nrec = bytes / rsz;
+    if (!last && bytes % rsz) { close(fd); return -1; }
     rj.segs[rj.nseg++] = (struct rj_seg){.seq = seq, .first = rj.tail, .count = 0};
     uint8_t b[RJ_REC_BYTES];
     int bad = 0;
     uint64_t valid = 0;
     for (uint64_t k = 0; k < nrec; k++) {
-        if (pread(fd, b, sizeof(b), (off_t)(RJ_HDR_BYTES + k * RJ_REC_BYTES)) != (ssize_t)sizeof(b)) {
+        if (pread(fd, b, rsz, (off_t)(RJ_HDR_BYTES + k * rsz)) != (ssize_t)rsz) {
             close(fd); return -1;
         }
         struct rj_rec r;
-        if (rec_decode(b, seq, &r)) {
+        if (rec_decode(b, version, seq, &r)) {
             if (!last) { close(fd); return -1; }
             bad = 1; /* possible torn tail: every later record must be invalid too */
             continue;
         }
         if (bad) { close(fd); return -1; }
         if (rj.tail - rj.head >= RJ_CAP) { close(fd); return -1; }
+        r.checkpointed = r.kind != EFS_RECLAIM_INODE;
         *rec_at(rj.tail++) = r;
         rj.segs[rj.nseg - 1].count++;
         valid = k + 1;
     }
     close(fd);
-    if (last && (uint64_t)st.st_size != RJ_HDR_BYTES + valid * RJ_REC_BYTES) {
+    if (last && (uint64_t)st.st_size != RJ_HDR_BYTES + valid * rsz) {
         /* A torn tail was never acknowledged (the fsync did not return).
          * Cut it so this segment verifies cleanly once it is no longer last. */
         int wfd = open(path, O_WRONLY | O_CLOEXEC);
         if (wfd < 0) return -1;
-        int rc = ftruncate(wfd, (off_t)(RJ_HDR_BYTES + valid * RJ_REC_BYTES)) ? -1 : 0;
+        int rc = ftruncate(wfd, (off_t)(RJ_HDR_BYTES + valid * rsz)) ? -1 : 0;
         if (!rc && fsync_fd(wfd)) rc = -1;
         close(wfd);
         if (rc) return -1;
@@ -884,6 +1001,29 @@ static void recover_walk(const char *path, int level, uint64_t prefix, uint32_t 
     }
     closedir(d);
 }
+/* Segment files whose object is absent or no longer ACTIVE (proven by a
+ * linearizable read) lost their journal record with the journal: fence and
+ * delete them again. Doubt keeps the file. */
+struct recover_seg { struct efs_reclaim_item *batch; uint32_t *nb; };
+static void recover_segment(void *arg, uint32_t group, uint64_t id, uint64_t gen)
+{
+    struct recover_seg *rs = arg;
+    struct efs_reclaim_item it = {.export_id = EFS_RECLAIM_SEGMENT_EID(group), .ino = id,
+                                  .generation = gen, .kind = EFS_RECLAIM_SEGMENT};
+    for (uint32_t i = 0; i < *rs->nb; i++)
+        if (rs->batch[i].kind == it.kind && rs->batch[i].ino == id && rs->batch[i].export_id == it.export_id)
+            return; /* another fragment of the same segment */
+    int rc = EFS_ERR_BUSY;
+    for (int tries = 0; tries < 600 && !__atomic_load_n(&rj.stop, __ATOMIC_ACQUIRE); tries++) {
+        rc = segment_acceptable(&it);
+        if (rc == EFS_OK || rc == EFS_ERR_BUSY || rc == EFS_ERR_INVAL) break;
+        struct timespec ts = {0, 100 * 1000 * 1000};
+        nanosleep(&ts, NULL);
+    }
+    if (rc != EFS_OK) return;
+    rs->batch[*rs->nb] = it;
+    if (++*rs->nb == 1024) recover_flush(rs->batch, rs->nb);
+}
 static void *recover_main(void *arg)
 {
     (void)arg;
@@ -910,6 +1050,8 @@ static void *recover_main(void *arg)
         }
         closedir(d);
     }
+    struct recover_seg rs = {batch, &nb};
+    server_segment_scan(rj.s, recover_segment, &rs);
     recover_flush(batch, &nb);
     free(batch);
     if (__atomic_load_n(&rj.stop, __ATOMIC_ACQUIRE)) return NULL; /* still fail closed */
@@ -941,7 +1083,7 @@ int server_reclaim_init(struct efsd_server *s)
     if (verify_and_replay() == 0) {
         for (uint64_t i = rj.head; i < rj.tail; i++) {
             struct rj_rec *r = rec_at(i);
-            fence_insert_locked(r->eid, r->ino);
+            if (r->kind != EFS_RECLAIM_SUPERSEDED) fence_insert_locked(r->eid, r->ino);
         }
         server_inode_gc_epoch_bump();
         rj.ready = 1;

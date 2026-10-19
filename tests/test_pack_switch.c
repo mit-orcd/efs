@@ -170,8 +170,28 @@ int main(void)
     /* A switch into a reclaiming segment is refused outright. */
     assert(efs_meta_apply_pack_switch(kv, sw, &live) == EFS_ERR_STALE);
 
+    /* RETIRE forgets a reclaiming segment, skips an ACTIVE one, and a
+     * replay (or an unknown id) is a no-op. */
+    {
+        struct efs_pack_object *act = calloc(1, sizeof(*act));
+        assert(act && !efs_pack_build(78, 1, EFS_RAFT_GROUP_SHARD, rec, 1, image,
+                                      EFS_SEGMENT_MAX_SIZE, &geometry, refs));
+        assert(!efs_pack_ledger_init(image, geometry, refs, 1, &owner, 0x7, 0, &act->ledger));
+        for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) act->nodes[i] = (efs_node_id_t)(i + 1);
+        assert(efs_meta_apply_pack_admit(kv, EFS_RAFT_GROUP_SHARD, act) == EFS_OK);
+        uint64_t ids[3] = {77, 78, 999}, gens[3] = {1, 1, 1};
+        uint32_t retired = 9;
+        assert(efs_meta_apply_pack_retire(kv, EFS_RAFT_GROUP_SHARD, ids, gens, 3, &retired) == EFS_OK);
+        assert(retired == 1);
+        assert(efs_pack_object_get(kv, EFS_RAFT_GROUP_SHARD, 77, 1, cur) == EFS_ERR_NOT_FOUND);
+        assert(efs_pack_object_get(kv, EFS_RAFT_GROUP_SHARD, 78, 1, cur) == EFS_OK);
+        assert(efs_meta_apply_pack_retire(kv, EFS_RAFT_GROUP_SHARD, ids, gens, 3, &retired) == EFS_OK &&
+               retired == 0);
+        free(act);
+    }
+
     free(image); free(o); free(sw); free(wire); free(back); free(cur);
     efs_kv_mem_free(kv);
-    puts("pack switch: admit, exact-source CAS, cancel, replay, overwrite release, sweep release PASS");
+    puts("pack switch: admit, exact-source CAS, cancel, replay, overwrite release, sweep release, retire PASS");
     return 0;
 }

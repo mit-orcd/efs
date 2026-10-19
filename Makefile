@@ -133,7 +133,7 @@ SERVER_SRCS = src/server/put_fence.c src/server/put_upload.c src/server/efsd.c s
               src/server/cluster.c \
               src/server/peer_pool.c src/server/writer.c \
               src/server/iostats.c src/server/thread.c \
-              src/server/raft_host.c src/server/reclaim.c
+              src/server/raft_host.c src/server/reclaim.c src/server/segment_store.c
 SERVER_OBJS = $(SERVER_SRCS:.c=.o)
 
 CLIENT_SRCS = src/client/efs_fuse.c
@@ -678,16 +678,16 @@ $(filter src/client/%.o,$(COMMON_OBJS)) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ): src/
 src/client/efs_fuse.o: src/client/reply_buffers.h src/client/stop_control.h
 src/raft/raft_disk.o src/raft/raft_log.o: src/raft/raft_disk_internal.h
 
-tests/test_store_durability: tests/test_store_durability.c src/server/store.c src/server/reclaim.c src/server/storage_roots.c src/server/server_internal.h src/bench/writer.o $(LIB)
+tests/test_store_durability: tests/test_store_durability.c src/server/store.c src/server/reclaim.c src/server/segment_store.c src/server/storage_roots.c src/server/server_internal.h src/bench/writer.o $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o $(LIB) $(LDFLAGS)
 
-tests/test_store_overwrite: tests/test_store_overwrite.c src/server/store.c src/server/reclaim.c src/server/server_internal.h src/bench/writer.o src/bench/storage_roots.o $(LIB)
+tests/test_store_overwrite: tests/test_store_overwrite.c src/server/store.c src/server/reclaim.c src/server/segment_store.c src/server/server_internal.h src/bench/writer.o src/bench/storage_roots.o $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o src/bench/storage_roots.o $(LIB) $(LDFLAGS)
 
-tests/test_store_gc: tests/test_store_gc.c src/server/store.c src/server/reclaim.c src/server/server_internal.h src/bench/writer.o src/bench/storage_roots.o $(LIB)
+tests/test_store_gc: tests/test_store_gc.c src/server/store.c src/server/reclaim.c src/server/segment_store.c src/server/server_internal.h src/bench/writer.o src/bench/storage_roots.o $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o src/bench/storage_roots.o $(LIB) $(LDFLAGS)
 
-tests/test_reclaim: tests/test_reclaim.c src/server/store.c src/server/reclaim.c src/server/server_internal.h src/bench/writer.o src/bench/storage_roots.o $(LIB)
+tests/test_reclaim: tests/test_reclaim.c src/server/store.c src/server/reclaim.c src/server/segment_store.c src/server/server_internal.h src/bench/writer.o src/bench/storage_roots.o $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o src/bench/storage_roots.o $(LIB) $(LDFLAGS)
 
 tests/test_writer_routing: tests/test_writer_routing.c src/server/writer.c src/server/server_internal.h

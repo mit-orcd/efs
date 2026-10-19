@@ -9210,3 +9210,32 @@ out:
     free(o); free(slots); free(it); free(gk); free(gv); free(rel); free(val); free(ov);
     return rc;
 }
+
+/* Every member durably accepted these reclaiming segments into its reclaim
+ * journal (fenced, physical deletion owned by the node): forget them. A
+ * segment still ACTIVE is refused; an absent one is already retired. */
+int efs_meta_apply_pack_retire(struct efs_kv *kv, uint32_t group, const uint64_t *ids,
+                               const uint64_t *gens, uint32_t n, uint32_t *retired)
+{
+    uint8_t key[EFS_PACK_OBJECT_KEY_BYTES];
+    uint32_t done = 0;
+    int rc = EFS_OK;
+    if (retired) *retired = 0;
+    if (!kv || (n && (!ids || !gens)) || n > EFS_PACK_RETIRE_MAX) return EFS_ERR_INVAL;
+    struct efs_pack_object *o = malloc(sizeof(*o));
+    if (!o) return EFS_ERR_NOMEM;
+    for (uint32_t i = 0; i < n && rc == EFS_OK; i++) {
+        rc = efs_pack_object_key(group, ids[i], gens[i], key);
+        if (rc == EFS_OK) rc = efs_txn_key_exclusive(kv, key, sizeof(key));
+        if (rc == EFS_OK) rc = efs_pack_object_get(kv, group, ids[i], gens[i], o);
+        if (rc == EFS_ERR_NOT_FOUND) { rc = EFS_OK; continue; }
+        if (rc != EFS_OK) break;
+        if (o->ledger.phase == EFS_PACK_ACTIVE) continue;
+        rc = meta_write_del(kv, key, sizeof(key));
+        if (rc == EFS_ERR_NOT_FOUND) rc = EFS_OK;
+        if (rc == EFS_OK) done++;
+    }
+    free(o);
+    if (retired) *retired = done;
+    return rc;
+}
