@@ -54,6 +54,7 @@
 #include <unistd.h>
 
 #define PK_SCAN_MAX 4096u
+#define PK_FAIL_BACKOFF_NS (30ull * 1000000000ull) /* after a failed admission or upload */
 
 static struct {
     struct efsd_server *s;
@@ -65,6 +66,7 @@ static struct {
     uint32_t backfill_shards;
     struct {
         uint64_t last_commit, last_ns, own;
+        uint64_t backoff_until_ns; /* after a failed copy: leave the members alone */
         double tokens, fg_rate;
         int busy;
     } g[2];
@@ -405,6 +407,7 @@ static uint32_t pk_segment(uint8_t group, uint64_t term, const struct efs_node *
     if (efs_pack_object_encode(o, cmd + 2, EFS_PACK_OBJECT_MAX_BYTES, &olen) != EFS_OK ||
         pk_propose(group, cmd, (uint32_t)(2 + olen)) != EFS_OK) {
         STAT_ADD(admit_errors, 1);
+        pk.g[pk_gi(group)].backoff_until_ns = pk_now_ns() + PK_FAIL_BACKOFF_NS;
         goto out;
     }
     server_pack_crash_point("admitted");
@@ -418,6 +421,11 @@ static uint32_t pk_segment(uint8_t group, uint64_t term, const struct efs_node *
         memcpy(body + EFS_SEGMENT_PUT_HEADER, f[i], flen);
         if (pk_put_fragment(nodes, count, o->nodes[i], body, EFS_SEGMENT_PUT_HEADER + flen) != EFS_OK) {
             STAT_ADD(put_errors, 1);
+            /* A member is unreachable (possibly down before the heartbeat
+             * says so). Retrying every pass would keep failing and push
+             * this node's peer-connection cooldown for that member past its
+             * return, starving foreground traffic to it: back off. */
+            pk.g[pk_gi(group)].backoff_until_ns = pk_now_ns() + PK_FAIL_BACKOFF_NS;
             pk_cancel(group, id, gen);
             goto out;
         }
@@ -713,6 +721,7 @@ out:
 
 static void pk_group(uint8_t group, uint64_t term)
 {
+    if (pk_now_ns() < pk.g[pk_gi(group)].backoff_until_ns) return;
     struct efs_kv *kv = server_raft_host_kv();
     if (!kv) return;
     struct efs_node nodes[EFS_MAX_NODES];
