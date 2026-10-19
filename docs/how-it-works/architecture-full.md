@@ -588,18 +588,22 @@ node hosts many.
 small, is stored as k+f full fragments: 69,632-byte files on orcd-mini, a
 64 KiB payload plus header and digest. A sub-KiB file therefore costs about
 800× its size in raw disk, and one fragment per node to reclaim on delete.
-Small-file packing will replace this as the only small-file storage:
-- files below a packing threshold, measured before implementation (candidates
-  4–64 KiB; a segment holds at most 128 KiB of body), packed into shared
-  segments, each one stripe of standard fragments;
-- per-file fragments above that.
+Planned: background small-file packing.
+- Files are still written as today, with per-file fragments and an
+  unchanged close.
+- An always-on background packer moves closed files below the packing
+  threshold (initially 16 KiB) into shared segments, each one stripe of
+  standard fragments (at most 128 KiB of body).
+- It retires their per-file fragments through batched reclaim.
+- Larger files keep per-file fragments.
 
 File data is never stored in metadata rows. Segments track live bytes, and
-survivors of mostly-deleted segments are compacted forward, so no fragment
-stays pinned while mostly dead.
+survivors of mostly-deleted segments are compacted forward by the same
+packer, so no fragment stays pinned while mostly dead.
 
-There will be no switch between the two; the old way is preserved as a Git
-tag. It was removed from devel in D37 and returns under
+There will be no switch that disables the packer; the state before it is
+preserved as a Git tag. Packing was removed from devel in D37 and returns
+under
 [W125](../backlog/small-file-packing-default.md), after
 [W124](../backlog/fast-delete-reclaim.md)'s batched reclaim.
 
@@ -1565,8 +1569,8 @@ implemented and deployed on orcd-mini (`de0c856b4`);**
 - Packed singleton close is 3.53 ms against 0.65 ms (single writer).
 - Throughput falls 71–78%; 9.9 Raft entries per file against 4.0.
 - Space is 19× smaller.
-- Options: tighten and re-measure, background packing after close, change
-  the close contract, or stop. Awaiting the user's decision.
+- The user chose background packing after close (2026-10-18); W125's
+  design and plan are revised accordingly.
 
 [W125 P0: allocation and cost go/no-go](../status/w125-p0-20261018.md): **conditional
 GO for option (a) with singleton segments and merge compaction.**
@@ -1579,22 +1583,24 @@ GO for option (a) with singleton segments and merge compaction.**
 - Metadata is +1 Raft entry per file (today about 4.0) unless admission
   and publication are fused.
 
-[W125 — small-file packing as the only small-file storage](../backlog/small-file-packing-default.md):
-**proposed; W124 parts 1–2 are done, W125 can start.**
-- Files below a packing threshold (measured in P0, candidates 4–64 KiB)
-  packed into shared fragments; no data in metadata rows.
-- A go/no-go (P0.0) on allocated bytes, metadata operations, close latency
-  and compaction traffic comes before the port starts.
+[W125 — small-file packing by default](../backlog/small-file-packing-default.md):
+**proposed; revised 2026-10-18 to background packing after close.**
+- Files are written exactly as today (close and fsync unchanged). An
+  always-on background packer moves closed files below 16 KiB into shared
+  segments of ordinary fragments, lifetime-grouped by publication group,
+  directory subtree and creation epoch; no data in metadata rows.
+- Their per-file fragments are retired through W124's batched journal,
+  extended to superseded generations.
+- The same copy-forward engine compacts mostly-dead segments (overhead
+  ≤1/t). Existing small files are backfilled.
 - [Implementation plan](../backlog/small-file-packing-plan.md): P0
-  decisions, port P1–P3, compaction P4, transitions P5, old-path removal
-  P6, qualification and landing P7.
-- Lifetime grouping plus live-byte compaction keep mostly-dead fragments
-  from being pinned (overhead ≤1/t).
+  decisions, port P1–P3 (format, storage node, read path and client
+  handshake), packer P4, packed-file modification P5, landing checks P6,
+  qualification and landing P7.
 - Replaces the current ~800× raw amplification for sub-KiB files (298 GiB
   per node on orcd-mini for ~1–1.5 GB of data).
-- No switch in the code: the old way is preserved as a tag before packing
-  lands.
-- Ported from `archive/packing-containers-20261016`. All gates NOTRUN.
+- One write path and no switch that disables the packer; the prior state
+  is preserved as a tag before it lands. All gates NOTRUN.
 
 [orcd-mini deletes, GC and crawl on `5d673efa8`](../status/orcd-mini-gc-delete-profile-5d673efa8-20261018.md):
 **profiling only.**
@@ -1801,7 +1807,7 @@ W121 remains open with kernel remediation deferred.
 Experimental tiny-file packing and container-storage work was removed from
 devel on October 16 (D37); its code, tests and records are kept at tag
 `archive/packing-containers-20261016` (branch `packing-containers`).
-Packing is to return as the only small-file storage under
+Packing is to return as an always-on background packer under
 [W125](../backlog/small-file-packing-default.md).
 
 Experimental group A was removed from devel on October 16: the manual repair
@@ -2009,7 +2015,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | settings-discovery | **W122** · effective daemon/client settings and portal catalog | product observability | PROPOSED: role-specific supported settings, defaults, effective values and startup/runtime scope; backend implementation and acceptance NOTRUN | [feature and gates](#w122) |
 | crash-recovery-feature | **W123** · automatic crash recovery through per-file durable versions | new feature / durability recovery | PROPOSED: design review before code; implementation, migration and acceptance NOTRUN; W71 remains open | [feature and gates](../backlog/crash-safe-durable-versions.md) |
 | fast-delete | **W124** · fast delete: batched reclaim, quota credit at commit, then packing (W125) | performance / capacity | PROPOSED: design review before code; implementation, private A/B and orcd-mini acceptance NOTRUN | [proposal and gates](../backlog/fast-delete-reclaim.md) · [evidence](../status/orcd-mini-gc-delete-profile-5d673efa8-20261018.md) |
-| small-file-packing | **W125** · small-file packing as the only small-file storage | capacity / performance | PROPOSED: after W124 parts 1–2; no switch, old way kept as a tag; design, port and acceptance NOTRUN | [proposal and gates](../backlog/small-file-packing-default.md) · [plan](../backlog/small-file-packing-plan.md) · [D37](#appendix-4--decisions--taken-and-pending-register-d1d36) |
+| small-file-packing | **W125** · small-file packing by default (background packer after close) | capacity / performance | PROPOSED: revised to background packing 2026-10-18; write path unchanged, packer always on, no switch, prior state kept as a tag; port and acceptance NOTRUN | [proposal and gates](../backlog/small-file-packing-default.md) · [plan](../backlog/small-file-packing-plan.md) · [D37](#appendix-4--decisions--taken-and-pending-register-d1d36) |
 | orcd-qualification | **W119** · ORCD normal-operation RDMA failures and blocked clean stop | correctness / liveness | OPEN: 150 concurrent failures /846 NOTRUN; cross-host peer59/67; enabled queries EBUSY; retained writes block clean stop. TCP/commands-off rerun also FAILs (120 failures,520 NOTRUN; peer61/67; clean stop refused); all23 successfully prepared cold cases verify after authorized forced restart. [TCP evidence](../status/orcd-tcp-direct-disabled-20261015.md). Preserve failures, isolate causes and rerun original gates; W100 stays closed. [AMD follow-up](../status/amd-rdma-posix-20261015.md): native/serial/peer/cold/degraded PASS at `c8d057391`; one-mount jobs16 remains215/216 with unusual-name timeout. [Async durability follow-up](../status/amd-async-durability-20261015.md) at `c4178ea81`: scoped durability/native/serial/peer/cold/degraded PASS; jobs16 FAIL214/216 (unusual names, concurrent creates,15s) | [Raft/KV follow-up](../status/orcd-raft-kv-20261016.md) · [evidence and gates](../status/orcd-devel-qualification-20261015.md) · [item](#w119) |
 | immediate-readback | **W121** · successful fsync followed by previous-file payload | data correctness | OPEN: 255/123,932 exact readbacks failed across both queued-vote variants on ORCD native RDMA/direct with enabled `.efs`; unique512-byte files, no expiry. Diagnosed FUSE kernel fork/read page-pinning defect; kernel remediation deferred by user. Fork-isolated experiments do not close W121 | [diagnosis](../status/orcd-w121-fork-read-20261016.md) · [experiment](../status/orcd-queued-read-vote-20261016.md) · [item](#w121) |
 | qualification-fixtures | **W120** · stale extracted LOOKUP stub and command cleanup ownership check | verification correctness | OPEN (partial fix): AMD `f6235bb73` repairs the LOOKUP host context and checks reader identity; native/docs PASS at `85a9ad6b5`. Enabled-command cleanup ownership remains NOTRUN here and still needs correction/acceptance. [AMD evidence](../status/amd-rdma-posix-20261015.md); preserve original failures | [evidence](../status/orcd-devel-qualification-20261015.md) · [item](#w120) |
@@ -2154,11 +2160,16 @@ be resumed later. The last commit with both is `6c274f47f`, at tag
 `archive/packing-containers-20261016` (branch `packing-containers`).
 
 **Follow-up direction (user, 2026-10-18):** small-file packing is to return
-as the only small-file storage.
-- No runtime or build switch, and no unpacked fallback.
-- Immediately before it lands, the last per-file-fragment state is
+as the default small-file storage.
+- **Background packing after close** (the user's choice after the early P1
+  measurement failed packing at close): files are written exactly as
+  today, and an always-on background packer moves closed small files into
+  packed segments, retiring their per-file fragments through W124.
+- One write path; no runtime or build switch, and no setting that disables
+  the packer.
+- Immediately before it lands, the last devel state without the packer is
   preserved as a tag (`archive/unpacked-small-files-<date>`).
-- The container engine stays out unless separately decided.
+- The archived client packed writer and the container engine stay out.
 
 Work and gates: [W125](../backlog/small-file-packing-default.md), after
 [W124](../backlog/fast-delete-reclaim.md) parts 1–2.
@@ -7858,9 +7869,9 @@ No live configuration editor or automatic rollout is included in this item.
 **Performance/capacity; proposed 2026-10-18.** Design review first; implementation, private A/B and orcd-mini acceptance NOTRUN. POSIX delete stays metadata-only. Revised after design review: logical quota is credited exactly once when removal is final, with reclaim-pending bytes and physical availability (atomic per-filesystem reservations) reported separately. Reclaim moves from inode-at-a-time processing (2–3 proposals and ~8 fsyncs per inode) to bounded batches per owning group, with a journal-first node protocol (accepted for reclaim before the acknowledgement, physically reclaimed later). Rate targets are hypotheses for the A/B. Then small-file packing (W125). Slot reuse (needs reader retirement) and subtree delete are deferred. Motivated by 0.18–0.21 GiB/min reclaim and a 398 GiB-per-node backlog on orcd-mini. [Canonical proposal and gates](../backlog/fast-delete-reclaim.md).
 
 <a id="w125"></a>
-### W125 — Small-file packing as the only small-file storage
+### W125 — Small-file packing by default (background packer)
 
-**Capacity/performance; proposed 2026-10-18; starts after W124 parts 1–2.** Files below a packing threshold (measured in plan phase P0, candidates 4–64 KiB) are packed into shared segments of ordinary fragments (no data in metadata rows); larger files keep per-file fragments. Fragmentation is designed out from the start: pack files that die together, count live bytes per segment, and compact survivors forward below a live-share threshold (bounded overhead ≤1/t). No runtime or build switch: tag the last per-file-fragment devel commit (`archive/unpacked-small-files-<date>`), then land packing with the old small-file path removed; comparisons build the tag. Ported from `archive/packing-containers-20261016` (D37) without the container engine or `EFS_PACKED_WRITES`. Motivated by ~800× raw amplification for sub-KiB files on orcd-mini. [Canonical proposal and gates](../backlog/small-file-packing-default.md) · [implementation plan](../backlog/small-file-packing-plan.md).
+**Capacity/performance; proposed 2026-10-18; revised to background packing after close.** Packing at close failed the early P1 measurement (close 5.4× slower, throughput −71 to −78%), so files are written exactly as today and an always-on background packer moves closed files below the threshold (initially 16 KiB) into shared segments of ordinary fragments (no data in metadata rows), lifetime-grouped by publication group, directory subtree and creation epoch, then retires their per-file fragments through W124's batched journal. Larger files keep per-file fragments. The same copy-forward engine compacts survivors of mostly-dead segments (bounded overhead ≤1/t). One write path and no switch that disables the packer: tag the last devel commit without it (`archive/unpacked-small-files-<date>`); comparisons build the tag. Existing small files are backfilled. Pieces ported from `archive/packing-containers-20261016` (D37) without the client writer, cohorts, `EFS_PACKED_WRITES` or the container engine. Motivated by ~800× raw amplification for sub-KiB files on orcd-mini. [Canonical proposal and gates](../backlog/small-file-packing-default.md) · [implementation plan](../backlog/small-file-packing-plan.md).
 
 
 ## Appendix 6 — Naming

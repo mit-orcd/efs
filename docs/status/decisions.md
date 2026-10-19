@@ -37,11 +37,16 @@ be resumed later. The last commit with both is `6c274f47f`, at tag
 `archive/packing-containers-20261016` (branch `packing-containers`).
 
 **Follow-up direction (user, 2026-10-18):** small-file packing is to return
-as the only small-file storage.
-- No runtime or build switch, and no unpacked fallback.
-- Immediately before it lands, the last per-file-fragment state is
+as the default small-file storage.
+- **Background packing after close** (the user's choice after the early P1
+  measurement failed packing at close): files are written exactly as
+  today, and an always-on background packer moves closed small files into
+  packed segments, retiring their per-file fragments through W124.
+- One write path; no runtime or build switch, and no setting that disables
+  the packer.
+- Immediately before it lands, the last devel state without the packer is
   preserved as a tag (`archive/unpacked-small-files-<date>`).
-- The container engine stays out unless separately decided.
+- The archived client packed writer and the container engine stay out.
 
 Work and gates: [W125](../backlog/small-file-packing-default.md), after
 [W124](../backlog/fast-delete-reclaim.md) parts 1–2.

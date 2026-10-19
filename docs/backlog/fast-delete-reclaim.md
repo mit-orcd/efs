@@ -298,7 +298,7 @@ Three quantities, each reported separately in `gc-status` and
     atomically reserved amounts below the physical reserve:
     - a **journal and checkpoint minimum**, used only by reclaim journal
       segments and bitmap checkpoints, and never by compaction;
-    - a **compaction headroom**, used only by W125 compaction copies.
+    - a **compaction headroom**, used only by W125 packer and compaction copies.
   - **Why journal space is enough:** plain deletion needs only journal and
     checkpoint space, so reclaim always progresses from the minimum. Every
     completed segment retirement frees journal space again, and every
@@ -330,9 +330,11 @@ A 200-byte file therefore costs about 800× its size in raw disk, and one
 fragment per node to reclaim when it is deleted. The 298 GiB per node of live
 tiny files above would become a few GiB.
 
-The user wants packing to be the default:
-- files below a packing threshold measured in W125 plan phase P0 (candidates 4–64 KiB) packed into shared segments of ordinary
-  fragments, never stored in metadata rows;
+The user wants packing to be the default, as background packing after
+close (decided 2026-10-18):
+- files are written as today; an always-on packer moves closed files below
+  the packing threshold (initially 16 KiB) into shared segments of
+  ordinary fragments, never into metadata rows;
 - larger files unchanged.
 
 Its fragmentation rules are designed in from the start:
@@ -341,11 +343,13 @@ Its fragmentation rules are designed in from the start:
 - compact survivors forward below a live-share threshold, so no fragment
   stays pinned while mostly dead.
 
-It is restored from the archived implementation (D37, tag
-`archive/packing-containers-20261016`) after parts 1–2. Packing replaces
-the current small-file path outright, with no switch; the old way is kept
-only as a tag. Its segment
-compaction reuses part 1's batched reclaim. Design decisions, order and
+Its pieces are restored from the archived implementation (D37, tag
+`archive/packing-containers-20261016`) after parts 1–2, without the
+archived client writer. There is no switch; the state before the packer is
+kept only as a tag. The packer retires segments and the superseded per-file
+generations of packed files through part 1's batched journal, extended to
+superseded generations (today those go through the per-fragment GC-record
+pass). Design decisions, order and
 gates are in [W125](small-file-packing-default.md).
 
 ### 4. Fragment slot reuse (deferred; re-assess after W125)

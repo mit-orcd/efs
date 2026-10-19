@@ -558,18 +558,22 @@ node hosts many.
 small, is stored as k+f full fragments: 69,632-byte files on orcd-mini, a
 64 KiB payload plus header and digest. A sub-KiB file therefore costs about
 800× its size in raw disk, and one fragment per node to reclaim on delete.
-Small-file packing will replace this as the only small-file storage:
-- files below a packing threshold, measured before implementation (candidates
-  4–64 KiB; a segment holds at most 128 KiB of body), packed into shared
-  segments, each one stripe of standard fragments;
-- per-file fragments above that.
+Planned: background small-file packing.
+- Files are still written as today, with per-file fragments and an
+  unchanged close.
+- An always-on background packer moves closed files below the packing
+  threshold (initially 16 KiB) into shared segments, each one stripe of
+  standard fragments (at most 128 KiB of body).
+- It retires their per-file fragments through batched reclaim.
+- Larger files keep per-file fragments.
 
 File data is never stored in metadata rows. Segments track live bytes, and
-survivors of mostly-deleted segments are compacted forward, so no fragment
-stays pinned while mostly dead.
+survivors of mostly-deleted segments are compacted forward by the same
+packer, so no fragment stays pinned while mostly dead.
 
-There will be no switch between the two; the old way is preserved as a Git
-tag. It was removed from devel in D37 and returns under
+There will be no switch that disables the packer; the state before it is
+preserved as a Git tag. Packing was removed from devel in D37 and returns
+under
 [W125](../backlog/small-file-packing-default.md), after
 [W124](../backlog/fast-delete-reclaim.md)'s batched reclaim.
 

@@ -218,9 +218,9 @@ Two capacity costs dominate a tiny-file workload:
   at least one 69,632-byte fragment per node, so a sub-KiB file uses about
   800× its size in raw disk. On orcd-mini, 4.6 M live tiny files (about
   1–1.5 GB of data) occupy about 298 GiB per node.
-  - The packing implementation was removed in D37. It returns as the only
-    small-file storage under
-    [W125](small-file-packing-default.md).
+  - The packing implementation was removed in D37. It returns under
+    [W125](small-file-packing-default.md) as an always-on background
+    packer that packs closed small files, with the write path unchanged.
 - **Deleted space comes back slowly.** Reclaim runs at 0.18–0.21 GiB/min
   per node, a serial per-inode protocol of 32 inodes per one-second pass,
   so a large delete keeps the quota full for hours. About 398 GiB per node

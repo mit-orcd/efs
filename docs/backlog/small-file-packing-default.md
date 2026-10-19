@@ -1,12 +1,11 @@
 # W125 — Small-file packing as the default
 
 **Class:** capacity / performance. **Recorded:** 2026-10-18.
-**Status:** PROPOSED; to start after W124 parts 1–2.
-[Implementation plan](small-file-packing-plan.md) (phases P0–P7). The user wants packing to
-become the only small-file storage. The previous way is preserved by a tag,
-not by a switch in the code.
-Design (size classes, reclaim), port, qualification and landing:
-**NOTRUN**.
+**Status:** PROPOSED; design revised 2026-10-18 to **background packing
+after close** (the user's choice after the
+[early P1 measurement](../status/w125-p1-early-20261018.md)).
+[Implementation plan](small-file-packing-plan.md) (phases P0–P7).
+Design decisions, port, qualification and landing: **NOTRUN**.
 Related:
 - [W124 fast delete](fast-delete-reclaim.md), a prerequisite;
 - [D37](../status/decisions.md#d37--packing-and-container-engine-removed-from-devel-taken-oct-16);
@@ -33,7 +32,7 @@ Every file, however small, is stored as at least one full fragment per node.
 
 ## History
 
-- **What existed:** devel had experimental tiny-file packing:
+- **What existed:** devel had experimental tiny-file packing at close time:
   - client `pack_write` (`EFS_PACKED_WRITES`);
   - packed segments, readers, cohorts, ledger and mapping;
   - packed publication, upload, fence and GC.
@@ -43,46 +42,160 @@ Every file, however small, is stored as at least one full fragment per node.
   resumed later (D37, commit `5ded11179`). The last devel commit with both
   is `6c274f47f`, at tag `archive/packing-containers-20261016` on branch
   `packing-containers`.
-- **Resuming:** the removal commit says to branch from devel and revert it.
-- **Default:** the user now wants packing on by default.
+- **Packing at close was measured and rejected (2026-10-18).**
+  - [P0](../status/w125-p0-20261018.md) accepted singletons at close plus
+    merge compaction, on condition that a singleton's publication costs no
+    more than today's close.
+  - The [early P1 measurement](../status/w125-p1-early-20261018.md) of the
+    archived code failed that condition:
+    - close 3.53 ms against 0.65 ms;
+    - throughput −71% (one writer) and −78% (16 workers);
+    - 9.9 Raft entries per file against 4.0.
+  - The cause is structural. Today the data is sent before close
+    (asynchronous PUT), so close waits for one publication. A packed
+    segment can only be written once it is sealed, so close waits for the
+    PUTs, admission and publication in sequence.
+- **Decision (user, 2026-10-18):** background packing after close. Keep
+  today's write path and pack closed small files afterwards.
 
-## Rule: one storage path, no A/B in the code
+## Rule: one write path, packing always on, no A/B in the code
 
-The user's requirement (2026-10-18): packing replaces the current small-file
-storage. It is not an option beside it.
-- **No switch:** no runtime switch, environment variable, build flag or
-  opt-out, and no code that keeps both placements.
-  - The archived `EFS_PACKED_WRITES` switch and its unpacked fallback for
-    small files are not ported.
-- **Preserve the old way in Git:** immediately before packing lands, tag
-  the last devel commit that stores small files as per-file fragments
+The user's requirements (2026-10-18), as revised for background packing:
+- **One write path.** Every file is written exactly as today: per-file
+  chunk fragments, asynchronous PUT, unchanged close and fsync. There is no
+  second, packed write path in the client. The archived `pack_write`
+  writer, its client cohorts and `EFS_PACKED_WRITES` are not ported.
+- **Packing is part of storage, not a mode.** For a small file, today's
+  per-file fragments become a transient staging form. The background
+  packer moves every closed file under the threshold into packed segments
+  within a bounded delay, and nothing else stores small files long-term.
+- **No switch.** There is no runtime switch, environment variable, build
+  flag or opt-out that disables the packer, and no code that keeps
+  small files unpacked by choice.
+  - Operational tunables (minimum age, rate budget, priority) have no
+    value that means "off".
+  - Tests may shorten the minimum age, or ask the packer to run a pass at
+    once, so they can check packed state deterministically.
+- **Both representations are read.** The read path handles packed
+  references and per-file chunks. That is inherent in staging, and it also
+  covers every existing store, whose small files become packer input.
+- **The old way is preserved in Git.** Immediately before the packer
+  lands, tag the last devel commit without it
   (`archive/unpacked-small-files-<date>`).
-- **Replace in the next change:** packing lands and the old small-file
-  path is removed in the same change (or the immediately following
-  commit).
-- **Comparisons:** every before/after comparison builds the tag and the new
-  commit as two releases and compares the builds. Files above the packed
-  threshold keep today's per-file fragments; that is the size-class rule,
-  not an alternative mode.
+- **Comparisons build two releases.** Every before/after comparison builds
+  the tag and the new commit and compares the builds. There are never two
+  modes in one binary.
+- **Size class, not a mode.** Files above the packed threshold keep
+  today's per-file fragments permanently.
 
 ## Proposal
 
 **No file data in metadata rows.** Per the user (2026-10-18), every small
 file's bytes are packed into ordinary fragments. Metadata holds only the
-file's location in a segment (segment id, offset, length, digest), never its
-payload.
+file's location in a segment (segment id, generation, offset, length,
+digest), never its payload.
 
-**Placement by size, decided when the file's data is published:**
+**Life of a small file:**
 
-| Size | Storage |
+| Stage | Storage | Who |
+| --- | --- | --- |
+| written, open, or closed less than the minimum age ago | today's per-file chunk fragments | client, unchanged write path |
+| closed, below the threshold, quiet for the minimum age | candidate, queued for packing | metadata publication records it |
+| packed | a record in a shared packed segment; the per-file fragments are retired | background packer |
+| modified (write, append, truncate) | a new generation through today's write path; the packed record becomes dead space | client, unchanged write path |
+| deleted | metadata only; the record becomes dead space, and an empty segment is retired whole | POSIX delete, then W124 reclaim |
+
+A file deleted before it is packed is never packed, so create-then-delete
+workloads pay no packing cost.
+
+**Placement by size:**
+
+| Size | Long-term storage |
 | --- | --- |
-| up to the packing threshold, measured in [plan](small-file-packing-plan.md) phase P0 (candidates 4–64 KiB; a 128 KiB segment holds at most one 64 KiB record; the archived validator allows 4 KiB) | packed: many files' payloads in shared packed segments, each segment one erasure-coded stripe of standard fragments |
+| up to the packing threshold (initially 16 KiB, accepted in P0; it raises the archived validator's 4 KiB record limit as a versioned format change) | packed: many files' payloads in shared packed segments, each segment one erasure-coded stripe of standard fragments |
 | larger | today's per-file chunk fragments |
 
 A packed segment is one stripe: k data fragments plus f parity fragments,
-each the standard fixed-size fragment file (69,632 bytes on orcd-mini today).
-Packed and unpacked data therefore use the same fragment files, placement,
-integrity format and reclaim path.
+each a standard fragment file. Segments are variable size (up to 128 KiB,
+8 KiB aligned), so packed and unpacked data use the same fragment format,
+placement, integrity and reclaim path.
+
+**Segment ownership.** A packed segment does not live under any inode's
+directory. It has its own owner: a segment directory per publication group
+on each node, keyed by segment id. Inode death (W124 REAP) therefore never
+reaches a segment's fragments. A segment's space is freed only by
+retirement once its live count is zero.
+
+## The background packer
+
+One copy-forward engine does both the initial packing and the compaction
+of holes. Its inputs are either per-file staged small files or low-live
+packed segments, and its output is always a new packed segment.
+
+1. **Candidates.**
+   - When a publication leaves a file closed and below the threshold, the
+     same Raft entry records it in a per-group candidate index keyed by
+     (directory subtree, creation epoch). No extra Raft entry per file is
+     needed.
+   - The entry is removed when the file is packed, deleted or grows past
+     the threshold.
+   - Existing stores are backfilled into the index by a one-time,
+     rate-limited scan.
+   - A candidate is eligible once it is closed (no write lease), its last
+     data publication is at least the minimum age old, and it is not open
+     for reading by a lease that pins the chunk.
+2. **Lifetime grouping.** The packer builds each segment from candidates
+   that will probably die together:
+   - one publication group per segment, always (the ledger and references
+     assume it);
+   - then the same directory subtree and creation epoch, filling up to the
+     segment's record and byte caps.
+
+   Unlike packing at close, the packer sees whole closed directories, so a
+   sequential writer's folder fills segments instead of producing
+   singletons. Real tiny-file workloads fill a directory and later delete
+   the whole tree (`tiny_files.py`, then `edelete`). Such segments empty
+   completely and are retired whole with no copying.
+3. **Copy.** The packer reads each candidate's bytes through the normal
+   verified read path, builds the segment image (per-record digests), and
+   writes it through the packed PUT. The segment's records are admitted as
+   pending. The copy is durable on all k+f nodes before any switch.
+4. **Switch.** One Raft entry per segment switches the members' mappings,
+   with a compare-and-swap on each member's exact expected source:
+   - for a staged file: inode, chunk index, generation and fragment-set
+     identity, plus the content digest;
+   - for a compaction source: source segment id and generation, offset,
+     length and digest. A generation alone is not enough, because
+     relocation keeps the content generation.
+
+   In the same atomic batch, the destination ledger marks each switched
+   record live and the source releases it. A member whose CAS fails, because
+   it was written, truncated, deleted or moved meanwhile, is cancelled in
+   the destination ledger and counted as dead space there. The rest of the
+   segment switches normally.
+5. **Retire the sources.**
+   - **Staged per-file fragments** are superseded generations of a live
+     inode. They are retired through W124's batched, journal-first node
+     reclaim, extended to superseded generations: the node deletes exactly
+     that generation's fragment files, and then the inode's chunk and inode
+     directories once they are empty.
+   - **Emptied segments** are retired whole through the same journal.
+   - **Readers:** a source stays until no reader or open lease can still
+     reach it. The per-record and per-fragment digests reject any stale
+     read.
+6. **Budget and placement.**
+   - The packer runs on each publication group's leader, at most one per
+     group. Its state is soft: after a leader change it restarts from the
+     candidate index, and a half-written segment's pending records are
+     cancelled through admission (I15).
+   - It runs on a rate-limited budget below foreground I/O and backs off
+     when foreground latency rises. Its priority rises as the caps below
+     near.
+
+**Metadata cost:** the write path keeps today's ~4.0 Raft entries per file.
+Packing adds a candidate-index write inside the existing publication batch,
+one switch entry per segment (up to 512 files), and batched retirement:
+amortised, a small fraction of an entry per file.
 
 ## Fragmentation: never pin mostly-dead fragments
 
@@ -92,232 +205,206 @@ sub-KiB files, one 64 KiB fragment can hold hundreds of files, so an
 unmanaged scheme degrades towards today's waste. Three rules, required from
 the start:
 
-1. **Pack files that die together (lifetime grouping).**
-   - An open packing segment accepts files only from the same publication
-     group (every segment belongs to exactly one, as the archived ledger
-     requires), the same directory, the same writer session and a short
-     creation window (milliseconds to seconds, bounded by fsync).
-   - Cold compaction preserves the publication-group boundary.
-   - Real tiny-file workloads fill a directory and later delete the whole
-     tree (`tiny_files.py`, then `edelete`), so files packed together are
-     usually deleted together. The segment then empties completely and is
-     reclaimed whole with no copying.
-   - Mixed-lifetime survivors are the exception, not the norm.
-2. **Track live bytes per segment.**
-   - Each segment has a live-byte and live-file counter in metadata,
-     updated in the same Raft entry as the delete or overwrite that
-     changes it.
-   - An overwritten packed file is written as a new copy, and its old
-     bytes become dead space, counted the same way.
+1. **Pack files that die together:** the packer's lifetime grouping above.
+   Compaction output keeps the publication-group boundary and is written to
+   separate cold segments, never mixed with freshly packed files.
+2. **Track live bytes per segment.** Each segment's ledger has a live-byte
+   and live-file counter, updated in the same Raft entry as the delete,
+   overwrite, truncate or switch that changes it. An overwritten packed
+   file is written as a new per-file generation, and its old record becomes
+   dead space, counted the same way.
 3. **Compact by copying survivors forward, with a hard bound.**
    - **Trigger:** a segment becomes a compaction candidate when its live
      share falls below a threshold *t* (for example 50%) or its dead bytes
      exceed a size limit.
    - **Order:** candidates are processed by most dead space per byte
      copied, the log-structured-filesystem cost/benefit order.
-   - **Copy:** the survivors' payloads are copied into a separate cold
-     packing segment, so survivors are not mixed back with fresh data. The
-     new copy is durable before any switch.
-   - **Switch:** each survivor's location is switched with a Raft
-     compare-and-swap on its exact expected source reference: segment id
-     and generation, offset, length and digest. A generation alone is not
-     enough, because relocation keeps the content generation.
-   - In the same atomic batch, the destination ledger takes ownership and
-     the source ledger releases the record.
-   - A concurrent overwrite, delete or second compactor wins, and the copy
-     is discarded.
-   - **Retire:** when the old segment's live count reaches zero, the whole
-     stripe goes to W124's batched reclaim, to be deleted or reused as a
-     whole-fragment slot.
-   - **Readers:** the old segment is kept until no reader or open lease
-     can still reach the old location, and the per-file digest rejects any
-     stale read.
-   - **Budget:** compaction is rate-limited, below foreground I/O, on the
-     W124 batched path.
+   - **Mechanism:** the packer's copy, switch and retire steps, with a
+     segment as the source.
    - **The 15-of-16 case:** one survivor (1/16 of the segment) is copied,
      and the 15/16 is freed.
 
 **Bounds this gives, and what they exclude:**
-- **Sealed segments that are not candidates** are each at least *t* live,
+- **Packed segments that are not candidates** are each at least *t* live,
   so their overhead is at most 1/*t* (2× at *t* = 50%) on top of erasure
   coding.
 - **Excluded from that bound:**
   - segments queued for compaction;
-  - old segments retained after a switch until readers and leases retire;
-  - open and partially filled segments.
+  - sources retained after a switch until readers and leases retire;
+  - staged small files not yet packed, which cost today's 69,632 bytes per
+    node each.
+- **Caps:** per node, the compaction backlog (dead bytes awaiting
+  compaction), the retained-source bytes and the staged-unpacked bytes are
+  capped. As a cap nears, the packer's budget and priority rise:
+  compaction first when dead space dominates, packing first when staged
+  bytes dominate.
+- **No foreground throttling by the packer.** Writes are never delayed for
+  packing. If physical space runs short, writes get W124 part 2's ordinary
+  ENOSPC at the physical reserve, with its reason. The packer's copies use
+  W124's compaction headroom, and every copy is repaid by a retirement many
+  times larger: a 128 KiB segment replaces up to 512 per-file fragments.
+  With concurrent jobs capped and sources pinned by open leases excluded,
+  a full disk can still pack and compact. The journal and checkpoint
+  minimum is not available to the packer.
 
-  With rate-limited compaction these can accumulate, so the 1/*t* figure
-  alone is not a hard bound on total space.
-- **Hard bound, via backlog and headroom limits:**
-  - the candidate backlog (dead bytes awaiting compaction) and the
-    retained-segment bytes are capped per node;
-  - when a cap is near, compaction gets priority over its normal
-    foreground budget, and new packing is throttled before the physical
-    reserve (W124 part 2) is reached.
-- **Admission under sustained churn:** if deletes and overwrites create
-  dead space faster than compaction can absorb it, the caps bind.
-  - New packed writes are first delayed with a bounded backpressure, for
-    example up to a few hundred ms per write.
-  - If a cap is still exceeded after that, the write fails with ENOSPC and
-    the reason (compaction backlog), never by exceeding the physical
-    reserve.
-  - Compaction copies use the compaction headroom reserved by W124 part 2.
-    With concurrent compaction jobs capped and segments pinned by open
-    leases or readers excluded from selection, every copy is repaid by a
-    release, so a full disk can still compact. The journal and checkpoint
-    minimum is not available to compaction.
-
-  Total packed space is then at most 1/*t* × live bytes, plus the two caps,
-  plus open segments.
+  Total small-file space is then at most 1/*t* × live packed bytes, plus
+  the caps.
 - **Copy cost:** compaction rewrites at most 1/(1−*t*) times the deleted
-  bytes.
+  bytes. Initial packing copies each small file once (about 256 B for the
+  measured workload), against 69,632 bytes per node freed.
 - **Today:** overhead for sub-KiB files is about 800×.
-
-**Partially filled segments:** an fsync or the creation window can seal a
-segment early. An underfilled sealed segment is just a low-live segment.
-Compaction merges several of them into one full cold segment, under the same
-bound.
 
 **No hole reuse inside a segment.** Segments are erasure-coded across nodes.
 Filling a hole in place would be a partial-stripe update, with read-modify-
 write parity, consistency and crash hazards. Space is reused only at whole-
-segment or whole-fragment granularity, after compaction has emptied it.
+segment or whole-fragment granularity, after the segment has been emptied.
 
 ## Required design decisions (each recorded before code)
 
-1. **Thresholds and limits.** Choose the packing threshold from measured
-   allocation, fill, read amplification and metadata cost (candidates 4–64
-   KiB). A 128 KiB segment holds at most one 64 KiB record, and the
-   archived validator's 4 KiB limit is the actual format constraint.
-   Also choose the compaction threshold *t*, the dead-bytes limit, and the
-   per-node caps on candidate backlog and retained segments. Base them on
-   measured space, compaction write cost, read latency and the physical
-   reserve.
-2. **Grouping key, window and close contract.**
-   - The exact key (publication group, directory, session, window).
-   - What close must publish, and whether closes coalesce across
-     concurrent writers.
-   - The archived writer makes close wait for durable publication, which
-     gives one file per segment for a sequential writer.
-   - Decided from the plan's P0.0 go/no-go, a closed-loop model judged on
-     allocated bytes, metadata operations, close latency and compaction
-     traffic, not on occupancy alone.
-3. **Format compatibility.**
-   - Versioned on-disk formats for the segment (including any raised
-     record limit) and the extended ledger.
+1. **Thresholds and limits.**
+   - Packing threshold: 16 KiB initially (P0). 32 and 64 KiB stay
+     candidates after measuring read amplification and metadata cost.
+   - Compaction threshold *t*, the dead-bytes limit, and the per-node caps
+     on compaction backlog, retained sources and staged bytes, from
+     measured space, copy cost, read latency and the physical reserve.
+2. **Packer policy.**
+   - Minimum age before packing (a hypothesis: 60 s), and the creation
+     epoch length for grouping.
+   - Exact grouping key (publication group, directory subtree, epoch) and
+     how a large directory is split across segments.
+   - Placement on the group leader, the budget, the back-off signal and the
+     concurrency cap.
+3. **Candidate index.** Its KV kind and key, its update inside the
+   publication batch, and the backfill scan for existing stores.
+4. **Switch.** The exact source identity for staged files and segments,
+   the batch size per entry, and cancellation of failed members.
+5. **Format compatibility.**
+   - Versioned on-disk formats for the segment (including the raised record
+     limit), the extended ledger and the candidate index.
    - Builds that do not support a format refuse it, fail closed.
    - Coordinated upgrades; downgrades across a format change are refused.
-   - Clients are not build-gated today: only daemons send HELLO.
-     Compatibility is enforced by the server on every client connection,
-     pooled or reconnected: a version declaration is the first message,
-     and no data read or mutation is served before it. Old against new is
-     tested in both directions.
-4. **Growth across the threshold.**
-   - A packed file that grows past the threshold moves to per-file
-     fragments as a new immutable generation, as re-striping does; the
-     same applies when shrinking below it.
-   - Truncate and sparse files follow the same rule.
-   - Shared segments are never mutated in place.
-5. **Segment accounting and reclaim.**
+   - Clients are not build-gated today: only daemons send HELLO. Clients
+     must read packed references, so compatibility is enforced by the
+     server on every client connection, pooled or reconnected: a version
+     declaration is the first message, and no data read or mutation is
+     served before it. Old against new is tested in both directions.
+6. **Modifying packed files.** Any write, append, truncate or hole punch on
+   a packed file produces a new per-file generation through today's write
+   path (a read-modify-write of the packed bytes where needed). Its record
+   becomes dead space, and the packer repacks the new generation if it is
+   still below the threshold. Shared segments are never mutated in place.
+7. **Segment accounting and reclaim.**
    - The live-byte counter's key and update path.
-   - Compaction scheduling and its foreground budget.
-   - Whole-segment retirement through W124's batched, node-local reclaim.
-   - W124 part 2 (quota credit at delete commit) applies to packed bytes.
-6. **Durability and fsync.**
-   - fsync of a packed file gives the same guarantee as today's per-file
-     durable ACKs, including grouped barriers.
-   - A compaction copy is durable before its location switch.
-   - Interaction with W123 (durable versions) must be stated.
-7. **Recovery and integrity.**
+   - Retirement of superseded per-file generations and whole segments
+     through W124's batched node journal, including removal of emptied
+     inode directories.
+   - W124 part 2: logical quota counts a file's bytes once, whichever form
+     it is in; a switch changes no logical quota. Physical space is
+     reserved for the segment before the copy and released by retirement.
+8. **Durability and fsync.** Unchanged for writers, since the write path is
+   unchanged. A packer copy is durable on all k+f nodes before its switch,
+   and the switch keeps the file's durability guarantee. Interaction with
+   W123 (durable versions) must be stated.
+9. **Recovery and integrity.**
    - Segment checksums and each file's identity within its segment, so a
      packed read verifies exactly its bytes (I25).
-   - Orphan-segment safety (I15), covering a compaction copy that never
-     switched.
+   - Orphan-segment safety (I15): a copy that never switched is cancelled
+     and reclaimed.
    - Generation coherence (I13).
-8. **Which archived parts to keep.**
-   - Port the packing code only, and re-check it against the rules above.
-     The container storage engine stays out unless separately decided.
-   - Reconcile with everything that changed after 2026-10-16: the `h->mu`
-     steps, the GC and query changes, the cooldown fixes and the KV
-     changes.
+10. **Which archived parts to keep.** Port the segment format, codec,
+    ledger, mapping planner, admission, packed reader, packed storage-node
+    paths and meta-apply handling. Do not port the client packed writer,
+    client cohorts, the opt-in or the container storage engine. Reconcile
+    with devel changes since 2026-10-16 (`h->mu` steps, GC and query
+    changes, cooldown fixes, KV changes, W124).
 
 ## Order of work
 
 1. W124 part 1 (batched reclaim) and part 2 (quota credit at delete
-   commit), as prerequisites.
-2. Design review of the decisions above, recorded here.
-3. Port packing from `packing-containers` onto a work branch from devel,
-   without the switch. Add lifetime grouping, live-byte accounting and
-   compaction, and restore its tests.
-4. Rebase the branch onto the then-current devel. Qualify it on a private
-   node9901 cluster against a build of exactly that devel commit, so
-   concurrent fixes are on both sides. Then qualify it on orcd-mini with
-   the user's go-ahead.
-5. Once the gates pass:
+   commit), as prerequisites (done).
+2. Revise and review the decisions above, recorded here.
+3. Port the packing pieces from `packing-containers` onto the work branch
+   (`w125-packing`), without the client writer or any switch. Add the
+   candidate index, the packer, live-byte accounting, compaction and
+   superseded-generation retirement, and restore the tests.
+4. Measure the packer early, on a private node9901 cluster, as soon as it
+   packs end to end: foreground `tiny_files.py` throughput with the packer
+   running, against a build of the base commit, and the packing rate.
+5. Rebase onto the then-current devel. Qualify on a private node9901
+   cluster against a build of exactly that devel commit, so concurrent
+   fixes are on both sides. Then qualify on orcd-mini with the user's
+   go-ahead, including the backfill of its existing small files.
+6. Once the gates pass:
    - tag that same pre-merge devel commit, the final A/B baseline, as
      `archive/unpacked-small-files-<date>`;
-   - land packing on devel with the old small-file path removed, so there
-     is no switch.
-6. Re-assess W124 part 4 (fragment slot reuse). With small files packed,
+   - land the packer on devel, always on.
+7. Re-assess W124 part 4 (fragment slot reuse). With small files packed,
    it applies at whole-fragment granularity to retired segments and large
    files.
 
 ## Acceptance gates
 
 All gates are NOTRUN.
-1. **Space:** for 1 M files of 256 B, 4 KiB and 32 KiB:
-   - raw bytes per logical byte, new build versus the tagged build;
-   - target within a small constant of the 2+1 coding overhead, not
-     800×.
-2. **Fragmentation:**
-   - **Random deletion:** create 1 M files, then delete a random 15 of
-     every 16. Packed overhead must settle within the 1/*t* bound, and
-     compaction must move only the survivors. Candidate backlog and
-     retained segments stay within their caps, including at the maximum
-     delete rate.
-   - **Whole trees:** delete whole trees. Segments must retire with no
+1. **Write path unchanged:** create, write, close and fsync p50/p99 and
+   throughput for the user's tiny-file recipe, new build against the
+   tagged build:
+   - with the packer idle: within run-to-run noise;
+   - with the packer running at its budget: within an agreed limit (target
+     a loss of at most 10%).
+2. **Space:** for 1 M files of 256 B, 4 KiB and 16 KiB, after packing
+   settles:
+   - raw bytes per logical byte, new build against the tagged build;
+   - target within a small constant of the 2+1 coding overhead, not 800×;
+   - per-file inode directories removed for packed files.
+3. **Packing rate and delay:** the packer keeps up with the recipe's
+   sustained create rate, and staged bytes stay within their cap. Report
+   files packed per second and the age at which files are packed.
+4. **Fragmentation:**
+   - **Random deletion:** create 1 M files, let them pack, then delete a
+     random 15 of every 16. Packed overhead settles within the 1/*t* bound,
+     and compaction moves only the survivors. The backlog and retained
+     sources stay within their caps, including at the maximum delete rate.
+   - **Whole trees:** delete whole packed trees. Segments retire with no
      copying.
-   - **Churn:** 24 h of mixed create and delete churn. Overhead stays
-     within the bound throughout.
-   - **Overload:** churn faster than compaction. Backpressure engages, then
-     ENOSPC with the backlog reason. The physical reserve is never crossed,
-     and compaction still progresses from the recovery headroom.
-3. **Performance:** create, write, read, stat and delete p50/p99 and
-   throughput for the same sets, comparing the new build against the
-   `archive/unpacked-small-files-<date>` build, under the user's tiny-file
-   workload recipe.
-   - No regression beyond agreed limits for files above the packing
-     threshold.
-   - Foreground impact during compaction within agreed limits.
-4. **Reclaim:** delete 1 M packed files. Quota freed at delete commit
-   (W124 part 2), and retirement and compaction complete in minutes.
-5. **Correctness:**
+   - **Churn:** 24 h of mixed create, overwrite and delete churn. Overhead
+     stays within the bound throughout.
+   - **Space pressure:** churn on a nearly full filesystem. The packer
+     still progresses from the compaction headroom, the physical reserve is
+     never crossed, and writes see only the ordinary reserve ENOSPC.
+5. **Reads:** read p50/p99 and read amplification for packed files against
+   per-file reads on the tagged build.
+6. **Reclaim:** delete 1 M packed files. Quota freed at delete commit
+   (W124 part 2), and segment retirement completes in minutes.
+7. **Correctness:**
    - POSIX core, two-client, durability (`smoke-persist`), private GC,
      POSIX and expiry suites;
-   - crash tests during packing, during compaction (before and after the
-     location switch) and during retirement;
-   - concurrent overwrite or delete against compaction;
-   - the threshold transitions (grow, shrink, truncate, overwrite).
+   - crash tests during the copy, before and after the switch, and during
+     retirement;
+   - concurrent write, truncate, delete and read against the packer;
+   - two packers or compactors racing on the same file: exactly one switch
+     wins;
+   - modification of packed files (write, append, truncate, hole punch).
 
    All must PASS.
-6. **Landing:**
+8. **Landing:**
    - the tag exists;
    - behavioural tests through persisted mappings and a physical fragment
      inventory:
-     - fresh sub-threshold files are packed, with no per-file fragments;
+     - sub-threshold files are packed after the minimum age, and their
+       per-file fragments and inode directories are retired;
      - large files keep chunks;
-     - threshold transitions work;
-     - legacy per-file small files stay readable and are rewritten packed
-       when modified;
+     - a modified packed file is rewritten per file and repacked;
+     - legacy per-file small files are backfilled and packed;
      - empty files create no segment;
-     - no packing switch exists;
+     - no switch disables the packer;
    - a recorded evidence page;
    - D37's register entry updated.
 
 ## Non-goals
 
 - A runtime or build-time choice between packed and unpacked storage.
+- A packed write path in the client, or a change to the close or fsync
+  contract.
 - File data stored in metadata (KV) rows.
 - In-place reuse of holes inside segments.
 - Reintroducing the container storage engine.
-- Changing POSIX semantics or the fsync contract.
