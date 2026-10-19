@@ -67,6 +67,11 @@ static void *commit_one(void *arg)
             free(reply);
         }
         if(j->rc!=EFS_ERR_NET)break;
+        /* A peer that restarted inside the client's down cooldown is
+         * listening again before any checkout re-probes it; every node
+         * gets a COMMIT, so probe it here rather than fail the fsync. */
+        if (!conn && !efs_client_node_reprobe(j->node))
+            break;
     }
     efs_client_rpc_set_deadline_ms(saved);
     return NULL;

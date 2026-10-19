@@ -167,6 +167,30 @@ int efs_client_node_is_down(efs_node_id_t node_id)
     return down;
 }
 
+int efs_client_node_reprobe(efs_node_id_t node_id)
+{
+    int idx = node_index_for_id(node_id);
+    if (idx < 0)
+        return 0;
+    char host[64] = {0};
+    pthread_mutex_lock(&g_client.conn_lock[idx]);
+    int down = g_client.node_down_until_ms[idx] > monotonic_ms();
+    uint16_t port = g_client.nodes[idx].port;
+    strncpy(host, g_client.nodes[idx].addr, sizeof(host) - 1);
+    pthread_mutex_unlock(&g_client.conn_lock[idx]);
+    if (!down)
+        return 1;
+    int fd = efs_connect_tcp(host, port);
+    if (fd < 0)
+        return 0;
+    close(fd);
+    pthread_mutex_lock(&g_client.conn_lock[idx]);
+    g_client.node_down_until_ms[idx] = 0;
+    g_client.node_fail_streak[idx] = 0;
+    pthread_mutex_unlock(&g_client.conn_lock[idx]);
+    return 1;
+}
+
 void efs_client_nodes_force_reprobe(void)
 {
     for (uint32_t i = 0; i < EFS_MAX_NODES; i++) {
