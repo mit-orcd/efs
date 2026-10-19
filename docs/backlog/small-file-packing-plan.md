@@ -261,6 +261,22 @@ misread.
 **Exit:** a private cluster can store, read and reclaim packed objects
 written by a test driver, and retire a superseded per-file generation.
 
+**Status 2026-10-18: code and unit tests done on `w125-packing`**
+(`f7e85d29c`; not merged, not deployed).
+- Segment store in its own tree (`data/segments/g<group>/…`), fsynced
+  before the PUT is acknowledged; PUT authority by a linearizable read of
+  the segment object. Wire 157–164 (131–150 stay never-reuse).
+- Reclaim journal v2 (128-byte records with a kind; v1 replays): SEGMENT
+  and SUPERSEDED kinds, segment rescan in fail-closed recovery.
+- Leader: segment retirement pass plus MD 76 PACK_RETIRE; the fragment GC
+  pass now sends one GC_FRAG_BATCH per node per window instead of one
+  delete RPC per fragment.
+- node9901: full `make test` PASS (`detect_leaks=0`; log sha256 prefix
+  `0423bf65f5d6ec66`, outside Git).
+- **Not yet run:** the private-cluster exit check. Nothing proposes
+  ADMIT/SWITCH yet; the packer (P4) is the driver, so the cluster check
+  moves to P4's early measurement.
+
 ### P3 — Client read path and handshake
 
 - **Packed reads:** port `packed_reader` and the `read.c` changes. A
