@@ -163,6 +163,12 @@ The GO is conditional on a singleton's publication costing no more than
 today's close. That is measured as early as possible in the port, before
 P4.
 
+**Early measurement (2026-10-18):** the condition fails for the archived
+implementation ([evidence](../status/w125-p1-early-20261018.md)): close
+3.53 ms against 0.65 ms, 9.9 Raft entries per file against 4.0, space 19×
+smaller. The port is paused pending the user's choice among the options
+listed there.
+
 0. **Allocation and cost go/no-go (before any port work).** Prove that
    ordinary create, write and close gets a real space win at acceptable
    cost before investing in P1–P7.

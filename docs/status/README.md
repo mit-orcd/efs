@@ -31,6 +31,14 @@ implemented and deployed on orcd-mini (`de0c856b4`);**
   POSIX suites PASS; see the evidence page for the mixed-workload test.
 - Slot reuse and subtree delete stay deferred.
 
+[W125 P1 early: singleton publication cost](w125-p1-early-20261018.md):
+**the GO condition FAILS for the archived packing code.**
+- Packed singleton close is 3.53 ms against 0.65 ms (single writer).
+- Throughput falls 71–78%; 9.9 Raft entries per file against 4.0.
+- Space is 19× smaller.
+- Options: tighten and re-measure, background packing after close, change
+  the close contract, or stop. Awaiting the user's decision.
+
 [W125 P0: allocation and cost go/no-go](w125-p0-20261018.md): **conditional
 GO for option (a) with singleton segments and merge compaction.**
 - A packed singleton costs 8,749 B per node on XFS against 71,241 today
