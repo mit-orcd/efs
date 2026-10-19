@@ -14,6 +14,8 @@
 #define EFS_KV_KIND_EXPIRY_POLICY 42 /* directory FileID: operator policy */
 #define EFS_KV_KIND_EXPIRY 43 /* FileID: fixed deadline and monotonic revision */
 #define EFS_KV_KIND_EXPIRY_INDEX 44 /* group anchor/deadline/FileID: revision */
+#define EFS_KV_KIND_PACK_SEGMENT 45 /* group anchor/segment id/generation: W125 packed segment */
+#define EFS_KV_KIND_PACK_CANDIDATE 46 /* group anchor/epoch/FileID: W125 packing candidate */
 /* 36-41 are reserved: never reuse. Snapshot import refuses them. */
 #define EFS_KV_KIND_RESERVED_MIN 36
 #define EFS_KV_KIND_RESERVED_MAX 41

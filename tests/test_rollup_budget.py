@@ -123,6 +123,7 @@ with tempfile.TemporaryDirectory(prefix='efs-rollup-budget-') as tmp:
                     '-I' + str(root / 'deps/blake3'), str(c),
                     *[str(root / name) for name in ('src/common/common.c',
                         'src/common/checksum.c', 'src/data/erasure.c',
+                        'src/common/packed_segment.c',
                         'deps/blake3/blake3.c', 'deps/blake3/blake3_portable.c',
                         'deps/blake3/blake3_dispatch.c')], '-o', str(exe)], check=True)
     subprocess.run([str(exe)], check=True)

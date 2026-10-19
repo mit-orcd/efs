@@ -84,10 +84,23 @@ static int rdma_first_on(void)
  * See efs_conn_wait_request (protocol.c) — kept out of this file so the
  * xprt test cannot drift from the server conn thread. */
 
+/* W125: an undeclared connection asked for chunk maps or segments. */
+static int undeclared_refuse(uint8_t type)
+{
+    static uint64_t refused;
+    uint64_t n = __atomic_add_fetch(&refused, 1, __ATOMIC_RELAXED);
+    if (n <= 10 || !(n % 1000))
+        fprintf(stderr, "handler: refused message %u on a connection without a protocol "
+                        "declaration (client older than protocol %u); closing (%llu so far)\n",
+                type, EFS_PROTOCOL_VERSION, (unsigned long long)n);
+    return 1;
+}
+
 void server_handle_conn(struct efs_conn *conn)
 {
     int fd = conn->fd;
-    while (1) {
+    int declared = 0, close_conn = 0;
+    while (!close_conn) {
         uint8_t type = 0;
         void *payload = NULL;
         uint32_t payload_len = 0;
@@ -170,7 +183,25 @@ void server_handle_conn(struct efs_conn *conn)
             }
         }
 
+        /* Chunk maps and segments only after a protocol declaration. */
+        if (!declared && (type == EFS_MSG_INODE_GETCHUNKS || type == EFS_MSG_GET_SEGMENT ||
+                          type == EFS_MSG_PUT_SEGMENT)) {
+            close_conn = undeclared_refuse(type);
+            type = 0; /* falls to default: no reply */
+        }
         switch (type) {
+        case EFS_MSG_CLIENT_HELLO: {
+            struct efs_msg_client_hello_reply rep = {EFS_ERR_PROTO, EFS_PROTOCOL_VERSION};
+            const struct efs_msg_client_hello *h = payload;
+            if (payload_len == sizeof(*h) && !memcmp(h->magic, "EFSP", 4) &&
+                h->version >= EFS_PROTOCOL_MIN_VERSION) {
+                rep.rc = EFS_OK;
+                declared = 1;
+            }
+            efs_conn_send_msg(conn, EFS_MSG_CLIENT_HELLO_REPLY, &rep, sizeof(rep));
+            if (!declared) close_conn = 1;
+            break;
+        }
         case EFS_MSG_HEARTBEAT: {
             efs_conn_send_msg(conn, EFS_MSG_HEARTBEAT_ACK, NULL, 0);
             break;
@@ -541,6 +572,102 @@ send_reply:
             }
             efs_iostats_add(EFS_IOSTAT_GC_DELETE, 0, efs_iostats_now_us() - start, !ok);
             efs_conn_send_msg(conn,EFS_MSG_GC_INODE_BATCH_REPLY,rep,(uint32_t)rlen);
+            free(items);
+            free(rep);
+            break;
+        }
+        case EFS_MSG_PUT_SEGMENT: {
+            /* W125: one packed segment fragment from the group's packer. */
+            struct efs_msg_gc_inode_reply rep = {.rc = server_segment_put(g_server, payload, payload_len)};
+            efs_conn_send_msg(conn, EFS_MSG_PUT_SEGMENT_REPLY, &rep, sizeof(rep));
+            break;
+        }
+        case EFS_MSG_GET_SEGMENT: {
+            uint8_t *reply = NULL;
+            uint32_t rlen = 0;
+            if (server_segment_get(g_server, payload, payload_len, &reply, &rlen) != EFS_OK || !reply) {
+                uint8_t e[EFS_SEGMENT_GET_REPLY] = {0};
+                uint32_t v = (uint32_t)EFS_ERR_INVAL;
+                e[0] = (uint8_t)(v >> 24); e[1] = (uint8_t)(v >> 16); e[2] = (uint8_t)(v >> 8); e[3] = (uint8_t)v;
+                efs_conn_send_msg(conn, EFS_MSG_GET_SEGMENT_REPLY, e, sizeof(e));
+                free(reply);
+                break;
+            }
+            efs_conn_send_msg(conn, EFS_MSG_GET_SEGMENT_REPLY, reply, rlen);
+            free(reply);
+            break;
+        }
+        case EFS_MSG_GC_SEGMENT_BATCH: {
+            /* W125: journal-first acceptance of retired segments. Each rc is
+             * OK only once the record is fsynced and the fence installed. */
+            const uint8_t *q = payload;
+            uint32_t cnt = payload_len >= 8 ? ((uint32_t)q[4] << 24 | (uint32_t)q[5] << 16 |
+                                               (uint32_t)q[6] << 8 | q[7]) : 0;
+            int ok = payload_len >= 8 && cnt && cnt <= EFS_GC_SEGMENT_BATCH_MAX &&
+                     payload_len == 8u + (size_t)cnt * 16u;
+            size_t rlen = sizeof(struct efs_msg_gc_inode_batch_reply) + (size_t)(ok ? cnt : 0) * 4u;
+            struct efs_msg_gc_inode_batch_reply *rep = calloc(1, rlen);
+            struct efs_reclaim_item *items = ok ? calloc(cnt, sizeof(*items)) : NULL;
+            if (!rep || (ok && !items)) {
+                free(rep); free(items);
+                struct efs_msg_gc_inode_batch_reply e = {0};
+                efs_conn_send_msg(conn, EFS_MSG_GC_SEGMENT_BATCH_REPLY, &e, sizeof(e));
+                break;
+            }
+            if (ok) {
+                rep->count = cnt;
+                for (uint32_t i = 0; i < cnt; i++) {
+                    uint64_t id = 0, gen = 0;
+                    for (int b = 0; b < 8; b++) {
+                        id = id << 8 | q[8 + 16 * i + b];
+                        gen = gen << 8 | q[16 + 16 * i + b];
+                    }
+                    items[i] = (struct efs_reclaim_item){.export_id = EFS_RECLAIM_SEGMENT_EID(q[0]),
+                        .ino = id, .generation = gen, .kind = EFS_RECLAIM_SEGMENT};
+                    rep->rc[i] = EFS_ERR_BUSY;
+                }
+                (void)server_reclaim_accept(g_server, items, cnt, rep->rc);
+            }
+            efs_conn_send_msg(conn, EFS_MSG_GC_SEGMENT_BATCH_REPLY, rep, (uint32_t)rlen);
+            free(items);
+            free(rep);
+            break;
+        }
+        case EFS_MSG_GC_FRAG_BATCH: {
+            /* W125: journal-first acceptance of superseded fragments; rc OK
+             * once fsynced in the journal (deletion follows, checksum-guarded). */
+            const uint8_t *q = payload;
+            uint32_t eid = 0, cnt = 0;
+            if (payload_len >= 8) {
+                for (int b = 0; b < 4; b++) { eid = eid << 8 | q[b]; cnt = cnt << 8 | q[4 + b]; }
+            }
+            int ok = payload_len >= 8 && eid && cnt && cnt <= EFS_GC_FRAG_BATCH_MAX &&
+                     payload_len == 8u + (size_t)cnt * EFS_GC_FRAG_ITEM_BYTES;
+            size_t rlen = sizeof(struct efs_msg_gc_inode_batch_reply) + (size_t)(ok ? cnt : 0) * 4u;
+            struct efs_msg_gc_inode_batch_reply *rep = calloc(1, rlen);
+            struct efs_reclaim_item *items = ok ? calloc(cnt, sizeof(*items)) : NULL;
+            if (!rep || (ok && !items)) {
+                free(rep); free(items);
+                struct efs_msg_gc_inode_batch_reply e = {0};
+                efs_conn_send_msg(conn, EFS_MSG_GC_FRAG_BATCH_REPLY, &e, sizeof(e));
+                break;
+            }
+            if (ok) {
+                rep->count = cnt;
+                for (uint32_t i = 0; i < cnt; i++) {
+                    const uint8_t *m = q + 8 + (size_t)i * EFS_GC_FRAG_ITEM_BYTES;
+                    uint64_t ino = 0, gen = 0;
+                    uint32_t ci = 0;
+                    for (int b = 0; b < 8; b++) { ino = ino << 8 | m[b]; gen = gen << 8 | m[8 + b]; }
+                    for (int b = 0; b < 4; b++) ci = ci << 8 | m[16 + b];
+                    items[i] = (struct efs_reclaim_item){.export_id = eid, .ino = ino, .generation = gen,
+                        .kind = EFS_RECLAIM_SUPERSEDED, .chunk = ci, .fragment = m[20]};
+                    memcpy(items[i].sum, m + 24, EFS_HASH_SIZE);
+                    rep->rc[i] = EFS_ERR_BUSY;
+                }
+                (void)server_reclaim_accept(g_server, items, cnt, rep->rc);
+            }
+            efs_conn_send_msg(conn, EFS_MSG_GC_FRAG_BATCH_REPLY, rep, (uint32_t)rlen);
             free(items);
             free(rep);
             break;

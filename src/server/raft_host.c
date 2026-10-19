@@ -11,6 +11,7 @@
 #include "efs/kv_lsm.h"
 #include "efs/kv_snap.h"
 #include "efs/meta_apply.h"
+#include "efs/pack_mapping.h"
 #include "efs/query_filters.h"
 #include "efs/publication.h"
 #include "efs/put_ticket.h"
@@ -1966,6 +1967,66 @@ static int apply_reap_multi_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return off == clen ? EFS_OK : EFS_ERR_PROTO;
 }
 
+/* W125 packer commands. Per-member refusals are recorded in the segment
+ * ledger (cancelled records), so only storage failures retry the entry. */
+static int apply_pack_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                          uint32_t clen, uint64_t index)
+{
+    int rc;
+    if (clen < 2) return EFS_ERR_PROTO;
+    if (cmd[0] == EFS_MD_CMD_PACK_ADMIT) {
+        struct efs_pack_object *o = malloc(sizeof(*o));
+        if (!o) return EFS_ERR_NOMEM;
+        rc = efs_pack_object_decode(cmd + 2, clen - 2, o);
+        if (rc == EFS_OK) rc = efs_meta_apply_pack_admit(h->kv, cmd[1], o);
+        free(o);
+    } else if (cmd[0] == EFS_MD_CMD_PACK_SWITCH) {
+        struct efs_pack_switch *s = malloc(sizeof(*s));
+        uint32_t live = 0;
+        if (!s) return EFS_ERR_NOMEM;
+        rc = efs_pack_switch_decode(cmd + 1, clen - 1, s);
+        if (rc == EFS_OK) rc = efs_meta_apply_pack_switch(h->kv, s, &live);
+        free(s);
+    } else if (cmd[0] == EFS_MD_CMD_PACK_CANCEL) {
+        if (clen != 18) return EFS_ERR_PROTO;
+        rc = efs_meta_apply_pack_cancel(h->kv, cmd[1], rd64be(cmd + 2), rd64be(cmd + 10));
+    } else if (cmd[0] == EFS_MD_CMD_PACK_INDEX) {
+        struct efs_pack_index_item items[EFS_PACK_INDEX_MAX];
+        if (clen < 9) return EFS_ERR_PROTO;
+        uint32_t n = ((uint32_t)cmd[2] << 8) | cmd[3];
+        if (n > EFS_PACK_INDEX_MAX || clen != 9u + 24u * n) return EFS_ERR_PROTO;
+        for (uint32_t i = 0; i < n; i++)
+            items[i] = (struct efs_pack_index_item){rd64be(cmd + 9 + 24 * i), rd64be(cmd + 17 + 24 * i),
+                                                    rd64be(cmd + 25 + 24 * i)};
+        rc = efs_meta_apply_pack_index(h->kv, cmd[1], rd32be(cmd + 4), cmd[8], items, n);
+    } else if (cmd[0] == EFS_MD_CMD_PACK_UNINDEX) {
+        uint64_t epochs[EFS_PACK_UNINDEX_MAX];
+        efs_ino_t inos[EFS_PACK_UNINDEX_MAX];
+        if (clen < 4) return EFS_ERR_PROTO;
+        uint32_t n = ((uint32_t)cmd[2] << 8) | cmd[3];
+        if (n > EFS_PACK_UNINDEX_MAX || clen != 4u + 16u * n) return EFS_ERR_PROTO;
+        for (uint32_t i = 0; i < n; i++) {
+            epochs[i] = rd64be(cmd + 4 + 16 * i);
+            inos[i] = rd64be(cmd + 12 + 16 * i);
+        }
+        rc = efs_meta_apply_pack_unindex(h->kv, cmd[1], epochs, inos, n);
+    } else {
+        uint64_t ids[EFS_PACK_RETIRE_MAX], gens[EFS_PACK_RETIRE_MAX];
+        if (clen < 4) return EFS_ERR_PROTO;
+        uint32_t n = ((uint32_t)cmd[2] << 8) | cmd[3];
+        if (n > EFS_PACK_RETIRE_MAX || clen != 4u + 16u * n) return EFS_ERR_PROTO;
+        for (uint32_t i = 0; i < n; i++) {
+            ids[i] = rd64be(cmd + 4 + 16 * i);
+            gens[i] = rd64be(cmd + 12 + 16 * i);
+        }
+        rc = efs_meta_apply_pack_retire(h->kv, cmd[1], ids, gens, n, NULL);
+    }
+    if (rc != EFS_OK && rc != EFS_ERR_STALE)
+        fprintf(stderr, "raft-host: apply pack cmd=%u rc=%d index=%llu\n",
+                cmd[0], rc, (unsigned long long)index);
+    return rc;
+}
+
 static int apply_orphan_reap_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                                   uint32_t len, uint64_t index)
 {
@@ -2878,6 +2939,8 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE || cmd[0] == EFS_MD_CMD_REAP_BATCH ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_MULTI || cmd[0] == EFS_MD_CMD_REAP_MULTI ||
+           cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_SWITCH ||
+           cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX || cmd[0] == EFS_MD_CMD_PACK_INDEX ||
            cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
            cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP)
               ? EFS_OK
@@ -2909,6 +2972,8 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
          cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE || cmd[0] == EFS_MD_CMD_REAP_BATCH ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
          cmd[0] == EFS_MD_CMD_LANE_SWEEP_MULTI || cmd[0] == EFS_MD_CMD_REAP_MULTI ||
+         cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_SWITCH ||
+         cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX || cmd[0] == EFS_MD_CMD_PACK_INDEX ||
          cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
          cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_CREATE ||
          cmd[0] == EFS_MD_CMD_APPEND_RES || cmd[0] == EFS_MD_CMD_APPEND_CATCHUP || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
@@ -3392,6 +3457,11 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         return apply_lane_sweep_multi_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_REAP_MULTI)
         return apply_reap_multi_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_SWITCH ||
+        cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX || cmd[0] == EFS_MD_CMD_PACK_INDEX)
+        /* A segment belongs to exactly one publication group: never apply
+         * one group's packer entry to another group's rows. */
+        return clen >= 2 && cmd[1] == group ? apply_pack_cmd(h, cmd, clen, index) : EFS_ERR_PROTO;
     if (cmd[0] == EFS_MD_CMD_CLOSE_STEP) {
         if(clen!=46)return EFS_ERR_INVAL;
         return efs_close_step_apply(h->kv,rd64be(cmd+1),cmd+9,cmd[45]);
@@ -8199,100 +8269,6 @@ static struct efs_export *host_gc_export(struct efs_raft_host *h)
     return ex;
 }
 
-/* Delete one fragment on THIS node, checksum-conditional. EFS_OK when the
- * dead bytes are gone afterwards (deleted / absent / slot reused). */
-static int host_gc_local_del(struct efs_raft_host *h, struct efs_export *ex,
-                             efs_ino_t ino, uint32_t ci, uint32_t fi,
-                             uint64_t chunk_gen, const uint8_t *sum)
-{
-    struct efs_store st;
-    struct efs_nvme_store nctx;
-    struct efs_frag_id fid;
-    int rc;
-
-    memset(&fid, 0, sizeof(fid));
-    fid.export_id = ex->id;
-    fid.ino = ino;
-    fid.chunk_index = ci;
-    fid.fragment_index = fi;
-    fid.chunk_generation = chunk_gen;
-    efs_store_nvme_bind(&st, &nctx, h->s, ex);
-    rc = efs_store_del_if_sum(&st, &fid, sum);
-    if (rc == EFS_ERR_EXIST)
-        rc = EFS_OK; /* slot reused: the dead generation is already gone */
-    return rc;
-}
-
-/* One bounded in-flight deletion per fragment. The reply remains the proof
- * that checksum-guarded physical deletion and its directory sync completed. */
-struct host_gc_delete {
-    struct efs_conn *pc;
-    char host[64];
-    uint16_t port;
-};
-
-static int host_gc_remote_start(struct efs_raft_host *h,
-                                struct host_gc_delete *job,
-                                efs_node_id_t node, efs_export_id_t export_id,
-                                efs_ino_t ino, uint32_t ci, uint32_t fi,
-                                uint64_t chunk_gen, const uint8_t *sum)
-{
-    struct efs_msg_gc_fragment req;
-    memset(job, 0, sizeof(*job));
-    /* GC node ids are 1-based; peer_addr takes a 0-based Raft id. */
-    if (node == 0 || (int)node - 1 == h->raft_id ||
-        peer_addr(h, (int)node - 1, job->host, sizeof(job->host),
-                  &job->port) != 0)
-        return EFS_ERR_IO;
-    job->pc = server_peer_conn_get(job->host, job->port);
-    if (!job->pc)
-        return EFS_ERR_IO;
-    if (job->pc->kind == EFS_CONN_TCP && job->pc->fd >= 0) {
-        efs_set_recv_timeout(job->pc->fd, HOST_SEND_IO_MS);
-        efs_set_send_timeout(job->pc->fd, HOST_SEND_IO_MS);
-    }
-    memset(&req, 0, sizeof(req));
-    req.export_id = export_id;
-    req.ino = ino;
-    req.chunk_index = ci;
-    req.fragment_index = fi;
-    memcpy(req.checksum, sum, EFS_HASH_SIZE);
-    req.chunk_generation = chunk_gen;
-    if (efs_conn_send_msg(job->pc, EFS_MSG_GC_FRAGMENT,
-                          &req, sizeof(req)) != 0) {
-        server_peer_conn_drop(job->host, job->port, job->pc);
-        job->pc = NULL;
-        return EFS_ERR_IO;
-    }
-    return EFS_OK;
-}
-
-static int host_gc_remote_finish(struct host_gc_delete *job)
-{
-    uint8_t rtype = 0;
-    void *reply = NULL;
-    uint32_t rlen = 0;
-    int rc = EFS_ERR_IO;
-    if (!job->pc)
-        return rc;
-    if (efs_conn_recv_msg(job->pc, &rtype, &reply, &rlen) == 0 &&
-        rtype == EFS_MSG_GC_FRAGMENT_REPLY &&
-        rlen >= sizeof(struct efs_msg_gc_fragment_reply) &&
-        ((struct efs_msg_gc_fragment_reply *)reply)->status == 0)
-        rc = EFS_OK;
-    free(reply);
-    if (rc == EFS_OK) {
-        if (job->pc->kind == EFS_CONN_TCP && job->pc->fd >= 0) {
-            efs_set_recv_timeout(job->pc->fd, EFS_IO_TIMEOUT_MS);
-            efs_set_send_timeout(job->pc->fd, EFS_IO_TIMEOUT_MS);
-        }
-        server_peer_conn_release(job->host, job->port, job->pc);
-    } else {
-        server_peer_conn_drop(job->host, job->port, job->pc);
-    }
-    job->pc = NULL;
-    return rc;
-}
 
 
 /* Reap markers are the durable retry ledger for unreferenced PUT bodies too.
@@ -8464,6 +8440,146 @@ static int host_gc_propose(struct efs_raft_host *h, uint8_t group,
     }
     return rc;
 }
+
+/* W125: hand retired segments to every member's reclaim journal. ok[i] = 1
+ * only when every current member durably accepted item i. Same membership
+ * rule as host_gc_inode_nodes_batch: missing members prove nothing. */
+/* W125: hand retired segments to the reclaim journals of their placement
+ * nodes (the only nodes a PUT_SEGMENT could ever reach). ok[i] = 1 only when
+ * every node in members[i] durably accepted item i; a member that is not in
+ * the membership list, unreachable or refusing leaves the item for a later
+ * pass. One request per node carries just the items placed on it. */
+static void host_gc_segment_nodes_batch(struct efs_raft_host *h, uint8_t group,
+                                        const uint64_t *ids, const uint64_t *gens,
+                                        const uint32_t *members, uint32_t n, uint8_t *ok)
+{
+    struct efs_node nodes[EFS_MAX_NODES];
+    uint32_t count, present = 0, want = 0;
+    for (uint32_t i = 0; i < n; i++) { ok[i] = 1; want |= members[i]; }
+    if (!n || n > EFS_GC_SEGMENT_BATCH_MAX) { for (uint32_t i = 0; i < n; i++) ok[i] = 0; return; }
+    pthread_mutex_lock(&h->s->lock);
+    count = h->s->node_count;
+    memcpy(nodes, h->s->nodes, count * sizeof(nodes[0]));
+    pthread_mutex_unlock(&h->s->lock);
+    for (uint32_t i = 0; i < count; i++)
+        if (nodes[i].id && nodes[i].id <= EFS_MAX_NODES) present |= 1u << (nodes[i].id - 1);
+    for (uint32_t i = 0; i < n; i++) if (members[i] & ~present) ok[i] = 0;
+    uint8_t *req = calloc(1, 8u + (size_t)n * 16u);
+    struct efs_reclaim_item *items = calloc(n, sizeof(*items));
+    int32_t *rc = calloc(n, sizeof(*rc));
+    uint32_t *pick = calloc(n, sizeof(*pick));
+    if (!req || !items || !rc || !pick) {
+        for (uint32_t i = 0; i < n; i++) ok[i] = 0;
+        goto out;
+    }
+    for (uint32_t ni = 0; ni < count; ni++) {
+        uint32_t bit = 1u << (nodes[ni].id - 1), m = 0;
+        if (!nodes[ni].id || nodes[ni].id > EFS_MAX_NODES || !(want & bit)) continue;
+        for (uint32_t i = 0; i < n; i++) if ((members[i] & bit) && ok[i]) pick[m++] = i;
+        if (!m) continue;
+        req[0] = group;
+        wr32be(req + 4, m);
+        for (uint32_t k = 0; k < m; k++) {
+            uint32_t i = pick[k];
+            wr64be(req + 8 + 16 * k, ids[i]);
+            wr64be(req + 16 + 16 * k, gens[i]);
+            items[k] = (struct efs_reclaim_item){.export_id = EFS_RECLAIM_SEGMENT_EID(group),
+                .ino = ids[i], .generation = gens[i], .kind = EFS_RECLAIM_SEGMENT};
+            rc[k] = EFS_ERR_BUSY;
+        }
+        if (nodes[ni].id == h->s->id) {
+            (void)server_reclaim_accept(h->s, items, m, rc);
+        } else {
+            struct efs_conn *pc = server_peer_conn_get(nodes[ni].addr, nodes[ni].port);
+            uint8_t type = 0;
+            void *reply = NULL;
+            uint32_t len = 0;
+            if (pc && pc->kind == EFS_CONN_TCP) {
+                efs_set_recv_timeout(pc->fd, HOST_GC_BATCH_IO_MS);
+                efs_set_send_timeout(pc->fd, HOST_SEND_IO_MS);
+            }
+            int good = pc && !efs_conn_send_msg(pc, EFS_MSG_GC_SEGMENT_BATCH, req, 8u + 16u * m) &&
+                       !efs_conn_recv_msg(pc, &type, &reply, &len) &&
+                       type == EFS_MSG_GC_SEGMENT_BATCH_REPLY &&
+                       len == sizeof(struct efs_msg_gc_inode_batch_reply) + (size_t)m * 4u &&
+                       ((struct efs_msg_gc_inode_batch_reply *)reply)->count == m;
+            if (good) {
+                memcpy(rc, ((struct efs_msg_gc_inode_batch_reply *)reply)->rc, m * sizeof(*rc));
+                if (pc->kind == EFS_CONN_TCP) {
+                    efs_set_recv_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
+                    efs_set_send_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
+                }
+                server_peer_conn_release(nodes[ni].addr, nodes[ni].port, pc);
+            } else if (pc) {
+                server_peer_conn_drop(nodes[ni].addr, nodes[ni].port, pc);
+            }
+            free(reply);
+        }
+        for (uint32_t k = 0; k < m; k++) if (rc[k] != EFS_OK) ok[pick[k]] = 0;
+    }
+out:
+    free(req); free(items); free(rc); free(pick);
+}
+
+/* W125 segment retirement: every reclaiming segment object on this group's
+ * anchor (no live or pending record left) goes to all members' reclaim
+ * journals, then one PACK_RETIRE entry forgets the accepted ones. */
+struct pack_retire_scan {
+    uint64_t ids[EFS_GC_SEGMENT_BATCH_MAX], gens[EFS_GC_SEGMENT_BATCH_MAX];
+    uint32_t members[EFS_GC_SEGMENT_BATCH_MAX];
+    uint32_t n;
+    struct efs_pack_object o;
+};
+static int pack_retire_cb(void *user, const uint8_t *key, uint32_t klen,
+                          const uint8_t *val, uint32_t vlen)
+{
+    struct pack_retire_scan *ps = user;
+    if (klen != EFS_PACK_OBJECT_KEY_BYTES || key[2] != EFS_KV_KIND_PACK_SEGMENT) return 0;
+    if (efs_pack_object_decode(val, vlen, &ps->o) != EFS_OK) return 0;
+    if (ps->o.ledger.phase == EFS_PACK_ACTIVE) return 0;
+    ps->ids[ps->n] = ps->o.ledger.segment_id;
+    ps->gens[ps->n] = ps->o.ledger.segment_generation;
+    ps->members[ps->n] = 0;
+    for (unsigned f = 0; f < EFS_NUM_FRAGMENTS; f++)
+        if (ps->o.nodes[f] && ps->o.nodes[f] <= EFS_MAX_NODES)
+            ps->members[ps->n] |= 1u << (ps->o.nodes[f] - 1);
+    return ++ps->n == EFS_GC_SEGMENT_BATCH_MAX;
+}
+static void host_pack_retire_pass(struct efs_raft_host *h, uint8_t group, uint32_t anchor)
+{
+    uint8_t prefix[3] = {(uint8_t)(anchor >> 8), (uint8_t)anchor, EFS_KV_KIND_PACK_SEGMENT};
+    if (efs_pack_group_anchor(group) != anchor) return;
+    struct pack_retire_scan *ps = calloc(1, sizeof(*ps));
+    if (!ps) return;
+    if (efs_kv_scan_prefix(h->kv, prefix, sizeof(prefix), pack_retire_cb, ps) >= 0 && ps->n) {
+        uint8_t ok[EFS_GC_SEGMENT_BATCH_MAX];
+        host_gc_segment_nodes_batch(h, group, ps->ids, ps->gens, ps->members, ps->n, ok);
+        uint8_t *cmd = malloc(4u + 16u * ps->n);
+        uint32_t m = 0;
+        if (cmd) {
+            for (uint32_t i = 0; i < ps->n; i++) {
+                if (!ok[i]) continue;
+                wr64be(cmd + 4 + 16 * m, ps->ids[i]);
+                wr64be(cmd + 12 + 16 * m, ps->gens[i]);
+                m++;
+            }
+            if (m) {
+                server_pack_crash_point("retire_accepted");
+                cmd[0] = EFS_MD_CMD_PACK_RETIRE;
+                cmd[1] = group;
+                cmd[2] = (uint8_t)(m >> 8);
+                cmd[3] = (uint8_t)m;
+                (void)host_gc_propose(h, group, cmd, 4u + 16u * m);
+            }
+            if (env_on("EFS_GC_DBG"))
+                fprintf(stderr, "raft-host: pack retire group=%u candidates=%u accepted=%u\n",
+                        group, ps->n, m);
+            free(cmd);
+        }
+    }
+    free(ps);
+}
+
 
 
 /* Callback row limits cannot see tombstones. Bound physical merged-key work
@@ -8932,74 +9048,142 @@ static void host_txn_recover_pass(struct efs_raft_host *h)
     }
 }
 
-/* One GC record: attempt every un-acked fragment, appending an ack item
- * for each one now gone. At most GC_ACK_MAX acks are collected per pass
- * (one entry's worth); the rest are retried next pass. */
-static void host_gc_record(struct efs_raft_host *h, struct efs_export *ex,
-                           const uint8_t *key, const uint8_t *val,
-                           struct efs_gc_ack_item *acks, int *nack)
+/* W125: a window of GC records handed to the members' reclaim journals,
+ * one EFS_MSG_GC_FRAG_BATCH per node (the local node accepts directly).
+ * Every un-acked fragment becomes a SUPERSEDED journal item on its node; an
+ * ack item is appended for each fragment its node durably accepted (the
+ * node then deletes it, checksum-guarded). Requests go to all remote nodes
+ * before the local acceptance runs. The caller leaves room for
+ * n * EFS_NUM_FRAGMENTS acks. */
+static void host_gc_records(struct efs_raft_host *h, struct efs_export *ex,
+                            const uint8_t (*keys)[GC_KEY_LEN],
+                            const uint8_t (*vals)[EFS_META_GC_VAL], int n,
+                            struct efs_gc_ack_item *acks, int *nack)
 {
-    efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
-    uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
-    uint8_t ack_bits = 0;
-    efs_ino_t ino;
-    uint64_t gen;
-    uint32_t ci;
-    uint8_t lane;
-    int fi;
-
-    if (efs_meta_unpack_gc(val, EFS_META_GC_VAL, nodes, &ack_bits,
-                           sums) != EFS_OK)
-        return;
-    ino = rd64be(key + 3);
-    gen = rd64be(key + 11);
-    lane = key[19];
-    ci = rd32be(key + 20);
-    struct host_gc_delete jobs[EFS_NUM_FRAGMENTS] = {0};
-    int local_rc[EFS_NUM_FRAGMENTS];
-    uint8_t selected = 0;
-    int room = GC_ACK_MAX - *nack;
-    /* Reserve acknowledgement capacity before starting any physical work.
-     * Send peers first so their directory syncs overlap the local deletion. */
-    for (fi = 0; fi < EFS_NUM_FRAGMENTS && room > 0; fi++) {
-        if ((ack_bits & (1u << fi)) || !h->gc_running)
+    struct efs_node nodes[EFS_MAX_NODES];
+    uint32_t count;
+    struct gc_frag_item { efs_ino_t ino; uint64_t gen; uint32_t ci; uint8_t lane, fi, node; uint8_t sum[EFS_HASH_SIZE]; };
+    struct gc_frag_item *it = calloc((size_t)n * EFS_NUM_FRAGMENTS, sizeof(*it));
+    uint32_t m = 0;
+    if (!it) return;
+    pthread_mutex_lock(&h->s->lock);
+    count = h->s->node_count;
+    memcpy(nodes, h->s->nodes, count * sizeof(nodes[0]));
+    pthread_mutex_unlock(&h->s->lock);
+    for (int r = 0; r < n; r++) {
+        efs_node_id_t fnodes[EFS_NUM_FRAGMENTS];
+        uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE], ack_bits = 0;
+        if (efs_meta_unpack_gc(vals[r], EFS_META_GC_VAL, fnodes, &ack_bits, sums) != EFS_OK)
             continue;
-        selected |= (uint8_t)(1u << fi);
-        room--;
-        if (nodes[fi] != h->s->id)
-            host_gc_remote_start(h, &jobs[fi], nodes[fi], ex->id,
-                                 ino, ci, (uint32_t)fi, gen, sums[fi]);
+        for (int fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
+            if ((ack_bits & (1u << fi)) || !fnodes[fi] || fnodes[fi] > EFS_MAX_NODES) continue;
+            struct gc_frag_item *x = &it[m++];
+            x->ino = rd64be(keys[r] + 3);
+            x->gen = rd64be(keys[r] + 11);
+            x->lane = keys[r][19];
+            x->ci = rd32be(keys[r] + 20);
+            x->fi = (uint8_t)fi;
+            x->node = (uint8_t)fnodes[fi];
+            memcpy(x->sum, sums[fi], EFS_HASH_SIZE);
+        }
     }
-    /* Run local I/O before waiting for any peer, regardless of placement
-     * order. At most EFS_NUM_FRAGMENTS requests/results are retained. */
-    for (fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
-        local_rc[fi] = EFS_ERR_BUSY;
-        if ((selected & (1u << fi)) && nodes[fi] == h->s->id && h->gc_running)
-            local_rc[fi] = host_gc_local_del(h, ex, ino, ci,
-                                            (uint32_t)fi, gen, sums[fi]);
-    }
-    for (fi = 0; fi < EFS_NUM_FRAGMENTS; fi++) {
-        int rc;
-        if (!(selected & (1u << fi)))
-            continue;
-        /* Always consume started replies, including during shutdown. */
-        if (nodes[fi] == h->s->id)
-            rc = local_rc[fi];
+    int32_t *rc = calloc(m ? m : 1, sizeof(*rc));
+    struct efs_conn *pending[EFS_MAX_NODES] = {0};
+    uint32_t *npick = calloc(EFS_MAX_NODES, sizeof(*npick));
+    uint32_t **pick = calloc(EFS_MAX_NODES, sizeof(*pick));
+    if (!rc || !npick || !pick) goto out;
+    for (uint32_t k = 0; k < m; k++) rc[k] = EFS_ERR_BUSY;
+    /* Remote nodes first, so their journal fsyncs overlap the local one. */
+    for (uint32_t i = 0; i < count; i++) {
+        uint32_t id = nodes[i].id, c = 0;
+        if (!id || id > EFS_MAX_NODES) continue;
+        for (uint32_t k = 0; k < m; k++) c += it[k].node == id;
+        if (!c) continue;
+        pick[i] = calloc(c, sizeof(uint32_t));
+        if (!pick[i]) continue;
+        for (uint32_t k = 0; k < m; k++) if (it[k].node == id) pick[i][npick[i]++] = k;
+        if (id == h->s->id) continue;
+        size_t len = 8u + (size_t)c * EFS_GC_FRAG_ITEM_BYTES;
+        uint8_t *req = calloc(1, len);
+        struct efs_conn *pc = req ? server_peer_conn_get(nodes[i].addr, nodes[i].port) : NULL;
+        if (!pc) { free(req); continue; }
+        wr32be(req, ex->id);
+        wr32be(req + 4, c);
+        for (uint32_t j = 0; j < c; j++) {
+            const struct gc_frag_item *x = &it[pick[i][j]];
+            uint8_t *q = req + 8 + (size_t)j * EFS_GC_FRAG_ITEM_BYTES;
+            wr64be(q, x->ino); wr64be(q + 8, x->gen); wr32be(q + 16, x->ci); q[20] = x->fi;
+            memcpy(q + 24, x->sum, EFS_HASH_SIZE);
+        }
+        if (pc->kind == EFS_CONN_TCP) {
+            efs_set_recv_timeout(pc->fd, HOST_GC_BATCH_IO_MS);
+            efs_set_send_timeout(pc->fd, HOST_SEND_IO_MS);
+        }
+        if (efs_conn_send_msg(pc, EFS_MSG_GC_FRAG_BATCH, req, (uint32_t)len))
+            server_peer_conn_drop(nodes[i].addr, nodes[i].port, pc);
         else
-            rc = host_gc_remote_finish(&jobs[fi]);
-        if (env_on("EFS_GC_DBG"))
-            fprintf(stderr, "raft-host: gc del ino=%llu ci=%u frag=%u node=%u rc=%d\n",
-                    (unsigned long long)ino, ci, fi, nodes[fi], rc);
-        if (rc != EFS_OK)
-            continue;
-        acks[*nack].ino = ino;
-        acks[*nack].gen = gen;
-        acks[*nack].ci = ci;
-        acks[*nack].lane = lane;
-        acks[*nack].frag = (uint8_t)fi;
+            pending[i] = pc;
+        free(req);
+    }
+    for (uint32_t i = 0; i < count; i++) {
+        if (nodes[i].id != h->s->id || !npick[i]) continue;
+        struct efs_reclaim_item *items = calloc(npick[i], sizeof(*items));
+        int32_t *lrc = calloc(npick[i], sizeof(*lrc));
+        if (items && lrc) {
+            for (uint32_t j = 0; j < npick[i]; j++) {
+                const struct gc_frag_item *x = &it[pick[i][j]];
+                items[j] = (struct efs_reclaim_item){.export_id = ex->id, .ino = x->ino,
+                    .generation = x->gen, .kind = EFS_RECLAIM_SUPERSEDED, .chunk = x->ci,
+                    .fragment = x->fi};
+                memcpy(items[j].sum, x->sum, EFS_HASH_SIZE);
+                lrc[j] = EFS_ERR_BUSY;
+            }
+            (void)server_reclaim_accept(h->s, items, npick[i], lrc);
+            server_pack_crash_point("gc_accepted");
+            for (uint32_t j = 0; j < npick[i]; j++) rc[pick[i][j]] = lrc[j];
+        }
+        free(items);
+        free(lrc);
+    }
+    for (uint32_t i = 0; i < count; i++) {
+        struct efs_conn *pc = pending[i];
+        if (!pc) continue;
+        uint8_t type;
+        void *reply = NULL;
+        uint32_t len = 0;
+        int good = !efs_conn_recv_msg(pc, &type, &reply, &len) &&
+                   type == EFS_MSG_GC_FRAG_BATCH_REPLY &&
+                   len == sizeof(struct efs_msg_gc_inode_batch_reply) + (size_t)npick[i] * 4u &&
+                   ((struct efs_msg_gc_inode_batch_reply *)reply)->count == npick[i];
+        if (good) {
+            const struct efs_msg_gc_inode_batch_reply *rr = reply;
+            for (uint32_t j = 0; j < npick[i]; j++) rc[pick[i][j]] = rr->rc[j];
+            if (pc->kind == EFS_CONN_TCP) {
+                efs_set_recv_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
+                efs_set_send_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
+            }
+            server_peer_conn_release(nodes[i].addr, nodes[i].port, pc);
+        } else {
+            server_peer_conn_drop(nodes[i].addr, nodes[i].port, pc);
+        }
+        free(reply);
+    }
+    for (uint32_t k = 0; k < m && *nack < GC_ACK_MAX; k++) {
+        if (rc[k] != EFS_OK) continue;
+        acks[*nack] = (struct efs_gc_ack_item){.ino = it[k].ino, .gen = it[k].gen,
+                                               .ci = it[k].ci, .lane = it[k].lane, .frag = it[k].fi};
         (*nack)++;
     }
+    if (env_on("EFS_GC_DBG"))
+        fprintf(stderr, "raft-host: gc frag batch records=%d fragments=%u acks=%d\n", n, m, *nack);
+out:
+    if (pick) for (uint32_t i = 0; i < EFS_MAX_NODES; i++) free(pick[i]);
+    free(pick);
+    free(npick);
+    free(rc);
+    free(it);
 }
+
 
 
 /* REAP pass over one group's anchor shard: sweep every active lane of
@@ -9379,15 +9563,22 @@ static int host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
             __atomic_fetch_add(&h->s->gc_missing_exports, 1, __ATOMIC_RELAXED);
             break;
         }
+        /* W125: records go to the members' reclaim journals in windows,
+         * one batch per node per window, each window's acks fitting one
+         * GC_ACK entry. */
         i=0;
-        for(i=0;i<c.n && __atomic_load_n(&h->gc_running,__ATOMIC_ACQUIRE) && h->running;i++){
+        while(i<c.n && __atomic_load_n(&h->gc_running,__ATOMIC_ACQUIRE) && h->running){
             if(recs && now_us_()-t0>=GC_FRAG_BUDGET_US){budget_capped=1;break;}
-            if(nack+EFS_NUM_FRAGMENTS>GC_ACK_MAX){
+            int w=(GC_ACK_MAX-nack)/EFS_NUM_FRAGMENTS;
+            if(w<=0){
                 if(host_gc_ack_flush(h,group,acks,&nack)!=EFS_OK)goto out;
                 ack_progress=1;
+                continue;
             }
-            host_gc_record(h, ex, c.keys[i], c.vals[i], acks, &nack);
-            recs++;
+            if(w>c.n-i)w=c.n-i;
+            host_gc_records(h, ex, (const uint8_t (*)[GC_KEY_LEN])&c.keys[i],
+                            (const uint8_t (*)[EFS_META_GC_VAL])&c.vals[i], w, acks, &nack);
+            i+=w;recs+=w;
         }
         /* Unattempted records must remain ahead of the cursor. Failed
          * attempts stay in the ledger and are retried on the normal wrap. */
@@ -9877,6 +10068,7 @@ static void *host_gc_thread(void *arg)
                 efs_kv_lsm_scan_stats(&b, 0);
                 __atomic_store_n(&h->s->gc_stage, 4, __ATOMIC_RELAXED);
                 backlog_capped |= host_gc_frag_pass(h, h->g[g].group, anchor);
+                host_pack_retire_pass(h, h->g[g].group, anchor);
                 efs_kv_lsm_scan_stats(&a, 0);
                 sc_frag.scans += a.scans - b.scans;
                 sc_frag.segs += a.segs - b.segs;
@@ -12279,6 +12471,77 @@ int server_raft_host_inode_reaped(efs_ino_t ino, int *dead)
     if (rc != EFS_OK) return rc;
     *dead = version > 0;
     return EFS_OK;
+}
+
+int server_raft_host_pack_object(uint32_t group, uint64_t id, uint64_t gen,
+                                 struct efs_pack_object *out)
+{
+    struct efs_raft_host *h = g_host;
+    int hint = -1;
+    if (!h || !h->running || !h->kv) return EFS_ERR_NOT_PRIMARY;
+    if (!efs_pack_group_anchor(group)) return EFS_ERR_INVAL;
+    if (!host_hosts(h, (uint8_t)group)) return EFS_ERR_INVAL;
+    int rc = host_read_index(h, (uint8_t)group, &hint);
+    if (rc != EFS_OK) return rc;
+    return efs_pack_object_get(h->kv, group, id, gen, out);
+}
+
+/* W125 packer support. The packer runs only where this node leads a group;
+ * its reads are local-replica hints, and every decision is re-checked by
+ * the group's apply (admit, exact-source switch). */
+int server_raft_host_pack_leader(uint8_t group, uint64_t *term, uint64_t *commit)
+{
+    struct efs_raft_host *h = g_host;
+    if (!h || !h->running || !h->kv || !efs_pack_group_anchor(group)) return 0;
+    pthread_mutex_lock(&h->mu);
+    struct efs_raft *r = group_raft(h, group);
+    int lead = r && efs_raft_role(r) == EFS_RAFT_LEADER;
+    if (lead && term) *term = efs_raft_term(r);
+    if (lead && commit) *commit = efs_raft_commit(r);
+    pthread_mutex_unlock(&h->mu);
+    return lead;
+}
+/* Commit index of a group hosted here, leader or not; 0 when not hosted. */
+uint64_t server_raft_host_group_commit(uint8_t group)
+{
+    struct efs_raft_host *h = g_host;
+    uint64_t c = 0;
+    if (!h || !h->running) return 0;
+    pthread_mutex_lock(&h->mu);
+    struct efs_raft *r = group_raft(h, group);
+    if (r) c = efs_raft_commit(r);
+    pthread_mutex_unlock(&h->mu);
+    return c;
+}
+/* Voters of a hosted group as a node mask (bit id-1, as Raft id + 1). */
+uint32_t server_raft_host_group_voters(uint8_t group)
+{
+    struct efs_raft_host *h = g_host;
+    uint32_t v = 0;
+    if (!h || !h->running) return 0;
+    pthread_mutex_lock(&h->mu);
+    struct efs_raft *r = group_raft(h, group);
+    if (r) v = efs_raft_voters(r);
+    pthread_mutex_unlock(&h->mu);
+    return v;
+}
+struct efs_kv *server_raft_host_kv(void)
+{
+    struct efs_raft_host *h = g_host;
+    return h && h->running ? h->kv : NULL;
+}
+int server_raft_host_members(void)
+{
+    struct efs_raft_host *h = g_host;
+    return h ? h->n : 0;
+}
+static int host_bg_propose(struct efs_raft_host *h, uint8_t group,
+                           const uint8_t *cmd, uint32_t clen, int verdict);
+int server_raft_host_pack_propose(uint8_t group, const uint8_t *cmd, uint32_t len)
+{
+    struct efs_raft_host *h = g_host;
+    if (!h || !h->running) return EFS_ERR_NOT_PRIMARY;
+    return host_bg_propose(h, group, cmd, len, 1);
 }
 
 /* Keep fresh metadata proofs on a known dual-group
@@ -16594,7 +16857,16 @@ static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
             if (rc == EFS_ERR_NOT_FOUND)
                 rc = EFS_OK;
         }
-        if (rc == EFS_OK && !tail_ext) {
+        /* W125: a packed base is never aliased as an ordinary tail stub.
+         * Keep the row, exactly as for a span chain: the new size and the
+         * committed epoch fence hide its bytes past EOF, including after a
+         * later extension; truncating to zero deletes the row and releases
+         * the record. */
+        if (rc == EFS_OK && !tail_ext && got.coding_profile_id == EFS_META_PROFILE_PACK) {
+            has_tail = 0;
+            tp = NULL;
+            keep_tail = 1;
+        } else if (rc == EFS_OK && !tail_ext) {
             memset(&tail, 0, sizeof(tail));
             memset(uuid, 0, sizeof(uuid));
             tail.ino = ino;
@@ -16722,6 +16994,10 @@ static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
                     rc = EFS_OK;
             }
             if (rc != EFS_OK)
+                break;
+            /* W125: a packed tail is kept like a span chain (same rule as
+             * the same-group branch). */
+            if (got.coding_profile_id == EFS_META_PROFILE_PACK)
                 break;
             if (!got.generation) {
                 struct efs_meta_delta deltas[EFS_CHUNK_DELTA_MAX];
@@ -19478,6 +19754,15 @@ void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32
                    sizeof(out->recs[out->count].checksums));
             out->recs[out->count].base_gen = ch.generation;
             out->recs[out->count].chunk_generation = ch.generation;
+            /* W125: a packed base names its record; the client reads it
+             * from the segment (nodes/checksums are the segment's). */
+            if (ch.coding_profile_id == EFS_META_PROFILE_PACK) {
+                if (efs_pack_ref_encode(&ch.packed, out->recs[out->count].packed_ref) != EFS_OK) {
+                    rc = EFS_ERR_PROTO;
+                    break;
+                }
+                out->recs[out->count].publish_flags |= EFS_CHUNK_REC_F_PACKED;
+            }
             out->recs[out->count].delta_off = 0;
             out->recs[out->count].delta_len = 0;
             if (nd > 0) {

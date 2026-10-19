@@ -30,6 +30,7 @@ int efs_set_send_timeout(int fd,int ms) {(void)fd;(void)ms;return 0;}
 struct efs_conn *efs_conn_wrap_tcp(int fd,int server) {(void)fd;(void)server;return wrap_failure?NULL:&connection;}
 int efs_rdma_available(void) {return 0;}
 int efs_rdma_client_upgrade(struct efs_conn *c) {(void)c;return 0;}
+int efs_conn_declare(struct efs_conn *c){(void)c;return 0;}
 int efs_rdma_transport(void) {return EFS_TRANSPORT_TCP;}
 void efs_conn_destroy(struct efs_conn *c) {assert(c==&connection);destroyed++;}
 void efs_conn_bind_gen(struct efs_conn *c,uint64_t *p) {(void)c;(void)p;}

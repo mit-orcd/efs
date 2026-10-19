@@ -6,6 +6,7 @@
 
 #include "efs/common.h"
 #include "efs/fence_view.h"
+#include "efs/packed_segment.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -44,6 +45,7 @@ struct efs_chunk_entry {
     uint64_t delta_seq; /* newest delta seq; 0 if ndelta == 0 */
     struct efs_fence_view read_view; /* authoritative GETCHUNKS masks; count 0 = local row */
     struct efs_chunk_delta deltas[EFS_CHUNK_DELTA_MAX];
+    struct efs_pack_ref packed; /* W125: segment_id zero means an ordinary base */
 };
 
 /* A late fetch retains the identity it captured. Include every byte/view
@@ -75,6 +77,19 @@ static inline uint64_t efs_chunk_read_key(const struct efs_chunk_entry *ce)
             for (unsigned k = 0; k < EFS_HASH_SIZE; ++k)
                 EFS_READ_KEY_VALUE(d->checksums[j][k]);
         }
+    }
+    EFS_READ_KEY_VALUE(ce->packed.segment_id);
+    if (ce->packed.segment_id) {
+        EFS_READ_KEY_VALUE(ce->packed.ino);
+        EFS_READ_KEY_VALUE(ce->packed.inode_generation);
+        EFS_READ_KEY_VALUE(ce->packed.content_epoch);
+        EFS_READ_KEY_VALUE(ce->packed.record_generation);
+        EFS_READ_KEY_VALUE(ce->packed.segment_generation);
+        EFS_READ_KEY_VALUE(ce->packed.geometry);
+        EFS_READ_KEY_VALUE(ce->packed.publication_group);
+        EFS_READ_KEY_VALUE(ce->packed.offset); EFS_READ_KEY_VALUE(ce->packed.len);
+        for (unsigned i = 0; i < EFS_HASH_SIZE; ++i)
+            EFS_READ_KEY_VALUE(ce->packed.digest[i]);
     }
     EFS_READ_KEY_VALUE(ce->read_view.fence_epoch);
     EFS_READ_KEY_VALUE(ce->read_view.revision);
@@ -481,6 +496,10 @@ uint32_t efs_export_present_count(const struct efs_export *ex, efs_ino_t ino);
  * current list afterwards when this gen still has deltas. */
 int efs_export_set_chunk_gen(struct efs_export *ex, efs_ino_t ino,
                              uint32_t chunk_index, uint64_t generation);
+/* W125: install (or, with segment_id zero, clear) the packed reference of
+ * chunk zero's base. The reference must name this file and the entry's
+ * current generation. */
+int efs_export_set_chunk_packed(struct efs_export *, efs_ino_t, uint32_t, const struct efs_pack_ref *);
 /* Replace the chunk's delta list. n == 0 clears it. Does not touch the
  * base generation or its fragment set. */
 int efs_export_set_chunk_view(struct efs_export *ex, efs_ino_t ino,

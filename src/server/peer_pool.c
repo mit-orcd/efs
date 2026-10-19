@@ -171,6 +171,12 @@ static struct efs_conn *peer_connect(const char *host, uint16_t port)
         efs_conn_destroy(nc);
         return NULL;
     }
+    /* W125: pooled peer connections carry GETCHUNKS forwards and segment
+     * traffic, so they declare the protocol like any client. */
+    if (efs_conn_declare(nc) != EFS_OK) {
+        efs_conn_destroy(nc);
+        return NULL;
+    }
     return nc;
 }
 

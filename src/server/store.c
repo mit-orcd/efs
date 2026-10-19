@@ -1130,6 +1130,52 @@ int server_gc_inode_delete(struct efsd_server *s, efs_export_id_t eid, efs_ino_t
 
 /* W124: make every unlink and rmdir on the storage roots durable, one
  * syncfs per distinct filesystem. */
+int server_gc_superseded_delete(struct efsd_server *s, efs_export_id_t eid, efs_ino_t ino,
+                                uint32_t ci, uint32_t fi, uint64_t gen,
+                                const uint8_t sum[EFS_HASH_SIZE])
+{
+    if (!s || !eid || ino <= EFS_ROOT_INO || efs_ino_is_meta_table(ino) || !gen ||
+        fi >= EFS_NUM_FRAGMENTS || !sum) return EFS_ERR_INVAL;
+    struct efs_export ex;
+    memset(&ex, 0, sizeof(ex));
+    ex.id = eid;
+    uint64_t saved = efs_tls_chunk_gen;
+    efs_tls_chunk_gen = gen;
+    int rc = server_delete_fragment_if_sum(s, &ex, ino, ci, fi, sum);
+    efs_tls_chunk_gen = saved;
+    if (rc == EFS_ERR_EXIST) rc = EFS_OK; /* reused slot: the dead generation is gone */
+    if (rc != EFS_OK) return rc;
+    /* A packed or otherwise emptied inode keeps no directories. Under the
+     * inode's write guard a PUT cannot be between its mkdir and create. */
+    pthread_rwlock_t *g = server_inode_guard(eid, ino);
+    pthread_rwlock_wrlock(g);
+    for (uint32_t r = 0; rc == EFS_OK && r < (s->storage_path_count ? s->storage_path_count : 1); r++) {
+        char path[8192];
+        format_ino_chunk_dir(path, sizeof(path), s->storage_paths[r], eid, ino, ci);
+        if (rmdir(path)) {
+            if (errno == ENOENT) continue;
+            if (errno == ENOTEMPTY || errno == EEXIST) continue;
+            rc = EFS_ERR_IO;
+            break;
+        }
+        char *slash = strrchr(path, '/');
+        if (!slash) { rc = EFS_ERR_IO; break; }
+        *slash = '\0';
+        if (rmdir(path)) {
+            if (errno == ENOTEMPTY || errno == EEXIST || errno == ENOENT) {
+                rc = fragment_parent_sync(s, path);
+                continue;
+            }
+            rc = EFS_ERR_IO;
+            break;
+        }
+        rc = fragment_parent_sync(s, path);
+        if (rc == EFS_OK) rc = gc_dead_ancestors(s, path);
+    }
+    pthread_rwlock_unlock(g);
+    return rc;
+}
+
 int server_gc_sync_roots(struct efsd_server *s)
 {
     uint32_t n = s->storage_path_count ? s->storage_path_count : 1;

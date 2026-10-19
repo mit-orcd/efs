@@ -14,7 +14,15 @@ static __thread uint64_t deadline;
 static uint64_t epochs[8];
 uint64_t efs_client_rpc_deadline_ms(void) { return deadline; }
 void efs_client_rpc_set_deadline_ms(uint64_t d) { deadline = d; }
-struct efs_conn *efs_client_conn_get(efs_node_id_t id) { assert(id < 8); return &conns[id]; }
+static int cooldown[8], listening[8], reprobes[8];
+struct efs_conn *efs_client_conn_get(efs_node_id_t id) { assert(id < 8); return cooldown[id] ? NULL : &conns[id]; }
+int efs_client_node_reprobe(efs_node_id_t id)
+{
+    reprobes[id]++;
+    if (!listening[id]) return 0;
+    cooldown[id] = 0;
+    return 1;
+}
 void efs_client_conn_release(efs_node_id_t id, struct efs_conn *c) { (void)id; (void)c; }
 void efs_client_conn_drop(efs_node_id_t id, struct efs_conn *c) { (void)id; (void)c; }
 int efs_conn_send_msg(struct efs_conn *c, uint8_t type, const void *p, uint32_t n)
@@ -58,6 +66,13 @@ int main(void)
         reset(); assert(efs_client_data_commit()==EFS_OK);
         for(int i=1;i<=4;i++) assert(commits[i]==1);
     }
+    /* A peer restarted inside the client's down cooldown: COMMIT probes it
+     * and proceeds; a peer still down is probed once and fails the fsync. */
+    reset();cooldown[3]=1;listening[3]=1;assert(efs_client_data_commit()==EFS_OK);
+    assert(commits[3]==1 && reprobes[3]==1 && !cooldown[3]);
+    reset();cooldown[3]=1;listening[3]=0;reprobes[3]=0;
+    assert(efs_client_data_commit()==EFS_ERR_NET && commits[3]==0 && reprobes[3]==1);
+    cooldown[3]=0;
     reset();fail_net_once[2]=1;assert(efs_client_data_commit()==EFS_OK);
     assert(commits[2]==2 && commits[1]==1 && commits[3]==1 && commits[4]==1);
     /* Peer writes: no local notes, but a peer's failed barrier is visible. */
@@ -106,6 +121,6 @@ int main(void)
     assert(efs_client_data_commit()==EFS_ERR_IO);
     memset(node_commit,0,sizeof(node_commit));
     epochs[4]=0;assert(efs_client_data_commit()==EFS_ERR_IO);
-    puts("data commit: all-node peer/fresh-client fsync, concurrent barriers, failures, verifier changes and sticky lost-data EIO PASS");
+    puts("data commit: cooldown reprobe, all-node peer/fresh-client fsync, concurrent barriers, failures, verifier changes and sticky lost-data EIO PASS");
     return 0;
 }

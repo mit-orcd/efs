@@ -686,6 +686,10 @@ void efs_client_node_note_ok(efs_node_id_t node_id);
 void efs_client_node_note_fail(efs_node_id_t node_id);
 /* True while the peer is in the short connect-skip cooldown. */
 int efs_client_node_is_down(efs_node_id_t node_id);
+/* Peer in cooldown: try one plain TCP connect now and end the cooldown if it
+ * succeeds. Returns 1 when the next checkout may connect. For callers that
+ * must reach every node (COMMIT) and cannot wait for the background probe. */
+int efs_client_node_reprobe(efs_node_id_t node_id);
 /* Clear every down-mark so the next checkout re-probes. Call when fail-fast
  * would otherwise spin forever without ever calling conn_get. */
 void efs_client_nodes_force_reprobe(void);

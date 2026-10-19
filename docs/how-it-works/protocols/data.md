@@ -857,6 +857,73 @@ per-reservation fallback or widened request timeout. All voters must understand
 tag 52 before admission. No persistent row format changes, but an old binary
 must not replay a log containing an uncheckpointed command it cannot decode.
 
+## Packed small files (W125)
+
+**The write path is unchanged; packing happens after close.** A file of at
+most `EFS_PACK_THRESHOLD` (16 KiB) is written and published as per-file
+chunk fragments like any file. Its chunk-zero publication also records the
+file in its group's **candidate index** (KV kind 46, key epoch + FileID, the
+epoch being leader time / 600 s), in the same batch.
+
+**Packer (group leader).** For each led group the packer selects
+candidates that are closed, quiet for the minimum age (60 s), linked,
+single-chunk and not leased; groups them by (epoch, parent directory,
+inode); reads their bytes (data fragment 0 of base and spans, or fragments
+1 and 2 XORed); builds a segment (`packed_segment` v2: 96 B header, 72 B
+per record, at most 512 records, records up to 16 KiB, per-record digests)
+and encodes it 2+1.
+
+**Admission, upload, switch:**
+1. `PACK_ADMIT` (MD 73) stores the segment object (KV kind 45: ledger v2
+   plus placement) with every record PENDING, before any fragment exists,
+   and makes the store require reader capability PACK_V2 (older builds
+   refuse the store).
+2. `PUT_SEGMENT` (wire 157) writes each fragment to its node, which checks
+   by a linearizable read that the object is admitted, ACTIVE and places
+   this exact fragment there, and fsyncs file and directory before replying.
+3. `PACK_SWITCH` (MD 74) moves up to 128 files in one entry. Each member's
+   source is the digest of its stored chunk-zero row; it switches only if
+   the inode generation matches, the file is linked and unleased, the row
+   still hashes to that digest, and the new reference carries the row's
+   newest content epoch and a fresh record generation. Switched records
+   become LIVE; the superseded per-file generation and spans become GC
+   records; a replaced packed record is released. Other members are
+   CANCELLED (dead bytes).
+4. `PACK_CANCEL` (MD 75) abandons remaining PENDING records (failed copy,
+   deposed packer).
+
+**Ledger and reclaim.** Every path that drops or replaces a packed row
+(overwrite, truncate, lane sweep, reap) releases its record in the same
+batch, so live/dead bytes always match the mappings. A segment with no
+live or pending record is RECLAIMING; the retirement pass hands it to every
+member's reclaim journal (`GC_SEGMENT_BATCH`, wire 161; journal record kind
+SEGMENT, fenced, deleted later) and `PACK_RETIRE` (MD 76) forgets it.
+Superseded per-file fragments go to the journals in batches
+(`GC_FRAG_BATCH`, wire 163; kind SUPERSEDED, checksum-guarded deletion
+and removal of empty chunk and inode directories).
+
+**Compaction and backfill.** Segments with live share under 50%, at least
+32 KiB dead, or under 8 KiB live are read back and their live records
+switched into cold segments the same way. `PACK_INDEX` (MD 78) backfills
+the candidate index from a leader scan of inode shards for stores written
+before packing.
+
+**Reads.** GETCHUNKS returns a packed base with `EFS_CHUNK_REC_F_PACKED`
+and the 96-byte reference; nodes and checksums are the segment's. The
+client fetches any two segment fragments with `GET_SEGMENT` (wire 159),
+hashes each, decodes, checks the record against the reference, zero-fills
+past it and overlays spans. Connections must first declare protocol 2
+(`CLIENT_HELLO`, wire 165); the server answers GETCHUNKS and segment
+messages only on declared connections, and a new client refuses to mount
+daemons that do not accept the declaration.
+
+**Modification.** Writes, appends and truncates of a packed file use the
+ordinary write path: a full rewrite releases the record; spans over a
+packed base are read together with it and re-index the file, which the
+packer then repacks; a truncate keeps a packed tail like a span chain (the
+size and epoch fence hide bytes past EOF). Hole punch is not supported for
+any file.
+
 ## Stale-target fencing — targets are dumb, metadata decides
 
 Because clients write directly to data targets, Raft terms on the metadata

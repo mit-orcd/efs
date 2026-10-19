@@ -8,6 +8,8 @@ m = re.search(r'static int chunk_rec_same_read\([^;]+?\)\n\{', s)
 fn = s[m.start():s.index('\n}', m.end())+2]
 source = r'''
 #include "efs/protocol.h"
+int efs_pack_ref_encode(const struct efs_pack_ref *r, uint8_t out[EFS_PACK_REF_BYTES]) {(void)r;memset(out,0,EFS_PACK_REF_BYTES);return 0;}
+int efs_pack_ref_decode(const uint8_t *in, size_t len, struct efs_pack_ref *out) {(void)in;(void)len;memset(out,0,sizeof(*out));return EFS_ERR_PROTO;}
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>

@@ -143,3 +143,32 @@ int efs_decode_chunk(uint8_t *const fragments[EFS_NUM_FRAGMENTS], size_t size,
     return decode(fragments, size, a, b, missing, chunk, len,
                   EFS_MIN_CHUNK_SIZE, EFS_MAX_CHUNK_SIZE);
 }
+
+int efs_segment_geometry(size_t body_bytes, size_t *size)
+{
+    if (!size || !body_bytes || body_bytes > EFS_SEGMENT_MAX_SIZE)
+        return EFS_ERR_INVAL;
+    *size = ((body_bytes + EFS_SEGMENT_ALIGNMENT - 1) / EFS_SEGMENT_ALIGNMENT)
+            * EFS_SEGMENT_ALIGNMENT;
+    return EFS_OK;
+}
+static int segment_valid(size_t size)
+{
+    return size >= EFS_SEGMENT_ALIGNMENT && size <= EFS_SEGMENT_MAX_SIZE &&
+           size % EFS_SEGMENT_ALIGNMENT == 0;
+}
+int efs_encode_segment(const uint8_t *body, size_t len, size_t size,
+                       uint8_t *fragments[EFS_NUM_FRAGMENTS])
+{
+    if (!segment_valid(size))
+        return EFS_ERR_INVAL;
+    return encode(body, len, size, fragments, EFS_SEGMENT_ALIGNMENT, EFS_SEGMENT_MAX_SIZE);
+}
+int efs_decode_segment(uint8_t *const fragments[EFS_NUM_FRAGMENTS], size_t size,
+                       int a, int b, int missing, uint8_t *body, size_t len)
+{
+    if (!segment_valid(size))
+        return EFS_ERR_INVAL;
+    return decode(fragments, size, a, b, missing, body, len,
+                  EFS_SEGMENT_ALIGNMENT, EFS_SEGMENT_MAX_SIZE);
+}

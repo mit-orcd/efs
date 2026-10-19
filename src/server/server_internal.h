@@ -504,10 +504,21 @@ void server_put_sync_abandon(void);
 
 /* ---- W124 node reclaim (src/server/reclaim.c) ----
  * Batched, journal-first acceptance of dead inodes for physical reclaim. */
+#define EFS_RECLAIM_INODE 0u
+#define EFS_RECLAIM_SEGMENT 1u /* W125: a retired packed segment's fragments */
+#define EFS_RECLAIM_SUPERSEDED 2u /* one superseded fragment of a live inode */
+/* A segment's fence lives in the same set as inode fences, under an
+ * export id no export uses. */
+#define EFS_RECLAIM_SEGMENT_EID(group) (0x80000000u | (uint32_t)(group))
 struct efs_reclaim_item {
-    uint32_t export_id;
-    efs_ino_t ino;
-    uint64_t generation; /* 0 = derived by recovery */
+    uint32_t export_id;  /* SEGMENT: EFS_RECLAIM_SEGMENT_EID(group) */
+    efs_ino_t ino;       /* SEGMENT: segment id */
+    uint64_t generation; /* 0 = derived by recovery; SEGMENT: segment generation;
+                          * SUPERSEDED: the dead chunk generation */
+    uint8_t kind;
+    uint8_t fragment;     /* SUPERSEDED */
+    uint32_t chunk;       /* SUPERSEDED */
+    uint8_t sum[EFS_HASH_SIZE]; /* SUPERSEDED: deleted only if it still matches */
 };
 int server_reclaim_init(struct efsd_server *s); /* after the usage inventory */
 void server_reclaim_shutdown(struct efsd_server *s);
@@ -534,5 +545,51 @@ int server_gc_inode_payload(struct efsd_server *s, efs_export_id_t eid, efs_ino_
 int server_gc_inode_delete(struct efsd_server *s, efs_export_id_t eid, efs_ino_t ino,
                            uint64_t *counted, int durable);
 int server_gc_sync_roots(struct efsd_server *s);
+/* Delete one superseded fragment generation if its checksum still matches
+ * (a mismatch means the slot was reused: nothing to delete), then remove the
+ * chunk and inode directories if they are now empty. Debits `used`. */
+int server_gc_superseded_delete(struct efsd_server *s, efs_export_id_t eid, efs_ino_t ino,
+                                uint32_t ci, uint32_t fi, uint64_t gen,
+                                const uint8_t sum[EFS_HASH_SIZE]);
+
+/* ---- W125 packed segment store (src/server/segment_store.c) ---- */
+struct efs_pack_object;
+pthread_rwlock_t *server_segment_guard(uint32_t group, uint64_t id);
+void server_segment_path(const struct efsd_server *s, uint32_t group, uint64_t id, uint64_t gen,
+                         uint32_t fi, char *out, size_t n);
+int server_segment_put(struct efsd_server *s, const uint8_t *body, uint32_t bytes);
+int server_segment_get(struct efsd_server *s, const uint8_t *req, uint32_t bytes,
+                       uint8_t **reply, uint32_t *reply_len);
+int server_segment_read(struct efsd_server *s, uint32_t group, uint64_t id, uint64_t gen,
+                        uint32_t fi, uint32_t len, uint8_t *out, uint8_t sum[EFS_HASH_SIZE]);
+uint64_t server_segment_payload(struct efsd_server *s, uint32_t group, uint64_t id, uint64_t gen);
+int server_segment_delete(struct efsd_server *s, uint32_t group, uint64_t id, uint64_t gen,
+                          uint64_t *removed);
+int server_segment_scan(struct efsd_server *s,
+                        void (*fn)(void *, uint32_t, uint64_t, uint64_t), void *arg);
+/* Linearizable read of a segment object from its group (ReadIndex, then the
+ * local replica). NOT_FOUND when absent; INVAL when the group is not hosted. */
+int server_raft_host_pack_object(uint32_t group, uint64_t id, uint64_t gen,
+                                 struct efs_pack_object *out);
+/* 1 = this node leads the group; term and commit index (optional). */
+int server_raft_host_pack_leader(uint8_t group, uint64_t *term, uint64_t *commit);
+struct efs_kv *server_raft_host_kv(void);
+uint64_t server_raft_host_group_commit(uint8_t group);
+uint32_t server_raft_host_group_voters(uint8_t group);
+int server_raft_host_members(void);
+/* Propose a packer command to its group and wait for this replica's apply
+ * verdict. */
+int server_raft_host_pack_propose(uint8_t group, const uint8_t *cmd, uint32_t len);
+/* ---- W125 background packer (src/server/packer.c) ---- */
+int server_packer_start(struct efsd_server *s);
+void server_packer_stop(void);
+struct efs_packer_status {
+    uint64_t passes, candidates, segments, files_packed, files_cancelled,
+             unindexed, read_errors, put_errors, admit_errors, abandoned,
+             busy_passes, budget_waits, compacted, backfilled;
+};
+void server_packer_status(struct efs_packer_status *out);
+/* Crash injection points (no-op unless built with EFS_FAULTS=1). */
+void server_pack_crash_point(const char *point);
 
 #endif

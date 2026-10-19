@@ -22,4 +22,18 @@ int efs_decode_chunk(uint8_t *const fragments[EFS_NUM_FRAGMENTS], size_t chunk_s
                      int have_a, int have_b, int missing,
                      uint8_t *chunk, size_t chunk_len);
 
+/* Segment codec for packed small-file segments (W125): each fragment is a
+ * multiple of 4 KiB. A segment is a separately versioned object, not an
+ * ordinary chunk. Geometry includes the packed body's headers and index but
+ * excludes store tails. Decode writes size bytes, so the output buffer must
+ * hold the full size. All three fragment buffers must be allocated,
+ * including the missing one. */
+#define EFS_SEGMENT_ALIGNMENT (8u * 1024u)
+#define EFS_SEGMENT_MAX_SIZE EFS_MIN_CHUNK_SIZE
+int efs_segment_geometry(size_t body_bytes, size_t *size);
+int efs_encode_segment(const uint8_t *body, size_t len, size_t size,
+                       uint8_t *fragments[EFS_NUM_FRAGMENTS]);
+int efs_decode_segment(uint8_t *const fragments[EFS_NUM_FRAGMENTS], size_t size,
+                       int have_a, int have_b, int missing, uint8_t *body, size_t len);
+
 #endif

@@ -19,6 +19,7 @@ static int gc_unlink(const char*p){if(fault==4){errno=EACCES;return -1;}return u
 #define syncfs gc_syncfs
 #include "../src/server/store.c"
 #include "../src/server/reclaim.c"
+#include "../src/server/segment_store.c"
 #undef open
 #undef pread
 #undef unlink

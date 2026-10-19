@@ -1,6 +1,7 @@
 #include "efs/kv_snap.h"
 #include "efs/kv_key.h"
 #include "efs/kv_lsm.h"
+#include "efs/meta_apply.h"
 #include "efs/raft.h"
 #include <stdio.h>
 #include <fcntl.h>
@@ -37,11 +38,13 @@ static int key_in_group(const uint8_t *key, uint32_t klen, uint8_t group)
 /* Inspect the entire incoming image, including unchanged rows omitted from
  * the diff. Reserved KV kinds or a chunk with the reserved coding profile
  * come from a store this build cannot read: refuse the import before
- * anything lands. */
+ * anything lands. W125 packed rows (a packed segment, or a chunk with the
+ * packed profile) need the PACK_V2 reader barrier to be durable before
+ * they become visible; a failed import may conservatively keep it. */
 static int import_reader_barrier(struct efs_kv *kv,
     const struct efs_kv_item *items, uint32_t count)
 {
-    (void)kv;
+    int packed = 0;
     for (uint32_t i = 0; i < count; i++) {
         const struct efs_kv_item *it = &items[i];
         if (it->klen < 3) continue;
@@ -52,8 +55,12 @@ static int import_reader_barrier(struct efs_kv *kv,
             fprintf(stderr, "kv-snap: import holds reserved rows; refusing\n");
             return EFS_ERR_PROTO;
         }
+        if (kind == EFS_KV_KIND_PACK_SEGMENT ||
+            (kind == EFS_KV_KIND_CHUNK && it->vlen >= 12 && !it->val[8] &&
+             !it->val[9] && !it->val[10] && it->val[11] == EFS_META_PROFILE_PACK))
+            packed = 1;
     }
-    return EFS_OK;
+    return packed ? efs_kv_lsm_require_reader(kv, EFS_KV_READER_PACK_V2) : EFS_OK;
 }
 
 struct exp_acc {

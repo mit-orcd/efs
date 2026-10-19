@@ -2929,6 +2929,11 @@ static int cmd_raft_getchunks(int argc, char **argv)
     }
     efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
     efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    if (efs_fd_declare(fd) != EFS_OK) {
+        fprintf(stderr, "%s:%u refused the protocol %u declaration\n", host, port, EFS_PROTOCOL_VERSION);
+        close(fd);
+        return 1;
+    }
     if (send_recv(fd, EFS_MSG_INODE_GETCHUNKS, &req, sizeof(req), &reply_type,
                   &reply, &reply_len) != 0 ||
         reply_type != EFS_MSG_INODE_GETCHUNKS_REPLY ||
@@ -2966,6 +2971,16 @@ static int cmd_raft_getchunks(int argc, char **argv)
                    r->recs[i].checksums[0][2], r->recs[i].checksums[0][3],
                    r->recs[i].delta_base_n,
                    (unsigned long long)r->recs[i].delta_base_seq);
+            /* W125: a packed base names its segment record. */
+            if (r->recs[i].publish_flags & EFS_CHUNK_REC_F_PACKED) {
+                struct efs_pack_ref ref;
+                if (efs_pack_ref_decode(r->recs[i].packed_ref, sizeof(r->recs[i].packed_ref), &ref) == EFS_OK)
+                    printf("    packed segment=%llu gen=%llu group=%u offset=%u len=%u\n",
+                           (unsigned long long)ref.segment_id, (unsigned long long)ref.segment_generation,
+                           ref.publication_group, ref.offset, ref.len);
+                else
+                    printf("    packed reference malformed\n");
+            }
             for (d = 0; d < r->recs[i].delta_base_n && d < EFS_CHUNK_DELTA_MAX; d++)
                 printf("    span off=%u len=%u gen=%llu seq=%llu nodes=%u,%u,%u\n",
                        r->recs[i].deltas[d].off, r->recs[i].deltas[d].len,

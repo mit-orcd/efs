@@ -41,6 +41,15 @@
  * Items apply independently; a refused item keeps its REAP marker. */
 #define EFS_MD_CMD_LANE_SWEEP_MULTI 71
 #define EFS_MD_CMD_REAP_MULTI 72
+/* W125 background packer, applied by the segment's publication group
+ * (payloads in pack_mapping.h): admit a segment, switch files into it,
+ * cancel its remaining pending records. */
+#define EFS_MD_CMD_PACK_ADMIT 73
+#define EFS_MD_CMD_PACK_SWITCH 74
+#define EFS_MD_CMD_PACK_CANCEL 75
+#define EFS_MD_CMD_PACK_RETIRE 76
+#define EFS_MD_CMD_PACK_UNINDEX 77
+#define EFS_MD_CMD_PACK_INDEX 78
 #define EFS_MD_REQ_EXPIRY_ID 67 /* inode8; authoritative generation/uid/mode/links */
 #define EFS_MD_REQ_EXPIRY_ENABLE 66 /* renewal prefix + parent/name; absent-record CAS */
 #define EFS_MD_REQ_EXPIRY_DELETE 65 /* guarded due FileID/name; receiver owns clock */

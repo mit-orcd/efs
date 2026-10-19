@@ -9,8 +9,10 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #define EFS_BENCH_BUILD
+#define EFS_SEGMENT_TEST_AUTHORITY
 #include "../src/server/store.c"
 #include "../src/server/reclaim.c"
+#include "../src/server/segment_store.c"
 
 /* No Raft host: recovery asks this oracle instead. */
 static int host_active;
@@ -22,6 +24,19 @@ int server_raft_host_inode_reaped(efs_ino_t ino,int *dead)
 {
     *dead=0;
     for(int i=0;i<ndead;i++) if(dead_set[i]==ino) *dead=1;
+    return EFS_OK;
+}
+
+/* Segment authority oracle (W125): one object whose phase a test sets;
+ * phase 0 means absent. */
+static struct efs_pack_object seg_obj;
+static uint32_t seg_phase;
+int server_raft_host_pack_object(uint32_t group, uint64_t id, uint64_t gen, struct efs_pack_object *out)
+{
+    if (!seg_phase || group != seg_obj.ledger.publication_group || id != seg_obj.ledger.segment_id ||
+        gen != seg_obj.ledger.segment_generation) return EFS_ERR_NOT_FOUND;
+    *out = seg_obj;
+    out->ledger.phase = seg_phase;
     return EFS_OK;
 }
 
@@ -387,6 +402,208 @@ static void t_phys(void)
     assert(phys_ok[0]+phys_ok[1]==5 && S.phys_refused-refused==11);
 }
 
+/* W125 segments: authority-checked PUT, read back, idempotent retry, then
+ * journal-first acceptance (only once not ACTIVE), fence, credit, deletion. */
+static uint8_t seg_body[EFS_SEGMENT_PUT_HEADER + 8192];
+static void seg_setup(uint64_t id)
+{
+    memset(&seg_obj, 0, sizeof(seg_obj));
+    seg_obj.ledger.publication_group = 0; seg_obj.ledger.segment_id = id;
+    seg_obj.ledger.segment_generation = 1; seg_obj.ledger.geometry = 16384;
+    seg_obj.ledger.count = 1; seg_obj.ledger.state[0] = EFS_PACK_PENDING; seg_obj.ledger.len[0] = 100;
+    seg_obj.nodes[0] = 1; seg_obj.nodes[1] = 2; seg_obj.nodes[2] = 3;
+    uint8_t *q = seg_body;
+    memset(q, 0, sizeof(seg_body));
+    q[0] = 0; q[1] = 0; q[4] = 0; q[5] = 0; q[6] = 0x40; q[7] = 0; /* geometry 16384 */
+    for (int i = 0; i < 8; i++) { q[8 + i] = (uint8_t)(id >> (56 - 8 * i)); q[16 + i] = i == 7; }
+    memset(q + EFS_SEGMENT_PUT_HEADER, 0x5e, 8192);
+    efs_hash(q + EFS_SEGMENT_PUT_HEADER, 8192, q + 24);
+    memcpy(seg_obj.checksums[0], q + 24, EFS_HASH_SIZE);
+    seg_phase = EFS_PACK_ACTIVE;
+}
+static int seg_accept(uint64_t id)
+{
+    struct efs_reclaim_item it = {.export_id = EFS_RECLAIM_SEGMENT_EID(0), .ino = id, .generation = 1,
+                                  .kind = EFS_RECLAIM_SEGMENT};
+    int32_t rc = 0;
+    (void)server_reclaim_accept(&S, &it, 1, &rc);
+    return rc;
+}
+static int seg_file(uint64_t id)
+{
+    char p[8192]; server_segment_path(&S, 0, id, 1, 0, p, sizeof(p)); return !access(p, F_OK);
+}
+static void t_segment(void)
+{
+    boot();
+    uint64_t base = used();
+    seg_setup(0x5e60001);
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_OK);
+    assert(used() == base + 8192 && seg_file(0x5e60001));
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_OK); /* retry: no new charge */
+    assert(used() == base + 8192);
+    uint8_t out[8192], s2[EFS_HASH_SIZE];
+    assert(!server_segment_read(&S, 0, 0x5e60001, 1, 0, 8192, out, s2));
+    assert(!memcmp(out, seg_body + EFS_SEGMENT_PUT_HEADER, 8192));
+    seg_body[EFS_SEGMENT_PUT_HEADER] ^= 1; /* payload no longer matches its checksum */
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_ERR_CHECKSUM);
+    seg_body[EFS_SEGMENT_PUT_HEADER] ^= 1;
+    seg_body[1] = 1; /* fragment 1 is placed on node 2 */
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_ERR_INVAL);
+    seg_body[1] = 0;
+    assert(seg_accept(0x5e60001) == EFS_ERR_BUSY); /* still ACTIVE */
+    seg_phase = EFS_PACK_RECLAIMING;
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_ERR_STALE); /* no longer ACTIVE */
+    rj.hold = 1;
+    assert(seg_accept(0x5e60001) == EFS_OK);
+    assert(used() == base && pending() == 8192); /* credited at acceptance */
+    seg_phase = EFS_PACK_ACTIVE; /* even a (forged) ACTIVE view cannot pass the fence */
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_ERR_STALE);
+    seg_phase = EFS_PACK_RECLAIMING;
+    pthread_mutex_lock(&rj.mu); rj.hold = 0; pthread_cond_broadcast(&rj.work); pthread_mutex_unlock(&rj.mu);
+    wait_drained();
+    assert(!seg_file(0x5e60001) && used() == base && pending() == 0);
+    assert(server_compute_local_usage(&S) == base);
+}
+/* Crash after a segment acceptance: the version 2 record replays. */
+static void t_segment_crash(void)
+{
+    boot();
+    seg_setup(0x5e60002);
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_OK);
+    seg_phase = 0; /* the object is gone (retired) */
+    rj.hold = 1;
+    assert(seg_accept(0x5e60002) == EFS_OK);
+    _exit(0);
+}
+static void t_segment_replay(void)
+{
+    seg_setup(0x5e60002); seg_phase = 0;
+    boot();
+    assert(!S.reclaim_fail_closed);
+    seg_phase = EFS_PACK_ACTIVE;
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_ERR_STALE); /* fence replayed */
+    seg_phase = 0;
+    wait_drained();
+    assert(!seg_file(0x5e60002));
+}
+/* A version 1 (W124) segment written before the upgrade still replays. */
+static void t_v1_prepare(void)
+{
+    boot();
+    assert(!put(9500,0,0));
+    pthread_mutex_lock(&rj.mu);
+    uint64_t seq = rj.next;
+    char path[4200]; seg_path(path, sizeof(path), seq);
+    int fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0644); assert(fd >= 0);
+    uint8_t h[RJ_HDR_BYTES]; memset(h, 0, sizeof(h)); memcpy(h, RJ_HDR_MAGIC, 8);
+    put32(h + 8, 1); put32(h + 12, 1); put64(h + 16, rj.epoch); put64(h + 24, seq); efs_hash(h, 32, h + 32);
+    uint8_t r[RJ_REC_V1_BYTES]; memset(r, 0, sizeof(r));
+    put32(r, RJ_REC_TAG); put32(r + 4, 1); put64(r + 8, 9500); put64(r + 16, 7); put64(r + 24, seq); efs_hash(r, 32, r + 32);
+    assert(write(fd, h, sizeof(h)) == (ssize_t)sizeof(h) && write(fd, r, sizeof(r)) == (ssize_t)sizeof(r));
+    fsync(fd); close(fd);
+    assert(state_write(rj.epoch, rj.oldest, seq + 1) == EFS_OK);
+    pthread_mutex_unlock(&rj.mu);
+    _exit(0);
+}
+static void t_v1_replay(void)
+{
+    boot();
+    assert(!S.reclaim_fail_closed);
+    assert(put(9500,1,0) == EFS_ERR_STALE);
+    wait_drained();
+    assert(!inode_dir_exists(9500));
+}
+/* Fail-closed recovery deletes a segment whose object is gone, keeps one
+ * still ACTIVE. */
+static void t_segment_recover_prepare(void)
+{
+    boot();
+    seg_setup(0x5e60003);
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_OK);
+    seg_setup(0x5e60004);
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_OK);
+    _exit(0);
+}
+static void t_segment_recover(void)
+{
+    char cmd[512];
+    /* A segment file without a state record fails verification closed. */
+    snprintf(cmd, sizeof(cmd), "rm -f %s/" RJ_STATE_FILE " && touch %s/meta/gc-journal/0000000000000000.seg",
+             roots[0], roots[0]);
+    assert(!system(cmd));
+    seg_setup(0x5e60004); /* ACTIVE; 0x5e60003 reads absent */
+    host_active = 1;
+    boot();
+    for (int i = 0; i < 400 && S.reclaim_fail_closed; i++) usleep(25000);
+    assert(!S.reclaim_fail_closed);
+    wait_drained();
+    assert(!seg_file(0x5e60003) && seg_file(0x5e60004));
+    host_active = 0;
+}
+
+/* W125 superseded fragments: checksum-guarded deletion of one generation,
+ * no inode fence, empty chunk/inode directories removed, a reused slot
+ * (different checksum) kept, and replay after a crash. */
+static int sup_accept(efs_ino_t ino, uint32_t ci, const uint8_t *s)
+{
+    struct efs_reclaim_item it = {.export_id = 1, .ino = ino, .generation = 1000 + ci,
+                                  .kind = EFS_RECLAIM_SUPERSEDED, .chunk = ci, .fragment = 0};
+    memcpy(it.sum, s, EFS_HASH_SIZE);
+    int32_t rc = 0;
+    (void)server_reclaim_accept(&S, &it, 1, &rc);
+    return rc;
+}
+static int frag_file(efs_ino_t ino, uint32_t ci)
+{
+    for (int r = 0; r < 2; r++) {
+        char path[8192];
+        efs_tls_chunk_gen = 1000 + ci;
+        fragment_path_at(&S, (uint32_t)r, &EX, ino, ci, 0, path, sizeof(path));
+        if (!access(path, F_OK)) return 1;
+    }
+    return 0;
+}
+static void t_superseded(void)
+{
+    boot();
+    uint64_t base = used();
+    assert(!put(9600, 0, 0) && !put(9601, 0, 1) && !put(9601, 1024, 0) && !put(9602, 0, 0));
+    assert(used() == base + 4ull * EFS_FRAGMENT_SIZE);
+    uint8_t other[EFS_HASH_SIZE]; memset(other, 0x77, sizeof(other));
+    assert(sup_accept(9600, 0, sum) == EFS_OK);
+    assert(sup_accept(9601, 0, sum) == EFS_OK);
+    assert(sup_accept(9602, 0, other) == EFS_OK); /* reused slot: kept */
+    assert(sup_accept(9600, 0, sum) == EFS_OK);   /* duplicate */
+    assert(!put(9600, 5, 0)); /* the live inode is not fenced */
+    wait_drained();
+    assert(!frag_file(9600, 0) && frag_file(9600, 5));
+    assert(!frag_file(9601, 0) && frag_file(9601, 1024) && inode_dir_exists(9601));
+    assert(frag_file(9602, 0));
+    assert(used() == base + 3ull * EFS_FRAGMENT_SIZE);
+    /* The only fragment of an inode gone: its directories go too. */
+    assert(sup_accept(9600, 5, sum) == EFS_OK);
+    wait_drained();
+    assert(!inode_dir_exists(9600));
+    assert(server_compute_local_usage(&S) == used());
+}
+static void t_superseded_crash(void)
+{
+    boot();
+    assert(!put(9700, 0, 1));
+    rj.hold = 1;
+    assert(sup_accept(9700, 0, sum) == EFS_OK);
+    _exit(0);
+}
+static void t_superseded_replay(void)
+{
+    boot();
+    assert(!S.reclaim_fail_closed);
+    wait_drained();
+    assert(!frag_file(9700, 0) && !inode_dir_exists(9700));
+    assert(!put(9700, 1, 0)); /* never fenced */
+}
+
 int main(void)
 {
     snprintf(roots[0],sizeof(roots[0]),"/tmp/efs-rj-a-XXXXXX");snprintf(roots[1],sizeof(roots[1]),"/tmp/efs-rj-b-XXXXXX");
@@ -411,6 +628,16 @@ int main(void)
     run("journal cap BUSY",t_cap,0);
     run("PUT racing acceptance",t_race,0);
     run("physical guard",t_phys,0);
+    run("segment PUT/accept/fence/delete",t_segment,0);
+    run("segment crash after accept",t_segment_crash,1);
+    run("segment record replays",t_segment_replay,0);
+    run("v1 segment prepare",t_v1_prepare,1);
+    run("v1 segment replays",t_v1_replay,0);
+    run("segment recovery prepare",t_segment_recover_prepare,1);
+    run("segment recovery",t_segment_recover,0);
+    run("superseded fragments",t_superseded,0);
+    run("superseded crash after accept",t_superseded_crash,1);
+    run("superseded record replays",t_superseded_replay,0);
     snprintf(cmd,sizeof(cmd),"rm -rf %s %s",roots[0],roots[1]);(void)system(cmd);
     printf("reclaim journal: PASS\n");
     return 0;
