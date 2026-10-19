@@ -1564,6 +1564,13 @@ implemented and deployed on orcd-mini (`de0c856b4`);**
   POSIX suites PASS; see the evidence page for the mixed-workload test.
 - Slot reuse and subtree delete stay deferred.
 
+[W125 P7: node9901 qualification](../status/w125-p7-node9901-20261019.md):
+**crash injection, two-client, durability and GC PASS; expiry gate FAIL
+(intermittent, packing-related, open); one-writer −10.9% while packing.**
+- Found and fixed: segments placed on non-voters in 4-node clusters.
+- Expiry gate with the packer active: 3 of 7 runs pass (fsync EIO after
+  leader loss); base 3/3 and packer-idle 3/3 pass. orcd-mini waits.
+
 [W125 P6: landing checks and POSIX core](../status/w125-p6-20261019.md): **PASS.**
 - Behavioural landing checks 7/7 (packing, retirement, large and empty
   files, repack after modification, backfill, no switch).

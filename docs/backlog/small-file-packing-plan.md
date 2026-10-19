@@ -422,6 +422,15 @@ protocol docs updated on the branch. There was no old write path to remove.
    - merge the branch;
    - update D37's register entry, the W125 status and the status index.
 
+**Status 2026-10-19 (node9901 only,
+[evidence](../status/w125-p7-node9901-20261019.md)):** rebased onto devel
+`d9cee1ffd`; crash injection PASS at five points; two-client, durability
+and GC gates PASS; final A/B one-writer −10.9% while packing (six runs),
+just above target. Found and fixed segment placement on non-voters
+(4-node clusters). **Open:** the expiry gate fails intermittently with the
+packer active (fsync EIO after leader loss; base and packer-idle pass).
+orcd-mini waits for that and for the user's go-ahead.
+
 ## Risks
 
 - **Foreground impact (largest practical risk):** the packer reads, writes
