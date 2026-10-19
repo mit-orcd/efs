@@ -32,11 +32,13 @@ implemented and deployed on orcd-mini (`de0c856b4`);**
 - Slot reuse and subtree delete stay deferred.
 
 [W125 P7: node9901 qualification](w125-p7-node9901-20261019.md):
-**crash injection, two-client, durability and GC PASS; expiry gate FAIL
-(intermittent, packing-related, open); one-writer −10.9% while packing.**
+**crash injection, two-client, durability, GC and expiry PASS;
+one-writer −10.9% while packing.**
 - Found and fixed: segments placed on non-voters in 4-node clusters.
-- Expiry gate with the packer active: 3 of 7 runs pass (fsync EIO after
-  leader loss); base 3/3 and packer-idle 3/3 pass. orcd-mini waits.
+- Found and fixed: fsync EIO when a node restarted inside the client's
+  down cooldown (COMMIT now reprobes; latent in base). Expiry gate with
+  the packer active 8/8 PASS (8 of 13 before). orcd-mini needs the
+  user's go-ahead.
 
 [W125 P6: landing checks and POSIX core](w125-p6-20261019.md): **PASS.**
 - Behavioural landing checks 7/7 (packing, retirement, large and empty
