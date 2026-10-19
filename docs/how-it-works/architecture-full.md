@@ -1564,6 +1564,17 @@ implemented and deployed on orcd-mini (`de0c856b4`);**
   POSIX suites PASS; see the evidence page for the mixed-workload test.
 - Slot reuse and subtree delete stay deferred.
 
+[W125 P4 early: background packer on a private cluster](../status/w125-p4-early-20261018.md):
+**packing works end to end; space PASS; foreground impact while packing
+FAILS the 10% target (not tuned yet).**
+- 60,000 tiny files packed into 156 segments: 10.6 MB per node against
+  4.18 GB (395× less); directories 120,598 → 37 per node.
+- Whole-tree delete retires every segment within 20 s, no copying.
+- Foreground while packing concurrently: −12% (16 workers), −20% (one
+  writer); packer idle (index only) −4 to −5%, one run each.
+- Next: rate budget and back-off, repeated runs, compaction, backfill;
+  read-back needs P3.
+
 [W125 P1 early: singleton publication cost](../status/w125-p1-early-20261018.md):
 **the GO condition FAILS for the archived packing code.**
 - Packed singleton close is 3.53 ms against 0.65 ms (single writer).

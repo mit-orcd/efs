@@ -333,6 +333,15 @@ core PASS on a private cluster.
 **Exit:** the packing-rate, fragmentation and space-pressure gates PASS on
 a private cluster.
 
+**Status 2026-10-18: first packer on `w125-packing` (`6df0a4d3c`);
+compaction, backfill and tuning not done.** Candidate index (KV kind 46,
+MD 77 UNINDEX), packer thread, private-cluster check and
+[early measurement](../status/w125-p4-early-20261018.md): 60,000 tiny files
+in 156 segments (395× less space), whole-tree deletes retire segments
+without copying, but foreground −12% (16 workers) and −20% (one writer)
+while packing concurrently, above the 10% target. Next: rate budget and
+back-off, repeated runs, compaction, backfill.
+
 ### P5 — Modifying packed files
 
 Any modification of a packed file goes through today's write path as a new
