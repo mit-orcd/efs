@@ -31,7 +31,7 @@
  *
  * Tunables (environment, read at start): EFS_PACK_MIN_AGE_MS (default
  * 60000), EFS_PACK_INTERVAL_MS (1000), EFS_PACK_SEGMENTS_PER_PASS (8),
- * EFS_PACK_FILES_PER_S (5000), EFS_PACK_BUSY_FILES_PER_S (200),
+ * EFS_PACK_FILES_PER_S (5000), EFS_PACK_BUSY_FILES_PER_S (50),
  * EFS_PACK_BUSY_COMMITS_PER_S (100), EFS_PACK_BACKFILL_SHARDS (64 inode
  * shards scanned per pass until the group's backfill is done). None of
  * them turns the packer off:
@@ -884,7 +884,7 @@ int server_packer_start(struct efsd_server *s)
     pk.interval_ms = env_u64("EFS_PACK_INTERVAL_MS", 1000, 1);
     pk.segments_per_pass = (uint32_t)env_u64("EFS_PACK_SEGMENTS_PER_PASS", 8, 1);
     pk.idle_rate = (double)env_u64("EFS_PACK_FILES_PER_S", 5000, 1);
-    pk.busy_rate = (double)env_u64("EFS_PACK_BUSY_FILES_PER_S", 200, 1);
+    pk.busy_rate = (double)env_u64("EFS_PACK_BUSY_FILES_PER_S", 50, 1);
     pk.busy_commits = (double)env_u64("EFS_PACK_BUSY_COMMITS_PER_S", 100, 1);
     pk.backfill_shards = (uint32_t)env_u64("EFS_PACK_BACKFILL_SHARDS", 64, 1);
     if (pthread_create(&pk.tid, NULL, pk_main, NULL)) return -1;
