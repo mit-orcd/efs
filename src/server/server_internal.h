@@ -571,5 +571,19 @@ int server_segment_scan(struct efsd_server *s,
  * local replica). NOT_FOUND when absent; INVAL when the group is not hosted. */
 int server_raft_host_pack_object(uint32_t group, uint64_t id, uint64_t gen,
                                  struct efs_pack_object *out);
+int server_raft_host_pack_leader(uint8_t group, uint64_t *term); /* 1 = leads */
+struct efs_kv *server_raft_host_kv(void);
+int server_raft_host_members(void);
+/* Propose a packer command to its group and wait for this replica's apply
+ * verdict. */
+int server_raft_host_pack_propose(uint8_t group, const uint8_t *cmd, uint32_t len);
+/* ---- W125 background packer (src/server/packer.c) ---- */
+int server_packer_start(struct efsd_server *s);
+void server_packer_stop(void);
+struct efs_packer_status {
+    uint64_t passes, candidates, segments, files_packed, files_cancelled,
+             unindexed, read_errors, put_errors, admit_errors, abandoned;
+};
+void server_packer_status(struct efs_packer_status *out);
 
 #endif

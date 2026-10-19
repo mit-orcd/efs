@@ -1990,6 +1990,17 @@ static int apply_pack_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     } else if (cmd[0] == EFS_MD_CMD_PACK_CANCEL) {
         if (clen != 18) return EFS_ERR_PROTO;
         rc = efs_meta_apply_pack_cancel(h->kv, cmd[1], rd64be(cmd + 2), rd64be(cmd + 10));
+    } else if (cmd[0] == EFS_MD_CMD_PACK_UNINDEX) {
+        uint64_t epochs[EFS_PACK_UNINDEX_MAX];
+        efs_ino_t inos[EFS_PACK_UNINDEX_MAX];
+        if (clen < 4) return EFS_ERR_PROTO;
+        uint32_t n = ((uint32_t)cmd[2] << 8) | cmd[3];
+        if (n > EFS_PACK_UNINDEX_MAX || clen != 4u + 16u * n) return EFS_ERR_PROTO;
+        for (uint32_t i = 0; i < n; i++) {
+            epochs[i] = rd64be(cmd + 4 + 16 * i);
+            inos[i] = rd64be(cmd + 12 + 16 * i);
+        }
+        rc = efs_meta_apply_pack_unindex(h->kv, cmd[1], epochs, inos, n);
     } else {
         uint64_t ids[EFS_PACK_RETIRE_MAX], gens[EFS_PACK_RETIRE_MAX];
         if (clen < 4) return EFS_ERR_PROTO;
@@ -2920,7 +2931,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_MULTI || cmd[0] == EFS_MD_CMD_REAP_MULTI ||
            cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_SWITCH ||
-           cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE ||
+           cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX ||
            cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
            cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP)
               ? EFS_OK
@@ -2953,7 +2964,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
          cmd[0] == EFS_MD_CMD_LANE_SWEEP_MULTI || cmd[0] == EFS_MD_CMD_REAP_MULTI ||
          cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_SWITCH ||
-         cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE ||
+         cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX ||
          cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
          cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_CREATE ||
          cmd[0] == EFS_MD_CMD_APPEND_RES || cmd[0] == EFS_MD_CMD_APPEND_CATCHUP || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
@@ -3438,7 +3449,7 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
     if (cmd[0] == EFS_MD_CMD_REAP_MULTI)
         return apply_reap_multi_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_SWITCH ||
-        cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE)
+        cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX)
         /* A segment belongs to exactly one publication group: never apply
          * one group's packer entry to another group's rows. */
         return clen >= 2 && cmd[1] == group ? apply_pack_cmd(h, cmd, clen, index) : EFS_ERR_PROTO;
@@ -12460,6 +12471,39 @@ int server_raft_host_pack_object(uint32_t group, uint64_t id, uint64_t gen,
     int rc = host_read_index(h, (uint8_t)group, &hint);
     if (rc != EFS_OK) return rc;
     return efs_pack_object_get(h->kv, group, id, gen, out);
+}
+
+/* W125 packer support. The packer runs only where this node leads a group;
+ * its reads are local-replica hints, and every decision is re-checked by
+ * the group's apply (admit, exact-source switch). */
+int server_raft_host_pack_leader(uint8_t group, uint64_t *term)
+{
+    struct efs_raft_host *h = g_host;
+    if (!h || !h->running || !h->kv || !efs_pack_group_anchor(group)) return 0;
+    pthread_mutex_lock(&h->mu);
+    struct efs_raft *r = group_raft(h, group);
+    int lead = r && efs_raft_role(r) == EFS_RAFT_LEADER;
+    if (lead && term) *term = efs_raft_term(r);
+    pthread_mutex_unlock(&h->mu);
+    return lead;
+}
+struct efs_kv *server_raft_host_kv(void)
+{
+    struct efs_raft_host *h = g_host;
+    return h && h->running ? h->kv : NULL;
+}
+int server_raft_host_members(void)
+{
+    struct efs_raft_host *h = g_host;
+    return h ? h->n : 0;
+}
+static int host_bg_propose(struct efs_raft_host *h, uint8_t group,
+                           const uint8_t *cmd, uint32_t clen, int verdict);
+int server_raft_host_pack_propose(uint8_t group, const uint8_t *cmd, uint32_t len)
+{
+    struct efs_raft_host *h = g_host;
+    if (!h || !h->running) return EFS_ERR_NOT_PRIMARY;
+    return host_bg_propose(h, group, cmd, len, 1);
 }
 
 /* Keep fresh metadata proofs on a known dual-group

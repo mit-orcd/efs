@@ -67,6 +67,32 @@ int main(void)
     assert(made == N);
     int gc0 = gc_records(kv);
 
+    /* Each small-file publication recorded a candidate in its group's index
+     * (epoch from the leader stamp); the packer's view validates it; UNINDEX
+     * drops it. */
+    {
+        int cand = 0;
+        uint8_t p[3] = {0, 1, EFS_KV_KIND_PACK_CANDIDATE};
+        assert(efs_kv_scan_prefix(kv, p, 3, count_cb, &cand) >= 0 && cand == N);
+        struct efs_pack_candidate *c = calloc(1, sizeof(*c));
+        assert(c && efs_meta_pack_candidate(kv, ino[0], gen[0], c) == EFS_OK);
+        assert(c->size == 200 && c->nlink == 1 && S_ISREG(c->mode) && c->ndelta == 0 &&
+               c->base.generation == 0x100 && c->parent == EFS_ROOT_INO);
+        assert(efs_meta_pack_candidate(kv, ino[0], gen[0] + 1, c) == EFS_ERR_STALE);
+        free(c);
+        uint64_t ep = 0; /* publish() leaves the leader stamp at 0: epoch 0 */
+        assert(efs_meta_apply_pack_unindex(kv, EFS_RAFT_GROUP_SHARD, &ep, &ino[N - 1], 1) == EFS_OK);
+        cand = 0;
+        assert(efs_kv_scan_prefix(kv, p, 3, count_cb, &cand) >= 0 && cand == N - 1);
+        /* A file above the threshold is no candidate. */
+        efs_ino_t big = create(kv, "big");
+        if (efs_raft_shard_group(efs_kv_lane_shard(big, 0)) == EFS_RAFT_GROUP_SHARD) {
+            publish(kv, big, 0, 0x777, EFS_PACK_THRESHOLD + 1);
+            cand = 0;
+            assert(efs_kv_scan_prefix(kv, p, 3, count_cb, &cand) >= 0 && cand == N - 1);
+        }
+    }
+
     /* Build one segment holding all six files' bytes. */
     uint8_t data[N][256];
     struct efs_pack_record rec[N];
@@ -192,6 +218,6 @@ int main(void)
 
     free(image); free(o); free(sw); free(wire); free(back); free(cur);
     efs_kv_mem_free(kv);
-    puts("pack switch: admit, exact-source CAS, cancel, replay, overwrite release, sweep release, retire PASS");
+    puts("pack switch: admit, exact-source CAS, cancel, replay, overwrite release, sweep release, retire, candidate index PASS");
     return 0;
 }

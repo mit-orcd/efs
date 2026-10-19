@@ -232,3 +232,11 @@ int efs_pack_switch_decode(const uint8_t *in, size_t len, struct efs_pack_switch
     }
     return EFS_OK;
 }
+int efs_pack_candidate_key(uint32_t anchor, uint64_t epoch, efs_ino_t ino,
+    uint8_t out[EFS_PACK_CANDIDATE_KEY_BYTES])
+{
+    if (!out || (anchor != 1 && anchor != 2) || !ino) return EFS_ERR_INVAL;
+    put(out, anchor, 2); out[2] = EFS_KV_KIND_PACK_CANDIDATE;
+    put(out + 3, epoch, 8); put(out + 11, ino, 8);
+    return EFS_OK;
+}

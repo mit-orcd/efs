@@ -133,7 +133,8 @@ SERVER_SRCS = src/server/put_fence.c src/server/put_upload.c src/server/efsd.c s
               src/server/cluster.c \
               src/server/peer_pool.c src/server/writer.c \
               src/server/iostats.c src/server/thread.c \
-              src/server/raft_host.c src/server/reclaim.c src/server/segment_store.c
+              src/server/raft_host.c src/server/reclaim.c src/server/segment_store.c \
+              src/server/packer.c
 SERVER_OBJS = $(SERVER_SRCS:.c=.o)
 
 CLIENT_SRCS = src/client/efs_fuse.c

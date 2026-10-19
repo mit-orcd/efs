@@ -571,6 +571,12 @@ int main(int argc, char **argv)
         server_writer_pool_stop(&server);
         return 1;
     }
+    if (server_packer_start(&server) != 0) {
+        fprintf(stderr, "packer: start failed\n");
+        server_raft_host_stop();
+        server_writer_pool_stop(&server);
+        return 1;
+    }
 
     {
         const char *stripe = (server.storage_path_count > 1) ? "leastq" : "none";
@@ -698,6 +704,7 @@ int main(int argc, char **argv)
                     __sync_add_and_fetch(&g_live_conns, 0));
     }
 
+    server_packer_stop();
     server_writer_pool_stop(&server);
     server_put_sync_stop(&server);
     server_reclaim_shutdown(&server);

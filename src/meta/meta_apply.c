@@ -4322,7 +4322,8 @@ static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
     uint64_t committed = 0;
     uint64_t inode_gen, mtime_gen, row_base_size = 0, row_active = 0;
     struct lane_rec ln;
-    struct efs_kv_item it[8 + EFS_CHUNK_DELTA_MAX];
+    struct efs_kv_item it[9 + EFS_CHUNK_DELTA_MAX];
+    uint8_t k_cand[EFS_PACK_CANDIDATE_KEY_BYTES], v_cand[8];
     uint32_t n = 0;
     uint32_t ch_wlen = CHUNK_VAL;
     uint32_t nd_old = 0;
@@ -4686,6 +4687,14 @@ static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
         n++;
     }
     if (receipt) it[n++] = *receipt;
+    /* W125: a small file becomes a packing candidate in the same batch. */
+    if (p->chunk_index == 0 && p->new_size && p->new_size <= EFS_PACK_THRESHOLD &&
+        stored.coding_profile_id == EFS_META_PROFILE_K2F1 &&
+        efs_pack_candidate_key(efs_kv_anchor_shard(lsh), p->now / 1000000000ull / EFS_PACK_EPOCH_S,
+                               p->ino, k_cand) == EFS_OK) {
+        be64(v_cand, inode_gen);
+        it[n++] = (struct efs_kv_item){EFS_KV_PUT, k_cand, sizeof(k_cand), v_cand, sizeof(v_cand)};
+    }
     if (got.coding_profile_id == EFS_META_PROFILE_PACK ||
         stored.coding_profile_id == EFS_META_PROFILE_PACK) {
         /* The old image is already held by this CAS: no extra lookup on the
@@ -9238,4 +9247,59 @@ int efs_meta_apply_pack_retire(struct efs_kv *kv, uint32_t group, const uint64_t
     free(o);
     if (retired) *retired = done;
     return rc;
+}
+
+int efs_meta_pack_candidate(struct efs_kv *kv, efs_ino_t ino, uint64_t inode_gen,
+                            struct efs_pack_candidate *out)
+{
+    struct efs_meta_row row;
+    struct lane_rec lane;
+    uint8_t lk[EFS_KV_KEY_MAX], lv[LANE_VAL];
+    uint32_t lkl = 0, lvl = sizeof(lv);
+    if (!kv || !ino || !out) return EFS_ERR_INVAL;
+    memset(out, 0, sizeof(*out));
+    int rc = efs_meta_apply_get_inode(kv, ino, &row);
+    if (rc == EFS_ERR_NOT_FOUND) return EFS_ERR_STALE;
+    if (rc != EFS_OK) return rc;
+    if (row.generation != inode_gen) return EFS_ERR_STALE;
+    out->ino = ino; out->parent = row.parent; out->inode_generation = row.generation;
+    out->mode = row.mode; out->nlink = row.nlink; out->active_lanes = row.active_lanes;
+    memset(&lane, 0, sizeof(lane));
+    rc = efs_kv_key_lane(efs_kv_lane_shard(ino, 0), ino, row.generation, 0, lk, &lkl);
+    if (rc == EFS_OK) rc = efs_kv_get(kv, lk, lkl, lv, &lvl);
+    if (rc == EFS_OK) rc = unpack_lane(lv, lvl, &lane);
+    if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND) return rc;
+    out->size = max_u64(row.base_size, lane.max_end);
+    out->mtime = max_u64(row.base_mtime, lane.max_mtime);
+    uint8_t key[EFS_KV_KEY_MAX], val[CHUNK_VAL_MAX];
+    uint32_t kl = 0, vl = sizeof(val);
+    rc = pack_chunk_key(ino, row.generation, key, &kl);
+    if (rc == EFS_OK) rc = kv_get_copy(kv, key, kl, val, sizeof(val), &vl);
+    if (rc == EFS_ERR_NOT_FOUND) return EFS_ERR_STALE;
+    if (rc == EFS_OK) rc = unpack_chunk(val, vl, &out->base);
+    if (rc == EFS_OK) rc = efs_pack_chunk_identity(&out->base, ino, row.generation, 0);
+    if (rc != EFS_OK) return rc;
+    efs_hash(val, vl, out->source_digest);
+    out->content_epoch = pack_row_epoch(val, vl, &out->base);
+    out->ndelta = trailer_n(val, vl);
+    if (out->ndelta > EFS_CHUNK_DELTA_MAX) return EFS_ERR_PROTO;
+    for (uint32_t i = 0; i < out->ndelta; i++) {
+        rc = trailer_at(val, vl, i, &out->deltas[i]);
+        if (rc != EFS_OK) return rc;
+    }
+    return EFS_OK;
+}
+
+int efs_meta_apply_pack_unindex(struct efs_kv *kv, uint32_t group, const uint64_t *epochs,
+                                const efs_ino_t *inos, uint32_t n)
+{
+    uint32_t anchor = efs_pack_group_anchor(group);
+    if (!kv || !anchor || (n && (!epochs || !inos)) || n > EFS_PACK_UNINDEX_MAX) return EFS_ERR_INVAL;
+    for (uint32_t i = 0; i < n; i++) {
+        uint8_t key[EFS_PACK_CANDIDATE_KEY_BYTES];
+        int rc = efs_pack_candidate_key(anchor, epochs[i], inos[i], key);
+        if (rc == EFS_OK) rc = meta_write_del(kv, key, sizeof(key));
+        if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND) return rc;
+    }
+    return EFS_OK;
 }

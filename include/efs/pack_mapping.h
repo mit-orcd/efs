@@ -2,6 +2,7 @@
 #define EFS_PACK_MAPPING_H
 #include "efs/pack_ledger.h"
 #include "efs/meta_apply.h"
+#include "efs/metadata.h"
 
 /* W125 packed-segment object and mapping planner.
  *
@@ -101,12 +102,44 @@ int efs_meta_apply_pack_cancel(struct efs_kv *, uint32_t group, uint64_t id, uin
 int efs_meta_apply_pack_retire(struct efs_kv *, uint32_t group, const uint64_t *ids,
                                const uint64_t *gens, uint32_t n, uint32_t *retired);
 
+/* Packing candidates. A publication of chunk zero that leaves a file of at
+ * most EFS_PACK_THRESHOLD bytes records the file in its group's candidate
+ * index, in the same batch: key [anchor:2][kind:1][epoch:8][ino:8], value
+ * [inode generation:8], epoch = leader time / EFS_PACK_EPOCH_S. Iterating
+ * the index visits files by creation epoch, which the packer then groups
+ * by directory. Entries are hints: the packer re-validates each file and
+ * UNINDEX removes packed, stale and refused ones. The epoch length is part
+ * of the key format, never a runtime setting. */
+#define EFS_PACK_THRESHOLD 16384u
+#define EFS_PACK_EPOCH_S 600u
+#define EFS_PACK_CANDIDATE_KEY_BYTES 19u
+#define EFS_PACK_UNINDEX_MAX 512u
+int efs_pack_candidate_key(uint32_t anchor, uint64_t epoch, efs_ino_t ino,
+    uint8_t out[EFS_PACK_CANDIDATE_KEY_BYTES]);
+/* A candidate as the packer sees it on its local replica (not authority:
+ * the switch re-checks the exact source). STALE when the generation does
+ * not match or the inode is gone. */
+struct efs_pack_candidate {
+    efs_ino_t ino, parent;
+    uint64_t inode_generation, size, mtime, content_epoch;
+    uint32_t mode, nlink, ndelta;
+    uint64_t active_lanes;
+    struct efs_meta_chunk base;
+    struct efs_meta_delta deltas[EFS_CHUNK_DELTA_MAX]; /* ndelta spans, apply order */
+    uint8_t source_digest[EFS_HASH_SIZE];
+};
+int efs_meta_pack_candidate(struct efs_kv *, efs_ino_t ino, uint64_t inode_generation,
+    struct efs_pack_candidate *);
+int efs_meta_apply_pack_unindex(struct efs_kv *, uint32_t group, const uint64_t *epochs,
+    const efs_ino_t *inos, uint32_t n);
+
 /* Raft command payloads, after the command byte:
  *   ADMIT  [group:1][object]
  *   SWITCH [group:1][id:8][generation:8][count:2] then count members of
  *          [ino:8][inode generation:8][source digest:32][reference:96]
  *   CANCEL [group:1][id:8][generation:8]
- *   RETIRE [group:1][count:2] then count [id:8][generation:8] */
+ *   RETIRE [group:1][count:2] then count [id:8][generation:8]
+ *   UNINDEX [group:1][count:2] then count [epoch:8][ino:8] */
 int efs_pack_switch_encode(const struct efs_pack_switch *, uint8_t *, size_t, size_t *);
 int efs_pack_switch_decode(const uint8_t *, size_t, struct efs_pack_switch *);
 #endif
