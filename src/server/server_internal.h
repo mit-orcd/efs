@@ -589,6 +589,10 @@ struct efs_packer_status {
              busy_passes, budget_waits, compacted, backfilled;
 };
 void server_packer_status(struct efs_packer_status *out);
+/* efs-mgmt pack-compact: queue `segments` output segments of compaction on
+ * each group this node leads (run even while busy: an operator request)
+ * and report the fragmentation summary. */
+void server_packer_compact_request(const struct efs_msg_pack_compact *req, struct efs_msg_pack_compact_reply *out);
 /* Crash injection points (no-op unless built with EFS_FAULTS=1). */
 void server_pack_crash_point(const char *point);
 

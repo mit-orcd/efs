@@ -828,6 +828,67 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
     return 0;
 }
 
+/* W125: compaction now, on every node (each applies it to the metadata
+ * groups it leads); segments 0 = report the fragmentation summary only. */
+static int cmd_pack_compact(int argc, char **argv)
+{
+    char host[64];
+    uint16_t port;
+    if (argc < 1 || argc > 2 || parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Usage:\n  efs-mgmt pack-compact <node:port> [segments]   (default 64; 0 = summary only)\n");
+        return 1;
+    }
+    struct efs_msg_pack_compact req = {.segments = argc == 2 ? (uint32_t)strtoul(argv[1], NULL, 10) : 64u};
+    int fd = efs_connect_tcp(host, port);
+    if (fd < 0) { fprintf(stderr, "Cannot connect to %s:%u\n", host, port); return 1; }
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    uint8_t type = 0;
+    void *payload = NULL;
+    uint32_t len = 0;
+    int rc = send_recv(fd, EFS_MSG_LIST_NODES, NULL, 0, &type, &payload, &len);
+    close(fd);
+    if (rc || type != EFS_MSG_LIST_NODES_REPLY || len != sizeof(struct efs_msg_list_nodes_reply)) {
+        fprintf(stderr, "Failed to get node list\n");
+        free(payload);
+        return 1;
+    }
+    struct efs_msg_list_nodes_reply *list = payload;
+    uint32_t led = 0;
+    for (uint32_t i = 0; i < list->node_count; i++) {
+        const struct efs_node *n = &list->nodes[i];
+        int nfd = efs_connect_tcp(n->addr, n->port);
+        void *r = NULL;
+        uint32_t rl = 0;
+        uint8_t rt = 0;
+        if (nfd < 0) { printf("node %u %s:%u: unreachable\n", n->id, n->addr, n->port); continue; }
+        efs_set_recv_timeout(nfd, EFS_IO_TIMEOUT_MS);
+        rc = send_recv(nfd, EFS_MSG_PACK_COMPACT, &req, sizeof(req), &rt, &r, &rl);
+        close(nfd);
+        if (rc || rt != EFS_MSG_PACK_COMPACT_REPLY || rl != sizeof(struct efs_msg_pack_compact_reply)) {
+            printf("node %u %s:%u: no pack-compact reply (server upgrade may be required)\n", n->id, n->addr, n->port);
+            free(r);
+            continue;
+        }
+        const struct efs_msg_pack_compact_reply *x = r;
+        if (x->led_groups) {
+            led |= x->led_groups;
+            printf("node %u %s:%u: leads group(s)%s%s, %s %u segments; segments=%llu live=%llu KiB dead=%llu KiB "
+                   "holed=%llu underfilled=%llu compacted_total=%llu\n", n->id, n->addr, n->port,
+                   x->led_groups & 1 ? " 0" : "", x->led_groups & 2 ? " 2" : "",
+                   req.segments ? "queued" : "summary only,", req.segments,
+                   (unsigned long long)x->segments, (unsigned long long)(x->live_bytes >> 10),
+                   (unsigned long long)(x->dead_bytes >> 10), (unsigned long long)x->holes,
+                   (unsigned long long)x->small, (unsigned long long)x->compacted_total);
+        } else {
+            printf("node %u %s:%u: leads no group\n", n->id, n->addr, n->port);
+        }
+        free(r);
+    }
+    free(payload);
+    if (led != 3) fprintf(stderr, "warning: not every group's leader answered (led mask %u)\n", led);
+    return led ? 0 : 1;
+}
+
 static int cmd_gc_status(int argc,char **argv) {return cmd_gc_status_mode(argc,argv,0);}
 static int cmd_expiry_status(int argc,char **argv) {return cmd_gc_status_mode(argc,argv,1);}
 
@@ -3024,6 +3085,8 @@ int main(int argc, char **argv)
     /* One metadata engine: mkfs is the raft mkfs. */
     if (strcmp(cmd, "mkfs") == 0)
         return cmd_raft_mkfs(argc - 2, argv + 2);
+    if (strcmp(cmd, "pack-compact") == 0)
+        return cmd_pack_compact(argc - 2, argv + 2);
     if (strcmp(cmd, "gc-status") == 0)
         return cmd_gc_status(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-status") == 0)

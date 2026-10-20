@@ -216,6 +216,22 @@ enum efs_msg_type {
      * reads chunk maps or segments. */
     EFS_MSG_CLIENT_HELLO = 165,
     EFS_MSG_CLIENT_HELLO_REPLY = 166,
+    /* W125: request scheduled-maintenance compaction now (efs-mgmt
+     * pack-compact); segments = 0 only reports the fragmentation summary. */
+    EFS_MSG_PACK_COMPACT = 167,
+    EFS_MSG_PACK_COMPACT_REPLY = 168,
+};
+
+struct efs_msg_pack_compact {
+    uint32_t segments; /* output segments to build per led group; 0 = report only */
+    uint32_t reserved;
+};
+struct efs_msg_pack_compact_reply {
+    int32_t rc;
+    uint32_t led_groups;      /* metadata groups this node leads (bit per group index) */
+    uint64_t compacted_total; /* records moved by compaction since start */
+    /* Last fragmentation summary of the led groups (summed). */
+    uint64_t segments, live_bytes, dead_bytes, holes, small;
 };
 
 /* W125 connection handshake. A connection must declare a compatible

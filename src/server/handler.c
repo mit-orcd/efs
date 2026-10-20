@@ -679,6 +679,13 @@ send_reply:
             efs_conn_send_msg(conn,EFS_MSG_STORAGE_SESSION_FENCE_REPLY,&reply,sizeof(reply));
             break;
         }
+        case EFS_MSG_PACK_COMPACT: {
+            struct efs_msg_pack_compact_reply rep = {.rc = EFS_ERR_INVAL};
+            if (payload_len == sizeof(struct efs_msg_pack_compact))
+                server_packer_compact_request(payload, &rep);
+            efs_conn_send_msg(conn, EFS_MSG_PACK_COMPACT_REPLY, &rep, sizeof(rep));
+            break;
+        }
         case EFS_MSG_GC_STATUS: {
             struct efs_msg_gc_status_reply rep;
             server_gc_status(g_server, &rep);

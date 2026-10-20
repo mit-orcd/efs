@@ -89,6 +89,8 @@ static struct {
         uint64_t backlog, count_ns; /* candidate-index entries, when last counted */
         uint64_t fsum_ns;           /* last fragmentation summary */
         uint64_t idle_since_ns, compact_batch_ns; /* compaction schedule */
+        uint32_t compact_req;                     /* efs-mgmt pack-compact: segments queued */
+        uint64_t fs_segs, fs_live, fs_dead, fs_holes, fs_small; /* last summary */
         double pressure, used_frac;
         int busy;
     } g[2];
@@ -966,7 +968,13 @@ static int pk_group(uint8_t group, uint64_t term)
     if (pk_now_ns() >= pk.g[pk_gi(group)].fsum_ns + PK_COUNT_NS) {
         struct pk_fsum *fs = calloc(1, sizeof(*fs));
         uint8_t sp[3] = {(uint8_t)(anchor >> 8), (uint8_t)anchor, EFS_KV_KIND_PACK_SEGMENT};
-        if (fs && efs_kv_scan_prefix(kv, sp, 3, pk_fsum_cb, fs) >= 0)
+        if (fs && efs_kv_scan_prefix(kv, sp, 3, pk_fsum_cb, fs) >= 0) {
+            struct pk_fsum *o = fs;
+            pthread_mutex_lock(&pk.mu);
+            pk.g[pk_gi(group)].fs_segs = o->segs; pk.g[pk_gi(group)].fs_live = o->live;
+            pk.g[pk_gi(group)].fs_dead = o->dead; pk.g[pk_gi(group)].fs_holes = o->holes;
+            pk.g[pk_gi(group)].fs_small = o->small;
+            pthread_mutex_unlock(&pk.mu);
             fprintf(stderr, "packer: segments group=%u active=%llu total_kib=%llu live_kib=%llu dead_kib=%llu "
                     "holes=%llu small=%llu backlog=%llu compacted_total=%llu\n", group,
                     (unsigned long long)fs->segs, (unsigned long long)(fs->total >> 10),
@@ -974,6 +982,7 @@ static int pk_group(uint8_t group, uint64_t term)
                     (unsigned long long)fs->holes, (unsigned long long)fs->small,
                     (unsigned long long)pk.g[pk_gi(group)].backlog,
                     (unsigned long long)__atomic_load_n(&pk.st.compacted, __ATOMIC_RELAXED));
+        }
         free(fs);
         pk.g[pk_gi(group)].fsum_ns = pk_now_ns();
     }
@@ -1079,8 +1088,18 @@ static int pk_group(uint8_t group, uint64_t term)
     {
         uint32_t want = pk_compact_due(pk.g[pk_gi(group)].busy, pk_now_ns(), &pk.g[pk_gi(group)].idle_since_ns,
                                        &pk.g[pk_gi(group)].compact_batch_ns, pk_minute_of_day());
-        for (uint32_t q = 0; q < want && !__atomic_load_n(&pk.stop, __ATOMIC_ACQUIRE); q++)
-            if (!pk_compact(kv, group, term, nodes, count)) break;
+        /* An operator request (efs-mgmt pack-compact) runs even while busy,
+         * segments_per_pass at a time until it is used up or nothing is left. */
+        uint32_t req = __atomic_load_n(&pk.g[pk_gi(group)].compact_req, __ATOMIC_ACQUIRE);
+        uint32_t manual = req < pk.segments_per_pass ? req : pk.segments_per_pass;
+        if (manual > want) want = manual;
+        uint32_t built = 0;
+        for (; built < want && !__atomic_load_n(&pk.stop, __ATOMIC_ACQUIRE); built++)
+            if (!pk_compact(kv, group, term, nodes, count)) { if (req) __atomic_store_n(&pk.g[pk_gi(group)].compact_req, 0, __ATOMIC_RELEASE); break; }
+        if (req && built) {
+            uint32_t cur = __atomic_load_n(&pk.g[pk_gi(group)].compact_req, __ATOMIC_ACQUIRE);
+            __atomic_store_n(&pk.g[pk_gi(group)].compact_req, cur > built ? cur - built : 0, __ATOMIC_RELEASE);
+        }
     }
     if (segs || ndrop)
         fprintf(stderr, "packer: group=%u term=%llu busy=%d fg_commits_per_s=%.0f lag_s=%.0f rate=%.0f pressure=%.2f unpacked_gib=%.1f used_pct=%.1f candidates=%u eligible=%u segments=%u unindexed=%u packed_total=%llu scan_ms=%llu read_ms=%llu seg_ms=%llu pass_ms=%llu\n",
@@ -1231,6 +1250,24 @@ int server_packer_start(struct efsd_server *s)
             pk.compact_daily_start / 60, pk.compact_daily_start % 60, pk.compact_daily_min,
             (unsigned long long)(pk.compact_cold_ns / 1000000000ull));
     return 0;
+}
+
+void server_packer_compact_request(const struct efs_msg_pack_compact *req, struct efs_msg_pack_compact_reply *out)
+{
+    static const uint8_t groups[2] = {EFS_RAFT_GROUP_SHARD, EFS_RAFT_GROUP_SHARD2};
+    memset(out, 0, sizeof(*out));
+    out->rc = EFS_OK;
+    out->compacted_total = __atomic_load_n(&pk.st.compacted, __ATOMIC_RELAXED);
+    for (int g = 0; g < 2; g++) {
+        uint64_t term = 0;
+        if (!pk.started || !server_raft_host_pack_leader(groups[g], &term, NULL)) continue;
+        out->led_groups |= 1u << g;
+        if (req->segments) __atomic_store_n(&pk.g[g].compact_req, req->segments, __ATOMIC_RELEASE);
+        pthread_mutex_lock(&pk.mu);
+        out->segments += pk.g[g].fs_segs; out->live_bytes += pk.g[g].fs_live;
+        out->dead_bytes += pk.g[g].fs_dead; out->holes += pk.g[g].fs_holes; out->small += pk.g[g].fs_small;
+        pthread_mutex_unlock(&pk.mu);
+    }
 }
 
 void server_packer_stop(void)
