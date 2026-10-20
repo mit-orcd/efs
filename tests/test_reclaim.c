@@ -433,6 +433,24 @@ static int seg_file(uint64_t id)
 {
     char p[8192]; server_segment_path(&S, 0, id, 1, 0, p, sizeof(p)); return !access(p, F_OK);
 }
+/* A full quota must not stop packing: a segment PUT may use the reserve
+ * above it (it frees the per-file fragments it replaces); beyond the
+ * reserve it is refused. */
+static void t_segment_quota(void)
+{
+    boot();
+    uint64_t q = S.quota, r = sg_quota_reserve(q);
+    assert(r >= (16ull << 20) && r <= (256ull << 20));
+    pthread_mutex_lock(&S.lock); S.nodes[0].used = q; pthread_mutex_unlock(&S.lock);
+    seg_setup(0x5e60101);
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_OK);
+    assert(used() == q + 8192);
+    pthread_mutex_lock(&S.lock); S.nodes[0].used = q + r - 4096; pthread_mutex_unlock(&S.lock);
+    seg_setup(0x5e60102);
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_ERR_QUOTA);
+    assert(used() == q + r - 4096);
+    pthread_mutex_lock(&S.lock); S.nodes[0].used = 0; pthread_mutex_unlock(&S.lock);
+}
 static void t_segment(void)
 {
     boot();
@@ -638,6 +656,7 @@ int main(void)
     run("superseded fragments",t_superseded,0);
     run("superseded crash after accept",t_superseded_crash,1);
     run("superseded record replays",t_superseded_replay,0);
+    run("segment PUT at a full quota uses the reserve",t_segment_quota,0);
     snprintf(cmd,sizeof(cmd),"rm -rf %s %s",roots[0],roots[1]);(void)system(cmd);
     printf("reclaim journal: PASS\n");
     return 0;

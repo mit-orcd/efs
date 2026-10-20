@@ -1,27 +1,30 @@
 #!/usr/bin/env python3
-"""Packer busy rate follows the lag: floor up to the target, linear to the idle rate over one span."""
+"""Packer busy rate: the floor until space pressure (unpacked bytes or quota usage), then linear to the idle rate."""
 from pathlib import Path
 import os,subprocess,tempfile
 root=Path(__file__).resolve().parents[1];s=(root/'src/server/packer.c').read_text()
-a=s.index('static double pk_busy_rate(uint64_t lag_ns)');b=s.index('\n}\n',a)+3
-assert 'pk_busy_rate(pk.g[g].lag_ns)' in s, 'busy accrual must use the lag-controlled rate'
-assert 'pk.g[pk_gi(group)].lag_ns =' in s, 'the scan must record the lag'
+a=s.index('static double pk_pressure(');b=s.index('/* Highest quota usage',a)
+assert 'pk_busy_rate(pk.g[g].pressure)' in s, 'busy accrual must use the pressure-controlled rate'
+assert 'pk.g[0].backlog + pk.g[1].backlog' in s, 'unpacked bytes must cover both groups'
+assert 'EFS_PACK_LAG_TARGET_MS' not in s, 'the lag-controlled ramp is replaced'
 code=r'''
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
-static struct { double idle_rate, busy_rate; uint64_t lag_target_ns, lag_span_ns; } pk;
+static struct { double idle_rate, busy_rate; uint64_t unpacked_start; double space_start, space_full; } pk;
 '''+s[a:b]+r'''
-#define S 1000000000ull
+#define G (1ull<<30)
 int main(void){
- pk.idle_rate=5000;pk.busy_rate=50;pk.lag_target_ns=60*S;pk.lag_span_ns=300*S;
- assert(pk_busy_rate(0)==50);assert(pk_busy_rate(60*S)==50);
- assert(pk_busy_rate(210*S)==2525);           /* half a span: halfway */
- assert(pk_busy_rate(360*S)==5000);assert(pk_busy_rate(3600*S)==5000); /* capped */
- double prev=0;for(uint64_t l=0;l<400*S;l+=S){double r=pk_busy_rate(l);assert(r>=prev&&r>=50&&r<=5000);prev=r;}
- pk.busy_rate=6000;assert(pk_busy_rate(3600*S)==6000); /* busy above idle: never lowered */
- pk.busy_rate=50;pk.lag_target_ns=0;assert(pk_busy_rate(1)>50); /* target 0: ramps at once */
- puts("pack budget: lag-controlled busy rate, floor, linear ramp, cap and monotonicity PASS");return 0;}
+ pk.idle_rate=5000;pk.busy_rate=50;pk.unpacked_start=64*G;pk.space_start=.5;pk.space_full=.8;
+ assert(pk_pressure(0,0)==0);assert(pk_pressure(64*G,.5)==0);            /* at the starts: no pressure */
+ assert(pk_pressure(96*G,0)==.5);assert(pk_pressure(128*G,0)==1);assert(pk_pressure(900*G,0)==1);
+ double p=pk_pressure(0,.65);assert(p>.49&&p<.51);assert(pk_pressure(0,.95)==1);
+ assert(pk_pressure(96*G,.8)==1);                                       /* the larger signal wins */
+ assert(pk_busy_rate(0)==50);assert(pk_busy_rate(1)==5000);assert(pk_busy_rate(.5)==2525);
+ double prev=-1;for(uint64_t u=0;u<200*G;u+=G){double q=pk_pressure(u,.3);assert(q>=prev&&q>=0&&q<=1);prev=q;}
+ pk.busy_rate=6000;assert(pk_busy_rate(0)==6000);                       /* busy above idle: never lowered */
+ pk.space_start=.8;pk.space_full=.8;assert(pk_pressure(0,.79)==0&&pk_pressure(0,.8)==1);
+ puts("pack budget: floor until space pressure, unpacked-bytes and quota signals, linear ramp, cap and monotonicity PASS");return 0;}
 '''
 with tempfile.TemporaryDirectory(prefix='efs-pack-budget-') as d:
     c=os.path.join(d,'t.c');x=os.path.join(d,'t');open(c,'w').write(code)

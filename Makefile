@@ -188,6 +188,7 @@ test-report-pressure:
 	python3 tests/test_conn_checkout_budget.py
 	python3 tests/test_node_reprobe.py
 	python3 tests/test_pack_budget.py
+	python3 tests/test_pack_compact_schedule.py
 	python3 tests/test_net_receive_deadline.py
 	python3 tests/test_small_frame_receive.py
 	python3 tests/test_net_send_deadline.py

@@ -29,18 +29,23 @@
  * either group makes packing in both yield. A segment is built only when
  * the bucket holds its file count, so segments stay full.
  *
- * The busy rate follows the packer's lag: how long the oldest eligible
- * candidate has waited beyond the minimum age. Up to the lag target the
- * packer yields at the busy floor; beyond it the busy rate rises linearly
- * and reaches the idle rate one lag span later. A sustained writer thus
- * settles where packing keeps pace with it, with a bounded backlog of
- * unpacked files, while short bursts are packed after they end.
+ * While busy the packer yields at the busy floor and catches up when the
+ * cluster is idle: packing at a saturating writer's pace costs that writer
+ * about a third of its throughput (2026-10-20 A/B). It ramps up only under
+ * space pressure, the larger of two signals, each 0 below its start and 1
+ * at its full point: unpacked bytes per node (each unpacked small file
+ * holds one EFS_FRAGMENT_SIZE fragment on each node; the group's candidate
+ * index is counted every PK_COUNT_NS) from EFS_PACK_UNPACKED_GIB to twice
+ * that, and quota usage of the group's voters from EFS_PACK_SPACE_START_PCT
+ * to EFS_PACK_SPACE_FULL_PCT. The busy rate is floor + (idle - floor) *
+ * pressure.
  *
  * Tunables (environment, read at start): EFS_PACK_MIN_AGE_MS (default
  * 60000), EFS_PACK_INTERVAL_MS (1000), EFS_PACK_SEGMENTS_PER_PASS (8),
  * EFS_PACK_FILES_PER_S (5000), EFS_PACK_BUSY_FILES_PER_S (50),
- * EFS_PACK_BUSY_COMMITS_PER_S (100), EFS_PACK_LAG_TARGET_MS (60000),
- * EFS_PACK_LAG_SPAN_MS (300000), EFS_PACK_BACKFILL_SHARDS (64 inode
+ * EFS_PACK_BUSY_COMMITS_PER_S (100), EFS_PACK_UNPACKED_GIB (64),
+ * EFS_PACK_SPACE_START_PCT (50), EFS_PACK_SPACE_FULL_PCT (80),
+ * EFS_PACK_BACKFILL_SHARDS (64 inode
  * shards scanned per pass until the group's backfill is done). None of
  * them turns the packer off:
  * rates and counts below 1 are raised to 1 (the minimum age may be 0 for
@@ -71,13 +76,20 @@ static struct {
     uint64_t min_age_ns, interval_ms;
     uint32_t segments_per_pass;
     double idle_rate, busy_rate, busy_commits;
-    uint64_t lag_target_ns, lag_span_ns;
+    uint64_t unpacked_start; /* bytes per node */
+    uint64_t compact_idle_ns, compact_cold_ns;
+    uint32_t compact_idle_segs, compact_daily_start, compact_daily_min; /* minutes, UTC */
+    double space_start, space_full; /* quota fractions */
     uint32_t backfill_shards;
     struct {
         uint64_t last_commit, last_ns, own;
         uint64_t backoff_until_ns; /* after a failed copy: leave the members alone */
         double tokens, fg_rate, rate;
         uint64_t lag_ns; /* oldest eligible candidate's wait beyond the minimum age */
+        uint64_t backlog, count_ns; /* candidate-index entries, when last counted */
+        uint64_t fsum_ns;           /* last fragmentation summary */
+        uint64_t idle_since_ns, compact_batch_ns; /* compaction schedule */
+        double pressure, used_frac;
         int busy;
     } g[2];
     struct efs_packer_status st;
@@ -198,6 +210,15 @@ static int pk_scan_cb(void *u, const uint8_t *k, uint32_t kl, const uint8_t *v, 
     if (rd64(k + 3) == EFS_PACK_CURSOR_EPOCH) return 0; /* backfill cursor */
     sc->e[sc->n++] = (struct pk_entry){rd64(k + 3), rd64(k + 11), rd64(v)};
     return sc->n == PK_SCAN_MAX;
+}
+#define PK_COUNT_NS (30ull * 1000000000ull)
+static int pk_count_cb(void *u, const uint8_t *k, uint32_t kl, const uint8_t *v, uint32_t vl)
+{
+    (void)v; (void)vl;
+    if (kl == EFS_PACK_CANDIDATE_KEY_BYTES && k[2] == EFS_KV_KIND_PACK_CANDIDATE &&
+        rd64(k + 3) != EFS_PACK_CURSOR_EPOCH)
+        (*(uint64_t *)u)++;
+    return 0;
 }
 struct pk_file {
     struct efs_pack_candidate c;
@@ -552,13 +573,31 @@ out:
 
 /* ---- compaction: copy survivors of mostly-dead segments forward ---- */
 #define PK_COMPACT_MAX 64u
-#define PK_DEAD_LIMIT (32u * 1024u)   /* dead payload that alone makes a candidate */
 #define PK_SMALL_BYTES (8u * 1024u)   /* underfilled: merged with other small ones */
 struct pk_seg {
     struct efs_pack_object o;
     double score;
+    int holes;
 };
-struct pk_cscan { struct pk_seg *s; uint32_t n, small; struct efs_pack_object tmp; };
+/* Compaction priority, higher first: favour tiny holes (a high live
+ * fraction) and cold segments (compacted output, or older than the cold
+ * age; segment ids carry their creation time, modulo 2^56 ns). A cluster
+ * left idle long enough compacts every holed segment in this order. */
+static double pk_compact_priority(uint64_t live_bytes, uint64_t total_bytes, uint64_t age_ns, int cold_flag)
+{
+    double live = total_bytes ? (double)live_bytes / (double)total_bytes : 0;
+    double cold = cold_flag || !pk.compact_cold_ns ? 1.0 : (double)age_ns / (double)pk.compact_cold_ns;
+    if (cold > 1.0) cold = 1.0;
+    return 0.5 * live + 0.5 * cold;
+}
+static uint64_t pk_segment_age_ns(uint64_t segment_id, uint64_t now_ns)
+{
+    const uint64_t m = (1ull << 56) - 1;
+    return ((now_ns & m) - (segment_id >> 8)) & m;
+}
+/* The whole index is scanned; the PK_COMPACT_MAX best candidates are kept:
+ * every segment with a hole, and underfilled ones (merged together). */
+struct pk_cscan { struct pk_seg *s; uint32_t n, small; uint64_t now; struct efs_pack_object tmp; };
 static int pk_cscan_cb(void *u, const uint8_t *k, uint32_t kl, const uint8_t *v, uint32_t vl)
 {
     struct pk_cscan *c = u;
@@ -567,14 +606,45 @@ static int pk_cscan_cb(void *u, const uint8_t *k, uint32_t kl, const uint8_t *v,
     struct efs_pack_ledger_usage u2;
     efs_pack_ledger_usage(&c->tmp.ledger, &u2);
     if (u2.pending || !u2.live) return 0;
-    int holes = u2.live_bytes * 2 < u2.total_bytes || u2.dead_bytes >= PK_DEAD_LIMIT;
+    int holes = u2.dead_bytes > 0;
     int small = u2.live_bytes < PK_SMALL_BYTES;
     if (!holes && !small) return 0;
-    c->s[c->n].o = c->tmp;
-    /* Most dead space per byte copied first; small ones after holes. */
-    c->s[c->n].score = holes ? (double)u2.dead_bytes / (double)(u2.live_bytes ? u2.live_bytes : 1) : -1.0;
+    double score = pk_compact_priority(u2.live_bytes, u2.total_bytes,
+                                       pk_segment_age_ns(c->tmp.ledger.segment_id, c->now),
+                                       (c->tmp.ledger.flags & EFS_PACK_LEDGER_F_COLD) != 0);
+    uint32_t at = c->n;
+    if (c->n == PK_COMPACT_MAX) { /* replace the weakest kept candidate */
+        at = 0;
+        for (uint32_t i = 1; i < c->n; i++) if (c->s[i].score < c->s[at].score) at = i;
+        if (c->s[at].score >= score) return 0;
+        c->small -= !c->s[at].holes;
+    } else {
+        c->n++;
+    }
+    c->s[at].o = c->tmp;
+    c->s[at].score = score;
+    c->s[at].holes = holes;
     c->small += !holes;
-    return ++c->n == PK_COMPACT_MAX;
+    return 0;
+}
+/* Fragmentation summary over a group's active segments, logged with the
+ * backlog count: how much of the packed bytes are dead, and how many
+ * segments compaction would take (holes) or merge (small). */
+struct pk_fsum { uint64_t segs, live, dead, total, holes, small; struct efs_pack_object tmp; };
+static int pk_fsum_cb(void *u, const uint8_t *k, uint32_t kl, const uint8_t *v, uint32_t vl)
+{
+    struct pk_fsum *f = u;
+    if (kl != EFS_PACK_OBJECT_KEY_BYTES || k[2] != EFS_KV_KIND_PACK_SEGMENT) return 0;
+    if (efs_pack_object_decode(v, vl, &f->tmp) != EFS_OK || f->tmp.ledger.phase != EFS_PACK_ACTIVE) return 0;
+    struct efs_pack_ledger_usage u2;
+    efs_pack_ledger_usage(&f->tmp.ledger, &u2);
+    f->segs++;
+    f->live += u2.live_bytes;
+    f->dead += u2.dead_bytes;
+    f->total += u2.total_bytes;
+    if (u2.live && u2.dead_bytes) f->holes++;
+    else if (u2.live && u2.live_bytes < PK_SMALL_BYTES) f->small++;
+    return 0;
 }
 static int pk_seg_cmp(const void *a, const void *b)
 {
@@ -643,11 +713,13 @@ static int pk_read_segment(const struct efs_node *nodes, uint32_t count, const s
     free(buf);
     return rc;
 }
-static void pk_compact(struct efs_kv *kv, uint8_t group, uint64_t term,
-                       const struct efs_node *nodes, uint32_t count)
+static uint32_t pk_compact(struct efs_kv *kv, uint8_t group, uint64_t term,
+                           const struct efs_node *nodes, uint32_t count)
 {
+    uint32_t moved = 0;
     struct pk_cscan sc;
     memset(&sc, 0, sizeof(sc));
+    sc.now = pk_now_ns();
     sc.s = calloc(PK_COMPACT_MAX, sizeof(struct pk_seg));
     struct pk_file *files = calloc(EFS_PACK_MAX_RECORDS, sizeof(*files));
     uint8_t **images = calloc(PK_COMPACT_MAX, sizeof(*images));
@@ -698,21 +770,14 @@ static void pk_compact(struct efs_kv *kv, uint8_t group, uint64_t term,
         if (nfiles > before) used_segs++;
     }
     free(c);
-    /* Merging is worth a copy only if it frees at least one segment. */
     /* Worth a copy: it frees a segment with holes, or merges at least two
-     * underfilled ones. */
-    int worth = used_segs >= 2 || (used_segs == 1 && sc.s[0].score >= 0);
+     * underfilled ones. Scheduled maintenance: no packing tokens. */
+    int worth = used_segs >= 2 || (used_segs == 1 && sc.s[0].holes);
     if (nfiles && worth) {
-        if (pk.g[pk_gi(group)].tokens >= (double)nfiles) {
-            pk.g[pk_gi(group)].tokens -= (double)nfiles;
-            qsort(files, nfiles, sizeof(*files), pk_file_cmp);
-            uint32_t moved = pk_segment(group, term, nodes, count, files, nfiles, NULL, NULL,
-                                        EFS_PACK_LEDGER_F_COLD);
-            STAT_ADD(compacted, moved);
-            fprintf(stderr, "packer: compact group=%u sources=%u moved=%u/%u\n", group, used_segs, moved, nfiles);
-        } else {
-            STAT_ADD(budget_waits, 1);
-        }
+        qsort(files, nfiles, sizeof(*files), pk_file_cmp);
+        moved = pk_segment(group, term, nodes, count, files, nfiles, NULL, NULL, EFS_PACK_LEDGER_F_COLD);
+        STAT_ADD(compacted, moved);
+        fprintf(stderr, "packer: compact group=%u sources=%u moved=%u/%u\n", group, used_segs, moved, nfiles);
     }
 out:
     if (files) for (uint32_t i = 0; i < EFS_PACK_MAX_RECORDS; i++) free(files[i].data);
@@ -720,6 +785,7 @@ out:
     free(images);
     free(files);
     free(sc.s);
+    return moved;
 }
 
 /* ---- backfill: index small files written before the packer ---- */
@@ -815,6 +881,36 @@ static void *pk_job_run(void *arg)
     return NULL;
 }
 
+/* Compaction schedule: output segments to build in this pass.
+ * - Idle: once the cluster has not been busy for compact_idle_ns, a batch
+ *   of compact_idle_segs every compact_idle_ns while it stays idle (reads
+ *   are not commits, so a read-only cluster counts as idle).
+ * - Daily: inside [compact_daily_start, +compact_daily_min) UTC, a larger
+ *   batch every pass, but only while the cluster is not busy.
+ * Busy: nothing; the idle clock restarts. */
+static uint32_t pk_compact_due(int busy, uint64_t now, uint64_t *idle_since, uint64_t *last_batch,
+                               uint32_t minute_of_day)
+{
+    if (busy) { *idle_since = 0; return 0; }
+    if (!*idle_since) *idle_since = now;
+    uint32_t end = pk.compact_daily_start + pk.compact_daily_min;
+    int daily = pk.compact_daily_min &&
+                (minute_of_day >= pk.compact_daily_start ? minute_of_day < end : minute_of_day + 1440 < end);
+    if (daily) return pk.segments_per_pass;
+    if (now - *idle_since >= pk.compact_idle_ns && now - *last_batch >= pk.compact_idle_ns) {
+        *last_batch = now;
+        return pk.compact_idle_segs;
+    }
+    return 0;
+}
+static uint32_t pk_minute_of_day(void)
+{
+    time_t t = time(NULL);
+    struct tm tm;
+    gmtime_r(&t, &tm);
+    return (uint32_t)(tm.tm_hour * 60 + tm.tm_min);
+}
+
 /* One pass over a group. Returns 1 when it stopped at the per-pass segment
  * cap with eligible files and budget left, so the caller does not sleep. */
 static int pk_group(uint8_t group, uint64_t term)
@@ -858,6 +954,29 @@ static int pk_group(uint8_t group, uint64_t term)
     uint32_t anchor = efs_pack_group_anchor(group);
     uint8_t prefix[3] = {(uint8_t)(anchor >> 8), (uint8_t)anchor, EFS_KV_KIND_PACK_CANDIDATE};
     if (efs_kv_scan_prefix(kv, prefix, 3, pk_scan_cb, &sc) < 0) goto out;
+    /* The whole index, for the unpacked-bytes signal: not every pass. */
+    if (sc.n < PK_SCAN_MAX) {
+        pk.g[pk_gi(group)].backlog = sc.n; /* the scan saw it all */
+        pk.g[pk_gi(group)].count_ns = pk_now_ns();
+    } else if (pk_now_ns() >= pk.g[pk_gi(group)].count_ns + PK_COUNT_NS) {
+        uint64_t n = 0;
+        if (efs_kv_scan_prefix(kv, prefix, 3, pk_count_cb, &n) >= 0) pk.g[pk_gi(group)].backlog = n;
+        pk.g[pk_gi(group)].count_ns = pk_now_ns();
+    }
+    if (pk_now_ns() >= pk.g[pk_gi(group)].fsum_ns + PK_COUNT_NS) {
+        struct pk_fsum *fs = calloc(1, sizeof(*fs));
+        uint8_t sp[3] = {(uint8_t)(anchor >> 8), (uint8_t)anchor, EFS_KV_KIND_PACK_SEGMENT};
+        if (fs && efs_kv_scan_prefix(kv, sp, 3, pk_fsum_cb, fs) >= 0)
+            fprintf(stderr, "packer: segments group=%u active=%llu total_kib=%llu live_kib=%llu dead_kib=%llu "
+                    "holes=%llu small=%llu backlog=%llu compacted_total=%llu\n", group,
+                    (unsigned long long)fs->segs, (unsigned long long)(fs->total >> 10),
+                    (unsigned long long)(fs->live >> 10), (unsigned long long)(fs->dead >> 10),
+                    (unsigned long long)fs->holes, (unsigned long long)fs->small,
+                    (unsigned long long)pk.g[pk_gi(group)].backlog,
+                    (unsigned long long)__atomic_load_n(&pk.st.compacted, __ATOMIC_RELAXED));
+        free(fs);
+        pk.g[pk_gi(group)].fsum_ns = pk_now_ns();
+    }
     STAT_ADD(candidates, sc.n);
     uint64_t now = pk_now_ns();
     for (uint32_t i = 0; i < sc.n; i++) {
@@ -956,12 +1075,19 @@ static int pk_group(uint8_t group, uint64_t term)
     more = i < nfiles && segs >= pk.segments_per_pass &&
            pk.g[pk_gi(group)].tokens >= (double)EFS_PACK_MAX_RECORDS / 4;
     pk_unindex(group, drop, ndrop);
-    /* Compaction runs after packing, on what the budget leaves. */
-    if (!__atomic_load_n(&pk.stop, __ATOMIC_ACQUIRE)) pk_compact(kv, group, term, nodes, count);
+    /* Compaction is scheduled maintenance, decoupled from foreground I/O. */
+    {
+        uint32_t want = pk_compact_due(pk.g[pk_gi(group)].busy, pk_now_ns(), &pk.g[pk_gi(group)].idle_since_ns,
+                                       &pk.g[pk_gi(group)].compact_batch_ns, pk_minute_of_day());
+        for (uint32_t q = 0; q < want && !__atomic_load_n(&pk.stop, __ATOMIC_ACQUIRE); q++)
+            if (!pk_compact(kv, group, term, nodes, count)) break;
+    }
     if (segs || ndrop)
-        fprintf(stderr, "packer: group=%u term=%llu busy=%d fg_commits_per_s=%.0f lag_s=%.0f rate=%.0f candidates=%u eligible=%u segments=%u unindexed=%u packed_total=%llu scan_ms=%llu read_ms=%llu seg_ms=%llu pass_ms=%llu\n",
+        fprintf(stderr, "packer: group=%u term=%llu busy=%d fg_commits_per_s=%.0f lag_s=%.0f rate=%.0f pressure=%.2f unpacked_gib=%.1f used_pct=%.1f candidates=%u eligible=%u segments=%u unindexed=%u packed_total=%llu scan_ms=%llu read_ms=%llu seg_ms=%llu pass_ms=%llu\n",
                 group, (unsigned long long)term, pk.g[pk_gi(group)].busy, pk.g[pk_gi(group)].fg_rate,
-                (double)pk.g[pk_gi(group)].lag_ns / 1e9, pk.g[pk_gi(group)].rate,
+                (double)pk.g[pk_gi(group)].lag_ns / 1e9, pk.g[pk_gi(group)].rate, pk.g[pk_gi(group)].pressure,
+                (double)(pk.g[pk_gi(group)].backlog * (uint64_t)EFS_FRAGMENT_SIZE) / (double)(1ull << 30),
+                pk.g[pk_gi(group)].used_frac * 100.0,
                 sc.n, nfiles, segs, ndrop,
                 (unsigned long long)__atomic_load_n(&pk.st.files_packed, __ATOMIC_RELAXED),
                 (unsigned long long)((t_pass - t_scan) / 1000000ull),
@@ -975,14 +1101,40 @@ out:
     return more;
 }
 
-/* Busy rate for a lag: the floor up to the target, then linear to the idle
- * rate over one span. */
-static double pk_busy_rate(uint64_t lag_ns)
+/* Space pressure in [0, 1]: the larger of the unpacked-bytes and quota
+ * signals, each linear from its start to its full point. */
+static double pk_pressure(uint64_t unpacked_bytes, double used_frac)
 {
-    if (pk.busy_rate >= pk.idle_rate || lag_ns <= pk.lag_target_ns) return pk.busy_rate;
-    double f = (double)(lag_ns - pk.lag_target_ns) / (double)pk.lag_span_ns;
-    if (f > 1.0) f = 1.0;
-    return pk.busy_rate + (pk.idle_rate - pk.busy_rate) * f;
+    double pb = 0, ps = 0;
+    if (pk.unpacked_start && unpacked_bytes > pk.unpacked_start)
+        pb = (double)(unpacked_bytes - pk.unpacked_start) / (double)pk.unpacked_start;
+    if (pk.space_full > pk.space_start && used_frac > pk.space_start)
+        ps = (used_frac - pk.space_start) / (pk.space_full - pk.space_start);
+    else if (pk.space_full <= pk.space_start && used_frac >= pk.space_full)
+        ps = 1;
+    double p = pb > ps ? pb : ps;
+    return p > 1 ? 1 : p < 0 ? 0 : p;
+}
+static double pk_busy_rate(double pressure)
+{
+    if (pk.busy_rate >= pk.idle_rate) return pk.busy_rate;
+    return pk.busy_rate + (pk.idle_rate - pk.busy_rate) * pressure;
+}
+/* Highest quota usage among the group's voters (the local row is exact,
+ * peers' rows come from membership gossip). */
+static double pk_used_frac(uint8_t group)
+{
+    uint32_t voters = server_raft_host_group_voters(group);
+    double m = 0;
+    pthread_mutex_lock(&pk.s->lock);
+    for (uint32_t i = 0; i < pk.s->node_count; i++) {
+        const struct efs_node *n = &pk.s->nodes[i];
+        if (!n->id || n->id > EFS_MAX_NODES || !(voters & (1u << (n->id - 1))) || !n->quota) continue;
+        double f = (double)n->used / (double)n->quota;
+        if (f > m) m = f;
+    }
+    pthread_mutex_unlock(&pk.s->lock);
+    return m;
 }
 
 static void *pk_main(void *arg)
@@ -1021,9 +1173,17 @@ static void *pk_main(void *arg)
         for (int g = 0; g < 2; g++) {
             uint64_t term = 0;
             pk.g[g].busy = busy;
-            if (!server_raft_host_pack_leader(groups[g], &term, NULL)) continue;
+            if (!server_raft_host_pack_leader(groups[g], &term, NULL)) {
+                pk.g[g].backlog = 0; /* counted by that group's leader */
+                pk.g[g].count_ns = 0;
+                continue;
+            }
             if (measured) {
-                double rate = busy ? pk_busy_rate(pk.g[g].lag_ns) : pk.idle_rate;
+                pk.g[g].used_frac = pk_used_frac(groups[g]);
+                /* Both groups' unpacked files occupy the same nodes. */
+                pk.g[g].pressure = pk_pressure((pk.g[0].backlog + pk.g[1].backlog) * (uint64_t)EFS_FRAGMENT_SIZE,
+                                               pk.g[g].used_frac);
+                double rate = busy ? pk_busy_rate(pk.g[g].pressure) : pk.idle_rate;
                 pk.g[g].rate = rate;
                 double cap = rate * 2.0 > 2.0 * EFS_PACK_MAX_RECORDS ? rate * 2.0 : 2.0 * EFS_PACK_MAX_RECORDS;
                 pk.g[g].tokens += rate * dt;
@@ -1049,16 +1209,27 @@ int server_packer_start(struct efsd_server *s)
     pk.idle_rate = (double)env_u64("EFS_PACK_FILES_PER_S", 5000, 1);
     pk.busy_rate = (double)env_u64("EFS_PACK_BUSY_FILES_PER_S", 50, 1);
     pk.busy_commits = (double)env_u64("EFS_PACK_BUSY_COMMITS_PER_S", 100, 1);
-    pk.lag_target_ns = env_u64("EFS_PACK_LAG_TARGET_MS", 60000, 0) * 1000000ull;
-    pk.lag_span_ns = env_u64("EFS_PACK_LAG_SPAN_MS", 300000, 1) * 1000000ull;
+    pk.unpacked_start = env_u64("EFS_PACK_UNPACKED_GIB", 64, 1) << 30;
+    pk.space_start = (double)env_u64("EFS_PACK_SPACE_START_PCT", 50, 0) / 100.0;
+    pk.space_full = (double)env_u64("EFS_PACK_SPACE_FULL_PCT", 80, 0) / 100.0;
+    pk.compact_idle_ns = env_u64("EFS_PACK_COMPACT_IDLE_S", 60, 1) * 1000000000ull;
+    pk.compact_idle_segs = (uint32_t)env_u64("EFS_PACK_COMPACT_IDLE_SEGS", 8, 1);
+    pk.compact_daily_start = (uint32_t)env_u64("EFS_PACK_COMPACT_DAILY_START_MIN", 180, 0) % 1440;
+    pk.compact_daily_min = (uint32_t)env_u64("EFS_PACK_COMPACT_DAILY_MIN", 120, 1);
+    if (pk.compact_daily_min > 1440) pk.compact_daily_min = 1440;
+    pk.compact_cold_ns = env_u64("EFS_PACK_COMPACT_COLD_S", 86400, 1) * 1000000000ull;
     pk.backfill_shards = (uint32_t)env_u64("EFS_PACK_BACKFILL_SHARDS", 64, 1);
     if (pthread_create(&pk.tid, NULL, pk_main, NULL)) return -1;
     pk.started = 1;
     fprintf(stderr, "packer: started min_age_ms=%llu interval_ms=%llu segments_per_pass=%u "
-            "files_per_s=%.0f busy_files_per_s=%.0f busy_commits_per_s=%.0f lag_target_ms=%llu lag_span_ms=%llu\n",
+            "files_per_s=%.0f busy_files_per_s=%.0f busy_commits_per_s=%.0f unpacked_gib=%llu space_pct=%.0f-%.0f "
+            "compact_idle_s=%llu compact_idle_segs=%u compact_daily=%02u:%02u+%umin compact_cold_s=%llu\n",
             (unsigned long long)(pk.min_age_ns / 1000000ull), (unsigned long long)pk.interval_ms,
             pk.segments_per_pass, pk.idle_rate, pk.busy_rate, pk.busy_commits,
-            (unsigned long long)(pk.lag_target_ns / 1000000ull), (unsigned long long)(pk.lag_span_ns / 1000000ull));
+            (unsigned long long)(pk.unpacked_start >> 30), pk.space_start * 100, pk.space_full * 100,
+            (unsigned long long)(pk.compact_idle_ns / 1000000000ull), pk.compact_idle_segs,
+            pk.compact_daily_start / 60, pk.compact_daily_start % 60, pk.compact_daily_min,
+            (unsigned long long)(pk.compact_cold_ns / 1000000000ull));
     return 0;
 }
 

@@ -1,18 +1,20 @@
 #!/bin/bash
 # w125_budget_ab.sh BASE_REL PACK_REL OUT [PORT] [REPS] [FILES]
 #
-# Sustained-writer A/B for the packer's lag-controlled busy budget, on a
+# Sustained-writer A/B for the packer's busy-time budget, on a
 # private node9901 cluster (ports PORT+1..PORT+3, default 17681-17683;
 # never orcd-mini or w100). Configurations, each on a fresh 3-daemon RDMA
 # cluster (w125_p0_cluster.sh) with the default packer settings (minimum
 # age 60 s):
 #   B  base build, no packer
-#   F  packer build, busy rate fixed at the floor (EFS_PACK_LAG_TARGET_MS=86400000)
-#   A  packer build, lag-controlled busy rate (defaults: target 60 s, span 300 s)
+#   P  packer build, defaults: busy floor until space pressure (unpacked
+#      bytes from 64 GiB per node, quota usage from 50%)
+#   T  packer build, pressure triggered early (EFS_PACK_UNPACKED_GIB=16)
 # Workload: w125_p0_capture.py, 16 workers, FILES files (default 1,200,000,
 # several minutes at ~3,000 files/s). Every 30 s during the write the
 # script records node 1's per-file fragment and segment counts (backlog);
-# after the write F and A wait until every file is packed (or 1,800 s).
+# after the write P and T wait until no per-file fragment is left on node 1
+# (or 1,800 s).
 # OUT/<cfg>/: capture CSV and rate, rates per minute
 # (w125_budget_rates.py), backlog.txt, times.txt, packer log lines.
 set -u
@@ -23,13 +25,13 @@ export LD_LIBRARY_PATH=/data1/efs/deps/libfuse/lib64
 count() { echo "$(find $RUN/n1/data/exports -type f 2>/dev/null | wc -l) $(find $RUN/n1/data/segments -type f 2>/dev/null | wc -l)"; }
 packed() { grep -h 'packed_total=' $RUN/logs/efsd-n*.log 2>/dev/null | sed 's/.*packed_total=//' | sort -n | tail -1; }
 for rep in $(seq "$REPS"); do
-for base_cfg in B F A; do
+for base_cfg in B P T; do
   cfg=$base_cfg; [ "$REPS" -gt 1 ] && cfg=$base_cfg-$rep
-  unset EFS_PACK_LAG_TARGET_MS
+  unset EFS_PACK_UNPACKED_GIB
   case $base_cfg in
     B) REL=$BASE ;;
-    F) REL=$PACK; export EFS_PACK_LAG_TARGET_MS=86400000 ;;
-    A) REL=$PACK ;;
+    P) REL=$PACK ;;
+    T) REL=$PACK; export EFS_PACK_UNPACKED_GIB=16 ;;
   esac
   mkdir -p "$OUT/$cfg"; rm -rf "$RUN"
   "$HERE/w125_p0_cluster.sh" start "$REL" "$RUN" "$PORT" > "$OUT/$cfg/start.txt" 2>&1 || { cat "$OUT/$cfg/start.txt"; exit 1; }
@@ -41,7 +43,7 @@ for base_cfg in B F A; do
   t1=$(date +%s)
   echo "end-of-write $(( t1 - t0 )) frag_seg $(count) packed $(packed)" >> "$OUT/$cfg/backlog.txt"
   if [ $base_cfg != B ]; then
-    for t in $(seq 1800); do [ "$(packed)" -ge "$FILES" ] 2>/dev/null && break; sleep 1; done
+    for t in $(seq 360); do [ "$(count | cut -d' ' -f1)" -eq 0 ] && break; sleep 5; done
   fi
   t2=$(date +%s)
   echo "drained $(( t2 - t0 )) frag_seg $(count) packed $(packed)" >> "$OUT/$cfg/backlog.txt"

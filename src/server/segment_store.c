@@ -180,6 +180,15 @@ static int sg_write(struct efsd_server *s, const char *path, const uint8_t *data
     return rc;
 }
 
+/* Segment reserve above the quota: 1/64 of it, at least 16 MiB (a pass of
+ * concurrent segment jobs) and at most 256 MiB. */
+static uint64_t sg_quota_reserve(uint64_t quota)
+{
+    uint64_t r = quota / 64;
+    if (r < (16ull << 20)) r = 16ull << 20;
+    if (r > (256ull << 20)) r = 256ull << 20;
+    return r;
+}
 int server_segment_put(struct efsd_server *s, const uint8_t *body, uint32_t bytes)
 {
     if (!s || !body || bytes < EFS_SEGMENT_PUT_HEADER) return EFS_ERR_INVAL;
@@ -217,11 +226,17 @@ int server_segment_put(struct efsd_server *s, const uint8_t *body, uint32_t byte
         pthread_rwlock_unlock(g);
         return EFS_ERR_STALE;
     }
-    /* Charge the payload like a fragment before writing it. */
+    /* Charge the payload like a fragment before writing it. A segment may
+     * use a reserve above the quota: it replaces up to 512 per-file
+     * fragments, so packing frees far more than it borrows, but at a full
+     * quota it could otherwise never write the segment that frees space
+     * (2026-10-20: unpacked files filled the quota, every PUT_SEGMENT was
+     * refused and the node stayed full). Client fragments keep the quota. */
     pthread_mutex_lock(&s->lock);
     struct efs_node *ln = server_local_node(s);
+    uint64_t limit = s->quota ? s->quota + sg_quota_reserve(s->quota) : 0;
     if (!ln || len > UINT64_MAX - ln->used ||
-        (s->quota && (ln->used > s->quota || len > s->quota - ln->used)) ||
+        (limit && (ln->used > limit || len > limit - ln->used)) ||
         server_phys_admit_locked(s, path, len)) {
         pthread_mutex_unlock(&s->lock);
         pthread_rwlock_unlock(g);
