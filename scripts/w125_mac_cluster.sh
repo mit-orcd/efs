@@ -16,6 +16,11 @@ H=(efs2 efs3 efs3); A=(192.168.2.12 192.168.2.13 192.168.2.13)
 PACKENV=$(env | grep -E '^EFS_PACK_[A-Z_]+=' | tr '\n' ' ')
 case $cmd in
 start)
+  # A mount left from an earlier run would be reused silently (and talk to
+  # this new cluster with stale client state): refuse instead.
+  for h in efs2 efs3; do
+    ssh $h "grep -q ' $D/mnt' /proc/mounts" && { echo "$h: an efs mount under $D is still present; run stop first"; exit 1; }
+  done
   for i in 0 1 2; do
     id=$((i + 1)); join=""; [ $id -gt 1 ] && join="--join ${A[0]}:$((PORT + 1))"
     ssh "${H[$i]}" "mkdir -p $D/n$id $D/logs && cd $SRC && env $PACKENV EFS_MD_RAFT_N=3 setsid -f ./efsd --node-id $id \
@@ -29,7 +34,13 @@ start)
     findmnt -rn $D/mnt > /dev/null && echo mounted $D/mnt || { echo mount failed; tail -5 $D/logs/client.out; exit 1; }"
   ;;
 stop)
-  ssh "${H[0]}" "cd $SRC && scripts/client.sh stop $D/mnt > /dev/null 2>&1"
+  # Clients by mount path, not through their log (the log may be gone):
+  # stop efs-fuse for any mount under $D, then detach what is left.
+  for h in efs2 efs3; do
+    ssh $h "for m in \$(awk '\$2 ~ \"^$D/mnt\" {print \$2}' /proc/mounts); do
+      pkill -TERM -f \"^./efs-fuse .* \$m\$\"; sleep 2; pkill -KILL -f \"^./efs-fuse .* \$m\$\";
+      fusermount3 -u -z \$m 2>/dev/null; done; true"
+  done
   for sig in TERM KILL; do
     for i in 0 1 2; do
       ssh "${H[$i]}" "pkill -$sig -f '^./efsd .*--storage $D/n$((i + 1))( |\$)'; true"

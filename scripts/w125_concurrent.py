@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""w125_concurrent.py ROOT SECONDS [--writers 4] [--readers 4] [--deleters 2]
+"""w125_concurrent.py ROOT SECONDS [--writers 4] [--readers 4] [--deleters 2] [--remote --deleted-out FILE]
 
 Concurrent writers, readers and deleters on one efs mount, for packing and
 compaction under load. Every file's content is a deterministic function of
@@ -9,9 +9,15 @@ packed, some are large), so any read can be checked:
   readers   read a random live file and compare it with its expected bytes;
             ENOENT is fine (a deleter won the race), wrong bytes are not;
   deleters  unlink a random live file (kept to about half the files written).
-Every 10 s one status line. After SECONDS the workers stop and every
-remaining file is verified once more. The final live list is written to
-ROOT.live (one name per line). Exit 1 on any mismatch or unexpected error.
+Writers publish a file atomically: written and closed as NAME.tmp, then
+renamed to NAME. Every 10 s one status line. After SECONDS the workers
+stop and every remaining file is verified once more; a file that is gone
+is recorded in ROOT.missing (another client may have deleted it) rather
+than counted as an error. The final live list is written to ROOT.live.
+--remote: a second client on another mount, with no writers: it discovers
+published files by listing ROOT every 5 s, verifies them with its readers
+and deletes some with its deleters (about one per two discovered), naming
+each in --deleted-out. Exit 1 on any mismatch or unexpected error.
 """
 import argparse, errno, math, os, random, sys, threading, time
 
@@ -24,6 +30,7 @@ ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDe
 ap.add_argument("root"); ap.add_argument("seconds", type=float)
 ap.add_argument("--writers", type=int, default=4); ap.add_argument("--readers", type=int, default=4)
 ap.add_argument("--deleters", type=int, default=2)
+ap.add_argument("--remote", action="store_true"); ap.add_argument("--deleted-out")
 a = ap.parse_args()
 os.makedirs(a.root, exist_ok=True)
 lock = threading.Lock()
@@ -45,7 +52,8 @@ def writer(w):
         try:
             os.makedirs(os.path.dirname(path), exist_ok=True)
             data = body(name)
-            with open(path, "wb") as f: f.write(data)
+            with open(path + ".tmp", "wb") as f: f.write(data)
+            os.rename(path + ".tmp", path)
             with lock: live.append(name); st["written"] += 1; st["wbytes"] += len(data)
         except OSError as e:
             fail("errors", "write %s: %s" % (name, e))
@@ -63,6 +71,18 @@ def reader(_):
         if got != body(name): fail("mismatch", "%s: %d bytes, expected %d" % (name, len(got), len(body(name))))
         else: bump("read"); bump("rbytes", len(got))
 
+seen = set(); gone = []
+def walker():
+    while not stop.is_set():
+        found = []
+        for d, _, fs in os.walk(a.root):
+            found += [os.path.relpath(os.path.join(d, f), a.root) for f in fs if not f.endswith(".tmp")]
+        with lock:
+            fresh = [n for n in found if n not in seen]
+            seen.update(fresh); live.extend(fresh)
+            st["written"] += len(fresh) # discovered, for the deleter ratio
+        stop.wait(5)
+
 def deleter(_):
     while not stop.is_set():
         with lock:
@@ -71,10 +91,15 @@ def deleter(_):
         if not name: time.sleep(0.05); continue
         try:
             os.unlink(os.path.join(a.root, name)); bump("deleted")
+            if a.remote:
+                with lock: gone.append(name)
+        except FileNotFoundError:
+            bump("enoent")
         except OSError as e:
             fail("errors", "unlink %s: %s" % (name, e))
 
-threads = [threading.Thread(target=writer, args=(i,)) for i in range(a.writers)]
+threads = [] if a.remote else [threading.Thread(target=writer, args=(i,)) for i in range(a.writers)]
+if a.remote: threads.append(threading.Thread(target=walker))
 threads += [threading.Thread(target=reader, args=(i,)) for i in range(a.readers)]
 threads += [threading.Thread(target=deleter, args=(i,)) for i in range(a.deleters)]
 for t in threads: t.start()
@@ -87,14 +112,21 @@ while time.time() - t0 < a.seconds:
         s["enoent"], s["deleted"], s["mismatch"], s["errors"]), flush=True)
 stop.set()
 for t in threads: t.join()
-bad = 0
+bad, missing = 0, []
 for name in live:
     try:
         with open(os.path.join(a.root, name), "rb") as f:
             if f.read() != body(name): bad += 1; errs.append("final mismatch " + name)
+    except FileNotFoundError:
+        missing.append(name)
     except OSError as e:
         bad += 1; errs.append("final %s: %s" % (name, e))
-with open(a.root.rstrip("/") + ".live", "w") as f: f.write("\n".join(live) + "\n")
-print("final live=%d verified_bad=%d mismatch=%d errors=%d" % (len(live), bad, st["mismatch"], st["errors"]))
+tag = ".remote" if a.remote else ""
+with open(a.root.rstrip("/") + tag + ".live", "w") as f: f.write("\n".join(live) + "\n")
+with open(a.root.rstrip("/") + tag + ".missing", "w") as f: f.write("\n".join(missing) + "\n")
+if a.deleted_out:
+    with open(a.deleted_out, "w") as f: f.write("\n".join(gone) + "\n")
+print("final live=%d verified_bad=%d missing=%d mismatch=%d errors=%d deleted=%d" % (
+    len(live), bad, len(missing), st["mismatch"], st["errors"], st["deleted"]))
 for e in errs[:20]: print("ERR", e)
 sys.exit(1 if bad or st["mismatch"] or st["errors"] else 0)
