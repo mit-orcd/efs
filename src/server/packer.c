@@ -29,10 +29,18 @@
  * either group makes packing in both yield. A segment is built only when
  * the bucket holds its file count, so segments stay full.
  *
+ * The busy rate follows the packer's lag: how long the oldest eligible
+ * candidate has waited beyond the minimum age. Up to the lag target the
+ * packer yields at the busy floor; beyond it the busy rate rises linearly
+ * and reaches the idle rate one lag span later. A sustained writer thus
+ * settles where packing keeps pace with it, with a bounded backlog of
+ * unpacked files, while short bursts are packed after they end.
+ *
  * Tunables (environment, read at start): EFS_PACK_MIN_AGE_MS (default
  * 60000), EFS_PACK_INTERVAL_MS (1000), EFS_PACK_SEGMENTS_PER_PASS (8),
  * EFS_PACK_FILES_PER_S (5000), EFS_PACK_BUSY_FILES_PER_S (50),
- * EFS_PACK_BUSY_COMMITS_PER_S (100), EFS_PACK_BACKFILL_SHARDS (64 inode
+ * EFS_PACK_BUSY_COMMITS_PER_S (100), EFS_PACK_LAG_TARGET_MS (60000),
+ * EFS_PACK_LAG_SPAN_MS (300000), EFS_PACK_BACKFILL_SHARDS (64 inode
  * shards scanned per pass until the group's backfill is done). None of
  * them turns the packer off:
  * rates and counts below 1 are raised to 1 (the minimum age may be 0 for
@@ -63,11 +71,13 @@ static struct {
     uint64_t min_age_ns, interval_ms;
     uint32_t segments_per_pass;
     double idle_rate, busy_rate, busy_commits;
+    uint64_t lag_target_ns, lag_span_ns;
     uint32_t backfill_shards;
     struct {
         uint64_t last_commit, last_ns, own;
         uint64_t backoff_until_ns; /* after a failed copy: leave the members alone */
-        double tokens, fg_rate;
+        double tokens, fg_rate, rate;
+        uint64_t lag_ns; /* oldest eligible candidate's wait beyond the minimum age */
         int busy;
     } g[2];
     struct efs_packer_status st;
@@ -325,6 +335,37 @@ static int pk_read_file(const struct efs_node *nodes, uint32_t count, struct pk_
     free(b);
     return rc;
 }
+/* Reading a segment's files one after another cost about a third of a
+ * millisecond each (a fragment GET per file) and capped the packer near
+ * 1,000 files/s: read them on PK_READ_THREADS threads. rcs[x] gets each
+ * file's result. */
+#define PK_READ_THREADS 16u
+struct pk_reader {
+    const struct efs_node *nodes;
+    uint32_t count, flen, n, next;
+    struct pk_file *files;
+    int *rcs;
+};
+static void *pk_reader_run(void *arg)
+{
+    struct pk_reader *r = arg;
+    for (;;) {
+        uint32_t x = __atomic_fetch_add(&r->next, 1, __ATOMIC_RELAXED);
+        if (x >= r->n) return NULL;
+        r->rcs[x] = pk_read_file(r->nodes, r->count, &r->files[x], r->flen);
+    }
+}
+static void pk_read_files(const struct efs_node *nodes, uint32_t count, struct pk_file *files,
+                          uint32_t n, uint32_t flen, int *rcs)
+{
+    struct pk_reader r = {nodes, count, flen, n, 0, files, rcs};
+    pthread_t t[PK_READ_THREADS];
+    uint32_t started = 0, want = n < PK_READ_THREADS ? n : PK_READ_THREADS;
+    for (uint32_t i = 1; i < want; i++)
+        if (pthread_create(&t[started], NULL, pk_reader_run, &r) == 0) started++;
+    pk_reader_run(&r); /* this thread reads too; a failed create only slows it */
+    for (uint32_t i = 0; i < started; i++) pthread_join(t[i], NULL);
+}
 static int pk_put_fragment(const struct efs_node *nodes, uint32_t count, uint32_t id,
                            const uint8_t *body, uint32_t len)
 {
@@ -348,6 +389,19 @@ static int pk_put_fragment(const struct efs_node *nodes, uint32_t count, uint32_
     free(reply);
     return rc;
 }
+struct pk_put {
+    const struct efs_node *nodes;
+    uint32_t count, id;
+    const uint8_t *body;
+    uint32_t len;
+    int rc;
+};
+static void *pk_put_run(void *arg)
+{
+    struct pk_put *p = arg;
+    p->rc = pk_put_fragment(p->nodes, p->count, p->id, p->body, p->len);
+    return NULL;
+}
 static void pk_unindex(uint8_t group, const struct pk_entry *e, uint32_t n)
 {
     while (n) {
@@ -366,6 +420,18 @@ static void pk_unindex(uint8_t group, const struct pk_entry *e, uint32_t n)
 
 /* Pack files[0..n) (already read) into one segment. Returns the number of
  * files switched; *done receives the index entries to drop. */
+/* Segment ids: time-ordered and node-tagged as before, now also unique
+ * across the concurrent segment jobs of one pass. */
+static uint64_t pk_segment_id(void)
+{
+    static uint64_t last;
+    uint64_t want = pk_now_ns() << 8, prev = __atomic_load_n(&last, __ATOMIC_RELAXED);
+    for (;;) {
+        uint64_t next = want > prev ? want : prev + 256;
+        if (__atomic_compare_exchange_n(&last, &prev, next, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED))
+            return next | (pk.s->id & 0xff);
+    }
+}
 static uint32_t pk_segment(uint8_t group, uint64_t term, const struct efs_node *nodes, uint32_t count,
                            struct pk_file *files, uint32_t n, struct pk_entry *done, uint32_t *ndone,
                            uint32_t flags)
@@ -376,12 +442,12 @@ static uint32_t pk_segment(uint8_t group, uint64_t term, const struct efs_node *
     uint8_t *image = malloc(EFS_SEGMENT_MAX_SIZE);
     struct efs_pack_object *o = calloc(1, sizeof(*o));
     uint8_t *frag = malloc(EFS_SEGMENT_MAX_SIZE / 2 * 3);
-    uint8_t *body = malloc(EFS_SEGMENT_PUT_HEADER + EFS_SEGMENT_MAX_SIZE / 2);
+    uint8_t *body = malloc((size_t)EFS_NUM_FRAGMENTS * (EFS_SEGMENT_PUT_HEADER + EFS_SEGMENT_MAX_SIZE / 2));
     uint8_t *cmd = malloc(2u + EFS_PACK_OBJECT_MAX_BYTES);
     struct efs_pack_switch *sw = calloc(1, sizeof(*sw));
     uint8_t *swire = malloc(1u + 19u + EFS_PACK_SWITCH_MAX * EFS_MD_PACK_SWITCH_MEMBER_BYTES);
     if (!rec || !refs || !image || !o || !frag || !body || !cmd || !sw || !swire) goto out;
-    uint64_t id = (pk_now_ns() << 8) | (pk.s->id & 0xff), gen = 1;
+    uint64_t id = pk_segment_id(), gen = 1;
     for (uint32_t i = 0; i < n; i++)
         rec[i] = (struct efs_pack_record){.ino = files[i].c.ino, .inode_generation = files[i].c.inode_generation,
             .content_epoch = files[i].c.content_epoch,
@@ -411,24 +477,36 @@ static uint32_t pk_segment(uint8_t group, uint64_t term, const struct efs_node *
         goto out;
     }
     server_pack_crash_point("admitted");
+    /* The three fragments go out in parallel; all must be durable. */
+    struct pk_put puts[EFS_NUM_FRAGMENTS];
+    pthread_t pt[EFS_NUM_FRAGMENTS];
+    int pstarted[EFS_NUM_FRAGMENTS] = {0}, put_ok = 1;
     for (uint32_t i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        memset(body, 0, EFS_SEGMENT_PUT_HEADER);
-        body[0] = group; body[1] = (uint8_t)i;
-        body[4] = (uint8_t)(geometry >> 24); body[5] = (uint8_t)(geometry >> 16);
-        body[6] = (uint8_t)(geometry >> 8); body[7] = (uint8_t)geometry;
-        wr64(body + 8, id); wr64(body + 16, gen);
-        memcpy(body + 24, o->checksums[i], EFS_HASH_SIZE);
-        memcpy(body + EFS_SEGMENT_PUT_HEADER, f[i], flen);
-        if (pk_put_fragment(nodes, count, o->nodes[i], body, EFS_SEGMENT_PUT_HEADER + flen) != EFS_OK) {
-            STAT_ADD(put_errors, 1);
-            /* A member is unreachable (possibly down before the heartbeat
-             * says so). Retrying every pass would keep failing and push
-             * this node's peer-connection cooldown for that member past its
-             * return, starving foreground traffic to it: back off. */
-            pk.g[pk_gi(group)].backoff_until_ns = pk_now_ns() + PK_FAIL_BACKOFF_NS;
-            pk_cancel(group, id, gen);
-            goto out;
-        }
+        uint8_t *b = body + (size_t)i * (EFS_SEGMENT_PUT_HEADER + EFS_SEGMENT_MAX_SIZE / 2);
+        memset(b, 0, EFS_SEGMENT_PUT_HEADER);
+        b[0] = group; b[1] = (uint8_t)i;
+        b[4] = (uint8_t)(geometry >> 24); b[5] = (uint8_t)(geometry >> 16);
+        b[6] = (uint8_t)(geometry >> 8); b[7] = (uint8_t)geometry;
+        wr64(b + 8, id); wr64(b + 16, gen);
+        memcpy(b + 24, o->checksums[i], EFS_HASH_SIZE);
+        memcpy(b + EFS_SEGMENT_PUT_HEADER, f[i], flen);
+        puts[i] = (struct pk_put){nodes, count, o->nodes[i], b, EFS_SEGMENT_PUT_HEADER + flen, EFS_ERR_IO};
+        pstarted[i] = i > 0 && pthread_create(&pt[i], NULL, pk_put_run, &puts[i]) == 0;
+    }
+    for (uint32_t i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        if (!pstarted[i]) pk_put_run(&puts[i]);
+        else pthread_join(pt[i], NULL);
+        if (puts[i].rc != EFS_OK) put_ok = 0;
+    }
+    if (!put_ok) {
+        STAT_ADD(put_errors, 1);
+        /* A member is unreachable (possibly down before the heartbeat
+         * says so). Retrying every pass would keep failing and push
+         * this node's peer-connection cooldown for that member past its
+         * return, starving foreground traffic to it: back off. */
+        pk.g[pk_gi(group)].backoff_until_ns = pk_now_ns() + PK_FAIL_BACKOFF_NS;
+        pk_cancel(group, id, gen);
+        goto out;
     }
     STAT_ADD(segments, 1);
     server_pack_crash_point("uploaded");
@@ -719,11 +797,31 @@ out:
     free(c);
 }
 
-static void pk_group(uint8_t group, uint64_t term)
+#define PK_SEGMENTS_MAX 32u
+struct pk_job {
+    uint32_t start, end, n, ndone;
+    uint8_t group;
+    uint64_t term;
+    const struct efs_node *nodes;
+    uint32_t count;
+    struct pk_file *files;
+    struct pk_entry *done;
+};
+static void *pk_job_run(void *arg)
 {
-    if (pk_now_ns() < pk.g[pk_gi(group)].backoff_until_ns) return;
+    struct pk_job *j = arg;
+    j->ndone = 0;
+    (void)pk_segment(j->group, j->term, j->nodes, j->count, j->files, j->n, j->done, &j->ndone, 0);
+    return NULL;
+}
+
+/* One pass over a group. Returns 1 when it stopped at the per-pass segment
+ * cap with eligible files and budget left, so the caller does not sleep. */
+static int pk_group(uint8_t group, uint64_t term)
+{
+    if (pk_now_ns() < pk.g[pk_gi(group)].backoff_until_ns) return 0;
     struct efs_kv *kv = server_raft_host_kv();
-    if (!kv) return;
+    if (!kv) return 0;
     struct efs_node nodes[EFS_MAX_NODES];
     uint32_t count;
     pthread_mutex_lock(&pk.s->lock);
@@ -743,7 +841,7 @@ static void pk_group(uint8_t group, uint64_t term)
         }
         if (m < EFS_NUM_FRAGMENTS) {
             pk_abandon(kv, group, term);
-            return; /* not enough live voters to place a segment */
+            return 0; /* not enough live voters to place a segment */
         }
     }
     pk_abandon(kv, group, term);
@@ -751,8 +849,11 @@ static void pk_group(uint8_t group, uint64_t term)
 
     struct pk_scan sc = {calloc(PK_SCAN_MAX, sizeof(struct pk_entry)), 0};
     struct pk_file *files = calloc(PK_SCAN_MAX, sizeof(*files));
-    struct pk_entry *drop = calloc(PK_SCAN_MAX, sizeof(*drop));
+    /* drop: unindex list, then per-segment done lists for the jobs. */
+    struct pk_entry *drop = calloc(PK_SCAN_MAX + (size_t)PK_SEGMENTS_MAX * EFS_PACK_MAX_RECORDS, sizeof(*drop));
     uint32_t nfiles = 0, ndrop = 0;
+    int more = 0;
+    uint64_t oldest = 0, t_scan = pk_now_ns();
     if (!sc.e || !files || !drop) goto out;
     uint32_t anchor = efs_pack_group_anchor(group);
     uint8_t prefix[3] = {(uint8_t)(anchor >> 8), (uint8_t)anchor, EFS_KV_KIND_PACK_CANDIDATE};
@@ -781,55 +882,107 @@ static void pk_group(uint8_t group, uint64_t term)
         if (f->c.mtime + pk.min_age_ns > now) continue; /* not quiet yet */
         if (efs_lease_any(kv, f->c.ino, f->c.inode_generation) != 0) continue; /* open */
         f->epoch = sc.e[i].epoch;
+        if (!oldest || f->c.mtime < oldest) oldest = f->c.mtime;
         nfiles++;
     }
+    pk.g[pk_gi(group)].lag_ns = oldest && now > oldest + pk.min_age_ns ? now - oldest - pk.min_age_ns : 0;
     qsort(files, nfiles, sizeof(*files), pk_file_cmp);
     uint32_t flen = EFS_FRAGMENT_SIZE;
     uint32_t segs = 0, i = 0;
-    while (i < nfiles && segs < pk.segments_per_pass && !__atomic_load_n(&pk.stop, __ATOMIC_ACQUIRE)) {
-        uint64_t t;
-        if (!server_raft_host_pack_leader(group, &t, NULL) || t != term) break;
-        /* Fill one segment: record and byte caps. */
-        uint32_t j = i, used = EFS_PACK_HEADER_BYTES + EFS_HASH_SIZE;
-        while (j < nfiles && j - i < EFS_PACK_MAX_RECORDS &&
-               used + EFS_PACK_RECORD_BYTES + files[j].c.size <= EFS_SEGMENT_MAX_SIZE) {
-            used += EFS_PACK_RECORD_BYTES + (uint32_t)files[j].c.size;
-            j++;
-        }
-        /* Budget: build the segment only when the bucket holds its files. */
-        if (pk.g[pk_gi(group)].tokens < (double)(j - i)) { STAT_ADD(budget_waits, 1); break; }
-        pk.g[pk_gi(group)].tokens -= (double)(j - i);
-        /* Read; a file that cannot be read stays a candidate. */
-        uint32_t k = i;
-        for (uint32_t x = i; x < j; x++) {
-            if (pk_read_file(nodes, count, &files[x], flen) != EFS_OK) {
-                STAT_ADD(read_errors, 1);
-                free(files[x].data);
-                files[x].data = NULL;
-                continue;
+    uint64_t t_read = 0, t_seg = 0, t_pass = pk_now_ns();
+    /* Choose this pass's segments (record and byte caps, budget), read all
+     * their files in one parallel batch, then build, upload and switch the
+     * segments concurrently: one after another they cost ~90 ms each. */
+    struct pk_job jobs[PK_SEGMENTS_MAX];
+    uint32_t njobs = 0;
+    uint64_t t;
+    if (server_raft_host_pack_leader(group, &t, NULL) && t == term) {
+        while (i < nfiles && njobs < pk.segments_per_pass && njobs < PK_SEGMENTS_MAX) {
+            uint32_t j = i, used = EFS_PACK_HEADER_BYTES + EFS_HASH_SIZE;
+            while (j < nfiles && j - i < EFS_PACK_MAX_RECORDS &&
+                   used + EFS_PACK_RECORD_BYTES + files[j].c.size <= EFS_SEGMENT_MAX_SIZE) {
+                used += EFS_PACK_RECORD_BYTES + (uint32_t)files[j].c.size;
+                j++;
             }
-            if (k != x) { struct pk_file tmp = files[k]; files[k] = files[x]; files[x] = tmp; }
-            k++;
+            /* Budget: build the segment only when the bucket holds its files. */
+            if (pk.g[pk_gi(group)].tokens < (double)(j - i)) { STAT_ADD(budget_waits, 1); break; }
+            pk.g[pk_gi(group)].tokens -= (double)(j - i);
+            jobs[njobs++] = (struct pk_job){.start = i, .end = j};
+            i = j;
         }
-        if (k > i) {
-            (void)pk_segment(group, term, nodes, count, files + i, k - i, drop, &ndrop, 0);
-            segs++;
-        }
-        i = j;
     }
+    if (njobs) {
+        uint32_t first = jobs[0].start, span = jobs[njobs - 1].end - first;
+        int *rcs = malloc(span * sizeof(*rcs));
+        uint64_t t0 = pk_now_ns();
+        if (rcs) pk_read_files(nodes, count, files + first, span, flen, rcs);
+        /* A file that cannot be read stays a candidate. */
+        for (uint32_t q = 0; q < njobs; q++) {
+            uint32_t k = jobs[q].start;
+            for (uint32_t x = jobs[q].start; x < jobs[q].end; x++) {
+                if (!rcs || rcs[x - first] != EFS_OK) {
+                    STAT_ADD(read_errors, 1);
+                    free(files[x].data);
+                    files[x].data = NULL;
+                    continue;
+                }
+                if (k != x) { struct pk_file tmp = files[k]; files[k] = files[x]; files[x] = tmp; }
+                k++;
+            }
+            jobs[q].n = k - jobs[q].start;
+        }
+        free(rcs);
+        uint64_t t1 = pk_now_ns();
+        t_read = t1 - t0;
+        pthread_t th[PK_SEGMENTS_MAX];
+        int started[PK_SEGMENTS_MAX] = {0};
+        for (uint32_t q = 0; q < njobs; q++) {
+            jobs[q] = (struct pk_job){.start = jobs[q].start, .end = jobs[q].end, .n = jobs[q].n,
+                .group = group, .term = term, .nodes = nodes, .count = count, .files = files + jobs[q].start,
+                .done = drop + PK_SCAN_MAX + (size_t)q * EFS_PACK_MAX_RECORDS};
+            if (!jobs[q].n) continue;
+            started[q] = q > 0 && pthread_create(&th[q], NULL, pk_job_run, &jobs[q]) == 0;
+            if (q > 0 && !started[q]) pk_job_run(&jobs[q]);
+        }
+        if (jobs[0].n) pk_job_run(&jobs[0]);
+        for (uint32_t q = 0; q < njobs; q++) {
+            if (started[q]) pthread_join(th[q], NULL);
+            if (!jobs[q].n) continue;
+            segs++;
+            for (uint32_t d = 0; d < jobs[q].ndone && ndrop < PK_SCAN_MAX; d++) drop[ndrop++] = jobs[q].done[d];
+        }
+        t_seg = pk_now_ns() - t1;
+    }
+    more = i < nfiles && segs >= pk.segments_per_pass &&
+           pk.g[pk_gi(group)].tokens >= (double)EFS_PACK_MAX_RECORDS / 4;
     pk_unindex(group, drop, ndrop);
     /* Compaction runs after packing, on what the budget leaves. */
     if (!__atomic_load_n(&pk.stop, __ATOMIC_ACQUIRE)) pk_compact(kv, group, term, nodes, count);
     if (segs || ndrop)
-        fprintf(stderr, "packer: group=%u term=%llu busy=%d fg_commits_per_s=%.0f candidates=%u eligible=%u segments=%u unindexed=%u packed_total=%llu\n",
+        fprintf(stderr, "packer: group=%u term=%llu busy=%d fg_commits_per_s=%.0f lag_s=%.0f rate=%.0f candidates=%u eligible=%u segments=%u unindexed=%u packed_total=%llu scan_ms=%llu read_ms=%llu seg_ms=%llu pass_ms=%llu\n",
                 group, (unsigned long long)term, pk.g[pk_gi(group)].busy, pk.g[pk_gi(group)].fg_rate,
+                (double)pk.g[pk_gi(group)].lag_ns / 1e9, pk.g[pk_gi(group)].rate,
                 sc.n, nfiles, segs, ndrop,
-                (unsigned long long)__atomic_load_n(&pk.st.files_packed, __ATOMIC_RELAXED));
+                (unsigned long long)__atomic_load_n(&pk.st.files_packed, __ATOMIC_RELAXED),
+                (unsigned long long)((t_pass - t_scan) / 1000000ull),
+                (unsigned long long)(t_read / 1000000ull), (unsigned long long)(t_seg / 1000000ull),
+                (unsigned long long)((pk_now_ns() - t_pass) / 1000000ull));
 out:
     if (files) for (uint32_t x = 0; x < PK_SCAN_MAX; x++) free(files[x].data);
     free(files);
     free(sc.e);
     free(drop);
+    return more;
+}
+
+/* Busy rate for a lag: the floor up to the target, then linear to the idle
+ * rate over one span. */
+static double pk_busy_rate(uint64_t lag_ns)
+{
+    if (pk.busy_rate >= pk.idle_rate || lag_ns <= pk.lag_target_ns) return pk.busy_rate;
+    double f = (double)(lag_ns - pk.lag_target_ns) / (double)pk.lag_span_ns;
+    if (f > 1.0) f = 1.0;
+    return pk.busy_rate + (pk.idle_rate - pk.busy_rate) * f;
 }
 
 static void *pk_main(void *arg)
@@ -840,37 +993,47 @@ static void *pk_main(void *arg)
         /* Foreground load over all hosted groups: commits in the last
          * interval that were not the packer's own proposals. */
         uint64_t now = pk_now_ns();
-        double fg_total = 0, dt = 0;
-        int measured = 0;
+        /* Commit rates over windows of at least a second: passes can run
+         * back to back, and a rate over a few milliseconds is noise. */
+        static double fg_total;
+        static int measured;
         for (int g = 0; g < 2; g++) {
             uint64_t commit = server_raft_host_group_commit(groups[g]);
+            if (pk.g[g].last_ns && now < pk.g[g].last_ns + 1000000000ull && commit >= pk.g[g].last_commit)
+                continue;
             uint64_t own = __atomic_exchange_n(&pk.g[g].own, 0, __ATOMIC_RELAXED);
             if (pk.g[g].last_ns && now > pk.g[g].last_ns && commit >= pk.g[g].last_commit) {
-                dt = (double)(now - pk.g[g].last_ns) / 1e9;
+                double w = (double)(now - pk.g[g].last_ns) / 1e9;
                 double fg = (double)(commit - pk.g[g].last_commit) - (double)own;
-                pk.g[g].fg_rate = fg > 0 ? fg / dt : 0;
-                fg_total += pk.g[g].fg_rate;
+                pk.g[g].fg_rate = fg > 0 ? fg / w : 0;
                 measured = 1;
             }
             pk.g[g].last_ns = commit ? now : 0;
             pk.g[g].last_commit = commit;
         }
-        int busy = fg_total > pk.busy_commits;
+        fg_total = pk.g[0].fg_rate + pk.g[1].fg_rate;
+        double dt = 0;
+        static uint64_t last_acc;
+        if (last_acc && now > last_acc) dt = (double)(now - last_acc) / 1e9;
+        last_acc = now;
+        int busy = fg_total > pk.busy_commits, more = 0;
         if (measured && busy) STAT_ADD(busy_passes, 1);
         for (int g = 0; g < 2; g++) {
             uint64_t term = 0;
             pk.g[g].busy = busy;
             if (!server_raft_host_pack_leader(groups[g], &term, NULL)) continue;
             if (measured) {
-                double rate = busy ? pk.busy_rate : pk.idle_rate;
+                double rate = busy ? pk_busy_rate(pk.g[g].lag_ns) : pk.idle_rate;
+                pk.g[g].rate = rate;
                 double cap = rate * 2.0 > 2.0 * EFS_PACK_MAX_RECORDS ? rate * 2.0 : 2.0 * EFS_PACK_MAX_RECORDS;
                 pk.g[g].tokens += rate * dt;
                 if (pk.g[g].tokens > cap) pk.g[g].tokens = cap;
             }
-            pk_group(groups[g], term);
+            more |= pk_group(groups[g], term);
         }
         STAT_ADD(passes, 1);
-        for (uint64_t w = 0; w < pk.interval_ms && !__atomic_load_n(&pk.stop, __ATOMIC_ACQUIRE); w += 50)
+        /* Backlog and budget left: go straight into the next pass. */
+        for (uint64_t w = 0; !more && w < pk.interval_ms && !__atomic_load_n(&pk.stop, __ATOMIC_ACQUIRE); w += 50)
             usleep(50000);
     }
     return NULL;
@@ -886,13 +1049,16 @@ int server_packer_start(struct efsd_server *s)
     pk.idle_rate = (double)env_u64("EFS_PACK_FILES_PER_S", 5000, 1);
     pk.busy_rate = (double)env_u64("EFS_PACK_BUSY_FILES_PER_S", 50, 1);
     pk.busy_commits = (double)env_u64("EFS_PACK_BUSY_COMMITS_PER_S", 100, 1);
+    pk.lag_target_ns = env_u64("EFS_PACK_LAG_TARGET_MS", 60000, 0) * 1000000ull;
+    pk.lag_span_ns = env_u64("EFS_PACK_LAG_SPAN_MS", 300000, 1) * 1000000ull;
     pk.backfill_shards = (uint32_t)env_u64("EFS_PACK_BACKFILL_SHARDS", 64, 1);
     if (pthread_create(&pk.tid, NULL, pk_main, NULL)) return -1;
     pk.started = 1;
     fprintf(stderr, "packer: started min_age_ms=%llu interval_ms=%llu segments_per_pass=%u "
-            "files_per_s=%.0f busy_files_per_s=%.0f busy_commits_per_s=%.0f\n",
+            "files_per_s=%.0f busy_files_per_s=%.0f busy_commits_per_s=%.0f lag_target_ms=%llu lag_span_ms=%llu\n",
             (unsigned long long)(pk.min_age_ns / 1000000ull), (unsigned long long)pk.interval_ms,
-            pk.segments_per_pass, pk.idle_rate, pk.busy_rate, pk.busy_commits);
+            pk.segments_per_pass, pk.idle_rate, pk.busy_rate, pk.busy_commits,
+            (unsigned long long)(pk.lag_target_ns / 1000000ull), (unsigned long long)(pk.lag_span_ns / 1000000ull));
     return 0;
 }
 

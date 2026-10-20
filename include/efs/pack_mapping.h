@@ -111,7 +111,10 @@ int efs_meta_apply_pack_retire(struct efs_kv *, uint32_t group, const uint64_t *
  * UNINDEX removes packed, stale and refused ones. The epoch length is part
  * of the key format, never a runtime setting. */
 #define EFS_PACK_THRESHOLD 16384u
-#define EFS_PACK_EPOCH_S 600u
+/* 60 s: the packer scans the oldest epochs first, so an epoch must be short
+ * against the minimum age or a sustained writer's young files (ordered by
+ * inode inside one epoch) crowd the eligible ones out of the scan window. */
+#define EFS_PACK_EPOCH_S 60u
 #define EFS_PACK_CANDIDATE_KEY_BYTES 19u
 #define EFS_PACK_UNINDEX_MAX 512u
 int efs_pack_candidate_key(uint32_t anchor, uint64_t epoch, efs_ino_t ino,
