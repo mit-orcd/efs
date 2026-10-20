@@ -1,8 +1,9 @@
 # ORCD-test detached packing/RDMA/.efs campaign — 2026-10-20
 
-**Verdict: qualification NOTRUN; build and detached-worker smoke checks PASS.**
-Interactive SSH access restored. No deployment replacement, format, cluster
-stop or qualification launch has occurred. No campaign timer is running.
+**Verdict: RUNNING; qualification pending.** Build and detached-worker smoke
+checks PASS. User authorized stopping the old fcstor007–013 mounts; all
+seven stopped cleanly. Old daemons on fcstor003–006 stopped cleanly and their
+disposable stores were removed. The controller is running in detached screen.
 
 ## Prepared run
 
@@ -21,15 +22,22 @@ stop or qualification launch has occurred. No campaign timer is running.
   2 TiB per storage node; 32 writer threads per host, up to 10 M files per
   host (40 M total target), bounded by the campaign time window. Actual
   achieved counts must be reported, not inferred from the target.
-- **Pending boundary decision:** existing storage daemons have connections
-  from fcstor007–013. Asked whether their old `/tmp/efs-mount` mounts may
-  be stopped, or whether the replacement must use a different port. No
-  action on those hosts or on the unrelated `fstor007` has been taken.
-- Controller source: `scripts/orcd_test_campaign.py`. Its source is staged
-  as `campaign.py` in the run directory. The workers are idle pending the
-  replacement; the controller has NOT been started.
+- User approved stopping old clients on fcstor007–013; stop returned 0 for
+  all seven. The unrelated `fstor007` was not accessed.
+- Each old daemon's PID and command are retained in `<host>-previous.json`.
+  `/tmp/efs` now points at the verified shared source. Old binaries are
+  retained offline at `/tmp/efs-before-campaign-20261020`; there is no
+  second running deployment. New stores use `/data1/01/efs-orcd-test-campaign`.
+- Controller source: `scripts/orcd_test_campaign.py`, staged as `campaign.py`.
+  Screen `orcd-campaign-controller` on fcstor003 started at approximately
+  2026-10-20 21:00 UTC (16:00 America/Bogota). Status timestamps are UTC Unix
+  seconds; use the actual `started` field for exact timing.
+- A 30-minute monitoring heartbeat is configured in this chat. It reports
+  failures/completion without restarting failed cases.
+- If fewer than 40 M files are reached within the window, the controller
+  reports `INCOMPLETE_SCALE_TARGET` even when correctness checks pass.
 
-After replacement, controller launch on fcstor003:
+Actual controller launch on fcstor003:
 
 ```sh
 R=/home/erbmi1/orcd/scratch/efs/orcd-test/campaign-20261020
@@ -37,9 +45,9 @@ screen -dmS orcd-campaign-controller bash -c "python3 -u $R/campaign.py controll
 ```
 
 Reconnect through `ssh -A erbmi1@orcd-login.mit.edu`, then
-`ssh fcstor003`. Use `screen -r orcd-campaign-controller` once launched;
+`ssh fcstor003`. Use `screen -r orcd-campaign-controller`;
 inspect `$R/status.json`, `$R/exit-status`, and per-host `$R/mail/` logs.
-This command is a launch instruction, not evidence that it has run.
+The detached screen launch was verified; per-case results remain pending.
 
 ## Authorization and scope
 
@@ -111,6 +119,5 @@ Adapt actual distributed tests rather than relabeling that harness.
 
 ## Remaining gates
 
-Deployment replacement, full disconnect survival, EFS test, EFS cleanup and
-RDMA verification gates remain **NOTRUN**. This page records preparation
-and the access block, not a completed or scheduled deployment.
+Full disconnect survival, EFS test, final cleanup and RDMA counter
+verification remain pending. No final qualification verdict is claimed.

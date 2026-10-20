@@ -149,8 +149,10 @@ class Controller:
    self.case('rdma-evidence',['bash','-ec',"grep -h 'RDMA counters' "+str(RUN/'mail'/h/'*.log')+" | tee "+str(RUN/(h+'-rdma.txt'))+" | grep -Eq 'data_(tx|rx)=[1-9][0-9]*/[1-9]'"],30,h)
   self.case('packing-evidence',['bash','-ec',"grep -hE 'packed_total=[1-9][0-9]*' "+str(RUN/'mail'/'fcstor*'/'*.log')+" > "+str(RUN/'packing-evidence.txt')],30)
   failed=any(r['rc'] for r in self.results)
-  self.status('FAIL' if failed else 'PASS',notrun=['W123 loss-report continuity: absent from source','Full tens-of-millions payload verification: sample-only'])
-  (RUN/'exit-status').write_text(str(int(failed))+'\n');(RUN/'workers.stop').touch()
+  counts={h:json.loads((RUN/(h+'-scale.json')).read_text())['files'] for h in HOSTS}
+  total=sum(counts.values())
+  self.status('FAIL' if failed else 'PASS' if total>=40000000 else 'INCOMPLETE_SCALE_TARGET',files_by_host=counts,total_files=total,target_files=40000000,notrun=['W123 loss-report continuity: absent from source','Full tens-of-millions payload verification: sample-only'])
+  (RUN/'exit-status').write_text(str(1 if failed else 0 if total>=40000000 else 2)+'\n');(RUN/'workers.stop').touch()
 if args.mode=='worker':worker()
 elif args.mode=='scale':sys.exit(scale())
 else:
