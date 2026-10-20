@@ -18,6 +18,11 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[ORCD-test detached campaign](orcd-test-detached-campaign-20261020.md):
+**Qualification NOTRUN; build/worker smoke PASS.** Four-host campaign prepared
+with 2 TiB/node and 40 M-file target; replacement awaits the existing-client
+stop decision. Detached workers are idle; no EFS deployment changed.
+
 [W124 — fast delete](../backlog/fast-delete-reclaim.md): **parts 1–2
 implemented and deployed on orcd-mini (`de0c856b4`);**
 [evidence](w124-reclaim-20261018.md).
