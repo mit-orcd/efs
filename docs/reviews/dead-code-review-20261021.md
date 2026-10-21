@@ -111,9 +111,10 @@ source lines** of the client library are reachable only from test harnesses
    efs-fuse, efs-bench, efs-mgmt, efs-query) was linked against the
    *whole* `libefs.a` with `--gc-sections --print-gc-sections`. A library
    function counts as dead in production when all five links discard it.
-   That claim holds for the scanned build configurations only: the default
-   Linux build, plus `EFS_FAULTS=1` and `EFS_MEMCHECK=1` as reported under
-   [Revision after the review](#revision-after-the-review). It does not
+   That claim holds only for the configurations actually scanned: the
+   default Linux build and `EFS_FAULTS=1`. `EFS_MEMCHECK=1` was attempted
+   but could not build on node9901, so it is NOTRUN, not measured coverage
+   (see [Revision after the review](#revision-after-the-review)). It does not
    cover external callers of the public headers. For a wire handler it
    says nothing about whether a peer or tool can send that message. A
    server function counts against efsd (and against the efs-bench copy for
@@ -125,9 +126,9 @@ source lines** of the client library are reachable only from test harnesses
    callbacks stay alive because their table is referenced, so the scan is
    conservative. Every row below was then checked by hand with
    `git grep -w`. `reachability.sh` cleans, rebuilds and relinks inside
-   its TREE argument as well as writing to OUT. It refuses a git checkout,
-   a deployed tree, or a tree without a `.efs-audit-tree` marker, so give it
-   a disposable `git archive` extraction. Run `classify.py` in a git
+   its TREE argument as well as writing to OUT, so give it a disposable
+   `git archive` extraction marked with `.efs-audit-tree`. Its other checks
+   only catch common accidents (see the tooling response at the end). Run `classify.py` in a git
    checkout of the reviewed commit. Rerunning
    both scripts reproduced the counts exactly: 59 dead, 158 test-only and
    27 header-inline.
@@ -987,3 +988,38 @@ reproduced the failure above. These checks do not verify the Linux reachability
 counts. Preserve the original run evidence. Fix the tooling issues in a small
 follow-up; the accepted product-correctness work can proceed independently.
 No further conceptual review loop is needed for the accepted recommendations.
+
+## Tooling response to the follow-up review
+
+**Checked against the script, fixed, and retested on node9901 (private tree
+`deadcode-0bdf55256`); no product code changed.** All four script issues and
+the Method wording point were correct. One opinion where I differ slightly:
+the memcheck inference is still worth recording as an inference, because it
+explains why the missing variant does not block cleanup, and it is labelled
+as such.
+
+| Review point | My check | Fix |
+|---|---|---|
+| Relative OUT breaks after `cd TREE` | Confirmed by reading: `mkdir -p "$OUT"` ran before `cd`, the writes after | Both paths are resolved with `pwd -P` before any cleanup. OUT inside TREE is refused |
+| Guards are narrower than claimed | Confirmed: logical `pwd`, `.git` checked only at the top level, two deny paths | `pwd -P`; refuses anything inside a Git working tree (`git rev-parse --is-inside-work-tree`); deny list adds `/data1/efs/orcd-mini-client/*`. The header now calls the marker the caller's assertion, and the other checks accident prevention only, not deployment detection or a security boundary |
+| Variant forwarding is incomplete | Confirmed: `make -pn` got no variables; gcc and link libraries are hardcoded | Variants restricted to `EFS_FAULTS=1` and `EFS_MEMCHECK=1` (defines only). The Makefile database is read once with the same variables, without early-exit pipelines, and the script fails if it cannot find `SERVER_SRCS`/`TEST_BINS` |
+| A failed `nm` can inflate DEAD | Confirmed: `nm \| awk` under `set -e` hid nm failures | `set -o pipefail`; every expected test binary must exist; `nm` is checked per binary; zero extracted symbols is an error. Any failure writes `OUT/INCOMPLETE` and exits 2; success writes `OUT/COMPLETE`. `classify.py` refuses an OUT without `COMPLETE` |
+| Method overstated the coverage | Confirmed | Method now lists only the default build and `EFS_FAULTS=1` as scanned; `EFS_MEMCHECK=1` is NOTRUN |
+
+**Retest on node9901:**
+
+| Case | Expected | Result |
+|---|---|---|
+| Unmarked tree | refuse, rc=2 | rc=2 |
+| Marked tree inside a Git working tree (`/tmp/deadcode-guard/repo/sub`) | refuse | rc=2 |
+| Unsupported variant `FOO=1` | refuse | rc=2 |
+| OUT inside TREE | refuse | rc=2 |
+| Real default scan, relative OUT (`rel`, run from `/data1/efs/testsuite/deadcode-out`) | complete, same counts | rc=0, `COMPLETE`; 59 / 158 / 27, `diff` against the original classification empty |
+| Same scan with a failing `nm` stub first on PATH | fail closed | rc=2, `INCOMPLETE`: "nm failed on tests/test_rdma_segmented"; `classify.py` then exits 1 ("not a complete reachability.sh scan") |
+
+The four refusals happen before `make clean`, so the guarded trees were not
+modified. The original run evidence (hashes in Method) is unchanged.
+
+**Agreed:** these are tooling fixes. They do not block the accepted
+correctness work (M1–M5, P1, P3, S1), and they change none of the findings.
+I see no need for another review loop on the recommendations.

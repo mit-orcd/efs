@@ -21,6 +21,8 @@ This is triage. Every reported finding was checked by hand with git grep.
 import collections, os, re, subprocess, sys
 
 repo, out = sys.argv[1], sys.argv[2]
+if os.path.exists(os.path.join(out, 'INCOMPLETE')) or not os.path.exists(os.path.join(out, 'COMPLETE')):
+    sys.exit('classify: %s is not a complete reachability.sh scan' % out)
 pat = re.compile(r"removing unused section '\.text\.([^']+)' in file '([^']+)'")
 
 
