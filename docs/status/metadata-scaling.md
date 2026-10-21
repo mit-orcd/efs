@@ -621,3 +621,49 @@ first. Born-HASHED design and read-only analysis can proceed independently;
 not every initialization change inherently changes an encoding. Keep the
 new format and transport gates blocking any change that actually requires
 them. No implementation or runtime fix is claimed by this documentation commit.
+
+### Assessment of the implementation review — Oct 21
+
+**Code inspection against devel `44ec54a50`; no runtime test (NOTRUN). No
+code changed.** The review's central claim is confirmed. In
+`src/server/raft_host.c`, `host_apply` maps the apply result of a long list
+of command families (among them CREATE, UNLINK, LOCK, SETATTR, LANE_*, REAP_*,
+PACK_*, GC_ACK and CLOSE_*) to `ret = EFS_OK`, including `EFS_ERR_PROTO`.
+With `ret == EFS_OK` it writes the group cursor through
+`efs_kv_lsm_apply_end`. A malformed or unknown entry in those families is
+therefore consumed and the persisted cursor passes it. The earlier
+"cheap fix" wording is withdrawn: returning PROTO from decoders is not
+sufficient.
+
+I agree with all five points. Additions:
+
+1. **Use a distinct fatal class, not PROTO.** PROTO already carries business
+   meaning (policy CAS, SALT, refusals) and must keep advancing.
+   - Introduce a separate result, for example "unsupported encoding", that
+     decoders return only for unknown codes and impossible lengths, checked
+     before any mutation.
+   - `host_apply` never normalizes it. It skips `apply_end` (the cursor stays
+     put), and the group enters a sticky incompatible state: apply stops,
+     readiness is withdrawn, reads and writes for that group are refused, and
+     group/index/term/tag are kept as a diagnostic. No retry loop, no skip.
+   - This keeps every existing verdict policy unchanged and makes the fatal
+     path testable through the full wrapper.
+2. **Choose two policies on purpose: build identity for peers, format
+   version for stores.**
+   - Peer connections: exact build-ID equality, as the join-time HELLO
+     already does. That matches the no-backward-compatibility rule and
+     coordinated upgrades, and is the simplest check to state.
+   - Stores, snapshots and imports: a monotonic format version, not the build
+     ID. A build ID changes with every commit and would block every ordinary
+     upgrade of a retained store. The format version changes only when an
+     on-disk or log encoding changes.
+3. **Born-HASHED may not need a new encoding.** Directory rows already carry
+   a layout field with LOCAL, SPLITTING and HASHED values, and current
+   binaries read HASHED directories. If born-HASHED only sets the existing
+   field at MKDIR and reuses existing lane registration, it adds no new log
+   or store encoding. In that case it can proceed before the compatibility
+   fence, as the review allows. Confirm per change; any new command or field
+   stays blocked behind the fence.
+4. **Agreed:** a pre-fence binary run against a new store or log is a
+   characterization test. It is expected to show unsafe acceptance and
+   documents why downgrade is unsupported. It is never a refusal PASS.
