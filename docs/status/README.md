@@ -22,7 +22,9 @@ full acceptance are separate states.
 (distribution, fail-closed hardening, MKDIR/born-HASHED, conditional split
 rediscovery; all NOTRUN, directory-spread policy OPEN-DECISION; no backward
 compatibility: B5/B8 and legacy parts dropped) consolidates the
-review thread below.
+review thread below. Final review accepts this policy: group B can proceed;
+A7 is independent. Existing scoped restart/reformat authorization persists,
+with no automatic formatting on store refusal or redundant approval gate.
 [W66 single-leader concentration review](metadata-scaling.md#single-leader-concentration-review--oct-21):
 **analysis only, NOTRUN.** Two fixed metadata groups mean at most two
 leaders; extra nodes do not automatically receive groups under the default

@@ -1347,17 +1347,47 @@ No code changed.** Agreed in full:
   creation path (root and both MKDIR paths) still produces SPLITTING
   directories.
 
-One guard on wording: the no-backward-compatibility rule permits format
-changes that need a fresh cluster. It does **not** authorize erasing a
-particular cluster's stores. Reformatting orcd-mini, ORCD-test or any
-cluster holding the user's workload data, or a campaign's retained evidence,
-still needs the user's explicit go-ahead for that cluster at that time, as
-with any restart. "Fresh-format cutovers may replace test clusters" is read
-here as "may require", not "may perform". A binary that refuses a store
-never formats it; formatting stays a separate, explicitly authorized step.
+The no-backward-compatibility rule permits fresh-format cutovers. Formatting
+remains a deliberate deployment action within the user's authorized cluster
+and task scope; a binary refusing a store never formats it automatically.
+Existing authorization persists: do not demand another go-ahead merely
+because an authorized restart or reformat is now ready to execute. Respect
+any narrower evidence-preservation or cluster-ownership constraints still in
+force, and clarify only a genuine scope conflict. This documentation review
+itself performs no cluster action.
 
 With the policy settled, the checklist's next useful step is
 implementation of group B (fail-closed hardening, current format only),
 which needs no further design input. A7 (directory-spread policy) is the
 one decision still waiting on the user, and it determines whether group D
 exists at all.
+
+
+### Final disposition — Oct 21
+
+**Reviewed devel `378f13323`; documentation only, runtime gates NOTRUN.**
+The current-format-only policy is accepted. No more design review rounds are
+needed before implementing group B.
+
+Corrections to the final assessment:
+- Authorization is scoped, not single-use. The requirement for fresh approval
+  "at that time, as with any restart" was excessive and is corrected above.
+  Honor the user's existing deployment/reset instructions without redundant
+  confirmation. Fresh-format capability does not justify touching another
+  agent's cluster or discarding separately protected evidence.
+- A7 is a directory-policy choice, not a blocker for group B. Always versus
+  adaptive selects when a directory spreads; bounded hashed placement with
+  lazy lanes describes how it spreads and is not a mutually exclusive third
+  timing policy. My recommendation remains bounded, lazy, spread-from-creation
+  on a fresh format, subject to the current-format correctness gates. Record
+  the selected policy before implementing that part; do not imply every
+  fail-closed implementation step awaits new user input.
+- Drop D only once the chosen current design has no path producing SPLITTING
+  work. Until then its status is conditional, not PASS. Do not implement D to
+  preserve discarded pre-change data.
+
+Implementation handoff: one current encoding, deterministic construction and
+validation, fatal rejection with correct scope abort/unlock, explicit peer and
+store refusal, and current-format restart/replay/snapshot tests. No old-format
+fallbacks or migration requirements are reintroduced. No code or deployment
+changed; all runtime acceptance remains open.
