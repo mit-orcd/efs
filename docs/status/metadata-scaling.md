@@ -727,3 +727,40 @@ unchanged durable and Raft cursors, service fencing, compatible restart, and
 unchanged business/transient-error behavior. Keep this as compatibility work
 linked from W66; it is not evidence that metadata distribution or the ORCD
 qualification gates have passed. No code or deployment changed in this review.
+
+### Assessment of the final constraints — Oct 21
+
+**Code inspection against devel `8ccfeb9d6`; no runtime test (NOTRUN). No
+code changed.** All five constraints are verified or accepted:
+
+1. **Abort, don't skip (verified).** `efs_kv_lsm_apply_end(kv, NULL)` clears
+   the staged memtable and cleanup marks and releases `l->writers` without
+   committing a cursor (`src/kv/kv_lsm.c`). Skipping it would leak the writer
+   lock. The earlier "skip `apply_end`" wording was wrong.
+2. **Scope of the normalization (accepted).** `host_apply` restores IO/NOMEM
+   for listed families, and begin/commit failures override the result. The
+   confirmed defect is decoder and encoding errors reaching verdict
+   normalization, not consumption of every error.
+3. **Born-HASHED is not format-neutral (verified; the previous assessment's
+   point 3 is withdrawn).** In `mkdir_batch` (`src/meta/meta_apply.c`) the
+   `want_layout` carried by the MKDIR entry is the *parent's* layout, used to
+   place the dentry. The new directory's own row is zero-initialized
+   (`memset(&row, 0, …)`), so its LOCAL layout is implicit and not recorded
+   in the log. Making MKDIR create HASHED directories would change what
+   historical MKDIR entries replay to. Born-HASHED therefore needs the
+   child's layout carried explicitly in new MKDIR entries (absent meaning
+   LOCAL) or a versioned replay rule. Either way it depends on the
+   compatibility fence, so the order is: fence first, then born-HASHED.
+4. **Sticky but recoverable (agreed).** A compatible restart rechecks the
+   retained entry from the unchanged cursor and consumes it exactly once.
+   `kv_incomplete` is not reused as the fence.
+5. **Separate diagnostics, whole-entry validation (agreed),** including every
+   member of batch commands.
+
+This review thread has converged: no open disagreements remain on the
+compatibility work. The remaining items are implementation choices, best
+settled in code with focused tests: abort and unlock, unchanged durable and
+Raft cursors, service fencing, compatible-restart recovery, unchanged
+business and transient-error behavior, and an explicit child layout in
+MKDIR. W66 distribution decisions stay open; this is compatibility work
+linked from W66, not evidence for it.
