@@ -78,7 +78,7 @@ static struct {
     uint32_t segments_per_pass;
     double idle_rate, busy_rate, busy_commits;
     uint64_t unpacked_start; /* bytes per node */
-    uint64_t compact_idle_ns, compact_cold_ns;
+    uint64_t compact_idle_ns, compact_cold_ns, compact_batch_budget_ns;
     uint32_t compact_idle_segs, compact_daily_start, compact_daily_min; /* minutes, UTC */
     double space_start, space_full; /* quota fractions */
     uint32_t backfill_shards;
@@ -886,7 +886,8 @@ static void *pk_job_run(void *arg)
 
 /* Compaction schedule: output segments to build in this pass.
  * - Idle: once the cluster has not been busy for compact_idle_ns, a batch
- *   of compact_idle_segs every compact_idle_ns while it stays idle (reads
+ *   of compact_idle_segs (at most compact_batch_budget_ns of work) every
+ *   compact_idle_ns while it stays idle (reads
  *   are not commits, so a read-only cluster counts as idle).
  * - Daily: inside [compact_daily_start, +compact_daily_min) UTC, a larger
  *   batch every pass, but only while the cluster is not busy.
@@ -1095,8 +1096,13 @@ static int pk_group(uint8_t group, uint64_t term)
         uint32_t manual = req < pk.segments_per_pass ? req : pk.segments_per_pass;
         if (manual > want) want = manual;
         uint32_t built = 0;
-        for (; built < want && !__atomic_load_n(&pk.stop, __ATOMIC_ACQUIRE); built++)
+        /* A batch also stops after compact_batch_budget_ns of work, so a
+         * large idle batch spends at most that much of each idle period. */
+        uint64_t batch_start = pk_now_ns();
+        for (; built < want && !__atomic_load_n(&pk.stop, __ATOMIC_ACQUIRE); built++) {
+            if (built && pk_now_ns() - batch_start > pk.compact_batch_budget_ns) break;
             if (!pk_compact(kv, group, term, nodes, count)) { if (req) __atomic_store_n(&pk.g[pk_gi(group)].compact_req, 0, __ATOMIC_RELEASE); break; }
+        }
         if (req && built) {
             uint32_t cur = __atomic_load_n(&pk.g[pk_gi(group)].compact_req, __ATOMIC_ACQUIRE);
             __atomic_store_n(&pk.g[pk_gi(group)].compact_req, cur > built ? cur - built : 0, __ATOMIC_RELEASE);
@@ -1233,7 +1239,12 @@ int server_packer_start(struct efsd_server *s)
     pk.space_start = (double)env_u64("EFS_PACK_SPACE_START_PCT", 50, 0) / 100.0;
     pk.space_full = (double)env_u64("EFS_PACK_SPACE_FULL_PCT", 80, 0) / 100.0;
     pk.compact_idle_ns = env_u64("EFS_PACK_COMPACT_IDLE_S", 60, 1) * 1000000000ull;
-    pk.compact_idle_segs = (uint32_t)env_u64("EFS_PACK_COMPACT_IDLE_SEGS", 8, 1);
+    /* An output segment is at most 128 KiB (often only ~15 files of
+     * ~8 KiB): 8 per idle minute left thousands of holed segments after an
+     * hour of churn (closure C5, 2026-10-21). 256 per batch, capped at
+     * EFS_PACK_COMPACT_IDLE_MS of work per batch. */
+    pk.compact_idle_segs = (uint32_t)env_u64("EFS_PACK_COMPACT_IDLE_SEGS", 256, 1);
+    pk.compact_batch_budget_ns = env_u64("EFS_PACK_COMPACT_IDLE_MS", 10000, 1) * 1000000ull;
     pk.compact_daily_start = (uint32_t)env_u64("EFS_PACK_COMPACT_DAILY_START_MIN", 180, 0) % 1440;
     pk.compact_daily_min = (uint32_t)env_u64("EFS_PACK_COMPACT_DAILY_MIN", 120, 1);
     if (pk.compact_daily_min > 1440) pk.compact_daily_min = 1440;
@@ -1243,11 +1254,12 @@ int server_packer_start(struct efsd_server *s)
     pk.started = 1;
     fprintf(stderr, "packer: started min_age_ms=%llu interval_ms=%llu segments_per_pass=%u "
             "files_per_s=%.0f busy_files_per_s=%.0f busy_commits_per_s=%.0f unpacked_gib=%llu space_pct=%.0f-%.0f "
-            "compact_idle_s=%llu compact_idle_segs=%u compact_daily=%02u:%02u+%umin compact_cold_s=%llu\n",
+            "compact_idle_s=%llu compact_idle_segs=%u compact_idle_ms=%llu compact_daily=%02u:%02u+%umin compact_cold_s=%llu\n",
             (unsigned long long)(pk.min_age_ns / 1000000ull), (unsigned long long)pk.interval_ms,
             pk.segments_per_pass, pk.idle_rate, pk.busy_rate, pk.busy_commits,
             (unsigned long long)(pk.unpacked_start >> 30), pk.space_start * 100, pk.space_full * 100,
             (unsigned long long)(pk.compact_idle_ns / 1000000000ull), pk.compact_idle_segs,
+            (unsigned long long)(pk.compact_batch_budget_ns / 1000000ull),
             pk.compact_daily_start / 60, pk.compact_daily_start % 60, pk.compact_daily_min,
             (unsigned long long)(pk.compact_cold_ns / 1000000000ull));
     return 0;

@@ -7,6 +7,8 @@ def fn(sig):
     a=s.index(sig);return s[a:s.index('\n}\n',a)+3]
 assert 'pk_compact_due(pk.g[pk_gi(group)].busy' in s, 'compaction must run from the schedule'
 assert 'pk.g[pk_gi(group)].tokens -= (double)nfiles' not in s, 'compaction must not draw packing tokens'
+assert 'pk_now_ns() - batch_start > pk.compact_batch_budget_ns' in s, 'a compaction batch is bounded in time'
+assert 'env_u64("EFS_PACK_COMPACT_IDLE_SEGS", 256, 1)' in s, 'idle batches are large enough to clear a churn backlog'
 code=r'''
 #include <assert.h>
 #include <stdint.h>
