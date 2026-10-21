@@ -7,7 +7,15 @@ to delete or fix.
 **Verdict:** this is an audit, not a gate. 44 findings: 8 correctness, 7
 liveness, 29 maintenance. `make test` on the reviewed commit **FAILS** at
 the documentation gate (finding T1). With the docs regenerated in a private
-copy, the code tests PASS (rc=0, 2 min 29 s).
+copy, the code tests PASS (rc=0, 2 min 29 s). Neither run is a mounted or
+RDMA qualification, and neither says anything about a later devel tip.
+
+The 44 rows are audit entries, not 44 demonstrated defects. Some are owner
+decisions (W1, S1, X1), some are test seams to keep (D5, K4), and several
+deletions change visible behaviour (P4, E2, K3). The
+[independent review](#independent-review-of-efca33a22--october-21) at the
+end corrected several recommended actions. The rows below are revised to
+match it (see [Revision after the review](#revision-after-the-review)).
 
 | | |
 |---|---|
@@ -42,7 +50,8 @@ the code whose runtime path was not exercised.
 | Scripts, env flags, CLI and docs | — | — | 4 | 4 |
 | **Total** | **8** | **7** | **29** | **44** |
 
-By kind, 15 rows are dead code (no live caller, reader, sender or runner:
+By kind, 15 rows are dead code (no caller, reader, sender or runner in the
+audited build:
 M6, P2, P3, W1–W3, D1–D3, R1, R3, K1, K4, T2, T6) and 29 are dysfunctional
 or compatibility code. The linker scan flagged **59
 functions that no production binary or test reaches** (one, a weak test
@@ -59,8 +68,10 @@ source lines** of the client library are reachable only from test harnesses
    return `EFS_OK` in the DIR, SESSION and TXN decoders. For about 45
    command tags, `host_apply` then forces any verdict, `EFS_ERR_PROTO`
    included, to `EFS_OK` and commits the KV cursor. The DIR decoder also
-   swallows I/O errors. W66 group B (B1–B4) is the fix. The known example
-   is confirmed, and `tests/test_gc_verdict.py:75` asserts the PROTO→OK
+   swallows I/O errors. W66 group B (B1–B4) is the fix: a distinct
+   malformed/unsupported outcome, not "every PROTO is fatal", because SALT
+   and QUERY_POLICY use PROTO as a business refusal. The known example is
+   confirmed, and `tests/test_gc_verdict.py:75` asserts the PROTO→OK
    conversion as intended behaviour.
 2. **T1: `make test` on devel stops at `docs/check-architecture.py`**
    (`Makefile:455`). Commit `0bdf55256` edited `docs/status/README.md`
@@ -79,13 +90,16 @@ source lines** of the client library are reachable only from test harnesses
 5. **W1: the typed-publication, lane-writer and PUT-ticket client stack
    is about 1,300 lines that efs-fuse never reaches.** Only `tests/live`
    harnesses and source-slice tests use it. Its server RPCs are reachable
-   only through it. It needs an owner decision: integrate (W86/W88) or
-   delete.
+   only through efs-fuse-unreachable client code, though any peer can
+   still send them. It needs an owner decision: keep it parked, or archive
+   it as one unit (client, RPCs and apply tags together). Do not integrate
+   it just to improve a reachability count.
 6. **T2–T5: tests that never run or pass without testing.** Three unit
    binaries are built and never run. Twenty Python tests are unwired; two
    of them fail on devel (`test_pressure_cohort.py` since the packing
    removal, and `test_live_ticket_retry.py`). The ThreadSanitizer half of
-   `test_apply_ring.py` silently skips on gcc 11.
+   `test_apply_ring.py` silently skips on gcc 11. Wire and fix these
+   before deleting code they could protect.
 7. **R1/R2: the old RDMA receive API (about 250 lines) is dead since the
    segmented transport.** The documented `EFS_RDMA_SPIN_US` knob is read
    only by that dead code, so setting it has no effect.
@@ -96,7 +110,12 @@ source lines** of the client library are reachable only from test harnesses
    `-O0 -fno-inline -ffunction-sections`. Each production binary (efsd,
    efs-fuse, efs-bench, efs-mgmt, efs-query) was linked against the
    *whole* `libefs.a` with `--gc-sections --print-gc-sections`. A library
-   function counts as production-dead when all five links discard it. A
+   function counts as dead in production when all five links discard it.
+   That claim holds for the scanned build configurations only: the default
+   Linux build, plus `EFS_FAULTS=1` and `EFS_MEMCHECK=1` as reported under
+   [Revision after the review](#revision-after-the-review). It does not
+   cover external callers of the public headers. For a wire handler it
+   says nothing about whether a peer or tool can send that message. A
    server function counts against efsd (and against the efs-bench copy for
    the storage files it recompiles). The test binaries were relinked with
    `--gc-sections` and their surviving symbols recorded, which separates
@@ -105,8 +124,11 @@ source lines** of the client library are reachable only from test harnesses
    [`classify.py`](dead-code-review-20261021/classify.py). Table-referenced
    callbacks stay alive because their table is referenced, so the scan is
    conservative. Every row below was then checked by hand with
-   `git grep -w`. Run `classify.py` in a git checkout of the reviewed
-   commit; the build tree on node9901 is a `git archive` copy. Rerunning
+   `git grep -w`. `reachability.sh` cleans, rebuilds and relinks inside
+   its TREE argument as well as writing to OUT. It refuses a git checkout,
+   a deployed tree, or a tree without a `.efs-audit-tree` marker, so give it
+   a disposable `git archive` extraction. Run `classify.py` in a git
+   checkout of the reviewed commit. Rerunning
    both scripts reproduced the counts exactly: 59 dead, 158 test-only and
    27 header-inline.
 2. **Compiler warnings.** I ran the default build with `-Wunused-macros
@@ -158,8 +180,10 @@ To clean up, remove `/data1/efs/testsuite/deadcode-0bdf55256` and
   advances (`:3005–3010`) and `applied` moves past the entry on every
   replica.
 - Evidence: the code; [W66 checklist](../status/metadata-scaling.md#w66-acceptance-checklist-consolidated-oct-21) B1 NOTRUN.
-- Action: return a distinct fatal "unsupported encoding" class before any
-  mutation (B1–B4).
+- Action: return a distinct fatal "unsupported encoding" class, decided
+  before any mutation (B1–B4). On that outcome, abort the KV scope, leave
+  the cursor and `applied` unchanged, and withdraw readiness. Validate every
+  member of a batch before any side effect.
 
 ### M2 — Unknown sub-tags and short frames apply as success · correctness · High · **fix**
 - `apply_dir_cmd`: short frame (`:2226–2227`) and unknown kind (`:2239–2240`).
@@ -181,8 +205,15 @@ To clean up, remove `/data1/efs/testsuite/deadcode-0bdf55256` and
 - `tests/test_gc_verdict.py:75` asserts
   `core_result(EFS_MD_CMD_APPEND_RES,EFS_ERR_PROTO,37)==EFS_OK`, which
   encodes the defect as intended.
-- Action: keep business verdicts in the ring. Make PROTO and malformed
-  input fatal (B1). Update `test_gc_verdict.py`.
+- Not every PROTO here is a decode failure. SALT answers PROTO for an
+  anchor mismatch (comment at `:2933–2935`), and the QUERY_POLICY branch
+  treats PROTO as a logical CAS verdict (`:2963–2966`). Both are legitimate
+  business refusals.
+- Action: add a separate malformed/unsupported outcome that decoders
+  return. Keep business refusals (PROTO included where it means a refusal)
+  as ring verdicts. Removing PROTO from one allow-list is not the fix.
+  Replace the expression-level check in `test_gc_verdict.py` with tests at
+  the real apply boundary: verdict, cursor, and the state after restart.
 
 ### M4 — DIR apply swallows storage errors · correctness · High · **fix**
 - `apply_dir_cmd` maps NOT_FOUND/INVAL/BUSY to OK.
@@ -191,7 +222,9 @@ To clean up, remove `/data1/efs/testsuite/deadcode-0bdf55256` and
 - DIR is also missing from the IO-retry list (`:2984–3000`).
 - A failed split or migrate step therefore advances the cursor on that
   replica only, so replicas diverge.
-- Action: return IO/NOMEM. Make PROTO fatal.
+- Action: return IO/NOMEM so the existing retry applies. Route malformed
+  DIR entries to the M1 outcome. Test: inject a DIR storage failure on one
+  replica, then show recovery and equal state on all replicas.
 
 ### M5 — Missing KV host applies as success · correctness · Medium · **fix**
 - `host_apply` stamps the ring `EFS_OK` and returns OK when
@@ -215,8 +248,10 @@ To clean up, remove `/data1/efs/testsuite/deadcode-0bdf55256` and
   lists and the error counters (`:8448–8450`).
 - The comment "Historical LANE_SWEEP retains whole-lane replay semantics"
   in `meta_cmd.h` says it outright.
-- Action: delete per AGENTS.md. Old logs are then refused through M1.
-  Remove the cases from `tests/test_gc_verdict.py`.
+- Action: delete the apply paths per AGENTS.md, and keep the five tag
+  values explicitly refused (add them to the reserved ranges in
+  `meta_cmd.h`) until a format-marker change replaces them. Do not rely on
+  M1 for this. Remove the cases from `tests/test_gc_verdict.py`.
 
 ### M7 — PUT_TICKET_RETIRE_PUBLISHED verdicts halt apply · liveness · Medium · **fix with W86**
 - PUT_TICKET_ADMIT is in the verdict list (`:2948`).
@@ -224,8 +259,10 @@ To clean up, remove `/data1/efs/testsuite/deadcode-0bdf55256` and
 - A business refusal from `efs_put_ticket_retire_published` (INVAL/STALE)
   is therefore returned to the Raft core as an apply failure, which retries
   the same index.
-- This path belongs to the staged W86 stack (W1), so production does not
-  reach it today.
+- efs-fuse never sends the request that leads here, because it belongs to
+  the staged W86 stack (W1). The server still exposes it: any peer that
+  sends the RPC reaches this apply path. Client reachability and server
+  exposure are different claims.
 - Action: decide together with W1. If kept, classify its verdicts like
   ADMIT.
 
@@ -242,15 +279,25 @@ To clean up, remove `/data1/efs/testsuite/deadcode-0bdf55256` and
 - `include/efs/protocol.h:237–242` documents the old-client intent.
 - `scripts/w125_p3_compat.sh` case 2 expects "old client … writes still
   work".
-- Action: require one exact declaration before any request. Turn
-  `w125_p3_compat.sh` into a refusal test or delete it.
+- Action: require one exact supported declaration. Define this as a
+  connection-state and message matrix, not a single "before any request"
+  rule. The declaration messages themselves must be accepted, and client,
+  peer (HELLO) and management connections have different valid
+  operations. Cover TCP and RDMA, reconnects, and forwarding connections.
+  Test with synthetic unsupported declarations; no old-client campaign is
+  needed. Turn `w125_p3_compat.sh` into a refusal test or delete it.
+- A declaration is not authentication. A correct version does not
+  authorize peer or administrative mutations, and this gate does not
+  claim to.
 
 ### P2 — Single-item GC RPCs without a sender · maintenance · High · **delete**
 - `EFS_MSG_GC_INODE` (`handler.c:530`) and `EFS_MSG_GC_FRAGMENT`
   (`handler.c:695`) have no sender outside the handler.
 - W124 senders use `GC_INODE_BATCH` (`raft_host.c:8343`) and
   `GC_FRAG_BATCH` (`:9135`).
-- Action: delete the handlers, request/reply structs and enum values.
+- Action: delete the handlers and request/reply structs. Keep the two
+  message IDs explicitly refused (not silently ignored) until a
+  current-format protocol change retires them.
 
 ### P3 — `NODE_LEFT` handler without a sender · correctness · High · **delete**
 - `handler.c:902–911` calls `server_remove_node_from_cluster`
@@ -258,7 +305,9 @@ To clean up, remove `/data1/efs/testsuite/deadcode-0bdf55256` and
   no declaration and no peer identity.
 - Nothing in the tree sends it (the last sender went with the server peer
   pool rework; see `git log -G EFS_MSG_NODE_LEFT`).
-- Action: delete. Membership changes go through Raft.
+- Action: delete the handler (a narrow fix, independent of P1). Refuse the
+  message ID explicitly. Membership changes go through Raft. This removes
+  one unsafe endpoint; it does not authenticate the others (P1).
 
 ### P4 — `HEAL_STATUS` is a zero stub (repair leftover) · maintenance · High · **delete**
 - `handler.c:831–838` always replies with zeros ("The KV has no heal
@@ -267,7 +316,9 @@ To clean up, remove `/data1/efs/testsuite/deadcode-0bdf55256` and
   `node N: idle` for every node, and its healing branches are unreachable.
 - Repair was removed with experimental group A (October 16).
 - Action: delete the RPC, its structs (`protocol.h:841`) and the mgmt
-  section.
+  section, and refuse the message ID. This changes visible `efs-mgmt status`
+  output, so update its help and any test or script that parses it in the
+  same change.
 
 ### P5 — Four query snapshot request versions · maintenance · High · **delete the unsent ones**
 - `handler.c:1333–1340` accepts `EFS_QUERY_VERSION`,
@@ -318,8 +369,9 @@ To clean up, remove `/data1/efs/testsuite/deadcode-0bdf55256` and
 
 ## 4. Client staged write path (typed publication, lane writer, PUT tickets)
 
-### W1 — About 1,300 client lines that efs-fuse never reaches · maintenance · High · **decide: integrate or delete**
-None of these is reachable from efs-fuse (linker scan). Only
+### W1 — About 1,300 client lines that efs-fuse never reaches · maintenance · High · **decide: keep parked or archive as one unit**
+None of these is reachable from efs-fuse in the audited links (linker
+scan). The server side stays exposed to any peer. Only
 `tests/live/client_publication_writeback.c`, `client_put_ticket.c`,
 `client_report_many_inodes.c`, `client_lease_edge.c`,
 `client_retained_lease.c` and source-slice tests use them:
@@ -349,9 +401,12 @@ The backlog says this is staged and was never activated: W86 "staged for
 production data-plane integration"; W88 typed publication adoption open;
 `client_internal.h:531` "no FUSE caller is enabled yet".
 
-Action: the user decides. Either give W86/W88 an owner and an activation
-gate, or delete the client stack, its RPCs and its apply tags together
-(the archive tag pattern of D37 works). Under the no-compatibility rule,
+Action: the user decides. Either keep it parked, or archive the client
+stack, its RPCs and its apply tags together as one coherent unit (the D37
+archive-tag pattern works), keeping the retired message IDs and tags
+refused. Do not integrate it just to improve a reachability count. If a
+named acceptance requirement needs it, qualify that production path
+explicitly. Under the no-compatibility rule,
 "legacy PUT transport after admission" (W86) is the only live data path.
 
 ### W2 — Dead client helpers · maintenance · High · **delete**
@@ -394,8 +449,10 @@ gate, or delete the client stack, its RPCs and its apply tags together
   line or the pack-compact reply.
 - `read_errors`, `put_errors`, `admit_errors`, `abandoned`, `unindexed`,
   `busy_passes` and `budget_waits` are invisible to operators.
-- Action: export through `gc-status` or the pack-compact reply, or drop
-  the counters.
+- Action: prefer exporting the useful error and backlog counters through
+  `gc-status` or the pack-compact reply. Drop only counters with no
+  diagnostic value. An unused getter is not by itself a reason to delete
+  them.
 
 ### D4 — Pre-W1 fragment names and old storage layouts · maintenance · Medium · **delete with format marker**
 - `chunk_generation == 0` still selects the `{ci}.{fi}` name
@@ -428,13 +485,17 @@ gate, or delete the client stack, its RPCs and its apply tags together
 - `docs/using/power-user.md:66` documents it.
 - Its only reader is the dead `spin_us()` (R1).
 
-### R3 — Baseline R8 still open, plus unused bits · maintenance · High · **decide**
+### R3 — Baseline R8 still open, plus unused bits · maintenance · High · **decide; prefer exporting diagnostics**
 - `efs_rdma_zc_stats` (`:261`) and `efs_rdma_send_quiesce` (`:1568`,
   named in the lifetime contract `rdma.h:60–68`).
 - `zc_lkey` (`:271`, marked `unused`).
 - Unused macro `SEND_WRID_INLINE` (`:82`).
 - `efs_rdma_message_stats` (`:1746`) and its byte counters are read only
   by tests.
+- Action: prefer exposing the useful RDMA diagnostics (zero-copy and
+  fallback counts, message byte counters) through `io-stats` over deleting
+  them. Delete `zc_lkey` and the unused macro. Decide quiesce together with
+  the lifetime contract.
 
 ## 7. KV, metadata and query library
 
@@ -457,6 +518,9 @@ gate, or delete the client stack, its RPCs and its apply tags together
 - `tests/test_query_cache_migration.c` (unwired) is the cross-build oracle
   (`75974ba54`).
 - Both are migration of retained data. Delete together.
+- This changes format handling: an old v5/v6 directory must then be refused
+  clearly (fail-closed), not silently ignored or overwritten. Update the
+  query-cache tests in the same change.
 
 ### K4 — Test-only library APIs · maintenance · Medium · **keep or move to a test header**
 - `efs_kv_group_export` and `efs_kv_group_import` (`kv_snap.c:129`,
@@ -468,8 +532,9 @@ gate, or delete the client stack, its RPCs and its apply tags together
   simulator.
 - Also test-only: the in-memory KV, Raft, store and transport backends,
   `efs_wire_pack/unpack`, and the `efs_name_index_*` accessors.
-- These are seams, not abandoned code. Keep them only where a test proves
-  equivalence with the production path.
+- These are seams, not abandoned code. Keep the ones that support
+  meaningful tests of the current path. A seam need not duplicate
+  production exactly, but its test must state what it does not cover.
 
 ### K5 — Small code-quality items · maintenance · Low · **fix when touched**
 - `src/meta/query_disk.c:1606`: `if(length)path[length++]='/';memcpy(…)`
@@ -508,8 +573,13 @@ gate, or delete the client stack, its RPCs and its apply tags together
   the recipe never run, including every `./tests/test_*` unit binary.
 - After `python3 docs/gen-architecture-full.py` in the private copy only,
   `make test` passed (rc=0, real 2 min 29 s).
-- Action: regenerate and commit. Move the docs gate to the end of `test`
-  (or its own prerequisite) so a docs lag cannot hide code results.
+- Action: regenerate and commit. Moving the same fail-fast line, or making
+  it a prerequisite, does not help: a failing prerequisite also stops the
+  recipe. Split `test` into independent docs and code targets that both
+  always run, and have `test` report an aggregate nonzero result if either
+  fails.
+- The stock FAIL and the regenerated-copy PASS are separate results. Neither
+  is a mounted or RDMA qualification.
 
 ### T2 — Unit binaries built but never run · liveness · High · **wire**
 - `tests/test_rdma_segmented`, `tests/test_expiry` and
@@ -543,8 +613,20 @@ NOTRUN" verdict, not a silent pass.
   (`src/server/apply_ring.h:38`, `:61`).
 - The test then prints `SKIP` and passes (`tests/test_apply_ring.py:229–231`).
 - The race check and its negative control never run on node9901.
-- Action: add `-Wno-error=tsan` (or use atomic loads and stores instead of
-  the fence) and fail when a gating node cannot build TSan.
+- The ring payload already uses atomic loads and stores. The
+  release/acquire fences are part of the documented sequence-lock ordering,
+  so "use atomics instead of the fence" (the earlier advice here) was wrong
+  and would change the algorithm.
+- Action: fix the test, not the synchronization.
+  - Allowing the warning (`-Wno-error=tsan`) can enable a diagnostic run,
+    but TSan does not model these fences, so a clean run does not prove
+    snapshot coherence.
+  - Keep the torn-record stress check and the plain-field negative control
+    as the real evidence, and record the sanitizer's limits in the test.
+  - Report SKIP as NOTRUN. A qualification gate must run in an environment
+    where the check is supported.
+  - Any change to the memory-ordering algorithm needs its own correctness
+    review.
 
 ### T6 — Unwired C sources in `tests/` · maintenance · High · **delete or move**
 - `tests/test_query_cache_migration.c`: compat, delete with K3.
@@ -593,13 +675,16 @@ NOTRUN" verdict, not a silent pass.
 - `tests/clean_cluster.sh:25` says `EFS_FLUSH_PROF=1` makes efsd print
   FLUSH-PROF lines, but efsd does not read it.
 
-### E2 — Compatibility CLI syntax · maintenance · High · **delete**
+### E2 — Compatibility CLI syntax · maintenance · High · **delete (visible change)**
 - `efs-mgmt mkfs|raft-mkfs NODE:PORT [legacy-label]` accepts and ignores a
   label (`src/mgmt/efs_mgmt.c:1113–1121`, `include/efs/cli_help.h:114`,
   `:152`).
 - `expiry-policy` keeps a "Legacy set ROOT GENERATION …" positional form
   (`cli_help.h:149`, `efs_mgmt.c:1611`).
 - efs-fuse ignores a legacy export label (`efs_fuse.c:7818`).
+- Removing these changes accepted command lines. Make the old forms fail
+  with a clear usage error, and update help, scripts and tests in the same
+  change.
 
 ### E3 — Mixed-build script · maintenance · High · **delete or rewrite**
 - `scripts/w125_p3_compat.sh` tests an old efs-fuse on new daemons and a
@@ -679,21 +764,36 @@ NOTRUN" verdict, not a silent pass.
 
 ## Suggested order for the follow-up
 
-1. T1: regenerate the docs and move the docs gate. This restores `make test`
-   as the verdict for everything that follows.
-2. M1–M4 and M6, as the W66 group B implementation: one fail-closed apply
-   boundary, deleting the superseded encodings with it.
-3. P1, P3 and E3: fail-closed client declaration and the unauthenticated
-   membership handler.
-4. Pure deletions with no behaviour change: P2, P4, R1, K1, K3, W2, W3, D1,
-   D2, T6, E2.
-5. Owner decisions: W1 (W86/W88), S1 (W72), X1 (spread policy), P5/P6
-   formats, R3, R10.
-6. Test wiring: T2–T5, T7.
+Revised to the independent review's order: tests first, then
+correctness, then enforcement, then cleanup.
 
-Each removal needs its own Linux build and `make test` on node9901.
-Removals in the apply path also need a fresh-cluster restart and replay
-check.
+1. **Trustworthy test reporting.**
+   - T1: regenerate the docs, and split the docs and code test targets
+     with an aggregate result.
+   - T2–T5 and T7: wire the tests, fix the two stale ones, and report SKIP
+     as NOTRUN.
+   - Add the missing current-path tests (apply boundary, cursor, restart)
+     *before* deleting any code they could protect.
+2. **Correctness fixes.**
+   - M1–M5: a distinct malformed/unsupported apply outcome. Business
+     refusals stay ring verdicts.
+   - P3: delete the unsafe `NODE_LEFT` endpoint.
+3. **Enforcement.**
+   - P1: the declaration state matrix, plus E3.
+   - S1: atomically with W72 registration.
+4. **Scoped cleanup**, batched by subsystem, with one Linux build and
+   `make test` per coherent batch (not per symbol).
+   - Behaviour-neutral deletions: P2, R1, K1, W2, W3, D1, D2, T6. The
+     retired message IDs and command tags stay explicitly refused.
+   - Visible behaviour changes, each done with its help text, tests and
+     fail-closed handling: P4, E2, K3, M6, P5/P6, D4.
+5. **Owner decisions:** W1/M7 (park or archive as a unit), S2, X1 (spread
+   policy), D3/R3 (prefer exporting diagnostics), R10.
+
+This is a current-format plan: no retained-data migration, no mixed-version
+support, no old-binary acceptance tests. Apply-path changes also need a
+fresh-cluster restart and replay check. This audit is not evidence for
+tagging a beta or for declaring any finding resolved.
 
 ## Independent review of `efca33a22` — October 21
 
@@ -797,3 +897,37 @@ complete declaration/session gates; then perform scoped cleanup and resolve the
 staged-feature decisions. This is a current-format plan, with no retained-data
 migration, mixed-version support or old-binary acceptance tests. The audit alone
 is not sufficient evidence to tag a beta or declare these findings resolved.
+
+## Revision after the review
+
+**Revised on `dcc9c674f`; reachability rerun on node9901; no product code
+changed.** I checked each correction against the source before applying it.
+All were accepted:
+
+| Review point | Check | Change in this report |
+|---|---|---|
+| Not every PROTO is a decode failure | SALT comment `raft_host.c:2933–2935`; QUERY_POLICY CAS `:2963–2966` | M1, M3, M4 and the top findings: a distinct malformed/unsupported outcome; cursor and readiness handling; batch validation; apply-boundary tests; a DIR fault-injection test |
+| A declaration is not authentication | `handler.c:186–197` | P1: a connection-state matrix and an explicit non-claim. P3 framed as a narrow fix |
+| T1 prerequisite advice | a failing prerequisite also stops the recipe | T1: independent docs and code targets with an aggregate result |
+| T5 "use atomics instead of the fence" | `apply_ring.h:35–41`, `:58–62` already use atomics, and the fences carry the seqlock ordering | T5: fix the test, keep the stress check and negative control, SKIP = NOTRUN |
+| Reachability is configuration-scoped | rerun below | Method and W1/M7 wording scoped to the audited links; server exposure stated separately |
+| The script writes into TREE | `reachability.sh` runs `make clean` and relinks in TREE | Header corrected. The script now refuses a git checkout, `/data1/efs/releases/*`, `/data1/efs/src`, and any tree without a `.efs-audit-tree` marker (checked: rc=2 on an unmarked tree). It takes make variables for variants |
+| Some deletions change visible behaviour | P4 mgmt output, E2 CLI forms, K3 format handling, M6 tags | Marked as visible changes. Retired IDs and tags stay explicitly refused |
+| D3/R3: prefer exporting diagnostics | — | Actions changed |
+| K4 seams | — | Seams need to state their limits, not duplicate production |
+| Order | — | "Suggested order" rewritten: tests → correctness → enforcement → cleanup |
+
+**Variant reachability (node9901, same tree, `classify.py` run in this
+checkout):**
+
+| Variant | Result |
+|---|---|
+| default | 59 dead / 158 test-only / 27 header (as before) |
+| `EFS_FAULTS=1` | identical sets (`diff` empty) |
+| `EFS_MEMCHECK=1` | NOTRUN: `valgrind/memcheck.h` is missing on node9901. By inspection, the variant only adds Valgrind client-request macros inside the inline helpers of `src/common/rdma_memcheck.h`, so it cannot change which functions are called |
+
+Remaining limits: external consumers of the public headers, other
+compilers, and peers or tools that can send a handled message are outside
+what a linker scan can show. Raw variant outputs:
+`/data1/efs/testsuite/deadcode-out/reach-EFS_FAULTS=1/` and
+`reach-EFS_MEMCHECK=1/` on node9901.
