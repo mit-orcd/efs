@@ -594,3 +594,36 @@ Scale counters: 5,064,283 (1,244,941 / 1,271,475 / 1,275,275 / 1,272,592),
 zero reported writer errors after5,300 s. At this rate the bounded five-hour
 run will not reach40 M. Report achieved counts separately; the target and
 post-scale full verification/restart gates remain open.
+
+### Repaired scale close EIO — 2026-10-21 08:27 UTC
+
+**FAIL remains open on deployed 643f6104f**, unchanged four-host RDMA/direct-I/O
+profile. At inspection the new fixture had 7,756,970 acknowledged files
+(1,917,069 / 1,942,491 / 1,949,504 / 1,947,906). fcstor004 worker14
+failed at index57313; the other127 workers continue. No failed write was retried.
+The preserved client log reports at08:14:54.632 UTC inode25891960 REPORT
+publication taking8001 ms, one BUSY result, then flush-meta resource busy.
+The client code caps synchronous REPORT publication at8000 ms; the maintenance
+repair therefore has not eliminated the loaded close failure.
+
+A read-only check of the uncertain path
+`scale-fcstor004/w14/d00057/f0313` returned exactly256 bytes matching
+`sha256(b'fcstor004:14:57313').digest()*8`. This is one uncertain-write check,
+not full verification of the new scale fixture and not a successful close.
+Evidence: qualification directory `fcstor004-eio-client.log`; journal test
+`scale-eio-payload` has the exact command and exit0. Original failures remain.
+
+Four bounded CPU profiles used `perf record -F 99 -g -p DAEMON_PID -o OUTPUT
+-- sleep 25`, with `efs-mgmt raft-status NODE:17432` before/after, followed by
+`perf report --stdio --no-children --percent-limit 2`. All captures exited0.
+Raw outputs are `qualification-643f6104f/fcstor00{3,4,5,6}-scale-eio-perf.data`
+beneath the repair evidence root; exact commands/PIDs are recorded in mailbox
+jobs indexed by deployment-journal tests `HOST-scale-eio-profile`.
+Group2 changed from term5533/leader node2 to term5536/leader node4 during this
+capture; group0 remained term8862/leader node1. Around the failure, packer logs
+also show group2 terms5425/5426/5427 and an11.2 s pass on node4.
+Election disruption is a supported contributor hypothesis, not an established
+root cause; pass duration does not prove mutex hold time. CPU profiles alone
+do not measure blocked duration. No timeout, durability, deployment or workload
+relaxation was made. Loaded latency, new full payload verification,40 M target
+and cold-restart qualification remain open.

@@ -44,7 +44,10 @@ without a fix; per-node capture confirmed one catalog remained unindexed after
 another warmed. Corrected all-serving-node warmup gate is running; concurrent
 NODATA still fails. Corrected gate PASS: 2,853 successful queries and all
 4,459 test payloads verified. Scale at 5.06 M new files, zero write errors;
-40 M target remains open. Original failure preserved.
+40 M target remains open. Original failure preserved. At7.76 M new files,
+a new close EIO on643f6104f exhausted the8 s REPORT budget. Its uncertain
+256-byte payload matches, but the close remains FAIL. Four new profiles confirm
+group2 term5533→5536 in25 s; election-stall root cause remains under investigation.
 
 [W124 — fast delete](../backlog/fast-delete-reclaim.md): **parts 1–2
 implemented and deployed on orcd-mini (`de0c856b4`);**
