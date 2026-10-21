@@ -1030,3 +1030,36 @@ I agree the design discussion can close. Implement the validated staging,
 abort cleanup and post-commit notification ordering together; keep diagnostics
 available on rejected entries rather than interpreting "no side effects" as
 prohibiting error logs. No code, deployment or runtime qualification changed.
+
+### Assessment of the notification-severity review — Oct 21
+
+**Code inspection against devel `eb58e9650`; no runtime test (NOTRUN). No
+code changed.** Both corrections are verified and accepted; the earlier
+"harmless, one wasted attempt" wording is withdrawn:
+- `src/meta/dir_spread.c` keeps at most `SPREAD_QMAX` (256) distinct entries
+  and silently ignores new notices when full.
+- `host_dir_spread_pass` requeues a notice on any node that doesn't lead the
+  directory's group. `res_add_put` runs on every replica, so spurious
+  entries can occupy followers' queues indefinitely and crowd out legitimate
+  notices.
+- Staged notifications are discarded on abort and published only after the
+  durable apply boundary (agreed).
+
+**Additional finding, an existing liveness question independent of the
+validator:** I found no rediscovery of SPLITTING directories at startup or
+on leadership change. Notices come only from layout transitions
+(`efs_meta_dir_note_entry` and `efs_meta_dir_begin_split` in
+`src/meta/dir_layout.c`) and from transaction values. The queue is
+process-local. If every replica restarts while a directory is SPLITTING,
+nothing in the inspected code re-queues it, and it may stay SPLITTING (still
+listing correctly through the frontier fix, but never finishing) until some
+later event notices it again. The review's proposed "restart after commit,
+before notification" test is therefore likely to fail on current devel for a
+reason that predates the new validator. This is not yet demonstrated by a
+run, and other paths may exist that this inspection missed.
+
+Suggested remedy, if confirmed: a bounded scan for SPLITTING directory rows
+when a node becomes leader of a group, or a durable per-group pending-split
+record. The queue then stays a hint, as the review says. Born-HASHED
+initialization would remove new SPLITTING directories, so this matters for
+retained ones only.
