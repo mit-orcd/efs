@@ -242,6 +242,75 @@ GC queues; independent physical inventory is empty. Canonical native tests and
 all five documentation checks pass. Installed AMD direct/TCP service is restored.
 See [completed regression evidence](../../results/measure/20261010-w66-leadership/open-fixed/README.md).
 
+## W66 acceptance checklist (consolidated Oct 21)
+
+This consolidates every gate agreed in the Oct 21 review thread below
+(single-leader review through the rediscovery test design). Use this list
+for implementation. The thread is the rationale and audit trail. All tests
+run on disposable private fixtures, never retained ORCD stores.
+
+**Owners:**
+- **W66:** metadata distribution.
+- **W66-compat:** a compatibility-hardening prerequisite of W66 with no W
+  number yet; it needs its own.
+- **W81:** automatic directory spreading.
+- **D36:** the node-count protection contract.
+
+Status values: NOTRUN (not started or not run), OPEN-DECISION (needs the
+user).
+
+**A. Distribution design and measurement**
+
+| # | Gate | Owner | Status | Source |
+| --- | --- | --- | --- | --- |
+| A1 | Decision page that treats replica placement, leader placement, read routing and execution ownership (host mutex, pump, WAL, KV) separately | W66 | NOTRUN | Position for the W66 decision page |
+| A2 | Per-group instrumentation: offered/achieved rate, blocked time per completed operation, WAL/apply delay, p99, errors, leader placement, lane-to-group mapping; independent-directory and hot-directory workloads measured separately | W66 | NOTRUN | Position; independent review; implementation-review assessment (point 4) |
+| A3 | Leader-spreading A/B on the existing two groups, not presented as the fix for the ~8 s publication stalls unless measurements connect them | W66 | NOTRUN | Position (point 5) |
+| A4 | Evaluate follower-read routing as existing machinery | W66 | NOTRUN | Position (point 3) |
+| A5 | More-groups design: bounded transaction fan-out and locality (parent dentry, child inode, accounting, session and publication records), routing without a common dual-group host, versioned group distribution, migration and recovery | W66 | NOTRUN | Transaction locality; independent review |
+| A6 | Replica count per group derived from the D36 recovery proof, not from throughput arguments | D36 | NOTRUN | Position (point 4); independent review |
+| A7 | Directory-spread policy: always spread vs adaptive vs bounded hashed placement with lazy lanes | W81 | OPEN-DECISION | Position (point 6); independent review |
+
+**B. Compatibility hardening (prerequisite for any new log, store or row encoding)**
+
+| # | Gate | Owner | Status | Source |
+| --- | --- | --- | --- | --- |
+| B1 | Unknown top-level commands and every sub-tag (dir, LOCK, txn, pack, GC, session…), truncated encodings and invalid batch members return a distinct fatal "unsupported encoding" class, not PROTO. It is validated before any mutation and immune to every `host_apply` normalization branch. Business rejections and IO/NOMEM retries keep their current behavior. | W66-compat | NOTRUN | Follow-up and implementation reviews; final constraints (2, 5) |
+| B2 | A fatal result inside an open scope aborts exactly once with `efs_kv_lsm_apply_end(kv, NULL)` (writer lock released). Another group on the shared KV still progresses. Non-KV side effects are audited. | W66-compat | NOTRUN | Final constraints (1) |
+| B3 | After rejection and after restart, both the durable KV cursor and the Raft applied index are unchanged | W66-compat | NOTRUN | Implementation review |
+| B4 | Incompatible-group state: sticky on the unchanged build; readiness withdrawn; affected service refused, including cross-group and cached read paths; diagnostics retained (group, index, term, tag; unsupported vs malformed). Never skip or truncate the entry. Not implemented by reusing `kv_incomplete`. | W66-compat | NOTRUN | Implementation review; final constraints (4, 5) |
+| B5 | Compatible-restart recovery: an upgraded binary rechecks the retained entry from the unchanged cursor and applies its durable effects exactly once | W66-compat | NOTRUN | Final constraints (4) |
+| B6 | Store/log format version: a defined supported set, missing-marker policy and upgrade ordering. It covers command semantics, routing rules, snapshot interpretation and the packed row encoding. It is checked at startup, snapshot restore/import and WAL replay, before any apply. | W66-compat | NOTRUN | Implementation review; final constraints (3); MKDIR assessment (2) |
+| B7 | Peer fence: exact build-ID match on every new or reconnected Raft connection, both directions, TCP and RDMA, bound to the expected peer identity, before frames reach Raft | W66-compat | NOTRUN | Follow-up review (2); implementation review |
+| B8 | A pre-fence binary against a new store/log is a characterization test that documents unsupported downgrade; never a refusal PASS | W66-compat | NOTRUN | Implementation review |
+| B9 | A single row validator at the apply boundary (transaction PUT, new MKDIR operation, direct metadata writes, snapshot install/import): format, length, enum ranges and key/value identity. Legitimate retained states stay valid. The shared decoder stays lenient until its callers are audited. | W66-compat | NOTRUN | Transactional-row review; validator handoff |
+
+**C. MKDIR and born-HASHED placement (after B)**
+
+| # | Gate | Owner | Status | Source |
+| --- | --- | --- | --- | --- |
+| C1 | New strictly validated fast-path MKDIR encoding that carries the child layout separately from the parent routing layout. The old opcode keeps its LOCAL meaning, and a truncated new record is malformed. | W81 | NOTRUN | Final constraints (3); MKDIR replay-path review |
+| C2 | One deterministic row constructor (explicit layout, inode, parent, ownership, timestamps; no allocation, clocks or KV writes) shared by both MKDIR paths. Root creation is covered or its invariants documented. | W81 | NOTRUN | Validator handoff; MKDIR assessment |
+| C3 | Mixed-history MKDIR replay: legacy operation entries, legacy transaction entries and new creations on both paths, from a clean store and from snapshot plus suffix. Compare layouts, inode/dentry placement, lane registration, complete listings and operation-ID outcomes. Retry/restart yields one directory, one allocation and one parent-link update. | W81 | NOTRUN | MKDIR replay-path review |
+| C4 | Spread notifications: validated first, staged, discarded on abort, published only after durable commit. Tests: a valid SPLITTING item plus a later invalid row commits nothing and publishes no work; a storage-failure abort after validation publishes no work. | W81 | NOTRUN | Validator handoff; notification-severity review |
+| C5 | Born-HASHED correctness: empty root/mkdir, concurrent first lane registration, readdir and cookies, timestamps and counts, rename/link/unlink, retry dedup, restart. Measure cold first-touch vs established-lane cost. | W81 | NOTRUN | Follow-up review (3, 4) |
+
+**D. Split rediscovery (retained SPLITTING directories)**
+
+| # | Gate | Owner | Status | Source |
+| --- | --- | --- | --- | --- |
+| D1 | Reproduction: split-start entry covered by the durable cursor; every replica restarted with empty queues, no namespace writes and no manual split; also snapshot plus suffix. SPLITTING→HASHED must complete autonomously within a stated deadline (expiry fails the gate). | W81 | NOTRUN | Rediscovery review; decisive test sequence (2) |
+| D2 | Only after completion: verify payloads and complete listings against an independent inventory, then `rm -rf` the fixture (exit status and absence) | W81 | NOTRUN | Decisive test sequence (2) |
+| D3 | Separate fixture: replace an empty destination directory after its split completes (ENOTEMPTY from a populated destination is not a rediscovery failure) | W81 | NOTRUN | Decisive test sequence (3) |
+| D4 | More than 256 pending directories, leadership transfer and additions behind the scan cursor all reach eventual discovery. A full queue never marks a row covered. | W81 | NOTRUN | Rediscovery review; decisive test sequence (4) |
+| D5 | If D1 reproduces: a resumable, bounded leader discovery scan with a reconciliation backstop, never a whole-store scan under `h->mu`. A durable pending-split index is the fallback, chosen by measured discovery delay and foreground impact. | W81 | NOTRUN | Rediscovery review and assessment |
+
+**Out of scope here, tracked elsewhere:**
+- Requalification of the readdir split-frontier fix `f8b7a7818` (the W125 C7
+  rerun on orcd-mini is NOTRUN).
+- The ORCD-test REPORT-deadline close failures, which need their own
+  diagnosis.
+
 ## Single-leader concentration review — Oct 21
 
 **Analysis only; no code change, nothing measured for this section (NOTRUN).**
