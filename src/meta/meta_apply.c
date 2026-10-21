@@ -3220,10 +3220,22 @@ int efs_meta_apply_setattr(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
  * consequences, both easy to get wrong in opposite directions: the local
  * pass must not treat those names as claimed by the hashed side (they would
  * vanish), and during SPLITTING lane 0 must not be scanned as a lane on top
- * of the local pass (every unmigrated name would come back twice). */
+ * of the local pass (every unmigrated name would come back twice).
+ *
+ * So source 0 is always the inode shard's range: the whole directory when
+ * LOCAL, the local pass when SPLITTING, lane 0 when HASHED. It must come
+ * first. A listing is many pages and the migrator runs between them, moving
+ * names local -> hashed only. Local first means a name the local pass has
+ * not reached yet can only move to a lane that is still ahead of the cursor.
+ * Scanning the lanes first lost every name that moved into an already
+ * scanned lane before the local pass got to it: a run of names at the
+ * migration frontier per listing (W125 C7, 1M-file directory). The cost is
+ * the reverse window: a name listed by the local pass and then migrated is
+ * listed again by its lane. Readdir is a weak listing; callers drop repeated
+ * names. The same numbering keeps a cookie valid across LOCAL -> SPLITTING
+ * -> HASHED, which can happen mid-listing. */
 
 #define DENTRY_KEY_PREFIX 11 /* shard + kind + parent; name follows */
-#define READDIR_SRC_LOCAL EFS_META_LANES /* the pre-split source */
 
 struct dir_scan {
     struct efs_meta_dir_ent *out;
@@ -3341,9 +3353,7 @@ int efs_meta_apply_readdir(struct efs_kv *kv, efs_ino_t dir,
     if (!S_ISDIR(row.mode))
         return EFS_ERR_INVAL; /* as create_file does for a non-dir parent */
 
-    last_src = row.layout == EFS_META_LAYOUT_LOCAL ? 0 :
-               row.layout == EFS_META_LAYOUT_HASHED ? EFS_META_LANES - 1 :
-               READDIR_SRC_LOCAL;
+    last_src = row.layout == EFS_META_LAYOUT_LOCAL ? 0 : EFS_META_LANES - 1;
 
     memset(&s, 0, sizeof(s));
     s.out = out;
@@ -3352,19 +3362,18 @@ int efs_meta_apply_readdir(struct efs_kv *kv, efs_ino_t dir,
         uint32_t shard, base = s.n;
         int local_pass = 0;
 
-        if (row.layout == EFS_META_LAYOUT_LOCAL) {
+        if (cur->src == 0) {
+            /* LOCAL, the SPLITTING local pass and HASHED lane 0 are all
+             * this one range. The local pass runs whatever the bitmap says. */
             shard = efs_kv_inode_shard(dir);
-        } else if (cur->src == READDIR_SRC_LOCAL) {
-            shard = efs_kv_inode_shard(dir);
-            local_pass = 1;
-        } else {
-            /* Lane 0's key range is the pre-split local range, which the
-             * local pass below already covers while the split is running. */
-            if (cur->src == 0 && row.layout == EFS_META_LAYOUT_SPLITTING) {
+            local_pass = row.layout == EFS_META_LAYOUT_SPLITTING;
+            if (row.layout == EFS_META_LAYOUT_HASHED &&
+                (row.used_shards & 1ULL) == 0) {
                 cur->src++;
                 cur->name[0] = 0;
                 continue;
             }
+        } else {
             /* A lane this directory has never used holds no keys, and the
              * bitmap records every first use — including the migrator's. */
             if ((row.used_shards & (1ULL << cur->src)) == 0) {

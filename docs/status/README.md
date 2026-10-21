@@ -78,6 +78,13 @@ implemented and deployed on orcd-mini (`de0c856b4`);**
   POSIX suites PASS; see the evidence page for the mixed-workload test.
 - Slot reuse and subtree delete stay deferred.
 
+[Readdir misses names at the directory-split frontier](readdir-split-frontier-20261021.md):
+**PASS on a private cluster; C7 rerun on orcd-mini open.** A listing of a
+directory being split (>65,536 entries) scanned hashed lanes before the
+local range, so names the migrator moved between pages were lost. The local
+range is now listed first. 500 k-file reproducer: 0 missing in 12 of 12
+listings (was 3–8 per listing).
+
 [W125 closure tests C0–C8](w125-closure-20261021.md): **IN PROGRESS;
 no data errors from packing.** C0 (2 h, both clients), C2, C3, C4, C5 and
 C6 (backfill on upgrade) PASS; three packing defects were fixed on devel,

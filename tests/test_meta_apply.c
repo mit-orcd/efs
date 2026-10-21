@@ -1403,6 +1403,82 @@ static void test_readdir_spread(void)
     efs_kv_mem_free(kv);
 }
 
+/* A big directory splits for a long time, and its listing is many pages with
+ * the migrator moving names between them (W125 C7: a 1M-file `ls -f` missed
+ * runs of names at the migration frontier, a different run every listing).
+ * Page one entry at a time and migrate between pages: every name must be
+ * listed at least once. Repeats are allowed — readdir is a weak listing and
+ * the client drops repeated names — so count distinct names. */
+struct seen_names {
+    char names[48][EFS_MAX_NAME];
+    uint32_t n;
+};
+
+static void seen_add(struct seen_names *v, const char *name)
+{
+    for (uint32_t i = 0; i < v->n; i++)
+        if (strcmp(v->names[i], name) == 0)
+            return;
+    CHECK(v->n < 48, "seen capacity");
+    if (v->n < 48)
+        snprintf(v->names[v->n++], EFS_MAX_NAME, "%s", name);
+}
+
+/* moves_per_page names migrate after each page; finish_at > 0 completes the
+ * migration and flips the directory to HASHED after that many pages. */
+static uint32_t list_while_splitting(int moves_per_page, uint32_t finish_at)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_dir_cursor cur;
+    struct efs_meta_dir_ent ent[1];
+    struct seen_names v;
+    efs_ino_t ino = 0;
+    uint32_t got, pages = 0;
+    char nm[32];
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    for (int i = 0; i < 40; i++) {
+        snprintf(nm, sizeof(nm), "f%07d", i);
+        CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                         nm, &ino) == EFS_OK, "create");
+    }
+    CHECK(efs_meta_dir_begin_split(kv, EFS_ROOT_INO) == EFS_OK, "split");
+    /* Some lanes already hold names, as they do once a split is under way. */
+    for (int i = 0; i < 8; i++)
+        CHECK(efs_meta_dir_migrate_one(kv, EFS_ROOT_INO) == EFS_OK, "migrate");
+    memset(&cur, 0, sizeof(cur));
+    memset(&v, 0, sizeof(v));
+    while (!cur.done && pages < 400) {
+        CHECK(efs_meta_apply_readdir(kv, EFS_ROOT_INO, &cur, ent, 1, &got) ==
+                  EFS_OK, "readdir page");
+        pages++;
+        for (uint32_t i = 0; i < got; i++)
+            seen_add(&v, ent[i].name);
+        for (int m = 0; m < moves_per_page; m++)
+            (void)efs_meta_dir_migrate_one(kv, EFS_ROOT_INO);
+        if (finish_at && pages == finish_at) {
+            while (efs_meta_dir_migrate_one(kv, EFS_ROOT_INO) == EFS_OK)
+                ;
+            CHECK(efs_meta_dir_finish_hashed(kv, EFS_ROOT_INO) == EFS_OK,
+                  "HASHED mid-listing");
+        }
+    }
+    CHECK(cur.done, "listing ends");
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
+    efs_kv_mem_free(kv);
+    return v.n;
+}
+
+static void test_readdir_concurrent_split(void)
+{
+    CHECK(list_while_splitting(0, 0) == 40, "static split listing");
+    CHECK(list_while_splitting(1, 0) == 40, "one name migrates per page");
+    CHECK(list_while_splitting(3, 0) == 40, "three names migrate per page");
+    for (uint32_t at = 1; at <= 40; at += 13)
+        CHECK(list_while_splitting(1, at) == 40, "split finishes mid-listing");
+}
+
 /* Dir lane 0 is the directory's own inode shard, so a lane-0 name occupies
  * the same key in both layouts. That makes it the one name for which "move
  * it to the hashed side" and "check whether the hashed side owns it" are
@@ -5734,6 +5810,7 @@ int main(void)
     test_readdir_local();
     test_readdir_spread();
     test_readdir_lane0();
+    test_readdir_concurrent_split();
     test_setattr_mode_owner();
     test_stat_collect();
     test_stat_committed_unresolved_row();
