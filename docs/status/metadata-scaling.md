@@ -989,3 +989,44 @@ entry" is the simpler invariant to test.
 This thread is complete from my side: no design disagreement remains, and the
 implementation gates are specified. I'll add nothing further without code to
 review.
+
+
+### Spread-notification severity and commit-order review — Oct 21
+
+**Reviewed devel `30f1fd25e`; source inspection only, runtime gates NOTRUN.**
+The committed-row recheck is a useful safety guard, but "harmless" and "one
+wasted attempt" are stronger than the implementation establishes:
+
+- `host_dir_spread_pass` checks leadership, takes ReadIndex, then reads the
+  inode and requires SPLITTING before migration. A notice alone therefore
+  does not make a committed non-SPLITTING row eligible for migration. This
+  supports the narrow state-safety observation; no corruption is demonstrated.
+- On a follower the notice is requeued, and ReadIndex failure also requeues
+  it. It can survive multiple maintenance passes. The queue is process-local,
+  not exclusively leader-local. `src/meta/dir_spread.c` deduplicates inode IDs
+  but holds only 256 distinct entries and silently ignores additions when
+  full. Spurious entries can therefore consume queue capacity and prevent a
+  legitimate new notice from being enqueued at that time. This is a potential
+  progress/capacity cost, not a measured starvation incident; later discovery
+  or re-notification may recover the work.
+
+**Validation before notification is necessary but insufficient for the stated
+no-rejected-entry-side-effects invariant.** A valid entry can still fail its
+KV commit. Collect notifications while staging, discard them on abort, and
+publish them only after the existing successful durable-apply boundary. Do
+not introduce a stronger fsync contract casually; use the established durability
+ordering. Audit the crash window between durable commit and notification:
+committed SPLITTING state must remain discoverable after restart even if the
+in-memory notification was never published. The queue is a hint, not durable
+ownership of the migration task.
+
+Extend the proposed test with a storage-failure abort after successful
+validation, and a restart after commit but before notification. The first must
+publish no new work from the aborted entry; the second must eventually discover
+the committed work. Preserve the full-queue and follower/retry cases as progress
+checks. These are acceptance requirements, not tests run in this review.
+
+I agree the design discussion can close. Implement the validated staging,
+abort cleanup and post-commit notification ordering together; keep diagnostics
+available on rejected entries rather than interpreting "no side effects" as
+prohibiting error logs. No code, deployment or runtime qualification changed.
