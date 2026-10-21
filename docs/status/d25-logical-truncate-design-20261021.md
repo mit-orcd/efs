@@ -496,3 +496,97 @@ It does not.
   Single-digit milliseconds is a target to measure, not a claim.
 - **Order of work:** agree with the review's order, with the publish-epoch
   source fix (above) placed first, because every later step depends on it.
+
+
+## Follow-up review of the author response — October 21
+
+Reviewed `48c423434`; source/design inspection only, **runtime gates NOTRUN**.
+The response substantially improves the design. Rewrite §§1–5 into one
+normative protocol next; leaving contradictory original and response text is
+not a safe implementation handoff. No backward compatibility is required.
+
+### Disposition of the disputed points
+
+- **Writer epoch: accepted and essential.** `src/client/write.c` copies
+  `obs->read_view.fence_epoch` into the publication, and current chunk-view
+  construction derives that field from the lane stamp. All writer-view,
+  retained retry and merge paths must use the coherent inode authority under
+  lazy adoption. Test a write begun after truncate returns on a lane that has
+  not adopted yet. The described loss is a hazard if lazy adoption lands
+  without this change, not a newly reproduced current-devel loss incident.
+- **Stale extend: the proposed ordering can be valid.** A coherent collect
+  performed during the request may order an omitted overlapping publication
+  after the truncate, provided the result really remains
+  `max(requested_size, same-epoch lane EOF)` and preserves those bytes. The
+  expected-base-size check addresses an inode-owned change absent from the
+  epoch-only precondition. I do not require an epoch bump on every extend.
+  The proof must include coherent active-lane membership, pending reductions,
+  shrink races (epoch check), and reservation admission at apply. Test those
+  conditions; a generic claim about ReadIndex alone is insufficient.
+- **PACK_SWITCH: withdraw a blanket cross-group-serialization requirement.**
+  A coherently masked image at the newest source-part epoch can preserve
+  shrink semantics without synchronously locking the inode group. This is
+  valid only if the image incorporates every earlier mask and `valid_len`,
+  and source-row CAS includes all part identities and clips. If a later
+  shrink occurs before SWITCH, its retained fence masks the replacement.
+  If its history was retired, the completed sweep must already have either
+  changed/deleted any affected source row (making CAS fail), or proved that
+  the replacement introduces no bytes outside the surviving bounds. Prove
+  this two-case argument explicitly. Do not stamp the current inode epoch
+  onto older captured bytes. Test SWITCH delayed through shrink, sweep and
+  retirement, not only through shrink, including mixed-epoch spans.
+- **Read ordering: accept the revision recheck as the chosen rule.** An
+  overlapping read may legitimately linearize before a shrink; seeing a
+  shrink during a read does not inherently make its earlier view invalid.
+  My concern was an incoherent inode/history/row capture, particularly across
+  retirement, not a requirement to return the newest concurrent state.
+  With coherent capture, monotonic retirement evidence and the agreed recheck,
+  there is no need to settle a weaker unchecked algorithm. Keep the actual
+  rule in the normative text and cover warm peer caches.
+
+### Remaining protocol details to specify
+
+1. **Opid results versus internal retries.** Persist a successful truncate's
+   identity/effect/verdict atomically. Define how precondition STALE and
+   history-full BUSY interact with that receipt. If every attempt records a
+   terminal STALE for the same opid, rereading and retrying it cannot succeed;
+   if a retry uses a new identity before resolving an ambiguous success, it
+   can truncate again. Specify the existing session mechanism's applicable
+   admission/receipt rules, recheck identity before preconditions, and gate
+   lost reply plus internal recapture plus intervening writes. The wire size
+   is now **TBD**, not 42: expected base size and the opid enlarge the earlier
+   sketch. Publish an exact validated encoding in the rewrite.
+2. **Deterministic bounded sweep.** Replicas do not have identical whole-KV
+   images at every instant: different Raft groups apply independently.
+   An apply-time scan is valid if it examines only the target lane/group's
+   replicated state in deterministic key order, with explicit bounds and
+   no dependence on remote inode reads, wall time or uncommitted overlays.
+   Bound scanned work/bytes as well as changed-row count. Define restart of
+   the cursor when the target epoch changes, handling of a stale sweep
+   command, and preservation of clips when new-epoch publications retain
+   older parts behind the cursor.
+3. **Activation and SWEEP_DONE proof lifecycle.** Inode-group activation
+   must commit before bootstrap can permit a publication. Duplicate or delayed
+   bootstrap must never lower adoption or reset a newer sweep. Define what
+   happens if a lane is already active: an old request must not be treated as
+   a fresh empty activation and marked done. Bind SWEEP_DONE to inode
+   generation, lane and target, ignore obsolete targets, and prove the
+   acknowledged property survives all permitted lane updates. No handler-only
+   claim that a lane is empty may authorize retirement. Marking a truly new
+   lane done is safe only with an enforced bootstrap floor that excludes all
+   older publishes, including delayed requests after retirement.
+4. **Revision matching must allow retirement to make progress.** Inode history
+   revision changes on retirement even when the target content epoch does not.
+   Specify which adoption/target owns a carried history snapshot and how it
+   remains valid or is retried when revision changes. An unexplained equality
+   check against an old lane revision can permanently reject otherwise valid
+   sweep work. A full-history priority hint may be in memory, but committed
+   pending keys must suffice to rediscover work after restart.
+
+The packed ledger correction and abort/fatal distinction are accepted. The
+work order should implement the writer-epoch source, coherent views and lane
+admission as one gated change before enabling lazy truncate; do not switch
+only the client stamp while the server still enforces incompatible lane rules.
+Then qualify retirement and packed compaction with the same-format restart
+and interleaving tests above. This review changes no code or deployment and
+claims no runtime acceptance.

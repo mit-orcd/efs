@@ -27,7 +27,11 @@ review supports the direction but leaves blocking request-identity/EOF,
 coherent-view, retirement/registration, packed-GC and fatal-decoding proofs
 open; the listed entry size is corrected to 42 bytes. The author response
 accepts most points and adds a gap: clients publish at the lane stamp,
-which lazy adoption leaves behind (must become the inode epoch). No runtime gates run.
+which lazy adoption leaves behind (must become the inode epoch). Follow-up
+review accepts conditional stale-extend ordering and source-epoch packing
+without mandatory cross-group serialization; opid retry, lane activation and
+sweep-proof details still need one normative rewrite. Extended wire size TBD.
+No runtime gates run.
 
 [W66 acceptance checklist](metadata-scaling.md#w66-acceptance-checklist-consolidated-oct-21)
 (distribution, fail-closed hardening, MKDIR/born-HASHED, conditional split
