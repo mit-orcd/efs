@@ -91,12 +91,15 @@ listings (was 3–8 per listing).
 no data errors from packing.** C0 (2 h, both clients), C2, C3, C4, C5 and
 C6 (backfill on upgrade) PASS; three packing defects were fixed on devel,
 each with a rerun (idle compaction batch, segment quota reserve,
-grown-file fold). orcd-mini runs `6ffa9e785f57`.
+grown-file fold).
 - Packed md5 crawl is 14% faster than unpacked. Client RSS plateaus at
   about 1.06 GB.
 - Defects outside packing: large-file EIO under concurrent append (0a) and
   readdir skipping entries at 1M entries.
-- Remaining: C1 rerun (running), C9 24 h soak (armed), C10 and docs.
+- The C1 rerun found a pre-existing client defect: a small overwrite
+  after chunk-map eviction published zeros plus the overwrite as the whole
+  chunk. Fixed in `4058d8141`, and orcd-mini now runs `4058d81416a0`.
+- Remaining: C1 rerun 2 (running), C9 24 h soak (armed), C10.
 
 [W125 packer throughput and busy budget](w125-packer-throughput-20261020.md):
 **gates PASS; copy throughput ~1,020 → ~5,000 files/s; lag-controlled busy
