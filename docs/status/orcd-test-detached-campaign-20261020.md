@@ -579,3 +579,18 @@ journal, staged beneath `repair-20261020/query-warmup/`. Product binaries and
 refresh/error semantics are unchanged; the new gate result is pending.
 
 Scale at inspection: 4,384,800 new acknowledged files, zero writer errors.
+
+### Corrected loaded-query gate PASS — 2026-10-21 07:12 UTC
+
+The all-serving-node warmup gate passed under the continuing 128-writer scale
+load (exit0, 226.9 s, no leftovers): 2,853 successful reader queries, five
+permitted BUSY refusals, generations164/165/166, no NODATA during concurrent
+reads. Query p50 was35.8/36.2 ms, p95 346/353 ms, p99 1,156/1,193 ms.
+All4,459 writer payloads verified, exact logical bytes1,141,504, convergence
+32.68 s. This validates the corrected distributed precondition for this run;
+the earlier failure remains preserved and no product semantic change is claimed.
+
+Scale counters: 5,064,283 (1,244,941 / 1,271,475 / 1,275,275 / 1,272,592),
+zero reported writer errors after5,300 s. At this rate the bounded five-hour
+run will not reach40 M. Report achieved counts separately; the target and
+post-scale full verification/restart gates remain open.

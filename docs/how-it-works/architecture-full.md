@@ -1578,7 +1578,9 @@ new scale/restart gates remain open. At 2.24 M new writes (zero write errors),
 concurrent queries under scale fail NODATA after warmup. Diagnostic rerun passed
 without a fix; per-node capture confirmed one catalog remained unindexed after
 another warmed. Corrected all-serving-node warmup gate is running; concurrent
-NODATA still fails. Original failure preserved.
+NODATA still fails. Corrected gate PASS: 2,853 successful queries and all
+4,459 test payloads verified. Scale at 5.06 M new files, zero write errors;
+40 M target remains open. Original failure preserved.
 
 [W124 — fast delete](../backlog/fast-delete-reclaim.md): **parts 1–2
 implemented and deployed on orcd-mini (`de0c856b4`);**
