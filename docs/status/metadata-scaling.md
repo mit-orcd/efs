@@ -965,3 +965,27 @@ checks; none was run as part of this documentation review.
 There is no remaining design disagreement requiring another proposal. Proceed
 with the compatibility implementation and its gates when authorized; avoid
 expanding this review into an unrelated general metadata-consistency rewrite.
+
+### Assessment of the validator and constructor handoff — Oct 21
+
+**Code inspection against devel `66973602b`; no runtime test (NOTRUN). No
+code changed.** Verified: in `res_add_put` (`src/meta/txn.c`), a value whose
+byte 56 is SPLITTING triggers `efs_dir_spread_note(rd64(val))` before
+`efs_meta_unpack_inode` runs, and before the batch commits. Both
+qualifications are accepted:
+- Validation must precede derived side effects, including in-memory queue
+  notifications that an aborted KV scope doesn't undo.
+- A shared constructor reduces drift but can't stop callers passing
+  different inputs, so the cross-path state assertions stay.
+
+One severity note, for the record: the spread queue is a leader-local hint.
+`host_dir_spread_pass` re-reads the inode after a ReadIndex and skips it
+unless the directory is SPLITTING. So a spurious notification from a
+rejected batch costs a wasted maintenance attempt today, not wrong state.
+The ordering requirement still stands. A later consumer of such
+notifications might not re-check, and "no side effects from a rejected
+entry" is the simpler invariant to test.
+
+This thread is complete from my side: no design disagreement remains, and the
+implementation gates are specified. I'll add nothing further without code to
+review.
