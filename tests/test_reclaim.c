@@ -10,7 +10,12 @@
 #include <unistd.h>
 #define EFS_BENCH_BUILD
 #define EFS_SEGMENT_TEST_AUTHORITY
+#define server_gc_sync_roots real_gc_sync_roots
 #include "../src/server/store.c"
+#undef server_gc_sync_roots
+static void (*after_root_sync)(void);
+int server_gc_sync_roots(struct efsd_server *s)
+{int rc=real_gc_sync_roots(s);if(!rc&&after_root_sync)after_root_sync();return rc;}
 #include "../src/server/reclaim.c"
 #include "../src/server/segment_store.c"
 
@@ -622,6 +627,32 @@ static void t_superseded_replay(void)
     assert(!put(9700, 1, 0)); /* never fenced */
 }
 
+static uint64_t late_id;
+static void finish_after_sync(void)
+{
+ after_root_sync=NULL;
+ struct rj_rec *r=rec_at(late_id);
+ assert(!server_gc_inode_delete(&S,r->eid,r->ino,NULL,0));
+ r->deleted=1; /* deletion deliberately completed after the barrier */
+}
+static void t_retire_cut(void)
+{
+ boot();server_reclaim_shutdown(&S);rj.stop=0; /* deterministic workers */
+ assert(!put(41000,0,0));assert(!put(41001,0,1));
+ accept_range(41000,1,EFS_OK);
+ close(rj.seg_fd);rj.seg_fd=-1; /* force a second segment */
+ accept_range(41001,1,EFS_OK);
+ assert(rj.nseg==2&&rj.tail-rj.head==2);
+ efs_ino_t inos[2]={41000,41001};assert(!server_gc_death_set_many(&S,1,inos,2));
+ struct rj_rec *first=rec_at(rj.head),*last=rec_at(rj.head+1);
+ first->checkpointed=last->checkpointed=1;
+ assert(!server_gc_inode_delete(&S,1,41000,NULL,0));first->deleted=1;
+ late_id=rj.head+1;rj.last_append_us=now_us()-2000000;
+ after_root_sync=finish_after_sync;retire_some();
+ assert(rj.nseg==1&&rj.head==late_id&&rj.tail-rj.head==1);
+ retire_some();assert(!rj.nseg&&rj.head==rj.tail);
+}
+
 int main(void)
 {
     snprintf(roots[0],sizeof(roots[0]),"/tmp/efs-rj-a-XXXXXX");snprintf(roots[1],sizeof(roots[1]),"/tmp/efs-rj-b-XXXXXX");
@@ -646,6 +677,7 @@ int main(void)
     run("journal cap BUSY",t_cap,0);
     run("PUT racing acceptance",t_race,0);
     run("physical guard",t_phys,0);
+    run("retirement excludes post-sync deletion",t_retire_cut,0);
     run("segment PUT/accept/fence/delete",t_segment,0);
     run("segment crash after accept",t_segment_crash,1);
     run("segment record replays",t_segment_replay,0);

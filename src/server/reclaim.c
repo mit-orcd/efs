@@ -711,6 +711,7 @@ static void checkpoint_some(void)
 static void retire_some(void)
 {
     int synced = 0;
+    uint64_t covered = 0;
     pthread_mutex_lock(&rj.mu);
     for (;;) {
         if (!rj.nseg) break;
@@ -724,9 +725,14 @@ static void retire_some(void)
         }
         if (!all) break;
         if (current && idle < 1000000) break;
+        if(synced && sg->first+sg->count>covered)break;
         if (!synced) {
-            /* Outside rj.mu: completed records stay completed. Every deletion
-             * observed above finished before this sync started. */
+            /* Freeze the completed prefix BEFORE sync. Deleters may finish
+             * later records while unlocked; those need the next existing
+             * batch barrier, never this earlier one. */
+            covered=rj.head;
+            while(covered<rj.tail && rec_at(covered)->checkpointed && rec_at(covered)->deleted)covered++;
+            /* Outside rj.mu: completed records stay completed. */
             pthread_mutex_unlock(&rj.mu);
             int src = server_gc_sync_roots(rj.s);
             pthread_mutex_lock(&rj.mu);
