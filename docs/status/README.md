@@ -64,6 +64,8 @@ Qualification remains FAIL. Five-hour run completed at10:44 UTC with
 11,840,878/40 M acknowledged files and45 failed closes; all45 uncertain payloads
 match. Full new-fixture verification now runs on all four hosts using frozen
 final manifests, deadline15:14:33 UTC. Cold restart and stall repair remain open.
+At12:28 UTC5.22 M verified with zero errors. Reviewed new partial-overwrite
+and splitting-READDIR fixes4058d8141/f8b7a7818 for the next build; not deployed.
 
 [W124 — fast delete](../backlog/fast-delete-reclaim.md): **parts 1–2
 implemented and deployed on orcd-mini (`de0c856b4`);**

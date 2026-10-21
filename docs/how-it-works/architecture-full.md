@@ -1605,6 +1605,8 @@ Qualification remains FAIL. Five-hour run completed at10:44 UTC with
 11,840,878/40 M acknowledged files and45 failed closes; all45 uncertain payloads
 match. Full new-fixture verification now runs on all four hosts using frozen
 final manifests, deadline15:14:33 UTC. Cold restart and stall repair remain open.
+At12:28 UTC5.22 M verified with zero errors. Reviewed new partial-overwrite
+and splitting-READDIR fixes4058d8141/f8b7a7818 for the next build; not deployed.
 
 [W124 — fast delete](../backlog/fast-delete-reclaim.md): **parts 1–2
 implemented and deployed on orcd-mini (`de0c856b4`);**
@@ -1618,6 +1620,13 @@ implemented and deployed on orcd-mini (`de0c856b4`);**
 - Unit, `make test`, private GC/expiry/SIGKILL gates and all orcd-mini
   POSIX suites PASS; see the evidence page for the mixed-workload test.
 - Slot reuse and subtree delete stay deferred.
+
+[Readdir misses names at the directory-split frontier](../status/readdir-split-frontier-20261021.md):
+**PASS on a private cluster; C7 rerun on orcd-mini open.** A listing of a
+directory being split (>65,536 entries) scanned hashed lanes before the
+local range, so names the migrator moved between pages were lost. The local
+range is now listed first. 500 k-file reproducer: 0 missing in 12 of 12
+listings (was 3–8 per listing).
 
 [W125 closure tests C0–C8](../status/w125-closure-20261021.md): **IN PROGRESS;
 no data errors from packing.** C0 (2 h, both clients), C2, C3, C4, C5 and

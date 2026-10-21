@@ -764,3 +764,21 @@ Packing remains active: latest group2 logs show~32,300 active segments,
 ~3,218,572 live KiB,~2.94 M backlog and~179 GiB unpacked estimate; these are
 node-observed shared-group gauges, not additive across replicas. Packing progress
 does not establish reclaim correctness or full payload integrity.
+
+### New correctness commits reviewed — 2026-10-21 12:28 UTC
+
+Full new-fixture verification reached5,218,064/11,840,878 with zero errors;
+all four readers and daemons remain active. No deployment change.
+
+Reviewed4058d8141: a baseless partial initialization must clear an inherited
+UNCOND chunk base so flush fetches/merges existing data after map eviction.
+The focused `python3 tests/test_partial_uncond.py` regression passes locally.
+This addresses in-place overwrite integrity, not the observed REPORT deadline;
+the create-once256-byte scale fixture does not exercise its reported trigger.
+Reviewedf8b7a7818: scan a splitting directory's local range before hashed lanes
+to avoid missing names moved behind the READDIR cursor. Important for directory
+qualification, but the current full verifier derives paths directly from frozen
+per-worker counts, so it does not depend on READDIR completeness.
+Both commits are already on devel and should be included in the next reviewed
+build, with focused and mounted regressions; neither is deployed or qualified
+on ORCD by this inspection. Do not fold their validation into643f6104f results.
