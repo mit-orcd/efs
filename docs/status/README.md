@@ -47,6 +47,17 @@ data files under `docs/` now live only at tag `archive/raw-evidence-20261021`
 links in 96 pages now name the archived path. Read one with
 `git show archive/raw-evidence-20261021:<path>`.
 
+[orcd-mini profile under the 32M-file create run, `47ba6b590`](orcd-mini-profile-47ba6b590-20261021.md):
+**profiling only; no PASS/FAIL gate.**
+- From ~1.0 to ~2.6 M files, creates fell from 2,564 to 1,130 files/s.
+- Leader LSM lock waits rose from 3.3% to 16–18% of its switches. They are
+  LOOKUP → GETATTR reduce-lane reads queued behind apply's
+  `lsm_batch_committed`.
+- The `.efs` catalog rebuild grew from 21 s to 58 s of each 60 s refresh.
+- Directory spreading started; the spread pass itself is cheap.
+- `h->mu` waits did not grow (8–13%).
+- Errors: only `report-split` `EFS_ERR_BUSY` apply-wait timeouts.
+
 [ORCD-test detached campaign](orcd-test-detached-campaign-20261020.md):
 **FAIL / BLOCKED.** 8,437,752 successful-write counts of 40 M target;
 117 writer-thread EIO reports, `.efs` command/query failures, post-load
