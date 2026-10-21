@@ -18,6 +18,14 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[W66 single-leader concentration review](metadata-scaling.md#single-leader-concentration-review--oct-21):
+**analysis only, NOTRUN.** Two fixed metadata groups mean at most two
+leaders, and extra nodes add no metadata capacity. Follower reads exist, but
+routing prefers leaders. Next: a decision page separating replica, leader,
+read-routing and execution placement; measure per-group traffic and blocked
+time first; transaction locality and D36's replica count gate more groups.
+The directory-spread policy (always vs adaptive) is the user's decision.
+
 **Raw evidence moved off devel (2026-10-21).** 23,126 raw files (logs, TSV,
 JSON, fixture stores) under `results/`, `docs/status/evidence/` and seven
 data files under `docs/` now live only at tag `archive/raw-evidence-20261021`

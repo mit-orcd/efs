@@ -241,3 +241,64 @@ races (16,000 exact records), full peer POSIX 64/64, cold exact bytes and draine
 GC queues; independent physical inventory is empty. Canonical native tests and
 all five documentation checks pass. Installed AMD direct/TCP service is restored.
 See [completed regression evidence](../../results/measure/20261010-w66-leadership/open-fixed/README.md).
+
+## Single-leader concentration review — Oct 21
+
+**Analysis only; no code change, nothing measured for this section (NOTRUN).**
+The user objected that metadata effectively lives on one instance, which
+contradicts EFS being a parallel file system. A first assessment overstated
+several points; an independent review against devel `08e7fb297` corrected
+it. This section records the corrected, code-backed position.
+
+| Claim | Code-backed status |
+| --- | --- |
+| Exactly two metadata groups | **Correct.** Odd shards go to group 0 and even shards to group 2 (`efs_raft_shard_group`, `HOST_NGROUPS 2`), so at most two leaders exist. |
+| Every node votes in both groups | **Only at three nodes.** At four or more nodes, `group_voters()` puts group 0 on nodes 1/2/3 and group 2 on 2/3/4 (`src/server/raft_host.c`). Extra nodes add no metadata capacity. |
+| Followers never serve reads | **Incorrect.** A follower gets a fresh ReadIndex from the leader, waits for its own apply index and reads locally. Namespace routing prefers leaders, which concentrates traffic, so follower reads are a routing and qualification question, not a new protocol. |
+| The balancer colocates leaders | **Only when enabled.** The common-voter preference (`host_balanced_voter`) applies only with `EFS_METADATA_BALANCE=1` (opt-in). orcd-mini does not set it, so its observed placement (node 3 leading both groups) was an election outcome. |
+| Spreading leaders roughly halves leader load | **Not established.** Followers still apply every mutation, group load can be very uneven, and cross-group operations add coordination. ORCD-test captures already showed separate leaders while the active group churned and timed out. |
+| The runtime contradicts the architecture | **Qualified.** Architecture §7.1 states the runtime still maps shards to two fixed groups. This is an acknowledged implementation gap toward the required multi-Raft runtime. |
+
+Observed load (passive orcd-mini profiles, single snapshots, workloads not
+controlled):
+- On `9099380f3`, lock waits were 15.6% of the leader's context switches,
+  nearly all on the Raft host mutex `h->mu` (submit 28%, REPORT 14%,
+  retained CREATE 13%, unlink 8%) — [profile](orcd-mini-profile-9099380f3-20261017.md).
+- On `f4a373b13`, the leader used about 5.8 cores and each follower about
+  2.5 — [profile](orcd-mini-profile-f4a373b13-20261016.md).
+
+These show one busy leader. They do not show how much spreading would gain.
+
+### The design point the first assessment missed: transaction locality
+
+More groups help only if ordinary operations touch a small, bounded number
+of groups. A create touches the parent dentry, the child inode, directory
+accounting, the session and publication records. If those land in different
+groups, cheap operations become distributed transactions. Raising
+`HOST_NGROUPS` alone also leaves the per-node host mutex, pump, WAL and KV
+contention in place.
+
+### Position for the W66 decision page
+
+1. Treat four dimensions separately: replica placement, leader placement,
+   read routing, and execution ownership (host mutex, pump, WAL, KV).
+2. Measure first: per-group traffic and actual blocked time per completed
+   operation, before promising gains from any change.
+3. Treat follower reads as existing machinery whose routing needs evaluation.
+4. Design more groups with bounded transaction fan-out, plus migration,
+   versioning and recovery. Don't replicate every group to every node.
+   **Open conflict:** the review suggests three replicas per group, while
+   [D36](node-count-protection-20261009.md) requires four-node, two-loss
+   protection that three-voter groups cannot provide. The replica count per
+   group must satisfy D36.
+5. A leader-spreading A/B is worthwhile. It must not be presented as the fix
+   for the ~8 s publication stalls until measurements connect the two.
+6. Directory spreading: the review recommends adaptive spreading, since
+   always spreading small directories adds coordination without useful
+   parallelism. The user's stated principle is that metadata should always
+   be reasonably spread. **This is a user decision, still open.**
+
+Remaining gates: the decision page itself, per-group traffic and blocked-time
+instrumentation (the step 1 metrics in the
+[Raft host mutex plan](raft-host-mu-plan-20261016.md)), and the leader-spreading
+A/B. All NOTRUN.
