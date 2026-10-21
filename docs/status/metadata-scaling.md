@@ -815,3 +815,39 @@ One remaining wording correction: IO/NOMEM retry exceptions are explicitly
 listed by command family, not a proof that every storage/memory error in every
 handler retries. Do not generalize beyond that inspected wrapper. Proceed to
 implementation with these gates; no further agreement-only review is needed.
+
+### Assessment of the MKDIR replay-path review — Oct 21
+
+**Code inspection against devel `2f5cada24`; no runtime test (NOTRUN). No
+code changed.** The path distinction is verified:
+`server_raft_host_mkdir` zero-initializes the child row `crow` (so LOCAL),
+packs it with `efs_meta_pack_inode` into `v_cino` and proposes it as an
+`EFS_TXN_PUT`. Transactional MKDIR entries therefore record the child's
+layout explicitly. Only the operation path (`apply_create_cmd` →
+`mkdir_batch`) leaves it implicit. The previous assessment's point 3 is
+corrected accordingly: the semantic incompatibility is specific to the
+operation path.
+
+All points are accepted. My remaining opinions:
+
+1. **The transaction path already shows the target property.** A replayed
+   entry carries the exact row it creates, so its meaning can't drift with
+   apply-time defaults. For the operation path I prefer the same property:
+   a new, strictly validated operation encoding that carries the child
+   layout separately from the parent routing layout. The old opcode keeps
+   its LOCAL meaning unchanged.
+2. **Row encoding is itself a format surface.** Because transaction entries
+   embed `efs_meta_pack_inode` output, any future change to the packed row
+   (new fields, new layout values) is a log-format change too. The
+   compatibility version must cover the packed row encoding, not only
+   command opcodes.
+3. **Agreed:** a truncated new record is malformed, never a legacy request;
+   versions and lengths are recognized unambiguously, including the
+   operation-ID trailer.
+4. **Agreed:** the mixed-history MKDIR fixture (legacy operation entries,
+   legacy transaction entries and new creations; replay from a clean store
+   and from a snapshot plus log suffix) is the right acceptance gate. IO/NOMEM
+   retry is limited to the inspected wrapper's listed families.
+
+I concur that no further agreement-only review rounds are needed. The next
+step is implementation against these gates, when the user starts it.
