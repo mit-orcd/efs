@@ -23,7 +23,8 @@ refresh=refresh_seconds(peer)
 settle=settle_seconds(refresh)
 # A fresh directory has no catalog binding until a refresh publishes it.
 # Warm it before testing concurrent reads: NODATA is not a successful read.
-wait_indexed(peer/fixture, settle)
+warm=wait_indexed(peer/fixture, settle)
+print("warmed fixture "+json.dumps(dict(root=root_ino,fixture=fixture,snapshot=warm.get("snapshot")),sort_keys=True),flush=True)
 end=time.monotonic()+max(14, 2*refresh+14)
 latencies=[[] for _ in range(8)]
 
@@ -53,6 +54,12 @@ def reader():
         if len(sampled)<4096:sampled.append((time.monotonic()-started)*1000)
         if reply.status:
             busy+=1
+            if reply.status!=-13 or text:
+                print('query failure context '+json.dumps(dict(root=root_ino,fixture=fixture,
+                    successes=successes,generations=sorted(generations),status=reply.status,
+                    primary_id=reply.primary_id,boot_id=reply.boot_id,generation=reply.generation,
+                    terms=list(reply.terms),applied=list(reply.applied),refresh_error=reply.refresh_error,
+                    checked_dirs=reply.checked_dirs),sort_keys=True),flush=True)
             assert reply.status==-13 and not text,('concurrent query failure',reply.status)
             continue  # bounded BUSY during mutations; never partial success
         result=json.loads(text)

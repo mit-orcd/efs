@@ -515,3 +515,27 @@ After writes, use staged `verify_scale_f6d83c895.py SCALE_RUN NEW_OUTPUT
 --fixture-root /tmp/efs-mount/qualification-643f6104f-scale`, then orderly
 restart/full verification with preserved checkpoints before bounded job expiry.
 Actual new file counts and writer outcome are pending; 40 M is a target only.
+
+### Query refusal during scale — 2026-10-21 06:12 UTC
+
+Scale writers remain active: 2,239,497 new acknowledged files (551,991 /
+563,069 / 561,940 / 562,497), no reported writer errors at inspection.
+The independent concurrent-query gate during scale **FAILS** with NODATA (-21)
+after warmup, despite stats snapshots advancing through generations 106/107
+and reporting refresh_error=0. Job `queries-scale-5d55f286091b4e29b23523c2c2a3f87d`
+and its fixture/log are preserved. Earlier lighter-load query passes do not
+qualify this heavier workload.
+
+NODATA can originate in live-vs-catalog directory binding/ancestry validation;
+healthy global refresh alone does not prove the request's root is indexed on
+the serving snapshot. The exact failing stage is not established. The harness
+now records warmup snapshot and failing reply generation/boot/terms/root plus
+success count; it still fails on NODATA. A new diagnostic fixture/job is tracked
+as `query-scale-diagnostic` in the deployment journal, using separately staged
+`query_load_diagnostic.py` with deployed query helpers.
+
+Reviewed new commit e12e23394: larger idle compaction batches with a ten-second
+between-output budget check. Relevant to later reclaim qualification, but not
+an established fix for this query refusal; not deployed into the running scale
+experiment. Its time bound is checked between outputs and cannot preempt a
+single long compaction.
