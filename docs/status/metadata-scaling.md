@@ -246,7 +246,36 @@ See [completed regression evidence](../../results/measure/20261010-w66-leadershi
 
 **Analysis only; no code change, nothing measured for this section (NOTRUN).**
 The user objected that metadata effectively lives on one instance, which
-contradicts EFS being a parallel file system. A first assessment overstated
+contradicts EFS being a parallel file system.
+
+### How this came up
+
+The objection followed a run of large-directory problems on 2026-10-21, all
+caused by directories living on one shard until they grow:
+- A directory with more than `EFS_DIR_SPREAD_MIN` (65,536) entries switches
+  LOCAL → SPLITTING → HASHED. A background migrator then moves its existing
+  names from the one local shard to 64 hashed lanes.
+- **The split took hours.** The migrator moved at most 8 names per 1 s
+  maintenance tick (about 480 names/min), so the 64.5 k names of a split took
+  about 2.3 h. Each step also rescanned the local range past every
+  already-moved tombstone, which is quadratic in the split size.
+- **Readdir lost names during the split.** W125 closure test C7 (1,000,000
+  files in one directory on orcd-mini) listed 999,990 names, and `rm -rf`
+  left 5 files behind. Names at the moving split frontier were missed for
+  the hours the directory stayed SPLITTING
+  ([readdir split frontier](readdir-split-frontier-20261021.md), fixed in
+  `f8b7a7818`).
+- **A linear migrator fixed the speed but was not continued.** It cut a
+  500 k-file split to 1,124 s on a private cluster: a resumable scan, named
+  moves, and up to 4,096 names per tick. It is parked at tag
+  `archive/split-migrator-linear-20261021`
+  (`docs/status/split-migrator-linear-20261021.md` there) and not merged.
+
+The user stopped further large-directory testing (W125 C1 rerun, C9 and C10
+NOTRUN) and questioned the premise itself: a directory, and metadata in
+general, shouldn't sit on one shard or leader and migrate later; it should
+always be spread reasonably. That led to the broader question below of
+whether metadata is served by one node at all. A first assessment overstated
 several points; an independent review against devel `08e7fb297` corrected
 it. This section records the corrected, code-backed position.
 
