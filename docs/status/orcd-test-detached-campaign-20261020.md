@@ -351,3 +351,25 @@ of bounded runtime remaining; daemons have over seven hours.
 New commits through `827758454` add W125 test/collection scripts only; no newer
 product changes require rebuilding the pinned `d7ddcc045` candidate. It remains
 **NOT DEPLOYED** until baseline completion and review of all failed-write audits.
+
+### Candidate update — 2026-10-21 04:00 UTC
+
+Baseline still running at the 03:57 check: 8,399,213 / 8,437,752 paths
+attempted, 49 EBUSY failures, no observed payload mismatch. fcstor004/006
+completed; all 64 uncertain-write paths on those hosts match expected payloads.
+
+Reviewed new product changes `f958852fd` (fold a packed base into per-file
+storage when a write grows past the threshold) and `0b2802a06` (bound REAP
+scan work including tombstones). Both are relevant to packed workload
+qualification. Local `test_span_selection.py`, `test_reap_fairness.py`, and
+`test_gc_reap_shutdown.py` PASS. No other product files changed since d7ddcc045.
+
+New pinned candidate **643f6104f** is being staged and built, **NOT DEPLOYED**.
+The detached build on fcstor003 waits for the complete archive and verifies
+SHA256 `a099b46a0b3a3e64c0a76b234482136f677fba84d4a031ad02bd5e999fc43f08`
+before extraction. Build identity/job is recorded in
+`repair-20261020/candidate-643f6104f.json`; artifacts will be in
+`repair-20261020/source-643f6104f`. Its mailbox log records build, buffer-pool,
+ledger/recovery, packed-switch/reader, bounded KV, REAP, span and readiness
+regressions and binary hashes. Check the job result before using this candidate.
+The original build remains live until baseline completion; no store is removed.

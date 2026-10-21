@@ -29,7 +29,9 @@ adds reviewed read headroom; isolated tests PASS, not deployed; acceptance open.
 Original-build verification resumed after a clean restart/readiness PASS (61 s),
 retaining prior failures. At 03:10 UTC: 7.65 M paths attempted, 48 EBUSY;
 fcstor004 complete with ten read failures and all 32 uncertain-write payloads
-matching. Other baseline verifiers remain active; no repair deployed.
+matching. Other baseline verifiers remain active; no repair deployed. New candidate
+`643f6104f` adds reviewed REAP scan bounds and packed-growth folding; isolated
+build/regressions pending.
 
 [W124 — fast delete](../backlog/fast-delete-reclaim.md): **parts 1–2
 implemented and deployed on orcd-mini (`de0c856b4`);**
