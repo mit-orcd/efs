@@ -330,3 +330,24 @@ Adapt actual distributed tests rather than relabeling that harness.
 
 Full disconnect survival, EFS test, final cleanup and RDMA counter
 verification remain pending. No final qualification verdict is claimed.
+
+### Baseline progress — 2026-10-21 03:10 UTC
+
+Same original build/profile and resumed verifier described above: 7,650,358 of
+8,437,752 acknowledged paths attempted (90.7%). Per-host counts are
+1,743,916 / 2,200,714 / 1,612,513 / 2,093,215; preserved EBUSY counts are
+4 / 10 / 3 / 31 (48 total). No observed payload mismatch or missing
+acknowledged file; unread EBUSY payloads remain unverified.
+
+fcstor004 completed every acknowledged path, returning **FAIL** (exit 1,
+no leftover processes) because of its ten read failures. Its separate audit
+found all 32 original failed-write paths contain the exact expected 256-byte
+payload. This supports uncertain close/publication outcomes for those writes;
+it does not turn their EIO reports into successes or establish other hosts'
+outcomes. Evidence: `existing-payloads-resume1/fcstor004-failed-write-outcomes.json`
+under the repair directory. Three verifiers remain active with over four hours
+of bounded runtime remaining; daemons have over seven hours.
+
+New commits through `827758454` add W125 test/collection scripts only; no newer
+product changes require rebuilding the pinned `d7ddcc045` candidate. It remains
+**NOT DEPLOYED** until baseline completion and review of all failed-write audits.
