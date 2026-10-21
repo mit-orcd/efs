@@ -386,6 +386,8 @@ int efs_export_set_size(struct efs_export *ex, efs_ino_t ino, uint64_t size);
 int efs_export_set_size_norollup(struct efs_export *ex, efs_ino_t ino,
                                  uint64_t size);
 
+/* Drop one chunk map entry; 1 if one was present. */
+int efs_export_drop_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t ci);
 /* Drop chunk map entries with chunk_index >= first_chunk (truncate shrink). */
 void efs_export_drop_chunks_from(struct efs_export *ex, efs_ino_t ino,
                                  uint32_t first_chunk);

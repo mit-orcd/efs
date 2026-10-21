@@ -312,6 +312,50 @@ static void apply_chunk_recs(efs_ino_t lock_ino, const struct efs_chunk_rec *rec
  * for those chunks — usually this client's own unreported PUT — so a
  * caller that must tell "the host committed our object" from "we only
  * PUT it" (the STALE classifier) reads this, not the table generation. */
+/* Read keys of the local entries in [lo, hi) (one chunk group), 0 = none. */
+static void map_snapshot(efs_ino_t ino, uint32_t lo, uint32_t hi, uint64_t *keys)
+{
+    efs_client_lock_dir(ino);
+    pthread_mutex_lock(&g_client.idx_mu);
+    for (uint32_t ci = lo; ci < hi; ci++) {
+        struct efs_chunk_entry ce;
+        keys[ci - lo] = efs_export_get_chunk(&g_client.export, ino, ci, &ce) == 0 ?
+                        efs_chunk_read_key(&ce) : 0;
+    }
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_unlock_dir(ino);
+}
+
+/* A successful GETCHUNKS is authority for the chunks it covered and did
+ * not return: their rows are gone (a peer's truncate deleted them). Keeping
+ * the local entry served the old objects until GC removed them, so a peer
+ * read after shrink-then-extend returned the discarded bytes. Drop an
+ * absent entry only if it is still the one seen before the RPC; a local
+ * publish that installed a newer entry in between keeps it. */
+static void map_drop_absent(efs_ino_t ino, uint32_t lo, uint32_t hi,
+                            const struct efs_chunk_rec *recs, uint32_t n,
+                            uint32_t asked, const uint64_t *before)
+{
+    uint32_t covered = n < asked ? hi : recs[n - 1].chunk_index + 1, r = 0;
+    for (uint32_t ci = lo; ci < covered && ci < hi; ci++) {
+        while (r < n && recs[r].chunk_index < ci)
+            r++;
+        if (!before[ci - lo] || (r < n && recs[r].chunk_index == ci))
+            continue;
+        struct efs_chunk_entry ce;
+        int dropped = 0;
+        efs_client_lock_dir(ino);
+        pthread_mutex_lock(&g_client.idx_mu);
+        if (efs_export_get_chunk(&g_client.export, ino, ci, &ce) == 0 &&
+            efs_chunk_read_key(&ce) == before[ci - lo])
+            dropped = efs_export_drop_chunk(&g_client.export, ino, ci);
+        pthread_mutex_unlock(&g_client.idx_mu);
+        efs_client_unlock_dir(ino);
+        if (dropped)
+            efs_rdcache_invalidate(ino, ci);
+    }
+}
+
 struct pull_absent {
     uint8_t *bits;
     uint32_t base;
@@ -452,13 +496,17 @@ static int pull_chunks_range(efs_ino_t ino, uint32_t start_ci, uint32_t end_ci,
             if (efs_client_rpc_past_deadline())
                 return EFS_ERR_BUSY;
             struct efs_chunk_rec recs[EFS_GETCHUNKS_MAX];
-            uint32_t n = group_end - cur;
+            uint64_t before[EFS_CHUNK_GROUP_SIZE];
+            uint32_t n = group_end - cur, asked;
             if (n > EFS_GETCHUNKS_MAX)
                 n = EFS_GETCHUNKS_MAX;
+            asked = n;
+            map_snapshot(ino, cur, group_end, before);
             int grc = efs_client_rpc_getchunks(g_client.export_id, ino, cur,
                                                recs, &n);
             if (grc != EFS_OK)
                 return grc;
+            map_drop_absent(ino, cur, group_end, recs, n, asked, before);
             if (n == 0) {
                 pull_absent_mark(ab, cur, group_end);
                 break;

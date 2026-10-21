@@ -135,11 +135,14 @@
  * ACTIVATE_LANE runs on the INODE group and only sets the active_lanes bit;
  * LANE_FENCE runs on the LANE's group and carries one lane's share of a
  * truncate (epoch fence + range delete). Both idempotent. */
-#define EFS_MD_CMD_ACTIVATE_LANE 19 /* [ino:8][lane:1]  (10 B)
-                                     * or [ino:8][mask:8] (17 B); REPORT
-                                     * appends UUID/epoch (20 B) to either form */
+#define EFS_MD_CMD_ACTIVATE_LANE 19 /* [ino:8][mask:8][content_epoch:8]
+                                     * (25 B); REPORT appends UUID/epoch (20 B) */
 #define EFS_MD_CMD_LANE_FENCE    20 /* [ino:8][gen:8][lane:1][epoch:8][size:8]
                                      * [tail_ci:4][has_tail:1] */
+/* D25 BOOTSTRAP on a cross-group lane's group: create the lane stamp at the
+ * inode epoch the proposer read, or adopt it; never lowers it. A lane-local
+ * publish to a lane without a stamp answers BUSY until this commits. */
+#define EFS_MD_CMD_BOOTSTRAP_LANE 79 /* [ino:8][gen:8][lane:1][epoch:8], 26 B */
 /* Data-plane GC (spec L7). LANE_SWEEP runs on the LANE's group: deletes the
  * lane's chunk keys (emitting one GC record per chunk on the group's anchor
  * shard), then the lane key. REAP_DONE runs on the INODE's group: clears

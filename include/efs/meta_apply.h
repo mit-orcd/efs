@@ -452,6 +452,23 @@ struct efs_meta_chunk_view {
 int efs_meta_get_chunk_view(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
                             uint32_t chunk_index, uint32_t chunk_size,
                             struct efs_meta_chunk_view *out);
+/* D25: capture the inode's content epoch and fence history coherently (the
+ * read authority), then build chunk views against it. The lane stamp is
+ * never the read authority. View: BUSY if a part is newer than `epoch`. */
+int efs_meta_get_inode_authority_tx(struct efs_kv *kv, efs_ino_t ino,
+                                    efs_txn_coord_fn coord, void *ctx,
+                                    struct efs_meta_row *row,
+                                    struct efs_fence_history *history);
+int efs_meta_get_chunk_view_auth(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                                 uint32_t ci, uint32_t cs, uint64_t epoch,
+                                 const struct efs_fence_history *history,
+                                 struct efs_meta_chunk_view *out);
+/* The lane stamp's adopted epoch; NOT_FOUND when the lane has no stamp. */
+int efs_meta_get_lane_epoch(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                            uint8_t lane, uint64_t *epoch);
+/* D25 BOOTSTRAP: create a cross-group lane stamp at `epoch`, or adopt it. */
+int efs_meta_apply_bootstrap_lane(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                                  uint8_t lane, uint64_t epoch);
 /* Handler variant: committed EXCL stamp/history replacements are visible
  * before RESOLVE. Undecided decisions are validated across the whole collect.
  * NULL coordinator retains the plain apply-side behavior. */

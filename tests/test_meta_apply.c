@@ -3469,6 +3469,10 @@ static void test_cross_group_lane(void)
     CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "row2");
     p.inode_gen = r.generation;
     p.mtime_gen = r.mtime_gen;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_ERR_BUSY,
+          "D25: lane-local publish needs a bootstrapped stamp");
+    CHECK(efs_meta_apply_bootstrap_lane(kv, ino, r.generation, lane,
+                                        r.content_epoch) == EFS_OK, "bootstrap");
     CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "lane-local pub");
     CHECK(efs_meta_apply_get_chunk(kv, ino, ci, &got) == EFS_OK &&
               got.generation == 0xF1,
@@ -3603,6 +3607,8 @@ static void lane_fence_fill(struct efs_kv *kv, efs_ino_t ino, uint8_t lane,
 
     CHECK(efs_meta_apply_activate_lane(kv, ino, lane) == EFS_OK, "activate");
     CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "row");
+    CHECK(efs_meta_apply_bootstrap_lane(kv, ino, r.generation, lane,
+                                        r.content_epoch) == EFS_OK, "bootstrap");
     fill_ch(&ch);
     for (uint32_t j = 0; j < rows; j++) {
         memset(&p, 0, sizeof(p));
@@ -5853,8 +5859,135 @@ static void test_reaped_sweep_no_gc(void)
     }
     efs_kv_mem_free(kv);
 }
+/* D25 step 2: one adoption transition, the absent-stamp floor, the
+ * epoch-filtered lane EOF and the inode-authority chunk view. The inode
+ * epoch is moved directly (put_row) to stand in for a lazy truncate that
+ * fences no lane. */
+static void test_lane_adoption(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct coord_ctx cc;
+    struct efs_meta_stat st;
+    struct efs_meta_row r;
+    struct efs_meta_pub p;
+    struct efs_fence_history h;
+    struct efs_meta_chunk_view view;
+    efs_ino_t ino = 0;
+    uint64_t e = 0;
+
+    CHECK(kv != NULL, "kv");
+    memset(&cc, 0, sizeof(cc));
+    cc.kv = kv;
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "adopt", &ino) == EFS_OK, "create");
+    pub(kv, ino, 3, 1u << 20, 0xD1, 0, T0 + 1, "1 MiB at epoch 0");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.size == 1u << 20, "lane EOF counted at its epoch");
+
+    /* Shrink to 100 at epoch 1 without touching the lane. */
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "row");
+    r.content_epoch = 1;
+    r.base_size = 100;
+    put_row(kv, &r);
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.size == 100, "lagging lane EOF ignored");
+
+    /* BOOTSTRAP of the existing lane: the old maximum must not reappear. */
+    CHECK(efs_meta_apply_bootstrap_lane(kv, ino, r.generation, 3, 1) == EFS_OK,
+          "bootstrap existing lane");
+    CHECK(efs_meta_get_lane_epoch(kv, ino, r.generation, 3, &e) == EFS_OK && e == 1,
+          "adopted");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.size == 100, "bootstrap cleared the old EOF");
+
+    /* A write at epoch 1, then a duplicate bootstrap keeps its maximum. */
+    pub(kv, ino, 3, 4096, 0xD2, 0xD1, T0 + 2, "write at epoch 1");
+    CHECK(efs_meta_apply_bootstrap_lane(kv, ino, r.generation, 3, 1) == EFS_OK,
+          "duplicate bootstrap");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.size == 4096, "duplicate bootstrap keeps current writes");
+    CHECK(efs_meta_apply_bootstrap_lane(kv, ino, r.generation, 3, 0) == EFS_OK &&
+              efs_meta_get_lane_epoch(kv, ino, r.generation, 3, &e) == EFS_OK &&
+              e == 1, "obsolete bootstrap never lowers the epoch");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.size == 4096, "obsolete bootstrap keeps the maximum");
+
+    /* Publish adoption: epoch 2 on a lane at 1 resets that lane's EOF. */
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "row 2");
+    r.content_epoch = 2;
+    r.base_size = 10;
+    put_row(kv, &r);
+    memset(&p, 0, sizeof(p));
+    p.ino = ino;
+    p.chunk_index = 3;
+    p.new_size = 20;
+    p.expected_gen = 0xD2;
+    p.candidate_gen = 0xD3;
+    p.coding_profile_id = EFS_META_PROFILE_K2F1;
+    p.content_epoch = 1;
+    p.now = T0 + 3;
+    fill_ch(&p.ch);
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_ERR_STALE,
+          "row epoch still refuses an old same-group publish");
+    p.content_epoch = 2;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "publish adopts epoch 2");
+    CHECK(efs_meta_get_lane_epoch(kv, ino, r.generation, 3, &e) == EFS_OK && e == 2,
+          "publish adopted");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.size == 20, "adoption reset the epoch-1 maximum");
+
+    /* Inode-authority view: masks from the inode history, epoch from the
+     * inode, and BUSY when a part is newer than the captured epoch. */
+    CHECK(efs_meta_get_inode_authority_tx(kv, ino, coord_fn, &cc, &r, &h) ==
+              EFS_OK && r.content_epoch == 2 && h.count == 0, "authority");
+    CHECK(efs_meta_get_chunk_view_auth(kv, ino, r.generation, 3,
+              EFS_MIN_CHUNK_SIZE, 2, &h, &view) == EFS_OK &&
+              view.fence_epoch == 2 && view.bytes.fence_epoch == 2,
+          "view carries the inode epoch");
+    CHECK(efs_meta_get_chunk_view_auth(kv, ino, r.generation, 3,
+              EFS_MIN_CHUNK_SIZE, 1, &h, &view) == EFS_ERR_BUSY,
+          "part newer than the captured authority");
+    h.count = 1;
+    h.entries[0].epoch = 2;
+    h.entries[0].size = 3ull * EFS_MIN_CHUNK_SIZE + 7;
+    CHECK(efs_meta_get_chunk_view_auth(kv, ino, r.generation, 3,
+              EFS_MIN_CHUNK_SIZE, 2, &h, &view) == EFS_OK &&
+              view.bytes.parts[0].len == EFS_MIN_CHUNK_SIZE,
+          "a fence at the part's own epoch does not mask it");
+    h.entries[0].epoch = 3;
+    CHECK(efs_meta_get_chunk_view_auth(kv, ino, r.generation, 3,
+              EFS_MIN_CHUNK_SIZE, 3, &h, &view) == EFS_OK &&
+              view.bytes.parts[0].len == 7,
+          "a later fence masks an older part at its size");
+
+    /* Floor: a lane-local publish never creates a stamp. */
+    memset(&p, 0, sizeof(p));
+    p.ino = ino;
+    p.chunk_index = 5;
+    p.new_size = 5ull * EFS_MIN_CHUNK_SIZE + 1;
+    p.candidate_gen = 0xD5;
+    p.coding_profile_id = EFS_META_PROFILE_K2F1;
+    p.content_epoch = 2;
+    p.now = T0 + 4;
+    p.lane_local = 1;
+    p.inode_gen = r.generation;
+    p.mtime_gen = r.mtime_gen;
+    fill_ch(&p.ch);
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_ERR_BUSY, "absent stamp is BUSY");
+    CHECK(efs_meta_apply_bootstrap_lane(kv, ino, r.generation, 5, 2) == EFS_OK,
+          "bootstrap lane 5");
+    p.content_epoch = 1;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_ERR_STALE,
+          "bootstrap floor refuses an older publish");
+    p.content_epoch = 2;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "current publish lands");
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
+    test_lane_adoption();
     test_reaped_sweep_no_gc();
     test_reap_cleanup_deferred();
     test_create_negative_replay();

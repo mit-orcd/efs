@@ -126,9 +126,8 @@ static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
 #define HOST_PUBLICATION_TICKET_LEN (HOST_PUBLICATION_LEN + 36u)
 #define HOST_PUB_F_TICKETED 4
 #define HOST_PUB_TAIL_TRIES  4 /* cross-group truncate tail CAS retries */
-#define HOST_ACTIVATE_LANE_LEN 10 /* tag + ino:8 + lane:1 */
-#define HOST_ACTIVATE_MASK_LEN 17 /* tag + ino:8 + mask:8 */
 #define HOST_ACTIVATE_AT_LEN   25 /* tag + ino:8 + mask:8 + content_epoch:8 */
+#define HOST_BOOTSTRAP_LANE_LEN 26 /* tag + ino:8 + gen:8 + lane:1 + epoch:8 */
 #define HOST_LANE_FENCE_LEN    39 /* tag + ino:8 + gen:8 + lane:1 +
                                    * epoch:8 + size:8 + tail_ci:4 +
                                    * has_tail:1 — matches meta_cmd.h */
@@ -1780,12 +1779,11 @@ static int apply_activate_lane_cmd(struct efs_raft_host *h, const uint8_t *cmd,
 
     uint32_t base = clen;
     struct efs_opid session;
-    int fenced = clen == HOST_ACTIVATE_LANE_LEN + EFS_REPORT_SESSION_LEN ||
-                 clen == HOST_ACTIVATE_MASK_LEN + EFS_REPORT_SESSION_LEN ||
-                 clen == HOST_ACTIVATE_AT_LEN + EFS_REPORT_SESSION_LEN;
+    /* Only the epoch-checked form exists (D25 ACTIVATE floor); the older
+     * unchecked [ino][lane] and [ino][mask] forms are refused. */
+    int fenced = clen == HOST_ACTIVATE_AT_LEN + EFS_REPORT_SESSION_LEN;
     if (fenced) base -= EFS_REPORT_SESSION_LEN;
-    if (base != HOST_ACTIVATE_LANE_LEN && base != HOST_ACTIVATE_MASK_LEN &&
-        base != HOST_ACTIVATE_AT_LEN)
+    if (base != HOST_ACTIVATE_AT_LEN)
         return EFS_ERR_PROTO;
     ino = rd64be(cmd + 1);
     if (fenced) {
@@ -1795,13 +1793,8 @@ static int apply_activate_lane_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         rc = efs_session_accept(h->kv, shard, session.client_uuid, session.session_epoch);
         if (rc != EFS_OK) return rc;
     }
-    if (base == HOST_ACTIVATE_AT_LEN)
-        rc = efs_meta_apply_activate_lanes_at(h->kv, ino, rd64be(cmd + 9),
-                                              rd64be(cmd + 17));
-    else if (base == HOST_ACTIVATE_MASK_LEN)
-        rc = efs_meta_apply_activate_lanes(h->kv, ino, rd64be(cmd + 9));
-    else
-        rc = efs_meta_apply_activate_lane(h->kv, ino, cmd[9]);
+    rc = efs_meta_apply_activate_lanes_at(h->kv, ino, rd64be(cmd + 9),
+                                          rd64be(cmd + 17));
     /* W45: efs_meta_apply_activate_lanes already answers OK for the two
      * idempotent cases (row unlinked since the host's read; bits already
      * set). Anything else (IO, INVAL) is the verdict the REPORT's
@@ -1856,6 +1849,28 @@ static int apply_lane_fence_cmd(struct efs_raft_host *h, const uint8_t *cmd,
             (unsigned long long)index, (unsigned long long)ino,
             (unsigned)cmd[17]);
     return EFS_OK;
+}
+
+/* EFS_MD_CMD_BOOTSTRAP_LANE on the lane's group (D25). Exact length, and
+ * only on the group that owns the lane's shard. */
+static int apply_bootstrap_lane_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                                    uint32_t clen, uint64_t index, uint8_t group)
+{
+    efs_ino_t ino;
+    int rc;
+
+    if (clen != HOST_BOOTSTRAP_LANE_LEN || !rd64be(cmd + 1) || !rd64be(cmd + 9) ||
+        cmd[17] >= EFS_META_LANES)
+        return EFS_ERR_PROTO;
+    ino = rd64be(cmd + 1);
+    if (efs_raft_shard_group(efs_kv_lane_shard(ino, cmd[17])) != group)
+        return EFS_ERR_INVAL;
+    rc = efs_meta_apply_bootstrap_lane(h->kv, ino, rd64be(cmd + 9), cmd[17],
+                                       rd64be(cmd + 18));
+    if (rc != EFS_OK)
+        fprintf(stderr, "raft-host: apply bootstrap-lane rc=%d index=%llu ino=%llu lane=%u\n",
+                rc, (unsigned long long)index, (unsigned long long)ino, (unsigned)cmd[17]);
+    return rc;
 }
 
 /* Pump-safe: apply already holds the committed KV. Must not ReadIndex. */
@@ -2949,7 +2964,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_LOCK ||
            cmd[0] == EFS_MD_CMD_UNLINK || cmd[0] == EFS_MD_CMD_SETATTR ||
            cmd[0] == EFS_MD_CMD_UTIMENS || cmd[0] == EFS_MD_CMD_TRUNCATE ||
-           cmd[0] == EFS_MD_CMD_ACTIVATE_LANE ||
+           cmd[0] == EFS_MD_CMD_ACTIVATE_LANE || cmd[0] == EFS_MD_CMD_BOOTSTRAP_LANE ||
            cmd[0] == EFS_MD_CMD_LANE_FENCE ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE || cmd[0] == EFS_MD_CMD_REAP_BATCH ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
@@ -2993,6 +3008,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
          cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_CREATE ||
          cmd[0] == EFS_MD_CMD_APPEND_RES || cmd[0] == EFS_MD_CMD_APPEND_CATCHUP || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
          cmd[0] == EFS_MD_CMD_REPORT_PUBLISH || cmd[0] == EFS_MD_CMD_ACTIVATE_LANE ||
+         cmd[0] == EFS_MD_CMD_BOOTSTRAP_LANE ||
          cmd[0] == EFS_MD_CMD_PUBLISH || cmd[0] == EFS_MD_CMD_PUBLICATION ||
          cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE ||
          (cmd[0] == EFS_MD_CMD_APPEND_RSV && clen == HOST_APPEND_RSV_LEN) ||
@@ -3445,6 +3461,8 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         return apply_truncate_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_ACTIVATE_LANE)
         return apply_activate_lane_cmd(h, cmd, clen, index, group);
+    if (cmd[0] == EFS_MD_CMD_BOOTSTRAP_LANE)
+        return apply_bootstrap_lane_cmd(h, cmd, clen, index, group);
     if (cmd[0] == EFS_MD_CMD_LANE_FENCE)
         return apply_lane_fence_cmd(h, cmd, clen, index);
     if(cmd[0]==EFS_MD_CMD_APPEND_COMPLETE_ATOMIC) {
@@ -6249,9 +6267,7 @@ static int pack_publish_cmd(uint8_t *out, uint32_t *len, const struct efs_meta_p
 /* EFS_MD_CMD_ACTIVATE_LANE: [ino:8][mask:8][content_epoch:8] — the epoch
  * the publish needing these lanes was checked against. The apply refuses
  * (STALE) once a truncate moved it: no truncate since then fenced the new
- * lanes, so the publish would otherwise create them under the old epoch.
- * The older [ino:8][lane:1] and [ino:8][mask:8] forms still apply from
- * the log, unchecked. */
+ * lanes, so the publish would otherwise create them under the old epoch. */
 static int pack_activate_at_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
                                 uint64_t mask, uint64_t epoch)
 {
@@ -6261,6 +6277,34 @@ static int pack_activate_at_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
     wr64be(out + 17, epoch);
     *len = HOST_ACTIVATE_AT_LEN;
     return EFS_OK;
+}
+
+/* D25 floor: a cross-group lane gets its first stamp from BOOTSTRAP at the
+ * inode epoch read under ReadIndex, before any publish lands on it. The local
+ * presence check needs no ReadIndex: a stamp, once present, never goes away
+ * while the inode lives, so a stale "absent" costs only an idempotent entry.
+ * `allow` is 0 while the REPORT holds the log: answer BUSY, as activation. */
+static int host_bootstrap_lane(struct efs_raft_host *h, efs_ino_t ino,
+                               uint64_t gen, uint8_t lane, uint64_t epoch,
+                               int allow, int *hint)
+{
+    uint8_t cmd[HOST_BOOTSTRAP_LANE_LEN];
+    uint64_t have = 0;
+    int rc = efs_meta_get_lane_epoch(h->kv, ino, gen, lane, &have);
+
+    if (rc == EFS_OK)
+        return EFS_OK;
+    if (rc != EFS_ERR_NOT_FOUND)
+        return rc;
+    if (!allow)
+        return EFS_ERR_BUSY;
+    cmd[0] = EFS_MD_CMD_BOOTSTRAP_LANE;
+    wr64be(cmd + 1, ino);
+    wr64be(cmd + 9, gen);
+    cmd[17] = lane;
+    wr64be(cmd + 18, epoch);
+    return host_propose_wait(h, efs_raft_shard_group(efs_kv_lane_shard(ino, lane)),
+                             cmd, HOST_BOOTSTRAP_LANE_LEN, hint);
 }
 
 /* EFS_MD_CMD_LANE_FENCE: [ino:8][gen:8][lane:1][epoch:8][size:8]
@@ -18661,6 +18705,9 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
     }
     if (lg != ig && !skip_ri)
         rc = host_read_index(h, lg, hint);
+    if (rc == EFS_OK && lg != ig)
+        rc = host_bootstrap_lane(h, rec->ino, row.generation, lane,
+                                 row.content_epoch, activate, hint);
     if (rc != EFS_OK)
         return rc;
     memset(&got, 0, sizeof(got));
@@ -19151,6 +19198,18 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
             }
             if (rc == EFS_OK)
                 rc = host_propose_wait(h, ig, acmd, alen, &hint);
+        }
+        /* D25: stamp every cross-group lane of a cached inode before the
+         * log hold (an absent stamp answers BUSY inside it). */
+        for (i = 0; i < count && rc == EFS_OK; i++) {
+            uint8_t lane = (uint8_t)(recs[i].chunk_index % EFS_META_LANES);
+            for (k = 0; k < nic; k++) if (ic[k].have && ic[k].ino == recs[i].ino) break;
+            if (k == nic ||
+                efs_raft_shard_group(efs_kv_lane_shard(recs[i].ino, lane)) ==
+                    efs_raft_shard_group(efs_kv_inode_shard(recs[i].ino)))
+                continue;
+            rc = host_bootstrap_lane(h, recs[i].ino, ic[k].row.generation, lane,
+                                     ic[k].row.content_epoch, 1, &hint);
         }
         /* The row cache is bounded at32 inodes. Prepare every uncached
          * record's activation before taking the REPORT log hold as well. */
@@ -19783,111 +19842,136 @@ void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32
     }
     rc = host_read_index(h, ig, &hint);
     t_ri = now_ns() - t0;
-    if (rc == EFS_OK)
-        rc = efs_meta_apply_get_inode_tx(h->kv, ino, host_txn_coord, h, &row);
-    if (rc == EFS_OK && !host_holds_chunks(row.mode))
-        rc = EFS_ERR_INVAL;
-    if (rc == EFS_OK && generation && row.generation != generation)
-        rc = EFS_ERR_STALE;
-    if (rc == EFS_OK) {
-        out->ino = ino;
-        out->generation = row.generation;
-        out->authority_epoch = row.content_epoch;
-    }
     seen = (rc == EFS_OK) ? (1u << ig) : 0;
-    for (ci = start; rc == EFS_OK && ci < group_end && out->count < max; ci++) {
-        uint8_t lane = (uint8_t)(ci % EFS_META_LANES);
-
-        /* A chunk cannot exist on a lane the inode never registered.
-         * ReadIndexing unused lanes would send this RPC to groups this
-         * node does not host (fresh smoke: group-0 leader, lane 1+). */
-        if ((row.active_lanes & (1ULL << lane)) == 0)
-            continue;
-        lsh = efs_kv_lane_shard(ino, lane);
-        lg = efs_raft_shard_group(lsh);
-        if (!host_hosts(h, lg)) {
-            /* An active lane's group is not local: the chunk rows live
-             * there, so this node cannot answer authoritatively. Bounce
-             * to a dual-host (never self — no loop). */
-            uint8_t need[2];
-            int nn = 1;
-            need[0] = ig;
-            if (lg != ig)
-                need[nn++] = lg;
-            host_fwd_getchunks(h, export_id, ino, start, max, generation, out, need, nn);
-            return;
-        }
-        if ((seen & (1u << lg)) == 0) {
-            int hh = -1;
-            uint64_t tr = now_ns();
-
-            rc = host_read_index(h, lg, &hh);
-            t_ri += now_ns() - tr;
-            if (rc != EFS_OK)
-                hint = hh;
-            else
-                seen |= 1u << lg;
-        }
-        if (rc != EFS_OK)
+    /* D25: the inode's epoch and fence history are the read authority for
+     * every lane. A truncate that commits while the lanes are read shows up
+     * as a newer part (BUSY from the view) or a moved authority at the
+     * recheck; either way the whole window is captured again. */
+    for (unsigned attempt = 0; rc == EFS_OK; attempt++) {
+        struct efs_fence_history hist;
+        struct efs_meta_row again;
+        struct efs_fence_history hist_again;
+        if (attempt == 4) {
+            rc = EFS_ERR_BUSY;
             break;
-        {
-            struct efs_meta_chunk_view view;
-            struct efs_meta_delta ds[EFS_CHUNK_DELTA_MAX];
-            uint32_t nd = 0, di;
-            uint64_t newest = 0;
+        }
+        out->count = 0;
+        rc = efs_meta_get_inode_authority_tx(h->kv, ino, host_txn_coord, h, &row, &hist);
+        if (rc == EFS_OK && !host_holds_chunks(row.mode))
+            rc = EFS_ERR_INVAL;
+        if (rc == EFS_OK && generation && row.generation != generation)
+            rc = EFS_ERR_STALE;
+        if (rc == EFS_OK) {
+            out->ino = ino;
+            out->generation = row.generation;
+            out->authority_epoch = row.content_epoch;
+        }
+        for (ci = start; rc == EFS_OK && ci < group_end && out->count < max; ci++) {
+            uint8_t lane = (uint8_t)(ci % EFS_META_LANES);
 
-            /* One get: image and span trailer together. */
-            rc = efs_meta_get_chunk_view_tx(h->kv, ino, row.generation,
-                                            ci, cs, host_txn_coord, h, &view);
-            if (rc == EFS_ERR_NOT_FOUND) {
-                rc = EFS_OK;
+            /* A chunk cannot exist on a lane the inode never registered.
+             * ReadIndexing unused lanes would send this RPC to groups this
+             * node does not host (fresh smoke: group-0 leader, lane 1+). */
+            if ((row.active_lanes & (1ULL << lane)) == 0)
                 continue;
+            lsh = efs_kv_lane_shard(ino, lane);
+            lg = efs_raft_shard_group(lsh);
+            if (!host_hosts(h, lg)) {
+                /* An active lane's group is not local: the chunk rows live
+                 * there, so this node cannot answer authoritatively. Bounce
+                 * to a dual-host (never self — no loop). */
+                uint8_t need[2];
+                int nn = 1;
+                need[0] = ig;
+                if (lg != ig)
+                    need[nn++] = lg;
+                host_fwd_getchunks(h, export_id, ino, start, max, generation, out, need, nn);
+                return;
+            }
+            if ((seen & (1u << lg)) == 0) {
+                int hh = -1;
+                uint64_t tr = now_ns();
+
+                rc = host_read_index(h, lg, &hh);
+                t_ri += now_ns() - tr;
+                if (rc != EFS_OK)
+                    hint = hh;
+                else
+                    seen |= 1u << lg;
             }
             if (rc != EFS_OK)
                 break;
-            ch = view.base;
-            nd = view.ndelta;
-            newest = view.delta_seq;
-            memcpy(ds, view.deltas, nd * sizeof(*ds));
-            out->recs[out->count].read_view = view.bytes;
-            out->recs[out->count].ino = ino;
-            out->recs[out->count].chunk_index = ci;
-            memcpy(out->recs[out->count].nodes, ch.nodes,
-                   sizeof(out->recs[out->count].nodes));
-            memcpy(out->recs[out->count].checksums, ch.checksums,
-                   sizeof(out->recs[out->count].checksums));
-            out->recs[out->count].base_gen = ch.generation;
-            out->recs[out->count].chunk_generation = ch.generation;
-            /* W125: a packed base names its record; the client reads it
-             * from the segment (nodes/checksums are the segment's). */
-            if (ch.coding_profile_id == EFS_META_PROFILE_PACK) {
-                if (efs_pack_ref_encode(&ch.packed, out->recs[out->count].packed_ref) != EFS_OK) {
-                    rc = EFS_ERR_PROTO;
+            {
+                struct efs_meta_chunk_view view;
+                struct efs_meta_delta ds[EFS_CHUNK_DELTA_MAX];
+                uint32_t nd = 0, di;
+                uint64_t newest = 0;
+
+                /* One get: image and span trailer together. */
+                rc = efs_meta_get_chunk_view_auth(h->kv, ino, row.generation, ci, cs,
+                                                  row.content_epoch, &hist, &view);
+                if (rc == EFS_ERR_NOT_FOUND) {
+                    rc = EFS_OK;
+                    continue;
+                }
+                if (rc != EFS_OK)
                     break;
+                ch = view.base;
+                nd = view.ndelta;
+                newest = view.delta_seq;
+                memcpy(ds, view.deltas, nd * sizeof(*ds));
+                out->recs[out->count].read_view = view.bytes;
+                out->recs[out->count].ino = ino;
+                out->recs[out->count].chunk_index = ci;
+                memcpy(out->recs[out->count].nodes, ch.nodes,
+                       sizeof(out->recs[out->count].nodes));
+                memcpy(out->recs[out->count].checksums, ch.checksums,
+                       sizeof(out->recs[out->count].checksums));
+                out->recs[out->count].base_gen = ch.generation;
+                out->recs[out->count].chunk_generation = ch.generation;
+                /* W125: a packed base names its record; the client reads it
+                 * from the segment (nodes/checksums are the segment's). */
+                if (ch.coding_profile_id == EFS_META_PROFILE_PACK) {
+                    if (efs_pack_ref_encode(&ch.packed, out->recs[out->count].packed_ref) != EFS_OK) {
+                        rc = EFS_ERR_PROTO;
+                        break;
+                    }
+                    out->recs[out->count].publish_flags |= EFS_CHUNK_REC_F_PACKED;
                 }
-                out->recs[out->count].publish_flags |= EFS_CHUNK_REC_F_PACKED;
-            }
-            out->recs[out->count].delta_off = 0;
-            out->recs[out->count].delta_len = 0;
-            if (nd > 0) {
-                if (nd > EFS_CHUNK_DELTA_MAX)
-                    nd = EFS_CHUNK_DELTA_MAX;
-                out->recs[out->count].delta_base_n = nd;
-                out->recs[out->count].delta_base_seq = newest;
-                for (di = 0; di < nd; di++) {
-                    out->recs[out->count].deltas[di].off = ds[di].off;
-                    out->recs[out->count].deltas[di].len = ds[di].len;
-                    out->recs[out->count].deltas[di].generation =
-                        ds[di].generation;
-                    out->recs[out->count].deltas[di].seq = ds[di].seq;
-                    memcpy(out->recs[out->count].deltas[di].nodes,
-                           ds[di].nodes, sizeof(ds[di].nodes));
-                    memcpy(out->recs[out->count].deltas[di].checksums,
-                           ds[di].checksums, sizeof(ds[di].checksums));
+                out->recs[out->count].delta_off = 0;
+                out->recs[out->count].delta_len = 0;
+                if (nd > 0) {
+                    if (nd > EFS_CHUNK_DELTA_MAX)
+                        nd = EFS_CHUNK_DELTA_MAX;
+                    out->recs[out->count].delta_base_n = nd;
+                    out->recs[out->count].delta_base_seq = newest;
+                    for (di = 0; di < nd; di++) {
+                        out->recs[out->count].deltas[di].off = ds[di].off;
+                        out->recs[out->count].deltas[di].len = ds[di].len;
+                        out->recs[out->count].deltas[di].generation =
+                            ds[di].generation;
+                        out->recs[out->count].deltas[di].seq = ds[di].seq;
+                        memcpy(out->recs[out->count].deltas[di].nodes,
+                               ds[di].nodes, sizeof(ds[di].nodes));
+                        memcpy(out->recs[out->count].deltas[di].checksums,
+                               ds[di].checksums, sizeof(ds[di].checksums));
+                    }
                 }
             }
+            out->count++;
         }
-        out->count++;
+        if (rc == EFS_ERR_BUSY) {
+            rc = EFS_OK; /* a part newer than the captured authority */
+            continue;
+        }
+        if (rc == EFS_OK)
+            rc = efs_meta_get_inode_authority_tx(h->kv, ino, host_txn_coord, h,
+                                                 &again, &hist_again);
+        if (rc == EFS_OK && (again.generation != row.generation ||
+                             again.content_epoch != row.content_epoch ||
+                             memcmp(&hist, &hist_again, sizeof(hist))))
+            continue;
+        break;
     }
     if (rc == EFS_ERR_NOT_PRIMARY &&
         (!host_hosts(h, EFS_RAFT_GROUP_SHARD) ||

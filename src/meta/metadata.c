@@ -2060,6 +2060,29 @@ int efs_export_evict_ino(struct efs_export *ex, efs_ino_t ino)
     return 2;
 }
 
+static int drop_chunk_one(struct efs_export *ex, efs_ino_t ino, uint32_t ci)
+{
+    uint64_t pos = 0;
+    if (chunk_idx_get(ex, ino, ci, &pos) != 0)
+        return 0;
+    ex->layout_epoch++;
+    remove_chunk_at(ex, pos);
+    return 1;
+}
+
+int efs_export_drop_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t ci)
+{
+    int dropped;
+    if (!ex)
+        return 0;
+    dropped = drop_chunk_one(ex, ino, ci);
+    if (export_is_sharded_root(ex) && ex->root.shard_count > 1 && ex->shard_tabs)
+        for (uint32_t s = 1; s < ex->shard_tab_cap; s++)
+            if (ex->shard_tabs[s])
+                dropped |= drop_chunk_one(ex->shard_tabs[s], ino, ci);
+    return dropped;
+}
+
 void efs_export_drop_chunks_from(struct efs_export *ex, efs_ino_t ino,
                                  uint32_t first_chunk)
 {

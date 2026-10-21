@@ -216,6 +216,20 @@ static int unpack_lane(const uint8_t *p, uint32_t n, struct lane_rec *l)
     return EFS_OK;
 }
 
+/* D25 adoption: the one transition that moves a lane to a newer content
+ * epoch (publish, BOOTSTRAP, fences). The lane's EOF summary belongs to the
+ * epoch it was written under, so it is cleared and the validation sequence
+ * advances; an equal or older epoch changes nothing. Returns 1 if it moved. */
+static int lane_adopt(struct lane_rec *ln, uint64_t epoch)
+{
+    if (epoch <= ln->fenced_epoch)
+        return 0;
+    ln->fenced_epoch = epoch;
+    ln->max_end = 0;
+    ln->seq++;
+    return 1;
+}
+
 /* Dir-lane stamp for a HASHED/SPLITTING mutation. Same record as a file
  * write lane — MAX mtime/ctime + seq — living on the dentry shard so a
  * create does not bounce back to the directory's home leader (§7.4). */
@@ -4450,6 +4464,12 @@ static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
         if (rc != EFS_OK)
             return rc;
     } else if (rc == EFS_ERR_NOT_FOUND) {
+        /* D25 floor: a cross-group lane's first stamp comes only from
+         * BOOTSTRAP or a fence, never from a publish, which this group
+         * cannot check against the inode epoch. Same-group publishes
+         * checked the row's epoch above. */
+        if (p->lane_local)
+            return EFS_ERR_BUSY;
         memset(&ln, 0, sizeof(ln));
         ln.fenced_epoch = p->content_epoch;
     } else {
@@ -4458,6 +4478,7 @@ static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
     if (p->durable_result && p->lane_local) mtime_gen = ln.mtime_gen;
     if (p->content_epoch < ln.fenced_epoch)
         PUB_STALE(EFS_PUB_STALE_LANE_EPOCH);
+    (void)lane_adopt(&ln, p->content_epoch);
     if (ln.append_bar && p->new_size > ln.append_bar)
         return EFS_ERR_BUSY;
     nd_old = trailer_n(old_ch, ch_vlen);
@@ -6515,7 +6536,10 @@ int efs_meta_apply_getattr(struct efs_kv *kv, efs_ino_t ino,
             }
             seq1[i] = ln.seq;
             if (!is_dir) {
-                size = max_u64(size, red.max_end);
+                /* D25: a lane's EOF counts only under the current epoch;
+                 * a lane that has not adopted it holds a superseded claim. */
+                if (ln.fenced_epoch == row.content_epoch)
+                    size = max_u64(size, red.max_end);
                 /* D17: present-chunk counts live only on materialized
                  * lanes (a pending reduction never makes a chunk
                  * present), so the reduce is a plain sum. */
@@ -6914,7 +6938,7 @@ static int truncate_publish_tail(struct efs_kv *kv, struct efs_meta_row *row,
     /* A sparse grow can create this lane after the active-lane fence walk.
      * Its new tail and stamp must carry the same truncate epoch; otherwise
      * GETCHUNKS captures epoch zero and every subsequent writer is STALE. */
-    ln.fenced_epoch = max_u64(ln.fenced_epoch, p.content_epoch);
+    (void)lane_adopt(&ln, p.content_epoch);
     ln.max_end = max_u64(ln.max_end, p.new_size);
     if (!had_row)
         ln.present++;
@@ -7358,8 +7382,8 @@ static int collect_phys_eof(struct efs_kv *kv, const struct efs_meta_row *row,
             return rc;
         }
         seqs[i] = ln.seq;
-        size = max_u64(size, red.max_end);
-        size = max_u64(size, ln.max_end);
+        if (ln.fenced_epoch == row->content_epoch) /* D25 adoption */
+            size = max_u64(size, max_u64(red.max_end, ln.max_end));
     }
     *eof = size;
     return EFS_OK;
@@ -8770,6 +8794,140 @@ int efs_meta_get_chunk_view(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
                             struct efs_meta_chunk_view *out)
 {
     return efs_meta_get_chunk_view_tx(kv, ino, gen, ci, cs, NULL, NULL, out);
+}
+
+/* D25 read authority is the inode: its content epoch and fence history,
+ * captured together. Two reads of each must agree, and no transaction the
+ * reads depended on may have been decided in between. */
+int efs_meta_get_inode_authority_tx(struct efs_kv *kv, efs_ino_t ino,
+                                    efs_txn_coord_fn coord, void *ctx,
+                                    struct efs_meta_row *row,
+                                    struct efs_fence_history *history)
+{
+    if (!kv || !ino || !row || !history)
+        return EFS_ERR_INVAL;
+    for (unsigned attempt = 0; attempt < 4; ++attempt) {
+        struct efs_meta_row r1, r2;
+        struct efs_fence_history h1, h2;
+        struct efs_txn_pending pend = {0};
+        int moved = 0;
+        int rc = inode_read_tx(kv, ino, coord, ctx, &pend, &r1);
+        if (rc == EFS_OK)
+            rc = fence_history_read(kv, ino, r1.generation, EFS_META_FENCE_INODE,
+                                    coord, ctx, &pend, &h1);
+        if (rc == EFS_OK)
+            rc = inode_read_tx(kv, ino, coord, ctx, &pend, &r2);
+        if (rc == EFS_OK)
+            rc = fence_history_read(kv, ino, r2.generation, EFS_META_FENCE_INODE,
+                                    coord, ctx, &pend, &h2);
+        if (rc == EFS_OK && coord)
+            rc = efs_txn_pending_recheck(&pend, coord, ctx, &moved);
+        if (rc != EFS_OK)
+            return rc;
+        if (moved || r1.generation != r2.generation ||
+            r1.content_epoch != r2.content_epoch ||
+            memcmp(&h1, &h2, sizeof(h1)))
+            continue;
+        if (h1.count && h1.entries[h1.count - 1].epoch > r1.content_epoch)
+            return EFS_ERR_PROTO;
+        *row = r2;
+        *history = h1;
+        return EFS_OK;
+    }
+    return EFS_ERR_BUSY;
+}
+
+/* A chunk view under the inode authority captured by
+ * efs_meta_get_inode_authority_tx: masks come from the inode history, and
+ * the lane stamp is not consulted. A part newer than the captured epoch
+ * means a truncate committed after the capture: BUSY, recapture. */
+int efs_meta_get_chunk_view_auth(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                                 uint32_t ci, uint32_t cs, uint64_t epoch,
+                                 const struct efs_fence_history *history,
+                                 struct efs_meta_chunk_view *out)
+{
+    struct efs_meta_chunk_view view = {0};
+    struct efs_fence_part parts[EFS_FENCE_PART_MAX] = {{0}};
+    int rc;
+    if (!kv || !out || !ino || !gen || !history || cs < EFS_MIN_CHUNK_SIZE ||
+        cs > EFS_MAX_CHUNK_SIZE || (cs & (cs - 1)))
+        return EFS_ERR_INVAL;
+    rc = efs_meta_apply_get_chunk_row(kv, ino, gen, ci, &view.base, view.deltas,
+                                      EFS_CHUNK_DELTA_MAX, &view.ndelta,
+                                      &view.delta_seq);
+    if (rc != EFS_OK)
+        return rc;
+    if (view.ndelta > EFS_CHUNK_DELTA_MAX)
+        return EFS_ERR_PROTO;
+    if (view.base.content_epoch > epoch)
+        return EFS_ERR_BUSY;
+    parts[0] = (struct efs_fence_part){view.base.content_epoch, 0,
+                                      view.base.generation ? cs : 0};
+    for (uint32_t i = 0; i < view.ndelta; ++i) {
+        const struct efs_meta_delta *d = &view.deltas[i];
+        if (d->content_epoch > epoch)
+            return EFS_ERR_BUSY;
+        parts[i + 1] = (struct efs_fence_part){d->content_epoch, d->off, d->len};
+    }
+    if (efs_fence_view_build(&view.bytes, epoch, (uint64_t)ci * cs, cs, history,
+                             parts, view.ndelta + 1) != EFS_OK)
+        return EFS_ERR_PROTO;
+    view.fence_epoch = epoch;
+    view.bytes.fence_epoch = epoch;
+    *out = view;
+    return EFS_OK;
+}
+
+/* The lane stamp's adopted epoch; NOT_FOUND when the lane has no stamp. */
+int efs_meta_get_lane_epoch(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                            uint8_t lane, uint64_t *epoch)
+{
+    uint8_t key[EFS_KV_KEY_MAX], val[LANE_VAL];
+    uint32_t kl = 0, vn = sizeof(val);
+    struct lane_rec ln;
+    int rc;
+    if (!kv || !ino || !gen || lane >= EFS_META_LANES || !epoch)
+        return EFS_ERR_INVAL;
+    rc = efs_kv_key_lane(efs_kv_lane_shard(ino, lane), ino, gen, lane, key, &kl);
+    if (rc == EFS_OK)
+        rc = efs_kv_get(kv, key, kl, val, &vn);
+    if (rc == EFS_OK)
+        rc = unpack_lane(val, vn, &ln);
+    if (rc == EFS_OK)
+        *epoch = ln.fenced_epoch;
+    return rc;
+}
+
+/* D25 BOOTSTRAP on the lane's group: create a cross-group lane's stamp at
+ * the inode epoch the proposer read, or adopt it if the stamp is older.
+ * An equal or older epoch changes nothing. */
+int efs_meta_apply_bootstrap_lane(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                                  uint8_t lane, uint64_t epoch)
+{
+    uint8_t key[EFS_KV_KEY_MAX], val[LANE_VAL];
+    uint32_t kl = 0, vn = sizeof(val);
+    struct lane_rec ln;
+    int rc;
+    if (!kv || !ino || !gen || lane >= EFS_META_LANES)
+        return EFS_ERR_INVAL;
+    rc = efs_kv_key_lane(efs_kv_lane_shard(ino, lane), ino, gen, lane, key, &kl);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_kv_get(kv, key, kl, val, &vn);
+    if (rc == EFS_ERR_NOT_FOUND) {
+        memset(&ln, 0, sizeof(ln));
+        ln.fenced_epoch = epoch;
+    } else if (rc == EFS_OK) {
+        rc = unpack_lane(val, vn, &ln);
+        if (rc != EFS_OK)
+            return rc;
+        if (!lane_adopt(&ln, epoch))
+            return EFS_OK;
+    } else {
+        return rc;
+    }
+    pack_lane(val, &ln);
+    return meta_write_put(kv, key, kl, val, LANE_VAL);
 }
 
 int efs_meta_apply_sweep_chunk(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
