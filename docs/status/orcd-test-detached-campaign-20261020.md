@@ -407,3 +407,25 @@ with six-hour limits from ~04:15 UTC. Every prior EBUSY path is included.
 POSIX core runs concurrently against a separate test fixture. Acceptance is
 **OPEN**: repaired full verification, query suites, 40 M scale and subsequent
 orderly restart/full verification remain pending. No original failure is erased.
+
+### Repaired-build suites — 2026-10-21 04:30 UTC
+
+On deployed 643f6104f with full retained-payload verification running concurrently:
+- POSIX core **FAIL: 215/216**, `mtime_monotonic_many_writes` exceeded its
+  unchanged 15-second deadline. Fixture retained at
+  `/tmp/efs-mount/posix-fcstor003-nwt0y2yy`; result `qualification-643f6104f/posix.tsv`.
+- Two-client **PASS: 67/67** (two independent mounts on fcstor003).
+- Focused `.efs` commands **PASS**. Options and concurrent-load suites RUNNING.
+- Retained verification reached 1,339,726 paths with zero errors at inspection;
+  this remains incomplete, not a full-payload PASS.
+
+Diagnostic strace could not run: host rejects `PTRACE_TRACEME` with EPERM;
+that diagnostic failure is preserved. `scripts/orcd_mtime_probe.py MOUNT`
+reproduces the 80-append pattern with per-operation timings, retains its fixture,
+and asserts mtime monotonicity. Its separate bounded 120-second job completed
+in 11.64 seconds: close total 8.11 s / max 489 ms, open total 1.95 s / max
+222 ms, stat total 1.56 s / max 262 ms. This suggests cumulative publication
+latency near the suite deadline; it neither clears the original timeout nor
+proves its cause. No acceptance timeout or durability rule was relaxed.
+Raw probe/trace-attempt jobs are recorded under `tests` in
+`repair-20261020/deployment-643f6104f.json`, with logs in the original mailbox.
