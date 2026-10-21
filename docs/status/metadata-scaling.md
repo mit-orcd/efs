@@ -764,3 +764,54 @@ Raft cursors, service fencing, compatible-restart recovery, unchanged
 business and transient-error behavior, and an explicit child layout in
 MKDIR. W66 distribution decisions stay open; this is compatibility work
 linked from W66, not evidence for it.
+
+
+### MKDIR replay-path review — Oct 21
+
+**Reviewed devel `be1541f28`; code inspection only, runtime tests NOTRUN.**
+The abort/unlock correction stands. Compatibility hardening has converged at
+the requirements level, but the MKDIR conclusion needs path-specific wording:
+
+- **Same-group operation replay has an implicit child layout.**
+  `apply_create_cmd` dispatches S_IFDIR CREATE entries to the mkdir helpers;
+  `mkdir_batch` in `src/meta/meta_apply.c` interprets `want_layout` as the
+  parent's layout and zero-initializes the child's row. Unconditionally
+  changing that apply-time default would reinterpret historical entries.
+  This establishes semantic incompatibility, not that every born-HASHED
+  implementation must change the byte format in the same way.
+- **The transaction path already carries the child row.**
+  `server_raft_host_mkdir` builds `crow`, serializes it with
+  `efs_meta_pack_inode`, and supplies `v_cino` to `host_prep_async` as an
+  `EFS_TXN_PUT`. Its log therefore carries the child's serialized layout.
+  Old transaction records retain their recorded LOCAL row. Audit and test
+  both paths: changing only `mkdir_batch` would leave transactional mkdir
+  producing LOCAL children, while changing only the transaction builder
+  would leave the fast path unchanged. Include root creation separately.
+- **Explicit child layout is my preferred operation-format solution, not
+  the only possible one.** Preserve the old opcode/encoding's LOCAL meaning;
+  introduce a strictly validated versioned encoding for new requests, with
+  child layout separate from parent routing layout. A versioned replay rule
+  is also possible, but must distinguish historical entries deterministically.
+  A new global startup format number must not retroactively reinterpret all
+  old MKDIR entries. An existing transaction encoding might also express the
+  new row, at a cost that must be measured rather than assumed acceptable.
+- **"Absent means LOCAL" must mean a recognized legacy encoding.** A
+  truncated new-format record is malformed, not a legacy request with a
+  missing optional field. Recognize versions and lengths unambiguously,
+  including the existing operation-ID trailer. Test truncation, unknown
+  layout values and unsupported versions through the full apply wrapper.
+
+The focused MKDIR acceptance fixture should mix legacy operation entries,
+legacy transaction entries and new directory creations across both paths.
+Replay from a clean store and from a snapshot plus log suffix; compare child
+layouts, inode/dentry placement, lane registration, complete listings and
+operation-ID outcomes. Verify retry/restart creates one visible directory
+with one allocation and one parent-link update. "Exactly once" here concerns
+durable effects; execution may be attempted again after an aborted apply.
+Keep the unknown/malformed rejection tests and cursor checks from the prior
+review. These are required tests, not results from this documentation review.
+
+One remaining wording correction: IO/NOMEM retry exceptions are explicitly
+listed by command family, not a proof that every storage/memory error in every
+handler retries. Do not generalize beyond that inspected wrapper. Proceed to
+implementation with these gates; no further agreement-only review is needed.

@@ -1578,7 +1578,9 @@ rejection must preserve both KV and Raft cursors and withdraw readiness.
 New markers cannot retroactively fence old readers. Fatal rejection must
 abort an opened KV apply scope with `apply_end(kv, NULL)` to release its writer
 lock; compatibility must cover replay semantics as well as encoding bytes.
-Born-HASHED correctness and compatibility gates are NOTRUN.
+MKDIR review distinguishes implicit child layout in operation replay from
+serialized child rows in transactions; both paths and legacy/new replay need
+coverage. Born-HASHED correctness and compatibility gates are NOTRUN.
 
 **Raw evidence moved off devel (2026-10-21).** 23,126 raw files (logs, TSV,
 JSON, fixture stores) under `results/`, `docs/status/evidence/` and seven
