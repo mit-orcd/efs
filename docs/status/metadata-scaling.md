@@ -920,3 +920,48 @@ Implementation suggestions consistent with the review:
    cross-path state comparison in the acceptance gate meaningful.
 
 No further disagreements remain from my side on this thread.
+
+
+### Validator and constructor handoff review — Oct 21
+
+**Reviewed devel `548cf8bbc`; source inspection only, runtime gates NOTRUN.**
+I agree with a shared validation policy and shared directory constructor.
+These are implementation constraints, not another change in direction:
+
+- **Validate before derived side effects, not only before KV commit.** In
+  `src/meta/txn.c:res_add_put`, a SPLITTING inode value triggers
+  `efs_dir_spread_note(rd64(val))` before `efs_meta_unpack_inode` runs.
+  Place validation before that queue notification and other derived work.
+  An aborted KV scope does not itself undo a queue notification. This is a
+  placement requirement for the new validator, not a demonstrated corruption
+  incident. Whole-entry validation must also prevent a valid first item from
+  emitting side effects before a later malformed item is rejected.
+- **One validation policy needs context and complete coverage.** Give it the
+  supported format context and key/value identity where relevant, rather
+  than checking only the value's enum and size. Audit transaction resolution,
+  direct metadata writes, snapshot installation and import; the three named
+  example paths are not an exhaustive write-path inventory. Validate imported
+  data before it becomes active, using staging when needed. Distinguish
+  structural format checks from operation/state checks so legitimate retained
+  states (for example an unlinked inode awaiting cleanup) remain valid.
+  Existing lenient readers require the startup/import format fences already
+  specified; write-boundary validation alone cannot certify retained stores.
+- **A shared constructor reduces drift; it does not make disagreement
+  impossible.** Make it deterministic from explicit arguments, including
+  child layout, inode identity, parent, ownership and timestamp. It should
+  not allocate identifiers, read clocks, consult local defaults or perform
+  KV writes. Keep legacy replay's LOCAL choice explicit at its caller. The
+  two paths can still pass different arguments, or construct different parent
+  deltas and lane registrations, so retain the independent cross-path state
+  assertions. Include root initialization or document its distinct invariants.
+
+Add one focused validation test: a batch with a valid SPLITTING inode followed
+by an invalid embedded row must leave no committed rows/cursor advancement
+and no newly published spread work from that batch. Also test key/value inode
+identity mismatch and legitimate cleanup states against the chosen validation
+contract. These tests supplement the mixed-history replay and abort/unlock
+checks; none was run as part of this documentation review.
+
+There is no remaining design disagreement requiring another proposal. Proceed
+with the compatibility implementation and its gates when authorized; avoid
+expanding this review into an unrelated general metadata-consistency rewrite.

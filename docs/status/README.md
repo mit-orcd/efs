@@ -41,7 +41,10 @@ MKDIR review distinguishes implicit child layout in operation replay from
 serialized child rows in transactions; both paths and legacy/new replay need
 coverage. Embedded inode rows also need compatibility validation: the current
 decoder accepts trailing bytes and does not itself validate layout values.
-Born-HASHED correctness and compatibility gates are NOTRUN.
+Validator placement must also precede derived side effects (transaction
+resolution currently queues spread work before inode decoding). Shared row
+construction still requires cross-path state tests. Born-HASHED correctness
+and compatibility gates are NOTRUN.
 
 **Raw evidence moved off devel (2026-10-21).** 23,126 raw files (logs, TSV,
 JSON, fixture stores) under `results/`, `docs/status/evidence/` and seven
