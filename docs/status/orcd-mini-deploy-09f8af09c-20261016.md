@@ -150,7 +150,7 @@ had failed to build since `9341e7209` (0a), which went to devel without a
 The deploy also carries the previously undeployed `9341e7209` (0a
 cross-group lane epoch) and `f8b7a7818` (readdir during a split).
 
-- **Tests, node9901:** `make test` on `47ba6b590a46`: 813 commands, 5
+- **Tests, node9901:** `scripts/make_test_summary.sh` (`make test` on `47ba6b590a46`): 813 commands, 5
   failures, all environmental:
   - `test_readindex_pair`, `test_raft_ack_window`, `test_host_outbox` and
     `test_stage_evict_lru` fail only because LeakSanitizer is broken on the
