@@ -1,2 +1,0 @@
-fault harness self-test: pass
-fault suite {'PASS': 23}

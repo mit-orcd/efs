@@ -11,7 +11,7 @@ creation took 5.376 seconds. Exact .efs/find paths and .efs/stats counts/bytes p
 Deleted 75, cross-directory renamed 75, appended 17 bytes to 15: final 1425 files,
 16 descendant directories, 45855 logical bytes. Sampled payload SHA256 checks pass.
 The same model passes after full daemon restart and a fresh FUSE mount. Evidence:
-[oracle](oracle.log), [fixture](clean_catalog_oracle.py), [runtime](runtime.log).
+oracle (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261009-w92-clean-cluster/oracle.log`), fixture (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261009-w92-clean-cluster/clean_catalog_oracle.py`), runtime (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261009-w92-clean-cluster/runtime.log`).
 The restart rejected an outdated checkpoint (rc=-14) and rebuilt all 4096 partitions
 in 137 ms; this proves rebuild correctness, not checkpoint reuse in this run.
 Root daemon rollups include the test directory itself (17 directories); scoped
@@ -21,7 +21,7 @@ Post-restart node-1 sample: RSS 28824 KiB, cache allocated usage 5752 KiB. These
 single samples are not a scaling/RSS ceiling measurement. Publication samples at
 1500 files were 140 ms; final mutation refresh 146 ms. No engine performance claim.
 
-[Quota unit output](quota-tests.log): default and 12000-file RAM/disk differential
+Quota unit output (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261009-w92-clean-cluster/quota-tests.log`): default and 12000-file RAM/disk differential
 checks pass; 1 MiB limit refuses before allocation and 3 MiB refuses during raw
 partition ingestion. Complete native/code gates pass in the private build; the
 architecture link checker was excluded because historical result archives were

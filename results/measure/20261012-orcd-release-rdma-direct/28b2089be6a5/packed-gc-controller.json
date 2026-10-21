@@ -1,4 +1,0 @@
-{
-  "suite": "packed-gc",
-  "transcript": "Unmounting /data1/01/efs-orcd-release-28b2089be6a5-private/gc-direct-2zwqzpnr/mnt\nRetiring drained efs-fuse PID 1764254 for /data1/01/efs-orcd-release-28b2089be6a5-private/gc-direct-2zwqzpnr/mnt\nUnmounted /data1/01/efs-orcd-release-28b2089be6a5-private/gc-direct-2zwqzpnr/mnt\nnode 1 listening PASS\nnode 2 listening PASS\nnode 3 listening PASS\nnode 4 listening PASS\nclient serving PASS\nmounted packed/ordinary mutations and acknowledged cold hashes PASS\nmounted packed physical fragments reclaimed PASS\nmounted packing metadata queues drained PASS\nmounted packing direct PASS\nsuite-exit=0"
-}

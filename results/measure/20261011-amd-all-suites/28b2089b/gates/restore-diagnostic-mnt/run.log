@@ -1,1 +1,0 @@
-ERROR: another efs-fuse already holds /data1/efs/mnt (/data1/efs/.efs-mnt.lock)

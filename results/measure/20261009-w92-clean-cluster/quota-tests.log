@@ -1,7 +1,0 @@
-query-disk: unlinked directory ino=36864004096 parent=1 nlink=2
-query disk: RAM oracle, external sort, bounded metadata, retained snapshot, rename and cancellation PASS
-query disk: generation quota PASS
-query-disk: raw shard=3950 rc=-11 errno=0
-query disk: generation quota PASS
-query-disk: unlinked directory ino=36864004096 parent=1 nlink=2
-query disk: RAM oracle, external sort, bounded metadata, retained snapshot, rename and cancellation PASS

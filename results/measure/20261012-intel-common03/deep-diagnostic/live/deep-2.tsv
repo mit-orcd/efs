@@ -1,7 +1,0 @@
-# posix-suite host=intel1 mnt=/tmp/efs-intel-common03-deep-20261012-intel1_efs/deep-mnt2 2026-10-12T13:19:34Z
-# suite=all
-# select	dir_deep_nesting
-test	result	detail
-dir_deep_nesting	PASS	
-# summary pass=1 fail=0 skip=0 notrun=0 total=1 dur=13.6
-# complete

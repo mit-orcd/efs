@@ -1,7 +1,0 @@
-{
-  "duration_seconds": 180,
-  "tag": "late2",
-  "early_retire": 0,
-  "root": "/data1/efs/mnt/tiny-w93-read-pressure-late2-20261009",
-  "drained": true
-}

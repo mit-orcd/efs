@@ -1,3 +1,0 @@
-WALL 4.757
-pass dir_deep_nesting_beyond_64      
-dir_deep_nesting_beyond_64	PASS	

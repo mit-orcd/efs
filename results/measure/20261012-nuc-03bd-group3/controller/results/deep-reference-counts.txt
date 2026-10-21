@@ -1,2 +1,0 @@
-Linux Python normal-/tmp reference; exact test body only, excludes worker/setup/startup; not FUSE RPC or timing measurement
-{'close': 122, 'fstat': 123, 'getdents64': 120, 'mkdir': 60, 'newfstatat': 121, 'openat': 62, 'read': 2, 'rmdir': 1, 'unlinkat': 60, 'write': 1}

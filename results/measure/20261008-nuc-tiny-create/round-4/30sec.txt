@@ -1,2 +1,0 @@
-efs@nuc:~$ cd /home/efs && ./tiny_files.py --max-depth 8 --max-files-per-folder 1000 --max-files 1000000 --workers 8 /data1/efs/mnt/tiny-profile-r4
-3,819/1,000,000 files (0.4%), 30.0 s, 127 files/s

@@ -1,5 +1,0 @@
-985818fa30243d2a0291d525b7ade43ce541e1ee8cf6ea450f6129cbe9947662  /tmp/efs/efsd
-52bab75b42b6bf6a462136cc043c8c666bb56e41445c36c703d6476f1bfb6905  /tmp/efs/efs-fuse
-4956d98e5c11fec63716d6f2ce53c15734a7c10fa173a1c61aca8d2a7ab68cce  /tmp/efs/efs-mgmt
-382811 ./efs-fuse 192.168.122.111:17432 fs /mnt/efs -o allow_other
-Sat Oct 10 11:54:56 AM UTC 2026

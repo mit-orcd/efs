@@ -1,7 +1,0 @@
-{
-  "pid": 196853,
-  "exit": 1,
-  "timed_out": false,
-  "utc": "2026-10-12T01:50:33Z",
-  "marker_scope": "Actual owned fixture process exit; parent recipe marker may remain absent after deliberate supersession."
-}

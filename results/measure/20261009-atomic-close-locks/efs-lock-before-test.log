@@ -1,7 +1,0 @@
-FAIL tests/test_lock.c:151: prepared last lock blocks whole close
-FAIL tests/test_lock.c:152: BUSY preserves all locks
-FAIL tests/test_lock.c:156: atomic close IO failure
-FAIL tests/test_lock.c:157: IO preserves all locks
-FAIL tests/test_lock.c:170: over-cap refuses atomically
-FAIL tests/test_lock.c:171: over-cap preserves rows
-test_lock: 6 failure(s)

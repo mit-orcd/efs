@@ -1,4 +1,0 @@
-{"host": "fcstor003", "path": "/data1/01/efs-orcd-test-erbmi1/meta/pack-fences-v1/1/4925959731071590093/2793619445051681373", "exists": true, "magic": "EFSDEAD1"}
-{"host": "fcstor004", "path": "/data1/01/efs-orcd-test-erbmi1/meta/pack-fences-v1/1/4925959731071590093/2793619445051681373", "exists": true, "magic": "EFSDEAD1"}
-{"host": "fcstor005", "path": "/data1/01/efs-orcd-test-erbmi1/meta/pack-fences-v1/1/4925959731071590093/2793619445051681373", "exists": true, "magic": "EFSDEAD1"}
-{"host": "fcstor006", "path": "/data1/01/efs-orcd-test-erbmi1/meta/pack-fences-v1/1/4925959731071590093/2793619445051681373", "exists": true, "magic": "EFSDEAD1"}

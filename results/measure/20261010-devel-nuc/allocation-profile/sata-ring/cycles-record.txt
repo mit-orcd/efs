@@ -1,2 +1,0 @@
-[ perf record: Woken up 1 times to write data ]
-[ perf record: Captured and wrote 0.074 MB /data1/efs/devel-nuc-20261010/allocation-profile/sata-ring/cycles.data (299 samples) ]

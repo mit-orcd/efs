@@ -1,9 +1,0 @@
-{
-  "cold_verified": true,
-  "physical_packed_empty": true,
-  "failures": [],
-  "source_sha256": "ea2fd6f9af0bf2bfcd82e88d5955c0faaa52b68cd769bccb0dc41239e683b5c3",
-  "clients": 7,
-  "mode": "direct",
-  "transport": "rdma"
-}

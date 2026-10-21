@@ -1,6 +1,0 @@
-{
-  "ordinary_create": true,
-  "original_verdict": "EEXIST",
-  "crash_restart_after_unlink": true,
-  "name_reuse_preserved": true
-}

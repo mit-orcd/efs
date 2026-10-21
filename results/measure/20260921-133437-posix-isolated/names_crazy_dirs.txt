@@ -1,3 +1,0 @@
-WALL 3.341
-pass names_crazy_dirs                
-names_crazy_dirs	PASS	

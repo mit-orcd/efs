@@ -1,7 +1,0 @@
-Assertion failed: (handed_off&&!g_open_refs&&!server_hold&&closes==old_closes), function main, file test.c, line 528.
-Traceback (most recent call last):
-  File "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd/tests/test_fuse_lease_retention.py", line 189, in <module>
-    subprocess.run([str(p.with_suffix(''))],check=True)
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 528, in run
-    raise CalledProcessError(retcode, process.args,
-subprocess.CalledProcessError: Command '['/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/efs-lease-retention-efqqlyfs/test']' died with <Signals.SIGABRT: 6>.

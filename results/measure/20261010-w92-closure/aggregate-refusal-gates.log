@@ -1,7 +1,0 @@
-gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"d83f3f06"' -DEFS_VERSION='"d83f3f06"' -DEFS_GIT_BRANCH='"devel-find-stats"' -DEFS_BUILD_TIME='"2026-10-10T06:30:47Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_query_disk_io tests/test_query_disk_io.c libefs.a -lpthread -lm -ldl -libverbs
-query-disk: nodes shard=1 previous=28673 rc=-1
-query-disk: raw shard=1 rc=-1 errno=5
-query-disk: raw shard=1 rc=-1 errno=5
-query disk I/O: windows, lookup, packed records, partial ENOSPC, FD reuse and fsync refusal PASS
-query disk: generation quota PASS
-query disk: generation quota PASS

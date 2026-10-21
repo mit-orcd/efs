@@ -1,6 +1,0 @@
-2026-10-12T13:08:11Z posix-core-peer-direct START
-2026-10-12T13:09:46Z posix-core-peer-direct PASS 0
-2026-10-12T13:09:46Z mounted-packing-direct START
-2026-10-12T13:10:05Z mounted-packing-direct PASS 0
-2026-10-12T13:10:05Z mounted-packing-seven-quiet START
-2026-10-12T13:12:59Z mounted-packing-seven-quiet FAIL 1

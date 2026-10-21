@@ -161,8 +161,8 @@ down dead QPs and retain replay identity; do not blindly reduce hardware retries
 
 ## Evidence and limits
 
-[Derived query/wait/TCP records](../../results/measure/20261011-orcd-communication/hypothesis-evidence.json)
-and [historical lane-sweep records](../../results/measure/20261011-orcd-communication/historical-failure-window.json)
+Derived query/wait/TCP records (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-orcd-communication/hypothesis-evidence.json`)
+and historical lane-sweep records (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-orcd-communication/historical-failure-window.json`)
 supplement the [baseline capture](orcd-communication-20261011.md).
 Raw profiles/traces remain in that capture's ORCD scratch directory.
 

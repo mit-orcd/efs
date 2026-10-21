@@ -49,7 +49,7 @@ It records 4352 MiB/27 seconds and an RSS-threshold stop, but its zero-L0/no-eff
 interpretation is **withdrawn**. Later inspection of raw samples and server logs
 found [W89](../backlog/work-items.md#w89): four KV values occupy one TSV field,
 so the derived peaks read shifted columns. The retained
-[corrected expansion](round6-w23-samples-corrected.tsv) and
+corrected expansion (archived raw evidence: `archive/raw-evidence-20261021:docs/archive/round6-w23-samples-corrected.tsv`) and
 [peaks](round6-w23-peaks-corrected.txt) show node3 reached 22 L0 files /
 3,367,253 bytes during the park (raw logs confirm), versus node1's 4 / 105,281.
 The sampled RSS peaks are 30,316 / 25,936 / 25,624 KiB; sampled lag remains zero.
@@ -105,7 +105,7 @@ in-memory KV, without sockets, FUSE or fragment stores:
 retry status 0, one reintroduced live old span. **Exit 1 is the expected failing
 safety assertion**, not a passing release gate. The result was repeated against
 a frozen source/header snapshot. Its
-[dependency fingerprints](round6-fixture-dependencies.json) include the staged
+dependency fingerprints (archived raw evidence: `archive/raw-evidence-20261021:docs/archive/round6-fixture-dependencies.json`) include the staged
 metadata sources compiled in the fixture; the tested request uses the legacy
 non-ticketed/non-durable-result path.
 

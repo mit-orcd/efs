@@ -1,7 +1,0 @@
-test: /tmp/efs-append-burst-clock-3nnyvcsd/test.c:67: main: Assertion `append_publish_burst(42)==0 && flushes==1 && entry.append_burst==2' failed.
-Traceback (most recent call last):
-  File "/data1/efs/devel-nuc-20261011/clock-focused-source/tests/test_append_burst_clock.py", line 55, in <module>
-    subprocess.run([str(path.with_suffix(''))],check=True,timeout=5)
-  File "/usr/lib64/python3.12/subprocess.py", line 571, in run
-    raise CalledProcessError(retcode, process.args,
-subprocess.CalledProcessError: Command '['/tmp/efs-append-burst-clock-3nnyvcsd/test']' died with <Signals.SIGABRT: 6>.

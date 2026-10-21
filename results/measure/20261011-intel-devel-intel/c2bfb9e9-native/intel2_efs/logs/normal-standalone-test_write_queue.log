@@ -1,2 +1,0 @@
-write-queue pressure jobs=2 queued_bytes=20 inflight_bytes=0 oldest_ms=100 waits=1 timeouts=0
-write queue: timeout/shutdown ownership and accepted-job completion PASS

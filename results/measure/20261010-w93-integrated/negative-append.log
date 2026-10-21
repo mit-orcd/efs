@@ -1,7 +1,0 @@
-t: /tmp/efs-append-budget-vzx71761/t.c:37: efs_client_append_begin: Assertion `!pthread_mutex_trylock(&stripe)' failed.
-Traceback (most recent call last):
-  File "/data1/efs/w93-integrated-20261010/negative-test_append_reserve_budget.py", line 116, in <module>
-    subprocess.run([str(p.with_suffix(''))],check=True,timeout=5)
-  File "/usr/lib64/python3.12/subprocess.py", line 571, in run
-    raise CalledProcessError(retcode, process.args,
-subprocess.CalledProcessError: Command '['/tmp/efs-append-budget-vzx71761/t']' died with <Signals.SIGABRT: 6>.

@@ -36,7 +36,7 @@ advanced, removed-fragment/payload-byte counters increased, and usage decreased.
 After broad POSIX deletion it also requires increased pass/removal counters;
 final restart still requires empty physical inventory, zero data usage and
 retired queues. Recorded JSON checkpoints live in
-[GC effects](../../results/measure/20261007-gc-effects/direct-posix.json).
+GC effects (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-gc-effects/direct-posix.json`).
 
 NUC buffered and direct private four-node tests pass: single POSIX 216/0/1 skip,
 peer 64/64, failure/restart/offline-member protection, zero inventory/quota and
@@ -330,7 +330,7 @@ still fails immediately. The corrected run retires 5,121 owners / 103,487,696
 capacity bytes, zero remaining owners and 2,648 KiB RSS span. Full Linux units
 pass afterward. Manifest records gate options, real storage paths and source/
 test/binary hashes. Small evidence is retained under
-[continuation evidence](../../results/measure/20261007-roadmap-continuation/buffered-manifest.json).
+continuation evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-roadmap-continuation/buffered-manifest.json`).
 Logs `/private/tmp/efs-roadmap-round30-buffered-final.log` and
 `/private/tmp/efs-roadmap-round30-units.log`; fixture
 `/data1/efs/gc-buffered-it_redju`. Failed iterations remain in the preceding

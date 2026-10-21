@@ -1,8 +1,0 @@
-{
-  "received": 47,
-  "retained": 47,
-  "limit": 128,
-  "errors": [],
-  "lost_datagrams_unknown": true,
-  "scope": "opt-in bounded observations; missing records are unknown, not absent work"
-}

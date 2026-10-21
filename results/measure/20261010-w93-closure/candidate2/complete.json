@@ -1,7 +1,0 @@
-{
-  "duration_seconds": 900,
-  "tag": "candidate2",
-  "applied_interval_ms": 100,
-  "root": "/data1/efs/mnt/tiny-w93-closure-candidate2-20261010",
-  "drained": true
-}

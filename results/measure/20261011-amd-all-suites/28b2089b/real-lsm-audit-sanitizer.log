@@ -1,2 +1,0 @@
-readonly real-LSM audit: parent=1098 child=1584 replacement=1029 records=20 lineage=3677883430315748501/9393132306978751090; cold graph/ownership inconclusive and no repair PASS
-partial committed replacement: live orphan shape stays inconclusive across cold reopen, final victim retirement restores graph PASS

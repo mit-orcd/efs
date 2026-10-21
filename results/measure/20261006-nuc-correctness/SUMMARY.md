@@ -9,14 +9,14 @@ and mounts on ports 17432–17434 were not redeployed or discarded.
 | Gate | Result | Evidence |
 | --- | --- | --- |
 | Linux make test | PASS | /data1/efs/review-20261006-lease/src/report-orphan-tests.log |
-| POSIX jobs=4 | 216 PASS, 0 FAIL, 1 mmap SKIP | [TSV](posix-all-fixes.tsv) |
-| POSIX jobs=1 | 216 PASS, 0 FAIL, 1 mmap SKIP | [TSV](posix-jobs1.tsv) |
-| Two-client POSIX | 64 PASS, 0 FAIL | [TSV](posix2-all-fixes.tsv) |
-| Two-client after drain fix | 64 PASS, 0 FAIL; both clients cleanly stopped | [TSV](posix2-drain-fix.tsv) |
+| POSIX jobs=4 | 216 PASS, 0 FAIL, 1 mmap SKIP | TSV (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261006-nuc-correctness/posix-all-fixes.tsv`) |
+| POSIX jobs=1 | 216 PASS, 0 FAIL, 1 mmap SKIP | TSV (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261006-nuc-correctness/posix-jobs1.tsv`) |
+| Two-client POSIX | 64 PASS, 0 FAIL | TSV (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261006-nuc-correctness/posix2-all-fixes.tsv`) |
+| Two-client after drain fix | 64 PASS, 0 FAIL; both clients cleanly stopped | TSV (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261006-nuc-correctness/posix2-drain-fix.tsv`) |
 | Rename-vs-unlink source | 20/20 PASS | /data1/efs/review-20261006-lease/logs/w36-{1..20}.tsv |
 | Chunk-straddle overlap | 20/20 PASS | /data1/efs/review-20261006-final/logs/straddle-{1..20}.tsv |
-| Durability prepare | 26/26 PASS | [TSV](persist-prepare-20261006-130641.tsv) |
-| Clean stop/remount verify | 26/26 PASS | [TSV](persist-verify-20261006-130641.tsv) |
+| Durability prepare | 26/26 PASS | TSV (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261006-nuc-correctness/persist-prepare-20261006-130641.tsv`) |
+| Clean stop/remount verify | 26/26 PASS | TSV (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261006-nuc-correctness/persist-verify-20261006-130641.tsv`) |
 
 Sparse-tail regression against pre-fix meta_apply.c fails both epoch agreement
 and first-writer publication checks. Span-selection regression against pre-fix

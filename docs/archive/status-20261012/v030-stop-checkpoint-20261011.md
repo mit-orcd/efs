@@ -10,7 +10,7 @@ Correct packaging-v2 archive SHA256 `e5685d586e1de93335d1ff339f22cb24ba646009499
 
 ## Gates and retained evidence
 
-- PASS: corrected 410 AMD full `make all test` normal and fault; 20 focused sanitizer gates; fully sanitized real-LSM catalog and namespace audit. All final exit markers are zero, all 1,563 source hashes unchanged. [Raw logs and restoration proof](../../../results/measure/20261012-v030-merged-native/410afed4/artifact-sha256.json).
+- PASS: corrected 410 AMD full `make all test` normal and fault; 20 focused sanitizer gates; fully sanitized real-LSM catalog and namespace audit. All final exit markers are zero, all 1,563 source hashes unchanged. Raw logs and restoration proof (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-v030-merged-native/410afed4/artifact-sha256.json`).
 - FAIL: first 410 packaging attempt omitted five exact-Git evidence JSONs and failed doc links; preserved remotely in `/data1/efs/release-v030-results-20261012-410afed4`. Corrected attempt is `/data1/efs/release-v030-results-20261012-410afed4-attempt2`. It is not retroactively labeled PASS.
 - PASS locally: actual combined CREATE caller/transport fault regression fixed three stages, normal/ASan/UBSan; old c2 six-stage negative FAIL, existing retained/legacy identity mismatch controls PASS. Strict fixed mounted CREATE/cold/ownership acceptance is NOTRUN centrally.
 - Earlier c2: full native/fault/sanitizers and original direct/buffered warm/peer/cold overwrite/physical cleanup PASS. One original seven-client/jobs16 diagnostic FAIL on stats/find 30-second deadlines; deep60/cold bytes PASS independently, normal mounts restored. Publication gaps are correlated, per-root causal proof missing.

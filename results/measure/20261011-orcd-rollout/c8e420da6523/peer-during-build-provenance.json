@@ -1,8 +1,0 @@
-{
-  "test_tag": "c8e420da6523",
-  "live_deployed_revision": "dbf2b5db69e609b6b5d9904fb57170129298f6ec",
-  "candidate_revision": "c8e420da65236b5f9f58f3aea8ba1fe000a731a2",
-  "note": "The quiet peer probe launched while the corrected candidate built. Test directory defaults to candidate tag, but runtime is prior dbf revision. It is not candidate acceptance.",
-  "transport": "native RDMA",
-  "packing_enabled": true
-}

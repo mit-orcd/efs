@@ -1,3 +1,0 @@
-Filesystem      Size  Used Avail Use% Mounted on
-/dev/loop0      8.0G  245M  7.4G   4% /data1/efs/bench/w92-scale-volume-20261010/fs
-/dev/vdb        112G   11G  102G   9% /data1

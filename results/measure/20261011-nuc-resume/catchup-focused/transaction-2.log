@@ -1,1 +1,0 @@
-test_append_transaction: tests/test_append_transaction.c:715: caught_up: Assertion `efs_meta_apply_append_catchup(kv,ino,gen+1,row.content_epoch,end,&q.id)==EFS_ERR_STALE' failed.

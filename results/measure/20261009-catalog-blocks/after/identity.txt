@@ -1,6 +1,0 @@
-    PID     ELAPSED %CPU   RSS COMMAND
-2209924       01:30 21.8 545312 /data1/efs/src/efsd --node-id 1 --addr 127.0.0.1 --port 17432 --storage /data1/efs/n1 --quota 187.5G --direct-io
-2211225       01:13 39.9 2061348 /data1/efs/src/efsd --node-id 2 --addr 127.0.0.1 --port 17433 --storage /data1/efs/n2 --quota 187.5G --direct-io --join 127.0.0.1:17432
-2212641       00:52 51.7 2045436 /data1/efs/src/efsd --node-id 3 --addr 127.0.0.1 --port 17434 --storage /data2/efs/n3 --quota 187.5G --direct-io --join 127.0.0.1:17432
-2214482       00:29 66.5 482600 /data1/efs/src/efsd --node-id 4 --addr 127.0.0.1 --port 17435 --storage /data2/efs/n4 --quota 187.5G --direct-io --join 127.0.0.1:17432
-efsd a62cbd5f6ca2 (branch devel-find-stats, built 2026-10-09T04:55:54Z on nuc)

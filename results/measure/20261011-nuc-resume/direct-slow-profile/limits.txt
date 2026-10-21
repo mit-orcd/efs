@@ -1,1 +1,0 @@
-Instrumented active private direct gate; do not treat throughput as unprofiled or a hardware ceiling.

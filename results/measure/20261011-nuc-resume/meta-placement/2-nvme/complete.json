@@ -1,9 +1,0 @@
-{
-  "tag": "2-nvme",
-  "files": 9971,
-  "errors": [],
-  "cold_checks": 64,
-  "storage": "/home/efs/w97-meta-placement-data-20261011-2",
-  "start_mono": 2591.676207,
-  "seconds": 600
-}

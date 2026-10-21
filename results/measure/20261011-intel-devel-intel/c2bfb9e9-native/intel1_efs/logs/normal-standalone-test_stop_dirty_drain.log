@@ -1,7 +1,0 @@
-stop dirty drain: partial bodies, bounded pages, duplicate inodes, unlocked I/O, failures and deadline PASS
-stop-refused: unresolved writes or lease releases remain; mount retained
-stop-refused: unresolved writes or lease releases remain; mount retained
-stop-refused: unresolved writes or lease releases remain; mount retained
-stop-refused: unresolved writes or lease releases remain; mount retained
-force-discard REPORT pending=0 inflight=1 cause=explicit-stop-force-discard
-stop drain: detached REPORT ownership, unresolved body refusal and deadline restoration PASS

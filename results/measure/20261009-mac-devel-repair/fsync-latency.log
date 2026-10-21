@@ -1,3 +1,0 @@
-cluster: mac
-/data1 fdatasync median_ms 34.13 max_ms 65.91
-/var/tmp fdatasync median_ms 31.02 max_ms 46.03

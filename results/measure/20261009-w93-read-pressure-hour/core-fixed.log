@@ -1,8 +1,0 @@
-test_raft: OK
-test_raft_store: OK
-test_wire: OK
-host retirement: credits after KV release/before marker; queued arrivals retained; KV/marker EIO guards PASS
-host checkpoint: failed KV sync cannot advance normal/shutdown markers; save failures retained PASS
-efs: fetch published ino=1 ci=0 rc=-9 then pull rc=0 rc=-9 map before gen=b nd=2 seq=9 (1) after gen=b nd=2 seq=9 (1)
-fence reads: mixed ages, dead-object skips, refresh failure, view keys and wire validation PASS
-writer fence merge: pipeline/direct masks, absent CAS, failure retention and full overwrite PASS

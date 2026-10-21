@@ -1,1 +1,0 @@
-{"host": "fcstor007", "suite": "persist-verify", "transcript": "pass dir_mode                        \npass size_and_mtime                  \npass large_file_size_only            \n\nverify: pass=27 fail=0 total=27 in 2.9s\nsuite-exit=0"}

@@ -1,8 +1,0 @@
-Unmounting /data1/efs/mnt
-Retiring drained efs-fuse PID 3109708 for /data1/efs/mnt
-Unmounted /data1/efs/mnt
-Unmounting /data1/efs/mnt2
-Retiring drained efs-fuse PID 3109743 for /data1/efs/mnt2
-Unmounted /data1/efs/mnt2
-cluster ready: flow=1 observations=0
-{"tag": "idle-cadence", "applied_interval_ms": 100, "cohort": 0, "seconds": 83.97808053299377, "reads": {"0": {"n": 6000, "mean_us": 6563.666833333334, "p50_us": 6077, "p95_us": 10483, "p99_us": 16029, "max_us": 50524}, "2": {"n": 6000, "mean_us": 7397.7855, "p50_us": 6488, "p95_us": 10121, "p99_us": 35141, "max_us": 65985}}}

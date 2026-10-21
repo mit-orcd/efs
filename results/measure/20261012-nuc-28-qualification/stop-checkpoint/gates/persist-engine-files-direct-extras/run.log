@@ -1,9 +1,0 @@
-parallel 5 tests jobs=16 (serial 0 after)
-SKIP virt_stats_readable              .efs commands absent (opt-in disabled)
-SKIP virt_find_query                  .efs commands absent (opt-in disabled)
-SKIP mmap_write_read                  mmap unsupported: [Errno 19] No such device
-SKIP virt_find_not_a_real_dir         .efs commands absent (opt-in disabled)
-pass mmap_private_not_visible        
-============================================================
-POSIX suite: 1/5 pass, 0 fail, 4 skip, 0 notrun  (1.0s)
-wrote /home/efs/nuc-28-qualification/results/live-extra/persist-engine-files-direct/extras.tsv

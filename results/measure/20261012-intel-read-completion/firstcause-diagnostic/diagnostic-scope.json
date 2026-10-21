@@ -1,5 +1,0 @@
-{
-  "source": "c10a0678 plus bounded firstcause trace instrumentation",
-  "purpose": "identify exact packed-write failing stage and current read authority term/leader/config state",
-  "acceptance": false
-}

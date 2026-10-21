@@ -1,9 +1,0 @@
-{
-  "tag": "nvme",
-  "files": 15506,
-  "errors": [],
-  "cold_checks": 64,
-  "storage": "/home/efs/w97-three-nvme-v2-20261010",
-  "start_mono": 99227.554184,
-  "seconds": 1200
-}

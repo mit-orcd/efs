@@ -1,6 +1,0 @@
-{"sample": 0, "batch": 1, "files": 128, "total_ms": 5084.632918, "sync_mean_ms": 39.5042311015625, "sync_max_ms": 120.460959}
-{"sample": 0, "batch": 16, "files": 128, "total_ms": 5057.300505, "sync_mean_ms": 39.450741, "sync_max_ms": 66.13872}
-{"sample": 1, "batch": 16, "files": 128, "total_ms": 5174.098765, "sync_mean_ms": 40.351737734375, "sync_max_ms": 80.614475}
-{"sample": 1, "batch": 1, "files": 128, "total_ms": 4872.741803, "sync_mean_ms": 37.8638677421875, "sync_max_ms": 67.523191}
-{"sample": 2, "batch": 1, "files": 128, "total_ms": 4821.068546, "sync_mean_ms": 37.4838565, "sync_max_ms": 74.697255}
-{"sample": 2, "batch": 16, "files": 128, "total_ms": 5212.041064, "sync_mean_ms": 40.6496867421875, "sync_max_ms": 68.18178}

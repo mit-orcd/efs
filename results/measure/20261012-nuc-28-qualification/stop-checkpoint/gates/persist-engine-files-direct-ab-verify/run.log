@@ -1,1 +1,0 @@
-{"phase": "verify", "workers": 4, "operations": 256, "bytes": 134217728, "wall_s": 3.727620254001522, "MiB_s": 34.338261753620074, "ops_s": 68.67652350724015, "p99_ms": 169.89782900054706, "max_ms": 182.08884399791714, "errors": 0, "integrity": true}

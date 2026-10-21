@@ -1,8 +1,0 @@
-80dc28b6285a340cb7aea802b7f6cd689df2e6f537f969aa1676ff6665585fd7  /tmp/efs/efsd
-b6b3e8d48f61de0a349d24f464b6c724e280e2a56966aaaa9bc30a35e34849d0  /tmp/efs/efs-fuse
-7fc005ac611c67f6661f2345dd1e923de73dfad86e369b140462cd4ac77081db  /tmp/efs/efs-mgmt
-/home/efs/w92-evidence-cdc13b88/results
-Filesystem      Size  Used Avail Use% Mounted on
-tmpfs           3.9G   39M  3.9G   1% /tmp
-476173 ./efs-fuse 192.168.122.111:17432 fs /mnt/efs -o allow_other
-Sat Oct 10 12:37:33 PM UTC 2026

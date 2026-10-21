@@ -1,6 +1,0 @@
-# posix-2client host_a=local-a host_b=local-b mnt=/tmp/efs-intel-28b2089b-intel1_efs/mnt 2026-10-12T04:06:00Z
-# select	peer_concurrent_append
-test	result	detail
-peer_concurrent_append	PASS	
-# summary pass=1 fail=0 skip=0 total=1 dur=39.0
-# complete

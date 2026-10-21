@@ -1,7 +1,0 @@
-Traceback (most recent call last):
-  File "/data1/efs/devel-nuc-20261011/catchup-base-src/tests/live/gc_reclamation.py", line 183, in <module>
-    "binary_sha256":{name:hashlib.sha256((a.server_binary if name=='efsd' and a.server_binary else a.client_binary if name=='efs-fuse' and a.client_binary else source/name).read_bytes()).hexdigest()
-                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/data1/efs/devel-nuc-20261011/catchup-base-src/tests/live/gc_reclamation.py", line 33, in interrupt_fixture
-    raise KeyboardInterrupt('private fixture interrupted by signal '+str(signum))
-KeyboardInterrupt: private fixture interrupted by signal 15

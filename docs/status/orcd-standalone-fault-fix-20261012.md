@@ -65,24 +65,24 @@ Final qualification on exact `ed749cab` **PASS**:
 
 | Gate | Result | Evidence |
 |---|---|---|
-| Complete fault-enabled native build/test | exit0 | [log](../../results/measure/20261012-orcd-standalone-fault-fix/remote/efs-qualified-v3-fault-native.log) |
-| Complete normal native build/test | exit0 | [log](../../results/measure/20261012-orcd-standalone-fault-fix/remote/efs-qualified-v3-normal-native.log) |
-| Normal-build native RDMA/direct IO standalone | 23 PASS, exit0; all three repair roles | [results](../../results/measure/20261012-orcd-standalone-fault-fix/remote/efs-qualified-v3-rdma-ed749cab/results.jsonl) |
-| Normal-build TCP/direct IO standalone | 23 PASS, exit0; all three repair roles | [results](../../results/measure/20261012-orcd-standalone-fault-fix/remote/efs-qualified-v3-tcp-ed749cab/results.jsonl) |
-| Actual worker ASan/UBSan and leak detection | PASS | [log](../../results/measure/20261012-orcd-standalone-fault-fix/remote/efs-qualified-v3-worker-asan.log) |
-| Default-off/manual RPC/incarnation boundary | PASS; separate from real repair proof | [result](../../results/measure/20261012-orcd-standalone-fault-fix/remote/efs-qualified-v3-wire-ed749cab/result.json) |
-| Post-test source fingerprint | 1,059 source inputs match frozen commit | [proof](../../results/measure/20261012-orcd-standalone-fault-fix/controller/source-proof.json) |
-| Owned private processes/mounts retired | PASS | [proof](../../results/measure/20261012-orcd-standalone-fault-fix/controller/cleanup.json) |
-| Installed ORCD deployment preserved | same eleven PIDs, binary hashes, arguments, UID and8b7391b3 source; repair disabled | [proof](../../results/measure/20261012-orcd-standalone-fault-fix/controller/main-preservation.json) |
+| Complete fault-enabled native build/test | exit0 | log (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-orcd-standalone-fault-fix/remote/efs-qualified-v3-fault-native.log`) |
+| Complete normal native build/test | exit0 | log (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-orcd-standalone-fault-fix/remote/efs-qualified-v3-normal-native.log`) |
+| Normal-build native RDMA/direct IO standalone | 23 PASS, exit0; all three repair roles | results (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-orcd-standalone-fault-fix/remote/efs-qualified-v3-rdma-ed749cab/results.jsonl`) |
+| Normal-build TCP/direct IO standalone | 23 PASS, exit0; all three repair roles | results (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-orcd-standalone-fault-fix/remote/efs-qualified-v3-tcp-ed749cab/results.jsonl`) |
+| Actual worker ASan/UBSan and leak detection | PASS | log (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-orcd-standalone-fault-fix/remote/efs-qualified-v3-worker-asan.log`) |
+| Default-off/manual RPC/incarnation boundary | PASS; separate from real repair proof | result (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-orcd-standalone-fault-fix/remote/efs-qualified-v3-wire-ed749cab/result.json`) |
+| Post-test source fingerprint | 1,059 source inputs match frozen commit | proof (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-orcd-standalone-fault-fix/controller/source-proof.json`) |
+| Owned private processes/mounts retired | PASS | proof (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-orcd-standalone-fault-fix/controller/cleanup.json`) |
+| Installed ORCD deployment preserved | same eleven PIDs, binary hashes, arguments, UID and8b7391b3 source; repair disabled | proof (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-orcd-standalone-fault-fix/controller/main-preservation.json`) |
 
 The three-role protection verdict describes the verified repaired state **before**
 the second injected loss; the subsequent two-role read is an independent
 witness that the restored copy works after cold restart. Simulator PASS is not
 borrowed as physical durability acceptance.
 
-[Machine summary](../../results/measure/20261012-orcd-standalone-fault-fix/summary.json),
-[artifact hashes](../../results/measure/20261012-orcd-standalone-fault-fix/artifact-sha256.json),
-and [exact source manifest](../../results/measure/20261012-orcd-standalone-fault-fix/controller/qualified-inputs.json)
+Machine summary (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-orcd-standalone-fault-fix/summary.json`),
+artifact hashes (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-orcd-standalone-fault-fix/artifact-sha256.json`),
+and exact source manifest (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-orcd-standalone-fault-fix/controller/qualified-inputs.json`)
 retain 543 hashed evidence/controller files. Historical documentation evidence
 was copied from the actual existing8b source and overlaid with committed added
 artifacts to satisfy link checks; it is not counted as new acceptance. Both

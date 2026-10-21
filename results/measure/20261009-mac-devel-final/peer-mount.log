@@ -1,3 +1,0 @@
-Stop with: ./scripts/client.sh stop /mnt/efs-b
-Logging efs-fuse to /mnt/efs-fuse-efs-b.log
-Mounted /mnt/efs-b

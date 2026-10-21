@@ -1,5 +1,0 @@
-Traceback (most recent call last):
-  File "/data1/efs/devel-nuc-20261010/nuc_sanitizers.py", line 10, in <module>
-    assert (base/'closure/native-exit.txt').read_text().strip()=='0'
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-AssertionError

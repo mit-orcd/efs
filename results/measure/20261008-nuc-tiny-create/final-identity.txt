@@ -1,5 +1,0 @@
-7c880b2bce06e576fadb77cba3695a39d25ed38258edf6f28e450dc838a1e0d7  /data1/efs/src/efsd
-18c60a20b3fe9dec89bf0b3c778d5b7126bb2b57394c0ffa0bbc2ced0b28a55a  /data1/efs/src/efs-fuse
-71c6434371d20e8c90e947ca107f76b49d5a9c5c97ea7f1a4292048050a36612  /data1/efs/src/src/kv/kv_wal.c
-8f853585af479742ecef2411ce7d1297869c6a993797acf27af7e0643ee21847  /data1/efs/src/src/raft/raft_log.c
-version 127.0.0.1:17432 efsd c2275423-tiny-rfinal (branch devel-find-stats, built 2026-10-08T14:48:36Z on nuc)

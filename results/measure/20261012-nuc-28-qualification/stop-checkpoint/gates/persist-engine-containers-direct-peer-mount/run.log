@@ -1,3 +1,0 @@
-Stop with: /home/efs/nuc-28-qualification/source-normal/scripts/client.sh stop /data1/efs/mnt2
-Logging efs-fuse to /data1/efs/efs-fuse-mnt2.log
-Mounted /data1/efs/mnt2

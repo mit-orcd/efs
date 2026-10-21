@@ -1,1 +1,0 @@
-four-member storage certificates: uuid=61bdba9ca3e4b95cbb2b3e07da8bdb12 reject_below=2 old PUT guards refused, current guards allowed PASS

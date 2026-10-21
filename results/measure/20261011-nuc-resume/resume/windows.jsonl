@@ -1,9 +1,0 @@
-{"elapsed_s": 30.017195473000015, "closed_files": 4469, "files_s": 148.88133050337078, "mean_ms": {"open": 37.08878075721638, "write": 0.048463842246587605, "close": 16.37073102483777}, "profiling_overlap": true}
-{"elapsed_s": 60.030691777000015, "closed_files": 9618, "files_s": 171.55615419966168, "mean_ms": {"open": 31.349632172072248, "write": 0.049739212274228006, "close": 15.22868535327248}, "profiling_overlap": true}
-{"elapsed_s": 90.04421648599998, "closed_files": 12320, "files_s": 90.02608078183394, "mean_ms": {"open": 61.26837865803109, "write": 0.05152821872686899, "close": 27.44256962065137}, "profiling_overlap": false}
-{"elapsed_s": 120.05782907499997, "closed_files": 14061, "files_s": 58.00701247933338, "mean_ms": {"open": 98.73728650603103, "write": 0.059499483630097647, "close": 38.871366600229756}, "profiling_overlap": false}
-{"elapsed_s": 150.07278395799995, "closed_files": 15778, "files_s": 57.204816955180014, "mean_ms": {"open": 101.5917861304601, "write": 0.07236645020384391, "close": 38.11027461560862}, "profiling_overlap": false}
-{"elapsed_s": 180.08914918099993, "closed_files": 17509, "files_s": 57.668541382006666, "mean_ms": {"open": 100.09144493991913, "write": 0.07725549162333911, "close": 38.60099967244367}, "profiling_overlap": false}
-{"elapsed_s": 210.104205407, "closed_files": 19216, "files_s": 56.87145768267254, "mean_ms": {"open": 100.34501213591096, "write": 0.10217674399531342, "close": 40.05877858933802}, "profiling_overlap": false}
-{"elapsed_s": 240.12183143799996, "closed_files": 20920, "files_s": 56.76664764362898, "mean_ms": {"open": 99.42233026115024, "write": 0.11220017136150234, "close": 41.08994643133803}, "profiling_overlap": true}
-{"elapsed_s": 270.13799656599997, "closed_files": 22597, "files_s": 55.86989519975829, "mean_ms": {"open": 105.27443489326177, "write": 0.09321592188431722, "close": 38.30422834466309}, "profiling_overlap": true}

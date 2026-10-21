@@ -1,1 +1,0 @@
-virtual export handles: FORGET recovery, immutable version/size, open/lookup pins, bounded 64-slot recycling PASS

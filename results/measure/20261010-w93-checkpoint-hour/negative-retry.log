@@ -1,4 +1,0 @@
-applied interval: bounded cadence/tail, durable record, immediate error retry, shutdown force PASS
-corrected exit 0 
-baseline exit -6 Assertion failed: (h.g[0].applied_saved_us==100000), function main, file baseline.c, line 76.
-negative control: original updates failed-attempt timestamp; corrected preserves immediate retry PASS

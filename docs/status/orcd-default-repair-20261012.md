@@ -80,7 +80,7 @@ Each mounted run contains six simulator and seventeen integration verdicts,
 including three independent repaired-role checks. Exact reproduction commands,
 source hashes, binary hashes, raw verdicts, current-incarnation transport logs,
 cold-protection journals and the before/after runtime audit are retained in
-[evidence](../../results/measure/20261012-orcd-default-repair/summary.json).
+evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-orcd-default-repair/summary.json`).
 The collector normalizes the log's trailing colon after the build ID; raw result
 rows are retained unchanged.
 

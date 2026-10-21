@@ -1,1 +1,0 @@
-store: put O_DIRECT zero-copy (payload+digest writev) len=65536

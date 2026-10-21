@@ -1,1 +1,0 @@
-get-feature:0x06 (Volatile Write Cache), Current value:0x00000001

@@ -63,7 +63,7 @@ metadata-memory guarantee.
 
 ## AMD evidence
 
-[Raw evidence and measured summary](../../results/measure/20261008-amd-compaction-pressure/summary.json)
+Raw evidence and measured summary (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-amd-compaction-pressure/summary.json`)
 come from `/data1/efs/compaction-pressure-20261008/cap-05`, three private daemons,
 direct I/O/TCP, synchronous production KV/log persistence, Linux user `efs`.
 All `.efs` commands were disabled. A compile-only hook inserts 1 MiB test values
@@ -98,18 +98,18 @@ Neither the L0 cap nor production watermarks were reduced.
   restart. All sixteen final pressure values also passed exact cold KV reopen
   on every replica. No installed daemon was crashed.
 
-The strict [TSV](../../results/measure/20261008-amd-compaction-pressure/cap-05/samples.tsv)
+The strict TSV (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-amd-compaction-pressure/cap-05/samples.tsv`)
 passes `w23_samples.py cap-proof`: simultaneous complete three-replica ticks,
 known roles/RSS/L0/lag and a real follower at the unchanged cap. Raw JSON includes
 queues, physical files and group positions. Unobserved apply-sleep counts remain
 `NA`; they are not zero. The summary explicitly describes finite sampled peaks.
 Source and binary identities are retained in
-[source checksums](../../results/measure/20261008-amd-compaction-pressure/source-sha256.txt).
+source checksums (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-amd-compaction-pressure/source-sha256.txt`).
 The private rsynced binary's `unknown` version is not used as source identity.
 
 ## Validation and restoration
 
-The [full AMD test suite](../../results/measure/20261008-amd-compaction-pressure/full-tests-final.log)
+The full AMD test suite (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-amd-compaction-pressure/full-tests-final.log`)
 passes with pressure enabled and faults compiled. Raft tests cover admission
 before persistence, nonacceptance under BUSY, healthy quorum progress, paced
 retries, follower convergence, accepted-log ownership with both peers absent,
@@ -119,7 +119,7 @@ also passes locally. The compiled host policy test covers soft/hard receive
 boundaries, recovery count/log/byte reserves, persistence poison and leadership
 eligibility; it passes on Mac and AMD and is part of `make test`.
 
-The [publication pending regression](../../results/measure/20261008-amd-compaction-pressure/publication-pending.log)
+The publication pending regression (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-amd-compaction-pressure/publication-pending.log`)
 passes lost admission ACK, four-private-daemon crash, cold pending recovery,
 altered payload refusal, final rejection and durable retirement floor. This
 validates coexistence with staged D29 machinery; it does not establish complete
@@ -168,7 +168,7 @@ Installed acceptance passed:
   installed branch identity, both groups converged at commit=applied on all
   three hosted replicas.
 
-[Deployment logs, TSVs and final health](../../results/measure/20261008-amd-compaction-deploy/health.json)
+Deployment logs, TSVs and final health (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-amd-compaction-deploy/health.json`)
 are retained alongside `results.json`, build/start logs and per-suite output.
 The advisory reservation was released after health verification. The deployed
 cluster remains running; this documentation-only follow-up commit does not

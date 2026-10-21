@@ -77,7 +77,7 @@ Earlier ORCD repeated-load verdict remains **1485 pass, 27 fail, 7 skips,
 28 NOTRUN**; the [rollout report](orcd-integration-20261011.md) owns that result.
 This communication capture did not rerun or close those gates.
 
-[Small derived evidence](../../results/measure/20261011-orcd-communication/analysis.json).
+Small derived evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-orcd-communication/analysis.json`).
 Bulk profiles, three perf report shapes, traces and raw snapshots remain under
 `~/orcd/scratch/efs/orcd-test/communication-20261011T045504Z/HOST/`.
 The local full report and copies are under

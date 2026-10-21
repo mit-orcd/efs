@@ -1,9 +1,0 @@
-{
-  "name": "rdma-posix-gid1",
-  "command": [
-    "bash",
-    "tests/live/rdma_posix_gates.sh"
-  ],
-  "source": "28b2089be6a5df835cc7bb46b9c2a9e2f10df190",
-  "started": "2026-10-12T04:08:27Z"
-}

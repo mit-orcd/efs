@@ -584,7 +584,7 @@ Historical broader-scope blockers (superseded for release scheduling by the scop
 - Final-source qualification is incomplete: Mac 410 native STOPPED; ORCD 410 fault PASS/normal STOPPED/sanitizers and mounted NOTRUN; NUC 410 execution NOTRUN. Older candidate passes do not transfer.
 - Retained Mac inode4091 creating writer/ownership and a safe repair remain unproven. The CREATE duplicate fault hook is fixed and locally regressed; strict live/cold acceptance remains pending.
 
-[Release ledger](../v030-pre-alpha-release.md) · [central stop/merge checkpoint](../../archive/status-20261012/v030-stop-checkpoint-20261011.md) · [query/fault diagnostic history](../v030-query-stage-diagnostic-20261012.md) · [reconciliation JSON](../v030-owner-commit-reconciliation.json) · [candidate operator notes](../../using/v030-candidate.md) · [documentation consistency review](../status-consistency-review-20261011.md).
+[Release ledger](../v030-pre-alpha-release.md) · [central stop/merge checkpoint](../../archive/status-20261012/v030-stop-checkpoint-20261011.md) · [query/fault diagnostic history](../v030-query-stage-diagnostic-20261012.md) · reconciliation JSON (archived raw evidence: `archive/raw-evidence-20261021:docs/status/v030-owner-commit-reconciliation.json`) · [candidate operator notes](../../using/v030-candidate.md) · [documentation consistency review](../status-consistency-review-20261011.md).
 
 [Superseded release-index narrative](../../archive/v030-index-checkpoints-20261011.md) preserves the older source-specific checkpoints removed from this running summary.
 

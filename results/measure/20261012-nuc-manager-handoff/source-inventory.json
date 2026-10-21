@@ -1,9 +1,0 @@
-{
-  "branch": "devel-nuc",
-  "source_head": "101598d2f2d0ce9ac99ab59f840130f3c8f0e218",
-  "worktree": "/Users/mike/Documents/Codex/2026-10-07/i-l/work/efs-find-stats",
-  "common_devel_base": "48a2719d19fb5a6b0464935c70a967a1f1a86236",
-  "ahead_of_current_local_devel": 189,
-  "uncommitted_before_handoff": [],
-  "subagents": []
-}

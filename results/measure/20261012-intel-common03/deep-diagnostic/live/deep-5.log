@@ -1,5 +1,0 @@
-parallel 1 tests jobs=16 (serial 0 after)
-pass dir_deep_nesting                
-============================================================
-POSIX suite: 1/1 pass, 0 fail, 0 skip, 0 notrun  (14.6s)
-wrote /data1/efs/intel-common03-deep-20261012/evidence/live/deep-5.tsv

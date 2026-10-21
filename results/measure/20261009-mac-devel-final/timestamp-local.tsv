@@ -1,6 +1,0 @@
-# posix-2client host_a=local-a host_b=local-b mnt=/mnt/efs 2026-10-09T21:58:32Z
-# select	peer_dir_mtime_bump_visible
-test	result	detail
-peer_dir_mtime_bump_visible	PASS	
-# summary pass=1 fail=0 skip=0 total=1 dur=17.2
-# complete

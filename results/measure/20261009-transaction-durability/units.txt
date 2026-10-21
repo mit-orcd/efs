@@ -1,4 +1,0 @@
-transaction resolve: version/batch failures preserve old row/version and epoch guard; exact retry commits once then permits revocation PASS
-transaction Raft apply: IO/NOMEM preserve pending index; business conflicts advance with ring verdict; session fence and ticket storage failures retry PASS
-test_raft: OK
-namespace session: fenced replay/effects refused; concurrent shared guards block revocation through commit/abort and delayed prepare; cold WAL guards/floors PASS

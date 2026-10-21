@@ -147,7 +147,7 @@ The final latest-source AMD direct/TCP broad cycle passes POSIX 216/0/1 skip,
 all 64 peer cases, append reservation replay and fsync boundary, O_SYNC/O_DSYNC,
 retained partial-body stop recovery, graceful leader recovery, exact 800 cold
 append records under GC, and zero fragment/quota inventory after restart.
-[Final evidence](../../results/measure/20261008-writeback-hour/final/live.log)
+Final evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-writeback-hour/final/live.log`)
 includes the source/binary manifest and service restoration check. No private
 fixture daemons/clients remain; four installed daemons and both mounts are up.
 Installed stores/binaries were preserved. No push, merge, tag or D25 activation.
@@ -164,7 +164,7 @@ Final linked-client TCP verification after `b1a19421` also passes: stalled PUT
 quorum 75 ms, two-ACK/partial-peer success 75–76 ms, healthy quorum 0 ms,
 no-parent PUT 30,002 ms, default partial GET pair 5,006 ms and inherited GET pair
 75 ms. All cases retain caller TLS, release pool ownership and record no false
-peer failures. [Raw final TCP probe](../../results/measure/20261008-writeback-hour/final/tcp-final.log).
+peer failures. Raw final TCP probe (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-writeback-hour/final/tcp-final.log`).
 Incremental large GET frame/parity progress under a partially responding
 preferred peer remains a separate availability gate; the five-second pair bound
 is not a claim of optimal degraded-read latency.

@@ -86,10 +86,10 @@ The installed three-VM native/peer POSIX gates are recorded separately.
 
 ## Evidence and checkpoint
 
-[Boundary baseline](../../results/measure/20261011-mac-query-delta/baseline-6000.txt),
-[60,000-file baseline/journal comparison](../../results/measure/20261011-mac-query-delta/journal-60000.txt),
-[sequential merge and existing query oracles](../../results/measure/20261011-mac-query-delta/merge-oracles.txt),
-[large creation/deletion oracle](../../results/measure/20261011-mac-query-delta/create-delete-oracle.txt).
+Boundary baseline (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-mac-query-delta/baseline-6000.txt`),
+60,000-file baseline/journal comparison (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-mac-query-delta/journal-60000.txt`),
+sequential merge and existing query oracles (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-mac-query-delta/merge-oracles.txt`),
+large creation/deletion oracle (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-mac-query-delta/create-delete-oracle.txt`).
 
 ## Live verdicts and retained evidence
 

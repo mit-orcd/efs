@@ -1,8 +1,0 @@
-2026-10-12T02:59:39.610Z storage-engine=files direct_io=on
-2026-10-12T02:59:39.610Z Data GC admission: experimental
-2026-10-12T02:59:39.610Z Storage quota: explicit 4.00 GiB (safe maximum 112.30 GiB; reserve 20%, minimum 1 GiB per filesystem)
-2026-10-12T02:59:39.611Z heartbeat: enabled (2000 ms interval)
-2026-10-12T02:59:39.613Z raft-host: up raft_id=0 n=4 boot=6878421958258832 salt=18277937635608373667 g0=hosted g2=off
-2026-10-12T02:59:39.613Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T02:57:01Z on amd-395), build=28b2089b-release-normal: node 1 listening on 127.0.0.1:24210, storage=/data1/efs/release-v030-results-20261012-28b2089b/live/packing-seven-direct/gc-direct-80r7wy2y/n1 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=on, writers=28 shared
-2026-10-12T02:59:39.613Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
-2026-10-12T02:59:41.612Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=980 passes=2 sampled=1 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0

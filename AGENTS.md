@@ -24,7 +24,9 @@ record their location and useful hashes in the summary. Reproduction must not
 depend on an unavailable private capture. Small deterministic regression
 fixtures needed by tests are source assets, not run artifacts.
 
-Existing committed raw evidence is historical. Migrate it to adequate summaries
-and reproduction instructions before removing it; keep unresolved findings and
-release verdicts traceable. Do not treat missing raw captures as a passing gate.
+Raw evidence committed before 2026-10-21 was moved off devel. It is preserved
+unchanged at tag `archive/raw-evidence-20261021` (branch `raw-evidence`); read
+it with `git show archive/raw-evidence-20261021:<path>`. Devel keeps the
+summaries under `results/`, and links to removed files name the archive path.
+Keep unresolved findings and release verdicts traceable. Do not treat missing raw captures as a passing gate.
 Update `docs/status/README.md` whenever an active status page or verdict changes.

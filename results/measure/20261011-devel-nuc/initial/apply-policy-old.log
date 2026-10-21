@@ -1,7 +1,0 @@
-Assertion failed: (policy(EFS_MD_CMD_SESSION,sessions[i],business[j])==EFS_OK), function main, file t.c, line 74.
-Traceback (most recent call last):
-  File "/Users/mike/Documents/Codex/2026-10-07/i-l/work/efs-find-stats/tests/test_txn_apply_retry.py", line 56, in <module>
-    subprocess.run([str(p.with_suffix(''))],check=True)
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 528, in run
-    raise CalledProcessError(retcode, process.args,
-subprocess.CalledProcessError: Command '['/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/efs-txn-apply-return-7muaggty/t']' died with <Signals.SIGABRT: 6>.

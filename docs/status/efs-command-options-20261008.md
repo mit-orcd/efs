@@ -49,7 +49,7 @@ a new gate requires permission denial even when a size predicate would exclude
 the inaccessible entry. The final candidate and validation are recorded below.
 
 Evidence directory:
-[command-options measurements](../../results/measure/20261008-efs-command-options).
+command-options measurements (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-efs-command-options`).
 The production stores and historical generator trees are preserved; fixture
 stores and rollback binaries remain on NUC.
 

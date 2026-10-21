@@ -1,6 +1,0 @@
-server type/size/time filters AND together; ns boundaries and folded stat/owner fields PASS
-sort directions/ties, directories first, UTC/relative dates, sizes, paths and control escaping PASS
-filters precede output limits while candidate-visit bounds remain enforced PASS
-filtered result permission denial, immutable fd and peer size convergence PASS
-expiry unavailable and unsupported args refused PASS (no expiry deletion/renewal claim)
-efs_command_options: PASS

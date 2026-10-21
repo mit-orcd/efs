@@ -87,8 +87,8 @@ version 17/mask 3, exact stats converge and the complete 120-path export matches
 the independent oracle. The earlier 2 KiB raw-output assertion encountered a
 truthful OVERFLOW, so the final oracle requests a bounded 1 MiB reply.
 
-[Live evidence](../../results/measure/20261010-w92-closure/w92-policy-live-passed.log),
-[cold evidence](../../results/measure/20261010-w92-closure/w92-policy-cold-passed.log).
+Live evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/w92-policy-live-passed.log`),
+cold evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/w92-policy-cold-passed.log`).
 Quorum-loss, lost-reply resolution and startup-ceiling checks follow; scale and
 Mac execution remain separate W92 gates.
 
@@ -110,23 +110,23 @@ redirects its explicit CAS. The extracted actual tail passes policy/append
 redirect and unchanged ordinary CREATE forwarding; complete native repetition
 and final named rollout follow.
 
-[Quorum](../../results/measure/20261010-w92-closure/w92-policy-quorum-passed.log),
-[lost reply](../../results/measure/20261010-w92-closure/w92-policy-lost-reply-passed.log),
-[startup-disabled writes](../../results/measure/20261010-w92-closure/w92-policy-ceiling-write-passed.log),
-[cold ceiling recovery](../../results/measure/20261010-w92-closure/w92-policy-ceiling-cold-passed.log),
-[storage failures](../../results/measure/20261010-w92-closure/w92-policy-storage-fault-passed.log).
+Quorum (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/w92-policy-quorum-passed.log`),
+lost reply (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/w92-policy-lost-reply-passed.log`),
+startup-disabled writes (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/w92-policy-ceiling-write-passed.log`),
+cold ceiling recovery (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/w92-policy-ceiling-cold-passed.log`),
+storage failures (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/w92-policy-storage-fault-passed.log`).
 
 The final proposal-tail guard passes the full native suite, then the private
 three-node live/cold gate again: baseline version 18 reaches disabled version 22,
 survives cold restart, and re-enables at version 23. All 120 payload hashes and
 491520 bytes, exact stats and complete path export pass.
 
-[Final native guard](../../results/measure/20261010-w92-closure/w92-policy-final-guard-native-passed.log),
-[final live](../../results/measure/20261010-w92-closure/w92-policy-final-guard-live.log),
-[final cold](../../results/measure/20261010-w92-closure/w92-policy-final-guard-cold.log).
+Final native guard (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/w92-policy-final-guard-native-passed.log`),
+final live (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/w92-policy-final-guard-live.log`),
+final cold (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/w92-policy-final-guard-cold.log`).
 
 The completed private 19432 fixture was retired at 12:01 UTC: its client was
 drained and all three policy services stopped. Data and prior evidence remain
 intact; normal services and the separate capacity test stay active.
-[Retirement log](../../results/measure/20261010-w92-closure/policy-retirement-20261010.log).
+Retirement log (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/policy-retirement-20261010.log`).
 This cleanup does not close W92's remaining large-scale gates.

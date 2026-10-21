@@ -1,7 +1,7 @@
 # devel-find-stats — all committed branch integration
 
 Oct 9 EDT / Oct 10 UTC. Merge boundary `f4f95ed7` includes every local branch
-tip listed in the [boundary ledger](../../results/measure/20261009-find-stats-merge/branch-boundary.txt).
+tip listed in the boundary ledger (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261009-find-stats-merge/branch-boundary.txt`).
 This imports committed work only; other worktrees and their uncommitted edits
 are left intact. No push, tag, main merge or service redeployment.
 

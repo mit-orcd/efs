@@ -99,7 +99,7 @@ is running and all seven clients remain mounted. Existing stores and prior
 source trees are retained. This work has not modified, merged, tagged or
 pushed `release-v0.3.0-pre-alpha`; other release-owner changes are independent.
 
-[Collected execution evidence](../../results/orcd-ordinary-rdma-direct-20261012/)
+Collected execution evidence (archived raw evidence: `archive/raw-evidence-20261021:results/orcd-ordinary-rdma-direct-20261012`)
 contains controller source/logs, process/binary manifests, cold hashes, physical
 GC observations and actual per-host test TSVs. The first failed candidate is
 retained alongside the final evidence.

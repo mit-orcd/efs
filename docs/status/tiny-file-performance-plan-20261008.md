@@ -155,13 +155,13 @@ regression evidence for the prior candidate, not acceptance of W93, W94 or W96.
 
 ## Evidence
 
-- [Before group comparison](../../results/measure/20261008-nuc-tiny-create/round-7/group-comparison-before.json)
-  and [after](../../results/measure/20261008-nuc-tiny-create/round-7/group-comparison-after.json).
-- [Separate perf/strace files](../../results/measure/20261008-nuc-tiny-create/round-7/after)
-  and [sync summary](../../results/measure/20261008-nuc-tiny-create/round-7/sync-summary.json).
-- [Storage principle probe](../../results/measure/20261008-nuc-tiny-create/round-7/log-space-probe-r7.json).
-- [Build identities](../../results/measure/20261008-nuc-tiny-create/round-7/identity.txt),
-  [source patch](../../results/measure/20261008-nuc-tiny-create/round-7/source.patch),
-  and [validation](../../results/measure/20261008-nuc-tiny-create/round-7/full-validation.log).
+- Before group comparison (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-nuc-tiny-create/round-7/group-comparison-before.json`)
+  and after (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-nuc-tiny-create/round-7/group-comparison-after.json`).
+- Separate perf/strace files (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-nuc-tiny-create/round-7/after`)
+  and sync summary (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-nuc-tiny-create/round-7/sync-summary.json`).
+- Storage principle probe (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-nuc-tiny-create/round-7/log-space-probe-r7.json`).
+- Build identities (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-nuc-tiny-create/round-7/identity.txt`),
+  source patch (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-nuc-tiny-create/round-7/source.patch`),
+  and validation (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-nuc-tiny-create/round-7/full-validation.log`).
 
 The full text and binding limits for each item are in the work-item register.

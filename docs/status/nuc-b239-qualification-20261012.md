@@ -20,7 +20,7 @@ Manager reviewed minimal inverse root-stop delta in local `qualification-b239/w9
 
 After native/sanitizer/functional correctness acceptance, compare same merged source/scheduler/completion with only this reviewed delta. Three voters, fixed leaders, SATA metadata, SATA and NVMe data, base/root/root/base600s each, cold exact bytes and restoration. Report late throughput and change in fractional decline per repeat. This measures the root-stop optimization effect on b239, not all historical W97 fixes, drive cache behavior or hardware ceiling. W97 remains open until measured evidence supports a narrower verdict.
 
-Input receipts and executed controllers: [qualification input](../../results/measure/20261012-nuc-b239-qualification/input/). Raw live files remain under `/data1/efs/nuc-b239-qualification`; gate logs will be retained after verdicts.
+Input receipts and executed controllers: qualification input (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-nuc-b239-qualification/input`). Raw live files remain under `/data1/efs/nuc-b239-qualification`; gate logs will be retained after verdicts.
 
 ## Mounted progress and regression control input repair
 

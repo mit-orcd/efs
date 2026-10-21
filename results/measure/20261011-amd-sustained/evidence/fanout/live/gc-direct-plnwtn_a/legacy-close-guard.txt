@@ -1,4 +1,0 @@
-raft-create status=0 primary=1 parent=1 name=legacy-close-guard ino=8193 mode=0100644 nlink=1
-owner command=5 sub=7 rc=0 expected=0
-owner command=7 sub=191 rc=0 expected=0
-legacy wire OPEN returns BUSY behind prepared close; later RESOLVE and retry acquire/release PASS

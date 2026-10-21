@@ -4,7 +4,7 @@ Reviewed `devel` commit `cde67dca`; production files were clean. Local macOS
 reproduction links the actual KV WAL and checksum sources. It creates/removes
 one private temporary file, with no server or user data involved.
 
-[Reproducer](wal-tail.c) · [Observed output](wal-tail.txt)
+Reproducer (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-w93-w96-review/wal-tail.c`) · Observed output (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-w93-w96-review/wal-tail.txt`)
 
 ```sh
 cc -std=c11 -D_DARWIN_C_SOURCE -DBLAKE3_USE_NEON=0 \

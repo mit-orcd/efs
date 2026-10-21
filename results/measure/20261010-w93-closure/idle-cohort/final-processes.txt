@@ -1,7 +1,0 @@
-    PID COMMAND
-2219133 /data1/efs/src/efsd --node-id 1 --addr 127.0.0.1 --port 17432 --storage /data1/efs/n1 --quota 187.5G --direct-io
-2221804 /data1/efs/src/efsd --node-id 2 --addr 127.0.0.1 --port 17433 --storage /data1/efs/n2 --quota 187.5G --direct-io --join 127.0.0.1:17432
-2224666 /data1/efs/src/efsd --node-id 3 --addr 127.0.0.1 --port 17434 --storage /data2/efs/n3 --quota 187.5G --direct-io --join 127.0.0.1:17432
-2227063 /data1/efs/src/efsd --node-id 4 --addr 127.0.0.1 --port 17435 --storage /data2/efs/n4 --quota 187.5G --direct-io --join 127.0.0.1:17432
-2229717 ./efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt
-2229752 ./efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt2

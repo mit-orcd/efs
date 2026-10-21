@@ -1,2 +1,0 @@
-FAIL tests/test_raft_store.c:895: receive acknowledged index and term oracle
-FAIL tests/test_raft_store.c:898: fsynced four-voter child committed

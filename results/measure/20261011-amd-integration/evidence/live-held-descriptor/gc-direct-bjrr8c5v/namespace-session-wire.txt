@@ -1,4 +1,0 @@
-raft-session status=0 rc=0 primary=1 op=fence ssh=1095 shard=1 epoch=2 state=1 touched=1 index=6122
-namespace first untouched shard: completed global revocation rejects old identity without a local floor PASS
-namespace fenced names retained for cold restart PASS
-namespace cold restart: all seven pre-revocation receipts remain STALE PASS

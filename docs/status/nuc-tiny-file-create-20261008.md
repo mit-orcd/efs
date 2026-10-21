@@ -86,7 +86,7 @@ current legacy query implementation as a regression gate; they do not claim
 completion of the separate `.efs/find` / `.efs/stats` replacement work.
 Process crash/reopen tests do not simulate physical power loss.
 
-[Round 7 raw profiles, traces, group comparisons, build hashes and test logs](../../results/measure/20261008-nuc-tiny-create/round-7).
+Round 7 raw profiles, traces, group comparisons, build hashes and test logs (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-nuc-tiny-create/round-7`).
 The original pre-change group and log-space results are in the parent evidence
 directory. Population was resumed automatically after private testing.
 
@@ -117,7 +117,7 @@ no physical power-loss acceptance is claimed. The generator was temporarily
 paused for those tests and has resumed in the existing `tiny_files` screen.
 Its later lifetime rate includes that pause. All output trees are retained.
 
-[Round 6 profiles, patches, hashes and test results](../../results/measure/20261008-nuc-tiny-create/round-6).
+Round 6 profiles, patches, hashes and test results (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-nuc-tiny-create/round-6`).
 
 ## Historical five-round checkpoint
 

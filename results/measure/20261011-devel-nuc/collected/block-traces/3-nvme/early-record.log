@@ -1,2 +1,0 @@
-[ perf record: Woken up 64 times to write data ]
-[ perf record: Captured and wrote 16.907 MB /data1/efs/devel-nuc-20261011/block-traces/3-nvme/early.data (138004 samples) ]

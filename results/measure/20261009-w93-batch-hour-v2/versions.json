@@ -1,8 +1,0 @@
-{
-  "version": "efsd 39be3b38 (branch devel-persistence-pressure, built 2026-10-09T21:23:13Z on nuc)\n",
-  "sha256": {
-    "efsd": "19dd9f4603bc85cfa66708941bacd3a3d9ed7748f7e742a216086b21d5d62d2f",
-    "efs-fuse": "a5304b5dabf99e25440718dfaec5c3bff45bf9a5afe6573f98290c97640c12c6",
-    "efs-mgmt": "03d7c67a8b59b337d391b814a58330db5f278e877dfbbb4e8ee0f8499a836ca3"
-  }
-}

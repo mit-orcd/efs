@@ -28,7 +28,7 @@ Oct 12 2026 cleanup consolidated 37 byte-identical large logs using relative
 symlinks and removed 72 repetitive server/restart logs from historical container
 profiling rounds 1–6. Source identities, phase oracles, traces, CPU reports and
 final comparisons remain. Latest release qualification and open-item evidence
-remain retained. [Inventory, canonical paths and recovery hashes](measure/20261012-evidence-cleanup/manifest.json)
+remain retained. Inventory, canonical paths and recovery hashes (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-evidence-cleanup/manifest.json`)
 and [scope](measure/20261012-evidence-cleanup/README.md) record every change.
 
 ## Historical layout

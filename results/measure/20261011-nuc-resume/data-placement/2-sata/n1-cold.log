@@ -1,6 +1,0 @@
-2026-10-11T18:45:27.715Z storage-engine=files direct_io=on
-2026-10-11T18:45:27.715Z Loaded 3 persisted cluster node(s) from /data1/efs/w97-data-placement-data-20261011-2/n1/meta/cluster_nodes.bin
-2026-10-11T18:45:27.715Z   persisted node 1: 127.0.0.1:26770
-2026-10-11T18:45:27.715Z   persisted node 2: 127.0.0.1:26771
-2026-10-11T18:45:27.715Z   persisted node 3: 127.0.0.1:26772
-2026-10-11T18:45:32.521Z Storage quota 80.00 GiB exceeds safe maximum 69.32 GiB; refusing startup

@@ -1,1 +1,0 @@
-{"removed": ["fault-source", "san-source"], "reason": "completed temporary builds reclaimed to satisfy unchanged 4G fixture safe-quota requirement", "binary_hashes_preserved": true}

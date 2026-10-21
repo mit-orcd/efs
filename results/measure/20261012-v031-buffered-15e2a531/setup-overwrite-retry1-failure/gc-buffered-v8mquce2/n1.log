@@ -1,3 +1,0 @@
-2026-10-12T17:54:27.830Z storage-engine=files direct_io=off
-2026-10-12T17:54:27.830Z Data GC admission: disabled
-2026-10-12T17:54:27.831Z Storage quota: cannot establish safe headroom; refusing startup

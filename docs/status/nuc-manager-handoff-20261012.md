@@ -11,7 +11,7 @@ exist; no shared devel/main mutation or push is authorized here.
 - Owner worktree: `/Users/mike/Documents/Codex/2026-10-07/i-l/work/efs-find-stats`.
 - Branch: `devel-nuc`; frozen source **`101598d2f2d0ce9ac99ab59f840130f3c8f0e218`**.
 - Clean before this handoff; no uncommitted code or experiments to import.
-- [Exact ordered inventory](../../results/measure/20261012-nuc-manager-handoff/merge-ready-commits.txt)
+- Exact ordered inventory (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-nuc-manager-handoff/merge-ready-commits.txt`)
   contains 189 commits not in the current local devel tip; common base
   `48a2719d19fb5a6b0464935c70a967a1f1a86236`. Many are already in the release
   branch: use ancestry/content checks, not blind duplicate cherry-picks.
@@ -35,7 +35,7 @@ AMD is the sole release worktree editor/executor; this owner has not edited it.
 ## Installed versus active versus rebuilt
 
 Installed source/binaries `/data1/efs/src` remain **`f52cd2dd-nuc`**. Exact five
-versions/hashes are in [installed images](../../results/measure/20261011-nuc-resume/clock-install/images.json).
+versions/hashes are in installed images (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-nuc-resume/clock-install/images.json`).
 Regular stores, `.mkfs-done` and retained payload trees are preserved. Regular
 four-node service is normally stopped while the private fixture owns policy
 mounts `/data1/efs/mnt` and `mnt2`; no pending regular writes were discarded.
@@ -59,7 +59,7 @@ Repaired builds use frozen **`101598d2`**, including W112 identically in both
 variants. Only `store.c`, a fence header and the corresponding durability test
 differ. Build IDs: `101598d2-w52-nuc` / `101598d2-root-nuc`. Isolated staging:
 `/data1/efs/devel-nuc-20261011/catchup-w112-native-staging`.
-[Input manifest and running build receipt](../../results/measure/20261012-nuc-manager-handoff/)
+Input manifest and running build receipt (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-nuc-manager-handoff`)
 retain all166 C/H+Makefile hashes, source archive SHA and wrapper SHA. Archive
 excludes results; canonical root overlay remains the hash-verified f52 baseline.
 No repaired binaries have been installed or admitted. Compilation overlaps
@@ -82,7 +82,7 @@ old correctness-only verification, never a W97 timed comparison.
   pending writes to stop the recipe.
 - **129782..129785**: installer, preserved cold, root full-live and W97 ABBA were
   safely held/stopped while idle. Exact command/no-child/no-started-work receipt
-  is [committed](../../results/measure/20261011-nuc-resume/catchup-w112-hold/receipt.json).
+  is committed (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-nuc-resume/catchup-w112-hold/receipt.json`).
   **Do not restart them unchanged**: original inputs have the shared W112 bug.
 - Free space at capture: SATA207GiB, NVMe463GiB. No tiny generator is running.
 
@@ -173,7 +173,7 @@ hashes/configurations, all17432..17435 listeners, both mounts, closed private
 26590..26593 ports, retained `.mkfs-done` and all36 prior payload hashes.
 Installed source remainsf52cd2dd-nuc. Every owned gate/build controller has
 finished or was held; there is no active writer or new-candidate deployment.
-[Final proof and restoration logs](../../results/measure/20261012-nuc-manager-handoff/final-restoration/)
+Final proof and restoration logs (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-nuc-manager-handoff/final-restoration`)
 retain exact processes/paths/config and payloads. The original base recipe records a failure from the safely superseded empty
 buffered fixture and leaves its overall run-exit marker absent; do not invent
 an overall exit marker. Its actual interrupted-fixture exit, restoration0 and

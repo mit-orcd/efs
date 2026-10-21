@@ -1,9 +1,0 @@
-import importlib.util,subprocess,tarfile,io
-from pathlib import Path
-s=importlib.util.spec_from_file_location('o','/Users/mike/git/cluster/orcd-test.py');m=importlib.util.module_from_spec(s);s.loader.exec_module(m);m.OPTIONS+=['-o','ControlPath=/private/tmp/efs-orcd-login-control3']
-p=Path('work/fix-orcd-valgrind');paths=subprocess.check_output(['git','diff','--name-only','8b7391b3'],cwd=p,text=True).splitlines()+['src/server/repair_worker.c','tests/faults/repair_request.c','tests/test_repair_worker.c'];paths=sorted(set(x for x in paths if not x.startswith(('results/','docs/')) and (p/x).is_file()))
-b=io.BytesIO()
-with tarfile.open(fileobj=b,mode='w:gz') as t:
- for name in paths:t.add(p/name,arcname=name)
-root='/tmp/efs-fault-repair-worker-20261012';r=subprocess.run(m.ssh_command('fcstor006',f'tar -xzf - -C {root}',m.OPTIONS,m.USER,m.BRIDGE),input=b.getvalue(),capture_output=True,timeout=120);assert r.returncode==0,r.stderr
-print(m.shell('fcstor006',f'cd {root}; export PKG_CONFIG_PATH={m.BULK}/deps/libfuse/lib/pkgconfig; export LD_LIBRARY_PATH={m.BULK}/deps/libfuse/lib${{LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}}; make -j12 EFS_GIT_ID=orcd-repair-worker-wip EFS_FAULTS=1 efsd efs-fuse tests/faults/fault_sim tests/faults/repair_request > /tmp/efs-fault-repair-worker-build2.log 2>&1; make EFS_GIT_ID=orcd-repair-worker-wip EFS_FAULTS=1 tests/test_repair_worker > /tmp/efs-repair-worker-unit-build.log 2>&1; ./tests/test_repair_worker; python3 tests/test_repair_coordinator.py; python3 tests/test_repair_gc_host.py; export EFS_FAULT_BIN={root}; export EFS_REPAIR_EXPERIMENT=1 EFS_REPAIR_INIT_STORE=1 EFS_PACKED_WRITES=0; set +e; bash tests/faults/run_faults.sh /tmp/efs-fault-repair-worker-results-v3-20261012 --integrate --mode direct --transport rdma --rdma-device mlx5_2; rc=$?; echo SUITE_EXIT=$rc; exit 0',3600),flush=True)

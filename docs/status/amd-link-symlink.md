@@ -35,8 +35,8 @@ Both filesystems produced the same results:
 
 The explicit no-follow case returned the source symlink's inode, and the
 follow case returned the target's inode. Evidence is retained in
-[probe results](../../results/measure/20261008-amd-link-symlink/amd-link-symlink-probe.jsonl)
-and [syscall trace](../../results/measure/20261008-amd-link-symlink/amd-link-symlink-syscalls.txt).
+probe results (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-amd-link-symlink/amd-link-symlink-probe.jsonl`)
+and syscall trace (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-amd-link-symlink/amd-link-symlink-syscalls.txt`).
 The evidence directory is dated by UTC; this was Oct 7 evening in EDT.
 
 `efs_fuse_link_at` links the supplied inode and refuses directory links;
@@ -83,10 +83,10 @@ client. Native focused cases pass; both AMD TCP core suites pass 216/216 and
 all new peer symlink assertions pass in both I/O modes. Direct peer passes
 67/67; buffered peer passes 66/67 with the independent MKDIR failure.
 
-[Direct core](../../results/measure/20261010-amd-three-hour/evidence/gc-direct-5tg7dw4n/posix.tsv),
-[direct peer](../../results/measure/20261010-amd-three-hour/evidence/gc-direct-5tg7dw4n/posix2.tsv),
-[buffered core](../../results/measure/20261010-amd-three-hour/evidence/gc-buffered-3uzt77vo/posix.tsv),
-[buffered peer](../../results/measure/20261010-amd-three-hour/evidence/gc-buffered-3uzt77vo/posix2.tsv).
+Direct core (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-amd-three-hour/evidence/gc-direct-5tg7dw4n/posix.tsv`),
+direct peer (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-amd-three-hour/evidence/gc-direct-5tg7dw4n/posix2.tsv`),
+buffered core (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-amd-three-hour/evidence/gc-buffered-3uzt77vo/posix.tsv`),
+buffered peer (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-amd-three-hour/evidence/gc-buffered-3uzt77vo/posix2.tsv`).
 The earlier NUC/Python comparison is optional portability evidence; it is not
 claimed by this AMD-only round. Raw libc syscall coverage remains optional.
 

@@ -1,9 +1,0 @@
-cluster: mac
-Stop with: ./scripts/client.sh stop /mnt/efs-d
-Logging efs-fuse to /mnt/efs-fuse-efs-d.log
-Mounted /mnt/efs-d
-parallel 1 tests jobs=1 (serial 0 after)
-pass dir_readdir_listing             
-============================================================
-POSIX suite: 1/1 pass, 0 fail, 0 skip, 0 notrun  (26.1s)
-wrote /var/tmp/efs-fix4-readdir.tsv

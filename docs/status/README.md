@@ -18,6 +18,13 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+**Raw evidence moved off devel (2026-10-21).** 23,126 raw files (logs, TSV,
+JSON, fixture stores) under `results/`, `docs/status/evidence/` and seven
+data files under `docs/` now live only at tag `archive/raw-evidence-20261021`
+(branch `raw-evidence`). Devel keeps the 302 summaries under `results/`; 523
+links in 96 pages now name the archived path. Read one with
+`git show archive/raw-evidence-20261021:<path>`.
+
 [ORCD-test detached campaign](orcd-test-detached-campaign-20261020.md):
 **FAIL / BLOCKED.** 8,437,752 successful-write counts of 40 M target;
 117 writer-thread EIO reports, `.efs` command/query failures, post-load

@@ -1,2 +1,0 @@
-host flow: codec, bounded admission/detached work, control/read escape PASS
-Linux async sender: mixed-channel BUSY drain, recovery, legacy/malformed/lost replies and shutdown PASS

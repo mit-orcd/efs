@@ -1,5 +1,0 @@
-Traceback (most recent call last):
-  File "/data1/efs/devel-nuc-20261011/nuc_w52_build_20261011.py", line 32, in <module>
-    (out/(name+'-exit.txt')).write_text(str(rc)+'\n');assert rc==0,(name,rc)
-                                                             ^^^^^
-AssertionError: ('native', 2)

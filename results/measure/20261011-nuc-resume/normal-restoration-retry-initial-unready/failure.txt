@@ -1,9 +1,0 @@
-Traceback (most recent call last):
-  File "/data1/efs/devel-nuc-20261011/restore-normal-retry.py", line 9, in <module>
-    with socket.create_connection(('127.0.0.1',p),1):pass
-         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/lib64/python3.12/socket.py", line 865, in create_connection
-    raise exceptions[0]
-  File "/usr/lib64/python3.12/socket.py", line 850, in create_connection
-    sock.connect(sa)
-ConnectionRefusedError: [Errno 111] Connection refused

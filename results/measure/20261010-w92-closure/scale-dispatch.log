@@ -1,5 +1,0 @@
-There is a screen on:
-	36679.w92-scale-pilot-20261010	(Detached)
-1 Socket in /run/screen/S-efs.
-TARGET                                        SOURCE     FSTYPE OPTIONS
-/data1/efs/bench/w92-scale-volume-20261010/fs /dev/loop0 btrfs  rw,noatime,seclabel,compress-force=zstd:3,discard=async,space_cache=v2,subvolid=5,subvol=/

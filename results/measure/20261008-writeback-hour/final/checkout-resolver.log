@@ -1,4 +1,0 @@
-checkout-local hung DNS elapsed_ms=50 restored_deadline=0 busy=0 peer_failures=0
-resolver: hung NSS deadlines, eight-job cap, late completion ownership, thread failure and hostname connect and checkout-local DNS budget PASS
-checkout-local hung DNS elapsed_ms=50 restored_deadline=0 busy=0 peer_failures=0
-resolver: hung NSS deadlines, eight-job cap, late completion ownership, thread failure and hostname connect and checkout-local DNS budget PASS

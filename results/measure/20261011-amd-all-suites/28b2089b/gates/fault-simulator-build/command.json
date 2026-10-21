@@ -1,9 +1,0 @@
-{
-  "name": "fault-simulator-build",
-  "command": [
-    "make",
-    "tests/faults/fault_sim"
-  ],
-  "source": "28b2089be6a5df835cc7bb46b9c2a9e2f10df190",
-  "started": "2026-10-12T02:59:13Z"
-}

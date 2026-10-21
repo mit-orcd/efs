@@ -1,1 +1,0 @@
-FIX PASS: read-only NET uses fresh legacy admission and FileID checks; stale admission/epoch, local guard, and BUSY refuse writes

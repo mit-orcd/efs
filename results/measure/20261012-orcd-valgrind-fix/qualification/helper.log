@@ -1,3 +1,0 @@
-/orcd/scratch/orcd/001/erbmi1/efs/orcd-test/qualification-valgrind-fix-8b7391b3f3ed/rdma-core-v59.0.tar.gz: OK
-/orcd/scratch/orcd/001/erbmi1/efs/orcd-test/qualification-valgrind-fix-8b7391b3f3ed/valgrind-3.26.0.tar.bz2: OK
-Use EFS_VG_RDMA_RUNTIME=/orcd/scratch/orcd/001/erbmi1/efs/orcd-test/qualification-valgrind-fix-8b7391b3f3ed/reproducible-runtime with tests/valgrind_leaks.sh in an isolated EFS checkout.

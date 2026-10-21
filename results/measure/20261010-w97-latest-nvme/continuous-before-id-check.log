@@ -1,5 +1,0 @@
-Traceback (most recent call last):
-  File "/data1/efs/w97-latest-20261010/balanced-capture.py", line 21, in <module>
-    version=subprocess.check_output(['/data1/efs/src/efsd','--version'],text=True);assert version.startswith('efsd 37ad6a87 ')
-                                                                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-AssertionError

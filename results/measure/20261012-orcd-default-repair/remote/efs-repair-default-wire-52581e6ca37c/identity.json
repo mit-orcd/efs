@@ -1,6 +1,0 @@
-{
-  "binary": "/tmp/efs-repair-default-52581e6ca37c/efsd",
-  "sha256": "cded076b37ac50f34b46238216349bf11cf0469d0589743de04ee3fe9bff8c25",
-  "build_id": "52581e6ca37c",
-  "scope": "real daemon protocol/default-off/incarnation boundary only; no repair or quorum recovery proof"
-}

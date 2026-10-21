@@ -1,9 +1,0 @@
-{
-  "roots": [
-    "/data1/efs/gc-direct-a1kmj9hw/n1",
-    "/data1/efs/gc-direct-a1kmj9hw/n2",
-    "/home/efs/gc-direct-gcy163q6/n3",
-    "/home/efs/gc-direct-gcy163q6/n4"
-  ],
-  "all_payload_files_empty": true
-}

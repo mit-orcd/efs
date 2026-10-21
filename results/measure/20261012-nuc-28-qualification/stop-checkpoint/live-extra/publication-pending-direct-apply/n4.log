@@ -1,9 +1,0 @@
-2026-10-12T04:11:46.346Z storage-engine=files direct_io=on
-2026-10-12T04:11:46.346Z Data GC admission: experimental
-2026-10-12T04:11:46.347Z Storage quota: explicit 1.00 GiB (safe maximum 252.34 GiB; reserve 20%, minimum 1 GiB per filesystem)
-2026-10-12T04:11:46.355Z Joined cluster with 4 nodes
-2026-10-12T04:11:46.358Z heartbeat: enabled (2000 ms interval)
-2026-10-12T04:11:46.372Z raft-host: up raft_id=3 n=4 boot=1938418789665918 salt=8397508247657856712 g0=off g2=hosted
-2026-10-12T04:11:46.372Z efsd v0.3.0-pre-alpha-candidate (branch release-v0.3.0-pre-alpha, built 2026-10-12T03:46:34Z on nuc), build=28b2089b-release-fault: node 4 listening on 127.0.0.1:25007, storage=/home/efs/nuc-28-qualification/results/live-extra/publication-pending-direct-apply/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=0 shared
-2026-10-12T04:11:46.372Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
-2026-10-12T04:11:48.358Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=980 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0

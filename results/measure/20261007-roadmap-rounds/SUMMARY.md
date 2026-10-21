@@ -59,7 +59,7 @@ and `--direct-io`; n1/n2 use SATA and n3/n4 use the NVMe-backed location.
 | Concurrent suite repeated after full acceptance | 10 × 8/8 PASS, including both append cases |
 | Architecture documentation gate | 5/5 PASS |
 
-Raw logs and per-test TSVs are under [final](final/). The unit run rebuilt
+Raw logs and per-test TSVs are under final (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-roadmap-rounds/final`). The unit run rebuilt
 on-disk binaries with a dirty marker for a test-fixture-only change; production
 sources were unchanged. Running server versions/hashes are recorded separately.
 The fixture now extracts the actual pending-cache wait code rather than copying

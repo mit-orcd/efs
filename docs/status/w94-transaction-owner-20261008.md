@@ -42,7 +42,7 @@ any mutation. All five wire probes return INVAL, the guarded valid request
 returns BUSY, and resolution permits the successful retry. Full direct-I/O/TCP
 POSIX/peer, ownership, GC and two-crash WAL gates pass; installed service restored.
 Session normal/sanitizer checks and the full Linux target pass. No NUC test ran.
-[Wire evidence](../../results/measure/20261008-w93-w96-review/w94-fence-validation/prepared-owner-wire.txt).
+Wire evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-w93-w96-review/w94-fence-validation/prepared-owner-wire.txt`).
 
 
 Pending-CREATE apply now checks the established local session and rejection

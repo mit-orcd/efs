@@ -1,2 +1,0 @@
-[ perf record: Woken up 1 times to write data ]
-[ perf record: Captured and wrote 0.396 MB /data1/efs/command-perf/round8-before/after.data (2387 samples) ]

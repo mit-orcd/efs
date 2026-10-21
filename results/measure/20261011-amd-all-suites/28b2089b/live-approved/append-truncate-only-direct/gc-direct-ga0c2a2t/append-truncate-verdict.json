@@ -1,6 +1,0 @@
-{
-  "pass": true,
-  "truncate_repeats": 8,
-  "concurrent_append_records": 800,
-  "cold_restart_after_repeat": 4
-}

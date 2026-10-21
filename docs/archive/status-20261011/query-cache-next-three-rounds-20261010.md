@@ -7,7 +7,7 @@ files/direct-I/O/TCP. Retained namespace preserved; no wipe or push.
 ## Integration boundary
 
 Every local branch tip captured before this round is an ancestor of the merged
-branch. [Boundary and ancestry proof](../../../results/measure/20261010-w92-next-three-rounds/branch-coverage.tsv)
+branch. Boundary and ancestry proof (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-next-three-rounds/branch-coverage.tsv`)
 includes fifteen branches. Only three needed new merges: `devel` at `39fb25da`
 via `25745e6d`, persistence-pressure at `8ee8b69e` via `a4c0a73b`, and W66 at
 `7ff7cb70` via `51880999`. This imports the durable published-ticket retirement

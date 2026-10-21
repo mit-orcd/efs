@@ -1,6 +1,0 @@
-{"sample": 0, "batch": 1, "writeback_hint": false, "files": 128, "total_ms": 4008.61782, "sync_mean_ms": 31.1958981953125, "sync_max_ms": 159.808646}
-{"sample": 0, "batch": 16, "writeback_hint": true, "files": 128, "total_ms": 885.631385, "sync_mean_ms": 6.8473067578124995, "sync_max_ms": 70.397133}
-{"sample": 1, "batch": 16, "writeback_hint": true, "files": 128, "total_ms": 884.4355, "sync_mean_ms": 6.8494767109375, "sync_max_ms": 56.669135}
-{"sample": 1, "batch": 1, "writeback_hint": false, "files": 128, "total_ms": 4463.288285, "sync_mean_ms": 34.732023140625, "sync_max_ms": 79.764635}
-{"sample": 2, "batch": 1, "writeback_hint": false, "files": 128, "total_ms": 3912.348745, "sync_mean_ms": 30.456088859375, "sync_max_ms": 58.005689}
-{"sample": 2, "batch": 16, "writeback_hint": true, "files": 128, "total_ms": 735.074406, "sync_mean_ms": 5.709458609375, "sync_max_ms": 63.583322}

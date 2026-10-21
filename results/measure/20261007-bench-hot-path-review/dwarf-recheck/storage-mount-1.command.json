@@ -1,5 +1,0 @@
-[
-  "findmnt",
-  "-T",
-  "/data1/efs/bench"
-]

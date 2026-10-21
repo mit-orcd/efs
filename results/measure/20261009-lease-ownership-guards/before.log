@@ -1,1 +1,0 @@
-efs-before-guards-test: tests/test_append_transaction.c:261: close_prepare: Assertion `efs_lease_open(c->kv,c->ino,c->gen,legacy,1)==EFS_ERR_BUSY' failed.

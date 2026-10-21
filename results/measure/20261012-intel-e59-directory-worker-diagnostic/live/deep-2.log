@@ -1,6 +1,0 @@
-parallel 2 tests jobs=16 (serial 0 after)
-pass dir_readdir_listing             
-FAIL names_crazy_dirs                 timeout after 30s
-============================================================
-POSIX suite: 1/2 pass, 1 fail, 0 skip, 0 notrun  (32.2s)
-wrote /data1/efs/intel-e59-dir2-diag-20261012/evidence/live/deep-2.tsv

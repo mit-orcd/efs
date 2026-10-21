@@ -1,4 +1,0 @@
-INODE shard=1    ino=1 gen=1 mode=40755 nlink=2 nents=1 layout=0 used_shards=0 parent=1 size=0 pver=0
- DENTRY parent=1 shard=1    name="sentinel" -> ino=81921 gen=1 type=32768 child-row=present
-scan rc=0
-ino 1: 1 inode row(s) on this node, 1 dentry

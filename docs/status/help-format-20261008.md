@@ -32,7 +32,7 @@ The maintenance rule is recorded in
 [developing](../how-it-works/developing.md#command-line-help-style).
 Final candidate: `c22754236b38-help-abf6838b`. Exact source patch, build/test/help
 output and deployment evidence are retained under
-[`results/measure/20261008-help-format`](../../results/measure/20261008-help-format).
+`results/measure/20261008-help-format` (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-help-format`).
 Relevant existing checks: benchmark CLI ownership/parser/scratch protection and
 14 directory-command/codec/source tests. All native help entry points are also
 inspected for success/stdout/section layout. Engine acceptance is inherited from

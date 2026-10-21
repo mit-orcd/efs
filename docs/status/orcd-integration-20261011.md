@@ -49,10 +49,10 @@ runs. Logs in the failure window show compaction activity and repeated
 failures is not proven. Prioritize a focused metadata/GC/query contention
 investigation under W66/W23/D30, retaining original deadlines and error oracles.
 
-Small evidence: [original gates](../../results/measure/20261011-orcd-integration/original-gates.json),
-[corrected gates](../../results/measure/20261011-orcd-integration/corrected-gates.json),
-[runtime audit](../../results/measure/20261011-orcd-integration/runtime-audit.json),
-[retired workers](../../results/measure/20261011-orcd-integration/retired-workers.json).
+Small evidence: original gates (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-orcd-integration/original-gates.json`),
+corrected gates (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-orcd-integration/corrected-gates.json`),
+runtime audit (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-orcd-integration/runtime-audit.json`),
+retired workers (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-orcd-integration/retired-workers.json`).
 
 Bulk logs and TSVs stay under `~/orcd/scratch/efs/orcd-test/`:
 `fcstor003/test-52bc8edb3d1a.log`, `merged-52bc8edb-20261011/` (original),

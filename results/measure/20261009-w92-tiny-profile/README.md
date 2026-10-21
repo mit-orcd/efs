@@ -7,7 +7,7 @@ removed after cold verification. Normal gateway/client mounts remain opted out.
 
 ## Workload and daemon profiles
 
-Copied the user's [tiny_files.py](tiny_files.py) from ~/git/cluster/testing to
+Copied the user's tiny_files.py (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261009-w92-tiny-profile/tiny_files.py`) from ~/git/cluster/testing to
 xefs1:/home/efs/tiny_files.py. Ran on its explicitly authorized diagnostic mount:
 
 ```sh
@@ -38,7 +38,7 @@ or wall time; retained namespace and foreground changes confound comparisons.
 | host_query_thread | 57.64% / 42.11% | 62.32% / 63.78% | 69.54% / 64.92% |
 | __libc_pread | 36.01% / 15.47% | 40.93% / 24.23% | 45.91% / 22.88% |
 
-[Baseline](node1-baseline-perf.txt), [after](node1-after-perf.txt), and corresponding
+Baseline (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261009-w92-tiny-profile/node1-baseline-perf.txt`), after (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261009-w92-tiny-profile/node1-after-perf.txt`), and corresponding
 node2/node3 reports retain full compact symbol tables. Raw perf.data files remain
 in /home/admin/w92-tiny-profile on each node; final-runtime logs retain SHA256s.
 The profile's remaining fsync chain included 5.17% beneath query disk construction
@@ -48,7 +48,7 @@ profile covers 56b845a4; the frozen comparison and final cold gates cover 6e8416
 ## Isolated cache-only measurements
 
 Identical copies of stopped /data1/mdraft/kv were verified by diff before opening.
-[Harness](frozen_catalog_bench.c) opens each private copy, pins metadata, builds
+Harness (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261009-w92-tiny-profile/frozen_catalog_bench.c`) opens each private copy, pins metadata, builds
 one fresh cache and performs three unchanged refreshes. Original and final cache
 implementations use the same other branch/library code. No production KV or data
 is modified. Both produce 25425 files, 827 directories and 6234928 bytes on every
@@ -62,13 +62,13 @@ round (also equal to the two tiny-tree models plus the earlier clean oracle).
 | 12000-file differential harness pread calls | 11317099 | 5640565 | 50.2% fewer |
 | Same harness pwrite calls | 420760 | 420760 | unchanged |
 
-[Frozen before](frozen-before.jsonl), [final](frozen-after.jsonl), and
-[resource observations](frozen-resource.jsonl) retain raw timing/counts. Trials
+Frozen before (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261009-w92-tiny-profile/frozen-before.jsonl`), final (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261009-w92-tiny-profile/frozen-after.jsonl`), and
+resource observations (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261009-w92-tiny-profile/frozen-resource.jsonl`) retain raw timing/counts. Trials
 are sequential, before then after; there is no hardware cold-cache or endurance
 claim. Resource peak is cumulative child max RSS, not a per-generation bound.
 Strace compares the original backend and first read-window fix against the same
 12000-file deterministic RAM/disk regression; traced duration is not throughput.
-[Before syscall summary](before-12000-strace.txt), [after](after-12000-strace.txt).
+Before syscall summary (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261009-w92-tiny-profile/before-12000-strace.txt`), after (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261009-w92-tiny-profile/after-12000-strace.txt`).
 
 ## Changes and correctness
 
@@ -88,9 +88,9 @@ reuse. Default/12000-file RAM/disk differential, retained views, rename, restore
 watermark/corruption refusal, orphan recovery and quota refusal pass. Related
 catalog/name-index/metadata tests pass. Full code suite was not rerun. Optional
 ASan/UBSan linking was unavailable because the VM lacks its libasan runtime;
-no sanitizer pass is claimed. [Unit output](unit-gates.log), [oracles](oracles.log).
+no sanitizer pass is claimed. Unit output (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261009-w92-tiny-profile/unit-gates.log`), oracles (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261009-w92-tiny-profile/oracles.log`).
 
-The [independent live oracle](tiny_oracle.py) compares all streamed paths and
+The independent live oracle (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261009-w92-tiny-profile/tiny_oracle.py`) compares all streamed paths and
 exact directory/byte totals with a filesystem model, plus 65 payload hashes per
 tree. Both 12000-file trees pass before and after the final full daemon restart
 with a fresh mount. Normal services restored; matching daemon hashes/build IDs

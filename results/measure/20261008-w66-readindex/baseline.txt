@@ -1,3 +1,0 @@
-FAIL tests/test_raft.c:462: fresh quorum completes without heartbeat tick
-test_raft: 1 failure(s)
-exit_status=1

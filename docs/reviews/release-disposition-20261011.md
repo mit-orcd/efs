@@ -10,7 +10,7 @@ Original review base: `48a2719d19fb5a6b0464935c70a967a1f1a86236`.
 - `devel-nuc`: `1f1037a6aa001546982defcb4e5e3997d694076f`
 - `devel-mac`: `b2c01fa05afa1287cd358f352ebfbc831b570e31`
 
-These are committed snapshots, not the branches' later tips or their worktree changes. Exact-token search evidence is retained in [the revalidation inventory](release-revalidation-20261011.json). Original reproducible scratch copies and probes are in [the probe archive](structural-review-probes-20261011.tar.gz); its README describes commands, and its manifest hashes the source files. Full source copies inside the archive are historical scratch evidence, not alternate implementations to build or merge.
+These are committed snapshots, not the branches' later tips or their worktree changes. Exact-token search evidence is retained in the revalidation inventory (archived raw evidence: `archive/raw-evidence-20261021:docs/reviews/release-revalidation-20261011.json`). Original reproducible scratch copies and probes are in [the probe archive](structural-review-probes-20261011.tar.gz); its README describes commands, and its manifest hashes the source files. Full source copies inside the archive are historical scratch evidence, not alternate implementations to build or merge.
 
 Archive SHA-256: `3c2758887fe5ea82a40c5b6a031da05dc3aab6c549ceeeaae12c484f9b2d485d`.
 

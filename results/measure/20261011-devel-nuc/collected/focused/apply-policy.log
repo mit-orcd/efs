@@ -1,1 +1,0 @@
-transaction/publication Raft apply: IO/NOMEM preserve pending index; business conflicts advance with ring verdict; policy CAS conflicts advance while policy IO/NOMEM/BUSY retry; session fence and ticket storage failures retry PASS

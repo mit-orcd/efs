@@ -29,7 +29,7 @@ then produce both empty GC queues and empty physical fragment inventories.
 The harness drains/restores the two installed mounts with TCP and commands off.
 No RDMA, D25 activation or pushes are part of this gate.
 
-[Reproducible runner](../../results/measure/20261011-amd-sustained/run.sh).
+Reproducible runner (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-sustained/run.sh`).
 Acceptance and remaining blockers will be recorded after the actual verdicts.
 
 ## Unpaced mixed-load failure — retained, not closed
@@ -47,7 +47,7 @@ files occupy at most 64 MiB; this is overwritten-generation/GC pressure, not a
 full host filesystem. PUT counters reached roughly 5 GB per node and recorded
 quota failures. The 30-second sample completed 2,245 tiny closes, before the
 failure. It is not a sustained throughput or cold-byte acceptance result.
-[Failed run](../../results/measure/20261011-amd-sustained/evidence/unpaced/direct.log).
+Failed run (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-sustained/evidence/unpaced/direct.log`).
 
 A separate 60-second cold restart without writers enables actual GC identity,
 delete and ACK diagnostics. Per-node sampled allocation falls from
@@ -59,7 +59,7 @@ establishes progress under quiescence, not complete drain, a proven leak cause,
 or exact acknowledged-byte recovery of the failed run. Concurrent inventory
 samples explicitly count files that disappeared between scan and stat; the
 first inventory-race audit attempt is also retained.
-[Cold recovery observations](../../results/measure/20261011-amd-sustained/evidence/unpaced/cold-gc-recovery.json).
+Cold recovery observations (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-sustained/evidence/unpaced/cold-gc-recovery.json`).
 
 The unpaced offered load exceeds the observed quiescent reclaim rate. Source
 uses bounded GC scans/ACKs, a 200-ms fragment budget per group and one-second
@@ -105,7 +105,7 @@ ten full 30-second windows (174.88/s), with final per-node charged usage
 3,084,189,696/2,759,720,960/3,084,713,984/2,760,179,712 bytes. It stopped by
 cooperative SIGINT, exit 130, and restoration exit 0. This is an intentional
 diagnostic stop, not a storage failure or cold-byte acceptance result.
-[Interval/final-status evidence](../../results/measure/20261011-amd-sustained/evidence/baseline/baseline-stop.json).
+Interval/final-status evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-sustained/evidence/baseline/baseline-stop.json`).
 
 ## Final first-candidate verdict
 
@@ -122,7 +122,7 @@ inventories reach zero files/allocated bytes at the 30-second sample and remain
 empty through 60 seconds. This proves eventual reclamation of this retained
 fixture, not a pass of its original deadline. Installed service restoration
 passes independently. W94/W97 remain open; the default idle is unchanged.
-[Recovery evidence](../../results/measure/20261011-amd-sustained/evidence/candidate/live/cold-gc-recovery.json).
+Recovery evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-sustained/evidence/candidate/live/cold-gc-recovery.json`).
 
 ## Fragment-backlog scheduling follow-up
 
@@ -167,7 +167,7 @@ placement make these acceptance observations, not a matched performance A/B.
 Both installed mounts restore successfully. The conditional ten-minute run
 is not started because direct failed; fanout validation follows without
 overlapping load or compilation. W94/W97 remain open.
-[Retained verdicts](../../results/measure/20261011-amd-sustained/evidence/fragments/live/round.exit).
+Retained verdicts (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-sustained/evidence/fragments/live/round.exit`).
 
 Rejected setup/build attempts are retained alongside accepted gates: an aborted
 incorrect build label, a stale generated-doc upload, missing linked evidence,
@@ -196,16 +196,16 @@ is claimed. Post-load sampled fencing passes fall from about 188–192 ms to
 93–104 ms; batch and placement context still matter. The aggregate sampled
 four-daemon/FUSE CPU is about 0.93 cores and peak aggregate RSS about 309–315
 MiB on the two fanout loads; workload-driver CPU is excluded.
-[Reconciled raw-field summary](../../results/measure/20261011-amd-sustained/followup-summary.json) /
-[reproduction](../../results/measure/20261011-amd-sustained/summarize-followup.py).
+Reconciled raw-field summary (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-sustained/followup-summary.json`) /
+reproduction (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-sustained/summarize-followup.py`).
 
 The subsequent ten-minute direct/buffered tests retained
 the same rate, quota, survivor oracle and 180-second drain deadline. No complete
 sustained-service or unpaced-overload acceptance is claimed yet. Installed
 service keeps the default idle; private acceptance uses explicit 100 ms.
-[Exclusive AMD queue](../../results/measure/20261011-amd-sustained/fanout-queue.sh)
+Exclusive AMD queue (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-sustained/fanout-queue.sh`)
 may restart the four installed daemons while retaining stores;
-[long runner](../../results/measure/20261011-amd-sustained/fanout-long.sh) borrows
+long runner (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-sustained/fanout-long.sh`) borrows
 and restores the two mounts. W94/W97 remain open.
 
 ## Ten-minute direct failure and 20-ms-yield follow-up
@@ -275,8 +275,8 @@ version is `715b1103-deploy-normal`; dedicated build source is
 `/data1/efs/devel-amd-gc-yield20-20261011`, while installed binaries are under
 `/data1/efs/src`. Existing stores were retained. The installed GC idle remains
 the default 1000 ms; 20 ms was explicitly set only on private acceptance nodes.
-[Restoration audit](../../results/measure/20261011-amd-sustained/evidence/yield20/restoration-proof.json)
-and [deployment identity](../../results/measure/20261011-amd-sustained/evidence/yield20/deployment/deployment.json).
+Restoration audit (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-sustained/evidence/yield20/restoration-proof.json`)
+and deployment identity (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-sustained/evidence/yield20/deployment/deployment.json`).
 
 AMD restart defaults were tested with a clean environment and explicit override
 checks; TCP/direct and commands-off defaults pass, while explicit overrides

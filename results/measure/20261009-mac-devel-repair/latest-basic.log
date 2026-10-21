@@ -1,6 +1,0 @@
-cluster: mac
-parallel 1 tests jobs=1 (serial 0 after)
-pass basic_write_read                
-============================================================
-POSIX suite: 1/1 pass, 0 fail, 0 skip, 0 notrun  (3.2s)
-wrote /var/tmp/efs-latest-basic.tsv

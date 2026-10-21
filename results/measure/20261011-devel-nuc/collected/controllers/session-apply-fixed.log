@@ -1,7 +1,0 @@
-test: /tmp/efs-session-apply-z5koj294/test.c:208: main: Assertion `apply_session_cmd(&h,cmd,26,2)==EFS_ERR_NOT_FOUND' failed.
-Traceback (most recent call last):
-  File "/data1/efs/devel-nuc-20261011/candidate/tests/test_namespace_session_apply.py", line 59, in <module>
-    subprocess.run([str(binary)],check=True,timeout=30)
-  File "/usr/lib64/python3.12/subprocess.py", line 571, in run
-    raise CalledProcessError(retcode, process.args,
-subprocess.CalledProcessError: Command '['/tmp/efs-session-apply-z5koj294/test']' died with <Signals.SIGABRT: 6>.

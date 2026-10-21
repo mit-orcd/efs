@@ -1,5 +1,0 @@
-EFS_FUSE_EXPORT=1
-EFS_TRANSPORT=tcp
-EFS_COMMANDS=1
-efs-fuse 1a25d20a193b-virtual-export-candidate (branch devel-find-stats, built 2026-10-10T11:36:43Z on xefsgw)
-bc9c6f2d6e959c6df273e796c5a49fc29769ca2f61cf25163c0c7858adb4280b  /tmp/efs/efs-fuse

@@ -10,7 +10,7 @@ the existing bounded preserved-store startup script.
 ## Integration boundary
 
 Frozen integrated baseline: `c3118143b3e121a447b8cc5397b24a727f00abbd`.
-The [captured refs and detached worktrees](../../results/measure/20261011-devel-nuc/integration-refs.json)
+The captured refs and detached worktrees (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-devel-nuc/integration-refs.json`)
 record all commits selected before testing. Captured devel, AMD, Intel, Mac,
 ORCD, capacity branch, remote refs and detached worktree heads are ancestors
 of that baseline. Other branch tips and worktrees are not moved, and active

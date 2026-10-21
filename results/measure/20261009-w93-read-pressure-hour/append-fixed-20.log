@@ -1,5 +1,0 @@
-prepared /data1/efs/mnt/w93-fixed-append-20 (64 testdirs)
-pass peer_append_while_truncate      
-============================================================
-POSIX 2-client: 1/1 pass, 0 fail  (2.5s)
-wrote /data1/efs/w93-read-pressure-hour-20261009/append-fixed-20.tsv

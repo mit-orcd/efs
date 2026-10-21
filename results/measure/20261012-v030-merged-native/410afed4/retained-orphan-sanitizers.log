@@ -1,4 +1,0 @@
-query-disk: unlinked directory preflight ino=4091 parent=2098 nlink=2
-query-disk: unlinked directory preflight ino=4091 parent=2098 nlink=2
-query-disk: unlinked directory preflight ino=4091 parent=2098 nlink=2
-retained4091/parent2098/replaced8187: actual preflight refuses, pending/cancel inconclusive, immutable old snapshot and new repair/backlink controls PASS

@@ -1,8 +1,0 @@
-ENABLE_VALGRIND:UNINITIALIZED=ON
-HAVE_VALGRIND_DRD:INTERNAL=1
-HAVE_VALGRIND_MEMCHECK:INTERNAL=1
-d549ff9cde3d13c8418bd537ef386366efb958ee9deb66c61e8fb14108eeed1c  /home/erbmi1/orcd/scratch/efs/orcd-test/qualification-valgrind-fix-8b7391b3f3ed/rdma-core-build/lib/libibverbs.so
-b7c4659ce7233b27d431493411636a53f739aca664cc557bf0b851e8863504d0  /home/erbmi1/orcd/scratch/efs/orcd-test/qualification-valgrind-fix-8b7391b3f3ed/rdma-core-build/lib/libmlx5-rdmav59.so
-	libibverbs.so.1 => /home/erbmi1/orcd/scratch/efs/orcd-test/qualification-valgrind-fix-8b7391b3f3ed/rdma-core-build/lib/libibverbs.so.1 (0x00007f073e1b8000)
-==1520439== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
-==1520417== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)

@@ -1,8 +1,0 @@
-{
-  "mode": "direct",
-  "transport": "tcp",
-  "nodes": 3,
-  "transactions": false,
-  "publication": false,
-  "configuration": false
-}

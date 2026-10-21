@@ -1,6 +1,0 @@
-Evidence: /data1/efs/efs-checkpoint-fault-skg8dhc8
-Traceback (most recent call last):
-  File "/data1/efs/w97-flow-build/tests/live/checkpoint_sync_fault.py", line 145, in <module>
-    assert after==before,(before,after)
-           ^^^^^^^^^^^^^
-AssertionError: ({0: 4, 2: 3}, {0: 5, 2: 3})

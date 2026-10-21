@@ -11,7 +11,7 @@ creation continues to completion. Live rates are observational, because namespac
 grows between rounds. Each change is also measured against the same frozen
 25425-file namespace using the same supporting library and four catalog builds.
 The first build is fresh; the next three refresh unchanged partitions.
-The [frozen harness](../20261009-w92-tiny-profile/frozen_catalog_bench.c)
+The frozen harness (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261009-w92-tiny-profile/frozen_catalog_bench.c`)
 and [production-code regression](../../../tests/test_query_disk_io.c) are retained.
 
 The oracle checks every exported file path and exact directory/byte counts,

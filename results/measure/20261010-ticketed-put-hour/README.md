@@ -11,10 +11,10 @@ BUSY/STALE must reach callers and advance apply; IO/NOMEM must remain retryable.
 Before this fix, `namespace-barrier-l2to3opx` left group 2 applied=6/commit=7 after
 incomplete FINISH and subsequent ReadIndex hung. The focused fixed fixture
 `namespace-barrier-cgbd_4pq` passes the exact frozen touched-set gate; see
-[raw isolated output](namespace-isolated.log). The four-daemon full fixture
+raw isolated output (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-ticketed-put-hour/namespace-isolated.log`). The four-daemon full fixture
 `gc-direct-2oo6ou8k` passes core 212/212 and peer 64/64, the namespace gate,
 certificate-sync fault recovery, all-member cold rejection floors and physical
-GC/restart; see [full output](namespace-full-live.log).
+GC/restart; see full output (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-ticketed-put-hour/namespace-full-live.log`).
 
 ## Staged ticketed data-plane receiver
 
@@ -61,42 +61,42 @@ records it; its direct/TCP rerun passes. All inspected local tips are included.
 Final receiver fixture `gc-direct-mehuigdc` passes core212/212, peer64/64 and cold
 physical GC. Integrated fixture `gc-direct-k7dik9wu` independently repeats those
 counts, exact ticketed cold bytes, publication/retirement rejection, certificate
-fault/recovery, namespace completion and physical deletion. See [merged live
-output](merged/live.log), [regressions](merged/final-make-test.log) and [direct
-partition output](merged/partition-direct.log). Both restored installed service.
+fault/recovery, namespace completion and physical deletion. See merged live
+output (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-ticketed-put-hour/merged/live.log`), regressions (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-ticketed-put-hour/merged/final-make-test.log`) and direct
+partition output (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-ticketed-put-hour/merged/partition-direct.log`). Both restored installed service.
 Selected local/AMD source hashes match; the private build still reports unknown
 Git identity. New-module ASan/UBSan reruns pass after the geometry/deadline tests.
 
 WAL fault fixture `gc-direct-s24q2nrm` proves periodic and shutdown checkpoints
 remain unchanged after a real latched follower KV fdatasync failure, then cold
 Raft replay recovers exact original/link/follow-up bytes and nlink=2 before
-physical deletion. [Raw log](merged/wal-fault.log).
+physical deletion. Raw log (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-ticketed-put-hour/merged/wal-fault.log`).
 
 Fixture `gc-direct-rgtf3fdp` passes cross-group append/fsync peer-before-close/cold
 bytes, 32 identical APPEND requests with one allocation, ACK retirement, retained
 partial-body recovery after failed stop and acknowledged fsynced bytes across
-leader shutdown. [Raw log](merged/append-drain.log).
+leader shutdown. Raw log (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-ticketed-put-hour/merged/append-drain.log`).
 
 The additional session-cleanup gate initially failed in `gc-direct-x0braao2`:
 its helper assumed one manually registered inode shard represented the complete
 frozen touched set. Lease admission registers additional guarded participants.
 The committed FINISH BUSY now exposed that incomplete barrier instead of hiding
-it. [Retained failure](merged/session-cleanup-before.log). The updated helper
+it. Retained failure (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-ticketed-put-hour/merged/session-cleanup-before.log`). The updated helper
 requires incomplete BUSY, reads and ACKs every frozen bit, verifies the storage
 epoch and retries exact FINISH; it never relaxes the production barrier. Corrected
 fixture `gc-direct-d_48g00a` passes exact first-eight replay, remaining owners
 across cold restart, management resume, zero locks/markers, physical reclamation,
 and deferred CLOSE with 64 cross-group reservations, cold holes, retired
-obligations and exact reopened bytes. [Raw output](merged/session-close-fixed.log).
+obligations and exact reopened bytes. Raw output (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-ticketed-put-hour/merged/session-close-fixed.log`).
 The revoked-append helper had the same single-shard assumption and now uses the
 exact frozen set and storage epoch too; its corrected `gc-direct-0gb77sxi` run passes exact 32+32 transactions, cold
 original bytes/holes, rejected late appends, zero remaining reservations/receipts,
 bounded lease release and physical reclaim. The helper holds a real session lease
 so unrelated CLOSE cleanup cannot race the exact half-complete snapshot; the
-prior open=31 setup failure is retained in [its log](merged/revoked-append-before.log).
+prior open=31 setup failure is retained in its log (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-ticketed-put-hour/merged/revoked-append-before.log`).
 This does not weaken the open=32 assertion. Actual O_SYNC/O_DSYNC callback failure
 also retains exact bytes through fsync and cold recovery.
-[Successful run](merged/revoked-append-fixed.log).
+Successful run (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-ticketed-put-hour/merged/revoked-append-fixed.log`).
 
 ## Final late-arriving integration
 
@@ -108,7 +108,7 @@ The final source hashes are separate under `final-integration/` and match the AM
 private checkout. Complete native regressions pass after this code integration;
 the final full AMD live run `gc-direct-vs3gw66k` passes core212/212, peer64/64,
 typed same/cross cold replay, namespace completion, certificate fault/recovery
-and physical GC. [Raw integrated output](final-integration/live.log). Earlier fault/cleanup proofs above must
+and physical GC. Raw integrated output (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-ticketed-put-hour/final-integration/live.log`). Earlier fault/cleanup proofs above must
 not be attributed to the late atomic-cursor code. W93's broader exact committed
 build and sustained acceptance gates remain open; this private build reports
 unknown Git identity. No downgrade, activation or service-store migration occurs.
@@ -123,7 +123,7 @@ query-cache generation/candidate bounds. All captured branch tips and matching
 local/AMD sources are under `last-tips/`. Complete AMD Linux regressions and the
 warning-free build pass. Final direct/TCP fixture `gc-direct-7xbnrwx1` passes core212/212, peer64/64,
 server-side deletion counters, zero quota/physical inventory and cold GC/rejection
-floors. [Final raw gate](last-tips/live.log). Installed service and both policy
-mounts are restored; [restoration proof](last-tips/restored-service.txt). No owned
+floors. Final raw gate (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-ticketed-put-hour/last-tips/live.log`). Installed service and both policy
+mounts are restored; restoration proof (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-ticketed-put-hour/last-tips/restored-service.txt`). No owned
 fixture remains active. Earlier fault/cleanup results remain attached to their
 own candidate. No new implementation or test is started after 06:44:32 UTC.

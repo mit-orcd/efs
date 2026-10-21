@@ -41,7 +41,7 @@ Focused actual-source tests cover shared links, orphan copies, exact boundary,
 concurrent builders, cancellation/retry, lease-release recovery, configured caps,
 and preservation of the old checkpoint after aggregate refusal. Existing mutation,
 retained-view, partial IO and fsync tests and the complete native suite pass. Logs are retained in
-[closure evidence](../../results/measure/20261010-w92-closure).
+closure evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure`).
 
 The root scan is proportional to generation file count (at most five partition
 files per populated shard per generation), not file cardinality; costs under
@@ -91,7 +91,7 @@ bytes. `du` allocated blocks are not a reliable compressed physical-space projec
 The initial launcher lacked `/usr/bin/time`, failed before fixture creation, and was
 retried after installing that utility; its failure evidence is retained separately.
 No 2^32-entry acceptance claim is made. Compact raw logs are in
-[scale pilot evidence](../../results/measure/20261010-w92-closure/scale-pilot).
+scale pilot evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/scale-pilot`).
 
 The cardinality audit also found unchecked 64-bit tree-count additions. Fresh and
 incremental disk folds now refuse aggregate overflow before changing counts or
@@ -200,7 +200,7 @@ The preceding version-4 ten-million-file run completed successfully: fresh build
 3,672,472 bytes and whole-process maximum RSS 42,424 KiB. Every exported file
 passed the independent sequence/identity oracle; close/reopen restore also passed.
 Its source NOSYNC, warm/shared VM environment and isolated compressed fixture are
-unchanged limitations. See [raw ten-million evidence](../../results/measure/20261010-w92-closure/scale-10m-v4).
+unchanged limitations. See raw ten-million evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/scale-10m-v4`).
 These are observed pilots, not extrapolated 2^32 acceptance. The version-5 repeat also completed with every file checked before and after
 an inode-only mutation. Fresh build 291.206 s; unchanged refresh 0.617 s;
 full export verification 7.196 s; mutation refresh 2.932 s (one partition,
@@ -208,7 +208,7 @@ full export verification 7.196 s; mutation refresh 2.932 s (one partition,
 The old snapshot retained its original exact totals. Accounted builder memory
 3,864,480 bytes; whole-process peak RSS 41,000 KiB. These are single shared-VM,
 warm-kernel measurements, not a controlled throughput comparison or the 2^32 gate.
-See [version-5 evidence](../../results/measure/20261010-w92-closure/scale-10m-v5).
+See version-5 evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/scale-10m-v5`).
 
 ## Cardinality and budget audit
 
@@ -441,7 +441,7 @@ probe now uses an isolated structure with its own mutex; the live segment counts
 are never changed. The fan-in fixture also waits for source quiescence before
 borrowing its segment. The corrected complete native suite passes, including the whole-source tail,
 KV, differential catalog, retained-view, IO/fault and architecture gates.
-Raw evidence: [complete gate](../../results/measure/20261010-w92-closure/source-tail-native-passed.log).
+Raw evidence: complete gate (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/source-tail-native-passed.log`).
 
 ## Latest bounded-source ten-million-entry repeat
 
@@ -453,7 +453,7 @@ full export also checks every path/identity/sequence. Accounted catalog scratch
 remains 3864480 bytes; source snapshot charges 112752/112859 bytes before/after
 mutation. Wall time varies on shared VMs, so the reduced fold count is the
 substantiated optimization, not a measured wall-time speedup. Time/allocation
-evidence is [retained here](../../results/measure/20261010-w92-closure/scale-10m-bounded-v3).
+evidence is retained here (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/scale-10m-bounded-v3`).
 
 The source-scale VM has been gracefully drained for a temporary increase from
 3 GiB to 24 GiB RAM. Its inactive original XML is preserved on the host at
@@ -487,7 +487,7 @@ A fresh Linux NFS mount negotiated 4.2. Its intermittent directory-open EINVAL
 is traced on the wire to GET_DIR_DELEGATION returning NFS4ERR_INVAL; corresponding
 FUSE responses succeed. Explicit 4.0 matches the macOS helper and avoids that
 negotiation. Version 4.2 is not certified by this gate; protocol evidence is
-[retained here](../../results/measure/20261010-w92-closure/nfs42-delegation-status.tsv).
+retained here (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/nfs42-delegation-status.tsv`).
 
 The explicit 4.0 gate found a W92 freshness defect: repeated stats calls kept
 receiving generation 16 (99 files) for over 120 seconds, while a native fresh
@@ -536,7 +536,7 @@ The first capacity writer stopped at 09:33:38 UTC with exit 1 after 124983
 acknowledged files (32763543552 payload bytes), before the 400 GiB gate. The
 client reported CREATE PROTO (-7), not ENOSPC; all three private daemons remained
 active with about 248 GiB free each and no PUT/disk-write errors. The original
-[failed-run checkpoints](../../results/measure/20261010-w92-closure/w92-capacity-write-failed/write.log)
+failed-run checkpoints (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/w92-capacity-write-failed/write.log`)
 are retained. A later diagnostic exclusive CREATE for the absent failing name
 succeeded and left an unacknowledged zero-byte tail. The explicit resume harness
 rehashes every acknowledged payload before proceeding and only rewrites the
@@ -553,7 +553,7 @@ without per-probe tracing does not prove which validation branch fired.
 
 The unrouted-BUSY fix passes the actual extracted retained-CREATE and FUSE
 admission deadline regressions on Mac, the retained-CREATE regression on Linux,
-and the [unchanged complete native suite](../../results/measure/20261010-w92-closure/w92-unrouted-busy-native-passed.log).
+and the unchanged complete native suite (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/w92-unrouted-busy-native-passed.log`).
 The initial resume was intentionally stopped with SIGTERM/143 during its read-only
 acknowledgement rehash to install the fixed private client. The new detached
 `w92-capacity-busy-fixed-20261010` resumes from the preserved original write
@@ -580,10 +580,10 @@ now run under sudo before a single fresh mount. Earlier acknowledged disabled
 and quota fixtures also recover all 1000 payloads/4096000 bytes after rollout.
 Mac execution remains pending its user-privileged stale-mount refresh.
 
-[Deployment/digests](../../results/measure/20261010-w92-closure/w92-1a25d20a-deployment.json),
-[native commands](../../results/measure/20261010-w92-closure/w92-1a25d20a-native-commands.log),
-[fresh NFSv4.0](../../results/measure/20261010-w92-closure/w92-1a25d20a-nfs40-fresh-single.log),
-[retained payloads](../../results/measure/20261010-w92-closure/w92-1a25d20a-retained-payloads.log).
+Deployment/digests (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/w92-1a25d20a-deployment.json`),
+native commands (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/w92-1a25d20a-native-commands.log`),
+fresh NFSv4.0 (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/w92-1a25d20a-nfs40-fresh-single.log`),
+retained payloads (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/w92-1a25d20a-retained-payloads.log`).
 
 The fixed capacity client has rehashed the original acknowledged prefix and
 resumed new writes. Its recorded zero-byte unacknowledged diagnostic tail is
@@ -592,7 +592,7 @@ rewritten, with original failed-run evidence retained. No 400 GiB or actual
 checkpoint is 2345664512 entries; whole generator/source-process RSS is
 4305072 KiB, distinct from the fixed query-builder/scratch budgets.
 
-The named [loaded writer/query repeat](../../results/measure/20261010-w92-closure/w92-1a25d20a-loaded.log)
+The named loaded writer/query repeat (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/w92-1a25d20a-loaded.log`)
 also passes with eight writers/two concurrent readers: 1126 independently
 verified payloads (288256 bytes), changing publication generations and exact
 post-close stats in 10.573 s. Create p50/p95/p99 are 76.766/217.434/418.663 ms.
@@ -630,7 +630,7 @@ An additional fresh-process recovery verifies all 10m paths and exact aggregates
 after the concurrent test: 29.104 s recovery, 12.798 s complete export verification,
 zero rebuilt partitions, exit 0. Compact raw evidence, including the quota
 failure, is in
-[the cold/concurrent results](../../results/measure/20261010-w92-closure/cold-kernel-and-concurrent-10m).
+the cold/concurrent results (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/cold-kernel-and-concurrent-10m`).
 The actual 2^32 run still owes its own complete build/export/mutation/recovery
 oracles; these pilots do not substitute for it.
 
@@ -679,7 +679,7 @@ W55 incident closure or W66 consensus claim are part of this handoff.
 
 The named 2^32 guest-kernel-cold recovery is queued in detached admin screen
 `w92-2p32-kernel-recovery-20261010`. Its
-[exact wrapper](../../results/measure/20261010-w92-closure/scale-recovery-handoff/w92-scale-recovery-20261010.sh)
+exact wrapper (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/scale-recovery-handoff/w92-scale-recovery-20261010.sh`)
 waits for the original marker, refuses a failed/missing original process, checks
 all population/build/cold/mutation verdicts, then clears guest caches and runs
 the named full recovery oracle. It preserves the large private disk budgets and
@@ -691,7 +691,7 @@ stem plus `-kernel-recovery.{cache-state,log,time,exit,finished}`.
 The 400 GiB cold handoff is queued in a local detached screen
 `w92-capacity-cold-handoff-cdc13b88` (replaces the intentionally retired
 previous watchers without interrupting the writer), using this
-[exact one-shot script](../../results/measure/20261010-w92-closure/capacity-recovery-handoff/run.sh).
+exact one-shot script (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/capacity-recovery-handoff/run.sh`).
 It retries SSH observation failures without restarting the writer. Only an exit-0
 marker plus the complete 1,638,400-file/400-GiB independent write verdict permits
 the handoff. It preflights the named daemon hashes and all three private unit
@@ -732,7 +732,7 @@ The waiting billion-entry recovery wrapper now uses
 replaced, leaving the original generator running. The original gate's narrower
 statistics checks will be supplemented by this complete fresh-process gate,
 which still owes a passing terminal verdict.
-[Raw logs and harness/library hashes](../../results/measure/20261010-w92-closure/full-stat-oracle)
+Raw logs and harness/library hashes (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/full-stat-oracle`)
 preserve the strengthened checks. W92 remains open.
 
 ## Mac NFS handle-recovery fix
@@ -769,7 +769,7 @@ tunnel; the gateway maps all NFS credentials to root, so this is not a UID-501
 ACL-isolation result. NFS restart grace is 90 seconds and was observed before
 the first successful candidate open; it is separate from the captured ESTALE.
 
-[Failure traces, decoded requests and candidate gate results](../../results/measure/20261010-w92-closure/mac-nfs)
+Failure traces, decoded requests and candidate gate results (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/mac-nfs`)
 are preserved. Candidate human version is
 `1a25d20a193b-virtual-export-candidate`, retaining the compatible client build ID
 for this temporary gateway test; the committed named rollout and repeated
@@ -805,7 +805,7 @@ boot 17023102757887622. The additional 96 fresh Mac nonce queries pass in
 fixtures was independently rechecked after the named cold restart: 423 files,
 including the raw invalid-UTF8/newline/escape names, all match.
 
-[Named deployment and platform evidence](../../results/measure/20261010-w92-closure/named-1434aa83)
+Named deployment and platform evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/named-1434aa83`)
 includes all six guest binary identities, normal and private unit arguments,
 the initial discovery failure and successful remaining rollout, and complete
 platform verdicts. Acceptance-only NFS mounts and native diagnostic mounts are
@@ -822,7 +822,7 @@ and storage-fault evidence. Its diagnostic client was drained and unmounted,
 then only w92-policy-efsd.service was stopped on all three nodes. All private
 policy data directories are preserved. Normal efsd and private 18432 capacity
 services remain active on every node.
-[Retirement evidence](../../results/measure/20261010-w92-closure/policy-retirement-20261010.log).
+Retirement evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/policy-retirement-20261010.log`).
 The capacity fixture and original actual-entry run were not stopped; their
 complete terminal/recovery verdicts remain required for closure.
 
@@ -851,14 +851,14 @@ its existing Linux-only fopencookie logger; it is not a Mac native-suite pass.
 Named diagnostic deployment and live verification remain owed. The two large
 original fixtures continue untouched, with no disk-format conversion required.
 
-[Phase-diagnostic staging and compilation evidence](../../results/measure/20261010-w92-closure/build-phase-native)
+Phase-diagnostic staging and compilation evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/build-phase-native`)
 preserves both archive failures and the successful preflight. They are staging
 failures, not failed cache oracles, and do not count as a complete native pass.
 
 The completed third Linux `make -j4 test` repeat exits 0, including the new
 RAM/disk phase-state checks, partial IO/fsync, quota, cancellation and retained
 catalog gates plus the complete native and documentation suites. Its
-[raw log and terminal markers](../../results/measure/20261010-w92-closure/build-phase-native)
+raw log and terminal markers (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/build-phase-native`)
 are preserved. Runtime phase JSON still needs named deployment/live verification;
 this native pass does not close the two large-scale acceptance gates.
 
@@ -895,7 +895,7 @@ populated but no complete build/export/mutation verdict yet. The capacity writer
 PID 269152 is live at 404480 files/98.75 GiB. Its new local handoff watcher
 preflights exact cdc13b88 server SHA256 before any private stop.
 
-[Named rollout, command and NFS evidence](../../results/measure/20261010-w92-closure/named-cdc13b88)
+Named rollout, command and NFS evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/named-cdc13b88`)
 includes all six guest identities and normal/private unit arguments, pilot logs
 and preserved first-invocation failure. The normal gateway and clients are
 restored to commands disabled; acceptance-only mounts are retired. Private
@@ -934,7 +934,7 @@ Normal and private capacity daemons remain on cdc13b88. The original scale proce
 capacity writer were not interrupted. At 12:47 UTC the real writer had synced
 413184 files / 100.875 GiB; its complete cold-verification gate remains pending.
 
-[Focused merge evidence](../../results/measure/20261010-w92-closure/buffered-merge).
+Focused merge evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/buffered-merge`).
 
 
 ## Reuse completed 2^32 source with the batched implementation
@@ -985,7 +985,7 @@ were advancing. Normal/private capacity daemons and the real writer were not
 stopped. The writer reached 424576 files / 103.65625 GiB; its own cold handoff
 still waits for the complete 400 GiB verdict. Both terminal gates remain open.
 
-[Reused-source pilot, original population proof and exact handoff scripts](../../results/measure/20261010-w92-closure/scale-reuse-handoff).
+Reused-source pilot, original population proof and exact handoff scripts (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/scale-reuse-handoff`).
 
 
 ## Bounded raw-record and slot batching
@@ -1019,7 +1019,7 @@ wait for the complete native verdict before advancing those binaries. The
 current large run and its watcher are still PID 554207/554216, and the 400 GiB
 writer/handoff remain unchanged. W92 is still open.
 
-[Raw batching focused and complete pilot evidence](../../results/measure/20261010-w92-closure/raw-batching).
+Raw batching focused and complete pilot evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/raw-batching`).
 
 
 ## Raw batching full gates and named rollout
@@ -1088,8 +1088,8 @@ repeats do not replace them. W92 remains open; `.efs` functionality is excluded
 from v0.3.2-pre-alpha. Before further cold verification, resolve the writer-state
 handoff precondition and obtain the complete write verdict.
 
-[Recovered handoff evidence](../../results/measure/20261010-w92-closure/capacity-recovery-handoff/handoff.log)
-and [preservation manifest](../../results/measure/20261012-leftover-evidence-review/manifest.json)
+Recovered handoff evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/capacity-recovery-handoff/handoff.log`)
+and preservation manifest (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-leftover-evidence-review/manifest.json`)
 record the completed attempts; the earlier queued/pending description is superseded.
 
-[Named binary, mapped runtime, native and platform evidence](../../results/measure/20261010-w92-closure/raw-batching).
+Named binary, mapped runtime, native and platform evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/raw-batching`).

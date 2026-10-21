@@ -1,7 +1,0 @@
-{
-  "duration_seconds": 90,
-  "tag": "profiled",
-  "applied_interval_ms": 10,
-  "root": "/data1/efs/mnt/tiny-w93-checkpoint-profiled-20261010",
-  "drained": true
-}

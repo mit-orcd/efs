@@ -1,3 +1,0 @@
-WALL 5.182
-pass dir_many_files                  
-dir_many_files	PASS	

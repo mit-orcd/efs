@@ -1,9 +1,0 @@
-{
-  "follower_node": 3,
-  "held_lag": [
-    15,
-    16
-  ],
-  "cold_exact_bytes": true,
-  "cold_nlink": 2
-}

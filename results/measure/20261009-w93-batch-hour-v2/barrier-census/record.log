@@ -1,2 +1,0 @@
-[ perf record: Woken up 25 times to write data ]
-[ perf record: Captured and wrote 60.933 MB /data1/efs/w93-batch-hour-v2-20261009/barrier-census/perf.data (723930 samples) ]

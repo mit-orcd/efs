@@ -1,2 +1,0 @@
-[ perf record: Woken up 1 times to write data ]
-[ perf record: Captured and wrote 0.987 MB /data1/efs/amd-round-20261010/cold-profile/perf.data (2710 samples) ]

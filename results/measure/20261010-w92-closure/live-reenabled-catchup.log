@@ -1,6 +1,0 @@
-Results as of 1 minute ago; validated against this snapshot. Background refresh may lag recent writes.
-Snapshot 17023102757887614:1; no refresh error recorded; expiry unavailable.
-{"version":1,"operation":"stats","complete":true,"expiry":"unavailable","snapshot":{"boot_id":17023102757887614,"generation":1,"source_ns":1791618484459086571,"built_ns":1791618489078095446,"applied_g0":649165,"applied_g2":647525,"term_g0":99,"term_g2":90,"refresh_error":0,"refresh_n":256,"refresh_ms":2000,"refresh_min_ms":2000,"pending_changes_at_least":0,"pending_age_ms_at_sample":0,"lag_sample_ns":1791618489078095506,"refresh_overdue":false},"stats":{"imm_files":500,"imm_dirs":0,"imm_bytes":2048000,"imm_tmin":1791618442881566954,"imm_tmax":1791618446461687870,"tree_files":500,"tree_dirs":0,"tree_bytes":2048000,"tree_tmin":1791618442881566954,"tree_tmax":1791618446461687870}}
-2026-10-10T07:48:09.076Z query-catchup: rc=0 backend=disk
-2026-10-10T07:48:09.076Z query-restore: rc=0 backend=disk
-2026-10-10T07:48:09.078Z query-publish: generation=1 g0=649165 g2=647525 rebuilt=7 refolded=755 edge_reused=0 bytes=3864480 pin_ms=3 build_ms=4619 root_rc=0 files=105907 dirs=3825 logical=676244452

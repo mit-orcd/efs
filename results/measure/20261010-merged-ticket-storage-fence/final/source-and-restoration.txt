@@ -1,7 +1,0 @@
-9ee44e27808971fa25198f427225af3f58475db41c8eb9096becf418b9f0e4e5  src/server/put_fence.c
-3338dfe6a5e7e24688257bc674b1aaa3124bd62ccd40191bf01b7faff752424e  src/server/raft_host.c
-f3648b851e4793771eb11307f47cfe9a5d66f94f4b9aa5f044eaac6c162039c4  src/mgmt/efs_mgmt.c
-987fa69b31954d7becc083d8a7c779352911917013cabe683d36f1bad75133ca  src/meta/session.c
-f634578b7391d6b5fbdac3f48cfc7e29338379b0d769636bd18a7e430e1d42e6  include/efs/protocol.h
-339f170826c97caaad0a207d9ec3d61be7d2a5a824eeffa3faa0b139d86b643d  tests/live/lease_edges.c
-released: installed direct/TCP service restored after lease-retention fixture

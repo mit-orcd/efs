@@ -1,2 +1,0 @@
-root refusal: cached new root, live TXN, catalog IO, parent/generation, binding missing/TXN/mismatch, expiry and permission retain exact refusal without output PASS
-opt-in root stages: disabled quiet; exact labels, actual leaf durations and root/catalog/inode identity PASS

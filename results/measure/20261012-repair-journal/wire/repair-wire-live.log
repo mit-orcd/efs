@@ -1,7 +1,0 @@
-Traceback (most recent call last):
-  File "/home/efs/nuc-receiver-cc090985-wip/tests/live/repair_wire.py", line 48, in <module>
-    start('default')
-  File "/home/efs/nuc-receiver-cc090985-wip/tests/live/repair_wire.py", line 40, in start
-    assert proc.poll() is None,'daemon exited'
-           ^^^^^^^^^^^^^^^^^^^
-AssertionError: daemon exited

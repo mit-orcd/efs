@@ -13,8 +13,8 @@ Storage root `/data1/efs/bench`: filesystem device `259:0`, initial free bytes 3
 
 | Case | Result | Baseline measurements | Hottest sampled symbols |
 |---|---|---|---|
-| [data-buffered-w0-qd16](data-buffered-w0-qd16/baseline.stdout) | PASS | write/1/16 GiB_s=0.761 ops_s=12463.4 p50_us=1505 p99_us=3438 max_us=4684; read/1/16 GiB_s=40.900 ops_s=670109.0 p50_us=23 p99_us=27 max_us=77602 | blake3_hash_many_avx512 (62.8%), _copy_to_iter (7.6%), selinux_inode_permission (1.1%) |
-| [data-direct-w0-qd16](data-direct-w0-qd16/baseline.stdout) | PASS | write/1/16 GiB_s=0.719 ops_s=11773.3 p50_us=1449 p99_us=3252 max_us=116731; read/1/16 GiB_s=1.477 ops_s=24201.7 p50_us=709 p99_us=1185 max_us=4093 | blake3_hash_many_avx512 (12.3%), xfs_btree_get_leaf_keys (4.1%), __memmove_avx512_unaligned_erms (3.5%) |
+| data-buffered-w0-qd16 (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-bench-hot-path-review/dwarf-recheck/data-buffered-w0-qd16/baseline.stdout`) | PASS | write/1/16 GiB_s=0.761 ops_s=12463.4 p50_us=1505 p99_us=3438 max_us=4684; read/1/16 GiB_s=40.900 ops_s=670109.0 p50_us=23 p99_us=27 max_us=77602 | blake3_hash_many_avx512 (62.8%), _copy_to_iter (7.6%), selinux_inode_permission (1.1%) |
+| data-direct-w0-qd16 (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-bench-hot-path-review/dwarf-recheck/data-direct-w0-qd16/baseline.stdout`) | PASS | write/1/16 GiB_s=0.719 ops_s=11773.3 p50_us=1449 p99_us=3252 max_us=116731; read/1/16 GiB_s=1.477 ops_s=24201.7 p50_us=709 p99_us=1185 max_us=4093 | blake3_hash_many_avx512 (12.3%), xfs_btree_get_leaf_keys (4.1%), __memmove_avx512_unaligned_erms (3.5%) |
 
 ## Baseline comparisons
 
@@ -29,11 +29,11 @@ These are best observations within this run, not production configuration recomm
 
 
 **data-buffered-w0-qd16 sampled CPU:** BLAKE3 64.1%, other 10.4%, memory copies/fills 8.3%, synchronization/scheduling 1.1%
-[Flat](data-buffered-w0-qd16/perf/flat.txt), [threads](data-buffered-w0-qd16/perf/by_thread.txt), [call chains](data-buffered-w0-qd16/perf/callers.txt), source annotations under `data-buffered-w0-qd16/perf/annotate-*.stdout`.
+Flat (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-bench-hot-path-review/dwarf-recheck/data-buffered-w0-qd16/perf/flat.txt`), threads (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-bench-hot-path-review/dwarf-recheck/data-buffered-w0-qd16/perf/by_thread.txt`), call chains (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-bench-hot-path-review/dwarf-recheck/data-buffered-w0-qd16/perf/callers.txt`), source annotations under `data-buffered-w0-qd16/perf/annotate-*.stdout`.
 
 
 **data-direct-w0-qd16 sampled CPU:** other 29.5%, storage I/O/filesystem 26.4%, BLAKE3 12.9%, synchronization/scheduling 11.4%, page pinning/IOMMU 5.5%, memory copies/fills 4.1%, time/vDSO 0.4%
-[Flat](data-direct-w0-qd16/perf/flat.txt), [threads](data-direct-w0-qd16/perf/by_thread.txt), [call chains](data-direct-w0-qd16/perf/callers.txt), source annotations under `data-direct-w0-qd16/perf/annotate-*.stdout`.
+Flat (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-bench-hot-path-review/dwarf-recheck/data-direct-w0-qd16/perf/flat.txt`), threads (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-bench-hot-path-review/dwarf-recheck/data-direct-w0-qd16/perf/by_thread.txt`), call chains (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-bench-hot-path-review/dwarf-recheck/data-direct-w0-qd16/perf/callers.txt`), source annotations under `data-direct-w0-qd16/perf/annotate-*.stdout`.
 
 
 Cluster net/store/read/metadata modes were not requested: no seed supplied.

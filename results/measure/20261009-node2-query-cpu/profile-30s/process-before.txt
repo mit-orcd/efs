@@ -1,2 +1,0 @@
-    PID     ELAPSED %CPU %MEM NLWP COMMAND
-1488325       23:40 82.7  7.6   33 /data1/efs/src/efsd --node-id 2 --addr 127.0.0.1 --port 17433 --storage /data1/efs/n2 --quota 187.5G --direct-io --join 127.0.0.1:17432

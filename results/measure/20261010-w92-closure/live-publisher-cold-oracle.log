@@ -1,7 +1,0 @@
-Unmounting /home/efs/w92-survivor-mnt
-Retiring drained efs-fuse PID 127741 for /home/efs/w92-survivor-mnt
-Unmounted /home/efs/w92-survivor-mnt
-Stop with: ./scripts/client.sh stop /home/efs/w92-survivor-mnt
-Logging efs-fuse to /home/efs/efs-fuse-w92-survivor-mnt.log
-Mounted /home/efs/w92-survivor-mnt
-{"old_token_status": -14, "acknowledged_verified": 2100, "actual_files": 2100, "actual_bytes": 8601600, "writer_error": null, "snapshot": {"boot_id": 17023102757887619, "generation": 1, "source_ns": 1791619410211909249, "built_ns": 1791619415383290367, "applied_g0": 653523, "applied_g2": 671560, "term_g0": 106, "term_g2": 95, "refresh_error": 0, "refresh_n": 256, "refresh_ms": 2000, "refresh_min_ms": 2000, "pending_changes_at_least": 0, "pending_age_ms_at_sample": 0, "lag_sample_ns": 1791619415383290428, "refresh_overdue": false}}

@@ -1,7 +1,0 @@
-source reads, command listing, lookup-only traversal and help PASS
-peer catalog, raw filenames, JSON, NUL, terminal escaping and immediate listing PASS
-truthful stats and immutable open/seek/fstat across peer mutation PASS
-fresh caller/descendant permissions and authorized open lifetime PASS
-symlink scope, legacy user names and real .efs collision precedence PASS
-bounded identity exhaustion and sequential release/FORGET recovery PASS
-efs_commands: PASS (focused command gates; large-scale/fault/NFS acceptance remains)

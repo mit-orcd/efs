@@ -1,2 +1,0 @@
-PARENT_OK
-rc=0

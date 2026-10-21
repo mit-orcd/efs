@@ -1,2 +1,0 @@
-opid-admission: BUSY oldest=800004 next=800020 live=16 window=16
-append sequence: 800000 concurrent unique IDs, contiguous ACK, bounded in-flight admission and exhaustion PASS

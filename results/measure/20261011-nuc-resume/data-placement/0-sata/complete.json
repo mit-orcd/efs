@@ -1,9 +1,0 @@
-{
-  "tag": "0-sata",
-  "files": 212648,
-  "errors": [],
-  "cold_checks": 64,
-  "storage": "/data1/efs/w97-data-placement-data-20261011-0",
-  "start_mono": 7394.823597,
-  "seconds": 600
-}

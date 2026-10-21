@@ -1,7 +1,0 @@
-{
-  "duration_seconds": 240,
-  "tag": "early",
-  "early_retire": 1,
-  "root": "/data1/efs/mnt/tiny-w93-read-pressure-early-20261009",
-  "drained": true
-}

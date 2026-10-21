@@ -1,7 +1,0 @@
-Assertion failed: (host_query_source_once(&host,&mixed,&view,revisions,imports,&changed)==EFS_ERR_BUSY), function main, file test.c, line 121.
-Traceback (most recent call last):
-  File "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/release-v0.3.0-pre-alpha/tests/test_query_capture_retry.py", line 92, in <module>
-    subprocess.run([str(p/'test')],check=True)
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 528, in run
-    raise CalledProcessError(retcode, process.args,
-subprocess.CalledProcessError: Command '['/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/efs-query-capture-b4zgoehi/test']' died with <Signals.SIGABRT: 6>.

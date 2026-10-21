@@ -1,4 +1,0 @@
-Oct 10 01:34:00 efs2 systemd[1]: Stopping efsd.service - [systemd-run] /tmp/efs/efsd --node-id 2 --addr 192.168.2.12 --port 17432 --storage /data1 --quota 15G --no-direct-io --join 192.168.2.11:17432...
-Oct 10 01:34:00 efs2 systemd[1]: efsd.service: Deactivated successfully.
-Oct 10 01:34:00 efs2 systemd[1]: Stopped efsd.service - [systemd-run] /tmp/efs/efsd --node-id 2 --addr 192.168.2.12 --port 17432 --storage /data1 --quota 15G --no-direct-io --join 192.168.2.11:17432.
-Oct 10 01:34:00 efs2 systemd[1]: efsd.service: Consumed 49.291s CPU time, 487M memory peak.

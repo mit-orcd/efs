@@ -1,7 +1,0 @@
-raft-session status=0 rc=0 primary=2 op=fence ssh=854 shard=1 epoch=2 state=1 touched=1 index=134
-actual PUT ticket discard=0 cross-group shard=868: pure probes, exact admission/replay, body collision and durable revocation PASS
-raft-session status=0 rc=0 primary=1 op=fence ssh=3671 shard=1 epoch=2 state=1 touched=1 index=136
-actual PUT ticket discard=1 cross-group shard=868: pure probes, exact admission/replay, body collision and durable revocation PASS
-actual PUT ticket exact body saved for cold replay PASS
-raft-session status=0 rc=0 primary=2 op=fence ssh=610 shard=1 epoch=2 state=1 touched=1 index=154
-actual PUT ticket cold restart: exact body admission survives; completed fence rejects status and replay PASS

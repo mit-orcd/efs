@@ -106,8 +106,8 @@ and [unpaced sustained/cold/physical acceptance](amd-overload-admission-20261011
 remain the measured performance and sustained-service evidence. This closure
 does not turn the synthetic W97 slow-follower trials into a new W94 A/B.
 
-[Current full functional logs](../../results/measure/20261011-amd-feedback/evidence/functional/direct/run.log),
-[buffered functional logs](../../results/measure/20261011-amd-feedback/evidence/functional/buffered/run.log)
+Current full functional logs (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-feedback/evidence/functional/direct/run.log`),
+buffered functional logs (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-feedback/evidence/functional/buffered/run.log`)
 and both-mode fault results are retained under the same evidence root. Native
 loopback/software-crash tests do not certify independent hardware failures.
 
@@ -127,7 +127,7 @@ pair1 remains excluded; replacement direct pairs2/3/4 all verify progress by
 every tiny/large worker, actual delayed follower recovery, cold acknowledged
 bytes, physical empty inventory and a fresh post-pressure cold write. These
 results describe the previous AMD feedback build, not the merged release
-candidate. [Compact raw JSON, identities and derived comparison](../../results/measure/20261011-amd-feedback-final/comparison-summary.json)
+candidate. Compact raw JSON, identities and derived comparison (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-feedback-final/comparison-summary.json`)
 retain exact source-tree and binary hashes per fixture.
 
 | Direct TCP, median of three comparable cells | Feedback off | Feedback on |

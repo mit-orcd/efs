@@ -1,7 +1,0 @@
-{
-  "duration_seconds": 3000,
-  "tag": "continuous",
-  "applied_interval_ms": 10,
-  "root": "/data1/efs/mnt/tiny-w97-latest-continuous-v2-20261010",
-  "drained": true
-}

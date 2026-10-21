@@ -27,11 +27,11 @@ invented as zero. The old Oct 5 malformed samples and their withdrawn
 interpretation remain preserved. D30/W23 memory/lag bounds, production policy
 activation and permanent-stall throughput are separate open obligations.
 
-Evidence: [gate log](../../results/measure/20261010-amd-three-hour/evidence/pressure.log),
-[raw observations](../../results/measure/20261010-amd-three-hour/evidence/pressure-current/samples.jsonl),
-[TSV](../../results/measure/20261010-amd-three-hour/evidence/pressure-current/samples.tsv),
-[build identity](../../results/measure/20261010-amd-three-hour/evidence/pressure-build-identity.txt),
-[binary hashes](../../results/measure/20261010-amd-three-hour/evidence/pressure-binary-sha256.txt).
+Evidence: gate log (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-amd-three-hour/evidence/pressure.log`),
+raw observations (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-amd-three-hour/evidence/pressure-current/samples.jsonl`),
+TSV (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-amd-three-hour/evidence/pressure-current/samples.tsv`),
+build identity (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-amd-three-hour/evidence/pressure-build-identity.txt`),
+binary hashes (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-amd-three-hour/evidence/pressure-binary-sha256.txt`).
 
 ## Acceptance checkpoint
 
@@ -65,9 +65,9 @@ verifies all directories after cold restart, followed by physical reclamation.
 Both installed mounts restore successfully. The combined candidate's full
 native suite also passes; broader direct/buffered live candidate acceptance has also passed.
 
-[Buffered regression](../../results/measure/20261010-amd-three-hour/evidence/buffered-mkdir-race.log),
-[direct regression](../../results/measure/20261010-amd-three-hour/evidence/direct-mkdir-race.log),
-[native suite](../../results/measure/20261010-amd-three-hour/evidence/adopt-native.log).
+Buffered regression (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-amd-three-hour/evidence/buffered-mkdir-race.log`),
+direct regression (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-amd-three-hour/evidence/direct-mkdir-race.log`),
+native suite (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-amd-three-hour/evidence/adopt-native.log`).
 This closes the reproduced placement defect, not W66's D36 protection,
 independent leadership, migration or scale obligations.
 
@@ -112,7 +112,7 @@ candidate file has OPEN|CLEAR_PENDING and CLOSE. Both subsequently add the same
 OPEN/CLOSE pair for the cold byte oracle. This counts distinct committed Raft
 entries, not replicas, retries or log lines. Successful deferred lease edges
 return before the ordinary server log message, so text logs alone cannot prove
-this reduction. [Decoded committed identities and applied bounds](../../results/measure/20261010-amd-three-hour/lease-consensus-proof.json).
+this reduction. Decoded committed identities and applied bounds (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-amd-three-hour/lease-consensus-proof.json`).
 
 The early-exit tiny fixture now requires actual physical absence alongside
 sampled-zero GC counters. Independent stopped-store inspection verifies all 16 completed long cases
@@ -133,7 +133,7 @@ All production C/header sources outside FUSE adoption and non-identity compiler
 flags match; fault injection is disabled in the performance builds. Every
 variant keeps its executable hashes unchanged across repeats. This finite
 creation gate does not establish sustained-service performance.
-[Complete observations and verification](../../results/measure/20261010-amd-three-hour/evidence/w94-ab/comparison.json).
+Complete observations and verification (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-amd-three-hour/evidence/w94-ab/comparison.json`).
 
 The fault-enabled native suite passes on `9c7c7a28-retained-combined-fault`.
 The new **direct/TCP** live scenarios pass retained CREATE committed-reply loss
@@ -149,13 +149,13 @@ CLOSE_STEP marker (`owner_rpc` retry budget exhausted). The available evidence
 does not establish whether this is retained cleanup/placement or a fixture
 issue. Buffered follow-up was consequently not started. Keep the legacy guard
 failure and the full two-mode failure matrix open; individual earlier passes
-are not a substitute. [Full failed run and partial passes](../../results/measure/20261010-amd-three-hour/evidence/adopt-fault/direct.log).
+are not a substitute. Full failed run and partial passes (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-amd-three-hour/evidence/adopt-fault/direct.log`).
 
 The initial attempt failed closed because its legacy lost-CREATE-reply hook
 never exercised current retained CREATE framing. That attempt is preserved;
 `9c7c7a28` adds the fault-only hook to actual retained framing and the rerun
 exercises all three stages. Neither failed attempt is presented as acceptance.
-[Initial framing mismatch](../../results/measure/20261010-amd-three-hour/evidence/adopt-fault-unexercised-legacy-marker/direct.log).
+Initial framing mismatch (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-amd-three-hour/evidence/adopt-fault-unexercised-legacy-marker/direct.log`).
 
 ### Negative combined verdict follow-up
 
@@ -187,7 +187,7 @@ decisions remain open. No RDMA work, shared devel changes or pushes were made.
 The final read-only restoration audit confirms the original four installed
 daemons and both installed TCP clients, `.efs` commands disabled, mounted
 paths accessible and no private test daemons remaining.
-[Restoration proof](../../results/measure/20261010-amd-three-hour/evidence/restoration-proof.json).
+Restoration proof (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-amd-three-hour/evidence/restoration-proof.json`).
 
 A clean isolated normal build (`EFS_FAULTS=0`,
 `9c7c7a28-final-normal`) passes `make -j8 all test`. The first queued attempt
@@ -195,7 +195,7 @@ refused to start after the live matrix failed; that refusal is preserved as
 `prior-live-gate-wait.exit=1`. The independent native rerun, after restoration,
 completes with `native.exit=0` and `round.exit=0`; it does not override the
 failed live verdict.
-[Normal native log](../../results/measure/20261010-amd-three-hour/evidence/final-native/native.log).
+Normal native log (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-amd-three-hour/evidence/final-native/native.log`).
 
 Oct 11 audit correction: the original lease-count script decoded the whole
 16-byte applied checkpoint as an integer. The corrected reader validates the

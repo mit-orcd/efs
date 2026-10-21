@@ -1,9 +1,0 @@
-# posix-suite host=nuc mnt=/data1/efs/mnt 2026-10-09T14:58:35Z
-# suite=core
-# select	concurrent_appends
-# select	concurrent_appends_two_proc
-test	result	detail
-concurrent_appends	PASS	
-concurrent_appends_two_proc	PASS	
-# summary pass=2 fail=0 skip=0 notrun=0 total=2 dur=4.6
-# complete

@@ -16,8 +16,8 @@ but wrong SHA256, differing from offset0. Both modes reproduce identically.
 Actual bytes exactly equal the old512-byte payload, zeros through byte131,071,
 then the new payload from131,072 onward. Truncated tiny-1 and untouched tiny-3
 remain exact. This is acknowledged overwrite loss, beyond a warmed-cache issue.
-[Raw two-mode byte audit](../../results/measure/20261012-w112-overwrite/audit/)
-and [expected/actual/cold payloads plus cache trace](../../results/measure/20261012-w112-overwrite/trace/) are retained.
+Raw two-mode byte audit (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-w112-overwrite/audit`)
+and expected/actual/cold payloads plus cache trace (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-w112-overwrite/trace`) are retained.
 
 ## Cause and bounded repair
 
@@ -35,7 +35,7 @@ cleared span state, peer bytes, failed fetches and ambiguous ownership retain
 their existing refusal/merge paths. No publication, fence or durability barrier
 is removed.
 
-The actual production-function [old-source regression](../../results/measure/20261012-w112-overwrite/old-source-regression.log) fails at d9d39acc; the fixed
+The actual production-function old-source regression (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-w112-overwrite/old-source-regression.log`) fails at d9d39acc; the fixed
 regression and existing peer-byte/tombstone/race/error tests pass normally and
 with ASan/UBSan. A new `--ordinary-overwrite-only` live fixture covers former
 512-byte spans becoming a full chunk, two chunks plus a tail, full zero bytes
@@ -56,7 +56,7 @@ and eleven ASan/UBSan gates pass. All 1,335 source/linked-evidence inputs remain
 unchanged. Both direct and buffered ordinary-overwrite runs pass every exact
 primary, warmed-peer and cold SHA256 oracle for all four cases, then physical
 fragment and metadata queue cleanup; normal mounts restore successfully.
-[Full gates, binary identities and raw both-mode evidence](../../results/measure/20261012-v030-overwrite-qualified/02b9918b/acceptance-summary.json)
+Full gates, binary identities and raw both-mode evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-v030-overwrite-qualified/02b9918b/acceptance-summary.json`)
 include 41 retrieved artifacts verified against their SHA256 manifest.
 
 Independent [boundary review](../reviews/w112-overwrite-20261011/README.md)

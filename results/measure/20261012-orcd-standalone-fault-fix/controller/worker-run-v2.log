@@ -1,5 +1,0 @@
-inactive actual coordinator wrapper+memory journal: malformed receipt before authority, current owner/committed term, lost reply debt, old-owner cancel/seal/retire, new UUID takeover PASS; ReadIndex/proposal/writer RPC are adapters
-actual experimental GC hook/helper: default zero debt scans; no delete/ACK on pending/corrupt/IO; unhosted/failed proof blocks target GC PASS
-fault harness self-test: pass
-fault suite {'PASS': 23}
-SUITE_EXIT=0

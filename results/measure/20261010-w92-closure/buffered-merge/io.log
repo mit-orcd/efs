@@ -1,4 +1,0 @@
-query-disk: nodes shard=1 previous=28673 rc=-1
-query-disk: raw shard=1 rc=-1 errno=5
-query-disk: raw shard=1 rc=-1 errno=5
-query disk I/O: windows, lookup, packed records, partial ENOSPC, FD reuse and fsync refusal PASS

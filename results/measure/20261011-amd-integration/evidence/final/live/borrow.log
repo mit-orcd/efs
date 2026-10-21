@@ -1,6 +1,0 @@
-Unmounting /data1/efs/mnt
-Retiring drained efs-fuse PID 493911 for /data1/efs/mnt
-Unmounted /data1/efs/mnt
-Unmounting /data1/efs/mnt2
-Retiring drained efs-fuse PID 493949 for /data1/efs/mnt2
-Unmounted /data1/efs/mnt2

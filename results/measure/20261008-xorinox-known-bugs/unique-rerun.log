@@ -1,5 +1,0 @@
-Traceback (most recent call last):
-  File "/data1/efs-known-bugs/src/tests/live/gc_reclamation.py", line 128, in <module>
-    assert mount.is_dir() and not os.path.ismount(mount) and not any(mount.iterdir()), 'mount path must be empty and unmounted'
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-AssertionError: mount path must be empty and unmounted

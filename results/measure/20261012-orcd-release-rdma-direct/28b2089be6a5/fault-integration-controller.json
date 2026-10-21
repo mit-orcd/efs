@@ -1,4 +1,0 @@
-{
-  "suite": "fault-integration",
-  "transcript": "gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='\"28b2089be6a5-release-normal\"' -DEFS_VERSION='\"v0.3.0-pre-alpha-candidate\"' -DEFS_GIT_BRANCH='\"release-v0.3.0-pre-alpha\"' -DEFS_BUILD_TIME='\"2026-10-12T04:02:23Z\"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/faults/fault_sim tests/faults/fault_sim.c src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_ns.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o src/sim/sim_disk.o libefs.a -lpthread -lm -ldl -libverbs\nfault harness self-test: pass\nfault suite {'PASS': 19, 'GAP': 2}\nsuite-exit=2"
-}

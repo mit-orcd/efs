@@ -1,1 +1,0 @@
-{"platform": "darwin", "directory": "/private/tmp/efsmac-x/w55-macos-stress-20261009", "workers": 8, "iterations": 20, "boundary": "successful cp/close, no added fsync", "copy_command": "cp -X", "operations_passed": 640, "operations_expected": 640, "elapsed_seconds": 70.61649203300476, "errors": []}

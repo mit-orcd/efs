@@ -1,4 +1,0 @@
-cluster: mac
-== stop efsd on efs1
-== stop efsd on efs2
-== stop efsd on efs3

@@ -60,7 +60,7 @@ publication, overlapping non-append extension, concurrent clients, changed
 leaders and lost replies. Keep durable replay and legacy compatibility tests.
 
 W73's proposed explicit write-callback publication is preserved in
-[the unaccepted patch](../../results/measure/20261008-replay-readiness/w73-not-accepted.patch).
+the unaccepted patch (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-replay-readiness/w73-not-accepted.patch`).
 It was removed after that failed run. After the coordinated W64 fix, the callback change was reapplied and gated successfully (see W73 acceptance below). The opt-in live
 `--append-sync-boundary` exercises repeated 128 KiB appends with explicit fsync,
 peer visibility before close and cold crash bytes; it does not require W73.
@@ -89,7 +89,7 @@ a new cursor with an old raw foreign-reservation scan. Lost COMMIT and abrupt
 LSM exit, with foreign-lane resolution before inode resolution, recover the same
 offset or the original absent reservation according to the durable decision.
 The full AMD `make -j12 test` passes, console `/tmp/efs-append-txn-unit.log`.
-[Exact source hashes and commands](../../results/measure/20261008-replay-readiness/append-transaction-tests.json)
+Exact source hashes and commands (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-replay-readiness/append-transaction-tests.json`)
 record this staged implementation.
 
 **Production APPEND routing is not changed by this prerequisite.** Next:
@@ -119,7 +119,7 @@ partial foreign-lane resolution, reopened completion and reopened prune commits
 recover exact size and original reservation reply. AMD targeted tests,
 ASan/UBSan and the full unit/document suite pass. The bounded image and
 per-participant checks also refuse future oversized plans before PREPARE.
-[Source hashes and gates](../../results/measure/20261008-replay-readiness/append-completion-tests.json).
+Source hashes and gates (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-replay-readiness/append-completion-tests.json`).
 Production routing integration and the live append/fsync reproducer are next;
 this prerequisite alone does not close W64 or activate D25.
 
@@ -141,9 +141,9 @@ inode-leader death, cold retry, ACK retirement and changed-payload refusal pass.
 Single-client POSIX: **216 PASS, 0 FAIL, 1 SKIP**. Two-client POSIX: **64/64**.
 Concurrent append during GC retains all **800 exact cold records**; physical
 fragment deletion, quotas, late-PUT fencing and restart inventory pass.
-[Fixture manifest](../../results/measure/20261008-replay-readiness/append-authority-pass/manifest.json),
-[gate console](../../results/measure/20261008-replay-readiness/append-authority-pass/console.log),
-[append/extension cases](../../results/measure/20261008-replay-readiness/append-authority-pass/append-sync-boundary.json).
+Fixture manifest (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-replay-readiness/append-authority-pass/manifest.json`),
+gate console (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-replay-readiness/append-authority-pass/console.log`),
+append/extension cases (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-replay-readiness/append-authority-pass/append-sync-boundary.json`).
 
 A combined shutdown run exposed a separate client drain problem after a failed
 PUT: clean stop retained a new partial dirty body until its 60-second deadline.
@@ -167,13 +167,13 @@ retention, expiry, detached REPORT ownership and deadline restoration. The
 full unit suite passes (`/tmp/efs-stop-dirty-unit.log`). The complete direct/TCP
 append/replay/POSIX/GC run now passes graceful leader shutdown and exact cold
 acknowledged bytes; a second run validates the final in-flight ownership check.
-[Shutdown evidence](../../results/measure/20261008-replay-readiness/stop-flight-pass/shutdown-mutations.json).
+Shutdown evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-replay-readiness/stop-flight-pass/shutdown-mutations.json`).
 
 The new deterministic `--stop-dirty-recovery` gate stops all four private
 daemons after a new partial write. Both fsync and close return **EIO**. After
 restart, clean stop drains the retained **45 bytes in 0.270 seconds**, and a
 cold remount reads the exact SHA-256-verified body. No force-discard is used.
-[Recovery evidence](../../results/measure/20261008-replay-readiness/stop-partial-pass/stop-dirty-recovery.json).
+Recovery evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-replay-readiness/stop-partial-pass/stop-dirty-recovery.json`).
 The failed combined run is retained under `shutdown-before-fix`; its failure
 remains recorded rather than being counted as a pass. D27 whole-call recovery
 and small-host memory acceptance are still separate obligations.
@@ -193,7 +193,7 @@ return all requested bytes; no short result is hidden or retried by the test.
 The peer verifies every body before the writer is allowed to close. Actual
 FUSE callback trace is required, then daemon crash/restart verifies exact
 hashes. Explicit append/fsync and peer sparse extensions run alongside these.
-[All cases](../../results/measure/20261008-replay-readiness/sync-publication-pass/synchronous-writes.json).
+All cases (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-replay-readiness/sync-publication-pass/synchronous-writes.json`).
 
 The same run passes lost-reply/leader-death append replay, deterministic dirty
 stop recovery, graceful leader shutdown, all **216 POSIX + 64 peer tests**
@@ -202,7 +202,7 @@ fragment inventory and late-PUT fencing after restart. Full AMD units pass in
 `/tmp/efs-sync-retry-unit.log`; extracted production callback tests also verify
 ordinary-write behavior, both synchronous flags, failure propagation, empty
 writes and inherited deadline restoration.
-[Gate console](../../results/measure/20261008-replay-readiness/sync-publication-pass/console.log).
+Gate console (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-replay-readiness/sync-publication-pass/console.log`).
 The earlier failed candidate remains historical evidence, not an outstanding
 routing failure. Hardware power loss and the final multi-mode matrix are owed;
 D25 remains staged.
@@ -226,8 +226,8 @@ Lost COMMIT, partial participant resolution, bounded retirement and abrupt
 LSM recovery still pass. AMD targeted tests, actual meta/txn ASan+UBSan, full
 units and the complete direct/TCP synchronous-write/append/replay/POSIX/GC/
 shutdown/recovery gate all pass.
-[Measured unit evidence](../../results/measure/20261008-replay-readiness/streaming-append-pass/unit-evidence.json),
-[live console](../../results/measure/20261008-replay-readiness/streaming-append-pass/console.log).
+Measured unit evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-replay-readiness/streaming-append-pass/unit-evidence.json`),
+live console (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-replay-readiness/streaming-append-pass/console.log`).
 Foreign-owner admission remains linear in the outstanding reservation rows;
 this change bounds memory and removes completion's full-burst copies, not a
 claim of thousand-client metadata scalability.
@@ -246,8 +246,8 @@ Actual production-function tests cover expiry before/after RPC, a one-millisecon
 remaining budget, contended reacquisition, identity across three attempts and
 all failure ownership paths. AMD targeted and full units pass. The complete
 AMD direct/TCP sync/append/replay/POSIX/peer/GC/shutdown/cold recovery run also
-passes on this final code. [Unit evidence](../../results/measure/20261008-replay-readiness/append-budget-pass/unit-evidence.json),
-[live console](../../results/measure/20261008-replay-readiness/append-budget-pass/console.log).
+passes on this final code. Unit evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-replay-readiness/append-budget-pass/unit-evidence.json`),
+live console (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-replay-readiness/append-budget-pass/console.log`).
 This closes this retry-loop timing gap; durable unknown-outcome ownership and
 whole-write fault/RSS acceptance remain D27/W72/W88 work.
 
@@ -262,8 +262,8 @@ for both flags, and delete/reclamation returns physical inventory to zero.
 This closes the live failed-publication retention gate for these two callback
 paths. Mount-sync, the final operating-mode matrix and hardware power-loss
 acceptance remain owed. AMD installed service was restored direct-I/O/TCP.
-[Failure/recovery evidence](../../results/measure/20261008-replay-readiness/sync-fault-pass/synchronous-write-fault.json),
-[live console](../../results/measure/20261008-replay-readiness/sync-fault-pass/console.log).
+Failure/recovery evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-replay-readiness/sync-fault-pass/synchronous-write-fault.json`),
+live console (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-replay-readiness/sync-fault-pass/console.log`).
 
 ## Evidence
 

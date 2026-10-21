@@ -1,5 +1,0 @@
-Traceback (most recent call last):
-  File "/tmp/amd-v031-buffered-live-fixture.py", line 18, in <module>
-    server.append(subprocess.Popen(cmd,env=env,stdout=f,stderr=f));time.sleep(.8);assert server[-1].poll() is None
-                                                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^
-AssertionError

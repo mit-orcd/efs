@@ -124,10 +124,10 @@ an item is open or closed; reconcile its evidence before changing status.
   retained W23 and quorum-loss explanation before correction.
 - [Span replay fixture](round6-span-replay-repro.c),
   [output](round6-span-replay-output.txt) and
-  [dependency fingerprints](round6-fixture-dependencies.json) — isolated W88
+  dependency fingerprints (archived raw evidence: `archive/raw-evidence-20261021:docs/archive/round6-fixture-dependencies.json`) — isolated W88
   metadata failure; not a passing public-path acceptance gate.
 
-- [Corrected W23 sample expansion](round6-w23-samples-corrected.tsv) and
+- Corrected W23 sample expansion (archived raw evidence: `archive/raw-evidence-20261021:docs/archive/round6-w23-samples-corrected.tsv`) and
   [recomputed peaks](round6-w23-peaks-corrected.txt) — W89 evidence; original
   result files and their withdrawn interpretation remain preserved.
 

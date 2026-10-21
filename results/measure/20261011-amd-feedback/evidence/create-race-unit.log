@@ -1,2 +1,0 @@
-CREATE adoption/competing OPEN barrier: one lease, two descriptors, last-close ownership PASS
-FUSE ambiguous OPEN/CLOSE: retained ownership, reopen barrier and clean-stop retry PASS

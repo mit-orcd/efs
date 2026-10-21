@@ -22,7 +22,7 @@ pending token while retaining accepted bytes/pins. Other failures retain both.
 
 Validation:
 
-- NUC Linux full `make -j8 test`: PASS; [output](nuc-test.log).
+- NUC Linux full `make -j8 test`: PASS; output (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261006-durable-publication/nuc-test.log`).
 - Real LSM child `_exit` without close/flush: committed and rejected receipts
   survive reopen after a superseding write and fence. Original retry cannot
   restore old mappings. Atomic batch failure leaves neither mapping nor receipt;

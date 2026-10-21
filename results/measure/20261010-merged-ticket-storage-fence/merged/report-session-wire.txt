@@ -1,3 +1,0 @@
-raft-session status=0 rc=0 primary=1 op=fence ssh=33 shard=1 epoch=2 state=1 touched=1 index=2183
-REPORT mount identity: discarded reply/exact mapping retry, malformed frame, revoked replay, delayed mapping/activation apply and first-touch rejection PASS
-REPORT cold restart: revoked mapping replay remains STALE PASS

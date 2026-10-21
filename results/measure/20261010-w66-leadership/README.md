@@ -12,14 +12,14 @@ preserved. No D36 or independent-host/power-loss claim.
   An old idle matched tail cannot initiate handoff to an unavailable peer.
 - Production host policy extraction: two-second grace, actual sparse voter
   set, lag refusal, thirty-second backoff retained across source re-election,
-  membership-change reset. `make test` runs this gate; [native log](native.log).
-- [Four-voter results](four-voter/results.json): 800 reads, 36 exact-inode
+  membership-change reset. `make test` runs this gate; native log (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w66-leadership/native.log`).
+- Four-voter results (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w66-leadership/four-voter/results.json`): 800 reads, 36 exact-inode
   recovery probes. Both groups explicitly reconfigured to 0xf through
   production raft-change. Preferred leaders on nodes 1/2 before load, after
   both rejoin cases and after cold restart.
-- [Legacy results](legacy/results.json): same 800/36 gates, production default
+- Legacy results (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w66-leadership/legacy/results.json`): same 800/36 gates, production default
   memberships 0x7/0xe, preferred leaders on nodes 1/3 at those boundaries.
-- [Prolonged loss](outage/results.json): each preferred leader absent for 35
+- Prolonged loss (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w66-leadership/outage/results.json`): each preferred leader absent for 35
   seconds. 420 read probes pass without retries at the harness call level,
   identity mismatch, observed leader/term churn or failure. Available groups
   may temporarily share a surviving leader. Rejoin/cold placement also passes.

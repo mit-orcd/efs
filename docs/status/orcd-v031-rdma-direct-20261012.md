@@ -65,7 +65,7 @@ the frozen `40f4509d` tested here. Those AMD results are not counted as ORCD
 RDMA results. No product code or release ref is modified by
 this qualification.
 
-[Raw execution evidence](../../results/orcd-v031-rdma-direct-20261012-40f4509d/)
+Raw execution evidence (archived raw evidence: `archive/raw-evidence-20261021:results/orcd-v031-rdma-direct-20261012-40f4509d`)
 includes the exact controller scripts, source/binary manifests, native and
 sanitizer logs, per-host TSVs, cold hashes and ordinary physical-GC observations.
 

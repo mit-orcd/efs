@@ -1,6 +1,0 @@
-suite	result_file	summary
-native_core	after-fix/native-core-final.tsv	# summary pass=212 fail=0 skip=0 notrun=0 total=212 dur=14.8
-core	after-fix/posix-mac-profile.tsv	# summary pass=212 fail=0 skip=0 notrun=0 total=212 dur=1594.2
-persist_prepare	recovered/persist-prepare-final.tsv	# summary pass=26 fail=0 skip=0 total=26 dur=331.8
-persist_verify	recovered/persist-verify-final.tsv	# summary pass=26 fail=0 skip=0 total=26 dur=100.7
-peer	final-peer/peer-final.tsv	# summary pass=64 fail=0 skip=0 total=64 dur=1506.8

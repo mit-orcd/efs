@@ -1,1 +1,0 @@
-namespace session: fenced replay/effects refused; concurrent shared guards block revocation through commit/abort and delayed prepare; cold WAL guards/floors PASS

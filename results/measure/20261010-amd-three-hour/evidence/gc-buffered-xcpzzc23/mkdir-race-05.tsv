@@ -1,6 +1,0 @@
-# posix-2client host_a=local-a host_b=local-b mnt=/data1/efs/mnt 2026-10-11T04:04:42Z
-# select	peer_mkdir_exclusive_race
-test	result	detail
-peer_mkdir_exclusive_race	PASS	
-# summary pass=1 fail=0 skip=0 total=1 dur=0.3
-# complete

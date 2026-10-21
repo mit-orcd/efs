@@ -1,1 +1,0 @@
-append PREPARE: ordered floor/inode guards, bounded cohorts, every applied verdict before decision, refusal/abort cleanup and ambiguous COMMIT retention PASS

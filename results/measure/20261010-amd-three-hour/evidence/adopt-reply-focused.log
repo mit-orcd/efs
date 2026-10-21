@@ -1,2 +1,0 @@
-opid-admission: BUSY oldest=8 next=24 live=16 window=16
-retained sequenced lease: immutable retries, unknown probe, pinned ACK, durable negative proof and capacity PASS

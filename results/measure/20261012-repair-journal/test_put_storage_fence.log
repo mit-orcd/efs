@@ -1,1 +1,0 @@
-storage session fence: full UUID, monotonic cold floor, guarded-write ordering, file/directory sync failures and corrupt-certificate rejection PASS

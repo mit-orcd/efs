@@ -1,6 +1,0 @@
-{
-  "original": "/data1/efs/devel-nuc-20261011/clock-install-initial-readiness-failure",
-  "verification": "/data1/efs/devel-nuc-20261011/clock-install-readiness-retry/verified.json",
-  "reason": "Original payload verification ran before every recovering listener was ready; unchanged images and every prior payload now verified.",
-  "controller_commit": "recorded in retry provenance"
-}

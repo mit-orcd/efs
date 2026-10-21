@@ -1,4 +1,0 @@
-1cad6e034e5524676e392277f87b1aa58679c3793c7f01bd544d03545f250167  src/client/publication_writeback.c
-5e67423999046a96b1cf55203d277762455c3db9284ccb0807fa6a8349488666  src/client/write.c
-0dd36f8940ff4fd9e70d0b134e4442be7fadfac6ffbe41edaa3b14074930f466  src/meta/meta_apply.c
-8beaeee401af605b94ae31c6a8bf21ceff3589280ec64f025c79631f277ecd16  scripts/client_processes.py

@@ -1,4 +1,0 @@
-pending_uuid=57c0010dadfdb831f16beeff6354997a ino=5996 name=pending shard=1900 hashed=0
-pending CREATE epoch7: same inode on retry, exact adoption/CLOSE and replay cannot reacquire pending ownership PASS ino=5996
-pending_uuid=eb4f5f299cac5660fa07e6c587224120 ino=3359 name=pending1 shard=3359 hashed=1
-pending CREATE epoch7: same inode on retry, exact adoption/CLOSE and replay cannot reacquire pending ownership PASS ino=3359

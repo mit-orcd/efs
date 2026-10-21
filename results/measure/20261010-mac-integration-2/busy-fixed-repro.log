@@ -1,7 +1,0 @@
-Traceback (most recent call last):
-  File "/var/tmp/efs-busy-repro.py", line 2, in <module>
-    base=tempfile.mkdtemp(prefix='busy-repro-',dir=sys.argv[1])
-  File "/usr/lib64/python3.13/tempfile.py", line 381, in mkdtemp
-    _os.mkdir(file, 0o700)
-    ~~~~~~~~~^^^^^^^^^^^^^
-OSError: [Errno 16] Device or resource busy: '/mnt/efs-b/busy-repro-zq584hu1'

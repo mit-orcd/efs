@@ -21,11 +21,11 @@ scratch children are removed without clearing caller-owned parents.
 Validation:
 
 - NUC Linux full `make -j8 test`: PASS, including six harness regressions and
-  CLI/parser/BLAKE3 tests. [Full output](nuc-test.log).
+  CLI/parser/BLAKE3 tests. Full output (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261006-bench-profile-harness/nuc-test.log`).
 - NUC real baseline-only local smoke: five cases PASS (BLAKE3 one-shot/stream,
   buffered/direct data and metadata). Additional inline/fixed/auto writer and QD1/16
   bounded data matrix: 12/12 PASS, 1 MiB fragment payload cap.
-  [Matrix output](nuc-data-matrix.log). A one-slot window CLI regression proves
+  Matrix output (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261006-bench-profile-harness/nuc-data-matrix.log`). A one-slot window CLI regression proves
   reads use resident fragments after cumulative writes wrap.
 - NUC has no perf package and sudo needs a password; no package or kernel-policy
   changes were made. Baseline-only mode was explicitly selected there.

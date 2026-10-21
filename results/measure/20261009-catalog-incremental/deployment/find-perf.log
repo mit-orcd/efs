@@ -1,2 +1,0 @@
-[ perf record: Woken up 1 times to write data ]
-[ perf record: Captured and wrote 0.118 MB /data1/efs/deploy-query-5084f8c2/find-perf.data (573 samples) ]

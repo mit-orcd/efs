@@ -1,3 +1,0 @@
-root label limits: successful live regular-file lookup can emit catalog-absent; hard live IO keeps IO under live-txn label PASS
-root refusal: cached new root, live TXN, catalog IO, parent/generation, binding missing/TXN/mismatch, expiry and permission retain exact refusal without output PASS
-opt-in root stages: disabled quiet; exact labels, actual leaf durations and root/catalog/inode identity PASS

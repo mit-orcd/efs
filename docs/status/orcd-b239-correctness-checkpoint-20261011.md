@@ -2,8 +2,8 @@
 
 Recorded October 11, 2026 EDT. Exact source:
 `b239dc7de104ff8437e49d9333a529790601464c`.
-[Raw gate summary](../../results/measure/20261011-orcd-rollout/b239dc7de104-private/acceptance-summary.json)
-and [artifact hashes](../../results/measure/20261011-orcd-rollout/b239dc7de104-private/artifact-sha256.json)
+Raw gate summary (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-orcd-rollout/b239dc7de104-private/acceptance-summary.json`)
+and artifact hashes (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-orcd-rollout/b239dc7de104-private/artifact-sha256.json`)
 retain the source-specific results. This is not acceptance of the subsequent
 common candidate or closure of the original concurrent-pressure failures.
 
@@ -45,7 +45,7 @@ admission were disabled. The original RDMA installation and stores were untouche
 ## Idle state and remaining blockers
 
 All seven private mounts and four private listeners/processes are stopped after
-safe drain. [Final original-service proof](../../results/measure/20261011-orcd-rollout/b239dc7de104-private/final-original-service-proof.json)
+safe drain. Final original-service proof (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-orcd-rollout/b239dc7de104-private/final-original-service-proof.json`)
 confirms all eleven original 4fe services remain non-root, with their original
 source revision. All 24 private stores, certificates, binaries, logs and the
 ordinary-write fixture are preserved; no upgraded store was opened by an old reader.

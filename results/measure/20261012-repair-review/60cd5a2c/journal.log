@@ -1,9 +1,0 @@
-fenced source rc=-14
-fenced source rc=-14
-kv-compact: start l0=1 inputs=1 range=1 l0only=0
-kv-compact: end bytes=790 ms=0 l0=0 l1=1 rc=0
-repair journal mem: exact replay/conflict, failed batches, floor and GC dependency PASS
-repair journal synced-LSM: exact replay/conflict, failed batches, floor and GC dependency PASS
-repair journal cold: admitted debt after abrupt process exit; terminal floor after flush/compaction/reopen PASS
-repair journal bounded: exact128 pending jobs;129th BUSY; durable retirement releases admission slot PASS
-inactive repair-journal prerequisite PASS; physical repair and distributed authority NOTRUN

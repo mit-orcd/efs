@@ -1,8 +1,0 @@
-fcstor007: POSIX runner pid=1564477
-fcstor008: POSIX runner pid=2608418
-fcstor009: POSIX runner pid=2433546
-fcstor010: POSIX runner pid=2154425
-fcstor011: POSIX runner pid=2390051
-fcstor012: POSIX runner pid=2563911
-fcstor013: POSIX runner pid=2466526
-tiny-files benchmark pid=1564996

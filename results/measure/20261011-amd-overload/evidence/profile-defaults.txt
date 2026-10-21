@@ -1,2 +1,0 @@
-defaults: transport=tcp direct=1 admission=1 gc_idle_ms=20 commands=0 server_commands=0
-overrides: admission=0 gc_idle_ms=1000

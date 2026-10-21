@@ -1,2 +1,0 @@
-READY: stop private policy nodes 2/3, then create start marker
-{"result": "PASS", "phase": "loss", "features": 0, "versions": [1, 2, 3, 4], "verdicts": [-13, -13, -13, -13, -13, -13], "retained_bytes": 678}

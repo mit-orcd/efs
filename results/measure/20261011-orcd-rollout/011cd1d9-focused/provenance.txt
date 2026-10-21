@@ -1,1 +1,0 @@
-Corrected gate from 011cd1d9; root redirected to the unchanged production implementation in /tmp/efs-orcd-unit-619301ee3bd3. This focused check does not replace full 011cd1d9 snapshot/source validation.

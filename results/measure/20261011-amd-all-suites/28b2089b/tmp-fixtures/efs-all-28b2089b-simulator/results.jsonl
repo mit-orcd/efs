@@ -1,7 +1,0 @@
-{"layer":"sim","case":"one_server_lost","status":"PASS","detail":"readable with one voter down; new publication rejected; sim read still opens the crashed server store","completion":"sim_publish"}
-{"layer":"sim","case":"restart","status":"PASS","detail":"published bytes and name survive same-storage restart; unpublished put does not","completion":"sim_publish"}
-{"layer":"sim","case":"one_fragment_corrupt","status":"PASS","detail":"each fragment position reconstructs; the damaged copy is not repaired","completion":"sim_publish"}
-{"layer":"sim","case":"missing_checksum","status":"PASS","detail":"sim refuses a fragment with no sidecar, including after its payload is flipped","completion":"sim_publish"}
-{"layer":"sim","case":"two_fragments_unavailable","status":"PASS","detail":"two damaged fragments are an explicit read failure","completion":"sim_publish"}
-{"layer":"sim","case":"repair_restores_protection","status":"GAP","detail":"no repair; a readable 2-of-3 chunk is not fully protected and a restarted node does not rebuild lost fragments","completion":"sim_publish"}
-{"layer": "integration", "case": "cluster", "status": "not_run", "detail": "pass --integrate to start the private cluster"}

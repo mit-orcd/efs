@@ -1,3 +1,0 @@
-fcstor013 begin 13:58:12Z
-fcstor013 fuse window=--time 3695453.260,3697433.260
-fcstor013 ANA_DONE 13:58:20Z

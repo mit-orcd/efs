@@ -1,4 +1,0 @@
-Stop with: ./scripts/client.sh stop /home/efs/w92-survivor-mnt
-Logging efs-fuse to /home/efs/efs-fuse-w92-survivor-mnt.log
-Mounted /home/efs/w92-survivor-mnt
-{"phase": "quota-check", "files": 500, "bytes": 2048000, "payloads_verified": 500}

@@ -1,6 +1,0 @@
-cluster: mac
-kernel/mnt/efs      	<world>
-TARGET   SOURCE   FSTYPE        OPTIONS
-/mnt/efs efs-fuse fuse.efs-fuse rw,nosuid,nodev,relatime,user_id=1001,group_id=1001,allow_other
-admin      30570    2045 Ss         00:00 bash -c sudo -n fuser -vm /mnt/efs; sudo -n exportfs; findmnt /mnt/efs; ps -eo user,pid,ppid,stat,etime,args | grep -E "posix|python3|timeout"
-admin      30604   30570 S          00:00 grep -E posix|python3|timeout

@@ -1,2 +1,0 @@
-cluster: mac
-scp: /var/tmp/efs-mac-devel-0abe7fd7/posix2.json: No such file or directory

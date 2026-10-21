@@ -60,7 +60,7 @@ uses the production synchronous KV WAL and compile-only compactor park.
   not promise allocator RSS returns to baseline.
 - Four update/recovery rounds and exact durable reopen bytes pass.
 
-[Raw engine log](../../results/measure/20261008-mac-compaction-pressure/kv-pressure.log).
+Raw engine log (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-mac-compaction-pressure/kv-pressure.log`).
 This is an engine experiment, not a stalled Raft follower or hardware power-loss
 experiment. The private rsynced build reports version `unknown`; identify source
 by this branch/commit and the retained source checksums, not that version string.
@@ -72,17 +72,17 @@ and admission test pass. Local admission tests also pass with AddressSanitizer
 and UndefinedBehaviorSanitizer. The five W89 Python tests pass, including refusal
 of incomplete cap evidence. An initial new-test failure left a durable fixture
 key for the next scan-order test; fixture cleanup was repaired before the passing
-full gate. [Full test log](../../results/measure/20261008-mac-compaction-pressure/mac-pressure-final-tests.log)
-and [private fault-build log](../../results/measure/20261008-mac-compaction-pressure/mac-pressure-private-build.log).
+full gate. Full test log (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-mac-compaction-pressure/mac-pressure-final-tests.log`)
+and private fault-build log (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-mac-compaction-pressure/mac-pressure-private-build.log`).
 
 The restored Mac storage cluster runs all three daemons as `efs:efs`, with
 matching binary SHA256 `dc8cb6970c6920d1810e536a8a7bf2dd4539834c82fd59074b14c49405f56120`,
 direct I/O/TCP and explicit `EFS_COMMANDS=0`, `EFS_COMMANDS_SERVER=0`.
 Both groups converge at commit=applied on all nodes after the rolling restart.
 Gateway `efsgw` remains stopped; no Mac NFS or FUSE acceptance is claimed.
-[Restored health](../../results/measure/20261008-mac-compaction-pressure/mac-pressure-health.log),
-[policy](../../results/measure/20261008-mac-compaction-pressure/mac-pressure-policy.log),
-[source checksums](../../results/measure/20261008-mac-compaction-pressure/source-sha256.txt).
+Restored health (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-mac-compaction-pressure/mac-pressure-health.log`),
+policy (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-mac-compaction-pressure/mac-pressure-policy.log`),
+source checksums (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-mac-compaction-pressure/source-sha256.txt`).
 
 ## Required integration contract and remaining gates
 

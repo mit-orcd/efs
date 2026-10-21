@@ -1,7 +1,0 @@
-{
-  "duration_seconds": 600,
-  "tag": "10ms",
-  "applied_interval_ms": 10,
-  "root": "/data1/efs/mnt/tiny-w93-checkpoint-10ms-20261010",
-  "drained": true
-}

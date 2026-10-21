@@ -24,7 +24,7 @@ The expanded metadata regression runs ordinary and pending cases, covers failed
 receipt persistence, replay after unlink and name reuse, and retirement followed
 by a new request. On xefs1, the original code fails eight assertions; the fix
 passes `tests/test_meta_apply`. Fault-enabled `efsd` and `efs-fuse` builds pass.
-[Captured red/green output](../../results/measure/20261008-w58-negative-replay/meta-red-green.txt).
+Captured red/green output (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-w58-negative-replay/meta-red-green.txt`).
 
 ## Added live gates — initial outage checkpoint
 

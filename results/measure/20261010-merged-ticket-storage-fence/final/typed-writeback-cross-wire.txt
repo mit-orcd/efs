@@ -1,3 +1,0 @@
-actual ticket window: 130 extra uploads/publications, discarded retirement replies, bounded floor progress and byte preservation PASS
-actual pre-PUT ticket admission, atomic PUBLISHED mapping, exact ticketed receipt/retirement and newer bytes PASS
-typed cache lost publication/retirement ACK, exact newer-range ownership and peer preservation PASS ci=1 group=2

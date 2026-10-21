@@ -94,7 +94,7 @@ The oracle corruption regression passes on AMD: retained refusal information
 cannot waive corrupt acknowledged tiny bytes or large fsync-prefix bytes, and
 unknown fixture files are not retired before all acknowledged checks pass.
 
-[Reconciled cell summary](../../results/measure/20261011-amd-overload/summary.json)
+Reconciled cell summary (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-overload/summary.json`)
 keeps the sustained-load and cold/reclamation verdicts separate. The initial
 control/direct-on/buffered-on sampled peak charged usage is 4.134/3.865/3.865
 GB on the most occupied node. Thirty-second samples can miss the terminal
@@ -164,10 +164,10 @@ after service stop. Optional utilities now preserve the existing artifact;
 the subsequent deployment and service audit pass. The failed installation
 log remains evidence, separate from the zero-exit final deployment.
 
-[Restoration proof](../../results/measure/20261011-amd-overload/evidence/restoration-proof.json),
-[deployment record](../../results/measure/20261011-amd-overload/evidence/deployment/deployment.json),
-[profile checks](../../results/measure/20261011-amd-overload/evidence/profile-defaults.txt)
-and [raw file hashes](../../results/measure/20261011-amd-overload/evidence/retrieved-sha256.json)
+Restoration proof (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-overload/evidence/restoration-proof.json`),
+deployment record (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-overload/evidence/deployment/deployment.json`),
+profile checks (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-overload/evidence/profile-defaults.txt`)
+and raw file hashes (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-overload/evidence/retrieved-sha256.json`)
 retain the accepted state. Core implementation is `d9db68e7`, expanded reply
 and retry regressions `fc826030`, build dependencies `4e9c0f20`, and full
 functional/long acceptance `55906500`. No push was performed.

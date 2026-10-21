@@ -1,8 +1,0 @@
-{"qd": 8, "records": 4000, "ops_s": 15038.2, "p50_us": 541.5, "p95_us": 681.9, "p99_us": 881.6, "root": "/data1/efs/bench", "reserve": 0}
-{"qd": 8, "records": 4000, "ops_s": 15555.3, "p50_us": 533.9, "p95_us": 665.8, "p99_us": 829.5, "root": "/data1/efs/bench", "reserve": 1048576}
-{"qd": 8, "records": 4000, "ops_s": 15424.8, "p50_us": 536.2, "p95_us": 667.9, "p99_us": 968.9, "root": "/data1/efs/bench", "reserve": 1048576}
-{"qd": 8, "records": 4000, "ops_s": 14934.6, "p50_us": 547.9, "p95_us": 710.2, "p99_us": 824.8, "root": "/data1/efs/bench", "reserve": 0}
-{"qd": 8, "records": 4000, "ops_s": 228.7, "p50_us": 31982.0, "p95_us": 57823.0, "p99_us": 68805.2, "root": "/data2/efs/bench", "reserve": 0}
-{"qd": 8, "records": 4000, "ops_s": 186.1, "p50_us": 42893.8, "p95_us": 65319.7, "p99_us": 75250.4, "root": "/data2/efs/bench", "reserve": 1048576}
-{"qd": 8, "records": 4000, "ops_s": 243.2, "p50_us": 31543.0, "p95_us": 53402.7, "p99_us": 63017.5, "root": "/data2/efs/bench", "reserve": 1048576}
-{"qd": 8, "records": 4000, "ops_s": 247.4, "p50_us": 31549.2, "p95_us": 51065.3, "p99_us": 65293.7, "root": "/data2/efs/bench", "reserve": 0}

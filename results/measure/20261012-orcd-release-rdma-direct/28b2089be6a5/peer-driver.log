@@ -1,9 +1,0 @@
-pass peer_concurrent_hardlink        
-pass peer_concurrent_unlink_hardlinks
-pass peer_fcntl_range_conflict       
-pass peer_fcntl_range_adjacent       
-pass peer_mtime_no_regress           
-============================================================
-POSIX 2-client: 67/67 pass, 0 fail  (107.7s)
-wrote /home/erbmi1/orcd/scratch/efs/orcd-test/qualification-release-28b2089be6a5/suites/fcstor007/peer.tsv
- 

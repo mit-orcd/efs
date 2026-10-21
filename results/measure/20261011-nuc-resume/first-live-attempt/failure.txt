@@ -1,5 +1,0 @@
-Traceback (most recent call last):
-  File "/data1/efs/devel-nuc-20261011/nuc_w52_live_20261011.py", line 45, in <module>
-    (out/'verdicts.json').write_text(json.dumps(codes,indent=2));assert all(rc==0 for rc in codes.values()),codes
-                                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-AssertionError: {'full-direct': 1, 'full-buffered': 0}

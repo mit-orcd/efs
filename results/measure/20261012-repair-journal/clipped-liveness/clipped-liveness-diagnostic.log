@@ -1,6 +1,0 @@
-fenced source rc=-14
-fenced source rc=-14
-kv-compact: start l0=1 inputs=1 range=1 l0only=0
-kv-compact: end bytes=790 ms=15 l0=0 l1=1 rc=0
-clip ndelta=1 base=101 span=102 lengths=131072,1024 epochs=0,0 fence=2
-test_repair_job: tests/test_repair_job.c:179: fenced_liveness: Assertion `view.ndelta==1 && view.deltas[0].generation==102 && view.bytes.parts[1].len==0 && view.bytes.parts[0].len==1000' failed.

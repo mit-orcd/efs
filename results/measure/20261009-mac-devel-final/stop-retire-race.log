@@ -1,7 +1,0 @@
-cluster: mac
-== drain/unmount client /mnt/efs-b on efsgw
-Unmounting /mnt/efs-b
-Retiring drained efs-fuse PID 18206 for /mnt/efs-b
-ERROR: cannot identify mount for efs-fuse PID 18206
-ERROR: client stop refused on efsgw; servers retained
-To explicitly accept loss of unpublished writes: ./cluster.sh stop --force-discard

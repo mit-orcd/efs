@@ -118,8 +118,8 @@ Five architecture checks pass after regeneration. This is not full Linux,
 mounted, performance or release acceptance. The release ledger will be updated
 with exact final test/build identities and raw evidence before promotion.
 
-The [integration checkpoint evidence](../../results/measure/20261011-v030-release-integration/focused-checkpoint.json)
-records ten passed local focused gates. The [detached ancestry audit](../../results/measure/20261011-v030-release-integration/detached-ancestry.json)
+The integration checkpoint evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-v030-release-integration/focused-checkpoint.json`)
+records ten passed local focused gates. The detached ancestry audit (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-v030-release-integration/detached-ancestry.json`)
 records exact worktree commits and tracked-change counts.
 
 ## AMD merged qualification — October 11
@@ -153,7 +153,7 @@ synchronization mismatches. NUC reports both tag52 native builds pass on
 Frozen `d11973815676657e53039615634a9ac4b14c927c` passes `make -j8 all test`
 in both normal and EFS_FAULTS=1 builds on AMD. Both native exit markers and
 the controlling build exit are0. All929 hashed build/test/documentation inputs
-match the frozen source. [Native logs, source verification and binary identities](../../results/measure/20261011-v030-merged-native/d1197381/acceptance-summary.json)
+match the frozen source. Native logs, source verification and binary identities (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-v030-merged-native/d1197381/acceptance-summary.json`)
 retain the exact artifact identity. Normal binaries identify as
 `d1197381-release-normal`; fault artifacts are separate. Final sanitizer and later parser checkpoint acceptance are
 still pending. This native pass does not close ORCD's quiet concurrent
@@ -179,9 +179,9 @@ seven-client outcomes are recorded below.
 
 Frozen `f1c322e1`, `bbb84e41` and `f0bb0208` each pass full Linux normal and
 fault-native suites and their ASan/UBSan gates
-([f1c322e1](../../results/measure/20261011-v030-merged-native/f1c322e1/acceptance-summary.json),
-[bbb84e41](../../results/measure/20261011-v030-merged-native/bbb84e41/acceptance-summary.json),
-[f0bb0208](../../results/measure/20261011-v030-merged-native/f0bb0208/acceptance-summary.json)).
+(f1c322e1 (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-v030-merged-native/f1c322e1/acceptance-summary.json`),
+bbb84e41 (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-v030-merged-native/bbb84e41/acceptance-summary.json`),
+f0bb0208 (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-v030-merged-native/f0bb0208/acceptance-summary.json`)).
 The original higher-pressure seven-client/jobs16 gate reproduces the ORCD
 directory/query failures on AMD. Nothing is tagged or pushed.
 
@@ -206,7 +206,7 @@ Frozen `cfa103dc` passes full AMD Linux `make all test` in normal and
 `EFS_FAULTS=1` builds plus eight ASan/UBSan gates, including the actual
 read-only authority NET fallback caller. All 1,325 source/linked-evidence
 inputs verify unchanged after qualification. Exact versions and normal/fault
-binary hashes are retained with [native gates and logs](../../results/measure/20261011-v030-merged-native/cfa103dc/acceptance-summary.json).
+binary hashes are retained with native gates and logs (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-v030-merged-native/cfa103dc/acceptance-summary.json`).
 
 The earlier `9c65c893` attempt failed the real-storage test's obsolete NET
 expectation. `cfa103dc` corrects that assertion and expands real buffered/direct
@@ -246,7 +246,7 @@ AMD qualification and same quiet pressure gates are next.
 
 The bounded query candidate passes full merged AMD normal/fault `all test` and
 ten sanitizer gates; all1,330 inputs are unchanged and27 retrieved native
-artifacts verify byte-for-byte. [Exact full gates](../../results/measure/20261011-v030-merged-native/d9d39acc/acceptance-summary.json).
+artifacts verify byte-for-byte. Exact full gates (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-v030-merged-native/d9d39acc/acceptance-summary.json`).
 Independent [query safety review](../reviews/query-cut-retry-20261011.md) finds
 no additional concrete defect within its bounded scope.
 
@@ -301,11 +301,11 @@ records the missing Mac client adoption prerequisite and exact pending gates.
 ### Latest frozen merged qualification d26e6874
 
 Complete AMD normal/fault native `all test` and sixteen focused ASan/UBSan gates
-PASS; all1,469 frozen source/linked inputs remain unchanged. [Native results and
-normal/fault binary identities](../../results/measure/20261012-v030-merged-native/d26e6874/acceptance-summary.json)
+PASS; all1,469 frozen source/linked inputs remain unchanged. Native results and
+normal/fault binary identities (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-v030-merged-native/d26e6874/acceptance-summary.json`)
 include33 retrieved hash-verified artifacts. Both direct/buffered ordinary
 overwrite gates pass all four primary/peer/cold exact SHA256 oracles and physical/
-queue cleanup, restore0; [raw both-mode evidence](../../results/measure/20261012-v030-ordinary-overwrite/d26e6874/).
+queue cleanup, restore0; raw both-mode evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-v030-ordinary-overwrite/d26e6874`).
 Original seven-client/jobs16 pressure fails both modes: direct seven209/4/1/7;
 buffered six209/4/1/7, one210/3/1/7 (PASS/FAIL/SKIP/NOTRUN).
 Busy extra-client stop aborts later cold/GC phases; round1, restore0.

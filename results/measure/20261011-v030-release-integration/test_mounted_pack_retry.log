@@ -1,7 +1,0 @@
-clang: error: no such file or directory: '/Users/mike/Documents/Codex/2026-10-07/do-x20/work/release-v0.3.0-pre-alpha/libefs.a'
-Traceback (most recent call last):
-  File "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/release-v0.3.0-pre-alpha/tests/test_mounted_pack_retry.py", line 108, in <module>
-    subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror','-Wno-unused-variable','-pthread','-I'+str(root/'include'),'-I'+str(root/'src/client'),str(p),str(root/'libefs.a'),'-lm','-o',str(exe)],check=True)
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 528, in run
-    raise CalledProcessError(retcode, process.args,
-subprocess.CalledProcessError: Command '['cc', '-std=gnu11', '-Wall', '-Wextra', '-Werror', '-Wno-unused-variable', '-pthread', '-I/Users/mike/Documents/Codex/2026-10-07/do-x20/work/release-v0.3.0-pre-alpha/include', '-I/Users/mike/Documents/Codex/2026-10-07/do-x20/work/release-v0.3.0-pre-alpha/src/client', '/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/efs-mounted-pack-tak851wu/t.c', '/Users/mike/Documents/Codex/2026-10-07/do-x20/work/release-v0.3.0-pre-alpha/libefs.a', '-lm', '-o', '/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/efs-mounted-pack-tak851wu/t']' returned non-zero exit status 1.

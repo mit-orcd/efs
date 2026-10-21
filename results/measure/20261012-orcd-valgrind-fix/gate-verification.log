@@ -1,5 +1,0 @@
-RDMA Memcheck: bounded completion, repost/tail poisoning, undefined send detection PASS
-[leaks] unit/test_repair_job: parent leak gate; deliberate crash-child leaks EXCLUDED (access-error exits still gated)
-[leaks] unit/test_repair_job: definite=0B indirect=0B uninit=0 invalid=0
-valgrind verdict: empty/truncated reports refused, complete zero-loss accepted, real leaks fail PASS
-valgrind cleanup: exact owned argument/start identity, prefix and stale PID refused PASS

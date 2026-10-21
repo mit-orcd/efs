@@ -1,9 +1,0 @@
-2026-10-12T02:08:40.804Z storage-engine=files direct_io=off
-2026-10-12T02:08:40.804Z Data GC admission: disabled
-2026-10-12T02:08:40.804Z Storage quota: explicit 1.00 GiB (safe maximum 501.94 GiB; reserve 20%, minimum 1 GiB per filesystem)
-2026-10-12T02:08:40.807Z heartbeat: enabled (2000 ms interval)
-2026-10-12T02:08:40.818Z raft-host: up raft_id=0 n=4 boot=9292721987313772 salt=6832182463957078422 g0=hosted g2=off
-2026-10-12T02:08:40.818Z efsd v0.3.0-pre-alpha-c2bfb9e9 (branch release-v0.3.0-pre-alpha, built 2026-10-12T01:55:00Z on intel1), build=c2bfb9e9-release-fault: node 1 listening on 127.0.0.1:31010, storage=/data1/efs/gc-buffered-ykyqtqzo/n1 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=off, writers=4 shared
-2026-10-12T02:08:40.818Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
-2026-10-12T02:08:42.807Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=985 passes=2 sampled=1 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
-2026-10-12T02:08:45.245Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=1 bytes=65536 errors=0 avg_us=3440 p50_us=3440 max_us=3440

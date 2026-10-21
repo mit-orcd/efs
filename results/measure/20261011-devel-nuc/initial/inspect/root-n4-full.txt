@@ -1,3 +1,0 @@
-scan rc=0
-ino 1: 0 inode row(s) on this node, 0 dentries
-ino 81921: 0 inode row(s) on this node, 0 dentries

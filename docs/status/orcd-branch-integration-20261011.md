@@ -86,13 +86,13 @@ The active namespace is the fresh test namespace. All old stores remain offline
 in the backup ledger; neither this reset nor these passing ordinary suites
 establishes loaded-query scaling.
 
-Evidence: [passing per-client suites](../../results/measure/20261011-orcd-branch-integration/fd83b30d7e4a/sequential-summary.json),
-[concurrent failure verdict](../../results/measure/20261011-orcd-branch-integration/fd83b30d7e4a/concurrent-summary.json),
-[peer suite](../../results/measure/20261011-orcd-branch-integration/fd83b30d7e4a/peer.tsv),
-[store backup ledger](../../results/measure/20261011-orcd-branch-integration/store-backups-fd83b30d.json),
-[captured refs and merge fixes](../../results/measure/20261011-orcd-branch-integration/integration-refs.json),
-[complete Linux gate](../../results/measure/20261011-orcd-branch-integration/unit-fd83b30d7e4a-full-pass.log),
-[exact unit source manifest](../../results/measure/20261011-orcd-branch-integration/unit-fd83b30d7e4a-source-manifest.json).
+Evidence: passing per-client suites (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-orcd-branch-integration/fd83b30d7e4a/sequential-summary.json`),
+concurrent failure verdict (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-orcd-branch-integration/fd83b30d7e4a/concurrent-summary.json`),
+peer suite (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-orcd-branch-integration/fd83b30d7e4a/peer.tsv`),
+store backup ledger (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-orcd-branch-integration/store-backups-fd83b30d.json`),
+captured refs and merge fixes (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-orcd-branch-integration/integration-refs.json`),
+complete Linux gate (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-orcd-branch-integration/unit-fd83b30d7e4a-full-pass.log`),
+exact unit source manifest (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-orcd-branch-integration/unit-fd83b30d7e4a-source-manifest.json`).
 Retained mounted/peer/persistence TSVs are under
 `results/measure/20261011-orcd-branch-integration/66be74b73384/`.
 
@@ -102,5 +102,5 @@ not a matched comparison with the earlier large dataset. For sampled inode 94241
 on nodes 4, 1 and 2. Each exact fragment consumes 69,632 allocated bytes:
 208,896 bytes total, **408×** the application payload, excluding metadata.
 
-Evidence: [finite baseline](../../results/measure/20261011-orcd-branch-integration/fd83b30d7e4a/baseline-summary.json),
-[exact physical allocation](../../results/measure/20261011-orcd-branch-integration/fd83b30d7e4a/baseline-sample.json).
+Evidence: finite baseline (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-orcd-branch-integration/fd83b30d7e4a/baseline-summary.json`),
+exact physical allocation (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-orcd-branch-integration/fd83b30d7e4a/baseline-sample.json`).

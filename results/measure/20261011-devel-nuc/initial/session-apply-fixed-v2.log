@@ -1,2 +1,0 @@
-raft-host: applied session index=3 kind=1 shard=0 ino=0
-session apply: real missing-owner bootstrap, participant admission and exact BUSY/STALE/INVAL refusal PASS

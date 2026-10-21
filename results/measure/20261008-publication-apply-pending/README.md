@@ -4,18 +4,18 @@ Agent 4 private source and stores: `/data1/efs/agent4-d29-20261008`, Linux user
 `efs`, direct I/O/TCP, `EFS_FAULTS=1`, `EXTRA_DEFS=-Werror`, commands disabled,
 pressure admission enabled. Installed services and mounts remain untouched.
 
-- [Build](build-proof-2.log): warning-free AMD build.
-- [Full unit suite](full-tests-proof-2.log): exit 0.
-- [Core regression](quorum-test.log): fresh correlated quorum proof while apply
+- Build (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-publication-apply-pending/build-proof-2.log`): warning-free AMD build.
+- Full unit suite (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-publication-apply-pending/full-tests-proof-2.log`): exit 0.
+- Core regression (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-publication-apply-pending/quorum-test.log`): fresh correlated quorum proof while apply
   is parked; old replies/partition/stepdown cannot authorize proof; ordinary KV
   reads remain unavailable until apply, exit 0.
-- [Ownership](ownership-proof.log): apply-pending retains dirty bytes, cache pin,
+- Ownership (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-publication-apply-pending/ownership-proof.log`): apply-pending retains dirty bytes, cache pin,
   immutable request and ordered ACK ownership, exit 0.
-- [Fault release](apply-pending-r4.log): mapping group 0/index 12/term 2 commits
+- Fault release (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-publication-apply-pending/apply-pending-r4.log`): mapping group 0/index 12/term 2 commits
   while all replicas park mapping apply. Query returns the same proof; altered
   query and early retirement fail. Release yields rejection with the same
   index/term, exit 0.
-- [Cold replay](apply-pending-cold.log): mapping group 0/index 11/term 2 commits
+- Cold replay (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-publication-apply-pending/apply-pending-cold.log`): mapping group 0/index 11/term 2 commits
   before all four private daemons are killed. Cold replay preserves its exact
   final rejection locator; retry cannot reapply effects and retirement leaves
   a refusal floor, exit 0.

@@ -1,2 +1,0 @@
-read scope: one absolute400ms budget, shorter inherited/expired budgets, restoration, semantic/hard refusal and unchanged mutation uncertainty PASS
-forwarded RPC: TCP/RDMA receive limits, previous timeout restoration, large-frame ownership, lost/short/wrong replies drop connections and refuse authority PASS

@@ -8,7 +8,7 @@ W109 acceptance remains unresolved.
 ## Controls and repeatability
 
 The machine-readable
-[wave matrix](../../results/measure/20261011-orcd-rollout/starvation-disposition-20261012/frozen-wave-matrix.json)
+wave matrix (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-orcd-rollout/starvation-disposition-20261012/frozen-wave-matrix.json`)
 contains all seven hosts for six retained runs, with input TSV SHA-256 and exit
 codes. Each full quiet run uses the original jobs16 and 30-second case budgets.
 
@@ -40,7 +40,7 @@ quiet latency, causality, or sustained slot availability from one instant.
 A query slot leak/saturation was not observed at those capture instants.
 
 Retained timestamped publisher logs are copied unchanged into
-[diagnostic timing evidence](../../results/measure/20261011-orcd-rollout/starvation-disposition-20261012/fcstor004-query-timing.log)
+diagnostic timing evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-orcd-rollout/starvation-disposition-20261012/fcstor004-query-timing.log`)
 and the adjacent005 file. At004 the last successful publication was
 23:45:16.157; BUSY refresh logs appeared23:45:18.064 and23:45:48.336; the next
 publication was23:45:58.352 (build8015ms). This is a42.195s publication gap.

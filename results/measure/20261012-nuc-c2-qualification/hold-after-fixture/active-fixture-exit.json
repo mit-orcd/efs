@@ -1,8 +1,0 @@
-{
-  "pid": 219346,
-  "exit": -2,
-  "timed_out": false,
-  "utc": "2026-10-12T02:23:43Z",
-  "source": "c2bfb9e9a281aae33dfaa01689e61866ccf60af8",
-  "scope": "Actual active full-direct fixture only; no overall matrix acceptance"
-}

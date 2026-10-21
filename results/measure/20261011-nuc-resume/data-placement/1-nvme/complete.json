@@ -1,9 +1,0 @@
-{
-  "tag": "1-nvme",
-  "files": 71248,
-  "errors": [],
-  "cold_checks": 64,
-  "storage": "/home/efs/w97-data-placement-data-20261011-1",
-  "start_mono": 8098.339958,
-  "seconds": 600
-}

@@ -1,1 +1,0 @@
-["python3", "/data1/efs/w97-replication-loader.py", "--max-depth", "8", "--max-files-per-folder", "1000", "--max-files", "50000", "--workers", "8", "/data1/efs/mnt/tiny-w97-replication-baseline-20261009"]

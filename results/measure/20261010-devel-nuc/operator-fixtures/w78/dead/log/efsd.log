@@ -1,6 +1,0 @@
-2026-10-11T04:19:40.945Z storage-engine=files direct_io=on
-2026-10-11T04:19:40.948Z heartbeat: enabled (2000 ms interval)
-2026-10-11T04:19:40.960Z raft-host: .efs server queries disabled; no catalog worker or query tracking
-2026-10-11T04:19:40.960Z raft-host: up raft_id=0 n=4 boot=15684229347437400 salt=3563998014624438636 g0=hosted g2=off
-2026-10-11T04:19:40.960Z efsd 3df19310-nuc (branch devel-nuc, built 2026-10-11T04:12:28Z on nuc), build=3df1931032b8-nuc: node 1 listening on 127.0.0.1:34733, storage=/tmp/efs-wrapper-start-70q3qjlj/dead (1 paths, stripe=none), used=0, quota=0, direct_io=on, writers=4 shared
-2026-10-11T04:19:40.960Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0

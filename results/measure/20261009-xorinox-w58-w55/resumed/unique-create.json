@@ -1,9 +1,0 @@
-{
-  "workers": 16,
-  "files": 1024,
-  "genuine_eexist_checks": 1024,
-  "name_replacements": 16,
-  "bytes_per_file": 224,
-  "explicit_fsync": false,
-  "durability_boundary": "successful close"
-}

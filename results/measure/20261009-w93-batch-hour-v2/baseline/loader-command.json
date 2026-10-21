@@ -1,1 +1,0 @@
-["python3", "/data1/efs/w93-batch-hour-v2-20261009/loader-latency.py", "--max-depth", "8", "--max-files-per-folder", "1000", "--max-files", "2000000", "--workers", "8", "/data1/efs/mnt/tiny-w93-batch-hour-v2-baseline-20261009"]

@@ -87,8 +87,8 @@ now waits for all 215 files to reach the background snapshot. An intermediate
 private run was invalidated when deployment moved its build directory before
 the restart stage; the complete suite was rerun from the stable installed path.
 
-[Raw profiles, annotations, timings, screen capture, validation and deployment
-evidence](../../results/measure/20261009-catalog-ordinal).
+Raw profiles, annotations, timings, screen capture, validation and deployment
+evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261009-catalog-ordinal`).
 
 User observed node-id 2 at 100% CPU and requested strace investigation.
 Installed build: devel `ab050595c3b8`, direct I/O/TCP, `.efs` enabled.
@@ -321,7 +321,7 @@ suffix gate still times out at the same scan cap; the options repeat refuses
 its already existing test directory, so it adds no acceptance evidence.
 
 Raw deployment/profile evidence is retained in
-[results/measure/20261009-catalog-incremental](../../results/measure/20261009-catalog-incremental)
+results/measure/20261009-catalog-incremental (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261009-catalog-incremental`)
 and on NUC at `/data1/efs/deploy-query-5084f8c2`. Native unit/build logs and private
 fixture logs remain under `/data1/efs/query-incremental-*`.
 

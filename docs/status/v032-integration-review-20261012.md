@@ -20,4 +20,4 @@ One minor bookkeeping difference: the saved historical verification.log reports9
 
 .efs and dedicated repair/recovery remain outside this qualification; this does not enable them. ORCD RDMA evidence is supplemental to the original TCP release qualification and does not claim RDMA/buffered, failure repair, performance ceilings or production readiness. ORCD mounts were reported left running by its owner; this local review did not operate that cluster.
 
-[Machine-readable review](evidence/v032-9fc5e024-review.json) · [ORCD report](orcd-v031-rdma-direct-20261012.md) · [AMD direct](v031-qualification-20261012.md) · [AMD buffered](v031-buffered-qualification-20261012.md).
+Machine-readable review (archived raw evidence: `archive/raw-evidence-20261021:docs/status/evidence/v032-9fc5e024-review.json`) · [ORCD report](orcd-v031-rdma-direct-20261012.md) · [AMD direct](v031-qualification-20261012.md) · [AMD buffered](v031-buffered-qualification-20261012.md).

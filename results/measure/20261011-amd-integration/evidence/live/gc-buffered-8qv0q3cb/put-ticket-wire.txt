@@ -1,7 +1,0 @@
-raft-session status=0 rc=0 primary=1 op=fence ssh=3989 shard=1 epoch=2 state=1 touched=1 index=5936
-actual retained PUT ticket discard=0 cross-group shard=868: budgeted immutable body, membership reorder refusal, pure probes, exact admission/replay, body collision and revoked-owner retention PASS
-raft-session status=0 rc=0 primary=1 op=fence ssh=1889 shard=1 epoch=2 state=1 touched=1 index=5943
-actual retained PUT ticket discard=1 cross-group shard=868: budgeted immutable body, membership reorder refusal, pure probes, exact admission/replay, body collision and revoked-owner retention PASS
-actual PUT ticket exact body saved for cold replay PASS
-raft-session status=0 rc=0 primary=2 op=fence ssh=2882 shard=1 epoch=2 state=1 touched=1 index=5663
-actual PUT ticket cold restart: exact body admission and all three fragments survive; completed fence rejects actual late PUT/status/replay PASS

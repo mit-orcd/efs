@@ -1,4 +1,0 @@
-query disk: RAM oracle, external sort, bounded metadata, retained snapshot, rename and cancellation PASS
-query disk: free-space guard PASS
-bash: line 1: /usr/bin/time: No such file or directory
-query disk: RAM oracle, external sort, bounded metadata, retained snapshot, rename and cancellation PASS

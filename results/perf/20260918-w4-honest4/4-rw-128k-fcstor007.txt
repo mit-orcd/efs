@@ -1,2 +1,0 @@
-FUSE_CHECK fstype=fuse.efs-fuse mnt=/tmp/efs-mount
-FUSE_OK

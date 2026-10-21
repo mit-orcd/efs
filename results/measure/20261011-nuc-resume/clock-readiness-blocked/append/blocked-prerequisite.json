@@ -1,7 +1,0 @@
-{
-  "status": "not run",
-  "no_workload_created": true,
-  "failed": [
-    "clock-install"
-  ]
-}

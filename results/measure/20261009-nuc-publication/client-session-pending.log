@@ -1,9 +1,0 @@
-real production client session CREATE/REGISTER/ESTABLISH and exact retry PASS
-pending intent locator group=0 index=6 term=1
-pending intent survives lost admission ACK; early retirement refused PASS
-proof response status=0 state=5 index=11
-pending intent locator group=0 index=6 term=1
-committed mapping/apply pending group=0 index=11 term=2
-committed/unapplied mapping ready for all-daemon crash PASS
-committed/unapplied mapping survives four-daemon crash, exact locator and replay floor PASS
-publication pending: direct/TCP lost ACK, four-daemon crash and cold recovery PASS

@@ -1,5 +1,0 @@
-Traceback (most recent call last):
-  File "/data1/efs/devel-nuc-20261011/append-comparison.py", line 25, in <module>
-    assert (base/'fixed-v2-live/run-exit.txt').exists(),'full gates failed; retain failure and do not interrupt regular service'
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-AssertionError: full gates failed; retain failure and do not interrupt regular service

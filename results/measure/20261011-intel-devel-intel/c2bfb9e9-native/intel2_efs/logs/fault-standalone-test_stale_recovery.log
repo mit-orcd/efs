@@ -1,5 +1,0 @@
-report-stale: chunks=2 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=0
-report-stale: chunks=2 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=0
-report-stale: chunks=2 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=0
-report-stale: chunks=2 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=0
-STALE recovery: authoritative pull, absence, retained failures, dedupe and prefix ACK PASS

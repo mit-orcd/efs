@@ -1,8 +1,0 @@
-/usr/bin/ld: cannot find /usr/lib64/libubsan.so.1.0.0
-collect2: error: ld returned 1 exit status
-Traceback (most recent call last):
-  File "/tmp/efs-orcd-unit-b239dc7de104/tests/test_client_memory.py", line 595, in <module>
-    subprocess.run(cmd,check=True)
-  File "/usr/lib64/python3.9/subprocess.py", line 528, in run
-    raise CalledProcessError(retcode, process.args,
-subprocess.CalledProcessError: Command '['cc', '-fsanitize=address,undefined', '-std=gnu11', '-D_GNU_SOURCE', '-O1', '-g', '-pthread', '-I/tmp/efs-orcd-unit-b239dc7de104/include', '-I/tmp/efs-orcd-unit-b239dc7de104/src/common', '-I/tmp/efs-orcd-unit-b239dc7de104/src/client', '/tmp/efs-memory-test-p69_ncdl/test.c', '/tmp/efs-orcd-unit-b239dc7de104/src/common/common.c', '/tmp/efs-orcd-unit-b239dc7de104/src/kv/kv_key.c', '/tmp/efs-orcd-unit-b239dc7de104/src/sim/opid.c', '-o', '/tmp/efs-memory-test-p69_ncdl/test']' returned non-zero exit status 1.

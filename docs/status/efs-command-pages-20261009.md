@@ -122,7 +122,7 @@ the cap and complete-export runs. An earlier live run with legacy broad probes
 hit the legacy cap as expected and is retained as historical failed evidence. These tests do not establish
 400 GiB real payload coverage, a hardware CPU ceiling, or full expiry support.
 
-Evidence: [results/measure/20261009-command-pages](../../results/measure/20261009-command-pages),
+Evidence: results/measure/20261009-command-pages (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261009-command-pages`),
 with full native logs under `/data1/efs/query-pages-*` and live artifacts under
 `/data1/efs/deploy-pages-abcd9b7b` on NUC. The file export is deliberately retained
 remotely rather than adding 78 MB of generated paths to Git.

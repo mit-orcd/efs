@@ -1,3 +1,0 @@
-Filesystem      Size  Used Avail Use% Mounted on
-/dev/vdc        2.0T  589M  2.0T   1% /data1/efs/bench/w92-scale-2p32-20261010
-/dev/vdb        112G   11G  101G  10% /data1

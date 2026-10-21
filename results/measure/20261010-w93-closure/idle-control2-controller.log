@@ -1,8 +1,0 @@
-Unmounting /data1/efs/mnt
-Retiring drained efs-fuse PID 2229717 for /data1/efs/mnt
-Unmounted /data1/efs/mnt
-Unmounting /data1/efs/mnt2
-Retiring drained efs-fuse PID 2229752 for /data1/efs/mnt2
-Unmounted /data1/efs/mnt2
-cluster ready: flow=1 observations=0
-{"tag": "idle-control2", "applied_interval_ms": 10, "cohort": 0, "seconds": 96.77444693999132, "reads": {"0": {"n": 6000, "mean_us": 7068.405833333333, "p50_us": 6559, "p95_us": 11235, "p99_us": 16112, "max_us": 41955}, "2": {"n": 6000, "mean_us": 9022.978166666666, "p50_us": 8121, "p95_us": 12920, "p99_us": 39645, "max_us": 77677}}}

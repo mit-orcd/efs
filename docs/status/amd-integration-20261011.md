@@ -7,7 +7,7 @@ worktree tip captured at the start of this request. All 20 recorded tips are
 ancestors of integration commit `3b3b0172`. No source conflict required choosing
 one implementation over another; generated architecture HTML was regenerated
 from merged sources. Shared branches and installed AMD data remain unchanged.
-[Starting inventory](../../results/measure/20261011-amd-integration/starting-refs.json).
+Starting inventory (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-integration/starting-refs.json`).
 
 ## W94 legacy guarded-lease fixture
 
@@ -67,8 +67,8 @@ failed apply and retry. The actual-source regression fails on `df63bbfa`'s
 masked result and passes after repair; existing namespace owner tests pass.
 This preserves missing-only bootstrap and refuses stale/uncertain admission;
 it does not activate production ticket integration.
-[Before](../../results/measure/20261011-amd-integration/register-verdict-before.log) /
-[after](../../results/measure/20261011-amd-integration/register-verdict-after.log).
+Before (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-integration/register-verdict-before.log`) /
+after (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-integration/register-verdict-after.log`).
 
 Post-repair full normal/fault native suites and both earlier-candidate live
 matrices pass. W72 and W94 remain partially open.
@@ -88,9 +88,9 @@ committed identity/flag counts: 192 versus 128 creation/close lease commands.
 The guard audit likewise validates indices 6386/5792 for the stopped failed
 fixture, with combined adoption seq 11 and later close seq 12. Throughput,
 latency and cold-byte observations are unchanged.
-[Corrected guard evidence](../../results/measure/20261011-amd-integration/guard-adoption-edges.json),
-[prior invalid lease bound](../../results/measure/20261011-amd-integration/lease-proof-prior-invalid-bounds.json),
-[prior invalid guard bound](../../results/measure/20261011-amd-integration/guard-edges-prior-invalid-bounds.json).
+Corrected guard evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-integration/guard-adoption-edges.json`),
+prior invalid lease bound (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-integration/lease-proof-prior-invalid-bounds.json`),
+prior invalid guard bound (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-integration/guard-edges-prior-invalid-bounds.json`).
 
 The full repaired direct/TCP matrix now passes, including the prepared legacy
 guard, authoritative inode reclaim, normal CREATE EEXIST cold replay, pending
@@ -107,7 +107,7 @@ verdicts, with both branches' regressions retained. The quota-test conflict
 retains real filesystem inventory and controlled headroom, asymmetric used
 bytes, mixed-device grouping and overflow checks. Both indexed Mac and ORCD
 status notes are preserved; generated architecture output is regenerated.
-[Captured updates](../../results/measure/20261011-amd-integration/follow-up-refs.json).
+Captured updates (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-integration/follow-up-refs.json`).
 
 The earlier `8e0e4f3c` candidate with the corrected fixture passes full normal
 and fault suites and direct/buffered TCP matrices: core 216/216, peer 67/67 in
@@ -115,9 +115,9 @@ each mode, exact cold bytes, inode/physical reclaim and zero final quota.
 All four installed daemons and two TCP/commands-off clients restore, with no
 private listeners left. Those passes are retained as **earlier-candidate**
 evidence, not claimed for the follow-up source.
-[Direct](../../results/measure/20261011-amd-integration/evidence/live/direct.log) /
-[buffered](../../results/measure/20261011-amd-integration/evidence/live/buffered.log) /
-[restoration](../../results/measure/20261011-amd-integration/evidence/restoration-proof.json).
+Direct (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-integration/evidence/live/direct.log`) /
+buffered (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-integration/evidence/live/buffered.log`) /
+restoration (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-integration/evidence/restoration-proof.json`).
 
 ## Final captured-candidate acceptance
 
@@ -136,12 +136,12 @@ Normal, fault, native-round, direct, buffered, live-round and restoration exit
 markers are all zero. The independent restoration audit verifies the original
 four installed daemons and two TCP/commands-off clients; no private screens or
 24190–24193 listeners remain. Installed stores and binaries were not replaced.
-[Acceptance and file hashes](../../results/measure/20261011-amd-integration/final-acceptance.json),
-[normal native](../../results/measure/20261011-amd-integration/evidence/final/normal-native.log),
-[fault native](../../results/measure/20261011-amd-integration/evidence/final/fault-native.log),
-[direct](../../results/measure/20261011-amd-integration/evidence/final/live/direct.log),
-[buffered](../../results/measure/20261011-amd-integration/evidence/final/live/buffered.log),
-[restoration](../../results/measure/20261011-amd-integration/evidence/final/restoration-proof.json).
+Acceptance and file hashes (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-integration/final-acceptance.json`),
+normal native (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-integration/evidence/final/normal-native.log`),
+fault native (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-integration/evidence/final/fault-native.log`),
+direct (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-integration/evidence/final/live/direct.log`),
+buffered (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-integration/evidence/final/live/buffered.log`),
+restoration (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-integration/evidence/final/restoration-proof.json`).
 
 This accepts the recorded starting inventory plus the three follow-up captured
 tips, not commits added to other active branches after that capture. Production

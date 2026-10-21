@@ -1,2 +1,0 @@
-inherited100ms: elapsed=100 expired_RPC_attempts=0 status=-13
-read retry loop: inherited/no-peer/already-expired budgets stop without expired RPC attempts; unscoped400ms and scope restoration PASS

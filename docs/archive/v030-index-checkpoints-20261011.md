@@ -49,10 +49,10 @@ both-mode primary/peer/cold/cleanup gates pass at `02b9918b`.
 Independent authority review NET fallback is implemented with normal and
 ASan/UBSan actual-caller regressions; semantic refusals and fresh guards remain.
 All five frozen owner handoffs are release ancestors;
-[reconciliation ledger](../status/v030-owner-commit-reconciliation.json) retains every submitted
+reconciliation ledger (archived raw evidence: `archive/raw-evidence-20261021:docs/status/v030-owner-commit-reconciliation.json`) retains every submitted
 commit and explicit remaining behavior/qualification holds.
 [AMD frozen integration handoff](../status/v030-amd-handoff-20261012.md) records `d26e6874`,
-full normal/fault plus sixteen sanitizers and both-mode ordinary cold-byte PASS at d26e6874, [per-owner commit reconciliation](../status/v030-owner-commit-reconciliation.json), compatibility; [Mac reconciliation](../status/mac-client-reconciliation-20261012.md) confirms
+full normal/fault plus sixteen sanitizers and both-mode ordinary cold-byte PASS at d26e6874, per-owner commit reconciliation (archived raw evidence: `archive/raw-evidence-20261021:docs/status/v030-owner-commit-reconciliation.json`), compatibility; [Mac reconciliation](../status/mac-client-reconciliation-20261012.md) confirms
 existing combined adoption and withdraws the earlier missing-feature diagnosis.
 Latest Mac tag54 completion and ORCD follower-read deadline/proof checkpoints
 are integrated with the independent inherited-deadline retry repair; full merged

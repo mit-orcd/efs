@@ -1,7 +1,0 @@
-{
-  "path": "/data1/efs/devel-nuc-20261011/clock-src/results",
-  "source": "/data1/efs/devel-nuc-20261011/batch-src/results",
-  "kind": "self-contained hard-linked evidence",
-  "core_unchanged": true,
-  "resumed_missing_sidecar": true
-}

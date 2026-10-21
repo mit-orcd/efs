@@ -80,6 +80,14 @@ __pycache__/
 
 # Raw run artifacts: commit summaries and reproduction recipes instead.
 /artifacts/
+# results/ keeps only summaries (Markdown, SUMMARY/README text); raw output
+# written there by measurement scripts stays local.
+/results/**
+!/results/**/
+!/results/**/*.md
+!/results/**/SUMMARY*.txt
+!/results/**/README*.txt
+!/results/**/*summary*.txt
 tests/test_rdma_segmented
 tests/test_expiry
 tests/test_query_refresh

@@ -11,8 +11,8 @@ Historical builds below do not identify current running processes.
 
 | Identity | Retained evidence | Acceptance scope |
 | --- | --- | --- |
-| W36 | [Final NUC race log](../../results/measure/20261007-roadmap-rounds/final/final-w36.log), [xorinox repair/acceptance](../../results/measure/20261006-xorinox-orphan-unlink/SUMMARY.md) | 20/20 named rename-versus-unlink repeats on NUC `128f6b7d` and xorinox `b4a75492`; repeat on changed rollout |
-| Row 0m / associated W57 fix | [Full single-client TSV](../../results/measure/20261007-roadmap-rounds/final/tsv/posix-20261007-050224.tsv), [full peer TSV](../../results/measure/20261007-roadmap-rounds/final/tsv/posix2c-20261007-050327.tsv) | seven `dir_times_*` tests PASS, including rename and child mutation; peer directory-mtime visibility PASS; supersedes 6/7 and peer-pending state |
+| W36 | Final NUC race log (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-roadmap-rounds/final/final-w36.log`), [xorinox repair/acceptance](../../results/measure/20261006-xorinox-orphan-unlink/SUMMARY.md) | 20/20 named rename-versus-unlink repeats on NUC `128f6b7d` and xorinox `b4a75492`; repeat on changed rollout |
+| Row 0m / associated W57 fix | Full single-client TSV (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-roadmap-rounds/final/tsv/posix-20261007-050224.tsv`), full peer TSV (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-roadmap-rounds/final/tsv/posix2c-20261007-050327.tsv`) | seven `dir_times_*` tests PASS, including rename and child mutation; peer directory-mtime visibility PASS; supersedes 6/7 and peer-pending state |
 
 W56's four root-rename tests also pass in the single-client TSV. Its separate
 xorinox rollout obligation is retained; these NUC results do not close it.
@@ -21,7 +21,7 @@ xorinox rollout obligation is retained; these NUC results do not close it.
 
 | Item | What the review establishes | What remains |
 | --- | --- | --- |
-| W42 | Both FUSE statfs and management status call `efs_capacity_logical`; [four-node status](../../results/measure/20261007-roadmap-rounds/final/final-status.log) reports 500 GiB from 4 × 187.5 GiB quotas and matching FUSE total | Named fcstor gate not established here; one quota-rejected stripe member can leave protection debt, requiring fault/repair evidence |
+| W42 | Both FUSE statfs and management status call `efs_capacity_logical`; four-node status (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-roadmap-rounds/final/final-status.log`) reports 500 GiB from 4 × 187.5 GiB quotas and matching FUSE total | Named fcstor gate not established here; one quota-rejected stripe member can leave protection debt, requiring fault/repair evidence |
 | W27 | Both report paths distinguish ownership-free phantom marks from accepted local work; `febc55e5` is recorded in the item | Nonzero-node staging identity fallback and current traced putid-miss gate remain |
 | W52 | `host_resolve_caught_up` still loops over OPEN reservations and calls `host_propose_wait` individually | Approved shape A batching is not implemented; ordinary append passes are not its latency/proposal gate |
 | W43 / D25 | Public `efs_client_truncate` still flushes/reports and calls SETATTR; it does not invoke staged logical resize | Epoch-owned FUSE admission/publication, live-file sweep/history retirement and activation gates |

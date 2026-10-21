@@ -1,6 +1,0 @@
-{
-  "binary": "/tmp/efs-repair-qualified-ed749cab-v2/efsd",
-  "sha256": "7a7205df3e1dc0f3e9b149bd4d0627e5b07386f1c940dec427c4cfd8c9770d1b",
-  "build_id": "ed749cab2127",
-  "scope": "real daemon protocol/default-off/incarnation boundary only; no repair or quorum recovery proof"
-}

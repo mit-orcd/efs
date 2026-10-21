@@ -1,9 +1,0 @@
-{
-  "tag": "sata",
-  "files": 361060,
-  "errors": [],
-  "cold_checks": 64,
-  "storage": "/data1/efs/w97-three-sata-v2-20261010",
-  "start_mono": 100540.381406,
-  "seconds": 1200
-}

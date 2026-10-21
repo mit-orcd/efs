@@ -1,8 +1,0 @@
-test_raft: OK
-test_raft_store: OK
-test_wire: OK
-host retirement: credits after KV release/before marker; queued arrivals retained; KV/marker EIO guards PASS
-host checkpoint: failed KV sync cannot advance normal/shutdown markers; save failures retained PASS
-host flow: codec, bounded admission/detached work, control/read escape PASS
-Linux async sender: mixed-channel BUSY drain, recovery, legacy/malformed/lost replies and shutdown PASS
-actual overlap classifier: duplicate/new suffix/conflict/config/log/overflow PASS

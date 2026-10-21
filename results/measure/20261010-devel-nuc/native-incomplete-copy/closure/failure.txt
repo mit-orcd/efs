@@ -1,7 +1,0 @@
-Traceback (most recent call last):
-  File "/data1/efs/devel-nuc-20261010/nuc_closure.py", line 33, in <module>
-    run('native',['make','-j6','test',*defs],timeout=1800)
-  File "/data1/efs/devel-nuc-20261010/nuc_closure.py", line 24, in run
-    if required:assert p.returncode==0,name+' failed; retained raw logs'
-                       ^^^^^^^^^^^^^^^
-AssertionError: native failed; retained raw logs

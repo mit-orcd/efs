@@ -11,7 +11,7 @@ W93/W97 investigation, not closure or a hardware-ceiling claim.
 ## Committed branch integration
 
 Frozen branch tips are in
-[merge-tips.json](../../../results/measure/20261010-w93-checkpoint-hour/merge-tips.json).
+merge-tips.json (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w93-checkpoint-hour/merge-tips.json`).
 All 16 captured local branch tips are ancestors of this branch: first fast-forward
 through `51880999`, then `4be9ecf6` (integrated devel). No other checkout or branch
 pointer is changed; commits made elsewhere after this boundary are outside the

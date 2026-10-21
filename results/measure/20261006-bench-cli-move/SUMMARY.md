@@ -25,6 +25,6 @@ Validation on the NUC host, private `/data1/efs/review/ten-rounds` source:
 An initial remote full-test attempt stopped because generated documentation had
 not yet been synced; regeneration/sync followed by the full rerun passed.
 
-[Smoke output](smoke.log), [full test output](test.log).
+Smoke output (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261006-bench-cli-move/smoke.log`), full test output (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261006-bench-cli-move/test.log`).
 These short smoke runs validate execution, not storage performance. The live
 four-node cluster was not redeployed or exercised by this change.

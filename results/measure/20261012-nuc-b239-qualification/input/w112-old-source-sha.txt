@@ -1,1 +1,0 @@
-b2beb978051e39dfb8ee830c51480524e2dc1d34d41804d794c20f2e7f24a8d8  ba73f304:src/client/write.c

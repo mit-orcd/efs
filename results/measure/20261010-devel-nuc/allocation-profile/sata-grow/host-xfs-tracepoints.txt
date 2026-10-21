@@ -1,3 +1,0 @@
-215556,,xfs:xfs_log_force,160008984594,100.00,,
-5,,xfs:xlog_iclog_force,160008990853,100.00,,
-78148,,xfs:xlog_iclog_sync,160008993503,100.00,,

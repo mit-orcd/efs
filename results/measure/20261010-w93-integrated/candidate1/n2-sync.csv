@@ -1,5 +1,0 @@
-Events disabled
-Events enabled
-Events disabled
-740305,,syscalls:sys_enter_fdatasync,121148166447,100.00,,
-787579,,syscalls:sys_enter_fsync,121148166447,100.00,,

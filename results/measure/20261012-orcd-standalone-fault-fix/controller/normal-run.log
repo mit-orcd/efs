@@ -1,5 +1,0 @@
-test_lock: OK
-./tests/test_stage_evict
-test_stage_evict: OK
-./tests/test_conn_fd
-test_conn_fd: OK

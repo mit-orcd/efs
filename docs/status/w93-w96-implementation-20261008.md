@@ -42,7 +42,7 @@ cold bytes. Physical inventory/quota return to zero and late PUTs stay fenced.
 The live fixture contains the tail-repair/validation fix; final sticky I/O
 fencing was separately exercised by the focused AMD/Linux and sanitizer tests.
 
-[Retained acceptance evidence](../../results/measure/20261008-w93-w96-implementation/w96-recovery/live.log).
+Retained acceptance evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-w93-w96-implementation/w96-recovery/live.log`).
 KV preallocation and its performance/recovery gates remain separate work.
 
 ## Remaining packages
@@ -109,7 +109,7 @@ files on ordinary and first-use cross-group hashed paths, crashes all four
 daemons before adoption, retries the identical CREATE identity, unlinks while
 held and verifies nlink-zero inode lifetime until final close and removal.
 Full POSIX 216/0/1, peer 64/64 and GC/cold recovery pass; service restored.
-[Evidence](../../results/measure/20261008-w93-w96-implementation/w94-atomic-server/live.log).
+Evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-w93-w96-implementation/w94-atomic-server/live.log`).
 
 W94 remains open for client adoption ownership and ambiguous-result cleanup.
 FUSE still uses separate HOLD; enabling the old flag now would retain the
@@ -136,7 +136,7 @@ reply or apply escapes those failures. Focused AMD tests and local sanitizers
 pass. Full private AMD direct/TCP fixture `gc-direct-aw0f7val` passes POSIX
 216/0/1, peer 64/64, append/replay/fsync, held CREATE, shutdown, two cold WAL
 recovery cycles and empty final physical GC inventory. Installed service restored.
-[Evidence](../../results/measure/20261008-w93-w96-implementation/w93-fault-recovery/live.log).
+Evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-w93-w96-implementation/w93-fault-recovery/live.log`).
 
 ## W94 rejected descriptor replies
 
@@ -149,7 +149,7 @@ descriptor, returns the rejected-reply status, then verifies unlink reclaims
 the server inode. Full private AMD `gc-direct-czn4utnr` passes POSIX 216/0/1,
 peer 64/64, replay/fsync/shutdown and repeated cold WAL/GC gates. Service restored.
 The full Linux regression suite also passes in an isolated generated-doc tree.
-[Evidence](../../results/measure/20261008-w93-w96-implementation/w94-rejected-replies/live.log).
+Evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-w93-w96-implementation/w94-rejected-replies/live.log`).
 
 This fixes a lifecycle leak; it does not enable CREATE lease piggybacking.
 Client adoption and ambiguous CREATE/lease-close recovery remain open.
@@ -171,7 +171,7 @@ generations across 100 files, payloads 1/17/128/512/65536 bytes. It verifies
 every final generation after abrupt private-daemon restart, then proves
 physical deletion and queue drain. This is functional correctness evidence,
 not a power-loss claim.
-[Evidence](../../results/measure/20261008-w93-w96-implementation/live-churn/live.log).
+Evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-w93-w96-implementation/live-churn/live.log`).
 
 ## W93 / W53 end-to-end mixed-load finding
 
@@ -373,7 +373,7 @@ POSIX/peer, guarded ownership, atomic CREATE, append/sync/replay, dirty stop,
 physical GC/quota and two-crash WAL recovery all pass. Focused session
 ASan/UBSan and the full Linux test target pass. The sanitizer repeat corrected
 an erroneous test-fixture destructor; no production leak was implicated.
-[Retained evidence](../../results/measure/20261008-w93-w96-review/w94-transaction-owner/live.log).
+Retained evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-w93-w96-review/w94-transaction-owner/live.log`).
 
 Pending-CREATE apply admission is now checked before replay/negative verdicts.
 A missing local establishment returns BUSY without a name or receipt; an old

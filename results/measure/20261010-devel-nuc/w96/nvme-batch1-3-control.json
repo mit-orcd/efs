@@ -1,1 +1,0 @@
-{"reserve_bytes":0,"batch":1,"records":26366,"seconds":90.002655,"records_s":292.946914,"encoded_bytes":4139462,"resets":0,"max_reserved_slack":0,"max_allocated_bytes":7864320,"sync_calls_including_reopen":26367,"sync_mean_ms":3.375906,"sync_p50_us":3384,"sync_p95_us":3653,"sync_p99_us":5798,"sync_max_ms":18.320866,"replay_verified":true}

@@ -1,2 +1,0 @@
-[ perf record: Woken up 71 times to write data ]
-[ perf record: Captured and wrote 145.983 MB /data1/efs/durability-tracepoints-20261009/perf.data (1699265 samples) ]

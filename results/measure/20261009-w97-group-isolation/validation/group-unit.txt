@@ -1,6 +1,0 @@
-host outbox: independent group ACKs/heartbeats, vote eviction and bounded replacement PASS
-host pressure: soft/hard, receive pacing, leader eligibility, recovery reserves, retained ownership and persistence poison PASS
-test_raft: OK
-test_raft_store: OK
-test_raft: OK
-test_raft_store: OK

@@ -1,1 +1,0 @@
-GET pool: mutex/condition/thread failures, complete cleanup, atomic readiness and repeated stop/restart PASS

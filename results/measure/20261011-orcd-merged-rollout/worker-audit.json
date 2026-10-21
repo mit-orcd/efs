@@ -1,9 +1,0 @@
-{
-  "fcstor007": "1572459 1572432 Ss   bash -c python3 '/tmp/efs/tests/posix/posix_2client.py' --exec 'peer_unlink_recreate_old_fd' 1 '/tmp/efs-mount/posix2-merged-c52a464391a6/peer_unlink_recreate_old_fd'",
-  "fcstor008": "",
-  "fcstor009": "",
-  "fcstor010": "",
-  "fcstor011": "",
-  "fcstor012": "",
-  "fcstor013": ""
-}

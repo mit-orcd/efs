@@ -1,5 +1,0 @@
-Traceback (most recent call last):
-  File "/tmp/efs/tests/live/efs_commands_nfs.py", line 51, in <module>
-    assert stats['stats']['tree_files'] == len(expected), stats
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-AssertionError: {'version': 1, 'operation': 'stats', 'complete': True, 'expiry': 'unavailable', 'snapshot': {'boot_id': 17023102757887620, 'generation': 16, 'source_ns': 1791622411812419082, 'built_ns': 1791622412999542027, 'applied_g0': 659668, 'applied_g2': 691723, 'term_g0': 113, 'term_g2': 102, 'refresh_error': 0, 'refresh_n': 256, 'refresh_ms': 2000, 'refresh_min_ms': 2000, 'pending_changes_at_least': 256, 'pending_age_ms_at_sample': 0, 'lag_sample_ns': 1791622413233662315, 'refresh_overdue': False}, 'stats': {'imm_files': 50, 'imm_dirs': 1, 'imm_bytes': 204800, 'imm_tmin': 1791622409314084017, 'imm_tmax': 1791622411809216720, 'tree_files': 99, 'tree_dirs': 1, 'tree_bytes': 405504, 'tree_tmin': 1791622409314084017, 'tree_tmax': 1791622411809216720}}

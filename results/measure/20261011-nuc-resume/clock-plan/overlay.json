@@ -1,9 +1,0 @@
-{
-  "commit": "f52cd2dd93e43cfd0b2ac7c70d2ade58121b9487",
-  "sha256": "e830614d208735f4b34660110a0a1295c7aa81de1026ddafd79d5e5a28b1283d",
-  "files": [
-    "Makefile",
-    "src/client/efs_fuse.c",
-    "tests/test_append_burst_clock.py"
-  ]
-}

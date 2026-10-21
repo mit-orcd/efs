@@ -1,7 +1,0 @@
-TCP_DIAG_1=1
-fault harness self-test: pass
-fault suite {'PASS': 20, 'FAIL': 1}
-2026-10-12T14:01:16.673Z Repair manual: ino=65537 role=1 phase=source read rc=-1; pending debt is retained
-2026-10-12T14:01:16.675Z Repair manual: ino=65537 role=1 phase=capture rc=-15; pending debt is retained
-2026-10-12T14:01:16.677Z Repair manual: ino=65537 role=1 phase=capture rc=-15; pending debt is retained
-2026-10-12T14:01:16.679Z Repair manual: ino=65537 role=1 phase=capture rc=-15; pending debt is retained

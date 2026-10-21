@@ -1,7 +1,0 @@
-dcache-pressure live=33554432 reserved=0 backing=33554432 limit=67108864 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=body
-dcache-pressure live=33554432 reserved=0 backing=33554432 limit=67108864 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=body
-dcache-pressure live=33554432 reserved=0 backing=33554432 limit=67108864 request=1572864 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=body
-dcache-pressure live=0 reserved=0 backing=33554432 limit=67108864 request=1572864 metadata=8388312 metadata_reserved=0 metadata_limit=8388608 metadata_request=3072 failed=metadata
-dcache-pressure live=0 reserved=0 backing=33554432 limit=67108864 request=68157440 metadata=0 metadata_reserved=0 metadata_limit=8388608 metadata_request=133120 failed=body
-test_client_memory: OK (sparse bound, failed PUT/pressure retention, commit identity)
-test_read_pressure: OK (pin and pending-read ownership)

@@ -1,9 +1,0 @@
-raft-host: applied session index=1 kind=2 shard=1 ino=42
-raft-host: applied session index=1 kind=2 shard=1 ino=42
-Assertion failed: (audible(EFS_MD_SESS_REGISTER, business[i]) == business[i]), function main, file test.c, line 46.
-Traceback (most recent call last):
-  File "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-amd/tests/test_session_register_verdict.py", line 54, in <module>
-    subprocess.run([str(binary)], check=True, timeout=5)
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 528, in run
-    raise CalledProcessError(retcode, process.args,
-subprocess.CalledProcessError: Command '['/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/efs-register-verdict-z9c_2eis/test']' died with <Signals.SIGABRT: 6>.

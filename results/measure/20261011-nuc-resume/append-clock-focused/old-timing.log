@@ -1,7 +1,0 @@
-Assertion failed: (append_publish_burst(42)==0 && flushes==1 && entry.append_burst==2), function main, file test.c, line 67.
-Traceback (most recent call last):
-  File "/Users/mike/Documents/Codex/2026-10-07/i-l/work/efs-find-stats/tests/test_append_burst_clock.py", line 55, in <module>
-    subprocess.run([str(path.with_suffix(''))],check=True,timeout=5)
-  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 528, in run
-    raise CalledProcessError(retcode, process.args,
-subprocess.CalledProcessError: Command '['/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/efs-append-burst-clock-r1mn8nlm/test']' died with <Signals.SIGABRT: 6>.

@@ -1,2 +1,0 @@
-file=/data1/efs/mnt/ior-hard-4 size=564096000 records=12000 ntasks=4 G=271828 threads=8
-DONE records=12000 bad=0 short=0

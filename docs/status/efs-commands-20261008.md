@@ -100,7 +100,7 @@ Candidate build ID after the loaded-capacity repair: `c22754236b38-cmd-58997ac5`
 The earlier `3997575c` passed small-fixture gates but exposed production
 catalog capacity on rollout; it is not the final candidate. Exact source patch, untracked
 source hashes and raw logs live in
-[`results/measure/20261008-efs-commands`](../../results/measure/20261008-efs-commands).
+`results/measure/20261008-efs-commands` (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-efs-commands`).
 NUC build uses `/data1/efs/command-build`, separate from running source/stores.
 Private fixture directories are new, never existing production stores.
 

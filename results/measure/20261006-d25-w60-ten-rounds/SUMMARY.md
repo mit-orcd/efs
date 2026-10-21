@@ -33,21 +33,21 @@ Testing used the four-node NUC. `/data2/efs` resolves onto `/home`, which had
 
 ## Acceptance
 
-- Full Linux `make test`: PASS ([unit log](unit.log)). Initial private-build
+- Full Linux `make test`: PASS (unit log (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261006-d25-w60-ten-rounds/unit.log`)). Initial private-build
   attempts exposed missing copied docs/README and accidentally copied Mac test
   executables; complete source/doc synchronization and forced Linux test
   rebuild resolved these environment issues. The fence-read test stub was
   updated and committed; no unresolved test failure remains.
 - Full NUC POSIX: **216 pass, 0 fail, 1 skip** in 76.1 s. The skip is unsupported
-  mmap ([log](posix.log)).
-- NUC W36 `peer_rename_vs_unlink_src`: **20/20 pass** ([log](w36-20.log)).
+  mmap (log (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261006-d25-w60-ten-rounds/posix.log`)).
+- NUC W36 `peer_rename_vs_unlink_src`: **20/20 pass** (log (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261006-d25-w60-ten-rounds/w36-20.log`)).
 - W60 baseline: **2000/2000 tiny reads fail**, 2000 read-NOMEM log lines,
-  sequential reader error-free ([result](baseline.log)).
+  sequential reader error-free (result (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261006-d25-w60-ten-rounds/baseline.log`)).
 - W60 fixed, identical fixture/budget: **0/2000 failures**, zero read-NOMEM
-  lines, sequential reader error-free ([result](fixed.log)).
+  lines, sequential reader error-free (result (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261006-d25-w60-ten-rounds/fixed.log`)).
 - Reusable harness checks both sequential and tiny data: **0/2000 failures**,
   27,414,757,376 sequential bytes, error-free and reader joined normally,
-  47.7 s including concurrent test activity ([result](verified.log)).
+  47.7 s including concurrent test activity (result (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261006-d25-w60-ten-rounds/verified.log`)).
 - Body budget on both A/B mounts: **32 MiB normal + 32 MiB drain**.
 - Architecture documentation gate: **5/5 PASS**.
 
@@ -85,4 +85,4 @@ Final normal `deploy-and-restart.sh` cycle: **PASS**, with all four servers
 and both normal client mounts on clean code build `2a30c8eb960c`. The
 post-deployment POSIX run again passed **216 / 0 failures / 1 mmap skip**.
 Generated W60 fixtures were removed; diagnostic mounts were stopped; both
-normal mounts were restored. [Rollout acceptance log](rollout.log).
+normal mounts were restored. Rollout acceptance log (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261006-d25-w60-ten-rounds/rollout.log`).

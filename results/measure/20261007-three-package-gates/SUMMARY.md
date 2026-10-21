@@ -7,23 +7,23 @@ Fixture JSON records the source/test/binary hashes and exact CLI options.
 
 | Experiment | Outcome | Raw log |
 | --- | --- | --- |
-| Old KV production-cap idle recovery | FAIL: 120-second timeout | [before](three-gates-kv-before.log) |
-| Repaired KV cap/idle recovery | PASS | [after](three-gates-kv-after.log) |
-| Repaired KV four steady update cycles, NVMe | PASS | [steady](three-gates-kv-steady.log) |
-| Final KV cap/drain/steady/reopen, including WAL repair, SATA | PASS | [final](three-gates-kv-final.log) |
-| Old WAL concurrent-tail crash | FAIL: overwrite, insertion, deletion lost | [before](three-gates-wal-before.log) |
-| Repaired WAL, complete KV unit suite | PASS | [after](three-gates-wal-after.log) |
-| Production allocator full normal/drain reserve | PASS | [allocator](three-gates-final-bufpool.log) |
-| Exact ancestry/participant production helpers | PASS | [namespace](three-gates-final-namespace-unit.log) |
-| Production nested rename deadline helper | PASS | [deadline](three-gates-rename-unit.log) |
-| Initial direct withheld publication + sparse pressure + GC/restart | PASS | [direct](three-gates-w59-direct.log) |
-| Initial buffered withheld publication + sparse pressure + GC/restart | PASS | [buffered](three-gates-w59-buffered.log) |
-| Final direct fault repeat, refused write does not extend file | PASS | [strict direct](three-gates-pressure-final-direct-repeat.log) |
-| Final buffered fault repeat | PASS | [strict buffered](three-gates-pressure-final-buffered.log) |
-| Final direct namespace boundary + restart + POSIX + GC | PASS: 216 single, 64 peer, zero failures, one skip | [direct](three-gates-final-direct.log) |
-| Final buffered namespace boundary + restart + POSIX + GC | PASS: 216 single, 64 peer, zero failures, one skip | [buffered](three-gates-buffered-repeat2.log) |
-| Discovery/retirement, including natural socket-close exit | PASS | [processes](three-gates-client-processes-repeat.log) |
-| Full clean Linux `make -j8 test` | PASS | [units](three-gates-full-test-clean.log) |
+| Old KV production-cap idle recovery | FAIL: 120-second timeout | before (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-three-package-gates/three-gates-kv-before.log`) |
+| Repaired KV cap/idle recovery | PASS | after (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-three-package-gates/three-gates-kv-after.log`) |
+| Repaired KV four steady update cycles, NVMe | PASS | steady (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-three-package-gates/three-gates-kv-steady.log`) |
+| Final KV cap/drain/steady/reopen, including WAL repair, SATA | PASS | final (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-three-package-gates/three-gates-kv-final.log`) |
+| Old WAL concurrent-tail crash | FAIL: overwrite, insertion, deletion lost | before (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-three-package-gates/three-gates-wal-before.log`) |
+| Repaired WAL, complete KV unit suite | PASS | after (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-three-package-gates/three-gates-wal-after.log`) |
+| Production allocator full normal/drain reserve | PASS | allocator (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-three-package-gates/three-gates-final-bufpool.log`) |
+| Exact ancestry/participant production helpers | PASS | namespace (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-three-package-gates/three-gates-final-namespace-unit.log`) |
+| Production nested rename deadline helper | PASS | deadline (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-three-package-gates/three-gates-rename-unit.log`) |
+| Initial direct withheld publication + sparse pressure + GC/restart | PASS | direct (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-three-package-gates/three-gates-w59-direct.log`) |
+| Initial buffered withheld publication + sparse pressure + GC/restart | PASS | buffered (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-three-package-gates/three-gates-w59-buffered.log`) |
+| Final direct fault repeat, refused write does not extend file | PASS | strict direct (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-three-package-gates/three-gates-pressure-final-direct-repeat.log`) |
+| Final buffered fault repeat | PASS | strict buffered (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-three-package-gates/three-gates-pressure-final-buffered.log`) |
+| Final direct namespace boundary + restart + POSIX + GC | PASS: 216 single, 64 peer, zero failures, one skip | direct (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-three-package-gates/three-gates-final-direct.log`) |
+| Final buffered namespace boundary + restart + POSIX + GC | PASS: 216 single, 64 peer, zero failures, one skip | buffered (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-three-package-gates/three-gates-buffered-repeat2.log`) |
+| Discovery/retirement, including natural socket-close exit | PASS | processes (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-three-package-gates/three-gates-client-processes-repeat.log`) |
+| Full clean Linux `make -j8 test` | PASS | units (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-three-package-gates/three-gates-full-test-clean.log`) |
 
 ## Commands
 

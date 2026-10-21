@@ -36,8 +36,8 @@ It does not modify production networking or stores.
   two-client POSIX 64/64; restart persistence 26/26 prepare and 26/26 verify.
   Deployment completes with four healthy nodes and both FUSE mounts.
 
-Retained [baseline failure](../../results/measure/20261007-w82/baseline-partition.txt)
-and [fixed acceptance](../../results/measure/20261007-w82/fixed-partition.txt)
+Retained baseline failure (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-w82/baseline-partition.txt`)
+and fixed acceptance (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-w82/fixed-partition.txt`)
 establish the same live RPC scenario before/after. Additional driver logs `/private/tmp/efs-w82-nuc-final-gates.log`,
 `/private/tmp/efs-w82-partition3.log`, `/private/tmp/efs-w82-baseline.log`;
 NUC unit log `/tmp/efs-w82-final-test.log`. Private fixture paths are printed in

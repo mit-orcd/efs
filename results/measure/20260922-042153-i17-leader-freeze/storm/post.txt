@@ -1,3 +1,0 @@
-children=1 nlink=2
-RMDIR_FAIL
-d-fcstor009-2-29
