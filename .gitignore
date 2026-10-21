@@ -80,3 +80,33 @@ __pycache__/
 
 # Raw run artifacts: commit summaries and reproduction recipes instead.
 /artifacts/
+tests/test_rdma_segmented
+tests/test_expiry
+tests/test_query_refresh
+tests/test_txn_resolve_faults
+tests/test_namespace_session
+tests/test_query_catalog
+tests/test_name_index
+tests/test_append_transaction
+tests/test_store_durability
+tests/test_append_receipt
+tests/test_put_ticket
+tests/test_store_gc
+tests/test_reclaim
+tests/test_kv_snapshot_tail
+tests/test_kv_seg_bloom
+tests/test_kv_lsm_concurrent
+tests/test_kv_block_hash
+tests/test_query_disk
+tests/test_query_delta
+tests/test_query_disk_io
+tests/test_small_segment
+tests/test_packed_segment
+tests/test_pack_ledger
+tests/test_pack_ledger_recovery
+tests/test_pack_switch
+tests/test_packed_reader
+tests/test_directory_sync_group
+tests/test_kv_insertion_buffer
+tests/test_retained_namespace_audit
+tests/test_kv_reader_gate
