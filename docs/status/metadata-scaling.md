@@ -392,3 +392,52 @@ and legacy-state migration. Measure independent-directory and hot-directory
 workloads separately, including per-group offered/achieved rate, blocked time,
 WAL/apply delay, p99 and errors. No claimed speedup, W66 closure, or deployment
 authorization follows from this review.
+
+### Assessment of the independent review — Oct 21
+
+**Documentation/code review against devel `01eed2cdd`; no cluster test
+(NOTRUN).** The review's corrections are verified against the code and the
+archived evidence:
+- **Pacing.** `host_dir_spread_pass` pops up to `HOST_SPREAD_MAX` (8) queued
+  directories per maintenance pass, one move attempt each. Attempts per pass
+  across queued directories is the precise description. With a single
+  requeued directory this comes to about 8 per pass, which matches the
+  measured 464–472 moves/min.
+- **Baseline.** It was stopped at 16,784 moves and FINISH was NOTRUN, so the
+  2.3 h figure was an extrapolation.
+- **Candidate run.** 1,124 s from creation start, 64,516 moves; creation took
+  1,063 s. The earlier "500 k-file split to 1,124 s" wording was wrong.
+
+Where this assessment differs or adds:
+
+1. **Born-hashed placement reuses existing machinery, but alone it doesn't
+   distribute execution.** HASHED directories already lazily register used
+   lanes in a 64-bit bitmap, keep per-lane timestamps, and use a fixed
+   64-lane permutation (architecture §7.4). Creating directories HASHED
+   removes the LOCAL → SPLITTING transition, and with it the migrator and
+   the frontier listing defect, for all new directories. But the 64 lanes
+   still map onto two consensus groups, so it fixes the migration problems
+   without spreading metadata execution. Distribution needs more groups.
+   Sequence: born-hashed placement (correctness and simplicity), then
+   versioned group distribution (scale). The cost to evaluate is the loss of
+   LOCAL CREATE co-location (dentry and inode in one atomic entry) for
+   small directories.
+2. **Legacy migration: necessary for topology change, not necessarily for
+   legacy LOCAL directories.** Adding groups or moving lanes between groups
+   needs a restartable, replay-safe move protocol regardless. For directories
+   that are LOCAL today, the project's no-backward-compatibility policy
+   allows a reformat-based cutover instead of in-place migration (orcd-mini
+   was freshly formatted on 2026-10-19). Which way to go is a user decision.
+   It shouldn't be assumed in either direction.
+3. **Named `DIR_MIGRATE` encoding: valid concern, narrower exposure.** Daemons
+   refuse mismatched build IDs (daemon HELLO), so mixed-version voters can't
+   apply the same log concurrently. The remaining exposure is a downgrade
+   that replays a retained log, where an old decoder would move a different
+   name. The fix consistent with the project's fail-closed practice is a new
+   command or sub-tag that old decoders refuse, not an optional trailing
+   field.
+4. **Measurement plan: agreed.** Add per-lane occupancy and lane-to-group
+   mapping to the per-group metrics. With two groups, "64 lanes" is at most
+   2-way at the consensus level, so lane counts alone overstate spread.
+5. **D36: agreed.** The voter count per group follows from the D36 recovery
+   proof, not from throughput arguments.
