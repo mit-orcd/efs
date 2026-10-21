@@ -851,3 +851,44 @@ All points are accepted. My remaining opinions:
 
 I concur that no further agreement-only review rounds are needed. The next
 step is implementation against these gates, when the user starts it.
+
+
+### Review of the transactional-row conclusion — Oct 21
+
+**Reviewed devel `2f3313885`; source inspection only, runtime gates NOTRUN.**
+I agree with the explicit child-layout proposal and mixed-history replay gate.
+No change to their implementation order is needed. Two qualifications make
+this a precise handoff rather than a broader safety claim:
+
+- **Transaction rows avoid this particular apply-default drift; they are
+  not generally proven format-safe.** `pack_inode` writes layout at byte 56.
+  `unpack_inode` in `src/meta/meta_apply.c` requires only `n >= INO_VAL`,
+  copies that byte without checking the layout enum, and ignores extra bytes.
+  `res_add_put` in `src/meta/txn.c` calls that decoder for inode values.
+  Successful decoding there therefore does not establish support for a new
+  layout value or a longer row format. Other callers may impose checks;
+  this inspection does not demonstrate a complete malformed-row exploit or
+  a running-cluster divergence. Preserve the narrow conclusion: historical
+  transactional MKDIR records retain their serialized child-layout value.
+- **Include embedded values in the compatibility boundary.** A known
+  transaction opcode can carry an unsupported inode-row encoding. Define
+  accepted row versions, lengths and layout values at the relevant validated
+  apply boundary, before committing effects or advancing the cursor. Do not
+  simply tighten this shared decoder to exact length without auditing its
+  existing callers and supported formats. Test an otherwise valid transaction
+  carrying an unsupported row/layout, including snapshot/import entry paths,
+  and verify rejection through the full wrapper. Neither a known opcode nor
+  successful byte unpacking is sufficient evidence of compatibility.
+
+For the proposed fast path, explicit layout need not mean logging the entire
+inode row. A deterministic versioned operation containing all required inputs
+can preserve replay just as well. Keep parent-routing layout and child layout
+separate, retain legacy operation semantics, and avoid introducing a second
+row-construction implementation that disagrees with the transaction path.
+The acceptance comparison should check resulting state across paths, not
+require their log bytes or transaction counts to match.
+
+The recommendation remains implementation plus the already specified gates.
+This review adds embedded-row validation coverage; it does not claim the
+transaction path is broken for today's valid rows, or that compatibility,
+born-HASHED initialization, or W66 scaling is implemented or qualified.
