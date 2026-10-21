@@ -737,3 +737,30 @@ client logs preserved as `qualification-643f6104f/HOST-client-1012.log`.
 Same unresolved failure mechanism; no new product commits or deployment changes.
 Writers and queued full-verification jobs remain active with unchanged bounds.
 Full acknowledged-payload verification and cold-restart gates remain pending.
+
+### Five-hour scale finished; full verification started — 2026-10-21 10:44 UTC
+
+**Scale FAIL:**11,840,878 acknowledged new files of40,000,000 target (29.60%).
+Final host counts003–006:2,929,018 /2,981,503 /2,969,341 /2,961,016.
+Final failed-worker counts14 /7 /11 /13,total45. All four writer jobs completed
+normally at their workload duration, exit1 reflecting errors, not job timeout.
+All45 uncertain-write payloads match the complete expected256 bytes in the
+read-only audit (`HOST-uncertain-final-window`, exit0); this does not turn failed
+closes into success. Copied client logs are `HOST-client-1043.log`.
+
+All four queued full verifiers started automatically after writer completion.
+They use preserved final manifests under
+`qualification-643f6104f/scale-final-manifests/HOST/` and write cumulative
+checkpoints to `qualification-643f6104f/full-new-scale/HOST.json`.
+Initial checkpoints exist on all four, with zero errors; verification remains
+IN PROGRESS, not PASS. Deadline15:14:33 UTC includes the earlier wait; monitor
+remaining time and preserve/resume checkpoints before expiration if necessary.
+The original retained8,437,752-payload PASS remains a separate result. No restart
+or redeployment during full reads. After verification, investigate any mismatch
+first, then orderly restart with EFS_RAFT_OBS=1 for unresolved publication
+stalls and perform cold verification. The40 M target is still unmet.
+
+Packing remains active: latest group2 logs show~32,300 active segments,
+~3,218,572 live KiB,~2.94 M backlog and~179 GiB unpacked estimate; these are
+node-observed shared-group gauges, not additive across replicas. Packing progress
+does not establish reclaim correctness or full payload integrity.
