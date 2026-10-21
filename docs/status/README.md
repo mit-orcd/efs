@@ -30,33 +30,13 @@ placement. Follower reads exist, but
 routing prefers leaders. Next: a decision page separating replica, leader,
 read-routing and execution placement; measure per-group traffic and blocked
 time first; transaction locality and D36's replica count gate more groups.
-Independent review corrects migration timing/counts and separates pacing,
-listing correctness and metadata distribution. Honor reasonably spread metadata
-with bounded fan-out and D36 protection. The follow-up review corrects
-HASHED CREATE costs and warns that unknown command codes currently return
-success rather than enforcing downgrade refusal. Explicitly authorized fresh
-formats can avoid legacy conversion; retained-data routing changes need a
-safe transition. The implementation review additionally finds that apply
-wrappers can consume decoder errors as business verdicts: fatal encoding
-rejection must preserve both KV and Raft cursors and withdraw readiness.
-New markers cannot retroactively fence old readers. Fatal rejection must
-abort an opened KV apply scope with `apply_end(kv, NULL)` to release its writer
-lock; compatibility must cover replay semantics as well as encoding bytes.
-MKDIR review distinguishes implicit child layout in operation replay from
-serialized child rows in transactions; both paths and legacy/new replay need
-coverage. Embedded inode rows also need compatibility validation: the current
-decoder accepts trailing bytes and does not itself validate layout values.
-Validator placement must also precede derived side effects (transaction
-resolution currently queues spread work before inode decoding). Shared row
-construction still requires cross-path state tests. Spread notices are
-requeued and share a bounded queue; the row recheck limits state risk but does
-not establish a one-attempt cost. Stage notifications through abort/commit
-and verify restart discovery. Born-HASHED correctness and compatibility gates
-are NOTRUN. Split rediscovery remains an untested liveness concern; SPLITTING
-also blocks rmdir and directory replacement. Reproduce with a durable applied
-cursor and empty queues, and require discovery to survive queue overflow.
-Observe autonomous split completion before cleanup writes; test rename
-replacement with a separate empty destination. Runtime reproduction is NOTRUN.
+The no-backward-compatibility policy supersedes the historical legacy replay
+and migration proposals. Use one current format and fresh-format cutovers;
+keep fail-closed refusal and current-format restart/replay/snapshot tests.
+Do not build split rediscovery for discarded stores: retain those gates only
+if the chosen current design can still create SPLITTING directories.
+Earlier measurements and review findings remain evidence, not legacy-support
+requirements. Implementation and runtime qualification remain NOTRUN.
 
 **Raw evidence moved off devel (2026-10-21).** 23,126 raw files (logs, TSV,
 JSON, fixture stores) under `results/`, `docs/status/evidence/` and seven

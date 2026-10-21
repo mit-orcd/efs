@@ -247,7 +247,9 @@ See [completed regression evidence](../../results/measure/20261010-w66-leadershi
 This consolidates every gate agreed in the Oct 21 review thread below
 (single-leader review through the rediscovery test design). Use this list
 for implementation. The thread is the rationale and audit trail. All tests
-run on disposable private fixtures, never retained ORCD stores.
+run on disposable private fixtures. Fresh-format cutovers may replace test
+clusters under the user's no-backward-compatibility policy; preserve concise
+failure evidence separately rather than requiring old stores to remain usable.
 
 **No backward compatibility (user rule, Oct 21).** EFS is not in production.
 Unless the user explicitly says otherwise:
@@ -261,10 +263,41 @@ store or peer it doesn't support stops and says so. It never silently
 skips or misreads. Where the review thread below argues for legacy
 handling, this checklist supersedes it.
 
+### Review of the no-backward-compatibility cutover — Oct 21
+
+**Reviewed devel `c70beab3f`; documentation review only, runtime gates NOTRUN.**
+I agree with the removal of legacy gates. My earlier reviews over-scoped this
+work by treating old-store migration and historical encoding preservation as
+requirements. They are superseded, not deferred prerequisites for beta.
+
+- Implement one current encoding and placement scheme. Change it directly
+  with a format-marker bump and a fresh cluster when needed; no legacy opcode,
+  optional-field fallback, migration scanner or old-binary test matrix is
+  required just to carry pre-production data forward.
+- Keep current-format restart, replay, snapshot restore and operation retry
+  tests. A freshly formatted cluster must still preserve its data through
+  ordinary restart on the supported build. These are normal-operation
+  correctness checks, not backward compatibility. Dropping B5 removes the
+  upgrade of an incompatible store, not current-format recovery testing.
+- Refuse mismatched markers, unsupported commands and incompatible peer
+  declarations explicitly. Refusal must not silently erase a store; formatting
+  remains an explicit deployment operation. Synthetic invalid/current-format
+  fixtures are sufficient for these negative tests; no old-binary matrix.
+- Drop split rediscovery when no current path creates SPLITTING state. Do not
+  implement a durable pending index or migration scan solely for directories
+  on stores that will be discarded. If adaptive splitting is retained, its
+  restart/progress requirements still apply to fresh current-format clusters.
+
+Recommended scope: current-format fail-closed validation, the chosen directory
+initialization and metadata distribution, then fresh-cluster qualification.
+Keep concise failure evidence outside disposable stores; preserving evidence
+must not become a requirement to support the old data format. No cluster was
+changed or erased by this review.
+
 **Owners:**
 - **W66:** metadata distribution.
-- **W66-compat:** a compatibility-hardening prerequisite of W66 with no W
-  number yet; it needs its own.
+- **W66-compat:** historical label for fail-closed format validation, not
+  backward compatibility; no W number assigned yet.
 - **W81:** automatic directory spreading.
 - **D36:** the node-count protection contract.
 
@@ -309,10 +342,11 @@ user).
 
 **D. Split rediscovery: only if splitting stays in the design (depends on A7)**
 
-If A7 chooses directories that are spread from creation, no SPLITTING
-directories exist on a fresh format and D1–D5 are dropped. They apply only
-if a LOCAL → SPLITTING transition remains in the design, and never to
-retained pre-change directories.
+If A7 chooses spread-from-creation and all current creation paths (including
+root and both MKDIR paths) eliminate the initial split transition, D1–D5
+are dropped. Verify that condition on a fresh format rather than implementing
+rediscovery for discarded old stores. If current operation still produces
+SPLITTING directories, its liveness remains a current-format requirement.
 
 | # | Gate | Owner | Status | Source |
 | --- | --- | --- | --- | --- |
