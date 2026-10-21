@@ -10,6 +10,7 @@
 #include "efs/publication.h"
 #include "efs/put_ticket.h"
 #include "efs/write_extent.h"
+#include "efs/pack_mapping.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <stddef.h>
@@ -5790,6 +5791,15 @@ static void span_of(efs_ino_t ino, uint32_t ci, uint64_t bg, uint8_t nrange,
         struct efs_chunk_rec mine = {0};
         uint64_t mine_gen = 0;
         if (ce.ndelta >= EFS_CHUNK_DELTA_MAX)
+            return;
+        /* W125: a write that takes a packed file past the packing threshold
+         * is folded, not spanned: the full CAS fold fetches the packed base,
+         * writes an ordinary per-file chunk and its publication releases the
+         * packed record. A span would leave the file a hybrid for good (a
+         * packed base under per-file spans), since a file above the
+         * threshold is never repacked (closure C3, 2026-10-21). */
+        if (ci == 0 && ce.packed.segment_id &&
+            (uint64_t)roff[0] + rlen[0] > EFS_PACK_THRESHOLD)
             return;
         /* Our unreported local span is not committed coverage. The next
          * snapshot must still include every application byte it owns. */

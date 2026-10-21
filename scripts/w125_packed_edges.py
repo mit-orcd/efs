@@ -8,9 +8,12 @@
  2. read patterns on packed files: partial reads at random offsets, reads
     past EOF (short), O_DIRECT reads (4 KiB aligned buffer), and 32 threads
     reading files of the same segments at once;
- 3. modify packed files: append past 16 KiB (must leave packing), small
-    append, overwrite in the middle, truncate shorter and longer; verify,
-    wait for repacking, verify again;
+ 3. modify packed files: append past 16 KiB (a write past the threshold
+    must leave packing: the client folds the chunk into a per-file base),
+    small append, overwrite in the middle, truncate shorter and longer
+    (a truncate keeps a packed tail, so a file extended past 16 KiB by
+    truncate may stay packed); verify, wait up to 600 s for repacking per
+    modification kind, verify again;
  4. delete everything.
 Exit 1 on any mismatch or error.
 """
@@ -85,6 +88,7 @@ for t in ts: t.join()
 check(terr[0] == 0, "%d concurrent same-segment reads wrong" % terr[0])
 print("reads: partial/EOF errors=%d O_DIRECT errors=%d concurrent errors=%d" % (errs, derr, terr[0]))
 mod = rng.sample([p for p in small if packed(p)], 60)
+kind = {}
 for i, p in enumerate(mod):                  # modify packed files
     b = expect[p]
     with open(p, "r+b") as f:
@@ -95,14 +99,17 @@ for i, p in enumerate(mod):                  # modify packed files
             off = len(b) // 2; x = data(p + "o", min(300, len(b) - off)); f.seek(off); f.write(x); b = b[:off] + x + b[off + len(x):]
         elif k == 3: f.truncate(len(b) // 3); b = b[:len(b) // 3]
         else: f.truncate(len(b) + 4000); b = b + b"\0" * 4000
-    expect[p] = b
+    expect[p] = b; kind[p] = ("append_big", "append", "overwrite", "shrink", "extend")[i % 5]
 bad = sum(1 for p in mod if open(p, "rb").read() != expect[p])
 check(bad == 0, "%d modified files wrong right after modification" % bad)
-grown = [p for p in mod if len(expect[p]) > 16384]
+grown = [p for p in mod if len(expect[p]) > 16384 and kind[p] != "extend"]   # grown by a write
 small2 = [p for p in mod if 0 < len(expect[p]) <= 16384]
-n2 = wait_packed(small2, len(small2))
+n2 = wait_packed(small2, len(small2), 600)
+for k in ("append", "overwrite", "shrink", "extend"):
+    ps = [p for p in small2 if kind[p] == k]
+    print("  repacked %-9s %d/%d" % (k, sum(packed(p) for p in ps), len(ps)))
 bad2 = sum(1 for p in mod if open(p, "rb").read() != expect[p])
-print("modified %d: wrong now=%d; repacked %d/%d; grown past 16KiB packed %d/%d (must be 0); wrong after repack=%d" % (
+print("modified %d: wrong now=%d; repacked %d/%d; grown past 16KiB by a write packed %d/%d (must be 0); wrong after repack=%d" % (
     len(mod), bad, n2, len(small2), sum(packed(p) for p in grown), len(grown), bad2))
 check(n2 == len(small2), "modified small files not repacked")
 check(not any(packed(p) for p in grown), "file grown past 16 KiB still packed")

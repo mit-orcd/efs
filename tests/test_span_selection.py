@@ -8,6 +8,7 @@ m = re.search(r'^static void span_of\([^;]+?\)\n\{', text, re.M)
 function = text[m.start():text.index('\n}', m.end()) + 2]
 source = r'''
 #include "client_internal.h"
+#include "efs/pack_mapping.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -37,7 +38,19 @@ int main(void) {
     map.ndelta = EFS_CHUNK_DELTA_MAX;
     span_of(1, 1, 0, 1, &off, &len, 131072, &out, &n);
     assert(!out && !n);
-    puts("span selection: partial overlap folds, disjoint and local unpublished ranges preserved PASS");
+    /* W125: over a packed chunk-0 base, a write reaching past the packing
+     * threshold folds (the file leaves packing); below it, it may span. */
+    memset(&map, 0, sizeof(map)); own = 0; map.packed.segment_id = 99;
+    off = 6000; len = 20000;
+    span_of(1, 0, 0, 1, &off, &len, 131072, &out, &n);
+    assert(!out && !n);
+    off = 6000; len = 500;
+    span_of(1, 0, 0, 1, &off, &len, 131072, &out, &n);
+    assert(out == off && n == len);
+    off = 6000; len = 20000;                 /* chunk 1 is never packed: spans as usual */
+    span_of(1, 1, 0, 1, &off, &len, 131072, &out, &n);
+    assert(out == off && n == len);
+    puts("span selection: partial overlap folds, disjoint and local unpublished ranges preserved, packed base folds past the threshold PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-span-selection-') as directory:
