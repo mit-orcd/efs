@@ -2194,6 +2194,21 @@ builds, not a new finding that current truncate silently succeeds.
 
 **STALE replay that never converges** (no W number; the earlier `W26` label here collided with the `fallocate` item)
 
+**Oct 21: one cause found and fixed (C1 variant).** A cross-group lane's
+stamp could fall behind the inode's `content_epoch`. Three paths caused it:
+the external tail stub on an unregistered lane, a `LANE_FENCE` that skipped a
+lane with no stamp, and an `ACTIVATE_LANE` racing the truncate's lane
+snapshot. After that every publish on the lane captured the old epoch and the
+REPORT precheck refused it silently (`why=authority`), until D27 stalled it
+into EIO. The fix checks activation against the epoch, makes the truncate
+BUSY on a lane registered since its snapshot, stamps absent lanes, and
+registers the tail lane. Private C1-workload runs: unfixed 2 stalls and
+11 EIO in 15 min; fixed 0 stalls and no publish EIO in 3 runs (~64 min); orcd-mini rerun NOTRUN (stopped at the user's request). Evidence:
+[status page](../status/w0a-lane-epoch-lag-20261021.md). Open:
+- orcd-mini C1 rerun after deploy;
+- whether the fstor007 and ior-hard captures below share this cause;
+- the same-length read mismatch, probably the `4058d8141` defect (status page).
+
 **Follow-up steps.** (a) identify ino 116202 on 19810 from a KV copy and compare its chunk row with what the classifier (`write.c:880–968`) would replay; (b) repro: eight `dd bs=1M` into one mount, SIGINT mid-write, client stop, `EFS_DCACHE_TRACE=1`; (c) mechanical: the unmount drain names the inos and rc it abandons, and a `report-stale` round that replays the same single chunk > 16 times logs ino/ci/row gen/verdict once; (d) **DECIDED Oct 2 03:50Z = D27** ([decisions table](../status/decisions.md)): detect non-progress as repeated STALE against the *same* server generation (a gen advance is contention), stop the loop, keep the dirty bytes pinned, errseq-style EIO on `fsync`/`fdatasync`/`flush` of that inode, `client.sh stop` refused while a stalled rec exists, forced teardown reports ino/ci/off/len/cause per rec. Spill (Oct 1 23:00Z) and drop-after-N (Oct 2 01:45Z) were both rejected. **D28 (ask):** loss on forced teardown as written policy vs server-held write intents. Note: 2768 rounds prove a stalled operation, not a content mismatch — (a) decides which
 
 **Evidence and limits.** fstor007 Oct 1 00:05: 2768 rounds of `report-stale: chunks=1 … committed=0 replayed=1` and then `UNMOUNT DATA LOSS … rc=-14 after 60s`. Acknowledged writes were discarded; the log cannot say whose. Forbidden: widening the 60 s drain, dropping the STALE check, or publishing a rec the server rejected

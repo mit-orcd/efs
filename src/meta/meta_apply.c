@@ -4766,8 +4766,8 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     return written==EFS_OK?rc:written;
 }
 
-int efs_meta_apply_activate_lanes(struct efs_kv *kv, efs_ino_t ino,
-                                  uint64_t mask)
+static int activate_lanes(struct efs_kv *kv, efs_ino_t ino, uint64_t mask,
+                          int check_epoch, uint64_t expected_epoch)
 {
     struct efs_meta_row row;
     uint8_t key[EFS_KV_KEY_MAX], val[INO_VAL];
@@ -4787,12 +4787,26 @@ int efs_meta_apply_activate_lanes(struct efs_kv *kv, efs_ino_t ino,
         return rc;
     if ((row.active_lanes & mask) == mask)
         return EFS_OK; /* idempotent replay */
+    if (check_epoch && row.content_epoch != expected_epoch)
+        return EFS_ERR_STALE;
     row.active_lanes |= mask;
     pack_inode(val, &row);
     rc = efs_kv_key_inode(efs_kv_inode_shard(ino), ino, key, &klen);
     if (rc != EFS_OK)
         return rc;
     return meta_write_put(kv, key, klen, val, INO_VAL);
+}
+
+int efs_meta_apply_activate_lanes(struct efs_kv *kv, efs_ino_t ino,
+                                  uint64_t mask)
+{
+    return activate_lanes(kv, ino, mask, 0, 0);
+}
+
+int efs_meta_apply_activate_lanes_at(struct efs_kv *kv, efs_ino_t ino,
+                                     uint64_t mask, uint64_t expected_epoch)
+{
+    return activate_lanes(kv, ino, mask, 1, expected_epoch);
 }
 
 int efs_meta_apply_activate_lane(struct efs_kv *kv, efs_ino_t ino,
@@ -5660,7 +5674,7 @@ static int lane_fence_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
     struct lane_rec ln = {0};
     struct lane_authority_fence overlay;
     struct packed_retirement retirement = {0};
-    int rc, full = 0, resume = 0;
+    int rc, full = 0, resume = 0, absent = 0;
 
     /* Idempotency: a replay of an already-applied fence must not zero
      * max_end again — a publish that landed after the first apply would be
@@ -5679,7 +5693,9 @@ static int lane_fence_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
         if (ln.fenced_epoch > new_epoch)
             return EFS_OK;
         resume = ln.fenced_epoch == new_epoch;
-    } else if (rc != EFS_ERR_NOT_FOUND) {
+    } else if (rc == EFS_ERR_NOT_FOUND) {
+        absent = 1;
+    } else {
         return rc;
     }
     if (resume) {
@@ -5692,6 +5708,19 @@ static int lane_fence_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
                              &new_epoch, it, &n, pg->k_ln, pg->v_ln);
         if (rc != EFS_OK)
             return rc;
+        if (absent) {
+            /* An active lane with no stamp yet: a lane-local publish that
+             * passed its epoch check before this truncate may still be in
+             * flight, and an absent stamp would let it create the lane at
+             * the old epoch. Every later publish then captured that stale
+             * epoch and lost its authority check forever (0a). Stamp it. */
+            memset(&ln, 0, sizeof(ln));
+            (void)epoch_lane_upd(&ln, &new_epoch);
+            memcpy(pg->k_ln[lane], key, klen);
+            pack_lane(pg->v_ln[lane], &ln);
+            it[n++] = (struct efs_kv_item){EFS_KV_PUT, pg->k_ln[lane], klen,
+                                           pg->v_ln[lane], LANE_VAL};
+        }
         nfence = n; /* nonzero means the lane stamp is staged for patching */
         if (overlay.present && !nfence) return EFS_ERR_BUSY;
         append_lane_authority_fence(it,&n,&overlay);
@@ -7039,6 +7068,8 @@ static int truncate_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
     rc=load_append_cur(kv,ino,row.generation,&cursor);
     if(rc!=EFS_OK)return rc;
     if(cursor.nopen)return EFS_ERR_BUSY;
+    if (t->check_active && (row.active_lanes & ~t->active_seen))
+        return EFS_ERR_BUSY;
     rc=efs_kv_key_append_cur(efs_kv_inode_shard(ino),ino,row.generation,k_cur,&kc);
     if(rc!=EFS_OK)return rc;
     new_epoch = row.content_epoch + 1;

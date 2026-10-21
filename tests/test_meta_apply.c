@@ -3511,6 +3511,85 @@ static void test_cross_group_lane(void)
     efs_kv_mem_free(kv);
 }
 
+/* 0a: a cross-group lane's stamp must never fall behind the inode's
+ * content_epoch. GETCHUNKS hands the lane stamp to the writer as its
+ * captured authority and the host checks it against the inode, so a
+ * lagging stamp STALEs every later publish on that lane forever (C1:
+ * `pub-stale why=authority epoch=2 want=3`, publish-stalled, EIO). */
+static void test_lane_epoch_never_lags(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    efs_ino_t ino = 0;
+    struct efs_meta_row r, after;
+    struct efs_meta_pub p;
+    struct efs_meta_chunk_view view;
+    uint64_t e0;
+
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK &&
+          efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "lag", &ino) == EFS_OK, "lag fixture");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "lag row");
+    e0 = r.content_epoch;
+
+    /* (1) A lane registered but never published: the truncate's fence
+     * must stamp it, so a publish checked before the truncate cannot
+     * create it under the old epoch afterwards. */
+    CHECK(efs_meta_apply_activate_lanes_at(kv, ino, 1ULL << 1, e0) == EFS_OK,
+          "activate at the current epoch");
+    CHECK(efs_meta_apply_lane_fence(kv, ino, r.generation, 1, e0 + 1, 0, 0, 0)
+              == EFS_OK, "fence a lane with no stamp");
+    CHECK(efs_meta_get_chunk_view(kv, ino, r.generation, 1, EFS_MIN_CHUNK_SIZE,
+                                  &view) == EFS_ERR_NOT_FOUND ||
+          view.fence_epoch == e0 + 1, "fenced lane view");
+    memset(&p, 0, sizeof(p));
+    p.ino = ino;
+    p.chunk_index = 1;
+    p.new_size = 2ULL * EFS_MIN_CHUNK_SIZE;
+    p.candidate_gen = 0xA1;
+    p.coding_profile_id = EFS_META_PROFILE_K2F1;
+    p.now = T0 + 1;
+    fill_ch(&p.ch);
+    p.lane_local = 1;
+    p.inode_gen = r.generation;
+    p.mtime_gen = r.mtime_gen;
+    p.content_epoch = e0;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_ERR_STALE,
+          "pre-truncate publish cannot create the lane at the old epoch");
+    p.content_epoch = e0 + 1;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "current-epoch publish");
+    CHECK(efs_meta_get_chunk_view(kv, ino, r.generation, 1, EFS_MIN_CHUNK_SIZE,
+                                  &view) == EFS_OK && view.fence_epoch == e0 + 1,
+          "lane stamp is the fence epoch");
+
+    /* (2) Registering a lane after a truncate the publish predates. */
+    struct efs_meta_truncate t = {.size = 0, .lane_mask = ~0ULL};
+    CHECK(efs_meta_apply_truncate(kv, ino, T0 + 2, &t) == EFS_OK, "truncate");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK &&
+          r.content_epoch == e0 + 1, "truncate moved the epoch");
+    CHECK(efs_meta_apply_activate_lanes_at(kv, ino, 1ULL << 5, e0) == EFS_ERR_STALE,
+          "activation checked before the truncate is refused");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK &&
+          !(r.active_lanes & (1ULL << 5)), "refused activation sets nothing");
+    CHECK(efs_meta_apply_activate_lanes_at(kv, ino, 1ULL << 5, e0 + 1) == EFS_OK,
+          "activation at the current epoch");
+    CHECK(efs_meta_apply_activate_lanes_at(kv, ino, 1ULL << 5, e0) == EFS_OK,
+          "already-registered lane stays OK");
+
+    /* (3) A truncate whose fence set predates a registration. */
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "row before");
+    t.check_active = 1;
+    t.active_seen = r.active_lanes & ~(1ULL << 5);
+    CHECK(efs_meta_apply_truncate(kv, ino, T0 + 3, &t) == EFS_ERR_BUSY,
+          "truncate refuses a lane registered after its snapshot");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &after) == EFS_OK &&
+          after.content_epoch == r.content_epoch, "refused truncate keeps epoch");
+    t.active_seen = r.active_lanes;
+    CHECK(efs_meta_apply_truncate(kv, ino, T0 + 4, &t) == EFS_OK,
+          "truncate with the current snapshot");
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "lag check");
+    efs_kv_mem_free(kv);
+}
+
 /* A lane with more rows past the new size than one LANE_FENCE page:
  * the first entry fences and deletes a page, re-proposals of the same
  * command resume (EFS_META_FENCE_MORE) until the lane is drained, rows
@@ -5825,6 +5904,7 @@ int main(void)
     test_sparse_grow_tail_epoch();
     test_truncate_range_del();
     test_cross_group_lane();
+    test_lane_epoch_never_lags();
     test_append_reserve();
     test_truncate_append_cursor();
     test_link_nlink();

@@ -242,6 +242,7 @@ Complete navigation to top-level status ledgers as of October 15, 2026. Grouping
 - [W100 EOF rounding: missing REPORT size record — reproduction and fix verdict](w100-eof-contract-20261013.md)
 - [W108 · Resolve owner names in directory-local long listings](w108-owner-name-display-20261011.md)
 - [W112 — acknowledged ordinary full-overwrite loss on STALE replay](w112-full-overwrite-replay-20261012.md)
+- [0a — lane epoch behind the inode: STALE replay that never converges (C1)](w0a-lane-epoch-lag-20261021.md)
 - [W66 protection and routing — implementation proposal, Oct 10](w66-protection-routing-design-20261010.md)
 - [W66 — fresh ReadIndex behind outstanding replication](w66-readindex-20261008.md)
 - [W84 closed for the accepted bounded namespace contract](w84-closure-20261009.md)

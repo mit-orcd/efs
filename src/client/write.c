@@ -6712,11 +6712,17 @@ static int dcache_cycle_verdict(efs_ino_t ino, uint32_t ci,
             if (!e->stalled && wb_error_record_add(ino)) {
                 e->stalled = 1;
                 dcache_pin_add(e);
-                fprintf(stderr, "publish-stalled ino=%llu ci=%u gen=%llu epoch=%llu spans=%u cycles=%u\n",
+                fprintf(stderr, "publish-stalled ino=%llu ci=%u gen=%llu epoch=%llu spans=%u cycles=%u "
+                        "base=%llx span_base=%llx span=%u+%u pub_epoch=%llu pub_flags=%u\n",
                         (unsigned long long)ino, ci,
                         (unsigned long long)p->generation,
                         (unsigned long long)p->epoch, p->spans,
-                        e->recovery.unchanged);
+                        e->recovery.unchanged,
+                        (unsigned long long)e->base_gen,
+                        (unsigned long long)e->object_span_base_gen,
+                        e->object_delta_off, e->object_delta_len,
+                        (unsigned long long)e->object_publish_epoch,
+                        e->object_publish_flags);
             }
             stalled = 1; /* allocation failure still fails this sync */
         }

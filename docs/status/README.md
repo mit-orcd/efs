@@ -103,6 +103,14 @@ grown-file fold).
   chunk. Fixed in `4058d8141`, and orcd-mini now runs `4058d81416a0`.
 - Not run: C1 rerun 2 (stopped), C9 24 h soak (cancelled), C10.
 
+[0a: lane epoch behind the inode](w0a-lane-epoch-lag-20261021.md):
+**fix PASS on a private node9901 cluster; orcd-mini C1 rerun NOTRUN
+(stopped at the user's request).** The C1 large-file EIO came from a
+cross-group lane stamp lagging the inode's epoch, so every publish failed
+the authority check until D27 stalled it. Fixed builds: 0 stalls and 0
+publish EIO in 3 runs of the C1 workload, about 64 min (unfixed: 2 stalls,
+11 EIO in 15 min).
+
 [W125 packer throughput and busy budget](w125-packer-throughput-20261020.md):
 **gates PASS; copy throughput ~1,020 → ~5,000 files/s; lag-controlled busy
 budget bounds the backlog but costs a saturating writer 37% (FAIL vs

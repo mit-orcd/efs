@@ -913,10 +913,23 @@ struct efs_meta_truncate {
     /* Unaligned size and no tail image: keep the existing tail chunk
      * (a generation-0 span row). Do not publish a zero stub over it. */
     uint8_t keep_tail;
+    /* check_active: active_seen is the row's active_lanes the host read
+     * when it chose which lanes to fence. A lane registered since then was
+     * fenced by nobody, and a lane-local publish captured before this
+     * truncate could create it under the old epoch; the apply answers BUSY
+     * so the host re-reads and fences it (0a). */
+    uint8_t check_active;
+    uint64_t active_seen;
 };
 
 int efs_meta_apply_truncate(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
                             const struct efs_meta_truncate *t);
+/* Same, but only while the row's content_epoch is still expected_epoch:
+ * the epoch the publish that needs the lane was checked against. A lane
+ * registered after a truncate the publish predates would accept that
+ * publish under the old epoch (0a). Already-set bits stay OK. */
+int efs_meta_apply_activate_lanes_at(struct efs_kv *kv, efs_ino_t ino,
+                                     uint64_t mask, uint64_t expected_epoch);
 /* EFS_MD_CMD_ACTIVATE_LANE: set one active_lanes bit on the inode row.
  * Idempotent and monotonic; NOT_FOUND (deleted inode) is a no-op OK (P3). */
 int efs_meta_apply_activate_lane(struct efs_kv *kv, efs_ino_t ino,

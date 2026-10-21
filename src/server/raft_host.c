@@ -98,6 +98,10 @@ static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
  * The client folds spans into one image before truncate when it can.
  * This flag is the case where that fold has not landed yet. */
 #define HOST_TRUNC_F_KEEP_TAIL 2
+/* Bit2: bytes 34..41 (the unused session field) carry the active_lanes
+ * snapshot the fences were chosen from; the apply answers BUSY when the
+ * row has registered a lane since (0a). */
+#define HOST_TRUNC_F_ACTIVE_SEEN 4
 #define HOST_APPEND_RSV_LEGACY_LEN 45
 #define HOST_APPEND_RSV_LEN 53
 #define HOST_APPEND_RES_LEN 38
@@ -124,6 +128,7 @@ static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
 #define HOST_PUB_TAIL_TRIES  4 /* cross-group truncate tail CAS retries */
 #define HOST_ACTIVATE_LANE_LEN 10 /* tag + ino:8 + lane:1 */
 #define HOST_ACTIVATE_MASK_LEN 17 /* tag + ino:8 + mask:8 */
+#define HOST_ACTIVATE_AT_LEN   25 /* tag + ino:8 + mask:8 + content_epoch:8 */
 #define HOST_LANE_FENCE_LEN    39 /* tag + ino:8 + gen:8 + lane:1 +
                                    * epoch:8 + size:8 + tail_ci:4 +
                                    * has_tail:1 — matches meta_cmd.h */
@@ -1721,6 +1726,9 @@ static int apply_truncate_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     t.lane_mask = rd64be(cmd + 54);
     t.tail_external = (cmd[62] & HOST_TRUNC_F_TAIL_EXT) ? 1 : 0;
     t.keep_tail = (cmd[62] & HOST_TRUNC_F_KEEP_TAIL) ? 1 : 0;
+    t.check_active = (cmd[62] & HOST_TRUNC_F_ACTIVE_SEEN) ? 1 : 0;
+    if (t.check_active)
+        t.active_seen = rd64be(cmd + 34);
     if (cmd[33]) {
         if (clen < HOST_TRUNC_LEN + HOST_TRUNC_TAIL)
             return EFS_OK;
@@ -1773,9 +1781,11 @@ static int apply_activate_lane_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     uint32_t base = clen;
     struct efs_opid session;
     int fenced = clen == HOST_ACTIVATE_LANE_LEN + EFS_REPORT_SESSION_LEN ||
-                 clen == HOST_ACTIVATE_MASK_LEN + EFS_REPORT_SESSION_LEN;
+                 clen == HOST_ACTIVATE_MASK_LEN + EFS_REPORT_SESSION_LEN ||
+                 clen == HOST_ACTIVATE_AT_LEN + EFS_REPORT_SESSION_LEN;
     if (fenced) base -= EFS_REPORT_SESSION_LEN;
-    if (base != HOST_ACTIVATE_LANE_LEN && base != HOST_ACTIVATE_MASK_LEN)
+    if (base != HOST_ACTIVATE_LANE_LEN && base != HOST_ACTIVATE_MASK_LEN &&
+        base != HOST_ACTIVATE_AT_LEN)
         return EFS_ERR_PROTO;
     ino = rd64be(cmd + 1);
     if (fenced) {
@@ -1785,7 +1795,10 @@ static int apply_activate_lane_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         rc = efs_session_accept(h->kv, shard, session.client_uuid, session.session_epoch);
         if (rc != EFS_OK) return rc;
     }
-    if (base == HOST_ACTIVATE_MASK_LEN)
+    if (base == HOST_ACTIVATE_AT_LEN)
+        rc = efs_meta_apply_activate_lanes_at(h->kv, ino, rd64be(cmd + 9),
+                                              rd64be(cmd + 17));
+    else if (base == HOST_ACTIVATE_MASK_LEN)
         rc = efs_meta_apply_activate_lanes(h->kv, ino, rd64be(cmd + 9));
     else
         rc = efs_meta_apply_activate_lane(h->kv, ino, cmd[9]);
@@ -1794,6 +1807,8 @@ static int apply_activate_lane_cmd(struct efs_raft_host *h, const uint8_t *cmd,
      * set). Anything else (IO, INVAL) is the verdict the REPORT's
      * host_propose_wait needs — the publish that follows would otherwise
      * land on a lane stat() never collects. Ring-only in host_apply. */
+    if (rc == EFS_ERR_STALE)
+        return rc; /* a truncate won the race; the REPORT re-pulls */
     if (rc != EFS_OK) {
         fprintf(stderr, "raft-host: apply activate-lane rc=%d index=%llu ino=%llu\n",
                 rc, (unsigned long long)index, (unsigned long long)ino);
@@ -5994,7 +6009,8 @@ static int pack_utimens_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
 static int pack_truncate_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
                              uint64_t now, uint64_t expect_gen, uint64_t size,
                              const struct efs_meta_pub *tail,
-                             uint64_t lane_mask, uint8_t flags)
+                             uint64_t lane_mask, uint64_t active_seen,
+                             uint8_t flags)
 {
     uint8_t *q;
     int i;
@@ -6006,8 +6022,9 @@ static int pack_truncate_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
     wr64be(out + 25, size);
     out[33] = tail ? 1 : 0;
     memset(out + 34, 0, EFS_OPID_UUID_LEN + 4);
+    wr64be(out + 34, active_seen);
     wr64be(out + 54, lane_mask);
-    out[62] = flags;
+    out[62] = flags | HOST_TRUNC_F_ACTIVE_SEEN;
     *len = HOST_TRUNC_LEN;
     if (!tail)
         return EFS_OK;
@@ -6229,24 +6246,20 @@ static int pack_publish_cmd(uint8_t *out, uint32_t *len, const struct efs_meta_p
     return EFS_OK;
 }
 
-/* EFS_MD_CMD_ACTIVATE_LANE: [ino:8][lane:1] — meta_cmd.h. */
-static int pack_activate_lane_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
-                                  uint8_t lane)
-{
-    out[0] = EFS_MD_CMD_ACTIVATE_LANE;
-    wr64be(out + 1, ino);
-    out[9] = lane;
-    *len = HOST_ACTIVATE_LANE_LEN;
-    return EFS_OK;
-}
-
-static int pack_activate_mask_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
-                                  uint64_t mask)
+/* EFS_MD_CMD_ACTIVATE_LANE: [ino:8][mask:8][content_epoch:8] — the epoch
+ * the publish needing these lanes was checked against. The apply refuses
+ * (STALE) once a truncate moved it: no truncate since then fenced the new
+ * lanes, so the publish would otherwise create them under the old epoch.
+ * The older [ino:8][lane:1] and [ino:8][mask:8] forms still apply from
+ * the log, unchecked. */
+static int pack_activate_at_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
+                                uint64_t mask, uint64_t epoch)
 {
     out[0] = EFS_MD_CMD_ACTIVATE_LANE;
     wr64be(out + 1, ino);
     wr64be(out + 9, mask);
-    *len = HOST_ACTIVATE_MASK_LEN;
+    wr64be(out + 17, epoch);
+    *len = HOST_ACTIVATE_AT_LEN;
     return EFS_OK;
 }
 
@@ -16951,6 +16964,34 @@ static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
             }
         }
     }
+    /* The cross-group tail stub below creates a row on its lane. An
+     * unregistered lane is neither fenced now nor by any later truncate,
+     * so its stamp stayed at this epoch while the inode moved on; once a
+     * writer registered it, every publish captured that old stamp and
+     * lost the authority check forever (0a). Register it first, so this
+     * truncate fences it like any active lane. */
+    if (rc == EFS_OK && tail_ext && (bits & (1ULL << lane)) == 0) {
+        uint8_t acmd[HOST_ACTIVATE_AT_LEN];
+        uint32_t alen = 0;
+
+        if (!host_hosts(h, lg)) {
+            uint8_t need[2];
+            host_need_both(need);
+            host_fwd_setattr(h, ino, EFS_SETATTR_SIZE | EFS_SETATTR_MTIME, 0,
+                             0, 0, size, mtime, mtime_nsec, 0, 0, out, need, 2);
+            return;
+        }
+        rc = pack_activate_at_cmd(acmd, &alen, ino, 1ULL << lane,
+                                  row.content_epoch);
+        if (rc == EFS_OK)
+            rc = host_propose_wait(h, g, acmd, alen, &hint);
+        if (rc == EFS_ERR_STALE)
+            rc = EFS_ERR_BUSY; /* another truncate won; re-read */
+        if (rc == EFS_OK) {
+            bits |= 1ULL << lane;
+            cross[ncross++] = lane;
+        }
+    }
     /* Fence the cross-group lanes BEFORE the inode-group entry commits the
      * new epoch: a lane whose fenced_epoch already moved rejects any
      * stale-epoch publish, so no publication of the old epoch can slip in
@@ -16972,7 +17013,7 @@ static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
     if (mtime)
         now = mtime * 1000000000ull + (uint64_t)mtime_nsec;
     if (rc == EFS_OK)
-        rc = pack_truncate_cmd(cmd, &clen, ino, now, 0, size, tp, same_mask,
+        rc = pack_truncate_cmd(cmd, &clen, ino, now, 0, size, tp, same_mask, bits,
                                (uint8_t)((tail_ext ? HOST_TRUNC_F_TAIL_EXT : 0) |
                                          (keep_tail ? HOST_TRUNC_F_KEEP_TAIL : 0)));
     if (rc == EFS_OK && clen > HOST_CMD_MAX)
@@ -18493,6 +18534,29 @@ static uint64_t host_pub_candidate_gen(const struct efs_chunk_rec *rec,
     return efs_meta_candidate_gen(h, 0, 1, chunk_index, 0);
 }
 
+/* A precheck STALE never reaches the apply log, so a REPORT that loses the
+ * same CAS round after round left no server trace (0a). Rate-limited:
+ * at most 20 lines per second across all threads. */
+static void host_pub_stale_note(const char *why, const struct efs_chunk_rec *rec,
+                                uint64_t want, uint64_t have)
+{
+    static uint64_t sec, n;
+    uint64_t now = now_ns() / 1000000000ull;
+    uint64_t was = __atomic_load_n(&sec, __ATOMIC_RELAXED);
+
+    if (was != now && __atomic_compare_exchange_n(&sec, &was, now, 0,
+                                                  __ATOMIC_RELAXED, __ATOMIC_RELAXED))
+        __atomic_store_n(&n, 0, __ATOMIC_RELAXED);
+    if (__atomic_fetch_add(&n, 1, __ATOMIC_RELAXED) >= 20)
+        return;
+    fprintf(stderr, "raft-host: pub-stale why=%s ino=%llu ci=%u rec_base=%llx "
+            "span=%u+%u flags=%u epoch=%llu want=%llx have=%llx\n", why,
+            (unsigned long long)rec->ino, rec->chunk_index,
+            (unsigned long long)rec->base_gen, rec->delta_off, rec->delta_len,
+            rec->publish_flags, (unsigned long long)rec->publish_epoch,
+            (unsigned long long)want, (unsigned long long)have);
+}
+
 /* Pack one PUBLISH. *clen=0 means skip (identical mapping or deleted).
  * *lg is the raft group that must host the entry. skip_ri is for the
  * REPORT batch path (ReadIndex already done per group). cached is the
@@ -18561,6 +18625,8 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
      * Never re-stamp an old materialization with a later truncation epoch. */
     uint64_t publish_epoch;
     int epoch_rc = efs_chunk_publish_authority(rec, row.generation, row.content_epoch, &publish_epoch);
+    if (epoch_rc == EFS_ERR_STALE)
+        host_pub_stale_note("authority", rec, row.content_epoch, row.generation);
     if (epoch_rc != EFS_OK) {
         if(epoch_rc==EFS_ERR_INVAL)
             fprintf(stderr,"raft-host: pub-reject reason=authority ino=%llu ci=%u flags=%u file_gen=%llu epoch=%llu\n",
@@ -18577,10 +18643,11 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
          * stat()'s collect set), then publish lane-local below. A crash
          * between the two leaves the bit set with no chunk — harmless
          * (stat treats an absent lane as 0). */
-        uint8_t acmd[HOST_ACTIVATE_LANE_LEN + EFS_REPORT_SESSION_LEN];
+        uint8_t acmd[HOST_ACTIVATE_AT_LEN + EFS_REPORT_SESSION_LEN];
         uint32_t alen = 0;
 
-        rc = pack_activate_lane_cmd(acmd, &alen, rec->ino, lane);
+        rc = pack_activate_at_cmd(acmd, &alen, rec->ino, 1ULL << lane,
+                                  row.content_epoch);
         if (rc == EFS_OK && session) {
             efs_report_session_pack(acmd + alen, session);
             alen += EFS_REPORT_SESSION_LEN;
@@ -18627,10 +18694,11 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
         if (rc != 0 && rc != EFS_ERR_NOT_FOUND)
             return rc;
         if (rec->base_gen != 0) {
-            if (rc == EFS_ERR_NOT_FOUND)
+            if (rc == EFS_ERR_NOT_FOUND || cur != rec->base_gen) {
+                host_pub_stale_note(rc == EFS_ERR_NOT_FOUND ? "span-norow" : "span-base",
+                                    rec, rec->base_gen, cur);
                 return EFS_ERR_STALE;
-            if (cur != rec->base_gen)
-                return EFS_ERR_STALE;
+            }
         }
         rc = EFS_OK;
     } else if (rec->base_gen == 0) {
@@ -18657,8 +18725,10 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
             memcmp(got.checksums, rec->checksums, sizeof(got.checksums)) == 0)
             return EFS_OK;
         if (rec->base_gen != EFS_CHUNK_BASE_UNCOND &&
-            rec->base_gen != got.generation)
+            rec->base_gen != got.generation) {
+            host_pub_stale_note("image-base", rec, rec->base_gen, got.generation);
             return EFS_ERR_STALE;
+        }
     }
     memset(&p, 0, sizeof(p));
     p.ino = rec->ino;
@@ -19050,6 +19120,9 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
             uint64_t captured_epoch;
             rc = efs_chunk_publish_authority(&recs[i], ic[k].row.generation,
                                               ic[k].row.content_epoch, &captured_epoch);
+            if (rc == EFS_ERR_STALE)
+                host_pub_stale_note("authority", &recs[i], ic[k].row.content_epoch,
+                                    ic[k].row.generation);
             if (rc != EFS_OK)
                 break;
             lane = (uint8_t)(recs[i].chunk_index % EFS_META_LANES);
@@ -19063,14 +19136,15 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
             }
         }
         for (k = 0; k < nic && rc == EFS_OK; k++) {
-            uint8_t acmd[HOST_ACTIVATE_MASK_LEN + EFS_REPORT_SESSION_LEN];
+            uint8_t acmd[HOST_ACTIVATE_AT_LEN + EFS_REPORT_SESSION_LEN];
             uint32_t alen = 0;
             uint8_t ig;
 
             if (!ic[k].need_act)
                 continue;
             ig = efs_raft_shard_group(efs_kv_inode_shard(ic[k].ino));
-            rc = pack_activate_mask_cmd(acmd, &alen, ic[k].ino, ic[k].need_act);
+            rc = pack_activate_at_cmd(acmd, &alen, ic[k].ino, ic[k].need_act,
+                                      ic[k].row.content_epoch);
             if (rc == EFS_OK && session) {
                 efs_report_session_pack(acmd + alen, session);
                 alen += EFS_REPORT_SESSION_LEN;
