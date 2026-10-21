@@ -497,3 +497,21 @@ failures from an unconditional regression; it cannot erase loaded failures.
 Next is a separate 40 M-target fixture on the same deployed profile, followed
 by exact verification and orderly cold restart. The updated full verifier is
 staged as `repair-20261020/verify_scale_f6d83c895.py`.
+
+### Unloaded core PASS; new scale running — 2026-10-21 05:44 UTC
+
+After verification readers finished, unchanged POSIX core **216/216 PASS**
+in 34.6 s, including the 15-second mtime case. Prior loaded failures remain
+open as load-sensitive latency; no extra product fix or relaxed timeout was used.
+
+Started a separate **40 M target** workload: 32 writers per host, 10 M target
+each, 18,000-second duration / 18,300-second job limit from ~05:44 UTC.
+Fixture root `/tmp/efs-mount/qualification-643f6104f-scale`; each host writes
+its own `scale-HOST` subtree. Evidence/manifests:
+`repair-20261020/qualification-643f6104f/scale-40m/`. Current job IDs are in
+the deployment journal's `scale` section. Old fixtures remain untouched.
+The workload's sampled checks do **not** qualify full payload correctness.
+After writes, use staged `verify_scale_f6d83c895.py SCALE_RUN NEW_OUTPUT
+--fixture-root /tmp/efs-mount/qualification-643f6104f-scale`, then orderly
+restart/full verification with preserved checkpoints before bounded job expiry.
+Actual new file counts and writer outcome are pending; 40 M is a target only.

@@ -1572,7 +1572,9 @@ verified). Retained verification at 2.96 M without errors. Isolated mtime
 case still exceeds 15 s under read load (80-append diagnostics 9.11–18.46 s,
 mtime monotonic). Full retained verification PASS: all 8,437,752 payloads, zero errors, including
 all 49 prior EBUSY paths; all 117 uncertain writes match. Unchanged core suite
-is rerunning after readers finish; new scale/restart gates remain open.
+passed 216/216 after readers finished; loaded timeout remains preserved.
+New 40 M-target workload running in a separate fixture (32 writers/host);
+new scale/restart gates remain open.
 
 [W124 — fast delete](../backlog/fast-delete-reclaim.md): **parts 1–2
 implemented and deployed on orcd-mini (`de0c856b4`);**
