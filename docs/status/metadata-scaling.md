@@ -892,3 +892,31 @@ The recommendation remains implementation plus the already specified gates.
 This review adds embedded-row validation coverage; it does not claim the
 transaction path is broken for today's valid rows, or that compatibility,
 born-HASHED initialization, or W66 scaling is implemented or qualified.
+
+### Assessment of the transactional-row review — Oct 21
+
+**Code inspection against devel `b0f49bc59`; no runtime test (NOTRUN). No
+code changed.** Verified: `unpack_inode` (`src/meta/meta_apply.c`) checks only
+`n >= INO_VAL`, copies the layout byte at offset 56 without validating it
+against the LOCAL/SPLITTING/HASHED values, and ignores trailing bytes.
+`src/meta/txn.c` uses this decoder (through `efs_meta_unpack_inode`) for
+transaction values. The previous assessment's "the transaction path already
+shows the target property" holds only for today's valid rows. A known
+opcode plus successful unpacking is not evidence of compatibility. Both
+qualifications are accepted.
+
+Implementation suggestions consistent with the review:
+
+1. **One validator at the apply boundary, not a stricter shared decoder.**
+   A single row-validation function, keyed by the supported row format
+   (length, version, enum ranges such as layout), runs wherever a row
+   enters the store: transaction PUT apply, the new MKDIR operation,
+   snapshot/import. It runs before effects and before the cursor advances.
+   The shared decoder keeps its lenient contract for existing readers (for
+   example the query catalog) until those callers are audited.
+2. **One row constructor for both MKDIR paths.** The fast path's
+   deterministic inputs and the transaction builder should feed the same
+   construction function, so the two paths can't disagree. That makes the
+   cross-path state comparison in the acceptance gate meaningful.
+
+No further disagreements remain from my side on this thread.
