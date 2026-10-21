@@ -18,6 +18,12 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[D25 logical truncate design](d25-logical-truncate-design-20261021.md):
+**proposal for review, NOTRUN.** One inode-group entry commits size, epoch
+and a pruned inode fence history; lanes adopt the epoch lazily; a GC
+sweep deletes or clips superseded rows and feeds the reclaim journal.
+Replaces the declined 256 MiB EBUSY refusal; W43 stays open.
+
 [W66 acceptance checklist](metadata-scaling.md#w66-acceptance-checklist-consolidated-oct-21)
 (distribution, fail-closed hardening, MKDIR/born-HASHED, conditional split
 rediscovery; all NOTRUN, directory-spread policy OPEN-DECISION; no backward
