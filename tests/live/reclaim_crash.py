@@ -42,7 +42,10 @@ roots = [base / f'n{i+1}' for i in range(3)]
 mount = base / 'mnt'
 for d in roots + [mount]:
     d.mkdir(parents=True, exist_ok=True)
-env = dict(os.environ, EFS_TRANSPORT='tcp', EFS_COMMANDS='0', EFS_COMMANDS_SERVER='0', EFS_MD_RAFT_N='3')
+# W125: keep the packer out of the way (an hour's minimum age) so every keep
+# file stays in per-file fragments; this gate checks W124 whole-inode reclaim.
+env = dict(os.environ, EFS_TRANSPORT='tcp', EFS_COMMANDS='0', EFS_COMMANDS_SERVER='0', EFS_MD_RAFT_N='3',
+           EFS_PACK_MIN_AGE_MS='3600000')
 procs = [None, None, None]
 logs = []
 client = None
