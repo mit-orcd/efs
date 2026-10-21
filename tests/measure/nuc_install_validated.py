@@ -3,7 +3,7 @@
 import collections,hashlib,json,os,shutil,signal,socket,subprocess,time
 from pathlib import Path
 base=Path('/data1/efs/devel-nuc-20261010');src=base/'src';installed=Path('/data1/efs/src');out=base/'installed-validation'
-out.mkdir(exist_ok=False);names=('efsd','efs-fuse','efs-mgmt','efs-query','efs-bench')
+out.mkdir(exist_ok=False);names=('efsd','efs-fuse','efs-mgmt','efs-bench')
 def wait(fn,seconds,label):
     end=time.monotonic()+seconds
     while time.monotonic()<end:

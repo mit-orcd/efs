@@ -100,9 +100,9 @@ for direct in (False, True):
                     assert 'quota=8.00 MiB' in status,status
                     good()
                     print(f'{direct=} {roots=} running quota reduced; below-usage reduction refused; bytes retained PASS',flush=True)
-                    for flag in ([], ['--raw']):
-                        query=subprocess.run([str(source/'efs-query'),*flag,f'127.0.0.1:{port}'],capture_output=True,text=True)
-                        assert query.returncode==2 and not query.stdout and 'unavailable' in query.stderr,query
+                    # QUERY_STATS (25) must answer UNSUPPORTED (1) in a one-byte
+                    # QUERY_STATS_REPLY (26), never totals, on a nonempty export.
+                    assert rpc(25,b'')==bytes([26,1]),'retired QUERY_STATS returned totals'
                     print(f'{direct=} {roots=} nonempty export query: unsupported, no false totals PASS',flush=True)
                     put.sum[0] ^= 1
                     assert rpc(6,bytes(put)+b'x'*65536)[:2] == bytes([7,1]), 'wrong caller digest accepted'

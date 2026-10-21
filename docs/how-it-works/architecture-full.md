@@ -5996,6 +5996,15 @@ not diagnose the current reclamation incident.
 
 <a id="w81"></a>
 
+
+**October 21, 2026: binary removed.** `efs-query` and its help entry were
+deleted, as the [dead-code audit](../reviews/dead-code-review-20261021.md)
+recommended (P6, baseline R10). The server's `QUERY_STATS` handler still
+answers UNSUPPORTED and never returns totals. `tests/live/raft_read_freshness.py`
+and `tests/live/fragment_integrity.py` now check that refusal over the wire.
+`tests/test_query_unavailable.py`, which tested only the CLI against a fake
+server, was removed with the binary.
+
 ### W81 · Automatic directory spread responds to size, not pressure
 
 **Policy accepted Oct 8 (D35):** sustained directory-local serialization wait and queue pressure plus activity; retain size trigger, use hysteresis/cooldowns and bounded fair migration. Exclude global overload signals; select explicit configurable thresholds from AMD measurements before activation. [Contract](../status/accepted-namespace-scratch-20261008.md#d35--w81-sustained-contention-directory-spreading).
