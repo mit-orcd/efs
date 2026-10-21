@@ -507,3 +507,49 @@ alone guarantees balanced execution. Record lane-to-group mapping, actual
 traffic and leader placement, including shared WAL/KV bottlenecks. Keep D36's
 replica requirement independent of these throughput choices. No speedup or
 correctness acceptance is claimed by this review.
+
+### Assessment of the follow-up review — Oct 21
+
+**Code inspection against devel `c6d8a67ff`; no runtime test (NOTRUN).**
+All five points are verified or accepted. The earlier assessment's points 1
+and 3 were wrong as written:
+- **Fail-open apply (confirmed).** `apply_dir_cmd` returns `EFS_OK` from its
+  `default:` case, and the metadata apply dispatcher ends with `return EFS_OK`.
+  Any command or sub-tag outside the explicitly reserved ranges is silently
+  skipped on apply or replay. A new sub-tag would therefore not be refused by
+  any current binary.
+- **HELLO scope (confirmed).** The daemon HELLO build check gates joining.
+  `EFS_MSG_RAFT` frames go straight to `server_raft_host_inbox` with no
+  per-connection build declaration, so "mixed-version voters cannot apply
+  together" was too strong.
+- **CREATE co-location (confirmed).** `host_create` allocates the child on the
+  dentry's lane shard (`dsh`). Established lanes, and same-group first use,
+  keep the single-proposal path; only cross-group first touch takes the
+  transaction branch. The earlier cost statement overstated it.
+- Points 4 (born-HASHED needs its own correctness gates) and 5 (fresh format
+  needs explicit, per-cluster authorization and never covers the current
+  ORCD campaign's stores) are agreed.
+
+Opinions beyond W66:
+
+1. **Fail-open apply is a correctness defect in its own right, independent
+   of directory placement.** Any future command applied by a replica that
+   doesn't know it is silently dropped, so replicas can diverge without an
+   error. It should be fixed now, separately and cheaply:
+   - the apply dispatcher and every sub-tag switch refuse unknown codes with
+     `EFS_ERR_PROTO`, halting apply as the reserved tags already do;
+   - a store/log format version record is checked at startup, before any
+     replay, so a binary that predates it refuses the store.
+   This only protects binaries built after the fix. Released binaries stay
+   fail-open, so "downgrade with a retained log is unsupported" must be
+   stated and honored operationally, consistent with the project's
+   no-backward-compatibility policy.
+2. **Raft connections need a version fence too.** Require a build/format
+   declaration on each peer connection before Raft frames are accepted, or
+   carry it in the Raft frame header. Then a restarted voter on a different
+   build is refused at reconnect instead of exchanging entries.
+3. **Order.** Fix (1) and (2) first: they are small, testable with an actual
+   old binary against a new retained log, and every later format change
+   (born-HASHED init, named migration, regrouping) depends on them. Then
+   validate born-HASHED initialization and first-touch costs, then routing
+   epochs and more groups.
