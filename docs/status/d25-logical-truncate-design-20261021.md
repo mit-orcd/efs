@@ -430,6 +430,80 @@ Constants proposed here: history 32 entries, sweep 256 keys examined and 64
 rows changed per entry. They stay proposals until g1 and g6 measure them.
 W43 stays open until the gates pass.
 
+## Final protocol review of `07011a9cc` — October 21
+
+**Design review: changes required; implementation and all runtime gates NOTRUN.**
+This review qualifies §§0–7 above; it is not part of the superseded appendix.
+The single-entry direction, lane-local sweep and source-row CAS approach are
+sound directions to implement, but the following details must be resolved first.
+No code, cluster deployment or format migration is included in this review.
+
+### Blocking: BOOTSTRAP must invalidate the old EOF summary
+
+Section 3.4 raises a present stamp's `adopted_epoch` without resetting
+`max_end` or advancing `seq`. Counterexample: a lane at epoch 0 has
+`max_end = 1 MiB`; truncate commits epoch 1 and size 100. Its old EOF is
+correctly ignored until BOOTSTRAP(1) relabels it as current. The next collect
+then reports 1 MiB again, without any new publication. This follows directly
+from the proposed epoch filter; current `collect_phys_eof` in
+`src/meta/meta_apply.c` also confirms that the lane maximum contributes to EOF.
+
+Use one adoption transition for publish, bootstrap, sweep and any permitted
+reduction: when the epoch increases, reset the epoch-scoped EOF summary and
+advance its validation sequence atomically. Equal or older bootstrap requests
+must preserve current writes and their maximum. Bootstrap must still preserve
+the sweep fields. The reduction audit must cover pending reductions too;
+clearing only the stored maximum cannot neutralize an untagged pending maximum.
+Add g4 cases for existing-lane bootstrap after shrink, duplicate bootstrap after
+a new write, and an obsolete bootstrap after a newer epoch has been adopted.
+
+### Required: receipt exhaustion must refuse the whole truncate
+
+The proposed atomic receipt is right, but “same shape and bounds as
+APPEND_RECEIPT” is not enough to specify its failure behavior.
+`include/efs/opid.h` and `src/sim/opid.c` explicitly permit an ordinary operation
+to apply unrecorded when `efs_opid_fold` cannot fit the receipt. The cache holds
+16 replies and the completion bitmap spans 64 sequence positions.
+
+Truncate must never inherit that fallback. Apply the acknowledgement to a
+private window, check lookup/admission, and successfully encode the completed
+receipt before committing any inode/history changes. Capacity exhaustion must
+produce a bounded retryable refusal with the entire truncate batch unchanged.
+Do not treat a partially modified in-memory window from a failed
+`efs_opid_complete` as committed state. Test full reply cache, sparse sequences
+beyond the bitmap, acknowledgement freeing capacity, and lost reply across a
+restart at each boundary. A reclaimed lookup returns a zero-valued success stub;
+it must not be interpreted as a real `(E_after=0, size=0)` authority result.
+Keep acknowledged duplicates distinct from unacknowledged receipts whose exact
+result must remain available. These are current-format correctness tests only.
+
+### Gate ordering and two smaller clarifications
+
+- The two audits may start immediately, but their outputs must identify every
+  relevant call site and the resulting rule, not just record that code was read.
+  The cache audit must include the kernel's attribute/page caches as well as
+  userspace mappings, and ordinary read paths that do not reopen the file.
+- g4 is missing from the explicit implementation-order gate lists. It is a
+  prerequisite for accepting the joint authority/adoption change and the new
+  truncate path, alongside g0–g3. Run g5 before accepting cache coherence;
+  keep g6–g8 as sweep/packing gates. Private incremental development is fine;
+  no partially converted production path should be qualified.
+- Retain the history revision even when its entry count becomes zero; deleting
+  the history record and recreating revision zero would defeat its use as an
+  ABA-resistant cache/read validation token. Specify overflow refusal, just as
+  for the content epoch.
+- “Before commit” in §5 is an internal state boundary, not a conclusion a
+  timed-out caller can draw. A lost reply or leadership change can leave an
+  unknown outcome. g0 must inject a definite non-commit/refusal to demand the
+  old payload; ambiguous outcomes require same-opid resolution, not an assertion
+  that the old file necessarily remains.
+
+**Recommendation:** incorporate these focused corrections, perform the two
+call-site audits, then implement against the gates. The stale-extend argument
+and conditional packing-CAS argument do not need another conceptual rewrite.
+No backward-compatible encodings, retained-data migration or old-binary tests
+are requested.
+
 ## Appendix — review history (superseded)
 
 **Superseded by §§0–7 above.** Kept unchanged except for heading depth, so
