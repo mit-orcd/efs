@@ -1,5 +1,16 @@
 # Project rules
 
+## No backward compatibility
+
+EFS is not in production. Unless the user explicitly says otherwise, never
+design, implement, test or require backward compatibility: no preserved old
+log, store, snapshot, wire or row encodings, no migration of retained data,
+no downgrade support, no mixed-build clusters, no old-client fallbacks. A
+format or placement change takes effect on a freshly formatted cluster.
+Keep fail-closed refusal: a binary meeting an encoding, store or peer it
+does not support stops with a clear error and never silently skips or
+misreads it. Do not add legacy-compatibility gates to reviews or plans.
+
 ## Evidence and reproducibility
 
 Commit concise evidence summaries and clear reproduction instructions. Do not

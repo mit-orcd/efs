@@ -19,8 +19,9 @@ full acceptance are separate states.
 ## Recent evidence and remaining acceptance
 
 [W66 acceptance checklist](metadata-scaling.md#w66-acceptance-checklist-consolidated-oct-21)
-(26 gates: distribution, compatibility hardening, MKDIR/born-HASHED, split
-rediscovery; all NOTRUN, directory-spread policy OPEN-DECISION) consolidates the
+(distribution, fail-closed hardening, MKDIR/born-HASHED, conditional split
+rediscovery; all NOTRUN, directory-spread policy OPEN-DECISION; no backward
+compatibility: B5/B8 and legacy parts dropped) consolidates the
 review thread below.
 [W66 single-leader concentration review](metadata-scaling.md#single-leader-concentration-review--oct-21):
 **analysis only, NOTRUN.** Two fixed metadata groups mean at most two

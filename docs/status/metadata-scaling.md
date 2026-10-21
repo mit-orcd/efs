@@ -249,6 +249,18 @@ This consolidates every gate agreed in the Oct 21 review thread below
 for implementation. The thread is the rationale and audit trail. All tests
 run on disposable private fixtures, never retained ORCD stores.
 
+**No backward compatibility (user rule, Oct 21).** EFS is not in production.
+Unless the user explicitly says otherwise:
+- no gate preserves old log, store, snapshot, wire or row encodings;
+- no gate migrates retained data, or supports downgrade, mixed builds or old
+  clients;
+- a changed format or placement takes effect on a freshly formatted cluster.
+
+What stays is **fail-closed refusal**: a binary that meets an encoding,
+store or peer it doesn't support stops and says so. It never silently
+skips or misreads. Where the review thread below argues for legacy
+handling, this checklist supersedes it.
+
 **Owners:**
 - **W66:** metadata distribution.
 - **W66-compat:** a compatibility-hardening prerequisite of W66 with no W
@@ -267,11 +279,11 @@ user).
 | A2 | Per-group instrumentation: offered/achieved rate, blocked time per completed operation, WAL/apply delay, p99, errors, leader placement, lane-to-group mapping; independent-directory and hot-directory workloads measured separately | W66 | NOTRUN | Position; independent review; implementation-review assessment (point 4) |
 | A3 | Leader-spreading A/B on the existing two groups, not presented as the fix for the ~8 s publication stalls unless measurements connect them | W66 | NOTRUN | Position (point 5) |
 | A4 | Evaluate follower-read routing as existing machinery | W66 | NOTRUN | Position (point 3) |
-| A5 | More-groups design: bounded transaction fan-out and locality (parent dentry, child inode, accounting, session and publication records), routing without a common dual-group host, versioned group distribution, migration and recovery | W66 | NOTRUN | Transaction locality; independent review |
+| A5 | More-groups design: bounded transaction fan-out and locality (parent dentry, child inode, accounting, session and publication records), routing without a common dual-group host, recovery. A new group layout takes effect on a fresh format; no migration of existing stores. Live expansion of a running cluster is a separate feature, only if the user asks for it. | W66 | NOTRUN | Transaction locality; independent review |
 | A6 | Replica count per group derived from the D36 recovery proof, not from throughput arguments | D36 | NOTRUN | Position (point 4); independent review |
 | A7 | Directory-spread policy: always spread vs adaptive vs bounded hashed placement with lazy lanes | W81 | OPEN-DECISION | Position (point 6); independent review |
 
-**B. Compatibility hardening (prerequisite for any new log, store or row encoding)**
+**B. Fail-closed hardening (prerequisite for any encoding change; refusal only, no compatibility)**
 
 | # | Gate | Owner | Status | Source |
 | --- | --- | --- | --- | --- |
@@ -279,23 +291,28 @@ user).
 | B2 | A fatal result inside an open scope aborts exactly once with `efs_kv_lsm_apply_end(kv, NULL)` (writer lock released). Another group on the shared KV still progresses. Non-KV side effects are audited. | W66-compat | NOTRUN | Final constraints (1) |
 | B3 | After rejection and after restart, both the durable KV cursor and the Raft applied index are unchanged | W66-compat | NOTRUN | Implementation review |
 | B4 | Incompatible-group state: sticky on the unchanged build; readiness withdrawn; affected service refused, including cross-group and cached read paths; diagnostics retained (group, index, term, tag; unsupported vs malformed). Never skip or truncate the entry. Not implemented by reusing `kv_incomplete`. | W66-compat | NOTRUN | Implementation review; final constraints (4, 5) |
-| B5 | Compatible-restart recovery: an upgraded binary rechecks the retained entry from the unchanged cursor and applies its durable effects exactly once | W66-compat | NOTRUN | Final constraints (4) |
-| B6 | Store/log format version: a defined supported set, missing-marker policy and upgrade ordering. It covers command semantics, routing rules, snapshot interpretation and the packed row encoding. It is checked at startup, snapshot restore/import and WAL replay, before any apply. | W66-compat | NOTRUN | Implementation review; final constraints (3); MKDIR assessment (2) |
+| B5 | ~~Compatible-restart recovery of a retained incompatible entry~~: **dropped** (no backward compatibility); an incompatible store is reformatted | — | DROPPED | Final constraints (4) |
+| B6 | Store/log format marker: one current format. Every reader refuses a missing or different marker, and a format change bumps it. No supported-legacy set, no upgrade path. It covers command semantics, routing rules, snapshot interpretation and the packed row encoding, and is checked at startup, snapshot restore/import and WAL replay, before any apply. | W66-compat | NOTRUN | Implementation review; final constraints (3); MKDIR assessment (2) |
 | B7 | Peer fence: exact build-ID match on every new or reconnected Raft connection, both directions, TCP and RDMA, bound to the expected peer identity, before frames reach Raft | W66-compat | NOTRUN | Follow-up review (2); implementation review |
-| B8 | A pre-fence binary against a new store/log is a characterization test that documents unsupported downgrade; never a refusal PASS | W66-compat | NOTRUN | Implementation review |
-| B9 | A single row validator at the apply boundary (transaction PUT, new MKDIR operation, direct metadata writes, snapshot install/import): format, length, enum ranges and key/value identity. Legitimate retained states stay valid. The shared decoder stays lenient until its callers are audited. | W66-compat | NOTRUN | Transactional-row review; validator handoff |
+| B8 | ~~Pre-fence binary characterization of downgrade~~: **dropped**; downgrade is unsupported by rule, so there is nothing to characterize | — | DROPPED | Implementation review |
+| B9 | A single row validator at the apply boundary (transaction PUT, MKDIR, direct metadata writes, snapshot install/import) for the current row format only: exact length, enum ranges, key/value identity. Legitimate runtime states (for example unlinked inodes awaiting cleanup) stay valid. | W66-compat | NOTRUN | Transactional-row review; validator handoff |
 
 **C. MKDIR and born-HASHED placement (after B)**
 
 | # | Gate | Owner | Status | Source |
 | --- | --- | --- | --- | --- |
-| C1 | New strictly validated fast-path MKDIR encoding that carries the child layout separately from the parent routing layout. The old opcode keeps its LOCAL meaning, and a truncated new record is malformed. | W81 | NOTRUN | Final constraints (3); MKDIR replay-path review |
+| C1 | Fast-path MKDIR carries the child layout explicitly, separate from the parent routing layout, in its one current encoding (changed in place; no legacy opcode kept). Any other length or value is malformed. | W81 | NOTRUN | Final constraints (3); MKDIR replay-path review |
 | C2 | One deterministic row constructor (explicit layout, inode, parent, ownership, timestamps; no allocation, clocks or KV writes) shared by both MKDIR paths. Root creation is covered or its invariants documented. | W81 | NOTRUN | Validator handoff; MKDIR assessment |
-| C3 | Mixed-history MKDIR replay: legacy operation entries, legacy transaction entries and new creations on both paths, from a clean store and from snapshot plus suffix. Compare layouts, inode/dentry placement, lane registration, complete listings and operation-ID outcomes. Retry/restart yields one directory, one allocation and one parent-link update. | W81 | NOTRUN | MKDIR replay-path review |
+| C3 | MKDIR replay on a fresh store: creations on both paths, replayed from a clean store and from snapshot plus suffix. Compare layouts, inode/dentry placement, lane registration, complete listings and operation-ID outcomes across replicas and paths. Retry/restart yields one directory, one allocation and one parent-link update. No legacy entries. | W81 | NOTRUN | MKDIR replay-path review |
 | C4 | Spread notifications: validated first, staged, discarded on abort, published only after durable commit. Tests: a valid SPLITTING item plus a later invalid row commits nothing and publishes no work; a storage-failure abort after validation publishes no work. | W81 | NOTRUN | Validator handoff; notification-severity review |
 | C5 | Born-HASHED correctness: empty root/mkdir, concurrent first lane registration, readdir and cookies, timestamps and counts, rename/link/unlink, retry dedup, restart. Measure cold first-touch vs established-lane cost. | W81 | NOTRUN | Follow-up review (3, 4) |
 
-**D. Split rediscovery (retained SPLITTING directories)**
+**D. Split rediscovery: only if splitting stays in the design (depends on A7)**
+
+If A7 chooses directories that are spread from creation, no SPLITTING
+directories exist on a fresh format and D1–D5 are dropped. They apply only
+if a LOCAL → SPLITTING transition remains in the design, and never to
+retained pre-change directories.
 
 | # | Gate | Owner | Status | Source |
 | --- | --- | --- | --- | --- |
@@ -304,6 +321,10 @@ user).
 | D3 | Separate fixture: replace an empty destination directory after its split completes (ENOTEMPTY from a populated destination is not a rediscovery failure) | W81 | NOTRUN | Decisive test sequence (3) |
 | D4 | More than 256 pending directories, leadership transfer and additions behind the scan cursor all reach eventual discovery. A full queue never marks a row covered. | W81 | NOTRUN | Rediscovery review; decisive test sequence (4) |
 | D5 | If D1 reproduces: a resumable, bounded leader discovery scan with a reconciliation backstop, never a whole-store scan under `h->mu`. A durable pending-split index is the fallback, chosen by measured discovery delay and foreground impact. | W81 | NOTRUN | Rediscovery review and assessment |
+
+**Dropped by the no-backward-compatibility rule:** B5, B8, and the legacy
+parts of B6, B9, C1, C3 and A5 (as rewritten above). Migrating retained
+LOCAL/SPLITTING directories is also dropped: reformat instead.
 
 **Out of scope here, tracked elsewhere:**
 - Requalification of the readdir split-frontier fix `f8b7a7818` (the W125 C7
