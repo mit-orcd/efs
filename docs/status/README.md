@@ -26,8 +26,7 @@ implemented; Linux results are attributed to the audit author. The tooling
 fixes landed in `040734d26`. The findings now have work items:
 [W127–W134](../backlog/work-items.md#w127) (apply, protocol and session
 correctness, all OPEN) and [W135–W139](../backlog/work-items.md#w135)
-(test-suite defects and qualification gaps, all OPEN). The scope/priority review
-at the end of W139 distinguishes confirmed unsafe code, W131 defensive hardening
+(test-suite defects and qualification gaps, all OPEN). The [scope/priority review](../backlog/work-items.md#w127-w139-review) distinguishes confirmed unsafe code, W131 defensive hardening
 and test evidence gaps; W127–W131 form one implementation package, not five
 independent error-handling designs. No acceptance gates are waived.
 

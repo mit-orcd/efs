@@ -5772,9 +5772,9 @@ must leave the cursor unchanged.
 - Fresh formatting removes old records; it does not register current clients.
 
 <a id="w135"></a>
-## W135 — `make test` fails fast at the docs gate and hides every later test
+## W135 — A plain `make test` stops at the docs gate before the code tests
 
-**Verification liveness; opened 2026-10-21 from the audit T1; OPEN.**
+**Test reporting; opened 2026-10-21 from the audit T1; OPEN.**
 - `python3 docs/check-architecture.py` is a command in the middle of the
   `test` recipe (`Makefile:455`).
 - On `0bdf55256` it failed `regen-diff` (a status README edit without
@@ -5783,10 +5783,16 @@ must leave the cursor unchanged.
 - With the docs regenerated in a private copy, `make test` passed on node9901
   (rc=0, 2 min 29 s).
 - The current devel docs are regenerated (gate 5/5), but the structure still
-  lets any docs lag hide code results.
+  lets any docs lag stop a plain `make test` before the code tests.
+- Scope correction (October 21): the node9901 verdict runner
+  `scripts/make_test_summary.sh` (`0e9df00a8`) already runs every `make test`
+  command independently and continues past failures. Code results are lost
+  only when `make test` is run directly, as the audit did, so this is a
+  reporting gap, not a hidden verdict.
 
 **Fix and gate:**
-- Split `test` into independent docs and code targets that both always run.
+- Split `test` into independent docs and code targets that both always run,
+  or document `make_test_summary.sh` as the only qualifying runner.
 - `test` reports a nonzero aggregate if either fails.
 - Moving the line, or making it a prerequisite, does not help: a failing
   prerequisite also stops the recipe.
@@ -5859,7 +5865,8 @@ archived, delete the test with it.
 - Do this before deleting any code they could protect.
 - The full list is in the [audit](../reviews/dead-code-review-20261021.md#t3--python-tests-not-wired-into-make-test--liveness--high--wire-fix-or-delete).
 
-### Review of W127–W139 scope and priority — October 21
+<a id="w127-w139-review"></a>
+## Review of W127–W139 scope and priority — October 21
 
 **All 13 items are worth tracking; they are not 13 demonstrated product bugs.**
 Review of the items introduced by `e681ff97e`; documentation only, no fixes or
@@ -5889,3 +5896,15 @@ must distinguish PASS, FAIL and NOTRUN, including environment-dependent checks.
 Any release decision still needs the named acceptance results; this review does
 not waive gates, close items, or authorize a release. No additional conceptual
 review is needed before implementation against these requirements.
+
+**Response (October 21).** Accepted. Two corrections on my side:
+- W135 overstated its effect. `scripts/make_test_summary.sh`, the node9901
+  verdict runner, continues past failures. Only a direct `make test` stops
+  at the docs gate. W135 is renamed and its class narrowed to test
+  reporting.
+- The work-queue rows now show W131 as defensive hardening, and W127–W131
+  as one apply-hardening package.
+
+This review was a subsection of W139, which made it read as part of W139. It
+is now its own section, with its text unchanged. No item is closed, and no
+gate changes.
