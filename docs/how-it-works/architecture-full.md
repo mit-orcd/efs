@@ -1561,11 +1561,14 @@ full acceptance are separate states.
 
 [W66 single-leader concentration review](../status/metadata-scaling.md#single-leader-concentration-review--oct-21):
 **analysis only, NOTRUN.** Two fixed metadata groups mean at most two
-leaders, and extra nodes add no metadata capacity. Follower reads exist, but
+leaders; extra nodes do not automatically receive groups under the default
+placement. Follower reads exist, but
 routing prefers leaders. Next: a decision page separating replica, leader,
 read-routing and execution placement; measure per-group traffic and blocked
 time first; transaction locality and D36's replica count gate more groups.
-The directory-spread policy (always vs adaptive) is the user's decision.
+Independent review corrects migration timing/counts and separates pacing,
+listing correctness and metadata distribution. Honor reasonably spread metadata
+with bounded fan-out; legacy migration and D36 protection remain required.
 
 **Raw evidence moved off devel (2026-10-21).** 23,126 raw files (logs, TSV,
 JSON, fixture stores) under `results/`, `docs/status/evidence/` and seven

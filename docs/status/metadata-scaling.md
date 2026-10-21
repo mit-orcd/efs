@@ -250,24 +250,33 @@ contradicts EFS being a parallel file system.
 
 ### How this came up
 
-The objection followed a run of large-directory problems on 2026-10-21, all
-caused by directories living on one shard until they grow:
+The objection followed large-directory problems on 2026-10-21. Local-first
+placement required a migration, whose pacing and listing correctness had
+separate defects; these are not inevitable consequences of adaptive placement:
 - A directory with more than `EFS_DIR_SPREAD_MIN` (65,536) entries switches
   LOCAL → SPLITTING → HASHED. A background migrator then moves its existing
   names from the one local shard to 64 hashed lanes.
-- **The split took hours.** The migrator moved at most 8 names per 1 s
-  maintenance tick (about 480 names/min), so the 64.5 k names of a split took
-  about 2.3 h. Each step also rescanned the local range past every
-  already-moved tombstone, which is quadratic in the split size.
+- **The split was paced for hours.** `HOST_SPREAD_MAX=8` bounds queue
+  attempts per maintenance pass across queued directories, not eight successful
+  moves per directory per second. Requeues, failures and other maintenance
+  reduce progress. The archived baseline measured 464–472 moves/min; about
+  2.3 h for 64.5 k moves is an extrapolation, not a completed baseline run.
+  Repeated scans from the head also admit quadratic merged-key work in the
+  number of leftovers/tombstones, although that cost was not yet visible in
+  baseline pass timings through 16.4 k moves.
 - **Readdir lost names during the split.** W125 closure test C7 (1,000,000
   files in one directory on orcd-mini) listed 999,990 names, and `rm -rf`
   left 5 files behind. Names at the moving split frontier were missed for
   the hours the directory stayed SPLITTING
-  ([readdir split frontier](readdir-split-frontier-20261021.md), fixed in
-  `f8b7a7818`).
-- **A linear migrator fixed the speed but was not continued.** It cut a
-  500 k-file split to 1,124 s on a private cluster: a resumable scan, named
-  moves, and up to 4,096 names per tick. It is parked at tag
+  ([readdir split frontier](readdir-split-frontier-20261021.md), code fix
+  `f8b7a7818`, focused private-cluster PASS; original orcd-mini C7 rerun NOTRUN).
+- **An archived migrator improved one bounded run.** In a 500 k-file
+  create workload, HASHED was reached 1,124 s after creation started; 64,516
+  existing names moved, not 500 k. Creation itself took 1,063 s. New names
+  already used hashed placement. The candidate used a resumable scan, named
+  moves, and a 4,096-attempt / 200 ms pass budget, achieving 79–92 moves/pass.
+  Baseline and candidate ran concurrently on the same physical host alongside
+  other load; this is not an isolated speedup measurement or general scale gate. It is parked at tag
   `archive/split-migrator-linear-20261021`
   (`docs/status/split-migrator-linear-20261021.md` there) and not merged.
 
@@ -282,7 +291,7 @@ it. This section records the corrected, code-backed position.
 | Claim | Code-backed status |
 | --- | --- |
 | Exactly two metadata groups | **Correct.** Odd shards go to group 0 and even shards to group 2 (`efs_raft_shard_group`, `HOST_NGROUPS 2`), so at most two leaders exist. |
-| Every node votes in both groups | **Only at three nodes.** At four or more nodes, `group_voters()` puts group 0 on nodes 1/2/3 and group 2 on 2/3/4 (`src/server/raft_host.c`). Extra nodes add no metadata capacity. |
+| Every node votes in both groups | **Only at three nodes.** At four or more nodes, `group_voters()` puts group 0 on nodes 1/2/3 and group 2 on 2/3/4 (`src/server/raft_host.c`). Extra nodes do not automatically add metadata group leadership or replica placement under this default; explicit membership changes are separately supported. |
 | Followers never serve reads | **Incorrect.** A follower gets a fresh ReadIndex from the leader, waits for its own apply index and reads locally. Namespace routing prefers leaders, which concentrates traffic, so follower reads are a routing and qualification question, not a new protocol. |
 | The balancer colocates leaders | **Only when enabled.** The common-voter preference (`host_balanced_voter`) applies only with `EFS_METADATA_BALANCE=1` (opt-in). orcd-mini does not set it, so its observed placement (node 3 leading both groups) was an election outcome. |
 | Spreading leaders roughly halves leader load | **Not established.** Followers still apply every mutation, group load can be very uneven, and cross-group operations add coordination. ORCD-test captures already showed separate leaders while the active group churned and timed out. |
@@ -322,12 +331,64 @@ contention in place.
    group must satisfy D36.
 5. A leader-spreading A/B is worthwhile. It must not be presented as the fix
    for the ~8 s publication stalls until measurements connect the two.
-6. Directory spreading: the review recommends adaptive spreading, since
-   always spreading small directories adds coordination without useful
-   parallelism. The user's stated principle is that metadata should always
-   be reasonably spread. **This is a user decision, still open.**
+6. Directory spreading: the earlier review favored adaptive spreading to
+   limit small-directory coordination. The user's stated requirement is
+   reasonably spread metadata; the design must honor it. Bounded hashed
+   placement with lazy lane allocation is an alternative to evaluate, not
+   an assumption that every directory must coordinate with every group.
 
 Remaining gates: the decision page itself, per-group traffic and blocked-time
 instrumentation (the step 1 metrics in the
 [Raft host mutex plan](raft-host-mu-plan-20261016.md)), and the leader-spreading
 A/B. All NOTRUN.
+
+### Independent review of the origin narrative — Oct 21
+
+**Documentation/code review against devel `061007586`; no new cluster test
+(NOTRUN).** Reviewed the source and the archived migrator evidence via
+`git show archive/split-migrator-linear-20261021:docs/status/split-migrator-linear-20261021.md`.
+The corrected account above distinguishes measurements, extrapolation and
+uncompleted acceptance. The narrative is useful; it does not prove that one
+placement policy causes all three issues (slow migration, missing listings,
+concentrated metadata execution).
+
+Reviewer corrections and recommendations:
+
+- **Correct my earlier replica advice.** Three replicas per group was not a
+  sufficient recommendation under D36. Select replica placement and durable
+  commit/recovery evidence against that protection contract. Simply increasing
+  to four voters does not itself establish two-loss recovery or availability.
+- **Honor the user's distribution objective without assuming maximum fan-out.**
+  Treat reasonably distributed metadata as the design requirement. Evaluate
+  bounded hashed lanes from directory creation, with lazy allocation of used
+  lanes and explicit locality for child inodes, accounting and transaction
+  records. This can avoid the initial local-to-hashed transition without
+  materializing every possible lane or involving every node in every update.
+  My adaptive-placement suggestion is a tradeoff to explain, not permission
+  to override the requested direction. The choice of lane count, group mapping
+  and accounting protocol still needs design and measurement.
+- **Separate directory placement from execution capacity.** Many hashed lanes
+  mapped to only two consensus groups do not create dozens of independent
+  metadata servers. More groups also need routing that does not require a
+  common dual-group host, bounded transaction participants, and measured
+  scheduling/lock isolation. Replicas still apply committed writes; leader
+  redistribution alone cannot promise a proportional CPU reduction.
+- **Retain migration correctness even with hashed-from-birth directories.**
+  Existing LOCAL/SPLITTING directories and future topology movement still need
+  valid listing cookies, no silently omitted stable names, replay-safe moves,
+  layout-epoch checks and restartable ownership transfer. The parked migrator
+  is evidence and possible reusable work, not an accepted deployment candidate.
+  Its named-command encoding must be reviewed for replay/downgrade safety:
+  an old decoder ignoring the supplied name is not equivalent application.
+- **Keep beta fixes separate from the scaling redesign.** The listing fix can
+  be requalified independently. The ORCD-test REPORT deadline failures occurred
+  with separated leaders too, so they remain their own diagnosis and acceptance
+  gate. Full payload integrity does not turn failed closes into success.
+
+Recommended decision-page sequence: state the protection and directory-placement
+requirements; specify bounded authority/transaction fan-out; compare leader/read
+routing options on the existing topology; then stage versioned group distribution
+and legacy-state migration. Measure independent-directory and hot-directory
+workloads separately, including per-group offered/achieved rate, blocked time,
+WAL/apply delay, p99 and errors. No claimed speedup, W66 closure, or deployment
+authorization follows from this review.
