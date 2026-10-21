@@ -574,6 +574,10 @@ explicitly. Under the no-compatibility rule,
   the recipe never run, including every `./tests/test_*` unit binary.
 - After `python3 docs/gen-architecture-full.py` in the private copy only,
   `make test` passed (rc=0, real 2 min 29 s).
+- Scope note (added October 21, see W135): this applies to running
+  `make test` directly. The node9901 verdict runner
+  `scripts/make_test_summary.sh` runs every command independently and
+  continues past failures, so its summaries were not hiding code results.
 - Action: regenerate and commit. Moving the same fail-fast line, or making
   it a prerequisite, does not help: a failing prerequisite also stops the
   recipe. Split `test` into independent docs and code targets that both
