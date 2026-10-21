@@ -78,6 +78,67 @@ Raw evidence stays outside Git at
 `scripts/orcd_test_campaign.py`; preserve its original results and use a
 separate explicitly authorized run for any future corrected harness.
 
+## Authorized repair follow-up (in progress)
+
+The user authorized fixes and separate reruns, with existing-payload verification
+first. Original failures above remain FAIL. The original build is still serving
+retained stores; no repaired daemon has been deployed yet.
+
+- All four read-only mounts recovered once the restarted servers were ready.
+  `scripts/orcd_verify_existing.py` reads every acknowledged file against the
+  deterministic 256-byte oracle, including exact length/EOF. Target: all
+  8,437,752 files. Failed-write paths are audited separately. Verification is
+  **RUNNING**, not a payload PASS. At 2,114,639 checked, two reads returned
+  EBUSY (fcstor003 and fcstor006), with no observed payload mismatch. These
+  failures are retained without retry. Raw progress is under
+  `../repair-20261020/existing-payloads/` beside the original campaign.
+- All 117 EIOs correspond to `flush-meta` returning BUSY (`efs_rc=-13`)
+  after the eight-second publication budget. This identifies the failing path,
+  not proof that uncertain writes lost data.
+- Thirty-second 99 Hz daemon profiles during verification show ledger decoding
+  at 33.43%, 24.29%, 31.71%, 54.00% self CPU on fcstor003–006. Caller stacks
+  identify `pack_retire_cb` and `pk_abandon_cb` beneath `lsm_scan_prefix`.
+  Those whole-prefix scans hold the KV read lock while decoding every ledger;
+  apply needs the writer lock. Quadratic digest-uniqueness validation magnifies
+  that stall. Raft terms continue advancing with only verifiers and maintenance.
+  This is the repair hypothesis; end-to-end EIO elimination remains **NOTRUN**.
+- Candidate fix: pointer-sort duplicate validation (same format/checks), and
+  yielding maintenance scans with 128-key ledger / 4096-key index pages,
+  including tombstones. These are non-snapshot hints; mutation authority stays
+  in serialized apply. No close timeout or durability requirement is relaxed.
+- Query tests now derive timing from advertised refresh policy, warm the fixture
+  before concurrent reads, and require multiple successful snapshot generations
+  over at least two refresh periods. Exact count/byte and payload oracles remain.
+  A NODATA response never counts as a successful concurrent query.
+- `scripts/orcd_test_ready.py` checks recovered export, full hosted voter sets,
+  self-reported leaders, matching term/views, applied leader commits and a fresh
+  root read. Two stable observations replace mounting after a fixed startup sleep.
+- Initial isolated Linux build and ledger, ledger-recovery, packed-switch and
+  bounded-scan tests PASS. Writer-progress regression demonstrates a competing
+  KV writer completes before a yielding maintenance scan ends. Python count/byte,
+  payload-corruption and readiness regressions PASS. A native macOS build cannot
+  compile the Linux `fopencookie` logger; Linux is the validation platform.
+
+Candidate binaries are build artifacts only, under
+`/home/erbmi1/orcd/scratch/efs/orcd-test/repair-20261020/source/`; this is not a
+second deployment. Raw profiles are `<host>-perf.data` in that repair directory;
+mailbox job logs remain in the original campaign mailbox with `profile-`,
+`callers-`, `verify-all-`, and `build-repair-` prefixes. Commands:
+
+```sh
+# On each fcstor003–006, with the retained filesystem mounted read-only:
+python3 scripts/orcd_verify_existing.py /path/to/campaign-20261020 /path/to/existing-payloads
+# On a test client, before any remount after restart:
+python3 scripts/orcd_test_ready.py 172.16.223.57:17432 172.16.223.58:17432 172.16.223.59:17432 172.16.223.60:17432
+# Profiles (daemon PID explicitly identified per host):
+perf record -F 99 -g -p "$daemon_pid" -o "$host-perf.data" -- sleep 30
+perf report -i "$host-perf.data" --stdio --children --percent-limit 5 -g caller,5,callee,function,percent
+```
+
+Do not clear original fixtures/results when deploying the candidate. Full retained
+verification, repaired-build identity, loaded EIO/query rerun, 40 M target and
+subsequent cold-restart verification remain open until new evidence is recorded.
+
 ## Prepared run
 
 - Shared evidence: `/home/erbmi1/orcd/scratch/efs/orcd-test/campaign-20261020/`.

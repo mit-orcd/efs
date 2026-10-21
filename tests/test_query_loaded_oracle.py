@@ -11,7 +11,7 @@ def check(snapshots,success):
  def run(*args,**kwargs):
   i=min(len(calls),len(snapshots)-1);calls.append(i)
   return SimpleNamespace(stdout=json.dumps({'stats':snapshots[i]}).encode())
- context=dict(expected=3,subprocess=SimpleNamespace(run=run,PIPE=-1),sys=SimpleNamespace(executable='python'),peer=Path('/unused'),fixture='fixture',time=SimpleNamespace(sleep=sleeps.append),json=json)
+ context=dict(settle=180,expected=3,subprocess=SimpleNamespace(run=run,PIPE=-1),sys=SimpleNamespace(executable='python'),peer=Path('/unused'),fixture='fixture',time=SimpleNamespace(sleep=sleeps.append),json=json)
  try:exec(loop,context)
  except AssertionError:
   assert not success,'oracle rejected a valid later snapshot';assert len(calls)==40 and len(sleeps)==40

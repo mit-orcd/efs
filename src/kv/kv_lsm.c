@@ -1595,6 +1595,39 @@ int efs_kv_lsm_scan_work(struct efs_kv *kv,const uint8_t *prefix,uint32_t plen,
     return rc;
 }
 
+struct yielding_scan {
+    int (*cb)(void *, const uint8_t *, uint32_t, const uint8_t *, uint32_t);
+    void *user;
+    uint8_t skip[EFS_KV_KEY_MAX];
+    uint32_t skip_len;
+};
+static int yielding_scan_cb(void *user, const uint8_t *key, uint32_t klen,
+                            const uint8_t *val, uint32_t vlen)
+{
+    struct yielding_scan *scan = user;
+    if (scan->skip_len && klen == scan->skip_len && !memcmp(key, scan->skip, klen)) return 0;
+    return scan->cb(scan->user, key, klen, val, vlen);
+}
+int efs_kv_lsm_scan_yield(struct efs_kv *kv, const uint8_t *prefix, uint32_t plen,
+    uint32_t max_keys,
+    int (*cb)(void *, const uint8_t *, uint32_t, const uint8_t *, uint32_t), void *user)
+{
+    if (!cb) return EFS_ERR_INVAL;
+    struct yielding_scan scan = {.cb=cb, .user=user};
+    for (;;) {
+        uint8_t resume[EFS_KV_KEY_MAX];
+        uint32_t len = 0;
+        int rc = efs_kv_lsm_scan_work(kv, prefix, plen,
+            scan.skip_len ? scan.skip : NULL, scan.skip_len, max_keys,
+            yielding_scan_cb, &scan, resume, &len);
+        if (rc != 1 || !len) return rc;
+        memcpy(scan.skip, resume, len); scan.skip_len = len;
+        /* No KV lock is held here. In particular, let the Raft apply
+         * writer make progress before another page takes the read lock. */
+        usleep(1000);
+    }
+}
+
 int efs_kv_lsm_flush(struct efs_kv *kv)
 {
     return lsm_flush(kv, 1);

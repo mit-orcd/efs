@@ -49,6 +49,14 @@ int efs_kv_lsm_scan_work(struct efs_kv *,const uint8_t *,uint32_t,
     int (*)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t),void *,
     uint8_t [EFS_KV_KEY_MAX],uint32_t *);
 
+/* Background hint scan, NOT a snapshot: release the KV read lock after each
+ * max_keys merged keys (including tombstones), then yield to writers. Rows
+ * inserted behind the cursor can wait for the next maintenance pass. Callers
+ * must revalidate mutations in serialized apply; never use for read authority
+ * or to infer absence. Callback stop/error codes are returned unchanged. */
+int efs_kv_lsm_scan_yield(struct efs_kv *, const uint8_t *, uint32_t, uint32_t,
+    int (*)(void *, const uint8_t *, uint32_t, const uint8_t *, uint32_t), void *);
+
 /* Minimum-reader barrier (W125). Before the first format-dependent row
  * (a packed segment or packed chunk) becomes visible, the store durably
  * requires PACK_V2, writing a KVLSM2 MANIFEST that builds without packing

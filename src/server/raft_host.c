@@ -8551,7 +8551,7 @@ static void host_pack_retire_pass(struct efs_raft_host *h, uint8_t group, uint32
     if (efs_pack_group_anchor(group) != anchor) return;
     struct pack_retire_scan *ps = calloc(1, sizeof(*ps));
     if (!ps) return;
-    if (efs_kv_scan_prefix(h->kv, prefix, sizeof(prefix), pack_retire_cb, ps) >= 0 && ps->n) {
+    if (efs_kv_lsm_scan_yield(h->kv, prefix, sizeof(prefix), 128, pack_retire_cb, ps) >= 0 && ps->n) {
         uint8_t ok[EFS_GC_SEGMENT_BATCH_MAX];
         host_gc_segment_nodes_batch(h, group, ps->ids, ps->gens, ps->members, ps->n, ok);
         uint8_t *cmd = malloc(4u + 16u * ps->n);

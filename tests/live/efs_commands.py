@@ -7,8 +7,10 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+from query_timing import refresh_seconds, settle_seconds
 
 mount, peer = map(Path, sys.argv[1:3])
+settle = settle_seconds(refresh_seconds(peer))
 name = 'efs-command-gates-%d' % os.getpid()
 root, other = mount / name, peer / name
 root.mkdir()
@@ -26,7 +28,8 @@ def command(where, cmd, *args, expected=0):
     assert result.returncode == expected, (cmd, args, result.returncode, result.stderr)
     return result
 
-def eventually(check, timeout=20):
+def eventually(check, timeout=None):
+    timeout = settle if timeout is None else timeout
     deadline = time.monotonic() + timeout
     while True:
         try:

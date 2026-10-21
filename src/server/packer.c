@@ -54,6 +54,7 @@
 #include "efs/checksum.h"
 #include "efs/erasure.h"
 #include "efs/kv_key.h"
+#include "efs/kv_lsm.h"
 #include "efs/meta_cmd.h"
 #include "efs/pack_mapping.h"
 #include "efs/raft.h"
@@ -197,7 +198,7 @@ static void pk_abandon(struct efs_kv *kv, uint8_t group, uint64_t term)
     pk_owner(group, term, &a->me);
     uint32_t anchor = efs_pack_group_anchor(group);
     uint8_t prefix[3] = {(uint8_t)(anchor >> 8), (uint8_t)anchor, EFS_KV_KIND_PACK_SEGMENT};
-    (void)efs_kv_scan_prefix(kv, prefix, 3, pk_abandon_cb, a);
+    (void)efs_kv_lsm_scan_yield(kv, prefix, 3, 128, pk_abandon_cb, a);
     for (uint32_t i = 0; i < a->n; i++) { pk_cancel(group, a->ids[i], a->gens[i]); STAT_ADD(abandoned, 1); }
     free(a);
 }
@@ -729,7 +730,7 @@ static uint32_t pk_compact(struct efs_kv *kv, uint8_t group, uint64_t term,
     if (!sc.s || !files || !images) goto out;
     uint32_t anchor = efs_pack_group_anchor(group);
     uint8_t prefix[3] = {(uint8_t)(anchor >> 8), (uint8_t)anchor, EFS_KV_KIND_PACK_SEGMENT};
-    if (efs_kv_scan_prefix(kv, prefix, 3, pk_cscan_cb, &sc) < 0 || !sc.n) goto out;
+    if (efs_kv_lsm_scan_yield(kv, prefix, 3, 128, pk_cscan_cb, &sc) < 0 || !sc.n) goto out;
     /* A lone underfilled segment has nothing to merge with. */
     if (sc.n == 1 && sc.small == 1) goto out;
     qsort(sc.s, sc.n, sizeof(sc.s[0]), pk_seg_cmp);
@@ -839,7 +840,7 @@ static void pk_backfill(struct efs_kv *kv, uint8_t group)
         if (efs_raft_shard_group(s) != group) continue;
         uint8_t prefix[3] = {(uint8_t)(s >> 8), (uint8_t)s, EFS_KV_KIND_INODE};
         a.n = 0;
-        if (efs_kv_scan_prefix(kv, prefix, 3, pk_inos_cb, &a) < 0) goto out;
+        if (efs_kv_lsm_scan_yield(kv, prefix, 3, 4096, pk_inos_cb, &a) < 0) goto out;
         for (uint32_t i = 0; i < a.n; i++) {
             struct efs_meta_row row;
             if (efs_meta_apply_get_inode(kv, a.v[i], &row) != EFS_OK || !S_ISREG(row.mode)) continue;
@@ -955,20 +956,20 @@ static int pk_group(uint8_t group, uint64_t term)
     if (!sc.e || !files || !drop) goto out;
     uint32_t anchor = efs_pack_group_anchor(group);
     uint8_t prefix[3] = {(uint8_t)(anchor >> 8), (uint8_t)anchor, EFS_KV_KIND_PACK_CANDIDATE};
-    if (efs_kv_scan_prefix(kv, prefix, 3, pk_scan_cb, &sc) < 0) goto out;
+    if (efs_kv_lsm_scan_yield(kv, prefix, 3, 4096, pk_scan_cb, &sc) < 0) goto out;
     /* The whole index, for the unpacked-bytes signal: not every pass. */
     if (sc.n < PK_SCAN_MAX) {
         pk.g[pk_gi(group)].backlog = sc.n; /* the scan saw it all */
         pk.g[pk_gi(group)].count_ns = pk_now_ns();
     } else if (pk_now_ns() >= pk.g[pk_gi(group)].count_ns + PK_COUNT_NS) {
         uint64_t n = 0;
-        if (efs_kv_scan_prefix(kv, prefix, 3, pk_count_cb, &n) >= 0) pk.g[pk_gi(group)].backlog = n;
+        if (efs_kv_lsm_scan_yield(kv, prefix, 3, 4096, pk_count_cb, &n) >= 0) pk.g[pk_gi(group)].backlog = n;
         pk.g[pk_gi(group)].count_ns = pk_now_ns();
     }
     if (pk_now_ns() >= pk.g[pk_gi(group)].fsum_ns + PK_COUNT_NS) {
         struct pk_fsum *fs = calloc(1, sizeof(*fs));
         uint8_t sp[3] = {(uint8_t)(anchor >> 8), (uint8_t)anchor, EFS_KV_KIND_PACK_SEGMENT};
-        if (fs && efs_kv_scan_prefix(kv, sp, 3, pk_fsum_cb, fs) >= 0) {
+        if (fs && efs_kv_lsm_scan_yield(kv, sp, 3, 128, pk_fsum_cb, fs) >= 0) {
             struct pk_fsum *o = fs;
             pthread_mutex_lock(&pk.mu);
             pk.g[pk_gi(group)].fs_segs = o->segs; pk.g[pk_gi(group)].fs_live = o->live;

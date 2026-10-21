@@ -22,7 +22,9 @@ full acceptance are separate states.
 **FAIL / BLOCKED.** 8,437,752 successful-write counts of 40 M target;
 117 writer-thread EIO reports, `.efs` command/query failures, post-load
 remount discovery failure. Initial core 216/216, peer 67/67 and persistence
-27/27 PASS; RDMA and packing exercised. Evidence retained; no retries.
+27/27 PASS; RDMA and packing exercised. Original evidence retained. Authorized
+repair in progress: full retained-payload verification, bounded packing-maintenance
+scans, refresh-aware query tests and restart readiness; fixed-build acceptance open.
 
 [W124 — fast delete](../backlog/fast-delete-reclaim.md): **parts 1–2
 implemented and deployed on orcd-mini (`de0c856b4`);**

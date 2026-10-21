@@ -103,6 +103,7 @@ class Controller:
    time.sleep(3)
    if (RUN/'mail'/h/(j[1]+'.result.json')).exists():raise RuntimeError('daemon failed '+h)
  def mount(self):
+  self.shell(HOSTS[0],sys.executable+" scripts/orcd_test_ready.py "+" ".join(a+":17432" for a in ADDRS),210)
   for h in HOSTS:
    self.shell(h,'mkdir -p /tmp/efs-mount; bash scripts/client.sh '+ADDRS[0]+':17432 /tmp/efs-mount',90)
   self.shell(HOSTS[0],'mkdir -p /tmp/efs-mount-peer; bash scripts/client.sh '+ADDRS[0]+':17432 /tmp/efs-mount-peer',90)

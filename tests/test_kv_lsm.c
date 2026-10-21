@@ -1745,6 +1745,25 @@ static int work_oracle_cb(void *u,const uint8_t *k,uint32_t n,const uint8_t *v,u
 }
 static int work_refuse_cb(void *u,const uint8_t *k,uint32_t n,const uint8_t *v,uint32_t vn)
 { (void)u;(void)k;(void)n;(void)v;(void)vn;return 2; }
+struct yielding_writer { struct efs_kv *kv; int start, done, observed; unsigned seen; };
+static void *yielding_writer_run(void *arg)
+{
+    struct yielding_writer *w=arg;
+    while(!__atomic_load_n(&w->start,__ATOMIC_ACQUIRE))usleep(100);
+    uint8_t key=0x70,value=1;
+    int rc=efs_kv_put(w->kv,&key,1,&value,1);
+    __atomic_store_n(&w->done,rc? -1:1,__ATOMIC_RELEASE);
+    return NULL;
+}
+static int yielding_writer_cb(void *arg,const uint8_t *k,uint32_t n,const uint8_t *v,uint32_t vn)
+{
+    (void)k;(void)n;(void)v;(void)vn;
+    struct yielding_writer *w=arg;
+    __atomic_store_n(&w->start,1,__ATOMIC_RELEASE);
+    if(__atomic_load_n(&w->done,__ATOMIC_ACQUIRE)==1)w->observed=1;
+    w->seen++;
+    return 0;
+}
 static void test_tombstone_work_pages(void)
 {
     rmtree(g_dir);
@@ -1771,6 +1790,21 @@ static void test_tombstone_work_pages(void)
     CHECK(rc==0 && o.seen==10 && pages>500,"all survivors once across tombstone pages");
     rc=efs_kv_lsm_scan_work(kv,key,1,NULL,0,17,work_refuse_cb,NULL,resume,&len);
     CHECK(rc==2 && len==0,"callback refusal is not a work continuation");
+    memset(&o,0,sizeof(o));
+    rc=efs_kv_lsm_scan_yield(kv,key,1,17,work_oracle_cb,&o);
+    CHECK(rc==0 && o.seen==10,"yielding scan visits survivors exactly once across tombstone pages");
+    rc=efs_kv_lsm_scan_yield(kv,key,1,17,work_refuse_cb,NULL);
+    CHECK(rc==2,"yielding scan preserves callback refusal");
+    struct yielding_writer writer={.kv=kv};pthread_t thread;
+    int started=pthread_create(&thread,NULL,yielding_writer_run,&writer);
+    CHECK(!started,"start competing KV writer");
+    if(!started) {
+        rc=efs_kv_lsm_scan_yield(kv,key,1,17,yielding_writer_cb,&writer);
+        __atomic_store_n(&writer.start,1,__ATOMIC_RELEASE);
+        pthread_join(thread,NULL);
+        CHECK(rc==0 && writer.seen==10 && writer.observed && writer.done==1,
+              "writer progresses between pages before maintenance scan ends");
+    }
     efs_kv_lsm_close(kv);rmtree(g_dir);
 }
 

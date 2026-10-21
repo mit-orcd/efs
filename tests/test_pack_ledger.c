@@ -130,6 +130,14 @@ int main(void)
     assert(!efs_pack_ledger_init(image,geometry,refs,EFS_PACK_MAX_RECORDS,&owner,15,0,&ledger));
     roundtrip();assert(!efs_pack_ledger_encode(&ledger,wire,sizeof(wire),&n));
     assert(n==EFS_PACK_LEDGER_MAX_BYTES);
+    /* Nonadjacent duplicates at maximum occupancy still fail atomically. */
+    saved=decoded;
+    memcpy(copy,wire,n);
+    memcpy(copy+EFS_PACK_LEDGER_HEADER+(EFS_PACK_MAX_RECORDS-1)*EFS_PACK_LEDGER_RECORD,
+           copy+EFS_PACK_LEDGER_HEADER,EFS_HASH_SIZE);
+    resign(copy,n);
+    assert(efs_pack_ledger_decode(copy,n,&decoded)==EFS_ERR_PROTO);
+    assert(!memcmp(&decoded,&saved,sizeof(saved)));
     saved=ledger;refs[1]=refs[0];
     assert(efs_pack_ledger_init(image,geometry,refs,EFS_PACK_MAX_RECORDS,&owner,15,0,&ledger)==EFS_ERR_INVAL);
     assert(!memcmp(&ledger,&saved,sizeof(saved)));

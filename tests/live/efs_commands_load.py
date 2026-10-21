@@ -9,6 +9,7 @@ import sys
 import time
 import hashlib
 import statistics
+from query_timing import refresh_seconds, settle_seconds, wait_indexed
 from query_rpc import routed_query as query, request
 
 mount=Path(sys.argv[1])
@@ -18,14 +19,19 @@ assert fixture and '/' not in fixture and fixture not in ('.','..')
 root=mount/fixture
 root.mkdir()  # refuse reuse
 root_ino=root.stat().st_ino
-end=time.monotonic()+14
+refresh=refresh_seconds(peer)
+settle=settle_seconds(refresh)
+# A fresh directory has no catalog binding until a refresh publishes it.
+# Warm it before testing concurrent reads: NODATA is not a successful read.
+wait_indexed(peer/fixture, settle)
+end=time.monotonic()+max(14, 2*refresh+14)
 latencies=[[] for _ in range(8)]
 
 def writer(worker):
     count=0
     folder=root/str(worker)
     folder.mkdir()
-    while time.monotonic()<end and count<2000:
+    while time.monotonic()<end:
         # Actual small payload and close, rather than namespace-only RPCs.
         start=time.monotonic()
         (folder/str(count)).write_bytes(bytes([worker])*256)
@@ -65,14 +71,14 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool:
     tasks=[pool.submit(writer,i) for i in range(8)]
     readers=[pool.submit(reader) for _ in range(2)]
     for _ in range(5):
-        time.sleep(2)
+        time.sleep(max(2, (2*refresh+14)/5))
         result=subprocess.run([sys.executable,str(peer/'.efs/stats'),'--json'],
                               check=True,stdout=subprocess.PIPE,timeout=12)
         snap=json.loads(result.stdout)['snapshot']
         generations.append(snap['generation'])
         print('loaded snapshot '+json.dumps(snap,sort_keys=True),flush=True)
-    counts=[t.result(timeout=30) for t in tasks]
-    reader_results=[t.result(timeout=30) for t in readers]
+    counts=[t.result(timeout=settle) for t in tasks]
+    reader_results=[t.result(timeout=settle) for t in readers]
 assert all(count>1 and len(gens)>1 for count,gens,_ in reader_results),reader_results
 print('concurrent readers and publication PASS '+str(reader_results),flush=True)
 assert sum(counts)>100,counts
@@ -89,7 +95,7 @@ for _ in range(40):
     if (parsed['stats']['tree_files']==expected and
             parsed['stats']['tree_bytes']==expected*256):
         break
-    time.sleep(.25)
+    time.sleep(max(.25, settle/40))
 else:
     raise AssertionError(('closed writer oracle did not publish',expected,parsed))
 print(f'loaded publication PASS files={expected} logical_bytes={expected*256}',flush=True)

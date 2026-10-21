@@ -7,9 +7,11 @@ import stat
 import subprocess
 import sys
 import time
+from query_timing import refresh_seconds, settle_seconds
 from query_rpc import routed_query as query, request, filtered_request
 
 mount, peer = map(Path, sys.argv[1:3])
+settle = settle_seconds(refresh_seconds(peer))
 root = mount / ('efs-options-gates-'+str(time.time_ns()))
 other = peer / root.name
 root.mkdir()
@@ -32,7 +34,7 @@ def cmd(command,*args,code=0):
     return p
 
 def eventually(check):
-    end=time.monotonic()+25
+    end=time.monotonic()+settle
     while True:
         try:
             return check()

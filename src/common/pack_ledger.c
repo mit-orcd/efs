@@ -1,6 +1,7 @@
 #include "efs/pack_ledger.h"
 #include "efs/checksum.h"
 #include <string.h>
+#include <stdlib.h>
 
 static void put(uint8_t *p, uint64_t n, unsigned bytes)
 { while (bytes) { p[--bytes]=(uint8_t)n; n>>=8; } }
@@ -30,10 +31,21 @@ static int valid(const struct efs_pack_ledger *s)
     }
     return 1;
 }
+static int digest_order(const void *a, const void *b)
+{
+    const uint8_t *const *x = a, *const *y = b;
+    return memcmp(*x, *y, EFS_HASH_SIZE);
+}
 static int unique(const struct efs_pack_ledger *s)
 {
-    for(unsigned i=0;i<s->count;i++)for(unsigned j=0;j<i;j++)
-        if(!memcmp(s->reference_digest[i],s->reference_digest[j],EFS_HASH_SIZE))return 0;
+    /* Validation runs on every maintenance read. Pairwise comparison made
+     * a full ledger O(count^2), extending KV read-lock holds into seconds.
+     * Sort pointers, not records: slot order and the wire format stay intact. */
+    const uint8_t *sorted[EFS_PACK_MAX_RECORDS];
+    for (unsigned i = 0; i < s->count; i++) sorted[i] = s->reference_digest[i];
+    qsort(sorted, s->count, sizeof(sorted[0]), digest_order);
+    for (unsigned i = 1; i < s->count; i++)
+        if (!memcmp(sorted[i-1], sorted[i], EFS_HASH_SIZE)) return 0;
     return 1;
 }
 int efs_pack_ledger_init(const uint8_t *image,size_t geometry,
