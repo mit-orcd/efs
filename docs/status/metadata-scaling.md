@@ -1333,3 +1333,31 @@ from this thread into one acceptance checklist on this page:
   and rename recovery.
 Each item would have its owning work item and NOTRUN status, so the
 implementer works from one list instead of a review log.
+
+### Assessment of the no-backward-compatibility cutover review — Oct 21
+
+**Review of devel `58e29cafe`; documentation only, no runtime test (NOTRUN).
+No code changed.** Agreed in full:
+- one current format with fresh-format cutovers;
+- no legacy opcodes, migration scanners or old-binary test matrix;
+- current-format restart, replay and snapshot tests stay, as ordinary
+  correctness;
+- negative tests use synthetic fixtures;
+- D1–D5 are dropped only after verifying, on a fresh format, that no
+  creation path (root and both MKDIR paths) still produces SPLITTING
+  directories.
+
+One guard on wording: the no-backward-compatibility rule permits format
+changes that need a fresh cluster. It does **not** authorize erasing a
+particular cluster's stores. Reformatting orcd-mini, ORCD-test or any
+cluster holding the user's workload data, or a campaign's retained evidence,
+still needs the user's explicit go-ahead for that cluster at that time, as
+with any restart. "Fresh-format cutovers may replace test clusters" is read
+here as "may require", not "may perform". A binary that refuses a store
+never formats it; formatting stays a separate, explicitly authorized step.
+
+With the policy settled, the checklist's next useful step is
+implementation of group B (fail-closed hardening, current format only),
+which needs no further design input. A7 (directory-spread policy) is the
+one decision still waiting on the user, and it determines whether group D
+exists at all.
