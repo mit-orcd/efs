@@ -448,3 +448,26 @@ does not resolve this repeatable loaded-latency failure. Further diagnosis is
 open; no acceptance timeout increase or product fix is claimed. Raw job IDs,
 including a preserved-fixture/client-log inspection, remain in the deployment
 journal.
+
+### Loaded append diagnostics — 2026-10-21 05:00 UTC
+
+Retained verification advanced to 4,630,228 paths with zero errors; more than
+five hours remain on verifier jobs. Timed-out mtime fixtures retained 74 and
+76 bytes (initial byte plus 73/75 of 80 appends). Client logs include a successful
+INODE_APPEND RPC taking 1.37 s. Three diagnostic 80-append runs completed with
+monotonic mtime in **18.46 / 9.11 / 17.02 s**. This establishes variable cumulative
+latency exceeding the 15-second gate, not a demonstrated mtime regression; the
+acceptance failures remain open.
+
+Two 25-second, 99 Hz daemon profiles completed successfully during these probes.
+On fcstor003, yielding maintenance scan inclusive CPU was 24.77%, ledger decode
+12.46% inclusive / 1.47% self, and sorting 9.50% self; packing object decode
+was 21.71% inclusive. fcstor004 showed Raft apply, transport and scheduling work.
+CPU percentages overlap and do not measure blocking time or establish the
+current leader. No root-cause claim or further product change is justified yet.
+Raw files: `qualification-643f6104f/fcstor00{3,4}-mtime-perf.data` and
+`mtime-probe-{1,2,3}.jsonl`. Reproduce the captures with the earlier perf command
+and `scripts/orcd_mtime_probe.py /tmp/efs-mount`; current daemon PIDs and jobs
+are in the deployment journal. New diagnostic `tests` entries use
+`{"host": "fcstor003", "job": "..."}`; earlier suite entries are job strings
+on fcstor003.

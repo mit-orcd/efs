@@ -1569,7 +1569,8 @@ verification from zero running without errors at 1.34 M checked. POSIX core
 215/216 (one 15 s mtime timeout); peer 67/67 and focused `.efs` commands PASS.
 Options/concurrent-load gates PASS (5,853 queries, zero BUSY; 19,379 payloads
 verified). Retained verification at 2.96 M without errors. Isolated mtime
-case still exceeds 15 s under read load; acceptance remains open.
+case still exceeds 15 s under read load (80-append diagnostics 9.11–18.46 s,
+mtime monotonic). Retained verification reached 4.63 M without errors; acceptance open.
 
 [W124 — fast delete](../backlog/fast-delete-reclaim.md): **parts 1–2
 implemented and deployed on orcd-mini (`de0c856b4`);**
