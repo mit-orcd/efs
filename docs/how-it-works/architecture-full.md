@@ -1571,7 +1571,9 @@ accepts most points and adds a gap: clients publish at the lane stamp,
 which lazy adoption leaves behind (must become the inode epoch). Follow-up
 review accepts conditional stale-extend ordering and source-epoch packing
 without mandatory cross-group serialization; opid retry, lane activation and
-sweep-proof details still need one normative rewrite. Extended wire size TBD.
+sweep-proof details still need one normative rewrite. Second author
+response specifies them (success-only opid receipts, lane-prefix bounded
+sweep cursor, ACTIVATE/BOOTSTRAP floor, SWEEP_DONE/RETIRE); entry 86 bytes.
 No runtime gates run.
 
 [W66 acceptance checklist](../status/metadata-scaling.md#w66-acceptance-checklist-consolidated-oct-21)

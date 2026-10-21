@@ -590,3 +590,136 @@ only the client stamp while the server still enforces incompatible lane rules.
 Then qualify retirement and packed compaction with the same-format restart
 and interleaving tests above. This review changes no code or deployment and
 claims no runtime acceptance.
+
+## Author response to the follow-up review — October 21
+
+Reviewed `58eea8360`; source inspection only, NOTRUN. I accept the
+dispositions as stated, including the narrower PACK_SWITCH proof obligation
+and the decision to recheck revisions as the read rule. I also agree the next step is one
+normative rewrite of §§1–5; the rules below are what that rewrite will
+contain. Two corrections to my previous response come first.
+
+### Corrections to my previous response
+
+- **"Existing opid session machinery" was too broad.** Most of
+  `include/efs/session.h` (lease edges, close steps, guarded probes) is
+  staged, not production. The production replay path is the opid window in
+  `include/efs/opid.h` (`efs_opid_lookup` / `efs_opid_complete` /
+  `efs_opid_ack`), which CREATE uses (`HOST_CREATE_F_OPID`,
+  `src/server/raft_host.c`). The truncate receipt should use that window,
+  not the staged lease or session code.
+- **"Replicas hold identical KV" was loose.** The KV on a node is shared by
+  both groups, so the true statement is narrower: replicas of one group hold
+  identical state *for that group's shards* at the same applied index. The
+  sweep rule below depends only on that.
+
+### 1. Opid receipts versus internal retries
+
+- Only a committed **success** is recorded. The TRUNCATE apply first runs
+  `efs_opid_lookup` on the inode shard's window. A hit returns the stored
+  result `(OK, E_after, size)` and changes nothing else. Then come the
+  preconditions (generation, `expect_epoch`, `expect_base_size`, append
+  reservations, history room). On success, the effect and
+  `efs_opid_complete` go in the same KV batch.
+- STALE and BUSY are **not terminal and not recorded**. The handler's
+  internal retry reuses the same opid with freshly captured preconditions.
+  This is safe: if an earlier attempt committed, its receipt answers the
+  retry before any precondition is checked, so the effect is never applied
+  twice. If no attempt committed, there is nothing to confuse.
+- The client keeps the same opid across RPC retries until it gets a definite
+  answer, and acks it with the window's normal contiguous ack. A new opid is
+  used only after a definite answer.
+- Malformed encodings stop the apply as fatal before the lookup. The window
+  bound is the existing one.
+- Gate: lost reply → handler recapture → intervening pwrite → client retry
+  must return the first result and keep the pwrite's bytes. A second,
+  distinct truncate to the same size with a new opid must truncate again.
+- Encoding: the earlier 42 bytes plus `expect_base_size:8` plus the opid
+  wire form (`EFS_OPID_WIRE_LEN` = 36): 86 bytes as sketched. The exact
+  layout is set in the rewrite,
+  validated with an exact-length check.
+
+### 2. Deterministic bounded sweep
+
+- The scan reads only the target lane's shard prefix `(shard, ino, gen,
+  lane)`, in key order from the cursor. It stops at whichever comes first:
+  `SWEEP_SCAN_MAX` keys examined (proposed 256), 64 rows changed, or the
+  batch item cap. It does not read the inode, wall time or the other group.
+- A chunk key under a pending transaction intent stops the entry at that key
+  with the cursor unchanged. A later entry retries, so a rewrite never runs
+  over an uncommitted overlay.
+- The cursor is `(target_epoch, next_ci)` on the lane stamp.
+  - A command whose target is **below** the stamp's target is obsolete and
+    is a no-op (OK).
+  - A target **above** it restarts the cursor at 0 and adopts:
+    `adopted = max(adopted, target)`.
+  - An equal target continues from the cursor.
+- **Behind the cursor, new-epoch publishes keep older parts' clips.** A
+  span published onto a clipped base copies the base's `valid_len`
+  unchanged, and a base replacement removes the old part outright. Publish
+  apply never writes a larger `valid_len`, and a unit test asserts this.
+- **Mixed rows:** each part is handled on its own. A fully dead base under
+  live spans becomes an empty base: identity dropped, fragments sent to
+  `SUPERSEDED` (packed records to the ledger). Dead spans are removed, and
+  a span that crosses the boundary is clipped.
+
+### 3. Activation, bootstrap and SWEEP_DONE lifecycle
+
+- **ACTIVATE** `(ino, gen, lane, writer_E)` runs on the inode group. Its
+  apply refuses with STALE if `writer_E != content_epoch`. If the lane is
+  already active it is a no-op OK that never marks anything done. A newly
+  active lane records `activated_epoch = E` and is marked done for every
+  pending entry with epoch ≤ E: a lane registered at E cannot hold older
+  rows, provided the floor below holds.
+- **BOOTSTRAP** creates the lane stamp on the lane group. It is proposed
+  only after a ReadIndex read shows the lane active, and it carries the
+  inode's current epoch at proposal time, which is ≥ `activated_epoch`.
+  Apply creates the stamp with that `adopted` value, or raises an existing
+  one with `max()`. It never lowers adoption and never touches the sweep
+  cursor or target.
+- **Floor:** a publish to a lane with no stamp answers BUSY; a publish
+  below `adopted` answers STALE. A lane marked done at activation therefore
+  rejects anything older than `activated_epoch`, which is ≥ the target.
+- **Delayed bootstrap after retirement:** retirement of target T needs
+  SWEEP_DONE (or done-at-activation) for every active lane. A sweep at
+  target T creates or raises the stamp to ≥ T. A delayed bootstrap with an
+  older epoch therefore hits an existing stamp and `max()` leaves it
+  unchanged.
+- **SWEEP_DONE** `(ino, gen, lane, T)` runs on the inode group. It is
+  ignored (OK) if the generation differs, T is no longer a history entry
+  (already retired or pruned), or the lane is not active. Otherwise it sets
+  the lane's bit for T.
+  - **The acknowledged property:** `adopted ≥ T`, and no part with
+    epoch < T lies past its `valid_end`.
+  - It survives every update a lane can receive: publishes at ≥ `adopted`
+    add only parts at ≥ T; clip-preserving publishes keep the masks; higher
+    sweeps only delete or clip more; bootstrap only raises `adopted`.
+- **RETIRE(T)** removes every entry ≤ T once done ⊇ `active_lanes` for T.
+  This is valid because the sweep for T carried all unretired entries ≤ T,
+  so it masked them as well. Only committed apply state authorises
+  retirement, never a handler's claim.
+
+### 4. Revision matching and progress
+
+- I withdraw my earlier "the snapshot revision must equal the one recorded
+  at adoption" rule. It would block progress after any retirement, which is
+  the review's point.
+- The carried snapshot belongs to its target T. It is valid for sweeping
+  toward T if it contains T and every unretired entry below T. Pruning only
+  drops entries that cannot lower a `valid_end`. Retiring an entry j < T
+  happens only after every lane is swept for j, so no row that j would mask
+  is left. Either way, a later snapshot that is missing j yields the same
+  bounds for every remaining row, and no revision equality is needed.
+- The lane apply checks only that the snapshot is well formed and that its
+  newest entry is T.
+- The full-history priority hint is in memory only. The committed
+  truncate-pending key plus the inode history are enough to rediscover all
+  pending sweeps after a restart.
+
+### Work order
+
+Agreed. The writer-epoch source, coherent inode-authority views, the
+ACTIVATE/BOOTSTRAP floor and the lane adoption table land together as one
+gated change, before lazy truncate is enabled. Then TRUNCATE with opid
+receipts, then sweep/SWEEP_DONE/RETIRE with packed-ledger release, and
+finally removal of the destructive path. File-lane reduction audit first.
