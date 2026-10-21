@@ -139,6 +139,44 @@ Do not clear original fixtures/results when deploying the candidate. Full retain
 verification, repaired-build identity, loaded EIO/query rerun, 40 M target and
 subsequent cold-restart verification remain open until new evidence is recorded.
 
+### Follow-up at 2026-10-21 01:27 UTC
+
+Baseline verification: 2,964,468 of 8,437,752 checked, five EBUSY reads
+(1/1/0/3 on fcstor003/004/005/006), no observed mismatch. All workers and
+original daemons remain alive. This is still **RUNNING / acceptance open**.
+
+Reviewed newer commit `d7ddcc04510722e203ff52e9d925ab286310bd20` (read buffer
+headroom under pending writes). It includes repair `602e67d2c`; its explicit
+read allocation budget and deadline are relevant to the subsequent mixed
+workload. It does not explain away the read-only baseline's EBUSY failures.
+`6a6a2bb2b` changes only another cluster's collection script, not product code.
+
+**Current deployment candidate: `d7ddcc045`, built but NOT deployed.**
+Build artifacts: `repair-20261020/source-d7ddcc045/`, built on fcstor003 at
+01:28:38 UTC. `make -j8 all tests/test_bufpool`, `test_bufpool`,
+`test_pack_ledger`, `test_pack_ledger_recovery`, `test_pack_switch`,
+`test_packed_reader`, `EFS_TEST_KV_WORK_ONLY=1 test_kv_lsm`, and
+`python3 tests/test_orcd_ready.py` PASS (job exit 0, 18.1 s, no leftovers).
+Full KV tests previously passed on `602e67d2c` (unchanged KV code).
+
+| Binary | SHA256 |
+| --- | --- |
+| efsd | `c7c3ac34c1fb1041e16be93765099769275e230fdbe5b9b98bf9b0e09c7f4795` |
+| efs-fuse | `6886db9235e6e72cd1305802baef539e3ba65dfc613c949101b8016e84315089` |
+| efs-mgmt | `5dc972da2b166ac634c5f2bd9da8bfb9b20c643e70b4c3497a3ea17c0ef04b2c` |
+
+Verifier job deadlines are around 03:31 UTC; old daemon deadlines around
+03:51 UTC. `scripts/orcd_verify_existing.py --resume CHECKPOINT_DIR` now
+supports continuing only unchecked records into a **different** output directory.
+Prior failure counts/details remain failures; the old checkpoint is untouched.
+`python3 tests/test_orcd_verify_resume.py` checks that an already-checked path
+is not reread, remaining payloads are verified, and a prior failure cannot
+become PASS. The running baseline script has not been replaced or restarted.
+If continuation is needed, record the interruption, cleanly restart the
+**original build**, and finish baseline verification before deploying repairs.
+Do not mistake baseline EBUSY for verified payload content; every such path
+must also be read in the later, separately reported fixed-build verification.
+
 ## Prepared run
 
 - Shared evidence: `/home/erbmi1/orcd/scratch/efs/orcd-test/campaign-20261020/`.

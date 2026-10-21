@@ -24,7 +24,8 @@ full acceptance are separate states.
 remount discovery failure. Initial core 216/216, peer 67/67 and persistence
 27/27 PASS; RDMA and packing exercised. Original evidence retained. Authorized
 repair in progress: full retained-payload verification, bounded packing-maintenance
-scans, refresh-aware query tests and restart readiness; fixed-build acceptance open.
+scans, refresh-aware query tests and restart readiness. Candidate `d7ddcc045`
+adds reviewed read headroom; isolated tests PASS, not deployed; acceptance open.
 
 [W124 — fast delete](../backlog/fast-delete-reclaim.md): **parts 1–2
 implemented and deployed on orcd-mini (`de0c856b4`);**
