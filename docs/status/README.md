@@ -50,9 +50,14 @@ links in 96 pages now name the archived path. Read one with
 [orcd-mini profile under the 32M-file create run, `47ba6b590`](orcd-mini-profile-47ba6b590-20261021.md):
 **profiling only; no PASS/FAIL gate.**
 - From ~1.0 to ~2.6 M files, creates fell from 2,564 to 1,130 files/s.
-- Leader LSM lock waits rose from 3.3% to 16–18% of its switches. They are
-  LOOKUP → GETATTR reduce-lane reads queued behind apply's
-  `lsm_batch_committed`.
+- Leader LSM lock waits rose from 3.3% to 16–18% of its switches. LOOKUP
+  reads convoy behind the writer-preferring KV view lock.
+  [W126](../backlog/work-items.md#w126) is opened for this; step 1 is
+  implemented with a regression test. `make test`, deployment and the live
+  A/B are NOTRUN.
+- Corrected: the reported 30.6/15.9-core n1 "bursts" were an artifact of
+  `/proc` accounting with perf attached (A/B: 6.8 vs 4.5 cores). No work
+  item.
 - The `.efs` catalog rebuild grew from 21 s to 58 s of each 60 s refresh.
 - Directory spreading started; the spread pass itself is cheap.
 - `h->mu` waits did not grow (8–13%).

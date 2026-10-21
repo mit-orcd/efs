@@ -5549,3 +5549,63 @@ No live configuration editor or automatic rollout is included in this item.
 ## W125 — Small-file packing by default (background packer)
 
 **Capacity/performance; proposed 2026-10-18; revised to background packing after close.** Packing at close failed the early P1 measurement (close 5.4× slower, throughput −71 to −78%), so files are written exactly as today and an always-on background packer moves closed files below the threshold (initially 16 KiB) into shared segments of ordinary fragments (no data in metadata rows), lifetime-grouped by publication group, directory subtree and creation epoch, then retires their per-file fragments through W124's batched journal. Larger files keep per-file fragments. The same copy-forward engine compacts survivors of mostly-dead segments (bounded overhead ≤1/t). One write path and no switch that disables the packer: tag the last devel commit without it (`archive/unpacked-small-files-<date>`); comparisons build the tag. Existing small files are backfilled. Pieces ported from `archive/packing-containers-20261016` (D37) without the client writer, cohorts, `EFS_PACKED_WRITES` or the container engine. Motivated by ~800× raw amplification for sub-KiB files on orcd-mini. [Canonical proposal and gates](small-file-packing-default.md) · [implementation plan](small-file-packing-plan.md).
+
+<a id="w126"></a>
+## W126 — KV readers convoy behind exclusive LSM phases on a busy leader
+
+**Performance; opened 2026-10-21; step 1 implemented, deployment and live A/B NOTRUN.**
+Found under the user's 32M-file `tiny_files.py` run on orcd-mini `47ba6b590`
+([profile](../status/orcd-mini-profile-47ba6b590-20261021.md)). From ~1.0 to
+~2.6 M files, creates fell from 2,564 to 1,130 files/s. Over the same span,
+leader n1's LSM lock waits rose from 3.3% to 16–18% of its context switches.
+- About 93% of the read waits were LOOKUP → `efs_meta_apply_getattr` gets.
+- Apply's own blocked switches sat in `pthread_rwlock_wrlock`: 1,051 in a
+  3 s DWARF capture.
+- `apply-sleep` (>20 ms) occurred 1,400–2,600 times per ~90 s window, up to
+  400 ms.
+
+**Mechanism.** Every KV read (point get or scan) shares one `view_rw` per
+node. The lock is writer-preferring so Raft apply cannot starve. Each
+exclusive acquisition (`lsm_lock`) therefore waits for every in-flight
+reader, including long scans, and new readers queue behind it. Both Raft
+groups share the node's KV, so W66's leader distribution alone does not
+remove this ([`h->mu` plan](../status/raft-host-mu-plan-20261016.md)).
+
+**Step 1 (implemented).** Writer-owned flags and counters change only under
+`mu`, and readers only read them. A new `lsm_peek_lock` takes `mu` without
+`view_rw` for read-only peeks:
+- the failure-flag check before every batch's WAL append, which halves the
+  exclusive phases per applied batch;
+- REPORT's `efs_kv_lsm_l0_hot`;
+- `efs_kv_lsm_stats` and `seg_count`;
+- the query-refresh revision reads (`metadata_revisions`,
+  `transaction_revision`/`activity`, `cleanup_deferred`).
+
+Peeks keep `lsm_lock`'s fail-fast abort inside a read section.
+`tests/test_kv_lsm.c` `test_peek_beside_reader` parks a reader inside a scan
+callback and requires every peek to return. It FAILs on `47ba6b590` and
+PASSes with the change. On node9901, the patched tree passes `test_kv_lsm`,
+`test_kv_lsm_concurrent 4`, `test_kv`, `test_meta_apply`, `test_raft_store`,
+`test_query_disk`, `test_txn`, `test_kv_snapshot_tail`, `test_kv_reader_gate`
+and `test_query_catalog`.
+
+**Remaining steps (not redesigns; each needs its own A/B):**
+2. Hold-time metrics for the exclusive phase: WAL-order wait, memtable
+   batch, `kv_mtab_merge`, `kv_flush_locked`. Count readers held back per
+   phase.
+3. If flush dominates: flush a frozen immutable memtable outside the
+   exclusive phase. Readers would consult the frozen table until the L0
+   segment is published. `kv_flush_locked` writes the L0 file and MANIFEST
+   while holding `view_rw` exclusively.
+4. If long readers dominate: bound how long a scan holds the shared side.
+   Point gets already drop it around preads; `merge_scan` does not.
+
+**Gates.**
+- Deploy step 1 to orcd-mini only with the user's go-ahead: the 32M-file run
+  is live.
+- Re-profile under the same `tiny_files.py` shape at matching file counts.
+  Compare leader LSM lock-wait share, apply's `wrlock` switches,
+  `apply-sleep` counts and create rate.
+- Record steps 2–4 with their own evidence.
+
+`make test` on the patched tree remains NOTRUN.

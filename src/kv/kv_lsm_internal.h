@@ -344,6 +344,30 @@ static inline void lsm_unlock(struct kv_lsm *l)
     pthread_mutex_unlock(&l->mu);
 }
 
+/* Read-only peek at writer-owned state (flags, counters, level sizes):
+ * every write to it happens under mu and readers only read it, so mu
+ * alone gives a consistent value. Unlike lsm_lock it leaves view_rw
+ * alone: a peek neither waits for in-flight readers nor, as a queued
+ * writer under writer preference, holds new readers back. W126: the
+ * apply's flag check and REPORT's l0-hot check each drained the
+ * leader's LOOKUP readers once per call. Never wait on cv or change
+ * state under a peek. */
+static inline void lsm_peek_lock(struct kv_lsm *l)
+{
+    /* Same order rule as lsm_lock: mu after view_rw would deadlock
+     * against a writer that holds mu and waits for this reader. */
+    if (lsm_slot_in(lsm_reading, l, 0)) {
+        fprintf(stderr, "kv-lsm: peek requested inside a read section\n");
+        abort();
+    }
+    pthread_mutex_lock(&l->mu);
+}
+
+static inline void lsm_peek_unlock(struct kv_lsm *l)
+{
+    pthread_mutex_unlock(&l->mu);
+}
+
 /* Callers wait at depth 1 (a recursive mutex releases one level). */
 static inline void lsm_cond_wait(struct kv_lsm *l, pthread_cond_t *cv)
 {

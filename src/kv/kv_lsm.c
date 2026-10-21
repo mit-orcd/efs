@@ -1106,17 +1106,19 @@ static int lsm_batch_committed(void *ctx, const struct efs_kv_item *items, uint3
 
     if (!l || (n > 0 && !items))
         return EFS_ERR_INVAL;
-    lsm_lock(l);
+    /* A flag check before the WAL append: mu suffices. The exclusive view
+     * is taken once, below, for the memtable update. */
+    lsm_peek_lock(l);
     if (l->fail_next_batch) {
         l->fail_next_batch = 0;
-        lsm_unlock(l);
+        lsm_peek_unlock(l);
         return EFS_ERR_IO;
     }
     if (l->io_failed) {
-        lsm_unlock(l);
+        lsm_peek_unlock(l);
         return EFS_ERR_IO;
     }
-    lsm_unlock(l);
+    lsm_peek_unlock(l);
     if (n == 0)
         return EFS_OK;
     /* Durable first unless a sync-hold is open: then the record is written
@@ -1702,9 +1704,9 @@ int efs_kv_lsm_l0_hot(struct efs_kv *kv)
     if (!kv || !kv->ctx)
         return 0;
     l = kv->ctx;
-    lsm_lock(l);
+    lsm_peek_lock(l);
     hot = kv_l0_bytes(l) >= KV_LSM_L0_BYTES;
-    lsm_unlock(l);
+    lsm_peek_unlock(l);
     return hot;
 }
 
@@ -1715,12 +1717,12 @@ int efs_kv_lsm_seg_count(struct efs_kv *kv, uint32_t *l0, uint32_t *l1)
     if (!kv || !kv->ctx)
         return EFS_ERR_INVAL;
     l = kv->ctx;
-    lsm_lock(l);
+    lsm_peek_lock(l);
     if (l0)
         *l0 = l->n_l0;
     if (l1)
         *l1 = l->n_l1;
-    lsm_unlock(l);
+    lsm_peek_unlock(l);
     return EFS_OK;
 }
 
@@ -1733,12 +1735,12 @@ int efs_kv_lsm_stats(struct efs_kv *kv, struct efs_kv_lsm_stats *out)
     l = kv->ctx;
     if (l->magic != KV_LSM_MAGIC)
         return EFS_ERR_INVAL;
-    lsm_lock(l);
+    lsm_peek_lock(l);
     out->mt_bytes = kv_memtable_bytes(l);
     out->l0_bytes = kv_l0_bytes(l);
     out->n_l0 = l->n_l0;
     out->n_l1 = l->n_l1;
-    lsm_unlock(l);
+    lsm_peek_unlock(l);
     return EFS_OK;
 }
 
@@ -2025,7 +2027,7 @@ uint64_t efs_kv_lsm_cleanup_deferred(struct efs_kv *kv)
 {
     if(!kv || kv->ops!=&lsm_ops || !kv->ctx)return 0;
     struct kv_lsm *l=kv->ctx;
-    lsm_lock(l);uint64_t n=l->cleanup_deferred;lsm_unlock(l);
+    lsm_peek_lock(l);uint64_t n=l->cleanup_deferred;lsm_peek_unlock(l);
     return n;
 }
 
@@ -2034,11 +2036,11 @@ int efs_kv_lsm_metadata_revisions(struct efs_kv *kv, uint64_t *out, uint32_t n)
     if (!kv || kv->ops!=&lsm_ops || !kv->ctx || !out || n<4096)
         return EFS_ERR_INVAL;
     struct kv_lsm *l=kv->ctx;
-    lsm_lock(l);
+    lsm_peek_lock(l);
     int rc=l->io_failed ? EFS_ERR_IO : EFS_OK;
     for(unsigned i=0;i<4096 && !rc;i++)if(l->metadata_revision[i]==UINT64_MAX)rc=EFS_ERR_OVERFLOW;
     if (rc==EFS_OK) memcpy(out,l->metadata_revision,sizeof(l->metadata_revision));
-    lsm_unlock(l);
+    lsm_peek_unlock(l);
     return rc;
 }
 int efs_kv_lsm_snapshot_revisions(struct efs_kv_lsm_snapshot *s,
@@ -2063,19 +2065,19 @@ int efs_kv_lsm_transaction_revision(struct efs_kv *kv,uint64_t *out)
 {
     if (!kv || kv->ops!=&lsm_ops || !kv->ctx || !out) return EFS_ERR_INVAL;
     struct kv_lsm *l=kv->ctx;
-    lsm_lock(l);
+    lsm_peek_lock(l);
     int rc=l->io_failed ? EFS_ERR_IO : l->transaction_revision==UINT64_MAX ? EFS_ERR_BUSY : EFS_OK;
     *out=l->transaction_revision;
-    lsm_unlock(l);
+    lsm_peek_unlock(l);
     return rc;
 }
 int efs_kv_lsm_transaction_activity(struct efs_kv *kv,uint64_t out[8])
 {
     if(!kv || kv->ops!=&lsm_ops || !kv->ctx || !out)return EFS_ERR_INVAL;
-    struct kv_lsm *l=kv->ctx;lsm_lock(l);
+    struct kv_lsm *l=kv->ctx;lsm_peek_lock(l);
     int rc=l->io_failed?EFS_ERR_IO:EFS_OK;
     memcpy(out,l->transaction_activity,sizeof(l->transaction_activity));
-    lsm_unlock(l);return rc;
+    lsm_peek_unlock(l);return rc;
 }
 int efs_kv_lsm_snapshot_transaction_activity(struct efs_kv_lsm_snapshot *s,uint64_t out[8])
 {

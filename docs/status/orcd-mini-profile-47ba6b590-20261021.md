@@ -39,8 +39,8 @@ Previous profile: [`9099380f3`](orcd-mini-profile-9099380f3-20261017.md).
 | --- | --- | --- | --- |
 | Creates/s (`tiny_files.py` `syscw` delta, 30 s; one write per file) | 2,564 | 1,382 (1,404 at 22:05) | 1,130 |
 | Raft commits/s, group 0 / group 2 (30 s) | 0 / 10,204 | 2,235 / 3,419 | 2,153 / 2,497 |
-| efsd CPU (15 s), n1 / n2 / n3 | 6.9 / 3.0 / 2.9 cores | 30.6 / 4.2 / 4.2 | 15.9 / 2.8 / 2.6 |
-| node9900 efs-fuse CPU | 1.72 cores | 0.85 | 0.73 |
+| efsd CPU (perf samples / 499 Hz / 15 s), n1 / n2 / n3 | 4.6 / 2.0 / 2.1 cores | 6.3 / 2.9 / 2.9 | 5.9 / 2.5 / 2.4 |
+| node9900 efs-fuse CPU (/proc, perf attached; upper bound) | 1.72 cores | 0.85 | 0.73 |
 | Server context switches (10 s, all efsd) | 317,384 | 228,431 | 235,992 |
 | Leader mutex waits (DWARF cs, 3 s) | 12.7% of switches | 9.8% | 8.2% |
 | Leader LSM lock waits (`lsm_rlock`/`lsm_lock`) | 3.3% of switches | 18.4% | 15.8% |
@@ -48,11 +48,22 @@ Previous profile: [`9099380f3`](orcd-mini-profile-9099380f3-20261017.md).
 | n1 `apply-sleep` (>20 ms) per ~90 s window | 265, mean 36 ms | 2,644, mean 42 ms, max 400 ms | 1,436, mean 48 ms, max 400 ms |
 | n1 slow gc-passes with spread time | 0 of 80 | 54 of 69 (spread max 690 ms) | 50 of 65 (max 154 ms) |
 
-The n1 CPU is bursty. A 60 s sample right after p2 measured 4.5–5.6 cores
-in each 10 s step. The 30.6- and 15.9-core figures are 15 s windows that hit
-a burst.
+**Correction (2026-10-21, later the same day).** This page first gave n1
+30.6 and 15.9 cores at p2 and p3, from `/proc/PID/stat` deltas taken around
+an attached `perf record -g`. Those figures were a measurement artifact, not
+CPU bursts. A same-window A/B on n1 (`perf-accounting-ab.txt` with the raw
+captures) shows the effect:
+- without perf, the process total and the sum of its threads agree (4.5
+  and 4.4 cores);
+- with perf attached, the process total reads 6.8 cores while its threads
+  sum to 4.5, and no threads start or exit.
 
-### Bottleneck 1: LOOKUP reads wait on the leader's LSM lock
+A 5 s watcher that compared both counters for four minutes saw no thread
+churn and no burst outside perf windows. The table now gives perf-sample
+CPU. The capture scripts now sum per-thread counters. No work item was
+opened for the supposed bursts.
+
+### Bottleneck 1: LOOKUP reads wait on the leader's LSM lock ([W126](../backlog/work-items.md#w126))
 
 The leader's DWARF context-switch capture shows `lsm_rlock` becoming the
 largest single switch kind after spreading started (13–15% of all switches).
@@ -66,10 +77,18 @@ At p3:
 | 7.1% | `kv_get_copy` |
 | 3.3% | REPORT `efs_kv_lsm_l0_hot` |
 
-Each LOOKUP's GETATTR reads the parent directory's reduce lane: a get plus a
-prefix scan of the pending deltas. The parents are the 16 hot directories.
-Those reads stall behind apply's batch commit, and apply in turn
-waits >20 ms for 1,400–2,600 committed indices per window (`apply-sleep`).
+Each LOOKUP's GETATTR reads an inode row and its reduce lane: a get plus a
+prefix scan of the pending deltas. All KV reads share one writer-preferring
+`view_rw` per node, and every exclusive acquisition drains in-flight readers
+and holds back new ones. In p3, the apply thread's own blocked switches were
+1,051 in `pthread_rwlock_wrlock`, waiting for readers to drain. Waiters for
+applied indices then slept >20 ms 1,400–2,600 times per window
+(`apply-sleep`).
+
+Each applied batch took the exclusive side twice: once only to check two
+failure flags, then for the memtable update. Each REPORT took it once more,
+only to read the L0 size (`efs_kv_lsm_l0_hot`). W126 step 1 removes those
+read-only exclusive phases.
 
 The `h->mu` waits did not grow (8–13% of switches). They have the same shape as on
 `9099380f3`: proposals 44–49%, REPORT 9–12%, `host_pump` 7–12%.

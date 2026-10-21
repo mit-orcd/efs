@@ -1588,6 +1588,22 @@ data files under `docs/` now live only at tag `archive/raw-evidence-20261021`
 links in 96 pages now name the archived path. Read one with
 `git show archive/raw-evidence-20261021:<path>`.
 
+[orcd-mini profile under the 32M-file create run, `47ba6b590`](../status/orcd-mini-profile-47ba6b590-20261021.md):
+**profiling only; no PASS/FAIL gate.**
+- From ~1.0 to ~2.6 M files, creates fell from 2,564 to 1,130 files/s.
+- Leader LSM lock waits rose from 3.3% to 16–18% of its switches. LOOKUP
+  reads convoy behind the writer-preferring KV view lock.
+  [W126](#w126) is opened for this; step 1 is
+  implemented with a regression test. `make test`, deployment and the live
+  A/B are NOTRUN.
+- Corrected: the reported 30.6/15.9-core n1 "bursts" were an artifact of
+  `/proc` accounting with perf attached (A/B: 6.8 vs 4.5 cores). No work
+  item.
+- The `.efs` catalog rebuild grew from 21 s to 58 s of each 60 s refresh.
+- Directory spreading started; the spread pass itself is cheap.
+- `h->mu` waits did not grow (8–13%).
+- Errors: only `report-split` `EFS_ERR_BUSY` apply-wait timeouts.
+
 [ORCD-test detached campaign](../status/orcd-test-detached-campaign-20261020.md):
 **FAIL / BLOCKED.** 8,437,752 successful-write counts of 40 M target;
 117 writer-thread EIO reports, `.efs` command/query failures, post-load
@@ -2215,6 +2231,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | crash-recovery-feature | **W123** · automatic crash recovery through per-file durable versions | new feature / durability recovery | PROPOSED: design review before code; implementation, migration and acceptance NOTRUN; W71 remains open | [feature and gates](../backlog/crash-safe-durable-versions.md) |
 | fast-delete | **W124** · fast delete: batched reclaim, quota credit at commit, then packing (W125) | performance / capacity | PROPOSED: design review before code; implementation, private A/B and orcd-mini acceptance NOTRUN | [proposal and gates](../backlog/fast-delete-reclaim.md) · [evidence](../status/orcd-mini-gc-delete-profile-5d673efa8-20261018.md) |
 | small-file-packing | **W125** · small-file packing by default (background packer after close) | capacity / performance | PROPOSED: revised to background packing 2026-10-18; write path unchanged, packer always on, no switch, prior state kept as a tag; port and acceptance NOTRUN | [proposal and gates](../backlog/small-file-packing-default.md) · [plan](../backlog/small-file-packing-plan.md) · [D37](#appendix-4--decisions--taken-and-pending-register-d1d36) |
+| kv-reader-convoy | **W126** · KV readers convoy behind exclusive LSM phases on a busy leader | performance | OPEN: step 1 (read-only peeks take `mu` only) implemented with regression test, unit tests PASS on node9901; `make test`, orcd-mini deployment and live A/B NOTRUN; steps 2–4 (phase hold-time metrics, flush outside the exclusive phase, bounded scan holds) open | [item](#w126) · [evidence](../status/orcd-mini-profile-47ba6b590-20261021.md) |
 | orcd-qualification | **W119** · ORCD normal-operation RDMA failures and blocked clean stop | correctness / liveness | OPEN: 150 concurrent failures /846 NOTRUN; cross-host peer59/67; enabled queries EBUSY; retained writes block clean stop. TCP/commands-off rerun also FAILs (120 failures,520 NOTRUN; peer61/67; clean stop refused); all23 successfully prepared cold cases verify after authorized forced restart. [TCP evidence](../status/orcd-tcp-direct-disabled-20261015.md). Preserve failures, isolate causes and rerun original gates; W100 stays closed. [AMD follow-up](../status/amd-rdma-posix-20261015.md): native/serial/peer/cold/degraded PASS at `c8d057391`; one-mount jobs16 remains215/216 with unusual-name timeout. [Async durability follow-up](../status/amd-async-durability-20261015.md) at `c4178ea81`: scoped durability/native/serial/peer/cold/degraded PASS; jobs16 FAIL214/216 (unusual names, concurrent creates,15s) | [Raft/KV follow-up](../status/orcd-raft-kv-20261016.md) · [evidence and gates](../status/orcd-devel-qualification-20261015.md) · [item](#w119) |
 | immediate-readback | **W121** · successful fsync followed by previous-file payload | data correctness | OPEN: 255/123,932 exact readbacks failed across both queued-vote variants on ORCD native RDMA/direct with enabled `.efs`; unique512-byte files, no expiry. Diagnosed FUSE kernel fork/read page-pinning defect; kernel remediation deferred by user. Fork-isolated experiments do not close W121 | [diagnosis](../status/orcd-w121-fork-read-20261016.md) · [experiment](../status/orcd-queued-read-vote-20261016.md) · [item](#w121) |
 | qualification-fixtures | **W120** · stale extracted LOOKUP stub and command cleanup ownership check | verification correctness | OPEN (partial fix): AMD `f6235bb73` repairs the LOOKUP host context and checks reader identity; native/docs PASS at `85a9ad6b5`. Enabled-command cleanup ownership remains NOTRUN here and still needs correction/acceptance. [AMD evidence](../status/amd-rdma-posix-20261015.md); preserve original failures | [evidence](../status/orcd-devel-qualification-20261015.md) · [item](#w120) |
@@ -8086,6 +8103,66 @@ No live configuration editor or automatic rollout is included in this item.
 ### W125 — Small-file packing by default (background packer)
 
 **Capacity/performance; proposed 2026-10-18; revised to background packing after close.** Packing at close failed the early P1 measurement (close 5.4× slower, throughput −71 to −78%), so files are written exactly as today and an always-on background packer moves closed files below the threshold (initially 16 KiB) into shared segments of ordinary fragments (no data in metadata rows), lifetime-grouped by publication group, directory subtree and creation epoch, then retires their per-file fragments through W124's batched journal. Larger files keep per-file fragments. The same copy-forward engine compacts survivors of mostly-dead segments (bounded overhead ≤1/t). One write path and no switch that disables the packer: tag the last devel commit without it (`archive/unpacked-small-files-<date>`); comparisons build the tag. Existing small files are backfilled. Pieces ported from `archive/packing-containers-20261016` (D37) without the client writer, cohorts, `EFS_PACKED_WRITES` or the container engine. Motivated by ~800× raw amplification for sub-KiB files on orcd-mini. [Canonical proposal and gates](../backlog/small-file-packing-default.md) · [implementation plan](../backlog/small-file-packing-plan.md).
+
+<a id="w126"></a>
+### W126 — KV readers convoy behind exclusive LSM phases on a busy leader
+
+**Performance; opened 2026-10-21; step 1 implemented, deployment and live A/B NOTRUN.**
+Found under the user's 32M-file `tiny_files.py` run on orcd-mini `47ba6b590`
+([profile](../status/orcd-mini-profile-47ba6b590-20261021.md)). From ~1.0 to
+~2.6 M files, creates fell from 2,564 to 1,130 files/s. Over the same span,
+leader n1's LSM lock waits rose from 3.3% to 16–18% of its context switches.
+- About 93% of the read waits were LOOKUP → `efs_meta_apply_getattr` gets.
+- Apply's own blocked switches sat in `pthread_rwlock_wrlock`: 1,051 in a
+  3 s DWARF capture.
+- `apply-sleep` (>20 ms) occurred 1,400–2,600 times per ~90 s window, up to
+  400 ms.
+
+**Mechanism.** Every KV read (point get or scan) shares one `view_rw` per
+node. The lock is writer-preferring so Raft apply cannot starve. Each
+exclusive acquisition (`lsm_lock`) therefore waits for every in-flight
+reader, including long scans, and new readers queue behind it. Both Raft
+groups share the node's KV, so W66's leader distribution alone does not
+remove this ([`h->mu` plan](../status/raft-host-mu-plan-20261016.md)).
+
+**Step 1 (implemented).** Writer-owned flags and counters change only under
+`mu`, and readers only read them. A new `lsm_peek_lock` takes `mu` without
+`view_rw` for read-only peeks:
+- the failure-flag check before every batch's WAL append, which halves the
+  exclusive phases per applied batch;
+- REPORT's `efs_kv_lsm_l0_hot`;
+- `efs_kv_lsm_stats` and `seg_count`;
+- the query-refresh revision reads (`metadata_revisions`,
+  `transaction_revision`/`activity`, `cleanup_deferred`).
+
+Peeks keep `lsm_lock`'s fail-fast abort inside a read section.
+`tests/test_kv_lsm.c` `test_peek_beside_reader` parks a reader inside a scan
+callback and requires every peek to return. It FAILs on `47ba6b590` and
+PASSes with the change. On node9901, the patched tree passes `test_kv_lsm`,
+`test_kv_lsm_concurrent 4`, `test_kv`, `test_meta_apply`, `test_raft_store`,
+`test_query_disk`, `test_txn`, `test_kv_snapshot_tail`, `test_kv_reader_gate`
+and `test_query_catalog`.
+
+**Remaining steps (not redesigns; each needs its own A/B):**
+2. Hold-time metrics for the exclusive phase: WAL-order wait, memtable
+   batch, `kv_mtab_merge`, `kv_flush_locked`. Count readers held back per
+   phase.
+3. If flush dominates: flush a frozen immutable memtable outside the
+   exclusive phase. Readers would consult the frozen table until the L0
+   segment is published. `kv_flush_locked` writes the L0 file and MANIFEST
+   while holding `view_rw` exclusively.
+4. If long readers dominate: bound how long a scan holds the shared side.
+   Point gets already drop it around preads; `merge_scan` does not.
+
+**Gates.**
+- Deploy step 1 to orcd-mini only with the user's go-ahead: the 32M-file run
+  is live.
+- Re-profile under the same `tiny_files.py` shape at matching file counts.
+  Compare leader LSM lock-wait share, apply's `wrlock` switches,
+  `apply-sleep` counts and create rate.
+- Record steps 2–4 with their own evidence.
+
+`make test` on the patched tree remains NOTRUN.
 
 
 ## Appendix 6 — Naming
