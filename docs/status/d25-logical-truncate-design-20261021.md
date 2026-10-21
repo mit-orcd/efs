@@ -1,4 +1,445 @@
-# D25 logical truncate — single-entry design (proposal for review)
+# D25 logical truncate — single-entry protocol
+
+October 21, 2026. Branch `d25-logical-truncate`, source devel `0e9df00a8`.
+**Normative design for final review; not implemented; all gates NOTRUN.**
+Linked items: D25 / W43 / W24
+([contract](../backlog/decision-contracts.md#d25--logical-truncate),
+[register](decisions.md)). This text replaces the declined 256 MiB EBUSY
+refusal (`fe2e13624`) and the 65-participant coordinated truncate on
+`devel-w123-recovery` (`1e7835d8a`). It folds in the original proposal
+(`06098fa98`), two reviews (`7f8ffc6a9`, `58eea8360`) and two author
+responses (`48c423434`, `a1b3e68c1`). Those are kept in the
+[appendix](#appendix--review-history-superseded) and are **superseded**:
+where they differ from §§0–7, this text governs. Fresh format only: no old
+encoding is decoded, migrated or replayed (AGENTS.md).
+
+## 0. Problem and direction
+
+`host_truncate` (`src/server/raft_host.c`) deletes cross-group chunk rows in
+`LANE_FENCE` entries before the inode-group `TRUNCATE` entry. If that last
+entry is refused, the deletions remain: EOF keeps the old size but the
+contents are gone (`git show
+devel-w123-recovery:docs/status/w123-refused-truncate-20261020.md`). The
+client adds a second non-atomic step by zero-filling and publishing the
+retained tail before SETATTR (`efs_client_truncate`, `src/client/ops.c`).
+
+The user's direction (Oct 21) is that truncate works like a delete. **One
+inode-group Raft entry** commits the new size and, for a shrink, a new
+content epoch and a fence-history entry. Nothing is deleted when the
+truncate runs. Reads mask superseded mappings. A bounded asynchronous sweep
+deletes or clips them and hands their fragments to the existing reclaim
+paths. Truncate to 0 is the simplest case: one history entry `(E, 0)`, and
+the sweep only deletes.
+
+Reused from devel: per-part `content_epoch` on chunk rows; the masking
+helpers `efs_fence_valid_end` / `efs_fence_view_build`
+(`include/efs/fence_view.h`); GETCHUNKS per-part read views; the opid
+window (`include/efs/opid.h`, as used by append receipts); the GC record →
+`GC_FRAG_BATCH` → reclaim-journal `SUPERSEDED` pipeline; and packed-base
+release through `packed_retirement` and the segment ledger.
+
+## 1. State and encodings
+
+All integers are big-endian unless stated. The opid suffix is the existing
+`efs_opid_req_pack` form: 16 B UUID plus native-order session epoch (4 B),
+sequence (8 B) and acknowledgement (8 B), 36 B in total.
+
+### 1.1 Durable state
+
+| record | shard | contents (new or changed fields in bold) |
+| --- | --- | --- |
+| inode row | inode | `content_epoch` `E`, `base_size`, `active_lanes`, times (unchanged layout) |
+| fence history (`CONTENT_FENCE`, authority `EFS_META_FENCE_INODE`) | inode | **format 2:** `fmt:4=2`, `count:4`, **`revision:8`**, then `count × (epoch:8, size:8, done:8)`; at most 32 entries; epochs strictly increasing, sizes strictly increasing after pruning; `done` is a lane bitmap |
+| truncate receipt window (**new kind `TRUNCATE_RECEIPT`**) | inode | key `(ino, client_uuid, session_epoch)`, value an `efs_opid_window` whose completed results are `(E_after:8, size:8)`; same shape and bounds as `APPEND_RECEIPT` |
+| truncate-pending (**new kind `TRUNC_PENDING`**) | inode's anchor shard | key `(ino)`, value `gen:8` |
+| lane stamp | lane | `max_end`, `max_mtime`, `max_ctime`, `seq`, **`adopted_epoch`** (was `fenced_epoch`), `mtime_gen`, `append_bar`, `present`, **`sweep_target:8`, `sweep_next_ci:8`, `swept_epoch:8`**; 88 B |
+| chunk row | lane | each part (base and each span) gains **`valid_len:4`**: visible bytes `[off, off + min(len, valid_len))`; a new part has `valid_len = len` |
+
+Removed, and refused on decode: per-lane `CONTENT_FENCE` sidecars,
+`LANE_AUTHORITY` records, fence-history format 1, and lane values of any
+length other than 88 B.
+
+### 1.2 Commands
+
+| command | group | exact layout | bytes |
+| --- | --- | --- | --- |
+| `TRUNCATE` | inode | `tag:1 kind:1 ino:8 inode_gen:8 expect_epoch:8 expect_base_size:8 size:8 mtime_ns:8 opid:36` | **86** |
+| `ACTIVATE` | inode | `tag:1 ino:8 inode_gen:8 lane:1 writer_epoch:8` | 26 |
+| `BOOTSTRAP` | lane | `tag:1 ino:8 inode_gen:8 lane:1 epoch:8` | 26 |
+| `TRUNC_SWEEP` | lane | `tag:1 ino:8 inode_gen:8 lane:1 target:8 count:1 count × (epoch:8 size:8)` | 27 + 16·count, count 1..32 |
+| `SWEEP_DONE` | inode | `tag:1 ino:8 inode_gen:8 lane:1 target:8` | 26 |
+| `RETIRE` | inode | `tag:1 ino:8 inode_gen:8 target:8` | 25 |
+
+`TRUNCATE` offsets: kind at 1, ino 2, inode_gen 10, expect_epoch 18,
+expect_base_size 26, size 34, mtime_ns 42, opid 50–85. `kind`: 0 = extend,
+1 = shrink. `ACTIVATE` replaces `ACTIVATE_LANE` / `_MASK` / `_AT`.
+`LANE_FENCE`, `LANE_SWEEP` used for truncate, and the old 63-byte
+`TRUNCATE` with its tail candidate are removed.
+
+### 1.3 Decoding (fail closed)
+
+Each decoder checks, before any KV read or mutation: the exact length, or
+for `TRUNC_SWEEP` `27 + 16·count` with `count` in 1..32; `kind` ≤ 1; lane
+< 64; non-zero ino, generation and target; a valid opid
+(`efs_opid_req_valid`); `size` with `size / EFS_MIN_CHUNK_SIZE ≤
+UINT32_MAX`; and, for the snapshot, strictly increasing epochs and sizes
+with the newest epoch equal to `target`. A failure is a **fatal apply
+error**: the group's apply stops with a logged decode error. It is never
+turned into a proposer verdict, and it is separate from BUSY, STALE and
+INVAL. An inode with `content_epoch == UINT64_MAX` refuses a shrink with
+INVAL before any change; that verdict is not fatal.
+
+## 2. TRUNCATE
+
+### 2.1 Handler (inode-group leader host, hosts both groups)
+
+1. Under inode-group ReadIndex, read the row (`E`, `base_size`, gen) and run
+   the getattr lane collect: lane stamps under lane-group ReadIndex, with
+   the existing read-twice lane-sequence validation and the pending
+   reductions, counting only lanes with `adopted_epoch == E` (§3.3).
+   Result: `eof`.
+2. `kind = extend` if `size ≥ eof`, otherwise `shrink`. A shrink uses the
+   whole history as captured.
+3. Propose one `TRUNCATE` carrying the client's opid, `expect_epoch = E`
+   and `expect_base_size = base_size`, and wait for its apply verdict.
+4. On STALE or BUSY, go back to step 1 with the **same opid**, within the
+   request budget. On OK, return the inode. Nothing is proposed to any
+   other group.
+
+### 2.2 Apply (one KV batch)
+
+1. Decode (§1.3). Load the row. A missing row or a different generation is
+   STALE; a file that is not regular is INVAL.
+2. `efs_opid_lookup` on the receipt window. A hit returns the recorded
+   `(OK, E_after, size)` and writes nothing. This runs **before** the
+   preconditions, so a retry of a committed truncate never applies twice.
+3. Preconditions. Any failure writes nothing and records nothing:
+   `content_epoch == expect_epoch` and `base_size == expect_base_size`,
+   else STALE; open append reservations give BUSY; for extend,
+   `size ≥ base_size`, else INVAL (a handler bug).
+4. **Extend:** `base_size = size`. Epoch and history are unchanged.
+5. **Shrink:** `E' = E + 1`; `base_size = size`. Append `(E', size,
+   done = 0)` after removing every entry with `size_j ≥ size`. If the
+   history still holds 32 entries, answer BUSY and write nothing.
+   `revision++`. Put `TRUNC_PENDING`.
+6. Both kinds: `base_mtime` and `base_ctime` are raised to `mtime_ns`; the
+   append cursor is deleted (existing); `efs_opid_complete(E_after, size)`.
+
+Only a committed success is recorded. Under the same opid, STALE, BUSY and
+INVAL stay retryable or final for the handler: they are never stored as a
+receipt. The client keeps one opid until it gets a definite answer and
+acknowledges it through the window's normal contiguous ack.
+
+### 2.3 Why a stale extend is correct
+
+Suppose an extend's collect missed a publication P that raises EOF above
+`size` before the apply. The collect began after the truncate request
+arrived and was coherent: lane sequences were validated, pending reductions
+counted, and lanes on older epochs excluded. So P had not committed when the
+request began, and P overlaps the truncate. `expect_epoch` excludes any
+shrink in between, and `expect_base_size` excludes any extend or shrink
+that changed the inode-owned size. The resulting state is `base_size =
+size`, with P's bytes and lane EOF intact, so `EOF = max(size, P's end)`.
+That is exactly the state of the valid order "truncate, then P". Append
+reservations cannot interleave, because open ones refuse the truncate and
+new ones validate against the same EOF vector (§3.3).
+
+### 2.4 Client
+
+`efs_client_truncate` drops the tail rewrite. It flushes the inode's dirty
+records (existing), sends SETATTR with a fresh opid, then drops every
+cached view of the inode whose authority is not the returned `(E,
+revision)`.
+
+## 3. Reads, writes and lanes
+
+### 3.1 Validity rule
+
+A part (base or span) with epoch `e`, chunk offset `off` and length `len`
+shows file bytes `[c + off, c + off + min(len, valid_len, max(0,
+valid_end(e) − c − off)))`, where `c` is the chunk start and `valid_end(e)
+= min{size_j : epoch_j > e}` over the inode history (unbounded if no such
+entry). Bytes it does not show read as whatever lies under it, or as zero
+within EOF. Parts are applied base first, then spans in publication order,
+each masked before it is overlaid (architecture §7.3). A part that shows
+nothing is dead.
+
+### 3.2 Coherent read view (GETCHUNKS, writer view)
+
+On the host serving both groups:
+
+1. Under inode-group ReadIndex, read `(E, history, revision)` twice and
+   compare. On a mismatch, retry.
+2. Under lane-group ReadIndex, build each chunk view as today
+   (`efs_meta_get_chunk_view_tx`), with masks from the **inode** history
+   and `valid_len`. The lane stamp is not an authority.
+3. Re-read `(E, revision)`. If it changed, or any captured part has epoch
+   `> E`, retry from step 1 (bounded tries, then BUSY).
+4. The reply carries `authority_epoch = E` and `revision`. Each record
+   carries its self-contained masked view.
+
+A view captured this way stays valid after retirement: retirement happens
+only after the sweep has deleted or clipped every part it would mask
+(§4.4). Fragment loss during a read goes through the existing
+refresh-and-retry path; zeros are never substituted for live data.
+
+### 3.3 Lane adoption and publishing
+
+The writer publishes at the view's `authority_epoch = E`. This replaces
+`read_view.fence_epoch`, which is taken from the lane stamp
+(`src/client/write.c` lines 414, 3854 and 6708). Lane apply for a publish
+at epoch `p`:
+
+| lane stamp | result |
+| --- | --- |
+| absent | BUSY (activation and bootstrap first, §3.4) |
+| `p < adopted_epoch` | STALE |
+| `p == adopted_epoch` | apply as today |
+| `p > adopted_epoch` | `adopted_epoch = p`, `max_end = 0`, `seq++`, then apply |
+
+A publish that keeps an existing part copies its `valid_len` unchanged, and
+no publish ever raises a `valid_len`. A merge publish (sub-chunk RMW)
+compares the exact source row value: part identities, sequences and clips.
+A publish at `E` that lands on a lane not yet adopted after a shrink to
+`E+1` is ordered before that shrink: the history masks it, the collect
+ignores its EOF, and the sweep removes it.
+
+**EOF summaries.** getattr, the size collect and the append EOF vector
+count a lane's `max_end` and pending reductions only when `adopted_epoch
+== E`. Before implementation, every transaction that reduces into a
+*file* lane must be audited. Each must carry its epoch, so that the
+reduction is dropped when its epoch is below `adopted_epoch` and adopts
+when above, or else be refused on file lanes. `present` and `st_blocks`
+include dead rows until the sweep, so `df` lags a large truncate.
+
+### 3.4 Activation and bootstrap
+
+- `ACTIVATE` (inode group): STALE if `writer_epoch != E`. A lane that is
+  already active gives OK and changes nothing. A newly active lane sets its
+  bit and also sets its `done` bit in **every** history entry with epoch
+  ≤ `E`: a lane registered at `E` cannot hold older rows (floor below).
+- `BOOTSTRAP` (lane group): proposed only after an inode-group ReadIndex
+  shows the lane active. It carries the inode's `E` at that moment, which
+  is at least the activation epoch. Apply: absent stamp → create it with
+  `adopted_epoch = epoch`; present stamp → `adopted_epoch = max(adopted,
+  epoch)`. It never lowers the epoch and never touches the sweep fields.
+- **Floor:** a stamp is created only by `BOOTSTRAP` or `TRUNC_SWEEP`, never
+  by a publish. With §3.3, a lane rejects every publish below the epoch
+  its first stamp was created at.
+
+### 3.5 Caches on every mount
+
+Every cached chunk mapping and decoded chunk is keyed by `(ino, gen, E,
+revision)`. It is served only while that key matches the inode authority
+the client currently holds. That authority is refreshed under the same
+rules that already govern size visibility (open, getattr, attribute
+timeout), so a mount never shows discarded bytes once it can see the new
+size. Before implementation, confirm in the client which rule currently
+gives size visibility. The data rule must be no weaker than the size rule.
+
+## 4. Sweep, reclaim and retirement
+
+### 4.1 Scheduling
+
+The GC pass on the anchor's leader scans `TRUNC_PENDING`. For an inode, it
+reads the history under ReadIndex. `T` is the newest entry, and `S` is the
+snapshot of every entry ≤ `T`. For each active lane whose `done` bit for
+`T` is clear, it proposes `TRUNC_SWEEP(lane, T, S)` until it observes
+`swept_epoch ≥ T` under lane ReadIndex, then proposes `SWEEP_DONE(lane,
+T)`. When every active lane is done for `T`, it proposes `RETIRE(T)`. An
+inode whose last shrink answered BUSY because the history was full is
+moved to the front of the next pass. That priority lives only in memory:
+after a restart, the committed `TRUNC_PENDING` keys and histories are
+enough to find all work again.
+
+### 4.2 `TRUNC_SWEEP` apply (lane group)
+
+Deterministic and bounded. It reads only this lane's shard prefix `(shard,
+ino, gen, lane)` and the lane stamp. It never reads the inode, the other
+group or wall time.
+
+1. A missing stamp is created with `adopted_epoch = T`, `sweep_target = T`
+   and cursor 0. If `T < sweep_target`, the command is obsolete: OK, no
+   change. If `T > sweep_target`: `sweep_target = T`, cursor 0, and
+   `adopted_epoch = max(adopted_epoch, T)` (and `max_end = 0`, `seq++` if
+   it moved).
+2. Scan chunk keys in order from `sweep_next_ci`. Stop at whichever comes
+   first: 256 keys examined, 64 rows changed, the batch item cap, or a key
+   under a pending transaction intent. The cursor stops **at** that key,
+   and a later entry continues from it.
+3. Each row is masked with `S` (§3.1), one part at a time:
+   - A dead span is removed, and its fragments are queued as GC records.
+   - A dead ordinary base is dropped (row base identity cleared) and its
+     fragments queued. A dead packed base goes to `packed_retirement`
+     exactly once.
+   - A part that is only partly visible gets `valid_len` lowered to its
+     visible length. Identity, checksums and stored length are unchanged,
+     and a packed base keeps its ledger reference.
+   - A row with no parts left is deleted and `present` lowered.
+   - A row that changes nothing is left untouched.
+4. Advance `sweep_next_ci`. If the scan reached the end of the prefix,
+   `swept_epoch = max(swept_epoch, T)`.
+
+S is valid for every remaining row even if it lacks entries that were
+retired or pruned. A pruned entry could not lower any bound. A retired
+entry `j < T` was retired only after every lane was swept for `j` or a
+later target, so no row it masks is left. Because the snapshot needs no
+revision check, retirement cannot stall the sweep.
+
+### 4.3 The `swept_epoch ≥ T` property
+
+The property: `adopted_epoch ≥ T`, and no part with epoch `< T` shows a
+byte that `S` masks. It holds once the cursor reaches the end, because
+step 1 adopted `T` before the scan, and from then on no publish below `T`
+is accepted (§3.3). Rows behind the cursor change only through publishes at
+epoch ≥ `T`, which leave older parts' clips alone; through sweeps at higher
+targets, which only delete or clip; and through bootstrap, which only
+raises `adopted_epoch`. No other update can occur, so the property stays
+true.
+
+### 4.4 `SWEEP_DONE` and `RETIRE` (inode group)
+
+- `SWEEP_DONE(lane, T)`: OK with no change when the generation differs, `T`
+  is not an entry of the history (retired or pruned), or the lane is not
+  active. Otherwise it sets the lane's bit in `T.done`. The proposer
+  observed the durable, monotonic `swept_epoch ≥ T` before proposing, so
+  the apply reads no lane state.
+- `RETIRE(T)`: OK with no change if `T` is not an entry. INVAL if `T.done ⊉
+  active_lanes`. Otherwise it removes every entry with epoch ≤ `T` and
+  increments `revision`. When the history is empty, `TRUNC_PENDING` is
+  deleted in the same batch.
+
+Retiring every entry ≤ `T` is sound because the sweep for `T` masked rows
+with the whole snapshot `S`. A lane activated after `T` was marked done at
+activation and is covered by the floor in §3.4.
+
+### 4.5 Reclaim
+
+Ordinary base and span fragments use the existing path: the GC record is
+written in the same batch as the row change, then `GC_FRAG_BATCH`, then
+`SUPERSEDED` records in each member's reclaim journal. Packed records are
+released only through the segment ledger, never per file. A clipped part
+keeps its whole object until the part is overwritten or dropped. An
+`INODE` reclaim record cannot be used for truncate, because fragment files
+under `(ino, ci)` are shared with new-epoch writes.
+
+### 4.6 Packing and compaction
+
+- A packing candidate is built from a coherent view (§3.2), with every
+  history mask and `valid_len` applied, and the packed record is stamped
+  with the **newest source-part epoch**, never the current inode epoch.
+  `PACK_SWITCH` compares the full source row value, including identities,
+  span sequences and clips.
+- **A shrink between capture and SWITCH is safe in both cases.** If its
+  entry is still in the history, the record is older than the entry and is
+  masked by it. If the entry was retired first, the lane's sweep for that
+  entry either changed or deleted the source row, so the CAS fails, or left
+  it unchanged because it showed no bytes past the bound. In that case the
+  masked image adds nothing outside the bounds that remain.
+- Segment compaction copies only the visible range of each record and
+  keeps its clip.
+
+## 5. Crash, replay and progress
+
+- **A truncate is one entry.** Before commit, a refusal, leader loss or
+  crash leaves the whole old file. After commit, the new size, epoch,
+  history and receipt are all present. This closes the W123 refused-truncate
+  hole by construction.
+- **Lost reply:** the retry with the same opid hits the receipt before any
+  precondition and returns the first result. A later write is never
+  truncated again.
+- **Every sweep-side step is idempotent:** adoption is a max; a sweep
+  command is obsolete, restarts or continues according to its target; the
+  cursor is durable; deletes and clips act on the current row inside the
+  apply; `swept_epoch` is a max; `SWEEP_DONE` sets a bit; `RETIRE` is
+  conditional. A crash between a row change and the reclaim acceptance is
+  covered by the GC record committed with the change.
+- **Snapshots** hold the history, receipts, pending keys and lane stamps;
+  after a restart, the sweep is rediscovered from them.
+- **Full history:** a shrink answers BUSY with nothing written. Progress
+  needs no new truncate: the committed pending key drives the sweep, and
+  `SWEEP_DONE` and `RETIRE` free entries. The client retries within its
+  budget.
+
+## 6. Gates
+
+All run on the private node9901 cluster under `/tmp`, with ASan and
+`ASAN_OPTIONS=detect_leaks=0`; orcd-mini and ORCD-test are not used.
+Evidence summaries follow AGENTS.md. "Cold" means after unmount and remount
+and a same-format orderly restart.
+
+- **g0 refusal atomicity:** the W123 repro (300 MiB pattern, two mounts).
+  Faults are injected after the handler's reads, at proposal, and as an
+  apply refusal. O_TRUNC fails, and the whole file verifies from both
+  mounts.
+- **g1 speed:** sparse and allocated 100 GiB files, `dd if=/dev/null`
+  (baseline 4.3 s at `4d6530dd8`). Report server commit latency and
+  whole-syscall latency separately, plus `apply_max` on every replica.
+  Single-digit milliseconds is a measured target, not a guarantee. The
+  sweep then drains, and bytes verify cold.
+- **g2 identity:** a lost reply, an internal recapture, an intervening
+  pwrite, then a client retry returns the first result and keeps the
+  pwrite. A distinct truncate to the same size truncates again. Also covers
+  zero-size and same-size truncates.
+- **g3 interleavings:** delayed truncate requests and replies across
+  another truncate, an extend, an append reservation and a pwrite; a stale
+  extend against a concurrent publication (§2.3).
+- **g4 lazy lanes:** a write that starts after truncate returns, on a lane
+  not yet adopted, must survive; a delayed old-epoch publish across a
+  shrink is invisible, leaves the size unchanged, and is later deleted;
+  activation and bootstrap delayed across a shrink, a sweep and a
+  retirement.
+- **g5 views and caches:** mount B reads before and after a truncate on
+  mount A, both cold and warm; a read view captured before a retirement
+  finishes after it.
+- **g6 sweep:** restart of the anchor and lane leaders mid-sweep; a cursor
+  blocked by a pending intent; new-epoch writes behind and ahead of the
+  cursor; a stalled lane with more than 32 non-dominated fences: BUSY while
+  blocked, completion once the lane resumes.
+- **g7 clipping:** shrink, extend and partial rewrite with overlapping
+  spans, before and after retirement, read cold.
+- **g8 packing:** two files sharing a segment, one truncated or unlinked
+  while the other is read; SWITCH delayed across a shrink, a sweep and a
+  retirement, with mixed-epoch spans; truncate racing segment compaction.
+- **D25 contract t1–t9**, with t3 read as "no served row" before the sweep
+  and "row absent" after it.
+- **Unit tests:** decoders (every length and field refusal is fatal),
+  pruning, adoption table, getattr lane filter, clip monotonicity in
+  publish and sweep, `SWEEP_DONE` and `RETIRE` evidence, receipt-before-
+  precondition ordering.
+
+## 7. Implementation order and open items
+
+1. Audit transactions that reduce into file lanes (§3.3), and confirm the
+   client's size-visibility rule (§3.5). Both are prerequisites, not
+   follow-ups.
+2. One gated change: inode-authority read views (§3.2), the writer epoch
+   source (§3.3), the adoption table, `ACTIVATE` / `BOOTSTRAP` and the
+   floor, and inode-keyed caches. The client stamp is never switched
+   without the matching server lane rules.
+3. `TRUNCATE` with receipts (§2), behind the old path until g0–g3 pass.
+4. `TRUNC_SWEEP`, `SWEEP_DONE`, `RETIRE`, reclaim and packing (§4), with
+   g5–g8.
+5. Remove `LANE_FENCE`, the destructive truncate path, tail stubs and the
+   client tail rewrite. Update architecture §7.3 ("pushed by a bounded fence
+   over the inode row plus the active lanes" becomes lazy adoption with the
+   inode as the single history authority), the D25 contract row and the
+   register.
+
+Constants proposed here: history 32 entries, sweep 256 keys examined and 64
+rows changed per entry. They stay proposals until g1 and g6 measure them.
+W43 stays open until the gates pass.
+
+## Appendix — review history (superseded)
+
+**Superseded by §§0–7 above.** Kept unchanged except for heading depth, so
+the review trail stays readable: the original proposal (`06098fa98`, with the
+42-byte correction from `7f8ffc6a9`), the two reviews and the two author
+responses. Nothing here is normative; where it differs from §§0–7, §§0–7
+govern. In particular, the 48/42-byte encodings, the lane-revision equality
+check and the leader-selected sweep keys are withdrawn.
+
+### Original proposal (`06098fa98`)
 
 October 21, 2026. Branch `d25-logical-truncate` from devel `0e9df00a8`.
 **Design only; not implemented; NOTRUN.** Linked items: D25 / W43 / W24
@@ -7,7 +448,7 @@ October 21, 2026. Branch `d25-logical-truncate` from devel `0e9df00a8`.
 (`fe2e13624`) and the 65-participant coordinated truncate on
 `devel-w123-recovery` (`1e7835d8a`).
 
-## Problem
+#### Problem
 
 `host_truncate` (`src/server/raft_host.c`) proposes one or more
 `LANE_FENCE` entries per cross-group lane, each of which **deletes** chunk
@@ -18,7 +459,7 @@ change) cannot roll the deletes back: EOF stays old, contents are gone
 The client adds a second non-atomic step: it zero-fills and publishes the
 retained tail chunk before SETATTR (`efs_client_truncate`, `src/client/ops.c`).
 
-## Direction (user, Oct 21)
+#### Direction (user, Oct 21)
 
 Truncate is a delete of the discarded content: **one Raft entry on the
 inode's group** commits the new size and a new content epoch; nothing is
@@ -37,7 +478,7 @@ What changes: the fence history moves to **one authority — the inode** —
 and lanes adopt a new epoch **lazily** instead of being fenced by the
 truncate. No transaction, no LANE_FENCE, no in-entry range delete.
 
-## 1. Entry encoding
+#### 1. Entry encoding
 
 `EFS_MD_CMD_TRUNCATE` is redefined in place (no old layout is decoded;
 an old-format entry is refused with `EFS_ERR_PROTO`):
@@ -79,7 +520,7 @@ cross-group tail CAS publish, zero-fragment stub digests),
 path, the per-lane history sidecars and `LANE_AUTHORITY` records, and the
 client tail rewrite. The `efs_fence_*` helpers stay.
 
-## 2. Read-path validity
+#### 2. Read-path validity
 
 One rule, unchanged from architecture §7.3: a part with epoch `e_r` is
 valid below `valid_end(e_r) = min{size_j : epoch_j > e_r}` over the inode
@@ -109,7 +550,7 @@ history; bytes past it read as zeros within EOF; a part with
   drops cached views for the inode. The client truncate becomes: flush the
   inode's dirty records (existing), SETATTR, invalidate.
 
-## 3. In-flight publishes and lane fences
+#### 3. In-flight publishes and lane fences
 
 At lane apply, a publish with epoch `p`:
 
@@ -133,7 +574,7 @@ re-validated against the inode epoch at SWITCH, and segment compaction
 copies only retained ranges (the bug found on `devel-w123-recovery`,
 `ae563ebed` area — port the test, not the branch).
 
-## 4. GC and reclaim of superseded fragments
+#### 4. GC and reclaim of superseded fragments
 
 The leader's GC pass picks up truncate-pending keys and runs a **truncate
 sweep** per active lane, using the existing two-step exact-key path (lane
@@ -177,7 +618,7 @@ record cannot be used for truncate. Per-fragment `SUPERSEDED` records are
 the bounded path; an epoch-scoped directory is a possible later
 optimisation, not part of this change.
 
-## 5. Crash and replay
+#### 5. Crash and replay
 
 - The truncate is one entry: either committed (new size, epoch, history)
   or not (nothing changed). A refusal or a lost leader before commit
@@ -193,7 +634,7 @@ optimisation, not part of this change.
 - Snapshots carry inode history, lane stamps and pending keys like any KV;
   the sweep is re-derived from them after restart.
 
-## Format changes (fresh format only)
+#### Format changes (fresh format only)
 
 TRUNCATE entry layout; chunk-row per-part `valid_len`; lane stamp gains
 `swept_epoch` (fenced → adopted); inode history keeps the existing
@@ -202,7 +643,7 @@ TRUNCATE entry layout; chunk-row per-part `valid_len`; lane stamp gains
 sidecars, `LANE_AUTHORITY` and `LANE_FENCE` removed. Unknown or removed
 encodings fail closed.
 
-## Gates (private node9901 cluster, ASan with `detect_leaks=0`)
+#### Gates (private node9901 cluster, ASan with `detect_leaks=0`)
 
 Adapted from the D25 contract t1–t9; t3 now means "no served row" before
 the sweep and "row absent" after it.
@@ -221,7 +662,7 @@ the sweep and "row absent" after it.
 - Unit: history pruning, adoption table, getattr lane filter, clip CAS,
   retire evidence, refused old encodings.
 
-## Open questions for review
+#### Open questions for review
 
 1. Extend keeps the D25 rule (size only, no epoch). Alternative: always
    bump — simpler, but grows the history on repeated grow. Recommend keep.
@@ -234,7 +675,7 @@ the sweep and "row absent" after it.
    contract row and register line will be updated with the implementation.
 
 
-## Independent technical review — October 21
+### Independent technical review — October 21
 
 Reviewed proposal/source `06098fa98` on `d25-logical-truncate`. **Design review
 only; all new gates NOTRUN.** I support one inode-group commit for the logical
@@ -242,7 +683,7 @@ size/fence and asynchronous physical reclamation. Fresh format only; no legacy
 replay, migration or downgrade machinery is requested. The following are
 correctness requirements to settle before calling this implementation-ready.
 
-### 1. Request identity and size classification — blocking
+#### 1. Request identity and size classification — blocking
 
 The proposed entry has generation and expected content epoch but no operation
 identity. Matching `base_size` and the latest fence is not proof that a retry is
@@ -260,7 +701,7 @@ apply. Test delayed requests/replies across another truncate, extension, append
 and pwrite, including identical requested sizes and zero/same-size operations.
 No request-ID or format compatibility with older builds is needed.
 
-### 2. Read authority must be a coherent image — blocking
+#### 2. Read authority must be a coherent image — blocking
 
 ReadIndex establishes an applied floor; separate inode/history reads following
 it are not automatically one atomic image. Current chunk-view code in
@@ -276,7 +717,7 @@ consistently. Include peer cache invalidation/revalidation: invalidating the
 truncating client's cache alone does not establish correctness for a read
 started on another mount after truncate returns.
 
-### 3. Sweep completion and retirement evidence — blocking
+#### 3. Sweep completion and retirement evidence — blocking
 
 The stated `TRUNC_SWEEP` wire sketch carries indices but not the row versions
 or history revision later claimed by the CAS/idempotence text. Choose one
@@ -296,7 +737,7 @@ register an omitted lane after history is retired and publish unmasked old
 bytes. The assertion that every later registration uses a newer epoch needs
 an enforced admission rule, not merely a handler convention.
 
-### 4. Clipping and packed-object lifetime — blocking
+#### 4. Clipping and packed-object lifetime — blocking
 
 Metadata-only clipping is reasonable if every read, RMW, fold, packing and
 compaction path respects it even after history retirement. Define `valid_len`
@@ -314,7 +755,7 @@ check followed by a later switch is a race. Test two files sharing a segment,
 truncate/unlink one while reading the other, and race truncate against packing
 and segment compaction. No automatic crash-recovery feature is implied.
 
-### 5. Fail-closed encoding and bounded-history progress — blocking
+#### 5. Fail-closed encoding and bounded-history progress — blocking
 
 The listed entry is 42 bytes, now corrected above. Specify exact current-format
 lengths, allowed kind values, size bounds and epoch-overflow refusal. Existing
@@ -329,7 +770,7 @@ work with the logical commit. Test a stalled lane and more than 32 non-dominated
 fences; preserve bounded refusal while blocked and eventual completion after
 progress resumes. Separate a legitimate BUSY verdict from malformed encoding.
 
-### Scope and implementation order
+#### Scope and implementation order
 
 Keep the design's O(1) logical mutation and bounded asynchronous sweep. First
 settle request identity/classification and authority/retirement proofs, then
@@ -345,7 +786,7 @@ verify all expected bytes before and after a same-format orderly restart.
 The missing failure/interleaving gates above supplement t1–t9. No runtime
 success, implementation approval or deployment is claimed by this review.
 
-## Author response to the review — October 21
+### Author response to the review — October 21
 
 Response from the proposal's author to the review in `7f8ffc6a9`; checked
 against devel `0e9df00a8`. Design text only; NOTRUN. Accepted points
@@ -354,7 +795,7 @@ will be rewritten once these points are settled.
 
 **Encoding size.** Accepted: 1+8+8+8+8+8+1 = 42 bytes, not 48.
 
-### Additional gap found while checking the review
+#### Additional gap found while checking the review
 
 The client stamps its publications with the **lane** stamp, not the inode
 epoch: `p->publish_epoch = obs->read_view.fence_epoch`
@@ -368,7 +809,7 @@ writer publishes at `E`, and the merge/STALE checks compare against `E` plus
 the history revision (below). §3 of the proposal assumed this already held.
 It does not.
 
-### 1. Request identity and size classification — agree, with one claim kept
+#### 1. Request identity and size classification — agree, with one claim kept
 
 - **Identity: agree.** My retry rule ("`base_size == size` and newest entry
   `(E, size)` → OK") is wrong: a second truncate to the same size after a
@@ -393,7 +834,7 @@ It does not.
   is what makes it coherent. I will write this as a short proof in the
   rewritten §1 and test the delayed-request matrix the review lists.
 
-### 2. Coherent read image — agree on the mechanism, disagree on one reason
+#### 2. Coherent read image — agree on the mechanism, disagree on one reason
 
 - **Agree:** add a **history revision** on the inode, bumped by both append
   and retirement. Capture `(E, revision, history)` with the same
@@ -415,7 +856,7 @@ It does not.
   size. Gate: on mount B, read before and after a truncate on mount A, both
   cold and warm.
 
-### 3. Sweep completion and retirement — agree; concrete model
+#### 3. Sweep completion and retirement — agree; concrete model
 
 - **One model: inspect and transform at apply.** History entries are
   immutable until retirement, and retirement waits for the sweep, so the
@@ -449,7 +890,7 @@ It does not.
   fence at `E` cannot contain older rows, so its activation marks it done
   for every pending target.
 
-### 4. Clipping and packed objects — agree, plus one correction to the review
+#### 4. Clipping and packed objects — agree, plus one correction to the review
 
 - **Packed bases: agree, and my note was wrong.** Devel already releases a
   dead packed base through `packed_retirement` and the segment ledger, not
@@ -473,7 +914,7 @@ It does not.
   part has an epoch above the lane's adopted epoch. I'll add the two-file
   shared-segment and truncate-versus-pack/compaction races to the gates.
 
-### 5. Fail-closed decoding and full history — agree
+#### 5. Fail-closed decoding and full history — agree
 
 - The current TRUNCATE path turns apply errors into proposer verdicts, so
   `EFS_ERR_PROTO` from a decoder would reach the client as an error while
@@ -487,7 +928,7 @@ It does not.
   from `SWEEP_DONE` evidence alone, with no new truncate needed. The
   stalled-lane test and the >32 non-dominated fences test are accepted.
 
-### Other points
+#### Other points
 
 - **File-lane reductions:** agree this is a prerequisite audit, not a
   follow-up. It runs before any epoch-invariant code.
@@ -498,14 +939,14 @@ It does not.
   source fix (above) placed first, because every later step depends on it.
 
 
-## Follow-up review of the author response — October 21
+### Follow-up review of the author response — October 21
 
 Reviewed `48c423434`; source/design inspection only, **runtime gates NOTRUN**.
 The response substantially improves the design. Rewrite §§1–5 into one
 normative protocol next; leaving contradictory original and response text is
 not a safe implementation handoff. No backward compatibility is required.
 
-### Disposition of the disputed points
+#### Disposition of the disputed points
 
 - **Writer epoch: accepted and essential.** `src/client/write.c` copies
   `obs->read_view.fence_epoch` into the publication, and current chunk-view
@@ -544,7 +985,7 @@ not a safe implementation handoff. No backward compatibility is required.
   there is no need to settle a weaker unchecked algorithm. Keep the actual
   rule in the normative text and cover warm peer caches.
 
-### Remaining protocol details to specify
+#### Remaining protocol details to specify
 
 1. **Opid results versus internal retries.** Persist a successful truncate's
    identity/effect/verdict atomically. Define how precondition STALE and
@@ -591,7 +1032,7 @@ Then qualify retirement and packed compaction with the same-format restart
 and interleaving tests above. This review changes no code or deployment and
 claims no runtime acceptance.
 
-## Author response to the follow-up review — October 21
+### Author response to the follow-up review — October 21
 
 Reviewed `58eea8360`; source inspection only, NOTRUN. I accept the
 dispositions as stated, including the narrower PACK_SWITCH proof obligation
@@ -599,7 +1040,7 @@ and the decision to recheck revisions as the read rule. I also agree the next st
 normative rewrite of §§1–5; the rules below are what that rewrite will
 contain. Two corrections to my previous response come first.
 
-### Corrections to my previous response
+#### Corrections to my previous response
 
 - **"Existing opid session machinery" was too broad.** Most of
   `include/efs/session.h` (lease edges, close steps, guarded probes) is
@@ -613,7 +1054,7 @@ contain. Two corrections to my previous response come first.
   identical state *for that group's shards* at the same applied index. The
   sweep rule below depends only on that.
 
-### 1. Opid receipts versus internal retries
+#### 1. Opid receipts versus internal retries
 
 - Only a committed **success** is recorded. The TRUNCATE apply first runs
   `efs_opid_lookup` on the inode shard's window. A hit returns the stored
@@ -639,7 +1080,7 @@ contain. Two corrections to my previous response come first.
   layout is set in the rewrite,
   validated with an exact-length check.
 
-### 2. Deterministic bounded sweep
+#### 2. Deterministic bounded sweep
 
 - The scan reads only the target lane's shard prefix `(shard, ino, gen,
   lane)`, in key order from the cursor. It stops at whichever comes first:
@@ -663,7 +1104,7 @@ contain. Two corrections to my previous response come first.
   `SUPERSEDED` (packed records to the ledger). Dead spans are removed, and
   a span that crosses the boundary is clipped.
 
-### 3. Activation, bootstrap and SWEEP_DONE lifecycle
+#### 3. Activation, bootstrap and SWEEP_DONE lifecycle
 
 - **ACTIVATE** `(ino, gen, lane, writer_E)` runs on the inode group. Its
   apply refuses with STALE if `writer_E != content_epoch`. If the lane is
@@ -699,7 +1140,7 @@ contain. Two corrections to my previous response come first.
   so it masked them as well. Only committed apply state authorises
   retirement, never a handler's claim.
 
-### 4. Revision matching and progress
+#### 4. Revision matching and progress
 
 - I withdraw my earlier "the snapshot revision must equal the one recorded
   at adoption" rule. It would block progress after any retirement, which is
@@ -716,7 +1157,7 @@ contain. Two corrections to my previous response come first.
   truncate-pending key plus the inode history are enough to rediscover all
   pending sweeps after a restart.
 
-### Work order
+#### Work order
 
 Agreed. The writer-epoch source, coherent inode-authority views, the
 ACTIVATE/BOOTSTRAP floor and the lane adoption table land together as one
