@@ -24,6 +24,14 @@ Done and verified (evidence pages under `docs/status/w125-*`):
 - two-client 1 h on orcd-mini: 0 mismatches, 0 errors; mixed-size
   create/read/delete/compact rounds; dd up to 4 GiB.
 
+Closure tests ([evidence](../status/w125-closure-20261021.md)):
+
+- C0, C2, C3, C4, C5 and C6 PASS; C8 recorded;
+- C1 and C7 failed only on defects outside packing (0a, readdir);
+- fixes made here: segment quota reserve, idle compaction batches
+  (`e12e23394`), grown-file fold (`f958852fd`);
+- open: C1 rerun, C9, C10, docs.
+
 Set aside (not W125): network-interruption bounds on branch
 `client-interruption-bounds`; degraded publication (product gaps §1.2).
 

@@ -78,6 +78,17 @@ implemented and deployed on orcd-mini (`de0c856b4`);**
   POSIX suites PASS; see the evidence page for the mixed-workload test.
 - Slot reuse and subtree delete stay deferred.
 
+[W125 closure tests C0–C8](w125-closure-20261021.md): **IN PROGRESS;
+no data errors from packing.** C0 (2 h, both clients), C2, C3, C4, C5 and
+C6 (backfill on upgrade) PASS; three packing defects were fixed on devel,
+each with a rerun (idle compaction batch, segment quota reserve,
+grown-file fold). orcd-mini runs `6ffa9e785f57`.
+- Packed md5 crawl is 14% faster than unpacked. Client RSS plateaus at
+  about 1.06 GB.
+- Defects outside packing: large-file EIO under concurrent append (0a) and
+  readdir skipping entries at 1M entries.
+- Remaining: C1 rerun (running), C9 24 h soak (armed), C10 and docs.
+
 [W125 packer throughput and busy budget](w125-packer-throughput-20261020.md):
 **gates PASS; copy throughput ~1,020 → ~5,000 files/s; lag-controlled busy
 budget bounds the backlog but costs a saturating writer 37% (FAIL vs
