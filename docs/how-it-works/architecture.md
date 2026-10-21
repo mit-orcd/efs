@@ -572,9 +572,14 @@ shared packed segment:
 - **Lifetime:** files are grouped by creation epoch and directory, so tree
   deletes empty whole segments; segments track live bytes, and survivors of
   mostly-dead segments are compacted forward.
-- **Budget:** packing yields to foreground load (token bucket per group,
-  cluster-wide busy signal). Modified packed files are written per file and
-  repacked; files that grow past 16 KiB keep per-file fragments.
+- **Budget:** packing drops to a floor while foreground load is high and
+  ramps up only under space pressure (unpacked bytes or quota usage).
+  Modified packed files are written per file and repacked. A file that
+  grows past 16 KiB is folded back into per-file fragments.
+- **Compaction:** scheduled maintenance, not tied to foreground I/O. It
+  runs in idle batches, in a daily window, and on demand
+  (`efs-mgmt pack-compact`). Tiny holes and cold segments go first, so an
+  idle cluster ends with no holes.
 
 There is no switch that disables the packer. The protocol is in
 [data plane: packed small files](protocols/data.md#packed-small-files-w125);

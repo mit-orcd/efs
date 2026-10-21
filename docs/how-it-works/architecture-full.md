@@ -602,9 +602,14 @@ shared packed segment:
 - **Lifetime:** files are grouped by creation epoch and directory, so tree
   deletes empty whole segments; segments track live bytes, and survivors of
   mostly-dead segments are compacted forward.
-- **Budget:** packing yields to foreground load (token bucket per group,
-  cluster-wide busy signal). Modified packed files are written per file and
-  repacked; files that grow past 16 KiB keep per-file fragments.
+- **Budget:** packing drops to a floor while foreground load is high and
+  ramps up only under space pressure (unpacked bytes or quota usage).
+  Modified packed files are written per file and repacked. A file that
+  grows past 16 KiB is folded back into per-file fragments.
+- **Compaction:** scheduled maintenance, not tied to foreground I/O. It
+  runs in idle batches, in a daily window, and on demand
+  (`efs-mgmt pack-compact`). Tiny holes and cold segments go first, so an
+  idle cluster ends with no holes.
 
 There is no switch that disables the packer. The protocol is in
 [data plane: packed small files](protocols/data.md#packed-small-files-w125);
@@ -1613,6 +1618,17 @@ implemented and deployed on orcd-mini (`de0c856b4`);**
 - Unit, `make test`, private GC/expiry/SIGKILL gates and all orcd-mini
   POSIX suites PASS; see the evidence page for the mixed-workload test.
 - Slot reuse and subtree delete stay deferred.
+
+[W125 closure tests C0–C8](../status/w125-closure-20261021.md): **IN PROGRESS;
+no data errors from packing.** C0 (2 h, both clients), C2, C3, C4, C5 and
+C6 (backfill on upgrade) PASS; three packing defects were fixed on devel,
+each with a rerun (idle compaction batch, segment quota reserve,
+grown-file fold). orcd-mini runs `6ffa9e785f57`.
+- Packed md5 crawl is 14% faster than unpacked. Client RSS plateaus at
+  about 1.06 GB.
+- Defects outside packing: large-file EIO under concurrent append (0a) and
+  readdir skipping entries at 1M entries.
+- Remaining: C1 rerun (running), C9 24 h soak (armed), C10 and docs.
 
 [W125 packer throughput and busy budget](../status/w125-packer-throughput-20261020.md):
 **gates PASS; copy throughput ~1,020 → ~5,000 files/s; lag-controlled busy
@@ -9562,7 +9578,7 @@ must not replay a log containing an uncheckpointed command it cannot decode.
 most `EFS_PACK_THRESHOLD` (16 KiB) is written and published as per-file
 chunk fragments like any file. Its chunk-zero publication also records the
 file in its group's **candidate index** (KV kind 46, key epoch + FileID, the
-epoch being leader time / 600 s), in the same batch.
+epoch being leader time / 60 s, `EFS_PACK_EPOCH_S`), in the same batch.
 
 **Packer (group leader).** For each led group the packer selects
 candidates that are closed, quiet for the minimum age (60 s), linked,
@@ -9601,20 +9617,88 @@ Superseded per-file fragments go to the journals in batches
 (`GC_FRAG_BATCH`, wire 163; kind SUPERSEDED, checksum-guarded deletion
 and removal of empty chunk and inode directories).
 
-**Compaction and backfill.** Segments with live share under 50%, at least
-32 KiB dead, or under 8 KiB live are read back and their live records
-switched into cold segments the same way. `PACK_INDEX` (MD 78) backfills
-the candidate index from a leader scan of inode shards for stores written
-before packing.
+**Budget.** Packing runs at the idle rate (5,000 files/s per group) unless
+the group is busy, meaning foreground commits exceed 100/s, measured over
+windows of at least 1 s. While busy, it drops to a floor of 50 files/s and
+ramps back towards the idle rate only under space pressure. Pressure is the
+larger of two linear ramps:
+
+- unpacked candidate bytes, estimated as backlog × 64 KiB, from 64 GiB to
+  128 GiB;
+- quota usage, from 50% to 80%.
+
+The busy rate is `floor + (idle − floor) × pressure`. The backlog is
+counted every 30 s. A pass reads its segments' files on 16 threads and
+builds and switches its segments concurrently (`EFS_PACK_SEGMENTS_PER_PASS`, at most 32). Passes run back to
+back while backlog and budget remain.
+
+**Segment quota reserve.** `PUT_SEGMENT` may exceed a node's quota by
+quota/64, clamped to 16–256 MiB. Packing frees more than it writes, since
+each file's 69,632-byte fragments shrink to a share of a segment. Without
+the reserve, a node at quota could never pack its way back under it.
+
+**Compaction.** Compaction is scheduled maintenance, separate from packing
+passes and from foreground I/O. It considers every ACTIVE segment that has
+a hole, and underfilled segments (under 8 KiB live), which are merged
+together. The whole segment index is scanned and the 64 highest-priority
+candidates are kept. Priority is `0.5 × live fraction + 0.5 × coldness`:
+
+- the live-fraction term clears tiny holes first;
+- coldness is age over 24 h, capped at 1; compacted output counts as cold.
+
+So a cluster left idle or read-only long enough ends with no holes. Live
+records are read back and switched into cold segments, the same way
+packing switches files. Compaction runs on three triggers:
+
+- **Idle:** after 60 s without busy load, a batch of up to 256 output
+  segments, capped at 10 s of work per batch, repeated every 60 s while
+  idle. Reads are not commits, so a read-only cluster counts as idle.
+- **Daily:** a UTC window (default 03:00 for 120 min) runs
+  `segments_per_pass` per pass whenever the group is not busy.
+- **Operator:** `efs-mgmt pack-compact <node:port> [segments]` (wire
+  167/168) queues a request on every group the node leads and runs even
+  while busy. With `0` it only prints the fragmentation summary.
+
+Each leader logs a `packer: segments` fragmentation summary every 30 s:
+segments, live, dead, holed, underfilled and compacted total.
+
+**Backfill.** `PACK_INDEX` (MD 78) backfills the candidate index from a
+leader scan of inode shards, for stores written before packing.
+
+**Tunables** (efsd environment; defaults in parentheses):
+
+| Variable | Meaning |
+| --- | --- |
+| `EFS_PACK_MIN_AGE_MS` (60000) | quiet time before a closed file is packed |
+| `EFS_PACK_FILES_PER_S` (5000) | idle packing rate per group |
+| `EFS_PACK_BUSY_FILES_PER_S` (50) | floor while busy |
+| `EFS_PACK_BUSY_COMMITS_PER_S` (100) | foreground commit rate that counts as busy |
+| `EFS_PACK_UNPACKED_GIB` (64) | unpacked bytes where pressure starts (full at 2×) |
+| `EFS_PACK_SPACE_START_PCT` / `_FULL_PCT` (50 / 80) | quota-usage pressure ramp |
+| `EFS_PACK_SEGMENTS_PER_PASS` (8) | segments per pass, and compaction per daily pass |
+| `EFS_PACK_COMPACT_IDLE_S` (60) | idle time before idle compaction |
+| `EFS_PACK_COMPACT_IDLE_SEGS` (256) | output segments per idle batch |
+| `EFS_PACK_COMPACT_IDLE_MS` (10000) | work cap per idle batch |
+| `EFS_PACK_COMPACT_DAILY_START_MIN` / `_DAILY_MIN` (180 / 120) | daily window, UTC minute of day and length |
+| `EFS_PACK_COMPACT_COLD_S` (86400) | age at which a segment counts as fully cold |
+| `EFS_PACK_BACKFILL_SHARDS` (64) | inode shards scanned per backfill step |
 
 **Reads.** GETCHUNKS returns a packed base with `EFS_CHUNK_REC_F_PACKED`
 and the 96-byte reference; nodes and checksums are the segment's. The
 client fetches any two segment fragments with `GET_SEGMENT` (wire 159),
 hashes each, decodes, checks the record against the reference, zero-fills
-past it and overlays spans. Connections must first declare protocol 2
+past it and overlays spans. The scratch buffers come from the demand-read
+allowance (below). Connections must first declare protocol 2
 (`CLIENT_HELLO`, wire 165); the server answers GETCHUNKS and segment
 messages only on declared connections, and a new client refuses to mount
 daemons that do not accept the declaration.
+
+**Read headroom.** Demand reads, including packed-segment scratch, may use
+the client buffer pool's hard and drain budgets plus a read allowance
+(`EFS_DCACHE_READ_BYTES`, 64 MiB). Dirty write data cannot hold that
+allowance, so a heavy writer can no longer starve readers into
+ENOMEM/EBUSY. A read that cannot get buffers waits until its deadline
+(30 s when it has none) instead of failing at once.
 
 **Modification.** Writes, appends and truncates of a packed file use the
 ordinary write path: a full rewrite releases the record; spans over a
