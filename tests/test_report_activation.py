@@ -14,6 +14,7 @@ code=r'''
 #include <string.h>
 #define HOST_ACTIVATE_LANE_LEN 10u
 #define HOST_ACTIVATE_MASK_LEN 17u
+#define HOST_ACTIVATE_AT_LEN 25u
 #define APPLY_LOG(...) ((void)0)
 struct efs_raft_host {struct efs_kv *kv;};
 static unsigned effects;static int floor_rc;
@@ -23,6 +24,8 @@ static uint64_t rd64be(const uint8_t*p){return ((uint64_t)rd32be(p)<<32)|rd32be(
 uint8_t efs_raft_shard_group(uint32_t shard){assert(shard==efs_kv_inode_shard(1));return 0;}
 int efs_session_accept(struct efs_kv*kv,uint32_t sh,const uint8_t*uuid,uint32_t epoch){(void)kv;assert(sh==efs_kv_inode_shard(1) && uuid[0]==9 && epoch==42);return floor_rc;}
 int efs_meta_apply_activate_lanes(struct efs_kv*kv,efs_ino_t ino,uint64_t mask){(void)kv;assert(ino==1 && mask==3);effects++;return EFS_OK;}
+static int at_rc;
+int efs_meta_apply_activate_lanes_at(struct efs_kv*kv,efs_ino_t ino,uint64_t mask,uint64_t epoch){(void)kv;assert(ino==1 && mask==3 && epoch==7);if(at_rc)return at_rc;effects++;return EFS_OK;}
 int efs_meta_apply_activate_lane(struct efs_kv*kv,efs_ino_t ino,uint8_t lane){(void)kv;assert(ino==1 && lane==1);effects++;return EFS_OK;}
 ''' + s[a:b] + r'''
 int main(void){struct efs_raft_host h={0};uint8_t cmd[37]={0};cmd[8]=1;cmd[16]=3;struct efs_opid id={.session_epoch=42};id.client_uuid[0]=9;efs_report_session_pack(cmd+17,&id);
@@ -36,6 +39,10 @@ int main(void){struct efs_raft_host h={0};uint8_t cmd[37]={0};cmd[8]=1;cmd[16]=3
  floor_rc=EFS_ERR_STALE;assert(apply_activate_lane_cmd(&h,cmd,30,1,0)==EFS_ERR_STALE && effects==2);
  floor_rc=EFS_OK;assert(!apply_activate_lane_cmd(&h,cmd,30,1,0) && effects==3);
  assert(!apply_activate_lane_cmd(&h,cmd,10,1,0) && effects==4);
+ /* 0a: [ino][mask][content_epoch] applies at the epoch; STALE returns. */
+ {uint8_t at[45]={0};at[8]=1;at[16]=3;at[24]=7;efs_report_session_pack(at+25,&id);
+  floor_rc=EFS_OK;at_rc=EFS_ERR_STALE;assert(apply_activate_lane_cmd(&h,at,45,1,0)==EFS_ERR_STALE && effects==4);
+  at_rc=EFS_OK;assert(!apply_activate_lane_cmd(&h,at,45,1,0) && effects==5);}
  return 0;}
 '''
 with tempfile.TemporaryDirectory(prefix='efs-report-activation-') as d:

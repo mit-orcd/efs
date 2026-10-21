@@ -25,6 +25,8 @@ source=r'''
 static uint8_t bytes[65536], sum[EFS_HASH_SIZE];
 static pthread_once_t read_verify_once=PTHREAD_ONCE_INIT;
 static int read_verify, read_frag_prof;
+/* Fragment attempt bound (src/client/read.c; tested by test_fragment_attempt.py). */
+static int read_frag_timeout_ms __attribute__((unused)) = 2000;
 int efs_conn_recv_msg_into(struct efs_conn *conn,uint8_t *type,uint8_t *status,
                           void *header,uint32_t hn,void *body,uint32_t bn) {
     (void)conn; assert(hn==EFS_HASH_SIZE && bn==sizeof(bytes));
