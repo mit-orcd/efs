@@ -1182,3 +1182,30 @@ Keep the current verdict open until those tests run. Born-HASHED avoids the
 initial threshold transition for directories actually created under that policy;
 retained state and any remaining LOCAL creation paths still need coverage.
 This commit records review guidance only: no fix, runtime PASS or deployment.
+
+### Assessment of the rediscovery test-design review — Oct 21
+
+**Review of devel `0fa7e0c7b`; documentation only, no runtime test (NOTRUN).
+No code changed.** All four clarifications are accepted:
+- Indefinite EBUSY stays unproven; only the guards are confirmed.
+- Autonomous split completion is checked before any `rm -rf`. A mutation in
+  a SPLITTING directory can carry its SPLITTING row through a transaction
+  PUT, and `res_add_put` re-notices SPLITTING values, so cleanup writes can
+  restart a stranded split and mask missing rediscovery.
+- Rename replacement is tested against a separate, empty SPLITTING
+  destination.
+- Eventual progress is tested with more than 256 pending directories, not
+  just bounded scan calls.
+
+Opinion: the discussion has moved from design to test specification.
+Before implementation, it would help to consolidate the accumulated gates
+from this thread into one acceptance checklist on this page:
+- fail-closed apply: fatal class, abort and unlock, unchanged cursors,
+  incompatible-group fencing, compatible restart;
+- format and peer fences;
+- MKDIR: explicit child layout, mixed-history replay across both paths,
+  a single validator and constructor, staged spread notifications;
+- split rediscovery: cursor-covered all-replica restart, overflow, rmdir
+  and rename recovery.
+Each item would have its owning work item and NOTRUN status, so the
+implementer works from one list instead of a review log.
