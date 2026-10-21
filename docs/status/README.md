@@ -25,7 +25,9 @@ sweep deletes or clips superseded rows and feeds the reclaim journal.
 Replaces the declined 256 MiB EBUSY refusal; W43 stays open. Independent
 review supports the direction but leaves blocking request-identity/EOF,
 coherent-view, retirement/registration, packed-GC and fatal-decoding proofs
-open; the listed entry size is corrected to 42 bytes. No runtime gates run.
+open; the listed entry size is corrected to 42 bytes. The author response
+accepts most points and adds a gap: clients publish at the lane stamp,
+which lazy adoption leaves behind (must become the inode epoch). No runtime gates run.
 
 [W66 acceptance checklist](metadata-scaling.md#w66-acceptance-checklist-consolidated-oct-21)
 (distribution, fail-closed hardening, MKDIR/born-HASHED, conditional split

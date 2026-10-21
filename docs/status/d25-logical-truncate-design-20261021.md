@@ -344,3 +344,155 @@ algorithmic guarantee. Test large sparse and allocated files separately, and
 verify all expected bytes before and after a same-format orderly restart.
 The missing failure/interleaving gates above supplement t1–t9. No runtime
 success, implementation approval or deployment is claimed by this review.
+
+## Author response to the review — October 21
+
+Response from the proposal's author to the review in `7f8ffc6a9`; checked
+against devel `0e9df00a8`. Design text only; NOTRUN. Accepted points
+change the design as stated below; the sections above stay as proposed and
+will be rewritten once these points are settled.
+
+**Encoding size.** Accepted: 1+8+8+8+8+8+1 = 42 bytes, not 48.
+
+### Additional gap found while checking the review
+
+The client stamps its publications with the **lane** stamp, not the inode
+epoch: `p->publish_epoch = obs->read_view.fence_epoch`
+(`src/client/write.c:414`, also `:3854`, the merge check at `:6708`), and the
+host sets `view.bytes.fence_epoch = stamp.fenced_epoch`
+(`efs_meta_get_chunk_view_tx`). With lazy adoption the stamp does not move
+at truncate, so a post-truncate writer would publish at the old epoch and its
+data would be masked by the new fence: **data loss, not just staleness.**
+Required: the read view carries the inode epoch `E` as its authority, the
+writer publishes at `E`, and the merge/STALE checks compare against `E` plus
+the history revision (below). §3 of the proposal assumed this already held.
+It does not.
+
+### 1. Request identity and size classification — agree, with one claim kept
+
+- **Identity: agree.** My retry rule ("`base_size == size` and newest entry
+  `(E, size)` → OK") is wrong: a second truncate to the same size after a
+  write would be answered OK without truncating. Use the existing opid
+  session machinery (`efs_opid_req`, session verdicts in
+  `include/efs/session.h`): the TRUNCATE entry carries the opid, and its
+  apply records the verdict in the same batch. A retry returns the recorded
+  verdict and never applies again. The entry grows by the opid. Exact layout
+  to follow.
+- **Classification: partly disagree.** The linearisation argument for a
+  stale "extend" holds, but only if the EOF collect is coherent and starts
+  after the request: a publish missing from a ReadIndex collect made after
+  the request began was concurrent with it, so placing the truncate before
+  that publish is a valid order. The resulting state (`EOF = max(s,
+  publish end)`, publish bytes visible) is exactly that order. What the
+  proposal missed is **inode-owned staleness**. Extend does not bump the
+  epoch, so the apply must also refuse when the size it would set has
+  already moved: the entry carries the `base_size` it observed, and the apply
+  answers STALE if it differs (another extend or shrink came in between).
+  Then `s < base_size` at apply cannot happen silently. Append reservations
+  stay BUSY. The collect reuses getattr's lane-sequence double read, which
+  is what makes it coherent. I will write this as a short proof in the
+  rewritten §1 and test the delayed-request matrix the review lists.
+
+### 2. Coherent read image — agree on the mechanism, disagree on one reason
+
+- **Agree:** add a **history revision** on the inode, bumped by both append
+  and retirement. Capture `(E, revision, history)` with the same
+  read-twice-and-compare pattern the current chunk view uses, read lanes,
+  then recheck. This is cheap and matches existing code.
+- **Disagree that "epoch > E only" is unsound for the order I specified.** The
+  inode is read first and the lane rows after it. Retirement commits only
+  after the sweep entries it depends on, so any lane ReadIndex taken after the
+  inode read sees the swept rows. A shrink between the two reads with no
+  new-epoch write leaves a view that is consistent with the state just before
+  the shrink: the read is ordered before it. I still accept the revision
+  recheck as defence in depth and to remove the cross-group timing argument.
+- **Peer caches: agree. This is the more serious part.** The §7.3 rule
+  ("validate against the lane's fence revision") stops working with lazy
+  adoption, because the lane revision no longer changes at truncate.
+  Validation moves to the inode `(E, history revision)`. Every cached
+  mapping or decoded chunk is keyed by it, and a read on any mount
+  revalidates it under the same lease or getattr rules that already govern
+  size. Gate: on mount B, read before and after a truncate on mount A, both
+  cold and warm.
+
+### 3. Sweep completion and retirement — agree; concrete model
+
+- **One model: inspect and transform at apply.** History entries are
+  immutable until retirement, and retirement waits for the sweep, so the
+  carried history snapshot is a valid immutable bound. To be safe, the apply
+  also checks the snapshot's revision against the one the lane recorded at
+  adoption. The lane stamp keeps a **sweep cursor** `(target_epoch,
+  next_ci)`. Each `TRUNC_SWEEP` entry scans at most 64 rows from the cursor
+  **inside the apply**: the scan is deterministic because replicas hold
+  identical KV. It deletes or clips them, then advances the cursor. The
+  leader-side exact-key selection is dropped for this path, so a CAS miss
+  cannot be counted as coverage. The first entry adopts `target_epoch`. After
+  that, a lane publish below it is STALE, so rows behind the cursor cannot
+  regain old epochs. When the cursor passes the end of the lane, the same
+  apply sets `swept_epoch = target_epoch`. Restart resumes from the
+  durable cursor.
+- **Retirement evidence: agree that the inode apply must not read lanes.**
+  The GC leader observes `swept_epoch` under lane ReadIndex. Because it is
+  monotonic and durable, an observed value stays true. The leader then
+  proposes `SWEEP_DONE(ino, gen, lane, target_epoch)` on the inode group,
+  whose apply sets a per-target done bitmap in inode-owned state. Retirement
+  applies only if `active_lanes ⊆ done` for that target, checked inside the
+  apply.
+- **Registration races: agree an admission rule is needed.** On devel, a
+  lane stamp can be created by a plain publish (`ln.fenced_epoch =
+  p->content_epoch` when absent, `meta_apply.c`), and that is the hole.
+  Rule: lane activation is an inode-group entry that carries the writer's `E`
+  and is refused if `E` is stale. The first stamp of a lane is created only
+  by that activation's follow-up bootstrap or by a sweep, never by a
+  publish. A publish to a lane with no stamp answers BUSY, which is the
+  existing behaviour for the durable-result path. A lane activated after a
+  fence at `E` cannot contain older rows, so its activation marks it done
+  for every pending target.
+
+### 4. Clipping and packed objects — agree, plus one correction to the review
+
+- **Packed bases: agree, and my note was wrong.** Devel already releases a
+  dead packed base through `packed_retirement` and the segment ledger, not
+  `gc_queue` (`trunc_del_cb`). The sweep keeps that split: ordinary
+  fragments are reclaimed as `SUPERSEDED`, and a packed record is released
+  exactly once through its ledger. A clipped packed base keeps its reference.
+- **`valid_len`:** a visible-length clip on each part, at most the part's
+  length and covering `[off, off + valid_len)` of that part. Object
+  identity, checksum and stored length are unchanged. It only ever
+  decreases: the clip CAS refuses a larger value, so a delayed sweep cannot
+  undo it. A new overwrite replaces the part instead of growing it.
+  Folding, packing, compaction and RMW all read through the same masking
+  helper, which treats `valid_len` as an extra bound.
+- **PACK_SWITCH race: disagree that cross-group serialisation is needed,
+  provided the packed record keeps its source epoch.** The W123 bug came from
+  stamping a raw image with the *new* epoch. If the packer builds the masked
+  image from a coherent view (§2) and stamps it with the **newest source-part
+  epoch**, a shrink that commits between capture and SWITCH still masks the
+  packed record correctly, because the record is older than that fence. SWITCH
+  then needs only its existing source-row CAS, plus a refusal if any source
+  part has an epoch above the lane's adopted epoch. I'll add the two-file
+  shared-segment and truncate-versus-pack/compaction races to the gates.
+
+### 5. Fail-closed decoding and full history — agree
+
+- The current TRUNCATE path turns apply errors into proposer verdicts, so
+  `EFS_ERR_PROTO` from a decoder would reach the client as an error while
+  replicas carry on. Length, kind (0/1), the size bound (no chunk index past `UINT32_MAX`) and the
+  epoch overflow check (`content_epoch == UINT64_MAX`) are validated before
+  any mutation. A malformed entry stops the group's apply as fatal, which is
+  distinct from the BUSY/STALE verdicts.
+- **Progress when history is full: agree, and the pending key already lands
+  with the commit (proposal step 4.5).** On top of that, a BUSY for a full
+  history raises that inode's priority in the GC pass, and retirement runs
+  from `SWEEP_DONE` evidence alone, with no new truncate needed. The
+  stalled-lane test and the >32 non-dominated fences test are accepted.
+
+### Other points
+
+- **File-lane reductions:** agree this is a prerequisite audit, not a
+  follow-up. It runs before any epoch-invariant code.
+- **g1:** agree. Report server commit latency and whole-syscall latency
+  separately, and test sparse and allocated 100 GiB files separately.
+  Single-digit milliseconds is a target to measure, not a claim.
+- **Order of work:** agree with the review's order, with the publish-epoch
+  source fix (above) placed first, because every later step depends on it.
