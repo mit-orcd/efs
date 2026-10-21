@@ -62,6 +62,8 @@ static void flush_drop_new(struct kv_lsm *l, struct seg_slot *neu, uint32_t n)
     }
 }
 
+static uint64_t mono_ms(void);
+
 int kv_flush_locked(struct kv_lsm *l)
 {
     char path[KV_LSM_PATH_MAX + 64];
@@ -69,7 +71,8 @@ int kv_flush_locked(struct kv_lsm *l)
     struct kv_seg_w *w = NULL;
     uint32_t nneu = 0, i, runs = 0;
     int cur = -1, prev = -1;
-    int rc = EFS_OK;
+    int rc = EFS_OK, yielded = 0, outer;
+    uint64_t t0, t_io = 0, t_pub = 0;
 
     rc=kv_mtab_merge(&l->mt,&l->pending_mt);
     if(rc!=EFS_OK)return rc;
@@ -89,6 +92,12 @@ int kv_flush_locked(struct kv_lsm *l)
         }
     }
     memset(neu, 0, sizeof(neu));
+    /* W126: writing and fsyncing one L0 file per range took the leader's
+     * exclusive view for the whole flush, so every LOOKUP queued behind
+     * it. The memtable is frozen from here to the publish (writers wait
+     * on mu), so readers may keep reading it while the files are written. */
+    t0 = mono_ms();
+    outer = yielded = lsm_view_yield(l);
     for (i = 0; i < l->mt.n; i++) {
         struct kv_ent *e = l->mt.e[i];
         int r = key_range(e->key, e->klen);
@@ -152,9 +161,16 @@ int kv_flush_locked(struct kv_lsm *l)
         neu[nneu].level = 0;
         nneu++;
     }
+    t_io = mono_ms() - t0;
+    /* Publish exclusively: the level array may move (reserve) and the
+     * memtable empties. Then the MANIFEST and WAL reset, which readers
+     * never see, run with mu only again. */
+    lsm_view_reclaim(l, yielded);
     rc = kv_l0_reserve(l, l->n_l0 + nneu);
-    if (rc != EFS_OK)
+    if (rc != EFS_OK) {
+        yielded = 0;
         goto fail;
+    }
     if (nneu && l->n_l0)
         memmove(&l->l0[nneu], &l->l0[0], l->n_l0 * sizeof(l->l0[0]));
     for (i = 0; i < nneu; i++)
@@ -162,13 +178,27 @@ int kv_flush_locked(struct kv_lsm *l)
     l->n_l0 += nneu;
     kv_candidates_changed(l);
     memcpy(l->query_flushed,l->query_revision,sizeof(l->query_flushed));
+    /* Until the memtable clears, readers find the rows in both it and the
+     * new L0 files, with identical values; the memtable wins. */
+    yielded = lsm_view_yield(l);
+    t_pub = mono_ms();
     rc = kv_manifest_write(l);
-    if (rc != EFS_OK)
-        return rc;
-    kv_mtab_clear(&l->mt);
-    return kv_wal_reset(l->wal, l->apply_next - 1);
+    lsm_view_reclaim(l, yielded);
+    if (rc == EFS_OK) {
+        kv_mtab_clear(&l->mt);
+        yielded = lsm_view_yield(l);
+        rc = kv_wal_reset(l->wal, l->apply_next - 1);
+        lsm_view_reclaim(l, yielded);
+    }
+    t_pub = mono_ms() - t_pub;
+    if (t_io + t_pub >= 100)
+        fprintf(stderr, "kv-flush: files=%u io_ms=%llu manifest_ms=%llu "
+                "view_yielded=%d rc=%d\n", nneu, (unsigned long long)t_io,
+                (unsigned long long)t_pub, outer, rc);
+    return rc;
 
 fail:
+    lsm_view_reclaim(l, yielded);
     flush_drop_new(l, neu, nneu);
     return rc;
 }

@@ -368,6 +368,27 @@ static inline void lsm_peek_unlock(struct kv_lsm *l)
     pthread_mutex_unlock(&l->mu);
 }
 
+/* W126: let readers in during a writer's file I/O. At the outermost
+ * writer level only, drop the exclusive view but keep mu: every writer
+ * still waits on mu, and readers see the state exactly as it stands.
+ * Until lsm_view_reclaim the holder must not change anything a reader
+ * can see (memtables, level arrays, candidates); it may write files and
+ * writer-owned fields. Returns nonzero when the view was dropped. */
+static inline int lsm_view_yield(struct kv_lsm *l)
+{
+    struct lsm_owner *o = lsm_owner_slot(l, 0);
+    if (!o || o->depth != 1)
+        return 0;
+    pthread_rwlock_unlock(&l->view_rw);
+    return 1;
+}
+
+static inline void lsm_view_reclaim(struct kv_lsm *l, int yielded)
+{
+    if (yielded)
+        pthread_rwlock_wrlock(&l->view_rw);
+}
+
 /* Callers wait at depth 1 (a recursive mutex releases one level). */
 static inline void lsm_cond_wait(struct kv_lsm *l, pthread_cond_t *cv)
 {
