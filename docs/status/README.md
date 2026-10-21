@@ -39,7 +39,8 @@ all 49 prior EBUSY paths; all 117 uncertain writes match. Unchanged core suite
 passed 216/216 after readers finished; loaded timeout remains preserved.
 New 40 M-target workload running in a separate fixture (32 writers/host);
 new scale/restart gates remain open. At 2.24 M new writes (zero write errors),
-concurrent queries under scale fail NODATA after warmup; diagnostic capture running.
+concurrent queries under scale fail NODATA after warmup. Diagnostic rerun passed
+without a fix; per-node snapshot visibility capture is running. Failure stays open.
 
 [W124 — fast delete](../backlog/fast-delete-reclaim.md): **parts 1–2
 implemented and deployed on orcd-mini (`de0c856b4`);**

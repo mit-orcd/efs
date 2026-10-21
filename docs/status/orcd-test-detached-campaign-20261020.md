@@ -539,3 +539,21 @@ between-output budget check. Relevant to later reclaim qualification, but not
 an established fix for this query refusal; not deployed into the running scale
 experiment. Its time bound is checked between outputs and cannot preempt a
 single long compaction.
+
+### Intermittent query investigation — 2026-10-21 06:42 UTC
+
+Scale reached 3,745,581 new acknowledged files with no writer errors; all four
+writers remain active with ~4.1 h remaining in their bounded jobs. The diagnostic
+query run passed without a product change: 4,506 successful queries and 56 BUSY
+refusals, three generations, all 5,580 writer payloads verified. This establishes
+intermittency, not resolution of the preserved NODATA failure.
+
+Code review shows any dual-group-capable node can serve its own published
+catalog. Helper warmup and a separately routed raw request may reach different
+catalogs; this is a hypothesis to test, not an established cause. New bounded
+`scripts/orcd_query_snapshot_probe.py` creates one retained directory, warms it
+through the helper, then records direct per-node status/boot/generation every
+two seconds for 45 rounds. It does not accept NODATA as a passing gate.
+Run with deployed `tests/live` on PYTHONPATH and the campaign endpoint environment.
+Staged as `repair-20261020/query_snapshot_probe.py`, job recorded under
+`query-node-snapshots` in the deployment journal. No deployment or timeout change.
