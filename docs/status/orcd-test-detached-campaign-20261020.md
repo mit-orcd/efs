@@ -471,3 +471,14 @@ and `scripts/orcd_mtime_probe.py /tmp/efs-mount`; current daemon PIDs and jobs
 are in the deployment journal. New diagnostic `tests` entries use
 `{"host": "fcstor003", "job": "..."}`; earlier suite entries are job strings
 on fcstor003.
+
+### Next-scale preparation — 2026-10-21 05:12 UTC
+
+Retained verification reached 6,220,146 paths without errors; it remains running.
+For the next fresh scale fixture, `orcd_verify_existing.py` now accepts
+`--fixture-root /tmp/efs-mount/NEW-DIRECTORY`, containing `scale-HOST` directories.
+This keeps existing workload data intact while using the same exact payload
+oracle and separate manifests/output. Checkpoints record the fixture root and
+refuse resumes from another fixture. The regression verifies both retention
+of prior failures and rejection of the wrong fixture. Existing deployed binaries
+and running verification scripts are unchanged; new scale writes have not begun.
