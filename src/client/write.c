@@ -3697,6 +3697,23 @@ static int chunk_obs_has_live_spans(const struct efs_chunk_entry *obs)
     return 0;
 }
 
+/* D25: a logical truncate keeps the row and its generation but masks its
+ * bytes. A view that masks any part means "the committed object is ours"
+ * no longer implies "our buffer is the current image". */
+static int chunk_obs_masked(const struct efs_chunk_entry *obs)
+{
+    const struct efs_fence_view *v;
+    if (!obs || !obs->read_view.count)
+        return 0;
+    v = &obs->read_view;
+    if (obs->generation && v->parts[0].len < v->chunk_size)
+        return 1;
+    for (uint32_t i = 0; i < obs->ndelta && i + 1 < v->count; ++i)
+        if (v->parts[i + 1].len < obs->deltas[i].len)
+            return 1;
+    return 0;
+}
+
 static int dcache_put_now_budgeted(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
                           uint32_t chunk_size, uint64_t base_gen,
                           uint64_t snap_seq, uint32_t delta_off,
@@ -6895,7 +6912,7 @@ static int dcache_replay_stale_ex_budgeted(efs_ino_t ino, uint32_t ci, int absen
         memcpy(base, copy, len);
         bg = committed;
     } else if (have_base && object_gen && committed == object_gen &&
-               !chunk_obs_has_live_spans(&obs)) {
+               !chunk_obs_has_live_spans(&obs) && !chunk_obs_masked(&obs)) {
         memcpy(base, copy, len);
         bg = committed;
     } else if (!nrange) {

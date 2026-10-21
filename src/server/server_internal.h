@@ -421,6 +421,7 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
                               uint32_t uid, uint32_t gid, uint64_t size,
                               uint64_t mtime, uint32_t mtime_nsec,
                               uint64_t atime, uint32_t atime_nsec,
+                              const struct efs_opid_req *q,
                               struct efs_msg_inode_reply *out);
 struct efs_expiry_due;
 /* Staged conditional transaction. Not connected to RPC or a live worker. */

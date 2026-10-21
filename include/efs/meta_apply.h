@@ -37,7 +37,7 @@
  * Authority 64 is the inode; 0..63 are its publication lanes. The FileID
  * generation is in the key, so inode reuse cannot inherit discarded bytes. */
 #define EFS_META_FENCE_INODE 64u
-#define EFS_META_FENCE_BYTES (8u + 16u * EFS_FENCE_HISTORY_MAX)
+#define EFS_META_FENCE_BYTES (16u + 24u * EFS_FENCE_HISTORY_MAX)
 int efs_meta_get_fence_history(struct efs_kv *kv, efs_ino_t ino,
                                uint64_t generation, uint8_t authority,
                                struct efs_fence_history *out);
@@ -912,6 +912,30 @@ int efs_meta_apply_epoch_fence(struct efs_kv *kv, efs_ino_t ino);
  * range-delete of chunk-map entries beyond the new size, optional tail
  * chunk CAS (§7.3). `expect_gen` is the stale-handle check (0 = skip).
  * `tail` is NULL when the new size is chunk-aligned or zero. */
+/* D25 single-entry logical truncate (protocol §2.2). Applied on the inode
+ * group only: no lane is fenced and no chunk row is deleted. kind 0 extends
+ * (size only), kind 1 shrinks (new content epoch + pruned history entry +
+ * TRUNC_PENDING). The opid receipt is checked before the preconditions and
+ * written in the same batch; a full receipt window answers BUSY. */
+#define EFS_META_TRUNCATE_EXTEND 0u
+#define EFS_META_TRUNCATE_SHRINK 1u
+struct efs_meta_truncate_lazy {
+    efs_ino_t ino;
+    uint64_t inode_gen;
+    uint64_t expect_epoch;
+    uint64_t expect_base_size;
+    uint64_t size;
+    uint64_t mtime_ns;
+    uint8_t kind;
+    struct efs_opid_req q;
+};
+/* OK (fresh or replayed success; *epoch_after set), STALE (precondition or
+ * an acknowledged identity), BUSY (append reservations, full history, full
+ * receipt window), INVAL. Nothing is written unless OK and fresh. */
+int efs_meta_apply_truncate_lazy(struct efs_kv *kv,
+                                 const struct efs_meta_truncate_lazy *t,
+                                 uint64_t *epoch_after);
+
 struct efs_meta_truncate {
     uint64_t expect_gen;
     uint64_t size;

@@ -2765,7 +2765,7 @@ static void test_writer_authority_view(void)
     memset(&sentinel, 0xa5, sizeof(sentinel)); v = sentinel;
     CHECK(efs_meta_get_writer_view_tx(kv, ino, row.generation + 1, NULL, NULL, &v) == EFS_ERR_STALE &&
           !memcmp(&v, &sentinel, sizeof(v)), "writer wrong FileID leaves output unchanged");
-    h.count = 1; h.entries[0] = (struct efs_content_fence){4, 1};
+    h.count = 1; h.entries[0] = (struct efs_content_fence){4, 1, 0};
     CHECK(efs_meta_pack_fence_history(&h, value, sizeof(value), &vl) == EFS_OK &&
           efs_kv_put(kv, key, kl, value, vl) == EFS_OK &&
           efs_meta_get_writer_view_tx(kv, ino, row.generation, NULL, NULL, &v) == EFS_ERR_PROTO &&
@@ -4544,10 +4544,13 @@ static void test_content_fence_history(void)
               !memcmp(&h, &decoded, sizeof(h)), "D25 format round trip");
     CHECK(efs_meta_unpack_fence_history(value, len - 1, &decoded) == EFS_ERR_PROTO,
           "D25 truncated history fails closed");
-    value[3] = 2;
+    value[3] = 1;
+    CHECK(efs_meta_unpack_fence_history(value, len, &decoded) == EFS_ERR_PROTO,
+          "D25 removed format 1 fails closed");
+    value[3] = 3;
     CHECK(efs_meta_unpack_fence_history(value, len, &decoded) == EFS_ERR_PROTO,
           "D25 unknown format fails closed");
-    value[3] = 1; value[7] = EFS_FENCE_HISTORY_MAX + 1;
+    value[3] = 2; value[7] = EFS_FENCE_HISTORY_MAX + 1;
     CHECK(efs_meta_unpack_fence_history(value, len, &decoded) == EFS_ERR_PROTO,
           "D25 corrupt count fails closed");
     CHECK(efs_meta_apply_check(kv) == EFS_OK, "D25 KV consistency");
@@ -5985,8 +5988,152 @@ static void test_lane_adoption(void)
     efs_kv_mem_free(kv);
 }
 
+/* D25 step 3: the single-entry logical truncate apply. */
+static int lazy_trunc(struct efs_kv *kv, efs_ino_t ino, uint8_t kind,
+                      uint64_t size, uint64_t seq, uint64_t ack, uint64_t *epoch)
+{
+    struct efs_meta_row r;
+    struct efs_meta_truncate_lazy t;
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "row for lazy");
+    memset(&t, 0, sizeof(t));
+    t.ino = ino;
+    t.inode_gen = r.generation;
+    t.expect_epoch = r.content_epoch;
+    t.expect_base_size = r.base_size;
+    t.size = size;
+    t.mtime_ns = T0 + 100 + seq;
+    t.kind = kind;
+    t.q.id.client_uuid[15] = 9;
+    t.q.id.session_epoch = 1;
+    t.q.id.seq = seq;
+    t.q.ack = ack;
+    return efs_meta_apply_truncate_lazy(kv, &t, epoch);
+}
+
+static void test_truncate_lazy(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct coord_ctx cc;
+    struct efs_meta_stat st;
+    struct efs_meta_row r, again;
+    struct efs_fence_history h;
+    struct efs_meta_chunk_view view;
+    struct efs_meta_truncate_lazy t;
+    efs_ino_t ino = 0, b = 0;
+    uint64_t e = 0;
+    const uint64_t cs = EFS_MIN_CHUNK_SIZE;
+
+    CHECK(kv != NULL, "kv");
+    memset(&cc, 0, sizeof(cc));
+    cc.kv = kv;
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "lazy", &ino) == EFS_OK, "create");
+    for (uint32_t ci = 0; ci < 4; ci++)
+        pub(kv, ino, ci * 64, (ci * 64 + 1) * cs, 0xE0 + ci, 0, T0 + 1, "fill");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.size == 193 * cs, "4 chunks, one lane");
+
+    /* Shrink to an unaligned size inside chunk 64: one entry, no deletes. */
+    CHECK(lazy_trunc(kv, ino, EFS_META_TRUNCATE_SHRINK, 64 * cs + 100, 1, 0, &e) ==
+              EFS_OK && e == 1, "shrink commits epoch 1");
+    CHECK(efs_meta_get_inode_authority_tx(kv, ino, coord_fn, &cc, &r, &h) == EFS_OK &&
+              r.content_epoch == 1 && r.base_size == 64 * cs + 100 && h.count == 1 &&
+              h.entries[0].epoch == 1 && h.revision == 1, "history entry and revision");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.size == 64 * cs + 100, "lagging lane EOF ignored");
+    CHECK(efs_meta_get_chunk_view_auth(kv, ino, r.generation, 128, cs, 1, &h, &view) ==
+              EFS_OK && view.bytes.parts[0].len == 0, "row past the size is dead, not deleted");
+    CHECK(efs_meta_get_chunk_view_auth(kv, ino, r.generation, 64, cs, 1, &h, &view) ==
+              EFS_OK && view.bytes.parts[0].len == 100, "boundary row masked");
+    {
+        uint8_t k[11] = {0};
+        uint8_t v[8];
+        uint32_t vn = sizeof(v);
+        uint32_t sh = efs_kv_anchor_shard(efs_kv_inode_shard(ino));
+        k[0] = (uint8_t)(sh >> 8); k[1] = (uint8_t)sh; k[2] = EFS_KV_KIND_TRUNC_PENDING;
+        for (int i = 0; i < 8; i++) k[3 + i] = (uint8_t)(ino >> (56 - 8 * i));
+        CHECK(efs_kv_get(kv, k, sizeof(k), v, &vn) == EFS_OK && vn == 8,
+              "TRUNC_PENDING committed with the shrink");
+    }
+
+    /* Retry of the committed identity: receipt before preconditions. */
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "row");
+    memset(&t, 0, sizeof(t));
+    t.ino = ino; t.inode_gen = r.generation; t.expect_epoch = 0; t.expect_base_size = 7;
+    t.size = 64 * cs + 100; t.kind = EFS_META_TRUNCATE_SHRINK;
+    t.q.id.client_uuid[15] = 9; t.q.id.session_epoch = 1; t.q.id.seq = 1;
+    e = 0;
+    CHECK(efs_meta_apply_truncate_lazy(kv, &t, &e) == EFS_OK && e == 1,
+          "lost-reply retry answers the first result");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &again) == EFS_OK &&
+              again.content_epoch == 1, "and applies nothing twice");
+    t.q.id.seq = 2;
+    CHECK(efs_meta_apply_truncate_lazy(kv, &t, &e) == EFS_ERR_STALE,
+          "a new identity with stale preconditions is STALE");
+
+    /* A write at epoch 1 past the boundary, then a distinct truncate to the
+     * same size truncates again. */
+    pub(kv, ino, 64, 64 * cs + 4000, 0xF1, 0xE1, T0 + 2, "rewrite at epoch 1");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.size == 64 * cs + 4000, "write extends at epoch 1");
+    CHECK(lazy_trunc(kv, ino, EFS_META_TRUNCATE_SHRINK, 64 * cs + 100, 3, 0, &e) ==
+              EFS_OK && e == 2, "distinct same-size truncate");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.size == 64 * cs + 100, "write's EOF discarded");
+    CHECK(efs_meta_get_inode_authority_tx(kv, ino, coord_fn, &cc, &r, &h) == EFS_OK &&
+              h.count == 1 && h.entries[0].epoch == 2, "dominated entry pruned");
+
+    /* Extend: size only, no epoch, no history; refused below base_size. */
+    CHECK(lazy_trunc(kv, ino, EFS_META_TRUNCATE_EXTEND, 10, 4, 0, &e) == EFS_ERR_INVAL,
+          "extend below base_size");
+    CHECK(lazy_trunc(kv, ino, EFS_META_TRUNCATE_EXTEND, 200 * cs, 5, 0, &e) == EFS_OK &&
+              e == 2, "extend");
+    CHECK(efs_meta_get_inode_authority_tx(kv, ino, coord_fn, &cc, &r, &h) ==
+              EFS_OK && r.base_size == 200 * cs && h.count == 1 &&
+              h.revision == 2, "extend keeps the history");
+    CHECK(efs_meta_get_chunk_view_auth(kv, ino, r.generation, 64, cs, 2, &h, &view) ==
+              EFS_OK && view.bytes.parts[0].len == 100,
+          "extend never exposes the discarded tail");
+
+    /* Shrink to 0 leaves one entry. */
+    CHECK(lazy_trunc(kv, ino, EFS_META_TRUNCATE_SHRINK, 0, 6, 0, &e) == EFS_OK && e == 3,
+          "truncate to 0");
+    CHECK(efs_meta_get_inode_authority_tx(kv, ino, coord_fn, &cc, &r, &h) == EFS_OK &&
+              h.count == 1 && h.entries[0].size == 0, "one (E,0) entry");
+
+    /* Acknowledged duplicate: seq 7 acks 1..6, then seq 1 is STALE. */
+    CHECK(lazy_trunc(kv, ino, EFS_META_TRUNCATE_EXTEND, 10, 7, 6, &e) == EFS_OK,
+          "ack advances the window");
+    CHECK(lazy_trunc(kv, ino, EFS_META_TRUNCATE_SHRINK, 64 * cs + 100, 1, 0, &e) ==
+              EFS_ERR_STALE, "acknowledged duplicate is STALE, never a stub success");
+
+    /* Receipt capacity: a sequence past the window refuses with nothing
+     * written (never applied unrecorded). */
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "row");
+    CHECK(lazy_trunc(kv, ino, EFS_META_TRUNCATE_SHRINK, 5, 7 + 200, 6, &e) == EFS_ERR_BUSY,
+          "beyond the window bitmap: BUSY");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &again) == EFS_OK &&
+              again.content_epoch == r.content_epoch && again.base_size == r.base_size,
+          "refused truncate changed nothing");
+
+    /* History bound: 32 non-dominated entries, the 33rd is BUSY. */
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "full", &b) == EFS_OK, "create b");
+    for (uint64_t i = 0; i < 32; i++)
+        CHECK(lazy_trunc(kv, b, EFS_META_TRUNCATE_SHRINK, i + 1, 100 + i, 99 + i, &e) ==
+                  EFS_OK, "non-dominated shrink");
+    CHECK(lazy_trunc(kv, b, EFS_META_TRUNCATE_SHRINK, 64, 140, 139, &e) == EFS_ERR_BUSY,
+          "full history is BUSY");
+    CHECK(lazy_trunc(kv, b, EFS_META_TRUNCATE_SHRINK, 0, 141, 140, &e) == EFS_OK,
+          "a dominating shrink still prunes and commits");
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
+    test_truncate_lazy();
     test_lane_adoption();
     test_reaped_sweep_no_gc();
     test_reap_cleanup_deferred();

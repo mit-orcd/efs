@@ -91,6 +91,10 @@ static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
  * the tail chunk's lane is on another group and is published separately
  * after commit). Cross-group lanes were fenced by LANE_FENCE entries on
  * their own groups before this entry was proposed. */
+/* D25 single-entry TRUNCATE (protocol §1.2): tag kind ino:8 inode_gen:8
+ * expect_epoch:8 expect_base_size:8 size:8 mtime_ns:8 opid:36. Exactly
+ * this length; every other TRUNCATE length is the eager path. */
+#define HOST_TRUNC_LAZY_LEN 86u
 #define HOST_TRUNC_LEN     63
 #define HOST_TRUNC_F_TAIL_EXT 1
 /* Bit1: unaligned size, no tail CAS. The tail chunk is a generation-0
@@ -1705,6 +1709,49 @@ static int apply_utimens_cmd(struct efs_raft_host *h, const uint8_t *cmd,
 }
 
 /* Same encoding as sim apply_truncate_cmd. Session fencing is not hosted. */
+/* D25: decode the 86-byte TRUNCATE completely before the apply touches
+ * the KV; any malformed field is refused with nothing written. */
+static int apply_truncate_lazy_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                                   uint32_t clen, uint64_t index, uint8_t group)
+{
+    struct efs_meta_truncate_lazy t;
+    uint64_t epoch = 0;
+    int rc;
+
+    if (clen != HOST_TRUNC_LAZY_LEN || cmd[1] > EFS_META_TRUNCATE_SHRINK)
+        return EFS_ERR_PROTO;
+    memset(&t, 0, sizeof(t));
+    t.kind = cmd[1];
+    t.ino = rd64be(cmd + 2);
+    t.inode_gen = rd64be(cmd + 10);
+    t.expect_epoch = rd64be(cmd + 18);
+    t.expect_base_size = rd64be(cmd + 26);
+    t.size = rd64be(cmd + 34);
+    t.mtime_ns = rd64be(cmd + 42);
+    efs_opid_req_unpack(&t.q, cmd + 50);
+    if (!t.ino || !t.inode_gen || !efs_opid_req_valid(&t.q) ||
+        t.q.ack >= t.q.id.seq || t.size / EFS_MIN_CHUNK_SIZE > UINT32_MAX)
+        return EFS_ERR_PROTO;
+    if (efs_raft_shard_group(efs_kv_inode_shard(t.ino)) != group)
+        return EFS_ERR_INVAL;
+#if EFS_FAULTS
+    {   /* D25 g0: a definite refusal at apply, nothing written. */
+        const char *gate = getenv("EFS_FAULT_TRUNCATE_APPLY_FILE");
+        if (gate && access(gate, F_OK) == 0) return EFS_ERR_BUSY;
+    }
+#endif
+    rc = efs_meta_apply_truncate_lazy(h->kv, &t, &epoch);
+    if (rc != EFS_OK && rc != EFS_ERR_STALE && rc != EFS_ERR_BUSY)
+        fprintf(stderr, "raft-host: apply truncate-lazy rc=%d index=%llu ino=%llu\n",
+                rc, (unsigned long long)index, (unsigned long long)t.ino);
+    else
+        APPLY_LOG("raft-host: applied truncate-lazy index=%llu ino=%llu size=%llu kind=%u rc=%d epoch=%llu\n",
+                  (unsigned long long)index, (unsigned long long)t.ino,
+                  (unsigned long long)t.size, (unsigned)t.kind, rc,
+                  (unsigned long long)epoch);
+    return rc;
+}
+
 static int apply_truncate_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                               uint32_t clen, uint64_t index)
 {
@@ -3457,6 +3504,8 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         return apply_xattr_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_UTIMENS)
         return apply_utimens_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_TRUNCATE && clen == HOST_TRUNC_LAZY_LEN)
+        return apply_truncate_lazy_cmd(h, cmd, clen, index, group);
     if (cmd[0] == EFS_MD_CMD_TRUNCATE)
         return apply_truncate_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_ACTIVATE_LANE)
@@ -5778,6 +5827,28 @@ static void host_fwd_setattr(struct efs_raft_host *h, efs_ino_t ino,
     req.atime_nsec = atime_nsec;
     host_inode_forward(h, EFS_MSG_INODE_SETATTR, &req, sizeof(req),
                        EFS_MSG_INODE_SETATTR_REPLY, out, groups, ng);
+}
+
+/* Forward a SETATTR SIZE with its opid suffix (D25 lazy truncate). */
+static void host_fwd_truncate_opid(struct efs_raft_host *h, efs_ino_t ino,
+                                   uint64_t size, uint64_t mtime,
+                                   uint32_t mtime_nsec,
+                                   const struct efs_opid_req *q,
+                                   struct efs_msg_inode_reply *out)
+{
+    uint8_t buf[sizeof(struct efs_msg_inode_setattr) + EFS_OPID_WIRE_LEN];
+    struct efs_msg_inode_setattr *req = (struct efs_msg_inode_setattr *)buf;
+    uint8_t need[2] = {EFS_RAFT_GROUP_SHARD, EFS_RAFT_GROUP_SHARD2};
+
+    memset(buf, 0, sizeof(buf));
+    req->ino = ino;
+    req->mask = EFS_SETATTR_SIZE | EFS_SETATTR_MTIME;
+    req->size = size;
+    req->mtime = mtime;
+    req->mtime_nsec = mtime_nsec;
+    efs_opid_req_pack(q, buf + sizeof(*req));
+    host_inode_forward(h, EFS_MSG_INODE_SETATTR, buf, sizeof(buf),
+                       EFS_MSG_INODE_SETATTR_REPLY, out, need, 2);
 }
 
 static void host_fwd_getchunks(struct efs_raft_host *h, efs_export_id_t export_id, efs_ino_t ino,
@@ -17188,10 +17259,131 @@ static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
         stat_to_inode(&st, &out->inode);
 }
 
+/* D25 step 3: the single-entry logical truncate stays behind the eager
+ * path until its gates pass. EFS_D25_LAZY_TRUNCATE=1 on every efsd (and
+ * every client, which then skips its tail rewrite) selects it. */
+static int host_lazy_truncate(void)
+{
+    static int on = -1;
+    if (on < 0) {
+        const char *e = getenv("EFS_D25_LAZY_TRUNCATE");
+        on = e && e[0] == '1';
+    }
+    return on;
+}
+
+/* D25 protocol §2.1: one TRUNCATE entry on the inode group. Capture the
+ * row and a coherent lane EOF under ReadIndex, classify, propose, and on
+ * STALE/BUSY recapture under the same opid; the receipt makes a retry of a
+ * committed entry answer its result instead of applying twice. */
+#define HOST_TRUNC_LAZY_TRIES 16
+static void host_truncate_lazy(efs_ino_t ino, uint64_t size, uint64_t mtime,
+                               uint32_t mtime_nsec, const struct efs_opid_req *q,
+                               struct efs_msg_inode_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_meta_stat st;
+    struct efs_meta_row row;
+    uint8_t cmd[HOST_TRUNC_LAZY_LEN];
+    uint8_t g;
+    int hint = -1, rc = EFS_ERR_BUSY;
+
+    memset(out, 0, sizeof(*out));
+    out->status = EFS_INODE_RPC_ERROR;
+    if (!h || !h->running || ino == 0 || !q || !efs_opid_req_valid(q) ||
+        q->ack >= q->id.seq) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    g = efs_raft_shard_group(efs_kv_inode_shard(ino));
+    if (!host_hosts(h, EFS_RAFT_GROUP_SHARD) || !host_hosts(h, EFS_RAFT_GROUP_SHARD2)) {
+        host_fwd_truncate_opid(h, ino, size, mtime, mtime_nsec, q, out);
+        return;
+    }
+    for (int attempt = 0; attempt < HOST_TRUNC_LAZY_TRIES; attempt++) {
+        struct efs_meta_truncate_lazy t;
+        uint64_t idx = 0, term = 0;
+
+        if (attempt)
+            usleep(1000u << (attempt < 6 ? attempt : 6));
+        rc = host_read_index(h, g, &hint);
+        if (rc == EFS_OK)
+            rc = efs_meta_apply_get_inode_tx(h->kv, ino, host_txn_coord, h, &row);
+        if (rc == EFS_OK && !S_ISREG(row.mode))
+            rc = EFS_ERR_INVAL;
+        if (rc == EFS_OK)
+            rc = host_read_inode_lanes(h, ino, &hint);
+        if (rc == EFS_OK)
+            rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
+        if (rc != EFS_OK)
+            break;
+        memset(&t, 0, sizeof(t));
+        t.ino = ino;
+        t.inode_gen = row.generation;
+        t.expect_epoch = row.content_epoch;
+        t.expect_base_size = row.base_size;
+        t.size = size;
+        t.mtime_ns = mtime ? mtime * 1000000000ull + mtime_nsec : now_ns();
+        /* st.size counts only lanes at the current epoch (§3.3). */
+        t.kind = size >= st.size && size >= row.base_size ?
+                 EFS_META_TRUNCATE_EXTEND : EFS_META_TRUNCATE_SHRINK;
+        t.q = *q;
+        cmd[0] = EFS_MD_CMD_TRUNCATE;
+        cmd[1] = t.kind;
+        wr64be(cmd + 2, t.ino);
+        wr64be(cmd + 10, t.inode_gen);
+        wr64be(cmd + 18, t.expect_epoch);
+        wr64be(cmd + 26, t.expect_base_size);
+        wr64be(cmd + 34, t.size);
+        wr64be(cmd + 42, t.mtime_ns);
+        efs_opid_req_pack(&t.q, cmd + 50);
+#if EFS_FAULTS
+        {   /* D25 g0: a definite refusal before anything is proposed. */
+            const char *gate = getenv("EFS_FAULT_TRUNCATE_BEFORE_FILE");
+            if (gate && access(gate, F_OK) == 0) { rc = EFS_ERR_BUSY; continue; }
+        }
+#endif
+        rc = host_propose(h, g, cmd, HOST_TRUNC_LAZY_LEN, &idx, &term, &hint);
+        if (rc == EFS_OK)
+            rc = host_wait_verdict(h, g, idx, term, &hint);
+        if (rc != EFS_ERR_STALE && rc != EFS_ERR_BUSY)
+            break;
+    }
+#if EFS_FAULTS
+    if (rc == EFS_OK) {
+        /* D25 g0/g2: commit, then lose the reply once. The file holds the
+         * delay in ms; the client must resolve by retrying the same opid. */
+        const char *gate = getenv("EFS_FAULT_TRUNCATE_DROP_REPLY_FILE");
+        FILE *f = gate ? fopen(gate, "r") : NULL;
+        if (f) {
+            unsigned ms = 0;
+            if (fscanf(f, "%u", &ms) != 1) ms = 0;
+            fclose(f);
+            unlink(gate);
+            fprintf(stderr, "raft-host: fault truncate ino=%llu committed, reply dropped after %u ms\n",
+                    (unsigned long long)ino, ms);
+            usleep(ms * 1000u);
+            /* A retryable answer stands in for the lost reply: the client
+             * treats NET and BUSY alike, retrying the same identity. */
+            set_inode_rc(out, EFS_ERR_BUSY, hint);
+            return;
+        }
+    }
+#endif
+    if (rc == EFS_OK)
+        rc = host_read_inode_lanes(h, ino, &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
+    set_inode_rc(out, rc, hint);
+    if (rc == EFS_OK)
+        stat_to_inode(&st, &out->inode);
+}
+
 void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
                               uint32_t uid, uint32_t gid, uint64_t size,
                               uint64_t mtime, uint32_t mtime_nsec,
                               uint64_t atime, uint32_t atime_nsec,
+                              const struct efs_opid_req *q,
                               struct efs_msg_inode_reply *out)
 {
     struct efs_raft_host *h = g_host;
@@ -17225,7 +17417,10 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
             out->status = EFS_INODE_RPC_INVAL;
             return;
         }
-        host_truncate(ino, size, mtime, mtime_nsec, out);
+        if (host_lazy_truncate())
+            host_truncate_lazy(ino, size, mtime, mtime_nsec, q, out);
+        else
+            host_truncate(ino, size, mtime, mtime_nsec, out);
         return;
     }
     if ((own && times)) {
@@ -18775,6 +18970,27 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
             rec->base_gen != got.generation) {
             host_pub_stale_note("image-base", rec, rec->base_gen, got.generation);
             return EFS_ERR_STALE;
+        }
+        /* D25: a logical truncate leaves the row and its generation in
+         * place and masks its bytes. A full image built from an unmasked
+         * copy of that base (e.g. this client's own cached image) would
+         * republish discarded bytes at the current epoch. Unless the
+         * record was built from a view at the current epoch, refuse when
+         * a later fence masks any of this chunk's base: the client re-pulls
+         * the masked view and replays. MAX chunk size: never under-check. */
+        if (got.generation != 0 && rec->base_gen != EFS_CHUNK_BASE_UNCOND &&
+            !(rec->publish_flags & EFS_CHUNK_REC_F_CAPTURED_EPOCH)) {
+            struct efs_fence_history hist;
+            rc = efs_meta_get_fence_history(h->kv, rec->ino, row.generation,
+                                            EFS_META_FENCE_INODE, &hist);
+            if (rc != EFS_OK)
+                return rc;
+            if (efs_fence_valid_end(&hist, got.content_epoch) <
+                ((uint64_t)rec->chunk_index + 1) * EFS_MAX_CHUNK_SIZE) {
+                host_pub_stale_note("masked-base", rec, got.content_epoch,
+                                    row.content_epoch);
+                return EFS_ERR_STALE;
+            }
         }
     }
     memset(&p, 0, sizeof(p));

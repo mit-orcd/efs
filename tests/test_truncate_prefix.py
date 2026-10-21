@@ -26,6 +26,7 @@ int efs_export_upsert_inode(struct efs_export *e,const struct efs_inode *r) {(vo
 void efs_client_stage_touch(efs_ino_t i) {(void)i;}
 void efs_rdcache_invalidate(efs_ino_t i,uint32_t ci) {(void)i;(void)ci;}
 void efs_dcache_drop_if_clean(efs_ino_t i,uint32_t ci) {(void)i;(void)ci;}
+static int lazy;static int client_lazy_truncate(void) {return lazy;}
 '''+f+r'''
 int main(void) {
  pthread_mutex_init(&g_client.idx_mu,NULL);
@@ -37,6 +38,10 @@ int main(void) {
  assert(writes==2&&reports==1&&!setattrs);
  report_rc=EFS_OK;assert(!efs_client_truncate(1,100));
  assert(writes==3&&reports==2&&setattrs==1);
+ /* D25 lazy truncate: no tail rewrite (the history masks the tail), so a
+  * refused SETATTR leaves nothing half done; only the SETATTR is sent. */
+ lazy=1;read_rc=EFS_ERR_NET;assert(!efs_client_truncate(1,100));
+ assert(writes==3&&reports==2&&setattrs==2);
  return 0;
 }
 '''

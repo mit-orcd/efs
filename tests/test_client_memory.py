@@ -303,12 +303,12 @@ int main(void) {
     uint64_t charged_metadata=g_metadata;
     assert(efs_dcache_bind_writer(1,7,0,&view)==EFS_OK && g_metadata==charged_metadata);
     view.authority_epoch=1;view.history.count=1;
-    view.history.entries[0]=(struct efs_content_fence){1,100};
+    view.history.entries[0]=(struct efs_content_fence){1, 100, 0};
     assert(efs_dcache_bind_writer(1,7,0,&view)==EFS_OK);
     view.authority_epoch=0;view.history.count=0;
     assert(efs_dcache_bind_writer(1,7,0,&view)==EFS_ERR_STALE);
     view.authority_epoch=1;view.history.count=1;
-    view.history.entries[0]=(struct efs_content_fence){1,100};
+    view.history.entries[0]=(struct efs_content_fence){1, 100, 0};
     struct efs_msg_lane_writer_view_reply cached_view={.view=view,.chunk_size=owned->len};
     uint8_t patch[4]={1,2,3,4};
     uint8_t original_byte=owned->data[10];
@@ -438,7 +438,7 @@ int main(void) {
     assert(efs_dcache_overlay_lane(555,7,0,&cached_view,read_base,read_image,sizeof(read_image))==EFS_OK);
     assert(!memcmp(read_image+10,patch,4) && read_image[14]==0x33 && !memcmp(read_image+20,patch,4));
     cached_view.view.authority_epoch=1;cached_view.view.history.count=1;
-    cached_view.view.history.entries[0]=(struct efs_content_fence){1,12};read_base->authority_epoch=1;
+    cached_view.view.history.entries[0]=(struct efs_content_fence){1, 12, 0};read_base->authority_epoch=1;
     memset(read_image,0x33,sizeof(read_image));
     assert(efs_dcache_overlay_lane(555,7,0,&cached_view,read_base,read_image,sizeof(read_image))==EFS_OK);
     assert(!memcmp(read_image+10,patch,2) && read_image[12]==0x33 && read_image[20]==0x33);
@@ -463,7 +463,7 @@ int main(void) {
     assert(!efs_dcache_admit_lane_write(555,7,0,&cached_view,10,patch,4));
     assert(fresh->data && fresh->present_extra && efs_writer_state_owned(fresh->writer));
     cached_view.view.authority_epoch=2;cached_view.view.history.count=2;
-    cached_view.view.history.entries[1]=(struct efs_content_fence){2,0};read_base->authority_epoch=2;
+    cached_view.view.history.entries[1]=(struct efs_content_fence){2, 0, 0};read_base->authority_epoch=2;
     assert(!efs_dcache_retire_clipped(555,7,0,&cached_view,read_base));
     assert(!fresh->data && fresh->present_extra);
     free(read_base);
@@ -516,7 +516,7 @@ int main(void) {
     assert(efs_writer_state_write_lane(&writer,&lane_view,body,cs,500,body,4)==EFS_OK);
     assert(efs_writer_state_retire_clipped(writer,&lane_view,base)==EFS_ERR_BUSY);
     lane_view.view.authority_epoch=1;lane_view.view.history.count=1;
-    lane_view.view.history.entries[0]=(struct efs_content_fence){1,100};
+    lane_view.view.history.entries[0]=(struct efs_content_fence){1, 100, 0};
     base->authority_epoch=1;
     assert(efs_writer_state_retire_clipped(writer,&lane_view,base)==EFS_OK);
     assert(!efs_writer_state_owned(writer) && writer->ranges.observed_epoch==1);

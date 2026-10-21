@@ -2079,8 +2079,35 @@ int efs_client_rpc_setattr(efs_export_id_t export_id, efs_ino_t ino,
     req.atime = atime;
     req.atime_nsec = atime_nsec;
     struct efs_msg_inode_reply r;
-    int rc = rpc_send_recv_owner(ino, EFS_MSG_INODE_SETATTR, &req, sizeof(req),
+    int rc;
+    if (mask & EFS_SETATTR_SIZE) {
+        /* D25: a truncate carries an opid; the server records its result
+         * with the effect. An ambiguous failure is resolved only by
+         * retrying the same identity, never by issuing a new one. */
+        uint8_t buf[sizeof(req) + EFS_OPID_WIRE_LEN];
+        struct efs_opid_req q;
+        int slot = opid_begin(&q);
+        if (slot < 0)
+            return EFS_ERR_BUSY;
+        rc = EFS_ERR_BUSY;
+        for (int t = 0; t < 8 && !efs_client_rpc_past_deadline(); t++) {
+            if (t)
+                usleep(2000u << (unsigned)(t < 4 ? t : 4));
+            opid_refresh_ack(&q);
+            memcpy(buf, &req, sizeof(req));
+            uint32_t slen = opid_suffix(buf, sizeof(req), &q);
+            rc = rpc_send_recv_owner(ino, EFS_MSG_INODE_SETATTR, buf, slen,
+                                     EFS_MSG_INODE_SETATTR_REPLY, &r, sizeof(r));
+            if (rc == EFS_OK && r.status == EFS_INODE_RPC_BUSY)
+                rc = EFS_ERR_BUSY;
+            if (rc != EFS_ERR_NET && rc != EFS_ERR_NO_QUORUM && rc != EFS_ERR_BUSY)
+                break;
+        }
+        opid_end(slot);
+    } else {
+        rc = rpc_send_recv_owner(ino, EFS_MSG_INODE_SETATTR, &req, sizeof(req),
                                  EFS_MSG_INODE_SETATTR_REPLY, &r, sizeof(r));
+    }
     if (rc != EFS_OK)
         return rc;
     if (r.status != EFS_INODE_RPC_OK)

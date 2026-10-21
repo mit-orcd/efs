@@ -20,7 +20,7 @@ static void test_base_identity(void)
     writer.bytes.chunk_size = EFS_MIN_CHUNK_SIZE;
     assert(efs_writer_ranges_admit(&writer, &view, 0, 200) == EFS_OK);
     view.authority_epoch = 1; view.history.count = 1;
-    view.history.entries[0] = (struct efs_content_fence){1, 100};
+    view.history.entries[0] = (struct efs_content_fence){1, 100, 0};
     base->ino = writer.ino; base->generation = writer.generation; base->authority_epoch = 1;
     assert(efs_writer_ranges_plan_base(&writer, &view, base, &plan) == EFS_OK);
     assert(plan.base_absent && plan.surviving.ranges[0].len == 100);
@@ -79,7 +79,7 @@ static void test_publication_identity(void)
     assert(!writer.bytes.count);
     assert(efs_writer_ranges_admit(&writer, &view, 0, 100) == EFS_OK);
     view.authority_epoch = 1; view.history.count = 1;
-    view.history.entries[0] = (struct efs_content_fence){1, 100};
+    view.history.entries[0] = (struct efs_content_fence){1, 100, 0};
     assert(efs_writer_ranges_plan(&writer, &view, 1, &plan) == EFS_OK);
     assert(efs_writer_publication_bind(&plan, 1003, 13, &publication) == EFS_OK);
     assert(efs_writer_publication_complete(&writer, &publication, 1003, 13, EFS_OK) == EFS_OK);
@@ -101,7 +101,7 @@ static void test_materialized_publication(void)
     assert(efs_writer_ranges_admit(&writer,&view,20,4)==EFS_OK);
     assert(efs_writer_ranges_admit(&writer,&view,500,4)==EFS_OK);
     view.authority_epoch=1;view.history.count=1;
-    view.history.entries[0]=(struct efs_content_fence){1,100};
+    view.history.entries[0]=(struct efs_content_fence){1,100,0};
     base->ino=100;base->generation=7;base->authority_epoch=1;base->count=1;
     struct efs_chunk_rec *r=&base->recs[0];r->ino=100;r->chunk_generation=5;
     r->base_gen=5;r->delta_base_seq=3;
@@ -141,10 +141,10 @@ int main(void)
     assert(efs_writer_ranges_admit(&writer, &v, 0, 700) == EFS_OK);
     assert(writer.generation == 7 && writer.bytes.ranges[0].epoch == 0);
     v.authority_epoch = 1; v.history.count = 1;
-    v.history.entries[0] = (struct efs_content_fence){1, 100};
+    v.history.entries[0] = (struct efs_content_fence){1, 100, 0};
     assert(efs_writer_ranges_admit(&writer, &v, 500, 100) == EFS_OK);
     v.authority_epoch = 2; v.history.count = 2;
-    v.history.entries[1] = (struct efs_content_fence){2, 700};
+    v.history.entries[1] = (struct efs_content_fence){2, 700, 0};
     assert(efs_writer_ranges_plan(&writer, &v, 2, &plan) == EFS_OK);
     assert(plan.surviving.count == 2 && plan.surviving.ranges[0].len == 100 &&
            plan.surviving.ranges[1].off == 500 && plan.surviving.ranges[1].len == 100 &&
@@ -202,7 +202,7 @@ int main(void)
     v.chunk_index = 1;
     assert(efs_writer_ranges_admit(&writer, &v, 0, 100) == EFS_OK);
     v.authority_epoch = 1; v.history.count = 1;
-    v.history.entries[0] = (struct efs_content_fence){1, 100};
+    v.history.entries[0] = (struct efs_content_fence){1, 100, 0};
     assert(efs_writer_ranges_plan(&writer, &v, 1, &plan) == EFS_OK);
     assert(!plan.surviving.count && plan.original.count == 1);
     puts("writer ranges: FileID admission, coherent planning, fence clipping and exact ACK PASS");

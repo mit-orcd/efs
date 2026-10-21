@@ -1483,6 +1483,20 @@ int efs_client_utimens_both(efs_ino_t ino, uint64_t mtime, uint32_t mtime_nsec,
                                   atime_nsec);
 }
 
+/* D25 step 3: with the single-entry logical truncate (EFS_D25_LAZY_TRUNCATE=1,
+ * set on the daemons too) the server's history masks the discarded bytes, so
+ * no tail chunk is rewritten before SETATTR: that rewrite was a second,
+ * non-atomic step a refused truncate could not undo. */
+static int client_lazy_truncate(void)
+{
+    static int on = -1;
+    if (on < 0) {
+        const char *e = getenv("EFS_D25_LAZY_TRUNCATE");
+        on = e && e[0] == '1';
+    }
+    return on;
+}
+
 int efs_client_truncate(efs_ino_t ino, uint64_t size)
 {
     efs_client_lock_dir(ino);
@@ -1497,7 +1511,7 @@ int efs_client_truncate(efs_ino_t ino, uint64_t size)
     if (size == old_size)
         return EFS_OK;
 
-    if (size < old_size && size % data_chunk_size() != 0) {
+    if (!client_lazy_truncate() && size < old_size && size % data_chunk_size() != 0) {
         /* Rewrite last kept chunk with a zeroed tail so a later truncate-up
          * does not resurrect discarded bytes (data path; reported via RPC). */
         uint32_t chunk_size = data_chunk_size();
@@ -1573,6 +1587,10 @@ int efs_client_truncate(efs_ino_t ino, uint64_t size)
     if (size < old_size) {
         uint32_t cs = data_chunk_size();
         drop = (size == 0) ? 0 : (uint32_t)((size + cs - 1) / cs);
+        /* Lazy: the boundary chunk's row stays, now masked; its local entry
+         * and cached image predate the mask and must be pulled again. */
+        if (client_lazy_truncate() && cs)
+            drop = (uint32_t)(size / cs);
         old_nci = cs ? (uint32_t)((old_size + cs - 1) / cs) : 0;
         efs_export_drop_chunks_from(&g_client.export, ino, drop);
     }

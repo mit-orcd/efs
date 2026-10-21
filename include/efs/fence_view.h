@@ -14,10 +14,14 @@
 struct efs_content_fence {
     uint64_t epoch;
     uint64_t size;
+    uint64_t done; /* D25 sweep: lanes proven swept for this entry */
 };
 
+/* `revision` moves on every append and retirement, so (content epoch,
+ * revision) never repeats for an inode; it is not an epoch. */
 struct efs_fence_history {
     uint32_t count;
+    uint64_t revision;
     struct efs_content_fence entries[EFS_FENCE_HISTORY_MAX];
 };
 
@@ -65,7 +69,30 @@ static inline int efs_fence_history_append(struct efs_fence_history *h,
     }
     if (h->count == EFS_FENCE_HISTORY_MAX)
         return EFS_ERR_BUSY;
-    h->entries[h->count++] = (struct efs_content_fence){epoch, size};
+    h->entries[h->count++] = (struct efs_content_fence){epoch, size, 0};
+    return EFS_OK;
+}
+
+/* D25 shrink: append (epoch, size) after dropping every entry whose size
+ * is at least `size` (it can no longer lower any valid_end), so a truncate
+ * to 0 leaves one entry. BUSY if 32 entries remain; failure changes
+ * nothing. The caller advances the revision. */
+static inline int efs_fence_history_append_pruned(struct efs_fence_history *h,
+                                                 uint64_t epoch, uint64_t size)
+{
+    struct efs_fence_history next;
+    if (efs_fence_history_valid(h) != EFS_OK || !epoch ||
+        (h->count && epoch <= h->entries[h->count - 1].epoch))
+        return EFS_ERR_INVAL;
+    next = *h;
+    next.count = 0;
+    for (uint32_t i = 0; i < h->count; ++i)
+        if (h->entries[i].size < size)
+            next.entries[next.count++] = h->entries[i];
+    if (next.count == EFS_FENCE_HISTORY_MAX)
+        return EFS_ERR_BUSY;
+    next.entries[next.count++] = (struct efs_content_fence){epoch, size, 0};
+    *h = next;
     return EFS_OK;
 }
 

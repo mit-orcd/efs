@@ -1007,5 +1007,27 @@ static void atomic_completion(int cold)
 }
 
 
+/* D25: after a lazy shrink every lane lags the inode epoch. O_APPEND must
+ * adopt them in its exact-image plan, place the reservation at the new EOF
+ * and not count their superseded EOF claims. */
+static void lagging_lanes(void)
+{
+ struct efs_kv *kv=efs_kv_mem_create();assert(kv);efs_ino_t ino;uint64_t gen,e=0;
+ fixture(kv,&ino,&gen);
+ struct efs_meta_truncate_lazy t={0};struct efs_meta_row row;
+ assert(efs_meta_apply_get_inode(kv,ino,&row)==EFS_OK);
+ t.ino=ino;t.inode_gen=gen;t.expect_epoch=row.content_epoch;t.expect_base_size=row.base_size;
+ t.size=50;t.kind=EFS_META_TRUNCATE_SHRINK;t.q=identity(7,0);
+ assert(efs_meta_apply_truncate_lazy(kv,&t,&e)==EFS_OK && e==1);
+ struct efs_meta_append_plan *a=malloc(sizeof(*a));assert(a);
+ struct efs_opid_req q=identity(8,7);
+ {int rc=efs_meta_capture_append(kv,ino,8,&q,decision,kv,a);if(rc||a->offset!=50)fprintf(stderr,"lagging capture rc=%d off=%llu\n",rc,(unsigned long long)a->offset);assert(rc==EFS_OK && a->offset==50);}
+ struct efs_txid x={{0}};x.bytes[0]=77;
+ assert(efs_meta_execute_append(a,&x,&ops,kv)==EFS_OK);
+ uint64_t lane_epoch=0;
+ assert(efs_meta_get_lane_epoch(kv,ino,gen,0,&lane_epoch)==EFS_OK && lane_epoch==1);
+ assert(efs_meta_get_lane_epoch(kv,ino,gen,1,&lane_epoch)==EFS_OK && lane_epoch==1);
+ free(a);efs_kv_mem_free(kv);
+}
 int main(void)
-{atomic_completion(0);atomic_completion(1);bounded_completed_bursts(0);bounded_completed_bursts(1);atomic_reservation(0);atomic_reservation(1);caught_up(20000,0);caught_up(20000,1);caught_up(EFS_META_APPEND_CATCHUP_MAX,1);completion_batch_gaps();for(int cold=0;cold<2;cold++)for(int owned=0;owned<2;owned++)for(int reverse=0;reverse<2;reverse++)completion_batch(cold,owned,reverse,0);for(int cold=0;cold<2;cold++)completion_batch(cold,1,1,1);for(unsigned v=0;v<3;v++){receipt_capture_race(v,0);receipt_capture_race(v,1);}session_owned_completion(0);session_owned_completion(1);retired_append_receipts(0);retired_append_receipts(1);session_owned_append(0);session_owned_append(1);fenced_completion();unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}
+{atomic_completion(0);atomic_completion(1);bounded_completed_bursts(0);bounded_completed_bursts(1);atomic_reservation(0);atomic_reservation(1);caught_up(20000,0);caught_up(20000,1);caught_up(EFS_META_APPEND_CATCHUP_MAX,1);completion_batch_gaps();for(int cold=0;cold<2;cold++)for(int owned=0;owned<2;owned++)for(int reverse=0;reverse<2;reverse++)completion_batch(cold,owned,reverse,0);for(int cold=0;cold<2;cold++)completion_batch(cold,1,1,1);for(unsigned v=0;v<3;v++){receipt_capture_race(v,0);receipt_capture_race(v,1);}session_owned_completion(0);session_owned_completion(1);retired_append_receipts(0);retired_append_receipts(1);session_owned_append(0);session_owned_append(1);fenced_completion();lagging_lanes();unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}

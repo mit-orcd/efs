@@ -155,4 +155,27 @@ static void recovery(int verdict)
     while((e=readdir(d))){if(e->d_name[0]=='.')continue;char path[512];snprintf(path,sizeof(path),"%s/%s",dir,e->d_name);assert(!unlink(path));}
     closedir(d);assert(!rmdir(dir));
 }
-int main(void){unit();recovery(EFS_TXN_COMMIT);recovery(EFS_TXN_ABORT);recovery(0);puts("mtime barrier publication races and durable recovery PASS");}
+/* D25: utimens after a lazy shrink adopts the lagging lane in its plan. */
+static void lagging_lane(void)
+{
+    struct efs_kv *kv=efs_kv_mem_create();assert(kv);efs_ino_t ino;uint64_t gen,e=0;
+    struct efs_meta_attrs a={1000,1000,100};struct efs_meta_row row;
+    assert(efs_meta_apply_init(kv,1)==EFS_OK);
+    assert(efs_meta_apply_create_file(kv,&a,EFS_ROOT_INO,S_IFREG|0644,"lag",&ino)==EFS_OK);
+    assert(efs_meta_apply_get_inode(kv,ino,&row)==EFS_OK);gen=row.generation;
+    assert(efs_meta_apply_activate_lanes(kv,ino,1ull<<17)==EFS_OK);
+    assert(efs_meta_apply_bootstrap_lane(kv,ino,gen,17,0)==EFS_OK);
+    struct efs_meta_pub p=publication(ino,gen,17);p.new_size=17ull*EFS_MIN_CHUNK_SIZE+9;
+    assert(efs_meta_apply_publish(kv,&p)==EFS_OK);
+    struct efs_meta_truncate_lazy t={0};
+    t.ino=ino;t.inode_gen=gen;t.size=5;t.kind=EFS_META_TRUNCATE_SHRINK;
+    t.q.id.client_uuid[0]=3;t.q.id.session_epoch=1;t.q.id.seq=1;
+    assert(efs_meta_apply_truncate_lazy(kv,&t,&e)==EFS_OK && e==1);
+    struct efs_meta_mtime_plan *plan=malloc(sizeof(*plan));assert(plan);
+    assert(efs_meta_capture_mtime(kv,ino,700,EFS_META_SET_MTIME,11,0,decision,kv,plan)==EFS_OK);
+    struct efs_txid x={{9}};
+    assert(efs_meta_execute_mtime(plan,&x,&ops,kv)==EFS_OK);
+    uint64_t le=0;assert(efs_meta_get_lane_epoch(kv,ino,gen,17,&le)==EFS_OK && le==1);
+    free(plan);efs_kv_mem_free(kv);
+}
+int main(void){lagging_lane();unit();recovery(EFS_TXN_COMMIT);recovery(EFS_TXN_ABORT);recovery(0);puts("mtime barrier publication races and durable recovery PASS");}

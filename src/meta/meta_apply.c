@@ -57,6 +57,7 @@ static int meta_write_check(struct efs_kv *kv, const uint8_t *key, uint32_t kl)
         return efs_txn_key_exclusive(kv, lane_key, sizeof(lane_key));
     case EFS_KV_KIND_APPEND_CUR:
     case EFS_KV_KIND_APPEND_RECEIPT:
+    case EFS_KV_KIND_TRUNCATE_RECEIPT:
     case EFS_KV_KIND_APPEND_RSV: {
         uint8_t inode_key[11];
         if (kl < 19)
@@ -348,23 +349,26 @@ static int unpack_inode(const uint8_t *p, uint32_t n, struct efs_meta_row *r)
     return EFS_OK;
 }
 
-/* D25 versioned sidecar: u32 format, u32 count, count*(epoch,size), BE.
- * Absent is the pre-D25 empty history. Malformed/unknown records fail closed,
- * never become an empty history that could expose discarded bytes. */
+/* D25 history, format 2 (BE): u32 format, u32 count, u64 revision, then
+ * count*(epoch, size, done lane bitmap). Absent is the empty history at
+ * revision 0. Malformed or other formats fail closed, never become an
+ * empty history that could expose discarded bytes. */
 int efs_meta_pack_fence_history(const struct efs_fence_history *h,
                                 uint8_t *out, uint32_t cap, uint32_t *len)
 {
     uint32_t need;
     if (!out || !len || efs_fence_history_valid(h) != EFS_OK)
         return EFS_ERR_INVAL;
-    need = 8u + h->count * 16u;
+    need = 16u + h->count * 24u;
     if (cap < need)
         return EFS_ERR_INVAL;
-    be32(out, 1);
+    be32(out, 2);
     be32(out + 4, h->count);
+    be64(out + 8, h->revision);
     for (uint32_t i = 0; i < h->count; ++i) {
-        be64(out + 8 + i * 16, h->entries[i].epoch);
-        be64(out + 16 + i * 16, h->entries[i].size);
+        be64(out + 16 + i * 24, h->entries[i].epoch);
+        be64(out + 24 + i * 24, h->entries[i].size);
+        be64(out + 32 + i * 24, h->entries[i].done);
     }
     *len = need;
     return EFS_OK;
@@ -374,14 +378,16 @@ int efs_meta_unpack_fence_history(const uint8_t *value, uint32_t len,
                                   struct efs_fence_history *out)
 {
     struct efs_fence_history h = {0};
-    if (!value || !out || len < 8 || rd32(value) != 1)
+    if (!value || !out || len < 16 || rd32(value) != 2)
         return EFS_ERR_PROTO;
     h.count = rd32(value + 4);
-    if (h.count > EFS_FENCE_HISTORY_MAX || len != 8u + h.count * 16u)
+    if (h.count > EFS_FENCE_HISTORY_MAX || len != 16u + h.count * 24u)
         return EFS_ERR_PROTO;
+    h.revision = rd64(value + 8);
     for (uint32_t i = 0; i < h.count; ++i) {
-        h.entries[i].epoch = rd64(value + 8 + i * 16);
-        h.entries[i].size = rd64(value + 16 + i * 16);
+        h.entries[i].epoch = rd64(value + 16 + i * 24);
+        h.entries[i].size = rd64(value + 24 + i * 24);
+        h.entries[i].done = rd64(value + 32 + i * 24);
     }
     if (efs_fence_history_valid(&h) != EFS_OK)
         return EFS_ERR_PROTO;
@@ -5325,7 +5331,7 @@ int efs_meta_apply_lane_bootstrap(struct efs_kv *kv, const struct efs_txid *t,
     q.lane_epoch = rd64(pay + 48); q.lane_seq = rd64(pay + 56);
     q.chunk_size = rd32(pay + 64); q.lane = pay[68]; q.lane_present = pay[69];
     uint8_t authority = pay[70]; q.mtime_gen = rd64(pay + 72);
-    int rc = efs_meta_unpack_fence_history(pay + 80, 8u + 16u * rd32(pay + 84), &q.view.history);
+    int rc = efs_meta_unpack_fence_history(pay + 80, 16u + 24u * rd32(pay + 84), &q.view.history);
     if (rc != EFS_OK || efs_meta_encode_lane_bootstrap(&q, authority, expected, &len, encoded) != EFS_OK ||
         kl != len || memcmp(key, expected, kl) || memcmp(pay, encoded, plen))
         return EFS_ERR_PROTO;
@@ -5396,7 +5402,7 @@ int efs_meta_apply_lane_bootstrap(struct efs_kv *kv, const struct efs_txid *t,
         pack_lane_authority(av, q.chunk_size, q.view.authority_epoch, q.view.oldest_complete_epoch);
     }
     requests[0] = (struct efs_txn_value_cas){key, kl, old, old_len, EFS_TXN_PUT, value, vl};
-    uint32_t nh = 8u + 16u * q.view.history.count;
+    uint32_t nh = 16u + 24u * q.view.history.count;
     requests[1] = (struct efs_txn_value_cas){hk, hkl, hv, hlen, EFS_TXN_PUT, pay + 80, nh};
     if (authority != EFS_META_FENCE_INODE)
         requests[2] = (struct efs_txn_value_cas){ak, akl, NULL, EFS_TXN_ABSENT, EFS_TXN_PUT, av, sizeof(av)};
@@ -5488,7 +5494,9 @@ int efs_meta_capture_mtime(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
         /* A lane ahead of the row signals an unfinished legacy fanout. */
         if (stamp.mtime_gen >= next || stamp.seq == UINT64_MAX)
             return EFS_ERR_BUSY;
-        if (len && stamp.fenced_epoch != epoch) return EFS_ERR_BUSY;
+        /* D25: a lane behind the inode epoch adopts it here; ahead is a race. */
+        if (len && stamp.fenced_epoch > epoch) return EFS_ERR_BUSY;
+        if (len) (void)lane_adopt(&stamp, epoch);
         image->expected_len = len ? len : EFS_TXN_ABSENT;
         image->new_len = LANE_VAL;
         stamp.fenced_epoch = epoch; stamp.mtime_gen = next;
@@ -5545,8 +5553,10 @@ int efs_meta_execute_mtime(const struct efs_meta_mtime_plan *plan,
                 unpack_lane(image->expected, LANE_VAL, &old) != EFS_OK)
                 return EFS_ERR_INVAL;
             if (old.seq == UINT64_MAX || old.mtime_gen >= after.mtime_gen ||
-                (image->expected_len != EFS_TXN_ABSENT && old.fenced_epoch != before.content_epoch))
+                (image->expected_len != EFS_TXN_ABSENT && old.fenced_epoch > before.content_epoch))
                 return EFS_ERR_INVAL;
+            if (image->expected_len != EFS_TXN_ABSENT)
+                (void)lane_adopt(&old, before.content_epoch);
             old.fenced_epoch = before.content_epoch; old.mtime_gen = after.mtime_gen;
             old.max_mtime = 0; ++old.seq;
             uint8_t encoded[LANE_VAL]; pack_lane(encoded, &old);
@@ -7536,6 +7546,152 @@ int efs_meta_append_result(struct efs_kv *kv, efs_ino_t ino, uint64_t len,
     return rc == EFS_OK ? append_receipt_result(value, vl, len, q, off) : rc;
 }
 
+/* D25 truncate receipts: the append window shape under its own kind. */
+static int truncate_receipt_load(struct efs_kv *kv, efs_ino_t ino,
+                                 const struct efs_opid_req *q, uint8_t *key,
+                                 uint32_t *kl, uint8_t *value, uint32_t *vl)
+{
+    int rc;
+    if (!kv || !ino || !q || !efs_opid_req_valid(q) ||
+        !q->id.session_epoch || q->ack >= q->id.seq)
+        return EFS_ERR_INVAL;
+    rc = efs_kv_key_inode(efs_kv_inode_shard(ino), ino, key, kl);
+    if (rc != EFS_OK) return rc;
+    key[2] = EFS_KV_KIND_TRUNCATE_RECEIPT;
+    memcpy(key + *kl, q->id.client_uuid, EFS_OPID_UUID_LEN);
+    *kl += EFS_OPID_UUID_LEN;
+    be32(key + *kl, q->id.session_epoch); *kl += 4;
+    rc = efs_kv_get(kv, key, *kl, value, vl);
+    if (rc == EFS_ERR_NOT_FOUND) { *vl = 0; return EFS_OK; }
+    return rc;
+}
+
+static int trunc_pending_key(efs_ino_t ino, uint8_t *key, uint32_t *kl)
+{
+    uint32_t shard = efs_kv_anchor_shard(efs_kv_inode_shard(ino));
+    key[0] = (uint8_t)(shard >> 8);
+    key[1] = (uint8_t)shard;
+    key[2] = EFS_KV_KIND_TRUNC_PENDING;
+    be64(key + 3, ino);
+    *kl = 11;
+    return EFS_OK;
+}
+
+int efs_meta_apply_truncate_lazy(struct efs_kv *kv,
+                                 const struct efs_meta_truncate_lazy *t,
+                                 uint64_t *epoch_after)
+{
+    struct efs_meta_row row;
+    struct append_cur cur;
+    struct efs_fence_history history;
+    struct efs_opid_reply rep;
+    uint8_t k_ino[EFS_KV_KEY_MAX], v_ino[INO_VAL];
+    uint8_t k_cur[EFS_KV_KEY_MAX], k_h[EFS_KV_KEY_MAX], v_h[EFS_META_FENCE_BYTES];
+    uint8_t k_rc[EFS_KV_KEY_MAX], v_rc[EFS_OPID_VAL_MAX], v_new[EFS_OPID_VAL_MAX];
+    uint8_t k_p[EFS_KV_KEY_MAX], v_p[8];
+    uint32_t ki = 0, kc = 0, kh = 0, vh = 0, krc = 0, vrc = sizeof(v_rc);
+    uint32_t vnew = sizeof(v_new), kp = 0, n = 0;
+    struct efs_kv_item it[5];
+    int shrink, rc;
+
+    if (!kv || !t || !t->ino || !t->inode_gen || !epoch_after ||
+        t->kind > EFS_META_TRUNCATE_SHRINK)
+        return EFS_ERR_INVAL;
+    shrink = t->kind == EFS_META_TRUNCATE_SHRINK;
+    rc = efs_meta_apply_get_inode(kv, t->ino, &row);
+    if (rc == EFS_ERR_NOT_FOUND)
+        return EFS_ERR_STALE;
+    if (rc != EFS_OK)
+        return rc;
+    if (row.generation != t->inode_gen)
+        return EFS_ERR_STALE;
+    if (!S_ISREG(row.mode))
+        return EFS_ERR_INVAL;
+    /* Receipt first: a committed truncate retried under its identity
+     * answers its result even though its preconditions no longer hold. */
+    rc = truncate_receipt_load(kv, t->ino, &t->q, k_rc, &krc, v_rc, &vrc);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_opid_probe(v_rc, vrc, &t->q.id, &rep);
+    if (rc < 0)
+        return rc;
+    if (rc == 1) {
+        if (!rep.ino)
+            return EFS_ERR_STALE; /* acknowledged and reclaimed: no result */
+        if (rep.rc == EFS_OK)
+            *epoch_after = rep.extra;
+        return rep.rc;
+    }
+    if (row.content_epoch != t->expect_epoch ||
+        row.base_size != t->expect_base_size)
+        return EFS_ERR_STALE;
+    rc = load_append_cur(kv, t->ino, row.generation, &cur);
+    if (rc != EFS_OK)
+        return rc;
+    if (cur.nopen)
+        return EFS_ERR_BUSY;
+    if (!shrink && t->size < row.base_size)
+        return EFS_ERR_INVAL;
+    if (shrink) {
+        if (row.content_epoch == UINT64_MAX)
+            return EFS_ERR_INVAL;
+        rc = fence_history_read(kv, t->ino, row.generation, EFS_META_FENCE_INODE,
+                                NULL, NULL, NULL, &history);
+        if (rc != EFS_OK)
+            return rc;
+        if (history.revision == UINT64_MAX)
+            return EFS_ERR_INVAL;
+        rc = efs_fence_history_append_pruned(&history, row.content_epoch + 1,
+                                             t->size);
+        if (rc != EFS_OK)
+            return rc;
+        history.revision++;
+        row.content_epoch++;
+    }
+    /* Receipt capacity before any effect: never apply unrecorded. */
+    memset(&rep, 0, sizeof(rep));
+    rep.rc = EFS_OK;
+    rep.ino = t->ino;
+    rep.extra = row.content_epoch;
+    rc = efs_opid_fold(v_rc, vrc, t->q.id.client_uuid, t->q.id.session_epoch,
+                       &t->q, &rep, v_new, &vnew);
+    if (rc == EFS_ERR_NOMEM)
+        return EFS_ERR_BUSY;
+    if (rc != EFS_OK)
+        return rc;
+    row.base_size = t->size;
+    row.base_mtime = max_u64(row.base_mtime, t->mtime_ns);
+    row.base_ctime = max_u64(row.base_ctime, t->mtime_ns);
+    pack_inode(v_ino, &row);
+    rc = efs_kv_key_inode(efs_kv_inode_shard(t->ino), t->ino, k_ino, &ki);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_append_cur(efs_kv_inode_shard(t->ino), t->ino,
+                                   row.generation, k_cur, &kc);
+    if (rc != EFS_OK)
+        return rc;
+    it[n++] = (struct efs_kv_item){EFS_KV_PUT, k_ino, ki, v_ino, INO_VAL};
+    /* Closed cursor and new EOF change together (as the eager path). */
+    it[n++] = (struct efs_kv_item){EFS_KV_DEL, k_cur, kc, NULL, 0};
+    it[n++] = (struct efs_kv_item){EFS_KV_PUT, k_rc, krc, v_new, vnew};
+    if (shrink) {
+        rc = content_fence_key(t->ino, row.generation, EFS_META_FENCE_INODE,
+                               k_h, &kh);
+        if (rc == EFS_OK)
+            rc = efs_meta_pack_fence_history(&history, v_h, sizeof(v_h), &vh);
+        if (rc == EFS_OK)
+            rc = trunc_pending_key(t->ino, k_p, &kp);
+        if (rc != EFS_OK)
+            return rc;
+        be64(v_p, row.generation);
+        it[n++] = (struct efs_kv_item){EFS_KV_PUT, k_h, kh, v_h, vh};
+        it[n++] = (struct efs_kv_item){EFS_KV_PUT, k_p, kp, v_p, sizeof(v_p)};
+    }
+    rc = meta_write_batch(kv, it, n);
+    if (rc == EFS_OK)
+        *epoch_after = row.content_epoch;
+    return rc;
+}
+
 static int append_reserve_inner(struct efs_kv *kv, efs_ino_t ino, uint64_t len,
                                   const struct efs_opid *op,
                                   const struct efs_opid_req *durable,
@@ -7762,9 +7918,14 @@ int efs_meta_capture_append(struct efs_kv *kv, efs_ino_t ino, uint64_t len,
         image->expected_len = n ? n : EFS_TXN_ABSENT;
         image->new_len = LANE_VAL;
         if (!n) stamp.fenced_epoch = row.content_epoch;
-        /* A legacy incomplete epoch fanout cannot grant append authority. */
-        if (stamp.fenced_epoch != row.content_epoch) return EFS_ERR_BUSY;
-        phys = max_u64(phys, max_u64(stamp.max_end, red.max_end));
+        /* D25: a lane behind the inode epoch adopts it in this image (its
+         * old EOF claim is superseded); a lane ahead of it cannot occur
+         * without a newer inode epoch, so it is a race: retry. */
+        if (stamp.fenced_epoch > row.content_epoch) return EFS_ERR_BUSY;
+        (void)lane_adopt(&stamp, row.content_epoch);
+        /* red.max_end is the materialized lane's own claim (reductions carry
+         * no EOF); after adoption only the stamp's current-epoch EOF counts. */
+        phys = max_u64(phys, stamp.max_end);
         pack_lane(image->value, &stamp);
         rc = resize_parts_add(&out->parts, efs_kv_lane_shard(ino, lane));
         if (rc != EFS_OK) return rc;
@@ -7913,7 +8074,12 @@ int efs_meta_execute_append(const struct efs_meta_append_plan *plan,
             if (bits & (1ull << lane)) return EFS_ERR_INVAL;
             bits |= 1ull << lane;
             if (image->expected_len == EFS_TXN_ABSENT) before.fenced_epoch = row.content_epoch;
-            if (before.fenced_epoch != row.content_epoch || reservation.off < before.max_end)
+            /* Capture adopts a lane behind the inode epoch (D25); the plan
+             * must carry exactly that adoption. */
+            if (before.fenced_epoch > row.content_epoch)
+                return EFS_ERR_INVAL;
+            (void)lane_adopt(&before, row.content_epoch);
+            if (reservation.off < before.max_end)
                 return EFS_ERR_INVAL;
             before.append_bar = cursor.watermark;
             uint8_t value[LANE_VAL]; pack_lane(value, &before);
@@ -9054,7 +9220,16 @@ static int check_cb(void *user, const uint8_t *key, uint32_t klen,
         }
         return 0;
     }
-    if (key[2] == EFS_KV_KIND_APPEND_RECEIPT) {
+    if (key[2] == EFS_KV_KIND_TRUNC_PENDING) {
+        if (klen != 11 || !rd64(key + 3) || vlen != 8 || !rd64(val) ||
+            efs_kv_anchor_shard(efs_kv_inode_shard(rd64(key + 3))) !=
+                (((uint32_t)key[0] << 8) | key[1])) {
+            c->rc = EFS_ERR_PROTO; return 1;
+        }
+        return 0;
+    }
+    if (key[2] == EFS_KV_KIND_APPEND_RECEIPT ||
+        key[2] == EFS_KV_KIND_TRUNCATE_RECEIPT) {
         struct efs_opid_window window;
         if (klen != 31 || !rd64(key + 3) || !rd32(key + 27) ||
             efs_kv_inode_shard(rd64(key + 3)) != (((uint32_t)key[0] << 8) | key[1]) ||
@@ -9484,6 +9659,16 @@ int efs_meta_pack_candidate(struct efs_kv *kv, efs_ino_t ino, uint64_t inode_gen
     if (rc == EFS_OK) rc = efs_kv_get(kv, lk, lkl, lv, &lvl);
     if (rc == EFS_OK) rc = unpack_lane(lv, lvl, &lane);
     if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND) return rc;
+    /* D25: packing copies a raw image. Until it builds masked images, an
+     * inode with a fence history or a lane behind its epoch stays a
+     * candidate (BUSY) and is not packed. */
+    {
+        struct efs_fence_history h;
+        rc = fence_history_read(kv, ino, row.generation, EFS_META_FENCE_INODE,
+                                NULL, NULL, NULL, &h);
+        if (rc != EFS_OK) return rc;
+        if (h.count || lane.fenced_epoch != row.content_epoch) return EFS_ERR_BUSY;
+    }
     out->size = max_u64(row.base_size, lane.max_end);
     out->mtime = max_u64(row.base_mtime, lane.max_mtime);
     uint8_t key[EFS_KV_KEY_MAX], val[CHUNK_VAL_MAX];
