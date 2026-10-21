@@ -178,3 +178,39 @@ cross-group lane epoch) and `f8b7a7818` (readdir during a split).
   - An 8 MiB write, fsync and read-back hash match on node9900.
 - **Not run:** two-client, persistence, GC and fault gates. The truncate
   hole remains open (above).
+
+### Suites and ior on `47ba6b590` under a 32M-file create load — 2026-10-21 21:49Z
+
+**PASS: no user-visible errors.** Load: the user's
+`tiny_files.py --max-depth 2 --max-files-per-folder 1000000 --max-files 32000000 --workers 16`
+on node9900 (`/data1/efs/orcd-mini-mnt/20m-tiny-files`), at about 2,300
+write calls/s. The run was started detached in screen `suites-20261021-2149`
+on node9901, from `/data1/efs/devops`.
+
+| Suite (node9901 mount unless noted) | Result |
+| --- | --- |
+| Core POSIX (`smoke.sh`, jobs 4) | 216/216 PASS (17.3 s) |
+| POSIX extras (`posix_extras.py --jobs 4 --timeout-s 150`) | 4/5 PASS, 1 SKIP (mmap unsupported) |
+| Durability (`smoke-persist.sh`: prepare, remount, verify) | 27/27 + 27/27 PASS |
+| ior easy (8 ranks, OpenMPI 4.1.7, `-F -t 1m -b 2048m`) | rc 0; write 1,091 MiB/s, read 3,057 MiB/s |
+| ior hard (8 ranks, shared file, `-t/-b 47008 -s 2000`) | rc 0; write 28.9 MiB/s, read 125.8 MiB/s |
+| Two-client, node9901 + node9900 (`scripts/orcd_mini_posix2.py` from the Mac) | 67/67 PASS (314 s) |
+
+The ior binary is `~/orcd/scratch/efs-io500/io500/bin/ior` with
+`/usr/mpi/gcc/openmpi-4.1.7rc1/bin/mpivars.sh` sourced.
+
+Log signals, none user-visible:
+- **n1 `report-split rc=-13` (BUSY):** 9 at 21:51:08 during ior hard. The
+  client retried them, and ior completed with no I/O errors.
+- **Two `segmented RDMA setup failed`:** at 21:27:32 during the deploy
+  startup, before peers were up. RDMA came up afterwards.
+- **n1 `apply-sleep`:** 1,723 lines, p50 28 ms, p99 94 ms, max 420 ms,
+  mostly while durability and ior ran. This is leader apply latency, not an
+  error.
+- **node9901 client `dcache-pressure failed=body`:** 758 lines at 21:50 as
+  ior easy began writing 16 GiB. Writers waited for cache space; nothing
+  failed.
+- **node9900 client:** no errors.
+
+Raw output stays on node9901 under `/data1/efs/prof/suites-20261021-2149/`.
+Not run here: the GC, fault and Valgrind gates (private-cluster suites).
