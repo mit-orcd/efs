@@ -1564,10 +1564,13 @@ full acceptance are separate states.
 protocol paths, but corrects PROTO classification, gate ordering and deletion
 scope. Follow-up review of `36d612b4d` accepts the substantive corrections. No product fixes
 implemented; Linux results are attributed to the audit author. The tooling
-fixes landed in `040734d26`. Each confirmed bug now has a work item:
+fixes landed in `040734d26`. The findings now have work items:
 [W127–W134](#w127) (apply, protocol and session
 correctness, all OPEN) and [W135–W139](#w135)
-(test-suite defects, all OPEN).
+(test-suite defects and qualification gaps, all OPEN). The scope/priority review
+at the end of W139 distinguishes confirmed unsafe code, W131 defensive hardening
+and test evidence gaps; W127–W131 form one implementation package, not five
+independent error-handling designs. No acceptance gates are waived.
 
 [W66 acceptance checklist](../status/metadata-scaling.md#w66-acceptance-checklist-consolidated-oct-21)
 (distribution, fail-closed hardening, MKDIR/born-HASHED, conditional split
@@ -8376,7 +8379,7 @@ must leave the cursor unchanged.
 - Its source slice defines a stub `efs_client_pack_flush` that production
   stopped calling with the D37 packing removal (`5ded11179`).
 - The generated C fails `-Werror=unused-function` (node9901, gcc 11.5.0),
-  so the pressure-cohort behaviour is untested.
+  so this test supplies no pressure-cohort coverage.
 
 **Fix and gate:** update the slice to the current production context, or
 delete the test if the cohort path no longer exists. Then wire it into
@@ -8397,7 +8400,7 @@ W1, W86). If it is kept, update the fake reply and wire the test. If it is
 archived, delete the test with it.
 
 <a id="w138"></a>
-### W138 — `test_apply_ring.py` reports PASS while its ThreadSanitizer half never runs
+### W138 — `test_apply_ring.py` succeeds while its TSan check is NOTRUN on gcc 11
 
 **Verification correctness; opened 2026-10-21 from the audit T5; OPEN.**
 - On gcc 11.5.0 (node9901) the TSan build fails:
@@ -8427,7 +8430,7 @@ archived, delete the test with it.
   headers) and `test_cluster_stop.py` (needs `~/git/cluster`) depend on the
   environment.
 - `test-client-memory` is never invoked by `test`, so `test_fuse_workers.py`
-  and `test_fuse_worker_options.py` never run. The latter exits 0 when fuse3
+  and `test_fuse_worker_options.py` do not run through the default test target. The latter exits 0 when fuse3
   is unavailable.
 
 **Fix and gate:**
@@ -8435,6 +8438,37 @@ archived, delete the test with it.
 - Report environment-dependent tests as NOTRUN, never as a silent pass.
 - Do this before deleting any code they could protect.
 - The full list is in the [audit](../reviews/dead-code-review-20261021.md#t3--python-tests-not-wired-into-make-test--liveness--high--wire-fix-or-delete).
+
+#### Review of W127–W139 scope and priority — October 21
+
+**All 13 items are worth tracking; they are not 13 demonstrated product bugs.**
+Review of the items introduced by `e681ff97e`; documentation only, no fixes or
+new runtime qualification. Existing OPEN/NOTRUN verdicts remain unchanged.
+
+| Items | Assessment |
+| --- | --- |
+| W127–W130 | Confirmed unsafe apply behavior by code inspection. Preserve legitimate business refusals while fixing malformed-command and storage-error handling; cluster reproduction gates remain NOTRUN. |
+| W131 | Defensive hardening with runtime reachability unproven, not a demonstrated running-cluster failure. |
+| W132–W133 | Confirmed unsafe endpoint and protocol-enforcement gaps; declaration is not authentication. |
+| W134 | Valid session-fencing gap, to be fixed together with registration of current mutation paths under W72. |
+| W135 | Test-reporting improvement. Fail-fast is normal behavior; incomplete execution must not be presented as full qualification. Independent suite results should preserve an aggregate failure. |
+| W136–W137 | Broken test fixtures, not evidence that the corresponding product behavior is wrong. Fix or remove with their associated functionality. |
+| W138–W139 | Qualification gaps scoped to the audited environment/default suite. Absence from that suite does not mean a test cannot run manually or through a dedicated target. |
+
+Keep the separate W numbers for traceability, but implement W127–W131 as one
+coherent apply-hardening package with shared error classification and real
+apply-boundary tests. W132 can proceed independently. W133 requires the
+connection-state matrix; W134 requires the W72 integration, not an isolated
+removal of its bypass.
+
+Do not assign identical release-blocker status to all 13. Prioritize live
+correctness/enforcement issues and trustworthy qualification of enabled paths.
+Staged-feature tests may be removed when that feature is archived coherently;
+this must not remove coverage of a still-exposed server endpoint. Qualification
+must distinguish PASS, FAIL and NOTRUN, including environment-dependent checks.
+Any release decision still needs the named acceptance results; this review does
+not waive gates, close items, or authorize a release. No additional conceptual
+review is needed before implementation against these requirements.
 
 
 ## Appendix 6 — Naming

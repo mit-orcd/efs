@@ -23,10 +23,13 @@ full acceptance are separate states.
 protocol paths, but corrects PROTO classification, gate ordering and deletion
 scope. Follow-up review of `36d612b4d` accepts the substantive corrections. No product fixes
 implemented; Linux results are attributed to the audit author. The tooling
-fixes landed in `040734d26`. Each confirmed bug now has a work item:
+fixes landed in `040734d26`. The findings now have work items:
 [W127–W134](../backlog/work-items.md#w127) (apply, protocol and session
 correctness, all OPEN) and [W135–W139](../backlog/work-items.md#w135)
-(test-suite defects, all OPEN).
+(test-suite defects and qualification gaps, all OPEN). The scope/priority review
+at the end of W139 distinguishes confirmed unsafe code, W131 defensive hardening
+and test evidence gaps; W127–W131 form one implementation package, not five
+independent error-handling designs. No acceptance gates are waived.
 
 [W66 acceptance checklist](metadata-scaling.md#w66-acceptance-checklist-consolidated-oct-21)
 (distribution, fail-closed hardening, MKDIR/born-HASHED, conditional split
