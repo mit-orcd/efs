@@ -429,3 +429,22 @@ latency near the suite deadline; it neither clears the original timeout nor
 proves its cause. No acceptance timeout or durability rule was relaxed.
 Raw probe/trace-attempt jobs are recorded under `tests` in
 `repair-20261020/deployment-643f6104f.json`, with logs in the original mailbox.
+
+### Query gates completed — 2026-10-21 04:42 UTC
+
+On the same repaired build/profile under full verification load, command options
+and concurrent queries now **PASS** as well. Concurrent readers completed
+5,853 requests, zero BUSY, across snapshot generations 16/17/18. Per-reader
+p50 was 17.2 ms, p95 148/154 ms, p99 789/781 ms. The write portion published
+19,379 files and verified every payload; create p50/p95/p99 was 39.6/135/553 ms,
+with 42.46 s convergence. No refresh error was recorded. These are focused
+loaded gates, not the still-open 40 M scale qualification.
+
+Full retained verification reached 2,955,114 checked paths with zero errors.
+The unchanged 15-second mtime case **failed again when isolated** while those
+readers ran (`mtime-gate.tsv`, retained fixture
+`/tmp/efs-mount/posix-fcstor003-1h16u6yi`). The earlier successful timing probe
+does not resolve this repeatable loaded-latency failure. Further diagnosis is
+open; no acceptance timeout increase or product fix is claimed. Raw job IDs,
+including a preserved-fixture/client-log inspection, remain in the deployment
+journal.
