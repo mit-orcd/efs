@@ -26,8 +26,10 @@ the epoch lazily behind an ACTIVATE/BOOTSTRAP floor; a bounded lane-local
 sweep deletes or clips superseded rows, and SWEEP_DONE/RETIRE free history.
 Final review's corrections are folded in: one `adopt` transition resets lane
 EOF, receipt capacity is checked before commit (BUSY, never unprotected),
-history revision persists, g4/g5 gate acceptance. The two call-site audits
-are the next step.
+history revision persists, g4/g5 gate acceptance. Both call-site audits
+are done (§8): no lane reduction carries an EOF (drop `max_end` from it), and
+the kernel caches nothing; client caches need only the inode epoch/revision
+in the read view. Implementation (§7 step 2) is next.
 Earlier reviews and responses are kept as superseded history.
 Replaces the declined 256 MiB EBUSY refusal; W43 stays open.
 

@@ -236,12 +236,13 @@ ignores its EOF, and the sweep removes it.
 
 **EOF summaries.** getattr, the size collect and the append EOF vector
 count a lane's `max_end` and pending reductions only when `adopted_epoch
-== E`. Before implementation, every transaction that reduces into a
-*file* lane must be audited, **including reductions still pending**. Each
-must carry its epoch, so that the reduction is dropped when its epoch is
-below `adopted_epoch` and goes through `adopt` when above, or else be
-refused on file lanes. Clearing the stored `max_end` does not neutralise an
-untagged pending maximum, so untagged file-lane reductions are not allowed. `present` and `st_blocks`
+== E`. **Reductions (audit 1, §8.1):** no production path reduces an EOF
+into any lane, so `max_end` is removed from the lane reduction triple:
+`struct efs_txn_reduce` and its wire form lose `max_end`, `getattr`,
+`collect_phys_eof` and `efs_meta_capture_append` stop reading
+`red.max_end`, and a lane EOF can change only through the lane's own
+entries, which go through `adopt`. Pending reductions then cannot carry an
+untagged maximum at all. `present` and `st_blocks`
 include dead rows until the sweep, so `df` lags a large truncate.
 
 ### 3.4 Activation and bootstrap
@@ -267,12 +268,14 @@ revision)`. It is served only while that key matches the inode authority
 the client currently holds. That authority is refreshed under the same
 rules that already govern size visibility (open, getattr, attribute
 timeout), so a mount never shows discarded bytes once it can see the new
-size. Before implementation, the cache audit lists every call site that
-decides size and data visibility — the kernel attribute and page caches
-(FUSE `attr_timeout`, `keep_cache`, invalidation notifications) as well as
-userspace mappings and decoded chunks, and read paths that do not reopen the
-file — with the rule each follows. The data rule must be no weaker than the
-size rule.
+size. **Audit 2 (§8.2)** found the kernel caches nothing for regular
+files, so the rule is entirely in the client: the decoded-chunk cache key
+already includes the view's epoch, revision and masks, so it needs only the
+§3.2 change to carry `E` and `revision`. The existing promise is kept
+unchanged: a mount that opens the file after the truncate returns sees the
+new size and data; an already-open descriptor sees them within
+`EFS_READ_MAP_TTL_MS` (default 200 ms), the same bound as for any peer
+write today.
 
 ## 4. Sweep, reclaim and retirement
 
@@ -459,11 +462,9 @@ and a same-format orderly restart.
 
 ## 7. Implementation order and open items
 
-1. The two audits: transactions that reduce into file lanes, including
-   pending reductions (§3.3), and size and data visibility on the client,
-   including kernel caches (§3.5). Each output lists every relevant call
-   site and the rule that results, not just that the code was read. Both
-   are prerequisites, not follow-ups.
+1. ~~The two audits~~ — **done, §8.** Their code consequences join step 2:
+   remove `max_end` from the lane reduction (audit 1), and carry `E` and
+   `revision` in the read view that keys the client caches (audit 2).
 2. One gated change: inode-authority read views (§3.2), the writer epoch
    source and `adopt` (§3.3), `ACTIVATE` / `BOOTSTRAP` and the floor
    (§3.4), and inode-keyed caches (§3.5). The client stamp is never switched
@@ -483,6 +484,54 @@ and a same-format orderly restart.
 Constants proposed here: history 32 entries, sweep 256 keys examined and 64
 rows changed per entry. They stay proposals until g1 and g6 measure them.
 W43 stays open until the gates pass.
+
+## 8. Audit results — October 21
+
+Source inspection of `d25-logical-truncate` at `bc1eff29e` (devel
+`0e9df00a8` plus docs only). Read-only; no runtime run.
+
+### 8.1 Audit 1 — reductions into lanes
+
+| call site | target key | fields set | file lane? |
+| --- | --- | --- | --- |
+| `host_prep_lane_stamp` (`src/server/raft_host.c`), the **only** producer of `EFS_TXN_REDUCE`; called from 8 call sites, all in namespace transactions on a parent directory | lane `efs_kv_dir_lane(name)` of the **parent directory** | `max_mtime`, `max_ctime`, `mtime_gen`; `max_end = 0` (memset) | no |
+| `host_prep_raw(... EFS_TXN_REDUCE_INO ...)` | inode row | nlink, entry count, times, used shards, parent, parent version | no; never touches `base_size` or `content_epoch` |
+| `EFS_TXN_REDUCE_ADD` | `DSEQ` witness | counter | no |
+| `EFS_TXN_REDUCE_OPID` | opid window | receipt | no |
+| `efs_txn_prepare_reduce` decode path (`src/meta/txn.c`) | any key named in the PREPARE | the full triple from the wire | **not restricted today** |
+
+Consumers of a reduction's `max_end`: `efs_meta_apply_getattr`,
+`collect_phys_eof` and `efs_meta_capture_append` (all in
+`src/meta/meta_apply.c`); the resolve fold folds the triple into the lane
+record. `src/sim` also produces reductions and must follow the same change.
+
+**Rule:** no production reduction carries an EOF, and the decoder accepts
+one only because the field exists. Remove `max_end` from `struct
+efs_txn_reduce` and from `EFS_TXN_REDUCE_WIRE` (32 → 24 B; fresh format),
+and stop reading it in the three consumers and the fold. File-lane EOF then
+moves only through lane entries that use `adopt` (§3.3), and no epoch tag
+is needed on reductions.
+
+### 8.2 Audit 2 — size and data visibility on a mount
+
+| layer | call site | behaviour | effect on truncate |
+| --- | --- | --- | --- |
+| kernel page cache | `fuse_fi_direct_io` (`src/client/efs_fuse.c`), set on every regular-file open | `direct_io = 1`, `keep_cache = 0` | no kernel data cache to invalidate |
+| kernel attributes and entries | `fill_entry`, `fuse_reply_attr(..., 0.0)` | `attr_timeout = entry_timeout = 0` | every stat reaches the daemon |
+| daemon lookup memo | `LOOKUP_MEMO_*` (`efs_fuse.c`) | one-shot, 50 ms, invalidated by local mutations | at most 50 ms stale for a peer's change, as today |
+| local truncate | `ll_setattr` → `ll_inval_inode` | drops pages at and past the new EOF on the truncating mount | unchanged |
+| local inode row (size used by reads) | `efs_client_read` reads `efs_export_get_inode` | refreshed by open (`efs_client_stat_ino`), getattr and lookup | a read without stat uses the last fetched size, as today |
+| chunk maps | `efs_client_map_fresh` (`src/client/ops.c`) | a map is reused without GETCHUNKS only if pulled **after the last open** of that inode on this mount and within `EFS_READ_MAP_TTL_MS` (default 200 ms, capped at 10 s) | an open after the truncate always re-pulls |
+| decoded chunks | `rdcache` (`src/client/read.c`), key `efs_chunk_read_key` (`include/efs/metadata.h`) | key covers base and span identities, packed reference, and `read_view.fence_epoch`, `revision` and every part's mask | a refreshed view with new masks never hits old bytes |
+
+**Rule:** the kernel holds no state to invalidate. The protocol keeps
+today's promise unchanged: open after the truncate returns → new size and
+data; an already-open descriptor → new data within the map TTL, and new
+size at its next stat. The one required change is §3.2: the read view's
+`fence_epoch` and `revision` must be the inode's `E` and history revision.
+Today they come from the lane stamp, which lazy adoption no longer moves,
+so without the change a cached map could stay keyed as current. g5 checks
+both the open and the already-open cases.
 
 ## Final protocol review of `07011a9cc` — October 21
 
