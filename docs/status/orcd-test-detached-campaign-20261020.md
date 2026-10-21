@@ -482,3 +482,18 @@ oracle and separate manifests/output. Checkpoints record the fixture root and
 refuse resumes from another fixture. The regression verifies both retention
 of prior failures and rejection of the wrong fixture. Existing deployed binaries
 and running verification scripts are unchanged; new scale writes have not begun.
+
+### Full retained payload gate PASS — 2026-10-21 05:43 UTC
+
+Repaired build 643f6104f verified **all 8,437,752 acknowledged payloads** with
+zero errors and exact contents/length/EOF: 2,035,744 / 2,200,714 / 1,967,117 /
+2,234,177 on fcstor003/004/005/006. All four verifier jobs exited 0. This
+includes every one of the original 49 EBUSY paths. Separate audits also match
+all 117 uncertain-write payloads. Original baseline failures remain preserved.
+
+An unchanged four-worker POSIX core run now runs after all verification readers
+finished, in `posix-after-verify.tsv`. It distinguishes load-sensitive deadline
+failures from an unconditional regression; it cannot erase loaded failures.
+Next is a separate 40 M-target fixture on the same deployed profile, followed
+by exact verification and orderly cold restart. The updated full verifier is
+staged as `repair-20261020/verify_scale_f6d83c895.py`.

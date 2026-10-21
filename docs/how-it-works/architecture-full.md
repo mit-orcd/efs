@@ -1570,8 +1570,9 @@ verification from zero running without errors at 1.34 M checked. POSIX core
 Options/concurrent-load gates PASS (5,853 queries, zero BUSY; 19,379 payloads
 verified). Retained verification at 2.96 M without errors. Isolated mtime
 case still exceeds 15 s under read load (80-append diagnostics 9.11–18.46 s,
-mtime monotonic). Retained verification reached 6.22 M without errors; separate-fixture full
-verification is prepared for the next scale run. Acceptance remains open.
+mtime monotonic). Full retained verification PASS: all 8,437,752 payloads, zero errors, including
+all 49 prior EBUSY paths; all 117 uncertain writes match. Unchanged core suite
+is rerunning after readers finish; new scale/restart gates remain open.
 
 [W124 — fast delete](../backlog/fast-delete-reclaim.md): **parts 1–2
 implemented and deployed on orcd-mini (`de0c856b4`);**
