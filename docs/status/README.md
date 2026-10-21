@@ -26,12 +26,10 @@ remount discovery failure. Initial core 216/216, peer 67/67 and persistence
 repair in progress: full retained-payload verification, bounded packing-maintenance
 scans, refresh-aware query tests and restart readiness. Candidate `d7ddcc045`
 adds reviewed read headroom; isolated tests PASS, not deployed; acceptance open.
-Original-build verification resumed after a clean restart/readiness PASS (61 s),
-retaining prior failures. At 03:10 UTC: 7.65 M paths attempted, 48 EBUSY;
-fcstor004 complete with ten read failures and all 32 uncertain-write payloads
-matching. Other baseline verifiers remain active; no repair deployed. New candidate
-`643f6104f` adds reviewed REAP scan bounds and packed-growth folding; isolated
-build/regressions pending.
+Baseline complete: all 8,437,752 paths attempted, 49 EBUSY failures; all 117
+uncertain-write payloads match. Repair `643f6104f` deployed on preserved stores
+after clean stops, readiness PASS (9.6 s), and all remounts PASS. Full retained
+verification from zero and POSIX core now running; acceptance remains open.
 
 [W124 — fast delete](../backlog/fast-delete-reclaim.md): **parts 1–2
 implemented and deployed on orcd-mini (`de0c856b4`);**

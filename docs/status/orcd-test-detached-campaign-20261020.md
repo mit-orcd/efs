@@ -373,3 +373,37 @@ before extraction. Build identity/job is recorded in
 ledger/recovery, packed-switch/reader, bounded KV, REAP, span and readiness
 regressions and binary hashes. Check the job result before using this candidate.
 The original build remains live until baseline completion; no store is removed.
+
+### Baseline complete; repair deployed — 2026-10-21 04:15 UTC
+
+Original-build verification attempted **all 8,437,752 acknowledged paths**.
+Verdict **FAIL**: 49 EBUSY reads (4/10/4/31); no observed payload mismatch or
+missing acknowledged file. The failed reads remain unverified. The separate
+uncertain-write audit found all **117** original failed-write paths contain
+the exact expected payload (26/32/27/32). All baseline results are preserved.
+
+Candidate **643f6104f** passed the isolated build and every regression listed
+in the preceding section (job exit 0, no leftovers). Built at 04:09 UTC:
+
+| Binary | SHA256 |
+| --- | --- |
+| efsd | `8e70317f9f22d46511115a8787c9b40e250b51aaa6b41abab3de876e6757da16` |
+| efs-fuse | `38678ab3aaddff29628b3f64ce43082b22b4aa35d3fa5f2381232c40f2eb0d59` |
+| efs-mgmt | `16bdca35c1b3ffa8cd2bc7d821a0b1cc33b42eb6f22f06f9e6df0a94ceb8d575` |
+
+All original mounts stopped with exit 0; all four owned original daemon jobs
+stopped deliberately (wrapper 130, no leftovers). The repaired binaries
+started at ~04:13 UTC against the **same stores/profile**, with 12-hour job
+limits. Readiness passed in **9.58 s** after an initial absent-leader response;
+this is gate runtime, not a controlled startup-performance comparison. All four
+client mounts and the second mount on fcstor003 succeeded. `/tmp/efs` now
+points at the repaired source on these four hosts.
+
+Authoritative deployment/job journal: `repair-20261020/deployment-643f6104f.json`.
+New evidence: `repair-20261020/qualification-643f6104f/`. Full verification
+started from zero on all four hosts using `scripts/orcd_verify_existing.py`
+against the original campaign manifests, output `full-existing/<host>.json`,
+with six-hour limits from ~04:15 UTC. Every prior EBUSY path is included.
+POSIX core runs concurrently against a separate test fixture. Acceptance is
+**OPEN**: repaired full verification, query suites, 40 M scale and subsequent
+orderly restart/full verification remain pending. No original failure is erased.
