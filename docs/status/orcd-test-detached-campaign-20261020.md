@@ -714,3 +714,16 @@ Reviewed new commit1fe4f8024: an orcd-mini upgrade/backfill test script only, no
 product repair for the observed stalls; not run on orcd-test. Deployment remains
 643f6104f. Existing Raft timing diagnostics are still planned for the next
 orderly restart after this verification, with every original failure preserved.
+
+### Continued scale failures — 2026-10-21 09:57 UTC
+
+10,582,596 acknowledged new files (2,620,883 / 2,655,703 / 2,654,850 /
+2,651,160),18 failed workers,110 continuing. Six additional close failures
+at09:54:13–15 and09:57:29 again exhausted REPORT in8000–8026 ms with BUSY.
+All18 uncertain payloads were read completely with a257-byte read bound and
+matched the expected256 bytes (four `HOST-uncertain18` journal jobs, exit0).
+Copied logs `qualification-643f6104f/HOST-client-0957.log` preserve the exact
+errors. This does not qualify the acknowledged new files; full verification
+remains queued until all writers complete. All daemons and waiting verification
+jobs remain live, with unchanged deadlines. No new product commits, deployment
+changes, retries or timeout relaxations. Scale qualification remains FAIL.
