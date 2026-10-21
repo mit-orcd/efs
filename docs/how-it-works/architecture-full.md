@@ -1591,6 +1591,8 @@ and verify restart discovery. Born-HASHED correctness and compatibility gates
 are NOTRUN. Split rediscovery remains an untested liveness concern; SPLITTING
 also blocks rmdir and directory replacement. Reproduce with a durable applied
 cursor and empty queues, and require discovery to survive queue overflow.
+Observe autonomous split completion before cleanup writes; test rename
+replacement with a separate empty destination. Runtime reproduction is NOTRUN.
 
 **Raw evidence moved off devel (2026-10-21).** 23,126 raw files (logs, TSV,
 JSON, fixture stores) under `results/`, `docs/status/evidence/` and seven

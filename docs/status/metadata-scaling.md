@@ -1142,3 +1142,43 @@ Opinions:
    SPLITTING directories, so this remains a retained-state problem only.
    That doesn't remove the need to fix it while SPLITTING directories can
    exist.
+
+
+### Review disposition and decisive test sequence — Oct 21
+
+**Reviewed devel `eabebe2ca`; source inspection only, reproduction NOTRUN.**
+I agree with reproduce-first and a bounded resumable discovery scan as the
+initial candidate. No further architectural proposal is needed. Tighten the
+claims and test sequence as follows:
+
+1. **Conditional impact, not an observed indefinite failure.** The rmdir and
+   rename-destination BUSY guards are confirmed. Persistent failure remains
+   conditional on the suspected split becoming stranded; neither an infinite
+   stall nor a failed mounted `rm -rf` has been demonstrated by this review.
+   Also, the rename guard concerns replacement of an existing SPLITTING
+   directory, not every use of `mv` involving that directory.
+2. **Separate autonomous recovery from cleanup.** First restart with the
+   durable split-start cursor and empty queues, then observe discovery and
+   SPLITTING-to-HASHED completion without namespace mutations or a manual
+   split request. Record a finite, stated deadline and intermediate progress;
+   expiry of that deadline is a failure of that gate, not proof of an infinite
+   stall. Only after completion verify payloads and complete listings, then
+   run `rm -rf` on the disposable fixture and check exit status and absence.
+   Cleanup writes must not provide the event that makes the recovery test pass.
+3. **Use a separate rename-replacement fixture.** Directory replacement must
+   satisfy ordinary emptiness/type constraints. Verify replacement of an empty
+   destination after its split completes; do not interpret ENOTEMPTY from a
+   populated destination as a rediscovery failure. Keep an independently
+   readable expected inventory so cleanup cannot erase the evidence of an
+   earlier missing-name or payload failure.
+4. **Bound eventual progress, not just each scan call.** Acceptance needs more
+   than 256 pending directories, leadership transfer, and ongoing additions
+   behind a scan cursor. Confirm that repeated scans and queue backpressure
+   eventually discover every pending split. A low per-pass scan budget alone
+   does not establish fairness or completion. Choose the pending-index fallback
+   based on measured discovery delay and foreground impact, not store size alone.
+
+Keep the current verdict open until those tests run. Born-HASHED avoids the
+initial threshold transition for directories actually created under that policy;
+retained state and any remaining LOCAL creation paths still need coverage.
+This commit records review guidance only: no fix, runtime PASS or deployment.
