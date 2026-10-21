@@ -683,3 +683,34 @@ Do not claim snapshot-triggered flush coverage from kv-flush-prof alone.
 No new product commits were available at this inspection; no speculative code
 change or mid-run restart was made. Scale ends approximately10:44 UTC, daemon
 limits approximately16:13 UTC; preserve checkpoints before any required restart.
+
+### Full new-fixture verification queued — 2026-10-21 09:12 UTC
+
+Scale reached9,280,630 acknowledged new files,12 failed workers,116 continuing.
+The two additional uncertain paths (003 worker25/index70883 and005 worker8/
+index71650) both match their complete256-byte expected payloads; journal tests
+`HOST-uncertain12`, exit0. All12 uncertain writes match; all failed closes remain.
+
+Committed launcher `scripts/orcd_verify_after_scale.py` waits for all four
+writer results and complete manifests, rejects timeout/cancellation/leftover
+children, preserves final manifests and original writer result codes in a new
+per-host directory, then invokes the exact full verifier. rc1 writer failures
+are retained and permit read-only auditing, not qualification PASS. Local checks
+confirm preserved failed-writer evidence and refusal of interrupted writers.
+
+Four jobs are queued in deployment journal tests `HOST-full-new-scale`. They
+run staged `repair-20261020/verify_after_scale_20261021.py JOURNAL MAIL
+qualification-643f6104f/scale-final-manifests
+qualification-643f6104f/full-new-scale repair-20261020/verify_scale_f6d83c895.py`.
+Paths are absolute in recorded requests. The completion wait is6500 s, and total
+job lifetime21600 s: actual deadlines approximately15:14:33 UTC, before daemon
+expiry16:13 UTC. Full verification has NOT started yet; it automatically starts
+only after all writers stop. If verification cannot finish before its bound,
+preserve checkpoints and resume unchecked paths in a separate output directory.
+The verifier snapshots are the authoritative run input for subsequent resumes.
+Do not start a duplicate verifier or restart daemons while these readers run.
+
+Reviewed new commit1fe4f8024: an orcd-mini upgrade/backfill test script only, no
+product repair for the observed stalls; not run on orcd-test. Deployment remains
+643f6104f. Existing Raft timing diagnostics are still planned for the next
+orderly restart after this verification, with every original failure preserved.

@@ -53,7 +53,10 @@ All nine uncertain payloads match. Contention captures retained with lost-sample
 and symbolization limitations. At8.80 M new files, ten closes have failed;
 all ten uncertain payloads match,118 writers continue. Synchronous memtable
 flushes remain a candidate stall source; next orderly restart will enable
-existing Raft/flush timing diagnostics.
+existing Raft/flush timing diagnostics. At9.28 M new files,12 failed closes
+(all uncertain payloads match). Full new-fixture verification is queued behind
+all writer completions; final manifests/errors are preserved. Verification jobs
+expire15:14 UTC, before daemons16:13 UTC; monitor/resume checkpoints as needed.
 
 [W124 — fast delete](../backlog/fast-delete-reclaim.md): **parts 1–2
 implemented and deployed on orcd-mini (`de0c856b4`);**
