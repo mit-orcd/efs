@@ -223,6 +223,7 @@ int main(void)
 {
     setenv("EFS_DCACHE_HARD_BYTES", "33554432", 1);
     setenv("EFS_DCACHE_DRAIN_BYTES", "33554432", 1);
+    setenv("EFS_DCACHE_READ_BYTES", "33554432", 1);
     fail_malloc = 1;
     assert(!efs_buf_alloc(1));
     check(0);
@@ -359,6 +360,21 @@ int main(void)
     assert(!fault_drain_count && !g_live);efs_buf_unreserve();
     unsetenv("EFS_FAULT_DRAIN_FILE");
 #endif
-    puts("test_bufpool: OK (hard bound, reserve, failures, concurrency, metadata)");
+    /* Pending writes filling the budget cannot starve demand reads: reads
+     * have the drain and read headroom above it, and no more (orcd-mini big
+     * test: reads failed ENOMEM/EBUSY while writers held the budget). */
+    {
+        static void *w[256], *r[512];
+        for (int i=0;i<256;i++) { w[i]=efs_buf_alloc(EFS_CHUNK_SIZE); assert(w[i]); }
+        assert(!efs_buf_alloc(1) && !efs_buf_alloc_prefetch(1));
+        for (int i=0;i<512;i++) { r[i]=efs_buf_alloc_read(EFS_CHUNK_SIZE); assert(r[i]); }
+        assert(!efs_buf_alloc_read(1));
+        assert(!efs_buf_alloc(1)); /* writes never spend read headroom */
+        for (int i=0;i<512;i++) efs_buf_free(r[i],EFS_CHUNK_SIZE);
+        { void *x=efs_buf_alloc_read(1); assert(x); efs_buf_free(x,1); }
+        for (int i=0;i<256;i++) efs_buf_free(w[i],EFS_CHUNK_SIZE);
+        check(0);
+    }
+    puts("test_bufpool: OK (hard bound, reserve, failures, concurrency, metadata, read headroom)");
     return 0;
 }

@@ -18,6 +18,7 @@
 #include <poll.h>
 #include <errno.h>
 
+static void *demand_read_alloc(uint32_t len);
 static uint32_t data_chunk_size(void)
 {
     uint32_t cs = g_client.export.chunk_size;
@@ -414,8 +415,8 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
         size_t needed = efs_packed_read_scratch_size(&ce.packed);
         if (!needed || needed > UINT32_MAX) return EFS_ERR_PROTO;
         if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
-        void *scratch = efs_buf_alloc((uint32_t)needed);
-        if (!scratch) return EFS_ERR_BUSY;
+        void *scratch = demand_read_alloc((uint32_t)needed);
+        if (!scratch) return EFS_ERR_BUSY; /* deadline passed */
         struct packed_fetch_ctx pctx = {ce.packed.publication_group};
         int prc = efs_packed_read_base_scratch(&ce.packed, ce.fragment_nodes,
             (const uint8_t (*)[EFS_HASH_SIZE])ce.checksums, packed_fetch, &pctx,
@@ -908,22 +909,30 @@ void efs_rdcache_trim(void)
 /* Called only while constructing demand jobs, before taking index/cache
  * locks or submitting the batch. Reclaim reproducible bodies first, then
  * allow in-flight owners a bounded opportunity to release capacity. */
+/* A demand read waits for a buffer within its RPC deadline (read buffers
+ * are transient and have their own headroom); it gave up after 20 ms
+ * before and the read failed ENOMEM while writers held the budget. */
 static void *demand_read_alloc(uint32_t len)
 {
     if (efs_client_rpc_past_deadline())
         return NULL;
-    void *p = efs_buf_alloc(len);
+    void *p = efs_buf_alloc_read(len);
     if (p) return p;
     efs_rdcache_trim();
-    for (unsigned attempt = 0; attempt < 20; attempt++) {
-        if (efs_client_rpc_past_deadline())
+    struct timespec t0;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    for (unsigned attempt = 0; ; attempt++) {
+        struct timespec t1;
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        /* No caller deadline: still bounded (30 s), then ENOMEM. */
+        if (efs_client_rpc_past_deadline() ||
+            (!efs_client_rpc_deadline_ms() && t1.tv_sec - t0.tv_sec > 30))
             return NULL;
-        p = efs_buf_alloc(len);
+        p = efs_buf_alloc_read(len);
         if (p) return p;
-        struct timespec delay = { .tv_sec = 0, .tv_nsec = 1000000 };
+        struct timespec delay = { .tv_sec = 0, .tv_nsec = attempt < 100 ? 1000000 : 10000000 };
         nanosleep(&delay, NULL);
     }
-    return NULL;
 }
 
 static struct rdcache_ent *rdcache_find(uint32_t s, efs_ino_t ino, uint32_t ci)

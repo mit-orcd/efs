@@ -15,6 +15,9 @@
  * of RSS across 200+ threads). Free with the SAME len passed at alloc. */
 void *efs_buf_alloc(uint32_t len);
 void *efs_buf_alloc_prefetch(uint32_t len);
+/* Demand-read buffers (chunk staging, packed-read scratch): may use a read
+ * headroom above the write budget, so pending writes cannot starve reads. */
+void *efs_buf_alloc_read(uint32_t len);
 void efs_buf_free(void *p, uint32_t len);
 #define EFS_DCACHE_ENTRY_BUDGET 1024u
 /* Local capacity contention returns BUSY; QUOTA is reserved for backend verdicts. */

@@ -18,7 +18,7 @@ static void *g_bp[BUFPOOL_MAX_FREE];
 static void *g_slabs[BUF_SLAB_MAX];
 static int g_bp_n, g_bp_slabs;
 static uint64_t g_live, g_reserved, g_heap, g_backing, g_metadata, g_meta_reserved;
-static uint64_t g_hard, g_drain;
+static uint64_t g_hard, g_drain, g_read;
 static pthread_mutex_t g_bp_mu = PTHREAD_MUTEX_INITIALIZER;
 static pthread_once_t g_bp_once = PTHREAD_ONCE_INIT;
 struct buf_credit { uint64_t body, metadata; };
@@ -55,6 +55,13 @@ static void buf_init(void)
                          SLAB_BYTES, 4ull << 30);
     g_drain = budget_env("EFS_DCACHE_DRAIN_BYTES", 64ull << 20,
                           SLAB_BYTES, 1ull << 30);
+    /* Read headroom above the write and drain bounds: unpublished write
+     * bodies cannot be evicted, and with enough writers they filled the
+     * whole budget, so demand reads (and packed-read scratch) found no
+     * buffer and failed ENOMEM/EBUSY (orcd-mini big test, 2026-10-20).
+     * Read buffers are transient; writes never spend this headroom. */
+    g_read = budget_env("EFS_DCACHE_READ_BYTES", 64ull << 20,
+                         SLAB_BYTES, 1ull << 30);
     const char *trace = getenv("EFS_BUF_BUDGET_TRACE");
     if (trace && trace[0] && strcmp(trace,"0"))
         fprintf(stderr,"buf-budget hard=%llu drain=%llu slab=%llu\n",
@@ -152,7 +159,7 @@ void efs_buf_budget_stats(uint64_t *live, uint64_t *reserved,
     if (live) *live = g_live;
     if (reserved) *reserved = g_reserved;
     if (backing) *backing = g_backing + g_heap;
-    if (limit) *limit = g_hard + g_drain;
+    if (limit) *limit = g_hard + g_drain + g_read; /* every allocation's ceiling */
     pthread_mutex_unlock(&g_bp_mu);
 }
 
@@ -196,6 +203,8 @@ static void fault_drain_update(void)
 }
 #endif
 
+/* speculative: 1 = cache admission (half the normal budget), 2 = demand
+ * read (normal budget plus drain and read headroom), 0 = write/other. */
 static void *buf_alloc(uint32_t len, int speculative)
 {
     void *p = NULL;
@@ -205,13 +214,17 @@ static void *buf_alloc(uint32_t len, int speculative)
     fault_drain_update();
 #endif
     pthread_mutex_lock(&g_bp_mu);
-    credit = speculative || t_drain || !t_credit_owner ? 0 :
+    int read = speculative == 2;
+    if (read) speculative = 0;
+    credit = speculative || read || t_drain || !t_credit_owner ? 0 :
              (t_credit_owner->body < charge ? t_credit_owner->body : charge);
+    uint64_t extra = read ? g_drain + g_read : 0;
     /* Drain scratch can temporarily put live bytes above the normal cap.
      * Fully reserved allocations already own capacity: honor that promise
      * under the combined bound, which drain allocations also respect.
      * Unreserved/partly reserved writes still cannot spend drain headroom. */
     uint64_t limit = speculative ? g_hard / 2 :
+        read ? g_hard + extra :
         (t_drain || credit == charge ? g_hard + g_drain : g_hard);
     if (charge - credit > limit ||
         g_live + g_reserved > limit - (charge - credit))
@@ -219,7 +232,7 @@ static void *buf_alloc(uint32_t len, int speculative)
     if (len <= EFS_CHUNK_SIZE && g_bp_n) {
         p = g_bp[--g_bp_n];
     } else if (len <= EFS_CHUNK_SIZE && g_bp_slabs < BUF_SLAB_MAX &&
-               g_backing + g_heap <= g_hard + g_drain - SLAB_BYTES) {
+               g_backing + g_heap <= g_hard + g_drain + (read ? g_read : 0) - SLAB_BYTES) {
         /* Serialize creation: the registered slab and its free-list become
          * visible together. Slabs remain registered for process lifetime. */
         p = malloc((size_t)SLAB_BYTES);
@@ -230,8 +243,8 @@ static void *buf_alloc(uint32_t len, int speculative)
         (void)efs_rdma_zc_region_add(p, (size_t)SLAB_BYTES);
         for (int i = 1; i < BUF_SLAB_N; i++)
             g_bp[g_bp_n++] = (uint8_t *)p + (size_t)i * EFS_CHUNK_SIZE;
-    } else if (charge <= g_hard + g_drain &&
-               g_backing + g_heap <= g_hard + g_drain - charge) {
+    } else if (charge <= g_hard + g_drain + (read ? g_read : 0) &&
+               g_backing + g_heap <= g_hard + g_drain + (read ? g_read : 0) - charge) {
         p = malloc((size_t)charge);
         if (p)
             g_heap += charge;
@@ -250,6 +263,8 @@ out:
  * request credit or drain capacity, and leaves half the normal budget for
  * demand reads and writes, including when queued jobs retain their bodies. */
 void *efs_buf_alloc_prefetch(uint32_t len) { return buf_alloc(len, 1); }
+/* Demand reads: normal budget plus the drain and read headroom. */
+void *efs_buf_alloc_read(uint32_t len) { return buf_alloc(len, 2); }
 void *efs_buf_alloc(uint32_t len) { return buf_alloc(len, 0); }
 
 void efs_buf_free(void *p, uint32_t len)
