@@ -87,8 +87,10 @@ local range, so names the migrator moved between pages were lost. The local
 range is now listed first. 500 k-file reproducer: 0 missing in 12 of 12
 listings (was 3–8 per listing).
 
-[W125 closure tests C0–C8](w125-closure-20261021.md): **IN PROGRESS;
-no data errors from packing.** C0 (2 h, both clients), C2, C3, C4, C5 and
+[W125 closure tests C0–C8](w125-closure-20261021.md): **STOPPED; C1
+rerun 2, C9 and C10 NOTRUN** at the user's request (design roadblock:
+directories must always be spread, not co-located then migrated). **No
+data errors from packing.** C0 (2 h, both clients), C2, C3, C4, C5 and
 C6 (backfill on upgrade) PASS; three packing defects were fixed on devel,
 each with a rerun (idle compaction batch, segment quota reserve,
 grown-file fold).
@@ -99,7 +101,7 @@ grown-file fold).
 - The C1 rerun found a pre-existing client defect: a small overwrite
   after chunk-map eviction published zeros plus the overwrite as the whole
   chunk. Fixed in `4058d8141`, and orcd-mini now runs `4058d81416a0`.
-- Remaining: C1 rerun 2 (running), C9 24 h soak (armed), C10.
+- Not run: C1 rerun 2 (stopped), C9 24 h soak (cancelled), C10.
 
 [W125 packer throughput and busy budget](w125-packer-throughput-20261020.md):
 **gates PASS; copy throughput ~1,020 → ~5,000 files/s; lag-controlled busy

@@ -1,6 +1,6 @@
 # W125 closure plan — small-file packing
 
-**Status:** IN PROGRESS (2026-10-21). Scope: close the packing feature under
+**Status:** STOPPED (2026-10-21): C1 rerun 2, C9 and C10 NOTRUN at the user's request (design roadblock: directories must always be spread, not co-located then migrated). Scope: close the packing feature under
 **normal operation** (no node, network or disk failures; failure tolerance
 is the separate recovery work). Builds on the
 [implementation plan](small-file-packing-plan.md) (P0–P7 done) and
@@ -30,7 +30,8 @@ Closure tests ([evidence](../status/w125-closure-20261021.md)):
 - C1 and C7 failed only on defects outside packing (0a, readdir);
 - fixes made here: segment quota reserve, idle compaction batches
   (`e12e23394`), grown-file fold (`f958852fd`);
-- open: C1 rerun, C9, C10, docs.
+- also fixed: chunk loss after eviction (`4058d8141`, client, not packing);
+- not run: C1 rerun 2, C9, C10.
 
 Set aside (not W125): network-interruption bounds on branch
 `client-interruption-bounds`; degraded publication (product gaps §1.2).
