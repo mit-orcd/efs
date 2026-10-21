@@ -5609,3 +5609,252 @@ and `test_query_catalog`.
 - Record steps 2–4 with their own evidence.
 
 `make test` on the patched tree remains NOTRUN.
+
+<a id="w127"></a>
+## W127 — Metadata apply accepts unknown command tags as applied
+
+**Correctness; opened 2026-10-21 from the [dead-code audit](../reviews/dead-code-review-20261021.md) M1; OPEN, fix NOTRUN.**
+`host_apply_dispatch` ends in `return EFS_OK;` (`src/server/raft_host.c:3507`).
+Only the reserved ranges 45–51 and 55–57 are refused (`:3410–3416`). Any other
+tag this build does not know is consumed: the KV cursor advances
+(`:3005–3010`), and `applied` moves past the entry on every replica, with no
+effect and no error. Evidence is a code reading at `0bdf55256`, confirmed by an
+independent review. It has not been triggered on a cluster.
+
+**Fix and gate:** this is the concrete defect behind [W66](../status/metadata-scaling.md#w66-acceptance-checklist-consolidated-oct-21)
+B1–B4.
+- Add a distinct fatal "unsupported encoding" outcome, decided before any
+  mutation.
+- On that outcome: abort the KV scope, leave the cursor and `applied`
+  unchanged, and withdraw readiness.
+- Test at the real apply boundary with a synthetic unknown tag: check the
+  verdict, the cursor, and the state after restart.
+- No old-binary or old-log matrix.
+
+<a id="w128"></a>
+## W128 — Metadata apply accepts unknown sub-tags and short frames as applied
+
+**Correctness; opened 2026-10-21 from the audit M2; OPEN, fix NOTRUN.**
+These decoders return `EFS_OK` without any effect (`raft_host.c`):
+- `apply_dir_cmd`: short frame (`:2226–2227`) and unknown kind (`:2239–2240`).
+- `apply_session_cmd`: short header (`:2381–2382`), per-kind short frames
+  (`:2387`, `:2393`, `:2404`, `:2430`, `:2454`, `:2474`, `:2482`, `:2511`)
+  and `default:` (`:2515–2516`).
+- `apply_txn_cmd`: `default:` (`:2834–2835`).
+
+Evidence: code reading at `0bdf55256`; not triggered on a cluster.
+
+**Fix and gate:** route these cases to the W127 outcome. W66 B1 names "every
+sub-tag". Validate every member of a batch before any side effect. Test with
+synthetic malformed frames for each decoder.
+
+<a id="w129"></a>
+## W129 — `host_apply` turns decoder errors into success and commits the cursor
+
+**Correctness; opened 2026-10-21 from the audit M3; OPEN, fix NOTRUN.**
+- For about 45 command tags (`raft_host.c:2941–2962`), `host_apply` forces
+  the result to `EFS_OK` whatever the apply returned. Only IO/NOMEM are
+  restored (`:2984–3000`).
+- So a decoder `EFS_ERR_PROTO` (for example a wrong-length CREATE) commits
+  the cursor and is skipped on every replica.
+- QUERY_POLICY (`:2966`), CREATE_REFUSAL/EXPIRY (`:2967–2970`) and nine
+  SESSION sub-tags (`:2975–2982`) do the same.
+- `tests/test_gc_verdict.py:75` asserts
+  `core_result(EFS_MD_CMD_APPEND_RES,EFS_ERR_PROTO,37)==EFS_OK`, so the test
+  suite currently protects this behaviour.
+
+**Not every PROTO is a decode failure.** SALT answers PROTO for an anchor
+mismatch (`:2933–2935`), and QUERY_POLICY treats PROTO as a logical CAS
+verdict (`:2963–2966`). Both are legitimate business refusals.
+
+**Fix and gate:**
+- Decoders return the W127 malformed/unsupported outcome. Business refusals,
+  PROTO included where it means a refusal, stay ring verdicts.
+- Removing PROTO from one allow-list is not the fix.
+- Replace the expression-level check in `test_gc_verdict.py` with tests at
+  the apply boundary: verdict, cursor and restart.
+
+<a id="w130"></a>
+## W130 — DIR apply swallows storage errors; replicas can diverge
+
+**Correctness; opened 2026-10-21 from the audit M4; OPEN, fix NOTRUN.**
+- `apply_dir_cmd` maps NOT_FOUND/INVAL/BUSY to OK, then logs every other rc
+  (IO and NOMEM included) and returns `EFS_OK` (`raft_host.c:2242–2249`).
+- DIR is also missing from the IO-retry list (`:2984–3000`).
+- A failed directory split or migrate step therefore advances the cursor on
+  that replica only. The size-triggered split is live
+  (`src/meta/dir_layout.c:23–37`).
+
+Evidence: code reading at `0bdf55256`; not triggered on a cluster.
+
+**Fix and gate:**
+- Return IO/NOMEM so the existing per-index retry applies.
+- Route malformed DIR entries to W127.
+- Test: inject a DIR storage failure on one replica, then show recovery and
+  equal state on all replicas.
+- If the spread-policy decision removes this path (audit X1), close W130
+  with that removal.
+
+<a id="w131"></a>
+## W131 — Missing KV engine counts as applied
+
+**Correctness; opened 2026-10-21 from the audit M5; OPEN, reachability unproven.**
+`host_apply` stamps the apply ring `EFS_OK` and returns OK when
+`!h || !h->kv || !cmd || clen==0` (`raft_host.c:2891–2896`). `clen==0` (a
+Raft no-op) is legitimate. A missing `h->kv` is not: the entry would be
+consumed without effect. No path that reaches it with the pump running is
+known yet, so confidence is Medium.
+
+**Fix and gate:** separate the no-op case from the missing-engine case, and
+make a missing engine fatal. A unit test of `host_apply` with no KV engine
+must leave the cursor unchanged.
+
+<a id="w132"></a>
+## W132 — `NODE_LEFT` lets any connection drop a node from membership
+
+**Correctness / safety; opened 2026-10-21 from the audit P3; OPEN, fix NOTRUN.**
+- `src/server/handler.c:902–911` calls `server_remove_node_from_cluster`
+  (`src/server/cluster.c:402`) for any connection that sends
+  `EFS_MSG_NODE_LEFT`. It needs no declaration and no peer identity.
+- Nothing in the tree sends this message (`git grep -w EFS_MSG_NODE_LEFT`).
+- Evidence is a code reading, confirmed by review. It was not exercised
+  against a server.
+
+**Fix and gate:**
+- Delete the handler and refuse the message ID explicitly. Membership
+  changes go through Raft.
+- Test: a synthetic `NODE_LEFT` gets a refusal and leaves membership
+  unchanged.
+- This is a narrow fix. It does not authenticate other requests (W133).
+
+<a id="w133"></a>
+## W133 — Client protocol declaration gate is fail-open
+
+**Correctness; opened 2026-10-21 from the audit P1; OPEN, fix NOTRUN.**
+- Only `INODE_GETCHUNKS`, `GET_SEGMENT` and `PUT_SEGMENT` require
+  `CLIENT_HELLO` (`handler.c:186–190`).
+- Every other request (`PUT_CHUNK`, namespace mutations, REPORT, …) is served
+  on an undeclared connection.
+- The version check is `>= EFS_PROTOCOL_MIN_VERSION` (`handler.c:196`,
+  `src/common/protocol.c:697`), so newer versions are accepted too.
+- `scripts/w125_p3_compat.sh` case 2 expects an old client's writes to keep
+  working, which contradicts the no-backward-compatibility rule.
+
+**Fix and gate:**
+- Require one exact supported declaration, defined as a connection-state and
+  message matrix: client, peer (HELLO) and management connections have
+  different valid operations, and the declaration messages themselves must be
+  accepted.
+- Cover TCP and RDMA, reconnects and forwarding connections.
+- Test with synthetic unsupported and missing declarations.
+- Turn `w125_p3_compat.sh` into a refusal test or delete it.
+- A declaration is not authentication, and this item does not claim it.
+
+<a id="w134"></a>
+## W134 — Unregistered session identities bypass session fencing
+
+**Correctness (fail-open); opened 2026-10-21 from the audit S1; OPEN, sequenced with W72.**
+- `efs_session_accept_legacy` (`src/meta/session.c:443–453`) returns OK
+  when the shard has no local session row.
+- `efs_session_prepare_namespace` does the same (`session.c:463`).
+- Callers include `meta_apply.c:1111`, `:1132`, `:7542`, `:7702`,
+  `session.c:593` and `raft_host.c:6080`.
+- `raft_host.c:11809`: "Legacy unregistered append identities remain
+  compatible".
+- W72 records that mount sessions do not yet cover every mutation, so this
+  is a live fail-open path, not just replay support.
+
+**Fix and gate:**
+- Complete registration and establishment for every current mutation path
+  (W72).
+- Remove the bypass in the same change, never before.
+- Test reconnects and delayed requests from a fenced session.
+- Fresh formatting removes old records; it does not register current clients.
+
+<a id="w135"></a>
+## W135 — `make test` fails fast at the docs gate and hides every later test
+
+**Verification liveness; opened 2026-10-21 from the audit T1; OPEN.**
+- `python3 docs/check-architecture.py` is a command in the middle of the
+  `test` recipe (`Makefile:455`).
+- On `0bdf55256` it failed `regen-diff` (a status README edit without
+  regeneration), so 162 of the 276 recipe commands never ran, including every
+  `./tests/test_*` unit binary.
+- With the docs regenerated in a private copy, `make test` passed on node9901
+  (rc=0, 2 min 29 s).
+- The current devel docs are regenerated (gate 5/5), but the structure still
+  lets any docs lag hide code results.
+
+**Fix and gate:**
+- Split `test` into independent docs and code targets that both always run.
+- `test` reports a nonzero aggregate if either fails.
+- Moving the line, or making it a prerequisite, does not help: a failing
+  prerequisite also stops the recipe.
+
+<a id="w136"></a>
+## W136 — `test_pressure_cohort.py` broken since the packing removal
+
+**Verification correctness; opened 2026-10-21 from the audit T3; OPEN.**
+- The test is not wired into `make test`.
+- Its source slice defines a stub `efs_client_pack_flush` that production
+  stopped calling with the D37 packing removal (`5ded11179`).
+- The generated C fails `-Werror=unused-function` (node9901, gcc 11.5.0),
+  so the pressure-cohort behaviour is untested.
+
+**Fix and gate:** update the slice to the current production context, or
+delete the test if the cohort path no longer exists. Then wire it into
+`make test`. Do not suppress the warning.
+
+<a id="w137"></a>
+## W137 — `test_live_ticket_retry.py` fakes a reply length the protocol no longer has
+
+**Verification correctness; opened 2026-10-21 from the audit T3; OPEN.**
+- The test is not wired into `make test`.
+- Its fake server replies with 5 bytes, but `EFS_PUT_UPLOAD_REPLY_LEN` has
+  been 13 since `c186a07cb`.
+- The probe aborts on `type==EFS_MSG_PUT_TICKETED_REPLY&&bytes==EFS_PUT_UPLOAD_REPLY_LEN`
+  (node9901).
+
+**Fix and gate:** decide together with the staged PUT-ticket stack (audit
+W1, W86). If it is kept, update the fake reply and wire the test. If it is
+archived, delete the test with it.
+
+<a id="w138"></a>
+## W138 — `test_apply_ring.py` reports PASS while its ThreadSanitizer half never runs
+
+**Verification correctness; opened 2026-10-21 from the audit T5; OPEN.**
+- On gcc 11.5.0 (node9901) the TSan build fails:
+  `'atomic_thread_fence' is not supported with '-fsanitize=thread' [-Werror=tsan]`
+  (`src/server/apply_ring.h:38`, `:61`).
+- The test prints `SKIP` and passes (`tests/test_apply_ring.py:229–231`), so
+  the race check and its negative control never run on the build node.
+
+**Fix and gate:** fix the test, not the synchronization.
+- The ring payload already uses atomics, and the fences carry the seqlock
+  ordering.
+- `-Wno-error=tsan` can enable a diagnostic run, but TSan does not model the
+  fences, so a clean run is not proof.
+- Keep the torn-record stress check and the negative control, record the
+  sanitizer's limits, and report SKIP as NOTRUN.
+- Any change to the memory ordering needs its own correctness review.
+
+<a id="w139"></a>
+## W139 — Unit binaries and tests that are built or present but never run
+
+**Verification liveness; opened 2026-10-21 from the audit T2–T4; OPEN.**
+- `tests/test_rdma_segmented`, `tests/test_expiry` and
+  `tests/test_rdma_xprt` are built by `all`, but no recipe runs them. All
+  three PASS on node9901.
+- Sixteen of the twenty Python tests not named in the Makefile PASS; W136
+  and W137 cover the two stale ones. `test_rdma_memcheck.py` (needs valgrind
+  headers) and `test_cluster_stop.py` (needs `~/git/cluster`) depend on the
+  environment.
+- `test-client-memory` is never invoked by `test`, so `test_fuse_workers.py`
+  and `test_fuse_worker_options.py` never run. The latter exits 0 when fuse3
+  is unavailable.
+
+**Fix and gate:**
+- Wire the platform-independent tests.
+- Report environment-dependent tests as NOTRUN, never as a silent pass.
+- Do this before deleting any code they could protect.
+- The full list is in the [audit](../reviews/dead-code-review-20261021.md#t3--python-tests-not-wired-into-make-test--liveness--high--wire-fix-or-delete).

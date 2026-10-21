@@ -21,9 +21,12 @@ full acceptance are separate states.
 [Dead-code audit and independent review](../reviews/dead-code-review-20261021.md):
 44 audit entries at `0bdf55256`; targeted review confirms fail-open apply and
 protocol paths, but corrects PROTO classification, gate ordering and deletion
-scope. Follow-up review of `36d612b4d` accepts the substantive corrections;
-relative-output handling and scan robustness still need fixes. No product fixes
-implemented; Linux results are attributed to the audit author.
+scope. Follow-up review of `36d612b4d` accepts the substantive corrections. No product fixes
+implemented; Linux results are attributed to the audit author. The tooling
+fixes landed in `040734d26`. Each confirmed bug now has a work item:
+[W127–W134](../backlog/work-items.md#w127) (apply, protocol and session
+correctness, all OPEN) and [W135–W139](../backlog/work-items.md#w135)
+(test-suite defects, all OPEN).
 
 [W66 acceptance checklist](metadata-scaling.md#w66-acceptance-checklist-consolidated-oct-21)
 (distribution, fail-closed hardening, MKDIR/born-HASHED, conditional split
