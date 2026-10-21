@@ -22,7 +22,10 @@ full acceptance are separate states.
 **proposal for review, NOTRUN.** One inode-group entry commits size, epoch
 and a pruned inode fence history; lanes adopt the epoch lazily; a GC
 sweep deletes or clips superseded rows and feeds the reclaim journal.
-Replaces the declined 256 MiB EBUSY refusal; W43 stays open.
+Replaces the declined 256 MiB EBUSY refusal; W43 stays open. Independent
+review supports the direction but leaves blocking request-identity/EOF,
+coherent-view, retirement/registration, packed-GC and fatal-decoding proofs
+open; the listed entry size is corrected to 42 bytes. No runtime gates run.
 
 [W66 acceptance checklist](metadata-scaling.md#w66-acceptance-checklist-consolidated-oct-21)
 (distribution, fail-closed hardening, MKDIR/born-HASHED, conditional split

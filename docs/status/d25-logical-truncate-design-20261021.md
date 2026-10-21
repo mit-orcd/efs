@@ -47,7 +47,8 @@ an old-format entry is refused with `EFS_ERR_PROTO`):
 kind: 0 = extend (size >= observed EOF), 1 = shrink
 ```
 
-48 bytes. Apply on the inode group, one KV batch, O(1) items:
+42 bytes for the fields listed above (corrected during review; no implicit
+C-struct padding). Apply on the inode group, one KV batch, O(1) items:
 
 1. Row exists, regular file, `inode_gen` matches, `content_epoch ==
    expect_epoch` — else STALE (handler re-reads and re-decides).
@@ -231,3 +232,115 @@ the sweep and "row absent" after it.
    fence over the inode row plus the active lanes". It changes to lazy
    adoption with the inode as the single history authority; the D25
    contract row and register line will be updated with the implementation.
+
+
+## Independent technical review — October 21
+
+Reviewed proposal/source `06098fa98` on `d25-logical-truncate`. **Design review
+only; all new gates NOTRUN.** I support one inode-group commit for the logical
+size/fence and asynchronous physical reclamation. Fresh format only; no legacy
+replay, migration or downgrade machinery is requested. The following are
+correctness requirements to settle before calling this implementation-ready.
+
+### 1. Request identity and size classification — blocking
+
+The proposed entry has generation and expected content epoch but no operation
+identity. Matching `base_size` and the latest fence is not proof that a retry is
+of the same request. Two distinct truncates to the same size, separated by a
+write, must not be confused; a lost-reply retry must not truncate later writes
+again. Extension does not change the content epoch, so that epoch alone also
+cannot reject a stale size collect after another extension/publication.
+
+Specify a durable request identity/verdict and the rules for size classification
+under concurrent EOF changes. A handler cannot simply assert that its stale
+"extend" linearizes before a publish: the resulting EOF and masks must actually
+match that order. Preserve the single-entry goal, but give a concrete proof or
+protocol for the cross-group EOF collect, append reservations and subsequent
+apply. Test delayed requests/replies across another truncate, extension, append
+and pwrite, including identical requested sizes and zero/same-size operations.
+No request-ID or format compatibility with older builds is needed.
+
+### 2. Read authority must be a coherent image — blocking
+
+ReadIndex establishes an applied floor; separate inode/history reads following
+it are not automatically one atomic image. Current chunk-view code in
+`src/meta/meta_apply.c` rereads stamp/history and checks for movement. Preserve
+an equivalent coherent capture for the new inode authority and chunk rows.
+Checking only for a part with epoch greater than E is insufficient: a truncate
+or history retirement can occur without any new-epoch part appearing.
+
+Specify a revision that changes on history retirement as well as shrink, and
+validate the capture or use an appropriate pinned snapshot. Self-contained
+masks may survive retirement only if the source row and masks were captured
+consistently. Include peer cache invalidation/revalidation: invalidating the
+truncating client's cache alone does not establish correctness for a read
+started on another mount after truncate returns.
+
+### 3. Sweep completion and retirement evidence — blocking
+
+The stated `TRUNC_SWEEP` wire sketch carries indices but not the row versions
+or history revision later claimed by the CAS/idempotence text. Choose one
+precise model: inspect and transform the current row deterministically at
+apply using validated immutable bounds, or encode the expected versions and
+handle CAS misses without claiming coverage. Never let a missed/new row count
+as swept merely because its key was selected earlier.
+
+A `swept_epoch` acknowledgement needs a complete range-scan proof, a persistent
+or safely restartable cursor, and adoption that excludes late older publishes.
+History retirement on the inode group cannot depend on each replica reading
+mutable remote lane state during apply. Encode durable, monotonic completion
+evidence with inode generation, target epoch and lane-membership identity;
+validate it deterministically against inode-owned state. Define how lane
+registration races retirement. In particular, an old-view writer must not
+register an omitted lane after history is retired and publish unmasked old
+bytes. The assertion that every later registration uses a newer epoch needs
+an enforced admission rule, not merely a handler convention.
+
+### 4. Clipping and packed-object lifetime — blocking
+
+Metadata-only clipping is reasonable if every read, RMW, fold, packing and
+compaction path respects it even after history retirement. Define `valid_len`
+unambiguously for base and offset spans; preserve original object identity,
+checksum and stored length while reducing visible bytes. A clip cannot be
+undone by a delayed sweep or a mapping rewrite. Test shrink/extend/partial
+rewrite before and after retirement, with overlapping spans and cold reads.
+
+Do not send shared packed segment fragments to per-file SUPERSEDED reclamation
+when one packed mapping dies. Use the packing mapping/ledger ownership path,
+releasing the record exactly once and reclaiming the segment only when its
+lifetime rules permit it. Partial clips retain their reference. A PACK_SWITCH
+inode-epoch check also needs a serialized proof across groups; a handler-side
+check followed by a later switch is a race. Test two files sharing a segment,
+truncate/unlink one while reading the other, and race truncate against packing
+and segment compaction. No automatic crash-recovery feature is implied.
+
+### 5. Fail-closed encoding and bounded-history progress — blocking
+
+The listed entry is 42 bytes, now corrected above. Specify exact current-format
+lengths, allowed kind values, size bounds and epoch-overflow refusal. Existing
+`host_apply` normalizes TRUNCATE errors into proposer verdicts; a decoder's
+`EFS_ERR_PROTO` alone does not establish fatal format refusal. Use the reviewed
+fatal-encoding classification and abort/unlock rules before any mutation.
+
+Bounded history with pruning is a sensible space bound, but BUSY needs a
+progress mechanism: a full history must wake/reprioritize the sweep and retire
+proven entries without requiring a successful new truncate. Persist the pending
+work with the logical commit. Test a stalled lane and more than 32 non-dominated
+fences; preserve bounded refusal while blocked and eventual completion after
+progress resumes. Separate a legitimate BUSY verdict from malformed encoding.
+
+### Scope and implementation order
+
+Keep the design's O(1) logical mutation and bounded asynchronous sweep. First
+settle request identity/classification and authority/retirement proofs, then
+implement coherent masking and lazy adoption, then sweep/packed ownership,
+and finally remove the old destructive truncate path. Audit the noted file-lane
+reductions before claiming the epoch invariant; it is not an optional follow-up.
+
+For g1, report both server logical-commit latency and whole syscall latency:
+client dirty-data flush, RPC queueing and quota pressure are outside the O(1)
+metadata mutation. Single-digit milliseconds are a measured target, not an
+algorithmic guarantee. Test large sparse and allocated files separately, and
+verify all expected bytes before and after a same-format orderly restart.
+The missing failure/interleaving gates above supplement t1–t9. No runtime
+success, implementation approval or deployment is claimed by this review.
