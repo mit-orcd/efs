@@ -9298,17 +9298,38 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
     cp->skip_len = h->reap_cursor_len[gi];
     memcpy(cp->skip, h->reap_cursor[gi], cp->skip_len);
     prc = efs_kv_key_reap_prefix(anchor, prefix, &plen);
-    src = (prc == EFS_OK)
-          ? efs_kv_scan_from(h->kv, prefix, plen, cp->skip_len ? cp->skip : NULL,
-                             cp->skip_len, reap_scan_cb, cp)
-          : -999;
+    /* Bounded work pages: a mass delete leaves REAP tombstones until KV
+     * compaction drops them, and the 512-marker callback limit cannot see
+     * those. Each page holds the KV read lock for at most 4,096 merged keys
+     * (tombstones included); pages continue within the frag budget while the
+     * batch has room. A work-bound stop resumes at its inclusive cursor. */
+    uint8_t resume[EFS_KV_KEY_MAX];
+    uint32_t rlen = 0;
+    src = -999;
+    if (prc == EFS_OK) {
+        for (;;) {
+            rlen = 0;
+            src = host_gc_scan_work(h, prefix, plen, cp->skip_len ? cp->skip : NULL, cp->skip_len,
+                                    reap_scan_cb, cp, resume, &rlen, sizeof(resume));
+            if (src <= 0 || !rlen || cp->full) break;
+            /* Page bound. The next page starts at the consumed cursor; the
+             * scan callback skips a re-emitted cursor key. */
+            if (rlen > sizeof(cp->skip)) { src = EFS_ERR_PROTO; break; }
+            memcpy(cp->skip, resume, rlen);
+            cp->skip_len = rlen;
+            if (now_us_() - started >= GC_FRAG_BUDGET_US ||
+                !__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE) || !h->running)
+                break;
+        }
+    }
     times->scan += now_us_() - started;
     if (prc != EFS_OK || src < 0) {
         __atomic_fetch_add(&h->s->gc_scan_errors, 1, __ATOMIC_RELAXED);
         return;
     }
+    /* More markers may follow: the batch filled, or a work page ended. */
+    int work_stop = src > 0 && rlen && !cp->full && rlen == REAP_KEY_LEN;
     int n = cp->n;
-    if (!n) h->reap_cursor_len[gi] = 0;
     __atomic_store_n(&h->s->gc_reap_seen[gi], n, __ATOMIC_RELAXED);
     __atomic_store_n(&h->s->gc_reap_capped[gi], src > 0, __ATOMIC_RELAXED);
     uint64_t first = n ? cp->ino[0] : 0;
@@ -9316,11 +9337,20 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
         __atomic_store_n(&h->s->gc_first_reap[gi], first, __ATOMIC_RELAXED);
         __atomic_store_n(&h->s->gc_first_seen_us[gi], first ? efs_iostats_now_us() : 0, __ATOMIC_RELAXED);
     }
+    /* Round robin: the next pass starts after this batch (or after the last
+     * consumed key of a work page), so a stuck inode (BUSY lane, unreachable
+     * member) never starves the markers behind it, and a run of tombstones
+     * is crossed once rather than on every pass. */
+    if (work_stop) {
+        memcpy(h->reap_cursor[gi], resume, REAP_KEY_LEN);
+        h->reap_cursor_len[gi] = REAP_KEY_LEN;
+    } else if (n && src > 0) {
+        memcpy(h->reap_cursor[gi], cp->keys[n - 1], REAP_KEY_LEN);
+        h->reap_cursor_len[gi] = REAP_KEY_LEN;
+    } else {
+        h->reap_cursor_len[gi] = 0;
+    }
     if (!n) return;
-    /* Round robin: the next pass starts after this batch, so a stuck inode
-     * (BUSY lane, unreachable member) never starves the markers behind it. */
-    memcpy(h->reap_cursor[gi], cp->keys[n - 1], REAP_KEY_LEN);
-    h->reap_cursor_len[gi] = src > 0 ? REAP_KEY_LEN : 0;
 
     /* 1. Lane sweeps, in rounds: each round sweeps up to
      * EFS_META_SWEEP_BATCH_MAX chunks of every unfinished hosted lane, then

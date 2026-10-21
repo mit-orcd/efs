@@ -19,7 +19,6 @@ code=r'''
 #define REAP_KEY_LEN 11
 #define GC_FRAG_BUDGET_US 100000
 #define HOST_NGROUPS 2
-#define efs_kv_scan_from fake_scan_from
 #define efs_kv_get fake_kv_get
 #define efs_kv_lane_shard fake_lane_shard
 #define efs_kv_inode_shard fake_inode_shard
@@ -44,8 +43,9 @@ static void wr32be(uint8_t *p,uint32_t x) {for(int i=3;i>=0;i--){p[i]=(uint8_t)x
 static int ix(efs_ino_t ino){assert(ino>=42&&ino<42+NI);return (int)(ino-42);}
 int efs_kv_key_reap_prefix(uint32_t sh,uint8_t *p,uint32_t *n) {(void)sh;memset(p,0,3);*n=3;return 0;}
 static int reap_scan_cb(void *u,const uint8_t *k,uint32_t n,const uint8_t *v,uint32_t z) {(void)u;(void)k;(void)n;(void)v;(void)z;return 0;}
-static int efs_kv_scan_from(struct efs_kv *kv,const uint8_t *p,uint32_t n,const uint8_t *start,uint32_t slen,int (*cb)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t),void *u) {
- (void)kv;(void)p;(void)n;(void)cb;(void)start;(void)slen;
+static int host_gc_scan_work(struct efs_raft_host *h,const uint8_t *p,uint32_t n,const uint8_t *start,uint32_t slen,
+ int (*cb)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t),void *u,uint8_t *last,uint32_t *last_len,uint32_t cap) {
+ (void)h;(void)p;(void)n;(void)cb;(void)start;(void)slen;(void)last;(void)cap;*last_len=0;
  struct reap_scan_ctx *c=u;c->n=NI;
  for(int i=0;i<NI;i++){c->ino[i]=42+i;c->gen[i]=7;c->lanes[i]=i==2?0:UINT64_MAX;memset(c->keys[i],i,REAP_KEY_LEN);}
  return 0;

@@ -69,11 +69,30 @@ static int host_gc_propose(struct efs_raft_host *h,uint8_t group,const uint8_t *
 }
 '''+ctx+'\n'+function('static int reap_scan_cb(')+r'''
 typedef int (*visit_fn)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t);
-int mock_scan_from(struct efs_kv *kv,const uint8_t *prefix,uint32_t pn,const uint8_t *start,uint32_t sn,visit_fn cb,void *user){
- (void)kv;assert(pn==3);if(scan_error)return scan_error;
- for(unsigned i=0;i<4;i++) {uint8_t key[11],value[16]={0};memcpy(key,prefix,3);wr64be(key+3,i+11);
-  if(dead[i]||(sn&&memcmp(key,start,sn)<0))continue;
-  int rc=cb(user,key,11,value,16);if(rc)return rc;
+/* Bounded work pages over tombstones (inodes 1..tombs) then the four
+ * markers (11..14; reaped ones are tombstones too). Like the real KV scan:
+ * the page bound is checked before the callback, a callback stop is not
+ * consumed, and a page stop returns its last consumed key. */
+static unsigned tombs,page=4096,pages,page_cost_us;
+static int host_gc_scan_work(struct efs_raft_host *h,const uint8_t *prefix,uint32_t pn,const uint8_t *start,uint32_t sn,
+                             visit_fn cb,void *user,uint8_t *last,uint32_t *last_len,uint32_t cap){
+ (void)h;assert(pn==3&&cap>=11);*last_len=0;if(scan_error)return scan_error;
+ pages++;clock_us+=page_cost_us;
+ unsigned consumed=0;
+ for(unsigned i=1;i<=14;i++) {
+  int tomb=i<=tombs?1:i>=11?(int)dead[i-11]:-1;
+  if(tomb<0)continue;
+  uint8_t key[11],value[16]={0};memcpy(key,prefix,3);wr64be(key+3,i);
+  if(sn&&memcmp(key,start,sn)<0)continue;
+  if(consumed==page){memcpy(last,key,11);return 1;}
+  if(!tomb){int rc=cb(user,key,11,value,16);if(rc)return rc;}
+  consumed++;
+  if(consumed==page){
+   /* The next merged key decides: none left ends the scan. */
+   unsigned j=i+1;int more=0;
+   for(;j<=14;j++){int t=j<=tombs?1:j>=11?(int)dead[j-11]:-1;if(t>=0){more=1;break;}}
+   if(more){memcpy(last,key,11);*last_len=11;return 1;}
+  }
  }
  return EFS_OK;
 }
@@ -82,6 +101,7 @@ static void reset(struct efs_raft_host *h,unsigned c){
  memset(handed,0,sizeof(handed));memset(reaped,0,sizeof(reaped));memset(dead,0,sizeof(dead));memset(rounds_of,0,sizeof(rounds_of));
  for(unsigned i=0;i<4;i++)chunks[i]=c;
  memset(h->reap_cursor_len,0,sizeof(h->reap_cursor_len));clock_us=0;scan_error=refuse=busy_lane=missing_node=0;node.used=100;
+ tombs=0;page=4096;pages=0;page_cost_us=0;
  h->wait_head=NULL;memset(h->waiters,0,sizeof(h->waiters));h->waiters[HOST_WAITERS-1].active=1;h->gc_running=h->running=1;h->s->quota=1000;}
 static unsigned total(unsigned *v){return v[0]+v[1]+v[2]+v[3];}
 int main(void){struct fake_server server={0};struct efs_raft_host h={.s=&server};pthread_mutex_init(&server.lock,NULL);pthread_mutex_init(&h.cv_mu,NULL);pthread_mutex_init(&h.wait_mu,NULL);
@@ -105,16 +125,29 @@ int main(void){struct fake_server server={0};struct efs_raft_host h={.s=&server}
   reset(&h,24);h.waiters[HOST_WAITERS-1].active=0;host_gc_reap_pass(&h,group,1,&times);assert(rounds_of[0]==3&&reaped[0]&&reaped[1]);
   reset(&h,24);node.used=950;host_gc_reap_pass(&h,group,1,&times);assert(rounds_of[0]==3&&reaped[0]); /* capacity pressure must reclaim */
   reset(&h,24);missing_node=1;host_gc_reap_pass(&h,group,1,&times);assert(rounds_of[0]==3&&reaped[0]); /* unknown usage is no proof of free space */
+  /* W124: tombstones before the markers are crossed in bounded pages within
+   * one pass (each page holds the KV lock for at most `page` merged keys). */
+  reset(&h,1);tombs=10;page=4;host_gc_reap_pass(&h,group,1,&times);
+  assert(pages==4&&reaped[0]&&reaped[1]&&!reaped[2]); /* each page re-consumes its inclusive cursor */
+  assert(h.reap_cursor_len[gi]==11&&rd64be(h.reap_cursor[gi]+3)==12);
+  /* Past the frag budget the pass stops at the page cursor; the next pass
+   * resumes there instead of rescanning the tombstones from the start. */
+  reset(&h,1);tombs=10;page=4;page_cost_us=150000;host_gc_reap_pass(&h,group,1,&times);
+  assert(pages==2&&!total(handed)&&h.reap_cursor_len[gi]==11&&rd64be(h.reap_cursor[gi]+3)==7);
+  assert(server.gc_reap_capped[gi]);
+  pages=0;host_gc_reap_pass(&h,group,1,&times);
+  assert(pages==2&&reaped[0]&&reaped[1]&&rd64be(h.reap_cursor[gi]+3)==12);
+  pages=0;host_gc_reap_pass(&h,group,1,&times);
+  assert(reaped[2]&&reaped[3]&&!h.reap_cursor_len[gi]);
   /* Shutdown and scan errors attempt nothing. */
   reset(&h,1);h.gc_running=0;host_gc_reap_pass(&h,group,1,&times);assert(!total(handed)&&!total(rounds_of)&&!h.reap_cursor_len[gi]);
   reset(&h,1);scan_error=EFS_ERR_IO;uint64_t before=server.gc_scan_errors;host_gc_reap_pass(&h,group,1,&times);
   assert(!total(rounds_of)&&!h.reap_cursor_len[gi]&&server.gc_scan_errors==before+1);
  }
  pthread_mutex_destroy(&h.cv_mu);pthread_mutex_destroy(&h.wait_mu);pthread_mutex_destroy(&server.lock);
- puts("actual batched REAP fairness: capped round-robin cursor, per-inode refusal/busy isolation, metadata budget between rounds, quota speed, shutdown and scan errors PASS");
+ puts("actual batched REAP fairness: capped round-robin cursor, per-inode refusal/busy isolation, metadata budget between rounds, quota speed, bounded tombstone pages with a resumable cursor, shutdown and scan errors PASS");
 }
 '''
-code=code.replace('efs_kv_scan_from','mock_scan_from')
 with tempfile.TemporaryDirectory(prefix='efs-reap-fairness-') as d:
     p=Path(d)/'test.c';p.write_text(code);exe=p.with_suffix('')
     subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-Wno-unused-function','-pthread','-I'+str(root/'include'),str(p),'-o',str(exe)],check=True)
