@@ -9585,9 +9585,13 @@ daemons that do not accept the declaration.
 **Modification.** Writes, appends and truncates of a packed file use the
 ordinary write path: a full rewrite releases the record; spans over a
 packed base are read together with it and re-index the file, which the
-packer then repacks; a truncate keeps a packed tail like a span chain (the
-size and epoch fence hide bytes past EOF). Hole punch is not supported for
-any file.
+packer then repacks; a write that takes the file past the packing
+threshold is never a span: the client folds chunk zero (packed base plus
+the new bytes) into an ordinary per-file base, whose publication releases
+the record, so no file above the threshold keeps a packed base under
+spans; a truncate keeps a packed tail like a span chain (the size and
+epoch fence hide bytes past EOF; extended by truncate, the file reads
+zeros past the record). Hole punch is not supported for any file.
 
 ### Stale-target fencing — targets are dumb, metadata decides
 
