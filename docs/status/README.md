@@ -430,6 +430,11 @@ W121 remains open with kernel remediation deferred.
 Experimental tiny-file packing and container-storage work was removed from
 devel on October 16 (D37); its code, tests and records are kept at tag
 `archive/packing-containers-20261016` (branch `packing-containers`).
+
+The linear directory-split migrator (not continued; the user wants
+directories always spread instead of migrated) is parked at tag
+`archive/split-migrator-linear-20261021`. Its readdir-during-split and
+stale-replay siblings are on devel (`f8b7a7818`, `9341e7209`).
 Packing is to return as an always-on background packer under
 [W125](../backlog/small-file-packing-default.md).
 
