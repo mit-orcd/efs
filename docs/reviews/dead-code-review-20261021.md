@@ -694,3 +694,106 @@ NOTRUN" verdict, not a silent pass.
 Each removal needs its own Linux build and `make test` on node9901.
 Removals in the apply path also need a fresh-cluster restart and replay
 check.
+
+## Independent review of `efca33a22` — October 21
+
+**Verdict: useful triage; corrections required before executing the cleanup.**
+Reviewed this report and targeted source paths at `efca33a22` (code baseline
+`0bdf55256`). This review did not rerun the author's Linux builds, linker scan,
+or runtime tests; their reported results remain attributed to that run.
+No code changed. The 44 rows are audit entries, not 44 demonstrated defects:
+D5 explicitly says keep, and several rows are owner decisions or test seams.
+
+### Confirmed priorities, with corrections
+
+1. **M1–M4 deserve priority over cosmetic deletion.** The apply dispatcher,
+   normalization list and DIR decoder support the reported failure mechanisms.
+   However, M3/M4's action “make PROTO fatal” is too broad. The comment above
+   `host_apply` explicitly uses PROTO for a SALT comparison rejection, and the
+   QUERY_POLICY branch consumes PROTO as a business verdict. Introduce a distinct
+   malformed/unsupported-encoding outcome, validate before mutation, and preserve
+   legitimate proposer refusals. On fatal decode, abort the KV scope, leave the
+   cursor unchanged and withdraw readiness; on IO/NOMEM, abort and retain the
+   existing retry behavior. Do not merely remove PROTO from one allow-list.
+   Validate every member of a batch before side effects. Tests must exercise
+   the real apply boundary, cursor and restart behavior, not only reproduce the
+   tag-list expression in `test_gc_verdict.py`. Inject a DIR storage failure on
+   one replica to demonstrate the M4 recovery path and eventual equal state.
+
+2. **P1 and P3 are confirmed, but declaration is not authentication.**
+   `handler.c` gates just three message types and accepts declared versions
+   greater than the minimum; NODE_LEFT directly changes the local membership
+   view with no declaration check. Deleting the unused NODE_LEFT handler is a
+   sensible narrow fix. Requiring an exact supported declaration is also right,
+   but “before any request” needs a connection-state/message matrix: declaration
+   messages must themselves be accepted, while client, peer and management
+   traffic have different valid operations. Cover TCP and RDMA, reconnects and
+   forwarding connections. A caller supplying the correct version is not thereby
+   authorized to issue peer or administrative mutations. Do not claim this gate
+   alone supplies authentication. Use synthetic unsupported declarations; no
+   old-client compatibility campaign is needed.
+
+3. **S1 is a live integration gap, not a safe standalone deletion.** The
+   missing-row success is explicit in `efs_session_accept_legacy`. Agree with
+   the report's sequencing: complete registration/establishment for all current
+   mutation paths and require it atomically with removing the bypass. Include
+   reconnect and delayed fenced-session requests. Fresh formatting removes the
+   need to support old records; it does not establish current clients' sessions.
+
+4. **T1's proposed prerequisite does not solve hidden test results.** A failing
+   prerequisite prevents the recipe from running too. Regenerating fixes this
+   specific revision, but independent docs/code test targets with an aggregate
+   nonzero result provide clearer evidence than moving the same fail-fast line.
+   Keep the stock FAIL and regenerated-copy PASS distinct. Neither is a full
+   mounted/RDMA qualification. The report's reproducible private-copy run is
+   useful, but does not establish the result of an unmodified later devel tip.
+
+5. **T5 needs a testing fix, not an incidental synchronization rewrite.**
+   The ring payload already uses atomic loads/stores; its release/acquire fences
+   are part of the documented sequence-lock ordering. “Use atomic loads and
+   stores instead” is therefore not a drop-in correction. Allowing the GCC TSan
+   warning can enable a diagnostic run, but does not make TSan understand those
+   fences or prove snapshot coherence. Retain the torn-record stress check and
+   negative control, record sanitizer limitations, and require a supported gate
+   environment to run successfully. A SKIP must remain NOTRUN in qualification;
+   changing the memory-ordering algorithm needs its own correctness review.
+
+### Limits on deletion and suggested disposition
+
+- **Linker evidence is configuration-scoped.** The supplied script builds one
+  Linux/default macro configuration. “Unreachable in the five audited links”
+  is supported; “unreachable in every production build” requires checking the
+  supported compile-time variants and indirect/external entry points. Test-only
+  APIs and public RPC handlers are not interchangeable with unused static helpers.
+  Static symbol reachability also does not establish that a wire handler can
+  never be invoked by a peer or tool.
+- **Fix the reproduction-script contract:** `reachability.sh` says it writes only
+  under OUT, but runs `make clean`, rebuilds objects, removes test binaries and
+  relinks inside TREE. Its clean archive requirement is essential. Document both
+  write locations and reject an unsuitable working tree before cleanup; never
+  run it against a deployed or shared development checkout.
+- **Do not call the entire step-4 list behavior-neutral.** P4 removes visible
+  management output; E2 removes accepted CLI forms; K3 changes format handling.
+  These removals fit the no-compatibility policy, but need current callers,
+  help/tests and fail-closed handling updated together. Keep unsupported tags
+  explicitly refused until a coordinated current-format change replaces them.
+- **W1/M7:** keep the staged stack parked or archive it as one coherent unit;
+  do not integrate it solely to improve a reachability count. If needed for a
+  named acceptance requirement, qualify that current production path explicitly.
+  M7 is still reachable over its server RPC even without an efs-fuse caller;
+  production-client reachability and server exposure are different claims.
+- **D3/R3:** prefer exporting useful packing error/backlog and RDMA diagnostics
+  over deleting counters merely because the getter is unused. Keep test seams
+  that support meaningful current-path tests. Requiring each seam to duplicate
+  production behavior exactly is unnecessary; the test must state its limits.
+- Wire/fix relevant tests **before** deleting the code they could protect.
+  Keep environment-specific suites explicit, with PASS/FAIL/NOTRUN reporting.
+  Batch mechanical removals by subsystem with focused checks and one Linux
+  build/test pass per coherent batch; no need to rebuild after each dead symbol.
+
+**Recommended order:** restore trustworthy test reporting and missing current-path
+coverage; fix apply error classification and the unsafe membership endpoint;
+complete declaration/session gates; then perform scoped cleanup and resolve the
+staged-feature decisions. This is a current-format plan, with no retained-data
+migration, mixed-version support or old-binary acceptance tests. The audit alone
+is not sufficient evidence to tag a beta or declare these findings resolved.

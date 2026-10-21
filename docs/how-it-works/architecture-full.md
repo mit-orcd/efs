@@ -1559,6 +1559,11 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[Dead-code audit and independent review](../reviews/dead-code-review-20261021.md):
+44 audit entries at `0bdf55256`; targeted review confirms fail-open apply and
+protocol paths, but corrects PROTO classification, gate ordering and deletion
+scope. No fixes implemented; Linux results are attributed to the original audit.
+
 [W66 acceptance checklist](../status/metadata-scaling.md#w66-acceptance-checklist-consolidated-oct-21)
 (distribution, fail-closed hardening, MKDIR/born-HASHED, conditional split
 rediscovery; all NOTRUN, directory-spread policy OPEN-DECISION; no backward
@@ -1587,6 +1592,17 @@ data files under `docs/` now live only at tag `archive/raw-evidence-20261021`
 (branch `raw-evidence`). Devel keeps the 302 summaries under `results/`; 523
 links in 96 pages now name the archived path. Read one with
 `git show archive/raw-evidence-20261021:<path>`.
+
+[orcd-mini profile under the 32M-file create run, `47ba6b590`](../status/orcd-mini-profile-47ba6b590-20261021.md):
+**profiling only; no PASS/FAIL gate.**
+- From ~1.0 to ~2.6 M files, creates fell from 2,564 to 1,130 files/s.
+- Leader LSM lock waits rose from 3.3% to 16–18% of its switches. They are
+  LOOKUP → GETATTR reduce-lane reads queued behind apply's
+  `lsm_batch_committed`.
+- The `.efs` catalog rebuild grew from 21 s to 58 s of each 60 s refresh.
+- Directory spreading started; the spread pass itself is cheap.
+- `h->mu` waits did not grow (8–13%).
+- Errors: only `report-split` `EFS_ERR_BUSY` apply-wait timeouts.
 
 [ORCD-test detached campaign](../status/orcd-test-detached-campaign-20261020.md):
 **FAIL / BLOCKED.** 8,437,752 successful-write counts of 40 M target;
