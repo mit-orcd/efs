@@ -1993,26 +1993,25 @@ static void test_stat_collect(void)
     CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK, "stat");
     CHECK(st.alloc == 2, "replay does not double count");
 
-    /* Committed, not yet materialized: a write that has returned to its
-     * caller. Ignoring it would report a size older than that write. */
+    /* Committed, not yet materialized: a transaction that has returned to
+     * its caller. Ignoring it would report times older than that change.
+     * D25: a reduction carries times only, never an EOF. */
     memset(&red, 0, sizeof(red));
-    red.max_end = 500;
     red.max_mtime = T0 + 9;
     red.max_ctime = T0 + 9;
     commit_reduce(kv, 1, ino, 1, 1, &red, 1);
     CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK, "stat");
-    CHECK(st.size == 500 && st.mtime == T0 + 9, "committed reduction counted");
+    CHECK(st.size == 200 && st.mtime == T0 + 9, "committed reduction counted");
     CHECK(st.alloc == 2, "a reduction carries no present count");
 
     /* Prepared but undecided: NOT part of the state yet, and its mere
      * presence must not make the collect retry — the vector is still
      * consistent, so attempts stays 1. */
     memset(&red, 0, sizeof(red));
-    red.max_end = 9000;
     red.max_mtime = T0 + 50;
     commit_reduce(kv, 2, ino, 1, 0, &red, 0);
     CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK, "stat");
-    CHECK(st.size == 500 && st.mtime == T0 + 9, "undecided excluded");
+    CHECK(st.size == 200 && st.mtime == T0 + 9, "undecided excluded");
     CHECK(st.attempts == 1, "undecided alone is not a retry");
 
     /* An unreachable authority is a resource failure. Answering "absent"
@@ -2034,7 +2033,7 @@ static void test_stat_collect(void)
                              EFS_TXN_COMMIT) == EFS_OK, "late decide");
     }
     CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK, "stat");
-    CHECK(st.size == 9000 && st.mtime == T0 + 50, "decision is the visibility");
+    CHECK(st.size == 200 && st.mtime == T0 + 50, "decision is the visibility");
 
     /* More undecided transactions than the collect can track. It cannot
      * prove its vector held, so it must not answer: a plausible-looking size
@@ -2046,7 +2045,7 @@ static void test_stat_collect(void)
             struct efs_txn_reduce r2;
 
             memset(&r2, 0, sizeof(r2));
-            r2.max_end = 1000000 + (uint64_t)i;
+            r2.max_mtime = T0 + 1000 + (uint64_t)i;
             commit_reduce(kv, (uint8_t)(20 + i), ino, 1, 0, &r2, 0);
         }
     }
@@ -3178,15 +3177,14 @@ static void test_append_reserve(void)
           "create r");
     pub(kv, ino, 0, 64, 0xC1, 0, T0 + 1, "lane for reduce");
     memset(&red, 0, sizeof(red));
-    red.max_end = 500;
     red.max_mtime = T0 + 9;
     red.max_ctime = T0 + 9;
     commit_reduce(kv, 3, ino, 1, 0, &red, 1);
     mkop(&op, 7, 5);
     CHECK(efs_meta_apply_append_reserve(kv, ino, 16, &op, coord_fn, &cc, &off) ==
                   EFS_OK &&
-              off == 500,
-          "pending reduction is eof");
+              off == 64,
+          "D25: a pending reduction never moves eof");
     {
         efs_ino_t zino = 0;
         struct efs_opid zop;
@@ -3214,14 +3212,14 @@ static void test_append_reserve(void)
               "overflowing reserve refused");
         CHECK(efs_meta_apply_append_state(kv, ino, &watermark, &frontier,
                                          &nopen) == EFS_OK &&
-                  watermark == 516 && nopen == 1,
+                  watermark == 80 && nopen == 1,
               "overflow refusal leaves reservation state intact");
         CHECK(efs_meta_apply_append_resolve(kv, ino, off,
                                            EFS_META_APPEND_COMPLETED) == EFS_OK,
               "prior reservation still resolves after overflow refusal");
         CHECK(efs_meta_apply_append_reserve(kv, ino, 16, &op,
                                            coord_fn, &cc, &off2) == EFS_OK &&
-                  off2 == 516,
+                  off2 == 80,
               "same identity may retry a refused reserve");
     }
     CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");

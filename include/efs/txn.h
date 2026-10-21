@@ -64,6 +64,10 @@ struct efs_txn_parts {
     uint32_t shard[EFS_TXN_MAX_PART];
 };
 
+/* A committed reduction carries times only (D25 §8.1): no reduction may move
+ * an EOF, so a lane's max_end changes only through the lane's own entries,
+ * which go through the epoch adoption rule. max_end is filled by the readers
+ * from the materialized lane value; a reduction with max_end != 0 is refused. */
 struct efs_txn_reduce {
     uint64_t max_end;
     uint64_t max_mtime;
@@ -95,7 +99,7 @@ struct efs_txn_ino_delta {
 };
 
 /* Wire payload sizes of the PREPARE kinds (after the key). */
-#define EFS_TXN_REDUCE_WIRE     32
+#define EFS_TXN_REDUCE_WIRE     24 /* max_mtime, max_ctime, mtime_gen (BE) */
 #define EFS_TXN_REDUCE_INO_WIRE 48
 #define EFS_TXN_REDUCE_ADD_WIRE 8
 #define EFS_TXN_REDUCE_OPID_WIRE 36 /* seq, rc, ino, extra, ack (BE) */

@@ -151,7 +151,7 @@ static void test_reduce_no_block(void)
     struct efs_txn_parts p = two(1, 2);
     uint8_t key[EFS_KV_KEY_MAX];
     uint32_t klen = 0;
-    struct efs_txn_reduce ra = { .max_end = 100 }, rb = { .max_end = 500 };
+    struct efs_txn_reduce ra = { .max_mtime = 100 }, rb = { .max_mtime = 500 };
     struct efs_txn_reduce got;
     uint32_t coord_a, coord_b;
 
@@ -161,6 +161,11 @@ static void test_reduce_no_block(void)
     ctx.fail = 0;
     CHECK(kv != NULL, "kv");
     CHECK(efs_kv_key_lane(1, 1, 1, 0, key, &klen) == EFS_OK, "lane");
+    {
+        struct efs_txn_reduce eof = { .max_end = 1 };
+        CHECK(efs_txn_prepare_reduce(kv, &a, &p, key, klen, &eof) == EFS_ERR_INVAL,
+              "D25: a reduction never carries an EOF");
+    }
     CHECK(efs_txn_prepare_reduce(kv, &a, &p, key, klen, &ra) == EFS_OK, "ra");
     CHECK(efs_txn_prepare_reduce(kv, &b, &p, key, klen, &rb) == EFS_OK,
           "rb no-block");
@@ -169,7 +174,7 @@ static void test_reduce_no_block(void)
     CHECK(efs_txn_decide(kv, coord_a, &a, EFS_TXN_COMMIT) == EFS_OK, "da");
     CHECK(efs_txn_decide(kv, coord_b, &b, EFS_TXN_COMMIT) == EFS_OK, "db");
     CHECK(efs_txn_reduce_read(kv, key, klen, coord_ok, &ctx, &got) == EFS_OK &&
-              got.max_end == 500,
+              got.max_mtime == 500 && got.max_end == 0,
           "MAX pending");
 
     /* A materialized lane record is longer than the reduce triple, because
@@ -180,14 +185,15 @@ static void test_reduce_no_block(void)
         uint8_t lv[64];
         memset(lv, 0, sizeof(lv));
         lv[7] = 200;                  /* max_end = 200, big-endian */
-        lv[15] = 7;                   /* max_mtime = 7 */
+        lv[15] = 7;                   /* max_mtime = 7, below the reduction */
         lv[23] = 9;                   /* max_ctime = 9 */
         lv[31] = 3;                   /* lane_seq = 3, past the triple */
         CHECK(efs_kv_put(kv, key, klen, lv, sizeof(lv)) == EFS_OK, "lane put");
         CHECK(efs_txn_reduce_read(kv, key, klen, coord_ok, &ctx, &got) == EFS_OK,
               "materialized lane readable");
-        CHECK(got.max_end == 500, "committed reduction still dominates");
-        CHECK(got.max_mtime == 7 && got.max_ctime == 9, "materialized times");
+        CHECK(got.max_mtime == 500, "committed reduction still dominates");
+        CHECK(got.max_end == 200 && got.max_ctime == 9,
+              "materialized EOF and times come from the lane value");
         uint8_t visible[64];
         uint32_t vn = sizeof(visible);
         int value_rc = EFS_ERR_IO;
@@ -195,7 +201,7 @@ static void test_reduce_no_block(void)
         CHECK(efs_txn_reduce_read_value_ex(kv, key, klen, coord_ok, &ctx,
                     &got, &pend, visible, &vn, &value_rc) == EFS_OK &&
                   value_rc == EFS_OK && vn == sizeof(lv) &&
-                  !memcmp(visible, lv, vn) && got.max_end == 500,
+                  !memcmp(visible, lv, vn) && got.max_mtime == 500,
               "reduction and exact visible lane returned together");
         vn = 24;
         CHECK(efs_txn_reduce_read_value_ex(kv, key, klen, coord_ok, &ctx,
@@ -205,7 +211,8 @@ static void test_reduce_no_block(void)
         vn = sizeof(visible);
         CHECK(efs_txn_reduce_read_value_ex(kv, key, klen, coord_ok, &ctx,
                     &got, &pend, visible, &vn, &value_rc) == EFS_OK &&
-                  value_rc == EFS_ERR_NOT_FOUND && vn == 0 && got.max_end == 500,
+                  value_rc == EFS_ERR_NOT_FOUND && vn == 0 && got.max_mtime == 500 &&
+                  got.max_end == 0,
               "absent lane still includes committed pending reductions");
         ctx.fail = 1;
         vn = sizeof(visible);
@@ -229,7 +236,7 @@ static void test_pending_recheck(void)
     struct efs_txn_parts p = two(1, 2);
     uint8_t key[EFS_KV_KEY_MAX];
     uint32_t klen = 0, coord;
-    struct efs_txn_reduce red = { .max_end = 700 }, got;
+    struct efs_txn_reduce red = { .max_mtime = 700 }, got;
     struct efs_txn_pending pend;
     int moved = 1;
 
@@ -243,7 +250,7 @@ static void test_pending_recheck(void)
     CHECK(efs_txn_reduce_read_ex(kv, key, klen, coord_ok, &ctx, &got, &pend) ==
               EFS_OK,
           "read");
-    CHECK(got.max_end == 0, "undecided contributes nothing");
+    CHECK(got.max_mtime == 0, "undecided contributes nothing");
     CHECK(pend.n == 1 && pend.overflow == 0, "recorded as undecided");
     CHECK(efs_txn_pending_recheck(&pend, coord_ok, &ctx, &moved) == EFS_OK &&
               moved == 0,
@@ -1088,7 +1095,7 @@ static void test_extended_guard_reduce_envelopes(void)
     struct efs_kv *kv = efs_kv_mem_create();
     struct efs_txn_parts p = {0};
     struct efs_txid guard, reduce;
-    struct efs_txn_reduce delta = {10, 20, 30, 40};
+    struct efs_txn_reduce delta = {0, 20, 30, 40};
     struct kvs ctx = {kv, 0};
     uint8_t key[EFS_KV_KEY_MAX], out[64];
     uint32_t kl = 0, n;
@@ -1109,7 +1116,7 @@ static void test_extended_guard_reduce_envelopes(void)
     {
         struct efs_txn_reduce observed = {0};
         CHECK(efs_txn_reduce_read(kv, key, kl, coord_ok, &ctx, &observed) == EFS_OK &&
-                  observed.max_end == 10 && observed.max_mtime == 20 &&
+                  observed.max_end == 0 && observed.max_mtime == 20 &&
                   observed.max_ctime == 30 && observed.mtime_gen == 40,
               "extended reduce visible before resolution");
     }
@@ -1117,7 +1124,7 @@ static void test_extended_guard_reduce_envelopes(void)
           "extended reduce resolves");
     n = sizeof(out);
     CHECK(efs_kv_get(kv, key, kl, out, &n) == EFS_OK && n >= 48 &&
-              out[7] == 10 && out[15] == 20 && out[23] == 30 && out[47] == 40,
+              out[7] == 0 && out[15] == 20 && out[23] == 30 && out[47] == 40,
           "extended reduce folds all stamp fields");
     efs_kv_mem_free(kv);
 }
