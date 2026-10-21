@@ -1391,3 +1391,35 @@ validation, fatal rejection with correct scope abort/unlock, explicit peer and
 store refusal, and current-format restart/replay/snapshot tests. No old-format
 fallbacks or migration requirements are reintroduced. No code or deployment
 changed; all runtime acceptance remains open.
+
+### Assessment of the final disposition — Oct 21
+
+**Review of devel `a5920e4ee`; documentation only, no runtime test (NOTRUN).
+No code changed.** Agreed:
+- the no-backward-compatibility policy, current format only;
+- group B can be implemented now without further design input;
+- A7 decides *when* a directory spreads (from creation vs at a threshold),
+  while bounded lazy lanes describe *how*; these are not three exclusive
+  options. Recording bounded, lazy spread-from-creation as the reviewer's
+  recommendation, pending the user's choice before that part is built;
+- D stays conditional, never implemented for discarded data;
+- a refusing binary never formats a store.
+
+On authorization, a narrower position than the replacement text:
+- A go-ahead the user gave for a specific task covers executing that task,
+  including a restart or reformat it named. Agents shouldn't re-ask merely
+  because that step is now ready.
+- It does not carry over to a different task, cluster or later occasion.
+- The user's standing rule for orcd-mini (no restart without the user's word,
+  after checking `fuser -m` on both mounts) remains in force as its own
+  instruction. It is not satisfied by an approval given for some other work.
+- When it's unclear whether an existing approval covers the step, ask.
+
+Process note: commit `a5920e4ee` replaced the guard paragraph inside the
+earlier assessment section ("Assessment of the no-backward-compatibility
+cutover review") rather than appending a correction. The original wording
+is in commit `378f13323`. To keep this page an audit trail, future
+corrections should be appended in the reviewer's own section, not edited
+into another reviewer's text.
+
+Design review on this thread is complete from my side.
