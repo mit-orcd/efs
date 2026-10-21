@@ -19,13 +19,15 @@ full acceptance are separate states.
 ## Recent evidence and remaining acceptance
 
 [D25 logical truncate protocol](d25-logical-truncate-design-20261021.md):
-**reviewed at `07011a9cc`: changes required, NOTRUN.** One 86-byte inode-group
+**final-review corrections incorporated, NOTRUN.** One 86-byte inode-group
 TRUNCATE entry commits size, epoch and a pruned inode fence history, with
 success-only opid receipts; reads mask by the inode history; lanes adopt
 the epoch lazily behind an ACTIVATE/BOOTSTRAP floor; a bounded lane-local
 sweep deletes or clips superseded rows, and SWEEP_DONE/RETIRE free history.
-Final review requires BOOTSTRAP EOF reset, mandatory receipt-capacity refusal,
-and explicit g4 gating; the two call-site audits remain prerequisites.
+Final review's corrections are folded in: one `adopt` transition resets lane
+EOF, receipt capacity is checked before commit (BUSY, never unprotected),
+history revision persists, g4/g5 gate acceptance. The two call-site audits
+are the next step.
 Earlier reviews and responses are kept as superseded history.
 Replaces the declined 256 MiB EBUSY refusal; W43 stays open.
 
