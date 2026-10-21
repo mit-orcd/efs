@@ -9,7 +9,7 @@ import sys
 import time
 import hashlib
 import statistics
-from query_timing import refresh_seconds, settle_seconds, wait_indexed
+from query_timing import refresh_seconds, settle_seconds, wait_indexed, wait_query_nodes_indexed
 from query_rpc import routed_query as query, request
 
 mount=Path(sys.argv[1])
@@ -25,6 +25,7 @@ settle=settle_seconds(refresh)
 # Warm it before testing concurrent reads: NODATA is not a successful read.
 warm=wait_indexed(peer/fixture, settle)
 print("warmed fixture "+json.dumps(dict(root=root_ino,fixture=fixture,snapshot=warm.get("snapshot")),sort_keys=True),flush=True)
+print("warmed query nodes "+json.dumps(wait_query_nodes_indexed(root_ino, settle),sort_keys=True),flush=True)
 end=time.monotonic()+max(14, 2*refresh+14)
 latencies=[[] for _ in range(8)]
 

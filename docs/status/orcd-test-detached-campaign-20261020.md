@@ -557,3 +557,25 @@ two seconds for 45 rounds. It does not accept NODATA as a passing gate.
 Run with deployed `tests/live` on PYTHONPATH and the campaign endpoint environment.
 Staged as `repair-20261020/query_snapshot_probe.py`, job recorded under
 `query-node-snapshots` in the deployment journal. No deployment or timeout change.
+
+### Confirmed catalog skew; warmup correction — 2026-10-21 06:57 UTC
+
+The per-node probe confirms the distributed precondition gap: helper warmup
+returned node2 boot 14658435758186835 / generation150, while node3 returned
+NODATA for seven probes before becoming queryable. Node2 had43 successes/2BUSY;
+node3 had37 successes/1BUSY/7NODATA. Nodes1/4 redirected. This proves one-node
+warmup does not establish visibility on all possible serving nodes; it supports
+the explanation for the earlier failure but does not retrospectively identify
+that failed request's node.
+
+`wait_query_nodes_indexed` now checks every configured endpoint in one bounded
+round, requires positive responses from every serving catalog and validates
+redirects to successful targets. Only the fresh-fixture precondition permits
+NODATA; concurrent reads still reject it. Permanent NODATA fails the existing
+settle deadline. `tests/test_query_node_warmup.py` verifies a second stale node
+is not hidden by a successful first node and a permanently stale node fails.
+The corrected gate runs under scale as `query-all-nodes-warmed` in the deployment
+journal, staged beneath `repair-20261020/query-warmup/`. Product binaries and
+refresh/error semantics are unchanged; the new gate result is pending.
+
+Scale at inspection: 4,384,800 new acknowledged files, zero writer errors.

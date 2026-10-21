@@ -40,7 +40,9 @@ passed 216/216 after readers finished; loaded timeout remains preserved.
 New 40 M-target workload running in a separate fixture (32 writers/host);
 new scale/restart gates remain open. At 2.24 M new writes (zero write errors),
 concurrent queries under scale fail NODATA after warmup. Diagnostic rerun passed
-without a fix; per-node snapshot visibility capture is running. Failure stays open.
+without a fix; per-node capture confirmed one catalog remained unindexed after
+another warmed. Corrected all-serving-node warmup gate is running; concurrent
+NODATA still fails. Original failure preserved.
 
 [W124 — fast delete](../backlog/fast-delete-reclaim.md): **parts 1–2
 implemented and deployed on orcd-mini (`de0c856b4`);**
