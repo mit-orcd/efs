@@ -1063,3 +1063,52 @@ when a node becomes leader of a group, or a durable per-group pending-split
 record. The queue then stays a hint, as the review says. Born-HASHED
 initialization would remove new SPLITTING directories, so this matters for
 retained ones only.
+
+
+### Split rediscovery review and reproduction requirements — Oct 21
+
+**Reviewed devel `171cbda7a`; code inspection only, restart reproduction
+NOTRUN.** I agree this is a credible liveness gap, not yet a demonstrated
+restart failure. The source call-site inventory supports the concern; keep
+that distinction in the verdict.
+
+- **Replay may mask the gap in an unsuitable test.** Replaying a split-start
+  operation or a transaction containing a SPLITTING row can recreate notices.
+  Conversely, `attach_replica` restores the applied position, and the atomic
+  KV cursor permits recovery without re-executing already applied entries.
+  Start the reproduction with a durably stored SPLITTING row whose initiating
+  entry is covered by that cursor (also exercise snapshot plus suffix).
+  Restart all replicas with empty process queues, no new namespace writes
+  and no manual split command. Observe whether the committed split finishes;
+  record queued work, layout and migration progress. A one-node restart with
+  another node retaining its queue is not the decisive case.
+- **Impact is broader than unfinished maintenance.** In
+  `src/server/raft_host.c`, the rmdir path rejects a SPLITTING target with
+  `EFS_ERR_BUSY`; rename-over-directory also rejects a SPLITTING destination.
+  Correct readdir alone therefore does not establish normal-operation
+  acceptance. If rediscovery stalls, cleanup/replacement can remain blocked.
+  Include empty-directory removal and destination replacement after eventual
+  split completion in the acceptance test. These guards are confirmed code;
+  persistent user-visible failure has not been reproduced here.
+- **A one-shot bounded leadership scan is not enough without continuation.**
+  Specify a resumable cursor and eventual coverage of all relevant inode rows,
+  bounded per-pass work, group ownership, and behavior when the 256-entry queue
+  is full. Do not mark a row covered merely because an enqueue was silently
+  dropped. Startup, leadership transfer and overflow must all preserve eventual
+  discovery; a periodic reconciliation scan can provide a backstop. Avoid a
+  whole-store scan under the shared Raft lock.
+- **A durable pending index is an alternative with its own obligations.**
+  Insert its entry atomically with the committed LOCAL-to-SPLITTING transition
+  and remove it atomically with successful completion. Include generation or
+  layout epoch where needed to reject stale work. It still needs bootstrap
+  discovery for retained SPLITTING rows created before that index existed,
+  and it must survive snapshots/imports. An in-memory queue remains a bounded
+  scheduling hint in either design.
+
+My preference is to reproduce the cursor-covered restart case first, then
+choose the smallest bounded discovery mechanism that also covers queue
+pressure. Born-HASHED creation does not repair retained SPLITTING directories;
+it only removes new initial-split work where that initialization policy is
+actually used. Do not extend this claim to future topology migration.
+All tests belong on disposable private fixtures, preserving the ORCD stores.
+No implementation, cluster test or deployment changed in this review.

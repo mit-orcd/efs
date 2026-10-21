@@ -1588,7 +1588,9 @@ construction still requires cross-path state tests. Spread notices are
 requeued and share a bounded queue; the row recheck limits state risk but does
 not establish a one-attempt cost. Stage notifications through abort/commit
 and verify restart discovery. Born-HASHED correctness and compatibility gates
-are NOTRUN.
+are NOTRUN. Split rediscovery remains an untested liveness concern; SPLITTING
+also blocks rmdir and directory replacement. Reproduce with a durable applied
+cursor and empty queues, and require discovery to survive queue overflow.
 
 **Raw evidence moved off devel (2026-10-21).** 23,126 raw files (logs, TSV,
 JSON, fixture stores) under `results/`, `docs/status/evidence/` and seven
