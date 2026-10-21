@@ -27,9 +27,10 @@ sweep deletes or clips superseded rows, and SWEEP_DONE/RETIRE free history.
 Final review's corrections are folded in: one `adopt` transition resets lane
 EOF, receipt capacity is checked before commit (BUSY, never unprotected),
 history revision persists, g4/g5 gate acceptance. Both call-site audits
-are done (§8): no lane reduction carries an EOF (drop `max_end` from it), and
-the kernel caches nothing; client caches need only the inode epoch/revision
-in the read view. Implementation (§7 step 2) is next.
+are done (§8). [Step 2](d25-step2-gates-20261021.md) (`3e133c257`): inode-authority
+views, lane adoption, BOOTSTRAP floor; g4/g5 step-2 form PASS on node9901, and a
+pre-existing peer read of truncated data (fails on 47ba6b590) is fixed. Step 3
+(lazy TRUNCATE) is next.
 Earlier reviews and responses are kept as superseded history.
 Replaces the declined 256 MiB EBUSY refusal; W43 stays open.
 

@@ -273,9 +273,12 @@ files, so the rule is entirely in the client: the decoded-chunk cache key
 already includes the view's epoch, revision and masks, so it needs only the
 §3.2 change to carry `E` and `revision`. The existing promise is kept
 unchanged: a mount that opens the file after the truncate returns sees the
-new size and data; an already-open descriptor sees them within
-`EFS_READ_MAP_TTL_MS` (default 200 ms), the same bound as for any peer
-write today.
+new size and data. An already-open descriptor keeps the size this mount
+last had (`efs_fuse_getattr_ino`: "Open-fd size stays local", deliberate,
+for unflushed writes and unlinked-open files) while a path stat shows the
+new size; within `EFS_READ_MAP_TTL_MS` (default 200 ms) its reads show the
+new data and zeros past the new EOF, never discarded bytes. That last part
+needs the absent-entry fix recorded in §8.2.
 
 ## 4. Sweep, reclaim and retirement
 
@@ -465,7 +468,9 @@ and a same-format orderly restart.
 1. ~~The two audits~~ — **done, §8.** Their code consequences join step 2:
    remove `max_end` from the lane reduction (audit 1), and carry `E` and
    `revision` in the read view that keys the client caches (audit 2).
-2. One gated change: inode-authority read views (§3.2), the writer epoch
+2. **Done — [step-2 evidence](d25-step2-gates-20261021.md), `3e133c257`;
+   g4/g5 step-2 form PASS, full g4 waits for step 3.** One gated change:
+   inode-authority read views (§3.2), the writer epoch
    source and `adopt` (§3.3), `ACTIVATE` / `BOOTSTRAP` and the floor
    (§3.4), and inode-keyed caches (§3.5). The client stamp is never switched
    without the matching server lane rules. Accepted on **g4**, and on
@@ -520,14 +525,25 @@ is needed on reductions.
 | kernel attributes and entries | `fill_entry`, `fuse_reply_attr(..., 0.0)` | `attr_timeout = entry_timeout = 0` | every stat reaches the daemon |
 | daemon lookup memo | `LOOKUP_MEMO_*` (`efs_fuse.c`) | one-shot, 50 ms, invalidated by local mutations | at most 50 ms stale for a peer's change, as today |
 | local truncate | `ll_setattr` → `ll_inval_inode` | drops pages at and past the new EOF on the truncating mount | unchanged |
-| local inode row (size used by reads) | `efs_client_read` reads `efs_export_get_inode` | refreshed by open (`efs_client_stat_ino`), getattr and lookup | a read without stat uses the last fetched size, as today |
+| local inode row (size used by reads) | `efs_client_read` reads `efs_export_get_inode` | refreshed by open (`efs_client_stat_ino`), getattr and lookup — **except** a getattr on an inode open on this mount, which answers from the local row (`efs_client_stat_open`, only `nlink` refreshed) | a held descriptor keeps its size; a read without stat uses the last fetched size, as today |
 | chunk maps | `efs_client_map_fresh` (`src/client/ops.c`) | a map is reused without GETCHUNKS only if pulled **after the last open** of that inode on this mount and within `EFS_READ_MAP_TTL_MS` (default 200 ms, capped at 10 s) | an open after the truncate always re-pulls |
 | decoded chunks | `rdcache` (`src/client/read.c`), key `efs_chunk_read_key` (`include/efs/metadata.h`) | key covers base and span identities, packed reference, and `read_view.fence_epoch`, `revision` and every part's mask | a refreshed view with new masks never hits old bytes |
 
 **Rule:** the kernel holds no state to invalidate. The protocol keeps
 today's promise unchanged: open after the truncate returns → new size and
-data; an already-open descriptor → new data within the map TTL, and new
-size at its next stat. The one required change is §3.2: the read view's
+data; an already-open descriptor → its size stays local, and its reads
+show new data (zeros past the new EOF) within the map TTL.
+
+**Correction (measured on node9901, October 21):** this table first said
+an open descriptor sees the new size at its next stat; the code and the
+step-2 gate g5.1 show it does not (see the row above). The gate also found
+a pre-existing client bug, present on the unchanged release `47ba6b590`:
+`pull_chunks_range` (`src/client/ops.c`) never removed local entries for
+chunks that a successful GETCHUNKS reported absent, yet marked the range
+fresh, so a peer kept serving a truncated chunk's old objects until GC
+deleted them (shrink, then extend: old bytes back from 1 MiB on mount B).
+Logical truncate would hit the same path once the sweep deletes rows. The
+fix drops such an entry if it is unchanged since before the RPC (step 2). The one required change is §3.2: the read view's
 `fence_epoch` and `revision` must be the inode's `E` and history revision.
 Today they come from the lane stamp, which lazy adoption no longer moves,
 so without the change a cached map could stay keyed as current. g5 checks
