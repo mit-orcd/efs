@@ -655,3 +655,31 @@ lost15 chunks, and005/006 analysis emitted addr2line warnings: preserve these
 limitations, avoid relying on suspect individual symbol attribution.
 No failure retry, timeout relaxation or deployment change; subsequent diagnosis
 needs pump/apply/durability timing and election reasons, not just wait counts.
+
+### Publication stall diagnosis — 2026-10-21 08:57 UTC
+
+Scale reached8,796,209 acknowledged new files (2,176,550 / 2,201,418 /
+2,210,853 / 2,207,388). A tenth failed close occurred on005 worker13 index68027
+at08:51:28.792 UTC: inode32919664, one REPORT round,8000 ms, BUSY.
+Journal test `scale-uncertain10` verifies the entire256-byte uncertain payload
+against its deterministic expected bytes, exit0. All ten uncertain writes match;
+none becomes a passing close.118 workers remain, all four daemons remain alive.
+
+Code review on unchanged deployed source identifies a remaining blocking path:
+`kv_maybe_flush_locked` invokes `kv_flush_locked` synchronously; the latter
+writes/finishes L0 segments while owning the KV writer lock. Raft apply may
+reach this while holding the host lock. Background compaction normally drops
+the KV lock for its merge, so do not conflate compaction and memtable flush.
+This is a hypothesis to measure, not a demonstrated cause or an implemented fix.
+The five-second KV observations around08:29 show changing memtables/L0, but
+cannot establish individual flush duration or lock ownership at failure.
+
+At the next orderly restart, after preserving/checking the scale fixture, enable
+existing `EFS_RAFT_OBS=1` diagnostics on all four daemons. This enables term/role
+changes, pump phase maxima and `kv-flush-prof` timing for slow apply-triggered
+flushes without relaxing deadlines or durability. Keep the RDMA/direct-I/O and
+feature profile unchanged, and record the diagnostic environment explicitly.
+Do not claim snapshot-triggered flush coverage from kv-flush-prof alone.
+No new product commits were available at this inspection; no speculative code
+change or mid-run restart was made. Scale ends approximately10:44 UTC, daemon
+limits approximately16:13 UTC; preserve checkpoints before any required restart.

@@ -50,7 +50,10 @@ a new close EIO on643f6104f exhausted the8 s REPORT budget. Its uncertain
 group2 term5533→5536 in25 s; election-stall root cause remains under investigation.
 At8.28 M new files nine closes have failed; eight share the same32 ms window.
 All nine uncertain payloads match. Contention captures retained with lost-sample
-and symbolization limitations;119 writers continue.
+and symbolization limitations. At8.80 M new files, ten closes have failed;
+all ten uncertain payloads match,118 writers continue. Synchronous memtable
+flushes remain a candidate stall source; next orderly restart will enable
+existing Raft/flush timing diagnostics.
 
 [W124 — fast delete](../backlog/fast-delete-reclaim.md): **parts 1–2
 implemented and deployed on orcd-mini (`de0c856b4`);**
