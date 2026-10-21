@@ -1965,6 +1965,7 @@ spike of 24–27 ms, which is not explained.
 [W123 — automatic crash recovery](../backlog/crash-safe-durable-versions.md): **proposed new feature; source review only.** Reuse root barrier watermarks if epoch history, exact write tags and retained file versions prove recovery. No extra fsync-time metadata commit remains a hypothesis; eight-byte/zero-I/O cost claims are unproven. Implementation and acceptance NOTRUN; W71 remains open.
 
 [orcd-mini deployment of `09f8af09c`](../status/orcd-mini-deploy-09f8af09c-20261016.md)
+(now running `47ba6b590`: W123-branch reclaim-retirement and fragment-attempt fixes ported; oversized-truncate refusal not merged, D25 logical truncate proposed instead; make test and smoke 216/216 PASS)
 (daemons `4aff22c62`, clients `155695ccd`; smoke POSIX 216/216 PASS):
 **deployed; live POSIX 216/216, two-client 67/67, durability 27/27 PASS.**
 `make test` has 4 environmental failures. GC crash-restart and fault-suite

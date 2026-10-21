@@ -130,3 +130,51 @@ per-thread KV read-buffer leak fix (`49167f2cf`); the other commits since
   - A 200-file probe on the idle node9900 mount: create / stat / open /
     unlink p50 0.83 / 0.35 / 0.49 / 0.48 ms.
   - The idle probe is not comparable with the loaded probes above.
+
+## Redeploy of devel `47ba6b590` with W123-branch fixes — 2026-10-21 21:27Z
+
+**Deployed; `make test` and smoke PASS (environmental failures only).**
+User request: review, merge and deploy four commits from
+`devel-w123-recovery`. No backward compatibility (AGENTS.md).
+
+| Commit (W123 branch) | Disposition |
+| --- | --- |
+| `c9f366617` reclaim retirement boundary | Ported to devel as `ca3cd94bf`, with its unit test. Freezes the completed prefix before the root sync, so a segment retires only on a barrier that covered its deletions. |
+| `7525aa332` bound fragment read attempts | Ported as `5fc7e8b79`, with only the prerequisite `read_frag_timeout_ms` setting (default 2 s, `EFS_READ_FRAG_TIMEOUT_MS`) from WIP `1730307a0`. The WIP's read hedging is not included. |
+| `786653683` reprobe a cooled-down node before COMMIT | Already on devel as `e6771854e` (identical patch), deployed since 2026-10-19. |
+| `fe2e13624` refuse oversized truncate | **Not merged (user decision).** It makes shrinking truncate/`O_TRUNC` of files over 256 MiB return EBUSY, giving up the large-truncate capability from `4d6530dd8`. The hole it closes stays open: a large truncate refused mid-way can lose contents that `host_truncate` already fenced. The user proposed instead treating truncate like a delete: one atomic entry that sets size and bumps `content_epoch`, with old fragments reclaimed by GC. That is the accepted D25 logical-truncate design, not yet implemented. |
+
+`47ba6b590` also fixes two test harnesses on devel. `test_report_activation`
+had failed to build since `9341e7209` (0a), which went to devel without a
+`make test` run. `test_read_verify` needed the new timeout declaration.
+The deploy also carries the previously undeployed `9341e7209` (0a
+cross-group lane epoch) and `f8b7a7818` (readdir during a split).
+
+- **Tests, node9901:** `make test` on `47ba6b590a46`: 813 commands, 5
+  failures, all environmental:
+  - `test_readindex_pair`, `test_raft_ack_window`, `test_host_outbox` and
+    `test_stage_evict_lru` fail only because LeakSanitizer is broken on the
+    host; all four pass with `ASAN_OPTIONS=detect_leaks=0`.
+  - `check-architecture` needs `results/`, which the upload excludes; it
+    passes 5/5 on the checkout.
+  The earlier run on `5fc7e8b79198` found the two broken harnesses.
+- **Builds** (clean `git archive`, shared build ID `47ba6b590a46`):
+  - node9901 `/data1/efs/releases/47ba6b590a46`: efsd
+    `14bc717fca7dcf17a3accc21ae7135720660ca006a9a739a63401061379efb74`,
+    efs-fuse `386fef2e151b684c2f8cfa0937efa1989c12845637382b3595c76401073a036a`.
+  - node9900 `/data1/efs/orcd-mini-client/releases/47ba6b590a46`: efs-fuse
+    `ce7f2e8ce7f0314a903d968d5652aad49b1f2b94c60520807e59f153e3db9598`.
+- **Procedure** (from `4058d81416a0`):
+  1. `fuser -m` empty on both mounts.
+  2. devops copy rsynced.
+  3. Both clients stopped with plain `client.sh stop`, then `stop.sh`; all
+     three roots logged `stopped clean`.
+  4. Switch both `src` symlinks; `start.sh` with `EFS_START_TIMEOUT=900`
+     (storage preserved, 2.45 GiB per node); node9900 `client.sh start`.
+- **Checks:**
+  - No `recovery uncertain` or refusal lines.
+  - RDMA up on all daemons and the node9900 client.
+  - `smoke.sh` POSIX **216/216 PASS** (13.1 s).
+  - An 8 MiB write, fsync and read-back hash match on node9900.
+- **Not run:** two-client, persistence, GC and fault gates. The truncate
+  hole remains open (above).
