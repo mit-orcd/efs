@@ -81,7 +81,7 @@ implemented and deployed on orcd-mini (`de0c856b4`);**
 - Slot reuse and subtree delete stay deferred.
 
 [Readdir misses names at the directory-split frontier](readdir-split-frontier-20261021.md):
-**PASS on a private cluster; C7 rerun on orcd-mini open.** A listing of a
+**PASS on a private cluster; C7 rerun on orcd-mini NOTRUN (stopped at the user's request; design roadblock: directories must always be spread, not co-located then migrated).** A listing of a
 directory being split (>65,536 entries) scanned hashed lanes before the
 local range, so names the migrator moved between pages were lost. The local
 range is now listed first. 500 k-file reproducer: 0 missing in 12 of 12

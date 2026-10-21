@@ -1,6 +1,6 @@
 # Readdir misses names at the directory-split frontier (2026-10-21)
 
-**Verdict: PASS (fix verified on a private node9901 cluster; W125 C7 rerun on orcd-mini still open).** Found while running W125 closure test C7
+**Verdict: PASS on a private node9901 cluster. The W125 C7 rerun on orcd-mini is NOTRUN.** Found while running W125 closure test C7
 ([W125 closure](w125-closure-20261021.md)). This is a namespace defect, not a
 packing one.
 
@@ -131,6 +131,12 @@ both runs.
   lane-0 names each time, which is why a split runs at ~530 names/min and
   lasts hours. That is a separate performance item; this fix does not
   depend on it.
-- W125 C7 on orcd-mini needs a rerun with this fix deployed. orcd-mini was
-  not restarted for this work because packing closure tests are running
-  there.
+- **NOTRUN: W125 C7 rerun on orcd-mini with this fix.** Stopped at the
+  user's request (2026-10-21). orcd-mini stays on `4058d81416a0`, which
+  predates this fix (`f8b7a7818`), so this fix is not deployed there.
+- **Design roadblock:** directories must always be spread, not co-located
+  and then migrated. This fix closes the listing gap of the current
+  LOCAL -> SPLITTING -> HASHED design but does not remove the migration
+  window itself.
+- Cleanup: the node9901 build trees are deleted. The small result files and
+  patches stay in `/data1/efs/prof/bdfix`.
