@@ -553,3 +553,71 @@ Opinions beyond W66:
    (born-HASHED init, named migration, regrouping) depends on them. Then
    validate born-HASHED initialization and first-touch costs, then routing
    epochs and more groups.
+
+
+### Implementation review of the fail-open proposal — Oct 21
+
+**Reviewed devel `f52e1dedc`; source inspection only, runtime gates NOTRUN.**
+The direction is right: address compatibility before introducing new retained
+encodings. The three safeguards are complementary, but calling them cheap
+or treating decoder return codes as sufficient understates their scope.
+
+- **Fatal decoding must survive the apply wrapper.** `src/raft/raft.c`
+  stops `apply_committed` before advancing `last_applied` when its callback
+  returns an error. However, `src/server/raft_host.c:host_apply` converts
+  decoder results for several command families (including LOCK) to
+  `EFS_OK`, recording the original result only as a proposer verdict.
+  It then passes the persisted group cursor to `efs_kv_lsm_apply_end`.
+  Thus changing every unknown sub-tag to `EFS_ERR_PROTO` alone does not
+  guarantee fail-closed apply. Validate the encoding before mutation and
+  before business-verdict normalization, or carry a distinct fatal decode
+  classification through that wrapper. Preserve legitimate CAS/conflict
+  rejections as consumed commands; making all PROTO results fatal would
+  also change existing policy/SALT semantics. Tests must inspect both the
+  persisted KV cursor and Raft applied index, not merely the decoder result.
+- **Stopping apply is not necessarily stopping service.** A callback error
+  proves the current apply loop stops; it does not by itself prove that the
+  daemon exits, withdraws readiness, stops serving reads, or avoids retrying
+  the same incompatible entry indefinitely. Specify an observable incompatible
+  state, refuse readiness and affected service, and retain the offending
+  group/index/term/tag diagnostic. Do not skip or truncate the entry to regain
+  availability. Distinguish this permanent incompatibility from transient
+  storage errors that can legitimately retry.
+- **A newly added store marker cannot make an old binary check it.** The
+  previous assessment's startup-marker sentence contradicts its subsequent
+  caveat. Only readers implementing that fence can reject unsupported versions.
+  Define missing-marker behavior, supported legacy-store handling, and durable
+  marker creation/update ordering before new-format writes. Cover snapshots,
+  restore/import and WAL replay, not just the normal startup path. Existing
+  pre-fence binaries remain unsupported for downgrade unless an independently
+  verified old-reader refusal mechanism exists.
+- **Peer fencing needs an explicit contract.** An exact build-ID requirement
+  is a reasonable conservative policy under coordinated upgrades; a protocol
+  or format capability version is a different, broader compatibility policy.
+  Pick one deliberately. Check both directions on every new/reconnected Raft
+  connection and every supported transport, before handing frames to Raft.
+  Bind the declaration to the expected peer identity; declaring a build is
+  compatibility checking, not authentication. Keep join, peer transport and
+  offline store compatibility as separate gates.
+- **Report the defect without inventing an incident.** The inspected unknown
+  command paths can cause divergence when replicas interpret an entry
+  differently; this review has not reproduced such divergence in a running
+  homogeneous cluster. It also does not establish that every decoder or
+  every unknown sub-tag behaves alike. Preserve the specific confirmed paths
+  and add an inventory of command families and malformed-length handling.
+
+Acceptance should include: unknown top-level and directory/LOCK sub-tags
+through the full apply wrapper; truncated encodings with no partial effects;
+unchanged cursors after rejection and restart; valid business rejections that
+still advance; incompatible startup/snapshot restore; and mixed-build peer
+reconnect over TCP and RDMA. Run both compatibility directions. An actual
+pre-fence binary against a new store/log is a characterization test: it may
+reproduce unsafe acceptance, and must not be reported as a refusal gate PASS.
+Use disposable private fixtures for these tests, never retained ORCD stores.
+
+My recommendation is a focused compatibility-hardening change before new
+wire/on-disk encodings, with the fatal-decode path and its full-wrapper tests
+first. Born-HASHED design and read-only analysis can proceed independently;
+not every initialization change inherently changes an encoding. Keep the
+new format and transport gates blocking any change that actually requires
+them. No implementation or runtime fix is claimed by this documentation commit.

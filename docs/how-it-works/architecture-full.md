@@ -1572,7 +1572,11 @@ with bounded fan-out and D36 protection. The follow-up review corrects
 HASHED CREATE costs and warns that unknown command codes currently return
 success rather than enforcing downgrade refusal. Explicitly authorized fresh
 formats can avoid legacy conversion; retained-data routing changes need a
-safe transition. Born-HASHED correctness and compatibility gates are NOTRUN.
+safe transition. The implementation review additionally finds that apply
+wrappers can consume decoder errors as business verdicts: fatal encoding
+rejection must preserve both KV and Raft cursors and withdraw readiness.
+New markers cannot retroactively fence old readers. Born-HASHED correctness
+and compatibility gates are NOTRUN.
 
 **Raw evidence moved off devel (2026-10-21).** 23,126 raw files (logs, TSV,
 JSON, fixture stores) under `results/`, `docs/status/evidence/` and seven
