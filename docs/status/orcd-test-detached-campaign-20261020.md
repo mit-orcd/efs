@@ -727,3 +727,13 @@ errors. This does not qualify the acknowledged new files; full verification
 remains queued until all writers complete. All daemons and waiting verification
 jobs remain live, with unchanged deadlines. No new product commits, deployment
 changes, retries or timeout relaxations. Scale qualification remains FAIL.
+
+### Scale audit — 2026-10-21 10:12 UTC
+
+10,995,511 acknowledged new files;25 failed workers,103 continuing. Seven
+additional REPORT timeouts occurred at10:04:29–58, taking8002–8017 ms. All25
+uncertain payloads match exactly (journal `HOST-uncertain25`, all four exit0);
+client logs preserved as `qualification-643f6104f/HOST-client-1012.log`.
+Same unresolved failure mechanism; no new product commits or deployment changes.
+Writers and queued full-verification jobs remain active with unchanged bounds.
+Full acknowledged-payload verification and cold-restart gates remain pending.

@@ -58,7 +58,9 @@ existing Raft/flush timing diagnostics. At9.28 M new files,12 failed closes
 all writer completions; final manifests/errors are preserved. Verification jobs
 expire15:14 UTC, before daemons16:13 UTC; monitor/resume checkpoints as needed.
 At10.58 M new files,18 closes failed with the same REPORT deadline; all18
-uncertain payloads match,110 writers continue. Qualification remains FAIL.
+uncertain payloads match,110 writers continue. At11.00 M new files,25 closes
+have failed; all25 uncertain payloads match and103 writers continue.
+Qualification remains FAIL; full verification is still queued.
 
 [W124 — fast delete](../backlog/fast-delete-reclaim.md): **parts 1–2
 implemented and deployed on orcd-mini (`de0c856b4`);**
