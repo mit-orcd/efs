@@ -435,9 +435,75 @@ Where this assessment differs or adds:
    that replays a retained log, where an old decoder would move a different
    name. The fix consistent with the project's fail-closed practice is a new
    command or sub-tag that old decoders refuse, not an optional trailing
-   field.
+   field. **Correction from the follow-up review below:** current unknown-code
+   handling does not provide that refusal, and HELLO is not a universal
+   replay or per-connection Raft version fence.
 4. **Measurement plan: agreed.** Add per-lane occupancy and lane-to-group
    mapping to the per-group metrics. With two groups, "64 lanes" is at most
    2-way at the consensus level, so lane counts alone overstate spread.
 5. **D36: agreed.** The voter count per group follows from the D36 recovery
    proof, not from throughput arguments.
+
+
+### Follow-up review: placement cost and replay fences — Oct 21
+
+**Review of devel `9ed70419f`; code/document inspection only. Runtime and
+compatibility gates NOTRUN.** No deployment or stored data changed.
+
+The corrected migration measurements stand. I support bounded, lazy,
+born-HASHED placement as the next design increment, with these corrections to
+the assessment above:
+
+1. **New opcodes do not currently fail closed.** In
+   `src/server/raft_host.c`, `apply_dir_cmd` returns `EFS_OK` for unknown
+   directory sub-tags; the outer metadata apply dispatcher also falls through
+   to `EFS_OK` for an unknown top-level command. Merely assigning a new code
+   can therefore silently omit an effect on replay instead of rejecting it.
+   Explicit rejection of some retired commands does not establish rejection
+   of all unknown commands. A named-migration format needs a store/log version
+   fence enforced before replay by every supported reader, or an explicitly
+   unsupported downgrade with a fresh-format cutover. Adding rejection to a
+   new binary cannot repair an already released old decoder. Test the actual
+   old binary against the new retained log/store, and verify refusal before
+   any apply progress; do not substitute a same-build unit test.
+2. **HELLO is a join check, not sufficient proof of universal isolation.**
+   `src/server/cluster.c` and the HELLO handler reject mismatched joining
+   builds. However, `src/server/handler.c` dispatches `EFS_MSG_RAFT` directly
+   to the Raft inbox without a preceding daemon-build declaration requirement
+   in that handler. The protocol declaration guard applies to selected data
+   messages. Thus the claim that mixed-version voters *cannot* apply together
+   is stronger than the checked mechanism establishes. Retained-store restart
+   and peer reconnect require explicit compatibility tests as well as join
+   rejection; a network gate cannot protect offline replay.
+3. **HASHED does not inherently lose dentry/inode co-location on every
+   CREATE.** `host_create` allocates the child on `dsh`. With expiry disabled,
+   its HASHED/SPLITTING transaction branch is taken for first use of a lane
+   whose group differs from the parent's group. Established lanes, and
+   same-group first use, use the ordinary proposal path. Other admission and
+   read barriers still cost work. Measure cold first-touch versus established
+   lanes separately, including consensus participants, RPCs and latency.
+   Describing all small-directory CREATEs as losing a single-entry commit
+   overstates the current implementation's cost.
+4. **Removing the split transition removes that failure mechanism, not a
+   proof obligation.** Before landing born-HASHED initialization, test empty
+   root/mkdir, concurrent first lane registration, complete readdir/cookies,
+   timestamps and counts, rename/link/unlink, retry deduplication and restart.
+   Preserve the existing listing fix for retained SPLITTING directories.
+   Existing lazy-lane machinery is useful evidence of feasibility, not a
+   passing result for the new initialization path.
+5. **Fresh format is a valid alternative to legacy conversion.** My earlier
+   blanket requirement to migrate existing LOCAL directories was too strong.
+   A specifically authorized fresh-format deployment can avoid that work.
+   If existing data must survive a changed lane-to-group mapping, a versioned,
+   restartable transition remains necessary. Neither a no-backward-compatibility
+   policy nor a previous reformat authorizes deleting the current ORCD
+   campaign's retained stores and evidence.
+
+Recommended order: validate born-HASHED initialization and first-touch costs
+on a private cluster, then design retained-data routing epochs and additional
+groups. Two groups can already distribute leadership across two nodes; more
+than two leaders requires more groups. Neither 64 lanes nor adding groups
+alone guarantees balanced execution. Record lane-to-group mapping, actual
+traffic and leader placement, including shared WAL/KV bottlenecks. Keep D36's
+replica requirement independent of these throughput choices. No speedup or
+correctness acceptance is claimed by this review.

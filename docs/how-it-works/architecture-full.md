@@ -1568,7 +1568,11 @@ read-routing and execution placement; measure per-group traffic and blocked
 time first; transaction locality and D36's replica count gate more groups.
 Independent review corrects migration timing/counts and separates pacing,
 listing correctness and metadata distribution. Honor reasonably spread metadata
-with bounded fan-out; legacy migration and D36 protection remain required.
+with bounded fan-out and D36 protection. The follow-up review corrects
+HASHED CREATE costs and warns that unknown command codes currently return
+success rather than enforcing downgrade refusal. Explicitly authorized fresh
+formats can avoid legacy conversion; retained-data routing changes need a
+safe transition. Born-HASHED correctness and compatibility gates are NOTRUN.
 
 **Raw evidence moved off devel (2026-10-21).** 23,126 raw files (logs, TSV,
 JSON, fixture stores) under `results/`, `docs/status/evidence/` and seven
