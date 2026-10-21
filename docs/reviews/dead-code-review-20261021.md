@@ -931,3 +931,59 @@ compilers, and peers or tools that can send a handled message are outside
 what a linker scan can show. Raw variant outputs:
 `/data1/efs/testsuite/deadcode-out/reach-EFS_FAULTS=1/` and
 `reach-EFS_MEMCHECK=1/` on node9901.
+
+## Follow-up review of `36d612b4d` — October 21
+
+**Disposition: accept the substantive response; narrow tooling/evidence fixes
+remain.** Checked the commit diff, current Makefile, reachability script and
+`rdma_memcheck.h`. No Linux rescan, cluster operation or product-code change was
+performed for this review. The original correctness findings remain open;
+accepting their revised descriptions does not resolve them.
+
+The revised error classification, declaration-state matrix, session sequencing,
+test-first order and synchronization cautions address the previous review.
+The reported EFS_FAULTS scan adds useful coverage. The Memcheck row correctly
+says NOTRUN; the Method paragraph should list only default and EFS_FAULTS as
+completed configurations, and Memcheck separately as attempted but unavailable.
+Inspection confirms EFS_MEMCHECK is used in the RDMA annotation header, but that
+is an expectation about reachability, not a successful build/link measurement.
+Do not promote it to measured coverage or block unrelated default-build cleanup
+on this unavailable diagnostic variant.
+
+### Remaining script issues
+
+1. **Relative OUT fails after cleanup (reproduced).** The script creates OUT
+   before changing to TREE, but opens `OUT/build.log` after changing directory.
+   A relative OUT therefore resolves to a different location. In a temporary
+   marked fixture with a stub `make` that only recorded arguments, invoking
+   `bash reachability.sh ABSOLUTE_TREE relative-out` exited 1 with
+   `relative-out/build.log: No such file or directory`; the recorded invocation
+   was already `make clean`. Canonicalize both paths before any cleanup, verify
+   the output location, and either support relative arguments or refuse them
+   before modifying TREE. No actual build files were removed by this probe.
+2. **Guard claims are stronger than the checks.** The marker is a useful explicit
+   opt-in, but the deployment deny-list covers two particular paths, not every
+   deployment. `cd ... && pwd` is logical path resolution and `.git` is checked
+   only directly inside TREE. Use physical path resolution, reject a tree inside
+   a Git working tree, and describe the marker as the caller's assertion that
+   this is a disposable archive. Do not describe these checks as universal
+   deployment detection. This is accident prevention, not a security boundary.
+3. **General variant support remains partial.** The build commands receive the
+   extra variables, but both `make -pn` queries do not, and the production relinks
+   hardcode gcc and libraries. Forward the same configuration to introspection,
+   and either restrict the interface to supported feature toggles or derive the
+   compiler/link requirements consistently. This does not invalidate the reported
+   EFS_FAULTS result: that toggle adds a define and does not change these source
+   lists in this Makefile. It does limit claims about arbitrary MAKE_VARIABLES.
+4. **Missing symbol evidence should fail the scan.** `set -eu` does not propagate
+   failures from `nm ... | awk` when awk succeeds. A missing/unreadable test binary
+   could silently lose test references and inflate DEAD classifications. Check
+   each expected binary and each symbol extraction explicitly; pipeline failure
+   handling must also account for the existing `head` pipelines. Keep failed or
+   incomplete scans separate from valid zero-symbol outputs.
+
+Validation for this review: `bash -n` PASS; the isolated relative-output probe
+reproduced the failure above. These checks do not verify the Linux reachability
+counts. Preserve the original run evidence. Fix the tooling issues in a small
+follow-up; the accepted product-correctness work can proceed independently.
+No further conceptual review loop is needed for the accepted recommendations.
