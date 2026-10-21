@@ -642,8 +642,10 @@ I agree with all five points. Additions:
    - Introduce a separate result, for example "unsupported encoding", that
      decoders return only for unknown codes and impossible lengths, checked
      before any mutation.
-   - `host_apply` never normalizes it. It skips `apply_end` (the cursor stays
-     put), and the group enters a sticky incompatible state: apply stops,
+   - `host_apply` never normalizes it. **Corrected by the review below:** if
+     an apply scope was opened, it must call `apply_end(kv, NULL)` to abort
+     and unlock, rather than skip cleanup. The cursor stays put, and the
+     group enters a sticky incompatible state: apply stops,
      readiness is withdrawn, reads and writes for that group are refused, and
      group/index/term/tag are kept as a diagnostic. No retry loop, no skip.
    - This keeps every existing verdict policy unchanged and makes the fatal
@@ -667,3 +669,61 @@ I agree with all five points. Additions:
 4. **Agreed:** a pre-fence binary run against a new store or log is a
    characterization test. It is expected to show unsafe acceptance and
    documents why downgrade is unsupported. It is never a refusal PASS.
+
+
+### Final implementation constraints for compatibility hardening — Oct 21
+
+**Review against devel `bf1949f37`; source inspection only. Runtime gates
+NOTRUN.** The separate fatal classification and separate peer/store policies
+are sound directions. These corrections are needed before implementation:
+
+1. **Abort the apply scope; do not skip its cleanup.**
+   `efs_kv_lsm_apply_begin` in `src/kv/kv_lsm.c` takes `l->writers` for write
+   and establishes thread-local staging. `efs_kv_lsm_apply_end(kv, NULL)`
+   clears staged effects, resets the scope and releases that lock without
+   committing a cursor (also documented in `include/efs/kv_lsm.h`). Skipping
+   `apply_end` after a successful begin leaks the scope and writer lock.
+   Validate before opening the scope where possible; if validation fails
+   inside an opened scope, abort exactly once on the same thread, retain the
+   fatal classification, then fence service. Include a test proving another
+   group using the shared KV can still make progress after this rejection.
+   Audit non-KV side effects separately; aborting staged KV does not undo them.
+2. **"Any error ... regardless" is too broad.** The current wrapper restores
+   IO/NOMEM errors for an explicit list of command families; begin and commit
+   failures also override the apparent success. The confirmed problem is
+   decoder/encoding errors reaching business-verdict normalization, not an
+   unconditional consumption of every failure. Preserve transient error
+   handling while making the fatal classification immune to every later
+   normalization branch, not merely the first assignment to `ret`.
+3. **A format version covers interpretation as well as byte structure.**
+   Unchanged bytes can acquire incompatible semantics. For example, changing
+   MKDIR apply to initialize HASHED rather than LOCAL changes replay behavior
+   unless the layout choice is already encoded or replay is explicitly
+   versioned. Reading existing HASHED rows successfully does not prove that
+   historical MKDIR logs will replay identically. Check that concrete path
+   before declaring born-HASHED format-neutral. Bump compatibility when
+   necessary for command meaning, routing rules or snapshot interpretation,
+   not only when adding a field. A monotonic number alone is insufficient:
+   define supported versions, missing-marker policy and upgrade ordering.
+4. **Sticky means no retry on the unchanged incompatible build, not permanent
+   inability to recover.** Refuse operations depending on the affected group,
+   including cross-group requests and cached/read fast paths. Keep status and
+   diagnostics available. Define how a compatible restart rechecks the
+   offending entry and resumes from the unchanged cursor. Do not reuse the
+   existing automatically cleared `kv_incomplete` condition as this fence
+   without changing its lifecycle. A passing recovery test upgrades the
+   reader and consumes the retained entry exactly once; it never deletes it.
+5. **Separate unsupported-format and malformed-entry diagnostics.** Both may
+   require the same fatal control flow, but an unknown supported-version tag
+   or invalid length is not necessarily evidence of a newer legitimate
+   format. Record the reason without claiming corruption or version skew
+   has been demonstrated. Validate complete entries, including all members
+   of batches, before mutations; do not limit validation to top-level tags.
+
+I agree with exact-build peer fencing for coordinated upgrades and a separate
+persistent compatibility version. The next useful step is implementation and
+focused tests, rather than another round of agreement prose: abort/unlock,
+unchanged durable and Raft cursors, service fencing, compatible restart, and
+unchanged business/transient-error behavior. Keep this as compatibility work
+linked from W66; it is not evidence that metadata distribution or the ORCD
+qualification gates have passed. No code or deployment changed in this review.

@@ -34,8 +34,10 @@ formats can avoid legacy conversion; retained-data routing changes need a
 safe transition. The implementation review additionally finds that apply
 wrappers can consume decoder errors as business verdicts: fatal encoding
 rejection must preserve both KV and Raft cursors and withdraw readiness.
-New markers cannot retroactively fence old readers. Born-HASHED correctness
-and compatibility gates are NOTRUN.
+New markers cannot retroactively fence old readers. Fatal rejection must
+abort an opened KV apply scope with `apply_end(kv, NULL)` to release its writer
+lock; compatibility must cover replay semantics as well as encoding bytes.
+Born-HASHED correctness and compatibility gates are NOTRUN.
 
 **Raw evidence moved off devel (2026-10-21).** 23,126 raw files (logs, TSV,
 JSON, fixture stores) under `results/`, `docs/status/evidence/` and seven
