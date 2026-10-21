@@ -19,9 +19,10 @@ full acceptance are separate states.
 ## Recent evidence and remaining acceptance
 
 [ORCD-test detached campaign](orcd-test-detached-campaign-20261020.md):
-**RUNNING; qualification pending.** Old deployment replaced, seven old
-client mounts stopped cleanly. Detached four-host campaign: 2 TiB/node,
-40 M-file target, packing/RDMA/direct-I/O/`.efs`; failures retained.
+**FAIL / BLOCKED.** 8,437,752 successful-write counts of 40 M target;
+117 writer-thread EIO reports, `.efs` command/query failures, post-load
+remount discovery failure. Initial core 216/216, peer 67/67 and persistence
+27/27 PASS; RDMA and packing exercised. Evidence retained; no retries.
 
 [W124 — fast delete](../backlog/fast-delete-reclaim.md): **parts 1–2
 implemented and deployed on orcd-mini (`de0c856b4`);**

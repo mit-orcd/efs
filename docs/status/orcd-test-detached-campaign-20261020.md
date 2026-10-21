@@ -1,9 +1,82 @@
 # ORCD-test detached packing/RDMA/.efs campaign — 2026-10-20
 
-**Verdict: RUNNING; qualification pending.** Build and detached-worker smoke
-checks PASS. User authorized stopping the old fcstor007–013 mounts; all
-seven stopped cleanly. Old daemons on fcstor003–006 stopped cleanly and their
-disposable stores were removed. The controller is running in detached screen.
+**Verdict: FAIL / controller BLOCKED (exit 125).** The controller stopped after
+9,731.7 seconds (~2 h 42 min), at the post-load remount. Failed evidence and
+stores are retained; no failed case was retried during this monitoring check.
+
+## Results
+
+Tested source: `1a9b96a3bb0c5f99959edd51790f52aca2ef5070`.
+Four distributed storage hosts fcstor003–006, 2 TiB quota each, RDMA on
+mlx5_2, direct I/O, background packing and `.efs` enabled; expiry/containers
+disabled. Test mounts on those four hosts; the two-client suite used two
+independent mounts on fcstor003 against the distributed storage cluster.
+
+| Gate | Verdict | Evidence |
+| --- | --- | --- |
+| POSIX core | PASS | 216/216, four jobs |
+| Two-client consistency | PASS | 67/67; both client processes on fcstor003 |
+| Initial persistence / cold restart | PASS | prepare 27/27, verify 27/27 before large load |
+| `.efs` commands | FAIL | `find` exits 75: directory not indexed yet |
+| `.efs` options | FAIL | same exit 75 / not indexed yet |
+| Concurrent queries, before and during load | FAIL | unexpected status -21 (NODATA); harness expects only -13 refusals |
+| Large-file-count workload | FAIL | all four host jobs return 1; 117 writer-thread EIO reports |
+| Post-load restart verification | BLOCKED / NOTRUN | initial remount cannot discover bootstrap cluster; sample verification never runs |
+| RDMA exercised | CONFIRMED | nonzero RDMA data counters on all four nodes |
+| Packing exercised | CONFIRMED | positive `packed_total` on all four nodes; not a full packed-data correctness pass |
+| W123 loss-report continuity | NOTRUN | absent from pinned source |
+
+Successful workload counters (not an independently crawled/durable file count):
+
+| Host | Files | Writer threads reporting EIO |
+| --- | ---: | ---: |
+| fcstor003 | 2,035,744 | 26 |
+| fcstor004 | 2,200,714 | 32 |
+| fcstor005 | 1,967,117 | 27 |
+| fcstor006 | 2,234,177 | 32 |
+| Total | **8,437,752** | **117** |
+
+The 40 M target was not reached (21.1%); neither was the tens-of-millions
+scale gate. Counters exclude operations that threw errors, whose exact
+persisted effects have not been inventoried. EIO records do not distinguish
+open/write/close failures; root cause remains unclassified.
+
+### Failure interpretation and harness limits
+
+- The `.efs` snapshots advertise a 60,000 ms refresh minimum. Command
+  tests give newly-created directories ~20 seconds, and concurrent-query
+  tests accept BUSY but not NODATA. The failures are preserved; stale test
+  expectations versus a product defect require investigation. No timeouts
+  were increased or cases rerun to manufacture a pass.
+- The controller continues independent suites and all scale jobs after
+  query failures. It stops at the later remount-control failure, rather
+  than pretending post-load verification passed.
+- Failed remount job `b1f4fc9acb4b4838ba6472342361e122` logs `Could not
+  discover cluster from any bootstrap node`. Startup uses only a fixed
+  three-second delay per daemon, not a bounded cluster-readiness gate.
+  Therefore this is a failed restart qualification, not proof of data loss
+  or an unrecoverable store. At inspection all four restarted daemon jobs
+  were active and emitting compaction/GC logs.
+- Large-load post-restart sample verification did not execute. Full payload
+  verification was never part of this scale harness. Only the earlier
+  27-case persistence fixture has a verified cold-restart result.
+- RDMA evidence scan found 3,759/4,141/2,634/1,289 nonzero-data counter lines
+  on fcstor003/004/005/006 respectively in completed daemon logs. Sample
+  lines show `post_setup_tcp=0/0 violations=0`; this is not an exhaustive
+  audit of every connection. Observed maximum `packed_total` values were
+  2,402,276 / 1,072,806 / 588,173 / 1,406,265 (not unique global counts).
+- No deployment change, cleanup, restart or retry was performed by the
+  monitor. Worker-owned restarted daemons retain their original 15,000 s
+  deadlines; the monitor did not extend them. Stores and evidence remain.
+
+Raw evidence stays outside Git at
+`/home/erbmi1/orcd/scratch/efs/orcd-test/campaign-20261020/`:
+`status.json`, `controller.log`, `exit-status`, `*-scale.json`, per-host
+`mail/<host>/<job>.log`, and FUSE log snapshots. The source archive SHA256 is
+`f4abcd639b3dbc03e9cb76aeac5c2efd28ba375bb12722a51c27817c3a4ce777`;
+`binaries.sha256` records the built executables. Reproducer is
+`scripts/orcd_test_campaign.py`; preserve its original results and use a
+separate explicitly authorized run for any future corrected harness.
 
 ## Prepared run
 
