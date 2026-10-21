@@ -1584,6 +1584,9 @@ NODATA still fails. Corrected gate PASS: 2,853 successful queries and all
 a new close EIO on643f6104f exhausted the8 s REPORT budget. Its uncertain
 256-byte payload matches, but the close remains FAIL. Four new profiles confirm
 group2 term5533→5536 in25 s; election-stall root cause remains under investigation.
+At8.28 M new files nine closes have failed; eight share the same32 ms window.
+All nine uncertain payloads match. Contention captures retained with lost-sample
+and symbolization limitations;119 writers continue.
 
 [W124 — fast delete](../backlog/fast-delete-reclaim.md): **parts 1–2
 implemented and deployed on orcd-mini (`de0c856b4`);**

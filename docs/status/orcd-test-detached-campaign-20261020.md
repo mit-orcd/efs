@@ -627,3 +627,31 @@ root cause; pass duration does not prove mutex hold time. CPU profiles alone
 do not measure blocked duration. No timeout, durability, deployment or workload
 relaxation was made. Loaded latency, new full payload verification,40 M target
 and cold-restart qualification remain open.
+
+### Synchronized REPORT failures — 2026-10-21 08:42 UTC
+
+New fixture counters reached8,283,743 (2,047,393 / 2,073,453 / 2,082,284 /
+2,080,613), with nine failed workers across all four hosts. Eight additional
+REPORT timeouts occurred at08:29:14.744–.776 UTC, each after8000–8020 ms,
+plus the earlier08:14 failure. All nine uncertain paths were read in full and
+matched their deterministic256-byte expected payloads. These remain failed
+closes;119 workers continue. Existing8,437,752 retained-payload PASS is separate.
+
+The synchronized failures precede the CPU capture start08:32:27 UTC. They
+support a shared publication-stall hypothesis rather than independent damaged
+files. Raft observability was not enabled on this deployment, so term-change
+cause/timing cannot be recovered from detailed raft-obs logs.
+
+Additional bounded captures used `perf record -e context-switches --call-graph
+dwarf,16384 -p PID -o OUTPUT -- sleep 5`, then `perf script -i OUTPUT |
+python3 scripts/cs_dwarf_locks.py` from deployed source. Exact requests/results
+are journal tests `HOST-scale-blocked` and `HOST-blocked-report`. Raw data is
+`qualification-643f6104f/HOST-scale-blocked.data`; copied client logs are
+`HOST-scale-errors-client.log`. All recording and analysis jobs exited0.
+fcstor005 had65,997 sampled switches:14.4% classified as mutex waits,13.8%
+lsm_rlock,13.5% host_waiter_sleep. Other daemons showed0.2–0.3% mutex waits.
+This is frequency, not blocked duration or proof of causality. The005 capture
+lost15 chunks, and005/006 analysis emitted addr2line warnings: preserve these
+limitations, avoid relying on suspect individual symbol attribution.
+No failure retry, timeout relaxation or deployment change; subsequent diagnosis
+needs pump/apply/durability timing and election reasons, not just wait counts.
