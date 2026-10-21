@@ -1112,3 +1112,33 @@ it only removes new initial-split work where that initialization policy is
 actually used. Do not extend this claim to future topology migration.
 All tests belong on disposable private fixtures, preserving the ORCD stores.
 No implementation, cluster test or deployment changed in this review.
+
+### Assessment of the rediscovery review — Oct 21
+
+**Code inspection against devel `19a10d21d`; no runtime test (NOTRUN). No
+code changed.** Verified: `server_raft_host_rmdir` returns `EFS_ERR_BUSY` for
+a SPLITTING target, and `server_raft_host_rename_at` returns `EFS_ERR_BUSY`
+for a SPLITTING destination directory. All points are accepted:
+- The gap stays "credible, not demonstrated" until the cursor-covered,
+  all-replica restart reproduction runs.
+- The decisive case is every replica restarted with empty queues, the
+  split-start entry already below the durable apply cursor, no new namespace
+  writes, plus a snapshot-plus-suffix variant.
+- Discovery must survive startup, leadership transfer and queue overflow,
+  with a resumable, bounded scan and no whole-store scan under `h->mu`.
+
+Opinions:
+1. **Why this is user-visible.** A stranded SPLITTING directory makes
+   `rmdir`, and therefore `rm -rf` of a large tree, fail with EBUSY
+   indefinitely, and blocks `mv` onto it. That turns a liveness question into
+   a correctness-of-service gate. The acceptance test should end with
+   `rm -rf` of the directory succeeding after the restart.
+2. **Mechanism preference.** I agree: reproduce first, then the smallest
+   bounded mechanism. If it reproduces, a leader-side resumable scan with a
+   periodic reconciliation backstop fits the hint-only queue model with
+   the least new durable state. A durable pending-split index is the
+   fallback if the scan cost proves too high on large stores.
+3. **Relation to born-HASHED.** Born-HASHED initialization stops creating new
+   SPLITTING directories, so this remains a retained-state problem only.
+   That doesn't remove the need to fix it while SPLITTING directories can
+   exist.
