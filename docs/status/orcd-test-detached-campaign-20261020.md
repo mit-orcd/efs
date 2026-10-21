@@ -177,6 +177,43 @@ If continuation is needed, record the interruption, cleanly restart the
 Do not mistake baseline EBUSY for verified payload content; every such path
 must also be read in the later, separately reported fixed-build verification.
 
+### Same-build baseline continuation — 2026-10-21 02:14 UTC
+
+The original verification would exceed its bounded job lifetime. It was stopped
+at 4,761,593 checked paths (1,039,045 / 1,688,501 / 917,701 / 1,116,346 per
+host), carrying 24 EBUSY failures (3/2/0/19), with no observed payload mismatch.
+Original checkpoint files and cancelled-job results remain unchanged. The
+worker initially reported verifier PIDs as leftovers; independent process
+inspection and explicit `/proc/PID` absence checks established that they had
+subsequently exited before unmounts were permitted.
+
+All four read-only mounts stopped cleanly (exit 0). The four original daemon
+jobs were deliberately cancelled after unmounting (wrapper exit 130, no
+leftovers). The **same `1a9b96a3bb0c` binaries**, storage paths, quotas and
+feature/transport profile were restarted. No store was cleared and no repair
+binary was deployed. New daemon job limits are eight hours from ~02:16 UTC.
+
+The readiness gate passed in **61.45 s**, after connection refusals, two
+10-second status timeouts and temporary absent leaders. It observed both
+metadata groups with matching terms and applied commits, then a successful
+fresh root read. All four read-only remounts returned 0. This establishes
+startup readiness on this restart; it does not establish full payload recovery.
+
+Verification resumes only unchecked records into
+`repair-20261020/existing-payloads-resume1/<host>.json`, with five-hour job
+limits from ~02:20 UTC. Counts are cumulative and include the earlier checkpoint;
+**do not add the old and new counts**. All 24 earlier read failures remain in
+these results. The journal `repair-20261020/baseline-restart-20261021T0214.json`
+records old/new job IDs, unmounts, readiness, remounts and resumed verifier IDs.
+Use this journal and live mailbox requests for exact deadlines. The old
+03:31/03:51 deadlines no longer govern active jobs.
+
+Reviewed subsequent commits `628664b7d` (read-admission regression) and
+`5c41111d1` (private-cluster RSS collection). Neither changes product code.
+`python3 tests/test_read_admission.py` PASS locally. Candidate remains
+`d7ddcc045`, not deployed. Original campaign FAIL and full qualification gates
+remain open.
+
 ## Prepared run
 
 - Shared evidence: `/home/erbmi1/orcd/scratch/efs/orcd-test/campaign-20261020/`.

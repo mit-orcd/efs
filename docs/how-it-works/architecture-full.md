@@ -1562,6 +1562,8 @@ remount discovery failure. Initial core 216/216, peer 67/67 and persistence
 repair in progress: full retained-payload verification, bounded packing-maintenance
 scans, refresh-aware query tests and restart readiness. Candidate `d7ddcc045`
 adds reviewed read headroom; isolated tests PASS, not deployed; acceptance open.
+Original-build verification resumed after a clean restart/readiness PASS (61 s),
+retaining 24 EBUSY failures at the 4.76 M-file checkpoint.
 
 [W124 — fast delete](../backlog/fast-delete-reclaim.md): **parts 1–2
 implemented and deployed on orcd-mini (`de0c856b4`);**
