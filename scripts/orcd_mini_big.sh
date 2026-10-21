@@ -67,8 +67,8 @@ LAUNCH
   ;;
 status|collect)
   TAG=$2; DA=$A/big-$TAG; DB=$B/big-$TAG
-  echo "== node9901 (A)"; q node9901 "cd $DA; screen -ls | grep -c big-$TAG; tail -n 1 conc.txt; for f in dd efs; do echo \"$f: \$(grep -c . $f.log 2>/dev/null) ops, \$(grep -c FAIL $f.log 2>/dev/null) FAIL; last: \$(tail -n 1 $f.log 2>/dev/null)\"; done; tail -n 4 compact.log | cut -c1-230"
-  echo "== node9900 (B)"; q node9900 "cd $DB; screen -ls | grep -c big-$TAG; tail -n 1 conc.txt; for f in dd md5 del tiny; do echo \"$f: \$(grep -c FAIL $f.log 2>/dev/null) FAIL; last: \$(tail -n 1 $f.log 2>/dev/null | cut -c1-200)\"; done; grep -h 'mismatches=[1-9]\|read_errors=[1-9]' md5.log | head -3"
+  echo "== node9901 (A)"; q node9901 "cd $DA; screen -ls | grep -c big-$TAG; tail -n 1 conc.txt; for f in dd efs; do echo \"\$f: \$(grep -c . \$f.log 2>/dev/null) ops, \$(grep -c FAIL \$f.log 2>/dev/null) FAIL; last: \$(tail -n 1 \$f.log 2>/dev/null)\"; done; tail -n 4 compact.log | cut -c1-230"
+  echo "== node9900 (B)"; q node9900 "cd $DB; screen -ls | grep -c big-$TAG; tail -n 1 conc.txt; for f in dd md5 del tiny; do echo \"\$f: \$(grep -c FAIL \$f.log 2>/dev/null) FAIL; last: \$(tail -n 1 \$f.log 2>/dev/null | cut -c1-200)\"; done; grep -h 'mismatches=[1-9]\|read_errors=[1-9]' md5.log | head -3"
   if [ "$1" = collect ]; then
     echo "== FAIL lines"; q node9901 "grep -h FAIL $DA/*.log | head"; q node9900 "grep -h FAIL $DB/*.log | head"
     echo "== concurrent"; q node9901 "grep -E 'final|ERR|RC=' $DA/conc.txt | head -12"; q node9900 "grep -E 'final|ERR|RC=' $DB/conc.txt | head -12"
