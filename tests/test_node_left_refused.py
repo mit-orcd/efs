@@ -80,6 +80,10 @@ int efs_decl_gate_frame(struct efs_decl_gate *g, struct efs_conn *c, uint8_t typ
     assert(!EFS_MSG_IS_RETIRED(type));
     return !g->declared && type != EFS_MSG_HEARTBEAT ? EFS_GATE_REFUSE : EFS_GATE_DISPATCH;
 }
+/* K1/W145 part 4 stop gate: no stop is requested in this fixture, so every
+ * loop iteration proceeds to read the next frame (the real gate is in
+ * handler.c and covered by tests/test_shutdown_bounded.py). */
+static int handler_stop_gate(void) { return 0; }
 ''' + fn('retired_refuse') + prefix + r'''
         default:
             (void)rc;
