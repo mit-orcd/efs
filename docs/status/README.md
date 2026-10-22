@@ -19,9 +19,11 @@ full acceptance are separate states.
 ## Recent evidence and remaining acceptance
 
 [Packing validate-once review and assessment](review-pack-validate-once-20261022.md):
-merge remains **BLOCKED** by unresolved modify-under-load wrong bytes. Focused
-PASS does not close the read mismatch; preserve failure stores, propagate workload
-exit status and investigate version coherence before qualification.
+**merged into devel `842a014b3` by user decision; read mismatch OPEN.** The
+mismatched file was 3.3–3.6 MB in every version, so it was never packed and no
+changed path read it. Suspect a devel truncate-up-after-overwrite read race.
+The repro now keeps failing stores, saves mismatching bytes and propagates exit
+status; reruns NOTRUN.
 
 [Phase 1 / alpha 1.0 checklist](alpha-1.0-2plus1-checklist.md): **OPEN**.
 Finish and qualify **2+1 on 3, 4 and >4 physical nodes** before the remaining
@@ -39,8 +41,8 @@ only; no implementation or protection gate closed.
 [ORCD tiny-file CPU profile analysis](orcd-tiny-profile-20261022.md):
 `08cc16af4f77`, four 30-second captures; repeated whole-segment validation
 confirmed in packing, plus abandonment scans, `.efs` indexing and LSM maintenance.
-Validate-once and bounded abandon scan fixed on branch `claude/pack-validate-once`
-(unit, node9900 private-cluster and `make test` gates); orcd-mini CPU A/B NOTRUN.
+Validate-once and bounded abandon scan merged into devel (`842a014b3`; unit,
+node9900 private-cluster and `make test` gates); orcd-mini CPU A/B NOTRUN.
 
 [orcd-mini deploy of `08cc16af4`](orcd-mini-deploy-08cc16af4-20261022.md):
 **cleanup merge deployed; all suites and gates PASS over RDMA + `.efs`**

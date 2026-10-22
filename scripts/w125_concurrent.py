@@ -61,6 +61,8 @@ ap.add_argument("--writers", type=int, default=4); ap.add_argument("--readers", 
 ap.add_argument("--deleters", type=int, default=2)
 ap.add_argument("--remote", action="store_true"); ap.add_argument("--deleted-out")
 ap.add_argument("--modifiers", type=int, default=0)
+ap.add_argument("--mismatch-dir", help="save each mismatching local read as DIR/N/NAME "
+               "(N counts mismatches) for w125_modify_inspect.py DIR/N NAME")
 a = ap.parse_args()
 os.makedirs(a.root, exist_ok=True)
 lock = threading.Lock()
@@ -80,6 +82,18 @@ def fail(kind, msg):
     with lock:
         st[kind] += 1
         if len(errs) < 20: errs.append("%s %s" % (kind, msg))
+
+saved = [0]
+def save_mismatch(name, got):
+    """Keep the bytes this read returned: a transient mismatch is gone by the
+    time the store can be inspected. Saved under --mismatch-dir (outside Git)."""
+    if not a.mismatch_dir: return
+    with lock:
+        saved[0] += 1; n = saved[0]
+    if n > 20: return
+    path = os.path.join(a.mismatch_dir, str(n), name)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "wb") as f: f.write(got)
 
 def writer(w):
     i = 0
@@ -125,7 +139,9 @@ def reader(_):
             try: got = read_file(name)
             except FileNotFoundError: bump("enoent"); continue
             except OSError as e: fail("errors", "read %s: %s" % (name, e)); continue
-            if got != want: fail("mismatch", "%s v%d: %d bytes, expected %d" % (name, ver.get(name, 0), len(got), len(want)))
+            if got != want:
+                fail("mismatch", "%s v%d: %d bytes, expected %d" % (name, ver.get(name, 0), len(got), len(want)))
+                save_mismatch(name, got)
             else: bump("read"); bump("rbytes", len(got))
         finally:
             l.release()

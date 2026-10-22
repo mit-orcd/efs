@@ -172,3 +172,89 @@ mode is needed: compare separate private builds, then land one qualified behavio
 This is part of alpha 1.0's packing correctness and evidence gates, not a reason
 to defer correctness in exchange for lower CPU consumption. No code was changed
 by this assessment; all additional tests described here remain NOTRUN.
+
+## Reviewer follow-up to the assessment — October 22
+
+**Status: merged into devel at `842a014b3` by user decision. The read
+mismatch stays OPEN, but evidence now points away from the branch.**
+
+### Correction to my review: the mismatched file was never packed
+
+`w125_concurrent.py` content is a pure function of (name, version), so every
+version of the file can be recomputed with the script's own `body`,
+`op_of`, `apply_op` and `contents`. The workload names the file
+`w2/d049/f004799`, relative to the mount root.
+
+| Version | Operation | Size (bytes) |
+| --- | --- | ---: |
+| v0 | create | 3,290,288 |
+| v1 | append | 3,299,550 |
+| v2 | append | 3,305,263 |
+| v3 | rewrite | 3,629,464 |
+| v4 | extend | 3,631,970 |
+| v5 | overwrite | 3,631,970 |
+| v6 | extend | 3,633,734 |
+
+- **Never packable.** No version is near the 16 KiB packing threshold, so
+  the file never had a packed base.
+- **No changed path reads it.** The client never read it through
+  `efs_pack_read`. The packer never selected it, and `pk_read_bases` never
+  repacked it. My "no changed code path does not hold" argument (that it
+  might have been packed while small) is wrong for this file. The branch
+  doc's statement stands.
+- **What remains.** The branch can only have influenced this read through
+  timing, for example less packer CPU or different scheduling. That does not
+  make the branch a cause, and it does not clear it either.
+
+### A concrete hypothesis
+
+- **The sequence.** v5 overwrites up to 4,000 bytes in the middle at the same
+  size, then v6 extends with zeros (`truncate` up).
+- **Why size alone can't catch it.** v4 and v5 have the same size, so a read
+  that misses v5's overwrite but sees v6's extension has exactly v6's size
+  and wrong bytes. That matches "correct size, wrong bytes".
+- **Candidate.** A stale chunk or a lost overwrite on the client read path
+  after truncate-up. That would be a devel bug independent of packing.
+- **Not established.** The returned bytes are lost, so this cannot be
+  confirmed for the original event.
+
+### Assessment points
+
+- **Agreed:**
+  - "code correct" should read "no defect found in the reviewed mechanisms;
+    focused tests PASS";
+  - the implementation of `efs_pack_read` did change;
+  - a matching digest does not prove the reference was the right version;
+  - five clean reruns cannot explain the original event;
+  - a tombstone/work-budget stop test for the abandon scan is still missing
+    (NOTRUN).
+- **Lifetime (checked):** image and payload pointers do not outlive their
+  buffers on the merged code. `pk_base_run` copies each record into `f->data`
+  before freeing its image. Compaction keeps `images[si]` until the copied
+  records are used. Read-through views never escape their function.
+- **Harness defects confirmed and fixed (this commit):**
+  - `scripts/w125_modify_repro.sh` deleted the previous run's store, and
+    returned success after a failed workload.
+  - It now uses a fresh directory for each run, refuses to reuse one, keeps
+    the store of any failing run, and deletes only passing stores. It
+    records the arguments and the sha256 of `efsd`/`efs-fuse`, and exits with
+    the workload's status (2 when the cluster does not start, 3 when only the
+    stop fails).
+  - `scripts/w125_concurrent.py --mismatch-dir` saves the exact bytes of each
+    mismatching local read (first 20), so `w125_modify_inspect.py DIR/N NAME`
+    can show which version each 64 KiB block holds. This records the state of
+    the transient read itself.
+  - Checked only by `bash -n` and a 4 s local run of the workload (0
+    mismatches). Not yet run on a cluster.
+
+### Remaining gates (all NOTRUN)
+
+1. Run the repro at least 5 times each on devel `842a014b3` and on the
+   pre-merge devel, alternating. Use the fixed script and keep any failing
+   store and mismatch dump. If a dump shows a v4 block where v5 overwrote,
+   file a devel client-read bug (truncate-up after overwrite).
+2. Add a targeted regression: on a large file, overwrite in the middle at the
+   same size, then truncate up, then read back immediately, under concurrent
+   modifiers.
+3. Add the abandon-scan work-budget stop and resume test, including term
+   change and wraparound.
