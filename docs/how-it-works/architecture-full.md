@@ -2390,7 +2390,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | apply-proto-normalized | **W129** · `host_apply` turns decoder errors into success and commits the cursor | correctness | FIXED, merged into devel `08cc16af4`; private RDMA gate PASS (`scripts/w127_incompatible_entry.sh`); unit gates PASS; RDMA/multi-host NOTRUN ([implementation](#w127-w131-fix)) | [item](#w129) · [audit](../reviews/dead-code-review-20261021.md) |
 | dir-apply-io | **W130** · DIR apply swallows storage errors; replicas can diverge | correctness | FIXED, merged into devel `08cc16af4`; private RDMA gate PASS (`scripts/w127_incompatible_entry.sh`); unit gates PASS, one-replica fault injection NOTRUN; RDMA/multi-host NOTRUN ([implementation](#w127-w131-fix)) | [item](#w130) · [audit](../reviews/dead-code-review-20261021.md) |
 | apply-missing-kv | **W131** · missing KV engine counts as applied | defensive hardening | FIXED, merged into devel `08cc16af4`; private RDMA gate PASS (`scripts/w127_incompatible_entry.sh`); unit gates PASS; RDMA/multi-host NOTRUN ([implementation](#w127-w131-fix)) | [item](#w131) · [audit](../reviews/dead-code-review-20261021.md) |
-| node-left | **W132** · `NODE_LEFT` lets any connection drop a node from membership | correctness / safety | OPEN: no sender in tree; delete handler and refuse the ID; NOTRUN | [item](#w132) · [audit](../reviews/dead-code-review-20261021.md) |
+| node-left | **W132** · `NODE_LEFT` lets any connection drop a node from membership | correctness / safety | FIXED on `devel-k03` (`8727e3afe`): ID 24 retired, handler and remover deleted; `make test` PASS on efs2 except the pre-existing host-only `test_reclaim` failure (`tests/test_node_left_refused.py` PASS); cluster NOTRUN; not merged into devel | [item](#w132) · [audit](../reviews/dead-code-review-20261021.md) |
 | declaration-gate | **W133** · client protocol declaration gate is fail-open | correctness | OPEN: only three requests gated, newer versions accepted; connection-state matrix NOTRUN; not authentication | [item](#w133) · [audit](../reviews/dead-code-review-20261021.md) |
 | legacy-session | **W134** · unregistered session identities bypass session fencing | correctness (fail-open) | OPEN: live while W72 is open; remove atomically with full registration | [item](#w134) · [audit](../reviews/dead-code-review-20261021.md) |
 | test-docs-failfast | **W135** · a plain `make test` stops at the docs gate before the code tests | test reporting | OPEN: a direct `make test` stopped after 114/276 commands at `0bdf55256`; `make_test_summary.sh` already continues past failures; devel docs regenerated; target split NOTRUN | [item](#w135) · [audit](../reviews/dead-code-review-20261021.md) |
@@ -8566,7 +8566,24 @@ must leave the cursor unchanged.
 <a id="w132"></a>
 ### W132 — `NODE_LEFT` lets any connection drop a node from membership
 
-**Correctness / safety; opened 2026-10-21 from the audit P3; OPEN, fix NOTRUN.**
+**Correctness / safety; opened 2026-10-21 from the audit P3; FIXED on
+branch `devel-k03` (`8727e3afe`, 2026-10-22), unit gate PASS, cluster
+NOTRUN.**
+- Fix: ID 24 is retired and listed in `EFS_MSG_IS_RETIRED`, so a frame
+  carrying it is refused before dispatch by `retired_refuse` (no reply,
+  connection closed). The `NODE_LEFT` case in `handler.c`, `struct
+  efs_msg_node_left` and `server_remove_node_from_cluster` (no other
+  caller) are deleted. No ID moves; no replacement message.
+- Gate: `tests/test_node_left_refused.py` (in `make test`) embeds the real
+  receive-and-refusal prefix of `server_handle_conn`, sends a `NODE_LEFT`
+  frame over a socketpair and checks no reply, closed connection, nothing
+  dispatched, membership unchanged; a `HEARTBEAT` control frame proves the
+  embedded loop dispatches live frames. `tests/test_retired_messages.py`
+  lists 24. Build PASS on efs2 (Fedora 42, aarch64, gcc); every `make test`
+  line PASS there except `./tests/test_reclaim`, which fails the same way
+  on a pristine devel build of the same host (hardcoded `/tmp` roots on a
+  972 MB tmpfs) and is unrelated; the live wrapper test needs `TMPDIR` on
+  a real disk for the same reason. Not exercised against a running cluster.
 - `src/server/handler.c:902–911` calls `server_remove_node_from_cluster`
   (`src/server/cluster.c:402`) for any connection that sends
   `EFS_MSG_NODE_LEFT`. It needs no declaration and no peer identity.

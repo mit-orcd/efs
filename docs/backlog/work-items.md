@@ -5776,7 +5776,24 @@ must leave the cursor unchanged.
 <a id="w132"></a>
 ## W132 — `NODE_LEFT` lets any connection drop a node from membership
 
-**Correctness / safety; opened 2026-10-21 from the audit P3; OPEN, fix NOTRUN.**
+**Correctness / safety; opened 2026-10-21 from the audit P3; FIXED on
+branch `devel-k03` (`8727e3afe`, 2026-10-22), unit gate PASS, cluster
+NOTRUN.**
+- Fix: ID 24 is retired and listed in `EFS_MSG_IS_RETIRED`, so a frame
+  carrying it is refused before dispatch by `retired_refuse` (no reply,
+  connection closed). The `NODE_LEFT` case in `handler.c`, `struct
+  efs_msg_node_left` and `server_remove_node_from_cluster` (no other
+  caller) are deleted. No ID moves; no replacement message.
+- Gate: `tests/test_node_left_refused.py` (in `make test`) embeds the real
+  receive-and-refusal prefix of `server_handle_conn`, sends a `NODE_LEFT`
+  frame over a socketpair and checks no reply, closed connection, nothing
+  dispatched, membership unchanged; a `HEARTBEAT` control frame proves the
+  embedded loop dispatches live frames. `tests/test_retired_messages.py`
+  lists 24. Build PASS on efs2 (Fedora 42, aarch64, gcc); every `make test`
+  line PASS there except `./tests/test_reclaim`, which fails the same way
+  on a pristine devel build of the same host (hardcoded `/tmp` roots on a
+  972 MB tmpfs) and is unrelated; the live wrapper test needs `TMPDIR` on
+  a real disk for the same reason. Not exercised against a running cluster.
 - `src/server/handler.c:902–911` calls `server_remove_node_from_cluster`
   (`src/server/cluster.c:402`) for any connection that sends
   `EFS_MSG_NODE_LEFT`. It needs no declaration and no peer identity.
