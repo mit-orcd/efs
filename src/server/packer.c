@@ -227,6 +227,7 @@ struct pk_file {
     struct efs_pack_candidate c;
     uint64_t epoch;
     uint8_t *data;
+    int base_read, base_rc; /* packed base already read (pk_read_bases) */
 };
 static int pk_file_cmp(const void *a, const void *b)
 {
@@ -305,26 +306,59 @@ static int pk_get_d1(const struct efs_node *nodes, uint32_t count, const struct 
 }
 static int pk_read_segment(const struct efs_node *nodes, uint32_t count, const struct efs_pack_object *o,
                            uint8_t *image, struct efs_pack_view *view);
-/* A packed base's bytes: its record, read back from the segment. */
-static int pk_read_packed_base(const struct efs_node *nodes, uint32_t count, struct pk_file *f)
+/* Packed bases, a segment at a time: every file of the pass whose base is a
+ * record of one segment is read from one fetch and one validation of that
+ * segment (it was a fetch and a whole-image validation per file). */
+struct pk_base_key { uint32_t group; uint64_t id, gen; uint32_t x; };
+static int pk_base_cmp(const void *a, const void *b)
+{
+    const struct pk_base_key *p = a, *q = b;
+    if (p->group != q->group) return p->group < q->group ? -1 : 1;
+    if (p->id != q->id) return p->id < q->id ? -1 : 1;
+    if (p->gen != q->gen) return p->gen < q->gen ? -1 : 1;
+    return p->x < q->x ? -1 : p->x > q->x;
+}
+struct pk_bases {
+    const struct efs_node *nodes;
+    uint32_t count, nruns, next;
+    struct pk_file *files;
+    const struct pk_base_key *keys;
+    const uint32_t *runs; /* nruns + 1 boundaries into keys */
+};
+static void pk_base_run(struct pk_bases *b, uint32_t run)
 {
     struct efs_kv *kv = server_raft_host_kv();
-    const struct efs_pack_ref *r = &f->c.base.packed;
+    const struct pk_base_key *k = &b->keys[b->runs[run]];
+    uint32_t n = b->runs[run + 1] - b->runs[run];
     struct efs_pack_object *o = malloc(sizeof(*o));
     uint8_t *image = malloc(EFS_SEGMENT_MAX_SIZE);
-    int rc = kv && o && image ? EFS_OK : EFS_ERR_NOMEM;
-    if (rc == EFS_OK) rc = efs_pack_object_get(kv, r->publication_group, r->segment_id, r->segment_generation, o);
     struct efs_pack_view view;
-    if (rc == EFS_OK) rc = pk_read_segment(nodes, count, o, image, &view);
-    if (rc == EFS_OK) {
+    int rc = kv && o && image ? EFS_OK : EFS_ERR_NOMEM;
+    if (rc == EFS_OK) rc = efs_pack_object_get(kv, k->group, k->id, k->gen, o);
+    if (rc == EFS_OK) rc = pk_read_segment(b->nodes, b->count, o, image, &view);
+    for (uint32_t i = 0; i < n; i++) {
+        struct pk_file *f = &b->files[k[i].x];
         const uint8_t *data;
         uint32_t len;
-        rc = efs_pack_view_read(&view, r, &data, &len);
-        if (rc == EFS_OK) memcpy(f->data, data, len < f->c.size ? len : f->c.size);
+        int frc = rc;
+        f->data = calloc(1, f->c.size);
+        if (frc == EFS_OK && !f->data) frc = EFS_ERR_NOMEM;
+        if (frc == EFS_OK) frc = efs_pack_view_read(&view, &f->c.base.packed, &data, &len);
+        if (frc == EFS_OK) memcpy(f->data, data, len < f->c.size ? len : f->c.size);
+        f->base_rc = frc;
+        f->base_read = 1;
     }
     free(o);
     free(image);
-    return rc;
+}
+static void *pk_bases_run(void *arg)
+{
+    struct pk_bases *b = arg;
+    for (;;) {
+        uint32_t r = __atomic_fetch_add(&b->next, 1, __ATOMIC_RELAXED);
+        if (r >= b->nruns) return NULL;
+        pk_base_run(b, r);
+    }
 }
 /* A small file lies wholly in data fragment 0. Its bytes are the base
  * image (absent when the base generation is 0) overlaid by each span's
@@ -334,12 +368,13 @@ static int pk_read_file(const struct efs_node *nodes, uint32_t count, struct pk_
     uint8_t *a = malloc(flen), *b = malloc(flen);
     int rc = a && b ? EFS_OK : EFS_ERR_NOMEM;
     if (rc == EFS_OK && f->c.size > flen) rc = EFS_ERR_INVAL;
-    if (rc == EFS_OK) {
+    if (rc == EFS_OK && !f->base_read) {
         f->data = calloc(1, f->c.size);
         if (!f->data) rc = EFS_ERR_NOMEM;
     }
     if (rc == EFS_OK && f->c.base.coding_profile_id == EFS_META_PROFILE_PACK) {
-        rc = pk_read_packed_base(nodes, count, f);
+        /* Read by pk_read_bases; a base it did not read is refused. */
+        rc = f->base_read ? f->base_rc : EFS_ERR_INVAL;
         /* D25: only the base's visible bytes; the rest stays zero. */
         if (rc == EFS_OK && f->c.base_visible < f->c.size)
             memset(f->data + f->c.base_visible, 0, f->c.size - f->c.base_visible);
@@ -384,9 +419,42 @@ static void *pk_reader_run(void *arg)
         r->rcs[x] = pk_read_file(r->nodes, r->count, &r->files[x], r->flen);
     }
 }
+static void pk_read_bases(const struct efs_node *nodes, uint32_t count, struct pk_file *files,
+                          uint32_t n, uint32_t flen)
+{
+    struct pk_base_key *keys = malloc((size_t)n * sizeof(*keys));
+    uint32_t *runs = malloc(((size_t)n + 1) * sizeof(*runs)), nk = 0, nruns = 0;
+    if (!keys || !runs) goto out; /* the bases stay unread: those files fail */
+    for (uint32_t x = 0; x < n; x++) {
+        const struct pk_file *f = &files[x];
+        if (f->c.base.coding_profile_id != EFS_META_PROFILE_PACK || f->c.size > flen) continue;
+        const struct efs_pack_ref *r = &f->c.base.packed;
+        keys[nk++] = (struct pk_base_key){r->publication_group, r->segment_id, r->segment_generation, x};
+    }
+    if (!nk) goto out;
+    qsort(keys, nk, sizeof(*keys), pk_base_cmp);
+    for (uint32_t i = 0; i < nk; i++)
+        if (!i || keys[i].group != keys[i - 1].group || keys[i].id != keys[i - 1].id ||
+            keys[i].gen != keys[i - 1].gen)
+            runs[nruns++] = i;
+    runs[nruns] = nk;
+    STAT_ADD(base_segments, nruns);
+    STAT_ADD(base_files, nk);
+    struct pk_bases b = {nodes, count, nruns, 0, files, keys, runs};
+    pthread_t t[PK_READ_THREADS];
+    uint32_t started = 0, want = nruns < PK_READ_THREADS ? nruns : PK_READ_THREADS;
+    for (uint32_t i = 1; i < want; i++)
+        if (pthread_create(&t[started], NULL, pk_bases_run, &b) == 0) started++;
+    pk_bases_run(&b);
+    for (uint32_t i = 0; i < started; i++) pthread_join(t[i], NULL);
+out:
+    free(keys);
+    free(runs);
+}
 static void pk_read_files(const struct efs_node *nodes, uint32_t count, struct pk_file *files,
                           uint32_t n, uint32_t flen, int *rcs)
 {
+    pk_read_bases(nodes, count, files, n, flen);
     struct pk_reader r = {nodes, count, flen, n, 0, files, rcs};
     pthread_t t[PK_READ_THREADS];
     uint32_t started = 0, want = n < PK_READ_THREADS ? n : PK_READ_THREADS;

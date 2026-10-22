@@ -187,6 +187,7 @@ test-report-pressure:
 	python3 tests/test_node_reprobe.py
 	python3 tests/test_pack_budget.py
 	python3 tests/test_pack_compact_schedule.py
+	python3 tests/test_pack_base_reads.py
 	python3 tests/test_net_receive_deadline.py
 	python3 tests/test_fragment_attempt.py
 	python3 tests/test_small_frame_receive.py
