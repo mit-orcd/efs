@@ -112,6 +112,12 @@ struct efs_raft_msg {
     uint64_t leader_commit;
     uint64_t match_index;
     int success;
+    /* K22/W23, AE_REP only: this follower is at its unapplied-log bound.
+     * On a rejection it refused the batch (nothing appended, nothing
+     * dropped: the leader resends from match_index+1). On a success it is
+     * advisory: send heartbeats only until a reply clears it. Wire: bit 1
+     * of the success byte. */
+    int busy;
     uint32_t nentries;
     struct efs_raft_entry entries[EFS_RAFT_AE_MAX]; /* batched AE payloads */
     /* W19: entry bytes already sit in this buffer at EFS_WIRE_RAFT_HDR_LEN.
@@ -309,6 +315,8 @@ struct efs_raft_peer_progress {
     uint64_t send_blocked;  /* entry batches not built: host not ready */
     uint64_t send_errors;   /* entry batches failed with another error */
     uint64_t rejects;       /* AppendEntries rejections from this peer */
+    uint64_t busy;          /* K22: busy rejections/advisories from this peer */
+    int busy_hold;          /* K22: entries withheld from this peer now */
     uint64_t reject_hint;   /* match_index carried by the last rejection */
 };
 int efs_raft_peer_progress(const struct efs_raft *r, int peer,
@@ -319,8 +327,22 @@ struct efs_raft_log_progress {
     uint64_t last_index, last_term, snap_index;
     uint64_t rejects_sent;  /* AppendEntries this follower refused */
     uint64_t proto_drops;   /* refused with no reply: conflict at or below commit */
+    /* K22/W23 bound: log entries past last_applied (committed or not),
+     * its cap (0 = unbounded), batches refused busy as a follower and
+     * proposals refused EFS_ERR_BUSY as a leader. */
+    uint64_t unapplied, max_unapplied, busy_sent, admit_busy;
 };
 int efs_raft_log_progress(struct efs_raft *r, struct efs_raft_log_progress *out);
+/* K22/W23 universal follower memory/lag bound. A replica's unapplied log
+ * (entries past last_applied, committed or not) never exceeds max entries:
+ * a follower refuses an AppendEntries batch that would cross it (busy
+ * reply, no drop), a leader refuses proposals with EFS_ERR_BUSY. Heartbeats
+ * and commit/apply always proceed, so the backlog drains. 0 = unbounded. */
+void efs_raft_set_max_unapplied(struct efs_raft *r, uint64_t max);
+/* The cap derived from the replica's memory budget (bytes): each retained
+ * unapplied entry costs a resident index record; budget/256, at least two
+ * full AppendEntries batches. No operator setting. */
+uint64_t efs_raft_unapplied_cap(uint64_t mem_budget);
 /* W145 repair, operator-triggered only: this follower's committed log
  * disagrees with the leader (a conflict at or below commit). While set,
  * such a conflict is answered with match_index 0 instead of refused

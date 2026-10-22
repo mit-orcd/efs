@@ -1427,6 +1427,19 @@ struct efs_kv *efs_kv_lsm_open(const char *dir, const struct efs_kv_lsm_cfg *cfg
     memcpy(l->dir, dir, dlen + 1);
     if (cfg)
         l->cfg = *cfg;
+    l->l0_cap_bytes = l->cfg.l0_bytes ? l->cfg.l0_bytes : KV_LSM_L0_BYTES;
+#if EFS_FAULTS
+    {
+        /* W23 test hook: reach the L0 cap without writing 1 GiB. */
+        const char *v = getenv("EFS_FAULT_L0_BYTES");
+        unsigned long long b = v && v[0] ? strtoull(v, NULL, 0) : 0;
+        if (b >= (1u << 20)) {
+            l->l0_cap_bytes = b;
+            fprintf(stderr, "kv-fault: l0 cap %llu bytes\n", b);
+        }
+    }
+#endif
+    l->mem_budget = efs_kv_lsm_mem_budget(l->l0_cap_bytes, l->cfg.memtable_max);
     l->next_seq = 1;
     l->apply_next = 1;
     /* Recursive: a scan callback is allowed to read the same store (
@@ -1530,7 +1543,7 @@ static int lsm_flush(struct efs_kv *kv, int wait)
     /* A flush emits at most one L0 file per key[0]. Counting those runs
      * walks the memtable. The raft pump calls this on every snapshot
      * open; refuse before the walk when a full memtable cannot fit. */
-    if (!wait && (l->mt.n || l->pending_mt.n) && kv_l0_bytes(l) >= KV_LSM_L0_BYTES) {
+    if (!wait && (l->mt.n || l->pending_mt.n) && kv_l0_bytes(l) >= kv_l0_cap(l)) {
         if (l->compact_started) {
             l->compact_req = 1;
             pthread_cond_signal(&l->compact_cv);
@@ -1542,7 +1555,7 @@ static int lsm_flush(struct efs_kv *kv, int wait)
      * background thread's job; at the engine cap, wait for it instead of
      * rewriting L1 on this call. The pump must not wait. */
     if (wait) {
-        while (kv_l0_bytes(l) >= KV_LSM_L0_BYTES && !l->io_failed) {
+        while (kv_l0_bytes(l) >= kv_l0_cap(l) && !l->io_failed) {
             if (!l->compact_started) {
                 rc = kv_compact_locked(l, 0);
                 if (rc != EFS_OK) {
@@ -1705,7 +1718,7 @@ int efs_kv_lsm_l0_hot(struct efs_kv *kv)
         return 0;
     l = kv->ctx;
     lsm_peek_lock(l);
-    hot = kv_l0_bytes(l) >= KV_LSM_L0_BYTES;
+    hot = kv_l0_bytes(l) >= kv_l0_cap(l);
     lsm_peek_unlock(l);
     return hot;
 }
@@ -1740,8 +1753,80 @@ int efs_kv_lsm_stats(struct efs_kv *kv, struct efs_kv_lsm_stats *out)
     out->l0_bytes = kv_l0_bytes(l);
     out->n_l0 = l->n_l0;
     out->n_l1 = l->n_l1;
+    out->l0_cap = kv_l0_cap(l);
+    out->mem_budget = l->mem_budget;
+    out->apply_deferred = l->apply_deferred;
     lsm_peek_unlock(l);
     return EFS_OK;
+}
+
+uint64_t efs_kv_lsm_mem_budget(uint64_t l0_cap, uint32_t memtable_max)
+{
+    uint64_t mt = memtable_max ? memtable_max : KV_LSM_MEM_DEFAULT;
+    uint64_t b = (l0_cap ? l0_cap : KV_LSM_L0_BYTES) / 8u;
+    long pages = sysconf(_SC_PHYS_PAGES), psz = sysconf(_SC_PAGESIZE);
+
+    if (pages > 0 && psz > 0) {
+        uint64_t ram = (uint64_t)pages * (uint64_t)psz / 16u;
+        if (ram < b) b = ram;
+    }
+    return b < 4u * mt ? 4u * mt : b;
+}
+
+int efs_kv_lsm_apply_room(struct efs_kv *kv, int admit)
+{
+    struct kv_lsm *l;
+    uint64_t lim;
+    int rc = EFS_OK;
+
+    if (!kv || kv->ops != &lsm_ops || !kv->ctx)
+        return EFS_OK; /* no engine bound: in-memory stores */
+    l = kv->ctx;
+    lim = admit ? l->mem_budget / 4u * 3u : l->mem_budget;
+    lsm_peek_lock(l);
+    int over = kv_memtable_bytes(l) >= lim;
+    int logged = l->room_logged;
+    lsm_peek_unlock(l);
+    if (!over && !admit && logged) {
+        lsm_lock(l);
+        if (l->room_logged && kv_memtable_bytes(l) < lim) {
+            fprintf(stderr, "kv-bound: apply resumed mt_bytes=%llu deferred=%llu\n",
+                    (unsigned long long)kv_memtable_bytes(l),
+                    (unsigned long long)l->apply_deferred);
+            l->room_logged = 0;
+        }
+        lsm_unlock(l);
+    }
+    if (!over)
+        return EFS_OK;
+    if (admit)
+        return EFS_ERR_BUSY;
+    /* Flush now if L0 has room; otherwise this only kicks the compactor
+     * (kv_maybe_flush_locked never waits on it). */
+    lsm_lock(l);
+    if (kv_memtable_bytes(l) >= lim) {
+        rc = kv_maybe_flush_locked(l);
+        if (rc == EFS_OK && kv_memtable_bytes(l) >= lim) {
+            rc = EFS_ERR_BUSY;
+            l->apply_deferred++;
+            if (!l->room_logged) {
+                fprintf(stderr, "kv-bound: apply deferred mt_bytes=%llu budget=%llu "
+                        "l0_bytes=%llu l0_cap=%llu\n",
+                        (unsigned long long)kv_memtable_bytes(l),
+                        (unsigned long long)l->mem_budget,
+                        (unsigned long long)kv_l0_bytes(l),
+                        (unsigned long long)kv_l0_cap(l));
+                l->room_logged = 1;
+            }
+        } else if (rc == EFS_OK && l->room_logged) {
+            fprintf(stderr, "kv-bound: apply resumed mt_bytes=%llu deferred=%llu\n",
+                    (unsigned long long)kv_memtable_bytes(l),
+                    (unsigned long long)l->apply_deferred);
+            l->room_logged = 0;
+        }
+    }
+    lsm_unlock(l);
+    return rc;
 }
 
 int efs_kv_lsm_apply_begin(struct efs_kv *kv)

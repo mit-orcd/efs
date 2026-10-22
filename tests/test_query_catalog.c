@@ -113,7 +113,7 @@ static int cancel(void *ctx) { (void)ctx;return 1; }
 int main(void)
 {
     snprintf(store,sizeof(store),"/tmp/efs-query-catalog-%d",getpid());cleanup();
-    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};
     struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
     CHECK(kv!=NULL,"open");if (!kv) return 1;
     struct efs_meta_attrs attrs={1000,1000,100};

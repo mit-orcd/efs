@@ -5703,7 +5703,7 @@ static void test_reap_cleanup_deferred(void)
 {
     char dir[]="/tmp/efs-meta-reap-cleanup-XXXXXX";
     CHECK(mkdtemp(dir) != NULL,"cleanup store dir");
-    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};
     struct efs_kv *kv=efs_kv_lsm_open(dir,&cfg);
     CHECK(kv != NULL,"cleanup store");if(!kv)return;
     efs_ino_t ino=0;struct efs_meta_row row;

@@ -59,7 +59,7 @@ int main(int argc,char **argv)
     if(lstat(argv[1],&st) || !S_ISDIR(st.st_mode) ||
        lstat(kvpath,&st) || !S_ISDIR(st.st_mode) ||
        lstat(cache,&st) || !S_ISDIR(st.st_mode))return 2;
-    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,4<<20,4};
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,4<<20,4,0};
     struct batch b={.kv=efs_kv_lsm_open(kvpath,&cfg)};if(!b.kv)return 1;
     struct efs_kv_lsm_snapshot *old_source=NULL,*source=NULL;
     struct efs_query_catalog *old=NULL,*next=NULL,*restored=NULL;

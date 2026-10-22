@@ -42,7 +42,7 @@ static int collect(void *user, const struct efs_name_entry *entry)
 int main(void)
 {
     snprintf(path,sizeof(path),"/tmp/efs-name-index-%d",getpid());cleanup();
-    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};
     struct efs_kv *kv=efs_kv_lsm_open(path,&cfg);
     CHECK(kv!=NULL,"open store");if (!kv) return 1;
     CHECK(!put_dentry(kv,3,100,"report-aaa.dat",201),"first report");

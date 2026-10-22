@@ -16,7 +16,7 @@ static int run_fixture(void)
 {
     char store[]="/tmp/efs-query-delta-kv-XXXXXX",cache[]="/tmp/efs-query-delta-cache-XXXXXX";
     CHECK(mkdtemp(store));CHECK(mkdtemp(cache));
-    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};
     struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);CHECK(kv);if(!kv)return 1;
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t dir;
     unsigned files=6000;const char *n=getenv("EFS_QUERY_DELTA_FILES");

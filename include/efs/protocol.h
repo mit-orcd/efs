@@ -530,6 +530,8 @@ struct efs_raft_peer_status {
     uint64_t inflight_age, ack_age;
     uint64_t batches_sent, send_again, send_blocked, send_errors;
     uint64_t rejects, reject_hint;
+    uint64_t busy;      /* K22: busy refusals/advisories from this peer */
+    uint64_t busy_hold; /* K22: 1 while entries are withheld from it */
 };
 
 struct efs_raft_group_status {
@@ -553,6 +555,9 @@ struct efs_raft_group_status {
     uint64_t proto_drops;
     uint32_t npeers;
     uint32_t resync_pending; /* W145: efs-mgmt raft-resync requested, not yet installed */
+    /* K22/W23 bound: entries past applied (committed or not) and its cap;
+     * AppendEntries refused busy (follower), proposals refused BUSY (leader). */
+    uint64_t unapplied, max_unapplied, busy_sent, admit_busy;
     struct efs_raft_peer_status peers[EFS_RAFT_STATUS_PEERS];
 };
 
@@ -563,6 +568,11 @@ struct efs_msg_raft_status_reply {
     uint64_t export_salt; /* valid when kv_has_root */
     uint32_t ngroups;
     uint32_t pad;
+    /* K22/W23 node bound: KV unflushed memtable/WAL tail vs its derived
+     * budget, L0 bytes vs cap, applies deferred at the budget, and
+     * proposals refused at the 3/4 admission watermark. */
+    uint64_t kv_mt_bytes, kv_mem_budget, kv_l0_bytes, kv_l0_cap;
+    uint64_t kv_apply_deferred, admit_busy;
     struct efs_raft_group_status groups[EFS_RAFT_HOST_MAX_GROUPS];
 };
 

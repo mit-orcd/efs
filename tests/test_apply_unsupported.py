@@ -82,7 +82,7 @@ static int cursor_at(struct efs_kv *kv,uint8_t group,uint64_t index){
 }
 int main(int argc,char **argv){
     (void)argc;
-    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};
     struct efs_kv *kv=efs_kv_lsm_open(argv[1],&cfg);assert(kv);
     struct efs_raft r={EFS_RAFT_LEADER,1,0};
     struct efs_raft_host h={.kv=kv};struct host_group g={.group=2,.r=&r,.host=&h};
