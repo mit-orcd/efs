@@ -3,7 +3,7 @@
 **Purpose:** user-requested short server profile during the 7 × 10M
 tiny-files run, to explain why four clients ran about half as fast as the
 other three, and to name the server hot paths.
-**Verdict: explained (diagnosis, no fix).** The gap comes from metadata-group
+**Verdict: explained (diagnosis); spread-leader rerun inconclusive (see below).** The gap comes from metadata-group
 placement, not from the clients. Each client tree lives in one of the two Raft
 groups, chosen by the parity of its top directory's inode. Group 2 carried four
 client trees and group 0 three. Each group has a similar throughput ceiling, and
@@ -88,16 +88,55 @@ Also growing during the run: KV L0 table count on every node (leader 121 →
 this create rate. The group-2 packer (on fcstor005) reported `lag_s` rising to
 300 s and 35.9 GiB unpacked.
 
-## What this suggests (not tested)
+## What this suggests
 
-1. Spread leadership: `EFS_METADATA_BALANCE=1` (off by default) places the two
-   groups' leaders on different nodes. Here node 2 carried both groups' fsyncs,
-   hashing, packing validation and the catalog build.
+1. Spread leadership. Correction: `EFS_METADATA_BALANCE=1` does **not** do that.
+   Its `host_balanced_voter()` deliberately colocates both leaders on a voter
+   common to both groups. `de307a783` adds an opt-in mode 2 that spreads them
+   (see the rerun below). Here node 2 carried both groups' fsyncs, hashing,
+   packing validation and the catalog build.
 2. Make a disconnected follower resume appends without waiting for the next
    snapshot, and add a leader-side per-peer match/next-index counter to `raft-status`.
 3. The snapshot-export stall (6–8 s, and growing) remains the next gate from the rotation work.
 4. With two groups and parity placement, a workload of N top-level trees gets an
    uneven split whenever N is odd. W66 (more groups, routing) is the real fix.
+
+## Rerun with spread leaders (`EFS_METADATA_BALANCE=2`) — inconclusive
+
+Build `e8b3f1bb1`: devel `e7f640f3d` (W143, W144) plus `de307a783`/`e8b3f1bb1`,
+the new spread mode. `make_test_summary.sh` on node9901: 816 commands. The
+spread-voter test expectation was wrong once and is fixed; the remaining
+failure was the known W141 `test_reclaim` flake, which passed 3/3 reruns.
+`orcd-test.py start --balance 2` (in `~/git/cluster`) placed group 0 on node 1
+and group 2 on node 3, as intended. The first run's trees were stopped at about
+1.0–1.3M files per client and kept. New per-client parent directories were
+chosen with the same group per client as before.
+
+| 60 s window | Leaders | Group-0 clients | Group-2 clients | g0 / g2 entries/s |
+|---|---|---|---|---|
+| Run 1, first 10 min (`08cc16af4`) | both node 2 | 593–623 files/s | 369–377 files/s | — |
+| Spread, ~3 min | node 1 / node 3 | 130–138 | 136–153 | 1,637 / 2,434 |
+| Spread, ~10 min | node 1 / node 3 | 93–101 | 94–96 | 1,218 / 1,564 |
+| Colocated control (`--balance 1`), ~3 min | node 3 / node 3 | 124–138 | 121–134 | 1,649 / 2,121 |
+| Colocated control, ~10 min | node 2 / node 2 | 356–557 | **14–87** | 5,284 / 817 |
+
+- With spread leaders the per-client gap disappeared: both groups' clients ran at the same rate.
+- **Total throughput fell about 5× in both arms, though, and it was not caused by leader placement.**
+  The cluster restarted onto the first run's backlog:
+  - group-2 packer about an hour behind (`lag_s≈3600`) with ~75 GiB unpacked, against 16.7 GiB for group 0;
+  - group-2 GC pending ≈3.2M and 2.1M, against 0 for group 0;
+  - leader L0 at ~250 tables before the run started;
+  - group-0 snapshots of 3.5 GB taking 7–12 s.
+- In the colocated control, group 0 recovered to run-1 speed while group 2 nearly stopped.
+- The hot thread on the new group-0 leader was the packer (`pk_abandon` →
+  ledger decode, BLAKE3, digest sort, KV scans: one core at 81%).
+- A clean comparison needs equal starting state: a freshly formatted cluster per
+  arm, or a drained backlog. Raw profile:
+  `~/orcd/scratch/efs/profile-tiny-20261022/run2-spread/fcstor003/`.
+
+The 30-minute follower stall above is a second occurrence of the W145 class
+(a replica stops receiving appends after a short local stall). Here it
+recovered only through a leader snapshot install.
 
 ## Reproduction
 
