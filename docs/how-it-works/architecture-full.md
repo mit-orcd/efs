@@ -1574,7 +1574,10 @@ pre-existing peer read of truncated data (fails on 47ba6b590) is fixed.
 [Step 3](../status/d25-step3-gates-20261021.md) (lazy 86-byte TRUNCATE, off by default): g0-g4
 PASS on node9901, sparse 100 GiB O_TRUNC 0.024 s, after fixing a pre-existing
 stale-cache republish the eager baseline 47ba6b590 still fails (UNCOND images now
-carry their formation epoch). Step 4 (sweep, SWEEP_DONE/RETIRE, masked packing) is next.
+carry their formation epoch). [Step 4](../status/d25-step4-gates-20261022.md): lane-cursor sweep,
+SWEEP_DONE/RETIRE, base clips, masked packing; g5-g8 PASS (2 GiB O_TRUNC 0.020 s, sweep
+9 s, space returned; history bound, restart mid-sweep, packed files). Step 5 (remove the
+eager path, default to lazy) is next.
 Earlier reviews and responses are kept as superseded history.
 Replaces the declined 256 MiB EBUSY refusal; W43 stays open.
 

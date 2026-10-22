@@ -22,7 +22,7 @@
 #define DENT_VAL 20
 #define ALLOC_VAL 8
 #define LANE_VAL EFS_META_LANE_BYTES
-#define CHUNK_HDR 20
+#define CHUNK_HDR 24 /* gen:8 profile:4 epoch:8 base_clip:4 */
 #define CHUNK_VAL (CHUNK_HDR + 4 * EFS_NUM_FRAGMENTS + \
                    EFS_HASH_SIZE * EFS_NUM_FRAGMENTS)
 /* Trailer after CHUNK_VAL: u16 count, u16 pad, then count records.
@@ -180,6 +180,12 @@ struct lane_rec {
     uint64_t mtime_gen;
     uint64_t append_bar; /* live reservation watermark; 0 = no barrier */
     uint64_t present;
+    /* D25 truncate sweep (protocol §4.2): the target fence epoch being
+     * swept, the next chunk index to examine, and the highest target this
+     * lane was completely swept for. */
+    uint64_t sweep_target;
+    uint64_t sweep_next_ci;
+    uint64_t swept_epoch;
 };
 
 static void pack_lane(uint8_t *p, const struct lane_rec *l)
@@ -192,6 +198,9 @@ static void pack_lane(uint8_t *p, const struct lane_rec *l)
     be64(p + 40, l->mtime_gen);
     be64(p + 48, l->append_bar);
     be64(p + 56, l->present);
+    be64(p + 64, l->sweep_target);
+    be64(p + 72, l->sweep_next_ci);
+    be64(p + 80, l->swept_epoch);
 }
 
 /* Tolerates a record carrying only the reduce triple: a lane whose only
@@ -214,6 +223,11 @@ static int unpack_lane(const uint8_t *p, uint32_t n, struct lane_rec *l)
         l->append_bar = rd64(p + 48);
     if (n >= 64)
         l->present = rd64(p + 56);
+    if (n >= 88) {
+        l->sweep_target = rd64(p + 64);
+        l->sweep_next_ci = rd64(p + 72);
+        l->swept_epoch = rd64(p + 80);
+    }
     return EFS_OK;
 }
 
@@ -3758,6 +3772,7 @@ static void pack_chunk(uint8_t *p, const struct efs_meta_chunk *ch)
     be64(p + 0, ch->generation);
     be32(p + 8, ch->coding_profile_id);
     be64(p + 12, ch->content_epoch);
+    be32(p + 20, ch->base_clip);
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
         be32(p + CHUNK_HDR + (uint32_t)i * 4u, ch->nodes[i]);
     memcpy(p + CHUNK_HDR + 4 * EFS_NUM_FRAGMENTS, ch->checksums,
@@ -3776,6 +3791,7 @@ static int unpack_chunk(const uint8_t *p, uint32_t n, struct efs_meta_chunk *ch)
     ch->generation = rd64(p + 0);
     ch->coding_profile_id = rd32(p + 8);
     ch->content_epoch = rd64(p + 12);
+    ch->base_clip = rd32(p + 20);
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
         ch->nodes[i] = rd32(p + CHUNK_HDR + (uint32_t)i * 4u);
     memcpy(ch->checksums, p + CHUNK_HDR + 4 * EFS_NUM_FRAGMENTS,
@@ -4816,12 +4832,36 @@ static int activate_lanes(struct efs_kv *kv, efs_ino_t ino, uint64_t mask,
         return EFS_OK; /* idempotent replay */
     if (check_epoch && row.content_epoch != expected_epoch)
         return EFS_ERR_STALE;
-    row.active_lanes |= mask;
-    pack_inode(val, &row);
-    rc = efs_kv_key_inode(efs_kv_inode_shard(ino), ino, key, &klen);
-    if (rc != EFS_OK)
-        return rc;
-    return meta_write_put(kv, key, klen, val, INO_VAL);
+    {
+        /* D25 §3.4: a lane registered now cannot hold rows older than the
+         * current epoch, so it is done for every existing fence entry. */
+        struct efs_fence_history h;
+        uint8_t hk[EFS_KV_KEY_MAX], hv[EFS_META_FENCE_BYTES];
+        uint32_t hkl = 0, hvl = 0;
+        struct efs_kv_item it[2];
+        uint64_t added = mask & ~row.active_lanes;
+        rc = fence_history_read(kv, ino, row.generation, EFS_META_FENCE_INODE,
+                                NULL, NULL, NULL, &h);
+        if (rc != EFS_OK)
+            return rc;
+        row.active_lanes |= mask;
+        pack_inode(val, &row);
+        rc = efs_kv_key_inode(efs_kv_inode_shard(ino), ino, key, &klen);
+        if (rc != EFS_OK)
+            return rc;
+        it[0] = (struct efs_kv_item){EFS_KV_PUT, key, klen, val, INO_VAL};
+        if (!h.count)
+            return meta_write_batch(kv, it, 1);
+        for (uint32_t i = 0; i < h.count; i++)
+            h.entries[i].done |= added;
+        rc = content_fence_key(ino, row.generation, EFS_META_FENCE_INODE, hk, &hkl);
+        if (rc == EFS_OK)
+            rc = efs_meta_pack_fence_history(&h, hv, sizeof(hv), &hvl);
+        if (rc != EFS_OK)
+            return rc;
+        it[1] = (struct efs_kv_item){EFS_KV_PUT, hk, hkl, hv, hvl};
+        return meta_write_batch(kv, it, 2);
+    }
 }
 
 int efs_meta_apply_activate_lanes(struct efs_kv *kv, efs_ino_t ino,
@@ -8938,7 +8978,9 @@ int efs_meta_get_chunk_view_tx(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
         view.fence_epoch = stamp.fenced_epoch;
         epoch = max_u64(stamp.fenced_epoch, view.base.content_epoch);
         parts[0] = (struct efs_fence_part){view.base.content_epoch, 0,
-                                          view.base.generation ? cs : 0};
+                                          view.base.generation ?
+                                          (view.base.base_clip && view.base.base_clip < cs ?
+                                           view.base.base_clip : cs) : 0};
         for (uint32_t i = 0; i < view.ndelta; ++i) {
             const struct efs_meta_delta *d = &view.deltas[i];
             epoch = max_u64(epoch, d->content_epoch);
@@ -9028,7 +9070,9 @@ int efs_meta_get_chunk_view_auth(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
     if (view.base.content_epoch > epoch)
         return EFS_ERR_BUSY;
     parts[0] = (struct efs_fence_part){view.base.content_epoch, 0,
-                                      view.base.generation ? cs : 0};
+                                      view.base.generation ?
+                                      (view.base.base_clip && view.base.base_clip < cs ?
+                                       view.base.base_clip : cs) : 0};
     for (uint32_t i = 0; i < view.ndelta; ++i) {
         const struct efs_meta_delta *d = &view.deltas[i];
         if (d->content_epoch > epoch)
@@ -9639,6 +9683,351 @@ int efs_meta_apply_pack_retire(struct efs_kv *kv, uint32_t group, const uint64_t
     return rc;
 }
 
+/* ---- D25 truncate sweep (protocol §4.2-§4.4) ---- */
+
+#define SWEEP_SCAN_MAX 256u
+#define SWEEP_CHANGE_MAX 64u
+#define SWEEP_ITEMS (SWEEP_SCAN_MAX + SWEEP_CHANGE_MAX * (2u + EFS_CHUNK_DELTA_MAX) + 8u)
+
+struct tsweep_row {
+    uint32_t ci;
+    uint32_t klen, vlen;
+    uint8_t key[EFS_KV_KEY_MAX];
+    uint8_t val[CHUNK_VAL_MAX];
+};
+struct tsweep_scan {
+    efs_ino_t ino;
+    uint64_t gen;
+    uint8_t lane;
+    uint32_t n;
+    int more;
+    struct tsweep_row *rows;
+};
+static int tsweep_scan_cb(void *user, const uint8_t *key, uint32_t klen,
+                         const uint8_t *val, uint32_t vlen)
+{
+    struct tsweep_scan *sc = user;
+    if (klen < 24 || key[2] != EFS_KV_KIND_CHUNK || rd64(key + 3) != sc->ino ||
+        rd64(key + 11) != sc->gen || key[19] != sc->lane)
+        return 0;
+    if (sc->n == SWEEP_SCAN_MAX) {
+        sc->more = 1;
+        return 1;
+    }
+    if (klen > EFS_KV_KEY_MAX || vlen > CHUNK_VAL_MAX)
+        return 1;
+    struct tsweep_row *r = &sc->rows[sc->n++];
+    r->ci = rd32(key + 20);
+    r->klen = klen;
+    r->vlen = vlen;
+    memcpy(r->key, key, klen);
+    memcpy(r->val, val, vlen);
+    return 0;
+}
+
+/* Visible length of a part at chunk offset `off` (file offset c + off) that
+ * would otherwise show `len` bytes, under history S. */
+static uint32_t sweep_visible(const struct efs_fence_history *s, uint64_t epoch,
+                              uint64_t c, uint32_t off, uint32_t len)
+{
+    uint64_t end = efs_fence_valid_end(s, epoch), start = c + off;
+    if (end <= start)
+        return 0;
+    return end - start < len ? (uint32_t)(end - start) : len;
+}
+
+struct tsweep_page {
+    struct tsweep_row rows[SWEEP_SCAN_MAX];
+    struct efs_kv_item it[SWEEP_ITEMS];
+    uint8_t vals[SWEEP_CHANGE_MAX][CHUNK_VAL_MAX];
+    uint8_t gc_keys[SWEEP_ITEMS][EFS_KV_KEY_MAX];
+    uint8_t gc_vals[SWEEP_ITEMS][EFS_META_GC_VAL];
+};
+
+int efs_meta_apply_trunc_sweep(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                               uint8_t lane, uint64_t target, uint32_t cs,
+                               const struct efs_fence_history *snap)
+{
+    uint8_t lk[EFS_KV_KEY_MAX], lv[LANE_VAL], pref[EFS_KV_KEY_MAX], start[EFS_KV_KEY_MAX];
+    uint32_t lkl = 0, lvn = sizeof(lv), plen = 0, slen = 0, n = 0, changed = 0, dropped = 0;
+    struct lane_rec ln;
+    struct packed_retirement retirement = {0};
+    struct tsweep_scan sc;
+    struct tsweep_page *pg;
+    uint32_t i;
+    int rc, stop = 0;
+
+    if (!kv || !ino || !gen || lane >= EFS_META_LANES || !target || !snap ||
+        cs < EFS_MIN_CHUNK_SIZE || cs > EFS_MAX_CHUNK_SIZE || (cs & (cs - 1)) ||
+        efs_fence_history_valid(snap) != EFS_OK || !snap->count ||
+        snap->entries[snap->count - 1].epoch != target)
+        return EFS_ERR_INVAL;
+    rc = efs_kv_key_lane(efs_kv_lane_shard(ino, lane), ino, gen, lane, lk, &lkl);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_kv_get(kv, lk, lkl, lv, &lvn);
+    if (rc == EFS_ERR_NOT_FOUND) {
+        memset(&ln, 0, sizeof(ln));
+        ln.fenced_epoch = target;
+    } else if (rc == EFS_OK) {
+        rc = unpack_lane(lv, lvn, &ln);
+        if (rc != EFS_OK)
+            return rc;
+    } else {
+        return rc;
+    }
+    if (target < ln.sweep_target)
+        return EFS_OK; /* obsolete command */
+    if (target > ln.sweep_target) {
+        ln.sweep_target = target;
+        ln.sweep_next_ci = 0;
+    }
+    (void)lane_adopt(&ln, target);
+    if (ln.swept_epoch >= target) {
+        pack_lane(lv, &ln);
+        return meta_write_put(kv, lk, lkl, lv, LANE_VAL);
+    }
+    pg = malloc(sizeof(*pg));
+    if (!pg)
+        return EFS_ERR_NOMEM;
+    memset(&sc, 0, sizeof(sc));
+    sc.ino = ino; sc.gen = gen; sc.lane = lane; sc.rows = pg->rows;
+    rc = efs_kv_key_chunk(efs_kv_lane_shard(ino, lane), ino, gen, lane, 0, pref, &plen);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_chunk(efs_kv_lane_shard(ino, lane), ino, gen, lane,
+                              ln.sweep_next_ci > UINT32_MAX ? UINT32_MAX :
+                              (uint32_t)ln.sweep_next_ci, start, &slen);
+    if (rc == EFS_OK && ln.sweep_next_ci <= UINT32_MAX)
+        rc = efs_kv_scan_from(kv, pref, 20, start, slen, tsweep_scan_cb, &sc);
+    if (rc < 0) {
+        free(pg);
+        return rc;
+    }
+    rc = EFS_OK;
+    uint64_t next = ln.sweep_next_ci;
+    for (i = 0; i < sc.n && rc == EFS_OK && !stop; i++) {
+        struct tsweep_row *r = &pg->rows[i];
+        struct efs_meta_chunk base;
+        struct efs_meta_delta ds[EFS_CHUNK_DELTA_MAX];
+        uint32_t nd = trailer_n(r->val, r->vlen), j, need;
+        uint64_t c = (uint64_t)r->ci * cs;
+        int dirty = 0, live = 0;
+
+        /* A row under a pending transaction intent waits: stop here, the
+         * cursor stays on it, a later entry retries. */
+        need = 3u + 2u * (nd + 1u);
+        if (changed == SWEEP_CHANGE_MAX || n + need > SWEEP_ITEMS ||
+            meta_write_check(kv, r->key, r->klen) != EFS_OK) {
+            stop = 1;
+            break;
+        }
+        rc = unpack_chunk(r->val, r->vlen, &base);
+        for (j = 0; rc == EFS_OK && j < nd; j++)
+            rc = trailer_at(r->val, r->vlen, j, &ds[j]);
+        if (rc != EFS_OK)
+            break;
+        if (base.generation) {
+            uint32_t blen = base.base_clip && base.base_clip < cs ? base.base_clip : cs;
+            uint32_t vis = sweep_visible(snap, base.content_epoch, c, 0, blen);
+            if (!vis) {
+                if (base.coding_profile_id == EFS_META_PROFILE_PACK) {
+                    if (retirement.present) { stop = 1; break; } /* one per batch */
+                    retirement.before = base;
+                    retirement.present = 1;
+                } else {
+                    rc = gc_queue(pg->it, &n, SWEEP_ITEMS, pg->gc_keys, pg->gc_vals,
+                                  ino, lane, r->ci, &base);
+                    if (rc != EFS_OK)
+                        break;
+                }
+                uint64_t epoch = base.content_epoch;
+                memset(&base, 0, sizeof(base));
+                base.coding_profile_id = EFS_META_PROFILE_K2F1;
+                base.content_epoch = epoch;
+                dirty = 1;
+            } else if (vis < blen) {
+                base.base_clip = vis;
+                dirty = 1;
+            }
+        }
+        for (j = 0; j < nd && rc == EFS_OK; j++) {
+            struct efs_meta_delta *d = &ds[j];
+            uint32_t vis;
+            if (!d->len || !d->generation)
+                continue;
+            vis = sweep_visible(snap, d->content_epoch, c, d->off, d->len);
+            if (!vis) {
+                struct efs_meta_chunk span;
+                memset(&span, 0, sizeof(span));
+                span.generation = d->generation;
+                memcpy(span.nodes, d->nodes, sizeof(span.nodes));
+                memcpy(span.checksums, d->checksums, sizeof(span.checksums));
+                rc = gc_queue(pg->it, &n, SWEEP_ITEMS, pg->gc_keys, pg->gc_vals,
+                              ino, lane, r->ci, &span);
+                d->off = 0;
+                d->len = 0; /* tombstone: its object is now GC's */
+                dirty = 1;
+            } else if (vis < d->len) {
+                d->len = vis;
+                dirty = 1;
+            }
+        }
+        if (rc != EFS_OK)
+            break;
+        live = base.generation != 0;
+        for (j = 0; j < nd; j++)
+            live |= ds[j].len != 0;
+        if (!live) {
+            pg->it[n++] = (struct efs_kv_item){EFS_KV_DEL, r->key, r->klen, NULL, 0};
+            dropped++;
+            changed++;
+        } else if (dirty) {
+            uint32_t vl = pack_chunk_value(pg->vals[changed], &base, ds, nd);
+            pg->it[n++] = (struct efs_kv_item){EFS_KV_PUT, r->key, r->klen,
+                                               pg->vals[changed], vl};
+            if (retirement.present && !retirement.has_after && r->ci == 0) {
+                retirement.after = base;
+                retirement.has_after = 1;
+            }
+            changed++;
+        }
+        next = (uint64_t)r->ci + 1;
+    }
+    if (rc == EFS_OK) {
+        ln.sweep_next_ci = next;
+        if (!stop && !sc.more)
+            ln.swept_epoch = max_u64(ln.swept_epoch, target);
+        ln.present = ln.present >= dropped ? ln.present - dropped : 0;
+        if (changed)
+            ln.seq++;
+        pack_lane(lv, &ln);
+        pg->it[n++] = (struct efs_kv_item){EFS_KV_PUT, lk, lkl, lv, LANE_VAL};
+        rc = packed_retirement_commit(kv, ino, gen, &retirement, pg->it, n, SWEEP_ITEMS);
+    }
+    free(pg);
+    return rc;
+}
+
+int efs_meta_get_lane_swept(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                            uint8_t lane, uint64_t *swept_epoch)
+{
+    uint8_t key[EFS_KV_KEY_MAX], val[LANE_VAL];
+    uint32_t kl = 0, vn = sizeof(val);
+    struct lane_rec ln;
+    int rc;
+    if (!kv || !ino || !gen || lane >= EFS_META_LANES || !swept_epoch)
+        return EFS_ERR_INVAL;
+    rc = efs_kv_key_lane(efs_kv_lane_shard(ino, lane), ino, gen, lane, key, &kl);
+    if (rc == EFS_OK)
+        rc = efs_kv_get(kv, key, kl, val, &vn);
+    if (rc == EFS_OK)
+        rc = unpack_lane(val, vn, &ln);
+    if (rc == EFS_OK)
+        *swept_epoch = ln.swept_epoch;
+    return rc;
+}
+
+/* Inode group: record that `lane` holds swept_epoch >= target. Obsolete or
+ * foreign evidence is OK with no change. */
+int efs_meta_apply_sweep_done(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                              uint8_t lane, uint64_t target)
+{
+    struct efs_meta_row row;
+    struct efs_fence_history h;
+    uint8_t k[EFS_KV_KEY_MAX], v[EFS_META_FENCE_BYTES];
+    uint32_t kl = 0, vl = 0;
+    int rc;
+    if (!kv || !ino || lane >= EFS_META_LANES || !target)
+        return EFS_ERR_INVAL;
+    rc = efs_meta_apply_get_inode(kv, ino, &row);
+    if (rc == EFS_ERR_NOT_FOUND)
+        return EFS_OK;
+    if (rc != EFS_OK)
+        return rc;
+    if (row.generation != gen || !(row.active_lanes & (1ull << lane)))
+        return EFS_OK;
+    rc = fence_history_read(kv, ino, gen, EFS_META_FENCE_INODE, NULL, NULL, NULL, &h);
+    if (rc != EFS_OK)
+        return rc;
+    for (uint32_t i = 0; i < h.count; i++) {
+        if (h.entries[i].epoch != target)
+            continue;
+        if (h.entries[i].done & (1ull << lane))
+            return EFS_OK;
+        h.entries[i].done |= 1ull << lane;
+        rc = content_fence_key(ino, gen, EFS_META_FENCE_INODE, k, &kl);
+        if (rc == EFS_OK)
+            rc = efs_meta_pack_fence_history(&h, v, sizeof(v), &vl);
+        return rc == EFS_OK ? meta_write_put(kv, k, kl, v, vl) : rc;
+    }
+    return EFS_OK;
+}
+
+/* Inode group: drop every entry <= target once all active lanes are done
+ * for target. The record stays (count 0, revision kept); TRUNC_PENDING goes
+ * with the last entry. */
+int efs_meta_apply_retire(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                          uint64_t target)
+{
+    struct efs_meta_row row;
+    struct efs_fence_history h, next;
+    uint8_t k[EFS_KV_KEY_MAX], v[EFS_META_FENCE_BYTES], kp[EFS_KV_KEY_MAX];
+    uint32_t kl = 0, vl = 0, kpl = 0, at = UINT32_MAX;
+    struct efs_kv_item it[2];
+    int rc;
+    if (!kv || !ino || !target)
+        return EFS_ERR_INVAL;
+    rc = efs_meta_apply_get_inode(kv, ino, &row);
+    if (rc == EFS_ERR_NOT_FOUND || (rc == EFS_OK && row.generation != gen)) {
+        /* The file is gone: its pending sweep is the reaper's now. */
+        uint8_t pv[8];
+        uint32_t pvl = sizeof(pv);
+        rc = trunc_pending_key(ino, kp, &kpl);
+        if (rc == EFS_OK)
+            rc = efs_kv_get(kv, kp, kpl, pv, &pvl);
+        if (rc == EFS_ERR_NOT_FOUND)
+            return EFS_OK;
+        if (rc != EFS_OK)
+            return rc;
+        if (pvl != 8 || rd64(pv) != gen)
+            return EFS_OK;
+        rc = meta_write_del(kv, kp, kpl);
+        return rc == EFS_ERR_NOT_FOUND ? EFS_OK : rc;
+    }
+    if (rc != EFS_OK)
+        return rc;
+    rc = fence_history_read(kv, ino, gen, EFS_META_FENCE_INODE, NULL, NULL, NULL, &h);
+    if (rc != EFS_OK)
+        return rc;
+    for (uint32_t i = 0; i < h.count; i++)
+        if (h.entries[i].epoch == target)
+            at = i;
+    if (at == UINT32_MAX)
+        return EFS_OK;
+    if ((h.entries[at].done & row.active_lanes) != row.active_lanes)
+        return EFS_ERR_INVAL;
+    if (h.revision == UINT64_MAX)
+        return EFS_ERR_INVAL;
+    next = h;
+    next.count = 0;
+    for (uint32_t i = at + 1; i < h.count; i++)
+        next.entries[next.count++] = h.entries[i];
+    next.revision++;
+    rc = content_fence_key(ino, gen, EFS_META_FENCE_INODE, k, &kl);
+    if (rc == EFS_OK)
+        rc = efs_meta_pack_fence_history(&next, v, sizeof(v), &vl);
+    if (rc != EFS_OK)
+        return rc;
+    it[0] = (struct efs_kv_item){EFS_KV_PUT, k, kl, v, vl};
+    if (next.count)
+        return meta_write_batch(kv, it, 1);
+    rc = trunc_pending_key(ino, kp, &kpl);
+    if (rc != EFS_OK)
+        return rc;
+    it[1] = (struct efs_kv_item){EFS_KV_DEL, kp, kpl, NULL, 0};
+    return meta_write_batch(kv, it, 2);
+}
+
 int efs_meta_pack_candidate(struct efs_kv *kv, efs_ino_t ino, uint64_t inode_gen,
                             struct efs_pack_candidate *out)
 {
@@ -9659,17 +10048,14 @@ int efs_meta_pack_candidate(struct efs_kv *kv, efs_ino_t ino, uint64_t inode_gen
     if (rc == EFS_OK) rc = efs_kv_get(kv, lk, lkl, lv, &lvl);
     if (rc == EFS_OK) rc = unpack_lane(lv, lvl, &lane);
     if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND) return rc;
-    /* D25: packing copies a raw image. Until it builds masked images, an
-     * inode with a fence history or a lane behind its epoch stays a
-     * candidate (BUSY) and is not packed. */
-    {
-        struct efs_fence_history h;
-        rc = fence_history_read(kv, ino, row.generation, EFS_META_FENCE_INODE,
-                                NULL, NULL, NULL, &h);
-        if (rc != EFS_OK) return rc;
-        if (h.count || lane.fenced_epoch != row.content_epoch) return EFS_ERR_BUSY;
-    }
-    out->size = max_u64(row.base_size, lane.max_end);
+    /* D25: the packed image is masked by the inode history (and the base
+     * clip); a lane EOF counts only at the current epoch. */
+    struct efs_fence_history hist;
+    rc = fence_history_read(kv, ino, row.generation, EFS_META_FENCE_INODE,
+                            NULL, NULL, NULL, &hist);
+    if (rc != EFS_OK) return rc;
+    out->size = lane.fenced_epoch == row.content_epoch ?
+                max_u64(row.base_size, lane.max_end) : row.base_size;
     out->mtime = max_u64(row.base_mtime, lane.max_mtime);
     uint8_t key[EFS_KV_KEY_MAX], val[CHUNK_VAL_MAX];
     uint32_t kl = 0, vl = sizeof(val);
@@ -9686,7 +10072,12 @@ int efs_meta_pack_candidate(struct efs_kv *kv, efs_ino_t ino, uint64_t inode_gen
     for (uint32_t i = 0; i < out->ndelta; i++) {
         rc = trailer_at(val, vl, i, &out->deltas[i]);
         if (rc != EFS_OK) return rc;
+        out->deltas[i].len = sweep_visible(&hist, out->deltas[i].content_epoch, 0,
+                                           out->deltas[i].off, out->deltas[i].len);
     }
+    out->base_visible = out->base.generation ?
+        sweep_visible(&hist, out->base.content_epoch, 0, 0,
+                      out->base.base_clip ? out->base.base_clip : UINT32_MAX) : 0;
     return EFS_OK;
 }
 

@@ -482,7 +482,9 @@ and a same-format orderly restart.
    behind the old path until **g0–g4**
    pass. Incremental private development is fine; no partly converted path
    is qualified.
-4. `TRUNC_SWEEP`, `SWEEP_DONE`, `RETIRE`, reclaim and packing (§4), with
+4. **Done — [step-4 evidence](d25-step4-gates-20261022.md): g5–g8 PASS;
+   step-3 gates still PASS with the sweep active.** `TRUNC_SWEEP`,
+   `SWEEP_DONE`, `RETIRE`, reclaim and packing (§4), with
    g5–g8.
 5. Remove `LANE_FENCE`, the destructive truncate path, tail stubs and the
    client tail rewrite. Update architecture §7.3 ("pushed by a bounded fence

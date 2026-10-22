@@ -339,6 +339,8 @@ struct efs_msg_gc_status_reply {
     struct efs_expiry_status expiry;
     /* Version 4 appends W124 node reclaim state. */
     struct efs_reclaim_status reclaim;
+    /* Version 5 appends D25 TRUNC_PENDING inodes seen by the last pass. */
+    uint64_t trunc_pending[2];
 };
 
 /* D25 read authority for write admission, including holes and new lanes.

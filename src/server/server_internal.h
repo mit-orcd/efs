@@ -94,6 +94,7 @@ struct efsd_server {
     uint64_t gc_delete_errors, gc_mismatches, gc_last_delete_us;
     uint64_t gc_pass_start_us, gc_last_pass_us, gc_passes;
     uint64_t gc_sweep_errors, gc_reap_errors, gc_ack_errors, gc_scan_errors;
+    uint64_t gc_trunc_seen[2]; /* D25 TRUNC_PENDING inodes at the last pass */
     uint64_t gc_reap_seen[2], gc_orphan_seen[2], gc_pending[2], gc_first_reap[2], gc_first_seen_us[2];
     uint64_t gc_missing_exports;
     /* W124 node reclaim (reclaim.c). Bytes credited back to quota at

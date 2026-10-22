@@ -143,6 +143,12 @@
  * inode epoch the proposer read, or adopt it; never lowers it. A lane-local
  * publish to a lane without a stamp answers BUSY until this commits. */
 #define EFS_MD_CMD_BOOTSTRAP_LANE 79 /* [ino:8][gen:8][lane:1][epoch:8], 26 B */
+/* D25 sweep (protocol §1.2, §4). TRUNC_SWEEP on the lane's group, the other
+ * two on the inode's group. */
+#define EFS_MD_CMD_TRUNC_SWEEP 80 /* [ino:8][gen:8][lane:1][target:8][cs:4]
+                                   * [count:1][count x (epoch:8 size:8)] */
+#define EFS_MD_CMD_SWEEP_DONE  81 /* [ino:8][gen:8][lane:1][target:8], 26 B */
+#define EFS_MD_CMD_RETIRE      82 /* [ino:8][gen:8][target:8], 25 B */
 /* Data-plane GC (spec L7). LANE_SWEEP runs on the LANE's group: deletes the
  * lane's chunk keys (emitting one GC record per chunk on the group's anchor
  * shard), then the lane key. REAP_DONE runs on the INODE's group: clears

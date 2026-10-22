@@ -31,7 +31,7 @@
 #define EFS_META_INO_BYTES   128
 #define EFS_META_DENT_BYTES  20
 #define EFS_META_ALLOC_BYTES 8
-#define EFS_META_LANE_BYTES  64
+#define EFS_META_LANE_BYTES  88 /* + D25 sweep_target, sweep_next_ci, swept_epoch */
 
 /* History sidecars keep the established inode/lane encodings unchanged.
  * Authority 64 is the inode; 0..63 are its publication lanes. The FileID
@@ -371,6 +371,9 @@ struct efs_meta_chunk {
     uint64_t generation;
     uint32_t coding_profile_id;
     uint64_t content_epoch;
+    /* D25 sweep clip: 0 = the base shows its whole chunk; otherwise it
+     * shows only [0, base_clip). Only ever lowered; a new base resets it. */
+    uint32_t base_clip;
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
     uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
     struct efs_pack_ref packed; /* profile PACK only; canonical persisted extension */
@@ -463,6 +466,21 @@ int efs_meta_get_chunk_view_auth(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
                                  uint32_t ci, uint32_t cs, uint64_t epoch,
                                  const struct efs_fence_history *history,
                                  struct efs_meta_chunk_view *out);
+/* D25 truncate sweep (protocol §4). TRUNC_SWEEP on the lane's group:
+ * adopt `target`, examine at most 256 rows from the lane's cursor, delete
+ * dead rows (GC records / packed ledger), clip partly visible ones, and set
+ * swept_epoch when the lane end is reached. SWEEP_DONE and RETIRE run on
+ * the inode's group. Obsolete or foreign commands are OK with no change. */
+int efs_meta_apply_trunc_sweep(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                               uint8_t lane, uint64_t target, uint32_t cs,
+                               const struct efs_fence_history *snap);
+int efs_meta_apply_sweep_done(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                              uint8_t lane, uint64_t target);
+int efs_meta_apply_retire(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                          uint64_t target);
+/* Sweep state of a lane stamp: swept_epoch; NOT_FOUND without a stamp. */
+int efs_meta_get_lane_swept(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                            uint8_t lane, uint64_t *swept_epoch);
 /* The lane stamp's adopted epoch; NOT_FOUND when the lane has no stamp. */
 int efs_meta_get_lane_epoch(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
                             uint8_t lane, uint64_t *epoch);

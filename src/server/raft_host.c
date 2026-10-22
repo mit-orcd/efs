@@ -1898,6 +1898,59 @@ static int apply_lane_fence_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return EFS_OK;
 }
 
+/* D25 sweep commands (protocol §1.2, §4.2-§4.4). Exact lengths and the
+ * owning group, checked before the apply touches the KV. */
+static int apply_trunc_sweep_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                                 uint32_t clen, uint64_t index, uint8_t group)
+{
+    struct efs_fence_history snap;
+    efs_ino_t ino;
+    uint8_t lane, count;
+    int rc;
+
+    if (clen < 31 || (count = cmd[30]) == 0 || count > EFS_FENCE_HISTORY_MAX ||
+        clen != 31u + 16u * count || !rd64be(cmd + 1) || !rd64be(cmd + 9) ||
+        cmd[17] >= EFS_META_LANES || !rd64be(cmd + 18))
+        return EFS_ERR_PROTO;
+    ino = rd64be(cmd + 1);
+    lane = cmd[17];
+    if (efs_raft_shard_group(efs_kv_lane_shard(ino, lane)) != group)
+        return EFS_ERR_INVAL;
+    memset(&snap, 0, sizeof(snap));
+    snap.count = count;
+    for (uint32_t i = 0; i < count; i++) {
+        snap.entries[i].epoch = rd64be(cmd + 31 + 16 * i);
+        snap.entries[i].size = rd64be(cmd + 39 + 16 * i);
+    }
+    rc = efs_meta_apply_trunc_sweep(h->kv, ino, rd64be(cmd + 9), lane,
+                                    rd64be(cmd + 18), rd32be(cmd + 26), &snap);
+    if (rc != EFS_OK)
+        fprintf(stderr, "raft-host: apply trunc-sweep rc=%d index=%llu ino=%llu lane=%u\n",
+                rc, (unsigned long long)index, (unsigned long long)ino, (unsigned)lane);
+    return rc;
+}
+
+static int apply_sweep_done_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                                uint32_t clen, uint8_t group)
+{
+    if (clen != 26 || !rd64be(cmd + 1) || cmd[17] >= EFS_META_LANES || !rd64be(cmd + 18))
+        return EFS_ERR_PROTO;
+    if (efs_raft_shard_group(efs_kv_inode_shard(rd64be(cmd + 1))) != group)
+        return EFS_ERR_INVAL;
+    return efs_meta_apply_sweep_done(h->kv, rd64be(cmd + 1), rd64be(cmd + 9), cmd[17],
+                                     rd64be(cmd + 18));
+}
+
+static int apply_retire_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                            uint32_t clen, uint8_t group)
+{
+    if (clen != 25 || !rd64be(cmd + 1) || !rd64be(cmd + 17))
+        return EFS_ERR_PROTO;
+    if (efs_raft_shard_group(efs_kv_inode_shard(rd64be(cmd + 1))) != group)
+        return EFS_ERR_INVAL;
+    return efs_meta_apply_retire(h->kv, rd64be(cmd + 1), rd64be(cmd + 9), rd64be(cmd + 17));
+}
+
 /* EFS_MD_CMD_BOOTSTRAP_LANE on the lane's group (D25). Exact length, and
  * only on the group that owns the lane's shard. */
 static int apply_bootstrap_lane_cmd(struct efs_raft_host *h, const uint8_t *cmd,
@@ -3012,6 +3065,8 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_UNLINK || cmd[0] == EFS_MD_CMD_SETATTR ||
            cmd[0] == EFS_MD_CMD_UTIMENS || cmd[0] == EFS_MD_CMD_TRUNCATE ||
            cmd[0] == EFS_MD_CMD_ACTIVATE_LANE || cmd[0] == EFS_MD_CMD_BOOTSTRAP_LANE ||
+           cmd[0] == EFS_MD_CMD_TRUNC_SWEEP || cmd[0] == EFS_MD_CMD_SWEEP_DONE ||
+           cmd[0] == EFS_MD_CMD_RETIRE ||
            cmd[0] == EFS_MD_CMD_LANE_FENCE ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE || cmd[0] == EFS_MD_CMD_REAP_BATCH ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
@@ -3055,7 +3110,8 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
          cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_CREATE ||
          cmd[0] == EFS_MD_CMD_APPEND_RES || cmd[0] == EFS_MD_CMD_APPEND_CATCHUP || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
          cmd[0] == EFS_MD_CMD_REPORT_PUBLISH || cmd[0] == EFS_MD_CMD_ACTIVATE_LANE ||
-         cmd[0] == EFS_MD_CMD_BOOTSTRAP_LANE ||
+         cmd[0] == EFS_MD_CMD_BOOTSTRAP_LANE || cmd[0] == EFS_MD_CMD_TRUNC_SWEEP ||
+         cmd[0] == EFS_MD_CMD_SWEEP_DONE || cmd[0] == EFS_MD_CMD_RETIRE ||
          cmd[0] == EFS_MD_CMD_PUBLISH || cmd[0] == EFS_MD_CMD_PUBLICATION ||
          cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE ||
          (cmd[0] == EFS_MD_CMD_APPEND_RSV && clen == HOST_APPEND_RSV_LEN) ||
@@ -3512,6 +3568,12 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         return apply_activate_lane_cmd(h, cmd, clen, index, group);
     if (cmd[0] == EFS_MD_CMD_BOOTSTRAP_LANE)
         return apply_bootstrap_lane_cmd(h, cmd, clen, index, group);
+    if (cmd[0] == EFS_MD_CMD_TRUNC_SWEEP)
+        return apply_trunc_sweep_cmd(h, cmd, clen, index, group);
+    if (cmd[0] == EFS_MD_CMD_SWEEP_DONE)
+        return apply_sweep_done_cmd(h, cmd, clen, group);
+    if (cmd[0] == EFS_MD_CMD_RETIRE)
+        return apply_retire_cmd(h, cmd, clen, group);
     if (cmd[0] == EFS_MD_CMD_LANE_FENCE)
         return apply_lane_fence_cmd(h, cmd, clen, index);
     if(cmd[0]==EFS_MD_CMD_APPEND_COMPLETE_ATOMIC) {
@@ -10168,6 +10230,119 @@ static int host_gc_expiry_groups(struct efs_raft_host *h)
     return progress;
 }
 
+/* D25 protocol §4.1: drive TRUNC_PENDING inodes of this anchor toward an
+ * empty history. Per inode: sweep each active lane not yet done for the
+ * newest entry T (TRUNC_SWEEP on its group), record lanes whose applied
+ * stamp shows swept_epoch >= T (SWEEP_DONE), and retire T once every active
+ * lane is done. Bounded per pass; a restart rediscovers the work from the
+ * committed keys. Needs both groups local to read lane stamps. */
+#define TRUNC_PASS_INODES 16u
+#define TRUNC_PASS_PROPOSALS 64u
+struct trunc_scan_ctx { efs_ino_t ino[TRUNC_PASS_INODES]; uint64_t gen[TRUNC_PASS_INODES]; uint32_t n; };
+static int trunc_scan_cb(void *user, const uint8_t *key, uint32_t klen,
+                         const uint8_t *val, uint32_t vlen)
+{
+    struct trunc_scan_ctx *c = user;
+    if (klen != 11 || key[2] != EFS_KV_KIND_TRUNC_PENDING || vlen != 8)
+        return 0;
+    c->ino[c->n] = rd64be(key + 3);
+    c->gen[c->n] = rd64be(val);
+    return ++c->n == TRUNC_PASS_INODES;
+}
+
+static void host_gc_trunc_pass(struct efs_raft_host *h, uint8_t group, uint32_t anchor)
+{
+    struct trunc_scan_ctx c = {0};
+    uint8_t prefix[3] = {(uint8_t)(anchor >> 8), (uint8_t)anchor, EFS_KV_KIND_TRUNC_PENDING};
+    uint32_t cs = EFS_DEFAULT_CHUNK_SIZE, budget = TRUNC_PASS_PROPOSALS;
+
+    if (!host_hosts(h, EFS_RAFT_GROUP_SHARD) || !host_hosts(h, EFS_RAFT_GROUP_SHARD2))
+        return;
+
+    pthread_mutex_lock(&h->s->lock);
+    struct efs_export *ex = server_export_acquire_locked(h->s, 1);
+    if (ex)
+        cs = server_data_chunk_size(ex);
+    pthread_mutex_unlock(&h->s->lock);
+    if (ex)
+        server_export_put(h->s, ex);
+    if (efs_kv_scan_prefix(h->kv, prefix, sizeof(prefix), trunc_scan_cb, &c) < 0)
+        return;
+    __atomic_store_n(&h->s->gc_trunc_seen[group == 0 ? 0 : 1], c.n, __ATOMIC_RELAXED);
+#if EFS_FAULTS
+    {   /* D25 g6: hold the sweep (a stalled lane) while the file exists;
+         * the pending count above stays live. */
+        const char *gate = getenv("EFS_FAULT_TRUNC_SWEEP_HOLD_FILE");
+        if (gate && access(gate, F_OK) == 0) return;
+    }
+#endif
+    for (uint32_t i = 0; i < c.n && budget; i++) {
+        struct efs_meta_row row;
+        struct efs_fence_history hist;
+        uint8_t ig = efs_raft_shard_group(efs_kv_inode_shard(c.ino[i]));
+        uint8_t cmd[31 + 16 * EFS_FENCE_HISTORY_MAX];
+        uint64_t target, pending = 0;
+        int rc = efs_meta_apply_get_inode(h->kv, c.ino[i], &row);
+
+        memset(&hist, 0, sizeof(hist));
+
+        if (rc == EFS_OK && row.generation == c.gen[i])
+            rc = efs_meta_get_fence_history(h->kv, c.ino[i], row.generation,
+                                            EFS_META_FENCE_INODE, &hist);
+        if (rc != EFS_OK || row.generation != c.gen[i] || !hist.count) {
+            /* Unlinked (or nothing left): RETIRE drops the pending key. */
+            cmd[0] = EFS_MD_CMD_RETIRE;
+            wr64be(cmd + 1, c.ino[i]);
+            wr64be(cmd + 9, c.gen[i]);
+            wr64be(cmd + 17, hist.count && rc == EFS_OK ? hist.entries[hist.count - 1].epoch : 1);
+            (void)host_gc_propose(h, ig, cmd, 25);
+            budget--;
+            continue;
+        }
+        target = hist.entries[hist.count - 1].epoch;
+        for (uint8_t lane = 0; lane < EFS_META_LANES && budget; lane++) {
+            uint64_t swept = 0;
+            if (!(row.active_lanes & (1ull << lane)))
+                continue;
+            if (hist.entries[hist.count - 1].done & (1ull << lane))
+                continue;
+            pending |= 1ull << lane;
+            if (efs_meta_get_lane_swept(h->kv, c.ino[i], row.generation, lane, &swept) == EFS_OK &&
+                swept >= target) {
+                cmd[0] = EFS_MD_CMD_SWEEP_DONE;
+                wr64be(cmd + 1, c.ino[i]);
+                wr64be(cmd + 9, row.generation);
+                cmd[17] = lane;
+                wr64be(cmd + 18, target);
+                (void)host_gc_propose(h, ig, cmd, 26);
+            } else {
+                cmd[0] = EFS_MD_CMD_TRUNC_SWEEP;
+                wr64be(cmd + 1, c.ino[i]);
+                wr64be(cmd + 9, row.generation);
+                cmd[17] = lane;
+                wr64be(cmd + 18, target);
+                wr32be(cmd + 26, cs);
+                cmd[30] = (uint8_t)hist.count;
+                for (uint32_t k = 0; k < hist.count; k++) {
+                    wr64be(cmd + 31 + 16 * k, hist.entries[k].epoch);
+                    wr64be(cmd + 39 + 16 * k, hist.entries[k].size);
+                }
+                (void)host_gc_propose(h, efs_raft_shard_group(efs_kv_lane_shard(c.ino[i], lane)),
+                                      cmd, 31 + 16 * hist.count);
+            }
+            budget--;
+        }
+        if (!pending && budget) {
+            cmd[0] = EFS_MD_CMD_RETIRE;
+            wr64be(cmd + 1, c.ino[i]);
+            wr64be(cmd + 9, row.generation);
+            wr64be(cmd + 17, target);
+            (void)host_gc_propose(h, ig, cmd, 25);
+            budget--;
+        }
+    }
+}
+
 static void *host_gc_thread(void *arg)
 {
     struct efs_raft_host *h = arg;
@@ -10230,6 +10405,7 @@ static void *host_gc_thread(void *arg)
             t_orphan += now_us_() - ta;
             ta = now_us_();
             host_gc_reap_pass(h, h->g[g].group, anchor, &reap_times);
+            host_gc_trunc_pass(h, h->g[g].group, anchor);
             backlog_capped |= __atomic_load_n(&h->s->gc_reap_capped[g], __ATOMIC_RELAXED);
             t_reap += now_us_() - ta;
             ta = now_us_();

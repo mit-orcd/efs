@@ -4731,7 +4731,7 @@ static void test_content_fence_sweep_cas(void)
         struct efs_kv_ops fault = *original;
         struct efs_meta_chunk fresh = replacement;
         struct efs_meta_chunk_view unchanged;
-        uint8_t lk[EFS_KV_KEY_MAX], before[64], after[64];
+        uint8_t lk[EFS_KV_KEY_MAX], before[EFS_META_LANE_BYTES], after[EFS_META_LANE_BYTES];
         uint32_t kl = 0, bn = sizeof(before), an = sizeof(after);
         fresh.content_epoch = 2; fresh.generation = 0x2519;
         for (unsigned i = 0; i < EFS_NUM_FRAGMENTS; ++i) {
@@ -6131,8 +6131,133 @@ static void test_truncate_lazy(void)
     efs_kv_mem_free(kv);
 }
 
+/* D25 step 4: the truncate sweep, SWEEP_DONE and RETIRE. */
+static int sweep_lane(struct efs_kv *kv, efs_ino_t ino, uint8_t lane)
+{
+    struct efs_meta_row r;
+    struct efs_fence_history h;
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "row for sweep");
+    CHECK(efs_meta_get_fence_history(kv, ino, r.generation, EFS_META_FENCE_INODE, &h) ==
+              EFS_OK && h.count, "history for sweep");
+    return efs_meta_apply_trunc_sweep(kv, ino, r.generation, lane,
+                                      h.entries[h.count - 1].epoch, EFS_MIN_CHUNK_SIZE, &h);
+}
+
+static void test_trunc_sweep(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct coord_ctx cc;
+    struct efs_meta_row r;
+    struct efs_fence_history h;
+    struct efs_meta_chunk_view view;
+    struct efs_meta_chunk got;
+    struct gc_probe gc;
+    efs_ino_t ino = 0, big = 0;
+    uint64_t e = 0, swept = 0;
+    const uint64_t cs = EFS_MIN_CHUNK_SIZE;
+
+    CHECK(kv != NULL, "kv");
+    memset(&cc, 0, sizeof(cc));
+    cc.kv = kv;
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "sweep", &ino) == EFS_OK, "create");
+    /* Lane 0: chunks 0, 64, 128, 192; lane 1: chunk 1. */
+    for (uint32_t k = 0; k < 4; k++)
+        pub(kv, ino, k * 64, (k * 64 + 1) * cs, 0xA0 + k, 0, T0 + 1, "fill lane 0");
+    pub(kv, ino, 1, 2 * cs, 0xB1, 0, T0 + 1, "fill lane 1");
+    CHECK(gc_probe(kv, &gc) == 0 && gc.n == 0, "no GC before");
+    /* Shrink inside chunk 64 (lane 0). */
+    CHECK(lazy_trunc(kv, ino, EFS_META_TRUNCATE_SHRINK, 64 * cs + 100, 1, 0, &e) == EFS_OK &&
+              e == 1, "shrink");
+    /* A write at the new epoch past the boundary, before the sweep: kept. */
+    pub(kv, ino, 192, 192 * cs + 50, 0xC1, 0xA3, T0 + 2, "new-epoch rewrite of chunk 192");
+    CHECK(sweep_lane(kv, ino, 0) == EFS_OK, "sweep lane 0");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 128, &got) == EFS_ERR_NOT_FOUND,
+          "dead row deleted");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK && got.base_clip == 0,
+          "row below the boundary untouched");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 64, &got) == EFS_OK && got.base_clip == 100,
+          "boundary base clipped in metadata");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 192, &got) == EFS_OK && got.generation == 0xC1,
+          "new-epoch row never swept");
+    /* The rewrite reused the fill's fragment set (an alias), so the swept
+     * dead row is the only GC record. */
+    CHECK(gc_probe(kv, &gc) == 0 && gc.n == 1 && gc_probe_find(&gc, 0xA2, 0, 128),
+          "GC record for the swept dead row");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK &&
+              efs_meta_get_lane_swept(kv, ino, r.generation, 0, &swept) == EFS_OK && swept == 1,
+          "lane 0 swept for epoch 1");
+    CHECK(sweep_lane(kv, ino, 0) == EFS_OK &&
+              efs_meta_apply_get_chunk(kv, ino, 64, &got) == EFS_OK && got.base_clip == 100,
+          "a repeated sweep changes nothing");
+    {
+        struct efs_fence_history old = {0};
+        old.count = 1; old.entries[0].epoch = 0;
+        CHECK(efs_meta_apply_trunc_sweep(kv, ino, r.generation, 0, 0, cs, &old) ==
+                  EFS_ERR_INVAL, "target 0 refused");
+    }
+    /* Retirement waits for every active lane. */
+    CHECK(efs_meta_apply_sweep_done(kv, ino, r.generation, 0, 1) == EFS_OK, "done lane 0");
+    CHECK(efs_meta_apply_retire(kv, ino, r.generation, 1) == EFS_ERR_INVAL,
+          "retire refused while lane 1 is not done");
+    CHECK(sweep_lane(kv, ino, 1) == EFS_OK &&
+              efs_meta_apply_get_chunk(kv, ino, 1, &got) == EFS_OK && got.base_clip == 0,
+          "lane 1 row lies below the boundary");
+    CHECK(efs_meta_apply_sweep_done(kv, ino, r.generation, 1, 1) == EFS_OK, "done lane 1");
+    CHECK(efs_meta_apply_sweep_done(kv, ino, r.generation, 1, 7) == EFS_OK,
+          "evidence for an unknown target is OK with no change");
+    CHECK(efs_meta_apply_retire(kv, ino, r.generation, 1) == EFS_OK, "retire");
+    CHECK(efs_meta_get_inode_authority_tx(kv, ino, coord_fn, &cc, &r, &h) == EFS_OK &&
+              h.count == 0 && h.revision == 2, "history empty, revision kept and advanced");
+    CHECK(efs_meta_get_chunk_view_auth(kv, ino, r.generation, 64, cs, r.content_epoch, &h,
+              &view) == EFS_OK && view.bytes.parts[0].len == 100,
+          "after retirement the clip alone masks the tail");
+    {
+        uint8_t k[11] = {0}, v[8];
+        uint32_t vn = sizeof(v), sh = efs_kv_anchor_shard(efs_kv_inode_shard(ino));
+        k[0] = (uint8_t)(sh >> 8); k[1] = (uint8_t)sh; k[2] = EFS_KV_KIND_TRUNC_PENDING;
+        for (int i = 0; i < 8; i++) k[3 + i] = (uint8_t)(ino >> (56 - 8 * i));
+        CHECK(efs_kv_get(kv, k, sizeof(k), v, &vn) == EFS_ERR_NOT_FOUND,
+              "TRUNC_PENDING gone with the last entry");
+    }
+    /* Activation after a fence is done for it at once. */
+    CHECK(lazy_trunc(kv, ino, EFS_META_TRUNCATE_SHRINK, 10, 2, 1, &e) == EFS_OK && e == 2,
+          "second shrink");
+    CHECK(efs_meta_apply_activate_lanes_at(kv, ino, 1ull << 5, 2) == EFS_OK, "activate lane 5");
+    CHECK(efs_meta_get_inode_authority_tx(kv, ino, coord_fn, &cc, &r, &h) == EFS_OK &&
+              h.count == 1 && (h.entries[0].done & (1ull << 5)), "new lane done for the fence");
+
+    /* Cursor bound: 300 rows on one lane take two sweeps. */
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "big", &big) == EFS_OK, "create big");
+    for (uint32_t k = 0; k < 300; k++)
+        pub(kv, big, k * 64, (k * 64 + 1) * cs, 0x10000 + k, 0, T0 + 1, "fill big");
+    CHECK(lazy_trunc(kv, big, EFS_META_TRUNCATE_SHRINK, 0, 50, 0, &e) == EFS_OK, "big to 0");
+    CHECK(sweep_lane(kv, big, 0) == EFS_OK && efs_meta_apply_get_inode(kv, big, &r) == EFS_OK &&
+              efs_meta_get_lane_swept(kv, big, r.generation, 0, &swept) == EFS_OK && swept == 0,
+          "first sweep stops at its bound");
+    {
+        /* 64 changed rows per entry: 300 dead rows take five entries. */
+        int sweeps = 1;
+        while (swept == 0 && sweeps < 10) {
+            CHECK(sweep_lane(kv, big, 0) == EFS_OK, "next sweep");
+            CHECK(efs_meta_get_lane_swept(kv, big, r.generation, 0, &swept) == EFS_OK, "swept");
+            sweeps++;
+        }
+        CHECK(swept == 1 && sweeps == 5, "bounded sweeps reach the end");
+    }
+    CHECK(efs_meta_apply_get_chunk(kv, big, 299 * 64, &got) == EFS_ERR_NOT_FOUND,
+          "every dead row deleted");
+    /* Unlinked file: RETIRE removes its pending key. */
+    CHECK(efs_meta_apply_retire(kv, big + 1000, 1, 1) == EFS_OK, "retire of an unknown inode");
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
+    test_trunc_sweep();
     test_truncate_lazy();
     test_lane_adoption();
     test_reaped_sweep_no_gc();

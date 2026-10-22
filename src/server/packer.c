@@ -339,11 +339,15 @@ static int pk_read_file(const struct efs_node *nodes, uint32_t count, struct pk_
     }
     if (rc == EFS_OK && f->c.base.coding_profile_id == EFS_META_PROFILE_PACK) {
         rc = pk_read_packed_base(nodes, count, f);
+        /* D25: only the base's visible bytes; the rest stays zero. */
+        if (rc == EFS_OK && f->c.base_visible < f->c.size)
+            memset(f->data + f->c.base_visible, 0, f->c.size - f->c.base_visible);
     } else if (rc == EFS_OK && f->c.base.generation) {
         struct pk_object o = {f->c.base.nodes, (const uint8_t (*)[EFS_HASH_SIZE])f->c.base.checksums,
                               f->c.base.generation};
         rc = pk_get_d1(nodes, count, &f->c, &o, a, b, flen);
-        if (rc == EFS_OK) memcpy(f->data, a, f->c.size);
+        if (rc == EFS_OK)
+            memcpy(f->data, a, f->c.base_visible < f->c.size ? f->c.base_visible : f->c.size);
     }
     for (uint32_t i = 0; rc == EFS_OK && i < f->c.ndelta; i++) {
         const struct efs_meta_delta *d = &f->c.deltas[i];
@@ -767,6 +771,10 @@ static uint32_t pk_compact(struct efs_kv *kv, uint8_t group, uint64_t term,
             f->data = malloc(ref.len);
             if (!f->data) break;
             memcpy(f->data, images[si] + ref.offset, ref.len);
+            /* D25: copy the record's visible bytes only; a clipped or
+             * fenced tail is zero in the compacted record. */
+            if (c->base_visible < ref.len)
+                memset(f->data + c->base_visible, 0, ref.len - c->base_visible);
             used += EFS_PACK_RECORD_BYTES + ref.len;
             nfiles++;
         }
