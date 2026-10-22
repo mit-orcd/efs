@@ -960,49 +960,356 @@ int efs_txn_drop(struct efs_kv *kv, const struct efs_txid *t, uint32_t shard)
     return efs_kv_batch(kv, a.it, a.n);
 }
 
+uint64_t efs_txid_ns(const struct efs_txid *t)
+{
+    uint64_t v = 0;
+
+    if (t)
+        memcpy(&v, t->bytes, 8); /* host order, as the host mints it */
+    return v;
+}
+
+/* Live record: [dec:1][n:1][shard:4 BE]*n. Retired: [dec:1][retire_ns:8].
+ * Per-shard reclaim state: [floor:8 BE] or [floor:8][cursor txid:16]. */
+#define DEC_RETIRED_LEN 9u
+#define DEC_STATE_MAX 24u
+
+static int dec_keys(uint32_t coord_shard, const struct efs_txid *t,
+                    uint8_t *live, uint32_t *ll, uint8_t *ret, uint32_t *rl)
+{
+    int rc = efs_kv_key_decision(coord_shard, t->bytes, live, ll);
+
+    if (rc != EFS_OK)
+        return rc;
+    return efs_kv_key_decision_retired(coord_shard, t->bytes, ret, rl);
+}
+
+/* Fetch one decision record. *vlen is the stored size on success. */
+static int dec_fetch(struct efs_kv *kv, const uint8_t *key, uint32_t klen,
+                     uint8_t *val, uint32_t *vlen)
+{
+    int rc = efs_kv_get(kv, key, klen, val, vlen);
+
+    if (rc != EFS_OK)
+        return rc;
+    if (*vlen < 1 || (val[0] != EFS_TXN_COMMIT && val[0] != EFS_TXN_ABORT))
+        return EFS_ERR_PROTO;
+    return EFS_OK;
+}
+
+/* Reclaim state of one coordinator shard. Absent = floor 0, no cursor. */
+static int dec_state(struct efs_kv *kv, uint32_t shard, uint64_t *floor,
+                     uint8_t cursor[16], int *have_cursor)
+{
+    uint8_t key[KEY_MAX], val[DEC_STATE_MAX];
+    uint32_t kl = 0, n = sizeof(val);
+    int rc = efs_kv_key_decision_cursor(shard, key, &kl);
+
+    *floor = 0;
+    *have_cursor = 0;
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_kv_get(kv, key, kl, val, &n);
+    if (rc == EFS_ERR_NOT_FOUND)
+        return EFS_OK;
+    if (rc != EFS_OK)
+        return rc;
+    if (n != 8 && n != DEC_STATE_MAX)
+        return EFS_ERR_PROTO;
+    *floor = rd64(val);
+    if (n == DEC_STATE_MAX) {
+        memcpy(cursor, val + 8, 16);
+        *have_cursor = 1;
+    }
+    return EFS_OK;
+}
+
+/* Verdict of T: live record, then the retired tombstone, then the floor.
+ * An absent decision whose txid is not newer than the shard's reclaim
+ * floor may have been reclaimed: it is unknown (STALE), never undecided. */
+static int dec_lookup(struct efs_kv *kv, uint32_t coord_shard,
+                      const struct efs_txid *t, int *decision)
+{
+    uint8_t lk[KEY_MAX], rk[KEY_MAX], val[EFS_TXN_DECISION_LIVE_MAX], cur[16];
+    uint32_t ll = 0, rl = 0, n = sizeof(val);
+    uint64_t floor = 0;
+    int rc, have;
+
+    rc = dec_keys(coord_shard, t, lk, &ll, rk, &rl);
+    if (rc != EFS_OK)
+        return rc;
+    rc = dec_fetch(kv, lk, ll, val, &n);
+    if (rc == EFS_ERR_NOT_FOUND) {
+        n = sizeof(val);
+        rc = dec_fetch(kv, rk, rl, val, &n);
+    }
+    if (rc == EFS_ERR_NOT_FOUND) {
+        rc = dec_state(kv, coord_shard, &floor, cur, &have);
+        if (rc != EFS_OK)
+            return rc;
+        return efs_txid_ns(t) <= floor ? EFS_ERR_STALE : EFS_ERR_NOT_FOUND;
+    }
+    if (rc != EFS_OK)
+        return rc;
+    *decision = val[0];
+    return EFS_OK;
+}
+
 int efs_txn_decide(struct efs_kv *kv, uint32_t coord_shard,
                    const struct efs_txid *t, int decision)
 {
-    uint8_t key[KEY_MAX], val[1], have[1];
-    uint32_t klen = 0, n = 1;
-    int rc;
+    return efs_txn_decide_parts(kv, coord_shard, t, NULL, decision);
+}
+
+int efs_txn_decide_parts(struct efs_kv *kv, uint32_t coord_shard,
+                         const struct efs_txid *t,
+                         const struct efs_txn_parts *parts, int decision)
+{
+    uint8_t key[KEY_MAX], val[EFS_TXN_DECISION_LIVE_MAX];
+    uint32_t klen = 0, n = 0, i;
+    int rc, have;
 
     if (!kv || !t || (decision != EFS_TXN_COMMIT && decision != EFS_TXN_ABORT))
         return EFS_ERR_INVAL;
+    if (parts && parts->n > EFS_TXN_MAX_PART)
+        return EFS_ERR_INVAL;
+    rc = dec_lookup(kv, coord_shard, t, &have);
+    if (rc == EFS_OK)
+        return have == decision ? EFS_OK : EFS_ERR_PROTO;
+    if (rc != EFS_ERR_NOT_FOUND)
+        return rc; /* STALE: a reclaimed verdict is never re-minted */
     rc = efs_kv_key_decision(coord_shard, t->bytes, key, &klen);
     if (rc != EFS_OK)
         return rc;
-    val[0] = (uint8_t)decision;
-    rc = efs_kv_get(kv, key, klen, have, &n);
-    if (rc == EFS_OK) {
-        if (n < 1 || have[0] != val[0])
-            return EFS_ERR_PROTO;
-        return EFS_OK;
+    val[n++] = (uint8_t)decision;
+    val[n++] = parts ? parts->n : 0;
+    for (i = 0; parts && i < parts->n; i++) {
+        be32(val + n, parts->shard[i]);
+        n += 4;
     }
-    if (rc != EFS_ERR_NOT_FOUND)
-        return rc;
-    return efs_kv_put(kv, key, klen, val, 1);
+    return efs_kv_put(kv, key, klen, val, n);
 }
 
 int efs_txn_decision_get(struct efs_kv *kv, uint32_t coord_shard,
                          const struct efs_txid *t, int *decision)
 {
-    uint8_t key[KEY_MAX], have[1];
-    uint32_t klen = 0, n = 1;
-    int rc;
-
     if (!kv || !t || !decision)
         return EFS_ERR_INVAL;
-    rc = efs_kv_key_decision(coord_shard, t->bytes, key, &klen);
+    return dec_lookup(kv, coord_shard, t, decision);
+}
+
+/* Reclaim accumulator: the tombstones visited from the cursor. */
+struct retire_acc {
+    uint64_t now_ns, floor;
+    uint32_t shard;
+    uint32_t visited, expired;
+    uint8_t last[16];
+    uint8_t keys[EFS_TXN_RETIRE_SCAN][KEY_MAX];
+    uint32_t klen[EFS_TXN_RETIRE_SCAN];
+};
+
+static int retire_cb(void *user, const uint8_t *key, uint32_t klen,
+                     const uint8_t *val, uint32_t vlen)
+{
+    struct retire_acc *a = user;
+    struct efs_txid t;
+    uint64_t retired_at;
+
+    if (klen != 19 || key_shard(key) != a->shard ||
+        key[2] != EFS_KV_KIND_DECISION_RETIRED)
+        return 0;
+    if (a->visited >= EFS_TXN_RETIRE_SCAN)
+        return 1;
+    a->visited++;
+    memcpy(a->last, key + 3, 16);
+    if (vlen != DEC_RETIRED_LEN)
+        return 0; /* not ours to reinterpret; left for inspection */
+    retired_at = rd64(val + 1);
+    if (a->now_ns >= retired_at &&
+        a->now_ns - retired_at >= EFS_TXN_DECISION_RETAIN_NS) {
+        memcpy(a->keys[a->expired], key, klen);
+        a->klen[a->expired] = klen;
+        a->expired++;
+        memcpy(t.bytes, key + 3, 16);
+        if (efs_txid_ns(&t) > a->floor)
+            a->floor = efs_txid_ns(&t);
+    }
+    return 0;
+}
+
+int efs_txn_retire(struct efs_kv *kv, uint32_t coord_shard,
+                   const struct efs_txid *t, uint64_t now_ns)
+{
+    struct retire_acc *a;
+    struct efs_kv_item it[EFS_TXN_RETIRE_SCAN + 3];
+    uint8_t lk[KEY_MAX], rk[KEY_MAX], ck[KEY_MAX], sk[KEY_MAX], pref[3];
+    uint8_t live[EFS_TXN_DECISION_LIVE_MAX], tomb[DEC_RETIRED_LEN];
+    uint8_t cur[16], state[DEC_STATE_MAX];
+    uint32_t ll = 0, rl = 0, cl = 0, sl = 0, n = sizeof(live), i, ni = 0, stn;
+    uint64_t floor = 0;
+    int rc, have_cursor = 0, more;
+
+    if (!kv || !t)
+        return EFS_ERR_INVAL;
+    rc = dec_keys(coord_shard, t, lk, &ll, rk, &rl);
     if (rc != EFS_OK)
         return rc;
-    rc = efs_kv_get(kv, key, klen, have, &n);
+    rc = efs_kv_key_decision_cursor(coord_shard, ck, &cl);
     if (rc != EFS_OK)
         return rc;
-    if (n < 1)
-        return EFS_ERR_PROTO;
-    *decision = have[0];
-    return EFS_OK;
+    /* 1. Live -> retired tombstone carrying the verdict. */
+    rc = dec_fetch(kv, lk, ll, live, &n);
+    if (rc == EFS_OK) {
+        tomb[0] = live[0];
+        be64(tomb + 1, now_ns);
+        it[ni].op = EFS_KV_DEL; it[ni].key = lk; it[ni].klen = ll; ni++;
+        it[ni].op = EFS_KV_PUT; it[ni].key = rk; it[ni].klen = rl;
+        it[ni].val = tomb; it[ni].vlen = sizeof(tomb); ni++;
+    } else if (rc == EFS_ERR_NOT_FOUND) {
+        n = sizeof(live);
+        rc = dec_fetch(kv, rk, rl, live, &n);
+        if (rc != EFS_OK)
+            return rc; /* NOT_FOUND: nothing to retire, nothing minted */
+    } else {
+        return rc;
+    }
+    /* 2. Reclaim a bounded window of expired tombstones from the cursor. */
+    rc = dec_state(kv, coord_shard, &floor, cur, &have_cursor);
+    if (rc != EFS_OK)
+        return rc;
+    a = calloc(1, sizeof(*a));
+    if (!a)
+        return EFS_ERR_NOMEM;
+    a->now_ns = now_ns;
+    a->floor = floor;
+    a->shard = coord_shard;
+    pref[0] = (uint8_t)(coord_shard >> 8);
+    pref[1] = (uint8_t)coord_shard;
+    pref[2] = EFS_KV_KIND_DECISION_RETIRED;
+    if (have_cursor)
+        rc = efs_kv_key_decision_retired(coord_shard, cur, sk, &sl);
+    if (rc == EFS_OK)
+        rc = efs_kv_scan_from(kv, pref, 3, have_cursor ? sk : NULL,
+                              have_cursor ? sl : 0, retire_cb, a);
+    if (rc != EFS_OK && rc != 1) {
+        free(a);
+        return rc;
+    }
+    for (i = 0; i < a->expired; i++) {
+        it[ni].op = EFS_KV_DEL; it[ni].key = a->keys[i]; it[ni].klen = a->klen[i];
+        ni++;
+    }
+    /* 3. A full window resumes after its last key (that key itself may be
+     * revisited if it was kept: scan_from is inclusive, and a kept key is
+     * one of at most RETIRE_SCAN). A short window reached the end of the
+     * prefix and wraps to the start. The floor only grows. */
+    more = a->visited >= EFS_TXN_RETIRE_SCAN;
+    if (more || have_cursor || a->floor != floor) {
+        be64(state, a->floor);
+        stn = 8;
+        if (more) {
+            memcpy(state + 8, a->last, 16);
+            stn = DEC_STATE_MAX;
+        }
+        it[ni].op = EFS_KV_PUT; it[ni].key = ck; it[ni].klen = cl;
+        it[ni].val = state; it[ni].vlen = stn; ni++;
+    }
+    rc = ni ? efs_kv_batch(kv, it, ni) : EFS_OK;
+    free(a);
+    return rc;
+}
+
+struct dscan_acc {
+    uint32_t shard;
+    struct efs_txn_decision_rec *out;
+    uint32_t cap, n;
+    uint32_t live, retired;
+    int overflow;
+};
+
+static int dscan_cb(void *user, const uint8_t *key, uint32_t klen,
+                    const uint8_t *val, uint32_t vlen)
+{
+    struct dscan_acc *a = user;
+    struct efs_txn_decision_rec *r;
+    uint32_t i;
+
+    if (klen != 19 || key_shard(key) != a->shard)
+        return 0;
+    if (key[2] == EFS_KV_KIND_DECISION_RETIRED) {
+        a->retired++;
+        return 0;
+    }
+    if (key[2] != EFS_KV_KIND_DECISION)
+        return 0;
+    a->live++;
+    if (!a->out)
+        return 0;
+    if (vlen < 2 || (val[0] != EFS_TXN_COMMIT && val[0] != EFS_TXN_ABORT) ||
+        val[1] > EFS_TXN_MAX_PART || vlen != 2u + 4u * val[1])
+        return 0;
+    if (a->n >= a->cap) {
+        a->overflow = 1;
+        return 1;
+    }
+    r = &a->out[a->n++];
+    memset(r, 0, sizeof(*r));
+    memcpy(r->t.bytes, key + 3, 16);
+    r->decision = val[0];
+    r->parts.n = val[1];
+    for (i = 0; i < r->parts.n; i++)
+        r->parts.shard[i] = rd32(val + 2 + 4 * i);
+    return 0;
+}
+
+int efs_txn_scan_decisions(struct efs_kv *kv, uint32_t shard,
+                           struct efs_txn_decision_rec *out, uint32_t cap,
+                           uint32_t *n)
+{
+    struct dscan_acc a;
+    uint8_t pref[3];
+    int rc;
+
+    if (!kv || !out || !n || cap == 0)
+        return EFS_ERR_INVAL;
+    memset(&a, 0, sizeof(a));
+    a.shard = shard;
+    a.out = out;
+    a.cap = cap;
+    pref[0] = (uint8_t)(shard >> 8);
+    pref[1] = (uint8_t)shard;
+    pref[2] = EFS_KV_KIND_DECISION;
+    rc = efs_kv_scan_prefix(kv, pref, 3, dscan_cb, &a);
+    *n = a.n;
+    if (a.overflow)
+        return EFS_OK;
+    return rc;
+}
+
+int efs_txn_decision_count(struct efs_kv *kv, uint32_t shard,
+                           uint32_t *live, uint32_t *retired)
+{
+    struct dscan_acc a;
+    uint8_t pref[3];
+    int rc;
+
+    if (!kv)
+        return EFS_ERR_INVAL;
+    memset(&a, 0, sizeof(a));
+    a.shard = shard;
+    pref[0] = (uint8_t)(shard >> 8);
+    pref[1] = (uint8_t)shard;
+    pref[2] = EFS_KV_KIND_DECISION;
+    rc = efs_kv_scan_prefix(kv, pref, 3, dscan_cb, &a);
+    if (rc == EFS_OK) {
+        pref[2] = EFS_KV_KIND_DECISION_RETIRED;
+        rc = efs_kv_scan_prefix(kv, pref, 3, dscan_cb, &a);
+    }
+    if (live)
+        *live = a.live;
+    if (retired)
+        *retired = a.retired;
+    return rc;
 }
 
 static int ask_coord(efs_txn_coord_fn coord, void *ctx, const struct efs_txid *t,
@@ -1017,6 +1324,11 @@ static int ask_coord(efs_txn_coord_fn coord, void *ctx, const struct efs_txid *t
         *dec = EFS_TXN_UNDECIDED;
         return EFS_OK;
     }
+    /* A retired-and-reclaimed decision is unknown, not undecided: the
+     * record this reader met is a stale view of a resolved transaction.
+     * Refuse the read as retryable; never answer with the old value. */
+    if (rc == EFS_ERR_STALE)
+        return EFS_ERR_BUSY;
     if (rc != EFS_OK)
         return (rc == EFS_ERR_BUSY || rc == EFS_ERR_NOT_PRIMARY) ? rc : EFS_ERR_IO;
     return EFS_OK;

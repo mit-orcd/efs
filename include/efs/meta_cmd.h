@@ -84,7 +84,8 @@
 #define EFS_MD_CMD_PUBLICATION 28 /* legacy publish payload + UUID/epoch/seq (28 B) */
 #define EFS_MD_CMD_PUBLISH 3 /* matches sim CMD_PUBLISH */
 #define EFS_MD_CMD_PREPARE 5 /* matches sim CMD_PREPARE */
-#define EFS_MD_CMD_DECIDE  6
+#define EFS_MD_CMD_DECIDE  6 /* [txid:16][coord:4][dec:1][n:1][shard:4]*n */
+#define EFS_MD_CMD_TXN_RETIRE 83 /* [txid:16][coord:4][now_ns:8]: every RESOLVE applied */
 #define EFS_MD_CMD_RESOLVE 7
 #define EFS_MD_CMD_DROP    8
 #define EFS_MD_CMD_SESSION 9 /* matches sim SIM_CMD_SESSION */

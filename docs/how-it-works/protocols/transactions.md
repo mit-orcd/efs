@@ -4,8 +4,9 @@
 Namespace and resize primitives exist; request-wide public data publication
 and observation remain [W77](../../backlog/work-items.md#w77). Do not infer
 FUSE activation from the presence of metadata transaction helpers.
-Decision retirement and namespace predicate bounds remain
-[W83/W84](../../status/spec-implementation.md); coordinator authority also
+Decision retirement ([W83](../../backlog/work-items.md#w83)) follows the GC
+rule below; namespace predicate bounds remain
+[W84](../../status/spec-implementation.md); coordinator authority also
 depends on the read-freshness gate [W82](../../backlog/work-items.md#w82).
 
 [Architecture](../architecture.md) · [Data protocol](data.md) ·
@@ -194,13 +195,49 @@ no serializable history even though each commits atomically.
   transaction to completion (L5).
 - **GC.** Resolved intents are reclaimed (L7-class). A **decision record**
   outlives its intents — a recovering participant must still be able to ask
-  what happened — so it has its own explicit condition: reclaimable once
-  every participant has acknowledged the decision durably, and no participant
-  that could still be recovering remains. Until then it is retained,
-  bounded by unresolved/recoverable transactions rather than all completed
-  operation history, once that retirement protocol is implemented. The current
-  inspected implementation retains decisions without that protocol
-  ([W83](../../backlog/work-items.md#w83)).
+  what happened — so it has its own explicit retirement rule
+  ([W83](../../backlog/work-items.md#w83)):
+
+  **A decision is retirable once every participant's RESOLVE has been applied
+  in that participant's group log with an OK verdict; it is then retired by a
+  replicated `TXN_RETIRE` command on the coordinator's group, which keeps a
+  verdict-bearing tombstone that is reclaimed only by a later `TXN_RETIRE`
+  whose logged clock is at least the retention (60 s) past that tombstone's
+  retirement. An absent decision whose txid is not newer than the shard's
+  replicated reclaim floor is *unknown*: readers refuse it as retryable BUSY
+  and a late DECIDE is refused, so a reclaimed verdict is never answered as
+  the old value or re-minted.**
+
+  ```text
+  DECIDE  [txid][coord][dec][participants]   live record = verdict + parts
+  RESOLVE on every participant               each verdict OK -> proof
+  TXN_RETIRE [txid][coord][now]              live -> tombstone(verdict, now)
+                                             + reclaim <= 32 tombstones with
+                                               now - retired_at >= 60 s,
+                                               resuming at a stored cursor;
+                                               floor = max txid time reclaimed
+  lookup(txid): live | tombstone -> verdict
+                absent, txid time >  floor -> NO-DECISION (undecided)
+                absent, txid time <= floor -> UNKNOWN (STALE -> reader BUSY,
+                                              DECIDE refused)
+  ```
+
+  Every input of the rule is replicated state or a field of the logged
+  command (the proposer's clock rides in `TXN_RETIRE`), so all replicas delete
+  the same keys at the same log index; no replica deletes on a local timer.
+  Each apply touches a bounded window (one live record, at most 32 tombstones,
+  one cursor/floor record), so retirement cannot stall the apply loop. The
+  proposer of a transaction (its RESOLVE wait, the finisher, or recovery)
+  proposes `TXN_RETIRE` after the last RESOLVE verdict. If that proposer dies
+  or its RETIRE is lost, the decision stays live — never deleted by age — and
+  the recovery sweep re-drives RESOLVE to the participants recorded in the
+  decision and then retires it. Recovery that meets an UNKNOWN decision for a
+  pending record knows every RESOLVE already applied, so the record is a
+  straggler PREPARE and is dropped on that shard only. A transaction whose
+  txid time trails the floor (clock skew beyond the retention) cannot decide
+  and is aborted: fail-closed. Retained state is therefore live decisions of
+  unretired transactions plus one retention window of tombstones per
+  coordinator shard, not completed operation history.
   Duplicate-suppression records have the matching bound in
   [sessions.md](sessions.md).
 

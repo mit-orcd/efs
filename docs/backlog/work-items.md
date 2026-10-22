@@ -3528,6 +3528,19 @@ RPC paths. No healthy POSIX result closes this partition gate.
 
 ## W83 · Transaction decisions have no inspected retirement protocol
 
+**Implemented Oct 22 on branch `devel-k07` (cluster gate NOTRUN):** the
+retirement rule is in
+[transactions.md "GC"](../how-it-works/protocols/transactions.md). The proof is
+every participant RESOLVE verdict observed OK; retirement is the replicated
+`EFS_MD_CMD_TXN_RETIRE` (verdict tombstone, then bounded cursor reclaim after a
+60 s logged-clock retention); a reclaimed decision is an explicit unknown
+(`EFS_ERR_STALE`, reader BUSY, DECIDE refused) via a replicated per-shard floor.
+DECIDE now carries the participant set so recovery re-drives RESOLVE and RETIRE
+for decisions whose proposer died. Unit gate: `tests/test_txn_retire` (bounded
+count over 3000 transactions, late participant after reclaim, LSM crash/restart
+replay byte-identical). Store format changed (DECIDE wire, decision value, two
+new key kinds): fresh format only. Remaining gate: the cluster checks below.
+
 **Class/state:** metadata lifecycle / bounded-state feature gap; source-reviewed
 Oct 7. `efs_txn_decide` stores a decision keyed by coordinator shard and txid.
 `efs_txn_resolve` and `efs_txn_drop` scan/delete INTENT, GUARD and REDUCE kinds;

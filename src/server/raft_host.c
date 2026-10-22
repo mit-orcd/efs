@@ -195,6 +195,7 @@ struct host_fin_item {
     struct efs_txn_parts parts;
     uint32_t coord;
     uint64_t born_ns;
+    int retire_only; /* every RESOLVE verdict seen: just propose RETIRE */
 };
 
 /* Apply-result ring slots per group. Power of 2. Must exceed the most
@@ -406,6 +407,9 @@ struct efs_raft_host {
     pthread_mutex_t rec_mu;
     uint64_t rec_mark[EFS_KV_SHARD_MASK + 1];
     uint64_t rec_found, rec_aborted, rec_resolved, rec_fail, rec_scans;
+    /* W83 decision retirement: RETIREs proposed OK / failed, live
+     * decisions re-driven by the sweeper, sweeps with a failed RESOLVE. */
+    uint64_t dec_retired, dec_retire_fail, dec_swept, dec_sweep_fail, rec_unknown;
     /* Txn finisher: a coordinator whose DECIDE COMMIT is in the log but
      * whose apply wait ran out (or whose RESOLVEs did not all land) hands
      * the txn here instead of leaving its intents for the 5 s recovery
@@ -2683,6 +2687,7 @@ static int apply_publish_cmd(struct efs_raft_host *h, const uint8_t *cmd,
  * (a rejected PREP is intent-conflict BUSY / version STALE); host_apply
  * records it in the group ring and is what keeps txn apply from stalling
  * the log. */
+#define HOST_RETIRE_LEN 29u /* EFS_MD_CMD_TXN_RETIRE; see pack_retire */
 static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                          uint32_t clen)
 {
@@ -2728,12 +2733,27 @@ static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
             host_rec_mark(h, ((uint32_t)key[0] << 8) | key[1]);
         break;
     case EFS_MD_CMD_DECIDE:
-        if (clen < 1 + 16 + 4 + 1)
+        if (clen < 23)
             break;
         memcpy(t.bytes, cmd + 1, 16);
         shard = rd32be(cmd + 17);
         dec = cmd[21];
-        rc = efs_txn_decide(h->kv, shard, &t, dec);
+        p.n = cmd[22];
+        if (p.n == 0 || p.n > EFS_TXN_MAX_PART || clen < 23 + (uint32_t)p.n * 4u)
+            break;
+        {
+            uint8_t i;
+            for (i = 0; i < p.n; i++)
+                p.shard[i] = rd32be(cmd + 23 + (uint32_t)i * 4u);
+        }
+        rc = efs_txn_decide_parts(h->kv, shard, &t, &p, dec);
+        break;
+    case EFS_MD_CMD_TXN_RETIRE:
+        if (clen < HOST_RETIRE_LEN)
+            break;
+        memcpy(t.bytes, cmd + 1, 16);
+        shard = rd32be(cmd + 17);
+        rc = efs_txn_retire(h->kv, shard, &t, rd64be(cmd + 21));
         break;
     case EFS_MD_CMD_RESOLVE:
         if (clen < 1 + 16 + 4 + 1)
@@ -2893,6 +2913,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
      * never a reason to re-apply the same index. */
     ret = (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
            cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP ||
+           cmd[0] == EFS_MD_CMD_TXN_RETIRE ||
            cmd[0] == EFS_MD_CMD_RMDIR || cmd[0] == EFS_MD_CMD_APPEND_COMPLETE_ATOMIC || cmd[0] == EFS_MD_CMD_APPEND_ATOMIC || cmd[0] == EFS_MD_CMD_APPEND_RSV ||
            cmd[0] == EFS_MD_CMD_APPEND_CATCHUP ||
            cmd[0] == EFS_MD_CMD_CREATE || cmd[0] == EFS_MD_CMD_PUBLISH ||
@@ -2936,6 +2957,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
      * advance a follower past cleanup it did not durably perform. */
     if ((cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
          cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP ||
+         cmd[0] == EFS_MD_CMD_TXN_RETIRE ||
          cmd[0] == EFS_MD_CMD_LANE_SWEEP_MULTI || cmd[0] == EFS_MD_CMD_REAP_MULTI ||
          cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_SWITCH ||
          cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX || cmd[0] == EFS_MD_CMD_PACK_INDEX ||
@@ -3460,7 +3482,8 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
     if (cmd[0] == EFS_MD_CMD_GC_ACK)
         return apply_gc_ack_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
-        cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP)
+        cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP ||
+        cmd[0] == EFS_MD_CMD_TXN_RETIRE)
         return apply_txn_cmd(h, cmd, clen);
     /* W127: a tag this build does not know is never applied as success. */
     return EFS_ERR_UNSUPPORTED;
@@ -6306,13 +6329,37 @@ static uint32_t pack_prep_raw(uint8_t *out, int kind, const struct efs_txid *t,
     return n + plen;
 }
 
-static void pack_decide(uint8_t *out, const struct efs_txid *t, uint32_t coord,
-                        int dec)
+/* [DECIDE][txid:16][coord:4][dec:1][n:1][shard:4]*n: the participant set
+ * rides with the verdict so the decision sweeper can re-drive RESOLVE for
+ * a decision whose proposer died before retiring it. */
+#define HOST_DECIDE_MAX (23u + 4u * EFS_TXN_MAX_PART)
+static uint32_t pack_decide(uint8_t *out, const struct efs_txid *t, uint32_t coord,
+                            int dec, const struct efs_txn_parts *p)
 {
+    uint32_t n = 23, i;
+
     out[0] = EFS_MD_CMD_DECIDE;
     memcpy(out + 1, t->bytes, 16);
     wr32be(out + 17, coord);
     out[21] = (uint8_t)dec;
+    out[22] = p ? p->n : 0;
+    for (i = 0; p && i < p->n; i++) {
+        wr32be(out + n, p->shard[i]);
+        n += 4;
+    }
+    return n;
+}
+
+/* [TXN_RETIRE][txid:16][coord:4][now_ns:8]. Proposed only once every
+ * participant's RESOLVE applied with an OK verdict (transactions.md "GC").
+ * The clock rides in the entry so every replica reclaims the same
+ * tombstones at the same index. */
+static void pack_retire(uint8_t *out, const struct efs_txid *t, uint32_t coord)
+{
+    out[0] = EFS_MD_CMD_TXN_RETIRE;
+    memcpy(out + 1, t->bytes, 16);
+    wr32be(out + 17, coord);
+    wr64be(out + 21, now_ns());
 }
 
 static void pack_resolve(uint8_t *out, const struct efs_txid *t, uint32_t shard,
@@ -6360,6 +6407,8 @@ static int host_txn_coord(void *user, const struct efs_txid *t,
         /* A pending fresh quorum is retryable, never decision absence.
          * Hard authority failures retain I9's IO refusal. */
         return rc == EFS_ERR_BUSY ? EFS_ERR_BUSY : EFS_ERR_IO;
+    /* A reclaimed decision is STALE (unknown); efs_txn's reader refuses
+     * the stale view as BUSY rather than answer the old value (W83). */
     return efs_txn_decision_get(h->kv, coord_shard, t, dec);
 }
 
@@ -8753,7 +8802,8 @@ static void host_gc_orphan_pass(struct efs_raft_host *h, uint8_t group, uint32_t
 #define HOST_FIN_POLL_US 5000
 
 static void host_fin_add(struct efs_raft_host *h, const struct efs_txid *t,
-                         const struct efs_txn_parts *p, uint32_t coord)
+                         const struct efs_txn_parts *p, uint32_t coord,
+                         int retire_only)
 {
     struct host_fin_item *it;
 
@@ -8770,10 +8820,28 @@ static void host_fin_add(struct efs_raft_host *h, const struct efs_txid *t,
     it->parts = *p;
     it->coord = coord;
     it->born_ns = now_ns();
+    it->retire_only = retire_only;
     h->fin_n++;
     h->fin_queued++;
     pthread_cond_signal(&h->fin_cv);
     pthread_mutex_unlock(&h->fin_mu);
+}
+
+/* RETIRE at the coordinator once every RESOLVE verdict is in. Best effort:
+ * a lost RETIRE leaves a live decision the sweeper retires after
+ * HOST_REC_AGE_NS (host_txn_decision_sweep). */
+static void host_txn_retire(struct efs_raft_host *h, const struct efs_txid *t,
+                            uint32_t coord)
+{
+    uint8_t cmd[HOST_RETIRE_LEN];
+    int rc;
+
+    pack_retire(cmd, t, coord);
+    rc = host_bg_propose(h, efs_raft_shard_group(coord), cmd, HOST_RETIRE_LEN, 0);
+    if (rc == EFS_OK)
+        h->dec_retired++;
+    else
+        h->dec_retire_fail++;
 }
 
 static void host_fin_one(struct efs_raft_host *h, const struct host_fin_item *it)
@@ -8782,6 +8850,10 @@ static void host_fin_one(struct efs_raft_host *h, const struct host_fin_item *it
     uint8_t cg = efs_raft_shard_group(it->coord);
     int dec = EFS_TXN_ABORT, rc, i, hint = -1;
 
+    if (it->retire_only) {
+        host_txn_retire(h, &it->t, it->coord);
+        return;
+    }
     for (;;) {
         if (!h->fin_running)
             return;
@@ -8798,6 +8870,8 @@ static void host_fin_one(struct efs_raft_host *h, const struct host_fin_item *it
             rc = efs_txn_decision_get(h->kv, it->coord, &it->t, &dec);
         if (rc == EFS_OK)
             break;
+        /* STALE: retired and reclaimed, so every RESOLVE already applied;
+         * nothing is left to finish. */
         if (rc != EFS_ERR_NOT_FOUND && rc != EFS_ERR_BUSY &&
             rc != EFS_ERR_NOT_PRIMARY) {
             h->fin_dropped++;
@@ -8833,6 +8907,7 @@ static void host_fin_one(struct efs_raft_host *h, const struct host_fin_item *it
         }
     }
     h->fin_done++;
+    host_txn_retire(h, &it->t, it->coord);
 }
 
 static void *host_fin_thread(void *arg)
@@ -8936,14 +9011,31 @@ static int host_leads(struct efs_raft_host *h, uint8_t group)
 static void host_txn_recover_one(struct efs_raft_host *h, uint32_t shard,
                                  const struct efs_txn_pending_rec *rec)
 {
-    uint8_t cmd[22];
-    uint32_t coord, i, nsh, shards[EFS_TXN_MAX_PART + 1];
+    uint8_t cmd[HOST_DECIDE_MAX];
+    uint32_t coord, i, nsh, shards[EFS_TXN_MAX_PART + 1], n;
     int dec = EFS_TXN_ABORT, rc, j;
 
     h->rec_found++;
     coord = efs_txn_coordinator(&rec->t, &rec->parts);
-    pack_decide(cmd, &rec->t, coord, EFS_TXN_ABORT);
-    rc = host_bg_propose(h, efs_raft_shard_group(coord), cmd, 22, 1);
+    n = pack_decide(cmd, &rec->t, coord, EFS_TXN_ABORT, &rec->parts);
+    rc = host_bg_propose(h, efs_raft_shard_group(coord), cmd, n, 1);
+    if (rc == EFS_ERR_STALE) {
+        /* Unknown decision (W83): retired and reclaimed, so every
+         * participant's RESOLVE already applied with the verdict. This
+         * record is a straggler PREPARE that landed after its RESOLVE; it
+         * must not apply again under either verdict. Drop it here only. */
+        uint8_t drop[21];
+
+        pack_drop(drop, &rec->t, shard);
+        rc = host_bg_propose(h, efs_raft_shard_group(shard), drop, 21, 1);
+        if (rc == EFS_OK)
+            h->rec_unknown++;
+        else
+            h->rec_fail++;
+        fprintf(stderr, "raft-host: txn-recover shard=%u coord=%u "
+                "unknown decision (reclaimed) -> drop rc=%d\n", shard, coord, rc);
+        return;
+    }
     if (rc == EFS_ERR_PROTO) {
         dec = EFS_TXN_COMMIT; /* committed; only its RESOLVEs were lost */
     } else if (rc != EFS_OK) {
@@ -8988,6 +9080,58 @@ static void host_txn_recover_one(struct efs_raft_host *h, uint32_t shard,
             "age=%.1fs -> %s\n", shard, coord, rec->parts.n,
             (double)(now_ns() - txid_ns(&rec->t)) / 1e9,
             dec == EFS_TXN_COMMIT ? "COMMIT (resolved)" : "ABORT");
+    /* Every participant resolved with the established verdict (each
+     * proposal above returned its OK verdict): retire the decision. */
+    host_txn_retire(h, &rec->t, coord);
+}
+
+/* Decision sweeper (W83). A live decision older than HOST_REC_AGE_NS on a
+ * shard this node leads belongs to a proposer that died (or lost its
+ * RETIRE) between DECIDE and RETIRE. Its participants are in the record,
+ * so re-drive RESOLVE with the recorded verdict to each (idempotent; a
+ * rejected verdict means that participant is not done) and then RETIRE.
+ * Nothing here deletes by age: the verdict stays until every RESOLVE
+ * verdict was observed. Returns the number of live decisions seen, which
+ * keeps the shard's recovery mark armed. */
+static uint32_t host_txn_decision_sweep(struct efs_raft_host *h, uint32_t shard,
+                                        uint64_t now)
+{
+    struct efs_txn_decision_rec *recs;
+    uint8_t cmd[22];
+    uint32_t n = 0, i, j;
+    int rc;
+
+    recs = calloc(HOST_REC_MAX, sizeof(*recs));
+    if (!recs)
+        return 1;
+    if (efs_txn_scan_decisions(h->kv, shard, recs, HOST_REC_MAX, &n) != EFS_OK) {
+        free(recs);
+        return 1; /* retried next pass */
+    }
+    for (i = 0; i < n && h->gc_running && h->running; i++) {
+        uint64_t born = txid_ns(&recs[i].t);
+        uint32_t coord = efs_txn_coordinator(&recs[i].t, &recs[i].parts);
+
+        if (born > now || now - born < HOST_REC_AGE_NS)
+            continue;
+        if (recs[i].parts.n == 0 || coord != shard)
+            continue; /* not this shard's decision, or an unsweepable record */
+        h->dec_swept++;
+        for (j = 0; j < recs[i].parts.n; j++) {
+            pack_resolve(cmd, &recs[i].t, recs[i].parts.shard[j], recs[i].decision);
+            rc = host_bg_propose(h, efs_raft_shard_group(recs[i].parts.shard[j]),
+                                 cmd, 22, 1);
+            if (rc != EFS_OK)
+                break;
+        }
+        if (j < recs[i].parts.n) {
+            h->dec_sweep_fail++;
+            continue; /* retried next pass; the decision stays live */
+        }
+        host_txn_retire(h, &recs[i].t, coord);
+    }
+    free(recs);
+    return n;
 }
 
 static void host_txn_recover_pass(struct efs_raft_host *h)
@@ -9026,6 +9170,10 @@ static void host_txn_recover_pass(struct efs_raft_host *h)
                 continue;
             host_txn_recover_one(h, shard, &recs[i]);
         }
+        /* The coordinator shard is always a participant, so its PREPARE
+         * marked it: the same due mark drives the decision sweep. Live
+         * decisions (young or orphaned) re-arm the mark like records do. */
+        n += host_txn_decision_sweep(h, shard, now);
         /* Clean: clear the mark unless a PREPARE landed meanwhile (mark
          * moved). Anything found — young, recovered, or a failed recovery
          * — re-arms from now so the shard is looked at again in one age
@@ -14341,21 +14489,22 @@ static int host_txn_commit(struct efs_raft_host *h, const struct efs_txid *t,
                            const struct efs_txn_parts *parts, uint32_t coord,
                            int *hint)
 {
-    uint8_t cmd[22];
+    uint8_t cmd[HOST_DECIDE_MAX];
     struct host_idx_ref refs[EFS_TXN_MAX_PART];
     int i, n = 0, rc;
 
 #if EFS_FAULTS
     host_txn_fault_barrier(h, parts, "prepare");
 #endif
-    pack_decide(cmd, t, coord, EFS_TXN_COMMIT);
-    rc = host_propose_wait(h, efs_raft_shard_group(coord), cmd, 22, hint);
+    n = (int)pack_decide(cmd, t, coord, EFS_TXN_COMMIT, parts);
+    rc = host_propose_wait(h, efs_raft_shard_group(coord), cmd, (uint32_t)n, hint);
+    n = 0;
     if (rc != EFS_OK) {
         /* BUSY = the wait ran out; the entry may well commit. Any other
          * verdict means it was decided differently (recovery ABORT) or
          * never proposed — nothing to finish. */
         if (rc == EFS_ERR_BUSY)
-            host_fin_add(h, t, parts, coord);
+            host_fin_add(h, t, parts, coord, 0);
         return rc;
     }
 #if EFS_FAULTS
@@ -14374,8 +14523,10 @@ static int host_txn_commit(struct efs_raft_host *h, const struct efs_txid *t,
     rc=host_command_cohort_end(&cohort,rc,hint);
     if (rc == EFS_OK)
         rc = host_wait_refs(h, refs, n, hint);
-    if (rc != EFS_OK)
-        host_fin_add(h, t, parts, coord);
+    /* Every RESOLVE verdict is OK: the decision is retirable. The RETIRE
+     * is off the client's path (finisher thread); the sweeper covers a
+     * full queue or a lost proposal. */
+    host_fin_add(h, t, parts, coord, rc == EFS_OK);
     return rc;
 }
 
@@ -14638,13 +14789,13 @@ static int host_resize_decide(void *user, const struct efs_txid *t,
                                const struct efs_txn_parts *parts, int decision)
 {
     struct host_resize_ctx *ctx = user;
-    uint8_t cmd[22];
+    uint8_t cmd[HOST_DECIDE_MAX];
     uint32_t coord = efs_txn_coordinator(t, parts);
-    pack_decide(cmd, t, coord, decision);
+    uint32_t n = pack_decide(cmd, t, coord, decision, parts);
     int rc = host_propose_wait(ctx->host, efs_raft_shard_group(coord), cmd,
-                                sizeof(cmd), ctx->hint);
+                                n, ctx->hint);
     if (rc == EFS_ERR_BUSY)
-        host_fin_add(ctx->host, t, parts, coord);
+        host_fin_add(ctx->host, t, parts, coord, 0);
     return rc;
 }
 
@@ -14668,8 +14819,7 @@ static int host_resize_resolve(void *user, const struct efs_txid *t,
     rc=host_command_cohort_end(&cohort,rc,ctx->hint);
     if (rc == EFS_OK)
         rc = host_wait_refs(ctx->host, refs, n, ctx->hint);
-    if (rc != EFS_OK)
-        host_fin_add(ctx->host, t, parts, efs_txn_coordinator(t, parts));
+    host_fin_add(ctx->host, t, parts, efs_txn_coordinator(t, parts), rc == EFS_OK);
     return rc;
 }
 
