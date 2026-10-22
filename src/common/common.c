@@ -50,6 +50,7 @@ const char *efs_strerror(int rc)
     case EFS_ERR_OVERFLOW: return "query limit exceeded";
     case EFS_ERR_ILSEQ: return "unrepresentable name";
     case EFS_ERR_NODATA: return "attribute not found";
+    case EFS_ERR_UNSUPPORTED: return "unsupported log encoding";
     default:             return "unknown error";
     }
 }

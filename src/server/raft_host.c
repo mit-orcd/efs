@@ -259,6 +259,12 @@ struct host_group {
     uint8_t *import_hold_b;
     uint64_t import_retry_us;
     int kv_incomplete;  /* apply missed a committed row; do not lead */
+    /* W127: a committed entry this build cannot apply. Sticky until restart
+     * with a build that can; the entry is never skipped. */
+    int incompatible;
+    uint64_t incompat_index, incompat_term;
+    uint32_t incompat_len;
+    uint8_t incompat_tag, incompat_sub;
     struct efs_raft *r;
     struct efs_raft_host *host; /* back-pointer, set in attach_group */
     /* Apply-result ring: (index, rc, extra) of the last HOST_APPLY_RC_RING
@@ -1352,7 +1358,7 @@ static int apply_mkfs_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     int rc;
 
     if (clen < 9)
-        return EFS_OK;
+        return EFS_ERR_UNSUPPORTED;
     now = rd64be(cmd + 1);
     if (clen >= 17)
         salt = rd64be(cmd + 9);
@@ -1378,7 +1384,7 @@ static int apply_salt_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     int rc;
 
     if (clen < 13)
-        return EFS_OK;
+        return EFS_ERR_UNSUPPORTED;
     anchor = rd32be(cmd + 1);
     salt = rd64be(cmd + 5);
     rc = efs_meta_apply_salt_record(h->kv, anchor, salt);
@@ -1409,10 +1415,10 @@ static int apply_create_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     int rc;
 
     if (clen < HOST_CREATE_NAME_OFF)
-        return clen>=2 && (cmd[1]&HOST_CREATE_F_PENDING) ? EFS_ERR_PROTO : EFS_OK;
+        return EFS_ERR_UNSUPPORTED;
     int pending=!!(cmd[1]&HOST_CREATE_F_PENDING);
     if (pending && ((cmd[1]&~(HOST_CREATE_F_OPID|HOST_CREATE_F_PENDING)) ||
-                    !(cmd[1]&HOST_CREATE_F_OPID))) return EFS_ERR_PROTO;
+                    !(cmd[1]&HOST_CREATE_F_OPID))) return EFS_ERR_UNSUPPORTED;
     parent = rd64be(cmd + 2);
     mode = rd32be(cmd + 10);
     memset(&at, 0, sizeof(at));
@@ -1507,12 +1513,12 @@ static int apply_unlink_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     int rc;
 
     if (clen < 18)
-        return EFS_OK;
+        return EFS_ERR_UNSUPPORTED;
     parent = rd64be(cmd + 1);
     now = rd64be(cmd + 9);
     nl = cmd[17];
     if ((uint32_t)18 + nl + EFS_OPID_UUID_LEN + 4 > clen)
-        return EFS_OK;
+        return EFS_ERR_UNSUPPORTED;
     memset(name, 0, sizeof(name));
     memcpy(name, cmd + 18, nl);
     rc = efs_meta_apply_unlink_op(h->kv, parent, name, now,
@@ -1549,12 +1555,12 @@ static int apply_rmdir_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     int rc;
 
     if (clen < 18)
-        return EFS_ERR_INVAL;
+        return EFS_ERR_UNSUPPORTED;
     parent = rd64be(cmd + 1);
     now = rd64be(cmd + 9);
     nl = cmd[17];
     if ((uint32_t)18 + nl + EFS_OPID_UUID_LEN + 4 > clen)
-        return EFS_ERR_INVAL;
+        return EFS_ERR_UNSUPPORTED;
     memset(name, 0, sizeof(name));
     memcpy(name, cmd + 18, nl);
     rc = efs_meta_apply_rmdir_op(h->kv, parent, name, now,
@@ -1584,7 +1590,7 @@ static int apply_setattr_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     int rc;
 
     if (clen < HOST_SETATTR_LEN)
-        return EFS_OK;
+        return EFS_ERR_UNSUPPORTED;
     ino = rd64be(cmd + 1);
     now = rd64be(cmd + 9);
     memset(&sa, 0, sizeof(sa));
@@ -1622,7 +1628,7 @@ static int apply_xattr_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     int rc;
 
     if (clen < HOST_XATTR_HDR)
-        return EFS_ERR_INVAL;
+        return EFS_ERR_UNSUPPORTED;
     op = cmd[1];
     ino = rd64be(cmd + 2);
     now = rd64be(cmd + 10);
@@ -1630,10 +1636,10 @@ static int apply_xattr_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     nlen = (uint16_t)(((uint16_t)cmd[22] << 8) | cmd[23]);
     vlen = rd32be(cmd + 24);
     if (nlen > EFS_XATTR_NAME_MAX || vlen > EFS_XATTR_VALUE_MAX)
-        return EFS_ERR_INVAL;
+        return EFS_ERR_UNSUPPORTED;
     body = (uint32_t)nlen + vlen;
     if (clen != HOST_XATTR_HDR + body)
-        return EFS_ERR_INVAL;
+        return EFS_ERR_UNSUPPORTED;
     rc = efs_meta_apply_xattr(h->kv, ino, now, op, flags, cmd + HOST_XATTR_HDR,
                               nlen, cmd + HOST_XATTR_HDR + nlen, vlen);
     if (rc != EFS_OK && rc != EFS_ERR_NODATA && rc != EFS_ERR_EXIST &&
@@ -1654,7 +1660,7 @@ static int apply_utimens_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     int rc;
 
     if (clen < HOST_UTIMENS_LEN)
-        return EFS_OK;
+        return EFS_ERR_UNSUPPORTED;
     ino = rd64be(cmd + 1);
     now = rd64be(cmd + 9);
     memset(&u, 0, sizeof(u));
@@ -1695,7 +1701,7 @@ static int apply_truncate_lazy_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     int rc;
 
     if (clen != HOST_TRUNC_LAZY_LEN || cmd[1] > EFS_META_TRUNCATE_SHRINK)
-        return EFS_ERR_PROTO;
+        return EFS_ERR_UNSUPPORTED;
     memset(&t, 0, sizeof(t));
     t.kind = cmd[1];
     t.ino = rd64be(cmd + 2);
@@ -1809,7 +1815,7 @@ static int apply_sweep_done_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                                 uint32_t clen, uint8_t group)
 {
     if (clen != 26 || !rd64be(cmd + 1) || cmd[17] >= EFS_META_LANES || !rd64be(cmd + 18))
-        return EFS_ERR_PROTO;
+        return EFS_ERR_UNSUPPORTED;
     if (efs_raft_shard_group(efs_kv_inode_shard(rd64be(cmd + 1))) != group)
         return EFS_ERR_INVAL;
     return efs_meta_apply_sweep_done(h->kv, rd64be(cmd + 1), rd64be(cmd + 9), cmd[17],
@@ -1820,7 +1826,7 @@ static int apply_retire_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                             uint32_t clen, uint8_t group)
 {
     if (clen != 25 || !rd64be(cmd + 1) || !rd64be(cmd + 17))
-        return EFS_ERR_PROTO;
+        return EFS_ERR_UNSUPPORTED;
     if (efs_raft_shard_group(efs_kv_inode_shard(rd64be(cmd + 1))) != group)
         return EFS_ERR_INVAL;
     return efs_meta_apply_retire(h->kv, rd64be(cmd + 1), rd64be(cmd + 9), rd64be(cmd + 17));
@@ -1893,15 +1899,15 @@ static int host_pack_sweep_next(struct efs_raft_host *h, uint8_t group,
 static int apply_lane_sweep_multi_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                                       uint32_t clen, uint64_t index)
 {
-    if (clen < 3) return EFS_ERR_PROTO;
+    if (clen < 3) return EFS_ERR_UNSUPPORTED;
     uint32_t count = ((uint32_t)cmd[1] << 8) | cmd[2], off = 3;
     for (uint32_t k = 0; k < count; k++) {
-        if (clen - off < 18) return EFS_ERR_PROTO;
+        if (clen - off < 18) return EFS_ERR_UNSUPPORTED;
         efs_ino_t ino = rd64be(cmd + off);
         uint64_t gen = rd64be(cmd + off + 8);
         uint8_t lane = cmd[off + 16], n = cmd[off + 17];
         uint32_t indices[EFS_META_SWEEP_BATCH_MAX];
-        if (n > EFS_META_SWEEP_BATCH_MAX || clen - off - 18 < 4u * n) return EFS_ERR_PROTO;
+        if (n > EFS_META_SWEEP_BATCH_MAX || clen - off - 18 < 4u * n) return EFS_ERR_UNSUPPORTED;
         for (uint32_t i = 0; i < n; i++) indices[i] = rd32be(cmd + off + 18 + 4 * i);
         off += 18u + 4u * n;
         int rc = efs_meta_apply_lane_sweep_reaped(h->kv, ino, gen, lane, indices, n);
@@ -1912,7 +1918,7 @@ static int apply_lane_sweep_multi_cmd(struct efs_raft_host *h, const uint8_t *cm
         }
         if (count == 1 && off == clen) return rc;
     }
-    return off == clen ? EFS_OK : EFS_ERR_PROTO;
+    return off == clen ? EFS_OK : EFS_ERR_UNSUPPORTED;
 }
 
 /* W124 REAP_MULTI: independent reap completions for inodes every member has
@@ -1921,15 +1927,15 @@ static int apply_lane_sweep_multi_cmd(struct efs_raft_host *h, const uint8_t *cm
 static int apply_reap_multi_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                                 uint32_t clen, uint64_t index)
 {
-    if (clen < 3) return EFS_ERR_PROTO;
+    if (clen < 3) return EFS_ERR_UNSUPPORTED;
     uint32_t count = ((uint32_t)cmd[1] << 8) | cmd[2], off = 3;
     for (uint32_t k = 0; k < count; k++) {
-        if (clen - off < 17) return EFS_ERR_PROTO;
+        if (clen - off < 17) return EFS_ERR_UNSUPPORTED;
         efs_ino_t ino = rd64be(cmd + off);
         uint64_t gen = rd64be(cmd + off + 8);
         uint8_t n = cmd[off + 16];
         struct efs_meta_reap_key keys[EFS_META_REAP_BATCH_MAX];
-        if (n > EFS_META_REAP_BATCH_MAX || clen - off - 17 < 32u * n) return EFS_ERR_PROTO;
+        if (n > EFS_META_REAP_BATCH_MAX || clen - off - 17 < 32u * n) return EFS_ERR_UNSUPPORTED;
         for (uint32_t i = 0; i < n; i++) {
             keys[i].len = cmd[off + 17 + 32 * i];
             memcpy(keys[i].key, cmd + off + 18 + 32 * i, EFS_META_REAP_KEY_MAX);
@@ -1942,7 +1948,7 @@ static int apply_reap_multi_cmd(struct efs_raft_host *h, const uint8_t *cmd,
             return rc;
         }
     }
-    return off == clen ? EFS_OK : EFS_ERR_PROTO;
+    return off == clen ? EFS_OK : EFS_ERR_UNSUPPORTED;
 }
 
 /* W125 packer commands. Per-member refusals are recorded in the segment
@@ -1951,7 +1957,7 @@ static int apply_pack_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                           uint32_t clen, uint64_t index)
 {
     int rc;
-    if (clen < 2) return EFS_ERR_PROTO;
+    if (clen < 2) return EFS_ERR_UNSUPPORTED;
     if (cmd[0] == EFS_MD_CMD_PACK_ADMIT) {
         struct efs_pack_object *o = malloc(sizeof(*o));
         if (!o) return EFS_ERR_NOMEM;
@@ -1966,13 +1972,13 @@ static int apply_pack_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         if (rc == EFS_OK) rc = efs_meta_apply_pack_switch(h->kv, s, &live);
         free(s);
     } else if (cmd[0] == EFS_MD_CMD_PACK_CANCEL) {
-        if (clen != 18) return EFS_ERR_PROTO;
+        if (clen != 18) return EFS_ERR_UNSUPPORTED;
         rc = efs_meta_apply_pack_cancel(h->kv, cmd[1], rd64be(cmd + 2), rd64be(cmd + 10));
     } else if (cmd[0] == EFS_MD_CMD_PACK_INDEX) {
         struct efs_pack_index_item items[EFS_PACK_INDEX_MAX];
-        if (clen < 9) return EFS_ERR_PROTO;
+        if (clen < 9) return EFS_ERR_UNSUPPORTED;
         uint32_t n = ((uint32_t)cmd[2] << 8) | cmd[3];
-        if (n > EFS_PACK_INDEX_MAX || clen != 9u + 24u * n) return EFS_ERR_PROTO;
+        if (n > EFS_PACK_INDEX_MAX || clen != 9u + 24u * n) return EFS_ERR_UNSUPPORTED;
         for (uint32_t i = 0; i < n; i++)
             items[i] = (struct efs_pack_index_item){rd64be(cmd + 9 + 24 * i), rd64be(cmd + 17 + 24 * i),
                                                     rd64be(cmd + 25 + 24 * i)};
@@ -1980,9 +1986,9 @@ static int apply_pack_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     } else if (cmd[0] == EFS_MD_CMD_PACK_UNINDEX) {
         uint64_t epochs[EFS_PACK_UNINDEX_MAX];
         efs_ino_t inos[EFS_PACK_UNINDEX_MAX];
-        if (clen < 4) return EFS_ERR_PROTO;
+        if (clen < 4) return EFS_ERR_UNSUPPORTED;
         uint32_t n = ((uint32_t)cmd[2] << 8) | cmd[3];
-        if (n > EFS_PACK_UNINDEX_MAX || clen != 4u + 16u * n) return EFS_ERR_PROTO;
+        if (n > EFS_PACK_UNINDEX_MAX || clen != 4u + 16u * n) return EFS_ERR_UNSUPPORTED;
         for (uint32_t i = 0; i < n; i++) {
             epochs[i] = rd64be(cmd + 4 + 16 * i);
             inos[i] = rd64be(cmd + 12 + 16 * i);
@@ -1990,9 +1996,9 @@ static int apply_pack_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         rc = efs_meta_apply_pack_unindex(h->kv, cmd[1], epochs, inos, n);
     } else {
         uint64_t ids[EFS_PACK_RETIRE_MAX], gens[EFS_PACK_RETIRE_MAX];
-        if (clen < 4) return EFS_ERR_PROTO;
+        if (clen < 4) return EFS_ERR_UNSUPPORTED;
         uint32_t n = ((uint32_t)cmd[2] << 8) | cmd[3];
-        if (n > EFS_PACK_RETIRE_MAX || clen != 4u + 16u * n) return EFS_ERR_PROTO;
+        if (n > EFS_PACK_RETIRE_MAX || clen != 4u + 16u * n) return EFS_ERR_UNSUPPORTED;
         for (uint32_t i = 0; i < n; i++) {
             ids[i] = rd64be(cmd + 4 + 16 * i);
             gens[i] = rd64be(cmd + 12 + 16 * i);
@@ -2009,7 +2015,7 @@ static int apply_orphan_reap_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                                   uint32_t len, uint64_t index)
 {
     (void)index;
-    if (len != 17) return EFS_ERR_PROTO;
+    if (len != 17) return EFS_ERR_UNSUPPORTED;
     return efs_meta_apply_orphan_reclaim(h->kv, rd64be(cmd + 1), rd64be(cmd + 9));
 }
 
@@ -2025,10 +2031,10 @@ static int apply_gc_ack_cmd(struct efs_raft_host *h, const uint8_t *cmd,
 
     (void)index;
     if (clen < 3)
-        return EFS_ERR_PROTO;
+        return EFS_ERR_UNSUPPORTED;
     cnt = (uint32_t)((cmd[1] << 8) | cmd[2]);
     if (cnt > EFS_META_GC_ACK_MAX || clen < 3 + cnt * 22)
-        return EFS_ERR_PROTO;
+        return EFS_ERR_UNSUPPORTED;
     off = 3;
     for (i = 0; i < cnt; i++) {
         items[i].ino = rd64be(cmd + off);
@@ -2071,7 +2077,7 @@ static int apply_append_rsv_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     int rc;
 
     if (clen != HOST_APPEND_RSV_LEGACY_LEN && clen != HOST_APPEND_RSV_LEN)
-        return EFS_OK;
+        return EFS_ERR_UNSUPPORTED;
     ino = rd64be(cmd + 1);
     len = rd64be(cmd + 9);
     memset(&op, 0, sizeof(op));
@@ -2104,8 +2110,8 @@ static int apply_append_rsv_cmd(struct efs_raft_host *h, const uint8_t *cmd,
 static int apply_append_catchup_cmd(struct efs_raft_host *h,const uint8_t *cmd,
                                     uint32_t clen,uint8_t group)
 {
-    if(clen!=38 && clen!=58)return EFS_ERR_PROTO;
-    if(cmd[37]>1 || (cmd[37] && clen!=58) || (!cmd[37] && clen!=38))return EFS_ERR_PROTO;
+    if(clen!=38 && clen!=58)return EFS_ERR_UNSUPPORTED;
+    if(cmd[37]>1 || (cmd[37] && clen!=58) || (!cmd[37] && clen!=38))return EFS_ERR_UNSUPPORTED;
     uint32_t limit=rd32be(cmd+33);
     if(!limit || limit>EFS_META_APPEND_CATCHUP_MAX)return EFS_ERR_INVAL;
     efs_ino_t ino=rd64be(cmd+1);
@@ -2130,7 +2136,7 @@ static int apply_dir_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     int rc = EFS_ERR_PROTO;
 
     if (clen < HOST_DIR_LEN)
-        return EFS_OK;
+        return EFS_ERR_UNSUPPORTED;
     dir = rd64be(cmd + 2);
     switch (cmd[1]) {
     case EFS_MD_DIR_BEGIN:
@@ -2143,7 +2149,7 @@ static int apply_dir_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         rc = efs_meta_dir_finish_hashed(h->kv, dir);
         break;
     default:
-        return EFS_OK;
+        return EFS_ERR_UNSUPPORTED;
     }
     if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_INVAL || rc == EFS_ERR_BUSY)
         rc = EFS_OK;
@@ -2151,6 +2157,10 @@ static int apply_dir_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         fprintf(stderr, "raft-host: apply dir rc=%d index=%llu ino=%llu kind=%u\n",
                 rc, (unsigned long long)index, (unsigned long long)dir,
                 (unsigned)cmd[1]);
+        /* W130: a storage failure must retry this index on this replica,
+         * never advance it past a split/migrate step it did not perform. */
+        if (rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM)
+            return rc;
         return EFS_OK;
     }
     APPLY_LOG("raft-host: applied dir index=%llu ino=%llu kind=%u\n",
@@ -2285,29 +2295,29 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     int rc = EFS_ERR_PROTO, required_failure = 0;
 
     if (clen < HOST_SESS_HDR_LEN)
-        return EFS_OK;
+        return EFS_ERR_UNSUPPORTED;
     memcpy(uuid, cmd + 2, EFS_OPID_UUID_LEN);
     switch (cmd[1]) {
     case EFS_MD_SESS_CREATE:
         if (clen < HOST_SESS_CREATE_LEN)
-            return EFS_OK;
+            return EFS_ERR_UNSUPPORTED;
         epoch = rd32be(cmd + 18);
         rc = efs_session_create(h->kv, uuid, epoch);
         break;
     case EFS_MD_SESS_REGISTER:
         if (clen < HOST_SESS_REG_LEN)
-            return EFS_OK;
+            return EFS_ERR_UNSUPPORTED;
         epoch = rd32be(cmd + 18);
         shard = rd32be(cmd + 22);
         rc = host_session_register_apply(h, uuid, epoch, shard);
         break;
     case EFS_MD_SESS_REGISTER_ESTABLISH:
-        if(clen!=HOST_SESS_REG_LEN)return EFS_ERR_PROTO;
+        if(clen!=HOST_SESS_REG_LEN)return EFS_ERR_UNSUPPORTED;
         rc=efs_session_register_establish(h->kv,uuid,rd32be(cmd+18),rd32be(cmd+22));
         break;
     case EFS_MD_SESS_ESTABLISH:
         if (clen < HOST_SESS_REG_LEN)
-            return EFS_OK;
+            return EFS_ERR_UNSUPPORTED;
         epoch = rd32be(cmd + 18);
         shard = rd32be(cmd + 22);
         rc = efs_session_establish(h->kv, shard, uuid, epoch);
@@ -2317,7 +2327,7 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         break;
     case EFS_MD_SESS_FENCE_LOC:
         if (clen != HOST_SESS_REG_LEN)
-            return EFS_ERR_INVAL;
+            return EFS_ERR_UNSUPPORTED;
         epoch = rd32be(cmd + 18);
         shard = rd32be(cmd + 22);
         if (!epoch || shard >= EFS_SESSION_BITS)
@@ -2333,7 +2343,7 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         break;
     case EFS_MD_SESS_ACK:
         if (clen < HOST_SESS_CREATE_LEN)
-            return EFS_OK;
+            return EFS_ERR_UNSUPPORTED;
         shard = rd32be(cmd + 18);
         rc = efs_session_ack_fence(h->kv, uuid, shard);
         break;
@@ -2357,7 +2367,7 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     }
     case EFS_MD_SESS_LEASE_DROP:
         if (clen < HOST_SESS_REG_LEN)
-            return EFS_OK;
+            return EFS_ERR_UNSUPPORTED;
         epoch = rd32be(cmd + 18);
         shard = rd32be(cmd + 22);
         rc = efs_lease_drop_session(h->kv, shard, uuid, epoch);
@@ -2377,7 +2387,7 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         break;
     case EFS_MD_SESS_LEASE_OPEN:
         if (clen < HOST_SESS_LEASE_LEN)
-            return EFS_OK;
+            return EFS_ERR_UNSUPPORTED;
         epoch = rd32be(cmd + 18);
         ino = rd64be(cmd + 22);
         gen = rd64be(cmd + 30);
@@ -2385,7 +2395,7 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         break;
     case EFS_MD_SESS_LEASE_CLOSE:
         if (clen < HOST_SESS_LEASE_LEN)
-            return EFS_OK;
+            return EFS_ERR_UNSUPPORTED;
         epoch = rd32be(cmd + 18);
         ino = rd64be(cmd + 22);
         gen = rd64be(cmd + 30);
@@ -2414,12 +2424,12 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     }
     case EFS_MD_SESS_RECLAIM:
         if (clen < 26)
-            return EFS_OK;
+            return EFS_ERR_UNSUPPORTED;
         ino = rd64be(cmd + 18);
         rc = efs_meta_apply_reclaim(h->kv, ino);
         break;
     default:
-        return EFS_OK;
+        return EFS_ERR_UNSUPPORTED;
     }
     if (required_failure) {
         fprintf(stderr,"raft-host: required lease cleanup rc=%d index=%llu ino=%llu\n",
@@ -2467,7 +2477,7 @@ static int apply_lock_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     int rc = EFS_ERR_PROTO;
 
     if (clen < HOST_LOCK_LEN)
-        return EFS_ERR_PROTO;
+        return EFS_ERR_UNSUPPORTED;
     memset(&r, 0, sizeof(r));
     r.ino = rd64be(cmd + 2);
     r.generation = rd64be(cmd + 10);
@@ -2636,7 +2646,7 @@ static int apply_publish_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     int first = EFS_OK;
 
     if (clen < HOST_PUBLISH_LEN)
-        return EFS_OK;
+        return EFS_ERR_UNSUPPORTED;
     /* One WAL fsync for the whole Raft entry. Sequential efs_kv_batch
      * otherwise fsyncs per pub; group-commit only helps concurrent callers. */
     if (clen >= 2u * HOST_PUBLISH_LEN) {
@@ -2675,7 +2685,7 @@ static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
 {
     struct efs_txid t;
     uint32_t shard, off;
-    int rc = EFS_ERR_PROTO, dec, kind;
+    int rc = EFS_ERR_UNSUPPORTED, dec, kind; /* a short frame breaks out */
     uint32_t klen;
     const uint8_t *key;
     struct efs_txn_parts p;
@@ -2738,7 +2748,7 @@ static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         rc = efs_txn_drop(h->kv, &t, shard);
         break;
     default:
-        return EFS_OK;
+        return EFS_ERR_UNSUPPORTED;
     }
     return rc;
 }
@@ -2761,6 +2771,30 @@ static void host_mark_incomplete(struct host_group *g)
     }
     efs_raft_allow_campaign(g->r, 0);
     efs_raft_step_down(g->r);
+}
+
+/* W127/B4: stop serving the group. No campaign, step down, refuse its
+ * proposals and reads; keep the diagnostic. KV cursor and applied stay put. */
+static void host_mark_incompatible(struct host_group *g, uint64_t index, uint64_t term,
+                                   const uint8_t *cmd, uint32_t clen)
+{
+    if (!g || g->incompatible)
+        return;
+    g->incompat_index = index;
+    g->incompat_term = term;
+    g->incompat_len = clen;
+    g->incompat_tag = cmd[0];
+    g->incompat_sub = clen > 1 ? cmd[1] : 0;
+    __atomic_store_n(&g->incompatible, 1, __ATOMIC_RELEASE);
+    fprintf(stderr,
+            "raft-host: group=%u INCOMPATIBLE entry index=%llu term=%llu tag=%u sub=%u len=%u: "
+            "unsupported or malformed encoding; apply halted, group not served\n",
+            g->group, (unsigned long long)index, (unsigned long long)term,
+            (unsigned)g->incompat_tag, (unsigned)g->incompat_sub, clen);
+    if (g->r) {
+        efs_raft_allow_campaign(g->r, 0);
+        efs_raft_step_down(g->r);
+    }
 }
 
 static void host_clear_incomplete(struct host_group *g)
@@ -2794,8 +2828,18 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         return EFS_ERR_BUSY;
     if (h && __atomic_load_n(&h->snap_batch, __ATOMIC_ACQUIRE))
         return EFS_ERR_BUSY;
-    if (!h || !h->kv || !cmd || clen == 0) {
-        /* Still stamp the slot: a waiter must never find "never written". */
+    if (__atomic_load_n(&g->incompatible, __ATOMIC_ACQUIRE))
+        return EFS_ERR_UNSUPPORTED; /* sticky: never re-applied or skipped */
+    if (!h || !h->kv) {
+        /* W131: no engine is not an applied entry; the index stays. */
+        static int logged;
+        if (!__atomic_exchange_n(&logged, 1, __ATOMIC_RELAXED))
+            fprintf(stderr, "raft-host: group=%u apply without a KV engine at index=%llu; refused\n",
+                    g->group, (unsigned long long)index);
+        return EFS_ERR_IO;
+    }
+    if (!cmd || clen == 0) {
+        /* Raft no-op. Still stamp the slot: a waiter must never find "never written". */
         efs_arc_store(&g->arc[index & HOST_APPLY_RC_MASK], index, term,
                       EFS_OK, 0, 0);
         return EFS_OK;
@@ -2905,6 +2949,10 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
          (cmd[0] == EFS_MD_CMD_LOCK && clen >= HOST_LOCK_LEN)) &&
         (rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM))
         ret = rc;
+    /* W127-W129: no normalization above may turn an unsupported or
+     * malformed entry into an applied one. */
+    if (rc == EFS_ERR_UNSUPPORTED)
+        ret = rc;
     /* Finish the atomic apply scope before publishing its verdict. */
     if (scope_rc!=EFS_OK) ret=rc=scope_rc;
     if (scope_rc==EFS_OK) {
@@ -2934,6 +2982,13 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
     if (wp0) {
         apply_us = wprof_now();
         wprof_add(WP_APPLY, apply_us - wp0);
+    }
+    if (ret == EFS_ERR_UNSUPPORTED) {
+        /* The scope was aborted and the cursor not written: nothing of this
+         * entry is visible. Applied does not move (the core retries and
+         * meets the sticky state). */
+        host_mark_incompatible(g, index, term, cmd, clen);
+        return ret;
     }
     efs_arc_store(&g->arc[index & HOST_APPLY_RC_MASK], index, term, rc,
                   h->apply_extra, apply_us);
@@ -3283,7 +3338,7 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         return efs_meta_apply_create_refusal(h->kv,rd32be(cmd+1),&q);
     }
     if(cmd[0]==EFS_MD_CMD_EXPIRY_POLICY) {
-        if(clen!=46 || (cmd[45]&~3u))return EFS_ERR_PROTO;
+        if(clen!=46 || (cmd[45]&~3u))return EFS_ERR_UNSUPPORTED;
         struct efs_expiry_policy p={.ttl_ns=rd64be(cmd+29),.max_ns=rd64be(cmd+37),
             .enabled=cmd[45]&1u,.allow_clear=(cmd[45]>>1)&1u};
         if(group!=efs_raft_shard_group(efs_kv_inode_shard(rd64be(cmd+1))))return EFS_ERR_PROTO;
@@ -3317,16 +3372,11 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
     if (cmd[0] == EFS_MD_CMD_RMDIR)
         return apply_rmdir_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT) {
-        if (!host_publication_command_valid(cmd,clen)) return EFS_ERR_PROTO;
+        if (!host_publication_command_valid(cmd,clen)) return EFS_ERR_UNSUPPORTED;
         return apply_one_publish(h,cmd,index,term,group);
     }
-    if(EFS_MD_CMD_IS_RESERVED(cmd[0])) {
-        /* Halting here, not skipping, keeps such a log from being
-         * half-applied. */
-        fprintf(stderr,"raft-host: reserved command %u at index %llu group %u; this build cannot apply it\n",
-                cmd[0],(unsigned long long)index,group);
-        return EFS_ERR_PROTO;
-    }
+    if(EFS_MD_CMD_IS_RESERVED(cmd[0]))
+        return EFS_ERR_UNSUPPORTED; /* retired or reserved: halts, never skips */
     if(cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT || cmd[0]==EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED) {
         struct efs_put_ticket ticket;
         int rc=efs_put_ticket_decode(cmd+1,clen-1,&ticket);
@@ -3385,11 +3435,11 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
          * one group's packer entry to another group's rows. */
         return clen >= 2 && cmd[1] == group ? apply_pack_cmd(h, cmd, clen, index) : EFS_ERR_PROTO;
     if (cmd[0] == EFS_MD_CMD_CLOSE_STEP) {
-        if(clen!=46)return EFS_ERR_INVAL;
+        if(clen!=46)return EFS_ERR_UNSUPPORTED;
         return efs_close_step_apply(h->kv,rd64be(cmd+1),cmd+9,cmd[45]);
     }
     if (cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP) {
-        if(clen!=17)return EFS_ERR_PROTO;
+        if(clen!=17)return EFS_ERR_UNSUPPORTED;
         efs_ino_t ino=rd64be(cmd+1);uint64_t gen=rd64be(cmd+9);
         uint8_t key[EFS_KV_KEY_MAX],value[8];uint32_t kl=0,vl=sizeof(value);
         int rc=efs_kv_key_reap(efs_kv_anchor_shard(efs_kv_inode_shard(ino)),ino,key,&kl);
@@ -3409,7 +3459,8 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
     if (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
         cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP)
         return apply_txn_cmd(h, cmd, clen);
-    return EFS_OK;
+    /* W127: a tag this build does not know is never applied as success. */
+    return EFS_ERR_UNSUPPORTED;
 }
 
 static struct efs_raft *group_raft(struct efs_raft_host *h, uint8_t group)
@@ -3430,6 +3481,12 @@ static struct host_group *group_slot(struct efs_raft_host *h, uint8_t group)
             return &h->g[i];
     }
     return NULL;
+}
+
+static int host_group_incompatible(struct efs_raft_host *h, uint8_t group)
+{
+    struct host_group *g = group_slot(h, group);
+    return g && __atomic_load_n(&g->incompatible, __ATOMIC_ACQUIRE);
 }
 
 #define V_LOAD(p) __atomic_load_n(&(p), __ATOMIC_ACQUIRE)
@@ -4496,6 +4553,10 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
     int prof = read_prof_on();
     uint64_t p0 = prof ? now_us_() : 0;
     int first = 1, requested = 0;
+    /* W127/B4: never serve reads from a group stuck below a committed
+     * entry it cannot apply. */
+    if (host_group_incompatible(h, group))
+        return EFS_ERR_UNSUPPORTED;
     /* Server mode: admission and round starts never take h->mu. */
     int delegated=h->s!=NULL;
 
@@ -4892,6 +4953,9 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
 
     if (term)
         *term = 0;
+    /* W127/B4: an incompatible group accepts no new entries. */
+    if (host_group_incompatible(h, group))
+        return EFS_ERR_UNSUPPORTED;
     /* Each disk-backed submit owns a hold before taking h->mu. Merely
      * observing another caller's hold is racy: it can close before append,
      * making the storage callback fsync while the host mutex is held.

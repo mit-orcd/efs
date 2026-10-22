@@ -66,7 +66,7 @@ int main(void){
  uint8_t retired_tags[]={17,20,21,22,33,34};
  for(unsigned i=0;i<sizeof(retired_tags);i++){
   assert(EFS_MD_CMD_IS_RESERVED(retired_tags[i]));
-  assert(core_result(retired_tags[i],EFS_ERR_PROTO,53)==EFS_ERR_PROTO);
+  assert(core_result(retired_tags[i],EFS_ERR_UNSUPPORTED,53)==EFS_ERR_UNSUPPORTED);
  }
  uint8_t cmd[25]={EFS_MD_CMD_ORPHAN_REAP};cmd[8]=42;cmd[16]=7;cmd[17]=3;
  int values[]={EFS_OK,EFS_ERR_BUSY,EFS_ERR_IO,EFS_ERR_NOMEM,EFS_ERR_PROTO,EFS_ERR_NOT_PRIMARY};
@@ -76,10 +76,10 @@ int main(void){
   h.r.leader=0;assert(host_gc_propose(&h,0,cmd,18)==verdict);h.r.leader=1;
  }
  assert(waits==7&&forwards==6&&s.gc_reap_errors==10&&!s.gc_sweep_errors);
- assert(apply_orphan_reap_cmd(&h,cmd,16,41)==EFS_ERR_PROTO);
+ assert(apply_orphan_reap_cmd(&h,cmd,16,41)==EFS_ERR_UNSUPPORTED);
  uint8_t ack[25]={EFS_MD_CMD_GC_ACK,0,1};ack[10]=42;ack[18]=7;ack[19]=3;ack[23]=8;ack[24]=2;
  for(unsigned i=0;i<sizeof(values)/sizeof(values[0]);i++){verdict=values[i];assert(apply_gc_ack_cmd(&h,ack,sizeof(ack),41)==verdict);}
- assert(apply_gc_ack_cmd(&h,ack,24,41)==EFS_ERR_PROTO);
+ assert(apply_gc_ack_cmd(&h,ack,24,41)==EFS_ERR_UNSUPPORTED);
  uint64_t errors;
  uint8_t request[18]={EFS_MD_REQ_SWEEP_NEXT},packed[51];uint32_t packed_len=0;
  request[8]=42;request[16]=7;request[17]=3;
@@ -99,10 +99,10 @@ int main(void){
  verdict=EFS_ERR_IO;assert(apply_lane_sweep_multi_cmd(&h,two,sizeof(two),41)==EFS_ERR_IO);
  verdict=EFS_ERR_NOMEM;assert(apply_lane_sweep_multi_cmd(&h,two,sizeof(two),41)==EFS_ERR_NOMEM);
  verdict=EFS_OK;
- assert(apply_lane_sweep_multi_cmd(&h,two,sizeof(two)-1,41)==EFS_ERR_PROTO);
- assert(apply_lane_sweep_multi_cmd(&h,two,2,41)==EFS_ERR_PROTO);
- two[2]=3;assert(apply_lane_sweep_multi_cmd(&h,two,sizeof(two),41)==EFS_ERR_PROTO);two[2]=2;
- two[20]=9;assert(apply_lane_sweep_multi_cmd(&h,two,sizeof(two),41)==EFS_ERR_PROTO);two[20]=1;
+ assert(apply_lane_sweep_multi_cmd(&h,two,sizeof(two)-1,41)==EFS_ERR_UNSUPPORTED);
+ assert(apply_lane_sweep_multi_cmd(&h,two,2,41)==EFS_ERR_UNSUPPORTED);
+ two[2]=3;assert(apply_lane_sweep_multi_cmd(&h,two,sizeof(two),41)==EFS_ERR_UNSUPPORTED);two[2]=2;
+ two[20]=9;assert(apply_lane_sweep_multi_cmd(&h,two,sizeof(two),41)==EFS_ERR_UNSUPPORTED);two[20]=1;
  uint8_t rm[3+2*49]={EFS_MD_CMD_REAP_MULTI,0,2};
  for(unsigned k=0;k<2;k++){uint8_t *it=rm+3+49*k;it[7]=42;it[15]=7;it[16]=1;it[17]=27;it[18]=9;}
  int reap_values[]={EFS_OK,EFS_ERR_BUSY,EFS_ERR_STALE,EFS_ERR_NOT_FOUND};
@@ -110,8 +110,8 @@ int main(void){
  verdict=EFS_ERR_IO;assert(apply_reap_multi_cmd(&h,rm,sizeof(rm),41)==EFS_ERR_IO);
  verdict=EFS_ERR_NOMEM;assert(apply_reap_multi_cmd(&h,rm,sizeof(rm),41)==EFS_ERR_NOMEM);
  verdict=EFS_OK;
- assert(apply_reap_multi_cmd(&h,rm,sizeof(rm)-1,41)==EFS_ERR_PROTO);
- rm[3+16]=9;assert(apply_reap_multi_cmd(&h,rm,sizeof(rm),41)==EFS_ERR_PROTO);rm[3+16]=1;
+ assert(apply_reap_multi_cmd(&h,rm,sizeof(rm)-1,41)==EFS_ERR_UNSUPPORTED);
+ rm[3+16]=9;assert(apply_reap_multi_cmd(&h,rm,sizeof(rm),41)==EFS_ERR_UNSUPPORTED);rm[3+16]=1;
  verdict=EFS_ERR_BUSY;errors=s.gc_sweep_errors;
  assert(host_gc_propose(&h,0,packed,25)==EFS_ERR_BUSY && s.gc_sweep_errors==errors);
  verdict=EFS_ERR_IO;
@@ -129,7 +129,13 @@ int main(void){
   assert(core_result(codes[op],EFS_ERR_BUSY,53)==EFS_OK);
   assert(core_result(codes[op],EFS_ERR_IO,53)==EFS_ERR_IO);
   assert(core_result(codes[op],EFS_ERR_NOMEM,53)==EFS_ERR_NOMEM);
+  /* W127-W129: no verdict list turns a malformed entry into success. */
+  assert(core_result(codes[op],EFS_ERR_UNSUPPORTED,53)==EFS_ERR_UNSUPPORTED);
  }
+ assert(core_result(EFS_MD_CMD_CREATE,EFS_ERR_UNSUPPORTED,53)==EFS_ERR_UNSUPPORTED);
+ assert(core_result(EFS_MD_CMD_QUERY_POLICY,EFS_ERR_UNSUPPORTED,13)==EFS_ERR_UNSUPPORTED);
+ assert(core_result(EFS_MD_CMD_QUERY_POLICY,EFS_ERR_PROTO,13)==EFS_OK); /* business CAS verdict */
+ assert(core_result(EFS_MD_CMD_SESSION,EFS_ERR_UNSUPPORTED,3)==EFS_ERR_UNSUPPORTED);
  /* CREATE's namespace/lease/replay batch may fail after the log is durable.
   * A follower must retry this index, rather than lose an acknowledged create. */
  assert(core_result(EFS_MD_CMD_APPEND_COMPLETE_ATOMIC,EFS_ERR_IO,53)==EFS_ERR_IO);

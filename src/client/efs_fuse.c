@@ -4685,6 +4685,7 @@ static int efs_rc_to_errno(int rc)
     case EFS_ERR_NODATA:    return -ENODATA;
     case EFS_ERR_OVERFLOW: return -EOVERFLOW;
     case EFS_ERR_ILSEQ: return -EILSEQ;
+    case EFS_ERR_UNSUPPORTED: return -EIO;
     case EFS_ERR_BUSY:
         return -EBUSY;
     case EFS_ERR_AGAIN:

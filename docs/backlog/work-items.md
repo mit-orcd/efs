@@ -5631,10 +5631,53 @@ fsync waits.
 deferred until LSM waits rise again. Create throughput on orcd-mini is not
 a W126 matter.
 
+<a id="w127-w131-fix"></a>
+## W127–W131 apply hardening — implementation (October 22)
+
+**Implemented on `claude/dead-code-cleanup-5f7087`; not merged.** One package,
+as the scope review asked:
+- `EFS_ERR_UNSUPPORTED` (-24) is the "unsupported or malformed encoding"
+  class. Dispatch returns it for unknown tags and for reserved or retired
+  tags; the DIR, SESSION and TXN decoders for unknown sub-tags and short
+  frames; the other decoders for length and count errors. No normalization
+  list in `host_apply` turns it into success. Business refusals (SALT
+  mismatch, QUERY_POLICY CAS, the other ring verdicts) are unchanged, and
+  group-routing mismatches still answer INVAL/PROTO.
+- On that result `host_apply` aborts the KV scope (no cursor), returns the
+  error so the Raft core does not advance `applied`, and marks the group
+  `incompatible` (sticky, separate from `kv_incomplete`): one diagnostic
+  line with group, index, term, tag, sub-tag and length; step-down; no
+  campaign; proposals and ReadIndex refused with `EFS_ERR_UNSUPPORTED`.
+  A retried apply returns at once without dispatching.
+- W130: DIR returns IO/NOMEM so the per-index retry applies.
+- W131: no KV engine returns IO (logged once) instead of OK; the empty
+  no-op entry still applies.
+
+**Evidence (node9901, gcc 11.5.0):**
+- `tests/test_apply_unsupported.py` (wired): the production `host_apply`
+  over a real KV LSM. An unsupported verdict on a normally-normalized tag
+  leaves no row and no cursor, also after reopening the KV; the state is
+  sticky; another group on the same KV still applies; a missing engine is
+  refused; DIR storage errors retry; unknown or short DIR/TXN frames are
+  unsupported. `test_gc_verdict.py` checks that no verdict list absorbs it.
+- `scripts/w127_incompatible_entry.sh`: a private 3-node TCP efsd set
+  (ports 17631–17633). An entry with unknown tag 200 is committed to
+  group 0; all replicas log the diagnostic and keep `applied` below it;
+  group 0 has no leader and refuses a new MKFS; group 2 keeps its leader
+  and stays applied; after restarting all nodes the same holds. PASS.
+
+**Remaining:** RDMA and multi-host runs; the one-replica DIR fault
+injection (W130); cross-group and cached read refusal and a status-reply
+field (W66 B4); prevalidating batch members before the first side effect
+(they are rejected inside the aborted scope today). **New finding:** the
+proposal RPC accepts a tag this build does not know, so any connection can
+commit such an entry and halt a group. Submit-side refusal of unknown tags
+belongs with the W133 connection-state matrix.
+
 <a id="w127"></a>
 ## W127 — Metadata apply accepts unknown command tags as applied
 
-**Correctness; opened 2026-10-21 from the [dead-code audit](../reviews/dead-code-review-20261021.md) M1; OPEN, fix NOTRUN.**
+**Correctness; opened 2026-10-21 from the [dead-code audit](../reviews/dead-code-review-20261021.md) M1; FIXED on `claude/dead-code-cleanup-5f7087` (not merged); unit and private 3-node gates PASS, RDMA/multi-host NOTRUN.**
 `host_apply_dispatch` ends in `return EFS_OK;` (`src/server/raft_host.c:3507`).
 Only the reserved ranges 45–51 and 55–57 are refused (`:3410–3416`). Any other
 tag this build does not know is consumed: the KV cursor advances
@@ -5655,7 +5698,7 @@ B1–B4.
 <a id="w128"></a>
 ## W128 — Metadata apply accepts unknown sub-tags and short frames as applied
 
-**Correctness; opened 2026-10-21 from the audit M2; OPEN, fix NOTRUN.**
+**Correctness; opened 2026-10-21 from the audit M2; FIXED on `claude/dead-code-cleanup-5f7087` (not merged); unit gates PASS.**
 These decoders return `EFS_OK` without any effect (`raft_host.c`):
 - `apply_dir_cmd`: short frame (`:2226–2227`) and unknown kind (`:2239–2240`).
 - `apply_session_cmd`: short header (`:2381–2382`), per-kind short frames
@@ -5672,7 +5715,7 @@ synthetic malformed frames for each decoder.
 <a id="w129"></a>
 ## W129 — `host_apply` turns decoder errors into success and commits the cursor
 
-**Correctness; opened 2026-10-21 from the audit M3; OPEN, fix NOTRUN.**
+**Correctness; opened 2026-10-21 from the audit M3; FIXED on `claude/dead-code-cleanup-5f7087` (not merged); unit gates PASS.**
 - For about 45 command tags (`raft_host.c:2941–2962`), `host_apply` forces
   the result to `EFS_OK` whatever the apply returned. Only IO/NOMEM are
   restored (`:2984–3000`).
@@ -5698,7 +5741,7 @@ verdict (`:2963–2966`). Both are legitimate business refusals.
 <a id="w130"></a>
 ## W130 — DIR apply swallows storage errors; replicas can diverge
 
-**Correctness; opened 2026-10-21 from the audit M4; OPEN, fix NOTRUN.**
+**Correctness; opened 2026-10-21 from the audit M4; FIXED on `claude/dead-code-cleanup-5f7087` (not merged); decoder unit gate PASS, one-replica fault-injection gate NOTRUN.**
 - `apply_dir_cmd` maps NOT_FOUND/INVAL/BUSY to OK, then logs every other rc
   (IO and NOMEM included) and returns `EFS_OK` (`raft_host.c:2242–2249`).
 - DIR is also missing from the IO-retry list (`:2984–3000`).
@@ -5719,7 +5762,7 @@ Evidence: code reading at `0bdf55256`; not triggered on a cluster.
 <a id="w131"></a>
 ## W131 — Missing KV engine counts as applied
 
-**Correctness; opened 2026-10-21 from the audit M5; OPEN, reachability unproven.**
+**Correctness; opened 2026-10-21 from the audit M5; FIXED on `claude/dead-code-cleanup-5f7087` (not merged); unit gate PASS, reachability still unproven.**
 `host_apply` stamps the apply ring `EFS_OK` and returns OK when
 `!h || !h->kv || !cmd || clen==0` (`raft_host.c:2891–2896`). `clen==0` (a
 Raft no-op) is legitimate. A missing `h->kv` is not: the entry would be

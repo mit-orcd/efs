@@ -44,9 +44,9 @@ int main(void) {
  assert(!pack_create_cmd(bytes,&n,1,S_IFREG|0600,"p",&at,0,4097,0,&q,1));
  assert(!apply_create_cmd(&host,bytes,n,1)&&pending_calls==1);
  assert(!apply_create_cmd(&host,bytes,n,2)&&pending_calls==2);
- for(uint32_t length=2;length<n;length++)assert(apply_create_cmd(&host,bytes,length,3)==EFS_ERR_PROTO);
- memcpy(bad,bytes,n);bad[1]|=128;assert(apply_create_cmd(&host,bad,n,3)==EFS_ERR_PROTO);
- memcpy(bad,bytes,n);bad[1]&=~HOST_CREATE_F_OPID;assert(apply_create_cmd(&host,bad,n,3)==EFS_ERR_PROTO);
+ for(uint32_t length=2;length<n;length++){int rc=apply_create_cmd(&host,bytes,length,3);assert(rc==EFS_ERR_PROTO||rc==EFS_ERR_UNSUPPORTED);}
+ memcpy(bad,bytes,n);bad[1]|=128;assert(apply_create_cmd(&host,bad,n,3)==EFS_ERR_UNSUPPORTED);
+ memcpy(bad,bytes,n);bad[1]&=~HOST_CREATE_F_OPID;assert(apply_create_cmd(&host,bad,n,3)==EFS_ERR_UNSUPPORTED);
  memcpy(bad,bytes,n);bad[32+19]=8;assert(apply_create_cmd(&host,bad,n,3)==EFS_ERR_PROTO);
  memcpy(bad,bytes,n);bad[32+15]^=1;assert(apply_create_cmd(&host,bad,n,3)==EFS_ERR_PROTO);
  assert(pending_calls==2);

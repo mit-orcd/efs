@@ -40,8 +40,18 @@ def release(path, data):
     if str(path) in pages:
         command, term, match, nonce = pages[str(path)]
         close_query(str(path.parent.parent.parent), command, data, term, match, None, nonce)
+def until_indexed(fn):
+    # Same bounded wait as contents(): ENODATA until the next refresh.
+    indexed_by = time.monotonic() + a.freshness_s
+    while True:
+        try:
+            return fn()
+        except OSError as error:
+            if error.errno != errno.ENODATA or time.monotonic() >= indexed_by:
+                raise
+            time.sleep(1)
 def held_fd(path):
-    fd = os.open(path, os.O_RDONLY)
+    fd = until_indexed(lambda: os.open(path, os.O_RDONLY))
     release(path, os.pread(fd, 1 << 20, 0))
     return fd
 def find_bytes(path):
@@ -50,13 +60,19 @@ def find_bytes(path):
     directory = path.parent.parent.parent
     return b''.join(os.fsencode(directory) + b'/' + bytes.fromhex(e['path_hex']) + b'\n' for e in value['entries'])
 def contents(path):
-    for attempt in range(8):
+    # ENODATA: the directory is not in the published index yet. A fresh
+    # gate directory waits for the next refresh, bounded by --freshness-s.
+    indexed_by=time.monotonic()+a.freshness_s
+    attempt=0
+    while True:
         try:
             with open(path,'rb',buffering=0) as f:data=f.read()
             release(path,data);return data
         except OSError as error:
+            if error.errno==errno.ENODATA and time.monotonic()<indexed_by:
+                time.sleep(1);continue
             if error.errno not in (errno.ESTALE,errno.EAGAIN,errno.EBUSY) or attempt==7:raise
-            time.sleep(.025*(attempt+1))
+            attempt+=1;time.sleep(.025*attempt)
 def snapshot():
     d=root/'snapshot';d.mkdir()
     for i in range(100): (d/f'match-{i:04}').write_bytes(b'x')
@@ -150,11 +166,22 @@ def nested_authorization():
     try:
         # Direct credential-boundary gate: unprivileged subject has only a
         # supplementary group grant. No root/group changes on the host.
-        from query_rpc import request,routed_query as rpc
+        from query_rpc import page_request,routed_query
         ports=os.environ.get('EFS_QUERY_TEST_PORT')
         if not ports:raise AssertionError('supplementary-group gate requires explicit private cohost port')
         st=os.stat(group);subject=st.st_uid+10000
-        req=request(root=st.st_ino,uid=subject,gid=st.st_gid+10000,operation=1,term=b'group-secret')
+        fields=dict(root=st.st_ino,uid=subject,gid=st.st_gid+10000,operation=1,term=b'group-secret',limit=1000)
+        def rpc(port,req):
+            # One first page, closed at once; text is the matched paths.
+            reply,text=routed_query(port,req)
+            if reply.status or not text:return reply,text
+            value=json.loads(text);page=value['page']
+            if int(page['token']):
+                close=page_request(**{k:v for k,v in fields.items() if k!='limit'},token=int(page['token']),cursor=int(page['cursor']),limit=0)
+                close.ngroups=req.ngroups;close.groups[0]=req.groups[0]
+                routed_query(port,close)
+            return reply,b''.join(b'/'+bytes.fromhex(e['path_hex'])+b'\n' for e in value['entries'])
+        req=page_request(**fields)
         deadline=time.monotonic()+a.freshness_s
         while True:
             reply,text=rpc(int(ports),req)
@@ -212,7 +239,7 @@ def recovery():
     d=root/'recovery';d.mkdir()
     for i in range(256):
         q=query_path(d,f'absent-stat-{i:03}*')
-        assert os.stat(q).st_size>0
+        assert until_indexed(lambda:os.stat(q)).st_size>0
         contents(q)  # releases the page session the lookup created
     for i in range(128):
         assert not json.loads(contents(query_path(d,f'absent-open-{i:03}*')))['entries']

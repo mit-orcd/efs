@@ -119,7 +119,7 @@ print('truthful stats and immutable open/seek/fstat across peer mutation PASS', 
 # Caller is the unprivileged mount owner. Reauthorize each new delivery;
 # a descriptor already opened keeps its immutable bytes after chmod.
 assert os.geteuid() != 0, 'permission gates must not run as root'
-with open_query(query) as held:
+with held_query(b'file.txt') as held:
     old = held.read()
     os.chmod(other, 0)
     try:

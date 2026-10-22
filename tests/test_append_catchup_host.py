@@ -15,6 +15,7 @@ code = r'''
 #include <stdio.h>
 #define EFS_OK 0
 #define EFS_ERR_PROTO -7
+#define EFS_ERR_UNSUPPORTED -24
 #define EFS_ERR_INVAL -1
 #define EFS_ERR_BUSY -13
 #define EFS_ERR_STALE -14
@@ -102,8 +103,8 @@ int main(void){
   assert(captured_length==(owned?58u:38u)&&captured[37]==owned);
   assert(!apply_append_catchup_cmd(&h,captured,captured_length,2)&&apply_calls==1);
   assert(apply_append_catchup_cmd(&h,captured,captured_length,0)==EFS_ERR_INVAL&&apply_calls==1);
-  assert(apply_append_catchup_cmd(&h,captured,captured_length-1,2)==EFS_ERR_PROTO&&apply_calls==1);
-  captured[37]^=1;assert(apply_append_catchup_cmd(&h,captured,captured_length,2)==EFS_ERR_PROTO&&apply_calls==1);captured[37]^=1;
+  assert(apply_append_catchup_cmd(&h,captured,captured_length-1,2)==EFS_ERR_UNSUPPORTED&&apply_calls==1);
+  captured[37]^=1;assert(apply_append_catchup_cmd(&h,captured,captured_length,2)==EFS_ERR_UNSUPPORTED&&apply_calls==1);captured[37]^=1;
   metadata_error=EFS_ERR_IO;assert(apply_append_catchup_cmd(&h,captured,captured_length,2)==EFS_ERR_IO&&apply_calls==2);
   reset();assert(!host_resolve_caught_up(&h,11,40000,owned?&id:NULL,&hint));
   assert(proposals==1&&completed==10000&&remaining==10000&&!retirements);
