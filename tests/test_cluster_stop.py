@@ -23,10 +23,6 @@ with tempfile.TemporaryDirectory(prefix='efs-cluster-stop-') as directory:
     (task/'hosts.sh').write_text('#!/bin/bash\nexit 0\n');(task/'hosts.sh').chmod(0o755)
     (task/'bin/sshpass').write_text('''#!/bin/bash
 case "$*" in
- *"rsync -az"*)
-   echo "BOOTSTRAP:$*" >> "$LOG"
-   case "$*" in *"admin@${SYNC_FAIL:-never}:"*) exit 2;; esac
-   exit 0;;
  *"client_processes.py has"*) exit "${PROCESS_RC:-0}";; esac
 exit 0
 ''');(task/'bin/sshpass').chmod(0o755)
@@ -44,7 +40,11 @@ ip_of() { echo "$1"; }
 vm_is_running() { return 0; }
 wait_ssh() { return 0; }
 ensure_guest_tz() { return 0; }
-rsync_to() { return 0; }
+rsync_to() {
+  echo "BOOTSTRAP:$*" >> "$LOG"
+  [ "$1" = "${SYNC_FAIL:-never}" ] && return 2
+  return 0
+}
 ssh_node_once() { ssh_node "$@"; }
 ssh_node() {
   local host=$1; shift
@@ -74,7 +74,7 @@ ssh_node() {
     assert log.index('cd /tmp/efs && sudo -n -H -u efs ./scripts/client.sh stop') < log.index('systemctl stop')
     assert 'fusermount' not in log
     assert log.index('BOOTSTRAP:') < log.index('client_processes.py list')
-    assert 'client_processes.py admin@n1:/tmp/efs/scripts/' in log
+    assert any(l.startswith('BOOTSTRAP:n1 ') and l.endswith('client_processes.py /tmp/efs/scripts/') for l in log.splitlines())
     for settings in ({'REFUSE':'gw'},{'DISCOVERY_FAIL':'c1'},{'SYNC_FAIL':'n1'}):
         r,log=run('cluster.sh','stop',**settings)
         assert r.returncode!=0 and 'systemctl stop' not in log and 'pkill' not in log
