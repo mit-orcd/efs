@@ -27,6 +27,20 @@ static int resolve(void *ctx,const struct efs_txid *t,const struct efs_txn_parts
 static const struct efs_meta_append_ops ops={prepare,decide,resolve};
 static struct efs_opid_req identity(unsigned seq,unsigned ack)
 {struct efs_opid_req q={0};q.id.client_uuid[0]=42;q.id.session_epoch=1;q.id.seq=seq;q.ack=ack;return q;}
+/* D25: one logical TRUNCATE entry, classified as the host does it. */
+static int trunc_to(struct efs_kv *kv,efs_ino_t ino,uint64_t size)
+{
+ static uint64_t seq;struct efs_meta_row row;struct efs_meta_stat st;
+ struct efs_meta_truncate_lazy t={0};uint64_t e;
+ int rc=efs_meta_apply_get_inode(kv,ino,&row);
+ if(!rc)rc=efs_meta_apply_getattr(kv,ino,decision,kv,&st);
+ if(rc)return rc;
+ t.ino=ino;t.inode_gen=row.generation;t.expect_epoch=row.content_epoch;
+ t.expect_base_size=row.base_size;t.size=size;t.mtime_ns=400000000000ull;
+ t.kind=size>=st.size&&size>=row.base_size?EFS_META_TRUNCATE_EXTEND:EFS_META_TRUNCATE_SHRINK;
+ t.q.id.client_uuid[0]=43;t.q.id.session_epoch=1;t.q.id.seq=++seq;t.q.ack=seq-1;
+ return efs_meta_apply_truncate_lazy(kv,&t,&e);
+}
 static struct efs_meta_pub publication(efs_ino_t ino,uint64_t gen,unsigned ci,uint64_t end,unsigned candidate)
 {
  struct efs_meta_pub p={0};p.ino=ino;p.inode_gen=gen;p.chunk_index=ci;
@@ -818,8 +832,7 @@ static void bounded_completed_bursts(int cold)
  tx.bytes[0]=31;assert(!efs_meta_execute_append(plan,&tx,&ops,kv));
  tx.bytes[1]=1;assert(!efs_meta_finish_append(kv,ino,264,EFS_META_APPEND_COMPLETED,&tx,&ops,kv));
  assert(!efs_meta_append_prune_due(kv,ino));
- struct efs_meta_truncate truncate={.expect_gen=gen,.size=0,.lane_mask=UINT64_MAX};
- assert(!efs_meta_apply_truncate(kv,ino,400,&truncate));
+ assert(!trunc_to(kv,ino,0));
  if(cold){efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(dir,NULL);assert(kv);}
  assert(efs_meta_append_prune_due(kv,ino)==1);
  q=identity(10,9);assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,plan)==EFS_ERR_BUSY);
@@ -975,8 +988,7 @@ static void atomic_completion(int cold)
  tx.bytes[1]=2;assert(efs_txn_prepare_guard(kv,&tx,&parts,ik,ikl,version)==EFS_ERR_STALE);
  /* A queued old completion cannot consume a new reservation at the same offset. */
  assert(!efs_meta_apply_append_complete_atomic(kv,ino,gen,200,&q.id,binding_epoch,binding));
- struct efs_meta_truncate truncate={.expect_gen=gen,.size=200,.lane_mask=UINT64_MAX,.keep_tail=1};
- assert(!efs_meta_apply_truncate(kv,ino,400,&truncate));
+ assert(!trunc_to(kv,ino,200));
  unsigned removed;tx.bytes[1]=8;assert(!efs_meta_prune_append(kv,ino,&tx,&ops,kv,&removed) && removed==2);
  q.id.seq=3;q.ack=2;assert(!efs_meta_capture_append(kv,ino,8,&q,decision,kv,p) && p->offset==200);
  assert(!efs_meta_apply_append_atomic(kv,p,&q));

@@ -7,10 +7,10 @@
 # /<label>, --direct-io, 64 GiB quota). Refuses to start when a port is in use;
 # never touches orcd-mini (17432-17434).
 #
-# LAZY=1 (default) exports EFS_D25_LAZY_TRUNCATE=1 to the daemons and the
-# clients. g0 and g2 need a build with EFS_FAULTS=1 (fault files under the
-# label directory arm the hooks in host_truncate_lazy). LAZY=0 runs only g1
-# on the eager path, for the timing baseline.
+# g0 and g2 need a build with EFS_FAULTS=1 (fault files under the label
+# directory arm the hooks in host_truncate_lazy). LAZY=0 runs only g1 (or,
+# with D25_ONLY, that phase), for a baseline on an older eager-truncate
+# release; the logical truncate is the only path from step 5 on.
 #
 #   g0 300 MiB i%256 pattern; definite refusal before propose and at apply:
 #      truncate fails, whole file verifies on A and B; commit with the reply
@@ -33,7 +33,6 @@ REL=$1; L=$2
 PORT=${PORT:-17670}; R=${D25_ROOT:-/tmp/d25-gates}/$L; A=${D25_ADDR:-127.0.0.1}
 LAZY=${LAZY:-1}; OPS=${OPS:-300}; REPS=${REPS:-20}; ALLOC_GIB=${ALLOC_GIB:-4}
 export EFS_TRANSPORT=${EFS_TRANSPORT:-tcp} EFS_MD_RAFT_N=3 ASAN_OPTIONS=detect_leaks=0
-export EFS_D25_LAZY_TRUNCATE=$LAZY
 export EFS_FAULT_TRUNCATE_BEFORE_FILE=$R/fault-before EFS_FAULT_TRUNCATE_APPLY_FILE=$R/fault-apply
 export EFS_FAULT_TRUNCATE_DROP_REPLY_FILE=$R/fault-drop
 for i in 1 2 3; do

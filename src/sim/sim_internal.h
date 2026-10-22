@@ -174,7 +174,7 @@ int sim_raft_setattr(struct efs_sim *sim, int client, efs_ino_t ino,
 int sim_raft_utimens(struct efs_sim *sim, int client, efs_ino_t ino,
                      const struct efs_meta_utimens *u);
 int sim_raft_truncate(struct efs_sim *sim, int client, efs_ino_t ino,
-                      uint64_t size, const struct efs_meta_pub *tail);
+                      uint64_t size);
 int sim_raft_append_reserve(struct efs_sim *sim, int client,
                             const struct efs_opid *op, efs_ino_t ino,
                             uint64_t len, uint64_t *off_out);

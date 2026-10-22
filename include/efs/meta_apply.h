@@ -18,16 +18,6 @@
 
 #define EFS_META_LANES 64
 /* Shared with admission accounting; changing apply capacity changes its charge. */
-/* One LANE_FENCE entry's page: the stamp, history and authority PUTs plus
- * chunk DELs with their GC records. A lane with more rows past the new
- * size is fenced by the first entry and drained by re-proposals of the same
- * command; efs_meta_apply_lane_fence answers EFS_META_FENCE_MORE until done.
- * Far below the KV apply scope's 32768-key bound. */
-#define EFS_META_LANE_FENCE_ITEMS 4096u
-/* Positive apply verdict: the fence committed a full page; propose the same
- * command again. Never a Raft-level retry of the index. */
-#define EFS_META_FENCE_MORE 1
-#define EFS_META_TRUNCATE_ITEMS (EFS_META_LANES + 1u + EFS_META_LANES * 32u * 2u + 3u)
 #define EFS_META_INO_BYTES   128
 #define EFS_META_DENT_BYTES  20
 #define EFS_META_ALLOC_BYTES 8
@@ -954,35 +944,6 @@ int efs_meta_apply_truncate_lazy(struct efs_kv *kv,
                                  const struct efs_meta_truncate_lazy *t,
                                  uint64_t *epoch_after);
 
-struct efs_meta_truncate {
-    uint64_t expect_gen;
-    uint64_t size;
-    const struct efs_meta_pub *tail;
-    /* Which active lanes THIS entry fences + range-deletes. The truncate
-     * entry runs on the inode group, whose KV holds only the lanes whose
-     * shard maps to that group; lanes on other groups are fenced by
-     * separate EFS_MD_CMD_LANE_FENCE entries proposed to their own groups
-     * BEFORE this entry (a group's log only writes its own shards' keys).
-     * ~0ULL = all lanes (single-group deployments, the simulator). */
-    uint64_t lane_mask;
-    /* The tail chunk's lane lives on another group: the tail CAS is NOT in
-     * this entry (it is lane-local-published after commit, fenced by the
-     * LANE_FENCE that already landed on that lane). tail must be NULL. */
-    uint8_t tail_external;
-    /* Unaligned size and no tail image: keep the existing tail chunk
-     * (a generation-0 span row). Do not publish a zero stub over it. */
-    uint8_t keep_tail;
-    /* check_active: active_seen is the row's active_lanes the host read
-     * when it chose which lanes to fence. A lane registered since then was
-     * fenced by nobody, and a lane-local publish captured before this
-     * truncate could create it under the old epoch; the apply answers BUSY
-     * so the host re-reads and fences it (0a). */
-    uint8_t check_active;
-    uint64_t active_seen;
-};
-
-int efs_meta_apply_truncate(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
-                            const struct efs_meta_truncate *t);
 /* Same, but only while the row's content_epoch is still expected_epoch:
  * the epoch the publish that needs the lane was checked against. A lane
  * registered after a truncate the publish predates would accept that
@@ -996,15 +957,6 @@ int efs_meta_apply_activate_lane(struct efs_kv *kv, efs_ino_t ino,
 /* Same, OR a mask of lanes in one inode PUT. */
 int efs_meta_apply_activate_lanes(struct efs_kv *kv, efs_ino_t ino,
                                   uint64_t mask);
-/* EFS_MD_CMD_LANE_FENCE: one lane's share of a truncate, applied on the
- * LANE's group: fenced_epoch = new_epoch, max_end = 0, seq++, then the
- * range delete of that lane's chunk entries beyond size (tail_ci kept),
- * subtracting what it dropped from the lane's present count (D17).
- * Idempotent via the epoch guard (a replay with the same new_epoch after
- * the lane already fenced at >= new_epoch is a no-op OK). */
-int efs_meta_apply_lane_fence(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
-                              uint8_t lane, uint64_t new_epoch, uint64_t size,
-                              uint32_t tail_ci, uint8_t has_tail);
 
 /* Data-plane GC (spec L7). A GC record (EFS_KV_KIND_GC on the lane group's
  * anchor shard) is written in the SAME batch as every chunk-key delete —

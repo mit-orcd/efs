@@ -86,31 +86,13 @@ static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
 #define HOST_SETATTR_LEN   61
 #define HOST_XATTR_HDR     28
 #define HOST_UTIMENS_LEN   73
-/* TRUNCATE: +8 lane_mask (which active lanes THIS entry fences — the ones
- * whose shard maps to the inode's group) +1 flags (bit0: tail_external —
- * the tail chunk's lane is on another group and is published separately
- * after commit). Cross-group lanes were fenced by LANE_FENCE entries on
- * their own groups before this entry was proposed. */
 /* D25 single-entry TRUNCATE (protocol §1.2): tag kind ino:8 inode_gen:8
  * expect_epoch:8 expect_base_size:8 size:8 mtime_ns:8 opid:36. Exactly
- * this length; every other TRUNCATE length is the eager path. */
+ * this length; any other TRUNCATE is refused. */
 #define HOST_TRUNC_LAZY_LEN 86u
-#define HOST_TRUNC_LEN     63
-#define HOST_TRUNC_F_TAIL_EXT 1
-/* Bit1: unaligned size, no tail CAS. The tail chunk is a generation-0
- * span row; a zero stub would drop the trailer and the bytes with it.
- * The client folds spans into one image before truncate when it can.
- * This flag is the case where that fold has not landed yet. */
-#define HOST_TRUNC_F_KEEP_TAIL 2
-/* Bit2: bytes 34..41 (the unused session field) carry the active_lanes
- * snapshot the fences were chosen from; the apply answers BUSY when the
- * row has registered a lane since (0a). */
-#define HOST_TRUNC_F_ACTIVE_SEEN 4
 #define HOST_APPEND_RSV_LEGACY_LEN 45
 #define HOST_APPEND_RSV_LEN 53
 #define HOST_APPEND_RES_LEN 38
-#define HOST_TRUNC_TAIL    (4u + 8u + 8u + 4u + \
-                            (uint32_t)EFS_NUM_FRAGMENTS * (4u + EFS_HASH_SIZE))
 /* PUBLISH: +8 inode_gen +8 mtime_gen +1 flags (bit0: lane_local — applied
  * on the lane's group, whose KV has no inode row; see meta_apply.h). */
 #define HOST_PUBLISH_LEN   (29u + (uint32_t)EFS_NUM_FRAGMENTS * (4u + EFS_HASH_SIZE) + \
@@ -129,12 +111,8 @@ static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
 #define HOST_PUBLICATION_LEN (HOST_PUBLISH_LEN + 28u)
 #define HOST_PUBLICATION_TICKET_LEN (HOST_PUBLICATION_LEN + 36u)
 #define HOST_PUB_F_TICKETED 4
-#define HOST_PUB_TAIL_TRIES  4 /* cross-group truncate tail CAS retries */
 #define HOST_ACTIVATE_AT_LEN   25 /* tag + ino:8 + mask:8 + content_epoch:8 */
 #define HOST_BOOTSTRAP_LANE_LEN 26 /* tag + ino:8 + gen:8 + lane:1 + epoch:8 */
-#define HOST_LANE_FENCE_LEN    39 /* tag + ino:8 + gen:8 + lane:1 +
-                                   * epoch:8 + size:8 + tail_ci:4 +
-                                   * has_tail:1 — matches meta_cmd.h */
 #define HOST_DIR_LEN       10
 #define HOST_CFG_LEN       6 /* tag + sub + voters:4 */
 #define HOST_SPREAD_MAX    8 /* leftovers per GC tick; batch, not a scan */
@@ -1708,7 +1686,6 @@ static int apply_utimens_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return EFS_OK;
 }
 
-/* Same encoding as sim apply_truncate_cmd. Session fencing is not hosted. */
 /* D25: decode the 86-byte TRUNCATE completely before the apply touches
  * the KV; any malformed field is refused with nothing written. */
 static int apply_truncate_lazy_cmd(struct efs_raft_host *h, const uint8_t *cmd,
@@ -1752,69 +1729,6 @@ static int apply_truncate_lazy_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return rc;
 }
 
-static int apply_truncate_cmd(struct efs_raft_host *h, const uint8_t *cmd,
-                              uint32_t clen, uint64_t index)
-{
-    struct efs_meta_truncate t;
-    struct efs_meta_pub tail;
-    efs_ino_t ino;
-    uint64_t now;
-    const uint8_t *q;
-    int i, rc;
-
-    if (clen < HOST_TRUNC_LEN)
-        return EFS_OK;
-    ino = rd64be(cmd + 1);
-    now = rd64be(cmd + 9);
-    memset(&t, 0, sizeof(t));
-    t.expect_gen = rd64be(cmd + 17);
-    t.size = rd64be(cmd + 25);
-    t.lane_mask = rd64be(cmd + 54);
-    t.tail_external = (cmd[62] & HOST_TRUNC_F_TAIL_EXT) ? 1 : 0;
-    t.keep_tail = (cmd[62] & HOST_TRUNC_F_KEEP_TAIL) ? 1 : 0;
-    t.check_active = (cmd[62] & HOST_TRUNC_F_ACTIVE_SEEN) ? 1 : 0;
-    if (t.check_active)
-        t.active_seen = rd64be(cmd + 34);
-    if (cmd[33]) {
-        if (clen < HOST_TRUNC_LEN + HOST_TRUNC_TAIL)
-            return EFS_OK;
-        q = cmd + HOST_TRUNC_LEN;
-        memset(&tail, 0, sizeof(tail));
-        tail.ino = ino;
-        tail.chunk_index = rd32be(q);
-        tail.new_size = t.size;
-        tail.candidate_gen = rd64be(q + 4);
-        tail.expected_gen = rd64be(q + 12);
-        tail.coding_profile_id = rd32be(q + 20);
-        q += 24;
-        for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-            tail.ch.nodes[i] = rd32be(q);
-            q += 4;
-            memcpy(tail.ch.checksums[i], q, EFS_HASH_SIZE);
-            q += EFS_HASH_SIZE;
-        }
-        tail.now = now;
-        t.tail = &tail;
-    }
-    rc = efs_meta_apply_truncate(h->kv, ino, now, &t);
-    /* W43 step b / W45: the apply's rc is the ring verdict (TRUNCATE is
-     * ring-only in host_apply, so a failed apply never halts the log).
-     * Before, every failure became OK: a lane holding more than the
-     * TRUNC_IT_CAP 32 chunk DELs returned NOMEM, the row kept its size,
-     * and `truncate -s 0` of a big file reported success (docs/status/README.md
-     * W43). Now the SETATTR answers EIO (W16 mapping) until D25 decides
-     * the multi-entry shape. NOT_FOUND (row gone after the leader's
-     * pre-read) is ENOENT; STALE cannot occur (expect_gen = 0). */
-    if (rc != EFS_OK) {
-        fprintf(stderr, "raft-host: apply truncate rc=%d index=%llu ino=%llu\n",
-                rc, (unsigned long long)index, (unsigned long long)ino);
-        return rc;
-    }
-    APPLY_LOG("raft-host: applied truncate index=%llu ino=%llu size=%llu\n",
-            (unsigned long long)index, (unsigned long long)ino,
-            (unsigned long long)t.size);
-    return EFS_OK;
-}
 
 /* Host-generated lane maintenance (never client-originated, no session
  * suffix): EFS_MD_CMD_ACTIVATE_LANE on the inode group. */
@@ -1857,44 +1771,6 @@ static int apply_activate_lane_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     if (raft_dbg_on())
         APPLY_LOG("raft-host: applied activate-lane index=%llu ino=%llu\n",
                 (unsigned long long)index, (unsigned long long)ino);
-    return EFS_OK;
-}
-
-/* EFS_MD_CMD_LANE_FENCE on the lane's group: one lane's share of a
- * truncate, proposed before the inode-group truncate entry. */
-static int apply_lane_fence_cmd(struct efs_raft_host *h, const uint8_t *cmd,
-                                uint32_t clen, uint64_t index)
-{
-    efs_ino_t ino;
-    int rc;
-
-    if (clen < HOST_LANE_FENCE_LEN)
-        return EFS_OK;
-    ino = rd64be(cmd + 1);
-    rc = efs_meta_apply_lane_fence(h->kv, ino, rd64be(cmd + 9), cmd[17],
-                                   rd64be(cmd + 18), rd64be(cmd + 26),
-                                   rd32be(cmd + 34), cmd[38]);
-    /* W43 step b: the fence's rc is the verdict host_truncate waits on.
-     * efs_meta_apply_lane_fence is idempotent on its own (a fence at the
-     * same or an older epoch returns OK); a NOMEM from the 32-DEL cap or
-     * an IO error must stop the truncate before the inode-group entry
-     * advances the epoch over chunks that are still there. Ring-only in
-     * host_apply. */
-    if (rc == EFS_META_FENCE_MORE) {
-        /* A committed page; the proposer re-proposes the same fence. */
-        APPLY_LOG("raft-host: applied lane-fence page index=%llu ino=%llu lane=%u more\n",
-                  (unsigned long long)index, (unsigned long long)ino,
-                  (unsigned)cmd[17]);
-        return rc;
-    }
-    if (rc != EFS_OK) {
-        fprintf(stderr, "raft-host: apply lane-fence rc=%d index=%llu ino=%llu\n",
-                rc, (unsigned long long)index, (unsigned long long)ino);
-        return rc;
-    }
-    APPLY_LOG("raft-host: applied lane-fence index=%llu ino=%llu lane=%u\n",
-            (unsigned long long)index, (unsigned long long)ino,
-            (unsigned)cmd[17]);
     return EFS_OK;
 }
 
@@ -3049,8 +2925,8 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
     /* SALT too (W37): a SALT that does not match the anchor's record
      * answers PROTO and writes nothing; it must not halt the group's
      * apply (Oct 1: `apply salt rc=-7 index=3` on every group-2 apply).
-     * W43/W45 (Oct 1): UNLINK, SETATTR, UTIMENS, TRUNCATE, ACTIVATE_LANE
-     * and LANE_FENCE now return their apply rc as the verdict instead of
+     * W43/W45 (Oct 1): UNLINK, SETATTR, UTIMENS, TRUNCATE and
+     * ACTIVATE_LANE now return their apply rc as the verdict instead of
      * swallowing it as OK; a non-OK verdict is a reply to the proposer,
      * never a reason to re-apply the same index. */
     ret = (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
@@ -3067,7 +2943,6 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_ACTIVATE_LANE || cmd[0] == EFS_MD_CMD_BOOTSTRAP_LANE ||
            cmd[0] == EFS_MD_CMD_TRUNC_SWEEP || cmd[0] == EFS_MD_CMD_SWEEP_DONE ||
            cmd[0] == EFS_MD_CMD_RETIRE ||
-           cmd[0] == EFS_MD_CMD_LANE_FENCE ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE || cmd[0] == EFS_MD_CMD_REAP_BATCH ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_MULTI || cmd[0] == EFS_MD_CMD_REAP_MULTI ||
@@ -3560,10 +3435,8 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         return apply_xattr_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_UTIMENS)
         return apply_utimens_cmd(h, cmd, clen, index);
-    if (cmd[0] == EFS_MD_CMD_TRUNCATE && clen == HOST_TRUNC_LAZY_LEN)
-        return apply_truncate_lazy_cmd(h, cmd, clen, index, group);
     if (cmd[0] == EFS_MD_CMD_TRUNCATE)
-        return apply_truncate_cmd(h, cmd, clen, index);
+        return apply_truncate_lazy_cmd(h, cmd, clen, index, group);
     if (cmd[0] == EFS_MD_CMD_ACTIVATE_LANE)
         return apply_activate_lane_cmd(h, cmd, clen, index, group);
     if (cmd[0] == EFS_MD_CMD_BOOTSTRAP_LANE)
@@ -3574,8 +3447,6 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         return apply_sweep_done_cmd(h, cmd, clen, group);
     if (cmd[0] == EFS_MD_CMD_RETIRE)
         return apply_retire_cmd(h, cmd, clen, group);
-    if (cmd[0] == EFS_MD_CMD_LANE_FENCE)
-        return apply_lane_fence_cmd(h, cmd, clen, index);
     if(cmd[0]==EFS_MD_CMD_APPEND_COMPLETE_ATOMIC) {
         if(clen!=EFS_MD_APPEND_COMPLETE_ATOMIC_LEN || group!=efs_raft_shard_group(efs_kv_inode_shard(rd64be(cmd+1))))
             return EFS_ERR_INVAL;
@@ -3633,6 +3504,8 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
     if (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
         cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP)
         return apply_txn_cmd(h, cmd, clen);
+    if (cmd[0] == 20) /* the retired LANE_FENCE: refused, never skipped */
+        return EFS_ERR_PROTO;
     return EFS_OK;
 }
 
@@ -6156,44 +6029,6 @@ static int pack_utimens_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
     return EFS_OK;
 }
 
-/* Same encoding as sim_raft_truncate. Unaligned sizes carry a tail CAS. */
-static int pack_truncate_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
-                             uint64_t now, uint64_t expect_gen, uint64_t size,
-                             const struct efs_meta_pub *tail,
-                             uint64_t lane_mask, uint64_t active_seen,
-                             uint8_t flags)
-{
-    uint8_t *q;
-    int i;
-
-    out[0] = EFS_MD_CMD_TRUNCATE;
-    wr64be(out + 1, ino);
-    wr64be(out + 9, now);
-    wr64be(out + 17, expect_gen);
-    wr64be(out + 25, size);
-    out[33] = tail ? 1 : 0;
-    memset(out + 34, 0, EFS_OPID_UUID_LEN + 4);
-    wr64be(out + 34, active_seen);
-    wr64be(out + 54, lane_mask);
-    out[62] = flags | HOST_TRUNC_F_ACTIVE_SEEN;
-    *len = HOST_TRUNC_LEN;
-    if (!tail)
-        return EFS_OK;
-    q = out + HOST_TRUNC_LEN;
-    wr32be(q, tail->chunk_index);
-    wr64be(q + 4, tail->candidate_gen);
-    wr64be(q + 12, tail->expected_gen);
-    wr32be(q + 20, tail->coding_profile_id);
-    q += 24;
-    for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        wr32be(q, tail->ch.nodes[i]);
-        q += 4;
-        memcpy(q, tail->ch.checksums[i], EFS_HASH_SIZE);
-        q += EFS_HASH_SIZE;
-    }
-    *len = HOST_TRUNC_LEN + HOST_TRUNC_TAIL;
-    return EFS_OK;
-}
 
 static int pack_append_rsv_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
                                uint64_t alen, const uint8_t *uuid,
@@ -6440,24 +6275,6 @@ static int host_bootstrap_lane(struct efs_raft_host *h, efs_ino_t ino,
                              cmd, HOST_BOOTSTRAP_LANE_LEN, hint);
 }
 
-/* EFS_MD_CMD_LANE_FENCE: [ino:8][gen:8][lane:1][epoch:8][size:8]
- * [tail_ci:4][has_tail:1] — meta_cmd.h. */
-static int pack_lane_fence_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
-                               uint64_t gen, uint8_t lane, uint64_t new_epoch,
-                               uint64_t size, uint32_t tail_ci,
-                               uint8_t has_tail)
-{
-    out[0] = EFS_MD_CMD_LANE_FENCE;
-    wr64be(out + 1, ino);
-    wr64be(out + 9, gen);
-    out[17] = lane;
-    wr64be(out + 18, new_epoch);
-    wr64be(out + 26, size);
-    wr32be(out + 34, tail_ci);
-    out[38] = has_tail;
-    *len = HOST_LANE_FENCE_LEN;
-    return EFS_OK;
-}
 
 static uint32_t pack_prep(uint8_t *out, int kind, const struct efs_txid *t,
                           const struct efs_txn_parts *p, const uint8_t *key,
@@ -17057,8 +16874,7 @@ static void host_utimens(efs_ino_t ino, uint32_t mask, uint64_t mtime,
         }
         /* Lane records in the other group are updated by the same
          * utimens command applied there (inode row is not in that KV;
-         * lane_bits says which lanes). Proposed first, like truncate's
-         * LANE_FENCE, so a REPORT cannot stamp "now" over the set time. */
+         * lane_bits says which lanes). Proposed first, so a REPORT cannot stamp "now" over the set time. */
         if (rc == EFS_OK && cross) {
             if (!host_hosts(h, fg)) {
                 uint8_t need[2];
@@ -17092,377 +16908,7 @@ collect:
         stat_to_inode(&st, &out->inode);
 }
 
-/* SETATTR SIZE: content_epoch fence + base_size. Unaligned sizes mint a
- * same-group tail candidate (CAS inside the truncate entry). mtime is the
- * client-stamped time when the caller sent SIZE|MTIME (the client's truncate
- * always does — it marks the truncate newer than any in-flight REPORT), or
- * 0 to stamp now. */
-/* Fence one lane at new_epoch and drain its rows past size: each LANE_FENCE
- * entry deletes one bounded page and answers EFS_META_FENCE_MORE while rows
- * remain. Re-proposing the same command resumes (idempotent at an equal
- * epoch), so a failed or retried truncate converges. */
-static int host_lane_fence_drain(struct efs_raft_host *h, uint8_t group,
-                                 efs_ino_t ino, uint64_t gen, uint8_t lane,
-                                 uint64_t new_epoch, uint64_t size,
-                                 uint32_t tci, uint8_t has_tail, int *hint)
-{
-    uint8_t fcmd[HOST_LANE_FENCE_LEN];
-    uint32_t flen = 0, pages = 0;
-    int rc = pack_lane_fence_cmd(fcmd, &flen, ino, gen, lane, new_epoch, size,
-                                 tci, has_tail);
-
-    while (rc == EFS_OK) {
-        rc = host_propose_wait(h, group, fcmd, flen, hint);
-        pages++;
-        if (rc != EFS_META_FENCE_MORE)
-            break;
-        rc = EFS_OK;
-    }
-    if (pages > 1)
-        fprintf(stderr, "raft-host: truncate ino=%llu lane=%u epoch=%llu pages=%u rc=%d\n",
-                (unsigned long long)ino, (unsigned)lane,
-                (unsigned long long)new_epoch, pages, rc);
-    return rc;
-}
-
-static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
-                          uint32_t mtime_nsec,
-                          struct efs_msg_inode_reply *out)
-{
-    struct efs_raft_host *h = g_host;
-    struct efs_meta_stat st;
-    struct efs_meta_row row;
-    struct efs_meta_pub tail;
-    struct efs_meta_chunk got;
-    const struct efs_meta_pub *tp = NULL;
-    uint8_t cmd[HOST_CMD_MAX];
-    uint8_t uuid[EFS_OPID_UUID_LEN];
-    uint8_t cross[EFS_META_LANES];
-    uint32_t clen = 0, tci = 0, lsh = 0;
-    uint64_t idx = 0, term = 0, bits = 0, now, same_mask = 0;
-    uint8_t g, lane = 0, lg = 0, has_tail = 0;
-    int hint = -1, ncross = 0, tail_ext = 0, keep_tail = 0;
-    int rc;
-    uint32_t i;
-
-    memset(out, 0, sizeof(*out));
-    out->status = EFS_INODE_RPC_ERROR;
-    if (!h || !h->running || ino == 0) {
-        out->status = EFS_INODE_RPC_INVAL;
-        return;
-    }
-    g = efs_raft_shard_group(efs_kv_inode_shard(ino));
-    if (!host_hosts(h, g)) {
-        /* The truncate needs every active lane's group local (fences wait
-         * on local apply); bounce to a dual-host. */
-        uint8_t need[2];
-        host_need_both(need);
-        host_fwd_setattr(h, ino, EFS_SETATTR_SIZE | EFS_SETATTR_MTIME, 0, 0,
-                         0, size, mtime, mtime_nsec, 0, 0, out, need, 2);
-        return;
-    }
-    rc = host_read_index(h, g, &hint);
-    if (rc == EFS_OK)
-        rc = efs_meta_apply_get_inode(h->kv, ino, &row);
-    if (rc == EFS_OK && !S_ISREG(row.mode))
-        rc = EFS_ERR_INVAL;
-    if (rc == EFS_OK) {
-        /* Split the active lanes into the ones this group's KV holds
-         * (fenced + range-deleted by the truncate entry itself) and the
-         * cross-group ones (fenced by LANE_FENCE entries on their own
-         * groups, proposed first). A group's log only writes its own
-         * shards' keys. */
-        bits = row.active_lanes;
-        for (i = 0; i < EFS_META_LANES; i++) {
-            if ((bits & (1ULL << i)) == 0)
-                continue;
-            lsh = efs_kv_lane_shard(ino, (uint8_t)i);
-            lg = efs_raft_shard_group(lsh);
-            if (lg == g)
-                same_mask |= 1ULL << i;
-            else
-                cross[ncross++] = (uint8_t)i;
-        }
-        if (ncross && !host_hosts(h, efs_raft_shard_group(
-                          efs_kv_lane_shard(ino, cross[0])))) {
-            uint8_t need[2];
-            host_need_both(need);
-            host_fwd_setattr(h, ino, EFS_SETATTR_SIZE | EFS_SETATTR_MTIME, 0,
-                             0, 0, size, mtime, mtime_nsec, 0, 0, out, need, 2);
-            return;
-        }
-    }
-    if (rc == EFS_OK && size > 0 && (size % EFS_MIN_CHUNK_SIZE) != 0) {
-        tci = (uint32_t)(size / EFS_MIN_CHUNK_SIZE);
-        lane = (uint8_t)(tci % EFS_META_LANES);
-        lsh = efs_kv_lane_shard(ino, lane);
-        lg = efs_raft_shard_group(lsh);
-        has_tail = 1;
-        tail_ext = (lg != g);
-        if (!tail_ext) {
-            memset(&got, 0, sizeof(got));
-            rc = efs_meta_apply_get_chunk(h->kv, ino, tci, &got);
-            if (rc == EFS_ERR_NOT_FOUND)
-                rc = EFS_OK;
-        }
-        /* W125: a packed base is never aliased as an ordinary tail stub.
-         * Keep the row, exactly as for a span chain: the new size and the
-         * committed epoch fence hide its bytes past EOF, including after a
-         * later extension; truncating to zero deletes the row and releases
-         * the record. */
-        if (rc == EFS_OK && !tail_ext && got.coding_profile_id == EFS_META_PROFILE_PACK) {
-            has_tail = 0;
-            tp = NULL;
-            keep_tail = 1;
-        } else if (rc == EFS_OK && !tail_ext) {
-            memset(&tail, 0, sizeof(tail));
-            memset(uuid, 0, sizeof(uuid));
-            tail.ino = ino;
-            tail.chunk_index = tci;
-            tail.new_size = size;
-            tail.expected_gen = got.generation;
-            tail.coding_profile_id = EFS_META_PROFILE_K2F1;
-            if (got.generation != 0) {
-                /* Alias the live objects under the generation they were
-                 * PUT at. A fresh candidate_gen is a filename nothing
-                 * wrote; the reader GETs that name and DECODE-fails
-                 * (peer_truncate_visible, peer_extend_and_truncate).
-                 * The epoch fence rejects a stale publish. The apply
-                 * sees candidate == committed and leaves the row. */
-                tail.candidate_gen = got.generation;
-                memcpy(tail.ch.nodes, got.nodes, sizeof(tail.ch.nodes));
-                memcpy(tail.ch.checksums, got.checksums,
-                       sizeof(tail.ch.checksums));
-                tp = &tail;
-            } else {
-                struct efs_meta_delta ds[EFS_CHUNK_DELTA_MAX];
-                uint32_t nd = 0;
-
-                /* A generation-0 row with a trailer is a span chain, not
-                 * a hole. A zero stub drops the trailer
-                 * (peer_truncate_visible read back zeros). Keep the row;
-                 * the size change still hides bytes past EOF. */
-                if (efs_meta_apply_get_chunk_deltas(h->kv, ino, tci, ds,
-                                                    EFS_CHUNK_DELTA_MAX, &nd,
-                                                    NULL) == EFS_OK &&
-                    nd > 0) {
-                    has_tail = 0;
-                    tp = NULL;
-                    tail_ext = 0;
-                    keep_tail = 1;
-                } else {
-                    tail.candidate_gen = efs_meta_candidate_gen(uuid, 0, 2, tci, 0);
-                    if (tail.candidate_gen == 0 ||
-                        tail.candidate_gen == tail.expected_gen)
-                        tail.candidate_gen = tail.expected_gen + 1;
-                    if (tail.candidate_gen == 0)
-                        tail.candidate_gen = 1;
-                    /* Grow into a chunk that was never written: publish the
-                     * well-known zero-fragment digests so the read path
-                     * synthesizes zeros without a GET (no fragments exist). */
-                    for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-                        tail.ch.nodes[i] = (efs_node_id_t)(i + 1);
-                        efs_hash_zero_fragment(tail.ch.checksums[i]);
-                    }
-                    tp = &tail;
-                }
-            }
-        }
-    }
-    /* The cross-group tail stub below creates a row on its lane. An
-     * unregistered lane is neither fenced now nor by any later truncate,
-     * so its stamp stayed at this epoch while the inode moved on; once a
-     * writer registered it, every publish captured that old stamp and
-     * lost the authority check forever (0a). Register it first, so this
-     * truncate fences it like any active lane. */
-    if (rc == EFS_OK && tail_ext && (bits & (1ULL << lane)) == 0) {
-        uint8_t acmd[HOST_ACTIVATE_AT_LEN];
-        uint32_t alen = 0;
-
-        if (!host_hosts(h, lg)) {
-            uint8_t need[2];
-            host_need_both(need);
-            host_fwd_setattr(h, ino, EFS_SETATTR_SIZE | EFS_SETATTR_MTIME, 0,
-                             0, 0, size, mtime, mtime_nsec, 0, 0, out, need, 2);
-            return;
-        }
-        rc = pack_activate_at_cmd(acmd, &alen, ino, 1ULL << lane,
-                                  row.content_epoch);
-        if (rc == EFS_OK)
-            rc = host_propose_wait(h, g, acmd, alen, &hint);
-        if (rc == EFS_ERR_STALE)
-            rc = EFS_ERR_BUSY; /* another truncate won; re-read */
-        if (rc == EFS_OK) {
-            bits |= 1ULL << lane;
-            cross[ncross++] = lane;
-        }
-    }
-    /* Fence the cross-group lanes BEFORE the inode-group entry commits the
-     * new epoch: a lane whose fenced_epoch already moved rejects any
-     * stale-epoch publish, so no publication of the old epoch can slip in
-     * after the row says the epoch advanced. Idempotent on retry — the
-     * row's content_epoch only moves with the truncate entry, so a retried
-     * truncate re-fences at the same new_epoch (a no-op). */
-    if (rc == EFS_OK && ncross) {
-        uint64_t new_epoch = row.content_epoch + 1;
-        int k;
-
-        for (k = 0; k < ncross && rc == EFS_OK; k++) {
-            uint8_t fg = efs_raft_shard_group(efs_kv_lane_shard(ino, cross[k]));
-
-            rc = host_lane_fence_drain(h, fg, ino, row.generation, cross[k],
-                                       new_epoch, size, tci, has_tail, &hint);
-        }
-    }
-    now = now_ns();
-    if (mtime)
-        now = mtime * 1000000000ull + (uint64_t)mtime_nsec;
-    if (rc == EFS_OK)
-        rc = pack_truncate_cmd(cmd, &clen, ino, now, 0, size, tp, same_mask, bits,
-                               (uint8_t)((tail_ext ? HOST_TRUNC_F_TAIL_EXT : 0) |
-                                         (keep_tail ? HOST_TRUNC_F_KEEP_TAIL : 0)));
-    if (rc == EFS_OK && clen > HOST_CMD_MAX)
-        rc = EFS_ERR_INVAL;
-    if (rc == EFS_OK)
-        rc = host_propose(h, g, cmd, clen, &idx, &term, &hint);
-    /* The verdict, not just the index: a TRUNCATE that refused (NOMEM past
-     * its item cap, BUSY with open append reservations) wrote nothing, and
-     * answering OK left the old size behind a successful truncate. */
-    if (rc == EFS_OK)
-        rc = host_wait_verdict(h, g, idx, term, &hint);
-    if (rc == EFS_ERR_NOMEM && same_mask) {
-        /* Too many rows for one entry: fence and drain the same-group lanes
-         * page by page first (same epoch as the TRUNCATE), then the TRUNCATE
-         * finds them fenced with nothing left past the new size. */
-        uint64_t new_epoch = row.content_epoch + 1;
-
-        rc = EFS_OK;
-        for (i = 0; i < EFS_META_LANES && rc == EFS_OK; i++)
-            if (same_mask & (1ULL << i))
-                rc = host_lane_fence_drain(h, g, ino, row.generation,
-                                           (uint8_t)i, new_epoch, size, tci,
-                                           has_tail, &hint);
-        if (rc == EFS_OK)
-            rc = host_propose(h, g, cmd, clen, &idx, &term, &hint);
-        if (rc == EFS_OK)
-            rc = host_wait_verdict(h, g, idx, term, &hint);
-    }
-    /* Cross-group tail: the fence on its lane already kept tail_ci and
-     * rejects old-epoch publishes, so the zero-filled tail candidate goes
-     * up as a lane-local publish under the NEW epoch after the commit.
-     * The CAS base is re-read post-fence; a same-chunk writer that raced
-     * in under the new epoch wins the CAS and this publish retries against
-     * its generation — after HOST_PUB_TAIL_TRIES the truncate is still
-     * committed (the entry landed); the tail stub losing that race is a
-     * known slice gap (the raft path's tail zero-fill is a metadata stub
-     * regardless), logged, not silently dropped. */
-    if (rc == EFS_OK && tail_ext) {
-        int attempt;
-
-        for (attempt = 0; attempt < HOST_PUB_TAIL_TRIES; attempt++) {
-            uint8_t tg = efs_raft_shard_group(efs_kv_lane_shard(ino, lane));
-
-            rc = host_read_index(h, tg, &hint);
-            if (rc == EFS_OK) {
-                memset(&got, 0, sizeof(got));
-                rc = efs_meta_apply_get_chunk(h->kv, ino, tci, &got);
-                if (rc == EFS_ERR_NOT_FOUND)
-                    rc = EFS_OK;
-            }
-            if (rc != EFS_OK)
-                break;
-            /* W125: a packed tail is kept like a span chain (same rule as
-             * the same-group branch). */
-            if (got.coding_profile_id == EFS_META_PROFILE_PACK)
-                break;
-            if (!got.generation) {
-                struct efs_meta_delta deltas[EFS_CHUNK_DELTA_MAX];
-                uint32_t count = 0;
-                rc = efs_meta_apply_get_chunk_deltas(h->kv, ino, tci, deltas,
-                                                    EFS_CHUNK_DELTA_MAX, &count,
-                                                    NULL);
-                if (rc == EFS_OK && count) {
-                    /* A span-only tail is live data, just as in the
-                     * same-group branch. The committed fence hides EOF;
-                     * do not replace its trailer with a zero stub. */
-                    break;
-                }
-                if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND)
-                    break;
-                rc = EFS_OK;
-            }
-            memset(&tail, 0, sizeof(tail));
-            memset(uuid, 0, sizeof(uuid));
-            tail.ino = ino;
-            tail.chunk_index = tci;
-            tail.new_size = size;
-            tail.expected_gen = got.generation;
-            tail.coding_profile_id = EFS_META_PROFILE_K2F1;
-            tail.content_epoch = row.content_epoch + 1;
-            tail.inode_gen = row.generation;
-            tail.mtime_gen = row.mtime_gen;
-            tail.lane_local = 1;
-            if (got.generation != 0) {
-                /* Same alias rule as the same-group branch: the live
-                 * generation already names the objects. */
-                tail.candidate_gen = got.generation;
-                memcpy(tail.ch.nodes, got.nodes, sizeof(tail.ch.nodes));
-                memcpy(tail.ch.checksums, got.checksums,
-                       sizeof(tail.ch.checksums));
-            } else {
-                tail.candidate_gen = efs_meta_candidate_gen(uuid, 0, 2, tci,
-                                                            (uint32_t)attempt);
-                if (tail.candidate_gen == 0 ||
-                    tail.candidate_gen == tail.expected_gen)
-                    tail.candidate_gen = tail.expected_gen + 1;
-                if (tail.candidate_gen == 0)
-                    tail.candidate_gen = 1;
-                for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-                    tail.ch.nodes[i] = (efs_node_id_t)(i + 1);
-                    efs_hash_zero_fragment(tail.ch.checksums[i]);
-                }
-            }
-            rc = pack_publish_cmd(cmd, &clen, &tail);
-            if (rc == EFS_OK && clen > HOST_CMD_MAX)
-                rc = EFS_ERR_INVAL;
-            if (rc == EFS_OK)
-                rc = host_propose(h, tg, cmd, clen, &idx, &term, &hint);
-            if (rc == EFS_OK)
-                rc = host_wait_settled(h, tg, idx, term, &hint);
-            if (rc != EFS_ERR_STALE)
-                break;
-        }
-        if (rc == EFS_ERR_STALE) {
-            fprintf(stderr,
-                    "raft-host: truncate ino=%llu tail ci=%u lost CAS race; "
-                    "committed anyway (tail stub gap)\n",
-                    (unsigned long long)ino, tci);
-            rc = EFS_OK;
-        }
-    }
-    if (rc == EFS_OK)
-        rc = host_read_inode_lanes(h, ino, &hint);
-    if (rc == EFS_OK)
-        rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
-    set_inode_rc(out, rc, hint);
-    if (rc == EFS_OK) {
-        stat_to_inode(&st, &out->inode);
-        reply_note_epoch(h, ino, host_txn_coord, h, &out->inode);
-    }
-}
-
-/* D25 step 3: the single-entry logical truncate stays behind the eager
- * path until its gates pass. EFS_D25_LAZY_TRUNCATE=1 on every efsd (and
- * every client, which then skips its tail rewrite) selects it. */
-static int host_lazy_truncate(void)
-{
-    static int on = -1;
-    if (on < 0) {
-        const char *e = getenv("EFS_D25_LAZY_TRUNCATE");
-        on = e && e[0] == '1';
-    }
-    return on;
-}
+/* SETATTR SIZE (D25 protocol §2.1): one TRUNCATE entry on the inode group. */
 
 /* D25 protocol §2.1: one TRUNCATE entry on the inode group. Capture the
  * row and a coherent lane EOF under ReadIndex, classify, propose, and on
@@ -17611,10 +17057,7 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
             out->status = EFS_INODE_RPC_INVAL;
             return;
         }
-        if (host_lazy_truncate())
-            host_truncate_lazy(ino, size, mtime, mtime_nsec, q, out);
-        else
-            host_truncate(ino, size, mtime, mtime_nsec, out);
+        host_truncate_lazy(ino, size, mtime, mtime_nsec, q, out);
         return;
     }
     if ((own && times)) {

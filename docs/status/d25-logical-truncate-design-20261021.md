@@ -486,7 +486,9 @@ and a same-format orderly restart.
    step-3 gates still PASS with the sweep active.** `TRUNC_SWEEP`,
    `SWEEP_DONE`, `RETIRE`, reclaim and packing (§4), with
    g5–g8.
-5. Remove `LANE_FENCE`, the destructive truncate path, tail stubs and the
+5. **Done — [step-5 evidence](d25-step5-gates-20261022.md): every D25
+   gate (g0–g8, step-2 g4/g5, the repro) PASS with the eager path removed.**
+   Remove `LANE_FENCE`, the destructive truncate path, tail stubs and the
    client tail rewrite. Update architecture §7.3 ("pushed by a bounded fence
    over the inode row plus the active lanes" becomes lazy adoption with the
    inode as the single history authority), the D25 contract row and the

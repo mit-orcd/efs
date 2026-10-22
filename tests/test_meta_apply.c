@@ -1718,6 +1718,80 @@ static int coord_fn(void *user, const struct efs_txid *t, uint32_t shard,
     return efs_txn_decision_get(c->kv, shard, t, dec);
 }
 
+/* D25: one logical TRUNCATE entry, classified as the host does it (the
+ * stat counts only lanes at the current epoch). */
+static uint64_t g_trunc_seq;
+static int trunc_to(struct efs_kv *kv, efs_ino_t ino, uint64_t size)
+{
+    struct coord_ctx cc = {.kv = kv};
+    struct efs_meta_row r;
+    struct efs_meta_stat st;
+    struct efs_meta_truncate_lazy t;
+    uint64_t e;
+    int rc = efs_meta_apply_get_inode(kv, ino, &r);
+
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st);
+    if (rc != EFS_OK)
+        return rc;
+    memset(&t, 0, sizeof(t));
+    t.ino = ino;
+    t.inode_gen = r.generation;
+    t.expect_epoch = r.content_epoch;
+    t.expect_base_size = r.base_size;
+    t.size = size;
+    t.mtime_ns = (T0 + 50) * 1000000000ull + g_trunc_seq;
+    t.kind = size >= st.size && size >= r.base_size ? EFS_META_TRUNCATE_EXTEND
+                                                    : EFS_META_TRUNCATE_SHRINK;
+    t.q.id.client_uuid[15] = 0x7e;
+    t.q.id.session_epoch = 1;
+    t.q.id.seq = ++g_trunc_seq;
+    t.q.ack = g_trunc_seq - 1;
+    return efs_meta_apply_truncate_lazy(kv, &t, &e);
+}
+
+/* One TRUNC_SWEEP entry on one lane for the newest history entry. */
+static int sweep_once(struct efs_kv *kv, efs_ino_t ino, uint8_t lane)
+{
+    struct efs_meta_row r;
+    struct efs_fence_history h;
+    int rc = efs_meta_apply_get_inode(kv, ino, &r);
+
+    if (rc == EFS_OK)
+        rc = efs_meta_get_fence_history(kv, ino, r.generation, EFS_META_FENCE_INODE, &h);
+    if (rc != EFS_OK)
+        return rc;
+    if (!h.count)
+        return EFS_ERR_INVAL;
+    return efs_meta_apply_trunc_sweep(kv, ino, r.generation, lane,
+                                      h.entries[h.count - 1].epoch, EFS_MIN_CHUNK_SIZE, &h);
+}
+
+/* Drive every active lane's TRUNC_SWEEP to the end of the lane for the
+ * newest history entry (the KV holds every lane: one group). */
+static void sweep_all(struct efs_kv *kv, efs_ino_t ino)
+{
+    struct efs_meta_row r;
+    struct efs_fence_history h;
+
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "row for sweep_all");
+    CHECK(efs_meta_get_fence_history(kv, ino, r.generation, EFS_META_FENCE_INODE, &h) ==
+              EFS_OK && h.count, "history for sweep_all");
+    for (uint8_t l = 0; l < 64; l++) {
+        uint64_t target = h.entries[h.count - 1].epoch, swept = 0;
+        int k;
+        if (!(r.active_lanes & (1ull << l)))
+            continue;
+        for (k = 0; k < 1000 && swept < target; k++) {
+            CHECK(efs_meta_apply_trunc_sweep(kv, ino, r.generation, l, target,
+                                             EFS_MIN_CHUNK_SIZE, &h) == EFS_OK, "sweep_all");
+            CHECK(efs_meta_get_lane_swept(kv, ino, r.generation, l, &swept) == EFS_OK,
+                  "swept_all");
+        }
+        CHECK(swept >= target, "sweep_all reaches the lane end");
+    }
+}
+
 struct fence_decision_race {
     struct efs_kv *kv;
     unsigned calls;
@@ -2829,47 +2903,39 @@ static void test_writer_lane_authority(void)
 
 static void test_sparse_grow_tail_epoch(void)
 {
+    /* D25: a sparse extend is a size change only. It records no history
+     * entry and does not move the epoch, so a writer that read the file
+     * before it still publishes. */
     struct efs_kv *kv = efs_kv_mem_create();
     struct efs_meta_row row;
-    struct efs_meta_chunk_view view;
-    struct efs_meta_pub tail = {0}, write = {0};
+    struct efs_meta_pub write = {0};
     efs_ino_t ino = 0;
     CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "sparse epoch init");
     CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
                                      "sparse-epoch", &ino) == EFS_OK, "sparse epoch create");
-    CHECK(efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK && !row.active_lanes,
-          "sparse epoch begins with no active lane");
-    tail.ino = ino; tail.candidate_gen = 0x5901; tail.new_size = 8192;
-    tail.coding_profile_id = EFS_META_PROFILE_K2F1;
-    fill_ch(&tail.ch);
-    struct efs_meta_truncate tr = {.expect_gen = row.generation, .size = 8192,
-                                   .tail = &tail, .lane_mask = ~0ULL};
-    CHECK(efs_meta_apply_truncate(kv, ino, T0 + 1, &tr) == EFS_OK,
-          "sparse epoch grow creates inactive tail lane");
-    CHECK(efs_meta_get_chunk_view(kv, ino, row.generation, 0,
-                                  EFS_MIN_CHUNK_SIZE, &view) == EFS_OK &&
-              view.fence_epoch == 1 && view.bytes.fence_epoch == 1 &&
-              view.base.content_epoch == 1, "sparse tail and captured authority agree");
-    write.ino = ino; write.expected_gen = 0x5901; write.candidate_gen = 0x5902;
-    write.new_size = 8192; write.content_epoch = view.bytes.fence_epoch;
+    CHECK(trunc_to(kv, ino, 8192) == EFS_OK, "sparse extend");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK && row.base_size == 8192 &&
+              row.content_epoch == 0 && !row.active_lanes,
+          "sparse extend: size only, no lane, no epoch");
+    write.ino = ino; write.expected_gen = 0; write.candidate_gen = 0x5902;
+    write.new_size = 4096; write.content_epoch = 0;
     write.now = T0 + 2; write.coding_profile_id = EFS_META_PROFILE_K2F1;
     fill_ch(&write.ch);
     CHECK(efs_meta_apply_publish(kv, &write) == EFS_OK,
-          "sparse epoch first writer publishes with captured epoch");
-    write.expected_gen = 0x5902; write.candidate_gen = 0x5903; write.content_epoch = 0;
-    CHECK(efs_meta_apply_publish(kv, &write) == EFS_ERR_STALE,
-          "sparse epoch rejects pre-truncate writer");
+          "writer from before the extend publishes");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK && row.base_size == 8192,
+          "a shorter write keeps the extended size");
     efs_kv_mem_free(kv);
 }
 
 static void test_truncate_range_del(void)
 {
+    /* D25: the truncate entry masks; the sweep deletes and clips. */
     struct efs_kv *kv = efs_kv_mem_create();
     efs_ino_t ino = 0;
     struct efs_meta_row r;
     struct efs_meta_chunk got, ch;
-    struct efs_meta_truncate t;
-    struct efs_meta_pub tail, p;
+    struct efs_meta_pub p;
     struct coord_ctx cc;
     struct efs_meta_stat st;
 
@@ -2882,24 +2948,24 @@ static void test_truncate_range_del(void)
           "create");
     pub(kv, ino, 0, EFS_MIN_CHUNK_SIZE, 0xA1, 0, T0 + 1, "pub0");
     pub(kv, ino, 64, 2ULL * EFS_MIN_CHUNK_SIZE, 0xA2, 0, T0 + 2, "pub64");
-    CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK, "chunk0");
-    CHECK(efs_meta_apply_get_chunk(kv, ino, 64, &got) == EFS_OK, "chunk64");
     CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
               st.alloc == 2, "two chunks present");
 
-    memset(&t, 0, sizeof(t));
-    t.size = 0;
-    t.lane_mask = ~0ULL; /* single-group test KV holds every lane */
-    CHECK(efs_meta_apply_truncate(kv, ino, T0 + 10, &t) == EFS_OK, "to zero");
+    CHECK(trunc_to(kv, ino, 0) == EFS_OK, "to zero");
     CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK && r.base_size == 0 &&
               r.content_epoch == 1,
           "epoch+size");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 64, &got) == EFS_OK,
+          "rows stay until the sweep");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK && st.size == 0,
+          "size 0 at once");
+    sweep_all(kv, ino);
     CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_ERR_NOT_FOUND,
           "c0 deleted");
     CHECK(efs_meta_apply_get_chunk(kv, ino, 64, &got) == EFS_ERR_NOT_FOUND,
           "c64 deleted");
     CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
-              st.alloc == 0, "truncate to zero subtracts every chunk");
+              st.alloc == 0, "the sweep subtracts every chunk");
 
     fill_ch(&ch);
     memset(&p, 0, sizeof(p));
@@ -2915,57 +2981,42 @@ static void test_truncate_range_del(void)
     p.content_epoch = 1;
     CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "new epoch ok");
     CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
-              st.alloc == 1, "post-fence publish counts again");
+              st.alloc == 1, "post-truncate publish counts again");
 
     CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "u", &ino)
               == EFS_OK,
           "create2");
     pub(kv, ino, 0, EFS_MIN_CHUNK_SIZE, 0xC1, 0, T0 + 1, "pub0b");
     pub(kv, ino, 64, 2ULL * EFS_MIN_CHUNK_SIZE, 0xC2, 0, T0 + 2, "pub64b");
-    memset(&t, 0, sizeof(t));
-    t.size = EFS_MIN_CHUNK_SIZE;
-    t.lane_mask = ~0ULL;
-    CHECK(efs_meta_apply_truncate(kv, ino, T0 + 12, &t) == EFS_OK, "aligned");
-    CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK, "prefix kept");
+    CHECK(trunc_to(kv, ino, EFS_MIN_CHUNK_SIZE) == EFS_OK, "aligned");
+    sweep_all(kv, ino);
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK && got.base_clip == 0,
+          "prefix kept whole");
     CHECK(efs_meta_apply_get_chunk(kv, ino, 64, &got) == EFS_ERR_NOT_FOUND,
           "suffix deleted");
     CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
               st.alloc == 1, "aligned truncate subtracts the suffix");
 
+    /* Unaligned: no tail rewrite; the boundary row is clipped in place. */
     CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "v", &ino)
               == EFS_OK,
           "create3");
     pub(kv, ino, 0, EFS_MIN_CHUNK_SIZE, 0xD1, 0, T0 + 1, "pub0c");
-    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "row");
-    fill_ch(&ch);
-    memset(&tail, 0, sizeof(tail));
-    tail.ino = ino;
-    tail.chunk_index = 0;
-    tail.new_size = 4096;
-    tail.expected_gen = 0xD1;
-    tail.candidate_gen = 0xD2;
-    tail.coding_profile_id = EFS_META_PROFILE_K2F1;
-    tail.content_epoch = r.content_epoch;
-    tail.now = T0 + 13;
-    tail.ch = ch;
-    memset(&t, 0, sizeof(t));
-    t.size = 4096;
-    t.tail = &tail;
-    t.lane_mask = ~0ULL;
-    CHECK(efs_meta_apply_truncate(kv, ino, T0 + 13, &t) == EFS_OK, "partial");
+    CHECK(trunc_to(kv, ino, 4096) == EFS_OK, "partial");
     CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK &&
-              got.generation == 0xD2,
-          "tail cas");
+              got.generation == 0xD1 && got.base_clip == 0,
+          "boundary row unchanged before the sweep");
+    sweep_all(kv, ino);
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK &&
+              got.generation == 0xD1 && got.base_clip == 4096,
+          "boundary row clipped");
     CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK && r.base_size == 4096,
           "partial size");
     CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
-              st.alloc == 1, "tail CAS keeps the present count");
+              st.alloc == 1, "a clip keeps the present count");
 
-    /* Multi-lane range delete: ci 0/64 are lane 0, ci 1/65 are lane 1, so a
-     * truncate to 2 chunks must delete one key from EACH lane. Regression:
-     * the delete scratch array was indexed from a per-lane base, so the
-     * second lane overwrote the first lane's keys and the wrong chunks were
-     * deleted (a same-lane pair like 0/64 cannot see it). */
+    /* Multi-lane: ci 0/64 are lane 0, ci 1/65 are lane 1, so a truncate to
+     * 2 chunks removes one row from EACH lane. */
     CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "m", &ino)
               == EFS_OK,
           "create4");
@@ -2973,10 +3024,8 @@ static void test_truncate_range_del(void)
     pub(kv, ino, 1, 2ULL * EFS_MIN_CHUNK_SIZE, 0xE2, 0, T0 + 2, "pub1m");
     pub(kv, ino, 64, 65ULL * EFS_MIN_CHUNK_SIZE, 0xE3, 0, T0 + 3, "pub64m");
     pub(kv, ino, 65, 66ULL * EFS_MIN_CHUNK_SIZE, 0xE4, 0, T0 + 4, "pub65m");
-    memset(&t, 0, sizeof(t));
-    t.size = 2ULL * EFS_MIN_CHUNK_SIZE;
-    t.lane_mask = ~0ULL;
-    CHECK(efs_meta_apply_truncate(kv, ino, T0 + 14, &t) == EFS_OK, "multi-lane");
+    CHECK(trunc_to(kv, ino, 2ULL * EFS_MIN_CHUNK_SIZE) == EFS_OK, "multi-lane");
+    sweep_all(kv, ino);
     CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK, "m c0 kept");
     CHECK(efs_meta_apply_get_chunk(kv, ino, 1, &got) == EFS_OK, "m c1 kept");
     CHECK(efs_meta_apply_get_chunk(kv, ino, 64, &got) == EFS_ERR_NOT_FOUND,
@@ -2984,7 +3033,7 @@ static void test_truncate_range_del(void)
     CHECK(efs_meta_apply_get_chunk(kv, ino, 65, &got) == EFS_ERR_NOT_FOUND,
           "m c65 deleted");
     CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
-              st.alloc == 2, "multi-lane truncate subtracts per lane");
+              st.alloc == 2, "multi-lane sweep subtracts per lane");
 
     CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
     efs_kv_mem_free(kv);
@@ -3003,7 +3052,6 @@ static void test_truncate_append_cursor(void)
     struct efs_kv *kv=efs_kv_mem_create();
     struct coord_ctx cc={.kv=kv};
     struct efs_opid op;struct efs_meta_row before,after;
-    struct efs_meta_truncate t={.size=0,.lane_mask=~0ULL};
     efs_ino_t ino=0;uint64_t off=0;
     CHECK(efs_meta_apply_init(kv,T0)==EFS_OK &&
           efs_meta_apply_create_file(kv,&g_at,1,S_IFREG|0644,"append-truncate",&ino)==EFS_OK,
@@ -3012,7 +3060,7 @@ static void test_truncate_append_cursor(void)
     CHECK(efs_meta_apply_append_reserve(kv,ino,6,&op,coord_fn,&cc,&off)==EFS_OK && off==0,
           "append truncate reserve");
     CHECK(efs_meta_apply_get_inode(kv,ino,&before)==EFS_OK,"append truncate before");
-    CHECK(efs_meta_apply_truncate(kv,ino,T0+1,&t)==EFS_ERR_BUSY,
+    CHECK(trunc_to(kv,ino,0)==EFS_ERR_BUSY,
           "truncate refuses outstanding append ranges");
     CHECK(efs_meta_apply_get_inode(kv,ino,&after)==EFS_OK &&
           after.content_epoch==before.content_epoch && after.base_size==before.base_size,
@@ -3023,7 +3071,7 @@ static void test_truncate_append_cursor(void)
     value[7]=64;value[15]=64;
     CHECK(efs_kv_key_append_cur(efs_kv_inode_shard(ino),ino,before.generation,key,&kl)==EFS_OK &&
           efs_kv_put(kv,key,kl,value,sizeof(value))==EFS_OK,"closed cursor fixture");
-    CHECK(efs_meta_apply_truncate(kv,ino,T0+2,&t)==EFS_OK,"truncate after completion");
+    CHECK(trunc_to(kv,ino,0)==EFS_OK,"truncate after completion");
     CHECK(efs_kv_get(kv,key,kl,value,&vl)==EFS_ERR_NOT_FOUND,"truncate retires closed watermark");
     mkop(&op,7,2);
     CHECK(efs_meta_apply_append_reserve(kv,ino,6,&op,coord_fn,&cc,&off)==EFS_OK && off==0,
@@ -3407,8 +3455,8 @@ static void test_symlink(void)
 }
 
 /* Cross-group lane machinery (a group's log only writes its own shards'
- * keys): ACTIVATE_LANE on the inode group, LANE_FENCE on the lane's group,
- * and lane-local publishes that never touch the inode row. One KV here —
+ * keys): ACTIVATE_LANE on the inode group, BOOTSTRAP and TRUNC_SWEEP on
+ * the lane's group, and lane-local publishes that never touch the inode row. One KV here —
  * the group split is the host's routing concern; what is tested is that the
  * three applies compose and are idempotent. */
 static void test_cross_group_lane(void)
@@ -3484,30 +3532,26 @@ static void test_cross_group_lane(void)
           "base_size untouched");
     CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "lane-local replay");
 
-    /* LANE_FENCE (truncate to 0's lane-1 share): deletes the lane's chunks,
-     * fences the epoch, clamps max_end; idempotent replay keeps a later
-     * publish visible. */
-    CHECK(efs_meta_apply_lane_fence(kv, ino, r.generation, lane, 1, 0, 0, 0)
-              == EFS_OK,
-          "lane fence");
+    /* Truncate to 0, then the lane's sweep: deletes the lane's chunk,
+     * adopts the epoch; a repeated sweep keeps a later publish. */
+    CHECK(trunc_to(kv, ino, 0) == EFS_OK, "truncate");
+    sweep_all(kv, ino);
     CHECK(efs_meta_apply_get_chunk(kv, ino, ci, &got) == EFS_ERR_NOT_FOUND,
           "lane chunk deleted");
     CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
-              st.alloc == 0, "lane fence subtracts");
+              st.alloc == 0, "sweep subtracts");
     p.candidate_gen = 0xF2;
     p.expected_gen = 0;
-    p.content_epoch = 0; /* pre-fence epoch: must be rejected by the lane */
-    CHECK(efs_meta_apply_publish(kv, &p) == EFS_ERR_STALE, "fence rejects");
+    p.content_epoch = 0; /* pre-truncate epoch: must be rejected by the lane */
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_ERR_STALE, "adopted lane rejects");
     p.content_epoch = 1;
-    CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "post-fence pub");
-    CHECK(efs_meta_apply_lane_fence(kv, ino, r.generation, lane, 1, 0, 0, 0)
-              == EFS_OK,
-          "fence replay");
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "post-truncate pub");
+    sweep_all(kv, ino);
     CHECK(efs_meta_apply_get_chunk(kv, ino, ci, &got) == EFS_OK &&
               got.generation == 0xF2,
-          "replay kept newer pub");
+          "repeated sweep kept newer pub");
     CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
-              st.alloc == 1, "fence replay does not subtract again");
+              st.alloc == 1, "repeated sweep does not subtract again");
 
     CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
     efs_kv_mem_free(kv);
@@ -3533,16 +3577,16 @@ static void test_lane_epoch_never_lags(void)
     CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "lag row");
     e0 = r.content_epoch;
 
-    /* (1) A lane registered but never published: the truncate's fence
-     * must stamp it, so a publish checked before the truncate cannot
-     * create it under the old epoch afterwards. */
+    /* (1) A lane registered but never published has no stamp: a
+     * lane-local publish waits for BOOTSTRAP, which stamps the inode's
+     * epoch, so a publish checked before the truncate cannot create the
+     * lane under the old epoch afterwards. */
     CHECK(efs_meta_apply_activate_lanes_at(kv, ino, 1ULL << 1, e0) == EFS_OK,
           "activate at the current epoch");
-    CHECK(efs_meta_apply_lane_fence(kv, ino, r.generation, 1, e0 + 1, 0, 0, 0)
-              == EFS_OK, "fence a lane with no stamp");
-    CHECK(efs_meta_get_chunk_view(kv, ino, r.generation, 1, EFS_MIN_CHUNK_SIZE,
-                                  &view) == EFS_ERR_NOT_FOUND ||
-          view.fence_epoch == e0 + 1, "fenced lane view");
+    CHECK(trunc_to(kv, ino, 3 * EFS_MIN_CHUNK_SIZE) == EFS_OK &&
+              trunc_to(kv, ino, 0) == EFS_OK, "extend then shrink");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK &&
+          r.content_epoch == e0 + 1, "shrink moved the epoch");
     memset(&p, 0, sizeof(p));
     p.ino = ino;
     p.chunk_index = 1;
@@ -3555,49 +3599,35 @@ static void test_lane_epoch_never_lags(void)
     p.inode_gen = r.generation;
     p.mtime_gen = r.mtime_gen;
     p.content_epoch = e0;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_ERR_BUSY,
+          "no stamp: the publish waits for BOOTSTRAP");
+    CHECK(efs_meta_apply_bootstrap_lane(kv, ino, r.generation, 1, r.content_epoch) == EFS_OK,
+          "bootstrap at the inode epoch");
     CHECK(efs_meta_apply_publish(kv, &p) == EFS_ERR_STALE,
           "pre-truncate publish cannot create the lane at the old epoch");
     p.content_epoch = e0 + 1;
     CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "current-epoch publish");
     CHECK(efs_meta_get_chunk_view(kv, ino, r.generation, 1, EFS_MIN_CHUNK_SIZE,
                                   &view) == EFS_OK && view.fence_epoch == e0 + 1,
-          "lane stamp is the fence epoch");
+          "lane stamp is the truncate epoch");
 
     /* (2) Registering a lane after a truncate the publish predates. */
-    struct efs_meta_truncate t = {.size = 0, .lane_mask = ~0ULL};
-    CHECK(efs_meta_apply_truncate(kv, ino, T0 + 2, &t) == EFS_OK, "truncate");
-    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK &&
-          r.content_epoch == e0 + 1, "truncate moved the epoch");
     CHECK(efs_meta_apply_activate_lanes_at(kv, ino, 1ULL << 5, e0) == EFS_ERR_STALE,
           "activation checked before the truncate is refused");
-    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK &&
-          !(r.active_lanes & (1ULL << 5)), "refused activation sets nothing");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &after) == EFS_OK &&
+          !(after.active_lanes & (1ULL << 5)), "refused activation sets nothing");
     CHECK(efs_meta_apply_activate_lanes_at(kv, ino, 1ULL << 5, e0 + 1) == EFS_OK,
           "activation at the current epoch");
     CHECK(efs_meta_apply_activate_lanes_at(kv, ino, 1ULL << 5, e0) == EFS_OK,
           "already-registered lane stays OK");
-
-    /* (3) A truncate whose fence set predates a registration. */
-    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "row before");
-    t.check_active = 1;
-    t.active_seen = r.active_lanes & ~(1ULL << 5);
-    CHECK(efs_meta_apply_truncate(kv, ino, T0 + 3, &t) == EFS_ERR_BUSY,
-          "truncate refuses a lane registered after its snapshot");
-    CHECK(efs_meta_apply_get_inode(kv, ino, &after) == EFS_OK &&
-          after.content_epoch == r.content_epoch, "refused truncate keeps epoch");
-    t.active_seen = r.active_lanes;
-    CHECK(efs_meta_apply_truncate(kv, ino, T0 + 4, &t) == EFS_OK,
-          "truncate with the current snapshot");
     CHECK(efs_meta_apply_check(kv) == EFS_OK, "lag check");
     efs_kv_mem_free(kv);
 }
 
-/* A lane with more rows past the new size than one LANE_FENCE page:
- * the first entry fences and deletes a page, re-proposals of the same
- * command resume (EFS_META_FENCE_MORE) until the lane is drained, rows
- * below the size stay, and a resume never deletes a row written under
- * the new epoch. Before paging this was NOMEM and the truncate EIO. */
-static void lane_fence_fill(struct efs_kv *kv, efs_ino_t ino, uint8_t lane,
+/* A lane with many rows past the new size: the truncate entry is O(1);
+ * bounded TRUNC_SWEEP entries drain the lane, rows below the size stay,
+ * and a repeated sweep never deletes a row written under the new epoch. */
+static void lane_fill(struct efs_kv *kv, efs_ino_t ino, uint8_t lane,
                             uint32_t rows)
 {
     struct efs_meta_row r;
@@ -3627,21 +3657,7 @@ static void lane_fence_fill(struct efs_kv *kv, efs_ino_t ino, uint8_t lane,
     CHECK(ok, "fill lane");
 }
 
-static int lane_fence_drain(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
-                            uint8_t lane, uint64_t epoch, uint64_t size,
-                            uint32_t *pages)
-{
-    int rc;
-
-    *pages = 0;
-    do {
-        rc = efs_meta_apply_lane_fence(kv, ino, gen, lane, epoch, size, 0, 0);
-        ++*pages;
-    } while (rc == EFS_META_FENCE_MORE && *pages < 1000);
-    return rc;
-}
-
-static void test_lane_fence_paged(void)
+static void test_lane_sweep_bounded(void)
 {
     struct efs_kv *kv = efs_kv_mem_create();
     struct efs_meta_row r;
@@ -3651,8 +3667,8 @@ static void test_lane_fence_paged(void)
     struct coord_ctx cc;
     efs_ino_t ino = 0, ino2 = 0;
     const uint8_t lane = 1;
-    const uint32_t rows = 3 * EFS_META_LANE_FENCE_ITEMS / 2;
-    uint32_t pages = 0, keep = rows / 3;
+    const uint32_t rows = 1000;
+    uint32_t keep = rows / 3;
 
     CHECK(kv != NULL, "kv");
     memset(&cc, 0, sizeof(cc));
@@ -3660,12 +3676,12 @@ static void test_lane_fence_paged(void)
     CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
     CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
                                      "big", &ino) == EFS_OK, "create");
-    lane_fence_fill(kv, ino, lane, rows);
+    lane_fill(kv, ino, lane, rows);
     CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "row");
-    CHECK(efs_meta_apply_lane_fence(kv, ino, r.generation, lane, 1, 0, 0, 0)
-              == EFS_META_FENCE_MORE, "first page committed, more remain");
-    CHECK(lane_fence_drain(kv, ino, r.generation, lane, 1, 0, &pages) == EFS_OK &&
-              pages >= 2, "resumed pages drain the lane");
+    CHECK(trunc_to(kv, ino, 0) == EFS_OK, "truncate to 0");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, lane + EFS_META_LANES * (rows - 1),
+                                   &got) == EFS_OK, "the entry deletes nothing");
+    sweep_all(kv, ino);
     CHECK(efs_meta_apply_get_chunk(kv, ino, lane, &got) == EFS_ERR_NOT_FOUND &&
               efs_meta_apply_get_chunk(kv, ino, lane + EFS_META_LANES * (rows - 1),
                                        &got) == EFS_ERR_NOT_FOUND,
@@ -3686,24 +3702,22 @@ static void test_lane_fence_paged(void)
     p.lane_local = 1;
     p.inode_gen = r.generation;
     p.mtime_gen = r.mtime_gen;
-    CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "post-fence publish");
-    CHECK(efs_meta_apply_lane_fence(kv, ino, r.generation, lane, 1, 0, 0, 0)
-              == EFS_OK &&
-              efs_meta_apply_get_chunk(kv, ino, lane, &got) == EFS_OK &&
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "post-truncate publish");
+    sweep_all(kv, ino);
+    CHECK(efs_meta_apply_get_chunk(kv, ino, lane, &got) == EFS_OK &&
               got.generation == 0xF7,
-          "late resume keeps the new-epoch row");
+          "repeated sweep keeps the new-epoch row");
     CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
-              st.alloc == 1, "late resume does not subtract");
+              st.alloc == 1, "repeated sweep does not subtract");
 
-    /* Partial truncate: rows below the size stay, rows from it are paged. */
+    /* Partial truncate: rows below the size stay, rows from it go. */
     CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
                                      "big2", &ino2) == EFS_OK, "create 2");
-    lane_fence_fill(kv, ino2, lane, rows);
+    lane_fill(kv, ino2, lane, rows);
     CHECK(efs_meta_apply_get_inode(kv, ino2, &r) == EFS_OK, "row 2");
-    CHECK(lane_fence_drain(kv, ino2, r.generation, lane, 1,
-                           (uint64_t)(lane + EFS_META_LANES * keep) * EFS_MIN_CHUNK_SIZE,
-                           &pages) == EFS_OK && pages >= 2,
-          "partial truncate pages");
+    CHECK(trunc_to(kv, ino2, (uint64_t)(lane + EFS_META_LANES * keep) *
+                                 EFS_MIN_CHUNK_SIZE) == EFS_OK, "partial truncate");
+    sweep_all(kv, ino2);
     CHECK(efs_meta_apply_get_chunk(kv, ino2, lane + EFS_META_LANES * (keep - 1),
                                    &got) == EFS_OK &&
               efs_meta_apply_get_chunk(kv, ino2, lane + EFS_META_LANES * keep,
@@ -3823,7 +3837,6 @@ static void test_gc_reap(void)
     efs_ino_t ino = 0, ino2 = 0;
     struct efs_meta_row r;
     struct efs_meta_chunk got;
-    struct efs_meta_truncate t;
     struct gc_probe pr;
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
     uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
@@ -3954,10 +3967,9 @@ static void test_gc_reap(void)
     pub(kv, ino2, 1, 2ULL * EFS_MIN_CHUNK_SIZE, 0xC2, 0, T0 + 6, "t2 pub1");
     CHECK(efs_meta_apply_get_inode(kv, ino2, &r) == EFS_OK, "row2");
     gen2 = r.generation;
-    memset(&t, 0, sizeof(t));
-    t.size = 0;
-    t.lane_mask = ~0ULL; /* single-group test KV holds every lane */
-    CHECK(efs_meta_apply_truncate(kv, ino2, T0 + 10, &t) == EFS_OK, "trunc0");
+    CHECK(trunc_to(kv, ino2, 0) == EFS_OK, "trunc0");
+    CHECK(gc_probe(kv, &pr) == 0 && pr.n == 0, "the entry emits no GC");
+    sweep_all(kv, ino2);
     CHECK(efs_meta_apply_get_chunk(kv, ino2, 0, &got) == EFS_ERR_NOT_FOUND,
           "t2 c0 gone");
     CHECK(efs_meta_apply_get_chunk(kv, ino2, 1, &got) == EFS_ERR_NOT_FOUND,
@@ -3965,18 +3977,12 @@ static void test_gc_reap(void)
     CHECK(chunk_present(kv, ino2, gen2, 0) == 0, "t2 c0 key gone");
     CHECK(gc_probe(kv, &pr) == 0 && pr.n == 2 &&
           gc_probe_find(&pr, 0xC1, 0, 0) && gc_probe_find(&pr, 0xC2, 1, 1),
-          "truncate emits GC per chunk");
+          "the sweep emits GC per chunk");
 
     CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
     efs_kv_mem_free(kv);
 }
 
-/* The raft truncate tail stub writes no fragments: it aliases the
- * superseded row's placement so reads keep finding the surviving prefix.
- * The apply side must NOT queue a GC record for an aliased supersede (the
- * reaper's checksum-conditional delete would match and remove the live
- * tail data), and an unlink of the file must still reclaim the fragments
- * through the live row's real checksums. */
 /* W54: a fold can publish the same object as a span, or alias its fragment
  * set under another generation. Neither live spans nor replay tombstones
  * may queue a fragment set still named by the replacement base. */
@@ -3989,7 +3995,6 @@ static void test_content_fence_prepared_writers(void)
     struct efs_meta_chunk_view view;
     struct efs_meta_pub publish = {0};
     struct efs_meta_setattr sa = {.mask = EFS_META_SET_UID, .uid = 42};
-    struct efs_meta_truncate trunc = {.size = 0, .lane_mask = UINT64_MAX};
     struct efs_fence_history history;
     struct coord_ctx ctx = {kv, 0};
     struct gc_probe gc;
@@ -4039,8 +4044,8 @@ static void test_content_fence_prepared_writers(void)
           "D25 prepared inode excludes setattr overwrite");
     CHECK(utimens_at(kv, ino, T0 + 4, EFS_META_SET_MTIME, T0 + 4, 0) == EFS_ERR_BUSY,
           "D25 prepared inode excludes utimens overwrite");
-    CHECK(efs_meta_apply_truncate(kv, ino, T0 + 4, &trunc) == EFS_ERR_BUSY,
-          "D25 prepared inode excludes legacy truncate");
+    CHECK(trunc_to(kv, ino, 0) == EFS_ERR_BUSY,
+          "D25 prepared inode excludes truncate");
     CHECK(efs_kv_key_lane(efs_kv_lane_shard(ino, 0), ino, row.generation, 0,
                           lk, &kl) == EFS_OK, "D25 lane stamp key");
     n = sizeof(raw);
@@ -4886,7 +4891,9 @@ static int gc_many_cb(void *arg, const uint8_t *key, uint32_t kl,
 }
 static void test_gc_delta_batch_boundary(void)
 {
-    for (int truncate = 0; truncate < 3; truncate++) {
+    /* truncate=1: the D25 sweep after a truncate to 0 reclaims every base
+     * and delta, and a failed sweep batch keeps every reference. */
+    for (int truncate = 0; truncate < 2; truncate++) {
         struct efs_kv *kv = efs_kv_mem_create();
         efs_ino_t ino = 0; struct efs_meta_row row;
         struct gc_many_probe probe = {0};
@@ -4895,7 +4902,7 @@ static void test_gc_delta_batch_boundary(void)
         CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
                                          "gc-many", &ino) == EFS_OK, "W62 create");
         CHECK(efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK, "W62 row");
-        for (unsigned c = 0; c < (truncate == 2 ? 420u : 13u); c++) {
+        for (unsigned c = 0; c < 13u; c++) {
             uint32_t ci = c * EFS_META_LANES;
             uint64_t base = 0x6200 + c * 16;
             pub(kv, ino, ci, (uint64_t)(ci + 1) * EFS_MIN_CHUNK_SIZE,
@@ -4911,30 +4918,19 @@ static void test_gc_delta_batch_boundary(void)
                 CHECK(efs_meta_apply_publish(kv, &span) == EFS_OK, "W62 delta");
             }
         }
-        if (truncate == 2) {
-            struct efs_meta_truncate t = {.size=0, .lane_mask=~0ULL};
-            CHECK(efs_meta_apply_truncate(kv, ino, T0+21, &t) == EFS_ERR_NOMEM,
-                  "W62 oversized truncate fails atomically");
-            for (unsigned c=0;c<420;c++)
-                CHECK(chunk_present(kv,ino,row.generation,c*EFS_META_LANES),
-                      "W62 capacity rejection preserves every source reference");
-            struct gc_probe empty;
-            CHECK(gc_probe(kv,&empty)==EFS_OK && !empty.n,"W62 no partial GC on rejection");
-            efs_kv_mem_free(kv); continue;
-        }
         if (!truncate) CHECK(efs_meta_apply_unlink(kv, EFS_ROOT_INO, "gc-many", T0+20) == EFS_OK, "W62 unlink");
+        else CHECK(trunc_to(kv, ino, 0) == EFS_OK, "W62 truncate");
         CHECK(efs_kv_mem_fail_next_batch(kv) == EFS_OK, "W62 fail batch");
-        struct efs_meta_truncate t = {.size=0, .lane_mask=~0ULL};
         uint32_t selected[EFS_META_SWEEP_BATCH_MAX], count = 0;
         if (!truncate)
             CHECK(efs_meta_lane_sweep_select(kv,ino,row.generation,0,selected,&count)==EFS_OK && count==8,
                   "bounded sweep selects eight exact keys");
-        int rc = truncate ? efs_meta_apply_truncate(kv, ino, T0+21, &t) :
+        int rc = truncate ? sweep_once(kv, ino, 0) :
             efs_meta_apply_lane_sweep_batch(kv,ino,row.generation,0,selected,count);
         CHECK(rc == EFS_ERR_IO, "W62 failed cleanup visible");
         CHECK(chunk_present(kv, ino, row.generation, 0), "W62 failure retains reference");
         if (truncate) {
-            CHECK(efs_meta_apply_truncate(kv,ino,T0+21,&t)==EFS_OK,"W62 retry cleanup");
+            sweep_all(kv, ino);
         } else {
             CHECK(efs_meta_apply_lane_sweep_batch(kv,ino,row.generation,0,selected,count)==EFS_ERR_BUSY,
                   "one bounded batch retains remaining work");
@@ -4975,14 +4971,15 @@ static void test_gc_delta_batch_boundary(void)
     }
 }
 
+/* D25: a shrink into a chunk clips the boundary row in place; its
+ * fragment set stays live (no GC record), and an unlink still reclaims it
+ * through the row's real checksums. */
 static void test_gc_tail_alias(void)
 {
     struct efs_kv *kv = efs_kv_mem_create();
-    efs_ino_t ino = 0, ino2 = 0;
+    efs_ino_t ino = 0;
     struct efs_meta_row r;
     struct efs_meta_chunk got;
-    struct efs_meta_truncate t;
-    struct efs_meta_pub tail;
     struct gc_probe pr;
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
     uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
@@ -4996,76 +4993,28 @@ static void test_gc_tail_alias(void)
                                      "ta", &ino) == EFS_OK && ino,
           "create");
     pub(kv, ino, 0, EFS_MIN_CHUNK_SIZE, 0xD1, 0, T0 + 1, "pub0");
+    CHECK(trunc_to(kv, ino, 4000) == EFS_OK, "shrink into the chunk");
+    sweep_all(kv, ino);
+    CHECK(gc_probe(kv, &pr) == 0 && pr.n == 0, "a clip emits no GC record");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK &&
+              got.generation == 0xD1 && got.base_clip == 4000,
+          "boundary row live and clipped");
 
-    /* Shrink into the chunk: the tail stub aliases the 0xD1 fragment set
-     * under a fresh generation. No GC record — the fragments are shared
-     * with the live row, not dead. */
-    memset(&tail, 0, sizeof(tail));
-    fill_ch(&tail.ch); /* identical to the 0xD1 row: the alias */
-    tail.chunk_index = 0;
-    tail.new_size = 4000;
-    tail.expected_gen = 0xD1;
-    tail.candidate_gen = 0xD2;
-    tail.coding_profile_id = EFS_META_PROFILE_K2F1;
-    memset(&t, 0, sizeof(t));
-    t.size = 4000;
-    t.tail = &tail;
-    t.lane_mask = ~0ULL; /* single-group test KV holds every lane */
-    CHECK(efs_meta_apply_truncate(kv, ino, T0 + 2, &t) == EFS_OK,
-          "truncate alias tail");
-    CHECK(gc_probe(kv, &pr) == 0 && pr.n == 0, "alias emits no GC record");
-    CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK,
-          "tail row live");
-    CHECK(got.generation == 0xD2, "tail carries the new gen");
-    for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        CHECK(got.nodes[i] == (efs_node_id_t)(i + 1), "tail nodes aliased");
-        CHECK(got.checksums[i][0] == (uint8_t)(0x10 + i),
-              "tail sums aliased");
-    }
-
-    /* Unlink still reclaims: the sweep records the LIVE aliased gen with
-     * the real checksums, so the reaper's conditional delete matches. */
     CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "row pre-unlink");
     gen = r.generation;
     CHECK(efs_meta_apply_unlink(kv, EFS_ROOT_INO, "ta", T0 + 3) == EFS_OK,
           "unlink");
     CHECK(efs_meta_apply_lane_sweep(kv, ino, gen, 0) == EFS_OK, "sweep");
     CHECK(gc_probe(kv, &pr) == 0 && pr.n == 1 &&
-          gc_probe_find(&pr, 0xD2, 0, 0),
-          "sweep records the aliased gen");
+          gc_probe_find(&pr, 0xD1, 0, 0),
+          "unlink sweep records the clipped gen");
     CHECK(efs_meta_unpack_gc(pr.val, EFS_META_GC_VAL, nodes, &ack_bits,
                              sums) == EFS_OK,
           "unpack");
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
         CHECK(sums[i][0] == (uint8_t)(0x10 + i), "real sums swept");
-    gc_ack_all(kv, ino, 0xD2, 0, 0, "ack 0xD2");
+    gc_ack_all(kv, ino, 0xD1, 0, 0, "ack 0xD1");
     CHECK(gc_probe(kv, &pr) == 0 && pr.n == 0, "retired");
-
-    /* Control: a tail carrying NEW content (different checksums — a real
-     * zero-fill write) supersedes for real and must emit a record. */
-    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
-                                     "tb", &ino2) == EFS_OK && ino2,
-          "create2");
-    pub(kv, ino2, 0, EFS_MIN_CHUNK_SIZE, 0xE1, 0, T0 + 4, "pub0");
-    memset(&tail, 0, sizeof(tail));
-    fill_ch(&tail.ch);
-    for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
-        tail.ch.checksums[i][0] = (uint8_t)(0x70 + i); /* new content */
-    tail.chunk_index = 0;
-    tail.new_size = 4000;
-    tail.expected_gen = 0xE1;
-    tail.candidate_gen = 0xE2;
-    tail.coding_profile_id = EFS_META_PROFILE_K2F1;
-    memset(&t, 0, sizeof(t));
-    t.size = 4000;
-    t.tail = &tail;
-    t.lane_mask = ~0ULL;
-    CHECK(efs_meta_apply_truncate(kv, ino2, T0 + 5, &t) == EFS_OK,
-          "truncate new-content tail");
-    CHECK(gc_probe(kv, &pr) == 0 && pr.n == 1 &&
-          gc_probe_find(&pr, 0xE1, 0, 0),
-          "new-content tail emits GC for the superseded gen");
-
     CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
     efs_kv_mem_free(kv);
 }
@@ -5306,8 +5255,7 @@ static int lane_bootstrap_fail_batch(void *ctx, const struct efs_kv_item *items,
 
 static int lane_truncate_fail_batch(void *ctx, const struct efs_kv_item *items, uint32_t count)
 {
-    (void)ctx; (void)items;
-    CHECK(count==5,"same-group inode/cursor/stamp/history/authority atomic batch");
+    (void)ctx; (void)items; (void)count;
     return EFS_ERR_IO;
 }
 
@@ -5428,33 +5376,6 @@ static void test_lane_local_writer_views(void)
     for (uint32_t i = 0; i < parts.n; ++i)
         CHECK(efs_txn_resolve(kv, &fail, parts.shard[i], EFS_TXN_ABORT) == EFS_OK,
               "failed bootstrap releases inode/history holds");
-    CHECK(efs_meta_get_lane_writer_view(kv,ino,row.generation,17,EFS_MIN_CHUNK_SIZE,&view)==EFS_OK,
-          "legacy fence starts from complete typed lane");
-    saved=view;
-    wrapped=*base;wrapped.batch=lane_bootstrap_fail_batch;kv->ops=&wrapped;
-    CHECK(efs_meta_apply_lane_fence(kv,ino,row.generation,17,saved.authority_epoch+1,10,17,1)==EFS_ERR_IO,
-          "legacy lane fence preserves failed atomic batch");
-    kv->ops=base;
-    CHECK(efs_meta_get_lane_writer_view(kv,ino,row.generation,17,EFS_MIN_CHUNK_SIZE,&view)==EFS_OK &&
-          !memcmp(&view,&saved,sizeof(view)),"failed legacy fence leaves typed authority unchanged");
-    CHECK(efs_meta_apply_lane_fence(kv,ino,row.generation,17,saved.authority_epoch+1,10,17,1)==EFS_OK &&
-          efs_meta_get_lane_writer_view(kv,ino,row.generation,17,EFS_MIN_CHUNK_SIZE,&view)==EFS_OK &&
-          view.authority_epoch==saved.authority_epoch+1 && view.history.count==saved.history.count+1 &&
-          view.history.entries[view.history.count-1].size==10,
-          "legacy cross-group fence atomically advances typed authority and history");
-    saved=view;
-    CHECK(efs_meta_apply_lane_fence(kv,ino,row.generation,17,saved.authority_epoch,10,17,1)==EFS_OK &&
-          efs_meta_get_lane_writer_view(kv,ino,row.generation,17,EFS_MIN_CHUNK_SIZE,&view)==EFS_OK &&
-          !memcmp(&view,&saved,sizeof(view)),"legacy fence replay preserves exact typed view");
-    while(view.history.count<EFS_FENCE_HISTORY_MAX) {
-        CHECK(efs_meta_apply_lane_fence(kv,ino,row.generation,17,view.authority_epoch+1,10,17,1)==EFS_OK &&
-              efs_meta_get_lane_writer_view(kv,ino,row.generation,17,EFS_MIN_CHUNK_SIZE,&view)==EFS_OK,
-              "legacy typed fence bounded history");
-    }
-    saved=view;
-    CHECK(efs_meta_apply_lane_fence(kv,ino,row.generation,17,view.authority_epoch+1,10,17,1)==EFS_ERR_BUSY &&
-          efs_meta_get_lane_writer_view(kv,ino,row.generation,17,EFS_MIN_CHUNK_SIZE,&view)==EFS_OK &&
-          !memcmp(&view,&saved,sizeof(view)),"history overflow changes neither stamp nor authority");
     efs_ino_t local=0;struct efs_meta_row local_row;
     CHECK(efs_meta_apply_create_file(kv,&g_at,EFS_ROOT_INO,S_IFREG|0644,"local-truncate",&local)==EFS_OK &&
           efs_meta_apply_get_inode(kv,local,&local_row)==EFS_OK,"same-group truncate fixture");
@@ -5469,18 +5390,24 @@ static void test_lane_local_writer_views(void)
           "same-group bootstrap prepares/commits");
     for(uint32_t i=0;i<parts.n;i++)CHECK(efs_txn_resolve(kv,&local_tx,parts.shard[i],EFS_TXN_COMMIT)==EFS_OK,
           "same-group bootstrap resolves");
-    struct efs_meta_truncate shrink={.expect_gen=local_row.generation,.lane_mask=~0ULL};
+    struct efs_fence_history lh;
+    CHECK(trunc_to(kv,local,10)==EFS_OK,"same-group extend");
     CHECK(efs_meta_get_lane_writer_view(kv,local,local_row.generation,5,EFS_MIN_CHUNK_SIZE,&saved)==EFS_OK,
           "same-group initial complete view");
     wrapped=*base;wrapped.batch=lane_truncate_fail_batch;kv->ops=&wrapped;
-    CHECK(efs_meta_apply_truncate(kv,local,T0+99,&shrink)==EFS_ERR_IO,"same-group failed batch");
+    CHECK(trunc_to(kv,local,0)==EFS_ERR_IO,"same-group failed batch");
     kv->ops=base;
     CHECK(efs_meta_get_lane_writer_view(kv,local,local_row.generation,5,EFS_MIN_CHUNK_SIZE,&view)==EFS_OK &&
-          !memcmp(&view,&saved,sizeof(view)),"same-group failed batch retains authority");
-    CHECK(efs_meta_apply_truncate(kv,local,T0+99,&shrink)==EFS_OK &&
-          efs_meta_get_lane_writer_view(kv,local,local_row.generation,5,EFS_MIN_CHUNK_SIZE,&view)==EFS_OK &&
-          view.authority_epoch==1 && view.history.count==1 && !view.history.entries[0].size,
-          "same-group truncate advances lane/history/authority atomically");
+          !memcmp(&view,&saved,sizeof(view)) &&
+          efs_meta_apply_get_inode(kv,local,&local_row)==EFS_OK && local_row.content_epoch==0,
+          "same-group failed batch retains authority");
+    /* D25: the truncate entry writes the inode's history only; the lane
+     * adopts lazily. */
+    CHECK(trunc_to(kv,local,0)==EFS_OK &&
+          efs_meta_apply_get_inode(kv,local,&local_row)==EFS_OK && local_row.content_epoch==1 &&
+          efs_meta_get_fence_history(kv,local,local_row.generation,EFS_META_FENCE_INODE,&lh)==EFS_OK &&
+          lh.count==1 && !lh.entries[0].size,
+          "same-group truncate advances the inode epoch and history atomically");
     efs_kv_mem_free(kv);
 }
 
@@ -6303,7 +6230,7 @@ int main(void)
     test_writer_authority_view();
     test_writer_lane_authority();
     test_lane_local_writer_views();
-    test_lane_fence_paged();
+    test_lane_sweep_bounded();
     test_sparse_grow_tail_epoch();
     test_truncate_range_del();
     test_cross_group_lane();

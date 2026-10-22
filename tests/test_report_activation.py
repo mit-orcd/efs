@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/server/raft_host.c').read_text()
-a=s.index('static int apply_activate_lane_cmd(');b=s.index('\n/* EFS_MD_CMD_LANE_FENCE',a)
+a=s.index('static int apply_activate_lane_cmd(');b=s.index('\n/* D25 sweep commands',a)
 code=r'''
 #include "efs/protocol.h"
 #include "efs/meta_apply.h"

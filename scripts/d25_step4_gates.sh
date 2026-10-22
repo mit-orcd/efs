@@ -8,8 +8,8 @@
 # /<label>, --direct-io, 64 GiB quota). Refuses to start when a port is in use;
 # never touches orcd-mini (17432-17434).
 #
-# Needs an EFS_FAULTS=1 build (the sweep hold for g6). Lazy truncate is on
-# for daemons and clients; the packer runs with low thresholds for g8.
+# Needs an EFS_FAULTS=1 build (the sweep hold for g6). The packer runs with
+# low thresholds for g8.
 #
 #   g5 a warm descriptor on B across a shrink, the sweep and retirement on A
 #      reads new bytes and zeros, never discarded data; reopen matches
@@ -27,9 +27,8 @@
 set -u
 REL=$1; L=$2
 PORT=${PORT:-17850}; R=${D25_ROOT:-/tmp/d25-gates}/$L; A=${D25_ADDR:-127.0.0.1}
-LAZY=1; ALLOC_GIB=${ALLOC_GIB:-2}; PACK_FILES=${PACK_FILES:-400}
+ALLOC_GIB=${ALLOC_GIB:-2}; PACK_FILES=${PACK_FILES:-400}
 export EFS_TRANSPORT=${EFS_TRANSPORT:-tcp} EFS_MD_RAFT_N=3 ASAN_OPTIONS=detect_leaks=0
-export EFS_D25_LAZY_TRUNCATE=$LAZY
 export EFS_FAULT_TRUNCATE_BEFORE_FILE=$R/fault-before EFS_FAULT_TRUNCATE_APPLY_FILE=$R/fault-apply
 export EFS_FAULT_TRUNCATE_DROP_REPLY_FILE=$R/fault-drop EFS_FAULT_TRUNC_SWEEP_HOLD_FILE=$R/sweep-hold
 export EFS_PACK_MIN_AGE_MS=500 EFS_PACK_SPACE_START_PCT=0 EFS_PACK_SPACE_FULL_PCT=1 EFS_PACK_COMPACT_IDLE_S=2 EFS_PACK_DBG=1
@@ -89,7 +88,7 @@ trap cleanup EXIT
 start_daemons
 for t in $(seq 30); do "$REL/efs-mgmt" raft-mkfs $A:$((PORT+1)) 2>&1 | grep -q 'raft-mkfs rc=0 ' && break; sleep 1; done
 mount_all
-echo "== $L $("$REL/efsd" --version | head -1) transport=$EFS_TRANSPORT lazy=$LAZY"
+echo "== $L $("$REL/efsd" --version | head -1) transport=$EFS_TRANSPORT"
 export D25_REL=$REL D25_PORT=$PORT
 
 cat > "$R/gates.py" <<'EOF'

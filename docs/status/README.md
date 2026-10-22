@@ -19,7 +19,7 @@ full acceptance are separate states.
 ## Recent evidence and remaining acceptance
 
 [D25 logical truncate protocol](d25-logical-truncate-design-20261021.md):
-**final-review corrections incorporated, NOTRUN.** One 86-byte inode-group
+**implemented through step 5 on branch `d25-logical-truncate`; all D25 gates PASS on a private node9901 cluster.** One 86-byte inode-group
 TRUNCATE entry commits size, epoch and a pruned inode fence history, with
 success-only opid receipts; reads mask by the inode history; lanes adopt
 the epoch lazily behind an ACTIVATE/BOOTSTRAP floor; a bounded lane-local
@@ -35,8 +35,11 @@ PASS on node9901, sparse 100 GiB O_TRUNC 0.024 s, after fixing a pre-existing
 stale-cache republish the eager baseline 47ba6b590 still fails (UNCOND images now
 carry their formation epoch). [Step 4](d25-step4-gates-20261022.md): lane-cursor sweep,
 SWEEP_DONE/RETIRE, base clips, masked packing; g5-g8 PASS (2 GiB O_TRUNC 0.020 s, sweep
-9 s, space returned; history bound, restart mid-sweep, packed files). Step 5 (remove the
-eager path, default to lazy) is next.
+9 s, space returned; history bound, restart mid-sweep, packed files).
+[Step 5](d25-step5-gates-20261022.md): the eager path, LANE_FENCE, tail stubs, the
+client tail rewrite and the switch are removed; logical truncate is the only path, and
+every D25 gate (g0-g8, step-2 g4/g5, the repro) passes again on node9901. orcd-mini and
+RDMA remain.
 Earlier reviews and responses are kept as superseded history.
 Replaces the declined 256 MiB EBUSY refusal; W43 stays open.
 
