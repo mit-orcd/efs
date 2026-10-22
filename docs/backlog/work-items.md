@@ -6355,3 +6355,35 @@ between chunks.
 
 **Gate.** n2's group-2 InstallSnapshot completes on orcd-mini (the W145
 repair, together with W146).
+
+<a id="w150"></a>
+## W150 — No test for the abandon scan's work-budget stop and resume
+
+**Test coverage; opened 2026-10-22 from the [packing validate-once review](../status/review-pack-validate-once-20261022.md); FIXED on `devel-k25` (October 22).**
+- `efs_pack_abandon_scan` (`src/meta/pack_mapping.c`) is bounded by
+  `efs_kv_lsm_scan_work`, which counts tombstones. A stop by that budget
+  resumes after the work cursor, not the callback's last live key.
+- `tests/test_pack_validate_once.c` drove only callback stops on the memory
+  store, so the work-cursor path, a tombstone-only window and the term
+  restart had no test.
+
+**Fix (test only, no change to the scan).** `abandon_sweep_work_bound` runs
+on an LSM store with 48 objects of four owner/state kinds, interleaved with
+0–16 flushed-then-deleted generations each, before the first object and
+after the last. Each bounded call checks that the budget counts tombstones
+and that the cursor strictly advances or wraps. The test also covers:
+- one pass finds every actionable object exactly once; the first window
+  holds tombstones only, and the budget stops most windows;
+- wraparound: the next pass finds the same set again;
+- mutation mid-pass: an object ahead is cancelled and a new one admitted,
+  and the pass reports exactly the current set;
+- term change: continuing the old cursor misses this node's earlier
+  admissions, and the packer's restart finds them all in one pass;
+- budget edges: a budget equal to the measured key count wraps in one call;
+  one key short stops just before an actionable last key, and the next
+  window reports it and wraps.
+
+**Check that it catches defects (efs3, then reverted).** A scan that drops
+the work cursor fails the new case at the cursor-advance check. That
+mutation passes the old memory-store cases. An inclusive resume fails
+both. Gate: `make test` on efs3, in the K25 report.
