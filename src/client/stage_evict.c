@@ -537,6 +537,9 @@ static uint64_t stage_bytes_now(void)
  * *requeued counts pinned candidates moved to the newest end. */
 static int evict_pass(int *requeued)
 {
+    static int env_stage_dbg = -1; /* W143: read once, per-op path */
+    if (env_stage_dbg < 0)
+        env_stage_dbg = getenv("EFS_STAGE_DBG") != NULL;
     static struct lru_node cand[SCAN_BATCH];
     uint32_t nc = lru_oldest(cand, SCAN_BATCH);
     int evicted = 0;
@@ -551,7 +554,7 @@ static int evict_pass(int *requeued)
         if (evict_one((efs_ino_t)cand[i].ino, cand[i].tick))
             evicted++;
     }
-    if (evicted && getenv("EFS_STAGE_DBG"))
+    if (evicted && env_stage_dbg)
         fprintf(stderr, "stage-evict: pass cand=%u evicted=%d requeued=%d\n",
                 nc, evicted, *requeued);
     return evicted;
@@ -608,6 +611,9 @@ static int tab_lru_cb(efs_ino_t ino, void *arg)
 /* Returns the number of tabs dropped; *bytes_io is the reading after. */
 static int evict_cold_tabs(uint64_t cap, uint64_t *bytes_io)
 {
+    static int env_stage_dbg = -1; /* W143: read once, per-op path */
+    if (env_stage_dbg < 0)
+        env_stage_dbg = getenv("EFS_STAGE_DBG") != NULL;
     uint32_t shards[TAB_SCAN];
     uint32_t n, i;
     int dropped = 0, skipped = 0;
@@ -638,7 +644,7 @@ static int evict_cold_tabs(uint64_t cap, uint64_t *bytes_io)
         pthread_mutex_unlock(&g_client.idx_mu);
         efs_client_table_unlock();
     }
-    if (dropped && getenv("EFS_STAGE_DBG"))
+    if (dropped && env_stage_dbg)
         fprintf(stderr,
                 "stage-evict: tabs bytes=%lluMB cand=%u dropped=%d "
                 "pinned=%d\n",

@@ -76,8 +76,11 @@ static void dir_lock_report(const char *what, int stripe, efs_ino_t parent)
  * The same EFS_RPC_PROF switch enables the RPC timings used for comparison. */
 static void dir_lock_take(int stripe, efs_ino_t parent)
 {
+    static int env_rpc_prof = -1; /* W143: read once, per-op path */
+    if (env_rpc_prof < 0)
+        env_rpc_prof = getenv("EFS_RPC_PROF") != NULL;
     struct timespec before, after;
-    int profile = getenv("EFS_RPC_PROF") != NULL;
+    int profile = env_rpc_prof;
     if (profile)
         clock_gettime(CLOCK_MONOTONIC, &before);
     pthread_mutex_lock(&g_client.dir_lock[stripe]);

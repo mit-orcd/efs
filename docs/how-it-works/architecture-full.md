@@ -1569,6 +1569,11 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[orcd-mini deploy of `08cc16af4`](../status/orcd-mini-deploy-08cc16af4-20261022.md):
+**cleanup merge deployed; all suites and gates PASS over RDMA + `.efs`**
+after two harness fixes (`e4bd1b6d7`, merged in `99c7a1c75`): faults 24/24,
+`.efs` commands gate PASS.
+
 [orcd-mini fresh-format deploy with D25](../status/orcd-mini-d25-deploy-20261022.md):
 **deployed `ee1087129`; all suites and D25 step-5 gates PASS.** Fresh
 format (user-authorized wipe). Core 216/216, extras 4/5 + mmap skip,
@@ -1615,6 +1620,13 @@ scheduler's both-groups-local assumption remain.
 Earlier reviews and responses are kept as superseded history.
 Replaces the declined 256 MiB EBUSY refusal; W43 stays open.
 
+[orcd-test devel suites over TCP and RDMA](../status/orcd-test-devel-suites-20261022.md):
+**PASS** on devel `08cc16af4`, `.efs` on, both transports: POSIX all 218/221 (3 SKIP by
+design/budget) on 7 clients, persist across a full restart and transport switch,
+two-client 67/67, every live `.efs` harness, IOR little/wide easy/hard with
+verification. Four harness bugs fixed on `claude/orcd-test-suites`; W121 reproduced
+(still OPEN, kernel).
+
 [orcd-test cleanup and W127–W131 run](../status/orcd-test-cleanup-w127-20261022.md):
 **PASS** on a reformatted orcd-test (RDMA, `.efs`): POSIX core 216/216 on 7
 concurrent clients twice, the live `.efs` harnesses, a restart on existing
@@ -1648,6 +1660,14 @@ data files under `docs/` now live only at tag `archive/raw-evidence-20261021`
 (branch `raw-evidence`). Devel keeps the 302 summaries under `results/`; 523
 links in 96 pages now name the archived path. Read one with
 `git show archive/raw-evidence-20261021:<path>`.
+
+[orcd-mini profile on `08cc16af4`](../status/orcd-mini-profile-08cc16af4-20261022.md):
+**profiling only.**
+- Two tiny-file writers: ~3,000 creates/s, limited by the leader's `h->mu`
+  and apply lag (known plan).
+- W126's LSM fix holds: 1.4% lock waits.
+- New [W143](#w143): efs-fuse spent ~4% of its CPU
+  in `getenv` on per-op paths. Fixed; deploy and re-profile pending.
 
 [W126 on orcd-mini, `8fb4247ad` A/B](../status/orcd-mini-w126-ab-8fb4247ad-20261022.md):
 **deployed. Lock-wait gate PASS; create-rate gate FAIL.**
@@ -2319,6 +2339,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | submit-unknown-tag | **W140** · proposal RPC accepts metadata tags this build cannot apply (halts a group since W127) | correctness / safety | OPEN: shown by `scripts/w127_incompatible_entry.sh`; fix NOTRUN; caller authorization stays W133 | [item](#w140) |
 | reclaim-test-flake | **W141** · `test_reclaim` fail-closed recovery waits a fixed 5 s | verification flake | OPEN: one failure under suite load, 10/10 direct reruns pass | [item](#w141) |
 | cleanup-leftovers | **W142** · store `del_if_sum` and RDMA zero-copy region table without a reader | maintenance | OPEN | [item](#w142) |
+| client-getenv | **W143** · efs-fuse reads diagnostic environment switches on per-op paths (~4% of client CPU) | performance | OPEN: fix implemented (function-local caches in 20 functions); `make test` 816/816 (1 environmental docs-check failure); deploy and client re-profile pending | [item](#w143) · [evidence](../status/orcd-mini-profile-08cc16af4-20261022.md) |
 | orcd-qualification | **W119** · ORCD normal-operation RDMA failures and blocked clean stop | correctness / liveness | OPEN: 150 concurrent failures /846 NOTRUN; cross-host peer59/67; enabled queries EBUSY; retained writes block clean stop. TCP/commands-off rerun also FAILs (120 failures,520 NOTRUN; peer61/67; clean stop refused); all23 successfully prepared cold cases verify after authorized forced restart. [TCP evidence](../status/orcd-tcp-direct-disabled-20261015.md). Preserve failures, isolate causes and rerun original gates; W100 stays closed. [AMD follow-up](../status/amd-rdma-posix-20261015.md): native/serial/peer/cold/degraded PASS at `c8d057391`; one-mount jobs16 remains215/216 with unusual-name timeout. [Async durability follow-up](../status/amd-async-durability-20261015.md) at `c4178ea81`: scoped durability/native/serial/peer/cold/degraded PASS; jobs16 FAIL214/216 (unusual names, concurrent creates,15s) | [Raft/KV follow-up](../status/orcd-raft-kv-20261016.md) · [evidence and gates](../status/orcd-devel-qualification-20261015.md) · [item](#w119) |
 | immediate-readback | **W121** · successful fsync followed by previous-file payload | data correctness | OPEN: 255/123,932 exact readbacks failed across both queued-vote variants on ORCD native RDMA/direct with enabled `.efs`; unique512-byte files, no expiry. Diagnosed FUSE kernel fork/read page-pinning defect; kernel remediation deferred by user. Fork-isolated experiments do not close W121 | [diagnosis](../status/orcd-w121-fork-read-20261016.md) · [experiment](../status/orcd-queued-read-vote-20261016.md) · [item](#w121) |
 | qualification-fixtures | **W120** · stale extracted LOOKUP stub and command cleanup ownership check | verification correctness | OPEN (partial fix): AMD `f6235bb73` repairs the LOOKUP host context and checks reader identity; native/docs PASS at `85a9ad6b5`. Enabled-command cleanup ownership remains NOTRUN here and still needs correction/acceptance. [AMD evidence](../status/amd-rdma-posix-20261015.md); preserve original failures | [evidence](../status/orcd-devel-qualification-20261015.md) · [item](#w120) |
@@ -8662,6 +8683,44 @@ review is needed before implementation against these requirements.
 This review was a subsection of W139, which made it read as part of W139. It
 is now its own section, with its text unchanged. No item is closed, and no
 gate changes.
+
+<a id="w143"></a>
+### W143 — efs-fuse reads diagnostic environment switches on per-op paths
+
+**Performance; opened 2026-10-22; fix implemented; `make test` 816/816 with one environmental failure (docs check without `results/`); deploy and re-profile pending.**
+Found by passively profiling orcd-mini on `08cc16af4` under two
+`tiny_files.py` writers ([profile](../status/orcd-mini-profile-08cc16af4-20261022.md)).
+On the node9901 client, `getenv` was 2.9% self and 3.7% with children of
+efs-fuse on-CPU time. `__strncmp_evex` and `__strlen_evex`, used by
+`getenv`'s environment scan, added another 1.8% and 1.1%. On node9900 it
+was 1.3% on 2026-10-21. `getenv` walks the whole process environment on
+every call. These checks read diagnostic switches that never change after
+start:
+- `EFS_RPC_PROF` in `dir_lock_take`: every directory lock, and 64 times
+  per `efs_client_lock_all_dirs` (once per stripe) on the eviction path;
+- `EFS_RPC_PROF` in `lookup_memo_observe` (every lookup) and
+  `efs_append_flush_report_run` (every flush);
+- `EFS_OPID_TRACE_VERBOSE` and `EFS_OPID_TRACE` in `inode_rpc.c`: several
+  per create, lease and append;
+- `EFS_STAGE_DBG` per eviction pass.
+
+**Fix.** Each of the 20 affected functions reads its switch once into a
+function-local `static int` (`-1` until read), as `write.c` already does
+for `EFS_REPORT_DBG`. The cache stays inside the function: source-slice
+tests compile these functions alone, and an earlier version that used a
+shared header helper and file-scope caches broke 14 of them. Unchanged:
+startup-only reads, error-path `EFS_RDMA_FIRST` logging and
+`EFS_FAULTS`-only checks. Behaviour is unchanged, because no test or tool
+sets these variables at runtime.
+
+**Gates.**
+- `make test` on node9901 (`scripts/make_test_summary.sh`). Many tests
+  compile slices of the changed files.
+- A client on-CPU profile under the same tiny-file load shows `getenv`
+  below 0.1%.
+
+The client is not the throughput limit here: both mounts used only
+0.16–0.18 cores. The gain is efs-fuse CPU, not create rate.
 
 
 ## Appendix 6 — Naming

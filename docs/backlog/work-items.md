@@ -6021,3 +6021,41 @@ review is needed before implementation against these requirements.
 This review was a subsection of W139, which made it read as part of W139. It
 is now its own section, with its text unchanged. No item is closed, and no
 gate changes.
+
+<a id="w143"></a>
+## W143 — efs-fuse reads diagnostic environment switches on per-op paths
+
+**Performance; opened 2026-10-22; fix implemented; `make test` 816/816 with one environmental failure (docs check without `results/`); deploy and re-profile pending.**
+Found by passively profiling orcd-mini on `08cc16af4` under two
+`tiny_files.py` writers ([profile](../status/orcd-mini-profile-08cc16af4-20261022.md)).
+On the node9901 client, `getenv` was 2.9% self and 3.7% with children of
+efs-fuse on-CPU time. `__strncmp_evex` and `__strlen_evex`, used by
+`getenv`'s environment scan, added another 1.8% and 1.1%. On node9900 it
+was 1.3% on 2026-10-21. `getenv` walks the whole process environment on
+every call. These checks read diagnostic switches that never change after
+start:
+- `EFS_RPC_PROF` in `dir_lock_take`: every directory lock, and 64 times
+  per `efs_client_lock_all_dirs` (once per stripe) on the eviction path;
+- `EFS_RPC_PROF` in `lookup_memo_observe` (every lookup) and
+  `efs_append_flush_report_run` (every flush);
+- `EFS_OPID_TRACE_VERBOSE` and `EFS_OPID_TRACE` in `inode_rpc.c`: several
+  per create, lease and append;
+- `EFS_STAGE_DBG` per eviction pass.
+
+**Fix.** Each of the 20 affected functions reads its switch once into a
+function-local `static int` (`-1` until read), as `write.c` already does
+for `EFS_REPORT_DBG`. The cache stays inside the function: source-slice
+tests compile these functions alone, and an earlier version that used a
+shared header helper and file-scope caches broke 14 of them. Unchanged:
+startup-only reads, error-path `EFS_RDMA_FIRST` logging and
+`EFS_FAULTS`-only checks. Behaviour is unchanged, because no test or tool
+sets these variables at runtime.
+
+**Gates.**
+- `make test` on node9901 (`scripts/make_test_summary.sh`). Many tests
+  compile slices of the changed files.
+- A client on-CPU profile under the same tiny-file load shows `getenv`
+  below 0.1%.
+
+The client is not the throughput limit here: both mounts used only
+0.16–0.18 cores. The gain is efs-fuse CPU, not create rate.

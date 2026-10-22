@@ -110,6 +110,14 @@ data files under `docs/` now live only at tag `archive/raw-evidence-20261021`
 links in 96 pages now name the archived path. Read one with
 `git show archive/raw-evidence-20261021:<path>`.
 
+[orcd-mini profile on `08cc16af4`](orcd-mini-profile-08cc16af4-20261022.md):
+**profiling only.**
+- Two tiny-file writers: ~3,000 creates/s, limited by the leader's `h->mu`
+  and apply lag (known plan).
+- W126's LSM fix holds: 1.4% lock waits.
+- New [W143](../backlog/work-items.md#w143): efs-fuse spent ~4% of its CPU
+  in `getenv` on per-op paths. Fixed; deploy and re-profile pending.
+
 [W126 on orcd-mini, `8fb4247ad` A/B](orcd-mini-w126-ab-8fb4247ad-20261022.md):
 **deployed. Lock-wait gate PASS; create-rate gate FAIL.**
 - Read-only LSM peeks take `mu` only, and flush file I/O yields the
