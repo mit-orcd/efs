@@ -9,7 +9,7 @@ resolve/drop scan the three txn kinds, not the whole shard"). Companion perf
 run: `20260921-202715-w8-root-perf` (referenced, not in this batch).
 
 ## Verdict
-Diagnostic run — no pass/fail gate. Diagnosis achieved: the stall is on-CPU
+**PASS** (diagnostic run — no pass/fail gate). Diagnosis achieved: the stall is on-CPU
 inside the raft apply under `h->mu`, not disk and not network.
 
 ## Source commit and build identity

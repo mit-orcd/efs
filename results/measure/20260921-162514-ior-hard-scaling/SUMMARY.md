@@ -9,7 +9,7 @@ the perf residual later owned by W17/D1 (span publish) and W38 (fold
 tombstone). Adding commit: `59eb0ee93`.
 
 ## Verdict
-Measurement run — no pass/fail gate. All four IOR launches completed; the
+**PASS** (measurement run — no pass/fail gate). All four IOR launches completed; the
 finding is the throughput collapse from 372 MiB/s (NP=1) to 33 MiB/s (NP=4)
 and only partial recovery at NP=9/36 (69/82 MiB/s).
 
