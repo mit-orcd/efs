@@ -9,13 +9,16 @@ must keep committing, and the follower must catch up once the stall clears.
 
 | Gate | Verdict |
 | --- | --- |
-| Unit test `tests/test_follower_bound`, normal and `EFS_FAULTS=1` builds | PASS |
-| `make test`, normal build, efs3, rebased on devel `c0652be3b`, `TMPDIR=/data1/tmp` | 420/422 command lines PASS; the 2 failures are `tests/test_node_left_refused.py` (and its `test-create-errors` target), which fails identically on pristine devel |
-| Private 3-daemon cluster, stalled-compactor follower, scaled fault-build caps | PASS (run 2) |
-| Same cluster before the capacity gate (run 1) | FAIL: the stalled follower became group 2 leader; fixed in `cc7d051d2` |
-| Production-scale plateau (1 GiB L0 cap, derived 121 MiB budget) | NOTRUN |
-| InstallSnapshot import into a stalled follower | NOTRUN (no snapshot was sent in either run) |
+| Unit test `tests/test_follower_bound`, normal and `EFS_FAULTS=1` builds (stalled-compactor arm in the fault build) | PASS |
+| `make test`, normal build, efs3, `TMPDIR=/data1/tmp`, branch rebased on devel `c516e58e2` | PASS (rc=0, full suite) |
+| Plateau measurement on a real cluster (production caps, RSS/lag over time) | NOTRUN: owned by the parent session |
+| InstallSnapshot import into a stalled follower | NOTRUN |
 | Multi-host, RDMA, crash/restart while at the bound | NOTRUN |
+
+Two scaled cluster runs on efs3 (below) took place before the rule that
+efs1–3 run only builds and `make test`. They are informational, not a
+gate: one found a real defect (run 1), and the other showed the fixed
+behavior (run 2). Both used pre-rebase binaries.
 
 ## The bound
 
@@ -42,14 +45,15 @@ replica's state machine holds at most `mem_budget` of unflushed memtable
 
 ## Source and builds
 
-- Branch `devel-k22` on devel `c0652be3b` (rebased Oct 22; runs used the pre-rebase base `7c510c60f`). Commits `b3068a6d5` (bound),
-  `a7bc59f99` (cluster driver), `cc7d051d2` (capacity gate, memtable
-  fault hook).
-- Built on efs3 from the working tree of those commits with
-  `make -j4` and `make -j4 EFS_FAULTS=1`. The build ID is `unknown`
-  because the tree was copied without `.git`.
-- Run 2 binaries match `cc7d051d2`. Run 1 binaries were `b3068a6d5` plus
-  the `EFS_FAULT_MEMTABLE_BYTES` hook, without the capacity gate.
+- Branch `devel-k22` on devel `c516e58e2`. Commits `cf96c2cda` (bound),
+  `85459a926` (cluster driver), `1661d5439` (capacity gate, memtable
+  fault hook), `2e1ea8dea` (capacity hold before pre-vote) and docs.
+- The tests ran on `git archive` of the branch head with `make -j4` and
+  `make -j4 EFS_FAULTS=1`. The build ID is `unknown` because the tree has
+  no `.git`.
+- The informational cluster runs used the same code before the rebases, on
+  devel `7c510c60f`. Run 2 had the code of `1661d5439`. Run 1 had
+  `cf96c2cda` plus the memtable fault hook, without the capacity gate.
 
 ## Environment
 
@@ -68,7 +72,7 @@ replica's state machine holds at most `mem_budget` of unflushed memtable
 - Nodes 1 and 2 ran production values: 1 GiB L0 cap, 121.7 MiB budget,
   498378-entry cap.
 
-## Reproduction
+## Reproduction (informational cluster runs; real-cluster gate is the parent's)
 
 Build the fault tree, then run the committed driver in a screen:
 
@@ -111,7 +115,7 @@ Retained outside Git on efs3 under `~/k22-evidence/`:
 
 The store directories were deleted.
 
-## Results: run 2 (PASS)
+## Informational run 2, efs3 (bound held)
 
 Node 3, group 0. `t` is seconds from start. The stall began at t≈61 and
 the release came at t≈572.
@@ -171,7 +175,7 @@ The failures follow the overloaded VM's commit latency, not the bound,
 which refused no admission. Warm was too short to show a baseline
 failure count.
 
-## Results: run 1 (FAIL, fixed)
+## Informational run 1, efs3 (defect found, fixed)
 
 The same run without the capacity gate reached the same plateau: 4095 of
 4096 entries, memtable and L0 at their bounds, 270 busy refusals and
@@ -200,8 +204,6 @@ requires local capacity. `cc7d051d2` fixed it, and run 2 shows the fix.
 - **Not run.** Multi-host, RDMA, crash/restart while at the bound, and a
   leader whose own compactor stalls in a real cluster. The leader
   step-down is covered only by the unit test.
-- **Pre-existing failure.** `tests/test_node_left_refused.py` fails to
-  compile on devel `c0652be3b` (unstubbed `handler_stop_gate`).
 - **After the rebase** onto devel with K1 pre-vote, the capacity hold also
-  runs before pre-vote (`53f1462fa`). The cluster runs predate the rebase;
-  a rerun on the rebased build was stopped before completion.
+  runs before pre-vote (`2e1ea8dea`). No cluster run covers the rebased
+  build.
