@@ -39,6 +39,7 @@ export EFS_FAULT_TRUNCATE_DROP_REPLY_FILE=$R/fault-drop
 for i in 1 2 3; do
   ss -ltnH "sport = :$((PORT+i))" | grep -q . && { echo "$L: port $((PORT+i)) in use"; exit 1; }
 done
+findmnt -rn -o TARGET | grep -q "^$R/" && { echo "$L: a mount under $R is still live"; exit 1; }
 rm -rf "$R"; mkdir -p "$R"/{n1,n2,n3,logs,mA,mB}
 start_daemons() {
   for i in 1 2 3; do
@@ -62,7 +63,18 @@ stop_daemons() {
   done
   for i in 1 2 3; do kill -9 "$(cat "$R/logs/n$i.pid")" 2>/dev/null; done
 }
-umount_all() { for m in mA mB; do "$REL/scripts/client.sh" stop "$R/$m" > /dev/null 2>&1; done; }
+# A refused clean stop means unresolved writes: record it as a failure,
+# then discard explicitly so the run can continue and clean up.
+UNRESOLVED=0
+umount_all() {
+  for m in mA mB; do
+    findmnt -rn "$R/$m" > /dev/null || continue
+    if ! "$REL/scripts/client.sh" stop "$R/$m" >> "$R/logs/client-$m.out" 2>&1; then
+      UNRESOLVED=$((UNRESOLVED+1)); echo "  FAIL  clean unmount of $m refused (unresolved writes); force-discarding"
+      "$REL/scripts/client.sh" stop --force-discard "$R/$m" >> "$R/logs/client-$m.out" 2>&1
+    fi
+  done
+}
 mount_all() {
   for m in mA mB; do
     for t in $(seq 5); do
@@ -153,6 +165,13 @@ if phase == "repro":
     os.truncate(pa, 0); m = b""
     print("  repro: wrote, extended, truncated to 0", flush=True)
     d = os.urandom(288394); write_at(pb, 139501, d); m = put(m, 139501, d)
+    for label, p in (("A", pa), ("B", pb)):
+        got = readall(p)
+        bad = next((k for k in range(min(len(got), len(m))) if got[k] != m[k]), -1)
+        seg = got[bad:bad + 64] if bad >= 0 else b""
+        print("    %s: size=%d first_diff=%d zeros=%s" % (label, len(got), bad,
+              bool(seg) and seg == b"\0" * len(seg)), flush=True)
+    time.sleep(1.0)
     same("repro partial write after peer truncate-0 (A)", pa, m)
     same("repro partial write after peer truncate-0 (B)", pb, m)
     sys.exit(1 if fails else 0)
@@ -301,4 +320,5 @@ echo "  logs: truncate-apply-errors=$(cat "$R"/logs/efsd-n*.log | grep -c 'apply
      "pub-reject=$(cat "$R"/logs/efsd-n*.log | grep -c 'pub-reject')" \
      "publish-stalled=$(cat "$R"/logs/fuse-*.log 2>/dev/null | grep -c 'publish-stalled')" \
      "eio=$(cat "$R"/logs/fuse-*.log 2>/dev/null | grep -ci 'EIO')"
-[ $rc1 = 0 ] && [ $rc2 = 0 ] && echo "== $L VERDICT PASS" || echo "== $L VERDICT FAIL"
+umount_all
+[ $rc1 = 0 ] && [ $rc2 = 0 ] && [ $UNRESOLVED = 0 ] && echo "== $L VERDICT PASS" || echo "== $L VERDICT FAIL"

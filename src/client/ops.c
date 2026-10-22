@@ -312,6 +312,35 @@ static void apply_chunk_recs(efs_ino_t lock_ino, const struct efs_chunk_rec *rec
  * for those chunks — usually this client's own unreported PUT — so a
  * caller that must tell "the host committed our object" from "we only
  * PUT it" (the STALE classifier) reads this, not the table generation. */
+/* D25 per-inode content epoch, as last shown by a server reply. Lossy
+ * (a colliding inode evicts the slot); a miss reads 0, which only makes a
+ * tagged publication STALE once and refetch. Leaf locks. */
+#define EPOCH_SLOTS 4096u
+static struct { efs_ino_t ino; uint64_t epoch; } g_epochs[EPOCH_SLOTS];
+static pthread_mutex_t g_epoch_mu[64] = {[0 ... 63] = PTHREAD_MUTEX_INITIALIZER};
+
+void efs_client_epoch_note(efs_ino_t ino, uint64_t epoch)
+{
+    uint32_t s = (uint32_t)((ino * 0x9E3779B97F4A7C15ull) >> 52) & (EPOCH_SLOTS - 1);
+    if (!ino)
+        return;
+    pthread_mutex_lock(&g_epoch_mu[s & 63]);
+    g_epochs[s].ino = ino;
+    g_epochs[s].epoch = epoch;
+    pthread_mutex_unlock(&g_epoch_mu[s & 63]);
+}
+
+uint64_t efs_client_epoch_get(efs_ino_t ino)
+{
+    uint32_t s = (uint32_t)((ino * 0x9E3779B97F4A7C15ull) >> 52) & (EPOCH_SLOTS - 1);
+    uint64_t e = 0;
+    pthread_mutex_lock(&g_epoch_mu[s & 63]);
+    if (g_epochs[s].ino == ino)
+        e = g_epochs[s].epoch;
+    pthread_mutex_unlock(&g_epoch_mu[s & 63]);
+    return e;
+}
+
 /* Read keys of the local entries in [lo, hi) (one chunk group), 0 = none. */
 static void map_snapshot(efs_ino_t ino, uint32_t lo, uint32_t hi, uint64_t *keys)
 {
@@ -327,7 +356,8 @@ static void map_snapshot(efs_ino_t ino, uint32_t lo, uint32_t hi, uint64_t *keys
 }
 
 /* A successful GETCHUNKS is authority for the chunks it covered and did
- * not return: their rows are gone (a peer's truncate deleted them). Keeping
+ * not return: their rows are gone (a peer's truncate deleted them), unless
+ * the entry is this client's own PUT awaiting its REPORT. Keeping
  * the local entry served the old objects until GC removed them, so a peer
  * read after shrink-then-extend returned the discarded bytes. Drop an
  * absent entry only if it is still the one seen before the RPC; a local
@@ -346,8 +376,12 @@ static void map_drop_absent(efs_ino_t ino, uint32_t lo, uint32_t hi,
         int dropped = 0;
         efs_client_lock_dir(ino);
         pthread_mutex_lock(&g_client.idx_mu);
+        /* This client's own unreported PUT stays: absence on the host is
+         * expected until its REPORT lands, and the STALE classifier needs
+         * the entry to replay it (it read a dropped entry as truncated). */
         if (efs_export_get_chunk(&g_client.export, ino, ci, &ce) == 0 &&
-            efs_chunk_read_key(&ce) == before[ci - lo])
+            efs_chunk_read_key(&ce) == before[ci - lo] &&
+            !efs_client_putid_owns(ino, ci, ce.generation))
             dropped = efs_export_drop_chunk(&g_client.export, ino, ci);
         pthread_mutex_unlock(&g_client.idx_mu);
         efs_client_unlock_dir(ino);

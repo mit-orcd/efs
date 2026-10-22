@@ -11,6 +11,7 @@ code=r'''
 #include <assert.h>
 #include <stdlib.h>
 #include <time.h>
+static void efs_client_epoch_note(efs_ino_t i,uint64_t e){(void)i;(void)e;}
 uint32_t efs_export_shard_of(efs_ino_t ino,uint32_t bits) {(void)ino;(void)bits;return 0;}
 int efs_chunk_size_valid(uint32_t cs) {return cs==EFS_MIN_CHUNK_SIZE;}
 static uint64_t now=1000,deadline;static unsigned calls,sleeps,freed,drops,releases;

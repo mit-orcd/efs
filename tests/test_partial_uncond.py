@@ -23,6 +23,9 @@ source = r'''
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+uint64_t efs_client_epoch_get(efs_ino_t ino) {(void)ino;return 0;}
+void efs_client_epoch_note(efs_ino_t ino,uint64_t e) {(void)ino;(void)e;}
+int efs_client_putid_owns(efs_ino_t ino,uint32_t ci,uint64_t g) {(void)ino;(void)ci;(void)g;return 0;}
 #define DCACHE_NR 32
 #define DTRACE(...) ((void)0)
 ''' + entry + '\n' + init + '\n' + function('dcache_add_range') + '\n' + function('dcache_apply_init') + r'''

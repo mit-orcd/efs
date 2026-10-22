@@ -6559,6 +6559,19 @@ static void stat_to_inode(const struct efs_meta_stat *st, struct efs_inode *ino)
     ino->alloc_chunks = st->alloc;
 }
 
+/* D25: getattr and truncate replies carry the inode's content epoch, read
+ * from the row after the collect (efs_meta_stat is a persisted query-catalog
+ * row and stays as it is). A newer epoch than the stat is harmless: the
+ * client uses it only to tag images it forms later. */
+static void reply_note_epoch(struct efs_raft_host *h, efs_ino_t ino,
+                             efs_txn_coord_fn coord, void *ctx,
+                             struct efs_inode *out)
+{
+    struct efs_meta_row row;
+    if (efs_meta_apply_get_inode_tx(h->kv, ino, coord, ctx, &row) == EFS_OK)
+        out->content_epoch = row.content_epoch;
+}
+
 /* Fresh create/mkdir: no write lanes, no used dir-shards. The inode row
  * IS the getattr. Skipping host_read_inode_lanes + the full collect saves
  * a ReadIndex (often a follower-forward RPC) on every create. */
@@ -12766,6 +12779,7 @@ void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out)
     set_inode_rc(out, rc, hint);
     if (rc == EFS_OK) {
         stat_to_inode(&st, &out->inode);
+        reply_note_epoch(h, ino, host_txn_read_coord, &txn, &out->inode);
         out->read_node_id = h->s ? h->s->id : 0;
     }
     if (prof) {
@@ -17255,8 +17269,10 @@ static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
     if (rc == EFS_OK)
         rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
     set_inode_rc(out, rc, hint);
-    if (rc == EFS_OK)
+    if (rc == EFS_OK) {
         stat_to_inode(&st, &out->inode);
+        reply_note_epoch(h, ino, host_txn_coord, h, &out->inode);
+    }
 }
 
 /* D25 step 3: the single-entry logical truncate stays behind the eager
@@ -17375,8 +17391,10 @@ static void host_truncate_lazy(efs_ino_t ino, uint64_t size, uint64_t mtime,
     if (rc == EFS_OK)
         rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
     set_inode_rc(out, rc, hint);
-    if (rc == EFS_OK)
+    if (rc == EFS_OK) {
         stat_to_inode(&st, &out->inode);
+        reply_note_epoch(h, ino, host_txn_coord, h, &out->inode);
+    }
 }
 
 void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,

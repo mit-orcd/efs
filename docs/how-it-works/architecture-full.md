@@ -1571,10 +1571,10 @@ history revision persists, g4/g5 gate acceptance. Both call-site audits
 are done (§8). [Step 2](../status/d25-step2-gates-20261021.md) (`3e133c257`): inode-authority
 views, lane adoption, BOOTSTRAP floor; g4/g5 step-2 form PASS on node9901, and a
 pre-existing peer read of truncated data (fails on 47ba6b590) is fixed.
-[Step 3](../status/d25-step3-gates-20261021.md) (lazy 86-byte TRUNCATE, off by default): g0/g1/g2/g4
-PASS, sparse 100 GiB O_TRUNC 0.023 s; g3 FAIL from a pre-existing client bug the
-eager baseline shares (stale cached chunk republished unconditionally after a peer
-truncate). Fixing it gates step 3; step 4 (sweep) follows.
+[Step 3](../status/d25-step3-gates-20261021.md) (lazy 86-byte TRUNCATE, off by default): g0-g4
+PASS on node9901, sparse 100 GiB O_TRUNC 0.024 s, after fixing a pre-existing
+stale-cache republish the eager baseline 47ba6b590 still fails (UNCOND images now
+carry their formation epoch). Step 4 (sweep, SWEEP_DONE/RETIRE, masked packing) is next.
 Earlier reviews and responses are kept as superseded history.
 Replaces the declined 256 MiB EBUSY refusal; W43 stays open.
 

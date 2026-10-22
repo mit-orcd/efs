@@ -475,10 +475,10 @@ and a same-format orderly restart.
    (§3.4), and inode-keyed caches (§3.5). The client stamp is never switched
    without the matching server lane rules. Accepted on **g4**, and on
    **g5** for cache coherence.
-3. **In progress — [step-3 evidence](d25-step3-gates-20261021.md): g0, g1,
-   g2, g4 PASS; g3 FAIL from a pre-existing client bug (unconditional
-   full-image republish of a stale cached chunk after a peer truncate),
-   which the eager baseline also fails.** `TRUNCATE` with receipts (§2),
+3. **Done — [step-3 evidence](d25-step3-gates-20261021.md): g0–g4 PASS
+   after the October 22 fix of a pre-existing stale-cache republish (UNCOND
+   images now carry their formation epoch); lazy truncate stays off by
+   default until step 4.** `TRUNCATE` with receipts (§2),
    behind the old path until **g0–g4**
    pass. Incremental private development is fine; no partly converted path
    is qualified.

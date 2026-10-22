@@ -36,6 +36,9 @@ source = r'''
 #include "efs/write_extent.h"
 #include <limits.h>
 struct efs_client g_client;
+uint64_t efs_client_epoch_get(efs_ino_t ino) {(void)ino;return 0;}
+void efs_client_epoch_note(efs_ino_t ino,uint64_t e) {(void)ino;(void)e;}
+int efs_client_putid_owns(efs_ino_t ino,uint32_t ci,uint64_t g) {(void)ino;(void)ci;(void)g;return 0;}
 int efs_rdma_zc_region_add(void *p, size_t n) { (void)p; (void)n; return 0; }
 #include "bufpool.c"
 #include "writer_state.c"

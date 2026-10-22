@@ -485,6 +485,12 @@ void efs_rdcache_put(efs_ino_t ino, uint32_t ci, const uint8_t *src, uint32_t le
 int efs_rdcache_put_owned(efs_ino_t ino, uint32_t ci, uint8_t *buf,
                           uint32_t len);
 void efs_rdcache_invalidate(efs_ino_t ino, uint32_t ci);
+/* D25: the last inode content epoch a server reply showed for ino (0 when
+ * unknown). A leaf lock only; safe under any other client lock. */
+void efs_client_epoch_note(efs_ino_t ino, uint64_t epoch);
+/* This client's own unreported PUT is the staging entry for (ino, ci). */
+int efs_client_putid_owns(efs_ino_t ino, uint32_t ci, uint64_t gen);
+uint64_t efs_client_epoch_get(efs_ino_t ino);
 
 /* Dirty assembled chunks: combine partial writes and PUT on flush/evict. */
 int efs_dcache_has(efs_ino_t ino, uint32_t ci);

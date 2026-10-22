@@ -332,7 +332,7 @@ static void inode_copy_attr(struct efs_inode_mem *d, const struct efs_inode *s)
     d->imm_tmax = s->imm_tmax;
     d->tree_tmin = s->tree_tmin;
     d->tree_tmax = s->tree_tmax;
-    d->reserved_ino = s->reserved_ino;
+    d->content_epoch = s->content_epoch;
     d->reserved_off = s->reserved_off;
     d->reserved_len = s->reserved_len;
     d->alloc_chunks = s->alloc_chunks;
@@ -367,7 +367,7 @@ static void inode_to_rpc_p(const struct efs_export *ex,
     out->imm_tmax = p->imm_tmax;
     out->tree_tmin = p->tree_tmin;
     out->tree_tmax = p->tree_tmax;
-    out->reserved_ino = p->reserved_ino;
+    out->content_epoch = p->content_epoch;
     out->reserved_off = p->reserved_off;
     out->reserved_len = p->reserved_len;
     out->alloc_chunks = p->alloc_chunks;

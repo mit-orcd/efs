@@ -1141,6 +1141,7 @@ int efs_client_rpc_getattr(efs_export_id_t export_id, efs_ino_t ino,
     if (r.status != EFS_INODE_RPC_OK)
         return rpc_status_to_efs(r.status);
     rpc_learn_leader(&r);
+    efs_client_epoch_note(ino, r.inode.content_epoch);
     if (out)
         *out = r.inode;
     return EFS_OK;
@@ -1975,6 +1976,7 @@ int efs_client_rpc_getchunks_fileid(efs_export_id_t export_id, efs_ino_t ino,
         *inout_count = n;
     if (resolved_generation)
         *resolved_generation = r->generation;
+    efs_client_epoch_note(ino, r->authority_epoch); /* also for an empty reply */
     free(payload);
     return EFS_OK;
 }
@@ -2112,6 +2114,8 @@ int efs_client_rpc_setattr(efs_export_id_t export_id, efs_ino_t ino,
         return rc;
     if (r.status != EFS_INODE_RPC_OK)
         return rpc_status_to_efs(r.status);
+    if (mask & EFS_SETATTR_SIZE)
+        efs_client_epoch_note(ino, r.inode.content_epoch);
     if (out)
         *out = r.inode;
     return EFS_OK;

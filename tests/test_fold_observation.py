@@ -37,6 +37,8 @@ static struct {uint64_t pressure_slots[64][16];} g_dcache;
 #define DTRACE(...) ((void)0)
 #define CS EFS_MIN_CHUNK_SIZE
 struct efs_client g_client;
+uint64_t efs_client_epoch_get(efs_ino_t ino) {(void)ino;return 0;}
+void efs_client_epoch_note(efs_ino_t ino,uint64_t e) {(void)ino;(void)e;}
 ''' + entry + r'''
 static struct dcache_ent slot;
 static struct efs_chunk_entry map, remote, sent_obs;
@@ -122,6 +124,7 @@ int efs_export_add_chunk_delta(struct efs_export *ex,efs_ino_t ino,uint32_t ci,
     if(map.ndelta>=EFS_CHUNK_DELTA_MAX)return EFS_ERR_NOMEM;
     map.deltas[map.ndelta++]=*d;return EFS_OK;
 }
+static uint64_t expect_tag=UINT64_MAX,noted_tag;
 static void putid_note(efs_ino_t ino,uint32_t ci,uint64_t obj,uint64_t seq,
                        const efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
                        const uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE],
@@ -130,7 +133,9 @@ static void putid_note(efs_ino_t ino,uint32_t ci,uint64_t obj,uint64_t seq,
     (void)span_base_gen;
     (void)ino;(void)ci;(void)obj;(void)seq;(void)nodes;(void)sums;
     if (obs && obs->read_view.count) {
-        assert(obs->read_view.fence_epoch == 6);
+        /* A fetched view (epoch 6), or an UNCOND image's formation tag. */
+        assert(obs->read_view.fence_epoch == 6 || obs->read_view.fence_epoch == expect_tag);
+        noted_tag=obs->read_view.fence_epoch;
     }
     ++notes;noted_off=off;noted_len=len;noted_n=n;noted_seq=newest;
 }
@@ -179,8 +184,14 @@ static void put_tests(void) {
     assert(dcache_put_now_budgeted(1,0,slot.data,CS,7,1,0,0,NULL)==EFS_OK);
     assert(notes==1 && noted_n==0 && noted_seq==0);free(slot.data);
     reset();map=remote;map.ndelta=EFS_CHUNK_DELTA_MAX;
+    /* D25: an UNCOND whole image without a view carries the epoch its slot
+     * image was formed at, so the server can refuse one older than a
+     * peer's truncate. */
+    slot.image_epoch=3;expect_tag=3;noted_tag=0;
     assert(dcache_put_now_budgeted(1,0,slot.data,CS,EFS_CHUNK_BASE_UNCOND,1,0,0,NULL)==EFS_OK);
-    assert(notes==1 && noted_n==EFS_CHUNK_DELTA_MAX && noted_seq==9);free(slot.data);
+    assert(notes==1 && noted_n==EFS_CHUNK_DELTA_MAX && noted_seq==9 && noted_tag==3);
+    assert(slot.object_publish_epoch==3 && (slot.object_publish_flags & EFS_CHUNK_REC_F_CAPTURED_EPOCH));
+    expect_tag=UINT64_MAX;free(slot.data);
     reset();map=remote;before=map;add_error=EFS_ERR_NOMEM;
     slot.object_seq=17;slot.nrange=1;slot.roff[0]=100;slot.rlen[0]=64;
     memset(slot.data+100,'N',64);

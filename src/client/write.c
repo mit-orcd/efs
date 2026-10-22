@@ -449,6 +449,22 @@ static int putid_fill(efs_ino_t ino, uint32_t ci, struct efs_chunk_rec *rec,
     return hit;
 }
 
+/* 1 when the staging table's object `gen` for (ino, ci) is this client's
+ * own PUT that no REPORT has confirmed yet: its row may legitimately be
+ * absent on the host, and the entry is the only record of the PUT. */
+int efs_client_putid_owns(efs_ino_t ino, uint32_t ci, uint64_t gen)
+{
+    struct efs_chunk_rec obj;
+    uint64_t seq = 0;
+
+    (void)gen;
+    if (!ino)
+        return 0;
+    /* The STALE classifier's identity sources, in its order. */
+    memset(&obj, 0, sizeof(obj));
+    return putid_fill(ino, ci, &obj, &seq) || dcache_object_of(ino, ci, &obj, &seq);
+}
+
 /* The host committed object `gen` for (ino, ci) (gen 0: the chunk is
  * gone, e.g. truncated). A newer PUT of the same chunk keeps its entry. */
 static void putid_drop(efs_ino_t ino, uint32_t ci, uint64_t gen)
@@ -3263,6 +3279,11 @@ struct dcache_ent {
     /* Committed generation the slot's dirty ranges were patched onto.
      * EFS_CHUNK_BASE_UNCOND = aligned last-writer-wins (no RMW). */
     uint64_t base_gen;
+    /* D25: inode content epoch the slot's image was formed at (a whole-chunk
+     * write, or a base fetched from a view). An UNCOND full image carries it
+     * as its captured epoch, so the server refuses an image built before a
+     * peer's truncate; the replay then overlays only this client's ranges. */
+    uint64_t image_epoch;
     /* Object name + placement of the NEWEST-SNAPSHOT successful PUT. REPORT
      * must send these, not a GETCHUNKS-adopted stub (zero checksums + a KV
      * gen that was never written as `{ci}.{fi}.{gen}`). Two flushes of one
@@ -3770,6 +3791,21 @@ static int dcache_put_now_budgeted(efs_ino_t ino, uint32_t ci, const uint8_t *ch
         export_reserve_chunks_locked(4096);
     uint32_t obs_n = 0;
     uint64_t obs_seq = 0;
+    /* D25: an UNCOND whole image without a fetched view is tagged with the
+     * epoch its slot image was formed at (see dcache_ent.image_epoch). */
+    struct efs_chunk_entry tagobs;
+    const struct efs_chunk_entry *tag = obs;
+    if (!obs && !span && base_gen == EFS_CHUNK_BASE_UNCOND) {
+        uint32_t ts = dcache_slot(ino, ci);
+        struct dcache_ent *te;
+        memset(&tagobs, 0, sizeof(tagobs));
+        tagobs.read_view.count = 1;
+        pthread_mutex_lock(dcache_mu(ts));
+        te = dcache_find_meta(ts, ino, ci);
+        tagobs.read_view.fence_epoch = te ? te->image_epoch : efs_client_epoch_get(ino);
+        pthread_mutex_unlock(dcache_mu(ts));
+        tag = &tagobs;
+    }
     {
         struct efs_chunk_entry ce;
         uint64_t obj = object_gen;
@@ -3848,7 +3884,7 @@ static int dcache_put_now_budgeted(efs_ino_t ino, uint32_t ci, const uint8_t *ch
         pthread_mutex_unlock(&g_client.idx_mu);
         efs_client_unlock_dir(ino);
         putid_note(ino, ci, obj, snap_seq, nodes, checksums,
-                   span ? delta_off : 0, span ? delta_len : 0, obs_n, obs_seq, obs, base_gen);
+                   span ? delta_off : 0, span ? delta_len : 0, obs_n, obs_seq, tag, base_gen);
     }
     {
         uint64_t obj = object_gen;
@@ -3868,9 +3904,9 @@ static int dcache_put_now_budgeted(efs_ino_t ino, uint32_t ci, const uint8_t *ch
             de->object_delta_base_n = obs_n;
             de->object_delta_base_seq = obs_seq;
             de->object_file_generation = 0;
-            de->object_publish_epoch = obs ? obs->read_view.fence_epoch : 0;
+            de->object_publish_epoch = tag ? tag->read_view.fence_epoch : 0;
             de->object_publish_flags = EFS_CHUNK_REC_F_FRESH_OBJECT |
-                (obs && obs->read_view.count ? EFS_CHUNK_REC_F_CAPTURED_EPOCH : 0);
+                (tag && tag->read_view.count ? EFS_CHUNK_REC_F_CAPTURED_EPOCH : 0);
             DTRACE(de, "put-record obj=%llx seq=%llu",
                    (unsigned long long)obj, (unsigned long long)snap_seq);
         } else {
@@ -4961,6 +4997,7 @@ static int dcache_patch_full(efs_ino_t ino, uint32_t ci, const uint8_t *src,
     e->have_base = 1;
     e->nrange = 0;
     e->base_gen = EFS_CHUNK_BASE_UNCOND;
+    e->image_epoch = efs_client_epoch_get(ino);
     e->img_seq = dcache_seq_now();
     pthread_mutex_unlock(mu);
     efs_rdcache_invalidate(ino, ci);
@@ -5526,6 +5563,7 @@ static void dcache_apply_init(struct dcache_ent *e,
         e->have_base = 1;
         e->nrange = 0;
         e->base_gen = EFS_CHUNK_BASE_UNCOND;
+        e->image_epoch = efs_client_epoch_get(e->ino);
         return;
     }
     e->have_base = in->have_base;
@@ -6946,6 +6984,10 @@ static int dcache_replay_stale_ex_budgeted(efs_ino_t ino, uint32_t ci, int absen
     if (e && e->data && e->len >= len) {
         if (e->base_gen != EFS_CHUNK_BASE_UNCOND)
             e->base_gen = bg;
+        /* The image now rests on the base just fetched (or on an absent row,
+         * whose GETCHUNKS still carried the inode epoch). */
+        e->image_epoch = have_obs && obs.read_view.count ? obs.read_view.fence_epoch :
+                         efs_client_epoch_get(ino);
         dcache_install_image(e, base, len, seq);
         if (rc == EFS_OK && (absent || obs.read_view.count) &&
             e->mutation == mutation && e->object_seq == seq) {
