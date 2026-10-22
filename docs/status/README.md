@@ -119,7 +119,9 @@ links in 96 pages now name the archived path. Read one with
   in `getenv` on per-op paths. Fixed, deployed in `46496416e` and verified.
 - New [W144](../backlog/work-items.md#w144): with split leadership,
   LOOKUP/GETATTR at a group follower took `h->mu` for the leader hint (22%
-  of lock waits). Fixed with the lock-free published view; deploy pending.
+  of lock waits). Fixed, deployed in `784bcc6ee` and verified.
+- Observation: at ~16 M files, leader terms move under load (group 2:
+  58 → 63 in 15 min). Cause not shown; not filed.
 
 [W126 on orcd-mini, `8fb4247ad` A/B](orcd-mini-w126-ab-8fb4247ad-20261022.md):
 **deployed. Lock-wait gate PASS; create-rate gate FAIL.**

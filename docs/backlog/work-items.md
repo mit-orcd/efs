@@ -6063,7 +6063,7 @@ The client is not the throughput limit here: both mounts used only
 <a id="w144"></a>
 ## W144 — LOOKUP/GETATTR on a group follower takes `h->mu` for the leader hint
 
-**Performance; opened 2026-10-22; fix implemented; `make test` 816/816 with one environmental failure; deploy and split-leader re-profile pending.**
+**Performance; opened 2026-10-22; deployed in `784bcc6ee`. Verified with split leadership (n3 led group 0, n2 led group 2): `host_namespace_leader_hint` no longer appears in the leaders' lock waits. `make test` 816/816 with one environmental failure.**
 Found in the orcd-mini profile on `46496416e`
 ([profile, p2](../status/orcd-mini-profile-08cc16af4-20261022.md)). There,
 leadership was split: n2 led group 0 and n1 led group 2. On n1,

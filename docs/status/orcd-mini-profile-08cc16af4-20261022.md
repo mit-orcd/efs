@@ -98,6 +98,34 @@ existing PIDs). A second node9901 mount for another session's suite
 - Raw: Mac `p2/node9901.txt`, `p2/node9900.txt` and `p2/getenv-check.txt`;
   node paths as for p1, under `p2`.
 
+## Repeat on `784bcc6ee` (W143 + W144 deployed), p3 — 2026-10-22 12:53Z
+
+- **Deploy.** Release `784bcc6ee7f1` was built on both nodes:
+  - efsd `d420a43624ebc363…`;
+  - node9901 efs-fuse `2ddbf9310cfc3c62…`;
+  - node9900 efs-fuse `e4dff1426d734d2d…`.
+
+  The procedure was the same as for p2. The ssh session dropped after the
+  node9901 restart, and the node9900 client switch and mount were
+  completed by hand. Result: 3/3 identical versions, roots `stopped clean`,
+  no recovery, refusal, abort or assert lines, POSIX smoke 216/216.
+- **Workload.** The same two writers, in fresh directories, captured about
+  6 minutes in, then stopped. Creates were 102 + 639/s, against 592 + 204
+  in p2. Both points are at about 16 M files, so the totals (741 vs 796)
+  are equal within noise.
+- **W144 verified.** Leadership split again during the run (n3 led group 0,
+  n2 led group 2). `host_namespace_leader_hint` no longer appears in any
+  lock-wait list; it was 22.1% of n1's in p2. The leaders now wait on
+  proposals (n3, 47%) and on `kv_wal_fsync_to_locked` and
+  `host_pending_reads` (n2, 37% and 25%).
+- **Observation (not filed).** Group 2's term went from 58 to 63 within
+  ~15 minutes after the restart, and group 0's from 57 to 58, with no log
+  line naming an election. `apply-sleep` ran 1,700–6,200 per node per
+  window, with a mean of 70–100 ms. This fits the known snapshot
+  export/import stalls at this size (4–5 GB per export), but this profile
+  does not show the cause.
+- Raw: Mac `p3/`; node paths as for p1, under `p3`.
+
 ## Reproduce
 
 Scripts are kept with the raw captures in

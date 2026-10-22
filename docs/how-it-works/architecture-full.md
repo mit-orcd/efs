@@ -1670,7 +1670,9 @@ links in 96 pages now name the archived path. Read one with
   in `getenv` on per-op paths. Fixed, deployed in `46496416e` and verified.
 - New [W144](#w144): with split leadership,
   LOOKUP/GETATTR at a group follower took `h->mu` for the leader hint (22%
-  of lock waits). Fixed with the lock-free published view; deploy pending.
+  of lock waits). Fixed, deployed in `784bcc6ee` and verified.
+- Observation: at ~16 M files, leader terms move under load (group 2:
+  58 → 63 in 15 min). Cause not shown; not filed.
 
 [W126 on orcd-mini, `8fb4247ad` A/B](../status/orcd-mini-w126-ab-8fb4247ad-20261022.md):
 **deployed. Lock-wait gate PASS; create-rate gate FAIL.**
@@ -2343,7 +2345,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | reclaim-test-flake | **W141** · `test_reclaim` fail-closed recovery waits a fixed 5 s | verification flake | OPEN: one failure under suite load, 10/10 direct reruns pass | [item](#w141) |
 | cleanup-leftovers | **W142** · store `del_if_sum` and RDMA zero-copy region table without a reader | maintenance | OPEN | [item](#w142) |
 | client-getenv | **W143** · efs-fuse reads diagnostic environment switches on per-op paths (~4% of client CPU) | performance | DEPLOYED on orcd-mini `46496416e`: `getenv` gone from both clients' profiles (was ~4% of efs-fuse CPU); `make test` 816/816 (1 environmental docs-check failure) | [item](#w143) · [evidence](../status/orcd-mini-profile-08cc16af4-20261022.md) |
-| leader-hint-lock | **W144** · LOOKUP/GETATTR on a group follower takes `h->mu` for the leader hint (22% of a split leader's lock waits) | performance | OPEN: fix implemented (lock-free `host_route_voters`); routing tests PASS, `make test` 816/816 (1 environmental docs-check failure); deploy and split-leader re-profile pending | [item](#w144) · [evidence](../status/orcd-mini-profile-08cc16af4-20261022.md) |
+| leader-hint-lock | **W144** · LOOKUP/GETATTR on a group follower takes `h->mu` for the leader hint (22% of a split leader's lock waits) | performance | DEPLOYED on orcd-mini `784bcc6ee`: the leader-hint lock site is gone with split leadership (was 22% of n1's lock waits); routing tests PASS, `make test` 816/816 (1 environmental docs-check failure) | [item](#w144) · [evidence](../status/orcd-mini-profile-08cc16af4-20261022.md) |
 | orcd-qualification | **W119** · ORCD normal-operation RDMA failures and blocked clean stop | correctness / liveness | OPEN: 150 concurrent failures /846 NOTRUN; cross-host peer59/67; enabled queries EBUSY; retained writes block clean stop. TCP/commands-off rerun also FAILs (120 failures,520 NOTRUN; peer61/67; clean stop refused); all23 successfully prepared cold cases verify after authorized forced restart. [TCP evidence](../status/orcd-tcp-direct-disabled-20261015.md). Preserve failures, isolate causes and rerun original gates; W100 stays closed. [AMD follow-up](../status/amd-rdma-posix-20261015.md): native/serial/peer/cold/degraded PASS at `c8d057391`; one-mount jobs16 remains215/216 with unusual-name timeout. [Async durability follow-up](../status/amd-async-durability-20261015.md) at `c4178ea81`: scoped durability/native/serial/peer/cold/degraded PASS; jobs16 FAIL214/216 (unusual names, concurrent creates,15s) | [Raft/KV follow-up](../status/orcd-raft-kv-20261016.md) · [evidence and gates](../status/orcd-devel-qualification-20261015.md) · [item](#w119) |
 | immediate-readback | **W121** · successful fsync followed by previous-file payload | data correctness | OPEN: 255/123,932 exact readbacks failed across both queued-vote variants on ORCD native RDMA/direct with enabled `.efs`; unique512-byte files, no expiry. Diagnosed FUSE kernel fork/read page-pinning defect; kernel remediation deferred by user. Fork-isolated experiments do not close W121 | [diagnosis](../status/orcd-w121-fork-read-20261016.md) · [experiment](../status/orcd-queued-read-vote-20261016.md) · [item](#w121) |
 | qualification-fixtures | **W120** · stale extracted LOOKUP stub and command cleanup ownership check | verification correctness | OPEN (partial fix): AMD `f6235bb73` repairs the LOOKUP host context and checks reader identity; native/docs PASS at `85a9ad6b5`. Enabled-command cleanup ownership remains NOTRUN here and still needs correction/acceptance. [AMD evidence](../status/amd-rdma-posix-20261015.md); preserve original failures | [evidence](../status/orcd-devel-qualification-20261015.md) · [item](#w120) |
@@ -8729,7 +8731,7 @@ The client is not the throughput limit here: both mounts used only
 <a id="w144"></a>
 ### W144 — LOOKUP/GETATTR on a group follower takes `h->mu` for the leader hint
 
-**Performance; opened 2026-10-22; fix implemented; `make test` 816/816 with one environmental failure; deploy and split-leader re-profile pending.**
+**Performance; opened 2026-10-22; deployed in `784bcc6ee`. Verified with split leadership (n3 led group 0, n2 led group 2): `host_namespace_leader_hint` no longer appears in the leaders' lock waits. `make test` 816/816 with one environmental failure.**
 Found in the orcd-mini profile on `46496416e`
 ([profile, p2](../status/orcd-mini-profile-08cc16af4-20261022.md)). There,
 leadership was split: n2 led group 0 and n1 led group 2. On n1,
