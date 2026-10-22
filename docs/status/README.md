@@ -116,10 +116,10 @@ links in 96 pages now name the archived path. Read one with
   and apply lag (known plan).
 - W126's LSM fix holds: 1.4% lock waits.
 - New [W143](../backlog/work-items.md#w143): efs-fuse spent ~4% of its CPU
-  in `getenv` on per-op paths. Fixed, deployed in `46496416e` and verified.
+  in `getenv` on per-op paths. Fixed, deployed in `46496416e`, verified and closed.
 - New [W144](../backlog/work-items.md#w144): with split leadership,
   LOOKUP/GETATTR at a group follower took `h->mu` for the leader hint (22%
-  of lock waits). Fixed, deployed in `784bcc6ee` and verified.
+  of lock waits). Fixed, deployed in `784bcc6ee`, verified and closed.
 - Observation: at ~16 M files, leader terms move under load (group 2:
   58 → 63 in 15 min). Cause not shown; not filed.
 

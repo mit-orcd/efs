@@ -6025,7 +6025,7 @@ gate changes.
 <a id="w143"></a>
 ## W143 — efs-fuse reads diagnostic environment switches on per-op paths
 
-**Performance; opened 2026-10-22; deployed in `46496416e`. Verified: `getenv` is gone from both clients' on-CPU profiles under the same load. `make test` 816/816 with one environmental failure (docs check without `results/`).**
+**Performance; opened and closed 2026-10-22 (both gates recorded); deployed in `46496416e`. Verified: `getenv` is gone from both clients' on-CPU profiles under the same load. `make test` 816/816 with one environmental failure (docs check without `results/`).**
 Found by passively profiling orcd-mini on `08cc16af4` under two
 `tiny_files.py` writers ([profile](../status/orcd-mini-profile-08cc16af4-20261022.md)).
 On the node9901 client, `getenv` was 2.9% self and 3.7% with children of
@@ -6063,7 +6063,7 @@ The client is not the throughput limit here: both mounts used only
 <a id="w144"></a>
 ## W144 — LOOKUP/GETATTR on a group follower takes `h->mu` for the leader hint
 
-**Performance; opened 2026-10-22; deployed in `784bcc6ee`. Verified with split leadership (n3 led group 0, n2 led group 2): `host_namespace_leader_hint` no longer appears in the leaders' lock waits. `make test` 816/816 with one environmental failure.**
+**Performance; opened and closed 2026-10-22 (both gates recorded); deployed in `784bcc6ee`. Verified with split leadership (n3 led group 0, n2 led group 2): `host_namespace_leader_hint` no longer appears in the leaders' lock waits. `make test` 816/816 with one environmental failure.**
 Found in the orcd-mini profile on `46496416e`
 ([profile, p2](../status/orcd-mini-profile-08cc16af4-20261022.md)). There,
 leadership was split: n2 led group 0 and n1 led group 2. On n1,
