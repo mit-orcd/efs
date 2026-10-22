@@ -135,9 +135,12 @@ disagree, the index wins" is a fallback, not a substitute for the tables
 being single-sourced.
 
 The gate is `docs/check-architecture.py` (stdlib only). Run it with
-`make docs-check` (login-node safe) or as part of `make test` on a build
-node. It regenerates `architecture-full.md` into a temp file and diffs;
-it never clobbers the checked-in copy.
+`make docs-check` (login-node safe). It is not part of `make test`: the
+link check resolves into `results/`, which release trees and archived
+copies omit, and a docs failure must not stop the code tests (W135).
+`make check` runs both gates to completion and fails if either does. It
+regenerates `architecture-full.md` into a temp file and diffs; it never
+clobbers the checked-in copy.
 
 **Why it is in the architecture and not a style guide:** the migration
 (§10 of the spec) lands Raft, KV, and the transaction protocol as *new*

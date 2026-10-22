@@ -175,7 +175,7 @@ BLAKE3_OBJS = $(BLAKE3_DIR)/blake3.o \
               $(BLAKE3_DIR)/blake3_dispatch.o \
               $(BLAKE3_ARCH_SRCS:.c=.o)
 
-.PHONY: all clean tests test test-client-memory docs-check blake3-bench FORCE
+.PHONY: all clean tests test check test-client-memory docs-check blake3-bench FORCE
 
 .PHONY: test-fence-read test-fence-view test-lookup-memo test-fold-observation test-create-errors test-report-pressure
 test-report-pressure:
@@ -336,9 +336,14 @@ all: $(LIB) efsd efs-fuse efs-bench efs-mgmt tests
 FORCE:
 
 # Architecture doc machine-gate (docs/how-it-works/developing.md). Python only;
-# safe on the login node. `make test` on a build node runs it too.
+# safe on the login node. It links into results/, which release trees and
+# archived copies omit, so it is not part of `test` (W135): `check` runs
+# both gates independently and fails if either does.
 docs-check:
 	python3 docs/check-architecture.py
+
+check:
+	@rc=0; $(MAKE) test || rc=1; $(MAKE) docs-check || rc=1; exit $$rc
 
 test: all
 	python3 tests/test_retired_root_markers.py
@@ -456,7 +461,7 @@ test: all
 	python3 tests/test_bench_cli.py
 	python3 tests/test_bench_profile.py
 	python3 tests/test_storage_principles.py
-	python3 docs/check-architecture.py
+	python3 tests/test_make_test_recipe.py
 	$(MAKE) test-fence-read
 	$(MAKE) test-fence-view
 	$(MAKE) test-dirty-ranges

@@ -5838,9 +5838,9 @@ must leave the cursor unchanged.
 <a id="w135"></a>
 ## W135 — A plain `make test` stops at the docs gate before the code tests
 
-**Test reporting; opened 2026-10-21 from the audit T1; OPEN.**
-- `python3 docs/check-architecture.py` is a command in the middle of the
-  `test` recipe (`Makefile:455`).
+**Test reporting; opened 2026-10-21 from the audit T1; FIXED on `devel-k25` (October 22), gate run on efs3 below.**
+- `python3 docs/check-architecture.py` was a command in the middle of the
+  `test` recipe (`Makefile:455` at `0bdf55256`).
 - On `0bdf55256` it failed `regen-diff` (a status README edit without
   regeneration), so 162 of the 276 recipe commands never ran, including every
   `./tests/test_*` unit binary.
@@ -5860,6 +5860,22 @@ must leave the cursor unchanged.
 - `test` reports a nonzero aggregate if either fails.
 - Moving the line, or making it a prerequisite, does not help: a failing
   prerequisite also stops the recipe.
+
+**Fix (October 22, `devel-k25`, alpha K25):**
+- The docs gate is out of the `test` recipe. It stays `make docs-check`;
+  the new `make check` runs `test` and `docs-check` each to completion and
+  exits nonzero if either failed. The gate itself is unchanged.
+- A second reason, found while fixing: the link check resolves into
+  `results/`, which release trees and archived copies omit, so the gate
+  failed every `make test` on a node tree (see the orcd-mini deploy and
+  tiny-profile pages). The code gate no longer depends on `results/`.
+- Regression check: `tests/test_make_test_recipe.py` (in `make test`)
+  parses `make -n test` and fails if any command names the docs gate.
+- `scripts/make_test_summary.sh` is unchanged: it runs the `test` recipe's
+  commands, which are now the code tests only. Run `make docs-check` where
+  the docs and `results/` exist (the Mac checkout).
+- Gate: `make test` on efs3 and `make docs-check` on the Mac, recorded in
+  the K25 report.
 
 <a id="w136"></a>
 ## W136 — `test_pressure_cohort.py` broken since the packing removal
