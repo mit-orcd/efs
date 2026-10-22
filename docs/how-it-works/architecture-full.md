@@ -1569,6 +1569,11 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[W87/K9 append oracle on efs2](../status/w87-append-oracle-efs2-20261022.md):
+**INCOMPLETE: not reproduced, no root cause; W87 OPEN.** 23 exact rounds, 19,597 acknowledged records on
+a private 3-daemon TCP buffered cluster under churn/GC and POSIX load; no loss,
+duplicate or reorder warm or cold. No fix; bounded rerun NOTRUN.
+
 [K22 / W23 follower memory/lag bound](../../results/measure/20261022-k22-follower-bound/SUMMARY.md):
 **implemented on `devel-k22` (not merged); unit test (EFS_FAULTS stall
 hook) and `make test` PASS on efs3; the plateau measurement on a real cluster
@@ -2516,7 +2521,7 @@ positions do not assign an execution order or override the active handoff.
 | proto3 | **W84** · bounded namespace transactions | namespace completeness | Closed for accepted D32 144-participant envelope: distinct EOVERFLOW, prompt atomic refusal diagnostics, mixed boundaries, full64-lane removal/replacement, exact144 PREPARE/COMMIT cold recovery and AMD normal/fault POSIX/GC gates pass; larger-operation protocol deferred | [closure and limits](../status/w84-closure-20261009.md) |
 | storage1 | **W85** · path-hint eviction loses ambiguous PUT retry history | conditional accounting/storage correctness | Closed: ambiguous PUT placement retained in 389a8baf; direct/buffered real lost-ACK collision and two-root physical/quota/restart gates pass | [evidence and gate](#w85) |
 | gc-own | **W86** · durable PUT ticket integration | feature / safe reclamation | metadata ledger, budgeted retained admission and ticket-bound durable publication receipts implemented (`22c8c1f9`, `70daa5a4`); AMD same/cross-group lost replies, leader death, cold replay, collision and revocation pass; default PUT/flush, storage fences and all-member abandoned collection remain staged | [evidence and gate](#w86) · [D31](#d31--recorded-abandoned-upload-policy) |
-| append-load | **W87** · buffered concurrent append loses records under load | correctness investigation | failure recorded in private GC fixture; isolated repeats pass; full traced acceptance owed | [evidence and gate](#w87) |
+| append-load | **W87** · buffered concurrent append loses records under load | correctness investigation | failure recorded in private GC fixture; isolated repeats pass; Oct 22 efs2 exact-oracle attempt (23 rounds, 19,597 records, churn/GC/POSIX load) did not reproduce; full traced acceptance owed | [evidence and gate](#w87) · [Oct 22 attempt](../status/w87-append-oracle-efs2-20261022.md) |
 | replay-span | **W88** · folded span retry resurrects after bounded history eviction | publication/retry correctness | partial — actual cross-group typed cache/host replay preserves peer bytes and cold mappings on AMD direct/TCP; production flush/ticket integration and full replay gates remain open | [evidence and gate](#w88) · [Oct9 checkpoint](../status/dependency-package-20261009.md#retained-typed-publication-writeback--staged-amd-gated) |
 | measure-fields | **W89** · W23 TSV field merging shifts derived metrics | verification correctness | Closed measurement defect: explicit schema and raw-field identity regressions pass; fresh AMD real-cap/quorum/recovery/cold-value gate passes (276 observations); D30/W23 bounds remain open | [closure and limits](../status/amd-non-rdma-20261010.md#w89) |
 
@@ -6630,6 +6635,14 @@ Default FUSE flush, durable per-ticket membership capture and all-member abandon
 collection remain open. [Checkpoint](../status/dependency-package-20261009.md#exact-finish-apply-and-ticketed-put-receiver--oct-10-0600-utc).
 
 ### W87 · Buffered concurrent append loses records under broader load
+
+**Oct 22 efs2 reproduction attempt (K9):** a new exact append oracle
+(`tests/live/append_oracle.py`, classification unit test in `make test`) ran 23
+rounds, 19,597 acknowledged records, on a private 3-daemon TCP buffered cluster
+under churn/GC, a 4 MiB client cache and concurrent POSIX load. No record was
+lost, duplicated, torn or reordered warm or cold. Not reproduced on devel
+`7c510c60f`; INCOMPLETE, no root cause or fix; keep W87 open. Bounded rerun NOTRUN.
+[Summary and commands](../status/w87-append-oracle-efs2-20261022.md).
 
 **Oct 11 NUC integration acceptance:** merged fixed core passes full POSIX
 216/216 and peer 67/67 in both direct and buffered modes. An additional focused

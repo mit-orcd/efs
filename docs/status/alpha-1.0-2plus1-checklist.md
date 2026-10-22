@@ -100,7 +100,7 @@ row is checked again on current devel before work starts.
 | K6 | **W127–W131** fail-closed apply (in devel since `08cc16af4`; private RDMA gate PASS) | correctness | VERIFY multi-host |
 | K7 | **W83** transaction decision records are never retired | lifecycle / growth | FIX |
 | K8 | **W148** modify-under-load returned wrong bytes, correct size, on a never-packed 3.6 MB file | data correctness | FIXED, merged Oct 22 (`71ce4ff35` on devel). Root cause: `dcache_apply_init` let a partial write with a loaded base keep the slot's UNCOND base, so the flush published the write-time image (from an unrefreshed local chunk entry: zeros or a peer's lost bytes) as the whole chunk with no merge and no CAS. Reproduced 3× in 9 attempts on node9901 (RDMA, devel `7c510c60f`); a cold read from a fresh client returned the same bad bytes. The two-client regression (`tests/posix/posix_2client.py`) fails 3/3 before and passes 3/3 after. VERIFY: the w125 modify rerun on the fixed build is NOTRUN; the kept W148 stores and hashes are in the session hand-over ([review](review-pack-validate-once-20261022.md)) |
-| K9 | **W87** buffered concurrent append loses records under load | data correctness | FIX |
+| K9 | **W87** buffered concurrent append loses records under load | data correctness | **INCOMPLETE** (Oct 22): not reproduced (23 oracle rounds, 19,597 records, churn/GC/POSIX load on efs2; VM run, not formal evidence; [attempt](w87-append-oracle-efs2-20261022.md)); no root cause, no fix. The exact oracle (`tests/live/append_oracle.py`, `append_oracle_cluster.sh`) and `tests/test_append_oracle.py` are in devel for the parent session to run on the real clusters |
 | K10 | **W121** a read right after a successful fsync returns the previous file's payload (FUSE kernel fork/page-pinning; kernel fix deferred) | data correctness | DECIDE |
 | K11 | **W55** span committed but fragment PUTs never landed | data correctness | VERIFY Linux FUSE. NFS re-export and macOS clients are **DECIDED out of alpha** (user, Oct 22): beta backlog **W152**; their W55 triggers are not isolated in alpha |
 | K12 | **W58** `O_EXCL` create answered EEXIST (historical trigger not isolated) | correctness | VERIFY |
@@ -136,7 +136,7 @@ cluster. No row was found already fixed.
 | K6 | Merged. Remaining: the W130 one-replica DIR fault injection, and multi-host runs. |
 | K7 | Open. `EFS_KV_KIND_DECISION` keys are written and read (`txn.c:972`, `:996`); nothing deletes them. |
 | K8 | Fixed Oct 22 (`71ce4ff35`); see the K row. |
-| K9, K13–K16 | Open; backlog unchanged since Oct 11–15 (W87, W88, W86, W77, W64, W52, W75). |
+| K9, K13, K14 | K9 INCOMPLETE (harness merged, not reproduced); K13, K14 await the user's scope decision; K15 and K16 are fixed (see their rows). |
 | K10 | Open. User-deferred kernel fix; test harnesses now isolate it (`exclusive_create_visibility.py --spawn`). |
 | K11, K12, K17–K20 | VERIFY. The fixes are recorded on NUC/AMD/TCP or private stores; the alpha profile on separate hosts is NOTRUN. |
 | K21 | W119's evidence (Oct 15) predates the RDMA, query, apply and Raft fixes since then. Rerun its original gates before diagnosing. W65 is closed for TCP only; it overlaps K1 part 4. |
