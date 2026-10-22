@@ -3334,6 +3334,12 @@ static int host_session_combined_group(const uint8_t *cmd,uint32_t clen,uint8_t 
 static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t term, uint8_t group,
                                const uint8_t *cmd, uint32_t clen)
 {
+    /* W140: the same predicate every proposal path refuses on
+     * (host_tag_refused). A tag outside it never reaches a handler; the
+     * fall-through at the end still halts on anything a handler cannot
+     * decode. */
+    if (!efs_md_cmd_applicable(cmd[0]))
+        return EFS_ERR_UNSUPPORTED;
     if(cmd[0]==EFS_MD_CMD_CREATE_REFUSAL) {
         if(clen!=5+HOST_OPID_TRAILER || rd32be(cmd+1)>EFS_KV_SHARD_MASK ||
            group!=efs_raft_shard_group(rd32be(cmd+1)))return EFS_ERR_PROTO;
@@ -4942,6 +4948,36 @@ static int host_mark_durable_covered(struct efs_raft_host *h, uint8_t group,
  * command was forwarded: the leader matched (idx, term) itself before it
  * replied and its reply rc is the verdict; the local wait on rep.index is
  * only read-your-writes (a committed index is unique). */
+/* W140: a command tag this build cannot apply is refused before any log
+ * append, by the predicate host_apply_dispatch decides on
+ * (efs_md_cmd_applicable). One committed entry with such a tag halts the
+ * group at apply (W127), so every proposal path passes here: the submit
+ * RPC, the inode RPC handlers, background reclaim and the packer
+ * (host_bg_propose / server_raft_host_pack_propose). A forwarded command
+ * meets the same gate on the leader. Logged at most once per second, with
+ * the number of refusals suppressed since the previous line. */
+static int host_tag_refused(uint8_t group, const uint8_t *cmd, uint32_t clen)
+{
+    static uint64_t last_us, suppressed;
+    uint64_t now, last, skipped;
+
+    if (!clen || efs_md_cmd_applicable(cmd[0]))
+        return 0;
+    now = now_us_();
+    last = __atomic_load_n(&last_us, __ATOMIC_RELAXED);
+    if (now - last < 1000000ull ||
+        !__atomic_compare_exchange_n(&last_us, &last, now, 0,
+                                     __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+        __atomic_add_fetch(&suppressed, 1, __ATOMIC_RELAXED);
+        return 1;
+    }
+    skipped = __atomic_exchange_n(&suppressed, 0, __ATOMIC_RELAXED);
+    fprintf(stderr, "raft-host: group=%u refused proposal tag=%u len=%u: "
+            "not a log command this build applies (suppressed=%llu)\n",
+            group, (unsigned)cmd[0], clen, (unsigned long long)skipped);
+    return 1;
+}
+
 static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
                         const uint8_t *cmd, uint32_t clen, uint64_t *idx,
                         uint64_t *term, int *leader_hint, int local_only)
@@ -4956,6 +4992,9 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
 
     if (term)
         *term = 0;
+    /* W140: never append a tag the apply cannot handle. */
+    if (host_tag_refused(group, cmd, clen))
+        return EFS_ERR_PROTO;
     /* W127/B4: an incompatible group accepts no new entries. */
     if (host_group_incompatible(h, group))
         return EFS_ERR_UNSUPPORTED;
@@ -12071,7 +12110,9 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     group = payload[0];
     cmd = payload + 1;
     clen = plen - 1;
-    /* Never propose reserved commands/requests. */
+    /* Never propose reserved commands/requests. Any other tag this build
+     * does not apply is refused by host_tag_refused on the way into the
+     * log (W140); RPC-only requests answer above that gate. */
     if(clen && EFS_MD_CMD_IS_RESERVED(cmd[0])) {
         out->rc=EFS_ERR_PROTO;return;
     }

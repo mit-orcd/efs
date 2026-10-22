@@ -1,6 +1,8 @@
 #ifndef EFS_META_CMD_H
 #define EFS_META_CMD_H
 
+#include <stdint.h>
+
 /* Raft log command namespace for the metadata engine (architecture.md
  * §7 / §10 step 10.5). Byte 0 is the command tag; multi-byte fields are
  * big-endian. The simulator (src/sim/sim_internal.h SIM_CMD_*) uses the
@@ -196,5 +198,41 @@
  * admission/authority/selection refusal, before transaction callbacks.
  * It never certifies a completion or retirement transaction's BUSY. */
 #define EFS_MD_SESSION_APPEND_RETRY_SALT 3ull
+
+/* W140: the log commands this build applies. host_apply_dispatch
+ * (src/server/raft_host.c) handles exactly these tags, and every proposal
+ * path refuses any other tag before it reaches the log (one committed entry
+ * with an unknown tag halts the group at apply, W127). The dispatcher
+ * checks the same predicate first and still halts on anything a handler
+ * cannot decode. Add a tag here only together with its dispatch arm;
+ * tests/test_submit_unknown_tag.py fails when the two drift. RPC-only
+ * requests (EFS_MD_REQ_*) and the host-only CFG are never log commands and
+ * never belong here. */
+#define EFS_MD_CMD_APPLIED(X) \
+    X(CREATE) X(UNLINK) X(PUBLISH) X(PREPARE) X(DECIDE) X(RESOLVE) X(DROP) \
+    X(SESSION) X(DIR) X(LOCK) X(SETATTR) X(UTIMENS) X(TRUNCATE) \
+    X(APPEND_RSV) X(MKFS) X(ACTIVATE_LANE) X(GC_ACK) X(RMDIR) X(SALT) \
+    X(XATTR) X(PUBLICATION) X(PUBLICATION_RETIRE) X(ORPHAN_REAP) \
+    X(PUBLICATION_ADMIT) X(CLOSE_CLEANUP) X(CLOSE_STEP) X(PUT_TICKET_ADMIT) \
+    X(REPORT_PUBLISH) X(PUT_TICKET_RETIRE_PUBLISHED) X(QUERY_POLICY) \
+    X(APPEND_CATCHUP) X(APPEND_ATOMIC) X(APPEND_COMPLETE_ATOMIC) \
+    X(EXPIRY_POLICY) X(EXPIRY_RENEW) X(CREATE_REFUSAL) \
+    X(LANE_SWEEP_MULTI) X(REAP_MULTI) \
+    X(PACK_ADMIT) X(PACK_SWITCH) X(PACK_CANCEL) X(PACK_RETIRE) \
+    X(PACK_UNINDEX) X(PACK_INDEX) \
+    X(BOOTSTRAP_LANE) X(TRUNC_SWEEP) X(SWEEP_DONE) X(RETIRE)
+
+/* 1 when byte 0 of a log command names a command this build applies. */
+static inline int efs_md_cmd_applicable(uint8_t tag)
+{
+    switch (tag) {
+#define EFS_MD_CMD_APPLIED_CASE(name) case EFS_MD_CMD_##name:
+    EFS_MD_CMD_APPLIED(EFS_MD_CMD_APPLIED_CASE)
+#undef EFS_MD_CMD_APPLIED_CASE
+        return 1;
+    default:
+        return 0;
+    }
+}
 
 #endif
