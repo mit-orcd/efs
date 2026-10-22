@@ -128,7 +128,7 @@ cluster. No row was found already fixed.
 
 | Row | Finding on devel |
 | --- | --- |
-| K1 | Root cause fixed (`76614e8e8`, regression test). Four parts still open, as listed in W145: (1) why a near follower got a 4.7 GB snapshot instead of a tail walk-back (likely a `match_index` 0 rejection resetting `next_index` to 1); (2) whether a client was acknowledged for 30,929,219@62; (3) hundreds of elections per restart; (4) a daemon blocked in a group read outlasts `stop.sh`'s wait. The private reproduction gate is NOTRUN. |
+| K1 | Root cause fixed (`76614e8e8`, regression test). The four W145 parts are done on branch `devel-k01` ([note](k01-w145-remaining-20261022.md)): (1) a match-0 commit-probe ACK reset `next_index` to 1, so the leader sent a snapshot; fixed, and conflict hints skip the term run; (2) 30,929,219@62 was **not** acknowledged to any client; (3) restart election storms fixed with pre-vote (efs1 cluster PASS); (4) efsd stops are bounded. Unit tests PASS. Open: orcd-mini deploy and restart gate, and the private deposed-leader reproduction, both NOTRUN. |
 | K2 | Open. Submit still refuses only `EFS_MD_CMD_IS_RESERVED` (`raft_host.c:3381`, `:12075`). |
 | K3 | Open. `handler.c:856` still handles `EFS_MSG_NODE_LEFT`; nothing sends it. |
 | K4 | Open. Only three requests need a declaration (`handler.c:200`), the version check is `>=` (`:219`), and `scripts/w125_p3_compat.sh` still expects old clients to work. |

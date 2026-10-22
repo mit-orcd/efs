@@ -6094,7 +6094,7 @@ assertions are unchanged and PASS. `test_host_cover_route` and
 <a id="w145"></a>
 ## W145 — A follower commits its own unproven log tail after an InstallSnapshot
 
-**Raft safety; opened 2026-10-22. Root cause fixed and deployed (`76614e8e8`); orcd-mini n2 repaired 16:20Z with `efs-mgmt raft-resync`. Still open: the acknowledged-write check and the restart election storms.** Seen on orcd-mini (`784bcc6ee`, two
+**Raft safety; opened 2026-10-22. Root cause fixed and deployed (`76614e8e8`); orcd-mini n2 repaired 16:20Z with `efs-mgmt raft-resync`. The four remaining parts are fixed or answered on branch `devel-k01` (no client was acknowledged for 30,929,219@62); orcd-mini deploy gate NOTRUN.** Seen on orcd-mini (`784bcc6ee`, two
 `tiny_files.py` writers, ~16 M files) after a 3 s `perf --call-graph dwarf`
 capture stalled the group-2 leader n2 at 12:54:41–44Z
 ([profile, p4](../status/orcd-mini-profile-08cc16af4-20261022.md)).
@@ -6215,6 +6215,18 @@ HARD, SNAP and CFG records.
    clients logged only successful retries. n2's raft.log no longer holds
    the record (replaced by the 16:20Z resync); the efsd and fuse logs still
    cover the window.
+3. Restart election storms: fixed in `dd876e069` with pre-vote. A node
+   campaigned alone from the moment its groups started until its peers
+   listened (n3: term 923 -> 1120 in 33 s, then deposed the leader). The
+   vote/election/step-down lines are rate limited per group. Unit tests
+   FAIL on the old code and PASS; on a private efs1 cluster a staggered
+   restart moved terms 1 -> 20/18 before and 1 -> 2 after.
+4. Blocked handler at stop: fixed in `781df5750`. A pooled RDMA client
+   kept one handler serving retried group reads (no quorum while peers
+   stopped); TCP `SHUT_RD` does not reach the RDMA channel. Handlers now
+   close before the next request once a stop begins, and the drain is
+   bounded at 40 s (refuse, log, exit rc 3 without teardown). Unit test
+   PASS; the RDMA case was not reproduced on a cluster.
 
 **Gates.**
 - `make test` PASS (done).
