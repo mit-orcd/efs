@@ -80,6 +80,9 @@ struct efs_raft {
     unsigned last_commit_bits; /* W145: quorum that made the last leader commit */
     int resync_requested;      /* W145 repair: see efs_raft_request_resync */
     unsigned vote_bits;
+    unsigned prevote_bits;      /* K1: pre-vote grants for prevote_term */
+    uint64_t prevote_term;      /* current_term + 1 while pre-voting, else 0 */
+    uint64_t elect_events, elect_log_tick, elect_log_shown; /* K1 log limiter */
     uint32_t election_elapsed;
     uint32_t election_ticks;
     uint32_t election_deadline; /* randomized in [election_ticks, 2*election_ticks) */
@@ -474,22 +477,48 @@ static void reset_election(struct efs_raft *r)
         r->election_ticks + (uint32_t)(splitmix64(&r->rng) % r->election_ticks);
 }
 
+/* K1/W145: vote, election and step-down lines are rate limited per group
+ * like ae_reject_note: the first event, then one per REJECT_LOG_TICKS
+ * (10 s at 5 ms ticks), each with the running count. A restart storm
+ * printed hundreds of these per group. */
+#define ELECT_LOG_TICKS 2000u
+static int elect_note_ok(struct efs_raft *r)
+{
+    r->elect_events++;
+    if (r->elect_events != 1 && r->ticks - r->elect_log_tick < ELECT_LOG_TICKS)
+        return 0;
+    r->elect_log_tick = r->ticks;
+    return 1;
+}
+
+static unsigned long long elect_note_skipped(struct efs_raft *r)
+{
+    unsigned long long n = r->elect_events - r->elect_log_shown - 1;
+
+    r->elect_log_shown = r->elect_events;
+    return n;
+}
+
 /* W145: elections and step-downs were invisible. Log a leader leaving
  * office with its commit, tail and every peer's match index. */
 static void leader_exit_note(struct efs_raft *r, uint64_t term, const char *why)
 {
     uint64_t last_i = 0, last_t = 0;
 
+    if (!elect_note_ok(r))
+        return;
     (void)last_log(r, &last_i, &last_t);
     fprintf(stderr, "raft: group=%u leader steps down term=%llu->%llu why=%s commit=%llu "
-            "applied=%llu last=%llu/%llu commit_quorum=0x%x match=[%llu,%llu,%llu,%llu,%llu,%llu,%llu]\n",
+            "applied=%llu last=%llu/%llu commit_quorum=0x%x match=[%llu,%llu,%llu,%llu,%llu,%llu,%llu] "
+            "events=%llu skipped=%llu\n",
             r->group, (unsigned long long)r->current_term, (unsigned long long)term, why,
             (unsigned long long)r->commit_index, (unsigned long long)r->last_applied,
             (unsigned long long)last_i, (unsigned long long)last_t, r->last_commit_bits,
             (unsigned long long)r->match_index[0], (unsigned long long)r->match_index[1],
             (unsigned long long)r->match_index[2], (unsigned long long)r->match_index[3],
             (unsigned long long)r->match_index[4], (unsigned long long)r->match_index[5],
-            (unsigned long long)r->match_index[6]);
+            (unsigned long long)r->match_index[6], (unsigned long long)r->elect_events,
+            elect_note_skipped(r));
 }
 
 static int maybe_step_down(struct efs_raft *r, uint64_t term)
@@ -1266,9 +1295,12 @@ static int become_leader(struct efs_raft *r)
     if (rc != EFS_OK)
         return rc;
     r->match_index[r->id] = last_i;
-    fprintf(stderr, "raft: group=%u became leader term=%llu noop=%llu commit=%llu applied=%llu\n",
-            r->group, (unsigned long long)r->current_term, (unsigned long long)last_i,
-            (unsigned long long)r->commit_index, (unsigned long long)r->last_applied);
+    if (elect_note_ok(r))
+        fprintf(stderr, "raft: group=%u became leader term=%llu noop=%llu commit=%llu "
+                "applied=%llu events=%llu skipped=%llu\n",
+                r->group, (unsigned long long)r->current_term, (unsigned long long)last_i,
+                (unsigned long long)r->commit_index, (unsigned long long)r->last_applied,
+                (unsigned long long)r->elect_events, elect_note_skipped(r));
     send_idx_cover(r, last_i);
     if (solo(r)) {
         r->commit_index = last_i;
@@ -1293,6 +1325,7 @@ static int start_election(struct efs_raft *r)
     }
     r->current_term++;
     r->voted_for = (int32_t)r->id;
+    r->prevote_term = 0;
     read_proof_forget(r);
     r->role = EFS_RAFT_CANDIDATE;
     r->leader = -1;
@@ -1352,12 +1385,113 @@ static int on_vote_req(struct efs_raft *r, const struct efs_raft_msg *in)
             return rc;
     }
     m.vote_granted = grant;
-    fprintf(stderr, "raft: group=%u vote %s for=%d term=%llu cand_last=%llu/%llu my_last=%llu/%llu "
-            "voted_for=%d commit=%llu\n", r->group, grant ? "granted" : "refused", in->from,
-            (unsigned long long)in->term, (unsigned long long)in->last_log_index,
-            (unsigned long long)in->last_log_term, (unsigned long long)last_i,
-            (unsigned long long)last_t, (int)r->voted_for, (unsigned long long)r->commit_index);
+    if (elect_note_ok(r))
+        fprintf(stderr, "raft: group=%u vote %s for=%d term=%llu cand_last=%llu/%llu "
+                "my_last=%llu/%llu voted_for=%d commit=%llu events=%llu skipped=%llu\n",
+                r->group, grant ? "granted" : "refused", in->from,
+                (unsigned long long)in->term, (unsigned long long)in->last_log_index,
+                (unsigned long long)in->last_log_term, (unsigned long long)last_i,
+                (unsigned long long)last_t, (int)r->voted_for,
+                (unsigned long long)r->commit_index, (unsigned long long)r->elect_events,
+                elect_note_skipped(r));
     return send_msg(r, &m);
+}
+
+/* K1/W145: restarts ran hundreds of elections per group. A node starts its
+ * groups before its peers listen (or while they are still in their storage
+ * inventory), and every election timeout raised its term by one: orcd-mini
+ * n3 went from term 923 to 1120 in the 33 s before it listened, then
+ * deposed the healthy leader on contact. Pre-vote: ask at term+1 without
+ * persisting anything; only a quorum of grants starts a real election. */
+static int start_prevote(struct efs_raft *r)
+{
+    struct efs_raft_msg m;
+    uint64_t last_i = 0, last_t = 0;
+    int i, rc;
+
+    if (!is_voter(r, r->id) || !r->allow_campaign) {
+        reset_election(r);
+        return EFS_OK;
+    }
+    read_proof_forget(r);
+    r->role = EFS_RAFT_FOLLOWER;
+    r->leader = -1;
+    r->prevote_term = r->current_term + 1;
+    r->prevote_bits = 1u << r->id;
+    reset_election(r);
+    if (quorum_ok(r, r->prevote_bits))
+        return start_election(r);
+    rc = last_log(r, &last_i, &last_t);
+    if (rc != EFS_OK)
+        return rc;
+    memset(&m, 0, sizeof(m));
+    m.type = EFS_RAFT_MSG_PREVOTE_REQ;
+    m.prev_term = r->prevote_term;
+    m.last_log_index = last_i;
+    m.last_log_term = last_t;
+    for (i = 0; i < EFS_RAFT_MAX_PEERS; i++) {
+        if (i == r->id || !is_voter(r, i))
+            continue;
+        m.to = i;
+        rc = send_msg(r, &m);
+        if (rc == EFS_ERR_AGAIN)
+            continue;
+        if (rc != EFS_OK)
+            return rc;
+    }
+    return EFS_OK;
+}
+
+/* No term or vote change on either side. send_msg stamps current_term
+ * into term, so the prospective term travels in prev_term both ways. */
+static int on_prevote_req(struct efs_raft *r, const struct efs_raft_msg *in)
+{
+    struct efs_raft_msg m;
+    uint64_t last_i = 0, last_t = 0, want = in->prev_term;
+    int grant = 0, rc;
+
+    memset(&m, 0, sizeof(m));
+    m.type = EFS_RAFT_MSG_PREVOTE_REP;
+    m.to = in->from;
+    m.prev_term = want;
+    rc = last_log(r, &last_i, &last_t);
+    if (rc != EFS_OK)
+        return rc;
+    /* A live leader (this node, or one heard from within the minimum
+     * election timeout) refuses: the candidate is the one cut off. */
+    int leader_live = r->role == EFS_RAFT_LEADER ||
+        (r->leader >= 0 && r->election_elapsed < r->election_ticks);
+    if (is_voter(r, r->id) && want > r->current_term && !leader_live &&
+        (in->last_log_term > last_t ||
+         (in->last_log_term == last_t && in->last_log_index >= last_i)))
+        grant = 1;
+    m.vote_granted = grant;
+    if (elect_note_ok(r))
+        fprintf(stderr, "raft: group=%u prevote %s for=%d term=%llu cand_last=%llu/%llu "
+                "my_last=%llu/%llu my_term=%llu leader=%d events=%llu skipped=%llu\n",
+                r->group, grant ? "granted" : "refused", in->from,
+                (unsigned long long)want, (unsigned long long)in->last_log_index,
+                (unsigned long long)in->last_log_term, (unsigned long long)last_i,
+                (unsigned long long)last_t, (unsigned long long)r->current_term,
+                r->leader, (unsigned long long)r->elect_events, elect_note_skipped(r));
+    return send_msg(r, &m);
+}
+
+static int on_prevote_rep(struct efs_raft *r, const struct efs_raft_msg *in)
+{
+    /* A refusal from a higher term: that term exists, so adopt it (as a
+     * normal reply would) and stop pre-voting. A grant never moves terms. */
+    if (!in->vote_granted && in->term > r->current_term)
+        return maybe_step_down(r, in->term) < 0 ? EFS_ERR_IO : EFS_OK;
+    if (!in->vote_granted || r->role != EFS_RAFT_FOLLOWER || r->leader != -1 ||
+        !r->prevote_term || r->prevote_term != r->current_term + 1 ||
+        in->prev_term != r->prevote_term)
+        return EFS_OK;
+    if (in->from >= 0 && in->from < EFS_RAFT_MAX_PEERS && is_voter(r, in->from))
+        r->prevote_bits |= 1u << in->from;
+    if (quorum_ok(r, r->prevote_bits))
+        return start_election(r);
+    return EFS_OK;
 }
 
 static int on_vote_rep(struct efs_raft *r, const struct efs_raft_msg *in)
@@ -2062,7 +2196,7 @@ int efs_raft_tick(struct efs_raft *r)
     }
     r->election_elapsed++;
     if (r->election_elapsed >= r->election_deadline)
-        return start_election(r);
+        return start_prevote(r);
     return EFS_OK;
 }
 
@@ -2118,6 +2252,10 @@ int efs_raft_recv(struct efs_raft *r, const struct efs_raft_msg *msg)
         return on_snap_rep(r, msg);
     case EFS_RAFT_MSG_TIMEOUT_NOW:
         return on_timeout_now(r, msg);
+    case EFS_RAFT_MSG_PREVOTE_REQ:
+        return on_prevote_req(r, msg);
+    case EFS_RAFT_MSG_PREVOTE_REP:
+        return on_prevote_rep(r, msg);
     default:
         return EFS_ERR_INVAL;
     }

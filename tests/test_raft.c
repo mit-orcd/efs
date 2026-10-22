@@ -27,6 +27,7 @@ struct net {
     struct efs_raft *r[EFS_RAFT_MAX_PEERS];
     int n;
     int drop[EFS_RAFT_MAX_PEERS];
+    int isolate[EFS_RAFT_MAX_PEERS]; /* drop everything this peer sends */
     int ae_requests[EFS_RAFT_MAX_PEERS]; /* every append/commit probe, including empty */
     int batches[EFS_RAFT_MAX_PEERS]; /* AE_REQ with entries delivered/dropped per peer */
     struct efs_raft_msg *keep;       /* deep copy of the last AE_REQ to keep_to */
@@ -269,6 +270,8 @@ static int send_now(void *net, const struct efs_raft_msg *msg)
     if (n->hold_ae_replies && msg->type == EFS_RAFT_MSG_AE_REP)
         return EFS_OK;
     if (n->drop[msg->to])
+        return EFS_OK;
+    if (msg->from >= 0 && msg->from < EFS_RAFT_MAX_PEERS && n->isolate[msg->from])
         return EFS_OK;
     if (msg->to < 0 || msg->to >= n->n || !n->r[msg->to])
         return EFS_ERR_INVAL;
@@ -2434,9 +2437,14 @@ static void test_probe_ack_keeps_next_index(void)
     n.r[0] = test_raft_new(&cfg);
     CHECK(n.r[0] != NULL, "leader-to-be");
     if (!n.r[0]) { efs_raft_mem_free(st); return; }
-    for (t = 0; t < 10 && efs_raft_role(n.r[0]) != EFS_RAFT_CANDIDATE; t++)
+    for (t = 0; t < 10; t++)
         (void)efs_raft_tick(n.r[0]);
-    CHECK(efs_raft_role(n.r[0]) == EFS_RAFT_CANDIDATE, "campaigns");
+    CHECK(efs_raft_term(n.r[0]) == 1, "pre-vote keeps the term");
+    memset(&m, 0, sizeof(m));
+    m.type = EFS_RAFT_MSG_PREVOTE_REP; m.from = 1; m.to = 0; m.term = 1;
+    m.prev_term = 2; m.vote_granted = 1; m.boot_id = 1;
+    CHECK(efs_raft_recv(n.r[0], &m) == EFS_OK &&
+          efs_raft_role(n.r[0]) == EFS_RAFT_CANDIDATE, "campaigns after a pre-vote quorum");
     CHECK(st->load_hard(st, &term, &(int32_t){0}) == EFS_OK && term == 2, "term 2");
     memset(&m, 0, sizeof(m));
     m.type = EFS_RAFT_MSG_VOTE_REP; m.from = 1; m.to = 0; m.term = term;
@@ -2520,6 +2528,122 @@ static void test_conflict_hint_skips_term_run(void)
     CHECK(st->last(st, &li, &lt) == EFS_OK && li == 5 && lt == 2, "stale tail gone");
     efs_raft_free(n.r[1]);
     efs_raft_mem_free(st);
+}
+
+/* K1/W145 (orcd-mini, 2026-10-22): every restart ran hundreds of elections
+ * (group 2: term 923 -> 1121 in one restart). Each node starts its groups
+ * before its peers listen and campaigned alone, one term per election
+ * timeout; the late node then deposed the healthy leader on contact.
+ * With pre-vote an isolated node keeps its term, and a staggered restart of
+ * all three nodes costs a bounded number of elections. */
+static void restart_node(struct net *n, struct efs_raft_store **st, struct app *app,
+                         struct efs_raft_cfg *cfg, int i)
+{
+    efs_raft_free(n->r[i]);
+    cfg->id = i;
+    cfg->store = st[i];
+    cfg->store_ctx = st[i];
+    cfg->app = &app[i];
+    cfg->election_ticks = 4;
+    cfg->heartbeat_ticks = 1;
+    cfg->rng_seed = 1000u + (uint64_t)i;
+    n->r[i] = test_raft_new(cfg);
+    n->drop[i] = 0;
+}
+
+static void test_restart_elections_bounded(void)
+{
+    struct net n;
+    struct efs_raft_store *st[3];
+    struct app app[3];
+    struct efs_raft_cfg cfg;
+    uint64_t t0, lt;
+    int i, lid, t;
+
+    boot_n(&n, st, app, &cfg, 3, 0x7);
+    CHECK(elect(&n, 40) == 1, "initial leader");
+    lid = leader_id(&n);
+    for (i = 0; i < 5 && lid >= 0; i++) {
+        uint8_t cmd = (uint8_t)('a' + i);
+        uint64_t idx = 0;
+        CHECK(efs_raft_propose(n.r[lid], &cmd, 1, &idx) == EFS_OK, "propose");
+        CHECK(elect(&n, 3) >= 0, "replicate");
+    }
+    t0 = efs_raft_term(n.r[0]);
+    for (i = 0; i < 3; i++)
+        if (efs_raft_term(n.r[i]) > t0)
+            t0 = efs_raft_term(n.r[i]);
+
+    /* Full stop: no node runs. */
+    for (i = 0; i < 3; i++) {
+        efs_raft_free(n.r[i]);
+        n.r[i] = NULL;
+        n.drop[i] = 1;
+    }
+    /* n1 restarts first and runs alone for 100 minimum election timeouts. */
+    restart_node(&n, st, app, &cfg, 0);
+    CHECK(n.r[0] != NULL, "n1 restarted");
+    CHECK(elect(&n, 400) == 0, "a lone node cannot lead");
+    CHECK(efs_raft_term(n.r[0]) == t0,
+          "a lone restarted node does not raise its term (pre-vote)");
+    /* n2 comes up: one election. */
+    restart_node(&n, st, app, &cfg, 1);
+    CHECK(elect(&n, 100) == 1, "n1+n2 elect one leader");
+    lid = leader_id(&n);
+    CHECK(lid >= 0 && efs_raft_term(n.r[lid]) <= t0 + 2,
+          "the first quorum costs at most two elections");
+    lt = lid >= 0 ? efs_raft_term(n.r[lid]) : 0;
+    /* n3 restarts but cannot reach anyone for 400 election timeouts
+     * (still in its storage inventory, or not yet listening). */
+    restart_node(&n, st, app, &cfg, 2);
+    n.isolate[2] = 1;
+    n.drop[2] = 1;
+    for (t = 0; t < 1600; t++) {
+        CHECK(efs_raft_tick(n.r[2]) == EFS_OK, "isolated tick");
+        CHECK(elect(&n, 1) == 1, "leader holds");
+    }
+    CHECK(efs_raft_term(n.r[2]) <= lt, "an isolated node does not raise its term");
+    n.isolate[2] = 0;
+    n.drop[2] = 0;
+    CHECK(elect(&n, 100) == 1, "one leader after n3 joins");
+    CHECK(leader_id(&n) == lid && efs_raft_term(n.r[lid]) == lt,
+          "the late node does not depose the leader");
+    CHECK(efs_raft_term(n.r[2]) == lt, "the late node adopts the leader's term");
+    CHECK(efs_raft_role(n.r[2]) == EFS_RAFT_FOLLOWER, "the late node follows");
+    free_n(&n, st, 3);
+}
+
+/* Pre-vote never moves a receiver's term or vote, and a live leader's
+ * followers refuse it. */
+static void test_prevote_does_not_disturb(void)
+{
+    struct net n;
+    struct efs_raft_store *st[3];
+    struct app app[3];
+    struct efs_raft_cfg cfg;
+    struct efs_raft_msg m;
+    uint64_t term;
+    int lid, f;
+
+    boot_n(&n, st, app, &cfg, 3, 0x7);
+    CHECK(elect(&n, 40) == 1, "leader");
+    lid = leader_id(&n);
+    if (lid < 0) { free_n(&n, st, 3); return; }
+    f = (lid + 1) % 3;
+    term = efs_raft_term(n.r[f]);
+    CHECK(elect(&n, 1) == 1, "heartbeat");
+    memset(&m, 0, sizeof(m));
+    m.type = EFS_RAFT_MSG_PREVOTE_REQ; m.from = (lid + 2) % 3; m.to = f;
+    m.term = term; m.prev_term = term + 5; m.boot_id = 1;
+    m.last_log_index = 1000; m.last_log_term = term;
+    n.drop[m.from] = 1; /* the reply is not delivered */
+    CHECK(efs_raft_recv(n.r[f], &m) == EFS_OK, "prevote request handled");
+    CHECK(efs_raft_term(n.r[f]) == term && efs_raft_role(n.r[f]) == EFS_RAFT_FOLLOWER,
+          "a prevote request leaves term and role unchanged");
+    n.drop[m.from] = 0;
+    CHECK(elect(&n, 20) == 1 && leader_id(&n) == lid &&
+          efs_raft_term(n.r[lid]) == term, "leader undisturbed");
+    free_n(&n, st, 3);
 }
 
 /* W145 repair: a follower whose COMMITTED entry conflicts with the leader
@@ -3081,6 +3205,8 @@ int main(void)
         test_resync_replaces_diverged_follower();
         test_probe_ack_keeps_next_index();
         test_conflict_hint_skips_term_run();
+        test_restart_elections_bounded();
+        test_prevote_does_not_disturb();
         test_noop_over_stale_tail();
         test_ae_batch_catchup();
         test_ae_catchup_flow_control();

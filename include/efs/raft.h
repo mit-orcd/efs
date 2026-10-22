@@ -55,6 +55,14 @@ static inline int efs_raft_preferred_voter(uint32_t voters, unsigned ordinal)
 #define EFS_RAFT_MSG_SNAP_REP 6
 /* Caught-up voter starts a normal election; never grants authority itself. */
 #define EFS_RAFT_MSG_TIMEOUT_NOW 7
+/* K1/W145 pre-vote (Raft thesis 9.6). A follower whose election timer
+ * fires asks first whether a quorum would vote for it at term+1, without
+ * changing its own term. term = the prospective term; the reply echoes it
+ * in prev_term. A voter grants only if it has not heard from a leader
+ * within the minimum election timeout and the candidate's log is at least
+ * as up to date. Neither message changes the receiver's term or vote. */
+#define EFS_RAFT_MSG_PREVOTE_REQ 8
+#define EFS_RAFT_MSG_PREVOTE_REP 9
 
 #define EFS_RAFT_GROUP_SHARD  0
 #define EFS_RAFT_GROUP_CTRL   1
