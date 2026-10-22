@@ -10,9 +10,9 @@ must keep committing, and the follower must catch up once the stall clears.
 | Gate | Verdict |
 | --- | --- |
 | Unit test `tests/test_follower_bound`, normal and `EFS_FAULTS=1` builds | PASS |
-| `make test`, normal build, efs3 | PASS except `test_reclaim`, which fails identically on pristine devel on efs3 (environment) |
+| `make test`, normal build, efs3, rebased on devel `c0652be3b`, `TMPDIR=/data1/tmp` | 420/422 command lines PASS; the 2 failures are `tests/test_node_left_refused.py` (and its `test-create-errors` target), which fails identically on pristine devel |
 | Private 3-daemon cluster, stalled-compactor follower, scaled fault-build caps | PASS (run 2) |
-| Same cluster before the capacity gate (run 1) | FAIL: the stalled follower became group 2 leader; fixed in `ac3e838ee` |
+| Same cluster before the capacity gate (run 1) | FAIL: the stalled follower became group 2 leader; fixed in `cc7d051d2` |
 | Production-scale plateau (1 GiB L0 cap, derived 121 MiB budget) | NOTRUN |
 | InstallSnapshot import into a stalled follower | NOTRUN (no snapshot was sent in either run) |
 | Multi-host, RDMA, crash/restart while at the bound | NOTRUN |
@@ -42,13 +42,13 @@ replica's state machine holds at most `mem_budget` of unflushed memtable
 
 ## Source and builds
 
-- Branch `devel-k22` on devel `7c510c60f`. Commits `5ca8142cc` (bound),
-  `b21ee8d25` (cluster driver), `ac3e838ee` (capacity gate, memtable
+- Branch `devel-k22` on devel `c0652be3b` (rebased Oct 22; runs used the pre-rebase base `7c510c60f`). Commits `b3068a6d5` (bound),
+  `a7bc59f99` (cluster driver), `cc7d051d2` (capacity gate, memtable
   fault hook).
 - Built on efs3 from the working tree of those commits with
   `make -j4` and `make -j4 EFS_FAULTS=1`. The build ID is `unknown`
   because the tree was copied without `.git`.
-- Run 2 binaries match `ac3e838ee`. Run 1 binaries were `5ca8142cc` plus
+- Run 2 binaries match `cc7d051d2`. Run 1 binaries were `b3068a6d5` plus
   the `EFS_FAULT_MEMTABLE_BYTES` hook, without the capacity gate.
 
 ## Environment
@@ -183,7 +183,7 @@ the missed heartbeats was not isolated. Its log was up to date, so it
 won group 2. With apply deferred it refused every proposal: 11206
 `admit_busy`. Group 2's commit index stayed at 12796 until the stall
 cleared 5 minutes later. This violated D30, which says leadership
-requires local capacity. `ac3e838ee` fixed it, and run 2 shows the fix.
+requires local capacity. `cc7d051d2` fixed it, and run 2 shows the fix.
 
 ## Limitations and remaining gates
 
@@ -200,5 +200,8 @@ requires local capacity. `ac3e838ee` fixed it, and run 2 shows the fix.
 - **Not run.** Multi-host, RDMA, crash/restart while at the bound, and a
   leader whose own compactor stalls in a real cluster. The leader
   step-down is covered only by the unit test.
-- **Pre-existing failure.** `test_reclaim` fails on efs3 with or without
-  this change.
+- **Pre-existing failure.** `tests/test_node_left_refused.py` fails to
+  compile on devel `c0652be3b` (unstubbed `handler_stop_gate`).
+- **After the rebase** onto devel with K1 pre-vote, the capacity hold also
+  runs before pre-vote (`53f1462fa`). The cluster runs predate the rebase;
+  a rerun on the rebased build was stopped before completion.
