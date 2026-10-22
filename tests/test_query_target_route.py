@@ -23,6 +23,7 @@ code=r"""
 #define EFS_ERR_IO -6
 #define EFS_ERR_BUSY -13
 #define EFS_ERR_NOT_PRIMARY -15
+#define EFS_ERR_NODATA -21
 struct efs_raft {int leader;uint32_t voters;};
 struct host_group {struct efs_raft *r;uint32_t voters;};
 struct efs_server_query_view {void *catalog;};
@@ -68,12 +69,18 @@ int main(void){struct efs_raft r[2]={{2,7},{3,14}};
  assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_BUSY&&consumed==1);
  barrier_rc=EFS_ERR_IO;
  assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_IO&&consumed==1);
+ /* No catalog published yet: "not indexed yet", not BUSY; a refresh error wins. */
+ barrier_rc=0;h.query_view.catalog=NULL;
+ assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_NODATA&&consumed==1);
+ h.query_error=EFS_ERR_IO;
+ assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_IO&&consumed==1);
+ h.query_error=0;h.query_view.catalog=(void*)1;
  barrier_rc=0;lose_capability=1;
  assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_BUSY&&consumed==1);
  h.query_enabled=0;
  assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_NOT_FOUND&&consumed==1);
  pthread_rwlock_destroy(&h.query_lock);pthread_mutex_destroy(&h.mu);
- puts("query target: actual dual leader preference, single/unknown/removed fallback, capable local serve and fresh refusal PASS");
+ puts("query target: actual dual leader preference, single/unknown/removed fallback, capable local serve, unpublished catalog NODATA and fresh refusal PASS");
 }
 """
 with tempfile.TemporaryDirectory(prefix='efs-query-route-') as d:

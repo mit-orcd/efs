@@ -10840,8 +10840,12 @@ int server_raft_host_query_read(int (*consume)(void *,const struct efs_server_qu
     pthread_mutex_unlock(&h->mu);
     if (!capable) return EFS_ERR_BUSY;
     pthread_rwlock_rdlock(&h->query_lock);
+    /* No catalog published yet (a fresh cluster before its first build):
+     * nothing is indexed, the same "not indexed yet" NODATA a directory
+     * newer than the catalog gets, so .efs callers wait for the refresh
+     * instead of failing on BUSY. A recorded refresh error still wins. */
     int rc=h->query_view.catalog ? consume(ctx,&h->query_view,h->query_error) :
-           h->query_error ? h->query_error : EFS_ERR_BUSY;
+           h->query_error ? h->query_error : EFS_ERR_NODATA;
     pthread_rwlock_unlock(&h->query_lock);
     return rc;
 }
