@@ -853,17 +853,6 @@ send_reply:
             efs_conn_send_msg(conn, EFS_MSG_ADD_STORAGE_REPLY, &r, sizeof(r));
             break;
         }
-        case EFS_MSG_NODE_LEFT: {
-            if (payload_len >= sizeof(struct efs_msg_node_left)) {
-                struct efs_msg_node_left *msg = payload;
-                /* Membership only. Fragment re-placement after a permanent
-                 * loss is the control-plane repair protocol (spec §7.8),
-                 * not a handler-side scan. */
-                server_remove_node_from_cluster(g_server, msg->node_id);
-                printf("Node %u left the cluster\n", msg->node_id);
-            }
-            break;
-        }
         case EFS_MSG_JOIN: {
             if (payload_len >= sizeof(struct efs_msg_join)) {
                 struct efs_msg_join *req = payload;

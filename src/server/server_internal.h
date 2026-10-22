@@ -456,9 +456,6 @@ void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32
 /* Start the background cluster rejoin retry thread. */
 void server_start_rejoin(struct efsd_server *s);
 
-/* Remove a node from the local cluster list. */
-void server_remove_node_from_cluster(struct efsd_server *s, efs_node_id_t node_id);
-
 /* Persist the cluster nodes list to disk. Caller must NOT hold s->lock (does
  * disk I/O). Use server_nodes_mark_dirty under the lock instead. */
 void server_save_nodes(struct efsd_server *s);

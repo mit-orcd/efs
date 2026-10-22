@@ -143,7 +143,6 @@ static void test_every_msg_struct(void)
     RT(struct efs_msg_list_nodes_reply);
     RT(struct efs_msg_status_reply);
     RT(struct efs_msg_shrink_quota);
-    RT(struct efs_msg_node_left);
     RT(struct efs_msg_add_storage);
     RT(struct efs_msg_add_storage_reply);
     RT(struct efs_msg_join);
