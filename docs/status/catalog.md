@@ -16,6 +16,8 @@ Complete navigation to top-level status ledgers as of October 15, 2026. Grouping
 
 ## Cluster architecture roadmap
 
+- [Phase 1 / alpha 1.0: 2+1 completion checklist for 3, 4 and larger clusters](alpha-1.0-2plus1-checklist.md)
+
 - [Distributed EFS: 3-, 4- and larger-node targets and implementation roadmap](distributed-cluster-roadmap-20261022.md)
 
 ## Query commands and metadata

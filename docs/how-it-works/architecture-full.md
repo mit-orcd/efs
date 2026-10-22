@@ -1569,6 +1569,12 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[Phase 1 / alpha 1.0 checklist](../status/alpha-1.0-2plus1-checklist.md): **OPEN**.
+Finish and qualify **2+1 on 3, 4 and >4 physical nodes** before the remaining
+roadmap. Candidate-specific gates cover placement, enabled I/O, packing/GC,
+`.efs`, full payloads and orderly restart. 2+2, many-group distribution and
+full D36 protection remain later milestones.
+
 [Distributed EFS cluster roadmap](../status/distributed-cluster-roadmap-20261022.md):
 3-node 2+1, 4+ node 2+2 target diagrams; current codec/two-group gaps, D36
 metadata protection, distributed background work and staged acceptance. Roadmap
@@ -2530,6 +2536,11 @@ four-node/f=1 and f=3 ladder. The four-node metadata mechanism remains unresolve
 not permission to weaken the requirement. See [binding contract and gates](../status/node-count-protection-20261009.md)
 and [architecture §2](#architecture). W74/W66 implementation
 and acceptance remain open.
+
+**Release sequencing, October 22:** the user sets [Phase 1 / alpha 1.0](../status/alpha-1.0-2plus1-checklist.md)
+as completing 2+1 on 3, 4 and >4 nodes before continuing the remaining roadmap.
+This intermediate release does not claim D36 two-loss protection on 4+ nodes;
+the accepted final requirement above is unchanged.
 
 ### Earlier decisions — compact register
 

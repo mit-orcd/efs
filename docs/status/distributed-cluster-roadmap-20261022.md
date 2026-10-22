@@ -8,6 +8,15 @@ change or new cluster test is part of this document.
 [W66 metadata scaling](metadata-scaling.md) ·
 [W98 all-node metadata/query service](all-node-metadata-queries-20261009.md)
 
+## Release sequencing — updated October 22
+
+**Phase 1 is now alpha 1.0: finish 2+1 on 3, 4 and >4 nodes.**
+The [alpha 1.0 checklist](alpha-1.0-2plus1-checklist.md) is the release gate.
+The diagrams below describe the final architecture; their 2+2 and many-group
+targets are later work, not prerequisites for this intermediate milestone.
+D36 remains binding for the final design; alpha does not claim its two-loss
+protection on four or larger clusters.
+
 ## Vision and boundaries
 
 No permanent central data or metadata primary. Adding nodes contributes storage,
@@ -136,7 +145,7 @@ ownership; changing `HOST_NGROUPS` alone is not an implementation.
 ```mermaid
 flowchart TB
     NOW["Today<br/>2+1 codec · two metadata groups<br/>Possible leadership concentration"]
-    BASE["1 · Correctness and measurement<br/>Fail-closed apply and formats<br/>Per-group load, latency and ownership"]
+    BASE["PHASE 1 · ALPHA 1.0<br/>Finish 2+1 on 3, 4 and larger clusters<br/>Correctness, packing, queries, full verification<br/>Orderly restart and bounded progress"]
     DATA["2A · Data protection<br/>3 nodes: 2+1<br/>4+ nodes: 2+2"]
     META["2B · Metadata distribution and protection<br/>Spread leaders, then generalize groups<br/>Prove D36; bound coordination"]
     BG["3 · Background work<br/>Distributed ownership<br/>Bound resource use and scans"]
@@ -153,7 +162,7 @@ flowchart TB
 
 | Stage | Work and ownership | Exit evidence |
 | --- | --- | --- |
-| 1 | W127–W134/W66 hardening and current-format refusal; W135–W139 trustworthy test reporting; W66 instrumentation | Real apply/cursor/refusal tests; correct PASS/FAIL/NOTRUN; per-group rates, blocked time, WAL/apply delay and p99 |
+| **1 · alpha 1.0** | **Finish current 2+1 at 3, 4 and >4 nodes**; enabled-path correctness, placement/accounting, packing, queries and orderly lifecycle | [Mandatory checklist and topology matrix](alpha-1.0-2plus1-checklist.md); exact full payloads, bounded progress and explicit limitations |
 | 2A | W74/D36 codec, placement and durable protection for both chunks and packing | Exact full payload checks; no duplicate placement within a stripe; durable publication identity and correct accounting; D36 loss matrix |
 | 2B | W66/W98/W81 leader distribution, configurable groups, bounded routing and directory policy; D36 metadata mechanism | Independent-directory and hot-directory tests; verified group/slot/leader mappings; metadata loss matrix and safe partition behavior; no common-leader routing dependency |
 | 3 | W125 packing, W92/W98 indexing, W124 reclaim and W126 KV maintenance | Bounded progress with foreground correctness; per-node work distribution; no repeated full validation or unbounded prefix rescans; latency/resource evidence |

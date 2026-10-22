@@ -62,6 +62,11 @@ not permission to weaken the requirement. See [binding contract and gates](node-
 and [architecture §2](../how-it-works/architecture.md). W74/W66 implementation
 and acceptance remain open.
 
+**Release sequencing, October 22:** the user sets [Phase 1 / alpha 1.0](alpha-1.0-2plus1-checklist.md)
+as completing 2+1 on 3, 4 and >4 nodes before continuing the remaining roadmap.
+This intermediate release does not claim D36 two-loss protection on 4+ nodes;
+the accepted final requirement above is unchanged.
+
 ## Earlier decisions — compact register
 
 Exact accepted text, rationale and dated measurements are preserved in
