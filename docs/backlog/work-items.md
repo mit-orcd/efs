@@ -5919,8 +5919,8 @@ archived, delete the test with it.
 <a id="w138"></a>
 ## W138 — `test_apply_ring.py` succeeds while its TSan check is NOTRUN on gcc 11
 
-**Verification correctness; opened 2026-10-21 from the audit T5; OPEN.**
-- On gcc 11.5.0 (node9901) the TSan build fails:
+**Verification correctness; opened 2026-10-21 from the audit T5; FIXED on `devel-k25` (October 22).**
+- On gcc 11.5.0 (node9901) the TSan build failed:
   `'atomic_thread_fence' is not supported with '-fsanitize=thread' [-Werror=tsan]`
   (`src/server/apply_ring.h:38`, `:61`).
 - The test prints `SKIP` and passes (`tests/test_apply_ring.py:229–231`), so
@@ -5934,6 +5934,24 @@ archived, delete the test with it.
 - Keep the torn-record stress check and the negative control, record the
   sanitizer's limits, and report SKIP as NOTRUN.
 - Any change to the memory ordering needs its own correctness review.
+
+**Fix (October 22, `devel-k25`, alpha K25), test only, no change to
+`apply_ring.h`:**
+- The TSan half runs or the test fails with the reason; there is no SKIP
+  path left. A build failure (including a missing `libtsan`) and a binary
+  that does not run both exit nonzero with the compiler or runtime output.
+- gcc's `'atomic_thread_fence' is not supported with '-fsanitize=thread'`
+  is allowed with `-Wno-error=tsan` for the sanitizer build only, and only
+  after the plain build reported it (clang does not); the fences stay.
+- The limit is in the PASS line: TSan does not model the fences, so a
+  clean run covers the atomic payload accesses, not the ordering; the
+  torn-record stress check (4 M native writes, 3 readers, 0 torn) is the
+  ordering gate. The TSan builds use 400 k writes. The plain-field negative
+  control still runs and must be reported as a data race.
+- Verified: Mac/clang PASS; efs3 gcc 15.0.1 aarch64 PASS after
+  `libtsan` was installed there (the gcc build without the retry does
+  fail `-Werror=tsan`, so the retry path is exercised). node9901 gcc 11:
+  NOTRUN here, expected to take the same path.
 
 <a id="w139"></a>
 ## W139 — Unit binaries and tests that are built or present but never run
