@@ -96,7 +96,7 @@ row is checked again on current devel before work starts.
 | K2 | **W140** proposal RPC accepts metadata tags this build cannot apply (halts a group) | safety | FIX |
 | K3 | **W132** `NODE_LEFT` from any connection drops a node | safety | FIX |
 | K4 | **W133** client protocol declaration gate is fail-open | correctness | FIX |
-| K5 | **W134** unregistered session identities bypass fencing (with **W72** production session lifecycle) | correctness | FIX |
+| K5 | **W134** unregistered session identities bypass fencing (with **W72** production session lifecycle) | correctness | FIXED, merged into devel Oct 22 (`a443863b1`): one session check at every apply (`efs_session_accept`: UNREGISTERED or FENCED, no legacy acceptance, `efs_session_accept_legacy` deleted); the mount establishes a session, admits each touched shard and latches fenced; every metadata mutation carries the session (protocol 4); `efs-mgmt` raw mutations establish their own. VERIFY: the fence cluster gate (`scripts/k05_session_fence_gate.sh`) and the NUC/AMD live harnesses are NOTRUN for the parent session; partitioned-client and leader-change barrier gates stay W72 work |
 | K6 | **W127–W131** fail-closed apply (in devel since `08cc16af4`; private RDMA gate PASS) | correctness | VERIFY multi-host |
 | K7 | **W83** transaction decision records are never retired | lifecycle / growth | FIX |
 | K8 | **W148** modify-under-load returned wrong bytes, correct size, on a never-packed 3.6 MB file (suspected read race: same-size overwrite then truncate-up) | data correctness | FIX ([review](review-pack-validate-once-20261022.md)) |
@@ -132,7 +132,7 @@ cluster. No row was found already fixed.
 | K2 | Open. Submit still refuses only `EFS_MD_CMD_IS_RESERVED` (`raft_host.c:3381`, `:12075`). |
 | K3 | Fixed on `devel-k03` (`8727e3afe`): ID 24 retired and refused fail-closed, handler and remover deleted, `tests/test_node_left_refused.py` in `make test`; unit gate PASS on efs2 (`test_reclaim` fails there on pristine devel too, host issue), cluster NOTRUN, not yet merged into devel. |
 | K4 | Fixed on branch `devel-k04`, not merged ([W133 implementation](../backlog/work-items.md#w133-fix)). The gate covers every request; the version must equal 3; every connection opener declares first. Unit gates PASS on efs3 over TCP. The RDMA unit path and the cluster refusal run are NOTRUN. |
-| K5 | Open. `efs_session_accept_legacy` has 8 callers (`lock.c`, `meta_apply.c` ×4, `session.c`, `raft_host.c`), and the "legacy … remain compatible" path is at `raft_host.c:11913`. Tied to W72, which is partial. |
+| K5 | Fixed Oct 22 on devel (`a443863b1`); see the K row. |
 | K6 | Merged. Remaining: the W130 one-replica DIR fault injection, and multi-host runs. |
 | K7 | Open. `EFS_KV_KIND_DECISION` keys are written and read (`txn.c:972`, `:996`); nothing deletes them. |
 | K8 | Open. Repro harness fixed (`a1ceff4cb`); reruns NOTRUN. |

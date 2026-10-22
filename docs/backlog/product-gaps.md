@@ -78,24 +78,21 @@ Staged typed publication validates three distinct nodes but does not establish
 durable physical ACKs or repair. Follow [W71](work-items.md#w71) and
 [W74](work-items.md#w74); do not claim a full-ACK production guarantee here.
 
-### 1.3 The client does not run the session protocol, so fencing is not real
+### 1.3 The client session protocol: landed Oct 22 (alpha K5), gates open
 
-Invariant **I23** and [protocols/sessions.md](../how-it-works/protocols/sessions.md)
-define a session with an epoch and a revocation barrier, and make it the
-fencing token: a partitioned-but-alive client is fenced at epoch+1 and can no
-longer make an authoritative mutation. The server side of this exists
-(`host_sess_gate`, the session applies in `raft_host.c`). The FUSE client does
-not participate — when a request carries no session suffix the server
-substitutes a stand-in UUID.
-
-Production HOLD/FLOCK still omit that suffix. The mount's operation-ID UUID
-at locally fixed epoch 1 provides retry identity, not a committed session
-lifecycle. Append's owner suffix also does not implement that lifecycle.
-Management can create/register/establish/fence sessions, and staged D25
-publication admission enforces local session authority. Those primitives are
-implemented; mount-wide establishment, touched-shard registration and all
-public dependent paths remain [W72](work-items.md#w72). Avoid describing every
-session mechanism as absent or treating the staged endpoint as full activation.
+Until Oct 22 the FUSE client did not run the session lifecycle and the
+server accepted a request without a registered identity through
+`efs_session_accept_legacy`, so a partitioned-but-alive client was never
+fenced. Devel `a443863b1` (K5: W134 with W72) closes the mechanism gap: the
+mount establishes one session, admits each touched shard before its first
+mutation, carries the session on every metadata mutation (protocol 4), and
+latches fenced on a refused epoch; the server has one check at every apply
+(`efs_session_accept`: UNREGISTERED or FENCED), and the legacy acceptance
+is deleted. What remains is evidence, not mechanism: the fence cluster gate
+(`scripts/k05_session_fence_gate.sh`), the NUC/AMD live harnesses, and the
+partitioned-client and leader-change barrier gates of
+[W72](work-items.md#w72) are NOTRUN. Until they pass, I23 is implemented
+but not qualified.
 
 ### 1.4 Fragment integrity format and repair remain incomplete
 

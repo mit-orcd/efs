@@ -2431,7 +2431,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | apply-missing-kv | **W131** · missing KV engine counts as applied | defensive hardening | FIXED, merged into devel `08cc16af4`; private RDMA gate PASS (`scripts/w127_incompatible_entry.sh`); unit gates PASS; RDMA/multi-host NOTRUN ([implementation](#w127-w131-fix)) | [item](#w131) · [audit](../reviews/dead-code-review-20261021.md) |
 | node-left | **W132** · `NODE_LEFT` lets any connection drop a node from membership | correctness / safety | FIXED on `devel-k03` (`8727e3afe`): ID 24 retired, handler and remover deleted; `make test` PASS on efs2 except the pre-existing host-only `test_reclaim` failure (`tests/test_node_left_refused.py` PASS); cluster NOTRUN; not merged into devel | [item](#w132) · [audit](../reviews/dead-code-review-20261021.md) |
 | declaration-gate | **W133** · client protocol declaration gate is fail-open | correctness | FIXED on branch `devel-k04`, not merged: every request except CLIENT_HELLO and HEARTBEAT needs an accepted declaration of exactly protocol 3; unit gates PASS on efs3 (TCP), RDMA unit path and cluster refusal run (`scripts/w125_p3_compat.sh`) NOTRUN; not authentication | [item](#w133) · [audit](../reviews/dead-code-review-20261021.md) |
-| legacy-session | **W134** · unregistered session identities bypass session fencing | correctness (fail-open) | OPEN: live while W72 is open; remove atomically with full registration | [item](#w134) · [audit](../reviews/dead-code-review-20261021.md) |
+| legacy-session | **W134** · unregistered session identities bypass session fencing | correctness (fail-open) | FIXED Oct 22 (`a443863b1`, alpha K5): `efs_session_accept_legacy` deleted, every apply checks `efs_session_accept` (UNREGISTERED/FENCED), protocol 4; fence cluster gate NOTRUN | [item](#w134) · [audit](../reviews/dead-code-review-20261021.md) |
 | test-docs-failfast | **W135** · a plain `make test` stops at the docs gate before the code tests | test reporting | FIXED on `devel-k25` (Oct 22): the docs gate is out of `test` (it also needs the `results/` tree that release copies omit); `make check` runs both gates to completion; `tests/test_make_test_recipe.py` refuses the docs gate inside `test`. History: a direct `make test` stopped after 114/276 commands at `0bdf55256` | [item](#w135) · [audit](../reviews/dead-code-review-20261021.md) |
 | test-pressure-cohort | **W136** · `test_pressure_cohort.py` broken since the packing removal | verification correctness | FIXED on `devel-k25` (Oct 22): dead `efs_client_pack_flush` stub and its case removed, `-Werror` kept, test wired into `make test`. History: FAIL on node9901 (unused stub); unwired | [item](#w136) · [audit](../reviews/dead-code-review-20261021.md) |
 | test-ticket-retry | **W137** · `test_live_ticket_retry.py` fakes a stale reply length | verification correctness | OPEN: FAIL on node9901 (5 vs 13 bytes); decide with the staged PUT-ticket stack | [item](#w137) · [audit](../reviews/dead-code-review-20261021.md) |
@@ -2501,7 +2501,7 @@ positions do not assign an execution order or override the active handoff.
 | review ID | finding | classification | review state | evidence / gate |
 | --- | --- | --- | --- | --- |
 | spec1 | **W71** · fragment PUT lacks a production persistence barrier | durability correctness | historical per-PUT barrier superseded by asynchronous ACK; all-node COMMIT/verifier and unclean-recovery refusal pass AMD scoped gates on c4178ea81 ([AMD follow-up](../status/amd-async-durability-20261015.md)); hardware power-loss gate owed | [evidence and gate](#w71) |
-| spec2 | **W72** · production mount session lifecycle / I23 integration | fencing integration | partial — full mount UUID/epoch shared by append/HOLD/FLOCK; retained FUSE CREATE/adoption and sequenced OPEN/CLOSE plus proven-revocation recovery pass AMD direct/TCP; namespace shard admission and fenced replay/effect checks are AMD gated; Oct 11 merged REGISTER verdict mismatch repaired; before/after proof retained; REGISTER/ESTABLISH verdict regressions and final captured `90a47313` full normal/fault native plus direct/buffered TCP cold namespace/APPEND/sync gates pass ([follow-up](../status/amd-integration-20261011.md#w72-register-verdict-mismatch--reproduced-and-repaired)); REPORT mapping/activation/completion session fences pass AMD direct/TCP; staged typed per-publication recovery/newer-range ownership passes AMD; production flush/PUT-ticket integration remain open | [evidence and gate](#w72) · [Oct9 mounted-client gates](../status/dependency-package-20261009.md#terminal-retained-identity-recovery--implementedgated) |
+| spec2 | **W72** · production mount session lifecycle / I23 integration | fencing integration | mount lifecycle landed Oct 22 (`a443863b1`, alpha K5): the mount establishes one session, admits each touched shard before its first mutation and latches fenced (EIO, never a resend under the old epoch); every mutation path carries the session; refused at apply otherwise. Open: the fence cluster gate and the NUC/AMD live harnesses (NOTRUN), partitioned-client and leader-change barrier gates | [evidence and gate](#w72) · [Oct9 mounted-client gates](../status/dependency-package-20261009.md#terminal-retained-identity-recovery--implementedgated) |
 | spec3 | **W73** · synchronous application-write publication | integration | Closed supported software integration: application sync and mount-sync direct/buffered × TCP/RXE gates accepted; hardware power-loss acceptance remains W71 ([Oct9 closure](../status/amd-rxe-gate-closure-20261009.md)) | [evidence and gate](#w73) |
 | spec4 | **W74** · protection profiles, debt and automatic repair | recovery feature gap | repair experiment removed from devel 2026-10-16 (tag `archive/experimental-group-a-20261016`); earlier ordinary-fragment standalone repair qualification ([ledger](../status/orcd-default-repair-20261012.md)) applies only to that tag; no repair path in devel; automatic/unplanned repair deferred; protection/profile cutover remain unclosed | [evidence and gate](#w74) |
 | spec5 | **W75** · fragment integrity trust / missing checksum fallback | integrity correctness | missing/corrupt evidence fails closed; captured metadata digest and PUT validation gates pass on NUC; K16 identity-bound fragment record (format 2) implemented on `devel-k16`, efs1 unit + private TCP cluster gates (see [K16 summary](../status/k16-w75-identity-format-20261022.md)); not merged; inode generation/salt binding, RDMA and hardware gates open | [evidence and gate](#w75) |
@@ -11810,6 +11810,87 @@ the I/O path**. Registration is once per shard per session; the barrier runs
 only during recovery. Normal operations proceed on locally established
 authority, which is exactly why the fence has to be explicit — nobody is
 checking anything per request.
+
+#### Mutation coverage (K5: W134 with W72)
+
+Every metadata mutation a mount sends names its session, and every apply
+that changes session-owned state checks it. There is no stand-in identity,
+no "absent row means OK" path and no compatibility switch.
+
+**Mount lifecycle.**
+
+```text
+mount:        random client_uuid, epoch 1; CREATE the session on its owner
+              shard (Raft commit). Mount fails if the cluster refuses it.
+first use     the client (HOLD, FLOCK, APPEND, publication, REPORT, PUT
+of a shard:   ticket, SETATTR, XATTR) or the serving host (namespace ops)
+              REGISTERs the shard in touched_shards on the owner, then
+              ESTABLISHes it on the shard (one REGISTER_ESTABLISH entry when
+              both share a Raft group). The client caches the shard bit.
+UNREGISTERED: the shard has no established row for this epoch. The client
+              forgets the cached bit, admits the shard again and resends
+              the same identity once.
+FENCED:       the shard's rejection floor (or a newer established epoch)
+              is above the request epoch. The mount stops mutating: every
+              later mutation fails EIO locally without an RPC, and no
+              request is ever resent under the old epoch.
+unknown:      the owner has no session for this uuid (never created, or
+              the cluster was re-formatted). Hosts never create a session
+              on a client's behalf; the refusal is UNREGISTERED at the
+              owner and the client treats it as FENCED.
+```
+
+The operation-ID retry identity (I16) is unchanged: a retry keeps its
+`(uuid, epoch, seq)`, and the session check runs before any recorded
+verdict is returned, so a fenced identity cannot read back a retained
+result.
+
+**Refusal codes.** `efs_session_accept` is the single local check.
+
+| Local state on the shard | Result | Inode RPC status | FUSE errno |
+| --- | --- | --- | --- |
+| no row for the uuid | `EFS_ERR_UNREGISTERED` | `UNREGISTERED` (15) | re-admit once, else `EIO` |
+| established epoch below the request | `EFS_ERR_UNREGISTERED` | `UNREGISTERED` (15) | re-admit once, else `EIO` |
+| request epoch below the rejection floor | `EFS_ERR_FENCED` | `FENCED` (14) | `EIO`, mount fenced |
+| established epoch above the request | `EFS_ERR_FENCED` | `FENCED` (14) | `EIO`, mount fenced |
+| established epoch equals the request | `EFS_OK` | — | — |
+
+**Coverage.** "Wire" is what the request carries. "Admit" is who registers
+the touched shard. "Apply" names the replicated check that refuses the
+identity after a fence, so a check that passed before proposal cannot
+let a fenced mutation commit.
+
+| Path | Wire | Admit | Apply check | Before K5 |
+| --- | --- | --- | --- | --- |
+| CREATE, MKDIR | opid suffix (mandatory) | host, served dentry shard | `efs_session_prepare_namespace` / opid window | opid optional; host created unknown sessions |
+| retained CREATE (FUSE) | `efs_opid_req` in the request | host | same | already mandatory |
+| UNLINK, RMDIR | opid suffix (mandatory) | host | same | opid optional |
+| LINK | opid suffix (mandatory) | host | same | opid optional |
+| RENAME_AT | opid suffix (mandatory) | host | same | opid optional |
+| SETATTR size (truncate, D25) | opid suffix (mandatory) | client, inode shard | opid window on the inode shard | apply used the legacy accept |
+| SETATTR mode/uid/gid | opid suffix (mandatory) | client, inode shard | SETATTR command session bytes | no identity |
+| SETATTR times (utimens) | opid suffix (mandatory) | client, inode shard | UTIMENS command session bytes (inode copy) | no identity |
+| XATTR set/remove | session suffix (mandatory) | client, inode shard | XATTR command session bytes | no identity |
+| HOLD open/close (lease) | session suffix (mandatory) | client, inode shard | `efs_lease_open` | suffix optional, stand-in UUID |
+| CREATE with `EFS_CREATE_F_HOLD` | opid suffix (mandatory) | host | lease key bound to the request session | stand-in UUID from owner |
+| FLOCK / fcntl grant | session suffix (mandatory) | client, inode shard | `efs_lock_grant` | suffix optional, stand-in UUID |
+| FLOCK / fcntl release, GETLK | session suffix (mandatory) | — | host gate before release; GETLK is a read | suffix optional |
+| APPEND reservation | opid + ACK suffix (mandatory) | client, inode shard | `efs_meta_capture_append` / append apply | absent suffix accepted |
+| lease edges (OPEN/CLOSE/CLEAR_PENDING, D25) | identity in command | client | guarded edge apply | already strict |
+| publication / admit / retire (D25) | identity in request | client | publication apply | already strict |
+| PUT ticket admit / retire | identity in ticket | client | ticket apply | already strict |
+| REPORT_CHUNKS | session suffix (mandatory) | client, lane shards | REPORT mapping/activation guards | suffix optional |
+| lane bootstrap | none | — | none | none |
+| data PUT / DATA_COMMIT | none | — | none (targets do not fence) | none |
+| `efs-mgmt` raft-* smoke commands | own session, created per call | mgmt | same as the path it drives | none |
+
+Lane bootstrap only creates the empty lane rows a file's layout already
+implies; it changes no user-visible state, so it is not session-scoped.
+Data targets do not fence by design; the metadata publication that would
+make a fenced write visible is refused instead. The raw command submit
+RPC (`efs-mgmt raft-submit`, session commands) proposes commands whose
+apply checks are listed above; it is an operator interface, not a client
+path, and a command without session bytes is refused by those applies.
 
 #### Duplicate suppression must be bounded state
 
