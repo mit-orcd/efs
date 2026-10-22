@@ -37,12 +37,11 @@ int main(void){struct efs_raft_host h={0};uint8_t cmd[9]={EFS_MD_CMD_APPEND_ATOM
  apply_rc=0;assert(!apply_append_atomic_cmd(&h,cmd,9,group) && h.apply_extra==123);
  struct efs_meta_append_plan *p=calloc(1,sizeof(*p));assert(p);p->parts.n=1;p->parts.shard[0]=1;struct efs_opid_req q={0};
  pthread_mutex_init(&h.mu,NULL);p->count=4;
- assert(host_append_atomic_eligible(&h,p,1));role=EFS_RAFT_FOLLOWER;
- assert(!host_append_atomic_eligible(&h,p,1));role=EFS_RAFT_LEADER;voters=1;
- assert(!host_append_atomic_eligible(&h,p,1));voters=7;
- assert(!host_append_atomic_eligible(&h,p,0));p->count=0;
- assert(!host_append_atomic_eligible(&h,p,1));p->count=4;p->parts.n=2;
- assert(!host_append_atomic_eligible(&h,p,1));p->parts.n=1;
+ assert(host_append_atomic_eligible(&h,p));role=EFS_RAFT_FOLLOWER;
+ assert(!host_append_atomic_eligible(&h,p));role=EFS_RAFT_LEADER;voters=1;
+ assert(!host_append_atomic_eligible(&h,p));voters=7;p->count=0;
+ assert(!host_append_atomic_eligible(&h,p));p->count=4;p->parts.n=2;
+ assert(!host_append_atomic_eligible(&h,p));p->parts.n=1;
  encode_rc=EFS_ERR_INVAL;assert(host_append_execute_atomic(&h,p,&q,&hint)==EFS_ERR_INVAL && !proposals && !waits);
  encode_rc=0;propose_rc=EFS_ERR_NOT_PRIMARY;
  assert(host_append_execute_atomic(&h,p,&q,&hint)==EFS_ERR_NOT_PRIMARY && proposals==1 && !waits);
@@ -52,8 +51,10 @@ int main(void){struct efs_raft_host h={0};uint8_t cmd[9]={EFS_MD_CMD_APPEND_ATOM
 }
 '''
 a=s.index('static int host_append_transaction(');b=s.index('\n}',a);body=s[a:b]
-assert 'host_append_atomic_eligible(h,plan,registered)' in body
-assert 'host_append_execute_batched(h,plan,q,&t,registered,hint)' in body
+# K5: every append is session-owned; there is no unregistered branch.
+assert 'host_append_atomic_eligible(h,plan)' in body
+assert 'host_append_execute_batched(h,plan,q,&t,hint)' in body
+assert 'registered' not in body
 assert 'cmd[0] == EFS_MD_CMD_APPEND_ATOMIC' in s[s.index('ret = (cmd[0]'):s.index('/* Finish the atomic apply scope')]
 with tempfile.TemporaryDirectory(prefix='efs-atomic-host-') as d:
  p=Path(d)/'t.c';p.write_text(c)

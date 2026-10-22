@@ -159,9 +159,10 @@ with tempfile.TemporaryDirectory(prefix='efs-append-prepares-') as td:
  subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=c99','-Wall','-Wextra','-Werror','-pthread',str(p),'-o',str(binary)],check=True)
  subprocess.run([str(binary)],check=True,timeout=30)
 a=s.index('static int host_append_transaction(');b=s.index('\n}',a);body=s[a:b]
-assert 'host_append_atomic_eligible(h,plan,registered)' in body
-assert 'host_append_execute_batched(h,plan,q,&t,registered,hint)' in body
+assert 'host_append_atomic_eligible(h,plan)' in body
+assert 'host_append_execute_batched(h,plan,q,&t,hint)' in body
 a=s.index('static int host_append_execute_batched(');b=s.index('\n}',a);adapter=s[a:b]
-assert adapter.count('&host_append_reserve_ops,&batch')==2
-assert '.leading=registered?2:1' in adapter
+# K5: every append is session-owned; only the owned execution remains.
+assert adapter.count('&host_append_reserve_ops,&batch')==1
+assert 'efs_meta_execute_append_owned(' in adapter and '.leading=2' in adapter
 assert 'host_append_prune_batched(h,ino,&t,hint,&removed)' in body

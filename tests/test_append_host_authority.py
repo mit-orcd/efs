@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Production append authority admission and synchronized replay ownership."""
+"""Production append authority admission: leader-only allocation replies and
+the session-owned reservation path (K5: no unidentified reservation and no
+in-memory replay cache for one)."""
 from pathlib import Path
 import subprocess,tempfile,os
 root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_text()
 def fn(p):
  a=s.index(p);return s[a:s.index('\n}',a)+2]
-code=r'''
+code=r"""
 #include "efs/protocol.h"
 #include "efs/kv_key.h"
 #include <pthread.h>
@@ -14,51 +16,20 @@ code=r'''
 #include <string.h>
 #define EFS_RAFT_LEADER 1
 struct efs_raft{int role,leader;};
-struct efs_raft_host{struct efs_kv *kv;pthread_mutex_t mu;struct efs_raft r;struct {uint8_t uuid[16];uint32_t epoch;uint64_t seq;efs_ino_t ino;uint64_t len,off;}ap_rep[512];uint32_t ap_rep_i;};
-static int acceptance;
-static int efs_session_accept_legacy(struct efs_kv *kv,uint32_t shard,const uint8_t uuid[16],uint32_t epoch)
-{(void)kv;(void)shard;(void)uuid;(void)epoch;return acceptance;}
+struct efs_raft_host{struct efs_kv *kv;pthread_mutex_t mu;struct efs_raft r;};
 static struct efs_raft *group_raft(struct efs_raft_host*h,uint8_t g){return g==2?&h->r:NULL;}
 static int efs_raft_role(struct efs_raft*r){return r->role;}
 static int efs_raft_leader(struct efs_raft*r){return r->leader;}
-'''+fn('static int host_append_primary(')+fn('static int host_append_replay_get(')+fn('static void host_append_replay_put(')+r'''
+"""+fn('static int host_append_primary(')+r"""
 static struct efs_raft_host host={.mu=PTHREAD_MUTEX_INITIALIZER};
-static void *worker(void*p){uint64_t id=(uintptr_t)p;uint8_t uuid[16]={0};memcpy(uuid,&id,8);
- for(unsigned i=0;i<50000;i++){uint64_t seq=id*50000+i+1,out;
- host_append_replay_put(&host,id,uuid,1,seq,8,seq*8);
- if(!host_append_replay_get(&host,id,uuid,1,seq,8,&out))assert(out==seq*8);
- }return NULL;}
 int main(void){struct efs_msg_inode_reply r={0};host.r.role=0;host.r.leader=2;
  assert(!host_append_primary(&host,2,&r)&&r.status==EFS_INODE_RPC_NOT_PRIMARY&&r.primary_id==3);
  host.r.role=EFS_RAFT_LEADER;assert(host_append_primary(&host,2,&r));
  host.r.role=0;host.r.leader=-1;assert(!host_append_primary(&host,2,&r)&&!r.primary_id);
  assert(!host_append_primary(&host,0,&r));
- pthread_t t[8];for(uintptr_t i=0;i<8;i++)assert(!pthread_create(&t[i],NULL,worker,(void*)(i+1)));
- for(int i=0;i<8;i++){assert(!pthread_join(t[i],NULL));}
- assert(host.ap_rep_i==400000);
- uint8_t a[16]={1},b[16]={1},z[16]={0};uint64_t off=999;
- b[15]=2;z[15]=3;
- host_append_replay_put(&host,42,a,7,10,8,80);
- assert(!host_append_replay_get(&host,42,a,7,10,8,&off)&&off==80);
- assert(host_append_replay_get(&host,42,b,7,10,8,&off)==EFS_ERR_NOT_FOUND);
- assert(host_append_replay_get(&host,42,a,8,10,8,&off)==EFS_ERR_NOT_FOUND);
- assert(host_append_replay_get(&host,42,a,7,10,16,&off)==EFS_ERR_INVAL);
- host_append_replay_put(&host,42,z,7,11,8,88);
- assert(!host_append_replay_get(&host,42,z,7,11,8,&off)&&off==88);
- acceptance=EFS_ERR_STALE;off=999;
- assert(host_append_replay_get(&host,42,a,7,10,8,&off)==EFS_ERR_STALE && off==999);
- acceptance=EFS_ERR_IO;
- assert(host_append_replay_get(&host,42,a,7,10,8,&off)==EFS_ERR_IO && off==999);
- acceptance=EFS_OK;
- assert(host_append_replay_get(&host,42,a,7,10,8,&off)==EFS_OK && off==80);
- uint8_t empty[16]={0};
- host_append_replay_put(&host,42,empty,7,12,8,96);
- assert(host_append_replay_get(&host,42,empty,7,12,8,&off)==EFS_ERR_NOT_FOUND);
  return 0;
 }
-'''
-if os.environ.get('APPEND_HOST_TEST_OLD'):
- code=code.replace('pthread_mutex_lock(&h->mu);','').replace('pthread_mutex_unlock(&h->mu);','')
+"""
 with tempfile.TemporaryDirectory(prefix='efs-append-host-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(['cc','-std=gnu11','-pthread','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
@@ -66,9 +37,12 @@ with tempfile.TemporaryDirectory(prefix='efs-append-host-') as d:
 # A term change cannot fall through to generic forwarding without the offset.
 a=s.index('static int host_propose_impl(struct');b=s.index('rc = host_remote_cmd(h, group, cmd, clen, &rep, lid);',a)
 assert 'cmd[0] == EFS_MD_CMD_APPEND_RSV' in s[a:b]
-a=s.index('static void host_append_owner(');b=s.index('host_append_replay_get(',a)
-assert 'if (!host_append_primary(h, ig, out))' in s[a:b]
-print('append host: leader-only allocation replies, role-change forwarding guard and concurrent replay ownership PASS')
+# K5: the owner refuses an append without uuid/epoch/seq/ACK and has no
+# unidentified or cached-replay reservation path.
+a=s.index('static void host_append_owner(');b=s.index('\n}',a);owner=s[a:b]
+assert 'if (!ack || !sess_uuid)' in owner and 'EFS_ERR_UNREGISTERED' in owner
+assert 'host_append_replay_get' not in s and 'ap_rep' not in s
+print('append host: leader-only allocation replies, role-change forwarding guard and session-owned reservation PASS')
 
 a=s.index('void server_raft_host_append(');b=s.index('\n}',a)
 public=s[a:b]

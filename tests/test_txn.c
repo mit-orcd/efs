@@ -1,5 +1,6 @@
 /* Isolated transaction SM. No sockets, no Raft. */
 #include "efs/txn.h"
+#include "efs/session.h"
 #include "efs/kv.h"
 #include "efs/kv_key.h"
 #include "efs/meta_apply.h"
@@ -726,6 +727,10 @@ static void test_opid_reduce(void)
     rep.rc = EFS_OK;
     rep.ino = 4242;
 
+    /* K5: receipts belong to an established session on the receipt shard. */
+    CHECK(efs_meta_apply_opid_probe(kv, 1, &q1.id, &got) == EFS_ERR_UNREGISTERED,
+          "unregistered receipt probe refused");
+    CHECK(efs_session_establish(kv, 1, uuid, 1) == EFS_OK, "establish receipt session");
     /* no window yet: probe is a miss, not an error */
     CHECK(efs_meta_apply_opid_probe(kv, 1, &q1.id, &got) == 0, "empty probe");
     /* txn a records seq 1 on COMMIT */

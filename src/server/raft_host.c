@@ -80,14 +80,13 @@ _Static_assert(EFS_RAFT_STATUS_PEERS == EFS_RAFT_MAX_PEERS,
 #define HOST_NGROUPS       2
 #define HOST_READ_TRIES    80 /* 80 × 5 ms = 400 ms; heartbeat is 50 ms */
 #define HOST_CREATE_NAME_OFF 31
-static void host_hold_uuid(uint64_t owner, uint8_t uuid[EFS_OPID_UUID_LEN]);
 static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
                           uint64_t gen, const uint8_t uuid[EFS_OPID_UUID_LEN],
                           uint32_t epoch);
 #define HOST_CMD_MAX       512 /* stack size for small cmds, not a wire cap */
 #define HOST_SETATTR_LEN   61
-#define HOST_XATTR_HDR     28
-#define HOST_UTIMENS_LEN   73
+#define HOST_XATTR_HDR     48 /* 28 + session uuid/epoch (K5) */
+#define HOST_UTIMENS_LEN   93 /* 73 + session uuid/epoch (K5) */
 /* D25 single-entry TRUNCATE (protocol §1.2): tag kind ino:8 inode_gen:8
  * expect_epoch:8 expect_base_size:8 size:8 mtime_ns:8 opid:36. Exactly
  * this length; any other TRUNCATE is refused. */
@@ -521,18 +520,6 @@ struct efs_raft_host {
     uint64_t obs_opid_replay;
     /* Set by apply_append_rsv_cmd; host_apply copies it into the ring. */
     uint64_t apply_extra;
-    /* In-memory I16 for APPEND: a retried RPC with the same (ino,uuid,epoch,seq)
-     * must not propose a second reservation (that left a 6-byte hole).
-     * Not in the Raft cmd — 400 unique seqs in the op-id window is NOMEM. */
-    struct {
-        uint8_t uuid[EFS_OPID_UUID_LEN];
-        uint32_t epoch;
-        uint64_t seq;
-        efs_ino_t ino;
-        uint64_t len;
-        uint64_t off;
-    } ap_rep[512];
-    uint32_t ap_rep_i;
 };
 
 static struct efs_raft_host *g_host;
@@ -1483,7 +1470,8 @@ static int apply_create_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                 rc = efs_meta_apply_create_file_log_lease(h->kv, &at, parent, mode,
                                                       name, want, lay, qp,
                                                       nonzero ? uuid : NULL,
-                                                      1, &ino);
+                                                      rd32be(uuid + EFS_OPID_UUID_LEN),
+                                                      &ino);
         }
     }
     if (rc != EFS_OK) {
@@ -1591,8 +1579,8 @@ static int apply_rmdir_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return EFS_OK;
 }
 
-/* Same encoding as sim apply_setattr_cmd. Session fencing is not hosted.
- * Apply never stalls the log. */
+/* SETATTR apply. The session bytes at +41 must name a session established
+ * on the inode shard (K5). Apply never stalls the log. */
 static int apply_setattr_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                              uint32_t clen, uint64_t index)
 {
@@ -1611,7 +1599,10 @@ static int apply_setattr_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     sa.mode = rd32be(cmd + 29);
     sa.uid = rd32be(cmd + 33);
     sa.gid = rd32be(cmd + 37);
-    rc = efs_meta_apply_setattr(h->kv, ino, now, &sa);
+    rc = efs_session_accept(h->kv, efs_kv_inode_shard(ino), cmd + 41,
+                            rd32be(cmd + 41 + EFS_OPID_UUID_LEN));
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_setattr(h->kv, ino, now, &sa);
     /* W45: the rc is the ring verdict (SETATTR is ring-only in
      * host_apply). NOT_FOUND = the row went away after the leader's
      * pre-read → ENOENT. The handler packs expect_gen = 0, so STALE is
@@ -1652,17 +1643,21 @@ static int apply_xattr_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     body = (uint32_t)nlen + vlen;
     if (clen != HOST_XATTR_HDR + body)
         return EFS_ERR_UNSUPPORTED;
-    rc = efs_meta_apply_xattr(h->kv, ino, now, op, flags, cmd + HOST_XATTR_HDR,
-                              nlen, cmd + HOST_XATTR_HDR + nlen, vlen);
+    rc = efs_session_accept(h->kv, efs_kv_inode_shard(ino), cmd + 28,
+                            rd32be(cmd + 28 + EFS_OPID_UUID_LEN));
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_xattr(h->kv, ino, now, op, flags, cmd + HOST_XATTR_HDR,
+                                  nlen, cmd + HOST_XATTR_HDR + nlen, vlen);
     if (rc != EFS_OK && rc != EFS_ERR_NODATA && rc != EFS_ERR_EXIST &&
-        rc != EFS_ERR_NOT_FOUND && rc != EFS_ERR_INVAL) {
+        rc != EFS_ERR_NOT_FOUND && rc != EFS_ERR_INVAL &&
+        rc != EFS_ERR_FENCED && rc != EFS_ERR_UNREGISTERED) {
         fprintf(stderr, "raft-host: apply xattr rc=%d index=%llu ino=%llu\n",
                 rc, (unsigned long long)index, (unsigned long long)ino);
     }
     return rc;
 }
 
-/* Same encoding as sim apply_utimens_cmd. Session fencing is not hosted. */
+/* UTIMENS apply. The inode copy checks the session bytes (K5). */
 static int apply_utimens_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                              uint32_t clen, uint64_t index)
 {
@@ -1682,7 +1677,11 @@ static int apply_utimens_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     u.atime = rd64be(cmd + 37);
     u.mtime_gen = rd64be(cmd + 45);
     u.lane_bits = rd64be(cmd + 53);
-    rc = efs_meta_apply_utimens(h->kv, ino, now, &u);
+    rc = u.lane_bits ? EFS_OK :
+         efs_session_accept(h->kv, efs_kv_inode_shard(ino), cmd + 73,
+                            rd32be(cmd + 73 + EFS_OPID_UUID_LEN));
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_utimens(h->kv, ino, now, &u);
     /* W45. STALE is the one documented idempotent case: it means a utimens
      * with a higher mtime_gen already landed (`u->mtime_gen <
      * row.mtime_gen`) — the later caller's stamp is the one POSIX keeps,
@@ -5317,27 +5316,6 @@ static int host_arc_verdict(struct efs_raft_host *h, int hosted,
     return v->rc;
 }
 
-/* The entry's extra (APPEND_RSV's reserved offset) from the same slot copy
- * as its verdict, so rc and extra always belong to one apply. */
-static int host_arc_extra(struct efs_raft_host *h, int hosted,
-                          const struct efs_arc_view *v, uint64_t idx,
-                          uint64_t term, uint64_t *extra_out)
-{
-    if (!hosted)
-        return EFS_ERR_BUSY; /* no local ring; the extra is not on the wire */
-    if (v->idx != idx) {
-        __atomic_fetch_add(&h->obs_arc_miss, 1, __ATOMIC_RELAXED);
-        return EFS_ERR_BUSY;
-    }
-    if (term && v->term != term) {
-        __atomic_fetch_add(&h->obs_arc_term_miss, 1, __ATOMIC_RELAXED);
-        return EFS_ERR_NOT_PRIMARY;
-    }
-    if (extra_out)
-        *extra_out = v->extra;
-    return EFS_OK;
-}
-
 static int host_apply_rc(struct efs_raft_host *h, uint8_t group, uint64_t idx,
                          uint64_t term)
 {
@@ -5441,40 +5419,6 @@ static int host_propose_wait(struct efs_raft_host *h, uint8_t group,
                              const uint8_t *cmd, uint32_t clen, int *hint)
 {
     return host_propose_wait_idx(h, group, cmd, clen, hint, NULL);
-}
-
-static int host_propose_wait_ex_impl(struct efs_raft_host *h, uint8_t group,
-                                const uint8_t *cmd, uint32_t clen, int *hint,
-                                uint64_t *extra_out)
-{
-    uint64_t idx = 0, term = 0;
-    int rc, erc;
-
-    rc = host_propose_impl(h, group, cmd, clen, &idx, &term, hint, 0);
-    if (rc != EFS_OK)
-        return rc;
-    uint64_t wp0 = write_prof_on() ? wprof_now() : 0, seen = 0;
-    struct efs_arc_view v;
-    int hosted;
-    rc = host_wait_applied(h, group, idx, hint);
-    if (rc != EFS_OK)
-        return rc;
-    if (wp0) seen = wprof_now();
-    /* One slot copy: the verdict and the reserved offset of the same apply. */
-    hosted = host_arc_read(h, group, idx, &v);
-    rc = host_arc_verdict(h, hosted, &v, idx, term);
-    erc = host_arc_extra(h, hosted, &v, idx, term, extra_out);
-    if (wp0) wprof_verdict(wp0, seen, host_arc_apply_us(hosted, &v, idx));
-    if (rc == EFS_OK && extra_out)
-        rc = erc;
-    return rc;
-}
-
-static int host_propose_wait_ex(struct efs_raft_host *h, uint8_t group,
-                                const uint8_t *cmd, uint32_t clen, int *hint,
-                                uint64_t *extra_out)
-{
-    return host_propose_wait_ex_impl(h,group,cmd,clen,hint,extra_out);
 }
 
 static int host_inode_rpc_peer(struct efs_raft_host *h, int rid, uint8_t req_type,
@@ -5820,24 +5764,26 @@ static void host_fwd_setattr(struct efs_raft_host *h, efs_ino_t ino,
                              uint32_t mask, uint32_t mode, uint32_t uid,
                              uint32_t gid, uint64_t size, uint64_t mtime,
                              uint32_t mtime_nsec, uint64_t atime,
-                             uint32_t atime_nsec,
+                             uint32_t atime_nsec, const struct efs_opid_req *q,
                              struct efs_msg_inode_reply *out,
                              const uint8_t *groups, int ng)
 {
-    struct efs_msg_inode_setattr req;
+    uint8_t buf[sizeof(struct efs_msg_inode_setattr) + EFS_OPID_WIRE_LEN];
+    struct efs_msg_inode_setattr *req = (struct efs_msg_inode_setattr *)buf;
 
-    memset(&req, 0, sizeof(req));
-    req.ino = ino;
-    req.mask = mask;
-    req.mode = mode;
-    req.uid = uid;
-    req.gid = gid;
-    req.size = size;
-    req.mtime = mtime;
-    req.mtime_nsec = mtime_nsec;
-    req.atime = atime;
-    req.atime_nsec = atime_nsec;
-    host_inode_forward(h, EFS_MSG_INODE_SETATTR, &req, sizeof(req),
+    memset(buf, 0, sizeof(buf));
+    req->ino = ino;
+    req->mask = mask;
+    req->mode = mode;
+    req->uid = uid;
+    req->gid = gid;
+    req->size = size;
+    req->mtime = mtime;
+    req->mtime_nsec = mtime_nsec;
+    req->atime = atime;
+    req->atime_nsec = atime_nsec;
+    efs_opid_req_pack(q, buf + sizeof(*req));
+    host_inode_forward(h, EFS_MSG_INODE_SETATTR, buf, sizeof(buf),
                        EFS_MSG_INODE_SETATTR_REPLY, out, groups, ng);
 }
 
@@ -5985,6 +5931,8 @@ static int pack_create_cmd(uint8_t *out, uint32_t *len, efs_ino_t parent,
 
     if (pending && (!with_op || !q->id.session_epoch || q->ack>=q->id.seq ||
                     S_ISDIR(mode) || hold_owner)) return EFS_ERR_INVAL;
+    /* A CREATE-time open lease belongs to the request's session (K5). */
+    if (hold_owner && (!with_op || !q->id.session_epoch)) return EFS_ERR_INVAL;
     if (nl == 0 || nl >= EFS_MAX_NAME)
         return EFS_ERR_NAMETOOLONG;
     n = HOST_CREATE_NAME_OFF + (uint32_t)nl + EFS_OPID_UUID_LEN + 4;
@@ -6005,11 +5953,10 @@ static int pack_create_cmd(uint8_t *out, uint32_t *len, efs_ino_t parent,
     memcpy(out + HOST_CREATE_NAME_OFF, name, nl);
     p = out + HOST_CREATE_NAME_OFF + nl;
     memset(p, 0, EFS_OPID_UUID_LEN + 4);
-    if (pending) {
+    if (pending || (hold_owner && !S_ISDIR(mode))) {
         memcpy(p,q->id.client_uuid,EFS_OPID_UUID_LEN);
         wr32be(p+EFS_OPID_UUID_LEN,q->id.session_epoch);
-    } else if (hold_owner && !S_ISDIR(mode))
-        host_hold_uuid(hold_owner, p);
+    }
     p += EFS_OPID_UUID_LEN + 4;
     if (child_ino) {
         wr64be(p, child_ino);
@@ -6064,11 +6011,13 @@ static int pack_rmdir_cmd(uint8_t *out, uint32_t *len, efs_ino_t parent,
     return rc;
 }
 
-/* Same encoding as sim_raft_setattr. Session bytes are zero (not hosted). */
+/* Session bytes at +41 name the mount session (K5); the apply refuses the
+ * command unless that session is established on the inode shard. */
 static int pack_setattr_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
-                            uint64_t now, const struct efs_meta_setattr *sa)
+                            uint64_t now, const struct efs_meta_setattr *sa,
+                            const struct efs_opid *id)
 {
-    if (!sa)
+    if (!sa || !id)
         return EFS_ERR_INVAL;
     out[0] = EFS_MD_CMD_SETATTR;
     wr64be(out + 1, ino);
@@ -6078,16 +6027,21 @@ static int pack_setattr_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
     wr32be(out + 29, sa->mode);
     wr32be(out + 33, sa->uid);
     wr32be(out + 37, sa->gid);
-    memset(out + 41, 0, EFS_OPID_UUID_LEN + 4);
+    memcpy(out + 41, id->client_uuid, EFS_OPID_UUID_LEN);
+    wr32be(out + 41 + EFS_OPID_UUID_LEN, id->session_epoch);
     *len = HOST_SETATTR_LEN;
     return EFS_OK;
 }
 
-/* Same encoding as sim_raft_utimens. Session bytes are zero (not hosted). */
+/* Session bytes at +73 name the mount session (K5). The inode-row copy
+ * (lane_bits == 0) is refused at apply unless that session is established on
+ * the inode shard; the lane copy for the other group carries the same bytes
+ * but is proposed only after the inode shard's gate admitted the request. */
 static int pack_utimens_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
-                            uint64_t now, const struct efs_meta_utimens *u)
+                            uint64_t now, const struct efs_meta_utimens *u,
+                            const struct efs_opid *id)
 {
-    if (!u)
+    if (!u || !id)
         return EFS_ERR_INVAL;
     out[0] = EFS_MD_CMD_UTIMENS;
     wr64be(out + 1, ino);
@@ -6098,114 +6052,26 @@ static int pack_utimens_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
     wr64be(out + 37, u->atime);
     wr64be(out + 45, u->mtime_gen);
     /* +53: lane_bits (W25). Nonzero only on the copy proposed to the
-     * other group, whose KV has no inode row. UTIMENS carries no op-id;
-     * the remaining 12 bytes are zero. */
+     * other group, whose KV has no inode row. +61..72 stay zero. */
     memset(out + 53, 0, EFS_OPID_UUID_LEN + 4);
     wr64be(out + 53, u->lane_bits);
+    memcpy(out + 73, id->client_uuid, EFS_OPID_UUID_LEN);
+    wr32be(out + 73 + EFS_OPID_UUID_LEN, id->session_epoch);
     *len = HOST_UTIMENS_LEN;
     return EFS_OK;
 }
 
 
-static int pack_append_rsv_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
-                               uint64_t alen, const uint8_t *uuid,
-                               uint32_t epoch, uint64_t seq, const uint64_t *ack)
-{
-    out[0] = EFS_MD_CMD_APPEND_RSV;
-    wr64be(out + 1, ino);
-    wr64be(out + 9, alen);
-    memset(out + 17, 0, EFS_OPID_UUID_LEN + 4 + 8);
-    if (uuid) {
-        memcpy(out + 17, uuid, EFS_OPID_UUID_LEN);
-        wr32be(out + 33, epoch);
-        if (ack) wr64be(out + 37, seq);
-    }
-    *len = HOST_APPEND_RSV_LEGACY_LEN;
-    if (ack) { wr64be(out + 45, *ack); *len = HOST_APPEND_RSV_LEN; }
-    return EFS_OK;
-}
-
-/* 0 = exact replay, NOT_FOUND = cache miss, INVAL = reused identity
- * with a different payload. A payload mismatch must never allocate again. */
-static int host_append_replay_get(struct efs_raft_host *h, efs_ino_t ino,
-                                  const uint8_t *uuid, uint32_t epoch,
-                                  uint64_t seq, uint64_t len, uint64_t *off_out)
-{
-    uint32_t i;
-
-    if (!h || !uuid || seq == 0 || !off_out ||
-        memcmp(uuid, (uint8_t[EFS_OPID_UUID_LEN]){0}, EFS_OPID_UUID_LEN) == 0)
-        return EFS_ERR_NOT_FOUND;
-    pthread_mutex_lock(&h->mu);
-    /* A cached offset is not permission to bypass a later durable fence.
-     * Caller already crossed authoritative ReadIndex; serialize this local
-     * epoch check with apply before returning the retained result. */
-    int accepted=efs_session_accept_legacy(h->kv,efs_kv_inode_shard(ino),uuid,epoch);
-    if(accepted!=EFS_OK) {pthread_mutex_unlock(&h->mu);return accepted;}
-    for (i = 0; i < 512; i++) {
-        if (h->ap_rep[i].seq == seq && h->ap_rep[i].ino == ino &&
-            h->ap_rep[i].epoch == epoch &&
-            memcmp(h->ap_rep[i].uuid, uuid, EFS_OPID_UUID_LEN) == 0) {
-            int rc = h->ap_rep[i].len == len ? EFS_OK : EFS_ERR_INVAL;
-            if (rc == EFS_OK)
-                *off_out = h->ap_rep[i].off;
-            pthread_mutex_unlock(&h->mu);
-            return rc;
-        }
-    }
-    pthread_mutex_unlock(&h->mu);
-    return EFS_ERR_NOT_FOUND;
-}
-
-static void host_append_replay_put(struct efs_raft_host *h, efs_ino_t ino,
-                                   const uint8_t *uuid, uint32_t epoch,
-                                   uint64_t seq, uint64_t len, uint64_t off)
-{
-    uint32_t i;
-
-    if (!h || !uuid || seq == 0 ||
-        memcmp(uuid, (uint8_t[EFS_OPID_UUID_LEN]){0}, EFS_OPID_UUID_LEN) == 0)
-        return;
-    pthread_mutex_lock(&h->mu);
-    i = h->ap_rep_i++ & 511u;
-    memcpy(h->ap_rep[i].uuid, uuid, EFS_OPID_UUID_LEN);
-    h->ap_rep[i].epoch = epoch;
-    h->ap_rep[i].seq = seq;
-    h->ap_rep[i].ino = ino;
-    h->ap_rep[i].len = len;
-    h->ap_rep[i].off = off;
-    pthread_mutex_unlock(&h->mu);
-}
-
-
-/* Stand-in identity when the RPC has no session suffix (pre-35b FUSE
- * and smoke). Real (uuid, epoch) come from the optional wire suffix. */
-static void host_hold_uuid(uint64_t owner, uint8_t uuid[EFS_OPID_UUID_LEN])
-{
-    memset(uuid, 0, EFS_OPID_UUID_LEN);
-    wr64be(uuid, owner);
-}
-
-static void host_sess_bytes(uint64_t owner, const uint8_t *sess_uuid,
-                            uint32_t sess_epoch, uint8_t uuid[EFS_OPID_UUID_LEN],
-                            uint32_t *epoch)
-{
-    if (sess_uuid) {
-        memcpy(uuid, sess_uuid, EFS_OPID_UUID_LEN);
-        *epoch = sess_epoch;
-        return;
-    }
-    host_hold_uuid(owner, uuid);
-    *epoch = 1;
-}
-
-/* Absent suffix skips accept (stand-in). Present suffix must already
- * be established on the inode shard (35a CREATE/REGISTER/ESTABLISH). */
+/* The session named by the request must already be established on the
+ * inode shard (the client admits it: REGISTER + ESTABLISH). There is no
+ * stand-in identity: an absent suffix is UNREGISTERED (K5). The apply of
+ * the proposed command checks again, so a fence that lands in between
+ * still refuses it. */
 static int host_sess_gate(struct efs_raft_host *h, efs_ino_t ino,
                           const uint8_t *sess_uuid, uint32_t sess_epoch)
 {
     if (!sess_uuid)
-        return EFS_OK;
+        return EFS_ERR_UNREGISTERED;
     return efs_session_accept(h->kv, efs_kv_inode_shard(ino), sess_uuid,
                               sess_epoch);
 }
@@ -6264,8 +6130,10 @@ static void fill_flock_req(struct efs_lock_req *r, efs_ino_t ino, uint64_t gen,
     /* Classic fcntl = process token; flock (and OFD fcntl) = OFD. */
     r->owner.kind = (domain == EFS_LOCK_FCNTL) ? EFS_LOCK_PROC : EFS_LOCK_OFD;
     r->owner.id = owner;
-    host_sess_bytes(owner, sess_uuid, sess_epoch, r->owner.uuid,
-                    &r->owner.epoch);
+    if (sess_uuid) {
+        memcpy(r->owner.uuid, sess_uuid, EFS_OPID_UUID_LEN);
+        r->owner.epoch = sess_epoch;
+    }
 }
 
 /* Same encoding as sim pack_publish. Session bytes are zero (not hosted). */
@@ -6634,6 +6502,10 @@ static uint8_t rc_to_inode_status(int rc)
         return EFS_INODE_RPC_NODATA;
     if (rc == EFS_ERR_OVERFLOW)
         return EFS_INODE_RPC_OVERFLOW;
+    if (rc == EFS_ERR_FENCED)
+        return EFS_INODE_RPC_FENCED;
+    if (rc == EFS_ERR_UNREGISTERED)
+        return EFS_INODE_RPC_UNREGISTERED;
     return EFS_INODE_RPC_ERROR;
 }
 
@@ -12192,33 +12064,27 @@ static int host_session_cleanup_admit(struct efs_raft_host *h,
         EFS_OK : EFS_ERR_BUSY;
 }
 
-/* Legacy unregistered append identities remain compatible. Once a session is
- * registered, absence/error is never authority to bypass its global/local floor. */
+/* Append admission: the owner must know this session at the request epoch
+ * and the inode shard must have established it. An unknown session or an
+ * unestablished shard is UNREGISTERED (the client admits and resends); an
+ * owner at another epoch is FENCED. Absence is never permission (K5). */
 static int host_append_session_admit_covered(struct efs_raft_host *h,efs_ino_t ino,
-    const struct efs_opid_req *q,int *hint,int *registered,uint8_t covered)
+    const struct efs_opid_req *q,int *hint,uint8_t covered)
 {
     uint32_t shard=efs_kv_inode_shard(ino);uint8_t query[HOST_SESS_HDR_LEN+4]={EFS_MD_CMD_SESSION,HOST_SESS_GET};
     memcpy(query+2,q->id.client_uuid,16);wr32be(query+18,shard);
     uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(q->id.client_uuid));
     uint64_t salt=0;int rc;
-    *registered=0;
     if(host_hosts(h,owner))rc=host_session_get_covered(h,query,sizeof(query),owner,hint,&salt,covered);
     else {
         struct efs_msg_raft_mkfs_reply reply={0};
         rc=host_remote_cmd(h,owner,query,sizeof(query),&reply,-1);salt=reply.salt;
     }
-    if(rc==EFS_ERR_NOT_FOUND) {
-        uint8_t key[EFS_KV_KEY_MAX],value[EFS_SESS_LOCAL_VAL];uint32_t kl,vl=sizeof(value);
-        rc=efs_kv_key_sess_local(shard,q->id.client_uuid,key,&kl);
-        if(rc==EFS_OK)rc=efs_kv_get(h->kv,key,kl,value,&vl);
-        return rc==EFS_ERR_NOT_FOUND?EFS_OK:(rc==EFS_OK?EFS_ERR_NOT_FOUND:rc);
-    }
+    if(rc==EFS_ERR_NOT_FOUND)return EFS_ERR_UNREGISTERED;
     if(rc!=EFS_OK)return rc;
-    if((uint32_t)salt!=q->id.session_epoch)return EFS_ERR_STALE;
+    if((uint32_t)salt!=q->id.session_epoch)return EFS_ERR_FENCED;
     if((uint8_t)(salt>>32)!=EFS_SESSION_ACTIVE)return EFS_ERR_BUSY;
-    rc=efs_session_accept(h->kv,shard,q->id.client_uuid,q->id.session_epoch);
-    if(rc==EFS_OK)*registered=1;
-    return rc;
+    return efs_session_accept(h->kv,shard,q->id.client_uuid,q->id.session_epoch);
 }
 
 
@@ -13158,9 +13024,9 @@ void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out)
 }
 
 /* Open lease (I19): one Raft entry on the inode shard. flags=1 open,
- * flags=0 close. owner is the process/ofd id. Optional sess_uuid is
- * the 35b session identity (accept before propose); NULL keeps the
- * stand-in. Directories INVAL. Last close reclaims a nlink=0 inode. */
+ * flags=0 close. owner is the process/ofd id. sess_uuid/sess_epoch is the
+ * mount session (mandatory, K5): checked before propose and again by the
+ * LEASE apply. Directories INVAL. Last close reclaims a nlink=0 inode. */
 void server_raft_host_hold(efs_ino_t ino, uint32_t flags, uint64_t owner,
                            const uint8_t *sess_uuid, uint32_t sess_epoch,
                            struct efs_msg_inode_reply *out)
@@ -13169,8 +13035,7 @@ void server_raft_host_hold(efs_ino_t ino, uint32_t flags, uint64_t owner,
     struct efs_meta_row row;
     struct efs_meta_stat st;
     uint8_t cmd[HOST_SESS_LEASE_LEN];
-    uint8_t uuid[EFS_OPID_UUID_LEN];
-    uint32_t clen = 0, epoch = 1;
+    uint32_t clen = 0;
     uint8_t ig;
     int hint = -1;
     int rc;
@@ -13201,11 +13066,9 @@ void server_raft_host_hold(efs_ino_t ino, uint32_t flags, uint64_t owner,
         rc = EFS_ERR_INVAL;
     if (rc == EFS_OK)
         rc = host_sess_gate(h, ino, sess_uuid, sess_epoch);
-    if (rc == EFS_OK) {
-        host_sess_bytes(owner, sess_uuid, sess_epoch, uuid, &epoch);
+    if (rc == EFS_OK)
         rc = pack_lease_cmd(cmd, &clen, flags ? 1 : 0, ino, row.generation,
-                            uuid, epoch);
-    }
+                            sess_uuid, sess_epoch);
     if (rc == EFS_OK)
         rc = host_propose_wait(h, ig, cmd, clen, &hint);
     if (rc == EFS_OK) {
@@ -13799,14 +13662,16 @@ static int host_namespace_session_command(struct efs_raft_host *h,uint8_t group,
     if(reply.leader_hint>=0)*hint=reply.leader_hint;
     return rc;
 }
-/* REPORT preparation must not append an idempotent owner CREATE for every
- * newly touched file. A fresh owner read can prove that preparation already
- * exists. This proof is scoped to this call: each participant still performs
- * its original REGISTER/ESTABLISH and ACTIVE/epoch checks. */
+/* A fresh owner read proves the mount's session exists and is ACTIVE at the
+ * request epoch. Hosts never create a session on a client's behalf (K5):
+ * the mount creates its own at mount time, so an unknown owner row is
+ * UNREGISTERED and a different owner epoch is FENCED. This proof is scoped
+ * to this call: each participant still performs its own REGISTER/ESTABLISH
+ * and ACTIVE/epoch checks. */
 static int host_namespace_session_prepare_owner(struct efs_raft_host *h,
     const struct efs_opid_req *q,int *hint)
 {
-    if(!q || !efs_opid_req_valid(q) || !q->id.session_epoch)return EFS_OK;
+    if(!q || !efs_opid_req_valid(q) || !q->id.session_epoch)return EFS_ERR_UNREGISTERED;
     if(q->ack>=q->id.seq)return EFS_ERR_INVAL;
     uint8_t cmd[HOST_SESS_CREATE_LEN]={EFS_MD_CMD_SESSION,HOST_SESS_GET};
     memcpy(cmd+2,q->id.client_uuid,16);
@@ -13822,19 +13687,17 @@ static int host_namespace_session_prepare_owner(struct efs_raft_host *h,
         if(rc==EFS_OK)session=reply.salt;
     }
     if(rc==EFS_OK) {
-        if((uint32_t)session!=q->id.session_epoch)return EFS_ERR_STALE;
+        if((uint32_t)session!=q->id.session_epoch)return EFS_ERR_FENCED;
         uint8_t state=(uint8_t)(session>>32);
         if(state==EFS_SESSION_FENCING)return EFS_ERR_BUSY;
         return state==EFS_SESSION_ACTIVE?EFS_OK:EFS_ERR_PROTO;
     }
-    if(rc!=EFS_ERR_NOT_FOUND)return rc;
-    cmd[1]=EFS_MD_SESS_CREATE;wr32be(cmd+18,q->id.session_epoch);
-    return host_namespace_session_command(h,owner,cmd,sizeof(cmd),hint);
+    return rc==EFS_ERR_NOT_FOUND?EFS_ERR_UNREGISTERED:rc;
 }
 static int host_namespace_session_admit_covered(struct efs_raft_host *h,uint32_t shard,
     const struct efs_opid_req *q,int *hint,uint8_t covered)
 {
-    if(!q || !efs_opid_req_valid(q) || !q->id.session_epoch)return EFS_OK;
+    if(!q || !efs_opid_req_valid(q) || !q->id.session_epoch)return EFS_ERR_UNREGISTERED;
     if(q->ack>=q->id.seq || shard>=EFS_SESSION_BITS)return EFS_ERR_INVAL;
     uint8_t group=efs_raft_shard_group(shard);
     int rc=(covered&(1u<<group))?EFS_OK:host_read_index(h,group,hint);
@@ -13845,13 +13708,12 @@ static int host_namespace_session_admit_covered(struct efs_raft_host *h,uint32_t
     if(rc==EFS_OK)rc=efs_kv_get(h->kv,key,kl,value,&vl);
     if(rc==EFS_OK)return efs_session_accept(h->kv,shard,q->id.client_uuid,q->id.session_epoch);
     if(rc!=EFS_ERR_NOT_FOUND)return rc;
-    uint8_t cmd[HOST_SESS_REG_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_CREATE};
+    uint8_t cmd[HOST_SESS_REG_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_REGISTER};
     memcpy(cmd+2,q->id.client_uuid,16);wr32be(cmd+18,q->id.session_epoch);wr32be(cmd+22,shard);
     uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(q->id.client_uuid));
-    /* CREATE is a no-op for an existing session, but still used to pay a
-     * durable log round on every newly touched namespace shard. Consult
-     * fresh owner authority; only absence needs CREATE. Never infer ACTIVE
-     * from a missing local floor or cache the owner across requests. */
+    /* Consult fresh owner authority before admitting a new participant.
+     * Never infer ACTIVE from a missing local floor, never cache the owner
+     * across requests and never create a session for an unknown uuid. */
     uint8_t query[HOST_SESS_HDR_LEN+4];
     memcpy(query,cmd,HOST_SESS_HDR_LEN);query[1]=HOST_SESS_GET;wr32be(query+18,shard);
     uint64_t session=0;
@@ -13864,11 +13726,11 @@ static int host_namespace_session_admit_covered(struct efs_raft_host *h,uint32_t
     }
     int registered=0;
     if(rc==EFS_ERR_NOT_FOUND) {
-        rc=host_namespace_session_command(h,owner,cmd,HOST_SESS_CREATE_LEN,hint);
+        rc=EFS_ERR_UNREGISTERED;
     } else if(rc==EFS_OK) {
         uint32_t epoch=(uint32_t)session;
         uint8_t state=(uint8_t)(session>>32);
-        if(epoch!=q->id.session_epoch)rc=EFS_ERR_STALE;
+        if(epoch!=q->id.session_epoch)rc=EFS_ERR_FENCED;
         else if(state==EFS_SESSION_FENCING)rc=EFS_ERR_BUSY;
         else if(state!=EFS_SESSION_ACTIVE)rc=EFS_ERR_PROTO;
         else registered=(session&(1ull<<40))!=0;
@@ -13974,7 +13836,7 @@ static int host_report_session_admit(struct efs_raft_host *h,
             seen[shard / 8] |= (uint8_t)(1u << (shard % 8));
             int rc = efs_session_accept(h->kv, shard, session->client_uuid,
                                         session->session_epoch);
-            if (rc == EFS_ERR_BUSY || rc == EFS_ERR_NOT_FOUND)
+            if (rc == EFS_ERR_UNREGISTERED)
                 work.shards[work.count++] = shard;
             else if (rc != EFS_OK) return rc;
         }
@@ -14312,6 +14174,11 @@ static int host_retained_create_proof(struct efs_raft_host *h,
     if(rc!=EFS_OK)return rc;
     struct efs_opid_reply receipt;
     int hit=host_opid_replay(h,out->shard,&request->q,&receipt);
+    /* The probe runs before the client admits the routed shard. An identity
+     * never established at this epoch on this shard has no receipt here:
+     * report "not recorded" so the client admits and submits (K5). A fenced
+     * identity stays refused. */
+    if(hit==EFS_ERR_UNREGISTERED)return EFS_ERR_BUSY;
     if(hit<0)return hit;
     if(!hit)return EFS_ERR_BUSY;
     out->known=1;
@@ -15219,9 +15086,9 @@ static int host_append_execute_atomic(struct efs_raft_host *h,
  * that primary would forward the request back here. Keep ordinary cohort
  * forwarding for this coordinator; atomic verdicts require local leadership. */
 static int host_append_atomic_eligible(struct efs_raft_host *h,
-    const struct efs_meta_append_plan *p,int registered)
+    const struct efs_meta_append_plan *p)
 {
-    if(!registered || !p->count || p->parts.n!=1)return 0;
+    if(!p->count || p->parts.n!=1)return 0;
     uint8_t group=efs_raft_shard_group(p->parts.shard[0]);
     pthread_mutex_lock(&h->mu);
     struct efs_raft *r=group_raft(h,group);
@@ -15281,14 +15148,14 @@ static int host_append_batch_resolve(void *user,const struct efs_txid *t,
 
 static int host_append_execute_batched(struct efs_raft_host *h,
     const struct efs_meta_append_plan *plan,const struct efs_opid_req *q,
-    const struct efs_txid *t,int registered,int *hint)
+    const struct efs_txid *t,int *hint)
 {
     /* Keep NUC's synchronous ordered session/inode guards on the general
      * cross-shard path. Only the independently eligible atomic entry bypasses
-     * this adapter; completion and tag52 catch-up retain their own guards. */
-    struct host_append_reserve_ctx batch={.base={h,hint},.leading=registered?2:1};
-    return registered?efs_meta_execute_append_owned(h->kv,plan,q,t,&host_append_reserve_ops,&batch):
-                      efs_meta_execute_append(plan,t,&host_append_reserve_ops,&batch);
+     * this adapter; completion and tag52 catch-up retain their own guards.
+     * Every append is session-owned (K5): there is no unregistered path. */
+    struct host_append_reserve_ctx batch={.base={h,hint},.leading=2};
+    return efs_meta_execute_append_owned(h->kv,plan,q,t,&host_append_reserve_ops,&batch);
 }
 
 /* Pruning uses immutable captured images just like reserve.
@@ -15342,13 +15209,13 @@ static int host_append_transaction(struct efs_raft_host *h,efs_ino_t ino,uint64_
                                     const struct efs_opid_req *q,uint64_t *offset,int *hint)
 {
     struct efs_txid t;
-    int registered=0,rc=host_append_authority(h,hint);
+    int rc=host_append_authority(h,hint);
     /* Authority was established for both groups in this RPC, before any
      * mutation. Reuse only that request-local boundary for the owner read;
      * always reread its current epoch/state and local acceptance floor. */
     uint8_t groups[2];host_need_both(groups);
     uint8_t covered=(uint8_t)((1u<<groups[0])|(1u<<groups[1]));
-    if(rc==EFS_OK)rc=host_append_session_admit_covered(h,ino,q,hint,&registered,covered);
+    if(rc==EFS_OK)rc=host_append_session_admit_covered(h,ino,q,hint,covered);
     if(rc!=EFS_OK)return rc;
     /* Replayed reservations do not need cleanup or a new transaction. */
     rc=efs_meta_append_result(h->kv,ino,len,q,offset);
@@ -15378,9 +15245,9 @@ static int host_append_transaction(struct efs_raft_host *h,efs_ino_t ino,uint64_
     rc=efs_meta_capture_append(h->kv,ino,len,q,host_txn_coord,h,plan);
     if(rc==EFS_OK) {
         *offset=plan->offset;fill_txid(h,&t);
-        rc=host_append_atomic_eligible(h,plan,registered) ?
+        rc=host_append_atomic_eligible(h,plan) ?
             host_append_execute_atomic(h,plan,q,hint):
-            host_append_execute_batched(h,plan,q,&t,registered,hint);
+            host_append_execute_batched(h,plan,q,&t,hint);
         /* Exact-image conflicts are retryable; capture's retired identity
          * STALE is preserved and never allocated a second reservation. */
         if(rc==EFS_ERR_STALE)rc=EFS_ERR_BUSY;
@@ -15389,7 +15256,8 @@ static int host_append_transaction(struct efs_raft_host *h,efs_ino_t ino,uint64_
 }
 
 static int host_regular_mtime(struct efs_raft_host *h, efs_ino_t ino,
-                               const struct efs_meta_utimens *u, int *hint)
+                               const struct efs_meta_utimens *u,
+                               const struct efs_opid *id, int *hint)
 {
     const struct efs_meta_mtime_ops ops = {
         host_mtime_prepare, host_resize_decide, host_resize_resolve};
@@ -15406,7 +15274,7 @@ static int host_regular_mtime(struct efs_raft_host *h, efs_ino_t ino,
                                     u->atime, host_txn_coord, h, plan);
     if (rc == EFS_OK) {
         fill_txid(h, &t);
-        rc = efs_meta_execute_mtime(plan, &t, &ops, &ctx);
+        rc = efs_meta_execute_mtime_owned(h->kv, plan, id, &t, &ops, &ctx);
     }
     free(plan);
     return rc;
@@ -15920,9 +15788,16 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
     if (rc == EFS_OK)
         rc = efs_txn_ver_get(h->kv, k_dent, kd, &dver);
     if (rc == EFS_OK && hold) {
-        host_hold_uuid(hold, lease_uuid);
-        rc = efs_kv_key_lease(dsh, ino, crow.generation, lease_uuid, 1,
-                               k_lease, &lease_len);
+        /* The CREATE-time lease is owned by the request's session (K5). */
+        if (!q || !efs_opid_req_valid(q) || !q->id.session_epoch)
+            rc = EFS_ERR_UNREGISTERED;
+        if (rc == EFS_OK) {
+            memcpy(lease_uuid, q->id.client_uuid, EFS_OPID_UUID_LEN);
+            rc = efs_session_accept(h->kv, dsh, lease_uuid, q->id.session_epoch);
+        }
+        if (rc == EFS_OK)
+            rc = efs_kv_key_lease(dsh, ino, crow.generation, lease_uuid,
+                                  q->id.session_epoch, k_lease, &lease_len);
     }
     if (rc==EFS_OK && pending) {
         memcpy(lease_uuid,q->id.client_uuid,EFS_OPID_UUID_LEN);
@@ -17184,7 +17059,7 @@ void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
  * mode+time classes are INVAL — the §6 matrix splits them. */
 static void host_utimens(efs_ino_t ino, uint32_t mask, uint64_t mtime,
                          uint32_t mtime_nsec, uint64_t atime,
-                         uint32_t atime_nsec,
+                         uint32_t atime_nsec, const struct efs_opid_req *q,
                          struct efs_msg_inode_reply *out)
 {
     struct efs_raft_host *h = g_host;
@@ -17224,14 +17099,16 @@ static void host_utimens(efs_ino_t ino, uint32_t mask, uint64_t mtime,
     rc = host_read_index(h, g, &hint);
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, ino, &row);
+    if (rc == EFS_OK)
+        rc = host_sess_gate(h, ino, q->id.client_uuid, q->id.session_epoch);
     if (rc == EFS_OK && S_ISREG(row.mode) && (u.mask & EFS_META_SET_MTIME)) {
         uint8_t need[2]; host_need_both(need);
         if (!host_hosts(h, need[0]) || !host_hosts(h, need[1])) {
             host_fwd_setattr(h, ino, mask, 0, 0, 0, 0, mtime, mtime_nsec,
-                             atime, atime_nsec, out, need, 2);
+                             atime, atime_nsec, q, out, need, 2);
             return;
         }
-        rc = host_regular_mtime(h, ino, &u, &hint);
+        rc = host_regular_mtime(h, ino, &u, &q->id, &hint);
         goto collect;
     }
     if (rc == EFS_OK && (u.mask & EFS_META_SET_MTIME)) {
@@ -17263,12 +17140,12 @@ static void host_utimens(efs_ino_t ino, uint32_t mask, uint64_t mtime,
                 uint8_t need[2];
                 host_need_both(need);
                 host_fwd_setattr(h, ino, mask, 0, 0, 0, 0, mtime, mtime_nsec,
-                                 atime, atime_nsec, out, need, 2);
+                                 atime, atime_nsec, q, out, need, 2);
                 return;
             }
             u.expect_gen = row.generation;
             u.lane_bits = cross;
-            rc = pack_utimens_cmd(cmd, &clen, ino, now_ns(), &u);
+            rc = pack_utimens_cmd(cmd, &clen, ino, now_ns(), &u, &q->id);
             if (rc == EFS_OK)
                 rc = host_propose_wait(h, fg, cmd, clen, &hint);
             u.expect_gen = 0;
@@ -17276,7 +17153,7 @@ static void host_utimens(efs_ino_t ino, uint32_t mask, uint64_t mtime,
         }
     }
     if (rc == EFS_OK)
-        rc = pack_utimens_cmd(cmd, &clen, ino, now_ns(), &u);
+        rc = pack_utimens_cmd(cmd, &clen, ino, now_ns(), &u, &q->id);
     if (rc == EFS_OK)
         rc = host_propose(h, g, cmd, clen, &idx, &term, &hint);
     if (rc == EFS_OK)
@@ -17427,6 +17304,11 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
+    /* Every SETATTR names the mount session (K5). */
+    if (!q || !efs_opid_req_valid(q) || !q->id.session_epoch) {
+        set_inode_rc(out, EFS_ERR_UNREGISTERED, -1);
+        return;
+    }
     own = mask & (EFS_SETATTR_MODE | EFS_SETATTR_UID | EFS_SETATTR_GID);
     times = mask & (EFS_SETATTR_MTIME | EFS_SETATTR_ATIME);
     sz = mask & EFS_SETATTR_SIZE;
@@ -17448,7 +17330,7 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
         return;
     }
     if (times) {
-        host_utimens(ino, times, mtime, mtime_nsec, atime, atime_nsec, out);
+        host_utimens(ino, times, mtime, mtime_nsec, atime, atime_nsec, q, out);
         return;
     }
     if (own == 0 || (mask & ~(EFS_SETATTR_MODE | EFS_SETATTR_UID |
@@ -17462,7 +17344,7 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
     sa.uid = uid;
     sa.gid = gid;
     sa.expect_gen = 0;
-    rc = pack_setattr_cmd(cmd, &clen, ino, now_ns(), &sa);
+    rc = pack_setattr_cmd(cmd, &clen, ino, now_ns(), &sa, &q->id);
     if (rc != EFS_OK) {
         set_inode_rc(out, rc, -1);
         return;
@@ -17471,6 +17353,8 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
     rc = host_read_index(h, g, &hint);
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, ino, &row);
+    if (rc == EFS_OK)
+        rc = host_sess_gate(h, ino, q->id.client_uuid, q->id.session_epoch);
     /* A lane on the other group: do the setattr on a dual host, before
      * this one commits it and then fails the post-commit lane read. */
     if (rc == EFS_OK && !host_row_lanes_hosted(h, ino, &row)) {
@@ -17478,7 +17362,7 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
 
         host_need_both(need);
         host_fwd_setattr(h, ino, mask, mode, uid, gid, size, mtime,
-                         mtime_nsec, atime, atime_nsec, out, need, 2);
+                         mtime_nsec, atime, atime_nsec, q, out, need, 2);
         return;
     }
     if (rc == EFS_OK)
@@ -17504,6 +17388,7 @@ _Static_assert(sizeof(struct efs_msg_xattr) == 24, "xattr request layout");
 void server_raft_host_xattr(efs_ino_t ino, uint8_t op, uint32_t flags,
                             const uint8_t *name, uint16_t nlen,
                             const uint8_t *val, uint32_t vlen,
+                            const uint8_t *sess_uuid, uint32_t sess_epoch,
                             struct efs_msg_xattr_reply *out, uint32_t *out_len)
 {
     struct efs_raft_host *h = g_host;
@@ -17547,6 +17432,16 @@ void server_raft_host_xattr(efs_ino_t ino, uint8_t op, uint32_t flags,
         }
         return;
     }
+    /* SET/REMOVE name the mount session (K5): gate before propose, and the
+     * session bytes at +28 are checked again by the apply. */
+    rc = host_read_index(h, g, &hint);
+    if (rc == EFS_OK)
+        rc = host_sess_gate(h, ino, sess_uuid, sess_epoch);
+    if (rc != EFS_OK) {
+        out->status = rc_to_inode_status(rc);
+        out->primary_id = (hint >= 0) ? (efs_node_id_t)(hint + 1) : 0;
+        return;
+    }
     cmd[0] = EFS_MD_CMD_XATTR;
     cmd[1] = op;
     wr64be(cmd + 2, ino);
@@ -17555,6 +17450,8 @@ void server_raft_host_xattr(efs_ino_t ino, uint8_t op, uint32_t flags,
     cmd[22] = (uint8_t)(nlen >> 8);
     cmd[23] = (uint8_t)nlen;
     wr32be(cmd + 24, vlen);
+    memcpy(cmd + 28, sess_uuid, EFS_OPID_UUID_LEN);
+    wr32be(cmd + 28 + EFS_OPID_UUID_LEN, sess_epoch);
     if (nlen)
         memcpy(cmd + HOST_XATTR_HDR, name, nlen);
     if (vlen)
@@ -17600,109 +17497,35 @@ static void host_append_init(void)
         pthread_mutex_init(&host_append_locks[i], NULL);
 }
 
+/* Every append is a session-owned durable reservation (K5): the request
+ * carries uuid, epoch, seq and contiguous ACK; the owner admission and the
+ * apply both check the session. There is no unidentified reservation. */
 static void host_append_owner(struct efs_raft_host *h, efs_ino_t ino,
                                uint64_t len, const uint8_t *sess_uuid,
                                uint32_t sess_epoch, uint64_t op_seq, const uint64_t *ack,
                                struct efs_msg_inode_reply *out)
 {
-    struct efs_meta_row row;
     struct efs_meta_stat st;
-    uint8_t cmd[HOST_APPEND_RSV_LEN];
-    uint32_t clen = 0;
     uint64_t reserved = 0;
-    uint8_t ig = efs_raft_shard_group(efs_kv_inode_shard(ino));
     int hint = -1, rc;
 
     if (!h->running) {
         out->status = EFS_INODE_RPC_BUSY;
         return;
     }
-    if(ack && sess_uuid) {
-        struct efs_opid_req q={0};
-        memcpy(q.id.client_uuid,sess_uuid,EFS_OPID_UUID_LEN);
-        q.id.session_epoch=sess_epoch;q.id.seq=op_seq;q.ack=*ack;
-        rc=host_append_transaction(h,ino,len,&q,&reserved,&hint);
-        if(rc==EFS_OK)rc=efs_meta_apply_getattr(h->kv,ino,host_txn_coord,h,&st);
-        set_inode_rc(out,rc,hint);
-        if(rc==EFS_OK) {
-            stat_to_inode(&st,&out->inode);
-            out->inode.size=reserved+len;out->inode.atime=reserved;
-        }
+    if (!ack || !sess_uuid) {
+        set_inode_rc(out, EFS_ERR_UNREGISTERED, -1);
         return;
     }
-    rc = host_read_inode_lanes(h, ino, &hint);
-    if (rc != EFS_OK) {
-        set_inode_rc(out, rc, hint);
-        return;
-    }
-    if (!host_append_primary(h, ig, out))
-        return;
-    struct efs_opid_req q = {0};
-    if (ack && sess_uuid) {
-        memcpy(q.id.client_uuid, sess_uuid, EFS_OPID_UUID_LEN);
-        q.id.session_epoch = sess_epoch; q.id.seq = op_seq; q.ack = *ack;
-    }
-    rc = ack ? efs_meta_append_result(h->kv, ino, len, &q, &reserved)
-        : sess_uuid && op_seq
-        ? host_append_replay_get(h, ino, sess_uuid, sess_epoch, op_seq, len,
-                                 &reserved) : EFS_ERR_NOT_FOUND;
-    if (rc != EFS_ERR_NOT_FOUND) {
-        if (rc == EFS_OK)
-            rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
-        set_inode_rc(out, rc, hint);
-        if (rc == EFS_OK) {
-            stat_to_inode(&st, &out->inode);
-            out->inode.size = reserved + len;
-            out->inode.atime = reserved;
-        }
-        return;
-    }
-    rc = efs_meta_apply_get_inode(h->kv, ino, &row);
-    if (rc == EFS_OK && !S_ISREG(row.mode))
-        rc = EFS_ERR_INVAL;
-    /* Do not session-accept here: leftover-1 FUSE has no session record,
-     * and accept-on-miss is BUSY. The suffix is only an appender id so a
-     * second client's reserve waits for the first REPORT. */
-    if (rc == EFS_OK) {
-        uint8_t zu[EFS_OPID_UUID_LEN];
-        const uint8_t *uuid = sess_uuid;
-        int fr;
-
-        if (!uuid) {
-            memset(zu, 0, sizeof(zu));
-            uuid = zu;
-        }
-        fr = efs_meta_apply_append_foreign(h->kv, ino, uuid);
-        if (fr > 0)
-            rc = EFS_ERR_BUSY;
-        else if (fr < 0)
-            rc = fr;
-    }
-    if (rc == EFS_OK)
-        rc = pack_append_rsv_cmd(cmd, &clen, ino, len, sess_uuid, sess_epoch,
-                                 op_seq, ack);
-    if (rc == EFS_OK)
-        rc = host_propose_wait_ex(h, ig, cmd, clen, &hint, &reserved);
-    if (rc == EFS_OK && !ack && sess_uuid && op_seq)
-        host_append_replay_put(h, ino, sess_uuid, sess_epoch, op_seq, len,
-                               reserved);
-    if (rc == EFS_OK)
-        rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
-    /* Hollow apply is a BUSY retry, not a campaign ban. Marking the
-     * handler replica here poisoned the dual-host voter that still had
-     * the row: it forwarded to a hollow g2 leader, then disabled itself
-     * and the group had zero campaigners. Only host_apply on the leader
-     * that actually missed the row may step down. */
-    if (rc == EFS_ERR_NOT_FOUND)
-        rc = EFS_ERR_BUSY;
-    set_inode_rc(out, rc, hint);
-    if (rc == EFS_OK) {
-        stat_to_inode(&st, &out->inode);
-        /* This reservation's end, not getattr's frontier (0 while
-         * nopen>0) and not the live watermark. atime is the start so
-         * the client can check start+len==size. */
-        out->inode.size = reserved + len;
-        out->inode.atime = reserved;
+    struct efs_opid_req q={0};
+    memcpy(q.id.client_uuid,sess_uuid,EFS_OPID_UUID_LEN);
+    q.id.session_epoch=sess_epoch;q.id.seq=op_seq;q.ack=*ack;
+    rc=host_append_transaction(h,ino,len,&q,&reserved,&hint);
+    if(rc==EFS_OK)rc=efs_meta_apply_getattr(h->kv,ino,host_txn_coord,h,&st);
+    set_inode_rc(out,rc,hint);
+    if(rc==EFS_OK) {
+        stat_to_inode(&st,&out->inode);
+        out->inode.size=reserved+len;out->inode.atime=reserved;
     }
 }
 
@@ -19280,6 +19103,11 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
         (!!session != !!(flags & EFS_REPORT_F_SESSION)) ||
         (session && !efs_report_session_valid(session))) {
         out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    /* Every REPORT names the mount session (K5). */
+    if (!session) {
+        out->status = EFS_INODE_RPC_UNREGISTERED;
         return;
     }
     if (count == 0) {

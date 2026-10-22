@@ -7,6 +7,7 @@
 #include "efs/store.h"
 #include "efs/put_upload.h"
 #include "efs/opid.h"
+#include "efs/meta_cmd.h"
 #include "efs/version.h"
 #include "efs/storage_capacity.h"
 #include "server_internal.h"
@@ -55,7 +56,7 @@ static const struct efs_opid_req *dirop_opid(const void *payload, uint32_t plen,
     if (plen != slen + EFS_OPID_WIRE_LEN)
         return NULL;
     efs_opid_req_unpack(q, (const uint8_t *)payload + slen);
-    return efs_opid_req_valid(q) ? q : NULL;
+    return efs_opid_req_valid(q) && q->id.session_epoch ? q : NULL;
 }
 
 void server_handler_tls_cleanup(void)
@@ -705,14 +706,27 @@ void server_handle_conn(struct efs_conn *conn)
                 payload_len >= sizeof(struct efs_msg_xattr)) {
                 req = payload;
                 body = (uint32_t)req->nlen + req->vlen;
+                /* SET/REMOVE carry the mount session suffix (K5). */
+                uint32_t sess = (req->op == EFS_XATTR_SET ||
+                                 req->op == EFS_XATTR_REMOVE) ? EFS_SESS_WIRE_LEN : 0;
                 if (req->nlen <= EFS_XATTR_NAME_MAX &&
                     req->vlen <= EFS_XATTR_VALUE_MAX &&
-                    payload_len == sizeof(*req) + body) {
+                    payload_len == sizeof(*req) + body + sess) {
+                    const uint8_t *su = NULL;
+                    uint32_t se = 0;
                     name = (const uint8_t *)payload + sizeof(*req);
                     val = name + req->nlen;
+                    if (sess) {
+                        su = val + req->vlen;
+                        memcpy(&se, su + EFS_OPID_UUID_LEN, 4);
+                    }
                     server_raft_host_xattr(req->ino, req->op, req->flags, name,
-                                           req->nlen, val, req->vlen, &rep,
-                                           &rlen);
+                                           req->nlen, val, req->vlen, su, se,
+                                           &rep, &rlen);
+                } else if (sess && req->nlen <= EFS_XATTR_NAME_MAX &&
+                           req->vlen <= EFS_XATTR_VALUE_MAX &&
+                           payload_len == sizeof(*req) + body) {
+                    rep.status = EFS_INODE_RPC_UNREGISTERED;
                 }
             }
             efs_conn_send_msg(conn, EFS_MSG_XATTR_REPLY, &rep, rlen);
@@ -881,6 +895,28 @@ void server_handle_conn(struct efs_conn *conn)
                 uint8_t rtype;
                 memset(&r, 0, sizeof(r));
                 r.status = EFS_INODE_RPC_ERROR;
+                /* K5: namespace mutations and SETATTR name the mount session
+                 * with a full op-id suffix. Without one the request is
+                 * refused before any host work; there is no unidentified
+                 * mutation. HOLD, FLOCK and APPEND are refused by the host
+                 * gate when their session suffix is absent. */
+                size_t base = type == EFS_MSG_INODE_CREATE ? sizeof(struct efs_msg_inode_create) :
+                              type == EFS_MSG_INODE_UNLINK ? sizeof(struct efs_msg_inode_unlink) :
+                              type == EFS_MSG_INODE_LINK ? sizeof(struct efs_msg_inode_link) :
+                              type == EFS_MSG_INODE_RENAME_AT ? sizeof(struct efs_msg_inode_rename_at) :
+                              type == EFS_MSG_INODE_SETATTR ? sizeof(struct efs_msg_inode_setattr) : 0;
+                struct efs_opid_req required;
+                if (base && payload_len >= base &&
+                    !dirop_opid(payload, payload_len, (uint32_t)base, &required)) {
+                    r.status = EFS_INODE_RPC_UNREGISTERED;
+                    rtype = type == EFS_MSG_INODE_CREATE ? EFS_MSG_INODE_CREATE_REPLY :
+                            type == EFS_MSG_INODE_UNLINK ? EFS_MSG_INODE_UNLINK_REPLY :
+                            type == EFS_MSG_INODE_LINK ? EFS_MSG_INODE_LINK_REPLY :
+                            type == EFS_MSG_INODE_RENAME_AT ? EFS_MSG_INODE_RENAME_AT_REPLY :
+                                                              EFS_MSG_INODE_SETATTR_REPLY;
+                    efs_conn_send_msg(conn, rtype, &r, sizeof(r));
+                    break;
+                }
                 if (type == EFS_MSG_INODE_LOOKUP &&
                     payload_len >= sizeof(struct efs_msg_inode_lookup)) {
                     struct efs_msg_inode_lookup *req = payload;

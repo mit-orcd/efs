@@ -44,11 +44,11 @@ reply=$(python3 - "$P" <<'PY'
 import socket,struct,sys
 body=bytes([0,200,1,2,3,4])
 s=socket.create_connection(('127.0.0.1',int(sys.argv[1])),60)
-# W133: declare the protocol (CLIENT_HELLO 165, version 3) before the proposal.
-s.sendall(struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',3,0))
+# W133: declare the protocol (CLIENT_HELLO 165, version 4) before the proposal.
+s.sendall(struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',4,0))
 hello=b''
 while len(hello)<13:hello+=s.recv(13-len(hello))
-assert hello[4]==166 and struct.unpack('=iI',hello[5:13])==(0,3),hello.hex()
+assert hello[4]==166 and struct.unpack('=iI',hello[5:13])==(0,4),hello.hex()
 s.sendall(struct.pack('>IB',len(body)+1,95)+body)
 n=struct.unpack('>I',s.recv(4))[0];data=b''
 while len(data)<n:data+=s.recv(n-len(data))

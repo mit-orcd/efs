@@ -48,12 +48,56 @@ int efs_meta_execute_append_owned(struct efs_kv *kv,const struct efs_meta_append
     if(c.owner.expected_len!=EFS_SESS_LOCAL_VAL)return EFS_ERR_PROTO;
     uint32_t established=0,floor=0;
     for(unsigned i=0;i<4;i++) {established=established<<8|c.owner.expected[i];floor=floor<<8|c.owner.expected[4+i];}
-    if(floor>q->id.session_epoch)return EFS_ERR_STALE;
-    if(established!=q->id.session_epoch)return EFS_ERR_BUSY;
+    if(floor>q->id.session_epoch || established>q->id.session_epoch)return EFS_ERR_FENCED;
+    if(established!=q->id.session_epoch)return EFS_ERR_UNREGISTERED;
     c.owner.op=EFS_TXN_PUT;c.owner.new_len=EFS_SESS_LOCAL_VAL;
     memcpy(c.owner.value,c.owner.expected,EFS_SESS_LOCAL_VAL);
     const struct efs_meta_append_ops owned_ops={append_owner_prepare,append_owner_decide,append_owner_resolve};
     return efs_meta_execute_append(plan,tx,&owned_ops,&c);
+}
+
+/* Regular-file mtime (utimens) owned by a session (K5). The inode shard's
+ * local session row is prepared first with an unchanged exact image, so a
+ * FENCE_LOC that lands before the decision makes the PREPARE fail its CAS,
+ * and one that lands after waits on the intent. */
+struct mtime_owner_context {
+    const struct efs_meta_mtime_ops *ops;
+    void *ctx;
+    struct efs_meta_mtime_image owner;
+    unsigned first;
+};
+static int mtime_owner_prepare(void *user,const struct efs_txid *tx,
+    const struct efs_txn_parts *parts,const struct efs_meta_mtime_image *image)
+{
+    struct mtime_owner_context *c=user;int rc=EFS_OK;
+    if(c->first) {c->first=0;rc=c->ops->prepare(c->ctx,tx,parts,&c->owner);}
+    return rc==EFS_OK?c->ops->prepare(c->ctx,tx,parts,image):rc;
+}
+static int mtime_owner_decide(void *user,const struct efs_txid *tx,
+    const struct efs_txn_parts *parts,int decision)
+{struct mtime_owner_context *c=user;return c->ops->decide(c->ctx,tx,parts,decision);}
+static int mtime_owner_resolve(void *user,const struct efs_txid *tx,
+    const struct efs_txn_parts *parts,int decision)
+{struct mtime_owner_context *c=user;return c->ops->resolve(c->ctx,tx,parts,decision);}
+int efs_meta_execute_mtime_owned(struct efs_kv *kv,const struct efs_meta_mtime_plan *plan,
+    const struct efs_opid *id,const struct efs_txid *tx,
+    const struct efs_meta_mtime_ops *ops,void *ctx)
+{
+    if(!kv || !plan || !id || !tx || !ops || !ops->prepare || !ops->decide ||
+       !ops->resolve || !plan->count)return EFS_ERR_INVAL;
+    uint32_t shard=((uint32_t)plan->images[0].key[0]<<8)|plan->images[0].key[1];
+    int rc=efs_session_accept(kv,shard,id->client_uuid,id->session_epoch);
+    if(rc!=EFS_OK)return rc;
+    struct mtime_owner_context c={.ops=ops,.ctx=ctx,.first=1};
+    rc=efs_kv_key_sess_local(shard,id->client_uuid,c.owner.key,&c.owner.klen);
+    c.owner.expected_len=EFS_SESS_LOCAL_VAL;
+    if(rc==EFS_OK)rc=efs_kv_get(kv,c.owner.key,c.owner.klen,c.owner.expected,&c.owner.expected_len);
+    if(rc!=EFS_OK)return rc;
+    if(c.owner.expected_len!=EFS_SESS_LOCAL_VAL)return EFS_ERR_PROTO;
+    c.owner.new_len=EFS_SESS_LOCAL_VAL;
+    memcpy(c.owner.value,c.owner.expected,EFS_SESS_LOCAL_VAL);
+    const struct efs_meta_mtime_ops owned={mtime_owner_prepare,mtime_owner_decide,mtime_owner_resolve};
+    return efs_meta_execute_mtime(plan,tx,&owned,&c);
 }
 
 struct finish_image {

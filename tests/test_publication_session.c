@@ -23,10 +23,10 @@ static void fenced(struct efs_kv *kv,struct efs_meta_pub p)
 {
     int v;struct efs_meta_pub fresh=p;fresh.publication_id.seq=20;fresh.candidate_gen=20;
     fresh.expected_gen=10;
-    assert(efs_meta_apply_publish(kv,&p)==EFS_ERR_STALE); /* even exact successful retry */
-    assert(efs_meta_apply_publication_admit(kv,&fresh)==EFS_ERR_STALE);
-    assert(efs_meta_apply_publish(kv,&fresh)==EFS_ERR_STALE);
-    assert(efs_meta_apply_publication_retire(kv,&p)==EFS_ERR_STALE);
+    assert(efs_meta_apply_publish(kv,&p)==EFS_ERR_FENCED); /* even exact successful retry */
+    assert(efs_meta_apply_publication_admit(kv,&fresh)==EFS_ERR_FENCED);
+    assert(efs_meta_apply_publish(kv,&fresh)==EFS_ERR_FENCED);
+    assert(efs_meta_apply_publication_retire(kv,&p)==EFS_ERR_FENCED);
     assert(efs_meta_publication_result(kv,&fresh,&v)==EFS_ERR_NOT_FOUND); /* no terminal receipt */
     assert(efs_meta_publication_result(kv,&p,&v)==EFS_OK && v==EFS_OK);
     struct efs_meta_chunk ch;assert(efs_meta_apply_get_chunk(kv,p.ino,0,&ch)==EFS_OK && ch.generation==10);
@@ -41,20 +41,20 @@ static struct efs_meta_pub setup(struct efs_kv *kv,int finish)
     assert(efs_meta_apply_create_file(kv,&attrs,EFS_ROOT_INO,S_IFREG|0644,"session",&ino)==EFS_OK);
     assert(efs_meta_apply_get_inode(kv,ino,&row)==EFS_OK);
     struct efs_meta_pub p=intent(ino,row.generation,10);int v;
-    assert(efs_meta_apply_publication_admit(kv,&p)==EFS_ERR_BUSY);
-    assert(efs_meta_apply_publish(kv,&p)==EFS_ERR_BUSY);
+    assert(efs_meta_apply_publication_admit(kv,&p)==EFS_ERR_UNREGISTERED);
+    assert(efs_meta_apply_publish(kv,&p)==EFS_ERR_UNREGISTERED);
     assert(efs_meta_publication_result(kv,&p,&v)==EFS_ERR_NOT_FOUND);
     uint32_t shard=efs_kv_lane_shard(ino,0);const uint8_t *uuid=p.publication_id.client_uuid;
     assert(efs_session_create(kv,uuid,1)==EFS_OK);
     assert(efs_session_register(kv,uuid,1,shard)==EFS_OK);
-    assert(efs_meta_apply_publication_admit(kv,&p)==EFS_ERR_BUSY);
-    assert(efs_meta_apply_publish(kv,&p)==EFS_ERR_BUSY); /* REGISTER alone is not admission */
+    assert(efs_meta_apply_publication_admit(kv,&p)==EFS_ERR_UNREGISTERED);
+    assert(efs_meta_apply_publish(kv,&p)==EFS_ERR_UNREGISTERED); /* REGISTER alone is not admission */
     assert(efs_session_establish(kv,shard,uuid,1)==EFS_OK);
     assert(efs_meta_apply_publish(kv,&p)==EFS_OK);
     assert(efs_session_begin_fence(kv,uuid)==EFS_OK);
     assert(efs_session_barrier_done(kv,uuid,1)==EFS_ERR_BUSY);
     struct efs_meta_pub new_epoch=p;new_epoch.publication_id.session_epoch=2;
-    assert(efs_meta_apply_publish(kv,&new_epoch)==EFS_ERR_BUSY);
+    assert(efs_meta_apply_publish(kv,&new_epoch)==EFS_ERR_UNREGISTERED);
     assert(efs_session_accept(kv,shard,uuid,1)==EFS_OK); /* admitted before ordered local fence */
     assert(efs_session_fence_local(kv,shard,uuid,2)==EFS_OK);
     fenced(kv,p);
@@ -78,7 +78,7 @@ static void next_epoch(struct efs_kv *kv,struct efs_meta_pub old)
     p.expected_gen=10;p.candidate_gen=20;p.publication_id.seq=1;
     assert(efs_meta_apply_publish(kv,&p)==EFS_OK);
     assert(efs_meta_apply_publication_retire(kv,&p)==EFS_OK);
-    assert(efs_meta_apply_publication_retire(kv,&old)==EFS_ERR_STALE);
+    assert(efs_meta_apply_publication_retire(kv,&old)==EFS_ERR_FENCED);
     assert(efs_meta_apply_check(kv)==EFS_OK);
 }
 int main(void)

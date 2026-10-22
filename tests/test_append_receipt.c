@@ -1,6 +1,7 @@
 /* Actual metadata append reservations: atomic durable receipts, bounded ACK
  * retirement, payload binding and recovery without a graceful KV close. */
 #include "efs/meta_apply.h"
+#include "efs/session.h"
 #include "efs/kv_lsm.h"
 #include "efs/txn.h"
 #include "efs/kv_key.h"
@@ -47,6 +48,9 @@ static efs_ino_t create(struct efs_kv *kv)
     struct efs_meta_attrs at={0,0,1};efs_ino_t ino;
     assert(efs_meta_apply_init(kv,1)==EFS_OK);
     assert(efs_meta_apply_create_file(kv,&at,EFS_ROOT_INO,S_IFREG|0644,"append",&ino)==EFS_OK);
+    /* K5: the appender's session is established on the inode shard. */
+    struct efs_opid_req q=identity(1,0);
+    assert(efs_session_establish(kv,efs_kv_inode_shard(ino),q.id.client_uuid,1)==EFS_OK);
     return ino;
 }
 static void cold_bounded_sweep(void)

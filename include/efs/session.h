@@ -87,13 +87,13 @@ int efs_session_establish(struct efs_kv *kv, uint32_t shard,
 int efs_session_fence_local(struct efs_kv *kv, uint32_t shard,
                             const uint8_t uuid[EFS_OPID_UUID_LEN],
                             uint32_t fence_epoch);
+/* The single local session check (I23, K5). EFS_OK only when this shard
+ * has established exactly `epoch` for `uuid`. A zero identity, a missing
+ * row or a not-yet-established epoch is EFS_ERR_UNREGISTERED; an epoch below
+ * the rejection floor or below the established epoch is EFS_ERR_FENCED.
+ * There is no unregistered or legacy acceptance. */
 int efs_session_accept(struct efs_kv *kv, uint32_t shard,
                        const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch);
-
-/* Legacy mutation compatibility: absent local session is allowed, but retained
- * epoch/floor evidence is authoritative and errors never grant permission. */
-int efs_session_accept_legacy(struct efs_kv *, uint32_t shard,
-    const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch);
 
 /* Staged transaction ownership barrier. Prepare before any pending-CREATE
  * effect, on every affected participant, using the SAME txid/participant set.
@@ -104,8 +104,8 @@ int efs_session_accept_legacy(struct efs_kv *, uint32_t shard,
 struct efs_txid;
 struct efs_txn_parts;
 /* Namespace replay/effect transactions use a shared local-session guard.
- * Serialized apply validates epoch before the guard; local epoch writes block
- * on all such guards. Legacy logs with no local row remain replayable. */
+ * Serialized apply validates epoch (efs_session_accept) before the guard;
+ * local epoch writes block on all such guards. */
 int efs_session_prepare_namespace(struct efs_kv *,uint32_t,const struct efs_opid *,
     const struct efs_txid *,const struct efs_txn_parts *);
 int efs_session_prepare_owner(struct efs_kv *kv, uint32_t shard,

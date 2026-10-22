@@ -30,6 +30,14 @@ static void uuid_of(uint8_t u[EFS_OPID_UUID_LEN], uint8_t n)
     u[15] = n;
 }
 
+/* K5: a lock owner's session must be established on the inode shard. */
+static int establish(struct efs_kv *kv, efs_ino_t ino, uint8_t n)
+{
+    uint8_t u[EFS_OPID_UUID_LEN];
+    uuid_of(u, n);
+    return efs_session_establish(kv, efs_kv_inode_shard(ino), u, 1);
+}
+
 static void fill_req(struct efs_lock_req *r, efs_ino_t ino, uint64_t gen,
                      uint8_t domain, uint8_t type, uint64_t start, uint64_t end,
                      uint8_t kind, uint64_t id, uint8_t un)
@@ -60,6 +68,7 @@ static void test_conflict_and_domains(void)
               == EFS_OK,
           "create");
     CHECK(efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK, "row");
+    CHECK(establish(kv, ino, 1) == EFS_OK && establish(kv, ino, 2) == EFS_OK, "owners");
     fill_req(&a, ino, row.generation, EFS_LOCK_FCNTL, EFS_LOCK_EX, 0, 10,
              EFS_LOCK_PROC, 1, 1);
     fill_req(&b, ino, row.generation, EFS_LOCK_FCNTL, EFS_LOCK_EX, 5, 15,
@@ -110,6 +119,7 @@ static void test_cap_and_drop(void)
               == EFS_OK,
           "create");
     CHECK(efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK, "row");
+    CHECK(establish(kv, ino, 1) == EFS_OK, "owner");
     for (i = 0; i < EFS_LOCK_CAP; i++) {
         fill_req(&r, ino, row.generation, EFS_LOCK_FCNTL, EFS_LOCK_EX,
                  (uint64_t)i * 2, (uint64_t)i * 2 + 1, EFS_LOCK_PROC, 1, 1);
@@ -139,6 +149,7 @@ static void test_atomic_final_close(void)
     CHECK(efs_meta_apply_init(kv,T0)==EFS_OK,"atomic close init");
     CHECK(efs_meta_apply_create_file(kv,&g_at,1,S_IFREG|0600,"close",&ino)==EFS_OK,"atomic close inode");
     CHECK(efs_meta_apply_get_inode(kv,ino,&row)==EFS_OK,"atomic close row");
+    CHECK(establish(kv,ino,1)==EFS_OK,"atomic close owner");
     for(unsigned domain=0;domain<2;domain++)for(unsigned i=0;i<EFS_LOCK_CAP;i++) {
         fill_req(&r,ino,row.generation,domain,EFS_LOCK_EX,2*i,2*i+1,EFS_LOCK_PROC,1,1);
         CHECK(efs_lock_grant(kv,&r)==EFS_OK,"fill both capped domains");
@@ -179,17 +190,21 @@ static void test_rejection_floor(void)
  CHECK(kv!=NULL,"floor lock KV");if(!kv)return;
  CHECK(efs_meta_apply_init(kv,1)==EFS_OK && efs_meta_apply_create_file(kv,&g_at,1,S_IFREG|0600,"floor-lock",&ino)==EFS_OK && efs_meta_apply_get_inode(kv,ino,&row)==EFS_OK,"floor lock file");
  fill_req(&r,ino,row.generation,EFS_LOCK_FCNTL,EFS_LOCK_EX,0,1,EFS_LOCK_PROC,1,93);
+ CHECK(efs_lock_grant(kv,&r)==EFS_ERR_UNREGISTERED && efs_lock_count(kv,ino,row.generation)==0,"unregistered lock owner refused at apply");
+ uint8_t zero[EFS_OPID_UUID_LEN]={0};struct efs_lock_req anonymous=r;memcpy(anonymous.owner.uuid,zero,sizeof(zero));
+ CHECK(efs_lock_grant(kv,&anonymous)==EFS_ERR_UNREGISTERED,"lock without identity refused at apply");
+ CHECK(establish(kv,ino,93)==EFS_OK,"establish lock owner");
  CHECK(efs_kv_mem_fail_next_batch(kv)==EFS_OK,"inject grant storage failure");
  CHECK(efs_lock_grant(kv,&r)==EFS_ERR_IO && efs_lock_count(kv,ino,row.generation)==0,"failed grant owns no row and retains IO verdict");
- CHECK(efs_lock_grant(kv,&r)==EFS_OK,"unknown legacy lock compatibility and exact retry");
+ CHECK(efs_lock_grant(kv,&r)==EFS_OK,"registered lock exact retry");
  CHECK(efs_session_fence_local(kv,efs_kv_inode_shard(ino),r.owner.uuid,2)==EFS_OK,"durable lock owner rejection floor");
- CHECK(efs_lock_grant(kv,&r)==EFS_ERR_STALE,"revoked identical lock is not false grant success");
+ CHECK(efs_lock_grant(kv,&r)==EFS_ERR_FENCED,"revoked identical lock is not false grant success");
  CHECK(efs_lock_release(kv,&r)==EFS_OK,"old lock cleanup remains allowed");
- CHECK(efs_lock_grant(kv,&r)==EFS_ERR_STALE && efs_lock_count(kv,ino,row.generation)==0,"revoked range cannot recreate ownership");
+ CHECK(efs_lock_grant(kv,&r)==EFS_ERR_FENCED && efs_lock_count(kv,ino,row.generation)==0,"revoked range cannot recreate ownership");
  r.domain=EFS_LOCK_FLOCK;r.owner.kind=EFS_LOCK_OFD;
- CHECK(efs_lock_grant(kv,&r)==EFS_ERR_STALE,"both lock domains honor floor");
+ CHECK(efs_lock_grant(kv,&r)==EFS_ERR_FENCED,"both lock domains honor floor");
  r.owner.epoch=2;
- CHECK(efs_lock_grant(kv,&r)==EFS_ERR_BUSY,"next lock epoch needs establishment");
+ CHECK(efs_lock_grant(kv,&r)==EFS_ERR_UNREGISTERED,"next lock epoch needs establishment");
  efs_kv_mem_free(kv);
 }
 

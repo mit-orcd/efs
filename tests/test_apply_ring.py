@@ -12,8 +12,8 @@ the atomic payload accesses, not the fence ordering: the torn-record
 stress check is the ordering gate, and the plain-field negative control
 shows TSan does see seqlock races in this harness. Part 2 executes the
 production readers from
-raft_host.c (host_arc_read/verdict/extra, host_wait_verdict,
-host_wait_settled, host_propose_wait_ex_impl, host_wait_refs' host_apply_rc
+raft_host.c (host_arc_read/verdict, host_wait_verdict,
+host_wait_settled, host_wait_refs' host_apply_rc
 and host_pub_batch_wait) and checks they keep their own BUSY / STALE /
 NOT_PRIMARY rules, never take h->mu on the fast path, and fall back to it
 when a writer holds the slot.
@@ -126,12 +126,6 @@ static int counted_lock(pthread_mutex_t *m) { if (__atomic_load_n(&fast_path, __
 static int host_wait_applied(struct efs_raft_host *h, uint8_t group, uint64_t idx, int *hint) {
     (void)h; (void)group; (void)idx; (void)hint; return EFS_OK;
 }
-static int propose_rc; static uint64_t propose_idx, propose_term;
-static int host_propose_impl(struct efs_raft_host *h, uint8_t group, const uint8_t *cmd, uint32_t clen,
-                             uint64_t *idx, uint64_t *term, int *hint, int local) {
-    (void)h; (void)group; (void)cmd; (void)clen; (void)hint; (void)local;
-    *idx = propose_idx; *term = propose_term; return propose_rc;
-}
 static int write_prof_on(void) { return 0; }
 static uint64_t wprof_now(void) { return 0; }
 static void wprof_verdict(uint64_t t0, uint64_t seen, uint64_t apply_us) { (void)t0; (void)seen; (void)apply_us; }
@@ -140,8 +134,8 @@ static void host_pub_batch_reset(struct host_pub_batch *b) {
     free(b->idxs); free(b->terms); b->idxs = b->terms = NULL; b->nidx = 0; b->last_idx = 0; b->overflow = 0;
 }
 ''' + '\n'.join(function(n) for n in [
-    'host_arc_read', 'host_arc_verdict', 'host_arc_extra', 'host_apply_rc', 'host_arc_apply_us',
-    'host_wait_verdict', 'host_wait_settled', 'host_propose_wait_ex_impl', 'host_pub_batch_wait']) + r'''
+    'host_arc_read', 'host_arc_verdict', 'host_apply_rc', 'host_arc_apply_us',
+    'host_wait_verdict', 'host_wait_settled', 'host_pub_batch_wait']) + r'''
 static struct efs_raft_host h = {.mu = PTHREAD_MUTEX_INITIALIZER, .g = {{.group = 0, .hosted = 1}, {.group = 2, .hosted = 0}}};
 static void put(uint64_t idx, uint64_t term, int rc, uint64_t extra) {
     efs_arc_store(&h.g[0].arc[idx & HOST_APPLY_RC_MASK], idx, term, rc, extra, 0);
@@ -171,7 +165,6 @@ static void *slow_writer(void *arg) {
     return NULL;
 }
 int main(void) {
-    uint64_t extra = 0;
     fast_path = 1;
     /* host_wait_verdict / host_apply_rc: verdict, BUSY on overwrite, NOT_PRIMARY on term, OK unhosted. */
     put(11, 7, EFS_ERR_STALE, 0);
@@ -189,18 +182,6 @@ int main(void) {
     assert(host_wait_settled(&h, 0, 11, 7, NULL) == EFS_OK);          /* overwritten: not checked */
     assert(host_wait_settled(&h, 0, 19, 0, NULL) == EFS_OK);
     assert(host_wait_settled(&h, 2, 19, 6, NULL) == EFS_OK);
-    /* host_propose_wait_ex_impl: rc and extra from one apply. */
-    put(21, 7, EFS_OK, 4096); propose_idx = 21; propose_term = 7;
-    assert(host_propose_wait_ex_impl(&h, 0, (const uint8_t *)"x", 1, NULL, &extra) == EFS_OK && extra == 4096);
-    put(21, 7, EFS_ERR_QUOTA, 8192); extra = 0;
-    assert(host_propose_wait_ex_impl(&h, 0, (const uint8_t *)"x", 1, NULL, &extra) == EFS_ERR_QUOTA && extra == 8192);
-    propose_term = 6;
-    assert(host_propose_wait_ex_impl(&h, 0, (const uint8_t *)"x", 1, NULL, &extra) == EFS_ERR_NOT_PRIMARY);
-    propose_term = 7; propose_idx = 29;  /* overwritten */
-    assert(host_propose_wait_ex_impl(&h, 0, (const uint8_t *)"x", 1, NULL, &extra) == EFS_ERR_BUSY);
-    propose_idx = 21;
-    assert(host_propose_wait_ex_impl(&h, 2, (const uint8_t *)"x", 1, NULL, &extra) == EFS_ERR_BUSY);  /* no local extra */
-    assert(host_propose_wait_ex_impl(&h, 2, (const uint8_t *)"x", 1, NULL, NULL) == EFS_OK);
     /* host_pub_batch_wait: every entry's own verdict; misses and truncation are STALE. */
     put(1, 7, EFS_OK, 0); put(2, 7, EFS_OK, 0); put(3, 7, EFS_OK, 0);
     uint64_t i3[] = {1, 2, 3}, t3[] = {7, 7, 7};
@@ -222,8 +203,7 @@ int main(void) {
     fast_path = 0;
     pthread_t w; pthread_create(&w, NULL, slow_writer, NULL);
     while (!__atomic_load_n(&writer_odd, __ATOMIC_ACQUIRE)) ;
-    propose_idx = 12; propose_term = 9; extra = 0;
-    assert(host_propose_wait_ex_impl(&h, 0, (const uint8_t *)"x", 1, NULL, &extra) == EFS_ERR_EXIST);
+    assert(host_wait_verdict(&h, 0, 12, 9, NULL) == EFS_ERR_EXIST);
     pthread_join(w, NULL);
     assert(g_wprof_arc_fallback == 1 && locked == 2);  /* writer + reader fallback */
     puts("apply ring readers: verdict/settled/extra/batch semantics, wraparound, term mismatch, lock-free fast path and h->mu fallback PASS");

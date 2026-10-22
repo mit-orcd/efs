@@ -26,14 +26,14 @@ static uint64_t rd64be(const uint8_t *p){uint64_t v=0;for(unsigned i=0;i<8;i++)v
 static uint32_t rd32be(const uint8_t *p){return (uint32_t)rd64be((uint8_t[8]){0,0,0,0,p[0],p[1],p[2],p[3]});}
 static void wr64be(uint8_t *p,uint64_t v){for(int i=7;i>=0;i--){p[i]=v;v>>=8;}}
 static void wr32be(uint8_t *p,uint32_t v){for(int i=3;i>=0;i--){p[i]=v;v>>=8;}}
-static void host_hold_uuid(uint64_t owner,uint8_t *p){wr64be(p,owner);}
 int efs_meta_apply_create_file_log_pending(struct efs_kv *kv,const struct efs_meta_attrs *at,efs_ino_t parent,uint32_t mode,const char *name,efs_ino_t ino,int layout,const struct efs_opid_req *q,const uint8_t *uuid,uint32_t epoch,efs_ino_t *out) {
  (void)kv;(void)at;assert(parent==1&&mode==(S_IFREG|0600)&&!strcmp(name,"p")&&ino==4097&&layout==0);
  assert(epoch==7&&q&&q->id.seq==10&&q->ack==9&&uuid[0]==21&&uuid[15]==230);pending_calls++;*out=ino;return EFS_OK;
 }
 int efs_meta_apply_create_file_log_lease(struct efs_kv *kv,const struct efs_meta_attrs *at,efs_ino_t parent,uint32_t mode,const char *name,efs_ino_t ino,int layout,const struct efs_opid_req *q,const uint8_t *uuid,uint32_t epoch,efs_ino_t *out) {
  (void)kv;(void)at;(void)parent;(void)mode;(void)name;(void)layout;(void)q;
- assert(uuid&&epoch==1&&rd64be(uuid)==123);legacy_calls++;*out=ino;return EFS_OK;
+ /* K5: the CREATE-time open lease is the request's own session. */
+ assert(uuid&&epoch==7&&uuid[0]==21&&uuid[15]==230);legacy_calls++;*out=ino;return EFS_OK;
 }
 int efs_meta_apply_mkdir_log_op(struct efs_kv *kv,const struct efs_meta_attrs *at,efs_ino_t parent,uint32_t mode,const char *name,efs_ino_t ino,int layout,const struct efs_opid_req *q,efs_ino_t *out) {assert(0);return EFS_ERR_IO;}
 int efs_meta_apply_mkdir(struct efs_kv *kv,const struct efs_meta_attrs *at,efs_ino_t parent,uint32_t mode,const char *name,efs_ino_t *out) {assert(0);return EFS_ERR_IO;}
@@ -54,7 +54,8 @@ int main(void) {
  assert(pack_create_cmd(bytes,&n,1,S_IFREG|0600,"p",&at,0,4097,0,NULL,1)==EFS_ERR_INVAL);
  assert(!pack_create_cmd(bytes,&n,1,S_IFREG|0600,"p",&at,123,4097,0,&q,0));
  assert(!apply_create_cmd(&host,bytes,n,4)&&legacy_calls==1);
- puts("pending CREATE command: full UUID/epoch/token, strict truncation/identity rejection and historical lease replay PASS");
+ assert(pack_create_cmd(bytes,&n,1,S_IFREG|0600,"p",&at,123,4097,0,NULL,0)==EFS_ERR_INVAL); /* no stand-in owner */
+ puts("pending CREATE command: full UUID/epoch/token, strict truncation/identity rejection and session-bound CREATE lease PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-pending-command-') as d:

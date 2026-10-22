@@ -20,8 +20,10 @@ static void reset(void){owner_rc=read_rc=local_rc=owner_calls=read_calls=local_c
 int main(void){
  struct efs_kv kv={0};struct efs_raft_host h={.kv=&kv};int hint=-1,reused=99;uint8_t cmd[26]={0};cmd[2]=9;cmd[21]=1;cmd[25]=17;
  reset();assert(!host_session_establish_reuse(&h,cmd,26,0,&hint,&reused)&&reused==1&&owner_calls==1&&read_calls==1&&local_calls==1);
- reset();local_rc=EFS_ERR_BUSY;assert(!host_session_establish_reuse(&h,cmd,26,0,&hint,&reused)&&!reused&&local_calls==1);
- reset();local_rc=EFS_ERR_STALE;assert(host_session_establish_reuse(&h,cmd,26,0,&hint,&reused)==EFS_ERR_STALE&&!reused);
+ /* K5: only UNREGISTERED (no established row yet) falls back to ESTABLISH. */
+ reset();local_rc=EFS_ERR_UNREGISTERED;assert(!host_session_establish_reuse(&h,cmd,26,0,&hint,&reused)&&!reused&&local_calls==1);
+ reset();local_rc=EFS_ERR_BUSY;assert(host_session_establish_reuse(&h,cmd,26,0,&hint,&reused)==EFS_ERR_BUSY&&!reused);
+ reset();local_rc=EFS_ERR_FENCED;assert(host_session_establish_reuse(&h,cmd,26,0,&hint,&reused)==EFS_ERR_FENCED&&!reused);
  reset();local_rc=EFS_ERR_IO;assert(host_session_establish_reuse(&h,cmd,26,0,&hint,&reused)==EFS_ERR_IO&&!reused);
  reset();read_rc=EFS_ERR_BUSY;assert(host_session_establish_reuse(&h,cmd,26,0,&hint,&reused)==EFS_ERR_BUSY&&!reused&&!local_calls);
  reset();read_rc=EFS_ERR_IO;assert(host_session_establish_reuse(&h,cmd,26,0,&hint,&reused)==EFS_ERR_IO&&!reused&&!local_calls);
@@ -29,7 +31,7 @@ int main(void){
  reset();owner_rc=EFS_ERR_BUSY;assert(host_session_establish_reuse(&h,cmd,26,0,&hint,&reused)==EFS_ERR_BUSY&&!reused&&!read_calls&&!local_calls);
  /* A new RPC always checks both authorities; prior success is no cache. */
  reset();assert(!host_session_establish_reuse(&h,cmd,26,0,&hint,&reused)&&reused);
- reset();local_rc=EFS_ERR_STALE;assert(host_session_establish_reuse(&h,cmd,26,0,&hint,&reused)==EFS_ERR_STALE&&!reused);
+ reset();local_rc=EFS_ERR_FENCED;assert(host_session_establish_reuse(&h,cmd,26,0,&hint,&reused)==EFS_ERR_FENCED&&!reused);
  puts("publication session reuse: fresh owner and local floor, missing establishment fallback, revocation/read/IO refusal and next-RPC recheck PASS");
 }
 '''

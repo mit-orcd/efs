@@ -34,30 +34,32 @@ static int get(void *ctx,const uint8_t *key,uint32_t kl,uint8_t *value,uint32_t 
 '''+f+r'''
 int main(void) {
  const struct efs_kv_ops ops={.get=get};struct efs_kv kv={.ops=&ops};struct efs_raft_host h={.kv=&kv};
- struct efs_opid_req q={.id={.client_uuid={42},.session_epoch=1,.seq=1}};int hint=-1,known=99;
- global_rc=EFS_ERR_IO;assert(host_append_session_admit_covered(&h,4097,&q,&hint,&known,0)==EFS_ERR_IO && !known);
+ struct efs_opid_req q={.id={.client_uuid={42},.session_epoch=1,.seq=1}};int hint=-1;
+ global_rc=EFS_ERR_IO;assert(host_append_session_admit_covered(&h,4097,&q,&hint,0)==EFS_ERR_IO);
+ /* K5: an unknown session is refused whatever the local shard holds. */
  global_rc=EFS_ERR_NOT_FOUND;local_get=EFS_ERR_NOT_FOUND;
- assert(host_append_session_admit_covered(&h,4097,&q,&hint,&known,0)==EFS_OK && !known);
- local_get=EFS_OK;assert(host_append_session_admit_covered(&h,4097,&q,&hint,&known,0)==EFS_ERR_NOT_FOUND && !known);
+ assert(host_append_session_admit_covered(&h,4097,&q,&hint,0)==EFS_ERR_UNREGISTERED);
+ local_get=EFS_OK;assert(host_append_session_admit_covered(&h,4097,&q,&hint,0)==EFS_ERR_UNREGISTERED);
  global_rc=EFS_OK;global_salt=(uint64_t)EFS_SESSION_FENCING<<32|1;
- assert(host_append_session_admit_covered(&h,4097,&q,&hint,&known,0)==EFS_ERR_BUSY && !known);
+ assert(host_append_session_admit_covered(&h,4097,&q,&hint,0)==EFS_ERR_BUSY);
  global_salt=(uint64_t)EFS_SESSION_ACTIVE<<32|2;
- assert(host_append_session_admit_covered(&h,4097,&q,&hint,&known,0)==EFS_ERR_STALE && !known);
- global_salt=(uint64_t)EFS_SESSION_ACTIVE<<32|1;local_rc=EFS_ERR_STALE;
- assert(host_append_session_admit_covered(&h,4097,&q,&hint,&known,0)==EFS_ERR_STALE && !known);
- local_rc=EFS_ERR_BUSY;assert(host_append_session_admit_covered(&h,4097,&q,&hint,&known,0)==EFS_ERR_BUSY && !known);
- local_rc=EFS_OK;assert(host_append_session_admit_covered(&h,4097,&q,&hint,&known,0)==EFS_OK && known);
+ assert(host_append_session_admit_covered(&h,4097,&q,&hint,0)==EFS_ERR_FENCED);
+ global_salt=(uint64_t)EFS_SESSION_ACTIVE<<32|1;local_rc=EFS_ERR_FENCED;
+ assert(host_append_session_admit_covered(&h,4097,&q,&hint,0)==EFS_ERR_FENCED);
+ local_rc=EFS_ERR_UNREGISTERED;assert(host_append_session_admit_covered(&h,4097,&q,&hint,0)==EFS_ERR_UNREGISTERED);
+ local_rc=EFS_OK;assert(host_append_session_admit_covered(&h,4097,&q,&hint,0)==EFS_OK);
  int before=owner_reads;
- assert(host_append_session_admit_covered(&h,4097,&q,&hint,&known,1u<<2)==EFS_OK && known && owner_reads==before);
+ assert(host_append_session_admit_covered(&h,4097,&q,&hint,1u<<2)==EFS_OK && owner_reads==before);
  global_salt=(uint64_t)EFS_SESSION_FENCING<<32|1;
- assert(host_append_session_admit_covered(&h,4097,&q,&hint,&known,1u<<2)==EFS_ERR_BUSY && !known && owner_reads==before);
- global_salt=(uint64_t)EFS_SESSION_ACTIVE<<32|1;local_rc=EFS_ERR_STALE;
- assert(host_append_session_admit_covered(&h,4097,&q,&hint,&known,1u<<2)==EFS_ERR_STALE && !known);
+ assert(host_append_session_admit_covered(&h,4097,&q,&hint,1u<<2)==EFS_ERR_BUSY && owner_reads==before);
+ global_salt=(uint64_t)EFS_SESSION_ACTIVE<<32|1;local_rc=EFS_ERR_FENCED;
+ assert(host_append_session_admit_covered(&h,4097,&q,&hint,1u<<2)==EFS_ERR_FENCED);
  local_rc=EFS_OK;
- assert(!host_append_session_admit_covered(&h,4097,&q,&hint,&known,1u<<0) && owner_reads==before+1);
+ assert(!host_append_session_admit_covered(&h,4097,&q,&hint,1u<<0) && owner_reads==before+1);
  hosted=0;global_rc=EFS_ERR_NET;
- assert(host_append_session_admit_covered(&h,4097,&q,&hint,&known,0)==EFS_ERR_NET && !known && remote_calls==1);
- puts("append host: authoritative global epoch, fencing/unknown/error refusal, local floor and legacy-only absence compatibility PASS");
+ assert(host_append_session_admit_covered(&h,4097,&q,&hint,0)==EFS_ERR_NET && remote_calls==1);
+ (void)get;
+ puts("append host: authoritative global epoch, unknown session UNREGISTERED, fencing/error refusal and local floor PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-append-host-') as t:

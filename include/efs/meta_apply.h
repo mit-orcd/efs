@@ -120,6 +120,15 @@ struct efs_meta_mtime_ops {
 int efs_meta_execute_mtime(const struct efs_meta_mtime_plan *plan,
                            const struct efs_txid *t,
                            const struct efs_meta_mtime_ops *ops, void *ctx);
+/* Session-owned variant (K5): checks the session on the inode shard and
+ * prepares its local row with an exact unchanged image before the plan, so
+ * a concurrent fence conflicts instead of letting the change commit. */
+struct efs_opid;
+int efs_meta_execute_mtime_owned(struct efs_kv *kv,
+                                 const struct efs_meta_mtime_plan *plan,
+                                 const struct efs_opid *id,
+                                 const struct efs_txid *t,
+                                 const struct efs_meta_mtime_ops *ops, void *ctx);
 
 /* Staged cross-authority APPEND planning. Capture requires authoritative
  * views of the inode and all active lanes. Exact images freeze the inode

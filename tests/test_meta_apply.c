@@ -33,6 +33,17 @@ static int failures = 0;
 
 static const struct efs_meta_attrs g_at = { 1000, 1000, T0 };
 
+/* K5: every receipt and ownership apply checks an established session.
+ * Tests of other mechanisms establish their client on every shard, as a
+ * mount's touched-shard admission would before its first mutation there. */
+static void session_everywhere(struct efs_kv *kv, uint8_t id)
+{
+    uint8_t uuid[EFS_OPID_UUID_LEN] = {0};
+    uuid[15] = id;
+    for (uint32_t shard = 0; shard < EFS_SESSION_BITS; shard++)
+        (void)efs_session_establish(kv, shard, uuid, 1);
+}
+
 static void test_create_lookup_unlink(void)
 {
     struct efs_kv *kv = efs_kv_mem_create();
@@ -654,6 +665,7 @@ static void test_i16_durable(void)
 
     CHECK(kv != NULL, "kv");
     CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    session_everywhere(kv, 1);
     memset(&op, 0, sizeof(op));
     op.client_uuid[15] = 1;
     op.session_epoch = 1;
@@ -3056,6 +3068,7 @@ static void test_truncate_append_cursor(void)
     CHECK(efs_meta_apply_init(kv,T0)==EFS_OK &&
           efs_meta_apply_create_file(kv,&g_at,1,S_IFREG|0644,"append-truncate",&ino)==EFS_OK,
           "append truncate fixture");
+    session_everywhere(kv,7);
     mkop(&op,7,1);
     CHECK(efs_meta_apply_append_reserve(kv,ino,6,&op,coord_fn,&cc,&off)==EFS_OK && off==0,
           "append truncate reserve");
@@ -3095,6 +3108,9 @@ static void test_append_reserve(void)
     memset(&cc, 0, sizeof(cc));
     cc.kv = kv;
     CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    session_everywhere(kv, 7);
+    session_everywhere(kv, 8);
+    session_everywhere(kv, 9);
     CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "a",
                                      &ino) == EFS_OK,
           "create");
@@ -3241,15 +3257,16 @@ static void test_append_reserve(void)
 
         CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
                                          "s", &zino) == EFS_OK,
-              "create stand-in");
+              "create unidentified target");
         memset(&zop, 0, sizeof(zop));
+        /* K5: there is no stand-in appender; no identity, no reservation. */
         CHECK(efs_meta_apply_append_reserve(kv, zino, 64, &zop, coord_fn, &cc,
-                                            &zoff) == EFS_OK &&
+                                            &zoff) == EFS_ERR_UNREGISTERED &&
                   zoff == 0,
-              "zero uuid reserve");
+              "zero uuid reserve refused");
         CHECK(efs_meta_apply_append_state(kv, zino, &wm, &fr, &nopen) == EFS_OK &&
-                  wm == 64 && nopen == 1,
-              "zero uuid watermark");
+                  wm == 0 && nopen == 0,
+              "zero uuid leaves no reservation");
     }
     {
         uint64_t watermark, frontier;
@@ -5447,6 +5464,9 @@ static void test_orphan_unlink(void)
     CHECK(efs_meta_pack_dentry(&dent,value,sizeof(value))==EFS_OK &&
           efs_kv_put(kv,keys[2],lens[2],value,sizeof(value))==EFS_OK,"restore orphan fixture");
     struct efs_opid_req q={0};q.id.client_uuid[0]=1;q.id.session_epoch=1;q.id.seq=1;
+    CHECK(efs_meta_apply_get_inode(kv,EFS_ROOT_INO,&parent)==EFS_OK &&
+          efs_session_establish(kv,efs_kv_dentry_shard(EFS_ROOT_INO,"orphan",parent.layout),
+                                q.id.client_uuid,1)==EFS_OK,"repair session established (K5)");
     CHECK(efs_meta_apply_unlink_op(kv,EFS_ROOT_INO,"orphan",T0+2,&q)==EFS_OK,"repair orphan");
     CHECK(efs_meta_apply_lookup(kv,EFS_ROOT_INO,"orphan",&dent)==EFS_ERR_NOT_FOUND,"no dangling name");
     CHECK(efs_meta_apply_unlink_op(kv,EFS_ROOT_INO,"orphan",T0+3,&q)==EFS_OK,"repair opid replay");
@@ -5472,6 +5492,7 @@ static void test_gc_last_close_before_resolve(void)
         struct efs_txid tx = {{1}}, link = {{2}};
         struct efs_txn_ino_delta delta = {.d_nlink=-1};
         CHECK(efs_kv_key_inode(shard,ino,key,&kl)==EFS_OK,"orphan key");
+        CHECK(efs_session_establish(kv,shard,uuid,1)==EFS_OK,"orphan lease session (K5)");
         CHECK(efs_lease_open(kv,ino,gen,uuid,1)==EFS_OK,"orphan lease open");
         CHECK(efs_txn_prepare_ino_delta(kv,&tx,&parts,key,kl,&delta)==EFS_OK,"orphan prepare");
         if (!held) {
@@ -5571,9 +5592,10 @@ static void test_create_initial_lease_atomic(void)
     uint8_t uuid[EFS_OPID_UUID_LEN]={5};
     struct efs_opid_req q={0};memcpy(q.id.client_uuid,uuid,sizeof(uuid));q.id.session_epoch=1;q.id.seq=1;
     efs_ino_t ino=0;struct efs_meta_dentry dent;struct efs_opid_reply reply;
+    /* K5: both the pending and the CREATE-time open lease are session-owned. */
+    create_batch_fail=0;
+    CHECK(efs_session_create(kv,uuid,1)==EFS_OK&&efs_session_register(kv,uuid,1,1)==EFS_OK&&efs_session_establish(kv,1,uuid,1)==EFS_OK,"atomic CREATE session admission");
     if (pending) {
-        create_batch_fail=0;
-        CHECK(efs_session_create(kv,uuid,1)==EFS_OK&&efs_session_register(kv,uuid,1,1)==EFS_OK&&efs_session_establish(kv,1,uuid,1)==EFS_OK,"atomic pending session admission");
         CHECK(efs_meta_apply_create_file_log_pending(kv,&g_at,1,S_IFREG|0600,
               "atomic",0,-1,NULL,uuid,1,&ino)==EFS_ERR_INVAL,
               "pending CREATE requires durable request identity");

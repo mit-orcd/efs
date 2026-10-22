@@ -89,7 +89,8 @@ static void namespace_gates(void)
  r.deadline_ns=3*NS;apply(kv,ino,1,&r);
  assert(efs_meta_apply_expire(kv,1,"a",4*NS,&due)==EFS_ERR_STALE);
  due.deadline_ns=3*NS;due.revision=2;
- uint8_t uuid[16]={1};assert(!efs_lease_open(kv,ino,1,uuid,1));
+ uint8_t uuid[16]={1};assert(!efs_session_establish(kv,efs_kv_inode_shard(ino),uuid,1)); /* K5 */
+ assert(!efs_lease_open(kv,ino,1,uuid,1));
  struct failure f={kv};const struct efs_kv_ops ops={.get=fault_get,.scan_prefix=fault_scan,.batch=fault_batch};
  struct efs_kv failed={&ops,&f};
  assert(efs_meta_apply_expire(&failed,1,"a",4*NS,&due)==EFS_ERR_IO);
