@@ -92,8 +92,8 @@ this create rate. The group-2 packer (on fcstor005) reported `lag_s` rising to
 
 1. Spread leadership. Correction: `EFS_METADATA_BALANCE=1` does **not** do that.
    Its `host_balanced_voter()` deliberately colocates both leaders on a voter
-   common to both groups. `de307a783` adds an opt-in mode 2 that spreads them
-   (see the rerun below). Here node 2 carried both groups' fsyncs, hashing,
+   common to both groups. `de307a783` added an opt-in mode 2 that spreads them
+   (see the rerun below). It lost the A/B and was removed. Here node 2 carried both groups' fsyncs, hashing,
    packing validation and the catalog build.
 2. Make a disconnected follower resume appends without waiting for the next
    snapshot, and add a leader-side per-peer match/next-index counter to `raft-status`.
@@ -172,7 +172,8 @@ Conclusions:
 - Under the current routing, which prefers the node hosting both groups,
   colocating leaders is right, as the `host_balanced_voter()` comment says.
   Spreading them costs ~21% throughput and widens the per-client gap.
-  The `EFS_METADATA_BALANCE=2` experiment is a negative result.
+  The `EFS_METADATA_BALANCE=2` experiment is a negative result, and the mode
+  was removed again after this A/B (modes 0 and 1 remain).
 - On a freshly formatted cluster with colocated leaders, the run-1 2× gap
   does **not** reproduce (1.07×). Run 1 differed in three ways: the older build
   `08cc16af4` (before W143 and W144, the leader-hint fix), a used store, and
