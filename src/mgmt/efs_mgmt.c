@@ -882,7 +882,8 @@ static int cmd_raft_status(int argc, char **argv)
         printf("  group %u hosted=%u role=%s leader=%d term=%llu "
                "commit=%llu applied=%llu voters=0x%x joint=%u "
                "last=%llu last_term=%llu snap=%llu rejects_sent=%llu proto_drops=%llu "
-               "unapplied=%llu max_unapplied=%llu busy_sent=%llu admit_busy=%llu%s\n",
+               "unapplied=%llu max_unapplied=%llu busy_sent=%llu admit_busy=%llu "
+               "low_capacity=%llu campaigns_held=%llu capacity_stepdowns=%llu%s\n",
                g->group, g->hosted,
                g->hosted ? raft_role_name(g->role) : "-",
                g->leader,
@@ -899,6 +900,9 @@ static int cmd_raft_status(int argc, char **argv)
                (unsigned long long)g->max_unapplied,
                (unsigned long long)g->busy_sent,
                (unsigned long long)g->admit_busy,
+               (unsigned long long)g->low_capacity,
+               (unsigned long long)g->campaigns_held,
+               (unsigned long long)g->capacity_stepdowns,
                g->resync_pending ? " resync=1" : "");
         /* W145: replication progress per peer, as this node sees it. */
         for (uint32_t p = 0; g->hosted && g->role == EFS_RAFT_LEADER &&

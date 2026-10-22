@@ -558,6 +558,8 @@ struct efs_raft_group_status {
     /* K22/W23 bound: entries past applied (committed or not) and its cap;
      * AppendEntries refused busy (follower), proposals refused BUSY (leader). */
     uint64_t unapplied, max_unapplied, busy_sent, admit_busy;
+    /* K22: may not lead now; elections held; capacity step-downs. */
+    uint64_t low_capacity, campaigns_held, capacity_stepdowns;
     struct efs_raft_peer_status peers[EFS_RAFT_STATUS_PEERS];
 };
 

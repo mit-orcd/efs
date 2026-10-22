@@ -11,9 +11,10 @@
 #
 # Phases (durations in seconds, env-overridable):
 #   1. start nodes 1-2, raft-mkfs, start node 3 (follower of both groups)
-#      with EFS_FAULT_COMPACT_STALL=1 and EFS_FAULT_L0_BYTES=$L0 (fault
-#      build test hook: the L0 cap that the 1 GiB production cap scales
-#      down to, so the bound is reached in minutes); mount one efs-fuse.
+#      with EFS_FAULT_COMPACT_STALL=1, EFS_FAULT_L0_BYTES=$L0 and
+#      EFS_FAULT_MEMTABLE_BYTES=$MEMTABLE (fault-build hooks: the 1 GiB L0
+#      cap and 4 MiB memtable scaled down so the derived bound is reached in
+#      minutes on a slow host); mount one efs-fuse.
 #   2. WARM: load with the compactor running (baseline RSS/lag).
 #   3. STALL: create the fault file (compactor parks), keep the load;
 #      ends PLATEAU s after a leader first reports node 3 busy (deadline
@@ -32,7 +33,8 @@
 set -u
 REL=$1; D=$2
 PORT=${PORT:-18500}
-L0=${L0:-$((4 << 20))}
+L0=${L0:-$((1 << 20))}
+MEMTABLE=${MEMTABLE:-$((256 << 10))}
 WARM=${WARM:-60}; STALL=${STALL:-3600}; PLATEAU=${PLATEAU:-300}; RELEASE=${RELEASE:-120}; DRAIN=${DRAIN:-600}
 WORKERS=${WORKERS:-2}
 FILE_BYTES=${FILE_BYTES:-0}
@@ -83,7 +85,8 @@ for _ in $(seq 40); do
     sleep 1
 done
 [ $ok = 1 ] || { say "FATAL raft-mkfs"; exit 2; }
-start_node 3 EFS_FAULT_COMPACT_STALL=1 EFS_FAULT_COMPACT_FILE="$FAULT" EFS_FAULT_L0_BYTES="$L0"
+start_node 3 EFS_FAULT_COMPACT_STALL=1 EFS_FAULT_COMPACT_FILE="$FAULT" EFS_FAULT_L0_BYTES="$L0" \
+    EFS_FAULT_MEMTABLE_BYTES="$MEMTABLE"
 for _ in $(seq 120); do
     st=$("$REL/efs-mgmt" raft-status $ADDR:$((PORT+3)) 2>/dev/null)
     n=$(echo "$st" | grep -c 'hosted=1 role=FOLLOWER')
@@ -162,7 +165,7 @@ run_phase() {  # run_phase NAME SECONDS [PLATEAU]
     done
 }
 
-BENCH_FILES=${BENCH_FILES:-20000}
+BENCH_FILES=${BENCH_FILES:-2000}
 bench_loop() {  # bench_loop W: rounds until load.stop; counter file load.W
     local w=$1 n=0 e=0 r=0
     while [ ! -f "$D/load.stop" ]; do

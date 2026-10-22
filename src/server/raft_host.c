@@ -7822,9 +7822,13 @@ static void *host_pump(void *arg)
         {
             uint64_t now = now_us_();
             if (now - last_tick_us >= HOST_TICK_US) {
+                /* K22/W23: KV at its admission watermark -> no leadership. */
+                int kv_over = h->kv && efs_kv_lsm_apply_room(h->kv, 1) == EFS_ERR_BUSY;
                 for (i = 0; i < HOST_NGROUPS; i++) {
-                    if (h->g[i].hosted && h->g[i].r)
+                    if (h->g[i].hosted && h->g[i].r) {
+                        efs_raft_set_pressure(h->g[i].r, kv_over);
                         (void)efs_raft_tick(h->g[i].r);
+                    }
                 }
                 last_tick_us = now;
             }
@@ -12861,6 +12865,9 @@ void server_raft_host_status(struct efs_msg_raft_status_reply *out)
                 gs->max_unapplied = lp.max_unapplied;
                 gs->busy_sent = lp.busy_sent;
                 gs->admit_busy = lp.admit_busy;
+                gs->low_capacity = lp.low_capacity;
+                gs->campaigns_held = lp.campaigns_held;
+                gs->capacity_stepdowns = lp.capacity_stepdowns;
             }
             gs->resync_pending = efs_raft_resync_pending(h->g[i].r) ? 1u : 0u;
             gs->npeers = h->n < EFS_RAFT_STATUS_PEERS ? (uint32_t)h->n :

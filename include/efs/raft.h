@@ -331,6 +331,9 @@ struct efs_raft_log_progress {
      * its cap (0 = unbounded), batches refused busy as a follower and
      * proposals refused EFS_ERR_BUSY as a leader. */
     uint64_t unapplied, max_unapplied, busy_sent, admit_busy;
+    uint64_t low_capacity;     /* 1 while the replica may not lead */
+    uint64_t campaigns_held;   /* elections not started for capacity */
+    uint64_t capacity_stepdowns;
 };
 int efs_raft_log_progress(struct efs_raft *r, struct efs_raft_log_progress *out);
 /* K22/W23 universal follower memory/lag bound. A replica's unapplied log
@@ -343,6 +346,12 @@ void efs_raft_set_max_unapplied(struct efs_raft *r, uint64_t max);
  * unapplied entry costs a resident index record; budget/256, at least two
  * full AppendEntries batches. No operator setting. */
 uint64_t efs_raft_unapplied_cap(uint64_t mem_budget);
+/* K22/W23 (D30: leadership requires local capacity). The host reports its
+ * state machine's memory pressure (KV at the admission watermark). A replica
+ * under pressure, or holding >= 3/4 of max_unapplied, does not campaign; a
+ * leader that stays so for four election timeouts steps down so a healthy
+ * peer can lead. Votes are unaffected; a solo voter never steps down. */
+void efs_raft_set_pressure(struct efs_raft *r, int over);
 /* W145 repair, operator-triggered only: this follower's committed log
  * disagrees with the leader (a conflict at or below commit). While set,
  * such a conflict is answered with match_index 0 instead of refused

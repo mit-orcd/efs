@@ -1437,6 +1437,14 @@ struct efs_kv *efs_kv_lsm_open(const char *dir, const struct efs_kv_lsm_cfg *cfg
             l->l0_cap_bytes = b;
             fprintf(stderr, "kv-fault: l0 cap %llu bytes\n", b);
         }
+        /* Same hook for the memtable size, so the derived budget scales
+         * down with the cap on a slow test host. */
+        v = getenv("EFS_FAULT_MEMTABLE_BYTES");
+        b = v && v[0] ? strtoull(v, NULL, 0) : 0;
+        if (b >= (64u << 10) && b <= (64u << 20) && !l->cfg.memtable_max) {
+            l->cfg.memtable_max = (uint32_t)b;
+            fprintf(stderr, "kv-fault: memtable %llu bytes\n", b);
+        }
     }
 #endif
     l->mem_budget = efs_kv_lsm_mem_budget(l->l0_cap_bytes, l->cfg.memtable_max);

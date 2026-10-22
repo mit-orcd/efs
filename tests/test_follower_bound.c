@@ -312,6 +312,53 @@ static void test_leader_admission(void)
     shutdown_net(&n);
 }
 
+static int leader_of(struct net *n)
+{
+    for (int i = 0; i < NR; i++)
+        if (efs_raft_role(n->r[i]) == EFS_RAFT_LEADER) return i;
+    return -1;
+}
+
+/* D30: leadership requires local capacity. */
+static void test_capacity_leadership(void)
+{
+    struct net n;
+    struct efs_raft_log_progress lp;
+    int t, l;
+    fprintf(stderr, "test_capacity_leadership\n");
+    boot(&n, efs_raft_unapplied_cap(0));
+    efs_raft_allow_campaign(n.r[1], 1);
+    /* 1. The leader's state machine is at its watermark: it steps down
+     * after four election timeouts and does not campaign; node 1 leads. */
+    efs_raft_set_pressure(n.r[0], 1);
+    for (t = 0; t < 400 && leader_of(&n) != 1; t++) tick_all(&n);
+    CHECK(leader_of(&n) == 1, "healthy peer took leadership");
+    CHECK(efs_raft_log_progress(n.r[0], &lp) == EFS_OK && lp.capacity_stepdowns == 1,
+          "pressured leader stepped down once");
+    CHECK(lp.low_capacity == 1, "pressured replica reports low capacity");
+    CHECK(propose_one(&n, 1, 32) == EFS_ERR_NOT_PRIMARY, "old leader no longer admits");
+    /* 2. Both voters that may campaign are pressured: no leader, elections
+     * held (node 2 never campaigns in this fixture). */
+    efs_raft_set_pressure(n.r[1], 1);
+    for (t = 0; t < 400; t++) tick_all(&n);
+    CHECK(leader_of(&n) < 0, "no low-capacity replica leads");
+    CHECK(efs_raft_log_progress(n.r[0], &lp) == EFS_OK && lp.campaigns_held > 0,
+          "pressured follower held its election");
+    /* 3. Pressure clears: leadership and admission return. */
+    efs_raft_set_pressure(n.r[0], 0);
+    efs_raft_set_pressure(n.r[1], 0);
+    for (t = 0; t < 400 && leader_of(&n) < 0; t++) tick_all(&n);
+    l = leader_of(&n);
+    CHECK(l >= 0, "leader elected after pressure cleared");
+    if (l >= 0) {
+        uint64_t idx = 0;
+        uint8_t cmd[8] = {0x7a};
+        CHECK(efs_raft_propose(n.r[l], cmd, sizeof(cmd), &idx) == EFS_OK, "admits again");
+        deliver(&n);
+    }
+    shutdown_net(&n);
+}
+
 #if EFS_FAULTS
 static char fault_path[256];
 static void stall_release(void) { unlink(fault_path); }
@@ -369,6 +416,7 @@ int main(void)
 {
     test_sim();
     test_leader_admission();
+    test_capacity_leadership();
 #if EFS_FAULTS
     test_stalled_compactor();
 #else

@@ -85,6 +85,9 @@ struct efs_raft {
     uint64_t ae_busy_sent, admit_busy, busy_log_tick;
     uint64_t peer_busy[EFS_RAFT_MAX_PEERS];
     uint64_t peer_busy_until[EFS_RAFT_MAX_PEERS];
+    int pressure;              /* host: state machine at its watermark */
+    uint64_t pressure_ticks;   /* consecutive low-capacity leader ticks */
+    uint64_t campaigns_held, capacity_stepdowns, capacity_log_tick;
     unsigned last_commit_bits; /* W145: quorum that made the last leader commit */
     int resync_requested;      /* W145 repair: see efs_raft_request_resync */
     unsigned vote_bits;
@@ -1326,6 +1329,21 @@ static int become_leader(struct efs_raft *r)
     return broadcast_ae(r);
 }
 
+#define REJECT_LOG_TICKS 2000u
+
+/* K22/W23: this replica cannot serve as leader now. */
+static int low_capacity(const struct efs_raft *r)
+{
+    uint64_t last_i = 0, last_t = 0;
+
+    if (r->pressure)
+        return 1;
+    if (!r->max_unapplied || last_log((struct efs_raft *)r, &last_i, &last_t) != EFS_OK)
+        return 0;
+    return (last_i > r->last_applied ? last_i - r->last_applied : 0) >=
+           r->max_unapplied / 4u * 3u;
+}
+
 static int start_election(struct efs_raft *r)
 {
     struct efs_raft_msg m;
@@ -1333,6 +1351,20 @@ static int start_election(struct efs_raft *r)
     int i, rc;
 
     if (!is_voter(r, r->id) || !r->allow_campaign) {
+        reset_election(r);
+        return EFS_OK;
+    }
+    if (!solo(r) && low_capacity(r)) {
+        /* K22/W23: an up-to-date log is not enough to lead; a replica
+         * that cannot apply would refuse every proposal. */
+        r->campaigns_held++;
+        if (r->campaigns_held == 1 || r->ticks - r->capacity_log_tick >= REJECT_LOG_TICKS) {
+            r->capacity_log_tick = r->ticks;
+            fprintf(stderr, "raft: group=%u election held: low capacity "
+                    "(pressure=%d applied=%llu held=%llu)\n", r->group,
+                    r->pressure, (unsigned long long)r->last_applied,
+                    (unsigned long long)r->campaigns_held);
+        }
         reset_election(r);
         return EFS_OK;
     }
@@ -1523,7 +1555,6 @@ static int on_vote_rep(struct efs_raft *r, const struct efs_raft_msg *in)
 
 /* W145: a follower that keeps refusing its leader must say so. One line
  * per REJECT_LOG_TICKS (10 s at 5 ms ticks), plus the running count. */
-#define REJECT_LOG_TICKS 2000u
 static void ae_reject_note(struct efs_raft *r, const struct efs_raft_msg *in,
                            uint64_t last_i, const char *why)
 {
@@ -2271,6 +2302,27 @@ int efs_raft_tick(struct efs_raft *r)
         return EFS_ERR_IO;
     r->ticks++;
     if (r->role == EFS_RAFT_LEADER) {
+        if (!solo(r) && low_capacity(r)) {
+            if (++r->pressure_ticks >= 4u * (uint64_t)r->election_ticks) {
+                r->capacity_stepdowns++;
+                fprintf(stderr, "raft: group=%u leader steps down: low capacity "
+                        "for %llu ticks (pressure=%d applied=%llu commit=%llu)\n",
+                        r->group, (unsigned long long)r->pressure_ticks,
+                        r->pressure, (unsigned long long)r->last_applied,
+                        (unsigned long long)r->commit_index);
+                r->pressure_ticks = 0;
+                leader_exit_note(r, r->current_term, "capacity");
+                read_proof_forget(r);
+                r->role = EFS_RAFT_FOLLOWER;
+                r->leader = -1;
+                r->vote_bits = 0;
+                r->read_in_flight = 0;
+                reset_election(r);
+                return EFS_OK;
+            }
+        } else {
+            r->pressure_ticks = 0;
+        }
         r->hb_elapsed++;
         if (r->hb_elapsed >= r->heartbeat_ticks)
             return broadcast_ae(r);
@@ -2606,6 +2658,11 @@ void efs_raft_set_max_unapplied(struct efs_raft *r, uint64_t max)
     if (r) r->max_unapplied = max;
 }
 
+void efs_raft_set_pressure(struct efs_raft *r, int over)
+{
+    if (r) r->pressure = over ? 1 : 0;
+}
+
 uint64_t efs_raft_unapplied_cap(uint64_t mem_budget)
 {
     uint64_t cap = mem_budget / 256u;
@@ -2937,6 +2994,9 @@ int efs_raft_log_progress(struct efs_raft *r, struct efs_raft_log_progress *out)
     out->max_unapplied = r->max_unapplied;
     out->busy_sent = r->ae_busy_sent;
     out->admit_busy = r->admit_busy;
+    out->campaigns_held = r->campaigns_held;
+    out->capacity_stepdowns = r->capacity_stepdowns;
+    out->low_capacity = (uint64_t)low_capacity(r);
     int rc = last_log(r, &out->last_index, &out->last_term);
     out->unapplied = unapplied_at(r, out->last_index);
     return rc;
