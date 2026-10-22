@@ -1,8 +1,11 @@
 # Review of `claude/pack-validate-once` — 2026-10-22
 
-**Verdict: code correct, tests PASS. Not ready to merge until the
-modify-under-load read mismatch is reproduced or ruled out (open item
-below).** Subject: commits `207dde6b4`, `660c6621c`, `745af27f5`, `e223b88d5`,
+**Verdict: merged into devel in `842a014b3` by user decision (October 22),
+with the modify-under-load read mismatch still OPEN (below).** The merged
+devel passes `make test` 819/819 on node9901 (clean `git archive` of
+`842a014b3`, `scripts/make_test_summary.sh`, `ASAN_OPTIONS=detect_leaks=0`).
+The cluster gates and the mismatch investigation listed below remain NOTRUN
+on devel. The branch is deleted; its commits are in devel's history. Subject: commits `207dde6b4`, `660c6621c`, `745af27f5`, `e223b88d5`,
 `7cef019b4` and `1df84466d` on `claude/pack-validate-once`, based on devel
 `dd43b4015`. They fix findings 1 and 2 of
 [the ORCD tiny-file profile](orcd-tiny-profile-20261022.md). Nothing is
