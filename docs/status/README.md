@@ -18,6 +18,11 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[W87/K9 append oracle on efs2](w87-append-oracle-efs2-20261022.md):
+**INCOMPLETE: not reproduced, no root cause; W87 OPEN.** 23 exact rounds, 19,597 acknowledged records on
+a private 3-daemon TCP buffered cluster under churn/GC and POSIX load; no loss,
+duplicate or reorder warm or cold. No fix; bounded rerun NOTRUN.
+
 [K22 / W23 follower memory/lag bound](../../results/measure/20261022-k22-follower-bound/SUMMARY.md):
 **implemented on `devel-k22` (not merged); unit test (EFS_FAULTS stall
 hook) and `make test` PASS on efs3; the plateau measurement on a real cluster

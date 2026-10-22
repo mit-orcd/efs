@@ -3802,6 +3802,14 @@ collection remain open. [Checkpoint](../status/dependency-package-20261009.md#ex
 
 ## W87 · Buffered concurrent append loses records under broader load
 
+**Oct 22 efs2 reproduction attempt (K9):** a new exact append oracle
+(`tests/live/append_oracle.py`, classification unit test in `make test`) ran 23
+rounds, 19,597 acknowledged records, on a private 3-daemon TCP buffered cluster
+under churn/GC, a 4 MiB client cache and concurrent POSIX load. No record was
+lost, duplicated, torn or reordered warm or cold. Not reproduced on devel
+`7c510c60f`; INCOMPLETE, no root cause or fix; keep W87 open. Bounded rerun NOTRUN.
+[Summary and commands](../status/w87-append-oracle-efs2-20261022.md).
+
 **Oct 11 NUC integration acceptance:** merged fixed core passes full POSIX
 216/216 and peer 67/67 in both direct and buffered modes. An additional focused
 round per mode combines four two-mount persistent/per-record-close APPEND

@@ -100,7 +100,7 @@ row is checked again on current devel before work starts.
 | K6 | **W127–W131** fail-closed apply (in devel since `08cc16af4`; private RDMA gate PASS) | correctness | VERIFY multi-host |
 | K7 | **W83** transaction decision records are never retired | lifecycle / growth | FIX |
 | K8 | **W148** modify-under-load returned wrong bytes, correct size, on a never-packed 3.6 MB file (suspected read race: same-size overwrite then truncate-up) | data correctness | FIX ([review](review-pack-validate-once-20261022.md)) |
-| K9 | **W87** buffered concurrent append loses records under load | data correctness | FIX |
+| K9 | **W87** buffered concurrent append loses records under load | data correctness | FIX — not reproduced on efs2 Oct 22 ([attempt](w87-append-oracle-efs2-20261022.md)); OPEN |
 | K10 | **W121** a read right after a successful fsync returns the previous file's payload (FUSE kernel fork/page-pinning; kernel fix deferred) | data correctness | DECIDE |
 | K11 | **W55** span committed but fragment PUTs never landed | data correctness | VERIFY Linux FUSE. NFS re-export and macOS clients are **DECIDED out of alpha** (user, Oct 22): beta backlog **W152**; their W55 triggers are not isolated in alpha |
 | K12 | **W58** `O_EXCL` create answered EEXIST (historical trigger not isolated) | correctness | VERIFY |
