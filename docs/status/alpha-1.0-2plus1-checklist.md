@@ -113,7 +113,7 @@ row is checked again on current devel before work starts.
 | K19 | **W61**, **W62**, **W63** GC: final drain and lost-ledger reconciliation | reclaim correctness | VERIFY |
 | K20 | **W42** capacity reporting on any node count; protection debt (with B5) | correctness | VERIFY |
 | K21 | **W119** concurrent RDMA failures and blocked clean stop (recorded Oct 15, before many fixes); **W65** graceful-shutdown wait | correctness / liveness | VERIFY first, then FIX |
-| K22 | **W23** universal follower memory/lag bound | resource bound | FIXED on `devel-k22` (not merged); VERIFY: plateau measurement NOTRUN ([summary](../../results/measure/20261022-k22-follower-bound/SUMMARY.md)) |
+| K22 | **W23** universal follower memory/lag bound | resource bound | FIXED, merged into devel Oct 22 (derived KV memory budget, unapplied-log bound with busy AppendEntries replies, leader admission at 3/4, leadership requires capacity per D30; `efs-mgmt raft-status` shows the bound). VERIFY: the production-scale plateau measurement, snapshot import into a stalled follower and multi-host/RDMA runs are NOTRUN for the parent session ([summary](../../results/measure/20261022-k22-follower-bound/SUMMARY.md)) |
 | K23 | **W71** hardware power-loss gate; **W74** automatic repair; **W123** crash recovery | durability scope | DECIDE (deferred by current scope) |
 | K24 | **W149** `EFS_KV_COMPACT_DIE` exits the daemon in normal builds | build hygiene / safety | FIX |
 | K25 | **W135**–**W139**, **W141**, **W120**, **W150** test harness and reporting defects | test correctness | TEST |

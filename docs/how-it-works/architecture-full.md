@@ -1569,6 +1569,14 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[K22 / W23 follower memory/lag bound](../../results/measure/20261022-k22-follower-bound/SUMMARY.md):
+**implemented on `devel-k22` (not merged); unit test (EFS_FAULTS stall
+hook) and `make test` PASS on efs3; the plateau measurement on a real cluster
+is NOTRUN (parent session).** Two earlier scaled runs on efs3 are
+informational only: one found the stalled follower winning an election,
+which the capacity gate on campaigning and leadership fixed. Snapshot import
+into a stalled follower is NOTRUN.
+
 [K15 W52/W64 append gates](../status/k15-w52-w64-20261022.md): **W64 INCOMPLETE**.
 A leader change left append transactions PREPARED until recovery, so writes
 failed with EBUSY. The fix and its regression test are on `devel-k15`, and the
@@ -2472,7 +2480,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | 16 | **W53** · W41's create/close-storm p99 regression — keep or revert | investigation | investigate — evidence only, then the user decides | [full text](#w53--w41s-createclose-storm-tail-under-concurrent-big-writers--investigate-plan-row-16) |
 | E | **D17** · `st_blocks` = 0 for files this client did not write | performance | in tree + gated (dev cluster, Oct 4): lane-stamp present count, summed at getattr, client takes max with its local table; Closed: NUC direct/buffered actual ecrawl reports zero dense-file false sparse classifications, two true sparse files and zero errors; cold non-writer partial-tail/truncate/empty allocation gates pass | [D17](#appendix-4--decisions--taken-and-pending-register-d1d36) |
 | P2.2 | **D26** · the GC pass | performance | in tree + gated (dev cluster, Oct 4): per-anchor pending-GC watermark maintained in the apply, derived once per recovery/import, `zero_if` clamp on a drained pass; `test_gc_watermark`; live: 514 records/pass drain, 10 idle min with no `gc-pass` line; Oct 7 10-GiB physical reclamation passes; retained-table active GC latency regression remains (1393-ms pass); idle-hour/committed-tail results in the acceptance ledger | [full text](#p22--d26--the-gc-pass-performance-plan-row) · [D26](#appendix-4--decisions--taken-and-pending-register-d1d36) |
-| P2.3 | **W23** · stalled-compactor test | performance | strict W89 samples pass; NUC engine reaches production 1 GiB L0 cap; deferred idle drain and unapplied WAL-tail durability repaired; universal follower memory/lag bound remains open | [full text](#p23--w23--the-stalled-compactor-test-performance-plan-row) · [run](../../results/measure/20261005-040810-w23-stalled-compactor/SUMMARY.txt) |
+| P2.3 | **W23** · stalled-compactor test | performance | strict W89 samples pass; NUC engine reaches production 1 GiB L0 cap; deferred idle drain and unapplied WAL-tail durability repaired; **K22 (Oct 22, `devel-k22`, not merged): universal follower memory/lag bound implemented; unit test and `make test` PASS; plateau measurement and snapshot import NOTRUN** | [full text](#p23--w23--the-stalled-compactor-test-performance-plan-row) · [K22 run](../../results/measure/20261022-k22-follower-bound/SUMMARY.md) · [Oct 5 run](../../results/measure/20261005-040810-w23-stalled-compactor/SUMMARY.txt) |
 | P3 | `efs-bench --bench data/meta`, then `efs-fuse --bench` | performance | tools implemented; Oct 7 corrected histogram/window coverage and metadata result validation are recorded in the latency/benchmark checkpoints; named six-NVMe fcstor storage curve and two-host client ladder remain owed | [server plan](#single-node-storage-bench-efsd---bench--asked-oct-2-2026-user-queue-position-after-w41--d23--d17--d26-in-plan-after-the-oct-1-2200z-review-its-number-decides-the-fragment-layout-w40-and-zero-copy-receive) · [client plan](#client-bench-efs-fuse---bench--asked-oct-2-2026-user-after-efsd---bench) · [original run](../../results/measure/20261005-045140-p3-benches/SUMMARY.txt) · [latency validation](../../results/measure/20261007-latency-validation/SUMMARY.md) · [benchmark validation](../../results/measure/20261007-bench-hot-path-review/SUMMARY.md) |
 | metadata-group-perf | **W66** · metadata-placement performance split | investigation / benchmark enhancement | open follow-up; Oct 8 live probes reproduce group-2 reads at 16.5–18.7 ms median versus 1.4–1.6 ms for group 0; direct leader contact remains slow; quorum/pump durability candidate, causal isolation pending | [follow-up](../status/metadata-group-perf-followup-20261008.md) |
 | P4.1–P4.4 | fragment on-disk layout (**wipe**), W40 FUSE write copy, RDMA zero-copy receive, 9-client scaling | performance | deferred until P3's numbers | [full text](#p4--deferred-until-p3s-numbers-long-one-is-a-wipe) |
@@ -4561,6 +4569,17 @@ use `EFS_STRACE_EXPR`.
 
 ##### W23 — Server: the apply path blocks on L0 back-pressure, and compaction rewrites the table to absorb a few MiB
 
+**K22 update (Oct 22, branch `devel-k22`, not merged):** the universal
+follower memory/lag bound is implemented; its unit test and `make test`
+pass; the plateau measurement is NOTRUN ([summary](../../results/measure/20261022-k22-follower-bound/SUMMARY.md)). The KV budget is derived as
+`max(4 memtables, min(L0 cap / 8, RAM / 16))`; apply defers at it. The
+Raft unapplied log is capped at `budget / 256` entries. A follower at
+the cap refuses AppendEntries busy, the leader withholds entries from it,
+and leaders refuse proposals `EFS_ERR_BUSY` at 3/4 of either bound. A
+replica under pressure does not campaign, and a pressured leader steps
+down. The plateau measurement on a real cluster and InstallSnapshot into a
+stalled follower remain NOTRUN.
+
 **Acceptance update (Oct 7, three-package round):** an owned NUC engine reaches
 the actual 1 GiB L0 cap. Idle deferred-memtable recovery and unsafe concurrent
 WAL truncation are repaired and tested against their old-binary failures.
@@ -5406,7 +5425,7 @@ Rows P2.1 and P2.4 are DONE (archive index); P2.2 and P2.3 follow as sections be
 
 **Item.** **W23** stalled-compactor test
 
-**Status.** **Test/hook in tree; valid stalled-compactor bound still owed.** The [completed Oct 5 run](../../results/measure/20261005-040810-w23-stalled-compactor/SUMMARY.txt) supersedes the earlier setup failure: it recorded 4352 MiB in 27 seconds, but its zero-L0 interpretation comes from shifted TSV columns ([W89](#w89)). Corrected samples show real L0 accumulation; the cap/lag bound remains untested. Use the [current W23 checkpoint](#w23--server-the-apply-path-blocks-on-l0-back-pressure-and-compaction-rewrites-the-table-to-absorb-a-few-mib) for the source distinction and next measurement. This private-cluster gate does not depend on the historical 19810 endpoint.
+**Status (Oct 22, K22).** **Bound implemented on `devel-k22`; unit test and `make test` PASS; plateau measurement NOTRUN ([summary](../../results/measure/20261022-k22-follower-bound/SUMMARY.md)).** Earlier status: **Test/hook in tree; valid stalled-compactor bound still owed.** The [completed Oct 5 run](../../results/measure/20261005-040810-w23-stalled-compactor/SUMMARY.txt) supersedes the earlier setup failure: it recorded 4352 MiB in 27 seconds, but its zero-L0 interpretation comes from shifted TSV columns ([W89](#w89)). Corrected samples show real L0 accumulation; the cap/lag bound remains untested. Use the [current W23 checkpoint](#w23--server-the-apply-path-blocks-on-l0-back-pressure-and-compaction-rewrites-the-table-to-absorb-a-few-mib) for the source distinction and next measurement. This private-cluster gate does not depend on the historical 19810 endpoint.
 
 **What changes (server).** the test written in [W23](#w23--server-the-apply-path-blocks-on-l0-back-pressure-and-compaction-rewrites-the-table-to-absorb-a-few-mib) "correction": compactor stalled by a fault, measure memory and lag bound
 
