@@ -80,6 +80,15 @@ int main(void)
     assert(!efs_query_refresh_cut_retry(EFS_ERR_BUSY,1,200));
     assert(!efs_query_refresh_due_reason(1019,0,1000,256,0,1,1,256,2000));
     assert(efs_query_refresh_due_reason(1020,0,1000,256,0,1,1,256,2000));
+    /* No catalog yet and the capture was refused (BUSY/NOT_PRIMARY): retry
+     * after about a second, not a full interval; failed builds keep backoff. */
+    assert(efs_query_refresh_initial_retry(EFS_ERR_BUSY,1));
+    assert(efs_query_refresh_initial_retry(EFS_ERR_NOT_PRIMARY,1));
+    assert(!efs_query_refresh_initial_retry(EFS_ERR_BUSY,0));
+    assert(!efs_query_refresh_initial_retry(EFS_ERR_IO,1));
+    assert(!efs_query_refresh_due_reason(1999,0,1000,0,1,1,EFS_QUERY_RETRY_INITIAL,256,60000));
+    assert(efs_query_refresh_due_reason(2000,0,1000,0,1,1,EFS_QUERY_RETRY_INITIAL,256,60000));
+    assert(!efs_query_refresh_due_reason(2000,0,1000,0,1,1,0,256,60000));
     assert(!efs_query_refresh_due_reason(1200,0,1000,256,0,1,0,256,2000));
     assert(!efs_query_refresh_due_reason(1200,0,1000,0,0,1,1,256,2000));
     assert(!efs_query_refresh_due_reason(1200,0,1000,256,0,0,1,256,2000));

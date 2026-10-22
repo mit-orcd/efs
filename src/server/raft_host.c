@@ -10704,6 +10704,7 @@ static void *host_query_thread(void *ctx)
         rc=host_query_source(h,&source,&view,revisions,import_generation,&final_transaction_changed,work_enabled?&work:NULL);
         uint64_t capture_done=query_mono_ms();
         cut_retry=efs_query_refresh_cut_retry(rc,final_transaction_changed,capture_done-now);
+        if(!cut_retry && efs_query_refresh_initial_retry(rc,initial))cut_retry=EFS_QUERY_RETRY_INITIAL;
         if(work_enabled){work.capture_ms=capture_done-now;work.source_ms=capture_done-source_start;
             work.changed=final_transaction_changed;
             /* Eligibility is a historical experiment label, NEVER a scheduling input. */
@@ -10843,9 +10844,12 @@ int server_raft_host_query_read(int (*consume)(void *,const struct efs_server_qu
     /* No catalog published yet (a fresh cluster before its first build):
      * nothing is indexed, the same "not indexed yet" NODATA a directory
      * newer than the catalog gets, so .efs callers wait for the refresh
-     * instead of failing on BUSY. A recorded refresh error still wins. */
+     * instead of failing on BUSY. A transient refresh refusal (BUSY or
+     * NOT_PRIMARY, retried within about a second) is the same condition;
+     * any other recorded refresh error still wins. */
+    int transient=h->query_error==EFS_ERR_BUSY || h->query_error==EFS_ERR_NOT_PRIMARY;
     int rc=h->query_view.catalog ? consume(ctx,&h->query_view,h->query_error) :
-           h->query_error ? h->query_error : EFS_ERR_NODATA;
+           h->query_error && !transient ? h->query_error : EFS_ERR_NODATA;
     pthread_rwlock_unlock(&h->query_lock);
     return rc;
 }

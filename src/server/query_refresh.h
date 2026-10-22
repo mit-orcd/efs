@@ -93,12 +93,27 @@ static inline int efs_query_refresh_interval_config(const char *text,unsigned fa
     if(v<EFS_QUERY_REFRESH_MIN_MS)return EFS_ERR_INVAL;
     *ms=(unsigned)v;return EFS_OK;
 }
+/* Before the first catalog is published, a capture refused with BUSY or
+ * NOT_PRIMARY (authority not settled yet, e.g. at startup) built nothing.
+ * Retry it after a short bounded delay instead of a full interval, so a
+ * fresh or restarted leader is not left without a catalog for a whole
+ * refresh period. Failed builds keep the normal backoff. cut_retry carries
+ * this as EFS_QUERY_RETRY_INITIAL; EFS_QUERY_RETRY_CUT is the coherent-cut
+ * retry above. */
+#define EFS_QUERY_RETRY_CUT 1
+#define EFS_QUERY_RETRY_INITIAL 2
+#define EFS_QUERY_INITIAL_RETRY_MS 1000u
+static inline int efs_query_refresh_initial_retry(int rc,int initial)
+{
+    return initial && (rc==EFS_ERR_BUSY || rc==EFS_ERR_NOT_PRIMARY);
+}
 static inline int efs_query_refresh_due_reason(uint64_t now,uint64_t pending_since,
     uint64_t last_attempt,uint64_t dirty,int initial,int failed,int cut_retry,
     uint64_t trigger,uint64_t interval)
 {
     if(cut_retry && failed && (dirty || initial) && last_attempt)
-        return now-last_attempt>=EFS_QUERY_CUT_RETRY_MS;
+        return now-last_attempt>=(cut_retry==EFS_QUERY_RETRY_INITIAL ?
+                                  EFS_QUERY_INITIAL_RETRY_MS : EFS_QUERY_CUT_RETRY_MS);
     return efs_query_refresh_due(now,pending_since,last_attempt,dirty,initial,failed,trigger,interval);
 }
 

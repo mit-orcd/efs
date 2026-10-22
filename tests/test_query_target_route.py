@@ -74,6 +74,8 @@ int main(void){struct efs_raft r[2]={{2,7},{3,14}};
  assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_NODATA&&consumed==1);
  h.query_error=EFS_ERR_IO;
  assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_IO&&consumed==1);
+ h.query_error=EFS_ERR_BUSY; /* transient refresh refusal: still not indexed yet */
+ assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_NODATA&&consumed==1);
  h.query_error=0;h.query_view.catalog=(void*)1;
  barrier_rc=0;lose_capability=1;
  assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_BUSY&&consumed==1);
