@@ -6154,6 +6154,19 @@ HARD, SNAP and CFG records.
 - `scripts/w145_deposed_leader.sh` reproduces deposition on a private
   cluster; its SIGSTOP and perf modes passed without reproducing.
 
+**Deployed** `76614e8e8` on orcd-mini (2026-10-22 14:22Z):
+- `make test` 816/816 with one environmental failure; POSIX smoke 216/216;
+  3/3 identical versions.
+- The first swap left n3 on the old build: `stop.sh` did not stop it, and
+  `start.sh` then refused n2. The cluster was down about 14:20–14:22Z until
+  a second clean stop and start. The swap script now refuses to switch
+  until every efsd has exited.
+- Startup elections moved group 2 from term 149 to 291. The cause is not
+  yet examined.
+- As expected, n2 is still wedged: its committed 30,929,219@62 is on disk,
+  and `proto_drops` keeps rising. The fix prevents new cases; it does not
+  repair n2.
+
 **Remaining.**
 1. Repair n2: its persisted state carries the stray entry. Options need
    the user's decision (see the status page).
