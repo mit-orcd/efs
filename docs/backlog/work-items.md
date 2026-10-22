@@ -2353,6 +2353,18 @@ the quick ones).** Each row is a queue item; the W number is binding.
 
 ## W52 · a REPORT after thousands of O_APPEND writes answers after > 30 s (plan row 15)
 
+**Oct 22 K15 (`devel-k15`):** shape A is in tree (`32b472c5b`: one
+`APPEND_CATCHUP` proposal per REPORT); K15 changes no W52 code. A new live gate,
+`tests/live/append_failover.py`, checks 4 KiB records from several writers,
+the final fsync within the 30 s REPORT bound, no type-67 receive retry, and
+exact-once warm/peer/cold bytes. The exact 20k gate and the before/after A/B
+are **NOTRUN**. One efs3 attempt was stopped at 1,640 records: rate fell
+1.57 to 0.3 records/s, and one APPEND_RESERVE exceeded 30 s during a transaction
+recovery. A node9901 attempt was stopped by direction at 6,535 records with
+zero REPORT retries. The current client publishes every 32 writes or 1 s, so
+no REPORT carries thousands of reservations.
+[K15 evidence](../status/k15-w52-w64-20261022.md).
+
 **Oct 11 follow-up candidate:** REPORT now submits one inode-group
 `APPEND_CATCHUP` proposal for every caught-up reservation, then waits for a
 separate guarded lane-barrier retirement transaction before replying. No
