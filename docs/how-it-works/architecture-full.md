@@ -1601,8 +1601,9 @@ SWEEP_DONE/RETIRE, base clips, masked packing; g5-g8 PASS (2 GiB O_TRUNC 0.020 s
 9 s, space returned; history bound, restart mid-sweep, packed files).
 [Step 5](../status/d25-step5-gates-20261022.md): the eager path, LANE_FENCE, tail stubs, the
 client tail rewrite and the switch are removed; logical truncate is the only path, and
-every D25 gate (g0-g8, step-2 g4/g5, the repro) passes again on node9901. orcd-mini and
-RDMA remain.
+every D25 gate (g0-g8, step-2 g4/g5, the repro) passes again on node9901, and after
+merging devel on node9900 over TCP and RDMA. Multi-host placement and the sweep
+scheduler's both-groups-local assumption remain.
 Earlier reviews and responses are kept as superseded history.
 Replaces the declined 256 MiB EBUSY refusal; W43 stays open.
 
@@ -2519,7 +2520,7 @@ Read the relevant contract before changing its component.
 
 | ID | Accepted choice | Current state / gates |
 | --- | --- | --- |
-| D25 / W43 | Logical truncate with per-part epoch histories; deferred versioned reclamation, safe history retirement and bounded apply | Branch `d25-logical-truncate` (Oct 22, not yet merged): one 86 B inode-group TRUNCATE with opid receipts, lazy lane adoption, `TRUNC_SWEEP`/`SWEEP_DONE`/`RETIRE` with metadata clips and masked packing; the eager path, `LANE_FENCE`, tail stubs, the client tail rewrite and the switch are removed (step 5). Gates g0–g8 PASS on a private node9901 cluster; orcd-mini, RDMA and >2 GiB sweep throughput remain. [Contract](../backlog/decision-contracts.md#d25--logical-truncate), [protocol](../status/d25-logical-truncate-design-20261021.md), [step 5 evidence](../status/d25-step5-gates-20261022.md), [routing](../status/d25-admission-routing.md) |
+| D25 / W43 | Logical truncate with per-part epoch histories; deferred versioned reclamation, safe history retirement and bounded apply | Branch `d25-logical-truncate` (Oct 22, not yet merged): one 86 B inode-group TRUNCATE with opid receipts, lazy lane adoption, `TRUNC_SWEEP`/`SWEEP_DONE`/`RETIRE` with metadata clips and masked packing; the eager path, `LANE_FENCE`, tail stubs, the client tail rewrite and the switch are removed (step 5). Gates g0–g8 PASS on private node9901 and node9900 clusters (TCP and RDMA); multi-host placement, a sweep scheduler without both groups local, and >2 GiB sweep throughput remain. [Contract](../backlog/decision-contracts.md#d25--logical-truncate), [protocol](../status/d25-logical-truncate-design-20261021.md), [step 5 evidence](../status/d25-step5-gates-20261022.md), [routing](../status/d25-admission-routing.md) |
 | D26 / W44 | Pending-GC watermark plus bounded resumable scan | Historical development gate recorded; current reclamation correctness/diagnostics are W61–W63. [Contract](../backlog/decision-contracts.md#d26--bounded-gc-scan) |
 | D27 / 0a | Bound recovery attempts, retain unresolved bytes, sticky inode errors and refuse ordinary teardown before unresolved drain | Runtime foundations present; strict timing, contention/fault/recovery/RSS gates remain. [Contract](../backlog/decision-contracts.md#d27--retained-failed-writeback), [handoff](#appendix-3--in-flight--the-current-handoff-block) |
 

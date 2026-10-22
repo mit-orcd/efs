@@ -89,7 +89,7 @@ start_daemons
 for t in $(seq 30); do "$REL/efs-mgmt" raft-mkfs $A:$((PORT+1)) 2>&1 | grep -q 'raft-mkfs rc=0 ' && break; sleep 1; done
 mount_all
 echo "== $L $("$REL/efsd" --version | head -1) transport=$EFS_TRANSPORT"
-export D25_REL=$REL D25_PORT=$PORT
+export D25_REL=$REL D25_PORT=$PORT D25_ADDR=$A
 
 cat > "$R/gates.py" <<'EOF'
 import errno, hashlib, os, pickle, random, re, subprocess, sys, threading, time
@@ -121,7 +121,7 @@ def gc_status():
     # sweep waits and the space check vacuous.
     tot = {"pending": 0, "usage": 0}
     for i in (1, 2, 3):
-        r = subprocess.run([REL + "/efs-mgmt", "gc-status", "127.0.0.1:%d" % (PORT + i)],
+        r = subprocess.run([REL + "/efs-mgmt", "gc-status", "%s:%d" % (os.environ["D25_ADDR"], PORT + i)],
                            capture_output=True, text=True)
         mm = re.search(r"trunc_pending group0=(\d+) group2=(\d+)", r.stdout)
         u = re.search(r"data_usage_bytes=(\d+)", r.stdout)
@@ -316,7 +316,7 @@ REL, PORT = os.environ["D25_REL"], int(os.environ["D25_PORT"])
 def pending():
     n = 0
     for i in (1, 2, 3):
-        r = subprocess.run([REL + "/efs-mgmt", "gc-status", "127.0.0.1:%d" % (PORT + i)], capture_output=True, text=True)
+        r = subprocess.run([REL + "/efs-mgmt", "gc-status", "%s:%d" % (os.environ["D25_ADDR"], PORT + i)], capture_output=True, text=True)
         m = re.search(r"trunc_pending group0=(\d+) group2=(\d+)", r.stdout)
         if r.returncode or not m:
             raise SystemExit("gc-status unreadable on node %d" % i)

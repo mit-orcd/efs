@@ -50,8 +50,9 @@ SWEEP_DONE/RETIRE, base clips, masked packing; g5-g8 PASS (2 GiB O_TRUNC 0.020 s
 9 s, space returned; history bound, restart mid-sweep, packed files).
 [Step 5](d25-step5-gates-20261022.md): the eager path, LANE_FENCE, tail stubs, the
 client tail rewrite and the switch are removed; logical truncate is the only path, and
-every D25 gate (g0-g8, step-2 g4/g5, the repro) passes again on node9901. orcd-mini and
-RDMA remain.
+every D25 gate (g0-g8, step-2 g4/g5, the repro) passes again on node9901, and after
+merging devel on node9900 over TCP and RDMA. Multi-host placement and the sweep
+scheduler's both-groups-local assumption remain.
 Earlier reviews and responses are kept as superseded history.
 Replaces the declined 256 MiB EBUSY refusal; W43 stays open.
 
