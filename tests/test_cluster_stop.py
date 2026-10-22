@@ -5,6 +5,8 @@ import os
 import subprocess
 import tempfile
 cluster = Path(os.environ.get('EFS_CLUSTER_SCRIPTS', str(Path.home()/'git/cluster')))
+if not cluster.is_dir():
+    print('NOTRUN: cluster stop/remount scripts: %s is absent (EFS_CLUSTER_SCRIPTS)' % cluster);raise SystemExit(0)
 with tempfile.TemporaryDirectory(prefix='efs-cluster-stop-') as directory:
     task=Path(directory);(task/'bin').mkdir()
     (task/'source/scripts').mkdir(parents=True)

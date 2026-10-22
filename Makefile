@@ -175,7 +175,7 @@ BLAKE3_OBJS = $(BLAKE3_DIR)/blake3.o \
               $(BLAKE3_DIR)/blake3_dispatch.o \
               $(BLAKE3_ARCH_SRCS:.c=.o)
 
-.PHONY: all clean tests test test-client-memory docs-check blake3-bench FORCE
+.PHONY: all clean tests test check test-client-memory docs-check blake3-bench FORCE
 
 .PHONY: test-fence-read test-fence-view test-lookup-memo test-fold-observation test-create-errors test-report-pressure
 test-report-pressure:
@@ -337,9 +337,14 @@ all: $(LIB) efsd efs-fuse efs-bench efs-mgmt tests
 FORCE:
 
 # Architecture doc machine-gate (docs/how-it-works/developing.md). Python only;
-# safe on the login node. `make test` on a build node runs it too.
+# safe on the login node. It links into results/, which release trees and
+# archived copies omit, so it is not part of `test` (W135): `check` runs
+# both gates independently and fails if either does.
 docs-check:
 	python3 docs/check-architecture.py
+
+check:
+	@rc=0; $(MAKE) test || rc=1; $(MAKE) docs-check || rc=1; exit $$rc
 
 test: all
 	python3 tests/test_retired_root_markers.py
@@ -457,7 +462,26 @@ test: all
 	python3 tests/test_bench_cli.py
 	python3 tests/test_bench_profile.py
 	python3 tests/test_storage_principles.py
-	python3 docs/check-architecture.py
+	python3 tests/test_make_test_recipe.py
+	python3 tests/test_pressure_cohort.py
+	python3 tests/test_alloc_value_guard.py
+	python3 tests/test_commands_load_payloads.py
+	python3 tests/test_direct_read_fork_oracle.py
+	python3 tests/test_gate_rounds_cancel.py
+	python3 tests/test_nuc_block_analysis.py
+	python3 tests/test_nuc_controller_timeout.py
+	python3 tests/test_orcd_ready.py
+	python3 tests/test_orcd_verify_resume.py
+	python3 tests/test_pressure_admission.py
+	python3 tests/test_pressure_background.py
+	python3 tests/test_pressure_index.py
+	python3 tests/test_query_node_warmup.py
+	python3 tests/test_runtime_exe_identity.py
+	python3 tests/test_fuse_workers.py
+	python3 tests/test_fuse_worker_options.py
+	python3 tests/test_cluster_stop.py
+	python3 tests/test_rdma_memcheck.py
+	python3 tests/test_live_fixture_names.py
 	$(MAKE) test-fence-read
 	$(MAKE) test-fence-view
 	$(MAKE) test-dirty-ranges
@@ -490,6 +514,15 @@ test: all
 	python3 tests/test_declaration_gate_handler.py
 	./tests/test_data
 	./tests/test_kv
+	./tests/test_expiry
+	./tests/test_rdma_xprt
+	./tests/test_rdma_segmented normal
+	./tests/test_rdma_segmented interrupt
+	./tests/test_rdma_segmented tcp-violation
+	./tests/test_rdma_segmented deadline
+	./tests/test_rdma_segmented burst
+	./tests/test_rdma_segmented burst-asym
+	./tests/test_rdma_segmented churn
 	python3 tests/test_metadata_balance.py
 	python3 tests/test_host_outbox.py
 	python3 tests/test_raft_read_probe.py

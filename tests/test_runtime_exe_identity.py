@@ -6,7 +6,8 @@ root=Path(__file__).resolve().parents[1]
 source=(root/'tests/measure/nuc_final_service_20261011.py').read_text()
 node=next(n for n in ast.parse(source).body if isinstance(n,ast.FunctionDef) and n.name=='runtime_kind')
 namespace=dict(os=os,Path=Path);exec(ast.get_source_segment(source,node),namespace)
-assert Path('/proc/self/exe').exists(),'Linux /proc required for this actual process identity gate'
+if not Path('/proc/self/exe').exists():
+ print('NOTRUN: actual process identity gate requires Linux /proc');raise SystemExit(0)
 with tempfile.TemporaryDirectory(prefix='efs-runtime-identity-') as directory:
  installed=Path(directory).resolve()/'src';installed.mkdir();(installed/'scripts').mkdir()
  shutil.copy2(shutil.which('sleep'),installed/'efs-fuse')

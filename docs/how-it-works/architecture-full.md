@@ -2399,13 +2399,13 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | node-left | **W132** · `NODE_LEFT` lets any connection drop a node from membership | correctness / safety | FIXED on `devel-k03` (`8727e3afe`): ID 24 retired, handler and remover deleted; `make test` PASS on efs2 except the pre-existing host-only `test_reclaim` failure (`tests/test_node_left_refused.py` PASS); cluster NOTRUN; not merged into devel | [item](#w132) · [audit](../reviews/dead-code-review-20261021.md) |
 | declaration-gate | **W133** · client protocol declaration gate is fail-open | correctness | FIXED on branch `devel-k04`, not merged: every request except CLIENT_HELLO and HEARTBEAT needs an accepted declaration of exactly protocol 3; unit gates PASS on efs3 (TCP), RDMA unit path and cluster refusal run (`scripts/w125_p3_compat.sh`) NOTRUN; not authentication | [item](#w133) · [audit](../reviews/dead-code-review-20261021.md) |
 | legacy-session | **W134** · unregistered session identities bypass session fencing | correctness (fail-open) | OPEN: live while W72 is open; remove atomically with full registration | [item](#w134) · [audit](../reviews/dead-code-review-20261021.md) |
-| test-docs-failfast | **W135** · a plain `make test` stops at the docs gate before the code tests | test reporting | OPEN: a direct `make test` stopped after 114/276 commands at `0bdf55256`; `make_test_summary.sh` already continues past failures; devel docs regenerated; target split NOTRUN | [item](#w135) · [audit](../reviews/dead-code-review-20261021.md) |
-| test-pressure-cohort | **W136** · `test_pressure_cohort.py` broken since the packing removal | verification correctness | OPEN: FAIL on node9901 (unused stub, `-Werror`); unwired | [item](#w136) · [audit](../reviews/dead-code-review-20261021.md) |
+| test-docs-failfast | **W135** · a plain `make test` stops at the docs gate before the code tests | test reporting | FIXED on `devel-k25` (Oct 22): the docs gate is out of `test` (it also needs the `results/` tree that release copies omit); `make check` runs both gates to completion; `tests/test_make_test_recipe.py` refuses the docs gate inside `test`. History: a direct `make test` stopped after 114/276 commands at `0bdf55256` | [item](#w135) · [audit](../reviews/dead-code-review-20261021.md) |
+| test-pressure-cohort | **W136** · `test_pressure_cohort.py` broken since the packing removal | verification correctness | FIXED on `devel-k25` (Oct 22): dead `efs_client_pack_flush` stub and its case removed, `-Werror` kept, test wired into `make test`. History: FAIL on node9901 (unused stub); unwired | [item](#w136) · [audit](../reviews/dead-code-review-20261021.md) |
 | test-ticket-retry | **W137** · `test_live_ticket_retry.py` fakes a stale reply length | verification correctness | OPEN: FAIL on node9901 (5 vs 13 bytes); decide with the staged PUT-ticket stack | [item](#w137) · [audit](../reviews/dead-code-review-20261021.md) |
-| test-apply-ring-tsan | **W138** · `test_apply_ring.py` passes while its TSan half never runs | verification correctness | OPEN: gcc 11 `-Werror=tsan` on fences; SKIP must be NOTRUN | [item](#w138) · [audit](../reviews/dead-code-review-20261021.md) |
-| tests-never-run | **W139** · unit binaries and tests built or present but never run | verification liveness | OPEN: 3 binaries + 16 Python tests PASS when run; wire before cleanup | [item](#w139) · [audit](../reviews/dead-code-review-20261021.md) |
+| test-apply-ring-tsan | **W138** · `test_apply_ring.py` passes while its TSan half never runs | verification correctness | FIXED on `devel-k25` (Oct 22): the TSan half runs or the test fails with the reason (no SKIP); gcc's fence diagnostic is non-fatal for the sanitizer build only; limit recorded in the PASS line; negative control kept. PASS on Mac/clang and efs3/gcc 15; node9901 NOTRUN | [item](#w138) · [audit](../reviews/dead-code-review-20261021.md) |
+| tests-never-run | **W139** · unit binaries and tests built or present but never run | verification liveness | FIXED on `devel-k25` (Oct 22): 3 binaries (all `test_rdma_segmented` modes) and 17 Python tests wired; environment gaps print `NOTRUN:` and the summary runner counts them; `tests/test_make_test_recipe.py` refuses an unrun binary or script. Hardware modes NOTRUN on efs3, need node9901 | [item](#w139) · [audit](../reviews/dead-code-review-20261021.md) |
 | submit-unknown-tag | **W140** · proposal RPC accepts metadata tags this build cannot apply (halts a group since W127) | correctness / safety | OPEN: shown by `scripts/w127_incompatible_entry.sh`; fix NOTRUN; caller authorization stays W133 | [item](#w140) |
-| reclaim-test-flake | **W141** · `test_reclaim` fail-closed recovery waits a fixed 5 s | verification flake | OPEN: one failure under suite load, 10/10 direct reruns pass | [item](#w141) |
+| reclaim-test-flake | **W141** · `test_reclaim` fail-closed recovery waits a fixed 5 s | verification flake | FIXED on `devel-k25` (Oct 22): the wait follows the recovery counters, 30 s without progress or 300 s cap, status printed on failure. 20 summary runs on node9901 NOTRUN. History: one failure under suite load, 10/10 direct reruns pass | [item](#w141) |
 | cleanup-leftovers | **W142** · store `del_if_sum` and RDMA zero-copy region table without a reader | maintenance | OPEN | [item](#w142) |
 | client-getenv | **W143** · efs-fuse reads diagnostic environment switches on per-op paths (~4% of client CPU) | performance | Closed (Oct 22): both gates recorded. `make test` 816/816 with one environmental docs-check failure; after deploy (`46496416e`), `getenv` is gone from both clients' on-CPU profiles under the same load (was ~4% of efs-fuse CPU) | [item](#w143) · [evidence](../status/orcd-mini-profile-08cc16af4-20261022.md) |
 | leader-hint-lock | **W144** · LOOKUP/GETATTR on a group follower takes `h->mu` for the leader hint (22% of a split leader's lock waits) | performance | Closed (Oct 22): both gates recorded. `make test` 816/816 with one environmental docs-check failure; routing tests PASS; after deploy (`784bcc6ee`) with split leadership, the leader-hint lock site is gone (was 22% of n1's lock waits) | [item](#w144) · [evidence](../status/orcd-mini-profile-08cc16af4-20261022.md) |
@@ -2416,10 +2416,10 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | compact-die-env | **W149** · `EFS_KV_COMPACT_DIE` makes the daemon `_exit(99)` mid-compaction in normal builds | build hygiene / safety | OPEN: move it and `test_kv_lsm`'s use under `EFS_FAULTS`; alpha K24 | [checklist review](../status/alpha-1.0-2plus1-checklist.md) |
 | nfs-macos-clients | **W152** · NFS re-export and macOS clients | beta backlog | DECIDED out of alpha 1.0 (user, Oct 22); the W55 NFS/macOS triggers move here; alpha publishes "Linux FUSE client only" (F4) | [alpha checklist S1](../status/alpha-1.0-2plus1-checklist.md) |
 | node-cap | **W151** · the code caps a cluster at four nodes (`EFS_MAX_NODES` 4, `EFS_MD_RAFT_N` 3..4, voter sets only for n ≤ 4, placement ring clamped, client `leader_hint` bound), while alpha 1.0 and the spec (§1: 3–64) require >4 | implementation / scope | OPEN; alpha K28 and Stage 2 prerequisite of A3: raise the cap, define voter sets for n ≥ 5, placement/capacity tests at 5..max, membership and client tables, fresh format; no compatibility. Sub-item (D38, user Oct 22): packed segments move from the group's voters to the data ring across all N nodes, which needs a remote linearizable pack-object read for PUT_SEGMENT admission and reclaim on non-voter nodes | [review](../status/alpha-1.0-plan-review-20261022.md) · [D38](#appendix-4--decisions--taken-and-pending-register-d1d36) |
-| abandon-scan-test | **W150** · no test for the abandon scan's work-budget stop and resume (tombstones, term change, wraparound) | test coverage | OPEN; alpha K25 | [review](../status/review-pack-validate-once-20261022.md) |
+| abandon-scan-test | **W150** · no test for the abandon scan's work-budget stop and resume (tombstones, term change, wraparound) | test coverage | FIXED on `devel-k25` (Oct 22): LSM work-budget stop/resume, wraparound, mid-pass mutation, term restart and budget edges in `test_pack_validate_once`; a dropped work cursor fails it | [item](#w150) · [review](../status/review-pack-validate-once-20261022.md) |
 | orcd-qualification | **W119** · ORCD normal-operation RDMA failures and blocked clean stop | correctness / liveness | OPEN: 150 concurrent failures /846 NOTRUN; cross-host peer59/67; enabled queries EBUSY; retained writes block clean stop. TCP/commands-off rerun also FAILs (120 failures,520 NOTRUN; peer61/67; clean stop refused); all23 successfully prepared cold cases verify after authorized forced restart. [TCP evidence](../status/orcd-tcp-direct-disabled-20261015.md). Preserve failures, isolate causes and rerun original gates; W100 stays closed. [AMD follow-up](../status/amd-rdma-posix-20261015.md): native/serial/peer/cold/degraded PASS at `c8d057391`; one-mount jobs16 remains215/216 with unusual-name timeout. [Async durability follow-up](../status/amd-async-durability-20261015.md) at `c4178ea81`: scoped durability/native/serial/peer/cold/degraded PASS; jobs16 FAIL214/216 (unusual names, concurrent creates,15s) | [Raft/KV follow-up](../status/orcd-raft-kv-20261016.md) · [evidence and gates](../status/orcd-devel-qualification-20261015.md) · [item](#w119) |
 | immediate-readback | **W121** · successful fsync followed by previous-file payload | data correctness | OPEN: 255/123,932 exact readbacks failed across both queued-vote variants on ORCD native RDMA/direct with enabled `.efs`; unique512-byte files, no expiry. Diagnosed FUSE kernel fork/read page-pinning defect; kernel remediation deferred by user. Fork-isolated experiments do not close W121 | [diagnosis](../status/orcd-w121-fork-read-20261016.md) · [experiment](../status/orcd-queued-read-vote-20261016.md) · [item](#w121) |
-| qualification-fixtures | **W120** · stale extracted LOOKUP stub and command cleanup ownership check | verification correctness | OPEN (partial fix): AMD `f6235bb73` repairs the LOOKUP host context and checks reader identity; native/docs PASS at `85a9ad6b5`. Enabled-command cleanup ownership remains NOTRUN here and still needs correction/acceptance. [AMD evidence](../status/amd-rdma-posix-20261015.md); preserve original failures | [evidence](../status/orcd-devel-qualification-20261015.md) · [item](#w120) |
+| qualification-fixtures | **W120** · stale extracted LOOKUP stub and command cleanup ownership check | verification correctness | Fixtures FIXED on devel (`f6235bb73` LOOKUP stub, `d0761644e` suffixed names); `tests/test_live_fixture_names.py` on `devel-k25` (Oct 22) keeps harness and fixtures in step. Enabled-command cleanup acceptance on a cluster NOTRUN; the frozen-source FAIL stays recorded. [AMD evidence](../status/amd-rdma-posix-20261015.md) | [evidence](../status/orcd-devel-qualification-20261015.md) · [item](#w120) |
 | 0i | **W54** · a fold's GC deletes the live base → read EIO, data loss | correctness | NUC direct/buffered authoritative folds and cold GC/restart pass; real cold IOR/hardscan passes at 4 and 36 ranks, including nine independent NUC FUSE clients; nine physical hosts remain; AMD software-RXE fold/GC gate passes, hardware RDMA remains | [full text](#w54--a-folds-gc-deletes-the-live-base-queue-row-0i) |
 | 0j | **W69** · the client's 50 ms lookup memo returns pre-mutation stats (posix 164/201) | correctness | correctness accepted: real blocked LOOKUP across chmod, immediate stats and full POSIX pass; GNU du samples recorded; unidentified Spark performance gate remains | [full text](#w69) |
 | 0k | **W55** · span committed to raft, fragment PUTs never landed → read EIO, data loss | correctness | open — [follow-up](../status/known-bugs-create-negative-verdict-20261008.md): partial/directory barrier and quorum cold-byte gates pass after resumption; Linux NFS 20-copy cold bytes pass, broad NFS still fails (179/212); macOS plain cp fails attribute copy; cp -X 20/20 cold Mac pass; 640 publication stress operations, 184 peer byte checks and 331 exact-fragment quorum checks pass; Mac broad POSIX fails (166/212), including setup EIO and namespace/locking behavior; original macOS NFS trigger remains unisolated; [validation and POSIX suite split](../status/known-bugs-validation-20261008.md) | [full text](#w55--span-committed-to-raft-fragment-puts-never-landed--read-eio-data-loss-queue-row-0k) |
@@ -8275,6 +8275,25 @@ changes have separate acceptance in the [AMD RDMA/direct ledger](../status/amd-r
 Enabled-command cleanup ownership remains NOTRUN in this commands-disabled
 profile; W120 is not closed and the earlier frozen-source FAIL is retained.
 
+**October 22 (`devel-k25`, alpha K25): both fixture defects are fixed on
+devel; the cluster acceptance is NOTRUN.**
+- The LOOKUP stub: repaired at `f6235bb73` (reads `h->s`, checks null and
+  present reader identity); `tests/test_lookup_replacement.py` is in
+  `make test`, so the slice is compiled against production on every run.
+- The ownership assertion: `d0761644e` made `gc_reclamation.py` accept
+  the suffixed `efs-(command|options)-gates-[0-9]+` trees, and it removes
+  only the trees that appeared under the mount during the gate.
+- New `tests/test_live_fixture_names.py` (in `make test`) keeps the three
+  files in step without a cluster: it reads the harness's ownership
+  pattern and the two fixtures' name expressions, requires the pattern to
+  accept both generated names and to reject the old fixed name, a
+  non-numeric suffix, a nested path and foreign trees, and requires the
+  cleanup to act on the created set only. Either drift fails the unit gate
+  before a cluster run.
+- Still owed, cluster only: the enabled-command gate itself
+  (`gc_reclamation.py --efs-commands-only` with physical cleanup) on the
+  alpha profile, so the recorded frozen-source FAIL stays until that run.
+
 
 <a id="w121"></a>
 
@@ -8710,9 +8729,9 @@ NOTRUN.**
 <a id="w135"></a>
 ### W135 — A plain `make test` stops at the docs gate before the code tests
 
-**Test reporting; opened 2026-10-21 from the audit T1; OPEN.**
-- `python3 docs/check-architecture.py` is a command in the middle of the
-  `test` recipe (`Makefile:455`).
+**Test reporting; opened 2026-10-21 from the audit T1; FIXED on `devel-k25` (October 22), gate run on efs3 below.**
+- `python3 docs/check-architecture.py` was a command in the middle of the
+  `test` recipe (`Makefile:455` at `0bdf55256`).
 - On `0bdf55256` it failed `regen-diff` (a status README edit without
   regeneration), so 162 of the 276 recipe commands never ran, including every
   `./tests/test_*` unit binary.
@@ -8733,12 +8752,28 @@ NOTRUN.**
 - Moving the line, or making it a prerequisite, does not help: a failing
   prerequisite also stops the recipe.
 
+**Fix (October 22, `devel-k25`, alpha K25):**
+- The docs gate is out of the `test` recipe. It stays `make docs-check`;
+  the new `make check` runs `test` and `docs-check` each to completion and
+  exits nonzero if either failed. The gate itself is unchanged.
+- A second reason, found while fixing: the link check resolves into
+  `results/`, which release trees and archived copies omit, so the gate
+  failed every `make test` on a node tree (see the orcd-mini deploy and
+  tiny-profile pages). The code gate no longer depends on `results/`.
+- Regression check: `tests/test_make_test_recipe.py` (in `make test`)
+  parses `make -n test` and fails if any command names the docs gate.
+- `scripts/make_test_summary.sh` is unchanged: it runs the `test` recipe's
+  commands, which are now the code tests only. Run `make docs-check` where
+  the docs and `results/` exist (the Mac checkout).
+- Gate: `make test` on efs3 and `make docs-check` on the Mac, recorded in
+  the K25 report.
+
 <a id="w136"></a>
 ### W136 — `test_pressure_cohort.py` broken since the packing removal
 
-**Verification correctness; opened 2026-10-21 from the audit T3; OPEN.**
-- The test is not wired into `make test`.
-- Its source slice defines a stub `efs_client_pack_flush` that production
+**Verification correctness; opened 2026-10-21 from the audit T3; FIXED on `devel-k25` (October 22).**
+- The test was not wired into `make test`.
+- Its source slice defined a stub `efs_client_pack_flush` that production
   stopped calling with the D37 packing removal (`5ded11179`).
 - The generated C fails `-Werror=unused-function` (node9901, gcc 11.5.0),
   so this test supplies no pressure-cohort coverage.
@@ -8746,6 +8781,17 @@ NOTRUN.**
 **Fix and gate:** update the slice to the current production context, or
 delete the test if the cohort path no longer exists. Then wire it into
 `make test`. Do not suppress the warning.
+
+**Fix (October 22, `devel-k25`, alpha K25):** the cohort path still exists
+(`fuse_pressure_flush` → `efs_dcache_flush_pressure_ino` →
+`dcache_flush_ino_pass`), so the slice was brought to the current
+production context: the `efs_client_pack_flush` stub, its `pack_rc` knob
+and the one case that drove it are gone; the remaining six cases (bounded
+snapshot, exhaustive explicit pass, steal failure, lock budget, deadline,
+no write-back error consumption) are unchanged. `-Werror` stays. The test
+is now in `make test` (PASS on the Mac with clang; efs3 in the K25
+report), so a stub that production stops calling fails the gate instead
+of going unnoticed.
 
 <a id="w137"></a>
 ### W137 — `test_live_ticket_retry.py` fakes a reply length the protocol no longer has
@@ -8764,8 +8810,8 @@ archived, delete the test with it.
 <a id="w138"></a>
 ### W138 — `test_apply_ring.py` succeeds while its TSan check is NOTRUN on gcc 11
 
-**Verification correctness; opened 2026-10-21 from the audit T5; OPEN.**
-- On gcc 11.5.0 (node9901) the TSan build fails:
+**Verification correctness; opened 2026-10-21 from the audit T5; FIXED on `devel-k25` (October 22).**
+- On gcc 11.5.0 (node9901) the TSan build failed:
   `'atomic_thread_fence' is not supported with '-fsanitize=thread' [-Werror=tsan]`
   (`src/server/apply_ring.h:38`, `:61`).
 - The test prints `SKIP` and passes (`tests/test_apply_ring.py:229–231`), so
@@ -8780,12 +8826,30 @@ archived, delete the test with it.
   sanitizer's limits, and report SKIP as NOTRUN.
 - Any change to the memory ordering needs its own correctness review.
 
+**Fix (October 22, `devel-k25`, alpha K25), test only, no change to
+`apply_ring.h`:**
+- The TSan half runs or the test fails with the reason; there is no SKIP
+  path left. A build failure (including a missing `libtsan`) and a binary
+  that does not run both exit nonzero with the compiler or runtime output.
+- gcc's `'atomic_thread_fence' is not supported with '-fsanitize=thread'`
+  is allowed with `-Wno-error=tsan` for the sanitizer build only, and only
+  after the plain build reported it (clang does not); the fences stay.
+- The limit is in the PASS line: TSan does not model the fences, so a
+  clean run covers the atomic payload accesses, not the ordering; the
+  torn-record stress check (4 M native writes, 3 readers, 0 torn) is the
+  ordering gate. The TSan builds use 400 k writes. The plain-field negative
+  control still runs and must be reported as a data race.
+- Verified: Mac/clang PASS; efs3 gcc 15.0.1 aarch64 PASS after
+  `libtsan` was installed there (the gcc build without the retry does
+  fail `-Werror=tsan`, so the retry path is exercised). node9901 gcc 11:
+  NOTRUN here, expected to take the same path.
+
 <a id="w139"></a>
 ### W139 — Unit binaries and tests that are built or present but never run
 
-**Verification liveness; opened 2026-10-21 from the audit T2–T4; OPEN.**
+**Verification liveness; opened 2026-10-21 from the audit T2–T4; FIXED on `devel-k25` (October 22).**
 - `tests/test_rdma_segmented`, `tests/test_expiry` and
-  `tests/test_rdma_xprt` are built by `all`, but no recipe runs them. All
+  `tests/test_rdma_xprt` were built by `all`, but no recipe ran them. All
   three PASS on node9901.
 - Sixteen of the twenty Python tests not named in the Makefile PASS; W136
   and W137 cover the two stale ones. `test_rdma_memcheck.py` (needs valgrind
@@ -8800,6 +8864,34 @@ archived, delete the test with it.
 - Report environment-dependent tests as NOTRUN, never as a silent pass.
 - Do this before deleting any code they could protect.
 - The full list is in the [audit](../reviews/dead-code-review-20261021.md#t3--python-tests-not-wired-into-make-test--liveness--high--wire-fix-or-delete).
+
+**Fix (October 22, `devel-k25`, alpha K25):**
+- `make test` now runs `test_expiry`, `test_rdma_xprt` and every
+  `test_rdma_segmented` mode (normal, interrupt, tcp-violation, deadline,
+  burst, burst-asym, churn), and the seventeen Python tests that were not
+  named in the Makefile: the sixteen the audit found passing (W136's
+  `test_pressure_cohort.py` is wired by its own fix; W137's
+  `test_live_ticket_retry.py` stays out until K13) plus `test_fuse_workers.py`,
+  `test_fuse_worker_options.py`, `test_cluster_stop.py` and
+  `test_rdma_memcheck.py`.
+- Environment-dependent tests print one `NOTRUN: <reason>` line and exit 0
+  instead of a bare SKIP or a silent pass: the RDMA binaries without a
+  verbs device, the FUSE parser test without fuse3, the Memcheck test
+  without valgrind or its header, the cluster-stop test without
+  `~/git/cluster` (`EFS_CLUSTER_SCRIPTS`), and the two Linux-only tests
+  elsewhere. `scripts/make_test_summary.sh` lists every passing command
+  that printed a `NOTRUN` or `SKIP` token under a `NOTRUN` count in
+  `summary.txt`, so a qualification summary shows what did not run.
+- Regression check: `tests/test_make_test_recipe.py` fails if any
+  `TEST_BINS` binary or any `tests/test_*.py` is absent from `make -n test`
+  unless listed in the test with its reason (only W137 is).
+- Gate: `make test` on efs3 (no RDMA device, no valgrind: those rows are
+  NOTRUN by design) in the K25 report; the hardware modes themselves need a
+  node with a verbs device (node9901), NOTRUN here.
+- Wiring exposed one stale test. `test_query_node_warmup.py` passed on
+  October 21, but its fake server still answered success with `{}` after
+  the helper started requiring a page. Its fake now returns a complete
+  page, and a new case requires a malformed success to be refused.
 
 <a id="w140"></a>
 ### W140 — The proposal RPC accepts metadata tags this build cannot apply
@@ -8847,8 +8939,8 @@ archived, delete the test with it.
 <a id="w141"></a>
 ### W141 — `test_reclaim` "fail closed, recover, re-admit" fails under suite load
 
-**Verification flake; opened 2026-10-22; OPEN.**
-- `t_fail_closed` waits at most 5 s (200 × 25 ms) for background journal
+**Verification flake; opened 2026-10-22; FIXED on `devel-k25` (October 22), 20-run gate NOTRUN.**
+- `t_fail_closed` waited at most 5 s (200 × 25 ms) for background journal
   recovery to clear `reclaim_fail_closed`.
 - Under the full `make_test_summary.sh` run on node9901 it failed once in
   `dcclean-b4a` (October 21). Ten direct reruns in the same tree passed, and
@@ -8856,6 +8948,24 @@ archived, delete the test with it.
 
 **Fix and gate:** make the wait follow recovery progress (or a documented
 larger bound), not a fixed 5 s; then 20 summary runs without a failure.
+
+**Fix (October 22, `devel-k25`, alpha K25):** `wait_readmitted` in
+`tests/test_reclaim.c` polls every 10 ms and follows the recovery
+counters (`recovering`, `recovered` from `server_reclaim_status`): it
+gives up only after 30 s without a change in them, or at a 300 s cap,
+and prints the status when it does. A loaded host slows the export walk
+without failing the test; a stalled recovery still fails with its
+counters. Gate: 20 `make_test_summary.sh` runs on node9901 NOTRUN here.
+- The test also put its storage roots under a fixed `/tmp`, ignoring
+  `TMPDIR`. On efs3 `/tmp` is a tmpfs of about 1 GB, smaller than the
+  physical guard's floor (max(5%, 1 GiB) + 256 MiB). So every PUT was
+  refused (QUOTA) and the binary aborted in its first case, before the
+  W141 case ran (devel fails the same way there). The roots now follow
+  `TMPDIR`, which `make_test_summary.sh` sets to a disk path.
+- efs3 result (October 22): the W141 case passed in 9 of 9 runs. The full
+  binary passed 3 times, then the later "PUT racing acceptance" case got
+  QUOTA as the 10 GB VM disk filled (its writer runs until stopped). That
+  is a capacity limit of the VM, not this item; node9901 has the disk.
 
 <a id="w142"></a>
 ### W142 — Dead leftovers after the dead-code cleanup
@@ -9151,6 +9261,38 @@ between chunks.
 
 **Gate.** n2's group-2 InstallSnapshot completes on orcd-mini (the W145
 repair, together with W146).
+
+<a id="w150"></a>
+### W150 — No test for the abandon scan's work-budget stop and resume
+
+**Test coverage; opened 2026-10-22 from the [packing validate-once review](../status/review-pack-validate-once-20261022.md); FIXED on `devel-k25` (October 22).**
+- `efs_pack_abandon_scan` (`src/meta/pack_mapping.c`) is bounded by
+  `efs_kv_lsm_scan_work`, which counts tombstones. A stop by that budget
+  resumes after the work cursor, not the callback's last live key.
+- `tests/test_pack_validate_once.c` drove only callback stops on the memory
+  store, so the work-cursor path, a tombstone-only window and the term
+  restart had no test.
+
+**Fix (test only, no change to the scan).** `abandon_sweep_work_bound` runs
+on an LSM store with 48 objects of four owner/state kinds, interleaved with
+0–16 flushed-then-deleted generations each, before the first object and
+after the last. Each bounded call checks that the budget counts tombstones
+and that the cursor strictly advances or wraps. The test also covers:
+- one pass finds every actionable object exactly once; the first window
+  holds tombstones only, and the budget stops most windows;
+- wraparound: the next pass finds the same set again;
+- mutation mid-pass: an object ahead is cancelled and a new one admitted,
+  and the pass reports exactly the current set;
+- term change: continuing the old cursor misses this node's earlier
+  admissions, and the packer's restart finds them all in one pass;
+- budget edges: a budget equal to the measured key count wraps in one call;
+  one key short stops just before an actionable last key, and the next
+  window reports it and wraps.
+
+**Check that it catches defects (efs3, then reverted).** A scan that drops
+the work cursor fails the new case at the cursor-advance check. That
+mutation passes the old memory-store cases. An inclusive resume fails
+both. Gate: `make test` on efs3, in the K25 report.
 
 
 ## Appendix 6 — Naming
@@ -12393,9 +12535,12 @@ disagree, the index wins" is a fallback, not a substitute for the tables
 being single-sourced.
 
 The gate is `docs/check-architecture.py` (stdlib only). Run it with
-`make docs-check` (login-node safe) or as part of `make test` on a build
-node. It regenerates `architecture-full.md` into a temp file and diffs;
-it never clobbers the checked-in copy.
+`make docs-check` (login-node safe). It is not part of `make test`: the
+link check resolves into `results/`, which release trees and archived
+copies omit, and a docs failure must not stop the code tests (W135).
+`make check` runs both gates to completion and fails if either does. It
+regenerates `architecture-full.md` into a temp file and diffs; it never
+clobbers the checked-in copy.
 
 **Why it is in the architecture and not a style guide:** the migration
 (§10 of the spec) lands Raft, KV, and the transaction protocol as *new*

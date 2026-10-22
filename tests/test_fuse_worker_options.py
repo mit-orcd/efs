@@ -8,7 +8,7 @@ a=s.index('static int efs_fuse_parse_cmdline(');f=s[a:s.index('\n}',a)+2]
 try:
  flags=shlex.split(subprocess.check_output(['pkg-config','--cflags','--libs','fuse3'],text=True,stderr=subprocess.DEVNULL))
 except (OSError,subprocess.CalledProcessError):
- print('real FUSE worker parser: unavailable on this platform');sys.exit(0)
+ print('NOTRUN: real FUSE worker parser: fuse3 pkg-config unavailable on this platform');sys.exit(0)
 code=r'''
 #define FUSE_USE_VERSION 312
 #include <fuse_lowlevel.h>

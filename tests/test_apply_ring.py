@@ -3,8 +3,15 @@
 
 Part 1 runs apply_ring.h alone: wraparound, reset, bounded retries and a
 writer racing readers (each copy must be one writer's complete record, so rc
-always matches its own extra). It also builds under ThreadSanitizer when the
-compiler supports it. Part 2 executes the production readers from
+always matches its own extra). It also runs under ThreadSanitizer, and
+fails with the reason when that build or run cannot happen (W138: a SKIP
+is not a pass). gcc rejects the seqlock's atomic_thread_fence under
+-fsanitize=thread (-Werror=tsan) because TSan does not model fences; the
+sanitizer build alone allows that diagnostic, so a clean TSan run checks
+the atomic payload accesses, not the fence ordering: the torn-record
+stress check is the ordering gate, and the plain-field negative control
+shows TSan does see seqlock races in this harness. Part 2 executes the
+production readers from
 raft_host.c (host_arc_read/verdict/extra, host_wait_verdict,
 host_wait_settled, host_propose_wait_ex_impl, host_wait_refs' host_apply_rc
 and host_pub_batch_wait) and checks they keep their own BUSY / STALE /
@@ -41,9 +48,12 @@ static int coherent(const struct efs_arc_view *v) {
     return v->term == v->idx * 3 && v->rc == (int32_t)(v->idx % 5) - 2 &&
            v->extra == v->idx * 7 && v->apply_us == v->idx * 11;
 }
+#ifndef WRITES
+#define WRITES 4000000
+#endif
 static void *writer(void *arg) {
     (void)arg;
-    for (uint64_t i = RING; i < 4000000; i++) put(i);
+    for (uint64_t i = RING; i < WRITES; i++) put(i);
     __atomic_store_n(&stop, 1, __ATOMIC_RELEASE);
     return NULL;
 }
@@ -225,30 +235,43 @@ with tempfile.TemporaryDirectory(prefix='efs-apply-ring-') as d:
     (d / 'ring.c').write_text(ring); (d / 'host.c').write_text(host)
     subprocess.run(cc + flags + [str(d / 'ring.c'), '-o', str(d / 'ring')], check=True)
     subprocess.run([str(d / 'ring')], check=True, timeout=120)
-    tsan = subprocess.run(cc + flags + ['-fsanitize=thread', str(d / 'ring.c'), '-o', str(d / 'ring-tsan')],
-                          capture_output=True, text=True)
+    # ThreadSanitizer half (W138): it runs, or this test fails with the reason.
+    # Fewer writes than the native stress run: TSan slows the loop ~10x.
+    tsan_flags = flags + ['-fsanitize=thread', '-DWRITES=400000']
+    def tsan_build(extra, out):
+        return subprocess.run(cc + extra + tsan_flags + [str(d / 'ring.c'), '-o', str(d / out)], capture_output=True, text=True)
+    tsan = tsan_build([], 'ring-tsan')
+    if tsan.returncode != 0 and re.search(r'\[-W(error=)?tsan\]', tsan.stderr):
+        # gcc: 'atomic_thread_fence' is not supported with '-fsanitize=thread'.
+        # The fences stay (they are the seqlock's ordering); the sanitizer
+        # build alone keeps the diagnostic non-fatal.
+        tsan_flags.append('-Wno-error=tsan')
+        tsan = tsan_build([], 'ring-tsan')
     if tsan.returncode != 0:
-        print('apply ring slot under ThreadSanitizer: SKIP (TSan build failed: %s)' % (tsan.stderr.strip().splitlines() or ['?'])[-1])
-    else:
-        env = dict(os.environ, TSAN_OPTIONS='halt_on_error=1 exitcode=66')
-        run = subprocess.run([str(d / 'ring-tsan')], capture_output=True, text=True, timeout=600, env=env)
-        if run.returncode == 66 or 'ThreadSanitizer:' in run.stderr:
-            raise SystemExit('ThreadSanitizer reported a race:\n' + run.stderr)
-        if run.returncode == 0:
-            print('apply ring slot under ThreadSanitizer: no data race PASS')
-            # Negative control: the same seqlock with plain payload fields
-            # (the race WG21 P1478 describes) must be reported.
-            hdr = (root / 'src/server/apply_ring.h').read_text()
-            hdr = re.sub(r'__atomic_store_n\(&s->(idx|term|rc|extra|apply_us), ([^,]+), __ATOMIC_RELAXED\)', r's->\1 = \2', hdr)
-            hdr = re.sub(r'__atomic_load_n\(&s->(idx|term|rc|extra|apply_us), __ATOMIC_RELAXED\)', r's->\1', hdr)
-            assert hdr.count('s->idx = idx') == 1 and 'v->idx = s->idx;' in hdr
-            plain = d / 'plain'; plain.mkdir(); (plain / 'apply_ring.h').write_text(hdr)
-            subprocess.run(cc + ['-I' + str(plain)] + flags + ['-fsanitize=thread', str(d / 'ring.c'), '-o', str(d / 'ring-plain')], check=True)
-            neg = subprocess.run([str(d / 'ring-plain')], capture_output=True, text=True, timeout=600, env=env)
-            assert neg.returncode != 0 and 'ThreadSanitizer: data race' in neg.stderr, 'TSan missed the plain-field seqlock race: rc=%d %s' % (neg.returncode, neg.stderr[-600:] + neg.stdout[-300:])
-            print('apply ring negative control: plain payload fields are a reported data race PASS')
-        else:
-            print('apply ring slot under ThreadSanitizer: SKIP (runtime unavailable: %s)' % (run.stderr.strip().splitlines() or ['?'])[0])
+        raise SystemExit('apply ring under ThreadSanitizer: FAIL, the TSan build did not compile '
+                         '(W138: this gate runs or fails, it never skips):\n' + tsan.stderr)
+    env = dict(os.environ, TSAN_OPTIONS='halt_on_error=1 exitcode=66')
+    run = subprocess.run([str(d / 'ring-tsan')], capture_output=True, text=True, timeout=600, env=env)
+    if run.returncode == 66 or 'ThreadSanitizer:' in run.stderr:
+        raise SystemExit('ThreadSanitizer reported a race:\n' + run.stderr)
+    if run.returncode != 0:
+        raise SystemExit('apply ring under ThreadSanitizer: FAIL, the TSan binary did not run (rc=%d; runtime '
+                         'missing? W138: this gate runs or fails, it never skips):\n%s' % (run.returncode, run.stderr))
+    print('apply ring slot under ThreadSanitizer: no data race on the atomic payload PASS '
+          '(limit: TSan does not model the fences; the torn-record stress check is the ordering gate)')
+    # Negative control: the same seqlock with plain payload fields
+    # (the race WG21 P1478 describes) must be reported.
+    hdr = (root / 'src/server/apply_ring.h').read_text()
+    hdr = re.sub(r'__atomic_store_n\(&s->(idx|term|rc|extra|apply_us), ([^,]+), __ATOMIC_RELAXED\)', r's->\1 = \2', hdr)
+    hdr = re.sub(r'__atomic_load_n\(&s->(idx|term|rc|extra|apply_us), __ATOMIC_RELAXED\)', r's->\1', hdr)
+    assert hdr.count('s->idx = idx') == 1 and 'v->idx = s->idx;' in hdr
+    plain = d / 'plain'; plain.mkdir(); (plain / 'apply_ring.h').write_text(hdr)
+    neg_build = tsan_build(['-I' + str(plain)], 'ring-plain')
+    if neg_build.returncode != 0:
+        raise SystemExit('apply ring negative control: FAIL, the plain-field TSan build did not compile:\n' + neg_build.stderr)
+    neg = subprocess.run([str(d / 'ring-plain')], capture_output=True, text=True, timeout=600, env=env)
+    assert neg.returncode != 0 and 'ThreadSanitizer: data race' in neg.stderr, 'TSan missed the plain-field seqlock race: rc=%d %s' % (neg.returncode, neg.stderr[-600:] + neg.stdout[-300:])
+    print('apply ring negative control: plain payload fields are a reported data race PASS')
     subprocess.run(cc + flags + [str(d / 'host.c'), '-o', str(d / 'host')], check=True)
     subprocess.run([str(d / 'host')], check=True, timeout=60)
 

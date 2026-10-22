@@ -1,5 +1,6 @@
 /* Two processes, unequal physical receive pools; no pre-fork verbs state.
- * Requires real verbs device (exit77 is NOTRUN), uses socketpair for setup. */
+ * Requires a real verbs device: without one every mode prints a NOTRUN line
+ * and exits 0 (the summary runner reports it, W139); uses socketpair for setup. */
 #include "efs/rdma.h"
 #include "efs/rdma_message.h"
 #include "efs/network.h"
@@ -52,7 +53,7 @@ static int reconnect_churn(void)
     pid_t pid=fork();OK(pid>=0);int server=pid==0;
     setenv("EFS_RDMA_BUFS",server?"2":"7",1);
     if (!efs_rdma_available()) {
-        if (!server) {int st;waitpid(pid,&st,0);puts("SKIP: no RDMA device; churn NOTRUN");}
+        if (!server) {int st;waitpid(pid,&st,0);puts("NOTRUN: test_rdma_segmented churn: no usable RDMA device (EFS_TRANSPORT/EFS_RDMA_DEV)");}
         return 0;
     }
     for(int i=0;i<N;i++) close(sockets[i][server?0:1]);
@@ -87,7 +88,7 @@ int main(int argc,char **argv)
     if (!strcmp(mode,"burst-asym")) setenv("EFS_RDMA_BUFS",server?"7":"2",1);
     else if (strcmp(mode,"burst")) setenv("EFS_RDMA_BUFS",server?"2":"7",1);
     if (!efs_rdma_available()) {
-        if (!server) { int st;waitpid(pid,&st,0);puts("SKIP: no usable RDMA device; segmented gate NOTRUN"); }
+        if (!server) { int st;waitpid(pid,&st,0);printf("NOTRUN: test_rdma_segmented %s: no usable RDMA device (EFS_TRANSPORT/EFS_RDMA_DEV)\n",mode); }
         return 0;
     }
     close(sv[server?0:1]);struct efs_conn *c=setup(sv[server?1:0],server);

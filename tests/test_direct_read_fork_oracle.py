@@ -13,7 +13,7 @@ import sys
 import tempfile
 
 if not sys.platform.startswith('linux'):
-    print('SKIP: live direct-read/fork oracle requires Linux libcrypto runtime')
+    print('NOTRUN: live direct-read/fork oracle requires Linux libcrypto runtime')
     raise SystemExit(0)
 
 repo = Path(__file__).resolve().parents[1]
