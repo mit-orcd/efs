@@ -462,6 +462,7 @@ test: all
 	python3 tests/test_bench_profile.py
 	python3 tests/test_storage_principles.py
 	python3 tests/test_make_test_recipe.py
+	python3 tests/test_pressure_cohort.py
 	$(MAKE) test-fence-read
 	$(MAKE) test-fence-view
 	$(MAKE) test-dirty-ranges

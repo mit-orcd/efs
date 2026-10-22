@@ -5880,9 +5880,9 @@ must leave the cursor unchanged.
 <a id="w136"></a>
 ## W136 — `test_pressure_cohort.py` broken since the packing removal
 
-**Verification correctness; opened 2026-10-21 from the audit T3; OPEN.**
-- The test is not wired into `make test`.
-- Its source slice defines a stub `efs_client_pack_flush` that production
+**Verification correctness; opened 2026-10-21 from the audit T3; FIXED on `devel-k25` (October 22).**
+- The test was not wired into `make test`.
+- Its source slice defined a stub `efs_client_pack_flush` that production
   stopped calling with the D37 packing removal (`5ded11179`).
 - The generated C fails `-Werror=unused-function` (node9901, gcc 11.5.0),
   so this test supplies no pressure-cohort coverage.
@@ -5890,6 +5890,17 @@ must leave the cursor unchanged.
 **Fix and gate:** update the slice to the current production context, or
 delete the test if the cohort path no longer exists. Then wire it into
 `make test`. Do not suppress the warning.
+
+**Fix (October 22, `devel-k25`, alpha K25):** the cohort path still exists
+(`fuse_pressure_flush` → `efs_dcache_flush_pressure_ino` →
+`dcache_flush_ino_pass`), so the slice was brought to the current
+production context: the `efs_client_pack_flush` stub, its `pack_rc` knob
+and the one case that drove it are gone; the remaining six cases (bounded
+snapshot, exhaustive explicit pass, steal failure, lock budget, deadline,
+no write-back error consumption) are unchanged. `-Werror` stays. The test
+is now in `make test` (PASS on the Mac with clang; efs3 in the K25
+report), so a stub that production stops calling fails the gate instead
+of going unnoticed.
 
 <a id="w137"></a>
 ## W137 — `test_live_ticket_retry.py` fakes a reply length the protocol no longer has

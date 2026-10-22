@@ -2,7 +2,9 @@
 """Production pressure cohort is bounded; explicit flush remains exhaustive.
 
 The adapters model snapshot/PUT ownership. No WB wait/error-consumption or
-all-inode PUT-window function is supplied to the background path.
+all-inode PUT-window function is supplied to the background path. The slice
+compiles with -Werror=unused-function, so every stub must be a function the
+sliced production code still calls (W136: the packing-era flush stub).
 """
 from pathlib import Path
 import os, shlex, subprocess, tempfile
@@ -22,7 +24,7 @@ code=r'''
 #define EFS_WRITE_PIPELINE 32
 typedef uint64_t efs_ino_t;typedef unsigned efs_node_id_t;
 struct efs_chunk_entry {int unused;};struct flush_pipe {int rc;};
-static int stolen,drained,reports,fail_at,pack_rc,lock_rc;static uint64_t deadline;
+static int stolen,drained,reports,fail_at,lock_rc;static uint64_t deadline;
 static pthread_mutex_t mu=PTHREAD_MUTEX_INITIALIZER;
 static uint64_t efs_client_rpc_deadline_ms(void){return deadline;}
 static int efs_client_rpc_past_deadline(void){return deadline==1;}
@@ -37,18 +39,16 @@ stolen++;if(fail_at==stolen)return EFS_ERR_IO;*b=malloc(1);assert(*b);return 1;}
 static int flush_pipe_add(struct flush_pipe*p,efs_ino_t ino,uint32_t ci,uint8_t*b,uint32_t l,uint64_t bg,uint64_t seq,uint32_t off,uint32_t len,const struct efs_chunk_entry*obs){
 (void)p;(void)ino;(void)ci;(void)l;(void)bg;(void)seq;(void)off;(void)len;(void)obs;free(b);return 0;}
 static int flush_pipe_drain(struct flush_pipe*p){drained++;return p->rc;}
-static int efs_client_pack_flush(efs_ino_t ino){assert(ino==42);return pack_rc;}
 static pthread_mutex_t *append_mu(efs_ino_t ino){assert(ino==42);return &mu;}
 static int wb_lock_budget(pthread_mutex_t*m){if(lock_rc)return lock_rc;pthread_mutex_lock(m);return 0;}
 static int efs_client_report_dirty_ino(efs_ino_t ino,int sync){assert(ino==42&&sync);reports++;return 0;}
 '''+fn(w,'dcache_flush_ino_pass')+fn(w,'efs_dcache_flush_pressure_ino')+fn(f,'fuse_pressure_flush')+r'''
-static void reset(void){stolen=drained=reports=fail_at=pack_rc=lock_rc=0;deadline=200;}
+static void reset(void){stolen=drained=reports=fail_at=lock_rc=0;deadline=200;}
 int main(void){
 reset();assert(!fuse_pressure_flush(42));assert(stolen==32&&drained==1&&reports==1&&deadline==200);
 reset();assert(!dcache_flush_ino_pass(42,0)&&stolen==100&&drained==1);
 reset();fail_at=7;assert(fuse_pressure_flush(42)==EFS_ERR_IO&&stolen==7&&drained==1&&!reports&&deadline==200);
 assert(!pthread_mutex_trylock(&mu));pthread_mutex_unlock(&mu);
-reset();pack_rc=EFS_ERR_IO;assert(fuse_pressure_flush(42)==EFS_ERR_IO&&!stolen&&!reports&&deadline==200);
 reset();lock_rc=EFS_ERR_BUSY;assert(fuse_pressure_flush(42)==EFS_ERR_BUSY&&!stolen&&!reports&&deadline==200);
 reset();deadline=1;assert(fuse_pressure_flush(42)==EFS_ERR_BUSY&&!stolen&&!reports&&deadline==1);
 puts("pressure cohort: fixed snapshot bound, exhaustive explicit pass, failures/deadline retain ownership, no WB error consumption PASS");
