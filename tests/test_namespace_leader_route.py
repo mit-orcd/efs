@@ -22,6 +22,8 @@ static int host_local_leader(struct efs_raft_host *h,uint8_t group){(void)h;asse
 static struct host_group *group_slot(struct efs_raft_host *h,uint8_t group){return &h->groups[group>>1];}
 static uint32_t efs_raft_voters(struct efs_raft *r){return r->voters;}
 static int hosts_group(int id,uint32_t voters){return id>=0 && id<32 && (voters&(1u<<id));}
+/* W144: the published view's voters: the raft set for a hosted group, else the slot's stored set. */
+static uint32_t host_route_voters(struct efs_raft_host *h,uint8_t group){struct host_group *s=group_slot(h,group);return s->r?efs_raft_voters(s->r):s->voters;}
 '''+s[a:b]+s[s.index('static int host_read_leader_hint('):s.index('\n}',s.index('static int host_read_leader_hint('))+2]+r'''
 int main(void){
  struct efs_raft r[2]={{7},{7}};

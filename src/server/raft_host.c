@@ -15625,13 +15625,16 @@ static int host_namespace_leader_hint(struct efs_raft_host *h,uint8_t group)
 {
     int rid=host_local_leader(h,group);
     if (rid<0 || rid>=h->n || rid==h->raft_id) return -1;
-    pthread_mutex_lock(&h->mu);
+    /* W144: every LOOKUP/GETATTR on a group follower asks this, so read the
+     * committed voters from the published view (host_route_voters), not
+     * under h->mu: 22% of a split leader's lock waits on orcd-mini. A hint
+     * at most one pump cycle old; the recipient rechecks authority. A group
+     * without a local slot still means no hint. */
     for (unsigned i=0;i<HOST_NGROUPS;i++) {
-        struct host_group *s=group_slot(h,(uint8_t)(i<<1));
-        uint32_t voters=s ? (s->r ? efs_raft_voters(s->r) : s->voters) : 0;
-        if (!voters || !hosts_group(rid,voters)) {rid=-1;break;}
+        uint8_t g=(uint8_t)(i<<1);
+        uint32_t voters=group_slot(h,g) ? host_route_voters(h,g) : 0;
+        if (!voters || !hosts_group(rid,voters)) return -1;
     }
-    pthread_mutex_unlock(&h->mu);
     return rid;
 }
 

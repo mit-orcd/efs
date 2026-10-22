@@ -6025,7 +6025,7 @@ gate changes.
 <a id="w143"></a>
 ## W143 — efs-fuse reads diagnostic environment switches on per-op paths
 
-**Performance; opened 2026-10-22; fix implemented; `make test` 816/816 with one environmental failure (docs check without `results/`); deploy and re-profile pending.**
+**Performance; opened 2026-10-22; deployed in `46496416e`. Verified: `getenv` is gone from both clients' on-CPU profiles under the same load. `make test` 816/816 with one environmental failure (docs check without `results/`).**
 Found by passively profiling orcd-mini on `08cc16af4` under two
 `tiny_files.py` writers ([profile](../status/orcd-mini-profile-08cc16af4-20261022.md)).
 On the node9901 client, `getenv` was 2.9% self and 3.7% with children of
@@ -6059,3 +6059,34 @@ sets these variables at runtime.
 
 The client is not the throughput limit here: both mounts used only
 0.16–0.18 cores. The gain is efs-fuse CPU, not create rate.
+
+<a id="w144"></a>
+## W144 — LOOKUP/GETATTR on a group follower takes `h->mu` for the leader hint
+
+**Performance; opened 2026-10-22; fix implemented; `make test` 816/816 with one environmental failure; deploy and split-leader re-profile pending.**
+Found in the orcd-mini profile on `46496416e`
+([profile, p2](../status/orcd-mini-profile-08cc16af4-20261022.md)). There,
+leadership was split: n2 led group 0 and n1 led group 2. On n1,
+`host_namespace_leader_hint` ← `host_read_leader_hint` ←
+`server_raft_host_lookup` was the largest lock-wait site: 22.1% of n1's
+lock-wait switches, ahead of proposals.
+
+The function routes LOOKUP, GETATTR and namespace mutations to a dual-group
+leader. When this node is not the group's leader, it took `h->mu` to read
+both groups' committed voters. The 2026-10-18 profile saw nothing, because
+then one node led both groups and the leader returns before locking.
+
+**Fix.** Read the voters with `host_route_voters`, the lock-free published
+view also used by `host_leader_cover_pick`: the raft voters for a hosted
+group, else the slot's atomically stored set. A group without a local slot
+still yields no hint, as before. The hint can be one pump cycle old, which
+was already true, and the recipient rechecks authority.
+`tests/test_namespace_leader_route.py` gets the matching stub; all its
+assertions are unchanged and PASS. `test_host_cover_route` and
+`test_query_target_route` PASS.
+
+**Gates.**
+- `make test` on node9901.
+- After deploy, with split leadership, `host_namespace_leader_hint` is gone
+  from the leader-node lock waits. One node leading both groups does not
+  exercise the path.

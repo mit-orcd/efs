@@ -63,6 +63,41 @@ existing PIDs). A second node9901 mount for another session's suite
 - **`.efs` catalog incremental build (18% of efsd).** Known (W106 and the
   2026-10-21 profile).
 
+## Repeat on `46496416e` (W143 deployed), p2 — 2026-10-22 12:28Z
+
+- **Deploy.** Release `46496416e9c5` was built on both nodes:
+  - efsd `c6254fcf9a5262e7…`;
+  - node9901 efs-fuse `85234e8336fc6f9b…`;
+  - node9900 efs-fuse `9e80ee300137ebde…`.
+
+  The user's 32M writer (PID 1214638) was stopped with SIGKILL. Clients
+  were stopped with plain `client.sh stop`, then `stop.sh`; all three roots
+  logged `stopped clean`. The symlinks were switched and `start.sh` started
+  the cluster on preserved storage: 3/3 identical versions, POSIX smoke
+  216/216.
+- **Workload.** The same two `tiny_files.py` commands, into fresh
+  directories (`w143-tiny-files1`, `w143-20m-tiny-files`). Captured about
+  6 minutes in, then both writers were stopped.
+- **W143 verified.** `getenv`, `__strncmp_evex` and `__strlen_evex` no
+  longer appear in either client's on-CPU profile, nor in a DWARF on-CPU
+  check of the node9901 client. In p1 they were 2.9% / 1.8% / 1.1%.
+- **Throughput is not comparable to p1.** The cluster had grown from 0.35 M
+  to 15.95 M files. Creates were 592 + 204/s. `apply-sleep` ran about 10.5 K
+  per window with a mean of ~80 ms, against 1,290 with a mean of 28 ms in
+  p1.
+- **Snapshot export.** 32% of efsd on-CPU was `host_gc_thread` →
+  `host_snap_export_pass` → `efs_kv_lsm_view_export` (`vx_sift_down`,
+  `memcmp`). A group-0 export (5.3 GB, 16 s) ran from 12:28:51 to 12:29:07
+  and overlapped the capture. Exports are about 50 minutes apart here. The
+  cost is the known one recorded in the work-item history; no new item.
+- **New: [W144](../backlog/work-items.md#w144).** Leadership was split (n2
+  led group 0, n1 led group 2). On n1, `host_namespace_leader_hint` ←
+  `server_raft_host_lookup` was 22.1% of lock waits: every LOOKUP/GETATTR
+  at a group follower took `h->mu` to read the voters. Fixed with the
+  lock-free published view.
+- Raw: Mac `p2/node9901.txt`, `p2/node9900.txt` and `p2/getenv-check.txt`;
+  node paths as for p1, under `p2`.
+
 ## Reproduce
 
 Scripts are kept with the raw captures in
