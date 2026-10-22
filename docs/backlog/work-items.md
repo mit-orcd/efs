@@ -6016,6 +6016,10 @@ archived, delete the test with it.
 - Gate: `make test` on efs3 (no RDMA device, no valgrind: those rows are
   NOTRUN by design) in the K25 report; the hardware modes themselves need a
   node with a verbs device (node9901), NOTRUN here.
+- Wiring exposed one stale test. `test_query_node_warmup.py` passed on
+  October 21, but its fake server still answered success with `{}` after
+  the helper started requiring a page. Its fake now returns a complete
+  page, and a new case requires a malformed success to be refused.
 
 <a id="w140"></a>
 ## W140 — The proposal RPC accepts metadata tags this build cannot apply

@@ -10,7 +10,8 @@ def send(port,q,**kw):
     calls.append(port)
     round_no=(len(calls)-1)//3
     status=-15 if port==1 else -21 if port==3 and round_no==0 else 0
-    return SimpleNamespace(status=status,primary_id=2,boot_id=port,generation=round_no+1), b'{}' if status==0 else b''
+    page=b'{"page":{"token":"0","cursor":"0"}}'  # a complete page, no session to release
+    return SimpleNamespace(status=status,primary_id=2,boot_id=port,generation=round_no+1), page if status==0 else b''
 with patch.dict(os.environ,{'EFS_QUERY_TEST_NODES':'{"1":["a",1],"2":["b",2],"3":["c",3]}'}),patch.object(query_rpc,'query',send),patch.object(query_timing.time,'sleep',lambda _:None):
     ready=query_timing.wait_query_nodes_indexed(123,5)
     assert calls==[1,2,3,1,2,3] and set(ready)=={'2','3'}
@@ -18,4 +19,9 @@ with patch.dict(os.environ,{'EFS_QUERY_TEST_NODES':'{"1":["a",1],"2":["b",2],"3"
         try:query_timing.wait_query_nodes_indexed(123,5)
         except AssertionError:pass
         else:raise AssertionError('permanent NODATA accepted')
-print('query warmup: every serving catalog required; permanent NODATA fails PASS')
+    # A success without a page is not a warm catalog.
+    with patch.object(query_rpc,'query',lambda *a,**k:(SimpleNamespace(status=0,primary_id=0,boot_id=1,generation=1),b'{}')):
+        try:query_timing.wait_query_nodes_indexed(123,5)
+        except KeyError:pass
+        else:raise AssertionError('malformed success accepted as a warm catalog')
+print('query warmup: every serving catalog required; permanent NODATA and malformed success fail PASS')
