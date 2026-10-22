@@ -1089,6 +1089,25 @@ NOTRUN.
 | Refusal reply | **fixed (found in passing)** | Both handler refusals (an undeclared chunk-map/segment request, and a retired ID) rewrote the frame type to 0 to skip dispatch. 0 is `HEARTBEAT`, so the server answered a `HEARTBEAT_ACK` before closing (seen with a private 3-node smoke). A refused frame now skips dispatch and closes with no reply; `test_retired_messages.py` checks this. The declaration gate itself (W133) is unchanged. |
 | Runner | **fixed** | `scripts/make_test_summary.sh` creates `tmp/` before exporting `TMPDIR`, which removes the two environmental failures above. |
 
+**Findings from the cleanup** (beyond the audit rows):
+- The orcd-test stores were in the archived packing format (KV `MANIFEST`
+  reader capability 1). Every build since D37 refuses them, so the cluster
+  could not start on that data; it was wiped and reformatted on October 22
+  ([run](../status/orcd-test-cleanup-w127-20261022.md)).
+- Both handler refusals answered a `HEARTBEAT_ACK` before closing (fixed,
+  row "Refusal reply").
+- The proposal RPC accepts metadata tags the build cannot apply; since
+  W127 that halts a group ([W140](../backlog/work-items.md#w140)).
+- `test_reclaim` has a fixed 5 s recovery wait that failed once under
+  load ([W141](../backlog/work-items.md#w141)).
+- Two leftovers without a reader: store `del_if_sum` and the RDMA
+  zero-copy region table ([W142](../backlog/work-items.md#w142)).
+- The live `.efs` harnesses assumed localhost fixtures and a fast index
+  refresh; they now take `EFS_QUERY_TEST_NODES`, wait for indexing within
+  their freshness bound, and close every page session they open.
+- W127–W131 were implemented on this branch after the cleanup
+  ([implementation](../backlog/work-items.md#w127-w131-fix)).
+
 Not part of this cleanup: M1–M5, P1, P3, S1 (W127–W134), W1/M7, S2 (waits
 on W134), X1, E3 (waits on W133), T1–T5 (W135–W139; only
 `test_expiry_cli.py` and `test_gc_status_expiry.py` were wired here, because

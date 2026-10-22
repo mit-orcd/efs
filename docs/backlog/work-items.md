@@ -5929,6 +5929,55 @@ archived, delete the test with it.
 - Do this before deleting any code they could protect.
 - The full list is in the [audit](../reviews/dead-code-review-20261021.md#t3--python-tests-not-wired-into-make-test--liveness--high--wire-fix-or-delete).
 
+<a id="w140"></a>
+## W140 — The proposal RPC accepts metadata tags this build cannot apply
+
+**Correctness / safety; opened 2026-10-22 from the W127 gate; OPEN, fix NOTRUN.**
+- `EFS_MSG_RAFT_MKFS` with a payload (`server_raft_host_submit`) refuses
+  only reserved and retired tags (`EFS_MD_CMD_IS_RESERVED`). Any other byte
+  is proposed and committed.
+- Since W127, every replica refuses such an entry at apply and the group
+  stops serving until it is reformatted. So one request from any connection
+  can halt a metadata group.
+- Shown by `scripts/w127_incompatible_entry.sh` on node9901 (tag 200 to
+  group 0, October 22).
+
+**Fix and gate:**
+- Refuse at submit every tag the build does not apply, from one table of
+  known log commands. `tests/test_meta_cmd_namespace.py` must check that
+  every `EFS_MD_CMD_*` is in it and no `EFS_MD_REQ_*` (RPC-only) is.
+- Test: the same synthetic tag 200 is refused at submit, nothing is
+  committed, and the group keeps serving.
+- Who may submit at all is W133 (connection-state matrix); this item only
+  closes the encoding hole.
+
+<a id="w141"></a>
+## W141 — `test_reclaim` "fail closed, recover, re-admit" fails under suite load
+
+**Verification flake; opened 2026-10-22; OPEN.**
+- `t_fail_closed` waits at most 5 s (200 × 25 ms) for background journal
+  recovery to clear `reclaim_fail_closed`.
+- Under the full `make_test_summary.sh` run on node9901 it failed once in
+  `dcclean-b4a` (October 21). Ten direct reruns in the same tree passed, and
+  the other summary runs on the branch passed it.
+
+**Fix and gate:** make the wait follow recovery progress (or a documented
+larger bound), not a fixed 5 s; then 20 summary runs without a failure.
+
+<a id="w142"></a>
+## W142 — Dead leftovers after the dead-code cleanup
+
+**Maintenance; opened 2026-10-22 from the cleanup (audit P2, R3); OPEN.**
+- The store `del_if_sum` operation (`include/efs/store.h`, `store_mem.c`,
+  `store_nvme.c`) has no caller since the GC_FRAGMENT handler was removed.
+- The RDMA zero-copy region table (`efs_rdma_zc_region_add`, `g_zc`) only
+  records regions: the lookup was removed with `zc_lkey`, and direct fill
+  is disabled.
+
+**Fix and gate:** delete `del_if_sum`; for the region table, delete it with
+the disabled direct-fill path or restore a reader, decided together with
+`efs_rdma_send_quiesce` (audit R3).
+
 <a id="w127-w139-review"></a>
 ## Review of W127–W139 scope and priority — October 21
 

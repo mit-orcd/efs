@@ -2308,6 +2308,9 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | test-ticket-retry | **W137** · `test_live_ticket_retry.py` fakes a stale reply length | verification correctness | OPEN: FAIL on node9901 (5 vs 13 bytes); decide with the staged PUT-ticket stack | [item](#w137) · [audit](../reviews/dead-code-review-20261021.md) |
 | test-apply-ring-tsan | **W138** · `test_apply_ring.py` passes while its TSan half never runs | verification correctness | OPEN: gcc 11 `-Werror=tsan` on fences; SKIP must be NOTRUN | [item](#w138) · [audit](../reviews/dead-code-review-20261021.md) |
 | tests-never-run | **W139** · unit binaries and tests built or present but never run | verification liveness | OPEN: 3 binaries + 16 Python tests PASS when run; wire before cleanup | [item](#w139) · [audit](../reviews/dead-code-review-20261021.md) |
+| submit-unknown-tag | **W140** · proposal RPC accepts metadata tags this build cannot apply (halts a group since W127) | correctness / safety | OPEN: shown by `scripts/w127_incompatible_entry.sh`; fix NOTRUN; caller authorization stays W133 | [item](#w140) |
+| reclaim-test-flake | **W141** · `test_reclaim` fail-closed recovery waits a fixed 5 s | verification flake | OPEN: one failure under suite load, 10/10 direct reruns pass | [item](#w141) |
+| cleanup-leftovers | **W142** · store `del_if_sum` and RDMA zero-copy region table without a reader | maintenance | OPEN | [item](#w142) |
 | orcd-qualification | **W119** · ORCD normal-operation RDMA failures and blocked clean stop | correctness / liveness | OPEN: 150 concurrent failures /846 NOTRUN; cross-host peer59/67; enabled queries EBUSY; retained writes block clean stop. TCP/commands-off rerun also FAILs (120 failures,520 NOTRUN; peer61/67; clean stop refused); all23 successfully prepared cold cases verify after authorized forced restart. [TCP evidence](../status/orcd-tcp-direct-disabled-20261015.md). Preserve failures, isolate causes and rerun original gates; W100 stays closed. [AMD follow-up](../status/amd-rdma-posix-20261015.md): native/serial/peer/cold/degraded PASS at `c8d057391`; one-mount jobs16 remains215/216 with unusual-name timeout. [Async durability follow-up](../status/amd-async-durability-20261015.md) at `c4178ea81`: scoped durability/native/serial/peer/cold/degraded PASS; jobs16 FAIL214/216 (unusual names, concurrent creates,15s) | [Raft/KV follow-up](../status/orcd-raft-kv-20261016.md) · [evidence and gates](../status/orcd-devel-qualification-20261015.md) · [item](#w119) |
 | immediate-readback | **W121** · successful fsync followed by previous-file payload | data correctness | OPEN: 255/123,932 exact readbacks failed across both queued-vote variants on ORCD native RDMA/direct with enabled `.efs`; unique512-byte files, no expiry. Diagnosed FUSE kernel fork/read page-pinning defect; kernel remediation deferred by user. Fork-isolated experiments do not close W121 | [diagnosis](../status/orcd-w121-fork-read-20261016.md) · [experiment](../status/orcd-queued-read-vote-20261016.md) · [item](#w121) |
 | qualification-fixtures | **W120** · stale extracted LOOKUP stub and command cleanup ownership check | verification correctness | OPEN (partial fix): AMD `f6235bb73` repairs the LOOKUP host context and checks reader identity; native/docs PASS at `85a9ad6b5`. Enabled-command cleanup ownership remains NOTRUN here and still needs correction/acceptance. [AMD evidence](../status/amd-rdma-posix-20261015.md); preserve original failures | [evidence](../status/orcd-devel-qualification-20261015.md) · [item](#w120) |
@@ -8558,6 +8561,55 @@ archived, delete the test with it.
 - Report environment-dependent tests as NOTRUN, never as a silent pass.
 - Do this before deleting any code they could protect.
 - The full list is in the [audit](../reviews/dead-code-review-20261021.md#t3--python-tests-not-wired-into-make-test--liveness--high--wire-fix-or-delete).
+
+<a id="w140"></a>
+### W140 — The proposal RPC accepts metadata tags this build cannot apply
+
+**Correctness / safety; opened 2026-10-22 from the W127 gate; OPEN, fix NOTRUN.**
+- `EFS_MSG_RAFT_MKFS` with a payload (`server_raft_host_submit`) refuses
+  only reserved and retired tags (`EFS_MD_CMD_IS_RESERVED`). Any other byte
+  is proposed and committed.
+- Since W127, every replica refuses such an entry at apply and the group
+  stops serving until it is reformatted. So one request from any connection
+  can halt a metadata group.
+- Shown by `scripts/w127_incompatible_entry.sh` on node9901 (tag 200 to
+  group 0, October 22).
+
+**Fix and gate:**
+- Refuse at submit every tag the build does not apply, from one table of
+  known log commands. `tests/test_meta_cmd_namespace.py` must check that
+  every `EFS_MD_CMD_*` is in it and no `EFS_MD_REQ_*` (RPC-only) is.
+- Test: the same synthetic tag 200 is refused at submit, nothing is
+  committed, and the group keeps serving.
+- Who may submit at all is W133 (connection-state matrix); this item only
+  closes the encoding hole.
+
+<a id="w141"></a>
+### W141 — `test_reclaim` "fail closed, recover, re-admit" fails under suite load
+
+**Verification flake; opened 2026-10-22; OPEN.**
+- `t_fail_closed` waits at most 5 s (200 × 25 ms) for background journal
+  recovery to clear `reclaim_fail_closed`.
+- Under the full `make_test_summary.sh` run on node9901 it failed once in
+  `dcclean-b4a` (October 21). Ten direct reruns in the same tree passed, and
+  the other summary runs on the branch passed it.
+
+**Fix and gate:** make the wait follow recovery progress (or a documented
+larger bound), not a fixed 5 s; then 20 summary runs without a failure.
+
+<a id="w142"></a>
+### W142 — Dead leftovers after the dead-code cleanup
+
+**Maintenance; opened 2026-10-22 from the cleanup (audit P2, R3); OPEN.**
+- The store `del_if_sum` operation (`include/efs/store.h`, `store_mem.c`,
+  `store_nvme.c`) has no caller since the GC_FRAGMENT handler was removed.
+- The RDMA zero-copy region table (`efs_rdma_zc_region_add`, `g_zc`) only
+  records regions: the lookup was removed with `zc_lkey`, and direct fill
+  is disabled.
+
+**Fix and gate:** delete `del_if_sum`; for the region table, delete it with
+the disabled direct-fill path or restore a reader, decided together with
+`efs_rdma_send_quiesce` (audit R3).
 
 <a id="w127-w139-review"></a>
 ### Review of W127–W139 scope and priority — October 21
