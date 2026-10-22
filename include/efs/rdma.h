@@ -73,24 +73,10 @@ void *efs_rdma_send_buf(struct efs_rdma_conn *rc, uint32_t payload_len);
 int efs_rdma_send_commit(struct efs_rdma_conn *rc, void *buf, uint8_t type,
                          uint32_t payload_len);
 
-/* Wait for a received frame (spin briefly, then block on the CQ channel).
- * On success the frame is at efs_rdma_recv_frame() until
- * efs_rdma_recv_repost(). timeout_ms < 0 waits forever. */
-int efs_rdma_recv_wait(struct efs_rdma_conn *rc, int timeout_ms);
-void *efs_rdma_recv_frame(struct efs_rdma_conn *rc, uint32_t *frame_len);
+/* Repost the receive buffer the message path consumed. */
 int efs_rdma_recv_repost(struct efs_rdma_conn *rc);
-
-/* Arm the recv CQ and check for an already-queued completion. Returns 1 when
- * a frame is ready (recv_wait returns immediately), 0 when not (poll
- * efs_rdma_reply_fd()), -1 on error. */
-int efs_rdma_reply_ready(struct efs_rdma_conn *rc);
-/* Same contract, but a single non-spinning poll (still arms the CQ so a
- * later completion fires the comp channel). For harvest loops that check
- * several conns per wait — a full adaptive spin per conn multiplies CPU by
- * the conn count (the sw-1m client CPU sink). */
-int efs_rdma_reply_ready_quick(struct efs_rdma_conn *rc);
-/* A few pauses, then the caller blocks on the CQ event fd. No clock spin. */
-int efs_rdma_reply_ready_us(struct efs_rdma_conn *rc, int budget_us);
+/* Arm the CQ event fd and return it for poll(); a frame pended before the
+ * arm self-signals, so the poll does not sleep on a non-empty ring. */
 int efs_rdma_reply_fd(struct efs_rdma_conn *rc);
 
 struct efs_rdma_message_stats {
@@ -123,9 +109,5 @@ uint32_t efs_rdma_qpn(struct efs_rdma_conn *rc);
 
 /* Number of live RDMA conns in this process (tests/validation). */
 int efs_rdma_live_conns(void);
-
-/* Actual local receive count. Message capacity is a distinct negotiated
- * application pipeline bound; peer DATA credits use actual peer receives. */
-int efs_rdma_conn_nrecv(struct efs_rdma_conn *rc);
 
 #endif

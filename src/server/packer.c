@@ -408,8 +408,8 @@ static int pk_put_fragment(const struct efs_node *nodes, uint32_t count, uint32_
         return EFS_ERR_NET;
     }
     server_peer_conn_release(n->addr, n->port, pc);
-    int rc = type == EFS_MSG_PUT_SEGMENT_REPLY && rlen == sizeof(struct efs_msg_gc_inode_reply)
-             ? ((struct efs_msg_gc_inode_reply *)reply)->rc : EFS_ERR_PROTO;
+    int rc = type == EFS_MSG_PUT_SEGMENT_REPLY && rlen == sizeof(struct efs_msg_segment_put_reply)
+             ? ((struct efs_msg_segment_put_reply *)reply)->rc : EFS_ERR_PROTO;
     free(reply);
     return rc;
 }

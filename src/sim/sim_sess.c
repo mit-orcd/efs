@@ -61,8 +61,9 @@ static int read_sess(struct efs_sim *sim, uint32_t shard, struct efs_kv **kv)
 /* Drive one reap marker (L7) to completion on this replica's KV. The sim
  * has no reaper thread — the reclaim apply IS the reaper, infinitely
  * fast: sweep every active lane (deleting the lane's chunk keys and
- * emitting one GC record per chunk, exactly what EFS_MD_CMD_LANE_SWEEP
- * applies in production), then REAP_DONE clears the append state and the
+ * emitting one GC record per chunk, as the retired whole-lane
+ * LANE_SWEEP did; production now applies LANE_SWEEP_MULTI without GC
+ * records), then efs_meta_apply_reap_done clears the append state and the
  * marker. Every replica applies the same RECLAIM and drives its own KV,
  * so the replicas stay convergent; the all-voters topology means each KV
  * holds both groups' lanes. A missing marker = already driven = OK. */

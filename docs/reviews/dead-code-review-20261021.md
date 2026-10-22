@@ -1027,3 +1027,34 @@ modified. The original run evidence (hashes in Method) is unchanged.
 **Agreed:** these are tooling fixes. They do not block the accepted
 correctness work (M1–M5, P1, P3, S1), and they change none of the findings.
 I see no need for another review loop on the recommendations.
+
+## Cleanup status
+
+Cleanup of the accepted rows on branch `claude/dead-code-cleanup-5f7087`, cut
+from devel `a479018f6`. Correctness rows (M1–M5, P1, P3, S1) belong to
+W127–W134 and are not part of this cleanup; W1, M7, S2, X1 and E3 stay with
+their owner decisions. Each batch was built and run with
+`scripts/make_test_summary.sh` (copied to the tree root,
+`ASAN_OPTIONS=detect_leaks=0`) on node9901, in a fresh `git archive` tree
+under `/data1/efs/testsuite/`, next to the same run of the unmodified base.
+
+| Batch | Tree | Result | Base `a479018f6` |
+|---|---|---|---|
+| 1 (dead code) | `dcclean-b1a` | build clean; TOTAL 814, FAIL 2 | TOTAL 813, FAIL 2 (same two) |
+
+The two failures in both runs are environmental: the runner exports
+`TMPDIR=$PWD/tmp` without creating it, so `test_store_durability` and
+`test_kv_lsm_concurrent 4` fail `mkdtemp`. Both pass when run directly in the
+same tree. Neither run is a mounted, cluster or RDMA qualification.
+
+| Row | Status | What changed |
+|---|---|---|
+| M6 | **done** | Apply paths for APPEND_RES 17, LANE_SWEEP 21, REAP_DONE 22, LANE_SWEEP_BATCH 33 and REAP_BATCH 34 deleted, with their verdict-list and error-counter entries. The five values are refused through `EFS_MD_CMD_IS_RETIRED` inside `EFS_MD_CMD_IS_RESERVED` (apply halts, submit refuses) and their names are gone. `test_gc_verdict.py` drops the removed decoders and now asserts that retired tags keep their PROTO verdict; `test_meta_cmd_namespace.py` checks the retired list. The library functions stay: the simulator and unit tests use them. |
+| P2 | **done** | `GC_INODE` and `GC_FRAGMENT` handlers and request/reply structs deleted. IDs 99–100 and 121–122 are listed in `EFS_MSG_IS_RETIRED`; the handler closes a connection that sends one, with a rate-limited log line. The PUT_SEGMENT reply keeps its four-byte rc as `efs_msg_segment_put_reply`. New `tests/test_retired_messages.py` (wired) checks the list, the enum and that the refusal precedes dispatch. Follow-up: the store `del_if_sum` operation has no caller left. |
+| R1 | **done** | `efs_rdma_recv_wait`, `_recv_frame`, `_reply_ready`, `_reply_ready_quick`, `_reply_ready_us`, `efs_rdma_conn_nrecv`, `spin_budget_for_load`, `spin_us`, `now_ms`, `g_spinning` and the spin macros deleted. `EFS_RDMA_SPIN_US` now has no reader at all (docs: batch 3). |
+| K1 | **done** | `efs_kv_group_import_file`, `efs_export_format_stats_ex`, `efs_export_chunk_slot` and `EFS_FLUSH_HDR_ICOUNT_OFF` deleted. |
+| W2 | **done, one kept** | `efs_client_lookup_local`, `efs_rdcache_put`, `efs_client_rpc_query_snapshot_v4` and `DCACHE_RECLAIM_SCAN` deleted, with the test stubs. **Kept:** `efs_client_rpc_hold`, the only client of the peer-reachable `INODE_HOLD` endpoint; `tests/test_mount_identity_rpc.py` (wired) and two `tests/live` harnesses use it. |
+| W3 | **done** | `meta_v7_committed` and `meta_cap_blocked` deleted. |
+| D1 | **done** | `struct efs_ino_hold` and `ino_holds` deleted. |
+| D2 | **done** | `server_storage_sync_parents`, `server_raft_host_members`, `server_update_local_usage` and `server_init_local_usage` deleted. `test_store_gc.c` and `test_reclaim.c` used the last as "the inventory efsd runs at start"; they now run that inventory (`server_compute_local_usage` into the local node), as `efsd.c` does. The weak `server_raft_host_pack_object` seam stays. |
+| T6 | **done** | `bench_query_disk_scale.c` and `bench_query_disk_concurrent.c` moved to `tests/measure/` with Makefile targets and a run line. Deleted: `tests/diagnostics/raft_heap_probe.c`, `tests/live/{append_resolve_recovery,efs_raft_rotation_latency,inspect_close_cleanup,put_deadline,reap_bounded_recovery,session_cleanup_recovery}.c`, `tests/measure/{append_lane_inventory,kv_wal_preallocation}.c`, `tests/tools/kv_intents.c`. Status and result pages that used them now name `git show a479018f6:<path>`. `tests/test_query_cache_migration.c` goes with K3. |

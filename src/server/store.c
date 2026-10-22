@@ -2798,32 +2798,6 @@ void server_sync_local_membership(struct efsd_server *s)
     pthread_mutex_unlock(&s->lock);
 }
 
-void server_update_local_usage(struct efsd_server *s)
-{
-    uint64_t used = server_compute_local_usage(s);
-    if (used == UINT64_MAX)
-        fprintf(stderr, "usage: incomplete storage inventory; quota admission blocked\n");
-    pthread_mutex_lock(&s->lock);
-    struct efs_node *local = server_local_node(s);
-    if (local) {
-        local->used = used;
-        /* Keep advertised path list current (e.g. after upgrade / rejoin). */
-        server_format_storage_paths(s, local->storage_path,
-                                    sizeof(local->storage_path));
-    }
-    pthread_mutex_unlock(&s->lock);
-    server_usage_save(s);
-}
-
-void server_init_local_usage(struct efsd_server *s)
-{
-    /* usage.bin is an advisory heartbeat snapshot, not a transactional
-     * companion to PUT/unlink. A crash can leave it ahead of reclaimed
-     * files or behind new fragments. Reconcile before admitting writes;
-     * otherwise a stale overcount can permanently report ENOSPC. */
-    server_update_local_usage(s);
-}
-
 int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export *ex,
                                         efs_ino_t ino, uint32_t chunk_index,
                                         uint32_t fragment_index,

@@ -2650,13 +2650,6 @@ int efs_client_rpc_query_snapshot(const struct efs_msg_query_snapshot *req,
     if (req && req->version==EFS_QUERY_FILTER_VERSION) return EFS_ERR_INVAL;
     return query_snapshot_rpc(req,sizeof(*req),reply,text,0);
 }
-int efs_client_rpc_query_snapshot_v4(const struct efs_msg_query_snapshot_v4 *req,
-                                    struct efs_msg_query_snapshot_reply *reply,char **text)
-{
-    if (!req) return EFS_ERR_INVAL;
-    return query_snapshot_rpc(&req->base,req->base.version==EFS_QUERY_PAGE_VERSION ? sizeof(*req) :
-        req->base.version==EFS_QUERY_FILTER_VERSION ? sizeof(struct efs_msg_query_snapshot_v3) : sizeof(req->base),reply,text,0);
-}
 
 /* Preferred owner is a recoverable first-page hint; token ownership remains strict. */
 int efs_client_rpc_query_snapshot_v4_at(const struct efs_msg_query_snapshot_v4 *req,

@@ -1,6 +1,9 @@
 /* Existing private scale fixture only. Stream the immutable old generation
  * while its source changes and a new generation is built. Restore the fixture's
- * original +1 mutation so the independent recovery oracle remains applicable. */
+ * original +1 mutation so the independent recovery oracle remains applicable.
+ * Run (Linux): make tests/measure/bench_query_disk_concurrent, then
+ *   tests/measure/bench_query_disk_concurrent ROOT FILES
+ * on a ROOT built by bench_query_disk_scale with the same FILES; exit 2 = usage. */
 #define main scale_constructor_main
 #include "bench_query_disk_scale.c"
 #undef main

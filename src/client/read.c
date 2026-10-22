@@ -1325,11 +1325,6 @@ retry:
     return took;
 }
 
-void efs_rdcache_put(efs_ino_t ino, uint32_t ci, const uint8_t *src, uint32_t len)
-{
-    (void)rdcache_put_inner(ino, ci, src, len, 0, 0);
-}
-
 /* Store a pool buffer by ownership transfer. 1 = the cache owns buf now;
  * 0 = the caller still does. */
 int efs_rdcache_put_owned(efs_ino_t ino, uint32_t ci, uint8_t *buf,
@@ -1828,7 +1823,7 @@ static int rdcache_ready(efs_ino_t ino, uint32_t ci, uint32_t len)
 }
 
 /* 0 = dst filled from a finished entry. 1 = this caller owns the fetch
- * and must efs_rdcache_put or efs_rdcache_cancel. A second caller for a
+ * and must efs_rdcache_put_owned or efs_rdcache_cancel. A second caller for a
  * key that is already pending waits and then copies. */
 static int rdcache_acquire(efs_ino_t ino, uint32_t ci, uint8_t *dst,
                            uint32_t len)
@@ -1871,7 +1866,7 @@ static int rdcache_acquire(efs_ino_t ino, uint32_t ci, uint8_t *dst,
         /* Victim: a free way, else the LRU way that is not pending for
          * another key. Taking a pending way would strand that key's
          * waiters into a second fetch. No way at all: fetch unmarked;
-         * efs_rdcache_put picks its own slot. */
+         * efs_rdcache_put_owned picks its own slot. */
         e = NULL;
         for (w = 0; w < RDCACHE_WAYS; w++) {
             struct rdcache_ent *c = &g_rdcache.e[s][w];

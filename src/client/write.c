@@ -6965,7 +6965,6 @@ static int dcache_replay_stale_ex(efs_ino_t ino, uint32_t ci, int absent)
  * a small pool sweeps slots round-robin until dirty_bytes is back under the
  * low-water mark, so drain cost is spread and parallel instead of a stall. */
 #define DCACHE_RECLAIM_THREADS 16
-#define DCACHE_RECLAIM_SCAN    64 /* slots per worker wake */
 static struct {
     pthread_mutex_t mu;
     pthread_cond_t cv;

@@ -38,17 +38,6 @@ void server_peer_conn_drop(const char *host, uint16_t port, struct efs_conn *c);
 #define EFS_DEFAULT_WRITERS          8               /* daemon default / bench fallback */
 #define EFS_WRITERS_PER_PATH_DEFAULT EFS_DEFAULT_WRITERS
 
-/* RAM-only open-fd + flock state. Never serialized. */
-struct efs_ino_hold {
-    efs_export_id_t eid;
-    efs_ino_t ino;
-    uint32_t refs;
-    uint64_t flock_owner[8];
-    uint8_t flock_ex[8];
-    uint32_t flock_n;
-    struct efs_ino_hold *next;
-};
-
 struct efsd_server {
     uint64_t put_boot_epoch; /* durability verifier, stable across proven clean restarts */
     efs_node_id_t id;
@@ -118,9 +107,6 @@ struct efsd_server {
     int strace; /* attach strace -f (EFS_STRACE_PATH / EFS_STRACE_EXPR) */
     int usage_dirty; /* local->used changed; flush meta/usage.bin soon */
     int nodes_dirty; /* membership changed; persist nodes.bin off the lock */
-
-    /* Open-fd refs + cluster flock (guarded by s->lock). */
-    struct efs_ino_hold *ino_holds;
 
 };
 
@@ -283,7 +269,7 @@ void server_writer_set_npaths(uint32_t n);
 #define EFS_IOSTAT_PUT        1 /* PUT_CHUNK handler, conn thread */
 #define EFS_IOSTAT_DISK_WRITE 2 /* writer-pool disk write */
 #define EFS_IOSTAT_DISK_READ  3 /* filesystem-backed fragment read */
-#define EFS_IOSTAT_GC_DELETE  4 /* GC_FRAGMENT / GC_INODE RPC */
+#define EFS_IOSTAT_GC_DELETE  4 /* GC_INODE_BATCH RPC */
 uint64_t efs_iostats_now_us(void);
 void efs_iostats_add(int cls, uint64_t bytes, uint64_t us, int err);
 void efs_iostats_snapshot(struct efs_msg_io_stats_reply *out);
@@ -308,12 +294,6 @@ int server_compute_roots_usage(struct efsd_server *s, uint64_t *usage);
 
 /* Bytes used across all local data roots (sum of on-disk sizes). */
 uint64_t server_compute_local_usage(struct efsd_server *s);
-
-/* Update the local node's used counter via a full data/ tree scan, then persist. */
-void server_update_local_usage(struct efsd_server *s);
-
-/* Load meta/usage.bin, or scan+save if missing/corrupt. Call once at startup. */
-void server_init_local_usage(struct efsd_server *s);
 
 /* Persist local->used to meta/usage.bin (primary storage root). */
 void server_usage_save(struct efsd_server *s);
@@ -576,7 +556,6 @@ int server_raft_host_pack_leader(uint8_t group, uint64_t *term, uint64_t *commit
 struct efs_kv *server_raft_host_kv(void);
 uint64_t server_raft_host_group_commit(uint8_t group);
 uint32_t server_raft_host_group_voters(uint8_t group);
-int server_raft_host_members(void);
 /* Propose a packer command to its group and wait for this replica's apply
  * verdict. */
 int server_raft_host_pack_propose(uint8_t group, const uint8_t *cmd, uint32_t len);

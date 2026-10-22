@@ -518,12 +518,6 @@ int efs_export_add_chunk_delta(struct efs_export *ex, efs_ino_t ino,
 int efs_export_get_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_index,
                          struct efs_chunk_entry *out);
 
-/* Format directory rollup fields into .stats text. Returns bytes written
- * (excluding NUL), or -1 if buf is too small / not a directory. */
-int efs_export_format_stats_ex(const struct efs_export *ex,
-                               const struct efs_inode *dir, char *buf,
-                               size_t buflen);
-
 /* Visit each lookupable child slot under parent (skips the dir itself,
  * ino==0 holes, and rows the name index cannot resolve). */
 typedef int (*efs_child_cb)(struct efs_export *ex, uint64_t slot, void *arg);
@@ -538,8 +532,6 @@ const char *efs_export_inode_name(const struct efs_export *ex, uint64_t slot);
 void efs_export_inode_to_rpc(const struct efs_export *ex, uint64_t slot,
                              struct efs_inode *out);
 int efs_export_inode_slot(struct efs_export *ex, efs_ino_t ino, uint64_t *slot);
-int efs_export_chunk_slot(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_index,
-                          uint64_t *slot);
 int efs_export_needs_chunk_grow(const struct efs_export *ex);
 int efs_export_reserve_chunks(struct efs_export *ex, uint64_t extra);
 

@@ -171,12 +171,6 @@ struct efs_client {
     int meta_flush_stop;
     int meta_flush_started;
     int meta_flush_force; /* next flush does a full serialize */
-    /* Set once this process commits a v7 (page-aligned dentry) generation.
-     * Until then the first flush is forced full so every on-disk page is
-     * rewritten in v7 layout — the mounted cache may sit on v6 pages even
-     * when the adopted blob reads v7 (GET_META re-serializes server-side). */
-    int meta_v7_committed;
-    int meta_cap_blocked;  /* last flush hit the page cap; skip until shrink */
     int last_err;          /* EFS_ERR_* from the last mutating client op */
     int write_readonly;    /* mount is read-only (no write path enabled) */
 
@@ -259,9 +253,6 @@ int efs_client_stat_open(efs_ino_t ino, struct efs_inode *out);
 int efs_client_stat_refresh(efs_ino_t ino, struct efs_inode *out);
 /* Local table only — no RPC. For parent-dir checks on a known nodeid. */
 int efs_client_stat_local(efs_ino_t ino, struct efs_inode *out);
-/* Name this client already dual-applied. A miss is not "does not exist". */
-int efs_client_lookup_local(efs_ino_t parent, const char *name,
-                            struct efs_inode *out);
 /* Adopt a LOOKUP/GETATTR reply and overlay this client's unflushed size. */
 void efs_client_adopt_lookup(const struct efs_inode *rpc, struct efs_inode *out);
 /* Readdir with the server's (src, name) resume cookie. */
@@ -480,7 +471,6 @@ int efs_rdcache_get(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len);
  * on the 4k random-read path. */
 int efs_rdcache_copy(efs_ino_t ino, uint32_t ci, uint32_t off,
                      uint8_t *dst, uint32_t len);
-void efs_rdcache_put(efs_ino_t ino, uint32_t ci, const uint8_t *src, uint32_t len);
 /* Ownership transfer of a pool buffer (1 = taken). */
 int efs_rdcache_put_owned(efs_ino_t ino, uint32_t ci, uint8_t *buf,
                           uint32_t len);
@@ -719,8 +709,6 @@ int efs_client_rpc_query_snapshot(const struct efs_msg_query_snapshot *req,
                                     struct efs_msg_query_snapshot_reply *reply,char **text);
 
 
-int efs_client_rpc_query_snapshot_v4(const struct efs_msg_query_snapshot_v4 *req,
-                                    struct efs_msg_query_snapshot_reply *reply,char **text);
 int efs_client_rpc_query_snapshot_v4_at(const struct efs_msg_query_snapshot_v4 *req,
                                        efs_node_id_t preferred,
                                        struct efs_msg_query_snapshot_reply *reply,char **text);

@@ -96,6 +96,19 @@ static int undeclared_refuse(uint8_t type)
     return 1;
 }
 
+/* A retired message ID (EFS_MSG_IS_RETIRED): this build has no handler, so
+ * the sender learns it by a closed connection, never by silence. */
+static int retired_refuse(uint8_t type)
+{
+    static uint64_t refused;
+    uint64_t n = __atomic_add_fetch(&refused, 1, __ATOMIC_RELAXED);
+    if (n <= 10 || !(n % 1000))
+        fprintf(stderr, "handler: refused retired message %u; this build does not "
+                        "serve it; closing (%llu so far)\n",
+                type, (unsigned long long)n);
+    return 1;
+}
+
 void server_handle_conn(struct efs_conn *conn)
 {
     int fd = conn->fd;
@@ -188,6 +201,10 @@ void server_handle_conn(struct efs_conn *conn)
                           type == EFS_MSG_PUT_SEGMENT)) {
             close_conn = undeclared_refuse(type);
             type = 0; /* falls to default: no reply */
+        }
+        if (EFS_MSG_IS_RETIRED(type)) {
+            close_conn = retired_refuse(type);
+            type = 0;
         }
         switch (type) {
         case EFS_MSG_CLIENT_HELLO: {
@@ -527,23 +544,6 @@ send_reply:
             }
             break;
         }
-        case EFS_MSG_GC_INODE: {
-            /* W124: a single-inode request is a one-item reclaim acceptance. */
-            uint64_t start = efs_iostats_now_us();
-            struct efs_msg_gc_inode_reply rep = {.rc=EFS_ERR_PROTO};
-            if (payload_len == sizeof(struct efs_msg_gc_inode)) {
-                const struct efs_msg_gc_inode *req=payload;
-                struct efs_reclaim_item it={.export_id=req->export_id,.ino=req->ino,
-                                            .generation=req->generation};
-                int32_t rc=EFS_ERR_BUSY;
-                (void)server_reclaim_accept(g_server,&it,1,&rc);
-                rep.rc=rc;
-            }
-            efs_iostats_add(EFS_IOSTAT_GC_DELETE, 0, efs_iostats_now_us() - start,
-                            rep.rc != EFS_OK && rep.rc != EFS_ERR_BUSY);
-            efs_conn_send_msg(conn,EFS_MSG_GC_INODE_REPLY,&rep,sizeof(rep));
-            break;
-        }
         case EFS_MSG_GC_INODE_BATCH: {
             /* W124: journal-first acceptance of a reaped-inode batch. Each
              * rc is OK only once the record is fsynced and its fence set. */
@@ -578,7 +578,7 @@ send_reply:
         }
         case EFS_MSG_PUT_SEGMENT: {
             /* W125: one packed segment fragment from the group's packer. */
-            struct efs_msg_gc_inode_reply rep = {.rc = server_segment_put(g_server, payload, payload_len)};
+            struct efs_msg_segment_put_reply rep = {.rc = server_segment_put(g_server, payload, payload_len)};
             efs_conn_send_msg(conn, EFS_MSG_PUT_SEGMENT_REPLY, &rep, sizeof(rep));
             break;
         }
@@ -690,49 +690,6 @@ send_reply:
             struct efs_msg_gc_status_reply rep;
             server_gc_status(g_server, &rep);
             efs_conn_send_msg(conn, EFS_MSG_GC_STATUS_REPLY, &rep, sizeof(rep));
-            break;
-        }
-        case EFS_MSG_GC_FRAGMENT: {
-            uint64_t start = efs_iostats_now_us();
-            /* Data-plane GC (spec L7): checksum-conditional fragment
-             * delete. Idempotent — absent/deleted/mismatch-gone all reply
-             * 0; only a real I/O failure asks the reaper to retry. No
-             * export context must be restored after restart: absent RAM
-             * context does not prove on-disk fragments are absent. */
-            if (payload_len >= sizeof(struct efs_msg_gc_fragment)) {
-                struct efs_msg_gc_fragment *req = payload;
-                struct efs_msg_gc_fragment_reply rep;
-                struct efs_store st;
-                struct efs_nvme_store nctx;
-                struct efs_frag_id fid;
-                int grc = EFS_ERR_BUSY;
-
-                memset(&rep, 0, sizeof(rep));
-                pthread_mutex_lock(&g_server->lock);
-                struct efs_export *ex =
-                    server_export_acquire_or_create_locked(g_server, req->export_id);
-                pthread_mutex_unlock(&g_server->lock);
-                if (ex) {
-                    fid.export_id = ex->id;
-                    fid.ino = req->ino;
-                    fid.inode_generation = 0;
-                    fid.chunk_generation = req->chunk_generation;
-                    fid.chunk_index = req->chunk_index;
-                    fid.fragment_index = req->fragment_index;
-                    fid.coding_profile_id = 0;
-                    efs_store_nvme_bind(&st, &nctx, g_server, ex);
-                    grc = efs_store_del_if_sum(&st, &fid, req->checksum);
-                    server_export_put(g_server, ex);
-                }
-                /* EFS_ERR_EXIST = a newer generation occupies the slot:
-                 * the dead bytes are already gone, so that is terminal
-                 * success for the reaper, not a retry. */
-                rep.status = (grc == EFS_OK || grc == EFS_ERR_EXIST) ? 0 : 1;
-                efs_iostats_add(EFS_IOSTAT_GC_DELETE, 0, efs_iostats_now_us() - start,
-                                rep.status != 0);
-                efs_conn_send_msg(conn, EFS_MSG_GC_FRAGMENT_REPLY, &rep,
-                                  sizeof(rep));
-            }
             break;
         }
         case EFS_MSG_XATTR: {

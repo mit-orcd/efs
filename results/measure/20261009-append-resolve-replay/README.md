@@ -15,7 +15,7 @@ physical GC/restart/late PUT checks PASS. Installed service restored, pressure
 unset; no activation or deployment of this candidate.
 
 Additional actual synchronous-LSM WAL fixture passes on AMD:
-`tests/live/append_resolve_recovery.c` injects a failed completion batch, exits
+`tests/live/append_resolve_recovery.c` (removed from the tree on October 21 as an unrun orphan; read it with `git show a479018f6:tests/live/append_resolve_recovery.c`) injects a failed completion batch, exits
 without close, reopens and verifies identical reservation replay, completes an
 aborted hole, exits without delivering a reply, then reopens again and proves
 idempotent completion and exact size. This is process-crash proof, not a

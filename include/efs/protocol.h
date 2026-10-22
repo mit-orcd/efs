@@ -145,13 +145,7 @@ enum efs_msg_type {
     EFS_MSG_RAFT_STATUS = 97,
     EFS_MSG_RAFT_STATUS_REPLY = 98,
 
-    /* Data-plane GC (spec L7): the reaper asks the node holding a dead
-     * generation's fragment to delete it, proven by the fragment's
-     * checksum sidecar (fragment paths do not carry the generation, so
-     * the conditional delete never removes a newer generation's bytes).
-     * Idempotent: an absent fragment is a success. */
-    EFS_MSG_GC_FRAGMENT = 99,
-    EFS_MSG_GC_FRAGMENT_REPLY = 100,
+    /* 99-100 retired (single-fragment GC_FRAGMENT; see EFS_MSG_IS_RETIRED). */
     /* Extended attribute on one inode. Request is struct efs_msg_xattr
      * followed by name[nlen] and value[vlen]. The reply begins with the
      * same status + primary_id layout as efs_msg_inode_reply so a client
@@ -181,8 +175,7 @@ enum efs_msg_type {
     EFS_MSG_PUBLICATION_RETIRE_REPLY = 118,
     EFS_MSG_GC_STATUS = 119,
     EFS_MSG_GC_STATUS_REPLY = 120,
-    EFS_MSG_GC_INODE = 121,
-    EFS_MSG_GC_INODE_REPLY = 122,
+    /* 121-122 retired (single-inode GC_INODE; see EFS_MSG_IS_RETIRED). */
     EFS_MSG_QUERY_SNAPSHOT = 123,
     EFS_MSG_QUERY_SNAPSHOT_REPLY = 124,
     /* Opt-in pending CREATE with exact result proof and retained routing. */
@@ -222,6 +215,12 @@ enum efs_msg_type {
     EFS_MSG_PACK_COMPACT_REPLY = 168,
 };
 
+/* Retired message IDs: no handler in this build. The server closes a
+ * connection that sends one (handler.c retired_refuse); never reuse them. */
+#define EFS_MSG_IS_RETIRED(t) \
+    ((t) == 99 || (t) == 100 /* GC_FRAGMENT */ || \
+     (t) == 121 || (t) == 122 /* GC_INODE */)
+
 struct efs_msg_pack_compact {
     uint32_t segments; /* output segments to build per led group; 0 = report only */
     uint32_t reserved;
@@ -253,7 +252,7 @@ int efs_fd_declare(int fd);
 
 /* W125 segment messages, big-endian byte layouts:
  * PUT   [group:1][fragment:1][0:2][geometry:4][id:8][generation:8][checksum:32]
- *       then geometry/2 payload bytes; reply efs_msg_gc_inode_reply (rc).
+ *       then geometry/2 payload bytes; reply efs_msg_segment_put_reply (rc).
  * GET   [group:1][fragment:1][0:2][geometry:4][id:8][generation:8];
  *       reply [rc:4][payload bytes:4][checksum:32] then the payload.
  * GC    [group:1][0:3][count:4] then count [id:8][generation:8];
@@ -273,13 +272,7 @@ int efs_fd_declare(int fd);
 struct efs_msg_storage_session_fence { uint8_t uuid[16]; uint32_t floor, check_only; };
 struct efs_msg_storage_session_fence_reply { uint8_t uuid[16]; uint32_t floor; int32_t rc; };
 
-/* Trusted reaper only: all lanes swept and no remaining open lease.
- * The durable reap marker is retained until every member confirms cleanup. */
-struct efs_msg_gc_inode {
-    uint32_t export_id, reserved;
-    uint64_t ino, generation;
-};
-struct efs_msg_gc_inode_reply { int32_t rc; };
+struct efs_msg_segment_put_reply { int32_t rc; };
 /* Request: header then count items; reply: count int32 results in order.
  * EFS_OK = durably journalled and fenced (accepted for reclaim); BUSY = not
  * accepted (journal full, fail-closed or recovering), retry later. */
@@ -415,25 +408,6 @@ struct efs_msg_lane_bootstrap {
     uint64_t generation;
     uint32_t chunk_index;
     uint32_t chunk_size;
-};
-
-/* GC_FRAGMENT request: delete fragment `fragment_index` of chunk
- * `chunk_index` of `ino` iff its stored checksum sidecar equals
- * `checksum` (the dead generation's fragment hash from the GC record). */
-struct efs_msg_gc_fragment {
-    efs_export_id_t export_id;
-    efs_ino_t ino;
-    uint32_t chunk_index;
-    uint32_t fragment_index;
-    uint8_t checksum[EFS_HASH_SIZE];
-    uint64_t chunk_generation; /* 0 = legacy `{ci}.{fi}` */
-};
-
-/* status: 0 = the dead fragment is gone (deleted / already absent / a
- * newer generation occupies the slot); nonzero = try again later. */
-struct efs_msg_gc_fragment_reply {
-    uint8_t status;
-    uint8_t pad[7];
 };
 
 /* XATTR request. name[nlen] and value[vlen] follow this header with no

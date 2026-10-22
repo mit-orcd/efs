@@ -215,15 +215,9 @@ static struct target *target_at(struct efsd_server *s,const char *path)
     }
     return best;
 }
-/* Pinned-inode ancestry barrier. Every call still syncs the changed containing
- * directory; data-file barriers stay separate. */
-int server_storage_sync_parents(struct efsd_server *s,const char *path)
-{
-    struct target *t=target_at(s,path);
-    return t?parents_at(path,t):EFS_ERR_IO;
-}
-/* GC uses the same ancestry proof while retaining syscall accounting and
- * failure propagation through its own directory barrier. */
+/* Pinned-inode ancestry barrier for GC: every call still syncs the changed
+ * containing directory, with GC's syscall accounting and failure
+ * propagation through its own directory barrier. */
 int server_storage_sync_parents_with(struct efsd_server *s,const char *path,
                                     int (*sync)(void *,int),void *context)
 {

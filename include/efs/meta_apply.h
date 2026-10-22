@@ -973,13 +973,14 @@ void efs_meta_pack_reap(uint8_t *p, uint64_t generation,
 int efs_meta_unpack_reap(const uint8_t *p, uint32_t n, uint64_t *generation,
                          uint64_t *active_lanes);
 
-/* EFS_MD_CMD_LANE_SWEEP on the lane's group: delete every chunk key of
+/* Whole-lane sweep (simulator and tests; production applies
+ * EFS_MD_CMD_LANE_SWEEP_MULTI): delete every chunk key of
  * (ino, gen, lane), emitting a GC record per chunk on this group's anchor
  * shard, then delete the lane key. Idempotent: a swept lane scans empty.
  * Loops in bounded batches internally, so one entry drains a whole lane. */
 int efs_meta_apply_lane_sweep(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
                               uint8_t lane);
-/* EFS_MD_CMD_REAP_DONE on the inode's group after every active lane was
+/* Reap completion on the inode's group after every active lane was
  * swept: delete leftover append cursor/reservation records, then the reap
  * marker. Defensively deletes the inode row too if it somehow still exists
  * with nlink==0 and no leases; a live row (re-linked) just loses the

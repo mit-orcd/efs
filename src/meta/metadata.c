@@ -1704,39 +1704,6 @@ void efs_export_ensure_rollups(struct efs_export *ex)
     pending_rollup_clear(ex);
 }
 
-int efs_export_format_stats_ex(const struct efs_export *ex,
-                               const struct efs_inode *dir, char *buf,
-                               size_t buflen)
-{
-    if (!dir || !buf || buflen == 0 || !efs_mode_is_dir(dir->mode))
-        return -1;
-    (void)ex;
-    int n = snprintf(buf, buflen,
-                     "imm_files=%llu\n"
-                     "imm_dirs=%llu\n"
-                     "imm_bytes=%llu\n"
-                     "imm_tmin=%llu\n"
-                     "imm_tmax=%llu\n"
-                     "tree_files=%llu\n"
-                     "tree_dirs=%llu\n"
-                     "tree_bytes=%llu\n"
-                     "tree_tmin=%llu\n"
-                     "tree_tmax=%llu\n",
-                     (unsigned long long)dir->imm_files,
-                     (unsigned long long)dir->imm_dirs,
-                     (unsigned long long)dir->imm_bytes,
-                     (unsigned long long)dir->imm_tmin,
-                     (unsigned long long)dir->imm_tmax,
-                     (unsigned long long)dir->tree_files,
-                     (unsigned long long)dir->tree_dirs,
-                     (unsigned long long)dir->tree_bytes,
-                     (unsigned long long)dir->tree_tmin,
-                     (unsigned long long)dir->tree_tmax);
-    if (n < 0 || (size_t)n >= buflen)
-        return -1;
-    return n;
-}
-
 /* Copy shared inode fields onto every hard-link row with the same ino.
  * Parent/name of each directory entry are preserved. */
 static void sync_hardlink_attrs(struct efs_export *ex, efs_ino_t ino,
@@ -3576,19 +3543,6 @@ int efs_export_inode_slot(struct efs_export *ex, efs_ino_t ino, uint64_t *slot)
     return EFS_ERR_NOT_FOUND;
 }
 
-int efs_export_chunk_slot(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_index,
-                          uint64_t *slot)
-{
-    if (!ex || !slot)
-        return EFS_ERR_INVAL;
-    uint64_t pos = 0;
-    if (chunk_idx_get(ex, ino, chunk_index, &pos) == 0) {
-        *slot = pos;
-        return EFS_OK;
-    }
-    return EFS_ERR_NOT_FOUND;
-}
-
 int efs_export_needs_chunk_grow(const struct efs_export *ex)
 {
     if (!ex)
@@ -3620,8 +3574,6 @@ int efs_export_reserve_chunks(struct efs_export *ex, uint64_t extra)
         return EFS_ERR_NOMEM;
     return EFS_OK;
 }
-
-#define EFS_FLUSH_HDR_ICOUNT_OFF 276
 
 /* Approximate resident bytes of ONE table's cache structures (slab rows,
  * per-slab name arenas, chunk array, open-addressing indexes, child vecs).

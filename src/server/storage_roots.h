@@ -5,7 +5,6 @@
 int server_storage_roots_init(struct efsd_server *s);
 int server_storage_files_attach(struct efsd_server *s, const char *root, unsigned index);
 void server_storage_roots_close(struct efsd_server *s);
-int server_storage_sync_parents(struct efsd_server *s, const char *path);
 int server_storage_sync_parents_with(struct efsd_server *s, const char *path,
                                     int (*sync)(void *,int), void *context);
 /* Nonzero when a root-relative path is a metadata-table fragment path. */

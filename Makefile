@@ -231,6 +231,7 @@ test-create-errors: $(LIB)
 	python3 tests/test_open_busy.py
 	python3 tests/test_unlink_verdict.py
 	python3 tests/test_gc_verdict.py
+	python3 tests/test_retired_messages.py
 	python3 tests/test_put_hint.py
 
 test-fold-observation:
@@ -749,6 +750,13 @@ tests/measure/getattr_lane_smoke: tests/measure/getattr_lane_smoke.c $(LIB)
 
 tests/measure/lsm_index_smoke: tests/measure/lsm_index_smoke.c $(LIB) src/kv/kv_lsm_internal.h
 	$(CC) $(CFLAGS) $(INCLUDES) -Isrc/kv -o $@ $< $(LIB) $(LDFLAGS)
+
+# Offline query-cache scale benchmarks (docs/status/query-cache-closure-20261010.md).
+tests/measure/bench_query_disk_scale: tests/measure/bench_query_disk_scale.c $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(LIB) $(LDFLAGS)
+
+tests/measure/bench_query_disk_concurrent: tests/measure/bench_query_disk_concurrent.c tests/measure/bench_query_disk_scale.c $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(LIB) $(LDFLAGS)
 
 blake3-bench: $(BLAKE3_OBJS) src/bench/blake3_bench.o FORCE
 	$(CC) $(CFLAGS) $(INCLUDES) \

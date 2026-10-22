@@ -414,58 +414,6 @@ int efs_kv_group_import(struct efs_kv *kv, uint8_t group, const uint8_t *data,
     return rc;
 }
 
-int efs_kv_group_import_file(struct efs_kv *kv, uint8_t group, const char *path)
-{
-    uint8_t *buf = NULL;
-    off_t sz;
-    int fd, rc;
-
-    if (!kv || !path)
-        return EFS_ERR_INVAL;
-    fd = open(path, O_RDONLY);
-    if (fd < 0)
-        return EFS_ERR_IO;
-    sz = lseek(fd, 0, SEEK_END);
-    if (sz < 4 || (uint64_t)sz > 0xffffffffu) {
-        close(fd);
-        return sz < 4 ? EFS_ERR_PROTO : EFS_ERR_NOMEM;
-    }
-    buf = malloc((size_t)sz);
-    if (!buf) {
-        close(fd);
-        return EFS_ERR_NOMEM;
-    }
-    {
-        uint8_t *p = buf;
-        size_t left = (size_t)sz;
-        off_t at = 0;
-
-        while (left) {
-            ssize_t n = pread(fd, p, left, at);
-
-            if (n < 0) {
-                free(buf);
-                close(fd);
-                return EFS_ERR_IO;
-            }
-            if (n == 0)
-                break;
-            p += n;
-            at += n;
-            left -= (size_t)n;
-        }
-        if (left) {
-            free(buf);
-            close(fd);
-            return EFS_ERR_IO;
-        }
-    }
-    close(fd);
-    rc = efs_kv_group_import(kv, group, buf, (uint32_t)sz);
-    free(buf);
-    return rc;
-}
-
 static int read_whole(const char *path, uint8_t **out, uint32_t *len)
 {
     uint8_t *buf;
