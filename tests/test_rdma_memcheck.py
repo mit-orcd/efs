@@ -3,6 +3,7 @@
 from pathlib import Path
 import os
 import shlex
+import shutil
 import subprocess
 import tempfile
 
@@ -35,9 +36,14 @@ with tempfile.TemporaryDirectory(prefix='efs-rdma-memcheck-') as directory:
     source = Path(directory)/'test.c'
     binary = Path(directory)/'test'
     source.write_text(code)
-    subprocess.run(shlex.split(os.environ.get('CC', 'cc')) +
-                   ['-std=c99', '-DEFS_MEMCHECK=1', '-I'+str(root),
-                    str(source), '-o', str(binary)], check=True)
+    if shutil.which('valgrind') is None:
+        print('NOTRUN: RDMA Memcheck gate: valgrind is not installed'); raise SystemExit(0)
+    build = subprocess.run(shlex.split(os.environ.get('CC', 'cc')) +
+                           ['-std=c99', '-DEFS_MEMCHECK=1', '-I'+str(root),
+                            str(source), '-o', str(binary)], capture_output=True, text=True)
+    if build.returncode and 'valgrind/memcheck.h' in build.stderr:
+        print('NOTRUN: RDMA Memcheck gate: valgrind/memcheck.h is not installed'); raise SystemExit(0)
+    assert build.returncode == 0, build.stderr
     for negative in (False, True):
         result = subprocess.run(['valgrind', '--error-exitcode=99',
                                  '--leak-check=full', str(binary)] +

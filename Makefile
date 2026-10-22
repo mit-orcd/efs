@@ -463,6 +463,23 @@ test: all
 	python3 tests/test_storage_principles.py
 	python3 tests/test_make_test_recipe.py
 	python3 tests/test_pressure_cohort.py
+	python3 tests/test_alloc_value_guard.py
+	python3 tests/test_commands_load_payloads.py
+	python3 tests/test_direct_read_fork_oracle.py
+	python3 tests/test_gate_rounds_cancel.py
+	python3 tests/test_nuc_block_analysis.py
+	python3 tests/test_nuc_controller_timeout.py
+	python3 tests/test_orcd_ready.py
+	python3 tests/test_orcd_verify_resume.py
+	python3 tests/test_pressure_admission.py
+	python3 tests/test_pressure_background.py
+	python3 tests/test_pressure_index.py
+	python3 tests/test_query_node_warmup.py
+	python3 tests/test_runtime_exe_identity.py
+	python3 tests/test_fuse_workers.py
+	python3 tests/test_fuse_worker_options.py
+	python3 tests/test_cluster_stop.py
+	python3 tests/test_rdma_memcheck.py
 	$(MAKE) test-fence-read
 	$(MAKE) test-fence-view
 	$(MAKE) test-dirty-ranges
@@ -493,6 +510,15 @@ test: all
 	./tests/test_wire
 	./tests/test_data
 	./tests/test_kv
+	./tests/test_expiry
+	./tests/test_rdma_xprt
+	./tests/test_rdma_segmented normal
+	./tests/test_rdma_segmented interrupt
+	./tests/test_rdma_segmented tcp-violation
+	./tests/test_rdma_segmented deadline
+	./tests/test_rdma_segmented burst
+	./tests/test_rdma_segmented burst-asym
+	./tests/test_rdma_segmented churn
 	python3 tests/test_metadata_balance.py
 	python3 tests/test_host_outbox.py
 	python3 tests/test_raft_read_probe.py

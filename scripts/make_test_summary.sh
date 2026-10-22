@@ -1,8 +1,11 @@
 #!/bin/bash
 # make_test_summary.sh: run every `make test` command in a source tree,
 # continuing past failures, and write summary.txt (total, failures with
-# exit code and last output line) plus progress.txt. Run it from a copy of
-# the tree on a Linux build host (node9901 uses the private libfuse below).
+# exit code and last output line, and NOTRUN commands: exit 0 but printed
+# a NOTRUN/SKIP line, e.g. no RDMA device, no valgrind, no fuse3; W139)
+# plus progress.txt. Run it from a copy of the tree on a Linux build host
+# (node9901 uses the private libfuse below). The docs gate is separate:
+# `make docs-check` where docs/ and results/ exist (W135).
 # Raw output stays in the tree's tmp/ and is not committed.
 cd "$(dirname "$0")/.." || exit 2
 [ -f Makefile ] || { echo "make_test_summary: no Makefile in $PWD" >&2; exit 2; }
@@ -19,18 +22,24 @@ if [ -e build.failed ] || [ ! -s cmds.txt ]; then
     exit 1
 fi
 python3 - <<"EOP"
-import subprocess, time
+import re, subprocess, time
 lines=open("cmds.txt").read().split("\n"); cmds=[]; cur=""
 for l in lines:
     cur=cur+("\n" if cur else "")+l
     if not l.endswith(chr(92)):
         if cur.strip(): cmds.append(cur)
         cur=""
-fails=[]; t0=time.time()
+fails=[]; notrun=[]; t0=time.time()
 for i,c in enumerate(cmds):
     try: r=subprocess.run(["bash","-c",c],capture_output=True,text=True,timeout=900)
     except subprocess.TimeoutExpired: fails.append((i,124,c.split("\n")[0][:150],"timeout")); continue
-    if r.returncode: fails.append((i,r.returncode,c.split("\n")[0][:150],(r.stdout+r.stderr).strip().splitlines()[-1:] ))
-    open("progress.txt","w").write("%d/%d fails=%d\n"%(i+1,len(cmds),len(fails)))
-open("summary.txt","w").write("TOTAL %d FAIL %d (%.0fs)\n"%(len(cmds),len(fails),time.time()-t0)+"".join("%d\t%d\t%s\t%s\n"%f for f in fails))
+    out=r.stdout+r.stderr
+    if r.returncode: fails.append((i,r.returncode,c.split("\n")[0][:150],out.strip().splitlines()[-1:] ))
+    else:
+        # A passing command that could not run its gate says so; never a silent pass.
+        marks=[l for l in out.splitlines() if re.search(r"\b(NOTRUN|SKIP)\b",l)]
+        if marks: notrun.append((i,c.split("\n")[0][:150],marks[0].strip()[:200]))
+    open("progress.txt","w").write("%d/%d fails=%d notrun=%d\n"%(i+1,len(cmds),len(fails),len(notrun)))
+open("summary.txt","w").write("TOTAL %d FAIL %d NOTRUN %d (%.0fs)\n"%(len(cmds),len(fails),len(notrun),time.time()-t0)
+    +"".join("%d\t%d\t%s\t%s\n"%f for f in fails)+"".join("NOTRUN\t%d\t%s\t%s\n"%n for n in notrun))
 EOP

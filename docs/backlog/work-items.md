@@ -5956,9 +5956,9 @@ archived, delete the test with it.
 <a id="w139"></a>
 ## W139 — Unit binaries and tests that are built or present but never run
 
-**Verification liveness; opened 2026-10-21 from the audit T2–T4; OPEN.**
+**Verification liveness; opened 2026-10-21 from the audit T2–T4; FIXED on `devel-k25` (October 22).**
 - `tests/test_rdma_segmented`, `tests/test_expiry` and
-  `tests/test_rdma_xprt` are built by `all`, but no recipe runs them. All
+  `tests/test_rdma_xprt` were built by `all`, but no recipe ran them. All
   three PASS on node9901.
 - Sixteen of the twenty Python tests not named in the Makefile PASS; W136
   and W137 cover the two stale ones. `test_rdma_memcheck.py` (needs valgrind
@@ -5973,6 +5973,30 @@ archived, delete the test with it.
 - Report environment-dependent tests as NOTRUN, never as a silent pass.
 - Do this before deleting any code they could protect.
 - The full list is in the [audit](../reviews/dead-code-review-20261021.md#t3--python-tests-not-wired-into-make-test--liveness--high--wire-fix-or-delete).
+
+**Fix (October 22, `devel-k25`, alpha K25):**
+- `make test` now runs `test_expiry`, `test_rdma_xprt` and every
+  `test_rdma_segmented` mode (normal, interrupt, tcp-violation, deadline,
+  burst, burst-asym, churn), and the seventeen Python tests that were not
+  named in the Makefile: the sixteen the audit found passing (W136's
+  `test_pressure_cohort.py` is wired by its own fix; W137's
+  `test_live_ticket_retry.py` stays out until K13) plus `test_fuse_workers.py`,
+  `test_fuse_worker_options.py`, `test_cluster_stop.py` and
+  `test_rdma_memcheck.py`.
+- Environment-dependent tests print one `NOTRUN: <reason>` line and exit 0
+  instead of a bare SKIP or a silent pass: the RDMA binaries without a
+  verbs device, the FUSE parser test without fuse3, the Memcheck test
+  without valgrind or its header, the cluster-stop test without
+  `~/git/cluster` (`EFS_CLUSTER_SCRIPTS`), and the two Linux-only tests
+  elsewhere. `scripts/make_test_summary.sh` lists every passing command
+  that printed a `NOTRUN` or `SKIP` token under a `NOTRUN` count in
+  `summary.txt`, so a qualification summary shows what did not run.
+- Regression check: `tests/test_make_test_recipe.py` fails if any
+  `TEST_BINS` binary or any `tests/test_*.py` is absent from `make -n test`
+  unless listed in the test with its reason (only W137 is).
+- Gate: `make test` on efs3 (no RDMA device, no valgrind: those rows are
+  NOTRUN by design) in the K25 report; the hardware modes themselves need a
+  node with a verbs device (node9901), NOTRUN here.
 
 <a id="w140"></a>
 ## W140 — The proposal RPC accepts metadata tags this build cannot apply

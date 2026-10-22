@@ -1,7 +1,8 @@
 /* RDMA transport smoke test: QP loopback over the local IB device.
  *
- * Skips (exit 0, "SKIP") when no usable IB device exists, so it is safe in
- * the generic `make test` run on non-IB nodes. On the efs test servers it
+ * Without a usable IB device it prints a NOTRUN line and exits 0, so the
+ * generic `make test` run on non-IB nodes continues and the summary runner
+ * reports it (W139). On the efs test servers it
  * exercises: handshake, a 500ms quiet gap then a CREATE-sized frame,
  * inline/small/pool-max frames both ways, the TCP side-channel for
  * oversized frames, and teardown.
@@ -91,7 +92,7 @@ static void fill_pattern(uint8_t *buf, uint32_t len, uint8_t seed)
 int main(void)
 {
     if (!efs_rdma_available()) {
-        printf("SKIP: no usable IB device (EFS_TRANSPORT/EFS_RDMA_DEV)\n");
+        printf("NOTRUN: test_rdma_xprt: no usable IB device (EFS_TRANSPORT/EFS_RDMA_DEV)\n");
         return 0;
     }
 
