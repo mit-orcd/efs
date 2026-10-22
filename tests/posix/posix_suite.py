@@ -2815,7 +2815,9 @@ def efs_command_output(argv, deadline):
         except subprocess.CalledProcessError as error:
             if error.returncode != EFS_NOT_INDEXED_EXIT:
                 raise
-        if time.monotonic() + .5 >= deadline:
+        # Retry only if the command still gets 1 s after the pause; a sliver
+        # of budget made a retry time out as a hard failure.
+        if time.monotonic() + 1.5 >= deadline:
             raise Fail("not indexed yet within the case budget (catalog refresh "
                        "interval is longer)", soft=True)
         time.sleep(.5)

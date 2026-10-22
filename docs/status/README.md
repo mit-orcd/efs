@@ -69,6 +69,13 @@ scheduler's both-groups-local assumption remain.
 Earlier reviews and responses are kept as superseded history.
 Replaces the declined 256 MiB EBUSY refusal; W43 stays open.
 
+[orcd-test devel suites over TCP and RDMA](orcd-test-devel-suites-20261022.md):
+**PASS** on devel `08cc16af4`, `.efs` on, both transports: POSIX all 218/221 (3 SKIP by
+design/budget) on 7 clients, persist across a full restart and transport switch,
+two-client 67/67, every live `.efs` harness, IOR little/wide easy/hard with
+verification. Four harness bugs fixed on `claude/orcd-test-suites`; W121 reproduced
+(still OPEN, kernel).
+
 [orcd-test cleanup and W127–W131 run](orcd-test-cleanup-w127-20261022.md):
 **PASS** on a reformatted orcd-test (RDMA, `.efs`): POSIX core 216/216 on 7
 concurrent clients twice, the live `.efs` harnesses, a restart on existing
