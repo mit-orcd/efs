@@ -19,7 +19,7 @@ struct efs_raft_host {pthread_mutex_t mu;struct efs_raft_disk *disk;struct efs_r
 struct host_idx_ref {uint8_t group;uint64_t idx,term;};
 static unsigned sequence,holds,releases,fail_call,sync_fail,external_drop;
 static unsigned ids[256],groups[256],modes[256];
-static int decide_rc,wait_rc;static unsigned decided,finished,waited;
+static int decide_rc,wait_rc;static unsigned decided,finished,waited,retired;
 static struct efs_raft *group_raft(struct efs_raft_host *h,uint8_t g){return &h->r[g];}
 int efs_raft_role(const struct efs_raft *r){return r->role;}
 uint32_t efs_raft_voters(const struct efs_raft *r){return r->voters;}
@@ -36,10 +36,11 @@ static int host_propose_mode(struct efs_raft_host *h,uint8_t group,const uint8_t
 static int host_propose(struct efs_raft_host *h,uint8_t group,const uint8_t *cmd,uint32_t n,
  uint64_t *idx,uint64_t *term,int *hint){return host_propose_mode(h,group,cmd,n,idx,term,hint,0);}
 '''+s[a:b]+r'''
-static void pack_decide(uint8_t *cmd,const struct efs_txid *t,uint32_t sh,int state){(void)t;(void)sh;assert(state==EFS_TXN_COMMIT);memset(cmd,0,22);}
+#define HOST_DECIDE_MAX (23u+4u*EFS_TXN_MAX_PART)
+static uint32_t pack_decide(uint8_t *cmd,const struct efs_txid *t,uint32_t sh,int state,const struct efs_txn_parts *p){(void)t;(void)sh;assert(state==EFS_TXN_COMMIT && p && p->n==EFS_TXN_MAX_PART);memset(cmd,0,22);return 22;}
 static void pack_resolve(uint8_t *cmd,const struct efs_txid *t,uint32_t sh,int state){(void)t;assert(state==EFS_TXN_COMMIT);memset(cmd,0,22);cmd[0]=(uint8_t)sh;assert(decided);}
 static int host_propose_wait(struct efs_raft_host *h,uint8_t group,const uint8_t *cmd,uint32_t n,int *hint){(void)h;(void)group;(void)cmd;(void)hint;assert(n==22 && !sequence);if(!decide_rc)decided++;return decide_rc;}
-static void host_fin_add(struct efs_raft_host *h,const struct efs_txid *t,const struct efs_txn_parts *p,uint32_t coord){(void)h;(void)t;(void)p;(void)coord;finished++;}
+static void host_fin_add(struct efs_raft_host *h,const struct efs_txid *t,const struct efs_txn_parts *p,uint32_t coord,int retire_only){(void)h;(void)t;(void)p;(void)coord;if(retire_only)retired++;else finished++;}
 static int host_wait_refs(struct efs_raft_host *h,struct host_idx_ref *refs,int n,int *hint){(void)h;(void)hint;assert(decided);waited++;for(int i=0;i<n;i++)assert(refs[i].idx==(uint64_t)i+1 && refs[i].term==7);return wait_rc;}
 '''+s[ca:cb]+r'''
 struct host_resize_ctx {struct efs_raft_host *host;int *hint;};
@@ -48,7 +49,7 @@ uint32_t efs_txn_coordinator(const struct efs_txid*t,const struct efs_txn_parts*
 static int host_report_release(struct efs_raft_host *h,int held){
  assert(held && h->disk->depth==1);h->disk->depth--;releases++;return sync_fail?EFS_ERR_IO:0;
 }
-static void reset(void){sequence=holds=releases=fail_call=sync_fail=decided=finished=waited=0;decide_rc=wait_rc=0;}
+static void reset(void){sequence=holds=releases=fail_call=sync_fail=decided=finished=waited=retired=0;decide_rc=wait_rc=0;}
 int main(void){
  struct efs_raft_disk disk={0};struct efs_raft_host h={.disk=&disk};
  pthread_mutex_init(&h.mu,NULL);h.r[0].role=EFS_RAFT_LEADER;h.r[0].voters=7;
@@ -87,7 +88,7 @@ int main(void){
  struct efs_txid tx={0};struct efs_txn_parts parts={0};parts.n=EFS_TXN_MAX_PART;
  for(unsigned i=0;i<parts.n;i++)parts.shard[i]=i+1;
  h.r[2].role=EFS_RAFT_LEADER;reset();
- assert(!host_txn_commit(&h,&tx,&parts,1,&hint) && decided==1 && waited==1 && !finished);
+ assert(!host_txn_commit(&h,&tx,&parts,1,&hint) && decided==1 && waited==1 && !finished && retired==1);
  assert(sequence==EFS_TXN_MAX_PART && holds==EFS_TXN_MAX_PART/8 && releases==holds && !disk.depth);
  for(unsigned i=0;i<sequence;i++)assert(ids[i]==i+1 && groups[i]==efs_raft_shard_group(i+1));
  reset();decide_rc=EFS_ERR_BUSY;assert(host_txn_commit(&h,&tx,&parts,1,&hint)==EFS_ERR_BUSY && !sequence && finished==1);
@@ -96,7 +97,7 @@ int main(void){
  reset();sync_fail=1;assert(host_txn_commit(&h,&tx,&parts,1,&hint)==EFS_ERR_IO && finished==1 && !waited && !disk.depth);
  reset();wait_rc=EFS_ERR_STALE;assert(host_txn_commit(&h,&tx,&parts,1,&hint)==EFS_ERR_STALE && finished==1 && waited==1 && !disk.depth);
  struct host_resize_ctx ctx={&h,&hint};reset();decided=1;
- assert(!host_resize_resolve(&ctx,&tx,&parts,EFS_TXN_COMMIT) && waited==1 && !finished);
+ assert(!host_resize_resolve(&ctx,&tx,&parts,EFS_TXN_COMMIT) && waited==1 && !finished && retired==1);
  assert(sequence==EFS_TXN_MAX_PART && holds==EFS_TXN_MAX_PART/8 && releases==holds && !disk.depth);
  reset();decided=1;sync_fail=1;
  assert(host_resize_resolve(&ctx,&tx,&parts,EFS_TXN_COMMIT)==EFS_ERR_IO && finished==1 && !waited && !disk.depth);

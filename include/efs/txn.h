@@ -214,14 +214,78 @@ int efs_txn_apply_prepare(struct efs_kv *kv, int kind, const struct efs_txid *t,
                           const struct efs_txn_parts *p, const uint8_t *key,
                           uint32_t klen, const uint8_t *pay, uint32_t plen);
 
+/* Decision record lifecycle (transactions.md "GC", W83).
+ *
+ * DECIDE writes the live record [dec:1][n:1][shard:4]*n under
+ * EFS_KV_KIND_DECISION on the coordinator shard; it carries the
+ * participant set so the sweeper can re-drive RESOLVEs for a decision
+ * whose proposer died before retiring it. A live record is never deleted
+ * by age or by locally visible state.
+ *
+ * RETIRE is a Raft command proposed only after every participant's
+ * RESOLVE returned an OK verdict from its group's apply. Its apply
+ * compacts the live record into a retired tombstone [dec:1][retire_ns:8]
+ * (EFS_KV_KIND_DECISION_RETIRED) that still answers with the verdict, and
+ * reclaims at most EFS_TXN_RETIRE_SCAN tombstones retired at least
+ * EFS_TXN_DECISION_RETAIN_NS before the command's own clock, resuming from
+ * a per-shard cursor in the KV (EFS_KV_KIND_DECISION_CURSOR). Every
+ * replica evaluates the same command against the same applied state at the
+ * same log index, so all delete the same keys at the same position.
+ *
+ * The same state record keeps the shard's reclaim floor: the largest txid
+ * creation time (efs_txid_ns, bytes 0..7 as the host mints them) of any
+ * reclaimed tombstone. A decision that is neither live nor retired and
+ * whose txid is not newer than the floor is UNKNOWN: lookups return
+ * EFS_ERR_STALE, which readers refuse as retryable BUSY (never the old
+ * value), and DECIDE refuses STALE so a reclaimed verdict is never
+ * re-minted with the opposite outcome. The rule reads only replicated
+ * state, so it is deterministic inside apply. A transaction whose txid
+ * time trails the floor (clock skew beyond the retention) cannot decide
+ * and is aborted by recovery: fail-closed. */
+#define EFS_TXN_DECISION_RETAIN_NS (60ull * 1000000000ull)
+#define EFS_TXN_RETIRE_SCAN 32u
+#define EFS_TXN_DECISION_LIVE_MAX (2u + 4u * EFS_TXN_MAX_PART)
+
+uint64_t efs_txid_ns(const struct efs_txid *t);
+
+/* Idempotent for the same verdict (live or retired); PROTO for a different
+ * one; STALE when the decision is unknown (see above). The replicated
+ * DECIDE carries the participants; efs_txn_decide records none (n = 0:
+ * never swept, retired only by an explicit RETIRE). */
+int efs_txn_decide_parts(struct efs_kv *kv, uint32_t coord_shard,
+                         const struct efs_txid *t,
+                         const struct efs_txn_parts *parts, int decision);
 int efs_txn_decide(struct efs_kv *kv, uint32_t coord_shard,
                    const struct efs_txid *t, int decision);
+/* The verdict of a live or retired record; NOT_FOUND when undecided;
+ * STALE when unknown (retired and reclaimed). */
 int efs_txn_decision_get(struct efs_kv *kv, uint32_t coord_shard,
                          const struct efs_txid *t, int *decision);
+/* RETIRE apply. OK when the record is now retired (idempotent), NOT_FOUND
+ * when no live or retired record exists (nothing is minted). */
+int efs_txn_retire(struct efs_kv *kv, uint32_t coord_shard,
+                   const struct efs_txid *t, uint64_t now_ns);
+
+/* Live (unretired) decisions of one coordinator shard with their
+ * participant sets: the sweeper re-drives RESOLVE for the old ones, then
+ * RETIRE. A full page returns OK with *n == cap; sweep again. */
+struct efs_txn_decision_rec {
+    struct efs_txid t;
+    struct efs_txn_parts parts;
+    int decision;
+};
+int efs_txn_scan_decisions(struct efs_kv *kv, uint32_t shard,
+                           struct efs_txn_decision_rec *out, uint32_t cap,
+                           uint32_t *n);
+/* Diagnostics and tests: live and retired record counts on one shard. */
+int efs_txn_decision_count(struct efs_kv *kv, uint32_t shard,
+                           uint32_t *live, uint32_t *retired);
 
 /* coord returns EFS_OK and sets *decision, NOT_FOUND for no record
- * (treated as UNDECIDED), or a resource error (I9). A first UNDECIDED
- * is re-checked before the old value is returned. */
+ * (treated as UNDECIDED), EFS_ERR_STALE for a retired-and-reclaimed
+ * decision (the read is refused as BUSY: retry from a fresh view), or a
+ * resource error (I9). A first UNDECIDED is re-checked before the old
+ * value is returned. */
 typedef int (*efs_txn_coord_fn)(void *ctx, const struct efs_txid *t,
                                 uint32_t coord_shard, int *decision);
 

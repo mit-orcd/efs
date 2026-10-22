@@ -303,6 +303,25 @@ int efs_kv_key_decision(uint32_t shard, const uint8_t txid[16], uint8_t *out,
     return EFS_OK;
 }
 
+int efs_kv_key_decision_retired(uint32_t shard, const uint8_t txid[16],
+                                uint8_t *out, uint32_t *len)
+{
+    int rc;
+
+    if (!txid)
+        return EFS_ERR_INVAL;
+    rc = start(out, len, shard, EFS_KV_KIND_DECISION_RETIRED, 16, EFS_KV_KEY_MAX);
+    if (rc != EFS_OK)
+        return rc;
+    memcpy(out + 3, txid, 16);
+    return EFS_OK;
+}
+
+int efs_kv_key_decision_cursor(uint32_t shard, uint8_t *out, uint32_t *len)
+{
+    return start(out, len, shard, EFS_KV_KIND_DECISION_CURSOR, 0, EFS_KV_KEY_MAX);
+}
+
 int efs_kv_key_dseq(uint32_t shard, efs_ino_t dir, uint8_t lane, uint8_t *out,
                     uint32_t *len)
 {

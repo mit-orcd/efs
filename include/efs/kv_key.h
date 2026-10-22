@@ -43,7 +43,9 @@
 #define EFS_KV_KIND_INTENT   8  /* exclusive intent, keyed by the data key */
 #define EFS_KV_KIND_GUARD    9  /* shared predicate guard + txid suffix */
 #define EFS_KV_KIND_REDUCE   10 /* pending commutative reduction + txid */
-#define EFS_KV_KIND_DECISION 11 /* coordinator decision record (txid) */
+#define EFS_KV_KIND_DECISION 11 /* live coordinator decision: verdict + participants */
+#define EFS_KV_KIND_DECISION_RETIRED 49 /* retired decision: verdict + retire time */
+#define EFS_KV_KIND_DECISION_CURSOR 50 /* per-shard retired-decision reclaim cursor */
 #define EFS_KV_KIND_DSEQ     12 /* per-(dir, dentry-shard) emptiness witness */
 #define EFS_KV_KIND_SESSION  13 /* session record on hash(uuid) shard */
 #define EFS_KV_KIND_SESS_LOCAL 14 /* per-shard established epoch + fence */
@@ -113,6 +115,9 @@ int efs_kv_key_reduce_prefix(const uint8_t *orig, uint32_t olen, uint8_t *out,
                              uint32_t *len);
 int efs_kv_key_decision(uint32_t shard, const uint8_t txid[16], uint8_t *out,
                         uint32_t *len);
+int efs_kv_key_decision_retired(uint32_t shard, const uint8_t txid[16],
+                                uint8_t *out, uint32_t *len);
+int efs_kv_key_decision_cursor(uint32_t shard, uint8_t *out, uint32_t *len);
 int efs_kv_key_dseq(uint32_t shard, efs_ino_t dir, uint8_t lane, uint8_t *out,
                     uint32_t *len);
 int efs_kv_key_session(uint32_t shard, const uint8_t uuid[EFS_OPID_UUID_LEN],

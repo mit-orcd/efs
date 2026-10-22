@@ -6324,6 +6324,19 @@ RPC paths. No healthy POSIX result closes this partition gate.
 
 ### W83 · Transaction decisions have no inspected retirement protocol
 
+**Implemented Oct 22 on branch `devel-k07` (cluster gate NOTRUN):** the
+retirement rule is in
+[transactions.md "GC"](#appendix-9--protocol--cross-shard-transactions). The proof is
+every participant RESOLVE verdict observed OK; retirement is the replicated
+`EFS_MD_CMD_TXN_RETIRE` (verdict tombstone, then bounded cursor reclaim after a
+60 s logged-clock retention); a reclaimed decision is an explicit unknown
+(`EFS_ERR_STALE`, reader BUSY, DECIDE refused) via a replicated per-shard floor.
+DECIDE now carries the participant set so recovery re-drives RESOLVE and RETIRE
+for decisions whose proposer died. Unit gate: `tests/test_txn_retire` (bounded
+count over 3000 transactions, late participant after reclaim, LSM crash/restart
+replay byte-identical). Store format changed (DECIDE wire, decision value, two
+new key kinds): fresh format only. Remaining gate: the cluster checks below.
+
 **Class/state:** metadata lifecycle / bounded-state feature gap; source-reviewed
 Oct 7. `efs_txn_decide` stores a decision keyed by coordinator shard and txid.
 `efs_txn_resolve` and `efs_txn_drop` scan/delete INTENT, GUARD and REDUCE kinds;
@@ -9622,8 +9635,9 @@ quietly lower the protection level of freshly written data.
 Namespace and resize primitives exist; request-wide public data publication
 and observation remain [W77](#w77). Do not infer
 FUSE activation from the presence of metadata transaction helpers.
-Decision retirement and namespace predicate bounds remain
-[W83/W84](../status/spec-implementation.md); coordinator authority also
+Decision retirement ([W83](#w83)) follows the GC
+rule below; namespace predicate bounds remain
+[W84](../status/spec-implementation.md); coordinator authority also
 depends on the read-freshness gate [W82](#w82).
 
 [Architecture](#architecture) · [Data protocol](#appendix-10--protocol--data-plane) ·
@@ -9812,13 +9826,49 @@ no serializable history even though each commits atomically.
   transaction to completion (L5).
 - **GC.** Resolved intents are reclaimed (L7-class). A **decision record**
   outlives its intents — a recovering participant must still be able to ask
-  what happened — so it has its own explicit condition: reclaimable once
-  every participant has acknowledged the decision durably, and no participant
-  that could still be recovering remains. Until then it is retained,
-  bounded by unresolved/recoverable transactions rather than all completed
-  operation history, once that retirement protocol is implemented. The current
-  inspected implementation retains decisions without that protocol
-  ([W83](#w83)).
+  what happened — so it has its own explicit retirement rule
+  ([W83](#w83)):
+
+  **A decision is retirable once every participant's RESOLVE has been applied
+  in that participant's group log with an OK verdict; it is then retired by a
+  replicated `TXN_RETIRE` command on the coordinator's group, which keeps a
+  verdict-bearing tombstone that is reclaimed only by a later `TXN_RETIRE`
+  whose logged clock is at least the retention (60 s) past that tombstone's
+  retirement. An absent decision whose txid is not newer than the shard's
+  replicated reclaim floor is *unknown*: readers refuse it as retryable BUSY
+  and a late DECIDE is refused, so a reclaimed verdict is never answered as
+  the old value or re-minted.**
+
+  ```text
+  DECIDE  [txid][coord][dec][participants]   live record = verdict + parts
+  RESOLVE on every participant               each verdict OK -> proof
+  TXN_RETIRE [txid][coord][now]              live -> tombstone(verdict, now)
+                                             + reclaim <= 32 tombstones with
+                                               now - retired_at >= 60 s,
+                                               resuming at a stored cursor;
+                                               floor = max txid time reclaimed
+  lookup(txid): live | tombstone -> verdict
+                absent, txid time >  floor -> NO-DECISION (undecided)
+                absent, txid time <= floor -> UNKNOWN (STALE -> reader BUSY,
+                                              DECIDE refused)
+  ```
+
+  Every input of the rule is replicated state or a field of the logged
+  command (the proposer's clock rides in `TXN_RETIRE`), so all replicas delete
+  the same keys at the same log index; no replica deletes on a local timer.
+  Each apply touches a bounded window (one live record, at most 32 tombstones,
+  one cursor/floor record), so retirement cannot stall the apply loop. The
+  proposer of a transaction (its RESOLVE wait, the finisher, or recovery)
+  proposes `TXN_RETIRE` after the last RESOLVE verdict. If that proposer dies
+  or its RETIRE is lost, the decision stays live — never deleted by age — and
+  the recovery sweep re-drives RESOLVE to the participants recorded in the
+  decision and then retires it. Recovery that meets an UNKNOWN decision for a
+  pending record knows every RESOLVE already applied, so the record is a
+  straggler PREPARE and is dropped on that shard only. A transaction whose
+  txid time trails the floor (clock skew beyond the retention) cannot decide
+  and is aborted: fail-closed. Retained state is therefore live decisions of
+  unretired transactions plus one retention window of tombstones per
+  coordinator shard, not completed operation history.
   Duplicate-suppression records have the matching bound in
   [sessions.md](#appendix-12--protocol--sessions-open-unlinked-locking).
 
