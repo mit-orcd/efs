@@ -400,9 +400,9 @@ static int feature_enabled(uint32_t bit)
 }
 
 /* --- Virtual per-directory .find (not a real inode) ---
- * .find is a virtual directory; reading "<dir>/.find/<term>" runs a glob-ish
- * query ("term", "*term", "term*", "*term*"; literal part >= EFS_FIND_MIN_TERM
- * chars) over <dir>'s subtree and returns the matching paths (one per line,
+ * .find is a virtual directory; reading "<dir>/.find/<term>" runs a query
+ * (a command-path name, include/efs/command_path.h) over <dir>'s subtree and
+ * returns the matching paths (one per line,
  * host-absolute: mountpoint + fs-root path, so they pipe/loop from any cwd).
  * Single-command, e.g. cat ".find/PATTERN". The server searches a published
  * name index and supplies canonical export-relative paths. */
@@ -4611,10 +4611,9 @@ static void statfs_refresh_usage(void)
         if (efs_conn_send_msg(conn, EFS_MSG_STATUS, NULL, 0) == 0 &&
             efs_conn_recv_msg(conn, &type, &payload, &plen) == 0 &&
             type == EFS_MSG_STATUS_REPLY &&
-            plen >= 24) {
+            plen == sizeof(struct efs_msg_status_reply)) {
             struct efs_msg_status_reply r;
-            memset(&r, 0, sizeof(r));
-            memcpy(&r, payload, plen < sizeof(r) ? plen : sizeof(r));
+            memcpy(&r, payload, sizeof(r));
             pthread_mutex_lock(&g_client.lock);
             for (uint32_t j = 0; j < g_client.node_count; j++)
                 if (g_client.nodes[j].id == nid) {
@@ -4644,7 +4643,8 @@ static int efs_fuse_statfs(const char *path, struct statvfs *stbuf)
     pthread_mutex_lock(&g_client.lock);
 
     /* Use distinct-node placement over server filesystem capacity and available
-     * bytes, bounded by configured quotas. Older servers fall back to quotas. */
+     * bytes, bounded by configured quotas. A node whose capacity reading is
+     * unavailable (capacity_valid == 0) falls back to its quota. */
     uint64_t quota[EFS_MAX_NODES], room[EFS_MAX_NODES];
     uint32_t nn = g_client.node_count, all_quota = 1;
     if (nn > EFS_MAX_NODES)
@@ -7197,8 +7197,8 @@ static int efs_fuse_main_mt(int argc, char *argv[]);
 /* W125: refuse to mount a cluster whose daemons do not accept this
  * client's protocol declaration, instead of mounting and then failing
  * every read. A node that refuses is incompatible; one that does not
- * answer within 3 s is an older daemon or down. At least one node must
- * accept and none may refuse. */
+ * answer within 3 s is counted as down. At least one node must accept
+ * and none may refuse. */
 static int protocol_check(void)
 {
     uint32_t accepted = 0, refused = 0;

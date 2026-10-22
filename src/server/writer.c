@@ -21,7 +21,7 @@ struct writer_job {
     uint32_t chunk_index;
     uint32_t fragment_index;
     uint32_t path_index; /* local --storage root chosen for this job */
-    uint64_t chunk_generation; /* 0 = legacy `{ci}.{fi}` */
+    uint64_t chunk_generation; /* object name `{ci}.{fi}.{gen}`, nonzero */
     const uint8_t *data;
     uint32_t data_len;
     const uint8_t *checksum;

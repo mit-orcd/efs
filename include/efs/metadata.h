@@ -15,8 +15,6 @@
 #define EFS_STATS_NAME ".stats"
 /* Virtual per-directory search file (FUSE-only; not a real inode). */
 #define EFS_FIND_NAME ".find"
-/* Minimum literal (non-'*') characters in a .find query term. */
-#define EFS_FIND_MIN_TERM 4
 
 /* EFS_FEATURE_* / EFS_FEATURES_DEFAULT live in common.h (shared with the wire
  * protocol and efs-mgmt). */

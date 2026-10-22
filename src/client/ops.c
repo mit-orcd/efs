@@ -908,8 +908,8 @@ int efs_client_stat_open(efs_ino_t ino, struct efs_inode *out)
         return EFS_OK;
     }
     /* Both OPEN and CREATE hold a lease, so the last unlink stores nlink
-     * zero until last close. A missing row on an older server still leaves
-     * the local ghost available; transport errors keep the local count. */
+     * zero until last close. A missing row still leaves the local ghost
+     * available; transport errors keep the local count. */
     if (rpc_ok == EFS_ERR_NOT_FOUND)
         rpc.nlink = 0;
     else if (rpc_ok != EFS_OK) {

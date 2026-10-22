@@ -7,7 +7,7 @@ proto = (root/'include/efs/protocol.h').read_text()
 handler = Path(os.environ.get('EFS_HANDLER_SOURCE', root/'src/server/handler.c')).read_text()
 macro = re.search(r'#define EFS_MSG_IS_RETIRED\(t\) \\\n((?:.*\\\n)*.*\n)', proto).group(1)
 retired = sorted(map(int, re.findall(r'== (\d+)', macro)))
-assert retired == [99, 100, 121, 122], retired
+assert retired == [81, 82, 99, 100, 121, 122], retired
 enum = proto[proto.index('enum efs_msg_type'):]
 enum = enum[:enum.index('};')]
 live = {int(v): n for n, v in re.findall(r'^\s*(EFS_MSG_\w+)\s*=\s*(\d+)', enum, re.M)}

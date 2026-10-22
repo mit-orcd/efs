@@ -65,11 +65,9 @@ static int probe_node_up(const char *nhost, uint16_t nport, struct efs_msg_statu
     if (efs_send_msg(pfd, EFS_MSG_STATUS, NULL, 0) == 0 &&
         efs_recv_msg(pfd, &type, &preply, &preply_len) == 0 &&
         type == EFS_MSG_STATUS_REPLY &&
-        preply_len >= 24) {
-        if (status) {
-            memset(status, 0, sizeof(*status));
-            memcpy(status, preply, preply_len < sizeof(*status) ? preply_len : sizeof(*status));
-        }
+        preply_len == sizeof(struct efs_msg_status_reply)) {
+        if (status)
+            memcpy(status, preply, sizeof(*status));
         ok = 1;
     }
     free(preply);
@@ -315,91 +313,6 @@ static int cmd_status(int argc, char **argv)
     }
     free(reply);
     reply = NULL;
-
-    printf("Heal:\n");
-    {
-        int any = 0;
-        for (uint32_t i = 0; i < ncopy; i++) {
-            if (!probe_node_up(nodes_copy[i].addr, nodes_copy[i].port, NULL)) {
-                printf("  node %u: DOWN\n", nodes_copy[i].id);
-                continue;
-            }
-            int hfd = efs_connect_tcp(nodes_copy[i].addr, nodes_copy[i].port);
-            if (hfd < 0) {
-                printf("  node %u: unreachable\n", nodes_copy[i].id);
-                continue;
-            }
-            efs_set_recv_timeout(hfd, EFS_STATUS_PROBE_MS);
-            efs_set_send_timeout(hfd, EFS_STATUS_PROBE_MS);
-            uint8_t ht = 0;
-            void *hp = NULL;
-            uint32_t hl = 0;
-            if (efs_send_msg(hfd, EFS_MSG_HEAL_STATUS, NULL, 0) != 0 ||
-                efs_recv_msg(hfd, &ht, &hp, &hl) != 0 ||
-                ht != EFS_MSG_HEAL_STATUS_REPLY ||
-                hl != sizeof(struct efs_msg_heal_status_reply)) {
-                printf("  node %u: heal-status unsupported\n",
-                       nodes_copy[i].id);
-                free(hp);
-                close(hfd);
-                continue;
-            }
-            struct efs_msg_heal_status_reply *hs = hp;
-            if (!hs->healing && hs->export_count == 0) {
-                printf("  node %u: idle\n", nodes_copy[i].id);
-                any = 1;
-                free(hp);
-                close(hfd);
-                continue;
-            }
-            if (!hs->healing) {
-                printf("  node %u: idle", nodes_copy[i].id);
-                for (uint32_t e = 0; e < hs->export_count; e++) {
-                    if (hs->exports[e].name[0])
-                        printf("  %s gen=%llu", hs->exports[e].name,
-                               (unsigned long long)hs->exports[e].gen);
-                }
-                printf("\n");
-                any = 1;
-                free(hp);
-                close(hfd);
-                continue;
-            }
-            for (uint32_t e = 0; e < hs->export_count; e++) {
-                struct efs_msg_heal_status_export *x = &hs->exports[e];
-                if (!x->flags)
-                    continue;
-                any = 1;
-                printf("  node %u: healing  %s", nodes_copy[i].id,
-                       x->name[0] ? x->name : "?");
-                if (x->flags & EFS_HEAL_F_REBUILD)
-                    printf("  shard=%u  pages %u/%u", x->cur_shard,
-                           x->pages_done, x->pages_total);
-                if (x->tables_need)
-                    printf("  tables %u/%u need-rebuild", x->tables_need,
-                           x->tables_total);
-                printf("  gen=%llu", (unsigned long long)x->gen);
-                if ((x->flags & EFS_HEAL_F_REBUILD) && x->pages_done > 0 &&
-                    x->pages_total > x->pages_done && x->elapsed_us > 0) {
-                    uint64_t left = (x->elapsed_us / x->pages_done) *
-                                    (x->pages_total - x->pages_done);
-                    if (left < 1000000ull)
-                        printf("  ~<1s left");
-                    else if (left < 60000000ull)
-                        printf("  ~%llu s left",
-                               (unsigned long long)(left / 1000000ull));
-                    else
-                        printf("  ~%llu min left",
-                               (unsigned long long)(left / 60000000ull));
-                }
-                printf("\n");
-            }
-            free(hp);
-            close(hfd);
-        }
-        if (!any)
-            printf("  (no heal data)\n");
-    }
 
     close(fd);
     return (down_nodes > 0) ? 1 : 0;
@@ -1109,17 +1022,15 @@ static int cmd_raft_mkfs(int argc, char **argv)
     uint32_t reply_len = 0;
     struct efs_msg_raft_mkfs_reply *r;
 
-    if (argc < 1 || argc > 2) {
-        fprintf(stderr, "Usage:\n  efs-mgmt mkfs|raft-mkfs <node:port> [legacy-label]\n");
+    if (argc != 1) {
+        fprintf(stderr, "Usage:\n  efs-mgmt mkfs|raft-mkfs <node:port>\n"
+                        "mkfs initializes the single cluster export and takes no label.\n");
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
         fprintf(stderr, "Invalid address: %s\n", argv[0]);
         return 1;
     }
-    if (argc == 2)
-        fprintf(stderr, "Note: legacy label '%s' is ignored; initializes the single cluster export.\n",
-                argv[1]);
     fd = efs_connect_tcp(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
@@ -1570,7 +1481,9 @@ static int cmd_expiry(int argc,char **argv,int policy)
     int mutate=argc>=2 && !strcmp(argv[1],policy?"set":"renew");
     int named=policy && mutate && argc>5 && argv[5][0]=='-';
     char host[64];uint16_t port;uint64_t n[6]={0};
-    if((get && argc!=4) || (mutate && !named && argc!=(policy?8:6)) || (!get && !mutate))goto usage;
+    /* Policy set takes only the named form; the positional TTL_NS MAX_NS
+     * FLAGS form was removed. */
+    if((get && argc!=4) || (mutate && (policy?!named:argc!=6)) || (!get && !mutate))goto usage;
     if(parse_host_port(argv[0],host,sizeof(host),&port))return 1;
     for(int i=2;i<(named?5:argc);i++)if(expiry_u64(argv[i],&n[i-2]))return 1;
     if(named) {
@@ -1608,7 +1521,6 @@ usage:
     fprintf(stderr,"Usage:\n  efs-mgmt expiry-policy NODE:PORT get ROOT_INO GENERATION\n"
                    "  efs-mgmt expiry-policy NODE:PORT set ROOT_INO GENERATION EXPECTED_REV\n"
                    "    --expire-after DURATION [--renewal-limit DURATION] --flags FLAGS\n"
-                   "  Legacy: set ROOT_INO GENERATION EXPECTED_REV TTL_NS MAX_NS FLAGS\n"
                    "  efs-mgmt expiry NODE:PORT get FILE_INO GENERATION\n"
                    "  efs-mgmt expiry NODE:PORT renew FILE_INO GENERATION EXPECTED_REV DEADLINE_NS\n\n"
                    "DURATION: positive integer followed by ns, s, m, h or d (example: 24h).\n"

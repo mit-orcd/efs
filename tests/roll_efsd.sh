@@ -130,7 +130,7 @@ if [ $ALL = 1 ]; then
         echo "== raft-mkfs on node 1 only (same salt on every retry)"
         ok=0
         for i in $(seq 1 30); do
-            out=$(ssh_ 20 fcstor003 "cd /tmp/efs && ./efs-mgmt raft-mkfs 172.16.223.57:19810 efs-test; echo mkfs_exit=\$?")
+            out=$(ssh_ 20 fcstor003 "cd /tmp/efs && ./efs-mgmt raft-mkfs 172.16.223.57:19810; echo mkfs_exit=\$?")
             echo "fcstor003: $(echo "$out" | tail -2 | tr '\n' ' ')"
             if echo "$out" | grep -q 'mkfs_exit=0'; then ok=1; break; fi
             sleep 2

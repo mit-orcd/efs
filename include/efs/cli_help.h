@@ -111,7 +111,7 @@ static inline int efs_mgmt_help(FILE *out,const char *command)
         {"expiry-clock","NODE:PORT get|reset"},
         {"expiry-status","NODE:PORT"},
         {"expiry","NODE:PORT show PATH [--mount MOUNT] | get INO GENERATION | renew INO GENERATION EXPECTED_REV DEADLINE_NS"},
-        {"commands-policy","NODE:PORT get | set MASK EXPECTED_VERSION"},{"mkfs","NODE:PORT [legacy-label]"},{"raft-mkfs","NODE:PORT [legacy-label]"},
+        {"commands-policy","NODE:PORT get | set MASK EXPECTED_VERSION"},{"mkfs","NODE:PORT"},{"raft-mkfs","NODE:PORT"},
         {"raft-status","NODE:PORT"},{"raft-change","NODE:PORT GROUP VOTERS"},
         {"raft-dir","NODE:PORT INO begin|migrate|finish"},
         {"raft-session","NODE:PORT create|register|establish|get|fence|cleanup-leases|cleanup-appends UUID_HEX [epoch|shard] [shard]"},
@@ -146,10 +146,9 @@ static inline int efs_mgmt_help(FILE *out,const char *command)
             "Renewal checks the current limits at the file's saved policy source.\n"
             "The renewal limit is not a maximum lifetime rule.\n"
             "Set requires operator UID 0 and server EFS_EXPIRY=1.\n"
-            "Legacy set ROOT GENERATION EXPECTED_REV TTL_NS MAX_NS FLAGS is supported.\n"
             "Node addresses use HOST:PORT." :
             (!strcmp(command,"mkfs") || !strcmp(command,"raft-mkfs")) ?
-            "Single export; the legacy label is accepted and ignored.\nNode addresses use HOST:PORT." :
+            "Single export; no label argument.\nNode addresses use HOST:PORT." :
             "Node addresses use HOST:PORT.");return 0;
     }
     fprintf(stderr,"Unknown command: %s\n",command);return 1;

@@ -165,7 +165,8 @@ static inline uint32_t server_data_chunk_size(const struct efs_export *ex)
                : EFS_DEFAULT_CHUNK_SIZE;
 }
 
-/* Get the (sharded) path for a fragment on disk. Writes always use this. */
+/* Get the (sharded) path for a fragment on disk on the picked write root
+ * (efs_tls_write_root). Writes always use this; EFS_ERR_INVAL without one. */
 int server_fragment_path(struct efsd_server *s, struct efs_export *ex,
                          efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
                          char *path, size_t path_len);

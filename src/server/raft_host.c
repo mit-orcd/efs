@@ -10991,16 +10991,14 @@ int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req,con
     if (out) *out=NULL;
     if (!g_host || !g_host->query_enabled) return EFS_ERR_NOT_FOUND;
     if (!req || !out || !len || (req->version!=EFS_QUERY_VERSION && req->version!=EFS_QUERY_COMMAND_VERSION && req->version!=EFS_QUERY_FILTER_VERSION) || !req->root ||
-        req->operation>(req->version==EFS_QUERY_VERSION ? EFS_QUERY_FIND : EFS_QUERY_LS) || req->match>EFS_NAME_CONTAINS || req->ngroups>EFS_QUERY_GROUPS ||
+        (req->version==EFS_QUERY_VERSION ? req->operation!=EFS_QUERY_STATS : req->operation>EFS_QUERY_LS) || req->match>EFS_NAME_CONTAINS || req->ngroups>EFS_QUERY_GROUPS ||
         !req->max_output || req->max_output>EFS_QUERY_MAX_OUTPUT ||
         !req->visit_budget || req->visit_budget>EFS_QUERY_MAX_VISITS ||
         !memchr(req->term,0,sizeof(req->term))) return EFS_ERR_INVAL;
     if ((req->version==EFS_QUERY_FILTER_VERSION) != (filters!=NULL) ||
         (filters && (req->operation!=EFS_QUERY_FIND || !efs_query_filters_valid(filters)))) return EFS_ERR_INVAL;
-    if (req->operation==EFS_QUERY_FIND && (strchr(req->term,'/') ||
-        (req->version==EFS_QUERY_VERSION && (strlen(req->term)<EFS_FIND_MIN_TERM || strchr(req->term,'*'))) ||
-        (req->version>=EFS_QUERY_COMMAND_VERSION && (strlen(req->term)>120 ||
-        (!req->term[0] && req->match!=EFS_NAME_PREFIX && req->match!=EFS_NAME_CONTAINS)))))
+    if (req->operation==EFS_QUERY_FIND && (strchr(req->term,'/') || strlen(req->term)>120 ||
+        (!req->term[0] && req->match!=EFS_NAME_PREFIX && req->match!=EFS_NAME_CONTAINS)))
         return EFS_ERR_INVAL;
     int policy_rc=host_query_policy_operation(req->operation);
     if(policy_rc)return query_reply_status(policy_rc,0);

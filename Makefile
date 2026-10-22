@@ -418,6 +418,7 @@ test: all
 	python3 tests/test_query_rpc_routing.py
 	python3 tests/test_mgmt_session_routing.py
 	python3 tests/test_mgmt_expiry_lookup.py
+	python3 tests/test_expiry_cli.py ./efs-mgmt
 	python3 tests/test_session_admission.py
 	python3 tests/test_close_effects.py
 	python3 tests/test_session_cleanup_cli.py

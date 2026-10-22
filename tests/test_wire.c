@@ -151,8 +151,6 @@ static void test_every_msg_struct(void)
     RT(struct efs_msg_inode_lookup);
     RT(struct efs_msg_inode_lookup_path);
     RT(struct efs_msg_inode_lookup_path_reply);
-    RT(struct efs_msg_heal_status_export);
-    RT(struct efs_msg_heal_status_reply);
     RT(struct efs_msg_inode_create);
     RT(struct efs_msg_inode_getattr);
     RT(struct efs_msg_inode_readdir);
@@ -373,14 +371,14 @@ static void test_getchunks_reply_length(void)
     CHECK(efs_getchunks_reply_len(1) < full / 32, "GETCHUNKS one-record reply is small");
 
     CHECK(efs_getchunks_reply_len_ok(r, hdr) == EFS_OK, "GETCHUNKS header-only length");
-    CHECK(efs_getchunks_reply_len_ok(r, full) == EFS_OK, "GETCHUNKS legacy full length");
+    CHECK(efs_getchunks_reply_len_ok(r, full) == EFS_ERR_PROTO, "GETCHUNKS full fixed struct refused");
     CHECK(efs_getchunks_reply_len_ok(r, hdr - 1) == EFS_ERR_PROTO, "GETCHUNKS truncated header");
     CHECK(efs_getchunks_reply_len_ok(NULL, hdr) == EFS_ERR_PROTO, "GETCHUNKS null reply");
     r->count = 2;
     CHECK(efs_getchunks_reply_len_ok(r, hdr + rec) == EFS_ERR_PROTO, "GETCHUNKS missing record");
     CHECK(efs_getchunks_reply_len_ok(r, hdr + 3 * rec) == EFS_ERR_PROTO, "GETCHUNKS trailing record");
     CHECK(efs_getchunks_reply_len_ok(r, hdr + 2 * rec) == EFS_OK, "GETCHUNKS exact two records");
-    CHECK(efs_getchunks_reply_len_ok(r, full) == EFS_OK, "GETCHUNKS legacy full two records");
+    CHECK(efs_getchunks_reply_len_ok(r, full) == EFS_ERR_PROTO, "GETCHUNKS full struct with two records refused");
     r->count = EFS_GETCHUNKS_MAX + 1;
     CHECK(efs_getchunks_reply_len_ok(r, full) == EFS_ERR_PROTO, "GETCHUNKS count above max");
 

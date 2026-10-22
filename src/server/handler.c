@@ -785,14 +785,6 @@ send_reply:
             free(reply);
             break;
         }
-        case EFS_MSG_HEAL_STATUS: {
-            /* The KV has no heal state: nothing rebuilds a table. */
-            struct efs_msg_heal_status_reply reply;
-            memset(&reply, 0, sizeof(reply));
-            efs_conn_send_msg(conn, EFS_MSG_HEAL_STATUS_REPLY, &reply,
-                              sizeof(reply));
-            break;
-        }
         case EFS_MSG_IO_STATS: {
             struct efs_msg_io_stats_reply reply;
             efs_iostats_snapshot(&reply);

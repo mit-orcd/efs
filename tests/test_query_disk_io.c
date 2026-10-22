@@ -960,89 +960,74 @@ static void orphan_preflight_test(void)
     puts("orphan preflight: actual failed graph, no repeated scratch writes/syncs, immutable repair, prepared refusal and fresh rebuild PASS");
 }
 
-static void tag_legacy(struct efs_query_disk *d)
+static int tag_format(const char *generation,uint64_t version)
 {
-    char path[EFS_MAX_PATH];snprintf(path,sizeof(path),"%s/manifest",d->path);
-    int fd=open(path,O_RDWR);CHECK(fd>=0);if(fd<0)return;
-    uint64_t version=5,row=sizeof(struct disk_node)+sizeof(struct efs_name_entry)-sizeof(struct disk_link);
-    CHECK(pwrite(fd,&version,8,8)==8);CHECK(pwrite(fd,&row,8,24)==8);close(fd);
+    char path[EFS_MAX_PATH];snprintf(path,sizeof(path),"%s/manifest",generation);
+    int fd=open(path,O_RDWR);CHECK(fd>=0);if(fd<0)return -1;
+    int ok=pwrite(fd,&version,8,8)==8;close(fd);return ok?0:-1;
 }
-static void legacy_retirement_test(void)
+static int current_is(const char *cache,const char *generation)
 {
-    char store[]="/tmp/efs-query-legacy-kv-XXXXXX",cache[]="/tmp/efs-query-legacy-cache-XXXXXX";
+    char current[EFS_MAX_PATH],target[256];snprintf(current,sizeof(current),"%s/current",cache);
+    ssize_t length=readlink(current,target,sizeof(target)-1);
+    if(length<=0)return 0;
+    target[length]=0;return !strcmp(target,strrchr(generation,'/')+1);
+}
+/* Failed publication keeps the previous current; an older-format current
+ * (v5/v6) is refused at recovery and left untouched, never migrated. */
+static void publication_and_format_test(void)
+{
+    char store[]="/tmp/efs-query-format-kv-XXXXXX",cache[]="/tmp/efs-query-format-cache-XXXXXX";
     CHECK(mkdtemp(store));CHECK(mkdtemp(cache));
     struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
     CHECK(kv);if(!kv)return;
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t file;
     CHECK(!efs_meta_apply_init(kv,100));CHECK(!efs_meta_apply_create_file(kv,&attrs,EFS_ROOT_INO,S_IFREG|0644,"file",&file));
     struct efs_kv_lsm_snapshot *source=NULL;CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source));
-    struct efs_query_disk *old=NULL,*next=NULL,*later=NULL;uint64_t wm[4]={1,2,3,4};
+    struct efs_query_disk *old=NULL,*next=NULL;uint64_t wm[4]={1,2,3,4};
     CHECK(!efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&old));
     if(!old)goto done;
     CHECK(!efs_query_disk_checkpoint(old,wm));
-    uint64_t saved=aggregate_limit;aggregate_limit=2*old->disk_bytes+65536;
-    char legacy[EFS_MAX_PATH];strcpy(legacy,old->path);tag_legacy(old);
-    /* Deliberately tag the header while retaining v7 test rows: opaque
-     * retirement must never decode the alleged old ABI. Genuine v5 rows are
-     * covered by the mounted cross-build transition reproduction. */
-    efs_query_disk_free(old);old=NULL;CHECK(!access(legacy,F_OK));
+    char first[EFS_MAX_PATH];strcpy(first,old->path);
     CHECK(!efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&next));
     if(next){
         for(unsigned i=0;i<2;i++){
             fail_directory_open=i?EIO:EMFILE;
             CHECK(efs_query_disk_checkpoint(next,wm)==EFS_ERR_IO);
             fail_directory_open=0;
-            char current[EFS_MAX_PATH],target[256];snprintf(current,sizeof(current),"%s/current",cache);
-            ssize_t length=readlink(current,target,sizeof(target)-1);CHECK(length>0);
-            if(length>0){target[length]=0;CHECK(!strcmp(target,strrchr(legacy,'/')+1));}
-            CHECK(!access(legacy,F_OK));
+            CHECK(current_is(cache,first));CHECK(!access(first,F_OK));
         }
         fail_sync_kind='m';CHECK(efs_query_disk_checkpoint(next,wm)==EFS_ERR_IO);fail_sync_kind=0;
-        CHECK(!access(legacy,F_OK)); /* Failed publication preserves old current. */
-        CHECK(!efs_query_disk_checkpoint(next,wm));CHECK(access(legacy,F_OK)!=0);
-        /* The same tight aggregate budget now admits the second refresh;
-         * a leaked legacy generation would make this three generations. */
-        CHECK(!efs_query_disk_build(cache,source,next,4<<20,NULL,NULL,NULL,&later));
-        if(later){
-            CHECK(!efs_query_disk_checkpoint(later,wm));efs_query_disk_free(next);next=NULL;
-            strcpy(legacy,later->path);tag_legacy(later);
-            CHECK(!efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&next));
-            if(next){
-                CHECK(!efs_query_disk_checkpoint(next,wm));CHECK(!access(legacy,F_OK));
-                struct efs_query_rollup total;CHECK(!efs_query_disk_stats(later,EFS_ROOT_INO,&total) && total.tree_files==1);
-                efs_query_disk_free(later);later=NULL;CHECK(access(legacy,F_OK)!=0);
-            }
-        }
+        CHECK(current_is(cache,first)); /* Failed publication preserves old current. */
+        CHECK(!efs_query_disk_checkpoint(next,wm));CHECK(current_is(cache,next->path));
     }
-    /* A failed parent-directory fsync happens after current has switched.
-     * Keep the opaque owner through retry/abandonment so it cannot leak. */
-    for(unsigned mode=0;mode<2 && next;mode++){
-        char abandoned[EFS_MAX_PATH];strcpy(abandoned,next->path);tag_legacy(next);
-        efs_query_disk_free(next);next=NULL;
-        CHECK(!efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&next));
-        if(next){
-            fail_sync_kind='D';CHECK(efs_query_disk_checkpoint(next,wm)==EFS_ERR_IO);fail_sync_kind=0;
-            CHECK(!access(abandoned,F_OK));
-            if(!mode){CHECK(!efs_query_disk_checkpoint(next,wm));CHECK(access(abandoned,F_OK)!=0);}
-            else {
-                efs_query_disk_free(next);next=NULL;CHECK(!access(abandoned,F_OK));
-                CHECK(efs_query_disk_restore(cache,wm,4<<20,&next)==EFS_ERR_PROTO && !next);
-                CHECK(!efs_query_disk_build(cache,source,NULL,4<<20,NULL,NULL,NULL,&next));
-                if(next){CHECK(!efs_query_disk_checkpoint(next,wm));CHECK(access(abandoned,F_OK)!=0);}
-
-            }
-        }
+    char published[EFS_MAX_PATH];published[0]=0;
+    if(next)strcpy(published,next->path);
+    efs_query_disk_free(old);old=NULL;efs_query_disk_free(next);next=NULL;
+    for(uint64_t version=5;version<=6 && published[0];version++){
+        CHECK(!tag_format(published,version));
+        int lease=-1;
+        CHECK(efs_query_catalog_disk_recover(cache,&lease)==EFS_ERR_PROTO && lease<0);
+        CHECK(current_is(cache,published));CHECK(!access(published,F_OK));
+        char manifest[EFS_MAX_PATH];snprintf(manifest,sizeof(manifest),"%s/manifest",published);
+        CHECK(!access(manifest,F_OK)); /* Refused, never retired or rewritten. */
+        CHECK(efs_query_disk_restore(cache,wm,4<<20,&next)==EFS_ERR_PROTO && !next);
     }
-    aggregate_limit=saved;
+    if(published[0]){
+        CHECK(!tag_format(published,QUERY_DISK_FORMAT));
+        int lease=-1;CHECK(!efs_query_catalog_disk_recover(cache,&lease) && lease>=0);
+        if(lease>=0)close(lease);
+        CHECK(!efs_query_disk_restore(cache,wm,4<<20,&next) && next);
+    }
 done:
-    efs_query_disk_free(old);efs_query_disk_free(next);efs_query_disk_free(later);
+    efs_query_disk_free(old);efs_query_disk_free(next);
     efs_kv_lsm_snapshot_release(source);efs_kv_lsm_close(kv);
-    printf("legacy retirement: failed publication keeps current, opaque replacement, retained readers and tight-budget second refresh %s\n",failures?"FAIL":"PASS");
+    printf("query cache format: failed publication keeps current; v5/v6 current refused and untouched, v7 restores %s\n",failures?"FAIL":"PASS");
 }
 int main(void)
 {
     sort_budget_test();
-    legacy_retirement_test();
+    publication_and_format_test();
     raw_sync_batch_test();
     orphan_preflight_test();
     alias_batch_test();
