@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
-"""A partial load without a base never inherits a slot's UNCOND base.
+"""A partial load never inherits a slot's UNCOND base.
 
 A slot whose full-chunk body was published keeps base_gen UNCOND after the
-body is dropped. A later partial write whose chunk map was evicted loads
-zeros + its range with have_base=0; if the slot stayed UNCOND the flush
-skipped the merge-base fetch and published zeros + range as the whole chunk
-(W125 closure C1, 2026-10-21). dcache_apply_init must reset the base to 0
-then, keep UNCOND for a complete image, and set UNCOND for a full write.
+body is dropped. UNCOND publishes the slot image as the whole chunk with no
+CAS and no merge-base fetch, so a partial write must not inherit it:
+  - without a base (evicted map) the image is zeros + range (W125 closure C1,
+    2026-10-21);
+  - with a base, that base came from the local chunk entry, which the write
+    path does not refresh; a stale entry (a peer's newer object, or the
+    fence-masked pre-truncate row a GETCHUNKS reinstalled) loads old bytes or
+    zeros, and UNCOND published them over the committed chunk (W148 / alpha
+    K8, 2026-10-22).
+dcache_apply_init must set the loaded base generation (0 without a base) for
+any partial load, and UNCOND only for a full write.
 """
 from pathlib import Path
 import os, re, shlex, subprocess, tempfile
@@ -37,11 +43,19 @@ int main(void) {
     dcache_apply_init(&e, &in);
     assert(!e.have_base && e.base_gen == 0);
     assert(e.nrange == 1 && e.roff[0] == 1000 && e.rlen[0] == 100);
-    /* Complete image (fetched base): keeps UNCOND as before. */
+    /* Loaded base (W148/K8): the flush must merge onto a fresh fetch and
+     * CAS on it, so the slot takes the loaded generation, not UNCOND. */
     memset(&e, 0, sizeof(e)); e.base_gen = EFS_CHUNK_BASE_UNCOND;
-    in = (struct dcache_init){1, 77, 0, 0, 10};
+    in = (struct dcache_init){1, 77, 0, 1000, 100};
     dcache_apply_init(&e, &in);
-    assert(e.have_base && e.base_gen == EFS_CHUNK_BASE_UNCOND);
+    assert(e.have_base && e.base_gen == 77);
+    assert(e.nrange == 1 && e.roff[0] == 1000 && e.rlen[0] == 100);
+    /* Loaded base on a span-only row (generation 0): still not UNCOND. */
+    memset(&e, 0, sizeof(e)); e.base_gen = EFS_CHUNK_BASE_UNCOND;
+    in = (struct dcache_init){1, 0, 0, 0, 10};
+    dcache_apply_init(&e, &in);
+    assert(e.have_base && e.base_gen == 0);
+    in = (struct dcache_init){1, 77, 0, 0, 10};
     /* Ordinary slot: the fetched base generation. */
     memset(&e, 0, sizeof(e));
     dcache_apply_init(&e, &in);
@@ -51,7 +65,7 @@ int main(void) {
     in = (struct dcache_init){.full = 1};
     dcache_apply_init(&e, &in);
     assert(e.have_base && e.base_gen == EFS_CHUNK_BASE_UNCOND && e.nrange == 0);
-    puts("partial uncond: a baseless partial load resets an UNCOND slot to merge PASS");
+    puts("partial uncond: a partial load never inherits an UNCOND slot base PASS");
     return 0;
 }
 '''

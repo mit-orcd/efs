@@ -28,7 +28,7 @@ any version; a read matching none is re-read 3 times over ~6 s (another
 client's open-while-writing may legitimately show a partial state) and only
 a state that never settles counts as a mismatch ("transient" otherwise).
 """
-import argparse, errno, math, os, random, sys, threading, time
+import argparse, errno, hashlib, json, math, os, random, subprocess, sys, threading, time
 
 import functools
 MAX_VERSIONS = 6
@@ -63,6 +63,8 @@ ap.add_argument("--remote", action="store_true"); ap.add_argument("--deleted-out
 ap.add_argument("--modifiers", type=int, default=0)
 ap.add_argument("--mismatch-dir", help="save each mismatching local read as DIR/N/NAME "
                "(N counts mismatches) for w125_modify_inspect.py DIR/N NAME")
+ap.add_argument("--keep-dir", help="hard-link each mismatching file here (same mount)")
+ap.add_argument("--mgmt", help="'EFS-MGMT ADDR' to capture raft-getattr/raft-getchunks at a mismatch")
 a = ap.parse_args()
 os.makedirs(a.root, exist_ok=True)
 lock = threading.Lock()
@@ -84,16 +86,46 @@ def fail(kind, msg):
         if len(errs) < 20: errs.append("%s %s" % (kind, msg))
 
 saved = [0]
-def save_mismatch(name, got):
+def save_mismatch(name, got, v, want):
     """Keep the bytes this read returned: a transient mismatch is gone by the
-    time the store can be inspected. Saved under --mismatch-dir (outside Git)."""
+    time the store can be inspected. Saved under --mismatch-dir (outside Git)
+    as DIR/N/NAME plus DIR/N/meta.json (expected version, lengths, sha256,
+    first differing offset, inode, time). The caller holds the file's lock,
+    so the expected version is the one this read was checked against.
+    --keep-dir hard-links the file there (on the same mount) so a deleter
+    cannot destroy its server rows; --mgmt runs 'MGMT raft-getattr INO' and
+    'MGMT raft-getchunks INO' at once and saves their output."""
     if not a.mismatch_dir: return
     with lock:
         saved[0] += 1; n = saved[0]
     if n > 20: return
-    path = os.path.join(a.mismatch_dir, str(n), name)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "wb") as f: f.write(got)
+    d = os.path.join(a.mismatch_dir, str(n)); path = os.path.join(d, name)
+    meta = dict(name=name, version=v, expected_len=len(want), actual_len=len(got),
+                expected_sha256=hashlib.sha256(want).hexdigest(),
+                actual_sha256=hashlib.sha256(got).hexdigest(),
+                first_diff=next((i for i in range(min(len(got), len(want))) if got[i] != want[i]),
+                                min(len(got), len(want))),
+                time=time.time())
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as f: f.write(got)
+        src = os.path.join(a.root, name)
+        meta["ino"] = os.stat(src).st_ino
+        if a.keep_dir:
+            os.makedirs(a.keep_dir, exist_ok=True)
+            os.link(src, os.path.join(a.keep_dir, str(n)))
+            meta["kept"] = os.path.join(a.keep_dir, str(n))
+        if a.mgmt:
+            for cmd in ("raft-getattr", "raft-getchunks"):
+                m = a.mgmt.split()
+                r = subprocess.run([m[0], cmd] + m[1:] + [str(meta["ino"])],
+                                   capture_output=True, text=True, timeout=30)
+                with open(os.path.join(d, cmd + ".txt"), "w") as f:
+                    f.write(r.stdout + r.stderr + "rc=%d\n" % r.returncode)
+    except (OSError, subprocess.SubprocessError) as e:
+        meta["artifact_error"] = str(e)
+        print("mismatch artifact error %s: %s" % (name, e), file=sys.stderr, flush=True)
+    with open(os.path.join(d, "meta.json"), "w") as f: json.dump(meta, f, indent=1)
 
 def writer(w):
     i = 0
@@ -141,7 +173,7 @@ def reader(_):
             except OSError as e: fail("errors", "read %s: %s" % (name, e)); continue
             if got != want:
                 fail("mismatch", "%s v%d: %d bytes, expected %d" % (name, ver.get(name, 0), len(got), len(want)))
-                save_mismatch(name, got)
+                save_mismatch(name, got, ver.get(name, 0), want)
             else: bump("read"); bump("rbytes", len(got))
         finally:
             l.release()

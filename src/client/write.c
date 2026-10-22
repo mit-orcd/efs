@@ -5568,16 +5568,20 @@ static void dcache_apply_init(struct dcache_ent *e,
         return;
     }
     e->have_base = in->have_base;
-    /* UNCOND publishes the image as the whole chunk. A slot keeps it after
-     * its full-chunk body was published and dropped (D23), so a later
-     * partial load onto that slot without a base (no local row: evicted
-     * map) must not inherit it: its zeros+range image would replace the
-     * chunk. Base 0 makes the flush pull the row and merge onto it
-     * (closure C1: 57% of 2,000 evicted files lost a chunk). */
-    if (!in->have_base)
-        e->base_gen = 0;
-    else if (e->base_gen != EFS_CHUNK_BASE_UNCOND)
-        e->base_gen = in->base_gen;
+    /* UNCOND publishes the slot's image as the whole chunk with no CAS and
+     * no merge-base fetch. A slot keeps it after its full-chunk body was
+     * published and dropped (D23); a partial load onto that slot must
+     * never inherit it, with or without a base. Without a base (evicted
+     * map) the image is zeros + range (closure C1: 57% of 2,000 evicted
+     * files lost a chunk). With a base, the base came from the local chunk
+     * entry, which the write path never refreshes: a stale entry (a peer's
+     * newer object, or a GETCHUNKS that reinstalled the fence-masked
+     * pre-truncate row) loads old bytes or zeros, and UNCOND published them
+     * over the committed chunk (W148/K8, 2026-10-22: every bad chunk was
+     * zeros + one overwrite's bytes after a truncate(0) rewrite). The base
+     * generation makes the flush pull the row, fetch it and overlay only
+     * this write's ranges, under a CAS on what it fetched. */
+    e->base_gen = in->have_base ? in->base_gen : 0;
     e->nrange = 0;
     dcache_add_range(e, in->off, in->len);
 }

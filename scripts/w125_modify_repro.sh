@@ -11,7 +11,10 @@
 # (or $W125_RUN), so a later run never removes an earlier one's store. OUT
 # gets run.txt (run directory, arguments, binary sha256), a.txt (progress,
 # final verify, first 20 errors), fuse.log and, for each mismatching read,
-# the bytes it returned under mismatch/N/NAME; inspect them with
+# the bytes it returned under mismatch/N/NAME with mismatch/N/meta.json and
+# the server's raft-getattr/raft-getchunks output captured at that moment;
+# the file is hard-linked under RUN/mnt/keep/N so its rows survive the
+# deleters. OUT must not exist. Inspect the bytes with
 #   scripts/w125_modify_inspect.py OUT/mismatch/N NAME
 # On PASS the stopped store is deleted; on any failure it is kept for
 # inspection and its path is printed. Raw output stays outside Git.
@@ -23,7 +26,8 @@ REL=$1; OUT=$2; PORT=${3:-17740}; SECS=${4:-600}; AGE=${5:-3000}
 HERE=$(cd "$(dirname "$0")" && pwd)
 RUN=${W125_RUN:-/tmp/w125-modify-$PORT-$(date -u +%Y%m%dT%H%M%SZ)}
 [ -e "$RUN" ] && { echo "w125_modify_repro: $RUN exists; refusing to reuse it" >&2; exit 2; }
-mkdir -p "$OUT"
+[ -e "$OUT" ] && { echo "w125_modify_repro: $OUT exists; refusing to reuse it" >&2; exit 2; }
+mkdir -p "$OUT" || exit 2
 export LD_LIBRARY_PATH=/data1/efs/deps/libfuse/lib64 EFS_PACK_MIN_AGE_MS=$AGE
 {
     echo "run=$RUN port=$PORT seconds=$SECS min_age_ms=$AGE rel=$REL"
@@ -37,15 +41,20 @@ if ! "$REL/scripts/w125_p0_cluster.sh" start "$REL" "$RUN" "$PORT" > "$OUT/start
     exit 2
 fi
 python3 "$HERE/w125_concurrent.py" "$RUN/mnt/c" "$SECS" --writers 4 --readers 4 --deleters 2 \
-    --modifiers 4 --mismatch-dir "$OUT/mismatch" > "$OUT/a.txt" 2>&1
+    --modifiers 4 --mismatch-dir "$OUT/mismatch" --keep-dir "$RUN/mnt/keep" \
+    --mgmt "$REL/efs-mgmt ${W125_ADDR:-10.1.99.1}:$((PORT+1))" > "$OUT/a.txt" 2>&1
 rc=$?
 echo "RC=$rc" >> "$OUT/a.txt"
 cp "$RUN/logs/fuse.log" "$OUT/fuse.log" 2>/dev/null
 "$REL/scripts/w125_p0_cluster.sh" stop "$REL" "$RUN" "$PORT" > "$OUT/stop.txt" 2>&1
 stop_rc=$?
 echo "finished=$(date -u +%FT%TZ) workload_rc=$rc stop_rc=$stop_rc" >> "$OUT/run.txt"
+# PASS deletes the store only when the mount is really gone (the stop
+# helper's status does not prove it).
+findmnt -rn "$RUN/mnt" > /dev/null 2>&1 && stop_rc=3
 if [ $rc -eq 0 ] && [ $stop_rc -eq 0 ]; then
-    rm -rf "$RUN"
+    if [ -x "$HOME/bin/edelete" ]; then "$HOME/bin/edelete" --force --delete "$RUN" > /dev/null
+    else rm -rf "$RUN"; fi
     echo PASS > "$OUT/done"
     exit 0
 fi
