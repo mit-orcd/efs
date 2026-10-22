@@ -64,6 +64,13 @@ scheduler's both-groups-local assumption remain.
 Earlier reviews and responses are kept as superseded history.
 Replaces the declined 256 MiB EBUSY refusal; W43 stays open.
 
+[orcd-test tiny-files slow-client profile](orcd-test-tiny-files-profile-20261022.md):
+**explained, no fix.** The 2× per-client gap in the 7 × 10M tiny-files run is metadata-group
+placement: inode parity put 4 client trees in group 2 and 3 in group 0, and one node
+led both groups. Commit-to-apply latency on that leader is the limit, not server CPU. New:
+a group-2 follower received no appends for 30 minutes after a snapshot-time
+reconnect, until a snapshot install caught it up.
+
 [orcd-test devel suites over TCP and RDMA](orcd-test-devel-suites-20261022.md):
 **PASS** on devel `08cc16af4`, `.efs` on, both transports: POSIX all 218/221 (3 SKIP by
 design/budget) on 7 clients, persist across a full restart and transport switch,
