@@ -121,7 +121,10 @@ links in 96 pages now name the archived path. Read one with
   LOOKUP/GETATTR at a group follower took `h->mu` for the leader hint (22%
   of lock waits). Fixed, deployed in `784bcc6ee`, verified and closed.
 - Observation: at ~16 M files, leader terms move under load (group 2:
-  58 → 63 in 15 min). Cause not shown; not filed.
+  58 → 63 in 15 min).
+- New [W145](../backlog/work-items.md#w145), OPEN: n2, deposed as group-2
+  leader, never catches up (553 K entries behind, no log line). Clients
+  routed to n2 wait. Cause not identified.
 
 [W126 on orcd-mini, `8fb4247ad` A/B](orcd-mini-w126-ab-8fb4247ad-20261022.md):
 **deployed. Lock-wait gate PASS; create-rate gate FAIL.**

@@ -126,6 +126,28 @@ existing PIDs). A second node9901 mount for another session's suite
   does not show the cause.
 - Raw: Mac `p3/`; node paths as for p1, under `p3`.
 
+## p4 on `784bcc6ee` under the user's own load — 2026-10-22 13:01Z
+
+Load: the user's node9901 `tiny_files.py … tiny-files1` writer, and the
+node9900 32M run restarted with `--resume`.
+- **Throughput.** The node9901 writer managed 284 files/s. The node9900
+  rate was not captured, because `topio.sh` sorted numerically for `join`;
+  it now sorts lexically.
+- **New: [W145](../backlog/work-items.md#w145).** n2, deposed as group-2
+  leader at 12:54:49Z, never catches up. Its pump idles while n1 re-reads
+  cold log entries in `send_ae` (10.7% of efsd CPU). Clients routed to n2
+  wait in `read-sleep`/`apply-sleep` (400 ms each).
+
+  The deposition followed this run's own 3 s DWARF capture of the leader
+  in p3. Leader DWARF captures are now opt-in (`LEADER_DWARF=1`).
+- **efsd CPU** was dominated by background deletes: the GC deleter's
+  superseded-fragment deletes, mostly a parent-directory fsync per delete
+  (`fragment_parent_sync` 20.8%), with 178 K reclaims pending. Packer
+  decoding and retire passes added more. No new item for these: they are
+  the known fence-fsync cost, also in the 2026-10-17 GC/catalog notes.
+- Raw: Mac `p4/`; node9901 `/data1/efs/prof/orcd-08cc16af4/p4`, including
+  `oncpu-n1.data`, `oncpu-n2.data` and `dwarf-n2.data`.
+
 ## Reproduce
 
 Scripts are kept with the raw captures in

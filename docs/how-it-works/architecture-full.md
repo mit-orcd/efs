@@ -1672,7 +1672,10 @@ links in 96 pages now name the archived path. Read one with
   LOOKUP/GETATTR at a group follower took `h->mu` for the leader hint (22%
   of lock waits). Fixed, deployed in `784bcc6ee`, verified and closed.
 - Observation: at ~16 M files, leader terms move under load (group 2:
-  58 → 63 in 15 min). Cause not shown; not filed.
+  58 → 63 in 15 min).
+- New [W145](#w145), OPEN: n2, deposed as group-2
+  leader, never catches up (553 K entries behind, no log line). Clients
+  routed to n2 wait. Cause not identified.
 
 [W126 on orcd-mini, `8fb4247ad` A/B](../status/orcd-mini-w126-ab-8fb4247ad-20261022.md):
 **deployed. Lock-wait gate PASS; create-rate gate FAIL.**
@@ -2346,6 +2349,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | cleanup-leftovers | **W142** · store `del_if_sum` and RDMA zero-copy region table without a reader | maintenance | OPEN | [item](#w142) |
 | client-getenv | **W143** · efs-fuse reads diagnostic environment switches on per-op paths (~4% of client CPU) | performance | Closed (Oct 22): both gates recorded. `make test` 816/816 with one environmental docs-check failure; after deploy (`46496416e`), `getenv` is gone from both clients' on-CPU profiles under the same load (was ~4% of efs-fuse CPU) | [item](#w143) · [evidence](../status/orcd-mini-profile-08cc16af4-20261022.md) |
 | leader-hint-lock | **W144** · LOOKUP/GETATTR on a group follower takes `h->mu` for the leader hint (22% of a split leader's lock waits) | performance | Closed (Oct 22): both gates recorded. `make test` 816/816 with one environmental docs-check failure; routing tests PASS; after deploy (`784bcc6ee`) with split leadership, the leader-hint lock site is gone (was 22% of n1's lock waits) | [item](#w144) · [evidence](../status/orcd-mini-profile-08cc16af4-20261022.md) |
+| deposed-leader-stuck | **W145** · a deposed group leader never catches up as a follower (orcd-mini n2, group 2, 553 K entries behind, no log line) | liveness | OPEN: observed 2026-10-22 on `784bcc6ee` after a 3 s perf stall of the leader; cause not identified; per-peer progress in `raft-status` and a private stall reproduction first | [item](#w145) · [evidence](../status/orcd-mini-profile-08cc16af4-20261022.md) |
 | orcd-qualification | **W119** · ORCD normal-operation RDMA failures and blocked clean stop | correctness / liveness | OPEN: 150 concurrent failures /846 NOTRUN; cross-host peer59/67; enabled queries EBUSY; retained writes block clean stop. TCP/commands-off rerun also FAILs (120 failures,520 NOTRUN; peer61/67; clean stop refused); all23 successfully prepared cold cases verify after authorized forced restart. [TCP evidence](../status/orcd-tcp-direct-disabled-20261015.md). Preserve failures, isolate causes and rerun original gates; W100 stays closed. [AMD follow-up](../status/amd-rdma-posix-20261015.md): native/serial/peer/cold/degraded PASS at `c8d057391`; one-mount jobs16 remains215/216 with unusual-name timeout. [Async durability follow-up](../status/amd-async-durability-20261015.md) at `c4178ea81`: scoped durability/native/serial/peer/cold/degraded PASS; jobs16 FAIL214/216 (unusual names, concurrent creates,15s) | [Raft/KV follow-up](../status/orcd-raft-kv-20261016.md) · [evidence and gates](../status/orcd-devel-qualification-20261015.md) · [item](#w119) |
 | immediate-readback | **W121** · successful fsync followed by previous-file payload | data correctness | OPEN: 255/123,932 exact readbacks failed across both queued-vote variants on ORCD native RDMA/direct with enabled `.efs`; unique512-byte files, no expiry. Diagnosed FUSE kernel fork/read page-pinning defect; kernel remediation deferred by user. Fork-isolated experiments do not close W121 | [diagnosis](../status/orcd-w121-fork-read-20261016.md) · [experiment](../status/orcd-queued-read-vote-20261016.md) · [item](#w121) |
 | qualification-fixtures | **W120** · stale extracted LOOKUP stub and command cleanup ownership check | verification correctness | OPEN (partial fix): AMD `f6235bb73` repairs the LOOKUP host context and checks reader identity; native/docs PASS at `85a9ad6b5`. Enabled-command cleanup ownership remains NOTRUN here and still needs correction/acceptance. [AMD evidence](../status/amd-rdma-posix-20261015.md); preserve original failures | [evidence](../status/orcd-devel-qualification-20261015.md) · [item](#w120) |
@@ -8758,6 +8762,62 @@ assertions are unchanged and PASS. `test_host_cover_route` and
 - After deploy, with split leadership, `host_namespace_leader_hint` is gone
   from the leader-node lock waits. One node leading both groups does not
   exercise the path.
+
+<a id="w145"></a>
+### W145 — A deposed group leader never catches up as a follower
+
+**Liveness; opened 2026-10-22; OPEN, cause not yet identified.** Seen on
+orcd-mini `784bcc6ee` under two `tiny_files.py` writers at ~16 M files
+([profile, p4](../status/orcd-mini-profile-08cc16af4-20261022.md)).
+
+**What happened.**
+- n2 led group 2 (term ≤ 62). At 12:54:41–44Z a 3 s DWARF
+  context-switch capture (`perf record -e cs --call-graph dwarf,16384`)
+  stalled it.
+- By 12:54:49Z n1 led group 2 at term 63. n2 stopped applying at index
+  30,929,219.
+- n2 has not advanced since. At 13:07:53Z it was 553 K entries behind
+  (leader commit 31,482,465), and the gap keeps growing. Group 0 on the
+  same n2 is in sync.
+- n1 and n3 keep quorum, so the group stays available. But LOOKUP/GETATTR
+  routed to n2 for group 2 waits for that applied index. n2 logged ~6 K
+  `read-sleep` and ~7.6 K `apply-sleep` lines (each 400 ms) within 15
+  minutes. Client creates fell to ~284 files/s on node9901.
+- No efsd line on any node names a rejection, conflict, truncation or
+  snapshot transfer for this.
+
+**Evidence.**
+- n2's Raft pump is idle: 267 of 273 blocked switches are `poll` in
+  `host_pump`.
+- The leader n1 spends 10.7% of efsd CPU in `send_ae`. It repeatedly reads
+  cold log entries (`disk_get` → `index_cold_read`, with a `madvise` per
+  read and page faults; `raft_log_read_command` → `pread`) and blake3-hashes
+  the batch. These are catch-up batches that never take effect.
+- `raft-status` shows no per-peer progress (match/next index, in-flight
+  batch), so the leader's view of n2 cannot be read.
+
+**Leads, not verified.**
+- As the deposed leader, n2 may hold an uncommitted suffix that conflicts
+  with term 63. If the conflict-truncation and reject path does not
+  converge, the leader resends the same window (one outstanding batch per
+  behind peer, in `send_ae`) forever.
+- Or batches or replies for n2 are dropped: `send_ready` is false, or
+  `ae_inflight` is never cleared.
+
+**Next.**
+- Add per-peer progress (`next_index`, `match_index`, `ae_inflight` age,
+  reject count) to `raft-status`, plus a rate-limited log line on AE
+  reject and conflict truncation.
+- Reproduce on a private 3-node cluster: stall a group leader for 3 s
+  (SIGSTOP or the same perf capture) under a create load, then check that
+  the old leader catches up.
+
+**Gate.** A deposed leader catches up within a bounded time after a
+3 s stall under load, on a private cluster and on orcd-mini.
+
+**Tooling note.** DWARF capture of a busy leader can stall it long enough to
+depose it. The profiling scripts now skip leader DWARF captures unless
+asked.
 
 
 ## Appendix 6 — Naming

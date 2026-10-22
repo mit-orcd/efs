@@ -6090,3 +6090,59 @@ assertions are unchanged and PASS. `test_host_cover_route` and
 - After deploy, with split leadership, `host_namespace_leader_hint` is gone
   from the leader-node lock waits. One node leading both groups does not
   exercise the path.
+
+<a id="w145"></a>
+## W145 — A deposed group leader never catches up as a follower
+
+**Liveness; opened 2026-10-22; OPEN, cause not yet identified.** Seen on
+orcd-mini `784bcc6ee` under two `tiny_files.py` writers at ~16 M files
+([profile, p4](../status/orcd-mini-profile-08cc16af4-20261022.md)).
+
+**What happened.**
+- n2 led group 2 (term ≤ 62). At 12:54:41–44Z a 3 s DWARF
+  context-switch capture (`perf record -e cs --call-graph dwarf,16384`)
+  stalled it.
+- By 12:54:49Z n1 led group 2 at term 63. n2 stopped applying at index
+  30,929,219.
+- n2 has not advanced since. At 13:07:53Z it was 553 K entries behind
+  (leader commit 31,482,465), and the gap keeps growing. Group 0 on the
+  same n2 is in sync.
+- n1 and n3 keep quorum, so the group stays available. But LOOKUP/GETATTR
+  routed to n2 for group 2 waits for that applied index. n2 logged ~6 K
+  `read-sleep` and ~7.6 K `apply-sleep` lines (each 400 ms) within 15
+  minutes. Client creates fell to ~284 files/s on node9901.
+- No efsd line on any node names a rejection, conflict, truncation or
+  snapshot transfer for this.
+
+**Evidence.**
+- n2's Raft pump is idle: 267 of 273 blocked switches are `poll` in
+  `host_pump`.
+- The leader n1 spends 10.7% of efsd CPU in `send_ae`. It repeatedly reads
+  cold log entries (`disk_get` → `index_cold_read`, with a `madvise` per
+  read and page faults; `raft_log_read_command` → `pread`) and blake3-hashes
+  the batch. These are catch-up batches that never take effect.
+- `raft-status` shows no per-peer progress (match/next index, in-flight
+  batch), so the leader's view of n2 cannot be read.
+
+**Leads, not verified.**
+- As the deposed leader, n2 may hold an uncommitted suffix that conflicts
+  with term 63. If the conflict-truncation and reject path does not
+  converge, the leader resends the same window (one outstanding batch per
+  behind peer, in `send_ae`) forever.
+- Or batches or replies for n2 are dropped: `send_ready` is false, or
+  `ae_inflight` is never cleared.
+
+**Next.**
+- Add per-peer progress (`next_index`, `match_index`, `ae_inflight` age,
+  reject count) to `raft-status`, plus a rate-limited log line on AE
+  reject and conflict truncation.
+- Reproduce on a private 3-node cluster: stall a group leader for 3 s
+  (SIGSTOP or the same perf capture) under a create load, then check that
+  the old leader catches up.
+
+**Gate.** A deposed leader catches up within a bounded time after a
+3 s stall under load, on a private cluster and on orcd-mini.
+
+**Tooling note.** DWARF capture of a busy leader can stall it long enough to
+depose it. The profiling scripts now skip leader DWARF captures unless
+asked.
