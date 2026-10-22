@@ -1569,14 +1569,14 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
-[K1 / W145 remaining parts](../status/k01-w145-remaining-20261022.md): branch
-`devel-k01`. **Near-follower snapshot fixed (a match-0 probe ACK reset
+[K1 / W145 remaining parts](../status/k01-w145-remaining-20261022.md): **merged into
+devel (`86b6ef567`). Near-follower snapshot fixed (a match-0 probe ACK reset
 `next_index` to 1); 30,929,219@62 was not acknowledged to any client;
 pre-vote ends restart election storms (efs1 cluster: terms +19 before,
 +1 after); efsd stops are bounded (handlers close before the next
 request, 40 s drain).** Unit tests PASS; orcd-mini gates NOTRUN.
 [K16 / W75 identity-bound fragment record](../status/k16-w75-identity-format-20261022.md):
-**branch `devel-k16`, not merged.** Fragment record format 2 binds export,
+**merged into devel (`e9ca0d07b`); fresh format required.** Fragment record format 2 binds export,
 inode, chunk, candidate generation, fragment index and length to the payload;
 GET/GC/segment reads refuse unknown formats and mismatched identities; root
 format 0 refuses startup. Inode generation and export salt are not bound.
