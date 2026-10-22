@@ -68,6 +68,15 @@ struct efs_raft {
     unsigned peer_ack_bits;
     uint64_t ticks; /* efs_raft_tick count, for ae_inflight aging */
     uint64_t peer_boot[EFS_RAFT_MAX_PEERS];
+    /* W145: why a peer is (not) catching up; see efs_raft_peer_progress. */
+    uint64_t peer_ae_sent[EFS_RAFT_MAX_PEERS];
+    uint64_t peer_ae_again[EFS_RAFT_MAX_PEERS];
+    uint64_t peer_ae_blocked[EFS_RAFT_MAX_PEERS];
+    uint64_t peer_ae_err[EFS_RAFT_MAX_PEERS];
+    uint64_t peer_rejects[EFS_RAFT_MAX_PEERS];
+    uint64_t peer_reject_hint[EFS_RAFT_MAX_PEERS];
+    uint64_t peer_reject_log_tick[EFS_RAFT_MAX_PEERS];
+    uint64_t ae_rejects_sent, ae_reject_log_tick, ae_proto_drops;
     unsigned vote_bits;
     uint32_t election_elapsed;
     uint32_t election_ticks;
@@ -952,6 +961,7 @@ static int send_ae(struct efs_raft *r, int to, int data_only)
          * Do not allocate/unpack another one just to refuse it in send().
          * A fresh read still needs its context delivered as an empty probe. */
         if (r->send_ready && !r->send_ready(r->net,to,r->group)) {
+            r->peer_ae_blocked[to]++;
             /* An AE_REP's data-only follow-up must not generate another
              * probe: probe ACK -> blocked data -> probe would self-feed. */
             if (!data_only && r->read_in_flight==1) return send_commit_probe(r,to);
@@ -1031,6 +1041,11 @@ static int send_ae(struct efs_raft *r, int to, int data_only)
         }
     }
     rc = send_msg(r, &m);
+    if (m.nentries) {
+        if (rc == EFS_OK) r->peer_ae_sent[to]++;
+        else if (rc == EFS_ERR_AGAIN) r->peer_ae_again[to]++;
+        else r->peer_ae_err[to]++;
+    }
     if (rc == EFS_OK) {
         if (m.nentries && BO_ON()) {
             enum efs_batch_counter why = !r->ae_inflight[to] ? BO_AE_INITIAL :
@@ -1314,6 +1329,40 @@ static int on_vote_rep(struct efs_raft *r, const struct efs_raft_msg *in)
     return EFS_OK;
 }
 
+/* W145: a follower that keeps refusing its leader must say so. One line
+ * per REJECT_LOG_TICKS (10 s at 5 ms ticks), plus the running count. */
+#define REJECT_LOG_TICKS 2000u
+static void ae_reject_note(struct efs_raft *r, const struct efs_raft_msg *in,
+                           uint64_t last_i, const char *why)
+{
+    r->ae_rejects_sent++;
+    if (r->ae_rejects_sent != 1 &&
+        r->ticks - r->ae_reject_log_tick < REJECT_LOG_TICKS)
+        return;
+    r->ae_reject_log_tick = r->ticks;
+    fprintf(stderr, "raft: group=%u rejecting AE from=%d term=%llu prev=%llu/%llu "
+            "last=%llu commit=%llu why=%s rejects=%llu\n", r->group, in->from,
+            (unsigned long long)in->term, (unsigned long long)in->prev_index,
+            (unsigned long long)in->prev_term, (unsigned long long)last_i,
+            (unsigned long long)r->commit_index, why,
+            (unsigned long long)r->ae_rejects_sent);
+}
+
+/* A conflict at or below commit means this log disagrees with a committed
+ * entry: refuse without a reply (EFS_ERR_PROTO), but never silently. */
+static int ae_proto_drop(struct efs_raft *r, const struct efs_raft_msg *in,
+                         uint64_t idx)
+{
+    r->ae_proto_drops++;
+    fprintf(stderr, "raft: group=%u AE conflict at index=%llu <= commit=%llu "
+            "from=%d term=%llu prev=%llu/%llu: refused without reply (drops=%llu)\n",
+            r->group, (unsigned long long)idx, (unsigned long long)r->commit_index,
+            in->from, (unsigned long long)in->term,
+            (unsigned long long)in->prev_index, (unsigned long long)in->prev_term,
+            (unsigned long long)r->ae_proto_drops);
+    return EFS_ERR_PROTO;
+}
+
 static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
 {
     struct efs_raft_msg m;
@@ -1328,6 +1377,7 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
     m.last_log_index = in->last_log_index; /* echo ReadIndex context */
     if (in->term < r->current_term) {
         m.success = 0;
+        ae_reject_note(r, in, 0, "stale-term");
         return send_msg(r, &m);
     }
     read_proof_forget(r);
@@ -1354,6 +1404,7 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
                     (unsigned long long)in->prev_index, (unsigned long long)last_i);
         m.success = 0;
         m.match_index = last_i;
+        ae_reject_note(r, in, last_i, "prev-beyond-log");
         return send_msg(r, &m);
     }
     rc = log_term(r, in->prev_index, &pt);
@@ -1367,7 +1418,8 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
                     (unsigned long long)pt, (unsigned long long)in->prev_term, rc,
                     (unsigned long long)in->prev_index);
         if (in->prev_index > r->snap_idx) {
-            if (in->prev_index <= r->commit_index) return EFS_ERR_PROTO;
+            if (in->prev_index <= r->commit_index)
+                return ae_proto_drop(r, in, in->prev_index);
             rc = r->store->truncate_from(r->store_ctx, in->prev_index);
             if (rc == EFS_OK) rc = reload_cfg_from_log(r);
             if (rc != EFS_OK) { fence_storage(r); return rc; }
@@ -1375,6 +1427,7 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
         m.success = 0;
         last_log(r, &last_i, &last_t);
         m.match_index = last_i;
+        ae_reject_note(r, in, last_i, rc == EFS_ERR_NOT_FOUND ? "prev-missing" : "prev-term");
         return send_msg(r, &m);
     }
     if (in->nentries) {
@@ -1408,7 +1461,7 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
                  * applied per batched entry.) */
                 if (idx <= r->commit_index) {
                     if (batch) (void)receive_store(r,RECEIVE_END,0,0,0,NULL,0);
-                    return EFS_ERR_PROTO;
+                    return ae_proto_drop(r, in, idx);
                 }
                 rc = receive_store(r,RECEIVE_TRUNCATE,idx,0,0,NULL,0);
                 if (rc == EFS_OK) rc = reload_cfg_from_log(r);
@@ -1531,6 +1584,18 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
      * inflight set held the resend until the next heartbeat (apply sat
      * one index behind for 50 ms; the wire ACK was ~10 us). */
     r->ae_inflight[in->from] = 0;
+    r->peer_rejects[in->from]++;
+    r->peer_reject_hint[in->from] = in->match_index;
+    if (r->peer_rejects[in->from] == 1 ||
+        r->ticks - r->peer_reject_log_tick[in->from] >= REJECT_LOG_TICKS) {
+        r->peer_reject_log_tick[in->from] = r->ticks;
+        fprintf(stderr, "raft: group=%u AE rejected by peer=%d hint=%llu "
+                "next=%llu match=%llu rejects=%llu\n", r->group, in->from,
+                (unsigned long long)in->match_index,
+                (unsigned long long)r->next_index[in->from],
+                (unsigned long long)r->match_index[in->from],
+                (unsigned long long)r->peer_rejects[in->from]);
+    }
     {
         uint64_t ni = in->match_index + 1, last_i = 0, last_t = 0;
         last_log(r, &last_i, &last_t);
@@ -2451,6 +2516,40 @@ uint64_t efs_raft_applied(const struct efs_raft *r)
 uint64_t efs_raft_snap_index(const struct efs_raft *r)
 {
     return r ? r->snap_idx : 0;
+}
+
+int efs_raft_peer_progress(const struct efs_raft *r, int peer,
+                           struct efs_raft_peer_progress *out)
+{
+    if (!r || !out || peer < 0 || peer >= EFS_RAFT_MAX_PEERS)
+        return EFS_ERR_INVAL;
+    memset(out, 0, sizeof(*out));
+    out->next_index = r->next_index[peer];
+    out->match_index = r->match_index[peer];
+    out->inflight = r->ae_inflight[peer];
+    out->inflight_end = r->ae_inflight[peer] ? r->ae_inflight_end[peer] : 0;
+    out->inflight_age = r->ae_inflight[peer] ?
+        r->ticks - r->ae_inflight_tick[peer] : UINT64_MAX;
+    out->ack_age = r->peer_ack_tick[peer] ?
+        r->ticks - r->peer_ack_tick[peer] : UINT64_MAX;
+    out->batches_sent = r->peer_ae_sent[peer];
+    out->send_again = r->peer_ae_again[peer];
+    out->send_blocked = r->peer_ae_blocked[peer];
+    out->send_errors = r->peer_ae_err[peer];
+    out->rejects = r->peer_rejects[peer];
+    out->reject_hint = r->peer_reject_hint[peer];
+    return EFS_OK;
+}
+
+int efs_raft_log_progress(struct efs_raft *r, struct efs_raft_log_progress *out)
+{
+    if (!r || !out)
+        return EFS_ERR_INVAL;
+    memset(out, 0, sizeof(*out));
+    out->snap_index = r->snap_idx;
+    out->rejects_sent = r->ae_rejects_sent;
+    out->proto_drops = r->ae_proto_drops;
+    return last_log(r, &out->last_index, &out->last_term);
 }
 
 uint64_t efs_raft_log_floor(const struct efs_raft *r)

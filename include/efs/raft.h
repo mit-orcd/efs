@@ -289,6 +289,31 @@ int efs_raft_tracks_log_bytes(const struct efs_raft *r);
 uint64_t efs_raft_log_new_bytes(const struct efs_raft *r);
 int efs_raft_leader(const struct efs_raft *r); /* -1 if unknown */
 
+/* W145: per-peer replication progress as this node sees it (meaningful on
+ * the leader), plus counters that name why a peer is not catching up.
+ * Ages are in ticks; UINT64_MAX = never. Counters run since start. */
+struct efs_raft_peer_progress {
+    uint64_t next_index, match_index;
+    uint64_t inflight, inflight_end; /* outstanding catch-up batch; 0 = none */
+    uint64_t inflight_age, ack_age;
+    uint64_t batches_sent;  /* entry batches handed to the transport */
+    uint64_t send_again;    /* entry batches refused: peer outbox full */
+    uint64_t send_blocked;  /* entry batches not built: host not ready */
+    uint64_t send_errors;   /* entry batches failed with another error */
+    uint64_t rejects;       /* AppendEntries rejections from this peer */
+    uint64_t reject_hint;   /* match_index carried by the last rejection */
+};
+int efs_raft_peer_progress(const struct efs_raft *r, int peer,
+                           struct efs_raft_peer_progress *out);
+/* This replica's log and follower-side counters. Reads the log tail, so
+ * call it from status paths only. */
+struct efs_raft_log_progress {
+    uint64_t last_index, last_term, snap_index;
+    uint64_t rejects_sent;  /* AppendEntries this follower refused */
+    uint64_t proto_drops;   /* refused with no reply: conflict at or below commit */
+};
+int efs_raft_log_progress(struct efs_raft *r, struct efs_raft_log_progress *out);
+
 /* Committed voting set (C_old). During joint this is still C_old. */
 uint32_t efs_raft_voters(const struct efs_raft *r);
 /* 1 if a joint config is committed (C_new not yet COLD-committed). */

@@ -456,6 +456,17 @@ struct efs_msg_raft_mkfs_reply {
 
 #define EFS_RAFT_HOST_MAX_GROUPS 4
 
+/* Per-peer replication progress in raft-status (efs_raft_peer_progress).
+ * Ages are Raft ticks (5 ms); UINT64_MAX = never. */
+#define EFS_RAFT_STATUS_PEERS 7 /* == EFS_RAFT_MAX_PEERS (raft.h) */
+struct efs_raft_peer_status {
+    uint64_t next_index, match_index;
+    uint64_t inflight, inflight_end;
+    uint64_t inflight_age, ack_age;
+    uint64_t batches_sent, send_again, send_blocked, send_errors;
+    uint64_t rejects, reject_hint;
+};
+
 struct efs_raft_group_status {
     uint8_t group;
     uint8_t role;    /* EFS_RAFT_FOLLOWER/CANDIDATE/LEADER */
@@ -467,6 +478,17 @@ struct efs_raft_group_status {
     uint64_t term;
     uint64_t commit_index;
     uint64_t applied_index;
+    /* W145: this replica's log tail and follower-side refusals, and the
+     * replication progress it sees for each peer (filled for every peer;
+     * meaningful on the leader). */
+    uint64_t last_log_index;
+    uint64_t last_log_term;
+    uint64_t snap_index;
+    uint64_t rejects_sent;
+    uint64_t proto_drops;
+    uint32_t npeers;
+    uint32_t pad3;
+    struct efs_raft_peer_status peers[EFS_RAFT_STATUS_PEERS];
 };
 
 struct efs_msg_raft_status_reply {

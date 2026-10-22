@@ -65,6 +65,8 @@
 #define HOST_INBOX_BYTES   (32ull << 20)
 #define HOST_OUTBOX_BYTES  (16ull << 20)
 #define HOST_FRAME_MAX     (EFS_WIRE_RAFT_MAX_CMD + EFS_WIRE_RAFT_HDR_LEN + 12u)
+_Static_assert(EFS_RAFT_STATUS_PEERS == EFS_RAFT_MAX_PEERS,
+               "raft-status carries one entry per Raft peer (W145)");
 /* Per-peer outbound queue cap. A full queue used to drop the newest
  * message and still return success, so ae_inflight was set for an
  * AppendEntries that was never queued and the follower stopped
@@ -482,6 +484,7 @@ struct efs_raft_host {
      * EFS_RAFT_OBS — the first ten are logged, the total is printed on
      * the raft-obs line. */
     uint64_t inbox_drop;
+    uint64_t inbox_oversize; /* W145: frames over HOST_FRAME_MAX refused at the inbox */
     /* Last 64 publish-batch waits (propose → apply), microseconds. */
     uint64_t obs_pub_ring[64];
     uint64_t obs_pub_n;
@@ -11695,7 +11698,14 @@ int server_raft_host_inbox(const uint8_t *payload, uint32_t plen)
     uint8_t *copy;
     if (!h || !h->running) return EFS_ERR_INVAL;
     if (!payload || plen < EFS_WIRE_RAFT_HDR_LEN) return EFS_ERR_PROTO;
-    if (plen > HOST_FRAME_MAX) return EFS_ERR_INVAL;
+    if (plen > HOST_FRAME_MAX) {
+        /* W145: a refused Raft frame used to vanish without a trace. */
+        uint64_t n = __atomic_add_fetch(&h->inbox_oversize, 1, __ATOMIC_RELAXED);
+        if (n <= 10)
+            fprintf(stderr, "raft-host: inbox refused oversize frame len=%u max=%u type=%u (n=%llu)\n",
+                    plen, (unsigned)HOST_FRAME_MAX, payload[0], (unsigned long long)n);
+        return EFS_ERR_INVAL;
+    }
     if (host_read_control(h,payload,plen)) return EFS_OK;
     pthread_mutex_lock(&h->inbox_mu);
     if (h->inbox_n>=HOST_INBOX_MAX || plen>HOST_INBOX_BYTES-h->inbox_bytes) goto busy;
@@ -12557,6 +12567,38 @@ void server_raft_host_status(struct efs_msg_raft_status_reply *out)
             gs->applied_index = efs_raft_applied(h->g[i].r);
             gs->voters = efs_raft_voters(h->g[i].r);
             gs->joint = efs_raft_joint(h->g[i].r) ? 1 : 0;
+            {
+                struct efs_raft_log_progress lp;
+
+                if (efs_raft_log_progress(h->g[i].r, &lp) == EFS_OK) {
+                    gs->last_log_index = lp.last_index;
+                    gs->last_log_term = lp.last_term;
+                }
+                gs->snap_index = lp.snap_index;
+                gs->rejects_sent = lp.rejects_sent;
+                gs->proto_drops = lp.proto_drops;
+            }
+            gs->npeers = h->n < EFS_RAFT_STATUS_PEERS ? (uint32_t)h->n :
+                         EFS_RAFT_STATUS_PEERS;
+            for (uint32_t p = 0; p < gs->npeers; p++) {
+                struct efs_raft_peer_progress pp;
+                struct efs_raft_peer_status *ps = &gs->peers[p];
+
+                if (efs_raft_peer_progress(h->g[i].r, (int)p, &pp) != EFS_OK)
+                    continue;
+                ps->next_index = pp.next_index;
+                ps->match_index = pp.match_index;
+                ps->inflight = pp.inflight;
+                ps->inflight_end = pp.inflight_end;
+                ps->inflight_age = pp.inflight_age;
+                ps->ack_age = pp.ack_age;
+                ps->batches_sent = pp.batches_sent;
+                ps->send_again = pp.send_again;
+                ps->send_blocked = pp.send_blocked;
+                ps->send_errors = pp.send_errors;
+                ps->rejects = pp.rejects;
+                ps->reject_hint = pp.reject_hint;
+            }
         }
     }
     pthread_mutex_unlock(&h->mu);

@@ -866,14 +866,44 @@ static int cmd_raft_status(int argc, char **argv)
     for (i = 0; i < r->ngroups && i < EFS_RAFT_HOST_MAX_GROUPS; i++) {
         struct efs_raft_group_status *g = &r->groups[i];
         printf("  group %u hosted=%u role=%s leader=%d term=%llu "
-               "commit=%llu applied=%llu voters=0x%x joint=%u\n",
+               "commit=%llu applied=%llu voters=0x%x joint=%u "
+               "last=%llu last_term=%llu snap=%llu rejects_sent=%llu proto_drops=%llu\n",
                g->group, g->hosted,
                g->hosted ? raft_role_name(g->role) : "-",
                g->leader,
                (unsigned long long)g->term,
                (unsigned long long)g->commit_index,
                (unsigned long long)g->applied_index,
-               g->voters, g->joint);
+               g->voters, g->joint,
+               (unsigned long long)g->last_log_index,
+               (unsigned long long)g->last_log_term,
+               (unsigned long long)g->snap_index,
+               (unsigned long long)g->rejects_sent,
+               (unsigned long long)g->proto_drops);
+        /* W145: replication progress per peer, as this node sees it. */
+        for (uint32_t p = 0; g->hosted && g->role == EFS_RAFT_LEADER &&
+                             p < g->npeers && p < EFS_RAFT_STATUS_PEERS; p++) {
+            const struct efs_raft_peer_status *ps = &g->peers[p];
+            char ia[24], aa[24];
+
+            if (ps->inflight_age == UINT64_MAX) snprintf(ia, sizeof(ia), "-");
+            else snprintf(ia, sizeof(ia), "%llu", (unsigned long long)ps->inflight_age);
+            if (ps->ack_age == UINT64_MAX) snprintf(aa, sizeof(aa), "-");
+            else snprintf(aa, sizeof(aa), "%llu", (unsigned long long)ps->ack_age);
+            printf("    peer %u next=%llu match=%llu inflight=%llu..%llu inflight_age=%s "
+                   "ack_age=%s sent=%llu again=%llu blocked=%llu errors=%llu "
+                   "rejects=%llu reject_hint=%llu\n", p,
+                   (unsigned long long)ps->next_index,
+                   (unsigned long long)ps->match_index,
+                   (unsigned long long)ps->inflight,
+                   (unsigned long long)ps->inflight_end, ia, aa,
+                   (unsigned long long)ps->batches_sent,
+                   (unsigned long long)ps->send_again,
+                   (unsigned long long)ps->send_blocked,
+                   (unsigned long long)ps->send_errors,
+                   (unsigned long long)ps->rejects,
+                   (unsigned long long)ps->reject_hint);
+        }
     }
     free(reply);
     return 0;
