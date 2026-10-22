@@ -40,4 +40,12 @@ for bad in (coexist.replace('EFS_MD_CMD_APPEND_CATCHUP 52', 'EFS_MD_CMD_APPEND_C
         pass
     else:
         raise AssertionError('invalid namespace accepted')
-print('metadata command namespace: actual header unique, 45-51/55-57 and retired 17/20/21/22/33/34 stay reserved; reserved/completion collision and byte overflow rejected PASS')
+# W140: the applied-command table names every log command and no RPC-only
+# request; CFG is host-only (efs_raft_change appends its own entries).
+table = re.search(r'#define EFS_MD_CMD_APPLIED\(X\) \\\n((?:.*\\\n)*.*)\n', header).group(1)
+applied = set(re.findall(r'X\((\w+)\)', table))
+commands = {n[len('EFS_MD_CMD_'):] for n in current.values() if n.startswith('EFS_MD_CMD_') and 'RESERVED' not in n}
+assert commands - {'CFG'} == applied, ('EFS_MD_CMD_APPLIED differs from the EFS_MD_CMD_* namespace',
+                                       sorted(commands - {'CFG'} - applied), sorted(applied - commands))
+assert 'CFG' not in applied, 'CFG is never a log command'
+print('metadata command namespace: actual header unique, 45-51/55-57 and retired 17/20/21/22/33/34 stay reserved, applied table covers every log command and no request; reserved/completion collision and byte overflow rejected PASS')
