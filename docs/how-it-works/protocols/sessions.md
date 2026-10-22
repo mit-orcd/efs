@@ -143,6 +143,87 @@ only during recovery. Normal operations proceed on locally established
 authority, which is exactly why the fence has to be explicit — nobody is
 checking anything per request.
 
+### Mutation coverage (K5: W134 with W72)
+
+Every metadata mutation a mount sends names its session, and every apply
+that changes session-owned state checks it. There is no stand-in identity,
+no "absent row means OK" path and no compatibility switch.
+
+**Mount lifecycle.**
+
+```text
+mount:        random client_uuid, epoch 1; CREATE the session on its owner
+              shard (Raft commit). Mount fails if the cluster refuses it.
+first use     the client (HOLD, FLOCK, APPEND, publication, REPORT, PUT
+of a shard:   ticket, SETATTR, XATTR) or the serving host (namespace ops)
+              REGISTERs the shard in touched_shards on the owner, then
+              ESTABLISHes it on the shard (one REGISTER_ESTABLISH entry when
+              both share a Raft group). The client caches the shard bit.
+UNREGISTERED: the shard has no established row for this epoch. The client
+              forgets the cached bit, admits the shard again and resends
+              the same identity once.
+FENCED:       the shard's rejection floor (or a newer established epoch)
+              is above the request epoch. The mount stops mutating: every
+              later mutation fails EIO locally without an RPC, and no
+              request is ever resent under the old epoch.
+unknown:      the owner has no session for this uuid (never created, or
+              the cluster was re-formatted). Hosts never create a session
+              on a client's behalf; the refusal is UNREGISTERED at the
+              owner and the client treats it as FENCED.
+```
+
+The operation-ID retry identity (I16) is unchanged: a retry keeps its
+`(uuid, epoch, seq)`, and the session check runs before any recorded
+verdict is returned, so a fenced identity cannot read back a retained
+result.
+
+**Refusal codes.** `efs_session_accept` is the single local check.
+
+| Local state on the shard | Result | Inode RPC status | FUSE errno |
+| --- | --- | --- | --- |
+| no row for the uuid | `EFS_ERR_UNREGISTERED` | `UNREGISTERED` (15) | re-admit once, else `EIO` |
+| established epoch below the request | `EFS_ERR_UNREGISTERED` | `UNREGISTERED` (15) | re-admit once, else `EIO` |
+| request epoch below the rejection floor | `EFS_ERR_FENCED` | `FENCED` (14) | `EIO`, mount fenced |
+| established epoch above the request | `EFS_ERR_FENCED` | `FENCED` (14) | `EIO`, mount fenced |
+| established epoch equals the request | `EFS_OK` | — | — |
+
+**Coverage.** "Wire" is what the request carries. "Admit" is who registers
+the touched shard. "Apply" names the replicated check that refuses the
+identity after a fence, so a check that passed before proposal cannot
+let a fenced mutation commit.
+
+| Path | Wire | Admit | Apply check | Before K5 |
+| --- | --- | --- | --- | --- |
+| CREATE, MKDIR | opid suffix (mandatory) | host, served dentry shard | `efs_session_prepare_namespace` / opid window | opid optional; host created unknown sessions |
+| retained CREATE (FUSE) | `efs_opid_req` in the request | host | same | already mandatory |
+| UNLINK, RMDIR | opid suffix (mandatory) | host | same | opid optional |
+| LINK | opid suffix (mandatory) | host | same | opid optional |
+| RENAME_AT | opid suffix (mandatory) | host | same | opid optional |
+| SETATTR size (truncate, D25) | opid suffix (mandatory) | client, inode shard | opid window on the inode shard | apply used the legacy accept |
+| SETATTR mode/uid/gid | opid suffix (mandatory) | client, inode shard | SETATTR command session bytes | no identity |
+| SETATTR times (utimens) | opid suffix (mandatory) | client, inode shard | UTIMENS command session bytes (inode copy) | no identity |
+| XATTR set/remove | session suffix (mandatory) | client, inode shard | XATTR command session bytes | no identity |
+| HOLD open/close (lease) | session suffix (mandatory) | client, inode shard | `efs_lease_open` | suffix optional, stand-in UUID |
+| CREATE with `EFS_CREATE_F_HOLD` | opid suffix (mandatory) | host | lease key bound to the request session | stand-in UUID from owner |
+| FLOCK / fcntl grant | session suffix (mandatory) | client, inode shard | `efs_lock_grant` | suffix optional, stand-in UUID |
+| FLOCK / fcntl release, GETLK | session suffix (mandatory) | — | host gate before release; GETLK is a read | suffix optional |
+| APPEND reservation | opid + ACK suffix (mandatory) | client, inode shard | `efs_meta_capture_append` / append apply | absent suffix accepted |
+| lease edges (OPEN/CLOSE/CLEAR_PENDING, D25) | identity in command | client | guarded edge apply | already strict |
+| publication / admit / retire (D25) | identity in request | client | publication apply | already strict |
+| PUT ticket admit / retire | identity in ticket | client | ticket apply | already strict |
+| REPORT_CHUNKS | session suffix (mandatory) | client, lane shards | REPORT mapping/activation guards | suffix optional |
+| lane bootstrap | none | — | none | none |
+| data PUT / DATA_COMMIT | none | — | none (targets do not fence) | none |
+| `efs-mgmt` raft-* smoke commands | own session, created per call | mgmt | same as the path it drives | none |
+
+Lane bootstrap only creates the empty lane rows a file's layout already
+implies; it changes no user-visible state, so it is not session-scoped.
+Data targets do not fence by design; the metadata publication that would
+make a fenced write visible is refused instead. The raw command submit
+RPC (`efs-mgmt raft-submit`, session commands) proposes commands whose
+apply checks are listed above; it is an operator interface, not a client
+path, and a command without session bytes is refused by those applies.
+
 ### Duplicate suppression must be bounded state
 
 I16 requires that a replayed mutation cannot apply twice, and the fencing
