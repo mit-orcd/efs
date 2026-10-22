@@ -94,6 +94,70 @@ row is checked again on current devel before work starts.
 | K25 | **W135**–**W139**, **W141**, **W120**, **W150** test harness and reporting defects | test correctness | TEST |
 | K26 | LeakSanitizer aborts on node9900/node9901; F1 needs a working leak check | environment | FIX host or use another leak gate |
 
+### Recheck on devel `ab1920fae` (October 22)
+
+Checked by reading the code and the backlog entries; nothing was run on a
+cluster. No row was found already fixed.
+
+| Row | Finding on devel |
+| --- | --- |
+| K1 | Root cause fixed (`76614e8e8`, regression test). Four parts still open, as listed in W145: (1) why a near follower got a 4.7 GB snapshot instead of a tail walk-back (likely a `match_index` 0 rejection resetting `next_index` to 1); (2) whether a client was acknowledged for 30,929,219@62; (3) hundreds of elections per restart; (4) a daemon blocked in a group read outlasts `stop.sh`'s wait. The private reproduction gate is NOTRUN. |
+| K2 | Open. Submit still refuses only `EFS_MD_CMD_IS_RESERVED` (`raft_host.c:3381`, `:12075`). |
+| K3 | Open. `handler.c:856` still handles `EFS_MSG_NODE_LEFT`; nothing sends it. |
+| K4 | Open. Only three requests need a declaration (`handler.c:200`), the version check is `>=` (`:219`), and `scripts/w125_p3_compat.sh` still expects old clients to work. |
+| K5 | Open. `efs_session_accept_legacy` has 8 callers (`lock.c`, `meta_apply.c` ×4, `session.c`, `raft_host.c`), and the "legacy … remain compatible" path is at `raft_host.c:11913`. Tied to W72, which is partial. |
+| K6 | Merged. Remaining: the W130 one-replica DIR fault injection, and multi-host runs. |
+| K7 | Open. `EFS_KV_KIND_DECISION` keys are written and read (`txn.c:972`, `:996`); nothing deletes them. |
+| K8 | Open. Repro harness fixed (`a1ceff4cb`); reruns NOTRUN. |
+| K9, K13–K16 | Open; backlog unchanged since Oct 11–15 (W87, W88, W86, W77, W64, W52, W75). |
+| K10 | Open. User-deferred kernel fix; test harnesses now isolate it (`exclusive_create_visibility.py --spawn`). |
+| K11, K12, K17–K20 | VERIFY. The fixes are recorded on NUC/AMD/TCP or private stores; the alpha profile on separate hosts is NOTRUN. |
+| K21 | W119's evidence (Oct 15) predates the RDMA, query, apply and Raft fixes since then. Rerun its original gates before diagnosing. W65 is closed for TCP only; it overlaps K1 part 4. |
+| K22 | Open. Stalled-compactor hook in tree; the valid memory/lag bound is still owed. |
+| K23 | Deferred by the current alpha scope; needs the user's confirmation. |
+| K24 | Open (`kv_compact.c:272`, used by `test_kv_lsm.c:1085`). |
+| K25 | All open. W135: `check-architecture` still inside `test:`. W136: stub `efs_client_pack_flush` still there. W137: fake reply still 5 bytes. W138: TSan still prints SKIP. W139: `test_rdma_segmented`, `test_expiry`, `test_rdma_xprt` built but never run. W141: fixed 200 × 25 ms wait. W120 and W150 open. |
+| K26 | Open (LeakSanitizer aborts under ptrace on both nodes). |
+
+### Proposed fix order
+
+Each step is one change or a small group. Each gets a regression test, then
+`make test` and a private-cluster gate.
+
+1. **Your scope decisions.** No code. These change what Stage 1 contains:
+   - K10: W121, the kernel FUSE issue;
+   - K11: NFS and macOS clients;
+   - K13: whether the PUT-ticket stack W86 is in alpha or archived (this
+     also settles W137);
+   - K14: atomic multi-chunk publication;
+   - K23: power loss, repair and crash recovery.
+2. **Trustworthy tests:**
+   - K24 (`EFS_KV_COMPACT_DIE` under `EFS_FAULTS`);
+   - K25 (W135, W136, W138, W139, W141, W150, W120; W137 per step 1);
+   - K26 (a working leak gate: fix LeakSanitizer on the hosts, or use valgrind).
+
+   These are small, and every later verdict depends on them.
+3. **Small fail-open holes:** K3 (delete the `NODE_LEFT` handler), then K2
+   (refuse unknown tags at submit). One request can halt or shrink a cluster
+   today.
+4. **Raft:**
+   - K1 part 2 first, while orcd-mini's logs still exist. Was a client
+     acknowledged?
+   - Then parts 1, 3 and 4, and the private deposed-leader reproduction.
+5. **K8 reproduction.** Runs on node9901 in the background while steps 3–4
+   are coded; the fix follows from the saved bytes.
+6. **K4:** the client declaration matrix, plus refusal tests for TCP and RDMA.
+7. **Data correctness:** K9 (W87), K15 (W64, W52), then K16 (W75; a format
+   change, so a fresh format).
+8. **K5 with W72:** register every mutation path, then remove the bypass.
+   This is the largest item.
+9. **Bounded state:** K7 (W83 decision retirement) and K22 (W23 compactor
+   bound).
+10. **K13/K14, if step 1 keeps them in scope.**
+11. **VERIFY sweep on separate hosts with one candidate:** K6, K11, K12,
+    K17–K21. This needs the 3-, 4- and 5-plus-host clusters, so they are
+    set up in parallel with steps 2–10.
+
 ## A. Stage 2: freeze a reproducible candidate and support matrix
 
 - [ ] **A1** Choose one devel candidate commit and identify all daemon/client
