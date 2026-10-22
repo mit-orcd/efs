@@ -52,8 +52,11 @@ int efs_pack_ledger_init(const uint8_t *image,size_t geometry,
     const struct efs_pack_ref *refs,uint32_t count,const struct efs_opid *owner,
     uint32_t members,uint32_t flags,struct efs_pack_ledger *out)
 {
+    /* One validation for the image; each reference is then checked against
+     * that view (identity, generations, bounds, its record's digest). */
+    struct efs_pack_view view;
     if(!refs || !owner || !out || !count || count>EFS_PACK_MAX_RECORDS ||
-       efs_pack_validate(image,geometry)!=EFS_OK || get(image+24,4)!=count)return EFS_ERR_INVAL;
+       efs_pack_view_open(image,geometry,&view)!=EFS_OK || view.count!=count)return EFS_ERR_INVAL;
     struct efs_pack_ledger s={0};
     s.segment_id=get(image+32,8);s.segment_generation=get(image+40,8);
     s.publication_group=(uint32_t)get(image+48,4);s.geometry=(uint32_t)geometry;
@@ -61,10 +64,12 @@ int efs_pack_ledger_init(const uint8_t *image,size_t geometry,
     efs_hash(image,geometry,s.body_digest);
     for(unsigned i=0;i<count;i++) {
         const uint8_t *bytes;uint32_t len;uint8_t wire[EFS_PACK_REF_BYTES];
-        if(efs_pack_read(image,geometry,&refs[i],&bytes,&len)!=EFS_OK ||
+        if(efs_pack_view_read(&view,&refs[i],&bytes,&len)!=EFS_OK ||
            efs_pack_ref_encode(&refs[i],wire)!=EFS_OK)return EFS_ERR_INVAL;
+        /* Strictly increasing offsets, each matching a record of the
+         * validated (inode-unique) table: the references are distinct and
+         * cover every record, so no pairwise inode check is needed. */
         if(i && refs[i].offset<=refs[i-1].offset)return EFS_ERR_INVAL;
-        for(unsigned j=0;j<i;j++)if(refs[i].ino==refs[j].ino)return EFS_ERR_INVAL;
         efs_hash(wire,sizeof(wire),s.reference_digest[i]);s.state[i]=EFS_PACK_PENDING;s.len[i]=len;
     }
     if(!valid(&s))return EFS_ERR_INVAL;

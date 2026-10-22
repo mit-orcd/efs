@@ -304,7 +304,7 @@ static int pk_get_d1(const struct efs_node *nodes, uint32_t count, const struct 
     return rc;
 }
 static int pk_read_segment(const struct efs_node *nodes, uint32_t count, const struct efs_pack_object *o,
-                           uint8_t *image);
+                           uint8_t *image, struct efs_pack_view *view);
 /* A packed base's bytes: its record, read back from the segment. */
 static int pk_read_packed_base(const struct efs_node *nodes, uint32_t count, struct pk_file *f)
 {
@@ -314,11 +314,12 @@ static int pk_read_packed_base(const struct efs_node *nodes, uint32_t count, str
     uint8_t *image = malloc(EFS_SEGMENT_MAX_SIZE);
     int rc = kv && o && image ? EFS_OK : EFS_ERR_NOMEM;
     if (rc == EFS_OK) rc = efs_pack_object_get(kv, r->publication_group, r->segment_id, r->segment_generation, o);
-    if (rc == EFS_OK) rc = pk_read_segment(nodes, count, o, image);
+    struct efs_pack_view view;
+    if (rc == EFS_OK) rc = pk_read_segment(nodes, count, o, image, &view);
     if (rc == EFS_OK) {
         const uint8_t *data;
         uint32_t len;
-        rc = efs_pack_read(image, o->ledger.geometry, r, &data, &len);
+        rc = efs_pack_view_read(&view, r, &data, &len);
         if (rc == EFS_OK) memcpy(f->data, data, len < f->c.size ? len : f->c.size);
     }
     free(o);
@@ -699,9 +700,9 @@ static int pk_get_segfrag(const struct efs_node *nodes, uint32_t count, const st
     return memcmp(h, o->checksums[fi], EFS_HASH_SIZE) || memcmp(sum, o->checksums[fi], EFS_HASH_SIZE)
            ? EFS_ERR_CHECKSUM : EFS_OK;
 }
-/* Any two of the three fragments; the image is validated. */
+/* Any two of the three fragments; the image is validated once, into *view. */
 static int pk_read_segment(const struct efs_node *nodes, uint32_t count, const struct efs_pack_object *o,
-                           uint8_t *image)
+                           uint8_t *image, struct efs_pack_view *view)
 {
     uint32_t g = o->ledger.geometry, flen = g / 2;
     uint8_t *buf = malloc((size_t)flen * EFS_NUM_FRAGMENTS);
@@ -716,7 +717,7 @@ static int pk_read_segment(const struct efs_node *nodes, uint32_t count, const s
         else if (a < 0) a = i; else if (b < 0) b = i;
     }
     int rc = n == 2 && missing >= 0 ? efs_decode_segment(f, g, a, b, missing, image, g) : EFS_ERR_DECODE;
-    if (rc == EFS_OK) rc = efs_pack_validate(image, g);
+    if (rc == EFS_OK) rc = efs_pack_view_open(image, g, view);
     free(buf);
     return rc;
 }
@@ -743,18 +744,18 @@ static uint32_t pk_compact(struct efs_kv *kv, uint8_t group, uint64_t term,
     uint32_t used_segs = 0;
     for (uint32_t si = 0; si < sc.n && nfiles < EFS_PACK_MAX_RECORDS; si++) {
         const struct efs_pack_object *o = &sc.s[si].o;
+        struct efs_pack_view view;
         images[si] = malloc(EFS_SEGMENT_MAX_SIZE);
-        if (!images[si] || pk_read_segment(nodes, count, o, images[si]) != EFS_OK) {
+        if (!images[si] || pk_read_segment(nodes, count, o, images[si], &view) != EFS_OK) {
             STAT_ADD(read_errors, 1);
             continue;
         }
-        uint32_t nrec;
-        if (efs_pack_record_count(images[si], o->ledger.geometry, &nrec) != EFS_OK) continue;
         uint32_t before = nfiles;
-        for (uint32_t r = 0; r < nrec && nfiles < EFS_PACK_MAX_RECORDS; r++) {
+        /* Validated once by pk_read_segment; each record is checked against it. */
+        for (uint32_t r = 0; r < view.count && nfiles < EFS_PACK_MAX_RECORDS; r++) {
             struct efs_pack_ref ref;
             unsigned at;
-            if (efs_pack_record_at(images[si], o->ledger.geometry, r, &ref) != EFS_OK ||
+            if (efs_pack_view_record_at(&view, r, &ref) != EFS_OK ||
                 efs_pack_ledger_slot(&o->ledger, &ref, &at) != EFS_OK ||
                 o->ledger.state[at] != EFS_PACK_LIVE) continue;
             if (used + EFS_PACK_RECORD_BYTES + ref.len > EFS_SEGMENT_MAX_SIZE) break;

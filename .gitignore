@@ -113,6 +113,7 @@ tests/test_pack_ledger
 tests/test_pack_ledger_recovery
 tests/test_pack_switch
 tests/test_packed_reader
+tests/test_pack_validate_once
 tests/test_directory_sync_group
 tests/test_kv_insertion_buffer
 tests/test_retained_namespace_audit
