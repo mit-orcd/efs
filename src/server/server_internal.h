@@ -350,6 +350,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
                              struct efs_msg_raft_mkfs_reply *out);
 void server_raft_host_expiry_status(struct efs_expiry_status *out);
 void server_raft_host_status(struct efs_msg_raft_status_reply *out);
+void server_raft_host_resync(const struct efs_msg_raft_resync *in, struct efs_msg_raft_resync_reply *out);
 int server_raft_host_active(void);
 int server_raft_host_inode_reaped(efs_ino_t ino, int *dead);
 /* Borrowed immutable query image; group slots are 0 and 2. Only background

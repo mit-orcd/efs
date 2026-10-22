@@ -12578,6 +12578,7 @@ void server_raft_host_status(struct efs_msg_raft_status_reply *out)
                 gs->rejects_sent = lp.rejects_sent;
                 gs->proto_drops = lp.proto_drops;
             }
+            gs->resync_pending = efs_raft_resync_pending(h->g[i].r) ? 1u : 0u;
             gs->npeers = h->n < EFS_RAFT_STATUS_PEERS ? (uint32_t)h->n :
                          EFS_RAFT_STATUS_PEERS;
             for (uint32_t p = 0; p < gs->npeers; p++) {
@@ -12612,6 +12613,26 @@ void server_raft_host_status(struct efs_msg_raft_status_reply *out)
         if (efs_meta_apply_get_inode(h->kv, EFS_ROOT_INO, &row) == EFS_OK)
             out->kv_has_root = 1;
     }
+}
+
+/* W145 repair: mark one hosted group for resync from its leader's snapshot.
+ * Refused on the group's leader; the request clears on the next fresh
+ * snapshot install. */
+void server_raft_host_resync(const struct efs_msg_raft_resync *in,
+                             struct efs_msg_raft_resync_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    int i;
+
+    memset(out, 0, sizeof(*out));
+    out->rc = EFS_ERR_INVAL;
+    if (!h || !h->running || !in)
+        return;
+    pthread_mutex_lock(&h->mu);
+    for (i = 0; i < HOST_NGROUPS; i++)
+        if (h->g[i].group == in->group && h->g[i].hosted && h->g[i].r)
+            out->rc = efs_raft_request_resync(h->g[i].r);
+    pthread_mutex_unlock(&h->mu);
 }
 
 int server_raft_host_active(void)

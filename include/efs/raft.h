@@ -313,6 +313,14 @@ struct efs_raft_log_progress {
     uint64_t proto_drops;   /* refused with no reply: conflict at or below commit */
 };
 int efs_raft_log_progress(struct efs_raft *r, struct efs_raft_log_progress *out);
+/* W145 repair, operator-triggered only: this follower's committed log
+ * disagrees with the leader (a conflict at or below commit). While set,
+ * such a conflict is answered with match_index 0 instead of refused
+ * silently, so the leader falls back to InstallSnapshot; the fresh install
+ * replaces this group's state and log and clears the request.
+ * EFS_ERR_NOT_PRIMARY on a leader. */
+int efs_raft_request_resync(struct efs_raft *r);
+int efs_raft_resync_pending(const struct efs_raft *r);
 
 /* Committed voting set (C_old). During joint this is still C_old. */
 uint32_t efs_raft_voters(const struct efs_raft *r);

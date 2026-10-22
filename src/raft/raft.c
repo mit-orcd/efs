@@ -78,6 +78,7 @@ struct efs_raft {
     uint64_t peer_reject_log_tick[EFS_RAFT_MAX_PEERS];
     uint64_t ae_rejects_sent, ae_reject_log_tick, ae_proto_drops;
     unsigned last_commit_bits; /* W145: quorum that made the last leader commit */
+    int resync_requested;      /* W145 repair: see efs_raft_request_resync */
     unsigned vote_bits;
     uint32_t election_elapsed;
     uint32_t election_ticks;
@@ -1387,6 +1388,24 @@ static void ae_reject_note(struct efs_raft *r, const struct efs_raft_msg *in,
 static int ae_proto_drop(struct efs_raft *r, const struct efs_raft_msg *in,
                          uint64_t idx)
 {
+    if (r->resync_requested) {
+        /* Operator asked to resync: ask for the leader's snapshot. A
+         * rejection with match 0 sends next_index below the leader's log
+         * floor, so its next send is InstallSnapshot. */
+        struct efs_raft_msg m;
+
+        memset(&m, 0, sizeof(m));
+        m.type = EFS_RAFT_MSG_AE_REP;
+        m.to = in->from;
+        m.success = 0;
+        m.match_index = 0;
+        m.vote_granted = in->vote_granted;
+        m.last_log_index = in->last_log_index;
+        fprintf(stderr, "raft: group=%u resync: conflict at index=%llu <= commit=%llu from=%d; "
+                "requesting InstallSnapshot\n", r->group, (unsigned long long)idx,
+                (unsigned long long)r->commit_index, in->from);
+        return send_msg(r, &m);
+    }
     r->ae_proto_drops++;
     fprintf(stderr, "raft: group=%u AE conflict at index=%llu <= commit=%llu "
             "from=%d term=%llu prev=%llu/%llu: refused without reply (drops=%llu)\n",
@@ -1674,6 +1693,11 @@ static int snap_installed(struct efs_raft *r, struct efs_raft_msg *m,
     if (take_cfg) {
         read_proof_forget(r);
         r->read_in_flight = 0;
+        if (r->resync_requested)
+            fprintf(stderr, "raft: group=%u resync: installed snapshot incl=%llu/%llu "
+                    "(applied was %llu)\n", r->group, (unsigned long long)incl,
+                    (unsigned long long)incl_t, (unsigned long long)r->last_applied);
+        r->resync_requested = 0;
         r->last_applied = incl;
         r->app_old = r->log_old = cfg_old;
         r->app_new = r->log_new = cfg_new;
@@ -2583,6 +2607,24 @@ int efs_raft_peer_progress(const struct efs_raft *r, int peer,
     out->rejects = r->peer_rejects[peer];
     out->reject_hint = r->peer_reject_hint[peer];
     return EFS_OK;
+}
+
+int efs_raft_request_resync(struct efs_raft *r)
+{
+    if (!r)
+        return EFS_ERR_INVAL;
+    if (r->role == EFS_RAFT_LEADER)
+        return EFS_ERR_NOT_PRIMARY;
+    r->resync_requested = 1;
+    fprintf(stderr, "raft: group=%u resync requested (commit=%llu applied=%llu)\n",
+            r->group, (unsigned long long)r->commit_index,
+            (unsigned long long)r->last_applied);
+    return EFS_OK;
+}
+
+int efs_raft_resync_pending(const struct efs_raft *r)
+{
+    return r && r->resync_requested;
 }
 
 int efs_raft_log_progress(struct efs_raft *r, struct efs_raft_log_progress *out)

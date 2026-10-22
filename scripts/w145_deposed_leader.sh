@@ -18,8 +18,10 @@
 # FREEZE_MODE=stop sends SIGSTOP/SIGCONT; FREEZE_MODE=perf instead slows
 # the leader with `perf record -e cs --call-graph dwarf,16384` for FREEZE
 # seconds, the capture that deposed orcd-mini's n2 (it keeps running, slowly).
+# RESYNC_CHECK=1 first checks efs-mgmt raft-resync: refused on the group
+# leader, accepted on a follower, and a healthy follower keeps following.
 # Env: PORT (17760), GROUP (2), ROUNDS (3), FREEZE (3), FREEZE_MODE (stop),
-# WARMUP (45), CATCHUP (90), LAG (2000), KEEP (0).
+# WARMUP (45), CATCHUP (90), LAG (2000), KEEP (0), RESYNC_CHECK (0).
 # Exit 0 = every round caught up (PASS), 1 = a round did not (FAIL).
 set -u
 REL=$(cd "$1" && pwd); L=$2
@@ -87,6 +89,20 @@ field() { # node group key -> value from that node's group line
 leader_node() { for i in 1 2 3; do status $i | grep -q "^  group $1 .*role=LEADER" && { echo $i; return; }; done; }
 
 sleep "$WARMUP"
+if [ "${RESYNC_CHECK:-0}" = 1 ]; then
+  ld=$(leader_node "$GROUP"); fo=$(( ld % 3 + 1 ))
+  out=$("$REL/efs-mgmt" raft-resync 10.1.99.1:$((PORT+ld)) "$GROUP" 2>&1)
+  echo "-- resync on leader n$ld: $out"
+  echo "$out" | grep -q "rc=-" || { echo "   FAIL: leader accepted a resync"; FAILED=1; }
+  out=$("$REL/efs-mgmt" raft-resync 10.1.99.1:$((PORT+fo)) "$GROUP" 2>&1)
+  echo "-- resync on follower n$fo: $out"
+  echo "$out" | grep -q "rc=0" || { echo "   FAIL: follower refused a resync"; FAILED=1; }
+  sleep 20
+  status "$fo" | grep "^  group $GROUP " | grep -q " resync=1" || { echo "   FAIL: resync flag not shown"; FAILED=1; }
+  lc=$(field "$(leader_node "$GROUP")" "$GROUP" commit); fa=$(field "$fo" "$GROUP" applied)
+  echo "   healthy follower n$fo applied=$fa leader commit=$lc"
+  [ $(( lc - fa )) -le "$LAG" ] || { echo "   FAIL: healthy follower fell behind after resync request"; FAILED=1; }
+fi
 for r in $(seq "$ROUNDS"); do
   old=$(leader_node "$GROUP")
   [ -z "$old" ] && { echo "round $r: no leader for group $GROUP"; FAILED=1; break; }

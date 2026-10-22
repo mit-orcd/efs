@@ -2311,6 +2311,79 @@ static void test_snapshot_commit_stops_at_snapshot(void)
     efs_raft_mem_free(st);
 }
 
+/* W145 repair: a follower whose COMMITTED entry conflicts with the leader
+ * (orcd-mini n2 before the snap_installed fix) refuses silently. After an
+ * operator resync request it asks for the leader's snapshot instead
+ * (rejection with match 0), installs it over its state and log, and then
+ * follows normally. Without the request nothing changes. */
+static void test_resync_replaces_diverged_follower(void)
+{
+    struct net n = { .n = 3, .cap_rep = 1 };
+    struct efs_raft_store *st;
+    struct app app;
+    struct efs_raft_cfg cfg;
+    struct efs_raft_msg m;
+    uint8_t snap[13];
+    uint64_t li = 0, lt = 0;
+
+    memset(&app, 0, sizeof(app));
+    memset(&cfg, 0, sizeof(cfg));
+    st = efs_raft_mem_create();
+    CHECK(st && st->append(st, 1, 1, (const uint8_t *)"A", 1) == EFS_OK &&
+          st->append(st, 2, 1, (const uint8_t *)"B", 1) == EFS_OK &&
+          st->append(st, 3, 1, (const uint8_t *)"X", 1) == EFS_OK, "seed diverged log");
+    CHECK(st->save_hard(st, 1, -1) == EFS_OK, "hard");
+    cfg.n = 3; cfg.id = 1; cfg.voters = 0x7; cfg.store = st; cfg.store_ctx = st;
+    cfg.send = send_now; cfg.net = &n; cfg.apply = apply_cmd; cfg.app = &app;
+    cfg.snap_chunk = snap_chunk; cfg.election_ticks = 10; cfg.heartbeat_ticks = 2;
+    n.drop[0] = 1;
+    n.r[1] = test_raft_new(&cfg);
+    CHECK(n.r[1] != NULL, "follower");
+    if (!n.r[1]) { efs_raft_mem_free(st); return; }
+    efs_raft_allow_campaign(n.r[1], 0);
+    /* The stray entry X at index 3 gets committed and applied (the bug). */
+    memset(&m, 0, sizeof(m));
+    m.type = EFS_RAFT_MSG_AE_REQ; m.from = 0; m.to = 1; m.term = 1;
+    m.prev_index = 3; m.prev_term = 1; m.leader_commit = 3;
+    CHECK(efs_raft_recv(n.r[1], &m) == EFS_OK && efs_raft_commit(n.r[1]) == 3 &&
+          app.last == 'X', "stray entry committed and applied");
+    /* The real leader (term 2) holds a different entry at 3. */
+    memset(&m, 0, sizeof(m));
+    m.type = EFS_RAFT_MSG_AE_REQ; m.from = 0; m.to = 1; m.term = 2;
+    m.prev_index = 3; m.prev_term = 2; m.leader_commit = 5;
+    n.cap_n = 0;
+    CHECK(efs_raft_recv(n.r[1], &m) == EFS_ERR_PROTO && n.cap_n == 0,
+          "without resync the conflict at commit is refused with no reply");
+    CHECK(!efs_raft_resync_pending(n.r[1]) && efs_raft_request_resync(n.r[1]) == EFS_OK &&
+          efs_raft_resync_pending(n.r[1]), "resync requested on the follower");
+    CHECK(efs_raft_recv(n.r[1], &m) == EFS_OK && n.cap_n == 1 && n.cap_ok == 0 &&
+          n.cap_match == 0, "with resync the conflict asks for a snapshot (match 0)");
+    /* Leader's snapshot through index 5: membership 0x7, image (last 'E', n 5). */
+    memset(snap, 0, sizeof(snap));
+    wr32_t(snap, 0x7); wr32_t(snap + 4, 0);
+    snap[8] = 'E'; wr32_t(snap + 9, 5);
+    memset(&m, 0, sizeof(m));
+    m.type = EFS_RAFT_MSG_SNAP_REQ; m.from = 0; m.to = 1; m.term = 2;
+    m.last_log_index = 5; m.last_log_term = 2; m.leader_commit = 5; m.success = 1;
+    m.prev_index = 0; m.nentries = 1;
+    m.entries[0].cmd = snap; m.entries[0].clen = sizeof(snap); m.entries[0].term = 2;
+    CHECK(efs_raft_recv(n.r[1], &m) == EFS_OK, "leader snapshot accepted");
+    CHECK(app.snap_at == 5 && app.last == 'E' && efs_raft_applied(n.r[1]) == 5 &&
+          efs_raft_commit(n.r[1]) >= 5, "snapshot replaces the diverged state");
+    CHECK(!efs_raft_resync_pending(n.r[1]), "resync request cleared by the install");
+    CHECK(st->last(st, &li, &lt) == EFS_OK && li == 5 && lt == 2,
+          "diverged log replaced by the snapshot point");
+    /* Normal replication resumes from the snapshot. */
+    memset(&m, 0, sizeof(m));
+    m.type = EFS_RAFT_MSG_AE_REQ; m.from = 0; m.to = 1; m.term = 2;
+    m.prev_index = 5; m.prev_term = 2; m.leader_commit = 6; m.nentries = 1;
+    m.entries[0].term = 2; m.entries[0].cmd = (const uint8_t *)"F"; m.entries[0].clen = 1;
+    CHECK(efs_raft_recv(n.r[1], &m) == EFS_OK && efs_raft_commit(n.r[1]) == 6 &&
+          app.last == 'F', "follower replicates normally after the resync");
+    efs_raft_free(n.r[1]);
+    efs_raft_mem_free(st);
+}
+
 /* New leader's no-op is above the send cap armed at attach. A follower
  * that still holds a stale tail at that index must receive the no-op,
  * and the leader must not commit it off the stale reply. */
@@ -2794,6 +2867,7 @@ int main(void)
         test_stale_boot_id();
         test_ae_reply_match_stops_at_prev();
         test_snapshot_commit_stops_at_snapshot();
+        test_resync_replaces_diverged_follower();
         test_noop_over_stale_tail();
         test_ae_batch_catchup();
         test_ae_catchup_flow_control();

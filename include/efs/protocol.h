@@ -212,6 +212,11 @@ enum efs_msg_type {
      * pack-compact); segments = 0 only reports the fragmentation summary. */
     EFS_MSG_PACK_COMPACT = 167,
     EFS_MSG_PACK_COMPACT_REPLY = 168,
+    /* W145 repair: ask this node to resync one group from its leader's
+     * snapshot (efs-mgmt raft-resync). Request struct efs_msg_raft_resync,
+     * reply struct efs_msg_raft_resync_reply. */
+    EFS_MSG_RAFT_RESYNC = 169,
+    EFS_MSG_RAFT_RESYNC_REPLY = 170,
 };
 
 /* Retired message IDs: no handler in this build. The server closes a
@@ -220,6 +225,16 @@ enum efs_msg_type {
     ((t) == 81 || (t) == 82 /* HEAL_STATUS */ || \
      (t) == 99 || (t) == 100 /* GC_FRAGMENT */ || \
      (t) == 121 || (t) == 122 /* GC_INODE */)
+
+struct efs_msg_raft_resync {
+    uint8_t group;
+    uint8_t pad[7];
+};
+
+struct efs_msg_raft_resync_reply {
+    int32_t rc; /* EFS_OK, EFS_ERR_NOT_PRIMARY (this node leads it), EFS_ERR_INVAL */
+    uint32_t pad;
+};
 
 struct efs_msg_pack_compact {
     uint32_t segments; /* output segments to build per led group; 0 = report only */
@@ -487,7 +502,7 @@ struct efs_raft_group_status {
     uint64_t rejects_sent;
     uint64_t proto_drops;
     uint32_t npeers;
-    uint32_t pad3;
+    uint32_t resync_pending; /* W145: efs-mgmt raft-resync requested, not yet installed */
     struct efs_raft_peer_status peers[EFS_RAFT_STATUS_PEERS];
 };
 

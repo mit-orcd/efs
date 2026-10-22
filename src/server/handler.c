@@ -1266,6 +1266,13 @@ send_reply:
             efs_conn_send_msg(conn, EFS_MSG_RAFT_STATUS_REPLY, &r, sizeof(r));
             break;
         }
+        case EFS_MSG_RAFT_RESYNC: {
+            struct efs_msg_raft_resync_reply r = {.rc = EFS_ERR_INVAL};
+            if (payload_len == sizeof(struct efs_msg_raft_resync))
+                server_raft_host_resync(payload, &r);
+            efs_conn_send_msg(conn, EFS_MSG_RAFT_RESYNC_REPLY, &r, sizeof(r));
+            break;
+        }
         /* --- Retired control plane. These opcodes carry no state any
          * more, but they MUST still REPLY: silence costs the sender a full
          * recv timeout (the client GET_FEATURES poll is 2 s x node_count,

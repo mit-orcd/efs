@@ -867,7 +867,7 @@ static int cmd_raft_status(int argc, char **argv)
         struct efs_raft_group_status *g = &r->groups[i];
         printf("  group %u hosted=%u role=%s leader=%d term=%llu "
                "commit=%llu applied=%llu voters=0x%x joint=%u "
-               "last=%llu last_term=%llu snap=%llu rejects_sent=%llu proto_drops=%llu\n",
+               "last=%llu last_term=%llu snap=%llu rejects_sent=%llu proto_drops=%llu%s\n",
                g->group, g->hosted,
                g->hosted ? raft_role_name(g->role) : "-",
                g->leader,
@@ -879,7 +879,8 @@ static int cmd_raft_status(int argc, char **argv)
                (unsigned long long)g->last_log_term,
                (unsigned long long)g->snap_index,
                (unsigned long long)g->rejects_sent,
-               (unsigned long long)g->proto_drops);
+               (unsigned long long)g->proto_drops,
+               g->resync_pending ? " resync=1" : "");
         /* W145: replication progress per peer, as this node sees it. */
         for (uint32_t p = 0; g->hosted && g->role == EFS_RAFT_LEADER &&
                              p < g->npeers && p < EFS_RAFT_STATUS_PEERS; p++) {
@@ -980,6 +981,52 @@ static int raft_change_converged(const char *host, uint16_t port, uint8_t group,
     }
     free(reply);
     return ok;
+}
+
+/* W145 repair: ask one node to resync a group it follows from the
+ * leader's snapshot. Only for a follower whose committed log conflicts
+ * with the leader (raft-status: proto_drops rising); refused on a leader. */
+static int cmd_raft_resync(int argc, char **argv)
+{
+    char host[64];
+    uint16_t port;
+    struct efs_msg_raft_resync req;
+    struct efs_msg_raft_resync_reply *r;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    uint8_t reply_type = 0;
+    int fd;
+
+    if (argc != 2 || parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Usage:\n  efs-mgmt raft-resync <node:port> <group>\n"
+                "  Resync GROUP on that node from its leader's snapshot (follower only).\n");
+        return 1;
+    }
+    memset(&req, 0, sizeof(req));
+    req.group = (uint8_t)strtoul(argv[1], NULL, 10);
+    fd = efs_connect_tcp(host, port);
+    if (fd < 0) {
+        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
+        return 1;
+    }
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    if (send_recv(fd, EFS_MSG_RAFT_RESYNC, &req, sizeof(req), &reply_type, &reply,
+                  &reply_len) != 0 || reply_type != EFS_MSG_RAFT_RESYNC_REPLY ||
+        reply_len != sizeof(*r)) {
+        fprintf(stderr, "Failed to request raft-resync\n");
+        free(reply);
+        close(fd);
+        return 1;
+    }
+    close(fd);
+    r = reply;
+    printf("raft-resync %s:%u group=%u rc=%d%s\n", host, port, req.group, r->rc,
+           r->rc == EFS_ERR_NOT_PRIMARY ? " (this node leads the group; refused)" :
+           r->rc == EFS_OK ? " (requested; the next conflicting AppendEntries asks for a snapshot)" : "");
+    int out = r->rc == EFS_OK ? 0 : 1;
+    free(reply);
+    return out;
 }
 
 static int cmd_raft_change(int argc, char **argv)
@@ -3044,6 +3091,8 @@ int main(int argc, char **argv)
         return cmd_gc_status(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-status") == 0)
         return cmd_raft_status(argc - 2, argv + 2);
+    if (strcmp(cmd, "raft-resync") == 0)
+        return cmd_raft_resync(argc - 2, argv + 2);
     if (strcmp(cmd,"expiry-status")==0)return cmd_expiry_status(argc-2,argv+2);
     if (strcmp(cmd,"expiry-id")==0)return cmd_expiry_id(argc-2,argv+2);
     if (strcmp(cmd,"expiry-enable")==0)return cmd_expiry_enable(argc-2,argv+2);
