@@ -20,7 +20,7 @@ full acceptance are separate states.
 
 [orcd-mini deploy of `08cc16af4`](orcd-mini-deploy-08cc16af4-20261022.md):
 **cleanup merge deployed; all suites and gates PASS over RDMA + `.efs`**
-after two harness fixes (`e4bd1b6d7`, not yet on devel): faults 24/24,
+after two harness fixes (`e4bd1b6d7`, merged in `99c7a1c75`): faults 24/24,
 `.efs` commands gate PASS.
 
 [orcd-mini fresh-format deploy with D25](orcd-mini-d25-deploy-20261022.md):

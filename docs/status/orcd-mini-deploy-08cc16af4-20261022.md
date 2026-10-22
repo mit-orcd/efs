@@ -69,5 +69,5 @@ stay outside Git on node9901:
 - The reruns used the `08cc16af4` binaries with only
   `tests/faults/harness.py` and `tests/live/query_timing.py` taken from
   `e4bd1b6d7` (outputs in `/data1/efs/testsuite/private-e4bd/`,
-  `/tmp/efs-fault-e4bd/`). `e4bd1b6d7` must still be merged into devel.
+  `/tmp/efs-fault-e4bd/`). `e4bd1b6d7` is merged into devel in `99c7a1c75`.
 - LeakSanitizer remains broken on node9901; Valgrind not run.
