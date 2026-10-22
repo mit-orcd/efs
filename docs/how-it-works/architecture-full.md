@@ -1569,6 +1569,12 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[K15 W52/W64 append gates](../status/k15-w52-w64-20261022.md): **W64 INCOMPLETE**.
+A leader change left append transactions PREPARED until recovery, so writes
+failed with EBUSY. The fix and its regression test are on `devel-k15`, and the
+matched failover gate is NOTRUN. **W52: shape A in tree; exact 20k gate and A/B
+NOTRUN.**
+
 [Recent devel integration review](../status/devel-integration-review-20261022.md):
 **OPEN findings** through `e9ca0d07b` plus `95beaa053`: summary exit-status
 false success (reproduced), decision-sweep starvation, transaction encoding
@@ -2450,7 +2456,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | 0q | **W60** · sequential prefetch starves tiny demand reads | correctness | fixed in `73ce8aaa`; NUC 32 MiB A/B: baseline 2000/2000 failures, fixed 0/2000 and no read-NOMEM; closed Oct 9: user accepts AMD nested-tree 2000 tiny + four 128 MiB files, core212/212, peer64/64 and cold physical GC; Xorinox optional | [evidence and remaining gates](../status/fuse-memory.md) |
 | 0r | **W61** · local GC discards failed lane-sweep verdicts | correctness | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](#w61) |
 | 0s | **W62** · sweep/truncate batch boundaries lose delta GC records | correctness | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](#w62) |
-| 0t | **W64** · durable append reservation replay across leader changes | correctness / recovery | partial — durable replay, coordinated cross-group EOF/completion and bounded cleanup pass AMD direct/TCP replay, POSIX/peer, sync-write and cold-byte gates; production sessions and broader failover acceptance remain open ([ledger](../status/replay-readiness-20261008.md)) | [work item](#w64) |
+| 0t | **W64** · durable append reservation replay across leader changes | correctness / recovery | partial — Oct 22 K15: leader-change EBUSY (orphaned PREPARE until 5 s recovery) found; finisher ABORT hand-off fix + regression test on `devel-k15`; matched failover gate NOTRUN, lost-reserve-reply case needs K5/W72 sessions ([K15](../status/k15-w52-w64-20261022.md)); earlier: durable replay and coordinated EOF/completion pass AMD gates ([ledger](../status/replay-readiness-20261008.md)) | [work item](#w64) |
 | 0u | **W65** · daemon exceeds graceful shutdown wait | liveness investigation | supported TCP closure recorded; later AMD RXE shutdown acceptance supersedes the old RDMA-deferred wording ([RXE ledger](../status/amd-rxe-gate-closure-20261009.md)); broader hardware/profile limits remain | [work item](#w65) |
 | posix-link | **AMD `link_of_symlink` — Python request/test mismatch** | test correctness | Closed AMD test mismatch: corrected no-follow historical matrix passes; new explicit follow/dangling/core and peer cases pass native and AMD direct/buffered TCP; pre-fix buffered MKDIR failure retained; later repaired by W66 | [evidence and fix](../status/amd-link-symlink.md) |
 | virtual-io | **W91/W92 · `.efs/` commands — server snapshots and safe reads** | correctness / performance / access control | in progress — disk index, bounded incremental catch-up, aggregate quota and replicated policy landed; named native/live/cold and Linux NFSv4.0 gates pass; actual 2^32/400 GiB gates and named virtual-export fix rollout remain open; Mac/Linux NFS candidate oracles pass | [closure](../status/query-cache-closure-20261010.md) · [persistent policy](../status/efs-query-persistent-policy-20261010.md) |
@@ -2462,7 +2468,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | 0a | STALE replay that never converges; remedy = **D27** (decided) | correctness | runtime foundations present; strict timing, fault/recovery/contention and RSS gates remain in handoff. Oct 21: lane-epoch-lag cause fixed, private C1 workload PASS; orcd-mini C1 rerun NOTRUN (stopped at the user's request) ([evidence](../status/w0a-lane-epoch-lag-20261021.md)) | [full text](#0a--stale-replay-that-never-converges-queue-row-0a) · [D27](#appendix-4--decisions--taken-and-pending-register-d1d36) |
 | 0h | **W44** · the leader's GC frag pass scans the whole prefix every 1.2 s; remedy = **D26** | performance | D26 in tree + gated (dev cluster, Oct 4): watermark gates the scan, cursor bounds the pass; idle leaders logged no `gc-pass` line for 10 min; a 5120-record `rm` drained at ~514 records/pass; Oct 7 10-GiB physical reclamation passes; retained-table active GC latency regression remains (1393-ms pass); idle-hour/committed-tail results in the acceptance ledger | [full text](#w44--the-group-leaders-gc-frag-pass-scans-the-whole-prefix-every-12-s-queue-row-0h) · [D26](#appendix-4--decisions--taken-and-pending-register-d1d36) |
 | 12 | **W48** · four of the 16 dd streams ended early | investigation | investigate — evidence only | [full text](#w48--four-of-the-16-dd-streams-ended-early--investigate-plan-row-12) |
-| 15 | **W52** · a REPORT after thousands of O_APPEND writes answers after > 30 s | correctness | approved single-proposal shape A still open; bounded eight-reservation transaction and append timer fix await full acceptance, exact 20k append gate owed | [full text](#w52--a-report-after-thousands-of-o_append-writes-answers-after--30-s-plan-row-15) |
+| 15 | **W52** · a REPORT after thousands of O_APPEND writes answers after > 30 s | correctness | shape A in tree (`32b472c5b`); Oct 22 K15: live gate harness added, exact 20k gate and before/after A/B NOTRUN (two attempts stopped early, [K15](../status/k15-w52-w64-20261022.md)) | [full text](#w52--a-report-after-thousands-of-o_append-writes-answers-after--30-s-plan-row-15) |
 | 16 | **W53** · W41's create/close-storm p99 regression — keep or revert | investigation | investigate — evidence only, then the user decides | [full text](#w53--w41s-createclose-storm-tail-under-concurrent-big-writers--investigate-plan-row-16) |
 | E | **D17** · `st_blocks` = 0 for files this client did not write | performance | in tree + gated (dev cluster, Oct 4): lane-stamp present count, summed at getattr, client takes max with its local table; Closed: NUC direct/buffered actual ecrawl reports zero dense-file false sparse classifications, two true sparse files and zero errors; cold non-writer partial-tail/truncate/empty allocation gates pass | [D17](#appendix-4--decisions--taken-and-pending-register-d1d36) |
 | P2.2 | **D26** · the GC pass | performance | in tree + gated (dev cluster, Oct 4): per-anchor pending-GC watermark maintained in the apply, derived once per recovery/import, `zero_if` clamp on a drained pass; `test_gc_watermark`; live: 514 records/pass drain, 10 idle min with no `gc-pass` line; Oct 7 10-GiB physical reclamation passes; retained-table active GC latency regression remains (1393-ms pass); idle-hour/committed-tail results in the acceptance ledger | [full text](#p22--d26--the-gc-pass-performance-plan-row) · [D26](#appendix-4--decisions--taken-and-pending-register-d1d36) |
@@ -5168,6 +5174,18 @@ the quick ones).** Each row is a queue item; the W number is binding.
 
 ### W52 · a REPORT after thousands of O_APPEND writes answers after > 30 s (plan row 15)
 
+**Oct 22 K15 (`devel-k15`):** shape A is in tree (`32b472c5b`: one
+`APPEND_CATCHUP` proposal per REPORT); K15 changes no W52 code. A new live gate,
+`tests/live/append_failover.py`, checks 4 KiB records from several writers,
+the final fsync within the 30 s REPORT bound, no type-67 receive retry, and
+exact-once warm/peer/cold bytes. The exact 20k gate and the before/after A/B
+are **NOTRUN**. One efs3 attempt was stopped at 1,640 records: rate fell
+1.57 to 0.3 records/s, and one APPEND_RESERVE exceeded 30 s during a transaction
+recovery. A node9901 attempt was stopped by direction at 6,535 records with
+zero REPORT retries. The current client publishes every 32 writes or 1 s, so
+no REPORT carries thousands of reservations.
+[K15 evidence](../status/k15-w52-w64-20261022.md).
+
 **Oct 11 follow-up candidate:** REPORT now submits one inode-group
 `APPEND_CATCHUP` proposal for every caught-up reservation, then waits for a
 separate guarded lane-barrier retirement transaction before replying. No
@@ -5467,6 +5485,19 @@ results dirs; move this plan's finished rows to project-history.
 <a id="w64"></a>
 
 ### W64 · Durable append reservation replay across leader changes (queue row 0t)
+
+**Oct 22 K15 (`devel-k15`):** a step-down gate (4 writers, both group
+leaders stepped down every 20 s) kept integrity: 596 acknowledged records
+exactly once warm/peer/cold, failed writes invisible, no holes. It failed
+availability: four writes returned EBUSY. An interrupted reservation
+transaction stayed PREPARED until the 5 s recovery scan (ABORT at 7.0–7.4 s),
+beyond the client's 8 s budget. Fix: a failed coordinator DECIDE ABORT is
+handed to the finisher, which re-proposes ABORT at the new leader and resolves;
+COMMIT is never converted (`tests/test_fin_abort_handoff.py`). New
+`efs-mgmt raft-step-down`. The matched after-fix failover gate is **NOTRUN**,
+so W64 stays **INCOMPLETE**. K5/W72 must provide production sessions whose
+fencing lets `cleanup-appends` retire a reservation abandoned after an unknown
+outcome. [K15 evidence](../status/k15-w52-w64-20261022.md).
 
 **Oct 10 NUC regression:** integrated d4f2ddb3 private 100 ms checkpoint gate
 fails sequence-2/ACK-1 replay: 31/32 identical requests return offset 16 rather

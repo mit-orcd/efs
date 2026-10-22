@@ -18,6 +18,12 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[K15 W52/W64 append gates](k15-w52-w64-20261022.md): **W64 INCOMPLETE**.
+A leader change left append transactions PREPARED until recovery, so writes
+failed with EBUSY. The fix and its regression test are on `devel-k15`, and the
+matched failover gate is NOTRUN. **W52: shape A in tree; exact 20k gate and A/B
+NOTRUN.**
+
 [Recent devel integration review](devel-integration-review-20261022.md):
 **OPEN findings** through `e9ca0d07b` plus `95beaa053`: summary exit-status
 false success (reproduced), decision-sweep starvation, transaction encoding

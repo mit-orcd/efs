@@ -2353,6 +2353,18 @@ the quick ones).** Each row is a queue item; the W number is binding.
 
 ## W52 · a REPORT after thousands of O_APPEND writes answers after > 30 s (plan row 15)
 
+**Oct 22 K15 (`devel-k15`):** shape A is in tree (`32b472c5b`: one
+`APPEND_CATCHUP` proposal per REPORT); K15 changes no W52 code. A new live gate,
+`tests/live/append_failover.py`, checks 4 KiB records from several writers,
+the final fsync within the 30 s REPORT bound, no type-67 receive retry, and
+exact-once warm/peer/cold bytes. The exact 20k gate and the before/after A/B
+are **NOTRUN**. One efs3 attempt was stopped at 1,640 records: rate fell
+1.57 to 0.3 records/s, and one APPEND_RESERVE exceeded 30 s during a transaction
+recovery. A node9901 attempt was stopped by direction at 6,535 records with
+zero REPORT retries. The current client publishes every 32 writes or 1 s, so
+no REPORT carries thousands of reservations.
+[K15 evidence](../status/k15-w52-w64-20261022.md).
+
 **Oct 11 follow-up candidate:** REPORT now submits one inode-group
 `APPEND_CATCHUP` proposal for every caught-up reservation, then waits for a
 separate guarded lane-barrier retirement transaction before replying. No
@@ -2652,6 +2664,19 @@ results dirs; move this plan's finished rows to project-history.
 <a id="w64"></a>
 
 ## W64 · Durable append reservation replay across leader changes (queue row 0t)
+
+**Oct 22 K15 (`devel-k15`):** a step-down gate (4 writers, both group
+leaders stepped down every 20 s) kept integrity: 596 acknowledged records
+exactly once warm/peer/cold, failed writes invisible, no holes. It failed
+availability: four writes returned EBUSY. An interrupted reservation
+transaction stayed PREPARED until the 5 s recovery scan (ABORT at 7.0–7.4 s),
+beyond the client's 8 s budget. Fix: a failed coordinator DECIDE ABORT is
+handed to the finisher, which re-proposes ABORT at the new leader and resolves;
+COMMIT is never converted (`tests/test_fin_abort_handoff.py`). New
+`efs-mgmt raft-step-down`. The matched after-fix failover gate is **NOTRUN**,
+so W64 stays **INCOMPLETE**. K5/W72 must provide production sessions whose
+fencing lets `cleanup-appends` retire a reservation abandoned after an unknown
+outcome. [K15 evidence](../status/k15-w52-w64-20261022.md).
 
 **Oct 10 NUC regression:** integrated d4f2ddb3 private 100 ms checkpoint gate
 fails sequence-2/ACK-1 replay: 31/32 identical requests return offset 16 rather

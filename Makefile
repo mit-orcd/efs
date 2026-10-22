@@ -584,6 +584,7 @@ test: all
 	python3 tests/test_meta_cmd_namespace.py
 	python3 tests/test_submit_unknown_tag.py
 	python3 tests/test_append_catchup_host.py
+	python3 tests/test_fin_abort_handoff.py
 	python3 tests/test_append_single_host.py
 	./tests/test_meta_apply
 	./tests/test_retained_namespace_audit

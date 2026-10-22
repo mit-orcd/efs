@@ -218,6 +218,13 @@ enum efs_msg_type {
      * reply struct efs_msg_raft_resync_reply. */
     EFS_MSG_RAFT_RESYNC = 169,
     EFS_MSG_RAFT_RESYNC_REPLY = 170,
+    /* W64 failover harness: make this node stop leading one group now
+     * (efs-mgmt raft-step-down). With a target voter it is a leadership
+     * transfer (TIMEOUT_NOW); without one the node merely steps down and
+     * may win the next election again. Request struct
+     * efs_msg_raft_step_down, reply struct efs_msg_raft_step_down_reply. */
+    EFS_MSG_RAFT_STEP_DOWN = 171,
+    EFS_MSG_RAFT_STEP_DOWN_REPLY = 172,
 };
 
 /* Retired message IDs: no handler in this build. The server closes a
@@ -236,6 +243,19 @@ struct efs_msg_raft_resync {
 struct efs_msg_raft_resync_reply {
     int32_t rc; /* EFS_OK, EFS_ERR_NOT_PRIMARY (this node leads it), EFS_ERR_INVAL */
     uint32_t pad;
+};
+
+struct efs_msg_raft_step_down {
+    uint8_t group;
+    int8_t target; /* raft peer id (node-id - 1) to transfer to; -1 = plain step-down */
+    uint8_t pad[6];
+};
+
+struct efs_msg_raft_step_down_reply {
+    int32_t rc;      /* EFS_OK, EFS_ERR_NOT_PRIMARY (not leading), EFS_ERR_BUSY (transfer
+                        target not caught up / group frozen), EFS_ERR_INVAL */
+    int32_t raft_id; /* this node's raft peer id */
+    uint64_t term;   /* the term it led when it stepped down */
 };
 
 struct efs_msg_pack_compact {

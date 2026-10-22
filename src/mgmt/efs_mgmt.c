@@ -1037,6 +1037,63 @@ static int cmd_raft_resync(int argc, char **argv)
     return out;
 }
 
+/* W64 failover harness: make the node stop leading GROUP. With TARGET (a
+ * node-id) it is a leadership transfer; BUSY means the target is not caught
+ * up or the group is frozen — retry. Refused (NOT_PRIMARY) on a non-leader. */
+static int cmd_raft_step_down(int argc, char **argv)
+{
+    char host[64];
+    uint16_t port;
+    struct efs_msg_raft_step_down req;
+    struct efs_msg_raft_step_down_reply *r;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    uint8_t reply_type = 0;
+    int fd;
+
+    if (argc < 2 || argc > 3 || parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Usage:\n  efs-mgmt raft-step-down <node:port> <group> [target-node-id]\n"
+                "  Make that node stop leading GROUP now (transfer to TARGET when given).\n");
+        return 1;
+    }
+    memset(&req, 0, sizeof(req));
+    req.group = (uint8_t)strtoul(argv[1], NULL, 10);
+    req.target = -1;
+    if (argc == 3) {
+        long node = strtol(argv[2], NULL, 10);
+        if (node < 1 || node > EFS_MAX_NODES) {
+            fprintf(stderr, "raft-step-down: target node-id must be 1..%d\n", EFS_MAX_NODES);
+            return 1;
+        }
+        req.target = (int8_t)(node - 1);
+    }
+    fd = efs_connect_declared(host, port);
+    if (fd < 0) {
+        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
+        return 1;
+    }
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    if (send_recv(fd, EFS_MSG_RAFT_STEP_DOWN, &req, sizeof(req), &reply_type, &reply,
+                  &reply_len) != 0 || reply_type != EFS_MSG_RAFT_STEP_DOWN_REPLY ||
+        reply_len != sizeof(*r)) {
+        fprintf(stderr, "Failed to request raft-step-down\n");
+        free(reply);
+        close(fd);
+        return 1;
+    }
+    close(fd);
+    r = reply;
+    printf("raft-step-down %s:%u group=%u target=%d rc=%d raft_id=%d term=%llu%s\n", host, port,
+           req.group, req.target, r->rc, r->raft_id, (unsigned long long)r->term,
+           r->rc == EFS_ERR_NOT_PRIMARY ? " (this node does not lead the group; refused)" :
+           r->rc == EFS_ERR_BUSY ? " (target not caught up or group frozen; retry)" :
+           r->rc == EFS_OK ? " (stepped down)" : "");
+    int out = r->rc == EFS_OK ? 0 : 1;
+    free(reply);
+    return out;
+}
+
 static int cmd_raft_change(int argc, char **argv)
 {
     char host[64];
@@ -3096,6 +3153,8 @@ int main(int argc, char **argv)
         return cmd_raft_status(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-resync") == 0)
         return cmd_raft_resync(argc - 2, argv + 2);
+    if (strcmp(cmd, "raft-step-down") == 0)
+        return cmd_raft_step_down(argc - 2, argv + 2);
     if (strcmp(cmd,"expiry-status")==0)return cmd_expiry_status(argc-2,argv+2);
     if (strcmp(cmd,"expiry-id")==0)return cmd_expiry_id(argc-2,argv+2);
     if (strcmp(cmd,"expiry-enable")==0)return cmd_expiry_enable(argc-2,argv+2);
