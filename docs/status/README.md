@@ -18,6 +18,14 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[K22 / W23 follower memory/lag bound](../../results/measure/20261022-k22-follower-bound/SUMMARY.md):
+**implemented on `devel-k22` (not merged); unit test (EFS_FAULTS stall
+hook) and `make test` PASS on efs3; the plateau measurement on a real cluster
+is NOTRUN (parent session).** Two earlier scaled runs on efs3 are
+informational only: one found the stalled follower winning an election,
+which the capacity gate on campaigning and leadership fixed. Snapshot import
+into a stalled follower is NOTRUN.
+
 [K15 W52/W64 append gates](k15-w52-w64-20261022.md): **W64 INCOMPLETE**.
 A leader change left append transactions PREPARED until recovery, so writes
 failed with EBUSY. The fix and its regression test are on `devel-k15`, and the

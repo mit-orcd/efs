@@ -1740,6 +1740,17 @@ use `EFS_STRACE_EXPR`.
 
 #### W23 — Server: the apply path blocks on L0 back-pressure, and compaction rewrites the table to absorb a few MiB
 
+**K22 update (Oct 22, branch `devel-k22`, not merged):** the universal
+follower memory/lag bound is implemented; its unit test and `make test`
+pass; the plateau measurement is NOTRUN ([summary](../../results/measure/20261022-k22-follower-bound/SUMMARY.md)). The KV budget is derived as
+`max(4 memtables, min(L0 cap / 8, RAM / 16))`; apply defers at it. The
+Raft unapplied log is capped at `budget / 256` entries. A follower at
+the cap refuses AppendEntries busy, the leader withholds entries from it,
+and leaders refuse proposals `EFS_ERR_BUSY` at 3/4 of either bound. A
+replica under pressure does not campaign, and a pressured leader steps
+down. The plateau measurement on a real cluster and InstallSnapshot into a
+stalled follower remain NOTRUN.
+
 **Acceptance update (Oct 7, three-package round):** an owned NUC engine reaches
 the actual 1 GiB L0 cap. Idle deferred-memtable recovery and unsafe concurrent
 WAL truncation are repaired and tested against their old-binary failures.
@@ -2585,7 +2596,7 @@ Rows P2.1 and P2.4 are DONE (archive index); P2.2 and P2.3 follow as sections be
 
 **Item.** **W23** stalled-compactor test
 
-**Status.** **Test/hook in tree; valid stalled-compactor bound still owed.** The [completed Oct 5 run](../../results/measure/20261005-040810-w23-stalled-compactor/SUMMARY.txt) supersedes the earlier setup failure: it recorded 4352 MiB in 27 seconds, but its zero-L0 interpretation comes from shifted TSV columns ([W89](#w89)). Corrected samples show real L0 accumulation; the cap/lag bound remains untested. Use the [current W23 checkpoint](#w23--server-the-apply-path-blocks-on-l0-back-pressure-and-compaction-rewrites-the-table-to-absorb-a-few-mib) for the source distinction and next measurement. This private-cluster gate does not depend on the historical 19810 endpoint.
+**Status (Oct 22, K22).** **Bound implemented on `devel-k22`; unit test and `make test` PASS; plateau measurement NOTRUN ([summary](../../results/measure/20261022-k22-follower-bound/SUMMARY.md)).** Earlier status: **Test/hook in tree; valid stalled-compactor bound still owed.** The [completed Oct 5 run](../../results/measure/20261005-040810-w23-stalled-compactor/SUMMARY.txt) supersedes the earlier setup failure: it recorded 4352 MiB in 27 seconds, but its zero-L0 interpretation comes from shifted TSV columns ([W89](#w89)). Corrected samples show real L0 accumulation; the cap/lag bound remains untested. Use the [current W23 checkpoint](#w23--server-the-apply-path-blocks-on-l0-back-pressure-and-compaction-rewrites-the-table-to-absorb-a-few-mib) for the source distinction and next measurement. This private-cluster gate does not depend on the historical 19810 endpoint.
 
 **What changes (server).** the test written in [W23](#w23--server-the-apply-path-blocks-on-l0-back-pressure-and-compaction-rewrites-the-table-to-absorb-a-few-mib) "correction": compactor stalled by a fault, measure memory and lag bound
 
