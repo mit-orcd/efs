@@ -49,7 +49,8 @@ enum efs_msg_type {
     /* 20/21 retired: REMOVE_NODE (node lifecycle is a control-plane op). */
     EFS_MSG_SHRINK_QUOTA = 22,
     EFS_MSG_SHRINK_QUOTA_REPLY = 23,
-    EFS_MSG_NODE_LEFT = 24,
+    /* 24 retired: NODE_LEFT (W132). Membership changes are Raft
+     * configuration changes / JOIN; see EFS_MSG_IS_RETIRED. */
     EFS_MSG_QUERY_STATS = 25,
     EFS_MSG_QUERY_STATS_REPLY = 26,
     /* 27..32 retired: LIST_EXPORTS, DRAIN_NODE, UNDRAIN_NODE. */
@@ -222,7 +223,8 @@ enum efs_msg_type {
 /* Retired message IDs: no handler in this build. The server closes a
  * connection that sends one (handler.c retired_refuse); never reuse them. */
 #define EFS_MSG_IS_RETIRED(t) \
-    ((t) == 81 || (t) == 82 /* HEAL_STATUS */ || \
+    ((t) == 24 /* NODE_LEFT */ || \
+     (t) == 81 || (t) == 82 /* HEAL_STATUS */ || \
      (t) == 99 || (t) == 100 /* GC_FRAGMENT */ || \
      (t) == 121 || (t) == 122 /* GC_INODE */)
 
@@ -689,10 +691,6 @@ struct efs_msg_version_reply {
 
 struct efs_msg_shrink_quota {
     uint64_t amount; /* bytes to subtract from the current quota */
-};
-
-struct efs_msg_node_left {
-    efs_node_id_t node_id;
 };
 
 #define EFS_SHRINK_QUOTA_OK     0

@@ -398,20 +398,3 @@ void server_start_rejoin(struct efsd_server *s)
     pthread_create(&s->rejoin_tid, &attr, rejoin_thread, s);
     pthread_attr_destroy(&attr);
 }
-
-void server_remove_node_from_cluster(struct efsd_server *s, efs_node_id_t node_id)
-{
-    pthread_mutex_lock(&s->lock);
-    uint32_t new_count = 0;
-    struct efs_node new_nodes[EFS_MAX_NODES];
-    memset(new_nodes, 0, sizeof(new_nodes));
-    for (uint32_t i = 0; i < s->node_count; i++) {
-        if (s->nodes[i].id != node_id)
-            new_nodes[new_count++] = s->nodes[i];
-    }
-    memcpy(s->nodes, new_nodes, sizeof(s->nodes));
-    s->node_count = new_count;
-    server_nodes_mark_dirty(s);
-    pthread_mutex_unlock(&s->lock);
-    server_nodes_flush_dirty(s);
-}
