@@ -1295,7 +1295,9 @@ static int host_send(void *net, const struct efs_raft_msg *msg)
          * Anything else (an entry AE behind a full lane) is retried
          * by the caller; that is not a drop. */
         int vote = heap[0] == EFS_RAFT_MSG_VOTE_REQ ||
-                   heap[0] == EFS_RAFT_MSG_VOTE_REP;
+                   heap[0] == EFS_RAFT_MSG_VOTE_REP ||
+                   heap[0] == EFS_RAFT_MSG_PREVOTE_REQ ||
+                   heap[0] == EFS_RAFT_MSG_PREVOTE_REP;
         if (vote && outbox_pri_replace(tx, outbox_is_heartbeat, heap, len)) {
             tx->st_enq++;
             pthread_cond_signal(&tx->cv);

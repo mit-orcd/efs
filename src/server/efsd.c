@@ -212,6 +212,40 @@ static void conn_wake_readers(void)
 }
 
 
+/* K1/W145 part 4: a stop is bounded. stop.sh stops each daemon through
+ * scripts/server_processes.py stop-file, which waits 60 s for the process
+ * to exit and then gives up without SIGKILL, leaving it running. Handlers
+ * get EFS_SHUTDOWN_DRAIN_MS to finish: server_handlers_begin_stop closes
+ * each connection before its next request, and a request's group read or
+ * apply wait is itself bounded (400 ms); forwarded mutations are bounded by
+ * their RPC timeout.
+ * If any is still live after that, efsd refuses to tear shared state down
+ * under it (a use-after-free) and exits without teardown instead, rc 3,
+ * with a log line naming the count. Durable state needs no teardown: the
+ * Raft log is fsynced before any acknowledgement and replays at start. */
+#define EFS_SHUTDOWN_DRAIN_MS 40000u
+#define EFS_SHUTDOWN_FORCED_RC 3
+static int shutdown_drain(unsigned deadline_ms)
+{
+    unsigned waited_ms = 0;
+
+    while (__sync_add_and_fetch(&g_live_conns, 0) > 0) {
+        if (waited_ms >= deadline_ms) {
+            fprintf(stderr, "shutdown: %d live handlers after %u ms; refusing to tear "
+                    "down shared state under them; exiting without teardown (rc=%d)\n",
+                    __sync_add_and_fetch(&g_live_conns, 0), waited_ms,
+                    EFS_SHUTDOWN_FORCED_RC);
+            return -1;
+        }
+        usleep(50 * 1000);
+        waited_ms += 50;
+        if (waited_ms % 5000 == 0)
+            fprintf(stderr, "shutdown: waiting for %d live handlers (%u of %u ms)\n",
+                    __sync_add_and_fetch(&g_live_conns, 0), waited_ms, deadline_ms);
+    }
+    return 0;
+}
+
 static void *conn_thread(void *arg)
 {
     int fd = (intptr_t)arg;
@@ -692,16 +726,16 @@ int main(int argc, char **argv)
     }
     stop_perf_recorder();
 
-    /* Idle pooled readers have no receive timeout. Wake them, then retain
-     * shared state until every handler and its TLS cleanup has completed.
-     * An operator timeout must retain the daemon, never force a live UAF. */
+    /* Busy handlers close before their next request; idle pooled readers
+     * have no receive timeout, so wake them.
+     * Shared state stays until every handler and its TLS cleanup has
+     * completed, or the drain deadline passes and efsd exits untorn. */
+    server_handlers_begin_stop();
     conn_wake_readers();
-    for (unsigned waited_ms = 0; __sync_add_and_fetch(&g_live_conns, 0) > 0; ) {
-        usleep(50 * 1000);
-        waited_ms += 50;
-        if (waited_ms % 15000 == 0)
-            fprintf(stderr, "shutdown: waiting for %d live handlers; state retained\n",
-                    __sync_add_and_fetch(&g_live_conns, 0));
+    if (shutdown_drain(EFS_SHUTDOWN_DRAIN_MS) != 0) {
+        fflush(stdout);
+        fflush(stderr);
+        _exit(EFS_SHUTDOWN_FORCED_RC);
     }
 
     server_packer_stop();
