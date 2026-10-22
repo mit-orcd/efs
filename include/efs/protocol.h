@@ -573,6 +573,10 @@ struct efs_msg_get_chunk {
 #define EFS_GET_CHUNK_OK     0
 #define EFS_GET_CHUNK_NOT_FOUND 1
 #define EFS_GET_CHUNK_ERROR  2
+/* I25: the stored fragment exists but was refused (unknown format, another
+ * identity under this name, or payload/record corruption). Never served;
+ * the reader treats it as unavailable and decodes from verified siblings. */
+#define EFS_GET_CHUNK_INTEGRITY 3
 
 /* PUT/BENCH frame: this header followed by data_len payload bytes. */
 struct efs_msg_put_chunk {

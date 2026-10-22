@@ -141,6 +141,18 @@ static int get_one_reply(struct efs_conn *conn, struct frag_get_job *j)
         j->rc = EFS_ERR_NET;
         return -1;
     }
+    if (status == EFS_GET_CHUNK_INTEGRITY) {
+        /* I25: the node refused its stored copy (format, identity or
+         * corruption). Unavailable; the caller decodes from verified
+         * siblings or fails. Bounded log: first 64 refusals. */
+        static unsigned refused;
+        if (__atomic_add_fetch(&refused, 1, __ATOMIC_RELAXED) <= 64)
+            fprintf(stderr, "read: I25 node refused fragment ino=%llu ci=%u fi=%u; "
+                    "using the other fragments\n", (unsigned long long)j->ino,
+                    j->chunk_index, (unsigned)j->fi);
+        j->rc = EFS_ERR_CHECKSUM;
+        return 0;
+    }
     if (status != EFS_GET_CHUNK_OK) {
         j->rc = EFS_ERR_NOT_FOUND;
         return 0;
@@ -815,6 +827,12 @@ static int get_fragment_run(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
 
         if (status != EFS_GET_CHUNK_OK) {
             efs_client_conn_release(node_id, conn);
+            if (status == EFS_GET_CHUNK_INTEGRITY) {
+                fprintf(stderr, "read: I25 node %u refused fragment ino=%llu ci=%u fi=%u\n",
+                        (unsigned)node_id, (unsigned long long)ino, chunk_index,
+                        fragment_index);
+                return EFS_ERR_CHECKSUM;
+            }
             return EFS_ERR_NOT_FOUND;
         }
         *data_len = expected_frag_len;

@@ -51,6 +51,8 @@ const char *efs_strerror(int rc)
     case EFS_ERR_ILSEQ: return "unrepresentable name";
     case EFS_ERR_NODATA: return "attribute not found";
     case EFS_ERR_UNSUPPORTED: return "unsupported log encoding";
+    case EFS_ERR_FRAG_FORMAT: return "unknown fragment format";
+    case EFS_ERR_FRAG_IDENTITY: return "fragment identity mismatch";
     default:             return "unknown error";
     }
 }

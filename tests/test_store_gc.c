@@ -47,6 +47,73 @@ static int gc_inode(struct efsd_server *s,efs_export_id_t eid,efs_ino_t ino){
  return rc!=EFS_OK?rc:server_gc_inode_delete(s,eid,ino,NULL,1);
 }
 
+/* I25 fixture helpers: whole-file copy (an object swap) and a byte flip. */
+static void copy_file(const char *from,const char *to)
+{
+ int a=open(from,O_RDONLY);assert(a>=0);struct stat st;assert(!fstat(a,&st));
+ uint8_t *b=malloc((size_t)st.st_size);assert(b&&pread(a,b,(size_t)st.st_size,0)==st.st_size);close(a);
+ int z=open(to,O_WRONLY|O_TRUNC);assert(z>=0&&pwrite(z,b,(size_t)st.st_size,0)==st.st_size);close(z);free(b);
+}
+static void flip_byte(const char *path,off_t at)
+{
+ int z=open(path,O_RDWR);assert(z>=0);uint8_t c;assert(pread(z,&c,1,at)==1);c^=0x5a;
+ assert(pwrite(z,&c,1,at)==1);close(z);
+}
+/* I25: GET and GC act only on a file whose record names exactly the
+ * requested object; payload rot, another identity under the name and the
+ * previous (payload-only digest) tail are refused with distinct codes. */
+static void test_identity(struct efsd_server *s,struct efs_export *ex,uint8_t *body)
+{
+ uint8_t good[EFS_HASH_SIZE],sum[EFS_HASH_SIZE];efs_hash(body,EFS_FRAGMENT_SIZE,good);
+ uint8_t *out;assert(!posix_memalign((void**)&out,4096,EFS_FRAGMENT_SIZE));
+ for(int direct=0;direct<=1;direct++){
+  efs_ino_t ino=9000+(efs_ino_t)direct; /* reclaimed inodes are never reused */
+  s->direct_io=direct;ex->chunk_size=EFS_DEFAULT_CHUNK_SIZE;
+  efs_tls_chunk_gen=300+direct;efs_tls_write_root=0;efs_tls_path_hint=-1;
+  for(uint32_t ci=0;ci<4;ci++)
+   assert(!server_write_fragment_with_sum_sync(s,ex,ino,ci,0,body,EFS_FRAGMENT_SIZE,good));
+  char p[4][8192];for(int i=0;i<4;i++)fragment_path_at(s,0,ex,ino,(uint32_t)i,0,p[i],sizeof(p[i]));
+  uint32_t len=EFS_FRAGMENT_SIZE;int ok=0;
+  assert(!server_read_fragment_with_sum(s,ex,ino,0,0,out,&len,sum,&ok));
+  assert(ok==EFS_STORE_SUM_PRESENT&&len==EFS_FRAGMENT_SIZE&&!memcmp(sum,good,sizeof(sum))&&!memcmp(out,body,len));
+  uint64_t refused=server_fragment_refusals();
+  /* Object swap: chunk 1's complete, self-consistent file under chunk 0's
+   * name. Same payload bytes and digest: only identity can tell. */
+  copy_file(p[1],p[0]);len=EFS_FRAGMENT_SIZE;
+  assert(server_read_fragment_with_sum(s,ex,ino,0,0,out,&len,sum,&ok)==EFS_ERR_FRAG_IDENTITY&&!ok);
+  assert(server_delete_fragment_if_sum(s,ex,ino,0,0,good)==EFS_ERR_FRAG_IDENTITY&&!access(p[0],F_OK));
+  /* Another generation of the same name. */
+  efs_tls_chunk_gen=400+direct;len=EFS_FRAGMENT_SIZE;
+  char g[8192];fragment_path_at(s,0,ex,ino,1,0,g,sizeof(g));
+  assert(!rename(p[1],g)); /* gen-300 bytes now named generation 400 */
+  assert(server_read_fragment_with_sum(s,ex,ino,1,0,out,&len,sum,&ok)==EFS_ERR_FRAG_IDENTITY);
+  assert(!rename(g,p[1]));efs_tls_chunk_gen=300+direct;
+  /* Payload rot. */
+  flip_byte(p[2],100);len=EFS_FRAGMENT_SIZE;
+  assert(server_read_fragment_with_sum(s,ex,ino,2,0,out,&len,sum,&ok)==EFS_ERR_CHECKSUM);
+  /* Identity bytes rotted on disk: bound digest. */
+  flip_byte(p[3],EFS_FRAGMENT_SIZE+24);len=EFS_FRAGMENT_SIZE;
+  assert(server_read_fragment_with_sum(s,ex,ino,3,0,out,&len,sum,&ok)==EFS_ERR_CHECKSUM);
+  assert(server_delete_fragment_if_sum(s,ex,ino,3,0,good)==EFS_ERR_CHECKSUM&&!access(p[3],F_OK));
+  /* The previous on-disk format: payload then a bare 32-byte digest
+   * (buffered) or a 4 KiB tail page starting with it (direct). */
+  {
+   int z=open(p[2],O_WRONLY|O_TRUNC);assert(z>=0);
+   assert(pwrite(z,body,EFS_FRAGMENT_SIZE,0)==EFS_FRAGMENT_SIZE);
+   uint8_t tail[4096]={0};memcpy(tail,good,EFS_HASH_SIZE);
+   size_t tl=direct?sizeof(tail):EFS_HASH_SIZE;
+   assert(pwrite(z,tail,tl,EFS_FRAGMENT_SIZE)==(ssize_t)tl);close(z);
+   len=EFS_FRAGMENT_SIZE;int rc=server_read_fragment_with_sum(s,ex,ino,2,0,out,&len,sum,&ok);
+   assert(rc==(direct?EFS_ERR_FRAG_FORMAT:EFS_ERR_CHECKSUM)&&!ok);
+   if(direct)assert(server_delete_fragment_if_sum(s,ex,ino,2,0,good)==EFS_ERR_FRAG_FORMAT);
+   assert(!access(p[2],F_OK));
+  }
+  assert(server_fragment_refusals()>=refused+6);
+  assert(gc_inode(s,1,ino)==EFS_OK);
+  startup_inventory(s);assert(!s->nodes[0].used);
+ }
+ free(out);
+}
 int main(int argc,char **argv){
  assert(argc==1 || (argc==2 && !strcmp(argv[1],"unlimited")));
  char a[]="/tmp/efs-gc-a-XXXXXX",b[]="/tmp/efs-gc-b-XXXXXX";assert(mkdtemp(a)&&mkdtemp(b));
@@ -134,6 +201,7 @@ int main(int argc,char **argv){
   while((entry=readdir(d))) assert(!strcmp(entry->d_name,".") || !strcmp(entry->d_name,".."));
   assert(!closedir(d));
  }
+ test_identity(&s,&ex,body);
  /* Corrupt fence pages fail PUT closed, including an adjacent live inode. */
  char fence[8192];inode_death_path(&s,1,84,fence);
  int f=open(fence,O_WRONLY);assert(f>=0);uint8_t corrupt=255;
@@ -141,5 +209,5 @@ int main(int argc,char **argv){
  __atomic_fetch_add(&inode_gc_epoch,1,__ATOMIC_RELEASE);
  assert(server_write_fragment_with_sum_sync(&s,&ex,8276,0,0,body,EFS_FRAGMENT_SIZE,sum)==EFS_ERR_IO);
  assert(!s.nodes[0].used);
- free(body);printf("store GC: two roots, buffered/direct format switch, quota recount, checksum protection, syscall failures and idempotent deletion PASS\n");return 0;
+ free(body);printf("store GC: two roots, buffered/direct format switch, quota recount, checksum protection, I25 identity/format refusal, syscall failures and idempotent deletion PASS\n");return 0;
 }

@@ -8,7 +8,11 @@
  * The root is chosen by segment id, so a read needs no probing.
  *
  * File format: the fragment payload (geometry/2 bytes, a 4 KiB multiple)
- * followed by a 4 KiB tail: checksum:32, payload length:4, "EFSSEG1\0".
+ * followed by a 4 KiB tail page that starts with the I25 fragment record
+ * (efs/frag_record.h, kind SEGMENT: space = group, object = segment id,
+ * generation = segment generation, fragment index, payload length). Reads,
+ * retried PUTs and scans verify the record names exactly this file's
+ * segment fragment; an older tail ("EFSSEG1") is an unknown format.
  * Written once with O_EXCL (O_DIRECT when the node uses direct I/O), then
  * fsynced with its directory before the PUT is acknowledged: the packer's
  * switch requires the copy durable on every member.
@@ -21,6 +25,7 @@
  * fence under the read guard, so no PUT lands after acceptance. */
 #include "server_internal.h"
 #include "efs/checksum.h"
+#include "efs/frag_record.h"
 #include "efs/pack_mapping.h"
 #include <dirent.h>
 #include <errno.h>
@@ -33,7 +38,6 @@
 #include <unistd.h>
 
 #define SG_TAIL 4096u
-#define SG_MAGIC "EFSSEG1"
 #define SG_GUARDS 256u
 
 static pthread_rwlock_t sg_guard[SG_GUARDS];
@@ -119,19 +123,46 @@ static int sg_mkdirs(const char *dir)
     return EFS_OK;
 }
 
-static int sg_read_tail(int fd, uint32_t len, uint8_t sum[EFS_HASH_SIZE])
+static void sg_ident(uint32_t group, uint64_t id, uint64_t gen, uint32_t fi, uint32_t len,
+                     struct efs_frag_ident *out)
 {
-    uint8_t t[64];
-    if (pread(fd, t, sizeof(t), len) != (ssize_t)sizeof(t)) return EFS_ERR_IO;
-    if (memcmp(t + 36, SG_MAGIC, 8) || sg_get32(t + 32) != len) return EFS_ERR_CHECKSUM;
-    memcpy(sum, t, EFS_HASH_SIZE);
-    return EFS_OK;
+    memset(out, 0, sizeof(*out));
+    out->kind = EFS_FRAG_KIND_SEGMENT;
+    out->space = group;
+    out->object = id;
+    out->generation = gen;
+    out->fragment_index = fi;
+    out->payload_len = len;
+    out->coding_profile = EFS_FRAG_PROFILE_K2F1;
+}
+/* Verify the record names exactly this segment fragment; *sum is its payload
+ * digest. Refusals are logged (bounded) and never served or reused. */
+static int sg_read_tail(int fd, uint32_t group, uint64_t id, uint64_t gen, uint32_t fi,
+                        uint32_t len, uint8_t sum[EFS_HASH_SIZE])
+{
+    uint8_t t[EFS_FRAG_RECORD_BYTES];
+    ssize_t n = pread(fd, t, sizeof(t), len);
+    if (n < 0) return EFS_ERR_IO;
+    struct efs_frag_ident want;
+    const char *field = NULL;
+    sg_ident(group, id, gen, fi, len, &want);
+    int rc = efs_frag_record_verify(t, (size_t)n, &want, sum, &field);
+    if (rc != EFS_OK) {
+        static uint64_t refused;
+        uint64_t k = __atomic_add_fetch(&refused, 1, __ATOMIC_RELAXED);
+        if (k <= 256 || !(k % 1024))
+            fprintf(stderr, "segment: I25 refused fragment g%u id=%016llx gen=%llx fi=%u: "
+                    "%s%s%s\n", group, (unsigned long long)id, (unsigned long long)gen, fi,
+                    efs_strerror(rc), field ? " field=" : "", field ? field : "");
+    }
+    return rc;
 }
 
 /* Write and make durable one fragment. EEXIST with the same checksum (a
  * retried PUT) is success; a different file under the name is refused. */
-static int sg_write(struct efsd_server *s, const char *path, const uint8_t *data, uint32_t len,
-                     const uint8_t sum[EFS_HASH_SIZE], int *created)
+static int sg_write(struct efsd_server *s, const char *path, uint32_t group, uint64_t id,
+                    uint64_t gen, uint32_t fi, const uint8_t *data, uint32_t len,
+                    const uint8_t sum[EFS_HASH_SIZE], int *created)
 {
     char dir[EFS_MAX_PATH + 64];
     *created = 0;
@@ -146,9 +177,12 @@ static int sg_write(struct efsd_server *s, const char *path, const uint8_t *data
     if (posix_memalign((void **)&buf, 4096, total)) return EFS_ERR_NOMEM;
     memcpy(buf, data, len);
     memset(buf + len, 0, SG_TAIL);
-    memcpy(buf + len, sum, EFS_HASH_SIZE);
-    sg_put32(buf + len + 32, len);
-    memcpy(buf + len + 36, SG_MAGIC, 8);
+    struct efs_frag_ident ident;
+    sg_ident(group, id, gen, fi, len, &ident);
+    if (efs_frag_record_encode(&ident, sum, buf + len) != EFS_OK) {
+        free(buf);
+        return EFS_ERR_INVAL;
+    }
     int flags = O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC;
     if (s->direct_io) flags |= O_DIRECT;
     int fd = open(path, flags, 0644);
@@ -159,7 +193,7 @@ static int sg_write(struct efsd_server *s, const char *path, const uint8_t *data
         uint8_t have[EFS_HASH_SIZE];
         fd = open(path, O_RDONLY | O_CLOEXEC);
         if (fd < 0) return EFS_ERR_IO;
-        rc = sg_read_tail(fd, len, have);
+        rc = sg_read_tail(fd, group, id, gen, fi, len, have);
         close(fd);
         if (rc != EFS_OK) return rc;
         return memcmp(have, sum, EFS_HASH_SIZE) ? EFS_ERR_EXIST : EFS_OK;
@@ -245,7 +279,7 @@ int server_segment_put(struct efsd_server *s, const uint8_t *body, uint32_t byte
     ln->used += len;
     pthread_mutex_unlock(&s->lock);
     int created = 0;
-    rc = sg_write(s, path, data, len, sum, &created);
+    rc = sg_write(s, path, group, id, gen, fi, data, len, sum, &created);
     if (rc != EFS_OK || !created) {
         pthread_mutex_lock(&s->lock);
         ln = server_local_node(s);
@@ -264,7 +298,7 @@ int server_segment_read(struct efsd_server *s, uint32_t group, uint64_t id, uint
     server_segment_path(s, group, id, gen, fi, path, sizeof(path));
     int fd = open(path, O_RDONLY | O_CLOEXEC);
     if (fd < 0) return errno == ENOENT ? EFS_ERR_NOT_FOUND : EFS_ERR_IO;
-    int rc = sg_read_tail(fd, len, sum);
+    int rc = sg_read_tail(fd, group, id, gen, fi, len, sum);
     if (rc == EFS_OK) {
         size_t done = 0;
         while (done < len) {

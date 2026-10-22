@@ -197,6 +197,8 @@ void efs_store_nvme_bind(struct efs_store *st, struct efs_nvme_store *ctx,
 /* Combined fragment+checksum read (single-root fast path). *sum_ok uses
  * efs_store_sum_state, nonzero when a stored checksum exists. PRESENT
  * requires verification; NONE is untrusted for data fragments. */
+/* I25 refusals (GET/GC) since start; each one is also logged. */
+uint64_t server_fragment_refusals(void);
 int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
                                   efs_ino_t ino, uint32_t chunk_index,
                                   uint32_t fragment_index, uint8_t *data,

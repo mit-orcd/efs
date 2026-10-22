@@ -3,6 +3,7 @@
 #include "storage_roots.h"
 #include "efs/checksum.h"
 #include "efs/store.h"
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -191,14 +192,15 @@ static int marker_read(const char *root,uint8_t page[128])
     if(close(fd))rc=EFS_ERR_IO;
     uint8_t h[32];
     efs_hash(page,96,h);
-    if(rc||memcmp(page,"EFSENG01",8)||page[8]>1||memcmp(page+96,h,32))return EFS_ERR_IO;
+    if(rc||memcmp(page,"EFSENG01",8)||memcmp(page+96,h,32))return EFS_ERR_IO;
     return EFS_OK;
 }
 int server_storage_root_mode(const char *root)
 {
     uint8_t page[128]={0};
     int rc=marker_read(root,page);
-    return rc==EFS_ERR_NOT_FOUND?0:rc?-1:page[8];
+    /* A marker of any other root format is refused, like a corrupt one. */
+    return rc==EFS_ERR_NOT_FOUND?0:rc?-1:page[8]==EFS_STORAGE_ROOT_FORMAT?page[8]:-1;
 }
 static struct target *target_at(struct efsd_server *s,const char *path)
 {
@@ -275,8 +277,27 @@ int server_storage_roots_init(struct efsd_server *s)
         uint8_t marker[128]={0};
         int rc=marker_read(t->root,marker);
         if(rc==EFS_ERR_NOT_FOUND){
+            /* No marker: a fresh root, unless fragment data already exists
+             * (written by a build that predates markers, format unknown). */
+            /* efsd creates an empty data/ before this; any entry in it is
+             * data of an unknown format. */
+            snprintf(p,sizeof(p),"%s/data",t->root);
+            DIR *dd=opendir(p);
+            int has_data=0;
+            if(dd){
+                struct dirent *de;
+                while((de=readdir(dd)))if(strcmp(de->d_name,".")&&strcmp(de->d_name,"..")){has_data=1;break;}
+                closedir(dd);
+            } else if(errno!=ENOENT)goto fail;
+            if(has_data){
+                fprintf(stderr,"storage: %s has fragment data but no root marker; "
+                        "its format is unknown and this build reads only root format %u "
+                        "(fragment record format 2: I25 identity-bound records); refusing\n",
+                        t->root,(unsigned)EFS_STORAGE_ROOT_FORMAT);
+                goto fail;
+            }
             memcpy(marker,"EFSENG01",8);
-            marker[8]=0; /* root format 0 */
+            marker[8]=EFS_STORAGE_ROOT_FORMAT;
             if(getrandom(marker+16,16,0)!=16)goto fail;
             efs_hash(marker,96,marker+96);
             snprintf(p,sizeof(p),"%s/.efs-engine",t->root);
@@ -284,9 +305,14 @@ int server_storage_roots_init(struct efsd_server *s)
             if(atomic_page(p,marker,128,&published))goto fail;
         }
         else if(rc)goto fail;
-        else if(marker[8]!=0){
-            fprintf(stderr,"storage: %s has unsupported format %u; refusing\n",
-                    t->root,(unsigned)marker[8]);
+        else if(marker[8]!=EFS_STORAGE_ROOT_FORMAT){
+            /* No migration and no legacy reader (not in production). */
+            fprintf(stderr,"storage: %s has root format %u (%s); this build reads "
+                    "only root format %u (fragment format 2: I25 identity-bound "
+                    "fragment records); refusing startup, reformat the root\n",
+                    t->root,(unsigned)marker[8],
+                    marker[8]==0?"fragment format 1: payload-only digest tail":"unknown",
+                    (unsigned)EFS_STORAGE_ROOT_FORMAT);
             goto fail;
         }
         /* Existing roots may have been configured at a new pathname; persist

@@ -128,6 +128,12 @@
  * truncated encoding. Fatal for its Raft group; never a business verdict and
  * never normalized to success (W127-W129). */
 #define EFS_ERR_UNSUPPORTED -24
+/* I25 fragment record refusals (fragment format 2, efs/frag_record.h):
+ * an unknown/older on-disk record format, and a well-formed record naming a
+ * different immutable object than the reader asked for. Never served, never
+ * reconstruction input; distinct from payload corruption (EFS_ERR_CHECKSUM). */
+#define EFS_ERR_FRAG_FORMAT   -25
+#define EFS_ERR_FRAG_IDENTITY -26
 
 typedef uint64_t efs_ino_t;
 
