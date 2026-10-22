@@ -53,6 +53,8 @@ const char *efs_strerror(int rc)
     case EFS_ERR_UNSUPPORTED: return "unsupported log encoding";
     case EFS_ERR_FRAG_FORMAT: return "unknown fragment format";
     case EFS_ERR_FRAG_IDENTITY: return "fragment identity mismatch";
+    case EFS_ERR_FENCED: return "session fenced";
+    case EFS_ERR_UNREGISTERED: return "session not registered on shard";
     default:             return "unknown error";
     }
 }

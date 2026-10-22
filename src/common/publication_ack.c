@@ -56,7 +56,8 @@ int efs_publication_ack_consumed(struct efs_publication_ack_queue *q,
     if (reply->rpc.status!=EFS_INODE_RPC_OK ||
         !((reply->state==EFS_PUBLICATION_COMMITTED && reply->verdict==EFS_OK) ||
           (reply->state==EFS_PUBLICATION_REJECTED &&
-           (reply->verdict==EFS_ERR_STALE || reply->verdict==EFS_ERR_INVAL))))
+           (reply->verdict==EFS_ERR_STALE || reply->verdict==EFS_ERR_INVAL ||
+            reply->verdict==EFS_ERR_FENCED || reply->verdict==EFS_ERR_UNREGISTERED))))
         return EFS_ERR_BUSY;
     for (uint32_t i=0;i<q->count;i++) {
         struct efs_publication_ack_entry *e=&q->entries[(q->head+i)%EFS_META_PUBLICATION_MAX_RECEIPTS];

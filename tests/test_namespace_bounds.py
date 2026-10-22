@@ -28,6 +28,7 @@ code=r'''
 #include <errno.h>
 #include <efs/protocol.h>
 struct efs_raft_host { struct efs_kv *kv; };
+static void efs_client_session_fence(int rc){(void)rc;} /* K5 client latch */
 static int self_parent,read_error;
 static int host_read_index(struct efs_raft_host *h,uint8_t g,int *hint) {
  (void)h;(void)g;(void)hint;return read_error;

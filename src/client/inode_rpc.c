@@ -158,6 +158,10 @@ static int rpc_status_to_efs(uint8_t st)
     case EFS_INODE_RPC_STALE:       return EFS_ERR_STALE;
     case EFS_INODE_RPC_NODATA:      return EFS_ERR_NODATA;
     case EFS_INODE_RPC_OVERFLOW:    return EFS_ERR_OVERFLOW;
+    case EFS_INODE_RPC_FENCED:
+        efs_client_session_fence(EFS_ERR_FENCED);
+        return EFS_ERR_FENCED;
+    case EFS_INODE_RPC_UNREGISTERED: return EFS_ERR_UNREGISTERED;
     case EFS_INODE_RPC_SYMLINK:
     case EFS_INODE_RPC_DEEP:        return EFS_ERR_PROTO;
     default:                        return EFS_ERR_IO;
@@ -668,11 +672,47 @@ static void rpc_retry_peer(uint32_t shard, efs_node_id_t nid,
     }
 }
 
+/* 1 when this request changes session-owned metadata (K5 coverage table in
+ * docs/how-it-works/protocols/sessions.md). Reads and probes are not gated. */
+static int rpc_type_mutates(uint8_t type, const void *req, uint32_t req_len)
+{
+    switch (type) {
+    case EFS_MSG_INODE_CREATE: case EFS_MSG_INODE_UNLINK:
+    case EFS_MSG_INODE_LINK: case EFS_MSG_INODE_RENAME_AT:
+    case EFS_MSG_INODE_SETATTR: case EFS_MSG_INODE_APPEND:
+    case EFS_MSG_INODE_HOLD: case EFS_MSG_REPORT_CHUNKS:
+        return 1;
+    case EFS_MSG_CREATE_RETAINED:
+        return !(req && req_len >= sizeof(struct efs_msg_create_retained) &&
+                 ((const struct efs_msg_create_retained *)req)->probe);
+    case EFS_MSG_INODE_FLOCK: {
+        uint32_t op = 0;
+        if (req && req_len >= sizeof(struct efs_msg_inode_flock))
+            memcpy(&op, (const uint8_t *)req +
+                   offsetof(struct efs_msg_inode_flock, op), sizeof(op));
+        return !(op & EFS_FLOCK_GETLK);
+    }
+    case EFS_MSG_XATTR: {
+        uint8_t op = 0;
+        if (req && req_len >= sizeof(struct efs_msg_xattr))
+            op = ((const struct efs_msg_xattr *)req)->op;
+        return op == EFS_XATTR_SET || op == EFS_XATTR_REMOVE;
+    }
+    default:
+        return 0;
+    }
+}
+
 static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
                                uint32_t req_len, uint8_t expect, void *reply,
                                uint32_t reply_len, uint32_t copy_cap,
                                uint32_t *copied)
 {
+    if (rpc_type_mutates(type, req, req_len)) {
+        int ready = efs_client_session_check();
+        if (ready != EFS_OK)
+            return ready;
+    }
     efs_node_id_t target = 0; /* 0 = compute the owner from our view */
     efs_node_id_t skip = 0;   /* answered NOT_PRIMARY with no hint */
     int prof = rpc_prof_enabled();
@@ -885,6 +925,28 @@ static int rpc_send_recv_owner(efs_ino_t ino, uint8_t type, const void *req,
     return rpc_send_recv_shard(efs_export_shard_of(ino, EFS_KV_SHARD_BITS),
                                type, req, req_len, expect, reply, reply_len,
                                0, NULL);
+}
+
+/* Client-admitted mutation (K5): admit the target shard for this mount's
+ * session (cached per shard), send, and on an UNREGISTERED refusal drop the
+ * cached admission, admit again and resend the identical request once. The
+ * reply's first byte is the inode RPC status for every caller. */
+static int rpc_send_recv_admitted(uint32_t shard, const struct efs_opid *id,
+                                  uint8_t type, const void *req, uint32_t req_len,
+                                  uint8_t expect, void *reply, uint32_t reply_len,
+                                  uint32_t copy_cap, uint32_t *copied)
+{
+    for (int pass = 0;; pass++) {
+        int rc = efs_client_session_admit(shard, id);
+        if (rc != EFS_OK)
+            return rc;
+        rc = rpc_send_recv_shard(shard, type, req, req_len, expect, reply,
+                                 reply_len, copy_cap, copied);
+        if (rc != EFS_OK || pass ||
+            *(const uint8_t *)reply != EFS_INODE_RPC_UNREGISTERED)
+            return rc;
+        efs_client_session_forget(shard);
+    }
 }
 
 int efs_client_rpc_lookup_path(efs_export_id_t export_id, efs_ino_t start,
@@ -1103,7 +1165,7 @@ static int create_request_rpc(struct efs_client_create_request *r,int probe)
 
 static int create_request_revocation(struct efs_client_create_request *r,int rc)
 {
-    if(!r->complete && (rc==EFS_ERR_STALE || rc==EFS_ERR_NOT_FOUND)) {
+    if(!r->complete && (rc==EFS_ERR_STALE || rc==EFS_ERR_FENCED || rc==EFS_ERR_NOT_FOUND)) {
         int revoked=0;
         if(efs_client_rpc_identity_revoked(&r->wire.q.id,&revoked)==EFS_OK && revoked) {
             r->revoked=1;r->complete=1;r->result=EFS_ERR_STALE;
@@ -1394,7 +1456,10 @@ static int session_command_reply(uint32_t shard,const uint8_t *command,uint32_t 
             if (reply.leader_hint < -1 || reply.leader_hint >= EFS_MAX_NODES) return EFS_ERR_PROTO;
             target=reply.leader_hint>=0 && (efs_node_id_t)(reply.leader_hint+1)!=nid ?
                 (efs_node_id_t)(reply.leader_hint+1):0;
-        } else if (reply.rc!=EFS_ERR_BUSY && reply.rc!=EFS_ERR_NO_QUORUM) return reply.rc;
+        } else if (reply.rc!=EFS_ERR_BUSY && reply.rc!=EFS_ERR_NO_QUORUM) {
+            if (reply.rc==EFS_ERR_FENCED) efs_client_session_fence(reply.rc);
+            return reply.rc;
+        }
         if (rpc_writer_retry_pause(attempt)!=EFS_OK) return EFS_ERR_BUSY;
     }
     return EFS_ERR_BUSY;
@@ -1452,31 +1517,144 @@ int efs_client_rpc_lease_edge(efs_ino_t ino,uint64_t generation,
  * REGISTER and host-side ESTABLISH check its authoritative epoch/fence.
  * Retry the same UUID/epoch after an ambiguous reply, never mint a replacement
  * identity to bypass a fence. Queries and retirement do not call this helper. */
+/* ---- Mount session lifecycle (K5, I23) -------------------------------
+ * One session per mount: a random uuid at epoch 1, created on its owner
+ * shard before the first mutation. A touched shard is admitted (REGISTER on
+ * the owner, then ESTABLISH on the shard) before the client's first
+ * mutation there and cached per shard; an UNREGISTERED refusal drops the
+ * cached bit and admits again. A FENCED refusal, or an owner that no longer
+ * knows or has moved past this epoch, latches the mount fenced: mutations
+ * then fail locally and are never resent under the old epoch. Re-mount to
+ * obtain a new session. */
+void efs_client_session_fence(int rc)
+{
+    pthread_mutex_lock(&opid_mu);
+    int first=!g_client.session_fenced;
+    g_client.session_fenced=1;
+    pthread_mutex_unlock(&opid_mu);
+    if (first) {
+        char hex[2*EFS_OPID_UUID_LEN+1];
+        for (unsigned i=0;i<EFS_OPID_UUID_LEN;i++)
+            snprintf(hex+2*i,3,"%02x",g_client.opid_uuid[i]);
+        fprintf(stderr,"efs-client: session %s epoch %u fenced (%s); "
+                "mutations now fail EIO until re-mount\n",hex,g_client.opid_epoch,
+                efs_strerror(rc));
+    }
+}
+
+int efs_client_session_fenced(void)
+{
+    return __atomic_load_n(&g_client.session_fenced,__ATOMIC_ACQUIRE);
+}
+
+void efs_client_session_forget(uint32_t shard)
+{
+    if (shard>=4096) return;
+    pthread_mutex_lock(&opid_mu);
+    g_client.append_session_shards[shard/8]&=(uint8_t)~(1u<<(shard%8));
+    pthread_mutex_unlock(&opid_mu);
+}
+
+/* Owner view: (epoch, state) of this uuid. NOT_FOUND = no session. */
+static int session_owner_view(const struct efs_opid *id,uint32_t shard,uint64_t *view)
+{
+    uint8_t query[22]={EFS_MD_CMD_SESSION,0};
+    memcpy(query+2,id->client_uuid,EFS_OPID_UUID_LEN);
+    lease_command_be(query+18,shard,4);
+    *view=0;
+    int rc=session_command_reply(efs_kv_session_shard(id->client_uuid),query,
+                                 sizeof(query),view,2);
+    if(rc!=EFS_OK)return rc;
+    uint32_t epoch=(uint32_t)*view;unsigned state=(unsigned)((*view>>32)&255u);
+    if((*view>>41) || !epoch || (state!=EFS_SESSION_ACTIVE && state!=EFS_SESSION_FENCING))
+        return EFS_ERR_PROTO;
+    return EFS_OK;
+}
+
+int efs_client_session_start(void)
+{
+    struct efs_opid id;
+    int rc=efs_client_publication_id(1,&id); /* seeds the mount identity */
+    if(rc!=EFS_OK)return rc;
+    pthread_mutex_lock(&opid_mu);
+    int started=g_client.session_started,fenced=g_client.session_fenced;
+    pthread_mutex_unlock(&opid_mu);
+    if(fenced)return EFS_ERR_FENCED;
+    if(started)return EFS_OK;
+    uint32_t owner=efs_kv_session_shard(id.client_uuid);
+    uint64_t view=0;
+    rc=session_owner_view(&id,owner,&view);
+    if(rc==EFS_ERR_NOT_FOUND) {
+        /* CREATE is a no-op when the same (uuid, epoch) already exists, so
+         * an ambiguous first reply is safe to repeat; any other epoch for
+         * this uuid is refused by the owner. */
+        uint8_t command[22]={EFS_MD_CMD_SESSION,EFS_MD_SESS_CREATE};
+        memcpy(command+2,id.client_uuid,EFS_OPID_UUID_LEN);
+        lease_command_be(command+18,id.session_epoch,4);
+        rc=publication_session_command(owner,command,sizeof(command));
+        if(rc==EFS_OK)rc=session_owner_view(&id,owner,&view);
+    }
+    if(rc!=EFS_OK)return rc;
+    if((uint32_t)view!=id.session_epoch ||
+       ((view>>32)&255u)!=EFS_SESSION_ACTIVE) {
+        efs_client_session_fence(EFS_ERR_FENCED);
+        return EFS_ERR_FENCED;
+    }
+    pthread_mutex_lock(&opid_mu);
+    g_client.session_started=1;
+    pthread_mutex_unlock(&opid_mu);
+    return EFS_OK;
+}
+
+int efs_client_session_check(void)
+{
+    if(efs_client_session_fenced())return EFS_ERR_FENCED;
+    if(__atomic_load_n(&g_client.session_started,__ATOMIC_ACQUIRE))return EFS_OK;
+    return efs_client_session_start();
+}
+
+/* REGISTER/ESTABLISH refuse an epoch that is no longer the owner's ACTIVE
+ * epoch, or that lies below the participant's rejection floor, with STALE:
+ * for this mount that is a fence. */
+static int admission_verdict(int rc)
+{
+    if (rc==EFS_ERR_STALE || rc==EFS_ERR_FENCED) {
+        efs_client_session_fence(EFS_ERR_FENCED);
+        return EFS_ERR_FENCED;
+    }
+    return rc;
+}
+
 int efs_client_rpc_publication_session(uint32_t shard,const struct efs_opid *identity)
 {
     if (!identity || shard>=4096 || !identity->session_epoch) return EFS_ERR_INVAL;
     unsigned nonzero=0;
     for (unsigned i=0;i<EFS_OPID_UUID_LEN;i++) nonzero|=identity->client_uuid[i];
     if (!nonzero) return EFS_ERR_INVAL;
+    int rc=efs_client_session_check();
+    if (rc!=EFS_OK) return rc;
     uint8_t command[26]={EFS_MD_CMD_SESSION,0};
     memcpy(command+2,identity->client_uuid,EFS_OPID_UUID_LEN);
-    lease_command_be(command+18,shard,4);
     uint32_t owner=efs_kv_session_shard(identity->client_uuid);
     uint64_t view=0;
-    int rc=session_command_reply(owner,command,22,&view,2);
+    rc=session_owner_view(identity,shard,&view);
     int registered=0;
-    if(rc==EFS_OK) {
+    if(rc==EFS_ERR_NOT_FOUND) {
+        /* The session this mount created is gone (re-format or cleanup):
+         * never create a replacement under the same identity. */
+        efs_client_session_fence(EFS_ERR_FENCED);
+        return EFS_ERR_FENCED;
+    }
+    if(rc!=EFS_OK)return rc;
+    {
         uint32_t epoch=(uint32_t)view;unsigned state=(unsigned)((view>>32)&255u);
-        if((view>>41) || !epoch || (state!=EFS_SESSION_ACTIVE && state!=EFS_SESSION_FENCING))return EFS_ERR_PROTO;
-        if(epoch!=identity->session_epoch)return EFS_ERR_STALE;
+        if(epoch!=identity->session_epoch) {
+            efs_client_session_fence(EFS_ERR_FENCED);
+            return EFS_ERR_FENCED;
+        }
         if(state==EFS_SESSION_FENCING)return EFS_ERR_BUSY;
         registered=!!(view&(1ull<<40));
-    } else if(rc==EFS_ERR_NOT_FOUND) {
-        command[1]=EFS_MD_SESS_CREATE;
-        lease_command_be(command+18,identity->session_epoch,4);
-        rc=publication_session_command(owner,command,22);
-        if(rc)return rc;
-    } else return rc;
+    }
     lease_command_be(command+18,identity->session_epoch,4);
     lease_command_be(command+22,shard,4);
     if(!registered && efs_raft_shard_group(owner)==efs_raft_shard_group(shard)) {
@@ -1484,17 +1662,17 @@ int efs_client_rpc_publication_session(uint32_t shard,const struct efs_opid *ide
          * rejection floor atomically. Cross-group admission must still register
          * durably before establishing the participant. */
         command[1]=EFS_MD_SESS_REGISTER_ESTABLISH;
-        return publication_session_command(shard,command,sizeof(command));
+        return admission_verdict(publication_session_command(shard,command,sizeof(command)));
     }
     if(!registered) {
         command[1]=EFS_MD_SESS_REGISTER;
-        rc=publication_session_command(owner,command,sizeof(command));
+        rc=admission_verdict(publication_session_command(owner,command,sizeof(command)));
         if(rc)return rc;
     }
     /* ESTABLISH always rechecks fresh owner authority and the participant's
      * durable rejection floor. This is an RPC-local proof, not a client cache. */
     command[1]=EFS_MD_SESS_ESTABLISH;
-    return publication_session_command(shard,command,sizeof(command));
+    return admission_verdict(publication_session_command(shard,command,sizeof(command)));
 }
 
 /* Production ownership primitive: an unknown reply never frees its ACK slot
@@ -1571,7 +1749,7 @@ static int lease_request_result(struct efs_client_lease_request *r,int rc,
         opid_end(r->slot);
         r->slot=-1;
     }
-    if(!r->complete && (rc==EFS_ERR_STALE || rc==EFS_ERR_NOT_FOUND)) {
+    if(!r->complete && (rc==EFS_ERR_STALE || rc==EFS_ERR_FENCED || rc==EFS_ERR_NOT_FOUND)) {
         int revoked=0;
         if(efs_client_rpc_identity_revoked(&r->q.id,&revoked)==EFS_OK && revoked) {
             r->revoked=1;r->complete=1;r->result=EFS_ERR_STALE;
@@ -1636,6 +1814,10 @@ static int rpc_put_ticket(const struct efs_put_ticket *ticket,int probe_only,
     if(!state)return EFS_ERR_INVAL;
     *state=0;
     if(probe_only<0 || probe_only>2)return EFS_ERR_INVAL;
+    if(!probe_only) {
+        int ready=efs_client_session_check();
+        if(ready!=EFS_OK)return ready;
+    }
     uint8_t body[2+EFS_PUT_TICKET_WIRE_LEN];
     int rc=efs_put_ticket_encode(ticket,body+2);if(rc!=EFS_OK)return rc;
     uint32_t shard=efs_kv_lane_shard(ticket->ino,ticket->ci%EFS_META_LANES);
@@ -1672,7 +1854,10 @@ static int rpc_put_ticket(const struct efs_put_ticket *ticket,int probe_only,
             if(reply.leader_hint< -1 || reply.leader_hint>=EFS_MAX_NODES)return EFS_ERR_PROTO;
             target=reply.leader_hint>=0 && (efs_node_id_t)(reply.leader_hint+1)!=nid?
                 (efs_node_id_t)(reply.leader_hint+1):0;
-        } else if(reply.rc!=EFS_ERR_BUSY && reply.rc!=EFS_ERR_NO_QUORUM)return reply.rc;
+        } else if(reply.rc!=EFS_ERR_BUSY && reply.rc!=EFS_ERR_NO_QUORUM) {
+            if(reply.rc==EFS_ERR_FENCED)efs_client_session_fence(reply.rc);
+            return reply.rc;
+        }
         if(rpc_writer_retry_pause(attempt)!=EFS_OK)return EFS_ERR_BUSY;
     }
     return EFS_ERR_BUSY;
@@ -1699,6 +1884,10 @@ int efs_client_rpc_publication(const struct efs_msg_publication *request, int qu
     memset(out,0,sizeof(*out));
     if(efs_publication_from_request(&req,&p)!=EFS_OK)return EFS_ERR_INVAL;
     if(efs_publication_digest(&p,digest)!=EFS_OK)return EFS_ERR_INVAL;
+    if(!query_only) {
+        int ready=efs_client_session_check();
+        if(ready!=EFS_OK)return ready;
+    }
     uint32_t shard=efs_kv_lane_shard(req.rec.ino,req.rec.chunk_index%EFS_META_LANES);
     efs_node_id_t target=0;
     for(unsigned attempt=0;attempt<8;attempt++) {
@@ -1738,8 +1927,11 @@ int efs_client_rpc_publication(const struct efs_msg_publication *request, int qu
            (reply.state==EFS_PUBLICATION_APPLY_PENDING && !reply.receipt_index) ||
            (query_only==2 && reply.state!=EFS_PUBLICATION_RETIRED && reply.state!=EFS_PUBLICATION_PENDING) ||
            (reply.state==EFS_PUBLICATION_COMMITTED && reply.verdict!=EFS_OK) ||
-           (reply.state==EFS_PUBLICATION_REJECTED && reply.verdict!=EFS_ERR_STALE && reply.verdict!=EFS_ERR_INVAL))
+           (reply.state==EFS_PUBLICATION_REJECTED && reply.verdict!=EFS_ERR_STALE && reply.verdict!=EFS_ERR_INVAL &&
+            reply.verdict!=EFS_ERR_FENCED && reply.verdict!=EFS_ERR_UNREGISTERED))
             return EFS_ERR_PROTO;
+        if(reply.state==EFS_PUBLICATION_REJECTED && reply.verdict==EFS_ERR_FENCED)
+            efs_client_session_fence(EFS_ERR_FENCED);
         if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
         *out=reply;return EFS_OK;
     }
@@ -2118,10 +2310,12 @@ int efs_client_rpc_setattr(efs_export_id_t export_id, efs_ino_t ino,
     req.atime_nsec = atime_nsec;
     struct efs_msg_inode_reply r;
     int rc;
-    if (mask & EFS_SETATTR_SIZE) {
-        /* D25: a truncate carries an opid; the server records its result
-         * with the effect. An ambiguous failure is resolved only by
-         * retrying the same identity, never by issuing a new one. */
+    {
+        /* Every SETATTR carries the mount session (K5): the inode shard is
+         * admitted first and the apply refuses a fenced or unregistered
+         * identity. D25: a truncate's opid also records its result with the
+         * effect; an ambiguous failure is resolved only by retrying the same
+         * identity, never by issuing a new one. */
         uint8_t buf[sizeof(req) + EFS_OPID_WIRE_LEN];
         struct efs_opid_req q;
         int slot = opid_begin(&q);
@@ -2134,17 +2328,16 @@ int efs_client_rpc_setattr(efs_export_id_t export_id, efs_ino_t ino,
             opid_refresh_ack(&q);
             memcpy(buf, &req, sizeof(req));
             uint32_t slen = opid_suffix(buf, sizeof(req), &q);
-            rc = rpc_send_recv_owner(ino, EFS_MSG_INODE_SETATTR, buf, slen,
-                                     EFS_MSG_INODE_SETATTR_REPLY, &r, sizeof(r));
+            rc = rpc_send_recv_admitted(efs_kv_inode_shard(ino), &q.id,
+                                        EFS_MSG_INODE_SETATTR, buf, slen,
+                                        EFS_MSG_INODE_SETATTR_REPLY, &r,
+                                        sizeof(r), 0, NULL);
             if (rc == EFS_OK && r.status == EFS_INODE_RPC_BUSY)
                 rc = EFS_ERR_BUSY;
             if (rc != EFS_ERR_NET && rc != EFS_ERR_NO_QUORUM && rc != EFS_ERR_BUSY)
                 break;
         }
         opid_end(slot);
-    } else {
-        rc = rpc_send_recv_owner(ino, EFS_MSG_INODE_SETATTR, &req, sizeof(req),
-                                 EFS_MSG_INODE_SETATTR_REPLY, &r, sizeof(r));
     }
     if (rc != EFS_OK)
         return rc;
@@ -2177,8 +2370,6 @@ int efs_client_rpc_append_reserve(efs_export_id_t export_id, efs_ino_t ino,
 
     if (!efs_opid_req_valid(q) || q->ack >= q->id.seq)
         return EFS_ERR_INVAL;
-    rc=efs_client_session_admit(efs_kv_inode_shard(ino),&q->id);
-    if(rc!=EFS_OK)return rc;
     memset(buf, 0, sizeof(buf));
     req->export_id = export_id;
     req->ino = ino;
@@ -2198,8 +2389,9 @@ int efs_client_rpc_append_reserve(efs_export_id_t export_id, efs_ino_t ino,
     if(env_opid_verbose)
         fprintf(stderr,"opid-append-rpc: seq=%llu ino=%llu len=%llu\n",
             (unsigned long long)q->id.seq,(unsigned long long)ino,(unsigned long long)len);
-    rc = rpc_send_recv_owner(ino, EFS_MSG_INODE_APPEND, buf, sizeof(buf),
-                             EFS_MSG_INODE_APPEND_REPLY, &r, sizeof(r));
+    rc = rpc_send_recv_admitted(efs_kv_inode_shard(ino), &q->id,
+                                EFS_MSG_INODE_APPEND, buf, sizeof(buf),
+                                EFS_MSG_INODE_APPEND_REPLY, &r, sizeof(r), 0, NULL);
     if (rc != EFS_OK)
         return rc;
     if (r.status != EFS_INODE_RPC_OK)
@@ -2219,18 +2411,15 @@ int efs_client_rpc_hold(efs_export_id_t export_id, efs_ino_t ino, int open,
     struct efs_opid identity;
     int rc=efs_client_publication_id(1,&identity);
     if (rc!=EFS_OK) return rc;
-    if (open) {
-        rc=efs_client_rpc_publication_session(efs_kv_inode_shard(ino),&identity);
-        if (rc!=EFS_OK) return rc;
-    }
     memset(buf,0,sizeof(buf));
     req->export_id=export_id;req->ino=ino;req->flags=open?1u:0u;
     req->owner=owner?owner:g_client.flock_token;
     memcpy(buf+sizeof(*req),identity.client_uuid,EFS_OPID_UUID_LEN);
     memcpy(buf+sizeof(*req)+EFS_OPID_UUID_LEN,&identity.session_epoch,4);
     struct efs_msg_inode_reply reply;
-    rc=rpc_send_recv_owner(ino,EFS_MSG_INODE_HOLD,buf,sizeof(buf),
-                           EFS_MSG_INODE_HOLD_REPLY,&reply,sizeof(reply));
+    rc=rpc_send_recv_admitted(efs_kv_inode_shard(ino),&identity,EFS_MSG_INODE_HOLD,
+                              buf,sizeof(buf),EFS_MSG_INODE_HOLD_REPLY,&reply,
+                              sizeof(reply),0,NULL);
     return rc==EFS_OK?rpc_status_to_efs(reply.status):rc;
 }
 
@@ -2253,10 +2442,6 @@ int efs_client_rpc_flock_range(efs_export_id_t export_id, efs_ino_t ino,
     struct efs_opid identity;
     rc=efs_client_publication_id(1,&identity);
     if (rc!=EFS_OK) return rc;
-    if (!(op & (EFS_FLOCK_UN | EFS_FLOCK_GETLK))) {
-        rc=efs_client_rpc_publication_session(efs_kv_inode_shard(ino),&identity);
-        if (rc!=EFS_OK) return rc;
-    }
     memset(buf, 0, sizeof(buf));
     req->export_id = export_id;
     req->ino = ino;
@@ -2274,8 +2459,15 @@ int efs_client_rpc_flock_range(efs_export_id_t export_id, efs_ino_t ino,
     memcpy(buf+slen,identity.client_uuid,EFS_OPID_UUID_LEN);
     memcpy(buf+slen+EFS_OPID_UUID_LEN,&identity.session_epoch,4);
     slen += EFS_SESS_WIRE_LEN;
-    rc = rpc_send_recv_owner(ino, EFS_MSG_INODE_FLOCK, buf, slen,
-                             EFS_MSG_INODE_FLOCK_REPLY, &r, sizeof(r));
+    /* GETLK is a leader read: it carries the identity but needs no
+     * admission. Every grant and release is session-checked. */
+    rc = (op & EFS_FLOCK_GETLK)
+             ? rpc_send_recv_owner(ino, EFS_MSG_INODE_FLOCK, buf, slen,
+                                   EFS_MSG_INODE_FLOCK_REPLY, &r, sizeof(r))
+             : rpc_send_recv_admitted(efs_kv_inode_shard(ino), &identity,
+                                      EFS_MSG_INODE_FLOCK, buf, slen,
+                                      EFS_MSG_INODE_FLOCK_REPLY, &r, sizeof(r),
+                                      0, NULL);
     if (rc != EFS_OK)
         return rc;
     if (reply_out)
@@ -2363,6 +2555,11 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
                               uint8_t expect, void *reply, uint32_t reply_len,
                               int recv_ms)
 {
+    if (rpc_type_mutates(type, req, req_len)) {
+        int ready = efs_client_session_check();
+        if (ready != EFS_OK)
+            return ready;
+    }
     efs_node_id_t target = 0;
     efs_node_id_t skip = 0;
     int saw_busy = 0;
@@ -2611,7 +2808,7 @@ int efs_client_rpc_xattr(efs_export_id_t export_id, efs_ino_t ino, uint8_t op,
                          uint32_t *out_len)
 {
     uint8_t reqbuf[sizeof(struct efs_msg_xattr) + EFS_XATTR_NAME_MAX +
-                   EFS_XATTR_VALUE_MAX];
+                   EFS_XATTR_VALUE_MAX + EFS_SESS_WIRE_LEN];
     struct efs_msg_xattr_reply rep;
     struct efs_msg_xattr *req;
     uint32_t req_len, got = 0, hdr;
@@ -2636,9 +2833,23 @@ int efs_client_rpc_xattr(efs_export_id_t export_id, efs_ino_t ino, uint8_t op,
     req_len = (uint32_t)sizeof(*req) + (uint32_t)nlen + vlen;
     hdr = (uint32_t)offsetof(struct efs_msg_xattr_reply, data);
     memset(&rep, 0, hdr);
-    rc = rpc_send_recv_shard(efs_export_shard_of(ino, EFS_KV_SHARD_BITS),
-                             EFS_MSG_XATTR, reqbuf, req_len,
-                             EFS_MSG_XATTR_REPLY, &rep, hdr, sizeof(rep), &got);
+    if (op == EFS_XATTR_SET || op == EFS_XATTR_REMOVE) {
+        /* Mutations carry the mount session (K5); GET/LIST are reads. */
+        struct efs_opid identity;
+        rc = efs_client_publication_id(1, &identity);
+        if (rc != EFS_OK)
+            return rc;
+        memcpy(reqbuf + req_len, identity.client_uuid, EFS_OPID_UUID_LEN);
+        memcpy(reqbuf + req_len + EFS_OPID_UUID_LEN, &identity.session_epoch, 4);
+        req_len += EFS_SESS_WIRE_LEN;
+        rc = rpc_send_recv_admitted(efs_kv_inode_shard(ino), &identity,
+                                    EFS_MSG_XATTR, reqbuf, req_len,
+                                    EFS_MSG_XATTR_REPLY, &rep, hdr, sizeof(rep),
+                                    &got);
+    } else
+        rc = rpc_send_recv_shard(efs_export_shard_of(ino, EFS_KV_SHARD_BITS),
+                                 EFS_MSG_XATTR, reqbuf, req_len,
+                                 EFS_MSG_XATTR_REPLY, &rep, hdr, sizeof(rep), &got);
     if (rc != EFS_OK)
         return rc;
     if (rep.status != EFS_INODE_RPC_OK)

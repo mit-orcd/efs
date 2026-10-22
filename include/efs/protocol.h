@@ -877,6 +877,9 @@ struct efs_msg_query_stats_reply {
 #define EFS_INODE_RPC_NODATA    12
 /* Explicit metadata/output capacity refusal; never transient BUSY. */
 #define EFS_INODE_RPC_OVERFLOW  13
+/* Session refusals (K5): EFS_ERR_FENCED / EFS_ERR_UNREGISTERED. */
+#define EFS_INODE_RPC_FENCED    14
+#define EFS_INODE_RPC_UNREGISTERED 15
 
 struct efs_msg_inode_lookup {
     efs_export_id_t export_id;
