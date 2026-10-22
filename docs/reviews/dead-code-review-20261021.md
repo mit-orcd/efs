@@ -343,6 +343,8 @@ To clean up, remove `/data1/efs/testsuite/deadcode-0bdf55256` and
   baseline's R10, and its sentinel test `tests/test_query_unavailable.py`
   is not in `make test` (T3).
 - Action: remove with the format marker (W66 B6). Decide R10.
+- Update (October 21): R10 is done. `efs-query` was removed in `e1cbfa395`.
+  The `QUERY_STATS` refusal stays and is tested over the wire.
 
 ## 3. Sessions and fencing compatibility
 
@@ -764,7 +766,7 @@ NOTRUN" verdict, not a silent pass.
 | R6 three client wrappers | remove | two **removed**; `efs_rdcache_put` remains (W2) |
 | R8 RDMA stats and quiesce | decide | open (R3) |
 | R9 `name_is_reserved` | simplify | open (T7) |
-| R10 `efs-query` | decide | open (P6); its sentinel test is unwired (T3) |
+| R10 `efs-query` | decide | open (P6); its sentinel test is unwired (T3). **Removed October 21 (`e1cbfa395`); the server refusal is still tested over the wire** |
 | K3 D25 resize entry point | retain | removed October 16 with group A |
 
 ## Suggested order for the follow-up
