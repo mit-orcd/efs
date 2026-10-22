@@ -507,6 +507,8 @@ test: all
 	python3 tests/test_kv_mtab_batch.py
 	./tests/test_kv_lsm
 	./tests/test_kv_insertion_buffer
+	$(MAKE) tests/faults/test_kv_compact_crash
+	./tests/faults/test_kv_compact_crash
 	./tests/test_query_policy
 	./tests/test_query_catalog
 	./tests/test_query_disk
@@ -768,7 +770,7 @@ clean:
 	rm -f $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS) $(MGMT_OBJ)
 	rm -f src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_ns.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o src/sim/sim_disk.o src/sim/opid.o
 	rm -f $(LIB) efsd efs-fuse efs-bench efs-mgmt blake3-bench
-	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim
+	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim tests/faults/test_kv_compact_crash
 	rm -f $(TEST_BINS) tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_upload_client
 	rm -f tests/test_data_commit tests/measure/*_smoke tests/measure/bench_query_disk_scale tests/measure/bench_query_disk_concurrent
 	rm -f .build_id.stamp
@@ -852,6 +854,12 @@ src/meta/query_catalog.o src/meta/query_disk.o tests/test_query_disk_io: src/met
 
 tests/test_kv_reader_gate: tests/test_kv_reader_gate.c src/kv/kv_lsm.c src/kv/kv_lsm_internal.h $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(LIB) $(LDFLAGS)
+
+# Compaction crash recovery (K24). The EFS_FAULT_COMPACT_DIE exit exists only
+# behind EFS_FAULTS; this binary compiles its own kv_compact.c with the gate
+# on, so a plain build of $(LIB) and the daemons never carries the hook.
+tests/faults/test_kv_compact_crash: tests/faults/test_kv_compact_crash.c src/kv/kv_compact.c src/kv/kv_lsm_internal.h $(LIB)
+	$(CC) $(CFLAGS) -DEFS_FAULTS=1 $(INCLUDES) -o $@ $< src/kv/kv_compact.c $(LIB) $(LDFLAGS)
 
 src/kv/kv_lsm.o src/kv/kv_wal.o src/kv/kv_compact.o src/kv/kv_seg.o: src/kv/kv_lsm_internal.h
 src/kv/kv_lsm.o: src/kv/kv_candidates.h

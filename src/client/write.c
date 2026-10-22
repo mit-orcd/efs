@@ -1669,7 +1669,7 @@ int efs_client_report_dirty(int sync)
 /* only_ino=0 reports the whole dirty set. A per-file fsync passes the ino
  * so 9 concurrent 2g jobs do not build one 147k-rec REPORT (that times
  * out as NET). Other inodes stay dirty. */
-#if defined(EFS_FAULTS) && EFS_FAULTS
+#if EFS_FAULTS
 #ifndef EFS_FAULT_FILE
 #define EFS_FAULT_FILE "/tmp/efs/fault"
 #endif
@@ -1704,7 +1704,7 @@ static int report_send_records(const struct efs_chunk_rec *records, uint32_t n,
                                 const struct efs_ino_size_rec *inodes, uint32_t ni,
                                 int sync)
 {
-#if defined(EFS_FAULTS) && EFS_FAULTS
+#if EFS_FAULTS
     uint32_t withheld = 0;
     for (uint32_t i = 0; i < n; ++i)
         withheld += report_fault_withhold(records[i].ino, records[i].chunk_index);

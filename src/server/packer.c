@@ -132,7 +132,7 @@ static uint64_t rd64(const uint8_t *p) { uint64_t v = 0; for (int i = 0; i < 8; 
  * journals, before GC_ACK). */
 void server_pack_crash_point(const char *point)
 {
-#ifdef EFS_FAULTS
+#if EFS_FAULTS
     static int fired;
     const char *want = getenv("EFS_PACK_CRASH"), *node = getenv("EFS_PACK_CRASH_NODE");
     if (fired || !want || strcmp(want, point) || !pk.s) return;
