@@ -125,21 +125,28 @@
 #define EFS_MD_LOCK_RELEASE 2
 #define EFS_MD_CMD_SETATTR 13 /* matches sim SIM_CMD_SETATTR */
 #define EFS_MD_CMD_UTIMENS 14 /* matches sim SIM_CMD_UTIMENS */
-#define EFS_MD_CMD_TRUNCATE 15 /* matches sim SIM_CMD_TRUNCATE */
+#define EFS_MD_CMD_TRUNCATE 15 /* D25 logical truncate, exactly 86 B (protocol
+                                * §1.2); matches sim SIM_CMD_TRUNCATE */
 #define EFS_MD_CMD_APPEND_RSV 16 /* matches sim SIM_CMD_APPEND_RSV */
 #define EFS_MD_CMD_APPEND_RES 17 /* matches sim SIM_CMD_APPEND_RES */
 #define EFS_MD_CMD_MKFS 18 /* [now:8][salt:8] — idempotent; salt absent = 0 */
 /* Cross-group lane support (a group's log only writes its own shards' keys,
  * so the first publish to a lane whose shard lives on ANOTHER group cannot
  * ride the publish entry's inode-row touch — see efs_meta_apply_publish).
- * ACTIVATE_LANE runs on the INODE group and only sets the active_lanes bit;
- * LANE_FENCE runs on the LANE's group and carries one lane's share of a
- * truncate (epoch fence + range delete). Both idempotent. */
-#define EFS_MD_CMD_ACTIVATE_LANE 19 /* [ino:8][lane:1]  (10 B)
-                                     * or [ino:8][mask:8] (17 B); REPORT
-                                     * appends UUID/epoch (20 B) to either form */
-#define EFS_MD_CMD_LANE_FENCE    20 /* [ino:8][gen:8][lane:1][epoch:8][size:8]
-                                     * [tail_ci:4][has_tail:1] */
+ * ACTIVATE_LANE runs on the INODE group and only sets the active_lanes bit.
+ * Idempotent. Tag 20 (the retired LANE_FENCE) is unassigned and refused. */
+#define EFS_MD_CMD_ACTIVATE_LANE 19 /* [ino:8][mask:8][content_epoch:8]
+                                     * (25 B); REPORT appends UUID/epoch (20 B) */
+/* D25 BOOTSTRAP on a cross-group lane's group: create the lane stamp at the
+ * inode epoch the proposer read, or adopt it; never lowers it. A lane-local
+ * publish to a lane without a stamp answers BUSY until this commits. */
+#define EFS_MD_CMD_BOOTSTRAP_LANE 79 /* [ino:8][gen:8][lane:1][epoch:8], 26 B */
+/* D25 sweep (protocol §1.2, §4). TRUNC_SWEEP on the lane's group, the other
+ * two on the inode's group. */
+#define EFS_MD_CMD_TRUNC_SWEEP 80 /* [ino:8][gen:8][lane:1][target:8][cs:4]
+                                   * [count:1][count x (epoch:8 size:8)] */
+#define EFS_MD_CMD_SWEEP_DONE  81 /* [ino:8][gen:8][lane:1][target:8], 26 B */
+#define EFS_MD_CMD_RETIRE      82 /* [ino:8][gen:8][target:8], 25 B */
 /* Data-plane GC (spec L7). LANE_SWEEP runs on the LANE's group: deletes the
  * lane's chunk keys (emitting one GC record per chunk on the group's anchor
  * shard), then the lane key. REAP_DONE runs on the INODE's group: clears

@@ -312,6 +312,84 @@ static void apply_chunk_recs(efs_ino_t lock_ino, const struct efs_chunk_rec *rec
  * for those chunks — usually this client's own unreported PUT — so a
  * caller that must tell "the host committed our object" from "we only
  * PUT it" (the STALE classifier) reads this, not the table generation. */
+/* D25 per-inode content epoch, as last shown by a server reply. Lossy
+ * (a colliding inode evicts the slot); a miss reads 0, which only makes a
+ * tagged publication STALE once and refetch. Leaf locks. */
+#define EPOCH_SLOTS 4096u
+static struct { efs_ino_t ino; uint64_t epoch; } g_epochs[EPOCH_SLOTS];
+static pthread_mutex_t g_epoch_mu[64] = {[0 ... 63] = PTHREAD_MUTEX_INITIALIZER};
+
+void efs_client_epoch_note(efs_ino_t ino, uint64_t epoch)
+{
+    uint32_t s = (uint32_t)((ino * 0x9E3779B97F4A7C15ull) >> 52) & (EPOCH_SLOTS - 1);
+    if (!ino)
+        return;
+    pthread_mutex_lock(&g_epoch_mu[s & 63]);
+    g_epochs[s].ino = ino;
+    g_epochs[s].epoch = epoch;
+    pthread_mutex_unlock(&g_epoch_mu[s & 63]);
+}
+
+uint64_t efs_client_epoch_get(efs_ino_t ino)
+{
+    uint32_t s = (uint32_t)((ino * 0x9E3779B97F4A7C15ull) >> 52) & (EPOCH_SLOTS - 1);
+    uint64_t e = 0;
+    pthread_mutex_lock(&g_epoch_mu[s & 63]);
+    if (g_epochs[s].ino == ino)
+        e = g_epochs[s].epoch;
+    pthread_mutex_unlock(&g_epoch_mu[s & 63]);
+    return e;
+}
+
+/* Read keys of the local entries in [lo, hi) (one chunk group), 0 = none. */
+static void map_snapshot(efs_ino_t ino, uint32_t lo, uint32_t hi, uint64_t *keys)
+{
+    efs_client_lock_dir(ino);
+    pthread_mutex_lock(&g_client.idx_mu);
+    for (uint32_t ci = lo; ci < hi; ci++) {
+        struct efs_chunk_entry ce;
+        keys[ci - lo] = efs_export_get_chunk(&g_client.export, ino, ci, &ce) == 0 ?
+                        efs_chunk_read_key(&ce) : 0;
+    }
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_unlock_dir(ino);
+}
+
+/* A successful GETCHUNKS is authority for the chunks it covered and did
+ * not return: their rows are gone (a peer's truncate deleted them), unless
+ * the entry is this client's own PUT awaiting its REPORT. Keeping
+ * the local entry served the old objects until GC removed them, so a peer
+ * read after shrink-then-extend returned the discarded bytes. Drop an
+ * absent entry only if it is still the one seen before the RPC; a local
+ * publish that installed a newer entry in between keeps it. */
+static void map_drop_absent(efs_ino_t ino, uint32_t lo, uint32_t hi,
+                            const struct efs_chunk_rec *recs, uint32_t n,
+                            uint32_t asked, const uint64_t *before)
+{
+    uint32_t covered = n < asked ? hi : recs[n - 1].chunk_index + 1, r = 0;
+    for (uint32_t ci = lo; ci < covered && ci < hi; ci++) {
+        while (r < n && recs[r].chunk_index < ci)
+            r++;
+        if (!before[ci - lo] || (r < n && recs[r].chunk_index == ci))
+            continue;
+        struct efs_chunk_entry ce;
+        int dropped = 0;
+        efs_client_lock_dir(ino);
+        pthread_mutex_lock(&g_client.idx_mu);
+        /* This client's own unreported PUT stays: absence on the host is
+         * expected until its REPORT lands, and the STALE classifier needs
+         * the entry to replay it (it read a dropped entry as truncated). */
+        if (efs_export_get_chunk(&g_client.export, ino, ci, &ce) == 0 &&
+            efs_chunk_read_key(&ce) == before[ci - lo] &&
+            !efs_client_putid_owns(ino, ci, ce.generation))
+            dropped = efs_export_drop_chunk(&g_client.export, ino, ci);
+        pthread_mutex_unlock(&g_client.idx_mu);
+        efs_client_unlock_dir(ino);
+        if (dropped)
+            efs_rdcache_invalidate(ino, ci);
+    }
+}
+
 struct pull_absent {
     uint8_t *bits;
     uint32_t base;
@@ -452,13 +530,17 @@ static int pull_chunks_range(efs_ino_t ino, uint32_t start_ci, uint32_t end_ci,
             if (efs_client_rpc_past_deadline())
                 return EFS_ERR_BUSY;
             struct efs_chunk_rec recs[EFS_GETCHUNKS_MAX];
-            uint32_t n = group_end - cur;
+            uint64_t before[EFS_CHUNK_GROUP_SIZE];
+            uint32_t n = group_end - cur, asked;
             if (n > EFS_GETCHUNKS_MAX)
                 n = EFS_GETCHUNKS_MAX;
+            asked = n;
+            map_snapshot(ino, cur, group_end, before);
             int grc = efs_client_rpc_getchunks(g_client.export_id, ino, cur,
                                                recs, &n);
             if (grc != EFS_OK)
                 return grc;
+            map_drop_absent(ino, cur, group_end, recs, n, asked, before);
             if (n == 0) {
                 pull_absent_mark(ab, cur, group_end);
                 break;
@@ -1449,39 +1531,9 @@ int efs_client_truncate(efs_ino_t ino, uint64_t size)
     if (size == old_size)
         return EFS_OK;
 
-    if (size < old_size && size % data_chunk_size() != 0) {
-        /* Rewrite last kept chunk with a zeroed tail so a later truncate-up
-         * does not resurrect discarded bytes (data path; reported via RPC). */
-        uint32_t chunk_size = data_chunk_size();
-        uint32_t ci = (uint32_t)(size / chunk_size);
-        uint32_t keep = (uint32_t)(size % chunk_size);
-        uint8_t *chunk = efs_buf_alloc(chunk_size);
-        if (!chunk)
-            return EFS_ERR_NOMEM;
-        memset(chunk, 0, chunk_size);
-        uint64_t chunk_start = (uint64_t)ci * chunk_size;
-        size_t want = (size_t)(old_size - chunk_start);
-        if (want > chunk_size)
-            want = chunk_size;
-        size_t got = 0;
-        int rrc = efs_client_read(ino, chunk_start, want, (char *)chunk, &got);
-        if (rrc != EFS_OK || got < keep) {
-            efs_buf_free(chunk, chunk_size);
-            return rrc != EFS_OK ? rrc : EFS_ERR_IO;
-        }
-        memset(chunk + keep, 0, chunk_size - keep);
-        /* Use the normal owned-image pipeline: a fresh full object must
-         * name the span list it replaces and retain its body through REPORT.
-         * The immediate PUT path has neither that observation nor replay
-         * ownership, so a span-only tail could loop on FOLD_LIST until EIO. */
-        if (efs_dcache_store_full_owned(ino, ci, chunk, chunk_size) != 0) {
-            efs_buf_free(chunk, chunk_size);
-            return EFS_ERR_NOMEM;
-        }
-        int wrc = efs_dcache_flush_ino(ino);
-        if (wrc != EFS_OK)
-            return wrc;
-    }
+    /* D25: no tail rewrite. The server's single TRUNCATE entry records the
+     * boundary in the inode's history, which masks the discarded bytes;
+     * a client-side rewrite would be a second, non-atomic step. */
 
     /* Phase 2b: the size change (and server-side chunk drop on shrink) runs on
      * the primary. Dual-apply: drop the same chunks locally + upsert the
@@ -1524,7 +1576,9 @@ int efs_client_truncate(efs_ino_t ino, uint64_t size)
     uint32_t drop = 0, old_nci = 0;
     if (size < old_size) {
         uint32_t cs = data_chunk_size();
-        drop = (size == 0) ? 0 : (uint32_t)((size + cs - 1) / cs);
+        /* The boundary chunk's row stays, now masked; its local entry
+         * and cached image predate the mask and must be pulled again. */
+        drop = cs ? (uint32_t)(size / cs) : 0;
         old_nci = cs ? (uint32_t)((old_size + cs - 1) / cs) : 0;
         efs_export_drop_chunks_from(&g_client.export, ino, drop);
     }

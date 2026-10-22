@@ -128,6 +128,10 @@ struct efs_pack_candidate {
     uint32_t mode, nlink, ndelta;
     uint64_t active_lanes;
     struct efs_meta_chunk base;
+    /* D25: bytes of the base still visible (clip and fence history); the
+     * deltas below are already clipped to their visible lengths. The image
+     * is masked; content_epoch stays the newest source-part epoch. */
+    uint32_t base_visible;
     struct efs_meta_delta deltas[EFS_CHUNK_DELTA_MAX]; /* ndelta spans, apply order */
     uint8_t source_digest[EFS_HASH_SIZE];
 };

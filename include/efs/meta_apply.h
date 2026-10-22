@@ -18,26 +18,16 @@
 
 #define EFS_META_LANES 64
 /* Shared with admission accounting; changing apply capacity changes its charge. */
-/* One LANE_FENCE entry's page: the stamp, history and authority PUTs plus
- * chunk DELs with their GC records. A lane with more rows past the new
- * size is fenced by the first entry and drained by re-proposals of the same
- * command; efs_meta_apply_lane_fence answers EFS_META_FENCE_MORE until done.
- * Far below the KV apply scope's 32768-key bound. */
-#define EFS_META_LANE_FENCE_ITEMS 4096u
-/* Positive apply verdict: the fence committed a full page; propose the same
- * command again. Never a Raft-level retry of the index. */
-#define EFS_META_FENCE_MORE 1
-#define EFS_META_TRUNCATE_ITEMS (EFS_META_LANES + 1u + EFS_META_LANES * 32u * 2u + 3u)
 #define EFS_META_INO_BYTES   128
 #define EFS_META_DENT_BYTES  20
 #define EFS_META_ALLOC_BYTES 8
-#define EFS_META_LANE_BYTES  64
+#define EFS_META_LANE_BYTES  88 /* + D25 sweep_target, sweep_next_ci, swept_epoch */
 
 /* History sidecars keep the established inode/lane encodings unchanged.
  * Authority 64 is the inode; 0..63 are its publication lanes. The FileID
  * generation is in the key, so inode reuse cannot inherit discarded bytes. */
 #define EFS_META_FENCE_INODE 64u
-#define EFS_META_FENCE_BYTES (8u + 16u * EFS_FENCE_HISTORY_MAX)
+#define EFS_META_FENCE_BYTES (16u + 24u * EFS_FENCE_HISTORY_MAX)
 int efs_meta_get_fence_history(struct efs_kv *kv, efs_ino_t ino,
                                uint64_t generation, uint8_t authority,
                                struct efs_fence_history *out);
@@ -371,6 +361,9 @@ struct efs_meta_chunk {
     uint64_t generation;
     uint32_t coding_profile_id;
     uint64_t content_epoch;
+    /* D25 sweep clip: 0 = the base shows its whole chunk; otherwise it
+     * shows only [0, base_clip). Only ever lowered; a new base resets it. */
+    uint32_t base_clip;
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
     uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
     struct efs_pack_ref packed; /* profile PACK only; canonical persisted extension */
@@ -452,6 +445,38 @@ struct efs_meta_chunk_view {
 int efs_meta_get_chunk_view(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
                             uint32_t chunk_index, uint32_t chunk_size,
                             struct efs_meta_chunk_view *out);
+/* D25: capture the inode's content epoch and fence history coherently (the
+ * read authority), then build chunk views against it. The lane stamp is
+ * never the read authority. View: BUSY if a part is newer than `epoch`. */
+int efs_meta_get_inode_authority_tx(struct efs_kv *kv, efs_ino_t ino,
+                                    efs_txn_coord_fn coord, void *ctx,
+                                    struct efs_meta_row *row,
+                                    struct efs_fence_history *history);
+int efs_meta_get_chunk_view_auth(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                                 uint32_t ci, uint32_t cs, uint64_t epoch,
+                                 const struct efs_fence_history *history,
+                                 struct efs_meta_chunk_view *out);
+/* D25 truncate sweep (protocol §4). TRUNC_SWEEP on the lane's group:
+ * adopt `target`, examine at most 256 rows from the lane's cursor, delete
+ * dead rows (GC records / packed ledger), clip partly visible ones, and set
+ * swept_epoch when the lane end is reached. SWEEP_DONE and RETIRE run on
+ * the inode's group. Obsolete or foreign commands are OK with no change. */
+int efs_meta_apply_trunc_sweep(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                               uint8_t lane, uint64_t target, uint32_t cs,
+                               const struct efs_fence_history *snap);
+int efs_meta_apply_sweep_done(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                              uint8_t lane, uint64_t target);
+int efs_meta_apply_retire(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                          uint64_t target);
+/* Sweep state of a lane stamp: swept_epoch; NOT_FOUND without a stamp. */
+int efs_meta_get_lane_swept(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                            uint8_t lane, uint64_t *swept_epoch);
+/* The lane stamp's adopted epoch; NOT_FOUND when the lane has no stamp. */
+int efs_meta_get_lane_epoch(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                            uint8_t lane, uint64_t *epoch);
+/* D25 BOOTSTRAP: create a cross-group lane stamp at `epoch`, or adopt it. */
+int efs_meta_apply_bootstrap_lane(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                                  uint8_t lane, uint64_t epoch);
 /* Handler variant: committed EXCL stamp/history replacements are visible
  * before RESOLVE. Undecided decisions are validated across the whole collect.
  * NULL coordinator retains the plain apply-side behavior. */
@@ -895,35 +920,30 @@ int efs_meta_apply_epoch_fence(struct efs_kv *kv, efs_ino_t ino);
  * range-delete of chunk-map entries beyond the new size, optional tail
  * chunk CAS (§7.3). `expect_gen` is the stale-handle check (0 = skip).
  * `tail` is NULL when the new size is chunk-aligned or zero. */
-struct efs_meta_truncate {
-    uint64_t expect_gen;
+/* D25 single-entry logical truncate (protocol §2.2). Applied on the inode
+ * group only: no lane is fenced and no chunk row is deleted. kind 0 extends
+ * (size only), kind 1 shrinks (new content epoch + pruned history entry +
+ * TRUNC_PENDING). The opid receipt is checked before the preconditions and
+ * written in the same batch; a full receipt window answers BUSY. */
+#define EFS_META_TRUNCATE_EXTEND 0u
+#define EFS_META_TRUNCATE_SHRINK 1u
+struct efs_meta_truncate_lazy {
+    efs_ino_t ino;
+    uint64_t inode_gen;
+    uint64_t expect_epoch;
+    uint64_t expect_base_size;
     uint64_t size;
-    const struct efs_meta_pub *tail;
-    /* Which active lanes THIS entry fences + range-deletes. The truncate
-     * entry runs on the inode group, whose KV holds only the lanes whose
-     * shard maps to that group; lanes on other groups are fenced by
-     * separate EFS_MD_CMD_LANE_FENCE entries proposed to their own groups
-     * BEFORE this entry (a group's log only writes its own shards' keys).
-     * ~0ULL = all lanes (single-group deployments, the simulator). */
-    uint64_t lane_mask;
-    /* The tail chunk's lane lives on another group: the tail CAS is NOT in
-     * this entry (it is lane-local-published after commit, fenced by the
-     * LANE_FENCE that already landed on that lane). tail must be NULL. */
-    uint8_t tail_external;
-    /* Unaligned size and no tail image: keep the existing tail chunk
-     * (a generation-0 span row). Do not publish a zero stub over it. */
-    uint8_t keep_tail;
-    /* check_active: active_seen is the row's active_lanes the host read
-     * when it chose which lanes to fence. A lane registered since then was
-     * fenced by nobody, and a lane-local publish captured before this
-     * truncate could create it under the old epoch; the apply answers BUSY
-     * so the host re-reads and fences it (0a). */
-    uint8_t check_active;
-    uint64_t active_seen;
+    uint64_t mtime_ns;
+    uint8_t kind;
+    struct efs_opid_req q;
 };
+/* OK (fresh or replayed success; *epoch_after set), STALE (precondition or
+ * an acknowledged identity), BUSY (append reservations, full history, full
+ * receipt window), INVAL. Nothing is written unless OK and fresh. */
+int efs_meta_apply_truncate_lazy(struct efs_kv *kv,
+                                 const struct efs_meta_truncate_lazy *t,
+                                 uint64_t *epoch_after);
 
-int efs_meta_apply_truncate(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
-                            const struct efs_meta_truncate *t);
 /* Same, but only while the row's content_epoch is still expected_epoch:
  * the epoch the publish that needs the lane was checked against. A lane
  * registered after a truncate the publish predates would accept that
@@ -937,15 +957,6 @@ int efs_meta_apply_activate_lane(struct efs_kv *kv, efs_ino_t ino,
 /* Same, OR a mask of lanes in one inode PUT. */
 int efs_meta_apply_activate_lanes(struct efs_kv *kv, efs_ino_t ino,
                                   uint64_t mask);
-/* EFS_MD_CMD_LANE_FENCE: one lane's share of a truncate, applied on the
- * LANE's group: fenced_epoch = new_epoch, max_end = 0, seq++, then the
- * range delete of that lane's chunk entries beyond size (tail_ci kept),
- * subtracting what it dropped from the lane's present count (D17).
- * Idempotent via the epoch guard (a replay with the same new_epoch after
- * the lane already fenced at >= new_epoch is a no-op OK). */
-int efs_meta_apply_lane_fence(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
-                              uint8_t lane, uint64_t new_epoch, uint64_t size,
-                              uint32_t tail_ci, uint8_t has_tail);
 
 /* Data-plane GC (spec L7). A GC record (EFS_KV_KIND_GC on the lane group's
  * anchor shard) is written in the SAME batch as every chunk-key delete —

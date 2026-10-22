@@ -5,6 +5,7 @@
 # the tree on a Linux build host (node9901 uses the private libfuse below).
 # Raw output stays in the tree's tmp/ and is not committed.
 cd $(dirname $0)
+mkdir -p tmp  # C tests mkdtemp under TMPDIR and assert on failure
 export TMPDIR=$PWD/tmp PKG_CONFIG_PATH=/data1/efs/deps/libfuse/lib64/pkgconfig LD_LIBRARY_PATH=/data1/efs/deps/libfuse/lib64
 FL="$(pkg-config --libs fuse3) -Wl,-rpath,/data1/efs/deps/libfuse/lib64"
 make -j64 FUSE_LIBS="$FL" all tests > build.log 2>&1 || echo "BUILD FAILED" > build.failed

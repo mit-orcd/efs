@@ -731,7 +731,9 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
     if (!((g->version == 1 && len == offsetof(struct efs_msg_gc_status_reply, io)) ||
           (g->version == 2 && len == offsetof(struct efs_msg_gc_status_reply, expiry)) ||
           (g->version == 3 && len == offsetof(struct efs_msg_gc_status_reply, reclaim)) ||
-          (g->version == 4 && len == sizeof(*g)))) {
+          (g->version == 5 && len == sizeof(*g)))) {
+        fprintf(stderr, "GC status reply version %u length %u not understood\n",
+                g->version, len);
         free(payload);
         return 1;
     }
@@ -784,6 +786,9 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
                (unsigned long long)g->reap_seen[i], (unsigned long long)g->orphan_seen[i], g->reap_capped[i],
                (unsigned long long)g->first_reap[i],
                (unsigned long long)g->first_seen_age_ms[i]);
+    if (g->version >= 5)
+        printf("trunc_pending group0=%llu group2=%llu\n",
+               (unsigned long long)g->trunc_pending[0], (unsigned long long)g->trunc_pending[1]);
     if(g->version>=3) {
         const struct efs_expiry_status *e=&g->expiry;
         const char *state=!e->available?"unavailable":!e->enabled?"disabled":

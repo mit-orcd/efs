@@ -332,7 +332,7 @@ static void inode_copy_attr(struct efs_inode_mem *d, const struct efs_inode *s)
     d->imm_tmax = s->imm_tmax;
     d->tree_tmin = s->tree_tmin;
     d->tree_tmax = s->tree_tmax;
-    d->reserved_ino = s->reserved_ino;
+    d->content_epoch = s->content_epoch;
     d->reserved_off = s->reserved_off;
     d->reserved_len = s->reserved_len;
     d->alloc_chunks = s->alloc_chunks;
@@ -367,7 +367,7 @@ static void inode_to_rpc_p(const struct efs_export *ex,
     out->imm_tmax = p->imm_tmax;
     out->tree_tmin = p->tree_tmin;
     out->tree_tmax = p->tree_tmax;
-    out->reserved_ino = p->reserved_ino;
+    out->content_epoch = p->content_epoch;
     out->reserved_off = p->reserved_off;
     out->reserved_len = p->reserved_len;
     out->alloc_chunks = p->alloc_chunks;
@@ -2058,6 +2058,29 @@ int efs_export_evict_ino(struct efs_export *ex, efs_ino_t ino)
         forget_ino_on_tab(tabs[i], ino);
     }
     return 2;
+}
+
+static int drop_chunk_one(struct efs_export *ex, efs_ino_t ino, uint32_t ci)
+{
+    uint64_t pos = 0;
+    if (chunk_idx_get(ex, ino, ci, &pos) != 0)
+        return 0;
+    ex->layout_epoch++;
+    remove_chunk_at(ex, pos);
+    return 1;
+}
+
+int efs_export_drop_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t ci)
+{
+    int dropped;
+    if (!ex)
+        return 0;
+    dropped = drop_chunk_one(ex, ino, ci);
+    if (export_is_sharded_root(ex) && ex->root.shard_count > 1 && ex->shard_tabs)
+        for (uint32_t s = 1; s < ex->shard_tab_cap; s++)
+            if (ex->shard_tabs[s])
+                dropped |= drop_chunk_one(ex->shard_tabs[s], ino, ci);
+    return dropped;
 }
 
 void efs_export_drop_chunks_from(struct efs_export *ex, efs_ino_t ino,

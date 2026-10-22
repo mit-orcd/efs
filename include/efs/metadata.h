@@ -125,8 +125,9 @@ struct efs_inode {
     uint64_t imm_files, imm_dirs, tree_files, tree_dirs;
     uint64_t imm_bytes, tree_bytes;
     uint64_t imm_tmin, imm_tmax, tree_tmin, tree_tmax;
-    /* Reserved: always zero; keeps the EFSM and inode wire layouts. */
-    efs_ino_t reserved_ino;
+    /* D25: the inode's content epoch in RPC replies (the slot was reserved
+     * and always zero; layout unchanged). Zero in locally made rows. */
+    uint64_t content_epoch;
     uint32_t reserved_off;
     uint32_t reserved_len;
     /* D17: server-side present-chunk count (the lane stamps reduced at
@@ -162,7 +163,7 @@ struct efs_inode_mem {
     uint64_t imm_files, imm_dirs, tree_files, tree_dirs;
     uint64_t imm_bytes, tree_bytes;
     uint64_t imm_tmin, imm_tmax, tree_tmin, tree_tmax;
-    efs_ino_t reserved_ino;
+    uint64_t content_epoch;
     uint32_t reserved_off;
     uint32_t reserved_len;
     /* W20: chunks in this client's table, plus dirty dcache chunks that
@@ -386,6 +387,8 @@ int efs_export_set_size(struct efs_export *ex, efs_ino_t ino, uint64_t size);
 int efs_export_set_size_norollup(struct efs_export *ex, efs_ino_t ino,
                                  uint64_t size);
 
+/* Drop one chunk map entry; 1 if one was present. */
+int efs_export_drop_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t ci);
 /* Drop chunk map entries with chunk_index >= first_chunk (truncate shrink). */
 void efs_export_drop_chunks_from(struct efs_export *ex, efs_ino_t ino,
                                  uint32_t first_chunk);

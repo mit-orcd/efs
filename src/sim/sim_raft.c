@@ -21,8 +21,9 @@
 #define CMD_APPEND_RES SIM_CMD_APPEND_RES
 #define CMD_MKFS    SIM_CMD_MKFS
 #define CMD_MAX     512
-#define TRUNC_HDR   54
-#define TRUNC_TAIL  (4 + 8 + 8 + 4 + (uint32_t)EFS_NUM_FRAGMENTS * (4 + EFS_HASH_SIZE))
+/* Sim TRUNCATE: [tag][kind:1][ino][gen][expect_epoch][expect_base_size]
+ * [size][mtime_ns] then the session uuid[16] + epoch[4]. */
+#define TRUNC_LEN   70
 #define WAIT_TICKS  80
 #define RAFT_HDR    86 /* fixed part through nentries; entries follow (12+cmd each) */
 
@@ -462,59 +463,36 @@ static int apply_utimens_cmd(struct sim_server *s, const uint8_t *cmd,
 static int apply_truncate_cmd(struct sim_server *s, const uint8_t *cmd,
                               uint32_t clen, uint64_t index, uint8_t group)
 {
-    struct efs_meta_truncate t;
-    struct efs_meta_pub tail;
-    efs_ino_t ino;
-    uint64_t now, expect_gen, size;
-    uint8_t has_tail, uuid[EFS_OPID_UUID_LEN];
-    uint32_t epoch;
-    const uint8_t *q;
-    int i, rc;
+    struct efs_meta_truncate_lazy t;
+    uint64_t epoch_after;
+    int rc;
 
-    if (clen < TRUNC_HDR)
+    if (clen != TRUNC_LEN)
         return EFS_ERR_PROTO;
-    ino = rd64(cmd + 1);
-    now = rd64(cmd + 9);
-    expect_gen = rd64(cmd + 17);
-    size = rd64(cmd + 25);
-    has_tail = cmd[33];
-    memcpy(uuid, cmd + 34, EFS_OPID_UUID_LEN);
-    epoch = rd32(cmd + 34 + EFS_OPID_UUID_LEN);
-    rc = efs_session_accept(s->disk, efs_kv_inode_shard(ino), uuid, epoch);
+    memset(&t, 0, sizeof(t));
+    t.kind = cmd[1];
+    t.ino = rd64(cmd + 2);
+    t.inode_gen = rd64(cmd + 10);
+    t.expect_epoch = rd64(cmd + 18);
+    t.expect_base_size = rd64(cmd + 26);
+    t.size = rd64(cmd + 34);
+    t.mtime_ns = rd64(cmd + 42);
+    memcpy(t.q.id.client_uuid, cmd + 50, EFS_OPID_UUID_LEN);
+    t.q.id.session_epoch = rd32(cmd + 50 + EFS_OPID_UUID_LEN);
+    rc = efs_session_accept(s->disk, efs_kv_inode_shard(t.ino),
+                            t.q.id.client_uuid, t.q.id.session_epoch);
     if (rc != EFS_OK) {
-        sim_note_apply(s, group, index, rc, ino);
+        sim_note_apply(s, group, index, rc, t.ino);
         return EFS_OK;
     }
-    memset(&t, 0, sizeof(t));
-    t.expect_gen = expect_gen;
-    t.size = size;
-    /* The sim's servers all vote in all groups over one shared disk, so a
-     * truncate entry fences every lane locally (no cross-group split is
-     * modelled — see sim_raft_truncate). */
-    t.lane_mask = ~0ULL;
-    if (has_tail) {
-        if (clen < TRUNC_HDR + TRUNC_TAIL)
-            return EFS_ERR_PROTO;
-        q = cmd + TRUNC_HDR;
-        memset(&tail, 0, sizeof(tail));
-        tail.ino = ino;
-        tail.chunk_index = rd32(q);
-        tail.new_size = size;
-        tail.candidate_gen = rd64(q + 4);
-        tail.expected_gen = rd64(q + 12);
-        tail.coding_profile_id = rd32(q + 20);
-        q += 24;
-        for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-            tail.ch.nodes[i] = rd32(q);
-            q += 4;
-            memcpy(tail.ch.checksums[i], q, EFS_HASH_SIZE);
-            q += EFS_HASH_SIZE;
-        }
-        tail.now = now;
-        t.tail = &tail;
-    }
-    rc = efs_meta_apply_truncate(s->disk, ino, now, &t);
-    sim_note_apply(s, group, index, rc, ino);
+    /* The log index is a unique, increasing operation number; nothing
+     * retries a sim entry, so every earlier one is acknowledged. The
+     * servers all vote in all groups over one shared disk: no lane is
+     * remote, so no BOOTSTRAP or cross-group sweep is modelled. */
+    t.q.id.seq = index;
+    t.q.ack = index - 1;
+    rc = efs_meta_apply_truncate_lazy(s->disk, &t, &epoch_after);
+    sim_note_apply(s, group, index, rc, t.ino);
     return EFS_OK;
 }
 
@@ -577,11 +555,11 @@ static int apply_append_res_cmd(struct sim_server *s, const uint8_t *cmd,
     return EFS_OK;
 }
 
-/* Host-generated lane maintenance commands (EFS_MD_CMD_ACTIVATE_LANE /
- * EFS_MD_CMD_LANE_FENCE). The sim's coordinator never emits these — its
+/* Host-generated lane maintenance command (EFS_MD_CMD_ACTIVATE_LANE).
+ * The sim's coordinator never emits it — its
  * servers all vote in all groups over one shared disk, so the production
  * cross-group split never occurs — but the namespace is shared with the
- * production host, so the applies are kept here to keep them convergent. */
+ * production host, so the apply is kept here to keep it convergent. */
 static int apply_activate_lane_cmd(struct sim_server *s, const uint8_t *cmd,
                                    uint32_t clen, uint64_t index,
                                    uint8_t group)
@@ -596,27 +574,6 @@ static int apply_activate_lane_cmd(struct sim_server *s, const uint8_t *cmd,
         rc = efs_meta_apply_activate_lanes(s->disk, ino, rd64(cmd + 9));
     else
         rc = efs_meta_apply_activate_lane(s->disk, ino, cmd[9]);
-    sim_note_apply(s, group, index, rc, ino);
-    return EFS_OK;
-}
-
-static int apply_lane_fence_cmd(struct sim_server *s, const uint8_t *cmd,
-                                uint32_t clen, uint64_t index, uint8_t group)
-{
-    efs_ino_t ino;
-    uint64_t gen, epoch, size;
-    uint32_t tail_ci;
-    int rc;
-
-    if (clen < 39)
-        return EFS_ERR_PROTO;
-    ino = rd64(cmd + 1);
-    gen = rd64(cmd + 9);
-    epoch = rd64(cmd + 18);
-    size = rd64(cmd + 26);
-    tail_ci = rd32(cmd + 34);
-    rc = efs_meta_apply_lane_fence(s->disk, ino, gen, cmd[17], epoch, size,
-                                   tail_ci, cmd[38]);
     sim_note_apply(s, group, index, rc, ino);
     return EFS_OK;
 }
@@ -668,9 +625,6 @@ int sim_ns_try(struct sim_server *s, uint8_t group, const uint8_t *cmd,
         return 1;
     case EFS_MD_CMD_ACTIVATE_LANE:
         apply_activate_lane_cmd(s, cmd, clen, index, group);
-        return 1;
-    case EFS_MD_CMD_LANE_FENCE:
-        apply_lane_fence_cmd(s, cmd, clen, index, group);
         return 1;
     default:
         return 0;
@@ -1376,55 +1330,37 @@ int sim_raft_utimens(struct efs_sim *sim, int client, efs_ino_t ino,
 }
 
 int sim_raft_truncate(struct efs_sim *sim, int client, efs_ino_t ino,
-                      uint64_t size, const struct efs_meta_pub *tail)
+                      uint64_t size)
 {
     struct efs_meta_row row;
-    uint8_t cmd[TRUNC_HDR + TRUNC_TAIL];
-    uint32_t sh, epoch, n = TRUNC_HDR;
-    const uint8_t *uuid;
-    int i, rc;
+    struct efs_meta_stat st;
+    uint8_t cmd[TRUNC_LEN];
+    uint32_t sh;
+    int rc;
 
     if (!sim || ino == 0 || client < 0 || client >= sim->nclients)
-        return EFS_ERR_INVAL;
-    if (size > 0 && (size % EFS_MIN_CHUNK_SIZE) != 0 && !tail)
         return EFS_ERR_INVAL;
     sh = efs_kv_inode_shard(ino);
     rc = sim_sess_ensure(sim, client, sh);
     if (rc != EFS_OK)
         return rc;
     rc = read_inode(sim, ino, &row);
+    if (rc == EFS_OK)
+        rc = sim_raft_getattr(sim, ino, &st);
     if (rc != EFS_OK)
         return rc;
-    uuid = sim->cli[client].win.client_uuid;
-    epoch = sim->cli[client].win.session_epoch;
     cmd[0] = CMD_TRUNCATE;
-    wr64(cmd + 1, ino);
-    wr64(cmd + 9, sim->now);
-    wr64(cmd + 17, row.generation);
-    wr64(cmd + 25, size);
-    if (tail) {
-        if (tail->chunk_index != (uint32_t)(size / EFS_MIN_CHUNK_SIZE))
-            return EFS_ERR_INVAL;
-        cmd[33] = 1;
-        memcpy(cmd + 34, uuid, EFS_OPID_UUID_LEN);
-        wr32(cmd + 34 + EFS_OPID_UUID_LEN, epoch);
-        wr32(cmd + TRUNC_HDR, tail->chunk_index);
-        wr64(cmd + TRUNC_HDR + 4, tail->candidate_gen);
-        wr64(cmd + TRUNC_HDR + 12, tail->expected_gen);
-        wr32(cmd + TRUNC_HDR + 20, tail->coding_profile_id);
-        n = TRUNC_HDR + 24;
-        for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-            wr32(cmd + n, tail->ch.nodes[i]);
-            n += 4;
-            memcpy(cmd + n, tail->ch.checksums[i], EFS_HASH_SIZE);
-            n += EFS_HASH_SIZE;
-        }
-    } else {
-        cmd[33] = 0;
-        memcpy(cmd + 34, uuid, EFS_OPID_UUID_LEN);
-        wr32(cmd + 34 + EFS_OPID_UUID_LEN, epoch);
-    }
-    return sim_raft_propose_group(sim, sim_shard_group(sh), cmd, n);
+    cmd[1] = size >= st.size && size >= row.base_size ?
+             EFS_META_TRUNCATE_EXTEND : EFS_META_TRUNCATE_SHRINK;
+    wr64(cmd + 2, ino);
+    wr64(cmd + 10, row.generation);
+    wr64(cmd + 18, row.content_epoch);
+    wr64(cmd + 26, row.base_size);
+    wr64(cmd + 34, size);
+    wr64(cmd + 42, sim->now * 1000000000ull);
+    memcpy(cmd + 50, sim->cli[client].win.client_uuid, EFS_OPID_UUID_LEN);
+    wr32(cmd + 50 + EFS_OPID_UUID_LEN, sim->cli[client].win.session_epoch);
+    return sim_raft_propose_group(sim, sim_shard_group(sh), cmd, TRUNC_LEN);
 }
 
 int sim_raft_append_reserve(struct efs_sim *sim, int client,
