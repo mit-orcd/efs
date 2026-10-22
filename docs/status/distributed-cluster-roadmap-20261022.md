@@ -14,8 +14,12 @@ change or new cluster test is part of this document.
 The [alpha 1.0 checklist](alpha-1.0-2plus1-checklist.md) is the release gate,
 including A6–A12: audit behavior switches, choose built-in policies, remove
 competing A/B paths and reduce the combinatorial qualification matrix.
-The diagrams below describe the final architecture; their 2+2 and many-group
-targets are later work, not prerequisites for this intermediate milestone.
+**Metadata placement ladder ([D38](decisions.md), October 22):** alpha 1.0
+keeps metadata on at most three nodes (2+1) while data uses every node; alpha
+2.0 adds 2+2 metadata across at most four nodes (the D36 four-node protocol);
+alpha 3.0 and 4.0 add configurable metadata placement on N − M of N nodes at
+one and two losses. The diagrams below describe the final architecture; their
+2+2 and many-group targets are later work, not prerequisites for alpha 1.0.
 D36 remains binding for the final design; alpha does not claim its two-loss
 protection on four or larger clusters.
 

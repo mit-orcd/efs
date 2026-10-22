@@ -56,6 +56,13 @@ Alpha 1.0 is reached in three stages, in this order:
 | 4 nodes | Still D1, D2, P on three distinct nodes per stripe | Placement rotates across all four; the fourth is not a fixed idle spare | **Not 2+2; no two-node-loss protection claim** |
 | More than 4 | Still three distinct nodes per stripe | Independent stripes use different subsets across the supported node set | More capacity/work distribution, not stronger per-stripe protection |
 
+Metadata placement follows [D38](decisions.md): in alpha 1.0 every metadata
+group lives on at most three nodes (three voters, one loss), whatever the
+cluster size; data placement uses all nodes. Later alphas widen metadata
+placement (2.0: 2+2 on four nodes; 3.0/4.0: N − M configurable). Whether
+packed segments follow the data ring or stay on the metadata nodes in alpha
+1.0 is an open user question (D38).
+
 This milestone completes current-path correctness, durability and bounded
 progress. It does not require the later many-group metadata architecture, a new
 2+2 codec, linear throughput scaling or elimination of all local serialization.
@@ -442,9 +449,10 @@ round says which physical or software limiter it hit.
   progress failure or unexplained mounted-I/O failure may be called PASS.
 - [ ] **F3** Complete the topology ledger below, link exact reproduction commands
   or committed drivers and evidence summaries. Raw captures stay outside Git.
-- [ ] **F4** Publish alpha limitations: fixed metadata-group count/concentration,
-  actual packing placement, supported node range, deferred unplanned repair,
-  and lack of 2+2/two-loss protection on 4+ nodes.
+- [ ] **F4** Publish alpha limitations: fixed metadata-group count and
+  placement on at most three nodes (D38), actual packing placement, supported
+  node range, Linux FUSE client only, deferred unplanned repair, no
+  degraded-state indication, and lack of 2+2/two-loss protection on 4+ nodes.
 - [ ] **F5** Review the integrated candidate and approve alpha 1.0 only when all
   mandatory in-scope gates pass. Identify any excluded platform/feature explicitly;
   a required gate left NOTRUN blocks that support claim. Then perform the
@@ -474,8 +482,10 @@ unavailable diagnostics. It does not fill this multi-host 3/4/>4 matrix wholesal
 
 ## After alpha 1.0
 
-Resume the remaining roadmap: 2+2 for four and larger clusters (W74), D36
-metadata protection (W66), more metadata groups and distributed ownership
-(W66/W98/W81), then broader background-work efficiency and integrated scale
-acceptance. D36 remains the final protection contract; alpha 1.0 is explicitly
-the intermediate 2+1 milestone on all three topology classes.
+The [D38 ladder](decisions.md): alpha 2.0 adds 2+2 metadata protection on at
+most four nodes (the D36 four-node protocol, W66/W74); alpha 3.0 adds
+configurable 2+1 metadata placement on N − M nodes; alpha 4.0 the same at 2+2.
+More metadata groups and distributed ownership (W66/W98/W81), 2+2 data
+stripes, broader background-work efficiency and integrated scale acceptance
+follow the same path. D36 remains the final protection contract; alpha 1.0 is
+explicitly the 2+1 milestone with metadata on three nodes and data on all.

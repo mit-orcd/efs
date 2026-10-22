@@ -2547,6 +2547,46 @@ repair/recovery qualification. This is a release scheduling decision, not a
 change to the numbered architectural protection contracts. [Exact decision,
 remaining gates and limits](../status/v030-release-scope-20261012.md). Execution stays stopped.
 
+### D38 — metadata placement ladder across the alpha releases (accepted Oct 22)
+
+User wording:
+
+> alpha 1.0 only supports 2+1 across at most 3 nodes, even if we support > 3
+> nodes for data placement
+> alpha 2.0 additionally supports 2+2 across at most 4 nodes, even if we
+> support > 4 nodes for data placement
+> alpha 3.0 additionally supports 2+1 across as many nodes as defined, i think
+> there will be a setting: cluster nodes = N, data placement = N, meta data
+> placement = N − M (M could be zero)
+> alpha 4.0 additionally supports 2+2 across as many nodes as defined, with the
+> same setting
+
+Interpretation: the ladder is about **metadata** placement and protection.
+Data placement uses every cluster node from alpha 1.0 on.
+
+| Release | Metadata groups live on | Metadata protection | Data placement |
+| --- | --- | --- | --- |
+| alpha 1.0 | at most 3 nodes (three-voter groups, as today) | one loss (2+1) | all N nodes, 2+1 stripes |
+| alpha 2.0 | at most 4 nodes | two losses (2+2; the D36 four-node metadata protocol) | all N nodes |
+| alpha 3.0 | N − M nodes, configured (M may be 0) | one loss | all N nodes |
+| alpha 4.0 | N − M nodes, configured | two losses | all N nodes |
+
+Consequences recorded now:
+- **W151 (raise the four-node cap) is alpha 1.0 data-placement work only.**
+  Metadata stays on three voters per group; a fifth and later node serves data
+  and clients and hosts no metadata group. This matches the W151 brief.
+- **Packed segments are data, but today they live on a group's voters**
+  (`packer.c`). Under this ladder, "data placement = N" means small-file
+  packed data should also use all N nodes in alpha 1.0; keeping it on the
+  three voters would confine small files to three nodes. **Open question for
+  the user:** move packed-segment placement to the data ring in alpha 1.0
+  (a W151 sub-item), or publish "packed data on the metadata nodes only" as an
+  alpha 1.0 limitation.
+- The alpha 3.0/4.0 setting (N, data = N, metadata = N − M) is a deployment
+  input in the sense of A8, not an A/B switch.
+- D36's final contract is unchanged; alpha 2.0 is where its four-node metadata
+  mechanism is owed.
+
 ### D37 — packing and container engine removed from devel (taken Oct 16)
 
 **Taken 2026-10-16 at the user's request:** all tiny-file packing code and
