@@ -11,7 +11,9 @@ change or new cluster test is part of this document.
 ## Release sequencing — updated October 22
 
 **Phase 1 is now alpha 1.0: finish 2+1 on 3, 4 and >4 nodes.**
-The [alpha 1.0 checklist](alpha-1.0-2plus1-checklist.md) is the release gate.
+The [alpha 1.0 checklist](alpha-1.0-2plus1-checklist.md) is the release gate,
+including A6–A12: audit behavior switches, choose built-in policies, remove
+competing A/B paths and reduce the combinatorial qualification matrix.
 The diagrams below describe the final architecture; their 2+2 and many-group
 targets are later work, not prerequisites for this intermediate milestone.
 D36 remains binding for the final design; alpha does not claim its two-loss

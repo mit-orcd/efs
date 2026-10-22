@@ -1572,7 +1572,9 @@ full acceptance are separate states.
 [Phase 1 / alpha 1.0 checklist](../status/alpha-1.0-2plus1-checklist.md): **OPEN**.
 Finish and qualify **2+1 on 3, 4 and >4 physical nodes** before the remaining
 roadmap. Candidate-specific gates cover placement, enabled I/O, packing/GC,
-`.efs`, full payloads and orderly restart. 2+2, many-group distribution and
+`.efs`, full payloads and orderly restart. **A6–A12 also require a flag/mode
+audit, removal of competing A/B implementations, built-in policies and a reduced
+qualification matrix.** 2+2, many-group distribution and
 full D36 protection remain later milestones.
 
 [Distributed EFS cluster roadmap](../status/distributed-cluster-roadmap-20261022.md):

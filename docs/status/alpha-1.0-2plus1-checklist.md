@@ -50,6 +50,58 @@ metadata quorum availability, or automatic repair. Keep those later gates open.
   deadlines, fixture counts/sizes and expected results for every topology.
   Fresh-format setup only when a format change requires it; no compatibility work.
 
+## A6–A12. One supported behavior: audit and remove A/B modes
+
+**Mandatory alpha 1.0 gate, added by user direction October 22.** EFS should work
+with built-in policies and good defaults, without users choosing competing
+implementations. Retaining old/new behavior behind hidden environment variables
+is not completion. Automatic adaptation within tested bounds is compatible with
+one supported policy; fixed constants are not required where adaptation is better.
+
+The qualification cost is combinatorial: n independent binary switches permit
+2^n configurations (10 switches: 1,024). Constraints reduce reachable combinations,
+but testing each flag separately does not establish their interactions. Removing
+alternatives reduces both product complexity and the supported test matrix.
+
+- [ ] **A6 — Inventory.** Audit environment variables, CLI options, configuration
+  fields, runtime management settings and compile-time feature modes. For each,
+  record its reader/call sites, default, alternative behavior, dependencies,
+  deployment/portal exposure and tests. Include undocumented and dead settings.
+- [ ] **A7 — Decide and remove alternatives.** For behavior-changing A/B switches,
+  select and qualify one supported implementation or automatic policy. Remove the
+  losing code path, parser/environment reader and obsolete tests/docs together.
+  Do not merely hide the flag, change its default or force every switch on.
+  No replacement compatibility switch or fallback to the retired behavior.
+- [ ] **A8 — Keep only justified configuration.** Retain deployment inputs such as
+  nodes, disks, addresses and quotas. Prefer built-in or automatically derived
+  internal batching/concurrency/maintenance settings; justify any remaining
+  operator tuning with a concrete operational need and a bounded test scope.
+  Keep observability separate from behavior selection. Fault injection belongs
+  in test builds and must not be a normal deployment option. Record a disposition
+  for every inventoried setting; intentional transport/platform support is not
+  automatically an obsolete A/B implementation.
+- [ ] **A9 — Metadata leadership.** Remove `EFS_METADATA_BALANCE` as an operator
+  choice after selecting and qualifying the automatic policy. Do not force its
+  present common-voter/co-located-leader preference on as a substitute for that
+  decision. Preserve quorum, safe transfer and catch-up; expose actual leadership
+  diagnostically. This does not claim the later many-group design is complete.
+- [ ] **A10 — Operational consistency.** Update launch/deployment scripts, portal
+  settings, help and generated settings listings with each removal. Stale launch
+  configurations must be detected by validation rather than silently presented
+  as effective settings. No new deployment should require a hidden toggle to
+  obtain the qualified behavior.
+- [ ] **A11 — Reduced qualification matrix.** Publish the remaining supported
+  configuration dimensions and rationale. Qualify the selected paths under the
+  topology/profile gates below, including automatic-policy boundaries, load
+  changes and orderly restart. Report before/after behavior-switch counts and
+  reachable configuration counts where defensible; do not claim exhaustive
+  coverage from testing flags individually or from pairwise tests alone.
+- [ ] **A12 — Closure.** Every A/B selector has either been removed with its
+  alternative implementation or is an explicitly justified, reviewed support
+  dimension under A8. No unexplained experimental, legacy or correctness-policy
+  toggle remains in the alpha product. Record failures and gate results for the
+  integrated candidate; flag removal alone is not correctness evidence.
+
 ## B. Verify geometry, placement and usable capacity
 
 - [ ] **B1** Check ordinary chunks and packed segments use exactly D1/D2/P, each
@@ -145,6 +197,7 @@ metadata quorum availability, or automatic repair. Keep those later gates open.
 | Evidence | 3 physical nodes | 4 physical nodes | >4 physical nodes (record N) |
 | --- | --- | --- | --- |
 | Candidate and profile | NOTRUN | NOTRUN | NOTRUN |
+| Single supported policy / flag audit | NOTRUN | NOTRUN | NOTRUN |
 | Placement/capacity and decode | NOTRUN | NOTRUN | NOTRUN |
 | POSIX and concurrent I/O | NOTRUN | NOTRUN | NOTRUN |
 | Packing/shared-fragment GC | NOTRUN | NOTRUN | NOTRUN |
