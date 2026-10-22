@@ -1569,6 +1569,12 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[Recent devel integration review](../status/devel-integration-review-20261022.md):
+**OPEN findings** through `e9ca0d07b` plus `95beaa053`: summary exit-status
+false success (reproduced), decision-sweep starvation, transaction encoding
+strictness, and whole-shutdown qualification gaps. Local checks only; merged
+cluster acceptance NOTRUN.
+
 [K1 / W145 remaining parts](../status/k01-w145-remaining-20261022.md): **merged into
 devel (`86b6ef567`). Near-follower snapshot fixed (a match-0 probe ACK reset
 `next_index` to 1); 30,929,219@62 was not acknowledged to any client;
