@@ -10,6 +10,14 @@ fragment** architecture at every supported cluster size. Completion is the
 This is release sequencing, not a claim that the final D36 design is implemented.
 No tag, merge, push, deployment or data deletion is performed by this document.
 
+**Review (October 22, devel `165689c06`):**
+[plan and code review](alpha-1.0-plan-review-20261022.md). Main finding: the
+code caps a cluster at four nodes (`EFS_MAX_NODES`, voter sets, placement,
+client hint checks), so the >4-node column needs an implementation item or a
+narrower claim; also a K27 for the ior write regression, the four-node
+packing/metadata placement facts for F4, and `EFS_MD_RAFT_N` as a derived
+fact under A8.
+
 ## Order of work (user direction, October 22)
 
 Alpha 1.0 is reached in three stages, in this order:

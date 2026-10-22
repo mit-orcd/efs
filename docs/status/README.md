@@ -30,6 +30,12 @@ packed-read involvement. Overwrite followed by truncate-up is a hypothesis.
 Independent review of `a1ceff4cb` identifies remaining output-reuse, unchecked
 shutdown and mismatch-context gaps in the improved repro; qualification NOTRUN.
 
+[Alpha 1.0 plan and code review](alpha-1.0-plan-review-20261022.md):
+**the plan's order holds and its K register matches the code; the code caps
+a cluster at four nodes, so ">4 nodes" is an implementation item or a
+narrower claim.** W145–W147 fixes read correct; `raft-resync` mark is not
+persisted; ior write regression needs a K row.
+
 [Phase 1 / alpha 1.0 checklist](alpha-1.0-2plus1-checklist.md): **OPEN**.
 Finish and qualify **2+1 on 3, 4 and >4 physical nodes** before the remaining
 roadmap. **Order: (1) known bugs, register K1–K26; (2) functional
