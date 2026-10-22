@@ -71,7 +71,8 @@ int efs_client_put_resume(struct efs_client_put_request *r,int probe_only,
     if (rc!=EFS_OK) return rc;
     uint32_t observed=0;
     rc=efs_client_rpc_put_ticket(&r->ticket,1,&observed);
-    if (!probe_only && (rc==EFS_ERR_NOT_FOUND || rc==EFS_ERR_BUSY)) {
+    /* UNREGISTERED: this lane shard has not admitted the session yet (K5). */
+    if (!probe_only && (rc==EFS_ERR_NOT_FOUND || rc==EFS_ERR_BUSY || rc==EFS_ERR_UNREGISTERED)) {
         uint32_t shard=efs_kv_lane_shard(r->ticket.ino,r->ticket.ci%EFS_META_LANES);
         rc=efs_client_session_admit(shard,&r->ticket.id);
         if (rc!=EFS_OK) return rc;

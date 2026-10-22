@@ -145,7 +145,7 @@ static void metadata(void)
     assert(!memcmp(rebased.body_digest, orphan.body_digest, EFS_HASH_SIZE));
     revoke_session(kv, &q);
     assert(efs_put_ticket_reclaim_begin(kv, &orphan) == EFS_ERR_BUSY);
-    assert(efs_meta_apply_publish(kv, &q) == EFS_ERR_STALE);
+    assert(efs_meta_apply_publish(kv, &q) == EFS_ERR_FENCED);
     finish(kv, &q);
     assert(efs_put_ticket_reclaim_begin(kv, &t) ==
            EFS_ERR_BUSY); /* live mapping protected */
@@ -173,7 +173,7 @@ static void metadata(void)
     assert(!efs_put_ticket_retire_published(kv,&t));
     assert(efs_put_ticket_retire(kv, &orphan) == EFS_OK);
     assert(efs_put_ticket_get(kv, &orphan, &state) == EFS_ERR_STALE);
-    assert(efs_put_ticket_admit(kv, &orphan) == EFS_ERR_STALE);
+    assert(efs_put_ticket_admit(kv, &orphan) == EFS_ERR_FENCED);
     assert(efs_put_ticket_retire(kv, &orphan) == EFS_OK);
     assert(efs_meta_apply_get_chunk(kv, p.ino, 0, &ch) == EFS_OK &&
            ch.generation == p.candidate_gen);
@@ -248,7 +248,7 @@ static void restart(void)
     efs_kv_lsm_close(kv);
     kv = efs_kv_lsm_open(dir, NULL);
     assert(kv);
-    assert(efs_put_ticket_admit(kv, &t) == EFS_ERR_STALE);
+    assert(efs_put_ticket_admit(kv, &t) == EFS_ERR_FENCED);
     assert(efs_put_ticket_get(kv, &t, &state) == EFS_ERR_STALE);
     efs_kv_lsm_close(kv);
     DIR *dp = opendir(dir);

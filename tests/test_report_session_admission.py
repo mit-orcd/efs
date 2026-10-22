@@ -18,6 +18,8 @@ source=r'''
 #define EFS_ERR_NOT_FOUND -4
 #define EFS_ERR_INVAL -1
 #define EFS_ERR_STALE -7
+#define EFS_ERR_FENCED -27
+#define EFS_ERR_UNREGISTERED -28
 struct efs_opid {uint8_t client_uuid[16];uint32_t session_epoch;uint64_t seq;};
 struct efs_opid_req {struct efs_opid id;uint64_t ack;};
 struct efs_chunk_rec {uint64_t ino;uint32_t chunk_index;};
@@ -29,7 +31,7 @@ static unsigned expected_parallel=1,gate_open;
 static uint32_t efs_kv_inode_shard(uint64_t ino) {return ino==999?64:1;}
 static uint32_t efs_kv_lane_shard(uint64_t ino,uint32_t lane) {(void)ino;return 2+lane;}
 static int efs_session_accept(void *kv,uint32_t shard,const uint8_t *uuid,uint32_t epoch) {
- (void)kv;assert(uuid[0]==17&&epoch==2);return refusal ? refusal : existing ? EFS_OK : shard%2 ? EFS_ERR_BUSY : EFS_ERR_NOT_FOUND;
+ (void)kv;(void)shard;assert(uuid[0]==17&&epoch==2);return refusal ? refusal : existing ? EFS_OK : EFS_ERR_UNREGISTERED;
 }
 static int mock_admit(struct efs_raft_host *h,uint32_t shard,const struct efs_opid_req *q,int *hint) {
  (void)h;assert(q->id.client_uuid[0]==17 && q->id.session_epoch==2 && q->id.seq==1 && !q->ack);
@@ -83,11 +85,13 @@ int main(void) {
  assert(owner_calls==1 && hint==2 && !active && !max_active);
  for(unsigned shard=0;shard<64;shard++)assert(!calls[shard]);
  reset();existing=1;assert(!host_report_session_admit(&h,recs,16,&session,&hint));assert(!active && !create_calls && !owner_calls);
- reset();refusal=EFS_ERR_STALE;assert(host_report_session_admit(&h,recs,16,&session,&hint)==EFS_ERR_STALE);assert(!active && !create_calls && !owner_calls);
+ reset();refusal=EFS_ERR_FENCED;assert(host_report_session_admit(&h,recs,16,&session,&hint)==EFS_ERR_FENCED);assert(!active && !create_calls && !owner_calls);
+ /* K5: only UNREGISTERED shards are admitted; BUSY is not an admission cue. */
+ reset();refusal=EFS_ERR_BUSY;assert(host_report_session_admit(&h,recs,16,&session,&hint)==EFS_ERR_BUSY);assert(!active && !create_calls && !owner_calls);
  reset();fail_shard=1;hint=-1;assert(host_report_session_admit(&h,recs,16,&session,&hint)==EFS_ERR_STALE);
  assert(hint==3 && !active && max_active<=4);for(unsigned i=0;i<64;i++)assert(calls[i]<=1);
  reset();recs[0].ino=999;assert(host_report_session_admit(&h,recs,16,&session,&hint)==EFS_ERR_INVAL);assert(!active && !create_calls && !owner_calls);
- puts("REPORT sessions: one owner CREATE, exact dedup, bounded four-way admission, retryable contention/create-failure backpressure, fencing and joined error ownership PASS");
+ puts("REPORT sessions: one fresh owner proof, exact dedup, bounded four-way admission, retryable contention/create-failure backpressure, fencing and joined error ownership PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-report-session-') as td:

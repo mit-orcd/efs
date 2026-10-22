@@ -1376,6 +1376,11 @@ int sim_raft_append_reserve(struct efs_sim *sim, int client,
         return EFS_ERR_INVAL;
     sh = efs_kv_inode_shard(ino);
     rc = sim_sess_ensure_id(sim, op->client_uuid, op->session_epoch, sh);
+    /* The sim APPEND receipt window lives on the session shard; every
+     * receipt shard checks the session (K5), so admit it as well. */
+    if (rc == EFS_OK)
+        rc = sim_sess_ensure_id(sim, op->client_uuid, op->session_epoch,
+                                efs_kv_session_shard(op->client_uuid));
     if (rc != EFS_OK)
         return rc;
     cmd[0] = CMD_APPEND_RSV;

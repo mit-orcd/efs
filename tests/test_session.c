@@ -61,7 +61,7 @@ static void test_register_establish(void)
         fault.error=errors[i];
         CHECK(efs_session_register_establish(&wrapped,uuid,1,7)==errors[i],"batch failure audible");
         CHECK(!efs_session_get(kv,uuid,&rec) && !efs_session_bit_get(rec.touched,7),"failed batch no touched bit");
-        CHECK(efs_session_accept(kv,7,uuid,1)==EFS_ERR_BUSY,"failed batch no floor");
+        CHECK(efs_session_accept(kv,7,uuid,1)==EFS_ERR_UNREGISTERED,"failed batch no floor");
     }
     fault.error=0;CHECK(!efs_session_register_establish(&wrapped,uuid,1,7),"atomic retry");
     CHECK(fault.batches==3 && !efs_session_accept(kv,7,uuid,1),"one batch establishes floor");
@@ -72,7 +72,7 @@ static void test_register_establish(void)
     CHECK(efs_session_register_establish(kv,uuid,2,7)==EFS_ERR_BUSY,"new epoch waits for fence");
     CHECK(!efs_session_fence_local(kv,7,uuid,2) && !efs_session_ack_fence(kv,uuid,7) && !efs_session_finish_fence(kv,uuid),"full participant barrier");
     CHECK(!efs_session_register_establish(kv,uuid,2,7),"next ACTIVE epoch admitted");
-    CHECK(efs_session_accept(kv,7,uuid,1)==EFS_ERR_STALE && !efs_session_accept(kv,7,uuid,2),"floor retained");
+    CHECK(efs_session_accept(kv,7,uuid,1)==EFS_ERR_FENCED && !efs_session_accept(kv,7,uuid,2),"floor retained");
     CHECK(efs_session_register_establish(kv,uuid,0,7)==EFS_ERR_INVAL,"zero epoch refused");
     CHECK(efs_session_register_establish(kv,uuid,2,EFS_SESSION_BITS)==EFS_ERR_INVAL,"invalid domain refused");
     struct efs_txid tx={{0}};tx.bytes[15]=81;struct efs_txn_parts parts={.n=1,.shard={7}};
@@ -105,15 +105,15 @@ static void test_register_and_fence(void)
     CHECK(efs_session_register(kv, u, 1, 1) == EFS_OK, "reg 1 idemp");
     CHECK(efs_session_establish(kv, 1, u, 1) == EFS_OK, "est");
     CHECK(efs_session_accept(kv, 1, u, 1) == EFS_OK, "accept");
-    CHECK(efs_session_accept(kv, 2, u, 1) == EFS_ERR_BUSY, "need register");
+    CHECK(efs_session_accept(kv, 2, u, 1) == EFS_ERR_UNREGISTERED, "need register");
     CHECK(efs_session_begin_fence(kv, u) == EFS_OK, "begin");
     CHECK(efs_session_begin_fence(kv, u) == EFS_OK, "begin idemp");
     CHECK(efs_session_register(kv, u, 1, 2) == EFS_ERR_STALE, "no new shard");
     CHECK(efs_session_register(kv, u, 1, 1) == EFS_OK, "old bit idemp");
     CHECK(efs_session_register(kv, u, 2, 1) == EFS_ERR_BUSY, "new epoch waits");
     CHECK(efs_session_fence_local(kv, 1, u, 2) == EFS_OK, "fence local");
-    CHECK(efs_session_accept(kv, 1, u, 1) == EFS_ERR_STALE, "old epoch");
-    CHECK(efs_session_accept(kv, 1, u, 2) == EFS_ERR_BUSY, "new not established");
+    CHECK(efs_session_accept(kv, 1, u, 1) == EFS_ERR_FENCED, "old epoch");
+    CHECK(efs_session_accept(kv, 1, u, 2) == EFS_ERR_UNREGISTERED, "new not established");
     CHECK(efs_session_finish_fence(kv, u) == EFS_ERR_BUSY, "no ack");
     CHECK(efs_session_ack_fence(kv, u, 1) == EFS_OK, "ack");
     CHECK(efs_session_ack_fence(kv, u, 1) == EFS_OK, "ack idemp");
@@ -121,7 +121,7 @@ static void test_register_and_fence(void)
     CHECK(efs_session_get(kv, u, &r) == EFS_OK && r.state == EFS_SESSION_ACTIVE &&
               r.epoch == 2,
           "ACTIVE(2)");
-    CHECK(efs_session_accept(kv, 1, u, 1) == EFS_ERR_STALE, "still stale");
+    CHECK(efs_session_accept(kv, 1, u, 1) == EFS_ERR_FENCED, "still stale");
     CHECK(efs_session_register(kv, u, 2, 1) == EFS_OK, "reg epoch 2");
     CHECK(efs_session_establish(kv, 1, u, 2) == EFS_OK, "est 2");
     CHECK(efs_session_accept(kv, 1, u, 2) == EFS_OK, "accept 2");
@@ -137,10 +137,10 @@ static void test_registered_before_establish_fence(void)
     CHECK(efs_session_register(kv,uuid,1,7)==EFS_OK,"participant registered before BEGIN");
     CHECK(efs_session_begin_fence(kv,uuid)==EFS_OK,"BEGIN captures registered participant");
     CHECK(efs_session_register(kv,uuid,1,7)==EFS_OK,"FENCING old-bit success is only idempotent");
-    CHECK(efs_session_accept(kv,7,uuid,1)==EFS_ERR_BUSY,"floor is not yet established");
+    CHECK(efs_session_accept(kv,7,uuid,1)==EFS_ERR_UNREGISTERED,"floor is not yet established");
     CHECK(efs_session_fence_local(kv,7,uuid,2)==EFS_OK,"fence creates absent rejection floor");
     CHECK(efs_session_establish(kv,7,uuid,1)==EFS_ERR_STALE,"late old ESTABLISH cannot cross floor");
-    CHECK(efs_session_accept(kv,7,uuid,1)==EFS_ERR_STALE,"late mutation stays refused");
+    CHECK(efs_session_accept(kv,7,uuid,1)==EFS_ERR_FENCED,"late mutation stays refused");
     CHECK(efs_session_ack_fence(kv,uuid,7)==EFS_OK,"captured participant ACK");
     CHECK(efs_session_finish_fence(kv,uuid)==EFS_OK,"barrier finishes after participant fence");
     CHECK(efs_session_establish(kv,7,uuid,1)==EFS_ERR_STALE,"completed barrier cannot resurrect old floor");
@@ -163,6 +163,7 @@ static void test_i19_lease(void)
               == EFS_OK && ino,
           "create");
     CHECK(efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK, "row");
+    CHECK(efs_session_establish(kv, efs_kv_inode_shard(ino), u, 1) == EFS_OK, "est");
     CHECK(efs_lease_open(kv, ino, row.generation, u, 1) == EFS_OK, "open");
     CHECK(efs_lease_open(kv, ino, row.generation + 1, u, 1) == EFS_ERR_STALE,
           "bad gen");
@@ -243,6 +244,7 @@ static void test_pending_create_ownership(void)
     CHECK(efs_meta_apply_init(kv,T0)==EFS_OK,"pending init");
     CHECK(efs_meta_apply_create_file(kv,&g_at,EFS_ROOT_INO,S_IFREG|0600,"pending",&ino)==EFS_OK,"pending file");
     CHECK(efs_meta_apply_get_inode(kv,ino,&row)==EFS_OK,"pending inode");
+    CHECK(efs_session_establish(kv,efs_kv_inode_shard(ino),uuid,1)==EFS_OK,"pending session established");
     CHECK(efs_kv_key_lease(efs_kv_inode_shard(ino),ino,row.generation,uuid,1,key,&klen)==EFS_OK,"pending key");
     CHECK(efs_lease_pending_value(token,value)==EFS_OK,"encode full-width token");
     CHECK(efs_lease_pending_value(0,value)==EFS_ERR_INVAL && efs_lease_pending_value(token,NULL)==EFS_ERR_INVAL,"invalid pending token rejected");
@@ -410,7 +412,7 @@ static void test_pending_cold_edges(void)
         if (guarded && phase>=4) {
             struct efs_opid_req old={0};memcpy(old.id.client_uuid,uuid,sizeof(uuid));
             old.id.session_epoch=1;old.id.seq=2;old.ack=1;
-            CHECK(efs_lease_guarded_edge(kv,ino,1,&old,EFS_LEASE_EDGE_OPEN,0)==EFS_ERR_STALE,
+            CHECK(efs_lease_guarded_edge(kv,ino,1,&old,EFS_LEASE_EDGE_OPEN,0)==(phase>=5?EFS_ERR_FENCED:EFS_ERR_STALE),
                   "cold retired floor rejects delayed OPEN after tombstone deletion");
         }
         efs_kv_lsm_close(kv);
@@ -547,7 +549,7 @@ static void test_guarded_pending_and_fence(void)
     CHECK(efs_lease_any(kv,ino,1)==1,"local fence retains active ownership until global barrier");
     CHECK(efs_lease_guarded_retire(kv,1,uuid,1)==EFS_ERR_BUSY,"local floor alone cannot retire replay identity");
     q.id.seq=6;q.ack=5;
-    CHECK(efs_lease_guarded_edge(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_ERR_STALE,"local fence rejects old edges before global barrier finishes");
+    CHECK(efs_lease_guarded_edge(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_ERR_FENCED,"local fence rejects old edges before global barrier finishes");
     CHECK(efs_session_ack_fence(kv,uuid,1)==EFS_OK && efs_session_finish_fence(kv,uuid)==EFS_OK,"complete durable barrier");
     CHECK(efs_lease_guarded_retire(kv,1,uuid,1)==EFS_ERR_BUSY && guarded_rows(kv)==1,"retirement cannot expand into old ownership deletion");
     struct efs_session_cleanup_key cleanup[EFS_SESSION_CLEANUP_MAX];uint32_t nc=0;
@@ -571,7 +573,7 @@ static void test_guarded_pending_and_fence(void)
     CHECK(efs_lease_guarded_retire(kv,1,uuid,1)==EFS_OK && guarded_rows(kv)==0,"empty phase retires only replay floor");
     CHECK(efs_lease_guarded_retire(kv,1,uuid,1)==EFS_OK,"retirement is idempotent");
     q.id.seq=6;q.ack=5;
-    CHECK(efs_lease_guarded_edge(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_ERR_STALE,"retired old session cannot reopen after floor deletion");
+    CHECK(efs_lease_guarded_edge(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_ERR_FENCED,"retired old session cannot reopen after floor deletion");
     CHECK(efs_session_register(kv,uuid,2,1)==EFS_OK && efs_session_establish(kv,1,uuid,2)==EFS_OK,"new epoch establish");
     q=guarded_request(uuid,1,0);q.id.session_epoch=2;
     CHECK(efs_lease_guarded_edge(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_OK,"new epoch has independent sequence identity");
@@ -661,7 +663,7 @@ static void test_deferred_adoption_no_cleanup(void)
     n=sizeof(value);
     CHECK(efs_kv_get(kv,key,len,value,&n)==EFS_OK && value[28]==255 &&
           !efs_lease_any(kv,ino,1),"revoked owner still creates its cleanup marker");
-    CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_ERR_STALE,
+    CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_ERR_FENCED,
           "late adoption cannot reopen after durable revocation");
     efs_kv_mem_free(kv);
 }
@@ -864,9 +866,9 @@ static void test_prepared_owner_fence(void)
               "floor only after transaction resolution");
         CHECK(efs_txn_resolve(kv, &tx, 7, commit ? EFS_TXN_COMMIT : EFS_TXN_ABORT) == EFS_OK,
               "late resolve idempotent");
-        CHECK(efs_session_accept(kv, 7, uuid, 1) == EFS_ERR_STALE,
+        CHECK(efs_session_accept(kv, 7, uuid, 1) == EFS_ERR_FENCED,
               "late resolve cannot roll floor back");
-        CHECK(efs_session_prepare_owner(kv, 7, uuid, 1, &other, &parts) == EFS_ERR_STALE,
+        CHECK(efs_session_prepare_owner(kv, 7, uuid, 1, &other, &parts) == EFS_ERR_FENCED,
               "fenced owner cannot prepare");
         CHECK(efs_session_ack_fence(kv, uuid, 7) == EFS_OK, "ack drained shard");
         CHECK(efs_session_finish_fence(kv, uuid) == EFS_OK, "finish drained owner barrier");
@@ -935,13 +937,13 @@ static void test_prepared_owner_cold(void)
                     CHECK(efs_txn_resolve(kv, &tx, 1, commit ? EFS_TXN_COMMIT : EFS_TXN_ABORT) ==
                               EFS_OK,
                           "cold delayed resolve");
-                    CHECK(efs_session_accept(kv, 1, uuid, 1) == EFS_ERR_STALE,
+                    CHECK(efs_session_accept(kv, 1, uuid, 1) == EFS_ERR_FENCED,
                           "cold floor retained");
                     CHECK(efs_lease_any(kv, 4097, 1) == 0,
                           "cold delayed resolve cannot restore lease");
                     struct efs_opid_req q={0};memcpy(q.id.client_uuid,uuid,sizeof(uuid));q.id.session_epoch=1;q.id.seq=10;
                     efs_ino_t late=0;struct efs_meta_dentry dent;
-                    CHECK(efs_meta_apply_create_file_log_pending(kv,&g_at,1,S_IFREG|0600,"after-fence",0,-1,&q,uuid,1,&late)==EFS_ERR_STALE&&!late,"cold delayed CREATE cannot publish an old owner");
+                    CHECK(efs_meta_apply_create_file_log_pending(kv,&g_at,1,S_IFREG|0600,"after-fence",0,-1,&q,uuid,1,&late)==EFS_ERR_FENCED&&!late,"cold delayed CREATE cannot publish an old owner");
                     CHECK(efs_meta_apply_lookup(kv,1,"after-fence",&dent)==EFS_ERR_NOT_FOUND,"cold fenced CREATE has no name");
                 }
                 _exit(failures ? 1 : 0); /* deliberately no LSM close/checkpoint */
@@ -958,7 +960,7 @@ static void test_prepared_owner_cold(void)
                 CHECK(efs_session_fence_local(kv, 1, uuid, 2) == EFS_ERR_BUSY,
                       "cold owner barrier survived process exit");
             else
-                CHECK(efs_session_accept(kv, 1, uuid, 1) == EFS_ERR_STALE,
+                CHECK(efs_session_accept(kv, 1, uuid, 1) == EFS_ERR_FENCED,
                       "cold revocation survived process exit");
             efs_kv_lsm_close(kv);
         }
@@ -985,9 +987,9 @@ static void test_pending_create_session_fence(void)
     uint8_t uuid[EFS_OPID_UUID_LEN];uuid_of(uuid,224);
     struct efs_opid_req q={0};memcpy(q.id.client_uuid,uuid,sizeof(uuid));q.id.session_epoch=1;q.id.seq=1;
     efs_ino_t ino=0;struct efs_meta_dentry dent;struct efs_opid_reply rep;
-    CHECK(efs_meta_apply_create_file_log_pending(kv,&g_at,1,S_IFREG|0600,"admission",0,-1,&q,uuid,1,&ino)==EFS_ERR_BUSY,"unestablished pending CREATE refuses ownership");
+    CHECK(efs_meta_apply_create_file_log_pending(kv,&g_at,1,S_IFREG|0600,"admission",0,-1,&q,uuid,1,&ino)==EFS_ERR_UNREGISTERED,"unestablished pending CREATE refuses ownership");
     CHECK(efs_meta_apply_lookup(kv,1,"admission",&dent)==EFS_ERR_NOT_FOUND,"unestablished CREATE has no namespace effect");
-    CHECK(efs_meta_apply_opid_probe(kv,1,&q.id,&rep)==0,"unestablished CREATE records no verdict");
+    CHECK(efs_meta_apply_opid_probe(kv,1,&q.id,&rep)==EFS_ERR_UNREGISTERED,"unestablished CREATE records no verdict");
     CHECK(efs_session_create(kv,uuid,1)==EFS_OK&&efs_session_register(kv,uuid,1,1)==EFS_OK&&efs_session_establish(kv,1,uuid,1)==EFS_OK,"pending session admitted");
     CHECK(efs_meta_apply_create_file_log_pending(kv,&g_at,1,S_IFREG|0600,"admission",0,-1,&q,uuid,1,&ino)==EFS_OK&&ino,"admitted pending CREATE");
     uint8_t replay_key[EFS_KV_KEY_MAX],replay_value[EFS_OPID_VAL_MAX];uint32_t replay_len=0,replay_bytes=sizeof(replay_value);
@@ -996,13 +998,13 @@ static void test_pending_create_session_fence(void)
     CHECK(efs_lease_drop_session(kv,1,uuid,1)==EFS_OK&&!efs_lease_any(kv,ino,1),"revoked pending ownership removed");
     /* Model a crash after persisting the floor but before old-window deletion. */
     CHECK(efs_kv_put(kv,replay_key,replay_len,replay_value,replay_bytes)==EFS_OK,"retained old replay row behind durable floor");
-    CHECK(efs_meta_apply_opid_probe(kv,1,&q.id,&rep)==EFS_ERR_STALE,"durable floor supersedes retained successful receipt");
+    CHECK(efs_meta_apply_opid_probe(kv,1,&q.id,&rep)==EFS_ERR_FENCED,"durable floor supersedes retained successful receipt");
     efs_ino_t late=0;
-    CHECK(efs_meta_apply_create_file_log_pending(kv,&g_at,1,S_IFREG|0600,"admission",0,-1,&q,uuid,1,&late)==EFS_ERR_STALE&&!late,"fenced replay cannot grant adoption");
+    CHECK(efs_meta_apply_create_file_log_pending(kv,&g_at,1,S_IFREG|0600,"admission",0,-1,&q,uuid,1,&late)==EFS_ERR_FENCED&&!late,"fenced replay cannot grant adoption");
     q.id.seq=2;q.ack=1;
-    CHECK(efs_meta_apply_create_file_log_pending(kv,&g_at,1,S_IFREG|0600,"late",0,-1,&q,uuid,1,&late)==EFS_ERR_STALE&&!late,"delayed pending CREATE cannot cross local fence");
+    CHECK(efs_meta_apply_create_file_log_pending(kv,&g_at,1,S_IFREG|0600,"late",0,-1,&q,uuid,1,&late)==EFS_ERR_FENCED&&!late,"delayed pending CREATE cannot cross local fence");
     CHECK(efs_meta_apply_lookup(kv,1,"late",&dent)==EFS_ERR_NOT_FOUND,"fenced CREATE leaves no name");
-    CHECK(efs_meta_apply_opid_probe(kv,1,&q.id,&rep)==EFS_ERR_STALE,"fenced CREATE has no readable new verdict");
+    CHECK(efs_meta_apply_opid_probe(kv,1,&q.id,&rep)==EFS_ERR_FENCED,"fenced CREATE has no readable new verdict");
     CHECK(!efs_lease_any(kv,ino,1),"late retry cannot resurrect removed pending ownership");
     efs_kv_mem_free(kv);
 }
@@ -1108,7 +1110,7 @@ static void test_deferred_close_empty_proof(void)
         struct efs_opid_req q=guarded_request(uuid,1,0);
         CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_OK,"empty proof open");
         uint32_t shard=efs_kv_inode_shard(ino),len=0;uint8_t key[EFS_KV_KEY_MAX],one=1;
-        if(kind==1)CHECK(efs_lease_open(kv,ino,1,other,1)==EFS_OK,"foreign live lease");
+        if(kind==1)CHECK(efs_session_establish(kv,efs_kv_inode_shard(ino),other,1)==EFS_OK && efs_lease_open(kv,ino,1,other,1)==EFS_OK,"foreign live lease");
         if(kind==2) {
             CHECK(efs_kv_key_lease(shard,ino,1,other,1,key,&len)==EFS_OK &&
                   efs_kv_put(kv,key,len,&one,1)==EFS_OK,"unknown foreign ownership");
@@ -1269,7 +1271,7 @@ static void test_guarded_retire_cold(void)
             } else {
                 CHECK(efs_lease_guarded_retire(kv,1,uuid,1)==EFS_OK,"cold empty retirement replay");
                 struct efs_opid_req q=guarded_request(uuid,1,0);
-                CHECK(efs_lease_guarded_edge(kv,4097,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_ERR_STALE,
+                CHECK(efs_lease_guarded_edge(kv,4097,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_ERR_FENCED,
                       "cold retired epoch cannot resurrect old lease");
             }
             efs_kv_lsm_close(kv);_exit(failures?1:0);
@@ -1311,23 +1313,41 @@ static void test_legacy_lease_prepared(void)
  CHECK(efs_lease_close(kv,ino,1,uuid,1)==EFS_OK,"legacy close after resolution");
  efs_kv_mem_free(kv);
 }
-static void test_legacy_rejection_floor(void)
+/* K5 (W134): the apply refuses every unregistered, unknown or fenced
+ * identity. There is no absent-row compatibility path. */
+static void test_accept_refusals(void)
 {
- struct efs_kv *kv=efs_kv_mem_create();uint8_t uuid[16]={173};efs_ino_t ino=0;
- CHECK(kv!=NULL,"legacy floor KV");if(!kv)return;
- CHECK(efs_meta_apply_init(kv,1)==EFS_OK,"legacy floor root");
- CHECK(efs_meta_apply_create_file(kv,&g_at,1,S_IFREG|0600,"legacy-floor",&ino)==EFS_OK,"legacy floor file");
+ struct efs_kv *kv=efs_kv_mem_create();uint8_t uuid[16]={173},zero[16]={0},other[16]={174};efs_ino_t ino=0;
+ CHECK(kv!=NULL,"refusal KV");if(!kv)return;
+ CHECK(efs_meta_apply_init(kv,1)==EFS_OK,"refusal root");
+ CHECK(efs_meta_apply_create_file(kv,&g_at,1,S_IFREG|0600,"refusal",&ino)==EFS_OK,"refusal file");
  uint32_t shard=efs_kv_inode_shard(ino);
- CHECK(efs_session_accept_legacy(kv,shard,uuid,1)==EFS_OK,"legacy absent compatibility");
- CHECK(efs_lease_open(kv,ino,1,uuid,1)==EFS_OK,"legacy absent OPEN");
- CHECK(efs_lease_close(kv,ino,1,uuid,1)==EFS_OK,"legacy old close");
- CHECK(efs_session_fence_local(kv,shard,uuid,2)==EFS_OK,"legacy durable reject floor");
- CHECK(efs_lease_open(kv,ino,1,uuid,1)==EFS_ERR_STALE && efs_lease_any(kv,ino,1)==0,"legacy old OPEN cannot resurrect revoked ownership");
- CHECK(efs_lease_open(kv,ino,1,uuid,2)==EFS_ERR_BUSY,"legacy new epoch needs establishment");
+ CHECK(efs_session_accept(kv,shard,zero,1)==EFS_ERR_UNREGISTERED,"no identity (zero uuid) is unregistered");
+ CHECK(efs_session_accept(kv,shard,uuid,0)==EFS_ERR_UNREGISTERED,"epoch 0 is unregistered");
+ CHECK(efs_session_accept(kv,shard,uuid,1)==EFS_ERR_UNREGISTERED,"unknown uuid is unregistered");
+ CHECK(efs_lease_open(kv,ino,1,zero,1)==EFS_ERR_UNREGISTERED && efs_lease_any(kv,ino,1)==0,"OPEN without identity refused at apply");
+ CHECK(efs_lease_open(kv,ino,1,uuid,1)==EFS_ERR_UNREGISTERED && efs_lease_any(kv,ino,1)==0,"OPEN of an unknown session refused at apply");
+ struct efs_opid id={0};memcpy(id.client_uuid,uuid,16);id.session_epoch=1;id.seq=1;
+ struct efs_opid_reply rep;
+ CHECK(efs_meta_apply_opid_probe(kv,shard,&id,&rep)==EFS_ERR_UNREGISTERED,"receipt probe of an unknown session refused");
+ CHECK(efs_session_create(kv,uuid,1)==EFS_OK,"owner creates session");
+ CHECK(efs_session_accept(kv,shard,uuid,1)==EFS_ERR_UNREGISTERED,"created but not established is unregistered");
+ CHECK(efs_session_register_establish(kv,uuid,1,shard)==EFS_OK,"register and establish the shard");
+ CHECK(efs_session_accept(kv,shard,uuid,1)==EFS_OK,"established epoch accepted");
+ CHECK(efs_session_accept(kv,shard,other,1)==EFS_ERR_UNREGISTERED,"another uuid stays unregistered");
+ CHECK(efs_session_accept(kv,shard,uuid,2)==EFS_ERR_UNREGISTERED,"newer epoch needs its own establishment");
+ CHECK(efs_lease_open(kv,ino,1,uuid,1)==EFS_OK,"registered OPEN");
+ CHECK(efs_lease_close(kv,ino,1,uuid,1)==EFS_OK,"registered CLOSE");
+ CHECK(efs_session_fence_local(kv,shard,uuid,2)==EFS_OK,"durable reject floor");
+ CHECK(efs_session_accept(kv,shard,uuid,1)==EFS_ERR_FENCED,"stale epoch is fenced");
+ CHECK(efs_lease_open(kv,ino,1,uuid,1)==EFS_ERR_FENCED && efs_lease_any(kv,ino,1)==0,"fenced OPEN cannot resurrect revoked ownership");
+ CHECK(efs_meta_apply_opid_probe(kv,shard,&id,&rep)==EFS_ERR_FENCED,"fenced receipt probe refused");
+ CHECK(efs_session_establish(kv,shard,uuid,2)==EFS_OK,"new epoch established");
+ CHECK(efs_session_accept(kv,shard,uuid,2)==EFS_OK && efs_session_accept(kv,shard,uuid,1)==EFS_ERR_FENCED,"only the new epoch is accepted");
  uint8_t key[EFS_KV_KEY_MAX],bad=0;uint32_t kl;
- CHECK(efs_kv_key_sess_local(shard,uuid,key,&kl)==EFS_OK,"legacy floor key");
- CHECK(efs_kv_put(kv,key,kl,&bad,1)==EFS_OK,"legacy malformed floor");
- CHECK(efs_lease_open(kv,ino,1,uuid,1)==EFS_ERR_PROTO && efs_lease_any(kv,ino,1)==0,"legacy malformed authority fails closed");
+ CHECK(efs_kv_key_sess_local(shard,uuid,key,&kl)==EFS_OK,"floor key");
+ CHECK(efs_kv_put(kv,key,kl,&bad,1)==EFS_OK,"malformed floor");
+ CHECK(efs_lease_open(kv,ino,1,uuid,2)==EFS_ERR_PROTO && efs_lease_any(kv,ino,1)==0,"malformed authority fails closed");
  efs_kv_mem_free(kv);
 }
 static void test_legacy_sequenced_handoff(void)
@@ -1390,7 +1410,7 @@ int main(void)
 {
     test_epoch_bound_finish();
     test_legacy_sequenced_handoff();
-    test_legacy_rejection_floor();
+    test_accept_refusals();
     test_legacy_lease_prepared();
     test_guarded_retire_cold();
     test_deferred_close_empty_proof();

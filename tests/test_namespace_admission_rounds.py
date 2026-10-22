@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Fresh owner authority avoids redundant CREATE, retaining durable admission."""
+"""Fresh owner authority admits a namespace participant; hosts never create a
+session for an unknown uuid (K5), so an absent owner is UNREGISTERED and a
+different owner epoch is FENCED."""
 from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_text()
@@ -47,9 +49,9 @@ int main(void){struct efs_raft_host h={0};struct efs_opid_req q={0};int hint=-1;
  for(unsigned remote=0;remote<2;remote++){owner_hosted=!remote;
  reset();assert(!host_namespace_session_admit(&h,2,&q,&hint));assert(!creates && registers==1 && establishes==1 && owner_reads==1 && est_checks==1 && accepts==1);
  reset();owner_value|=1ull<<40;assert(!host_namespace_session_admit(&h,2,&q,&hint));assert(!creates && !registers && establishes==1 && est_checks==1);
- reset();owner_rc=EFS_ERR_NOT_FOUND;assert(!host_namespace_session_admit(&h,2,&q,&hint));assert(creates==1 && registers==1 && establishes==1);
+ reset();owner_rc=EFS_ERR_NOT_FOUND;assert(host_namespace_session_admit(&h,2,&q,&hint)==EFS_ERR_UNREGISTERED);assert(!creates && !registers && !establishes && !accepts);
  reset();owner_rc=EFS_ERR_IO;assert(host_namespace_session_admit(&h,2,&q,&hint)==EFS_ERR_IO && !creates && !registers && !establishes);
- reset();owner_value=8ull|((uint64_t)EFS_SESSION_ACTIVE<<32);assert(host_namespace_session_admit(&h,2,&q,&hint)==EFS_ERR_STALE && !registers && !establishes);
+ reset();owner_value=8ull|((uint64_t)EFS_SESSION_ACTIVE<<32);assert(host_namespace_session_admit(&h,2,&q,&hint)==EFS_ERR_FENCED && !registers && !establishes);
  reset();owner_value=7ull|((uint64_t)EFS_SESSION_FENCING<<32);assert(host_namespace_session_admit(&h,2,&q,&hint)==EFS_ERR_BUSY && !registers && !establishes);
  reset();owner_value=7;assert(host_namespace_session_admit(&h,2,&q,&hint)==EFS_ERR_PROTO && !registers && !establishes);
  reset();owner_value|=1ull<<40;est_rc=EFS_ERR_BUSY;assert(host_namespace_session_admit(&h,2,&q,&hint)==EFS_ERR_BUSY && est_checks==1 && !establishes && !accepts);
@@ -72,7 +74,9 @@ int main(void){struct efs_raft_host h={0};struct efs_opid_req q={0};int hint=-1;
  }
  reset();local_error=EFS_ERR_IO;assert(host_namespace_session_admit_with_owner(&h,2,&q,1,&hint)==EFS_ERR_IO);assert(!owner_reads&&!creates&&!registers&&!accepts);
  reset();est_rc=EFS_ERR_STALE;assert(host_namespace_session_admit(&h,2,&q,&hint)==EFS_ERR_STALE);assert(registers==1&&est_checks==1&&!establishes&&!accepts);
- puts("namespace admission: fresh local/remote authority, absent owner, ACTIVE/touched shortcuts, stale/fenced/error rejection and final durable floor PASS");
+ assert(host_namespace_session_admit(&h,2,NULL,&hint)==EFS_ERR_UNREGISTERED); /* no identity */
+ struct efs_opid_req none={0};assert(host_namespace_session_admit(&h,2,&none,&hint)==EFS_ERR_UNREGISTERED);
+ puts("namespace admission: fresh local/remote authority, unknown owner and missing identity UNREGISTERED, ACTIVE/touched shortcuts, fenced/error rejection and final durable floor PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-namespace-admit-') as d:

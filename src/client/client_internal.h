@@ -119,6 +119,13 @@ struct efs_client {
     uint8_t append_session_uuid[EFS_OPID_UUID_LEN];
     uint32_t append_session_epoch;
     uint8_t append_session_shards[512];
+    /* Mount session lifecycle (K5, I23). started: the session was created on
+     * its owner shard with this mount's uuid/epoch. fenced: an authority
+     * refused the epoch; every later mutation fails EFS_ERR_FENCED locally
+     * and nothing is resent under the old epoch. Both under opid_mu, read
+     * atomically on the fast path. */
+    int session_started;
+    int session_fenced;
 
     /* Persistent connection pool to each server. The server's accept
      * loop handles multiple requests per connection; a pool of conns lets
@@ -279,6 +286,16 @@ int efs_client_rpc_lease_edge(efs_ino_t,uint64_t,const struct efs_opid_req *,
 int efs_client_rpc_publication_session(uint32_t shard,const struct efs_opid *);
 /* Established-floor scheduling cache; never continuing mutation permission. */
 int efs_client_session_admit(uint32_t shard,const struct efs_opid *);
+/* Mount session lifecycle (K5). start: create this mount's session on its
+ * owner shard; called at mount, and lazily before the first mutation of a
+ * library user that never mounted. check: EFS_ERR_FENCED once fenced, else
+ * starts the session if needed. forget: drop one cached shard admission
+ * after an UNREGISTERED refusal. fence: latch the mount fenced. */
+int efs_client_session_start(void);
+int efs_client_session_check(void);
+void efs_client_session_forget(uint32_t shard);
+void efs_client_session_fence(int rc);
+int efs_client_session_fenced(void);
 /* ReadIndex of global owner: ACTIVE newer epoch proves completed revocation.
  * Missing owner/fencing state/transport failure never proves revocation. */
 int efs_client_rpc_identity_revoked(const struct efs_opid *,int *);

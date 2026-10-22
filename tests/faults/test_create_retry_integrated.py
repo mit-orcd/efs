@@ -16,6 +16,7 @@ code=r'''
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+void efs_client_session_fence(int rc){(void)rc;}
 '''+function('rpc_fault_create_reply')+function('rpc_status_to_efs')+r'''
 static unsigned wire_calls,ends,created;
 static struct efs_msg_inode_create original_create;

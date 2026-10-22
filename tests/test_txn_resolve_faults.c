@@ -48,7 +48,7 @@ static void run(int error,int batch)
  assert(!efs_txn_key_exclusive(kv,key,kl));assert(!efs_session_fence_local(kv,1,uuid,2));
  assert(!efs_txn_resolve(kv,&tx,1,EFS_TXN_COMMIT));
  assert(!efs_txn_ver_get(kv,key,kl,&ver) && ver==8);
- assert(efs_session_accept(kv,1,uuid,1)==EFS_ERR_STALE);
+ assert(efs_session_accept(kv,1,uuid,1)==EFS_ERR_FENCED);
  efs_kv_mem_free(kv);
 }
 int main(void){int errors[]={EFS_ERR_IO,EFS_ERR_NOMEM,EFS_ERR_PROTO};

@@ -4754,7 +4754,8 @@ int efs_dcache_consume_publication(efs_ino_t ino, uint64_t generation, uint32_t 
     if (!reply || reply->rpc.status!=EFS_INODE_RPC_OK ||
         (reply->state!=EFS_PUBLICATION_COMMITTED && reply->state!=EFS_PUBLICATION_REJECTED) ||
         (reply->state==EFS_PUBLICATION_COMMITTED && reply->verdict!=EFS_OK) ||
-        (reply->state==EFS_PUBLICATION_REJECTED && reply->verdict!=EFS_ERR_STALE && reply->verdict!=EFS_ERR_INVAL))
+        (reply->state==EFS_PUBLICATION_REJECTED && reply->verdict!=EFS_ERR_STALE && reply->verdict!=EFS_ERR_INVAL &&
+         reply->verdict!=EFS_ERR_FENCED && reply->verdict!=EFS_ERR_UNREGISTERED))
         return EFS_ERR_BUSY;
     dcache_ensure();uint32_t slot=dcache_slot(ino,ci);
     pthread_mutex_t *mu=dcache_mu(slot);pthread_mutex_lock(mu);

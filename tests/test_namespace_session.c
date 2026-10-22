@@ -23,18 +23,20 @@ static void namespace_effects(void)
  assert(!efs_meta_apply_create_file_log_op(kv,&at,1,S_IFREG|0600,"before",0,-1,&q,&again) && again==ino);
  assert(!efs_meta_apply_mkdir(kv,&at,1,S_IFDIR|0700,"dir",&dir));
  assert(!efs_session_begin_fence(kv,q.id.client_uuid));assert(!efs_session_fence_local(kv,1,q.id.client_uuid,2));
- assert(efs_meta_apply_opid_probe(kv,1,&q.id,&rep)==EFS_ERR_STALE);
- assert(efs_meta_apply_create_file_log_op(kv,&at,1,S_IFREG|0600,"before",0,-1,&q,&again)==EFS_ERR_STALE);
+ assert(efs_meta_apply_opid_probe(kv,1,&q.id,&rep)==EFS_ERR_FENCED);
+ assert(efs_meta_apply_create_file_log_op(kv,&at,1,S_IFREG|0600,"before",0,-1,&q,&again)==EFS_ERR_FENCED);
  q.id.seq=2;q.ack=1;
- assert(efs_meta_apply_create_file_log_op(kv,&at,1,S_IFREG|0600,"late",0,-1,&q,&again)==EFS_ERR_STALE);
+ assert(efs_meta_apply_create_file_log_op(kv,&at,1,S_IFREG|0600,"late",0,-1,&q,&again)==EFS_ERR_FENCED);
  assert(efs_meta_apply_lookup(kv,1,"late",&dent)==EFS_ERR_NOT_FOUND);
- assert(efs_meta_apply_mkdir_log_op(kv,&at,1,S_IFDIR|0700,"late-dir",0,-1,&q,&again)==EFS_ERR_STALE);
- assert(efs_meta_apply_unlink_op(kv,1,"before",2,&q)==EFS_ERR_STALE);
+ assert(efs_meta_apply_mkdir_log_op(kv,&at,1,S_IFDIR|0700,"late-dir",0,-1,&q,&again)==EFS_ERR_FENCED);
+ assert(efs_meta_apply_unlink_op(kv,1,"before",2,&q)==EFS_ERR_FENCED);
  assert(!efs_meta_apply_lookup(kv,1,"before",&dent) && dent.ino==ino);
- assert(efs_meta_apply_rmdir_op(kv,1,"dir",2,&q)==EFS_ERR_STALE);
+ assert(efs_meta_apply_rmdir_op(kv,1,"dir",2,&q)==EFS_ERR_FENCED);
  assert(!efs_meta_apply_lookup(kv,1,"dir",&dent) && dent.ino==dir);
+ /* K5: an identity never registered here is refused; no legacy effect. */
  q.id.client_uuid[15]=128;q.id.seq=1;q.ack=0;
- assert(!efs_meta_apply_create_file_log_op(kv,&at,1,S_IFREG|0600,"legacy",0,-1,&q,&again));
+ assert(efs_meta_apply_create_file_log_op(kv,&at,1,S_IFREG|0600,"legacy",0,-1,&q,&again)==EFS_ERR_UNREGISTERED);
+ assert(efs_meta_apply_lookup(kv,1,"legacy",&dent)==EFS_ERR_NOT_FOUND);
  efs_kv_mem_free(kv);
 }
 static void shared_guards(void)
@@ -57,9 +59,9 @@ static void shared_guards(void)
  assert(efs_session_fence_local(kv,7,q.id.client_uuid,2)==EFS_ERR_BUSY);
  assert(!efs_txn_resolve(kv,&second,7,EFS_TXN_ABORT));
  assert(!efs_session_fence_local(kv,7,q.id.client_uuid,2));
- assert(efs_txn_prepare_opid(kv,&late,&parts,key,bytes,&q,&reply)==EFS_ERR_STALE);
+ assert(efs_txn_prepare_opid(kv,&late,&parts,key,bytes,&q,&reply)==EFS_ERR_FENCED);
  assert(!efs_txn_resolve(kv,&first,7,EFS_TXN_COMMIT));
- assert(efs_session_accept(kv,7,q.id.client_uuid,1)==EFS_ERR_STALE);
+ assert(efs_session_accept(kv,7,q.id.client_uuid,1)==EFS_ERR_FENCED);
  struct efs_opid_req foreign=q;foreign.id.client_uuid[0]=1;
  assert(efs_txn_prepare_opid(kv,&late,&parts,key,bytes,&foreign,&reply)==EFS_ERR_INVAL);
  efs_kv_mem_free(kv);
@@ -95,11 +97,11 @@ static void cold_shared_guards(void)
     assert(!efs_session_fence_local(kv,7,q.id.client_uuid,2));
     assert(!efs_session_ack_fence(kv,q.id.client_uuid,7));assert(!efs_session_finish_fence(kv,q.id.client_uuid));
    }else{
-    assert(efs_session_accept(kv,7,q.id.client_uuid,1)==EFS_ERR_STALE);
+    assert(efs_session_accept(kv,7,q.id.client_uuid,1)==EFS_ERR_FENCED);
     assert(!efs_txn_resolve(kv,&first,7,EFS_TXN_COMMIT));
     assert(!efs_txn_resolve(kv,&second,7,EFS_TXN_ABORT));
-    assert(efs_txn_prepare_opid(kv,&late,&parts,key,bytes,&q,&reply)==EFS_ERR_STALE);
-    assert(efs_session_accept(kv,7,q.id.client_uuid,1)==EFS_ERR_STALE);
+    assert(efs_txn_prepare_opid(kv,&late,&parts,key,bytes,&q,&reply)==EFS_ERR_FENCED);
+    assert(efs_session_accept(kv,7,q.id.client_uuid,1)==EFS_ERR_FENCED);
    }
    _exit(0);
   }

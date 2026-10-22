@@ -4697,6 +4697,8 @@ static int efs_rc_to_errno(int rc)
     case EFS_ERR_UNSUPPORTED: return -EIO;
     case EFS_ERR_FRAG_FORMAT: return -EIO;
     case EFS_ERR_FRAG_IDENTITY: return -EIO;
+    case EFS_ERR_FENCED:    return -EIO; /* mount session fenced (I23) */
+    case EFS_ERR_UNREGISTERED: return -EIO;
     case EFS_ERR_BUSY:
         return -EBUSY;
     case EFS_ERR_AGAIN:
@@ -5085,6 +5087,14 @@ static void efs_fuse_destroy(void *userdata)
             mrc = efs_client_note_meta_change(1);
             if (mrc == EFS_OK)
                 break;
+            /* A fenced session can never publish again (K5/I23): waiting
+             * would only delay the unmount. Report the loss once. */
+            if (mrc == EFS_ERR_FENCED || efs_client_session_fenced()) {
+                fprintf(stderr, "efs-fuse: mount session fenced; writes that "
+                                "were never reported are discarded\n");
+                mrc = EFS_OK;
+                break;
+            }
             clock_gettime(CLOCK_MONOTONIC, &now);
             if (now.tv_sec - t0.tv_sec >= drain_s)
                 break;
@@ -7916,6 +7926,21 @@ int main(int argc, char **argv)
     }
     printf("export id=%u name=%s\n", g_client.export_id,
            g_client.export.name[0] ? g_client.export.name : g_client.export_name);
+    /* K5/I23: one session per mount, committed on its owner shard before
+     * the first mutation. Without it every mutation would be refused, so
+     * fail the mount instead of serving a read-only surprise. */
+    rc = efs_client_session_start();
+    if (rc != EFS_OK) {
+        fprintf(stderr, "Could not establish the mount session (%s).\n",
+                efs_strerror(rc));
+        return 1;
+    }
+    {
+        char hex[2 * EFS_OPID_UUID_LEN + 1];
+        for (unsigned i = 0; i < EFS_OPID_UUID_LEN; i++)
+            snprintf(hex + 2 * i, 3, "%02x", g_client.opid_uuid[i]);
+        printf("session uuid=%s epoch=%u\n", hex, g_client.opid_epoch);
+    }
     {
         /* Post-step-11 there is no bootstrap table fetch: the staging table
          * starts empty and fills on demand (client-cache Part A bounds it

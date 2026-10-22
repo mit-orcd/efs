@@ -57,7 +57,7 @@ static void delayed_apply(unsigned port, efs_ino_t ino, const struct efs_opid *i
             struct efs_msg_raft_mkfs_reply reply;memcpy(&reply,body,bytes);free(body);
             if(reply.rc==EFS_ERR_NOT_PRIMARY || reply.rc==EFS_ERR_BUSY) {usleep(10000);continue;}
             fprintf(stderr,"delayed REPORT apply case=%u rc=%d index=%llu\n",c,reply.rc,(unsigned long long)reply.index);
-            assert(reply.rc==EFS_ERR_STALE && reply.index);
+            assert(reply.rc==EFS_ERR_FENCED && reply.index);
             applied=1;
         }
         assert(applied);
@@ -77,8 +77,8 @@ int main(int argc,char **argv)
     assert(argc==5 || argc==6);unsigned port=atoi(argv[1]);efs_ino_t ino=strtoull(argv[2],0,10);
     if(argc==6 && !strcmp(argv[4],"cold")) {
         struct packet p;FILE *f=fopen(argv[5],"rb");assert(f && fread(&p,sizeof(p),1,f)==1 && fgetc(f)==EOF);fclose(f);
-        assert(p.len<=sizeof(p.body) && rpc(port,&p,0).status==EFS_INODE_RPC_STALE);
-        puts("REPORT cold restart: revoked mapping replay remains STALE PASS");return 0;
+        assert(p.len<=sizeof(p.body) && rpc(port,&p,0).status==EFS_INODE_RPC_FENCED);
+        puts("REPORT cold restart: revoked mapping replay remains FENCED PASS");return 0;
     }
     g_client.export_id=1;g_client.node_count=4;
     for(unsigned i=0;i<4;i++){g_client.nodes[i].id=i+1;strcpy(g_client.nodes[i].addr,"127.0.0.1");g_client.nodes[i].port=port+i;}
@@ -101,6 +101,7 @@ int main(int argc,char **argv)
     struct efs_inode row;assert(!efs_client_rpc_getattr(1,ino,&row));
     struct efs_ino_size_rec size={.ino=ino,.size=row.size};
     struct efs_opid id;assert(!efs_client_publication_id(1,&id));
+    assert(efs_client_session_start()==EFS_OK); /* K5: the mount creates its own session */
     struct packet p=pack(&rec,&id,size.size);rpc(port,&p,1); /* Lost reply retains the immutable mapping body. */
     assert(rpc(port,&p,0).status==EFS_INODE_RPC_OK);
     /* Missing EOF is deliberately malformed; session positives must carry
@@ -115,10 +116,10 @@ int main(int argc,char **argv)
     char hex[33],address[64];for(unsigned i=0;i<16;i++)snprintf(hex+2*i,3,"%02x",id.client_uuid[i]);snprintf(address,sizeof(address),"127.0.0.1:%u",port);
     pid_t child=fork();assert(child>=0);if(!child){execl(argv[3],argv[3],"raft-session",address,"fence",hex,(char*)NULL);_exit(127);}
     int status;assert(waitpid(child,&status,0)==child && WIFEXITED(status) && !WEXITSTATUS(status));
-    assert(rpc(port,&p,0).status==EFS_INODE_RPC_STALE);
+    assert(rpc(port,&p,0).status==EFS_INODE_RPC_FENCED);
     delayed_apply(port,ino,&id);
-    assert(efs_client_rpc_report_dirty_raft(1,&rec,1,&size,1,1)==EFS_ERR_STALE);
-    rec.chunk_index=17;struct packet first=pack(&rec,&id,size.size);assert(rpc(port,&first,0).status==EFS_INODE_RPC_STALE);
+    assert(efs_client_rpc_report_dirty_raft(1,&rec,1,&size,1,1)==EFS_ERR_FENCED);
+    rec.chunk_index=17;struct packet first=pack(&rec,&id,size.size);assert(rpc(port,&first,0).status==EFS_INODE_RPC_FENCED);
     FILE *f=fopen(argv[4],"wb");assert(f && fwrite(&p,sizeof(p),1,f)==1 && !fclose(f));
     puts("REPORT mount identity: discarded reply/exact mapping retry, malformed frame, revoked replay, delayed mapping/activation apply and first-touch rejection PASS");
 }

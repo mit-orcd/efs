@@ -625,11 +625,11 @@ static void test_i23_session_fence(void)
     CHECK(efs_sim_session_fence_until(s, 0, EFS_SIM_FENCE_LOCAL) == EFS_OK,
           "local");
     CHECK(efs_sim_create(s, 0, EFS_ROOT_INO, S_IFREG | 0644, "b", &b) ==
-              EFS_ERR_STALE,
+              EFS_ERR_FENCED,
           "old epoch create");
     CHECK(efs_sim_put_stripe(s, 0, ino, 0, src, sizeof(src), -1) == EFS_OK,
           "PUT after fence");
-    CHECK(efs_sim_publish(s, 0, ino, 0, sizeof(src)) == EFS_ERR_STALE,
+    CHECK(efs_sim_publish(s, 0, ino, 0, sizeof(src)) == EFS_ERR_FENCED,
           "publish fenced");
     CHECK(efs_sim_session_fence_until(s, 0, EFS_SIM_FENCE_ACTIVE) == EFS_OK,
           "active");
@@ -683,7 +683,7 @@ static void test_i23_barrier_holds_leases(void)
     CHECK(efs_sim_unlink(s, 0, EFS_ROOT_INO, "p") == EFS_OK, "unlink");
     CHECK(efs_sim_session_fence_until(s, 0, EFS_SIM_FENCE_ACK) == EFS_OK, "ack");
     CHECK(efs_sim_reclaim(s, ino) == EFS_ERR_BUSY, "before ACTIVE");
-    CHECK(efs_sim_close(s, 0, ino) == EFS_ERR_STALE, "close old epoch");
+    CHECK(efs_sim_close(s, 0, ino) == EFS_ERR_FENCED, "close old epoch");
     CHECK(efs_sim_session_fence_until(s, 0, EFS_SIM_FENCE_ACTIVE) == EFS_OK,
           "active drops");
     CHECK(efs_sim_reclaim(s, ino) == EFS_OK, "reclaim after barrier");

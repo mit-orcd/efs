@@ -17,6 +17,9 @@ struct efs_conn {int unused;};static struct efs_conn connection;
 static unsigned calls,drops,redirect,busy,expired,expire_receive,malformed,fail_receive,query;
 static uint64_t salt;static int result,hint,invalid;static uint8_t original[218];
 static int efs_client_rpc_past_deadline(void){return expired;}
+static int session_ready;static unsigned fences,session_checks;
+static int efs_client_session_check(void){session_checks++;return session_ready;}
+static void efs_client_session_fence(int rc){if(rc==EFS_ERR_FENCED)fences++;}
 static struct efs_conn *efs_client_conn_get(efs_node_id_t n){assert(n==3);return &connection;}
 static struct efs_conn *rpc_owner_conn_shard(uint32_t shard,efs_node_id_t *nid){assert(shard==1);*nid=1;return &connection;}
 static void efs_client_conn_drop(efs_node_id_t n,struct efs_conn *c){(void)n;(void)c;drops++;}
@@ -39,7 +42,8 @@ int efs_conn_recv_msg(struct efs_conn *c,uint8_t *type,void **out,uint32_t *byte
  return fail_receive;
 }
 '''+s[a:b]+r'''
-static void reset(void) {calls=drops=redirect=busy=expired=expire_receive=malformed=fail_receive=query=invalid=0;salt=1;result=EFS_OK;hint=-1;}
+static void reset(void) {calls=drops=redirect=busy=expired=expire_receive=malformed=fail_receive=query=invalid=0;salt=1;result=EFS_OK;hint=-1;
+ session_ready=EFS_OK;fences=session_checks=0;}
 int main(void) {
  struct efs_put_ticket t={.ino=4097};uint32_t state=99;
  #define RUN efs_client_rpc_put_ticket(&t,query,&state)
@@ -66,7 +70,13 @@ int main(void) {
  reset();query=2;salt=2;assert(efs_client_rpc_put_ticket_retire(&t)==EFS_ERR_PROTO);
  reset();query=2;salt=4;redirect=1;assert(!efs_client_rpc_put_ticket_retire(&t) && calls==2);
  reset();query=2;salt=4;fail_receive=1;assert(efs_client_rpc_put_ticket_retire(&t)==EFS_ERR_NET && drops==1);
- puts("PUT ticket RPC: immutable retries, pure probe, exact state, revoked/body-error refusal, redirects and deadlines PASS");
+ /* K5: a fenced mount admits no ticket (probes still run); a FENCED
+  * admission refusal latches the mount fenced. */
+ reset();session_ready=EFS_ERR_FENCED;assert(RUN==EFS_ERR_FENCED && !calls && session_checks==1);
+ reset();session_ready=EFS_ERR_FENCED;query=1;assert(!RUN && calls==1 && !session_checks);
+ reset();salt=0;result=EFS_ERR_FENCED;assert(RUN==EFS_ERR_FENCED && fences==1 && !state);
+ reset();salt=0;result=EFS_ERR_UNREGISTERED;assert(RUN==EFS_ERR_UNREGISTERED && !fences && !state);
+ puts("PUT ticket RPC: immutable retries, pure probe, exact state, revoked/body-error refusal, redirects, deadlines and fenced mount PASS");
 }
 '''
 with tempfile.TemporaryDirectory() as td:

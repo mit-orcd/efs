@@ -13,6 +13,7 @@ def function(name):
     return s[m.start():s.index('\n}',m.end())+2]
 code = r'''
 #include "efs/protocol.h"
+#include "efs/meta_cmd.h"
 #include "metadata_read_route.h"
 #include "efs/opid.h"
 #include "efs/kv_key.h"
@@ -43,6 +44,9 @@ static unsigned long long rpc_prof_now_us(void){return 0;}
 static void rpc_prof_add(unsigned t,unsigned long long a,unsigned long long b,unsigned long long c,unsigned long long d){(void)t;(void)a;(void)b;(void)c;(void)d;}
 static void rpc_note_slow_ok(unsigned t,int a,int b,unsigned st,unsigned long long start){(void)t;(void)a;(void)b;(void)st;(void)start;}
 static int efs_client_rpc_past_deadline(void){return 0;}
+static unsigned session_checks;
+static int efs_client_session_check(void){session_checks++;return EFS_OK;} /* K5 */
+static void efs_client_session_fence(int rc){(void)rc;assert(0);}
 static uint64_t efs_client_rpc_deadline_ms(void){return 0;}
 static int rpc_writer_retry_pause(unsigned n){(void)n;pauses++;return EFS_OK;}
 static void efs_client_node_note_fail(efs_node_id_t n){(void)n;}
@@ -72,7 +76,7 @@ int efs_conn_recv_msg(struct efs_conn *c,uint8_t *type,void **payload,uint32_t *
  return 0;
 }
 '''
-code += '\n'.join(function(n) for n in ['rpc_status_to_efs','stale_retryable','opid_suffix','rpc_retry_peer','rpc_send_recv_shard','rpc_send_recv_owner'])
+code += '\n'.join(function(n) for n in ['rpc_status_to_efs','stale_retryable','opid_suffix','rpc_retry_peer','rpc_type_mutates','rpc_send_recv_shard','rpc_send_recv_owner'])
 code += r'''
 static int rpc_send_recv_dual(uint8_t type,const void *req,uint32_t len,uint8_t expect,void *reply,uint32_t size,int unused){(void)unused;return rpc_send_recv_shard(1,type,req,len,expect,reply,size,0,NULL);}
 '''+function('efs_client_rpc_create')+r'''

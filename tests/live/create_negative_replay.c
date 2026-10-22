@@ -2,6 +2,7 @@
 #include "efs/protocol.h"
 #include "efs/network.h"
 #include "efs/opid.h"
+#include "live_session.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -44,6 +45,10 @@ static struct efs_msg_inode_reply call(unsigned type, const void *req,
 int main(int argc, char **argv)
 {
     assert(argc == 3); base = port = atoi(argv[1]);
+    { /* K5: the identity names a session that exists on its owner. */
+        uint8_t uuid[16] = {0}; memcpy(uuid, "W58-negative", 12);
+        live_session_create(base, uuid, 1);
+    }
     struct efs_msg_inode_create create = {0};
     create.export_id = 1; create.parent = 1; create.mode = S_IFREG | 0600;
     strcpy(create.name, "w58-negative");

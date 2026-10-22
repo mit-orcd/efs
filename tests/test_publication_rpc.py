@@ -49,6 +49,9 @@ int efs_conn_recv_msg(struct efs_conn *c,uint8_t *t,void **p,uint32_t *n)
  *n=sizeof(replies[0])-bad_length;*p=malloc(sizeof(replies[0]));assert(*p);
  memcpy(*p,&replies[calls++],sizeof(replies[0]));return fail_recv;
 }
+static unsigned session_checks,fences;static int session_ready;
+static int efs_client_session_check(void){session_checks++;return session_ready;}
+static void efs_client_session_fence(int rc){assert(rc==EFS_ERR_FENCED);fences++;}
 static int rpc_status_to_efs(uint8_t s)
 {switch(s){case EFS_INODE_RPC_OK:return EFS_OK;case EFS_INODE_RPC_BUSY:return EFS_ERR_BUSY;
 case EFS_INODE_RPC_NOT_FOUND:return EFS_ERR_NOT_FOUND;case EFS_INODE_RPC_STALE:return EFS_ERR_STALE;default:return EFS_ERR_PROTO;}}
@@ -56,6 +59,7 @@ case EFS_INODE_RPC_NOT_FOUND:return EFS_ERR_NOT_FOUND;case EFS_INODE_RPC_STALE:r
 static void reset(void)
 {
  calls=sleeps=drops=releases=targets=0;fail_send=fail_recv=bad_type=bad_length=expired=query=0;last_target=0;
+ session_checks=fences=0;session_ready=EFS_OK;
  struct efs_meta_pub p;assert(efs_publication_from_rec(&rec,100,&p)==EFS_OK);p.publication_id=request.id;
  for(unsigned i=0;i<8;i++) {memset(&replies[i],0,sizeof(replies[i]));replies[i].state=EFS_PUBLICATION_COMMITTED;
  assert(efs_publication_digest(&p,replies[i].digest)==EFS_OK);}
@@ -125,7 +129,17 @@ int main(void)
   out.state=EFS_PUBLICATION_COMMITTED;
   assert(efs_client_rpc_publication(&request,mode,&out)==EFS_ERR_STALE && out.state==EFS_PUBLICATION_UNKNOWN);
  }
- puts("publication RPC: exact identity, lane routing, redirects, bounded retries, unknown and lost reply PASS");
+ /* K5: a fenced mount submits nothing; queries still run. A FENCED
+  * rejection verdict is terminal and latches the mount fenced. */
+ reset();session_ready=EFS_ERR_FENCED;
+ assert(efs_client_rpc_publication(&request,0,&out)==EFS_ERR_FENCED && !calls && session_checks==1);
+ reset();session_ready=EFS_ERR_FENCED;query=1;
+ assert(efs_client_rpc_publication(&request,1,&out)==EFS_OK && calls==1 && !session_checks);
+ for(unsigned i=0;i<2;i++){
+  reset();replies[0].state=EFS_PUBLICATION_REJECTED;replies[0].verdict=i?EFS_ERR_UNREGISTERED:EFS_ERR_FENCED;
+  assert(efs_client_rpc_publication(&request,0,&out)==EFS_OK && out.state==EFS_PUBLICATION_REJECTED && fences==(i?0u:1u));
+ }
+ puts("publication RPC: exact identity, lane routing, redirects, bounded retries, unknown and lost reply, fenced mount and session verdicts PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-publication-rpc-') as d:

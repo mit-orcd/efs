@@ -294,8 +294,9 @@ struct efs_msg_pack_compact_reply {
  * HELLO/build-id join gate (peer_pool.c). A declaration is not
  * authentication.
  * Version history: 2 = packed references in GETCHUNKS (W125);
- * 3 = every request gated, exact version match (W133). */
-#define EFS_PROTOCOL_VERSION 3u
+ * 3 = every request gated, exact version match (W133);
+ * 4 = every metadata mutation carries a registered session (K5/W134). */
+#define EFS_PROTOCOL_VERSION 4u
 struct efs_msg_client_hello { uint8_t magic[4]; uint32_t version; uint64_t features; };
 struct efs_msg_client_hello_reply { int32_t rc; uint32_t version; };
 /* Send the declaration and check the reply; 0 when accepted. */
@@ -485,7 +486,8 @@ struct efs_msg_lane_bootstrap {
 };
 
 /* XATTR request. name[nlen] and value[vlen] follow this header with no
- * padding. op is EFS_XATTR_GET/SET/REMOVE/LIST. sizeof is 24. */
+ * padding. op is EFS_XATTR_GET/SET/REMOVE/LIST. SET and REMOVE append the
+ * mandatory EFS_SESS_WIRE_LEN mount session suffix (K5). sizeof is 24. */
 struct efs_msg_xattr {
     efs_export_id_t export_id;
     uint32_t flags;
@@ -877,6 +879,9 @@ struct efs_msg_query_stats_reply {
 #define EFS_INODE_RPC_NODATA    12
 /* Explicit metadata/output capacity refusal; never transient BUSY. */
 #define EFS_INODE_RPC_OVERFLOW  13
+/* Session refusals (K5): EFS_ERR_FENCED / EFS_ERR_UNREGISTERED. */
+#define EFS_INODE_RPC_FENCED    14
+#define EFS_INODE_RPC_UNREGISTERED 15
 
 struct efs_msg_inode_lookup {
     efs_export_id_t export_id;
@@ -1055,12 +1060,11 @@ struct efs_msg_inode_link {
  * with inode.size = THIS reservation's end (eof+len), not the live
  * watermark. offset = inode.size - len. Two concurrent reserves must
  * not share an offset.
- * Optional suffix: EFS_SESS_WIRE_LEN (uuid[16] + native uint32 epoch)
- * or EFS_APPEND_OPID_LEN (that plus native uint64 seq: legacy host cache).
- * EFS_APPEND_ACK_LEN adds native uint64 contiguous ACK and selects atomic
- * durable reservation receipts on the inode shard. Retired identities fail
- * closed; a full receipt window refuses allocation. Absent is legacy.
- * Do not grow this struct. */
+ * Mandatory suffix (K5): EFS_APPEND_ACK_LEN = uuid[16] + native uint32
+ * epoch + native uint64 seq + native uint64 contiguous ACK, selecting the
+ * durable reservation receipt on the inode shard. Any other length is
+ * refused UNREGISTERED. Retired identities fail closed; a full receipt
+ * window refuses allocation. Do not grow this struct. */
 struct efs_msg_inode_append {
     efs_export_id_t export_id;
     efs_ino_t ino;
@@ -1068,8 +1072,8 @@ struct efs_msg_inode_append {
 };
 
 /* flags: 1 = open (+1 ref), 0 = close (-1 ref). owner is the process/ofd
- * id. Optional EFS_SESS_WIRE_LEN suffix carries (uuid, epoch); absent
- * keeps the stand-in. Do not grow this struct. */
+ * id. Mandatory EFS_SESS_WIRE_LEN suffix carries the mount session (uuid,
+ * epoch); absent is refused UNREGISTERED (K5). Do not grow this struct. */
 struct efs_msg_inode_hold {
     efs_export_id_t export_id;
     efs_ino_t ino;
@@ -1089,10 +1093,11 @@ struct efs_msg_inode_hold {
  * blocking wait: a conflicting grant is queued at the leader (FIFO,
  * leader memory, not Raft state) and the held RPC's reply IS the grant;
  * leader loss replies NOT_PRIMARY and the client re-issues.
- * Optional session identity (10.5c-35b): EFS_SESS_WIRE_LEN bytes
- * (uuid[16] + native uint32 epoch) after the struct, or after the
- * range suffix. Absent ⇒ stand-in (owner packed into uuid, epoch 1).
- * HOLD takes the same optional suffix after struct efs_msg_inode_hold. */
+ * Session identity (K5): EFS_SESS_WIRE_LEN bytes (uuid[16] + native
+ * uint32 epoch) after the struct, or after the range suffix. Mandatory for
+ * every grant and release; GETLK is a read and needs none. Absent on a
+ * grant or release is refused UNREGISTERED; there is no stand-in owner.
+ * HOLD takes the same mandatory suffix after struct efs_msg_inode_hold. */
 #define EFS_FLOCK_SH 1u
 #define EFS_FLOCK_EX 2u
 #define EFS_FLOCK_NB 4u
@@ -1105,12 +1110,13 @@ struct efs_msg_inode_hold {
 #define EFS_APPEND_OPID_LEN (EFS_SESS_WIRE_LEN + 8u)
 #define EFS_APPEND_ACK_LEN (EFS_APPEND_OPID_LEN + 8u) /* contiguous client ACK */
 /* Directory mutations (INODE_CREATE incl. mkdir, INODE_UNLINK incl.
- * rmdir, INODE_LINK, INODE_RENAME_AT) take an optional EFS_OPID_WIRE_LEN
- * suffix (opid.h: uuid[16] + native u32 epoch + native u64 seq + native
- * u64 contiguous ack) after the fixed struct. With it the op is I16: a
- * retry with the same (uuid, epoch, seq) returns the recorded verdict
- * instead of EEXIST / ENOENT for an op that already committed. Absent
- * keeps the unprotected behaviour. Do not grow those structs. */
+ * rmdir, INODE_LINK, INODE_RENAME_AT) and INODE_SETATTR carry a mandatory
+ * EFS_OPID_WIRE_LEN suffix (opid.h: uuid[16] + native u32 epoch + native
+ * u64 seq + native u64 contiguous ack) after the fixed struct (K5). The
+ * (uuid, epoch) is the mount session; the op is I16: a retry with the same
+ * (uuid, epoch, seq) returns the recorded verdict instead of EEXIST /
+ * ENOENT for an op that already committed. Absent is refused
+ * UNREGISTERED. Do not grow those structs. */
 #define EFS_DIROP_OPID_LEN 36u
 struct efs_msg_inode_flock {
     efs_export_id_t export_id;
@@ -1449,7 +1455,8 @@ static inline int efs_getchunks_reply_valid(
  * the export (server_flush_fragmented_meta) before replying — this is the
  * fsync durability barrier now that clients no longer blob-flush. */
 /* REPORT session suffix is UUID + big-endian epoch, independent of an
- * operation receipt. Legacy 0/1 flags remain decodable for old log clients. */
+ * operation receipt. EFS_REPORT_F_SESSION is mandatory (K5): a REPORT
+ * without it is refused UNREGISTERED. */
 #define EFS_REPORT_F_SYNC 1u
 #define EFS_REPORT_F_SESSION 2u
 #define EFS_REPORT_SESSION_LEN 20u

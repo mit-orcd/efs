@@ -23,6 +23,7 @@ static struct efs_opid_req identity;
 static uint8_t first[67];static unsigned calls,drops,redirect,busy,expired,expire_receive,malformed,fail_receive,query;
 static uint64_t salt;static int result,hint;static uint32_t route;
 static int efs_client_rpc_past_deadline(void){return expired;}
+static unsigned fences;static void efs_client_session_fence(int rc){if(rc==EFS_ERR_FENCED)fences++;}
 static struct efs_conn *efs_client_conn_get(efs_node_id_t n){assert(n==3);return &connection;}
 static struct efs_conn *rpc_owner_conn_shard(uint32_t shard,efs_node_id_t *nid)
 {route=shard;*nid=1;return &connection;}

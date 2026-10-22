@@ -59,6 +59,12 @@ static void fixture(struct efs_kv *kv,efs_ino_t *ino,uint64_t *gen)
  struct efs_meta_pub p=publication(*ino,*gen,0,100,10);
  assert(efs_meta_apply_publish(kv,&p)==EFS_OK);
  p=publication(*ino,*gen,1,200,20);assert(efs_meta_apply_publish(kv,&p)==EFS_OK);
+ /* K5: the appenders (uuid 42 and the competing/truncating 43, epoch 1)
+  * are admitted on the inode shard. */
+ struct efs_opid_req q=identity(1,0);
+ assert(efs_session_establish(kv,efs_kv_inode_shard(*ino),q.id.client_uuid,1)==EFS_OK);
+ q.id.client_uuid[0]=43;
+ assert(efs_session_establish(kv,efs_kv_inode_shard(*ino),q.id.client_uuid,1)==EFS_OK);
 }
 static struct efs_txn_parts last_parts;
 static int lost_decision(void *ctx,const struct efs_txid *t,const struct efs_txn_parts *p,int d)
@@ -351,6 +357,9 @@ static void close_completion(void)
  assert(efs_session_create(kv,close.id.client_uuid,1)==EFS_OK);
  assert(efs_session_register(kv,close.id.client_uuid,1,shard)==EFS_OK);
  assert(efs_session_establish(kv,shard,close.id.client_uuid,1)==EFS_OK);
+ /* The plain-OPEN probe in close_prepare (uuid 119) is an admitted session,
+  * so it reaches the prepared-close guard (K5 refuses unadmitted OPENs). */
+ {uint8_t plain[16]={119};assert(efs_session_establish(kv,shard,plain,1)==EFS_OK);}
  assert(efs_lease_guarded_edge_deferred(kv,ino,gen,&close,EFS_LEASE_EDGE_CLOSE,0)==EFS_OK);
  uint8_t key[EFS_KV_KEY_MAX],first[EFS_CLOSE_STEP_VALUE],latest[EFS_CLOSE_STEP_VALUE];uint32_t kl,vl=sizeof(first);
  assert(efs_kv_key_reap(efs_kv_anchor_shard(shard),ino,key,&kl)==EFS_OK);key[2]=EFS_KV_KIND_CLOSE_STEP;
@@ -461,8 +470,8 @@ static void session_owned_append(int cold)
  assert(resolve(kv,&tx,&last_parts,EFS_TXN_COMMIT)==EFS_OK);
  assert(efs_session_fence_local(kv,shard,q.id.client_uuid,2)==EFS_OK);
  q.id.seq=2;q.ack=1;tx.bytes[1]=2;
- assert(efs_meta_execute_append_owned(kv,p,&q,&tx,&ops,kv)==EFS_ERR_STALE);
- assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,p)==EFS_ERR_STALE);
+ assert(efs_meta_execute_append_owned(kv,p,&q,&tx,&ops,kv)==EFS_ERR_FENCED);
+ assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,p)==EFS_ERR_FENCED);
  uint32_t open;assert(efs_meta_apply_append_state(kv,ino,NULL,NULL,&open)==EFS_OK && open==1);
  free(p);
  if(cold){
@@ -537,20 +546,23 @@ static void retired_append_receipts(int cold)
  vl=sizeof(value);assert(efs_kv_get(kv,key,kl,value,&vl)==EFS_ERR_NOT_FOUND);
  vl=sizeof(value);assert(efs_kv_get(kv,foreign,kl,value,&vl)==EFS_OK && vl==foreign_len && !memcmp(value,foreign_value,vl));
  vl=sizeof(value);assert(efs_kv_get(kv,newer,kl,value,&vl)==EFS_OK && vl==newer_len && !memcmp(value,newer_value,vl));
- assert(efs_session_accept(kv,shard,q.id.client_uuid,1)==EFS_ERR_STALE);
+ assert(efs_session_accept(kv,shard,q.id.client_uuid,1)==EFS_ERR_FENCED);
  uint64_t rejected=999;
- assert(efs_meta_apply_append_reserve(kv,ino,8,&q.id,decision,kv,&rejected)==EFS_ERR_STALE && rejected==999);
- assert(efs_lease_open(kv,ino,gen,q.id.client_uuid,1)==EFS_ERR_STALE);
+ assert(efs_meta_apply_append_reserve(kv,ino,8,&q.id,decision,kv,&rejected)==EFS_ERR_FENCED && rejected==999);
+ assert(efs_lease_open(kv,ino,gen,q.id.client_uuid,1)==EFS_ERR_FENCED);
  /* Historical seq0 reservations have no append receipt but must not be
   * mistaken for an empty cleanup phase. */
  struct efs_opid legacy=q.id;legacy.client_uuid[0]=45;legacy.seq=0;uint64_t off=0;
+ /* K5: even a receipt-less reservation needs an established session. */
+ assert(efs_meta_apply_append_reserve(kv,ino,8,&legacy,decision,kv,&off)==EFS_ERR_UNREGISTERED);
+ assert(efs_session_establish(kv,shard,legacy.client_uuid,1)==EFS_OK);
  assert(efs_meta_apply_append_reserve(kv,ino,8,&legacy,decision,kv,&off)==EFS_OK);
  tx.bytes[1]=90;
  assert(efs_meta_finish_append(kv,ino,off,EFS_META_APPEND_COMPLETED,&tx,&ops,kv)==EFS_OK);
  assert(efs_session_fence_local(kv,shard,legacy.client_uuid,2)==EFS_OK);
  tx.bytes[1]=91;
  assert(efs_meta_retire_append_session(kv,shard,legacy.client_uuid,1,&tx,&ops,kv,&progress)==EFS_OK && progress==1);
- assert(efs_meta_apply_append_reserve(kv,ino,8,&legacy,decision,kv,&off)==EFS_ERR_STALE);
+ assert(efs_meta_apply_append_reserve(kv,ino,8,&legacy,decision,kv,&off)==EFS_ERR_FENCED);
  tx.bytes[1]=92;
  assert(efs_meta_retire_append_session(kv,shard,legacy.client_uuid,1,&tx,&ops,kv,&progress)==EFS_OK && !progress);
  free(plan);
@@ -572,8 +584,10 @@ static void session_owned_completion(int cold)
  struct efs_txid reserve={{201}};
  assert(efs_meta_execute_append(plan,&reserve,&ops,kv)==EFS_OK);
  struct efs_txid complete={{202}};
+ /* K5: an identity not admitted on the shard cannot complete. */
+ struct efs_opid stranger=q.id;stranger.client_uuid[0]=0x77;
  assert(efs_meta_finish_append_owned(kv,ino,plan->offset,EFS_META_APPEND_COMPLETED,
-                                    &q.id,&complete,&ops,kv)==EFS_ERR_BUSY);
+                                    &stranger,&complete,&ops,kv)==EFS_ERR_UNREGISTERED);
  assert(efs_session_create(kv,q.id.client_uuid,1)==EFS_OK &&
         efs_session_register(kv,q.id.client_uuid,1,shard)==EFS_OK &&
         efs_session_establish(kv,shard,q.id.client_uuid,1)==EFS_OK);
@@ -590,7 +604,7 @@ static void session_owned_completion(int cold)
  assert(efs_session_fence_local(kv,shard,q.id.client_uuid,2)==EFS_OK);
  complete.bytes[1]=1;
  assert(efs_meta_finish_append_owned(kv,ino,plan->offset,EFS_META_APPEND_COMPLETED,
-                                    &q.id,&complete,&ops,kv)==EFS_ERR_STALE);
+                                    &q.id,&complete,&ops,kv)==EFS_ERR_FENCED);
  uint32_t open=99;assert(efs_meta_apply_append_state(kv,ino,NULL,NULL,&open)==EFS_OK && !open);
  free(plan);
  if(cold){
@@ -624,7 +638,10 @@ static void completion_batch(int cold,int owned,int reverse,int wide)
  assert(efs_meta_finish_append_batch(kv,ino,bad,2,EFS_META_APPEND_COMPLETED,&tx,&ops,kv)==EFS_ERR_NOT_FOUND);
  assert(efs_meta_apply_append_state(kv,ino,&watermark,&frontier,&open)==EFS_OK && open==EFS_META_APPEND_COMPLETE_MAX && frontier==200);
  if(owned) {
-  assert(efs_meta_finish_append_batch_owned(kv,ino,offsets,EFS_META_APPEND_COMPLETE_MAX,EFS_META_APPEND_COMPLETED,&q.id,&tx,&ops,kv)==EFS_ERR_BUSY);
+  /* K5: an identity not admitted on the shard cannot complete (the fixture
+   * admitted the appender itself, so probe with another identity). */
+  struct efs_opid stranger=q.id;stranger.client_uuid[0]=0x77;
+  assert(efs_meta_finish_append_batch_owned(kv,ino,offsets,EFS_META_APPEND_COMPLETE_MAX,EFS_META_APPEND_COMPLETED,&stranger,&tx,&ops,kv)==EFS_ERR_UNREGISTERED);
   assert(efs_session_create(kv,q.id.client_uuid,1)==EFS_OK);
   assert(efs_session_register(kv,q.id.client_uuid,1,shard)==EFS_OK);
   assert(efs_session_establish(kv,shard,q.id.client_uuid,1)==EFS_OK);
@@ -648,7 +665,7 @@ static void completion_batch(int cold,int owned,int reverse,int wide)
  assert(efs_meta_finish_append_batch(kv,ino,offsets,EFS_META_APPEND_COMPLETE_MAX,EFS_META_APPEND_COMPLETED,&tx,&ops,kv)==EFS_OK);
  if(owned) {
   assert(efs_session_fence_local(kv,shard,q.id.client_uuid,2)==EFS_OK);
-  assert(efs_meta_finish_append_batch_owned(kv,ino,offsets,EFS_META_APPEND_COMPLETE_MAX,EFS_META_APPEND_COMPLETED,&q.id,&tx,&ops,kv)==EFS_ERR_STALE);
+  assert(efs_meta_finish_append_batch_owned(kv,ino,offsets,EFS_META_APPEND_COMPLETE_MAX,EFS_META_APPEND_COMPLETED,&q.id,&tx,&ops,kv)==EFS_ERR_FENCED);
  }
  free(plan);
  if(cold) {
@@ -728,8 +745,8 @@ static void caught_up(unsigned count,int cold)
  uint64_t wm,frontier;uint32_t open;
  assert(efs_meta_apply_append_catchup(kv,ino,gen+1,row.content_epoch,end,count,&q.id)==EFS_ERR_STALE);
  assert(efs_meta_apply_append_catchup(kv,ino,gen,row.content_epoch+1,end,count,&q.id)==EFS_ERR_STALE);
- struct efs_opid unknown=q.id;unknown.client_uuid[0]++;
- assert(efs_meta_apply_append_catchup(kv,ino,gen,row.content_epoch,end,count,&unknown)==EFS_ERR_BUSY);
+ struct efs_opid unknown=q.id;unknown.client_uuid[0]=0x77; /* never admitted */
+ assert(efs_meta_apply_append_catchup(kv,ino,gen,row.content_epoch,end,count,&unknown)==EFS_ERR_UNREGISTERED);
  /* Capacity rejection precedes allocation/mutation. */
  catchup_be32(value+16,EFS_META_APPEND_CATCHUP_MAX+1);
  assert(!efs_kv_put(kv,key,kl,value,24));
@@ -798,7 +815,7 @@ static void caught_up(unsigned count,int cold)
  struct efs_meta_stat st;assert(!efs_meta_apply_getattr(kv,ino,decision,kv,&st)&&st.size==end);
  tx.bytes[1]=1;assert(!efs_meta_retire_append_barriers(kv,ino,&q.id,&tx,&ops,kv));
  assert(!efs_session_fence_local(kv,shard,q.id.client_uuid,2));
- assert(efs_meta_apply_append_catchup(kv,ino,gen,row.content_epoch,end,count,&q.id)==EFS_ERR_STALE);
+ assert(efs_meta_apply_append_catchup(kv,ino,gen,row.content_epoch,end,count,&q.id)==EFS_ERR_FENCED);
  assert(!efs_meta_apply_check(kv));
  if(cold) {
   efs_kv_lsm_close(kv);DIR *d=opendir(directory);assert(d);struct dirent *e;
@@ -905,7 +922,7 @@ static void atomic_reservation(int cold)
  assert(!efs_meta_apply_append_state(kv,ino,NULL,NULL,&open) && !open);
  q=identity(2,1);assert(!efs_meta_capture_append(kv,ino,8,&q,decision,kv,p) && p->offset==208);
  assert(!efs_session_fence_local(kv,shard,q.id.client_uuid,2));
- assert(efs_meta_apply_append_atomic(kv,p,&q)==EFS_ERR_STALE);
+ assert(efs_meta_apply_append_atomic(kv,p,&q)==EFS_ERR_FENCED);
  free(wire);free(decoded);free(p);
  if(cold){efs_kv_lsm_close(kv);DIR *d=opendir(dir);assert(d);struct dirent *e;
   while((e=readdir(d))){if(e->d_name[0]=='.')continue;char path[512];snprintf(path,sizeof(path),"%s/%s",dir,e->d_name);assert(!unlink(path));}
@@ -1009,7 +1026,7 @@ static void atomic_completion(int cold)
  assert(!efs_meta_apply_append_state(kv,ino,NULL,NULL,&open) && open==1);
  tx.bytes[1]=3;assert(!efs_meta_finish_append_owned(kv,ino,208,EFS_META_APPEND_COMPLETED,&q.id,&tx,&ops,kv));
  assert(!efs_session_fence_local(kv,shard,q.id.client_uuid,2));
- assert(completion_apply(kv,ino,gen,208,&q.id)==EFS_ERR_STALE);
+ assert(completion_apply(kv,ino,gen,208,&q.id)==EFS_ERR_FENCED);
  free(p);
  if(cold){efs_kv_lsm_close(kv);DIR*d=opendir(dir);assert(d);struct dirent*e;
   while((e=readdir(d))){if(e->d_name[0]=='.')continue;char path[512];snprintf(path,sizeof(path),"%s/%s",dir,e->d_name);assert(!unlink(path));}

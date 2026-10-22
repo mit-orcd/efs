@@ -526,10 +526,10 @@ def recv_exact(sock,n):
         body+=part
     return body
 
-HELLO=struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',3,0)  # CLIENT_HELLO, EFS_PROTOCOL_VERSION 3 (W133)
+HELLO=struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',4,0)  # CLIENT_HELLO, EFS_PROTOCOL_VERSION 4 (K5)
 def declare(sock):
     sock.sendall(HELLO);n=struct.unpack('>I',recv_exact(sock,4))[0];reply=recv_exact(sock,n)
-    assert n==9 and reply[0]==166 and struct.unpack('=iI',reply[1:])==(0,3),('declaration refused',reply)
+    assert n==9 and reply[0]==166 and struct.unpack('=iI',reply[1:])==(0,4),('declaration refused',reply)
 
 def valid_put(node,ino):
     req=Put(eid=1,ino=ino,ci=0,fi=0,length=65536,gen=987654321)
@@ -1347,9 +1347,9 @@ try:
         ticket_results.append(run([tickets,str(a.port),str(edge_ino),source/'efs-mgmt','cold',ticket_saved],capture_output=True,text=True,timeout=90).stdout)
         (work/'put-ticket-wire.txt').write_text(''.join(ticket_results))
         assert edge_path.read_bytes()==edge_body,'lease transport changed cold bytes'
-        edge_results.append(run([client_edge,str(a.port),str(edge_ino),edge_uuid,'cached',source/'efs-mgmt'],capture_output=True,text=True,timeout=90).stdout)
-        assert edge_path.read_bytes()==edge_body+bytes(8),'legacy cached append fence corrupts original bytes/hole'
-        edge_results.append(run([client_edge,str(a.port),str(edge_ino),edge_uuid,'revoked'],capture_output=True,text=True,timeout=90).stdout)
+        # K5: the unidentified append replay cache is gone; revocation of the
+        # lease session is exercised directly by the revoked stage.
+        edge_results.append(run([client_edge,str(a.port),str(edge_ino),edge_uuid,'revoked',source/'efs-mgmt'],capture_output=True,text=True,timeout=90).stdout)
         edge_path.unlink();wait(lambda:not files(edge_ino),'actual client lease close physical reclaim',180)
         (work/'client-lease-transport.json').write_text(json.dumps(edge_results,indent=2))
         print('actual client sequenced lease OPEN/CLOSE/probe/exact cold replay PASS',flush=True)
@@ -1394,6 +1394,8 @@ try:
         def error(name):
             return int(re.search(r'#define\s+'+name+r'\s+(-?\d+)',header).group(1))
         stale=error('EFS_ERR_STALE');missing=error('EFS_ERR_NOT_FOUND');busy=error('EFS_ERR_BUSY')
+        # K5: a not-admitted identity is UNREGISTERED and a fenced one FENCED.
+        unregistered=error('EFS_ERR_UNREGISTERED');fenced=error('EFS_ERR_FENCED')
         path=mount/'guarded-lease';body=b'guarded lease cold payload'*100
         with path.open('wb') as f:f.write(body);f.flush();os.fsync(f.fileno())
         ino=path.stat().st_ino
@@ -1406,7 +1408,7 @@ try:
             records.append({'seq':seq,'ack':ack,'flags':flags,'probe':probe,'expected':expected,'discard':discard,'result':result.strip()})
             return result
         shard=int(re.search(r'shard=(\d+)',attr).group(1))
-        edge(1,0,1,probe=1,expected=busy)
+        edge(1,0,1,probe=1,expected=unregistered)
         for operation,extra in [('create',['1']),('register',[str(shard),'1']),('establish',[str(shard),'1'])]:
             run([source/'efs-mgmt','raft-session',f'127.0.0.1:{a.port}',operation,uuid,*extra])
         owner_uuid=os.urandom(16).hex()
@@ -1440,7 +1442,7 @@ try:
         # A read-only unknown query must never acquire ownership.
         path=mount/'guarded-probe-only';path.write_bytes(b'probe only')
         ino=path.stat().st_ino;gen=1
-        edge(6,5,1,probe=1,expected=busy)
+        edge(6,5,1,probe=1,expected=unregistered)
         path.unlink()
         def reclaimed():
             attr=run([helper,str(a.port),str(ino)],capture_output=True,text=True).stdout
@@ -1456,7 +1458,7 @@ try:
             session_admission([source/'efs-mgmt','raft-session',f'127.0.0.1:{a.port}',operation,uuid,str(shard),'1'],busy)
         edge(6,5,1);path.unlink()
         run([source/'efs-mgmt','raft-session',f'127.0.0.1:{a.port}','fence',uuid])
-        edge(7,6,1,expected=stale)
+        edge(7,6,1,expected=fenced)
         wait(reclaimed,'durably fenced active lease inode reclaimed',60)
         wait(lambda:not files(ino),'durably fenced physical fragments reclaimed',180)
         (work/'guarded-leases.json').write_text(json.dumps(records,indent=2))
@@ -1659,7 +1661,7 @@ os.close(fd)
     if a.append_replay_race:
         helper=work/'append-replay-race'
         run(['cc','-D_GNU_SOURCE','-Wall','-Wextra','-Werror','-I'+str(source/'include'),
-             source/'tests/live/append_replay_race.c','-pthread','-o',helper])
+             source/'tests/live/append_replay_race.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',helper])
         path=mount/'append-identical-rpc'
         fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_RDWR,0o600)
         ino_replay=os.fstat(fd).st_ino
@@ -2775,6 +2777,7 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
         helper.write_text(r'''#include "efs/protocol.h"
 #include "efs/network.h"
 #include "efs/opid.h"
+#include "live_session.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -2807,7 +2810,10 @@ static efs_ino_t call(unsigned type,const void*req,unsigned size,unsigned seq){
     }
     abort();
 }
-int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
+int main(int argc,char**argv){assert(argc==3);port=atoi(argv[1]);
+    /* K5: the identity names a session that exists on its owner; create it
+     * directly on the cluster (argv[2]), not through the reply-dropping proxy. */
+    {uint8_t uuid[16]={1};unsigned pid=getpid();memcpy(uuid+4,&pid,sizeof(pid));live_session_create(atoi(argv[2]),uuid,1);}
     struct efs_msg_inode_create create={0};create.export_id=1;create.parent=1;create.mode=S_IFREG|0600;strcpy(create.name,"opid-source");
     efs_ino_t ino=call(EFS_MSG_INODE_CREATE,&create,sizeof(create),1);assert(ino);
     struct efs_msg_inode_link link={0};link.export_id=1;link.src_ino=ino;link.new_parent=1;strcpy(link.new_name,"opid-link");
@@ -2819,7 +2825,7 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
     puts("CREATE/LINK/RENAME/UNLINK lost replies recovered with same operation identity PASS");
 }
 ''')
-        run(['cc','-I'+str(source/'include'),helper,source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',work/'opid-client'])
+        run(['cc','-I'+str(source/'include'),'-I'+str(source/'tests/live'),helper,source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',work/'opid-client'])
         listener=socket.socket();listener.bind(('127.0.0.1',0));listener.listen();listener.settimeout(.2)
         proxy_port=listener.getsockname()[1];proxy_stop=threading.Event();proxy_errors=[];dropped={};replayed={}
         target=a.port
@@ -2869,7 +2875,7 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
                 except Exception as error:proxy_errors.append(repr(error));proxy_stop.set()
         proxy_thread=threading.Thread(target=proxy);proxy_thread.start()
         try:
-            run([work/'opid-client',proxy_port],timeout=120 if a.opid_restart else 60)
+            run([work/'opid-client',proxy_port,a.port],timeout=120 if a.opid_restart else 60)
             assert not proxy_errors,proxy_errors
             if a.opid_failover:unmount();stop();start();mount_client()
             assert len(dropped)==len(replayed)==4,(dropped.keys(),replayed.keys())

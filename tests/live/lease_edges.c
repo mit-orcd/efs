@@ -6,6 +6,7 @@
 #include "efs/kv_key.h"
 #include "efs/raft.h"
 #include "efs/txn.h"
+#include "live_session.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -133,14 +134,19 @@ static void owner_fence(unsigned port, const char *hex, unsigned shard)
     owner_rpc(port, fence, sizeof(fence), EFS_OK);
     puts("prepared owner blocks wire fence ACK; resolution releases barrier PASS");
 }
+/* K5: HOLD names an admitted session; there is no unidentified wire OPEN. */
+static const uint8_t hold_uuid[16]={0x19,0x10,[15]=0x01};
 static void legacy_hold(unsigned port,efs_ino_t ino,uint64_t owner,unsigned flags,unsigned expected)
 {
  struct efs_msg_inode_hold request={.export_id=1,.ino=ino,.flags=flags,.owner=owner};
+ uint8_t wire[sizeof(request)+EFS_SESS_WIRE_LEN];uint32_t epoch=1;
+ memcpy(wire,&request,sizeof(request));memcpy(wire+sizeof(request),hold_uuid,16);
+ memcpy(wire+sizeof(request)+16,&epoch,4);
  for(unsigned attempt=0;attempt<120;attempt++) {
   int fd=efs_connect_declared("127.0.0.1",port+attempt%4);if(fd<0){usleep(10000);continue;}
   efs_set_recv_timeout(fd,2000);efs_set_send_timeout(fd,2000);
   uint8_t type=0;void *body=NULL;uint32_t size=0;
-  int rc=efs_send_msg(fd,EFS_MSG_INODE_HOLD,&request,sizeof(request));
+  int rc=efs_send_msg(fd,EFS_MSG_INODE_HOLD,wire,sizeof(wire));
   if(!rc)rc=efs_recv_msg(fd,&type,&body,&size);
   close(fd);
   if(rc){free(body);usleep(10000);continue;}
@@ -161,13 +167,14 @@ static void legacy_guard(unsigned port,efs_ino_t ino)
  memcpy(p+3,txid,16);p[19]=1;be(p+20,shard,4);be(p+24,kl,2);memcpy(p+26,key,kl);
  assert(efs_txn_encode_excl_value(p+26+kl,sizeof(p)-26-kl,&n,NULL,EFS_TXN_ABSENT,EFS_TXN_PUT,value,sizeof(value))==EFS_OK);
  owner_rpc(port,p,26+kl+n,EFS_OK);
+ live_session_create(port,hold_uuid,1);live_session_admit(port,hold_uuid,1,efs_kv_inode_shard(ino));
  legacy_hold(port,ino,UINT64_C(1910000001),1,EFS_INODE_RPC_BUSY);
  uint8_t resolve[23]={0};resolve[0]=p[0];resolve[1]=EFS_MD_CMD_RESOLVE;
  memcpy(resolve+2,txid,16);be(resolve+18,shard,4);resolve[22]=EFS_TXN_ABORT;
  owner_rpc(port,resolve,sizeof(resolve),EFS_OK);
  legacy_hold(port,ino,UINT64_C(1910000001),1,EFS_INODE_RPC_OK);
  legacy_hold(port,ino,UINT64_C(1910000001),0,EFS_INODE_RPC_OK);
- puts("legacy wire OPEN returns BUSY behind prepared close; later RESOLVE and retry acquire/release PASS");
+ puts("session wire OPEN returns BUSY behind prepared close; later RESOLVE and retry acquire/release PASS");
 }
 /* Two same-session receipt transactions share an epoch predicate without
  * serializing unrelated operations. The wire fence must await both outcomes. */
@@ -196,7 +203,7 @@ static void namespace_guard(unsigned port)
  /* Retrying either durable decision cannot restore the old epoch. */
  for(unsigned i=0;i<2;i++){memcpy(resolve+2,tx[i],16);resolve[22]=i?EFS_TXN_ABORT:EFS_TXN_COMMIT;owner_rpc(port,resolve,sizeof(resolve),EFS_OK);}
  tx[0][0]=74;memcpy(prepare+3,tx[0],16);q.id.seq=3;efs_txn_encode_opid(prepare+26+kl,&q,&reply);
- owner_rpc(port,prepare,26+kl+EFS_TXN_REDUCE_OPID_WIRE,EFS_ERR_STALE);
+ owner_rpc(port,prepare,26+kl+EFS_TXN_REDUCE_OPID_WIRE,EFS_ERR_FENCED);
  session[0]=owner;session[2]=EFS_MD_SESS_ACK;be(session+19,0,4);owner_rpc(port,session,sizeof(session),EFS_OK);
  /* Completion now carries the checked epoch and requires every storage
   * member, including the member outside the metadata replica set. */

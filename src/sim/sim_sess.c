@@ -271,8 +271,8 @@ int sim_sess_ensure_id(struct efs_sim *sim, const uint8_t *uuid, uint32_t epoch,
     if (rc != EFS_OK)
         return rc;
     rc = efs_session_accept(kv, shard, uuid, epoch);
-    if (rc == EFS_OK || rc == EFS_ERR_STALE)
-        return rc;
+    if (rc != EFS_ERR_UNREGISTERED)
+        return rc; /* OK, FENCED or a storage error: nothing to admit */
     ssh = efs_kv_session_shard(uuid);
     n = (uint32_t)pack_hdr(cmd, EFS_MD_SESS_REGISTER, uuid);
     wr32(cmd + n, epoch);

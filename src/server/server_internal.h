@@ -420,6 +420,7 @@ void server_raft_host_expire(efs_ino_t parent,const char *name,
 void server_raft_host_xattr(efs_ino_t ino, uint8_t op, uint32_t flags,
                             const uint8_t *name, uint16_t nlen,
                             const uint8_t *val, uint32_t vlen,
+                            const uint8_t *sess_uuid, uint32_t sess_epoch,
                             struct efs_msg_xattr_reply *out, uint32_t *out_len);
 void server_raft_host_append(efs_ino_t ino, uint64_t len,
                              const uint8_t *sess_uuid, uint32_t sess_epoch,

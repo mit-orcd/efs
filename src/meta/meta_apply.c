@@ -1101,8 +1101,10 @@ static int alloc_key_claim(struct efs_kv *kv, const uint8_t *k_alloc,
 
 /* Op-id window (I16, §7.9) for a directory op lives on the shard that
  * served it — the dentry shard — under efs_kv_key_opid(shard, uuid,
- * epoch). A zero UUID / seq 0 means "no identity" (pre-I16 caller, or the
- * APPEND stand-in): no probe, no record. */
+ * epoch). A zero UUID / seq 0 means "no identity": only server-internal
+ * work (expiry) proposes such entries. Client RPCs without a session are
+ * refused at the host boundary (K5), and every apply that takes an identity
+ * checks it with efs_session_accept. */
 static int opid_hosted(const struct efs_opid *op)
 {
     uint32_t i;
@@ -1142,7 +1144,7 @@ int efs_meta_apply_opid_probe(struct efs_kv *kv, uint32_t shard,
 
     if (!kv || !opid_hosted(id))
         return 0;
-    rc=efs_session_accept_legacy(kv,shard,id->client_uuid,id->session_epoch);
+    rc=efs_session_accept(kv,shard,id->client_uuid,id->session_epoch);
     if(rc!=EFS_OK)return rc;
     rc = opid_get(kv, shard, id, key, &klen, val, &vlen);
     if (rc != EFS_OK)
@@ -1163,7 +1165,7 @@ static int opid_item(struct efs_kv *kv, uint32_t shard,
 
     if (!q || !opid_hosted(&q->id))
         return 0;
-    rc=efs_session_accept_legacy(kv,shard,q->id.client_uuid,q->id.session_epoch);
+    rc=efs_session_accept(kv,shard,q->id.client_uuid,q->id.session_epoch);
     if(rc!=EFS_OK)return rc;
     rc = opid_get(kv, shard, &q->id, key, &klen, cur, &cn);
     if (rc != EFS_OK)
@@ -1489,10 +1491,11 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
         shard = efs_kv_dentry_shard(parent, name, lay);
         dseq_lane = lay == EFS_META_LAYOUT_LOCAL ? 0 : efs_kv_dir_lane(name);
     }
-    /* Pending ownership is a session mutation, including negative verdicts
-     * and replays. Check inside serialized apply, before the replay fast path:
-     * an earlier local fence must prevent any old-epoch CREATE claim. */
-    if (lease_token) {
+    /* Lease ownership (pending or CREATE-time open) is a session mutation,
+     * including negative verdicts and replays. Check inside serialized apply,
+     * before the replay fast path: an earlier local fence must prevent any
+     * old-epoch CREATE claim. */
+    if (lease_uuid) {
         rc = efs_session_accept(kv, shard, lease_uuid, lease_epoch);
         if (rc != EFS_OK) return rc;
     }
@@ -7071,9 +7074,9 @@ static int append_reserve_inner(struct efs_kv *kv, efs_ino_t ino, uint64_t len,
 
     if (!kv || !op || !coord || !off_out || ino == 0 || len == 0)
         return EFS_ERR_INVAL;
-    /* Receipt retirement never restores permission for a revoked identity,
-     * including legacy seq0 requests that have no append receipt. */
-    rc=efs_session_accept_legacy(kv,efs_kv_inode_shard(ino),op->client_uuid,
+    /* Receipt retirement never restores permission for a revoked identity.
+     * Every append names an established session (K5). */
+    rc=efs_session_accept(kv,efs_kv_inode_shard(ino),op->client_uuid,
                                  op->session_epoch);
     if(rc!=EFS_OK)return rc;
     /* APPEND's window (sim; production APPEND carries seq 0) lives on the
@@ -7233,7 +7236,7 @@ int efs_meta_capture_append(struct efs_kv *kv, efs_ino_t ino, uint64_t len,
     if (!kv || !ino || !len || !q || !coord || !out)
         return EFS_ERR_INVAL;
     memset(out, 0, sizeof(*out));
-    rc=efs_session_accept_legacy(kv,efs_kv_inode_shard(ino),q->id.client_uuid,
+    rc=efs_session_accept(kv,efs_kv_inode_shard(ino),q->id.client_uuid,
                                  q->id.session_epoch);
     if(rc!=EFS_OK)return rc;
     rc = efs_meta_append_result(kv, ino, len, q, &out->offset);

@@ -1288,6 +1288,10 @@ for i in range(8192):
 # GET is a ReadIndex (not a log cmd). Survives crash as ACTIVE with
 # the registered bit. HOLD/FLOCK identity stays the uint64 stand-in.
 SESS_UUID=aa000000000000000000000000000001
+# K5: every raw mutation names a session. Unqualified efs-mgmt raft-*
+# commands share this one (efs-mgmt creates and admits it), so a later
+# "un owner=1" releases the lock an earlier invocation took.
+export EFS_MGMT_SESSION=${EFS_MGMT_SESSION:-bb000000000000000000000000000001}
 SESS_EPOCH=1
 check_session() {
     local lid=$1
@@ -1324,9 +1328,8 @@ check_session() {
     echo "$out" | grep -q 'status=0' || bad "$tag session create-dup not idempotent"
 }
 
-# Real (uuid, epoch) on HOLD/FLOCK (10.5c-35b). Optional wire suffix;
-# stand-in path (no suffix) stays for the later HOLD/FLOCK checks.
-# Accept rejects a not-established epoch. Dedicated raft-smoke-u,
+# Real (uuid, epoch) on HOLD/FLOCK (10.5c-35b, K5: mandatory suffix, no
+# stand-in owner). Accept refuses a not-established epoch UNREGISTERED (15). Dedicated raft-smoke-u,
 # unlinked before crash so ROOT readdir stays the same.
 check_sess_ident() {
     local lid=$1
@@ -1358,13 +1361,13 @@ check_sess_ident() {
     echo "$out" | grep -q 'status=0' || bad "$tag sess-ident hold open not OK"
     out=$(g0_mgmt raft-hold "$ino" open 1 "$SESS_UUID" 2)
     say "$tag sess-ident hold wrong-epoch: $out"
-    echo "$out" | grep -q 'status=5' || bad "$tag sess-ident hold wrong-epoch not BUSY"
+    echo "$out" | grep -q 'status=15' || bad "$tag sess-ident hold wrong-epoch not UNREGISTERED"
     out=$(g0_mgmt raft-flock "$ino" ex 1 "$SESS_UUID" 1)
     say "$tag sess-ident flock ex: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag sess-ident flock ex not OK"
     out=$(g0_mgmt raft-flock "$ino" ex 2)
-    say "$tag sess-ident flock stand-in busy: $out"
-    echo "$out" | grep -q 'status=5' || bad "$tag sess-ident flock stand-in not BUSY"
+    say "$tag sess-ident flock other-session busy: $out"
+    echo "$out" | grep -q 'status=5' || bad "$tag sess-ident flock other session not BUSY"
     out=$(g0_mgmt raft-flock "$ino" un 1 "$SESS_UUID" 1)
     say "$tag sess-ident flock un: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag sess-ident flock un not OK"
@@ -1440,7 +1443,7 @@ check_sess_fence() {
     echo "$out" | grep -q 'size=131072' || bad "$tag sess-fence reservation not FENCED_HOLE"
     out=$(g0_mgmt raft-append "$ino" 4096 "$SESS_UUID" 1)
     say "$tag sess-fence old-epoch append: $out"
-    echo "$out" | grep -q 'status=5' || bad "$tag sess-fence old-epoch append not BUSY"
+    echo "$out" | grep -q 'status=14' || bad "$tag sess-fence old-epoch append not FENCED"
     ok=0
     for i in $(seq 1 50); do
         if ! kill -0 $wp 2>/dev/null; then ok=1; break; fi
@@ -1449,10 +1452,10 @@ check_sess_fence() {
     [ "$ok" = 1 ] || { bad "$tag sess-fence waiter stuck after fence"; kill $wp 2>/dev/null; }
     wait $wp 2>/dev/null || true
     say "$tag sess-fence waiter out: $(cat "$FENCE_WAIT_OUT" 2>/dev/null)"
-    grep -q 'status=5' "$FENCE_WAIT_OUT" || bad "$tag sess-fence waiter not BUSY"
+    grep -qE 'status=(5|14)' "$FENCE_WAIT_OUT" || bad "$tag sess-fence waiter not BUSY/FENCED"
     out=$(g0_mgmt raft-fcntl "$ino" ex 3 0 100 "$SESS_UUID" 1)
     say "$tag sess-fence old-epoch ex: $out"
-    echo "$out" | grep -q 'status=5' || bad "$tag sess-fence old-epoch not BUSY"
+    echo "$out" | grep -q 'status=14' || bad "$tag sess-fence old-epoch not FENCED"
     out=$(g0_mgmt raft-session establish "$SESS_UUID" "$ish" 2)
     say "$tag sess-fence establish epoch2: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag sess-fence establish epoch2 not OK"

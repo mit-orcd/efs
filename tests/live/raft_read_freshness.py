@@ -125,7 +125,7 @@ def lost_mkfs_reply(node, command, work):
                     hello=exact(client,length);assert hello[0]==165,hello.hex()
                     server.sendall(header+hello)
                     hello_header=exact(server,4);hello_reply=exact(server,struct.unpack('>I',hello_header)[0])
-                    assert hello_reply[0]==166 and struct.unpack('=iI',hello_reply[1:])==(0,3),hello_reply.hex()
+                    assert hello_reply[0]==166 and struct.unpack('=iI',hello_reply[1:])==(0,4),hello_reply.hex()
                     client.sendall(hello_header+hello_reply)
                     header=exact(client,4);length=struct.unpack('>I',header)[0]
                     assert length==1
@@ -212,11 +212,11 @@ try:
     # QUERY_STATS_REPLY (26), never totals.
     with socket.create_connection(('127.0.0.1',base+old),10) as sock:
         sock.settimeout(10)
-        sock.sendall(struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',3,0))  # CLIENT_HELLO v3 (W133)
+        sock.sendall(struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',4,0))  # CLIENT_HELLO v4 (K5)
         hello=b''
         while len(hello)<13:
             chunk=sock.recv(13-len(hello));assert chunk,'declaration closed early';hello+=chunk
-        assert hello[4]==166 and struct.unpack('=iI',hello[5:13])==(0,3),hello.hex()
+        assert hello[4]==166 and struct.unpack('=iI',hello[5:13])==(0,4),hello.hex()
         sock.sendall(struct.pack('>IB',1,25))
         reply=b''
         while len(reply)<4 or len(reply)<4+struct.unpack('>I',reply[:4])[0]:

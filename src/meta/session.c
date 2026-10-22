@@ -420,36 +420,33 @@ int efs_session_fence_local(struct efs_kv *kv, uint32_t shard,
     return rc;
 }
 
+/* The single local session check (I23, K5). A missing row, a zero
+ * identity or an epoch not yet established here is UNREGISTERED (admit and
+ * resend); an epoch below the durable floor or below the established epoch
+ * is FENCED (never resend). Absence is never permission. */
 int efs_session_accept(struct efs_kv *kv, uint32_t shard,
                        const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch)
 {
     struct efs_sess_local loc;
     int rc;
+    uint8_t any = 0;
 
     if (!kv || !uuid || shard >= EFS_SESSION_BITS)
         return EFS_ERR_INVAL;
+    for (unsigned i = 0; i < EFS_OPID_UUID_LEN; i++)
+        any |= uuid[i];
+    if (!any || !epoch)
+        return EFS_ERR_UNREGISTERED;
     rc = load_local(kv, shard, uuid, &loc);
     if (rc == EFS_ERR_NOT_FOUND)
-        return EFS_ERR_BUSY;
+        return EFS_ERR_UNREGISTERED;
     if (rc != EFS_OK)
         return rc;
-    if (epoch < loc.reject_below)
-        return EFS_ERR_STALE;
+    if (epoch < loc.reject_below || epoch < loc.established)
+        return EFS_ERR_FENCED;
     if (loc.established != epoch)
-        return EFS_ERR_BUSY;
+        return EFS_ERR_UNREGISTERED;
     return EFS_OK;
-}
-
-int efs_session_accept_legacy(struct efs_kv *kv,uint32_t shard,
-    const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch)
-{
-    if(!kv || !uuid || shard>=EFS_SESSION_BITS)return EFS_ERR_INVAL;
-    struct efs_sess_local local;
-    int rc=load_local(kv,shard,uuid,&local);
-    if(rc==EFS_ERR_NOT_FOUND)return EFS_OK;
-    if(rc!=EFS_OK)return rc;
-    if(epoch<local.reject_below)return EFS_ERR_STALE;
-    return local.established==epoch?EFS_OK:EFS_ERR_BUSY;
 }
 
 int efs_session_prepare_namespace(struct efs_kv *kv,uint32_t shard,
@@ -459,11 +456,8 @@ int efs_session_prepare_namespace(struct efs_kv *kv,uint32_t shard,
        shard>=EFS_SESSION_BITS)return EFS_ERR_INVAL;
     unsigned member=0;for(unsigned i=0;i<parts->n;i++)member+=parts->shard[i]==shard;
     if(member!=1)return EFS_ERR_INVAL;
-    struct efs_sess_local local;int rc=load_local(kv,shard,id->client_uuid,&local);
-    if(rc==EFS_ERR_NOT_FOUND)return EFS_OK; /* historical unregistered log */
+    int rc=efs_session_accept(kv,shard,id->client_uuid,id->session_epoch);
     if(rc!=EFS_OK)return rc;
-    if(id->session_epoch<local.reject_below)return EFS_ERR_STALE;
-    if(local.established!=id->session_epoch)return EFS_ERR_BUSY;
     uint8_t key[EFS_KV_KEY_MAX];uint32_t bytes=0;uint64_t version=0;
     rc=efs_kv_key_sess_local(shard,id->client_uuid,key,&bytes);
     if(rc==EFS_OK)rc=efs_txn_ver_get(kv,key,bytes,&version);
@@ -590,7 +584,7 @@ int efs_lease_open(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
     if (row.generation != gen)
         return EFS_ERR_STALE;
     shard = efs_kv_inode_shard(ino);
-    rc=efs_session_accept_legacy(kv,shard,uuid,epoch);
+    rc=efs_session_accept(kv,shard,uuid,epoch);
     if(rc!=EFS_OK)return rc;
     rc=lease_open_guard(kv,ino);
     if(rc!=EFS_OK)return rc;

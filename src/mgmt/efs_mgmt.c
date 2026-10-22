@@ -2068,6 +2068,106 @@ static int cmd_raft_session(int argc, char **argv)
     }
 }
 
+/* K5: raw metadata mutations name a session. An explicit uuid/epoch on
+ * the command line is sent exactly as given (the caller manages it with
+ * raft-session; used to probe refusals). Otherwise efs-mgmt uses
+ * EFS_MGMT_SESSION=<uuid-hex>[:epoch] when set, else a fresh random uuid at
+ * epoch 1, creates that session on its owner shard and admits the target
+ * shard itself, like a mount does. */
+struct mgmt_session {
+    uint8_t uuid[EFS_OPID_UUID_LEN];
+    uint32_t epoch;
+};
+
+static int mgmt_session_cmd(const char *host, uint16_t port, uint8_t group,
+                            uint8_t sub, const struct mgmt_session *s,
+                            uint32_t shard, int with_shard)
+{
+    uint8_t payload[1 + 26];
+    struct efs_msg_raft_mkfs_reply reply;
+    sess_pack_hdr(payload, group, sub, s->uuid);
+    wr32be_mgmt(payload + 19, s->epoch);
+    wr32be_mgmt(payload + 23, shard);
+    int rc = sess_rpc(host, port, payload, with_shard ? 27 : 23, &reply);
+    return rc != EFS_OK ? rc : reply.rc;
+}
+
+static int mgmt_session_get(const char *host, uint16_t port, struct mgmt_session *s)
+{
+    const char *env = getenv("EFS_MGMT_SESSION");
+    memset(s, 0, sizeof(*s));
+    s->epoch = 1;
+    if (env && *env) {
+        char hex[33];
+        const char *colon = strchr(env, ':');
+        size_t n = colon ? (size_t)(colon - env) : strlen(env);
+        if (n != 32) { fprintf(stderr, "EFS_MGMT_SESSION: uuid must be 32 hex chars\n"); return EFS_ERR_INVAL; }
+        memcpy(hex, env, 32); hex[32] = 0;
+        if (parse_uuid_hex(hex, s->uuid) != 0) { fprintf(stderr, "EFS_MGMT_SESSION: bad uuid\n"); return EFS_ERR_INVAL; }
+        if (colon) s->epoch = (uint32_t)strtoul(colon + 1, NULL, 0);
+        if (!s->epoch) return EFS_ERR_INVAL;
+    } else {
+        FILE *f = fopen("/dev/urandom", "rb");
+        if (!f || fread(s->uuid, 1, sizeof(s->uuid), f) != sizeof(s->uuid)) {
+            if (f) fclose(f);
+            return EFS_ERR_IO;
+        }
+        fclose(f);
+        s->uuid[0] |= 1;
+    }
+    /* CREATE is a no-op for an existing session (any epoch); the owner's
+     * epoch is then checked by REGISTER/ESTABLISH and by every apply. */
+    uint32_t ssh = efs_kv_session_shard(s->uuid);
+    return mgmt_session_cmd(host, port, efs_raft_shard_group(ssh), EFS_MD_SESS_CREATE,
+                            s, 0, 0);
+}
+
+static int mgmt_session_admit(const char *host, uint16_t port,
+                              const struct mgmt_session *s, uint32_t shard)
+{
+    uint8_t owner = efs_raft_shard_group(efs_kv_session_shard(s->uuid));
+    uint8_t group = efs_raft_shard_group(shard);
+    if (owner == group)
+        return mgmt_session_cmd(host, port, group, EFS_MD_SESS_REGISTER_ESTABLISH, s, shard, 1);
+    int rc = mgmt_session_cmd(host, port, owner, EFS_MD_SESS_REGISTER, s, shard, 1);
+    if (rc == EFS_OK)
+        rc = mgmt_session_cmd(host, port, group, EFS_MD_SESS_ESTABLISH, s, shard, 1);
+    return rc;
+}
+
+/* Every invocation takes a new operation sequence so a reused session never
+ * replays an earlier invocation's recorded verdict (I16). */
+static void mgmt_opid(const struct mgmt_session *s, struct efs_opid_req *q)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    memset(q, 0, sizeof(*q));
+    memcpy(q->id.client_uuid, s->uuid, EFS_OPID_UUID_LEN);
+    q->id.session_epoch = s->epoch;
+    q->id.seq = (uint64_t)ts.tv_sec * 1000000ull + (uint64_t)ts.tv_nsec / 1000ull + 1;
+    q->ack = q->id.seq - 1;
+}
+
+/* Session + op-id suffix for a namespace/SETATTR request (shard < 0: the
+ * host admits the served shard itself). */
+static int mgmt_identify(const char *host, uint16_t port, int64_t shard,
+                         uint8_t *suffix, struct mgmt_session *out)
+{
+    struct mgmt_session s;
+    struct efs_opid_req q;
+    int rc = mgmt_session_get(host, port, &s);
+    if (rc == EFS_OK && shard >= 0)
+        rc = mgmt_session_admit(host, port, &s, (uint32_t)shard);
+    if (rc != EFS_OK) {
+        fprintf(stderr, "efs-mgmt: session setup failed: %s\n", efs_strerror(rc));
+        return rc;
+    }
+    mgmt_opid(&s, &q);
+    efs_opid_req_pack(&q, suffix);
+    if (out) *out = s;
+    return EFS_OK;
+}
+
 static int cmd_raft_getattr(int argc, char **argv)
 {
     char host[64];
@@ -2196,6 +2296,11 @@ static int cmd_raft_create(int argc, char **argv)
     if (argc >= 4)
         mode = (uint32_t)strtoul(argv[3], NULL, 0);
     req.mode = mode;
+    /* K5: every raw mutation names a session (see mgmt_identify). */
+    uint8_t wire[sizeof(req) + EFS_OPID_WIRE_LEN];
+    memcpy(wire, &req, sizeof(req));
+    if (mgmt_identify(host, port, -1, wire + sizeof(req), NULL) != EFS_OK)
+        return 1;
     fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
@@ -2203,7 +2308,7 @@ static int cmd_raft_create(int argc, char **argv)
     }
     efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
     efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-    if (send_recv(fd, EFS_MSG_INODE_CREATE, &req, sizeof(req), &reply_type,
+    if (send_recv(fd, EFS_MSG_INODE_CREATE, wire, sizeof(wire), &reply_type,
                   &reply, &reply_len) != 0 ||
         reply_type != EFS_MSG_INODE_CREATE_REPLY ||
         reply_len != sizeof(*r)) {
@@ -2232,7 +2337,7 @@ static int cmd_raft_append(int argc, char **argv)
     void *reply = NULL;
     uint32_t reply_len = 0, slen, epoch = 1;
     struct efs_msg_inode_append req;
-    uint8_t buf[sizeof(req) + EFS_SESS_WIRE_LEN];
+    uint8_t buf[sizeof(req) + EFS_APPEND_ACK_LEN];
     uint8_t uuid[EFS_OPID_UUID_LEN];
     struct efs_msg_inode_reply *r;
     int sess = 0;
@@ -2259,10 +2364,28 @@ static int cmd_raft_append(int argc, char **argv)
     req.len = strtoull(argv[2], NULL, 0);
     memcpy(buf, &req, sizeof(req));
     slen = sizeof(req);
-    if (sess) {
-        memcpy(buf + slen, uuid, EFS_OPID_UUID_LEN);
-        memcpy(buf + slen + EFS_OPID_UUID_LEN, &epoch, 4);
-        slen += EFS_SESS_WIRE_LEN;
+    {
+        /* K5: a reservation always carries uuid, epoch, seq and ACK. An
+         * explicit uuid/epoch is sent as given; otherwise efs-mgmt creates
+         * and admits its own session. */
+        struct mgmt_session ms;
+        struct efs_opid_req q;
+        int rc = EFS_OK;
+        if (sess) {
+            memcpy(ms.uuid, uuid, EFS_OPID_UUID_LEN);
+            ms.epoch = epoch;
+        } else {
+            rc = mgmt_session_get(host, port, &ms);
+            if (rc == EFS_OK)
+                rc = mgmt_session_admit(host, port, &ms, efs_kv_inode_shard(req.ino));
+        }
+        if (rc != EFS_OK) {
+            fprintf(stderr, "raft-append: session setup failed: %s\n", efs_strerror(rc));
+            return 1;
+        }
+        mgmt_opid(&ms, &q);
+        efs_opid_req_pack(&q, buf + slen);
+        slen += EFS_APPEND_ACK_LEN;
     }
     fd = efs_connect_declared(host, port);
     if (fd < 0) {
@@ -2330,10 +2453,22 @@ static int cmd_raft_hold(int argc, char **argv)
             return 1;
         }
         epoch = (uint32_t)strtoul(argv[5], NULL, 0);
-        memcpy(buf + slen, uuid, EFS_OPID_UUID_LEN);
-        memcpy(buf + slen + EFS_OPID_UUID_LEN, &epoch, 4);
-        slen += EFS_SESS_WIRE_LEN;
+    } else {
+        /* K5: no stand-in owner; use efs-mgmt's own admitted session. */
+        struct mgmt_session ms;
+        int rc = mgmt_session_get(host, port, &ms);
+        if (rc == EFS_OK)
+            rc = mgmt_session_admit(host, port, &ms, efs_kv_inode_shard(req.ino));
+        if (rc != EFS_OK) {
+            fprintf(stderr, "raft-hold: session setup failed: %s\n", efs_strerror(rc));
+            return 1;
+        }
+        memcpy(uuid, ms.uuid, EFS_OPID_UUID_LEN);
+        epoch = ms.epoch;
     }
+    memcpy(buf + slen, uuid, EFS_OPID_UUID_LEN);
+    memcpy(buf + slen + EFS_OPID_UUID_LEN, &epoch, 4);
+    slen += EFS_SESS_WIRE_LEN;
     fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
@@ -2430,6 +2565,22 @@ static int cmd_raft_lock_op(int argc, char **argv, uint32_t extra, const char *n
         memcpy(buf + sizeof(req) + 8, &end, 8);
         slen += EFS_FLOCK_RANGE_LEN;
     }
+    if (!sess && !is_getlk) {
+        /* K5: grants and releases name a session; there is no stand-in
+         * owner. Use efs-mgmt's own admitted session (EFS_MGMT_SESSION
+         * keeps one across invocations, so a later "un" matches). */
+        struct mgmt_session ms;
+        int rc = mgmt_session_get(host, port, &ms);
+        if (rc == EFS_OK)
+            rc = mgmt_session_admit(host, port, &ms, efs_kv_inode_shard(req.ino));
+        if (rc != EFS_OK) {
+            fprintf(stderr, "raft-%s: session setup failed: %s\n", name, efs_strerror(rc));
+            return 1;
+        }
+        memcpy(uuid, ms.uuid, EFS_OPID_UUID_LEN);
+        epoch = ms.epoch;
+        sess = 1;
+    }
     if (sess) {
         memcpy(buf + slen, uuid, EFS_OPID_UUID_LEN);
         memcpy(buf + slen + EFS_OPID_UUID_LEN, &epoch, 4);
@@ -2504,6 +2655,11 @@ static int cmd_raft_unlink(int argc, char **argv)
     memset(&req, 0, sizeof(req));
     req.parent = (efs_ino_t)strtoull(argv[1], NULL, 0);
     strncpy(req.name, argv[2], sizeof(req.name) - 1);
+    /* K5: every raw mutation names a session (see mgmt_identify). */
+    uint8_t wire[sizeof(req) + EFS_OPID_WIRE_LEN];
+    memcpy(wire, &req, sizeof(req));
+    if (mgmt_identify(host, port, -1, wire + sizeof(req), NULL) != EFS_OK)
+        return 1;
     fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
@@ -2511,7 +2667,7 @@ static int cmd_raft_unlink(int argc, char **argv)
     }
     efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
     efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-    if (send_recv(fd, EFS_MSG_INODE_UNLINK, &req, sizeof(req), &reply_type,
+    if (send_recv(fd, EFS_MSG_INODE_UNLINK, wire, sizeof(wire), &reply_type,
                   &reply, &reply_len) != 0 ||
         reply_type != EFS_MSG_INODE_UNLINK_REPLY ||
         reply_len != sizeof(*r)) {
@@ -2554,6 +2710,11 @@ static int cmd_raft_rmdir(int argc, char **argv)
     req.parent = (efs_ino_t)strtoull(argv[1], NULL, 0);
     strncpy(req.name, argv[2], sizeof(req.name) - 1);
     req.is_dir = 1;
+    /* K5: every raw mutation names a session (see mgmt_identify). */
+    uint8_t wire[sizeof(req) + EFS_OPID_WIRE_LEN];
+    memcpy(wire, &req, sizeof(req));
+    if (mgmt_identify(host, port, -1, wire + sizeof(req), NULL) != EFS_OK)
+        return 1;
     fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
@@ -2561,7 +2722,7 @@ static int cmd_raft_rmdir(int argc, char **argv)
     }
     efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
     efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-    if (send_recv(fd, EFS_MSG_INODE_UNLINK, &req, sizeof(req), &reply_type,
+    if (send_recv(fd, EFS_MSG_INODE_UNLINK, wire, sizeof(wire), &reply_type,
                   &reply, &reply_len) != 0 ||
         reply_type != EFS_MSG_INODE_UNLINK_REPLY ||
         reply_len != sizeof(*r)) {
@@ -2604,6 +2765,11 @@ static int cmd_raft_link(int argc, char **argv)
     req.src_ino = (efs_ino_t)strtoull(argv[1], NULL, 0);
     req.new_parent = (efs_ino_t)strtoull(argv[2], NULL, 0);
     strncpy(req.new_name, argv[3], sizeof(req.new_name) - 1);
+    /* K5: every raw mutation names a session (see mgmt_identify). */
+    uint8_t wire[sizeof(req) + EFS_OPID_WIRE_LEN];
+    memcpy(wire, &req, sizeof(req));
+    if (mgmt_identify(host, port, -1, wire + sizeof(req), NULL) != EFS_OK)
+        return 1;
     fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
@@ -2611,7 +2777,7 @@ static int cmd_raft_link(int argc, char **argv)
     }
     efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
     efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-    if (send_recv(fd, EFS_MSG_INODE_LINK, &req, sizeof(req), &reply_type,
+    if (send_recv(fd, EFS_MSG_INODE_LINK, wire, sizeof(wire), &reply_type,
                   &reply, &reply_len) != 0 ||
         reply_type != EFS_MSG_INODE_LINK_REPLY ||
         reply_len != sizeof(*r)) {
@@ -2670,6 +2836,11 @@ static int cmd_raft_setattr(int argc, char **argv)
         if (argc >= 6)
             req.gid = (uint32_t)strtoul(argv[5], NULL, 0);
     }
+    /* K5: every raw mutation names a session (see mgmt_identify). */
+    uint8_t wire[sizeof(req) + EFS_OPID_WIRE_LEN];
+    memcpy(wire, &req, sizeof(req));
+    if (mgmt_identify(host, port, (int64_t)efs_kv_inode_shard(req.ino), wire + sizeof(req), NULL) != EFS_OK)
+        return 1;
     fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
@@ -2677,7 +2848,7 @@ static int cmd_raft_setattr(int argc, char **argv)
     }
     efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
     efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-    if (send_recv(fd, EFS_MSG_INODE_SETATTR, &req, sizeof(req), &reply_type,
+    if (send_recv(fd, EFS_MSG_INODE_SETATTR, wire, sizeof(wire), &reply_type,
                   &reply, &reply_len) != 0 ||
         reply_type != EFS_MSG_INODE_SETATTR_REPLY ||
         reply_len != sizeof(*r)) {
@@ -2723,6 +2894,11 @@ static int cmd_raft_rename(int argc, char **argv)
     strncpy(req.old_name, argv[2], sizeof(req.old_name) - 1);
     req.new_parent = (efs_ino_t)strtoull(argv[3], NULL, 0);
     strncpy(req.new_name, argv[4], sizeof(req.new_name) - 1);
+    /* K5: every raw mutation names a session (see mgmt_identify). */
+    uint8_t wire[sizeof(req) + EFS_OPID_WIRE_LEN];
+    memcpy(wire, &req, sizeof(req));
+    if (mgmt_identify(host, port, -1, wire + sizeof(req), NULL) != EFS_OK)
+        return 1;
     fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
@@ -2730,7 +2906,7 @@ static int cmd_raft_rename(int argc, char **argv)
     }
     efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
     efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-    if (send_recv(fd, EFS_MSG_INODE_RENAME_AT, &req, sizeof(req), &reply_type,
+    if (send_recv(fd, EFS_MSG_INODE_RENAME_AT, wire, sizeof(wire), &reply_type,
                   &reply, &reply_len) != 0 ||
         reply_type != EFS_MSG_INODE_RENAME_AT_REPLY ||
         reply_len != sizeof(*r)) {

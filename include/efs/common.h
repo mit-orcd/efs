@@ -134,6 +134,13 @@
  * reconstruction input; distinct from payload corruption (EFS_ERR_CHECKSUM). */
 #define EFS_ERR_FRAG_FORMAT   -25
 #define EFS_ERR_FRAG_IDENTITY -26
+/* Session refusals (I23, K5). FENCED: the request epoch is below the shard's
+ * durable rejection floor or below the epoch established there; the mount
+ * must stop mutating and never resend under that epoch. UNREGISTERED: the
+ * shard has no established row for this (uuid, epoch); the client admits
+ * the shard (REGISTER + ESTABLISH) and resends the same identity. */
+#define EFS_ERR_FENCED      -27
+#define EFS_ERR_UNREGISTERED -28
 
 typedef uint64_t efs_ino_t;
 
