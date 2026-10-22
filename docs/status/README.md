@@ -18,6 +18,11 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[orcd-mini deploy of `d94ca85bf`](orcd-mini-deploy-d94ca85bf-20261022.md):
+**deployed; all functional suites PASS** (core 216/216, extras, durability,
+`.efs` 10/10, two-client 67/67, ior hard). **ior easy write down ~40% vs
+`08cc16af4` (710–863 vs ~1,330 MiB/s); unattributed, A/B NOTRUN.**
+
 [Packing validate-once review and assessment](review-pack-validate-once-20261022.md):
 **merged into devel `842a014b3` by user decision; read mismatch OPEN.** The
 mismatched file was 3.3–3.6 MB in every completed version; no demonstrated
