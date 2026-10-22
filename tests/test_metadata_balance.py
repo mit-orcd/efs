@@ -75,13 +75,20 @@ int main(void) {
  h.g[1].voters=4;r.voters=1;assert(host_balanced_voter(&h,1,0)==0);
  assert(host_balanced_voter(&h,4,1)==2);
  r.voters=7;h.g[1].voters=0xe;
+ /* Spread mode (2): distinct per-group leaders instead of the common voter. */
+ h.balance_enabled=2;
+ assert(host_balanced_voter(&h,7,0)==0);
+ assert(host_balanced_voter(&h,0xe,1)==2);
+ assert(host_balanced_voter(&h,0xe,0)==-1); /* mask must match the group's own */
+ h.g[1].voters=0;assert(host_balanced_voter(&h,7,0)==-1);
+ h.g[1].voters=0xe;h.balance_enabled=0;
  /* Transfer still honors settling, target lag refusal and backoff. */
  h.balance_enabled=1;h.raft_id=0;r.role=EFS_RAFT_LEADER;
  transfer_rc=EFS_ERR_BUSY;unsigned before=calls;
  host_balance_leaders(&h,60000000);host_balance_leaders(&h,62000000);
  assert(calls==before+1&&target==2&&!h.g[0].balance_attempt_us);
  transfer_rc=EFS_OK;host_balance_leaders(&h,62010000);assert(calls==before+2&&target==2);
- puts("metadata balance: opt-in, actual voter placement, grace, lag refusal and cross-term backoff PASS");
+ puts("metadata balance: opt-in, actual voter placement, spread mode, grace, lag refusal and cross-term backoff PASS");
  return 0;
 }
 '''

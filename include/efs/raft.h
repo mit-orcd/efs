@@ -41,6 +41,24 @@ static inline int efs_raft_preferred_voter(uint32_t voters, unsigned ordinal)
     return -1;
 }
 
+/* Spread placement: each group, in group order, prefers its own ordinal voter
+ * among those no earlier group took, so overlapping voter sets still get
+ * distinct leaders where possible. A group whose voters are all taken falls
+ * back to its ordinary preference. Placement only, like the above. */
+static inline int efs_raft_spread_voter(const uint32_t *voters, unsigned ngroups,
+                                        unsigned group)
+{
+    uint32_t taken = 0;
+    int pick = -1;
+    if (!voters || group >= ngroups) return -1;
+    for (unsigned g = 0; g <= group; g++) {
+        uint32_t free_voters = voters[g] & ~taken;
+        pick = efs_raft_preferred_voter(free_voters ? free_voters : voters[g], g);
+        if (pick < 0) return -1;
+        taken |= 1u << pick;
+    }
+    return pick;
+}
 
 #define EFS_RAFT_MSG_VOTE_REQ 1
 #define EFS_RAFT_MSG_VOTE_REP 2

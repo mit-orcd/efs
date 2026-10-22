@@ -345,7 +345,7 @@ struct host_waiter {
 struct efs_raft_host {
     struct efsd_server *s;
     int raft_id;
-    int balance_enabled; /* Opt-in until W66 distribution/failover gates pass. */
+    int balance_enabled; /* 0 off, 1 colocate, 2 spread; opt-in until W66 gates pass. */
     int n;
     uint64_t boot_id;
     uint64_t salt;
@@ -7213,6 +7213,18 @@ static int host_checkpoint_retire(struct efs_raft_host *h, const uint64_t *idx,
 static int host_balanced_voter(struct efs_raft_host *h,uint32_t voters,unsigned ordinal)
 {
     if(!h->s)return efs_raft_preferred_voter(voters,ordinal);
+    if(h->balance_enabled==2){
+        /* Spread (EFS_METADATA_BALANCE=2): distinct leaders per group, so
+         * one node does not carry both groups' log fsyncs and applies. */
+        uint32_t masks[HOST_NGROUPS];
+        for(unsigned i=0;i<HOST_NGROUPS;i++){
+            struct host_group *g=group_slot(h,(uint8_t)(i<<1));
+            masks[i]=g?(g->r?efs_raft_voters(g->r):g->voters):0;
+            if(!masks[i])return -1;
+        }
+        return ordinal<HOST_NGROUPS && masks[ordinal]==voters ?
+               efs_raft_spread_voter(masks,HOST_NGROUPS,ordinal) : -1;
+    }
     uint32_t common=voters;
     for(unsigned i=0;i<HOST_NGROUPS;i++){
         struct host_group *g=group_slot(h,(uint8_t)(i<<1));
@@ -11348,8 +11360,8 @@ int server_raft_host_start(struct efsd_server *s)
     }
 
     const char *balance = getenv("EFS_METADATA_BALANCE");
-    if (balance && strcmp(balance,"0") && strcmp(balance,"1")) {
-        fprintf(stderr,"raft-host: EFS_METADATA_BALANCE must be 0 or 1\n");
+    if (balance && strcmp(balance,"0") && strcmp(balance,"1") && strcmp(balance,"2")) {
+        fprintf(stderr,"raft-host: EFS_METADATA_BALANCE must be 0, 1 (colocate) or 2 (spread)\n");
         return EFS_ERR_INVAL;
     }
     h = calloc(1, sizeof(*h));
@@ -11357,7 +11369,7 @@ int server_raft_host_start(struct efsd_server *s)
         return EFS_ERR_NOMEM;
     h->applied_persist_us=applied_interval;
     h->gc_backlog_idle_ms = gc_backlog_idle_ms;
-    h->balance_enabled = balance && !strcmp(balance,"1");
+    h->balance_enabled = balance ? atoi(balance) : 0;
     h->s = s;
     h->query_enabled=query_enabled;
     h->expiry_enabled=expiry_enabled;h->expiry_peer_skip=-1;
