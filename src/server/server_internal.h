@@ -340,6 +340,8 @@ void server_start_heartbeat(struct efsd_server *s);
  * safe if never started. */
 int server_raft_host_start(struct efsd_server *s);
 void server_raft_host_stop(void);
+/* K1/W145: handlers close their connection before the next request. */
+void server_handlers_begin_stop(void);
 /* Copy one encoded efs_raft_msg into the pump inbox. Delivery ack is the
  * caller's job (EFS_MSG_RAFT_REPLY). BUSY accepts no frame; Raft retries. */
 int server_raft_host_inbox(const uint8_t *payload, uint32_t plen);

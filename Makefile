@@ -231,6 +231,7 @@ test-create-errors: $(LIB)
 	python3 tests/test_unlink_verdict.py
 	python3 tests/test_gc_verdict.py
 	python3 tests/test_retired_messages.py
+	python3 tests/test_shutdown_bounded.py
 	python3 tests/test_apply_unsupported.py
 	python3 tests/test_put_hint.py
 

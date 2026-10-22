@@ -109,6 +109,30 @@ static int retired_refuse(uint8_t type)
     return 1;
 }
 
+/* K1/W145 part 4: after a stop request a handler finishes the request in
+ * hand, then closes its connection instead of reading the next one. Pooled
+ * RDMA clients kept one handler alive for minutes by retrying a group read
+ * that could no longer get a quorum (the TCP SHUT_RD wake never reaches the
+ * RDMA channel). */
+static int g_handlers_stopping;
+static uint64_t g_handler_stop_closes;
+
+void server_handlers_begin_stop(void)
+{
+    __atomic_store_n(&g_handlers_stopping, 1, __ATOMIC_RELEASE);
+}
+
+static int handler_stop_gate(void)
+{
+    if (!__atomic_load_n(&g_handlers_stopping, __ATOMIC_ACQUIRE))
+        return 0;
+    uint64_t n = __atomic_add_fetch(&g_handler_stop_closes, 1, __ATOMIC_RELAXED);
+    if (n == 1 || !(n % 256))
+        fprintf(stderr, "handler: shutdown: closing connection before the next request "
+                "(closed=%llu)\n", (unsigned long long)n);
+    return 1;
+}
+
 void server_handle_conn(struct efs_conn *conn)
 {
     int fd = conn->fd;
@@ -121,6 +145,8 @@ void server_handle_conn(struct efs_conn *conn)
         int rdma_frame = 0;
         int rc = 0;
 
+        if (handler_stop_gate())
+            break;
         int chan = efs_conn_wait_request(conn);
         if (chan < 0)
             break;
