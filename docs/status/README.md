@@ -27,7 +27,8 @@ shutdown and mismatch-context gaps in the improved repro; qualification NOTRUN.
 
 [Phase 1 / alpha 1.0 checklist](alpha-1.0-2plus1-checklist.md): **OPEN**.
 Finish and qualify **2+1 on 3, 4 and >4 physical nodes** before the remaining
-roadmap. Candidate-specific gates cover placement, enabled I/O, packing/GC,
+roadmap. **Order: (1) known bugs, register K1–K26; (2) functional
+completeness, A/S/B/C/D/E; (3) performance, P.** Candidate-specific gates cover placement, enabled I/O, packing/GC,
 `.efs`, full payloads and orderly restart. **A6–A12 also require a flag/mode
 audit, removal of competing A/B implementations, built-in policies and a reduced
 qualification matrix.** 2+2, many-group distribution and

@@ -10,6 +10,26 @@ fragment** architecture at every supported cluster size. Completion is the
 This is release sequencing, not a claim that the final D36 design is implemented.
 No tag, merge, push, deployment or data deletion is performed by this document.
 
+## Order of work (user direction, October 22)
+
+Alpha 1.0 is reached in three stages, in this order:
+
+| Stage | Goal | Sections | Done when |
+| --- | --- | --- | --- |
+| 1. Known bugs | Fix or decide every known defect in the alpha scope | **K** | Every K row is CLOSED (fixed with a regression test and its gate), VERIFIED on the candidate, or DECIDED out of scope by the user with the limitation published |
+| 2. Functional completeness | One supported behavior and every in-scope feature working on 3, 4 and >4 hosts | **A**, **S**, **B**, **C**, **D**, **E1–E4** | All items PASS on the frozen candidate |
+| 3. Performance | Measure, then improve against targets agreed beforehand | **P** | Targets met or explicitly deferred; Stage 2 gates rerun after each change |
+
+**F** closes the release after all three stages.
+- **Stage 1 comes first.** Qualification (Stage 2) does not start while a K
+  row is open, because a run that never hits a known bug does not show it is
+  fixed.
+- **New bugs block.** A bug found in Stage 2 or 3 becomes a new K row and
+  blocks again.
+- **Performance comes last.** No performance work is done before Stage 3,
+  except where a correctness gate needs it (bounded progress, D4).
+  Performance changes never relax correctness or durability checks.
+
 ## Scope and meaning of done
 
 | Cluster | Phase-1 stripe | What extra nodes must do | Explicit limitation |
@@ -30,7 +50,51 @@ the existing scope. Controlled missing-fragment decode tests below establish
 2+1 reconstruction only; they do not establish whole-system D36 preservation,
 metadata quorum availability, or automatic repair. Keep those later gates open.
 
-## A. Freeze a reproducible candidate and support matrix
+## K. Stage 1: known defects in the alpha scope
+
+The register is built from the [work queue](work-queue.md) and this session's
+findings, as of October 22. Status text there may be older than devel. Each
+row is checked again on current devel before work starts.
+- **FIX:** an open bug. Fix it, add a regression test, and pass the item's
+  gate.
+- **VERIFY:** the fix is in devel, but its gate is not recorded on the alpha
+  profile (RDMA, direct I/O, `.efs` and packing on, distinct hosts). Run the
+  gate on the candidate.
+- **DECIDE:** a scope question for the user. Either fix it, or record it as
+  an alpha limitation (F4).
+- **TEST:** a harness or reporting defect. Fix it before relying on that
+  test's verdict.
+
+| ID | Item | Kind | Disposition |
+| --- | --- | --- | --- |
+| K1 | **W145** remaining parts: acknowledged-write check after the deposed-leader fix, snapshot sent to a near follower, restart election storms, `stop.sh` with a blocked handler | Raft safety / liveness | FIX |
+| K2 | **W140** proposal RPC accepts metadata tags this build cannot apply (halts a group) | safety | FIX |
+| K3 | **W132** `NODE_LEFT` from any connection drops a node | safety | FIX |
+| K4 | **W133** client protocol declaration gate is fail-open | correctness | FIX |
+| K5 | **W134** unregistered session identities bypass fencing (with **W72** production session lifecycle) | correctness | FIX |
+| K6 | **W127–W131** fail-closed apply (in devel since `08cc16af4`; private RDMA gate PASS) | correctness | VERIFY multi-host |
+| K7 | **W83** transaction decision records are never retired | lifecycle / growth | FIX |
+| K8 | **W148** modify-under-load returned wrong bytes, correct size, on a never-packed 3.6 MB file (suspected read race: same-size overwrite then truncate-up) | data correctness | FIX ([review](review-pack-validate-once-20261022.md)) |
+| K9 | **W87** buffered concurrent append loses records under load | data correctness | FIX |
+| K10 | **W121** a read right after a successful fsync returns the previous file's payload (FUSE kernel fork/page-pinning; kernel fix deferred) | data correctness | DECIDE |
+| K11 | **W55** span committed but fragment PUTs never landed (NFS/macOS triggers not isolated) | data correctness | VERIFY Linux FUSE; DECIDE NFS/macOS |
+| K12 | **W58** `O_EXCL` create answered EEXIST (historical trigger not isolated) | correctness | VERIFY |
+| K13 | **W88** a folded span retry resurrects after history eviction; **W86** default PUT/flush ticket integration staged | publication correctness | FIX or DECIDE |
+| K14 | **W77** atomic multi-chunk publication and observation | integration gap | FIX or DECIDE |
+| K15 | **W64** append reservation replay across leader changes (partial); **W52** REPORT after many `O_APPEND` writes exceeds 30 s | correctness | FIX |
+| K16 | **W75** identity-bound fragment integrity format (fresh format, no compatibility) | integrity | FIX |
+| K17 | **0a/D27** STALE replay convergence: orcd-mini C1 rerun | correctness | VERIFY |
+| K18 | **W54**, **W38** fold/GC data loss: multi-host hardware RDMA gate | correctness | VERIFY |
+| K19 | **W61**, **W62**, **W63** GC: final drain and lost-ledger reconciliation | reclaim correctness | VERIFY |
+| K20 | **W42** capacity reporting on any node count; protection debt (with B5) | correctness | VERIFY |
+| K21 | **W119** concurrent RDMA failures and blocked clean stop (recorded Oct 15, before many fixes); **W65** graceful-shutdown wait | correctness / liveness | VERIFY first, then FIX |
+| K22 | **W23** universal follower memory/lag bound | resource bound | FIX |
+| K23 | **W71** hardware power-loss gate; **W74** automatic repair; **W123** crash recovery | durability scope | DECIDE (deferred by current scope) |
+| K24 | **W149** `EFS_KV_COMPACT_DIE` exits the daemon in normal builds | build hygiene / safety | FIX |
+| K25 | **W135**–**W139**, **W141**, **W120**, **W150** test harness and reporting defects | test correctness | TEST |
+| K26 | LeakSanitizer aborts on node9900/node9901; F1 needs a working leak check | environment | FIX host or use another leak gate |
+
+## A. Stage 2: freeze a reproducible candidate and support matrix
 
 - [ ] **A1** Choose one devel candidate commit and identify all daemon/client
   binaries and test-harness revisions. Test fixes belong in the candidate;
@@ -138,6 +202,27 @@ facts for A6, not decisions.
   ledger row should read that way, so that three NOTRUN cells don't suggest the
   audit runs three times.
 
+## S. Stage 2: functional scope
+
+- [ ] **S1 — Surface list.** Mark every user-facing surface in or out, with
+  a reason. Candidates in scope: Linux FUSE mount over RDMA with direct I/O
+  (and TCP if supported), `.efs` commands (**W91/W92** named gates),
+  background packing (**W125**), logical truncate (**D25**), the `efs-mgmt`
+  operator commands, and the start/stop/deploy scripts. Candidates out of
+  scope: containers, expiry (**W90**; resolve under A7), NFS re-export, macOS
+  clients, 2+2, automatic repair and crash recovery (K23).
+- [ ] **S2 — POSIX subset.** Publish the supported operations and every known
+  gap (for example, mmap is skipped in the extras suite). Each gap is either
+  fixed or justified as a limitation (F4). No gap counts as PASS.
+- [ ] **S3 — Operator workflows.** Format, start, stop, status, `df`,
+  quotas, `raft-status`, `raft-resync`, packing control, and failure
+  messages. Each one is documented and covered by a test.
+- [ ] **S4 — Effective settings.** Decide whether **W122**, the listing of
+  effective settings, is in alpha. It supports A8 and A10.
+- [ ] **S5 — User documentation.** Install, configuration, supported
+  topologies, the reduced configuration matrix (A11) and the published
+  limitations.
+
 ## B. Verify geometry, placement and usable capacity
 
 - [ ] **B1** Check ordinary chunks and packed segments use exactly D1/D2/P, each
@@ -207,9 +292,34 @@ facts for A6, not decisions.
 - [ ] **E4** Run small-file scale and large-file fixtures with declared counts,
   quotas and concurrency; report actual completed versus target counts. Include
   cold reads, concurrent query load and delete/reclaim checks.
-- [ ] **E5** Record throughput, operation p50/p95/p99, resource use and per-node
-  activity. Acceptance is correctness and bounded operation under the declared
-  load, not a promise of linear scaling or an invented performance threshold.
+- [ ] **E5** Moved to Stage 3 as **P1**.
+
+## P. Stage 3: performance
+
+Starts only after Stage 2 passes on the frozen candidate. Any performance
+change produces a new candidate, and the affected Stage 2 gates are rerun on
+it.
+
+- [ ] **P1** On each topology, record throughput, operation p50/p95/p99,
+  resource use and per-node activity for the declared workloads. This is the
+  baseline (formerly E5).
+- [ ] **P2** Agree targets with the user before optimizing. Each target names
+  its workload, topology and metric. No invented thresholds, and no promise of
+  linear scaling.
+- [ ] **P3** Work the known performance items against those targets, each as
+  an A/B on private builds, so no runtime switch is added:
+  - **W66**: metadata-group latency and leader placement;
+  - **W124**: fast delete;
+  - **W126** step 4;
+  - findings 3–5 of the [ORCD tiny-file profile](orcd-tiny-profile-20261022.md):
+    `.efs` indexing and LSM maintenance;
+  - the packing-CPU A/B on orcd-mini;
+  - the **W44**/**D26** retained-table GC latency regression;
+  - **W53**;
+  - the **P3/P4** benches.
+- [ ] **P4** Record before/after results with the exact build and commands.
+  Keep a change only if it meets its target and the reruns of the affected
+  Stage 2 gates pass.
 
 ## F. Release evidence and alpha 1.0 exit
 
@@ -232,6 +342,8 @@ facts for A6, not decisions.
 
 | Evidence | 3 physical nodes | 4 physical nodes | >4 physical nodes (record N) |
 | --- | --- | --- | --- |
+| Known-defect register K (Stage 1; once per candidate) | OPEN | (same) | (same) |
+| Functional scope S decided (once per candidate) | OPEN | (same) | (same) |
 | Candidate and profile | NOTRUN | NOTRUN | NOTRUN |
 | Flag audit and A/B removal (A6–A10, A12; once per candidate) | NOTRUN | (same) | (same) |
 | Reduced-matrix qualification (A11) | NOTRUN | NOTRUN | NOTRUN |
@@ -240,7 +352,8 @@ facts for A6, not decisions.
 | Packing/shared-fragment GC | NOTRUN | NOTRUN | NOTRUN |
 | Enabled `.efs` under load | NOTRUN | NOTRUN | NOTRUN |
 | Full payloads + orderly restart | NOTRUN | NOTRUN | NOTRUN |
-| Scale/progress/resource evidence | NOTRUN | NOTRUN | NOTRUN |
+| Scale/progress evidence (E4, D4) | NOTRUN | NOTRUN | NOTRUN |
+| Performance baseline and targets (P1–P2, Stage 3) | NOTRUN | NOTRUN | NOTRUN |
 | Alpha topology acceptance | OPEN | OPEN | OPEN |
 
 These are candidate-specific release cells, not an assertion that no earlier
