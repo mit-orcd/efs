@@ -67,6 +67,9 @@ alternatives reduces both product complexity and the supported test matrix.
   fields, runtime management settings and compile-time feature modes. For each,
   record its reader/call sites, default, alternative behavior, dependencies,
   deployment/portal exposure and tests. Include undocumented and dead settings.
+  Find readers that take the name as an argument (`env_u64("EFS_…")` and the
+  `getenv(name)` helpers in `bufpool.c`, `write.c`, `packer.c`, `raft_host.c`,
+  `sim_disk.c`); grepping `getenv("` alone undercounts.
 - [ ] **A7 — Decide and remove alternatives.** For behavior-changing A/B switches,
   select and qualify one supported implementation or automatic policy. Remove the
   losing code path, parser/environment reader and obsolete tests/docs together.
@@ -101,6 +104,39 @@ alternatives reduces both product complexity and the supported test matrix.
   dimension under A8. No unexplained experimental, legacy or correctness-policy
   toggle remains in the alpha product. Record failures and gate results for the
   integrated candidate; flag removal alone is not correctness evidence.
+
+**Review of A6–A12 (October 22, at devel `a569de971`).** These are starting
+facts for A6, not decisions.
+
+- **Size.** `src/` and `include/` name 118 distinct `EFS_*` environment
+  variables: 90 through literal `getenv("…")`, the rest through name-taking
+  helpers (16 `EFS_PACK_*` tunables alone in `packer.c`). Efsd/efs-fuse CLI
+  options and the compile-time modes `EFS_FAULTS` and `EFS_BENCH_BUILD` come on
+  top. A6 should publish this count as the "before" figure A11 asks for.
+- **Kinds.** The 2^n argument fits true A/B selectors. Examples to classify
+  first: `EFS_METADATA_BALANCE`, `EFS_QUERY_BACKEND`, `EFS_RDMA_FIRST`,
+  `EFS_READ_VERIFY`, `EFS_READ_PREFETCH`, `EFS_FUSE_SPLICE_READ`,
+  `EFS_KV_BLOOM`, `EFS_RAFT_BATCH_OVERLAP`, `EFS_RAFT_BATCH_NOOP`. Numeric
+  tunables (most `EFS_PACK_*`, `EFS_QUERY_*_MIB`, `EFS_PUT_SYNC_*`) are not
+  binary; A8/A11 should qualify a built-in value or a bounded automatic range
+  for each, not count them as 2^n. Trace/debug/profiling switches (`*_DBG`,
+  `*_TRACE`, `*_PROF`, `*_OBS`) are observability under A8 and should be
+  confirmed not to change behavior.
+- **Feature enablement is also A/B.** `EFS_COMMANDS`/`EFS_COMMANDS_SERVER` and
+  `EFS_EXPIRY` select whether whole features exist. A2 fixes the alpha profile
+  (`.efs` on, containers and expiry off). A7 must decide whether the disabled
+  features leave the alpha product or stay as a justified dimension under A8;
+  shipping them dark behind a variable is the pattern this gate rejects.
+- **Fault injection leaks into normal builds.** `EFS_KV_COMPACT_DIE`
+  (`src/kv/kv_compact.c:270`) is read in every build and makes the daemon
+  `_exit(99)` mid-compaction. `test_kv_lsm` relies on it in the ordinary test
+  build. Move it and its test under `EFS_FAULTS` (A8). Most other fault sites are
+  gated, but five use `#ifdef EFS_FAULTS` and the rest `#if EFS_FAULTS`. Use one
+  form, so that `-DEFS_FAULTS=0` cannot turn the `#ifdef` sites on.
+- **Ledger.** A6–A10 and A12 are code and documentation work, done once per
+  candidate, not per topology. Only A11 qualification is per topology. The
+  ledger row should read that way, so that three NOTRUN cells don't suggest the
+  audit runs three times.
 
 ## B. Verify geometry, placement and usable capacity
 
@@ -197,7 +233,8 @@ alternatives reduces both product complexity and the supported test matrix.
 | Evidence | 3 physical nodes | 4 physical nodes | >4 physical nodes (record N) |
 | --- | --- | --- | --- |
 | Candidate and profile | NOTRUN | NOTRUN | NOTRUN |
-| Single supported policy / flag audit | NOTRUN | NOTRUN | NOTRUN |
+| Flag audit and A/B removal (A6–A10, A12; once per candidate) | NOTRUN | (same) | (same) |
+| Reduced-matrix qualification (A11) | NOTRUN | NOTRUN | NOTRUN |
 | Placement/capacity and decode | NOTRUN | NOTRUN | NOTRUN |
 | POSIX and concurrent I/O | NOTRUN | NOTRUN | NOTRUN |
 | Packing/shared-fragment GC | NOTRUN | NOTRUN | NOTRUN |
