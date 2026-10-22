@@ -1,8 +1,9 @@
 # orcd-mini deploy of devel `08cc16af4` (dead-code cleanup merge), RDMA + `.efs` suites — 2026-10-22
 
-**Deployed; daemons and mounted suites PASS. Two private gates FAIL from
-test-harness bugs (NOTRUN for the product paths they cover), both reported
-to the cleanup session for a fix on devel.** User request: deploy devel on
+**Deployed; all suites and gates PASS.** Two private gates first failed
+from test-harness bugs; the cleanup session fixed both in `e4bd1b6d7`
+(branch `claude/orcd-test-suites`, not yet on devel) and both gates pass
+when rerun with those files. User request: deploy devel on
 orcd-mini, run all test suites over RDMA with `.efs` commands only, and
 report bugs to the session "Dead-code cleanup from the 2026-10-21 audit".
 
@@ -37,10 +38,10 @@ report bugs to the session "Dead-code cleanup from the 2026-10-21 audit".
 | D25 step 2/3/4 gates + repro (`EFS_TRANSPORT=rdma`) | PASS: 17 / 39 / 1,454 / 2 checks, 0 FAIL |
 | `scripts/w127_incompatible_entry.sh` (`EFS_TRANSPORT=rdma`) | 19/19 PASS |
 | GC + POSIX (`gc_reclamation.py --transport rdma --posix`) | 71 PASS |
-| GC `.efs` commands (`gc_reclamation.py --transport rdma --efs-commands-only`) | **FAIL**, harness bug 2 |
-| Fault suite (`run_faults.sh --integrate --transport rdma --rdma-device mlx5_0`) | **FAIL** 6 PASS / 5 FAIL, harness bug 1 (`ef7b1735d`: 24/24) |
+| GC `.efs` commands (`gc_reclamation.py --transport rdma --efs-commands-only`) | **FAIL**, harness bug 2; rerun with `e4bd1b6d7` test files: PASS |
+| Fault suite (`run_faults.sh --integrate --transport rdma --rdma-device mlx5_0`) | **FAIL** 6 PASS / 5 FAIL, harness bug 1; rerun with `e4bd1b6d7` test files: 24/24 PASS |
 
-## Bugs (reported, not yet fixed)
+## Bugs (fixed in `e4bd1b6d7`, harness only)
 
 1. **Fault harness still passes the removed export label.**
    `74c283293` removed the efs-fuse export argument, but
@@ -65,6 +66,8 @@ stay outside Git on node9901:
 
 ## Remaining gates
 
-- Rerun the fault integration suite and the `.efs` commands gate once both
-  harness fixes land.
+- The reruns used the `08cc16af4` binaries with only
+  `tests/faults/harness.py` and `tests/live/query_timing.py` taken from
+  `e4bd1b6d7` (outputs in `/data1/efs/testsuite/private-e4bd/`,
+  `/tmp/efs-fault-e4bd/`). `e4bd1b6d7` must still be merged into devel.
 - LeakSanitizer remains broken on node9901; Valgrind not run.
