@@ -2399,6 +2399,129 @@ static void test_snapshot_commit_stops_at_snapshot(void)
     efs_raft_mem_free(st);
 }
 
+/* K1/W145 (orcd-mini, 2026-10-22): the new group-2 leader sent a 4.7 GB
+ * snapshot to n2, 12 entries behind. Right after an election no window is
+ * outstanding, so a commit probe carries prev_index 0 and its reply match
+ * 0. The success path set next_index = match + 1 = 1, below the log floor,
+ * and the next send was an InstallSnapshot. A success must never lower
+ * next_index; the near follower gets AppendEntries. */
+static void test_probe_ack_keeps_next_index(void)
+{
+    struct net n;
+    struct efs_raft_store *st;
+    struct app app;
+    struct efs_raft_cfg cfg;
+    struct efs_raft_msg m;
+    struct efs_raft_peer_progress pp;
+    uint64_t term = 0;
+    int t;
+
+    memset(&n, 0, sizeof(n));
+    memset(&app, 0, sizeof(app));
+    memset(&cfg, 0, sizeof(cfg));
+    n.n = 3;
+    st = efs_raft_mem_create();
+    for (uint64_t i = 1; i <= 10; i++)
+        CHECK(st && st->append(st, i, 1, (const uint8_t *)"A", 1) == EFS_OK, "seed log");
+    CHECK(st->save_hard(st, 1, -1) == EFS_OK, "hard");
+    CHECK(st->save_snap(st, 5, 1) == EFS_OK, "snapshot at 5: log floor 6");
+    cfg.n = 3; cfg.id = 0; cfg.voters = 0x7; cfg.store = st; cfg.store_ctx = st;
+    cfg.send = send_now; cfg.net = &n; cfg.apply = apply_cmd; cfg.app = &app;
+    cfg.snap_open = snap_open; cfg.snap_read = snap_read; cfg.snap_close = snap_close;
+    cfg.snap_chunk = snap_chunk; cfg.election_ticks = 2; cfg.heartbeat_ticks = 1;
+    cfg.boot_id = 1;
+    n.drop[1] = n.drop[2] = 1;
+    n.r[0] = test_raft_new(&cfg);
+    CHECK(n.r[0] != NULL, "leader-to-be");
+    if (!n.r[0]) { efs_raft_mem_free(st); return; }
+    for (t = 0; t < 10 && efs_raft_role(n.r[0]) != EFS_RAFT_CANDIDATE; t++)
+        (void)efs_raft_tick(n.r[0]);
+    CHECK(efs_raft_role(n.r[0]) == EFS_RAFT_CANDIDATE, "campaigns");
+    CHECK(st->load_hard(st, &term, &(int32_t){0}) == EFS_OK && term == 2, "term 2");
+    memset(&m, 0, sizeof(m));
+    m.type = EFS_RAFT_MSG_VOTE_REP; m.from = 1; m.to = 0; m.term = term;
+    m.vote_granted = 1; m.boot_id = 1;
+    CHECK(efs_raft_recv(n.r[0], &m) == EFS_OK &&
+          efs_raft_role(n.r[0]) == EFS_RAFT_LEADER, "elected");
+    CHECK(efs_raft_peer_progress(n.r[0], 1, &pp) == EFS_OK && pp.next_index == 11,
+          "next_index after election is the old tail + 1");
+    /* Reply to a commit/read probe sent with prev_index 0. */
+    memset(&m, 0, sizeof(m));
+    m.type = EFS_RAFT_MSG_AE_REP; m.from = 1; m.to = 0; m.term = term; m.boot_id = 1;
+    m.success = 1; m.vote_granted = 1; m.match_index = 0;
+    n.snap_chunks = 0;
+    CHECK(efs_raft_recv(n.r[0], &m) == EFS_OK, "probe ack accepted");
+    CHECK(efs_raft_peer_progress(n.r[0], 1, &pp) == EFS_OK && pp.next_index == 11,
+          "a match-0 probe ack does not drop next_index below the log floor");
+    for (t = 0; t < 4; t++)
+        (void)efs_raft_tick(n.r[0]);
+    CHECK(n.snap_chunks == 0, "near follower gets AppendEntries, not InstallSnapshot");
+    /* A rejection with a hint above the floor still walks back by hint. */
+    memset(&m, 0, sizeof(m));
+    m.type = EFS_RAFT_MSG_AE_REP; m.from = 1; m.to = 0; m.term = term; m.boot_id = 1;
+    m.success = 0; m.match_index = 7;
+    CHECK(efs_raft_recv(n.r[0], &m) == EFS_OK &&
+          efs_raft_peer_progress(n.r[0], 1, &pp) == EFS_OK && pp.next_index == 8 &&
+          n.snap_chunks == 0, "reject hint 7 sets next_index 8, no snapshot");
+    efs_raft_free(n.r[0]);
+    efs_raft_mem_free(st);
+}
+
+/* K1/W145 term hint: a deposed leader's unreplicated tail (term 1 entries
+ * 4..8 above commit 3) conflicts with the new leader. The rejection hints
+ * below the whole uncommitted run of the conflicting term, so the tail walks
+ * back in one round trip instead of one index per round trip. The walk
+ * never goes below commit. */
+static void test_conflict_hint_skips_term_run(void)
+{
+    struct net n = { .n = 3, .cap_rep = 1 };
+    struct efs_raft_store *st;
+    struct app app;
+    struct efs_raft_cfg cfg;
+    struct efs_raft_msg m;
+    uint64_t li = 0, lt = 0;
+
+    memset(&app, 0, sizeof(app));
+    memset(&cfg, 0, sizeof(cfg));
+    st = efs_raft_mem_create();
+    for (uint64_t i = 1; i <= 8; i++)
+        CHECK(st && st->append(st, i, 1, (const uint8_t *)"A", 1) == EFS_OK, "seed log");
+    CHECK(st->save_hard(st, 1, -1) == EFS_OK, "hard");
+    cfg.n = 3; cfg.id = 1; cfg.voters = 0x7; cfg.store = st; cfg.store_ctx = st;
+    cfg.send = send_now; cfg.net = &n; cfg.apply = apply_cmd; cfg.app = &app;
+    cfg.election_ticks = 10; cfg.heartbeat_ticks = 2;
+    n.drop[0] = 1;
+    n.r[1] = test_raft_new(&cfg);
+    CHECK(n.r[1] != NULL, "follower");
+    if (!n.r[1]) { efs_raft_mem_free(st); return; }
+    efs_raft_allow_campaign(n.r[1], 0);
+    memset(&m, 0, sizeof(m));
+    m.type = EFS_RAFT_MSG_AE_REQ; m.from = 0; m.to = 1; m.term = 1;
+    m.prev_index = 3; m.prev_term = 1; m.leader_commit = 3;
+    CHECK(efs_raft_recv(n.r[1], &m) == EFS_OK && efs_raft_commit(n.r[1]) == 3, "commit 3");
+    /* New leader (term 2): its entry 8 is term 2. */
+    memset(&m, 0, sizeof(m));
+    m.type = EFS_RAFT_MSG_AE_REQ; m.from = 0; m.to = 1; m.term = 2;
+    m.prev_index = 8; m.prev_term = 2; m.leader_commit = 3;
+    n.cap_n = 0;
+    CHECK(efs_raft_recv(n.r[1], &m) == EFS_OK && n.cap_n == 1 && !n.cap_ok,
+          "conflict rejected");
+    CHECK(n.cap_match == 3, "hint skips the conflicting term run down to commit");
+    CHECK(st->last(st, &li, &lt) == EFS_OK && li == 7, "only prev and after truncated");
+    /* The leader's next AE from the hint replaces the tail in one batch. */
+    memset(&m, 0, sizeof(m));
+    m.type = EFS_RAFT_MSG_AE_REQ; m.from = 0; m.to = 1; m.term = 2;
+    m.prev_index = 3; m.prev_term = 1; m.leader_commit = 5; m.nentries = 2;
+    m.entries[0].term = 1; m.entries[0].cmd = (const uint8_t *)"A"; m.entries[0].clen = 1;
+    m.entries[1].term = 2; m.entries[1].cmd = (const uint8_t *)"N"; m.entries[1].clen = 1;
+    n.cap_n = 0;
+    CHECK(efs_raft_recv(n.r[1], &m) == EFS_OK && n.cap_ok && n.cap_match == 5 &&
+          efs_raft_commit(n.r[1]) == 5 && app.last == 'N', "tail replaced and committed");
+    CHECK(st->last(st, &li, &lt) == EFS_OK && li == 5 && lt == 2, "stale tail gone");
+    efs_raft_free(n.r[1]);
+    efs_raft_mem_free(st);
+}
+
 /* W145 repair: a follower whose COMMITTED entry conflicts with the leader
  * (orcd-mini n2 before the snap_installed fix) refuses silently. After an
  * operator resync request it asks for the leader's snapshot instead
@@ -2956,6 +3079,8 @@ int main(void)
         test_ae_reply_match_stops_at_prev();
         test_snapshot_commit_stops_at_snapshot();
         test_resync_replaces_diverged_follower();
+        test_probe_ack_keeps_next_index();
+        test_conflict_hint_skips_term_run();
         test_noop_over_stale_tail();
         test_ae_batch_catchup();
         test_ae_catchup_flow_control();

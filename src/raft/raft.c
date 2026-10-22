@@ -1485,6 +1485,7 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
         return rc;
     }
     if ((in->prev_index > 0 && rc != EFS_OK) || pt != in->prev_term) {
+        int conflict_rc = rc;
         if (getenv("EFS_RAFT_AE_DBG"))
             fprintf(stderr, "AE_REQ REJECT prev_term: pt=%llu in_prev_term=%llu rc=%d prev_idx=%llu\n",
                     (unsigned long long)pt, (unsigned long long)in->prev_term, rc,
@@ -1499,7 +1500,29 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
         m.success = 0;
         last_log(r, &last_i, &last_t);
         m.match_index = last_i;
-        ae_reject_note(r, in, last_i, rc == EFS_ERR_NOT_FOUND ? "prev-missing" : "prev-term");
+        if (conflict_rc == EFS_OK && in->prev_index > r->snap_idx) {
+            /* K1/W145 term hint: entries of the conflicting term pt below
+             * prev_index are a deposed leader's tail as likely as not.
+             * Hint below the whole uncommitted run of pt, so the leader
+             * walks the tail back in one round trip instead of one index
+             * per round trip. Entries at or below commit match the leader
+             * (Log Matching), so the walk stops there. A hint below a
+             * matching entry is safe: the leader resends it and the
+             * duplicate is skipped. Only next_index uses the hint. */
+            uint64_t h = last_i < in->prev_index - 1 ? last_i : in->prev_index - 1;
+            uint64_t stop = r->commit_index > r->snap_idx ? r->commit_index : r->snap_idx;
+            uint32_t steps = 0;
+
+            while (h > stop && steps++ < 65536u) {
+                uint64_t ht = 0;
+                if (log_term(r, h, &ht) != EFS_OK || ht != pt)
+                    break;
+                h--;
+            }
+            m.match_index = h;
+        }
+        ae_reject_note(r, in, m.match_index,
+                       conflict_rc == EFS_ERR_NOT_FOUND ? "prev-missing" : "prev-term");
         return send_msg(r, &m);
     }
     if (in->nentries) {
@@ -1621,7 +1644,15 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
         r->peer_ack_tick[in->from] = r->ticks;
         if (in->match_index > r->match_index[in->from])
             r->match_index[in->from] = in->match_index;
-        r->next_index[in->from] = r->match_index[in->from] + 1;
+        /* K1/W145: a success proves the log through match_index and says
+         * nothing past it. A commit or read probe right after an election
+         * goes out with prev_index 0 (no window sent yet), so its reply
+         * carries match 0. Setting next_index = match + 1 then dropped it
+         * to 1, below the log floor, and the next send was an
+         * InstallSnapshot: orcd-mini n1 shipped a 4.7 GB image to n2, a
+         * follower 12 entries behind. Only a rejection lowers next_index. */
+        if (r->next_index[in->from] < r->match_index[in->from] + 1)
+            r->next_index[in->from] = r->match_index[in->from] + 1;
         if (r->read_in_flight == 1 && in->last_log_index == r->read_round &&
             is_voter(r, in->from))
             r->read_acks |= 1u << in->from;
