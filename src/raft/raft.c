@@ -1344,6 +1344,25 @@ static int low_capacity(const struct efs_raft *r)
            r->max_unapplied / 4u * 3u;
 }
 
+/* K22/W23: an up-to-date log is not enough to lead; a replica that
+ * cannot apply would refuse every proposal. Held before pre-vote and
+ * before the election itself (a transfer's TimeoutNow included). */
+static int capacity_hold(struct efs_raft *r)
+{
+    if (solo(r) || !low_capacity(r))
+        return 0;
+    r->campaigns_held++;
+    if (r->campaigns_held == 1 || r->ticks - r->capacity_log_tick >= REJECT_LOG_TICKS) {
+        r->capacity_log_tick = r->ticks;
+        fprintf(stderr, "raft: group=%u election held: low capacity "
+                "(pressure=%d applied=%llu held=%llu)\n", r->group,
+                r->pressure, (unsigned long long)r->last_applied,
+                (unsigned long long)r->campaigns_held);
+    }
+    reset_election(r);
+    return 1;
+}
+
 static int start_election(struct efs_raft *r)
 {
     struct efs_raft_msg m;
@@ -1354,20 +1373,8 @@ static int start_election(struct efs_raft *r)
         reset_election(r);
         return EFS_OK;
     }
-    if (!solo(r) && low_capacity(r)) {
-        /* K22/W23: an up-to-date log is not enough to lead; a replica
-         * that cannot apply would refuse every proposal. */
-        r->campaigns_held++;
-        if (r->campaigns_held == 1 || r->ticks - r->capacity_log_tick >= REJECT_LOG_TICKS) {
-            r->capacity_log_tick = r->ticks;
-            fprintf(stderr, "raft: group=%u election held: low capacity "
-                    "(pressure=%d applied=%llu held=%llu)\n", r->group,
-                    r->pressure, (unsigned long long)r->last_applied,
-                    (unsigned long long)r->campaigns_held);
-        }
-        reset_election(r);
+    if (capacity_hold(r))
         return EFS_OK;
-    }
     r->current_term++;
     r->voted_for = (int32_t)r->id;
     r->prevote_term = 0;
@@ -1458,6 +1465,8 @@ static int start_prevote(struct efs_raft *r)
         reset_election(r);
         return EFS_OK;
     }
+    if (capacity_hold(r))
+        return EFS_OK;
     read_proof_forget(r);
     r->role = EFS_RAFT_FOLLOWER;
     r->leader = -1;
