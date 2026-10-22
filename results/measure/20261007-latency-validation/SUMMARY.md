@@ -1,5 +1,12 @@
 # Latency validation — nuc, Oct 7
 
+## Verdict
+
+**PASS** (measurement completed): forty accepted runs, zero errors, exact
+sample-count coverage (11,767,159 measured operations); current-vs-candidate
+comparison below. The candidate patch is retained for reproducibility and was
+not applied to the daemon.
+
 Measurement fix: `8f24defb`. The data benchmark now prepopulates bounded
 windows before timing, counts every operation in a mergeable histogram, reports
 p99 bounds and retains the exact observed integer-microsecond maximum. The
