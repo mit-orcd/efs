@@ -9,6 +9,9 @@ capacity and the D36 recovery contract are not yet proved.
 [Status queue](work-queue.md#1a-the-work-queue) ·
 [Architecture §7.1](../how-it-works/architecture.md#71-sharded-raft-and-linearizable-reads)
 
+See the [distributed cluster roadmap](distributed-cluster-roadmap-20261022.md)
+for the 3-, 4- and larger-node diagrams, data/metadata dependencies and acceptance stages.
+
 ## D36 protection obligation — Oct 9
 
 The user requires four-node maximum two-loss protection for authoritative

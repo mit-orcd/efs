@@ -1569,6 +1569,11 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[Distributed EFS cluster roadmap](../status/distributed-cluster-roadmap-20261022.md):
+3-node 2+1, 4+ node 2+2 target diagrams; current codec/two-group gaps, D36
+metadata protection, distributed background work and staged acceptance. Roadmap
+only; no implementation or protection gate closed.
+
 [ORCD tiny-file CPU profile analysis](../status/orcd-tiny-profile-20261022.md):
 `08cc16af4f77`, four 30-second captures; repeated whole-segment validation
 confirmed in packing, plus abandonment scans, `.efs` indexing and LSM maintenance.
