@@ -1319,7 +1319,7 @@ static void test_leadership_transfer(void)
         const uint32_t one[2] = {0x2, 0x2}, sparse[2] = {0x52, 0x50};
         CHECK(efs_raft_spread_voter(four,2,0)==0 && efs_raft_spread_voter(four,2,1)==2,
               "spread: four-node groups 1/2/3 and 2/3/4 lead on nodes 1 and 3");
-        CHECK(efs_raft_spread_voter(three,2,0)==0 && efs_raft_spread_voter(three,2,1)==1,
+        CHECK(efs_raft_spread_voter(three,2,0)==0 && efs_raft_spread_voter(three,2,1)==2,
               "spread: identical voters still get distinct leaders");
         CHECK(efs_raft_spread_voter(one,2,0)==1 && efs_raft_spread_voter(one,2,1)==1,
               "spread: a single shared voter falls back to the ordinary preference");
