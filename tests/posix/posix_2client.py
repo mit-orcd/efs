@@ -468,6 +468,61 @@ def peer_shared_pwrite():
     return [("a", a0), ("ab", (a, b)), ("a", a2)]
 
 
+_KEPT_FDS = {}
+
+
+@test
+def peer_partial_after_full_overwrite():
+    """W148/K8: A's partial write keeps B's newer full-chunk overwrite.
+
+    A writes and reads a whole chunk, so its slot is a published full image
+    (UNCOND, body dropped) and its read cache holds A's bytes under A's map.
+    B overwrites the chunk. A then writes 100 bytes through the descriptor it
+    kept open (--local; a remote run reopens). A's write path loads its base
+    from its unrefreshed local entry; inheriting UNCOND published A's stale
+    image over B's chunk without a CAS (the same path published zeros after
+    a truncate(0) rewrite). The chunk must be B's bytes plus A's 100.
+    """
+    cs = 128 * 1024
+
+    def a1(d):
+        p = os.path.join(d, "f")
+        fd = os.open(p, os.O_CREAT | os.O_RDWR | os.O_TRUNC, 0o644)
+        os.pwrite(fd, b"\xaa" * (2 * cs), 0)
+        os.fsync(fd)
+        eq(os.pread(fd, 2 * cs, 0), b"\xaa" * (2 * cs), "A reads its own write")
+        _KEPT_FDS[d] = fd
+
+    def b1(d):
+        fd = os.open(os.path.join(d, "f"), os.O_RDWR)
+        try:
+            os.pwrite(fd, b"\xbb" * cs, 0)
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
+    def a2(d):
+        fd = _KEPT_FDS.pop(d, None)
+        if fd is None:
+            fd = os.open(os.path.join(d, "f"), os.O_RDWR)
+        try:
+            os.pwrite(fd, b"\xcc" * 100, 1000)
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
+    def b2(d):
+        want = b"\xbb" * 1000 + b"\xcc" * 100 + b"\xbb" * (cs - 1100) + b"\xaa" * cs
+        got = rd(os.path.join(d, "f"))
+        if got != want:
+            n = sum(1 for i in range(min(len(got), len(want))) if got[i] != want[i])
+            lost = sum(1 for i in range(min(len(got), cs)) if got[i] == 0xaa)
+            raise Fail("chunk 0: %d bytes differ (%d still A's old bytes), size %d/%d"
+                       % (n, lost, len(got), len(want)))
+
+    return [("a", a1), ("b", b1), ("a", a2), ("b", b2)]
+
+
 @test
 def peer_unlink_gone():
     """A creates then unlinks; B must not see a leftover name.
