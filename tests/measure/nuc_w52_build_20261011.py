@@ -65,7 +65,7 @@ try:
         (out/(name+'-exit.txt')).write_text(str(rc)+'\n');assert rc==0,(name,rc)
     images={n:dict(sha256=hashlib.sha256((src/n).read_bytes()).hexdigest(),
         version=subprocess.check_output([str(src/n),'--version'],text=True))
-        for n in ('efsd','efs-fuse','efs-mgmt','efs-query','efs-bench')}
+        for n in ('efsd','efs-fuse','efs-mgmt','efs-bench')}
     (out/'images.json').write_text(json.dumps(images,indent=2))
     (out/'source-sha256.json').write_text(json.dumps({str(p.relative_to(src)):hashlib.sha256(p.read_bytes()).hexdigest()
         for parent in ('src','include','tests') for p in (src/parent).rglob('*')

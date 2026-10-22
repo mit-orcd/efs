@@ -3417,6 +3417,15 @@ not diagnose the current reclamation incident.
 
 <a id="w81"></a>
 
+
+**October 21, 2026: binary removed.** `efs-query` and its help entry were
+deleted, as the [dead-code audit](../reviews/dead-code-review-20261021.md)
+recommended (P6, baseline R10). The server's `QUERY_STATS` handler still
+answers UNSUPPORTED and never returns totals. `tests/live/raft_read_freshness.py`
+and `tests/live/fragment_integrity.py` now check that refusal over the wire.
+`tests/test_query_unavailable.py`, which tested only the CLI against a fake
+server, was removed with the binary.
+
 ## W81 · Automatic directory spread responds to size, not pressure
 
 **Policy accepted Oct 8 (D35):** sustained directory-local serialization wait and queue pressure plus activity; retain size trigger, use hysteresis/cooldowns and bounded fair migration. Exclude global overload signals; select explicit configurable thresholds from AMD measurements before activation. [Contract](../status/accepted-namespace-scratch-20261008.md#d35--w81-sustained-contention-directory-spreading).
@@ -5549,3 +5558,362 @@ No live configuration editor or automatic rollout is included in this item.
 ## W125 — Small-file packing by default (background packer)
 
 **Capacity/performance; proposed 2026-10-18; revised to background packing after close.** Packing at close failed the early P1 measurement (close 5.4× slower, throughput −71 to −78%), so files are written exactly as today and an always-on background packer moves closed files below the threshold (initially 16 KiB) into shared segments of ordinary fragments (no data in metadata rows), lifetime-grouped by publication group, directory subtree and creation epoch, then retires their per-file fragments through W124's batched journal. Larger files keep per-file fragments. The same copy-forward engine compacts survivors of mostly-dead segments (bounded overhead ≤1/t). One write path and no switch that disables the packer: tag the last devel commit without it (`archive/unpacked-small-files-<date>`); comparisons build the tag. Existing small files are backfilled. Pieces ported from `archive/packing-containers-20261016` (D37) without the client writer, cohorts, `EFS_PACKED_WRITES` or the container engine. Motivated by ~800× raw amplification for sub-KiB files on orcd-mini. [Canonical proposal and gates](small-file-packing-default.md) · [implementation plan](small-file-packing-plan.md).
+
+<a id="w126"></a>
+## W126 — KV readers convoy behind exclusive LSM phases on a busy leader
+
+**Performance; opened 2026-10-21; step 1 implemented, deployment and live A/B NOTRUN.**
+Found under the user's 32M-file `tiny_files.py` run on orcd-mini `47ba6b590`
+([profile](../status/orcd-mini-profile-47ba6b590-20261021.md)). From ~1.0 to
+~2.6 M files, creates fell from 2,564 to 1,130 files/s. Over the same span,
+leader n1's LSM lock waits rose from 3.3% to 16–18% of its context switches.
+- About 93% of the read waits were LOOKUP → `efs_meta_apply_getattr` gets.
+- Apply's own blocked switches sat in `pthread_rwlock_wrlock`: 1,051 in a
+  3 s DWARF capture.
+- `apply-sleep` (>20 ms) occurred 1,400–2,600 times per ~90 s window, up to
+  400 ms.
+
+**Mechanism.** Every KV read (point get or scan) shares one `view_rw` per
+node. The lock is writer-preferring so Raft apply cannot starve. Each
+exclusive acquisition (`lsm_lock`) therefore waits for every in-flight
+reader, including long scans, and new readers queue behind it. Both Raft
+groups share the node's KV, so W66's leader distribution alone does not
+remove this ([`h->mu` plan](../status/raft-host-mu-plan-20261016.md)).
+
+**Step 1 (implemented).** Writer-owned flags and counters change only under
+`mu`, and readers only read them. A new `lsm_peek_lock` takes `mu` without
+`view_rw` for read-only peeks:
+- the failure-flag check before every batch's WAL append, which halves the
+  exclusive phases per applied batch;
+- REPORT's `efs_kv_lsm_l0_hot`;
+- `efs_kv_lsm_stats` and `seg_count`;
+- the query-refresh revision reads (`metadata_revisions`,
+  `transaction_revision`/`activity`, `cleanup_deferred`).
+
+Peeks keep `lsm_lock`'s fail-fast abort inside a read section.
+`tests/test_kv_lsm.c` `test_peek_beside_reader` parks a reader inside a scan
+callback and requires every peek to return. It FAILs on `47ba6b590` and
+PASSes with the change. On node9901, the patched tree passes `test_kv_lsm`,
+`test_kv_lsm_concurrent 4`, `test_kv`, `test_meta_apply`, `test_raft_store`,
+`test_query_disk`, `test_txn`, `test_kv_snapshot_tail`, `test_kv_reader_gate`
+and `test_query_catalog`.
+
+**Remaining steps (not redesigns; each needs its own A/B):**
+2. Hold-time metrics for the exclusive phase: WAL-order wait, memtable
+   batch, `kv_mtab_merge`, `kv_flush_locked`. Count readers held back per
+   phase.
+3. If flush dominates: flush a frozen immutable memtable outside the
+   exclusive phase. Readers would consult the frozen table until the L0
+   segment is published. `kv_flush_locked` writes the L0 file and MANIFEST
+   while holding `view_rw` exclusively.
+4. If long readers dominate: bound how long a scan holds the shared side.
+   Point gets already drop it around preads; `merge_scan` does not.
+
+**Gates.**
+- Deploy step 1 to orcd-mini only with the user's go-ahead: the 32M-file run
+  is live.
+- Re-profile under the same `tiny_files.py` shape at matching file counts.
+  Compare leader LSM lock-wait share, apply's `wrlock` switches,
+  `apply-sleep` counts and create rate.
+- Record steps 2–4 with their own evidence.
+
+`make test` on the patched tree remains NOTRUN.
+
+<a id="w127"></a>
+## W127 — Metadata apply accepts unknown command tags as applied
+
+**Correctness; opened 2026-10-21 from the [dead-code audit](../reviews/dead-code-review-20261021.md) M1; OPEN, fix NOTRUN.**
+`host_apply_dispatch` ends in `return EFS_OK;` (`src/server/raft_host.c:3507`).
+Only the reserved ranges 45–51 and 55–57 are refused (`:3410–3416`). Any other
+tag this build does not know is consumed: the KV cursor advances
+(`:3005–3010`), and `applied` moves past the entry on every replica, with no
+effect and no error. Evidence is a code reading at `0bdf55256`, confirmed by an
+independent review. It has not been triggered on a cluster.
+
+**Fix and gate:** this is the concrete defect behind [W66](../status/metadata-scaling.md#w66-acceptance-checklist-consolidated-oct-21)
+B1–B4.
+- Add a distinct fatal "unsupported encoding" outcome, decided before any
+  mutation.
+- On that outcome: abort the KV scope, leave the cursor and `applied`
+  unchanged, and withdraw readiness.
+- Test at the real apply boundary with a synthetic unknown tag: check the
+  verdict, the cursor, and the state after restart.
+- No old-binary or old-log matrix.
+
+<a id="w128"></a>
+## W128 — Metadata apply accepts unknown sub-tags and short frames as applied
+
+**Correctness; opened 2026-10-21 from the audit M2; OPEN, fix NOTRUN.**
+These decoders return `EFS_OK` without any effect (`raft_host.c`):
+- `apply_dir_cmd`: short frame (`:2226–2227`) and unknown kind (`:2239–2240`).
+- `apply_session_cmd`: short header (`:2381–2382`), per-kind short frames
+  (`:2387`, `:2393`, `:2404`, `:2430`, `:2454`, `:2474`, `:2482`, `:2511`)
+  and `default:` (`:2515–2516`).
+- `apply_txn_cmd`: `default:` (`:2834–2835`).
+
+Evidence: code reading at `0bdf55256`; not triggered on a cluster.
+
+**Fix and gate:** route these cases to the W127 outcome. W66 B1 names "every
+sub-tag". Validate every member of a batch before any side effect. Test with
+synthetic malformed frames for each decoder.
+
+<a id="w129"></a>
+## W129 — `host_apply` turns decoder errors into success and commits the cursor
+
+**Correctness; opened 2026-10-21 from the audit M3; OPEN, fix NOTRUN.**
+- For about 45 command tags (`raft_host.c:2941–2962`), `host_apply` forces
+  the result to `EFS_OK` whatever the apply returned. Only IO/NOMEM are
+  restored (`:2984–3000`).
+- So a decoder `EFS_ERR_PROTO` (for example a wrong-length CREATE) commits
+  the cursor and is skipped on every replica.
+- QUERY_POLICY (`:2966`), CREATE_REFUSAL/EXPIRY (`:2967–2970`) and nine
+  SESSION sub-tags (`:2975–2982`) do the same.
+- `tests/test_gc_verdict.py:75` asserts
+  `core_result(EFS_MD_CMD_APPEND_RES,EFS_ERR_PROTO,37)==EFS_OK`, so the test
+  suite currently protects this behaviour.
+
+**Not every PROTO is a decode failure.** SALT answers PROTO for an anchor
+mismatch (`:2933–2935`), and QUERY_POLICY treats PROTO as a logical CAS
+verdict (`:2963–2966`). Both are legitimate business refusals.
+
+**Fix and gate:**
+- Decoders return the W127 malformed/unsupported outcome. Business refusals,
+  PROTO included where it means a refusal, stay ring verdicts.
+- Removing PROTO from one allow-list is not the fix.
+- Replace the expression-level check in `test_gc_verdict.py` with tests at
+  the apply boundary: verdict, cursor and restart.
+
+<a id="w130"></a>
+## W130 — DIR apply swallows storage errors; replicas can diverge
+
+**Correctness; opened 2026-10-21 from the audit M4; OPEN, fix NOTRUN.**
+- `apply_dir_cmd` maps NOT_FOUND/INVAL/BUSY to OK, then logs every other rc
+  (IO and NOMEM included) and returns `EFS_OK` (`raft_host.c:2242–2249`).
+- DIR is also missing from the IO-retry list (`:2984–3000`).
+- A failed directory split or migrate step therefore advances the cursor on
+  that replica only. The size-triggered split is live
+  (`src/meta/dir_layout.c:23–37`).
+
+Evidence: code reading at `0bdf55256`; not triggered on a cluster.
+
+**Fix and gate:**
+- Return IO/NOMEM so the existing per-index retry applies.
+- Route malformed DIR entries to W127.
+- Test: inject a DIR storage failure on one replica, then show recovery and
+  equal state on all replicas.
+- If the spread-policy decision removes this path (audit X1), close W130
+  with that removal.
+
+<a id="w131"></a>
+## W131 — Missing KV engine counts as applied
+
+**Correctness; opened 2026-10-21 from the audit M5; OPEN, reachability unproven.**
+`host_apply` stamps the apply ring `EFS_OK` and returns OK when
+`!h || !h->kv || !cmd || clen==0` (`raft_host.c:2891–2896`). `clen==0` (a
+Raft no-op) is legitimate. A missing `h->kv` is not: the entry would be
+consumed without effect. No path that reaches it with the pump running is
+known yet, so confidence is Medium.
+
+**Fix and gate:** separate the no-op case from the missing-engine case, and
+make a missing engine fatal. A unit test of `host_apply` with no KV engine
+must leave the cursor unchanged.
+
+<a id="w132"></a>
+## W132 — `NODE_LEFT` lets any connection drop a node from membership
+
+**Correctness / safety; opened 2026-10-21 from the audit P3; OPEN, fix NOTRUN.**
+- `src/server/handler.c:902–911` calls `server_remove_node_from_cluster`
+  (`src/server/cluster.c:402`) for any connection that sends
+  `EFS_MSG_NODE_LEFT`. It needs no declaration and no peer identity.
+- Nothing in the tree sends this message (`git grep -w EFS_MSG_NODE_LEFT`).
+- Evidence is a code reading, confirmed by review. It was not exercised
+  against a server.
+
+**Fix and gate:**
+- Delete the handler and refuse the message ID explicitly. Membership
+  changes go through Raft.
+- Test: a synthetic `NODE_LEFT` gets a refusal and leaves membership
+  unchanged.
+- This is a narrow fix. It does not authenticate other requests (W133).
+
+<a id="w133"></a>
+## W133 — Client protocol declaration gate is fail-open
+
+**Correctness; opened 2026-10-21 from the audit P1; OPEN, fix NOTRUN.**
+- Only `INODE_GETCHUNKS`, `GET_SEGMENT` and `PUT_SEGMENT` require
+  `CLIENT_HELLO` (`handler.c:186–190`).
+- Every other request (`PUT_CHUNK`, namespace mutations, REPORT, …) is served
+  on an undeclared connection.
+- The version check is `>= EFS_PROTOCOL_MIN_VERSION` (`handler.c:196`,
+  `src/common/protocol.c:697`), so newer versions are accepted too.
+- `scripts/w125_p3_compat.sh` case 2 expects an old client's writes to keep
+  working, which contradicts the no-backward-compatibility rule.
+
+**Fix and gate:**
+- Require one exact supported declaration, defined as a connection-state and
+  message matrix: client, peer (HELLO) and management connections have
+  different valid operations, and the declaration messages themselves must be
+  accepted.
+- Cover TCP and RDMA, reconnects and forwarding connections.
+- Test with synthetic unsupported and missing declarations.
+- Turn `w125_p3_compat.sh` into a refusal test or delete it.
+- A declaration is not authentication, and this item does not claim it.
+
+<a id="w134"></a>
+## W134 — Unregistered session identities bypass session fencing
+
+**Correctness (fail-open); opened 2026-10-21 from the audit S1; OPEN, sequenced with W72.**
+- `efs_session_accept_legacy` (`src/meta/session.c:443–453`) returns OK
+  when the shard has no local session row.
+- `efs_session_prepare_namespace` does the same (`session.c:463`).
+- Callers include `meta_apply.c:1111`, `:1132`, `:7542`, `:7702`,
+  `session.c:593` and `raft_host.c:6080`.
+- `raft_host.c:11809`: "Legacy unregistered append identities remain
+  compatible".
+- W72 records that mount sessions do not yet cover every mutation, so this
+  is a live fail-open path, not just replay support.
+
+**Fix and gate:**
+- Complete registration and establishment for every current mutation path
+  (W72).
+- Remove the bypass in the same change, never before.
+- Test reconnects and delayed requests from a fenced session.
+- Fresh formatting removes old records; it does not register current clients.
+
+<a id="w135"></a>
+## W135 — A plain `make test` stops at the docs gate before the code tests
+
+**Test reporting; opened 2026-10-21 from the audit T1; OPEN.**
+- `python3 docs/check-architecture.py` is a command in the middle of the
+  `test` recipe (`Makefile:455`).
+- On `0bdf55256` it failed `regen-diff` (a status README edit without
+  regeneration), so 162 of the 276 recipe commands never ran, including every
+  `./tests/test_*` unit binary.
+- With the docs regenerated in a private copy, `make test` passed on node9901
+  (rc=0, 2 min 29 s).
+- The current devel docs are regenerated (gate 5/5), but the structure still
+  lets any docs lag stop a plain `make test` before the code tests.
+- Scope correction (October 21): the node9901 verdict runner
+  `scripts/make_test_summary.sh` (`0e9df00a8`) already runs every `make test`
+  command independently and continues past failures. Code results are lost
+  only when `make test` is run directly, as the audit did, so this is a
+  reporting gap, not a hidden verdict.
+
+**Fix and gate:**
+- Split `test` into independent docs and code targets that both always run,
+  or document `make_test_summary.sh` as the only qualifying runner.
+- `test` reports a nonzero aggregate if either fails.
+- Moving the line, or making it a prerequisite, does not help: a failing
+  prerequisite also stops the recipe.
+
+<a id="w136"></a>
+## W136 — `test_pressure_cohort.py` broken since the packing removal
+
+**Verification correctness; opened 2026-10-21 from the audit T3; OPEN.**
+- The test is not wired into `make test`.
+- Its source slice defines a stub `efs_client_pack_flush` that production
+  stopped calling with the D37 packing removal (`5ded11179`).
+- The generated C fails `-Werror=unused-function` (node9901, gcc 11.5.0),
+  so this test supplies no pressure-cohort coverage.
+
+**Fix and gate:** update the slice to the current production context, or
+delete the test if the cohort path no longer exists. Then wire it into
+`make test`. Do not suppress the warning.
+
+<a id="w137"></a>
+## W137 — `test_live_ticket_retry.py` fakes a reply length the protocol no longer has
+
+**Verification correctness; opened 2026-10-21 from the audit T3; OPEN.**
+- The test is not wired into `make test`.
+- Its fake server replies with 5 bytes, but `EFS_PUT_UPLOAD_REPLY_LEN` has
+  been 13 since `c186a07cb`.
+- The probe aborts on `type==EFS_MSG_PUT_TICKETED_REPLY&&bytes==EFS_PUT_UPLOAD_REPLY_LEN`
+  (node9901).
+
+**Fix and gate:** decide together with the staged PUT-ticket stack (audit
+W1, W86). If it is kept, update the fake reply and wire the test. If it is
+archived, delete the test with it.
+
+<a id="w138"></a>
+## W138 — `test_apply_ring.py` succeeds while its TSan check is NOTRUN on gcc 11
+
+**Verification correctness; opened 2026-10-21 from the audit T5; OPEN.**
+- On gcc 11.5.0 (node9901) the TSan build fails:
+  `'atomic_thread_fence' is not supported with '-fsanitize=thread' [-Werror=tsan]`
+  (`src/server/apply_ring.h:38`, `:61`).
+- The test prints `SKIP` and passes (`tests/test_apply_ring.py:229–231`), so
+  the race check and its negative control never run on the build node.
+
+**Fix and gate:** fix the test, not the synchronization.
+- The ring payload already uses atomics, and the fences carry the seqlock
+  ordering.
+- `-Wno-error=tsan` can enable a diagnostic run, but TSan does not model the
+  fences, so a clean run is not proof.
+- Keep the torn-record stress check and the negative control, record the
+  sanitizer's limits, and report SKIP as NOTRUN.
+- Any change to the memory ordering needs its own correctness review.
+
+<a id="w139"></a>
+## W139 — Unit binaries and tests that are built or present but never run
+
+**Verification liveness; opened 2026-10-21 from the audit T2–T4; OPEN.**
+- `tests/test_rdma_segmented`, `tests/test_expiry` and
+  `tests/test_rdma_xprt` are built by `all`, but no recipe runs them. All
+  three PASS on node9901.
+- Sixteen of the twenty Python tests not named in the Makefile PASS; W136
+  and W137 cover the two stale ones. `test_rdma_memcheck.py` (needs valgrind
+  headers) and `test_cluster_stop.py` (needs `~/git/cluster`) depend on the
+  environment.
+- `test-client-memory` is never invoked by `test`, so `test_fuse_workers.py`
+  and `test_fuse_worker_options.py` do not run through the default test target. The latter exits 0 when fuse3
+  is unavailable.
+
+**Fix and gate:**
+- Wire the platform-independent tests.
+- Report environment-dependent tests as NOTRUN, never as a silent pass.
+- Do this before deleting any code they could protect.
+- The full list is in the [audit](../reviews/dead-code-review-20261021.md#t3--python-tests-not-wired-into-make-test--liveness--high--wire-fix-or-delete).
+
+<a id="w127-w139-review"></a>
+## Review of W127–W139 scope and priority — October 21
+
+**All 13 items are worth tracking; they are not 13 demonstrated product bugs.**
+Review of the items introduced by `e681ff97e`; documentation only, no fixes or
+new runtime qualification. Existing OPEN/NOTRUN verdicts remain unchanged.
+
+| Items | Assessment |
+| --- | --- |
+| W127–W130 | Confirmed unsafe apply behavior by code inspection. Preserve legitimate business refusals while fixing malformed-command and storage-error handling; cluster reproduction gates remain NOTRUN. |
+| W131 | Defensive hardening with runtime reachability unproven, not a demonstrated running-cluster failure. |
+| W132–W133 | Confirmed unsafe endpoint and protocol-enforcement gaps; declaration is not authentication. |
+| W134 | Valid session-fencing gap, to be fixed together with registration of current mutation paths under W72. |
+| W135 | Test-reporting improvement. Fail-fast is normal behavior; incomplete execution must not be presented as full qualification. Independent suite results should preserve an aggregate failure. |
+| W136–W137 | Broken test fixtures, not evidence that the corresponding product behavior is wrong. Fix or remove with their associated functionality. |
+| W138–W139 | Qualification gaps scoped to the audited environment/default suite. Absence from that suite does not mean a test cannot run manually or through a dedicated target. |
+
+Keep the separate W numbers for traceability, but implement W127–W131 as one
+coherent apply-hardening package with shared error classification and real
+apply-boundary tests. W132 can proceed independently. W133 requires the
+connection-state matrix; W134 requires the W72 integration, not an isolated
+removal of its bypass.
+
+Do not assign identical release-blocker status to all 13. Prioritize live
+correctness/enforcement issues and trustworthy qualification of enabled paths.
+Staged-feature tests may be removed when that feature is archived coherently;
+this must not remove coverage of a still-exposed server endpoint. Qualification
+must distinguish PASS, FAIL and NOTRUN, including environment-dependent checks.
+Any release decision still needs the named acceptance results; this review does
+not waive gates, close items, or authorize a release. No additional conceptual
+review is needed before implementation against these requirements.
+
+**Response (October 21).** Accepted. Two corrections on my side:
+- W135 overstated its effect. `scripts/make_test_summary.sh`, the node9901
+  verdict runner, continues past failures. Only a direct `make test` stops
+  at the docs gate. W135 is renamed and its class narrowed to test
+  reporting.
+- The work-queue rows now show W131 as defensive hardening, and W127–W131
+  as one apply-hardening package.
+
+This review was a subsection of W139, which made it read as part of W139. It
+is now its own section, with its text unchanged. No item is closed, and no
+gate changes.

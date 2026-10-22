@@ -200,14 +200,19 @@ try:
     assert 'status=0' in mgmt(old,'raft-lookup',1,'before-rename')
     # W80 must include a nonempty authoritative namespace, not merely an
     # unreferenced fragment PUT in the separate integrity matrix.
-    queries=[]
-    for flags in ([],['--raw']):
-        reply=subprocess.run([str(source/'efs-query'),*flags,f'127.0.0.1:{base+old}'],capture_output=True,text=True,timeout=10)
-        assert reply.returncode==2 and not reply.stdout and 'unavailable' in reply.stderr,reply
-        queries.append(dict(flags=flags,exit=reply.returncode,stdout=reply.stdout,stderr=reply.stderr))
-    help_reply=subprocess.run([str(source/'efs-query'),'--help'],capture_output=True,text=True,check=True)
-    assert 'retired' in help_reply.stdout and '.efs/stats' in help_reply.stdout
-    (work/'query-unavailable.json').write_text(json.dumps(dict(authoritative_name='before-rename',queries=queries,help=help_reply.stdout),indent=2))
+    # QUERY_STATS (25) must answer UNSUPPORTED (1) in a one-byte
+    # QUERY_STATS_REPLY (26), never totals.
+    with socket.create_connection(('127.0.0.1',base+old),10) as sock:
+        sock.settimeout(10)
+        sock.sendall(struct.pack('>IB',1,25))
+        reply=b''
+        while len(reply)<4 or len(reply)<4+struct.unpack('>I',reply[:4])[0]:
+            chunk=sock.recv(4096)
+            assert chunk,'QUERY_STATS connection closed early'
+            reply+=chunk
+    reply=reply[4:]
+    assert reply==bytes([26,1]),reply
+    (work/'query-unavailable.json').write_text(json.dumps(dict(authoritative_name='before-rename',reply=reply.hex()),indent=2))
     print('PASS: nonempty authoritative namespace returns explicit unavailable query status, no false totals',flush=True)
     first_salt = re.search(r'salt=(\d+)',mgmt(old,'raft-status')).group(1)
     for command in ('mkfs','raft-mkfs'):

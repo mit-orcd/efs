@@ -18,6 +18,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 static int failures = 0;
@@ -970,6 +971,94 @@ static void test_pinned_view(void)
     efs_kv_lsm_close(kv);
 }
 
+/* W126: a peek at writer-owned state (REPORT's l0-hot check, stats,
+ * query revisions) takes mu only. A reader parked inside a scan callback
+ * holds view_rw shared; the peeks must still return, where an exclusive
+ * view would wait for that reader and, under writer preference, stall
+ * every newer reader behind it. */
+struct parked_scan {
+    struct efs_kv *kv;
+    pthread_mutex_t mu;
+    pthread_cond_t cv;
+    int inside, release, peeks_done;
+};
+static int parked_cb(void *user, const uint8_t *key, uint32_t klen,
+                     const uint8_t *val, uint32_t vlen)
+{
+    struct parked_scan *p = user;
+    (void)key; (void)klen; (void)val; (void)vlen;
+    pthread_mutex_lock(&p->mu);
+    p->inside = 1;
+    pthread_cond_broadcast(&p->cv);
+    while (!p->release)
+        pthread_cond_wait(&p->cv, &p->mu);
+    pthread_mutex_unlock(&p->mu);
+    return EFS_ERR_BUSY; /* one row is enough */
+}
+static void *parked_reader(void *arg)
+{
+    struct parked_scan *p = arg;
+    (void)efs_kv_scan_prefix(p->kv, (const uint8_t *)"pk/", 3, parked_cb, p);
+    return NULL;
+}
+static void *peeker(void *arg)
+{
+    struct parked_scan *p = arg;
+    struct efs_kv_lsm_stats st;
+    uint64_t rev[4096], txn = 0, act[8];
+    uint32_t l0 = 0, l1 = 0;
+    int ok = efs_kv_lsm_l0_hot(p->kv) == 0 &&
+             efs_kv_lsm_stats(p->kv, &st) == EFS_OK &&
+             efs_kv_lsm_seg_count(p->kv, &l0, &l1) == EFS_OK &&
+             efs_kv_lsm_metadata_revisions(p->kv, rev, 4096) == EFS_OK &&
+             efs_kv_lsm_transaction_revision(p->kv, &txn) == EFS_OK &&
+             efs_kv_lsm_transaction_activity(p->kv, act) == EFS_OK;
+    (void)efs_kv_lsm_cleanup_deferred(p->kv);
+    pthread_mutex_lock(&p->mu);
+    p->peeks_done = ok ? 1 : -1;
+    pthread_cond_broadcast(&p->cv);
+    pthread_mutex_unlock(&p->mu);
+    return NULL;
+}
+static void test_peek_beside_reader(void)
+{
+    struct parked_scan p;
+    pthread_t rd, pk;
+    struct timespec ts;
+
+    rmtree(g_dir);
+    memset(&p, 0, sizeof(p));
+    p.kv = open_store(EFS_KV_LSM_NOSYNC, 0);
+    CHECK(p.kv != NULL, "open peek store");
+    if (!p.kv)
+        return;
+    pthread_mutex_init(&p.mu, NULL);
+    pthread_cond_init(&p.cv, NULL);
+    CHECK(put_s(p.kv, "pk/a", "1") == EFS_OK, "put peek row");
+    CHECK(pthread_create(&rd, NULL, parked_reader, &p) == 0, "start reader");
+    pthread_mutex_lock(&p.mu);
+    while (!p.inside)
+        pthread_cond_wait(&p.cv, &p.mu);
+    pthread_mutex_unlock(&p.mu);
+    CHECK(pthread_create(&pk, NULL, peeker, &p) == 0, "start peeker");
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_sec += 5;
+    pthread_mutex_lock(&p.mu);
+    while (!p.peeks_done &&
+           pthread_cond_timedwait(&p.cv, &p.mu, &ts) == 0)
+        ;
+    int done = p.peeks_done;
+    p.release = 1; /* unblock the reader either way, then join both */
+    pthread_cond_broadcast(&p.cv);
+    pthread_mutex_unlock(&p.mu);
+    CHECK(done == 1, "peeks return while a reader holds the view");
+    pthread_join(rd, NULL);
+    pthread_join(pk, NULL);
+    pthread_cond_destroy(&p.cv);
+    pthread_mutex_destroy(&p.mu);
+    efs_kv_lsm_close(p.kv);
+}
+
 /* Kill after the compaction output file is durable and before the manifest
  * rename. Reopen must still serve every key from the old segments. */
 static void test_compact_crash(void)
@@ -1841,6 +1930,7 @@ int main(void)
     test_l1_grows();
     test_flush_nowait();
     test_pinned_view();
+    test_peek_beside_reader();
     test_snapshot_scan_bounds();
     test_full_snapshot();
     test_snapshot_batch_cut();

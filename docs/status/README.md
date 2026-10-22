@@ -18,6 +18,18 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Dead-code audit and independent review](../reviews/dead-code-review-20261021.md):
+44 audit entries at `0bdf55256`; targeted review confirms fail-open apply and
+protocol paths, but corrects PROTO classification, gate ordering and deletion
+scope. Follow-up review of `36d612b4d` accepts the substantive corrections. No product fixes
+implemented; Linux results are attributed to the audit author. The tooling
+fixes landed in `040734d26`. The findings now have work items:
+[W127–W134](../backlog/work-items.md#w127) (apply, protocol and session
+correctness, all OPEN) and [W135–W139](../backlog/work-items.md#w135)
+(test-suite defects and qualification gaps, all OPEN). The [scope/priority review](../backlog/work-items.md#w127-w139-review) distinguishes confirmed unsafe code, W131 defensive hardening
+and test evidence gaps; W127–W131 form one implementation package, not five
+independent error-handling designs. No acceptance gates are waived.
+
 [D25 logical truncate protocol](d25-logical-truncate-design-20261021.md):
 **implemented through step 5 on branch `d25-logical-truncate`; all D25 gates PASS on a private node9901 cluster.** One 86-byte inode-group
 TRUNCATE entry commits size, epoch and a pruned inode fence history, with
@@ -71,6 +83,22 @@ data files under `docs/` now live only at tag `archive/raw-evidence-20261021`
 (branch `raw-evidence`). Devel keeps the 302 summaries under `results/`; 523
 links in 96 pages now name the archived path. Read one with
 `git show archive/raw-evidence-20261021:<path>`.
+
+[orcd-mini profile under the 32M-file create run, `47ba6b590`](orcd-mini-profile-47ba6b590-20261021.md):
+**profiling only; no PASS/FAIL gate.**
+- From ~1.0 to ~2.6 M files, creates fell from 2,564 to 1,130 files/s.
+- Leader LSM lock waits rose from 3.3% to 16–18% of its switches. LOOKUP
+  reads convoy behind the writer-preferring KV view lock.
+  [W126](../backlog/work-items.md#w126) is opened for this; step 1 is
+  implemented with a regression test. `make test`, deployment and the live
+  A/B are NOTRUN.
+- Corrected: the reported 30.6/15.9-core n1 "bursts" were an artifact of
+  `/proc` accounting with perf attached (A/B: 6.8 vs 4.5 cores). No work
+  item.
+- The `.efs` catalog rebuild grew from 21 s to 58 s of each 60 s refresh.
+- Directory spreading started; the spread pass itself is cheap.
+- `h->mu` waits did not grow (8–13%).
+- Errors: only `report-split` `EFS_ERR_BUSY` apply-wait timeouts.
 
 [ORCD-test detached campaign](orcd-test-detached-campaign-20261020.md):
 **FAIL / BLOCKED.** 8,437,752 successful-write counts of 40 M target;
@@ -449,7 +477,7 @@ spike of 24–27 ms, which is not explained.
 [W123 — automatic crash recovery](../backlog/crash-safe-durable-versions.md): **proposed new feature; source review only.** Reuse root barrier watermarks if epoch history, exact write tags and retained file versions prove recovery. No extra fsync-time metadata commit remains a hypothesis; eight-byte/zero-I/O cost claims are unproven. Implementation and acceptance NOTRUN; W71 remains open.
 
 [orcd-mini deployment of `09f8af09c`](orcd-mini-deploy-09f8af09c-20261016.md)
-(now running `47ba6b590`: W123-branch reclaim-retirement and fragment-attempt fixes ported; oversized-truncate refusal not merged, D25 logical truncate proposed instead; make test and smoke 216/216 PASS)
+(now running `47ba6b590`: W123-branch reclaim-retirement and fragment-attempt fixes ported; oversized-truncate refusal not merged, D25 logical truncate proposed instead; make test and smoke 216/216 PASS; under a 32M-file create load: core 216/216, extras 4/5 + 1 skip, durability 27/27, two-client 67/67, ior easy/hard rc 0, no user-visible errors)
 (daemons `4aff22c62`, clients `155695ccd`; smoke POSIX 216/216 PASS):
 **deployed; live POSIX 216/216, two-client 67/67, durability 27/27 PASS.**
 `make test` has 4 environmental failures. GC crash-restart and fault-suite

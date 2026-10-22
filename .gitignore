@@ -4,7 +4,6 @@
 /efs-fuse
 /efs-bench
 /efs-mgmt
-/efs-query
 *.o
 *.d
 *.lo
