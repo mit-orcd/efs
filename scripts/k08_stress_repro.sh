@@ -22,7 +22,7 @@ RUN=/tmp/k08-stress-$PORT-$(date -u +%Y%m%dT%H%M%SZ)
 [ -e "$OUT" ] && { echo "k08_stress_repro: $OUT exists; refusing to reuse it" >&2; exit 2; }
 [ -e "$RUN" ] && { echo "k08_stress_repro: $RUN exists" >&2; exit 2; }
 mkdir -p "$OUT" || exit 2
-export LD_LIBRARY_PATH=/data1/efs/deps/libfuse/lib64
+export LD_LIBRARY_PATH=/data1/efs/deps/libfuse/lib64 EFS_PACK_MIN_AGE_MS=${EFS_PACK_MIN_AGE_MS:-3000}
 {
     echo "run=$RUN port=$PORT seconds=$SECS rel=$REL load=${K08_LOAD:-0} args=$*"
     echo "started=$(date -u +%FT%TZ)"
@@ -38,7 +38,8 @@ if [ "${K08_LOAD:-0}" = 1 ]; then
         --deleters 2 --mismatch-dir "$OUT/load-mismatch" > "$OUT/load.txt" 2>&1 &
     lpid=$!
 fi
-python3 "$HERE/k08_overwrite_extend.py" "$RUN/mnt/k08" "$SECS" --dump "$OUT/dump" "$@" > "$OUT/a.txt" 2>&1
+python3 "$HERE/k08_overwrite_extend.py" "$RUN/mnt/k08" "$SECS" --dump "$OUT/dump" \
+    --mgmt "$REL/efs-mgmt ${W125_ADDR:-10.1.99.1}:$((PORT+1))" "$@" > "$OUT/a.txt" 2>&1
 rc=$?
 if [ -n "$lpid" ]; then
     wait "$lpid"; lrc=$?
