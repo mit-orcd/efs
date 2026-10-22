@@ -6,7 +6,7 @@
 #include <string.h>
 
 struct recv_replies {
-    struct { int to, success, probe; uint64_t match, read; } reply[EFS_RAFT_RECV_MAX];
+    struct { int to, success, probe, busy; uint64_t match, read; } reply[EFS_RAFT_RECV_MAX];
     uint32_t n;
     uint64_t term, boot;
     uint64_t commit_before;
@@ -77,6 +77,17 @@ struct efs_raft {
     uint64_t peer_reject_hint[EFS_RAFT_MAX_PEERS];
     uint64_t peer_reject_log_tick[EFS_RAFT_MAX_PEERS];
     uint64_t ae_rejects_sent, ae_reject_log_tick, ae_proto_drops;
+    /* K22/W23 unapplied-log bound (entries past last_applied; 0 = none).
+     * peer_busy_until: the peer reported it is at its bound; entries are
+     * withheld from it (heartbeats still go) until this tick or a reply
+     * that clears busy. */
+    uint64_t max_unapplied;
+    uint64_t ae_busy_sent, admit_busy, busy_log_tick;
+    uint64_t peer_busy[EFS_RAFT_MAX_PEERS];
+    uint64_t peer_busy_until[EFS_RAFT_MAX_PEERS];
+    int pressure;              /* host: state machine at its watermark */
+    uint64_t pressure_ticks;   /* consecutive low-capacity leader ticks */
+    uint64_t campaigns_held, capacity_stepdowns, capacity_log_tick;
     unsigned last_commit_bits; /* W145: quorum that made the last leader commit */
     int resync_requested;      /* W145 repair: see efs_raft_request_resync */
     unsigned vote_bits;
@@ -447,6 +458,7 @@ static int send_msg(struct efs_raft *r, struct efs_raft_msg *m)
         q->reply[q->n].to = m->to;
         q->reply[q->n].success = m->success;
         q->reply[q->n].probe = m->vote_granted;
+        q->reply[q->n].busy = m->busy;
         q->reply[q->n].match = m->match_index;
         q->reply[q->n].read = m->last_log_index;
         q->n++;
@@ -980,6 +992,10 @@ static int send_ae(struct efs_raft *r, int to, int data_only)
 
         if (r->ae_capped && r->send_idx < end)
             end = r->send_idx;
+        /* K22/W23: a peer at its unapplied bound gets no entries, only
+         * the heartbeat/commit probe that lets it apply and drain. */
+        if (r->peer_busy_until[to] > r->ticks && end >= ni)
+            end = ni - 1;
         if (data_only && ni > end) {
             /* Caught up, nothing to ship. A commit that moved since this
              * peer's last send (ae_inflight_set records it on every AE,
@@ -1313,6 +1329,40 @@ static int become_leader(struct efs_raft *r)
     return broadcast_ae(r);
 }
 
+#define REJECT_LOG_TICKS 2000u
+
+/* K22/W23: this replica cannot serve as leader now. */
+static int low_capacity(const struct efs_raft *r)
+{
+    uint64_t last_i = 0, last_t = 0;
+
+    if (r->pressure)
+        return 1;
+    if (!r->max_unapplied || last_log((struct efs_raft *)r, &last_i, &last_t) != EFS_OK)
+        return 0;
+    return (last_i > r->last_applied ? last_i - r->last_applied : 0) >=
+           r->max_unapplied / 4u * 3u;
+}
+
+/* K22/W23: an up-to-date log is not enough to lead; a replica that
+ * cannot apply would refuse every proposal. Held before pre-vote and
+ * before the election itself (a transfer's TimeoutNow included). */
+static int capacity_hold(struct efs_raft *r)
+{
+    if (solo(r) || !low_capacity(r))
+        return 0;
+    r->campaigns_held++;
+    if (r->campaigns_held == 1 || r->ticks - r->capacity_log_tick >= REJECT_LOG_TICKS) {
+        r->capacity_log_tick = r->ticks;
+        fprintf(stderr, "raft: group=%u election held: low capacity "
+                "(pressure=%d applied=%llu held=%llu)\n", r->group,
+                r->pressure, (unsigned long long)r->last_applied,
+                (unsigned long long)r->campaigns_held);
+    }
+    reset_election(r);
+    return 1;
+}
+
 static int start_election(struct efs_raft *r)
 {
     struct efs_raft_msg m;
@@ -1323,6 +1373,8 @@ static int start_election(struct efs_raft *r)
         reset_election(r);
         return EFS_OK;
     }
+    if (capacity_hold(r))
+        return EFS_OK;
     r->current_term++;
     r->voted_for = (int32_t)r->id;
     r->prevote_term = 0;
@@ -1413,6 +1465,8 @@ static int start_prevote(struct efs_raft *r)
         reset_election(r);
         return EFS_OK;
     }
+    if (capacity_hold(r))
+        return EFS_OK;
     read_proof_forget(r);
     r->role = EFS_RAFT_FOLLOWER;
     r->leader = -1;
@@ -1510,7 +1564,6 @@ static int on_vote_rep(struct efs_raft *r, const struct efs_raft_msg *in)
 
 /* W145: a follower that keeps refusing its leader must say so. One line
  * per REJECT_LOG_TICKS (10 s at 5 ms ticks), plus the running count. */
-#define REJECT_LOG_TICKS 2000u
 static void ae_reject_note(struct efs_raft *r, const struct efs_raft_msg *in,
                            uint64_t last_i, const char *why)
 {
@@ -1564,6 +1617,22 @@ static int ae_proto_drop(struct efs_raft *r, const struct efs_raft_msg *in,
             (unsigned long long)in->prev_index, (unsigned long long)in->prev_term,
             (unsigned long long)r->ae_proto_drops);
     return EFS_ERR_PROTO;
+}
+
+/* K22/W23: entries this replica holds past last_applied, if its tail
+ * were tail. */
+static uint64_t unapplied_at(const struct efs_raft *r, uint64_t tail)
+{
+    return tail > r->last_applied ? tail - r->last_applied : 0;
+}
+
+/* Advisory on any successful reply: a full batch would not fit. */
+static int follower_busy(struct efs_raft *r)
+{
+    uint64_t last_i = 0, last_t = 0;
+    if (!r->max_unapplied || last_log(r, &last_i, &last_t) != EFS_OK)
+        return 0;
+    return unapplied_at(r, last_i) + EFS_RAFT_AE_MAX > r->max_unapplied;
 }
 
 static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
@@ -1659,6 +1728,38 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
                        conflict_rc == EFS_ERR_NOT_FOUND ? "prev-missing" : "prev-term");
         return send_msg(r, &m);
     }
+    if (in->nentries && r->max_unapplied &&
+        in->prev_index + (uint64_t)in->nentries > last_i &&
+        unapplied_at(r, in->prev_index + (uint64_t)in->nentries) > r->max_unapplied) {
+        /* K22/W23: taking this batch would hold more than max_unapplied
+         * entries past last_applied. prev matched, so commit may advance
+         * to it; apply what we can, then refuse the batch with a busy
+         * hint. Nothing is appended or dropped: the leader resends from
+         * prev_index+1 once a heartbeat reply clears busy. */
+        if (in->leader_commit > r->commit_index && in->prev_index > r->commit_index)
+            r->commit_index = in->leader_commit < in->prev_index ?
+                              in->leader_commit : in->prev_index;
+        rc = apply_committed(r);
+        if (r->storage_failed) return rc;
+        if (unapplied_at(r, in->prev_index + (uint64_t)in->nentries) > r->max_unapplied) {
+            r->ae_busy_sent++;
+            if (r->ae_busy_sent == 1 || r->ticks - r->busy_log_tick >= REJECT_LOG_TICKS) {
+                r->busy_log_tick = r->ticks;
+                fprintf(stderr, "raft: group=%u AE busy: unapplied=%llu max=%llu "
+                        "applied=%llu commit=%llu last=%llu busy_sent=%llu\n", r->group,
+                        (unsigned long long)unapplied_at(r, last_i),
+                        (unsigned long long)r->max_unapplied,
+                        (unsigned long long)r->last_applied,
+                        (unsigned long long)r->commit_index,
+                        (unsigned long long)last_i,
+                        (unsigned long long)r->ae_busy_sent);
+            }
+            m.success = 0;
+            m.busy = 1;
+            m.match_index = in->prev_index;
+            return send_msg(r, &m);
+        }
+    }
     if (in->nentries) {
         uint64_t idx = in->prev_index + 1;
         uint32_t i;
@@ -1746,6 +1847,7 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
      * group 0 index 437638). A rejection still carries last_i, which
      * is the hint for next_index. */
     m.match_index = in->prev_index + (uint64_t)in->nentries;
+    m.busy = follower_busy(r);
     return send_msg(r, &m);
 }
 
@@ -1774,6 +1876,14 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
     }
     if (in->success) {
         uint64_t prev_commit = r->commit_index;
+        /* K22: busy advisory holds entries back for two heartbeats; a
+         * reply without it releases them at once. */
+        if (in->busy) {
+            r->peer_busy[in->from]++;
+            r->peer_busy_until[in->from] = r->ticks + 2u * (uint64_t)r->heartbeat_ticks;
+        } else {
+            r->peer_busy_until[in->from] = 0;
+        }
         r->peer_ack_bits |= 1u << in->from;
         r->peer_ack_tick[in->from] = r->ticks;
         if (in->match_index > r->match_index[in->from])
@@ -1821,6 +1931,18 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
      * inflight set held the resend until the next heartbeat (apply sat
      * one index behind for 50 ms; the wire ACK was ~10 us). */
     r->ae_inflight[in->from] = 0;
+    if (in->busy) {
+        /* K22/W23: the follower is at its unapplied bound and appended
+         * nothing. Resend from its proven prefix after it drains; until
+         * then it gets heartbeats (commit/apply) only. Not a log
+         * rejection: next_index moves only to the proven prefix. */
+        r->peer_busy[in->from]++;
+        r->peer_busy_until[in->from] = r->ticks + 2u * (uint64_t)r->heartbeat_ticks;
+        if (in->match_index + 1 < r->next_index[in->from] &&
+            in->match_index >= r->match_index[in->from])
+            r->next_index[in->from] = in->match_index + 1;
+        return EFS_OK;
+    }
     r->peer_rejects[in->from]++;
     r->peer_reject_hint[in->from] = in->match_index;
     if (r->peer_rejects[in->from] == 1 ||
@@ -2189,6 +2311,27 @@ int efs_raft_tick(struct efs_raft *r)
         return EFS_ERR_IO;
     r->ticks++;
     if (r->role == EFS_RAFT_LEADER) {
+        if (!solo(r) && low_capacity(r)) {
+            if (++r->pressure_ticks >= 4u * (uint64_t)r->election_ticks) {
+                r->capacity_stepdowns++;
+                fprintf(stderr, "raft: group=%u leader steps down: low capacity "
+                        "for %llu ticks (pressure=%d applied=%llu commit=%llu)\n",
+                        r->group, (unsigned long long)r->pressure_ticks,
+                        r->pressure, (unsigned long long)r->last_applied,
+                        (unsigned long long)r->commit_index);
+                r->pressure_ticks = 0;
+                leader_exit_note(r, r->current_term, "capacity");
+                read_proof_forget(r);
+                r->role = EFS_RAFT_FOLLOWER;
+                r->leader = -1;
+                r->vote_bits = 0;
+                r->read_in_flight = 0;
+                reset_election(r);
+                return EFS_OK;
+            }
+        } else {
+            r->pressure_ticks = 0;
+        }
         r->hb_elapsed++;
         if (r->hb_elapsed >= r->heartbeat_ticks)
             return broadcast_ae(r);
@@ -2426,6 +2569,7 @@ static int recv_batch_finish(struct efs_raft *r, int prior)
         reply.to = q->reply[i].to;
         reply.success = q->reply[i].success;
         reply.vote_granted = q->reply[i].probe;
+        reply.busy = q->reply[i].busy;
         reply.match_index = q->reply[i].match;
         reply.last_log_index = q->reply[i].read;
         reply.from = r->id;
@@ -2505,6 +2649,35 @@ int efs_raft_recv_batch(struct efs_raft *r, const struct efs_raft_msg *msgs,
     return r->recv_replies ? recv_batch_finish(r, EFS_OK) : EFS_OK;
 }
 
+/* K22/W23: a leader holding max_unapplied entries past last_applied
+ * admits nothing new; the client gets EFS_ERR_BUSY and backs off. */
+static int leader_over_bound(struct efs_raft *r)
+{
+    uint64_t last_i = 0, last_t = 0;
+    if (!r->max_unapplied || last_log(r, &last_i, &last_t) != EFS_OK)
+        return 0;
+    if (unapplied_at(r, last_i) < r->max_unapplied)
+        return 0;
+    r->admit_busy++;
+    return 1;
+}
+
+void efs_raft_set_max_unapplied(struct efs_raft *r, uint64_t max)
+{
+    if (r) r->max_unapplied = max;
+}
+
+void efs_raft_set_pressure(struct efs_raft *r, int over)
+{
+    if (r) r->pressure = over ? 1 : 0;
+}
+
+uint64_t efs_raft_unapplied_cap(uint64_t mem_budget)
+{
+    uint64_t cap = mem_budget / 256u;
+    return cap < 2u * EFS_RAFT_AE_MAX ? 2u * EFS_RAFT_AE_MAX : cap;
+}
+
 int efs_raft_propose(struct efs_raft *r, const uint8_t *cmd, uint32_t clen,
                      uint64_t *index_out)
 {
@@ -2518,6 +2691,7 @@ int efs_raft_propose(struct efs_raft *r, const uint8_t *cmd, uint32_t clen,
         return EFS_ERR_NOT_PRIMARY;
     if (is_cfg_cmd(cmd, clen))
         return EFS_ERR_INVAL;
+    if (leader_over_bound(r)) return EFS_ERR_BUSY;
     rc = append_local(r, r->current_term, cmd, clen, &ix);
     if (rc != EFS_OK)
         return rc;
@@ -2565,6 +2739,7 @@ int efs_raft_propose_local(struct efs_raft *r, const uint8_t *cmd,
         return EFS_ERR_INVAL;
     if (solo(r))
         return EFS_ERR_INVAL;
+    if (leader_over_bound(r)) return EFS_ERR_BUSY;
     efs_raft_arm_durable(r);
     return append_local(r, r->current_term, cmd, clen, index_out);
 }
@@ -2794,6 +2969,8 @@ int efs_raft_peer_progress(const struct efs_raft *r, int peer,
     out->send_errors = r->peer_ae_err[peer];
     out->rejects = r->peer_rejects[peer];
     out->reject_hint = r->peer_reject_hint[peer];
+    out->busy = r->peer_busy[peer];
+    out->busy_hold = r->peer_busy_until[peer] > r->ticks;
     return EFS_OK;
 }
 
@@ -2823,7 +3000,15 @@ int efs_raft_log_progress(struct efs_raft *r, struct efs_raft_log_progress *out)
     out->snap_index = r->snap_idx;
     out->rejects_sent = r->ae_rejects_sent;
     out->proto_drops = r->ae_proto_drops;
-    return last_log(r, &out->last_index, &out->last_term);
+    out->max_unapplied = r->max_unapplied;
+    out->busy_sent = r->ae_busy_sent;
+    out->admit_busy = r->admit_busy;
+    out->campaigns_held = r->campaigns_held;
+    out->capacity_stepdowns = r->capacity_stepdowns;
+    out->low_capacity = (uint64_t)low_capacity(r);
+    int rc = last_log(r, &out->last_index, &out->last_term);
+    out->unapplied = unapplied_at(r, out->last_index);
+    return rc;
 }
 
 uint64_t efs_raft_log_floor(const struct efs_raft *r)

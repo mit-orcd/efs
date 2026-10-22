@@ -95,7 +95,7 @@ int kv_flush_locked(struct kv_lsm *l)
     if(rc!=EFS_OK)return rc;
     if (l->mt.n == 0)
         return EFS_OK;
-    if (kv_l0_bytes(l) >= KV_LSM_L0_BYTES)
+    if (kv_l0_bytes(l) >= kv_l0_cap(l))
         return EFS_ERR_BUSY;
     /* Stop once another run cannot fit in the output array. */
     for (i = 0; i < l->mt.n; i++) {
@@ -472,7 +472,7 @@ int kv_compact_locked(struct kv_lsm *l, int async)
     }
     if (!wide) {
         uint64_t best = 0;
-        int over_bytes = kv_l0_bytes(l) >= KV_LSM_L0_BYTES;
+        int over_bytes = kv_l0_bytes(l) >= kv_l0_cap(l);
         int r;
 
         for (i = 0; i < l->n_l1; i++) {
@@ -895,7 +895,7 @@ int kv_maybe_flush_locked(struct kv_lsm *l)
      * compaction (24 s for range 0) is a 24 s pump hold. Leave the
      * memtable in place and let the compactor catch up; admission of new
      * publish batches returns BUSY instead (efs_kv_lsm_l0_hot). */
-    if (kv_l0_bytes(l) >= KV_LSM_L0_BYTES && l->n_l0 > 0) {
+    if (kv_l0_bytes(l) >= kv_l0_cap(l) && l->n_l0 > 0) {
         if (!l->bp_logged) {
             fprintf(stderr, "kv-compact: backpressure n_l0=%u\n", l->n_l0);
             l->bp_logged = 1;

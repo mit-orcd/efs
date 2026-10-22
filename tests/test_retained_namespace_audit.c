@@ -52,7 +52,7 @@ static struct efs_kv *partial_replacement(struct efs_kv *kv,const char *path,
 }
 int main(void) {
     char path[]="/tmp/efs-retained-audit-XXXXXX";assert(mkdtemp(path));
-    struct efs_kv_lsm_cfg cfg={0,0,4};struct efs_kv *kv=efs_kv_lsm_open(path,&cfg);assert(kv);
+    struct efs_kv_lsm_cfg cfg={0,0,4,0};struct efs_kv *kv=efs_kv_lsm_open(path,&cfg);assert(kv);
     struct efs_meta_attrs at={1000,1000,100};efs_ino_t parent,child,replacement;
     assert(!efs_meta_apply_init(kv,100));
     assert(!efs_meta_apply_mkdir(kv,&at,1,S_IFDIR|0755,"parent",&parent));

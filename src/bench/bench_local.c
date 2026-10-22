@@ -854,7 +854,7 @@ static int run_meta_bench(struct efsd_server *s, double time_sec, int ceiling)
 
     /* KV write: sequential puts, production fsync-every-batch mode. The WAL
      * fsync is in the clock; enough puts cross the memtable into segments. */
-    struct efs_kv_lsm_cfg cfg = { EFS_KV_LSM_SYNC, 0, 0 };
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_SYNC,0,0,0};
     struct efs_kv *kv = efs_kv_lsm_open(kvdir, &cfg);
     if (!kv) {
         fprintf(stderr, "bench: kv open %s failed\n", kvdir);

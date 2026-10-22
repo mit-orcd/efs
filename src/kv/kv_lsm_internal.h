@@ -253,6 +253,10 @@ struct kv_lsm {
     int compact_busy;
     int compact_req;
     int bp_logged;
+    uint64_t l0_cap_bytes;  /* K22: cfg.l0_bytes or KV_LSM_L0_BYTES */
+    uint64_t mem_budget;    /* K22: derived; see efs_kv_lsm_mem_budget */
+    uint64_t apply_deferred;
+    int room_logged;
     uint64_t apply_next; /* WAL seq whose turn it is to hit the memtable */
     int io_failed;
     int fail_next_batch;
@@ -460,6 +464,11 @@ struct msrc {
 static inline uint64_t kv_memtable_bytes(const struct kv_lsm *l)
 {
     return l->mt.bytes + l->pending_mt.bytes;
+}
+/* K22/W23: the engine's L0 byte cap (production KV_LSM_L0_BYTES). */
+static inline uint64_t kv_l0_cap(const struct kv_lsm *l)
+{
+    return l->l0_cap_bytes ? l->l0_cap_bytes : KV_LSM_L0_BYTES;
 }
 int kv_mtab_merge(struct kv_mtab *to, struct kv_mtab *from);
 

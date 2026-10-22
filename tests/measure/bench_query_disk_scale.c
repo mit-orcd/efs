@@ -134,7 +134,7 @@ static int recover(const char *root,uint64_t n)
     if(snprintf(kvpath,sizeof(kvpath),"%s/kv",root)>=(int)sizeof(kvpath) ||
        snprintf(cache,sizeof(cache),"%s/cache",root)>=(int)sizeof(cache))return 2;
     int rc=cold_hint(root,0,&hinted);double start=clock_s();
-    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,4<<20,4};
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,4<<20,4,0};
     struct efs_kv *kv=rc?NULL:efs_kv_lsm_open(kvpath,&cfg);
     struct efs_kv_lsm_snapshot *source=NULL;struct efs_query_catalog *catalog=NULL;
     if(!rc && !kv)rc=EFS_ERR_IO;
@@ -167,7 +167,7 @@ int main(int argc,char **argv)
         if(lstat(argv[1],&st) || !S_ISDIR(st.st_mode) ||
            lstat(kvpath,&st) || !S_ISDIR(st.st_mode))return 2;
     }
-    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,4<<20,4};
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,4<<20,4,0};
     struct batch b={0};b.kv=efs_kv_lsm_open(kvpath,&cfg);if(!b.kv)return 1;
     double start=clock_s();uint64_t dirs=n<SHARDS?n:SHARDS;
     int rc=EFS_OK;

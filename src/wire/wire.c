@@ -167,7 +167,7 @@ int efs_wire_raft_encode(const struct efs_raft_msg *msg, uint8_t *out,
     p[0] = msg->type;
     p[1] = msg->group;
     p[2] = (uint8_t)(msg->vote_granted ? 1 : 0);
-    p[3] = (uint8_t)(msg->success ? 1 : 0);
+    p[3] = (uint8_t)((msg->success ? 1 : 0) | (msg->busy ? 2 : 0));
     p += 4;
     wr32be(p, (uint32_t)msg->from); p += 4;
     wr32be(p, (uint32_t)msg->to); p += 4;
@@ -211,7 +211,10 @@ int efs_wire_raft_decode(const uint8_t *in, uint32_t in_len,
     msg->type = p[0];
     msg->group = p[1];
     msg->vote_granted = p[2];
-    msg->success = p[3];
+    if (p[3] & ~3u)
+        return EFS_ERR_PROTO;
+    msg->success = p[3] & 1;
+    msg->busy = (p[3] >> 1) & 1;
     p += 4;
     msg->from = (int)rd32be(p); p += 4;
     msg->to = (int)rd32be(p); p += 4;

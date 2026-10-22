@@ -496,6 +496,7 @@ struct efs_raft_host {
     uint64_t obs_pub_n;
     uint64_t obs_pub_max_us;
     uint64_t obs_pump_hold_max_us;
+    uint64_t admit_busy; /* K22: proposals refused at the admission watermark */
     uint64_t obs_last_dump_ms;
     /* EFS_RAFT_OBS: per-cycle phase maxima (us) + applies in the worst
      * cycle, so a hold spike says WHERE the time went. */
@@ -1131,7 +1132,7 @@ static void host_fill_ae_hdr(uint8_t *p, const struct efs_raft_msg *msg)
     q[0] = msg->type;
     q[1] = msg->group;
     q[2] = (uint8_t)(msg->vote_granted ? 1 : 0);
-    q[3] = (uint8_t)(msg->success ? 1 : 0);
+    q[3] = (uint8_t)((msg->success ? 1 : 0) | (msg->busy ? 2 : 0));
     q += 4;
     wr32be(q, (uint32_t)msg->from); q += 4;
     wr32be(q, (uint32_t)msg->to); q += 4;
@@ -2871,6 +2872,13 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
                       EFS_OK, 0, 0);
         return EFS_OK;
     }
+    /* K22/W23: the unflushed KV tail is at its memory budget (L0 is at
+     * its cap and the compactor is behind). Defer this entry: it stays
+     * committed in the log and is retried on the next heartbeat; the
+     * unapplied-log bound then stops AppendEntries on this replica. */
+    rc = efs_kv_lsm_apply_room(h->kv, 0);
+    if (rc != EFS_OK)
+        return rc;
 #if EFS_FAULTS
     if (cmd[0]==EFS_MD_CMD_PUBLICATION) {
         const char *gate=getenv("EFS_FAULT_PUBLICATION_APPLY_FILE");
@@ -5005,6 +5013,33 @@ static int host_tag_refused(uint8_t group, const uint8_t *cmd, uint32_t clen)
     return 1;
 }
 
+/* K22/W23 leader admission (D30): start refusing before the hard bounds.
+ * New work is refused EFS_ERR_BUSY at 3/4 of the KV memory budget or of the
+ * unapplied-log cap; transaction resolution/cleanup keeps the last quarter
+ * and meets only the hard cap in efs_raft_propose. Under h->mu. */
+static int host_admit(struct efs_raft_host *h, struct efs_raft *r,
+                      const uint8_t *cmd, uint32_t clen)
+{
+    struct efs_raft_log_progress lp;
+
+    if (efs_raft_role(r) != EFS_RAFT_LEADER)
+        return EFS_OK;
+    if (cmd && clen && (cmd[0] == EFS_MD_CMD_DECIDE || cmd[0] == EFS_MD_CMD_RESOLVE ||
+                        cmd[0] == EFS_MD_CMD_DROP))
+        return EFS_OK;
+    if (efs_kv_lsm_apply_room(h->kv, 1) == EFS_ERR_BUSY)
+        goto busy;
+    if (efs_raft_log_progress(r, &lp) == EFS_OK && lp.max_unapplied &&
+        lp.unapplied >= lp.max_unapplied / 4u * 3u)
+        goto busy;
+    return EFS_OK;
+busy:
+    if (__atomic_fetch_add(&h->admit_busy, 1, __ATOMIC_RELAXED) % 4096u == 0)
+        fprintf(stderr, "raft-host: admission busy (refused=%llu)\n",
+                (unsigned long long)h->admit_busy);
+    return EFS_ERR_BUSY;
+}
+
 static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
                         const uint8_t *cmd, uint32_t clen, uint64_t *idx,
                         uint64_t *term, int *leader_hint, int local_only)
@@ -5053,6 +5088,12 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
         lid = efs_raft_leader(r);
         if (leader_hint)
             *leader_hint = lid;
+        if (host_admit(h, r, cmd, clen) != EFS_OK) {
+            pthread_mutex_unlock(&h->mu);
+            propose_q_sub();
+            if (quiet) (void)efs_raft_disk_sync_release(h->disk);
+            return EFS_ERR_BUSY;
+        }
         if (local_only && solo) {
             pthread_mutex_unlock(&h->mu);
             propose_q_sub();
@@ -7781,9 +7822,13 @@ static void *host_pump(void *arg)
         {
             uint64_t now = now_us_();
             if (now - last_tick_us >= HOST_TICK_US) {
+                /* K22/W23: KV at its admission watermark -> no leadership. */
+                int kv_over = h->kv && efs_kv_lsm_apply_room(h->kv, 1) == EFS_ERR_BUSY;
                 for (i = 0; i < HOST_NGROUPS; i++) {
-                    if (h->g[i].hosted && h->g[i].r)
+                    if (h->g[i].hosted && h->g[i].r) {
+                        efs_raft_set_pressure(h->g[i].r, kv_over);
                         (void)efs_raft_tick(h->g[i].r);
+                    }
                 }
                 last_tick_us = now;
             }
@@ -8082,6 +8127,13 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
     h->g[gi].r = efs_raft_new(&cfg);
     if (!h->g[gi].r)
         return EFS_ERR_NOMEM;
+    {
+        /* K22/W23: the unapplied-log bound from the KV memory budget. */
+        struct efs_kv_lsm_stats ks;
+        uint64_t budget = h->kv && efs_kv_lsm_stats(h->kv, &ks) == EFS_OK ?
+                          ks.mem_budget : efs_kv_lsm_mem_budget(0, 0);
+        efs_raft_set_max_unapplied(h->g[gi].r, efs_raft_unapplied_cap(budget));
+    }
     efs_raft_arm_durable(h->g[gi].r);
     __atomic_store_n(&h->g[gi].hosted, 1, __ATOMIC_RELEASE);
     __atomic_store_n(&h->g[gi].voters, efs_raft_voters(h->g[gi].r),
@@ -12809,6 +12861,13 @@ void server_raft_host_status(struct efs_msg_raft_status_reply *out)
                 gs->snap_index = lp.snap_index;
                 gs->rejects_sent = lp.rejects_sent;
                 gs->proto_drops = lp.proto_drops;
+                gs->unapplied = lp.unapplied;
+                gs->max_unapplied = lp.max_unapplied;
+                gs->busy_sent = lp.busy_sent;
+                gs->admit_busy = lp.admit_busy;
+                gs->low_capacity = lp.low_capacity;
+                gs->campaigns_held = lp.campaigns_held;
+                gs->capacity_stepdowns = lp.capacity_stepdowns;
             }
             gs->resync_pending = efs_raft_resync_pending(h->g[i].r) ? 1u : 0u;
             gs->npeers = h->n < EFS_RAFT_STATUS_PEERS ? (uint32_t)h->n :
@@ -12831,10 +12890,23 @@ void server_raft_host_status(struct efs_msg_raft_status_reply *out)
                 ps->send_errors = pp.send_errors;
                 ps->rejects = pp.rejects;
                 ps->reject_hint = pp.reject_hint;
+                ps->busy = pp.busy;
+                ps->busy_hold = (uint64_t)pp.busy_hold;
             }
         }
     }
     pthread_mutex_unlock(&h->mu);
+    {
+        struct efs_kv_lsm_stats ks;
+        if (h->kv && efs_kv_lsm_stats(h->kv, &ks) == EFS_OK) {
+            out->kv_mt_bytes = ks.mt_bytes;
+            out->kv_mem_budget = ks.mem_budget;
+            out->kv_l0_bytes = ks.l0_bytes;
+            out->kv_l0_cap = ks.l0_cap;
+            out->kv_apply_deferred = ks.apply_deferred;
+        }
+        out->admit_busy = __atomic_load_n(&h->admit_busy, __ATOMIC_RELAXED);
+    }
     src = efs_meta_apply_export_salt(h->kv, &salt);
     if (src == EFS_OK) {
         struct efs_meta_row row;

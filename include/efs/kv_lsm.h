@@ -29,6 +29,9 @@ struct efs_kv_lsm_cfg {
     int sync_mode;         /* EFS_KV_LSM_SYNC or EFS_KV_LSM_NOSYNC */
     uint32_t memtable_max; /* bytes before flush; 0 = default */
     uint32_t l0_max;       /* L0 segments before compaction; 0 = default */
+    /* L0 byte cap; 0 = the production 1 GiB. Not an operator setting:
+     * tests size it, and fault builds take EFS_FAULT_L0_BYTES. */
+    uint64_t l0_bytes;
 };
 
 /* Creates dir if absent, else recovers from it: load segments, replay the
@@ -85,12 +88,27 @@ struct efs_kv_lsm_stats {
     uint64_t l0_bytes;
     uint32_t n_l0;
     uint32_t n_l1;
+    /* K22/W23 bound: the L0 byte cap and the memory budget derived from
+     * it, min(L0 cap / 8, physical memory / 16), at least 4 memtables.
+     * mt_bytes (memtable + insertion buffer = unflushed WAL tail) is
+     * held at mem_budget by efs_kv_lsm_apply_room. */
+    uint64_t l0_cap;
+    uint64_t mem_budget;
+    uint64_t apply_deferred; /* apply_room refusals since open */
 };
 int efs_kv_lsm_stats(struct efs_kv *kv, struct efs_kv_lsm_stats *out);
 
 /* 1 when L0 is within one flush of the file cap. Publish admission
  * returns BUSY; the apply path does not wait. */
 int efs_kv_lsm_l0_hot(struct efs_kv *kv);
+/* K22/W23: room for one more state-machine apply. EFS_ERR_BUSY while the
+ * unflushed memtable/WAL tail is at mem_budget (flushes are deferred because
+ * L0 is at its cap, e.g. a stalled compactor); it kicks the flush or the
+ * compactor and the caller retries the same entry later, never skipping it.
+ * admit: 1 = admission watermark (3/4 of the budget) for new proposals. */
+int efs_kv_lsm_apply_room(struct efs_kv *kv, int admit);
+/* Same derivation, for a caller sizing other bounds before/without a KV. */
+uint64_t efs_kv_lsm_mem_budget(uint64_t l0_cap, uint32_t memtable_max);
 /* Nested. Hold: WAL write + memtable apply, no fsync. Release (last nest):
  * one fsync. No-op on a non-LSM store. Raft apply of a batched PUBLISH
  * holds across the entry so 256 pubs share one durable boundary. */

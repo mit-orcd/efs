@@ -871,11 +871,19 @@ static int cmd_raft_status(int argc, char **argv)
            (unsigned long long)r->kv_has_root,
            (unsigned long long)r->export_salt,
            r->ngroups);
+    /* K22/W23: the node's memory/lag bound. */
+    printf("  bound kv_mt_bytes=%llu kv_mem_budget=%llu kv_l0_bytes=%llu kv_l0_cap=%llu "
+           "kv_apply_deferred=%llu admit_busy=%llu\n",
+           (unsigned long long)r->kv_mt_bytes, (unsigned long long)r->kv_mem_budget,
+           (unsigned long long)r->kv_l0_bytes, (unsigned long long)r->kv_l0_cap,
+           (unsigned long long)r->kv_apply_deferred, (unsigned long long)r->admit_busy);
     for (i = 0; i < r->ngroups && i < EFS_RAFT_HOST_MAX_GROUPS; i++) {
         struct efs_raft_group_status *g = &r->groups[i];
         printf("  group %u hosted=%u role=%s leader=%d term=%llu "
                "commit=%llu applied=%llu voters=0x%x joint=%u "
-               "last=%llu last_term=%llu snap=%llu rejects_sent=%llu proto_drops=%llu%s\n",
+               "last=%llu last_term=%llu snap=%llu rejects_sent=%llu proto_drops=%llu "
+               "unapplied=%llu max_unapplied=%llu busy_sent=%llu admit_busy=%llu "
+               "low_capacity=%llu campaigns_held=%llu capacity_stepdowns=%llu%s\n",
                g->group, g->hosted,
                g->hosted ? raft_role_name(g->role) : "-",
                g->leader,
@@ -888,6 +896,13 @@ static int cmd_raft_status(int argc, char **argv)
                (unsigned long long)g->snap_index,
                (unsigned long long)g->rejects_sent,
                (unsigned long long)g->proto_drops,
+               (unsigned long long)g->unapplied,
+               (unsigned long long)g->max_unapplied,
+               (unsigned long long)g->busy_sent,
+               (unsigned long long)g->admit_busy,
+               (unsigned long long)g->low_capacity,
+               (unsigned long long)g->campaigns_held,
+               (unsigned long long)g->capacity_stepdowns,
                g->resync_pending ? " resync=1" : "");
         /* W145: replication progress per peer, as this node sees it. */
         for (uint32_t p = 0; g->hosted && g->role == EFS_RAFT_LEADER &&
@@ -901,7 +916,7 @@ static int cmd_raft_status(int argc, char **argv)
             else snprintf(aa, sizeof(aa), "%llu", (unsigned long long)ps->ack_age);
             printf("    peer %u next=%llu match=%llu inflight=%llu..%llu inflight_age=%s "
                    "ack_age=%s sent=%llu again=%llu blocked=%llu errors=%llu "
-                   "rejects=%llu reject_hint=%llu\n", p,
+                   "rejects=%llu reject_hint=%llu busy=%llu busy_hold=%llu\n", p,
                    (unsigned long long)ps->next_index,
                    (unsigned long long)ps->match_index,
                    (unsigned long long)ps->inflight,
@@ -911,7 +926,9 @@ static int cmd_raft_status(int argc, char **argv)
                    (unsigned long long)ps->send_blocked,
                    (unsigned long long)ps->send_errors,
                    (unsigned long long)ps->rejects,
-                   (unsigned long long)ps->reject_hint);
+                   (unsigned long long)ps->reject_hint,
+                   (unsigned long long)ps->busy,
+                   (unsigned long long)ps->busy_hold);
         }
     }
     free(reply);

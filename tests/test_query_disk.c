@@ -48,7 +48,7 @@ static void test_catchup_retirement(void)
 {
     char store[]="/tmp/efs-query-retire-kv-XXXXXX",root[]="/tmp/efs-query-retire-cache-XXXXXX";
     CHECK(mkdtemp(store));CHECK(mkdtemp(root));
-    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_SYNC,0,4};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_SYNC,0,4,0};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
     CHECK(kv);if(!kv)return;
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t file;
     CHECK(!efs_meta_apply_init(kv,100));
@@ -81,7 +81,7 @@ static void test_restart_catchup(void)
 {
     char store[]="/tmp/efs-query-catchup-kv-XXXXXX",root[]="/tmp/efs-query-catchup-cache-XXXXXX";
     CHECK(mkdtemp(store));CHECK(mkdtemp(root));
-    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_SYNC,0,4};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_SYNC,0,4,0};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
     CHECK(kv);if(!kv)return;
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t dir,file;
     CHECK(!efs_meta_apply_init(kv,100));
@@ -149,7 +149,7 @@ static void test_dependency_rows(void)
 {
     char store[]="/tmp/efs-query-deps-kv-XXXXXX",root[]="/tmp/efs-query-deps-cache-XXXXXX";
     CHECK(mkdtemp(store));CHECK(mkdtemp(root));
-    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
     CHECK(kv);if(!kv)return;
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t dir,ids[600];
     CHECK(!efs_meta_apply_init(kv,100));
@@ -211,7 +211,7 @@ int main(void)
 {
     if(!getenv("EFS_QUERY_TEST_QUOTA") && !getenv("EFS_QUERY_TEST_NOSPACE")){test_restart_catchup();test_catchup_retirement();test_dependency_rows();}
     char store[256],root[256];snprintf(store,sizeof(store),"/tmp/efs-query-disk-kv-%d",getpid());snprintf(root,sizeof(root),"/tmp/efs-query-disk-cache-%d",getpid());
-    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);CHECK(kv);if(!kv)return 1;
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);CHECK(kv);if(!kv)return 1;
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t dir,sub,file;
     CHECK(!efs_meta_apply_init(kv,100));CHECK(!efs_meta_apply_mkdir(kv,&attrs,EFS_ROOT_INO,S_IFDIR|0755,"dir",&dir));
     CHECK(!efs_meta_apply_mkdir(kv,&attrs,dir,S_IFDIR|0755,"sub",&sub));

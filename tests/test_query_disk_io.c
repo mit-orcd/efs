@@ -228,7 +228,7 @@ static void sort_budget_test(void)
         unsigned count=scenario==9?0:scenario==10?1:SORT_ROWS*4+1;
         char store[]="/tmp/efs-sort-kv-XXXXXX",root[]="/tmp/efs-sort-budget-XXXXXX";
         CHECK(mkdtemp(store));CHECK(mkdtemp(root));
-        struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
+        struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
         CHECK(kv);if(!kv)continue;
         for(unsigned i=0;i<count;i++){
             char name[32];snprintf(name,sizeof(name),"name-%08u",i);
@@ -309,7 +309,7 @@ static void rebuild_cache_test(void)
 {
     char store[]="/tmp/efs-query-rebuild-kv-XXXXXX",cache[]="/tmp/efs-query-rebuild-cache-XXXXXX";
     CHECK(mkdtemp(store));CHECK(mkdtemp(cache));
-    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};
     struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);CHECK(kv);if(!kv)return;
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t dir,file;
     CHECK(!efs_meta_apply_init(kv,100));
@@ -349,7 +349,7 @@ static void local_page_test(void)
 {
     char store[]="/tmp/efs-query-local-kv-XXXXXX",cache[]="/tmp/efs-query-local-cache-XXXXXX";
     CHECK(mkdtemp(store));CHECK(mkdtemp(cache));
-    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
     CHECK(kv);if(!kv)return;
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t leaf,outside,file;
     CHECK(!efs_meta_apply_init(kv,100));
@@ -697,7 +697,7 @@ static void subtree_page_test(void)
     int before=failures;
     char store[]="/tmp/efs-subtree-kv-XXXXXX",cache[]="/tmp/efs-subtree-cache-XXXXXX";
     CHECK(mkdtemp(store));CHECK(mkdtemp(cache));
-    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
     CHECK(kv);if(!kv)return;
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t unrelated,root,child,empty,file;
     CHECK(!efs_meta_apply_init(kv,100));
@@ -856,7 +856,7 @@ static void pending_preflight_test(void)
 {
     char store[]="/tmp/efs-query-pending-kv-XXXXXX",cache[]="/tmp/efs-query-pending-cache-XXXXXX";
     CHECK(mkdtemp(store));CHECK(mkdtemp(cache));
-    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);CHECK(kv);if(!kv)return;
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);CHECK(kv);if(!kv)return;
     struct efs_meta_attrs attrs={1000,1000,100};CHECK(!efs_meta_apply_init(kv,100));
     for(unsigned i=0;i<32;i++){
         char name[32];efs_ino_t ino;snprintf(name,sizeof(name),"ordinary-%u",i);
@@ -891,7 +891,7 @@ static void orphan_preflight_test(void)
 {
     char store[]="/tmp/efs-query-orphan-kv-XXXXXX",cache[]="/tmp/efs-query-orphan-cache-XXXXXX";
     CHECK(mkdtemp(store));CHECK(mkdtemp(cache));
-    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};
     struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);CHECK(kv);if(!kv)return;
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t parent,child;
     CHECK(!efs_meta_apply_init(kv,100));
@@ -980,7 +980,7 @@ static void publication_and_format_test(void)
 {
     char store[]="/tmp/efs-query-format-kv-XXXXXX",cache[]="/tmp/efs-query-format-cache-XXXXXX";
     CHECK(mkdtemp(store));CHECK(mkdtemp(cache));
-    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
     CHECK(kv);if(!kv)return;
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t file;
     CHECK(!efs_meta_apply_init(kv,100));CHECK(!efs_meta_apply_create_file(kv,&attrs,EFS_ROOT_INO,S_IFREG|0644,"file",&file));
@@ -1259,7 +1259,7 @@ int main(void)
      * replace the checkpoint of a previously completed generation. */
     char kvroot[]="/tmp/efs-query-sync-kv-XXXXXX",cache[]="/tmp/efs-query-sync-cache-XXXXXX";
     CHECK(mkdtemp(kvroot));CHECK(mkdtemp(cache));
-    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};
+    struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};
     struct efs_kv *kv=efs_kv_lsm_open(kvroot,&cfg);CHECK(kv);
     struct efs_kv_lsm_snapshot *source=NULL;struct efs_query_disk *old=NULL,*next=NULL;
     if(kv){
