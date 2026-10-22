@@ -1600,6 +1600,16 @@ data files under `docs/` now live only at tag `archive/raw-evidence-20261021`
 links in 96 pages now name the archived path. Read one with
 `git show archive/raw-evidence-20261021:<path>`.
 
+[W126 on orcd-mini, `8fb4247ad` A/B](../status/orcd-mini-w126-ab-8fb4247ad-20261022.md):
+**deployed. Lock-wait gate PASS; create-rate gate FAIL.**
+- Read-only LSM peeks take `mu` only, and flush file I/O yields the
+  exclusive view.
+- Leader LSM lock waits are 2–4× lower at matched points (A/B/A').
+- Creates/s followed the run order (736/598/551), not the build. Throughput
+  is bounded by `h->mu` and fsync.
+- `make test` 813/813 with one environmental failure; POSIX smoke 216/216.
+- The user's 32M-file run was stopped at ~5.67 M files for the deploy.
+
 [orcd-mini profile under the 32M-file create run, `47ba6b590`](../status/orcd-mini-profile-47ba6b590-20261021.md):
 **profiling only; no PASS/FAIL gate.**
 - From ~1.0 to ~2.6 M files, creates fell from 2,564 to 1,130 files/s.
@@ -2243,7 +2253,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | crash-recovery-feature | **W123** · automatic crash recovery through per-file durable versions | new feature / durability recovery | PROPOSED: design review before code; implementation, migration and acceptance NOTRUN; W71 remains open | [feature and gates](../backlog/crash-safe-durable-versions.md) |
 | fast-delete | **W124** · fast delete: batched reclaim, quota credit at commit, then packing (W125) | performance / capacity | PROPOSED: design review before code; implementation, private A/B and orcd-mini acceptance NOTRUN | [proposal and gates](../backlog/fast-delete-reclaim.md) · [evidence](../status/orcd-mini-gc-delete-profile-5d673efa8-20261018.md) |
 | small-file-packing | **W125** · small-file packing by default (background packer after close) | capacity / performance | PROPOSED: revised to background packing 2026-10-18; write path unchanged, packer always on, no switch, prior state kept as a tag; port and acceptance NOTRUN | [proposal and gates](../backlog/small-file-packing-default.md) · [plan](../backlog/small-file-packing-plan.md) · [D37](#appendix-4--decisions--taken-and-pending-register-d1d36) |
-| kv-reader-convoy | **W126** · KV readers convoy behind exclusive LSM phases on a busy leader | performance | OPEN: step 1 (read-only peeks take `mu` only) implemented with regression test, unit tests PASS on node9901; `make test`, orcd-mini deployment and live A/B NOTRUN; steps 2–4 (phase hold-time metrics, flush outside the exclusive phase, bounded scan holds) open | [item](#w126) · [evidence](../status/orcd-mini-profile-47ba6b590-20261021.md) |
+| kv-reader-convoy | **W126** · KV readers convoy behind exclusive LSM phases on a busy leader | performance | DEPLOYED on orcd-mini `8fb4247ad` (steps 1 and 3): `make test` 813/813 (1 environmental docs-check failure), POSIX smoke 216/216; A/B lock-wait gate PASS (leader LSM waits 2–4× lower), create-rate gate FAIL (no measurable gain; bounded by `h->mu` and fsync); step 4 deferred | [item](#w126) · [A/B](../status/orcd-mini-w126-ab-8fb4247ad-20261022.md) · [origin](../status/orcd-mini-profile-47ba6b590-20261021.md) |
 | apply-unknown-tag | **W127** · metadata apply accepts unknown command tags as applied | correctness | OPEN: code reading at `0bdf55256`, not triggered on a cluster; concrete defect behind W66 B1–B4; implement W127–W131 as one apply-hardening package ([scope review](#w127-w139-review)); fix NOTRUN | [item](#w127) · [audit](../reviews/dead-code-review-20261021.md) |
 | apply-unknown-subtag | **W128** · unknown sub-tags and short frames apply as success (DIR/SESSION/TXN) | correctness | OPEN: code reading; fix NOTRUN; W66 B1 | [item](#w128) · [audit](../reviews/dead-code-review-20261021.md) |
 | apply-proto-normalized | **W129** · `host_apply` turns decoder errors into success and commits the cursor | correctness | OPEN: code reading; `test_gc_verdict.py:75` asserts the defect; SALT/QUERY_POLICY PROTO are business refusals and stay; fix NOTRUN | [item](#w129) · [audit](../reviews/dead-code-review-20261021.md) |
@@ -8141,7 +8151,7 @@ No live configuration editor or automatic rollout is included in this item.
 <a id="w126"></a>
 ### W126 — KV readers convoy behind exclusive LSM phases on a busy leader
 
-**Performance; opened 2026-10-21; step 1 implemented, deployment and live A/B NOTRUN.**
+**Performance; opened 2026-10-21. Steps 1 and 3 deployed on orcd-mini (`8fb4247ad`, 2026-10-21 23:14Z). Lock-wait gate PASS; create-rate gate FAIL (no measurable gain; throughput is bounded elsewhere). Step 4 deferred.** [A/B evidence](../status/orcd-mini-w126-ab-8fb4247ad-20261022.md).
 Found under the user's 32M-file `tiny_files.py` run on orcd-mini `47ba6b590`
 ([profile](../status/orcd-mini-profile-47ba6b590-20261021.md)). From ~1.0 to
 ~2.6 M files, creates fell from 2,564 to 1,130 files/s. Over the same span,
@@ -8177,26 +8187,38 @@ PASSes with the change. On node9901, the patched tree passes `test_kv_lsm`,
 `test_query_disk`, `test_txn`, `test_kv_snapshot_tail`, `test_kv_reader_gate`
 and `test_query_catalog`.
 
-**Remaining steps (not redesigns; each needs its own A/B):**
-2. Hold-time metrics for the exclusive phase: WAL-order wait, memtable
-   batch, `kv_mtab_merge`, `kv_flush_locked`. Count readers held back per
-   phase.
-3. If flush dominates: flush a frozen immutable memtable outside the
-   exclusive phase. Readers would consult the frozen table until the L0
-   segment is published. `kv_flush_locked` writes the L0 file and MANIFEST
-   while holding `view_rw` exclusively.
-4. If long readers dominate: bound how long a scan holds the shared side.
-   Point gets already drop it around preads; `merge_scan` does not.
+**Step 2 (folded into step 3).** A flush of 100 ms or more logs
+`kv-flush: files= io_ms= manifest_ms= view_yielded=`. On orcd-mini, flushes
+wrote 26–37 L0 files with 117–160 ms of I/O each. Before step 3, all of that
+ran under the exclusive view.
 
-**Gates.**
-- Deploy step 1 to orcd-mini only with the user's go-ahead: the 32M-file run
-  is live.
-- Re-profile under the same `tiny_files.py` shape at matching file counts.
-  Compare leader LSM lock-wait share, apply's `wrlock` switches,
-  `apply-sleep` counts and create rate.
-- Record steps 2–4 with their own evidence.
+**Step 3 (`8fb4247ad`, implemented and deployed).** After the pending merge
+the memtable is frozen, because every writer waits on `mu`. At the outermost
+writer level, `kv_flush_locked` therefore yields the exclusive view and keeps
+`mu` while it writes and fsyncs the L0 files, the MANIFEST and the WAL
+reset. It retakes the view only to publish the L0 slots and to clear the
+memtable. Between those two steps, readers find identical rows in both. The
+memtable still clears only after the MANIFEST write succeeds.
+`test_kv_lsm` and three runs of `test_kv_lsm_concurrent 8` PASS.
 
-`make test` on the patched tree remains NOTRUN.
+**Verification.**
+- `make test` (`scripts/make_test_summary.sh`): 813/813 commands, 1
+  environmental failure (docs check without `results/`).
+- orcd-mini deploy and POSIX smoke: 216/216 PASS.
+- A/B (A 8fb, B 47ba, A' 8fb) with the user's exact `tiny_files.py` shape,
+  at matched new-file counts:
+  - leader LSM lock waits 1.6–6.0% vs 13.6% at 0.9 M, and 5.4% vs 20.9% at
+    1.7 M;
+  - creates/s 736 / 598 / 551 at 0.9 M, which follows the run order, not
+    the build.
+
+The remaining leader waits are `h->mu` in `host_pump`, proposals and REPORT
+([`h->mu` plan](../status/raft-host-mu-plan-20261016.md)), plus XFS log
+fsync waits.
+
+**Remaining.** Step 4 (bound how long `merge_scan` holds the shared view) is
+deferred until LSM waits rise again. Create throughput on orcd-mini is not
+a W126 matter.
 
 <a id="w127"></a>
 ### W127 — Metadata apply accepts unknown command tags as applied

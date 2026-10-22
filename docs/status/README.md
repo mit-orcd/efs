@@ -59,6 +59,16 @@ data files under `docs/` now live only at tag `archive/raw-evidence-20261021`
 links in 96 pages now name the archived path. Read one with
 `git show archive/raw-evidence-20261021:<path>`.
 
+[W126 on orcd-mini, `8fb4247ad` A/B](orcd-mini-w126-ab-8fb4247ad-20261022.md):
+**deployed. Lock-wait gate PASS; create-rate gate FAIL.**
+- Read-only LSM peeks take `mu` only, and flush file I/O yields the
+  exclusive view.
+- Leader LSM lock waits are 2–4× lower at matched points (A/B/A').
+- Creates/s followed the run order (736/598/551), not the build. Throughput
+  is bounded by `h->mu` and fsync.
+- `make test` 813/813 with one environmental failure; POSIX smoke 216/216.
+- The user's 32M-file run was stopped at ~5.67 M files for the deploy.
+
 [orcd-mini profile under the 32M-file create run, `47ba6b590`](orcd-mini-profile-47ba6b590-20261021.md):
 **profiling only; no PASS/FAIL gate.**
 - From ~1.0 to ~2.6 M files, creates fell from 2,564 to 1,130 files/s.

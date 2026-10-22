@@ -88,7 +88,9 @@ applied indices then slept >20 ms 1,400–2,600 times per window
 Each applied batch took the exclusive side twice: once only to check two
 failure flags, then for the memtable update. Each REPORT took it once more,
 only to read the L0 size (`efs_kv_lsm_l0_hot`). W126 step 1 removes those
-read-only exclusive phases.
+read-only exclusive phases. Steps 1 and 3 were deployed as `8fb4247ad`. Their A/B
+([W126 A/B](orcd-mini-w126-ab-8fb4247ad-20261022.md)) cut leader LSM waits
+2–4× but did not raise the create rate.
 
 The `h->mu` waits did not grow (8–13% of switches). They have the same shape as on
 `9099380f3`: proposals 44–49%, REPORT 9–12%, `host_pump` 7–12%.
