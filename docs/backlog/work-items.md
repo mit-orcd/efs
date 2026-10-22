@@ -3151,6 +3151,22 @@ replacing the accepted four-node target with a five-node minimum/f=3 ladder.
 
 **October 15 review:** The title retains the original defect. Missing/corrupt evidence now fails closed; identity-bound format and broader integrity requirements remain separate. See [reconciliation](../status/open-item-reconciliation-20261015.md).
 
+**K16 (Oct 22, branch `devel-k16`): identity-bound fragment record implemented.**
+Every chunk and packed-segment fragment file now ends in a 128-byte fragment
+record (format 2): kind, export/group, inode/segment id, candidate/segment
+generation, chunk index, fragment index, payload length, coding profile,
+payload digest and a bound digest over all of them. PUT writes it; GET, the
+checksum-conditional GC delete, segment reads and the restart scan verify it.
+Unknown format and wrong identity are refused with distinct codes
+(`EFS_ERR_FRAG_FORMAT`, `EFS_ERR_FRAG_IDENTITY`), GET status `INTEGRITY` and a
+logged line; GC neither deletes nor acknowledges. No old format is read:
+root format 0 refuses startup. Inode generation and export salt are not in
+the record because GET/GC do not carry them; FileID separation rests on the
+unique candidate generation (follow-up). Format in
+[data.md](../how-it-works/protocols/data.md#fragment-record-format-2-implemented-w75);
+evidence in [K16 summary](../status/k16-w75-identity-format-20261022.md).
+Not merged; RDMA and hardware gates NOTRUN.
+
 **Class:** integrity correctness. **Status:** open, inspected source gap to I25;
 no corruption experiment was run in this documentation review.
 

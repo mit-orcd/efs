@@ -1079,3 +1079,105 @@ the checksum is computed once, at creation, and never has to be maintained.
 This also gives the simulator ([verification.md](../verification.md)) a
 natural corruption fault to inject, which is the only way the property is
 ever actually tested.
+
+#### Fragment record format 2 (implemented, W75)
+
+Every fragment file a storage node writes, chunk fragments and packed-segment
+fragments alike, is the payload followed by one fixed 128-byte **fragment
+record** (`include/efs/frag_record.h`). Buffered roots append the record
+directly after the payload. O_DIRECT roots append a 4 KiB tail page that
+begins with the record and is zero-padded. There is no sidecar file. All
+integers are big-endian.
+
+```text
+off  size  field
+  0     8  magic "EFSFRAG\0"
+  8     2  version = 2
+ 10     2  kind: 1 chunk fragment, 2 packed-segment fragment
+ 12     4  record bytes = 128
+ 16     4  space: export id (chunk) | publication group (segment)
+ 20     4  fragment index (0 = D1, 1 = D2, 2 = P)
+ 24     8  object: inode number (chunk) | segment id (segment)
+ 32     8  generation: chunk candidate generation | segment generation
+ 40     4  chunk index (0 for a segment)
+ 44     4  payload length
+ 48     4  coding profile = 1 (fixed 2+1)
+ 52     4  reserved, zero
+ 56    32  payload digest = BLAKE3(payload)
+ 88    32  bound digest   = BLAKE3(record bytes [0, 88))
+120     8  reserved, zero
+```
+
+The bound digest covers the identity fields and the payload digest, so it is
+a checksum over the immutable identity plus the payload, as I25 requires.
+The payload digest is the value that travels on the wire and sits in the
+chunk map, so clients, metadata and GC records are unchanged.
+
+**Write.** The PUT handler and the ticketed upload rehash the received
+payload before storage, as before. The store then builds the record from
+the identity the request names and writes payload and record in one write.
+An incomplete identity, such as generation 0, is refused, so no file is
+ever written without a record.
+
+**Read.** A GET names export, inode, chunk index, fragment index and
+candidate generation. The storage node checks, in order:
+
+1. The record is present and complete. A torn or missing record is
+   `EFS_ERR_CHECKSUM`.
+2. Magic, version, kind, record size and reserved fields are known. Anything
+   else is `EFS_ERR_FRAG_FORMAT`.
+3. The bound digest matches. A rotted record is `EFS_ERR_CHECKSUM`.
+4. Every identity field equals the requested identity, including the export
+   geometry's payload length. A mismatch is `EFS_ERR_FRAG_IDENTITY`.
+5. For data fragments, BLAKE3 of the payload equals the payload digest. A
+   mismatch is `EFS_ERR_CHECKSUM`. Metadata-table pages stop after step 4,
+   because their payload integrity is the EFSR root checksums.
+
+A refused fragment is never served. The node replies with GET status
+`EFS_GET_CHUNK_INTEGRITY` and logs `store: I25 get refused fragment <path>:
+<reason> field=<name>` (the first 256 refusals, then every 1024th). The
+client logs `read: I25 node refused fragment` and treats the fragment as
+unavailable. A read then decodes from the other two fragments, which pass the
+same server-side checks and are compared with the chunk-map digests captured
+by the reader. Two refused fragments fail the read with EIO. Nothing is
+repaired automatically (W74).
+
+**GC.** The checksum-conditional delete reads the record, verifies identity
+and format, and compares the payload digest with the GC record's digest. A
+file whose record has an unknown format, another identity or a bad bound
+digest is neither deleted nor acknowledged. The GC record stays pending and
+the refusal is logged. Whole-inode reclaim of a dead inode removes the
+inode's directory without per-file checks, because it removes everything
+under that FileID.
+
+**Packed segments.** Segment fragment files use the same record with kind 2.
+Segment GET, a retried segment PUT that finds an existing file, and segment
+reads all verify the record against `(group, segment id, segment generation,
+fragment index, length)` before comparing digests.
+
+**Restart scan.** After an unclean stop the report-only scan checks each
+recently modified file's record for self-consistency and its payload digest.
+
+**Identity fields not in the record.** `content_epoch` is a fence, not
+object identity (see above), so it is not bound. The inode generation and
+the export salt are not bound either. Neither GET, the GC executor nor the
+packer receives them today. Fragment GETs carry only `(export, ino, chunk,
+fragment, candidate generation)`, and the client read path does not hold
+the inode generation. FileID separation comes from the candidate generation:
+it is BLAKE3 of a 128-bit per-process random object UUID, a sequence, and the
+chunk index. A fragment of a previous inode incarnation or of an earlier
+filesystem therefore carries a different generation and is refused as an
+identity mismatch. Binding the inode generation and the salt directly needs
+both fields on the GET and GC wire and in the client read path. That is a
+separate follow-up.
+
+**No earlier format is read.** The storage root marker (`.efs-engine`) now
+records root format 1, meaning fragment record format 2. At startup a root
+whose marker names format 0, the payload-only 32-byte digest tail, is
+refused, and so is an unmarked root whose `data/` directory is not empty. The error
+names the format, for example `storage: <root> has root format 0 (fragment
+format 1: payload-only digest tail); this build reads only root format 1
+...; refusing startup, reformat the root`. There is no migration. A single
+old-format file found inside a format-1 root is refused per file as
+`EFS_ERR_FRAG_FORMAT`, or as `EFS_ERR_CHECKSUM` when its 32-byte tail is too
+short to hold a record.

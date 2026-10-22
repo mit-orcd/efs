@@ -24,6 +24,12 @@ full acceptance are separate states.
 pre-vote ends restart election storms (efs1 cluster: terms +19 before,
 +1 after); efsd stops are bounded (handlers close before the next
 request, 40 s drain).** Unit tests PASS; orcd-mini gates NOTRUN.
+[K16 / W75 identity-bound fragment record](k16-w75-identity-format-20261022.md):
+**branch `devel-k16`, not merged.** Fragment record format 2 binds export,
+inode, chunk, candidate generation, fragment index and length to the payload;
+GET/GC/segment reads refuse unknown formats and mismatched identities; root
+format 0 refuses startup. Inode generation and export salt are not bound.
+RDMA and hardware gates NOTRUN.
 
 [orcd-mini deploy of `d94ca85bf`](orcd-mini-deploy-d94ca85bf-20261022.md):
 **deployed; all functional suites PASS** (core 216/216, extras, durability,

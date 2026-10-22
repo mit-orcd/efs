@@ -1575,6 +1575,12 @@ full acceptance are separate states.
 pre-vote ends restart election storms (efs1 cluster: terms +19 before,
 +1 after); efsd stops are bounded (handlers close before the next
 request, 40 s drain).** Unit tests PASS; orcd-mini gates NOTRUN.
+[K16 / W75 identity-bound fragment record](../status/k16-w75-identity-format-20261022.md):
+**branch `devel-k16`, not merged.** Fragment record format 2 binds export,
+inode, chunk, candidate generation, fragment index and length to the payload;
+GET/GC/segment reads refuse unknown formats and mismatched identities; root
+format 0 refuses startup. Inode generation and export salt are not bound.
+RDMA and hardware gates NOTRUN.
 
 [orcd-mini deploy of `d94ca85bf`](../status/orcd-mini-deploy-d94ca85bf-20261022.md):
 **deployed; all functional suites PASS** (core 216/216, extras, durability,
@@ -2478,7 +2484,7 @@ positions do not assign an execution order or override the active handoff.
 | spec2 | **W72** · production mount session lifecycle / I23 integration | fencing integration | partial — full mount UUID/epoch shared by append/HOLD/FLOCK; retained FUSE CREATE/adoption and sequenced OPEN/CLOSE plus proven-revocation recovery pass AMD direct/TCP; namespace shard admission and fenced replay/effect checks are AMD gated; Oct 11 merged REGISTER verdict mismatch repaired; before/after proof retained; REGISTER/ESTABLISH verdict regressions and final captured `90a47313` full normal/fault native plus direct/buffered TCP cold namespace/APPEND/sync gates pass ([follow-up](../status/amd-integration-20261011.md#w72-register-verdict-mismatch--reproduced-and-repaired)); REPORT mapping/activation/completion session fences pass AMD direct/TCP; staged typed per-publication recovery/newer-range ownership passes AMD; production flush/PUT-ticket integration remain open | [evidence and gate](#w72) · [Oct9 mounted-client gates](../status/dependency-package-20261009.md#terminal-retained-identity-recovery--implementedgated) |
 | spec3 | **W73** · synchronous application-write publication | integration | Closed supported software integration: application sync and mount-sync direct/buffered × TCP/RXE gates accepted; hardware power-loss acceptance remains W71 ([Oct9 closure](../status/amd-rxe-gate-closure-20261009.md)) | [evidence and gate](#w73) |
 | spec4 | **W74** · protection profiles, debt and automatic repair | recovery feature gap | repair experiment removed from devel 2026-10-16 (tag `archive/experimental-group-a-20261016`); earlier ordinary-fragment standalone repair qualification ([ledger](../status/orcd-default-repair-20261012.md)) applies only to that tag; no repair path in devel; automatic/unplanned repair deferred; protection/profile cutover remain unclosed | [evidence and gate](#w74) |
-| spec5 | **W75** · fragment integrity trust / missing checksum fallback | integrity correctness | missing/corrupt evidence fails closed; captured metadata digest and PUT validation gates pass on NUC; identity-bound format remains open | [evidence and gate](#w75) |
+| spec5 | **W75** · fragment integrity trust / missing checksum fallback | integrity correctness | missing/corrupt evidence fails closed; captured metadata digest and PUT validation gates pass on NUC; K16 identity-bound fragment record (format 2) implemented on `devel-k16`, efs1 unit + private TCP cluster gates (see [K16 summary](../status/k16-w75-identity-format-20261022.md)); not merged; inode generation/salt binding, RDMA and hardware gates open | [evidence and gate](#w75) |
 | spec6 | **W76** · opid table exhaustion sends unprotected namespace retries | conditional correctness | Closed: bounded identity admission refuses saturation safely; Oct9 reserves receipt capacity with16 unacknowledged positions (512 tracker slots); all four lost-reply mutations replay across leader death/restart with one effect | [evidence and gate](#w76) |
 | spec7 | **W77** · atomic multi-chunk public publication/observation | integration gap | per-group REPORT/per-chunk publication; request-wide decision/read-validation gate unestablished | [evidence and gate](#w77) |
 | op2 | **W78** · server wrapper trusts PID-file process identity | conditional operator correctness | Closed Oct11: actual NUC startup/stop retains unrelated processes; absent/dead/invalid/wrong-storage/stale-start and recorder ownership gates pass; shutdown remains W65 | [closure](../status/devel-nuc-closure-20261010.md) |
@@ -5953,6 +5959,22 @@ replacing the accepted four-node target with a five-node minimum/f=3 ladder.
 ### W75 · Integrity evidence is payload-only and missing evidence is accepted (queue row spec5)
 
 **October 15 review:** The title retains the original defect. Missing/corrupt evidence now fails closed; identity-bound format and broader integrity requirements remain separate. See [reconciliation](../status/open-item-reconciliation-20261015.md).
+
+**K16 (Oct 22, branch `devel-k16`): identity-bound fragment record implemented.**
+Every chunk and packed-segment fragment file now ends in a 128-byte fragment
+record (format 2): kind, export/group, inode/segment id, candidate/segment
+generation, chunk index, fragment index, payload length, coding profile,
+payload digest and a bound digest over all of them. PUT writes it; GET, the
+checksum-conditional GC delete, segment reads and the restart scan verify it.
+Unknown format and wrong identity are refused with distinct codes
+(`EFS_ERR_FRAG_FORMAT`, `EFS_ERR_FRAG_IDENTITY`), GET status `INTEGRITY` and a
+logged line; GC neither deletes nor acknowledges. No old format is read:
+root format 0 refuses startup. Inode generation and export salt are not in
+the record because GET/GC do not carry them; FileID separation rests on the
+unique candidate generation (follow-up). Format in
+[data.md](#fragment-record-format-2-implemented-w75);
+evidence in [K16 summary](../status/k16-w75-identity-format-20261022.md).
+Not merged; RDMA and hardware gates NOTRUN.
 
 **Class:** integrity correctness. **Status:** open, inspected source gap to I25;
 no corruption experiment was run in this documentation review.
@@ -11147,6 +11169,108 @@ the checksum is computed once, at creation, and never has to be maintained.
 This also gives the simulator ([verification.md](#appendix-15--verification--simulator--codesignal-cycle)) a
 natural corruption fault to inject, which is the only way the property is
 ever actually tested.
+
+##### Fragment record format 2 (implemented, W75)
+
+Every fragment file a storage node writes, chunk fragments and packed-segment
+fragments alike, is the payload followed by one fixed 128-byte **fragment
+record** (`include/efs/frag_record.h`). Buffered roots append the record
+directly after the payload. O_DIRECT roots append a 4 KiB tail page that
+begins with the record and is zero-padded. There is no sidecar file. All
+integers are big-endian.
+
+```text
+off  size  field
+  0     8  magic "EFSFRAG\0"
+  8     2  version = 2
+ 10     2  kind: 1 chunk fragment, 2 packed-segment fragment
+ 12     4  record bytes = 128
+ 16     4  space: export id (chunk) | publication group (segment)
+ 20     4  fragment index (0 = D1, 1 = D2, 2 = P)
+ 24     8  object: inode number (chunk) | segment id (segment)
+ 32     8  generation: chunk candidate generation | segment generation
+ 40     4  chunk index (0 for a segment)
+ 44     4  payload length
+ 48     4  coding profile = 1 (fixed 2+1)
+ 52     4  reserved, zero
+ 56    32  payload digest = BLAKE3(payload)
+ 88    32  bound digest   = BLAKE3(record bytes [0, 88))
+120     8  reserved, zero
+```
+
+The bound digest covers the identity fields and the payload digest, so it is
+a checksum over the immutable identity plus the payload, as I25 requires.
+The payload digest is the value that travels on the wire and sits in the
+chunk map, so clients, metadata and GC records are unchanged.
+
+**Write.** The PUT handler and the ticketed upload rehash the received
+payload before storage, as before. The store then builds the record from
+the identity the request names and writes payload and record in one write.
+An incomplete identity, such as generation 0, is refused, so no file is
+ever written without a record.
+
+**Read.** A GET names export, inode, chunk index, fragment index and
+candidate generation. The storage node checks, in order:
+
+1. The record is present and complete. A torn or missing record is
+   `EFS_ERR_CHECKSUM`.
+2. Magic, version, kind, record size and reserved fields are known. Anything
+   else is `EFS_ERR_FRAG_FORMAT`.
+3. The bound digest matches. A rotted record is `EFS_ERR_CHECKSUM`.
+4. Every identity field equals the requested identity, including the export
+   geometry's payload length. A mismatch is `EFS_ERR_FRAG_IDENTITY`.
+5. For data fragments, BLAKE3 of the payload equals the payload digest. A
+   mismatch is `EFS_ERR_CHECKSUM`. Metadata-table pages stop after step 4,
+   because their payload integrity is the EFSR root checksums.
+
+A refused fragment is never served. The node replies with GET status
+`EFS_GET_CHUNK_INTEGRITY` and logs `store: I25 get refused fragment <path>:
+<reason> field=<name>` (the first 256 refusals, then every 1024th). The
+client logs `read: I25 node refused fragment` and treats the fragment as
+unavailable. A read then decodes from the other two fragments, which pass the
+same server-side checks and are compared with the chunk-map digests captured
+by the reader. Two refused fragments fail the read with EIO. Nothing is
+repaired automatically (W74).
+
+**GC.** The checksum-conditional delete reads the record, verifies identity
+and format, and compares the payload digest with the GC record's digest. A
+file whose record has an unknown format, another identity or a bad bound
+digest is neither deleted nor acknowledged. The GC record stays pending and
+the refusal is logged. Whole-inode reclaim of a dead inode removes the
+inode's directory without per-file checks, because it removes everything
+under that FileID.
+
+**Packed segments.** Segment fragment files use the same record with kind 2.
+Segment GET, a retried segment PUT that finds an existing file, and segment
+reads all verify the record against `(group, segment id, segment generation,
+fragment index, length)` before comparing digests.
+
+**Restart scan.** After an unclean stop the report-only scan checks each
+recently modified file's record for self-consistency and its payload digest.
+
+**Identity fields not in the record.** `content_epoch` is a fence, not
+object identity (see above), so it is not bound. The inode generation and
+the export salt are not bound either. Neither GET, the GC executor nor the
+packer receives them today. Fragment GETs carry only `(export, ino, chunk,
+fragment, candidate generation)`, and the client read path does not hold
+the inode generation. FileID separation comes from the candidate generation:
+it is BLAKE3 of a 128-bit per-process random object UUID, a sequence, and the
+chunk index. A fragment of a previous inode incarnation or of an earlier
+filesystem therefore carries a different generation and is refused as an
+identity mismatch. Binding the inode generation and the salt directly needs
+both fields on the GET and GC wire and in the client read path. That is a
+separate follow-up.
+
+**No earlier format is read.** The storage root marker (`.efs-engine`) now
+records root format 1, meaning fragment record format 2. At startup a root
+whose marker names format 0, the payload-only 32-byte digest tail, is
+refused, and so is an unmarked root whose `data/` directory is not empty. The error
+names the format, for example `storage: <root> has root format 0 (fragment
+format 1: payload-only digest tail); this build reads only root format 1
+...; refusing startup, reformat the root`. There is no migration. A single
+old-format file found inside a format-1 root is refused per file as
+`EFS_ERR_FRAG_FORMAT`, or as `EFS_ERR_CHECKSUM` when its 32-byte tail is too
+short to hold a record.
 
 
 ## Appendix 11 — Protocol — directory placement & spreading

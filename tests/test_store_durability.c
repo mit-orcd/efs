@@ -53,10 +53,18 @@ static int barrier_close(int fd)
 #undef close
 /* Async acknowledgement on a real XFS directory ($TMPDIR): syncfs and the
  * epoch record need a real filesystem. Returns 0 when not XFS (SKIP). */
+/* A valid I25 record for a 4 KiB test payload. */
+static void test_record(const uint8_t *data, uint8_t rec[EFS_FRAG_RECORD_BYTES])
+{
+    struct efs_frag_ident id={.kind=EFS_FRAG_KIND_CHUNK,.space=1,.object=42,.generation=7,
+        .payload_len=4096,.coding_profile=EFS_FRAG_PROFILE_K2F1};
+    uint8_t d[EFS_HASH_SIZE];efs_hash(data,4096,d);
+    assert(!efs_frag_record_encode(&id,d,rec));
+}
 static int async_put(struct put_sync_root *r, const char *path, uint8_t *data)
 {
-    uint8_t sum[EFS_HASH_SIZE];efs_hash(data,4096,sum);
-    struct shard_io_arg a={.buf=data,.len=4096,.is_write=1,.sum=sum,.direct=1,.sync_root=r};
+    uint8_t rec[EFS_FRAG_RECORD_BYTES];test_record(data,rec);
+    struct shard_io_arg a={.buf=data,.len=4096,.is_write=1,.rec=rec,.direct=1,.sync_root=r};
     strcpy(a.path,path);shard_io_thread(&a);
     return a.result;
 }
@@ -224,8 +232,8 @@ static int test_async_durability(uint8_t *data)
      * verifies fragments modified since and reports a corrupted one. */
     snprintf(path,sizeof(path),"%s/data/a/f5",root);
     {   /* f5: a valid fragment, then its payload corrupted */
-        uint8_t sum[EFS_HASH_SIZE];efs_hash(data,4096,sum);
-        struct shard_io_arg a={.buf=data,.len=4096,.is_write=1,.sum=sum,.direct=1};
+        uint8_t rec[EFS_FRAG_RECORD_BYTES];test_record(data,rec);
+        struct shard_io_arg a={.buf=data,.len=4096,.is_write=1,.rec=rec,.direct=1};
         strcpy(a.path,path);file_syncs=0;shard_io_thread(&a);assert(a.result==EFS_OK);
         int cf=open(path,O_WRONLY);assert(cf>=0 && pwrite(cf,"X",1,0)==1);close(cf);
     }
@@ -254,6 +262,40 @@ static int test_async_durability(uint8_t *data)
     assert(!unlink(rec));assert(!rmdir(root));
     return 1;
 }
+/* I25 / fragment format 2: no legacy reader. A root marked with format 0
+ * (payload-only digest tails) or an unmarked root that already holds
+ * fragment data is refused at startup; a fresh root is marked format 1. */
+static void test_root_format(void)
+{
+    char dir[]="/tmp/efs-root-format-XXXXXX";assert(mkdtemp(dir));
+    struct efsd_server *server=calloc(1,sizeof(*server));assert(server);
+    server->storage_path_count=1;strcpy(server->storage_paths[0],dir);
+    booting=1;assert(!server_storage_roots_init(server));booting=0;
+    assert(server_storage_root_mode(dir)==(int)EFS_STORAGE_ROOT_FORMAT);
+    server_storage_roots_close(server);
+    /* Rewrite the marker as format 0, with a valid marker digest. */
+    char path[1100];snprintf(path,sizeof(path),"%s/.efs-engine",dir);
+    uint8_t page[128];int fd=open(path,O_RDWR);assert(fd>=0 && pread(fd,page,128,0)==128);
+    page[8]=0;efs_hash(page,96,page+96);assert(pwrite(fd,page,128,0)==128);close(fd);
+    assert(server_storage_root_mode(dir)==-1);
+    strcpy(server->storage_paths[0],dir);
+    booting=1;assert(server_storage_roots_init(server)==EFS_ERR_IO);booting=0;
+    assert(server_compute_usage(dir)==UINT64_MAX);
+    /* Unmarked root with existing fragment data: format unknown, refused. */
+    assert(!unlink(path));
+    char data[1100];snprintf(data,sizeof(data),"%s/data",dir);assert(!mkdir(data,0755));
+    /* An empty data/ (efsd creates it before marking) is a fresh root. */
+    strcpy(server->storage_paths[0],dir);
+    booting=1;assert(!server_storage_roots_init(server));booting=0;
+    server_storage_roots_close(server);assert(!unlink(path));
+    char sub[1200];snprintf(sub,sizeof(sub),"%s/exports",data);assert(!mkdir(sub,0755));
+    strcpy(server->storage_paths[0],dir);
+    booting=1;assert(server_storage_roots_init(server)==EFS_ERR_IO);booting=0;
+    assert(access(path,F_OK)); /* no marker was created */
+    assert(!rmdir(sub));assert(!rmdir(data));
+    snprintf(path,sizeof(path),"%s/.efs-engine-lock",dir);unlink(path);
+    free(server);assert(!rmdir(dir));
+}
 int main(void)
 {
     test_clean_verifier_selection();
@@ -269,8 +311,8 @@ int main(void)
     char dir[]="/tmp/efs-store-durability-XXXXXX";assert(mkdtemp(dir));
     char path[1024];snprintf(path,sizeof(path),"%s/a/b/body",dir);
     uint8_t *data;assert(!posix_memalign((void **)&data,4096,65536));memset(data,0x37,65536);
-    uint8_t sum[EFS_HASH_SIZE];memset(sum,0x42,sizeof(sum));
-    struct shard_io_arg a={.buf=data,.len=4096,.is_write=1,.sum=sum};strcpy(a.path,path);
+    uint8_t sum[EFS_FRAG_RECORD_BYTES];memset(sum,0x42,sizeof(sum)); /* opaque record */
+    struct shard_io_arg a={.buf=data,.len=4096,.is_write=1,.rec=sum};strcpy(a.path,path);
     struct efsd_server *server=calloc(1,sizeof(*server));assert(server);
     assert(!pthread_mutex_init(&server->lock,NULL));
     server->storage_path_count=1;strcpy(server->storage_paths[0],dir);
@@ -342,6 +384,7 @@ int main(void)
     snprintf(path,sizeof(path),"%s/a",dir);assert(!rmdir(path));snprintf(path,sizeof(path),"%s/.efs-engine",dir);assert(!unlink(path));
     snprintf(path,sizeof(path),"%s/.efs-engine-lock",dir);assert(!unlink(path));
     assert(!rmdir(dir));
+    test_root_format();
     int async_ran=test_async_durability(data);
     test_startup_abandon(data);
     if(!async_ran)puts("async durability: SKIP (TMPDIR is not XFS)");

@@ -4,6 +4,8 @@
 #include "directory_sync_group.h"
 #endif
 #include "efs/checksum.h"
+#include "efs/frag_record.h"
+#include "efs/store.h"
 #include "efs/kv_key.h"
 #include "efs/protocol.h"
 #include <stdio.h>
@@ -567,8 +569,9 @@ static pthread_mutex_t *fragment_mutex(efs_export_id_t eid, efs_ino_t ino, uint3
  * mode or transient export geometry. PUT bodies are multiples of 4 KiB. */
 static int fragment_payload_bytes(uint64_t bytes, uint64_t *payload)
 {
-    if (bytes >= EFS_HASH_SIZE && (bytes - EFS_HASH_SIZE) % 4096 == 0) {
-        *payload = bytes - EFS_HASH_SIZE;
+    if (bytes >= EFS_FRAG_RECORD_BYTES &&
+        (bytes - EFS_FRAG_RECORD_BYTES) % 4096 == 0) {
+        *payload = bytes - EFS_FRAG_RECORD_BYTES;
         return EFS_OK;
     }
     if (bytes >= 4096 && bytes % 4096 == 0) {
@@ -611,6 +614,44 @@ static int fragment_parent_sync(struct efsd_server *s, const char *path)
     return rc == 0 && cr == 0 ? EFS_OK : EFS_ERR_IO;
 }
 
+/* I25: the identity a chunk fragment file under this name must carry.
+ * The generation is the caller's efs_tls_chunk_gen (part of the name). */
+static void fragment_ident(const struct efs_export *ex, efs_ino_t ino,
+                           uint32_t chunk_index, uint32_t fragment_index,
+                           uint32_t payload_len, struct efs_frag_ident *id)
+{
+    memset(id, 0, sizeof(*id));
+    id->kind = EFS_FRAG_KIND_CHUNK;
+    id->space = ex->id;
+    id->object = ino;
+    id->generation = efs_tls_chunk_gen;
+    id->chunk_index = chunk_index;
+    id->fragment_index = fragment_index;
+    id->payload_len = payload_len;
+    id->coding_profile = EFS_FRAG_PROFILE_K2F1;
+}
+
+/* Every refused fragment is logged (bounded: the first 256, then every
+ * 1024th), naming the path, the refusal and the first mismatching field. */
+static uint64_t fragment_refusals;
+uint64_t server_fragment_refusals(void)
+{
+    return __atomic_load_n(&fragment_refusals, __ATOMIC_RELAXED);
+}
+static void fragment_refused(const char *op, const char *path, int rc,
+                             const char *field, const struct efs_frag_ident *id)
+{
+    uint64_t n = __atomic_add_fetch(&fragment_refusals, 1, __ATOMIC_RELAXED);
+    if (n > 256 && n % 1024)
+        return;
+    fprintf(stderr, "store: I25 %s refused fragment %s: %s%s%s "
+            "(expected export=%u ino=%llu ci=%u fi=%u gen=%llu len=%u; refusals=%llu)\n",
+            op, path, efs_strerror(rc), field ? " field=" : "", field ? field : "",
+            id->space, (unsigned long long)id->object, id->chunk_index,
+            id->fragment_index, (unsigned long long)id->generation,
+            id->payload_len, (unsigned long long)n);
+}
+
 /* Only a proven checksum mismatch is ackable. Read/open/stat/unlink failures
  * leave the durable GC record for retry. Count only files actually unlinked. */
 int server_delete_fragment_if_sum(struct efsd_server *s, struct efs_export *ex,
@@ -627,11 +668,11 @@ int server_delete_fragment_if_sum(struct efsd_server *s, struct efs_export *ex,
     pthread_mutex_lock(mu);
     for (uint32_t ri = 0; ri < n; ri++) {
         struct stat st;
-        uint8_t got[EFS_HASH_SIZE];
+        uint8_t rec[EFS_FRAG_RECORD_BYTES], got[EFS_HASH_SIZE];
         uint64_t payload;
         fragment_path_at(s, ri, ex, ino, chunk_index, fragment_index, path,
                          sizeof(path));
-        /* A small buffered digest read works for both stored tail formats. */
+        /* A small buffered record read works for both stored tail layouts. */
         int fd = open(path, O_RDONLY);
         if (fd < 0) {
             if (errno == ENOENT) {
@@ -655,15 +696,33 @@ int server_delete_fragment_if_sum(struct efsd_server *s, struct efs_export *ex,
         uint64_t read_start = gc_clock_us();
         ssize_t rn;
         do {
-            rn = pread(fd, got, sizeof(got), (off_t)payload);
+            rn = pread(fd, rec, sizeof(rec), (off_t)payload);
         } while (rn < 0 && errno == EINTR);
         int read_errno = errno;
         gc_io_add(s, 0, read_start, rn > 0 ? (uint64_t)rn : 0,
-                  rn != (ssize_t)sizeof(got));
+                  rn != (ssize_t)sizeof(rec));
         errno = read_errno;
         int cr = close(fd); /* never retry close on a potentially released fd */
-        if (rn != (ssize_t)sizeof(got) || cr != 0) {
+        if (rn != (ssize_t)sizeof(rec) || cr != 0) {
             rc = EFS_ERR_IO;
+            break;
+        }
+        /* I25: GC acts only on a file proven to be this exact object. An
+         * unknown format, a rotten record or another identity under this
+         * name is neither deleted nor acknowledged: the record stays for an
+         * operator, audibly. */
+        struct efs_frag_ident want;
+        const char *field = NULL;
+        if (payload > UINT32_MAX) {
+            rc = EFS_ERR_FRAG_FORMAT;
+            break;
+        }
+        fragment_ident(ex, ino, chunk_index, fragment_index, (uint32_t)payload,
+                       &want);
+        int vr = efs_frag_record_verify(rec, sizeof(rec), &want, got, &field);
+        if (vr != EFS_OK) {
+            fragment_refused("gc", path, vr, field, &want);
+            rc = vr;
             break;
         }
         if (memcmp(got, expect_sum, sizeof(got)) != 0) {
@@ -1193,11 +1252,13 @@ int server_gc_sync_roots(struct efsd_server *s)
 }
 
 /* direct: caller decides per-ino — data fragments only. Metadata pages
- * stay buffered. sum, when non-NULL, is filled from the digest stored
- * at offset want_len (a 4 KiB O_DIRECT tail, or 32 buffered bytes). */
+ * stay buffered. rec, when non-NULL, receives the I25 fragment record
+ * stored at offset want_len (the start of a 4 KiB O_DIRECT tail page, or
+ * EFS_FRAG_RECORD_BYTES buffered bytes); *rec_ok says whether all of its
+ * bytes were present. The caller verifies it (efs_frag_verify). */
 static int read_file_bytes(const char *path,
                            uint8_t *buf, uint32_t want_len, uint32_t *got,
-                           int direct, uint8_t *sum, int *sum_ok)
+                           int direct, uint8_t *rec, int *rec_ok)
 {
     int flags = O_RDONLY;
     if (direct)
@@ -1231,29 +1292,28 @@ static int read_file_bytes(const char *path,
         n = read(fd, buf, want_len);
         *got = (n > 0) ? (uint32_t)n : 0;
     }
-    if (sum && sum_ok && n > 0) {
-        *sum_ok = 0;
+    if (rec && rec_ok && n > 0) {
+        *rec_ok = 0;
         if (direct) {
             uint8_t *tail = NULL;
             if (posix_memalign((void **)&tail, 4096, 4096) == 0) {
                 ssize_t rn = pread(fd, tail, 4096, (off_t)want_len);
-                /* Buffered writers persist only the digest, whereas direct
+                /* Buffered writers persist only the record, whereas direct
                  * writers pad it to an aligned page. An aligned O_DIRECT
-                 * read may return a short final page at EOF. Both formats
-                 * carry the same complete digest; require its bytes, not
-                 * padding. The GET handler still verifies the payload hash. */
-                if (rn >= EFS_HASH_SIZE) {
-                    memcpy(sum, tail, EFS_HASH_SIZE);
-                    *sum_ok = 1;
+                 * read may return a short final page at EOF. Both layouts
+                 * carry the same complete record; require its bytes. */
+                if (rn >= (ssize_t)EFS_FRAG_RECORD_BYTES) {
+                    memcpy(rec, tail, EFS_FRAG_RECORD_BYTES);
+                    *rec_ok = 1;
                 }
                 free(tail);
             }
         } else {
-            uint8_t tmp[EFS_HASH_SIZE];
-            ssize_t rn = pread(fd, tmp, EFS_HASH_SIZE, (off_t)want_len);
-            if (rn == (ssize_t)EFS_HASH_SIZE) {
-                memcpy(sum, tmp, EFS_HASH_SIZE);
-                *sum_ok = 1;
+            uint8_t tmp[EFS_FRAG_RECORD_BYTES];
+            ssize_t rn = pread(fd, tmp, EFS_FRAG_RECORD_BYTES, (off_t)want_len);
+            if (rn == (ssize_t)EFS_FRAG_RECORD_BYTES) {
+                memcpy(rec, tmp, EFS_FRAG_RECORD_BYTES);
+                *rec_ok = 1;
             }
         }
     }
@@ -1274,7 +1334,7 @@ struct shard_io_arg {
     int direct; /* data fragments only; meta stays buffered */
     int no_create; /* write only if the file already exists (overwrite probe) */
     int excl;      /* O_CREAT|O_EXCL: EEXIST -> EFS_ERR_EXIST, no second open */
-    const uint8_t *sum; /* 32-byte digest; placed in the file, not a sidecar */
+    const uint8_t *rec; /* EFS_FRAG_RECORD_BYTES I25 record after the payload */
     int result;
     /* Data fragments are acknowledged after their write and made durable
      * by the root's background barrier (put_sync_root). */
@@ -1711,10 +1771,17 @@ static void put_sync_scan_dir(struct put_sync_root *r, const char *dir,
             if (fd >= 0) {
                 ssize_t got = pread(fd, buf, (size_t)st.st_size, 0);
                 close(fd);
-                uint8_t sum[EFS_HASH_SIZE];
-                if (got == (ssize_t)st.st_size) {
+                uint8_t sum[EFS_HASH_SIZE], want[EFS_HASH_SIZE];
+                struct efs_frag_ident id;
+                /* Self-consistency of the I25 record (the identity is the
+                 * name; GET checks it against the request) plus payload. */
+                if (got == (ssize_t)st.st_size &&
+                    efs_frag_record_parse(buf + payload,
+                                          (size_t)st.st_size - (size_t)payload,
+                                          &id, want) == EFS_OK &&
+                    id.payload_len == payload) {
                     efs_hash(buf, (size_t)payload, sum);
-                    ok = !memcmp(sum, buf + payload, EFS_HASH_SIZE);
+                    ok = !memcmp(sum, want, EFS_HASH_SIZE);
                 }
             }
             free(buf);
@@ -2126,14 +2193,14 @@ static void *shard_io_thread(void *arg)
             uint32_t alloc = (a->len + 4095u) & ~4095u;
             if (alloc < 4096)
                 alloc = 4096;
-            /* Digest lives in a 4 KiB tail after the payload so one
+            /* The record lives in a 4 KiB tail after the payload so one
              * O_DIRECT write carries both. No .sum inode. */
-            if (a->sum && alloc < a->len + 4096u)
+            if (a->rec && alloc < a->len + 4096u)
                 alloc = a->len + 4096u;
             /* Zero payloads (store-bench / dd if=/dev/zero): write from a
              * process-wide pre-zeroed O_DIRECT buffer — no per-PUT memset
              * or memcpy of the 64 KiB fragment. */
-            int is_zero = !a->sum && (a->len > 0) &&
+            int is_zero = !a->rec && (a->len > 0) &&
                           (efs_tls_write_known_zero ||
                            efs_bytes_are_zero(a->buf, a->len));
             const uint8_t *wbuf;
@@ -2169,7 +2236,7 @@ static void *shard_io_thread(void *arg)
                  * iovec from a per-thread aligned page; one writev carries
                  * payload + tail. Until Oct 1 the digest forced every
                  * fragment through the 64 KiB memcpy below. */
-                if (a->sum) {
+                if (a->rec) {
                     struct shard_io_buffers *buffers = shard_io_buffers_get();
                     if (!buffers || (!buffers->tail &&
                         posix_memalign((void **)&buffers->tail, 4096, 4096) != 0)) {
@@ -2177,12 +2244,13 @@ static void *shard_io_thread(void *arg)
                         a->result = EFS_ERR_NOMEM;
                         return NULL;
                     }
-                    memcpy(buffers->tail, a->sum, EFS_HASH_SIZE);
-                    memset(buffers->tail + EFS_HASH_SIZE, 0, 4096 - EFS_HASH_SIZE);
+                    memcpy(buffers->tail, a->rec, EFS_FRAG_RECORD_BYTES);
+                    memset(buffers->tail + EFS_FRAG_RECORD_BYTES, 0,
+                           4096 - EFS_FRAG_RECORD_BYTES);
                     static int once_zc;
                     if (!once_zc && __sync_bool_compare_and_swap(&once_zc, 0, 1))
                         fprintf(stderr, "store: put O_DIRECT zero-copy "
-                                "(payload+digest writev) len=%u\n", a->len);
+                                "(payload+record writev) len=%u\n", a->len);
                     struct iovec iov[2] = {
                         { .iov_base = a->buf, .iov_len = a->len },
                         { .iov_base = buffers->tail, .iov_len = 4096 },
@@ -2219,7 +2287,7 @@ static void *shard_io_thread(void *arg)
                     buffers->bounce_len = alloc;
                 }
                 static int once_bounce;
-                if (a->sum && !once_bounce &&
+                if (a->rec && !once_bounce &&
                     __sync_bool_compare_and_swap(&once_bounce, 0, 1))
                     fprintf(stderr, "store: put O_DIRECT bounce copy "
                             "(buf align=%u len=%u)\n",
@@ -2227,8 +2295,8 @@ static void *shard_io_thread(void *arg)
                 memcpy(buffers->bounce, a->buf, a->len);
                 if (a->len < alloc)
                     memset(buffers->bounce + a->len, 0, alloc - a->len);
-                if (a->sum)
-                    memcpy(buffers->bounce + a->len, a->sum, EFS_HASH_SIZE);
+                if (a->rec)
+                    memcpy(buffers->bounce + a->len, a->rec, EFS_FRAG_RECORD_BYTES);
                 wbuf = buffers->bounce;
             }
             while (written < alloc) {
@@ -2250,14 +2318,14 @@ static void *shard_io_thread(void *arg)
                 }
                 written += (size_t)n;
             }
-            if (a->sum) {
-                ssize_t n = write(fd, a->sum, EFS_HASH_SIZE);
-                if (n != (ssize_t)EFS_HASH_SIZE) {
+            if (a->rec) {
+                ssize_t n = write(fd, a->rec, EFS_FRAG_RECORD_BYTES);
+                if (n != (ssize_t)EFS_FRAG_RECORD_BYTES) {
                     close(fd);
                     a->result = EFS_ERR_IO;
                     return NULL;
                 }
-                written += EFS_HASH_SIZE;
+                written += EFS_FRAG_RECORD_BYTES;
             }
         }
         a->result = finish_fragment_put(a, fd, written);
@@ -2336,17 +2404,24 @@ static void frag_loc_note(efs_export_id_t export_id, efs_ino_t ino,
     __atomic_store_n(&loc->valid, 1, __ATOMIC_RELEASE);
 }
 
-/* Combined fragment+checksum read. Single probe pass per GET: the data
- * open() itself is the probe, and the digest is the 4 KiB tail of that
+/* Combined fragment+record read. Single probe pass per GET: the data
+ * open() itself is the probe, and the I25 record is the tail of that
  * file. Roots are probed low to high, same as server_find_fragment_root.
- * *sum_ok uses efs_store_sum_state: PRESENT requires caller verification. */
+ * The result is verified here (fragment_read_verified): EFS_OK means the
+ * record names exactly this object and, for data fragments, the payload
+ * hashes to its digest; checksum is then the payload digest and *sum_ok
+ * is EFS_STORE_SUM_PRESENT. Anything else is never served. */
 static int read_fragment_impl(struct efsd_server *s, struct efs_export *ex,
                                   efs_ino_t ino, uint32_t chunk_index,
                                   uint32_t fragment_index, uint8_t *data,
                                   uint32_t *data_len,
-                                  uint8_t checksum[EFS_HASH_SIZE], int *sum_ok)
+                                  uint8_t checksum[EFS_HASH_SIZE], int *sum_ok,
+                                  uint8_t rec[EFS_FRAG_RECORD_BYTES], int *rec_ok,
+                                  char *found, size_t found_len)
 {
+    (void)checksum; /* filled by read_fragment_verified */
     *sum_ok = 0;
+    *rec_ok = 0;
     uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
     if (n != 1) {
         uint32_t want = server_frag_len(ex, ino);
@@ -2366,8 +2441,8 @@ static int read_fragment_impl(struct efsd_server *s, struct efs_export *ex,
             fragment_path_at(s, loc->root, ex, ino, chunk_index,
                              fragment_index, path, sizeof(path));
             plen = (int)strlen(path);
-            rc = read_file_bytes(path, data, want, &got, direct, checksum,
-                                 sum_ok);
+            rc = read_file_bytes(path, data, want, &got, direct, rec,
+                                 rec_ok);
             if (rc == EFS_ERR_NOT_FOUND) {
                 loc->valid = 0;
                 rc = EFS_ERR_NOT_FOUND;
@@ -2380,8 +2455,8 @@ static int read_fragment_impl(struct efsd_server *s, struct efs_export *ex,
                 fragment_path_at(s, ri, ex, ino, chunk_index,
                                  fragment_index, path, sizeof(path));
                 plen = (int)strlen(path);
-                rc = read_file_bytes(path, data, want, &got, direct, checksum,
-                                     sum_ok);
+                rc = read_file_bytes(path, data, want, &got, direct, rec,
+                                     rec_ok);
                 if (rc == EFS_OK)
                     frag_loc_note(ex->id, ino, chunk_index, fragment_index,
                                   efs_tls_chunk_gen, ri);
@@ -2392,6 +2467,7 @@ static int read_fragment_impl(struct efsd_server *s, struct efs_export *ex,
         if (rc != EFS_OK)
             return rc;
         *data_len = got;
+        snprintf(found, found_len, "%s", path);
         (void)plen;
         return EFS_OK;
     }
@@ -2405,19 +2481,62 @@ static int read_fragment_impl(struct efsd_server *s, struct efs_export *ex,
     fragment_path_at(s, 0, ex, ino, chunk_index, fragment_index, path,
                      sizeof(path));
     plen = (int)strlen(path);
-    rc = read_file_bytes(path, data, want, &got, direct, checksum, sum_ok);
+    rc = read_file_bytes(path, data, want, &got, direct, rec, rec_ok);
     if (rc != EFS_OK)
         return rc;
     *data_len = got;
+    snprintf(found, found_len, "%s", path);
     (void)plen;
     return EFS_OK;
 }
+
+/* I25 GET gate: missing/torn record, unknown format, another identity, or
+ * (data fragments) a payload that does not hash to the recorded digest are
+ * all refused with distinct codes; the bytes are never served. Metadata-
+ * table pages verify identity only: their payload integrity is the EFSR
+ * root checksums. */
+static int read_fragment_verified(struct efsd_server *s, struct efs_export *ex,
+                                  efs_ino_t ino, uint32_t chunk_index,
+                                  uint32_t fragment_index, uint8_t *data,
+                                  uint32_t *data_len,
+                                  uint8_t checksum[EFS_HASH_SIZE], int *sum_ok)
+{
+    uint8_t rec[EFS_FRAG_RECORD_BYTES];
+    int rec_ok = 0;
+    char path[8300] = "";
+    int rc = read_fragment_impl(s, ex, ino, chunk_index, fragment_index, data,
+                                data_len, checksum, sum_ok, rec, &rec_ok,
+                                path, sizeof(path));
+    if (rc != EFS_OK)
+        return rc;
+    struct efs_frag_ident want;
+    const char *field = NULL;
+    fragment_ident(ex, ino, chunk_index, fragment_index,
+                   server_frag_len(ex, ino), &want);
+    if (efs_ino_is_meta_table(ino))
+        rc = efs_frag_record_verify(rec, rec_ok ? sizeof(rec) : 0, &want,
+                                    checksum, &field);
+    else if (*data_len != want.payload_len)
+        rc = EFS_ERR_CHECKSUM; /* torn: shorter than the export geometry */
+    else
+        rc = efs_frag_verify(data, *data_len, rec, rec_ok ? sizeof(rec) : 0,
+                             &want, checksum, &field);
+    if (rc != EFS_OK) {
+        fragment_refused("get", path, rc, field, &want);
+        *sum_ok = 0;
+        return rc;
+    }
+    *sum_ok = EFS_STORE_SUM_PRESENT;
+    return EFS_OK;
+}
+
+
 
 int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
                                   efs_ino_t ino, uint32_t ci, uint32_t fi,
                                   uint8_t *data, uint32_t *len, uint8_t sum[EFS_HASH_SIZE], int *sum_ok)
 {
-    return read_fragment_impl(s, ex, ino, ci, fi, data, len, sum, sum_ok);
+    return read_fragment_verified(s, ex, ino, ci, fi, data, len, sum, sum_ok);
 }
 
 static uint64_t compute_dir_usage(const char *path, size_t root_len)
@@ -2471,7 +2590,9 @@ uint64_t server_compute_usage(const char *path)
     char data_path[8192];
     snprintf(data_path, sizeof(data_path), "%s/data", path);
     int mode = server_storage_root_mode(path);
-    return mode != 0 ? UINT64_MAX : compute_dir_usage(data_path, strlen(path));
+    /* Unmarked (0) or the current root format; anything else is refused. */
+    return mode != 0 && mode != (int)EFS_STORAGE_ROOT_FORMAT ? UINT64_MAX
+                                                           : compute_dir_usage(data_path, strlen(path));
 }
 
 /* Full inventory remains mandatory. Ordinary-file roots are independent;
@@ -2648,7 +2769,9 @@ int server_add_storage_paths(struct efsd_server *s, const char *csv,
     }
 
     for (uint32_t i = 0; i < nfresh; i++) {
-        if (server_storage_root_mode(fresh[i]) != 0 || prepare_storage_root(fresh[i]) != 0)
+        int mode = server_storage_root_mode(fresh[i]);
+        if ((mode != 0 && mode != (int)EFS_STORAGE_ROOT_FORMAT) ||
+            prepare_storage_root(fresh[i]) != 0)
             return EFS_ADD_STORAGE_ERROR;
     }
 
@@ -2789,8 +2912,10 @@ int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export
                                         const uint8_t checksum[EFS_HASH_SIZE]);
 
 /* path must be the server_fragment_path() result for this fragment.
- * checksum, when non-NULL, is stored in the file (4 KiB tail under
- * O_DIRECT, 32 bytes otherwise). */
+ * Every fragment file carries the I25 record (frag_record.h) after its
+ * payload: a 4 KiB tail page under O_DIRECT, 128 bytes otherwise. checksum
+ * is the payload digest the caller already verified (data PUT) or NULL,
+ * in which case the payload is hashed here. */
 static int server_write_fragment_to_path(struct efsd_server *s, struct efs_export *ex,
                                          efs_ino_t ino, uint32_t chunk_index,
                                          uint32_t fragment_index,
@@ -2804,8 +2929,6 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
      * file and is charged; EEXIST is an overwrite and is not. The old
      * no-create probe failed ENOENT on every fresh fragment (~180 µs
      * and an 11-component walk, Oct 1). */
-    (void)chunk_index;
-    (void)fragment_index;
     int may_charge = (!efs_ino_is_meta_table(ino));
     int first_write = (efs_tls_path_hint == EFS_PATH_HINT_SKIP);
 
@@ -2821,7 +2944,16 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
 #ifdef EFS_BENCH_BUILD
     arg.sync_write = s->bench_sync;
 #endif
-    arg.sum = checksum;
+    uint8_t digest[EFS_HASH_SIZE], rec[EFS_FRAG_RECORD_BYTES];
+    struct efs_frag_ident ident;
+    if (!checksum) {
+        efs_hash(data, data_len, digest);
+        checksum = digest;
+    }
+    fragment_ident(ex, ino, chunk_index, fragment_index, arg.len, &ident);
+    if (efs_frag_record_encode(&ident, checksum, rec) != EFS_OK)
+        return EFS_ERR_INVAL; /* incomplete identity: never an unbound file */
+    arg.rec = rec;
     arg.result = EFS_ERR_IO;
     size_t plen = strlen(path);
     if (plen >= sizeof(arg.path))

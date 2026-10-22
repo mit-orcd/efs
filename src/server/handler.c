@@ -412,43 +412,24 @@ void server_handle_conn(struct efs_conn *conn)
                     efs_store_nvme_bind(&st, &nctx, g_server, ex);
                     rc = efs_store_get(&st, &fid, dptr, &data_len,
                                        reply + 1, &sum_ok);
-                    if (rc != 0) {
-                        reply[0] = EFS_GET_CHUNK_NOT_FOUND;
-                    } else {
-                        /* Server-side read-verify for data fragments: the
-                         * digest is the tail of the fragment file, so one blake3
-                         * detects disk rot on the read path without any
-                         * client CPU. A mismatch fails this fragment (the
-                         * client's 2+1 decode falls back to the other
-                         * fragments). Meta pages skip this: their integrity
-                         * is the EFSR root checksums. */
-                        /* I25: a fragment whose payload hash does not match
-                         * the recorded checksum is unavailable — never
-                         * served. Repair is a control-plane job. */
-                        if (!sum_ok && !efs_ino_is_meta_table(req->ino)) {
-                            /* A fresh hash cannot prove untrusted stored bytes.
-                             * Legacy data without its digest is unavailable. */
-                            reply[0] = EFS_GET_CHUNK_NOT_FOUND;
-                            out_len = 1;
-                            goto send_reply;
-                        }
-                        if (sum_ok &&
-                            !efs_ino_is_meta_table(req->ino)) {
-                            uint8_t vh[EFS_HASH_SIZE];
-                            efs_hash(dptr, data_len, vh);
-                            if (memcmp(vh, reply + 1, EFS_HASH_SIZE) != 0) {
-                                reply[0] = EFS_GET_CHUNK_NOT_FOUND;
-                                out_len = 1;
-                                goto send_reply;
-                            }
-                        }
-                        if (!sum_ok)
-                            efs_hash(dptr, data_len, reply + 1);
+                    /* I25: the store verified the fragment record (format,
+                     * identity = this request's export/ino/ci/fi/generation,
+                     * length) and, for data fragments, the payload hash
+                     * before returning OK; reply+1 is the payload digest.
+                     * A refused fragment is reported as INTEGRITY, never
+                     * served; repair is a control-plane job (W74). */
+                    if (rc == EFS_OK && sum_ok) {
                         reply[0] = EFS_GET_CHUNK_OK;
                         out_len = 1 + EFS_HASH_SIZE + data_len;
+                    } else if (rc == EFS_ERR_FRAG_FORMAT ||
+                               rc == EFS_ERR_FRAG_IDENTITY ||
+                               rc == EFS_ERR_CHECKSUM) {
+                        reply[0] = EFS_GET_CHUNK_INTEGRITY;
+                    } else {
+                        reply[0] = EFS_GET_CHUNK_NOT_FOUND;
                     }
                 }
-send_reply:
+
                 if (rdma_buf)
                     efs_rdma_send_commit(conn->rc, reply,
                                          EFS_MSG_GET_CHUNK_REPLY, out_len);

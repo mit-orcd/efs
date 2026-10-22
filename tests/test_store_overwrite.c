@@ -88,15 +88,15 @@ static void check(const char *path, const uint8_t *body, size_t len,
                   const uint8_t *sum, int direct)
 {
     struct stat st; assert(stat(path, &st) == 0);
-    size_t expected = direct ? len + (sum ? 4096 : 0) : len + (sum ? EFS_HASH_SIZE : 0);
+    size_t expected = direct ? len + (sum ? 4096 : 0) : len + (sum ? EFS_FRAG_RECORD_BYTES : 0);
     assert((size_t)st.st_size == expected);
     uint8_t *all = malloc(expected ? expected : 1); assert(all);
     int fd = open(path, O_RDONLY); assert(fd >= 0);
     assert(read(fd, all, expected) == (ssize_t)expected); close(fd);
     assert(memcmp(all, body, len) == 0);
     if (sum) {
-        assert(memcmp(all + len, sum, EFS_HASH_SIZE) == 0);
-        if (direct) for (size_t n = len + EFS_HASH_SIZE; n < expected; n++) assert(all[n] == 0);
+        assert(memcmp(all + len, sum, EFS_FRAG_RECORD_BYTES) == 0);
+        if (direct) for (size_t n = len + EFS_FRAG_RECORD_BYTES; n < expected; n++) assert(all[n] == 0);
     }
     free(all);
 }
@@ -105,20 +105,20 @@ int main(void)
     char dir[] = "/tmp/efs-overwrite-XXXXXX"; assert(mkdtemp(dir));
     char path[1024]; snprintf(path, sizeof(path), "%s/body", dir);
     uint8_t *aligned; assert(posix_memalign((void **)&aligned, 4096, 65536) == 0);
-    memset(aligned, 0x37, 65536); uint8_t sum[EFS_HASH_SIZE]; memset(sum, 0x42, sizeof(sum));
+    memset(aligned, 0x37, 65536); uint8_t sum[EFS_FRAG_RECORD_BYTES]; memset(sum, 0x42, sizeof(sum)); /* opaque record bytes */
     struct shard_io_arg a = {0}; strcpy(a.path, path); a.buf = aligned;
-    a.is_write = 1; a.sum = sum; a.len = 65536;
+    a.is_write = 1; a.rec = sum; a.len = 65536;
     image(path, 90000); shard_io_thread(&a); assert(a.result == EFS_OK); check(path, aligned, a.len, sum, 0);
     a.len = 1003; shard_io_thread(&a); assert(a.result == EFS_OK); check(path, aligned, a.len, sum, 0);
     a.len = 7003; shard_io_thread(&a); assert(a.result == EFS_OK); check(path, aligned, a.len, sum, 0);
-    a.sum = NULL; a.len = 0; shard_io_thread(&a); assert(a.result == EFS_OK); check(path, aligned, 0, NULL, 0);
-    a.direct = 1; a.sum = sum; a.len = 65536;
+    a.rec = NULL; a.len = 0; shard_io_thread(&a); assert(a.result == EFS_OK); check(path, aligned, 0, NULL, 0);
+    a.direct = 1; a.rec = sum; a.len = 65536;
     image(path, 90000); shard_io_thread(&a); assert(a.result == EFS_OK); check(path, aligned, a.len, sum, 1);
     a.len = 4096; shard_io_thread(&a); assert(a.result == EFS_OK); check(path, aligned, a.len, sum, 1);
-    a.sum = NULL; a.len = 8192; shard_io_thread(&a); assert(a.result == EFS_OK); check(path, aligned, a.len, NULL, 1);
-    a.sum = sum; a.buf = aligned + 1; a.len = 4096; /* bounce path */
+    a.rec = NULL; a.len = 8192; shard_io_thread(&a); assert(a.result == EFS_OK); check(path, aligned, a.len, NULL, 1);
+    a.rec = sum; a.buf = aligned + 1; a.len = 4096; /* bounce path */
     shard_io_thread(&a); assert(a.result == EFS_OK); check(path, a.buf, a.len, sum, 1);
-    a.direct = 0; a.buf = aligned; a.len = 1003; a.sum = sum;
+    a.direct = 0; a.buf = aligned; a.len = 1003; a.rec = sum;
     fail_finish = 1; finish_calls = 0; shard_io_thread(&a);
     assert(a.result == EFS_ERR_IO && finish_calls == 1);
     assert(fcntl(last_fd, F_GETFD) == -1 && errno == EBADF);
@@ -138,7 +138,7 @@ int main(void)
     fail_sync = 1; shard_io_thread(&a); assert(a.result == EFS_ERR_IO);
     fail_sync = 0; a.sync_write = 0;
     /* Conditional direct finalization: sync only a length change. */
-    a.direct = 1; a.sync_write = 1; a.buf = aligned; a.len = 4096; a.sum = sum;
+    a.direct = 1; a.sync_write = 1; a.buf = aligned; a.len = 4096; a.rec = sum;
     image(path, 90000); sync_calls = 0;
     shard_io_thread(&a); assert(a.result == EFS_OK && sync_calls == 1);
     check(path, aligned, a.len, sum, 1);
@@ -147,8 +147,8 @@ int main(void)
     image(path, 90000); shard_io_thread(&a); assert(a.result == EFS_ERR_IO && sync_calls == 1);
     fail_sync = 0; fail_stat = 1; shard_io_thread(&a); assert(a.result == EFS_ERR_IO); fail_stat = 0;
     image(path, 90000); fail_finish = 1; shard_io_thread(&a); assert(a.result == EFS_ERR_IO); fail_finish = 0;
-    a.sum = NULL; a.len = 0; shard_io_thread(&a); assert(a.result == EFS_OK); uint8_t zero_page[4096] = {0}; check(path, zero_page, sizeof(zero_page), NULL, 1);
-    a.direct = 0; a.sync_write = 0; a.sum = sum; a.len = 1003;
+    a.rec = NULL; a.len = 0; shard_io_thread(&a); assert(a.result == EFS_OK); uint8_t zero_page[4096] = {0}; check(path, zero_page, sizeof(zero_page), NULL, 1);
+    a.direct = 0; a.sync_write = 0; a.rec = sum; a.len = 1003;
     shard_io_thread(&a); assert(a.result == EFS_OK); check(path, aligned, a.len, sum, 0);
     for (int direct = 0; direct < 2; direct++) {
         a.direct = direct; a.len = direct ? 4096 : 1003;
@@ -168,12 +168,23 @@ int main(void)
     server.id = 1; server.node_count = 1; server.nodes[0].id = 1;
     server.quota = 1000; server.nodes[0].used = 1000;
     struct efs_export ex = {.id = 1};
+    efs_tls_chunk_gen = 1; /* every fragment object has a nonzero generation */
     efs_tls_path_hint = EFS_PATH_HINT_SKIP;
     assert(server_write_fragment_to_path(&server,&ex,42,0,0,aligned,10,path,NULL)==EFS_ERR_QUOTA);
     assert(access(path,F_OK)==-1 && server.nodes[0].used==1000);
     image(path,10); efs_tls_path_hint = -1;
     assert(server_write_fragment_to_path(&server,&ex,42,0,0,aligned,10,path,NULL)==EFS_OK);
-    assert(server.nodes[0].used==1000); check(path,aligned,10,NULL,0); unlink(path);
+    /* A NULL caller digest still produces a bound record over the payload. */
+    {
+        struct efs_frag_ident id; uint8_t d[EFS_HASH_SIZE], rec[EFS_FRAG_RECORD_BYTES];
+        fragment_ident(&ex, 42, 0, 0, 10, &id); efs_hash(aligned, 10, d);
+        assert(efs_frag_record_encode(&id, d, rec) == EFS_OK);
+        assert(server.nodes[0].used==1000); check(path,aligned,10,rec,0); unlink(path);
+    }
+    /* Generation 0 names no object: never written as an unbound file. */
+    efs_tls_chunk_gen = 0; efs_tls_path_hint = -1;
+    assert(server_write_fragment_to_path(&server,&ex,42,0,0,aligned,10,path,NULL)==EFS_ERR_INVAL);
+    assert(access(path,F_OK)==-1); efs_tls_chunk_gen = 1;
     server.nodes[0].used=700; efs_tls_path_hint=EFS_PATH_HINT_SKIP;
     assert(server_write_fragment_to_path(&server,&ex,42,0,0,aligned,10,path,NULL)==EFS_OK);
     assert(server.nodes[0].used==710); unlink(path);
