@@ -2456,7 +2456,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | 0q | **W60** · sequential prefetch starves tiny demand reads | correctness | fixed in `73ce8aaa`; NUC 32 MiB A/B: baseline 2000/2000 failures, fixed 0/2000 and no read-NOMEM; closed Oct 9: user accepts AMD nested-tree 2000 tiny + four 128 MiB files, core212/212, peer64/64 and cold physical GC; Xorinox optional | [evidence and remaining gates](../status/fuse-memory.md) |
 | 0r | **W61** · local GC discards failed lane-sweep verdicts | correctness | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](#w61) |
 | 0s | **W62** · sweep/truncate batch boundaries lose delta GC records | correctness | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](#w62) |
-| 0t | **W64** · durable append reservation replay across leader changes | correctness / recovery | partial — durable replay, coordinated cross-group EOF/completion and bounded cleanup pass AMD direct/TCP replay, POSIX/peer, sync-write and cold-byte gates; production sessions and broader failover acceptance remain open ([ledger](../status/replay-readiness-20261008.md)) | [work item](#w64) |
+| 0t | **W64** · durable append reservation replay across leader changes | correctness / recovery | partial — Oct 22 K15: leader-change EBUSY (orphaned PREPARE until 5 s recovery) found; finisher ABORT hand-off fix + regression test on `devel-k15`; matched failover gate NOTRUN, lost-reserve-reply case needs K5/W72 sessions ([K15](../status/k15-w52-w64-20261022.md)); earlier: durable replay and coordinated EOF/completion pass AMD gates ([ledger](../status/replay-readiness-20261008.md)) | [work item](#w64) |
 | 0u | **W65** · daemon exceeds graceful shutdown wait | liveness investigation | supported TCP closure recorded; later AMD RXE shutdown acceptance supersedes the old RDMA-deferred wording ([RXE ledger](../status/amd-rxe-gate-closure-20261009.md)); broader hardware/profile limits remain | [work item](#w65) |
 | posix-link | **AMD `link_of_symlink` — Python request/test mismatch** | test correctness | Closed AMD test mismatch: corrected no-follow historical matrix passes; new explicit follow/dangling/core and peer cases pass native and AMD direct/buffered TCP; pre-fix buffered MKDIR failure retained; later repaired by W66 | [evidence and fix](../status/amd-link-symlink.md) |
 | virtual-io | **W91/W92 · `.efs/` commands — server snapshots and safe reads** | correctness / performance / access control | in progress — disk index, bounded incremental catch-up, aggregate quota and replicated policy landed; named native/live/cold and Linux NFSv4.0 gates pass; actual 2^32/400 GiB gates and named virtual-export fix rollout remain open; Mac/Linux NFS candidate oracles pass | [closure](../status/query-cache-closure-20261010.md) · [persistent policy](../status/efs-query-persistent-policy-20261010.md) |
@@ -5485,6 +5485,19 @@ results dirs; move this plan's finished rows to project-history.
 <a id="w64"></a>
 
 ### W64 · Durable append reservation replay across leader changes (queue row 0t)
+
+**Oct 22 K15 (`devel-k15`):** a step-down gate (4 writers, both group
+leaders stepped down every 20 s) kept integrity: 596 acknowledged records
+exactly once warm/peer/cold, failed writes invisible, no holes. It failed
+availability: four writes returned EBUSY. An interrupted reservation
+transaction stayed PREPARED until the 5 s recovery scan (ABORT at 7.0–7.4 s),
+beyond the client's 8 s budget. Fix: a failed coordinator DECIDE ABORT is
+handed to the finisher, which re-proposes ABORT at the new leader and resolves;
+COMMIT is never converted (`tests/test_fin_abort_handoff.py`). New
+`efs-mgmt raft-step-down`. The matched after-fix failover gate is **NOTRUN**,
+so W64 stays **INCOMPLETE**. K5/W72 must provide production sessions whose
+fencing lets `cleanup-appends` retire a reservation abandoned after an unknown
+outcome. [K15 evidence](../status/k15-w52-w64-20261022.md).
 
 **Oct 10 NUC regression:** integrated d4f2ddb3 private 100 ms checkpoint gate
 fails sequence-2/ACK-1 replay: 31/32 identical requests return offset 16 rather

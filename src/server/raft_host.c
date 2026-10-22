@@ -195,8 +195,10 @@ struct host_fin_item {
     struct efs_txn_parts parts;
     uint32_t coord;
     uint64_t born_ns;
-    int retire_only; /* every RESOLVE verdict seen: just propose RETIRE */
+    int retire_only; /* every RESOLVE verdict seen: just propose RETIRE;
+                      * HOST_FIN_ABORT: COMMIT never proposed, decide ABORT */
 };
+#define HOST_FIN_ABORT 2
 
 /* Apply-result ring slots per group. Power of 2. Must exceed the most
  * applies that can land inside one host_propose_wait window (the wait
@@ -420,7 +422,7 @@ struct efs_raft_host {
     pthread_cond_t fin_cv;
     struct host_fin_item *fin;
     uint32_t fin_head, fin_n;
-    uint64_t fin_queued, fin_done, fin_dropped, fin_full;
+    uint64_t fin_queued, fin_done, fin_dropped, fin_full, fin_aborted;
     pthread_mutex_t inbox_mu;
     struct host_inbox_item inbox[HOST_INBOX_MAX];
     int inbox_n;
@@ -8891,9 +8893,48 @@ static void host_fin_one(struct efs_raft_host *h, const struct host_fin_item *it
     uint8_t cg = efs_raft_shard_group(it->coord);
     int dec = EFS_TXN_ABORT, rc, i, hint = -1;
 
-    if (it->retire_only) {
+    if (it->retire_only == 1) {
         host_txn_retire(h, &it->t, it->coord);
         return;
+    }
+    /* W64: the coordinator never proposed COMMIT and its own DECIDE ABORT
+     * failed (typically NOT_PRIMARY: the coordinator group's leader stepped
+     * down or died mid-transaction). Its PREPAREs would otherwise hold the
+     * inode/cursor/lane keys until the HOST_REC_AGE_NS recovery scan — a
+     * multi-second BUSY window per leader change that outlasted the client's
+     * write budget. ABORT is what recovery would decide; DECIDE is
+     * decide-once and idempotent for the same verdict, so racing recovery or
+     * a late duplicate is harmless. Retry it at the group's current leader,
+     * then RESOLVE exactly like an ordinary finish. */
+    if (it->retire_only == HOST_FIN_ABORT) {
+        uint8_t dcmd[HOST_DECIDE_MAX];
+        uint32_t dn = pack_decide(dcmd, &it->t, it->coord, EFS_TXN_ABORT, &it->parts);
+
+        for (;;) {
+            if (!h->fin_running)
+                return;
+            if (now_ns() - it->born_ns > HOST_FIN_MAX_NS) {
+                h->fin_dropped++;
+                return;
+            }
+            rc = host_bg_propose(h, cg, dcmd, dn, 1);
+            /* PROTO: decided differently (cannot be COMMIT from this
+             * coordinator, but read whatever was decided below). */
+            if (rc == EFS_OK || rc == EFS_ERR_PROTO)
+                break;
+            if (rc == EFS_ERR_STALE)
+                return; /* retired and reclaimed: every RESOLVE applied */
+            if (rc != EFS_ERR_BUSY && rc != EFS_ERR_NOT_PRIMARY) {
+                h->fin_dropped++;
+                fprintf(stderr, "raft-host: txn-finish coord=%u abort rc=%d (recovery)\n",
+                        it->coord, rc);
+                return;
+            }
+            usleep(4 * HOST_FIN_POLL_US);
+        }
+        h->fin_aborted++;
+        fprintf(stderr, "raft-host: txn-finish coord=%u abort decided rc=%d (coordinator lost its group)\n",
+                it->coord, rc);
     }
     for (;;) {
         if (!h->fin_running)
@@ -12826,6 +12867,43 @@ void server_raft_host_resync(const struct efs_msg_raft_resync *in,
     pthread_mutex_unlock(&h->mu);
 }
 
+/* W64 failover harness: stop leading one hosted group. A plain step-down
+ * drops to follower under h->mu exactly as the KV-incomplete/incompatible
+ * paths do; a transfer additionally sends TIMEOUT_NOW to a caught-up voter
+ * (efs_raft_transfer refuses with BUSY otherwise). Neither touches the log,
+ * the KV or any client state: reservations, receipts and ACK windows are
+ * recovered by the next leader from the committed prefix. */
+void server_raft_host_step_down(const struct efs_msg_raft_step_down *in,
+                                struct efs_msg_raft_step_down_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    int i;
+
+    memset(out, 0, sizeof(*out));
+    out->rc = EFS_ERR_INVAL;
+    out->raft_id = -1;
+    if (!h || !h->running || !in)
+        return;
+    pthread_mutex_lock(&h->mu);
+    out->raft_id = h->raft_id;
+    for (i = 0; i < HOST_NGROUPS; i++) {
+        struct host_group *g = &h->g[i];
+        if (g->group != in->group || !g->hosted || !g->r)
+            continue;
+        if (efs_raft_role(g->r) != EFS_RAFT_LEADER) {
+            out->rc = EFS_ERR_NOT_PRIMARY;
+            break;
+        }
+        out->term = efs_raft_term(g->r);
+        out->rc = in->target >= 0 ? efs_raft_transfer(g->r, in->target)
+                                  : efs_raft_step_down(g->r);
+        if (out->rc == EFS_OK)
+            fprintf(stderr, "raft-host: group=%u operator step-down term=%llu target=%d\n",
+                    g->group, (unsigned long long)out->term, in->target);
+    }
+    pthread_mutex_unlock(&h->mu);
+}
+
 int server_raft_host_active(void)
 {
     struct efs_raft_host *h = g_host;
@@ -14837,7 +14915,13 @@ static int host_resize_decide(void *user, const struct efs_txid *t,
     uint32_t n = pack_decide(cmd, t, coord, decision, parts);
     int rc = host_propose_wait(ctx->host, efs_raft_shard_group(coord), cmd,
                                 n, ctx->hint);
-    if (rc == EFS_ERR_BUSY)
+    /* ABORT is only ever requested before any COMMIT was proposed, so a
+     * failed or unconfirmed ABORT is handed off to be re-proposed promptly
+     * (W64 leader change); a BUSY COMMIT keeps the decision-reading finish. */
+    if (rc != EFS_OK && decision == EFS_TXN_ABORT &&
+        rc != EFS_ERR_PROTO && rc != EFS_ERR_STALE)
+        host_fin_add(ctx->host, t, parts, coord, HOST_FIN_ABORT);
+    else if (rc == EFS_ERR_BUSY)
         host_fin_add(ctx->host, t, parts, coord, 0);
     return rc;
 }
