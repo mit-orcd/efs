@@ -1,9 +1,11 @@
 /* A packed segment is validated once per image (ledger init, compaction
  * enumeration, packed-base reads), and every reference read through that
  * one validation is still checked: identity, generations, offset, digest
- * and the record's payload bytes. */
-#include "efs/pack_ledger.h"
+ * and the record's payload bytes. Also: the abandon sweep is bounded per
+ * call and still reaches every object. */
+#include "efs/pack_mapping.h"
 #include "efs/checksum.h"
+#include "efs/kv.h"
 #include "efs/raft.h"
 #include <assert.h>
 #include <stdio.h>
@@ -140,9 +142,77 @@ static void validate_once(void)
     free(copy);
 }
 
+/* ---- bounded abandon sweep ---- */
+static void put_object(struct efs_kv *kv, uint64_t id, const struct efs_opid *owner, int settle)
+{
+    uint8_t *image = malloc(EFS_SEGMENT_MAX_SIZE), *wire = malloc(EFS_PACK_OBJECT_MAX_BYTES);
+    struct efs_pack_object *o = calloc(1, sizeof(*o));
+    assert(image && wire && o);
+    size_t g = build(image, 4, id), len;
+    assert(!efs_pack_ledger_init(image, g, refs, 4, owner, 7, 0, &o->ledger));
+    if (settle) for (unsigned i = 0; i < 4; i++) assert(!efs_pack_ledger_cancel(&o->ledger, &refs[i]));
+    for (unsigned i = 0; i < EFS_NUM_FRAGMENTS; i++) o->nodes[i] = i + 1;
+    assert(!efs_pack_object_encode(o, wire, EFS_PACK_OBJECT_MAX_BYTES, &len));
+    uint8_t key[EFS_PACK_OBJECT_KEY_BYTES];
+    assert(!efs_pack_object_key(EFS_RAFT_GROUP_SHARD, id, 1, key));
+    assert(!efs_kv_put(kv, key, sizeof(key), wire, (uint32_t)len));
+    free(image); free(wire); free(o);
+}
+static void abandon_sweep(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    assert(kv);
+    struct efs_opid me = {.client_uuid = {'E', 'F', 'S'}, .session_epoch = 5, .seq = 1};
+    struct efs_opid old = me, other = me;
+    old.session_epoch = 4;                     /* this node, previous term */
+    other.client_uuid[8] = 1;                  /* another node */
+    /* 40 objects; ids 1..30 are ours (in flight) or settled, only the last
+     * ten, all beyond the first windows, are abandoned. */
+    enum { OBJS = 40, LIMIT = 8 };
+    for (uint64_t id = 1; id <= OBJS; id++) {
+        if (id <= 30) put_object(kv, id, id % 2 ? &me : &other, id % 2 == 0);
+        else put_object(kv, id, id % 3 ? &old : &other, 0);
+    }
+    /* A corrupt object is refused, never cancelled. */
+    uint8_t key[EFS_PACK_OBJECT_KEY_BYTES], junk[64] = {1};
+    assert(!efs_pack_object_key(EFS_RAFT_GROUP_SHARD, OBJS + 1, 1, key));
+    assert(!efs_kv_put(kv, key, sizeof(key), junk, sizeof(junk)));
+
+    struct efs_pack_abandon_scan sc;
+    memset(&sc, 0, sizeof(sc));
+    uint64_t ids[64], gens[64], found[OBJS + 2] = {0};
+    uint32_t n, calls = 0;
+    assert(!efs_pack_abandon_scan(kv, EFS_RAFT_GROUP_SHARD, &me, &sc, LIMIT, ids, gens, 64, &n));
+    calls++;
+    assert(n == 0 && sc.scanned == LIMIT && sc.cursor_len && !sc.wraps); /* first window: none */
+    while (!sc.wraps) {
+        assert(!efs_pack_abandon_scan(kv, EFS_RAFT_GROUP_SHARD, &me, &sc, LIMIT, ids, gens, 64, &n));
+        assert(++calls <= OBJS); /* bounded windows always make progress */
+        for (uint32_t i = 0; i < n; i++) { assert(gens[i] == 1 && ids[i] > 30 && ids[i] <= OBJS); found[ids[i]]++; }
+    }
+    for (uint64_t id = 31; id <= OBJS; id++) assert(found[id] == 1);
+    assert(sc.scanned == OBJS + 1 && sc.actionable == 10 && sc.refused == 1 && !sc.cursor_len);
+    assert(calls == (OBJS + 1 + LIMIT - 1) / LIMIT + ((OBJS + 1) % LIMIT == 0));
+    /* The next call starts the sweep over. */
+    assert(!efs_pack_abandon_scan(kv, EFS_RAFT_GROUP_SHARD, &me, &sc, LIMIT, ids, gens, 64, &n));
+    assert(n == 0 && sc.scanned == OBJS + 1 + LIMIT);
+    /* A full result list stops the window early and resumes after it. */
+    memset(&sc, 0, sizeof(sc));
+    uint32_t total = 0;
+    while (!sc.wraps) {
+        assert(!efs_pack_abandon_scan(kv, EFS_RAFT_GROUP_SHARD, &me, &sc, 1000, ids, gens, 3, &n));
+        assert(n <= 3);
+        total += n;
+    }
+    assert(total == 10);
+    assert(efs_pack_abandon_scan(kv, EFS_RAFT_GROUP_SHARD, &me, &sc, 1, ids, gens, 64, &n) == EFS_ERR_INVAL);
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
     validate_once();
-    puts("packed segment validated once per image; refs and corruption PASS");
+    abandon_sweep();
+    puts("packed segment validated once per image; refs, corruption and bounded abandon sweep PASS");
     return 0;
 }

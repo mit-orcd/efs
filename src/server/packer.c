@@ -4,7 +4,10 @@
  * (at most one packer per group). Each pass of a group:
  *   1. abandon: cancel ACTIVE segments with PENDING records that this
  *      packer (this node, this term) does not own; a crashed or deposed
- *      packer's copies are then reclaimed by the retirement pass;
+ *      packer's copies are then reclaimed by the retirement pass. Each
+ *      pass examines a bounded window of the group's segment index from a
+ *      per-group cursor (restarted on a term change), so a full sweep takes
+ *      ceil(segments / PK_ABANDON_KEYS) passes;
  *   2. select: walk the group's candidate index (creation epoch order) and
  *      re-validate each file on the local replica: same generation, linked,
  *      regular, at most EFS_PACK_THRESHOLD bytes, only chunk zero, a plain
@@ -94,6 +97,8 @@ static struct {
         uint64_t fs_segs, fs_live, fs_dead, fs_holes, fs_small; /* last summary */
         double pressure, used_frac;
         int busy;
+        struct efs_pack_abandon_scan abandon; /* resumable sweep (step 1) */
+        uint64_t abandon_term;
     } g[2];
     struct efs_packer_status st;
     pthread_mutex_t mu;
@@ -162,21 +167,10 @@ static void pk_owner(uint8_t group, uint64_t term, struct efs_opid *o)
 }
 
 /* ---- 1. abandon foreign pending segments ---- */
-struct pk_abandon { struct efs_opid me; uint64_t ids[64], gens[64]; uint32_t n; struct efs_pack_object o; };
-static int pk_abandon_cb(void *u, const uint8_t *k, uint32_t kl, const uint8_t *v, uint32_t vl)
-{
-    struct pk_abandon *a = u;
-    if (kl != EFS_PACK_OBJECT_KEY_BYTES || k[2] != EFS_KV_KIND_PACK_SEGMENT) return 0;
-    if (efs_pack_object_decode(v, vl, &a->o) != EFS_OK || a->o.ledger.phase != EFS_PACK_ACTIVE) return 0;
-    struct efs_pack_ledger_usage use;
-    efs_pack_ledger_usage(&a->o.ledger, &use);
-    if (!use.pending) return 0;
-    if (!memcmp(a->o.ledger.owner.client_uuid, a->me.client_uuid, EFS_OPID_UUID_LEN) &&
-        a->o.ledger.owner.session_epoch == a->me.session_epoch) return 0; /* ours, in flight */
-    a->ids[a->n] = a->o.ledger.segment_id;
-    a->gens[a->n] = a->o.ledger.segment_generation;
-    return ++a->n == 64;
-}
+/* Keys examined per pass: the scan resumes from a per-group cursor, so a
+ * pass costs a window, not the group's whole segment index (it scanned and
+ * decoded every object every pass). */
+#define PK_ABANDON_KEYS 1024u
 static int pk_gi(uint8_t group) { return group == EFS_RAFT_GROUP_SHARD ? 0 : 1; }
 /* Packer proposals are excluded from the foreground commit rate. */
 static int pk_propose(uint8_t group, const uint8_t *cmd, uint32_t len)
@@ -193,14 +187,23 @@ static void pk_cancel(uint8_t group, uint64_t id, uint64_t gen)
 }
 static void pk_abandon(struct efs_kv *kv, uint8_t group, uint64_t term)
 {
-    struct pk_abandon *a = calloc(1, sizeof(*a));
-    if (!a) return;
-    pk_owner(group, term, &a->me);
-    uint32_t anchor = efs_pack_group_anchor(group);
-    uint8_t prefix[3] = {(uint8_t)(anchor >> 8), (uint8_t)anchor, EFS_KV_KIND_PACK_SEGMENT};
-    (void)efs_kv_lsm_scan_yield(kv, prefix, 3, 128, pk_abandon_cb, a);
-    for (uint32_t i = 0; i < a->n; i++) { pk_cancel(group, a->ids[i], a->gens[i]); STAT_ADD(abandoned, 1); }
-    free(a);
+    struct efs_opid me;
+    uint64_t ids[64], gens[64];
+    uint32_t n = 0;
+    struct efs_pack_abandon_scan *sc = &pk.g[pk_gi(group)].abandon;
+    /* A new term makes the previous term's own admissions foreign: start
+     * the sweep over so they are found within one sweep of the change. */
+    if (pk.g[pk_gi(group)].abandon_term != term) {
+        sc->cursor_len = 0;
+        pk.g[pk_gi(group)].abandon_term = term;
+    }
+    pk_owner(group, term, &me);
+    uint64_t scanned = sc->scanned, refused = sc->refused;
+    if (efs_pack_abandon_scan(kv, group, &me, sc, PK_ABANDON_KEYS, ids, gens, 64, &n) != EFS_OK) return;
+    STAT_ADD(abandon_scanned, sc->scanned - scanned);
+    STAT_ADD(abandon_actionable, n);
+    STAT_ADD(abandon_refused, sc->refused - refused);
+    for (uint32_t i = 0; i < n; i++) { pk_cancel(group, ids[i], gens[i]); STAT_ADD(abandoned, 1); }
 }
 
 /* ---- 2. select ---- */

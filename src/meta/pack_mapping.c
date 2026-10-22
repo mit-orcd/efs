@@ -1,5 +1,6 @@
 #include "efs/pack_mapping.h"
 #include "efs/kv_key.h"
+#include "efs/kv_lsm.h"
 #include "efs/checksum.h"
 #include "efs/raft.h"
 #include "efs/txn.h"
@@ -90,6 +91,94 @@ int efs_pack_object_get(struct efs_kv *kv, uint32_t group, uint64_t id, uint64_t
     free(value);
     if (rc == EFS_OK && (out->ledger.publication_group != group ||
         out->ledger.segment_id != id || out->ledger.segment_generation != gen)) return EFS_ERR_PROTO;
+    return rc;
+}
+/* Encoded object offsets (efs_pack_object_encode, efs_pack_ledger_encode). */
+#define PO_LEDGER EFS_PACK_OBJECT_HEADER
+#define PO_COUNT (PO_LEDGER + 40)
+#define PO_PHASE (PO_LEDGER + 48)
+#define PO_OWNER (PO_LEDGER + 64)
+#define PO_EPOCH (PO_LEDGER + 80)
+#define PO_LIVE (PO_LEDGER + 128)
+#define PO_DEAD (PO_LEDGER + 140)
+#define ABANDON_MAX 64u
+struct abandon {
+    const struct efs_opid *me;
+    uint32_t limit, max, seen, n;
+    uint8_t last[EFS_KV_KEY_MAX];
+    uint32_t last_len;
+    uint64_t ids[ABANDON_MAX], gens[ABANDON_MAX];
+};
+/* Cheap filter on the encoded bytes. Decode verifies the stored live/dead
+ * totals against the states, so for any decodable object this agrees with
+ * the decoded ledger; anything else goes on to the full decode. */
+static int abandon_maybe(const struct abandon *a, const uint8_t *v, uint32_t vl)
+{
+    if (vl < PO_DEAD + 4 || memcmp(v, "EFSPMAP2", 8) || memcmp(v + PO_LEDGER, "EFSLIFE2", 8)) return 1;
+    if (get(v + PO_PHASE, 4) != EFS_PACK_ACTIVE) return 0;
+    uint64_t count = get(v + PO_COUNT, 4), settled = get(v + PO_LIVE, 4) + get(v + PO_DEAD, 4);
+    if (settled == count) return 0; /* nothing pending */
+    return memcmp(v + PO_OWNER, a->me->client_uuid, EFS_OPID_UUID_LEN) ||
+           get(v + PO_EPOCH, 4) != a->me->session_epoch;
+}
+static int abandon_cb(void *u, const uint8_t *k, uint32_t kl, const uint8_t *v, uint32_t vl)
+{
+    struct abandon *a = u;
+    memcpy(a->last, k, kl); a->last_len = kl;
+    a->seen++;
+    if (kl == EFS_PACK_OBJECT_KEY_BYTES && k[2] == EFS_KV_KIND_PACK_SEGMENT && abandon_maybe(a, v, vl)) {
+        a->ids[a->n] = get(k + 3, 8); a->gens[a->n] = get(k + 11, 8);
+        a->n++;
+    }
+    return a->seen >= a->limit || a->n >= a->max;
+}
+int efs_pack_abandon_scan(struct efs_kv *kv, uint32_t group, const struct efs_opid *me,
+    struct efs_pack_abandon_scan *sc, uint32_t limit, uint64_t *ids, uint64_t *gens,
+    uint32_t max, uint32_t *n)
+{
+    uint32_t anchor = efs_pack_group_anchor(group);
+    if (!kv || !me || !sc || !ids || !gens || !n || !anchor || limit < 2 || !max ||
+        sc->cursor_len > sizeof(sc->cursor)) return EFS_ERR_INVAL;
+    *n = 0;
+    struct abandon *a = calloc(1, sizeof(*a));
+    struct efs_pack_object *o = malloc(sizeof(*o));
+    if (!a || !o) { free(a); free(o); return EFS_ERR_NOMEM; }
+    a->me = me; a->limit = limit; a->max = max < ABANDON_MAX ? max : ABANDON_MAX;
+    uint8_t prefix[3] = {(uint8_t)(anchor >> 8), (uint8_t)anchor, EFS_KV_KIND_PACK_SEGMENT};
+    /* Strictly after the cursor: its key followed by a zero byte. */
+    uint8_t start[EFS_KV_KEY_MAX + 1], resume[EFS_KV_KEY_MAX];
+    uint32_t slen = sc->cursor_len ? sc->cursor_len + 1 : 0, rlen = 0;
+    memcpy(start, sc->cursor, sc->cursor_len); start[sc->cursor_len] = 0;
+    /* Work-bounded (tombstones count) on an LSM store; the callback bounds
+     * the visited keys on any store. */
+    int rc = efs_kv_lsm_scan_work(kv, prefix, 3, slen ? start : NULL, slen, limit,
+                                  abandon_cb, a, resume, &rlen);
+    if (rc < 0) goto out;
+    /* A stop (work bound or callback) resumes after the last key consumed:
+     * the work cursor when the bound stopped it, else the callback's. */
+    if (rc == 1 && (rlen || a->last_len)) {
+        if (rlen) { memcpy(sc->cursor, resume, rlen); sc->cursor_len = rlen; }
+        else { memcpy(sc->cursor, a->last, a->last_len); sc->cursor_len = a->last_len; }
+    } else {
+        sc->cursor_len = 0; /* end of the prefix: the next call starts over */
+        sc->wraps++;
+    }
+    sc->scanned += a->seen;
+    rc = EFS_OK;
+    /* Full decode outside the scan, only for the candidates. */
+    for (uint32_t i = 0; i < a->n; i++) {
+        if (efs_pack_object_get(kv, group, a->ids[i], a->gens[i], o) != EFS_OK) { sc->refused++; continue; }
+        struct efs_pack_ledger_usage use;
+        efs_pack_ledger_usage(&o->ledger, &use);
+        if (o->ledger.phase != EFS_PACK_ACTIVE || !use.pending ||
+            (!memcmp(o->ledger.owner.client_uuid, me->client_uuid, EFS_OPID_UUID_LEN) &&
+             o->ledger.owner.session_epoch == me->session_epoch)) continue;
+        ids[*n] = a->ids[i]; gens[*n] = a->gens[i]; (*n)++;
+    }
+    sc->actionable += *n;
+out:
+    free(a);
+    free(o);
     return rc;
 }
 int efs_pack_chunk_identity(const struct efs_meta_chunk *ch, efs_ino_t ino,

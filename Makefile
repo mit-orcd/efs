@@ -903,7 +903,7 @@ tests/test_small_segment: tests/test_small_segment.c src/data/erasure.c include/
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ tests/test_small_segment.c src/data/erasure.c
 src/common/packed_segment.o: include/efs/packed_segment.h include/efs/erasure.h
 src/common/pack_ledger.o: include/efs/pack_ledger.h include/efs/packed_segment.h
-src/meta/pack_mapping.o: include/efs/pack_mapping.h include/efs/pack_ledger.h include/efs/meta_apply.h include/efs/kv_key.h
+src/meta/pack_mapping.o: include/efs/pack_mapping.h include/efs/pack_ledger.h include/efs/meta_apply.h include/efs/kv_key.h include/efs/kv_lsm.h
 tests/test_packed_segment tests/test_pack_ledger tests/test_pack_ledger_recovery tests/test_pack_switch tests/test_packed_reader tests/test_pack_validate_once: %: %.c $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS)
 

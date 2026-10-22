@@ -3,6 +3,7 @@
 #include "efs/pack_ledger.h"
 #include "efs/meta_apply.h"
 #include "efs/metadata.h"
+#include "efs/kv_key.h"
 
 /* W125 packed-segment object and mapping planner.
  *
@@ -36,6 +37,24 @@ int efs_pack_object_encode(const struct efs_pack_object *, uint8_t *, size_t, si
 int efs_pack_object_decode(const uint8_t *, size_t, struct efs_pack_object *);
 int efs_pack_object_get(struct efs_kv *, uint32_t group, uint64_t id, uint64_t generation,
     struct efs_pack_object *);
+/* Abandoned admissions (packer step 1): ACTIVE segment objects with
+ * PENDING records whose owner is not `me` (this node, this term). One call
+ * examines at most `limit` keys of the group's object prefix, starting just
+ * after scan->cursor, and resumes there next call; reaching the end resets
+ * the cursor, so every object is reached within ceil(objects/limit) calls.
+ * Phase, record counts and owner are read from the encoded object before a
+ * full decode, which runs (outside the scan) only for those candidates; an
+ * object that fails the full decode is counted as refused, never cancelled.
+ * At most `max` (id, generation) pairs are returned in *n. A hint only:
+ * the CANCEL apply revalidates. */
+struct efs_pack_abandon_scan {
+    uint8_t cursor[EFS_KV_KEY_MAX];
+    uint32_t cursor_len; /* 0: from the start */
+    uint64_t scanned, actionable, refused, wraps; /* totals over calls */
+};
+int efs_pack_abandon_scan(struct efs_kv *, uint32_t group, const struct efs_opid *me,
+    struct efs_pack_abandon_scan *, uint32_t limit, uint64_t *ids, uint64_t *gens,
+    uint32_t max, uint32_t *n);
 /* A packed chunk row's reference must name exactly this file, chunk zero,
  * its record generation and content epoch, and the file's own group. */
 int efs_pack_chunk_identity(const struct efs_meta_chunk *, efs_ino_t ino,
