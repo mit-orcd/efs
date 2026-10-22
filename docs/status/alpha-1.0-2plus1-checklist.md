@@ -10,6 +10,10 @@ fragment** architecture at every supported cluster size. Completion is the
 This is release sequencing, not a claim that the final D36 design is implemented.
 No tag, merge, push, deployment or data deletion is performed by this document.
 
+**Decision (October 22):** the user keeps >4-node clusters in alpha 1.0;
+2+2 and broader metadata distribution follow alpha 1.0. The four-node cap is
+therefore alpha work (K28/W151), a prerequisite of A3.
+
 **Review (October 22, devel `165689c06`):**
 [plan and code review](alpha-1.0-plan-review-20261022.md). Main finding: the
 code caps a cluster at four nodes (`EFS_MAX_NODES`, voter sets, placement,
@@ -101,6 +105,8 @@ row is checked again on current devel before work starts.
 | K24 | **W149** `EFS_KV_COMPACT_DIE` exits the daemon in normal builds | build hygiene / safety | FIX |
 | K25 | **W135**–**W139**, **W141**, **W120**, **W150** test harness and reporting defects | test correctness | TEST |
 | K26 | LeakSanitizer aborts on node9900/node9901; F1 needs a working leak check | environment | FIX host or use another leak gate |
+| K27 | ior easy write on `d94ca85bf` is 710–863 MiB/s against 1,329 MiB/s on `08cc16af4`, same cluster, three runs, reads unchanged ([deploy report](orcd-mini-deploy-d94ca85bf-20261022.md)) | regression, unattributed | VERIFY (A/B/A′ on orcd-mini, needs a restart) |
+| K28 | **W151** the code caps a cluster at four nodes (`EFS_MAX_NODES`, `EFS_MD_RAFT_N`, voter sets, placement ring, client hint bound); the user keeps >4 nodes in alpha 1.0 (decision Oct 22) | implementation gap / scope | FIX: raise the cap with voter sets for n ≥ 5, placement and capacity tests at 5..max, membership and client tables; fresh format, no compatibility |
 
 ### Recheck on devel `ab1920fae` (October 22)
 
@@ -176,7 +182,9 @@ Each step is one change or a small group. Each gets a regression test, then
   target profile; containers and expiry remain disabled. If any of those choices
   changes, amend this matrix before calling the run alpha acceptance.
 - [ ] **A3** Specify supported node-count range. Qualify 3 nodes, 4 nodes and at
-  least one concrete larger topology (minimum 5). Record further coverage of
+  least one concrete larger topology (minimum 5). Prerequisite: K28/W151, the
+  code's four-node cap is raised; until then the third column is UNSUPPORTED,
+  not NOTRUN. Record further coverage of
   the claimed maximum and topology-dependent limits; one 5-node PASS does not
   qualify arbitrary cluster sizes.
 - [ ] **A4** Use distinct physical hosts for distributed acceptance. A private
@@ -416,7 +424,7 @@ it.
 | --- | --- | --- | --- |
 | Known-defect register K (Stage 1; once per candidate) | OPEN | (same) | (same) |
 | Functional scope S decided (once per candidate) | OPEN | (same) | (same) |
-| Candidate and profile | NOTRUN | NOTRUN | NOTRUN |
+| Candidate and profile | NOTRUN | NOTRUN | UNSUPPORTED until K28 |
 | Flag audit and A/B removal (A6–A10, A12; once per candidate) | NOTRUN | (same) | (same) |
 | Reduced-matrix qualification (A11) | NOTRUN | NOTRUN | NOTRUN |
 | Placement/capacity and decode | NOTRUN | NOTRUN | NOTRUN |

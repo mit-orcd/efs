@@ -180,6 +180,12 @@ when finding 1 is decided.
   log volume on exactly the restarts under study; keep it, but rate-limit
   per group like the AE rejection notes.
 
+**Decided (October 22):** the user keeps >4 nodes in alpha 1.0 ("Phase 1 =
+alpha 1.0: finish 2+1 on 3-, 4- and >4-node clusters; 2+2 and broader
+metadata distribution after alpha 1.0"). Finding 1 is now K28/W151 in the
+checklist and the work queue; finding 3 is K27. Findings 2, 4, 5 and the
+vision points stay recommendations.
+
 ## What I would change in the plan, in order
 
 1. Decide the node range (finding 1). If >4 stays in alpha, add the

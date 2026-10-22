@@ -65,7 +65,10 @@ and acceptance remain open.
 **Release sequencing, October 22:** the user sets [Phase 1 / alpha 1.0](alpha-1.0-2plus1-checklist.md)
 as completing 2+1 on 3, 4 and >4 nodes before continuing the remaining roadmap.
 This intermediate release does not claim D36 two-loss protection on 4+ nodes;
-the accepted final requirement above is unchanged.
+the accepted final requirement above is unchanged. **Reaffirmed October 22
+after the [plan review](alpha-1.0-plan-review-20261022.md):** >4-node clusters
+stay in alpha 1.0, so raising the code's four-node cap (W151) is alpha work;
+2+2 and broader metadata distribution follow alpha 1.0.
 
 ## Earlier decisions — compact register
 
