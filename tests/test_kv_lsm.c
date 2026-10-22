@@ -1,6 +1,8 @@
 /* Durable ordered-KV tests. No sockets, no cluster. Uses a temp directory:
- * every case that claims durability reopens the store, and the crash case
- * really exits the process so an unfsynced page cache cannot pass for it. */
+ * every case that claims durability reopens the store, and the crash cases
+ * really exit the process so an unfsynced page cache cannot pass for them.
+ * The compaction-crash case needs the EFS_FAULTS die hook and lives in
+ * tests/faults/test_kv_compact_crash.c. */
 #include "efs/common.h"
 #include "efs/kv.h"
 #include "efs/kv_key.h"
@@ -1059,61 +1061,6 @@ static void test_peek_beside_reader(void)
     efs_kv_lsm_close(p.kv);
 }
 
-/* Kill after the compaction output file is durable and before the manifest
- * rename. Reopen must still serve every key from the old segments. */
-static void test_compact_crash(void)
-{
-    struct efs_kv *kv;
-    pid_t pid;
-    int status = -1;
-    int i, bad = 0;
-
-    rmtree(g_dir);
-    kv = open_store(EFS_KV_LSM_SYNC, 0);
-    CHECK(kv != NULL, "open crash-compact");
-    if (!kv)
-        return;
-    for (i = 0; i < 20; i++) {
-        char k[32], v[32];
-
-        snprintf(k, sizeof(k), "ck%02d", i);
-        snprintf(v, sizeof(v), "cv%02d", i);
-        CHECK(put_s(kv, k, v) == EFS_OK, "put ck");
-    }
-    CHECK(efs_kv_lsm_flush(kv) == EFS_OK, "flush ck");
-    efs_kv_lsm_close(kv);
-    setenv("EFS_KV_COMPACT_DIE", "1", 1);
-    pid = fork();
-    CHECK(pid >= 0, "fork compact");
-    if (pid == 0) {
-        kv = open_store(EFS_KV_LSM_SYNC, 0);
-        if (!kv)
-            _exit(2);
-        if (efs_kv_lsm_compact(kv) == EFS_OK)
-            _exit(0);
-        _exit(3);
-    }
-    unsetenv("EFS_KV_COMPACT_DIE");
-    if (pid > 0) {
-        waitpid(pid, &status, 0);
-        CHECK(WIFEXITED(status) && WEXITSTATUS(status) == 99, "died after segment");
-    }
-    kv = open_store(EFS_KV_LSM_SYNC, 0);
-    CHECK(kv != NULL, "reopen after compact crash");
-    if (!kv)
-        return;
-    for (i = 0; i < 20; i++) {
-        char k[32], v[32];
-
-        snprintf(k, sizeof(k), "ck%02d", i);
-        snprintf(v, sizeof(v), "cv%02d", i);
-        if (get_is(kv, k, v) != EFS_OK)
-            bad++;
-    }
-    CHECK(bad == 0, "keys survived compact crash");
-    efs_kv_lsm_close(kv);
-}
-
 /* A flush of two key[0] ranges is two L0 files. Compacting one range
  * rewrites that range's L1 and leaves the other file in place. */
 static int sst_names(char names[][64], int cap)
@@ -1938,7 +1885,6 @@ int main(void)
     test_cleanup_scope_hints();
     test_cleanup_scope_apply();
     test_durable_query_hints();
-    test_compact_crash();
     test_sync_hold();
     test_partitioned_flush();
     test_view_export_overlap();

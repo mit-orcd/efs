@@ -23,7 +23,7 @@
 #include <time.h>
 #include <unistd.h>
 
-/* W23 stalled-compactor hook, compiled only with -DEFS_FAULTS=1 (the
+/* Fault hooks, compiled only with -DEFS_FAULTS=1. W23 stalled compactor (the
  * stalled-compactor test, tests/measure/w23_stalled_compactor.sh). A
  * process started with EFS_FAULT_COMPACT_STALL=1 parks its compactor
  * between iterations — holding neither l->mu nor a pinned view — while
@@ -42,6 +42,23 @@ static int fault_compact_stall_on(void)
 
     return v && v[0] && !(v[0] == '0' && !v[1]);
 }
+
+/* EFS_FAULT_COMPACT_DIE=N exits after the Nth finished output segment, before
+ * the manifest rename (tests/faults/test_kv_compact_crash). Recovery must
+ * still serve every key. A normal build has no such exit (K24). */
+static void compact_maybe_die(void)
+{
+    const char *e = getenv("EFS_FAULT_COMPACT_DIE");
+    static uint32_t n;
+
+    if (!e || !e[0])
+        return;
+    n++;
+    if ((uint32_t)atoi(e) == n)
+        _exit(99);
+}
+#else
+#define compact_maybe_die() ((void)0)
 #endif
 
 /* Range ids: kv_key_range / KV_RANGE_N in kv_lsm_internal.h (the point
@@ -263,20 +280,6 @@ static uint64_t take_seq(struct kv_lsm *l)
     s = l->next_seq++;
     lsm_unlock(l);
     return s;
-}
-
-/* EFS_KV_COMPACT_DIE=N exits after the Nth finished output segment, before
- * the manifest rename. Recovery must still serve every key. */
-static void compact_maybe_die(void)
-{
-    const char *e = getenv("EFS_KV_COMPACT_DIE");
-    static uint32_t n;
-
-    if (!e || !e[0])
-        return;
-    n++;
-    if ((uint32_t)atoi(e) == n)
-        _exit(99);
 }
 
 static uint64_t mono_ms(void)

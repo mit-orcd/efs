@@ -18,7 +18,7 @@ static pthread_once_t reply_buffers_once = PTHREAD_ONCE_INIT;
 static int reply_buffers_key_error;
 static int reply_buffers_trace;
 
-#if defined(EFS_FAULTS) && EFS_FAULTS
+#if EFS_FAULTS
 /* Test-only failures at this owner boundary, not arbitrary libc allocation.
  * Every seventeenth matching attempt fails so real workers can recover. */
 static int reply_buffers_fault_kind;
@@ -58,7 +58,7 @@ static void reply_buffers_init(void)
 {
     const char *trace = getenv("EFS_REPLY_BUFFER_TRACE");
     reply_buffers_trace = trace && trace[0] && strcmp(trace,"0") != 0;
-#if defined(EFS_FAULTS) && EFS_FAULTS
+#if EFS_FAULTS
     const char *fault = getenv("EFS_FAULT_REPLY_BUFFER");
     if (fault) {
         if (!strcmp(fault,"allocation")) reply_buffers_fault_kind=1;

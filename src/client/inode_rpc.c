@@ -2501,7 +2501,7 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
     return saw_busy ? EFS_ERR_BUSY : EFS_ERR_NOT_PRIMARY;
 }
 
-#if defined(EFS_FAULTS) && EFS_FAULTS
+#if EFS_FAULTS
 /* Private EOF-contract fault: omit one size record after valid construction.
  * File contains OMIT_SIZE <ino>; OFF or a missing file disables it. */
 static uint64_t report_fault_omit_size(void)
@@ -2573,7 +2573,7 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
             p += n;
         }
     }
-#if defined(EFS_FAULTS) && EFS_FAULTS
+#if EFS_FAULTS
     uint64_t omit = report_fault_omit_size();
     hdr->ino_count = 0;
     for (i = 0; i < ino_count; i++) {

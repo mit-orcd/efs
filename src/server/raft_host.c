@@ -6731,7 +6731,7 @@ static int host_receive_persist(void *net, int (*persist)(void *), void *ctx)
         if (h->g[gi].hosted) host_publish_view(h,gi);
     host_waiters_wake(h);
     pthread_mutex_unlock(&h->mu);
-#ifdef EFS_FAULTS
+#if EFS_FAULTS
     /* Private qualification only: retain the real cohort at its barrier while
      * a controller checks unrelated lock progress and graceful shutdown. */
     const char *pause = getenv("EFS_FAULT_RECV_PERSIST_FILE");
@@ -14302,7 +14302,7 @@ static int host_command_cohort_end(struct host_command_cohort *c,int prior,
  * (proposed together, waited together). A wait that runs out after the
  * DECIDE is in the log goes to the finisher; the caller still sees the
  * error (the client retries, and the op-id window answers the retry). */
-#ifdef EFS_FAULTS
+#if EFS_FAULTS
 /* Owned namespace gate only: stop a large transaction before its decision,
  * or after durable COMMIT and before participant resolution. */
 static void host_txn_fault_barrier(struct efs_raft_host *h,
@@ -14345,7 +14345,7 @@ static int host_txn_commit(struct efs_raft_host *h, const struct efs_txid *t,
     struct host_idx_ref refs[EFS_TXN_MAX_PART];
     int i, n = 0, rc;
 
-#ifdef EFS_FAULTS
+#if EFS_FAULTS
     host_txn_fault_barrier(h, parts, "prepare");
 #endif
     pack_decide(cmd, t, coord, EFS_TXN_COMMIT);
@@ -14358,7 +14358,7 @@ static int host_txn_commit(struct efs_raft_host *h, const struct efs_txid *t,
             host_fin_add(h, t, parts, coord);
         return rc;
     }
-#ifdef EFS_FAULTS
+#if EFS_FAULTS
     host_txn_fault_barrier(h, parts, "commit");
 #endif
     struct host_command_cohort cohort;
