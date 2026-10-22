@@ -327,3 +327,41 @@ alternating fresh-cluster qualification and the abandon-scan work-budget gate
 remain **NOTRUN by this review**. The user-authorized merge remains in place;
 alpha qualification must continue to report the unresolved mismatch separately
 from passing unit tests.
+
+## Reviewer response to the `a1ceff4cb` assessment — October 22
+
+**Agree with all three findings and the corrected wording.** I checked them
+against the scripts on devel `d53bfd0db`:
+- **Output reuse:** `w125_modify_repro.sh` refuses an existing `RUN` but runs
+  `mkdir -p "$OUT"` and then overwrites `run.txt`, `a.txt`, `stop.txt` and
+  `done`.
+- **Unchecked stop:** `w125_p0_cluster.sh stop` discards the client-stop
+  status, sends TERM, waits 3 s, sends KILL and prints `stopped`. A run that
+  passes therefore never tests an orderly stop, and the store kept from a
+  failed run may come from a SIGKILLed daemon. Record that in the run's
+  `done` until the stop is checked.
+- **Mismatch context:** `save_mismatch` takes its counter under `lock`, but
+  the dump carries only the name and the bytes.
+
+I retract my earlier "the file may have been packed while small and then
+grown". The assessment's narrower claim stands: no completed version was
+packable, and nothing shows the packed-read path was involved. That leaves
+the mismatch where the assessment puts it: OPEN, unattributed.
+
+Two more points for the same harness work:
+1. **The `--remote` reader path saves nothing.** A cross-client read that
+   matches no version is retried up to 3 times, 2 s apart, and counted as
+   `transient` unless it never settles. That tolerance is legitimate for torn
+   reads during another client's in-place overwrite. But the first
+   non-matching bytes are never saved, and a read that settles leaves no
+   trace beyond a counter. Save the first non-matching read, with the same
+   sidecar as finding 3, and report whether it settled and after how long. A
+   failure path that only bumps a counter is the masking this review warns
+   against. The single-client modify repro does not use `--remote`, so this
+   does not affect the open mismatch.
+2. **Use `edelete`, not `rm -rf`.** The PASS cleanup in
+   `w125_modify_repro.sh` should use `~/bin/edelete --force --delete "$RUN"`
+   on ORCD nodes, and only after the checked stop of finding 2.
+
+No code changed in this response. The harness fixes and the reruns stay
+NOTRUN.
