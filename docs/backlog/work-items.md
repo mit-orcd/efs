@@ -6021,3 +6021,128 @@ review is needed before implementation against these requirements.
 This review was a subsection of W139, which made it read as part of W139. It
 is now its own section, with its text unchanged. No item is closed, and no
 gate changes.
+
+<a id="w143"></a>
+## W143 — efs-fuse reads diagnostic environment switches on per-op paths
+
+**Performance; opened and closed 2026-10-22 (both gates recorded); deployed in `46496416e`. Verified: `getenv` is gone from both clients' on-CPU profiles under the same load. `make test` 816/816 with one environmental failure (docs check without `results/`).**
+Found by passively profiling orcd-mini on `08cc16af4` under two
+`tiny_files.py` writers ([profile](../status/orcd-mini-profile-08cc16af4-20261022.md)).
+On the node9901 client, `getenv` was 2.9% self and 3.7% with children of
+efs-fuse on-CPU time. `__strncmp_evex` and `__strlen_evex`, used by
+`getenv`'s environment scan, added another 1.8% and 1.1%. On node9900 it
+was 1.3% on 2026-10-21. `getenv` walks the whole process environment on
+every call. These checks read diagnostic switches that never change after
+start:
+- `EFS_RPC_PROF` in `dir_lock_take`: every directory lock, and 64 times
+  per `efs_client_lock_all_dirs` (once per stripe) on the eviction path;
+- `EFS_RPC_PROF` in `lookup_memo_observe` (every lookup) and
+  `efs_append_flush_report_run` (every flush);
+- `EFS_OPID_TRACE_VERBOSE` and `EFS_OPID_TRACE` in `inode_rpc.c`: several
+  per create, lease and append;
+- `EFS_STAGE_DBG` per eviction pass.
+
+**Fix.** Each of the 20 affected functions reads its switch once into a
+function-local `static int` (`-1` until read), as `write.c` already does
+for `EFS_REPORT_DBG`. The cache stays inside the function: source-slice
+tests compile these functions alone, and an earlier version that used a
+shared header helper and file-scope caches broke 14 of them. Unchanged:
+startup-only reads, error-path `EFS_RDMA_FIRST` logging and
+`EFS_FAULTS`-only checks. Behaviour is unchanged, because no test or tool
+sets these variables at runtime.
+
+**Gates.**
+- `make test` on node9901 (`scripts/make_test_summary.sh`). Many tests
+  compile slices of the changed files.
+- A client on-CPU profile under the same tiny-file load shows `getenv`
+  below 0.1%.
+
+The client is not the throughput limit here: both mounts used only
+0.16–0.18 cores. The gain is efs-fuse CPU, not create rate.
+
+<a id="w144"></a>
+## W144 — LOOKUP/GETATTR on a group follower takes `h->mu` for the leader hint
+
+**Performance; opened and closed 2026-10-22 (both gates recorded); deployed in `784bcc6ee`. Verified with split leadership (n3 led group 0, n2 led group 2): `host_namespace_leader_hint` no longer appears in the leaders' lock waits. `make test` 816/816 with one environmental failure.**
+Found in the orcd-mini profile on `46496416e`
+([profile, p2](../status/orcd-mini-profile-08cc16af4-20261022.md)). There,
+leadership was split: n2 led group 0 and n1 led group 2. On n1,
+`host_namespace_leader_hint` ← `host_read_leader_hint` ←
+`server_raft_host_lookup` was the largest lock-wait site: 22.1% of n1's
+lock-wait switches, ahead of proposals.
+
+The function routes LOOKUP, GETATTR and namespace mutations to a dual-group
+leader. When this node is not the group's leader, it took `h->mu` to read
+both groups' committed voters. The 2026-10-18 profile saw nothing, because
+then one node led both groups and the leader returns before locking.
+
+**Fix.** Read the voters with `host_route_voters`, the lock-free published
+view also used by `host_leader_cover_pick`: the raft voters for a hosted
+group, else the slot's atomically stored set. A group without a local slot
+still yields no hint, as before. The hint can be one pump cycle old, which
+was already true, and the recipient rechecks authority.
+`tests/test_namespace_leader_route.py` gets the matching stub; all its
+assertions are unchanged and PASS. `test_host_cover_route` and
+`test_query_target_route` PASS.
+
+**Gates.**
+- `make test` on node9901.
+- After deploy, with split leadership, `host_namespace_leader_hint` is gone
+  from the leader-node lock waits. One node leading both groups does not
+  exercise the path.
+
+<a id="w145"></a>
+## W145 — A deposed group leader never catches up as a follower
+
+**Liveness; opened 2026-10-22; OPEN, cause not yet identified.** Seen on
+orcd-mini `784bcc6ee` under two `tiny_files.py` writers at ~16 M files
+([profile, p4](../status/orcd-mini-profile-08cc16af4-20261022.md)).
+
+**What happened.**
+- n2 led group 2 (term ≤ 62). At 12:54:41–44Z a 3 s DWARF
+  context-switch capture (`perf record -e cs --call-graph dwarf,16384`)
+  stalled it.
+- By 12:54:49Z n1 led group 2 at term 63. n2 stopped applying at index
+  30,929,219.
+- n2 has not advanced since. At 13:07:53Z it was 553 K entries behind
+  (leader commit 31,482,465), and the gap keeps growing. Group 0 on the
+  same n2 is in sync.
+- n1 and n3 keep quorum, so the group stays available. But LOOKUP/GETATTR
+  routed to n2 for group 2 waits for that applied index. n2 logged ~6 K
+  `read-sleep` and ~7.6 K `apply-sleep` lines (each 400 ms) within 15
+  minutes. Client creates fell to ~284 files/s on node9901.
+- No efsd line on any node names a rejection, conflict, truncation or
+  snapshot transfer for this.
+
+**Evidence.**
+- n2's Raft pump is idle: 267 of 273 blocked switches are `poll` in
+  `host_pump`.
+- The leader n1 spends 10.7% of efsd CPU in `send_ae`. It repeatedly reads
+  cold log entries (`disk_get` → `index_cold_read`, with a `madvise` per
+  read and page faults; `raft_log_read_command` → `pread`) and blake3-hashes
+  the batch. These are catch-up batches that never take effect.
+- `raft-status` shows no per-peer progress (match/next index, in-flight
+  batch), so the leader's view of n2 cannot be read.
+
+**Leads, not verified.**
+- As the deposed leader, n2 may hold an uncommitted suffix that conflicts
+  with term 63. If the conflict-truncation and reject path does not
+  converge, the leader resends the same window (one outstanding batch per
+  behind peer, in `send_ae`) forever.
+- Or batches or replies for n2 are dropped: `send_ready` is false, or
+  `ae_inflight` is never cleared.
+
+**Next.**
+- Add per-peer progress (`next_index`, `match_index`, `ae_inflight` age,
+  reject count) to `raft-status`, plus a rate-limited log line on AE
+  reject and conflict truncation.
+- Reproduce on a private 3-node cluster: stall a group leader for 3 s
+  (SIGSTOP or the same perf capture) under a create load, then check that
+  the old leader catches up.
+
+**Gate.** A deposed leader catches up within a bounded time after a
+3 s stall under load, on a private cluster and on orcd-mini.
+
+**Tooling note.** DWARF capture of a busy leader can stall it long enough to
+depose it. The profiling scripts now skip leader DWARF captures unless
+asked.

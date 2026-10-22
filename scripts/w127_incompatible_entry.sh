@@ -1,7 +1,8 @@
 #!/bin/bash
 # w127_incompatible_entry.sh TREE [PORT]
 #
-# W127/W66 B1-B4 gate on a private 3-node TCP efsd set (ports PORT..PORT+2,
+# W127/W66 B1-B4 gate on a private 3-node efsd set (TCP by default; set
+# EFS_TRANSPORT=rdma and EFS_RDMA_DEV for RDMA; ports PORT..PORT+2,
 # default 17631; check `ss -ltn` first). TREE is a built, disposable tree;
 # stores go to TREE/w127 and the daemons are killed on exit. Never point it
 # at a deployed tree or a running cluster.
@@ -16,7 +17,7 @@
 # Prints PASS/FAIL per check and exits nonzero on any failure.
 set -u
 T=$(cd "$1" && pwd -P); P=${2:-17631}; D=$T/w127
-export EFS_TRANSPORT=tcp EFS_MD_RAFT_N=3
+export EFS_TRANSPORT=${EFS_TRANSPORT:-tcp} EFS_MD_RAFT_N=3
 fail=0
 check() { if eval "$2"; then echo "PASS $1"; else echo "FAIL $1"; fail=1; fi; }
 start() {

@@ -18,6 +18,11 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[orcd-mini deploy of `08cc16af4`](orcd-mini-deploy-08cc16af4-20261022.md):
+**cleanup merge deployed; all suites and gates PASS over RDMA + `.efs`**
+after two harness fixes (`e4bd1b6d7`, merged in `99c7a1c75`): faults 24/24,
+`.efs` commands gate PASS.
+
 [orcd-mini fresh-format deploy with D25](orcd-mini-d25-deploy-20261022.md):
 **deployed `ee1087129`; all suites and D25 step-5 gates PASS.** Fresh
 format (user-authorized wipe). Core 216/216, extras 4/5 + mmap skip,
@@ -111,6 +116,22 @@ data files under `docs/` now live only at tag `archive/raw-evidence-20261021`
 (branch `raw-evidence`). Devel keeps the 302 summaries under `results/`; 523
 links in 96 pages now name the archived path. Read one with
 `git show archive/raw-evidence-20261021:<path>`.
+
+[orcd-mini profile on `08cc16af4`](orcd-mini-profile-08cc16af4-20261022.md):
+**profiling only.**
+- Two tiny-file writers: ~3,000 creates/s, limited by the leader's `h->mu`
+  and apply lag (known plan).
+- W126's LSM fix holds: 1.4% lock waits.
+- New [W143](../backlog/work-items.md#w143): efs-fuse spent ~4% of its CPU
+  in `getenv` on per-op paths. Fixed, deployed in `46496416e`, verified and closed.
+- New [W144](../backlog/work-items.md#w144): with split leadership,
+  LOOKUP/GETATTR at a group follower took `h->mu` for the leader hint (22%
+  of lock waits). Fixed, deployed in `784bcc6ee`, verified and closed.
+- Observation: at ~16 M files, leader terms move under load (group 2:
+  58 → 63 in 15 min).
+- New [W145](../backlog/work-items.md#w145), OPEN: n2, deposed as group-2
+  leader, never catches up (553 K entries behind, no log line). Clients
+  routed to n2 wait. Cause not identified.
 
 [W126 on orcd-mini, `8fb4247ad` A/B](orcd-mini-w126-ab-8fb4247ad-20261022.md):
 **deployed. Lock-wait gate PASS; create-rate gate FAIL.**

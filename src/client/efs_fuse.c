@@ -1425,8 +1425,11 @@ static void lookup_memo_put(const struct efs_inode *row)
  * change cache lifetime, mutation fencing, RPC or quorum decisions. */
 static void lookup_memo_observe(unsigned reason)
 {
+    static int env_rpc_prof = -1; /* W143: read once, per-op path */
+    if (env_rpc_prof < 0)
+        env_rpc_prof = getenv("EFS_RPC_PROF") != NULL;
     static uint64_t counts[7], total;
-    if (!getenv("EFS_RPC_PROF"))
+    if (!env_rpc_prof)
         return;
     __atomic_add_fetch(&counts[reason], 1, __ATOMIC_RELAXED);
     if (reason >= 4)
@@ -2054,6 +2057,9 @@ static int efs_close_note(efs_ino_t ino, int *leased)
  * ownership, preventing a fresh OPEN from racing its delayed release. */
 static int efs_open_release_pending_run(efs_ino_t ino)
 {
+    static int env_opid_trace = -1; /* W143: read once, per-op path */
+    if (env_opid_trace < 0)
+        env_opid_trace = getenv("EFS_OPID_TRACE") != NULL;
     struct efs_open_ref *owner = NULL;
     pthread_mutex_lock(&g_open_mu);
     owner = open_ref_find(ino);
@@ -2076,7 +2082,7 @@ static int efs_open_release_pending_run(efs_ino_t ino)
             int rc=efs_client_lease_begin(&clear,ino,owner->lease_generation,
                 EFS_LEASE_EDGE_CLEAR_PENDING,owner->adoption.pending_token);
             if (rc!=EFS_OK) return rc;
-            if (getenv("EFS_OPID_TRACE"))
+            if (env_opid_trace)
                 fprintf(stderr,"opid-create-adopt: rejected seq=%llu ino=%llu rc=%d terminal=1\n",
                     (unsigned long long)owner->adoption.q.id.seq,(unsigned long long)ino,adoption_rc);
             (void)efs_client_lease_reset(&owner->adoption);
@@ -3331,9 +3337,12 @@ static int efs_ino_has_unpublished(efs_ino_t ino)
 
 static int efs_append_flush_report_run(struct fuse_file_info *fi, efs_ino_t ino)
 {
+    static int env_rpc_prof = -1; /* W143: read once, per-op path */
+    if (env_rpc_prof < 0)
+        env_rpc_prof = getenv("EFS_RPC_PROF") != NULL;
     pthread_mutex_t *amu;
     int rc;
-    int profile = getenv("EFS_RPC_PROF") != NULL;
+    int profile = env_rpc_prof;
     uint64_t t0=profile?stats_now_ms():0,t1=0,t2=0,t3=0;
 
     (void)fi;

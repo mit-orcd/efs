@@ -259,6 +259,9 @@ static int opid_take_locked(struct efs_opid_req *q)
 /* Fill q and take a slot (returned; -1 = none, q left invalid). */
 static int opid_begin(struct efs_opid_req *q)
 {
+    static int env_opid_verbose = -1; /* W143: read once, per-op path */
+    if (env_opid_verbose < 0)
+        env_opid_verbose = getenv("EFS_OPID_TRACE_VERBOSE") != NULL;
     memset(q,0,sizeof(*q));
     /* A later known reply still occupies the server cache until the oldest
      * unresolved identity finishes. Reserve space for that oldest identity:
@@ -278,7 +281,7 @@ static int opid_begin(struct efs_opid_req *q)
         int slot=opid_take_locked(q);
         if(slot>=0) {
             pthread_mutex_unlock(&opid_mu);
-            if (getenv("EFS_OPID_TRACE_VERBOSE"))
+            if (env_opid_verbose)
                 fprintf(stderr,"opid-begin: seq=%llu ack=%llu slot=%d thread=%lu deadline_ms=%llu\n",
                     (unsigned long long)q->id.seq,(unsigned long long)q->ack,slot,
                     (unsigned long)pthread_self(),(unsigned long long)efs_client_rpc_deadline_ms());
@@ -319,6 +322,9 @@ static int opid_begin(struct efs_opid_req *q)
 
 static void opid_end(int slot)
 {
+    static int env_opid_verbose = -1; /* W143: read once, per-op path */
+    if (env_opid_verbose < 0)
+        env_opid_verbose = getenv("EFS_OPID_TRACE_VERBOSE") != NULL;
     if (slot < 0)
         return;
     pthread_mutex_lock(&opid_mu);
@@ -326,7 +332,7 @@ static void opid_end(int slot)
     g_client.opid_inflight[slot] = 0;
     pthread_cond_broadcast(&opid_cv);
     pthread_mutex_unlock(&opid_mu);
-    if (getenv("EFS_OPID_TRACE_VERBOSE"))
+    if (env_opid_verbose)
         fprintf(stderr,"opid-end: seq=%llu slot=%d thread=%lu\n",
             (unsigned long long)seq,slot,(unsigned long)pthread_self());
 }
@@ -337,8 +343,11 @@ static void opid_end(int slot)
  * mount UUID is shared with lease and lock ownership. */
 int efs_client_append_begin(struct efs_opid_req *q)
 {
+    static int env_opid_verbose = -1; /* W143: read once, per-op path */
+    if (env_opid_verbose < 0)
+        env_opid_verbose = getenv("EFS_OPID_TRACE_VERBOSE") != NULL;
     int slot = opid_begin(q);
-    if (slot >= 0 && getenv("EFS_OPID_TRACE_VERBOSE"))
+    if (slot >= 0 && env_opid_verbose)
         fprintf(stderr,"opid-owner: seq=%llu kind=APPEND\n",(unsigned long long)q->id.seq);
     return slot;
 }
@@ -932,6 +941,12 @@ int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
                           uint32_t flags, efs_ino_t *out_ino,
                           struct efs_inode *out)
 {
+    static int env_opid_trace = -1; /* W143: read once, per-op path */
+    if (env_opid_trace < 0)
+        env_opid_trace = getenv("EFS_OPID_TRACE") != NULL;
+    static int env_opid_verbose = -1; /* W143: read once, per-op path */
+    if (env_opid_verbose < 0)
+        env_opid_verbose = getenv("EFS_OPID_TRACE_VERBOSE") != NULL;
     uint8_t buf[sizeof(struct efs_msg_inode_create) + EFS_OPID_WIRE_LEN];
     struct efs_msg_inode_create *req = (struct efs_msg_inode_create *)buf;
     struct efs_opid_req q;
@@ -959,7 +974,7 @@ int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
         slot = opid_begin(&q);
     if (slot < 0)
         return EFS_ERR_BUSY;
-    if (getenv("EFS_OPID_TRACE_VERBOSE"))
+    if (env_opid_verbose)
         fprintf(stderr,"opid-owner: seq=%llu kind=%s parent=%llu name=%s\n",
             (unsigned long long)q.id.seq,S_ISDIR(mode)?"MKDIR":"CREATE",
             (unsigned long long)parent,name?name:"");
@@ -976,7 +991,7 @@ int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
                  : rpc_send_recv_owner(parent, EFS_MSG_INODE_CREATE, buf,
                                        slen, EFS_MSG_INODE_CREATE_REPLY,
                                        &r, sizeof(r));
-    if (getenv("EFS_OPID_TRACE") && S_ISDIR(mode))
+    if (env_opid_trace && S_ISDIR(mode))
         fprintf(stderr,"opid-mkdir: parent=%llu name=%s seq=%llu transport_rc=%d status=%u\n",
             (unsigned long long)parent,name?name:"",(unsigned long long)q.id.seq,
             rc,rc==EFS_OK?r.status:255u);
@@ -1033,12 +1048,15 @@ int efs_client_session_admit(uint32_t shard,const struct efs_opid *identity)
 int efs_client_create_begin(struct efs_client_create_request *r,efs_ino_t parent,
                              const char *name,uint32_t mode,uid_t uid,gid_t gid)
 {
+    static int env_opid_verbose = -1; /* W143: read once, per-op path */
+    if (env_opid_verbose < 0)
+        env_opid_verbose = getenv("EFS_OPID_TRACE_VERBOSE") != NULL;
     if(!r || !parent || !name || !name[0] ||
        strnlen(name,EFS_MAX_NAME)>=EFS_MAX_NAME || !S_ISREG(mode))return EFS_ERR_INVAL;
     if(r->active)return EFS_ERR_BUSY;
     struct efs_opid_req q;int slot=opid_begin(&q);
     if(slot<0)return EFS_ERR_BUSY;
-    if(getenv("EFS_OPID_TRACE_VERBOSE"))
+    if(env_opid_verbose)
         fprintf(stderr,"opid-owner: seq=%llu kind=RETAINED_CREATE parent=%llu name=%s\n",
             (unsigned long long)q.id.seq,(unsigned long long)parent,name);
     memset(r,0,sizeof(*r));r->slot=slot;r->active=1;
@@ -1052,6 +1070,9 @@ int efs_client_create_begin(struct efs_client_create_request *r,efs_ino_t parent
 
 static int create_request_rpc(struct efs_client_create_request *r,int probe)
 {
+    static int env_opid_trace = -1; /* W143: read once, per-op path */
+    if (env_opid_trace < 0)
+        env_opid_trace = getenv("EFS_OPID_TRACE") != NULL;
     struct efs_msg_create_retained request=r->wire;
     request.probe=probe;
     struct efs_msg_create_retained_reply reply={0};
@@ -1073,7 +1094,7 @@ static int create_request_rpc(struct efs_client_create_request *r,int probe)
         r->inode=reply.rpc.inode;r->generation=reply.generation;
         r->complete=1;r->result=rc;opid_end(r->slot);r->slot=-1;
     }
-    if(r->attempted && !reply.known && getenv("EFS_OPID_TRACE"))
+    if(r->attempted && !reply.known && env_opid_trace)
         fprintf(stderr,"opid-create: unresolved seq=%llu parent=%llu shard=%u routed=%u rc=%d probe=%d\n",
             (unsigned long long)r->wire.q.id.seq,(unsigned long long)r->wire.create.parent,
             r->wire.shard,r->wire.routed,rc,probe);
@@ -1486,12 +1507,15 @@ int efs_client_rpc_publication_session(uint32_t shard,const struct efs_opid *ide
  * This changes no identity, ACK, capacity or inherited deadline. */
 static int opid_try_begin(struct efs_opid_req *q)
 {
+    static int env_opid_verbose = -1; /* W143: read once, per-op path */
+    if (env_opid_verbose < 0)
+        env_opid_verbose = getenv("EFS_OPID_TRACE_VERBOSE") != NULL;
     memset(q,0,sizeof(*q));
     if(efs_client_rpc_past_deadline())return -1;
     pthread_mutex_lock(&opid_mu);
     int slot=opid_take_locked(q);
     pthread_mutex_unlock(&opid_mu);
-    if(slot>=0 && getenv("EFS_OPID_TRACE_VERBOSE"))
+    if(slot>=0 && env_opid_verbose)
         fprintf(stderr,"opid-begin: seq=%llu ack=%llu slot=%d thread=%lu deadline_ms=%llu\n",
             (unsigned long long)q->id.seq,(unsigned long long)q->ack,slot,
             (unsigned long)pthread_self(),(unsigned long long)efs_client_rpc_deadline_ms());
@@ -1501,6 +1525,9 @@ static int opid_try_begin(struct efs_opid_req *q)
 int efs_client_lease_begin(struct efs_client_lease_request *r,efs_ino_t ino,
                            uint64_t generation,unsigned flags,uint64_t token)
 {
+    static int env_opid_verbose = -1; /* W143: read once, per-op path */
+    if (env_opid_verbose < 0)
+        env_opid_verbose = getenv("EFS_OPID_TRACE_VERBOSE") != NULL;
     if (!r || !ino || !generation || !flags || (flags & ~7u) ||
         (flags & 3u) == 3u ||
         !!(flags & EFS_LEASE_EDGE_CLEAR_PENDING) != !!token)
@@ -1509,7 +1536,7 @@ int efs_client_lease_begin(struct efs_client_lease_request *r,efs_ino_t ino,
     struct efs_opid_req q;
     int slot = opid_try_begin(&q);
     if (slot < 0) return EFS_ERR_BUSY;
-    if(getenv("EFS_OPID_TRACE_VERBOSE"))
+    if(env_opid_verbose)
         fprintf(stderr,"opid-owner: seq=%llu kind=LEASE ino=%llu flags=%u\n",
             (unsigned long long)q.id.seq,(unsigned long long)ino,flags);
     *r = (struct efs_client_lease_request){.q=q,.ino=ino,
@@ -1532,7 +1559,10 @@ int efs_client_lease_begin(struct efs_client_lease_request *r,efs_ino_t ino,
 static int lease_request_result(struct efs_client_lease_request *r,int rc,
                                  uint64_t known)
 {
-    if(!known && getenv("EFS_OPID_TRACE"))
+    static int env_opid_trace = -1; /* W143: read once, per-op path */
+    if (env_opid_trace < 0)
+        env_opid_trace = getenv("EFS_OPID_TRACE") != NULL;
+    if(!known && env_opid_trace)
         fprintf(stderr,"opid-lease: unresolved seq=%llu ino=%llu flags=%u rc=%d\n",
             (unsigned long long)r->q.id.seq,(unsigned long long)r->ino,r->flags,rc);
     if (known == 1) {
@@ -1992,6 +2022,9 @@ int efs_client_rpc_getchunks(efs_export_id_t export_id, efs_ino_t ino,
 int efs_client_rpc_unlink(efs_export_id_t export_id, efs_ino_t parent,
                           const char *name, int is_dir)
 {
+    static int env_opid_verbose = -1; /* W143: read once, per-op path */
+    if (env_opid_verbose < 0)
+        env_opid_verbose = getenv("EFS_OPID_TRACE_VERBOSE") != NULL;
     uint8_t buf[sizeof(struct efs_msg_inode_unlink) + EFS_OPID_WIRE_LEN];
     struct efs_msg_inode_unlink *req = (struct efs_msg_inode_unlink *)buf;
     struct efs_opid_req q;
@@ -2007,7 +2040,7 @@ int efs_client_rpc_unlink(efs_export_id_t export_id, efs_ino_t parent,
     slot = opid_begin(&q);
     if (slot < 0)
         return EFS_ERR_BUSY;
-    if(getenv("EFS_OPID_TRACE_VERBOSE"))
+    if(env_opid_verbose)
         fprintf(stderr,"opid-owner: seq=%llu kind=%s parent=%llu name=%s\n",
             (unsigned long long)q.id.seq,is_dir?"RMDIR":"UNLINK",
             (unsigned long long)parent,name?name:"");
@@ -2025,6 +2058,9 @@ int efs_client_rpc_rename_at(efs_export_id_t export_id, efs_ino_t old_parent,
                              const char *old_name, efs_ino_t new_parent,
                              const char *new_name, struct efs_inode *out)
 {
+    static int env_opid_verbose = -1; /* W143: read once, per-op path */
+    if (env_opid_verbose < 0)
+        env_opid_verbose = getenv("EFS_OPID_TRACE_VERBOSE") != NULL;
     uint8_t buf[sizeof(struct efs_msg_inode_rename_at) + EFS_OPID_WIRE_LEN];
     struct efs_msg_inode_rename_at *req = (struct efs_msg_inode_rename_at *)buf;
     struct efs_opid_req q;
@@ -2042,7 +2078,7 @@ int efs_client_rpc_rename_at(efs_export_id_t export_id, efs_ino_t old_parent,
     slot = opid_begin(&q);
     if (slot < 0)
         return EFS_ERR_BUSY;
-    if(getenv("EFS_OPID_TRACE_VERBOSE"))
+    if(env_opid_verbose)
         fprintf(stderr,"opid-owner: seq=%llu kind=RENAME parent=%llu name=%s new_parent=%llu new_name=%s\n",
             (unsigned long long)q.id.seq,(unsigned long long)old_parent,old_name?old_name:"",
             (unsigned long long)new_parent,new_name?new_name:"");
@@ -2130,6 +2166,9 @@ int efs_client_rpc_append_reserve(efs_export_id_t export_id, efs_ino_t ino,
                                   uint64_t len, const struct efs_opid_req *q,
                                   uint64_t *new_size_out, uint64_t *start_out)
 {
+    static int env_opid_verbose = -1; /* W143: read once, per-op path */
+    if (env_opid_verbose < 0)
+        env_opid_verbose = getenv("EFS_OPID_TRACE_VERBOSE") != NULL;
     uint8_t buf[sizeof(struct efs_msg_inode_append) + EFS_APPEND_ACK_LEN];
     struct efs_msg_inode_append *req = (struct efs_msg_inode_append *)buf;
     uint8_t *su = buf + sizeof(*req);
@@ -2156,7 +2195,7 @@ int efs_client_rpc_append_reserve(efs_export_id_t export_id, efs_ino_t ino,
     if (low - 1 > current.ack) current.ack = low - 1;
     pthread_mutex_unlock(&opid_mu);
     efs_opid_req_pack(&current, su);
-    if(getenv("EFS_OPID_TRACE_VERBOSE"))
+    if(env_opid_verbose)
         fprintf(stderr,"opid-append-rpc: seq=%llu ino=%llu len=%llu\n",
             (unsigned long long)q->id.seq,(unsigned long long)ino,(unsigned long long)len);
     rc = rpc_send_recv_owner(ino, EFS_MSG_INODE_APPEND, buf, sizeof(buf),
@@ -2248,6 +2287,9 @@ int efs_client_rpc_link(efs_export_id_t export_id, efs_ino_t src_ino,
                         efs_ino_t new_parent, const char *new_name,
                         struct efs_inode *out)
 {
+    static int env_opid_verbose = -1; /* W143: read once, per-op path */
+    if (env_opid_verbose < 0)
+        env_opid_verbose = getenv("EFS_OPID_TRACE_VERBOSE") != NULL;
     uint8_t buf[sizeof(struct efs_msg_inode_link) + EFS_OPID_WIRE_LEN];
     struct efs_msg_inode_link *req = (struct efs_msg_inode_link *)buf;
     struct efs_opid_req q;
@@ -2263,7 +2305,7 @@ int efs_client_rpc_link(efs_export_id_t export_id, efs_ino_t src_ino,
     slot = opid_begin(&q);
     if (slot < 0)
         return EFS_ERR_BUSY;
-    if(getenv("EFS_OPID_TRACE_VERBOSE"))
+    if(env_opid_verbose)
         fprintf(stderr,"opid-owner: seq=%llu kind=LINK ino=%llu parent=%llu name=%s\n",
             (unsigned long long)q.id.seq,(unsigned long long)src_ino,
             (unsigned long long)new_parent,new_name?new_name:"");
