@@ -29,7 +29,7 @@ try:
     assert (base/'w96/exit.txt').read_text().strip()=='0'
     defs=['EFS_GIT_ID=3df1931032b8-nuc','EFS_GIT_DESCRIBE=3df19310-nuc','EFS_GIT_BRANCH=devel-nuc']
     run('build',['make','-j6','all',*defs],timeout=900)
-    (out/'binary-provenance.json').write_text(json.dumps({n:dict(sha256=hashlib.sha256((src/n).read_bytes()).hexdigest(),version=subprocess.check_output([str(src/n),'--version'],text=True)) for n in ('efsd','efs-fuse','efs-mgmt','efs-query','efs-bench')},indent=2))
+    (out/'binary-provenance.json').write_text(json.dumps({n:dict(sha256=hashlib.sha256((src/n).read_bytes()).hexdigest(),version=subprocess.check_output([str(src/n),'--version'],text=True)) for n in ('efsd','efs-fuse','efs-mgmt','efs-bench')},indent=2))
     run('native',['make','-j6','test',*defs],timeout=1800)
     pids=subprocess.check_output(['pgrep','-f','^/data1/efs/src/efsd .*--port 1743[2-5]( |$)'],text=True).split();assert len(pids)==4
     stopped=True

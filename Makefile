@@ -165,8 +165,6 @@ $(SERVER_OBJS) $(BENCH_STORE_OBJS) src/bench/bench_local.o: src/server/server_in
 MGMT_SRC = src/mgmt/efs_mgmt.c
 MGMT_OBJ = $(MGMT_SRC:.c=.o)
 
-QUERY_SRC = src/query/efs_query.c
-QUERY_OBJ = $(QUERY_SRC:.c=.o)
 
 # System fuse3 (>= 3.12, bounded active-worker API). pkg-config supplies -I and -lfuse3.
 FUSE_CFLAGS := $(shell pkg-config --cflags fuse3 2>/dev/null)
@@ -328,7 +326,7 @@ test-client-stop:
 	python3 tests/test_fixture_interrupt.py
 	python3 tests/test_client_processes.py
 
-all: $(LIB) efsd efs-fuse efs-bench efs-mgmt efs-query tests
+all: $(LIB) efsd efs-fuse efs-bench efs-mgmt tests
 
 # blake3-bench always relinks so a stale binary cannot linger after CPU changes.
 FORCE:
@@ -623,7 +621,7 @@ test: all
 .build_id.stamp: FORCE
 	@echo '$(EFS_GIT_ID)' | cmp -s - $@ 2>/dev/null || echo '$(EFS_GIT_ID)' > $@
 
-$(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS) $(MGMT_OBJ) $(QUERY_OBJ) $(TEST_SRCS:.c=.o): \
+$(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS) $(MGMT_OBJ) $(TEST_SRCS:.c=.o): \
 	$(wildcard include/efs/*.h) .build_id.stamp
 
 src/wire/wire.o: include/efs/raft.h
@@ -647,9 +645,6 @@ $(CLIENT_OBJS): CFLAGS += $(FUSE_CFLAGS)
 
 efs-mgmt: $(MGMT_OBJ) $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(MGMT_OBJ) $(LIB) $(LDFLAGS)
-
-efs-query: $(QUERY_OBJ) $(LIB)
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(QUERY_OBJ) $(LIB) $(LDFLAGS)
 
 # These exercise production ownership/budget helpers with allocator/RDMA stubs.
 tests/test_reply_buffers: tests/test_reply_buffers.c src/client/reply_buffers.h
@@ -755,9 +750,9 @@ blake3-bench: $(BLAKE3_OBJS) src/bench/blake3_bench.o FORCE
 		-o blake3-bench tools/blake3-bench.c src/bench/blake3_bench.o $(BLAKE3_OBJS) $(LDFLAGS)
 
 clean:
-	rm -f $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS) $(MGMT_OBJ) $(QUERY_OBJ)
+	rm -f $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS) $(MGMT_OBJ)
 	rm -f src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_ns.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o src/sim/sim_disk.o src/sim/opid.o
-	rm -f $(LIB) efsd efs-fuse efs-bench efs-mgmt efs-query blake3-bench
+	rm -f $(LIB) efsd efs-fuse efs-bench efs-mgmt blake3-bench
 	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim
 	rm -f $(TEST_BINS) tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_upload_client
 	rm -f .build_id.stamp
@@ -801,7 +796,7 @@ src/client/commands/source.h: src/client/commands/command.py src/client/commands
 src/client/efs_fuse.o: src/client/commands/source.h include/efs/command_path.h
 
 # Native programs share one help renderer and option reference.
-$(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS) $(MGMT_OBJ) $(QUERY_OBJ): include/efs/cli_help.h
+$(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS) $(MGMT_OBJ): include/efs/cli_help.h
 
 tests/test_namespace_session: tests/test_namespace_session.o $(LIB)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
@@ -855,7 +850,7 @@ tests/test_query_delta: tests/test_query_delta.o $(LIB)
 
 # meta_apply.h structs are shared by every runtime consumer; rebuild them all so
 # an incremental build cannot retain an old struct ABI.
-$(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(MGMT_OBJ) $(QUERY_OBJ) $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS): include/efs/meta_apply.h
+$(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(MGMT_OBJ) $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS): include/efs/meta_apply.h
 
 
 
