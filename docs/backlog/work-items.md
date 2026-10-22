@@ -6094,8 +6094,7 @@ assertions are unchanged and PASS. `test_host_cover_route` and
 <a id="w145"></a>
 ## W145 — A follower commits its own unproven log tail after an InstallSnapshot
 
-**Raft safety; opened 2026-10-22; root cause found and fixed in source; orcd-mini
-n2 still diverged (repair pending).** Seen on orcd-mini (`784bcc6ee`, two
+**Raft safety; opened 2026-10-22. Root cause fixed and deployed (`76614e8e8`); orcd-mini n2 repaired 16:20Z with `efs-mgmt raft-resync`. Still open: the acknowledged-write check and the restart election storms.** Seen on orcd-mini (`784bcc6ee`, two
 `tiny_files.py` writers, ~16 M files) after a 3 s `perf --call-graph dwarf`
 capture stalled the group-2 leader n2 at 12:54:41–44Z
 ([profile, p4](../status/orcd-mini-profile-08cc16af4-20261022.md)).
@@ -6167,23 +6166,48 @@ HARD, SNAP and CFG records.
   and `proto_drops` keeps rising. The fix prevents new cases; it does not
   repair n2.
 
+**n2 repair (2026-10-22, with the user's go-ahead).**
+- No existing path could make a leader send n2 a snapshot, so
+  `613bb2c78` added the operator-only `efs-mgmt raft-resync`.
+- The first attempts exposed two more bugs:
+  - [W146](#w146): images over 4 GiB could not be imported;
+  - [W147](#w147): a transfer restarted on every send while the leader
+    committed.
+
+  Both were fixed (`e75391268`, `a569de971`).
+- On `a569de971`, `raft-resync 10.1.99.1:17433 2` (16:15:59Z) led n3 to send
+  its 5.2 GB image. n2 imported it as a full diff (3,769,881 keys) and
+  installed it at index 33,953,093 (16:20:33Z), replacing its stray
+  30,929,219@62.
+- Afterwards all three nodes were at group-2 commit and applied 33,967,666,
+  the request had cleared, n2 logged no `read-sleep`/`apply-sleep`, and
+  POSIX smoke was 216/216.
+- Each deploy restart took about 3 minutes, because n2's shutdown waited for
+  a handler stuck in a group-2 read and `stop.sh` gave up on the remaining
+  daemon. The guarded swap script retried.
+
 **Remaining.**
-1. Repair n2: its persisted state carries the stray entry. Options need
-   the user's decision (see the status page).
-2. Find why the new leader sent a 4.7 GB snapshot to a follower that was
+1. Find why the new leader sent a 4.7 GB snapshot to a follower that was
    only a few entries behind, instead of walking its tail back.
-3. Check whether a client was acknowledged for index 30,929,219@62.
+   - Likely cause: any rejection with `match_index` 0 (for example a
+     stale-term reply) resets the leader's `next_index` to 1, below its
+     log floor.
+2. Check whether a client was acknowledged for index 30,929,219@62.
+3. Every restart today ran hundreds of elections: group 2 went from term
+   511 to 721 to 923 to 1121.
+4. A daemon blocked in a group read delays its shutdown past `stop.sh`'s
+   wait. `stop.sh` then leaves the remaining daemons running.
 
 **Gates.**
-- `make test` PASS.
-- orcd-mini deploy, with n2 back in sync after its repair.
+- `make test` PASS (done).
+- orcd-mini deploy, with n2 back in sync after its repair (done, 16:20Z).
 - A private reproduction of deposed leader + snapshot under load, with the
   deposed leader catching up and no stale commit.
 
 <a id="w146"></a>
 ## W146 — A snapshot image over 4 GiB can never be installed
 
-**Correctness/liveness; opened 2026-10-22; fixed in source, deploy pending.**
+**Correctness/liveness; opened and closed 2026-10-22.** Deployed in `e75391268`. Gate PASS: n2 installed the 5.2 GB group-2 image on orcd-mini (16:20Z; import diff of 3,769,881 keys).
 Found while repairing W145 on orcd-mini. The group-2 snapshot image is 5.2 GB
 (group 0's is 5.4 GB). A follower installing it reads both the incoming and
 its local image whole through `read_whole`, which refused any file over
@@ -6206,7 +6230,7 @@ an image over 4 GiB is too heavy for the suite; the gate is a live install.
 <a id="w147"></a>
 ## W147 — A snapshot transfer restarts on every send while the leader commits
 
-**Liveness; opened 2026-10-22; fixed in source, deploy pending.** Found while
+**Liveness; opened and closed 2026-10-22.** Deployed in `a569de971`. Gate PASS: n2's group-2 transfer completed on orcd-mini while the group committed, with no re-export. Found while
 repairing W145 on orcd-mini.
 - The group-2 leader's stored snapshot point (30,676,475) had no file. Its
   `snap-2-*.kvx` had been rotated away; a restart keeps only the index.

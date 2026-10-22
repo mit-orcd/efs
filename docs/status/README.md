@@ -143,8 +143,15 @@ links in 96 pages now name the archived path. Read one with
 - New [W145](../backlog/work-items.md#w145), OPEN, Raft safety: after an
   InstallSnapshot, the deposed group-2 leader n2 committed its own
   unreplicated entry (30929219@62 against the cluster's 63) and wedged.
-  Fixed in `76614e8e8` with a regression test and deployed; n2 still needs
-  a repair.
+  Fixed in `76614e8e8` with a regression test and deployed.
+- n2 repaired 16:20Z with the new `efs-mgmt raft-resync`, after closing two
+  more bugs found on the way:
+  - [W146](../backlog/work-items.md#w146): snapshot images over 4 GiB could
+    not be installed;
+  - [W147](../backlog/work-items.md#w147): a transfer restarted on every
+    send while the leader committed.
+- All nodes are in sync and POSIX smoke passes 216/216. orcd-mini runs
+  `a569de971`.
 
 [W126 on orcd-mini, `8fb4247ad` A/B](orcd-mini-w126-ab-8fb4247ad-20261022.md):
 **deployed. Lock-wait gate PASS; create-rate gate FAIL.**

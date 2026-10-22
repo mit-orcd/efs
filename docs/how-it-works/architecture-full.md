@@ -1694,8 +1694,15 @@ links in 96 pages now name the archived path. Read one with
 - New [W145](#w145), OPEN, Raft safety: after an
   InstallSnapshot, the deposed group-2 leader n2 committed its own
   unreplicated entry (30929219@62 against the cluster's 63) and wedged.
-  Fixed in `76614e8e8` with a regression test and deployed; n2 still needs
-  a repair.
+  Fixed in `76614e8e8` with a regression test and deployed.
+- n2 repaired 16:20Z with the new `efs-mgmt raft-resync`, after closing two
+  more bugs found on the way:
+  - [W146](#w146): snapshot images over 4 GiB could
+    not be installed;
+  - [W147](#w147): a transfer restarted on every
+    send while the leader committed.
+- All nodes are in sync and POSIX smoke passes 216/216. orcd-mini runs
+  `a569de971`.
 
 [W126 on orcd-mini, `8fb4247ad` A/B](../status/orcd-mini-w126-ab-8fb4247ad-20261022.md):
 **deployed. Lock-wait gate PASS; create-rate gate FAIL.**
@@ -2369,9 +2376,9 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | cleanup-leftovers | **W142** · store `del_if_sum` and RDMA zero-copy region table without a reader | maintenance | OPEN | [item](#w142) |
 | client-getenv | **W143** · efs-fuse reads diagnostic environment switches on per-op paths (~4% of client CPU) | performance | Closed (Oct 22): both gates recorded. `make test` 816/816 with one environmental docs-check failure; after deploy (`46496416e`), `getenv` is gone from both clients' on-CPU profiles under the same load (was ~4% of efs-fuse CPU) | [item](#w143) · [evidence](../status/orcd-mini-profile-08cc16af4-20261022.md) |
 | leader-hint-lock | **W144** · LOOKUP/GETATTR on a group follower takes `h->mu` for the leader hint (22% of a split leader's lock waits) | performance | Closed (Oct 22): both gates recorded. `make test` 816/816 with one environmental docs-check failure; routing tests PASS; after deploy (`784bcc6ee`) with split leadership, the leader-hint lock site is gone (was 22% of n1's lock waits) | [item](#w144) · [evidence](../status/orcd-mini-profile-08cc16af4-20261022.md) |
-| deposed-leader-stuck | **W145** · a follower commits its own unproven log tail after an InstallSnapshot (orcd-mini n2 applied 30929219@62 against the cluster's 63, then wedged) | Raft safety | OPEN: root cause found from the nodes' raft.log records; fixed in `76614e8e8` (`snap_installed` caps commit at the snapshot index; regression test FAILs on the old code), `make test` 816/816 (1 environmental failure), deployed on orcd-mini with smoke 216/216; n2 still wedged (repair needs the user's decision); acknowledged-write check and startup election storm (group 2 term 149 → 291) open | [item](#w145) · [evidence](../status/orcd-mini-profile-08cc16af4-20261022.md) |
-| snapshot-4gib | **W146** · a snapshot image over 4 GiB can never be installed (32-bit import read; orcd-mini group 2 is 5.2 GB) | correctness / liveness | OPEN: fixed in source (64-bit import lengths), `make test` 816/816 (1 environmental failure); gate is the live n2 install | [item](#w146) |
-| snapshot-restart | **W147** · a snapshot transfer restarts on every send while the leader commits (stored snapshot point without a file) | liveness | OPEN: fixed in source with a regression test that FAILs on the old code; gate is the live n2 install | [item](#w147) |
+| deposed-leader-stuck | **W145** · a follower commits its own unproven log tail after an InstallSnapshot (orcd-mini n2 applied 30929219@62 against the cluster's 63, then wedged) | Raft safety | OPEN (fix deployed, n2 repaired): fix `76614e8e8` with a regression test; n2 repaired 16:20Z via `efs-mgmt raft-resync` (`613bb2c78`) after W146/W147; all nodes in sync, smoke 216/216; open: acknowledged-write check, snapshot sent to a near follower, restart election storms, `stop.sh` with a blocked handler | [item](#w145) · [evidence](../status/orcd-mini-profile-08cc16af4-20261022.md) |
+| snapshot-4gib | **W146** · a snapshot image over 4 GiB can never be installed (32-bit import read; orcd-mini group 2 is 5.2 GB) | correctness / liveness | Closed (Oct 22): fixed in `e75391268`; gate PASS, n2 installed the 5.2 GB image on orcd-mini | [item](#w146) |
+| snapshot-restart | **W147** · a snapshot transfer restarts on every send while the leader commits (stored snapshot point without a file) | liveness | Closed (Oct 22): fixed in `a569de971` with a regression test that FAILs on the old code; gate PASS, n2's transfer completed while group 2 committed | [item](#w147) |
 | orcd-qualification | **W119** · ORCD normal-operation RDMA failures and blocked clean stop | correctness / liveness | OPEN: 150 concurrent failures /846 NOTRUN; cross-host peer59/67; enabled queries EBUSY; retained writes block clean stop. TCP/commands-off rerun also FAILs (120 failures,520 NOTRUN; peer61/67; clean stop refused); all23 successfully prepared cold cases verify after authorized forced restart. [TCP evidence](../status/orcd-tcp-direct-disabled-20261015.md). Preserve failures, isolate causes and rerun original gates; W100 stays closed. [AMD follow-up](../status/amd-rdma-posix-20261015.md): native/serial/peer/cold/degraded PASS at `c8d057391`; one-mount jobs16 remains215/216 with unusual-name timeout. [Async durability follow-up](../status/amd-async-durability-20261015.md) at `c4178ea81`: scoped durability/native/serial/peer/cold/degraded PASS; jobs16 FAIL214/216 (unusual names, concurrent creates,15s) | [Raft/KV follow-up](../status/orcd-raft-kv-20261016.md) · [evidence and gates](../status/orcd-devel-qualification-20261015.md) · [item](#w119) |
 | immediate-readback | **W121** · successful fsync followed by previous-file payload | data correctness | OPEN: 255/123,932 exact readbacks failed across both queued-vote variants on ORCD native RDMA/direct with enabled `.efs`; unique512-byte files, no expiry. Diagnosed FUSE kernel fork/read page-pinning defect; kernel remediation deferred by user. Fork-isolated experiments do not close W121 | [diagnosis](../status/orcd-w121-fork-read-20261016.md) · [experiment](../status/orcd-queued-read-vote-20261016.md) · [item](#w121) |
 | qualification-fixtures | **W120** · stale extracted LOOKUP stub and command cleanup ownership check | verification correctness | OPEN (partial fix): AMD `f6235bb73` repairs the LOOKUP host context and checks reader identity; native/docs PASS at `85a9ad6b5`. Enabled-command cleanup ownership remains NOTRUN here and still needs correction/acceptance. [AMD evidence](../status/amd-rdma-posix-20261015.md); preserve original failures | [evidence](../status/orcd-devel-qualification-20261015.md) · [item](#w120) |
@@ -8793,8 +8800,7 @@ assertions are unchanged and PASS. `test_host_cover_route` and
 <a id="w145"></a>
 ### W145 — A follower commits its own unproven log tail after an InstallSnapshot
 
-**Raft safety; opened 2026-10-22; root cause found and fixed in source; orcd-mini
-n2 still diverged (repair pending).** Seen on orcd-mini (`784bcc6ee`, two
+**Raft safety; opened 2026-10-22. Root cause fixed and deployed (`76614e8e8`); orcd-mini n2 repaired 16:20Z with `efs-mgmt raft-resync`. Still open: the acknowledged-write check and the restart election storms.** Seen on orcd-mini (`784bcc6ee`, two
 `tiny_files.py` writers, ~16 M files) after a 3 s `perf --call-graph dwarf`
 capture stalled the group-2 leader n2 at 12:54:41–44Z
 ([profile, p4](../status/orcd-mini-profile-08cc16af4-20261022.md)).
@@ -8866,23 +8872,48 @@ HARD, SNAP and CFG records.
   and `proto_drops` keeps rising. The fix prevents new cases; it does not
   repair n2.
 
+**n2 repair (2026-10-22, with the user's go-ahead).**
+- No existing path could make a leader send n2 a snapshot, so
+  `613bb2c78` added the operator-only `efs-mgmt raft-resync`.
+- The first attempts exposed two more bugs:
+  - [W146](#w146): images over 4 GiB could not be imported;
+  - [W147](#w147): a transfer restarted on every send while the leader
+    committed.
+
+  Both were fixed (`e75391268`, `a569de971`).
+- On `a569de971`, `raft-resync 10.1.99.1:17433 2` (16:15:59Z) led n3 to send
+  its 5.2 GB image. n2 imported it as a full diff (3,769,881 keys) and
+  installed it at index 33,953,093 (16:20:33Z), replacing its stray
+  30,929,219@62.
+- Afterwards all three nodes were at group-2 commit and applied 33,967,666,
+  the request had cleared, n2 logged no `read-sleep`/`apply-sleep`, and
+  POSIX smoke was 216/216.
+- Each deploy restart took about 3 minutes, because n2's shutdown waited for
+  a handler stuck in a group-2 read and `stop.sh` gave up on the remaining
+  daemon. The guarded swap script retried.
+
 **Remaining.**
-1. Repair n2: its persisted state carries the stray entry. Options need
-   the user's decision (see the status page).
-2. Find why the new leader sent a 4.7 GB snapshot to a follower that was
+1. Find why the new leader sent a 4.7 GB snapshot to a follower that was
    only a few entries behind, instead of walking its tail back.
-3. Check whether a client was acknowledged for index 30,929,219@62.
+   - Likely cause: any rejection with `match_index` 0 (for example a
+     stale-term reply) resets the leader's `next_index` to 1, below its
+     log floor.
+2. Check whether a client was acknowledged for index 30,929,219@62.
+3. Every restart today ran hundreds of elections: group 2 went from term
+   511 to 721 to 923 to 1121.
+4. A daemon blocked in a group read delays its shutdown past `stop.sh`'s
+   wait. `stop.sh` then leaves the remaining daemons running.
 
 **Gates.**
-- `make test` PASS.
-- orcd-mini deploy, with n2 back in sync after its repair.
+- `make test` PASS (done).
+- orcd-mini deploy, with n2 back in sync after its repair (done, 16:20Z).
 - A private reproduction of deposed leader + snapshot under load, with the
   deposed leader catching up and no stale commit.
 
 <a id="w146"></a>
 ### W146 — A snapshot image over 4 GiB can never be installed
 
-**Correctness/liveness; opened 2026-10-22; fixed in source, deploy pending.**
+**Correctness/liveness; opened and closed 2026-10-22.** Deployed in `e75391268`. Gate PASS: n2 installed the 5.2 GB group-2 image on orcd-mini (16:20Z; import diff of 3,769,881 keys).
 Found while repairing W145 on orcd-mini. The group-2 snapshot image is 5.2 GB
 (group 0's is 5.4 GB). A follower installing it reads both the incoming and
 its local image whole through `read_whole`, which refused any file over
@@ -8905,7 +8936,7 @@ an image over 4 GiB is too heavy for the suite; the gate is a live install.
 <a id="w147"></a>
 ### W147 — A snapshot transfer restarts on every send while the leader commits
 
-**Liveness; opened 2026-10-22; fixed in source, deploy pending.** Found while
+**Liveness; opened and closed 2026-10-22.** Deployed in `a569de971`. Gate PASS: n2's group-2 transfer completed on orcd-mini while the group committed, with no re-export. Found while
 repairing W145 on orcd-mini.
 - The group-2 leader's stored snapshot point (30,676,475) had no file. Its
   `snap-2-*.kvx` had been rotated away; a restart keeps only the index.
