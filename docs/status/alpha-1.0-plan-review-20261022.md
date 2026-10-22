@@ -1,6 +1,6 @@
 # Review of the alpha 1.0 plan and of the code it relies on — 2026-10-22
 
-**Verdict: the plan is sound in its ordering (known bugs, then function, then
+**Verdict (amended after reading the vision documents): the plan is sound in its ordering (known bugs, then function, then
 performance) and its K register holds up against the code. It has one gap
 that blocks its own scope: the code supports at most four nodes, so the
 ">4 physical nodes" column cannot be qualified without an implementation
@@ -9,6 +9,48 @@ on devel `165689c06`: [the checklist](alpha-1.0-2plus1-checklist.md), [the
 roadmap](distributed-cluster-roadmap-20261022.md), the W145–W147 Raft
 commits and the placement, voter and apply paths the gates depend on. No
 code was changed and nothing was run on a cluster.
+
+## Read against the vision
+
+Read for this review: the README, [architecture §0–§2 and §9](../how-it-works/architecture.md),
+the [design rationale](../how-it-works/design-rationale.md),
+[failure tolerance](../how-it-works/failure-tolerance.md), [D36](node-count-protection-20261009.md),
+[product gaps](../backlog/product-gaps.md) and [parked ideas](../backlog/ideas.md).
+The vision is specific enough to check the plan against:
+- **3 to 64 nodes, one architecture** (§1 "Cluster size"; rationale: "64
+  servers → the same architecture"). Finding 1 below is therefore not an alpha
+  scoping question only: the code's four-node cap contradicts the spec, and
+  the README already says "three or four servers". Whatever the alpha claim,
+  the cap is a spec gap and belongs in the roadmap as an item.
+- **Minimalism: `efs init`, `efs mount`, done.** A member count passed by
+  the launch script (`EFS_MD_RAFT_N`, finding 5) and 118 environment
+  variables are the opposite of that; A6–A12 are the right gate, and the
+  vision says why.
+- **The scaling bar is already defined** (§1: when a benchmark stops, the
+  answer must be a physical resource; §9: per-workload-class table). Stage 3
+  P2 should not "agree targets" from scratch; it should cite §9 and record
+  which rows alpha measures and which it defers. The ior easy regression
+  (finding 3) is exactly a §9 question: where did the write path stop, and
+  why did the answer change between two builds?
+- **P1 (never serialize what the hardware allows in parallel).** The alpha
+  scope excuses "elimination of all local serialization". Fine as sequencing,
+  but §1 calls a software limiter a bug by definition, so F4 should list the
+  known software serializers alpha ships with (two fixed metadata groups,
+  the common-voter leader preference, one WAL per node) as limitations.
+- **Protection debt is invisible** (product gaps §1.1–1.2). The plan's scope
+  table says the code "tolerates one missing fragment for reconstruction",
+  and repair is deferred (K23). The vision's own gap list says the result: a
+  cluster that lost a node's storage looks healthy and is one failure from
+  loss, with no indication. F4 must say that in those words, or S3 adds a
+  minimal degraded indicator (`efs-mgmt status`: node absent since, chunks
+  below full protection unknown). A DECIDE row.
+- **The namespace is the database, one export, flash only.** `.efs` in scope
+  (D3), the export label removed, no HDD items: the plan is consistent with
+  all three.
+- **D36 (2+2 from four nodes).** Alpha's "2+1 everywhere, no two-loss claim"
+  is disclosed in F4 and recorded as sequencing in the decision register;
+  consistent, as long as the limitation text stays with every four-node
+  result.
 
 ## Plan findings
 
@@ -147,5 +189,7 @@ when finding 1 is decided.
 4. Reword the Stage 1/Stage 2 boundary for VERIFY rows (finding 4).
 5. Add `EFS_MD_RAFT_N` to the A6 inventory as a derived fact, not an input
    (finding 5), and persist the resync mark or document its loss.
+6. Make P2 cite §9 instead of agreeing new targets, and add the
+   protection-debt visibility DECIDE row and the §1 serializer list to F4.
 
 Nothing else in the plan conflicts with the code I read.
