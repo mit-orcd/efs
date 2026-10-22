@@ -1577,7 +1577,8 @@ only; no implementation or protection gate closed.
 [ORCD tiny-file CPU profile analysis](../status/orcd-tiny-profile-20261022.md):
 `08cc16af4f77`, four 30-second captures; repeated whole-segment validation
 confirmed in packing, plus abandonment scans, `.efs` indexing and LSM maintenance.
-Analysis only; fixes/A-B NOTRUN; no lock-wait or throughput claim.
+Validate-once and bounded abandon scan fixed on branch `claude/pack-validate-once`
+(unit, node9900 private-cluster and `make test` gates); orcd-mini CPU A/B NOTRUN.
 
 [orcd-mini deploy of `08cc16af4`](../status/orcd-mini-deploy-08cc16af4-20261022.md):
 **cleanup merge deployed; all suites and gates PASS over RDMA + `.efs`**
