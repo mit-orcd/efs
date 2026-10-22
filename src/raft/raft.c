@@ -77,6 +77,7 @@ struct efs_raft {
     uint64_t peer_reject_hint[EFS_RAFT_MAX_PEERS];
     uint64_t peer_reject_log_tick[EFS_RAFT_MAX_PEERS];
     uint64_t ae_rejects_sent, ae_reject_log_tick, ae_proto_drops;
+    unsigned last_commit_bits; /* W145: quorum that made the last leader commit */
     unsigned vote_bits;
     uint32_t election_elapsed;
     uint32_t election_ticks;
@@ -472,10 +473,30 @@ static void reset_election(struct efs_raft *r)
         r->election_ticks + (uint32_t)(splitmix64(&r->rng) % r->election_ticks);
 }
 
+/* W145: elections and step-downs were invisible. Log a leader leaving
+ * office with its commit, tail and every peer's match index. */
+static void leader_exit_note(struct efs_raft *r, uint64_t term, const char *why)
+{
+    uint64_t last_i = 0, last_t = 0;
+
+    (void)last_log(r, &last_i, &last_t);
+    fprintf(stderr, "raft: group=%u leader steps down term=%llu->%llu why=%s commit=%llu "
+            "applied=%llu last=%llu/%llu commit_quorum=0x%x match=[%llu,%llu,%llu,%llu,%llu,%llu,%llu]\n",
+            r->group, (unsigned long long)r->current_term, (unsigned long long)term, why,
+            (unsigned long long)r->commit_index, (unsigned long long)r->last_applied,
+            (unsigned long long)last_i, (unsigned long long)last_t, r->last_commit_bits,
+            (unsigned long long)r->match_index[0], (unsigned long long)r->match_index[1],
+            (unsigned long long)r->match_index[2], (unsigned long long)r->match_index[3],
+            (unsigned long long)r->match_index[4], (unsigned long long)r->match_index[5],
+            (unsigned long long)r->match_index[6]);
+}
+
 static int maybe_step_down(struct efs_raft *r, uint64_t term)
 {
     if (term <= r->current_term)
         return 0;
+    if (r->role == EFS_RAFT_LEADER)
+        leader_exit_note(r, term, "higher-term");
     r->current_term = term;
     r->voted_for = -1;
     read_proof_forget(r);
@@ -1179,7 +1200,12 @@ static int try_commit(struct efs_raft *r)
                 bits |= 1u << i;
         }
         if (quorum_ok(r, bits)) {
+            if (r->role != EFS_RAFT_LEADER)
+                fprintf(stderr, "raft: group=%u commit by non-leader role=%d term=%llu %llu->%llu "
+                        "quorum=0x%x\n", r->group, r->role, (unsigned long long)r->current_term,
+                        (unsigned long long)r->commit_index, (unsigned long long)n, bits);
             r->commit_index = n;
+            r->last_commit_bits = bits;
             /* A write quorum is not request-scoped read authority. Keep a
              * pending round's application barrier current, but only its
              * correlated heartbeat responses can complete it. */
@@ -1229,6 +1255,9 @@ static int become_leader(struct efs_raft *r)
     if (rc != EFS_OK)
         return rc;
     r->match_index[r->id] = last_i;
+    fprintf(stderr, "raft: group=%u became leader term=%llu noop=%llu commit=%llu applied=%llu\n",
+            r->group, (unsigned long long)r->current_term, (unsigned long long)last_i,
+            (unsigned long long)r->commit_index, (unsigned long long)r->last_applied);
     send_idx_cover(r, last_i);
     if (solo(r)) {
         r->commit_index = last_i;
@@ -1312,6 +1341,11 @@ static int on_vote_req(struct efs_raft *r, const struct efs_raft_msg *in)
             return rc;
     }
     m.vote_granted = grant;
+    fprintf(stderr, "raft: group=%u vote %s for=%d term=%llu cand_last=%llu/%llu my_last=%llu/%llu "
+            "voted_for=%d commit=%llu\n", r->group, grant ? "granted" : "refused", in->from,
+            (unsigned long long)in->term, (unsigned long long)in->last_log_index,
+            (unsigned long long)in->last_log_term, (unsigned long long)last_i,
+            (unsigned long long)last_t, (int)r->voted_for, (unsigned long long)r->commit_index);
     return send_msg(r, &m);
 }
 
@@ -1650,9 +1684,19 @@ static int snap_installed(struct efs_raft *r, struct efs_raft_msg *m,
     if (r->commit_index < r->last_applied)
         r->commit_index = r->last_applied;
     if (m->leader_commit > r->commit_index) {
+        /* W145: a snapshot proves its own last index, nothing after it.
+         * Entries this log keeps past incl may be a deposed leader's
+         * unreplicated tail; committing up to our own last_i applied one
+         * on orcd-mini n2 (group 2, index 30929219, term 62 vs the
+         * cluster's 63) and wedged it for good. AppendEntries proves the
+         * tail before it commits. */
+        uint64_t cap = m->leader_commit < incl ? m->leader_commit : incl;
+
         last_log(r, &last_i, &last_t);
-        r->commit_index =
-            m->leader_commit < last_i ? m->leader_commit : last_i;
+        if (cap > last_i)
+            cap = last_i;
+        if (cap > r->commit_index)
+            r->commit_index = cap;
         if (r->commit_index < r->last_applied)
             r->commit_index = r->last_applied;
         apply_committed(r);
@@ -2595,6 +2639,8 @@ int efs_raft_step_down(struct efs_raft *r)
         return EFS_ERR_INVAL;
     if (r->role == EFS_RAFT_FOLLOWER)
         return EFS_OK;
+    if (r->role == EFS_RAFT_LEADER)
+        leader_exit_note(r, r->current_term, "voluntary");
     read_proof_forget(r);
     r->role = EFS_RAFT_FOLLOWER;
     r->leader = -1;

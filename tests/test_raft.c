@@ -2255,6 +2255,62 @@ static void test_ae_reply_match_stops_at_prev(void)
     efs_raft_mem_free(st);
 }
 
+/* W145 (orcd-mini n2, 2026-10-22): a deposed leader kept an unreplicated
+ * tail from its old term. The new leader sent it an older snapshot; the
+ * already-applied install path then committed min(leader_commit, own log
+ * tail) and applied the follower's OWN unproven entry at an index the
+ * cluster had committed differently. Every later AppendEntries conflicted
+ * "at or below commit" and was refused for good. A snapshot proves only
+ * its own last index; the tail waits for a matching AppendEntries. */
+static void test_snapshot_commit_stops_at_snapshot(void)
+{
+    struct net n = { .n = 3, .cap_rep = 1 };
+    struct efs_raft_store *st;
+    struct app app;
+    struct efs_raft_cfg cfg;
+    struct efs_raft_msg m;
+    const uint8_t *cmds = (const uint8_t *)"ABCXY";
+
+    memset(&app, 0, sizeof(app));
+    memset(&cfg, 0, sizeof(cfg));
+    st = efs_raft_mem_create();
+    for (uint64_t i = 0; i < 5; i++)
+        CHECK(st && st->append(st, i + 1, 1, cmds + i, 1) == EFS_OK, "seed log");
+    CHECK(st->save_hard(st, 1, -1) == EFS_OK, "hard");
+    cfg.n = 3; cfg.id = 1; cfg.store = st; cfg.store_ctx = st;
+    cfg.send = send_now; cfg.net = &n; cfg.apply = apply_cmd; cfg.app = &app;
+    cfg.snap_chunk = snap_chunk; cfg.election_ticks = 10; cfg.heartbeat_ticks = 2;
+    n.drop[0] = 1;
+    n.r[1] = test_raft_new(&cfg);
+    CHECK(n.r[1] != NULL, "follower");
+    if (!n.r[1]) { efs_raft_mem_free(st); return; }
+    efs_raft_allow_campaign(n.r[1], 0);
+    /* New leader (term 2) proves the common prefix 1..3. */
+    memset(&m, 0, sizeof(m));
+    m.type = EFS_RAFT_MSG_AE_REQ; m.from = 0; m.to = 1; m.term = 2;
+    m.prev_index = 3; m.prev_term = 1; m.leader_commit = 3;
+    CHECK(efs_raft_recv(n.r[1], &m) == EFS_OK && efs_raft_commit(n.r[1]) == 3 &&
+          app.last == 'C', "proven prefix commits and applies");
+    /* An older snapshot (incl 2) with the leader's commit at 5. */
+    memset(&m, 0, sizeof(m));
+    m.type = EFS_RAFT_MSG_SNAP_REQ; m.from = 0; m.to = 1; m.term = 2;
+    m.last_log_index = 2; m.last_log_term = 1; m.leader_commit = 5; m.success = 1;
+    CHECK(efs_raft_recv(n.r[1], &m) == EFS_OK, "older snapshot accepted");
+    CHECK(efs_raft_commit(n.r[1]) == 3, "snapshot does not commit the unproven tail");
+    CHECK(app.last == 'C' && efs_raft_applied(n.r[1]) == 3,
+          "follower's own stale entries 4..5 are not applied");
+    /* The leader's entries at 4..5 replace the stale tail and commit. */
+    memset(&m, 0, sizeof(m));
+    m.type = EFS_RAFT_MSG_AE_REQ; m.from = 0; m.to = 1; m.term = 2;
+    m.prev_index = 3; m.prev_term = 1; m.leader_commit = 5; m.nentries = 2;
+    m.entries[0].term = 2; m.entries[0].cmd = (const uint8_t *)"R"; m.entries[0].clen = 1;
+    m.entries[1].term = 2; m.entries[1].cmd = (const uint8_t *)"S"; m.entries[1].clen = 1;
+    CHECK(efs_raft_recv(n.r[1], &m) == EFS_OK && efs_raft_commit(n.r[1]) == 5 &&
+          app.last == 'S', "leader's entries replace the stale tail and commit");
+    efs_raft_free(n.r[1]);
+    efs_raft_mem_free(st);
+}
+
 /* New leader's no-op is above the send cap armed at attach. A follower
  * that still holds a stale tail at that index must receive the no-op,
  * and the leader must not commit it off the stale reply. */
@@ -2737,6 +2793,7 @@ int main(void)
         test_i18_joint_quorum();
         test_stale_boot_id();
         test_ae_reply_match_stops_at_prev();
+        test_snapshot_commit_stops_at_snapshot();
         test_noop_over_stale_tail();
         test_ae_batch_catchup();
         test_ae_catchup_flow_control();

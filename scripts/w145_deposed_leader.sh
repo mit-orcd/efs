@@ -15,13 +15,17 @@
 # per-peer progress) and the efsd log lines from W145 are printed.
 # KEEP=1 leaves a failed cluster running for inspection.
 #
-# Env: PORT (17760), GROUP (2), ROUNDS (3), FREEZE (3), WARMUP (45),
-# CATCHUP (90), LAG (2000), KEEP (0).
+# FREEZE_MODE=stop sends SIGSTOP/SIGCONT; FREEZE_MODE=perf instead slows
+# the leader with `perf record -e cs --call-graph dwarf,16384` for FREEZE
+# seconds, the capture that deposed orcd-mini's n2 (it keeps running, slowly).
+# Env: PORT (17760), GROUP (2), ROUNDS (3), FREEZE (3), FREEZE_MODE (stop),
+# WARMUP (45), CATCHUP (90), LAG (2000), KEEP (0).
 # Exit 0 = every round caught up (PASS), 1 = a round did not (FAIL).
 set -u
 REL=$(cd "$1" && pwd); L=$2
 PORT=${PORT:-17760}; GROUP=${GROUP:-2}; ROUNDS=${ROUNDS:-3}; FREEZE=${FREEZE:-3}
 WARMUP=${WARMUP:-45}; CATCHUP=${CATCHUP:-90}; LAG=${LAG:-2000}; KEEP=${KEEP:-0}
+FREEZE_MODE=${FREEZE_MODE:-stop}
 AB=/tmp/efs-w145/$L
 FUSE_LIBDIR=/data1/efs/deps/libfuse/lib64
 for p in 1 2 3; do
@@ -57,7 +61,7 @@ done
 for t in $(seq 30); do "$REL/efs-mgmt" raft-mkfs 10.1.99.1:$((PORT+1)) 2>&1 | grep -q 'raft-mkfs rc=0 ' && break; sleep 1; done
 EFS_FUSE_LOG="$AB/logs/fuse.log" "$REL/scripts/client.sh" 10.1.99.1:$((PORT+1)) "$AB/mnt" > "$AB/logs/client.out" 2>&1
 findmnt -rn "$AB/mnt" > /dev/null || { echo "$L: mount failed"; tail -5 "$AB/logs/client.out"; exit 2; }
-echo "== $L $("$REL/efsd" --version | head -1); group $GROUP, $ROUNDS rounds, freeze ${FREEZE}s"
+echo "== $L $("$REL/efsd" --version | head -1); group $GROUP, $ROUNDS rounds, $FREEZE_MODE ${FREEZE}s"
 
 cat > "$AB/load.py" <<'EOF'
 import os,sys,threading
@@ -88,7 +92,13 @@ for r in $(seq "$ROUNDS"); do
   [ -z "$old" ] && { echo "round $r: no leader for group $GROUP"; FAILED=1; break; }
   before=$(field "$old" "$GROUP" commit)
   echo "-- round $r: freeze group-$GROUP leader n$old (commit=$before) for ${FREEZE}s"
-  kill -STOP "$(pid "$old")"; sleep "$FREEZE"; kill -CONT "$(pid "$old")"
+  if [ "$FREEZE_MODE" = perf ]; then
+    perf record -e cs --call-graph dwarf,16384 -p "$(pid "$old")" -o "$AB/logs/stall-$r.data" \
+      -- sleep "$FREEZE" > /dev/null 2>&1 < /dev/null
+    rm -f "$AB/logs/stall-$r.data"
+  else
+    kill -STOP "$(pid "$old")"; sleep "$FREEZE"; kill -CONT "$(pid "$old")"
+  fi
   ok=0; t0=$(date +%s)
   while [ $(( $(date +%s) - t0 )) -lt "$CATCHUP" ]; do
     sleep 2
@@ -108,7 +118,7 @@ for r in $(seq "$ROUNDS"); do
     for i in 1 2 3; do echo "   -- n$i raft-status"; status $i | sed 's/^/      /'; done
     for i in 1 2 3; do
       echo "   -- n$i W145 log lines"
-      grep -E "AE rejected|rejecting AE|AE conflict|inbox refused" "$AB/logs/efsd-n$i.log" | tail -8 | sed 's/^/      /'
+      grep -E "AE rejected|rejecting AE|AE conflict|inbox refused|became leader|steps down|vote |commit by non-leader" "$AB/logs/efsd-n$i.log" | tail -14 | sed 's/^/      /'
     done
     break
   fi
