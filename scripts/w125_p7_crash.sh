@@ -11,6 +11,7 @@
 # everything no per-file fragment and no segment file may remain on any node
 # (no orphan from the interrupted step).
 set -u
+ADDR=${W125_ADDR:-10.1.99.1} # node address; node9900 is 10.1.99.0
 HERE=$(cd "$(dirname "$0")" && pwd); REL=$1; R=${2:-/tmp/w125-p7-crash}; shift 2 2>/dev/null
 POINTS=${*:-admitted uploaded switched gc_accepted retire_accepted}
 PORT=17680; FAIL=0
@@ -27,7 +28,7 @@ for point in $POINTS; do
   for t in $(seq 180); do kill -0 $pid 2>/dev/null || break; sleep 1; done
   if kill -0 $pid 2>/dev/null; then echo "FAIL $point: crash point not reached"; FAIL=1; continue; fi
   grep -q "injected crash at $point" $R/logs/efsd-n1.log || { echo "FAIL $point: n1 exited without the injected crash"; FAIL=1; }
-  EFS_PACK_MIN_AGE_MS=2000 nohup "$REL/efsd" --node-id 1 --addr 10.1.99.1 --port $((PORT+1)) --storage $R/n1 \
+  EFS_PACK_MIN_AGE_MS=2000 nohup "$REL/efsd" --node-id 1 --addr $ADDR --port $((PORT+1)) --storage $R/n1 \
     --quota 200G --direct-io >> $R/logs/efsd-n1.log 2>&1 &
   echo $! > $R/logs/n1.pid
   sleep 60

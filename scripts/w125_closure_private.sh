@@ -7,8 +7,9 @@
 # test deletes its files, node 1 must reach no segment file within 120 s.
 # Scripts are taken from this script's directory. Exit 1 on any FAIL.
 set -u
+ADDR=${W125_ADDR:-10.1.99.1} # node address; node9900 is 10.1.99.0
 REL=$1; OUT=$2; PORT=${3:-17730}
-HERE=$(cd "$(dirname "$0")" && pwd); RUN=/tmp/w125-closure-run; SEED=10.1.99.1:$((PORT + 1))
+HERE=$(cd "$(dirname "$0")" && pwd); RUN=/tmp/w125-closure-run; SEED=$ADDR:$((PORT + 1))
 mkdir -p "$OUT"; FAIL=0
 export EFS_PACK_MIN_AGE_MS=3000 LD_LIBRARY_PATH=/data1/efs/deps/libfuse/lib64
 "$REL/scripts/w125_p0_cluster.sh" stop "$REL" $RUN $PORT > /dev/null 2>&1; rm -rf $RUN
