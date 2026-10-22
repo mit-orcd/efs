@@ -18,6 +18,11 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[orcd-mini deploy of `08cc16af4`](orcd-mini-deploy-08cc16af4-20261022.md):
+**cleanup merge deployed; mounted suites, D25 and W127 gates PASS over RDMA;
+fault integration and `.efs` commands gates FAIL from two harness bugs
+(reported, rerun pending).**
+
 [orcd-mini fresh-format deploy with D25](orcd-mini-d25-deploy-20261022.md):
 **deployed `ee1087129`; all suites and D25 step-5 gates PASS.** Fresh
 format (user-authorized wipe). Core 216/216, extras 4/5 + mmap skip,
