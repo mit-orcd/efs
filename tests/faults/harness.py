@@ -29,7 +29,6 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 REFUSED_PORTS = {19810, 19820}
-EXPORT = "efs-fault"
 CASE_BUDGET_S = 90
 OP_TIMEOUT_S = 40
 
@@ -409,7 +408,7 @@ class Cluster(object):
         log = open(log_path, "ab")
         seed = "127.0.0.1:%d" % self.servers[0].port
         proc = track(subprocess.Popen(
-            [self.fuse(), seed, EXPORT, path, "-f"],
+            [self.fuse(), seed, path, "-f"],
             stdout=log, stderr=log, env=fixture_env(self.transport, self.device),
             start_new_session=True))
         deadline = time.monotonic() + 20

@@ -4,10 +4,10 @@ import subprocess
 import sys
 import time
 
-def refresh_seconds(mount):
-    result = subprocess.run([sys.executable, str(mount / '.efs/stats'), '--json'],
-                            capture_output=True, timeout=30, check=True)
-    snapshot = json.loads(result.stdout)['snapshot']
+def refresh_seconds(mount, timeout=300):
+    # A freshly formatted cluster has no published catalog until its first
+    # refresh: stats exits 75 (not indexed yet) until then.
+    snapshot = wait_indexed(mount, timeout)['snapshot']
     interval = max(snapshot['refresh_ms'], snapshot['refresh_min_ms']) / 1000
     assert 0 < interval <= 3600, snapshot
     return interval
