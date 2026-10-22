@@ -2647,7 +2647,7 @@ static int query_snapshot_rpc(const struct efs_msg_query_snapshot *req,uint32_t 
 int efs_client_rpc_query_snapshot(const struct efs_msg_query_snapshot *req,
                                     struct efs_msg_query_snapshot_reply *reply,char **text)
 {
-    if (req && req->version==EFS_QUERY_FILTER_VERSION) return EFS_ERR_INVAL;
+    if (!req || req->version!=EFS_QUERY_VERSION || req->operation!=EFS_QUERY_STATS) return EFS_ERR_INVAL;
     return query_snapshot_rpc(req,sizeof(*req),reply,text,0);
 }
 
@@ -2656,7 +2656,6 @@ int efs_client_rpc_query_snapshot_v4_at(const struct efs_msg_query_snapshot_v4 *
                                        efs_node_id_t preferred,
                                        struct efs_msg_query_snapshot_reply *reply,char **text)
 {
-    if (!req || preferred>EFS_MAX_NODES) return EFS_ERR_INVAL;
-    return query_snapshot_rpc(&req->base,req->base.version==EFS_QUERY_PAGE_VERSION ? sizeof(*req) :
-        req->base.version==EFS_QUERY_FILTER_VERSION ? sizeof(struct efs_msg_query_snapshot_v3) : sizeof(req->base),reply,text,preferred);
+    if (!req || preferred>EFS_MAX_NODES || req->base.version!=EFS_QUERY_PAGE_VERSION) return EFS_ERR_INVAL;
+    return query_snapshot_rpc(&req->base,sizeof(*req),reply,text,preferred);
 }

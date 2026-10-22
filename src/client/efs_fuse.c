@@ -7770,13 +7770,14 @@ int main(int argc, char **argv)
     if (g_bench_time <= 0.0)
         g_bench_time = 10.0;
 
-    if (argc < 4) {
+    if (argc < 3) {
         efs_cli_help(stderr,argv[0],NULL);
         return 1;
     }
 
-    /* Server addresses are the first arguments (they contain a colon).
-       The first argument without a colon is the export name. */
+    /* Server addresses are the first arguments (they contain a colon);
+     * the first argument without a colon is the mountpoint. There is one
+     * export and no export label argument. */
     int arg_idx = 1;
     const char *nodes[EFS_MAX_NODES];
     uint32_t node_count = 0;
@@ -7786,22 +7787,20 @@ int main(int argc, char **argv)
     }
 
     if (node_count == 0 || arg_idx >= argc) {
-        fprintf(stderr, "Missing export name and mountpoint\n");
-        return 1;
-    }
-
-    const char *export_name = argv[arg_idx++];
-    if (arg_idx >= argc) {
         fprintf(stderr, "Missing mountpoint\n");
         return 1;
     }
     const char *mountpoint = argv[arg_idx++];
-
-    if (strcmp(export_name, "default") != 0) {
-        fprintf(stderr, "efs-fuse: legacy export label '%s' is ignored; "
-                "mounting the single export 'default' (id=1)\n", export_name);
-        export_name = "default";
+    /* Options follow the mountpoint. A second positional is the removed
+     * export-label form (NODE LABEL MOUNTPOINT): refuse it, never guess. */
+    if (arg_idx < argc && argv[arg_idx][0] != '-') {
+        fprintf(stderr, "efs-fuse: unexpected argument '%s' after mountpoint '%s'.\n"
+                "Usage: efs-fuse NODE:PORT [NODE:PORT ...] MOUNTPOINT [options]\n"
+                "The export label argument was removed; there is one export.\n",
+                argv[arg_idx], mountpoint);
+        return 1;
     }
+    const char *export_name = "default";
 
     /* Level cpu needs no cluster, no export and no mount: the client's
      * arithmetic only. Run before any network or NUMA setup. */

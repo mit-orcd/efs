@@ -8,7 +8,7 @@ import re
 import subprocess
 import sys
 import time
-from query_rpc import features, page_request, query, request
+from query_rpc import features, page_query, page_request, query, query_name, request
 
 mount, mgmt = map(Path, sys.argv[1:3])
 phase = sys.argv[3]
@@ -68,11 +68,17 @@ def stats(count):
 
 fields = dict(root=1, uid=os.getuid(), gid=os.getgid(), version=2, match=1,
               term=b'file-', max_output=1 << 20)
+def command(operation):
+    """Policy-checked first page of one operation (stats has no term)."""
+    page = {k: v for k, v in fields.items() if k != 'version'}
+    if operation == 0:
+        page.update(match=3, term=b'')
+    return page_query(port, **page, operation=operation)
 if phase == 'prepare':
     same(base, 3)
     root.mkdir();write(0, 20);stats(20)
     fields['root'] = root.stat().st_ino
-    with open(root / '.efs/.query' / ('v1.stats.' + os.urandom(16).hex()), 'rb') as retained:
+    with open(root / '.efs/.query' / query_name('stats'), 'rb') as retained:
         original = retained.read()
         reply, text = query(port, page_request(**{k:v for k,v in fields.items() if k!='version'}, limit=1))
         assert reply.status == 0
@@ -96,14 +102,14 @@ if phase == 'prepare':
     assert features(port) == 1
     stats(120)
     for operation in (1, 2):
-        reply, text = query(port, request(**dict(fields, operation=operation)))
+        reply, text = command(operation)
         assert reply.status and not text
     change(base + 2, 2)
     assert features(port) == 2
-    reply, text = query(port, request(**dict(fields, operation=0)))
+    reply, text = command(0)
     assert reply.status and not text
     for operation in (1, 2):
-        reply, text = query(port, request(**dict(fields, operation=operation)))
+        reply, text = command(operation)
         assert not reply.status and text, reply.status
     change(base + 3, 0)
 else:

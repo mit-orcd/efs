@@ -10822,7 +10822,7 @@ static int query_emit(void *ctx,const struct efs_name_entry *entry,const char *r
     struct query_request *q=ctx;
     struct efs_meta_stat stat;
     int rc=EFS_OK;
-    if (q->req->version>=EFS_QUERY_COMMAND_VERSION) {
+    if (q->req->version==EFS_QUERY_PAGE_VERSION) {
         rc=efs_query_catalog_inode(q->view->catalog,entry->dentry.ino,NULL,&stat);
         if (rc) return rc;
     }
@@ -10846,7 +10846,7 @@ static int query_emit(void *ctx,const struct efs_name_entry *entry,const char *r
         q->more_confirmed=1;return EFS_ERR_AGAIN;
     }
     q->emitted++;
-    if (q->req->version>=EFS_QUERY_COMMAND_VERSION) {
+    if (q->req->version==EFS_QUERY_PAGE_VERSION) {
         if (q->len && q->text[q->len-1]!= '[') {
             rc=query_append(q,",",1);if (rc) return rc;
         }
@@ -10890,7 +10890,7 @@ static int query_consume(void *ctx,const struct efs_server_query_view *view,int 
     memcpy(r->applied,view->applied,sizeof(r->applied));memcpy(r->terms,view->terms,sizeof(r->terms));
     r->refresh_error=refresh_error;r->uid=root->uid;r->gid=root->gid;
     r->mtime=root->base_mtime;r->atime=root->base_atime;r->ctime=root->base_ctime;
-    if (q->req->version>=EFS_QUERY_COMMAND_VERSION) {
+    if (q->req->version==EFS_QUERY_PAGE_VERSION) {
         rc=query_command_begin(q);
         if (!rc && q->req->operation==EFS_QUERY_STATS) {
             struct efs_query_rollup stats;
@@ -10990,20 +10990,16 @@ int server_raft_host_query_features_checked(uint32_t *mask)
     if (!g_host->query_started) return EFS_ERR_BUSY;
     return host_query_policy_authority(mask);
 }
-int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req,const struct efs_query_filters *filters,void **out,uint32_t *len)
+/* Unpaged version 1: only the efs-fuse directory .stats aggregate. */
+int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req,void **out,uint32_t *len)
 {
     if (out) *out=NULL;
     if (!g_host || !g_host->query_enabled) return EFS_ERR_NOT_FOUND;
-    if (!req || !out || !len || (req->version!=EFS_QUERY_VERSION && req->version!=EFS_QUERY_COMMAND_VERSION && req->version!=EFS_QUERY_FILTER_VERSION) || !req->root ||
-        (req->version==EFS_QUERY_VERSION ? req->operation!=EFS_QUERY_STATS : req->operation>EFS_QUERY_LS) || req->match>EFS_NAME_CONTAINS || req->ngroups>EFS_QUERY_GROUPS ||
+    if (!req || !out || !len || req->version!=EFS_QUERY_VERSION || !req->root ||
+        req->operation!=EFS_QUERY_STATS || req->match>EFS_NAME_CONTAINS || req->ngroups>EFS_QUERY_GROUPS ||
         !req->max_output || req->max_output>EFS_QUERY_MAX_OUTPUT ||
         !req->visit_budget || req->visit_budget>EFS_QUERY_MAX_VISITS ||
         !memchr(req->term,0,sizeof(req->term))) return EFS_ERR_INVAL;
-    if ((req->version==EFS_QUERY_FILTER_VERSION) != (filters!=NULL) ||
-        (filters && (req->operation!=EFS_QUERY_FIND || !efs_query_filters_valid(filters)))) return EFS_ERR_INVAL;
-    if (req->operation==EFS_QUERY_FIND && (strchr(req->term,'/') || strlen(req->term)>120 ||
-        (!req->term[0] && req->match!=EFS_NAME_PREFIX && req->match!=EFS_NAME_CONTAINS)))
-        return EFS_ERR_INVAL;
     int policy_rc=host_query_policy_operation(req->operation);
     if(policy_rc)return query_reply_status(policy_rc,0);
     if (__atomic_add_fetch(&query_requests,1,__ATOMIC_RELAXED)>8) {
@@ -11022,7 +11018,7 @@ int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req,con
     a->bytes=bytes;
     struct efs_msg_query_snapshot_reply *reply=(void *)(a+1);
     struct query_request q={0};
-    q.h=g_host;q.req=req;q.filters=filters;q.reply=reply;q.text=(char *)(reply+1);q.deadline=query_mono_ms()+5000;
+    q.h=g_host;q.req=req;q.reply=reply;q.text=(char *)(reply+1);q.deadline=query_mono_ms()+5000;
     q.auth=calloc(HOST_QUERY_AUTH_N,sizeof(*q.auth));
     reply->version=req->version;
     int rc=q.auth ? server_raft_host_query_read(query_consume,&q,&reply->primary_id) : EFS_ERR_NOMEM;

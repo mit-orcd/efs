@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 import sys
 import time
-from query_rpc import features, query, request
+from query_rpc import features, query, page_request
 mount=Path(sys.argv[1])
 phase=sys.argv[2]
 assert phase in ('write','check','quota-write','quota-check')
@@ -20,7 +20,7 @@ if phase.endswith('write'):
     assert (mask!=0 if quota else mask==0),('capability policy',phase,mask)
     deadline=time.monotonic()+30
     while True:
-        reply,text=query(port,request(version=2,operation=2,uid=os.getuid(),gid=os.getgid()))
+        reply,text=query(port,page_request(operation=2,uid=os.getuid(),gid=os.getgid()))
         assert reply.status and not text,'unavailable publisher returned successful bytes'
         if not quota or reply.status==-11 or reply.refresh_error==-11:break
         assert time.monotonic()<deadline,('quota refusal did not become truthful',reply.status,reply.refresh_error)

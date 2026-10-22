@@ -161,7 +161,6 @@ p.add_argument('--namespace', action='store_true')
 p.add_argument('--namespace-boundary', action='store_true')
 p.add_argument('--namespace-boundary-fault',action='store_true',help='kill the 64-lane replacement coordinator at prepared and committed barriers')
 p.add_argument('--namespace-cycles',action='store_true',help='race opposite directory moves using captured inode parents')
-p.add_argument('--mount-label', default='default')
 p.add_argument('--workers', action='store_true')
 p.add_argument('--pressure', action='store_true')
 p.add_argument('--production-budgets',action='store_true',help='exercise default 256 MiB body and 64 MiB drain budgets')
@@ -453,7 +452,7 @@ def mount_client():
     if a.fuse_reply_failure:
         from fuse_reply_failure import prepare
         client_env=prepare(work,client_env)
-    client=subprocess.Popen([str(a.client_binary or source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(mount),'-f',*(['-o','sync'] if a.mount_sync else []),*(['-o','max_threads=16,max_idle_threads=1'] if a.workers else [])],env=client_env,stdout=log,stderr=log)
+    client=subprocess.Popen([str(a.client_binary or source/'efs-fuse'),f'127.0.0.1:{a.port}',str(mount),'-f',*(['-o','sync'] if a.mount_sync else []),*(['-o','max_threads=16,max_idle_threads=1'] if a.workers else [])],env=client_env,stdout=log,stderr=log)
     def ready():
         if client.poll() is not None:raise AssertionError('FUSE exited')
         if subprocess.run(['mountpoint','-q',str(mount)]).returncode:return False
@@ -704,7 +703,7 @@ try:
             peer_log=open(work/'expiry-soak-peer.log','ab');handles.append(peer_log)
             def soak_peer_start():
                 global peer
-                peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+                peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
                 wait(lambda:os.path.ismount(peer_mount),'expiry soak peer mounted',40)
             def soak_restart():
                 global peer
@@ -716,7 +715,7 @@ try:
             run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
     if a.ordinary_overwrite_only:
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
-        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
         wait(lambda:os.path.ismount(peer_mount),'ordinary overwrite peer mounted',40)
         expected={};inodes=[];checks=[]
         bodies=[b'ordinary-growth:'+bytes(range(256))*1024,b'full:'+bytes(range(256))*511+b'Z'*251,bytes(131072),b'partial replacement'*17]
@@ -747,7 +746,7 @@ try:
         raise SystemExit(0)
     if a.efs_commands_only:
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
-        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
         wait(lambda:os.path.ismount(peer_mount),'enabled command peer mounted',40)
         before={p.name for p in mount.iterdir()}
         for script in ('efs_commands.py','efs_command_options.py'):
@@ -797,7 +796,7 @@ try:
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
         def loaded_peer_start():
             global peer
-            peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+            peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
             wait(lambda:os.path.ismount(peer_mount),'loaded append peer mounted',40)
         def loaded_peer_stop():
             global peer
@@ -811,7 +810,7 @@ try:
     if a.append_burst_only:
         import append_burst
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
-        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
         wait(lambda:os.path.ismount(peer_mount),'append burst peer mounted',40)
         burst_path,burst_report=append_burst.run(mount,peer_mount,a.append_burst,work)
         burst_ino=burst_path.stat().st_ino
@@ -828,7 +827,7 @@ try:
         raise SystemExit(0)
     if a.peer_mkdir_race_only:
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
-        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
         wait(lambda:subprocess.run(['mountpoint','-q',str(peer_mount)]).returncode==0,'peer mounted',40)
         # Mount registration can precede the first verbs connection; a served
         # GETATTR opens the peer's connections before the proof.
@@ -850,7 +849,7 @@ try:
         raise SystemExit(0)
     if a.peer_open_contention_only:
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
-        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
         wait(lambda:subprocess.run(['mountpoint','-q',str(peer_mount)]).returncode==0,'peer mounted',40)
         # Mount registration can precede the first verbs connection; a served
         # GETATTR opens the peer's connections before the proof.
@@ -1003,7 +1002,7 @@ try:
         print('16-worker unique CREATE, real EEXIST, name reuse and exact cold bytes PASS',flush=True)
     if a.append_truncate_only:
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
-        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
         wait(lambda:subprocess.run(['mountpoint','-q',str(peer_mount)]).returncode==0,'peer mounted',40)
         for index in range(8):
             run(['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,
@@ -1012,7 +1011,7 @@ try:
             if index==3:
                 run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
                 unmount();stop();start();mount_client()
-                peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+                peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
                 wait(lambda:subprocess.run(['mountpoint','-q',str(peer_mount)]).returncode==0,'cold peer mounted',40)
         run(['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,
              '--parent','append-handoff','--filter','peer_concurrent_append',
@@ -1574,7 +1573,7 @@ try:
         print('atomic CREATE lease local/first-use cross-group cold replay and final close PASS',flush=True)
     if a.append_sync_boundary or a.sync_writes:
         peer_log=open(work/'sync-peer.log','ab');handles.append(peer_log)
-        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
         wait(lambda:os.path.ismount(peer_mount) and (peer_mount.stat().st_ino>0),'sync peer mounted',40)
         transport_proof([*servers,client,peer])
         records=[];expected={}
@@ -2156,7 +2155,7 @@ os.close(fd)
             for index in range(1,a.ior_clients):
                 target=work/f'ior-client-{index}';target.mkdir(exist_ok=True)
                 log=open(work/f'ior-client-{index}.log','ab');handles.append(log)
-                proc=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(target),'-f'],env=env,stdout=log,stderr=log)
+                proc=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',str(target),'-f'],env=env,stdout=log,stderr=log)
                 extra_clients.append((proc,target))
                 def ready():
                     assert proc.poll() is None,'IOR peer exited'
@@ -2275,10 +2274,6 @@ os.close(fd)
             path.unlink()
             wait(lambda:not files(ino),'sequential admission cold bytes and physical deletion',180)
         (work/'sequential-admission.json').write_text(json.dumps({'files':2,'bytes':sum(x[3] for x in evidence),'same_mount':True,'cold_hashes_verified':True},indent=2))
-    if a.mount_label!='default':
-        text=(work/'fuse.log').read_text()
-        assert 'is ignored' in text and "mounted export 'default'" in text,text
-        print('legacy mount label explicitly ignored; canonical single export selected PASS',flush=True)
     if a.namespace or a.namespace_boundary:
         nested = mount/'deep-namespace';nested.mkdir()
         chain = [nested]
@@ -2889,7 +2884,7 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
         linked.unlink()
     # Two peers repeatedly touch adjacent ranges until the span chain folds.
     peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
-    peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+    peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
     wait(lambda:subprocess.run(['mountpoint','-q',str(peer_mount)]).returncode==0,'peer mounted',40)
     fold=mount/'peer-fold';f1=os.open(fold,os.O_CREAT|os.O_EXCL|os.O_RDWR,0o600)
     os.write(f1,b'\0'*(128*1024));os.fsync(f1)
@@ -3003,7 +2998,7 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
             (work/'posix-failure.json').write_text(json.dumps({'returncode':error.returncode,'command':list(map(str,error.cmd))},indent=2))
             print('POSIX FAILED; continuing independent gates, final status remains failure',flush=True)
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
-        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
         wait(lambda:subprocess.run(['mountpoint','-q',str(peer_mount)]).returncode==0,'peer mounted',40)
         # Mount registration can precede the first verbs connection; a served
         # GETATTR opens the peer's connections before the proof.
@@ -3030,7 +3025,7 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
         # verify real peer bytes, rather than reading an empty mount directory.
         if not os.path.ismount(peer_mount):
             peer_log=open(work/'append-burst-peer-fuse.log','ab');handles.append(peer_log)
-            peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+            peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
             wait(lambda:os.path.ismount(peer_mount),'append burst peer mounted',40)
         burst_path,burst_report=append_burst.run(mount,peer_mount,a.append_burst,work)
         # Retire both clients normally before cold daemon recovery.

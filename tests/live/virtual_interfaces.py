@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
-"""Current .efs query gates; retired .find/.stats remain ordinary user names."""
+"""Current .efs query gates (v3. page names); retired .find/.stats remain ordinary user names.
+
+Every first page holds a server page session (16 per host) until closed;
+reads here close it, so client-side capacity gates are not hidden by it."""
 import argparse,errno,json,os,time,traceback
 from pathlib import Path
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from query_rpc import close_query,query_name
 p=argparse.ArgumentParser();p.add_argument('mount');p.add_argument('peer');p.add_argument('--case',default='all');p.add_argument('--freshness-s',type=float,default=10);a=p.parse_args()
 name='w90-gates-'+str(os.getpid());root=Path(a.mount)/name;peer=Path(a.peer)/name;root.mkdir();results=[]
 def gate(name,fn):
@@ -19,7 +25,25 @@ def query_path(directory, pattern):
         mode, raw = 1, raw[:-1]
     elif raw.startswith(b'*'):
         mode, raw = 2, raw[1:]
-    return directory / '.efs/.query' / ('v1.find.%d.%s' % (mode, raw.hex()))
+    match = ('exact', 'prefix', 'suffix', 'contains')[mode]
+    nonce = int.from_bytes(os.urandom(4), 'big')
+    path = directory / '.efs/.query' / query_name('find', raw, match, nonce=nonce)
+    pages[str(path)] = ('find', raw, match, nonce)
+    return path
+pages = {}
+def stats_path(directory):
+    nonce = int.from_bytes(os.urandom(4), 'big')
+    path = directory / '.efs/.query' / query_name('stats', nonce=nonce)
+    pages[str(path)] = ('stats', b'', 'contains', nonce)
+    return path
+def release(path, data):
+    if str(path) in pages:
+        command, term, match, nonce = pages[str(path)]
+        close_query(str(path.parent.parent.parent), command, data, term, match, None, nonce)
+def held_fd(path):
+    fd = os.open(path, os.O_RDONLY)
+    release(path, os.pread(fd, 1 << 20, 0))
+    return fd
 def find_bytes(path):
     value = json.loads(contents(path))
     assert value['complete'], value
@@ -28,7 +52,8 @@ def find_bytes(path):
 def contents(path):
     for attempt in range(8):
         try:
-            with open(path,'rb',buffering=0) as f:return f.read()
+            with open(path,'rb',buffering=0) as f:data=f.read()
+            release(path,data);return data
         except OSError as error:
             if error.errno not in (errno.ESTALE,errno.EAGAIN,errno.EBUSY) or attempt==7:raise
             time.sleep(.025*(attempt+1))
@@ -43,7 +68,7 @@ def snapshot():
         if set(find_bytes(query).splitlines())==wanted:break
         assert time.monotonic()<deadline,(wanted-set(expected.splitlines()),expected)
         time.sleep(.2)
-    fd=os.open(query,os.O_RDONLY)
+    fd=held_fd(query)
     try:
         expected=os.read(fd,1<<20);os.lseek(fd,0,0)
         prefix=os.read(fd,17)
@@ -63,7 +88,7 @@ def stats():
     assert int(values['imm_files'])==1,values
     assert int(values['imm_bytes'])==4096,values
 def stats_values(d):
-    return json.loads(contents(d/'.efs/.query/v1.stats'))['stats']
+    return json.loads(contents(stats_path(d)))['stats']
 def expect_stats(d,**want):
     deadline=time.monotonic()+a.freshness_s
     while True:
@@ -90,13 +115,18 @@ def stats_mutations():
     os.unlink(pd/'alias');os.unlink(pd/'moved'/'payload');os.rmdir(pd/'moved')
     expect_stats(d,imm_files=0,imm_dirs=0,imm_bytes=0,tree_files=0,tree_dirs=0,tree_bytes=0)
 def invalid():
-    try:contents(root/'.efs/.query/v1.find.99.61')
+    # Removed unpaged names are refused like any malformed query name.
+    for old in ('v1.find.0.61','v1.stats','v2.stats'):
+        try:contents(root/'.efs/.query'/old)
+        except OSError as e:assert e.errno==errno.EINVAL,e
+        else:raise AssertionError('removed query name accepted: '+old)
+    try:contents(root/'.efs/.query/v3.GG')
     except OSError as e:assert e.errno==errno.EINVAL,e;return
     raise AssertionError('invalid query accepted')
 def permissions():
     d=root/'protected';d.mkdir();(d/'secret-file').write_bytes(b'x');os.chmod(d,0o100)
     try:
-        for q in [d/'.efs/.query/v1.stats',query_path(d,'secret-*')]:
+        for q in [stats_path(d),query_path(d,'secret-*')]:
             try:contents(q)
             except OSError as e:assert e.errno==errno.EACCES,e
             else:raise AssertionError('protected query succeeded: '+str(q))
@@ -168,7 +198,7 @@ def fd_capacity():
     fds=[];bounded=False
     try:
         for _ in range(80):
-            try:fds.append(os.open(query_path(d,f'absent-capacity-{_:03}*'),os.O_RDONLY))
+            try:fds.append(held_fd(query_path(d,f'absent-capacity-{_:03}*')))
             except OSError as e:
                 assert e.errno==errno.ENOMEM,(len(fds),e)
                 bounded=True;break
@@ -183,6 +213,7 @@ def recovery():
     for i in range(256):
         q=query_path(d,f'absent-stat-{i:03}*')
         assert os.stat(q).st_size>0
+        contents(q)  # releases the page session the lookup created
     for i in range(128):
         assert not json.loads(contents(query_path(d,f'absent-open-{i:03}*')))['entries']
     # Exhaust and drain twice, then use a different directory/query version.

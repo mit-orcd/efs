@@ -30,15 +30,14 @@ TYPES = (None, "file", "dir", "symlink")
 FILTER_FIELDS = ("min_size", "max_size", "modified_after_ns", "modified_before_ns")
 
 
-def query_name(command, term=b"", match="contains", filters=None):
+def validate_query(command, term=b"", match="contains", filters=None):
+    """Raise ValueError for an invalid request; page_name encodes valid ones."""
     if command not in ("find", "ls", "stats"):
         raise ValueError("unknown command")
     if command != "find":
         if term:
             raise ValueError("this command does not accept a pattern")
-        # NFS may retain an opened virtual inode beyond one Python process.
-        # Fresh invocations need a new name; retained descriptors stay immutable.
-        return "v1." + command + "." + os.urandom(16).hex()
+        return
     if match not in MATCHES:
         raise ValueError("unknown match")
     if len(term) > MAX_TERM_BYTES:
@@ -47,21 +46,12 @@ def query_name(command, term=b"", match="contains", filters=None):
         raise ValueError("patterns match names, not paths; slash and NUL are invalid")
     if not term and match not in ("prefix", "contains"):
         raise ValueError("empty exact/suffix pattern is invalid")
-    if filters is not None:
-        import base64
-        flags = sum(1 << i for i, key in enumerate(FILTER_FIELDS) if filters[key] is not None)
-        fields = "".join("%016x" % (filters[key] or 0) for key in FILTER_FIELDS)
-        encoded = base64.urlsafe_b64encode(term).decode("ascii").rstrip("=")
-        return "v2.find.%d.%d.%02x.%s.%s" % (MATCHES[match],
-            TYPES.index(filters["type"]), flags, fields, encoded)
-    return "v1.find.%d.%s" % (MATCHES[match], term.hex())
 
 
 def page_name(command, term, match, filters, limit, token=0, cursor=0, nonce=0):
     import base64
     import struct
-    # Run the same argument validation as legacy paths before encoding.
-    query_name(command, term, match, filters)
+    validate_query(command, term, match, filters)
     f = filters or dict(type=None, **{key: None for key in FILTER_FIELDS})
     flags = sum(1 << i for i, key in enumerate(FILTER_FIELDS) if f[key] is not None)
     raw = struct.pack(">BBHQQIIIQQQQ", {"stats": 0, "find": 1, "ls": 2}[command],
@@ -487,8 +477,8 @@ def main(argv=None, script_path=None):
     try:
         if command == "find":
             filters = make_filters(args, now_ns)
-        name = query_name(command, os.fsencode(args.pattern) if command == "find" else b"",
-                          args.match if command == "find" else "contains", filters)
+        validate_query(command, os.fsencode(args.pattern) if command == "find" else b"",
+                       args.match if command == "find" else "contains", filters)
     except ValueError as error:
         parser.error(str(error))
     directory = os.path.dirname(script)

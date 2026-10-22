@@ -14,7 +14,7 @@ import subprocess
 import sys
 import time
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'live'))
-from query_rpc import filtered_request, page_request, query, request, receive
+from query_rpc import filtered_request, page_request, query, query_name, request, receive
 
 p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('output', type=Path)
@@ -48,7 +48,7 @@ assert owner in a.stop_nodes and len(set(a.stop_nodes))==2
 result={'old_owner':owner,'old_boot':old_boot,'stopped_nodes':a.stop_nodes}
 live_ports=[17431+n for n in range(1,5) if n not in a.stop_nodes]
 try:
-    with (root/'.efs/.query'/('v1.stats.'+os.urandom(16).hex())).open('rb') as retained:
+    with (root/'.efs/.query'/query_name('stats')).open('rb') as retained:
         original=retained.read();assert json.loads(original)['stats']['tree_files']==288
         pids=[]
         for n in a.stop_nodes:

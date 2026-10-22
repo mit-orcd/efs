@@ -43,10 +43,10 @@ static inline void efs_cli_help(FILE *out,const char *program,const char *topic)
         notes="Metadata root changes do not move existing mdraft data.\nStorage roots use least-queue write placement across paths.\nEFS_COMMANDS_SERVER=0 disables query workers, tracking and query RPCs.\nSet the same policy on every node; changes require graceful restart.\nDefault: enabled. Re-enabling rebuilds from current persisted metadata.";
     } else if (!strcmp(name,"efs-fuse")) {
         summary="Mount an EFS export";
-        syntax="NODE:PORT [NODE:PORT ...] EXPORT MOUNTPOINT [options]";
+        syntax="NODE:PORT [NODE:PORT ...] MOUNTPOINT [options]";
         options="-o OPTIONS           FUSE mount options\n--perf               Record a CPU profile\n--strace             Record system calls\n--stop MOUNTPOINT    Drain and stop a mounted client\n--resume MOUNTPOINT  Resume a drained client";
-        examples="efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt\nEFS_COMMANDS=1 efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt";
-        notes="One node address is enough; the client discovers the other nodes.\nEFS_COMMANDS=1 enables .efs on this mount when server policy allows it.\nThose commands require Python 3 on the machine executing them.\nUse --stop MOUNTPOINT --force-discard only to discard pending writes.\nUse --help-fuse for the underlying FUSE option reference.";
+        examples="efs-fuse 127.0.0.1:17432 /data1/efs/mnt\nEFS_COMMANDS=1 efs-fuse 127.0.0.1:17432 /data1/efs/mnt";
+        notes="One node address is enough; the client discovers the other nodes.\nThere is one export; no export label argument.\nEFS_COMMANDS=1 enables .efs on this mount when server policy allows it.\nThose commands require Python 3 on the machine executing them.\nUse --stop MOUNTPOINT --force-discard only to discard pending writes.\nUse --help-fuse for the underlying FUSE option reference.";
     } else if (!strcmp(name,"efs-query")) {
         summary="Query the legacy server statistics endpoint";
         syntax="[--raw] NODE:PORT";

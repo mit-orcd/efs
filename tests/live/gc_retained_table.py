@@ -52,7 +52,7 @@ try:
         servers.append(subprocess.Popen([str(x) for x in args],env=env,stdout=log,stderr=log))
     time.sleep(3)
     log=open(output/'fuse.log','ab');logs.append(log)
-    client=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{port}','default',str(mount),'-f'],env=env,stdout=log,stderr=log)
+    client=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{port}',str(mount),'-f'],env=env,stdout=log,stderr=log)
     wait(lambda:client.poll() is None and subprocess.run(['mountpoint','-q',str(mount)]).returncode==0)
     wait(drained,1800)
     if a.drain_only:

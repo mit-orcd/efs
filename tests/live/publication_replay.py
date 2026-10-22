@@ -42,7 +42,7 @@ procs=[];logs=[];fuse=None
 def cold_bytes(label):
     global fuse
     f=(work/f'fuse-{label}.log').open('w');logs.append(f)
-    fuse=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{base}','private-replay',str(mount)],env=env,stdout=f,stderr=f)
+    fuse=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{base}',str(mount)],env=env,stdout=f,stderr=f)
     wait(lambda:os.path.ismount(mount))
     expected=(work/'request.bin.expected').read_bytes();actual=(mount/'pending').read_bytes()
     assert actual==expected,(label,len(actual),len(expected),hashlib.sha256(actual).hexdigest(),hashlib.sha256(expected).hexdigest())
@@ -96,7 +96,7 @@ try:
     # Exercise the cold mount before publication. The probe separately
     # establishes server geometry with the exact first immutable fragment PUT.
     warm=(work/'fuse-export-bootstrap.log').open('w');logs.append(warm)
-    fuse=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{base}','private-replay',str(mount)],env=env,stdout=warm,stderr=warm)
+    fuse=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{base}',str(mount)],env=env,stdout=warm,stderr=warm)
     wait(lambda:os.path.ismount(mount))
     assert (mount/'pending').stat().st_size==0
     subprocess.run([str(source/'scripts/client.sh'),'stop',str(mount)],env=env,check=True,timeout=100)

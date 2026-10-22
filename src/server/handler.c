@@ -1286,18 +1286,16 @@ send_reply:
             uint32_t version=0;
             if (payload_len>=sizeof(version)) memcpy(&version,payload,sizeof(version));
             int paged=version==EFS_QUERY_PAGE_VERSION && payload_len==sizeof(struct efs_msg_query_snapshot_v4);
-            int extended=version==EFS_QUERY_FILTER_VERSION && payload_len==sizeof(struct efs_msg_query_snapshot_v3);
-            int legacy=(version==EFS_QUERY_VERSION || version==EFS_QUERY_COMMAND_VERSION) &&
-                       payload_len==sizeof(struct efs_msg_query_snapshot);
-            const struct efs_query_filters *filters=extended ? &((const struct efs_msg_query_snapshot_v3 *)payload)->filters : NULL;
-            int rc=paged ? server_raft_host_query_page(payload,&reply,&reply_len) : extended || legacy ?
-                server_raft_host_query_snapshot(payload,filters,&reply,&reply_len) : EFS_ERR_INVAL;
+            /* Unpaged requests carry only the .stats aggregate (version 1). */
+            int stats=version==EFS_QUERY_VERSION && payload_len==sizeof(struct efs_msg_query_snapshot);
+            int rc=paged ? server_raft_host_query_page(payload,&reply,&reply_len) : stats ?
+                server_raft_host_query_snapshot(payload,&reply,&reply_len) : EFS_ERR_INVAL;
             if (rc) {
                 struct efs_msg_query_snapshot_reply failure;
                 memset(&failure,0,sizeof(failure));failure.version=EFS_QUERY_VERSION;failure.status=rc;
-                if (version==EFS_QUERY_COMMAND_VERSION || version==EFS_QUERY_FILTER_VERSION || version==EFS_QUERY_PAGE_VERSION)
+                if (version==EFS_QUERY_PAGE_VERSION)
                     failure.version=version;
-                efs_conn_send_msg(conn,EFS_MSG_QUERY_SNAPSHOT_REPLY,&failure,sizeof(failure));
+            efs_conn_send_msg(conn,EFS_MSG_QUERY_SNAPSHOT_REPLY,&failure,sizeof(failure));
             } else efs_conn_send_msg(conn,EFS_MSG_QUERY_SNAPSHOT_REPLY,reply,reply_len);
             server_raft_host_query_reply_free(reply);
             break;

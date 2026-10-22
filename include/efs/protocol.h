@@ -701,10 +701,9 @@ struct efs_user_stat {
  * Version 1 carries only the efs-fuse directory .stats aggregate
  * (operation STATS); a v1 FIND or LS is refused. */
 #define EFS_QUERY_VERSION 1
-/* W91 commands use ASCII JSON envelopes and hex-encoded relative path bytes.
- * The native request/reply layout is unchanged. */
-#define EFS_QUERY_COMMAND_VERSION 2
-#define EFS_QUERY_FILTER_VERSION 3
+/* Version 4: W91 command pages, ASCII JSON envelopes with hex-encoded
+ * relative path bytes. Versions 2 (unpaged commands) and 3 (unpaged filtered
+ * find) are retired and refused. */
 #define EFS_QUERY_PAGE_VERSION 4
 #define EFS_QUERY_GROUPS 128
 #define EFS_QUERY_MAX_OUTPUT (16u << 20)
@@ -720,8 +719,8 @@ struct efs_msg_query_snapshot {
     uint32_t groups[EFS_QUERY_GROUPS];
     char term[EFS_MAX_NAME];
 };
-/* v3 extends the native v1/v2 request without changing their 808-byte ABI.
- * Size bounds are inclusive; modification timestamps are strict ns bounds.
+/* Page filters. Size bounds are inclusive; modification timestamps are
+ * strict ns bounds.
  * Unset fields MUST be zero; kind: 0 any, 1 regular, 2 directory, 3 symlink. */
 #define EFS_QUERY_MIN_SIZE 1u
 #define EFS_QUERY_MAX_SIZE 2u
@@ -730,10 +729,6 @@ struct efs_msg_query_snapshot {
 struct efs_query_filters {
     uint32_t flags,kind;
     uint64_t min_size,max_size,after_ns,before_ns;
-};
-struct efs_msg_query_snapshot_v3 {
-    struct efs_msg_query_snapshot base;
-    struct efs_query_filters filters;
 };
 /* v4 bounded pages. Cursor is a physical index position, not a result offset.
  * token=0 starts one retained generation; limit=0 closes it. */

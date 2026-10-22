@@ -10,7 +10,7 @@ import time
 import hashlib
 import statistics
 from query_timing import refresh_seconds, settle_seconds, wait_indexed, wait_query_nodes_indexed
-from query_rpc import routed_query as query, request
+from query_rpc import routed_query as query, page_request
 
 mount=Path(sys.argv[1])
 peer=Path(sys.argv[2])
@@ -50,8 +50,13 @@ def reader():
     busy=0
     while time.monotonic()<end:
         started=time.monotonic()
-        reply,text=query(int(os.environ['EFS_QUERY_TEST_PORT']),request(
-            version=2,operation=1,root=root_ino,uid=os.getuid(),gid=os.getgid(),match=3,term=b'',max_output=4<<20))
+        fields=dict(operation=1,root=root_ino,uid=os.getuid(),gid=os.getgid(),match=3,term=b'',max_output=4<<20)
+        reply,text=query(int(os.environ['EFS_QUERY_TEST_PORT']),page_request(**fields,limit=10000))
+        if not reply.status:
+            page=json.loads(text)['page']
+            if int(page['token']):  # release the retained generation
+                query(int(os.environ['EFS_QUERY_TEST_PORT']),page_request(**fields,token=int(page['token']),
+                                                                      cursor=int(page['cursor']),limit=0))
         if len(sampled)<4096:sampled.append((time.monotonic()-started)*1000)
         if reply.status:
             busy+=1
