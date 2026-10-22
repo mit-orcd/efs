@@ -71,7 +71,8 @@ stay in alpha 1.0, so raising the code's four-node cap (W151) is alpha work;
 2+2 and broader metadata distribution follow alpha 1.0. The user's three
 conditions for alpha 1.0: fix all known in-scope bugs; functional completeness
 in scope; several rounds of performance testing and improvement that do not
-bleed into post-alpha changes.
+bleed into post-alpha changes. NFS re-export and macOS clients are not alpha
+scope (user, Oct 22): beta backlog W152; alpha supports the Linux FUSE client.
 
 ## Earlier decisions — compact register
 

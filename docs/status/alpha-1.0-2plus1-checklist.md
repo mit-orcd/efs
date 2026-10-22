@@ -95,7 +95,7 @@ row is checked again on current devel before work starts.
 | K8 | **W148** modify-under-load returned wrong bytes, correct size, on a never-packed 3.6 MB file (suspected read race: same-size overwrite then truncate-up) | data correctness | FIX ([review](review-pack-validate-once-20261022.md)) |
 | K9 | **W87** buffered concurrent append loses records under load | data correctness | FIX |
 | K10 | **W121** a read right after a successful fsync returns the previous file's payload (FUSE kernel fork/page-pinning; kernel fix deferred) | data correctness | DECIDE |
-| K11 | **W55** span committed but fragment PUTs never landed (NFS/macOS triggers not isolated) | data correctness | VERIFY Linux FUSE; DECIDE NFS/macOS |
+| K11 | **W55** span committed but fragment PUTs never landed | data correctness | VERIFY Linux FUSE. NFS re-export and macOS clients are **DECIDED out of alpha** (user, Oct 22): beta backlog **W152**; their W55 triggers are not isolated in alpha |
 | K12 | **W58** `O_EXCL` create answered EEXIST (historical trigger not isolated) | correctness | VERIFY |
 | K13 | **W88** a folded span retry resurrects after history eviction; **W86** default PUT/flush ticket integration staged | publication correctness | FIX or DECIDE |
 | K14 | **W77** atomic multi-chunk publication and observation | integration gap | FIX or DECIDE |
@@ -146,7 +146,6 @@ Each step is one change or a small group. Each gets a regression test, then
 
 1. **Your scope decisions.** No code. These change what Stage 1 contains:
    - K10: W121, the kernel FUSE issue;
-   - K11: NFS and macOS clients;
    - K13: whether the PUT-ticket stack W86 is in alpha or archived (this
      also settles W137);
    - K14: atomic multi-chunk publication;
@@ -295,8 +294,10 @@ facts for A6, not decisions.
   (and TCP if supported), `.efs` commands (**W91/W92** named gates),
   background packing (**W125**), logical truncate (**D25**), the `efs-mgmt`
   operator commands, and the start/stop/deploy scripts. Candidates out of
-  scope: containers, expiry (**W90**; resolve under A7), NFS re-export, macOS
-  clients, 2+2, automatic repair and crash recovery (K23).
+  scope: containers, expiry (**W90**; resolve under A7), 2+2, automatic repair
+  and crash recovery (K23). **Decided out (user, Oct 22):** NFS re-export and
+  macOS clients, on the beta backlog as **W152**; alpha supports the Linux FUSE
+  client only, and F4 says so.
 - [ ] **S2 — POSIX subset.** Publish the supported operations and every known
   gap (for example, mmap is skipped in the extras suite). Each gap is either
   fixed or justified as a limitation (F4). No gap counts as PASS.
