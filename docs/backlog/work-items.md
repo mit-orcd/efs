@@ -6058,8 +6058,17 @@ counters (`recovering`, `recovered` from `server_reclaim_status`): it
 gives up only after 30 s without a change in them, or at a 300 s cap,
 and prints the status when it does. A loaded host slows the export walk
 without failing the test; a stalled recovery still fails with its
-counters. Gate: 20 `make_test_summary.sh` runs on node9901 NOTRUN here;
-the K25 report records the efs3 reruns.
+counters. Gate: 20 `make_test_summary.sh` runs on node9901 NOTRUN here.
+- The test also put its storage roots under a fixed `/tmp`, ignoring
+  `TMPDIR`. On efs3 `/tmp` is a tmpfs of about 1 GB, smaller than the
+  physical guard's floor (max(5%, 1 GiB) + 256 MiB). So every PUT was
+  refused (QUOTA) and the binary aborted in its first case, before the
+  W141 case ran (devel fails the same way there). The roots now follow
+  `TMPDIR`, which `make_test_summary.sh` sets to a disk path.
+- efs3 result (October 22): the W141 case passed in 9 of 9 runs. The full
+  binary passed 3 times, then the later "PUT racing acceptance" case got
+  QUOTA as the 10 GB VM disk filled (its writer runs until stopped). That
+  is a capacity limit of the VM, not this item; node9901 has the disk.
 
 <a id="w142"></a>
 ## W142 — Dead leftovers after the dead-code cleanup

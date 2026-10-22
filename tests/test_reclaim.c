@@ -47,7 +47,7 @@ int server_raft_host_pack_object(uint32_t group, uint64_t id, uint64_t gen, stru
     return EFS_OK;
 }
 
-static char roots[2][64];
+static char roots[2][256];
 static struct efsd_server S;
 static struct efs_export EX={.id=1,.chunk_size=EFS_DEFAULT_CHUNK_SIZE};
 static uint8_t *body;
@@ -695,7 +695,10 @@ static void t_retire_cut(void)
 
 int main(void)
 {
-    snprintf(roots[0],sizeof(roots[0]),"/tmp/efs-rj-a-XXXXXX");snprintf(roots[1],sizeof(roots[1]),"/tmp/efs-rj-b-XXXXXX");
+    /* Under TMPDIR (make_test_summary.sh sets a disk path): the physical
+     * guard keeps max(5%, 1 GiB) + 256 MiB free, more than a small tmpfs /tmp. */
+    const char *tmp=getenv("TMPDIR");if(!tmp||!*tmp)tmp="/tmp";
+    snprintf(roots[0],sizeof(roots[0]),"%s/efs-rj-a-XXXXXX",tmp);snprintf(roots[1],sizeof(roots[1]),"%s/efs-rj-b-XXXXXX",tmp);
     assert(mkdtemp(roots[0])&&mkdtemp(roots[1]));
     assert(!posix_memalign((void**)&body,4096,EFS_FRAGMENT_SIZE));memset(body,0x61,EFS_FRAGMENT_SIZE);memset(sum,0x62,sizeof(sum));
     printf("reclaim journal:\n");
