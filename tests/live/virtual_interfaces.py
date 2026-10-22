@@ -97,7 +97,11 @@ def snapshot():
         assert os.fstat(fd).st_size==len(expected)
         os.lseek(fd,0,0);assert os.read(fd,len(expected)+100)==expected
     finally:os.close(fd)
-    assert b'match-new' in find_bytes(query)
+    # A fresh query (new page identity) sees the peer's file once the index
+    # refreshes; the held descriptor above kept its immutable bytes.
+    deadline=time.monotonic()+a.freshness_s
+    while b'match-new' not in find_bytes(query_path(d,'match-*')):
+        assert time.monotonic()<deadline,'peer file never published';time.sleep(1)
 def stats():
     d=root/'stats';d.mkdir();(peer/'stats'/'payload').write_bytes(b'x'*4096)
     values=expect_stats(d,imm_files=1,imm_bytes=4096)
@@ -185,17 +189,17 @@ def nested_authorization():
         deadline=time.monotonic()+a.freshness_s
         while True:
             reply,text=rpc(int(ports),req)
-            if reply.status!=-13:break
+            if reply.status not in (-13,-21):break  # busy or not indexed yet
             assert time.monotonic()<deadline,'group directory was not published';time.sleep(.2)
         assert reply.status==-16,(reply.status,text)
         req.ngroups=1;req.groups[0]=st.st_gid
         deadline=time.monotonic()+a.freshness_s
         while True:
             reply,text=rpc(int(ports),req)
-            if reply.status==0 and text.endswith(b'/group/group-secret\n'):break
-            assert reply.status in (0,-13) and time.monotonic()<deadline,(reply.status,text)
+            if reply.status==0 and text==b'/group-secret\n':break  # page paths are root-relative
+            assert reply.status in (0,-13,-21) and time.monotonic()<deadline,(reply.status,text)
             time.sleep(.2)
-        assert text.endswith(b'/group/group-secret\n'),text
+        assert text==b'/group-secret\n',text
     finally:os.chmod(group,0o700)
 def name_limits():
     d=root/'name-limits';d.mkdir();(d/'line\nbreak').write_bytes(b'x')

@@ -108,8 +108,7 @@ assert reply.status==-5 and not text,(reply.status,len(text))
 print('filtered pages and candidate-visit bounds; removed unpaged request refused PASS',flush=True)
 
 # A filtered path has the same immutable-open and fresh-permission contract.
-sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'src/client/commands'))
-from command import query_name
+from query_rpc import query_name
 import errno
 def open_query(path):
     for attempt in range(8):
@@ -118,7 +117,7 @@ def open_query(path):
             if error.errno not in (errno.ESTALE,errno.EAGAIN,errno.EBUSY) or attempt==7: raise
             time.sleep(.025*(attempt+1))
 filters=dict(type='file',min_size=7,max_size=7,modified_after_ns=None,modified_before_ns=None)
-qpath=root/'.efs/.query'/query_name('find',b'',filters=filters)
+qpath=root/'.efs/.query'/query_name('find',b'',filters=filters)  # a v3. first page
 with open_query(qpath) as held:
     old=held.read();length=os.fstat(held.fileno()).st_size
     os.chmod(other/'child',0)
