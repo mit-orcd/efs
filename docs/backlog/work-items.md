@@ -6198,6 +6198,24 @@ HARD, SNAP and CFG records.
 4. A daemon blocked in a group read delays its shutdown past `stop.sh`'s
    wait. `stop.sh` then leaves the remaining daemons running.
 
+**K1 follow-up (branch `devel-k01`,
+[status note](../status/k01-w145-remaining-20261022.md)).**
+1. Snapshot to a near follower: fixed in `48d14a37d`. The new leader's
+   first commit/read probe went out with `prev_index` 0; its success reply
+   (match 0) set `next_index` to 1, below the log floor. A success now never
+   lowers `next_index`, and a prev-term conflict hints below the whole
+   uncommitted run of the conflicting term. Unit tests FAIL on the old code
+   and PASS with the fix.
+2. Acknowledged write: **not acknowledged.** All 26 n2 waits on
+   30,929,219–30,929,230 ended at the 400 ms deadline with
+   `applied=30929217/30929218` (12:54:45.943–46.986Z), so their handlers
+   returned BUSY. n2 applied the stray 30,929,219@62 at 12:54:49Z, over two
+   seconds later. A verdict needs `applied >= idx` inside one bounded wait
+   and a matching term; no caller re-waits on the same (index, term). The
+   clients logged only successful retries. n2's raft.log no longer holds
+   the record (replaced by the 16:20Z resync); the efsd and fuse logs still
+   cover the window.
+
 **Gates.**
 - `make test` PASS (done).
 - orcd-mini deploy, with n2 back in sync after its repair (done, 16:20Z).

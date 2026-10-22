@@ -18,6 +18,11 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[K1 / W145 remaining parts](k01-w145-remaining-20261022.md): branch
+`devel-k01`. **Near-follower snapshot fixed (a match-0 probe ACK reset
+`next_index` to 1); 30,929,219@62 was not acknowledged to any client.**
+Election storms and bounded shutdown: see the note. orcd-mini gates NOTRUN.
+
 [orcd-mini deploy of `d94ca85bf`](orcd-mini-deploy-d94ca85bf-20261022.md):
 **deployed; all functional suites PASS** (core 216/216, extras, durability,
 `.efs` 10/10, two-client 67/67, ior hard). **ior easy write down ~40% vs
