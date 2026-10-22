@@ -635,10 +635,10 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
     efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
     int rc = send_recv(fd, EFS_MSG_GC_STATUS, NULL, 0, &type, &payload, &len);
     close(fd);
-    /* Only the current reply layout (version 4) is read. */
+    /* Only the current reply layout (version 5) is read. */
     if (rc || type != EFS_MSG_GC_STATUS_REPLY ||
         len != sizeof(struct efs_msg_gc_status_reply) ||
-        ((struct efs_msg_gc_status_reply *)payload)->version != 4) {
+        ((struct efs_msg_gc_status_reply *)payload)->version != 5) {
         fprintf(stderr, "GC status unavailable: no current-format reply\n");
         free(payload);
         return 1;
@@ -693,6 +693,8 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
                (unsigned long long)g->reap_seen[i], (unsigned long long)g->orphan_seen[i], g->reap_capped[i],
                (unsigned long long)g->first_reap[i],
                (unsigned long long)g->first_seen_age_ms[i]);
+    printf("trunc_pending group0=%llu group2=%llu\n",
+           (unsigned long long)g->trunc_pending[0], (unsigned long long)g->trunc_pending[1]);
     {
         const struct efs_expiry_status *e=&g->expiry;
         const char *state=!e->available?"unavailable":!e->enabled?"disabled":

@@ -77,7 +77,7 @@ int main(int argc,char **argv){
   s.nodes[0].used=123456;startup_inventory(&s);
   assert(s.nodes[0].used==0); /* crash snapshot cannot resurrect quota charges */
   struct efs_msg_gc_status_reply status;server_gc_status(&s,&status);
-  assert(status.version==4&&status.removed_fragments==removed+2&&status.delete_errors>0);
+  assert(status.version==5&&status.removed_fragments==removed+2&&status.delete_errors>0);
   assert(status.last_delete_age_ms<10000);
   assert(status.io[0].ops && status.io[0].bytes && status.io[0].errors);
   assert(status.io[1].ops && !status.io[1].bytes && status.io[1].errors);

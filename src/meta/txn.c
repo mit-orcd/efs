@@ -619,10 +619,9 @@ int efs_txn_prepare_guard(struct efs_kv *kv, const struct efs_txid *t,
 void efs_txn_encode_reduce(uint8_t out[EFS_TXN_REDUCE_WIRE],
                            const struct efs_txn_reduce *red)
 {
-    be64(out, red->max_end);
-    be64(out + 8, red->max_mtime);
-    be64(out + 16, red->max_ctime);
-    be64(out + 24, red->mtime_gen);
+    be64(out, red->max_mtime);
+    be64(out + 8, red->max_ctime);
+    be64(out + 16, red->mtime_gen);
 }
 
 void efs_txn_encode_ino_delta(uint8_t out[EFS_TXN_REDUCE_INO_WIRE],
@@ -737,7 +736,7 @@ int efs_txn_prepare_reduce(struct efs_kv *kv, const struct efs_txid *t,
 {
     uint8_t pay[EFS_TXN_REDUCE_WIRE];
 
-    if (!red)
+    if (!red || red->max_end)
         return EFS_ERR_INVAL;
     efs_txn_encode_reduce(pay, red);
     return prepare_reduce_rec(kv, t, p, key, klen, pay, sizeof(pay));
@@ -836,15 +835,12 @@ int efs_txn_apply_prepare(struct efs_kv *kv, int kind, const struct efs_txid *t,
             return EFS_ERR_PROTO;
         return efs_txn_prepare_guard(kv, t, p, key, klen, rd64(pay));
     case EFS_TXN_REDUCE:
-        /* 24-byte payload = pre-mtime_gen encoder. */
-        if (plen < 24)
+        if (plen != EFS_TXN_REDUCE_WIRE)
             return EFS_ERR_PROTO;
         memset(&red, 0, sizeof(red));
-        red.max_end = rd64(pay);
-        red.max_mtime = rd64(pay + 8);
-        red.max_ctime = rd64(pay + 16);
-        if (plen >= EFS_TXN_REDUCE_WIRE)
-            red.mtime_gen = rd64(pay + 24);
+        red.max_mtime = rd64(pay);
+        red.max_ctime = rd64(pay + 8);
+        red.mtime_gen = rd64(pay + 16);
         return efs_txn_prepare_reduce(kv, t, p, key, klen, &red);
     case EFS_TXN_REDUCE_INO:
         if (plen < EFS_TXN_REDUCE_INO_WIRE)
@@ -1163,7 +1159,7 @@ static int red_cb(void *user, const uint8_t *key, uint32_t klen,
     rc = parse_parts_txid(val, vlen, &t, &p, &used);
     if (rc != EFS_OK)
         return 0;
-    if (16 + used + 24 > vlen)
+    if (16 + used + EFS_TXN_REDUCE_WIRE != vlen)
         return 0;
     rc = decide_visible(a->coord, a->ctx, &t, &p, &dec);
     if (rc != EFS_OK) {
@@ -1175,14 +1171,12 @@ static int red_cb(void *user, const uint8_t *key, uint32_t klen,
     if (dec != EFS_TXN_COMMIT)
         return 0;
     pay = val + 16 + used;
-    if (rd64(pay) > a->out->max_end)
-        a->out->max_end = rd64(pay);
-    if (rd64(pay + 8) > a->out->max_mtime)
-        a->out->max_mtime = rd64(pay + 8);
-    if (rd64(pay + 16) > a->out->max_ctime)
-        a->out->max_ctime = rd64(pay + 16);
-    if (16 + used + 32 <= vlen && rd64(pay + 24) > a->out->mtime_gen)
-        a->out->mtime_gen = rd64(pay + 24);
+    if (rd64(pay) > a->out->max_mtime)
+        a->out->max_mtime = rd64(pay);
+    if (rd64(pay + 8) > a->out->max_ctime)
+        a->out->max_ctime = rd64(pay + 8);
+    if (rd64(pay + 16) > a->out->mtime_gen)
+        a->out->mtime_gen = rd64(pay + 16);
     return 0;
 }
 
@@ -1350,14 +1344,16 @@ static int fold_reduce(struct res_acc *a, const uint8_t *key, uint32_t klen,
         cn = 0;
     switch (key[2]) {
     case EFS_KV_KIND_LANE: {
-        /* MAX triple + seq++ + mtime_gen MAX in place; the owner's tail
-         * (fenced_epoch, append_bar, ...) is preserved, not truncated. */
+        /* MAX times + seq++ + mtime_gen MAX in place; max_end and the
+         * owner's tail (fenced_epoch, append_bar, ...) are preserved. */
         uint8_t out[VAL_MAX];
         uint32_t on = cn > 48 ? cn : 48;
         uint64_t e = 0, mt = 0, ct = 0, seq = 0, gen = 0;
 
-        if (plen < 24)
-            return 0;
+        if (plen != EFS_TXN_REDUCE_WIRE) {
+            a->rc = EFS_ERR_PROTO;
+            return 1;
+        }
         memset(out, 0, on);
         memcpy(out, cur, cn);
         if (cn >= 24) {
@@ -1369,14 +1365,12 @@ static int fold_reduce(struct res_acc *a, const uint8_t *key, uint32_t klen,
             seq = rd64(cur + 24);
         if (cn >= 48)
             gen = rd64(cur + 40);
-        if (rd64(pay) > e)
-            e = rd64(pay);
-        if (rd64(pay + 8) > mt)
-            mt = rd64(pay + 8);
-        if (rd64(pay + 16) > ct)
-            ct = rd64(pay + 16);
-        if (plen >= 32 && rd64(pay + 24) > gen)
-            gen = rd64(pay + 24);
+        if (rd64(pay) > mt)
+            mt = rd64(pay);
+        if (rd64(pay + 8) > ct)
+            ct = rd64(pay + 8);
+        if (rd64(pay + 16) > gen)
+            gen = rd64(pay + 16);
         be64(out, e);
         be64(out + 8, mt);
         be64(out + 16, ct);

@@ -27,6 +27,20 @@ static int resolve(void *ctx,const struct efs_txid *t,const struct efs_txn_parts
 static const struct efs_meta_append_ops ops={prepare,decide,resolve};
 static struct efs_opid_req identity(unsigned seq,unsigned ack)
 {struct efs_opid_req q={0};q.id.client_uuid[0]=42;q.id.session_epoch=1;q.id.seq=seq;q.ack=ack;return q;}
+/* D25: one logical TRUNCATE entry, classified as the host does it. */
+static int trunc_to(struct efs_kv *kv,efs_ino_t ino,uint64_t size)
+{
+ static uint64_t seq;struct efs_meta_row row;struct efs_meta_stat st;
+ struct efs_meta_truncate_lazy t={0};uint64_t e;
+ int rc=efs_meta_apply_get_inode(kv,ino,&row);
+ if(!rc)rc=efs_meta_apply_getattr(kv,ino,decision,kv,&st);
+ if(rc)return rc;
+ t.ino=ino;t.inode_gen=row.generation;t.expect_epoch=row.content_epoch;
+ t.expect_base_size=row.base_size;t.size=size;t.mtime_ns=400000000000ull;
+ t.kind=size>=st.size&&size>=row.base_size?EFS_META_TRUNCATE_EXTEND:EFS_META_TRUNCATE_SHRINK;
+ t.q.id.client_uuid[0]=43;t.q.id.session_epoch=1;t.q.id.seq=++seq;t.q.ack=seq-1;
+ return efs_meta_apply_truncate_lazy(kv,&t,&e);
+}
 static struct efs_meta_pub publication(efs_ino_t ino,uint64_t gen,unsigned ci,uint64_t end,unsigned candidate)
 {
  struct efs_meta_pub p={0};p.ino=ino;p.inode_gen=gen;p.chunk_index=ci;
@@ -818,8 +832,7 @@ static void bounded_completed_bursts(int cold)
  tx.bytes[0]=31;assert(!efs_meta_execute_append(plan,&tx,&ops,kv));
  tx.bytes[1]=1;assert(!efs_meta_finish_append(kv,ino,264,EFS_META_APPEND_COMPLETED,&tx,&ops,kv));
  assert(!efs_meta_append_prune_due(kv,ino));
- struct efs_meta_truncate truncate={.expect_gen=gen,.size=0,.lane_mask=UINT64_MAX};
- assert(!efs_meta_apply_truncate(kv,ino,400,&truncate));
+ assert(!trunc_to(kv,ino,0));
  if(cold){efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(dir,NULL);assert(kv);}
  assert(efs_meta_append_prune_due(kv,ino)==1);
  q=identity(10,9);assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,plan)==EFS_ERR_BUSY);
@@ -975,8 +988,7 @@ static void atomic_completion(int cold)
  tx.bytes[1]=2;assert(efs_txn_prepare_guard(kv,&tx,&parts,ik,ikl,version)==EFS_ERR_STALE);
  /* A queued old completion cannot consume a new reservation at the same offset. */
  assert(!efs_meta_apply_append_complete_atomic(kv,ino,gen,200,&q.id,binding_epoch,binding));
- struct efs_meta_truncate truncate={.expect_gen=gen,.size=200,.lane_mask=UINT64_MAX,.keep_tail=1};
- assert(!efs_meta_apply_truncate(kv,ino,400,&truncate));
+ assert(!trunc_to(kv,ino,200));
  unsigned removed;tx.bytes[1]=8;assert(!efs_meta_prune_append(kv,ino,&tx,&ops,kv,&removed) && removed==2);
  q.id.seq=3;q.ack=2;assert(!efs_meta_capture_append(kv,ino,8,&q,decision,kv,p) && p->offset==200);
  assert(!efs_meta_apply_append_atomic(kv,p,&q));
@@ -1007,5 +1019,27 @@ static void atomic_completion(int cold)
 }
 
 
+/* D25: after a lazy shrink every lane lags the inode epoch. O_APPEND must
+ * adopt them in its exact-image plan, place the reservation at the new EOF
+ * and not count their superseded EOF claims. */
+static void lagging_lanes(void)
+{
+ struct efs_kv *kv=efs_kv_mem_create();assert(kv);efs_ino_t ino;uint64_t gen,e=0;
+ fixture(kv,&ino,&gen);
+ struct efs_meta_truncate_lazy t={0};struct efs_meta_row row;
+ assert(efs_meta_apply_get_inode(kv,ino,&row)==EFS_OK);
+ t.ino=ino;t.inode_gen=gen;t.expect_epoch=row.content_epoch;t.expect_base_size=row.base_size;
+ t.size=50;t.kind=EFS_META_TRUNCATE_SHRINK;t.q=identity(7,0);
+ assert(efs_meta_apply_truncate_lazy(kv,&t,&e)==EFS_OK && e==1);
+ struct efs_meta_append_plan *a=malloc(sizeof(*a));assert(a);
+ struct efs_opid_req q=identity(8,7);
+ {int rc=efs_meta_capture_append(kv,ino,8,&q,decision,kv,a);if(rc||a->offset!=50)fprintf(stderr,"lagging capture rc=%d off=%llu\n",rc,(unsigned long long)a->offset);assert(rc==EFS_OK && a->offset==50);}
+ struct efs_txid x={{0}};x.bytes[0]=77;
+ assert(efs_meta_execute_append(a,&x,&ops,kv)==EFS_OK);
+ uint64_t lane_epoch=0;
+ assert(efs_meta_get_lane_epoch(kv,ino,gen,0,&lane_epoch)==EFS_OK && lane_epoch==1);
+ assert(efs_meta_get_lane_epoch(kv,ino,gen,1,&lane_epoch)==EFS_OK && lane_epoch==1);
+ free(a);efs_kv_mem_free(kv);
+}
 int main(void)
-{atomic_completion(0);atomic_completion(1);bounded_completed_bursts(0);bounded_completed_bursts(1);atomic_reservation(0);atomic_reservation(1);caught_up(20000,0);caught_up(20000,1);caught_up(EFS_META_APPEND_CATCHUP_MAX,1);completion_batch_gaps();for(int cold=0;cold<2;cold++)for(int owned=0;owned<2;owned++)for(int reverse=0;reverse<2;reverse++)completion_batch(cold,owned,reverse,0);for(int cold=0;cold<2;cold++)completion_batch(cold,1,1,1);for(unsigned v=0;v<3;v++){receipt_capture_race(v,0);receipt_capture_race(v,1);}session_owned_completion(0);session_owned_completion(1);retired_append_receipts(0);retired_append_receipts(1);session_owned_append(0);session_owned_append(1);fenced_completion();unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}
+{atomic_completion(0);atomic_completion(1);bounded_completed_bursts(0);bounded_completed_bursts(1);atomic_reservation(0);atomic_reservation(1);caught_up(20000,0);caught_up(20000,1);caught_up(EFS_META_APPEND_CATCHUP_MAX,1);completion_batch_gaps();for(int cold=0;cold<2;cold++)for(int owned=0;owned<2;owned++)for(int reverse=0;reverse<2;reverse++)completion_batch(cold,owned,reverse,0);for(int cold=0;cold<2;cold++)completion_batch(cold,1,1,1);for(unsigned v=0;v<3;v++){receipt_capture_race(v,0);receipt_capture_race(v,1);}session_owned_completion(0);session_owned_completion(1);retired_append_receipts(0);retired_append_receipts(1);session_owned_append(0);session_owned_append(1);fenced_completion();lagging_lanes();unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}

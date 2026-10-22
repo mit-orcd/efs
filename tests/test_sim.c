@@ -1618,18 +1618,20 @@ static void test_truncate_range_del(void)
     CHECK(efs_sim_read_chunk(s, f, 0, got, sizeof(got)) == EFS_OK, "read0");
     CHECK(efs_sim_read_chunk(s, f, 64, got, sizeof(got)) == EFS_OK, "read64");
 
-    CHECK(efs_sim_truncate(s, 0, f, 0, NULL) == EFS_OK, "truncate zero");
+    /* D25: the truncate entry is O(1) and masks; it deletes no row. The
+     * sim models no sweep, so the masked rows stay (sweep and reclaim are
+     * covered by test_meta_apply and the cluster gates). */
+    CHECK(efs_sim_truncate(s, 0, f, 0) == EFS_OK, "truncate zero");
     CHECK(efs_sim_getattr(s, f, &st) == EFS_OK && st.size == 0, "size zero");
-    CHECK(efs_sim_read_chunk(s, f, 0, got, sizeof(got)) == EFS_ERR_NOT_FOUND,
-          "chunk0 gone");
-    CHECK(efs_sim_read_chunk(s, f, 64, got, sizeof(got)) == EFS_ERR_NOT_FOUND,
-          "chunk64 gone");
+    CHECK(efs_sim_read_chunk(s, f, 64, got, sizeof(got)) == EFS_OK,
+          "masked row stays until a sweep");
 
     CHECK(efs_sim_crash(s, EFS_SIM_META) == EFS_OK, "crash");
     CHECK(efs_sim_restart(s, EFS_SIM_META) == EFS_OK, "restart");
     CHECK(efs_sim_getattr(s, f, &st) == EFS_OK && st.size == 0, "durable size");
-    CHECK(efs_sim_read_chunk(s, f, 64, got, sizeof(got)) == EFS_ERR_NOT_FOUND,
-          "still gone");
+    CHECK(efs_sim_truncate(s, 0, f, 10) == EFS_OK &&
+              efs_sim_getattr(s, f, &st) == EFS_OK && st.size == 10,
+          "extend after restart");
     CHECK(efs_sim_check(s) == EFS_OK, "check");
     efs_sim_free(s);
 }

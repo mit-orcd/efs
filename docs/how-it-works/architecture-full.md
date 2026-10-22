@@ -462,8 +462,10 @@ I6/I7.
   reverse — they are one Raft entry on one shard (§7.3). A reader never sees
   a size that covers unpublished bytes, nor published bytes that no committed
   size exposes.
-- **I22 · epoch fencing.** A publication naming a superseded content epoch is
-  never committed, and size/time lane state from a superseded epoch is never
+- **I22 · epoch fencing.** A lane that has adopted a content epoch refuses
+  every publication naming an older one; a publication that lands on a lane
+  not yet adopted is ordered before the truncate, masked by the history and
+  removed by the sweep. Size/time lane state from a superseded epoch is never
   read. The epoch fences *in-flight work and lane state*, and — together
   with the inode's **fence history** (§7.3) — bounds which bytes of a
   committed chunk row are still valid; it is not part of a fragment
@@ -680,7 +682,7 @@ Derived from the placement rules (§5) and the CREATE co-location rule
 | WRITE extending | chunk-map entry + that lane's size/mtime/ctime marks | **1** (co-located, §7.3) | single Raft entry |
 | WRITE first use of a lane | as above + `active_lanes` bit on the inode row | 2 | transaction (§7.2); ≤64 times per file, ever |
 | O_APPEND | EOF reserve (validated against the active-lane EOF vector, and holding an **EOF barrier** on those lanes until the reservation resolves) + chunk + size | inode shard + active lanes, then lane shards | reserve (§7.3) then ordinary write |
-| TRUNCATE | `content_epoch` + `base_size` + times + one **fence-history** entry on the inode row, **+ each active lane's fence stamp**; **no chunk-row deletes and no tail rewrite in the entry** — reclamation and tail materialisation are the reaper's background sweep (§7.3) | 1 + active lanes (≤65), O(lanes) apply | **inode fence**: one transaction (§7.2, §7.3); BUSY while the fence history is full |
+| TRUNCATE | `content_epoch` + `base_size` + times + one **fence-history** entry on the inode row, the closed append cursor, the opid receipt and the `TRUNC_PENDING` key; **no lane stamps, no chunk-row deletes and no tail rewrite** — lanes adopt the epoch lazily, and deletion and clipping are the background sweep (§7.3) | **1** (inode shard), O(1) apply | **one Raft entry** on the inode group (86 B, opid receipts); BUSY while the fence history is full |
 | READ spanning several chunks | chunk maps on the covering lanes | lanes covering the range | validated collect (§7.3) — I24 has a read side |
 | READDIR | dentries | 1 (normal) / used dir lanes (spread, ≤64) | range scan / scatter-merge |
 | CHMOD / CHOWN | inode row (ctime, **not** mtime) | 1 | single Raft entry |
@@ -915,16 +917,25 @@ not bit-exact wall-clock POSIX. **atime is
 `noatime` by default** (reads do not update atime at all), `relatime` a
 coalesced mount option; strict per-read atime is deliberately not offered.
 
-**Truncate is logical; reclamation is deferred (D25, Oct 2 2026 — this
-replaces the earlier in-entry range delete and tail rewrite).** A truncate
-bumps the content epoch, stamps `base_size`, and appends one entry
-`(epoch, size)` to the inode's **fence history**; because lane leaders must
-reject stale-epoch publications while ordinary writes never consult the
-inode shard, the epoch and the history entry are **pushed by a bounded
-fence over the inode row plus the active lanes** (≤65 authorities; rare ops
-pay, P2). The entry deletes no chunk rows and rewrites no tail: its apply
-is O(lanes), never O(chunks), so a truncate of a petabyte file holds the
-Raft pump for the same single-digit milliseconds as a truncate of a page.
+**Truncate is logical; reclamation is deferred (D25 — this replaces the
+earlier in-entry range delete, the per-lane `LANE_FENCE` entries and the
+client tail rewrite).** A truncate is **one Raft entry on the inode group**:
+it stamps `base_size` and times, and a shrink bumps the content epoch and
+appends one entry `(epoch, size)` to the inode's **fence history**, all in
+one KV batch with the opid receipt and a `TRUNC_PENDING` key for the sweep.
+The inode row and its history are the **single authority** for which bytes
+are valid; nothing is pushed to the lanes. A lane **adopts** a newer epoch
+lazily — on the first publish at it, on `BOOTSTRAP`, or on its sweep — and
+adoption resets its EOF claim, so a lane's size and times count only while
+its epoch equals the inode's. A lane that has adopted an epoch refuses
+publications at an older one; a publication that reached a not-yet-adopted
+lane is ordered before the truncate and is masked by the history. Read and
+writer views take their epoch and history from the inode, never from a lane
+stamp. The entry deletes no chunk rows and rewrites no tail: its apply is
+O(1), so a truncate of a petabyte file holds the Raft pump for the same
+time as a truncate of a page. A lost reply is retried under the same opid
+and answers the recorded result; an extension records no history entry and
+bumps no epoch.
 The bounded `utimens` fence distributes `mtime_gen` independently of content
 history. For regular files it prepares the inode first to freeze the active-lane
 set, then each lane's exact stamp image, and decides/resolves durably. A missing
@@ -962,8 +973,8 @@ identities, publication sequence, fence revision and per-part surviving
 ranges together under quorum-backed read authority. Reading the row and
 history separately requires validation that neither changed; a mixed
 snapshot is not a read view. The view owns its masks for the entire read
-or merge. Cached mappings must be validated against the lane's current
-fence revision before reuse; a cache hit is not read authority. Retirement
+or merge. Cached mappings must be validated against the inode's current
+epoch and history revision before reuse; a cache hit is not read authority. Retirement
 of history cannot alter a captured view's masks, so readers do not pin
 distributed fence-history records.
 
@@ -978,37 +989,33 @@ object still named by the current row. A merge's publication must compare
 the exact source base identity, span count and sequence, and fence revision,
 so a fence or publication during GET/PUT forces a fresh merge.
 
-**The sweep materialises fences and bounds the history.** The reaper's
-existing per-lane sweep (its own entries, 64 chunks per KV batch, off the
-client's path) walks each lane's rows older than the lane's newest fence:
-a dead row is deleted with a **versioned** DEL on the version it read, so
-a post-fence write that landed in between is never deleted; a boundary row
-is rewritten as the masked row at the fence epoch (versioned CAS). The
-materializer starts with a zero-filled chunk, decodes each surviving part,
-and overlays only its surviving range in publication order. It uses the
-same masking implementation as reads and publish merges. Fragment GET,
-encoding and immutable PUT happen outside Raft apply; the resulting entry
-compares both the complete source row version (base identity plus span
-count/sequence) and the exact fence revision. A conflict leaves the row
-unchanged and requires a new materialization; it never re-stamps the old
-unmasked objects. Successful CAS installs a full base image at the captured
-fence epoch and clears the source spans. Superseded objects are queued for
-GC only if their identities are absent from the replacement row (including
-base/span aliases, W54).
-
-The live-file truncation sweep is distinguished from unlink's whole-lane
-sweep; it cannot delete every row of a live inode. Each entry examines at
-most 64 chunk rows and commits at most one bounded batch, then yields.
-When no
-row in a lane precedes fence `j`, the lane drops `j` from its stamp; when
-every active lane has, the inode row drops `j` from the history. The
-history is bounded by `FENCE_HISTORY_MAX = 32` entries (an internal constant);
-a TRUNCATE that finds it full answers BUSY and the client retries on its
-existing budget — the sweep is the only progress, so a full history is a
-reaper backlog, never a reason to delete in the entry. The history, the
-lane stamps and the rows are all replicated state: a restart mid-sweep
-re-derives the work from them and every sweep step is idempotent. Space
-returns asynchronously; `df` lags a large truncate by the sweep.
+**The sweep clips, reclaims and retires the history.** The GC pass on the
+inode's anchor group finds work through `TRUNC_PENDING`. For the newest
+history entry `T` and a snapshot of the history, it proposes `TRUNC_SWEEP`
+to each active lane's group until that lane reports `swept_epoch ≥ T`, then
+`SWEEP_DONE(lane, T)` to the inode group, and `RETIRE(T)` once every active
+lane is done. `TRUNC_SWEEP` first adopts `T`, then continues from a cursor
+stored in the lane stamp: each entry examines at most 256 chunk rows and
+changes at most 64, and stops at a row under a pending transaction intent.
+Each row is masked part by part with the snapshot: a dead span or base is
+removed and its fragments queued as GC records in the same batch (a packed
+base is released once through its segment ledger); a partly visible part
+gets a **clip** in metadata (`base_clip`, or the span's length lowered)
+with its object, identity and checksums unchanged; a row with no part left
+is deleted and the lane's present count lowered; a row written at `T` or
+later is never touched. No data is read, re-encoded or rewritten. When the
+cursor reaches the lane's end the lane records `swept_epoch`. `RETIRE`
+removes every entry ≤ `T` and advances the history revision; after
+retirement the clips alone mask the discarded bytes, and the last
+retirement deletes `TRUNC_PENDING`. A lane activated after an entry is done
+for it at activation (it cannot hold older rows). The history is bounded by
+`FENCE_HISTORY_MAX = 32` entries; a non-dominated shrink that finds it full
+answers BUSY and the client retries on its existing budget — the sweep is
+the only progress, so a full history is a reaper backlog, never a reason
+to delete in the entry. The history, the lane stamps, the cursors and the
+rows are all replicated state: a restart mid-sweep re-derives the work from
+them and every sweep step is idempotent. Space returns asynchronously;
+`df` lags a large truncate by the sweep.
 
 **O_APPEND** reserves EOF on the inode shard, but the reservation is
 validated against the file's **real** EOF — the active-lane vector under the
@@ -1514,13 +1521,16 @@ this document is the invariant they are measured against.
   invalidate lane state and reject in-flight stale publications. It is a
   fence, not part of any object's identity.
 - **Fence history** — the inode's replicated list of un-swept `(epoch,
-  size)` truncate entries (bounded by `FENCE_HISTORY_MAX`); with the content
-  epoch it defines `valid_end` for every chunk row (§7.3). Entries leave
-  when the background sweep has materialised them.
+  size)` truncate entries (bounded by `FENCE_HISTORY_MAX`), with a revision
+  and per-entry lane `done` bits; with the content epoch it defines
+  `valid_end` for every chunk row (§7.3). The inode row is its only
+  authority; lanes adopt epochs lazily. Entries are retired once every
+  active lane's sweep has clipped or removed what they mask.
 - **Inode fence** — the bounded transaction over the inode row plus a file's
-  active lanes (≤65 authorities) that distributes a new `content_epoch` or
-  `mtime_gen` and truncate's fence-history entry. It deletes nothing. Used
-  only by rare operations; the write path never touches the inode shard.
+  active lanes (≤65 authorities) that distributes `mtime_gen` (`utimens`).
+  It deletes nothing. Used only by rare operations; the write path never
+  touches the inode shard. Truncate does not use it (one inode-group
+  entry, §7.3).
 - **Validated collect** — the read pattern shared by `stat()` and multi-chunk
   reads: collect versioned state, do the expensive work, re-read the
   versions, retry if they moved, with a read-only transaction as the bounded
@@ -1571,6 +1581,32 @@ correctness, all OPEN) and [W135–W139](#w135)
 and test evidence gaps; W127–W131 form one implementation package, not five
 independent error-handling designs. No acceptance gates are waived.
 
+[D25 logical truncate protocol](../status/d25-logical-truncate-design-20261021.md):
+**implemented through step 5 on branch `d25-logical-truncate`; all D25 gates PASS on a private node9901 cluster.** One 86-byte inode-group
+TRUNCATE entry commits size, epoch and a pruned inode fence history, with
+success-only opid receipts; reads mask by the inode history; lanes adopt
+the epoch lazily behind an ACTIVATE/BOOTSTRAP floor; a bounded lane-local
+sweep deletes or clips superseded rows, and SWEEP_DONE/RETIRE free history.
+Final review's corrections are folded in: one `adopt` transition resets lane
+EOF, receipt capacity is checked before commit (BUSY, never unprotected),
+history revision persists, g4/g5 gate acceptance. Both call-site audits
+are done (§8). [Step 2](../status/d25-step2-gates-20261021.md) (`3e133c257`): inode-authority
+views, lane adoption, BOOTSTRAP floor; g4/g5 step-2 form PASS on node9901, and a
+pre-existing peer read of truncated data (fails on 47ba6b590) is fixed.
+[Step 3](../status/d25-step3-gates-20261021.md) (lazy 86-byte TRUNCATE, off by default): g0-g4
+PASS on node9901, sparse 100 GiB O_TRUNC 0.024 s, after fixing a pre-existing
+stale-cache republish the eager baseline 47ba6b590 still fails (UNCOND images now
+carry their formation epoch). [Step 4](../status/d25-step4-gates-20261022.md): lane-cursor sweep,
+SWEEP_DONE/RETIRE, base clips, masked packing; g5-g8 PASS (2 GiB O_TRUNC 0.020 s, sweep
+9 s, space returned; history bound, restart mid-sweep, packed files).
+[Step 5](../status/d25-step5-gates-20261022.md): the eager path, LANE_FENCE, tail stubs, the
+client tail rewrite and the switch are removed; logical truncate is the only path, and
+every D25 gate (g0-g8, step-2 g4/g5, the repro) passes again on node9901, and after
+merging devel on node9900 over TCP and RDMA. Multi-host placement and the sweep
+scheduler's both-groups-local assumption remain.
+Earlier reviews and responses are kept as superseded history.
+Replaces the declined 256 MiB EBUSY refusal; W43 stays open.
+
 [W66 acceptance checklist](../status/metadata-scaling.md#w66-acceptance-checklist-consolidated-oct-21)
 (distribution, fail-closed hardening, MKDIR/born-HASHED, conditional split
 rediscovery; all NOTRUN, directory-spread policy OPEN-DECISION; no backward
@@ -1599,6 +1635,16 @@ data files under `docs/` now live only at tag `archive/raw-evidence-20261021`
 (branch `raw-evidence`). Devel keeps the 302 summaries under `results/`; 523
 links in 96 pages now name the archived path. Read one with
 `git show archive/raw-evidence-20261021:<path>`.
+
+[W126 on orcd-mini, `8fb4247ad` A/B](../status/orcd-mini-w126-ab-8fb4247ad-20261022.md):
+**deployed. Lock-wait gate PASS; create-rate gate FAIL.**
+- Read-only LSM peeks take `mu` only, and flush file I/O yields the
+  exclusive view.
+- Leader LSM lock waits are 2–4× lower at matched points (A/B/A').
+- Creates/s followed the run order (736/598/551), not the build. Throughput
+  is bounded by `h->mu` and fsync.
+- `make test` 813/813 with one environmental failure; POSIX smoke 216/216.
+- The user's 32M-file run was stopped at ~5.67 M files for the deploy.
 
 [orcd-mini profile under the 32M-file create run, `47ba6b590`](../status/orcd-mini-profile-47ba6b590-20261021.md):
 **profiling only; no PASS/FAIL gate.**
@@ -2243,7 +2289,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | crash-recovery-feature | **W123** · automatic crash recovery through per-file durable versions | new feature / durability recovery | PROPOSED: design review before code; implementation, migration and acceptance NOTRUN; W71 remains open | [feature and gates](../backlog/crash-safe-durable-versions.md) |
 | fast-delete | **W124** · fast delete: batched reclaim, quota credit at commit, then packing (W125) | performance / capacity | PROPOSED: design review before code; implementation, private A/B and orcd-mini acceptance NOTRUN | [proposal and gates](../backlog/fast-delete-reclaim.md) · [evidence](../status/orcd-mini-gc-delete-profile-5d673efa8-20261018.md) |
 | small-file-packing | **W125** · small-file packing by default (background packer after close) | capacity / performance | PROPOSED: revised to background packing 2026-10-18; write path unchanged, packer always on, no switch, prior state kept as a tag; port and acceptance NOTRUN | [proposal and gates](../backlog/small-file-packing-default.md) · [plan](../backlog/small-file-packing-plan.md) · [D37](#appendix-4--decisions--taken-and-pending-register-d1d36) |
-| kv-reader-convoy | **W126** · KV readers convoy behind exclusive LSM phases on a busy leader | performance | OPEN: step 1 (read-only peeks take `mu` only) implemented with regression test, unit tests PASS on node9901; `make test`, orcd-mini deployment and live A/B NOTRUN; steps 2–4 (phase hold-time metrics, flush outside the exclusive phase, bounded scan holds) open | [item](#w126) · [evidence](../status/orcd-mini-profile-47ba6b590-20261021.md) |
+| kv-reader-convoy | **W126** · KV readers convoy behind exclusive LSM phases on a busy leader | performance | DEPLOYED on orcd-mini `8fb4247ad` (steps 1 and 3): `make test` 813/813 (1 environmental docs-check failure), POSIX smoke 216/216; A/B lock-wait gate PASS (leader LSM waits 2–4× lower), create-rate gate FAIL (no measurable gain; bounded by `h->mu` and fsync); step 4 deferred | [item](#w126) · [A/B](../status/orcd-mini-w126-ab-8fb4247ad-20261022.md) · [origin](../status/orcd-mini-profile-47ba6b590-20261021.md) |
 | apply-unknown-tag | **W127** · metadata apply accepts unknown command tags as applied | correctness | OPEN: code reading at `0bdf55256`, not triggered on a cluster; concrete defect behind W66 B1–B4; implement W127–W131 as one apply-hardening package ([scope review](#w127-w139-review)); fix NOTRUN | [item](#w127) · [audit](../reviews/dead-code-review-20261021.md) |
 | apply-unknown-subtag | **W128** · unknown sub-tags and short frames apply as success (DIR/SESSION/TXN) | correctness | OPEN: code reading; fix NOTRUN; W66 B1 | [item](#w128) · [audit](../reviews/dead-code-review-20261021.md) |
 | apply-proto-normalized | **W129** · `host_apply` turns decoder errors into success and commits the cursor | correctness | OPEN: code reading; `test_gc_verdict.py:75` asserts the defect; SALT/QUERY_POLICY PROTO are business refusals and stay; fix NOTRUN | [item](#w129) · [audit](../reviews/dead-code-review-20261021.md) |
@@ -2484,7 +2530,7 @@ Read the relevant contract before changing its component.
 
 | ID | Accepted choice | Current state / gates |
 | --- | --- | --- |
-| D25 / W43 | Logical truncate with per-part epoch histories; deferred versioned reclamation, safe history retirement and bounded apply | Metadata/read/publication primitives staged; the staged resize was removed from devel Oct 16 (tag `archive/experimental-group-a-20261016`); resize, FUSE integration, live-file sweep and public activation remain. [Contract](../backlog/decision-contracts.md#d25--logical-truncate), [handoff](#appendix-3--in-flight--the-current-handoff-block), [routing](../status/d25-admission-routing.md) |
+| D25 / W43 | Logical truncate with per-part epoch histories; deferred versioned reclamation, safe history retirement and bounded apply | Branch `d25-logical-truncate` (Oct 22, not yet merged): one 86 B inode-group TRUNCATE with opid receipts, lazy lane adoption, `TRUNC_SWEEP`/`SWEEP_DONE`/`RETIRE` with metadata clips and masked packing; the eager path, `LANE_FENCE`, tail stubs, the client tail rewrite and the switch are removed (step 5). Gates g0–g8 PASS on private node9901 and node9900 clusters (TCP and RDMA); multi-host placement, a sweep scheduler without both groups local, and >2 GiB sweep throughput remain. [Contract](../backlog/decision-contracts.md#d25--logical-truncate), [protocol](../status/d25-logical-truncate-design-20261021.md), [step 5 evidence](../status/d25-step5-gates-20261022.md), [routing](../status/d25-admission-routing.md) |
 | D26 / W44 | Pending-GC watermark plus bounded resumable scan | Historical development gate recorded; current reclamation correctness/diagnostics are W61–W63. [Contract](../backlog/decision-contracts.md#d26--bounded-gc-scan) |
 | D27 / 0a | Bound recovery attempts, retain unresolved bytes, sticky inode errors and refuse ordinary teardown before unresolved drain | Runtime foundations present; strict timing, contention/fault/recovery/RSS gates remain. [Contract](../backlog/decision-contracts.md#d27--retained-failed-writeback), [handoff](#appendix-3--in-flight--the-current-handoff-block) |
 
@@ -5996,6 +6042,15 @@ not diagnose the current reclamation incident.
 
 <a id="w81"></a>
 
+
+**October 21, 2026: binary removed.** `efs-query` and its help entry were
+deleted, as the [dead-code audit](../reviews/dead-code-review-20261021.md)
+recommended (P6, baseline R10). The server's `QUERY_STATS` handler still
+answers UNSUPPORTED and never returns totals. `tests/live/raft_read_freshness.py`
+and `tests/live/fragment_integrity.py` now check that refusal over the wire.
+`tests/test_query_unavailable.py`, which tested only the CLI against a fake
+server, was removed with the binary.
+
 ### W81 · Automatic directory spread responds to size, not pressure
 
 **Policy accepted Oct 8 (D35):** sustained directory-local serialization wait and queue pressure plus activity; retain size trigger, use hysteresis/cooldowns and bounded fair migration. Exclude global overload signals; select explicit configurable thresholds from AMD measurements before activation. [Contract](../status/accepted-namespace-scratch-20261008.md#d35--w81-sustained-contention-directory-spreading).
@@ -8132,7 +8187,7 @@ No live configuration editor or automatic rollout is included in this item.
 <a id="w126"></a>
 ### W126 — KV readers convoy behind exclusive LSM phases on a busy leader
 
-**Performance; opened 2026-10-21; step 1 implemented, deployment and live A/B NOTRUN.**
+**Performance; opened 2026-10-21. Steps 1 and 3 deployed on orcd-mini (`8fb4247ad`, 2026-10-21 23:14Z). Lock-wait gate PASS; create-rate gate FAIL (no measurable gain; throughput is bounded elsewhere). Step 4 deferred.** [A/B evidence](../status/orcd-mini-w126-ab-8fb4247ad-20261022.md).
 Found under the user's 32M-file `tiny_files.py` run on orcd-mini `47ba6b590`
 ([profile](../status/orcd-mini-profile-47ba6b590-20261021.md)). From ~1.0 to
 ~2.6 M files, creates fell from 2,564 to 1,130 files/s. Over the same span,
@@ -8168,26 +8223,38 @@ PASSes with the change. On node9901, the patched tree passes `test_kv_lsm`,
 `test_query_disk`, `test_txn`, `test_kv_snapshot_tail`, `test_kv_reader_gate`
 and `test_query_catalog`.
 
-**Remaining steps (not redesigns; each needs its own A/B):**
-2. Hold-time metrics for the exclusive phase: WAL-order wait, memtable
-   batch, `kv_mtab_merge`, `kv_flush_locked`. Count readers held back per
-   phase.
-3. If flush dominates: flush a frozen immutable memtable outside the
-   exclusive phase. Readers would consult the frozen table until the L0
-   segment is published. `kv_flush_locked` writes the L0 file and MANIFEST
-   while holding `view_rw` exclusively.
-4. If long readers dominate: bound how long a scan holds the shared side.
-   Point gets already drop it around preads; `merge_scan` does not.
+**Step 2 (folded into step 3).** A flush of 100 ms or more logs
+`kv-flush: files= io_ms= manifest_ms= view_yielded=`. On orcd-mini, flushes
+wrote 26–37 L0 files with 117–160 ms of I/O each. Before step 3, all of that
+ran under the exclusive view.
 
-**Gates.**
-- Deploy step 1 to orcd-mini only with the user's go-ahead: the 32M-file run
-  is live.
-- Re-profile under the same `tiny_files.py` shape at matching file counts.
-  Compare leader LSM lock-wait share, apply's `wrlock` switches,
-  `apply-sleep` counts and create rate.
-- Record steps 2–4 with their own evidence.
+**Step 3 (`8fb4247ad`, implemented and deployed).** After the pending merge
+the memtable is frozen, because every writer waits on `mu`. At the outermost
+writer level, `kv_flush_locked` therefore yields the exclusive view and keeps
+`mu` while it writes and fsyncs the L0 files, the MANIFEST and the WAL
+reset. It retakes the view only to publish the L0 slots and to clear the
+memtable. Between those two steps, readers find identical rows in both. The
+memtable still clears only after the MANIFEST write succeeds.
+`test_kv_lsm` and three runs of `test_kv_lsm_concurrent 8` PASS.
 
-`make test` on the patched tree remains NOTRUN.
+**Verification.**
+- `make test` (`scripts/make_test_summary.sh`): 813/813 commands, 1
+  environmental failure (docs check without `results/`).
+- orcd-mini deploy and POSIX smoke: 216/216 PASS.
+- A/B (A 8fb, B 47ba, A' 8fb) with the user's exact `tiny_files.py` shape,
+  at matched new-file counts:
+  - leader LSM lock waits 1.6–6.0% vs 13.6% at 0.9 M, and 5.4% vs 20.9% at
+    1.7 M;
+  - creates/s 736 / 598 / 551 at 0.9 M, which follows the run order, not
+    the build.
+
+The remaining leader waits are `h->mu` in `host_pump`, proposals and REPORT
+([`h->mu` plan](../status/raft-host-mu-plan-20261016.md)), plus XFS log
+fsync waits.
+
+**Remaining.** Step 4 (bound how long `merge_scan` holds the shared view) is
+deferred until LSM waits rise again. Create throughput on orcd-mini is not
+a W126 matter.
 
 <a id="w127"></a>
 ### W127 — Metadata apply accepts unknown command tags as applied

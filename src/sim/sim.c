@@ -666,9 +666,9 @@ int efs_sim_utimens(struct efs_sim *sim, int client, efs_ino_t ino,
 }
 
 int efs_sim_truncate(struct efs_sim *sim, int client, efs_ino_t ino,
-                     uint64_t size, const struct efs_meta_pub *tail)
+                     uint64_t size)
 {
-    return sim_raft_truncate(sim, client, ino, size, tail);
+    return sim_raft_truncate(sim, client, ino, size);
 }
 
 int efs_sim_append_reserve_op(struct efs_sim *sim, int client,

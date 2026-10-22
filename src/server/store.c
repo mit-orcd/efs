@@ -446,7 +446,7 @@ int server_unlink_fragment_files(struct efsd_server *s, struct efs_export *ex,
 void server_gc_status(struct efsd_server *s, struct efs_msg_gc_status_reply *out)
 {
     memset(out, 0, sizeof(*out));
-    out->version = 4;
+    out->version = 5;
     out->node_id = s->id;
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -477,6 +477,7 @@ void server_gc_status(struct efsd_server *s, struct efs_msg_gc_status_reply *out
         out->pending[i] = __atomic_load_n(&s->gc_pending[i], __ATOMIC_RELAXED);
         out->orphan_seen[i] = __atomic_load_n(&s->gc_orphan_seen[i], __ATOMIC_RELAXED);
         out->reap_seen[i] = __atomic_load_n(&s->gc_reap_seen[i], __ATOMIC_RELAXED);
+        out->trunc_pending[i] = __atomic_load_n(&s->gc_trunc_seen[i], __ATOMIC_RELAXED);
         out->reap_capped[i] = __atomic_load_n(&s->gc_reap_capped[i], __ATOMIC_RELAXED);
         out->first_reap[i] = __atomic_load_n(&s->gc_first_reap[i], __ATOMIC_RELAXED);
         uint64_t first = __atomic_load_n(&s->gc_first_seen_us[i], __ATOMIC_RELAXED);

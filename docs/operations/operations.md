@@ -297,13 +297,8 @@ Each directory has a **lookup-only** virtual `.stats` file (`cat dir/.stats`).
 is rejected. Contents: immediate and subtree file/dir counts, bytes, min/max
 timestamps.
 
-```bash
-./efs-query 127.0.0.1:17432
-```
-
-currently prints zero-filled placeholder totals: the legacy whole-table query
-was retired and its server handler no longer calculates them
-([W80](../backlog/work-items.md#w80)). Do not use this output to infer that a
-cluster is empty, that unlink reclaimed space, or that per-user usage is zero.
-Use node usage/physical filesystem measurements for capacity and inspect
-directory `.stats` separately; those have different scopes.
+The old whole-table `efs-query` tool was removed on October 21, 2026. The
+server still refuses its `QUERY_STATS` request as unsupported, and never
+returns totals ([W80](../backlog/work-items.md#w80)). For server-owned
+snapshots, use a mounted directory's `.efs/stats` command. For capacity, use
+node usage or physical filesystem measurements.

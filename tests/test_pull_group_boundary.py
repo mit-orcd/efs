@@ -23,6 +23,8 @@ static void apply_chunk_recs(efs_ino_t ino,const struct efs_chunk_rec *r,uint32_
 static uint64_t map_fresh_now_us(void) {return 7;}
 static void map_fresh_mark(efs_ino_t ino,uint32_t a,uint32_t b,uint64_t ms) {(void)ino;assert(a>=lower&&b<=upper&&a<b&&ms==7);}
 static int chunk_rec_valid(const struct efs_chunk_rec *r) {(void)r;return EFS_OK;}
+static void map_snapshot(efs_ino_t ino,uint32_t lo,uint32_t hi,uint64_t *k) {(void)ino;assert(lo>=lower&&hi<=upper&&lo<hi&&hi-lo<=64);for(uint32_t c=lo;c<hi;c++)k[c-lo]=0;}
+static void map_drop_absent(efs_ino_t ino,uint32_t lo,uint32_t hi,const struct efs_chunk_rec *r,uint32_t n,uint32_t asked,const uint64_t *k) {(void)ino;(void)r;(void)k;assert(lo>=lower&&hi<=upper&&n<=asked&&asked<=64);}
 int efs_client_rpc_getchunks(efs_export_id_t ex,efs_ino_t ino,uint32_t start,struct efs_chunk_rec *r,uint32_t *n) {(void)ex;(void)ino;(void)r;assert(start>=lower&&start<upper&&*n>0&&*n<=64);__sync_fetch_and_add(&calls,1);*n=0;return EFS_OK;}
 '''+fn('pull_group_end')+fn('pull_chunks_range')+fan+fn('pull_fan_thread')+fn('pull_groups_parallel')+r'''
 int main(void) {

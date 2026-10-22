@@ -932,10 +932,14 @@ send_reply:
                 } else if (type == EFS_MSG_INODE_SETATTR &&
                            payload_len >= sizeof(struct efs_msg_inode_setattr)) {
                     struct efs_msg_inode_setattr *req = payload;
+                    struct efs_opid_req q;
                     server_raft_host_setattr(req->ino, req->mask, req->mode,
                                               req->uid, req->gid, req->size,
                                               req->mtime, req->mtime_nsec,
-                                              req->atime, req->atime_nsec, &r);
+                                              req->atime, req->atime_nsec,
+                                              dirop_opid(payload, payload_len,
+                                                         sizeof(*req), &q),
+                                              &r);
                     rtype = EFS_MSG_INODE_SETATTR_REPLY;
                 } else if (type == EFS_MSG_INODE_APPEND &&
                            payload_len >= sizeof(struct efs_msg_inode_append)) {

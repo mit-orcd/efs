@@ -24,9 +24,9 @@ for tag, name in current.items():
     assert 'RESERVED' in name or not (45 <= tag <= 51 or 55 <= tag <= 57), ('reserved tag reused', tag, name)
 # Single retired tags are refused by EFS_MD_CMD_IS_RETIRED and stay unnamed.
 retired = re.search(r'#define EFS_MD_CMD_IS_RETIRED\(c\) \\\n(.*)\n', header).group(1)
-assert sorted(map(int, re.findall(r'== (\d+)', retired))) == [17, 21, 22, 33, 34], retired
+assert sorted(map(int, re.findall(r'== (\d+)', retired))) == [17, 20, 21, 22, 33, 34], retired
 assert 'EFS_MD_CMD_IS_RETIRED(c)' in header.split('#define EFS_MD_CMD_IS_RESERVED(c)')[1].split('\n\n')[0]
-for tag in (17, 21, 22, 33, 34):
+for tag in (17, 20, 21, 22, 33, 34):
     assert tag not in current, ('retired tag reused', tag, current[tag])
 # Reserved commands may coexist with this completion command.
 assert current[52] == 'EFS_MD_CMD_APPEND_CATCHUP'
@@ -40,4 +40,4 @@ for bad in (coexist.replace('EFS_MD_CMD_APPEND_CATCHUP 52', 'EFS_MD_CMD_APPEND_C
         pass
     else:
         raise AssertionError('invalid namespace accepted')
-print('metadata command namespace: actual header unique, 45-51/55-57 and retired 17/21/22/33/34 stay reserved; reserved/completion collision and byte overflow rejected PASS')
+print('metadata command namespace: actual header unique, 45-51/55-57 and retired 17/20/21/22/33/34 stay reserved; reserved/completion collision and byte overflow rejected PASS')

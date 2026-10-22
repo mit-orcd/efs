@@ -17,16 +17,16 @@
 /* Internal coordinator commands; public control RPC cannot forge ACKs. */
 /* 45-51 and 55-57 are reserved for retired feature commands. Apply halts
  * on them; submit refuses. Retired tags are refused the same way:
- * APPEND_RES 17 (folded into APPEND_CATCHUP), LANE_SWEEP 21 and REAP_DONE
- * 22, LANE_SWEEP_BATCH 33 and REAP_BATCH 34 (replaced by the W124 *_MULTI
- * forms). The refusal stays until a format-marker change retires these
+ * APPEND_RES 17 (folded into APPEND_CATCHUP), LANE_FENCE 20 (D25 logical
+ * truncate), LANE_SWEEP 21 and REAP_DONE 22, LANE_SWEEP_BATCH 33 and
+ * REAP_BATCH 34 (replaced by the W124 *_MULTI forms). The refusal stays until a format-marker change retires these
  * values; do not assign them to new commands before that. */
 #define EFS_MD_CMD_RESERVED_MIN 45
 #define EFS_MD_CMD_RESERVED_MAX 51
 #define EFS_MD_CMD_RESERVED2_MIN 55
 #define EFS_MD_CMD_RESERVED2_MAX 57
 #define EFS_MD_CMD_IS_RETIRED(c) \
-    ((c) == 17 || (c) == 21 || (c) == 22 || (c) == 33 || (c) == 34)
+    ((c) == 17 || (c) == 20 || (c) == 21 || (c) == 22 || (c) == 33 || (c) == 34)
 #define EFS_MD_CMD_IS_RESERVED(c) \
     (((c) >= EFS_MD_CMD_RESERVED_MIN && (c) <= EFS_MD_CMD_RESERVED_MAX) || \
      ((c) >= EFS_MD_CMD_RESERVED2_MIN && (c) <= EFS_MD_CMD_RESERVED2_MAX) || \
@@ -127,20 +127,27 @@
 #define EFS_MD_LOCK_RELEASE 2
 #define EFS_MD_CMD_SETATTR 13 /* matches sim SIM_CMD_SETATTR */
 #define EFS_MD_CMD_UTIMENS 14 /* matches sim SIM_CMD_UTIMENS */
-#define EFS_MD_CMD_TRUNCATE 15 /* matches sim SIM_CMD_TRUNCATE */
+#define EFS_MD_CMD_TRUNCATE 15 /* D25 logical truncate, exactly 86 B (protocol
+                                * §1.2); matches sim SIM_CMD_TRUNCATE */
 #define EFS_MD_CMD_APPEND_RSV 16 /* matches sim SIM_CMD_APPEND_RSV */
 #define EFS_MD_CMD_MKFS 18 /* [now:8][salt:8] — idempotent; salt absent = 0 */
 /* Cross-group lane support (a group's log only writes its own shards' keys,
  * so the first publish to a lane whose shard lives on ANOTHER group cannot
  * ride the publish entry's inode-row touch — see efs_meta_apply_publish).
- * ACTIVATE_LANE runs on the INODE group and only sets the active_lanes bit;
- * LANE_FENCE runs on the LANE's group and carries one lane's share of a
- * truncate (epoch fence + range delete). Both idempotent. */
-#define EFS_MD_CMD_ACTIVATE_LANE 19 /* [ino:8][lane:1]  (10 B)
-                                     * or [ino:8][mask:8] (17 B); REPORT
-                                     * appends UUID/epoch (20 B) to either form */
-#define EFS_MD_CMD_LANE_FENCE    20 /* [ino:8][gen:8][lane:1][epoch:8][size:8]
-                                     * [tail_ci:4][has_tail:1] */
+ * ACTIVATE_LANE runs on the INODE group and only sets the active_lanes bit.
+ * Idempotent. Tag 20 (the retired LANE_FENCE) is refused (IS_RETIRED). */
+#define EFS_MD_CMD_ACTIVATE_LANE 19 /* [ino:8][mask:8][content_epoch:8]
+                                     * (25 B); REPORT appends UUID/epoch (20 B) */
+/* D25 BOOTSTRAP on a cross-group lane's group: create the lane stamp at the
+ * inode epoch the proposer read, or adopt it; never lowers it. A lane-local
+ * publish to a lane without a stamp answers BUSY until this commits. */
+#define EFS_MD_CMD_BOOTSTRAP_LANE 79 /* [ino:8][gen:8][lane:1][epoch:8], 26 B */
+/* D25 sweep (protocol §1.2, §4). TRUNC_SWEEP on the lane's group, the other
+ * two on the inode's group. */
+#define EFS_MD_CMD_TRUNC_SWEEP 80 /* [ino:8][gen:8][lane:1][target:8][cs:4]
+                                   * [count:1][count x (epoch:8 size:8)] */
+#define EFS_MD_CMD_SWEEP_DONE  81 /* [ino:8][gen:8][lane:1][target:8], 26 B */
+#define EFS_MD_CMD_RETIRE      82 /* [ino:8][gen:8][target:8], 25 B */
 /* Data-plane GC (spec L7). GC_ACK runs on the group whose anchor shard
  * holds the record: sets one fragment's ack bit, retiring the record when
  * all EFS_NUM_FRAGMENTS bits are set. An idempotent replay. Lane sweeps and

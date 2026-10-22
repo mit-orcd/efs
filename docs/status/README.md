@@ -30,6 +30,32 @@ correctness, all OPEN) and [W135–W139](../backlog/work-items.md#w135)
 and test evidence gaps; W127–W131 form one implementation package, not five
 independent error-handling designs. No acceptance gates are waived.
 
+[D25 logical truncate protocol](d25-logical-truncate-design-20261021.md):
+**implemented through step 5 on branch `d25-logical-truncate`; all D25 gates PASS on a private node9901 cluster.** One 86-byte inode-group
+TRUNCATE entry commits size, epoch and a pruned inode fence history, with
+success-only opid receipts; reads mask by the inode history; lanes adopt
+the epoch lazily behind an ACTIVATE/BOOTSTRAP floor; a bounded lane-local
+sweep deletes or clips superseded rows, and SWEEP_DONE/RETIRE free history.
+Final review's corrections are folded in: one `adopt` transition resets lane
+EOF, receipt capacity is checked before commit (BUSY, never unprotected),
+history revision persists, g4/g5 gate acceptance. Both call-site audits
+are done (§8). [Step 2](d25-step2-gates-20261021.md) (`3e133c257`): inode-authority
+views, lane adoption, BOOTSTRAP floor; g4/g5 step-2 form PASS on node9901, and a
+pre-existing peer read of truncated data (fails on 47ba6b590) is fixed.
+[Step 3](d25-step3-gates-20261021.md) (lazy 86-byte TRUNCATE, off by default): g0-g4
+PASS on node9901, sparse 100 GiB O_TRUNC 0.024 s, after fixing a pre-existing
+stale-cache republish the eager baseline 47ba6b590 still fails (UNCOND images now
+carry their formation epoch). [Step 4](d25-step4-gates-20261022.md): lane-cursor sweep,
+SWEEP_DONE/RETIRE, base clips, masked packing; g5-g8 PASS (2 GiB O_TRUNC 0.020 s, sweep
+9 s, space returned; history bound, restart mid-sweep, packed files).
+[Step 5](d25-step5-gates-20261022.md): the eager path, LANE_FENCE, tail stubs, the
+client tail rewrite and the switch are removed; logical truncate is the only path, and
+every D25 gate (g0-g8, step-2 g4/g5, the repro) passes again on node9901, and after
+merging devel on node9900 over TCP and RDMA. Multi-host placement and the sweep
+scheduler's both-groups-local assumption remain.
+Earlier reviews and responses are kept as superseded history.
+Replaces the declined 256 MiB EBUSY refusal; W43 stays open.
+
 [W66 acceptance checklist](metadata-scaling.md#w66-acceptance-checklist-consolidated-oct-21)
 (distribution, fail-closed hardening, MKDIR/born-HASHED, conditional split
 rediscovery; all NOTRUN, directory-spread policy OPEN-DECISION; no backward
@@ -58,6 +84,16 @@ data files under `docs/` now live only at tag `archive/raw-evidence-20261021`
 (branch `raw-evidence`). Devel keeps the 302 summaries under `results/`; 523
 links in 96 pages now name the archived path. Read one with
 `git show archive/raw-evidence-20261021:<path>`.
+
+[W126 on orcd-mini, `8fb4247ad` A/B](orcd-mini-w126-ab-8fb4247ad-20261022.md):
+**deployed. Lock-wait gate PASS; create-rate gate FAIL.**
+- Read-only LSM peeks take `mu` only, and flush file I/O yields the
+  exclusive view.
+- Leader LSM lock waits are 2–4× lower at matched points (A/B/A').
+- Creates/s followed the run order (736/598/551), not the build. Throughput
+  is bounded by `h->mu` and fsync.
+- `make test` 813/813 with one environmental failure; POSIX smoke 216/216.
+- The user's 32M-file run was stopped at ~5.67 M files for the deploy.
 
 [orcd-mini profile under the 32M-file create run, `47ba6b590`](orcd-mini-profile-47ba6b590-20261021.md):
 **profiling only; no PASS/FAIL gate.**

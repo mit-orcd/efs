@@ -153,7 +153,7 @@ static void writer_body_snapshot(void)
     struct efs_msg_inode_writer_view_reply view={.ino=100,.generation=1};
     assert(efs_writer_state_write(&state,&view,body,sizeof(body),0,incoming,200)==EFS_OK);
     view.authority_epoch=1;view.history.count=1;
-    view.history.entries[0]=(struct efs_content_fence){1,100};
+    view.history.entries[0]=(struct efs_content_fence){1, 100, 0};
     struct efs_msg_inode_getchunks_reply *base=calloc(1,sizeof(*base));assert(base);
     base->ino=100;base->generation=1;base->authority_epoch=1;
     struct efs_writer_plan plan, sentinel;

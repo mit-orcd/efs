@@ -16,6 +16,8 @@
 #define EFS_KV_KIND_EXPIRY_INDEX 44 /* group anchor/deadline/FileID: revision */
 #define EFS_KV_KIND_PACK_SEGMENT 45 /* group anchor/segment id/generation: W125 packed segment */
 #define EFS_KV_KIND_PACK_CANDIDATE 46 /* group anchor/epoch/FileID: W125 packing candidate */
+#define EFS_KV_KIND_TRUNCATE_RECEIPT 47 /* inode/session: D25 truncate opid window */
+#define EFS_KV_KIND_TRUNC_PENDING 48 /* inode anchor/ino: D25 history awaiting sweep */
 /* 36-41 are reserved: never reuse. Snapshot import refuses them. */
 #define EFS_KV_KIND_RESERVED_MIN 36
 #define EFS_KV_KIND_RESERVED_MAX 41

@@ -63,7 +63,7 @@ int main(void){
  /* Retired tags (APPEND_RES, LANE_SWEEP, REAP_DONE, *_BATCH) have no
   * decoder: dispatch refuses them as reserved, and no verdict list turns
   * that refusal into success. */
- uint8_t retired_tags[]={17,21,22,33,34};
+ uint8_t retired_tags[]={17,20,21,22,33,34};
  for(unsigned i=0;i<sizeof(retired_tags);i++){
   assert(EFS_MD_CMD_IS_RESERVED(retired_tags[i]));
   assert(core_result(retired_tags[i],EFS_ERR_PROTO,53)==EFS_ERR_PROTO);

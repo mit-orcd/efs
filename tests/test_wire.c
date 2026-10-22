@@ -405,8 +405,8 @@ static void test_writer_view_reply(void)
     r.ino = req.ino; r.generation = req.generation; r.chunk_index = req.chunk_index;
     CHECK(efs_writer_view_reply_valid(&req, &r) == EFS_OK, "writer zero epoch reply");
     r.authority_epoch = 3; r.history.count = 2;
-    r.history.entries[0] = (struct efs_content_fence){1, 100};
-    r.history.entries[1] = (struct efs_content_fence){3, 50};
+    r.history.entries[0] = (struct efs_content_fence){1, 100, 0};
+    r.history.entries[1] = (struct efs_content_fence){3, 50, 0};
     CHECK(efs_writer_view_reply_valid(&req, &r) == EFS_ERR_PROTO,
           "writer reply cannot invent completeness across a retired gap");
     r.oldest_complete_epoch = 2;
@@ -427,7 +427,7 @@ static void test_writer_view_reply(void)
     --r.chunk_index; r.oldest_complete_epoch = 4;
     CHECK(efs_writer_view_reply_valid(&req, &r) == EFS_ERR_PROTO, "writer future floor");
     r.oldest_complete_epoch = 3; r.history.count = 1;
-    r.history.entries[0] = (struct efs_content_fence){4, 1};
+    r.history.entries[0] = (struct efs_content_fence){4, 1, 0};
     CHECK(efs_writer_view_reply_valid(&req, &r) == EFS_ERR_PROTO, "writer future fence");
     rt_struct("writer-view-request", sizeof(req));
     rt_struct("writer-view-reply", sizeof(r));
