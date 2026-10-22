@@ -1631,6 +1631,13 @@ a cluster at four nodes, so ">4 nodes" is an implementation item or a
 narrower claim.** W145–W147 fixes read correct; `raft-resync` mark is not
 persisted; ior write regression needs a K row.
 
+[Alpha 1.0 Stage 1, Oct 22](../status/alpha-1.0-2plus1-checklist.md#stage-1-tally-end-of-oct-22):
+**11 K rows fixed and merged (K1–K5, K7, K8, K16, K22, K24, K25), 2
+INCOMPLETE (K9, K15), live gates NOTRUN.** Highlights: W148 wrong-bytes root
+cause fixed (UNCOND slot base), sessions registered on every mutation
+(protocol 4), identity-bound fragment format 2 (fresh format needed),
+follower memory/lag bound, pre-vote, bounded stops.
+
 [Phase 1 / alpha 1.0 checklist](../status/alpha-1.0-2plus1-checklist.md): **OPEN**.
 Finish and qualify **2+1 on 3, 4 and >4 physical nodes** before the remaining
 roadmap. **Order: (1) known bugs, register K1–K26; (2) functional

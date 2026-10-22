@@ -92,13 +92,13 @@ row is checked again on current devel before work starts.
 
 | ID | Item | Kind | Disposition |
 | --- | --- | --- | --- |
-| K1 | **W145** remaining parts: acknowledged-write check after the deposed-leader fix, snapshot sent to a near follower, restart election storms, `stop.sh` with a blocked handler | Raft safety / liveness | FIX |
-| K2 | **W140** proposal RPC accepts metadata tags this build cannot apply (halts a group) | safety | FIX |
-| K3 | **W132** `NODE_LEFT` from any connection drops a node | safety | FIX |
-| K4 | **W133** client protocol declaration gate is fail-open | correctness | FIX |
+| K1 | **W145** remaining parts: acknowledged-write check after the deposed-leader fix, snapshot sent to a near follower, restart election storms, `stop.sh` with a blocked handler | Raft safety / liveness | FIXED, merged Oct 22 (`86b6ef567`): 30,929,219@62 was never acknowledged; a probe ACK no longer lowers `next_index` and conflict hints skip the term run; pre-vote ends restart election storms; efsd stops are bounded (40 s drain). VERIFY: orcd-mini gates NOTRUN |
+| K2 | **W140** proposal RPC accepts metadata tags this build cannot apply (halts a group) | safety | FIXED, merged Oct 22 (`a5eb7e6ff`): one allow-list (`EFS_MD_CMD_APPLIED`) drives the dispatcher and every proposal path; unknown tags refused PROTO at submit; drift test |
+| K3 | **W132** `NODE_LEFT` from any connection drops a node | safety | FIXED, merged Oct 22 (`1fad577e2`): message 24 retired and refused fail-closed; handler, struct and remover deleted |
+| K4 | **W133** client protocol declaration gate is fail-open | correctness | FIXED, merged Oct 22 (`918ed9207`): every frame but CLIENT_HELLO and HEARTBEAT needs an accepted declaration; exact protocol version (4 after K5); peers, mgmt, bench and live tests declare. VERIFY: `w125_p3_compat.sh` on hardware NOTRUN |
 | K5 | **W134** unregistered session identities bypass fencing (with **W72** production session lifecycle) | correctness | FIXED, merged into devel Oct 22 (`a443863b1`): one session check at every apply (`efs_session_accept`: UNREGISTERED or FENCED, no legacy acceptance, `efs_session_accept_legacy` deleted); the mount establishes a session, admits each touched shard and latches fenced; every metadata mutation carries the session (protocol 4); `efs-mgmt` raw mutations establish their own. VERIFY: the fence cluster gate (`scripts/k05_session_fence_gate.sh`) and the NUC/AMD live harnesses are NOTRUN for the parent session; partitioned-client and leader-change barrier gates stay W72 work |
 | K6 | **W127–W131** fail-closed apply (in devel since `08cc16af4`; private RDMA gate PASS) | correctness | VERIFY multi-host |
-| K7 | **W83** transaction decision records are never retired | lifecycle / growth | FIX |
+| K7 | **W83** transaction decision records are never retired | lifecycle / growth | FIXED, merged Oct 22 (`907a5891f`): replicated `TXN_RETIRE` compacts decisions to tombstones and reclaims them after a 60 s retention from a per-shard cursor; unknown decisions answer STALE (readers retry), never the old value; a sweeper re-drives orphaned decisions. Note: retention must stay above the 5 s recovery age and clock skew (no assert yet) |
 | K8 | **W148** modify-under-load returned wrong bytes, correct size, on a never-packed 3.6 MB file | data correctness | FIXED, merged Oct 22 (`71ce4ff35` on devel). Root cause: `dcache_apply_init` let a partial write with a loaded base keep the slot's UNCOND base, so the flush published the write-time image (from an unrefreshed local chunk entry: zeros or a peer's lost bytes) as the whole chunk with no merge and no CAS. Reproduced 3× in 9 attempts on node9901 (RDMA, devel `7c510c60f`); a cold read from a fresh client returned the same bad bytes. The two-client regression (`tests/posix/posix_2client.py`) fails 3/3 before and passes 3/3 after. VERIFY: the w125 modify rerun on the fixed build is NOTRUN; the kept W148 stores and hashes are in the session hand-over ([review](review-pack-validate-once-20261022.md)) |
 | K9 | **W87** buffered concurrent append loses records under load | data correctness | **INCOMPLETE** (Oct 22): not reproduced (23 oracle rounds, 19,597 records, churn/GC/POSIX load on efs2; VM run, not formal evidence; [attempt](w87-append-oracle-efs2-20261022.md)); no root cause, no fix. The exact oracle (`tests/live/append_oracle.py`, `append_oracle_cluster.sh`) and `tests/test_append_oracle.py` are in devel for the parent session to run on the real clusters |
 | K10 | **W121** a read right after a successful fsync returns the previous file's payload (FUSE kernel fork/page-pinning; kernel fix deferred) | data correctness | DECIDE |
@@ -107,7 +107,7 @@ row is checked again on current devel before work starts.
 | K13 | **W88** a folded span retry resurrects after history eviction; **W86** default PUT/flush ticket integration staged | publication correctness | FIX or DECIDE |
 | K14 | **W77** atomic multi-chunk publication and observation | integration gap | FIX or DECIDE |
 | K15 | **W64** append reservation replay across leader changes; **W52** REPORT after many `O_APPEND` writes exceeds 30 s | correctness | **INCOMPLETE** (merged Oct 22). W52: shape A was already in tree (`32b472c5b`); the live gate harness `tests/live/append_failover.py` is in devel; the 20k gate and the before/after A/B are NOTRUN. W64: a coordinator that lost its group mid-transaction left PREPAREs until the 5 s recovery scan (writes failed EBUSY); the finisher now re-proposes ABORT at the new leader (`test_fin_abort_handoff.py`), `efs-mgmt raft-step-down` added; the live failover gate is NOTRUN, and cleanup-appends retiring a reservation after a lost reply need K5's production sessions. [Evidence](k15-w52-w64-20261022.md) |
-| K16 | **W75** identity-bound fragment integrity format (fresh format, no compatibility) | integrity | FIX |
+| K16 | **W75** identity-bound fragment integrity format (fresh format, no compatibility) | integrity | FIXED, merged Oct 22 (`e9ca0d07b`): fragment record format 2 binds identity and payload digest; GET refuses as INTEGRITY, GC and segments verify identity; old roots refuse startup. **Fresh format required at the next deploy.** VERIFY: RDMA and hardware gates NOTRUN ([evidence](k16-w75-identity-format-20261022.md)) |
 | K17 | **0a/D27** STALE replay convergence: orcd-mini C1 rerun | correctness | VERIFY |
 | K18 | **W54**, **W38** fold/GC data loss: multi-host hardware RDMA gate | correctness | VERIFY |
 | K19 | **W61**, **W62**, **W63** GC: final drain and lost-ledger reconciliation | reclaim correctness | VERIFY |
@@ -115,8 +115,8 @@ row is checked again on current devel before work starts.
 | K21 | **W119** concurrent RDMA failures and blocked clean stop (recorded Oct 15, before many fixes); **W65** graceful-shutdown wait | correctness / liveness | VERIFY first, then FIX |
 | K22 | **W23** universal follower memory/lag bound | resource bound | FIXED, merged into devel Oct 22 (derived KV memory budget, unapplied-log bound with busy AppendEntries replies, leader admission at 3/4, leadership requires capacity per D30; `efs-mgmt raft-status` shows the bound). VERIFY: the production-scale plateau measurement, snapshot import into a stalled follower and multi-host/RDMA runs are NOTRUN for the parent session ([summary](../../results/measure/20261022-k22-follower-bound/SUMMARY.md)) |
 | K23 | **W71** hardware power-loss gate; **W74** automatic repair; **W123** crash recovery | durability scope | DECIDE (deferred by current scope) |
-| K24 | **W149** `EFS_KV_COMPACT_DIE` exits the daemon in normal builds | build hygiene / safety | FIX |
-| K25 | **W135**–**W139**, **W141**, **W120**, **W150** test harness and reporting defects | test correctness | TEST |
+| K24 | **W149** `EFS_KV_COMPACT_DIE` exits the daemon in normal builds | build hygiene / safety | FIXED, merged Oct 22 (`19555889f`): the hook exists only in `EFS_FAULTS` builds, one gate form everywhere, crash-recovery test moved to `tests/faults` |
+| K25 | **W135**–**W139**, **W141**, **W120**, **W150** test harness and reporting defects | test correctness | FIXED, merged Oct 22 (`35647dd0f`): docs gate out of `make test` (`make check` runs both), every unit binary and Python test wired or listed with a reason, TSan gate runs or fails, NOTRUN counted by the summary runner, condition-based waits, W150 test added. W137 waits on K13 |
 | K26 | LeakSanitizer aborts on node9900/node9901; F1 needs a working leak check. On the efs1–3 build VMs (Fedora 42, aarch64, 1 GB RAM, tmpfs `/tmp`): `test_reclaim` and `tests/test_server_processes.py` failed on pristine devel and on every K branch. Cause found Oct 22: efsd's capacity headroom rule (`storage_capacity.h`, 20% free) refuses the 972 MB tmpfs `/tmp` and the 88%-full root disk ("Storage quota: cannot establish safe headroom; refusing startup"); both PASS with `TMPDIR=/data1/tmp` (the 20 GB XFS data disk), the full documented toolchain was applied on all three on Oct 22 (kickstart package set, devops build deps, `devops/profiling/HOST-SETUP.md`: perf, bpftrace, sysstat, fio, iperf3, blktrace, numactl, trace-cmd, dwarves, gdb, valgrind, sanitizer runtimes, glibc debuginfo, profiling sysctls, memlock, perf group with tracefs, cache-drop helper); Tart VMs expose no hardware PMU, so `perf` samples `cpu-clock`, not `cycles` (the W138 TSan gate failed without `libtsan`), and the root disks run full (old build trees under `~/build` must be deleted). Tests that hard-code `/tmp` instead of honouring `TMPDIR` (for example `test_query_disk`) leave stale `efs-*` directories that fill the tmpfs (857 found on efs3 on Oct 22); making every test honour `TMPDIR` and clean up is a K25-class harness item. The merged devel of Oct 22 was otherwise clean on efs1 | environment | FIX host or use another leak gate; find the efs1–3 cause or exclude those two tests there |
 | K27 | ior easy write on `d94ca85bf` is 710–863 MiB/s against 1,329 MiB/s on `08cc16af4`, same cluster, three runs, reads unchanged ([deploy report](orcd-mini-deploy-d94ca85bf-20261022.md)) | regression, unattributed | VERIFY (A/B/A′ on orcd-mini, needs a restart) |
 | K28 | **W151** the code caps a cluster at four nodes (`EFS_MAX_NODES`, `EFS_MD_RAFT_N`, voter sets, placement ring, client hint bound); the user keeps >4 nodes in alpha 1.0 (decision Oct 22) | implementation gap / scope | FIX: raise the cap with voter sets for n ≥ 5, placement and capacity tests at 5..max, membership and client tables; packed segments on the data ring across all N nodes (D38); fresh format, no compatibility |
@@ -128,23 +128,35 @@ cluster. No row was found already fixed.
 
 | Row | Finding on devel |
 | --- | --- |
-| K1 | Root cause fixed (`76614e8e8`, regression test). The four W145 parts are done on branch `devel-k01` ([note](k01-w145-remaining-20261022.md)): (1) a match-0 commit-probe ACK reset `next_index` to 1, so the leader sent a snapshot; fixed, and conflict hints skip the term run; (2) 30,929,219@62 was **not** acknowledged to any client; (3) restart election storms fixed with pre-vote (efs1 cluster PASS); (4) efsd stops are bounded. Unit tests PASS. Open: orcd-mini deploy and restart gate, and the private deposed-leader reproduction, both NOTRUN. |
-| K2 | Open. Submit still refuses only `EFS_MD_CMD_IS_RESERVED` (`raft_host.c:3381`, `:12075`). |
-| K3 | Fixed on `devel-k03` (`8727e3afe`): ID 24 retired and refused fail-closed, handler and remover deleted, `tests/test_node_left_refused.py` in `make test`; unit gate PASS on efs2 (`test_reclaim` fails there on pristine devel too, host issue), cluster NOTRUN, not yet merged into devel. |
-| K4 | Fixed on branch `devel-k04`, not merged ([W133 implementation](../backlog/work-items.md#w133-fix)). The gate covers every request; the version must equal 3; every connection opener declares first. Unit gates PASS on efs3 over TCP. The RDMA unit path and the cluster refusal run are NOTRUN. |
+| K1 | Fixed Oct 22 (`86b6ef567`); see the K row. |
+| K2 | Fixed Oct 22 (`a5eb7e6ff`); see the K row. |
+| K3 | Fixed Oct 22 (`1fad577e2`); see the K row. |
+| K4 | Fixed Oct 22 (`918ed9207`); see the K row. |
 | K5 | Fixed Oct 22 on devel (`a443863b1`); see the K row. |
 | K6 | Merged. Remaining: the W130 one-replica DIR fault injection, and multi-host runs. |
-| K7 | Open. `EFS_KV_KIND_DECISION` keys are written and read (`txn.c:972`, `:996`); nothing deletes them. |
+| K7 | Fixed Oct 22 (`907a5891f`); see the K row. |
 | K8 | Fixed Oct 22 (`71ce4ff35`); see the K row. |
 | K9, K13, K14 | K9 INCOMPLETE (harness merged, not reproduced); K13, K14 await the user's scope decision; K15 and K16 are fixed (see their rows). |
 | K10 | Open. User-deferred kernel fix; test harnesses now isolate it (`exclusive_create_visibility.py --spawn`). |
 | K11, K12, K17–K20 | VERIFY. The fixes are recorded on NUC/AMD/TCP or private stores; the alpha profile on separate hosts is NOTRUN. |
 | K21 | W119's evidence (Oct 15) predates the RDMA, query, apply and Raft fixes since then. Rerun its original gates before diagnosing. W65 is closed for TCP only; it overlaps K1 part 4. |
-| K22 | Open on devel. Oct 22: bound implemented on `devel-k22`; unit test and `make test` pass; plateau measurement on a real cluster and snapshot import NOTRUN. |
+| K22 | Fixed Oct 22 (`28883f2b1`); see the K row. |
 | K23 | Deferred by the current alpha scope; needs the user's confirmation. |
-| K24 | Open (`kv_compact.c:272`, used by `test_kv_lsm.c:1085`). |
-| K25 | All open. W135: `check-architecture` still inside `test:`. W136: stub `efs_client_pack_flush` still there. W137: fake reply still 5 bytes. W138: TSan still prints SKIP. W139: `test_rdma_segmented`, `test_expiry`, `test_rdma_xprt` built but never run. W141: fixed 200 × 25 ms wait. W120 and W150 open. |
+| K24 | Fixed Oct 22 (`19555889f`); see the K row. |
+| K25 | Fixed Oct 22 (`35647dd0f`); see the K row. |
 | K26 | Open (LeakSanitizer aborts under ptrace on both nodes). |
+
+### Stage 1 tally, end of Oct 22
+
+Fixed and merged into devel, unit-tested, with their live gates NOTRUN for
+the parent session: K1, K2, K3, K4, K5, K7, K8, K16, K22, K24, K25.
+INCOMPLETE: K9 (W87 not reproduced; oracle in devel), K15 (W64 fix merged,
+failover gate and K5-dependent cleanup open). VERIFY on the real clusters:
+K6, K11, K12, K17–K21, K27. Waiting on the user: K10, K13, K14, K23. Open
+work: K26 (environment), K28 (W151, proposed as a session). The merged devel
+(`a443863b1` and later) passed `make test` with zero error lines on efs1 and
+927/927 on efs2 before the K8 and K9 merges; the run with K8 included is
+NOTRUN (hosts unreachable).
 
 ### Proposed fix order
 
