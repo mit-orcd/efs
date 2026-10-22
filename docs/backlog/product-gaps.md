@@ -106,10 +106,13 @@ fallback receive paths. NUC corruption/metadata-digest gates are recorded in
 [W75](work-items.md#w75). The older inventory's fresh-hash fallback and
 parallel-path bypass statements are superseded.
 
-PUT hashes remain payload-based. The identity-bound immutable format and
-repair required by **I25** are still open: do not treat repaired checksum
-coverage as completion of the full integrity/repair design. Automatic fragment
-repair remains [W74](work-items.md#w74).
+The identity-bound fragment record (format 2) is implemented on branch
+`devel-k16` (K16, not yet merged): fragment files bind export, inode,
+chunk, candidate generation, fragment index and length to the payload, and
+GET/GC refuse unknown formats and mismatched identities
+([W75](work-items.md#w75)). Inode generation and export salt are not yet
+bound directly. Automatic fragment repair remains
+[W74](work-items.md#w74).
 
 ### 1.5 Two clients writing disjoint ranges of one chunk — CLOSED
 
