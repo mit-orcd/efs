@@ -21,9 +21,18 @@ def command(*args, expected=0):
     assert p.returncode == expected, (args, p.returncode, p.stderr)
     return p
 
-end = time.monotonic() + 30
+# A new directory is invisible until the next published catalog refresh
+# (60 s): find exits EX_TEMPFAIL (75) "not indexed yet" until then.
+end = time.monotonic() + 150
 while True:
-    complete = json.loads(command('--limit', '10000', '--json').stdout)
+    first = subprocess.run([sys.executable, str(other / '.efs/find'), '.txt', '--match', 'suffix',
+                            '--limit', '10000', '--json'], capture_output=True, timeout=60)
+    if first.returncode == 75 and b'not indexed yet' in first.stderr:
+        assert time.monotonic() < end, first.stderr
+        time.sleep(2)
+        continue
+    assert first.returncode == 0, (first.returncode, first.stderr)
+    complete = json.loads(first.stdout)
     result = command('--json')
     data = json.loads(result.stdout)
     if len(complete['entries']) == 215 and len(data['entries']) == 100:
