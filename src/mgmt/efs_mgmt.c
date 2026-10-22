@@ -798,14 +798,17 @@ static int cmd_pack_compact(int argc, char **argv)
         const struct efs_packer_status *p = &x->packer;
         printf("  packer: passes=%llu candidates=%llu built=%llu files_packed=%llu cancelled=%llu "
                "unindexed=%llu backfilled=%llu read_errors=%llu put_errors=%llu admit_errors=%llu "
-               "abandoned=%llu busy_passes=%llu budget_waits=%llu\n",
+               "abandoned=%llu busy_passes=%llu budget_waits=%llu abandon_scanned=%llu "
+               "abandon_actionable=%llu abandon_refused=%llu base_segments=%llu base_files=%llu\n",
                (unsigned long long)p->passes, (unsigned long long)p->candidates,
                (unsigned long long)p->segments, (unsigned long long)p->files_packed,
                (unsigned long long)p->files_cancelled, (unsigned long long)p->unindexed,
                (unsigned long long)p->backfilled, (unsigned long long)p->read_errors,
                (unsigned long long)p->put_errors, (unsigned long long)p->admit_errors,
                (unsigned long long)p->abandoned, (unsigned long long)p->busy_passes,
-               (unsigned long long)p->budget_waits);
+               (unsigned long long)p->budget_waits, (unsigned long long)p->abandon_scanned,
+               (unsigned long long)p->abandon_actionable, (unsigned long long)p->abandon_refused,
+               (unsigned long long)p->base_segments, (unsigned long long)p->base_files);
         free(r);
     }
     free(payload);

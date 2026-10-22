@@ -4,7 +4,10 @@
  * (at most one packer per group). Each pass of a group:
  *   1. abandon: cancel ACTIVE segments with PENDING records that this
  *      packer (this node, this term) does not own; a crashed or deposed
- *      packer's copies are then reclaimed by the retirement pass;
+ *      packer's copies are then reclaimed by the retirement pass. Each
+ *      pass examines a bounded window of the group's segment index from a
+ *      per-group cursor (restarted on a term change), so a full sweep takes
+ *      ceil(segments / PK_ABANDON_KEYS) passes;
  *   2. select: walk the group's candidate index (creation epoch order) and
  *      re-validate each file on the local replica: same generation, linked,
  *      regular, at most EFS_PACK_THRESHOLD bytes, only chunk zero, a plain
@@ -94,6 +97,8 @@ static struct {
         uint64_t fs_segs, fs_live, fs_dead, fs_holes, fs_small; /* last summary */
         double pressure, used_frac;
         int busy;
+        struct efs_pack_abandon_scan abandon; /* resumable sweep (step 1) */
+        uint64_t abandon_term;
     } g[2];
     struct efs_packer_status st;
     pthread_mutex_t mu;
@@ -162,21 +167,10 @@ static void pk_owner(uint8_t group, uint64_t term, struct efs_opid *o)
 }
 
 /* ---- 1. abandon foreign pending segments ---- */
-struct pk_abandon { struct efs_opid me; uint64_t ids[64], gens[64]; uint32_t n; struct efs_pack_object o; };
-static int pk_abandon_cb(void *u, const uint8_t *k, uint32_t kl, const uint8_t *v, uint32_t vl)
-{
-    struct pk_abandon *a = u;
-    if (kl != EFS_PACK_OBJECT_KEY_BYTES || k[2] != EFS_KV_KIND_PACK_SEGMENT) return 0;
-    if (efs_pack_object_decode(v, vl, &a->o) != EFS_OK || a->o.ledger.phase != EFS_PACK_ACTIVE) return 0;
-    struct efs_pack_ledger_usage use;
-    efs_pack_ledger_usage(&a->o.ledger, &use);
-    if (!use.pending) return 0;
-    if (!memcmp(a->o.ledger.owner.client_uuid, a->me.client_uuid, EFS_OPID_UUID_LEN) &&
-        a->o.ledger.owner.session_epoch == a->me.session_epoch) return 0; /* ours, in flight */
-    a->ids[a->n] = a->o.ledger.segment_id;
-    a->gens[a->n] = a->o.ledger.segment_generation;
-    return ++a->n == 64;
-}
+/* Keys examined per pass: the scan resumes from a per-group cursor, so a
+ * pass costs a window, not the group's whole segment index (it scanned and
+ * decoded every object every pass). */
+#define PK_ABANDON_KEYS 1024u
 static int pk_gi(uint8_t group) { return group == EFS_RAFT_GROUP_SHARD ? 0 : 1; }
 /* Packer proposals are excluded from the foreground commit rate. */
 static int pk_propose(uint8_t group, const uint8_t *cmd, uint32_t len)
@@ -193,14 +187,23 @@ static void pk_cancel(uint8_t group, uint64_t id, uint64_t gen)
 }
 static void pk_abandon(struct efs_kv *kv, uint8_t group, uint64_t term)
 {
-    struct pk_abandon *a = calloc(1, sizeof(*a));
-    if (!a) return;
-    pk_owner(group, term, &a->me);
-    uint32_t anchor = efs_pack_group_anchor(group);
-    uint8_t prefix[3] = {(uint8_t)(anchor >> 8), (uint8_t)anchor, EFS_KV_KIND_PACK_SEGMENT};
-    (void)efs_kv_lsm_scan_yield(kv, prefix, 3, 128, pk_abandon_cb, a);
-    for (uint32_t i = 0; i < a->n; i++) { pk_cancel(group, a->ids[i], a->gens[i]); STAT_ADD(abandoned, 1); }
-    free(a);
+    struct efs_opid me;
+    uint64_t ids[64], gens[64];
+    uint32_t n = 0;
+    struct efs_pack_abandon_scan *sc = &pk.g[pk_gi(group)].abandon;
+    /* A new term makes the previous term's own admissions foreign: start
+     * the sweep over so they are found within one sweep of the change. */
+    if (pk.g[pk_gi(group)].abandon_term != term) {
+        sc->cursor_len = 0;
+        pk.g[pk_gi(group)].abandon_term = term;
+    }
+    pk_owner(group, term, &me);
+    uint64_t scanned = sc->scanned, refused = sc->refused;
+    if (efs_pack_abandon_scan(kv, group, &me, sc, PK_ABANDON_KEYS, ids, gens, 64, &n) != EFS_OK) return;
+    STAT_ADD(abandon_scanned, sc->scanned - scanned);
+    STAT_ADD(abandon_actionable, n);
+    STAT_ADD(abandon_refused, sc->refused - refused);
+    for (uint32_t i = 0; i < n; i++) { pk_cancel(group, ids[i], gens[i]); STAT_ADD(abandoned, 1); }
 }
 
 /* ---- 2. select ---- */
@@ -227,6 +230,7 @@ struct pk_file {
     struct efs_pack_candidate c;
     uint64_t epoch;
     uint8_t *data;
+    int base_read, base_rc; /* packed base already read (pk_read_bases) */
 };
 static int pk_file_cmp(const void *a, const void *b)
 {
@@ -304,26 +308,60 @@ static int pk_get_d1(const struct efs_node *nodes, uint32_t count, const struct 
     return rc;
 }
 static int pk_read_segment(const struct efs_node *nodes, uint32_t count, const struct efs_pack_object *o,
-                           uint8_t *image);
-/* A packed base's bytes: its record, read back from the segment. */
-static int pk_read_packed_base(const struct efs_node *nodes, uint32_t count, struct pk_file *f)
+                           uint8_t *image, struct efs_pack_view *view);
+/* Packed bases, a segment at a time: every file of the pass whose base is a
+ * record of one segment is read from one fetch and one validation of that
+ * segment (it was a fetch and a whole-image validation per file). */
+struct pk_base_key { uint32_t group; uint64_t id, gen; uint32_t x; };
+static int pk_base_cmp(const void *a, const void *b)
+{
+    const struct pk_base_key *p = a, *q = b;
+    if (p->group != q->group) return p->group < q->group ? -1 : 1;
+    if (p->id != q->id) return p->id < q->id ? -1 : 1;
+    if (p->gen != q->gen) return p->gen < q->gen ? -1 : 1;
+    return p->x < q->x ? -1 : p->x > q->x;
+}
+struct pk_bases {
+    const struct efs_node *nodes;
+    uint32_t count, nruns, next;
+    struct pk_file *files;
+    const struct pk_base_key *keys;
+    const uint32_t *runs; /* nruns + 1 boundaries into keys */
+};
+static void pk_base_run(struct pk_bases *b, uint32_t run)
 {
     struct efs_kv *kv = server_raft_host_kv();
-    const struct efs_pack_ref *r = &f->c.base.packed;
+    const struct pk_base_key *k = &b->keys[b->runs[run]];
+    uint32_t n = b->runs[run + 1] - b->runs[run];
     struct efs_pack_object *o = malloc(sizeof(*o));
     uint8_t *image = malloc(EFS_SEGMENT_MAX_SIZE);
+    struct efs_pack_view view;
     int rc = kv && o && image ? EFS_OK : EFS_ERR_NOMEM;
-    if (rc == EFS_OK) rc = efs_pack_object_get(kv, r->publication_group, r->segment_id, r->segment_generation, o);
-    if (rc == EFS_OK) rc = pk_read_segment(nodes, count, o, image);
-    if (rc == EFS_OK) {
+    if (rc == EFS_OK) rc = efs_pack_object_get(kv, k->group, k->id, k->gen, o);
+    if (rc == EFS_OK) rc = pk_read_segment(b->nodes, b->count, o, image, &view);
+    for (uint32_t i = 0; i < n; i++) {
+        struct pk_file *f = &b->files[k[i].x];
         const uint8_t *data;
         uint32_t len;
-        rc = efs_pack_read(image, o->ledger.geometry, r, &data, &len);
-        if (rc == EFS_OK) memcpy(f->data, data, len < f->c.size ? len : f->c.size);
+        int frc = rc;
+        f->data = calloc(1, f->c.size);
+        if (frc == EFS_OK && !f->data) frc = EFS_ERR_NOMEM;
+        if (frc == EFS_OK) frc = efs_pack_view_read(&view, &f->c.base.packed, &data, &len);
+        if (frc == EFS_OK) memcpy(f->data, data, len < f->c.size ? len : f->c.size);
+        f->base_rc = frc;
+        f->base_read = 1;
     }
     free(o);
     free(image);
-    return rc;
+}
+static void *pk_bases_run(void *arg)
+{
+    struct pk_bases *b = arg;
+    for (;;) {
+        uint32_t r = __atomic_fetch_add(&b->next, 1, __ATOMIC_RELAXED);
+        if (r >= b->nruns) return NULL;
+        pk_base_run(b, r);
+    }
 }
 /* A small file lies wholly in data fragment 0. Its bytes are the base
  * image (absent when the base generation is 0) overlaid by each span's
@@ -333,12 +371,13 @@ static int pk_read_file(const struct efs_node *nodes, uint32_t count, struct pk_
     uint8_t *a = malloc(flen), *b = malloc(flen);
     int rc = a && b ? EFS_OK : EFS_ERR_NOMEM;
     if (rc == EFS_OK && f->c.size > flen) rc = EFS_ERR_INVAL;
-    if (rc == EFS_OK) {
+    if (rc == EFS_OK && !f->base_read) {
         f->data = calloc(1, f->c.size);
         if (!f->data) rc = EFS_ERR_NOMEM;
     }
     if (rc == EFS_OK && f->c.base.coding_profile_id == EFS_META_PROFILE_PACK) {
-        rc = pk_read_packed_base(nodes, count, f);
+        /* Read by pk_read_bases; a base it did not read is refused. */
+        rc = f->base_read ? f->base_rc : EFS_ERR_INVAL;
         /* D25: only the base's visible bytes; the rest stays zero. */
         if (rc == EFS_OK && f->c.base_visible < f->c.size)
             memset(f->data + f->c.base_visible, 0, f->c.size - f->c.base_visible);
@@ -383,9 +422,42 @@ static void *pk_reader_run(void *arg)
         r->rcs[x] = pk_read_file(r->nodes, r->count, &r->files[x], r->flen);
     }
 }
+static void pk_read_bases(const struct efs_node *nodes, uint32_t count, struct pk_file *files,
+                          uint32_t n, uint32_t flen)
+{
+    struct pk_base_key *keys = malloc((size_t)n * sizeof(*keys));
+    uint32_t *runs = malloc(((size_t)n + 1) * sizeof(*runs)), nk = 0, nruns = 0;
+    if (!keys || !runs) goto out; /* the bases stay unread: those files fail */
+    for (uint32_t x = 0; x < n; x++) {
+        const struct pk_file *f = &files[x];
+        if (f->c.base.coding_profile_id != EFS_META_PROFILE_PACK || f->c.size > flen) continue;
+        const struct efs_pack_ref *r = &f->c.base.packed;
+        keys[nk++] = (struct pk_base_key){r->publication_group, r->segment_id, r->segment_generation, x};
+    }
+    if (!nk) goto out;
+    qsort(keys, nk, sizeof(*keys), pk_base_cmp);
+    for (uint32_t i = 0; i < nk; i++)
+        if (!i || keys[i].group != keys[i - 1].group || keys[i].id != keys[i - 1].id ||
+            keys[i].gen != keys[i - 1].gen)
+            runs[nruns++] = i;
+    runs[nruns] = nk;
+    STAT_ADD(base_segments, nruns);
+    STAT_ADD(base_files, nk);
+    struct pk_bases b = {nodes, count, nruns, 0, files, keys, runs};
+    pthread_t t[PK_READ_THREADS];
+    uint32_t started = 0, want = nruns < PK_READ_THREADS ? nruns : PK_READ_THREADS;
+    for (uint32_t i = 1; i < want; i++)
+        if (pthread_create(&t[started], NULL, pk_bases_run, &b) == 0) started++;
+    pk_bases_run(&b);
+    for (uint32_t i = 0; i < started; i++) pthread_join(t[i], NULL);
+out:
+    free(keys);
+    free(runs);
+}
 static void pk_read_files(const struct efs_node *nodes, uint32_t count, struct pk_file *files,
                           uint32_t n, uint32_t flen, int *rcs)
 {
+    pk_read_bases(nodes, count, files, n, flen);
     struct pk_reader r = {nodes, count, flen, n, 0, files, rcs};
     pthread_t t[PK_READ_THREADS];
     uint32_t started = 0, want = n < PK_READ_THREADS ? n : PK_READ_THREADS;
@@ -699,9 +771,9 @@ static int pk_get_segfrag(const struct efs_node *nodes, uint32_t count, const st
     return memcmp(h, o->checksums[fi], EFS_HASH_SIZE) || memcmp(sum, o->checksums[fi], EFS_HASH_SIZE)
            ? EFS_ERR_CHECKSUM : EFS_OK;
 }
-/* Any two of the three fragments; the image is validated. */
+/* Any two of the three fragments; the image is validated once, into *view. */
 static int pk_read_segment(const struct efs_node *nodes, uint32_t count, const struct efs_pack_object *o,
-                           uint8_t *image)
+                           uint8_t *image, struct efs_pack_view *view)
 {
     uint32_t g = o->ledger.geometry, flen = g / 2;
     uint8_t *buf = malloc((size_t)flen * EFS_NUM_FRAGMENTS);
@@ -716,7 +788,7 @@ static int pk_read_segment(const struct efs_node *nodes, uint32_t count, const s
         else if (a < 0) a = i; else if (b < 0) b = i;
     }
     int rc = n == 2 && missing >= 0 ? efs_decode_segment(f, g, a, b, missing, image, g) : EFS_ERR_DECODE;
-    if (rc == EFS_OK) rc = efs_pack_validate(image, g);
+    if (rc == EFS_OK) rc = efs_pack_view_open(image, g, view);
     free(buf);
     return rc;
 }
@@ -743,18 +815,18 @@ static uint32_t pk_compact(struct efs_kv *kv, uint8_t group, uint64_t term,
     uint32_t used_segs = 0;
     for (uint32_t si = 0; si < sc.n && nfiles < EFS_PACK_MAX_RECORDS; si++) {
         const struct efs_pack_object *o = &sc.s[si].o;
+        struct efs_pack_view view;
         images[si] = malloc(EFS_SEGMENT_MAX_SIZE);
-        if (!images[si] || pk_read_segment(nodes, count, o, images[si]) != EFS_OK) {
+        if (!images[si] || pk_read_segment(nodes, count, o, images[si], &view) != EFS_OK) {
             STAT_ADD(read_errors, 1);
             continue;
         }
-        uint32_t nrec;
-        if (efs_pack_record_count(images[si], o->ledger.geometry, &nrec) != EFS_OK) continue;
         uint32_t before = nfiles;
-        for (uint32_t r = 0; r < nrec && nfiles < EFS_PACK_MAX_RECORDS; r++) {
+        /* Validated once by pk_read_segment; each record is checked against it. */
+        for (uint32_t r = 0; r < view.count && nfiles < EFS_PACK_MAX_RECORDS; r++) {
             struct efs_pack_ref ref;
             unsigned at;
-            if (efs_pack_record_at(images[si], o->ledger.geometry, r, &ref) != EFS_OK ||
+            if (efs_pack_view_record_at(&view, r, &ref) != EFS_OK ||
                 efs_pack_ledger_slot(&o->ledger, &ref, &at) != EFS_OK ||
                 o->ledger.state[at] != EFS_PACK_LIVE) continue;
             if (used + EFS_PACK_RECORD_BYTES + ref.len > EFS_SEGMENT_MAX_SIZE) break;

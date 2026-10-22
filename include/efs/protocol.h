@@ -244,7 +244,12 @@ struct efs_msg_pack_compact {
 struct efs_packer_status {
     uint64_t passes, candidates, segments, files_packed, files_cancelled,
              unindexed, read_errors, put_errors, admit_errors, abandoned,
-             busy_passes, budget_waits, compacted, backfilled;
+             busy_passes, budget_waits, compacted, backfilled,
+             abandon_scanned,    /* segment objects examined by the abandon sweep */
+             abandon_actionable, /* of those, foreign admissions with pending records */
+             abandon_refused,    /* candidates whose full decode failed (not cancelled) */
+             base_segments,      /* packed-base segments read (one per segment per pass) */
+             base_files;         /* files whose packed base came from those reads */
 };
 struct efs_msg_pack_compact_reply {
     int32_t rc;

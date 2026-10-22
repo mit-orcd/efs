@@ -67,14 +67,14 @@ int main(void)
     }
     /* Records enumerate exactly as built (compaction's view of a segment). */
     {
-        uint32_t cnt = 0; struct efs_pack_ref r; uint8_t a[EFS_PACK_REF_BYTES], b[EFS_PACK_REF_BYTES];
+        struct efs_pack_view v; struct efs_pack_ref r; uint8_t a[EFS_PACK_REF_BYTES], b[EFS_PACK_REF_BYTES];
         assert(!efs_pack_build(41, 43, 7, records, 16, image, EFS_SEGMENT_MAX_SIZE, &size, refs));
-        assert(!efs_pack_record_count(image, size, &cnt) && cnt == 16);
+        assert(!efs_pack_view_open(image, size, &v) && v.count == 16);
         for (unsigned i = 0; i < 16; i++) {
-            assert(!efs_pack_record_at(image, size, i, &r));
+            assert(!efs_pack_view_record_at(&v, i, &r));
             assert(!efs_pack_ref_encode(&r, a) && !efs_pack_ref_encode(&refs[i], b) && !memcmp(a, b, sizeof(a)));
         }
-        assert(efs_pack_record_at(image, size, 16, &r) == EFS_ERR_INVAL);
+        assert(efs_pack_view_record_at(&v, 16, &r) == EFS_ERR_INVAL);
     }
     /* Maximum record count remains bounded even for one-byte payloads. */
     for (unsigned i = 0; i < EFS_PACK_MAX_RECORDS; i++) records[i].len = 1;

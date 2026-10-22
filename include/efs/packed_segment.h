@@ -39,13 +39,33 @@ int efs_pack_build(uint64_t segment_id, uint64_t segment_generation,
 int efs_pack_validate(const uint8_t *image, size_t geometry);
 /* Returned bytes alias the validated immutable image; caller pins its lifetime.
  * The expected reference is authoritative metadata, not a record from the body.
- * No bytes escape on wrong identity, epoch, digest, or malformed geometry. */
+ * No bytes escape on wrong identity, epoch, digest, or malformed geometry.
+ * Validates the whole image on every call: a caller reading several
+ * references of one image opens a view instead. */
 int efs_pack_read(const uint8_t *image, size_t geometry,
                   const struct efs_pack_ref *, const uint8_t **data, uint32_t *len);
-/* Records of a validated image, by table index (compaction enumerates a
- * segment's records to find the files it still holds). */
-int efs_pack_record_count(const uint8_t *image, size_t geometry, uint32_t *count);
-int efs_pack_record_at(const uint8_t *image, size_t geometry, uint32_t i, struct efs_pack_ref *out);
+/* One image validated once, then read per reference or record without
+ * hashing the whole image again (validating per read made ledger init N+2
+ * whole-image hashes). Only efs_pack_view_open makes a view: its seal binds
+ * the exact image pointer, geometry and header it validated, so a zeroed,
+ * forged, or retargeted view, or a header changed afterwards, is refused.
+ * Every read still checks the reference's identity, bounds, generations and
+ * epoch against the record table, and hashes that record's payload against
+ * its digest. The image must stay immutable while the view is in use. */
+struct efs_pack_view {
+    const uint8_t *image;
+    size_t geometry;
+    uint32_t count;
+    uint8_t seal[EFS_HASH_SIZE];
+};
+int efs_pack_view_open(const uint8_t *image, size_t geometry, struct efs_pack_view *);
+int efs_pack_view_read(const struct efs_pack_view *, const struct efs_pack_ref *,
+                       const uint8_t **data, uint32_t *len);
+/* Record i in table order (compaction enumerates a segment's records to find
+ * the files it still holds). */
+int efs_pack_view_record_at(const struct efs_pack_view *, uint32_t i, struct efs_pack_ref *out);
+/* Whole-image validations since start (diagnostics and tests). */
+uint64_t efs_pack_validations(void);
 int efs_pack_ref_encode(const struct efs_pack_ref *, uint8_t out[EFS_PACK_REF_BYTES]);
 int efs_pack_ref_decode(const uint8_t *, size_t len, struct efs_pack_ref *);
 #endif
