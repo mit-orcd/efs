@@ -38,7 +38,7 @@ int main(int argc,char **argv)
     for(char *p=strtok_r(path,"/",&save);p;p=strtok_r(NULL,"/",&save)){
         assert(np<16 && strcmp(p,".") && strcmp(p,".."));parts[np++]=p;
     }
-    assert(np);int fd=efs_connect_tcp(argv[1],(uint16_t)port);assert(fd>=0);
+    assert(np);int fd=efs_connect_declared(argv[1],(uint16_t)port);assert(fd>=0);
     assert(!efs_set_recv_timeout(fd,3000) && !efs_set_send_timeout(fd,3000));
     efs_ino_t parents[16],inos[16],parent=EFS_ROOT_INO;
     for(unsigned j=0;j<np;j++){

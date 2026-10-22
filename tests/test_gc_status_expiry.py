@@ -17,6 +17,14 @@ def exact(s,n):
     return data
 
 
+def accept_declaration(conn):
+    """W133: efs-mgmt declares protocol 3 first; answer it as efsd does."""
+    n=struct.unpack('>I',exact(conn,4))[0];hello=exact(conn,n)
+    assert n==17 and hello[0]==165 and hello[1:5]==b'EFSP' and struct.unpack('=IQ',hello[5:])==(3,0),hello.hex()
+    reply=struct.pack('=iI',0,3)
+    conn.sendall(struct.pack('>IB',len(reply)+1,166)+reply)
+
+
 def probe(binary,command,version,payload_size=None,healthy=1,uncertain=0):
     base=struct.pack('=8I25Q',version,1,0,0,0,1,0,0,*([0]*25))
     io=struct.pack('=12Q',*([0]*12))
@@ -32,7 +40,7 @@ def probe(binary,command,version,payload_size=None,healthy=1,uncertain=0):
         def serve():
             try:
                 with listener.accept()[0] as conn:
-                    conn.settimeout(10)
+                    conn.settimeout(10);accept_declaration(conn)
                     n=struct.unpack('>I',exact(conn,4))[0]
                     assert exact(conn,n)==bytes((119,))
                     conn.sendall(struct.pack('>IB',len(payload)+1,120)+payload)

@@ -17,7 +17,7 @@ static void be32(uint8_t *p,uint32_t v){for(unsigned i=0;i<4;i++)p[i]=(uint8_t)(
 static void be64(uint8_t *p,uint64_t v){for(unsigned i=0;i<8;i++)p[i]=(uint8_t)(v>>(56-8*i));}
 static int connect_node(unsigned node)
 {
-    int fd=efs_connect_tcp("127.0.0.1",(uint16_t)(base+node));assert(fd>=0);
+    int fd=efs_connect_declared("127.0.0.1",(uint16_t)(base+node));assert(fd>=0);
     assert(!efs_set_recv_timeout(fd,15000));assert(!efs_set_send_timeout(fd,15000));return fd;
 }
 static struct efs_msg_publication_reply request(const struct efs_msg_publication *req,int mode)

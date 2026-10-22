@@ -31,7 +31,7 @@ int main(int argc,char **argv)
         assert(!efs_client_rpc_publication_session(r.wire.shard,&r.wire.q.id));
         r.admitted=1;r.attempted=1;
         struct efs_msg_create_retained request=r.wire;request.probe=0;
-        int fd=efs_connect_tcp("127.0.0.1",port);assert(fd>=0);
+        int fd=efs_connect_declared("127.0.0.1",port);assert(fd>=0);
         assert(!efs_send_msg(fd,EFS_MSG_CREATE_RETAINED,&request,sizeof(request)));
         /* Discard the reply, then recover through production read-only proof
          * or identical resubmission if the first send never reached apply. */

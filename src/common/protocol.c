@@ -12,6 +12,7 @@
 #include <sys/uio.h>
 #include <unistd.h>
 #include <limits.h>
+#include <stddef.h>
 #include <fcntl.h>
 
 static int send_iov_run(int fd, struct iovec *iov, int niov)
@@ -694,7 +695,9 @@ static int declare_check(uint8_t type, const void *reply, uint32_t len)
     const struct efs_msg_client_hello_reply *r = reply;
     if (type != EFS_MSG_CLIENT_HELLO_REPLY || len != sizeof(*r)) return EFS_ERR_PROTO;
     if (r->rc != EFS_OK) return r->rc;
-    return r->version >= EFS_PROTOCOL_MIN_VERSION ? EFS_OK : EFS_ERR_PROTO;
+    /* One supported protocol: a server on any other version is refused,
+     * even one that accepted us (a fail-open server must not be used). */
+    return r->version == EFS_PROTOCOL_VERSION ? EFS_OK : EFS_ERR_PROTO;
 }
 int efs_conn_declare(struct efs_conn *c)
 {
@@ -726,4 +729,77 @@ int efs_fd_declare(int fd)
     int rc = declare_check(type, reply, len);
     free(reply);
     return rc;
+}
+
+int efs_connect_declared(const char *host, uint16_t port)
+{
+    int fd = efs_connect_tcp(host, port);
+    if (fd < 0)
+        return -1;
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    int rc = efs_fd_declare(fd);
+    if (rc != EFS_OK) {
+        fprintf(stderr, "efs: %s:%u refused or did not answer the protocol %u "
+                        "declaration (rc=%d)\n", host, port, EFS_PROTOCOL_VERSION, rc);
+        close(fd);
+        return -1;
+    }
+    efs_set_recv_timeout(fd, 0);
+    efs_set_send_timeout(fd, 0);
+    return fd;
+}
+
+/* W133 server-side gate. */
+int efs_declaration_required(uint8_t type)
+{
+    return type != EFS_MSG_CLIENT_HELLO && type != EFS_MSG_HEARTBEAT;
+}
+
+int efs_client_hello_check(const void *payload, uint32_t len)
+{
+    const struct efs_msg_client_hello *h = payload;
+    if (!payload || len != sizeof(*h) || memcmp(h->magic, "EFSP", 4) != 0)
+        return EFS_ERR_PROTO;
+    return h->version == EFS_PROTOCOL_VERSION ? EFS_OK : EFS_ERR_PROTO;
+}
+
+/* One audible line per refused connection, bounded under a flood: the
+ * first 10 and then every 1000th. */
+static void gate_refuse_log(const char *what, unsigned detail)
+{
+    static uint64_t refused;
+    uint64_t n = __atomic_add_fetch(&refused, 1, __ATOMIC_RELAXED);
+    if (n <= 10 || !(n % 1000))
+        fprintf(stderr, "handler: refused %s %u; this daemon serves only after a "
+                        "protocol %u declaration; closing (%llu so far)\n",
+                what, detail, EFS_PROTOCOL_VERSION, (unsigned long long)n);
+}
+
+int efs_decl_gate_frame(struct efs_decl_gate *g, struct efs_conn *c, uint8_t type,
+                        const void *payload, uint32_t len)
+{
+    if (type == EFS_MSG_CLIENT_HELLO) {
+        /* Always answered, so a mismatched client learns the served version;
+         * a refused declaration still closes the connection. */
+        struct efs_msg_client_hello_reply rep = {EFS_ERR_PROTO, EFS_PROTOCOL_VERSION};
+        int ok = efs_client_hello_check(payload, len) == EFS_OK;
+        if (ok) {
+            rep.rc = EFS_OK;
+            g->declared = 1;
+        }
+        efs_conn_send_msg(c, EFS_MSG_CLIENT_HELLO_REPLY, &rep, sizeof(rep));
+        if (ok)
+            return EFS_GATE_ANSWERED;
+        const struct efs_msg_client_hello *h = payload;
+        gate_refuse_log("declaration of protocol",
+                        len >= offsetof(struct efs_msg_client_hello, version) + sizeof(h->version)
+                            ? h->version : 0u);
+        return EFS_GATE_REFUSE;
+    }
+    if (!g->declared && efs_declaration_required(type)) {
+        gate_refuse_log("message", type);
+        return EFS_GATE_REFUSE;
+    }
+    return EFS_GATE_DISPATCH;
 }

@@ -30,6 +30,12 @@ packed-read involvement. Overwrite followed by truncate-up is a hypothesis.
 Independent review of `a1ceff4cb` identifies remaining output-reuse, unchecked
 shutdown and mismatch-context gaps in the improved repro; qualification NOTRUN.
 
+[K4 / W133 declaration gate](../backlog/work-items.md#w133-fix):
+**fixed on branch `devel-k04`, not merged.** Every request except
+CLIENT_HELLO and HEARTBEAT needs an accepted declaration of exactly
+protocol 3. Unit gates PASS on efs3 over TCP; the RDMA unit path and the
+cluster refusal run are NOTRUN.
+
 [Alpha 1.0 plan and code review](alpha-1.0-plan-review-20261022.md):
 **the plan's order holds and its K register matches the code; the code caps
 a cluster at four nodes, so ">4 nodes" is an implementation item or a

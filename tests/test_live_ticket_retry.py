@@ -23,7 +23,7 @@ static int fake_clock(clockid_t id,struct timespec *out){assert(id==CLOCK_MONOTO
 static int fake_sleep(useconds_t us){assert(us==100000);sleeps++;now_ms+=100;return 0;}
 #define clock_gettime fake_clock
 #define usleep fake_sleep
-int efs_connect_tcp(const char *host,uint16_t port){assert(!strcmp(host,"127.0.0.1"));fi=port-27110;assert(fi<3);return 100+fi;}
+int efs_connect_declared(const char *host,uint16_t port){assert(!strcmp(host,"127.0.0.1"));fi=port-27110;assert(fi<3);return 100+fi;}
 int efs_set_recv_timeout(int fd,int ms){assert(fd>=100&&ms==15000);return 0;}
 int efs_set_send_timeout(int fd,int ms){assert(fd>=100&&ms==15000);return 0;}
 int efs_put_ticket_encode(const struct efs_put_ticket *ticket,uint8_t out[EFS_PUT_TICKET_WIRE_LEN]){assert(ticket==original);memset(out,91,EFS_PUT_TICKET_WIRE_LEN);return 0;}

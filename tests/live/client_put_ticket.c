@@ -25,7 +25,7 @@ static void fragment_probe(unsigned port,const struct efs_put_ticket *ticket,int
 {
  uint8_t *data=malloc(ticket->fragment_len);assert(data);memset(data,91,ticket->fragment_len);
  for(unsigned fi=0;fi<3;fi++) {
-  int fd=efs_connect_tcp("127.0.0.1",port+ticket->nodes[fi]-1);assert(fd>=0);
+  int fd=efs_connect_declared("127.0.0.1",port+ticket->nodes[fi]-1);assert(fd>=0);
   efs_set_recv_timeout(fd,15000);efs_set_send_timeout(fd,15000);
   if(cold) {
    struct efs_msg_get_chunk get={.export_id=1,.ino=ticket->ino,.chunk_index=ticket->ci,
@@ -50,7 +50,7 @@ static void fragment_probe(unsigned port,const struct efs_put_ticket *ticket,int
   for(unsigned attempt=0;attempt<16;attempt++) {
    assert(!clock_gettime(CLOCK_MONOTONIC,&now));
    if((uint64_t)now.tv_sec*1000+now.tv_nsec/1000000>=deadline){if(!attempt)close(fd);break;}
-   if(attempt){fd=efs_connect_tcp("127.0.0.1",port+ticket->nodes[fi]-1);assert(fd>=0);}
+   if(attempt){fd=efs_connect_declared("127.0.0.1",port+ticket->nodes[fi]-1);assert(fd>=0);}
    assert(!efs_send_msg_parts(fd,EFS_MSG_PUT_TICKETED,header,sizeof(header),data,ticket->fragment_len));
    uint8_t type;void *reply=NULL;uint32_t bytes;
    assert(!efs_recv_msg(fd,&type,&reply,&bytes));close(fd);
@@ -121,7 +121,7 @@ int main(int argc,char **argv)
     if(discard) {
         uint8_t bytes[2+EFS_PUT_TICKET_WIRE_LEN];bytes[0]=efs_raft_shard_group(shard);bytes[1]=EFS_MD_CMD_PUT_TICKET_ADMIT;
         assert(!efs_put_ticket_encode(&t,bytes+2));
-        int fd=efs_connect_tcp("127.0.0.1",port);assert(fd>=0);
+        int fd=efs_connect_declared("127.0.0.1",port);assert(fd>=0);
         assert(!efs_send_msg(fd,EFS_MSG_RAFT_MKFS,bytes,sizeof(bytes)));close(fd);
     }
     assert(!efs_client_put_resume(owned,0,&state) && state==EFS_PUT_TICKET_ADMITTED);

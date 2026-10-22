@@ -205,8 +205,8 @@ enum efs_msg_type {
     /* W125: journal-first acceptance of superseded fragments (GC records). */
     EFS_MSG_GC_FRAG_BATCH = 163,
     EFS_MSG_GC_FRAG_BATCH_REPLY = 164,
-    /* W125: protocol declaration, the first message of a connection that
-     * reads chunk maps or segments. */
+    /* W125/W133: protocol declaration, the first message of every client
+     * connection; nothing but HEARTBEAT is served before it is accepted. */
     EFS_MSG_CLIENT_HELLO = 165,
     EFS_MSG_CLIENT_HELLO_REPLY = 166,
     /* W125: request scheduled-maintenance compaction now (efs-mgmt
@@ -262,22 +262,45 @@ struct efs_msg_pack_compact_reply {
     struct efs_packer_status packer;
 };
 
-/* W125 connection handshake. A connection must declare a compatible
- * protocol version before the server answers GETCHUNKS or any segment
- * message: chunk maps may carry packed references that an older client
- * would misread. An undeclared request is refused by closing the
- * connection (logged), so an old client fails cleanly; a new client
- * meeting an old server gets no reply to its declaration and refuses the
- * connection. The write path (PUT, REPORT, publications) is unchanged and
- * not gated. Version 2 = packed references in GETCHUNKS. */
-#define EFS_PROTOCOL_VERSION 2u
-#define EFS_PROTOCOL_MIN_VERSION 2u
+/* Connection declaration (W125, tightened by W133). The first message on
+ * a client connection is CLIENT_HELLO naming exactly EFS_PROTOCOL_VERSION;
+ * there is one supported protocol, no minimum and no range. Until a
+ * declaration has been accepted the server serves nothing but HEARTBEAT:
+ * any other request is refused by closing the connection, with no reply
+ * and one logged line, so an undeclared or mismatched client fails closed
+ * instead of being served by accident. A declaration that names another
+ * version is answered with EFS_ERR_PROTO and this version, then closed.
+ * Daemon-to-daemon connections declare like clients before their own
+ * HELLO/build-id join gate (peer_pool.c). A declaration is not
+ * authentication.
+ * Version history: 2 = packed references in GETCHUNKS (W125);
+ * 3 = every request gated, exact version match (W133). */
+#define EFS_PROTOCOL_VERSION 3u
 struct efs_msg_client_hello { uint8_t magic[4]; uint32_t version; uint64_t features; };
 struct efs_msg_client_hello_reply { int32_t rc; uint32_t version; };
 /* Send the declaration and check the reply; 0 when accepted. */
 struct efs_conn;
 int efs_conn_declare(struct efs_conn *c);
 int efs_fd_declare(int fd);
+/* Connect to an efsd and declare in one step; -1 (fd closed) when the
+ * connection or the declaration fails. The declaration itself is bounded by
+ * EFS_IO_TIMEOUT_MS; the fd is returned without socket timeouts, as
+ * efs_connect_tcp returns it. */
+int efs_connect_declared(const char *host, uint16_t port);
+
+/* Server-side gate, one per accepted connection (handler.c). Every received
+ * frame passes through efs_decl_gate_frame before dispatch. */
+struct efs_decl_gate { int declared; };
+#define EFS_GATE_DISPATCH 0 /* serve the request */
+#define EFS_GATE_ANSWERED 1 /* a declaration: reply sent, keep the connection */
+#define EFS_GATE_REFUSE   2 /* refused: close the connection without a reply */
+/* 0 only for the two messages a connection may send before declaring:
+ * CLIENT_HELLO (the declaration) and HEARTBEAT (liveness, no state). */
+int efs_declaration_required(uint8_t type);
+/* EFS_OK when payload is a CLIENT_HELLO for exactly EFS_PROTOCOL_VERSION. */
+int efs_client_hello_check(const void *payload, uint32_t len);
+int efs_decl_gate_frame(struct efs_decl_gate *g, struct efs_conn *c, uint8_t type,
+                        const void *payload, uint32_t len);
 
 /* W125 segment messages, big-endian byte layouts:
  * PUT   [group:1][fragment:1][0:2][geometry:4][id:8][generation:8][checksum:32]

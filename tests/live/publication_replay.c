@@ -16,7 +16,7 @@ static unsigned base;
 static const char *mgmt;
 static int connect_node(unsigned node)
 {
-    int fd=efs_connect_tcp("127.0.0.1",(uint16_t)(base+node));assert(fd>=0);
+    int fd=efs_connect_declared("127.0.0.1",(uint16_t)(base+node));assert(fd>=0);
     assert(!efs_set_recv_timeout(fd,15000));assert(!efs_set_send_timeout(fd,15000));return fd;
 }
 static void session(const char *op,const char *uuid,const char *arg,const char *epoch)

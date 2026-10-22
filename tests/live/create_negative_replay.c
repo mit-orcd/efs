@@ -20,7 +20,7 @@ static struct efs_msg_inode_reply call(unsigned type, const void *req,
     q.id.session_epoch = 1; q.id.seq = seq; /* ack stays zero: retain verdict 2 */
     efs_opid_req_pack(&q, packet + size);
     for (unsigned attempt = 0; attempt < 128; attempt++) {
-        int fd = efs_connect_tcp("127.0.0.1", port);
+        int fd = efs_connect_declared("127.0.0.1", port);
         assert(fd >= 0);
         efs_set_recv_timeout(fd, 5000); efs_set_send_timeout(fd, 5000);
         assert(!efs_send_msg(fd, type, packet, size + EFS_OPID_WIRE_LEN));

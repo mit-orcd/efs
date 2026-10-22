@@ -131,7 +131,7 @@ cluster. No row was found already fixed.
 | K1 | Root cause fixed (`76614e8e8`, regression test). Four parts still open, as listed in W145: (1) why a near follower got a 4.7 GB snapshot instead of a tail walk-back (likely a `match_index` 0 rejection resetting `next_index` to 1); (2) whether a client was acknowledged for 30,929,219@62; (3) hundreds of elections per restart; (4) a daemon blocked in a group read outlasts `stop.sh`'s wait. The private reproduction gate is NOTRUN. |
 | K2 | Open. Submit still refuses only `EFS_MD_CMD_IS_RESERVED` (`raft_host.c:3381`, `:12075`). |
 | K3 | Fixed on `devel-k03` (`8727e3afe`): ID 24 retired and refused fail-closed, handler and remover deleted, `tests/test_node_left_refused.py` in `make test`; unit gate PASS on efs2 (`test_reclaim` fails there on pristine devel too, host issue), cluster NOTRUN, not yet merged into devel. |
-| K4 | Open. Only three requests need a declaration (`handler.c:200`), the version check is `>=` (`:219`), and `scripts/w125_p3_compat.sh` still expects old clients to work. |
+| K4 | Fixed on branch `devel-k04`, not merged ([W133 implementation](../backlog/work-items.md#w133-fix)). The gate covers every request; the version must equal 3; every connection opener declares first. Unit gates PASS on efs3 over TCP. The RDMA unit path and the cluster refusal run are NOTRUN. |
 | K5 | Open. `efs_session_accept_legacy` has 8 callers (`lock.c`, `meta_apply.c` ×4, `session.c`, `raft_host.c`), and the "legacy … remain compatible" path is at `raft_host.c:11913`. Tied to W72, which is partial. |
 | K6 | Merged. Remaining: the W130 one-replica DIR fault injection, and multi-host runs. |
 | K7 | Open. `EFS_KV_KIND_DECISION` keys are written and read (`txn.c:972`, `:996`); nothing deletes them. |

@@ -53,7 +53,7 @@ int main(int argc,char **argv)
   memcpy(packet+sizeof(request)+EFS_APPEND_OPID_LEN,&ack,8);
   unsigned attempt;
   for(attempt=0;attempt<400;attempt++) {
-   int fd=efs_connect_tcp("127.0.0.1",port+attempt%4);if(fd<0){usleep(10000);continue;}
+   int fd=efs_connect_declared("127.0.0.1",port+attempt%4);if(fd<0){usleep(10000);continue;}
    efs_set_recv_timeout(fd,10000);efs_set_send_timeout(fd,10000);
    uint8_t type=0;void *body=NULL;uint32_t size=0;
    int rc=efs_send_msg(fd,EFS_MSG_INODE_APPEND,packet,sizeof(packet));
