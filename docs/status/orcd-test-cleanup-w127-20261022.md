@@ -27,7 +27,7 @@ fault gates and multi-host fault injection remain NOTRUN.
 | `tests/live/efs_commands.py` | `57ea88201` | PASS |
 | `tests/live/efs_command_options.py` | `57ea88201` | PASS |
 | `tests/live/efs_commands_load.py` | `57ea88201` | PASS: 144,827 files by 8 writers with 2 RPC page readers; every payload verified; converged in 55 s; create p50/p95/p99 4.8/33.7/40.8 ms |
-| `tests/live/virtual_interfaces.py --freshness-s 150` | `57ea88201` | 11/11 gates PASS across runs (9 in the first, `snapshot` and `nested_authorization` after harness fixes); a single full rerun is recorded below |
+| `tests/live/virtual_interfaces.py --freshness-s 150` | `57ea88201` | Full run with the fixed harness: 10/11 PASS (`retired_names`, `recovery`, `snapshot`, `stats`, `stats_mutations`, `invalid`, `permissions`, `name_limits`, `fd_capacity`). `nested_authorization` failed there with connection refused because that run was launched without `EFS_QUERY_TEST_NODES` (its RPC helper then dials consecutive local ports); the isolated run of that gate with the variable set PASSES |
 
 The live harnesses needed fixes for the P5 page-only query path and for a
 60 s refresh (they assumed localhost fixtures with fast refresh): see the
