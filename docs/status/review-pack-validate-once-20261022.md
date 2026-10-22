@@ -8,8 +8,8 @@ The cluster gates and the mismatch investigation listed below remain NOTRUN
 on devel. The branch is deleted; its commits are in devel's history. Subject: commits `207dde6b4`, `660c6621c`, `745af27f5`, `e223b88d5`,
 `7cef019b4` and `1df84466d` on `claude/pack-validate-once`, based on devel
 `dd43b4015`. They fix findings 1 and 2 of
-[the ORCD tiny-file profile](orcd-tiny-profile-20261022.md). Nothing is
-merged or pushed.
+[the ORCD tiny-file profile](orcd-tiny-profile-20261022.md). The original
+review below predates that merge.
 
 ## Code review
 
@@ -261,3 +261,69 @@ version of the file can be recomputed with the script's own `body`,
    modifiers.
 3. Add the abandon-scan work-budget stop and resume test, including term
    change and wraparound.
+
+
+## Independent assessment of `a1ceff4cb` — October 22
+
+**Verdict: correction accepted for completed versions; read mismatch remains
+OPEN. Harness improvements are useful but evidence-preservation and shutdown
+checks remain incomplete.** Reviewed `a1ceff4cb` and its unchanged scripts on
+`d94ca85bf`; this is a source review and deterministic fixture reconstruction,
+not cluster qualification. No daemon, store, workload or deployment was changed.
+
+### What the reconstruction establishes
+
+I independently evaluated the workload's pure `body`, `op_of`, `apply_op` and
+`contents` functions for `w2/d049/f004799`, versions 0–6. All seven lengths
+match the table above. The v5 overwrite contains 2,601 bytes; v6 adds 1,764
+zero bytes. This disproves my earlier suggestion that a **completed version**
+of this particular file started small and was subsequently grown out of packing.
+The overwrite-followed-by-extension case is a good focused regression target.
+It is not a diagnosis: the original returned bytes and mapping were lost.
+
+Distinguish this reconstruction from an observed mapping history. Rewrite uses
+`truncate(0)` before writing, so completed sizes alone do not prove that the
+file never transiently became small. The intended packer guards reject zero or
+over-threshold sizes, require quiet age, and reject an open lease
+(`src/server/packer.c`, candidate selection). With those invariants intact,
+this file should never be selected. There is no retained evidence establishing
+a violation, and no reason to assert one. Prefer **“no completed version was
+packable; no demonstrated packed-read involvement”** to an unconditional
+historical claim. Timing or shared-state interactions remain possible; this
+review neither attributes the mismatch to packing nor clears the merged build.
+
+### Remaining actionable harness findings
+
+1. **Output reuse can still erase evidence.** `w125_modify_repro.sh` rejects an
+   existing `RUN`, but accepts an existing `OUT` with `mkdir -p`. It truncates
+   `run.txt`, `start.txt`, `a.txt`, `stop.txt` and `done`; mismatch numbering
+   restarts at 1. Require a fresh output directory too, and check directory
+   creation and identity recording before launching. Test two invocations
+   using the same output directory: the second must refuse without changing
+   the first run's artifacts.
+2. **A zero stop status does not certify safe cleanup.** The invoked
+   `w125_p0_cluster.sh stop` ignores the client-stop result, sends TERM, waits
+   three seconds, sends KILL, then ends with successful `echo stopped`.
+   Therefore the new wrapper's `stop_rc` check cannot detect ordinary unmount
+   or shutdown failures, and may delete the store after an unverified stop.
+   Check mount absence and termination of the owned processes before deletion;
+   distinguish forced termination from orderly shutdown and retain its store
+   and logs. Until then this harness cannot qualify orderly restart. Add
+   injected unmount-failure and delayed-exit tests before relying on PASS cleanup.
+3. **Tie saved bytes to their expected state.** `save_mismatch` records a name
+   and a counter, but no expected version, hashes or timestamp. Error reporting
+   and dump-number allocation use separate lock acquisitions; concurrent reads
+   need not appear in matching order, and the error list is separately capped.
+   Save a sidecar with each dump containing expected version, expected/actual
+   lengths and hashes, source/build identity and read time, captured while the
+   existing per-file lock still protects the version. Report artifact-write
+   failures explicitly. Preserve final-verification mismatches as well.
+
+These are focused follow-ups, not a request for additional runtime flags or
+legacy-format support. Failure-path tests can use a stub cluster helper and
+synthetic mismatches; another expensive cluster run is not needed to establish
+these harness properties. Those tests, the targeted overwrite/extend regression,
+alternating fresh-cluster qualification and the abandon-scan work-budget gate
+remain **NOTRUN by this review**. The user-authorized merge remains in place;
+alpha qualification must continue to report the unresolved mismatch separately
+from passing unit tests.

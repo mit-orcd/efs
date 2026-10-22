@@ -1571,10 +1571,10 @@ full acceptance are separate states.
 
 [Packing validate-once review and assessment](../status/review-pack-validate-once-20261022.md):
 **merged into devel `842a014b3` by user decision; read mismatch OPEN.** The
-mismatched file was 3.3–3.6 MB in every version, so it was never packed and no
-changed path read it. Suspect a devel truncate-up-after-overwrite read race.
-The repro now keeps failing stores, saves mismatching bytes and propagates exit
-status; reruns NOTRUN.
+mismatched file was 3.3–3.6 MB in every completed version; no demonstrated
+packed-read involvement. Overwrite followed by truncate-up is a hypothesis.
+Independent review of `a1ceff4cb` identifies remaining output-reuse, unchecked
+shutdown and mismatch-context gaps in the improved repro; qualification NOTRUN.
 
 [Phase 1 / alpha 1.0 checklist](../status/alpha-1.0-2plus1-checklist.md): **OPEN**.
 Finish and qualify **2+1 on 3, 4 and >4 physical nodes** before the remaining
