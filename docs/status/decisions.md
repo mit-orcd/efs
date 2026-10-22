@@ -60,10 +60,15 @@ Consequences recorded now:
 - **Packed segments are data, but today they live on a group's voters**
   (`packer.c`). Under this ladder, "data placement = N" means small-file
   packed data should also use all N nodes in alpha 1.0; keeping it on the
-  three voters would confine small files to three nodes. **Open question for
-  the user:** move packed-segment placement to the data ring in alpha 1.0
-  (a W151 sub-item), or publish "packed data on the metadata nodes only" as an
-  alpha 1.0 limitation.
+  three voters would confine small files to three nodes. **Decided (user,
+  Oct 22): packed segments are data; alpha 1.0 places them on the data ring
+  across all N nodes.** This is a W151 sub-item. Code consequence: a node that
+  does not host the group cannot read the pack object locally
+  (`server_raft_host_pack_object` refuses with `host_hosts`), and both the
+  PUT_SEGMENT admission check (`segment_store.c`) and the reclaim check
+  (`reclaim.c` `segment_acceptable`) depend on that read, so non-voter nodes
+  need a linearizable remote object read from a group voter before they can
+  accept or reclaim a segment fragment.
 - The alpha 3.0/4.0 setting (N, data = N, metadata = N − M) is a deployment
   input in the sense of A8, not an A/B switch.
 - D36's final contract is unchanged; alpha 2.0 is where its four-node metadata

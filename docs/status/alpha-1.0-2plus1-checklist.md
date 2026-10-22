@@ -59,9 +59,9 @@ Alpha 1.0 is reached in three stages, in this order:
 Metadata placement follows [D38](decisions.md): in alpha 1.0 every metadata
 group lives on at most three nodes (three voters, one loss), whatever the
 cluster size; data placement uses all nodes. Later alphas widen metadata
-placement (2.0: 2+2 on four nodes; 3.0/4.0: N − M configurable). Whether
-packed segments follow the data ring or stay on the metadata nodes in alpha
-1.0 is an open user question (D38).
+placement (2.0: 2+2 on four nodes; 3.0/4.0: N − M configurable). Packed
+segments are data and follow the data ring across all N nodes in alpha 1.0
+(D38, decided Oct 22; W151 sub-item).
 
 This milestone completes current-path correctness, durability and bounded
 progress. It does not require the later many-group metadata architecture, a new
@@ -119,7 +119,7 @@ row is checked again on current devel before work starts.
 | K25 | **W135**–**W139**, **W141**, **W120**, **W150** test harness and reporting defects | test correctness | TEST |
 | K26 | LeakSanitizer aborts on node9900/node9901; F1 needs a working leak check | environment | FIX host or use another leak gate |
 | K27 | ior easy write on `d94ca85bf` is 710–863 MiB/s against 1,329 MiB/s on `08cc16af4`, same cluster, three runs, reads unchanged ([deploy report](orcd-mini-deploy-d94ca85bf-20261022.md)) | regression, unattributed | VERIFY (A/B/A′ on orcd-mini, needs a restart) |
-| K28 | **W151** the code caps a cluster at four nodes (`EFS_MAX_NODES`, `EFS_MD_RAFT_N`, voter sets, placement ring, client hint bound); the user keeps >4 nodes in alpha 1.0 (decision Oct 22) | implementation gap / scope | FIX: raise the cap with voter sets for n ≥ 5, placement and capacity tests at 5..max, membership and client tables; fresh format, no compatibility |
+| K28 | **W151** the code caps a cluster at four nodes (`EFS_MAX_NODES`, `EFS_MD_RAFT_N`, voter sets, placement ring, client hint bound); the user keeps >4 nodes in alpha 1.0 (decision Oct 22) | implementation gap / scope | FIX: raise the cap with voter sets for n ≥ 5, placement and capacity tests at 5..max, membership and client tables; packed segments on the data ring across all N nodes (D38); fresh format, no compatibility |
 
 ### Recheck on devel `ab1920fae` (October 22)
 

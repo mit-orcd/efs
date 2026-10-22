@@ -2409,7 +2409,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | modify-read-mismatch | **W148** · modify-under-load read returned wrong bytes (correct size) on a never-packed 3.6 MB file | data correctness | OPEN: one event in 5 runs on node9900 (branch build), evidence lost; suspected stale read after a same-size overwrite then truncate-up; repro now keeps failing stores and mismatch bytes; reruns NOTRUN; alpha K8 | [review](../status/review-pack-validate-once-20261022.md) |
 | compact-die-env | **W149** · `EFS_KV_COMPACT_DIE` makes the daemon `_exit(99)` mid-compaction in normal builds | build hygiene / safety | OPEN: move it and `test_kv_lsm`'s use under `EFS_FAULTS`; alpha K24 | [checklist review](../status/alpha-1.0-2plus1-checklist.md) |
 | nfs-macos-clients | **W152** · NFS re-export and macOS clients | beta backlog | DECIDED out of alpha 1.0 (user, Oct 22); the W55 NFS/macOS triggers move here; alpha publishes "Linux FUSE client only" (F4) | [alpha checklist S1](../status/alpha-1.0-2plus1-checklist.md) |
-| node-cap | **W151** · the code caps a cluster at four nodes (`EFS_MAX_NODES` 4, `EFS_MD_RAFT_N` 3..4, voter sets only for n ≤ 4, placement ring clamped, client `leader_hint` bound), while alpha 1.0 and the spec (§1: 3–64) require >4 | implementation / scope | OPEN; alpha K28 and Stage 2 prerequisite of A3: raise the cap, define voter sets for n ≥ 5, placement/capacity tests at 5..max, membership and client tables, fresh format; no compatibility | [review](../status/alpha-1.0-plan-review-20261022.md) |
+| node-cap | **W151** · the code caps a cluster at four nodes (`EFS_MAX_NODES` 4, `EFS_MD_RAFT_N` 3..4, voter sets only for n ≤ 4, placement ring clamped, client `leader_hint` bound), while alpha 1.0 and the spec (§1: 3–64) require >4 | implementation / scope | OPEN; alpha K28 and Stage 2 prerequisite of A3: raise the cap, define voter sets for n ≥ 5, placement/capacity tests at 5..max, membership and client tables, fresh format; no compatibility. Sub-item (D38, user Oct 22): packed segments move from the group's voters to the data ring across all N nodes, which needs a remote linearizable pack-object read for PUT_SEGMENT admission and reclaim on non-voter nodes | [review](../status/alpha-1.0-plan-review-20261022.md) · [D38](#appendix-4--decisions--taken-and-pending-register-d1d36) |
 | abandon-scan-test | **W150** · no test for the abandon scan's work-budget stop and resume (tombstones, term change, wraparound) | test coverage | OPEN; alpha K25 | [review](../status/review-pack-validate-once-20261022.md) |
 | orcd-qualification | **W119** · ORCD normal-operation RDMA failures and blocked clean stop | correctness / liveness | OPEN: 150 concurrent failures /846 NOTRUN; cross-host peer59/67; enabled queries EBUSY; retained writes block clean stop. TCP/commands-off rerun also FAILs (120 failures,520 NOTRUN; peer61/67; clean stop refused); all23 successfully prepared cold cases verify after authorized forced restart. [TCP evidence](../status/orcd-tcp-direct-disabled-20261015.md). Preserve failures, isolate causes and rerun original gates; W100 stays closed. [AMD follow-up](../status/amd-rdma-posix-20261015.md): native/serial/peer/cold/degraded PASS at `c8d057391`; one-mount jobs16 remains215/216 with unusual-name timeout. [Async durability follow-up](../status/amd-async-durability-20261015.md) at `c4178ea81`: scoped durability/native/serial/peer/cold/degraded PASS; jobs16 FAIL214/216 (unusual names, concurrent creates,15s) | [Raft/KV follow-up](../status/orcd-raft-kv-20261016.md) · [evidence and gates](../status/orcd-devel-qualification-20261015.md) · [item](#w119) |
 | immediate-readback | **W121** · successful fsync followed by previous-file payload | data correctness | OPEN: 255/123,932 exact readbacks failed across both queued-vote variants on ORCD native RDMA/direct with enabled `.efs`; unique512-byte files, no expiry. Diagnosed FUSE kernel fork/read page-pinning defect; kernel remediation deferred by user. Fork-isolated experiments do not close W121 | [diagnosis](../status/orcd-w121-fork-read-20261016.md) · [experiment](../status/orcd-queued-read-vote-20261016.md) · [item](#w121) |
@@ -2578,10 +2578,15 @@ Consequences recorded now:
 - **Packed segments are data, but today they live on a group's voters**
   (`packer.c`). Under this ladder, "data placement = N" means small-file
   packed data should also use all N nodes in alpha 1.0; keeping it on the
-  three voters would confine small files to three nodes. **Open question for
-  the user:** move packed-segment placement to the data ring in alpha 1.0
-  (a W151 sub-item), or publish "packed data on the metadata nodes only" as an
-  alpha 1.0 limitation.
+  three voters would confine small files to three nodes. **Decided (user,
+  Oct 22): packed segments are data; alpha 1.0 places them on the data ring
+  across all N nodes.** This is a W151 sub-item. Code consequence: a node that
+  does not host the group cannot read the pack object locally
+  (`server_raft_host_pack_object` refuses with `host_hosts`), and both the
+  PUT_SEGMENT admission check (`segment_store.c`) and the reclaim check
+  (`reclaim.c` `segment_acceptable`) depend on that read, so non-voter nodes
+  need a linearizable remote object read from a group voter before they can
+  accept or reclaim a segment fragment.
 - The alpha 3.0/4.0 setting (N, data = N, metadata = N − M) is a deployment
   input in the sense of A8, not an A/B switch.
 - D36's final contract is unchanged; alpha 2.0 is where its four-node metadata
