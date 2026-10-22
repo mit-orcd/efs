@@ -99,7 +99,7 @@ row is checked again on current devel before work starts.
 | K5 | **W134** unregistered session identities bypass fencing (with **W72** production session lifecycle) | correctness | FIXED, merged into devel Oct 22 (`a443863b1`): one session check at every apply (`efs_session_accept`: UNREGISTERED or FENCED, no legacy acceptance, `efs_session_accept_legacy` deleted); the mount establishes a session, admits each touched shard and latches fenced; every metadata mutation carries the session (protocol 4); `efs-mgmt` raw mutations establish their own. VERIFY: the fence cluster gate (`scripts/k05_session_fence_gate.sh`) and the NUC/AMD live harnesses are NOTRUN for the parent session; partitioned-client and leader-change barrier gates stay W72 work |
 | K6 | **W127–W131** fail-closed apply (in devel since `08cc16af4`; private RDMA gate PASS) | correctness | VERIFY multi-host |
 | K7 | **W83** transaction decision records are never retired | lifecycle / growth | FIX |
-| K8 | **W148** modify-under-load returned wrong bytes, correct size, on a never-packed 3.6 MB file (suspected read race: same-size overwrite then truncate-up) | data correctness | FIX ([review](review-pack-validate-once-20261022.md)) |
+| K8 | **W148** modify-under-load returned wrong bytes, correct size, on a never-packed 3.6 MB file | data correctness | FIXED, merged Oct 22 (`71ce4ff35` on devel). Root cause: `dcache_apply_init` let a partial write with a loaded base keep the slot's UNCOND base, so the flush published the write-time image (from an unrefreshed local chunk entry: zeros or a peer's lost bytes) as the whole chunk with no merge and no CAS. Reproduced 3× in 9 attempts on node9901 (RDMA, devel `7c510c60f`); a cold read from a fresh client returned the same bad bytes. The two-client regression (`tests/posix/posix_2client.py`) fails 3/3 before and passes 3/3 after. VERIFY: the w125 modify rerun on the fixed build is NOTRUN; the kept W148 stores and hashes are in the session hand-over ([review](review-pack-validate-once-20261022.md)) |
 | K9 | **W87** buffered concurrent append loses records under load | data correctness | FIX |
 | K10 | **W121** a read right after a successful fsync returns the previous file's payload (FUSE kernel fork/page-pinning; kernel fix deferred) | data correctness | DECIDE |
 | K11 | **W55** span committed but fragment PUTs never landed | data correctness | VERIFY Linux FUSE. NFS re-export and macOS clients are **DECIDED out of alpha** (user, Oct 22): beta backlog **W152**; their W55 triggers are not isolated in alpha |
@@ -135,7 +135,7 @@ cluster. No row was found already fixed.
 | K5 | Fixed Oct 22 on devel (`a443863b1`); see the K row. |
 | K6 | Merged. Remaining: the W130 one-replica DIR fault injection, and multi-host runs. |
 | K7 | Open. `EFS_KV_KIND_DECISION` keys are written and read (`txn.c:972`, `:996`); nothing deletes them. |
-| K8 | Open. Repro harness fixed (`a1ceff4cb`); reruns NOTRUN. |
+| K8 | Fixed Oct 22 (`71ce4ff35`); see the K row. |
 | K9, K13–K16 | Open; backlog unchanged since Oct 11–15 (W87, W88, W86, W77, W64, W52, W75). |
 | K10 | Open. User-deferred kernel fix; test harnesses now isolate it (`exclusive_create_visibility.py --spawn`). |
 | K11, K12, K17–K20 | VERIFY. The fixes are recorded on NUC/AMD/TCP or private stores; the alpha profile on separate hosts is NOTRUN. |
