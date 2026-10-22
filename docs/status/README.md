@@ -18,6 +18,11 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Packing validate-once review and assessment](review-pack-validate-once-20261022.md):
+merge remains **BLOCKED** by unresolved modify-under-load wrong bytes. Focused
+PASS does not close the read mismatch; preserve failure stores, propagate workload
+exit status and investigate version coherence before qualification.
+
 [Phase 1 / alpha 1.0 checklist](alpha-1.0-2plus1-checklist.md): **OPEN**.
 Finish and qualify **2+1 on 3, 4 and >4 physical nodes** before the remaining
 roadmap. Candidate-specific gates cover placement, enabled I/O, packing/GC,

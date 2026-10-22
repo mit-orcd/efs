@@ -98,3 +98,77 @@ verify was clean. Two other branch runs and both base runs were clean.
   C tests, which need Linux. Say which tests ran on macOS.
 - **No raw output.** "Raw output was not kept" is fine for passing runs but
   not for the failing modify run; see above.
+
+## Independent assessment of `15a2c957d` — October 22
+
+**Agree: keep the merge blocked.** The performance diagnosis remains supported,
+but the unresolved wrong-byte event prevents correctness acceptance. This
+assessment inspected the review and the relevant source/script at `1df84466d`;
+it did not rerun the Linux tests or reproduce the mismatch. Their PASS results
+remain attributed to the reviewer above.
+
+### Corrections to the conclusions
+
+- Replace the blanket interpretation of “code correct” with “no defect identified
+  in the reviewed mechanisms; focused tests PASS; concurrent correctness remains
+  unresolved.” Inspection and unit tests do not prove that the integrated read
+  path is correct under modification.
+- “Public read unchanged” means its validation contract is intended to remain
+  unchanged, not its implementation. `efs_pack_read` now calls
+  `efs_pack_view_open` and `efs_pack_view_read`, so it is part of the changed
+  production path. The file-size argument does not exclude it.
+- A matching record digest proves integrity relative to the supplied reference,
+  not that the reference is the right version for this read. Stale mappings,
+  base/span version mixing, invalidation races or incorrect workload expectations
+  can return internally valid bytes inconsistent with the expected file version.
+  Diagnose the reference selection and assembled read, not just segment hashes.
+- The view seal binds pointer/geometry/header; it does not pin memory or enforce
+  immutability. Review ownership and lifetime through grouped worker reads and
+  returned payload pointers. This is a required invariant, not a demonstrated
+  defect in the branch.
+
+### Make the reproduction preserve failures first
+
+At `1df84466d`, `scripts/w125_modify_repro.sh` stops and removes
+`/tmp/w125-modify-PORT` at the start. Reusing the same port therefore destroys the
+previous storage. Give every attempt a unique retained run directory or preserve
+and inventory the failed stopped store before any subsequent run. Keep logs,
+expected/actual payloads and hashes, workload seed/options, exact build hashes,
+operation history and the mapping/base/span identities associated with the read.
+Do not rely on a later store inspection to reconstruct a transient read's view;
+record that view at the mismatch when possible.
+
+The script also uses `set -u`, writes the workload return code into `a.txt`, then
+continues to cleanup and ends with `echo DONE`. It can therefore return shell
+success after the workload fails. Preserve the workload exit status, report
+cleanup failures separately, and return failure for a failed workload. A DONE
+file proves termination, not PASS. Audit how the workload detects and propagates
+mismatches before using shell status as the campaign verdict.
+
+### What closes the investigation
+
+Five alternating runs per build are a reasonable minimum investigation sample,
+not proof that an intermittent mismatch has been ruled out. Match workload,
+packing age, concurrency, fixture setup and deadlines; record that packing/repack
+actually occurred. Use clean source archives and exact daemon/client identities.
+Add a targeted small-packed-file → growth → concurrent modify/read case, and
+verify the test oracle's synchronization/version rules as well as the filesystem.
+Do not mask errors with retries or extend timeouts to manufacture PASS.
+
+Reproduction on the base build establishes that a baseline issue exists; it does
+not prove the branch cannot trigger or worsen it. Establish the causal mechanism,
+add a regression for it, fix it or demonstrate a concrete oracle defect, and
+repeat branch acceptance. If it cannot be reproduced and original evidence is
+unrecoverable, retain OPEN/UNRESOLVED status and the exact limited clean-run
+results; do not silently convert that history into PASS.
+
+Also add the missing tombstone/work-budget scan-stop test: stop/resume must make
+bounded progress without skipping actionable keys, including term change and
+wraparound. Callback-limit coverage alone is not this gate.
+
+**Recommendation:** fix the evidence harness, investigate the read mismatch with
+preserved per-read state, then qualify the final branch. No new user-facing A/B
+mode is needed: compare separate private builds, then land one qualified behavior.
+This is part of alpha 1.0's packing correctness and evidence gates, not a reason
+to defer correctness in exchange for lower CPU consumption. No code was changed
+by this assessment; all additional tests described here remain NOTRUN.
