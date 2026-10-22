@@ -151,7 +151,8 @@ static ssize_t fault_pwrite_impl(int fd,const void *buf,size_t size,off_t offset
 static ssize_t fault_pwrite(int fd,const void *buf,size_t size,off_t offset)
 {
     ssize_t rc=fault_pwrite_impl(fd,buf,size,offset);
-    if(peak_enabled)check_sort_peak();return rc;
+    if(peak_enabled)check_sort_peak();
+    return rc;
 }
 static unsigned pending_scans;
 static int counted_snapshot_scan(struct efs_kv_lsm_snapshot *source,
@@ -222,7 +223,7 @@ static void check_sort_peak(void)
 static int sort_cancel(void *ctx){unsigned *left=ctx;return !--*left;}
 static void sort_budget_test(void)
 {
-    unsigned before=failures;
+    int before=failures;
     for(unsigned scenario=0;scenario<13;scenario++){
         unsigned count=scenario==9?0:scenario==10?1:SORT_ROWS*4+1;
         char store[]="/tmp/efs-sort-kv-XXXXXX",root[]="/tmp/efs-sort-budget-XXXXXX";
@@ -370,7 +371,7 @@ static void local_page_test(void)
     CHECK(pending_scans==3*SHARDS); /* One complete immutable proof, not a second raw-copy scan. */
     CHECK(thread_creates==PERSIST_WORKERS);
     if(disk){
-        struct efs_meta_row row;CHECK(!efs_query_disk_inode(disk,leaf,&row,NULL));CHECK(row.layout==EFS_META_LAYOUT_LOCAL);
+        struct efs_meta_row row={0};CHECK(!efs_query_disk_inode(disk,leaf,&row,NULL));CHECK(row.layout==EFS_META_LAYOUT_LOCAL);
         uint64_t watermark[4]={101,102,103,104};CHECK(!efs_query_disk_checkpoint(disk,watermark));
         struct efs_query_disk *failed=NULL,*restored=NULL;
         thread_creates=0;fail_thread_create=3;
@@ -693,7 +694,7 @@ static void *subtree_reader(void *ctx)
 }
 static void subtree_page_test(void)
 {
-    unsigned before=failures;
+    int before=failures;
     char store[]="/tmp/efs-subtree-kv-XXXXXX",cache[]="/tmp/efs-subtree-cache-XXXXXX";
     CHECK(mkdtemp(store));CHECK(mkdtemp(cache));
     struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);

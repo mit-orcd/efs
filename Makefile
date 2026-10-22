@@ -419,6 +419,7 @@ test: all
 	python3 tests/test_mgmt_session_routing.py
 	python3 tests/test_mgmt_expiry_lookup.py
 	python3 tests/test_expiry_cli.py ./efs-mgmt
+	python3 tests/test_gc_status_expiry.py ./efs-mgmt
 	python3 tests/test_session_admission.py
 	python3 tests/test_close_effects.py
 	python3 tests/test_session_cleanup_cli.py
@@ -769,6 +770,7 @@ clean:
 	rm -f $(LIB) efsd efs-fuse efs-bench efs-mgmt efs-query blake3-bench
 	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim
 	rm -f $(TEST_BINS) tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_upload_client
+	rm -f tests/test_data_commit tests/measure/*_smoke tests/measure/bench_query_disk_scale tests/measure/bench_query_disk_concurrent
 	rm -f .build_id.stamp
 
 $(BLAKE3_DIR)/blake3_sse2.o: $(BLAKE3_DIR)/blake3_sse2.c
@@ -816,7 +818,7 @@ tests/test_namespace_session: tests/test_namespace_session.o $(LIB)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 tests/test_txn_resolve_faults: tests/test_txn_resolve_faults.o $(LIB)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
 # Internal I/O fault regression compiles the actual disk-cache implementation.
 src/meta/query_disk.o tests/test_query_disk_io: src/meta/query_disk_incremental.h src/meta/query_disk_budget.h

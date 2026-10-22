@@ -3,24 +3,24 @@
 
 /* Raft log command namespace for the metadata engine (architecture.md
  * §7 / §10 step 10.5). Byte 0 is the command tag; multi-byte fields are
- * big-endian. This is ONE namespace shared by the simulator
- * (src/sim/sim_internal.h SIM_CMD_*) and the production raft host
- * (src/server/raft_host.c) — the values must never diverge.
+ * big-endian. The simulator (src/sim/sim_internal.h SIM_CMD_*) uses the
+ * same value for every command both apply.
  *
- * Only the commands the production host applies belong here. The sim's
- * remaining SIM_CMD_* values converge onto this header when the
- * coordinator side is lifted out of src/sim (production adoption P2). */
+ * Only the commands the production host applies belong here. The
+ * simulator also keeps commands production has retired (SIM_CMD_APPEND_RES
+ * 17); production refuses those tags (EFS_MD_CMD_IS_RETIRED). */
 
 /* W86: [tag:1][immutable ticket:216]. STATUS is ReadIndex-only; ADMIT
  * is serialized apply. Reply salt is ticket state, never permission to PUT. */
 /* REPORT envelope: [tag][uuid:16][epoch:4][legacy PUBLISH:202]*N.
  * Fences every mapping at serialized apply without reusing delta fields. */
 /* Internal coordinator commands; public control RPC cannot forge ACKs. */
-/* 45-51 and 55-57 are reserved: never reuse. Apply halts on them; submit
- * refuses. Retired tags are refused the same way: APPEND_RES 17 (folded
- * into APPEND_CATCHUP), LANE_SWEEP 21 and REAP_DONE 22, LANE_SWEEP_BATCH 33
- * and REAP_BATCH 34 (replaced by the W124 *_MULTI forms). The simulator
- * keeps its own SIM_CMD_APPEND_RES 17. */
+/* 45-51 and 55-57 are reserved for retired feature commands. Apply halts
+ * on them; submit refuses. Retired tags are refused the same way:
+ * APPEND_RES 17 (folded into APPEND_CATCHUP), LANE_SWEEP 21 and REAP_DONE
+ * 22, LANE_SWEEP_BATCH 33 and REAP_BATCH 34 (replaced by the W124 *_MULTI
+ * forms). The refusal stays until a format-marker change retires these
+ * values; do not assign them to new commands before that. */
 #define EFS_MD_CMD_RESERVED_MIN 45
 #define EFS_MD_CMD_RESERVED_MAX 51
 #define EFS_MD_CMD_RESERVED2_MIN 55

@@ -73,7 +73,6 @@ static inline void cpu_relax(void)
 #define EFS_RDMA_RECV_STRIDE   4096 /* extra slack per recv buffer */
 
 #define SEND_WRID_POOL   0x1000
-#define SEND_WRID_INLINE 0x2000
 
 /* What a file descriptor currently points at, e.g. "socket:[12345]". */
 static void fd_link_now(int fd, char *out, size_t n)
@@ -201,7 +200,9 @@ static int g_live_conns;
  * append-only: base/len are read without the lock, the per-device MR
  * pointer is published with a release store after registration. A send
  * whose payload is not in any region (TLS parity buffers, malloc'd
- * records) copies into the pool buffer as before. */
+ * records) copies into the pool buffer as before. Direct fill is disabled
+ * (efs_rdma_send_buf), so the table only records regions; the per-device
+ * lookup was removed with it. */
 #define ZC_MAX_REGIONS 128
 struct zc_region {
     uint8_t *base;
@@ -212,7 +213,6 @@ struct zc_region {
 static struct zc_region g_zc[ZC_MAX_REGIONS];
 static int g_zc_n;
 static pthread_mutex_t g_zc_lock = PTHREAD_MUTEX_INITIALIZER;
-static uint64_t g_zc_sent, g_zc_copied;
 
 int efs_rdma_zc_region_add(void *base, size_t len)
 {
@@ -233,51 +233,6 @@ int efs_rdma_zc_region_add(void *base, size_t len)
     return 0;
 }
 
-void efs_rdma_zc_stats(uint64_t *zc, uint64_t *copied)
-{
-    if (zc)
-        *zc = __atomic_load_n(&g_zc_sent, __ATOMIC_RELAXED);
-    if (copied)
-        *copied = __atomic_load_n(&g_zc_copied, __ATOMIC_RELAXED);
-}
-
-/* lkey for [p, p+len) on dev, or 0 when the range is not inside one
- * registered region. Registers on first use. */
-static uint32_t __attribute__((unused)) zc_lkey(struct efs_rdma_dev *dev, const void *p, uint32_t len)
-{
-    int di = (int)(dev - g_devs);
-    if (di < 0 || di >= 4)
-        return 0;
-    int n = __atomic_load_n(&g_zc_n, __ATOMIC_ACQUIRE);
-    const uint8_t *q = p;
-    for (int i = 0; i < n; i++) {
-        struct zc_region *r = &g_zc[i];
-        if (q < r->base || q + len > r->base + r->len)
-            continue;
-        struct ibv_mr *mr = __atomic_load_n(&r->mr[di], __ATOMIC_ACQUIRE);
-        if (mr)
-            return mr->lkey;
-        if (__atomic_load_n(&r->failed[di], __ATOMIC_RELAXED))
-            return 0;
-        pthread_mutex_lock(&g_zc_lock);
-        mr = r->mr[di];
-        if (!mr && !r->failed[di]) {
-            mr = ibv_reg_mr(dev->pd, r->base, r->len, IBV_ACCESS_LOCAL_WRITE);
-            if (mr) {
-                __atomic_store_n(&r->mr[di], mr, __ATOMIC_RELEASE);
-            } else {
-                r->failed[di] = 1;
-                fprintf(stderr, "efs: RDMA zero-copy region %p len=%zu "
-                        "reg_mr failed on %s (errno %d); copying sends\n",
-                        (void *)r->base, r->len, dev->name, errno);
-            }
-        }
-        pthread_mutex_unlock(&g_zc_lock);
-        return mr ? mr->lkey : 0;
-    }
-    return 0;
-}
-
 /* Conn registry: recv WR wr_id = (gen << 32) | (reg_idx << 8) | buf_idx, so
  * the shared-CQ poller can map a completion back to its conn. The generation
  * tag is bumped each time a slot is freed: completions a dead QP already
@@ -289,6 +244,9 @@ static uint32_t __attribute__((unused)) zc_lkey(struct efs_rdma_dev *dev, const 
 static struct efs_rdma_conn *g_conn_reg[EFS_RDMA_MAX_CONNS];
 static uint32_t g_reg_gen[EFS_RDMA_MAX_CONNS];
 static pthread_mutex_t g_reg_lock = PTHREAD_MUTEX_INITIALIZER;
+/* Counters of connections that left the registry (under g_reg_lock), so
+ * efs_rdma_totals counts every connection exactly once. */
+static struct efs_rdma_totals g_retired;
 
 int efs_rdma_live_conns(void)
 {
@@ -671,6 +629,20 @@ struct efs_rdma_conn {
     uint32_t max_inline; /* actual QP inline cap (may be < EFS_RDMA_INLINE_MAX) */
     int zc_ok;           /* QP accepts 2 SGEs: W39 zero-copy sends allowed */
 };
+
+/* Message counters have one writer, the checked-out owner; efs_rdma_totals
+ * reads them from another thread, so updates are single-writer atomic
+ * stores (no read-modify-write contention on the data path). */
+#define OWNER_ADD(field, n) \
+    __atomic_store_n(&(field), (field) + (uint64_t)(n), __ATOMIC_RELAXED)
+static void totals_add(struct efs_rdma_totals *t, struct efs_rdma_conn *rc)
+{
+    t->data_frames_tx += __atomic_load_n(&rc->data_frames, __ATOMIC_RELAXED);
+    t->data_bytes_tx += __atomic_load_n(&rc->data_bytes, __ATOMIC_RELAXED);
+    t->data_frames_rx += __atomic_load_n(&rc->rx_frames, __ATOMIC_RELAXED);
+    t->data_bytes_rx += __atomic_load_n(&rc->rx_bytes, __ATOMIC_RELAXED);
+    t->credit_stalls += __atomic_load_n(&rc->credit_stalls, __ATOMIC_RELAXED);
+}
 
 static int post_recv(struct efs_rdma_conn *rc, int idx)
 {
@@ -1174,6 +1146,7 @@ void efs_rdma_conn_destroy(struct efs_rdma_conn *rc)
         if (g_conn_reg[rc->reg_idx] == rc) {
             g_conn_reg[rc->reg_idx] = NULL;
             g_reg_gen[rc->reg_idx]++;
+            totals_add(&g_retired, rc);
         }
         pthread_mutex_unlock(&g_reg_lock);
     }
@@ -1541,7 +1514,7 @@ int efs_rdma_send_frame(struct efs_rdma_conn *rc, uint8_t type,
             if (message_progress(rc,rc->nrecv)<0 || now_us()>=end) goto fail;
             idx=send_buf_pick(rc);if (idx==-1) goto fail;
             if (idx>=0 && rc->credits.sent-rc->credits.returned<rc->credits.capacity) break;
-            rc->credit_stalls++;
+            OWNER_ADD(rc->credit_stalls, 1);
             if (message_pause(rc,end)<0) goto fail;
         }
         uint32_t n=total-off;if (n>rc->max_frame-EFS_RMSG_ENVELOPE) n=rc->max_frame-EFS_RMSG_ENVELOPE;
@@ -1558,7 +1531,7 @@ int efs_rdma_send_frame(struct efs_rdma_conn *rc, uint8_t type,
         if (left || efs_rmsg_credit_take(&rc->credits)!=1 ||
             post_send(rc,SEND_WRID_POOL|idx,b,n+EFS_RMSG_ENVELOPE,n+EFS_RMSG_ENVELOPE<=rc->max_inline)) goto fail;
         rc->send_busy[idx]=1;rc->send_posted_us[idx]=now_us();
-        rc->data_frames++;rc->data_bytes+=n+EFS_RMSG_ENVELOPE;off+=n;
+        OWNER_ADD(rc->data_frames, 1);OWNER_ADD(rc->data_bytes, n+EFS_RMSG_ENVELOPE);off+=n;
     }
     rc->app_tx++;rc->logical_tx+=total;return EFS_OK;
 fail:
@@ -1614,7 +1587,7 @@ static int message_progress(struct efs_rdma_conn *rc,unsigned frames)
             if (!rc->messages.active) rc->assembly_end_us=now_us()+(int64_t)EFS_IO_TIMEOUT_MS*1000;
             int got=efs_rmsg_rx_feed(&rc->messages,p,len);
             if (got<0) goto fail;
-            rc->rx_frames++;rc->rx_bytes+=len;
+            OWNER_ADD(rc->rx_frames, 1);OWNER_ADD(rc->rx_bytes, len);
             if (rc->messages.used>rc->assembly_peak) rc->assembly_peak=rc->messages.used;
             if (got) {rc->assembly_end_us=0;rc->app_rx++;rc->logical_rx+=h.total;}
         }
@@ -1691,6 +1664,16 @@ uint64_t efs_rdma_assembly_bytes(void)
 { return __atomic_load_n(&g_assembly_budget.used,__ATOMIC_RELAXED); }
 void efs_rdma_tcp_violation(struct efs_rdma_conn *rc)
 { rc->tcp_app_rx++;rc->broken=1; }
+void efs_rdma_totals(struct efs_rdma_totals *out)
+{
+    pthread_mutex_lock(&g_reg_lock);
+    *out = g_retired;
+    for (int i = 0; i < EFS_RDMA_MAX_CONNS; i++)
+        if (g_conn_reg[i])
+            totals_add(out, g_conn_reg[i]);
+    pthread_mutex_unlock(&g_reg_lock);
+    out->live_conns = (uint64_t)efs_rdma_live_conns();
+}
 void efs_rdma_message_stats(struct efs_rdma_conn *rc,struct efs_rdma_message_stats *o)
 {
     *o=(struct efs_rdma_message_stats){rc->data_frames,rc->data_bytes,rc->rx_frames,rc->rx_bytes,

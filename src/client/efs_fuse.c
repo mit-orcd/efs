@@ -411,13 +411,6 @@ static ino_t find_synthetic_ino(efs_ino_t parent_ino)
     return (ino_t)((1ULL << 61) | (parent_ino & ((1ULL << 60) - 1)));
 }
 
-/* Reserved virtual-file names: never allow a real file/dir to shadow them. */
-static int name_is_reserved(const char *name)
-{
-    (void)name;
-    return 0; /* Legacy names are ordinary user entries; .efs collisions win. */
-}
-
 /* Canonical absolute mountpoint, set once in main. .find results are rendered
  * as host-absolute paths (mountpoint + fs-root path) so they can be piped or
  * looped over from any working directory. */
@@ -4395,8 +4388,6 @@ static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
         memset(created, 0, sizeof(*created));
     if (strlen(name) > 255)
         return -ENAMETOOLONG;
-    if (name_is_reserved(name))
-        return -EEXIST;
     rc = efs_client_stat_ino((efs_ino_t)parent_ino, &parent);
     if (rc != EFS_OK)
         return fuse_stat_errno(rc);
@@ -4508,8 +4499,6 @@ static int efs_fuse_mkdir_at(fuse_ino_t parent_ino, const char *name, mode_t mod
     int rc;
     if (strlen(name) > 255)
         return -ENAMETOOLONG;
-    if (name_is_reserved(name))
-        return -EEXIST;
     rc = efs_client_stat_ino((efs_ino_t)parent_ino, &parent);
     if (rc != EFS_OK)
         return fuse_stat_errno(rc);
@@ -4538,8 +4527,6 @@ static int efs_fuse_unlink_at(fuse_ino_t parent_ino, const char *name)
 {
     struct efs_inode parent;
     int rc;
-    if (name_is_reserved(name))
-        return -EACCES;
     rc = efs_client_stat_ino((efs_ino_t)parent_ino, &parent);
     if (rc != EFS_OK)
         return fuse_stat_errno(rc);
@@ -4803,8 +4790,6 @@ static int efs_fuse_link_at(fuse_ino_t src_ino, fuse_ino_t newparent,
     struct efs_inode src, parent;
     int rc;
     if (virt_kind(src_ino) || virt_kind(newparent))
-        return -EACCES;
-    if (name_is_reserved(newname))
         return -EACCES;
     rc = efs_client_stat_ino((efs_ino_t)src_ino, &src);
     if (rc != EFS_OK)
@@ -5121,8 +5106,6 @@ static int efs_fuse_rename_at(fuse_ino_t parent, const char *name,
     if (flags != 0)
         return -EOPNOTSUPP;
     if (virt_kind(parent) || virt_kind(newparent))
-        return -EACCES;
-    if (name_is_reserved(name) || name_is_reserved(newname))
         return -EACCES;
     rc = efs_client_stat_ino((efs_ino_t)parent, &src_parent);
     if (rc != EFS_OK)

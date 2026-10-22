@@ -200,11 +200,16 @@ void server_handle_conn(struct efs_conn *conn)
         if (!declared && (type == EFS_MSG_INODE_GETCHUNKS || type == EFS_MSG_GET_SEGMENT ||
                           type == EFS_MSG_PUT_SEGMENT)) {
             close_conn = undeclared_refuse(type);
-            type = 0; /* falls to default: no reply */
         }
-        if (EFS_MSG_IS_RETIRED(type)) {
+        if (EFS_MSG_IS_RETIRED(type))
             close_conn = retired_refuse(type);
-            type = 0;
+        /* A refused frame gets no reply. (Rewriting its type to 0 used to
+         * dispatch it as HEARTBEAT and answer a HEARTBEAT_ACK first.) */
+        if (close_conn) {
+            if (rdma_frame)
+                efs_rdma_message_release(conn->rc);
+            free(to_free);
+            break;
         }
         switch (type) {
         case EFS_MSG_CLIENT_HELLO: {

@@ -1042,11 +1042,20 @@ under `/data1/efs/testsuite/`, next to the same run of the unmodified base.
 |---|---|---|---|
 | 1 (dead code) | `dcclean-b1a` | build clean; TOTAL 814, FAIL 2 | TOTAL 813, FAIL 2 (same two) |
 | 2 (old formats) | `dcclean-b2a` (`tmp/` created first) | build clean; TOTAL 815, FAIL 0 | — |
+| 3 (misleading code) | `dcclean-b3b` | build with no warnings; TOTAL 816, FAIL 0 (runner creates `tmp/`) | — |
 
 The two failures in the batch 1 and base runs are environmental: the runner
 exports `TMPDIR=$PWD/tmp` without creating it, so `test_store_durability` and
 `test_kv_lsm_concurrent 4` fail `mkdtemp`. Both pass when run directly in the
-same tree; later runs create `tmp/` first. Neither run is a mounted, cluster or RDMA qualification.
+same tree; later runs create `tmp/` first. No run is a mounted, cluster or
+RDMA qualification. For batch 3, [`cleanup_smoke.sh`](dead-code-review-20261021/cleanup_smoke.sh)
+also ran a private 3-node TCP efsd set on node9901 (ports 17631–17633) in
+`dcclean-b3b`: `mkfs` with a label and the positional `expiry-policy set`
+fail with usage errors; `status`, `io-stats` (with the `rdma` row),
+`gc-status` and `pack-compact 0` (with `packer:` lines) answer; a frame with
+retired ID 81 gets no reply and a closed connection, with one log line.
+PASS. The RDMA counters read 0 there (TCP transport); the RDMA path is
+NOTRUN.
 
 | Row | Status | What changed |
 |---|---|---|
@@ -1065,3 +1074,22 @@ same tree; later runs create `tmp/` first. Neither run is a mounted, cluster or 
 | D4 | **done (format)** | Fragment objects are always named `{ci}.{fi}.{gen}`; the store backend refuses generation 0 (`store_nvme.c`), so a GET of it reads as absent and a PUT fails. The round-robin root fallback is gone: a direct write without a picked root is refused with `EFS_ERR_INVAL` and a log line. The flat meta-directory usage exclusion is deleted. `efs-bench` local mode now uses generation 1. |
 | K3 | **done (format)** | `legacy_checkpoint_pin/retire`, the `legacy` fields and the publication rollback for them deleted, with `tests/test_query_cache_migration.c`. `efs_query_catalog_disk_recover` now refuses a `current` generation whose manifest has another format version, logs the path and version, and leaves it untouched; the host then reports the query publisher unavailable. `test_query_disk_io.c` replaces the migration test with that refusal (v5 and v6), checks that a failed publication keeps the previous current, and that v7 restores. |
 | E2 | **partly done (visible)** | `mkfs`/`raft-mkfs` take exactly `NODE:PORT`; a label is a usage error. `expiry-policy set` takes only the named form; the positional `TTL_NS MAX_NS FLAGS` form is a usage error. Help, `tests/roll_efsd.sh` and `tests/live/raft_read_freshness.py` (NOTRUN: needs a cluster) updated. `tests/test_expiry_cli.py` now checks the encoded payload directly, asserts the old form fails, and is wired into `make test`. **Not done:** the efs-fuse export label. It is part of every current mount command, including the efs-fuse help example and the deploy scripts in `~/git/cluster` and `~/git/devops`, so removing it needs a coordinated change there. |
+| E1, R2 | **done** | `EFS_STATS_TTL_MS`, `EFS_RDMA_SPIN_US` and `EFS_FAULT_REJECT_PUBLISH` removed from `docs/using/power-user.md` (no reader). The `EFS_FLUSH_PROF` comment in `tests/clean_cluster.sh` is gone. |
+| D3 | **done** | `struct efs_packer_status` moved to `protocol.h` and sent in the pack-compact reply; `efs-mgmt pack-compact` prints one `packer:` line per node with passes, candidates, built segments, files packed/cancelled, unindexed, backfilled, read/put/admit errors, abandoned, busy passes and budget waits. The line avoids the `leads`/`segments=` patterns that scripts grep. |
+| R3 | **done; quiesce undecided** | `io-stats` gains an `rdma` row: live connections, data frames/bytes sent and received, credit stalls. Closed connections are folded into a process total when they leave the registry; live ones are summed under the registry lock, and their owner-only counters are now single-writer atomic stores. `zc_lkey` and `SEND_WRID_INLINE` deleted. `efs_rdma_zc_stats` and its counters were deleted too: nothing ever incremented them, because direct fill is disabled, so exporting them would show permanent zeros. `efs_rdma_message_stats` stays (tests use it). `efs_rdma_send_quiesce` is unchanged and still undecided, with the lifetime contract. |
+| P6 (rest) | **done** | `efs-mgmt io-stats` accepts only the current reply (it read a three-class reply before); `gc-status`/`expiry-status` accept only version 4 with the exact length (versions 1–3 before). `tests/test_gc_status_expiry.py` now probes the v4 layout and asserts that the older ones are refused; it is wired into `make test`. |
+| K2 | **done** | The `efs_expiry_index_key` definition takes `uint8_t out[EFS_EXPIRY_INDEX_BYTES]`, as declared; the `-Warray-parameter` warning is gone. |
+| K5 | **done** | `query_disk.c` path join split onto two lines (no `-Wmisleading-indentation`). An invalid `EFS_QUERY_BACKEND` now leaves the query publisher unavailable with a log line instead of falling back to disk; `ram` stays as the documented comparison backend (`docs/using/efs-commands.md`). |
+| T7 | **done** | `name_is_reserved` (always 0) and its five call sites deleted, with the four stubs. `test_mkdir_committed_reply.py` lost its `.efs` case, which only tested its own stub. |
+| T8 | **done, probes kept** | `make clean` removes `tests/test_data_commit`, `tests/measure/*_smoke` and the two moved benchmarks. `test_txn_resolve_faults` links libraries after the objects. `test_query_disk_io.c` builds without warnings; the `test_bufpool.c` and `test_reclaim.c` stubs have prototypes. **Kept:** `docs/reviews/structural-review-probes-20261011.tar.gz` and the `test_*.py` copies under `docs/reviews/*-20261011/`; their READMEs are the reproduction of those reviews, so moving them needs its own change. |
+| E4 | **done** | `meta_cmd.h` no longer claims the simulator namespace "converges in P2" or that the two never diverge; it states the simulator keeps retired commands that production refuses, and that the reserved values stay refused until a format-marker change. The 30 unset `EFS_*` knobs are unchanged (not dead). |
+| Refusal reply | **fixed (found in passing)** | Both handler refusals (an undeclared chunk-map/segment request, and a retired ID) rewrote the frame type to 0 to skip dispatch. 0 is `HEARTBEAT`, so the server answered a `HEARTBEAT_ACK` before closing (seen with a private 3-node smoke). A refused frame now skips dispatch and closes with no reply; `test_retired_messages.py` checks this. The declaration gate itself (W133) is unchanged. |
+| Runner | **fixed** | `scripts/make_test_summary.sh` creates `tmp/` before exporting `TMPDIR`, which removes the two environmental failures above. |
+
+Not part of this cleanup: M1–M5, P1, P3, S1 (W127–W134), W1/M7, S2 (waits
+on W134), X1, E3 (waits on W133), T1–T5 (W135–W139; only
+`test_expiry_cli.py` and `test_gc_status_expiry.py` were wired here, because
+they cover code changed here), D5 and K4 (kept). Follow-ups found on the
+way: the store `del_if_sum` operation has no caller after P2, and the RDMA
+zero-copy region table (`efs_rdma_zc_region_add`) only records regions while
+direct fill stays disabled.

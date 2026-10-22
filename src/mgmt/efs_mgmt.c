@@ -541,8 +541,7 @@ static int cmd_io_stats(int argc, char **argv)
     if (send_recv(fd, EFS_MSG_IO_STATS, NULL, 0, &reply_type, &reply,
                   &reply_len) != 0 ||
         reply_type != EFS_MSG_IO_STATS_REPLY ||
-        (reply_len != sizeof(*r) &&
-         reply_len != sizeof(uint64_t) + 3 * sizeof(struct efs_io_stats_class))) {
+        reply_len != sizeof(*r)) {
         fprintf(stderr, "Failed to get io-stats\n");
         free(reply);
         close(fd);
@@ -552,8 +551,7 @@ static int cmd_io_stats(int argc, char **argv)
     r = reply;
     printf("io-stats %s:%u uptime_s=%llu\n", host, port,
            (unsigned long long)(r->uptime_us / 1000000ull));
-    uint32_t nclasses = (reply_len - sizeof(uint64_t)) / sizeof(struct efs_io_stats_class);
-    for (i = 0; i < nclasses; i++) {
+    for (i = 0; i < EFS_IO_STATS_CLASSES; i++) {
         struct efs_io_stats_class *c = &r->cls[i];
         printf("  %-10s ops=%llu bytes=%llu errors=%llu us_sum=%llu avg_us=%llu "
                "p50_us=%llu max_us=%llu\n",
@@ -566,6 +564,12 @@ static int cmd_io_stats(int argc, char **argv)
                (unsigned long long)c->p50_us,
                (unsigned long long)c->us_max);
     }
+    printf("  rdma       conns=%llu data_tx_frames=%llu data_tx_bytes=%llu data_rx_frames=%llu "
+           "data_rx_bytes=%llu credit_stalls=%llu\n",
+           (unsigned long long)r->rdma.live_conns,
+           (unsigned long long)r->rdma.data_frames_tx, (unsigned long long)r->rdma.data_bytes_tx,
+           (unsigned long long)r->rdma.data_frames_rx, (unsigned long long)r->rdma.data_bytes_rx,
+           (unsigned long long)r->rdma.credit_stalls);
     free(reply);
     return 0;
 }
@@ -631,26 +635,18 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
     efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
     int rc = send_recv(fd, EFS_MSG_GC_STATUS, NULL, 0, &type, &payload, &len);
     close(fd);
+    /* Only the current reply layout (version 4) is read. */
     if (rc || type != EFS_MSG_GC_STATUS_REPLY ||
-        (len != sizeof(struct efs_msg_gc_status_reply) &&
-         len != offsetof(struct efs_msg_gc_status_reply, reclaim) &&
-         len != offsetof(struct efs_msg_gc_status_reply, expiry) &&
-         len != offsetof(struct efs_msg_gc_status_reply, io))) {
-        fprintf(stderr, "GC status unavailable (server upgrade may be required)\n");
+        len != sizeof(struct efs_msg_gc_status_reply) ||
+        ((struct efs_msg_gc_status_reply *)payload)->version != 4) {
+        fprintf(stderr, "GC status unavailable: no current-format reply\n");
         free(payload);
         return 1;
     }
     struct efs_msg_gc_status_reply *g = payload;
-    if (!((g->version == 1 && len == offsetof(struct efs_msg_gc_status_reply, io)) ||
-          (g->version == 2 && len == offsetof(struct efs_msg_gc_status_reply, expiry)) ||
-          (g->version == 3 && len == offsetof(struct efs_msg_gc_status_reply, reclaim)) ||
-          (g->version == 4 && len == sizeof(*g)))) {
-        free(payload);
-        return 1;
-    }
     if(expiry_only) {
-        if(g->version<3 || !g->expiry.available) {
-            fprintf(stderr,"Expiry worker status unavailable; upgrade the server.\n");free(payload);return 1;
+        if(!g->expiry.available) {
+            fprintf(stderr,"Expiry worker status unavailable on this node.\n");free(payload);return 1;
         }
         const struct efs_expiry_status *e=&g->expiry;char bytes[64],age[80];
         const char *state=!e->enabled?"disabled":e->uncertain?"paused: clock uncertain":!e->healthy?"waiting: clock health sample":
@@ -697,7 +693,7 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
                (unsigned long long)g->reap_seen[i], (unsigned long long)g->orphan_seen[i], g->reap_capped[i],
                (unsigned long long)g->first_reap[i],
                (unsigned long long)g->first_seen_age_ms[i]);
-    if(g->version>=3) {
+    {
         const struct efs_expiry_status *e=&g->expiry;
         const char *state=!e->available?"unavailable":!e->enabled?"disabled":
                           e->uncertain?"paused_clock":!e->healthy?"warming_clock":!e->leader_mask?"standby":"running";
@@ -713,7 +709,7 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
                "overdue_capped=%u expiry_sample_age_ms=%llu\n",i*2,(e->sampled_mask>>i)&1,
                (unsigned long long)e->due_lower_bound[i],e->due_capped[i],(unsigned long long)e->sample_age_ms[i]);
     }
-    if(g->version>=4) {
+    {
         const struct efs_reclaim_status *c=&g->reclaim;
         printf("reclaim_state=%s reclaim_accepted=%llu reclaim_deleted=%llu reclaim_checkpointed=%llu "
                "reclaim_retired=%llu reclaim_busy=%llu journal_records=%llu journal_segments=%llu "
@@ -727,7 +723,7 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
                (unsigned long long)c->credited_bytes,(unsigned long long)c->phys_avail_bytes,
                (unsigned long long)c->phys_refused,(unsigned long long)c->recovered);
     }
-    if (g->version >= 2) {
+    {
         const char *names[] = {"checksum_read", "unlink", "dir_sync"};
         for (unsigned i = 0; i < EFS_GC_IO_CLASSES; i++) {
             struct efs_gc_io_stats *c = &g->io[i];
@@ -778,7 +774,7 @@ static int cmd_pack_compact(int argc, char **argv)
         rc = send_recv(nfd, EFS_MSG_PACK_COMPACT, &req, sizeof(req), &rt, &r, &rl);
         close(nfd);
         if (rc || rt != EFS_MSG_PACK_COMPACT_REPLY || rl != sizeof(struct efs_msg_pack_compact_reply)) {
-            printf("node %u %s:%u: no pack-compact reply (server upgrade may be required)\n", n->id, n->addr, n->port);
+            printf("node %u %s:%u: no current-format pack-compact reply\n", n->id, n->addr, n->port);
             free(r);
             continue;
         }
@@ -795,6 +791,19 @@ static int cmd_pack_compact(int argc, char **argv)
         } else {
             printf("node %u %s:%u: leads no group\n", n->id, n->addr, n->port);
         }
+        /* Node-wide since start, across every group it led; errors and
+         * backlog waits are otherwise invisible to operators. */
+        const struct efs_packer_status *p = &x->packer;
+        printf("  packer: passes=%llu candidates=%llu built=%llu files_packed=%llu cancelled=%llu "
+               "unindexed=%llu backfilled=%llu read_errors=%llu put_errors=%llu admit_errors=%llu "
+               "abandoned=%llu busy_passes=%llu budget_waits=%llu\n",
+               (unsigned long long)p->passes, (unsigned long long)p->candidates,
+               (unsigned long long)p->segments, (unsigned long long)p->files_packed,
+               (unsigned long long)p->files_cancelled, (unsigned long long)p->unindexed,
+               (unsigned long long)p->backfilled, (unsigned long long)p->read_errors,
+               (unsigned long long)p->put_errors, (unsigned long long)p->admit_errors,
+               (unsigned long long)p->abandoned, (unsigned long long)p->busy_passes,
+               (unsigned long long)p->budget_waits);
         free(r);
     }
     free(payload);

@@ -16,10 +16,14 @@ for t in retired:
 # The refusal runs after the frame is read and before the switch; nothing
 # below it may dispatch a retired type.
 loop = handler[handler.index('void server_handle_conn('):]
-check = loop.index('if (EFS_MSG_IS_RETIRED(type)) {')
-assert check < loop.index('switch (type) {'), 'refusal must precede dispatch'
-block = loop[check:loop.index('}', check)]
-assert 'close_conn = retired_refuse(type);' in block and 'type = 0;' in block, block
+check = loop.index('if (EFS_MSG_IS_RETIRED(type))\n            close_conn = retired_refuse(type);')
+skip = loop.index('if (close_conn) {', check)
+dispatch = loop.index('switch (type) {')
+assert check < skip < dispatch, 'refusal and skip must precede dispatch'
+block = loop[skip:loop.index('}', skip)]
+assert 'break;' in block and 'free(to_free);' in block, block
+# A refused frame is never rewritten into another type (0 is HEARTBEAT).
+assert 'type = 0;' not in loop[check-400:dispatch].replace('uint8_t type = 0;',''), 'refusal must not dispatch as HEARTBEAT'
 a = handler.index('static int retired_refuse(uint8_t type)')
 helper = handler[a:handler.index('\n}', a)+2]
 source = '#include "efs/protocol.h"\n#include <assert.h>\n#include <stdint.h>\n#include <stdio.h>\n' + helper + r'''
@@ -34,4 +38,4 @@ with tempfile.TemporaryDirectory(prefix='efs-retired-msg-') as d:
     subprocess.run(shlex.split(os.environ.get('CC', 'cc'))+['-std=gnu11', '-Wall', '-Wextra', '-Werror',
                    '-I'+str(root/'include'), str(path), '-o', str(path.with_suffix(''))], check=True)
     subprocess.run([str(path.with_suffix(''))], check=True, stderr=subprocess.DEVNULL)
-print('retired messages: IDs %s unnamed, refused before dispatch with a closed connection PASS' % retired)
+print('retired messages: IDs %s unnamed, refused before dispatch: no reply, connection closed PASS' % retired)

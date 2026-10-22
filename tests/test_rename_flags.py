@@ -18,7 +18,6 @@ typedef uint64_t fuse_ino_t;
 static struct {uint64_t export_id;} g_client={1};
 static int calls,renames,rename_rc,stat_rc,lookup_rc,wx_rc;
 static int virt_kind(fuse_ino_t ino){(void)ino;return 0;}
-static int name_is_reserved(const char *name){(void)name;return 0;}
 static int fuse_stat_errno(int rc){return rc==EFS_ERR_NOT_FOUND?-ENOENT:-EIO;}
 static int efs_rc_to_errno(int rc){return -rc;}
 static int efs_client_stat_ino(uint64_t ino,struct efs_inode *row){calls++;row->ino=ino;return stat_rc;}

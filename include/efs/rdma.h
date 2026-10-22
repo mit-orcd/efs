@@ -63,9 +63,14 @@ int efs_rdma_zc_region_add(void *base, size_t len);
  * completed. Returns 0, or -1 when the conn is broken. */
 int efs_rdma_send_quiesce(struct efs_rdma_conn *rc);
 
-/* Counters for raft-obs / fuse stats: zero-copy frames vs copied frames
- * that were eligible by size. */
-void efs_rdma_zc_stats(uint64_t *zc, uint64_t *copied);
+/* Process-wide message counters since start: closed connections plus a
+ * snapshot of the live ones (io-stats). */
+struct efs_rdma_totals {
+    uint64_t live_conns;
+    uint64_t data_frames_tx, data_bytes_tx, data_frames_rx, data_bytes_rx;
+    uint64_t credit_stalls;
+};
+void efs_rdma_totals(struct efs_rdma_totals *out);
 
 /* Direct-fill fast path is currently disabled (returns NULL); generic reply
  * fallback segments over RDMA and copies before TLS reply storage is reused. */

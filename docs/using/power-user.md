@@ -58,12 +58,10 @@ selects fragment I/O independently of transport; buffered is the daemon default.
 | `EFS_READ_PREFETCH` | read prefetch depth override |
 | `EFS_READ_VERIFY=1` | enable payload re-hashing on GET receive paths (off by default); returned digests are checked against the captured metadata view where available; identity-bound integrity/repair remain [W75](../backlog/work-items.md#w75) |
 | `EFS_FUSE_SPLICE_READ` | opt into `FUSE_CAP_SPLICE_READ` for measurement (default off); the recorded profile found no gain, so copy savings are not an accepted result |
-| `EFS_STATS_TTL_MS` | `.stats` rollup cache TTL (default 1000) |
 | `EFS_FEATURES_TTL_MS` | exported-features cache TTL (default 2000) |
 | `EFS_NUMA_NODE` | `=none` disables NUMA pinning at startup; `=N` forces node N |
 | `EFS_MD_RAFT_N` | **server:** voter count, currently 3 or 4 (default 4); node IDs must be 1..N |
 | `EFS_RDMA_DEV` / `EFS_RDMA_GID_INDEX` | **server/client:** verbs device and RoCE GID selection |
-| `EFS_RDMA_SPIN_US` | RDMA completion poll spin before sleeping |
 | `EFS_RDMA_BUFS` | RDMA buffer pool size |
 | `EFS_LOG_TS` | UTC timestamps are enabled by default; `=0` disables the timestamp wrapper |
 | `EFS_DCACHE_TRACE=1` | client dcache/publish trace (the `report` / `dcache` lines) |
@@ -78,7 +76,6 @@ selects fragment I/O independently of transport; buffered is the daemon default.
 | `EFS_PERF_PATH` / `EFS_STRACE_PATH` | output paths for recorders started by the binaries themselves |
 | `EFS_STRACE_EXPR` | strace syscall filter |
 | `EFS_FAULT_WITHHOLD=<ino>:<ci>` | **client:** implemented only in `EFS_FAULTS=1` builds; omits that REPORT record before serialization; `/tmp/efs/fault` containing `WITHHOLD <ino>:<ci>` overrides the environment, and `OFF` disables it |
-| `EFS_FAULT_REJECT_PUBLISH` | proposed server hook in the D27 decision; no implementation found in the reviewed source ([handoff](../status/in-flight.md)) |
 
 ## Quotas and capacity
 

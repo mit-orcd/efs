@@ -22,9 +22,7 @@ start_efsd() { # host node-id addr [join]
     local h=$1 nid=$2 addr=$3 join=${4:-}
     local j=""; [ -n "$join" ] && j="--join $join"
     # setsid detaches; the ssh session may linger (harmless) so allow rc=124.
-    # EFS_FLUSH_PROF=1 makes efsd emit FLUSH-PROF/FLUSH-WINDOW lines (metadata
-    # flush per-stage timing). Must stay UNSET when the caller did not ask for
-    # it — efsd tests it with getenv(), so even an empty value turns it on.
+    # Optional trace variables are forwarded only when the caller set them.
     local prof=""
     # RDMA handshake / first-frame trace (rdma-first: lines on both sides).
     [ -n "${EFS_RDMA_FIRST:-}" ] && prof="$prof EFS_RDMA_FIRST=$EFS_RDMA_FIRST"

@@ -1271,6 +1271,7 @@ void server_packer_compact_request(const struct efs_msg_pack_compact *req, struc
     memset(out, 0, sizeof(*out));
     out->rc = EFS_OK;
     out->compacted_total = __atomic_load_n(&pk.st.compacted, __ATOMIC_RELAXED);
+    server_packer_status(&out->packer);
     for (int g = 0; g < 2; g++) {
         uint64_t term = 0;
         if (!pk.started || !server_raft_host_pack_leader(groups[g], &term, NULL)) continue;

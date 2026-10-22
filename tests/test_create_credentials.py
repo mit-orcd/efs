@@ -35,7 +35,6 @@ static struct {uint64_t export_id;} g_client={1};
 struct request {struct efs_inode inode;int complete,result,attempted;uint64_t generation;struct {struct {struct {uint64_t seq;} id;} q;} wire;};
 struct efs_pending_create {struct request request;};
 static int open_acquired,stage_rc,releases;
-static int name_is_reserved(const char *name){(void)name;return 0;}
 static int check_dir_wx(const struct efs_inode *p){(void)p;return 0;}
 static int efs_client_stat_ino(efs_ino_t ino,struct efs_inode *p){memset(p,0,sizeof(*p));p->ino=ino;p->mode=parent_mode;p->gid=3001;return EFS_OK;}
 static struct efs_pending_create *efs_pending_create_alloc(void){return calloc(1,sizeof(struct efs_pending_create));}

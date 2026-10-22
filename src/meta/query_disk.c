@@ -1617,7 +1617,8 @@ static int subtree_page(struct efs_query_disk *d,const struct efs_meta_row *root
         char path[EFS_MAX_PATH];rc=efs_query_disk_path(d,next->entry.parent,root->ino,path,sizeof(path));if(rc)return rc;
         size_t length=strlen(path),name=strlen(next->entry.name);
         if(length+name+(length?1:0)>=sizeof(path))return EFS_ERR_NAMETOOLONG;
-        if(length)path[length++]='/';memcpy(path+length,next->entry.name,name+1);
+        if(length)path[length++]='/';
+        memcpy(path+length,next->entry.name,name+1);
         rc=emit(user,&next->entry,path);
         if(rc==EFS_ERR_AGAIN)return EFS_OK;
         if(rc)return rc;

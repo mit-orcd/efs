@@ -225,12 +225,19 @@ struct efs_msg_pack_compact {
     uint32_t segments; /* output segments to build per led group; 0 = report only */
     uint32_t reserved;
 };
+/* Background packer counters of one node since start (all groups it led). */
+struct efs_packer_status {
+    uint64_t passes, candidates, segments, files_packed, files_cancelled,
+             unindexed, read_errors, put_errors, admit_errors, abandoned,
+             busy_passes, budget_waits, compacted, backfilled;
+};
 struct efs_msg_pack_compact_reply {
     int32_t rc;
     uint32_t led_groups;      /* metadata groups this node leads (bit per group index) */
     uint64_t compacted_total; /* records moved by compaction since start */
     /* Last fragmentation summary of the led groups (summed). */
     uint64_t segments, live_bytes, dead_bytes, holes, small;
+    struct efs_packer_status packer;
 };
 
 /* W125 connection handshake. A connection must declare a compatible
@@ -615,9 +622,17 @@ struct efs_io_stats_class {
     uint64_t us_max;
     uint64_t p50_us;
 };
+/* Process-wide RDMA message transport counters since start: connections
+ * already closed plus a snapshot of the live ones (efs_rdma_totals). */
+struct efs_io_stats_rdma {
+    uint64_t live_conns;
+    uint64_t data_frames_tx, data_bytes_tx, data_frames_rx, data_bytes_rx;
+    uint64_t credit_stalls;
+};
 struct efs_msg_io_stats_reply {
     uint64_t uptime_us;
     struct efs_io_stats_class cls[EFS_IO_STATS_CLASSES];
+    struct efs_io_stats_rdma rdma;
 };
 
 /* VERSION reply: fixed-size NUL-terminated string (efs_version_string of

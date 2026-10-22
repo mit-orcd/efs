@@ -7,6 +7,7 @@
 static int fail_malloc, fail_calloc;
 static void *test_calloc(size_t n, size_t size) { return fail_calloc ? NULL : calloc(n, size); }
 static void *test_malloc(size_t n) { return fail_malloc ? NULL : malloc(n); }
+int efs_rdma_zc_region_add(void *p, size_t n);
 int efs_rdma_zc_region_add(void *p, size_t n) { (void)p; (void)n; return 0; }
 #define malloc test_malloc
 #define calloc test_calloc

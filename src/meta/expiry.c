@@ -9,8 +9,8 @@ void efs_expiry_policy_key(uint64_t root,uint64_t gen,uint8_t out[EFS_EXPIRY_KEY
 {key(out,efs_kv_inode_shard(root),EFS_KV_KIND_EXPIRY_POLICY,root,gen);}
 void efs_expiry_record_key(uint64_t ino,uint64_t gen,uint8_t out[EFS_EXPIRY_KEY_BYTES])
 {key(out,efs_kv_inode_shard(ino),EFS_KV_KIND_EXPIRY,ino,gen);}
-void efs_expiry_index_key(uint64_t ino,uint64_t gen,uint64_t deadline,uint8_t *p)
-{uint32_t sh=efs_kv_anchor_shard(efs_kv_inode_shard(ino));p[0]=(uint8_t)(sh>>8);p[1]=(uint8_t)sh;p[2]=EFS_KV_KIND_EXPIRY_INDEX;put64(p+3,deadline);put64(p+11,ino);put64(p+19,gen);}
+void efs_expiry_index_key(uint64_t ino,uint64_t gen,uint64_t deadline,uint8_t out[EFS_EXPIRY_INDEX_BYTES])
+{uint32_t sh=efs_kv_anchor_shard(efs_kv_inode_shard(ino));out[0]=(uint8_t)(sh>>8);out[1]=(uint8_t)sh;out[2]=EFS_KV_KIND_EXPIRY_INDEX;put64(out+3,deadline);put64(out+11,ino);put64(out+19,gen);}
 int efs_expiry_policy_decode(const uint8_t *v,uint32_t n,struct efs_expiry_policy *p)
 {
     if(!v || !p)return EFS_ERR_INVAL;

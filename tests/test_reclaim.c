@@ -14,6 +14,7 @@
 #include "../src/server/store.c"
 #undef server_gc_sync_roots
 static void (*after_root_sync)(void);
+int server_gc_sync_roots(struct efsd_server *s);
 int server_gc_sync_roots(struct efsd_server *s)
 {int rc=real_gc_sync_roots(s);if(!rc&&after_root_sync)after_root_sync();return rc;}
 #include "../src/server/reclaim.c"

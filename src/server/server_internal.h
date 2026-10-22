@@ -563,11 +563,8 @@ int server_raft_host_pack_propose(uint8_t group, const uint8_t *cmd, uint32_t le
 /* ---- W125 background packer (src/server/packer.c) ---- */
 int server_packer_start(struct efsd_server *s);
 void server_packer_stop(void);
-struct efs_packer_status {
-    uint64_t passes, candidates, segments, files_packed, files_cancelled,
-             unindexed, read_errors, put_errors, admit_errors, abandoned,
-             busy_passes, budget_waits, compacted, backfilled;
-};
+/* Copy of the packer counters (struct in protocol.h, sent in the
+ * pack-compact reply). */
 void server_packer_status(struct efs_packer_status *out);
 /* efs-mgmt pack-compact: queue `segments` output segments of compaction on
  * each group this node leads (run even while busy: an operator request)

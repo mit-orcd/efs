@@ -10402,8 +10402,12 @@ static void *host_query_thread(void *ctx)
     uint64_t catalog_bytes=HOST_QUERY_BYTES;
     const char *backend=getenv("EFS_QUERY_BACKEND");
     int disk_backend=!backend || strcmp(backend,"ram");
-    if(backend && strcmp(backend,"disk") && strcmp(backend,"ram"))
-        fprintf(stderr,"query-config: invalid EFS_QUERY_BACKEND; using disk\n");
+    if(backend && strcmp(backend,"disk") && strcmp(backend,"ram")) {
+        /* A mistyped backend must not silently select another one. */
+        fprintf(stderr,"query-config: invalid EFS_QUERY_BACKEND=%s (use disk or ram); query publisher unavailable\n",backend);
+        pthread_rwlock_wrlock(&h->query_lock);h->query_error=EFS_ERR_INVAL;
+        pthread_rwlock_unlock(&h->query_lock);return NULL;
+    }
     char query_root[sizeof(h->mdraft)+32];
     snprintf(query_root,sizeof(query_root),"%s/query-cache",h->mdraft);
     int disk_lease=-1;
