@@ -5087,6 +5087,14 @@ static void efs_fuse_destroy(void *userdata)
             mrc = efs_client_note_meta_change(1);
             if (mrc == EFS_OK)
                 break;
+            /* A fenced session can never publish again (K5/I23): waiting
+             * would only delay the unmount. Report the loss once. */
+            if (mrc == EFS_ERR_FENCED || efs_client_session_fenced()) {
+                fprintf(stderr, "efs-fuse: mount session fenced; writes that "
+                                "were never reported are discarded\n");
+                mrc = EFS_OK;
+                break;
+            }
             clock_gettime(CLOCK_MONOTONIC, &now);
             if (now.tv_sec - t0.tv_sec >= drain_s)
                 break;

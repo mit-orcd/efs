@@ -52,7 +52,8 @@ int efs_client_publication_progress(struct efs_publication_ack_queue *queue,
     if (rc!=EFS_OK) return rc;
     struct efs_msg_publication_reply reply={0};
     rc=efs_client_rpc_publication(&request,1,&reply);
-    if (rc==EFS_ERR_NOT_FOUND || rc==EFS_ERR_BUSY) {
+    /* UNREGISTERED: the lane shard has not admitted the session yet (K5). */
+    if (rc==EFS_ERR_NOT_FOUND || rc==EFS_ERR_BUSY || rc==EFS_ERR_UNREGISTERED) {
         uint32_t shard=efs_kv_lane_shard(request.rec.ino,
                                        request.rec.chunk_index%EFS_META_LANES);
         rc=efs_client_rpc_publication_session(shard,&request.id);
