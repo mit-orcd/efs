@@ -17,7 +17,7 @@ static void be(uint8_t *p,uint64_t v,unsigned n){while(n){p[--n]=(uint8_t)v;v>>=
 static struct efs_msg_raft_mkfs_reply rpc(const uint8_t *p,unsigned n,int expected)
 {
     for(unsigned attempt=0;attempt<120;attempt++) {
-        int fd=efs_connect_tcp("127.0.0.1",port+attempt%4);
+        int fd=efs_connect_declared("127.0.0.1",port+attempt%4);
         if(fd<0){usleep(10000);continue;}
         assert(!efs_set_recv_timeout(fd,2000) && !efs_set_send_timeout(fd,2000));
         int rc=efs_send_msg(fd,EFS_MSG_RAFT_MKFS,p,n);uint8_t type=0;void *body=NULL;uint32_t len=0;

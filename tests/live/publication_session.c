@@ -38,7 +38,7 @@ static void begin_fence(const uint8_t uuid[EFS_OPID_UUID_LEN])
     payload[1]=EFS_MD_CMD_SESSION;payload[2]=EFS_MD_SESS_BEGIN;memcpy(payload+3,uuid,16);
     char target[64];snprintf(target,sizeof(target),"%s",host);uint16_t target_port=port;
     for(unsigned attempt=0;attempt<8;attempt++) {
-        int fd=efs_connect_tcp(target,target_port);assert(fd>=0);
+        int fd=efs_connect_declared(target,target_port);assert(fd>=0);
         assert(!efs_set_recv_timeout(fd,30000));assert(!efs_set_send_timeout(fd,30000));
         assert(!efs_send_msg(fd,EFS_MSG_RAFT_MKFS,payload,sizeof(payload)));
         uint8_t type;void *reply;uint32_t n;
@@ -47,7 +47,7 @@ static void begin_fence(const uint8_t uuid[EFS_OPID_UUID_LEN])
         struct efs_msg_raft_mkfs_reply result;memcpy(&result,reply,n);free(reply);
         if(result.rc==EFS_OK)return;
         assert(result.rc==EFS_ERR_NOT_PRIMARY && result.leader_hint>=0);
-        fd=efs_connect_tcp(host,port);assert(fd>=0);
+        fd=efs_connect_declared(host,port);assert(fd>=0);
         assert(!efs_set_recv_timeout(fd,30000));assert(!efs_set_send_timeout(fd,30000));
         assert(!efs_send_msg(fd,EFS_MSG_LIST_NODES,NULL,0));
         assert(!efs_recv_msg(fd,&type,&reply,&n));close(fd);
@@ -62,7 +62,7 @@ static void begin_fence(const uint8_t uuid[EFS_OPID_UUID_LEN])
 }
 static struct efs_msg_publication_reply request(const struct efs_msg_publication *req,int mode)
 {
-    int fd=efs_connect_tcp(host,port);assert(fd>=0);
+    int fd=efs_connect_declared(host,port);assert(fd>=0);
     assert(!efs_set_recv_timeout(fd,30000));assert(!efs_set_send_timeout(fd,30000));
     uint8_t type=mode==2?EFS_MSG_PUBLICATION_RETIRE:mode?EFS_MSG_PUBLICATION_STATUS:EFS_MSG_PUBLICATION;
     uint8_t reply_type=mode==2?EFS_MSG_PUBLICATION_RETIRE_REPLY:mode?EFS_MSG_PUBLICATION_STATUS_REPLY:EFS_MSG_PUBLICATION_REPLY;

@@ -33,6 +33,11 @@ def exact(sock, length):
         result += part
     return result
 
+HELLO=struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',3,0)  # CLIENT_HELLO, EFS_PROTOCOL_VERSION 3 (W133)
+def declare(sock):
+    sock.sendall(HELLO);n=struct.unpack('>I',exact(sock,4))[0];reply=exact(sock,n)
+    assert n==9 and reply[0]==166 and struct.unpack('=iI',reply[1:])==(0,3),('declaration refused',reply)
+
 with tempfile.TemporaryDirectory(prefix='efs-tail-smoke-') as work:
     root = Path(work)/'store'
     root.mkdir()
@@ -43,7 +48,7 @@ with tempfile.TemporaryDirectory(prefix='efs-tail-smoke-') as work:
     def rpc(kind, body):
         with socket.create_connection(('127.0.0.1', port), 5) as sock:
             sock.settimeout(5)
-            sock.sendall(struct.pack('>IB', len(body)+1, kind)+body)
+            declare(sock);sock.sendall(struct.pack('>IB', len(body)+1, kind)+body)
             return exact(sock, struct.unpack('>I', exact(sock, 4))[0])
 
     env = dict(os.environ, EFS_TRANSPORT='tcp', EFS_COMMANDS='0',

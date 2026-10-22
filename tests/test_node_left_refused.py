@@ -70,7 +70,17 @@ int efs_recv_all(int fd, void *buf, size_t len)
 }
 static int dispatched, dispatched_type = -1;
 static uint32_t membership = 3; /* nodes the deleted handler would have shrunk */
-''' + fn('undeclared_refuse') + fn('retired_refuse') + prefix + r'''
+/* W133 gate stub with the real undeclared policy: before a declaration
+ * only CLIENT_HELLO and HEARTBEAT pass (test_declaration_gate covers the
+ * real gate). Retired IDs never reach it. */
+int efs_decl_gate_frame(struct efs_decl_gate *g, struct efs_conn *c, uint8_t type,
+                        const void *payload, uint32_t len)
+{
+    (void)c; (void)payload; (void)len;
+    assert(!EFS_MSG_IS_RETIRED(type));
+    return !g->declared && type != EFS_MSG_HEARTBEAT ? EFS_GATE_REFUSE : EFS_GATE_DISPATCH;
+}
+''' + fn('retired_refuse') + prefix + r'''
         default:
             (void)rc;
             dispatched++;

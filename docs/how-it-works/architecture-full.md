@@ -1581,6 +1581,12 @@ packed-read involvement. Overwrite followed by truncate-up is a hypothesis.
 Independent review of `a1ceff4cb` identifies remaining output-reuse, unchecked
 shutdown and mismatch-context gaps in the improved repro; qualification NOTRUN.
 
+[K4 / W133 declaration gate](#w133-fix):
+**fixed on branch `devel-k04`, not merged.** Every request except
+CLIENT_HELLO and HEARTBEAT needs an accepted declaration of exactly
+protocol 3. Unit gates PASS on efs3 over TCP; the RDMA unit path and the
+cluster refusal run are NOTRUN.
+
 [Alpha 1.0 plan and code review](../status/alpha-1.0-plan-review-20261022.md):
 **the plan's order holds and its K register matches the code; the code caps
 a cluster at four nodes, so ">4 nodes" is an implementation item or a
@@ -2391,7 +2397,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | dir-apply-io | **W130** · DIR apply swallows storage errors; replicas can diverge | correctness | FIXED, merged into devel `08cc16af4`; private RDMA gate PASS (`scripts/w127_incompatible_entry.sh`); unit gates PASS, one-replica fault injection NOTRUN; RDMA/multi-host NOTRUN ([implementation](#w127-w131-fix)) | [item](#w130) · [audit](../reviews/dead-code-review-20261021.md) |
 | apply-missing-kv | **W131** · missing KV engine counts as applied | defensive hardening | FIXED, merged into devel `08cc16af4`; private RDMA gate PASS (`scripts/w127_incompatible_entry.sh`); unit gates PASS; RDMA/multi-host NOTRUN ([implementation](#w127-w131-fix)) | [item](#w131) · [audit](../reviews/dead-code-review-20261021.md) |
 | node-left | **W132** · `NODE_LEFT` lets any connection drop a node from membership | correctness / safety | FIXED on `devel-k03` (`8727e3afe`): ID 24 retired, handler and remover deleted; `make test` PASS on efs2 except the pre-existing host-only `test_reclaim` failure (`tests/test_node_left_refused.py` PASS); cluster NOTRUN; not merged into devel | [item](#w132) · [audit](../reviews/dead-code-review-20261021.md) |
-| declaration-gate | **W133** · client protocol declaration gate is fail-open | correctness | OPEN: only three requests gated, newer versions accepted; connection-state matrix NOTRUN; not authentication | [item](#w133) · [audit](../reviews/dead-code-review-20261021.md) |
+| declaration-gate | **W133** · client protocol declaration gate is fail-open | correctness | FIXED on branch `devel-k04`, not merged: every request except CLIENT_HELLO and HEARTBEAT needs an accepted declaration of exactly protocol 3; unit gates PASS on efs3 (TCP), RDMA unit path and cluster refusal run (`scripts/w125_p3_compat.sh`) NOTRUN; not authentication | [item](#w133) · [audit](../reviews/dead-code-review-20261021.md) |
 | legacy-session | **W134** · unregistered session identities bypass session fencing | correctness (fail-open) | OPEN: live while W72 is open; remove atomically with full registration | [item](#w134) · [audit](../reviews/dead-code-review-20261021.md) |
 | test-docs-failfast | **W135** · a plain `make test` stops at the docs gate before the code tests | test reporting | OPEN: a direct `make test` stopped after 114/276 commands at `0bdf55256`; `make_test_summary.sh` already continues past failures; devel docs regenerated; target split NOTRUN | [item](#w135) · [audit](../reviews/dead-code-review-20261021.md) |
 | test-pressure-cohort | **W136** · `test_pressure_cohort.py` broken since the packing removal | verification correctness | OPEN: FAIL on node9901 (unused stub, `-Werror`); unwired | [item](#w136) · [audit](../reviews/dead-code-review-20261021.md) |
@@ -8620,6 +8626,52 @@ NOTRUN.**
 - Test with synthetic unsupported and missing declarations.
 - Turn `w125_p3_compat.sh` into a refusal test or delete it.
 - A declaration is not authentication, and this item does not claim it.
+
+<a id="w133-fix"></a>
+**Implementation (October 22, branch `devel-k04`, not merged):**
+- `EFS_PROTOCOL_VERSION` is 3, and `EFS_PROTOCOL_MIN_VERSION` is removed.
+  Both sides require an exact match. A client also refuses a server that
+  accepts it with another version.
+- `efs_decl_gate_frame` (`src/common/protocol.c`) runs on every frame in
+  `server_handle_conn` before dispatch, on TCP and RDMA alike. Before an
+  accepted CLIENT_HELLO only HEARTBEAT is served. Any other request is
+  refused with no reply, the connection is closed, and one rate-limited
+  `handler: refused ...` line is logged.
+- A mismatched declaration gets `{EFS_ERR_PROTO, 3}` and the connection is
+  closed. This also applies on an already-declared connection.
+- Every efsd connection opener declares first:
+  - **efs-fuse:** the pool declares before the RDMA upgrade. Discovery
+    (LIST_NODES) and the mount bootstrap (RAFT_STATUS) declare too.
+  - **Daemon peer pool:** declares before the RDMA upgrade and before the
+    HELLO/build-id join gate. Joins, Raft and forwards all use this pool.
+  - **efs-mgmt:** every command uses `efs_connect_declared`. The status
+    probe declares under its own 2 s bound.
+  - **Tests:** the live and measure C programs, the raw-socket Python live
+    tests and `scripts/w127_incompatible_entry.sh` all declare.
+- These openers are exempt:
+  - Reachability probes in `node_cache.c` connect and close without
+    sending anything.
+  - `tests/perf/tcp_rdma/xprt_bench` and the self-hosted unit tests
+    (`test_rdma_xprt`, `test_rdma_segmented`, `test_data`) are their own
+    server, not efsd.
+- `scripts/w125_p3_compat.sh` now expects old clients to be refused and
+  exits nonzero otherwise.
+- **Gates:**
+  - `tests/test_declaration_gate.c` PASS on efs3 (TCP frame path). It
+    covers undeclared requests refused without a reply, HEARTBEAT, wrong,
+    short and bad-magic declarations, an accepted declaration followed by
+    a served request, and client-side refusal.
+  - `tests/test_declaration_gate_handler.py` PASS. It checks the handler
+    ordering and that every opener declares.
+  - The RDMA frame path of the same test is NOTRUN on efs3 (no IB device).
+  - `make test` on efs3 (Fedora 42, aarch64, TMPDIR on disk), every
+    command run independently: 874 of 875 PASS. The one failure,
+    `tests/test_reclaim` (`t_basic` put assertion), fails identically on
+    devel `19555889f` on efs3, so this branch did not cause it.
+  - Fake-server and handler-slice tests now answer or stub the declaration
+    (`test_gc_status_expiry.py`, `test_expiry_cli.py`,
+    `test_node_left_refused.py`).
+  - The cluster refusal run (`w125_p3_compat.sh`) is NOTRUN.
 
 <a id="w134"></a>
 ### W134 — Unregistered session identities bypass session fencing

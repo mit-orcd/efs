@@ -58,6 +58,11 @@ static int probe_node_up(const char *nhost, uint16_t nport, struct efs_msg_statu
         return 0;
     efs_set_recv_timeout(pfd, EFS_STATUS_PROBE_MS);
     efs_set_send_timeout(pfd, EFS_STATUS_PROBE_MS);
+    /* Declared under the same short bound, not efs_connect_declared's. */
+    if (efs_fd_declare(pfd) != EFS_OK) {
+        close(pfd);
+        return 0;
+    }
     uint8_t type = 0;
     void *preply = NULL;
     uint32_t preply_len = 0;
@@ -99,7 +104,7 @@ static int cmd_status(int argc, char **argv)
         return 1;
     }
 
-    int fd = efs_connect_tcp(host, port);
+    int fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
         return 1;
@@ -254,7 +259,7 @@ static int cmd_status(int argc, char **argv)
         int have[EFS_MAX_NODES] = {0};
         uint32_t nprobed = 0, nsame = 0, first = UINT32_MAX;
         for (uint32_t i = 0; i < ncopy; i++) {
-            int vfd = efs_connect_tcp(nodes_copy[i].addr, nodes_copy[i].port);
+            int vfd = efs_connect_declared(nodes_copy[i].addr, nodes_copy[i].port);
             if (vfd < 0)
                 continue;
             efs_set_recv_timeout(vfd, EFS_STATUS_PROBE_MS);
@@ -332,7 +337,7 @@ static int cmd_add_node(int argc, char **argv)
         return 1;
     }
 
-    int fd = efs_connect_tcp(new_host, new_port);
+    int fd = efs_connect_declared(new_host, new_port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to new node %s:%u\n", new_host, new_port);
         return 1;
@@ -385,7 +390,7 @@ static int cmd_shrink_quota(int argc, char **argv)
         return 1;
     }
 
-    int fd = efs_connect_tcp(host, port);
+    int fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
         return 1;
@@ -456,7 +461,7 @@ static int cmd_add_storage(int argc, char **argv)
         return 1;
     }
 
-    int fd = efs_connect_tcp(host, port);
+    int fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
         return 1;
@@ -531,7 +536,7 @@ static int cmd_io_stats(int argc, char **argv)
         fprintf(stderr, "Invalid address: %s\n", argv[0]);
         return 1;
     }
-    fd = efs_connect_tcp(host, port);
+    fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
         return 1;
@@ -592,7 +597,7 @@ static int cmd_version(int argc, char **argv)
         fprintf(stderr, "Invalid address: %s\n", argv[0]);
         return 1;
     }
-    fd = efs_connect_tcp(host, port);
+    fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
         return 1;
@@ -629,7 +634,7 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
         fprintf(stderr, "Usage:\n  efs-mgmt %s <node:port>\n",expiry_only?"expiry-status":"gc-status");
         return 1;
     }
-    int fd = efs_connect_tcp(host, port);
+    int fd = efs_connect_declared(host, port);
     if (fd < 0)
         return 1;
     efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
@@ -750,7 +755,7 @@ static int cmd_pack_compact(int argc, char **argv)
         return 1;
     }
     struct efs_msg_pack_compact req = {.segments = argc == 2 ? (uint32_t)strtoul(argv[1], NULL, 10) : 64u};
-    int fd = efs_connect_tcp(host, port);
+    int fd = efs_connect_declared(host, port);
     if (fd < 0) { fprintf(stderr, "Cannot connect to %s:%u\n", host, port); return 1; }
     efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
     uint8_t type = 0;
@@ -767,7 +772,7 @@ static int cmd_pack_compact(int argc, char **argv)
     uint32_t led = 0;
     for (uint32_t i = 0; i < list->node_count; i++) {
         const struct efs_node *n = &list->nodes[i];
-        int nfd = efs_connect_tcp(n->addr, n->port);
+        int nfd = efs_connect_declared(n->addr, n->port);
         void *r = NULL;
         uint32_t rl = 0;
         uint8_t rt = 0;
@@ -838,7 +843,7 @@ static int cmd_raft_status(int argc, char **argv)
         fprintf(stderr, "Invalid address: %s\n", argv[0]);
         return 1;
     }
-    fd = efs_connect_tcp(host, port);
+    fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
         return 1;
@@ -930,7 +935,7 @@ static int raft_cfg_submit(const char *host, uint16_t port, uint8_t group,
     payload[4] = (uint8_t)(voters >> 16);
     payload[5] = (uint8_t)(voters >> 8);
     payload[6] = (uint8_t)voters;
-    fd = efs_connect_tcp(host, port);
+    fd = efs_connect_declared(host, port);
     if (fd < 0)
         return -1;
     efs_set_recv_timeout(fd, io_ms);
@@ -960,7 +965,7 @@ static int raft_change_converged(const char *host, uint16_t port, uint8_t group,
     uint32_t i;
     int ok = 0;
 
-    fd = efs_connect_tcp(host, port);
+    fd = efs_connect_declared(host, port);
     if (fd < 0)
         return 0;
     efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
@@ -1007,7 +1012,7 @@ static int cmd_raft_resync(int argc, char **argv)
     }
     memset(&req, 0, sizeof(req));
     req.group = (uint8_t)strtoul(argv[1], NULL, 10);
-    fd = efs_connect_tcp(host, port);
+    fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
         return 1;
@@ -1057,7 +1062,7 @@ static int cmd_raft_change(int argc, char **argv)
     }
     memset(&r, 0, sizeof(r));
     {
-        int lfd = efs_connect_tcp(host, port);
+        int lfd = efs_connect_declared(host, port);
         uint8_t ltype = 0;
         void *lrep = NULL;
         uint32_t llen = 0;
@@ -1122,7 +1127,7 @@ static int cmd_raft_mkfs(int argc, char **argv)
         fprintf(stderr, "Invalid address: %s\n", argv[0]);
         return 1;
     }
-    fd = efs_connect_tcp(host, port);
+    fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
         return 1;
@@ -1211,7 +1216,7 @@ static int cmd_raft_dir(int argc, char **argv)
     payload[1] = EFS_MD_CMD_DIR;
     payload[2] = kind;
     wr64be_mgmt(payload + 3, ino);
-    fd = efs_connect_tcp(host, port);
+    fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
         return 1;
@@ -1252,7 +1257,7 @@ static int sess_leader_address(const char *host, uint16_t port, int hint,
                                char target[64], uint16_t *target_port)
 {
     if (hint < 0 || hint >= EFS_MAX_NODES) return EFS_ERR_NOT_PRIMARY;
-    int fd=efs_connect_tcp(host,port);if(fd<0)return EFS_ERR_IO;
+    int fd=efs_connect_declared(host,port);if(fd<0)return EFS_ERR_IO;
     efs_set_recv_timeout(fd,EFS_IO_TIMEOUT_MS);efs_set_send_timeout(fd,EFS_IO_TIMEOUT_MS);
     uint8_t type;void *payload=NULL;uint32_t len=0;
     int rc=send_recv(fd,EFS_MSG_LIST_NODES,NULL,0,&type,&payload,&len);close(fd);
@@ -1276,7 +1281,7 @@ static int sess_rpc(const char *host, uint16_t port, const uint8_t *payload,
     char target[64];snprintf(target,sizeof(target),"%s",host);uint16_t target_port=port;
     memset(out,0,sizeof(*out));out->leader_hint=-1;
     for(unsigned attempt=0;attempt<8;attempt++) {
-        int fd=efs_connect_tcp(target,target_port);
+        int fd=efs_connect_declared(target,target_port);
         if(fd<0){out->rc=EFS_ERR_IO;return out->rc;}
         efs_set_recv_timeout(fd,EFS_IO_TIMEOUT_MS);efs_set_send_timeout(fd,EFS_IO_TIMEOUT_MS);
         uint8_t type;void *reply=NULL;uint32_t len=0;
@@ -1433,7 +1438,7 @@ static int expiry_lookup(const char *host,uint16_t port,const char *path,struct 
      * whenever the seed was not leader (posix_expiry, after mkfs). A read
      * is idempotent; transport failures stay terminal. */
     for(unsigned attempt=0;attempt<8;attempt++) {
-        int fd=efs_connect_tcp(target,target_port);if(fd<0)return EFS_ERR_IO;
+        int fd=efs_connect_declared(target,target_port);if(fd<0)return EFS_ERR_IO;
         efs_set_recv_timeout(fd,EFS_IO_TIMEOUT_MS);efs_set_send_timeout(fd,EFS_IO_TIMEOUT_MS);
         uint8_t type;void *payload=NULL;uint32_t len=0;
         rc=send_recv(fd,EFS_MSG_INODE_LOOKUP_PATH,&req,sizeof(req),&type,&payload,&len);
@@ -2013,7 +2018,7 @@ static int cmd_raft_getattr(int argc, char **argv)
         ino = (efs_ino_t)strtoull(argv[1], NULL, 0);
     memset(&req, 0, sizeof(req));
     req.ino = ino;
-    fd = efs_connect_tcp(host, port);
+    fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
         return 1;
@@ -2063,7 +2068,7 @@ static int cmd_raft_lookup(int argc, char **argv)
     memset(&req, 0, sizeof(req));
     req.parent = (efs_ino_t)strtoull(argv[1], NULL, 0);
     strncpy(req.name, argv[2], sizeof(req.name) - 1);
-    fd = efs_connect_tcp(host, port);
+    fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
         return 1;
@@ -2117,7 +2122,7 @@ static int cmd_raft_create(int argc, char **argv)
     if (argc >= 4)
         mode = (uint32_t)strtoul(argv[3], NULL, 0);
     req.mode = mode;
-    fd = efs_connect_tcp(host, port);
+    fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
         return 1;
@@ -2185,7 +2190,7 @@ static int cmd_raft_append(int argc, char **argv)
         memcpy(buf + slen + EFS_OPID_UUID_LEN, &epoch, 4);
         slen += EFS_SESS_WIRE_LEN;
     }
-    fd = efs_connect_tcp(host, port);
+    fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
         return 1;
@@ -2255,7 +2260,7 @@ static int cmd_raft_hold(int argc, char **argv)
         memcpy(buf + slen + EFS_OPID_UUID_LEN, &epoch, 4);
         slen += EFS_SESS_WIRE_LEN;
     }
-    fd = efs_connect_tcp(host, port);
+    fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
         return 1;
@@ -2356,7 +2361,7 @@ static int cmd_raft_lock_op(int argc, char **argv, uint32_t extra, const char *n
         memcpy(buf + slen + EFS_OPID_UUID_LEN, &epoch, 4);
         slen += EFS_SESS_WIRE_LEN;
     }
-    fd = efs_connect_tcp(host, port);
+    fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
         return 1;
@@ -2425,7 +2430,7 @@ static int cmd_raft_unlink(int argc, char **argv)
     memset(&req, 0, sizeof(req));
     req.parent = (efs_ino_t)strtoull(argv[1], NULL, 0);
     strncpy(req.name, argv[2], sizeof(req.name) - 1);
-    fd = efs_connect_tcp(host, port);
+    fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
         return 1;
@@ -2475,7 +2480,7 @@ static int cmd_raft_rmdir(int argc, char **argv)
     req.parent = (efs_ino_t)strtoull(argv[1], NULL, 0);
     strncpy(req.name, argv[2], sizeof(req.name) - 1);
     req.is_dir = 1;
-    fd = efs_connect_tcp(host, port);
+    fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
         return 1;
@@ -2525,7 +2530,7 @@ static int cmd_raft_link(int argc, char **argv)
     req.src_ino = (efs_ino_t)strtoull(argv[1], NULL, 0);
     req.new_parent = (efs_ino_t)strtoull(argv[2], NULL, 0);
     strncpy(req.new_name, argv[3], sizeof(req.new_name) - 1);
-    fd = efs_connect_tcp(host, port);
+    fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
         return 1;
@@ -2591,7 +2596,7 @@ static int cmd_raft_setattr(int argc, char **argv)
         if (argc >= 6)
             req.gid = (uint32_t)strtoul(argv[5], NULL, 0);
     }
-    fd = efs_connect_tcp(host, port);
+    fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
         return 1;
@@ -2644,7 +2649,7 @@ static int cmd_raft_rename(int argc, char **argv)
     strncpy(req.old_name, argv[2], sizeof(req.old_name) - 1);
     req.new_parent = (efs_ino_t)strtoull(argv[3], NULL, 0);
     strncpy(req.new_name, argv[4], sizeof(req.new_name) - 1);
-    fd = efs_connect_tcp(host, port);
+    fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
         return 1;
@@ -2697,7 +2702,7 @@ static int cmd_raft_readdir(int argc, char **argv)
     req.max_ents = EFS_READDIR_MAX;
     if (argc >= 3)
         req.after_ino = strtoull(argv[2], NULL, 0);
-    fd = efs_connect_tcp(host, port);
+    fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
         return 1;
@@ -2749,7 +2754,7 @@ static int cmd_raft_lookup_path(int argc, char **argv)
     strncpy(req.path, argv[1], sizeof(req.path) - 1);
     if (argc >= 3)
         req.start = (efs_ino_t)strtoull(argv[2], NULL, 0);
-    fd = efs_connect_tcp(host, port);
+    fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
         return 1;
@@ -2828,7 +2833,7 @@ static int cmd_raft_publish(int argc, char **argv)
         memcpy(buf + sizeof(req.hdr) + rn, &req.sz, sizeof(req.sz));
         send_len = (uint32_t)(sizeof(req.hdr) + rn + sizeof(req.sz));
     }
-    fd = efs_connect_tcp(host, port);
+    fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
         return 1;
@@ -2871,7 +2876,7 @@ static int cmd_sync_status(int argc, char **argv)
             fprintf(stderr, "Invalid address: %s\n", argv[a]);
             return 1;
         }
-        int fd = efs_connect_tcp(host, port);
+        int fd = efs_connect_declared(host, port);
         if (fd < 0) {
             printf("%s: unreachable\n", argv[a]);
             rc_all = 1;
@@ -2940,7 +2945,7 @@ static int cmd_data_commit(int argc, char **argv)
             fprintf(stderr, "Invalid address: %s\n", argv[a]);
             return 1;
         }
-        int fd = efs_connect_tcp(host, port);
+        int fd = efs_connect_declared(host, port);
         if (fd < 0) { printf("%s: unreachable\n", argv[a]); rc_all = 1; continue; }
         efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
         efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
@@ -2986,18 +2991,13 @@ static int cmd_raft_getchunks(int argc, char **argv)
     if (argc >= 3)
         req.start = (uint32_t)strtoul(argv[2], NULL, 0);
     req.max = EFS_GETCHUNKS_MAX;
-    fd = efs_connect_tcp(host, port);
+    fd = efs_connect_declared(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
         return 1;
     }
     efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
     efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-    if (efs_fd_declare(fd) != EFS_OK) {
-        fprintf(stderr, "%s:%u refused the protocol %u declaration\n", host, port, EFS_PROTOCOL_VERSION);
-        close(fd);
-        return 1;
-    }
     if (send_recv(fd, EFS_MSG_INODE_GETCHUNKS, &req, sizeof(req), &reply_type,
                   &reply, &reply_len) != 0 ||
         reply_type != EFS_MSG_INODE_GETCHUNKS_REPLY ||

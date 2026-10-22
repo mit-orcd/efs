@@ -18,7 +18,7 @@ static uint64_t owner_rpc(unsigned port, const uint8_t *payload, unsigned length
     unsigned cleanup_stale = 0, cleanup_busy = 0, session_busy = 0;
     fprintf(stderr,"owner BEGIN command=%u sub=%u length=%u expected=%d\n",payload[1],payload[2],length,expected);
     for (unsigned a = 0; a < 120; a++) {
-        int fd = efs_connect_tcp("127.0.0.1", port + a % 4);
+        int fd = efs_connect_declared("127.0.0.1", port + a % 4);
         if (fd < 0) {
             connect_failures++;
             usleep(10000);
@@ -137,7 +137,7 @@ static void legacy_hold(unsigned port,efs_ino_t ino,uint64_t owner,unsigned flag
 {
  struct efs_msg_inode_hold request={.export_id=1,.ino=ino,.flags=flags,.owner=owner};
  for(unsigned attempt=0;attempt<120;attempt++) {
-  int fd=efs_connect_tcp("127.0.0.1",port+attempt%4);if(fd<0){usleep(10000);continue;}
+  int fd=efs_connect_declared("127.0.0.1",port+attempt%4);if(fd<0){usleep(10000);continue;}
   efs_set_recv_timeout(fd,2000);efs_set_send_timeout(fd,2000);
   uint8_t type=0;void *body=NULL;uint32_t size=0;
   int rc=efs_send_msg(fd,EFS_MSG_INODE_HOLD,&request,sizeof(request));
@@ -231,7 +231,7 @@ int main(int argc,char **argv)
  if(argc==3){
   unsigned port=atoi(argv[1]);struct efs_msg_inode_getattr q={0};q.export_id=1;q.ino=strtoull(argv[2],0,10);
   for(unsigned a=0;a<120;a++){
-   int fd=efs_connect_tcp("127.0.0.1",port+a%4);if(fd<0)continue;
+   int fd=efs_connect_declared("127.0.0.1",port+a%4);if(fd<0)continue;
    efs_set_recv_timeout(fd,1000);efs_set_send_timeout(fd,1000);
    int rc=efs_send_msg(fd,EFS_MSG_INODE_GETATTR,&q,sizeof(q));uint8_t type=0;void *body=NULL;uint32_t len=0;
    if(!rc)rc=efs_recv_msg(fd,&type,&body,&len);
@@ -253,7 +253,7 @@ int main(int argc,char **argv)
  assert(strlen(argv[4])==32);for(unsigned i=0;i<16;i++){unsigned b;assert(sscanf(argv[4]+2*i,"%2x",&b)==1);p[3+i]=b;}
  be(p+19,1,4);be(p+23,seq,8);be(p+31,ack,8);be(p+39,ino,8);be(p+47,gen,8);be(p+55,flags,4);
  for(unsigned attempt=0;attempt<120;attempt++){
-  int fd=efs_connect_tcp("127.0.0.1",port+attempt%4);if(fd<0){usleep(10000);continue;}
+  int fd=efs_connect_declared("127.0.0.1",port+attempt%4);if(fd<0){usleep(10000);continue;}
   efs_set_recv_timeout(fd,1000);efs_set_send_timeout(fd,1000);
   int rc=efs_send_msg(fd,EFS_MSG_RAFT_MKFS,p,sizeof(p));
   /* Deliberately discard a reply, then resolve solely through a read-only probe. */

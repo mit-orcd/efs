@@ -31,7 +31,7 @@ int main(int argc,char **argv)
     unsigned port=(unsigned)atoi(argv[1]);
     struct efs_msg_inode_getattr q={.export_id=1,.ino=strtoull(argv[2],NULL,10)};
     for(unsigned attempt=0;attempt<120;attempt++) {
-        int fd=efs_connect_tcp("127.0.0.1",port+attempt%4);
+        int fd=efs_connect_declared("127.0.0.1",port+attempt%4);
         if(fd<0){usleep(10000);continue;}
         efs_set_recv_timeout(fd,1000);efs_set_send_timeout(fd,1000);
         int rc=efs_send_msg(fd,EFS_MSG_INODE_GETATTR,&q,sizeof(q));

@@ -27,6 +27,11 @@ def exact(sock, length):
         result += part
     return result
 
+HELLO=struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',3,0)  # CLIENT_HELLO, EFS_PROTOCOL_VERSION 3 (W133)
+def declare(sock):
+    sock.sendall(HELLO);n=struct.unpack('>I',exact(sock,4))[0];reply=exact(sock,n)
+    assert n==9 and reply[0]==166 and struct.unpack('=iI',reply[1:])==(0,3),('declaration refused',reply)
+
 for direct in (False, True):
     for roots in (1, 2):
         with tempfile.TemporaryDirectory(prefix='efs-integrity-') as work:
@@ -34,7 +39,7 @@ for direct in (False, True):
                 sock.bind(('127.0.0.1', 0)); port = sock.getsockname()[1]
             def rpc(kind, body):
                 with socket.create_connection(('127.0.0.1', port), 5) as sock:
-                    sock.sendall(struct.pack('>IB',len(body)+1,kind)+body)
+                    declare(sock);sock.sendall(struct.pack('>IB',len(body)+1,kind)+body)
                     return exact(sock,struct.unpack('>I',exact(sock,4))[0])
             cmd=[str(source/'efsd'),'--node-id','1','--addr','127.0.0.1',
                  '--port',str(port),'--quota','16M','--direct-io' if direct else '--no-direct-io']
@@ -75,7 +80,7 @@ for direct in (False, True):
                     usage_before=subprocess.run([str(source/'efs-mgmt'),'gc-status',endpoint],capture_output=True,text=True,check=True).stdout
                     body=bytes(put)+b'x'*65536
                     with socket.create_connection(('127.0.0.1',port),5) as lost:
-                        lost.sendall(struct.pack('>IB',len(body)+1,6)+body)
+                        declare(lost);lost.sendall(struct.pack('>IB',len(body)+1,6)+body)
                         # Wait for the reply to prove processing, then discard
                         # it without parsing status or teaching a path hint.
                         assert lost.recv(1,socket.MSG_PEEK)

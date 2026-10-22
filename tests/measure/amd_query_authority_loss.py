@@ -14,7 +14,7 @@ import subprocess
 import sys
 import time
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'live'))
-from query_rpc import filtered_request, page_request, query, query_name, request, receive
+from query_rpc import declare, filtered_request, page_request, query, query_name, request, receive
 
 p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('output', type=Path)
@@ -30,6 +30,7 @@ env=dict(os.environ,EFS_CLUSTER='amd',EFS_COMMANDS='1',EFS_COMMANDS_SERVER='1',
          EFS_EXPIRY='0',EFS_TRANSPORT='tcp')
 def feature_state(port):
     with socket.create_connection(('127.0.0.1',port),7) as conn:
+        declare(conn)
         body=b'package2'.ljust(256,b'\0')
         conn.sendall(struct.pack('!I',257)+bytes([39])+body)
         length=struct.unpack('!I',receive(conn,4))[0]

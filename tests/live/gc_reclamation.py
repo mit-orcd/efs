@@ -526,13 +526,18 @@ def recv_exact(sock,n):
         body+=part
     return body
 
+HELLO=struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',3,0)  # CLIENT_HELLO, EFS_PROTOCOL_VERSION 3 (W133)
+def declare(sock):
+    sock.sendall(HELLO);n=struct.unpack('>I',recv_exact(sock,4))[0];reply=recv_exact(sock,n)
+    assert n==9 and reply[0]==166 and struct.unpack('=iI',reply[1:])==(0,3),('declaration refused',reply)
+
 def valid_put(node,ino):
     req=Put(eid=1,ino=ino,ci=0,fi=0,length=65536,gen=987654321)
     # BLAKE3 of exactly 65536 'x' bytes; same vector as fragment_integrity.py.
     req.sum[:]=bytes.fromhex('70ff942c316810ac5ffe7081fc049dba30713646b1d6d7272cd5948ad5579804')
     payload=bytes(req)+b'x'*65536
     with socket.create_connection(('127.0.0.1',a.port+node),timeout=5) as sock:
-        sock.sendall(struct.pack('>IB',len(payload)+1,6)+payload)
+        declare(sock);sock.sendall(struct.pack('>IB',len(payload)+1,6)+payload)
         length=struct.unpack('>I',recv_exact(sock,4))[0]
         return recv_exact(sock,length)
 
@@ -2786,7 +2791,7 @@ static efs_ino_t call(unsigned type,const void*req,unsigned size,unsigned seq){
     for(unsigned phase=0;phase<2;phase++){
         int completed=0;
         for(unsigned attempt=0;attempt<64;attempt++){
-            int fd=efs_connect_tcp("127.0.0.1",port);assert(fd>=0);
+            int fd=efs_connect_declared("127.0.0.1",port);assert(fd>=0);
             efs_set_recv_timeout(fd,5000);efs_set_send_timeout(fd,5000);
             assert(efs_send_msg(fd,type,packet,size+EFS_OPID_WIRE_LEN)==0);
             void*body=NULL;unsigned len=0;unsigned char reply_type=0;

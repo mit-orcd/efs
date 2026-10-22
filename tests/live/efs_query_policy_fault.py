@@ -9,7 +9,7 @@ import struct
 import subprocess
 import sys
 import time
-from query_rpc import features, filtered_request, page_request, query, query_name, request
+from query_rpc import declare, features, filtered_request, page_request, query, query_name, request
 
 mount, mgmt, evidence = map(Path, sys.argv[1:4])
 phase = sys.argv[4]
@@ -69,6 +69,7 @@ elif phase == 'lost-reply':
     assert mask == 3 and 0 <= leader < 3
     body = bytes([0, 43]) + struct.pack('!QI', version, 3)
     with socket.create_connection(('192.168.122.%d' % (111 + leader), port), 7) as connection:
+        declare(connection)
         connection.sendall(struct.pack('!I', len(body) + 1) + bytes([95]) + body)
         # Deliberately lose the reply after the complete request is sent.
     end = time.monotonic() + 30

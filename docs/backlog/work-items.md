@@ -5831,6 +5831,52 @@ NOTRUN.**
 - Turn `w125_p3_compat.sh` into a refusal test or delete it.
 - A declaration is not authentication, and this item does not claim it.
 
+<a id="w133-fix"></a>
+**Implementation (October 22, branch `devel-k04`, not merged):**
+- `EFS_PROTOCOL_VERSION` is 3, and `EFS_PROTOCOL_MIN_VERSION` is removed.
+  Both sides require an exact match. A client also refuses a server that
+  accepts it with another version.
+- `efs_decl_gate_frame` (`src/common/protocol.c`) runs on every frame in
+  `server_handle_conn` before dispatch, on TCP and RDMA alike. Before an
+  accepted CLIENT_HELLO only HEARTBEAT is served. Any other request is
+  refused with no reply, the connection is closed, and one rate-limited
+  `handler: refused ...` line is logged.
+- A mismatched declaration gets `{EFS_ERR_PROTO, 3}` and the connection is
+  closed. This also applies on an already-declared connection.
+- Every efsd connection opener declares first:
+  - **efs-fuse:** the pool declares before the RDMA upgrade. Discovery
+    (LIST_NODES) and the mount bootstrap (RAFT_STATUS) declare too.
+  - **Daemon peer pool:** declares before the RDMA upgrade and before the
+    HELLO/build-id join gate. Joins, Raft and forwards all use this pool.
+  - **efs-mgmt:** every command uses `efs_connect_declared`. The status
+    probe declares under its own 2 s bound.
+  - **Tests:** the live and measure C programs, the raw-socket Python live
+    tests and `scripts/w127_incompatible_entry.sh` all declare.
+- These openers are exempt:
+  - Reachability probes in `node_cache.c` connect and close without
+    sending anything.
+  - `tests/perf/tcp_rdma/xprt_bench` and the self-hosted unit tests
+    (`test_rdma_xprt`, `test_rdma_segmented`, `test_data`) are their own
+    server, not efsd.
+- `scripts/w125_p3_compat.sh` now expects old clients to be refused and
+  exits nonzero otherwise.
+- **Gates:**
+  - `tests/test_declaration_gate.c` PASS on efs3 (TCP frame path). It
+    covers undeclared requests refused without a reply, HEARTBEAT, wrong,
+    short and bad-magic declarations, an accepted declaration followed by
+    a served request, and client-side refusal.
+  - `tests/test_declaration_gate_handler.py` PASS. It checks the handler
+    ordering and that every opener declares.
+  - The RDMA frame path of the same test is NOTRUN on efs3 (no IB device).
+  - `make test` on efs3 (Fedora 42, aarch64, TMPDIR on disk), every
+    command run independently: 874 of 875 PASS. The one failure,
+    `tests/test_reclaim` (`t_basic` put assertion), fails identically on
+    devel `19555889f` on efs3, so this branch did not cause it.
+  - Fake-server and handler-slice tests now answer or stub the declaration
+    (`test_gc_status_expiry.py`, `test_expiry_cli.py`,
+    `test_node_left_refused.py`).
+  - The cluster refusal run (`w125_p3_compat.sh`) is NOTRUN.
+
 <a id="w134"></a>
 ## W134 — Unregistered session identities bypass session fencing
 

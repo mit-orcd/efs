@@ -21,6 +21,11 @@ def exact(s,n):
         out+=part
     return out
 
+HELLO=struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',3,0)  # CLIENT_HELLO, EFS_PROTOCOL_VERSION 3 (W133)
+def declare(sock):
+    sock.sendall(HELLO);n=struct.unpack('>I',exact(sock,4))[0];reply=exact(sock,n)
+    assert n==9 and reply[0]==166 and struct.unpack('=iI',reply[1:])==(0,3),('declaration refused',reply)
+
 
 def exercise(mount,port,work,wait,physical_files,restart,offline,forward_group,clock_fault=False):
     checks=[]
@@ -30,7 +35,7 @@ def exercise(mount,port,work,wait,physical_files,restart,offline,forward_group,c
         while True:
             for node in range(4):
                 with socket.create_connection(('127.0.0.1',port+node),timeout=15) as s:
-                    s.sendall(struct.pack('>IB',len(payload)+1,95)+payload)
+                    declare(s);s.sendall(struct.pack('>IB',len(payload)+1,95)+payload)
                     n=struct.unpack('>I',exact(s,4))[0];reply=exact(s,n)
                 assert reply[0]==96 and len(reply)==33,repr(reply)
                 rc,hint,rev,value,other=struct.unpack('=iiQQQ',reply[1:])
@@ -217,7 +222,7 @@ def exercise(mount,port,work,wait,physical_files,restart,offline,forward_group,c
         def clock(node,reset=False):
             payload=bytes((0,64 if reset else 63))+(struct.pack('>I',0) if reset else b'')
             with socket.create_connection(('127.0.0.1',port+node),timeout=15) as sock:
-                sock.sendall(struct.pack('>IB',len(payload)+1,95)+payload)
+                declare(sock);sock.sendall(struct.pack('>IB',len(payload)+1,95)+payload)
                 n=struct.unpack('>I',exact(sock,4))[0];reply=exact(sock,n)
             rc,_,bits,_,_=struct.unpack('=iiQQQ',reply[1:]);assert rc==0
             return bits

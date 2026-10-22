@@ -165,15 +165,16 @@ static struct efs_conn *peer_connect(const char *host, uint16_t port)
         close(fd);
         return NULL;
     }
-    if (efs_rdma_available() &&
-        efs_rdma_client_upgrade(nc) != 0 &&
-        efs_rdma_transport() == EFS_TRANSPORT_RDMA) {
+    /* W125/W133: every daemon-to-daemon connection (HELLO join, Raft,
+     * forwards, segments) declares the protocol like any client, before
+     * the RDMA upgrade; the peer's HELLO/build-id gate follows. */
+    if (efs_conn_declare(nc) != EFS_OK) {
         efs_conn_destroy(nc);
         return NULL;
     }
-    /* W125: pooled peer connections carry GETCHUNKS forwards and segment
-     * traffic, so they declare the protocol like any client. */
-    if (efs_conn_declare(nc) != EFS_OK) {
+    if (efs_rdma_available() &&
+        efs_rdma_client_upgrade(nc) != 0 &&
+        efs_rdma_transport() == EFS_TRANSPORT_RDMA) {
         efs_conn_destroy(nc);
         return NULL;
     }

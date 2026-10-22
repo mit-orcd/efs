@@ -15,7 +15,7 @@ static struct efs_msg_inode_reply rpc(unsigned port,const struct packet *p,int d
 {
     unsigned node=0;
     for(unsigned attempt=0;attempt<100;attempt++) {
-        int fd=efs_connect_tcp("127.0.0.1",port+node);assert(fd>=0);
+        int fd=efs_connect_declared("127.0.0.1",port+node);assert(fd>=0);
         assert(!efs_set_recv_timeout(fd,10000) && !efs_set_send_timeout(fd,10000));
         assert(!efs_send_msg(fd,EFS_MSG_REPORT_CHUNKS,p->body,p->len));
         if(discard){close(fd);return (struct efs_msg_inode_reply){0};}
@@ -48,7 +48,7 @@ static void delayed_apply(unsigned port, efs_ino_t ino, const struct efs_opid *i
     for (unsigned c=0; c<2; c++) {
         int applied=0;
         for (unsigned attempt=0; attempt<100 && !applied; attempt++) {
-            int fd=efs_connect_tcp("127.0.0.1",port+attempt%4);assert(fd>=0);
+            int fd=efs_connect_declared("127.0.0.1",port+attempt%4);assert(fd>=0);
             assert(!efs_set_recv_timeout(fd,10000));
             assert(!efs_send_msg(fd,EFS_MSG_RAFT_MKFS,commands[c],lengths[c]));
             uint8_t type;void *body=NULL;uint32_t bytes;

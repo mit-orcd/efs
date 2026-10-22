@@ -13,7 +13,7 @@ static struct efs_msg_inode_reply rpc(unsigned port,const struct packet *p)
 {
  unsigned node=0;
  for(unsigned attempt=0;attempt<100;attempt++) {
-  int fd=efs_connect_tcp("127.0.0.1",port+node);assert(fd>=0);
+  int fd=efs_connect_declared("127.0.0.1",port+node);assert(fd>=0);
   assert(!efs_set_recv_timeout(fd,5000) && !efs_set_send_timeout(fd,5000));
   assert(!efs_send_msg(fd,p->type,p->body,p->bytes));uint8_t type;void *body=NULL;uint32_t bytes;
   assert(!efs_recv_msg(fd,&type,&body,&bytes));close(fd);

@@ -18,7 +18,7 @@ static efs_ino_t create(unsigned port,efs_ino_t parent,const struct efs_opid_req
     r->flags=EFS_CREATE_F_PENDING;strcpy(r->name,create_name);
     efs_opid_req_pack(q,buf+sizeof(*r));
     for(unsigned i=0;i<240;i++) {
-        int fd=efs_connect_tcp("127.0.0.1",port+i%4);
+        int fd=efs_connect_declared("127.0.0.1",port+i%4);
         if(fd<0){usleep(10000);continue;}
         assert(!efs_set_recv_timeout(fd,5000)&&!efs_set_send_timeout(fd,5000));
         int rc=efs_send_msg(fd,EFS_MSG_INODE_CREATE,buf,sizeof(buf));

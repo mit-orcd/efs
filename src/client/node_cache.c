@@ -422,15 +422,11 @@ struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
                 if (!nc) {
                     local_failure = 1; /* wrapper allocation, not peer failure */
                     close(fd);
-                } else if (efs_rdma_available() &&
-                           efs_rdma_client_upgrade(nc) != 0 &&
-                           efs_rdma_transport() == EFS_TRANSPORT_RDMA) {
-                    /* Strict mode: no silent TCP fallback. */
-                    efs_conn_destroy(nc);
-                    nc = NULL;
                 }
-                /* W125: declare the protocol before any request; a server
-                 * that does not accept it is never used. */
+                /* W125/W133: declare the protocol before anything else, the
+                 * RDMA upgrade included (the server serves nothing before an
+                 * accepted declaration); a server that does not accept it is
+                 * never used. */
                 if (nc) {
                     int drc = efs_conn_declare(nc);
                     if (drc != EFS_OK) {
@@ -442,6 +438,13 @@ struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
                         efs_conn_destroy(nc);
                         nc = NULL;
                     }
+                }
+                if (nc && efs_rdma_available() &&
+                    efs_rdma_client_upgrade(nc) != 0 &&
+                    efs_rdma_transport() == EFS_TRANSPORT_RDMA) {
+                    /* Strict mode: no silent TCP fallback. */
+                    efs_conn_destroy(nc);
+                    nc = NULL;
                 }
             }
             efs_client_rpc_set_deadline_ms(previous);
@@ -653,6 +656,11 @@ int efs_client_discover_nodes(struct efs_client *c, const char *host, uint16_t p
 
     efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
     efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    /* W133: LIST_NODES is served only on a declared connection. */
+    if (efs_fd_declare(fd) != EFS_OK) {
+        close(fd);
+        return -1;
+    }
 
     uint8_t type;
     void *payload = NULL;

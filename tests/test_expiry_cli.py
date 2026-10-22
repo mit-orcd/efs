@@ -7,7 +7,7 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
-from test_gc_status_expiry import exact
+from test_gc_status_expiry import accept_declaration,exact
 
 binary=Path(sys.argv[1] if len(sys.argv)>1 else './efs-mgmt').resolve()
 def request(args):
@@ -17,7 +17,7 @@ def request(args):
         def serve():
             try:
                 with listener.accept()[0] as conn:
-                    conn.settimeout(10);n=struct.unpack('>I',exact(conn,4))[0]
+                    conn.settimeout(10);accept_declaration(conn);n=struct.unpack('>I',exact(conn,4))[0]
                     received.append(exact(conn,n))
                     reply=struct.pack('=iiQQQ',0,-1,2,86400_000_000_000,604800_000_000_000)
                     conn.sendall(struct.pack('>IB',len(reply)+1,96)+reply)

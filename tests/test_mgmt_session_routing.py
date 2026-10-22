@@ -19,7 +19,7 @@ static unsigned requests,discoveries,connections,waits;
 static int fail_transport,loop,invalid_count,unknown,no_hint,busy;
 static uint32_t expected_len=27;
 static uint8_t immutable[27];
-static int efs_connect_tcp(const char *host,uint16_t port) {
+int efs_connect_declared(const char *host,uint16_t port) {
  assert((!strcmp(host,"seed")&&port==1)||(!strcmp(host,"leader.example")&&port==9300));connections++;return 7;
 }
 static int efs_set_recv_timeout(int fd,int n){(void)fd;(void)n;return 0;}

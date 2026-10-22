@@ -7233,6 +7233,10 @@ static int raft_bootstrap_metadata(void)
                 continue;
             efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
             efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+            if (efs_fd_declare(fd) != EFS_OK) { /* W133: declared first */
+                close(fd);
+                continue;
+            }
             uint8_t type = 0;
             void *payload = NULL;
             uint32_t plen = 0;

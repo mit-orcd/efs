@@ -62,7 +62,7 @@ static void published_ticket(void) {
 
 static int connect_node(unsigned node)
 {
-    int fd=efs_connect_tcp("127.0.0.1",base_port+node);assert(fd>=0);
+    int fd=efs_connect_declared("127.0.0.1",base_port+node);assert(fd>=0);
     assert(!efs_set_recv_timeout(fd,15000));assert(!efs_set_send_timeout(fd,15000));return fd;
 }
 static void drop_reply(const struct efs_msg_publication *request,int retire)

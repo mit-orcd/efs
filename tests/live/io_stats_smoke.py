@@ -34,13 +34,18 @@ def exact(sock, length):
         result += part
     return result
 
+HELLO=struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',3,0)  # CLIENT_HELLO, EFS_PROTOCOL_VERSION 3 (W133)
+def declare(sock):
+    sock.sendall(HELLO);n=struct.unpack('>I',exact(sock,4))[0];reply=exact(sock,n)
+    assert n==9 and reply[0]==166 and struct.unpack('=iI',reply[1:])==(0,3),('declaration refused',reply)
+
 with socket.socket() as sock:
     sock.bind(('127.0.0.1', 0))
     port = sock.getsockname()[1]
 
 def rpc(kind, body):
     with socket.create_connection(('127.0.0.1', port), 5) as sock:
-        sock.sendall(struct.pack('>IB', len(body)+1, kind)+body)
+        declare(sock);sock.sendall(struct.pack('>IB', len(body)+1, kind)+body)
         return exact(sock, struct.unpack('>I', exact(sock, 4))[0])
 
 def status(command):

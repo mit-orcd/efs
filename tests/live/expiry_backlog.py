@@ -9,7 +9,7 @@ import struct
 import subprocess
 import threading
 import time
-from expiry_lifecycle import exact
+from expiry_lifecycle import exact,declare
 
 
 def exercise(mount,port,work,wait,physical_files,restart,count):
@@ -22,7 +22,7 @@ def exercise(mount,port,work,wait,physical_files,restart,count):
         while True:
             for node in range(4):
                 with socket.create_connection(('127.0.0.1',port+node),timeout=20) as s:
-                    s.sendall(struct.pack('>IB',len(payload)+1,95)+payload)
+                    declare(s);s.sendall(struct.pack('>IB',len(payload)+1,95)+payload)
                     n=struct.unpack('>I',exact(s,4))[0];reply=exact(s,n)
                 assert reply[0]==96 and len(reply)==33
                 rc,hint,rev,value,other=struct.unpack('=iiQQQ',reply[1:])

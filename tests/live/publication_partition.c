@@ -24,7 +24,7 @@ int main(int argc,char **argv)
     assert(efs_raft_shard_group(shard)==0);
     if(!strcmp(argv[4],"describe")){printf("shard=%u\n",shard);return 0;}
     for(unsigned i=0;i<EFS_NUM_FRAGMENTS;i++)req.rec.nodes[i]=i+1;
-    int fd=efs_connect_tcp(argv[1],(uint16_t)atoi(argv[2]));assert(fd>=0);
+    int fd=efs_connect_declared(argv[1],(uint16_t)atoi(argv[2]));assert(fd>=0);
     assert(!efs_set_recv_timeout(fd,15000));assert(!efs_set_send_timeout(fd,15000));
     int query=!strcmp(argv[4],"query");assert(query || !strcmp(argv[4],"prepare"));
     assert(!efs_send_msg(fd,query?EFS_MSG_PUBLICATION_STATUS:EFS_MSG_PUBLICATION,&req,sizeof(req)));

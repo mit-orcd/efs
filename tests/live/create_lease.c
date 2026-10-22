@@ -20,7 +20,7 @@ static struct efs_msg_inode_reply call(unsigned type,const void *request,unsigne
     unsigned length=size;
     if(seq){struct efs_opid_req q={0};memcpy(q.id.client_uuid,&owner,sizeof(owner));q.id.client_uuid[15]=93;q.id.session_epoch=1;q.id.seq=seq;efs_opid_req_pack(&q,packet+size);length+=EFS_OPID_WIRE_LEN;}
     for(unsigned attempt=0;attempt<400;attempt++){
-        int fd=efs_connect_tcp("127.0.0.1",port+attempt%4);
+        int fd=efs_connect_declared("127.0.0.1",port+attempt%4);
         if(fd<0){usleep(10000);continue;}
         efs_set_recv_timeout(fd,5000);efs_set_send_timeout(fd,5000);
         int rc=efs_send_msg(fd,type,packet,length);

@@ -16,7 +16,7 @@ source=r'''
 static unsigned lookups,discoveries,waits,seed_lookups;
 static int no_hint,loop,fail_transport,status_after=EFS_INODE_RPC_OK;
 static const char *last_host;
-static int efs_connect_tcp(const char *host,uint16_t port){
+int efs_connect_declared(const char *host,uint16_t port){
  assert((!strcmp(host,"seed")&&port==1)||(!strcmp(host,"leader.example")&&port==9300));last_host=host;return 7;}
 static int efs_set_recv_timeout(int fd,int n){(void)fd;(void)n;return 0;}
 static int efs_set_send_timeout(int fd,int n){(void)fd;(void)n;return 0;}

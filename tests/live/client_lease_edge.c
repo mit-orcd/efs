@@ -16,7 +16,7 @@ static uint64_t legacy_cached(unsigned port,unsigned *node,efs_ino_t ino,
  memcpy(bytes,&request,sizeof(request));memcpy(bytes+sizeof(request),uuid,16);
  memcpy(bytes+sizeof(request)+16,&epoch,4);memcpy(bytes+sizeof(request)+20,&sequence,8);
  for(unsigned attempt=0;attempt<120;attempt++) {
-  int fd=efs_connect_tcp("127.0.0.1",port+*node);if(fd<0){*node=(*node+1)%4;usleep(10000);continue;}
+  int fd=efs_connect_declared("127.0.0.1",port+*node);if(fd<0){*node=(*node+1)%4;usleep(10000);continue;}
   assert(!efs_set_recv_timeout(fd,5000) && !efs_set_send_timeout(fd,5000));
   int rc=efs_send_msg(fd,EFS_MSG_INODE_APPEND,bytes,sizeof(bytes));uint8_t type=0;void *body=NULL;uint32_t length=0;
   if(!rc)rc=efs_recv_msg(fd,&type,&body,&length);
