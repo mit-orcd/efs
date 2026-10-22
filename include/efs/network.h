@@ -61,7 +61,7 @@ struct efs_conn {
     int64_t last_ok_ms;
     /* Reply wait bound for this conn, ms. 0 = EFS_IO_TIMEOUT_MS (30 s).
      * TCP conns carry it as SO_RCVTIMEO too; on an RDMA conn it bounds
-     * efs_rdma_recv_wait, which used to be the 30 s pool default on every
+     * the message wait, which used to be the 30 s pool default on every
      * conn (Sep 30 2026: a Raft peer lane sat 30 s on one lost RAFT_REPLY
      * and the unheard peer deposed the leader). */
     int recv_timeout_ms;

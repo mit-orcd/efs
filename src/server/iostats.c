@@ -1,4 +1,5 @@
 #include "server_internal.h"
+#include "efs/rdma.h"
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -103,6 +104,10 @@ void efs_iostats_snapshot(struct efs_msg_io_stats_reply *out)
         out->cls[i].us_max = __atomic_load_n(&c->us_max, __ATOMIC_RELAXED);
         out->cls[i].p50_us = class_p50(c);
     }
+    struct efs_rdma_totals t;
+    efs_rdma_totals(&t);
+    out->rdma = (struct efs_io_stats_rdma){t.live_conns, t.data_frames_tx, t.data_bytes_tx,
+                                          t.data_frames_rx, t.data_bytes_rx, t.credit_stalls};
 }
 
 /* Called from the raft host pump; prints one line per ~5 s once any class

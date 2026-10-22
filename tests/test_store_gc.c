@@ -30,6 +30,18 @@ void server_raft_host_expiry_status(struct efs_expiry_status *out){memset(out,0,
 int server_raft_host_active(void){return 0;}
 int server_raft_host_inode_reaped(efs_ino_t ino,int *dead){(void)ino;*dead=0;return EFS_ERR_NOT_PRIMARY;}
 /* The reclaim deleter's two durable steps: death bit, then whole-inode delete. */
+/* The startup inventory efsd.c runs: the local counter is the full scan,
+ * never the advisory usage.bin snapshot. */
+static void startup_inventory(struct efsd_server *s)
+{
+    uint64_t used = server_compute_local_usage(s);
+    assert(used != UINT64_MAX);
+    pthread_mutex_lock(&s->lock);
+    struct efs_node *local = server_local_node(s);
+    assert(local);
+    local->used = used;
+    pthread_mutex_unlock(&s->lock);
+}
 static int gc_inode(struct efsd_server *s,efs_export_id_t eid,efs_ino_t ino){
  int rc=server_gc_death_set_many(s,eid,&ino,1);
  return rc!=EFS_OK?rc:server_gc_inode_delete(s,eid,ino,NULL,1);
@@ -62,7 +74,7 @@ int main(int argc,char **argv){
   assert(!server_delete_fragment_if_sum(&s,&ex,42,0,0,sum));assert(s.gc_removed_fragments==removed+2&&!s.nodes[0].used);
   assert(access(paths[0],F_OK)&&access(paths[1],F_OK));assert(!server_compute_local_usage(&s));
   assert(!server_delete_fragment_if_sum(&s,&ex,42,0,0,sum)&&s.gc_removed_fragments==removed+2);
-  s.nodes[0].used=123456;server_init_local_usage(&s);
+  s.nodes[0].used=123456;startup_inventory(&s);
   assert(s.nodes[0].used==0); /* crash snapshot cannot resurrect quota charges */
   struct efs_msg_gc_status_reply status;server_gc_status(&s,&status);
   assert(status.version==5&&status.removed_fragments==removed+2&&status.delete_errors>0);
@@ -106,7 +118,7 @@ int main(int argc,char **argv){
  efs_tls_write_root=0;
  assert(!server_write_fragment_with_sum_sync(&s,&ex,4180,0,0,body,EFS_FRAGMENT_SIZE,sum));
  assert(gc_inode(&s,1,4180)==EFS_OK); /* adjacent bitmap bit preserves old fence */
- server_init_local_usage(&s);assert(s.nodes[0].used==0);
+ startup_inventory(&s);assert(s.nodes[0].used==0);
  assert(server_write_fragment_with_sum_sync(&s,&ex,84,71,0,body,EFS_FRAGMENT_SIZE,sum)==EFS_ERR_STALE);
  /* A failed death-fence sync preserves physical bytes for a durable retry. */
  efs_tls_write_root=0;

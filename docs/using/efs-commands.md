@@ -143,7 +143,8 @@ copy of file contents. Only hosts with both metadata groups can publish complete
 catalogs. Adding storage nodes does not automatically add full publishers.
 
 Set `EFS_QUERY_BACKEND=ram` at daemon startup to use the comparison backend, or
-`disk` for the default backend. `EFS_QUERY_CATALOG_MIB` remains a per-candidate
+`disk` for the default backend. Any other value leaves the query publisher
+unavailable (logged as `query-config: invalid EFS_QUERY_BACKEND`). `EFS_QUERY_CATALOG_MIB` remains a per-candidate
 allocation budget; it is not a process RSS limit.
 `EFS_QUERY_REFRESH_MS` (default 60000, range 200..3600000) is the minimum time
 between catalog refresh attempts. It also sets the pending age that is reported

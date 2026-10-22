@@ -37,7 +37,7 @@ def wait_query_nodes_indexed(root_ino, timeout):
     Concurrent-reader assertions remain unchanged after it completes.
     """
     import os
-    from query_rpc import query, request
+    from query_rpc import query, page_request
     configured = os.environ.get('EFS_QUERY_TEST_NODES')
     nodes = json.loads(configured) if configured else {
         str(i+1): [os.environ.get('EFS_QUERY_TEST_HOST', '127.0.0.1'),
@@ -49,11 +49,15 @@ def wait_query_nodes_indexed(root_ino, timeout):
         for node, (host, port) in nodes.items():
             remaining = deadline-time.monotonic()
             assert remaining > 0, ('query catalogs never warmed', root_ino, serving)
-            reply, text = query(port, request(version=2, operation=1, root=root_ino,
-                uid=os.getuid(), gid=os.getgid(), match=3, max_output=4<<20),
+            fields = dict(operation=1, root=root_ino, uid=os.getuid(), gid=os.getgid(),
+                          match=3, max_output=4<<20)
+            reply, text = query(port, page_request(**fields, limit=10000),
                 host=host, timeout=min(7, remaining))
             if reply.status == 0:
-                json.loads(text)  # malformed success is not a warm catalog
+                page = json.loads(text)['page']  # malformed success is not a warm catalog
+                if int(page['token']):  # release this node's page session
+                    query(port, page_request(**fields, token=int(page['token']),
+                          cursor=int(page['cursor']), limit=0), host=host, timeout=7)
                 serving[node] = dict(boot_id=reply.boot_id, generation=reply.generation)
             else:
                 assert not text and reply.status in (-13, -15, -21), ('warm query refused', node, reply.status)

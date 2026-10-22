@@ -61,7 +61,9 @@ while True:
         time.sleep(.25)
 # Pin the delivered old bytes, then require a NEW command to converge after a
 # peer-visible mutation. This catches NFS retaining a fixed-name virtual result.
-with open(root / '.efs/.query' / ('v1.stats.' + os.urandom(16).hex()), 'rb') as pinned:
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from query_rpc import query_name
+with open(root / '.efs/.query' / query_name('stats'), 'rb') as pinned:
     old = pinned.read()
     assert json.loads(old)['stats']['tree_files'] == len(expected)
     payload = b'after-pinned-result'

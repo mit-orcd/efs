@@ -250,7 +250,7 @@ PY_KILL
 format_group() {
     local seed=$1 attempt result
     for attempt in $(seq 1 30); do
-        result=$(./efs-mgmt raft-mkfs "$seed" "$EXPORT" 2>&1)
+        result=$(./efs-mgmt raft-mkfs "$seed" 2>&1)
         printf '%s\n' "$result" >> "$WORK-format.out"
         printf '%s\n' "$result" | grep -q 'raft-mkfs rc=0 ' && return 0
         sleep 1
@@ -411,7 +411,7 @@ mkdir -p "$MNT"
 # -f (foreground): no daemonize fork, so valgrind instruments the real
 # daemon (a forked parent would _exit without shutdown and leak the
 # pre-fork bootstrap table into the log).
-EFS_TRANSPORT=tcp $VG --log-file="$WORK-fuse.vg" ./efs-fuse "$SEED" "$EXPORT" "$MNT" -f \
+EFS_TRANSPORT=tcp $VG --log-file="$WORK-fuse.vg" ./efs-fuse "$SEED" "$MNT" -f \
     >"$WORK-fuse.out" 2>&1 &
 record_ours "$!"
 for i in $(seq 1 60); do grep -q "efs-fuse $MNT " /proc/mounts 2>/dev/null && break; sleep 0.5; done
@@ -458,7 +458,7 @@ else
     # SILENTLY if the upgrade fails, making the phase vacuous. Foreground
     # so valgrind instruments the real daemon (see phase 3).
     EFS_TRANSPORT=rdma $VG --log-file="$WORK-fuse-rdma.vg" \
-        ./efs-fuse "$RDMA_IP:$((PORT + 1))" "$EXPORT" "$MNT" -f \
+        ./efs-fuse "$RDMA_IP:$((PORT + 1))" "$MNT" -f \
         >"$WORK-fuse-rdma.out" 2>&1 &
     record_ours "$!"
     for i in $(seq 1 60); do grep -q "efs-fuse $MNT " /proc/mounts 2>/dev/null && break; sleep 0.5; done

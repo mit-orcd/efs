@@ -3,30 +3,34 @@
 
 /* Raft log command namespace for the metadata engine (architecture.md
  * §7 / §10 step 10.5). Byte 0 is the command tag; multi-byte fields are
- * big-endian. This is ONE namespace shared by the simulator
- * (src/sim/sim_internal.h SIM_CMD_*) and the production raft host
- * (src/server/raft_host.c) — the values must never diverge.
+ * big-endian. The simulator (src/sim/sim_internal.h SIM_CMD_*) uses the
+ * same value for every command both apply.
  *
- * Only the commands the production host applies belong here. The sim's
- * remaining SIM_CMD_* values converge onto this header when the
- * coordinator side is lifted out of src/sim (production adoption P2). */
+ * Only the commands the production host applies belong here. The
+ * simulator also keeps commands production has retired (SIM_CMD_APPEND_RES
+ * 17); production refuses those tags (EFS_MD_CMD_IS_RETIRED). */
 
-/* Exact bounded key set, so retrying an applied entry cannot consume the
- * next batch. Historical LANE_SWEEP retains whole-lane replay semantics. */
 /* W86: [tag:1][immutable ticket:216]. STATUS is ReadIndex-only; ADMIT
  * is serialized apply. Reply salt is ticket state, never permission to PUT. */
 /* REPORT envelope: [tag][uuid:16][epoch:4][legacy PUBLISH:202]*N.
  * Fences every mapping at serialized apply without reusing delta fields. */
 /* Internal coordinator commands; public control RPC cannot forge ACKs. */
-/* 45-51 and 55-57 are reserved: never reuse. Apply halts on them; submit
- * refuses. */
+/* 45-51 and 55-57 are reserved for retired feature commands. Apply halts
+ * on them; submit refuses. Retired tags are refused the same way:
+ * APPEND_RES 17 (folded into APPEND_CATCHUP), LANE_FENCE 20 (D25 logical
+ * truncate), LANE_SWEEP 21 and REAP_DONE 22, LANE_SWEEP_BATCH 33 and
+ * REAP_BATCH 34 (replaced by the W124 *_MULTI forms). The refusal stays until a format-marker change retires these
+ * values; do not assign them to new commands before that. */
 #define EFS_MD_CMD_RESERVED_MIN 45
 #define EFS_MD_CMD_RESERVED_MAX 51
 #define EFS_MD_CMD_RESERVED2_MIN 55
 #define EFS_MD_CMD_RESERVED2_MAX 57
+#define EFS_MD_CMD_IS_RETIRED(c) \
+    ((c) == 17 || (c) == 20 || (c) == 21 || (c) == 22 || (c) == 33 || (c) == 34)
 #define EFS_MD_CMD_IS_RESERVED(c) \
     (((c) >= EFS_MD_CMD_RESERVED_MIN && (c) <= EFS_MD_CMD_RESERVED_MAX) || \
-     ((c) >= EFS_MD_CMD_RESERVED2_MIN && (c) <= EFS_MD_CMD_RESERVED2_MAX))
+     ((c) >= EFS_MD_CMD_RESERVED2_MIN && (c) <= EFS_MD_CMD_RESERVED2_MAX) || \
+     EFS_MD_CMD_IS_RETIRED(c))
 /* Exact single-shard APPEND image envelope; no replica-local EOF selection. */
 #define EFS_MD_APPEND_COMPLETE_ATOMIC_LEN 101u
 #define EFS_MD_REQ_EXPIRY_CLOCK 63 /* local clock health only */
@@ -71,8 +75,6 @@
 #define EFS_MD_REQ_CLOSE_APPEND_NEXT 37 /* RPC only: [ino:8][identity:36] */
 #define EFS_MD_CMD_CLOSE_STEP 36 /* [ino:8][identity:36][phase:1], 46 bytes */
 #define EFS_MD_REQ_SWEEP_NEXT 35 /* RPC only: leader selects exact keys; never log */
-#define EFS_MD_CMD_REAP_BATCH 34 /* [ino:8][gen:8][n:1][len:1,key:31]*n */
-#define EFS_MD_CMD_LANE_SWEEP_BATCH 33 /* [ino:8][gen:8][lane:1][n:1][ci:4]*n */
 #define EFS_MD_CMD_CLOSE_CLEANUP 32 /* [ino:8][generation:8], retry deferred close */
 #define EFS_MD_CMD_PUBLICATION_ADMIT 31 /* immutable durable pending intent */
 #define EFS_MD_CMD_ORPHAN_REAP 30 /* [ino:8][generation:8], recheck leases/intents */
@@ -128,13 +130,12 @@
 #define EFS_MD_CMD_TRUNCATE 15 /* D25 logical truncate, exactly 86 B (protocol
                                 * §1.2); matches sim SIM_CMD_TRUNCATE */
 #define EFS_MD_CMD_APPEND_RSV 16 /* matches sim SIM_CMD_APPEND_RSV */
-#define EFS_MD_CMD_APPEND_RES 17 /* matches sim SIM_CMD_APPEND_RES */
 #define EFS_MD_CMD_MKFS 18 /* [now:8][salt:8] — idempotent; salt absent = 0 */
 /* Cross-group lane support (a group's log only writes its own shards' keys,
  * so the first publish to a lane whose shard lives on ANOTHER group cannot
  * ride the publish entry's inode-row touch — see efs_meta_apply_publish).
  * ACTIVATE_LANE runs on the INODE group and only sets the active_lanes bit.
- * Idempotent. Tag 20 (the retired LANE_FENCE) is unassigned and refused. */
+ * Idempotent. Tag 20 (the retired LANE_FENCE) is refused (IS_RETIRED). */
 #define EFS_MD_CMD_ACTIVATE_LANE 19 /* [ino:8][mask:8][content_epoch:8]
                                      * (25 B); REPORT appends UUID/epoch (20 B) */
 /* D25 BOOTSTRAP on a cross-group lane's group: create the lane stamp at the
@@ -147,15 +148,10 @@
                                    * [count:1][count x (epoch:8 size:8)] */
 #define EFS_MD_CMD_SWEEP_DONE  81 /* [ino:8][gen:8][lane:1][target:8], 26 B */
 #define EFS_MD_CMD_RETIRE      82 /* [ino:8][gen:8][target:8], 25 B */
-/* Data-plane GC (spec L7). LANE_SWEEP runs on the LANE's group: deletes the
- * lane's chunk keys (emitting one GC record per chunk on the group's anchor
- * shard), then the lane key. REAP_DONE runs on the INODE's group: clears
- * leftover append state and deletes the reap marker after every lane of a
- * dead inode was swept. GC_ACK runs on the group whose anchor shard holds
- * the record: sets one fragment's ack bit, retiring the record when all
- * EFS_NUM_FRAGMENTS bits are set. All three are idempotent replays. */
-#define EFS_MD_CMD_LANE_SWEEP  21 /* [ino:8][gen:8][lane:1] */
-#define EFS_MD_CMD_REAP_DONE   22 /* [ino:8][gen:8] */
+/* Data-plane GC (spec L7). GC_ACK runs on the group whose anchor shard
+ * holds the record: sets one fragment's ack bit, retiring the record when
+ * all EFS_NUM_FRAGMENTS bits are set. An idempotent replay. Lane sweeps and
+ * reap completions are LANE_SWEEP_MULTI / REAP_MULTI above. */
 #define EFS_MD_CMD_GC_ACK      23 /* [cnt:2][(ino:8)(gen:8)(lane:1)(ci:4)
                                    * (frag:1)]*cnt */
 /* Host-only membership (I18). Not a log command — the leader calls

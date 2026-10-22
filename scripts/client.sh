@@ -382,8 +382,6 @@ for a in "$@"; do
     fi
 done
 set -- "${ARGS[@]}"
-# efs-fuse still requires a name token. The server ignores it (one export).
-EXPORT_NAME=fs
 
 LOCK_DIR=$(dirname "$MOUNT_PATH")
 LOCK_FILE="$LOCK_DIR/.efs-$(basename "$MOUNT_PATH").lock"
@@ -457,7 +455,7 @@ if [ "$HAS_FOREGROUND" = 1 ]; then
             echo "strace -f -tt -T -> $dir/fuse.strace"
         fi
         set +e
-        "${wrap[@]}" ./efs-fuse "$ADDR_PORT" "$EXPORT_NAME" "$MOUNT_PATH" "$@" \
+        "${wrap[@]}" ./efs-fuse "$ADDR_PORT" "$MOUNT_PATH" "$@" \
             >>"$LOG_FILE" 2>&1
         rc=$?
         set -e
@@ -465,14 +463,14 @@ if [ "$HAS_FOREGROUND" = 1 ]; then
         finish_recorders "$MOUNT_PATH" || echo "WARNING: some recorder reports were not written" >&2
         exit "$rc"
     fi
-    ./efs-fuse "$ADDR_PORT" "$EXPORT_NAME" "$MOUNT_PATH" "$@" 2>&1 | tee -a "$LOG_FILE"
+    ./efs-fuse "$ADDR_PORT" "$MOUNT_PATH" "$@" 2>&1 | tee -a "$LOG_FILE"
     rc=${PIPESTATUS[0]}
     echo "efs-fuse exited rc=$rc" | tee -a "$LOG_FILE"
     exit "$rc"
 fi
 
 set +e
-./efs-fuse "$ADDR_PORT" "$EXPORT_NAME" "$MOUNT_PATH" "$@" >>"$LOG_FILE" 2>&1
+./efs-fuse "$ADDR_PORT" "$MOUNT_PATH" "$@" >>"$LOG_FILE" 2>&1
 rc=$?
 set -e
 if [ "$rc" -ne 0 ]; then

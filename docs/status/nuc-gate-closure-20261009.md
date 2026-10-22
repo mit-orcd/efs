@@ -81,7 +81,7 @@ generation's marker. Uncontended close avoids extra durable writes.
 
 The original failure stores remain unchanged. `replay_close_cleanup.py` copies
 all four stores, requires log progress and committed deferred retries, then
-uses `inspect_close_cleanup.c` only on stopped copies. The first experiment
+uses `inspect_close_cleanup.c` (removed from the tree on October 21 as an unrun orphan; read it with `git show a479018f6:tests/live/inspect_close_cleanup.c`) only on stopped copies. The first experiment
 stopped immediately after progress and still had one marker/288 OPEN rows;
 it is explicitly retained as **progress-only evidence**. The stronger final
 candidate replay includes recovery time and passes on all three group-2

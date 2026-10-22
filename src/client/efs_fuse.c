@@ -400,22 +400,15 @@ static int feature_enabled(uint32_t bit)
 }
 
 /* --- Virtual per-directory .find (not a real inode) ---
- * .find is a virtual directory; reading "<dir>/.find/<term>" runs a glob-ish
- * query ("term", "*term", "term*", "*term*"; literal part >= EFS_FIND_MIN_TERM
- * chars) over <dir>'s subtree and returns the matching paths (one per line,
+ * .find is a virtual directory; reading "<dir>/.find/<term>" runs a query
+ * (a command-path name, include/efs/command_path.h) over <dir>'s subtree and
+ * returns the matching paths (one per line,
  * host-absolute: mountpoint + fs-root path, so they pipe/loop from any cwd).
  * Single-command, e.g. cat ".find/PATTERN". The server searches a published
  * name index and supplies canonical export-relative paths. */
 static ino_t find_synthetic_ino(efs_ino_t parent_ino)
 {
     return (ino_t)((1ULL << 61) | (parent_ino & ((1ULL << 60) - 1)));
-}
-
-/* Reserved virtual-file names: never allow a real file/dir to shadow them. */
-static int name_is_reserved(const char *name)
-{
-    (void)name;
-    return 0; /* Legacy names are ordinary user entries; .efs collisions win. */
 }
 
 /* Canonical absolute mountpoint, set once in main. .find results are rendered
@@ -4395,8 +4388,6 @@ static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
         memset(created, 0, sizeof(*created));
     if (strlen(name) > 255)
         return -ENAMETOOLONG;
-    if (name_is_reserved(name))
-        return -EEXIST;
     rc = efs_client_stat_ino((efs_ino_t)parent_ino, &parent);
     if (rc != EFS_OK)
         return fuse_stat_errno(rc);
@@ -4508,8 +4499,6 @@ static int efs_fuse_mkdir_at(fuse_ino_t parent_ino, const char *name, mode_t mod
     int rc;
     if (strlen(name) > 255)
         return -ENAMETOOLONG;
-    if (name_is_reserved(name))
-        return -EEXIST;
     rc = efs_client_stat_ino((efs_ino_t)parent_ino, &parent);
     if (rc != EFS_OK)
         return fuse_stat_errno(rc);
@@ -4538,8 +4527,6 @@ static int efs_fuse_unlink_at(fuse_ino_t parent_ino, const char *name)
 {
     struct efs_inode parent;
     int rc;
-    if (name_is_reserved(name))
-        return -EACCES;
     rc = efs_client_stat_ino((efs_ino_t)parent_ino, &parent);
     if (rc != EFS_OK)
         return fuse_stat_errno(rc);
@@ -4611,10 +4598,9 @@ static void statfs_refresh_usage(void)
         if (efs_conn_send_msg(conn, EFS_MSG_STATUS, NULL, 0) == 0 &&
             efs_conn_recv_msg(conn, &type, &payload, &plen) == 0 &&
             type == EFS_MSG_STATUS_REPLY &&
-            plen >= 24) {
+            plen == sizeof(struct efs_msg_status_reply)) {
             struct efs_msg_status_reply r;
-            memset(&r, 0, sizeof(r));
-            memcpy(&r, payload, plen < sizeof(r) ? plen : sizeof(r));
+            memcpy(&r, payload, sizeof(r));
             pthread_mutex_lock(&g_client.lock);
             for (uint32_t j = 0; j < g_client.node_count; j++)
                 if (g_client.nodes[j].id == nid) {
@@ -4644,7 +4630,8 @@ static int efs_fuse_statfs(const char *path, struct statvfs *stbuf)
     pthread_mutex_lock(&g_client.lock);
 
     /* Use distinct-node placement over server filesystem capacity and available
-     * bytes, bounded by configured quotas. Older servers fall back to quotas. */
+     * bytes, bounded by configured quotas. A node whose capacity reading is
+     * unavailable (capacity_valid == 0) falls back to its quota. */
     uint64_t quota[EFS_MAX_NODES], room[EFS_MAX_NODES];
     uint32_t nn = g_client.node_count, all_quota = 1;
     if (nn > EFS_MAX_NODES)
@@ -4698,6 +4685,7 @@ static int efs_rc_to_errno(int rc)
     case EFS_ERR_NODATA:    return -ENODATA;
     case EFS_ERR_OVERFLOW: return -EOVERFLOW;
     case EFS_ERR_ILSEQ: return -EILSEQ;
+    case EFS_ERR_UNSUPPORTED: return -EIO;
     case EFS_ERR_BUSY:
         return -EBUSY;
     case EFS_ERR_AGAIN:
@@ -4803,8 +4791,6 @@ static int efs_fuse_link_at(fuse_ino_t src_ino, fuse_ino_t newparent,
     struct efs_inode src, parent;
     int rc;
     if (virt_kind(src_ino) || virt_kind(newparent))
-        return -EACCES;
-    if (name_is_reserved(newname))
         return -EACCES;
     rc = efs_client_stat_ino((efs_ino_t)src_ino, &src);
     if (rc != EFS_OK)
@@ -5121,8 +5107,6 @@ static int efs_fuse_rename_at(fuse_ino_t parent, const char *name,
     if (flags != 0)
         return -EOPNOTSUPP;
     if (virt_kind(parent) || virt_kind(newparent))
-        return -EACCES;
-    if (name_is_reserved(name) || name_is_reserved(newname))
         return -EACCES;
     rc = efs_client_stat_ino((efs_ino_t)parent, &src_parent);
     if (rc != EFS_OK)
@@ -7197,8 +7181,8 @@ static int efs_fuse_main_mt(int argc, char *argv[]);
 /* W125: refuse to mount a cluster whose daemons do not accept this
  * client's protocol declaration, instead of mounting and then failing
  * every read. A node that refuses is incompatible; one that does not
- * answer within 3 s is an older daemon or down. At least one node must
- * accept and none may refuse. */
+ * answer within 3 s is counted as down. At least one node must accept
+ * and none may refuse. */
 static int protocol_check(void)
 {
     uint32_t accepted = 0, refused = 0;
@@ -7787,13 +7771,14 @@ int main(int argc, char **argv)
     if (g_bench_time <= 0.0)
         g_bench_time = 10.0;
 
-    if (argc < 4) {
+    if (argc < 3) {
         efs_cli_help(stderr,argv[0],NULL);
         return 1;
     }
 
-    /* Server addresses are the first arguments (they contain a colon).
-       The first argument without a colon is the export name. */
+    /* Server addresses are the first arguments (they contain a colon);
+     * the first argument without a colon is the mountpoint. There is one
+     * export and no export label argument. */
     int arg_idx = 1;
     const char *nodes[EFS_MAX_NODES];
     uint32_t node_count = 0;
@@ -7803,22 +7788,20 @@ int main(int argc, char **argv)
     }
 
     if (node_count == 0 || arg_idx >= argc) {
-        fprintf(stderr, "Missing export name and mountpoint\n");
-        return 1;
-    }
-
-    const char *export_name = argv[arg_idx++];
-    if (arg_idx >= argc) {
         fprintf(stderr, "Missing mountpoint\n");
         return 1;
     }
     const char *mountpoint = argv[arg_idx++];
-
-    if (strcmp(export_name, "default") != 0) {
-        fprintf(stderr, "efs-fuse: legacy export label '%s' is ignored; "
-                "mounting the single export 'default' (id=1)\n", export_name);
-        export_name = "default";
+    /* Options follow the mountpoint. A second positional is the removed
+     * export-label form (NODE LABEL MOUNTPOINT): refuse it, never guess. */
+    if (arg_idx < argc && argv[arg_idx][0] != '-') {
+        fprintf(stderr, "efs-fuse: unexpected argument '%s' after mountpoint '%s'.\n"
+                "Usage: efs-fuse NODE:PORT [NODE:PORT ...] MOUNTPOINT [options]\n"
+                "The export label argument was removed; there is one export.\n",
+                argv[arg_idx], mountpoint);
+        return 1;
     }
+    const char *export_name = "default";
 
     /* Level cpu needs no cluster, no export and no mount: the client's
      * arithmetic only. Run before any network or NUMA setup. */

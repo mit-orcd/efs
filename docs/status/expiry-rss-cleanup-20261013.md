@@ -152,7 +152,7 @@ Native build /home/efs/devel-expiry-afbce294-normal; build/native/run logs
 private copies in /home/efs/expiry-rss-profile-20261013. Raw artifacts stay out
 of Git. Never point the probe at user storage: opening a log replays/truncates
 torn/reserved tails. Copy a stopped fixture first. Reproducer source:
-tests/diagnostics/raft_heap_probe.c. Build it with include/src/common/deps/blake3
+tests/diagnostics/raft_heap_probe.c (removed from the tree on October 21 as an unrun orphan; read it with `git show a479018f6:tests/diagnostics/raft_heap_probe.c`). Build it with include/src/common/deps/blake3
 headers and libefs.a, pthread/lm/dl/libibverbs; use generic-x86 objects for
 raft_disk.c,raft_log.c,checksum.c,common.c,batch_obs.c when profiling with Massif.
 

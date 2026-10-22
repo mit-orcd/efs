@@ -14,6 +14,7 @@
 #include "../src/server/store.c"
 #undef server_gc_sync_roots
 static void (*after_root_sync)(void);
+int server_gc_sync_roots(struct efsd_server *s);
 int server_gc_sync_roots(struct efsd_server *s)
 {int rc=real_gc_sync_roots(s);if(!rc&&after_root_sync)after_root_sync();return rc;}
 #include "../src/server/reclaim.c"
@@ -51,6 +52,18 @@ static struct efs_export EX={.id=1,.chunk_size=EFS_DEFAULT_CHUNK_SIZE};
 static uint8_t *body;
 static uint8_t sum[EFS_HASH_SIZE];
 
+/* The startup inventory efsd.c runs: the local counter is the full scan,
+ * never the advisory usage.bin snapshot. */
+static void startup_inventory(struct efsd_server *s)
+{
+    uint64_t used = server_compute_local_usage(s);
+    assert(used != UINT64_MAX);
+    pthread_mutex_lock(&s->lock);
+    struct efs_node *local = server_local_node(s);
+    assert(local);
+    local->used = used;
+    pthread_mutex_unlock(&s->lock);
+}
 static void server_setup(void)
 {
     memset(&S,0,sizeof(S));
@@ -99,7 +112,7 @@ static void wait_drained(void)
 static void boot(void)
 {
     server_setup();
-    server_init_local_usage(&S); /* the full inventory efsd runs at start */
+    startup_inventory(&S);
     assert(server_reclaim_init(&S)==EFS_OK);
 }
 static void run(const char *name,void (*fn)(void),int expect_crash)
@@ -180,7 +193,7 @@ static void t_crash_accept(void)
 }
 static void t_replay(void)
 {
-    server_setup();server_init_local_usage(&S);
+    server_setup();startup_inventory(&S);
     uint64_t base=base_after_settle();
     assert(used()==base+5ull*EFS_FRAGMENT_SIZE);
     rj.hold=1;

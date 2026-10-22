@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 from query_timing import refresh_seconds, settle_seconds
+from query_rpc import close_query, query_name
 
 mount, peer = map(Path, sys.argv[1:3])
 settle = settle_seconds(refresh_seconds(peer))
@@ -82,6 +83,14 @@ def stats_gate():
     assert stats['tree_files'] == len(expected) and stats['tree_dirs'] == 1, stats
     assert stats['tree_bytes'] == 16, stats
 eventually(stats_gate)
+def held_query(term):
+    # One exact-name first page held open; its server session is released
+    # at once, the descriptor keeps its immutable bytes.
+    nonce = int.from_bytes(os.urandom(4), 'big')
+    stream = open_query(root / '.efs/.query' / query_name('find', term, 'exact', nonce=nonce))
+    data = stream.read();stream.seek(0)
+    close_query(str(root), 'find', data, term, 'exact', None, nonce)
+    return stream
 def open_query(path):
     # ESTALE before OPEN succeeds is an explicit lookup/content-version race.
     # Once acquired, a descriptor must remain stable without retries.
@@ -96,8 +105,7 @@ def open_query(path):
 # Open a query result directly: multi-read/seek/fstat remains immutable.
 # Exact probes keep immutable-FD/slot gates independent of the legacy global
 # scan ceiling; broad-result behavior is covered by the v4 page gates.
-query = root / '.efs/.query/v1.find.0.66696c652e747874'
-with open_query(query) as stream:
+with held_query(b'file.txt') as stream:
     first = stream.read(17)
     size = os.fstat(stream.fileno()).st_size
     (other / 'new.txt').write_bytes(b'new')
@@ -111,7 +119,7 @@ print('truthful stats and immutable open/seek/fstat across peer mutation PASS', 
 # Caller is the unprivileged mount owner. Reauthorize each new delivery;
 # a descriptor already opened keeps its immutable bytes after chmod.
 assert os.geteuid() != 0, 'permission gates must not run as root'
-with open_query(query) as held:
+with held_query(b'file.txt') as held:
     old = held.read()
     os.chmod(other, 0)
     try:
@@ -170,7 +178,7 @@ try:
     for i in range(80):
         pattern=('capacity-%03d'%i).encode().hex()
         try:
-            held.append(open_query(root / '.efs/.query' / ('v1.find.0.'+pattern)))
+            held.append(held_query(bytes.fromhex(pattern)))
         except OSError as error:
             assert error.errno == errno.ENOMEM, error
             break
@@ -181,11 +189,11 @@ finally:
     for stream in held:
         stream.close()
 def recovered():
-    with open_query(root / '.efs/.query/v1.find.0.7265636f7665726564') as stream:
+    with held_query(b'recovered') as stream:
         assert json.load(stream)['complete'] is True
 eventually(recovered)
 for i in range(128):
-    with open_query(root / '.efs/.query' / ('v1.find.0.'+('released-%03d'%i).encode().hex())) as stream:
+    with held_query(('released-%03d'%i).encode()) as stream:
         assert json.load(stream)['complete'] is True
 print('bounded identity exhaustion and sequential release/FORGET recovery PASS', flush=True)
 print('efs_commands: PASS (focused command gates; large-scale/fault/NFS acceptance remains)', flush=True)

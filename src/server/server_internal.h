@@ -38,17 +38,6 @@ void server_peer_conn_drop(const char *host, uint16_t port, struct efs_conn *c);
 #define EFS_DEFAULT_WRITERS          8               /* daemon default / bench fallback */
 #define EFS_WRITERS_PER_PATH_DEFAULT EFS_DEFAULT_WRITERS
 
-/* RAM-only open-fd + flock state. Never serialized. */
-struct efs_ino_hold {
-    efs_export_id_t eid;
-    efs_ino_t ino;
-    uint32_t refs;
-    uint64_t flock_owner[8];
-    uint8_t flock_ex[8];
-    uint32_t flock_n;
-    struct efs_ino_hold *next;
-};
-
 struct efsd_server {
     uint64_t put_boot_epoch; /* durability verifier, stable across proven clean restarts */
     efs_node_id_t id;
@@ -120,9 +109,6 @@ struct efsd_server {
     int usage_dirty; /* local->used changed; flush meta/usage.bin soon */
     int nodes_dirty; /* membership changed; persist nodes.bin off the lock */
 
-    /* Open-fd refs + cluster flock (guarded by s->lock). */
-    struct efs_ino_hold *ino_holds;
-
 };
 
 
@@ -180,7 +166,8 @@ static inline uint32_t server_data_chunk_size(const struct efs_export *ex)
                : EFS_DEFAULT_CHUNK_SIZE;
 }
 
-/* Get the (sharded) path for a fragment on disk. Writes always use this. */
+/* Get the (sharded) path for a fragment on disk on the picked write root
+ * (efs_tls_write_root). Writes always use this; EFS_ERR_INVAL without one. */
 int server_fragment_path(struct efsd_server *s, struct efs_export *ex,
                          efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
                          char *path, size_t path_len);
@@ -284,7 +271,7 @@ void server_writer_set_npaths(uint32_t n);
 #define EFS_IOSTAT_PUT        1 /* PUT_CHUNK handler, conn thread */
 #define EFS_IOSTAT_DISK_WRITE 2 /* writer-pool disk write */
 #define EFS_IOSTAT_DISK_READ  3 /* filesystem-backed fragment read */
-#define EFS_IOSTAT_GC_DELETE  4 /* GC_FRAGMENT / GC_INODE RPC */
+#define EFS_IOSTAT_GC_DELETE  4 /* GC_INODE_BATCH RPC */
 uint64_t efs_iostats_now_us(void);
 void efs_iostats_add(int cls, uint64_t bytes, uint64_t us, int err);
 void efs_iostats_snapshot(struct efs_msg_io_stats_reply *out);
@@ -309,12 +296,6 @@ int server_compute_roots_usage(struct efsd_server *s, uint64_t *usage);
 
 /* Bytes used across all local data roots (sum of on-disk sizes). */
 uint64_t server_compute_local_usage(struct efsd_server *s);
-
-/* Update the local node's used counter via a full data/ tree scan, then persist. */
-void server_update_local_usage(struct efsd_server *s);
-
-/* Load meta/usage.bin, or scan+save if missing/corrupt. Call once at startup. */
-void server_init_local_usage(struct efsd_server *s);
 
 /* Persist local->used to meta/usage.bin (primary storage root). */
 void server_usage_save(struct efsd_server *s);
@@ -386,7 +367,7 @@ int server_raft_host_query_read(int (*consume)(void *,const struct efs_server_qu
 /* Leader + ReadIndex + applied KV. No s->lock. Inactive before mkfs
  * and these are never called. NOT_PRIMARY fills primary_id = raft leader
  * node id. */
-int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req, const struct efs_query_filters *filters, void **reply, uint32_t *len);
+int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req, void **reply, uint32_t *len);
 int server_raft_host_query_page(const struct efs_msg_query_snapshot_v4 *req,void **reply,uint32_t *len);
 void server_raft_host_query_reply_free(void *reply);
 void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out);
@@ -578,18 +559,14 @@ int server_raft_host_pack_leader(uint8_t group, uint64_t *term, uint64_t *commit
 struct efs_kv *server_raft_host_kv(void);
 uint64_t server_raft_host_group_commit(uint8_t group);
 uint32_t server_raft_host_group_voters(uint8_t group);
-int server_raft_host_members(void);
 /* Propose a packer command to its group and wait for this replica's apply
  * verdict. */
 int server_raft_host_pack_propose(uint8_t group, const uint8_t *cmd, uint32_t len);
 /* ---- W125 background packer (src/server/packer.c) ---- */
 int server_packer_start(struct efsd_server *s);
 void server_packer_stop(void);
-struct efs_packer_status {
-    uint64_t passes, candidates, segments, files_packed, files_cancelled,
-             unindexed, read_errors, put_errors, admit_errors, abandoned,
-             busy_passes, budget_waits, compacted, backfilled;
-};
+/* Copy of the packer counters (struct in protocol.h, sent in the
+ * pack-compact reply). */
 void server_packer_status(struct efs_packer_status *out);
 /* efs-mgmt pack-compact: queue `segments` output segments of compaction on
  * each group this node leads (run even while busy: an operator request)

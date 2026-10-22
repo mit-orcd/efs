@@ -3,7 +3,9 @@
 #include <string.h>
 
 /* NVMe backend for the store vtable. ctx is struct efs_nvme_store bound
- * to an already-acquired export (handler holds the inflight ref). */
+ * to an already-acquired export (handler holds the inflight ref). Every
+ * fragment object is named by its chunk generation; generation 0 (the
+ * pre-W1 `{ci}.{fi}` name) is refused, so a GET of it reads as absent. */
 
 static int nvme_get(void *ctx, const struct efs_frag_id *id,
                     uint8_t *buf, uint32_t *len,
@@ -19,7 +21,7 @@ static int nvme_get(void *ctx, const struct efs_frag_id *id,
 
     if (!n || !n->s || !n->ex || !id || !len)
         return EFS_ERR_INVAL;
-    if (id->export_id != n->ex->id)
+    if (id->export_id != n->ex->id || !id->chunk_generation)
         return EFS_ERR_INVAL;
     efs_tls_chunk_gen = id->chunk_generation;
     uint64_t start = efs_iostats_now_us();
@@ -40,7 +42,7 @@ static int nvme_put(void *ctx, const struct efs_frag_id *id,
 
     if (!n || !n->s || !n->ex || !id || (len > 0 && !buf))
         return EFS_ERR_INVAL;
-    if (id->export_id != n->ex->id)
+    if (id->export_id != n->ex->id || !id->chunk_generation)
         return EFS_ERR_INVAL;
     efs_tls_chunk_gen = id->chunk_generation;
     if (sum)
@@ -61,7 +63,7 @@ static int nvme_del(void *ctx, const struct efs_frag_id *id)
 
     if (!n || !n->s || !n->ex || !id)
         return EFS_ERR_INVAL;
-    if (id->export_id != n->ex->id)
+    if (id->export_id != n->ex->id || !id->chunk_generation)
         return EFS_ERR_INVAL;
     efs_tls_chunk_gen = id->chunk_generation;
     int rc = server_unlink_fragment_files(n->s, n->ex, id->ino, id->chunk_index,
@@ -78,7 +80,7 @@ static int nvme_del_if_sum(void *ctx, const struct efs_frag_id *id,
 
     if (!n || !n->s || !n->ex || !id || !expect_sum)
         return EFS_ERR_INVAL;
-    if (id->export_id != n->ex->id)
+    if (id->export_id != n->ex->id || !id->chunk_generation)
         return EFS_ERR_INVAL;
     efs_tls_chunk_gen = id->chunk_generation;
     rc = server_delete_fragment_if_sum(n->s, n->ex, id->ino,

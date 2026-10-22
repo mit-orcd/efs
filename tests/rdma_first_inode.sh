@@ -62,7 +62,7 @@ fi
 
 rm -f "$WORK/fuse.log"
 EFS_TRANSPORT=rdma EFS_RDMA_FIRST=1 setsid ./efs-fuse "$ADDR:$PORT" \
-    efs-rdma-first "$MNT" >"$WORK/fuse.log" 2>&1 </dev/null &
+    "$MNT" >"$WORK/fuse.log" 2>&1 </dev/null &
 
 served=0
 for _ in $(seq 1 50); do

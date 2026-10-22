@@ -322,9 +322,8 @@ static int format_ino_chunk_dir(char *path, size_t path_len, const char *root,
     return (int)(p - path);
 }
 
-/* Append "/{ci}.{fi}" or "/{ci}.{fi}.{gen}" onto a dir built by
- * format_ino_chunk_dir. gen==0 is the pre-W1 name so leftover files
- * stay readable. */
+/* Append "/{ci}.{fi}.{gen}" onto a dir built by format_ino_chunk_dir.
+ * The wire and store entry points refuse generation 0. */
 __thread uint64_t efs_tls_chunk_gen;
 
 static inline char *path_append_frag(char *p, uint32_t chunk_index,
@@ -334,32 +333,20 @@ static inline char *path_append_frag(char *p, uint32_t chunk_index,
     p = path_append_u64(p, chunk_index);
     *p++ = '.';
     p = path_append_u64(p, fragment_index);
-    if (efs_tls_chunk_gen) {
-        *p++ = '.';
-        p = path_append_u64(p, efs_tls_chunk_gen);
-    }
+    *p++ = '.';
+    p = path_append_u64(p, efs_tls_chunk_gen);
     *p = '\0';
     return p;
 }
 
-/* Legacy RR (chunk_index % N). Kept only as a create-path fallback when the
- * writer has not set efs_tls_write_root (e.g. inline sync without pool). */
-static uint32_t stripe_root_index(const struct efsd_server *s, uint32_t chunk_index)
+/* The writer pool picks the root (pick_write_path) before every write;
+ * UINT32_MAX = no valid root was picked, and the write is refused. */
+static uint32_t write_root_index(const struct efsd_server *s)
 {
     uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
-    if (n <= 1)
-        return 0;
-    return chunk_index % n;
-}
-
-static uint32_t write_root_index(const struct efsd_server *s, uint32_t chunk_index)
-{
-    if (efs_tls_write_root >= 0) {
-        uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
-        if ((uint32_t)efs_tls_write_root < n)
-            return (uint32_t)efs_tls_write_root;
-    }
-    return stripe_root_index(s, chunk_index);
+    if (efs_tls_write_root >= 0 && (uint32_t)efs_tls_write_root < n)
+        return (uint32_t)efs_tls_write_root;
+    return UINT32_MAX;
 }
 
 static void fragment_path_at(struct efsd_server *s, uint32_t root_idx,
@@ -421,8 +408,12 @@ int server_fragment_path(struct efsd_server *s, struct efs_export *ex,
                          efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
                          char *path, size_t path_len)
 {
-    uint32_t root = write_root_index(s, chunk_index);
+    uint32_t root = write_root_index(s);
 
+    if (root == UINT32_MAX) {
+        fprintf(stderr, "store: fragment write without a picked storage root refused\n");
+        return EFS_ERR_INVAL;
+    }
     fragment_path_at(s, root, ex, ino, chunk_index, fragment_index, path,
                      path_len);
     /* The GET that follows (verify-after-write, a peer's read-modify-
@@ -544,8 +535,9 @@ static int gc_unlink_file(struct efsd_server *s, const char *path)
     return rc;
 }
 
-/* PUT and checksum-test/unlink share an object lock. An immutable generation
- * normally avoids replacement, but legacy generation-zero slots can be reused. */
+/* PUT and checksum-test/unlink share an object lock: an immutable
+ * generation avoids replacement, and the lock serializes a retried PUT with
+ * the checksum test and unlink of the same object. */
 #define FRAG_LOCKS 4096
 static pthread_mutex_t frag_locks[FRAG_LOCKS];
 static pthread_rwlock_t inode_gc_locks[FRAG_LOCKS];
@@ -2435,10 +2427,6 @@ static uint64_t compute_dir_usage(const char *path, size_t root_len)
     if (!d)
         return errno == ENOENT ? 0 : UINT64_MAX;
 
-    char meta_ino_name[32];
-    snprintf(meta_ino_name, sizeof(meta_ino_name), "%llu",
-             (unsigned long long)EFS_META_TABLE_INO);
-
     struct dirent *entry;
     for (;;) {
         errno = 0;
@@ -2449,11 +2437,6 @@ static uint64_t compute_dir_usage(const char *path, size_t root_len)
         }
         if (entry->d_name[0] == '.')
             continue;
-        /* Exclude 2+1 metadata table pages from data usage / quota.
-         * Legacy: flat directory named after the meta ino. */
-        if (strcmp(entry->d_name, meta_ino_name) == 0)
-            continue;
-
         char full_path[8192];
         snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
 
@@ -2799,32 +2782,6 @@ void server_sync_local_membership(struct efsd_server *s)
     pthread_mutex_unlock(&s->lock);
 }
 
-void server_update_local_usage(struct efsd_server *s)
-{
-    uint64_t used = server_compute_local_usage(s);
-    if (used == UINT64_MAX)
-        fprintf(stderr, "usage: incomplete storage inventory; quota admission blocked\n");
-    pthread_mutex_lock(&s->lock);
-    struct efs_node *local = server_local_node(s);
-    if (local) {
-        local->used = used;
-        /* Keep advertised path list current (e.g. after upgrade / rejoin). */
-        server_format_storage_paths(s, local->storage_path,
-                                    sizeof(local->storage_path));
-    }
-    pthread_mutex_unlock(&s->lock);
-    server_usage_save(s);
-}
-
-void server_init_local_usage(struct efsd_server *s)
-{
-    /* usage.bin is an advisory heartbeat snapshot, not a transactional
-     * companion to PUT/unlink. A crash can leave it ahead of reclaimed
-     * files or behind new fragments. Reconcile before admitting writes;
-     * otherwise a stale overcount can permanently report ENOSPC. */
-    server_update_local_usage(s);
-}
-
 int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export *ex,
                                         efs_ino_t ino, uint32_t chunk_index,
                                         uint32_t fragment_index,
@@ -2996,8 +2953,10 @@ int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
                                const uint8_t *data, uint32_t data_len)
 {
     char path[8192];
-    server_fragment_path(s, ex, ino, chunk_index, fragment_index, path,
-                         sizeof(path));
+    int prc = server_fragment_path(s, ex, ino, chunk_index, fragment_index, path,
+                                   sizeof(path));
+    if (prc != EFS_OK)
+        return prc;
     pthread_rwlock_t *im = server_inode_gc_lock(s,ex->id,ino);
     pthread_rwlock_rdlock(im);
     int dead = inode_is_dead(s, ex->id, ino);
@@ -3021,8 +2980,10 @@ int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export
                                         const uint8_t checksum[EFS_HASH_SIZE])
 {
     char path[8192];
-    server_fragment_path(s, ex, ino, chunk_index, fragment_index, path,
-                         sizeof(path));
+    int prc = server_fragment_path(s, ex, ino, chunk_index, fragment_index, path,
+                                   sizeof(path));
+    if (prc != EFS_OK)
+        return prc;
     pthread_rwlock_t *im = server_inode_gc_lock(s,ex->id,ino);
     pthread_rwlock_rdlock(im);
     int dead = inode_is_dead(s, ex->id, ino);

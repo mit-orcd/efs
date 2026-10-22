@@ -31,8 +31,6 @@ static int fake_rpc(efs_node_id_t hint,struct efs_msg_query_snapshot_reply*r,cha
  memset(r,0,sizeof(*r));r->primary_id=owner;*text=strdup(owner==3?"owner-three":"owner-two");assert(*text);r->text_len=strlen(*text);return 0;
 }
 static int efs_client_rpc_query_snapshot_v4_at(const struct efs_msg_query_snapshot_v4*q,efs_node_id_t hint,struct efs_msg_query_snapshot_reply*r,char**t){(void)q;return fake_rpc(hint,r,t);}
-static int efs_client_rpc_query_snapshot_v4(const struct efs_msg_query_snapshot_v4*q,struct efs_msg_query_snapshot_reply*r,char**t) __attribute__((unused));
-static int efs_client_rpc_query_snapshot_v4(const struct efs_msg_query_snapshot_v4*q,struct efs_msg_query_snapshot_reply*r,char**t){(void)q;return fake_rpc(0,r,t);}
 '''+state+function+r'''
 int main(void){
  assert(!find_query_ensure(42,"unused","request-nonce-1"));

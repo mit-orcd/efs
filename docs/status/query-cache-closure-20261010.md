@@ -70,7 +70,7 @@ The deployment/live gates for this next logical fix are pending.
 
 ## First native-format scale pilots
 
-The bounded generator in `tests/bench_query_disk_scale.c` writes actual production
+The bounded generator in `tests/measure/bench_query_disk_scale.c` (moved from `tests/` on October 21) writes actual production
 KV and disk-catalog records, distributed over 4096 partitions. It enumerates every
 exported file and checks its name, parent, inode, generation and per-partition
 sequence against an independent streaming oracle; it checks every directory's
@@ -609,7 +609,7 @@ independent export check 6.300 s; one partition rebuilt, builder allocation was
 were not controlled; this is guest kernel/process cold recovery, not power-loss
 or physical-device cold performance. The two larger fixtures continued running.
 
-`tests/bench_query_disk_concurrent.c` retains an old generation, starts a complete
+`tests/measure/bench_query_disk_concurrent.c` retains an old generation, starts a complete
 independent export, changes one source inode, and builds a replacement while
 that export continues. It checks every old and new path, every directory/root
 aggregate, restores the private source and checkpoints it for an independent

@@ -29,7 +29,6 @@ struct fuse_entry_param {struct efs_inode row;};
 static void *t_req;
 static int create_rc,stat_rc,deny,malformed,stats,creates,errors,replies,last_error,held;
 static uint64_t deadline,observed_deadline;
-static int name_is_reserved(const char *n) {return !strcmp(n,".efs");}
 static int efs_client_stat_ino(efs_ino_t ino,struct efs_inode *row) {assert(ino==7);stats++;*row=(struct efs_inode){.ino=7,.mode=S_IFDIR|02770,.gid=91};return stat_rc;}
 static int fuse_stat_errno(int rc) {(void)rc;return -EIO;}
 static int check_dir_wx(const struct efs_inode *p) {assert(p->ino==7);return deny?-EACCES:0;}
@@ -60,7 +59,6 @@ int main(void) {
  reset();deny=1;ll_mkdir_run(NULL,7,"child",0750);assert(last_error==EACCES&&!creates&&!replies);
  reset();stat_rc=EFS_ERR_IO;ll_mkdir_run(NULL,7,"child",0750);assert(last_error==EIO&&!creates&&!replies);
  reset();malformed=1;ll_mkdir_run(NULL,7,"child",0750);assert(last_error==EIO&&creates==1&&!replies);
- reset();ll_mkdir_run(NULL,7,".efs",0750);assert(last_error==EEXIST&&!stats&&!creates&&!replies);
  puts("MKDIR committed reply: exact identity/setgid/attrs, one parent check, no post-create stat, error and deadline preservation PASS");
 }
 '''

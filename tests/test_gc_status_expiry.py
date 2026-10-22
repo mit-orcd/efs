@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Management status wire compatibility, including unknown expiry on old nodes."""
+"""efs-mgmt reads only the current GC status reply (version 5, exact length)."""
 import socket
 import struct
 import subprocess
@@ -22,7 +22,9 @@ def probe(binary,command,version,payload_size=None,healthy=1,uncertain=0):
     io=struct.pack('=12Q',*([0]*12))
     expiry=struct.pack('=6I12Q2I',1,1,healthy,uncertain,1,1,
                        17,16384,2,3,4,5,1000,2000,64,0,3000,0,1,0)
-    payload=base+(io if version>=2 else b'')+(expiry if version>=3 else b'')
+    reclaim=struct.pack('=12Q2IQ',*([0]*12),0,0,0)
+    trunc=struct.pack('=2Q',3,4)
+    payload=base+io+expiry+reclaim+trunc
     if payload_size is not None:payload=payload[:payload_size]
     errors=[]
     with socket.socket() as listener:
@@ -43,24 +45,22 @@ def probe(binary,command,version,payload_size=None,healthy=1,uncertain=0):
 
 def main():
     binary=Path(sys.argv[1] if len(sys.argv)>1 else './efs-mgmt').resolve()
-    for version in (1,2):
-        result=probe(binary,'gc-status',version)
-        assert result.returncode==0,result
-        assert 'expired_files=' not in result.stdout,'old status invented expiry counters'
-        result=probe(binary,'expiry-status',version)
-        assert result.returncode!=0 and 'unavailable' in result.stderr,result
-    result=probe(binary,'gc-status',3)
+    result=probe(binary,'gc-status',5)
+    assert 'trunc_pending group0=3 group2=4' in result.stdout,result
     assert result.returncode==0 and 'expired_files=17' in result.stdout and 'expired_size_unknown_files=2' in result.stdout,result
-    result=probe(binary,'expiry-status',3)
+    assert 'reclaim_state=ok' in result.stdout and 'gc_io=dir_sync' in result.stdout,result
+    result=probe(binary,'expiry-status',5)
     assert result.returncode==0 and '17 files' in result.stdout and 'at least 64' in result.stdout,result
     assert '2 seconds ago' in result.stdout and 'size_unknown=2' in result.stdout,result
-    result=probe(binary,'expiry-status',3,healthy=0)
+    result=probe(binary,'expiry-status',5,healthy=0)
     assert result.returncode==0 and 'waiting: clock health sample' in result.stdout and 'operator reset required' not in result.stdout,result
-    result=probe(binary,'expiry-status',3,healthy=0,uncertain=1)
+    result=probe(binary,'expiry-status',5,healthy=0,uncertain=1)
     assert result.returncode==0 and 'paused: clock uncertain' in result.stdout and 'operator reset required' in result.stdout,result
-    for version,size in ((3,328),(2,232),(1,231),(4,None)):
-        assert probe(binary,'gc-status',version,size).returncode!=0,(version,size)
-    print('GC status v1/v2 compatibility, v3 expiry fields and malformed replies PASS')
+    # Older layouts (versions 1-4, shorter replies) and wrong lengths are refused.
+    for version,size in ((1,231),(2,328),(3,456),(4,568),(5,568),(5,583),(4,None),(6,None)):
+        result=probe(binary,'gc-status',version,size)
+        assert result.returncode!=0 and 'unavailable' in result.stderr,(version,size,result)
+    print('GC status: current v5 reply with expiry and reclaim fields; older layouts and malformed replies refused PASS')
 
 
 if __name__=='__main__':main()

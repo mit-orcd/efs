@@ -184,10 +184,13 @@ class Commands(unittest.TestCase):
         self.assertEqual(literal, SOURCE.read_text())
 
     def test_simple_invocations_have_distinct_cache_identity(self):
+        # NFS may retain an opened virtual inode: each invocation's nonce
+        # gives its first page a distinct name.
         for op in ('stats', 'ls'):
-            first, second = commands.query_name(op), commands.query_name(op)
+            first = commands.page_name(op, b"", "contains", None, 1, 0, 0, 1)
+            second = commands.page_name(op, b"", "contains", None, 1, 0, 0, 2)
             self.assertNotEqual(first, second)
-            self.assertRegex(first, r'^v1\.' + op + r'\.[0-9a-f]{32}$')
+            self.assertRegex(first, r'^v3\.[A-Za-z0-9_-]+$')
 
     def test_command_directory_cannot_shadow_standard_library(self):
         self.result("stats")
@@ -360,9 +363,9 @@ class Commands(unittest.TestCase):
     def test_invalid_pattern(self):
         for term in (b"a/b", b"a\0b", b"x" * 121):
             with self.assertRaises(ValueError):
-                commands.query_name("find", term)
-        self.assertLessEqual(len(commands.query_name("find", b"x" * 120)), 255)
-        self.assertEqual(commands.query_name("find", b"*"), "v1.find.3.2a")
+                commands.validate_query("find", term)
+        commands.validate_query("find", b"x" * 120)
+        self.assertLessEqual(len(commands.page_name("find", b"x" * 120, "contains", None, 10000, 0, 0, 1)), 249)
 
     def test_long_dates_sizes_sort_and_relative(self):
         path = self.result("ls", [b"z", b"a", b"dir", b"line\nbreak"])
@@ -513,10 +516,9 @@ int main(int argc,char **argv) {
                     name = commands.page_name(command, b"", "contains", None, limit,
                                               144115188075855873 if not limit else 0, 0, 123)
                     self.assertEqual(int(subprocess.check_output([str(binary), name])), expected)
-            # Historical nonpaged paths cannot continue and retain their cap.
-            for command in ("stats", "find", "ls"):
-                name = commands.query_name(command, b"report" if command == "find" else b"")
-                self.assertEqual(int(subprocess.check_output([str(binary), name])), 16 << 20)
+            # The removed unpaged names are refused, not mapped to a request.
+            for name in ("v1.stats", "v1.ls", "v1.find.3.2a", "v1.stats." + "0" * 32):
+                self.assertNotEqual(subprocess.run([str(binary), name], stdout=subprocess.PIPE).returncode, 0, name)
 
     def test_python_c_roundtrip_and_refusals(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -524,10 +526,10 @@ int main(int argc,char **argv) {
             source.write_text('''#include "efs/command_path.h"
 #include <stdio.h>
 int main(int argc,char **argv) {
-    struct efs_msg_query_snapshot q={0};
-    if(argc!=2 || efs_command_path_parse(argv[1],&q)) return 1;
-    printf("%u %u %u ",q.version,q.operation,q.match);
-    for(const unsigned char *p=(void *)q.term;*p;p++) printf("%02x",*p);
+    struct efs_msg_query_snapshot_v4 q;
+    if(argc!=2 || efs_command_path_parse_v4(argv[1],&q)) return 1;
+    printf("%u %u %u ",q.base.version,q.base.operation,q.base.match);
+    for(const unsigned char *p=(void *)q.base.term;*p;p++) printf("%02x",*p);
     return 0;
 }
 ''')
@@ -536,18 +538,13 @@ int main(int argc,char **argv) {
                             "-Werror", "-I" + str(ROOT / "include"), str(source), "-o", str(binary)], check=True)
             for op, operation in (("stats", 0), ("ls", 2), ("find", 1)):
                 for term in ((b"",) if op != "find" else (b"", b"foo", b"\xff\n*", b"x" * 120)):
-                    name = commands.query_name(op, term)
+                    name = commands.page_name(op, term, "contains", None, 1 if op == "stats" else 100, 0, 0, 7)
                     p = subprocess.run([str(binary), name], stdout=subprocess.PIPE)
                     self.assertEqual(p.returncode, 0)
-                    self.assertEqual(p.stdout, ("2 %d %d %s" % (operation, 3 if op == "find" else 0,
-                                                              term.hex())).encode())
-            for legacy in ('v1.stats', 'v1.ls'):
-                self.assertEqual(subprocess.run([str(binary), legacy], stdout=subprocess.PIPE).returncode, 0)
-            for bad in ("", "v2.stats", "v1.stats.extra", "v1.stats." + '0' * 31,
-                        "v1.stats." + '0' * 33, "v1.stats." + 'G' * 32,
-                        "v1.find.", "v1.find.3", "v1.find.4.61",
-                        "v1.find.3.0", "v1.find.3.GG", "v1.find.3.FF", "v1.find.3.00", "v1.find.3.2f",
-                        "v1.find.0.", "v1.find.2.", "v1.find.3." + "61" * 121):
+                    self.assertEqual(p.stdout, ("4 %d 3 %s" % (operation, term.hex())).encode())
+            # The unpaged v1./v2. names were removed: every one is refused.
+            for bad in ("", "v1.stats", "v1.ls", "v2.stats", "v1.stats." + '0' * 32,
+                        "v1.find.3.2a", "v1.find.0.61", "v2.find.3.1.0f." + "0" * 64 + ".Zg"):
                 self.assertNotEqual(subprocess.run([str(binary), bad], stdout=subprocess.PIPE).returncode, 0, bad)
 
     def test_filtered_codec_and_predicate_bounds(self):
@@ -557,8 +554,8 @@ int main(int argc,char **argv) {
 #include <stdio.h>
 #include <stdlib.h>
 int main(int argc,char **argv) {
-    struct efs_msg_query_snapshot_v3 q={0};
-    if (argc!=5 || efs_command_path_parse_v3(argv[1],&q)) return 1;
+    struct efs_msg_query_snapshot_v4 q;
+    if (argc!=5 || efs_command_path_parse_v4(argv[1],&q)) return 1;
     printf("%u %u %u %u %llu %llu %llu %llu %d ",q.base.version,q.base.match,q.filters.kind,q.filters.flags,
        (unsigned long long)q.filters.min_size,(unsigned long long)q.filters.max_size,
        (unsigned long long)q.filters.after_ns,(unsigned long long)q.filters.before_ns,
@@ -572,21 +569,18 @@ int main(int argc,char **argv) {
                             "-Werror", "-I"+str(ROOT/"include"), str(source), "-o", str(binary)], check=True)
             filters = dict(type="file", min_size=7, max_size=9, modified_after_ns=10, modified_before_ns=20)
             for term in (b"", b"f", b"ff", b"fff", b"\xff\n*", b"x"*120):
-                name = commands.query_name("find", term, filters=filters)
-                self.assertLessEqual(len(name), 240)
+                name = commands.page_name("find", term, "contains", filters, 100, 0, 0, 7)
+                self.assertLessEqual(len(name), 249)
                 for mode, size, stamp, match in ((0o100644, 7, 11, 1), (0o100644, 9, 19, 1),
                      (0o100644, 6, 11, 0), (0o100644, 10, 11, 0), (0o100644, 7, 10, 0),
                      (0o100644, 7, 20, 0), (0o40755, 7, 11, 0), (0o120777, 7, 11, 0)):
                     p = subprocess.run([str(binary), name, str(mode), str(size), str(stamp)], capture_output=True)
                     self.assertEqual(p.returncode, 0, p.stderr)
-                    self.assertEqual(p.stdout, ("3 3 1 15 7 9 10 20 %d %s" % (match, term.hex())).encode())
-            name = commands.query_name("find", b"f", filters=filters)
-            for bad in (name+"=", name[:-1]+"h", name[:80]+"A", name[:80]+"AA", name[:80]+"Lw",
-                        name[:12]+"ff"+name[14:], name[:12]+"00"+name[14:],
-                        name[:15]+"f"*16+name[31:], name[:79]+"x"+name[80:], name+"a"*200):
+                    self.assertEqual(p.stdout, ("4 3 1 15 7 9 10 20 %d %s" % (match, term.hex())).encode())
+            name = commands.page_name("find", b"f", "contains", filters, 100, 0, 0, 7)
+            for bad in (name+"=", name+"a"*200, name[:3]+"!"+name[4:], "v3."+name[3:40]):
                 p = subprocess.run([str(binary), bad, "0", "0", "0"], capture_output=True)
                 self.assertNotEqual(p.returncode, 0, bad)
-
 
 if __name__ == "__main__":
     unittest.main()

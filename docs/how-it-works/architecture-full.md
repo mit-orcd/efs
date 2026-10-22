@@ -1615,9 +1615,14 @@ scheduler's both-groups-local assumption remain.
 Earlier reviews and responses are kept as superseded history.
 Replaces the declined 256 MiB EBUSY refusal; W43 stays open.
 
+[orcd-test cleanup and W127–W131 run](../status/orcd-test-cleanup-w127-20261022.md):
+**PASS** on a reformatted orcd-test (RDMA, `.efs`): POSIX core 216/216 on 7
+concurrent clients twice, the live `.efs` harnesses, a restart on existing
+data. Branch `claude/dead-code-cleanup-5f7087`, not merged.
+
 [W66 acceptance checklist](../status/metadata-scaling.md#w66-acceptance-checklist-consolidated-oct-21)
 (distribution, fail-closed hardening, MKDIR/born-HASHED, conditional split
-rediscovery; all NOTRUN, directory-spread policy OPEN-DECISION; no backward
+rediscovery; B1, B2 and B4 PARTIAL and B3 PASS on the cleanup branch (W127–W131), the rest NOTRUN, directory-spread policy OPEN-DECISION; no backward
 compatibility: B5/B8 and legacy parts dropped) consolidates the
 review thread below. Final review accepts this policy: group B can proceed;
 A7 is independent. Existing scoped restart/reformat authorization persists,
@@ -2298,11 +2303,11 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | fast-delete | **W124** · fast delete: batched reclaim, quota credit at commit, then packing (W125) | performance / capacity | PROPOSED: design review before code; implementation, private A/B and orcd-mini acceptance NOTRUN | [proposal and gates](../backlog/fast-delete-reclaim.md) · [evidence](../status/orcd-mini-gc-delete-profile-5d673efa8-20261018.md) |
 | small-file-packing | **W125** · small-file packing by default (background packer after close) | capacity / performance | PROPOSED: revised to background packing 2026-10-18; write path unchanged, packer always on, no switch, prior state kept as a tag; port and acceptance NOTRUN | [proposal and gates](../backlog/small-file-packing-default.md) · [plan](../backlog/small-file-packing-plan.md) · [D37](#appendix-4--decisions--taken-and-pending-register-d1d36) |
 | kv-reader-convoy | **W126** · KV readers convoy behind exclusive LSM phases on a busy leader | performance | DEPLOYED on orcd-mini `8fb4247ad` (steps 1 and 3): `make test` 813/813 (1 environmental docs-check failure), POSIX smoke 216/216; A/B lock-wait gate PASS (leader LSM waits 2–4× lower), create-rate gate FAIL (no measurable gain; bounded by `h->mu` and fsync); step 4 deferred | [item](#w126) · [A/B](../status/orcd-mini-w126-ab-8fb4247ad-20261022.md) · [origin](../status/orcd-mini-profile-47ba6b590-20261021.md) |
-| apply-unknown-tag | **W127** · metadata apply accepts unknown command tags as applied | correctness | OPEN: code reading at `0bdf55256`, not triggered on a cluster; concrete defect behind W66 B1–B4; implement W127–W131 as one apply-hardening package ([scope review](#w127-w139-review)); fix NOTRUN | [item](#w127) · [audit](../reviews/dead-code-review-20261021.md) |
-| apply-unknown-subtag | **W128** · unknown sub-tags and short frames apply as success (DIR/SESSION/TXN) | correctness | OPEN: code reading; fix NOTRUN; W66 B1 | [item](#w128) · [audit](../reviews/dead-code-review-20261021.md) |
-| apply-proto-normalized | **W129** · `host_apply` turns decoder errors into success and commits the cursor | correctness | OPEN: code reading; `test_gc_verdict.py:75` asserts the defect; SALT/QUERY_POLICY PROTO are business refusals and stay; fix NOTRUN | [item](#w129) · [audit](../reviews/dead-code-review-20261021.md) |
-| dir-apply-io | **W130** · DIR apply swallows storage errors; replicas can diverge | correctness | OPEN: code reading; one-replica fault-injection gate NOTRUN | [item](#w130) · [audit](../reviews/dead-code-review-20261021.md) |
-| apply-missing-kv | **W131** · missing KV engine counts as applied | defensive hardening | OPEN: runtime reachability unproven; part of the W127 package; fix NOTRUN | [item](#w131) · [audit](../reviews/dead-code-review-20261021.md) |
+| apply-unknown-tag | **W127** · metadata apply accepts unknown command tags as applied | correctness | FIXED on `claude/dead-code-cleanup-5f7087`, not merged; unit gates PASS, private 3-node gate PASS; RDMA/multi-host NOTRUN ([implementation](#w127-w131-fix)) | [item](#w127) · [audit](../reviews/dead-code-review-20261021.md) |
+| apply-unknown-subtag | **W128** · unknown sub-tags and short frames apply as success (DIR/SESSION/TXN) | correctness | FIXED on `claude/dead-code-cleanup-5f7087`, not merged; unit gates PASS; RDMA/multi-host NOTRUN ([implementation](#w127-w131-fix)) | [item](#w128) · [audit](../reviews/dead-code-review-20261021.md) |
+| apply-proto-normalized | **W129** · `host_apply` turns decoder errors into success and commits the cursor | correctness | FIXED on `claude/dead-code-cleanup-5f7087`, not merged; unit gates PASS; RDMA/multi-host NOTRUN ([implementation](#w127-w131-fix)) | [item](#w129) · [audit](../reviews/dead-code-review-20261021.md) |
+| dir-apply-io | **W130** · DIR apply swallows storage errors; replicas can diverge | correctness | FIXED on `claude/dead-code-cleanup-5f7087`, not merged; unit gates PASS, one-replica fault injection NOTRUN; RDMA/multi-host NOTRUN ([implementation](#w127-w131-fix)) | [item](#w130) · [audit](../reviews/dead-code-review-20261021.md) |
+| apply-missing-kv | **W131** · missing KV engine counts as applied | defensive hardening | FIXED on `claude/dead-code-cleanup-5f7087`, not merged; unit gates PASS; RDMA/multi-host NOTRUN ([implementation](#w127-w131-fix)) | [item](#w131) · [audit](../reviews/dead-code-review-20261021.md) |
 | node-left | **W132** · `NODE_LEFT` lets any connection drop a node from membership | correctness / safety | OPEN: no sender in tree; delete handler and refuse the ID; NOTRUN | [item](#w132) · [audit](../reviews/dead-code-review-20261021.md) |
 | declaration-gate | **W133** · client protocol declaration gate is fail-open | correctness | OPEN: only three requests gated, newer versions accepted; connection-state matrix NOTRUN; not authentication | [item](#w133) · [audit](../reviews/dead-code-review-20261021.md) |
 | legacy-session | **W134** · unregistered session identities bypass session fencing | correctness (fail-open) | OPEN: live while W72 is open; remove atomically with full registration | [item](#w134) · [audit](../reviews/dead-code-review-20261021.md) |
@@ -2311,6 +2316,9 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | test-ticket-retry | **W137** · `test_live_ticket_retry.py` fakes a stale reply length | verification correctness | OPEN: FAIL on node9901 (5 vs 13 bytes); decide with the staged PUT-ticket stack | [item](#w137) · [audit](../reviews/dead-code-review-20261021.md) |
 | test-apply-ring-tsan | **W138** · `test_apply_ring.py` passes while its TSan half never runs | verification correctness | OPEN: gcc 11 `-Werror=tsan` on fences; SKIP must be NOTRUN | [item](#w138) · [audit](../reviews/dead-code-review-20261021.md) |
 | tests-never-run | **W139** · unit binaries and tests built or present but never run | verification liveness | OPEN: 3 binaries + 16 Python tests PASS when run; wire before cleanup | [item](#w139) · [audit](../reviews/dead-code-review-20261021.md) |
+| submit-unknown-tag | **W140** · proposal RPC accepts metadata tags this build cannot apply (halts a group since W127) | correctness / safety | OPEN: shown by `scripts/w127_incompatible_entry.sh`; fix NOTRUN; caller authorization stays W133 | [item](#w140) |
+| reclaim-test-flake | **W141** · `test_reclaim` fail-closed recovery waits a fixed 5 s | verification flake | OPEN: one failure under suite load, 10/10 direct reruns pass | [item](#w141) |
+| cleanup-leftovers | **W142** · store `del_if_sum` and RDMA zero-copy region table without a reader | maintenance | OPEN | [item](#w142) |
 | orcd-qualification | **W119** · ORCD normal-operation RDMA failures and blocked clean stop | correctness / liveness | OPEN: 150 concurrent failures /846 NOTRUN; cross-host peer59/67; enabled queries EBUSY; retained writes block clean stop. TCP/commands-off rerun also FAILs (120 failures,520 NOTRUN; peer61/67; clean stop refused); all23 successfully prepared cold cases verify after authorized forced restart. [TCP evidence](../status/orcd-tcp-direct-disabled-20261015.md). Preserve failures, isolate causes and rerun original gates; W100 stays closed. [AMD follow-up](../status/amd-rdma-posix-20261015.md): native/serial/peer/cold/degraded PASS at `c8d057391`; one-mount jobs16 remains215/216 with unusual-name timeout. [Async durability follow-up](../status/amd-async-durability-20261015.md) at `c4178ea81`: scoped durability/native/serial/peer/cold/degraded PASS; jobs16 FAIL214/216 (unusual names, concurrent creates,15s) | [Raft/KV follow-up](../status/orcd-raft-kv-20261016.md) · [evidence and gates](../status/orcd-devel-qualification-20261015.md) · [item](#w119) |
 | immediate-readback | **W121** · successful fsync followed by previous-file payload | data correctness | OPEN: 255/123,932 exact readbacks failed across both queued-vote variants on ORCD native RDMA/direct with enabled `.efs`; unique512-byte files, no expiry. Diagnosed FUSE kernel fork/read page-pinning defect; kernel remediation deferred by user. Fork-isolated experiments do not close W121 | [diagnosis](../status/orcd-w121-fork-read-20261016.md) · [experiment](../status/orcd-queued-read-vote-20261016.md) · [item](#w121) |
 | qualification-fixtures | **W120** · stale extracted LOOKUP stub and command cleanup ownership check | verification correctness | OPEN (partial fix): AMD `f6235bb73` repairs the LOOKUP host context and checks reader identity; native/docs PASS at `85a9ad6b5`. Enabled-command cleanup ownership remains NOTRUN here and still needs correction/acceptance. [AMD evidence](../status/amd-rdma-posix-20261015.md); preserve original failures | [evidence](../status/orcd-devel-qualification-20261015.md) · [item](#w120) |
@@ -8264,10 +8272,53 @@ fsync waits.
 deferred until LSM waits rise again. Create throughput on orcd-mini is not
 a W126 matter.
 
+<a id="w127-w131-fix"></a>
+### W127–W131 apply hardening — implementation (October 22)
+
+**Implemented on `claude/dead-code-cleanup-5f7087`; not merged.** One package,
+as the scope review asked:
+- `EFS_ERR_UNSUPPORTED` (-24) is the "unsupported or malformed encoding"
+  class. Dispatch returns it for unknown tags and for reserved or retired
+  tags; the DIR, SESSION and TXN decoders for unknown sub-tags and short
+  frames; the other decoders for length and count errors. No normalization
+  list in `host_apply` turns it into success. Business refusals (SALT
+  mismatch, QUERY_POLICY CAS, the other ring verdicts) are unchanged, and
+  group-routing mismatches still answer INVAL/PROTO.
+- On that result `host_apply` aborts the KV scope (no cursor), returns the
+  error so the Raft core does not advance `applied`, and marks the group
+  `incompatible` (sticky, separate from `kv_incomplete`): one diagnostic
+  line with group, index, term, tag, sub-tag and length; step-down; no
+  campaign; proposals and ReadIndex refused with `EFS_ERR_UNSUPPORTED`.
+  A retried apply returns at once without dispatching.
+- W130: DIR returns IO/NOMEM so the per-index retry applies.
+- W131: no KV engine returns IO (logged once) instead of OK; the empty
+  no-op entry still applies.
+
+**Evidence (node9901, gcc 11.5.0):**
+- `tests/test_apply_unsupported.py` (wired): the production `host_apply`
+  over a real KV LSM. An unsupported verdict on a normally-normalized tag
+  leaves no row and no cursor, also after reopening the KV; the state is
+  sticky; another group on the same KV still applies; a missing engine is
+  refused; DIR storage errors retry; unknown or short DIR/TXN frames are
+  unsupported. `test_gc_verdict.py` checks that no verdict list absorbs it.
+- `scripts/w127_incompatible_entry.sh`: a private 3-node TCP efsd set
+  (ports 17631–17633). An entry with unknown tag 200 is committed to
+  group 0; all replicas log the diagnostic and keep `applied` below it;
+  group 0 has no leader and refuses a new MKFS; group 2 keeps its leader
+  and stays applied; after restarting all nodes the same holds. PASS.
+
+**Remaining:** RDMA and multi-host runs; the one-replica DIR fault
+injection (W130); cross-group and cached read refusal and a status-reply
+field (W66 B4); prevalidating batch members before the first side effect
+(they are rejected inside the aborted scope today). **New finding:** the
+proposal RPC accepts a tag this build does not know, so any connection can
+commit such an entry and halt a group. Submit-side refusal of unknown tags
+belongs with the W133 connection-state matrix.
+
 <a id="w127"></a>
 ### W127 — Metadata apply accepts unknown command tags as applied
 
-**Correctness; opened 2026-10-21 from the [dead-code audit](../reviews/dead-code-review-20261021.md) M1; OPEN, fix NOTRUN.**
+**Correctness; opened 2026-10-21 from the [dead-code audit](../reviews/dead-code-review-20261021.md) M1; FIXED on `claude/dead-code-cleanup-5f7087` (not merged); unit and private 3-node gates PASS, RDMA/multi-host NOTRUN.**
 `host_apply_dispatch` ends in `return EFS_OK;` (`src/server/raft_host.c:3507`).
 Only the reserved ranges 45–51 and 55–57 are refused (`:3410–3416`). Any other
 tag this build does not know is consumed: the KV cursor advances
@@ -8288,7 +8339,7 @@ B1–B4.
 <a id="w128"></a>
 ### W128 — Metadata apply accepts unknown sub-tags and short frames as applied
 
-**Correctness; opened 2026-10-21 from the audit M2; OPEN, fix NOTRUN.**
+**Correctness; opened 2026-10-21 from the audit M2; FIXED on `claude/dead-code-cleanup-5f7087` (not merged); unit gates PASS.**
 These decoders return `EFS_OK` without any effect (`raft_host.c`):
 - `apply_dir_cmd`: short frame (`:2226–2227`) and unknown kind (`:2239–2240`).
 - `apply_session_cmd`: short header (`:2381–2382`), per-kind short frames
@@ -8305,7 +8356,7 @@ synthetic malformed frames for each decoder.
 <a id="w129"></a>
 ### W129 — `host_apply` turns decoder errors into success and commits the cursor
 
-**Correctness; opened 2026-10-21 from the audit M3; OPEN, fix NOTRUN.**
+**Correctness; opened 2026-10-21 from the audit M3; FIXED on `claude/dead-code-cleanup-5f7087` (not merged); unit gates PASS.**
 - For about 45 command tags (`raft_host.c:2941–2962`), `host_apply` forces
   the result to `EFS_OK` whatever the apply returned. Only IO/NOMEM are
   restored (`:2984–3000`).
@@ -8331,7 +8382,7 @@ verdict (`:2963–2966`). Both are legitimate business refusals.
 <a id="w130"></a>
 ### W130 — DIR apply swallows storage errors; replicas can diverge
 
-**Correctness; opened 2026-10-21 from the audit M4; OPEN, fix NOTRUN.**
+**Correctness; opened 2026-10-21 from the audit M4; FIXED on `claude/dead-code-cleanup-5f7087` (not merged); decoder unit gate PASS, one-replica fault-injection gate NOTRUN.**
 - `apply_dir_cmd` maps NOT_FOUND/INVAL/BUSY to OK, then logs every other rc
   (IO and NOMEM included) and returns `EFS_OK` (`raft_host.c:2242–2249`).
 - DIR is also missing from the IO-retry list (`:2984–3000`).
@@ -8352,7 +8403,7 @@ Evidence: code reading at `0bdf55256`; not triggered on a cluster.
 <a id="w131"></a>
 ### W131 — Missing KV engine counts as applied
 
-**Correctness; opened 2026-10-21 from the audit M5; OPEN, reachability unproven.**
+**Correctness; opened 2026-10-21 from the audit M5; FIXED on `claude/dead-code-cleanup-5f7087` (not merged); unit gate PASS, reachability still unproven.**
 `host_apply` stamps the apply ring `EFS_OK` and returns OK when
 `!h || !h->kv || !cmd || clen==0` (`raft_host.c:2891–2896`). `clen==0` (a
 Raft no-op) is legitimate. A missing `h->kv` is not: the entry would be
@@ -8518,6 +8569,55 @@ archived, delete the test with it.
 - Report environment-dependent tests as NOTRUN, never as a silent pass.
 - Do this before deleting any code they could protect.
 - The full list is in the [audit](../reviews/dead-code-review-20261021.md#t3--python-tests-not-wired-into-make-test--liveness--high--wire-fix-or-delete).
+
+<a id="w140"></a>
+### W140 — The proposal RPC accepts metadata tags this build cannot apply
+
+**Correctness / safety; opened 2026-10-22 from the W127 gate; OPEN, fix NOTRUN.**
+- `EFS_MSG_RAFT_MKFS` with a payload (`server_raft_host_submit`) refuses
+  only reserved and retired tags (`EFS_MD_CMD_IS_RESERVED`). Any other byte
+  is proposed and committed.
+- Since W127, every replica refuses such an entry at apply and the group
+  stops serving until it is reformatted. So one request from any connection
+  can halt a metadata group.
+- Shown by `scripts/w127_incompatible_entry.sh` on node9901 (tag 200 to
+  group 0, October 22).
+
+**Fix and gate:**
+- Refuse at submit every tag the build does not apply, from one table of
+  known log commands. `tests/test_meta_cmd_namespace.py` must check that
+  every `EFS_MD_CMD_*` is in it and no `EFS_MD_REQ_*` (RPC-only) is.
+- Test: the same synthetic tag 200 is refused at submit, nothing is
+  committed, and the group keeps serving.
+- Who may submit at all is W133 (connection-state matrix); this item only
+  closes the encoding hole.
+
+<a id="w141"></a>
+### W141 — `test_reclaim` "fail closed, recover, re-admit" fails under suite load
+
+**Verification flake; opened 2026-10-22; OPEN.**
+- `t_fail_closed` waits at most 5 s (200 × 25 ms) for background journal
+  recovery to clear `reclaim_fail_closed`.
+- Under the full `make_test_summary.sh` run on node9901 it failed once in
+  `dcclean-b4a` (October 21). Ten direct reruns in the same tree passed, and
+  the other summary runs on the branch passed it.
+
+**Fix and gate:** make the wait follow recovery progress (or a documented
+larger bound), not a fixed 5 s; then 20 summary runs without a failure.
+
+<a id="w142"></a>
+### W142 — Dead leftovers after the dead-code cleanup
+
+**Maintenance; opened 2026-10-22 from the cleanup (audit P2, R3); OPEN.**
+- The store `del_if_sum` operation (`include/efs/store.h`, `store_mem.c`,
+  `store_nvme.c`) has no caller since the GC_FRAGMENT handler was removed.
+- The RDMA zero-copy region table (`efs_rdma_zc_region_add`, `g_zc`) only
+  records regions: the lookup was removed with `zc_lkey`, and direct fill
+  is disabled.
+
+**Fix and gate:** delete `del_if_sum`; for the region table, delete it with
+the disabled direct-fill path or restore a reader, decided together with
+`efs_rdma_send_quiesce` (audit R3).
 
 <a id="w127-w139-review"></a>
 ### Review of W127–W139 scope and priority — October 21

@@ -34,7 +34,7 @@ def clients(proc=Path('/proc')):
                     raise RuntimeError(f'ambiguous memcheck client PID {entry.name}')
             if len(args) > 1 and args[1] in (b'--stop', b'--resume', b'--version', b'--help'):
                 continue
-            if len(args) < 4 or args[1].startswith(b'--'):
+            if len(args) < 3 or args[1].startswith(b'--'):
                 # Exit can clear cmdline after the first stat read. Confirm
                 # death or PID reuse before treating this as a live ambiguity.
                 current = (entry/'stat').read_text().rsplit(')', 1)[1].split()
@@ -45,9 +45,16 @@ def clients(proc=Path('/proc')):
                         (not any(args) and int(current[6]) & 0x4)):
                     continue
                 raise RuntimeError(f'cannot identify mount for efs-fuse PID {entry.name}')
-            mount = os.fsdecode(args[3])
+            # argv: efs-fuse NODE:PORT [NODE:PORT ...] MOUNTPOINT [options]
+            positional = [a for a in args[1:] if a and not a.startswith(b'-')]
+            nodes = 0
+            while nodes < len(positional) and b':' in positional[nodes]:
+                nodes += 1
+            if not nodes or nodes >= len(positional):
+                raise RuntimeError(f'cannot identify mount for efs-fuse PID {entry.name}')
+            mount = os.fsdecode(positional[nodes])
             if not mount.startswith('/'):
-                mount = os.readlink(entry/'cwd') + '/' + os.fsdecode(args[3])
+                mount = os.readlink(entry/'cwd') + '/' + mount
             # starttime distinguishes PID reuse; never resolve the FUSE path.
             stamp = fields[19]
             if '\n' in mount or '\r' in mount:

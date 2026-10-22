@@ -55,7 +55,7 @@ static void host_waiter_sleep(struct efs_raft_host*h,uint8_t g,int any,uint64_t 
  current.proven_done=1;current.proven_round=10;current.proven_index=100;
  current.applied=110;current.read_context=delayed_floor==2?8:delayed_floor==3?0:7;
  return;}assert(0);}
-'''+fn('host_view_covers')+fn('host_view_wait_apply')+fn('host_view_quorum_index')+fn('host_read_wait_ready')+fn('host_read_floor_ready')+fn('host_read_index_admitted')+r'''
+'''+'static int host_group_incompatible(struct efs_raft_host *h,uint8_t g){(void)h;(void)g;return 0;}\n'+fn('host_view_covers')+fn('host_view_wait_apply')+fn('host_view_quorum_index')+fn('host_read_wait_ready')+fn('host_read_floor_ready')+fn('host_read_index_admitted')+r'''
 int main(void){
  struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.cv_mu=PTHREAD_MUTEX_INITIALIZER,.n=4};
  struct host_read_admission a={101,11,2};int hint;uint64_t proof=9999;

@@ -5631,10 +5631,53 @@ fsync waits.
 deferred until LSM waits rise again. Create throughput on orcd-mini is not
 a W126 matter.
 
+<a id="w127-w131-fix"></a>
+## W127–W131 apply hardening — implementation (October 22)
+
+**Implemented on `claude/dead-code-cleanup-5f7087`; not merged.** One package,
+as the scope review asked:
+- `EFS_ERR_UNSUPPORTED` (-24) is the "unsupported or malformed encoding"
+  class. Dispatch returns it for unknown tags and for reserved or retired
+  tags; the DIR, SESSION and TXN decoders for unknown sub-tags and short
+  frames; the other decoders for length and count errors. No normalization
+  list in `host_apply` turns it into success. Business refusals (SALT
+  mismatch, QUERY_POLICY CAS, the other ring verdicts) are unchanged, and
+  group-routing mismatches still answer INVAL/PROTO.
+- On that result `host_apply` aborts the KV scope (no cursor), returns the
+  error so the Raft core does not advance `applied`, and marks the group
+  `incompatible` (sticky, separate from `kv_incomplete`): one diagnostic
+  line with group, index, term, tag, sub-tag and length; step-down; no
+  campaign; proposals and ReadIndex refused with `EFS_ERR_UNSUPPORTED`.
+  A retried apply returns at once without dispatching.
+- W130: DIR returns IO/NOMEM so the per-index retry applies.
+- W131: no KV engine returns IO (logged once) instead of OK; the empty
+  no-op entry still applies.
+
+**Evidence (node9901, gcc 11.5.0):**
+- `tests/test_apply_unsupported.py` (wired): the production `host_apply`
+  over a real KV LSM. An unsupported verdict on a normally-normalized tag
+  leaves no row and no cursor, also after reopening the KV; the state is
+  sticky; another group on the same KV still applies; a missing engine is
+  refused; DIR storage errors retry; unknown or short DIR/TXN frames are
+  unsupported. `test_gc_verdict.py` checks that no verdict list absorbs it.
+- `scripts/w127_incompatible_entry.sh`: a private 3-node TCP efsd set
+  (ports 17631–17633). An entry with unknown tag 200 is committed to
+  group 0; all replicas log the diagnostic and keep `applied` below it;
+  group 0 has no leader and refuses a new MKFS; group 2 keeps its leader
+  and stays applied; after restarting all nodes the same holds. PASS.
+
+**Remaining:** RDMA and multi-host runs; the one-replica DIR fault
+injection (W130); cross-group and cached read refusal and a status-reply
+field (W66 B4); prevalidating batch members before the first side effect
+(they are rejected inside the aborted scope today). **New finding:** the
+proposal RPC accepts a tag this build does not know, so any connection can
+commit such an entry and halt a group. Submit-side refusal of unknown tags
+belongs with the W133 connection-state matrix.
+
 <a id="w127"></a>
 ## W127 — Metadata apply accepts unknown command tags as applied
 
-**Correctness; opened 2026-10-21 from the [dead-code audit](../reviews/dead-code-review-20261021.md) M1; OPEN, fix NOTRUN.**
+**Correctness; opened 2026-10-21 from the [dead-code audit](../reviews/dead-code-review-20261021.md) M1; FIXED on `claude/dead-code-cleanup-5f7087` (not merged); unit and private 3-node gates PASS, RDMA/multi-host NOTRUN.**
 `host_apply_dispatch` ends in `return EFS_OK;` (`src/server/raft_host.c:3507`).
 Only the reserved ranges 45–51 and 55–57 are refused (`:3410–3416`). Any other
 tag this build does not know is consumed: the KV cursor advances
@@ -5655,7 +5698,7 @@ B1–B4.
 <a id="w128"></a>
 ## W128 — Metadata apply accepts unknown sub-tags and short frames as applied
 
-**Correctness; opened 2026-10-21 from the audit M2; OPEN, fix NOTRUN.**
+**Correctness; opened 2026-10-21 from the audit M2; FIXED on `claude/dead-code-cleanup-5f7087` (not merged); unit gates PASS.**
 These decoders return `EFS_OK` without any effect (`raft_host.c`):
 - `apply_dir_cmd`: short frame (`:2226–2227`) and unknown kind (`:2239–2240`).
 - `apply_session_cmd`: short header (`:2381–2382`), per-kind short frames
@@ -5672,7 +5715,7 @@ synthetic malformed frames for each decoder.
 <a id="w129"></a>
 ## W129 — `host_apply` turns decoder errors into success and commits the cursor
 
-**Correctness; opened 2026-10-21 from the audit M3; OPEN, fix NOTRUN.**
+**Correctness; opened 2026-10-21 from the audit M3; FIXED on `claude/dead-code-cleanup-5f7087` (not merged); unit gates PASS.**
 - For about 45 command tags (`raft_host.c:2941–2962`), `host_apply` forces
   the result to `EFS_OK` whatever the apply returned. Only IO/NOMEM are
   restored (`:2984–3000`).
@@ -5698,7 +5741,7 @@ verdict (`:2963–2966`). Both are legitimate business refusals.
 <a id="w130"></a>
 ## W130 — DIR apply swallows storage errors; replicas can diverge
 
-**Correctness; opened 2026-10-21 from the audit M4; OPEN, fix NOTRUN.**
+**Correctness; opened 2026-10-21 from the audit M4; FIXED on `claude/dead-code-cleanup-5f7087` (not merged); decoder unit gate PASS, one-replica fault-injection gate NOTRUN.**
 - `apply_dir_cmd` maps NOT_FOUND/INVAL/BUSY to OK, then logs every other rc
   (IO and NOMEM included) and returns `EFS_OK` (`raft_host.c:2242–2249`).
 - DIR is also missing from the IO-retry list (`:2984–3000`).
@@ -5719,7 +5762,7 @@ Evidence: code reading at `0bdf55256`; not triggered on a cluster.
 <a id="w131"></a>
 ## W131 — Missing KV engine counts as applied
 
-**Correctness; opened 2026-10-21 from the audit M5; OPEN, reachability unproven.**
+**Correctness; opened 2026-10-21 from the audit M5; FIXED on `claude/dead-code-cleanup-5f7087` (not merged); unit gate PASS, reachability still unproven.**
 `host_apply` stamps the apply ring `EFS_OK` and returns OK when
 `!h || !h->kv || !cmd || clen==0` (`raft_host.c:2891–2896`). `clen==0` (a
 Raft no-op) is legitimate. A missing `h->kv` is not: the entry would be
@@ -5885,6 +5928,55 @@ archived, delete the test with it.
 - Report environment-dependent tests as NOTRUN, never as a silent pass.
 - Do this before deleting any code they could protect.
 - The full list is in the [audit](../reviews/dead-code-review-20261021.md#t3--python-tests-not-wired-into-make-test--liveness--high--wire-fix-or-delete).
+
+<a id="w140"></a>
+## W140 — The proposal RPC accepts metadata tags this build cannot apply
+
+**Correctness / safety; opened 2026-10-22 from the W127 gate; OPEN, fix NOTRUN.**
+- `EFS_MSG_RAFT_MKFS` with a payload (`server_raft_host_submit`) refuses
+  only reserved and retired tags (`EFS_MD_CMD_IS_RESERVED`). Any other byte
+  is proposed and committed.
+- Since W127, every replica refuses such an entry at apply and the group
+  stops serving until it is reformatted. So one request from any connection
+  can halt a metadata group.
+- Shown by `scripts/w127_incompatible_entry.sh` on node9901 (tag 200 to
+  group 0, October 22).
+
+**Fix and gate:**
+- Refuse at submit every tag the build does not apply, from one table of
+  known log commands. `tests/test_meta_cmd_namespace.py` must check that
+  every `EFS_MD_CMD_*` is in it and no `EFS_MD_REQ_*` (RPC-only) is.
+- Test: the same synthetic tag 200 is refused at submit, nothing is
+  committed, and the group keeps serving.
+- Who may submit at all is W133 (connection-state matrix); this item only
+  closes the encoding hole.
+
+<a id="w141"></a>
+## W141 — `test_reclaim` "fail closed, recover, re-admit" fails under suite load
+
+**Verification flake; opened 2026-10-22; OPEN.**
+- `t_fail_closed` waits at most 5 s (200 × 25 ms) for background journal
+  recovery to clear `reclaim_fail_closed`.
+- Under the full `make_test_summary.sh` run on node9901 it failed once in
+  `dcclean-b4a` (October 21). Ten direct reruns in the same tree passed, and
+  the other summary runs on the branch passed it.
+
+**Fix and gate:** make the wait follow recovery progress (or a documented
+larger bound), not a fixed 5 s; then 20 summary runs without a failure.
+
+<a id="w142"></a>
+## W142 — Dead leftovers after the dead-code cleanup
+
+**Maintenance; opened 2026-10-22 from the cleanup (audit P2, R3); OPEN.**
+- The store `del_if_sum` operation (`include/efs/store.h`, `store_mem.c`,
+  `store_nvme.c`) has no caller since the GC_FRAGMENT handler was removed.
+- The RDMA zero-copy region table (`efs_rdma_zc_region_add`, `g_zc`) only
+  records regions: the lookup was removed with `zc_lkey`, and direct fill
+  is disabled.
+
+**Fix and gate:** delete `del_if_sum`; for the region table, delete it with
+the disabled direct-fill path or restore a reader, decided together with
+`efs_rdma_send_quiesce` (audit R3).
 
 <a id="w127-w139-review"></a>
 ## Review of W127–W139 scope and priority — October 21

@@ -20,8 +20,6 @@ int efs_kv_group_export(struct efs_kv *kv, uint8_t group, uint32_t max_bytes,
                         uint8_t **data, uint32_t *len);
 int efs_kv_group_import(struct efs_kv *kv, uint8_t group, const uint8_t *data,
                         uint32_t len);
-/* Read the whole file and efs_kv_group_import it. */
-int efs_kv_group_import_file(struct efs_kv *kv, uint8_t group, const char *path);
 /* Diff incoming against a local image already in the same blob format
  * (a pinned-view export). Does not scan or change live rows. Images with
  * reserved rows are refused before any diff is computed.

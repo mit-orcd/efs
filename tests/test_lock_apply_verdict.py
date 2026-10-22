@@ -56,7 +56,7 @@ int main(void)
   cmd[1]=EFS_MD_LOCK_RELEASE;assert(apply_lock_cmd(&h,cmd,sizeof(cmd),1)==verdict);cmd[1]=EFS_MD_LOCK_GRANT;
  }
  verdict=EFS_OK;assert(apply_lock_cmd(&h,cmd,sizeof(cmd),1)==EFS_OK);
- int before=calls;assert(apply_lock_cmd(&h,cmd,2,1)==EFS_ERR_PROTO && calls==before);
+ int before=calls;assert(apply_lock_cmd(&h,cmd,2,1)==EFS_ERR_UNSUPPORTED && calls==before);
  puts("lock apply: audible business verdicts, advancing conflicts and retained IO/NOMEM replay PASS");
 }
 '''

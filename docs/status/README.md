@@ -64,9 +64,14 @@ scheduler's both-groups-local assumption remain.
 Earlier reviews and responses are kept as superseded history.
 Replaces the declined 256 MiB EBUSY refusal; W43 stays open.
 
+[orcd-test cleanup and W127–W131 run](orcd-test-cleanup-w127-20261022.md):
+**PASS** on a reformatted orcd-test (RDMA, `.efs`): POSIX core 216/216 on 7
+concurrent clients twice, the live `.efs` harnesses, a restart on existing
+data. Branch `claude/dead-code-cleanup-5f7087`, not merged.
+
 [W66 acceptance checklist](metadata-scaling.md#w66-acceptance-checklist-consolidated-oct-21)
 (distribution, fail-closed hardening, MKDIR/born-HASHED, conditional split
-rediscovery; all NOTRUN, directory-spread policy OPEN-DECISION; no backward
+rediscovery; B1, B2 and B4 PARTIAL and B3 PASS on the cleanup branch (W127–W131), the rest NOTRUN, directory-spread policy OPEN-DECISION; no backward
 compatibility: B5/B8 and legacy parts dropped) consolidates the
 review thread below. Final review accepts this policy: group B can proceed;
 A7 is independent. Existing scoped restart/reformat authorization persists,

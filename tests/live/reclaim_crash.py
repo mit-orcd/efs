@@ -97,7 +97,7 @@ def gc_status(i):
 def mount_fs():
     global client
     f = open(base / 'fuse.log', 'ab'); logs.append(f)
-    client = subprocess.Popen([str(src / 'efs-fuse'), f'127.0.0.1:{a.port}', 'rc', str(mount), '-f'], env=env, stdout=f, stderr=f)
+    client = subprocess.Popen([str(src / 'efs-fuse'), f'127.0.0.1:{a.port}', str(mount), '-f'], env=env, stdout=f, stderr=f)
     wait(lambda: subprocess.run(['mountpoint', '-q', str(mount)]).returncode == 0, 'mount', 60)
 
 

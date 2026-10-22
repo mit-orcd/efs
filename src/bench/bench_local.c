@@ -416,7 +416,7 @@ static int slot_put(struct bench_slot *sl, uint32_t chunk_index)
         .ino = (efs_ino_t)(0xBEEF0000u + (uint32_t)sl->slot),
         .chunk_index = chunk_index,
         .fragment_index = (uint32_t)(sl->slot % EFS_NUM_FRAGMENTS),
-        .chunk_generation = 0,
+        .chunk_generation = 1, /* every object has a nonzero generation */
     };
     efs_store_nvme_bind(&st, &nctx, sl->s, sl->ex);
     efs_tls_path_hint = !sl->window || sl->written < sl->window ?
@@ -441,7 +441,7 @@ static int slot_get(struct bench_slot *sl, uint32_t chunk_index)
         .ino = (efs_ino_t)(0xBEEF0000u + (uint32_t)sl->slot),
         .chunk_index = chunk_index,
         .fragment_index = (uint32_t)(sl->slot % EFS_NUM_FRAGMENTS),
-        .chunk_generation = 0,
+        .chunk_generation = 1, /* every object has a nonzero generation */
     };
     uint32_t data_len = sl->frag_len;
     uint8_t sum[EFS_HASH_SIZE];

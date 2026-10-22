@@ -102,7 +102,12 @@ try:
     assert not any('query-publish:' in (work/f'n{node}.log').read_text() for node in (1,4)), 'partial hosts published namespace'
     print('quiet metadata refresh and partial-host refusal PASS',flush=True)
     if os.environ.get('EFS_QUERY_RPC')=='1':
-        from query_rpc import request,query,filtered_request
+        from query_rpc import request,query,page_query
+        import json
+        sys.path.insert(0,str(source/'src/client/commands'))
+        from command import validate_result
+        def page_paths(text):
+            return {bytes.fromhex(e['path_hex']) for e in json.loads(text)['entries']}
         reply,text=query(base+1,request())
         assert reply.status==0,(reply.status,text)
         assert b'tree_files=4\n' in text and reply.checked_dirs==1,text
@@ -110,23 +115,21 @@ try:
         reply,text=query(base,request())
         assert reply.status==-15 and reply.primary_id in (2,3),(reply.status,reply.primary_id)
         for _ in range(12):
-            reply,text=query(base+1,request(operation=1,match=1,term=b'file-'))
-            assert reply.status==0 and set(text.splitlines())=={f'file-{i}'.encode() for i in range(4)},(reply.status,text)
+            reply,text=page_query(base+1,operation=1,match=1,term=b'file-')
+            assert reply.status==0 and page_paths(text)=={f'file-{i}'.encode() for i in range(4)},(reply.status,text)
             assert reply.generation==generation and list(reply.applied)==applied,'query rebuilt catalog'
-        for fields,status in [({'version':4},-5),({'version':3},-5),({'ngroups':129},-5),({'max_output':1},-22),
-                              ({'operation':1,'match':1,'term':b'file-','visit_budget':1},-13),
-                              ({'operation':1,'term':b'bad*term'},-5),({'root':999999},-3)]:
+        # Version 1 is the .stats aggregate only; versions 2/3 and a v1 find are refused.
+        for fields,status in [({'version':4},-5),({'version':3},-5),({'version':2},-5),({'ngroups':129},-5),
+                              ({'max_output':1},-22),({'operation':1,'match':1,'term':b'file-'},-5),
+                              ({'operation':2},-5),({'root':999999},-3)]:
             reply,text=query(base+1,request(**fields));assert reply.status==status,(fields,reply.status,status)
         reply,text=query(base+1,request(),raw=b'bad')
         assert reply.status==-5,reply.status
-        print('v1 RPC stats/find, unchanged publication, redirects and explicit errors PASS',flush=True)
-        import json
-        sys.path.insert(0,str(source/'src/client/commands'))
-        from command import validate_result
+        print('v1 stats RPC, page find, unchanged publication, redirects and explicit errors PASS',flush=True)
         for operation,command in ((0,'stats'),(1,'find'),(2,'ls')):
-            fields=dict(version=2,operation=operation,max_output=65536)
+            fields=dict(operation=operation,max_output=65536)
             if operation==1: fields.update(match=3,term=b'file-')
-            reply,text=query(base+1,request(**fields))
+            reply,text=page_query(base+1,**fields)
             assert reply.status==0,(command,reply.status,text)
             result=json.loads(text)
             paths=validate_result(result,command)
@@ -134,24 +137,24 @@ try:
             else: assert set(paths)=={f'file-{i}'.encode() for i in range(4)},result
             assert result['snapshot']['generation']==generation,'command rebuilt catalog'
             assert result['expiry']=='unavailable',result
-        for fields in (dict(version=2,operation=2,max_output=1),
-                       dict(version=2,operation=2,visit_budget=1),
-                       dict(version=2,operation=1,match=3,term=b'x'*121)):
-            reply,text=query(base+1,request(**fields))
+        for fields in (dict(operation=2,max_output=1),
+                       dict(operation=2,visit_budget=1),
+                       dict(operation=1,match=3,term=b'x'*121)):
+            reply,text=page_query(base+1,**fields)
             assert reply.status and not text,('command limit delivered partial success',fields,reply.status,text)
-        print('v2 command JSON stats/find/ls, immutable catalog identity and explicit limits PASS',flush=True)
+        print('page command JSON stats/find/ls, immutable catalog identity and explicit limits PASS',flush=True)
         for fields,status in ((dict(kind=1,flags=3,min_size=0,max_size=0),0),
                               (dict(kind=2),0),(dict(kind=4),-5),(dict(flags=16),-5),
                               (dict(min_size=1),-5),(dict(flags=3,min_size=2,max_size=1),-5),
                               (dict(flags=12,after_ns=2,before_ns=1),-5),
-                              (dict(operation=0),-5),(dict(max_output=1),-22)):
-            reply,text=query(base+1,filtered_request(match=1,term=b'file-',max_output=fields.get('max_output',65536),
-                              **{k:v for k,v in fields.items() if k!='max_output'}))
+                              (dict(operation=0),-5),(dict(max_output=1),-5)):
+            reply,text=page_query(base+1,operation=fields.pop('operation',1),match=1,term=b'file-',
+                                  max_output=fields.pop('max_output',65536),**fields)
             assert reply.status==status,(fields,reply.status,status)
             if not status:
                 result=json.loads(text)
                 assert len(result['entries'])==(0 if fields.get('kind')==2 else 4),result
-        print('v3 type/size predicates, canonical fields and explicit limits PASS',flush=True)
+        print('page type/size predicates, canonical fields and explicit limits PASS',flush=True)
 
 
     expected_root='root_rc=0 files=4 dirs=0 logical=0'
@@ -160,7 +163,7 @@ try:
             mount=mount_paths[index-1].resolve();mount.mkdir(exist_ok=True);mounts.append(mount)
             log=(work/f'fuse{index}.log').open('w');logs.append(log)
             fuse_procs.append(subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{base}',
-                                                'w92-private',str(mount),'-f'],env=env,stdout=log,stderr=log))
+                                                str(mount),'-f'],env=env,stdout=log,stderr=log))
             wait_for(lambda:os.path.ismount(mount),20)
         env['EFS_QUERY_TEST_PORT']=str(base+1)
         if os.environ.get('EFS_QUERY_LARGE_DELTA')=='1':
@@ -260,7 +263,7 @@ try:
             noexec=work/'noexec';noexec.mkdir();mounts.append(noexec)
             log=(work/'noexec.log').open('w');logs.append(log)
             proc=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{base}',
-                                   'w92-private',str(noexec),'-f','-o','noexec'],env=env,stdout=log,stderr=log)
+                                   str(noexec),'-f','-o','noexec'],env=env,stdout=log,stderr=log)
             fuse_procs.append(proc)
             wait_for(lambda:os.path.ismount(noexec),20)
             try:
@@ -279,7 +282,7 @@ try:
             log=(work/'disabled.log').open('w');logs.append(log)
             off_env=dict(env,EFS_COMMANDS='0')
             proc=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{base}',
-                                   'w92-private',str(disabled),'-f'],env=off_env,stdout=log,stderr=log)
+                                   str(disabled),'-f'],env=off_env,stdout=log,stderr=log)
             fuse_procs.append(proc)
             wait_for(lambda:os.path.ismount(disabled),20)
             assert not os.path.lexists(disabled/'.efs'),'disabled mount exposed synthetic commands'
@@ -300,7 +303,8 @@ try:
         if os.environ.get('EFS_QUERY_POLICY')=='1':
             for attempt in range(8):
                 try:
-                    held_stream=open(mounts[0]/'.efs/.query/v1.stats','rb')
+                    from query_rpc import query_name
+                    held_stream=open(mounts[0]/'.efs/.query'/query_name('stats'),'rb')
                     break
                 except OSError:
                     if attempt==7: raise
@@ -324,16 +328,16 @@ try:
             if node>1:args+=['--join',f'127.0.0.1:{base}']
             procs.append(subprocess.Popen(args,env=disabled_env,stdout=log,stderr=log))
             wait_for(lambda:'listening' in (work/f'n{node}-off.log').read_text(),10)
-        from query_rpc import request,query,filtered_request,features
+        from query_rpc import request,query,page_request,page_query,features
         for node in range(4):
             assert features(base+node)==0,('disabled feature mask',node)
-            for version in (1,2,3):
-                reply,text=query(base+node,filtered_request() if version==3 else request(version=version))
+            for version in (1,4):
+                reply,text=query(base+node,page_request() if version==4 else request(version=version))
                 assert reply.status==-3 and not text,('disabled RPC succeeded',node,version,reply.status)
         offmount=work/'server-off';offmount.mkdir();mounts.append(offmount)
         log=(work/'server-off-fuse.log').open('w');logs.append(log)
         proc=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{base}',
-                               'w92-private',str(offmount),'-f'],env=env,stdout=log,stderr=log)
+                               str(offmount),'-f'],env=env,stdout=log,stderr=log)
         fuse_procs.append(proc)
         wait_for(lambda:os.path.ismount(offmount),20)
         assert not os.path.lexists(offmount/'.efs'),'server opt-out did not hide client commands'
@@ -385,10 +389,10 @@ try:
     print('restart catalog restore/rebuild from persisted metadata PASS',flush=True)
     if os.environ.get('EFS_QUERY_RPC')=='1' and os.environ.get('EFS_QUERY_FUSE')!='1':
         def recovered_names(node):
-            reply,text=query(base+node-1,request(operation=1,match=1,term=b'file-'))
+            reply,text=page_query(base+node-1,operation=1,match=1,term=b'file-')
             if reply.status in (-8,-13):return False
             assert reply.status==0,(node,reply.status,text)
-            assert set(text.splitlines())=={f'file-{i}'.encode() for i in range(4)},text
+            assert {bytes.fromhex(e['path_hex']) for e in json.loads(text)['entries']}=={f'file-{i}'.encode() for i in range(4)},text
             return True
         for node in (2,3):wait_for(lambda node=node:recovered_names(node))
         print('restart RPC filenames match independent CREATE oracle PASS',flush=True)
@@ -400,12 +404,13 @@ try:
             # bounded command output cap for this namespace-wide oracle;
             # 64 KiB deliberately remains in the small explicit-limit gates.
             if os.environ.get('EFS_QUERY_VIRTUAL')=='1' and os.getuid()!=1000:
-                denied,body=query(base+node-1,request(version=2,max_output=16<<20,
-                                                     operation=1,match=1,term=b''))
+                denied,body=page_query(base+node-1,max_output=16<<20,limit=10000,
+                                       operation=1,match=1,term=b'')
                 assert denied.status==-16 and not body,('outsider read protected tree',denied.status,body)
-            reply,text=query(base+node-1,request(version=2,max_output=16<<20,operation=1,
-                                              uid=os.getuid(),gid=os.getgid(),match=1,term=b''))
+            reply,text=page_query(base+node-1,max_output=16<<20,limit=10000,operation=1,
+                                  uid=os.getuid(),gid=os.getgid(),match=1,term=b'')
             assert reply.status==0,(reply.status,text)
+            assert not json.loads(text)['page']['more'],'namespace oracle needs one complete page'
             paths={bytes.fromhex(e['path_hex']) for e in json.loads(text)['entries']}
             assert b'while-disabled/renamed' in paths and b'while-disabled/sub/new' in paths,paths
             assert b'while-disabled/gone' not in paths and b'while-disabled/old' not in paths,paths

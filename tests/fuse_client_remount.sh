@@ -16,7 +16,6 @@
 #                    it and is forwarded). One client only for strace.
 set -u
 SERVER="${EFS_SERVER:-172.16.223.57:19810}"
-EXPORT="${EFS_EXPORT:-efs-test}"
 MNT="${EFS_MNT:-/tmp/efs-mount}"
 
 if [ "${EFS_NO_BUILD:-0}" != 1 ]; then
@@ -60,7 +59,7 @@ case " $fuse_args " in
     [ -n "${EFS_STRACE_EXPR:-}" ] && perf_env="$perf_env EFS_STRACE_EXPR=$EFS_STRACE_EXPR"
     ;;
 esac
-(env EFS_TRANSPORT="${EFS_TRANSPORT:-tcp}" ${EFS_FUSE_ENV:-} $perf_env setsid ./efs-fuse "$SERVER" "$EXPORT" "$MNT" $fuse_args >fuse.log 2>&1 </dev/null &)
+(env EFS_TRANSPORT="${EFS_TRANSPORT:-tcp}" ${EFS_FUSE_ENV:-} $perf_env setsid ./efs-fuse "$SERVER" "$MNT" $fuse_args >fuse.log 2>&1 </dev/null &)
 for _ in $(seq 1 40); do
     sleep 0.5
     findmnt -no FSTYPE "$MNT" 2>/dev/null | grep -q fuse.efs-fuse && break

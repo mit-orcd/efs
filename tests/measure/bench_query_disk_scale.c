@@ -3,7 +3,10 @@
  * Never deletes a fixture. Generation needs a fresh private root; explicit
  * --populate-only stages it, --resume-build reuses a known complete unmutated
  * source, and --recover verifies the postmutation source in a fresh process.
- * The caller owns the source exclusively and retains its population verdict. */
+ * The caller owns the source exclusively and retains its population verdict.
+ * Run (Linux): make tests/measure/bench_query_disk_scale, then
+ *   tests/measure/bench_query_disk_scale ROOT FILES [--populate-only|--resume-build|--recover]
+ * ROOT must not exist unless --resume-build or --recover; exit 2 = usage. */
 #include "efs/query_catalog.h"
 #include <errno.h>
 #include <dirent.h>

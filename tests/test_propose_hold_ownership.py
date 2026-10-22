@@ -39,7 +39,7 @@ static void host_pump_kick(struct efs_raft_host*h){(void)h;}
 static void host_note_durable_synced(struct efs_raft_host*h){(void)h;}
 static int host_mark_durable_covered(struct efs_raft_host*h,uint8_t g,struct efs_raft*r,uint64_t i){(void)h;(void)g;(void)r;assert(i==17);return 0;}
 static int host_remote_cmd(struct efs_raft_host*h,uint8_t g,const uint8_t*c,uint32_t n,struct efs_msg_raft_mkfs_reply*r,int lid){(void)h;(void)g;(void)c;(void)n;(void)r;(void)lid;return EFS_ERR_NOT_PRIMARY;}
-''' + s[a:b] + r'''
+''' + 'static int host_group_incompatible(struct efs_raft_host *h,uint8_t g){(void)h;(void)g;return 0;}\n' + s[a:b] + r'''
 int main(void){struct efs_raft r={EFS_RAFT_LEADER,3};struct efs_raft_disk d={0};
  struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.disk=&d,.r=&r};test_host=&h;
  uint8_t cmd[]={EFS_MD_CMD_CREATE};uint64_t index=0,term=0;int hint=-1;

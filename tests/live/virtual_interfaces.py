@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
-"""Current .efs query gates; retired .find/.stats remain ordinary user names."""
+"""Current .efs query gates (v3. page names); retired .find/.stats remain ordinary user names.
+
+Every first page holds a server page session (16 per host) until closed;
+reads here close it, so client-side capacity gates are not hidden by it."""
 import argparse,errno,json,os,time,traceback
 from pathlib import Path
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from query_rpc import close_query,query_name
 p=argparse.ArgumentParser();p.add_argument('mount');p.add_argument('peer');p.add_argument('--case',default='all');p.add_argument('--freshness-s',type=float,default=10);a=p.parse_args()
 name='w90-gates-'+str(os.getpid());root=Path(a.mount)/name;peer=Path(a.peer)/name;root.mkdir();results=[]
 def gate(name,fn):
@@ -19,19 +25,54 @@ def query_path(directory, pattern):
         mode, raw = 1, raw[:-1]
     elif raw.startswith(b'*'):
         mode, raw = 2, raw[1:]
-    return directory / '.efs/.query' / ('v1.find.%d.%s' % (mode, raw.hex()))
+    match = ('exact', 'prefix', 'suffix', 'contains')[mode]
+    nonce = int.from_bytes(os.urandom(4), 'big')
+    path = directory / '.efs/.query' / query_name('find', raw, match, nonce=nonce)
+    pages[str(path)] = ('find', raw, match, nonce)
+    return path
+pages = {}
+def stats_path(directory):
+    nonce = int.from_bytes(os.urandom(4), 'big')
+    path = directory / '.efs/.query' / query_name('stats', nonce=nonce)
+    pages[str(path)] = ('stats', b'', 'contains', nonce)
+    return path
+def release(path, data):
+    if str(path) in pages:
+        command, term, match, nonce = pages[str(path)]
+        close_query(str(path.parent.parent.parent), command, data, term, match, None, nonce)
+def until_indexed(fn):
+    # Same bounded wait as contents(): ENODATA until the next refresh.
+    indexed_by = time.monotonic() + a.freshness_s
+    while True:
+        try:
+            return fn()
+        except OSError as error:
+            if error.errno != errno.ENODATA or time.monotonic() >= indexed_by:
+                raise
+            time.sleep(1)
+def held_fd(path):
+    fd = until_indexed(lambda: os.open(path, os.O_RDONLY))
+    release(path, os.pread(fd, 1 << 20, 0))
+    return fd
 def find_bytes(path):
     value = json.loads(contents(path))
     assert value['complete'], value
     directory = path.parent.parent.parent
     return b''.join(os.fsencode(directory) + b'/' + bytes.fromhex(e['path_hex']) + b'\n' for e in value['entries'])
 def contents(path):
-    for attempt in range(8):
+    # ENODATA: the directory is not in the published index yet. A fresh
+    # gate directory waits for the next refresh, bounded by --freshness-s.
+    indexed_by=time.monotonic()+a.freshness_s
+    attempt=0
+    while True:
         try:
-            with open(path,'rb',buffering=0) as f:return f.read()
+            with open(path,'rb',buffering=0) as f:data=f.read()
+            release(path,data);return data
         except OSError as error:
+            if error.errno==errno.ENODATA and time.monotonic()<indexed_by:
+                time.sleep(1);continue
             if error.errno not in (errno.ESTALE,errno.EAGAIN,errno.EBUSY) or attempt==7:raise
-            time.sleep(.025*(attempt+1))
+            attempt+=1;time.sleep(.025*attempt)
 def snapshot():
     d=root/'snapshot';d.mkdir()
     for i in range(100): (d/f'match-{i:04}').write_bytes(b'x')
@@ -43,7 +84,7 @@ def snapshot():
         if set(find_bytes(query).splitlines())==wanted:break
         assert time.monotonic()<deadline,(wanted-set(expected.splitlines()),expected)
         time.sleep(.2)
-    fd=os.open(query,os.O_RDONLY)
+    fd=held_fd(query)
     try:
         expected=os.read(fd,1<<20);os.lseek(fd,0,0)
         prefix=os.read(fd,17)
@@ -56,14 +97,18 @@ def snapshot():
         assert os.fstat(fd).st_size==len(expected)
         os.lseek(fd,0,0);assert os.read(fd,len(expected)+100)==expected
     finally:os.close(fd)
-    assert b'match-new' in find_bytes(query)
+    # A fresh query (new page identity) sees the peer's file once the index
+    # refreshes; the held descriptor above kept its immutable bytes.
+    deadline=time.monotonic()+a.freshness_s
+    while b'match-new' not in find_bytes(query_path(d,'match-*')):
+        assert time.monotonic()<deadline,'peer file never published';time.sleep(1)
 def stats():
     d=root/'stats';d.mkdir();(peer/'stats'/'payload').write_bytes(b'x'*4096)
     values=expect_stats(d,imm_files=1,imm_bytes=4096)
     assert int(values['imm_files'])==1,values
     assert int(values['imm_bytes'])==4096,values
 def stats_values(d):
-    return json.loads(contents(d/'.efs/.query/v1.stats'))['stats']
+    return json.loads(contents(stats_path(d)))['stats']
 def expect_stats(d,**want):
     deadline=time.monotonic()+a.freshness_s
     while True:
@@ -90,13 +135,18 @@ def stats_mutations():
     os.unlink(pd/'alias');os.unlink(pd/'moved'/'payload');os.rmdir(pd/'moved')
     expect_stats(d,imm_files=0,imm_dirs=0,imm_bytes=0,tree_files=0,tree_dirs=0,tree_bytes=0)
 def invalid():
-    try:contents(root/'.efs/.query/v1.find.99.61')
+    # Removed unpaged names are refused like any malformed query name.
+    for old in ('v1.find.0.61','v1.stats','v2.stats'):
+        try:contents(root/'.efs/.query'/old)
+        except OSError as e:assert e.errno==errno.EINVAL,e
+        else:raise AssertionError('removed query name accepted: '+old)
+    try:contents(root/'.efs/.query/v3.GG')
     except OSError as e:assert e.errno==errno.EINVAL,e;return
     raise AssertionError('invalid query accepted')
 def permissions():
     d=root/'protected';d.mkdir();(d/'secret-file').write_bytes(b'x');os.chmod(d,0o100)
     try:
-        for q in [d/'.efs/.query/v1.stats',query_path(d,'secret-*')]:
+        for q in [stats_path(d),query_path(d,'secret-*')]:
             try:contents(q)
             except OSError as e:assert e.errno==errno.EACCES,e
             else:raise AssertionError('protected query succeeded: '+str(q))
@@ -120,25 +170,36 @@ def nested_authorization():
     try:
         # Direct credential-boundary gate: unprivileged subject has only a
         # supplementary group grant. No root/group changes on the host.
-        from query_rpc import request,routed_query as rpc
+        from query_rpc import page_request,routed_query
         ports=os.environ.get('EFS_QUERY_TEST_PORT')
         if not ports:raise AssertionError('supplementary-group gate requires explicit private cohost port')
         st=os.stat(group);subject=st.st_uid+10000
-        req=request(root=st.st_ino,uid=subject,gid=st.st_gid+10000,operation=1,term=b'group-secret')
+        fields=dict(root=st.st_ino,uid=subject,gid=st.st_gid+10000,operation=1,term=b'group-secret',limit=1000)
+        def rpc(port,req):
+            # One first page, closed at once; text is the matched paths.
+            reply,text=routed_query(port,req)
+            if reply.status or not text:return reply,text
+            value=json.loads(text);page=value['page']
+            if int(page['token']):
+                close=page_request(**{k:v for k,v in fields.items() if k!='limit'},token=int(page['token']),cursor=int(page['cursor']),limit=0)
+                close.ngroups=req.ngroups;close.groups[0]=req.groups[0]
+                routed_query(port,close)
+            return reply,b''.join(b'/'+bytes.fromhex(e['path_hex'])+b'\n' for e in value['entries'])
+        req=page_request(**fields)
         deadline=time.monotonic()+a.freshness_s
         while True:
             reply,text=rpc(int(ports),req)
-            if reply.status!=-13:break
+            if reply.status not in (-13,-21):break  # busy or not indexed yet
             assert time.monotonic()<deadline,'group directory was not published';time.sleep(.2)
         assert reply.status==-16,(reply.status,text)
         req.ngroups=1;req.groups[0]=st.st_gid
         deadline=time.monotonic()+a.freshness_s
         while True:
             reply,text=rpc(int(ports),req)
-            if reply.status==0 and text.endswith(b'/group/group-secret\n'):break
-            assert reply.status in (0,-13) and time.monotonic()<deadline,(reply.status,text)
+            if reply.status==0 and text==b'/group-secret\n':break  # page paths are root-relative
+            assert reply.status in (0,-13,-21) and time.monotonic()<deadline,(reply.status,text)
             time.sleep(.2)
-        assert text.endswith(b'/group/group-secret\n'),text
+        assert text==b'/group-secret\n',text
     finally:os.chmod(group,0o700)
 def name_limits():
     d=root/'name-limits';d.mkdir();(d/'line\nbreak').write_bytes(b'x')
@@ -168,7 +229,7 @@ def fd_capacity():
     fds=[];bounded=False
     try:
         for _ in range(80):
-            try:fds.append(os.open(query_path(d,f'absent-capacity-{_:03}*'),os.O_RDONLY))
+            try:fds.append(held_fd(query_path(d,f'absent-capacity-{_:03}*')))
             except OSError as e:
                 assert e.errno==errno.ENOMEM,(len(fds),e)
                 bounded=True;break
@@ -182,7 +243,8 @@ def recovery():
     d=root/'recovery';d.mkdir()
     for i in range(256):
         q=query_path(d,f'absent-stat-{i:03}*')
-        assert os.stat(q).st_size>0
+        assert until_indexed(lambda:os.stat(q)).st_size>0
+        contents(q)  # releases the page session the lookup created
     for i in range(128):
         assert not json.loads(contents(query_path(d,f'absent-open-{i:03}*')))['entries']
     # Exhaust and drain twice, then use a different directory/query version.

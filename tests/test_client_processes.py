@@ -15,12 +15,12 @@ m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 with tempfile.TemporaryDirectory(prefix='efs-processes-') as directory:
     proc=Path(directory)
     p=proc/'123';p.mkdir();(p/'comm').write_text('efs-fuse\n')
-    (p/'cmdline').write_bytes(b'./efs-fuse\0seed:17432\0fs\0/mnt/a/../efs\0-o\0allow_other\0')
+    (p/'cmdline').write_bytes(b'./efs-fuse\0seed:17432\0/mnt/a/../efs\0-o\0allow_other\0')
     (p/'stat').write_text('123 (efs-fuse) '+' '.join(['S']+['0']*18+['99']))
     assert m.clients(proc)==[(123,'/mnt/efs','99')]
-    (p/'cmdline').write_bytes(b'/usr/libexec/valgrind/memcheck-amd64-linux\0--leak-check=full\0--log-file=/tmp/client.vg\0./efs-fuse\0seed:17432\0fs\0/mnt/efs\0-f\0')
+    (p/'cmdline').write_bytes(b'/usr/libexec/valgrind/memcheck-amd64-linux\0--leak-check=full\0--log-file=/tmp/client.vg\0./efs-fuse\0seed:17432\0/mnt/efs\0-f\0')
     assert m.clients(proc)==[(123,'/mnt/efs','99')]
-    (p/'cmdline').write_bytes(b'/usr/libexec/valgrind/memcheck-amd64-linux\0./efs-fuse\0seed\0fs\0/mnt/efs\0./efs-fuse\0')
+    (p/'cmdline').write_bytes(b'/usr/libexec/valgrind/memcheck-amd64-linux\0./efs-fuse\0seed:1\0/mnt/efs\0./efs-fuse\0')
     try: m.clients(proc)
     except RuntimeError: pass
     else: raise AssertionError('duplicate wrapped clients must remain ambiguous')

@@ -23,7 +23,6 @@ code=r'''
 typedef uint64_t fuse_ino_t;
 static int stat_rc,mutation_rc,permission_rc,stat_calls,mutations,source_dir;
 static int virt_kind(fuse_ino_t n){(void)n;return 0;}
-static int name_is_reserved(const char *name){(void)name;return 0;}
 static int efs_client_stat_ino(uint64_t ino,struct efs_inode *row){stat_calls++;row->ino=ino;row->mode=source_dir?S_IFDIR:S_IFREG;return stat_rc;}
 static int check_chown_perm(const struct efs_inode *row,uid_t uid,gid_t gid){(void)row;(void)uid;(void)gid;return permission_rc;}
 static int check_dir_wx(const struct efs_inode *row){(void)row;return permission_rc;}

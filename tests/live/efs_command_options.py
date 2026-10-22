@@ -93,19 +93,22 @@ ino=root.stat().st_ino
 fields=dict(root=ino,uid=os.getuid(),gid=os.getgid(),match=3,term=b'',kind=1,flags=3,min_size=7,max_size=7,max_output=65536)
 reply,text=query(port,filtered_request(**fields))
 assert reply.status==0 and paths(json.loads(text))==['child/nested.bin'],(reply.status,text)
-cap=len(text)+64
-reply,text=query(port,filtered_request(**dict(fields,max_output=cap)))
+# A page that runs out of candidate visits answers an empty, truncated page
+# that must continue; it never claims completion.
+fields=dict(root=ino,uid=os.getuid(),gid=os.getgid(),match=3,term=b'',flags=1,min_size=10**12,
+            max_output=65536,visit_budget=1)
+reply,text=query(port,filtered_request(**fields))
 assert reply.status==0,(reply.status,text)
-reply,text=query(port,request(version=2,operation=1,root=ino,uid=os.getuid(),gid=os.getgid(),match=3,term=b'',max_output=cap))
-assert reply.status==-22 and not text,(reply.status,len(text))
-reply,text=query(port,filtered_request(root=ino,uid=os.getuid(),gid=os.getgid(),match=3,term=b'',flags=1,min_size=10**12,
-                                     max_output=65536,visit_budget=1))
-assert reply.status==-13 and not text,(reply.status,text)
-print('filters precede output limits while candidate-visit bounds remain enforced PASS',flush=True)
+page=json.loads(text)
+assert not page['entries'] and page['truncated'] and page['page']['more'],page
+query(port,filtered_request(**fields,token=int(page['page']['token']),cursor=int(page['page']['cursor']),limit=0))
+# The unpaged command request (version 2) was removed and is refused.
+reply,text=query(port,request(version=2,operation=1,root=ino,uid=os.getuid(),gid=os.getgid(),match=3,term=b'',max_output=65536))
+assert reply.status==-5 and not text,(reply.status,len(text))
+print('filtered pages and candidate-visit bounds; removed unpaged request refused PASS',flush=True)
 
 # A filtered path has the same immutable-open and fresh-permission contract.
-sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'src/client/commands'))
-from command import query_name
+from query_rpc import query_name
 import errno
 def open_query(path):
     for attempt in range(8):
@@ -114,7 +117,7 @@ def open_query(path):
             if error.errno not in (errno.ESTALE,errno.EAGAIN,errno.EBUSY) or attempt==7: raise
             time.sleep(.025*(attempt+1))
 filters=dict(type='file',min_size=7,max_size=7,modified_after_ns=None,modified_before_ns=None)
-qpath=root/'.efs/.query'/query_name('find',b'',filters=filters)
+qpath=root/'.efs/.query'/query_name('find',b'',filters=filters)  # a v3. first page
 with open_query(qpath) as held:
     old=held.read();length=os.fstat(held.fileno()).st_size
     os.chmod(other/'child',0)

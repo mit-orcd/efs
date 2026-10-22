@@ -17,8 +17,8 @@ import zlib
 CMD = {1: "CREATE", 2: "UNLINK", 3: "PUBLISH", 5: "PREPARE", 6: "DECIDE",
        7: "RESOLVE", 8: "DROP", 9: "SESSION", 11: "DIR", 12: "LOCK",
        13: "SETATTR", 14: "UTIMENS", 15: "TRUNCATE", 16: "APPEND_RSV",
-       17: "APPEND_RES", 18: "MKFS", 19: "ACTIVATE_LANE", 20: "LANE_FENCE(retired)",
-       21: "LANE_SWEEP", 22: "REAP_DONE", 23: "GC_ACK", 24: "CFG",
+       17: "APPEND_RES(retired)", 18: "MKFS", 19: "ACTIVATE_LANE", 20: "LANE_FENCE(retired)",
+       21: "LANE_SWEEP(retired)", 22: "REAP_DONE(retired)", 23: "GC_ACK", 24: "CFG",
        25: "RMDIR", 26: "SALT"}
 SESS = {1: "CREATE", 2: "REGISTER", 3: "BEGIN", 4: "FENCE_LOC", 5: "ACK",
         6: "FINISH", 7: "ESTABLISH", 8: "LEASE_OPEN", 9: "LEASE_CLOSE",

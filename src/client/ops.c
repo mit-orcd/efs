@@ -990,8 +990,8 @@ int efs_client_stat_open(efs_ino_t ino, struct efs_inode *out)
         return EFS_OK;
     }
     /* Both OPEN and CREATE hold a lease, so the last unlink stores nlink
-     * zero until last close. A missing row on an older server still leaves
-     * the local ghost available; transport errors keep the local count. */
+     * zero until last close. A missing row still leaves the local ghost
+     * available; transport errors keep the local count. */
     if (rpc_ok == EFS_ERR_NOT_FOUND)
         rpc.nlink = 0;
     else if (rpc_ok != EFS_OK) {
@@ -1082,19 +1082,6 @@ int efs_client_stat_local(efs_ino_t ino, struct efs_inode *out)
     int rc = efs_export_get_inode(&g_client.export, ino, out);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(ino);
-    return rc == 0 ? EFS_OK : EFS_ERR_NOT_FOUND;
-}
-
-int efs_client_lookup_local(efs_ino_t parent, const char *name,
-                            struct efs_inode *out)
-{
-    if (!out || !parent || !name || !name[0])
-        return EFS_ERR_INVAL;
-    efs_client_lock_dir(parent);
-    pthread_mutex_lock(&g_client.idx_mu);
-    int rc = efs_export_lookup(&g_client.export, parent, name, out);
-    pthread_mutex_unlock(&g_client.idx_mu);
-    efs_client_unlock_dir(parent);
     return rc == 0 ? EFS_OK : EFS_ERR_NOT_FOUND;
 }
 

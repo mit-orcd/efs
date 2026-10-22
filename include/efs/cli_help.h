@@ -43,10 +43,10 @@ static inline void efs_cli_help(FILE *out,const char *program,const char *topic)
         notes="Metadata root changes do not move existing mdraft data.\nStorage roots use least-queue write placement across paths.\nEFS_COMMANDS_SERVER=0 disables query workers, tracking and query RPCs.\nSet the same policy on every node; changes require graceful restart.\nDefault: enabled. Re-enabling rebuilds from current persisted metadata.";
     } else if (!strcmp(name,"efs-fuse")) {
         summary="Mount an EFS export";
-        syntax="NODE:PORT [NODE:PORT ...] EXPORT MOUNTPOINT [options]";
+        syntax="NODE:PORT [NODE:PORT ...] MOUNTPOINT [options]";
         options="-o OPTIONS           FUSE mount options\n--perf               Record a CPU profile\n--strace             Record system calls\n--stop MOUNTPOINT    Drain and stop a mounted client\n--resume MOUNTPOINT  Resume a drained client";
-        examples="efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt\nEFS_COMMANDS=1 efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt";
-        notes="One node address is enough; the client discovers the other nodes.\nEFS_COMMANDS=1 enables .efs on this mount when server policy allows it.\nThose commands require Python 3 on the machine executing them.\nUse --stop MOUNTPOINT --force-discard only to discard pending writes.\nUse --help-fuse for the underlying FUSE option reference.";
+        examples="efs-fuse 127.0.0.1:17432 /data1/efs/mnt\nEFS_COMMANDS=1 efs-fuse 127.0.0.1:17432 /data1/efs/mnt";
+        notes="One node address is enough; the client discovers the other nodes.\nThere is one export; no export label argument.\nEFS_COMMANDS=1 enables .efs on this mount when server policy allows it.\nThose commands require Python 3 on the machine executing them.\nUse --stop MOUNTPOINT --force-discard only to discard pending writes.\nUse --help-fuse for the underlying FUSE option reference.";
     } else if (!strcmp(name,"efs-mgmt")) {
         summary="Inspect and manage an EFS cluster";syntax="COMMAND [arguments]";
         commands="status               Cluster status\nio-stats             I/O counters\ngc-status            Garbage-collection status\nversion              Node version\nadd-node             Add a node\nadd-storage          Add storage roots\nshrink-quota         Reduce a node quota\nmkfs, raft-mkfs      Format metadata\ncommands-policy      Get/set versioned command policy\nexpiry-policy        Get/set scratch expiry policy\nexpiry               Show path expiry or inspect/renew a deadline\nexpiry-status        Worker health, backlog and removal counters\nexpiry-clock         Inspect/reset node clock health\nexpiry-enable        Enable an existing file deadline\nexpiry-id            Inspect authoritative FileID\nraft-status          Raft group status\nraft-change          Change group voters\nraft-dir             Directory layout migration\nraft-session         Session lifecycle\nraft-getattr         Read inode attributes\nraft-lookup          Look up a name\nraft-lookup-path     Resolve a path\nraft-create          Create a file\nraft-unlink          Remove a file name\nraft-rmdir           Remove an empty directory\nraft-link            Create a hard link\nraft-setattr         Change attributes\nraft-rename          Rename a name\nraft-readdir         List directory entries\nraft-publish         Publish a chunk\nraft-getchunks       Read chunk mappings\nraft-append          Allocate an append range\nraft-hold            Open/close a lease\nraft-flock           Whole-file locking\nraft-fcntl           Byte-range locking";
@@ -105,7 +105,7 @@ static inline int efs_mgmt_help(FILE *out,const char *command)
         {"expiry-clock","NODE:PORT get|reset"},
         {"expiry-status","NODE:PORT"},
         {"expiry","NODE:PORT show PATH [--mount MOUNT] | get INO GENERATION | renew INO GENERATION EXPECTED_REV DEADLINE_NS"},
-        {"commands-policy","NODE:PORT get | set MASK EXPECTED_VERSION"},{"mkfs","NODE:PORT [legacy-label]"},{"raft-mkfs","NODE:PORT [legacy-label]"},
+        {"commands-policy","NODE:PORT get | set MASK EXPECTED_VERSION"},{"mkfs","NODE:PORT"},{"raft-mkfs","NODE:PORT"},
         {"raft-status","NODE:PORT"},{"raft-change","NODE:PORT GROUP VOTERS"},
         {"raft-dir","NODE:PORT INO begin|migrate|finish"},
         {"raft-session","NODE:PORT create|register|establish|get|fence|cleanup-leases|cleanup-appends UUID_HEX [epoch|shard] [shard]"},
@@ -140,10 +140,9 @@ static inline int efs_mgmt_help(FILE *out,const char *command)
             "Renewal checks the current limits at the file's saved policy source.\n"
             "The renewal limit is not a maximum lifetime rule.\n"
             "Set requires operator UID 0 and server EFS_EXPIRY=1.\n"
-            "Legacy set ROOT GENERATION EXPECTED_REV TTL_NS MAX_NS FLAGS is supported.\n"
             "Node addresses use HOST:PORT." :
             (!strcmp(command,"mkfs") || !strcmp(command,"raft-mkfs")) ?
-            "Single export; the legacy label is accepted and ignored.\nNode addresses use HOST:PORT." :
+            "Single export; no label argument.\nNode addresses use HOST:PORT." :
             "Node addresses use HOST:PORT.");return 0;
     }
     fprintf(stderr,"Unknown command: %s\n",command);return 1;

@@ -124,6 +124,10 @@
 #define EFS_ERR_OVERFLOW   -22 /* EOVERFLOW: explicit metadata/output limit */
 #define EFS_ERR_ILSEQ      -23 /* EILSEQ: unrepresentable legacy name */
 #define EFS_ERR_NODATA     -21 /* ENODATA: xattr name is not set */
+/* A log entry this build cannot apply: unknown tag or sub-tag, malformed or
+ * truncated encoding. Fatal for its Raft group; never a business verdict and
+ * never normalized to success (W127-W129). */
+#define EFS_ERR_UNSUPPORTED -24
 
 typedef uint64_t efs_ino_t;
 

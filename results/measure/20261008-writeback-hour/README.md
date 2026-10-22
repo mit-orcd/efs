@@ -14,7 +14,9 @@ Additional evidence:
 - `replay-bytes-r3/`: same-group old-object physical deletion and exact cold bytes.
 - `replay-cross-r4/`: cross-group explicit bootstrap, conflicting digest refusal, old-object re-PUT, cold retirement query/resubmit and exact bytes.
 
-Probe commands on a built Linux tree (TCP loopback only; no installed cluster touched):
+Probe commands on a built Linux tree (TCP loopback only; no installed cluster touched).
+`tests/live/put_deadline.c` was removed from the tree on October 21 as an unrun
+orphan; extract it first with `git show a479018f6:tests/live/put_deadline.c > tests/live/put_deadline.c`:
 
 ```sh
 cc -Wall -Wextra -Werror -Iinclude -Isrc/client tests/live/put_deadline.c libefs.a -lpthread -lm -ldl -libverbs -o /tmp/efs-put-deadline

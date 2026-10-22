@@ -9,7 +9,7 @@ import struct
 import subprocess
 import sys
 import time
-from query_rpc import features, filtered_request, page_request, query, request
+from query_rpc import features, filtered_request, page_request, query, query_name, request
 
 mount, mgmt, evidence = map(Path, sys.argv[1:4])
 phase = sys.argv[4]
@@ -35,7 +35,7 @@ fields = dict(root=root.stat().st_ino, uid=os.getuid(), gid=os.getgid(),
               match=1, term=b'file-', max_output=1 << 20)
 if phase == 'loss':
     assert features(port) == 3
-    with open(root / '.efs/.query' / ('v1.stats.' + os.urandom(16).hex()), 'rb') as retained:
+    with open(root / '.efs/.query' / query_name('stats'), 'rb') as retained:
         original = retained.read()
         assert json.loads(original)['stats']['tree_files'] == 120
         ready = evidence / 'ready'

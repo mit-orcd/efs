@@ -106,8 +106,7 @@ enum efs_msg_type {
      * is one Raft entry; the multi-shard cases are transactions. */
     EFS_MSG_INODE_LOOKUP_PATH = 79,
     EFS_MSG_INODE_LOOKUP_PATH_REPLY = 80,
-    EFS_MSG_HEAL_STATUS = 81,
-    EFS_MSG_HEAL_STATUS_REPLY = 82,
+    /* 81-82 retired (HEAL_STATUS; see EFS_MSG_IS_RETIRED). */
     /* Open-fd refcount on the shard owner. Last-link unlink keeps inode+
      * chunks while refs>0 so a peer with an open fd can still read. */
     EFS_MSG_INODE_HOLD = 83,
@@ -145,13 +144,7 @@ enum efs_msg_type {
     EFS_MSG_RAFT_STATUS = 97,
     EFS_MSG_RAFT_STATUS_REPLY = 98,
 
-    /* Data-plane GC (spec L7): the reaper asks the node holding a dead
-     * generation's fragment to delete it, proven by the fragment's
-     * checksum sidecar (fragment paths do not carry the generation, so
-     * the conditional delete never removes a newer generation's bytes).
-     * Idempotent: an absent fragment is a success. */
-    EFS_MSG_GC_FRAGMENT = 99,
-    EFS_MSG_GC_FRAGMENT_REPLY = 100,
+    /* 99-100 retired (single-fragment GC_FRAGMENT; see EFS_MSG_IS_RETIRED). */
     /* Extended attribute on one inode. Request is struct efs_msg_xattr
      * followed by name[nlen] and value[vlen]. The reply begins with the
      * same status + primary_id layout as efs_msg_inode_reply so a client
@@ -181,8 +174,7 @@ enum efs_msg_type {
     EFS_MSG_PUBLICATION_RETIRE_REPLY = 118,
     EFS_MSG_GC_STATUS = 119,
     EFS_MSG_GC_STATUS_REPLY = 120,
-    EFS_MSG_GC_INODE = 121,
-    EFS_MSG_GC_INODE_REPLY = 122,
+    /* 121-122 retired (single-inode GC_INODE; see EFS_MSG_IS_RETIRED). */
     EFS_MSG_QUERY_SNAPSHOT = 123,
     EFS_MSG_QUERY_SNAPSHOT_REPLY = 124,
     /* Opt-in pending CREATE with exact result proof and retained routing. */
@@ -222,9 +214,22 @@ enum efs_msg_type {
     EFS_MSG_PACK_COMPACT_REPLY = 168,
 };
 
+/* Retired message IDs: no handler in this build. The server closes a
+ * connection that sends one (handler.c retired_refuse); never reuse them. */
+#define EFS_MSG_IS_RETIRED(t) \
+    ((t) == 81 || (t) == 82 /* HEAL_STATUS */ || \
+     (t) == 99 || (t) == 100 /* GC_FRAGMENT */ || \
+     (t) == 121 || (t) == 122 /* GC_INODE */)
+
 struct efs_msg_pack_compact {
     uint32_t segments; /* output segments to build per led group; 0 = report only */
     uint32_t reserved;
+};
+/* Background packer counters of one node since start (all groups it led). */
+struct efs_packer_status {
+    uint64_t passes, candidates, segments, files_packed, files_cancelled,
+             unindexed, read_errors, put_errors, admit_errors, abandoned,
+             busy_passes, budget_waits, compacted, backfilled;
 };
 struct efs_msg_pack_compact_reply {
     int32_t rc;
@@ -232,6 +237,7 @@ struct efs_msg_pack_compact_reply {
     uint64_t compacted_total; /* records moved by compaction since start */
     /* Last fragmentation summary of the led groups (summed). */
     uint64_t segments, live_bytes, dead_bytes, holes, small;
+    struct efs_packer_status packer;
 };
 
 /* W125 connection handshake. A connection must declare a compatible
@@ -253,7 +259,7 @@ int efs_fd_declare(int fd);
 
 /* W125 segment messages, big-endian byte layouts:
  * PUT   [group:1][fragment:1][0:2][geometry:4][id:8][generation:8][checksum:32]
- *       then geometry/2 payload bytes; reply efs_msg_gc_inode_reply (rc).
+ *       then geometry/2 payload bytes; reply efs_msg_segment_put_reply (rc).
  * GET   [group:1][fragment:1][0:2][geometry:4][id:8][generation:8];
  *       reply [rc:4][payload bytes:4][checksum:32] then the payload.
  * GC    [group:1][0:3][count:4] then count [id:8][generation:8];
@@ -273,13 +279,7 @@ int efs_fd_declare(int fd);
 struct efs_msg_storage_session_fence { uint8_t uuid[16]; uint32_t floor, check_only; };
 struct efs_msg_storage_session_fence_reply { uint8_t uuid[16]; uint32_t floor; int32_t rc; };
 
-/* Trusted reaper only: all lanes swept and no remaining open lease.
- * The durable reap marker is retained until every member confirms cleanup. */
-struct efs_msg_gc_inode {
-    uint32_t export_id, reserved;
-    uint64_t ino, generation;
-};
-struct efs_msg_gc_inode_reply { int32_t rc; };
+struct efs_msg_segment_put_reply { int32_t rc; };
 /* Request: header then count items; reply: count int32 results in order.
  * EFS_OK = durably journalled and fenced (accepted for reclaim); BUSY = not
  * accepted (journal full, fail-closed or recovering), retry later. */
@@ -419,25 +419,6 @@ struct efs_msg_lane_bootstrap {
     uint32_t chunk_size;
 };
 
-/* GC_FRAGMENT request: delete fragment `fragment_index` of chunk
- * `chunk_index` of `ino` iff its stored checksum sidecar equals
- * `checksum` (the dead generation's fragment hash from the GC record). */
-struct efs_msg_gc_fragment {
-    efs_export_id_t export_id;
-    efs_ino_t ino;
-    uint32_t chunk_index;
-    uint32_t fragment_index;
-    uint8_t checksum[EFS_HASH_SIZE];
-    uint64_t chunk_generation; /* 0 = legacy `{ci}.{fi}` */
-};
-
-/* status: 0 = the dead fragment is gone (deleted / already absent / a
- * newer generation occupies the slot); nonzero = try again later. */
-struct efs_msg_gc_fragment_reply {
-    uint8_t status;
-    uint8_t pad[7];
-};
-
 /* XATTR request. name[nlen] and value[vlen] follow this header with no
  * padding. op is EFS_XATTR_GET/SET/REMOVE/LIST. sizeof is 24. */
 struct efs_msg_xattr {
@@ -541,7 +522,7 @@ struct efs_msg_get_chunk {
     efs_ino_t ino;
     uint32_t chunk_index;
     uint32_t fragment_index; /* 0 = D1, 1 = D2, 2 = P */
-    /* Candidate identity. 0 = legacy `{ci}.{fi}` object (pre-W1 files). */
+    /* Candidate identity, nonzero; generation 0 names no object (NOT_FOUND). */
     uint64_t chunk_generation;
 };
 
@@ -559,7 +540,7 @@ struct efs_msg_put_chunk {
     uint32_t fragment_index;
     uint8_t checksum[EFS_HASH_SIZE];
     uint32_t data_len;
-    /* Candidate identity. 0 = write the legacy `{ci}.{fi}` name. */
+    /* Candidate identity, nonzero; generation 0 is refused. */
     uint64_t chunk_generation;
     /* W14.4: 0 = no hint (probe every root). Else the storage-root index
      * from the previous PUT of this (ino, chunk, fragment), plus one.
@@ -589,7 +570,7 @@ struct efs_msg_status_reply {
     uint64_t quota;
     uint64_t used;
     uint32_t state; /* efsd_server_state: 0=active, 3=draining, 4=drained, ... */
-    uint32_t reserved; /* Preserve the legacy 24-byte STATUS prefix. */
+    uint32_t reserved; /* zero; aligns the capacity fields */
     uint64_t capacity_bytes;
     uint64_t available_bytes;
     uint64_t capacity_valid;
@@ -643,9 +624,17 @@ struct efs_io_stats_class {
     uint64_t us_max;
     uint64_t p50_us;
 };
+/* Process-wide RDMA message transport counters since start: connections
+ * already closed plus a snapshot of the live ones (efs_rdma_totals). */
+struct efs_io_stats_rdma {
+    uint64_t live_conns;
+    uint64_t data_frames_tx, data_bytes_tx, data_frames_rx, data_bytes_rx;
+    uint64_t credit_stalls;
+};
 struct efs_msg_io_stats_reply {
     uint64_t uptime_us;
     struct efs_io_stats_class cls[EFS_IO_STATS_CLASSES];
+    struct efs_io_stats_rdma rdma;
 };
 
 /* VERSION reply: fixed-size NUL-terminated string (efs_version_string of
@@ -707,15 +696,16 @@ struct efs_user_stat {
  * unavailable. Legacy struct replies are not authoritative statistics. */
 #define EFS_QUERY_STATS_UNSUPPORTED 1u
 
-/* W92 v1 bounded server snapshots. Paths are export-relative UTF8/raw bytes,
+/* W92 bounded server snapshots. Paths are export-relative UTF8/raw bytes,
  * newline separated; newline names fail ILSEQ. No partial-success replies.
  * Credentials use the same trusted mount boundary as inode RPCs; this does
- * not introduce an authentication protocol. Unknown versions fail explicitly. */
+ * not introduce an authentication protocol. Unknown versions fail explicitly.
+ * Version 1 carries only the efs-fuse directory .stats aggregate
+ * (operation STATS); a v1 FIND or LS is refused. */
 #define EFS_QUERY_VERSION 1
-/* W91 commands use ASCII JSON envelopes and hex-encoded relative path bytes.
- * The native request/reply layout is unchanged; legacy v1 is internal only. */
-#define EFS_QUERY_COMMAND_VERSION 2
-#define EFS_QUERY_FILTER_VERSION 3
+/* Version 4: W91 command pages, ASCII JSON envelopes with hex-encoded
+ * relative path bytes. Versions 2 (unpaged commands) and 3 (unpaged filtered
+ * find) are retired and refused. */
 #define EFS_QUERY_PAGE_VERSION 4
 #define EFS_QUERY_GROUPS 128
 #define EFS_QUERY_MAX_OUTPUT (16u << 20)
@@ -731,8 +721,8 @@ struct efs_msg_query_snapshot {
     uint32_t groups[EFS_QUERY_GROUPS];
     char term[EFS_MAX_NAME];
 };
-/* v3 extends the native v1/v2 request without changing their 808-byte ABI.
- * Size bounds are inclusive; modification timestamps are strict ns bounds.
+/* Page filters. Size bounds are inclusive; modification timestamps are
+ * strict ns bounds.
  * Unset fields MUST be zero; kind: 0 any, 1 regular, 2 directory, 3 symlink. */
 #define EFS_QUERY_MIN_SIZE 1u
 #define EFS_QUERY_MAX_SIZE 2u
@@ -741,10 +731,6 @@ struct efs_msg_query_snapshot {
 struct efs_query_filters {
     uint32_t flags,kind;
     uint64_t min_size,max_size,after_ns,before_ns;
-};
-struct efs_msg_query_snapshot_v3 {
-    struct efs_msg_query_snapshot base;
-    struct efs_query_filters filters;
 };
 /* v4 bounded pages. Cursor is a physical index position, not a result offset.
  * token=0 starts one retained generation; limit=0 closes it. */
@@ -825,25 +811,6 @@ struct efs_msg_inode_lookup_path_reply {
     struct efs_inode inode;
     uint32_t ancestor_count;
     struct efs_lookup_path_anc ancestors[EFS_LOOKUP_PATH_MAX_DEPTH];
-};
-
-#define EFS_HEAL_F_TABLES  (1u << 0) /* one or more tables still need rebuild */
-#define EFS_HEAL_F_REBUILD (1u << 1) /* a page rebuild is in progress now */
-struct efs_msg_heal_status_export {
-    char name[EFS_MAX_NAME];
-    uint64_t gen;
-    uint32_t flags;
-    uint32_t tables_need;
-    uint32_t tables_total;
-    uint32_t cur_shard;
-    uint32_t pages_done;
-    uint32_t pages_total;
-    uint64_t elapsed_us;
-};
-struct efs_msg_heal_status_reply {
-    uint32_t export_count;
-    uint32_t healing; /* any export has flags set */
-    struct efs_msg_heal_status_export exports[EFS_MAX_EXPORTS];
 };
 
 /* Piggyback an open hold on CREATE so create+open is one RPC. Release
@@ -1318,10 +1285,9 @@ struct efs_msg_inode_getchunks_reply {
     struct efs_chunk_rec recs[EFS_GETCHUNKS_MAX];
 };
 
-/* On the wire a GETCHUNKS reply is the header plus its `count` records
- * (each record is 1536 bytes; the full struct is 98 KiB). Receivers also
- * accept the full fixed struct sent by older servers. Fields past
- * recs[count] are never read, so a short reply may be used in place or
+/* On the wire a GETCHUNKS reply is exactly the header plus its `count`
+ * records (each record is 1536 bytes; the full struct is 98 KiB). Fields
+ * past recs[count] are never read, so a reply may be used in place or
  * zero-extended into a full struct. */
 #define EFS_GETCHUNKS_REPLY_HDR_LEN \
     ((uint32_t)offsetof(struct efs_msg_inode_getchunks_reply, recs))
@@ -1346,8 +1312,7 @@ static inline int efs_getchunks_reply_len_ok(const void *reply, uint32_t len)
            sizeof(count));
     if (count > EFS_GETCHUNKS_MAX)
         return EFS_ERR_PROTO;
-    if (len != efs_getchunks_reply_len(count) &&
-        len != (uint32_t)sizeof(struct efs_msg_inode_getchunks_reply))
+    if (len != efs_getchunks_reply_len(count))
         return EFS_ERR_PROTO;
     return EFS_OK;
 }

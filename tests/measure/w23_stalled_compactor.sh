@@ -179,7 +179,7 @@ say "node3 initial raft-status:"
 
 # one client (efs-fuse daemonizes; poll for the mount to serve)
 rm -f "$WORK/fuse.log"
-EFS_TRANSPORT=tcp setsid "$BIN/efs-fuse" "127.0.0.1:$PORT" w23 "$MNT" \
+EFS_TRANSPORT=tcp setsid "$BIN/efs-fuse" "127.0.0.1:$PORT" "$MNT" \
     >"$WORK/fuse.log" 2>&1 </dev/null &
 served=0
 for _ in $(seq 1 50); do

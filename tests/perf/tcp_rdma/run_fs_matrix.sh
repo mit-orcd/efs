@@ -14,7 +14,6 @@ WRITER=fcstor008.ib
 READER=fcstor007.ib
 ADDR=172.16.223.61
 PORT=19970
-EXPORT=efs-bench-priv
 WORK=/tmp/efs-bench-priv
 MNT=/tmp/efs-bench-mnt
 OUT=${1:-$HOME/git/efs/results/measure/$(date -u +%Y%m%d-%H%M)-fs-private}
@@ -130,7 +129,7 @@ start_servers tcp 0
 sleep 0.5
 mk=1
 for _ in $(seq 1 20); do
-    if on 20 "$SRV" "cd /tmp/efs && ./efs-mgmt raft-mkfs ${ADDR}:${PORT} $EXPORT"; then
+    if on 20 "$SRV" "cd /tmp/efs && ./efs-mgmt raft-mkfs ${ADDR}:${PORT}"; then
         mk=0
         break
     fi
@@ -145,7 +144,7 @@ wait_leader
 
 mount_one() {
     local host=$1 xport=$2
-    on 20 "$host" "mkdir -p $MNT $WORK; rm -f $WORK/fuse.log; cd /tmp/efs && EFS_TRANSPORT=$xport setsid -f ./efs-fuse ${ADDR}:${PORT} $EXPORT $MNT >$WORK/fuse.log 2>&1 </dev/null && echo mounted"
+    on 20 "$host" "mkdir -p $MNT $WORK; rm -f $WORK/fuse.log; cd /tmp/efs && EFS_TRANSPORT=$xport setsid -f ./efs-fuse ${ADDR}:${PORT} $MNT >$WORK/fuse.log 2>&1 </dev/null && echo mounted"
     local i ok=0
     for i in $(seq 1 50); do
         if on 15 "$host" "findmnt -n -o FSTYPE $MNT | grep -qx fuse.efs-fuse && stat $MNT >/dev/null"; then

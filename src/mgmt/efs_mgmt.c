@@ -65,11 +65,9 @@ static int probe_node_up(const char *nhost, uint16_t nport, struct efs_msg_statu
     if (efs_send_msg(pfd, EFS_MSG_STATUS, NULL, 0) == 0 &&
         efs_recv_msg(pfd, &type, &preply, &preply_len) == 0 &&
         type == EFS_MSG_STATUS_REPLY &&
-        preply_len >= 24) {
-        if (status) {
-            memset(status, 0, sizeof(*status));
-            memcpy(status, preply, preply_len < sizeof(*status) ? preply_len : sizeof(*status));
-        }
+        preply_len == sizeof(struct efs_msg_status_reply)) {
+        if (status)
+            memcpy(status, preply, sizeof(*status));
         ok = 1;
     }
     free(preply);
@@ -316,91 +314,6 @@ static int cmd_status(int argc, char **argv)
     free(reply);
     reply = NULL;
 
-    printf("Heal:\n");
-    {
-        int any = 0;
-        for (uint32_t i = 0; i < ncopy; i++) {
-            if (!probe_node_up(nodes_copy[i].addr, nodes_copy[i].port, NULL)) {
-                printf("  node %u: DOWN\n", nodes_copy[i].id);
-                continue;
-            }
-            int hfd = efs_connect_tcp(nodes_copy[i].addr, nodes_copy[i].port);
-            if (hfd < 0) {
-                printf("  node %u: unreachable\n", nodes_copy[i].id);
-                continue;
-            }
-            efs_set_recv_timeout(hfd, EFS_STATUS_PROBE_MS);
-            efs_set_send_timeout(hfd, EFS_STATUS_PROBE_MS);
-            uint8_t ht = 0;
-            void *hp = NULL;
-            uint32_t hl = 0;
-            if (efs_send_msg(hfd, EFS_MSG_HEAL_STATUS, NULL, 0) != 0 ||
-                efs_recv_msg(hfd, &ht, &hp, &hl) != 0 ||
-                ht != EFS_MSG_HEAL_STATUS_REPLY ||
-                hl != sizeof(struct efs_msg_heal_status_reply)) {
-                printf("  node %u: heal-status unsupported\n",
-                       nodes_copy[i].id);
-                free(hp);
-                close(hfd);
-                continue;
-            }
-            struct efs_msg_heal_status_reply *hs = hp;
-            if (!hs->healing && hs->export_count == 0) {
-                printf("  node %u: idle\n", nodes_copy[i].id);
-                any = 1;
-                free(hp);
-                close(hfd);
-                continue;
-            }
-            if (!hs->healing) {
-                printf("  node %u: idle", nodes_copy[i].id);
-                for (uint32_t e = 0; e < hs->export_count; e++) {
-                    if (hs->exports[e].name[0])
-                        printf("  %s gen=%llu", hs->exports[e].name,
-                               (unsigned long long)hs->exports[e].gen);
-                }
-                printf("\n");
-                any = 1;
-                free(hp);
-                close(hfd);
-                continue;
-            }
-            for (uint32_t e = 0; e < hs->export_count; e++) {
-                struct efs_msg_heal_status_export *x = &hs->exports[e];
-                if (!x->flags)
-                    continue;
-                any = 1;
-                printf("  node %u: healing  %s", nodes_copy[i].id,
-                       x->name[0] ? x->name : "?");
-                if (x->flags & EFS_HEAL_F_REBUILD)
-                    printf("  shard=%u  pages %u/%u", x->cur_shard,
-                           x->pages_done, x->pages_total);
-                if (x->tables_need)
-                    printf("  tables %u/%u need-rebuild", x->tables_need,
-                           x->tables_total);
-                printf("  gen=%llu", (unsigned long long)x->gen);
-                if ((x->flags & EFS_HEAL_F_REBUILD) && x->pages_done > 0 &&
-                    x->pages_total > x->pages_done && x->elapsed_us > 0) {
-                    uint64_t left = (x->elapsed_us / x->pages_done) *
-                                    (x->pages_total - x->pages_done);
-                    if (left < 1000000ull)
-                        printf("  ~<1s left");
-                    else if (left < 60000000ull)
-                        printf("  ~%llu s left",
-                               (unsigned long long)(left / 1000000ull));
-                    else
-                        printf("  ~%llu min left",
-                               (unsigned long long)(left / 60000000ull));
-                }
-                printf("\n");
-            }
-            free(hp);
-            close(hfd);
-        }
-        if (!any)
-            printf("  (no heal data)\n");
-    }
-
     close(fd);
     return (down_nodes > 0) ? 1 : 0;
 }
@@ -628,8 +541,7 @@ static int cmd_io_stats(int argc, char **argv)
     if (send_recv(fd, EFS_MSG_IO_STATS, NULL, 0, &reply_type, &reply,
                   &reply_len) != 0 ||
         reply_type != EFS_MSG_IO_STATS_REPLY ||
-        (reply_len != sizeof(*r) &&
-         reply_len != sizeof(uint64_t) + 3 * sizeof(struct efs_io_stats_class))) {
+        reply_len != sizeof(*r)) {
         fprintf(stderr, "Failed to get io-stats\n");
         free(reply);
         close(fd);
@@ -639,8 +551,7 @@ static int cmd_io_stats(int argc, char **argv)
     r = reply;
     printf("io-stats %s:%u uptime_s=%llu\n", host, port,
            (unsigned long long)(r->uptime_us / 1000000ull));
-    uint32_t nclasses = (reply_len - sizeof(uint64_t)) / sizeof(struct efs_io_stats_class);
-    for (i = 0; i < nclasses; i++) {
+    for (i = 0; i < EFS_IO_STATS_CLASSES; i++) {
         struct efs_io_stats_class *c = &r->cls[i];
         printf("  %-10s ops=%llu bytes=%llu errors=%llu us_sum=%llu avg_us=%llu "
                "p50_us=%llu max_us=%llu\n",
@@ -653,6 +564,12 @@ static int cmd_io_stats(int argc, char **argv)
                (unsigned long long)c->p50_us,
                (unsigned long long)c->us_max);
     }
+    printf("  rdma       conns=%llu data_tx_frames=%llu data_tx_bytes=%llu data_rx_frames=%llu "
+           "data_rx_bytes=%llu credit_stalls=%llu\n",
+           (unsigned long long)r->rdma.live_conns,
+           (unsigned long long)r->rdma.data_frames_tx, (unsigned long long)r->rdma.data_bytes_tx,
+           (unsigned long long)r->rdma.data_frames_rx, (unsigned long long)r->rdma.data_bytes_rx,
+           (unsigned long long)r->rdma.credit_stalls);
     free(reply);
     return 0;
 }
@@ -718,28 +635,18 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
     efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
     int rc = send_recv(fd, EFS_MSG_GC_STATUS, NULL, 0, &type, &payload, &len);
     close(fd);
+    /* Only the current reply layout (version 5) is read. */
     if (rc || type != EFS_MSG_GC_STATUS_REPLY ||
-        (len != sizeof(struct efs_msg_gc_status_reply) &&
-         len != offsetof(struct efs_msg_gc_status_reply, reclaim) &&
-         len != offsetof(struct efs_msg_gc_status_reply, expiry) &&
-         len != offsetof(struct efs_msg_gc_status_reply, io))) {
-        fprintf(stderr, "GC status unavailable (server upgrade may be required)\n");
+        len != sizeof(struct efs_msg_gc_status_reply) ||
+        ((struct efs_msg_gc_status_reply *)payload)->version != 5) {
+        fprintf(stderr, "GC status unavailable: no current-format reply\n");
         free(payload);
         return 1;
     }
     struct efs_msg_gc_status_reply *g = payload;
-    if (!((g->version == 1 && len == offsetof(struct efs_msg_gc_status_reply, io)) ||
-          (g->version == 2 && len == offsetof(struct efs_msg_gc_status_reply, expiry)) ||
-          (g->version == 3 && len == offsetof(struct efs_msg_gc_status_reply, reclaim)) ||
-          (g->version == 5 && len == sizeof(*g)))) {
-        fprintf(stderr, "GC status reply version %u length %u not understood\n",
-                g->version, len);
-        free(payload);
-        return 1;
-    }
     if(expiry_only) {
-        if(g->version<3 || !g->expiry.available) {
-            fprintf(stderr,"Expiry worker status unavailable; upgrade the server.\n");free(payload);return 1;
+        if(!g->expiry.available) {
+            fprintf(stderr,"Expiry worker status unavailable on this node.\n");free(payload);return 1;
         }
         const struct efs_expiry_status *e=&g->expiry;char bytes[64],age[80];
         const char *state=!e->enabled?"disabled":e->uncertain?"paused: clock uncertain":!e->healthy?"waiting: clock health sample":
@@ -786,10 +693,9 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
                (unsigned long long)g->reap_seen[i], (unsigned long long)g->orphan_seen[i], g->reap_capped[i],
                (unsigned long long)g->first_reap[i],
                (unsigned long long)g->first_seen_age_ms[i]);
-    if (g->version >= 5)
-        printf("trunc_pending group0=%llu group2=%llu\n",
-               (unsigned long long)g->trunc_pending[0], (unsigned long long)g->trunc_pending[1]);
-    if(g->version>=3) {
+    printf("trunc_pending group0=%llu group2=%llu\n",
+           (unsigned long long)g->trunc_pending[0], (unsigned long long)g->trunc_pending[1]);
+    {
         const struct efs_expiry_status *e=&g->expiry;
         const char *state=!e->available?"unavailable":!e->enabled?"disabled":
                           e->uncertain?"paused_clock":!e->healthy?"warming_clock":!e->leader_mask?"standby":"running";
@@ -805,7 +711,7 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
                "overdue_capped=%u expiry_sample_age_ms=%llu\n",i*2,(e->sampled_mask>>i)&1,
                (unsigned long long)e->due_lower_bound[i],e->due_capped[i],(unsigned long long)e->sample_age_ms[i]);
     }
-    if(g->version>=4) {
+    {
         const struct efs_reclaim_status *c=&g->reclaim;
         printf("reclaim_state=%s reclaim_accepted=%llu reclaim_deleted=%llu reclaim_checkpointed=%llu "
                "reclaim_retired=%llu reclaim_busy=%llu journal_records=%llu journal_segments=%llu "
@@ -819,7 +725,7 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
                (unsigned long long)c->credited_bytes,(unsigned long long)c->phys_avail_bytes,
                (unsigned long long)c->phys_refused,(unsigned long long)c->recovered);
     }
-    if (g->version >= 2) {
+    {
         const char *names[] = {"checksum_read", "unlink", "dir_sync"};
         for (unsigned i = 0; i < EFS_GC_IO_CLASSES; i++) {
             struct efs_gc_io_stats *c = &g->io[i];
@@ -870,7 +776,7 @@ static int cmd_pack_compact(int argc, char **argv)
         rc = send_recv(nfd, EFS_MSG_PACK_COMPACT, &req, sizeof(req), &rt, &r, &rl);
         close(nfd);
         if (rc || rt != EFS_MSG_PACK_COMPACT_REPLY || rl != sizeof(struct efs_msg_pack_compact_reply)) {
-            printf("node %u %s:%u: no pack-compact reply (server upgrade may be required)\n", n->id, n->addr, n->port);
+            printf("node %u %s:%u: no current-format pack-compact reply\n", n->id, n->addr, n->port);
             free(r);
             continue;
         }
@@ -887,6 +793,19 @@ static int cmd_pack_compact(int argc, char **argv)
         } else {
             printf("node %u %s:%u: leads no group\n", n->id, n->addr, n->port);
         }
+        /* Node-wide since start, across every group it led; errors and
+         * backlog waits are otherwise invisible to operators. */
+        const struct efs_packer_status *p = &x->packer;
+        printf("  packer: passes=%llu candidates=%llu built=%llu files_packed=%llu cancelled=%llu "
+               "unindexed=%llu backfilled=%llu read_errors=%llu put_errors=%llu admit_errors=%llu "
+               "abandoned=%llu busy_passes=%llu budget_waits=%llu\n",
+               (unsigned long long)p->passes, (unsigned long long)p->candidates,
+               (unsigned long long)p->segments, (unsigned long long)p->files_packed,
+               (unsigned long long)p->files_cancelled, (unsigned long long)p->unindexed,
+               (unsigned long long)p->backfilled, (unsigned long long)p->read_errors,
+               (unsigned long long)p->put_errors, (unsigned long long)p->admit_errors,
+               (unsigned long long)p->abandoned, (unsigned long long)p->busy_passes,
+               (unsigned long long)p->budget_waits);
         free(r);
     }
     free(payload);
@@ -1114,17 +1033,15 @@ static int cmd_raft_mkfs(int argc, char **argv)
     uint32_t reply_len = 0;
     struct efs_msg_raft_mkfs_reply *r;
 
-    if (argc < 1 || argc > 2) {
-        fprintf(stderr, "Usage:\n  efs-mgmt mkfs|raft-mkfs <node:port> [legacy-label]\n");
+    if (argc != 1) {
+        fprintf(stderr, "Usage:\n  efs-mgmt mkfs|raft-mkfs <node:port>\n"
+                        "mkfs initializes the single cluster export and takes no label.\n");
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
         fprintf(stderr, "Invalid address: %s\n", argv[0]);
         return 1;
     }
-    if (argc == 2)
-        fprintf(stderr, "Note: legacy label '%s' is ignored; initializes the single cluster export.\n",
-                argv[1]);
     fd = efs_connect_tcp(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
@@ -1575,7 +1492,9 @@ static int cmd_expiry(int argc,char **argv,int policy)
     int mutate=argc>=2 && !strcmp(argv[1],policy?"set":"renew");
     int named=policy && mutate && argc>5 && argv[5][0]=='-';
     char host[64];uint16_t port;uint64_t n[6]={0};
-    if((get && argc!=4) || (mutate && !named && argc!=(policy?8:6)) || (!get && !mutate))goto usage;
+    /* Policy set takes only the named form; the positional TTL_NS MAX_NS
+     * FLAGS form was removed. */
+    if((get && argc!=4) || (mutate && (policy?!named:argc!=6)) || (!get && !mutate))goto usage;
     if(parse_host_port(argv[0],host,sizeof(host),&port))return 1;
     for(int i=2;i<(named?5:argc);i++)if(expiry_u64(argv[i],&n[i-2]))return 1;
     if(named) {
@@ -1613,7 +1532,6 @@ usage:
     fprintf(stderr,"Usage:\n  efs-mgmt expiry-policy NODE:PORT get ROOT_INO GENERATION\n"
                    "  efs-mgmt expiry-policy NODE:PORT set ROOT_INO GENERATION EXPECTED_REV\n"
                    "    --expire-after DURATION [--renewal-limit DURATION] --flags FLAGS\n"
-                   "  Legacy: set ROOT_INO GENERATION EXPECTED_REV TTL_NS MAX_NS FLAGS\n"
                    "  efs-mgmt expiry NODE:PORT get FILE_INO GENERATION\n"
                    "  efs-mgmt expiry NODE:PORT renew FILE_INO GENERATION EXPECTED_REV DEADLINE_NS\n\n"
                    "DURATION: positive integer followed by ns, s, m, h or d (example: 24h).\n"

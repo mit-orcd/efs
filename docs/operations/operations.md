@@ -84,7 +84,7 @@ export EFS_TRANSPORT=tcp EFS_MD_RAFT_N=3
 ./efs-mgmt status 127.0.0.1:17432
 ./efs-mgmt mkfs 127.0.0.1:17432
 mkdir -p /mnt/efs
-./efs-fuse 127.0.0.1:17432 fs /mnt/efs
+./efs-fuse 127.0.0.1:17432 /mnt/efs
 ```
 
 `mkfs` is an alias for `raft-mkfs` and needs a **quorum of the metadata Raft
