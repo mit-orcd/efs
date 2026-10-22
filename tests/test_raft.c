@@ -93,6 +93,8 @@ struct app {
     uint32_t part_resets;
     int part_applied;
     int drop_blob; /* next snap_open fails once; the retry re-exports */
+    uint64_t missing_at; /* W147: snap_open of this index always fails (file gone) */
+    int opens;           /* W147: successful snap_open calls (exports) */
 };
 
 struct snap_mem {
@@ -124,6 +126,9 @@ static int snap_open(void *app_, uint64_t incl, void **handle, uint64_t *total)
         a->drop_blob = 0;
         return EFS_ERR_NOT_FOUND;
     }
+    if (a->missing_at && incl == a->missing_at)
+        return EFS_ERR_NOT_FOUND;
+    a->opens++;
     b = calloc(1, sizeof(*b));
     if (!b)
         return EFS_ERR_NOMEM;
@@ -2193,6 +2198,89 @@ static void test_snap_chunks(void)
     free_n(&n, st, 3);
 }
 
+/* W147 (orcd-mini, 2026-10-22): the leader's stored snapshot point had no
+ * file, so every send_snap re-exported at the CURRENT applied index. While
+ * the group kept committing, each export got a new index, the peer's offset
+ * went back to 0, and a 5.2 GB transfer never finished. A transfer must keep
+ * the image it started while the leader commits between chunks. */
+static void test_snap_transfer_survives_commits(void)
+{
+    struct net n;
+    struct efs_raft_store *st[3];
+    struct app app[3];
+    struct efs_raft_cfg cfg;
+    int i, lid, fol, keep;
+
+    boot_n(&n, st, app, &cfg, 3, 0x7);
+    cfg.snap_open = snap_open;
+    cfg.snap_read = snap_read;
+    cfg.snap_close = snap_close;
+    cfg.snap_chunk = snap_chunk;
+    cfg.snap_chunk_bytes = 16;
+    for (i = 0; i < 3; i++) {
+        efs_raft_free(n.r[i]);
+        app[i].wide = 1;
+        cfg.id = i; cfg.store = st[i]; cfg.store_ctx = st[i]; cfg.app = &app[i];
+        cfg.election_ticks = (uint32_t)(4 + i * 4);
+        cfg.heartbeat_ticks = 1;
+        n.r[i] = test_raft_new(&cfg);
+        CHECK(n.r[i] != NULL, "raft with chunked snap");
+    }
+    CHECK(elect(&n, 20) == 1, "elect");
+    lid = leader_id(&n);
+    for (i = 0; i < 8; i++) {
+        uint8_t cmd = (uint8_t)('a' + i);
+        uint64_t idx = 0;
+        CHECK(efs_raft_propose(n.r[lid], &cmd, 1, &idx) == EFS_OK, "propose");
+        if (elect(&n, 2) < 0)
+            CHECK(0, "elect during propose");
+        lid = leader_id(&n);
+    }
+    CHECK(lid >= 0 && efs_raft_snapshot(n.r[lid]) == EFS_OK, "leader snapshot");
+    fol = (lid + 1) % 3;
+    keep = (lid + 2) % 3;
+    /* Restart the leader: its stored snap point survives in the store, but
+     * the file for it is gone for good (as on orcd-mini). */
+    app[lid].missing_at = efs_raft_snap_index(n.r[lid]);
+    efs_raft_free(n.r[lid]);
+    cfg.id = lid; cfg.store = st[lid]; cfg.store_ctx = st[lid]; cfg.app = &app[lid];
+    cfg.election_ticks = 2; cfg.heartbeat_ticks = 1; cfg.voters = 0x7; cfg.n = 3;
+    n.r[lid] = test_raft_new(&cfg);
+    CHECK(n.r[lid] != NULL, "leader restarted");
+    efs_raft_allow_campaign(n.r[keep], 0);
+    efs_raft_allow_campaign(n.r[fol], 0);
+    for (i = 0; i < 60 && leader_id(&n) != lid; i++)
+        if (elect(&n, 1) < 0)
+            break;
+    CHECK(leader_id(&n) == lid, "restarted node leads again");
+    app[lid].opens = 0;
+    efs_raft_free(n.r[fol]);
+    efs_raft_mem_free(st[fol]);
+    st[fol] = efs_raft_mem_create();
+    cfg.id = fol; cfg.store = st[fol]; cfg.store_ctx = st[fol]; cfg.app = &app[fol];
+    cfg.election_ticks = 400; cfg.voters = 0x7; cfg.n = 3;
+    n.r[fol] = test_raft_new(&cfg);
+    CHECK(n.r[fol] != NULL, "empty follower needs a snapshot");
+    efs_raft_allow_campaign(n.r[fol], 0);
+    n.snap_hold = 1;
+    n.snap_hold_to = fol;
+    /* One chunk per tick, and a fresh commit before every tick. */
+    for (i = 0; i < 40 && !app[fol].part_applied; i++) {
+        uint8_t cmd = (uint8_t)('A' + (i % 26));
+        uint64_t idx = 0;
+        CHECK(efs_raft_propose(n.r[lid], &cmd, 1, &idx) == EFS_OK, "commit during transfer");
+        n.snap_hold_left = 1;
+        CHECK(efs_raft_tick(n.r[lid]) == EFS_OK, "tick");
+    }
+    n.snap_hold = 0;
+    CHECK(app[fol].part_applied, "snapshot transfer completes while the leader commits");
+    CHECK(app[lid].opens <= 2, "the leader keeps one export instead of one per send");
+    free(app[0].part);
+    free(app[1].part);
+    free(app[2].part);
+    free_n(&n, st, 3);
+}
+
 /* Empty AppendEntries that matches prev must not report a stale
  * uncommitted tail as replicated. */
 static void test_ae_reply_match_stops_at_prev(void)
@@ -2875,6 +2963,7 @@ int main(void)
         test_install_snapshot_needs_blob();
         test_install_snapshot_restarted_leader();
         test_snap_chunks();
+        test_snap_transfer_survives_commits();
     }
     if (failures) {
         fprintf(stderr, "test_raft: %d failure(s)\n", failures);

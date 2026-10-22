@@ -697,7 +697,17 @@ static int send_snap(struct efs_raft *r, int to)
     incl = r->snap_idx;
     incl_t = r->snap_term;
     rc = snap_ensure(r, incl);
-    if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_AGAIN) {
+    if ((rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_AGAIN) && r->snap_handle &&
+        r->snap_handle_incl > r->snap_idx &&
+        log_term(r, r->snap_handle_incl, &incl_t) == EFS_OK) {
+        /* W147: an image newer than the stored snap point is already open.
+         * Keep sending it. Re-exporting at the moving applied index gave
+         * every send a new incl and reset the peer's offset to 0, so a
+         * 5.2 GB transfer on orcd-mini never finished while the group
+         * committed. */
+        incl = r->snap_handle_incl;
+        rc = EFS_OK;
+    } else if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_AGAIN) {
         /* The stored snap point has no file (process restart). Re-export
          * at the current applied index, which is exactly the state the
          * caller holds the SM lock over. */
@@ -1462,7 +1472,10 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
             fprintf(stderr, "AE_REQ REJECT prev_idx=%llu > last_i=%llu\n",
                     (unsigned long long)in->prev_index, (unsigned long long)last_i);
         m.success = 0;
-        m.match_index = last_i;
+        /* W145 repair: while a resync is requested this log's tail is not
+         * trusted; a hint at it would pull the leader out of its snapshot
+         * transfer and back into the conflicting AppendEntries. */
+        m.match_index = r->resync_requested ? 0 : last_i;
         ae_reject_note(r, in, last_i, "prev-beyond-log");
         return send_msg(r, &m);
     }

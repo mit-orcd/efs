@@ -6202,3 +6202,35 @@ an image over 4 GiB is too heavy for the suite; the gate is a live install.
 
 **Gate.** An InstallSnapshot of an image over 4 GiB completes on orcd-mini
 (the W145 n2 repair).
+
+<a id="w147"></a>
+## W147 — A snapshot transfer restarts on every send while the leader commits
+
+**Liveness; opened 2026-10-22; fixed in source, deploy pending.** Found while
+repairing W145 on orcd-mini.
+- The group-2 leader's stored snapshot point (30,676,475) had no file. Its
+  `snap-2-*.kvx` had been rotated away; a restart keeps only the index.
+- In that case `send_snap` re-exported at the **current** applied index on
+  every call. The group kept committing, so each export got a new index, the
+  peer's transfer offset reset to 0, and a new 5.2 GB image was exported
+  about every 45 s.
+- n2's partial file stalled at 46 MB. Any follower needing a snapshot at
+  this scale would see the same, as long as the group commits during a
+  transfer.
+
+**Fix.** When the stored snapshot point has no file and a newer image is
+already open whose index is still in the log, `send_snap` keeps sending that
+image. It re-exports only when no usable image is open.
+
+While a W145 resync is requested, the follower's "prev beyond log" rejection
+also carries `match_index` 0. Its untrusted tail must not pull the leader
+out of the transfer and back into the conflicting AppendEntries.
+
+`tests/test_raft.c` `test_snap_transfer_survives_commits`: a restarted leader
+whose snapshot file is gone transfers a multi-chunk image while committing
+between chunks.
+- On the old code: FAIL (the transfer never completes; one export per send).
+- With the fix: PASS (the transfer completes with at most two exports).
+
+**Gate.** n2's group-2 InstallSnapshot completes on orcd-mini (the W145
+repair, together with W146).

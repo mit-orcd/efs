@@ -2371,6 +2371,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | leader-hint-lock | **W144** · LOOKUP/GETATTR on a group follower takes `h->mu` for the leader hint (22% of a split leader's lock waits) | performance | Closed (Oct 22): both gates recorded. `make test` 816/816 with one environmental docs-check failure; routing tests PASS; after deploy (`784bcc6ee`) with split leadership, the leader-hint lock site is gone (was 22% of n1's lock waits) | [item](#w144) · [evidence](../status/orcd-mini-profile-08cc16af4-20261022.md) |
 | deposed-leader-stuck | **W145** · a follower commits its own unproven log tail after an InstallSnapshot (orcd-mini n2 applied 30929219@62 against the cluster's 63, then wedged) | Raft safety | OPEN: root cause found from the nodes' raft.log records; fixed in `76614e8e8` (`snap_installed` caps commit at the snapshot index; regression test FAILs on the old code), `make test` 816/816 (1 environmental failure), deployed on orcd-mini with smoke 216/216; n2 still wedged (repair needs the user's decision); acknowledged-write check and startup election storm (group 2 term 149 → 291) open | [item](#w145) · [evidence](../status/orcd-mini-profile-08cc16af4-20261022.md) |
 | snapshot-4gib | **W146** · a snapshot image over 4 GiB can never be installed (32-bit import read; orcd-mini group 2 is 5.2 GB) | correctness / liveness | OPEN: fixed in source (64-bit import lengths), `make test` 816/816 (1 environmental failure); gate is the live n2 install | [item](#w146) |
+| snapshot-restart | **W147** · a snapshot transfer restarts on every send while the leader commits (stored snapshot point without a file) | liveness | OPEN: fixed in source with a regression test that FAILs on the old code; gate is the live n2 install | [item](#w147) |
 | orcd-qualification | **W119** · ORCD normal-operation RDMA failures and blocked clean stop | correctness / liveness | OPEN: 150 concurrent failures /846 NOTRUN; cross-host peer59/67; enabled queries EBUSY; retained writes block clean stop. TCP/commands-off rerun also FAILs (120 failures,520 NOTRUN; peer61/67; clean stop refused); all23 successfully prepared cold cases verify after authorized forced restart. [TCP evidence](../status/orcd-tcp-direct-disabled-20261015.md). Preserve failures, isolate causes and rerun original gates; W100 stays closed. [AMD follow-up](../status/amd-rdma-posix-20261015.md): native/serial/peer/cold/degraded PASS at `c8d057391`; one-mount jobs16 remains215/216 with unusual-name timeout. [Async durability follow-up](../status/amd-async-durability-20261015.md) at `c4178ea81`: scoped durability/native/serial/peer/cold/degraded PASS; jobs16 FAIL214/216 (unusual names, concurrent creates,15s) | [Raft/KV follow-up](../status/orcd-raft-kv-20261016.md) · [evidence and gates](../status/orcd-devel-qualification-20261015.md) · [item](#w119) |
 | immediate-readback | **W121** · successful fsync followed by previous-file payload | data correctness | OPEN: 255/123,932 exact readbacks failed across both queued-vote variants on ORCD native RDMA/direct with enabled `.efs`; unique512-byte files, no expiry. Diagnosed FUSE kernel fork/read page-pinning defect; kernel remediation deferred by user. Fork-isolated experiments do not close W121 | [diagnosis](../status/orcd-w121-fork-read-20261016.md) · [experiment](../status/orcd-queued-read-vote-20261016.md) · [item](#w121) |
 | qualification-fixtures | **W120** · stale extracted LOOKUP stub and command cleanup ownership check | verification correctness | OPEN (partial fix): AMD `f6235bb73` repairs the LOOKUP host context and checks reader identity; native/docs PASS at `85a9ad6b5`. Enabled-command cleanup ownership remains NOTRUN here and still needs correction/acceptance. [AMD evidence](../status/amd-rdma-posix-20261015.md); preserve original failures | [evidence](../status/orcd-devel-qualification-20261015.md) · [item](#w120) |
@@ -8900,6 +8901,38 @@ an image over 4 GiB is too heavy for the suite; the gate is a live install.
 
 **Gate.** An InstallSnapshot of an image over 4 GiB completes on orcd-mini
 (the W145 n2 repair).
+
+<a id="w147"></a>
+### W147 — A snapshot transfer restarts on every send while the leader commits
+
+**Liveness; opened 2026-10-22; fixed in source, deploy pending.** Found while
+repairing W145 on orcd-mini.
+- The group-2 leader's stored snapshot point (30,676,475) had no file. Its
+  `snap-2-*.kvx` had been rotated away; a restart keeps only the index.
+- In that case `send_snap` re-exported at the **current** applied index on
+  every call. The group kept committing, so each export got a new index, the
+  peer's transfer offset reset to 0, and a new 5.2 GB image was exported
+  about every 45 s.
+- n2's partial file stalled at 46 MB. Any follower needing a snapshot at
+  this scale would see the same, as long as the group commits during a
+  transfer.
+
+**Fix.** When the stored snapshot point has no file and a newer image is
+already open whose index is still in the log, `send_snap` keeps sending that
+image. It re-exports only when no usable image is open.
+
+While a W145 resync is requested, the follower's "prev beyond log" rejection
+also carries `match_index` 0. Its untrusted tail must not pull the leader
+out of the transfer and back into the conflicting AppendEntries.
+
+`tests/test_raft.c` `test_snap_transfer_survives_commits`: a restarted leader
+whose snapshot file is gone transfers a multi-chunk image while committing
+between chunks.
+- On the old code: FAIL (the transfer never completes; one export per send).
+- With the fix: PASS (the transfer completes with at most two exports).
+
+**Gate.** n2's group-2 InstallSnapshot completes on orcd-mini (the W145
+repair, together with W146).
 
 
 ## Appendix 6 — Naming
