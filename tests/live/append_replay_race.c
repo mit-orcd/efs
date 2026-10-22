@@ -1,5 +1,7 @@
 /* Simultaneous identical production APPEND RPCs must reserve once. */
 #include "efs/protocol.h"
+#include "efs/kv_key.h"
+#include "live_session.h"
 #include <arpa/inet.h>
 #include <assert.h>
 #include <pthread.h>
@@ -56,6 +58,10 @@ int main(int argc,char **argv)
     assert(argc==3 || argc==8);
     if(argc==8) {sequence=strtoull(argv[3],NULL,10);acknowledged=strtoull(argv[4],NULL,10);length=strtoull(argv[5],NULL,10);expected_status=atoi(argv[6]);expected_offset=strtoull(argv[7],NULL,10);}
     port=atoi(argv[1]);ino=strtoull(argv[2],NULL,10);
+    if(expected_status==EFS_INODE_RPC_OK) { /* K5: create and admit the appender's session */
+        uint8_t uuid[16];memset(uuid,0xa5,sizeof(uuid));
+        live_session_create((unsigned)port,uuid,1);live_session_admit((unsigned)port,uuid,1,efs_kv_inode_shard(ino));
+    }
     assert(!pthread_barrier_init(&gate,NULL,WORKERS));pthread_t threads[WORKERS];
     for(uintptr_t i=0;i<WORKERS;i++)assert(!pthread_create(&threads[i],NULL,worker,(void *)i));
     for(unsigned i=0;i<WORKERS;i++)assert(!pthread_join(threads[i],NULL));

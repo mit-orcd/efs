@@ -5,6 +5,7 @@
 #include "efs/kv_key.h"
 #include "efs/meta_apply.h"
 #include "efs/raft.h"
+#include "live_session.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,12 +14,16 @@
 #include <sys/stat.h>
 static unsigned port;
 static uint64_t owner;
+/* K5: the CREATE-time open lease belongs to this session; HOLD names it. */
+static void session_uuid(uint8_t uuid[16]){memset(uuid,0,16);memcpy(uuid,&owner,sizeof(owner));uuid[15]=93;}
 static struct efs_msg_inode_reply call(unsigned type,const void *request,unsigned size,unsigned seq)
 {
     uint8_t packet[1024];assert(size+EFS_OPID_WIRE_LEN<=sizeof(packet));
     memcpy(packet,request,size);
     unsigned length=size;
-    if(seq){struct efs_opid_req q={0};memcpy(q.id.client_uuid,&owner,sizeof(owner));q.id.client_uuid[15]=93;q.id.session_epoch=1;q.id.seq=seq;efs_opid_req_pack(&q,packet+size);length+=EFS_OPID_WIRE_LEN;}
+    if(seq){struct efs_opid_req q={0};session_uuid(q.id.client_uuid);q.id.session_epoch=1;q.id.seq=seq;efs_opid_req_pack(&q,packet+size);length+=EFS_OPID_WIRE_LEN;}
+    if(type==EFS_MSG_INODE_HOLD){uint8_t uuid[16];uint32_t epoch=1;session_uuid(uuid);
+        memcpy(packet+length,uuid,16);memcpy(packet+length+16,&epoch,4);length+=EFS_SESS_WIRE_LEN;}
     for(unsigned attempt=0;attempt<400;attempt++){
         int fd=efs_connect_declared("127.0.0.1",port+attempt%4);
         if(fd<0){usleep(10000);continue;}
@@ -40,6 +45,7 @@ int main(int argc,char **argv)
     assert(argc==5);port=atoi(argv[1]);efs_ino_t parent=strtoull(argv[2],NULL,10);
     owner=strtoull(argv[3],NULL,10);efs_ino_t expected=strtoull(argv[4],NULL,10);
     assert(parent && owner);
+    {uint8_t uuid[16];session_uuid(uuid);live_session_create(port,uuid,1);}
     struct efs_msg_inode_create create={0};create.export_id=1;create.parent=parent;
     create.mode=S_IFREG|0600;create.flags=EFS_CREATE_F_HOLD;create.owner=owner;
     unsigned shard=0;

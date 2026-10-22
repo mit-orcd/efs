@@ -56,6 +56,9 @@ int main(int argc,char **argv)
         assert((!strcmp(argv[3],"resume") || !strcmp(argv[3],"resume-hashed") || !strcmp(argv[3],"resume-adopt") || !strcmp(argv[3],"resume-adopt-hashed")) && strlen(argv[4])==32);
         for(unsigned i=0;i<16;i++){unsigned n;assert(sscanf(argv[4]+2*i,"%2x",&n)==1);q.id.client_uuid[i]=(uint8_t)n;}
     }
+    /* K5: this process is the mount whose session is (uuid, epoch 7). */
+    memcpy(g_client.opid_uuid,q.id.client_uuid,16);g_client.opid_epoch=7;
+    assert(efs_client_session_start()==EFS_OK);
     assert(!efs_client_rpc_publication_session(shard,&q.id));
     efs_ino_t ino=create(port,parent,&q);assert(create(port,parent,&q)==ino);
     if(argc==4 && (!strcmp(argv[3],"create") || !strcmp(argv[3],"create-hashed"))) {

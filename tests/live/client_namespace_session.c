@@ -37,12 +37,13 @@ int main(int argc,char **argv)
  if(argc==6 && !strcmp(argv[4],"cold")){
   assert(!strcmp(argv[4],"cold"));struct packet old[7];FILE *f=fopen(argv[5],"rb");assert(f);
   assert(fread(old,sizeof(old),1,f)==1 && fgetc(f)==EOF);fclose(f);
-  for(unsigned i=0;i<7;i++){assert(old[i].bytes<=sizeof(old[i].body));struct efs_msg_inode_reply r=rpc(port,&old[i]);fprintf(stderr,"cold namespace case=%u status=%u\n",i,r.status);assert(r.status==EFS_INODE_RPC_STALE);}
-  puts("namespace cold restart: all seven pre-revocation receipts remain STALE PASS");return 0;
+  for(unsigned i=0;i<7;i++){assert(old[i].bytes<=sizeof(old[i].body));struct efs_msg_inode_reply r=rpc(port,&old[i]);fprintf(stderr,"cold namespace case=%u status=%u\n",i,r.status);assert(r.status==EFS_INODE_RPC_FENCED);}
+  puts("namespace cold restart: all seven pre-revocation receipts remain FENCED PASS");return 0;
  }
  g_client.export_id=1;g_client.node_count=4;
  for(unsigned i=0;i<4;i++){g_client.nodes[i].id=i+1;strcpy(g_client.nodes[i].addr,"127.0.0.1");g_client.nodes[i].port=port+i;}
  efs_client_conn_init();struct efs_opid id;assert(!efs_client_publication_id(1,&id));
+ assert(efs_client_session_start()==EFS_OK); /* K5: the mount creates its own session */
  struct packet saved[7];
  struct efs_msg_inode_create create={.export_id=1,.parent=parent,.mode=S_IFREG|0600,.uid=getuid(),.gid=getgid()};strcpy(create.name,"a");
  saved[0]=pack(EFS_MSG_INODE_CREATE,&create,sizeof(create),&id,1);
@@ -63,20 +64,20 @@ int main(int argc,char **argv)
  char hex[33],address[64];for(unsigned i=0;i<16;i++)snprintf(hex+2*i,3,"%02x",id.client_uuid[i]);snprintf(address,sizeof(address),"127.0.0.1:%u",port);
  pid_t child=fork();assert(child>=0);if(!child){execl(argv[3],argv[3],"raft-session",address,"fence",hex,(char *)NULL);_exit(127);}
  int status;assert(waitpid(child,&status,0)==child && WIFEXITED(status) && !WEXITSTATUS(status));
- for(unsigned i=0;i<7;i++)assert(rpc(port,&saved[i]).status==EFS_INODE_RPC_STALE);
+ for(unsigned i=0;i<7;i++)assert(rpc(port,&saved[i]).status==EFS_INODE_RPC_FENCED);
  if(argc>=5){FILE *f=fopen(argv[4],"wb");assert(f);assert(fwrite(saved,sizeof(saved),1,f)==1);assert(!fclose(f));}
  create.mode=S_IFREG|0600;strcpy(create.name,"late");struct packet late=pack(EFS_MSG_INODE_CREATE,&create,sizeof(create),&id,8);
- assert(rpc(port,&late).status==EFS_INODE_RPC_STALE);
+ assert(rpc(port,&late).status==EFS_INODE_RPC_FENCED);
  create.mode=S_IFDIR|0700;strcpy(create.name,"late-dir");late=pack(EFS_MSG_INODE_CREATE,&create,sizeof(create),&id,9);
- assert(rpc(port,&late).status==EFS_INODE_RPC_STALE);
+ assert(rpc(port,&late).status==EFS_INODE_RPC_FENCED);
  strcpy(link.new_name,"late-link");late=pack(EFS_MSG_INODE_LINK,&link,sizeof(link),&id,10);
- assert(rpc(port,&late).status==EFS_INODE_RPC_STALE);
+ assert(rpc(port,&late).status==EFS_INODE_RPC_FENCED);
  strcpy(rename.old_name,"a");strcpy(rename.new_name,"moved");late=pack(EFS_MSG_INODE_RENAME_AT,&rename,sizeof(rename),&id,11);
- assert(rpc(port,&late).status==EFS_INODE_RPC_STALE);
+ assert(rpc(port,&late).status==EFS_INODE_RPC_FENCED);
  strcpy(unlink.name,"a");unlink.is_dir=0;late=pack(EFS_MSG_INODE_UNLINK,&unlink,sizeof(unlink),&id,12);
- assert(rpc(port,&late).status==EFS_INODE_RPC_STALE);
+ assert(rpc(port,&late).status==EFS_INODE_RPC_FENCED);
  strcpy(unlink.name,"still-empty");unlink.is_dir=1;late=pack(EFS_MSG_INODE_UNLINK,&unlink,sizeof(unlink),&id,13);
- assert(rpc(port,&late).status==EFS_INODE_RPC_STALE);
+ assert(rpc(port,&late).status==EFS_INODE_RPC_FENCED);
  struct efs_inode found;assert(!efs_client_rpc_lookup(1,parent,"a",&found) && found.ino==ino);
  assert(!efs_client_rpc_lookup(1,parent,"still-empty",&found));
  for(unsigned i=0;i<4;i++)assert(efs_client_rpc_lookup(1,parent,(const char *[]){"late","late-dir","late-link","moved"}[i],NULL)==EFS_ERR_NOT_FOUND);
@@ -84,7 +85,7 @@ int main(int argc,char **argv)
   efs_ino_t untouched=strtoull(argv[5],NULL,10);assert(untouched && efs_kv_inode_shard(untouched)!=efs_kv_inode_shard(parent));
   create.parent=untouched;create.mode=S_IFREG|0600;strcpy(create.name,"late-first-touch");
   late=pack(EFS_MSG_INODE_CREATE,&create,sizeof(create),&id,14);
-  assert(rpc(port,&late).status==EFS_INODE_RPC_STALE);
+  assert(rpc(port,&late).status==EFS_INODE_RPC_FENCED);
   assert(efs_client_rpc_lookup(1,untouched,"late-first-touch",NULL)==EFS_ERR_NOT_FOUND);
   puts("namespace first untouched shard: completed global revocation rejects old identity without a local floor PASS");
  }

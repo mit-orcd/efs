@@ -5,6 +5,8 @@
 #include "efs/session.h"
 #include "efs/lock.h"
 #include "efs/kv_lsm.h"
+#include "efs/kv_key.h"
+#include "live_session.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,6 +46,9 @@ int main(int argc,char **argv)
  uint8_t uuid[16];assert(strlen(argv[4])==32);
  for(unsigned i=0;i<16;i++){unsigned x;assert(sscanf(argv[4]+2*i,"%2x",&x)==1);uuid[i]=x;}
  uint64_t length=strtoull(argv[late?5:6],NULL,10),first=0;
+ /* K5: reservations name an admitted session; after revocation nothing is
+  * admitted and the late request must be refused FENCED. */
+ if(!late){live_session_create(port,uuid,1);live_session_admit(port,uuid,1,efs_kv_inode_shard(ino));}
  for(unsigned step=0;step<total;step++) {
   unsigned i=late?65:step+1;
   struct efs_msg_inode_append request={.export_id=1,.ino=ino,.len=length};
@@ -63,7 +68,7 @@ int main(int argc,char **argv)
    assert(type==EFS_MSG_INODE_APPEND_REPLY && size==sizeof(struct efs_msg_inode_reply));
    struct efs_msg_inode_reply reply;memcpy(&reply,body,sizeof(reply));free(body);
    if(reply.status==EFS_INODE_RPC_BUSY || reply.status==EFS_INODE_RPC_NOT_PRIMARY){usleep(10000);continue;}
-   if(late) {assert(reply.status==EFS_INODE_RPC_STALE);puts("fresh sequence65 after durable revocation rejected STALE PASS");return 0;}
+   if(late) {assert(reply.status==EFS_INODE_RPC_FENCED);puts("fresh sequence65 after durable revocation rejected FENCED PASS");return 0;}
    assert(reply.status==EFS_INODE_RPC_OK);if(i==1)first=reply.inode.atime;
    assert(reply.inode.atime==first+(i-1)*length);break;
   }
