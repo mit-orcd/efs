@@ -6179,3 +6179,26 @@ HARD, SNAP and CFG records.
 - orcd-mini deploy, with n2 back in sync after its repair.
 - A private reproduction of deposed leader + snapshot under load, with the
   deposed leader catching up and no stale commit.
+
+<a id="w146"></a>
+## W146 — A snapshot image over 4 GiB can never be installed
+
+**Correctness/liveness; opened 2026-10-22; fixed in source, deploy pending.**
+Found while repairing W145 on orcd-mini. The group-2 snapshot image is 5.2 GB
+(group 0's is 5.4 GB). A follower installing it reads both the incoming and
+its local image whole through `read_whole`, which refused any file over
+`0xffffffff` bytes with `EFS_ERR_NOMEM`. Every install failed after the
+transfer (`raft-snap: import diff group=2 rc=-2 n=0`), and the leader
+re-exported and re-sent the 5.2 GB image about every 45 s. Any follower
+that falls below a leader's log floor at this scale could never catch up.
+
+**Fix.** `read_whole`, `parse_image` and `efs_kv_group_import_prepare` use
+64-bit image lengths and offsets. The image format is unchanged: a 32-bit
+entry count and 32-bit key and value lengths. The import still holds both
+images in memory, about 10 GB for group 2 on orcd-mini.
+`test_kv_lsm`, `test_kv_snapshot_tail`, `test_raft_store` and `test_raft`
+PASS. `make test` 816/816 with one environmental failure. A unit test with
+an image over 4 GiB is too heavy for the suite; the gate is a live install.
+
+**Gate.** An InstallSnapshot of an image over 4 GiB completes on orcd-mini
+(the W145 n2 repair).

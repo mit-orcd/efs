@@ -3,6 +3,7 @@
 #include "efs/kv_lsm.h"
 #include "efs/meta_apply.h"
 #include "efs/raft.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -414,7 +415,10 @@ int efs_kv_group_import(struct efs_kv *kv, uint8_t group, const uint8_t *data,
     return rc;
 }
 
-static int read_whole(const char *path, uint8_t **out, uint32_t *len)
+/* W146: a group image is read whole. Lengths are 64-bit: orcd-mini's
+ * group-2 image reached 5.2 GB, and the old 32-bit read refused it with
+ * EFS_ERR_NOMEM, so no follower could ever install that snapshot. */
+static int read_whole(const char *path, uint8_t **out, uint64_t *len)
 {
     uint8_t *buf;
     off_t sz;
@@ -426,7 +430,7 @@ static int read_whole(const char *path, uint8_t **out, uint32_t *len)
     if (fd < 0)
         return EFS_ERR_IO;
     sz = lseek(fd, 0, SEEK_END);
-    if (sz < 4 || (uint64_t)sz > 0xffffffffu) {
+    if (sz < 4 || (uint64_t)sz > (uint64_t)SIZE_MAX) {
         close(fd);
         return sz < 4 ? EFS_ERR_PROTO : EFS_ERR_NOMEM;
     }
@@ -455,15 +459,16 @@ static int read_whole(const char *path, uint8_t **out, uint32_t *len)
     }
     close(fd);
     *out = buf;
-    *len = (uint32_t)sz;
+    *len = (uint64_t)sz;
     return EFS_OK;
 }
 
-static int parse_image(const uint8_t *data, uint32_t len, uint8_t group,
+static int parse_image(const uint8_t *data, uint64_t len, uint8_t group,
                        struct efs_kv_item **out, uint32_t *n_out)
 {
     struct efs_kv_item *items;
-    uint32_t n, i, off;
+    uint32_t n, i;
+    uint64_t off;
 
     *out = NULL;
     *n_out = 0;
@@ -516,7 +521,8 @@ int efs_kv_group_import_prepare(struct efs_kv *kv, uint8_t group,
                                 uint8_t **hold_a, uint8_t **hold_b)
 {
     uint8_t *ibuf = NULL, *lbuf = NULL;
-    uint32_t ilen = 0, llen = 0, ni = 0, n = 0, ln = 0, i, off;
+    uint64_t ilen = 0, llen = 0;
+    uint32_t ni = 0, n = 0, ln = 0, i, off;
     struct efs_kv_item *items = NULL, *loc = NULL, *diff = NULL;
     int rc;
 

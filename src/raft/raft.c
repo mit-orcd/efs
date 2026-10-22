@@ -1401,9 +1401,15 @@ static int ae_proto_drop(struct efs_raft *r, const struct efs_raft_msg *in,
         m.match_index = 0;
         m.vote_granted = in->vote_granted;
         m.last_log_index = in->last_log_index;
-        fprintf(stderr, "raft: group=%u resync: conflict at index=%llu <= commit=%llu from=%d; "
-                "requesting InstallSnapshot\n", r->group, (unsigned long long)idx,
-                (unsigned long long)r->commit_index, in->from);
+        r->ae_rejects_sent++;
+        if (r->ae_rejects_sent == 1 ||
+            r->ticks - r->ae_reject_log_tick >= REJECT_LOG_TICKS) {
+            r->ae_reject_log_tick = r->ticks;
+            fprintf(stderr, "raft: group=%u resync: conflict at index=%llu <= commit=%llu "
+                    "from=%d; requesting InstallSnapshot (rejects=%llu)\n", r->group,
+                    (unsigned long long)idx, (unsigned long long)r->commit_index,
+                    in->from, (unsigned long long)r->ae_rejects_sent);
+        }
         return send_msg(r, &m);
     }
     r->ae_proto_drops++;
