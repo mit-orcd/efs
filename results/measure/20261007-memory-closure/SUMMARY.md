@@ -1,7 +1,12 @@
 # W59/W67 memory acceptance closure — NUC, Oct 7 2026
 
-Private four-node TCP fixtures only; normal service untouched. All final
-commands exited zero. Explicit budget values match the production defaults
+## Verdict
+
+**PASS** (acceptance closure): all final commands exited zero; no allocator
+budget was raised as a repair; every fixture inside `MemoryMax=1G`,
+`MemorySwapMax=0` with 0 OOM / 0 OOM-kills in all four mode/body rows below.
+
+Private four-node TCP fixtures only; normal service untouched. Explicit budget values match the production defaults
 or the smaller stress setting; no allocator budget was raised as a repair.
 
 | Mode / body+drain MiB | Accepted sparse writes | Fault client RSS MiB | Whole-fixture peak MiB | OOM / OOM kill |
