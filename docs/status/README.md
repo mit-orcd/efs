@@ -72,7 +72,7 @@ Replaces the declined 256 MiB EBUSY refusal; W43 stays open.
 [orcd-test tiny-files slow-client profile](orcd-test-tiny-files-profile-20261022.md):
 **explained, no fix.** The 2× per-client gap in the 7 × 10M tiny-files run is metadata-group
 placement: inode parity put 4 client trees in group 2 and 3 in group 0, and one node
-led both groups. Commit-to-apply latency on that leader is the limit, not server CPU. New:
+led both groups. Commit-to-apply latency on that leader is the limit, not server CPU. Clean A/B on fresh formats: spreading leaders (`EFS_METADATA_BALANCE=2`) is 27% slower, because routing sends both groups' requests to the dual-group node; colocated leaders give a 1.07× gap. New:
 a group-2 follower received no appends for 30 minutes after a snapshot-time
 reconnect, until a snapshot install caught it up.
 

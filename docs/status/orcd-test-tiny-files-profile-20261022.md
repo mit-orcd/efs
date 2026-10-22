@@ -3,7 +3,7 @@
 **Purpose:** user-requested short server profile during the 7 × 10M
 tiny-files run, to explain why four clients ran about half as fast as the
 other three, and to name the server hot paths.
-**Verdict: explained (diagnosis); spread-leader rerun inconclusive (see below).** The gap comes from metadata-group
+**Verdict: explained (diagnosis). Clean A/B: colocated leaders beat spread ones by 27% (see below).** The gap comes from metadata-group
 placement, not from the clients. Each client tree lives in one of the two Raft
 groups, chosen by the parity of its top directory's inode. Group 2 carried four
 client trees and group 0 three. Each group has a similar throughput ceiling, and
@@ -137,6 +137,54 @@ chosen with the same group per client as before.
 The 30-minute follower stall above is a second occurrence of the W145 class
 (a replica stops receiving appends after a short local stall). Here it
 recovered only through a leader snapshot install.
+
+## Clean A/B on a freshly formatted cluster: colocated leaders win
+
+Each arm:
+
+- stores wiped and reformatted, with the background delete finished first;
+- build `e8b3f1bb1`, RDMA, `.efs` on, started with `orcd-test.py start --balance N`;
+- the same group per client as run 1 (fcstor007/009/010/012 group 2, others group 0);
+- `tiny_files.py` with the same parameters under `timeout -s INT 1800` (rc=124 on every client);
+- a 30 s server on-CPU profile at about 20 minutes.
+
+| | Arm A: `--balance 2` (spread) | Arm B: `--balance 1` (colocate) |
+|---|---|---|
+| Leaders | group 0 node 1, group 2 node 3 | both node 3 |
+| Group-0 clients, files/s (cumulative) | 418–419 | 440–445 |
+| Group-2 clients, files/s (cumulative) | 267–270 | 409–413 |
+| Per-client gap | **1.56×** | **1.07×** |
+| Files in 30 min, all 7 clients | ≈4.32M (≈2,400/s) | ≈5.49M (≈3,050/s, **+27%**) |
+| Busy cores, nodes 1/2/3/4 (of 24) | ~3.7 / 2.1 / 3.7 / 1.1 | ~1.1 / 1.5 / 5.2 / 1.1 |
+
+In both arms almost all client requests went to node 3 (fcstor005), the node
+hosting both groups. It logged 712k group-0 and 787k group-2 apply waits over
+20 ms in arm A, and 356k and 509k in arm B. The group-0 leader, node 1, saw 44k
+in arm A. With spread leaders node 3 served group 0 as a **follower**, waiting
+for its own apply (`idx-applied` p50 140). So the spread arm moved log and
+fsync work to node 1 but not the request traffic, and it added follower apply
+lag to every group-0 request. With colocated leaders node 3's apply lag was
+25–33 entries. Arm B's top paths: fragment writes, Raft pump and apply, and the
+packer (`efs_pack_validate`, BLAKE3) on node 3.
+
+Conclusions:
+
+- Under the current routing, which prefers the node hosting both groups,
+  colocating leaders is right, as the `host_balanced_voter()` comment says.
+  Spreading them costs ~21% throughput and widens the per-client gap.
+  The `EFS_METADATA_BALANCE=2` experiment is a negative result.
+- On a freshly formatted cluster with colocated leaders, the run-1 2× gap
+  does **not** reproduce (1.07×). Run 1 differed in three ways: the older build
+  `08cc16af4` (before W143 and W144, the leader-hint fix), a used store, and
+  the W145-class follower stall. This A/B does not separate them.
+
+Raw profiles: `~/orcd/scratch/efs/profile-tiny-20261022/{spreadA,colocB}/<host>/`.
+`oncpu-30s.perf.data` SHA-256 prefixes, spreadA/colocB: fcstor003
+`cbdb55f5eab06fba`/`f101fd51dfd3ea90`, fcstor004 `163fa95cce6a7311`/`9c8af5a2bb1ff8ce`,
+fcstor005 `db19e33791f8e14e`/`9bfae21e2bc2f3fe`, fcstor006 `761f357a4b00a1c8`/`20daef9b341bddbd`.
+Client logs: `<client>/tiny-30m-{spreadA,colocB}/tiny.log` under
+`/home/erbmi1/orcd/scratch/efs/orcd-test/`. Driver: the arm sequence above; the wipe moves each
+`/data1/0[1-6]/efs-orcd-test-erbmi1` aside and deletes it with the daemons stopped.
 
 ## Reproduction
 
