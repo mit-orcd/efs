@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 #define EFS_BENCH_BUILD
 #define EFS_SEGMENT_TEST_AUTHORITY
@@ -229,6 +230,32 @@ static void t_torn(void)
     assert(!inode_dir_exists(9000));
 }
 
+/* Recovery runs in the background (the export walk, then the segment scan,
+ * then the fence) and its wall time depends on the host's load: under a full
+ * suite run a fixed 5 s bound failed once (W141). Follow its progress instead:
+ * give up only after IDLE_MS without a change in the recovery counters, or
+ * at the hard cap, and print the status when giving up. */
+static void wait_readmitted(void)
+{
+    enum { IDLE_MS=30000, CAP_MS=300000, POLL_US=10000 };
+    struct timespec t0,now;clock_gettime(CLOCK_MONOTONIC,&t0);
+    uint64_t last_recovered=~0ull;uint32_t last_recovering=~0u;long long idle_since=0;
+    for(;;){
+        if(!__atomic_load_n(&S.reclaim_fail_closed,__ATOMIC_ACQUIRE)) return;
+        struct efs_reclaim_status st;server_reclaim_status(&S,&st);
+        clock_gettime(CLOCK_MONOTONIC,&now);
+        long long elapsed=(now.tv_sec-t0.tv_sec)*1000LL+(now.tv_nsec-t0.tv_nsec)/1000000;
+        if(st.recovered!=last_recovered||st.recovering!=last_recovering){
+            last_recovered=st.recovered;last_recovering=st.recovering;idle_since=elapsed;
+        }
+        if(elapsed-idle_since>=IDLE_MS||elapsed>=CAP_MS){
+            fprintf(stderr,"still fail closed after %lld ms (%lld ms without progress): recovering=%u recovered=%llu records=%llu\n",
+                    elapsed,elapsed-idle_since,st.recovering,(unsigned long long)st.recovered,(unsigned long long)st.journal_records);
+            assert(0);
+        }
+        usleep(POLL_US);
+    }
+}
 /* 5. A corrupt journal fails closed: every data PUT is refused until the
  * recovery scan has fenced the inodes metadata proves dead. */
 static void t_fail_closed_prepare(void)
@@ -256,7 +283,7 @@ static void t_fail_closed(void)
     int32_t rc;struct efs_reclaim_item it={.export_id=1,.ino=9200,.generation=1};
     (void)server_reclaim_accept(&S,&it,1,&rc);assert(rc==EFS_ERR_BUSY); /* leader retries later */
     host_active=1;
-    for(int i=0;i<200 && __atomic_load_n(&S.reclaim_fail_closed,__ATOMIC_ACQUIRE);i++) usleep(25000);
+    wait_readmitted();
     assert(!S.reclaim_fail_closed);
     assert(!put(9102,1,0));
     assert(put(9100,1,0)==EFS_ERR_STALE && put(9101,1,0)==EFS_ERR_STALE);

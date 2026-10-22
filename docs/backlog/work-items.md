@@ -6023,8 +6023,8 @@ archived, delete the test with it.
 <a id="w141"></a>
 ## W141 — `test_reclaim` "fail closed, recover, re-admit" fails under suite load
 
-**Verification flake; opened 2026-10-22; OPEN.**
-- `t_fail_closed` waits at most 5 s (200 × 25 ms) for background journal
+**Verification flake; opened 2026-10-22; FIXED on `devel-k25` (October 22), 20-run gate NOTRUN.**
+- `t_fail_closed` waited at most 5 s (200 × 25 ms) for background journal
   recovery to clear `reclaim_fail_closed`.
 - Under the full `make_test_summary.sh` run on node9901 it failed once in
   `dcclean-b4a` (October 21). Ten direct reruns in the same tree passed, and
@@ -6032,6 +6032,15 @@ archived, delete the test with it.
 
 **Fix and gate:** make the wait follow recovery progress (or a documented
 larger bound), not a fixed 5 s; then 20 summary runs without a failure.
+
+**Fix (October 22, `devel-k25`, alpha K25):** `wait_readmitted` in
+`tests/test_reclaim.c` polls every 10 ms and follows the recovery
+counters (`recovering`, `recovered` from `server_reclaim_status`): it
+gives up only after 30 s without a change in them, or at a 300 s cap,
+and prints the status when it does. A loaded host slows the export walk
+without failing the test; a stalled recovery still fails with its
+counters. Gate: 20 `make_test_summary.sh` runs on node9901 NOTRUN here;
+the K25 report records the efs3 reruns.
 
 <a id="w142"></a>
 ## W142 — Dead leftovers after the dead-code cleanup
