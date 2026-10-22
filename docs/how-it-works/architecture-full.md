@@ -8722,7 +8722,8 @@ archived, delete the test with it.
 <a id="w140"></a>
 ### W140 — The proposal RPC accepts metadata tags this build cannot apply
 
-**Correctness / safety; opened 2026-10-22 from the W127 gate; OPEN, fix NOTRUN.**
+**Correctness / safety; opened 2026-10-22 from the W127 gate; fix on
+`devel-k02` (`8b8048a5b`), unit gates PASS on efs1; cluster gate NOTRUN.**
 - `EFS_MSG_RAFT_MKFS` with a payload (`server_raft_host_submit`) refuses
   only reserved and retired tags (`EFS_MD_CMD_IS_RESERVED`). Any other byte
   is proposed and committed.
@@ -8732,12 +8733,32 @@ archived, delete the test with it.
 - Shown by `scripts/w127_incompatible_entry.sh` on node9901 (tag 200 to
   group 0, October 22).
 
-**Fix and gate:**
-- Refuse at submit every tag the build does not apply, from one table of
-  known log commands. `tests/test_meta_cmd_namespace.py` must check that
-  every `EFS_MD_CMD_*` is in it and no `EFS_MD_REQ_*` (RPC-only) is.
-- Test: the same synthetic tag 200 is refused at submit, nothing is
-  committed, and the group keeps serving.
+**Fix (`8b8048a5b`, October 22):**
+- `include/efs/meta_cmd.h` carries `EFS_MD_CMD_APPLIED`, the table of log
+  commands this build applies, and `efs_md_cmd_applicable()`. It is the one
+  source of truth: `host_apply_dispatch` checks it before any handler (the
+  final `EFS_ERR_UNSUPPORTED` halt stays for anything a handler cannot
+  decode), and `host_tag_refused()` refuses every other tag with
+  `EFS_ERR_PROTO` at the top of `host_propose_impl`, the only function that
+  appends to a Raft log. The submit RPC, the inode RPC handlers, background
+  reclaim, the packer (`server_raft_host_pack_propose`) and forwarded
+  commands all end there. One log line per second, with the count of
+  refusals suppressed in between.
+- `tests/test_submit_unknown_tag.py` (in `make test`): the dispatcher
+  compares against exactly the table's 48 tags, every log append is behind
+  the gate, the predicate over all 256 values, and the production gate in
+  front of a real single-voter Raft log: tag 200 (and reserved, retired,
+  RPC-only and CFG tags) answer PROTO with the log and applied count
+  unchanged, the next CREATE commits at the next index, the log line is
+  rate-limited. `tests/test_meta_cmd_namespace.py` checks the table names
+  every `EFS_MD_CMD_*` but host-only CFG and no `EFS_MD_REQ_*`.
+
+**Remaining gate:**
+- Cluster: tag 200 to group 0 through the proposal RPC answers PROTO, the
+  group's log and applied index do not move, and the group keeps serving.
+  `scripts/w127_incompatible_entry.sh` can no longer plant an incompatible
+  entry through the RPC; the W127 B1-B4 gate needs another vehicle (a log
+  entry written below the gate) before it is rerun.
 - Who may submit at all is W133 (connection-state matrix); this item only
   closes the encoding hole.
 
