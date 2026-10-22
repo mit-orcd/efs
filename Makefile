@@ -480,6 +480,7 @@ test: all
 	python3 tests/test_fuse_worker_options.py
 	python3 tests/test_cluster_stop.py
 	python3 tests/test_rdma_memcheck.py
+	python3 tests/test_live_fixture_names.py
 	$(MAKE) test-fence-read
 	$(MAKE) test-fence-view
 	$(MAKE) test-dirty-ranges

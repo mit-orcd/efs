@@ -5466,6 +5466,25 @@ changes have separate acceptance in the [AMD RDMA/direct ledger](../status/amd-r
 Enabled-command cleanup ownership remains NOTRUN in this commands-disabled
 profile; W120 is not closed and the earlier frozen-source FAIL is retained.
 
+**October 22 (`devel-k25`, alpha K25): both fixture defects are fixed on
+devel; the cluster acceptance is NOTRUN.**
+- The LOOKUP stub: repaired at `f6235bb73` (reads `h->s`, checks null and
+  present reader identity); `tests/test_lookup_replacement.py` is in
+  `make test`, so the slice is compiled against production on every run.
+- The ownership assertion: `d0761644e` made `gc_reclamation.py` accept
+  the suffixed `efs-(command|options)-gates-[0-9]+` trees, and it removes
+  only the trees that appeared under the mount during the gate.
+- New `tests/test_live_fixture_names.py` (in `make test`) keeps the three
+  files in step without a cluster: it reads the harness's ownership
+  pattern and the two fixtures' name expressions, requires the pattern to
+  accept both generated names and to reject the old fixed name, a
+  non-numeric suffix, a nested path and foreign trees, and requires the
+  cleanup to act on the created set only. Either drift fails the unit gate
+  before a cluster run.
+- Still owed, cluster only: the enabled-command gate itself
+  (`gc_reclamation.py --efs-commands-only` with physical cleanup) on the
+  alpha profile, so the recorded frozen-source FAIL stays until that run.
+
 
 <a id="w121"></a>
 
