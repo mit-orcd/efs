@@ -1569,6 +1569,11 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[ORCD tiny-file CPU profile analysis](../status/orcd-tiny-profile-20261022.md):
+`08cc16af4f77`, four 30-second captures; repeated whole-segment validation
+confirmed in packing, plus abandonment scans, `.efs` indexing and LSM maintenance.
+Analysis only; fixes/A-B NOTRUN; no lock-wait or throughput claim.
+
 [orcd-mini deploy of `08cc16af4`](../status/orcd-mini-deploy-08cc16af4-20261022.md):
 **cleanup merge deployed; all suites and gates PASS over RDMA + `.efs`**
 after two harness fixes (`e4bd1b6d7`, merged in `99c7a1c75`): faults 24/24,
