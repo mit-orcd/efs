@@ -30,7 +30,7 @@ Alpha 1.0 is reached in three stages, in this order:
 | --- | --- | --- | --- |
 | 1. Known bugs | Fix or decide every known defect in the alpha scope | **K** | Every K row is CLOSED (fixed with a regression test and its gate), VERIFIED on the candidate, or DECIDED out of scope by the user with the limitation published |
 | 2. Functional completeness | One supported behavior and every in-scope feature working on 3, 4 and >4 hosts | **A**, **S**, **B**, **C**, **D**, **E1–E4** | All items PASS on the frozen candidate |
-| 3. Performance | Measure, then improve against targets agreed beforehand | **P** | Targets met or explicitly deferred; Stage 2 gates rerun after each change |
+| 3. Performance | Several measure–improve rounds inside the alpha scope; no change that belongs to the post-alpha roadmap | **P** | Rounds stop when the user calls the result acceptable or the remaining headroom needs post-alpha work; Stage 2 gates rerun after each round |
 
 **F** closes the release after all three stages.
 - **Stage 1 comes first.** Qualification (Stage 2) does not start while a K
@@ -41,6 +41,12 @@ Alpha 1.0 is reached in three stages, in this order:
 - **Performance comes last.** No performance work is done before Stage 3,
   except where a correctness gate needs it (bounded progress, D4).
   Performance changes never relax correctness or durability checks.
+- **Stage 3 stays inside alpha.** A performance change that needs 2+2, more
+  or redistributed metadata groups, leader or voter redistribution (W66),
+  all-node query service (W98), the directory-spread policy (W81), repair
+  (W74) or any new on-disk/wire profile is post-alpha work, however large the
+  measured gain. It is recorded as a finding with its measurement and left
+  for the roadmap. (User direction, October 22.)
 
 ## Scope and meaning of done
 
@@ -376,30 +382,53 @@ facts for A6, not decisions.
 
 ## P. Stage 3: performance
 
-Starts only after Stage 2 passes on the frozen candidate. Any performance
-change produces a new candidate, and the affected Stage 2 gates are rerun on
-it.
+Starts only after Stage 2 passes on the frozen candidate. Stage 3 is run as
+**rounds**. Each round measures, picks the largest in-scope limiter, changes
+it on a private build, proves the gain A/B, and produces a new candidate on
+which the affected Stage 2 gates are rerun. Rounds continue until the user
+calls the result acceptable for alpha or the remaining limiters are all
+post-alpha work.
 
-- [ ] **P1** On each topology, record throughput, operation p50/p95/p99,
-  resource use and per-node activity for the declared workloads. This is the
-  baseline (formerly E5).
-- [ ] **P2** Agree targets with the user before optimizing. Each target names
-  its workload, topology and metric. No invented thresholds, and no promise of
-  linear scaling.
-- [ ] **P3** Work the known performance items against those targets, each as
-  an A/B on private builds, so no runtime switch is added:
-  - **W66**: metadata-group latency and leader placement;
-  - **W124**: fast delete;
-  - **W126** step 4;
+**Scope fence.** Before any change, name the limiter and check it against
+the post-alpha list in "Order of work": metadata group count or placement,
+leader/voter distribution, 2+2, all-node query service, directory policy,
+repair, new formats. Anything on that list is measured and recorded, never
+changed in Stage 3. The §9 scaling table of the
+[architecture](../how-it-works/architecture.md) is the reference for what
+"where did it stop" must name; alpha does not have to meet §9, but every
+round says which physical or software limiter it hit.
+
+- [ ] **P1 — Baseline (formerly E5).** On each topology, record throughput,
+  operation p50/p95/p99, resource use and per-node activity for the declared
+  workloads: the user's tiny-file creation, ior easy/hard, the two-client and
+  core suites' timings, delete/reclaim, `.efs` under load. Same candidate,
+  same fixtures, three runs each.
+- [ ] **P2 — Per-round goal.** Each round names its workload, topology,
+  metric and the limiter it attacks, with reference to the §9 row it belongs
+  to. No invented thresholds and no promise of linear scaling; a round's
+  goal is "this limiter is gone or measurably smaller", not a number picked
+  in advance.
+- [ ] **P3 — Candidate work, in scope.** Each as an A/B on private builds,
+  so no runtime switch is added:
+  - **K27**: the ior easy write drop between `08cc16af4` and `d94ca85bf`
+    (first, because it may be a regression rather than a limiter);
+  - **W124**: fast delete / reclaim;
+  - **W126** step 4: KV maintenance interference;
   - findings 3–5 of the [ORCD tiny-file profile](orcd-tiny-profile-20261022.md):
-    `.efs` indexing and LSM maintenance;
-  - the packing-CPU A/B on orcd-mini;
+    `.efs` indexing and LSM maintenance; the packing-CPU A/B on orcd-mini;
   - the **W44**/**D26** retained-table GC latency regression;
-  - **W53**;
-  - the **P3/P4** benches.
-- [ ] **P4** Record before/after results with the exact build and commands.
-  Keep a change only if it meets its target and the reruns of the affected
-  Stage 2 gates pass.
+  - **W53**: the create/close-storm p99 regression (evidence, then the user
+    decides);
+  - client-side limiters that the baseline shows (FUSE, prefetch,
+    connection fan-out), within the current protocol.
+  **Measured only, not changed in alpha:** **W66** leader placement and
+  group count (record the two-group concentration as the limiter where it
+  is one), **W98**, **W81**, 2+2 codec effects.
+- [ ] **P4 — Round record.** Before/after results with the exact builds and
+  commands, the limiter named, the Stage 2 gates rerun on the new candidate,
+  and the decision (keep or revert). A change is kept only if its gain is
+  reproduced and the reruns pass. Findings parked for post-alpha go to the
+  roadmap with their measurement.
 
 ## F. Release evidence and alpha 1.0 exit
 

@@ -2585,7 +2585,10 @@ This intermediate release does not claim D36 two-loss protection on 4+ nodes;
 the accepted final requirement above is unchanged. **Reaffirmed October 22
 after the [plan review](../status/alpha-1.0-plan-review-20261022.md):** >4-node clusters
 stay in alpha 1.0, so raising the code's four-node cap (W151) is alpha work;
-2+2 and broader metadata distribution follow alpha 1.0.
+2+2 and broader metadata distribution follow alpha 1.0. The user's three
+conditions for alpha 1.0: fix all known in-scope bugs; functional completeness
+in scope; several rounds of performance testing and improvement that do not
+bleed into post-alpha changes.
 
 ### Earlier decisions — compact register
 
