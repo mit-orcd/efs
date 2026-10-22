@@ -1569,6 +1569,14 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[orcd-mini fresh-format deploy with D25](../status/orcd-mini-d25-deploy-20261022.md):
+**deployed `ee1087129`; all suites and D25 step-5 gates PASS.** Fresh
+format (user-authorized wipe). Core 216/216, extras 4/5 + mmap skip,
+durability 27/27, two-client 67/67, ior rc 0, GC RDMA 71 checks, faults
+24/24, D25 gates 0 FAIL. make test fails only on environmental issues.
+Fixed on the way: `.efs` EBUSY for a minute after every restart
+(`ef7b1735d`, `ff93f8e86`) and two `make_test_summary.sh` bugs.
+
 [Dead-code audit and independent review](../reviews/dead-code-review-20261021.md):
 44 audit entries at `0bdf55256`; targeted review confirms fail-open apply and
 protocol paths, but corrects PROTO classification, gate ordering and deletion
