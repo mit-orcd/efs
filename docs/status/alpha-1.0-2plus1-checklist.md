@@ -148,8 +148,14 @@ cluster. No row was found already fixed.
 
 ### Proposed fix order
 
-Each step is one change or a small group. Each gets a regression test, then
-`make test` and a private-cluster gate.
+Each step is one change or a small group. A sub-session implements it with
+its regression test and runs `make test` on an efs1–3 build VM; that is the
+whole of a sub-session's job. Cluster gates, A/B measurements and long runs
+are not sub-session work: they stay NOTRUN in the sub-session's report and
+the parent session runs them on the real clusters (node9901 private `/tmp`
+clusters, orcd-mini with the user's go-ahead). An item whose implementation
+itself needs an A/B or a long run stops at that point and is marked
+INCOMPLETE with what was done and what is missing (user direction, Oct 22).
 
 1. **Your scope decisions.** No code. These change what Stage 1 contains:
    - K10: W121, the kernel FUSE issue;
