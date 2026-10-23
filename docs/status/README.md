@@ -18,6 +18,13 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[K25b summary-runner exit status and test TMPDIR](k25b-summary-exit-tmpdir-20261022.md):
+**PASS (scoped), on `devel-k25b`, not merged; K25 stays REOPENED until merge.**
+`make_test_summary.sh` exits 1 on any failure or timeout and 3 (INCOMPLETE)
+on NOTRUN, which fixes R1. Tests keep scratch under `$TMPDIR` and remove it on success.
+Two consecutive `make test` runs on efs2 passed without scratch growth. One
+earlier run hit a `server.sh` start flake, which is unresolved.
+
 [W87/K9 append oracle on efs2](w87-append-oracle-efs2-20261022.md):
 **INCOMPLETE: not reproduced, no root cause; W87 OPEN.** 23 exact rounds, 19,597 acknowledged records on
 a private 3-daemon TCP buffered cluster under churn/GC and POSIX load; no loss,
