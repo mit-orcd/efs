@@ -481,10 +481,18 @@ int efs_session_prepare_owner(struct efs_kv *kv, uint32_t shard,
     int rc = efs_session_accept(kv, shard, uuid, epoch);
     if (rc != EFS_OK)
         return rc;
+    /* The EXCL image is this second read; authorize it from its own bytes
+     * (a fence between the two reads must refuse, not become the image). */
     struct efs_sess_local local;
     rc = load_local(kv, shard, uuid, &local);
+    if (rc == EFS_ERR_NOT_FOUND)
+        return EFS_ERR_UNREGISTERED;
     if (rc != EFS_OK)
         return rc;
+    if (epoch < local.reject_below || epoch < local.established)
+        return EFS_ERR_FENCED;
+    if (local.established != epoch)
+        return EFS_ERR_UNREGISTERED;
     uint8_t key[EFS_KV_KEY_MAX], value[EFS_SESS_LOCAL_VAL];
     uint32_t len = 0;
     rc = efs_kv_key_sess_local(shard, uuid, key, &len);

@@ -40,7 +40,9 @@ NOTRUN.**
 [Recent devel integration review](devel-integration-review-20261022.md):
 **Second pass through `c71cd1066`: OPEN.** K22 log-lag election veto and K5
 mtime fence-capture counterexamples reproduced locally; session-latch data race
-identified. Earlier four findings remain open. K8 harness improvements credited;
+identified. Earlier four findings remain open. [K5 S2/S3](k05-s2-s3-20261022.md):
+**both FIXED on `devel-k05b` (not merged); regression and TSan tests in
+`make test`, PASS on efs1; fence cluster gate NOTRUN.** K8 harness improvements credited;
 four targeted checks PASS, merged cluster acceptance NOTRUN.
 
 [K1 / W145 remaining parts](k01-w145-remaining-20261022.md): **merged into

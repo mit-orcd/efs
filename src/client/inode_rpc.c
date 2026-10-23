@@ -1528,10 +1528,9 @@ int efs_client_rpc_lease_edge(efs_ino_t ino,uint64_t generation,
  * obtain a new session. */
 void efs_client_session_fence(int rc)
 {
-    pthread_mutex_lock(&opid_mu);
-    int first=!g_client.session_fenced;
-    g_client.session_fenced=1;
-    pthread_mutex_unlock(&opid_mu);
+    /* Every access to both latches is atomic (S3): the exchange makes the
+     * first fencer, and only it, log; checkers read without opid_mu. */
+    int first=!__atomic_exchange_n(&g_client.session_fenced,1,__ATOMIC_ACQ_REL);
     if (first) {
         char hex[2*EFS_OPID_UUID_LEN+1];
         for (unsigned i=0;i<EFS_OPID_UUID_LEN;i++)
@@ -1576,11 +1575,8 @@ int efs_client_session_start(void)
     struct efs_opid id;
     int rc=efs_client_publication_id(1,&id); /* seeds the mount identity */
     if(rc!=EFS_OK)return rc;
-    pthread_mutex_lock(&opid_mu);
-    int started=g_client.session_started,fenced=g_client.session_fenced;
-    pthread_mutex_unlock(&opid_mu);
-    if(fenced)return EFS_ERR_FENCED;
-    if(started)return EFS_OK;
+    if(efs_client_session_fenced())return EFS_ERR_FENCED;
+    if(__atomic_load_n(&g_client.session_started,__ATOMIC_ACQUIRE))return EFS_OK;
     uint32_t owner=efs_kv_session_shard(id.client_uuid);
     uint64_t view=0;
     rc=session_owner_view(&id,owner,&view);
@@ -1600,9 +1596,7 @@ int efs_client_session_start(void)
         efs_client_session_fence(EFS_ERR_FENCED);
         return EFS_ERR_FENCED;
     }
-    pthread_mutex_lock(&opid_mu);
-    g_client.session_started=1;
-    pthread_mutex_unlock(&opid_mu);
+    __atomic_store_n(&g_client.session_started,1,__ATOMIC_RELEASE);
     return EFS_OK;
 }
 

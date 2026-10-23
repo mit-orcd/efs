@@ -121,8 +121,8 @@ TEST_SRCS += tests/test_directory_sync_group.c
 TEST_SRCS += tests/test_frag_record.c tests/test_small_segment.c tests/test_packed_segment.c tests/test_pack_ledger.c tests/test_pack_ledger_recovery.c tests/test_pack_switch.c tests/test_packed_reader.c tests/test_pack_validate_once.c
 TEST_BINS += tests/test_frag_record tests/test_small_segment tests/test_packed_segment tests/test_pack_ledger tests/test_pack_ledger_recovery tests/test_pack_switch tests/test_packed_reader tests/test_pack_validate_once
 TEST_BINS += tests/test_directory_sync_group
-TEST_SRCS += tests/test_kv_insertion_buffer.c
-TEST_BINS += tests/test_kv_insertion_buffer
+TEST_SRCS += tests/test_kv_insertion_buffer.c tests/test_session_owned_capture.c
+TEST_BINS += tests/test_kv_insertion_buffer tests/test_session_owned_capture
 TEST_SRCS += tests/test_retained_namespace_audit.c
 TEST_BINS += tests/test_retained_namespace_audit
 
@@ -438,6 +438,7 @@ test: all
 	python3 tests/test_txn_read_reuse.py
 	python3 tests/test_publication_rpc.py
 	python3 tests/test_publication_session_rpc.py
+	python3 tests/test_session_latch_tsan.py
 	python3 tests/test_publication_session_reuse.py
 	python3 tests/test_lease_edge_rpc.py
 	python3 tests/test_lease_submission_proof.py
@@ -576,6 +577,8 @@ test: all
 	python3 tests/test_raft_append_offsets.py
 	python3 tests/test_raft_rotate_stall.py
 	./tests/test_mtime_barrier
+	./tests/test_session_owned_capture
+	python3 scripts/reviews/k05_mtime_fence_capture.py
 	./tests/test_publication_session
 	./tests/test_publication_ack
 	./tests/test_publication_recovery

@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
-"""K5 review counterexample: production mtime ownership wrapper captures a
-fenced session image after an earlier successful accept. The KV read models
-that interleaving; the executor is a callback spy, not a live transaction.
+"""K5 review finding S2, kept as a regression check (run by `make test`).
+The production mtime ownership wrapper first accepts epoch 1, then captures
+the session row; the stubbed KV read supplies a row fenced in between
+(established=1, reject_below=2). The executor is a callback spy, not a live
+transaction; tests/test_session_owned_capture.c runs the same interleaving
+against real session rows.
 Run: python3 scripts/reviews/k05_mtime_fence_capture.py
-Expected on c71cd1066: rc=0, executor=1, prepares=2 for epoch 1 / floor 2.
-This is a defect demonstration, not a passing product qualification gate.
+On c71cd1066 (defect): rc=0, executor=1, prepares=2.
+Fixed: rc=EFS_ERR_FENCED, executor=0, prepares=0.
 """
 from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[2]
 s=(root/'src/meta/append_plan.c').read_text()
-body=s[s.index('struct mtime_owner_context {'):s.index('\nstruct finish_image {')]
+helper=s[s.index('static int session_owner_capture('):s.index('\nstruct append_owner_context {')]
+body=helper+s[s.index('struct mtime_owner_context {'):s.index('\nstruct finish_image {')]
 code=r'''
 #include "efs/meta_apply.h"
 #include "efs/session.h"
@@ -32,7 +36,8 @@ int main(void){
  struct efs_meta_mtime_plan p={.count=1};struct efs_opid id={.session_epoch=1};struct efs_txid t={0};struct efs_meta_mtime_ops o={prepare,decide,decide};
  int rc=efs_meta_execute_mtime_owned(&kv,&p,&id,&t,&o,NULL);
  printf("mtime wrapper rc=%d executor=%d prepares=%d; captured reject_below=2 for epoch=1\n",rc,executor,prepared);
- assert(rc==EFS_OK&&executor==1&&prepared==2);
+ assert(rc==EFS_ERR_FENCED&&executor==0&&prepared==0);
+ puts("k05 mtime fence capture: fenced captured image is refused before any prepare PASS");
 }
 '''
 with tempfile.TemporaryDirectory() as d:

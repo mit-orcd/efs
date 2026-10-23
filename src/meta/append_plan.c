@@ -6,6 +6,31 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Capture the shard's local session row as the owner's EXCL comparison
+ * image and authorize the request from those exact bytes (K5, I23). The
+ * caller's earlier efs_session_accept read is not the image: a FENCE_LOC
+ * can land between the two reads, and a CAS against the fenced row would
+ * succeed. The rules are efs_session_accept's: a missing row or another
+ * established epoch is UNREGISTERED, an epoch below the floor or below the
+ * established epoch is FENCED. A fence after this capture fails the EXCL
+ * prepare instead; one after the prepare waits on the intent. */
+static int session_owner_capture(struct efs_kv *kv,uint32_t shard,
+    const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch,
+    uint8_t *key,uint32_t *klen,uint8_t image[EFS_SESS_LOCAL_VAL],uint32_t *image_len)
+{
+    *image_len=EFS_SESS_LOCAL_VAL;
+    int rc=efs_kv_key_sess_local(shard,uuid,key,klen);
+    if(rc==EFS_OK)rc=efs_kv_get(kv,key,*klen,image,image_len);
+    if(rc==EFS_ERR_NOT_FOUND)return EFS_ERR_UNREGISTERED;
+    if(rc!=EFS_OK)return rc;
+    if(*image_len!=EFS_SESS_LOCAL_VAL)return EFS_ERR_PROTO;
+    uint32_t established=0,floor=0;
+    for(unsigned i=0;i<4;i++) {established=established<<8|image[i];floor=floor<<8|image[4+i];}
+    if(epoch<floor || epoch<established)return EFS_ERR_FENCED;
+    if(established!=epoch)return EFS_ERR_UNREGISTERED;
+    return EFS_OK;
+}
+
 struct append_owner_context {
     const struct efs_meta_append_ops *ops;
     void *ctx;
@@ -41,15 +66,9 @@ int efs_meta_execute_append_owned(struct efs_kv *kv,const struct efs_meta_append
     int rc=efs_session_accept(kv,shard,q->id.client_uuid,q->id.session_epoch);
     if(rc!=EFS_OK)return rc;
     struct append_owner_context c={.ops=ops,.ctx=ctx,.first=1};
-    rc=efs_kv_key_sess_local(shard,q->id.client_uuid,c.owner.key,&c.owner.klen);
-    c.owner.expected_len=EFS_SESS_LOCAL_VAL;
-    if(rc==EFS_OK)rc=efs_kv_get(kv,c.owner.key,c.owner.klen,c.owner.expected,&c.owner.expected_len);
+    rc=session_owner_capture(kv,shard,q->id.client_uuid,q->id.session_epoch,
+        c.owner.key,&c.owner.klen,c.owner.expected,&c.owner.expected_len);
     if(rc!=EFS_OK)return rc;
-    if(c.owner.expected_len!=EFS_SESS_LOCAL_VAL)return EFS_ERR_PROTO;
-    uint32_t established=0,floor=0;
-    for(unsigned i=0;i<4;i++) {established=established<<8|c.owner.expected[i];floor=floor<<8|c.owner.expected[4+i];}
-    if(floor>q->id.session_epoch || established>q->id.session_epoch)return EFS_ERR_FENCED;
-    if(established!=q->id.session_epoch)return EFS_ERR_UNREGISTERED;
     c.owner.op=EFS_TXN_PUT;c.owner.new_len=EFS_SESS_LOCAL_VAL;
     memcpy(c.owner.value,c.owner.expected,EFS_SESS_LOCAL_VAL);
     const struct efs_meta_append_ops owned_ops={append_owner_prepare,append_owner_decide,append_owner_resolve};
@@ -89,11 +108,9 @@ int efs_meta_execute_mtime_owned(struct efs_kv *kv,const struct efs_meta_mtime_p
     int rc=efs_session_accept(kv,shard,id->client_uuid,id->session_epoch);
     if(rc!=EFS_OK)return rc;
     struct mtime_owner_context c={.ops=ops,.ctx=ctx,.first=1};
-    rc=efs_kv_key_sess_local(shard,id->client_uuid,c.owner.key,&c.owner.klen);
-    c.owner.expected_len=EFS_SESS_LOCAL_VAL;
-    if(rc==EFS_OK)rc=efs_kv_get(kv,c.owner.key,c.owner.klen,c.owner.expected,&c.owner.expected_len);
+    rc=session_owner_capture(kv,shard,id->client_uuid,id->session_epoch,
+        c.owner.key,&c.owner.klen,c.owner.expected,&c.owner.expected_len);
     if(rc!=EFS_OK)return rc;
-    if(c.owner.expected_len!=EFS_SESS_LOCAL_VAL)return EFS_ERR_PROTO;
     c.owner.new_len=EFS_SESS_LOCAL_VAL;
     memcpy(c.owner.value,c.owner.expected,EFS_SESS_LOCAL_VAL);
     const struct efs_meta_mtime_ops owned={mtime_owner_prepare,mtime_owner_decide,mtime_owner_resolve};
@@ -340,19 +357,9 @@ int efs_meta_finish_append_batch_owned(struct efs_kv *kv, efs_ino_t ino,
     int rc = efs_session_accept(kv, shard, id->client_uuid, id->session_epoch);
     if (rc != EFS_OK) return rc;
     struct append_owner_context c = {.ops=ops, .ctx=ctx, .first=1};
-    rc = efs_kv_key_sess_local(shard, id->client_uuid, c.owner.key, &c.owner.klen);
-    c.owner.expected_len = EFS_SESS_LOCAL_VAL;
-    if (rc == EFS_OK)
-        rc = efs_kv_get(kv, c.owner.key, c.owner.klen, c.owner.expected, &c.owner.expected_len);
+    rc = session_owner_capture(kv, shard, id->client_uuid, id->session_epoch,
+        c.owner.key, &c.owner.klen, c.owner.expected, &c.owner.expected_len);
     if (rc != EFS_OK) return rc;
-    if (c.owner.expected_len != EFS_SESS_LOCAL_VAL) return EFS_ERR_PROTO;
-    uint32_t established=0, floor=0;
-    for (unsigned i=0; i<4; i++) {
-        established = established << 8 | c.owner.expected[i];
-        floor = floor << 8 | c.owner.expected[4+i];
-    }
-    if (floor > id->session_epoch) return EFS_ERR_STALE;
-    if (established != id->session_epoch) return EFS_ERR_BUSY;
     c.owner.op = EFS_TXN_PUT; c.owner.new_len = EFS_SESS_LOCAL_VAL;
     memcpy(c.owner.value, c.owner.expected, EFS_SESS_LOCAL_VAL);
     const struct efs_meta_append_ops owned_ops = {
@@ -381,20 +388,8 @@ int efs_meta_retire_append_barriers(struct efs_kv *kv,efs_ino_t ino,
         struct efs_opid_req q={.id=*id};q.id.seq=1;
         if(!efs_opid_req_valid(&q) || !id->session_epoch)rc=EFS_ERR_INVAL;
         if(rc==EFS_OK)rc=efs_session_accept(kv,shard,id->client_uuid,id->session_epoch);
-        if(rc==EFS_OK)rc=efs_kv_key_sess_local(shard,id->client_uuid,owner.owner.key,&owner.owner.klen);
-        owner.owner.expected_len=EFS_SESS_LOCAL_VAL;
-        if(rc==EFS_OK)rc=efs_kv_get(kv,owner.owner.key,owner.owner.klen,
-                                    owner.owner.expected,&owner.owner.expected_len);
-        if(rc==EFS_OK && owner.owner.expected_len!=EFS_SESS_LOCAL_VAL)rc=EFS_ERR_PROTO;
-        if(rc==EFS_OK) {
-            uint32_t established=0,floor=0;
-            for(unsigned i=0;i<4;i++) {
-                established=established<<8|owner.owner.expected[i];
-                floor=floor<<8|owner.owner.expected[4+i];
-            }
-            if(floor>id->session_epoch)rc=EFS_ERR_STALE;
-            else if(established!=id->session_epoch)rc=EFS_ERR_BUSY;
-        }
+        if(rc==EFS_OK)rc=session_owner_capture(kv,shard,id->client_uuid,id->session_epoch,
+            owner.owner.key,&owner.owner.klen,owner.owner.expected,&owner.owner.expected_len);
         if(rc==EFS_OK) {
             owner.owner.op=EFS_TXN_PUT;owner.owner.new_len=EFS_SESS_LOCAL_VAL;
             memcpy(owner.owner.value,owner.owner.expected,EFS_SESS_LOCAL_VAL);
