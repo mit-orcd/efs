@@ -18,6 +18,13 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[K13 / W86, W88, W137 ticketed PUT/REPORT default](k13-w86-ticket-default-20261023.md):
+**PASS (scoped) on branch `devel-k13`, not merged.** Every data PUT and REPORT
+record is bound to an admitted ticket; the W88 retry is refused by ticket
+state; W137 uses the real reply shape. `make test` and a private three-daemon
+gate pass on intel1. The D31 abandoned-upload collector is INCOMPLETE; RDMA,
+orcd-mini and multi-host are NOTRUN.
+
 [Intel cluster + xorinox client CPU profile](intel-profile-20261023.md):
 **analysis only.** Not CPU-bound (servers 1.1–1.7 of 8 cores, client ≤0.7);
 write 155 MiB/s, read 179 MiB/s, tiny 123 files/s. Tiny files spin in 1 ms
