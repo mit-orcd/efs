@@ -75,7 +75,9 @@ live gate is NOTRUN. **W52: shape A in tree; exact 20k gate and A/B NOTRUN.**
 Nuc bundles are reported lost and xorinox raw outputs deleted. Their scoped
 PASS labels are historical reported outcomes; independent revalidation is
 INCOMPLETE. W148 remains reported FAIL, W155 unresolved; no gate is closed
-by missing evidence. Separate prior evidence remains separate.
+by missing evidence. Separate prior evidence remains separate. The acceptance
+in `2a40e3d54` was reviewed with no new findings; this evidence-policy review
+is settled, while the recorded qualification work remains open.
 
 [Oct 23 gate-merge review](devel-integration-review-20261022.md#review-of-the-oct-23-gate-merges-and-recap--october-23):
 **Qualification remains OPEN.** Scoped passes stand; W154 protection policy

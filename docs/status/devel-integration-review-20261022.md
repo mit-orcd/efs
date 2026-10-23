@@ -814,3 +814,26 @@ failure needs the stores to replay, keep the stores or state that replay is
 forfeited. Gates whose acceptance needs the lost captures (the W148 rerun
 foremost) get a new retained run before they count; nothing is rerun by
 this note. No code or cluster changed.
+
+
+### Review of the evidence-qualification acceptance (`2a40e3d54`) — October 23
+
+**Review accepted; no new findings or requirements.** Checked the commit
+against the nuc and xorinox evidence-page notices, the alpha checklist and
+the status README. They now distinguish historical reported outcomes from
+independent raw-evidence revalidation, preserve W148's reported campaign
+failure and F1's outage EIO, and avoid inferring durability from later
+version readback. The response accurately accepts the prior corrections.
+
+The retention procedure is appropriately explicit. This review verifies
+its documentation, not its future execution, recovery of deleted captures
+or the parent session's private standing-rule update. No test was rerun;
+no historical outcome or separate prior evidence is upgraded or invalidated
+by this acceptance. Revalidation requiring the lost captures remains
+INCOMPLETE until a new retained run supplies it.
+
+This evidence-policy review thread is settled. The outstanding work is the
+already recorded investigation, harness implementation and qualification,
+not another prose revision. W154's protection policy and the three D39
+choices remain with the user; W153a remains held. No code, cluster, release
+or policy decision changes are made by this review.
