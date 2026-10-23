@@ -2782,7 +2782,7 @@ remaining gates and limits](../status/v030-release-scope-20261012.md). Execution
 
 | Item | Decision |
 | --- | --- |
-| D39 scope | **Online node addition required; removal deferred.** Oct 23 user amendment supersedes fixed membership; see [simple startup and node addition](../status/alpha-1.0-node-addition-20261023.md) |
+| D39 scope | **Online node addition required; removal deferred.** Later Oct 23: `--cluster cluster.conf` stays as an optional alternative; seed/`--join` is the primary startup and the one acceptance qualifies. Oct 23 user amendment supersedes fixed membership; see [simple startup and node addition](../status/alpha-1.0-node-addition-20261023.md) |
 | D39 local identity | **Automatic durable member identity through formation/join**; no manual node id, member count or mandatory cluster file |
 | D39 initial formation | **Automatic formation with at least three agreeing storage members** and both groups ready; minimal seed/join commands, then safe online additions; restart remains quorum-based |
 | W154 degraded stripes | **Rebuild on return**: a stripe acknowledged with two fragments is re-protected when the missing node returns; the write path logs the degraded acknowledgement; write availability on three nodes with one down is kept |

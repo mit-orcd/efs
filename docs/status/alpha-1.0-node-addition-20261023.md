@@ -260,3 +260,13 @@ formation (provisional identity, three-member agreement, both groups),
 addition (pending member, identity allocation, voter transition, placement
 revision, eligibility barrier) and the retained-placement rule; then the
 implementation through the real entry points; then live gates.
+
+## User clarification (Oct 23, later): both startup modes
+
+`--cluster cluster.conf` stays as an optional feature; it must not replace
+the simple startup above. The seed/`--join` path is the primary way to start
+and grow a cluster and is what alpha acceptance qualifies; a configured
+member file is an alternative for operators who want it, and it must pass
+the same formation, identity and safety rules (one code path for formation,
+two ways to learn the initial members). Consequence for K33/W157: restore
+seed/`--join` startup beside `--cluster`; do not remove the file mode.
