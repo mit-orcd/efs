@@ -48,7 +48,11 @@ formation readiness. These recommendations are not accepted decisions.
 Parent-session response in the proposal's §7: agreed, with the note that
 peers already pass the W133 declaration gate (bind the digest there) and
 that the MKFS salt plus the configuration digest can be the cluster
-identity carried to both groups. Awaiting the user; W153a remains on hold.
+identity carried to both groups. The Oct 23 review (§8) requires explicit
+formation/admission states: independent pre-MKFS salts, existing connections
+and partial installation across both groups must not bypass agreement.
+Placement eligibility is not a complete readiness proof. Awaiting the user;
+W153a remains on hold.
 
 ## D38 — metadata placement ladder across the alpha releases (accepted Oct 22)
 

@@ -282,3 +282,78 @@ an accepted gate. Four points on the required corrections, from the source:
 
 Still PROPOSED. The user's three decisions are listed in §6; W153a stays on
 hold.
+
+
+## 8. Review of d2f9e9ead — October 23
+
+**Verdict: direction accepted; D39 still PROPOSED, implementation NOTRUN.**
+Reviewed the response against source on devel `9b38af915`. The newer K1/K5/K15
+merges are outside this D39 review; their evidence/status is not overwritten.
+
+The peer-declaration clarification is correct: `src/server/peer_pool.c`
+calls `efs_conn_declare`, and `src/common/protocol.c:efs_decl_gate_frame`
+checks declarations before dispatch. Extend this gate; do not build a second
+parallel handshake. Today's gate records only a `declared` boolean after the
+protocol/build check. It does not yet bind a member identity or configuration,
+so direct Raft and storage connection tests remain necessary after extension.
+A proposed peer declaration must distinguish a configured daemon from an
+ordinary declared client; a client's build match is not a peer membership
+credential. Preserve explicitly supported management/client operations.
+
+### Remaining formation constraints
+
+- **The salt cannot be required to match before it exists.** Each daemon
+  initializes `h->salt` with `make_salt(h->boot_id)`; MKFS chooses the committed
+  salt, then SALT installs it in group 2. Requiring matching local salts on
+  the initial peer connections would prevent the consensus that chooses one.
+  Specify explicit unformed/forming/formed admission states. Before formation,
+  bind canonical configuration digest and configured sender identity and
+  permit only the operations needed to form/recover the cluster. A formed
+  store must never fall back to unformed admission on a mismatch. Retrying a
+  partially committed formation must preserve the committed identity.
+- **Formation must also constrain connections already open.** A connection
+  accepted with only the bootstrap digest cannot remain an unrestricted
+  `declared=1` connection after formation. Specify redeclaration/reconnection
+  or equivalent per-request checks before it can carry formed-cluster traffic.
+  Test direct connections kept open across MKFS, including a conflicting salt.
+- **Salt plus digest is a reasonable identity representation, not a finished
+  protocol.** Define the digest over canonical configuration records separately
+  from the salt to avoid circular construction; install/verify the pair in
+  both groups and snapshots. For data-only nodes specify which authority is
+  read and how its answer proves formation completed in both groups. A single
+  successful group-0 read while group 2 lacks the installed pair must not
+  unlock full service. K28's remote read is a transport/ReadIndex pattern to
+  reuse, not already an implementation of that proof.
+- **A placement result is not an operational readiness proof.**
+  `efs_pack_destinations` rejects fewer than three eligible IDs, but eligibility
+  is based on the local table and down markers, not a fresh acknowledgement
+  from every destination. `efs_place_fragments` itself returns void and does
+  not filter liveness. Its callers may reject unavailable placements; this
+  still does not create a cluster-wide readiness signal. Report configured
+  metadata quorum, observed peer health and ability to place/acknowledge a
+  particular write distinctly. A preflight snapshot of health never replaces
+  the actual write's durability acknowledgements. No new promise of writable
+  degraded 2+1 operation is introduced here.
+
+Fixed membership for alpha remains the recommended scope choice, awaiting the
+user; a same-membership restart and partial formation are required even when
+online add/remove is deferred. Agreement between reviewers does not accept
+that deferral on the user's behalf. The proposed division into daemon/mgmt
+and driver work is reasonable, but the number of sub-sessions is not evidence
+that these state transitions are specified or qualified.
+
+### Acceptance additions and evidence
+
+Add fresh formation from independently generated local salts, concurrent or
+retried MKFS, restart after group-0 commit but before group-2 installation,
+pre-formation connections crossing into formed state, mismatched persisted
+salt with matching configuration, and data-only-node readiness during partial
+formation. Include a declared client attempting peer-only traffic and stale
+peer-health observations before a write. Every rejection must preserve the
+store and committed identity; no implicit reformat or membership shrink.
+
+This is source review only on macOS: no runtime binaries, cluster, transport,
+I/O profile, quota or workload were exercised. All proposed D39 protocol tests
+are NOTRUN. Documentation consistency is checked separately with
+`python3 docs/gen-architecture-full.py` and `make docs-check`. No production
+code changed; alpha remains 2+1 on 3, 4 and >4 nodes, and W153a remains held.

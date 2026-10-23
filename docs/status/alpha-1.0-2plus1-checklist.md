@@ -168,11 +168,14 @@ NOTRUN). **Reopened by the
 [integration review](devel-integration-review-20261022.md) and fixed again,
 merged Oct 22 evening:** K5 (S2, S3; `3bcde5e2a`), K7 (R2, R3; `85d8dd438`),
 K22 (S1; `001b5da30`), K1 (R4; `9fd38ffb4`), K25 (R1; `6df08cc3a`). The
-claim that no row stays reopened is withdrawn by the third review: **K1
-reopened (T2, blocking forced-exit reporting); K5 reopened (T1, append-abandon
-capture race, also affecting K15).** INCOMPLETE: K9 (W87 not reproduced; oracle in devel), K15 (W64 finisher
+third review reopened K1 (T2) and K5 (T1, also affecting K15); both are
+fixed and merged Oct 23 (K1 `c083b98b5`, K5 `9a88e332e`), so no row stays
+reopened. New Oct 23: K29 (append stall under load, found by the K15 live
+gates on intel2, integrity intact) and K30 (intermittent `test_reclaim` and
+`test_direct_read_fork_oracle` failures on unmodified devel), both VERIFY
+first. INCOMPLETE: K9 (W87 not reproduced; oracle in devel), K15 (W64 finisher
 handoff and lost-reply cleanup merged, `a51832413`; the failover and
-lost-reply live gates NOTRUN). VERIFY on the real clusters: K6, K11, K12,
+lost-reply live gates ran once on intel2 Oct 23: lost-reply FAIL and W52 FAIL indication under the K29 stall, failover modes and second runs NOTRUN). VERIFY on the real clusters: K6, K11, K12,
 K17–K21, K27. Waiting on the user: K10, K13, K14, K23. K26 closed as a gate:
 `make leak-check` (valgrind memcheck, 25 unit binaries) merged (`b8ef49e58`),
 PASS on efs2, NOTRUN on node9901. The W125 harness gap (cleanup,

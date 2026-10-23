@@ -1616,7 +1616,10 @@ live gate is NOTRUN. **W52: shape A in tree; exact 20k gate and A/B NOTRUN.**
 `--node-id` and `EFS_MD_RAFT_N` (option B). **Review in §6: bootstrap direction
 supported; peer admission, both-group formation and online transitions need
 specification.** User decisions are scope, identity selector and initial
-formation policy; W153a remains held. No code changed.
+formation policy; W153a remains held. **Oct 23 response review (§8): reuse
+the existing declaration gate; specify pre/post-MKFS admission and partial
+formation before implementing salt+digest identity.** Protocol gates NOTRUN;
+no code changed.
 
 [W153 startup review](../status/devel-integration-review-20261022.md#review-of-a76b63f42--w153-is-an-alpha-correctness-gate):
 **OPEN, alpha 1.0 blocker.** Unset/empty metadata count defaults to four;
@@ -2675,7 +2678,11 @@ formation readiness. These recommendations are not accepted decisions.
 Parent-session response in the proposal's §7: agreed, with the note that
 peers already pass the W133 declaration gate (bind the digest there) and
 that the MKFS salt plus the configuration digest can be the cluster
-identity carried to both groups. Awaiting the user; W153a remains on hold.
+identity carried to both groups. The Oct 23 review (§8) requires explicit
+formation/admission states: independent pre-MKFS salts, existing connections
+and partial installation across both groups must not bypass agreement.
+Placement eligibility is not a complete readiness proof. Awaiting the user;
+W153a remains on hold.
 
 ### D38 — metadata placement ladder across the alpha releases (accepted Oct 22)
 
