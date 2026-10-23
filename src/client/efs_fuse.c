@@ -3612,6 +3612,42 @@ static int append_identity_begin(efs_ino_t ino, struct efs_opid_req *q, int *hel
     }
 }
 
+/* K15/W64 client rule: a reserve whose outcome stayed unknown is either
+ * replayed with the same identity (the BUSY loop above) or, once this write
+ * gives up, explicitly abandoned under the same live session before the
+ * identity is released. The server retires the receipt, so the offset can
+ * never be learned later, and a reservation that did apply resolves as a
+ * hole so the file's frontier advances. If the abandon cannot be delivered
+ * within its own bound, session fencing or the last-close drain remains the
+ * backstop; the identity is still released (its later ACK forbids any new
+ * allocation under it). */
+#ifndef EFS_APPEND_ABANDON_MS
+#define EFS_APPEND_ABANDON_MS 10000u
+#endif
+static void append_abandon_identity(efs_ino_t ino, uint64_t len,
+                                    const struct efs_opid_req *q)
+{
+    uint64_t saved = efs_client_rpc_deadline_ms();
+    uint64_t until = stats_now_ms() + EFS_APPEND_ABANDON_MS;
+    efs_client_rpc_set_deadline_ms(until);
+    unsigned delay_us = 2000;
+    int rc = EFS_ERR_BUSY, retired = 0;
+    while (stats_now_ms() < until) {
+        rc = efs_client_rpc_append_abandon(g_client.export_id, ino, len, q,
+                                           &retired);
+        if (rc == EFS_OK || rc == EFS_ERR_FENCED || rc == EFS_ERR_INVAL ||
+            rc == EFS_ERR_PROTO || efs_client_session_fenced())
+            break;
+        usleep(delay_us);
+        if (delay_us < 100000u) delay_us *= 2;
+    }
+    efs_client_rpc_set_deadline_ms(saved);
+    fprintf(stderr, "append-abandon ino=%llu seq=%llu len=%llu rc=%d retired=%d\n",
+            (unsigned long long)ino, (unsigned long long)q->id.seq,
+            (unsigned long long)len, rc, retired);
+    fflush(stderr);
+}
+
 /* Cross-client append: reserve the region at the metadata owner so two
  * clients never write at the same end offset. A second client's uuid is
  * BUSY while the first still has OPEN reservations (in-place fragments
@@ -3625,7 +3661,7 @@ static int append_reserve_offset(efs_ino_t ino, uint64_t len, off_t *off_out)
     uint64_t ns = 0, start = 0, seq;
     struct efs_opid_req q;
     int slot;
-    int rc = EFS_ERR_BUSY, held = 1;
+    int rc = EFS_ERR_BUSY, held = 1, sent = 0;
 
     slot = append_identity_begin(ino, &q, &held);
     if (slot < 0) return -EAGAIN;
@@ -3639,6 +3675,7 @@ static int append_reserve_offset(efs_ino_t ino, uint64_t len, off_t *off_out)
             if(efs_client_rpc_past_deadline()){rc=EFS_ERR_BUSY;break;}
             rc=append_publication_wait(ino,&held);
             if(rc!=EFS_OK)break;
+            sent = 1;
             rc = efs_client_rpc_append_reserve(g_client.export_id, ino, len, &q,
                                                &ns, &start);
             if (rc == EFS_OK && ns >= len)
@@ -3656,6 +3693,12 @@ static int append_reserve_offset(efs_ino_t ino, uint64_t len, off_t *off_out)
             if (delay_us < 50000)
                 delay_us *= 2;
         }
+    }
+    if ((rc != EFS_OK || ns < len) && sent && rc != EFS_ERR_FENCED &&
+        !efs_client_session_fenced()) {
+        /* Never wait for the abandon while owning the append stripe. */
+        if (held) { pthread_mutex_unlock(append_mu(ino)); held = 0; }
+        append_abandon_identity(ino, len, &q);
     }
     efs_client_append_end(slot);
     /* Never fall back to an unreserved local end: under 9-way that

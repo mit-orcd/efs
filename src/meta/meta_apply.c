@@ -4130,6 +4130,9 @@ struct append_rsv {
     uint32_t epoch;
     uint64_t seq;
     uint8_t state;
+    /* K15/W64 decide-once: how a DONE row resolved (EFS_META_APPEND_*).
+     * 0 while OPEN. A completion over a hole-retired row is refused. */
+    uint8_t outcome;
 };
 
 static void pack_append_cur(uint8_t *p, const struct append_cur *c)
@@ -4159,7 +4162,8 @@ static void pack_append_rsv(uint8_t *p, const struct append_rsv *r)
     be32(p + 32, r->epoch);
     be64(p + 36, r->seq);
     p[44] = r->state;
-    memset(p + 45, 0, 3);
+    p[45] = r->outcome;
+    memset(p + 46, 0, 2);
 }
 
 static int unpack_append_rsv(const uint8_t *p, uint32_t n, struct append_rsv *r)
@@ -4173,6 +4177,10 @@ static int unpack_append_rsv(const uint8_t *p, uint32_t n, struct append_rsv *r)
     r->epoch = rd32(p + 32);
     r->seq = rd64(p + 36);
     r->state = p[44];
+    r->outcome = n > 45 ? p[45] : 0;
+    if (r->outcome > EFS_META_APPEND_FENCED_HOLE ||
+        (r->state == APPEND_OPEN && r->outcome))
+        return EFS_ERR_PROTO;
     return EFS_OK;
 }
 
@@ -7567,10 +7575,19 @@ static int meta_append_resolve(struct efs_kv *kv, efs_ino_t ino, uint64_t off,
     }
     if(emit && (rsv.off!=off || !rsv.len || rsv.len>UINT64_MAX-rsv.off ||
                  rsv.state>APPEND_DONE))return EFS_ERR_PROTO;
-    if (rsv.state == APPEND_DONE)
+    if (rsv.state == APPEND_DONE) {
+        /* Decide-once (K15/W64). The first resolution in the log wins:
+         * a retirement never overtakes a completion (no-op), and a late
+         * completion of a retired range is refused, never applied. */
+        if (outcome == EFS_META_APPEND_COMPLETED &&
+            (rsv.outcome == EFS_META_APPEND_ABORTED_HOLE ||
+             rsv.outcome == EFS_META_APPEND_FENCED_HOLE))
+            return EFS_ERR_STALE;
         return EFS_OK;
+    }
     hole = (outcome != EFS_META_APPEND_COMPLETED);
     rsv.state = APPEND_DONE;
+    rsv.outcome = (uint8_t)outcome;
     rc = load_append_cur(kv, ino, row.generation, &cur);
     if (rc != EFS_OK)
         return rc;
@@ -7732,7 +7749,8 @@ static int catchup_row(void *user,const uint8_t *key,uint32_t kl,
             if(s->rc!=EFS_OK)return 1;
             struct catchup_change *c=&s->changes[s->count++];
             memcpy(c->key,key,kl);memcpy(c->value,value,vl);
-            c->value[44]=APPEND_DONE;r.state=APPEND_DONE;
+            c->value[44]=APPEND_DONE;c->value[45]=EFS_META_APPEND_COMPLETED;
+            r.state=APPEND_DONE;
         }
     }
     if(r.off==s->frontier && r.state==APPEND_DONE)s->frontier=r.off+r.len;

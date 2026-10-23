@@ -1070,6 +1070,12 @@ struct efs_msg_inode_append {
     efs_ino_t ino;
     uint64_t len;
 };
+/* K15/W64: len | EFS_APPEND_ABANDON abandons the identity in the ACK suffix
+ * (same uuid/epoch/seq, same length) after its reserve outcome stayed
+ * unknown. The server retires the receipt (later reserve/replay is STALE)
+ * and resolves a still-OPEN reservation as a hole. OK reply carries no
+ * offset; inode.nlink = 1 when an OPEN reservation was retired. */
+#define EFS_APPEND_ABANDON (1ull << 63)
 
 /* flags: 1 = open (+1 ref), 0 = close (-1 ref). owner is the process/ofd
  * id. Mandatory EFS_SESS_WIRE_LEN suffix carries the mount session (uuid,

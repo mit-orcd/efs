@@ -15255,6 +15255,30 @@ static int host_append_transaction(struct efs_raft_host *h,efs_ino_t ino,uint64_
     free(plan);return rc;
 }
 
+/* K15/W64 cleanup-append: the live owner abandons one identity whose reserve
+ * reply it never received. Same authority and owner admission as a reserve;
+ * one exact-image transaction retires the receipt (and an OPEN reservation as
+ * a hole). Conflicts stay BUSY so the caller retries the same identity. */
+static int host_append_abandon(struct efs_raft_host *h,efs_ino_t ino,uint64_t len,
+                                const struct efs_opid_req *q,unsigned *retired,int *hint)
+{
+    *retired=0;
+    int rc=host_append_authority(h,hint);
+    uint8_t groups[2];host_need_both(groups);
+    uint8_t covered=(uint8_t)((1u<<groups[0])|(1u<<groups[1]));
+    if(rc==EFS_OK)rc=host_append_session_admit_covered(h,ino,q,hint,covered);
+    if(rc!=EFS_OK)return rc;
+    struct efs_txid t;fill_txid(h,&t);
+    struct host_resize_ctx ctx={h,hint};
+    rc=efs_meta_abandon_append(h->kv,ino,len,q,&t,&host_append_ops,&ctx,retired);
+    if(rc==EFS_OK && *retired)
+        fprintf(stderr,"append-abandon ino=%llu seq=%llu len=%llu retired=1\n",
+                (unsigned long long)ino,(unsigned long long)q->id.seq,
+                (unsigned long long)len);
+    /* Exact-image conflicts are retryable, as for a reserve. */
+    return rc==EFS_ERR_STALE?EFS_ERR_BUSY:rc;
+}
+
 static int host_regular_mtime(struct efs_raft_host *h, efs_ino_t ino,
                                const struct efs_meta_utimens *u,
                                const struct efs_opid *id, int *hint)
@@ -17520,6 +17544,13 @@ static void host_append_owner(struct efs_raft_host *h, efs_ino_t ino,
     struct efs_opid_req q={0};
     memcpy(q.id.client_uuid,sess_uuid,EFS_OPID_UUID_LEN);
     q.id.session_epoch=sess_epoch;q.id.seq=op_seq;q.ack=*ack;
+    if(len&EFS_APPEND_ABANDON) {
+        unsigned retired=0;
+        rc=host_append_abandon(h,ino,len&~EFS_APPEND_ABANDON,&q,&retired,&hint);
+        set_inode_rc(out,rc,hint);
+        if(rc==EFS_OK)out->inode.nlink=retired;
+        return;
+    }
     rc=host_append_transaction(h,ino,len,&q,&reserved,&hint);
     if(rc==EFS_OK)rc=efs_meta_apply_getattr(h->kv,ino,host_txn_coord,h,&st);
     set_inode_rc(out,rc,hint);

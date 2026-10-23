@@ -5,6 +5,7 @@
 #include "efs/session.h"
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 struct append_owner_context {
     const struct efs_meta_append_ops *ops;
@@ -866,14 +867,133 @@ int efs_meta_apply_append_complete_atomic(struct efs_kv *kv,efs_ino_t ino,uint64
     if(rc==EFS_OK)rc=efs_kv_get(kv,key,kl,value,&n);
     if(rc==EFS_ERR_NOT_FOUND)return EFS_ERR_STALE;
     if(rc!=EFS_OK)return rc;
-    if(n!=48 || value[44]>1 || reservation[44]>1)return EFS_ERR_PROTO;
+    if(n!=48 || value[44]>1 || reservation[44]>1 ||
+       value[45]>EFS_META_APPEND_FENCED_HOLE)return EFS_ERR_PROTO;
     /* DONE may prove this same reservation completed after a lost reply.
-     * Every immutable byte must still match: offset reuse is a new identity. */
-    if(memcmp(value,reservation,44) || memcmp(value+45,reservation+45,3))return EFS_ERR_STALE;
+     * Every immutable byte must still match: offset reuse is a new identity.
+     * Byte 45 is the decide-once outcome: the command carries the OPEN image
+     * (0) or the stored one; the collector refuses a hole-retired range. */
+    if(memcmp(value,reservation,44) || memcmp(value+46,reservation+46,2) ||
+       (reservation[45] && reservation[45]!=value[45]))return EFS_ERR_STALE;
     rc=append_completion_domain(kv,&row);
     if(rc!=1)return rc==0?EFS_ERR_BUSY:rc;
     struct append_atomic_context c={.kv=kv,.shard=efs_kv_inode_shard(ino)};
     struct efs_txid tx={{0}};
     const struct efs_meta_append_ops ops={append_atomic_prepare,append_atomic_decide,append_atomic_resolve};
     return efs_meta_finish_append_owned(kv,ino,offset,EFS_META_APPEND_COMPLETED,id,&tx,&ops,&c);
+}
+
+/* K15/W64 cleanup-append for a live owner. The client gives up on a reserve
+ * whose reply it never received and abandons that exact identity under its
+ * still-established session. Decide-once happens at the receipt window: the
+ * identity's result becomes STALE (retired), so a delayed reserve or replay
+ * can never allocate or learn an offset. If the reservation already applied
+ * and is still OPEN it resolves as ABORTED_HOLE, so the frontier advances.
+ * A completion already in the log wins: the row is left as it is. All
+ * images (owner session row, inode, receipt, reservation, cursor, lanes)
+ * are one exact-image transaction; any concurrent change aborts it. */
+static int abandon_receipt(const uint8_t *cur,uint32_t cn,const struct efs_opid_req *q,
+    uint64_t len,uint8_t *out,uint32_t *on,uint64_t *offset,int *recorded)
+{
+    struct efs_opid_reply rep={0};
+    *recorded=0;*offset=0;
+    int rc=efs_opid_probe(cur,cn,&q->id,&rep);
+    if(rc<0)return rc;
+    if(rc==0) {
+        /* Not applied yet (or refused): claim the identity first. */
+        struct efs_opid_reply retired={.seq=q->id.seq,.rc=EFS_ERR_STALE,.ino=len,.extra=0};
+        rc=efs_opid_fold(cur,cn,q->id.client_uuid,q->id.session_epoch,q,&retired,out,on);
+        return rc==EFS_ERR_NOMEM?EFS_ERR_BUSY:rc;
+    }
+    /* ACK-retired. The owner never ACKs an identity it still holds, so this
+     * is a protocol violation; refuse it definitively (no retry storm). */
+    if(!rep.ino)return EFS_ERR_PROTO;
+    if(rep.ino!=len)return EFS_ERR_INVAL;  /* different operation */
+    if(rep.rc==EFS_ERR_STALE)return EFS_ERR_EXIST; /* already abandoned */
+    if(rep.rc!=EFS_OK)return EFS_ERR_PROTO;
+    struct efs_opid_window w;
+    rc=efs_opid_window_unpack(&w,cur,cn);
+    if(rc!=EFS_OK)return rc;
+    int found=0;
+    for(int i=0;i<w.ncache;i++)
+        if(w.cache[i].seq==q->id.seq){w.cache[i].rc=EFS_ERR_STALE;found=1;}
+    if(!found)return EFS_ERR_PROTO;
+    rc=efs_opid_window_pack(&w,out,on);
+    if(rc!=EFS_OK)return rc;
+    *offset=rep.extra;*recorded=1;return EFS_OK;
+}
+int efs_meta_abandon_append(struct efs_kv *kv,efs_ino_t ino,uint64_t len,
+    const struct efs_opid_req *q,const struct efs_txid *tx,
+    const struct efs_meta_append_ops *ops,void *ctx,unsigned *retired)
+{
+    if(retired)*retired=0;
+    if(!kv || !ino || !len || !q || !efs_opid_req_valid(q) || !q->id.session_epoch ||
+       q->ack>=q->id.seq || !tx || !ops || !ops->prepare || !ops->decide ||
+       !ops->resolve || !retired)return EFS_ERR_INVAL;
+    uint32_t shard=efs_kv_inode_shard(ino);
+    /* A fenced owner is retired by session cleanup (FENCED_HOLE), not here. */
+    int rc=efs_session_accept(kv,shard,q->id.client_uuid,q->id.session_epoch);
+    if(rc!=EFS_OK)return rc;
+    struct append_owner_context owner={.ops=ops,.ctx=ctx,.first=1};
+    rc=efs_kv_key_sess_local(shard,q->id.client_uuid,owner.owner.key,&owner.owner.klen);
+    owner.owner.expected_len=EFS_SESS_LOCAL_VAL;
+    if(rc==EFS_OK)rc=efs_kv_get(kv,owner.owner.key,owner.owner.klen,
+                                owner.owner.expected,&owner.owner.expected_len);
+    if(rc!=EFS_OK)return rc;
+    if(owner.owner.expected_len!=EFS_SESS_LOCAL_VAL)return EFS_ERR_PROTO;
+    owner.owner.op=EFS_TXN_PUT;owner.owner.new_len=EFS_SESS_LOCAL_VAL;
+    memcpy(owner.owner.value,owner.owner.expected,EFS_SESS_LOCAL_VAL);
+
+    struct finish_capture c={.base=kv};
+    const struct efs_kv_ops capture_ops={.get=finish_get,.scan_prefix=finish_scan,.scan_from=finish_scan_from};
+    struct efs_kv capture={.ops=&capture_ops,.ctx=&c};
+    struct efs_meta_row row;
+    rc=efs_meta_apply_get_inode(&capture,ino,&row); /* image 0: inode guard */
+    if(rc==EFS_OK && !S_ISREG(row.mode))rc=EFS_ERR_INVAL;
+    uint8_t rkey[EFS_KV_KEY_MAX],cur[EFS_OPID_VAL_MAX],next[EFS_OPID_VAL_MAX];
+    uint32_t rkl=0,cn=sizeof(cur),nn=sizeof(next);
+    if(rc==EFS_OK)rc=efs_kv_key_inode(shard,ino,rkey,&rkl);
+    if(rc==EFS_OK) {
+        rkey[2]=EFS_KV_KIND_APPEND_RECEIPT;
+        memcpy(rkey+rkl,q->id.client_uuid,EFS_OPID_UUID_LEN);rkl+=EFS_OPID_UUID_LEN;
+        for(unsigned i=0;i<4;i++)rkey[rkl++]=(uint8_t)(q->id.session_epoch>>(24-8*i));
+        rc=efs_kv_get(kv,rkey,rkl,cur,&cn);
+        if(rc==EFS_ERR_NOT_FOUND){cn=0;rc=EFS_OK;}
+    }
+    uint64_t offset=0;int recorded=0;
+    if(rc==EFS_OK)rc=abandon_receipt(cur,cn,q,len,next,&nn,&offset,&recorded);
+    if(rc==EFS_ERR_EXIST){finish_free(&c);return EFS_OK;} /* exact replay */
+    if(rc==EFS_OK && recorded) {
+        uint8_t key[EFS_KV_KEY_MAX],value[48];uint32_t kl=0,vl=sizeof(value);
+        rc=efs_kv_key_append_rsv(shard,ino,row.generation,offset,key,&kl);
+        if(rc==EFS_OK)rc=efs_kv_get(&capture,key,kl,value,&vl);
+        if(rc==EFS_ERR_NOT_FOUND)rc=EFS_OK; /* resolved and pruned: nothing open */
+        else if(rc==EFS_OK) {
+            if(vl!=sizeof(value) || value[44]>1)rc=EFS_ERR_PROTO;
+            else if(memcmp(value+16,q->id.client_uuid,16) ||
+                    ((uint32_t)value[32]<<24|(uint32_t)value[33]<<16|
+                     (uint32_t)value[34]<<8|value[35])!=q->id.session_epoch)
+                rc=EFS_ERR_PROTO; /* receipt and reservation disagree */
+            else if(!value[44]) {
+                rc=efs_meta_collect_append_completion(&capture,ino,offset,
+                    EFS_META_APPEND_ABORTED_HOLE,finish_batch,&c);
+                if(rc==EFS_OK)*retired=1;
+            }
+        }
+    }
+    if(rc==EFS_OK) {
+        uint32_t slot;
+        rc=finish_record(&c,rkey,rkl,cur,cn?cn:EFS_TXN_ABSENT,&slot);
+        if(rc==EFS_OK) {
+            struct finish_image *im=&c.images[slot];
+            im->replacement=malloc(nn);
+            if(!im->replacement)rc=EFS_ERR_NOMEM;
+            else {memcpy(im->replacement,next,nn);im->op=EFS_TXN_PUT;im->new_len=nn;im->changed=1;}
+        }
+    }
+    const struct efs_meta_append_ops owned_ops={append_owner_prepare,append_owner_decide,append_owner_resolve};
+    if(rc==EFS_OK)rc=finish_execute(&c,tx,&owned_ops,&owner);
+    finish_free(&c);
+    if(rc!=EFS_OK)*retired=0;
+    return rc;
 }
