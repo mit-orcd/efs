@@ -43,6 +43,6 @@ for name, val in re.findall(r'^\s*(EFS_MSG_[A-Z0-9_]+)\s*=\s*(\d+)\s*,', proto, 
     v = int(val)
     assert v not in msgs, f'message type {v} used by both {msgs[v]} and {name}'
     msgs[v] = name
-assert msgs and all(0 < v < 256 for v in msgs), 'message types must fit one byte'
+assert msgs and all(0 <= v < 256 for v in msgs), 'message types must fit one byte (HEARTBEAT is 0)'
 print(f'wire message types: {len(msgs)} distinct PASS')
 
