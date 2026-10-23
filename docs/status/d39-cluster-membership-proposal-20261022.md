@@ -1412,3 +1412,96 @@ truncated-counter and maximum-counter tests, no power-loss scope added.
 
 Still proposed; the three user choices unchanged; W153a held; nothing is
 tested.
+
+## 22. Independent review of §21 (`48672e530`) — October 23
+
+**Verdict: OPEN; protocol model and implementation gates NOTRUN.** Reviewed
+§21 and the relevant source on devel `7be65667f`: `on_snap_req`,
+`send_snap` and `snap_installed` in `src/raft/raft.c`, `host_boot_bump`
+and orphan discovery in `src/server/raft_host.c`, and physical orphan
+cleanup in `src/server/store.c`. This is a specification review, not a
+reproduced runtime failure or a claim that a proposed mechanism exists.
+
+The cross-peer/member-history split and incarnation-first ordering resolve
+those §20 points. The three-outcome timeout classification is also right.
+The remaining qualifications concern the authority carried through those
+transitions, not additional configuration choices.
+
+### P1 — Snapshot RPC term is not the snapshot's last-included term
+
+Replace "its term is not below the receiver's current term knowledge" with
+explicit fields. The InstallSnapshot **RPC term** must pass ordinary Raft
+term processing; the snapshot's **last-included term** may legitimately be
+older. Example: a leader in term 12 sends committed snapshot index 1000,
+whose last entry was in term 9, to a term-12 follower applied only through
+900. Rejecting it because 9 < 12 breaks catch-up.
+
+The code already separates these: `on_snap_req` checks `in->term` against
+`current_term`, then extracts `incl_t = in->last_log_term`; `send_snap`
+carries that last-included term separately. Keep snapshot metadata validation
+and W145's no-unproven-tail rule, but do not order the included term against
+the receiver's current election term. Gate the example above and a genuinely
+stale RPC term. An already-applied snapshot must not overwrite newer state;
+an idempotent acknowledgement/no-import result is allowed, as current code
+does, rather than requiring an error that causes endless retries.
+
+### P1 — The drain exception still needs a wire-level transition rule
+
+§21 admits completion/control traffic **with the draining tuple**. A peer
+that just installed its pair has already bumped its generation and sends
+its new tuple under R1/R3. A receiver retaining the old binding until drain
+completion can reject those new-tagged acknowledgements as "redeclare
+required", while the declaration itself waits for that drain. This is a
+remaining circular dependency; merely allowing the traffic class under the
+old tuple does not establish the stated acyclicity.
+
+Specify active, pending and draining bindings and the exact tag carried by
+requests and replies during the transition, or another equivalent protocol.
+New compatible control traffic needs a defined admission route while old
+application tokens finish; it must not keep extending the old application
+drain count indefinitely. A continuation id must resolve to a locally owned
+operation bound to the member, identity, operation kind and permitted effects;
+asserting a transaction id is not blanket permission for a new mutation.
+Gate two simultaneous peer transitions with an acknowledgement generated
+only after the sender has changed its tag, plus sustained heartbeat traffic.
+Both transitions and the original operation must finish without accepting
+new application work under the old binding. Model both directions explicitly.
+
+### P1 — Detaching an uncertain obligation needs a safe ownership handoff
+
+An uncertain operation has not necessarily crossed its acceptance boundary.
+Moving its record outside the in-flight count does not explain why its
+outstanding I/O or later publication may now ignore the retired binding.
+Before detaching it, specify an atomic handoff to an independent owner with
+an immutable operation identity, authorized effects, and a resolution rule;
+or quiesce/isolate its staged effects so they cannot publish. The transition
+must not finish on a mere bookkeeping change while an unowned effect remains.
+
+Do not claim "replay resolves" every uncertain Raft entry: an uncommitted
+entry may be overwritten, whereas committed entries must apply. Likewise,
+a receipt resolves a result once present; its absence alone does not prove
+abort. Name the existing resolver and its coverage for each operation class.
+The inspected orphan discovery finds unlinked inodes and the physical sweep
+reclaims bodies after Raft-confirmed lane sweeps; these are not by themselves
+proof of a general exactly-once storage-write publication resolver.
+
+Gate uncertain I/O completing after transition, concurrent retry with the
+same identity, and an uncommitted Raft entry replaced by a new leader.
+Require one authoritative outcome, no duplicate publication and no forgotten
+live I/O. This is ordinary timeout/concurrency correctness, not a request to
+expand deferred power-loss recovery or support older formats.
+
+### First boot and next step
+
+The boot-counter hardening must distinguish a genuinely new store from a
+truncated counter in an existing store. Today `host_boot_bump` uses O_CREAT,
+then reads an empty file. Applying "short means fatal" without a separate
+fresh-store initialization rule would make first formation fail. Initialize
+the counter once under exclusive ownership before advertising; subsequently
+require its exact encoding and checked increment. Test both first formation
+and damaged existing-counter refusal using synthetic current-format stores.
+
+D39 remains proposed, W153a held, and the three user choices are unchanged.
+Consolidate the superseding rules into a single executable model before
+implementation. No code/deployment changes, legacy support or new flags are
+requested here; no live gate status is inferred from another session's recap.
