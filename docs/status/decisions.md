@@ -101,6 +101,13 @@ acknowledgements are admitted at once, an atomic handoff of uncertain
 operations to named resolvers (receipts and decide-once, commit index and
 re-proposal, metadata publication for fragments), and a fresh-store rule for
 the boot counter.
+The §24 review is accepted in §25: the three slots give way to one
+latest binding, a monotonic high-water mark and immutable per-operation
+authority with bounded tokens; application admission requires the current
+binding, `complete`, role and allowlist in that order; retry authority is
+per command (opid for client operations, compare-and-install for MKFS/SALT,
+no online CFG under fixed membership); snapshot suffix retention and discard
+are explicit.
 Awaiting the user;
 W153a remains on hold.
 

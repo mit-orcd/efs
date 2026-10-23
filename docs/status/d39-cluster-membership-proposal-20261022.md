@@ -1682,3 +1682,75 @@ change. The next useful artifact remains one consolidated transition model
 with these traces, not an implementation assembled from superseded prose.
 No backward compatibility, additional operator flags or cluster changes are
 requested by this review.
+
+## 25. Response to the §24 review (parent session, devel `1ca24fec6`)
+
+All four points accepted. They amend §23 as follows.
+
+**Repeated transitions: one latest binding, immutable operation authority,
+a high-water mark.** The three slots are withdrawn in favour of the
+simplification the review names. Per remote member the receiver keeps: a
+monotonic **high-water mark**, the highest declaration accepted so far by
+R2″ order (incarnation, then counter), which is the only freshness
+authority, so a reordered B can never supersede C whatever slot B would
+have taken; one **current binding**, equal to the high-water mark, which is
+the only binding that admits new application work; and **operation
+authority** that is immutable per admitted operation: the admitting tuple
+is copied into the operation's token at admission and is never replaced by
+a later declaration, so no token is overwritten when C or D arrive. Retired
+tuples are not kept as bindings at all; a frame tagged with a retired tuple
+is admitted only if it is a continuation of an operation whose token
+carries that tuple (resolved through the owned-operation record, R4″), or
+compatible Raft traffic between configured voters, which is admitted on
+digest and member id under the pair-compatibility rule and never on tuple
+retention. Independent stale Raft frames therefore gain no authority from a
+retained token. Bounded accounting: in-flight tokens per member are capped
+(configured bound); at the cap new application admissions are refused with
+BUSY while control and completion traffic continue, and old tokens drain
+by completion, proven abort or handoff. Gates: A/B/C/D with outstanding
+operations, duplicate and reordered declarations, the bound reached: no
+token overwritten, no lower generation becomes newest, no new application
+admission on a retired tuple, completions on retained tuples resolve to
+their owned operations.
+
+**Pending service, stated once.** Admission of new application work
+requires, in order: the frame's tuple equals the current binding; the
+receiver's `complete` predicate holds; the role and channel permit it; the
+operation is in the role's allowlist. A valid declaration proves none of
+these but the first. An `unknown`-pair catch-up connection is never an
+application channel. Promotion to current binding is accounting, not a
+readiness event; the words "pending admits new application work
+immediately" in §23 are withdrawn. Gate: a declaration during partial
+MKFS/SALT formation admits control traffic and refuses application work
+until completion.
+
+**Retry authority by command.** The client-identified retry rule applies
+only to commands with that identity and deduplication contract (opid and
+receipt). For the internal commands D39 admits: MKFS and SALT are
+compare-and-install on the complete identity pair including the proposed
+digest, as the current-format W37 check does for the salt; a retry whose
+pair is incompatible with the committed one fails, a retry with the same
+pair is a no-op. Online CFG changes are excluded from the fixed-membership
+alpha operation set, so their retry protocol is not designed here, and
+"idempotent by construction" is withdrawn as a general claim. Every other
+internal command the protocol admits is either listed with its resolver
+in the consolidated model or left explicitly unresolved there. Committed
+entries apply; an uncommitted entry is not authorized for re-proposal when
+its preconditions have changed. Gate: supported commands under intervening
+state changes.
+
+**Snapshot conflicts, explicit.** The RPC term is compared as before. For
+the snapshot's content: entries at or below the snapshot's last index are
+replaced by the snapshot (committed history is preserved because the
+snapshot is at or below the sender's commit); entries above that index are
+kept when the follower's entry at the last index matches the snapshot's
+last-included term and discarded otherwise. A conflicting uncommitted
+suffix therefore never refuses a valid snapshot; it is discarded. No import
+over newer applied state (idempotent acknowledgement). The included-index
+and local-term comparison is a required end-to-end check to implement and
+test, not a property already present in `on_snap_req`. Gates: matching
+suffix retained, divergent suffix discarded, no import over newer applied
+state.
+
+Proposed, untested; user choices unchanged; W153a held. The next artifact
+is the consolidated model with these traces.
