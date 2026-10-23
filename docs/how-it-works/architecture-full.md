@@ -1591,7 +1591,9 @@ NOTRUN.**
 [Recent devel integration review](../status/devel-integration-review-20261022.md):
 **Second pass through `c71cd1066`: OPEN.** K22 log-lag election veto and K5
 mtime fence-capture counterexamples reproduced locally; session-latch data race
-identified. Earlier four findings remain open. K8 harness improvements credited;
+identified. Earlier four findings remain open. [K5 S2/S3](../status/k05-s2-s3-20261022.md):
+**both FIXED on `devel-k05b` (not merged); regression and TSan tests in
+`make test`, PASS on efs1; fence cluster gate NOTRUN.** K8 harness improvements credited;
 four targeted checks PASS, merged cluster acceptance NOTRUN.
 
 [K1 / W145 remaining parts](../status/k01-w145-remaining-20261022.md): **merged into
@@ -11913,6 +11915,22 @@ make a fenced write visible is refused instead. The raw command submit
 RPC (`efs-mgmt raft-submit`, session commands) proposes commands whose
 apply checks are listed above; it is an operator interface, not a client
 path, and a command without session bytes is refused by those applies.
+
+**Transaction-owned paths.** Multi-shard transactions (regular-file
+utimens, APPEND reservation and completion, session-owned barrier
+retirement) prepare the inode shard's local session row with its unchanged
+exact image ahead of the plan. The executor authorizes that image from its
+own bytes (`session_owner_capture` in `src/meta/append_plan.c`, the
+`efs_session_accept` rules) before preparing it. A check on one read and a
+CAS on a later read would let a fence landing between them become the
+comparison base. A fence after the capture fails the owner PREPARE; a
+fence after the PREPARE waits behind the intent until the transaction
+resolves.
+
+**Client latch.** The mount's `session_started` and `session_fenced` flags
+are read without a lock on every mutation, so every access is atomic
+(acquire loads, release store, and an exchange that elects the one fencer
+that logs).
 
 #### Duplicate suppression must be bounded state
 
