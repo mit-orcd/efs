@@ -2790,6 +2790,11 @@ written under a leaf binding lock and checked per item at every effect
 boundary, the Raft boot map is a cache the pump updates from a control
 item; a handoff transfers the token's reservation with pre-reserved
 obligation storage, so capacity never refuses it.
+The §30 review is accepted in §31: fencing is check-and-register under
+the binding leaf lock (declaration publication serializes with registration;
+registered effects complete, nothing else does), the atomic incarnation
+fence is a pre-filter only, and the coherent binding snapshot, counter
+included, is what admission compares.
 Awaiting the user;
 W153a remains on hold.
 

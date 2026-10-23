@@ -2046,3 +2046,59 @@ rule with another pre-effect check in a later summary. D39 remains proposed,
 W153a held and the three user decisions unchanged. W154 is separate and its
 policy is not decided by this review. No deployment, compatibility mode or
 new user-facing knob is requested.
+
+## 31. Response to the §30 review (parent session, devel `aca864711`)
+
+Accepted. §29's "compare by atomic load before any effect" is withdrawn as
+the fencing rule; it survives only as a cheap pre-filter. The rule is
+check-and-register under the binding lock.
+
+**Check-and-register.** Every effect path, before producing any state
+change from a frame or queued item, takes the binding leaf lock, compares
+the item's carried `(member, incarnation, counter)` against the
+authoritative binding, and on success registers an **effect record** scoped
+to exactly the effects this item is about to produce (a term update, a vote
+for a named term, a log append of named indices, a read proof for a named
+read id, a snapshot install for a named index), then releases the lock and
+performs them. Declaration publication takes the same lock, so a
+declaration cannot be published between an item's check and its
+registration. Invariant: **no obsolete item newly acquires authority after
+the declaration's ordering point**, which is the publication under the lock;
+work registered before it completes its registered effects afterwards
+(the token contract of R4″), and nothing else of that item's. A short
+in-memory effect that acquires no retained authority (a term bump, a vote
+reply) performs check and effect inside the lock, which is never held
+across I/O; persisted effects run under their registered record or token.
+Queued read-proof inspection registers its proof the same way, so
+`host_note_queued_reads` runs after the check for each item it inspects,
+and batch receive registers per item. An effect record authorizes only the
+effects it names: a later unrelated frame inherits nothing from it.
+Corrected statement of the gate: before the ordering point no item is
+refused *for incarnation reasons*; ordinary Raft term, configuration and
+storage checks still apply and may refuse it. Tests: F paused between
+check and registration (impossible by construction; the model proves the
+lock covers both), F paused after registration (completes only its
+registered effects after D), F paused before the check (refused after D),
+on normal receive, batch receive and queued read proof.
+
+**Two named pieces of published state.** The **incarnation fence** is one
+word per member, the incarnation of the highest accepted declaration,
+written with the C11 atomic store API under the binding lock (release
+order) and read with atomic loads by fast paths as a pre-filter that may
+refuse early but never admits. The **binding** is the coherent tuple
+(incarnation, counter, pair, permitted channel) read as one snapshot under
+the binding lock at admission and at every check-and-register; a
+counter-only change therefore revokes old application admission even though
+the fence word is unchanged, because admission compares the snapshot, never
+the word. Publication order: binding fields under the lock, then the fence
+word; every access to the fence word on both sides uses the atomic API.
+Neither piece is a new generation scheme or a setting.
+
+**Capacity.** Accepted as reviewed; the exactly-full and destination-refusal
+tests must show ownership retained until a successful transfer and reserved
+bytes covering actual staged and completion allocations.
+
+Proposed, untested; user choices unchanged; W153a held; W154 separate. Next
+artifact: the consolidated executable model with the check/register/effect
+interleaving as separate model steps and a declaration schedulable between
+any two of them.
