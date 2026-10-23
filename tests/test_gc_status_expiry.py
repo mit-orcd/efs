@@ -20,8 +20,8 @@ def exact(s,n):
 def accept_declaration(conn):
     """W133: efs-mgmt declares protocol 3 first; answer it as efsd does."""
     n=struct.unpack('>I',exact(conn,4))[0];hello=exact(conn,n)
-    assert n==17 and hello[0]==165 and hello[1:5]==b'EFSP' and struct.unpack('=IQ',hello[5:])==(4,0),hello.hex()
-    reply=struct.pack('=iI',0,4)
+    assert n==17 and hello[0]==165 and hello[1:5]==b'EFSP' and struct.unpack('=IQ',hello[5:])==(5,0),hello.hex()
+    reply=struct.pack('=iI',0,5)
     conn.sendall(struct.pack('>IB',len(reply)+1,166)+reply)
 
 

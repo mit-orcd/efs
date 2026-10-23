@@ -99,7 +99,7 @@ def receive(s,n):
         if not chunk:raise EOFError('short query frame')
         data.extend(chunk)
     return bytes(data)
-HELLO=struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',4,0)  # CLIENT_HELLO, EFS_PROTOCOL_VERSION 4 (K5)
+HELLO=struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',5,0)  # CLIENT_HELLO, EFS_PROTOCOL_VERSION 5 (K13)
 def declare(sock):
     sock.sendall(HELLO);n=struct.unpack('>I',receive(sock,4))[0];reply=receive(sock,n)
     assert n==9 and reply[0]==166 and struct.unpack('=iI',reply[1:])==(0,4),('declaration refused',reply)

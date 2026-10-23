@@ -4782,9 +4782,71 @@ static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
     return meta_write_batch(kv, it, n);
 }
 
+/* K13 REPORT publication. The ticket, not the evictable span trailer, is
+ * the durable replay authority: a PUBLISHED ticket is an exact no-op (D1,
+ * I16) and a settled or retired one never takes effect again (W88). A lost
+ * CAS leaves the ticket ADMITTED: its owner may retry the same immutable
+ * object against a fresh base, or settle (abandon) it. */
+static int publish_ticketed(struct efs_kv *kv, const struct efs_meta_pub *p)
+{
+    struct efs_put_ticket ticket;
+    uint32_t state;
+    int rc = efs_put_ticket_from_pub(p, &ticket);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_put_ticket_state(kv, &ticket, &state);
+    if (rc == EFS_ERR_NOT_FOUND)
+        return EFS_ERR_STALE; /* never admitted: no unticketed publication */
+    if (rc != EFS_OK)
+        return rc;
+    if (state == EFS_PUT_TICKET_PUBLISHED)
+        return EFS_OK;
+    if (state != EFS_PUT_TICKET_ADMITTED)
+        return EFS_ERR_STALE;
+    rc = publish_inner(kv, p, NULL);
+    if (rc == EFS_OK) {
+        /* Every mutation carried the PUBLISHED item. A no-op leaves the
+         * ticket ADMITTED; never let a later settle abandon a body a
+         * mapping may name. */
+        rc = efs_put_ticket_get(kv, &ticket, &state);
+        if (rc == EFS_OK && state == EFS_PUT_TICKET_ADMITTED) {
+            uint8_t key[EFS_PUT_TICKET_KEY_LEN], val[EFS_PUT_TICKET_VAL_LEN];
+            struct efs_kv_item item;
+            rc = efs_put_ticket_publish_item(kv, &ticket, key, val, &item);
+            if (rc == EFS_OK)
+                rc = meta_write_batch(kv, &item, 1);
+        }
+        return rc;
+    }
+    return rc;
+}
+
+/* The host found the file deleted: settle the ADMITTED ticket as REJECTED
+ * (its body joins the orphan ledger at retirement). A PUBLISHED one already
+ * took effect. verdict is returned after a reject (EFS_OK, P3 no-op). */
+int efs_meta_apply_publish_reject(struct efs_kv *kv, const struct efs_meta_pub *p,
+                                  int verdict)
+{
+    struct efs_put_ticket ticket;
+    uint32_t state;
+    if (!kv || !p || !p->ticketed || p->durable_result) return EFS_ERR_INVAL;
+    int rc = efs_put_ticket_from_pub(p, &ticket);
+    if (rc == EFS_OK) rc = efs_put_ticket_state(kv, &ticket, &state);
+    if (rc == EFS_ERR_NOT_FOUND) return EFS_ERR_STALE;
+    if (rc != EFS_OK) return rc;
+    if (state == EFS_PUT_TICKET_PUBLISHED) return EFS_OK;
+    if (state == EFS_PUT_TICKET_ADMITTED) {
+        rc = efs_put_ticket_reject(kv, &ticket);
+        if (rc != EFS_OK) return rc;
+        return verdict;
+    }
+    return EFS_ERR_STALE;
+}
+
 int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
 {
-    if (p && p->ticketed && (!p->durable_result || !p->fresh_object)) return EFS_ERR_INVAL;
+    if (p && p->ticketed && !p->fresh_object) return EFS_ERR_INVAL;
+    if (p && p->ticketed && !p->durable_result) return kv ? publish_ticketed(kv, p) : EFS_ERR_INVAL;
     if(!p || !p->durable_result) return publish_inner(kv,p,NULL);
     if(!publication_locator_valid(&p->receipt_locator))return EFS_ERR_INVAL;
     uint8_t digest[EFS_HASH_SIZE],key[51],value[PUBLICATION_RECEIPT_V2];int verdict;

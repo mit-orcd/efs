@@ -106,7 +106,7 @@ COMMON_SRCS = src/meta/append_plan.c $(COMMON_DIR)/publication.c $(COMMON_DIR)/p
               src/client/ops.c \
               src/client/read.c \
               src/client/write.c \
-              src/client/bufpool.c src/client/writer_state.c src/client/publication_ack_owner.c src/client/publication_writeback.c src/client/put_ticket_owner.c src/client/put_upload.c src/client/data_commit.c \
+              src/client/bufpool.c src/client/writer_state.c src/client/publication_ack_owner.c src/client/publication_writeback.c src/client/put_ticket_owner.c src/client/data_commit.c \
               src/client/inode_rpc.c \
               src/client/stage_evict.c \
               src/client/node_cache.c
@@ -238,7 +238,6 @@ test-create-errors: $(LIB)
 	python3 tests/test_shutdown_stuck_worker.py
 	python3 tests/test_shutdown_blocked_io.py
 	python3 tests/test_apply_unsupported.py
-	python3 tests/test_put_hint.py
 
 test-fold-observation:
 	python3 tests/test_fold_observation.py
@@ -373,8 +372,6 @@ test: all
 	python3 tests/test_session_finish_retry.py
 	$(MAKE) tests/test_put_upload_server
 	./tests/test_put_upload_server
-	$(MAKE) tests/test_put_upload_client
-	./tests/test_put_upload_client
 	$(MAKE) tests/test_data_commit
 	./tests/test_data_commit
 	python3 tests/test_applied_interval.py
@@ -460,6 +457,7 @@ test: all
 	python3 tests/test_identity_revocation.py
 	python3 tests/test_put_ticket_rpc.py
 	python3 tests/test_put_ticket_owner.py
+	python3 tests/test_live_ticket_retry.py
 	python3 tests/test_put_submission_proof.py
 	python3 tests/test_put_identity.py
 	python3 tests/test_create_request.py
@@ -836,7 +834,7 @@ clean:
 	rm -f src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_ns.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o src/sim/sim_disk.o src/sim/opid.o
 	rm -f $(LIB) efsd efs-fuse efs-bench efs-mgmt blake3-bench
 	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim tests/faults/test_kv_compact_crash tests/shutdown_faults/efsd
-	rm -f $(TEST_BINS) tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_upload_client
+	rm -f $(TEST_BINS) tests/test_put_storage_fence tests/test_put_upload_server
 	rm -f tests/test_data_commit tests/measure/*_smoke tests/measure/bench_query_disk_scale tests/measure/bench_query_disk_concurrent
 	rm -f .build_id.stamp
 
@@ -900,8 +898,6 @@ tests/test_put_upload_server: tests/test_put_upload_server.c src/server/put_uplo
 
 tests/test_data_commit: tests/test_data_commit.c src/client/data_commit.c src/client/client_internal.h include/efs/protocol.h
 	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ $< -lpthread
-tests/test_put_upload_client: tests/test_put_upload_client.c src/client/put_upload.c include/efs/put_upload.h include/efs/put_ticket.h src/client/client_internal.h $(LIB)
-	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ $< $(LIB) $(LDFLAGS)
 # Publication coalescing is shared by the real worker and its policy gate.
 src/server/raft_host.o tests/test_query_refresh: src/server/query_refresh.h src/server/query_export_lease.h
 src/server/raft_host.o: src/server/read_index_pair_remote.h

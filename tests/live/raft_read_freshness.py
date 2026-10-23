@@ -212,7 +212,7 @@ try:
     # QUERY_STATS_REPLY (26), never totals.
     with socket.create_connection(('127.0.0.1',base+old),10) as sock:
         sock.settimeout(10)
-        sock.sendall(struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',4,0))  # CLIENT_HELLO v4 (K5)
+        sock.sendall(struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',5,0))  # CLIENT_HELLO v5 (K13)
         hello=b''
         while len(hello)<13:
             chunk=sock.recv(13-len(hello));assert chunk,'declaration closed early';hello+=chunk

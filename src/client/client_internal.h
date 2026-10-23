@@ -334,29 +334,30 @@ int efs_client_lease_reset(struct efs_client_lease_request *);
 
 struct efs_put_ticket;
 struct efs_meta_pub;
-struct efs_client_put_request;
 int efs_client_put_id(struct efs_opid *);
-/* Staged pre-PUT ownership. Reserve an immutable, budgeted manifest before
- * any admission RPC. Caller serializes the handle and keeps fragment bytes
- * separately. Membership slots are captured with node IDs, never reinterpreted
- * after a configuration change. ADMITTED is metadata proof, not a storage
- * write permit: the data-plane durable fence is still required. */
-int efs_client_put_begin(struct efs_client_put_request **,
-                         const struct efs_meta_pub *);
-int efs_client_put_manifest(const struct efs_client_put_request *,
-                            struct efs_put_ticket *);
-int efs_client_put_resume(struct efs_client_put_request *,int probe_only,
-                          uint32_t *state);
-int efs_client_put_fragment(struct efs_client_put_request *,uint32_t,
-                             const uint8_t *,uint32_t,uint8_t *);
-int efs_client_put_retire(struct efs_client_put_request *);
-/* Ambiguous admission, revocation and RECLAIMING retain ownership. Only a
- * never-attempted request or an observed PUBLISHED, retired ticket may be freed here. */
-int efs_client_put_free(struct efs_client_put_request *);
-/* Opt-in durable ownership only. Caller retains immutable identity/body on
- * ambiguity. STATUS does not establish a session; state is not a PUT permit. */
+/* K13 mount ticket ledger (put_ticket_owner.c). Admit the immutable ticket
+ * of one PUT body before any fragment is sent; it stays in the ledger,
+ * "putting", until efs_client_put_release. landed=1: the object is in the
+ * client tables and REPORT will carry it; landed=0: given up. */
+int efs_client_put_admit(efs_ino_t ino, uint32_t ci,
+                         const efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
+                         const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE],
+                         uint32_t frag_len, uint32_t delta_off, uint32_t delta_len,
+                         struct efs_put_ticket *out);
+void efs_client_put_release(uint64_t seq, int landed);
+/* No REPORT will carry this object again (confirmed or superseded). */
+void efs_client_put_done(efs_ino_t ino, uint32_t ci, uint64_t object);
+/* 1 while a client table still names the object (write.c). */
+int efs_client_put_referenced(efs_ino_t ino, uint32_t ci, uint64_t object);
+/* One settle pass: retire PUBLISHED, abandon unreported tickets, in
+ * per-stream sequence order. Background thread: kick after a REPORT. */
+int efs_client_put_settle(void);
+void efs_client_put_settle_kick(void);
+void efs_client_put_settle_stop(void);
+uint32_t efs_client_put_outstanding(void);
+/* STATUS does not establish a session; state is not a PUT permit. */
 int efs_client_rpc_put_ticket(const struct efs_put_ticket *,int probe_only,uint32_t *state);
-int efs_client_rpc_put_ticket_retire(const struct efs_put_ticket *);
+int efs_client_rpc_put_ticket_settle(const struct efs_put_ticket *,uint32_t n,uint32_t *retired);
 int efs_client_rpc_publication(const struct efs_msg_publication *, int query_only, /* 0 submit, 1 status, 2 exact retirement */
                                struct efs_msg_publication_reply *);
 int efs_client_rpc_lane_writer_view(efs_ino_t ino, uint64_t generation,
@@ -723,14 +724,16 @@ void efs_client_conn_init(void);
  * Safe to call once from FUSE destroy / process exit. */
 void efs_client_shutdown(void);
 
-/* PUT all three fragments concurrently (send-all / recv-all on three
- * pooled sockets). Returns EFS_OK if quorum (>=2) acks, else an error. */
+/* Admit the object's ticket, then PUT all three fragments concurrently
+ * (send-all / recv-all on three pooled sockets). Returns EFS_OK if quorum
+ * (>=2) acks; the caller then releases the ticket (write.c). */
 int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
                                       efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
                                       const uint8_t *fragments[EFS_NUM_FRAGMENTS],
                                       uint32_t frag_len,
                                       const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE],
-                                      uint64_t *object_out);
+                                      uint32_t delta_off, uint32_t delta_len,
+                                      struct efs_put_ticket *ticket);
 
 /* Immutable server-owned query bytes. Caller frees *text; errno remains an
  * EFS status here. All retries use negotiated connections and dual voters. */

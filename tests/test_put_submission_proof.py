@@ -20,15 +20,16 @@ int efs_session_accept(struct efs_kv*k,uint32_t shard,const uint8_t uuid[16],uin
 int efs_put_ticket_get(struct efs_kv*k,const struct efs_put_ticket*t,uint32_t*out){(void)k;assert(t->id.seq==3);ticket_reads++;*out=ticket_state;return ticket_rc;}
 int efs_put_ticket_retired(struct efs_kv*k,const struct efs_put_ticket*t,int*out){(void)k;assert(t->id.seq==3);retire_checks++;*out=retired;return retire_rc;}
 static int run(uint8_t tag,int rc,uint64_t idx,uint64_t *reply_salt){
- struct efs_raft_host host={0},*h=&host;uint8_t cmd[1]={tag},group=0;int hint=-1;uint32_t shard=17;uint64_t salt=0;
- struct efs_put_ticket ticket={.id={.client_uuid={9},.session_epoch=1,.seq=3}};
+ struct efs_raft_host host={0},*h=&host;uint8_t cmd[1]={tag},group=0;int hint=-1;uint32_t shard=17,n=1;uint64_t salt=0;
+ struct efs_put_ticket tickets[1]={{.id={.client_uuid={9},.session_epoch=1,.seq=3}}};
+ const struct efs_put_ticket *ticket=&tickets[0];
 ''' + body + r'''
  *reply_salt=rc==EFS_OK?salt:0;return rc;
 }
 static void reset(void){reads=floors=ticket_reads=retire_checks=0;read_rc=floor_rc=ticket_rc=retire_rc=0;retired=1;ticket_state=EFS_PUT_TICKET_ADMITTED;}
 int main(void){uint64_t salt=99;
  reset();assert(!run(EFS_MD_CMD_PUT_TICKET_ADMIT,EFS_OK,7,&salt)&&salt==EFS_PUT_TICKET_ADMITTED&&!reads&&floors==1&&ticket_reads==1);
- reset();assert(!run(EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED,EFS_OK,7,&salt)&&salt==EFS_PUT_TICKET_RETIRED&&!reads&&floors==1&&retire_checks==1);
+ reset();assert(!run(EFS_MD_CMD_PUT_TICKET_SETTLE,EFS_OK,7,&salt)&&salt==1&&!reads&&floors==1&&retire_checks==1);
  reset();assert(!run(EFS_MD_REQ_PUT_TICKET_STATUS,EFS_OK,7,&salt)&&reads==1&&ticket_reads==1);
  reset();assert(!run(EFS_MD_CMD_PUT_TICKET_ADMIT,EFS_OK,0,&salt)&&reads==1&&ticket_reads==1);
  int ambiguous[]={EFS_ERR_BUSY,EFS_ERR_STALE};
@@ -38,7 +39,9 @@ int main(void){uint64_t salt=99;
  }
  reset();floor_rc=EFS_ERR_STALE;assert(run(EFS_MD_CMD_PUT_TICKET_ADMIT,EFS_OK,7,&salt)==EFS_ERR_STALE&&!salt&&!reads&&floors==1&&!ticket_reads);
  reset();ticket_rc=EFS_ERR_PROTO;assert(run(EFS_MD_CMD_PUT_TICKET_ADMIT,EFS_OK,7,&salt)==EFS_ERR_PROTO&&!salt&&ticket_reads==1);
- reset();retired=0;assert(run(EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED,EFS_OK,7,&salt)==EFS_ERR_BUSY&&!salt&&retire_checks==1);
+ /* A settle that retired nothing answers zero, never success-by-absence. */
+ reset();retired=0;assert(!run(EFS_MD_CMD_PUT_TICKET_SETTLE,EFS_OK,7,&salt)&&!salt&&retire_checks==1);
+ reset();retired=0;assert(!run(EFS_MD_CMD_PUT_TICKET_SETTLE,EFS_ERR_BUSY,7,&salt)&&!salt&&reads==1&&retire_checks==1);
  reset();ticket_rc=EFS_ERR_NOT_FOUND;assert(run(EFS_MD_CMD_PUT_TICKET_ADMIT,EFS_ERR_STALE,7,&salt)==EFS_ERR_STALE&&!salt&&reads==1);
  reset();assert(run(EFS_MD_CMD_PUT_TICKET_ADMIT,EFS_ERR_IO,7,&salt)==EFS_ERR_IO&&!salt&&!reads&&!ticket_reads);
  puts("PUT submission proof: exact success only, STATUS/ambiguity/zero-index fresh fences, immutable body, epoch rejection and retirement evidence PASS");

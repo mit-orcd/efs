@@ -29,6 +29,8 @@
 #define EFS_KV_KIND_APPEND_RECEIPT 31 /* inode/session: bounded reservation results */
 #define EFS_KV_KIND_PUT_TICKET 29 /* admitted immutable body, session-owned */
 #define EFS_KV_KIND_PUT_FLOOR 30 /* retired ticket sequence; durable replay fence */
+#define EFS_KV_KIND_PUT_ORPHAN 51 /* retired REJECTED ticket: body awaiting revocation-gated collection */
+#define EFS_KV_KIND_PUT_COUNT 52 /* live tickets in one session/lane-shard stream (admission bound) */
 #define EFS_KV_KIND_ORPHAN 28 /* zero-link inode awaiting lease/txn-safe reclamation */
 #define EFS_KV_KIND_PUBLICATION_FLOOR 27 /* stream replay barrier, never expires */
 #define EFS_KV_KIND_PUBLICATION 26 /* FileID/chunk/intent digest: durable verdict */

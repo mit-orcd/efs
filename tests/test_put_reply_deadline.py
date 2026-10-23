@@ -8,6 +8,7 @@ f=s[a:s.index('\n}',a)+2]
 a=s.index('static int put_recv_reply(');reply_fn=s[a:s.index('\n}',a)+2]
 code=r'''
 #include "efs/protocol.h"
+#include "efs/put_upload.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -31,27 +32,28 @@ static struct efs_conn *efs_client_conn_get(efs_node_id_t n){checkouts++;return 
 static void efs_client_conn_drop(efs_node_id_t n,struct efs_conn *c){(void)n;(void)c;drops++;}
 static void efs_client_conn_release(efs_node_id_t n,struct efs_conn *c){(void)n;(void)c;releases++;}
 static void efs_client_node_note_fail(efs_node_id_t n){(void)n;fails++;}
-static uint32_t path_hint_get(efs_node_id_t n,efs_ino_t ino,uint32_t ci,uint8_t fi){(void)n;(void)ino;(void)ci;(void)fi;return 0;}
-int efs_conn_send_msg_parts(struct efs_conn *c,uint8_t t,const void *a,uint32_t an,const void *b,uint32_t bn){(void)c;(void)t;(void)a;(void)an;(void)b;(void)bn;sends++;return 0;}
-int efs_conn_reply_watch_quick(struct efs_conn *c){return ((mode==1 && c!=&conns[2]) || (mode==3 && c==&conns[0]) || mode==4 || mode==5 || mode==6 || mode==7)?EFS_CONN_REPLY_READY:c->fd;}
+int efs_put_ticket_encode(const struct efs_put_ticket *t,uint8_t out[EFS_PUT_TICKET_WIRE_LEN]){assert(t->ino==1);memset(out,7,EFS_PUT_TICKET_WIRE_LEN);return 0;}
+int efs_conn_send_msg_parts(struct efs_conn *c,uint8_t t,const void *a,uint32_t an,const void *b,uint32_t bn){(void)c;(void)b;assert(t==EFS_MSG_PUT_CHUNK&&an==EFS_PUT_UPLOAD_HEADER_LEN&&bn==1&&efs_put_upload_rd32(a)==1);sends++;return 0;}
+int efs_conn_reply_watch_quick(struct efs_conn *c){return ((mode==1 && c!=&conns[2]) || (mode==3 && c==&conns[0]) || mode==4 || mode==5 || mode==6 || mode==7 || mode==8)?EFS_CONN_REPLY_READY:c->fd;}
 int efs_conn_reply_watch_us(struct efs_conn *c,int budget){(void)budget;return efs_conn_reply_watch_quick(c);}
 int efs_conn_put_reply_watch(struct efs_conn *c,int budget){(void)budget;return efs_conn_reply_watch_quick(c);}
-static void path_hint_put(efs_node_id_t n,efs_ino_t ino,uint32_t ci,uint8_t fi,uint8_t path){(void)n;(void)ino;(void)ci;(void)fi;(void)path;}
 static void efs_client_node_note_ok(efs_node_id_t n){(void)n;}
 static void efs_client_commit_note(efs_node_id_t n,uint64_t epoch){(void)n;assert(epoch==123);}
-int efs_conn_recv_put_reply(struct efs_conn *c,uint8_t *t,uint8_t *status,uint8_t *path,uint64_t *epoch){(void)c;*epoch=123;*t=EFS_MSG_PUT_CHUNK_REPLY;*status=mode==6 && c==&conns[2]?EFS_PUT_CHUNK_BUSY:mode==7 && c!=&conns[0]?EFS_PUT_CHUNK_BUSY:mode==4?EFS_PUT_CHUNK_QUOTA_EXCEEDED:mode==5?EFS_PUT_CHUNK_BUSY:EFS_PUT_CHUNK_OK;*path=0xff;return 0;}
+int efs_conn_recv_put_reply(struct efs_conn *c,uint8_t *t,uint8_t *status,uint8_t *path,uint64_t *epoch){(void)c;*epoch=123;*t=EFS_MSG_PUT_CHUNK_REPLY;*status=mode==8 && c==&conns[1]?EFS_PUT_CHUNK_STALE:mode==6 && c==&conns[2]?EFS_PUT_CHUNK_BUSY:mode==7 && c!=&conns[0]?EFS_PUT_CHUNK_BUSY:mode==4?EFS_PUT_CHUNK_QUOTA_EXCEEDED:mode==5?EFS_PUT_CHUNK_BUSY:EFS_PUT_CHUNK_OK;*path=0xff;return 0;}
 '''+reply_fn+f+r'''
 int main(void){
  int pp[2];assert(!pipe(pp));
  for(unsigned i=0;i<3;i++){conns[i].rc=(void *)1;conns[i].fd=pp[0];}
- const efs_node_id_t nodes[3]={1,2,3};const uint8_t *fragments[3]={0};const uint8_t hashes[3][EFS_HASH_SIZE]={{0}};int failed[3];
- for(mode=0;mode<8;mode++){
+ g_client.export_id=1;struct efs_put_ticket ticket={.ino=1,.ci=0,.nodes={1,2,3},.fragment_len=1};
+ const uint8_t *fragments[3]={0};int failed[3];
+ for(mode=0;mode<9;mode++){
   drops=releases=fails=sends=checkouts=0;
   uint64_t start=report_clock_ms();deadline=mode==2?start:start+15;
-  int rc=put_fragments_parallel_once(1,0,nodes,fragments,1,hashes,failed,1,1);
+  int rc=put_fragments_parallel_once(&ticket,fragments,failed);
   uint64_t elapsed=report_clock_ms()-start;
   printf("mode=%u rc=%d elapsed_ms=%llu sent=%u drops=%u releases=%u peer_fail=%u\n",mode,rc,(unsigned long long)elapsed,sends,drops,releases,fails);fflush(stdout);
-  assert(elapsed<150);assert(rc==((mode==1 || mode==6)?EFS_OK:mode==4?EFS_ERR_QUOTA:EFS_ERR_BUSY));
+  /* mode 8: one member refuses the ticket; a quorum of ACKs never publishes it. */
+  assert(elapsed<150);assert(rc==((mode==1 || mode==6)?EFS_OK:mode==4?EFS_ERR_QUOTA:mode==8?EFS_ERR_STALE:EFS_ERR_BUSY));
   assert(!fails);assert(drops+releases==checkouts);
   if(mode==2)assert(!sends && !checkouts);
  }
@@ -64,4 +66,4 @@ with tempfile.TemporaryDirectory(prefix='efs-put-reply-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror','-Wno-unused-function','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=5)
-print('parallel PUT: caller-bound quorum/drain, expired admission, one-ACK refusal, negative replies and no false peer failures PASS')
+print('parallel ticketed PUT: caller-bound quorum/drain, expired admission, one-ACK refusal, negative replies, terminal ticket refusal and no false peer failures PASS')

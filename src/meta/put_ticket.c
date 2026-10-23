@@ -1,5 +1,5 @@
 /* Durable PUT ownership, with bounded admission and explicit replay floors.
- * This module is staged until the data-plane/session coordinator is wired. */
+ * Every data PUT and REPORT record is bound to one of these tickets (K13). */
 #include "efs/put_ticket.h"
 #include "efs/checksum.h"
 #include "efs/kv_key.h"
@@ -30,6 +30,11 @@ static uint64_t rd64(const uint8_t *p)
     for (unsigned i = 0; i < 8; i++)
         v = (v << 8) | p[i];
     return v;
+}
+static int state_stored(uint32_t state)
+{
+    return state == EFS_PUT_TICKET_ADMITTED || state == EFS_PUT_TICKET_PUBLISHED ||
+           state == EFS_PUT_TICKET_RECLAIMING || state == EFS_PUT_TICKET_REJECTED;
 }
 static uint32_t ticket_shard(const struct efs_put_ticket *t)
 {
@@ -196,8 +201,8 @@ int efs_put_ticket_get(struct efs_kv *kv, const struct efs_put_ticket *t,
     rc = efs_kv_get(kv, key, sizeof(key), val, &len);
     if (rc != EFS_OK)
         return rc;
-    if (len != sizeof(val) || rd32(val) != 1 || rd32(val + 4) < 1 ||
-        rd32(val + 4) > 3 || rd64(val + 8) != t->object ||
+    if (len != sizeof(val) || rd32(val) != 1 || !state_stored(rd32(val + 4)) ||
+        rd64(val + 8) != t->object ||
         memcmp(val + 16, t->body_digest, EFS_HASH_SIZE))
         return EFS_ERR_PROTO;
     uint8_t expected[EFS_PUT_TICKET_VAL_LEN];
@@ -218,23 +223,86 @@ static int scan_ticket(void *user, const uint8_t *key, uint32_t kl, const uint8_
 {
     struct ticket_scan *s = user;
     if (kl != 51 || !rd64(key + 23) || vl != EFS_PUT_TICKET_VAL_LEN || rd32(val) != 1 ||
-        rd32(val + 4) < 1 || rd32(val + 4) > 3 || !rd64(val + 8)) {
+        !state_stored(rd32(val + 4)) || !rd64(val + 8)) {
         s->rc = EFS_ERR_PROTO;
         return 1;
     }
     if (!s->count)
         s->first = rd64(key + 23);
-    return ++s->count >= EFS_PUT_TICKET_MAX + 1;
+    s->count++;
+    return 1; /* sequence-ordered: the first key is the stream head */
 }
-static int scan_stream(struct efs_kv *kv, const uint8_t key[51], struct ticket_scan *s)
+/* Head of one session/lane-shard stream. */
+static int stream_head(struct efs_kv *kv, const uint8_t key[51], struct ticket_scan *s)
 {
     memset(s, 0, sizeof(*s));
     int rc = efs_kv_scan_prefix(kv, key, 23, scan_ticket, s);
     return rc == EFS_OK || rc == 1 ? s->rc : rc;
 }
+/* Live-ticket count per stream: the admission bound without a full scan. */
+static void count_key(const uint8_t key[51], uint8_t ck[23])
+{
+    memcpy(ck, key, 23);
+    ck[2] = EFS_KV_KIND_PUT_COUNT;
+}
+static int stream_count(struct efs_kv *kv, const uint8_t key[51], uint32_t *count)
+{
+    uint8_t ck[23], val[8];
+    uint32_t len = sizeof(val);
+    count_key(key, ck);
+    int rc = efs_kv_get(kv, ck, sizeof(ck), val, &len);
+    if (rc == EFS_ERR_NOT_FOUND) {
+        *count = 0;
+        return EFS_OK;
+    }
+    if (rc != EFS_OK)
+        return rc;
+    if (len != sizeof(val) || rd32(val) != 1 || !rd32(val + 4) ||
+        rd32(val + 4) > EFS_PUT_TICKET_MAX)
+        return EFS_ERR_PROTO;
+    *count = rd32(val + 4);
+    return EFS_OK;
+}
+/* Batch item for a new count; zero deletes the key. */
+static void count_item(const uint8_t key[51], uint32_t count, uint8_t ck[23], uint8_t cv[8],
+                       struct efs_kv_item *item)
+{
+    count_key(key, ck);
+    wr32(cv, 1);
+    wr32(cv + 4, count);
+    *item = count ? (struct efs_kv_item){EFS_KV_PUT, ck, 23, cv, 8}
+                  : (struct efs_kv_item){EFS_KV_DEL, ck, 23, NULL, 0};
+}
+/* A new stream entry in state ADMITTED (admission) or REJECTED (settle of a
+ * ticket whose admission never applied: a late admission then finds it). */
+static int insert_ticket(struct efs_kv *kv, const struct efs_put_ticket *t,
+                         const uint8_t key[51], uint32_t state)
+{
+    uint8_t val[EFS_PUT_TICKET_VAL_LEN], ck[23], cv[8];
+    uint32_t live;
+    int rc = stream_count(kv, key, &live);
+    if (rc != EFS_OK)
+        return rc;
+    if (live >= EFS_PUT_TICKET_MAX)
+        return EFS_ERR_BUSY;
+    /* A sequence cannot identify two different bodies/files in this lane.
+     * Probe its 31-byte prefix before admitting a new key. */
+    struct ticket_scan same = {0};
+    rc = efs_kv_scan_prefix(kv, key, 31, scan_ticket, &same);
+    if (rc != EFS_OK && rc != 1)
+        return rc;
+    if (same.rc)
+        return same.rc;
+    if (same.count)
+        return EFS_ERR_PROTO;
+    ticket_value(t, state, val);
+    struct efs_kv_item items[2] = {{EFS_KV_PUT, key, 51, val, sizeof(val)}};
+    count_item(key, live + 1, ck, cv, &items[1]);
+    return efs_kv_batch(kv, items, 2);
+}
 int efs_put_ticket_admit(struct efs_kv *kv, const struct efs_put_ticket *t)
 {
-    uint8_t key[51], val[EFS_PUT_TICKET_VAL_LEN];
+    uint8_t key[51];
     uint32_t state;
     if (!kv)
         return EFS_ERR_INVAL;
@@ -250,24 +318,7 @@ int efs_put_ticket_admit(struct efs_kv *kv, const struct efs_put_ticket *t)
         return state == EFS_PUT_TICKET_ADMITTED ? EFS_OK : EFS_ERR_STALE;
     if (rc != EFS_ERR_NOT_FOUND)
         return rc;
-    struct ticket_scan s;
-    rc = scan_stream(kv, key, &s);
-    if (rc != EFS_OK)
-        return rc;
-    if (s.count >= EFS_PUT_TICKET_MAX)
-        return EFS_ERR_BUSY;
-    /* A sequence cannot identify two different bodies/files in this lane.
-     * Probe its 31-byte prefix before admitting a new key. */
-    struct ticket_scan same = {0};
-    rc = efs_kv_scan_prefix(kv, key, 31, scan_ticket, &same);
-    if (rc != EFS_OK && rc != 1)
-        return rc;
-    if (same.rc)
-        return same.rc;
-    if (same.count)
-        return EFS_ERR_PROTO;
-    ticket_value(t, EFS_PUT_TICKET_ADMITTED, val);
-    return efs_kv_put(kv, key, sizeof(key), val, sizeof(val));
+    return insert_ticket(kv, t, key, EFS_PUT_TICKET_ADMITTED);
 }
 int efs_put_ticket_publish_item(struct efs_kv *kv, const struct efs_put_ticket *t,
                                 uint8_t key[51], uint8_t val[EFS_PUT_TICKET_VAL_LEN],
@@ -338,9 +389,43 @@ int efs_put_ticket_delete_ack(struct efs_kv *kv, const struct efs_put_ticket *t,
     wr32(val + 176, acked | member_bit);
     return efs_kv_put(kv, key, sizeof(key), val, sizeof(val));
 }
+/* Retire the stream head. REJECTED moves its body into the orphan ledger in
+ * the same batch; RECLAIMING requires every captured member's deletion ACK. */
+static int retire_head(struct efs_kv *kv, const struct efs_put_ticket *t,
+                       const uint8_t key[51], uint32_t state)
+{
+    uint8_t fk[23], val[12], ok[51], ov[EFS_PUT_TICKET_VAL_LEN], ck[23], cv[8];
+    uint32_t live;
+    struct ticket_scan s;
+    int rc = stream_head(kv, key, &s);
+    if (rc != EFS_OK)
+        return rc;
+    if (!s.count || s.first != t->id.seq)
+        return EFS_ERR_BUSY;
+    rc = stream_count(kv, key, &live);
+    if (rc != EFS_OK)
+        return rc;
+    if (!live)
+        return EFS_ERR_PROTO;
+    memcpy(fk, key, sizeof(fk));
+    fk[2] = EFS_KV_KIND_PUT_FLOOR;
+    wr32(val, 1);
+    wr64(val + 4, t->id.seq);
+    struct efs_kv_item items[4] = {{EFS_KV_DEL, key, 51, NULL, 0},
+                                   {EFS_KV_PUT, fk, 23, val, sizeof(val)}};
+    unsigned n = 2;
+    count_item(key, live - 1, ck, cv, &items[n++]);
+    if (state == EFS_PUT_TICKET_REJECTED) {
+        memcpy(ok, key, sizeof(ok));
+        ok[2] = EFS_KV_KIND_PUT_ORPHAN;
+        ticket_value(t, EFS_PUT_TICKET_REJECTED, ov);
+        items[n++] = (struct efs_kv_item){EFS_KV_PUT, ok, 51, ov, sizeof(ov)};
+    }
+    return efs_kv_batch(kv, items, n);
+}
 int efs_put_ticket_retire(struct efs_kv *kv, const struct efs_put_ticket *t)
 {
-    uint8_t key[51], fk[23], val[12];
+    uint8_t key[51];
     uint32_t state;
     uint64_t floor;
     if (!kv)
@@ -366,19 +451,7 @@ int efs_put_ticket_retire(struct efs_kv *kv, const struct efs_put_ticket *t)
         if (rd32(pending + 176) != t->member_mask)
             return EFS_ERR_BUSY;
     }
-    struct ticket_scan s;
-    rc = scan_stream(kv, key, &s);
-    if (rc != EFS_OK)
-        return rc;
-    if (!s.count || s.first != t->id.seq)
-        return EFS_ERR_BUSY;
-    memcpy(fk, key, sizeof(fk));
-    fk[2] = EFS_KV_KIND_PUT_FLOOR;
-    wr32(val, 1);
-    wr64(val + 4, t->id.seq);
-    struct efs_kv_item items[2] = {{EFS_KV_DEL, key, 51, NULL, 0},
-                                   {EFS_KV_PUT, fk, 23, val, sizeof(val)}};
-    return efs_kv_batch(kv, items, 2);
+    return retire_head(kv, t, key, state);
 }
 
 int efs_put_ticket_retired(struct efs_kv *kv,const struct efs_put_ticket *t,int *out)
@@ -392,14 +465,67 @@ int efs_put_ticket_retired(struct efs_kv *kv,const struct efs_put_ticket *t,int 
     return rc;
 }
 
-int efs_put_ticket_retire_published(struct efs_kv *kv,const struct efs_put_ticket *t)
+int efs_put_ticket_state(struct efs_kv *kv,const struct efs_put_ticket *t,uint32_t *state)
 {
+    if (!state) return EFS_ERR_INVAL;
+    *state=0;
     int retired;
     int rc=efs_put_ticket_retired(kv,t,&retired);
-    if (rc!=EFS_OK || retired) return rc;
-    uint32_t state;
-    rc=efs_put_ticket_get(kv,t,&state);
     if (rc!=EFS_OK) return rc;
-    if (state!=EFS_PUT_TICKET_PUBLISHED) return EFS_ERR_BUSY;
-    return efs_put_ticket_retire(kv,t);
+    if (retired) { *state=EFS_PUT_TICKET_RETIRED; return EFS_OK; }
+    return efs_put_ticket_get(kv,t,state);
+}
+
+int efs_put_ticket_reject(struct efs_kv *kv,const struct efs_put_ticket *t)
+{
+    uint8_t key[51],val[EFS_PUT_TICKET_VAL_LEN];
+    uint32_t state;
+    if (!kv) return EFS_ERR_INVAL;
+    int rc=ticket_key(t,key);
+    if (rc==EFS_OK) rc=efs_put_ticket_get(kv,t,&state);
+    if (rc!=EFS_OK) return rc;
+    if (state==EFS_PUT_TICKET_REJECTED) return EFS_OK;
+    if (state==EFS_PUT_TICKET_PUBLISHED) return EFS_ERR_STALE;
+    if (state!=EFS_PUT_TICKET_ADMITTED) return EFS_ERR_BUSY;
+    ticket_value(t,EFS_PUT_TICKET_REJECTED,val);
+    return efs_kv_put(kv,key,sizeof(key),val,sizeof(val));
+}
+
+int efs_put_ticket_settle(struct efs_kv *kv,const struct efs_put_ticket *t)
+{
+    uint8_t key[51];
+    uint32_t state;
+    if (!kv) return EFS_ERR_INVAL;
+    int rc=ticket_key(t,key);
+    if (rc==EFS_OK) rc=efs_session_accept(kv,ticket_shard(t),t->id.client_uuid,t->id.session_epoch);
+    if (rc==EFS_OK) rc=efs_put_ticket_state(kv,t,&state);
+    if (rc==EFS_ERR_NOT_FOUND) {
+        /* The owner gave up an admission whose apply it never saw. */
+        rc=insert_ticket(kv,t,key,EFS_PUT_TICKET_REJECTED);
+        if (rc!=EFS_OK) return rc;
+        state=EFS_PUT_TICKET_REJECTED;
+    }
+    if (rc!=EFS_OK) return rc;
+    if (state==EFS_PUT_TICKET_RETIRED) return EFS_OK;
+    if (state==EFS_PUT_TICKET_RECLAIMING) return EFS_ERR_BUSY;
+    if (state==EFS_PUT_TICKET_ADMITTED) {
+        rc=efs_put_ticket_reject(kv,t);
+        if (rc!=EFS_OK) return rc;
+        state=EFS_PUT_TICKET_REJECTED;
+    }
+    return retire_head(kv,t,key,state);
+}
+
+int efs_put_ticket_orphan(struct efs_kv *kv,const struct efs_put_ticket *t)
+{
+    uint8_t key[51],val[EFS_PUT_TICKET_VAL_LEN],want[EFS_PUT_TICKET_VAL_LEN];
+    uint32_t len=sizeof(val);
+    if (!kv) return EFS_ERR_INVAL;
+    int rc=ticket_key(t,key);
+    if (rc!=EFS_OK) return rc;
+    key[2]=EFS_KV_KIND_PUT_ORPHAN;
+    rc=efs_kv_get(kv,key,sizeof(key),val,&len);
+    if (rc!=EFS_OK) return rc;
+    ticket_value(t,EFS_PUT_TICKET_REJECTED,want);
+    return len==sizeof(val) && !memcmp(val,want,sizeof(val)) ? EFS_OK : EFS_ERR_PROTO;
 }

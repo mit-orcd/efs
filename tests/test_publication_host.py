@@ -34,7 +34,7 @@ struct efs_raft_host {int running,n;struct efs_kv *kv;};
 static struct efs_raft_host host={.running=1,.n=3},*g_host=&host;
 static int owns=1,stored,stored_verdict,wait_rc,read_rc,store_on_propose=1;
 static int session_rc, fence_after_propose, admission_only;
-static unsigned admissions;static int ticketed;static uint64_t candidate=789;
+static unsigned admissions;static int ticketed=1;static uint64_t candidate=789;
 static unsigned gates;
 static unsigned proposals,reads,forwards;static uint8_t group;
 int efs_chunk_size_valid(uint32_t s){return s==EFS_MIN_CHUNK_SIZE;}
@@ -97,6 +97,13 @@ int main(void)
  group=efs_raft_shard_group(efs_kv_lane_shard(123,17));
  assert(group!=efs_raft_shard_group(efs_kv_inode_shard(123)));
  struct efs_msg_publication_reply out;
+ /* K13: an unticketed request is refused before any read or proposal. */
+ for(int mode=0;mode<3;mode++){server_raft_host_publication(&req,mode,&out);
+  assert(out.rpc.status==EFS_INODE_RPC_INVAL && out.state==EFS_PUBLICATION_UNKNOWN && !proposals && !forwards);}
+ req.ticketed=1;req.put_id=req.id;req.put_id.seq=66;
+ req.put_fragment_len=64;req.put_member_mask=15;req.rec.publish_flags|=EFS_CHUNK_REC_F_FRESH_OBJECT;
+ for(unsigned i=0;i<3;i++)req.rec.nodes[i]=i+1;
+ candidate=efs_meta_candidate_gen(req.put_id.client_uuid,1,66,17,0);req.rec.chunk_generation=candidate;
  server_raft_host_publication(&req,1,&out);
  assert(out.rpc.status==EFS_INODE_RPC_NOT_FOUND && out.state==EFS_PUBLICATION_UNKNOWN && !proposals);
  wait_rc=EFS_ERR_STALE;server_raft_host_publication(&req,0,&out);
@@ -147,7 +154,7 @@ int main(void)
  req.put_id.session_epoch++;saved=proposals;server_raft_host_publication(&req,0,&out);
  assert(out.rpc.status==EFS_INODE_RPC_INVAL && proposals==saved);
  uint8_t command[HOST_PUBLICATION_TICKET_LEN]={EFS_MD_CMD_PUBLICATION};
- assert(host_publication_command_valid(command,HOST_PUBLICATION_LEN));
+ assert(!host_publication_command_valid(command,HOST_PUBLICATION_LEN)); /* K13: no unticketed command */
  assert(!host_publication_command_valid(command,HOST_PUBLICATION_TICKET_LEN));
  command[HOST_PUBLISH_LEN-1]=HOST_PUB_F_TICKETED;
  assert(!host_publication_command_valid(command,HOST_PUBLICATION_TICKET_LEN));
@@ -157,7 +164,7 @@ int main(void)
  assert(!host_publication_command_valid(command,HOST_PUBLICATION_TICKET_LEN-1));
  command[HOST_PUBLISH_LEN-1]|=128;assert(!host_publication_command_valid(command,sizeof(command)));
  assert(!host_publication_command_valid(NULL,sizeof(command)));
- puts("publication host: lane-only authority, apply-ring loss, terminal recovery and unknown PASS");
+ puts("publication host: unticketed refusal, lane-only authority, apply-ring loss, terminal recovery and unknown PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-publication-host-') as d:

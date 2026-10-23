@@ -111,6 +111,13 @@ static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
 #define HOST_PUBLICATION_LEN (HOST_PUBLISH_LEN + 28u)
 #define HOST_PUBLICATION_TICKET_LEN (HOST_PUBLICATION_LEN + 36u)
 #define HOST_PUB_F_TICKETED 4
+/* 8 is reserved. REPORT records (K13) always carry TICKETED and a 16-byte
+ * trailer: put_seq:8 fragment_len:4 member_mask:4; uuid/epoch come from the
+ * REPORT session prefix. A GONE record only settles its ticket: the pack
+ * found the file deleted (verdict OK, P3). */
+#define HOST_PUB_F_REJECT_GONE 16
+#define HOST_REPORT_TICKET_LEN 16u
+#define HOST_REPORT_REC_LEN (HOST_PUBLISH_LEN + HOST_REPORT_TICKET_LEN)
 #define HOST_ACTIVATE_AT_LEN   25 /* tag + ino:8 + mask:8 + content_epoch:8 */
 #define HOST_BOOTSTRAP_LANE_LEN 26 /* tag + ino:8 + gen:8 + lane:1 + epoch:8 */
 #define HOST_DIR_LEN       10
@@ -2522,16 +2529,18 @@ static int apply_lock_cmd(struct efs_raft_host *h, const uint8_t *cmd,
 
 /* Same encoding as sim apply_publish_cmd (plus the host FileID/lane_local
  * tail). clen may be N * HOST_PUBLISH_LEN — one Raft entry, many pubs. */
+static int host_unpack_settle(const uint8_t *cmd, uint32_t clen,
+                              struct efs_put_ticket *tickets, uint32_t *count);
 static int host_publication_command_valid(const uint8_t *cmd, uint32_t len)
 {
-    if (!cmd || (len != HOST_PUBLICATION_LEN && len != HOST_PUBLICATION_TICKET_LEN) ||
+    /* K13: the ticket trailer is mandatory; no unticketed publication. */
+    if (!cmd || len != HOST_PUBLICATION_TICKET_LEN ||
         (cmd[0] != EFS_MD_CMD_PUBLICATION && cmd[0] != EFS_MD_CMD_PUBLICATION_ADMIT &&
          cmd[0] != EFS_MD_CMD_PUBLICATION_RETIRE)) return 0;
     uint8_t flags = cmd[HOST_PUBLISH_LEN - 1];
     /* Unknown flags, including reserved bit 8, are never valid. */
     if (flags & ~(HOST_PUB_F_LANE_LOCAL | HOST_PUB_F_FRESH_OBJECT | HOST_PUB_F_TICKETED)) return 0;
-    return !!(flags & HOST_PUB_F_TICKETED) == (len == HOST_PUBLICATION_TICKET_LEN) &&
-        (!(flags & HOST_PUB_F_TICKETED) || (flags & HOST_PUB_F_FRESH_OBJECT));
+    return (flags & HOST_PUB_F_TICKETED) && (flags & HOST_PUB_F_FRESH_OBJECT);
 }
 
 static void unpack_publication(const uint8_t *cmd, struct efs_meta_pub *p,
@@ -2614,18 +2623,38 @@ static int apply_one_publish(struct efs_raft_host *h, const uint8_t *cmd,
     return rc;
 }
 
+/* REPORT record ticket: the session prefix names the PUT stream. */
+static void unpack_report_ticket(const uint8_t *rec, const struct efs_opid *session,
+                                 struct efs_meta_pub *p)
+{
+    const uint8_t *t = rec + HOST_PUBLISH_LEN;
+    p->ticketed = 1;
+    memcpy(p->put_id.client_uuid, session->client_uuid, EFS_OPID_UUID_LEN);
+    p->put_id.session_epoch = session->session_epoch;
+    p->put_id.seq = rd64be(t);
+    p->put_fragment_len = rd32be(t + 8);
+    p->put_member_mask = rd32be(t + 12);
+    p->publication_id = p->put_id;
+}
+
 /* Validate the entire envelope before applying any record. Every publication
- * checks its lane floor at apply, including exact replay/no-op mappings. */
+ * checks its lane floor at apply, including exact replay/no-op mappings.
+ * Every record is ticketed (K13): an unticketed record is refused. */
 static int apply_report_publish_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                                     uint32_t clen, uint8_t group)
 {
     if (clen <= HOST_REPORT_PREFIX_LEN ||
-        (clen - HOST_REPORT_PREFIX_LEN) % HOST_PUBLISH_LEN)
+        (clen - HOST_REPORT_PREFIX_LEN) % HOST_REPORT_REC_LEN)
         return EFS_ERR_PROTO;
     struct efs_opid session;
     if (!efs_report_session_unpack(&session, cmd + 1)) return EFS_ERR_INVAL;
-    for (uint32_t off = HOST_REPORT_PREFIX_LEN; off < clen; off += HOST_PUBLISH_LEN) {
+    for (uint32_t off = HOST_REPORT_PREFIX_LEN; off < clen; off += HOST_REPORT_REC_LEN) {
+        uint8_t flags = cmd[off + HOST_PUBLISH_LEN - 1];
         if (cmd[off] != EFS_MD_CMD_PUBLISH) return EFS_ERR_PROTO;
+        if (!(flags & HOST_PUB_F_TICKETED) || !(flags & HOST_PUB_F_FRESH_OBJECT) ||
+            (flags & ~(HOST_PUB_F_LANE_LOCAL | HOST_PUB_F_FRESH_OBJECT | HOST_PUB_F_TICKETED |
+                       HOST_PUB_F_REJECT_GONE)))
+            return EFS_ERR_PROTO;
         uint32_t shard = efs_kv_lane_shard(rd64be(cmd + off + 1),
                             rd32be(cmd + off + 9) % EFS_META_LANES);
         if (efs_raft_shard_group(shard) != group) return EFS_ERR_INVAL;
@@ -2633,17 +2662,21 @@ static int apply_report_publish_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         if (rc != EFS_OK) return rc;
     }
     int result = EFS_OK;
-    int held = clen - HOST_REPORT_PREFIX_LEN >= 2u * HOST_PUBLISH_LEN;
+    int held = clen - HOST_REPORT_PREFIX_LEN >= 2u * HOST_REPORT_REC_LEN;
     if (held) {
         int rc = efs_kv_lsm_sync_hold(h->kv);
         if (rc != EFS_OK) return rc;
     }
-    for (uint32_t off = HOST_REPORT_PREFIX_LEN; off < clen; off += HOST_PUBLISH_LEN) {
+    for (uint32_t off = HOST_REPORT_PREFIX_LEN; off < clen; off += HOST_REPORT_REC_LEN) {
         struct efs_meta_pub p;
+        uint8_t flags = cmd[off + HOST_PUBLISH_LEN - 1];
         unpack_publication(cmd + off, &p, 0, 0, group);
-        int rc = efs_meta_apply_publish(h->kv, &p);
-        /* Only a deleted inode is an historical publication no-op. Missing
-         * participant floors were already rejected, rather than swallowed. */
+        unpack_report_ticket(cmd + off, &session, &p);
+        int rc = (flags & HOST_PUB_F_REJECT_GONE) ?
+                     efs_meta_apply_publish_reject(h->kv, &p, EFS_OK) :
+                     efs_meta_apply_publish(h->kv, &p);
+        /* A deleted file settles its ticket (GONE) before this point; any
+         * remaining NOT_FOUND is the same historical no-op. */
         if (rc == EFS_ERR_NOT_FOUND) rc = EFS_OK;
         if (rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM) { result = rc; break; }
         if (result == EFS_OK && rc != EFS_OK) result = rc;
@@ -2653,44 +2686,6 @@ static int apply_report_publish_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         if (rc != EFS_OK) return rc;
     }
     return result;
-}
-
-static int apply_publish_cmd(struct efs_raft_host *h, const uint8_t *cmd,
-                             uint32_t clen, uint64_t index, uint64_t term, uint8_t group)
-{
-    uint32_t off = 0, n = 0;
-    int held = 0;
-    int first = EFS_OK;
-
-    if (clen < HOST_PUBLISH_LEN)
-        return EFS_ERR_UNSUPPORTED;
-    /* One WAL fsync for the whole Raft entry. Sequential efs_kv_batch
-     * otherwise fsyncs per pub; group-commit only helps concurrent callers. */
-    if (clen >= 2u * HOST_PUBLISH_LEN) {
-        int rc = efs_kv_lsm_sync_hold(h->kv);
-        if (rc != EFS_OK) return rc;
-        held = 1;
-    }
-
-    while (off + HOST_PUBLISH_LEN <= clen) {
-        int prc = apply_one_publish(h, cmd + off, index, term, group);
-        if (prc == EFS_ERR_IO || prc == EFS_ERR_NOMEM) {
-            first = prc;
-            break; /* A prior business conflict must not hide failed storage. */
-        }
-        if (first == EFS_OK && prc != EFS_OK)
-            first = prc;
-        off += HOST_PUBLISH_LEN;
-        n++;
-    }
-    if (held) {
-        int rc = efs_kv_lsm_sync_release(h->kv);
-        if (rc != EFS_OK) return rc;
-    }
-    if (n > 1 && raft_dbg_on())
-        APPLY_LOG("raft-host: applied publish-batch index=%llu n=%u\n",
-                (unsigned long long)index, n);
-    return first;
 }
 
 /* Same encoding as sim_txn_apply. Returns the apply layer's real verdict
@@ -3438,19 +3433,35 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
     }
     if(EFS_MD_CMD_IS_RESERVED(cmd[0]))
         return EFS_ERR_UNSUPPORTED; /* retired or reserved: halts, never skips */
-    if(cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT || cmd[0]==EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED) {
+    if(cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT) {
         struct efs_put_ticket ticket;
         int rc=efs_put_ticket_decode(cmd+1,clen-1,&ticket);
         if(rc!=EFS_OK)return rc;
         if(group!=efs_raft_shard_group(efs_kv_lane_shard(ticket.ino,ticket.ci%EFS_META_LANES)))
             return EFS_ERR_INVAL;
-        return cmd[0]==EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED?
-            efs_put_ticket_retire_published(h->kv,&ticket):efs_put_ticket_admit(h->kv,&ticket);
+        return efs_put_ticket_admit(h->kv,&ticket);
+    }
+    if(cmd[0]==EFS_MD_CMD_PUT_TICKET_SETTLE) {
+        struct efs_put_ticket tickets[EFS_PUT_TICKET_SETTLE_MAX];uint32_t n=0;
+        int rc=host_unpack_settle(cmd,clen,tickets,&n);
+        if(rc!=EFS_OK)return rc;
+        if(group!=efs_raft_shard_group(efs_kv_lane_shard(tickets[0].ino,tickets[0].ci%EFS_META_LANES)))
+            return EFS_ERR_INVAL;
+        /* In sequence order; the first ticket that cannot retire stops the
+         * batch (its reject, if any, persists). The RPC reads the outcome. */
+        for(uint32_t i=0;i<n;i++){
+            rc=efs_put_ticket_settle(h->kv,&tickets[i]);
+            if(rc==EFS_ERR_IO || rc==EFS_ERR_NOMEM)return rc;
+            if(rc!=EFS_OK)break;
+        }
+        return EFS_OK;
     }
     if (cmd[0] == EFS_MD_CMD_REPORT_PUBLISH)
         return apply_report_publish_cmd(h, cmd, clen, group);
+    /* K13: a bare PUBLISH carries no ticket. Only REPORT_PUBLISH records and
+     * ticketed PUBLICATION commands publish; never apply or skip one. */
     if (cmd[0] == EFS_MD_CMD_PUBLISH)
-        return apply_publish_cmd(h, cmd, clen, index, term, group);
+        return EFS_ERR_UNSUPPORTED;
     if (cmd[0] == EFS_MD_CMD_SETATTR)
         return apply_setattr_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_XATTR)
@@ -6193,6 +6204,46 @@ static int pack_publish_cmd(uint8_t *out, uint32_t *len, const struct efs_meta_p
     q[16] = (p->lane_local ? HOST_PUB_F_LANE_LOCAL : 0) |
             (p->fresh_object ? HOST_PUB_F_FRESH_OBJECT : 0);
     *len = HOST_PUBLISH_LEN;
+    return EFS_OK;
+}
+
+/* EFS_MD_CMD_PUT_TICKET_SETTLE: [tag][count:2][ticket:216 x count], one
+ * session/lane-shard stream, strictly increasing sequence. */
+static int host_unpack_settle(const uint8_t *cmd, uint32_t clen,
+                              struct efs_put_ticket *tickets, uint32_t *count)
+{
+    if (!cmd || clen < 3 || cmd[0] != EFS_MD_CMD_PUT_TICKET_SETTLE) return EFS_ERR_INVAL;
+    uint32_t n = ((uint32_t)cmd[1] << 8) | cmd[2];
+    if (!n || n > EFS_PUT_TICKET_SETTLE_MAX || clen != 3u + n * EFS_PUT_TICKET_WIRE_LEN)
+        return EFS_ERR_INVAL;
+    for (uint32_t i = 0; i < n; i++) {
+        int rc = efs_put_ticket_decode(cmd + 3 + i * EFS_PUT_TICKET_WIRE_LEN,
+                                       EFS_PUT_TICKET_WIRE_LEN, &tickets[i]);
+        if (rc != EFS_OK) return rc;
+        if (i && (efs_kv_lane_shard(tickets[i].ino, tickets[i].ci % EFS_META_LANES) !=
+                      efs_kv_lane_shard(tickets[0].ino, tickets[0].ci % EFS_META_LANES) ||
+                  tickets[i].id.session_epoch != tickets[0].id.session_epoch ||
+                  memcmp(tickets[i].id.client_uuid, tickets[0].id.client_uuid, 16) ||
+                  tickets[i].id.seq <= tickets[i - 1].id.seq))
+            return EFS_ERR_INVAL;
+    }
+    *count = n;
+    return EFS_OK;
+}
+
+/* K13 REPORT record: PUBLISH body + ticket trailer (uuid/epoch from the
+ * REPORT session). reject is 0 or HOST_PUB_F_REJECT_GONE. */
+static int pack_report_rec(uint8_t *out, uint32_t *len, const struct efs_meta_pub *p,
+                           uint8_t reject)
+{
+    if (!p || !p->ticketed || !p->fresh_object) return EFS_ERR_INVAL;
+    int rc = pack_publish_cmd(out, len, p);
+    if (rc != EFS_OK) return rc;
+    out[HOST_PUBLISH_LEN - 1] |= HOST_PUB_F_TICKETED | reject;
+    wr64be(out + HOST_PUBLISH_LEN, p->put_id.seq);
+    wr32be(out + HOST_PUBLISH_LEN + 8, p->put_fragment_len);
+    wr32be(out + HOST_PUBLISH_LEN + 12, p->put_member_mask);
+    *len = HOST_REPORT_REC_LEN;
     return EFS_OK;
 }
 
@@ -12417,10 +12468,12 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         out->rc=EFS_ERR_INVAL;return;
     }
     if(clen && (cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT || cmd[0]==EFS_MD_REQ_PUT_TICKET_STATUS ||
-               cmd[0]==EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED)) {
-        struct efs_put_ticket ticket;
-        rc=efs_put_ticket_decode(cmd+1,clen-1,&ticket);
-        uint32_t shard=rc==EFS_OK?efs_kv_lane_shard(ticket.ino,ticket.ci%EFS_META_LANES):0;
+               cmd[0]==EFS_MD_CMD_PUT_TICKET_SETTLE)) {
+        struct efs_put_ticket tickets[EFS_PUT_TICKET_SETTLE_MAX];uint32_t n=1;
+        rc=cmd[0]==EFS_MD_CMD_PUT_TICKET_SETTLE?host_unpack_settle(cmd,clen,tickets,&n):
+            efs_put_ticket_decode(cmd+1,clen-1,&tickets[0]);
+        const struct efs_put_ticket *ticket=&tickets[0];
+        uint32_t shard=rc==EFS_OK?efs_kv_lane_shard(ticket->ino,ticket->ci%EFS_META_LANES):0;
         if(rc!=EFS_OK || group!=efs_raft_shard_group(shard)) {
             out->rc=rc==EFS_OK?EFS_ERR_INVAL:rc;return;
         }
@@ -12430,8 +12483,8 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
             return;
         }
         uint8_t admission[HOST_SESS_REG_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_ESTABLISH};
-        memcpy(admission+2,ticket.id.client_uuid,16);
-        wr32be(admission+18,ticket.id.session_epoch);wr32be(admission+22,shard);
+        memcpy(admission+2,ticket->id.client_uuid,16);
+        wr32be(admission+18,ticket->id.session_epoch);wr32be(admission+22,shard);
         rc=host_session_establish_admit(h,admission,sizeof(admission),group,&hint);
         if(rc!=EFS_OK){out->rc=rc;out->leader_hint=hint;return;}
         if(cmd[0]!=EFS_MD_REQ_PUT_TICKET_STATUS)
@@ -12445,12 +12498,14 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         int settled=cmd[0]!=EFS_MD_REQ_PUT_TICKET_STATUS && rc==EFS_OK && idx;
         if(rc==EFS_OK || rc==EFS_ERR_BUSY || rc==EFS_ERR_STALE) {
             int proof=settled?EFS_OK:host_read_index(h,group,&hint);uint32_t state=0;
-            if(proof==EFS_OK)proof=efs_session_accept(h->kv,shard,ticket.id.client_uuid,ticket.id.session_epoch);
-            if(proof==EFS_OK && cmd[0]==EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED) {
-                int retired=0;proof=efs_put_ticket_retired(h->kv,&ticket,&retired);
-                if(proof==EFS_OK && !retired)proof=EFS_ERR_BUSY;
-                if(proof==EFS_OK)state=EFS_PUT_TICKET_RETIRED;
-            } else if(proof==EFS_OK)proof=efs_put_ticket_get(h->kv,&ticket,&state);
+            if(proof==EFS_OK)proof=efs_session_accept(h->kv,shard,ticket->id.client_uuid,ticket->id.session_epoch);
+            if(proof==EFS_OK && cmd[0]==EFS_MD_CMD_PUT_TICKET_SETTLE) {
+                /* Reply: how many leading tickets are now retired. */
+                for(state=0;state<n && proof==EFS_OK;state++) {
+                    int retired=0;proof=efs_put_ticket_retired(h->kv,&tickets[state],&retired);
+                    if(proof==EFS_OK && !retired)break;
+                }
+            } else if(proof==EFS_OK)proof=efs_put_ticket_get(h->kv,ticket,&state);
             if(proof==EFS_OK){rc=EFS_OK;salt=state;}
             else if(rc==EFS_OK || proof!=EFS_ERR_NOT_FOUND)rc=proof;
         }
@@ -18785,9 +18840,10 @@ static void host_pub_stale_note(const char *why, const struct efs_chunk_rec *rec
  * *lg is the raft group that must host the entry. skip_ri is for the
  * REPORT batch path (ReadIndex already done per group). cached is the
  * inode row from the report's one get_inode; NULL falls back to a get. */
-static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *rec,
+static int host_pub_pack_inner(struct efs_raft_host *h, const struct efs_chunk_rec *rec,
                          uint64_t new_size, int *hint, int skip_ri,
                          struct efs_meta_row *cached, const struct efs_opid *session, int activate,
+                         const struct efs_meta_pub *ticket,
                          uint8_t *cmd, uint32_t *clen, uint8_t *lg_out)
 {
     struct efs_meta_pub p;
@@ -18822,12 +18878,10 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
      * ReadIndex guarantees we see the committed create, so NOT_FOUND here
      * means the unlink already won. */
     if (rc == EFS_ERR_NOT_FOUND) {
-        if (rec->publish_flags & EFS_CHUNK_REC_F_CAPTURED_FILEID)
-            return EFS_ERR_STALE;
         if (raft_dbg_on())
-            fprintf(stderr, "raft-host: pub ino=%llu ci=%u stale (deleted), skip\n",
+            fprintf(stderr, "raft-host: pub ino=%llu ci=%u stale (deleted), settle\n",
                     (unsigned long long)rec->ino, rec->chunk_index);
-        return EFS_OK;
+        return EFS_ERR_NOT_FOUND; /* caller packs the GONE settle record */
     }
     if (rc != EFS_OK) {
         if (raft_dbg_on())
@@ -18839,6 +18893,11 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
         fprintf(stderr, "raft-host: pub-reject reason=mode ino=%llu ci=%u mode=%o\n",
                 (unsigned long long)rec->ino,rec->chunk_index,row.mode);
         return EFS_ERR_INVAL;
+    }
+    /* The ticket binds one FileID; a reincarnated row is a terminal loss. */
+    if (rec->file_generation != row.generation) {
+        host_pub_stale_note("ticket-fileid", rec, rec->file_generation, row.generation);
+        return EFS_ERR_STALE;
     }
     lane = (uint8_t)(rec->chunk_index % EFS_META_LANES);
     lsh = efs_kv_lane_shard(rec->ino, lane);
@@ -19003,8 +19062,7 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
     p.delta_len = rec->delta_len;
     p.delta_base_n = rec->delta_base_n;
     p.delta_base_seq = rec->delta_base_seq;
-    if (rec->publish_flags & EFS_CHUNK_REC_F_CAPTURED_FILEID)
-        p.inode_gen = rec->file_generation;
+    p.inode_gen = rec->file_generation; /* the ticket FileID, checked above */
     if (lg != ig) {
         /* Lane-local: the lane group's KV has no inode row. The FileID
          * fields ride the entry (read above under ReadIndex on the inode
@@ -19013,7 +19071,108 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
         p.mtime_gen = row.mtime_gen;
         p.lane_local = 1;
     }
-    return pack_publish_cmd(cmd, clen, &p);
+    p.ticketed = 1;
+    p.put_id = ticket->put_id;
+    p.publication_id = ticket->put_id;
+    p.put_fragment_len = ticket->put_fragment_len;
+    p.put_member_mask = ticket->put_member_mask;
+    return pack_report_rec(cmd, clen, &p, 0);
+}
+
+/* The ticket body of one REPORT record: immutable PUT identity only. */
+static int host_report_ticket(const struct efs_chunk_rec *rec, const struct efs_opid *session,
+                              struct efs_meta_pub *t)
+{
+    memset(t, 0, sizeof(*t));
+    if (!rec || !session || !rec->put_seq || !rec->file_generation || rec->put_pad ||
+        !(rec->publish_flags & EFS_CHUNK_REC_F_FRESH_OBJECT) ||
+        !efs_chunk_size_valid(rec->put_fragment_len * 2u))
+        return EFS_ERR_INVAL;
+    t->ino = rec->ino;
+    t->chunk_index = rec->chunk_index;
+    t->candidate_gen = rec->chunk_generation;
+    t->coding_profile_id = EFS_META_PROFILE_K2F1;
+    memcpy(t->ch.nodes, rec->nodes, sizeof(t->ch.nodes));
+    memcpy(t->ch.checksums, rec->checksums, sizeof(t->ch.checksums));
+    t->delta_off = rec->delta_off;
+    t->delta_len = rec->delta_len;
+    t->inode_gen = rec->file_generation;
+    t->fresh_object = 1;
+    t->ticketed = 1;
+    memcpy(t->put_id.client_uuid, session->client_uuid, EFS_OPID_UUID_LEN);
+    t->put_id.session_epoch = session->session_epoch;
+    t->put_id.seq = rec->put_seq;
+    t->publication_id = t->put_id;
+    t->put_fragment_len = rec->put_fragment_len;
+    t->put_member_mask = rec->put_member_mask;
+    struct efs_put_ticket ticket;
+    uint8_t wire[EFS_PUT_TICKET_WIRE_LEN];
+    int rc = efs_put_ticket_from_pub(t, &ticket);
+    if (rc == EFS_OK) rc = efs_put_ticket_encode(&ticket, wire);
+    return rc;
+}
+
+/* K13: every REPORT record names an admitted ticket. Its durable state, not
+ * the evictable span trailer, decides replay: PUBLISHED is an exact no-op,
+ * settled/retired never publishes again, never-admitted is refused. A lost
+ * CAS keeps the ticket ADMITTED (the owner may retry the same object). A
+ * deleted file packs a GONE record so the log settles the ticket (EFS_OK). */
+static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *rec,
+                         uint64_t new_size, int *hint, int skip_ri,
+                         struct efs_meta_row *cached, const struct efs_opid *session, int activate,
+                         uint8_t *cmd, uint32_t *clen, uint8_t *lg_out)
+{
+    struct efs_meta_pub t;
+    struct efs_put_ticket ticket;
+    uint32_t state = 0;
+    *clen = 0;
+    if (!rec || !rec->ino) return EFS_ERR_INVAL;
+    int rc = host_report_ticket(rec, session, &t);
+    if (rc == EFS_OK) rc = efs_put_ticket_from_pub(&t, &ticket);
+    if (rc != EFS_OK) {
+        fprintf(stderr, "raft-host: pub-reject reason=ticket ino=%llu ci=%u seq=%llu file_gen=%llu flags=%u\n",
+                (unsigned long long)rec->ino, rec->chunk_index,
+                (unsigned long long)rec->put_seq, (unsigned long long)rec->file_generation,
+                rec->publish_flags);
+        return EFS_ERR_INVAL;
+    }
+    uint8_t lg = efs_raft_shard_group(efs_kv_lane_shard(rec->ino,
+                                      rec->chunk_index % EFS_META_LANES));
+    if (lg_out) *lg_out = lg;
+    if (!host_hosts(h, lg)) return EFS_ERR_NOT_PRIMARY;
+    if (!skip_ri) {
+        rc = host_read_index(h, lg, hint);
+        if (rc != EFS_OK) return rc;
+    }
+    rc = efs_put_ticket_state(h->kv, &ticket, &state);
+    if (rc == EFS_ERR_NOT_FOUND) {
+        fprintf(stderr, "raft-host: pub-reject reason=unadmitted ino=%llu ci=%u seq=%llu\n",
+                (unsigned long long)rec->ino, rec->chunk_index, (unsigned long long)rec->put_seq);
+        return EFS_ERR_INVAL;
+    }
+    if (rc != EFS_OK) return rc;
+    if (state == EFS_PUT_TICKET_PUBLISHED) return EFS_OK;
+    if (state != EFS_PUT_TICKET_ADMITTED) {
+        host_pub_stale_note("ticket-settled", rec, state, 0);
+        return EFS_ERR_STALE;
+    }
+    rc = host_pub_pack_inner(h, rec, new_size, hint, skip_ri, cached, session, activate,
+                             &t, cmd, clen, lg_out);
+    if (rc == EFS_OK && !*clen) {
+        /* A mapping that already names this object while its ticket is
+         * ADMITTED is impossible by construction; never settle it. */
+        fprintf(stderr, "raft-host: pub-reject reason=admitted-held ino=%llu ci=%u seq=%llu\n",
+                (unsigned long long)rec->ino, rec->chunk_index, (unsigned long long)rec->put_seq);
+        return EFS_ERR_PROTO;
+    }
+    if (rc == EFS_ERR_STALE) *clen = 0;
+    if (rc == EFS_ERR_NOT_FOUND) {
+        if (lg_out) *lg_out = lg;
+        int prc = pack_report_rec(cmd, clen, &t, HOST_PUB_F_REJECT_GONE);
+        if (prc != EFS_OK) { *clen = 0; return prc; }
+        return EFS_OK;
+    }
+    return rc;
 }
 
 /* One REPORT's publications for one Raft group. A report larger than
@@ -19111,7 +19270,7 @@ static int host_pub_batch_push(struct efs_raft_host *h, struct host_pub_batch *b
     if (clen == 0)
         return EFS_OK;
     if (!b->buf) {
-        b->buf = malloc(HOST_REPORT_PREFIX_LEN + (size_t)HOST_PUBLISH_LEN * HOST_PUB_BATCH_N);
+        b->buf = malloc(HOST_REPORT_PREFIX_LEN + (size_t)HOST_REPORT_REC_LEN * HOST_PUB_BATCH_N);
         if (!b->buf)
             return EFS_ERR_NOMEM;
         b->len = 0;
@@ -19120,7 +19279,7 @@ static int host_pub_batch_push(struct efs_raft_host *h, struct host_pub_batch *b
     }
     if (b->len && b->group != group)
         return EFS_ERR_INVAL;
-    if (b->len + clen > HOST_PUBLISH_LEN * HOST_PUB_BATCH_N) {
+    if (b->len + clen > HOST_REPORT_REC_LEN * HOST_PUB_BATCH_N) {
         rc = host_pub_batch_propose(h, b, hint);
         if (rc != EFS_OK)
             return rc;
@@ -19320,7 +19479,7 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
         uint64_t usz[32];
         uint32_t nu = 0, k;
         struct host_pub_batch bat[HOST_NGROUPS];
-        uint8_t cmd[HOST_PUBLISH_LEN];
+        uint8_t cmd[HOST_REPORT_REC_LEN];
         uint32_t clen;
         uint8_t lg;
         int bi;
@@ -19422,7 +19581,7 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
         for (i = 0; i < count && rc == EFS_OK; i++) {
             for (k = 0; k < nic; k++) if (ic[k].have && ic[k].ino == recs[i].ino) break;
             if (k < nic) continue;
-            uint8_t pre_cmd[HOST_PUBLISH_LEN], pre_group;
+            uint8_t pre_cmd[HOST_REPORT_REC_LEN], pre_group;
             uint32_t pre_len;
             rc = host_pub_pack(h, &recs[i], 0, &hint, 1, NULL, session, 1,
                                pre_cmd, &pre_len, &pre_group);
@@ -19734,8 +19893,9 @@ void server_raft_host_publication(const struct efs_msg_publication *req, int que
 {
     struct efs_raft_host *h=g_host;struct efs_meta_pub p;int hint=-1,verdict;
     memset(out,0,sizeof(*out));out->rpc.status=EFS_INODE_RPC_INVAL;
+    /* K13: no unticketed publication is accepted, submitted or answered. */
     if(query_only<0 || query_only>2 || !h || !h->running || !req ||
-       efs_publication_from_request(req,&p)!=EFS_OK)return;
+       efs_publication_from_request(req,&p)!=EFS_OK || !p.ticketed)return;
     if(efs_publication_digest(&p,out->digest)!=EFS_OK)return;
     uint32_t shard=efs_kv_lane_shard(p.ino,p.chunk_index%EFS_META_LANES);
     uint8_t group=efs_raft_shard_group(shard);
@@ -19798,7 +19958,7 @@ void server_raft_host_publication(const struct efs_msg_publication *req, int que
         }
     }
     if(rc==EFS_OK) {
-        struct efs_publication_locator locator;
+        struct efs_publication_locator locator={0};
         rc=efs_meta_publication_receipt(h->kv,&p,&verdict,&locator);
         if(rc==EFS_OK) {
             out->receipt_group=locator.group;out->receipt_index=locator.index;
@@ -19806,7 +19966,7 @@ void server_raft_host_publication(const struct efs_msg_publication *req, int que
         }
     }
     if(rc==EFS_ERR_BUSY && query_only!=2) {
-        struct efs_publication_locator locator;
+        struct efs_publication_locator locator={0};
         rc=host_publication_committed(h,group,&p,&locator,&hint);
         if(rc==EFS_OK) {
             out->receipt_group=locator.group;out->receipt_index=locator.index;

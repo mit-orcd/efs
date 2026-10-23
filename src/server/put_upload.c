@@ -5,14 +5,30 @@
 #include "efs/kv_key.h"
 #include "efs/meta_cmd.h"
 #include "efs/raft.h"
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
-/* Ticket authority is read before taking the local write guard. Holding the
+/* The one data PUT path (K13): every fragment names an ADMITTED ticket.
+ * Ticket authority is read before taking the local write guard. Holding the
  * guard over a metadata RPC can deadlock a Raft apply waiting to seal it.
  * A concurrently completed revocation is caught by the durable floor before
  * storage; a seal in progress waits for this guarded store to finish. */
+static int put_upload(struct efsd_server *s,const uint8_t *body,uint32_t bytes,
+                      uint8_t *path_used);
 int server_put_upload(struct efsd_server *s,const uint8_t *body,uint32_t bytes,
                        uint8_t *path_used)
+{
+    int rc=put_upload(s,body,bytes,path_used);
+    static int debug=-1;
+    if(debug<0)debug=getenv("EFS_PUT_TICKET_DBG")!=NULL;
+    if(rc!=EFS_OK && debug && bytes>=EFS_PUT_UPLOAD_HEADER_LEN)
+        fprintf(stderr,"put-upload refused fi=%u seq=%llu rc=%d\n",efs_put_upload_rd32(body+4),
+                (unsigned long long)(((uint64_t)efs_put_upload_rd32(body+28)<<32)|efs_put_upload_rd32(body+32)),rc);
+    return rc;
+}
+static int put_upload(struct efsd_server *s,const uint8_t *body,uint32_t bytes,
+                      uint8_t *path_used)
 {
     if(path_used)*path_used=0xff;
     if(!s || !body || !path_used || bytes<EFS_PUT_UPLOAD_HEADER_LEN)return EFS_ERR_INVAL;
@@ -35,25 +51,27 @@ int server_put_upload(struct efsd_server *s,const uint8_t *body,uint32_t bytes,
     query[1]=EFS_MD_REQ_PUT_TICKET_STATUS;memcpy(query+2,body+8,EFS_PUT_TICKET_WIRE_LEN);
     struct efs_msg_raft_mkfs_reply authority;
     server_raft_host_submit(query,sizeof(query),&authority);
+    if(authority.rc!=EFS_OK && getenv("EFS_PUT_TICKET_DBG"))
+        fprintf(stderr,"put-upload status rc=%d hint=%d group=%u\n",authority.rc,
+                authority.leader_hint,query[0]);
     if(authority.rc!=EFS_OK)return authority.rc;
     if(authority.salt!=EFS_PUT_TICKET_ADMITTED)return EFS_ERR_STALE;
 
-    struct efs_msg_inode_writer_view file={ticket.ino,ticket.inode_gen,ticket.ci,0};
-    struct efs_msg_inode_writer_view_reply inode;
-    server_raft_host_writer_view(&file,&inode);
-    if(inode.status==EFS_INODE_RPC_NOT_PRIMARY)return EFS_ERR_NOT_PRIMARY;
-    if(inode.status==EFS_INODE_RPC_BUSY)return EFS_ERR_BUSY;
-    if(inode.status==EFS_INODE_RPC_NOT_FOUND || inode.status==EFS_INODE_RPC_STALE)return EFS_ERR_STALE;
-    if(inode.status!=EFS_INODE_RPC_OK)return EFS_ERR_IO;
-    if(inode.ino!=ticket.ino || inode.generation!=ticket.inode_gen)return EFS_ERR_STALE;
-    if(efs_writer_view_reply_valid(&file,&inode)!=EFS_OK)return EFS_ERR_PROTO;
+    /* The ADMITTED ticket under a fresh ReadIndex is the storage authority.
+     * Its FileID is enforced at publication; a deleted file's ticket settles
+     * GONE and its body joins the orphan ledger. No typed-writer lane view
+     * here: on the REPORT path it is BUSY until REPORT bootstraps the lane,
+     * which refused fragments and left chunks with two of three (K13). */
 
     struct efs_put_storage_guard guard={0};
     rc=server_put_session_begin(s,ticket.id.client_uuid,ticket.id.session_epoch,&guard);
     if(rc!=EFS_OK)return rc;
     pthread_mutex_lock(&s->lock);
     struct efs_export *ex=server_export_acquire_or_create_locked(s,export_id);
-    /* Geometry comes from export configuration, never untrusted upload traffic. */
+    /* A storage node learns the data geometry from its first PUT, here
+     * only from a ticket that is ADMITTED under a live session. */
+    if(ex && (ex->chunk_size==0 || ex->chunk_size==EFS_DEFAULT_CHUNK_SIZE))
+        ex->chunk_size=ticket.fragment_len*2u;
     pthread_mutex_unlock(&s->lock);
     if(!ex)rc=EFS_ERR_NOMEM;
     else if(server_frag_len(ex,ticket.ino)!=ticket.fragment_len)rc=EFS_ERR_INVAL;

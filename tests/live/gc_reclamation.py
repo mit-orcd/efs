@@ -133,7 +133,7 @@ p.add_argument('--fixture-quota',choices=('0','1G','4G','16G'),help='explicit pe
 p.add_argument('--session-append',action='store_true',help='bounded revoked-session append holes, cold half-completion and exact epoch resume')
 p.add_argument('--session-cleanup',action='store_true',help='staged bounded lease/lock cleanup, global barrier, exact replay and cold physical reclaim')
 p.add_argument('--deferred-close',action='store_true',help='staged identified close, 64 cross-group OPEN appends, crash/resume, exact holes and bounded retirement')
-p.add_argument('--typed-writeback',action='store_true',help='actual typed cache bytes, publication/retirement lost ACK and post-snapshot peer preservation')
+p.add_argument('--typed-writeback',action='store_true',help='retired (K13): the staged unticketed typed driver; refused')
 p.add_argument('--guarded-leases',action='store_true',help='sequenced lease wire reorder, lost reply probe, cold replay and last-close reclaim')
 p.add_argument('--put-barrier-fault',action='store_true',help='test-only server fragment fsync refusal, unpublished state, retained-body recovery and cold bytes')
 p.add_argument('--create-adopt-negative',action='store_true',help='force a real stale FileID combined-adoption refusal, retain original CREATE token cleanup and verify name reuse cold; requires fault build')
@@ -206,6 +206,7 @@ p.add_argument('--idle-seconds',type=int,default=0,help='measure live-table idle
 p.add_argument('--full-node',action='store_true',help='one node quota exhausted while three fragment targets remain writable')
 p.add_argument('--port', type=int, default=20190)
 a = p.parse_args()
+if a.typed_writeback:raise SystemExit('--typed-writeback is retired (K13): the host refuses unticketed publications; tests/live/k13_ticket_cluster.py covers the ticketed path')
 if not 0 <= a.tiny_sustained_large_mib_s <= 64:p.error('--tiny-sustained-large-mib-s must be 0..64')
 if not 0 <= a.tiny_sustained_seconds <= 1800:p.error('--tiny-sustained-seconds must be 0..1800')
 if not 1<=a.append_loaded_rounds<=20:p.error('--append-loaded-rounds must be 1..20')
@@ -526,7 +527,7 @@ def recv_exact(sock,n):
         body+=part
     return body
 
-HELLO=struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',4,0)  # CLIENT_HELLO, EFS_PROTOCOL_VERSION 4 (K5)
+HELLO=struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',5,0)  # CLIENT_HELLO, EFS_PROTOCOL_VERSION 5 (K13)
 def declare(sock):
     sock.sendall(HELLO);n=struct.unpack('>I',recv_exact(sock,4))[0];reply=recv_exact(sock,n)
     assert n==9 and reply[0]==166 and struct.unpack('=iI',reply[1:])==(0,4),('declaration refused',reply)
@@ -1202,35 +1203,6 @@ try:
         start();mount_client()
         (work/'session-cleanup.json').write_text(json.dumps({'inos':inos,'records':records},indent=2))
         print('bounded session lease/lock global barrier, exact replay, cold remaining owners and physical reclaim PASS',flush=True)
-    if a.typed_writeback:
-        typed=work/'client-publication-writeback'
-        run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_publication_writeback.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',typed])
-        for group in ('cross','same'):
-            typed_env={**env}
-            if group=='same':typed_env['EFS_TYPED_SAME_GROUP']='1'
-            typed_path=mount/('typed-writeback-'+group);typed_path.touch()
-            typed_ino=typed_path.stat().st_ino
-            typed_state=work/('typed-writeback-'+group+'-state.bin')
-            typed_result=run([typed,str(a.port),str(typed_ino),typed_state],capture_output=True,text=True,timeout=180,env=typed_env).stdout
-            (work/('typed-writeback-'+group+'-wire.txt')).write_text(typed_result)
-            typed_ci=int(re.search(r'ci=(\d+)',typed_result).group(1))
-            typed_group=int(re.search(r'group=(\d+)',typed_result).group(1))
-            leaders=[]
-            for node in range(4):
-                raft=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port+node}'],capture_output=True,text=True).stdout
-                if re.search(r'group '+str(typed_group)+r' .*role=LEADER',raft):leaders.append(node)
-            assert len(leaders)==1,leaders
-            dead=leaders[0];servers[dead].kill();servers[dead].wait(timeout=10)
-            leader_replay=run([typed,str(a.port),str(typed_ino),typed_state,'receipt-only'],capture_output=True,text=True,timeout=180,env=typed_env).stdout
-            (work/('typed-writeback-'+group+'-leader-replay.txt')).write_text(leader_replay)
-            print('typed retired publication replay after actual lane leader death PASS',flush=True)
-            unmount();stop(crash=True);start();mount_client()
-            expected=bytearray([0x5a])*(128<<10);expected[4096:8192]=bytes([0xa7])*4096;expected[8192:12288]=bytes([0x33])*4096
-            assert typed_path.stat().st_ino==typed_ino and typed_path.read_bytes()==bytes(typed_ci*(128<<10))+expected
-            cold_replay=run([typed,str(a.port),str(typed_ino),typed_state,'verify'],capture_output=True,text=True,timeout=180,env=typed_env).stdout
-            (work/('typed-writeback-'+group+'-cold-replay.txt')).write_text(cold_replay)
-            typed_path.unlink();wait(lambda:not files(typed_ino),'typed writeback physical deletion',180)
-            print('actual typed cache, lost ACKs, newer-range ownership, peer preservation and exact cold bytes PASS',flush=True)
 
     if a.guarded_leases:
         pending_helper=work/'client-pending-create'
@@ -1325,11 +1297,10 @@ try:
 
         tickets=work/'client-put-ticket'
         run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_put_ticket.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',tickets])
-        ticket_results=[]
-        for discard in (0,1):
-            ticket_results.append(run([tickets,str(a.port),str(edge_ino),source/'efs-mgmt',str(discard)],capture_output=True,text=True,timeout=90).stdout)
-        ticket_saved=work/'put-ticket.bin'
-        ticket_results.append(run([tickets,str(a.port),str(edge_ino),source/'efs-mgmt','save',ticket_saved],capture_output=True,text=True,timeout=90).stdout)
+        ticket_results=[];ticket_env={**env,'EFS_PROBE_NODES':'4'};ticket_files=[]
+        for cross in (0,1):
+            ticket_path=mount/f'put-ticket-{cross}';ticket_path.touch();ticket_files.append(ticket_path)
+            ticket_results.append(run([tickets,str(a.port),str(ticket_path.stat().st_ino),source/'efs-mgmt','tickets',str(cross),work/f'put-ticket-{cross}.bin'],capture_output=True,text=True,timeout=90,env=ticket_env).stdout)
         (work/'put-ticket-wire.txt').write_text(''.join(ticket_results))
 
 
@@ -1344,7 +1315,9 @@ try:
         (work/'namespace-session-wire.txt').write_text(ns_result)
         (ns_path/'a').unlink();(ns_path/'still-empty').rmdir();ns_path.rmdir();ns_untouched.rmdir()
         edge_results.append(run([client_edge,str(a.port),str(edge_ino),edge_uuid,'replay'],capture_output=True,text=True,timeout=90).stdout)
-        ticket_results.append(run([tickets,str(a.port),str(edge_ino),source/'efs-mgmt','cold',ticket_saved],capture_output=True,text=True,timeout=90).stdout)
+        for cross,ticket_path in enumerate(ticket_files):
+            ticket_results.append(run([tickets,str(a.port),str(ticket_path.stat().st_ino),source/'efs-mgmt','cold',work/f'put-ticket-{cross}.bin'],capture_output=True,text=True,timeout=90,env=ticket_env).stdout)
+            ticket_path.unlink()
         (work/'put-ticket-wire.txt').write_text(''.join(ticket_results))
         assert edge_path.read_bytes()==edge_body,'lease transport changed cold bytes'
         # K5: the unidentified append replay cache is gone; revocation of the

@@ -1802,28 +1802,36 @@ int efs_client_lease_reset(struct efs_client_lease_request *r)
     return EFS_OK;
 }
 
-static int rpc_put_ticket(const struct efs_put_ticket *ticket,int probe_only,
-                                uint32_t *state)
+/* probe_only 0: ADMIT, 1: STATUS, 2: SETTLE of n tickets of one stream
+ * (*state = how many leading tickets are retired). */
+static int rpc_put_ticket(const struct efs_put_ticket *ticket,uint32_t n,int probe_only,
+                          uint32_t *state)
 {
     if(!state)return EFS_ERR_INVAL;
     *state=0;
-    if(probe_only<0 || probe_only>2)return EFS_ERR_INVAL;
-    if(!probe_only) {
+    if(probe_only<0 || probe_only>2 || !n || n>(probe_only==2?EFS_PUT_TICKET_SETTLE_MAX:1u))
+        return EFS_ERR_INVAL;
+    if(probe_only!=1) {
         int ready=efs_client_session_check();
         if(ready!=EFS_OK)return ready;
     }
-    uint8_t body[2+EFS_PUT_TICKET_WIRE_LEN];
-    int rc=efs_put_ticket_encode(ticket,body+2);if(rc!=EFS_OK)return rc;
+    uint8_t body[4+EFS_PUT_TICKET_SETTLE_MAX*EFS_PUT_TICKET_WIRE_LEN];uint32_t len;
+    uint8_t *at=body+2;
+    if(probe_only==2){body[2]=(uint8_t)(n>>8);body[3]=(uint8_t)n;at=body+4;}
+    for(uint32_t i=0;i<n;i++){
+        int rc=efs_put_ticket_encode(&ticket[i],at+i*EFS_PUT_TICKET_WIRE_LEN);if(rc!=EFS_OK)return rc;
+    }
+    len=(uint32_t)(at-body)+n*EFS_PUT_TICKET_WIRE_LEN;
     uint32_t shard=efs_kv_lane_shard(ticket->ino,ticket->ci%EFS_META_LANES);
     body[0]=efs_raft_shard_group(shard);
-    body[1]=probe_only==2?EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED:probe_only?EFS_MD_REQ_PUT_TICKET_STATUS:EFS_MD_CMD_PUT_TICKET_ADMIT;
+    body[1]=probe_only==2?EFS_MD_CMD_PUT_TICKET_SETTLE:probe_only?EFS_MD_REQ_PUT_TICKET_STATUS:EFS_MD_CMD_PUT_TICKET_ADMIT;
     efs_node_id_t target=0;
     for(unsigned attempt=0;attempt<8;attempt++) {
         if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
         efs_node_id_t nid=target;
         struct efs_conn *conn=target?efs_client_conn_get(target):rpc_owner_conn_shard(shard,&nid);
         if(!conn)return EFS_ERR_NET;
-        if(efs_conn_send_msg(conn,EFS_MSG_RAFT_MKFS,body,sizeof(body))) {
+        if(efs_conn_send_msg(conn,EFS_MSG_RAFT_MKFS,body,len)) {
             efs_client_conn_drop(nid,conn);return EFS_ERR_NET;
         }
         uint8_t type=0;uint32_t bytes=0;void *payload=NULL;
@@ -1837,8 +1845,9 @@ static int rpc_put_ticket(const struct efs_put_ticket *ticket,int probe_only,
         struct efs_msg_raft_mkfs_reply reply;memcpy(&reply,payload,bytes);free(payload);
         if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
         if(reply.rc==EFS_OK) {
-            if(probe_only==2 ? reply.salt!=EFS_PUT_TICKET_RETIRED :
-               (reply.salt<EFS_PUT_TICKET_ADMITTED || reply.salt>EFS_PUT_TICKET_RECLAIMING))
+            if(probe_only==2 ? reply.salt>n :
+               (reply.salt!=EFS_PUT_TICKET_ADMITTED && reply.salt!=EFS_PUT_TICKET_PUBLISHED &&
+                reply.salt!=EFS_PUT_TICKET_RECLAIMING && reply.salt!=EFS_PUT_TICKET_REJECTED))
                 return EFS_ERR_PROTO;
             if(!probe_only && reply.salt!=EFS_PUT_TICKET_ADMITTED)return EFS_ERR_STALE;
             *state=(uint32_t)reply.salt;return EFS_OK;
@@ -1861,12 +1870,12 @@ int efs_client_rpc_put_ticket(const struct efs_put_ticket *ticket,int probe_only
 {
     if (!state) return EFS_ERR_INVAL;
     *state=0;
-    return probe_only<0 || probe_only>1 ? EFS_ERR_INVAL : rpc_put_ticket(ticket,probe_only,state);
+    return probe_only<0 || probe_only>1 ? EFS_ERR_INVAL : rpc_put_ticket(ticket,1,probe_only,state);
 }
-int efs_client_rpc_put_ticket_retire(const struct efs_put_ticket *ticket)
+int efs_client_rpc_put_ticket_settle(const struct efs_put_ticket *tickets,uint32_t n,
+                                     uint32_t *retired)
 {
-    uint32_t state=0;
-    return rpc_put_ticket(ticket,2,&state);
+    return rpc_put_ticket(tickets,n,2,retired);
 }
 
 int efs_client_rpc_publication(const struct efs_msg_publication *request, int query_only,

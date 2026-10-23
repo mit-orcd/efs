@@ -4,14 +4,21 @@
 #include "efs/meta_apply.h"
 #include "efs/opid.h"
 
-/* Staged metadata state machine. Serialized apply only. A ticket precedes
- * PUT; its immutable body digest excludes publication CAS/size/time. Never
- * authorize deletion from age, missing state, or a local fence alone. */
-#define EFS_PUT_TICKET_MAX 128u
+/* Durable PUT ownership (K13, W86, D31). Serialized apply only. Every data
+ * PUT is preceded by an admitted ticket; its immutable body digest excludes
+ * publication CAS/size/time. A ticket ends PUBLISHED (with its mapping) or
+ * REJECTED (lost CAS, deleted file, or abandoned by its live owner), and the
+ * owner retires it in sequence order behind a durable floor. A retired
+ * REJECTED body moves to the orphan ledger; bodies are discarded only after
+ * durable session revocation. Never authorize deletion from age, missing
+ * state, or a local fence alone. */
+#define EFS_PUT_TICKET_MAX 4096u /* live tickets per session/lane-shard stream */
+#define EFS_PUT_TICKET_SETTLE_MAX 32u /* tickets in one SETTLE command */
 #define EFS_PUT_TICKET_ADMITTED 1u
 #define EFS_PUT_TICKET_PUBLISHED 2u
 #define EFS_PUT_TICKET_RECLAIMING 3u
 #define EFS_PUT_TICKET_RETIRED 4u /* transport floor proof only; never stored as a ticket */
+#define EFS_PUT_TICKET_REJECTED 5u /* terminal, never published; body retained */
 #define EFS_PUT_TICKET_KEY_LEN 51u
 #define EFS_PUT_TICKET_VAL_LEN 180u
 struct efs_put_ticket {
@@ -51,9 +58,20 @@ int efs_put_ticket_reclaim_begin(struct efs_kv *, const struct efs_put_ticket *)
 int efs_put_ticket_delete_ack(struct efs_kv *, const struct efs_put_ticket *,
                               uint32_t member_bit);
 int efs_put_ticket_retire(struct efs_kv *, const struct efs_put_ticket *);
-/* Floor proof cannot reconstruct the publication verdict or release bytes.
- * The production retirement RPC accepts PUBLISHED only: abandoned uploads
- * still require durable storage fences and every captured member's ACK. */
+/* Floor proof cannot reconstruct the publication verdict or release bytes. */
 int efs_put_ticket_retired(struct efs_kv *,const struct efs_put_ticket *,int *);
-int efs_put_ticket_retire_published(struct efs_kv *,const struct efs_put_ticket *);
+/* State including RETIRED (seq at or below the floor). NOT_FOUND: never
+ * admitted. Validates the stored body against this exact ticket. */
+int efs_put_ticket_state(struct efs_kv *,const struct efs_put_ticket *,uint32_t *state);
+/* ADMITTED -> REJECTED; idempotent on REJECTED. PUBLISHED is STALE (a
+ * published ticket is never abandoned), RECLAIMING is BUSY. */
+int efs_put_ticket_reject(struct efs_kv *,const struct efs_put_ticket *);
+/* Owner settle: reject an ADMITTED ticket, then retire a PUBLISHED/REJECTED
+ * ticket that heads its stream (BUSY otherwise; the reject persists). A
+ * retired REJECTED body is recorded in the orphan ledger. Idempotent once
+ * retired. Requires the owner's active session on the lane shard. */
+int efs_put_ticket_settle(struct efs_kv *,const struct efs_put_ticket *);
+/* Orphan ledger lookup for tests and the collector: OK when this retired
+ * REJECTED ticket's body is recorded. */
+int efs_put_ticket_orphan(struct efs_kv *,const struct efs_put_ticket *);
 #endif

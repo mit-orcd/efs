@@ -139,7 +139,7 @@ static void test_every_msg_struct(void)
     RT(struct efs_msg_hello);
     RT(struct efs_msg_hello_ack);
     RT(struct efs_msg_get_chunk);
-    RT(struct efs_msg_put_chunk);
+    RT(struct efs_msg_bench_put);
     RT(struct efs_msg_list_nodes_reply);
     RT(struct efs_msg_status_reply);
     RT(struct efs_msg_shrink_quota);

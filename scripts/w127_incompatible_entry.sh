@@ -45,7 +45,7 @@ import socket,struct,sys
 body=bytes([0,200,1,2,3,4])
 s=socket.create_connection(('127.0.0.1',int(sys.argv[1])),60)
 # W133: declare the protocol (CLIENT_HELLO 165, version 4) before the proposal.
-s.sendall(struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',4,0))
+s.sendall(struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',5,0))
 hello=b''
 while len(hello)<13:hello+=s.recv(13-len(hello))
 assert hello[4]==166 and struct.unpack('=iI',hello[5:13])==(0,4),hello.hex()
