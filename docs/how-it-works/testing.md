@@ -19,7 +19,19 @@ under a second; anything slower goes into `test-long`.
 binary and Python test, and that no command runs in both groups.
 `scripts/make_test_summary.sh` runs `test-all` by default; set
 `EFS_TEST_TARGET=test` or `test-long` to run one group. It writes
-`timings.tsv`, slowest first, to keep the split honest.
+`timings.tsv`, slowest first, to keep the split honest. With
+`EFS_TEST_JOBS=4` it runs tests in a bounded pool, each with its own
+`TMPDIR`. Tests that use real processes, shutdown, RDMA, timing,
+sanitizers, benchmarks or build introspection still run one at a time,
+after the pool. Measured on intel2 (8 cores, October 23):
+
+| Target | Serial | `EFS_TEST_JOBS=4` |
+| --- | --- | --- |
+| `test` | 43 s | 13 s |
+| `test-all` | 213 s | 132–152 s |
+
+Verdicts were identical in both modes. A test that fails only in the
+pool belongs in the runner's `EXCLUSIVE` pattern. Do not retry it.
 
 Together they run the suites listed in the current Makefile, including the
 simulator, metadata/session/transaction, store, buffer, publication and

@@ -24,8 +24,8 @@ def run(cmds, timeout=None, jobs=None):
     env = dict(os.environ)
     if timeout is not None:
         env['EFS_TEST_CMD_TIMEOUT'] = str(timeout)
-    if jobs is not None:
-        env['EFS_TEST_JOBS'] = str(jobs)
+    # Never inherit the outer run's pool size: serial unless a case asks.
+    env['EFS_TEST_JOBS'] = str(jobs if jobs is not None else 1)
     r = subprocess.run([sys.executable, '-c', runner], cwd=d, env=env, timeout=60)
     return r.returncode, Path(d, 'summary.txt').read_text().splitlines(), d
 
