@@ -209,12 +209,10 @@ test-report-pressure:
 	python3 tests/test_read_peer_order.py
 	python3 tests/test_get_pair_budget.py
 	python3 tests/test_get_pair_readiness.py
-	python3 tests/test_put_retry_budget.py
 	python3 tests/test_put_reply_deadline.py
 	python3 tests/test_put_tcp_frame.py
 	python3 tests/test_put_window_deadline.py
 	python3 tests/test_write_budget.py
-	python3 tests/test_append_sequence.py
 	python3 tests/test_append_session_admission.py
 	python3 tests/test_append_session_host.py
 	python3 tests/test_session_read_proof.py
@@ -226,7 +224,6 @@ test-create-errors: $(LIB)
 	python3 tests/test_create_errors.py
 	python3 tests/test_committed_directory_stage.py
 	python3 tests/test_create_retry_identity.py
-	python3 tests/test_create_retry_ack.py
 	python3 tests/test_open_lease.py
 	python3 tests/test_open_busy.py
 	python3 tests/test_unlink_verdict.py
@@ -235,8 +232,6 @@ test-create-errors: $(LIB)
 	python3 tests/test_node_left_refused.py
 	$(MAKE) tests/shutdown_faults/efsd
 	python3 tests/test_shutdown_bounded.py
-	python3 tests/test_shutdown_stuck_worker.py
-	python3 tests/test_shutdown_blocked_io.py
 	python3 tests/test_apply_unsupported.py
 	python3 tests/test_put_hint.py
 
@@ -294,7 +289,6 @@ test-stop-control:
 	python3 tests/test_client_ready.py
 	python3 tests/test_stop_dirty_drain.py
 	python3 tests/test_fixture_interrupt.py
-	python3 tests/test_client_processes.py
 
 test-wb-runtime:
 	python3 tests/test_wb_runtime.py
@@ -358,8 +352,10 @@ leak-check:
 	bash tests/leak_check.sh
 
 check:
-	@rc=0; $(MAKE) test || rc=1; $(MAKE) docs-check || rc=1; $(MAKE) leak-check || rc=1; exit $$rc
+	@rc=0; $(MAKE) test-all || rc=1; $(MAKE) docs-check || rc=1; $(MAKE) leak-check || rc=1; exit $$rc
 
+# make test: the fast, CPU-bound unit suite for every edit (each command well
+# under a second; about a minute in all). Slow tests belong in test-long.
 test: all
 	python3 tests/test_retired_root_markers.py
 	python3 tests/faults/test_create_retry_fault.py
@@ -412,7 +408,6 @@ test: all
 	python3 tests/test_readindex_coalescer.py
 	python3 tests/test_read_waiters.py
 	python3 tests/test_write_prof.py
-	python3 tests/test_apply_ring.py
 	python3 tests/test_readindex_remote_pair.py
 	python3 tests/test_read_retry_budget.py
 	python3 tests/test_host_read_deadline.py
@@ -421,7 +416,6 @@ test: all
 	python3 tests/test_lookup_path_authority.py
 	python3 tests/test_read_control_host.py
 	python3 tests/test_queued_read_control.py
-	python3 tests/test_raft_ack_window.py
 	python3 tests/test_raft_pending_reads.py
 	python3 tests/test_prepare_cohort.py
 	python3 tests/test_append_cohort.py
@@ -434,9 +428,6 @@ test: all
 	python3 tests/test_namespace_authority.py
 	python3 tests/test_w23_samples.py
 	python3 tests/test_read_verify.py
-	python3 tests/test_opid_admission.py
-	python3 tests/test_server_processes.py
-	python3 tests/test_storage_root_inventory.py
 	python3 tests/test_query_rpc_routing.py
 	python3 tests/test_mgmt_session_routing.py
 	python3 tests/test_mgmt_expiry_lookup.py
@@ -451,7 +442,6 @@ test: all
 	python3 tests/test_txn_read_reuse.py
 	python3 tests/test_publication_rpc.py
 	python3 tests/test_publication_session_rpc.py
-	python3 tests/test_session_latch_tsan.py
 	python3 tests/test_publication_session_reuse.py
 	python3 tests/test_lease_edge_rpc.py
 	python3 tests/test_lease_submission_proof.py
@@ -475,12 +465,6 @@ test: all
 	python3 tests/test_lock_apply_verdict.py
 	python3 tests/test_applied_cursor.py
 	python3 tests/test_tiny_fragment_audit.py
-	python3 tests/test_bench_cli.py
-	python3 tests/test_bench_profile.py
-	python3 tests/test_storage_principles.py
-	python3 tests/test_make_test_recipe.py
-	python3 tests/test_w125_harness.py
-	python3 tests/test_make_test_summary_runner.py
 	python3 tests/test_tmpdir_hygiene.py
 	python3 tests/test_pressure_cohort.py
 	python3 tests/test_alloc_value_guard.py
@@ -490,7 +474,6 @@ test: all
 	python3 tests/test_nuc_block_analysis.py
 	python3 tests/test_nuc_controller_timeout.py
 	python3 tests/test_orcd_ready.py
-	python3 tests/test_orcd_verify_resume.py
 	python3 tests/test_pressure_admission.py
 	python3 tests/test_pressure_background.py
 	python3 tests/test_pressure_index.py
@@ -520,7 +503,6 @@ test: all
 	python3 tests/test_read_failure_admission.py
 	python3 tests/test_read_refs_window.py
 	python3 tests/test_query_capacity_mount.py
-	python3 tests/test_client_memory.py
 	python3 tests/test_rollup_allocation_failure.py
 	python3 tests/test_rollup_budget.py
 	python3 tests/test_recorder_stop.py
@@ -559,39 +541,27 @@ test: all
 	python3 tests/test_host_retire.py
 	python3 tests/test_recv_overlap.py
 	python3 tests/test_kv_mtab_batch.py
-	./tests/test_kv_lsm
-	./tests/test_kv_insertion_buffer
 	$(MAKE) tests/faults/test_kv_compact_crash
 	./tests/faults/test_kv_compact_crash
 	./tests/test_query_policy
 	./tests/test_query_catalog
 	./tests/test_query_disk
-	EFS_QUERY_DELTA_DIRS=1 ./tests/test_query_delta
-	EFS_QUERY_DELTA_PARENTS=64 EFS_QUERY_DELTA_LANES=1 EFS_QUERY_DELTA_MULTI_LANES=1 ./tests/test_query_delta
-	./tests/test_query_disk_io
-	python3 tests/test_query_sort_peak_negative.py
-	python3 tests/test_query_subtree_negative.py
 	./tests/test_query_refresh
 	./tests/test_name_index
 	./tests/test_bench_latency
 	./tests/test_store_overwrite
-	./tests/test_store_durability
 	./tests/test_directory_sync_group
 	python3 tests/test_meta_flush_batch.py
 	./tests/test_put_ticket
 	./tests/test_store_gc
 	./tests/test_store_gc unlimited
-	./tests/test_reclaim
 	./tests/test_writer_routing
 	./tests/test_kv_snapshot_tail
 	./tests/test_kv_seg_index
 	./tests/test_kv_seg_bloom
-	./tests/test_kv_lsm_concurrent 4
 	./tests/test_kv_block_hash
-	./tests/test_raft_store
 	python3 tests/test_raft_replay_reads.py
 	python3 tests/test_raft_append_offsets.py
-	python3 tests/test_raft_rotate_stall.py
 	./tests/test_mtime_barrier
 	./tests/test_session_owned_capture
 	python3 scripts/reviews/k05_mtime_fence_capture.py
@@ -599,7 +569,6 @@ test: all
 	./tests/test_publication_ack
 	./tests/test_publication_recovery
 	./tests/test_append_receipt
-	./tests/test_append_transaction
 	./tests/test_append_cleanup
 	python3 tests/test_append_prepare_batch.py
 	python3 tests/test_meta_cmd_namespace.py
@@ -607,7 +576,6 @@ test: all
 	python3 tests/test_append_catchup_host.py
 	python3 tests/test_fin_abort_handoff.py
 	python3 tests/test_append_single_host.py
-	./tests/test_meta_apply
 	./tests/test_retained_namespace_audit
 	./tests/test_lane_bootstrap_recovery
 	./tests/test_raft
@@ -616,7 +584,6 @@ test: all
 	./tests/test_sim
 	./tests/test_txn
 	./tests/test_txn_resolve_faults
-	./tests/test_txn_retire
 	python3 tests/test_txn_decision_sweep.py
 	python3 tests/test_txn_apply_exact.py
 	python3 tests/test_txn_apply_retry.py
@@ -653,20 +620,17 @@ test: all
 	python3 tests/test_namespace_receipt_pending.py
 	python3 tests/test_query_loaded_oracle.py
 	python3 tests/test_valgrind_verdict.py
-	python3 tests/test_leak_gate.py
 	python3 tests/test_txn_parts_bounds.py
 	python3 tests/test_prepare_bounds.py
 	python3 tests/test_raft_tail.py
 	python3 tests/test_query_policy_forward.py
 	python3 tests/test_command_policy_mount.py
-	python3 tests/test_efs_commands.py
 	python3 tests/test_query_rpc_retry.py
 	python3 tests/test_query_target_route.py
 	python3 tests/test_posix_query_budget.py
 	python3 tests/test_namespace_bounds.py
 	python3 tests/test_namespace_fixture.py
 	python3 tests/test_namespace_envelope_fixture.py
-	python3 tests/test_posix_phase_trace.py
 	python3 tests/test_deepsteps_transparent.py
 	python3 tests/test_query_work_trace.py
 	python3 tests/test_gc_fixture_drain.py
@@ -686,7 +650,6 @@ test: all
 	./tests/test_placement
 	./tests/test_lock
 	./tests/test_stage_evict
-	python3 tests/test_stage_evict_lru.py
 	./tests/test_conn_fd
 
 # Rebuild when public headers change (struct layouts in metadata.h, etc.).
@@ -971,6 +934,54 @@ test-rdma-message:
 	$(CC) -std=c99 -O2 -g -Wall -Wextra -Werror -Iinclude tests/test_rdma_message.c src/common/rdma_message.c -pthread -o "$$bin" && "$$bin"
 
 test: test-rdma-message
+
+# make test-long: tests that wait on real deadlines, start daemons or
+# processes, inject faults or carry heavy workloads (1 s or more each on an
+# 8-core host). Not part of `make test`, the fast unit suite; `make test-all`
+# runs both and is what the gates run.
+.PHONY: test-long test-all
+test-long: all
+	python3 tests/test_shutdown_blocked_io.py
+	python3 tests/test_client_processes.py
+	python3 tests/test_shutdown_stuck_worker.py
+	./tests/test_reclaim
+	python3 tests/test_opid_admission.py
+	EFS_QUERY_DELTA_DIRS=1 ./tests/test_query_delta
+	python3 tests/test_raft_ack_window.py
+	./tests/test_kv_lsm
+	python3 tests/test_server_processes.py
+	python3 tests/test_w125_harness.py
+	./tests/test_append_transaction
+	python3 tests/test_orcd_verify_resume.py
+	./tests/test_kv_lsm_concurrent 4
+	./tests/test_txn_retire
+	python3 tests/test_bench_cli.py
+	python3 tests/test_bench_profile.py
+	python3 tests/test_query_subtree_negative.py
+	python3 tests/test_query_sort_peak_negative.py
+	EFS_QUERY_DELTA_PARENTS=64 EFS_QUERY_DELTA_LANES=1 EFS_QUERY_DELTA_MULTI_LANES=1 ./tests/test_query_delta
+	python3 tests/test_raft_rotate_stall.py
+	python3 tests/test_leak_gate.py
+	python3 tests/test_append_sequence.py
+	./tests/test_store_durability
+	python3 tests/test_storage_root_inventory.py
+	python3 tests/test_efs_commands.py
+	python3 tests/test_client_memory.py
+	python3 tests/test_storage_principles.py
+	python3 tests/test_session_latch_tsan.py
+	./tests/test_kv_insertion_buffer
+	python3 tests/test_make_test_summary_runner.py
+	./tests/test_query_disk_io
+	./tests/test_raft_store
+	./tests/test_meta_apply
+	python3 tests/test_put_retry_budget.py
+	python3 tests/test_make_test_recipe.py
+	python3 tests/test_stage_evict_lru.py
+	python3 tests/test_create_retry_ack.py
+	python3 tests/test_apply_ring.py
+	python3 tests/test_posix_phase_trace.py
+
+test-all: test test-long
 
 # Read routing hints must rebuild the production fragment selector.
 src/client/read.o: src/client/read_peer_order.h

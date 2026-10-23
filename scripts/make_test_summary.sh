@@ -16,6 +16,8 @@
 # last output line and tmp/fail-<index>.log, which keeps the command's full
 # output; then `NOTRUN index command first-mark` lines.
 # EFS_TEST_CMD_TIMEOUT (seconds, default 900) bounds each command.
+# EFS_TEST_TARGET picks the make target (default test-all, the full code gate;
+# test is the fast unit subset, test-long the slow one).
 cd "$(dirname "$0")/.." || exit 2
 [ -f Makefile ] || { echo "make_test_summary: no Makefile in $PWD" >&2; exit 2; }
 mkdir -p tmp  # C tests mkdtemp under TMPDIR and assert on failure
@@ -24,7 +26,7 @@ FL="$(pkg-config --libs fuse3) -Wl,-rpath,/data1/efs/deps/libfuse/lib64"
 make -j64 FUSE_LIBS="$FL" all tests > build.log 2>&1 || echo "BUILD FAILED" > build.failed
 # Same FUSE_LIBS as the build: a relink inside the test recipe must keep
 # the private libfuse rpath, or efs-fuse is left unusable outside this run.
-make -n FUSE_LIBS="$FL" test 2>/dev/null | grep -v "^make\|^echo\|^#" > cmds.txt
+make -n FUSE_LIBS="$FL" "${EFS_TEST_TARGET:-test-all}" 2>/dev/null | grep -v "^make\|^echo\|^#" > cmds.txt
 # Never report a pass for a run that built or ran nothing.
 if [ -e build.failed ] || [ ! -s cmds.txt ]; then
     echo "TOTAL 0 FAIL 1 NOTRUN 0 STATUS FAIL (build failed or no make test commands; see build.log)" > summary.txt
