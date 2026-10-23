@@ -7,6 +7,7 @@
 #include "efs/protocol.h"
 #include "efs/query_catalog.h"
 #include "efs/raft_frame.h"
+#include "member_store.h"
 #include <pthread.h>
 #include <time.h>
 
@@ -118,6 +119,11 @@ struct efsd_server {
     int strace; /* attach strace -f (EFS_STRACE_PATH / EFS_STRACE_EXPR) */
     int usage_dirty; /* local->used changed; flush meta/usage.bin soon */
     int nodes_dirty; /* membership changed; persist nodes.bin off the lock */
+    /* W153: the store under <meta root>/mdraft, owned (flock) for the
+     * process's life, its identity and committed membership; incarnation is
+     * the durable boot counter advanced at this start (the Raft boot id). */
+    struct member_store mstore;
+    uint64_t incarnation;
 
 };
 
@@ -351,6 +357,9 @@ struct efs_conn;
 void server_handle_conn(struct efs_conn *conn);
 
 /* Join an existing cluster by contacting a peer. */
+/* -2: the cluster is formed and refuses this node (W153; node addition is
+ * K33/W157). Never retried. */
+#define EFS_JOIN_REFUSED_FORMED -2
 int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t peer_port);
 
 /* Relay a membership change to all other peers (ring convergence). */
@@ -384,6 +393,17 @@ void server_raft_host_status(struct efs_msg_raft_status_reply *out);
 void server_raft_host_resync(const struct efs_msg_raft_resync *in, struct efs_msg_raft_resync_reply *out);
 void server_raft_host_step_down(const struct efs_msg_raft_step_down *in, struct efs_msg_raft_step_down_reply *out);
 int server_raft_host_active(void);
+/* W153: committed formation membership. formed: raft-mkfs committed it
+ * (before the host starts, as the member store recorded it). member_check:
+ * EFS_OK when unformed or id is a committed member at exactly addr:port,
+ * else EFS_ERR_FENCED; *count is the committed count (0 unformed).
+ * member_filter compacts a node table to the committed members (unchanged
+ * when unformed) and returns the kept count. keep_members drops HELLO-table
+ * rows that are not committed members (persisted). */
+int server_raft_host_formed(void);
+int server_member_check(efs_node_id_t id, const char *addr, uint16_t port, uint32_t *count);
+uint32_t server_member_filter(struct efs_node *nodes, uint32_t count);
+void server_nodes_keep_members(struct efsd_server *s, const struct efs_membership *m);
 int server_raft_host_inode_reaped(efs_ino_t ino, int *dead);
 /* Borrowed immutable query image; group slots are 0 and 2. Only background
  * refresh builds catalogs. The callback must enforce fresh authorization and

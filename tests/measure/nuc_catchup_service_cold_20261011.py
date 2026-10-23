@@ -7,7 +7,7 @@ out = base / 'catchup-service-cold'
 out.mkdir(exist_ok=False)
 src = Path('/data1/efs/src')
 env = dict(os.environ, EFS_CLUSTER='nuc', EFS_DIRECT_IO='1', EFS_TRANSPORT='tcp',
-           EFS_COMMANDS='0', EFS_COMMANDS_SERVER='0', EFS_MD_RAFT_N='4',
+           EFS_COMMANDS='0', EFS_COMMANDS_SERVER='0',
             EFS_RAFT_BATCH_OVERLAP='0', EFS_RAFT_BATCH_NOOP='0', EFS_RAFT_APPLIED_INTERVAL_MS='10', EFS_BATCH_OBS='0')
 def digest(path): return hashlib.sha256(path.read_bytes()).hexdigest()
 def wait(predicate, seconds, label):

@@ -62,6 +62,19 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
 
     struct efs_msg_hello_ack *ack = payload;
     if (ack->assigned_id == 0 || ack->assigned_id != s->id) {
+        if (ack->reject_reason == EFS_HELLO_REJECT_FORMED) {
+            fprintf(stderr,
+                    "Join refused by %s:%u — the cluster is already formed with %u "
+                    "committed members and node %llu at %s:%u is not one of them. "
+                    "Adding a node to a formed cluster is node addition (K33/W157), "
+                    "which this build does not implement; a member keeps its node id "
+                    "and endpoint.\n",
+                    peer_host, peer_port, ack->node_count, (unsigned long long)s->id,
+                    s->addr, s->port);
+            free(payload);
+            server_peer_conn_drop(peer_host, peer_port, pc);
+            return EFS_JOIN_REFUSED_FORMED;
+        }
         if (ack->reject_reason == EFS_HELLO_REJECT_VERSION) {
             fprintf(stderr,
                     "Join refused by %s:%u — VERSION MISMATCH: this node runs "
@@ -111,6 +124,8 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
     if (s->node_count > EFS_MAX_NODES)
         s->node_count = EFS_MAX_NODES;
     memcpy(s->nodes, ack->nodes, sizeof(s->nodes));
+    /* W153: once formed, only committed members enter the table. */
+    s->node_count = server_member_filter(s->nodes, s->node_count);
     server_dedupe_nodes_locked(s);
     /* Keep this process's listen/storage facts authoritative after adopt. */
     struct efs_node *local = server_local_node(s);
@@ -137,6 +152,28 @@ int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t p
 
     printf("Joined cluster with %u nodes\n", joined);
     return 0;
+}
+
+void server_nodes_keep_members(struct efsd_server *s, const struct efs_membership *m)
+{
+    uint32_t kept = 0;
+    pthread_mutex_lock(&s->lock);
+    for (uint32_t i = 0; i < s->node_count && i < EFS_MAX_NODES; i++) {
+        if (!efs_membership_find(m, s->nodes[i].id)) {
+            fprintf(stderr, "membership: node %u (%s:%u) is not a committed member; dropped "
+                    "from the node table\n", s->nodes[i].id, s->nodes[i].addr, s->nodes[i].port);
+            continue;
+        }
+        if (kept != i)
+            s->nodes[kept] = s->nodes[i];
+        kept++;
+    }
+    if (kept != s->node_count) {
+        s->node_count = kept;
+        server_nodes_mark_dirty(s);
+    }
+    pthread_mutex_unlock(&s->lock);
+    server_nodes_flush_dirty(s);
 }
 
 /* Forward one membership update to a single peer (best-effort, pooled conn). */
@@ -372,6 +409,11 @@ static void *rejoin_thread(void *arg)
         int rc;
         if (s->rejoin_addr[0]) {
             rc = server_join_cluster(s, s->rejoin_addr, s->rejoin_port);
+            if (rc == EFS_JOIN_REFUSED_FORMED) {
+                fprintf(stderr, "Stopping: this node cannot join the formed cluster\n");
+                __atomic_store_n(&s->running, 0, __ATOMIC_RELEASE);
+                break;
+            }
             if (rc == 0) {
                 printf("Rejoined cluster via %s:%u\n", s->rejoin_addr, s->rejoin_port);
                 pthread_mutex_lock(&s->lock);

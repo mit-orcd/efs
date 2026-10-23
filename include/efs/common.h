@@ -151,6 +151,9 @@ _Static_assert(EFS_MAX_NODES >= EFS_NUM_FRAGMENTS && EFS_MAX_NODES < 32,
  * the shard (REGISTER + ESTABLISH) and resends the same identity. */
 #define EFS_ERR_FENCED      -27
 #define EFS_ERR_UNREGISTERED -28
+/* W153: the cluster has not committed its formation membership yet
+ * (efs-mgmt raft-mkfs); no client metadata is served before it. */
+#define EFS_ERR_UNFORMED    -29
 
 typedef uint64_t efs_ino_t;
 

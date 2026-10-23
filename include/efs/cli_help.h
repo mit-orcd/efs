@@ -142,7 +142,9 @@ static inline int efs_mgmt_help(FILE *out,const char *command)
             "Set requires operator UID 0 and server EFS_EXPIRY=1.\n"
             "Node addresses use HOST:PORT." :
             (!strcmp(command,"mkfs") || !strcmp(command,"raft-mkfs")) ?
-            "Single export; no label argument.\nNode addresses use HOST:PORT." :
+            "Single export; no label argument.\nCommits the members joined at this moment as the "
+            "cluster membership (at least three, node ids 1..n); a repeat keeps the first.\n"
+            "Node addresses use HOST:PORT." :
             "Node addresses use HOST:PORT.");return 0;
     }
     fprintf(stderr,"Unknown command: %s\n",command);return 1;

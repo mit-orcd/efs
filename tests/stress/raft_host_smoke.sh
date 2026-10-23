@@ -2174,6 +2174,12 @@ if [ -z "$leader" ] || [ "$leader" = "-1" ]; then
     exit 1
 fi
 
+say "wait for all four members (W153: formation commits the members joined now)"
+for i in $(seq 1 60); do
+    ssh_to 10 fcstor003 "cd /tmp/efs && ./efs-mgmt status ${ADDRS[0]}:${PORT}" 2>/dev/null | grep -q 'Cluster nodes (4)' && break
+    sleep 1
+done
+
 say "raft-mkfs (try voters until accepted)"
 mkfs_ok=0
 for idx in 0 1 2; do

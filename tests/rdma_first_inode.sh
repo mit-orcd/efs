@@ -23,7 +23,7 @@ kill_ours
 start_one() {
     local id=$1 join=$2
     local port=$((PORT + id - 1))
-    EFS_MD_RAFT_N=3 EFS_TRANSPORT=auto setsid ./efsd --node-id "$id" \
+    EFS_TRANSPORT=auto setsid ./efsd --node-id "$id" \
         --addr "$ADDR" --port "$port" --storage "$WORK/store/s$id" \
         --quota 1G --writers 0 --no-direct-io $join \
         >"$WORK/s$id.log" 2>&1 </dev/null &

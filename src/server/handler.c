@@ -86,6 +86,35 @@ static int retired_refuse(uint8_t type)
     return 1;
 }
 
+/* W153: client metadata before formation. The cluster has no committed
+ * membership, so no count, no group-2 voters and no namespace: refuse it
+ * like a retired message (closed connection, one bounded log line). */
+static int unformed_metadata(uint8_t type)
+{
+    switch (type) {
+    case EFS_MSG_INODE_LOOKUP: case EFS_MSG_INODE_CREATE: case EFS_MSG_INODE_GETATTR:
+    case EFS_MSG_INODE_READDIR: case EFS_MSG_INODE_UNLINK: case EFS_MSG_INODE_SETATTR:
+    case EFS_MSG_INODE_LINK: case EFS_MSG_REPORT_CHUNKS: case EFS_MSG_INODE_GETCHUNKS:
+    case EFS_MSG_INODE_APPEND: case EFS_MSG_INODE_LOOKUP_PATH: case EFS_MSG_INODE_HOLD:
+    case EFS_MSG_INODE_FLOCK: case EFS_MSG_INODE_RENAME_AT: case EFS_MSG_XATTR:
+    case EFS_MSG_INODE_WRITER_VIEW: case EFS_MSG_LANE_WRITER_VIEW: case EFS_MSG_LANE_BOOTSTRAP:
+    case EFS_MSG_PUBLICATION: case EFS_MSG_PUBLICATION_STATUS: case EFS_MSG_PUBLICATION_RETIRE:
+    case EFS_MSG_QUERY_SNAPSHOT: case EFS_MSG_CREATE_RETAINED:
+        break;
+    default:
+        return 0;
+    }
+    if (server_raft_host_formed())
+        return 0;
+    static uint64_t refused;
+    uint64_t n = __atomic_add_fetch(&refused, 1, __ATOMIC_RELAXED);
+    if (n <= 10 || !(n % 1000))
+        fprintf(stderr, "handler: refused metadata message %u: the cluster is not formed; "
+                        "start at least three members and run efs-mgmt raft-mkfs once; "
+                        "closing (%llu so far)\n", type, (unsigned long long)n);
+    return 1;
+}
+
 /* K1/W145 part 4: after a stop request a handler finishes the request in
  * hand, then closes its connection instead of reading the next one. Pooled
  * RDMA clients kept one handler alive for minutes by retrying a group read
@@ -211,6 +240,8 @@ void server_handle_conn(struct efs_conn *conn)
             close_conn = 1;
         if (EFS_MSG_IS_RETIRED(type))
             close_conn = retired_refuse(type);
+        else if (gate == EFS_GATE_DISPATCH && unformed_metadata(type))
+            close_conn = 1;
         /* A refused frame gets no reply. (Rewriting its type to 0 used to
          * dispatch it as HEARTBEAT and answer a HEARTBEAT_ACK first.) */
         if (close_conn) {
@@ -269,6 +300,29 @@ void server_handle_conn(struct efs_conn *conn)
                     efs_conn_send_msg(conn, EFS_MSG_HELLO_ACK, rej, sizeof(*rej));
                     free(rej);
                     break;
+                }
+                /* W153: a formed cluster admits only its committed members at
+                 * their committed endpoints; node addition is K33/W157. */
+                {
+                    char haddr[sizeof(h->addr)];
+                    uint32_t committed = 0;
+                    memcpy(haddr, h->addr, sizeof(haddr));
+                    haddr[sizeof(haddr) - 1] = '\0';
+                    if (server_member_check(h->node_id, haddr, h->port, &committed) != EFS_OK) {
+                        struct efs_msg_hello_ack *rej = calloc(1, sizeof(*rej));
+                        if (!rej)
+                            break;
+                        rej->reject_reason = EFS_HELLO_REJECT_FORMED;
+                        rej->node_count = committed;
+                        strncpy(rej->build_id, EFS_BUILD_ID, sizeof(rej->build_id) - 1);
+                        fprintf(stderr, "HELLO refused: node %u (%s:%u) is not a committed member "
+                                "of this formed cluster (%u members); adding nodes is node "
+                                "addition (K33/W157), not implemented\n",
+                                h->node_id, haddr, h->port, committed);
+                        efs_conn_send_msg(conn, EFS_MSG_HELLO_ACK, rej, sizeof(*rej));
+                        free(rej);
+                        break;
+                    }
                 }
                 pthread_mutex_lock(&g_server->lock);
 
@@ -686,9 +740,10 @@ void server_handle_conn(struct efs_conn *conn)
             uint32_t node_count = g_server->node_count;
             if (node_count > EFS_MAX_NODES)
                 node_count = EFS_MAX_NODES;
-            reply->node_count = node_count;
             memcpy(reply->nodes, g_server->nodes, sizeof(g_server->nodes));
             pthread_mutex_unlock(&g_server->lock);
+            /* W153: clients place data over the committed members only. */
+            reply->node_count = server_member_filter(reply->nodes, node_count);
             efs_conn_send_msg(conn, EFS_MSG_LIST_NODES_REPLY, reply, sizeof(*reply));
             free(reply);
             break;

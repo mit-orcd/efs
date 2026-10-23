@@ -24,7 +24,7 @@ set -u
 REL=$1; L=$2; LOAD=${3:-40}; DWARF_SECONDS=${DWARF_SECONDS:-3}; PORT=${PORT:-17650}
 AB=/tmp/efs-mu-ab/$L
 rm -rf "$AB"; mkdir -p "$AB"/{n1,n2,n3,logs,mnt,perf}
-export EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_0 EFS_MD_RAFT_N=3 EFS_WRITE_PROF=1
+export EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_0 EFS_WRITE_PROF=1
 # efs-fuse links the private libfuse (FUSE >= 3.12) used by orcd-mini builds.
 FUSE_LIBDIR=${FUSE_LIBDIR:-/data1/efs/deps/libfuse/lib64}
 [ -d "$FUSE_LIBDIR" ] && export LD_LIBRARY_PATH=$FUSE_LIBDIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}

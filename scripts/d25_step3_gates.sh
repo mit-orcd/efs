@@ -32,7 +32,7 @@ set -u
 REL=$1; L=$2
 PORT=${PORT:-17670}; R=${D25_ROOT:-/tmp/d25-gates}/$L; A=${D25_ADDR:-127.0.0.1}
 LAZY=${LAZY:-1}; OPS=${OPS:-300}; REPS=${REPS:-20}; ALLOC_GIB=${ALLOC_GIB:-4}
-export EFS_TRANSPORT=${EFS_TRANSPORT:-tcp} EFS_MD_RAFT_N=3 ASAN_OPTIONS=detect_leaks=0
+export EFS_TRANSPORT=${EFS_TRANSPORT:-tcp} ASAN_OPTIONS=detect_leaks=0
 export EFS_FAULT_TRUNCATE_BEFORE_FILE=$R/fault-before EFS_FAULT_TRUNCATE_APPLY_FILE=$R/fault-apply
 export EFS_FAULT_TRUNCATE_DROP_REPLY_FILE=$R/fault-drop
 for i in 1 2 3; do

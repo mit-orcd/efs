@@ -18,7 +18,7 @@ for port in range(20190,20194):
  with socket.socket() as sock:sock.bind(('127.0.0.1',port))
 work=Path(tempfile.mkdtemp(prefix='close-replay-',dir=old.parent))
 print(work,flush=True)
-env=dict(os.environ,EFS_MD_RAFT_N='4',EFS_COMMANDS_SERVER='0',EFS_TRANSPORT='tcp',EFS_RAFT_OBS='1')
+env=dict(os.environ,EFS_COMMANDS_SERVER='0',EFS_TRANSPORT='tcp',EFS_RAFT_OBS='1')
 procs=[];logs=[]
 try:
  for i,root in enumerate(manifest['roots']):

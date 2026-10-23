@@ -6,7 +6,7 @@
 B=$1; L=$2; R=/tmp/qstart-$L; P=17760
 for p in 17761 17762 17763; do ss -ltn | grep -q ":$p " && { echo "port $p busy"; exit 1; }; done
 rm -rf $R; mkdir -p $R/n1 $R/n2 $R/n3 $R/mnt $R/logs
-export EFS_MD_RAFT_N=3 EFS_TRANSPORT=tcp EFS_COMMANDS=1 EFS_COMMANDS_SERVER=1 EFS_EXPIRY=0
+export EFS_TRANSPORT=tcp EFS_COMMANDS=1 EFS_COMMANDS_SERVER=1 EFS_EXPIRY=0
 start(){ for i in 1 2 3; do j=""; [ $i -gt 1 ] && j="--join 127.0.0.1:$((P+1))"
   setsid $B/efsd --node-id $i --addr 127.0.0.1 --port $((P+i)) --storage $R/n$i --quota 8G --direct-io $j >> $R/logs/n$i.log 2>&1 < /dev/null &
   echo $! > $R/logs/n$i.pid; done

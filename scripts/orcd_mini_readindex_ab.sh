@@ -22,7 +22,7 @@ set -u
 REL=$1; L=$2; LOAD=${3:-40}; PERF_SECONDS=${PERF_SECONDS:-10}; DWARF_SECONDS=${DWARF_SECONDS:-3}
 AB=/data1/efs/prof/ab/$L
 rm -rf "$AB"; mkdir -p "$AB"/{n1,n2,n3,logs,mnt,perf}
-export EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_0 EFS_MD_RAFT_N=3
+export EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_0
 for i in 1 2 3; do
   join=""; [ $i -gt 1 ] && join="--join 10.1.99.1:17631"
   nohup "$REL/efsd" --node-id $i --addr 10.1.99.1 --port $((17630+i)) --storage "$AB/n$i" \

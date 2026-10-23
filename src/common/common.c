@@ -55,6 +55,7 @@ const char *efs_strerror(int rc)
     case EFS_ERR_FRAG_IDENTITY: return "fragment identity mismatch";
     case EFS_ERR_FENCED: return "session fenced";
     case EFS_ERR_UNREGISTERED: return "session not registered on shard";
+    case EFS_ERR_UNFORMED: return "cluster not formed (run efs-mgmt raft-mkfs)";
     default:             return "unknown error";
     }
 }

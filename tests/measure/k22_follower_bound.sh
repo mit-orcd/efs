@@ -43,7 +43,7 @@ ADDR=127.0.0.1
 MNT=$D/mnt
 FAULT=$D/fault
 S=$D/samples.tsv
-export EFS_TRANSPORT=tcp EFS_MD_RAFT_N=3
+export EFS_TRANSPORT=tcp
 
 say() { echo "[k22 $(date -u +%H:%M:%S)] $*" | tee -a "$D/driver.log"; }
 pid_of() { cat "$D/logs/n$1.pid" 2>/dev/null; }

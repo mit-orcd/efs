@@ -97,7 +97,8 @@ class Cluster:
         self.base = base or free_base(members)
         self.extra = list(extra)
         self.storage = storage or (lambda i: [self.work / f'n{i+1}'])
-        self.env = dict(env or {}, EFS_MD_RAFT_N=str(members), EFS_TRANSPORT='tcp')
+        # W153: the member count comes from formation; EFS_MD_RAFT_N stops efsd.
+        self.env = {k: v for k, v in dict(env or {}, EFS_TRANSPORT='tcp').items() if k != 'EFS_MD_RAFT_N'}
         self.procs, self.logs = {}, []
 
     def roots(self, i):
@@ -120,7 +121,15 @@ class Cluster:
 
     def form(self):
         for i in range(self.members): self.start(i)
-        time.sleep(3)
+        # W153: formation commits the members joined at that moment, so wait
+        # until the seed lists every member up before raft-mkfs.
+        deadline = time.monotonic() + 60
+        while True:
+            out = subprocess.run([str(self.source / 'efs-mgmt'), 'status', f'127.0.0.1:{self.base}'],
+                                 env=self.env, capture_output=True, text=True, timeout=10).stdout
+            if out.count('  up ') >= self.members: break
+            assert time.monotonic() < deadline, ('members did not join', out[-400:])
+            time.sleep(.2)
         subprocess.run([str(self.source / 'efs-mgmt'), 'raft-mkfs', f'127.0.0.1:{self.base}'],
                        check=True, env=self.env, stdout=subprocess.DEVNULL, timeout=120)
 

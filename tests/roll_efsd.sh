@@ -112,21 +112,20 @@ if [ $ALL = 1 ]; then
         ssh_ 30 "$h" "mkdir -p /tmp/efs-perf; rm -f /tmp/efs-perf/efsd.data /tmp/efs-perf/efsd.strace; cd /tmp/efs && mv -f efsd.log efsd.log.prev 2>/dev/null; (env $EFSD_ENV $PERF_ENV setsid ./efsd --node-id $n --addr $a --port 19810 --storage $STORAGE --quota 36T --direct-io $join $EFSD_ARGS >efsd.log 2>&1 </dev/null &); sleep 1; echo $h up=\$(pgrep -x efsd | wc -l) perf=\$(pgrep -x perf | wc -l)"
     done
     if [ $FRESH = 1 ]; then
-        # Both groups need a leader first: mkfs commits MKFS on group 0
-        # and then the SALT record on group 2; a group-2 proposal before
-        # its first election is BUSY. And mkfs goes to ONE node only —
-        # the salt is h->salt of the node that serves it, so a retry on
-        # another node after a BUSY proposes a second salt and group 2's
-        # apply wedges on the SALT record forever (PROTO, Oct 1 07:15Z).
-        echo "== wait for a leader in both groups (node 2 hosts both)"
+        # W153: formation commits the members joined at that moment, and
+        # group 2 exists only from formation on (mkfs waits for its first
+        # election itself). Wait for all four members and a group-0 leader.
+        # mkfs goes to ONE node only (one salt on every retry, W37).
+        echo "== wait for all four members and a group-0 leader"
         ok=0
         for i in $(seq 1 60); do
-            st=$(ssh_ 15 fcstor004 "cd /tmp/efs && ./efs-mgmt raft-status 172.16.223.58:19810 2>/dev/null" | grep 'hosted=1')
-            if [ "$(echo "$st" | grep -c 'leader=[0-9]')" = 2 ]; then ok=1; break; fi
+            st=$(ssh_ 15 fcstor004 "cd /tmp/efs && ./efs-mgmt raft-status 172.16.223.58:19810 2>/dev/null" | grep 'group 0 hosted=1')
+            joined=$(ssh_ 15 fcstor003 "cd /tmp/efs && ./efs-mgmt status 172.16.223.57:19810 2>/dev/null" | grep -c 'Cluster nodes (4)')
+            if echo "$st" | grep -q 'leader=[0-9]' && [ "$joined" = 1 ]; then ok=1; break; fi
             sleep 2
         done
         echo "$st"
-        [ $ok = 1 ] || { echo "FAIL: no leader in both groups after 120 s"; exit 1; }
+        [ $ok = 1 ] || { echo "FAIL: four members and a group-0 leader not seen after 120 s"; exit 1; }
         echo "== raft-mkfs on node 1 only (same salt on every retry)"
         ok=0
         for i in $(seq 1 30); do

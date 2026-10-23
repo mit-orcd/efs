@@ -17,7 +17,7 @@
 # Prints PASS/FAIL per check and exits nonzero on any failure.
 set -u
 T=$(cd "$1" && pwd -P); P=${2:-17631}; D=$T/w127
-export EFS_TRANSPORT=${EFS_TRANSPORT:-tcp} EFS_MD_RAFT_N=3
+export EFS_TRANSPORT=${EFS_TRANSPORT:-tcp}
 fail=0
 check() { if eval "$2"; then echo "PASS $1"; else echo "FAIL $1"; fail=1; fi; }
 start() {

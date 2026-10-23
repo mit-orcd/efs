@@ -520,6 +520,15 @@ int efs_meta_apply_mkfs(struct efs_kv *kv, uint64_t now, uint64_t salt);
 int efs_meta_apply_export_salt(struct efs_kv *kv, uint64_t *out);
 int efs_meta_apply_salt_record(struct efs_kv *kv, uint32_t anchor,
                                uint64_t salt);
+/* W153: the committed formation membership record (efs/membership.h
+ * encoding, validated by the caller) on a group's anchor shard. MKFS keeps
+ * the first record (keep_first: a later one is a no-op, the W37 salt rule);
+ * SALT installs it on the even group, where an existing record must match
+ * (EFS_ERR_PROTO, nothing written). Get: EFS_ERR_NOT_FOUND when absent. */
+int efs_meta_apply_membership_record(struct efs_kv *kv, uint32_t anchor,
+                                     const uint8_t *rec, uint32_t len, int keep_first);
+int efs_meta_membership_get(struct efs_kv *kv, uint32_t anchor, uint8_t *out,
+                            uint32_t cap, uint32_t *len);
 int efs_meta_apply_get_inode(struct efs_kv *kv, efs_ino_t ino,
                              struct efs_meta_row *out);
 /* Handler-side row read: a committed EXCL replacement is served even when

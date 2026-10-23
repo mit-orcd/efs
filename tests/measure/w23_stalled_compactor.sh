@@ -135,7 +135,7 @@ PY
 start_node() {  # start_node <id> [extra env...]
     local id=$1; shift
     local port=$((PORT + id - 1))
-    env EFS_MD_RAFT_N=3 EFS_TRANSPORT=tcp EFS_RAFT_OBS=1 "$@" \
+    env EFS_TRANSPORT=tcp EFS_RAFT_OBS=1 "$@" \
         "$FBIN" --node-id "$id" --addr 127.0.0.1 --port "$port" \
         --storage "$STORE/s$id" --quota 4G --no-direct-io \
         ${JOIN:+--join 127.0.0.1:$PORT} \

@@ -30,7 +30,7 @@
 set -u
 REL=$1; L=$2
 PORT=${PORT:-17650}; R=${D25_ROOT:-/tmp/d25-gates}/$L; A=${D25_ADDR:-127.0.0.1}
-export EFS_TRANSPORT=${EFS_TRANSPORT:-tcp} EFS_MD_RAFT_N=3 ASAN_OPTIONS=detect_leaks=0
+export EFS_TRANSPORT=${EFS_TRANSPORT:-tcp} ASAN_OPTIONS=detect_leaks=0
 for i in 1 2 3; do
   ss -ltnH "sport = :$((PORT+i))" | grep -q . && { echo "$L: port $((PORT+i)) in use"; exit 1; }
 done

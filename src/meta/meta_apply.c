@@ -4,6 +4,7 @@
 #include "efs/raft.h"
 #include "efs/meta_cmd.h"
 #include "efs/kv_key.h"
+#include "efs/membership.h"
 #include "efs/session.h"
 #include "efs/put_ticket.h"
 #include "efs/pack_mapping.h"
@@ -1344,6 +1345,45 @@ int efs_meta_apply_salt_record(struct efs_kv *kv, uint32_t anchor,
         return rc;
     be64(v, salt);
     return meta_write_put(kv, k, kl, v, 8);
+}
+
+int efs_meta_membership_get(struct efs_kv *kv, uint32_t anchor, uint8_t *out,
+                            uint32_t cap, uint32_t *len)
+{
+    uint8_t k[EFS_KV_KEY_MAX];
+    uint32_t kl = 0;
+    int rc;
+
+    if (!kv || !out || !len)
+        return EFS_ERR_INVAL;
+    rc = efs_kv_key_membership(anchor, k, &kl);
+    if (rc != EFS_OK)
+        return rc;
+    *len = cap;
+    return efs_kv_get(kv, k, kl, out, len);
+}
+
+int efs_meta_apply_membership_record(struct efs_kv *kv, uint32_t anchor,
+                                     const uint8_t *rec, uint32_t len, int keep_first)
+{
+    uint8_t k[EFS_KV_KEY_MAX], have[EFS_MEMBERSHIP_MAX_LEN];
+    uint32_t kl = 0, hl = 0;
+    int rc;
+
+    if (!kv || !rec || !len || len > EFS_MEMBERSHIP_MAX_LEN)
+        return EFS_ERR_INVAL;
+    rc = efs_meta_membership_get(kv, anchor, have, sizeof(have), &hl);
+    if (rc == EFS_OK) {
+        if (keep_first || (hl == len && !memcmp(have, rec, len)))
+            return EFS_OK;
+        return EFS_ERR_PROTO;
+    }
+    if (rc != EFS_ERR_NOT_FOUND)
+        return rc;
+    rc = efs_kv_key_membership(anchor, k, &kl);
+    if (rc != EFS_OK)
+        return rc;
+    return meta_write_put(kv, k, kl, rec, len);
 }
 
 int efs_meta_pack_inode(const struct efs_meta_row *r, uint8_t *out, uint32_t cap)

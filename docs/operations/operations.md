@@ -33,8 +33,9 @@ back to it.
 identity, then uses a Linux pidfd to send SIGTERM and wait up to 60 seconds.
 A timeout retains the process and reports failure; it does not escalate to
 SIGKILL. Stale PID identity is not authority to signal an unrelated process.
-Use explicit `--node-id 1..N` and `EFS_MD_RAFT_N=3|4`: the wrapper's derived
-address ID is not a valid small-cluster Raft configuration. If startup exits
+Use explicit `--node-id 1..N` (no gaps): the wrapper's derived address ID is
+not a valid member id. The member count and the metadata voters come from the
+membership `mkfs` commits; efsd refuses the removed `EFS_MD_RAFT_N`. If startup exits
 immediately, the wrapper prints the last log lines.
 
 The client needs **one** server address; it discovers the rest. If it runs on
@@ -75,7 +76,7 @@ instructions can make binaries incompatible with a different host.
 
 ```bash
 # Disposable empty roots and free ports; do not reuse an active cluster here.
-export EFS_TRANSPORT=tcp EFS_MD_RAFT_N=3
+export EFS_TRANSPORT=tcp
 ./efsd --node-id 1 --addr 127.0.0.1 --port 17432 --storage /tmp/efs/s1 &
 ./efsd --node-id 2 --addr 127.0.0.1 --port 17433 --storage /tmp/efs/s2 --join 127.0.0.1:17432 &
 ./efsd --node-id 3 --addr 127.0.0.1 --port 17434 --storage /tmp/efs/s3 --join 127.0.0.1:17432 &
@@ -87,9 +88,14 @@ mkdir -p /mnt/efs
 ./efs-fuse 127.0.0.1:17432 /mnt/efs
 ```
 
-`mkfs` is an alias for `raft-mkfs` and needs a **quorum of the metadata Raft
-voters already running**, so start every server first and only then create the
-export. There is no "start the primary, mkfs, then let the others join" order.
+`mkfs` is an alias for `raft-mkfs`. It forms the cluster: it commits the
+members that have joined at that moment (node ids, endpoints, count) in both
+metadata groups, and every daemon derives the member count and the voters
+from that record from then on, across restarts. Start every server first and
+only then create the export: `mkfs` refuses fewer than three members or a gap
+in node ids and names who is missing, and a node that joins after formation
+is refused (node addition is not implemented yet). Before formation a daemon
+serves no client metadata. A repeated `mkfs` keeps the first membership.
 
 Several `--storage` roots (1–24) are allowed. New writes go to the path with
 the shortest writer queue (fairness-weighted by bytes already assigned).
@@ -104,8 +110,8 @@ logs/PID files use the first root. Metadata uses the first root unless
 | Dir | Contents |
 |---|---|
 | `data/` | fragments (file chunks) |
-| `mdraft/` | metadata: this node's Raft log, KV segments, applied index per group |
-| `meta/` | membership (`cluster_nodes.bin`) and `usage.bin` |
+| `mdraft/` | metadata: this node's Raft log, KV segments, applied index per group; `owner.lock` (one daemon per store), `boot.bin` (durable boot counter) and `identity.bin` (node id and the committed membership) |
+| `meta/` | node table (`cluster_nodes.bin`, the joined nodes; not the committed membership) and `usage.bin` |
 | `log/` | logs, PID file, optional `perf` output |
 
 Fragment paths are sharded by inode (five base-10000 segments) so the export

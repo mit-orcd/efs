@@ -4,7 +4,7 @@
     w154_rebuild_on_return.py REL WORK [PORT]
 
 A private five-daemon TCP cluster on loopback (ports PORT+1..PORT+5, default
-PORT 19100), EFS_MD_RAFT_N=5, stores WORK/n1..n5, one efs-fuse mount at
+PORT 19100), five committed members, stores WORK/n1..n5, one efs-fuse mount at
 WORK/mnt. REL holds efsd, efs-fuse, efs-mgmt and scripts/ of one build.
 WORK must be absolute. Stops only the PIDs it started and unmounts only
 WORK/mnt. The F1 scenario (gates-xorinox-20261022.md):
@@ -45,7 +45,7 @@ ADDR = '127.0.0.1'
 MNT = WORK / 'mnt'
 LOGS = WORK / 'logs'
 MIB = 1 << 20
-ENV = dict(os.environ, EFS_TRANSPORT='tcp', EFS_MD_RAFT_N=str(N),
+ENV = dict(os.environ, EFS_TRANSPORT='tcp',
            EFS_REBUILD_PER_PASS='4')
 procs = {}
 manifest = {}
@@ -207,6 +207,11 @@ def main():
     try:
         for i in range(1, N + 1):
             start_node(i)
+        # W153: formation commits the members joined at that moment.
+        for _ in range(120):
+            if f'Cluster nodes ({N})' in mgmt('status', ep(1), check=False):
+                break
+            time.sleep(0.5)
         for _ in range(60):
             if 'raft-mkfs rc=0 ' in mgmt('raft-mkfs', ep(1), check=False):
                 break

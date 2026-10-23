@@ -35,7 +35,7 @@ for p in 1 2 3; do
 done
 rm -rf "$AB"; mkdir -p "$AB"/n1 "$AB"/n2 "$AB"/n3 "$AB"/logs "$AB"/mnt
 [ -d "$FUSE_LIBDIR" ] && export LD_LIBRARY_PATH=$FUSE_LIBDIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
-export EFS_TRANSPORT=rdma EFS_RDMA_DEV=${EFS_RDMA_DEV:-mlx5_0} EFS_MD_RAFT_N=3
+export EFS_TRANSPORT=rdma EFS_RDMA_DEV=${EFS_RDMA_DEV:-mlx5_0}
 for i in 1 2 3; do
   join=""; [ $i -gt 1 ] && join="--join 10.1.99.1:$((PORT+1))"
   nohup "$REL/efsd" --node-id $i --addr 10.1.99.1 --port $((PORT+i)) --storage "$AB/n$i" \

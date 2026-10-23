@@ -13,13 +13,13 @@
 #     lost; then n3 restarts from the normal build on the preserved store,
 #     serves an 8 MiB write+read through a FUSE mount, and its stop reports
 #     rc 4 put_sync failed (W71 recovery-uncertain root after a forced stop).
-# server.sh derives a node id from addr:port; EFS_MD_RAFT_N=3 needs 1..3,
+# server.sh derives a node id from addr:port; formation needs ids 1..3,
 # so --node-id is passed as an extra efsd argument (last one wins).
 # Output on stdout; delete $GATES/k01 afterwards.
 set -u
 GATES=${GATES:-$HOME/efs-gates-nuc}
 REL=$GATES/src; K=$GATES/k01; A=127.0.0.1
-export EFS_TRANSPORT=tcp EFS_MD_RAFT_N=3 TMPDIR=$GATES/tmp
+export EFS_TRANSPORT=tcp TMPDIR=$GATES/tmp
 cd "$REL" || exit 2
 ms() { date +%s%3N; }
 for p in 18910 18911 18912; do ss -ltnH "sport = :$p" | grep -q . && { echo "port $p in use"; exit 1; }; done

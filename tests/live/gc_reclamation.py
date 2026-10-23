@@ -263,7 +263,7 @@ for path in sorted(inputs):
     "binary_sha256":{name:hashlib.sha256((a.server_binary if name=='efsd' and a.server_binary else a.client_binary if name=='efs-fuse' and a.client_binary else source/name).read_bytes()).hexdigest()
                       for name in ('efsd','efs-fuse','efs-mgmt')},
 },indent=2))
-env = dict(os.environ, EFS_MD_RAFT_N='4', EFS_TRANSPORT=a.transport)
+env = dict(os.environ, EFS_TRANSPORT=a.transport)
 # Query gates expect a fresh catalog within seconds; production defaults to 60 s.
 env.setdefault('EFS_QUERY_REFRESH_MS', '2000')
 if a.expiry_backlog_files:
@@ -375,6 +375,12 @@ def wait(predicate, label, seconds=120):
     except Exception as error:failure_status={'diagnostic_error':str(error)}
     (work/'failed-status.json').write_text(json.dumps(failure_status,indent=2))
     raise AssertionError(label+' timed out')
+
+def wait_joined():
+    # W153: formation commits the members joined at that moment; wait for all.
+    wait(lambda:f'Cluster nodes ({len(roots)})' in subprocess.run(
+        [str(source/'efs-mgmt'),'status',f'127.0.0.1:{a.port}'],env=env,capture_output=True,
+        text=True,timeout=10).stdout,'all members joined')
 
 def start(prefer_single_host=False):
     # Follower-persistence gates fault n3, which hosts both groups. Start its
@@ -628,6 +634,7 @@ def fresh_format(label):
     unmount();stop(crash=True)
     for root in roots:shutil.rmtree(root)
     start()
+    wait_joined()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
     print('fresh format of all four stores for '+label,flush=True)
@@ -660,6 +667,7 @@ try:
     if a.kv_wal_persistence_only:
         run(['cc','-shared','-fPIC','-Wall','-Wextra','-Werror',source/'tests/live/kv_wal_fault.c','-ldl','-o',work/'kv-wal-fault.so'])
     start()
+    wait_joined()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
     if a.expiry:

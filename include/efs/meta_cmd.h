@@ -118,6 +118,12 @@
  * PREPARE or RESOLVE and every command carries that tag. Apply runs each
  * command as its own entry would, in order, in the entry's one atomic KV
  * scope; the verdict is the first non-OK command verdict. */
+/* W153: host-only formation notice, never a log command (EFS_MSG_RAFT_MKFS
+ * submit, any group byte): [tag][committed membership record]. The member
+ * persists the record (member store), derives the count and both groups'
+ * voters from it and attaches its group-2 replica; the same record again
+ * is OK, a different one FENCED. */
+#define EFS_MD_REQ_FORMED 89
 #define EFS_MD_CMD_TXN_BATCH 88 /* K29; 86 is PUT_ORPHAN_ACK, 85 and 87 are requests */
 #define EFS_MD_TXN_BATCH_MAX 96u /* commands per entry */
 #define EFS_MD_CMD_SESSION 9 /* matches sim SIM_CMD_SESSION */
