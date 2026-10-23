@@ -1,6 +1,12 @@
 # D39 proposal — authoritative configured cluster membership (Oct 22, 2026)
 
-**Status: PROPOSED, awaiting the user's decision. No code changed.** Written
+**Historical proposal, accepted then amended Oct 23.** The current
+[startup and node-addition contract](alpha-1.0-node-addition-20261023.md)
+supersedes mandatory cluster files and fixed-membership-only alpha. Preserve
+the safety invariants; the model/code must support automatic formation and
+node addition. The dated proposal and review history below remain rationale.
+
+**Original status (superseded): PROPOSED, awaiting the user's decision. No code changed.** Written
 at the user's request after the W153 review
 ([integration review](devel-integration-review-20261022.md#review-of-a76b63f42--w153-is-an-alpha-correctness-gate)):
 W153a (fail-closed `EFS_MD_RAFT_N`) is on hold until this is decided.

@@ -193,7 +193,7 @@ on ambiguous-completion EIO/EBUSY (→ W155), and its raw bundles were lost
 with the session (summary-only evidence). INCOMPLETE: K9 (W87 not reproduced; oracle in devel), K15 (W64 finisher
 handoff and lost-reply cleanup merged, `a51832413`; the failover and
 lost-reply live gates ran once on intel2 Oct 23: lost-reply FAIL and W52 FAIL indication under the K29 stall, failover modes and second runs NOTRUN). VERIFY on the real clusters: K6, K11, K12,
-K17–K21, K27. User decisions taken Oct 23 (D40): K10 known limitation, K13 and K14 FIX in alpha, K23 stays deferred, W154 rebuild-on-return, D39 accepted (fixed membership, endpoint identity, all members at formation), W153a after the model, orcd-mini reformat approved. K26 closed as a gate:
+K17–K21, K27. User decisions taken Oct 23 (D40): K10 known limitation, K13 and K14 FIX in alpha, K23 stays deferred, W154 rebuild-on-return, D39 amended (simple startup, automatic identity, online addition; removal deferred), W153a after the model, orcd-mini reformat approved. K26 closed as a gate:
 `make leak-check` (valgrind memcheck, 25 unit binaries) merged (`b8ef49e58`),
 PASS on efs2, NOTRUN on node9901. The W125 harness gap (cleanup,
 remote and final-verification evidence, self-tests) is merged (`56b7e48fe`).
@@ -214,8 +214,10 @@ earlier) and `tests/test_kv_kind_unique.py` now checks KV kinds, Raft tags
 and message types. `make test-all` at `1324cbd99` on intel2: 431 commands,
 0 FAIL, 14 NOTRUN (environment). orcd-mini at `6b621993d` (before D39): ior
 easy write 444 MiB/s, 21.8 Raft entries per 1 MiB write (K32 still OPEN).
-**Builds with D39 need `--cluster <file>` instead of `--node-id`/`--join`/
-`EFS_MD_RAFT_N`: orcd-mini cannot run them until devops `start.sh` changes.**
+**Current code gap:** these D39 builds require `--cluster` and reject `--join`.
+The later user amendment requires simple startup and online addition (A13);
+a devops workaround alone does not satisfy alpha. Update the protocol and
+normal launch interface to the accepted contract.
 
 ### Fourth wave merged, Oct 23
 
@@ -311,6 +313,16 @@ INCOMPLETE with what was done and what is missing (user direction, Oct 22).
 - [ ] **A5** Record quota, disks, RDMA devices, mount options, clients, concurrency,
   deadlines, fixture counts/sizes and expected results for every topology.
   Fresh-format setup only when a format change requires it; no compatibility work.
+
+## A13. Simple startup and online growth (accepted Oct 23 amendment)
+
+- [ ] **A13 — Required alpha gate.** Implement and pass the
+  [startup and node-addition checklist](alpha-1.0-node-addition-20261023.md):
+  minimal seed/join commands, no mandatory member-list file, automatic initial
+  three-member formation, safe live 3-to-4 and further additions, usable added
+  capacity, stable existing data placement, interrupted-join recovery and
+  single-loss verification. Always 2+1. Online removal remains deferred.
+  Current D39 fixed-membership code/model does not close this gate.
 
 ## A6–A12. One supported behavior: audit and remove A/B modes
 
@@ -566,7 +578,7 @@ round says which physical or software limiter it hit.
     the FUSE kernel fork/page-pinning read path, no client workaround in
     alpha ([diagnosis](orcd-w121-fork-read-20261016.md)).
   - **Erasure profile:** 2+1 only, on 3, 4 and more than 4 nodes.
-  - **Membership:** fixed configured membership; no online add or remove.
+  - **Membership:** online addition required; online removal deferred (A13).
   - **Clients:** Linux FUSE client only (no NFS re-export, no macOS; W152).
   - **Repair:** automatic repair is deferred except W154 rebuild-on-return of
     stripes acknowledged with two fragments.

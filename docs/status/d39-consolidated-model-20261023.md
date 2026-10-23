@@ -1,5 +1,11 @@
 # D39 consolidated model — configured cluster membership (Oct 23, 2026)
 
+**Current scope amendment (Oct 23):**
+[Simple startup and safe node addition](alpha-1.0-node-addition-20261023.md)
+supersedes this model's mandatory cluster file and fixed membership. The
+model must be extended for automatic formation and live additions; historical
+MODEL PASS below does not qualify those requirements. Removal is deferred.
+
 **Status: MODEL PASS on branch `devel-d39model` (not merged); implementation
 and cluster gates NOTRUN.** This page is the single statement an implementer
 reads instead of the review history. It consolidates

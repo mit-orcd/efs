@@ -18,6 +18,11 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Alpha 1.0 simple startup and node addition](alpha-1.0-node-addition-20261023.md):
+**ACCEPTED; implementation OPEN, gates NOTRUN.** Minimal seed/join startup,
+automatic identity and formation, safe live additions, always 2+1; removal
+deferred. Supersedes mandatory cluster files and fixed-membership-only D39/D40.
+
 [K13 / D31 abandoned-upload collection](k13-d31-collection-20261023.md):
 **PASS (scoped, unit and in-process) on branch `devel-k13d31`, not merged.**
 The group leader deletes a settled abandoned body on every member that holds
@@ -133,7 +138,8 @@ is insufficient. K1's post-restart rc 4, loaded errors, raw-evidence losses
 and foreign-client discovery limits remain recorded.
 
 [D39 admission implementation](d39-admission-20261023.md): **stages 1–2 IMPLEMENTED, `make test-all` on amd PASS with host limits, on
-branch `devel-d39adm`, not merged.** `cluster.conf` replaces `--node-id`,
+branch `devel-d39adm`, since merged via `246bae7cf`.** Mandatory-file startup
+is superseded by the node-addition amendment; it is a current implementation gap. `cluster.conf` replaces `--node-id`,
 `--join` and `EFS_MD_RAFT_N` (W153a refusals at start); store lock, encoded
 boot counter, protocol 6 roles and identity declarations, bindings, formation
 states, `FORMATION_READ` and C7 checks at receive and inbox drain landed.
@@ -141,9 +147,9 @@ Effect registration, owned continuations and the stage-4 lifecycle are
 INCOMPLETE; private-cluster gates NOTRUN.
 
 [D39 consolidated model](d39-consolidated-model-20261023.md): **MODEL PASS on
-branch `devel-d39model`, merged Oct 23 `16d716308`.** The single authoritative statement of
-the accepted D39 rules, executable as `tests/d39_model.py` in `make test`:
-101 traces from §§8–33, 11 negative controls under superseded rules and a
+branch `devel-d39model`, merged Oct 23 `16d716308`.** Historical fixed-membership model; superseded for startup and membership growth
+by the accepted node-addition amendment. `tests/d39_model.py` in `make test`
+checks 101 traces from §§8–33, 11 negative controls under superseded rules and a
 randomized interleaving search. It adds three model findings the proposal must
 accept and lists nine unresolved points (C13). Implementation and cluster
 gates NOTRUN.
@@ -241,7 +247,7 @@ persisted; ior write regression needs a K row.
 [K31 fixed, K27 closed, orcd-mini on devel `24e58fb1d`](k31-k27-orcd-mini-20261023.md): **RDMA reply loss came from the K5 mount session starting before the daemon fork (poller thread lost); fixed in `24e58fb1d`. K27: no ior write regression on fresh formats. All orcd-mini suites PASS.**
 
 [D40, alpha 1.0 scope decisions Oct 23](decisions.md#d40--alpha-10-scope-decisions-taken-oct-23-user-in-one-pass):
-**D39 accepted (fixed membership, endpoint identity, all members at formation; model first); W154 rebuild on return; K10 known limitation; K13 and K14 fixed in alpha; K23 stays deferred; orcd-mini reformat and the K27 A/B approved.**
+**D39 amended (simple startup, automatic identity, online addition; removal deferred; model first); W154 rebuild on return; K10 known limitation; K13 and K14 fixed in alpha; K23 stays deferred; orcd-mini reformat and the K27 A/B approved.**
 
 [Alpha 1.0 Stage 1, Oct 22](alpha-1.0-2plus1-checklist.md#stage-1-tally-end-of-oct-22-adjusted-after-the-integration-review):
 **7 K rows fixed and merged (K2, K3, K4, K8, K16, K24, K28); of the 5 rows

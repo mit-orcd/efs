@@ -1569,6 +1569,11 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[Alpha 1.0 simple startup and node addition](../status/alpha-1.0-node-addition-20261023.md):
+**ACCEPTED; implementation OPEN, gates NOTRUN.** Minimal seed/join startup,
+automatic identity and formation, safe live additions, always 2+1; removal
+deferred. Supersedes mandatory cluster files and fixed-membership-only D39/D40.
+
 [K13 / D31 abandoned-upload collection](../status/k13-d31-collection-20261023.md):
 **PASS (scoped, unit and in-process) on branch `devel-k13d31`, not merged.**
 The group leader deletes a settled abandoned body on every member that holds
@@ -1684,7 +1689,8 @@ is insufficient. K1's post-restart rc 4, loaded errors, raw-evidence losses
 and foreign-client discovery limits remain recorded.
 
 [D39 admission implementation](../status/d39-admission-20261023.md): **stages 1–2 IMPLEMENTED, `make test-all` on amd PASS with host limits, on
-branch `devel-d39adm`, not merged.** `cluster.conf` replaces `--node-id`,
+branch `devel-d39adm`, since merged via `246bae7cf`.** Mandatory-file startup
+is superseded by the node-addition amendment; it is a current implementation gap. `cluster.conf` replaces `--node-id`,
 `--join` and `EFS_MD_RAFT_N` (W153a refusals at start); store lock, encoded
 boot counter, protocol 6 roles and identity declarations, bindings, formation
 states, `FORMATION_READ` and C7 checks at receive and inbox drain landed.
@@ -1692,9 +1698,9 @@ Effect registration, owned continuations and the stage-4 lifecycle are
 INCOMPLETE; private-cluster gates NOTRUN.
 
 [D39 consolidated model](../status/d39-consolidated-model-20261023.md): **MODEL PASS on
-branch `devel-d39model`, merged Oct 23 `16d716308`.** The single authoritative statement of
-the accepted D39 rules, executable as `tests/d39_model.py` in `make test`:
-101 traces from §§8–33, 11 negative controls under superseded rules and a
+branch `devel-d39model`, merged Oct 23 `16d716308`.** Historical fixed-membership model; superseded for startup and membership growth
+by the accepted node-addition amendment. `tests/d39_model.py` in `make test`
+checks 101 traces from §§8–33, 11 negative controls under superseded rules and a
 randomized interleaving search. It adds three model findings the proposal must
 accept and lists nine unresolved points (C13). Implementation and cluster
 gates NOTRUN.
@@ -1792,7 +1798,7 @@ persisted; ior write regression needs a K row.
 [K31 fixed, K27 closed, orcd-mini on devel `24e58fb1d`](../status/k31-k27-orcd-mini-20261023.md): **RDMA reply loss came from the K5 mount session starting before the daemon fork (poller thread lost); fixed in `24e58fb1d`. K27: no ior write regression on fresh formats. All orcd-mini suites PASS.**
 
 [D40, alpha 1.0 scope decisions Oct 23](#d40--alpha-10-scope-decisions-taken-oct-23-user-in-one-pass):
-**D39 accepted (fixed membership, endpoint identity, all members at formation; model first); W154 rebuild on return; K10 known limitation; K13 and K14 fixed in alpha; K23 stays deferred; orcd-mini reformat and the K27 A/B approved.**
+**D39 amended (simple startup, automatic identity, online addition; removal deferred; model first); W154 rebuild on return; K10 known limitation; K13 and K14 fixed in alpha; K23 stays deferred; orcd-mini reformat and the K27 A/B approved.**
 
 [Alpha 1.0 Stage 1, Oct 22](../status/alpha-1.0-2plus1-checklist.md#stage-1-tally-end-of-oct-22-adjusted-after-the-integration-review):
 **7 K rows fixed and merged (K2, K3, K4, K8, K16, K24, K28); of the 5 rows
@@ -2626,7 +2632,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | snapshot-restart | **W147** · a snapshot transfer restarts on every send while the leader commits (stored snapshot point without a file) | liveness | Closed (Oct 22): fixed in `a569de971` with a regression test that FAILs on the old code; gate PASS, n2's transfer completed while group 2 committed | [item](#w147) |
 | modify-read-mismatch | **W148** · modify-under-load read returned wrong bytes (correct size) on a never-packed 3.6 MB file | data correctness | FIXED Oct 22 (`71ce4ff35`, alpha K8): a partial load never inherits an UNCOND slot base; the flush fetches the row and overlays only this write's ranges under a CAS. Reproduced 3× on node9901 before the fix; two-client regression 3/3. Fixed-build rerun on nuc (TCP, 9 × 600 s, `163241584`, merged Oct 23 (`2213a4120`)): W148 signature 0/9 and checked stop clean 9/9, but the gate FAILs (3 harness mismatches in 2 attempts were exact committed versions after a rewrite returned EIO, a new finding; EBUSY errors in 5 attempts) ([evidence](../status/gates-nuc-20261022.md#w148-modify-under-load-rerun-on-the-fixed-build)); a rerun with the operation-aware W155 oracle (`devel-w155h`) is NOTRUN ([oracle](../status/w155-oracle-correlation-20261023.md)) | [review](../status/review-pack-validate-once-20261022.md) |
 | compact-die-env | **W149** · `EFS_KV_COMPACT_DIE` makes the daemon `_exit(99)` mid-compaction in normal builds | build hygiene / safety | OPEN: move it and `test_kv_lsm`'s use under `EFS_FAULTS`; alpha K24 | [checklist review](../status/alpha-1.0-2plus1-checklist.md) |
-| md-raft-n-default | **W153** · unset/empty `EFS_MD_RAFT_N` defaults to 4; on three nodes SHARD2 includes absent node 4 and cannot tolerate loss of node 2 or 3; `atoi` also accepts malformed numeric prefixes | fail-open configuration / protection correctness | **OPEN — alpha 1.0 blocker.** Derive bootstrap topology from authoritative configured membership; validate full input and consistent member identities, never infer membership from live reachability. Inspected drivers set the count, but running deployments were not audited. Startup, inconsistent-config and single-loss live gates NOTRUN. Parent-session response (`f2093fc9f` review): also blocks all-member GC inode reclaim silently; split into **W153a** fail-closed count validation (after the consolidated D39 model, user Oct 23) and the configured-membership design question, now [D39 proposal](../status/d39-cluster-membership-proposal-20261022.md) awaiting the user. [D39 admission](../status/d39-admission-20261023.md) (`devel-d39adm`, not merged) replaces `EFS_MD_RAFT_N`, `--node-id` and `--join` with `--cluster`, and a malformed list, an unconfigured endpoint or a set `EFS_MD_RAFT_N` stops efsd before it serves (W153a implemented; `make test-all` on amd PASS with host limits; cluster gates NOTRUN) | [review](../status/devel-integration-review-20261022.md#review-of-a76b63f42--w153-is-an-alpha-correctness-gate), [D38](#appendix-4--decisions--taken-and-pending-register-d1d36) |
+| md-raft-n-default | **W153** · unset/empty `EFS_MD_RAFT_N` defaults to 4; on three nodes SHARD2 includes absent node 4 and cannot tolerate loss of node 2 or 3; `atoi` also accepts malformed numeric prefixes | fail-open configuration / protection correctness | **OPEN — alpha 1.0 blocker.** Oct 23 user amendment: [simple startup and safe online addition](../status/alpha-1.0-node-addition-20261023.md) required; removal deferred. Mandatory-file/fixed-membership implementation does not close this gate. Earlier implementation notes below are historical. Derive bootstrap topology from authoritative configured membership; validate full input and consistent member identities, never infer membership from live reachability. Inspected drivers set the count, but running deployments were not audited. Startup, inconsistent-config and single-loss live gates NOTRUN. Parent-session response (`f2093fc9f` review): also blocks all-member GC inode reclaim silently; split into **W153a** fail-closed count validation (after the consolidated D39 model, user Oct 23) and the configured-membership design question, now [D39 proposal](../status/d39-cluster-membership-proposal-20261022.md) awaiting the user. [D39 admission](../status/d39-admission-20261023.md) (`devel-d39adm`, not merged) replaces `EFS_MD_RAFT_N`, `--node-id` and `--join` with `--cluster`, and a malformed list, an unconfigured endpoint or a set `EFS_MD_RAFT_N` stops efsd before it serves (W153a implemented; `make test-all` on amd PASS with host limits; cluster gates NOTRUN) | [review](../status/devel-integration-review-20261022.md#review-of-a76b63f42--w153-is-an-alpha-correctness-gate), [D38](#appendix-4--decisions--taken-and-pending-register-d1d36) |
 | degraded-stripe-reprotect | **W154** · a stripe acknowledged with two fragments while a node was down stays at two fragments after that node returns: no rebuild, no warning at acknowledgement; one later single-node outage made the file EIO until the second node returned (K28 five-node gate, F1, xorinox Oct 23: 4 of 512 chunks written in the window before the client marked node 5 down) | data protection / deferred repair | FIX (decided Oct 23, D40: rebuild on return): re-protect a stripe acknowledged with two fragments when the missing node returns, log the degraded acknowledgement, keep write availability; no unconditional single-node-failure protection claim until this is in and gated | [gates-xorinox](../status/gates-xorinox-20261022.md), K28 |
 | eio-after-commit | **W155** · flush/close returned EIO after a receive timeout/BUSY sequence; later reads matched the attempted rewrite version (nuc b1/b2). Visibility does not prove the full durability contract succeeded; exact request/receipt and failure stage need correlation. | ambiguous completion / error resolution / harness | OPEN; investigate bounded same-identity outcome resolution. Record completed syscall stages and quarantine unresolved files; do not assume rollback or blanket old-or-new atomicity. Preserve EIO/EBUSY as gate failures. Oracle and correlation tooling merged into devel Oct 23 (`92886b8e2`): the modifier records stages and quarantines unresolved files with syscall-boundary candidates, never PASSes with an error, and `w155_correlate.py` lists logging gaps G1–G8, led by the missing per-request receipt (G2) ([evidence](../status/w155-oracle-correlation-20261023.md)). | [gates-nuc](../status/gates-nuc-20261022.md), [review](../status/devel-integration-review-20261022.md#review-of-the-oct-23-gate-merges-and-recap--october-23), K8, K29 |
 | client-discovery-ownership | **W156** · `scripts/client_processes.py` cannot inspect another user's `efs-fuse` on a shared host (relative mount argv needs that process's cwd), so non-root test users could not stop their own mounts; the merged opt-in `EFS_CLIENT_SKIP_FOREIGN=1` (`2213a4120`) skips uninspectable foreign clients, which proves nothing about foreign clients on the same target | test ownership / operator path | FIXED on `devel-w156` (Oct 23, `dca4dd544`, not merged): owner from mountinfo `user_id=`, controller is the one inspectable `efs-fuse` holding the mount's control endpoint and `/dev/fuse`; foreign or ambiguous ownership refused, foreign processes never inspected; `EFS_CLIENT_SKIP_FOREIGN` removed. Synthetic same-target/unrelated/ambiguous tests PASS; `make test-all` on nuc PASS without a switch. Live foreign-client case NOTRUN (nuc's client was not running) ([evidence](../status/w156-client-discovery-20261023.md)) | [gates-nuc](../status/gates-nuc-20261022.md), [review](../status/devel-integration-review-20261022.md#review-of-the-oct-23-gate-merges-and-recap--october-23) |
@@ -2773,9 +2779,9 @@ remaining gates and limits](../status/v030-release-scope-20261012.md). Execution
 
 | Item | Decision |
 | --- | --- |
-| D39 scope | **Fixed configured membership** for alpha 1.0; online add/remove explicitly deferred past alpha 1.0 |
-| D39 local identity | **The canonical advertised endpoint** selects the member record; the separate `--node-id` input goes away |
-| D39 initial formation | **Every configured member present and agreeing** at `raft-mkfs`; ordinary restart and operation stay quorum-based |
+| D39 scope | **Online node addition required; removal deferred.** Oct 23 user amendment supersedes fixed membership; see [simple startup and node addition](../status/alpha-1.0-node-addition-20261023.md) |
+| D39 local identity | **Automatic durable member identity through formation/join**; no manual node id, member count or mandatory cluster file |
+| D39 initial formation | **Automatic formation with at least three agreeing storage members** and both groups ready; minimal seed/join commands, then safe online additions; restart remains quorum-based |
 | W154 degraded stripes | **Rebuild on return**: a stripe acknowledged with two fragments is re-protected when the missing node returns; the write path logs the degraded acknowledgement; write availability on three nodes with one down is kept |
 | K10 / W121 | **Known limitation** in alpha 1.0: the FUSE kernel page-pinning readback (fsync then previous payload) is documented with its trigger; no client workaround in alpha |
 | K13 / W86, W88 | **Finish for alpha**: the PUT/flush ticket integration is completed and qualified in alpha 1.0; W137 stays a required test item |
@@ -2783,6 +2789,8 @@ remaining gates and limits](../status/v030-release-scope-20261012.md). Execution
 | K23 / W71, W74, W123 | **Stay deferred** past alpha 1.0; W154's rebuild-on-return is the only repair in alpha |
 | W153a | **Model first**: the consolidated D39 model and its tests come first; fail-closed count validation lands inside the admission implementation |
 | orcd-mini | Reformat (fragment format 2) and deploy current devel approved; run the NOTRUN live gates and the K27 ior A/B/A' there |
+
+**Later Oct 23 user amendment:** [simple startup and node addition](../status/alpha-1.0-node-addition-20261023.md) is the current startup and membership contract. Mandatory `--cluster`, removal of `--join` and fixed-membership-only alpha are superseded. The earlier proposal/review chronology below is historical where it conflicts. D39 safety checks remain required; the model and implementation must be extended for additions.
 
 Alpha stays 2+1 only on 3, 4 and more nodes; no compatibility, no new
 operator knob. D39 is therefore **accepted** with the three choices above;

@@ -11,6 +11,7 @@ change or new cluster test is part of this document.
 ## Release sequencing — updated October 22
 
 **Phase 1 is now alpha 1.0: finish 2+1 on 3, 4 and >4 nodes.**
+**Oct 23 membership amendment:** alpha includes [simple startup and node addition](alpha-1.0-node-addition-20261023.md) (automatic formation, live additions, no mandatory member-list file); removal is deferred.
 The [alpha 1.0 checklist](alpha-1.0-2plus1-checklist.md) is the release gate,
 including A6–A12: audit behavior switches, choose built-in policies, remove
 competing A/B paths and reduce the combinatorial qualification matrix.
