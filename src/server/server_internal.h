@@ -542,7 +542,7 @@ int server_gc_sync_roots(struct efsd_server *s);
  * chunk and inode directories if they are now empty. Debits `used`. */
 int server_gc_superseded_delete(struct efsd_server *s, efs_export_id_t eid, efs_ino_t ino,
                                 uint32_t ci, uint32_t fi, uint64_t gen,
-                                const uint8_t sum[EFS_HASH_SIZE]);
+                                const uint8_t sum[EFS_HASH_SIZE], int durable);
 
 /* ---- W125 packed segment store (src/server/segment_store.c) ---- */
 struct efs_pack_object;

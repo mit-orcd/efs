@@ -22,6 +22,7 @@ void efs_client_rpc_set_deadline_ms(uint64_t d){deadline=d;}
 int efs_client_rpc_past_deadline(void){return deadline && now>=deadline;}
 static int fake_sleep(unsigned n){assert(n==1000);now+=1000;return 0;}
 #define usleep fake_sleep
+void efs_client_opid_wait(unsigned max_ms){usleep(max_ms*1000u);}
 int efs_client_create_begin(struct efs_client_create_request *r,efs_ino_t p,
     const char *name,uint32_t mode,uid_t uid,gid_t gid){
  assert(p==1 && name[0]=='f' && mode==0600 && uid==1 && gid==2);calls++;

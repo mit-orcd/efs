@@ -27,6 +27,7 @@ uint64_t efs_client_rpc_deadline_ms(void){return mock_deadline;}
 void efs_client_rpc_set_deadline_ms(uint64_t d){mock_deadline=d;}
 static uint64_t stats_now_ms(void){struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return (uint64_t)t.tv_sec*1000+t.tv_nsec/1000000;}
 int efs_client_rpc_past_deadline(void){return mock_deadline && stats_now_ms()>=mock_deadline;}
+void efs_client_opid_wait(unsigned max_ms){usleep(max_ms*1000u);}
 struct efs_client g_client;
 struct fuse_file_info { uint64_t fh, lock_owner;unsigned flock_release; };
 typedef uint64_t fuse_ino_t;

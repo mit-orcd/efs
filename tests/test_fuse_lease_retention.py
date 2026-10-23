@@ -81,6 +81,7 @@ static int fixture_sleep(unsigned us){
  return usleep(us);
 }
 #define usleep fixture_sleep
+void efs_client_opid_wait(unsigned max_ms){usleep(max_ms*1000u);}
 static unsigned fail_open_alloc;
 static void *fixture_calloc(size_t n,size_t size) {
  if(fail_open_alloc){fail_open_alloc=0;return NULL;}

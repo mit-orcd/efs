@@ -537,6 +537,10 @@ static int gc_unlink_file(struct efsd_server *s, const char *path)
     return rc;
 }
 
+/* Set while a reclaim deleter defers directory syncs to its journal
+ * retirement barrier (one syncfs per filesystem, reclaim.c retire_some). */
+static __thread int t_gc_defer_sync;
+
 /* PUT and checksum-test/unlink share an object lock: an immutable
  * generation avoids replacement, and the lock serializes a retried PUT with
  * the checksum test and unlink of the same object. */
@@ -676,7 +680,7 @@ int server_delete_fragment_if_sum(struct efsd_server *s, struct efs_export *ex,
         int fd = open(path, O_RDONLY);
         if (fd < 0) {
             if (errno == ENOENT) {
-                rc = fragment_parent_sync(s, path);
+                rc = t_gc_defer_sync ? EFS_OK : fragment_parent_sync(s, path);
                 if (rc == EFS_OK)
                     continue;
             }
@@ -732,7 +736,7 @@ int server_delete_fragment_if_sum(struct efsd_server *s, struct efs_export *ex,
         }
         if (gc_unlink_file(s, path) != 0) {
             if (errno == ENOENT) {
-                rc = fragment_parent_sync(s, path);
+                rc = t_gc_defer_sync ? EFS_OK : fragment_parent_sync(s, path);
                 if (rc == EFS_OK)
                     continue;
             }
@@ -756,7 +760,7 @@ int server_delete_fragment_if_sum(struct efsd_server *s, struct efs_export *ex,
             pthread_mutex_unlock(&s->lock);
             server_usage_mark_dirty(s);
         }
-        rc = fragment_parent_sync(s, path);
+        rc = t_gc_defer_sync ? EFS_OK : fragment_parent_sync(s, path);
         if (rc != EFS_OK)
             break;
     }
@@ -886,7 +890,6 @@ static __thread uint64_t *t_gc_counted;
 /* W124: set while the reclaim deleter runs. Directory syncs are skipped; the
  * journal makes the unlinks durable with server_gc_sync_roots before it
  * retires their records, and replays the deletion after a crash. */
-static __thread int t_gc_defer_sync;
 static void gc_account_removed(struct efsd_server *s,uint64_t count,
                                uint64_t payload,uint64_t stored_bytes)
 {
@@ -1184,7 +1187,7 @@ int server_gc_inode_delete(struct efsd_server *s, efs_export_id_t eid, efs_ino_t
  * syncfs per distinct filesystem. */
 int server_gc_superseded_delete(struct efsd_server *s, efs_export_id_t eid, efs_ino_t ino,
                                 uint32_t ci, uint32_t fi, uint64_t gen,
-                                const uint8_t sum[EFS_HASH_SIZE])
+                                const uint8_t sum[EFS_HASH_SIZE], int durable)
 {
     if (!s || !eid || ino <= EFS_ROOT_INO || efs_ino_is_meta_table(ino) || !gen ||
         fi >= EFS_NUM_FRAGMENTS || !sum) return EFS_ERR_INVAL;
@@ -1193,10 +1196,13 @@ int server_gc_superseded_delete(struct efsd_server *s, efs_export_id_t eid, efs_
     ex.id = eid;
     uint64_t saved = efs_tls_chunk_gen;
     efs_tls_chunk_gen = gen;
+    /* Not durable: the caller's journal keeps the obligation until its
+     * retirement syncfs, as for inode deletes (W124). */
+    t_gc_defer_sync = !durable;
     int rc = server_delete_fragment_if_sum(s, &ex, ino, ci, fi, sum);
     efs_tls_chunk_gen = saved;
     if (rc == EFS_ERR_EXIST) rc = EFS_OK; /* reused slot: the dead generation is gone */
-    if (rc != EFS_OK) return rc;
+    if (rc != EFS_OK) { t_gc_defer_sync = 0; return rc; }
     /* A packed or otherwise emptied inode keeps no directories. Under the
      * inode's write guard a PUT cannot be between its mkdir and create. */
     pthread_rwlock_t *g = server_inode_guard(eid, ino);
@@ -1215,16 +1221,17 @@ int server_gc_superseded_delete(struct efsd_server *s, efs_export_id_t eid, efs_
         *slash = '\0';
         if (rmdir(path)) {
             if (errno == ENOTEMPTY || errno == EEXIST || errno == ENOENT) {
-                rc = fragment_parent_sync(s, path);
+                rc = t_gc_defer_sync ? EFS_OK : fragment_parent_sync(s, path);
                 continue;
             }
             rc = EFS_ERR_IO;
             break;
         }
-        rc = fragment_parent_sync(s, path);
+        rc = t_gc_defer_sync ? EFS_OK : fragment_parent_sync(s, path);
         if (rc == EFS_OK) rc = gc_dead_ancestors(s, path);
     }
     pthread_rwlock_unlock(g);
+    t_gc_defer_sync = 0;
     return rc;
 }
 
