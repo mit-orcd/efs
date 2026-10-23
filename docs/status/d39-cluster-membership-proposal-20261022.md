@@ -1587,3 +1587,98 @@ fresh store succeeds; a damaged counter in an initialized store is refused;
 both on synthetic current-format stores.
 
 Proposed, untested, user choices unchanged, W153a held.
+
+## 24. Independent review of §23 (`3a232cb62`) — October 23
+
+**Verdict: OPEN; model and implementation gates NOTRUN.** Reviewed §23
+against the preceding constraints and source at `3a232cb62`, including
+`on_snap_req`/`send_snap`, `disk_save_snap`, `host_boot_bump` and the host
+CFG path. These are proposal counterexamples, not reproduced runtime
+failures. No code, deployment or other session's live-gate status changes.
+
+The RPC/included-term distinction, no-import acknowledgement, explicit
+fresh-store initialization and atomic obligation handoff address the intent
+of §22. Separating fragment visibility from orphan cleanup is also correct.
+The binding design now permits overlapping generations; its boundedness and
+service predicates need to be specified as such.
+
+### P1 — Three slots do not define repeated transitions
+
+Trace: generation A holds an operation; declaration B makes A draining and
+B pending; B admits an application operation; declaration C arrives before
+either finishes. The proposal says every passing declaration proceeds
+immediately, but has no rule for preserving A's and B's outstanding tokens
+while admitting C. Replacing either record loses ownership; waiting on C
+can recreate the completion-traffic problem. A third physical slot only
+delays this problem: repeat with D before previous operations finish.
+
+Define freshness against the highest accepted declaration, including pending
+state, so a reordered B declaration cannot supersede C merely because the
+old active slot is A. Keep a monotonic high-water mark separate from token
+retention. Then specify bounded retention/backpressure for additional
+generations, including how control/completion traffic still progresses.
+One possible simplification is a single latest admission binding plus
+immutable authority on admitted operations; it still needs bounded accounting
+and explicit rules for old control traffic. This is an implementation choice,
+not a demand for another slot or unbounded retired-binding list.
+
+Gate A/B/C/D with outstanding operations, duplicate and reordered
+declarations, and a configured bound reached. No token may be overwritten,
+no lower generation may become newest, and no new application admission may
+use a retired generation. State what happens to independent stale Raft
+frames versus completion of an already owned operation; the former must not
+acquire blanket authority just because their tuple is retained for the latter.
+
+### Pending application service must still satisfy formation readiness
+
+§23 says pending admits new application work immediately. Make the condition
+explicit in that rule: the receiver's complete predicate, the permitted
+role/channel and the operation allowlist must all hold, in addition to the
+binding checks. A valid declaration is not proof both formation groups have
+committed the same identity. Likewise, a restricted unknown-pair catch-up
+channel must not become an application channel just because it is pending.
+
+Gate a declaration during partial MKFS/SALT formation: control traffic may
+proceed, but application work remains refused until completion. If pending
+already grants all the same permissions as active after these checks, say
+that active promotion is accounting/retirement, not a second readiness event.
+Do not leave two different meanings of admission in the superseding sections.
+
+### P1 — Re-proposal needs command-specific authority, not blanket idempotence
+
+The client-identified retry rule is sound only for commands with that actual
+identity and deduplication contract. Do not extend it to all internal Raft
+commands on the grounds that they are "idempotent by construction".
+Idempotent repetition is not safety under intervening operations: setting
+configuration A, then B, then retrying A can undo B. The inspected CFG host
+path saves the requested desired set and may call `efs_raft_change`; merely
+being a desired-set assignment does not establish stale-retry refusal.
+
+For fixed-membership D39, exclude online CFG changes from the permitted
+operation set instead of designing their retry protocol here. For MKFS/SALT,
+name the current-format compare-and-install checks on the complete identity
+pair, including the proposed digest, and how an incompatible retry fails.
+For every other internal command admitted by the protocol, identify its real
+resolution rule or leave that row explicitly unresolved. A committed entry
+must apply; an uncommitted entry is not automatically authorized for later
+re-proposal after its original preconditions have changed. Same bytes alone
+are insufficient. Test supported commands under intervening state changes.
+
+### Snapshot wording: make the conflict outcome explicit
+
+The term distinction is fixed, but "normal conflict rule" must not mean
+refusing a valid snapshot solely because the follower has a conflicting
+uncommitted entry at the included index. Specify the compatible-suffix
+retention versus conflicting-suffix discard behavior and preserve committed
+history. Keep this separate from comparing the RPC term. The inspected
+`on_snap_req` distinguishes the terms; it does not itself contain the newly
+claimed included-index/local-term comparison. Label that part as a required
+end-to-end check, not an already verified property of that function. Gate
+both matching and divergent uncommitted suffixes and no import over newer
+applied state; do not infer correctness from the API names.
+
+D39 remains proposed and W153a held; the three user policy choices do not
+change. The next useful artifact remains one consolidated transition model
+with these traces, not an implementation assembled from superseded prose.
+No backward compatibility, additional operator flags or cluster changes are
+requested by this review.
