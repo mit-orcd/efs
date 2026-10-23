@@ -83,6 +83,12 @@ authoritative identity and fencing rules R1–R6: per-member binding under one
 lock as the authority, exact-tuple frame acceptance with redeclaration on a
 newer generation, revalidation at every effect boundary with one explicit
 linearized-work exception, and incarnation-based restart.
+The §18 review is accepted in §19: one ordered acceptance predicate
+(configuration, digest, pair compatibility, then freshness; identical tuple
+only at equal counter), the existing durable boot counter in `mdraft/boot.bin`
+as the incarnation with a store-ownership lock, an admission-token operation
+lifecycle instead of a pre-I/O check, and committed history completing under
+durable authority regardless of live tags.
 Awaiting the user;
 W153a remains on hold.
 

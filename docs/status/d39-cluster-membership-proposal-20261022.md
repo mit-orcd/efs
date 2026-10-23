@@ -1153,3 +1153,87 @@ as one acceptance predicate and R4 as an explicit operation lifecycle in the
 model, including non-instantaneous I/O and committed-but-unapplied work. Do
 not declare the protocol ready from prose agreement alone. Alpha remains
 2+1 on 3, 4 and >4 nodes; no code, deployment or held-work status changed.
+
+## 19. Response to the §18 review: acceptance predicate and operation lifecycle (parent session, devel `ce15a24db`)
+
+All points accepted. R2, R4 and R5 of §17 are replaced below; R1, R3 and R6
+stand with the changes noted.
+
+**R2′, one ordered acceptance predicate for a declaration** (evaluated under
+the binding lock, every step must hold, no step bypasses an earlier one):
+1. the declared member id is configured and its endpoint equals the
+   configured record (consistency, not authentication);
+2. the digest equals the local digest;
+3. pair compatibility against the local pair and the member's current
+   binding: `none` against anything is compatible only in the direction
+   unknown → known or unknown → unknown; `P` against `P` is compatible;
+   `P` against `Q` is refused; known → `none` (downgrade) is refused; a
+   refusal here is final whatever the incarnation or counter says;
+4. freshness against the member's current binding: a newer durable
+   incarnation is accepted (with the pair already proven compatible in
+   step 3); the same incarnation with a strictly higher counter is accepted
+   and is the only place unknown → known may happen; the same incarnation
+   and the same counter is accepted only when the whole tuple is identical
+   (idempotent redeclaration), otherwise refused as inconsistent; an older
+   incarnation or a lower counter is refused as stale.
+R3 is unchanged (a frame must equal the binding exactly; higher → "redeclare
+required"; equal counter with a different pair → inconsistent). Gates: a
+newer incarnation declaring a conflicting pair (refused at step 3), an
+equal-counter declaration with a different pair (refused at step 4),
+unknown → known at a higher counter (accepted), identical redeclaration
+(accepted, no change).
+
+**R5′, incarnation is the existing durable boot counter.** The incarnation
+is the value `host_boot_bump` already persists in `mdraft/boot.bin` with
+fsync before startup proceeds (always `max(fresh, saved+1)`, written before
+use). D39 adds: the bump is required in every formation state, including an
+unformed store; a persistence failure stops startup (fail-closed, as today's
+`EFS_ERR_IO`); exhaustion of the 64-bit counter stops startup; and the
+store-ownership contract: one process owns a member's store at a time,
+enforced by an exclusive lock on the store directory held for the process's
+life, so two live copies of one store cannot both bump and declare. With
+that contract, a delayed declaration from an old live process carries an
+older incarnation and is stale under R3, and it cannot re-bump because it
+does not hold the store lock. "Newer always wins" is withdrawn; the
+statement is: the newer durable incarnation of the same owned store wins
+the binding, after R2′ steps 1–3 hold. Two independently running copies of
+a store are outside the contract and are not fenced by D39.
+
+**R4′, operation lifecycle instead of a pre-I/O check.** An operation that
+may have a remote-visible or durable effect acquires an admission token
+under the binding lock: the token records the admitting tuple and
+increments the binding's in-flight count. The lock is released for I/O; the
+token is the retained authority. An identity transition (local install, or
+an accepted declaration that replaces the binding) marks the old binding
+`draining`: new admissions against it are refused, operations holding
+tokens continue, and the transition completes only when the in-flight
+count reaches zero or each remaining operation has reached its acceptance
+boundary (below). Publication, the step that makes an effect visible to
+other nodes or commits it locally, requires either a token whose binding is
+current or that the operation has crossed its acceptance boundary. Timeouts
+and failed I/O release the token with no effect published. This is per
+member and per operation, never a global lock across I/O. Gate: a storage
+write paused mid-I/O across an identity transition completes or is
+discarded according to the token rule, never half-published.
+
+**Acceptance boundaries and committed history.** Consensus and store
+operations have defined durable acceptance boundaries, and past them they
+complete under the durable authority, not under a live tag: a log entry
+whose commit index has advanced is applied by `apply_committed` through
+`commit_index` regardless of any sender's incarnation (an identity change
+cannot cancel or defer committed-but-unapplied entries); a snapshot whose
+chunk set is verified complete and whose index is covered by the committed
+history is installed; a store write whose durability barrier returned is
+published. A stale RPC reply is refused for delivery, which never rolls back
+the operation that produced it; the retry resolves through the existing
+operation identity and receipt semantics (`efs_opid`, receipts). Gates:
+commit an entry, pause before apply, change the sender incarnation, require
+exactly one application, deliver the old reply afterwards and verify the
+retry resolves to the committed result; alongside, the unaccepted queued
+frame that must be refused before any effect.
+
+**Model, step 1 of the work order.** R2′ is one predicate function in the
+model; operations are a lifecycle with admission, non-instantaneous I/O,
+acceptance boundary and publication; committed-but-unapplied entries and
+snapshot installation are explicit model states. No readiness claim is
+made from this prose.
