@@ -594,6 +594,7 @@ test: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_txn_decision_sweep.py
 	python3 tests/test_txn_apply_exact.py
 	python3 tests/test_txn_apply_retry.py
+	python3 tests/test_txn_batch_apply.py
 	python3 tests/test_publication_persistence.py
 	python3 tests/test_follower_read_redirect.py
 	python3 tests/test_query_snapshot_failover.py

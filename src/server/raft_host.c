@@ -2918,6 +2918,70 @@ static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return rc;
 }
 
+/* Target shard of one TXN_BATCH command: the PREPARE key's shard or the
+ * RESOLVE shard. UINT32_MAX when the command is too short to name one. */
+static uint32_t txn_batch_shard(const uint8_t *cmd, uint32_t clen)
+{
+    if (cmd[0] == EFS_MD_CMD_RESOLVE)
+        return clen >= 22 ? rd32be(cmd + 17) : UINT32_MAX;
+    if (clen < 19 || !cmd[18] || cmd[18] > EFS_TXN_MAX_PART)
+        return UINT32_MAX;
+    uint32_t off = 19u + 4u * cmd[18];
+    if (clen < off + 4u)
+        return UINT32_MAX;
+    uint32_t klen = ((uint32_t)cmd[off] << 8) | cmd[off + 1];
+    if (klen < 2 || klen > EFS_KV_KEY_MAX || clen < off + 2u + klen)
+        return UINT32_MAX;
+    return ((uint32_t)cmd[off + 2] << 8) | cmd[off + 3];
+}
+
+/* K29 TXN_BATCH: the whole frame is checked before any command applies; a
+ * malformed frame halts the group (UNSUPPORTED) and a command for another
+ * group's shard is refused with nothing applied. Each command then applies
+ * exactly as its own entry would. A storage failure returns at once, so the
+ * scope is dropped and the whole entry retries; business verdicts do not stop
+ * the remaining commands, as consecutive entries would not. */
+static int apply_txn_batch_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                               uint32_t clen, uint8_t group)
+{
+    uint32_t n, i, at, len, shard;
+    int rc, verdict = EFS_OK, foreign = 0;
+
+    if (clen < 4)
+        return EFS_ERR_UNSUPPORTED;
+    n = ((uint32_t)cmd[2] << 8) | cmd[3];
+    if ((cmd[1] != EFS_MD_CMD_PREPARE && cmd[1] != EFS_MD_CMD_RESOLVE) ||
+        n < 2 || n > EFS_MD_TXN_BATCH_MAX)
+        return EFS_ERR_UNSUPPORTED;
+    for (i = 0, at = 4; i < n; i++, at += len) {
+        if (clen - at < 2)
+            return EFS_ERR_UNSUPPORTED;
+        len = ((uint32_t)cmd[at] << 8) | cmd[at + 1];
+        at += 2;
+        if (!len || len > clen - at || cmd[at] != cmd[1])
+            return EFS_ERR_UNSUPPORTED;
+        shard = txn_batch_shard(cmd + at, len);
+        if (shard > EFS_KV_SHARD_MASK)
+            return EFS_ERR_UNSUPPORTED;
+        if (efs_raft_shard_group(shard) != group)
+            foreign = 1;
+    }
+    if (at != clen)
+        return EFS_ERR_UNSUPPORTED;
+    if (foreign)
+        return EFS_ERR_INVAL;
+    for (i = 0, at = 4; i < n; i++, at += len) {
+        len = ((uint32_t)cmd[at] << 8) | cmd[at + 1];
+        at += 2;
+        rc = apply_txn_cmd(h, cmd + at, len);
+        if (rc == EFS_ERR_UNSUPPORTED || rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM)
+            return rc;
+        if (rc != EFS_OK && verdict == EFS_OK)
+            verdict = rc;
+    }
+    return verdict;
+}
+
 static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t term, uint8_t group,
                                const uint8_t *cmd, uint32_t clen);
 
@@ -3030,7 +3094,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
     else {
 #if EFS_FAULTS
     if ((cmd[0]==EFS_MD_CMD_APPEND_CATCHUP || cmd[0]==EFS_MD_CMD_PREPARE || cmd[0]==EFS_MD_CMD_DECIDE ||
-         cmd[0]==EFS_MD_CMD_RESOLVE || cmd[0]==EFS_MD_CMD_DROP) &&
+         cmd[0]==EFS_MD_CMD_RESOLVE || cmd[0]==EFS_MD_CMD_DROP || cmd[0]==EFS_MD_CMD_TXN_BATCH) &&
         getenv("EFS_FAULT_TXN_APPLY_FILE") &&
         access(getenv("EFS_FAULT_TXN_APPLY_FILE"),F_OK)==0) {
         fprintf(stderr,"txn-fault: refused persistence index=%llu tag=%u group=%u\n",
@@ -3062,7 +3126,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
      * never a reason to re-apply the same index. */
     ret = (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
            cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP ||
-           cmd[0] == EFS_MD_CMD_TXN_RETIRE ||
+           cmd[0] == EFS_MD_CMD_TXN_RETIRE || cmd[0] == EFS_MD_CMD_TXN_BATCH ||
            cmd[0] == EFS_MD_CMD_RMDIR || cmd[0] == EFS_MD_CMD_APPEND_COMPLETE_ATOMIC || cmd[0] == EFS_MD_CMD_APPEND_ATOMIC || cmd[0] == EFS_MD_CMD_APPEND_RSV ||
            cmd[0] == EFS_MD_CMD_APPEND_CATCHUP ||
            cmd[0] == EFS_MD_CMD_CREATE || cmd[0] == EFS_MD_CMD_PUBLISH ||
@@ -3107,7 +3171,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
      * advance a follower past cleanup it did not durably perform. */
     if ((cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
          cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP ||
-         cmd[0] == EFS_MD_CMD_TXN_RETIRE ||
+         cmd[0] == EFS_MD_CMD_TXN_RETIRE || cmd[0] == EFS_MD_CMD_TXN_BATCH ||
          cmd[0] == EFS_MD_CMD_LANE_SWEEP_MULTI || cmd[0] == EFS_MD_CMD_REAP_MULTI ||
          cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_SWITCH ||
          cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX || cmd[0] == EFS_MD_CMD_PACK_INDEX ||
@@ -3659,6 +3723,8 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         return apply_gc_ack_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_DEGRADED_CLEAR)
         return apply_degraded_clear_cmd(h, cmd, clen, index, group);
+    if (cmd[0] == EFS_MD_CMD_TXN_BATCH)
+        return apply_txn_batch_cmd(h, cmd, clen, group);
     if (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
         cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP ||
         cmd[0] == EFS_MD_CMD_TXN_RETIRE)
@@ -5185,7 +5251,9 @@ static int host_admit(struct efs_raft_host *h, struct efs_raft *r,
     if (efs_raft_role(r) != EFS_RAFT_LEADER)
         return EFS_OK;
     if (cmd && clen && (cmd[0] == EFS_MD_CMD_DECIDE || cmd[0] == EFS_MD_CMD_RESOLVE ||
-                        cmd[0] == EFS_MD_CMD_DROP))
+                        cmd[0] == EFS_MD_CMD_DROP ||
+                        (cmd[0] == EFS_MD_CMD_TXN_BATCH && clen > 1 &&
+                         cmd[1] == EFS_MD_CMD_RESOLVE)))
         return EFS_OK;
     if (efs_kv_lsm_apply_room(h->kv, 1) == EFS_ERR_BUSY)
         goto busy;
@@ -15328,6 +15396,165 @@ static int host_pub_fault(struct efs_raft_host *h, const char *stage)
 }
 #endif
 
+/* K29: a transaction's PREPAREs (or RESOLVEs) for one Raft group share one
+ * TXN_BATCH entry. Every command and verdict is kept: apply runs them in
+ * order as consecutive entries would, and the entry's verdict is the first
+ * non-OK one, which is all host_wait_refs reports. An append reservation or
+ * barrier retirement on a file with 64 active lanes was 69 PREPAREs and 64
+ * RESOLVEs, each its own entry, fsync, replication and apply; it is now at
+ * most a few entries per group. A group with a single command proposes that
+ * command unchanged. With cohort set, entries that fit a cohort item join
+ * the caller's cohort and a larger one flushes the cohort first, keeping the
+ * order; without it every entry is proposed at once, because its caller
+ * waits for the verdicts next. */
+#define HOST_TXN_BATCH_BYTES (256u * 1024u)
+struct host_txn_batch {
+    uint32_t cap; /* entry bytes */
+    int cohort;
+    struct host_idx_ref *refs;
+    int *nrefs, max;
+    struct {
+        uint8_t group;
+        uint32_t n, len, size;
+        uint8_t *cmd;
+    } open[HOST_NGROUPS];
+};
+
+static void host_txn_batch_init(struct host_txn_batch *b, uint32_t cap, int cohort,
+                                struct host_idx_ref *refs, int *nrefs, int max)
+{
+    memset(b, 0, sizeof(*b));
+    b->cap = cap;
+    b->cohort = cohort;
+    b->refs = refs;
+    b->nrefs = nrefs;
+    b->max = max;
+}
+
+static void host_txn_batch_drop(struct host_txn_batch *b)
+{
+    for (unsigned i = 0; i < HOST_NGROUPS; i++) {
+        free(b->open[i].cmd);
+        b->open[i].cmd = NULL;
+    }
+}
+
+static int host_txn_batch_submit(struct efs_raft_host *h, const struct host_txn_batch *b,
+                                 struct host_idx_ref *ref, const uint8_t *cmd,
+                                 uint32_t bytes, int *hint)
+{
+    struct host_command_cohort *c = host_command_capture;
+
+    if (!b->cohort)
+        return host_propose(h, ref->group, cmd, bytes, &ref->idx, &ref->term, hint);
+    if (c && c->host == h && bytes > sizeof(c->item[0].cmd)) {
+        int rc = host_command_cohort_flush(c, hint);
+        if (rc != EFS_OK)
+            return rc;
+        return host_propose(h, ref->group, cmd, bytes, &ref->idx, &ref->term, hint);
+    }
+    return host_command_cohort_add(h, ref, cmd, bytes, hint);
+}
+
+static int host_txn_batch_close(struct efs_raft_host *h, struct host_txn_batch *b,
+                                unsigned slot, int *hint)
+{
+    uint8_t *cmd = b->open[slot].cmd;
+    uint32_t n = b->open[slot].n;
+    struct host_idx_ref *ref;
+    int rc;
+
+    if (!cmd)
+        return EFS_OK;
+    b->open[slot].cmd = NULL;
+    if (*b->nrefs >= b->max) {
+        free(cmd);
+        return EFS_ERR_OVERFLOW;
+    }
+    ref = &b->refs[*b->nrefs];
+    memset(ref, 0, sizeof(*ref));
+    ref->group = b->open[slot].group;
+    cmd[2] = (uint8_t)(n >> 8);
+    cmd[3] = (uint8_t)n;
+    rc = n == 1 ? host_txn_batch_submit(h, b, ref, cmd + 6, b->open[slot].len - 6, hint)
+                : host_txn_batch_submit(h, b, ref, cmd, b->open[slot].len, hint);
+    free(cmd);
+    if (rc == EFS_OK)
+        ++*b->nrefs;
+    return rc;
+}
+
+static int host_txn_batch_add(struct efs_raft_host *h, struct host_txn_batch *b,
+                              uint8_t group, const uint8_t *cmd, uint32_t bytes,
+                              int *hint)
+{
+    unsigned slot = HOST_NGROUPS, i;
+    int rc;
+
+    if (!bytes || bytes > 0xffffu || 6u + bytes > b->cap)
+        return EFS_ERR_INVAL;
+    for (i = 0; i < HOST_NGROUPS; i++)
+        if (b->open[i].cmd && b->open[i].group == group)
+            slot = i;
+    if (slot < HOST_NGROUPS && (b->open[slot].n == EFS_MD_TXN_BATCH_MAX ||
+                                b->open[slot].len + 2u + bytes > b->cap)) {
+        rc = host_txn_batch_close(h, b, slot, hint);
+        if (rc != EFS_OK)
+            return rc;
+    }
+    if (slot == HOST_NGROUPS || !b->open[slot].cmd) {
+        for (slot = 0; slot < HOST_NGROUPS && b->open[slot].cmd; slot++)
+            ;
+        if (slot == HOST_NGROUPS) {
+            slot = 0;
+            rc = host_txn_batch_close(h, b, slot, hint);
+            if (rc != EFS_OK)
+                return rc;
+        }
+        b->open[slot].size = b->cap < 16384u ? b->cap : 16384u;
+        b->open[slot].cmd = malloc(b->open[slot].size);
+        if (!b->open[slot].cmd)
+            return EFS_ERR_NOMEM;
+        b->open[slot].group = group;
+        b->open[slot].n = 0;
+        b->open[slot].len = 4;
+        b->open[slot].cmd[0] = EFS_MD_CMD_TXN_BATCH;
+        b->open[slot].cmd[1] = cmd[0];
+    }
+    if (b->open[slot].len + 2u + bytes > b->open[slot].size) {
+        uint32_t size = b->open[slot].size;
+        while (size < b->open[slot].len + 2u + bytes)
+            size = size > b->cap / 2u ? b->cap : 2u * size;
+        uint8_t *grown = realloc(b->open[slot].cmd, size);
+        if (!grown)
+            return EFS_ERR_NOMEM;
+        b->open[slot].cmd = grown;
+        b->open[slot].size = size;
+    }
+    uint8_t *at = b->open[slot].cmd + b->open[slot].len;
+    at[0] = (uint8_t)(bytes >> 8);
+    at[1] = (uint8_t)bytes;
+    memcpy(at + 2, cmd, bytes);
+    b->open[slot].len += 2u + bytes;
+    b->open[slot].n++;
+    return EFS_OK;
+}
+
+/* Submit every open entry, in group order of first use. */
+static int host_txn_batch_flush(struct efs_raft_host *h, struct host_txn_batch *b,
+                                int *hint)
+{
+    int rc = EFS_OK;
+
+    for (unsigned i = 0; i < HOST_NGROUPS; i++) {
+        int one = rc == EFS_OK ? host_txn_batch_close(h, b, i, hint) : EFS_OK;
+        if (one != EFS_OK)
+            rc = one;
+    }
+    host_txn_batch_drop(b);
+    return rc;
+}
+
 static int host_txn_commit(struct efs_raft_host *h, const struct efs_txid *t,
                            const struct efs_txn_parts *parts, uint32_t coord,
                            int *hint)
@@ -15355,15 +15582,19 @@ static int host_txn_commit(struct efs_raft_host *h, const struct efs_txid *t,
     (void)host_pub_fault(h, "commit");
 #endif
     struct host_command_cohort cohort;
+    struct host_txn_batch batch;
     host_command_cohort_begin(&cohort,h);
+    host_txn_batch_init(&batch,EFS_TXN_PREPARE_MAX,1,refs,&n,EFS_TXN_MAX_PART);
     for (i = 0; i < parts->n && i < EFS_TXN_MAX_PART; i++) {
         pack_resolve(cmd, t, parts->shard[i], EFS_TXN_COMMIT);
-        refs[n].group = efs_raft_shard_group(parts->shard[i]);
-        rc = host_command_cohort_add(h,&refs[n],cmd,22,hint);
+        rc = host_txn_batch_add(h,&batch,efs_raft_shard_group(parts->shard[i]),
+                                cmd,22,hint);
         if (rc != EFS_OK)
             break;
-        n++;
     }
+    if (rc == EFS_OK)
+        rc = host_txn_batch_flush(h,&batch,hint);
+    host_txn_batch_drop(&batch);
     rc=host_command_cohort_end(&cohort,rc,hint);
     if (rc == EFS_OK)
         rc = host_wait_refs(h, refs, n, hint);
@@ -15438,6 +15669,19 @@ static void host_gc_close_retire_batch(struct efs_raft_host *h,uint8_t group,
 }
 
 
+/* cmd holds EFS_TXN_PREPARE_MAX bytes. */
+static int host_prep_raw_pack(uint8_t *cmd, uint32_t *n, int kind,
+                              const struct efs_txid *t, const struct efs_txn_parts *p,
+                              const uint8_t *key, uint32_t klen, const uint8_t *pay,
+                              uint32_t plen)
+{
+    if (!p || !p->n || p->n > EFS_TXN_MAX_PART ||
+        klen > EFS_KV_KEY_MAX || plen > 9u + 2u * EFS_TXN_VALUE_MAX)
+        return EFS_ERR_INVAL;
+    *n = pack_prep_raw(cmd, kind, t, p, key, klen, pay, plen);
+    return *n > EFS_TXN_PREPARE_MAX ? EFS_ERR_INVAL : EFS_OK;
+}
+
 static int host_prep_raw(struct efs_raft_host *h, uint32_t shard, int kind,
                          const struct efs_txid *t, const struct efs_txn_parts *p,
                          const uint8_t *key, uint32_t klen, const uint8_t *pay,
@@ -15445,13 +15689,10 @@ static int host_prep_raw(struct efs_raft_host *h, uint32_t shard, int kind,
 {
     uint8_t cmd[EFS_TXN_PREPARE_MAX];
     uint32_t n;
+    int rc = host_prep_raw_pack(cmd, &n, kind, t, p, key, klen, pay, plen);
 
-    if (!p || !p->n || p->n > EFS_TXN_MAX_PART ||
-        klen > EFS_KV_KEY_MAX || plen > 9u + 2u * EFS_TXN_VALUE_MAX)
-        return EFS_ERR_INVAL;
-    n = pack_prep_raw(cmd, kind, t, p, key, klen, pay, plen);
-    if (n > sizeof(cmd))
-        return EFS_ERR_INVAL;
+    if (rc != EFS_OK)
+        return rc;
     if (!ref)
         return host_propose_wait(h, efs_raft_shard_group(shard), cmd, n, hint);
     ref->group = efs_raft_shard_group(shard);
@@ -15657,15 +15898,19 @@ static int host_resize_resolve(void *user, const struct efs_txid *t,
     uint8_t cmd[22];
     int rc = EFS_OK, n = 0;
     struct host_command_cohort cohort;
+    struct host_txn_batch batch;
     host_command_cohort_begin(&cohort,ctx->host);
+    host_txn_batch_init(&batch,EFS_TXN_PREPARE_MAX,1,refs,&n,EFS_TXN_MAX_PART);
     for (uint32_t i = 0; i < parts->n; ++i) {
         pack_resolve(cmd, t, parts->shard[i], decision);
-        refs[n].group = efs_raft_shard_group(parts->shard[i]);
-        rc = host_command_cohort_add(ctx->host,&refs[n],cmd,sizeof(cmd),ctx->hint);
+        rc = host_txn_batch_add(ctx->host,&batch,efs_raft_shard_group(parts->shard[i]),
+                                cmd,sizeof(cmd),ctx->hint);
         if (rc != EFS_OK)
             break;
-        ++n;
     }
+    if (rc == EFS_OK)
+        rc = host_txn_batch_flush(ctx->host,&batch,ctx->hint);
+    host_txn_batch_drop(&batch);
     rc=host_command_cohort_end(&cohort,rc,ctx->hint);
     if (rc == EFS_OK)
         rc = host_wait_refs(ctx->host, refs, n, ctx->hint);
@@ -15703,6 +15948,18 @@ static int host_append_prepare_ref(void *user,const struct efs_txid *t,
     return host_prep_raw(ctx->host,shard,EFS_TXN_EXCL_VALUE,t,parts,
                          im->key,im->klen,pay,pn,ref,ctx->hint);
 }
+/* The same exact-image PREPARE, encoded for a TXN_BATCH entry. */
+static int host_append_prepare_pack(const struct efs_txid *t,
+    const struct efs_txn_parts *parts,const struct efs_meta_append_image *im,
+    uint8_t *cmd,uint32_t *n,uint8_t *group)
+{
+    uint8_t pay[9+2*EFS_OPID_VAL_MAX];uint32_t pn;
+    int rc=efs_txn_encode_excl_value(pay,sizeof(pay),&pn,im->expected,
+                                     im->expected_len,im->op,im->value,im->new_len);
+    if(rc!=EFS_OK)return rc;
+    *group=efs_raft_shard_group(((uint32_t)im->key[0]<<8)|im->key[1]);
+    return host_prep_raw_pack(cmd,n,EFS_TXN_EXCL_VALUE,t,parts,im->key,im->klen,pay,pn);
+}
 static int host_append_prepare(void *user,const struct efs_txid *t,
                                 const struct efs_txn_parts *parts,
                                 const struct efs_meta_append_image *im)
@@ -15713,13 +15970,17 @@ static const struct efs_meta_append_ops host_append_ops={
     host_append_prepare,host_resize_decide,host_resize_resolve};
 
 /* Reservations keep their floor and inode guards synchronous and ordered.
- * The remaining exact images can share Raft durability cohorts. No decision
- * precedes the existing term/index-matched result check for EVERY proposal.
- * REPORT completion uses the same ordered guards; pruning stays synchronous. */
+ * The remaining exact images are buffered per Raft group and proposed as
+ * TXN_BATCH entries when the decision is reached (K29: one entry per group,
+ * not one per active lane). No decision precedes the existing
+ * term/index-matched result check for EVERY proposal; an ABORT proposes no
+ * buffered image. REPORT completion uses the same ordered guards; pruning
+ * stays synchronous. */
 struct host_append_reserve_ctx {
     struct host_resize_ctx base;
     struct host_idx_ref refs[EFS_META_LANES+5+EFS_META_APPEND_COMPLETE_MAX];
-    int nrefs,leading;
+    int nrefs,leading,images;
+    struct host_txn_batch batch;
 };
 static int host_append_reserve_prepare(void *user,const struct efs_txid *t,
     const struct efs_txn_parts *parts,const struct efs_meta_append_image *im)
@@ -15730,18 +15991,29 @@ static int host_append_reserve_prepare(void *user,const struct efs_txid *t,
         if(rc==EFS_OK)--ctx->leading;
         return rc;
     }
-    if(ctx->nrefs>=(int)(sizeof(ctx->refs)/sizeof(ctx->refs[0])))
+    if(ctx->images>=(int)(sizeof(ctx->refs)/sizeof(ctx->refs[0])))
         return EFS_ERR_INVAL;
-    int rc=host_append_prepare_ref(&ctx->base,t,parts,im,&ctx->refs[ctx->nrefs]);
-    if(rc==EFS_OK)++ctx->nrefs;
+    uint8_t cmd[EFS_TXN_PREPARE_MAX];uint32_t n;uint8_t group;
+    int rc=host_append_prepare_pack(t,parts,im,cmd,&n,&group);
+    if(rc!=EFS_OK)return rc;
+    if(!ctx->batch.cap)
+        host_txn_batch_init(&ctx->batch,HOST_TXN_BATCH_BYTES,0,ctx->refs,&ctx->nrefs,
+                            (int)(sizeof(ctx->refs)/sizeof(ctx->refs[0])));
+    rc=host_txn_batch_add(ctx->base.host,&ctx->batch,group,cmd,n,ctx->base.hint);
+    if(rc==EFS_OK)++ctx->images;
     return rc;
 }
 static int host_append_reserve_decide(void *user,const struct efs_txid *t,
     const struct efs_txn_parts *parts,int decision)
 {
     struct host_append_reserve_ctx *ctx=user;
+    int sent=EFS_OK;
+    if(decision==EFS_TXN_COMMIT && !ctx->leading && ctx->batch.cap)
+        sent=host_txn_batch_flush(ctx->base.host,&ctx->batch,ctx->base.hint);
+    host_txn_batch_drop(&ctx->batch);
     int prepared=host_wait_refs(ctx->base.host,ctx->refs,ctx->nrefs,ctx->base.hint);
-    ctx->nrefs=0;
+    if(prepared==EFS_OK)prepared=sent;
+    ctx->nrefs=ctx->images=0;
     if(decision==EFS_TXN_COMMIT && (prepared!=EFS_OK || ctx->leading)) {
         /* COMMIT has not been proposed. A late PREPARE refusal must take the
          * same durable ABORT/cleanup path as a synchronous PREPARE failure. */
