@@ -2,7 +2,7 @@
 # Wipe the fcstor efs test cluster and bring up a fresh mkfs'd efs-test.
 #
 # Does: wipe_cluster.sh -> (optional) rsync+build efsd on the 4 servers ->
-# start primary -> mkfs efs-test -> start 3 joiners -> verify 4 up.
+# start all four from one configured member list (D39) -> mkfs -> verify 4 up.
 # Clients are NOT mounted here — use run_tests.sh setup for that.
 #
 # Usage: clean_cluster.sh [--no-deploy]
@@ -18,18 +18,20 @@ DEPLOY=1
 say() { echo "[clean] $*"; }
 ssh_to() { local t=$1; shift; EFS_SSH_TIMEOUT=$t "$SSH" "$@"; }
 
-start_efsd() { # host node-id addr [join]
-    local h=$1 nid=$2 addr=$3 join=${4:-}
-    local j=""; [ -n "$join" ] && j="--join $join"
+# D39: the configured member list, written to /tmp/efs/cluster.conf on every
+# server; the endpoint (addr:19810) selects each member.
+CONF_TEXT=$(for i in 0 1 2 3; do printf '%d %s:19810\\n' $((i+1)) "${ADDR[$i]}"; done)
+start_efsd() { # host addr
+    local h=$1 addr=$2
     # setsid detaches; the ssh session may linger (harmless) so allow rc=124.
     # Optional trace variables are forwarded only when the caller set them.
     local prof=""
     # RDMA handshake / first-frame trace (rdma-first: lines on both sides).
     [ -n "${EFS_RDMA_FIRST:-}" ] && prof="$prof EFS_RDMA_FIRST=$EFS_RDMA_FIRST"
     [ -n "${EFS_TRANSPORT:-}" ] && prof="$prof EFS_TRANSPORT=$EFS_TRANSPORT"
-    ssh_to 15 "$h" "cd /tmp/efs && $prof \
-        setsid ./efsd --node-id $nid --addr $addr \
-        --port 19810 --storage $STORAGE --quota 36T --direct-io $j \
+    ssh_to 15 "$h" "cd /tmp/efs && printf '$CONF_TEXT' > cluster.conf && $prof \
+        setsid ./efsd --cluster /tmp/efs/cluster.conf --addr $addr \
+        --port 19810 --storage $STORAGE --quota 36T --direct-io \
         >efsd.log 2>&1 </dev/null & sleep 3; pgrep -x efsd >/dev/null && echo UP" \
         2>/dev/null | grep -q UP
 }
@@ -51,11 +53,11 @@ fi
 
 # Raft mkfs needs a quorum, so ALL nodes come up first, then mkfs.
 say "3/4 start node 1"
-start_efsd fcstor003.ib 1 172.16.223.57 || { echo "node 1 failed to start"; exit 1; }
+start_efsd fcstor003.ib 172.16.223.57 || { echo "node 1 failed to start"; exit 1; }
 
-say "4/4 start 3 joiners (parallel) + mkfs"
+say "4/4 start the other 3 members (parallel) + mkfs"
 for i in 1 2 3; do
-    ( start_efsd "${SERVERS[$i]}" $((i+1)) "${ADDR[$i]}" 172.16.223.57:19810 \
+    ( start_efsd "${SERVERS[$i]}" "${ADDR[$i]}" \
         && echo "  ${SERVERS[$i]%.ib} up" || echo "  ${SERVERS[$i]%.ib} FAILED" ) &
 done
 wait
@@ -65,7 +67,7 @@ wait
 # older efsd: a NOT_PRIMARY (rc=-15) reply carries leader_hint = the
 # leader's raw raft_id (0-based); node N has raft_id N-1 and addr
 # 172.16.223.(56+N).
-mkfs_out=$(ssh_to 20 fcstor003.ib 'cd /tmp/efs && ./efs-mgmt mkfs 172.16.223.57:19810 efs-test') || true
+mkfs_out=$(ssh_to 20 fcstor003.ib 'cd /tmp/efs && ./efs-mgmt --cluster cluster.conf mkfs 172.16.223.57:19810') || true
 echo "$mkfs_out"
 # rc=-13 (BUSY) is the 400 ms apply wait timing out on a cluster that has
 # been up for seconds; the entry still commits (Sep 29 17:04Z: both mkfs
@@ -87,7 +89,7 @@ if ! echo "$mkfs_out" | grep -q "rc=0"; then
         0|1|2|3)
             tip=$((57 + hint))
             say "mkfs NOT_PRIMARY, retrying on leader raft_id=$hint (172.16.223.$tip)"
-            ssh_to 20 fcstor003.ib "cd /tmp/efs && ./efs-mgmt mkfs 172.16.223.$tip:19810 efs-test" \
+            ssh_to 20 fcstor003.ib "cd /tmp/efs && ./efs-mgmt --cluster cluster.conf mkfs 172.16.223.$tip:19810" \
                 || { echo "mkfs failed (via hint $hint)"; exit 1; }
             ;;
         *)

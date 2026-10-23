@@ -18,8 +18,7 @@ def digest(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 def verify_images(root,images):
     for name,image in images.items():assert digest(root/name)==image['sha256'],name
 env=dict(os.environ,EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_TRANSPORT='tcp',
-    EFS_CLUSTER='nuc',EFS_DIRECT_IO='1',EFS_MD_RAFT_N='4',
-    EFS_RAFT_BATCH_OVERLAP='0',EFS_RAFT_BATCH_NOOP='0',EFS_RAFT_APPLIED_INTERVAL_MS='10',EFS_BATCH_OBS='0')
+    EFS_CLUSTER='nuc',EFS_DIRECT_IO='1',EFS_RAFT_BATCH_OVERLAP='0',EFS_RAFT_BATCH_NOOP='0',EFS_RAFT_APPLIED_INTERVAL_MS='10',EFS_BATCH_OBS='0')
 def start(label):
     with (out/(label+'.log')).open('w') as log:
         rc=subprocess.run(['bash','/data1/efs/w97-latest-20261010/start-preserved.sh'],

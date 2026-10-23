@@ -24,12 +24,16 @@ home = Path(tempfile.mkdtemp(prefix='async-commit-', dir=Path.home()))
 print(work, flush=True)
 env = os.environ.copy()
 env.update(EFS_TRANSPORT='rdma', EFS_RDMA_DEV='rxe0', EFS_RDMA_GID_INDEX='1',
-           EFS_MD_RAFT_N='4', EFS_METADATA_BALANCE='1', EFS_DIRECT_IO='1',
+           EFS_METADATA_BALANCE='1', EFS_DIRECT_IO='1',
            EFS_COMMANDS='0', EFS_COMMANDS_SERVER='0',            EFS_EXPIRY='0', EFS_PUT_SYNC_MS='10000',
            EFS_GC_BACKLOG_IDLE_MS='20')
 for key in ('EFS_RPC_PROF','EFS_READ_PROF','EFS_BATCH_OBS'):
     env.pop(key, None)
 base = 28432
+# D39: the configured member list; efs-mgmt declares as management with it.
+conf = work / 'cluster.conf'
+conf.write_text(''.join('%d 127.0.0.1:%d\n' % (i, base + i - 1) for i in range(1, 5)))
+env['EFS_CLUSTER_CONF'] = str(conf)
 nodes = {}
 mounts = []
 logs = []
@@ -40,10 +44,9 @@ def command(args, **kw):
 
 def start(i):
     log = open(work / ('n%d.log' % i), 'ab'); logs.append(log)
-    args = [str(src/'efsd'),'--node-id',str(i),'--addr','127.0.0.1',
+    args = [str(src/'efsd'),'--cluster',str(conf),'--addr','127.0.0.1',
             '--port',str(base+i-1),'--storage',str(work/('n%d'%i)),
             '--quota','4G','--direct-io']
-    if i != 1: args += ['--join','127.0.0.1:%d'%base]
     p = sp.Popen(args, env=env, stdout=log, stderr=log); nodes[i]=p
     until=time.monotonic()+30
     while time.monotonic()<until:

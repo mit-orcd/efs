@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """K13 private three-daemon gate: the ticketed PUT/REPORT path end to end.
 
-Starts three efsd on 127.0.0.1 (EFS_MD_RAFT_N=3, EFS_TRANSPORT=tcp) with
+Starts three efsd on 127.0.0.1 (one cluster.conf, D39; EFS_TRANSPORT=tcp) with
 stores under --work, one FUSE mount, and checks:
   * default PUT/flush: written files read back exactly (warm and cold),
     fsync succeeds, unflushed deletes and overwrites settle, and a clean
@@ -31,7 +31,11 @@ assert 18700 <= a.port and a.port + 2 <= 18799, 'ports must stay in 18700-18799'
 work.mkdir(parents=True, exist_ok=True)
 mnt = work / 'mnt'; mnt.mkdir(exist_ok=True)
 roots = [work / f'n{i+1}' for i in range(3)]
-env = dict(os.environ, EFS_MD_RAFT_N='3', EFS_TRANSPORT='tcp', TMPDIR=str(work / 'tmp'))
+env = dict(os.environ, EFS_TRANSPORT='tcp', TMPDIR=str(work / 'tmp'))
+# D39: the configured member list; efs-mgmt declares as management with it.
+conf = work / 'cluster.conf'
+conf.write_text(''.join(f'{i+1} 127.0.0.1:{a.port+i}\n' for i in range(3)))
+env['EFS_CLUSTER_CONF'] = str(conf)
 (work / 'tmp').mkdir(exist_ok=True)
 servers = {}
 client = None
@@ -61,9 +65,8 @@ def wait(pred, label, limit):
 def start_node(i):
     roots[i].mkdir(exist_ok=True)
     f = open(work / f'n{i+1}.log', 'ab'); logs.append(f)
-    cmd = [src / 'efsd', '--node-id', str(i+1), '--addr', '127.0.0.1', '--port', str(a.port+i),
+    cmd = [src / 'efsd', '--cluster', conf, '--addr', '127.0.0.1', '--port', str(a.port+i),
            '--storage', roots[i], '--quota', '4G', '--no-direct-io']
-    if i: cmd += ['--join', f'127.0.0.1:{a.port}']
     servers[i] = subprocess.Popen([str(c) for c in cmd], env=env, stdout=f, stderr=f)
     (work / 'pids').open('a').write(f'efsd n{i+1} {servers[i].pid}\n')
     def listening():

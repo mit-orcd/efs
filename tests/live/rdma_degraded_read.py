@@ -54,7 +54,7 @@ try:
  for node in (2,3):statuses[node]=subprocess.check_output([str(a.source/'efs-mgmt'),'raft-status',f'127.0.0.1:{a.base_port+node-1}'],text=True,timeout=15)
  node=next(n for n,s in statuses.items() if s.count('role=FOLLOWER')==2)
  pid=int((a.pid_root/f'efsd-n{node}.pid').read_text())
- cmd=Path(f'/proc/{pid}/cmdline').read_bytes().replace(b'\0',b' ').decode();assert f'--node-id {node} ' in cmd
+ cmd=Path(f'/proc/{pid}/cmdline').read_bytes().replace(b'\0',b' ').decode();assert f'--port {a.base_port+node-1} ' in cmd  # D39: the endpoint selects the member
  (a.output/'fixture.json').write_text(json.dumps(dict(node=node,pid=pid,fixture=str(fixture),reader=str(reader),source=(a.source/'SOURCE_COMMIT').read_text().strip(),bytes=TOTAL,outer_seconds=180,statuses=statuses),indent=2)+'\n')
  os.kill(pid,signal.SIGSTOP);paused=True
  print(f'Paused follower node={node} pid={pid}',flush=True)

@@ -16,9 +16,12 @@ for direct in (False,True):
             with socket.socket() as free:
                 free.bind(('127.0.0.1',0));port=free.getsockname()[1]
             logpath=Path(work)/'daemon.log'
+            # D39: one member of a three-member configured list (the others never start).
+            conf=Path(work)/'cluster.conf';conf.write_text(f'1 127.0.0.1:{port}\n2 127.0.0.2:{port}\n3 127.0.0.3:{port}\n')
+            os.mkdir(Path(work)/'store')
             sockets=[];stop=threading.Event()
             with logpath.open('w') as log:
-                proc=subprocess.Popen([str(source/'efsd'),'--node-id','1','--addr','127.0.0.1','--port',str(port),'--storage',work,'--direct-io' if direct else '--no-direct-io'],env=dict(os.environ,EFS_MD_RAFT_N='3',EFS_TRANSPORT='tcp'),stdout=log,stderr=log)
+                proc=subprocess.Popen([str(source/'efsd'),'--cluster',str(conf),'--addr','127.0.0.1','--port',str(port),'--storage',str(Path(work)/'store'),'--direct-io' if direct else '--no-direct-io'],env=dict(os.environ,EFS_TRANSPORT='tcp'),stdout=log,stderr=log)
                 def churn():
                     while not stop.is_set():
                         try:

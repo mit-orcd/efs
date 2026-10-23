@@ -4,7 +4,7 @@
 # K14 / W77 (I24) cluster gate: atomic multi-chunk publication and
 # observation. Private 3-daemon TCP cluster on ONE host: ports
 # PORT+1..PORT+3 (default 18801-18803), stores DIR/n{1,2,3},
-# EFS_MD_RAFT_N=3, two efs-fuse mounts: DIR/mntA (writers) and DIR/mntB
+# DIR/cluster.conf (D39), two efs-fuse mounts: DIR/mntA (writers) and DIR/mntB
 # (readers, a different client with its own caches). REL is a build tree
 # (efs-fuse, efs-mgmt, scripts/client.sh); efsd comes from FAULT_REL
 # (default REL), which must be built with EFS_FAULTS=1 for phases 4-6.
@@ -35,7 +35,7 @@
 set -u
 cmd=$1; REL=$2; D=$3; PORT=${4:-18800}; FREL=${5:-$REL}
 ADDR=127.0.0.1
-export EFS_TRANSPORT=tcp EFS_MD_RAFT_N=3
+export EFS_TRANSPORT=tcp
 export EFS_FAULT_PUB_BARRIER="$D/fault" EFS_RAFT_OBS=1
 PHASES=" ${K14_PHASES:-1 2 3 4 5 6} "
 on() { case "$PHASES" in *" $1 "*) return 0;; esac; return 1; }
@@ -45,11 +45,18 @@ WL="$D/k14wl"
 FAILS=0
 check() { if eval "$2"; then echo "PASS $1"; else echo "FAIL $1"; FAILS=$((FAILS+1)); fi; }
 
+# D39: the configured member list; the endpoint selects each member and
+# efs-mgmt declares as management with it (EFS_CLUSTER_CONF).
+export EFS_CLUSTER_CONF="$D/cluster.conf"
+write_conf() {
+  : > "$D/cluster.conf"
+  for i in 1 2 3; do echo "$i $ADDR:$((PORT+i))" >> "$D/cluster.conf"; done
+}
+
 start_node() {
-  local i=$1 join=""
-  [ "$i" -gt 1 ] && join="--join $ADDR:$((PORT+1))"
-  nohup "$FREL/efsd" --node-id "$i" --addr "$ADDR" --port $((PORT+i)) --storage "$D/n$i" \
-    --quota 4G $join >> "$D/logs/efsd-n$i.log" 2>&1 &
+  local i=$1
+  nohup "$FREL/efsd" --cluster "$D/cluster.conf" --addr "$ADDR" --port $((PORT+i)) --storage "$D/n$i" \
+    --quota 4G >> "$D/logs/efsd-n$i.log" 2>&1 &
   echo $! > "$D/logs/n$i.pid"
   for _ in $(seq 120); do grep -q listening "$D/logs/efsd-n$i.log" && return 0
     kill -0 "$(cat "$D/logs/n$i.pid")" 2>/dev/null || return 1; sleep 0.5; done
@@ -111,6 +118,7 @@ run)
   for i in 1 2 3; do ss -ltnH "sport = :$((PORT+i))" | grep -q . && { echo "port $((PORT+i)) in use"; exit 1; }; done
   [ -e "$D/n1" ] && { echo "$D not fresh"; exit 1; }
   mkdir -p "$D"/{n1,n2,n3,logs,mntA,mntB}
+  write_conf
   cc -O2 -Wall -Wextra -o "$WL" "$HERE/tests/live/k14_atomic_publication.c" || { echo "FAIL build workload"; exit 1; }
   echo "efsd $("$FREL/efsd" --version 2>&1 | head -1) | efs-fuse $("$REL/efs-fuse" --version 2>&1 | head -1)"
   for i in 1 2 3; do start_node $i || { echo "FAIL start n$i"; exit 1; }; done

@@ -35,3 +35,14 @@ for name, val in re.findall(r'^#define (EFS_MD_(?:CMD|REQ)_[A-Z0-9_]+)\s+(\d+)\b
 assert all(0 < v < 256 for v in tags), 'a Raft tag must fit one byte'
 print(f'Raft command/request tags: {len(tags)} distinct PASS')
 
+# Wire message types (enum in protocol.h): no two may share a value
+# (Oct 23: K13-D31 PUT_ORPHAN_DELETE and D39 FORMATION_READ both took 177/178).
+proto = (Path(__file__).resolve().parents[1] / 'include/efs/protocol.h').read_text()
+msgs = {}
+for name, val in re.findall(r'^\s*(EFS_MSG_[A-Z0-9_]+)\s*=\s*(\d+)\s*,', proto, flags=re.M):
+    v = int(val)
+    assert v not in msgs, f'message type {v} used by both {msgs[v]} and {name}'
+    msgs[v] = name
+assert msgs and all(0 < v < 256 for v in msgs), 'message types must fit one byte'
+print(f'wire message types: {len(msgs)} distinct PASS')
+

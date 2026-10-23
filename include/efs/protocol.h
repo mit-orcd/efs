@@ -253,6 +253,26 @@ enum efs_msg_type {
      * copy remains, durably. */
     EFS_MSG_PUT_ORPHAN_DELETE = 177,
     EFS_MSG_PUT_ORPHAN_DELETE_REPLY = 178,
+    /* D39 C10: a group's committed formation record. Request struct
+     * efs_msg_formation_read; answered by the group's leader after a
+     * ReadIndex proof with struct efs_msg_formation_read_reply. Peer and
+     * mgmt roles, any formation state. */
+    EFS_MSG_FORMATION_READ = 179, /* 177/178 are PUT_ORPHAN_DELETE (K13-D31) */
+    EFS_MSG_FORMATION_READ_REPLY = 180,
+};
+struct efs_msg_formation_read {
+    uint8_t group; /* 0 or 2 */
+    uint8_t pad[7];
+};
+struct efs_msg_formation_read_reply {
+    int32_t rc;        /* EFS_OK, EFS_ERR_NOT_PRIMARY (hint), EFS_ERR_BUSY */
+    int32_t leader_hint;
+    uint8_t group;
+    uint8_t known;     /* 1: salt and digest name the committed pair */
+    uint8_t pad[6];
+    uint64_t salt;
+    uint64_t index;    /* the formation entry's index when known here, else 0 */
+    uint8_t digest[32];
 };
 #define EFS_PUT_ORPHAN_DELETE_LEN (8u + 216u)
 struct efs_msg_put_orphan_delete_reply { int32_t rc; };
@@ -316,27 +336,82 @@ struct efs_msg_pack_compact_reply {
     struct efs_packer_status packer;
 };
 
-/* Connection declaration (W125, tightened by W133). The first message on
- * a client connection is CLIENT_HELLO naming exactly EFS_PROTOCOL_VERSION;
- * there is one supported protocol, no minimum and no range. Until a
- * declaration has been accepted the server serves nothing but HEARTBEAT:
- * any other request is refused by closing the connection, with no reply
- * and one logged line, so an undeclared or mismatched client fails closed
- * instead of being served by accident. A declaration that names another
- * version is answered with EFS_ERR_PROTO and this version, then closed.
- * Daemon-to-daemon connections declare like clients before their own
- * HELLO/build-id join gate (peer_pool.c). A declaration is not
- * authentication.
+/* Connection declaration (W125, tightened by W133, D39 roles). The first
+ * message on every connection is CLIENT_HELLO naming exactly
+ * EFS_PROTOCOL_VERSION and a role; there is one supported protocol, no
+ * minimum and no range. Until a declaration has been accepted the server
+ * serves nothing but HEARTBEAT: any other request is refused by closing the
+ * connection, with no reply and one logged line. A declaration that names
+ * another version, or that the admitter refuses, is answered with an error
+ * and the responder's identity, then closed.
+ * D39 (C4/C5): a daemon-to-daemon connection declares role PEER with its
+ * configured member id, its canonical advertised endpoint, the
+ * configuration digest, its pair (salt; the pair's digest is the
+ * configuration digest) or unknown, its incarnation and its identity
+ * counter; the reply carries the responder's, which the declarer checks
+ * like a declaration before it uses the connection. efs-mgmt declares MGMT
+ * with the digest; FUSE and other clients declare CLIENT and are admitted
+ * only by a daemon whose cluster formation is complete. Each role has its
+ * own message allowlist (efs_role_*). A declaration is not authentication.
  * Version history: 2 = packed references in GETCHUNKS (W125);
  * 3 = every request gated, exact version match (W133);
- * 4 = every metadata mutation carries a registered session (K5/W134). */
-#define EFS_PROTOCOL_VERSION 5u
-struct efs_msg_client_hello { uint8_t magic[4]; uint32_t version; uint64_t features; };
-struct efs_msg_client_hello_reply { int32_t rc; uint32_t version; };
-/* Send the declaration and check the reply; 0 when accepted. */
+ * 4 = every metadata mutation carries a registered session (K5/W134);
+ * 6 = roles and configured member identity (D39). */
+#define EFS_PROTOCOL_VERSION 6u
+#define EFS_ROLE_CLIENT 1u
+#define EFS_ROLE_MGMT   2u
+#define EFS_ROLE_PEER   3u
+/* Channel of an admitted peer connection, from (declared pair, local pair). */
+#define EFS_CHANNEL_NONE      0u
+#define EFS_CHANNEL_BOOTSTRAP 1u /* unknown -> unknown */
+#define EFS_CHANNEL_CATCHUP   2u /* unknown on exactly one side */
+#define EFS_CHANNEL_FORMED    3u /* equal pairs */
+#define EFS_CHANNEL_CLIENT    4u
+#define EFS_CHANNEL_MGMT      5u
+struct efs_identity {
+    uint32_t member_id;     /* configured id; 0 for client and mgmt */
+    uint32_t endpoint_ip;   /* canonical advertised IPv4, network order */
+    uint16_t endpoint_port;
+    uint8_t pair_known;     /* 1: salt names the pair; 0: unknown */
+    uint8_t pad0;
+    uint32_t pad1;
+    uint64_t incarnation;   /* durable boot counter (D39 C2) */
+    uint64_t counter;       /* identity events in this incarnation */
+    uint64_t salt;
+    uint8_t digest[32];     /* configuration digest; zero for a client */
+};
+struct efs_msg_client_hello {
+    uint8_t magic[4];
+    uint32_t version;
+    uint64_t features;
+    uint8_t role;
+    uint8_t pad[7];
+    struct efs_identity id;
+};
+struct efs_msg_client_hello_reply {
+    int32_t rc;
+    uint32_t version;
+    uint8_t role;     /* the responder's: always EFS_ROLE_PEER from a daemon */
+    uint8_t channel;  /* EFS_CHANNEL_* this connection was admitted on */
+    uint8_t complete; /* responder's formation complete */
+    uint8_t pad[5];
+    struct efs_identity id; /* the responder, also on a refusal */
+};
+_Static_assert(sizeof(struct efs_identity) == 72, "identity wire size");
+_Static_assert(sizeof(struct efs_msg_client_hello) == 96, "declaration wire size");
+_Static_assert(sizeof(struct efs_msg_client_hello_reply) == 88, "declaration reply wire size");
+/* Send the declaration and check the reply; 0 when accepted. The role and
+ * identity come from efs_declare_set_identity (default: CLIENT). */
 struct efs_conn;
 int efs_conn_declare(struct efs_conn *c);
 int efs_fd_declare(int fd);
+/* Declare with an explicit role and identity; the accepted reply is copied
+ * to *reply (the caller validates a peer reply). */
+int efs_conn_declare_as(struct efs_conn *c, uint8_t role, const struct efs_identity *id,
+                        struct efs_msg_client_hello_reply *reply);
+/* Process-wide default declaration for efs_conn_declare/efs_fd_declare:
+ * efs-mgmt sets MGMT with the configuration digest. */
+void efs_declare_set_identity(uint8_t role, const struct efs_identity *id);
 /* Connect to an efsd and declare in one step; -1 (fd closed) when the
  * connection or the declaration fails. The declaration itself is bounded by
  * EFS_IO_TIMEOUT_MS; the fd is returned without socket timeouts, as
@@ -345,17 +420,41 @@ int efs_connect_declared(const char *host, uint16_t port);
 
 /* Server-side gate, one per accepted connection (handler.c). Every received
  * frame passes through efs_decl_gate_frame before dispatch. */
-struct efs_decl_gate { int declared; };
+struct efs_decl_gate {
+    int declared;
+    uint8_t role;           /* EFS_ROLE_* once declared */
+    uint8_t channel;
+    struct efs_identity id; /* the declared identity (peer: the frame tag) */
+};
 #define EFS_GATE_DISPATCH 0 /* serve the request */
 #define EFS_GATE_ANSWERED 1 /* a declaration: reply sent, keep the connection */
 #define EFS_GATE_REFUSE   2 /* refused: close the connection without a reply */
+/* The daemon's admission (D39 C4/C5/C7). Without one, a gate admits only
+ * the CLIENT role and refuses every other role (fail-closed). declare
+ * fills rep (rc, channel, responder identity) and g on acceptance; frame
+ * returns EFS_GATE_DISPATCH or EFS_GATE_REFUSE for a declared connection. */
+struct efs_admission_ops {
+    int (*declare)(const struct efs_msg_client_hello *h, struct efs_msg_client_hello_reply *rep,
+                   struct efs_decl_gate *g);
+    int (*frame)(struct efs_decl_gate *g, uint8_t type, const void *payload, uint32_t len);
+};
+void efs_decl_gate_set_admission(const struct efs_admission_ops *ops);
 /* 0 only for the two messages a connection may send before declaring:
  * CLIENT_HELLO (the declaration) and HEARTBEAT (liveness, no state). */
 int efs_declaration_required(uint8_t type);
-/* EFS_OK when payload is a CLIENT_HELLO for exactly EFS_PROTOCOL_VERSION. */
+/* EFS_OK when payload is a CLIENT_HELLO for exactly EFS_PROTOCOL_VERSION
+ * with a known role. */
 int efs_client_hello_check(const void *payload, uint32_t len);
 int efs_decl_gate_frame(struct efs_decl_gate *g, struct efs_conn *c, uint8_t type,
                         const void *payload, uint32_t len);
+
+/* D39 C4 role allowlists over message types. A type absent from every
+ * list (JOIN under fixed membership, unknown types) is refused. */
+#define EFS_ALLOW_NONE    0
+#define EFS_ALLOW_CONTROL 1 /* peer control: Raft, HELLO, status, FORMATION_READ */
+#define EFS_ALLOW_APP     2 /* application work: needs complete (+ formed channel for peers) */
+#define EFS_ALLOW_MGMT    3 /* mgmt in any state: mkfs, FORMATION_READ, status, step-down */
+int efs_role_allow(uint8_t role, uint8_t type, uint32_t len);
 
 /* W125 segment messages, big-endian byte layouts:
  * PUT   [group:1][fragment:1][0:2][geometry:4][id:8][generation:8][checksum:32]
@@ -565,7 +664,9 @@ struct efs_msg_raft_mkfs_reply {
     uint64_t index;
     uint64_t salt; /* this process's mkfs salt candidate */
     uint64_t term; /* term of the entry at index (forwarded commands); the
-                    * forwarder matches (index, term) in its apply ring */
+                    * forwarder matches (index, term) in its apply ring.
+                    * raft-mkfs refused BUSY (D39): bit m-1 set for each
+                    * configured member that is not present. */
 };
 
 #define EFS_RAFT_HOST_MAX_GROUPS 4
@@ -664,6 +765,7 @@ struct efs_msg_hello_ack {
 #define EFS_HELLO_REJECT_NONE    0
 #define EFS_HELLO_REJECT_FULL    1
 #define EFS_HELLO_REJECT_VERSION 2
+#define EFS_HELLO_REJECT_MEMBER  3 /* D39: not a configured member record */
 
 struct efs_msg_get_chunk {
     efs_export_id_t export_id;

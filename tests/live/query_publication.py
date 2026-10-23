@@ -31,7 +31,7 @@ for mount in mount_paths:
 io_flag='--direct-io' if args.mode=='direct' else '--no-direct-io'
 work.mkdir(parents=True,exist_ok=False)
 logs=[];procs=[];fuse_procs=[];mounts=[];held_stream=None
-env=dict(os.environ,EFS_MD_RAFT_N='4',EFS_TRANSPORT='tcp')
+env=dict(os.environ,EFS_TRANSPORT='tcp')
 # Publication gates expect a fresh catalog within seconds; production defaults to 60 s.
 env.setdefault('EFS_QUERY_REFRESH_MS','2000')
 if os.environ.get('EFS_QUERY_FUSE')=='1': env['EFS_COMMANDS']='1'
@@ -49,6 +49,9 @@ for base in range(24800,25000,4):
 else:
     raise RuntimeError('no free fixture port range')
 print(f'fixture={work} ports={base}-{base+3} mode={args.mode} transport=tcp',flush=True)
+# D39: the configured member list; efs-mgmt declares as management with it.
+conf=work/'cluster.conf';conf.write_text(''.join(f'{n} 127.0.0.1:{base+n-1}\n' for n in range(1,5)))
+env['EFS_CLUSTER_CONF']=str(conf)
 def stop_mount(mount):
     if not os.path.ismount(mount):return
     # Drain while our servers are still alive. Foreground FUSE below keeps
@@ -74,10 +77,9 @@ def published(node,files):
 try:
     for node in range(1,5):
         log=(work/f'n{node}.log').open('w');logs.append(log)
-        args=[str(source/'efsd'),'--node-id',str(node),'--addr','127.0.0.1',
+        args=[str(source/'efsd'),'--cluster',str(conf),'--addr','127.0.0.1',
               '--port',str(base+node-1),'--storage',str(work/f'n{node}'),
               '--quota','1G','--writers','0',io_flag]
-        if node>1:args+=['--join',f'127.0.0.1:{base}']
         procs.append(subprocess.Popen(args,env=env,stdout=log,stderr=log))
         wait_for(lambda: 'listening' in (work/f'n{node}.log').read_text(),10)
     def mkfs():
@@ -245,9 +247,9 @@ try:
                 return any(bytes.fromhex(e['path_hex'])==b'failover-marker' for e in entries)
             wait_for(failover_query,45)
             log=(work/'n2-rejoin.log').open('w');logs.append(log)
-            args=[str(source/'efsd'),'--node-id','2','--addr','127.0.0.1',
+            args=[str(source/'efsd'),'--cluster',str(conf),'--addr','127.0.0.1',
                   '--port',str(base+1),'--storage',str(work/'n2'),'--quota','1G',
-                  '--writers','0',io_flag,'--join',f'127.0.0.1:{base}']
+                  '--writers','0',io_flag]
             procs.append(subprocess.Popen(args,env=env,stdout=log,stderr=log))
             wait_for(lambda:'listening' in (work/'n2-rejoin.log').read_text(),20)
             recovery_deadline=time.monotonic()+30
@@ -322,10 +324,9 @@ try:
         disabled_env=dict(env,EFS_COMMANDS_SERVER='0')
         for node in range(1,5):
             log=(work/f'n{node}-off.log').open('w');logs.append(log)
-            args=[str(source/'efsd'),'--node-id',str(node),'--addr','127.0.0.1',
+            args=[str(source/'efsd'),'--cluster',str(conf),'--addr','127.0.0.1',
                   '--port',str(base+node-1),'--storage',str(work/f'n{node}'),
                   '--quota','1G','--writers','0',io_flag]
-            if node>1:args+=['--join',f'127.0.0.1:{base}']
             procs.append(subprocess.Popen(args,env=disabled_env,stdout=log,stderr=log))
             wait_for(lambda:'listening' in (work/f'n{node}-off.log').read_text(),10)
         from query_rpc import request,query,page_request,page_query,features
@@ -373,10 +374,9 @@ try:
     env['EFS_COMMANDS_SERVER']='1'
     for node in range(1,5):
         log=(work/f'n{node}-restart.log').open('w');logs.append(log)
-        args=[str(source/'efsd'),'--node-id',str(node),'--addr','127.0.0.1',
+        args=[str(source/'efsd'),'--cluster',str(conf),'--addr','127.0.0.1',
               '--port',str(base+node-1),'--storage',str(work/f'n{node}'),
               '--quota','1G','--writers','0',io_flag]
-        if node>1:args+=['--join',f'127.0.0.1:{base}']
         procs.append(subprocess.Popen(args,env=env,stdout=log,stderr=log))
         wait_for(lambda: 'listening' in (work/f'n{node}-restart.log').read_text(),10)
     def recovered(node):

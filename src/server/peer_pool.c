@@ -1,4 +1,5 @@
 #include "server_internal.h"
+#include "admission.h"
 #include "efs/network.h"
 #include "efs/rdma.h"
 #include <pthread.h>
@@ -33,6 +34,7 @@ struct peer_slot {
     uint16_t port;
     int in_use; /* host/port assigned */
     struct efs_conn *conn[EFS_PEER_CONNS_PER_NODE];
+    uint64_t gen[EFS_PEER_CONNS_PER_NODE]; /* D39: identity generation declared at */
     int busy[EFS_PEER_CONNS_PER_NODE];
     uint64_t down_until_ms; /* skip reconnect until this monotonic deadline */
     uint32_t fail_streak;
@@ -165,10 +167,19 @@ static struct efs_conn *peer_connect(const char *host, uint16_t port)
         close(fd);
         return NULL;
     }
-    /* W125/W133: every daemon-to-daemon connection (HELLO join, Raft,
-     * forwards, segments) declares the protocol like any client, before
-     * the RDMA upgrade; the peer's HELLO/build-id gate follows. */
-    if (efs_conn_declare(nc) != EFS_OK) {
+    /* D39 C4/C5: every daemon-to-daemon connection (HELLO, Raft, forwards,
+     * segments) declares role PEER with this member's identity tuple before
+     * the RDMA upgrade, and is used only after the reply names the intended
+     * configured member at its configured endpoint and passes the same
+     * acceptance predicate as a declaration from it. Only configured
+     * members are ever dialed. */
+    const struct efs_cluster_conf *cc = efs_cluster_conf_current();
+    uint32_t member = cc ? efs_cluster_conf_member_at(cc, host, port) : 0;
+    struct efs_identity me;
+    struct efs_msg_client_hello_reply rep;
+    adm_local_identity(&me);
+    if (!member || efs_conn_declare_as(nc, EFS_ROLE_PEER, &me, &rep) != EFS_OK ||
+        adm_check_reply(member, &rep, NULL, 0) != EFS_OK) {
         efs_conn_destroy(nc);
         return NULL;
     }
@@ -251,6 +262,7 @@ static struct efs_conn *peer_conn_get(const char *host, uint16_t port, int read)
             p->busy[free_s] = 1;
             pthread_mutex_unlock(&p->lock);
 
+            uint64_t gen = adm_generation();
             struct efs_conn *nc = peer_connect(h, pt);
             if (!nc) {
                 pthread_mutex_lock(&p->lock);
@@ -270,6 +282,7 @@ static struct efs_conn *peer_conn_get(const char *host, uint16_t port, int read)
                 nc = p->conn[free_s];
             } else {
                 p->conn[free_s] = nc;
+                p->gen[free_s] = gen;
             }
             p->fail_streak = 0;
             p->down_until_ms = 0;
@@ -277,6 +290,15 @@ static struct efs_conn *peer_conn_get(const char *host, uint16_t port, int read)
             return nc;
         }
 
+        if (p->gen[free_s] != adm_generation()) {
+            /* D39 C2: declared before an identity event; reopen. */
+            struct efs_conn *old = p->conn[free_s];
+            p->conn[free_s] = NULL;
+            pthread_mutex_unlock(&p->lock);
+            efs_conn_destroy(old);
+            pthread_mutex_lock(&p->lock);
+            continue;
+        }
         p->busy[free_s] = 1;
         struct efs_conn *c = p->conn[free_s];
         pthread_mutex_unlock(&p->lock);

@@ -18,7 +18,9 @@ code = r'''
 int efs_batch_obs_on;
 void efs_batch_obs_count(enum efs_batch_counter k){(void)k;}
 struct efs_raft_host {int unused;};
-struct host_inbox_item {uint8_t *buf;uint32_t len;uint64_t queued_us;};
+struct inbox_tag {int fenced;};
+struct host_inbox_item {uint8_t *buf;uint32_t len;uint64_t queued_us;struct inbox_tag tag;};
+static int adm_check_control(const struct inbox_tag *t){return t->fenced?EFS_ERR_STALE:EFS_OK;}
 static struct efs_raft_msg decoded[10];
 static int calls,seen[10],refused;
 int efs_wire_raft_decode(const uint8_t *p,uint32_t n,struct efs_raft_msg *m,
@@ -39,7 +41,7 @@ int main(void) {
  struct host_inbox_item items[10],before[10];
  for(int i=0;i<10;i++) {
   frames[i][0]=EFS_RAFT_MSG_AE_REQ;frames[i][1]=(uint8_t)i;
-  items[i]=(struct host_inbox_item){frames[i],EFS_WIRE_RAFT_HDR_LEN,100+i};
+  items[i]=(struct host_inbox_item){frames[i],EFS_WIRE_RAFT_HDR_LEN,100+i,{0}};
   decoded[i].type=EFS_RAFT_MSG_AE_REQ;decoded[i].group=2;
   decoded[i].last_log_index=100+i;decoded[i].vote_granted=1;
  }
@@ -55,7 +57,11 @@ int main(void) {
  refused=1;host_note_queued_reads(&h,items,10);
  assert(calls==4&&seen[2]==107&&seen[3]==108);
  assert(!memcmp(saved,frames,sizeof(frames))&&!memcmp(before,items,sizeof(items)));
- puts("queued read control: zero-prefix fresh probes, core refusal, original frame retention PASS");
+ /* D39 C7 (b): an item whose connection tuple the binding no longer
+  * admits is skipped here (and refused again at the drain). */
+ refused=0;items[7].tag.fenced=1;host_note_queued_reads(&h,items,10);
+ assert(calls==5&&seen[4]==108);
+ puts("queued read control: zero-prefix fresh probes, core refusal, original frame retention, per-item admission PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-queued-read-') as d:

@@ -6,7 +6,7 @@ export EFS_TRANSPORT=rdma EFS_RDMA_DEV=${EFS_RDMA_DEV:-rxe0} EFS_RDMA_GID_INDEX=
 export EFS_GC_BACKLOG_IDLE_MS=20
 # Explicit placement qualification.
 export EFS_METADATA_BALANCE=1
-export EFS_MD_RAFT_N=4 EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0
+export EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0
 unset EFS_READ_PROF EFS_RPC_PROF EFS_DEEP_PATH_PROF EFS_READ_FRAG_PROF
 base=${EFS_GATE_BASE_PORT:-27432}
 work=$(mktemp -d /data1/efs/rdma-qualification-XXXXXX)
@@ -14,6 +14,9 @@ client_root=$(mktemp -d /home/efs/rdma-qualification-XXXXXX)
 mkdir -p "$client_root/mnt" "$client_root/mnt2"
 printf '%s\n' "$client_root" > "$work/mount-root.txt"
 printf '%s\n' "$work" # raw artifacts stay outside Git
+# D39: the configured member list; efs-mgmt declares as management with it.
+for id in 1 2 3 4; do echo "$id 127.0.0.1:$((base+id-1))"; done > "$work/cluster.conf"
+export EFS_CLUSTER_CONF="$work/cluster.conf"
 pids=();rc=0
 stop_nodes() {
  for pid in "${pids[@]}"; do kill "$pid" 2>/dev/null || true; done
@@ -31,8 +34,7 @@ cleanup() {
 trap cleanup EXIT
 start_nodes() {
  for id in 1 2 3 4; do
-  join=();[ "$id" = 1 ] || join=(--join "127.0.0.1:$base")
-  "$src/efsd" --node-id "$id" --addr 127.0.0.1 --port "$((base+id-1))" --storage "$work/n$id" --quota 4G --direct-io "${join[@]}" >> "$work/n$id.log" 2>&1 &
+  "$src/efsd" --cluster "$work/cluster.conf" --addr 127.0.0.1 --port "$((base+id-1))" --storage "$work/n$id" --quota 4G --direct-io >> "$work/n$id.log" 2>&1 &
   pids+=("$!");printf '%s\n' "$!" > "$work/efsd-n$id.pid"
   ready=0
   for attempt in $(seq 1 60); do

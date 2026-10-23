@@ -7,6 +7,8 @@
 #include "efs/protocol.h"
 #include "efs/query_catalog.h"
 #include "efs/raft_frame.h"
+#include "efs/cluster_conf.h"
+#include "member_store.h"
 #include <pthread.h>
 #include <time.h>
 
@@ -74,9 +76,14 @@ struct efsd_server {
     int listen_fd;
     int running;
 
-    pthread_t rejoin_tid; /* background rejoin retry thread */
-    char rejoin_addr[64]; /* explicit --join target to keep retrying; empty = use persisted peers */
-    uint16_t rejoin_port;
+    /* D39: the configured member list (--cluster), this member's store
+     * identity (owner lock, boot counter, pair) and its incarnation. The
+     * node table holds exactly the configured members; HELLO only refreshes
+     * their storage facts. */
+    struct efs_cluster_conf cluster;
+    struct member_store mstore;
+    uint64_t incarnation;
+    pthread_t hello_tid; /* HELLO to every configured peer until each answered */
 
     /* Runtime GC progress: atomically updated, reset on daemon restart. */
     uint64_t gc_removed_fragments, gc_removed_file_bytes, gc_removed_payload_bytes;
@@ -113,11 +120,9 @@ struct efsd_server {
     int bench_sync; /* benchmark-only O_SYNC; daemon store builds ignore it */
     /* Shared writer-pool size (0 = inline, <0 = auto from nproc at start). */
     int nwriters;
-    int persist_nodes; /* persist cluster membership to disk */
     int perf; /* run under perf record when starting */
     int strace; /* attach strace -f (EFS_STRACE_PATH / EFS_STRACE_EXPR) */
     int usage_dirty; /* local->used changed; flush meta/usage.bin soon */
-    int nodes_dirty; /* membership changed; persist nodes.bin off the lock */
 
 };
 
@@ -350,12 +355,14 @@ void server_dedupe_nodes_locked(struct efsd_server *s);
 struct efs_conn;
 void server_handle_conn(struct efs_conn *conn);
 
-/* Join an existing cluster by contacting a peer. */
-int server_join_cluster(struct efsd_server *s, const char *peer_host, uint16_t peer_port);
-
-/* Relay a membership change to all other peers (ring convergence). */
-struct efs_msg_hello;
-void server_gossip_membership(struct efsd_server *s, const struct efs_msg_hello *h);
+/* D39: membership is the configured member list. HELLO exchanges a
+ * configured member's storage facts (paths, quota, used) and its build;
+ * it never adds, removes or readdresses a member. */
+int server_hello_peer(struct efsd_server *s, uint32_t member);
+/* Send HELLO to every configured peer once (after a local storage change). */
+void server_hello_peers(struct efsd_server *s);
+/* Seed the node table from s->cluster (all members; local facts filled). */
+void server_membership_from_config(struct efsd_server *s);
 
 /* Start the background heartbeat thread. */
 void server_start_heartbeat(struct efsd_server *s);
@@ -373,8 +380,11 @@ void server_handlers_begin_stop(void);
 int server_shutdown_fault_park(const char *worker);
 /* Copy one encoded efs_raft_msg into the pump inbox. Delivery ack is the
  * caller's job (EFS_MSG_RAFT_REPLY). BUSY accepts no frame; Raft retries. */
-int server_raft_host_inbox(const uint8_t *payload, uint32_t plen);
+int server_raft_host_inbox(const uint8_t *payload, uint32_t plen, const struct efs_identity *tag);
 void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out);
+/* D39 C10: a group's committed formation record (leader, ReadIndex). */
+void server_raft_host_formation_read(const struct efs_msg_formation_read *req,
+                                     struct efs_msg_formation_read_reply *out);
 /* Non-empty RAFT_MKFS payload: group byte + command (or group-only =
  * ReadIndex). Leader-only; NOT_PRIMARY otherwise. */
 void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
@@ -487,23 +497,8 @@ void server_raft_host_writer_view_reuse(const struct efs_msg_inode_writer_view *
 void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32_t start, uint32_t max, uint64_t generation,
                                 struct efs_msg_inode_getchunks_reply *out);
 
-/* Start the background cluster rejoin retry thread. */
-void server_start_rejoin(struct efsd_server *s);
-
-/* Persist the cluster nodes list to disk. Caller must NOT hold s->lock (does
- * disk I/O). Use server_nodes_mark_dirty under the lock instead. */
-void server_save_nodes(struct efsd_server *s);
-
-/* Mark membership dirty (under s->lock); flush with server_nodes_flush_dirty
- * after dropping the lock so the fsync never stalls the global lock. */
-void server_nodes_mark_dirty(struct efsd_server *s);
-void server_nodes_flush_dirty(struct efsd_server *s);
-
-/* Load the persisted cluster nodes list from disk. */
-void server_load_nodes(struct efsd_server *s);
-
-/* Try to rejoin the cluster using any persisted peer. Returns 0 on success. */
-int server_rejoin_cluster(struct efsd_server *s);
+/* Background HELLO to every configured peer until each has answered once. */
+void server_start_hello(struct efsd_server *s);
 
 /* Asynchronous PUT acknowledgement and durability barriers (store.c). */
 struct efs_msg_sync_stats_reply;

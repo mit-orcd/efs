@@ -34,12 +34,16 @@ for p in 1 2 3; do
   ss -ltn | grep -q ":$((PORT+p)) " && { echo "port $((PORT+p)) in use"; exit 2; }
 done
 rm -rf "$AB"; mkdir -p "$AB"/n1 "$AB"/n2 "$AB"/n3 "$AB"/logs "$AB"/mnt
+# D39: the configured member list; the endpoint selects each member and
+# efs-mgmt declares as management with it (EFS_CLUSTER_CONF).
+CONF="$AB/cluster.conf"; : > "$CONF"
+for i in 1 2 3; do echo "$i 10.1.99.1:$((PORT+i))" >> "$CONF"; done
+export EFS_CLUSTER_CONF="$CONF"
 [ -d "$FUSE_LIBDIR" ] && export LD_LIBRARY_PATH=$FUSE_LIBDIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
-export EFS_TRANSPORT=rdma EFS_RDMA_DEV=${EFS_RDMA_DEV:-mlx5_0} EFS_MD_RAFT_N=3
+export EFS_TRANSPORT=rdma EFS_RDMA_DEV=${EFS_RDMA_DEV:-mlx5_0}
 for i in 1 2 3; do
-  join=""; [ $i -gt 1 ] && join="--join 10.1.99.1:$((PORT+1))"
-  nohup "$REL/efsd" --node-id $i --addr 10.1.99.1 --port $((PORT+i)) --storage "$AB/n$i" \
-    --quota 30G --direct-io $join > "$AB/logs/efsd-n$i.log" 2>&1 &
+  nohup "$REL/efsd" --cluster "$CONF" --addr 10.1.99.1 --port $((PORT+i)) --storage "$AB/n$i" \
+    --quota 30G --direct-io > "$AB/logs/efsd-n$i.log" 2>&1 &
   echo $! > "$AB/logs/n$i.pid"
   for t in $(seq 60); do grep -q listening "$AB/logs/efsd-n$i.log" && break; sleep 0.5; done
 done

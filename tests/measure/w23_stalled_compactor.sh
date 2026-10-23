@@ -122,6 +122,9 @@ fi
 kill_ours
 rm -rf "$STORE" "$OUTD"
 mkdir -p "$STORE" "$OUTD" "$MNT"
+# D39: the configured member list; efs-mgmt declares as management with it.
+for id in 1 2 3; do echo "$id 127.0.0.1:$((PORT + id - 1))"; done > "$STORE/cluster.conf"
+export EFS_CLUSTER_CONF="$STORE/cluster.conf"
 rm -f "$FAULT_FILE"
 
 # non-zero source (all-zero chunks skip the PUT — tests/measure/lib.sh)
@@ -135,11 +138,11 @@ PY
 start_node() {  # start_node <id> [extra env...]
     local id=$1; shift
     local port=$((PORT + id - 1))
-    env EFS_MD_RAFT_N=3 EFS_TRANSPORT=tcp EFS_RAFT_OBS=1 "$@" \
-        "$FBIN" --node-id "$id" --addr 127.0.0.1 --port "$port" \
+    env EFS_TRANSPORT=tcp EFS_RAFT_OBS=1 "$@" \
+        "$FBIN" --cluster "$STORE/cluster.conf" --addr 127.0.0.1 --port "$port" \
         --storage "$STORE/s$id" --quota 4G --no-direct-io \
-        ${JOIN:+--join 127.0.0.1:$PORT} \
         >"$WORK/s$id.log" 2>&1 </dev/null &
+    echo $! > "$WORK/s$id.pid"
     local i
     for i in $(seq 1 100); do
         grep -q listening "$WORK/s$id.log" 2>/dev/null && return 0
@@ -148,17 +151,20 @@ start_node() {  # start_node <id> [extra env...]
     say "FATAL: node $id did not start"; tail -20 "$WORK/s$id.log"; exit 2
 }
 
-# Nodes 1+2 first; mkfs elects both groups' leaders among them, so node 3
-# (the stalled one) joins as a follower of both groups.
+# raft-mkfs needs every configured member (D39), so all three start plain;
+# then node 3 restarts with the stalled compactor while 1+2 hold both
+# groups' leadership, and rejoins as a follower of both.
 start_node 1
-JOIN=1
 start_node 2
+start_node 3
 mk=1
 for _ in $(seq 1 20); do
-    if "$BIN/efs-mgmt" raft-mkfs "127.0.0.1:$PORT" w23 >/dev/null 2>&1; then mk=0; break; fi
+    if "$BIN/efs-mgmt" raft-mkfs "127.0.0.1:$PORT" >/dev/null 2>&1; then mk=0; break; fi
     sleep 0.5
 done
 [ "$mk" = 0 ] || { say "FATAL: raft-mkfs"; exit 2; }
+kill "$(cat "$WORK/s3.pid")"
+for _ in $(seq 1 100); do kill -0 "$(cat "$WORK/s3.pid")" 2>/dev/null || break; sleep 0.2; done
 start_node 3 env EFS_FAULT_COMPACT_STALL=1
 
 # wait for node 3 to be a caught-up follower of both groups

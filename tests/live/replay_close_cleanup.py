@@ -18,14 +18,15 @@ for port in range(20190,20194):
  with socket.socket() as sock:sock.bind(('127.0.0.1',port))
 work=Path(tempfile.mkdtemp(prefix='close-replay-',dir=old.parent))
 print(work,flush=True)
-env=dict(os.environ,EFS_MD_RAFT_N='4',EFS_COMMANDS_SERVER='0',EFS_TRANSPORT='tcp',EFS_RAFT_OBS='1')
+# D39: the copied stores are bound to the fixture's configured member list.
+conf=old/'cluster.conf';assert conf.is_file(),'fixture has no cluster.conf'
+env=dict(os.environ,EFS_COMMANDS_SERVER='0',EFS_TRANSPORT='tcp',EFS_RAFT_OBS='1',EFS_CLUSTER_CONF=str(conf))
 procs=[];logs=[]
 try:
  for i,root in enumerate(manifest['roots']):
   target=work/f'n{i+1}';shutil.copytree(root,target)
   log=(work/f'n{i+1}.log').open('wb');logs.append(log)
-  args=[str(source/'efsd'),'--node-id',str(i+1),'--addr','127.0.0.1','--port',str(20190+i),'--storage',str(target),'--quota','1G','--direct-io']
-  if i:args+=['--join','127.0.0.1:20190']
+  args=[str(source/'efsd'),'--cluster',str(conf),'--addr','127.0.0.1','--port',str(20190+i),'--storage',str(target),'--quota','1G','--direct-io']
   procs.append(subprocess.Popen(args,env=env,stdout=log,stderr=log));time.sleep(1)
  deadline=time.monotonic()+90
  while time.monotonic()<deadline:

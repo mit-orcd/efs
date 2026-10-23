@@ -4,7 +4,7 @@ set -euo pipefail
 src=$(cd "$(dirname "$0")/../.." && pwd)
 mode=${EFS_TRANSPORT:-rdma}
 case "$mode" in tcp|rdma) ;; *) echo 'Use explicit tcp or rdma' >&2; exit 2;; esac
-export EFS_TRANSPORT=$mode EFS_MD_RAFT_N=4
+export EFS_TRANSPORT=$mode
 export EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0
 export EFS_RDMA_DEV=${EFS_RDMA_DEV:-rxe0}
 if [ "$mode" = rdma ]; then
@@ -17,6 +17,9 @@ fi
 run=$(mktemp -d "${EFS_GATE_ROOT:-/home/efs/efs-rdma}/gate-$mode-XXXXXX")
 chmod 755 "$run" # mount helper must traverse the fixture directory
 mkdir -p "$run/mnt" "$run/mnt2"; pids=()
+# D39: the configured member list; efs-mgmt declares as management with it.
+for id in 1 2 3 4; do echo "$id 127.0.0.1:$((27431+id))"; done > "$run/cluster.conf"
+export EFS_CLUSTER_CONF="$run/cluster.conf"
 cleanup() {
     for m in "$run/mnt" "$run/mnt2"; do
         if mountpoint -q "$m"; then
@@ -30,8 +33,8 @@ cleanup() {
 }
 trap cleanup EXIT
 for id in 1 2 3 4; do
-    port=$((27431+id)); join=(); [ "$id" = 1 ] || join=(--join 127.0.0.1:27432)
-    "$src/efsd" --node-id "$id" --addr 127.0.0.1 --port "$port" --storage "$run/n$id" --quota 4G --direct-io "${join[@]}" > "$run/n$id.log" 2>&1 &
+    port=$((27431+id))
+    "$src/efsd" --cluster "$run/cluster.conf" --addr 127.0.0.1 --port "$port" --storage "$run/n$id" --quota 4G --direct-io > "$run/n$id.log" 2>&1 &
     pids+=("$!")
     ready=0
     for attempt in $(seq 1 60); do

@@ -19,13 +19,16 @@ trap kill_ours EXIT
 rm -rf "$WORK"
 mkdir -p "$WORK/store" "$MNT"
 kill_ours
+# D39: the configured member list; efs-mgmt declares as management with it.
+for id in 1 2 3; do echo "$id $ADDR:$((PORT + id - 1))"; done > "$WORK/cluster.conf"
+export EFS_CLUSTER_CONF="$WORK/cluster.conf"
 
 start_one() {
-    local id=$1 join=$2
+    local id=$1
     local port=$((PORT + id - 1))
-    EFS_MD_RAFT_N=3 EFS_TRANSPORT=auto setsid ./efsd --node-id "$id" \
+    EFS_TRANSPORT=auto setsid ./efsd --cluster "$WORK/cluster.conf" \
         --addr "$ADDR" --port "$port" --storage "$WORK/store/s$id" \
-        --quota 1G --writers 0 --no-direct-io $join \
+        --quota 1G --writers 0 --no-direct-io \
         >"$WORK/s$id.log" 2>&1 </dev/null &
     local i
     for i in $(seq 1 40); do
@@ -38,15 +41,15 @@ start_one() {
     exit 2
 }
 
-start_one 1 ""
-start_one 2 "--join $ADDR:$PORT"
-start_one 3 "--join $ADDR:$PORT"
+start_one 1
+start_one 2
+start_one 3
 
 sleep 0.4
 mk=1
 for _ in $(seq 1 15); do
     for off in 0 1 2; do
-        if ./efs-mgmt raft-mkfs "$ADDR:$((PORT + off))" efs-rdma-first; then
+        if ./efs-mgmt raft-mkfs "$ADDR:$((PORT + off))"; then
             mk=0
             break 2
         fi

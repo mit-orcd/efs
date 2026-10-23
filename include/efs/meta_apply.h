@@ -518,6 +518,7 @@ int efs_meta_apply_mkfs(struct efs_kv *kv, uint64_t now, uint64_t salt);
  * group never applied MKFS. EFS_ERR_NOT_FOUND when neither anchor carries
  * a record (never silently 0: placement is derived from this value). */
 int efs_meta_apply_export_salt(struct efs_kv *kv, uint64_t *out);
+int efs_meta_apply_anchor_salt(struct efs_kv *kv, uint32_t anchor, uint64_t *out);
 int efs_meta_apply_salt_record(struct efs_kv *kv, uint32_t anchor,
                                uint64_t salt);
 int efs_meta_apply_get_inode(struct efs_kv *kv, efs_ino_t ino,

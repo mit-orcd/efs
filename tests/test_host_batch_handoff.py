@@ -35,8 +35,10 @@ code=r'''
 #define BO_HIST(x,y) ((void)(y))
 struct efs_raft {int group;};
 struct efs_raft_msg {int group;};
-struct host_inbox_item {uint8_t *buf;uint32_t len;uint64_t queued_us;};
-struct efs_raft_host {pthread_mutex_t mu;struct {struct efs_raft*r;int hosted;}g[2];};
+struct inbox_tag {int fenced;};
+struct host_inbox_item {uint8_t *buf;uint32_t len;uint64_t queued_us;struct inbox_tag tag;};
+struct efs_raft_host {pthread_mutex_t mu;struct {struct efs_raft*r;int hosted;}g[2];uint64_t inbox_fenced;};
+static int adm_check_control(const struct inbox_tag *t){return t->fenced?-14:0;}
 static unsigned batches,handoffs,published,wakes,active,fail_batch,probe_batches;
 static atomic_int observer_seen;
 static int kv_hold=1;

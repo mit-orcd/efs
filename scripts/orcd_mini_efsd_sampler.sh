@@ -2,7 +2,7 @@
 # Run ON node9901 (detached). Usage: orcd_mini_efsd_sampler.sh [SECONDS]; writes /data1/efs/prof/qcat-live/sampler.tsv
 # 30 s samples of orcd-mini efsd CPU and GC counters for DUR seconds.
 DUR=${1:-1800}; O=/data1/efs/prof/qcat-live/sampler.tsv; mkdir -p $(dirname $O)
-P=$(for port in 17432 17433 17434; do pgrep -f "efsd --node-id .*--port $port"; done)
+P=$(for port in 17432 17433 17434; do pgrep -f "efsd --cluster .*--port $port( |$)"; done)
 T=$(getconf CLK_TCK); prev=""; end=$(( $(date +%s) + DUR ))
 echo -e "time\tcpu_n1\tcpu_n2\tcpu_n3\tremoved\tdata_usage\tpending_g0\treap_g0\tpending_g2\treap_g2" > $O
 while [ $(date +%s) -lt $end ]; do

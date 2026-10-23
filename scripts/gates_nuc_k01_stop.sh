@@ -13,22 +13,23 @@
 #     lost; then n3 restarts from the normal build on the preserved store,
 #     serves an 8 MiB write+read through a FUSE mount, and its stop reports
 #     rc 4 put_sync failed (W71 recovery-uncertain root after a forced stop).
-# server.sh derives a node id from addr:port; EFS_MD_RAFT_N=3 needs 1..3,
-# so --node-id is passed as an extra efsd argument (last one wins).
+# Every daemon gets the same configured member list, $K/cluster.conf (D39).
 # Output on stdout; delete $GATES/k01 afterwards.
 set -u
 GATES=${GATES:-$HOME/efs-gates-nuc}
 REL=$GATES/src; K=$GATES/k01; A=127.0.0.1
-export EFS_TRANSPORT=tcp EFS_MD_RAFT_N=3 TMPDIR=$GATES/tmp
+export EFS_TRANSPORT=tcp TMPDIR=$GATES/tmp
 cd "$REL" || exit 2
 ms() { date +%s%3N; }
 for p in 18910 18911 18912; do ss -ltnH "sport = :$p" | grep -q . && { echo "port $p in use"; exit 1; }; done
 [ -e "$K" ] && { echo "$K exists"; exit 1; }
 mkdir -p "$K"
+printf '1 %s:18910\n2 %s:18911\n3 %s:18912\n' $A $A $A > "$K/cluster.conf"
+export EFS_CLUSTER_CONF="$K/cluster.conf"
 start3() {
-  ./scripts/server.sh $A:18910 $K/n1:2G --node-id 1 || return 1
-  ./scripts/server.sh $A:18911 $K/n2:2G $A:18910 --node-id 2 || return 1
-  ./scripts/server.sh $A:18912 $K/n3:2G $A:18910 --node-id 3 || return 1
+  ./scripts/server.sh $A:18910 $K/n1:2G $K/cluster.conf || return 1
+  ./scripts/server.sh $A:18911 $K/n2:2G $K/cluster.conf || return 1
+  ./scripts/server.sh $A:18912 $K/n3:2G $K/cluster.conf || return 1
 }
 waitlisten() { for t in $(seq 120); do grep -q "listening on $A:$2" "$1/log/efsd.log" 2>/dev/null && return 0; sleep 0.5; done; return 1; }
 stopone() { # label storage
@@ -45,13 +46,12 @@ sleep 20   # idle
 stopone a-n3 $K/n3; stopone a-n2 $K/n2; stopone a-n1 $K/n1
 echo "== (b) forced stop of a daemon with a parked packer"
 start3_b() {
-  ./scripts/server.sh $A:18910 $K/n1:2G --node-id 1 || return 1
-  ./scripts/server.sh $A:18911 $K/n2:2G $A:18910 --node-id 2 || return 1
-  # n3 from the fault build, same node id and arguments as server.sh would use
-  NODE=3
+  ./scripts/server.sh $A:18910 $K/n1:2G $K/cluster.conf || return 1
+  ./scripts/server.sh $A:18911 $K/n2:2G $K/cluster.conf || return 1
+  # n3 from the fault build, same arguments as server.sh would use
   EFS_FAULT_SHUTDOWN_PARK=packer EFS_FAULT_SHUTDOWN_TOTAL_MS=6000 \
-    ./tests/shutdown_faults/efsd --node-id $NODE --addr $A --port 18912 --storage $K/n3 \
-    --quota 2G --join $A:18910 >> $K/n3/log/efsd.log 2>&1 &
+    ./tests/shutdown_faults/efsd --cluster $K/cluster.conf --addr $A --port 18912 --storage $K/n3 \
+    --quota 2G >> $K/n3/log/efsd.log 2>&1 &
   echo $! > $K/n3/log/efsd.pid
   python3 ./scripts/server_processes.py record $K/n3/log/efsd.pid $K/n3
 }
@@ -65,8 +65,8 @@ find $K/n3 -type f ! -path '*/log/*' ! -name '*.new' ! -name '*.tmp*' | sort > $
 echo "store files before=$(wc -l < $K/n3-before.txt) after=$(wc -l < $K/n3-after.txt) missing=$(comm -23 $K/n3-before.txt $K/n3-after.txt | wc -l)"
 grep -n "deadline .* passed" $K/n3/log/efsd.log | tail -2
 echo "== (b) restart n3 on the preserved store (normal build)"
-./scripts/server.sh $A:18912 $K/n3:2G $A:18910 --node-id 3; echo "first start rc=$?"
-if ! pgrep -f -- "--port 18912 " > /dev/null; then ./scripts/server.sh $A:18912 $K/n3:2G $A:18910 --node-id 3; echo "rerun start rc=$?"; fi
+./scripts/server.sh $A:18912 $K/n3:2G $K/cluster.conf; echo "first start rc=$?"
+if ! pgrep -f -- "--port 18912 " > /dev/null; then ./scripts/server.sh $A:18912 $K/n3:2G $K/cluster.conf; echo "rerun start rc=$?"; fi
 sleep 3; waitlisten $K/n3 18912 && echo "n3 listening again"
 sleep 10
 ./efs-mgmt raft-status $A:18912 2>&1 | head -12

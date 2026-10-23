@@ -99,10 +99,10 @@ def receive(s,n):
         if not chunk:raise EOFError('short query frame')
         data.extend(chunk)
     return bytes(data)
-HELLO=struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',5,0)  # CLIENT_HELLO, EFS_PROTOCOL_VERSION 5 (K13)
+HELLO=struct.pack('>IB',97,165)+b'EFSP'+struct.pack('=IQB7x',6,0,1)+bytes(72)  # CLIENT_HELLO, EFS_PROTOCOL_VERSION 6, role CLIENT (D39)
 def declare(sock):
     sock.sendall(HELLO);n=struct.unpack('>I',receive(sock,4))[0];reply=receive(sock,n)
-    assert n==9 and reply[0]==166 and struct.unpack('=iI',reply[1:])==(0,4),('declaration refused',reply)
+    assert n==89 and reply[0]==166 and struct.unpack('=iI',reply[1:9])==(0,6),('declaration refused',reply)
 def query(port,q,raw=None,*,host=None,timeout=7):
     body=bytes(q) if raw is None else raw
     with socket.create_connection((host or os.environ.get('EFS_QUERY_TEST_HOST','127.0.0.1'),port),timeout) as s:

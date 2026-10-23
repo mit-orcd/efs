@@ -700,7 +700,6 @@ static int run_data_bench(struct efsd_server *s, double time_sec, int qd, int ce
     s->nodes[0].port = 0;
     s->node_count = 1;
     s->quota = 0;
-    s->persist_nodes = 0;
 
     if (ceiling) {
         if (have_fio()) ceil_fio(s->storage_paths[0]);
