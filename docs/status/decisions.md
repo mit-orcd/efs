@@ -46,17 +46,24 @@ User wording:
 Interpretation: the ladder is about **metadata** placement and protection.
 Data placement uses every cluster node from alpha 1.0 on.
 
+**Amendment (user, Oct 22, T3 of the third integration pass):** "at most 3
+nodes" in alpha 1.0 means each metadata *group* has three voters (2+1, one
+loss); the two groups keep today's default layout and together span nodes
+1–4. K28's `efs_md_group_voters` layout stands; nodes 5 and up host no
+metadata group.
+
 | Release | Metadata groups live on | Metadata protection | Data placement |
 | --- | --- | --- | --- |
-| alpha 1.0 | at most 3 nodes (three-voter groups, as today) | one loss (2+1) | all N nodes, 2+1 stripes |
+| alpha 1.0 | at most 4 nodes: two three-voter groups, as today (shard group on nodes 1–3, SHARD2 on nodes 2–4; amended Oct 22, T3) | one loss (2+1) per group | all N nodes, 2+1 stripes |
 | alpha 2.0 | at most 4 nodes | two losses (2+2; the D36 four-node metadata protocol) | all N nodes |
 | alpha 3.0 | N − M nodes, configured (M may be 0) | one loss | all N nodes |
 | alpha 4.0 | N − M nodes, configured | two losses | all N nodes |
 
 Consequences recorded now:
 - **W151 (raise the four-node cap) is alpha 1.0 data-placement work only.**
-  Metadata stays on three voters per group; a fifth and later node serves data
-  and clients and hosts no metadata group. This matches the W151 brief.
+  Metadata stays on three voters per group (two groups on nodes 1–4); a fifth
+  and later node serves data and clients and hosts no metadata group. This
+  matches the W151 brief.
 - **Packed segments are data, but today they live on a group's voters**
   (`packer.c`). Under this ladder, "data placement = N" means small-file
   packed data should also use all N nodes in alpha 1.0; keeping it on the

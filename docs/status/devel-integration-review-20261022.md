@@ -421,8 +421,9 @@ response. Verdicts on the two findings and the corrections:
   1–3 and SHARD2 on nodes 2–4, so metadata voters span four nodes. Either
   amend D38 to "at most 4 nodes, two three-voter groups, as today" or make
   `efs_md_group_voters` place both groups on nodes 1–3 (a one-line change,
-  fresh format, cluster of three then carries all metadata). Recorded in
-  the K28 row as a VERIFY item pending that decision.
+  fresh format, cluster of three then carries all metadata). **Closed
+  (user, Oct 22): D38 amended to "at most 4 nodes, two three-voter groups,
+  as today"; K28's layout stands.**
 
 Reopened rows and their next step: K5/T1 and K1/T2 are sub-session work
 (implement, regression test, `make test` on an efs VM once the user's

@@ -117,7 +117,7 @@ persisted; ior write regression needs a K row.
 [Alpha 1.0 Stage 1, Oct 22](alpha-1.0-2plus1-checklist.md#stage-1-tally-end-of-oct-22-adjusted-after-the-integration-review):
 **7 K rows fixed and merged (K2, K3, K4, K8, K16, K24, K28); of the 5 rows
 REOPENED by the [integration review](devel-integration-review-20261022.md),
-their fixes are merged, but the third review reopens K1 (T2) and K5 (T1), both confirmed by the [parent session's response](devel-integration-review-20261022.md#response-to-the-third-pass-parent-session-devel-62d30994f) (which adds T3, a D38 placement question for the user),
+their fixes are merged, but the third review reopens K1 (T2) and K5 (T1), both confirmed by the [parent session's response](devel-integration-review-20261022.md#response-to-the-third-pass-parent-session-devel-62d30994f) (T3, the D38 placement question, closed by amending D38: two three-voter groups on nodes 1–4, K28's layout stands),
 with T1 also affecting K15; the K26 valgrind leak gate is merged;
 2 INCOMPLETE (K9, K15); live gates NOTRUN. devel `0eb1511d2` returned `make test`
 rc 0 on efs3 with 15 NOTRUN: executed checks passed, full qualification INCOMPLETE.** Highlights: W148 wrong-bytes root

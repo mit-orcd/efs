@@ -1668,7 +1668,7 @@ persisted; ior write regression needs a K row.
 [Alpha 1.0 Stage 1, Oct 22](../status/alpha-1.0-2plus1-checklist.md#stage-1-tally-end-of-oct-22-adjusted-after-the-integration-review):
 **7 K rows fixed and merged (K2, K3, K4, K8, K16, K24, K28); of the 5 rows
 REOPENED by the [integration review](../status/devel-integration-review-20261022.md),
-their fixes are merged, but the third review reopens K1 (T2) and K5 (T1), both confirmed by the [parent session's response](../status/devel-integration-review-20261022.md#response-to-the-third-pass-parent-session-devel-62d30994f) (which adds T3, a D38 placement question for the user),
+their fixes are merged, but the third review reopens K1 (T2) and K5 (T1), both confirmed by the [parent session's response](../status/devel-integration-review-20261022.md#response-to-the-third-pass-parent-session-devel-62d30994f) (T3, the D38 placement question, closed by amending D38: two three-voter groups on nodes 1–4, K28's layout stands),
 with T1 also affecting K15; the K26 valgrind leak gate is merged;
 2 INCOMPLETE (K9, K15); live gates NOTRUN. devel `0eb1511d2` returned `make test`
 rc 0 on efs3 with 15 NOTRUN: executed checks passed, full qualification INCOMPLETE.** Highlights: W148 wrong-bytes root
@@ -2653,17 +2653,24 @@ User wording:
 Interpretation: the ladder is about **metadata** placement and protection.
 Data placement uses every cluster node from alpha 1.0 on.
 
+**Amendment (user, Oct 22, T3 of the third integration pass):** "at most 3
+nodes" in alpha 1.0 means each metadata *group* has three voters (2+1, one
+loss); the two groups keep today's default layout and together span nodes
+1–4. K28's `efs_md_group_voters` layout stands; nodes 5 and up host no
+metadata group.
+
 | Release | Metadata groups live on | Metadata protection | Data placement |
 | --- | --- | --- | --- |
-| alpha 1.0 | at most 3 nodes (three-voter groups, as today) | one loss (2+1) | all N nodes, 2+1 stripes |
+| alpha 1.0 | at most 4 nodes: two three-voter groups, as today (shard group on nodes 1–3, SHARD2 on nodes 2–4; amended Oct 22, T3) | one loss (2+1) per group | all N nodes, 2+1 stripes |
 | alpha 2.0 | at most 4 nodes | two losses (2+2; the D36 four-node metadata protocol) | all N nodes |
 | alpha 3.0 | N − M nodes, configured (M may be 0) | one loss | all N nodes |
 | alpha 4.0 | N − M nodes, configured | two losses | all N nodes |
 
 Consequences recorded now:
 - **W151 (raise the four-node cap) is alpha 1.0 data-placement work only.**
-  Metadata stays on three voters per group; a fifth and later node serves data
-  and clients and hosts no metadata group. This matches the W151 brief.
+  Metadata stays on three voters per group (two groups on nodes 1–4); a fifth
+  and later node serves data and clients and hosts no metadata group. This
+  matches the W151 brief.
 - **Packed segments are data, but today they live on a group's voters**
   (`packer.c`). Under this ladder, "data placement = N" means small-file
   packed data should also use all N nodes in alpha 1.0; keeping it on the
