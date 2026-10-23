@@ -149,6 +149,15 @@ cluster. No row was found already fixed.
 
 ### Stage 1 tally, end of Oct 22 (adjusted after the integration review)
 
+**Additional alpha blocker W153:** the unset/empty metadata count silently
+selects four nodes and can remove single-loss tolerance on three-node
+clusters. Resolve authoritative bootstrap membership and strict configuration
+validation, then pass the startup and single-loss gates in the
+[W153 review](devel-integration-review-20261022.md#review-of-a76b63f42--w153-is-an-alpha-correctness-gate).
+The existing K28 implementation and T3 layout decision remain credited;
+W153 is not closed by their voter-mask unit tests.
+
+
 Fixed and merged into devel, unit-tested, live gates NOTRUN: K2, K3, K4, K8,
 K16, K24, K28 (W151: cap 16, segments on the data ring; 5-node live gate
 NOTRUN). **Reopened by the

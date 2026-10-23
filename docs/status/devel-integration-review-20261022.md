@@ -484,13 +484,66 @@ run here (`N=3..16 PASS`). Two additions:
   (`server_raft_host_start`), whatever the membership. A three-node cluster
   started without it gets SHARD2 voters 2,3,4 with node 4 never joining: a
   quorum of two from two live voters, so losing node 2 or 3 stops that group,
-  and the node-id range check (ids 1..3 within 1..4) does not catch it. Every
-  committed driver, `cluster.sh` and `nuc-efs/start.sh` set the variable to
-  the member count, so no current deployment is affected; it is a fail-open
-  default and is recorded as **W153** (make the setting mandatory, or refuse a
-  default voter set that names an id outside the configured membership). The
+  and the node-id range check (ids 1..3 within 1..4) does not catch it. The inspected
+  deployment drivers, including `cluster.sh` and `nuc-efs/start.sh`, set the
+  variable to the member count. This does not verify every running daemon
+  or establish that no deployment is affected. The fail-open default is
+  recorded as **W153**; the review below tightens its scope and acceptance. The
   D38 table now names the condition.
 - **Protection column wording.** The review's own point, that metadata is
   three full replicas with quorum two rather than 2+1 coding, was still
   contradicted by the table's "one loss (2+1) per group"; changed to "one loss
   per group (three replicas, quorum two)".
+
+
+## Review of a76b63f42 — W153 is an alpha correctness gate
+
+**Scope reaffirmed by the user:** alpha 1.0 supports only **2+1 on 3, 4
+and >4 nodes**. Additional nodes spread data placement; they do not introduce
+2+2 or two-loss protection. W153 protects the one-loss contract within that
+scope, and introduces no stronger protection requirement. Metadata implements
+its quorum with three full replicas, while data uses 2+1 coding.
+
+**Verdict: OPEN, alpha 1.0 blocker.** The protection-column correction is
+right, and T3 remains closed as the default-layout decision. W153 is the
+startup implementation gap that can violate that decision and the promised
+single-node-loss tolerance, not optional hardening.
+
+Source checked: `src/server/raft_host.c:server_raft_host_start` at
+`a76b63f42`. Both an unset and an empty `EFS_MD_RAFT_N` leave `n` at four;
+`atoi` also accepts a numeric prefix such as `3junk`. Nodes 1–3 pass the
+node-id range check with n = 4. SHARD2 then has voters 2,3,4, so losing
+node 2 or 3 leaves one of its three configured voters. These are source
+findings; no running cluster configuration or startup/failover was tested
+by this review. The inspected cluster/devops drivers supply the count;
+that is narrower than proof that every current deployment is unaffected.
+
+Preferred correction, consistent with the easy-configuration architecture:
+use one authoritative configured cluster membership as the source for
+bootstrap topology, derive the count/default voter sets from it, and
+validate it consistently across nodes. Avoid another independent mandatory
+user setting that duplicates that configuration. If an internal count is
+retained, validate the whole string and its agreement with configured member
+identities; do not silently default to four. **Never derive membership from
+currently reachable peers**: a temporarily absent member is an outage, not
+permission to shrink the consensus configuration or its quorum. Existing
+committed membership remains authoritative after bootstrap; topology changes
+must use the existing consensus membership protocol.
+
+Acceptance gates to add to the alpha checklist:
+
+- Startup with authoritative three-node configuration and the legacy count
+  unset/empty must either derive exactly the configured topology or refuse
+  clearly; it must never silently select an absent fourth voter.
+- Malformed, out-of-range and contradictory count/membership inputs are
+  rejected; a numeric prefix such as `3junk` is not a valid count.
+- Inconsistent bootstrap configurations across nodes cannot establish a
+  falsely qualified cluster. Test sequential startup with an intended member
+  temporarily absent without deriving a smaller membership.
+- With a correctly configured three-node cluster, verify both groups retain
+  service after each single-node loss. Record identities, actual voter sets,
+  leader/quorum observations and acknowledged-payload checks. Existing voter
+  mask arithmetic tests alone do not exercise this startup defect.
+
+All new startup/live gates are **NOTRUN**, and no production fix is claimed.
+This commit changes review/status documentation only; T1/T2 remain on hold.

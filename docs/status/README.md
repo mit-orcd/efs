@@ -59,6 +59,12 @@ matched failover gate is NOTRUN. Lost-reply cleanup (decide-once retirement by
 fence or live-owner abandon) is on `devel-k15b` with unit tests passing; its
 live gate is NOTRUN. **W52: shape A in tree; exact 20k gate and A/B NOTRUN.**
 
+[W153 startup review](devel-integration-review-20261022.md#review-of-a76b63f42--w153-is-an-alpha-correctness-gate):
+**OPEN, alpha 1.0 blocker.** Unset/empty metadata count defaults to four;
+three-node deployments can lose their promised single-loss tolerance.
+Derive topology from configured membership, validate full input and node
+agreement; startup and live gates NOTRUN. T3 remains closed.
+
 [D38 amendment review](devel-integration-review-20261022.md#review-of-the-d38-amendment-at-e328744ad):
 **T3 CLOSED for the default layout.** Three nodes: both groups on 1–3;
 four or more: groups on 1–3 and 2–4. Roadmap and packed-placement wording
