@@ -40,8 +40,12 @@ count (W153a only); **B (recommended for alpha 1.0), one configured member
 list passed to every daemon and to `raft-mkfs`, hashed into HELLO and the
 committed MKFS, replacing `--join`, `--node-id` and `EFS_MD_RAFT_N`, with
 later changes through `raft-change` plus a replicated `CLUSTER_SET`**; C,
-control-plane group (post-alpha). Awaiting the user's decision; W153a is on
-hold until then.
+control-plane group (post-alpha scope option). **Review: B's bootstrap
+direction is sound, but online CLUSTER_SET and cross-group installation are
+not yet specified.** See the proposal's §6 for the actual decisions: fixed
+versus online membership in alpha, local identity selection, and initial
+formation readiness. These recommendations are not accepted decisions.
+Awaiting the user; W153a remains on hold.
 
 ## D38 — metadata placement ladder across the alpha releases (accepted Oct 22)
 
