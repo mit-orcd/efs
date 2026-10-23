@@ -2676,6 +2676,17 @@ results dirs; move this plan's finished rows to project-history.
 
 ## W64 · Durable append reservation replay across leader changes (queue row 0t)
 
+**Oct 22 K15 part 2 (`devel-k15b`, not merged):** a reservation granted with
+a lost reply now retires decide-once. Session fencing resolves it as
+FENCED_HOLE, or the live owner abandons that exact identity: the receipt
+result becomes STALE and an OPEN row resolves as ABORTED_HOLE. The resolved
+row records its outcome. A late completion is refused STALE; a retirement
+never overtakes a completion. The client abandons after a failed sent reserve
+(`EFS_APPEND_ABANDON`). Unit tests through the real apply path pass
+(`tests/test_append_cleanup.c`). The live gate with injected lost replies
+(`append_failover.py --lose-reserve-every`) is **NOTRUN**, so W64 stays
+**INCOMPLETE**. [K15 evidence](../status/k15-w52-w64-20261022.md).
+
 **Oct 22 K15 (`devel-k15`):** a step-down gate (4 writers, both group
 leaders stepped down every 20 s) kept integrity: 596 acknowledged records
 exactly once warm/peer/cold, failed writes invisible, no holes. It failed

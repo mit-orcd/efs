@@ -803,11 +803,44 @@ writes share an inode.
   ```text
   COMPLETED       the reservation's publication commits
   ABORTED_HOLE    the owning client is alive and its append failed:
-                  it commits the abort itself, and the reserved range
+                  it commits the abort itself (for a lost reserve reply,
+                  by abandoning the identity), and the reserved range
                   becomes a committed zero hole
   FENCED_HOLE     the owning session is fenced (sessions.md); recovery
                   commits the same zero hole on its behalf
   ```
+
+  **Retirement after a lost reply is decided once (K15/W64).** A reserve
+  whose reply never arrives leaves a committed OPEN reservation that its
+  owner cannot complete, because the owner never learned the offset. Only
+  two facts authorize retiring it; a timer is not one of them, because a
+  live owner that did receive the reply may still be writing:
+
+  ```text
+  owner fenced     global revocation done and the shard's local rejection
+                   floor is above the epoch -> cleanup-appends resolves its
+                   OPEN rows as FENCED_HOLE (session cleanup)
+  owner abandons   the live owner gives up on the write and sends an
+                   abandon for that exact identity (uuid, epoch, seq, len)
+                   under its established session -> the receipt result
+                   becomes STALE and an OPEN row resolves as ABORTED_HOLE
+  ```
+
+  Both run as one exact-image transaction over the owner's session row,
+  inode, receipt, reservation, cursor and lane barriers. The resolved row
+  records its outcome (completed, aborted hole or fenced hole). The first
+  resolution in the log wins. A retirement over a completed row is a no-op.
+  A completion over a hole-retired row is refused STALE and never applied.
+  A completion that is decided but not yet resolved holds its intents, so
+  a concurrent retirement aborts and retries rather than overtaking it.
+  Because the abandon retires the receipt, a delayed reserve or replay of
+  that identity is refused STALE and can never allocate or learn the
+  offset. A reserve that never applied is therefore never applied later.
+  On the wire, the abandon is the ordinary APPEND request with
+  `EFS_APPEND_ABANDON` set in `len`. If the abandon cannot be delivered,
+  the client still releases the identity, and its later ACK forbids any
+  new allocation under it. The stranded row then waits for session fencing
+  or the last-close drain, which is the fail-closed backstop.
 
   The client is *required* to resolve a reservation it cannot complete;
   session fencing is the backstop for a client that stops participating
