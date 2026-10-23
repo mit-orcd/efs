@@ -357,9 +357,19 @@ static void t_old_meta_prepare(void)
 }
 static void t_old_meta(void)
 {
+    /* K30: earlier failures within the same second left non-empty asides
+     * under this second's name; setting the journal aside must not collide. */
+    char cmd[8192];time_t now=time(NULL);
+    for(int k=0;k<3;k++){
+        snprintf(cmd,sizeof(cmd),"mkdir -p %s/meta/gc-journal.broken.%lld && touch %s/meta/gc-journal.broken.%lld/seg",
+                 roots[0],(long long)now+k,roots[0],(long long)now+k);
+        assert(!system(cmd));
+    }
     host_active=0;
     boot();
     assert(S.reclaim_fail_closed);
+    snprintf(cmd,sizeof(cmd),"test -e %s/meta/gc-journal.broken.%lld/seg",roots[0],(long long)now);
+    assert(!system(cmd)); /* the earlier aside is kept */
     assert(put(9302,0,0)==EFS_ERR_IO);
     server_reclaim_shutdown(&S);
 }

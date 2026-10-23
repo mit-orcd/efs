@@ -25,6 +25,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/wait.h>
+#include <time.h>
 
 #define WORKERS 8
 #define PARTS 4
@@ -169,8 +170,22 @@ static void *forker(void *unused)
         }
         if (cow) close(hold[0]);
         atomic_fetch_add(&forks, 1);
-        /* Sampling proves activity, not exact kernel page-pin overlap. */
-        if (atomic_load(&active_reads)) atomic_fetch_add(&read_forks, 1);
+        /* Sampling proves activity, not exact kernel page-pin overlap.
+         * K30: page-cache reads of 64 KiB last microseconds and one sample
+         * after fork missed them in every fork of a short run. Poll up to
+         * 2 ms after fork; in COW mode the held child still shares the mm
+         * for that whole window. */
+        int seen = atomic_load(&active_reads) != 0;
+        if (!seen) {
+            struct timespec t0, t1;
+            clock_gettime(CLOCK_MONOTONIC, &t0);
+            do {
+                seen = atomic_load(&active_reads) != 0;
+                clock_gettime(CLOCK_MONOTONIC, &t1);
+            } while (!seen && (t1.tv_sec - t0.tv_sec) * 1000000000L +
+                     (t1.tv_nsec - t0.tv_nsec) < 2000000L);
+        }
+        if (seen) atomic_fetch_add(&read_forks, 1);
         if (cow) {
             pthread_mutex_lock(&buffers_mu);
             for (unsigned w = 0; w < WORKERS; ++w) {

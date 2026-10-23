@@ -1102,9 +1102,18 @@ int server_reclaim_init(struct efsd_server *s)
         __atomic_store_n(&s->reclaim_fail_closed, 1, __ATOMIC_RELEASE);
         fprintf(stderr, "reclaim: journal verification FAILED in %s; data PUTs refused until recovery\n",
                 rj.dir);
+        /* K30: a second failure within the same second must not collide
+         * with the earlier aside (rename onto a non-empty directory). */
         char aside[4300];
-        snprintf(aside, sizeof(aside), "%s.broken.%lld", rj.dir, (long long)time(NULL));
-        if (rename(rj.dir, aside) && errno != ENOENT) return EFS_ERR_IO;
+        long long when = (long long)time(NULL);
+        int moved = 0;
+        for (unsigned n = 0; n < 1000 && !moved; n++) {
+            if (n) snprintf(aside, sizeof(aside), "%s.broken.%lld.%u", rj.dir, when, n);
+            else snprintf(aside, sizeof(aside), "%s.broken.%lld", rj.dir, when);
+            if (!rename(rj.dir, aside) || errno == ENOENT) moved = 1;
+            else if (errno != EEXIST && errno != ENOTEMPTY) return EFS_ERR_IO;
+        }
+        if (!moved) return EFS_ERR_IO;
         rj.head = rj.tail = 0;
         rj.nseg = 0;
         if (mkdir(rj.dir, 0755) && errno != EEXIST) return EFS_ERR_IO;
