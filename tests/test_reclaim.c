@@ -436,6 +436,10 @@ static void *phys_writer(void *arg)
 static void t_phys(void)
 {
     boot();
+    /* K30: bg_main resamples every 500 ms; a sample it had started
+     * overwrote the forced budget below (1 of 25 on amd). PUT admission
+     * needs no reclaim threads, so stop them; run()'s shutdown is a no-op. */
+    server_reclaim_shutdown(&S);
     server_phys_sample(&S);
     assert(S.phys_fs[0] && S.phys_fs[0]==S.phys_fs[1]); /* both roots on one /tmp filesystem */
     uint8_t f=S.phys_fs[0]-1;
