@@ -566,7 +566,7 @@ static void test_sweep_cursor_lsm(void)
     char dir[256];
     int round, retired = 0, i;
 
-    snprintf(dir, sizeof(dir), "/tmp/efs-txn-sweep-%d", (int)getpid());
+    efs_test_path(dir, sizeof(dir), "efs-txn-sweep-%d", (int)getpid());
     rmtree(dir);
     memset(&cfg, 0, sizeof(cfg));
     cfg.sync_mode = EFS_KV_LSM_NOSYNC;
