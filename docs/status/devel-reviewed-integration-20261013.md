@@ -297,3 +297,5 @@ retained or every documented gate passes on the combined source.
 | `d5b23c38` | expiry: use monotonic deadlines for the split GC yield | src, tests |
 | `99f6ef0c` | expiry: spread deletion bursts while keeping physical GC fast | src, tests |
 | `e83a7db4` | docs: qualify foreground expiry fairness on NUC | docs |
+
+**Raw evidence note (2026-10-23):** the bulk data in `devel-integration-code-20261013` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

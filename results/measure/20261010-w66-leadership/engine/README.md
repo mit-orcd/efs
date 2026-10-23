@@ -38,3 +38,5 @@ d2c88f243d3f74b9bdc2074fb97b70dd71e062aea3321d997b66998e30f1b6cc  tests/test_wir
 
 This implements leadership handoff, not D36 commit certificates, recovery
 without a quorum, versioned shard routing or additional independent groups.
+
+**Raw evidence note (2026-10-23):** the bulk data in `merged-storage-src-20261010` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

@@ -43,3 +43,5 @@ Fault-enabled private fixture, not the installed service.
   here)
 - `build-proof-2.log`, `full-tests-proof-2.log`, `quorum-test.log`,
   `ownership-proof.log`, `apply-pending-cold.log`, `apply-pending-r4.log`
+
+**Raw evidence note (2026-10-23):** the bulk data in `agent4-d29-20261008` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

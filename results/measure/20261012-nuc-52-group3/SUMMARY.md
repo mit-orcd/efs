@@ -91,3 +91,5 @@ packing metadata queues drained.
 - `controller/results/normal-images.json` — binary sha256/version identity
 - `controller/results/build-exit.txt` / `build.json` — 5feceb66ffc86f38 / 326642b54efcacaf
 - `fixtures/data1/efs/evidence/nuc-52-group3/posix-core-peer-direct/gc-direct-fjw_b5np/posix.tsv` and `posix2.tsv` — POSIX core/peer case results
+
+**Raw evidence note (2026-10-23):** the bulk data in `nuc-52-group3` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

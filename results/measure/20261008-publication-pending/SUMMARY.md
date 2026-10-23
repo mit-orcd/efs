@@ -40,3 +40,5 @@ See `docs/status/publication-pending-20261008.md` for scope.
 
 - `README.md`, `source-sha256.txt`, `service-and-binaries.txt`, `unit.log`,
   `targeted.log`, `live.log` (run `shasum -a 256 <file> | cut -c1-16` here)
+
+**Raw evidence note (2026-10-23):** the bulk data in `warnings-src` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

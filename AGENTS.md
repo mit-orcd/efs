@@ -41,6 +41,12 @@ mounts, client directories and VM images. Raw evidence that a summary cites
 goes under `/data1/efs/evidence/<name>` (cite that path), and scratch run
 trees go under `/tmp` or a run directory that is deleted when the run ends.
 Never leave work directories at the top of `/data1/efs`.
+Once a summary records the method, prune bulk from cited evidence: copied
+runtime stores, generated payloads and build trees are recreated from the
+commit and the method, not kept. Keep text logs, results and profiler
+captures, write a `PRUNED.txt` listing what was removed, and note the
+deletion on the citing page. Keep bulk only while a page marks it as kept
+for an open investigation.
 
 Raw evidence committed before 2026-10-21 was moved off devel. It is preserved
 unchanged at tag `archive/raw-evidence-20261021`; read

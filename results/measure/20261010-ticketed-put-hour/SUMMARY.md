@@ -104,3 +104,5 @@ receiver supports namespace export 1 only.
 - `merged/revoked-append-fixed.log` — corrected revoked-append pass — `e338f967c2300d8a`
 - `namespace-full-live.log` — exact-FINISH full fixture `gc-direct-2oo6ou8k` — `7f3d020472e955ba`
 - `namespace-isolated.log` — focused fixed fixture `namespace-barrier-cgbd_4pq` — `d9bc1d0564f758af`
+
+**Raw evidence note (2026-10-23):** the bulk data in `lease-retention-fixtures` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

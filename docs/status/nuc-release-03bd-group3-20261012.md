@@ -116,3 +116,5 @@ old-binary/data retention/backwards qualification or unrelated host-service
 changes. Manager received exact failures and implementation analysis. Prior
 W52/fullbothmodeW112 and W97sustainedcomparison are not closed by these narrowed
 gates; RDMA/repair remain deferred. No pushes/tags/promotions.
+
+**Raw evidence note (2026-10-23):** the bulk data in `nuc-03bd-group3` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

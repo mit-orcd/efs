@@ -7,3 +7,5 @@ Read-only live investigation; no daemon restart, code deployment, leadership cha
 Probe times include launching the management CLI on the remote host, socket setup and request processing; they are end-to-end milliseconds, not isolated server handler times. Existing workload was active; group write pressure was unequal. One inode per group and 12 samples per cell do not establish general capacity or a controlled hardware comparison.
 
 See ../../../docs/status/metadata-group-perf-followup-20261008.md for interpretation and next gate.
+
+**Raw evidence note (2026-10-23):** the bulk data in `bench` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

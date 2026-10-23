@@ -96,3 +96,5 @@ proof of a lock defect. Direct profiles still show XFS allocation work.
 | before-root1-buffered/flat.txt | ad86f3f34b484cba |
 | fair-root1-direct/strace.txt | 0388a724fd3bafdf |
 | before-root2-direct/strace.txt | b29f145e4df1d7da |
+
+**Raw evidence note (2026-10-23):** the bulk data in `bench` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

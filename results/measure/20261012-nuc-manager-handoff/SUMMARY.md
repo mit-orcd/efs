@@ -90,3 +90,5 @@ service and a read-only audit verified images/ports/payloads
 - `final-restoration/restore-exit.txt` — 9a271f2a916b0b6e; `verified-service.json` — 0e5103130d04aa1f
 - `merge-ready-commits.txt` — 418b3c5b56779ccc; `native-launch.json` — 60f3c81016952773
 - `empty-buffered-stop.json` — 8d407845cd162d36; `frozen-input.json` — cb1ff90aca5b8fad
+
+**Raw evidence note (2026-10-23):** the bulk data in `gc-direct-dly7jx6q` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

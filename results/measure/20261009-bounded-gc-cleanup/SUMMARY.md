@@ -96,3 +96,5 @@ fairness-fix fixture logs.
 | w66-active-20261009/smoke.log | c304c6e56bed4f69 |
 | w66-bounded-20261009/smoke.log | 5322606b49d64ff4 |
 | raw-evidence.tar.gz (nested fixtures/build/test logs) | 36ed83b414ce6f66 |
+
+**Raw evidence note (2026-10-23):** the bulk data in `w66-bounded-backup-20261009`, `w66-gc-fixtures` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

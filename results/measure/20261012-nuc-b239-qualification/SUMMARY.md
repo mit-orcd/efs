@@ -88,3 +88,5 @@ service and verify 4 daemons/2 clients/5 hashes/36 payloads.
 - `partial-stop/durable-warm.json` — f2beea2c537c6fcb (2409-record cold-match witness)
 - `restoration-retry-proof.json` — 5f8269b2884634c9; `hold-after-fixture/failure.txt` — 5f0d98d91d901990 (initial restoration failure)
 - `input/v030-b239dc7d-inputs.json` — 1500601db39a388c; `SHA256-MANIFEST` — bffd5089f6a5fff3
+
+**Raw evidence note (2026-10-23):** the bulk data in `gc-direct-xaotwh8t`, `nuc-b239-qualification` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

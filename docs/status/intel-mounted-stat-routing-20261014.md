@@ -291,3 +291,5 @@ All build/native/smoke outputs, per-process inventories, before/after control
 records, health/raft snapshots, profiler archives and raw traces remain in that
 external evidence directory, not Git. No further root package/firewall changes
 were required.
+
+**Raw evidence note (2026-10-23):** the bulk data in `intel-stat-route-work` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

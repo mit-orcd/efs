@@ -75,3 +75,5 @@ host, direct I/O, TCP transport, mounts `/data1/efs/mnt` and
 | client-proof.json | a60794aa4ec40d72 |
 | live.log | 9e9410e06807b04e |
 | tests.log | 987e98ac8d52e1c3 |
+
+**Raw evidence note (2026-10-23):** the bulk data in `lease-retention-fixtures` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

@@ -61,3 +61,5 @@ lowered. The fault engine's temporary file parks only its own compactor.
   private tree before rebuilding yields the successful clean full-unit run.
 
 These failures remain available and are not passing acceptance evidence.
+
+**Raw evidence note (2026-10-23):** the bulk data in `three-gates-kv-final-store` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

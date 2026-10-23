@@ -155,3 +155,5 @@ restoration: `results/measure/20261010-w97-three-drive/`; remote evidence
 `/home/efs/w97-three-nvme-v2-20261010` and `/data1/efs/evidence/w97-three-sata-v2-20261010`.
 `analyze.py` regenerates minute/five-minute windows and pooled sync means;
 `health-summary.py` regenerates temperature/counter coverage. W97 stays open.
+
+**Raw evidence note (2026-10-23):** the bulk data in `w97-three-drive-v2-20261010`, `w97-three-sata-v2-20261010` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

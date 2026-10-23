@@ -90,3 +90,5 @@ diagnostics off are restored. All four active servers and two FUSE clients
 match installed binaries; no owned loader or profiling process remains.
 Read-only collector stop marker is present. See the final report in
 `docs/status/w97-latest-nvme-20261010.md`.
+
+**Raw evidence note (2026-10-23):** the bulk data in `w97-latest-build` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

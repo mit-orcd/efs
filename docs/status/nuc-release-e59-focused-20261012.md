@@ -47,3 +47,5 @@ commands/exit/timing, all21cases in14complete TSVs/logs and result/cleanup:
 `results/measure/20261012-nuc-e59-focused/raw/`; archive retained. Remote
 `/home/efs/nuc-e59-focus`. Manager informed of exact focusedpasses and limits.
 No duplicate broad test or further live profiling launched; EFS cluster stopped.
+
+**Raw evidence note (2026-10-23):** the bulk data in `nuc-e59-focus` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

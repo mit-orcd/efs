@@ -91,3 +91,5 @@ diagnostics were committed for the next reproduction.
 - `final/merged-source-and-restoration.txt` — source hashes, mounts and service restoration — `3a03abd3bfcd97e6`
 - `merged/posix.tsv` — merged-baseline POSIX phase numbers — `89cdd846f9dee82f`
 - `storage-first/manifest.json` — storage-first phase manifest — `a2ab99bbe4bd563c`
+
+**Raw evidence note (2026-10-23):** the bulk data in `lease-retention-fixtures` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

@@ -117,3 +117,5 @@ in Git, deletable).
   This is not tuned.
 - Not run: crash/power loss during paging, multi-client concurrent truncate,
   the Intel cluster.
+
+**Raw evidence note (2026-10-23):** the bulk data in `debug-lf` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

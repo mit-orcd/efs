@@ -36,3 +36,5 @@ Next: route all write entry points through authoritative admission; carry the
 same immutable plans through both flush paths, serialize pending publications
 and drain bounded range exhaustion before copying new bytes. Never attach a
 new epoch to already accepted legacy bytes.
+
+**Raw evidence note (2026-10-23):** the bulk data in `review-20261006-lease`, `review-20261006-writer-rpc` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

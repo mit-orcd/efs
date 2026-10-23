@@ -61,3 +61,5 @@ successful probe. Transport/features not recorded in the run.
 
 - `live-probe.py` (c25d294ec2c98604) — native wire probe script (216 checks)
 - no other raw files in this run; unit/sanitizer output not retained
+
+**Raw evidence note (2026-10-23):** the bulk data in `review-20261006-lease`, `review-20261006-writer-rpc` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

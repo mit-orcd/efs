@@ -261,3 +261,5 @@ retained. The owned orphan mount was gracefully stopped; the accidental tree
 was moved into `gc-direct-pcvbssfk/unmounted-mount-setup-tree` and installed
 service was restored and verified. The corrected focused run starts after
 formatting and mounting and passes. Existing installed data was preserved.
+
+**Raw evidence note (2026-10-23):** the bulk data in `gc-direct-agr8e5h7` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

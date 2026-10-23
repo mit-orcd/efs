@@ -50,3 +50,5 @@ Append-only 10 and 100 ms controls pass afterward; those omit earlier full-batch
 sync/crash work and do not prove cadence causality. Final-state restoration-only
 mode records the failure and unexecuted gates; no finish-pass exists. No adoption
 or W64/W93/W97 closure. Stronger offline follower oracle remains unexecuted.
+
+**Raw evidence note (2026-10-23):** the bulk data in `w93-checkpoint-hour-20261010` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

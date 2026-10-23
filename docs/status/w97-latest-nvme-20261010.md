@@ -193,3 +193,5 @@ node counter windows, catch-up, cold verification and final identity are in
 minute/phase rates, verifies controller hashes and zero final exit records,
 and asserts unchanged paused counts. W93 remains closed by its separate
 acceptance; this latest evidence keeps W97 open.
+
+**Raw evidence note (2026-10-23):** the bulk data in `gc-direct-vt7vrt5g`, `w97-latest-build` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

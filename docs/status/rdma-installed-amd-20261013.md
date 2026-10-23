@@ -199,3 +199,5 @@ For user-directed resumption, from `/home/efs` use the original command with
 `--resume`: `python3 ./tiny_files.py --resume --max-depth 8
 --max-files-per-folder 1000 --max-files 1000000 --workers 4
 /data1/efs/mnt/tiny-files1`.
+
+**Raw evidence note (2026-10-23):** the bulk data in `rdma-deploy-src`, `rdma-deployed-0ec2a869` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

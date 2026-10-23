@@ -133,3 +133,5 @@ PASS; private buffered/TCP POSIX 216/0/1 (16.0 s), peer 64/64 (10.4 s), nine
 virtual gates, raw query RPC, restart oracle 112 files / 153 dirs / 4,212 bytes
 PASS. Main generator PID 1747101 verified running (Sl). No physical power-loss
 or 1,000–10,000 files/s acceptance is claimed. No commit or push performed.
+
+**Raw evidence note (2026-10-23):** the bulk data in `tiny-final-validation-20261008` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

@@ -245,3 +245,5 @@ scratch parent is left empty. Peak usage is 272 MiB.
 `intel2_efs.jsonl` (`071260e05ad1404b5a53eb4bd243dafa0da3959992be29fd1495e9cccff91151`).
 Tool and runner copies remain under `/data1/efs/evidence/cohort-bench-20261015/src` on
 each Intel host; its `run` directory is empty.
+
+**Raw evidence note (2026-10-23):** the bulk data in `cohort-bench-20261015` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

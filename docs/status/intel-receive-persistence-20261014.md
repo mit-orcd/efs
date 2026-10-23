@@ -215,3 +215,5 @@ queue/window or deadlines; then qualify affected changes on Intel and the
 original ORCD load separately. ORCD still needs its own stopped-cluster source
 integration/acceptance. This correction neither proves an original EIO cause
 nor removes every possible host-lock I/O wait; no speedup is established.
+
+**Raw evidence note (2026-10-23):** the bulk data in `gc-direct-5a6ecapa`, `gc-direct-atg56qow` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

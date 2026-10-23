@@ -167,3 +167,5 @@ Raw evidence is outside Git under
 Release source archive SHA256:
 `8845d169879ac288261e8d19c2c70e7a2d0a582a6ab190e894a72f6dbb9adfc2`.
 Isolated native workspace: `/data1/efs/evidence/sync-batch-work-20261014` on Intel1.
+
+**Raw evidence note (2026-10-23):** the bulk data in `sync-batch-measure`, `sync-batch-work-20261014` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

@@ -444,3 +444,5 @@ owned clients and daemons stop; never point this driver at installed stores.
 Raw failures, logs, phase dumps and diagnostic captures remain outside Git:
 `/data1/efs/rdma-fixes-{715656fc,300f5192,2109eea0,cc1cf8cc,660d35db,b27a2e99,402862eef,18be5d060}`.
 Commit only this summary, clear reproduction scripts and verdict/index updates.
+
+**Raw evidence note (2026-10-23):** the bulk data in `rdma-deploy-src`, `rdma-san-14d621182`, `rdma-san-18be5d060`, `rdma-timeouts-18be5d060` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

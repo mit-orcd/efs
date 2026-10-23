@@ -81,3 +81,5 @@ transaction/leader/outage/import fault gates remain required.
 | `initial-directory-rename-fail.log` | 89e1e7260576ce92 | Retained rename-auth failure |
 | `initial-client-path-fail.log` | 2fb09474bc7d7f7b | Retained path-validation failure |
 | `stale-restart-oracle-fail.log` | 16c1bedd81aefcd9 | Retained stale-oracle harness failure |
+
+**Raw evidence note (2026-10-23):** the bulk data in `w92-query-fixture-20261008l` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

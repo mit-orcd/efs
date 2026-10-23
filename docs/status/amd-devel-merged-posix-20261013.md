@@ -58,3 +58,5 @@ PASS: core POSIX **216/216**, zero failures/skips/notrun, exit 0, **44.0 seconds
 Build and deployment PASS. Raw build/test logs
 remain outside Git at `/data1/efs/devel-merged-{build,posix}.log` and
 `/data1/efs/evidence/devel-merged-posix.tsv`.
+
+**Raw evidence note (2026-10-23):** the bulk data in `devel-merged-src` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

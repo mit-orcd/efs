@@ -64,3 +64,5 @@ when available. No unrelated host services or paths were touched.
 These are the manager's narrowed group3 gates. They do not close the earlier
 full W52/both-mode W112 assignment or establish a W97 slowdown improvement.
 No sustained W97 baseline/candidate comparison was run.
+
+**Raw evidence note (2026-10-23):** the bulk data in `nuc-52-group3` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

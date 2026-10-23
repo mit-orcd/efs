@@ -53,3 +53,5 @@ committed and subsequently overwritten. This is additional protocol/storage work
 not a reason to activate the staged APIs with ambiguous error recovery.
 
 No live deployment or POSIX acceptance is claimed for this batch.
+
+**Raw evidence note (2026-10-23):** the bulk data in `review` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

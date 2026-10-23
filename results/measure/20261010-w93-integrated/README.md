@@ -52,3 +52,5 @@ binaries and perf control FIFOs are intentionally omitted. Original private
 stores and rollback binaries remain on NUC. Fixture collection copies only
 small metadata and compressed logs, never service payload stores. The unused
 `debug-gc.py` is retained diagnostic history, not the executed gate source.
+
+**Raw evidence note (2026-10-23):** the bulk data in `w93-integrated-20261010`, `w93-integrated-build` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

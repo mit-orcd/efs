@@ -103,3 +103,5 @@ Per-client core-suite summaries: each client 215/216 pass, ~42.5–46.8 s
 | `ordinary/evidence/client-config.json` (verified client environments) | `2c5004a1966bf3c5` |
 | `overwrite/result.json` (overwrite gate PASS) | `588d872794836dd0` |
 | `overwrite/command.json` (exact overwrite command/env) | `be45fa758f41e2e8` |
+
+**Raw evidence note (2026-10-23):** the bulk data in `amd-release-final-1e3a4638-20261012` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

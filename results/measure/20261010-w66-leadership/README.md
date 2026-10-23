@@ -67,3 +67,5 @@ and verified recovery for D36, persisted versioned routing, migration, more
 independent groups and controlled useful-capacity/hot-directory measurements.
 The post-two-loss availability contract awaits the user's answer. Four-voter
 membership and balancing are not enabled on installed stores by these tests.
+
+**Raw evidence note (2026-10-23):** the bulk data in `merged-storage-src-20261010` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

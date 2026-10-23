@@ -183,3 +183,5 @@ Code is still frozen101598d2; only documentation/raw evidence followed.
 NUC is ready for the manager-approved merged source/hash. No new live/native
 rerun, source installation, performance matrix, shared merge or push proceeds
 until that explicit qualification assignment.
+
+**Raw evidence note (2026-10-23):** the bulk data in `gc-direct-dly7jx6q` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

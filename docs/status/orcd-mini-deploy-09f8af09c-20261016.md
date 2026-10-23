@@ -214,3 +214,5 @@ Log signals, none user-visible:
 
 Raw output stays on node9901 under `/data1/efs/prof/suites-20261021-2149/`.
 Not run here: the GC, fault and Valgrind gates (private-cluster suites).
+
+**Raw evidence note (2026-10-23):** the bulk data in `testsuite` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

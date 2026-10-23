@@ -6598,3 +6598,5 @@ and that the cursor strictly advances or wraps. The test also covers:
 the work cursor fails the new case at the cursor-advance check. That
 mutation passes the old memory-store cases. An inclusive resume fails
 both. Gate: `make test` on efs3, in the K25 report.
+
+**Raw evidence note (2026-10-23):** the bulk data in `gc-buffered-3ohdte4d` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

@@ -383,3 +383,5 @@ represented as tested.
 clean-downgrade rule, sample/outlier caveats and separate W53/W94/W97 obligations
 remain as stated above. This acceptance establishes neither a hardware ceiling
 nor physical power-loss or distributed-RDMA guarantees.
+
+**Raw evidence note (2026-10-23):** the bulk data in `w93-closure-20261010` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

@@ -423,3 +423,5 @@ the linked measurement directory, and `/data1/efs/evidence/command-perf/` on NUC
 fixture stores and rollback binaries stay on NUC rather than being committed.
 The 400 GiB, broader fault/platform and live remote export-policy gates remain
 open; these two profiling rounds do not close W91/W92.
+
+**Raw evidence note (2026-10-23):** the bulk data in `command-perf`, `command-perf-fixture-r5-final-20261008` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

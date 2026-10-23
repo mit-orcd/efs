@@ -68,3 +68,5 @@ W92 remains open.
 | `fixture.log` | b9224ab44b45c970 | PASS verdicts, raft-create records |
 | `shutdown.log` | 04fabda2c5d60070 | Six-variant shutdown gate PASS |
 | `n1-restart.log` | 779c46e558bf9242 | Restart rebuild evidence |
+
+**Raw evidence note (2026-10-23):** the bulk data in `w92-query-fixture-20261008c` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

@@ -92,3 +92,5 @@ D27 still needs strict socket/checkout whole-call bounds and recorded load gates
 
 Commits: 34775d99 (rounds 1–2), fd3531b5 (3), f899fb6b (4–6),
 79983128 (7–10). No required design decision arose during this batch.
+
+**Raw evidence note (2026-10-23):** the bulk data in `review` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

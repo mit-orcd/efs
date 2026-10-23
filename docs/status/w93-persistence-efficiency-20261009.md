@@ -215,3 +215,5 @@ At the end, preserved service stores are restored on both mounts with frozen
 off, commands disabled. No loader remains active and no pending writes are
 force-discarded. Source/test and evidence commits stay on
 `devel-persistence-pressure`; no merge into devel is performed.
+
+**Raw evidence note (2026-10-23):** the bulk data in `efs-checkpoint-fault-ayu2b3ag`, `gc-direct-_7mx29mc` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

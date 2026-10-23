@@ -100,3 +100,5 @@ Cleanup: collector verifies loader exit; cluster restarted with
 | complete.json | eb9a76324c8b84a2 |
 | cold-peer-smoke.json | f8bf6bffa6ffb1ea |
 | validation/batch-obs-remaining-tests.log | a5834f4bceff2ad6 |
+
+**Raw evidence note (2026-10-23):** the bulk data in `batch-internals-20261009` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

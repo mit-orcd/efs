@@ -39,3 +39,5 @@ pinned/unreported entries and clears only the phantom case. After febc55e5,
 a fresh client pair ran the entire two-client suite and both clean stops passed
 without force-discard. Old diagnostic clients were retained, along with their
 server clusters and logs, for inspection. No original mount was stopped.
+
+**Raw evidence note (2026-10-23):** the bulk data in `review-20261006-final`, `review-20261006-lease` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

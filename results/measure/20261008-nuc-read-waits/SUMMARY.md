@@ -71,3 +71,5 @@ processing), 12 samples per cell, all rc=0:
 | b83e847f37dd1318 | `node1-window.log` — strace window, node 1 |
 | 641124472a020cac | `source-excerpts.txt` — read-path code excerpts |
 | 7be953c18ee0148e | `README.md` — original run notes |
+
+**Raw evidence note (2026-10-23):** the bulk data in `bench` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

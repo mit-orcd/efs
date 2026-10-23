@@ -134,3 +134,5 @@ variants pass. Further Intel performance experiments are paused by human scope.
 Both Intel hosts were rechecked with `scripts/intel_package3_verify.py`: actual
 process/profile, mounts and disabled server command-policy gates PASS.
 No new production deployment or enabled-command workload was started.
+
+**Raw evidence note (2026-10-23):** the bulk data in `query-peak-correctness-20261013` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

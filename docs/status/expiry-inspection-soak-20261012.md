@@ -218,3 +218,5 @@ Long soak summary SHA256
 `2f566276874d4b581d6f5ed732017a0d1221e1ebb10f58a7debcf2e179dbb657`;
 observations SHA256
 `a5d1a5627e3f9beeacc7ef5dc11b1fec43d72220c8e89c8309c3c22ed6e75ea9`.
+
+**Raw evidence note (2026-10-23):** the bulk data in `expiry-2da7a70a-normal`, `expiry-3b873839-soak` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

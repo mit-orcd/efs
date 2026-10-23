@@ -139,3 +139,5 @@ missing-size/rounded EOF and lost-high/persistent-shrink cases; loaded fairness
 and directory failures; candidate mounted, aged and fault qualification; then
 reviewed ORCD integration/acceptance only after human resumption. No claims that
 these two commits close the shared-core gates.
+
+**Raw evidence note (2026-10-23):** the bulk data in `acceptance-eof-20261013` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

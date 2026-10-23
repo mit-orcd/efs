@@ -55,3 +55,5 @@ server snapshot after restart. Data/configuration was preserved. Generator PID
 2185374 at launch runs in the same screen, new directory
 `/data1/efs/mnt/tiny-help-abf6838b`. Binary rollback copies remain in
 `/data1/efs/evidence/help-rollback-abf6838b`. No code was committed during this update.
+
+**Raw evidence note (2026-10-23):** the bulk data in `help-rollback-abf6838b` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

@@ -173,3 +173,5 @@ are retained alongside `results.json`, build/start logs and per-suite output.
 The advisory reservation was released after health verification. The deployed
 cluster remains running; this documentation-only follow-up commit does not
 require rebuilding its binaries.
+
+**Raw evidence note (2026-10-23):** the bulk data in `compaction-pressure-20261008`, `deploy-backups` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

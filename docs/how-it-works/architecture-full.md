@@ -2584,6 +2584,8 @@ Archive only superseded records, preserve their findings and source-specific
 verdicts, and update incoming links. Archiving does not close an item, cancel a
 gate or authorize deployment. Keep unresolved work linked from its queue/ledger.
 
+**Raw evidence note (2026-10-23):** the bulk data in `testsuite` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.
+
 
 ## Appendix 2 — Work queue — ordered items and source findings
 
@@ -9787,6 +9789,8 @@ the work cursor fails the new case at the cursor-advance check. That
 mutation passes the old memory-store cases. An inclusive resume fails
 both. Gate: `make test` on efs3, in the K25 report.
 
+**Raw evidence note (2026-10-23):** the bulk data in `gc-buffered-3ohdte4d` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.
+
 
 ## Appendix 6 — Naming
 
@@ -13145,6 +13149,8 @@ separates population from timing and retains individual observations. Preserve
 older numbers as historical measurements; use the corrected method for a new
 steady-state tail-latency gate. CPU samples and aggregate syscall time do not
 measure the fraction of wall time waiting.
+
+**Raw evidence note (2026-10-23):** the bulk data in `bench` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.
 
 
 ## Appendix 14 — Development — modularity constraint

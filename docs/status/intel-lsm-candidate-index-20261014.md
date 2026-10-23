@@ -199,3 +199,5 @@ process inventories, manifests and smoke outputs. Useful SHA256s:
   `3e2727294e60002d8898627161632180fb760b8f1540ad4af54b58847aff385d`.
 - Mounted measurement summary:
   `3e3f1df740f7e786bda4a7e9c3138ce169edaa39bac94b70e1ee352c937f1515`.
+
+**Raw evidence note (2026-10-23):** the bulk data in `lsm-index-work` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

@@ -111,3 +111,5 @@ preserved/reconciled during a later driver-side devops sync.
 The [command-options build](efs-command-options-20261008.md) extends these gates
 to filtered-query wire v3; all three versions are refused while server commands
 are disabled. Earlier named-build evidence above covered v1/v2.
+
+**Raw evidence note (2026-10-23):** the bulk data in `commands-rollback-policy-a9f0a842` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

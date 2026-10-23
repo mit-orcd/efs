@@ -220,3 +220,5 @@ nodes before discarding only synthetic stores; preserve failed/log markers.
 Cleanup failure retains owned fixtures and must be resolved before layering.
 All raw outputs are outside Git at `/data1/efs/evidence/rdma-fixes-fc2460b19`; summarize
 verdicts and precise reproductions, never commit captures/binaries/stores.
+
+**Raw evidence note (2026-10-23):** the bulk data in `rdma-fault-fc2460b19`, `rdma-merged-fc2460b19`, `rdma-san-fc2460b19` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

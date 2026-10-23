@@ -347,3 +347,5 @@ production source passes full AMD units and direct/TCP private query/POSIX/peer
 and replay/sync/GC/shutdown/cold recovery gates. Installed AMD service restored;
 no installed-binary rollout, push or activation. [Merge checkpoint](../archive/status-20261011/find-stats-merge-20261008.md)
 records exact commits, source/binary hashes, results and remaining obligations.
+
+**Raw evidence note (2026-10-23):** the bulk data in `readiness-durable-src`, `replay-readiness-src` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

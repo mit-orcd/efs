@@ -194,3 +194,5 @@ a fixed dirty cohort; the worker does not call the writeback wait at all.
 Native `test_pressure_cohort.py` verifies the limit, full explicit pass, failure
 handling and restored deadlines. The original foreground error and wait behavior
 is unchanged and covered by the WB/append drain tests.
+
+**Raw evidence note (2026-10-23):** the bulk data in `pressure-work-20261014` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

@@ -1032,3 +1032,5 @@ is not completed implementation; close only against the named acceptance gates.
 Archive only superseded records, preserve their findings and source-specific
 verdicts, and update incoming links. Archiving does not close an item, cancel a
 gate or authorize deployment. Keep unresolved work linked from its queue/ledger.
+
+**Raw evidence note (2026-10-23):** the bulk data in `testsuite` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

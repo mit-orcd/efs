@@ -36,3 +36,5 @@ The merged delta changes only documentation and raw evidence (580 paths), with n
 ## Final Intel stop checkpoint integration
 
 On the subsequent human instruction to integrate all commits, aaaeaa38 was merged at acaed0ae. Two documentation-heading conflicts retain the reviewed status summary and add Intel final stop evidence. Both Intel410/v2 full normal Make suites PASS; partial standalone4/88 and6/88, remainder/fault/sanitizer/mounted STOPPED/NOTRUN. All current branch and detached-worktree tips are ancestors; no uncommitted work imported, cluster work resumed, push/tag or promotion performed.
+
+**Raw evidence note (2026-10-23):** the bulk data in `release-v030-410afed4`, `release-v030-results-20261012-410afed4-attempt2` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

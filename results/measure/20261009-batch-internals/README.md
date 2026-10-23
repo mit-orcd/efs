@@ -169,3 +169,5 @@ unpersisted entries. Compare bounded coalescing policies on identical repeated
 fixtures, including idle/mixed p99, queue/drop rates, RSS and cold/fault gates.
 Increasing queue capacity alone can postpone overflow without increasing service
 rate. Device/filesystem and W92 background-load controls remain separate experiments.
+
+**Raw evidence note (2026-10-23):** the bulk data in `batch-internals-20261009` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

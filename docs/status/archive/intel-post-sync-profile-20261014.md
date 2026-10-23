@@ -183,3 +183,5 @@ Archive SHA-256 (archives cover the main perf/syscall phase):
 - `amd_efs.tar.gz`: `c27bb826a40cdec662486c9e95cc306fe2132d791a4c5da507266f8b2ba7a0fa`
 - `intel1_efs.tar.gz`: `4498f5fcea5cd626cb188577b11ae4e8e7f8e2e359446d216ea7fb268ecdafc6`
 - `intel2_efs.tar.gz`: `f047214d3aa6aa9f94a8bb7e07cfc71caa311b7cdb6bc0d69aabedf248ca6c8b`
+
+**Raw evidence note (2026-10-23):** the bulk data in `post-sync-profile-20261014` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

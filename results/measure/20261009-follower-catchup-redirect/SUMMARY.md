@@ -82,3 +82,5 @@ gates enabled (manifest.json). Mounts `/data1/efs/mnt` and `/data1/efs/mnt2`.
 | live.txt | e99f244fe5c20f36 |
 | regressions.txt | 1b1f4e44b2b18a5b |
 | unit.txt | f4b710f3e4cd919b |
+
+**Raw evidence note (2026-10-23):** the bulk data in `lease-retention-fixtures`, `txn-apply-fault-src-20261009` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

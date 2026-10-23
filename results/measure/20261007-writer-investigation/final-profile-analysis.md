@@ -58,3 +58,5 @@ BLAKE3 reuses per-worker buffers: this measures warm-buffer CPU throughput, not 
 Raw allocating writes fill the window once then overwrite it: allocation_ops and overwrite_ops distinguish first fill from warm overwrites. They are not an append-only allocation ceiling.
 Local data writes wrap within the configured bounded working set after filling it; profiles include create and replacement work. Direct local CLI without --window retains append-only writes.
 Buffered storage reads are warm; compare direct-I/O cases and the separate ceiling probe before inferring device limits.
+
+**Raw evidence note (2026-10-23):** the bulk data in `bench` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

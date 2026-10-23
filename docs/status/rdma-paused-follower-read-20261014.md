@@ -175,3 +175,5 @@ Require repeated exact-source degraded byte/digest PASS plus affected quiet
 namespace/read/peer/cold gates. The affected AMD paused-read and quiet regression gates PASS on ade source.
 W106 aggregate stays OPEN for broader/hardware acceptance. Do not turn this
 advisory routing fix or software RXE evidence into hardware acceptance.
+
+**Raw evidence note (2026-10-23):** the bulk data in `rdma-fault-ade336daf`, `rdma-fixes-ade336daf`, `rdma-merged-ade336daf`, `rdma-paused-read-a7` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

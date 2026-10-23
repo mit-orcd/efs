@@ -376,3 +376,5 @@ Full normal/fault/18 focused sanitizer/real-LSM sanitizer gates and direct/buffe
 ## Supersession of earlier running/next checkpoints
 
 Sections above retain chronological evidence. Present-tense running, planned retry tuning and next-test statements in those dated checkpoints ended at the human stop. The b239 cut-retry optimization was removed before shared31/c2/410; it is not current release policy. The current checkpoint at the top and owner stop records govern status. No historical PASS transfers to another source or host.
+
+**Raw evidence note (2026-10-23):** the bulk data in `release-v030-20261011` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

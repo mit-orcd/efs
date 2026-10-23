@@ -49,3 +49,5 @@ metrics. Prior [three-package evidence](../20261007-three-package-gates/SUMMARY.
 records full normal Linux units and 216 single/64 peer POSIX cases per I/O mode.
 This round changes test-only fault/gate code and does not claim new D27
 whole-call recovery, crash salvage, mount fencing or universal RSS limits.
+
+**Raw evidence note (2026-10-23):** the bulk data in `close-memory-default-src` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

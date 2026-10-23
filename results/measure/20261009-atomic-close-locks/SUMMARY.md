@@ -89,3 +89,5 @@ late-PUT fencing checks; restore both installed AMD mounts.
 | efs-close-effects-test.log | c092ce9ac3a2c9e9 |
 | efs-lock-before-test.log | 85929ea88700ecd2 |
 | efs-close-tests.log | 85ddda276a7997ff |
+
+**Raw evidence note (2026-10-23):** the bulk data in `w66-gc-fixtures` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

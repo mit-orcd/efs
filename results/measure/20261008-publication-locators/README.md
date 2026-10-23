@@ -17,3 +17,5 @@ failure was hidden by this correction.
 
 This validates applied receipt locators. It does not validate mapping committed
 while apply is pending or enable production REPORT/session integration.
+
+**Raw evidence note (2026-10-23):** the bulk data in `agent4-d29-20261008` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

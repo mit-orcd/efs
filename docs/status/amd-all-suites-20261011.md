@@ -191,3 +191,5 @@ release scope, excluding repair/recovery. [Scope and four planning
 gate groups](v030-release-scope-20261012.md) now govern release scheduling; original
 broader-scope matrix failures/gaps remain evidence, not current blockers when
 explicitly deferred. No new execution or candidate integration occurred.
+
+**Raw evidence note (2026-10-23):** the bulk data in `intel-qual-28b2089b`, `release-v030-28b2089b`, `release-v030-results-20261012-28b2089b` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

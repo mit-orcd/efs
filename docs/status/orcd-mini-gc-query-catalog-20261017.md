@@ -294,3 +294,5 @@ cadence) before and after.
   about 5 by skipping a duplicate inode-directory fsync and caching death-page
   ancestor syncs; it is held separately. It shortens `reap_fence` but is not
   where the CPU goes.
+
+**Raw evidence note (2026-10-23):** the bulk data in `testsuite` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

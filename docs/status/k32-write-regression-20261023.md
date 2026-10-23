@@ -87,3 +87,5 @@ One cluster, one write per build for the entry counts (three for the
 throughput table rows from the phase runs). The per-step entry breakdown
 (how many of the 20 are PREPARE, DECIDE, RESOLVE, RETIRE) is inferred from
 the K14 design, not counted per command type.
+
+**Raw evidence note (2026-10-23):** the bulk data in `traces` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

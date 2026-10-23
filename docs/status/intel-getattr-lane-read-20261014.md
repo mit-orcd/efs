@@ -207,3 +207,5 @@ runs, mounted samples, process inventories and smoke results. Remote native
 runs: `/data1/efs/evidence/getattr-lane-final/` on both Intel hosts. Source archive SHA256:
 `497e0d4380fa9a5e7f79e7557c4fa76f6340d392f38bc59990141efb1ffad28a`;
 native summary: `aa271b671773d09db64562d720a47c541c4939856892392274a9be4c58164bae`.
+
+**Raw evidence note (2026-10-23):** the bulk data in `getattr-lane-final` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

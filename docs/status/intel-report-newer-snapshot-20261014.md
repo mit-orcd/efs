@@ -263,3 +263,5 @@ The original ORCD REPORT BUSY/EIO and broader sustained/profile acceptance are
 limitations of this evidence, not outstanding W100 closure gates. No ORCD,
 RDMA, buffered-I/O, optional-feature, universal timeout repair or speedup claim
 is made here. Existing failed checkpoints are preserved, not relabelled PASS.
+
+**Raw evidence note (2026-10-23):** the bulk data in `gc-direct-3dxcums1`, `gc-direct-5e8lx9gp`, `gc-direct-7u96onob`, `gc-direct-n9n_zi12` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

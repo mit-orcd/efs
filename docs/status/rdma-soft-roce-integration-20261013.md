@@ -195,3 +195,5 @@ large metadata/snapshot/cold durability and loaded concurrency gates must be
 qualified before rollout. Generic receive-into assembly copying and disabled
 registered reply/W39 fast paths are explicit implementation tradeoffs. No
 speedup conclusion from these correctness test durations.
+
+**Raw evidence note (2026-10-23):** the bulk data in `rdma-gates`, `rdma-san-a325` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

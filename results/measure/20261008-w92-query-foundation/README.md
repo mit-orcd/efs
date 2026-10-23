@@ -14,3 +14,5 @@ sanitizer success (w92-snapshot-asan-focused.log and w92-index-asan-test.log).
 NUC ASan link was unavailable because libasan.so.8.0.0 is missing; no packages
 were installed. These offline components do not establish live server stats,
 query freshness, transaction-safe cluster publication or final W92 acceptance.
+
+**Raw evidence note (2026-10-23):** the bulk data in `w92-build` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

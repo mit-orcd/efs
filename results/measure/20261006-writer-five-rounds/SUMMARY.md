@@ -64,3 +64,5 @@ recorded in the run.
 - `posix.tsv` (d8dae327385b830d) — single-client POSIX results, summary line pass=216
 - `posix2.tsv` (ce61c674b982fb73) — two-client POSIX results, summary line pass=64
 - `live-probe.py` (0af78c8c43032f12) — native wire probe script (432 checks)
+
+**Raw evidence note (2026-10-23):** the bulk data in `review-20261006-writer-rpc` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

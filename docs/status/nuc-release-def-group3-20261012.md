@@ -80,3 +80,5 @@ was requested for follow-on fixtures under the newer human instruction. Original
 service was drained before quiet comparison; host services outside EFS untouched.
 Manager received exact failures and quota context. NUC currently has no running
 EFS cluster; subsequent deployment belongs to coordinated next action.
+
+**Raw evidence note (2026-10-23):** the bulk data in `nuc-def-group3` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

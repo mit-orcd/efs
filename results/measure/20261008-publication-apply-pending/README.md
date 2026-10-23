@@ -33,3 +33,5 @@ The live intent deliberately uses an invalid FileID and performs no fragment
 PUTs: command commitment can lead to rejection, so this is not publication or
 fsync success. Existing real-byte staged W88 tests are recorded separately.
 Production legacy REPORT migration and pressure activation remain unfinished.
+
+**Raw evidence note (2026-10-23):** the bulk data in `agent4-d29-20261008` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

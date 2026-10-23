@@ -103,3 +103,5 @@ merely from batch order.
 - `owner/regressions.log` — owner portion regressions — `16c5bccfd97ca1a6`
 - `publication/live.log` — publication portion live gates — `2e3f1c77a3f017dc`
 - `publication/regressions.log` — publication portion regressions — `f747d00f3a5aecae`
+
+**Raw evidence note (2026-10-23):** the bulk data in `lease-retention-fixtures` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

@@ -179,3 +179,5 @@ stops/drains owned processes before deleting only synthetic stores. Quiet runs
 have no trace/profiler/build. Full native, fresh quiet load and peer/cold/EOF
 PASS on a7 source; degraded read FAIL as above. Preserve original failed markers;
 new passing evidence must name its exact source. W106 aggregate stays OPEN.
+
+**Raw evidence note (2026-10-23):** the bulk data in `rdma-diag-artifacts-ac22`, `rdma-fault-a7e2b6b7d`, `rdma-fixes-a7e2b6b7d`, `rdma-fixes-ac22b8d70`, `rdma-merged-a7e2b6b7d` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

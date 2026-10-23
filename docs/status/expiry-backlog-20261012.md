@@ -179,3 +179,5 @@ cadence are addressed on `devel-expiry` in
 [the matched-log and new backlog report](expiry-rss-cleanup-20261013.md): all
 three 10,000-file phases pass with 212–218 second drains and 60–72 MiB sampled
 node RSS, with a measured foreground tail-latency tradeoff.
+
+**Raw evidence note (2026-10-23):** the bulk data in `expiry-656fce08-backlog` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

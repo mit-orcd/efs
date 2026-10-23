@@ -34,3 +34,5 @@ age/error must be exposed, not claimed as freshness or bounded acceptance.
 Internal borrowed-view callback API exists, but no virtual query RPC consumer
 is wired yet. Fresh per-user permissions/ancestry, output semantics, live stats,
 large namespace, concurrent transactions and fault gates remain required.
+
+**Raw evidence note (2026-10-23):** the bulk data in `w92-query-fixture-20261008c` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

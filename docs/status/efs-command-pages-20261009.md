@@ -126,3 +126,5 @@ Evidence: results/measure/20261009-command-pages (archived raw evidence: `archiv
 with full native logs under `/data1/efs/query-pages-*` and live artifacts under
 `/data1/efs/evidence/deploy-pages-abcd9b7b` on NUC. The file export is deliberately retained
 remotely rather than adding 78 MB of generated paths to Git.
+
+**Raw evidence note (2026-10-23):** the bulk data in `deploy-pages-abcd9b7b`, `src-pre-pages-abcd9b7b-20261009T035940Z` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

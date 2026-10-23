@@ -20,3 +20,5 @@ focused tests do not exercise that unrelated snapshot export/import path.
 Leak checking is disabled because the available Mac runtime lacks it.
 
 No host worker, RPC consumer, live stats fix or scale acceptance is claimed.
+
+**Raw evidence note (2026-10-23):** the bulk data in `w92-build` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

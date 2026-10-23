@@ -28,3 +28,5 @@ not yet been synced; regeneration/sync followed by the full rerun passed.
 Smoke output (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261006-bench-cli-move/smoke.log`), full test output (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261006-bench-cli-move/test.log`).
 These short smoke runs validate execution, not storage performance. The live
 four-node cluster was not redeployed or exercised by this change.
+
+**Raw evidence note (2026-10-23):** the bulk data in `review` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

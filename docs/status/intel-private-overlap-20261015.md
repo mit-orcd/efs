@@ -140,3 +140,5 @@ Broader grouped completion remains a design candidate with clear latency cost,
 not an implemented or end-to-end qualified change. Crash/power-fail recovery,
 full POSIX suites and fault injection were NOTRUN. No claim that one file fsync
 persists another file, or that the October 8 regression hypothesis is proven.
+
+**Raw evidence note (2026-10-23):** the bulk data in `overlap-20261015` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

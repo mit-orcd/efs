@@ -32,3 +32,5 @@ corruption fix. Build uses `EFS_FAULTS=1 EXTRA_DEFS=-Werror`; test policy is
 Installed four daemons and both mounts remain owned by `efs`. Installed binaries,
 stores and pressure policy are unchanged. No package closure or default activation
 is claimed; see the [status note](../../../docs/status/publication-nuc-20261009.md).
+
+**Raw evidence note (2026-10-23):** the bulk data in `agent4-publication-20261008` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

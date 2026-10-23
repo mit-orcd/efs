@@ -49,3 +49,5 @@ are off and existing service/test payloads are preserved. Rollback
 executables and raw perf are deliberately excluded from the repository.
 
 See [status and limitations](../../../docs/status/w93-read-pressure-20261009.md).
+
+**Raw evidence note (2026-10-23):** the bulk data in `w93-read-pressure-hour-20261009` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

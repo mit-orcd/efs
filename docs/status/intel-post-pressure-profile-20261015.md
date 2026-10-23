@@ -166,3 +166,5 @@ subsequent write traces and both workload results. Valid write trace SHA-256:
 
 The captures date 03:55–04:01 UTC October 15 (October 14 EDT); artifact names
 retain the EDT start date. No new full POSIX suite was run for this diagnosis.
+
+**Raw evidence note (2026-10-23):** the bulk data in `post-pressure-profile-20261014` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

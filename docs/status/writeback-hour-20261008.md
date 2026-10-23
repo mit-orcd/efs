@@ -168,3 +168,5 @@ peer failures. Raw final TCP probe (archived raw evidence: `archive/raw-evidence
 Incremental large GET frame/parity progress under a partially responding
 preferred peer remains a separate availability gate; the five-second pair bound
 is not a claim of optimal degraded-read latency.
+
+**Raw evidence note (2026-10-23):** the bulk data in `publication-replay-bytes-20261008-r3`, `publication-replay-cross-20261008-r4` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

@@ -86,3 +86,5 @@ not activated: production FUSE still sends legacy HOLD.
 | efs-deferred-route-amd-live.log | efc9ba4cbc8bdc8c | Live fixture gate output |
 | efs-deferred-final-tests.log | 3ac6b9b47792f1fd | Final regression suite |
 | efs-close-staged-tests.log | 023eb2f91b7f2f07 | Staged-candidate test log |
+
+**Raw evidence note (2026-10-23):** the bulk data in `w66-gc-fixtures` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

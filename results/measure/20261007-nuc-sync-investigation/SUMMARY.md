@@ -104,3 +104,5 @@ superseded by the corrected latency-validation method (caveat above).
 | 38115abdae418ca1 | root1-buffered-sync0-flat.txt — SATA buffered perf flat report |
 | 6d736e3ce73f4cd3 | root2-direct-sync1-flat.txt — NVMe direct sync perf flat report |
 | 2a2165dde1c767f1 | profile-root1-sync0-manifest.json — perf capture manifest example |
+
+**Raw evidence note (2026-10-23):** the bulk data in `bench` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

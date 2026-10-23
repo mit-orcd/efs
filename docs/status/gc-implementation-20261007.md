@@ -169,3 +169,5 @@ counter reset or a failed probe; unsupported counters remain unavailable. The
 new telemetry has Linux fault-injection tests, a full NUC unit-suite pass, real
 v2 RPC/age checks and v1 compatibility checks against xorinox. These telemetry
 changes are not yet deployed on xorinox.
+
+**Raw evidence note (2026-10-23):** the bulk data in `gc-buffered-3ohdte4d`, `gc-direct-m_92r0h2`, `gc-direct-yzlxfnne` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

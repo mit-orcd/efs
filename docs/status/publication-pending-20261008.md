@@ -150,3 +150,5 @@ logical resize remains disabled; completing D29 must not silently enable it.
 
 D29/W88 and D30 default activation remain open until that migration and its
 real-byte FUSE fault/recovery gates pass. No new installed deployment is claimed.
+
+**Raw evidence note (2026-10-23):** the bulk data in `pending-receipts-20261008-r2` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

@@ -1093,3 +1093,5 @@ and preservation manifest (archived raw evidence: `archive/raw-evidence-20261021
 record the completed attempts; the earlier queued/pending description is superseded.
 
 Named binary, mapped runtime, native and platform evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261010-w92-closure/raw-batching`).
+
+**Raw evidence note (2026-10-23):** the bulk data in `bench` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

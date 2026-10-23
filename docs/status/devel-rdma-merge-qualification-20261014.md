@@ -165,3 +165,5 @@ mounts, stop owned daemons and delete only synthetic stores after clean teardown
 Keep failed markers and raw output outside Git; summary and commands in Git.
 Avoid build/profiler/trace alongside quiet measurement. W106 aggregate and Intel
 W100/deep-directory obligations remain distinct; no hardware closure implied.
+
+**Raw evidence note (2026-10-23):** the bulk data in `rdma-devel-a40428d9d`, `rdma-fault-a40428d9d`, `rdma-fixes-a40428d9d` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

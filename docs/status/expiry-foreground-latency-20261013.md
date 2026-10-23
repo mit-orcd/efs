@@ -185,3 +185,5 @@ Normal RSS/free-space samples 76/79/82; minimum free bytes 207,470,972,928.
 | expiry-lifecycle.json | 98f4e0e71e6bc3edaf2faec0c061175f9073c158072fdecc8d20c52e103abb2f |
 | posix.tsv | eb3c9261a3c8734b29495f8e26709104d1e6f0f58fb2e45bd2c31872f2464e2d |
 | posix2.tsv | 2316869ae205ff275edaf3cdcbd1ce1e937f7d93dec28269e415528c52631b04 |
+
+**Raw evidence note (2026-10-23):** the bulk data in `expiry-99f6ef0c-backlog`, `expiry-99f6ef0c-fault`, `expiry-d5b23c38-backlog` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

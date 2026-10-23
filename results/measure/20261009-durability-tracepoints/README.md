@@ -118,3 +118,5 @@ as a separate measurement. Device placement, cache/FUA and XFS log settings
 also need controlled comparisons before attributing the NVMe cost to hardware,
 firmware, thermal behavior or filesystem configuration. W93 correctness gates
 remain intact; this observational run does not close new optimization acceptance.
+
+**Raw evidence note (2026-10-23):** the bulk data in `durability-tracepoints-20261009` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

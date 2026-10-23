@@ -1115,3 +1115,5 @@ they cover code changed here), D5 and K4 (kept). Follow-ups found on the
 way: the store `del_if_sum` operation has no caller after P2, and the RDMA
 zero-copy region table (`efs_rdma_zc_region_add`) only records regions while
 direct fill stays disabled.
+
+**Raw evidence note (2026-10-23):** the bulk data in `testsuite` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

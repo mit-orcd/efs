@@ -250,3 +250,5 @@ measures smaller expiry bursts plus separate broad housekeeping cadence while
 keeping physical GC fast: p95 improves 20–40% and physical drain improves
 25–29% in the matched 30,000-file run. It records the rejected experiment,
 remaining maximum-latency outliers and exact source/configuration.
+
+**Raw evidence note (2026-10-23):** the bulk data in `expiry-afbce294-backlog`, `expiry-afbce294-fault` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

@@ -246,3 +246,5 @@ active, ~29,568 new small files /462 MiB at 03:00 EDT, ~698 GiB free /data1 and
 Expiry/W91 lifecycle tests still await the actual expiry interface; do not fake
 expiration by test-owned unlink. NFS gateway, large output-pressure, concurrent
 transactions, outage/leader/import and final data checks remain open.
+
+**Raw evidence note (2026-10-23):** the bulk data in `w92-build` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

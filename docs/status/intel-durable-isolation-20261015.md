@@ -224,3 +224,5 @@ All five phase scratch directories per host are empty, no efs-bench remains,
 the original crawl is running, and its resume guard and stat-only load are gone.
 The production release symlinks/PIDs remain unchanged. Build binaries, source and
 raw measurement output are retained separately; no raw captures/payloads enter Git.
+
+**Raw evidence note (2026-10-23):** the bulk data in `durable-isolation-20261015` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

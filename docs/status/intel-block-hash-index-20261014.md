@@ -207,3 +207,5 @@ Pre-freeze native comparisons `final-native-measurements.tar.gz` SHA256:
 Native build/test logs, both sanitizer outputs, all mounted timing rounds,
 before/after inventories and preserved-control records, and final health/raft
 snapshots are retained beside these archives. No raw artifacts are committed.
+
+**Raw evidence note (2026-10-23):** the bulk data in `intel-block-hash-work` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

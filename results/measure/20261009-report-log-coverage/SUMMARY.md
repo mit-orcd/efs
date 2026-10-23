@@ -89,3 +89,5 @@ service on exit.
 | mount-sync.log (gc-direct-gyil3xsd) | 94fdc9d41fefeee5 |
 | regressions.log (full make test) | f894d3c66b4ed254 |
 | build.log (warning-free Linux build) | 7fa447fd00ea8d2f |
+
+**Raw evidence note (2026-10-23):** the bulk data in `lease-retention-fixtures` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

@@ -125,3 +125,5 @@ fixture `/data1/efs/evidence/expiry-posix-runner-5b41b8d3/gc-direct-oszl7ahi/`
 contains manifest, actual runtime proof, named expiry verdicts and POSIX TSVs.
 These raw artifacts are outside Git. This validates runner integration, not
 additional large-scale capacity or a broader expiry policy than D33.
+
+**Raw evidence note (2026-10-23):** the bulk data in `expiry-posix-runner-5b41b8d3` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

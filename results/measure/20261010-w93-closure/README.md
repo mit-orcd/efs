@@ -56,3 +56,5 @@ and readiness-to-ACK fields. `cohort-original-source.c` retains its source.
 `29afbe1e` later corrects only an explanatory engine comment; executable code
 remains the frozen build above. Original failed gates, negative controls and
 raw fixture artefacts remain retained; they are not counted as final passes.
+
+**Raw evidence note (2026-10-23):** the bulk data in `w93-closure-20261010` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

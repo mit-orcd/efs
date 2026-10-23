@@ -344,3 +344,5 @@ replay, W83 decision retirement, W64 append failover, W84 maximum namespace
 envelope/depth, W87's retained buffered failure and the outstanding fault/RDMA/
 configuration-change gates remain open. These 30 rounds are fixes and acceptance
 work, not a claim that the complete roadmap or all GC recovery is finished.
+
+**Raw evidence note (2026-10-23):** the bulk data in `gc-buffered-it_redju`, `gc-direct-uvt7yab1`, `gc-direct-znd5nw4n`, `gc-direct-zvlzgj9m` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

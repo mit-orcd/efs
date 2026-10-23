@@ -206,3 +206,5 @@ query engine with the user's consistent-help update across all binaries.
 See [help checkpoint](help-format-20261008.md). The generator's latest fresh
 output is `/data1/efs/mnt/tiny-help-abf6838b`; preceding directories are retained.
 W91/W92's unresolved loaded freshness/scale/fault gates are unchanged.
+
+**Raw evidence note (2026-10-23):** the bulk data in `command-build`, `command-rollback-3997575c`, `commands-58997ac5-clean-20261008` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

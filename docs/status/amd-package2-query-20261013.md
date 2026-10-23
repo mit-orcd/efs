@@ -129,3 +129,5 @@ native/fault/sanitizer gates on final integration. ORCD owns full-size peak,
 loaded seven-client, complete 400 GiB and hardware transport acceptance. W108's
 historical closed implementation is not reopened; these are new-source rollout
 checks. No global W91/W92/W109 closure is claimed.
+
+**Raw evidence note (2026-10-23):** the bulk data in `amd-package2-src` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

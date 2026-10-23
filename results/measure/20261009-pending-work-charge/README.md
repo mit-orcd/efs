@@ -11,3 +11,5 @@ Installed 978caaf7 service restored, both command masks disabled, pressure off.
 Compressed evidence retains full regression, final build/focused tests, live
 output and POSIX verdicts. These are functional/replay gates; production-cap
 stress and the remaining command expansion audit are still required.
+
+**Raw evidence note (2026-10-23):** the bulk data in `w66-gc-fixtures` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

@@ -822,3 +822,5 @@ After the peer suite, a second quiet core jobs16 run with tag
 `BASE/quiet/core-repeat.{log,tsv}`. Both loaded runs retain the original
 timeouts. W119 remains open for its earlier failing configuration; no
 queued-read scheduling or append-lock experiment is accepted on this basis.
+
+**Raw evidence note (2026-10-23):** the bulk data in `metadata-waits-20261015`, `nuc-read-close-852caf1ae`, `timeout-diag-20261015` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

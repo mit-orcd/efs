@@ -93,3 +93,5 @@ The pure credit model does not prove control reserve progress under verbs load;
 codec tests do not prove connection pinning, deadlines, CQ handling, receive-into
 canaries, source lifetimes, persistence, or zero application TCP. These gates
 remain NOTRUN. No speedup claim.
+
+**Raw evidence note (2026-10-23):** the bulk data in `rdma-foundation` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

@@ -98,3 +98,5 @@ POSIX 216/0/1 unsupported-mmap skip; peer 64/64 (per status page).
 | direct-sparse-pressure.json | 5c7cfb2ea637905d |
 | direct-namespace-lost-replies.json | 62650ebefdb52378 |
 | direct-worker-retirement.json | e536ab0cd996a67d |
+
+**Raw evidence note (2026-10-23):** the bulk data in `gc-buffered-it_redju`, `gc-direct-uvt7yab1`, `gc-direct-znd5nw4n` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

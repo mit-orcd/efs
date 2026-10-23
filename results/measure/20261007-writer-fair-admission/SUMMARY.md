@@ -73,3 +73,5 @@ before, 44% after). Root2 buffered maximum worsens in one run.
 | File | sha256 (16) |
 |---|---|
 | results.json | 3fef732e5d2b55d8 |
+
+**Raw evidence note (2026-10-23):** the bulk data in `bench` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

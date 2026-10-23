@@ -144,3 +144,5 @@ three observed hosts. SHA256:
 - Intel2 archive: `c2831ca510ae0210d28897334d3f3a11e9a2b27110bddc58fdc03627c04d7aa8`
 - RPC trace: `ad22bf4cb6e13585fe9526e645498da91f59983c3efc4f999e6712070fc755bb`
 - Sync trace: `96219a710558da11819a68517017bee5f79063711f80f606bbb059417703bda9`
+
+**Raw evidence note (2026-10-23):** the bulk data in `intel-amd-dd-profile-20261014` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

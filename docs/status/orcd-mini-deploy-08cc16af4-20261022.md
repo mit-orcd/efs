@@ -71,3 +71,5 @@ stay outside Git on node9901:
   `e4bd1b6d7` (outputs in `/data1/efs/evidence/testsuite/private-e4bd/`,
   `/tmp/efs-fault-e4bd/`). `e4bd1b6d7` is merged into devel in `99c7a1c75`.
 - LeakSanitizer remains broken on node9901; Valgrind not run.
+
+**Raw evidence note (2026-10-23):** the bulk data in `testsuite` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

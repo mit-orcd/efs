@@ -98,3 +98,5 @@ Raw outputs stay outside Git on node9901:
 - The orcd-mini data from before 02:54Z is gone (authorized wipe).
 - LeakSanitizer remains broken on node9901.
 - Valgrind gates were not run.
+
+**Raw evidence note (2026-10-23):** the bulk data in `testsuite` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

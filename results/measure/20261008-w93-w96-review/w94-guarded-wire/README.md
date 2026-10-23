@@ -50,3 +50,5 @@ Latest session/metadata ASan/UBSan also covers all 120 pending-adoption/normal
 OPEN/CLOSE/cleanup arrival permutations, exact read-only stored verdicts,
 contiguous retirement and final inode reclamation. Normal KV library linked;
 not a fully instrumented library or a production FUSE adoption gate.
+
+**Raw evidence note (2026-10-23):** the bulk data in `w94-create-apply-fault-20261008` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

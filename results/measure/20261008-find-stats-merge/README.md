@@ -42,3 +42,5 @@ transaction/leader/outage/import faults and NFS/gateway acceptance remain.
 No RDMA/buffered matrix, hardware power loss, main merge, push or tag occurred.
 Existing documentation edits, staged proposal and untracked proposal file were
 restored; the protective stash `8ca59a12` remains available.
+
+**Raw evidence note (2026-10-23):** the bulk data in `find-merge-query-20261008`, `find-merge-src` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

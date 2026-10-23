@@ -96,3 +96,5 @@ unbounded speed guarantees: these approximately two-second catalog builds add
 to capture/queue time. Raw JSON, publication logs, binary hashes, RSS/space and
 deployment/build logs are retained in the results directory. The generator is
 still running; no generated directory was removed.
+
+**Raw evidence note (2026-10-23):** the bulk data in `commands-rollback-d2573704` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

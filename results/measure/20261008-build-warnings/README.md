@@ -25,3 +25,5 @@ Source SHA-256:
 e30709c0d464a97817abbe15effe5224800b21308d80b8c58ed645164c793463  src/server/efsd.c
 a3ae66c2e376728d1851e4c177833aef37e7d40c128c4d46d9d7ad02d32e80ec  src/server/raft_host.c
 ```
+
+**Raw evidence note (2026-10-23):** the bulk data in `warnings-query-20261008`, `warnings-src` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

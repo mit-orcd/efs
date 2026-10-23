@@ -335,3 +335,5 @@ October 12–13: [W90 large backlog qualification](expiry-backlog-20261012.md)
 records new duration arguments, 30,000 expirations, mid-drain restart/off-on,
 24 lifecycle/core 216/peer 67 PASS, and the observed default scheduling limit
 and rising sampled RSS. It does not claim instantaneous expiry or a memory plateau.
+
+**Raw evidence note (2026-10-23):** the bulk data in `expiry-0c68c032-fault`, `expiry-0e975936-fault`, `expiry-0e975936-normal`, `expiry-31e1cbcb`, `expiry-54b193b3`, `expiry-foundation-70ba0424`, `expiry-integration` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

@@ -252,3 +252,5 @@ Focused source commits are `ea23775b` (default-off credit experiment) and
 `437b7890` (confirmed-absence recovery fix); a separate documentation/evidence
 commit records the final results. Main devel and Xorinox remain untouched by
 this work. W93/W97 are open, and experimental credit return is not promoted.
+
+**Raw evidence note (2026-10-23):** the bulk data in `w93-read-build` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.

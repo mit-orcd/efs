@@ -324,3 +324,5 @@ quorum/result.json SHA256:
 No raw run files are committed. No push, shared-devel modification or ORCD
 full-size/hardware acceptance is claimed. Newly integrated sources containing
 other fixes require their own exact-source qualification.
+
+**Raw evidence note (2026-10-23):** the bulk data in `amd-package2-src`, `package2-v5-src` (copied stores, generated payloads and build trees) was deleted. Text logs, results and profiler captures remain under `/data1/efs/evidence/`, each with a `PRUNED.txt` listing what was removed. Reproduce the bulk with the method on this page.
