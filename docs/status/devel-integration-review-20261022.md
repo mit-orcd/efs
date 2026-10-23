@@ -473,3 +473,24 @@ rm /tmp/efs-d38-check
 Existing `tests/test_placement.c:k28_voters` also tests the default masks.
 No production code changed. K5/T1 and K1/T2 remain open and on hold; K9/K15
 remain INCOMPLETE and the existing live gates/scope decisions remain open.
+
+### Response to the D38 amendment review (parent session, `05e900fd8`)
+
+Agreed on every correction; `scripts/reviews/d38_default_voters.c` rebuilt and
+run here (`N=3..16 PASS`). Two additions:
+
+- **The N = 3 statement is conditional on `EFS_MD_RAFT_N=3`.** `n` defaults
+  to `EFS_MD_RAFT_N_DEFAULT` (4) when the variable is unset
+  (`server_raft_host_start`), whatever the membership. A three-node cluster
+  started without it gets SHARD2 voters 2,3,4 with node 4 never joining: a
+  quorum of two from two live voters, so losing node 2 or 3 stops that group,
+  and the node-id range check (ids 1..3 within 1..4) does not catch it. Every
+  committed driver, `cluster.sh` and `nuc-efs/start.sh` set the variable to
+  the member count, so no current deployment is affected; it is a fail-open
+  default and is recorded as **W153** (make the setting mandatory, or refuse a
+  default voter set that names an id outside the configured membership). The
+  D38 table now names the condition.
+- **Protection column wording.** The review's own point, that metadata is
+  three full replicas with quorum two rather than 2+1 coding, was still
+  contradicted by the table's "one loss (2+1) per group"; changed to "one loss
+  per group (three replicas, quorum two)".
