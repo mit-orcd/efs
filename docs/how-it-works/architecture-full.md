@@ -1730,7 +1730,7 @@ a cluster at four nodes, so ">4 nodes" is an implementation item or a
 narrower claim.** W145–W147 fixes read correct; `raft-resync` mark is not
 persisted; ior write regression needs a K row.
 
-**K31, Oct 23: devel RDMA clients lose replies of a few hundred bytes** (orcd-mini, freshly formatted, devel `bf16436e8`; TCP works). orcd-mini mounts are unusable over RDMA on devel; the K27 A/B/A′ stopped after phase A (`08cc16af4`: ior easy write about 1.14–1.24 GiB/s).
+[K31 fixed, K27 closed, orcd-mini on devel `24e58fb1d`](../status/k31-k27-orcd-mini-20261023.md): **RDMA reply loss came from the K5 mount session starting before the daemon fork (poller thread lost); fixed in `24e58fb1d`. K27: no ior write regression on fresh formats. All orcd-mini suites PASS.**
 
 [D40, alpha 1.0 scope decisions Oct 23](#d40--alpha-10-scope-decisions-taken-oct-23-user-in-one-pass):
 **D39 accepted (fixed membership, endpoint identity, all members at formation; model first); W154 rebuild on return; K10 known limitation; K13 and K14 fixed in alpha; K23 stays deferred; orcd-mini reformat and the K27 A/B approved.**
