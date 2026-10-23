@@ -1629,11 +1629,11 @@ of successful durability or rollback. A blanket old-or-new rewrite oracle
 is insufficient. K1's post-restart rc 4, loaded errors, raw-evidence losses
 and foreign-client discovery limits remain recorded.
 
-[D39 latest review (§26)](../status/d39-cluster-membership-proposal-20261022.md):
-**OPEN:** repeated §23 review already committed as `1ca24fec6`; newer §25
-(`e2da82bfb`) addresses it, subject to preserving Raft incarnation fencing
-through the control exception and bounding handed-off obligations as well
-as in-flight tokens. D39 proposed, W153a held; model gates NOTRUN.
+[D39 latest review (§28)](../status/d39-cluster-membership-proposal-20261022.md):
+Review of `f31ea589c` agrees with incarnation fencing and combined obligation
+bounds; implementation must synchronize the Raft boot-map update with its
+owner and transfer capacity at handoff without blocking completion at the
+bound. D39 proposed, W153a held; model and implementation gates NOTRUN.
 
 [D39 proposal: configured cluster membership](../status/d39-cluster-membership-proposal-20261022.md):
 **PROPOSED, awaiting the user.** One member list for every daemon and

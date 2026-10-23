@@ -1855,3 +1855,68 @@ admissions recovering.
 
 Proposed, untested; user choices unchanged; W153a held. The consolidated
 model with the traces from §§8–26 is the next artifact.
+
+## 28. Independent review of §27 (`f31ea589c`) — October 23
+
+**Agreement on the two §26 invariants; model/implementation gates remain
+NOTRUN.** Reviewed the response and current source at `0804ae068`:
+`efs_raft_recv`, the optimized receive/read predicates in `src/raft/raft.c`,
+and the inbox/read-control/persistence paths in `src/server/raft_host.c`.
+No implementation defect or live-test result is claimed by this review.
+
+The incarnation equality check closes the declaration-before-first-Raft-frame
+hole in the specification, and a bound covering both tokens and retained
+obligations closes the accounting escape. These do not need another design
+alternative. Two details belong in the consolidated model and implementation
+contract before either mechanism is claimed complete.
+
+### Synchronize the Raft boot map with its existing owner
+
+"Update the Raft boot map at once, under the binding lock" is not sufficient
+as an implementation locking rule. `peer_boot` is private mutable Raft state;
+normal receive reads/writes it and optimized paths read it under the host's
+existing execution/locking discipline, not the proposed binding lock. The
+host also deliberately releases `h->mu` during fenced receive persistence.
+A new declaration handler cannot safely write this state using only a new
+mutex, nor assume a queued update immediately fences earlier queued work.
+
+Define an explicit Raft API/owner operation and lock order for the publication
+of the declaration high-water mark and its Raft fence. Acceptance must have
+one observable ordering point: after it, every effect path rejects obsolete
+incarnations, including `host_note_queued_reads` before normal inbox dispatch.
+An authoritative effect-boundary check may provide that guarantee while a
+secondary cache catches up; if the map is promised synchronous, the protocol
+must actually serialize that update with its readers. Do not hold the binding
+lock across Raft disk I/O or introduce binding-lock/host-lock inversion.
+Already accepted I/O retains its specified ownership and committed history
+still completes. Gate a declaration racing a queued read proof, batch receive
+and the unlocked persistence interval, with explicit pre/post acceptance
+assertions. This is synchronization work, not a new operator choice.
+
+### Transfer capacity at handoff; reserve completion resources
+
+A single total bound is correct, but the handoff must transfer the operation's
+existing reservation rather than demand an extra free total slot. With N
+uncertain tokens at a bound of N, requiring a new obligation slot before
+releasing any token can reject every handoff. The records stay owned, but
+resolution progress then depends on resource headroom the design has not
+provided. Use an atomic accounting transfer, pre-reserved obligation storage,
+or a demonstrated equivalent; account for temporary memory during transfer.
+Destination-specific limits must likewise have a continuation path for work
+already admitted. New application work cannot consume the resources needed
+to resolve previously accepted work.
+
+The receipt window and upload-slot limits are per-session/path limits, not
+by themselves a proof of a daemon-wide bound across mounts and operation
+sizes. Define the charged unit and memory bound, the aggregate admission
+reservation, and its release/transfer points; derive and test internal
+constants without adding a user flag. Gate exactly-full occupancy, all-token
+handoff, destination refusal, mixed sessions and paused resolution, then
+resume completion and require recovery without dropping ownership. Ordinary
+network/disk unavailability need not promise progress; available completion
+must not deadlock solely on the admission bound.
+
+D39 stays proposed, W153a held, and the three user policy decisions unchanged.
+Proceed to one consolidated model with these implementation constraints and
+the prior traces. Prose agreement is not a protocol PASS; no further design
+branch, backwards compatibility or cluster action is requested here.
