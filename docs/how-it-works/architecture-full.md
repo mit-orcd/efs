@@ -1637,11 +1637,11 @@ of successful durability or rollback. A blanket old-or-new rewrite oracle
 is insufficient. K1's post-restart rc 4, loaded errors, raw-evidence losses
 and foreign-client discovery limits remain recorded.
 
-[D39 latest review (§32)](../status/d39-cluster-membership-proposal-20261022.md):
-`1610ef783` addresses the atomic-check race with check-and-register. Clarify
-role-specific counter checks and make model scheduling respect the critical
-section; effect records preserve identity authority, not unconditional Raft
-success. D39 proposed, W153a held; model and implementation gates NOTRUN.
+[D39 latest review (§34)](../status/d39-cluster-membership-proposal-20261022.md):
+`802416d39` resolves §32's predicate, critical-section scheduling and Raft
+ownership concerns; accepted with no new findings. Next: the consolidated
+executable model and the recorded gates. D39 proposed, W153a held; model
+and implementation gates NOTRUN. Documentation agreement is not protocol PASS.
 
 [D39 proposal: configured cluster membership](../status/d39-cluster-membership-proposal-20261022.md):
 **PROPOSED, awaiting the user.** One member list for every daemon and

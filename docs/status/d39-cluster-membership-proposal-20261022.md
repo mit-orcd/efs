@@ -2216,3 +2216,31 @@ across that I/O and never stands in for Raft's owner synchronization.
 Capacity unchanged (accepted, tests outstanding). Proposed, untested; user
 choices unchanged; W153a held; W154 separate. Next artifact: the
 consolidated executable model.
+
+## 34. Independent review of §33 (`802416d39`)
+
+**Verdict: accepted, no new findings in this response.** §33 resolves the
+three specification concerns in §32: application admission uses the full
+binding while eligible Raft control retains the same-incarnation counter
+exception; declaration publication cannot interleave with the locked
+check-and-register sequence; and an effect record grants identity authority
+without bypassing Raft validation, ownership or durable hard-state ordering.
+
+These corrections are consistent with the requested gates. An operation
+authorized before a declaration may finish only its registered effects and
+only as permitted by the Raft owner; neither cancellation of committed
+history nor unconditional success follows from the identity transition.
+
+The next useful artifact is the consolidated executable model, with one
+authoritative set of predicates and transitions replacing the superseded
+prose for implementation purposes. Exercise the recorded counterexamples,
+including counter-only changes, incarnation changes, the locked registration
+interval, pending persistence, and capacity handoff at the bound. Model
+results remain separate from tests through the actual receive and persistence
+paths. No additional design alternative or review round is requested here.
+
+This is a documentation review of `802416d39` against §32, not a runtime
+verification or protocol PASS. No code, model or cluster test was run for
+this assessment. Capacity tests remain outstanding; D39 remains proposed,
+the three user choices remain pending, W153a stays held, and W154 remains a
+separate protection-policy decision.
