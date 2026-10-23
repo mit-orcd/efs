@@ -1622,12 +1622,11 @@ matched failover gate is NOTRUN. Lost-reply cleanup (decide-once retirement by
 fence or live-owner abandon) is on `devel-k15b` with unit tests passing; its
 live gate is NOTRUN. **W52: shape A in tree; exact 20k gate and A/B NOTRUN.**
 
-[D39 latest review (§24)](../status/d39-cluster-membership-proposal-20261022.md):
-**OPEN:** review of `3a232cb62`: repeated transitions need bounded retained
-authority and monotonic freshness; pending application service still needs
-formation readiness; internal re-proposal needs command-specific authority;
-snapshot conflict outcomes need explicit gates. D39 proposed, W153a held;
-model and implementation gates NOTRUN.
+[D39 latest review (§26)](../status/d39-cluster-membership-proposal-20261022.md):
+**OPEN:** repeated §23 review already committed as `1ca24fec6`; newer §25
+(`e2da82bfb`) addresses it, subject to preserving Raft incarnation fencing
+through the control exception and bounding handed-off obligations as well
+as in-flight tokens. D39 proposed, W153a held; model gates NOTRUN.
 
 [D39 proposal: configured cluster membership](../status/d39-cluster-membership-proposal-20261022.md):
 **PROPOSED, awaiting the user.** One member list for every daemon and

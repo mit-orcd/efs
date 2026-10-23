@@ -1754,3 +1754,58 @@ state.
 
 Proposed, untested; user choices unchanged; W153a held. The next artifact
 is the consolidated model with these traces.
+
+
+## 26. Repeat-review check and review of §25 (`e2da82bfb`) — October 23
+
+**OPEN; model and implementation gates NOTRUN.** The user repeated the
+§23 recap (`3a232cb62`). That exact revision already has the committed §24
+review (`1ca24fec6`); no duplicate findings are added against it. On checking
+devel, §25 was present, so this follow-up evaluates that response instead.
+No live tests, deployment changes or implementation claims are made.
+
+The single latest binding with immutable operation tokens resolves the
+multiple-generation storage ambiguity. Explicit conjunctive service checks,
+command-specific retry authority and the snapshot suffix rule address the
+other §24 findings. Two qualifications remain before the model can close.
+
+### Preserve Raft incarnation fencing through the control exception
+
+§25 admits compatible Raft traffic on member id, digest and pair compatibility
+without stating incarnation freshness. That must not become an exemption
+from the accepted durable-incarnation high-water mark. Current `raft.c`
+`efs_raft_recv` rejects boot ids below `peer_boot[from]` before dispatch; the
+optimized receive/read paths also have boot checks. Preserve and integrate
+these checks with declaration freshness rather than relying on a Raft boot
+map that may not yet have observed the newer declaration's incarnation.
+
+Concrete model trace: accept declaration incarnation 12, then deliver an
+independent Raft frame from incarnation 11 with the same member, digest and
+pair, before any incarnation-12 Raft frame. It must not cause new term, vote,
+log or read-proof effects. Distinguish obsolete process incarnations from
+compatible identity-counter transitions within one process, whose control
+traffic may need to continue for formation. Define that narrow exception
+explicitly. Already committed history and owned operation completion remain
+separate authorities; neither authorizes arbitrary old Raft frames. Test
+normal receive, queued and optimized read/receive paths, both directions.
+
+### Bound retained obligations, not only the current in-flight count
+
+§25 caps in-flight tokens, but §21/§23 let uncertain operations leave that
+count after handoff. Repeated admissions followed by unresolved handoffs can
+therefore accumulate obligations without limit even while the token cap is
+respected. The handoff fixes ownership; it does not prove resource bounds.
+
+Account for all live retained work at the destination owner, with a bounded
+handoff/admission policy. At capacity, refuse new application work while
+control, resolution and already-admitted completion continue. Keep a token
+owned until the destination has accepted its obligation; no lost work on a
+failed handoff. Gate repeated uncertain handoffs with resolution paused,
+assert bounded memory/records and continued control progress, then resume
+resolution and require admissions to recover. No new user-facing tuning
+flag is needed: choose and test internal bounds consistent with the alpha
+policy of removing unnecessary modes and knobs.
+
+D39 remains proposed, W153a held, and user choices unchanged. These are
+model requirements, not evidence of production defects. Consolidate the
+current rules and run the traces before another claim of protocol closure.
