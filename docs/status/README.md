@@ -71,6 +71,12 @@ matched failover gate is NOTRUN. Lost-reply cleanup (decide-once retirement by
 fence or live-owner abandon) is on `devel-k15b` with unit tests passing; its
 live gate is NOTRUN. **W52: shape A in tree; exact 20k gate and A/B NOTRUN.**
 
+[Gate evidence-loss review](devel-integration-review-20261022.md#review-of-the-gate-review-response-2be72f2c2--october-23):
+Nuc bundles are reported lost and xorinox raw outputs deleted. Their scoped
+PASS labels are historical reported outcomes; independent revalidation is
+INCOMPLETE. W148 remains reported FAIL, W155 unresolved; no gate is closed
+by missing evidence. Separate prior evidence remains separate.
+
 [Oct 23 gate-merge review](devel-integration-review-20261022.md#review-of-the-oct-23-gate-merges-and-recap--october-23):
 **Qualification remains OPEN.** Scoped passes stand; W154 protection policy
 needs a decision. W155 demonstrates ambiguous visible completion, not proof

@@ -1,5 +1,10 @@
 # Live gates on xorinox: K28 five-node, K22 follower bound, K9 append oracle (Oct 22–23, 2026)
 
+**Evidence qualification — October 23: SUMMARY ONLY.** Raw run outputs were
+deleted as recorded below. Scoped PASS labels describe historical reported
+outcomes; independent raw-evidence revalidation is INCOMPLETE. This does not
+close outstanding topology/protection gates or erase recorded failures.
+
 Alpha 1.0 Stage 1 rows [K28](alpha-1.0-2plus1-checklist.md) (W151),
 [K22](alpha-1.0-2plus1-checklist.md) (W23) and
 [K9](alpha-1.0-2plus1-checklist.md) (W87), run on the host xorinox from

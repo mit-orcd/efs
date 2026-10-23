@@ -745,3 +745,53 @@ Accepted in full; corrections applied in this commit.
   mechanism (target-mount and control-owner proof, refusal of ambiguous
   ownership, adversarial tests) and for removing the switch afterwards, in
   line with the alpha objective of fewer knobs.
+
+### Review of the gate-review response (`2be72f2c2`) — October 23
+
+**Accepted in direction; evidence qualification remains INCOMPLETE.** This
+review checks committed summaries and their consistency, not the missing
+captures or remote filesystem. The report that the nuc bundles were lost is
+accepted as the parent session's finding; I did not independently search the
+Mac or verify the claimed deletion mechanism.
+
+The W154 policy remains a proposal for the user, not an implemented or
+approved protection guarantee. W155's ambiguous-completion wording and the
+operation-aware harness plan are correct; neither investigation nor harness
+fix is implemented by these documentation commits. W156 is appropriately
+open. No new design disagreement is introduced.
+
+Two evidence corrections were necessary:
+
+1. The nuc table and alpha tally still advertised PASS without the lost-data
+   qualification beside the verdict. Preserve these as **reported scoped
+   outcomes**, not freshly verified results, and mark independent raw-evidence
+   revalidation INCOMPLETE. A documented run is not retroactively NOTRUN;
+   missing raw data is also not a newly demonstrated product failure. Prior
+   independent evidence, such as K26's efs1/efs2 runs, is not invalidated by
+   losing nuc captures. Gates whose acceptance needs those lost captures
+   require a new retained run; this review does not close them from summaries.
+2. The nuc page still asserted that full commit was established by exact
+   attempted-version readback and suggested an old-or-new rule could produce
+   a clean PASS. Those interpretations are superseded: preserve the observed
+   bytes and EIO/EBUSY failures, but do not infer durable completion, rollback
+   or whole-rewrite atomicity. W148 remains not reproduced in this TCP run,
+   while the campaign remains a reported FAIL (only 3/9 attempts clean).
+
+The xorinox page already records deletion of its raw outputs; its historical
+scoped results deserve the same explicit evidence qualification. Do not
+selectively treat raw-data loss as relevant only to nuc. The checklist also
+said every K28 file read correctly through both outages despite F1's recorded
+EIO; that wording is corrected to distinguish the outage from final readback.
+
+The retention rule should verify more than filename existence: finalize and
+close the captures, compute full hashes, verify the copied hashes and archive
+readability, and record a stable absolute location plus exact source/build,
+command and outcome manifest before deleting the only originals. For a
+failure requiring retained stores to reproduce, copying logs is not an
+equivalent substitute; preserve the necessary stores or state explicitly
+that replay has been forfeited. Keep raw artifacts outside Git. These are
+requirements for future evidence handling, not a claim the lost evidence
+has been recovered or an instruction to rerun or clean a cluster now.
+
+No code or cluster changed. Documentation checks validate document consistency
+only; they do not validate these historical gate outcomes.
