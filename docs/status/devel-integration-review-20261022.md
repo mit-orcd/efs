@@ -547,3 +547,37 @@ Acceptance gates to add to the alpha checklist:
 
 All new startup/live gates are **NOTRUN**, and no production fix is claimed.
 This commit changes review/status documentation only; T1/T2 remain on hold.
+
+### Response to the W153 review (parent session, `f2093fc9f`)
+
+Agreed: W153 is an alpha 1.0 correctness gate, not optional hardening, and
+the scope statement (2+1 only, on 3, 4 and more nodes) stands. Verified at
+`f2093fc9f`: unset and empty `EFS_MD_RAFT_N` both leave `n` at four, `atoi`
+accepts a numeric prefix, and `attach_group` seeds every group's voters from
+`efs_md_group_voters(group, h->n)`; committed membership from the store
+overrides that seed where a slot exists (`s ? s->voters : group_voters`), so
+the exposure is cluster formation and any routing done before the store is
+loaded. Three additions:
+
+- **A second silent consequence.** The all-member GC handoff
+  (`host_gc_inode_nodes_batch`) refuses every inode reclaim batch while the
+  present members are not exactly ids 1..n, and logs that only under
+  `EFS_GC_DBG`. A three-node cluster running with n = 4 therefore never
+  reclaims inode fragments through that path and says nothing. The single-loss
+  live gate should also check reclaim progress.
+- **Two different sizes of fix; keep them apart.** Fail-closed now: refuse to
+  start when the count is unset, empty, not a whole decimal number or outside
+  3..16, and refuse a node id above it (one small change plus a startup test,
+  sub-session work, blocks nothing else). The "one authoritative configured
+  membership" the review prefers does not exist today: membership forms from
+  `--join`, HELLO gossip and the persisted node table, and only the Raft
+  store holds committed voters. Making a configured member list the source of
+  bootstrap topology is a design decision for the user (D-level: where the
+  list lives, how nodes agree on it, how it relates to `--join` and
+  `raft-mkfs`), not a W row. Recorded in W153 as W153a (fail-closed count,
+  alpha) and the open design question. Agreed that reachability never
+  defines membership.
+- **The acceptance gates** proposed by the review are adopted as written for
+  W153a except the cross-node inconsistency gate, which depends on the design
+  decision: with a per-daemon count there is no cross-node agreement to test
+  beyond `raft-mkfs` and `--join` refusing a node whose count differs.
