@@ -443,6 +443,7 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
 void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
                              const struct efs_ino_size_rec *irecs,
                              uint32_t ino_count, uint32_t flags, const struct efs_opid *session,
+                             const struct efs_report_pubid *pubid,
                              struct efs_msg_inode_reply *out);
 void server_raft_host_lane_bootstrap_rpc(const struct efs_msg_lane_bootstrap *,
                                           struct efs_msg_lane_writer_view_reply *);

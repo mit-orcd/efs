@@ -50,6 +50,7 @@ code = ''.join(define(n) for n in ('HOST_RETIRE_LEN', 'HOST_REC_AGE_NS', 'HOST_R
 #include "efs/meta_cmd.h"
 #include "efs/raft.h"
 #include "efs/txn.h"
+#include "efs/meta_apply.h" /* W77: RESOLVE/RETIRE apply through the publication stages */
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>

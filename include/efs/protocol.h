@@ -1170,6 +1170,12 @@ struct efs_msg_inode_flock {
  * Never valid in a publication or REPORT. */
 #define EFS_CHUNK_REC_F_PACKED 16u
 #define EFS_CHUNK_REC_PACKED_REF_BYTES 96u
+/* REPORT only (W77): the next record belongs to the same atomic publication
+ * unit (one FUSE write request, or the closure of overlapping ones). A
+ * unit's records are adjacent, of one inode, at most EFS_PUB_UNIT_MAX, and
+ * publish all-or-nothing; the REPORT must carry EFS_REPORT_F_PUBID. */
+#define EFS_CHUNK_REC_F_UNIT_NEXT 32u
+#define EFS_PUB_UNIT_MAX 64u
 struct efs_chunk_rec {
     efs_ino_t ino;
     uint32_t chunk_index;
@@ -1236,7 +1242,7 @@ static inline int efs_chunk_publish_epoch(const struct efs_chunk_rec *r,
 {
     if (!r || !out || (r->publish_flags &
         ~(EFS_CHUNK_REC_F_CAPTURED_EPOCH | EFS_CHUNK_REC_F_CAPTURED_FILEID |
-          EFS_CHUNK_REC_F_FRESH_OBJECT)) ||
+          EFS_CHUNK_REC_F_FRESH_OBJECT | EFS_CHUNK_REC_F_UNIT_NEXT)) ||
         ((r->publish_flags & EFS_CHUNK_REC_F_CAPTURED_FILEID) &&
          (!(r->publish_flags & EFS_CHUNK_REC_F_CAPTURED_EPOCH) || !r->file_generation)))
         return EFS_ERR_INVAL;
@@ -1487,6 +1493,32 @@ static inline int efs_getchunks_reply_valid(
 #define EFS_REPORT_F_SYNC 1u
 #define EFS_REPORT_F_SESSION 2u
 #define EFS_REPORT_SESSION_LEN 20u
+/* W77: the REPORT's publication identity, minted by the client per built
+ * REPORT and reused verbatim when that REPORT is re-sent, so a retry joins
+ * the same request-wide decision. Wire: [mint_ns:8 BE][seq:8 BE] directly
+ * before the session suffix. */
+#define EFS_REPORT_F_PUBID 4u
+#define EFS_REPORT_PUBID_LEN 16u
+struct efs_report_pubid {
+    uint64_t mint_ns;
+    uint64_t seq;
+};
+static inline void efs_report_pubid_pack(uint8_t *p, const struct efs_report_pubid *id)
+{
+    for (unsigned i = 0; i < 8; i++) {
+        p[i] = (uint8_t)(id->mint_ns >> (56 - 8*i));
+        p[8+i] = (uint8_t)(id->seq >> (56 - 8*i));
+    }
+}
+static inline int efs_report_pubid_unpack(struct efs_report_pubid *id, const uint8_t *p)
+{
+    id->mint_ns = id->seq = 0;
+    for (unsigned i = 0; i < 8; i++) {
+        id->mint_ns = (id->mint_ns << 8) | p[i];
+        id->seq = (id->seq << 8) | p[8+i];
+    }
+    return id->mint_ns && id->seq;
+}
 static inline int efs_report_session_valid(const struct efs_opid *id)
 {
     uint8_t any = 0;

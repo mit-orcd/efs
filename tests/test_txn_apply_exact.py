@@ -43,6 +43,7 @@ code = '#define EFS_FAULTS 0\n#define HOST_APPLY_RC_RING 16\n#define HOST_APPLY_
 #include "efs/kv_lsm.h"
 #include "efs/meta_cmd.h"
 #include "efs/txn.h"
+#include "efs/meta_apply.h" /* W77: RESOLVE/RETIRE apply through the publication stages */
 #include "../src/server/apply_ring.h"
 #include <assert.h>
 #include <pthread.h>

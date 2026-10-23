@@ -47,6 +47,9 @@
 #define EFS_TXN_CONTENT_FENCE 8 /* atomic inode/lane stamp + history pair */
 #define EFS_TXN_LANE_BOOTSTRAP 10 /* inode guard + lane authority adoption */
 #define EFS_TXN_RESERVED_9 9 /* reserved: PREPARE refuses it; never reuse */
+/* W77: one chunk's publication staged under the request-wide decision
+ * (chunk key), or the FileID truncate pin (inode key). meta_apply.h. */
+#define EFS_TXN_PUBLISH 11
 
 #define EFS_TXN_UNDECIDED 0
 #define EFS_TXN_COMMIT    1
@@ -178,6 +181,12 @@ int efs_txn_prepare_opid(struct efs_kv *kv, const struct efs_txid *t,
                          uint32_t klen, const struct efs_opid_req *q,
                          const struct efs_opid_reply *reply);
 int efs_txn_drop(struct efs_kv *kv, const struct efs_txid *t, uint32_t shard);
+/* Every transaction record value starts with [txid:16][n:1][shard:4 BE]*n.
+ * Pack returns the head length or a negative error; parse sets *used. */
+int efs_txn_record_head_pack(uint8_t *out, uint32_t cap, const struct efs_txid *t,
+                             const struct efs_txn_parts *p);
+int efs_txn_record_head_parse(const uint8_t *in, uint32_t n, struct efs_txid *t,
+                              struct efs_txn_parts *p, uint32_t *used);
 
 /* BUSY if any transaction holds an EXCL intent or a pending reduce on
  * `key`; EFS_OK when the key is free. The log path calls this before it
@@ -378,6 +387,10 @@ int efs_txn_reduce_read_value_ex(struct efs_kv *kv, const uint8_t *lane_key,
  * reports moved, because it cannot report otherwise. */
 int efs_txn_pending_recheck(const struct efs_txn_pending *pend,
                             efs_txn_coord_fn coord, void *ctx, int *moved);
+/* Record one undecided transaction a collect met (deduplicated; overflow
+ * makes the recheck report moved). */
+void efs_txn_pending_note(struct efs_txn_pending *pend, const struct efs_txid *t,
+                          const struct efs_txn_parts *parts);
 
 int efs_txn_resolve(struct efs_kv *kv, const struct efs_txid *t, uint32_t shard,
                     int decision);

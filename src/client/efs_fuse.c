@@ -3916,6 +3916,36 @@ static int fuse_write_admit(size_t size)
     return -EAGAIN;
 }
 
+static int efs_fuse_write_store(const char *path, const char *buf, size_t size,
+                                off_t offset, efs_ino_t ino, int append);
+static int efs_fuse_write_buf_store(struct fuse_bufvec *buf, size_t size,
+                                    off_t offset, efs_ino_t ino, int append);
+
+/* W77: one FUSE write request is one atomic publication unit. When joining
+ * the units it overlaps would exceed EFS_PUB_UNIT_MAX chunks, publish this
+ * file's pending units first (an O_APPEND caller already holds append_mu). */
+static int fuse_unit_begin(efs_ino_t ino, uint64_t offset, size_t size, int append_held)
+{
+    for (unsigned round = 0; ; round++) {
+        int rc = efs_client_unit_begin(ino, offset, size);
+        if (rc != EFS_ERR_AGAIN)
+            return rc == EFS_OK ? 0 : fuse_stat_errno(rc);
+        if (round == 8)
+            return -EBUSY;
+        if (append_held) {
+            rc = efs_wb_sync_ino(ino);
+            if (rc == EFS_OK)
+                rc = efs_dcache_flush_ino(ino);
+            if (rc == EFS_OK)
+                rc = efs_client_report_dirty_ino(ino, 1);
+        } else {
+            rc = efs_append_flush_report(NULL, ino);
+        }
+        if (rc != EFS_OK)
+            return fuse_stat_errno(rc);
+    }
+}
+
 static int efs_fuse_write_admitted_run(const char *path, const char *buf, size_t size,
                           off_t offset, struct fuse_file_info *fi)
 {
@@ -3943,6 +3973,25 @@ static int efs_fuse_write_admitted_run(const char *path, const char *buf, size_t
         rc = append_reserve_offset(ino, (uint64_t)size, &offset);
         if (rc != 0)return rc; /* reserve failure already released stripe */
     }
+    rc = fuse_unit_begin(ino, (uint64_t)offset, size, append);
+    if (rc != 0) {
+        if (append) {
+            efs_client_stage_unpin(ino);
+            pthread_mutex_unlock(append_mu(ino));
+        }
+        return rc;
+    }
+    rc = efs_fuse_write_store(path, buf, size, offset, ino, append);
+    efs_client_unit_end(ino, (uint64_t)offset, size);
+    return rc;
+}
+
+/* The request's bytes into the dcache or the writeback pool. With O_APPEND
+ * the caller holds append_mu and the stage pin; every path releases them. */
+static int efs_fuse_write_store(const char *path, const char *buf, size_t size,
+                                off_t offset, efs_ino_t ino, int append)
+{
+    int rc;
     if ((append ? efs_dcache_try_patch_sparse
                 : efs_dcache_try_patch)(ino, (uint64_t)offset, (uint32_t)size,
                                         (const uint8_t *)buf) == 0) {
@@ -4082,6 +4131,25 @@ static int efs_fuse_write_buf_admitted_run(const char *path, struct fuse_bufvec 
         rc = append_reserve_offset(ino, (uint64_t)size, &offset);
         if (rc != 0)return rc; /* reserve failure already released stripe */
     }
+    rc = fuse_unit_begin(ino, (uint64_t)offset, size, append);
+    if (rc != 0) {
+        if (append) {
+            efs_client_stage_unpin(ino);
+            pthread_mutex_unlock(append_mu(ino));
+        }
+        return rc;
+    }
+    rc = efs_fuse_write_buf_store(buf, size, offset, ino, append);
+    efs_client_unit_end(ino, (uint64_t)offset, size);
+    return rc;
+}
+
+/* write_buf's bytes into the dcache or the writeback pool; O_APPEND state
+ * as for efs_fuse_write_store. */
+static int efs_fuse_write_buf_store(struct fuse_bufvec *buf, size_t size,
+                                    off_t offset, efs_ino_t ino, int append)
+{
+    int rc = 0;
 
     /* W15.3: walk the write in chunk-sized pieces. Each whole chunk is
      * one fuse_buf_copy into a pool buffer the dcache owns (libfuse

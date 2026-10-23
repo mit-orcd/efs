@@ -12,7 +12,8 @@ if 'static void report_snapshot_lock(' in s:
     run = s[s.index('static int report_dirty_ino_run('):s.index('\nint efs_client_report_dirty_ino(')]
     assert 'efs_client_table_lock();' not in run and 'efs_client_table_unlock();' not in run
     assert run.count('report_snapshot_lock(only_ino);') == 3
-    assert run.count('report_snapshot_unlock(only_ino);') == 6
+    # Six exits plus the W77 unit-shaping refusal (NOMEM) under the lock.
+    assert run.count('report_snapshot_unlock(only_ino);') == 7
 else:
     # The old production caller used these whole-table guards for every inode.
     guards = 'static void report_snapshot_lock(efs_ino_t ino){(void)ino;efs_client_table_lock();}\nstatic void report_snapshot_unlock(efs_ino_t ino){(void)ino;efs_client_table_unlock();}'

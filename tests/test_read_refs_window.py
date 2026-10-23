@@ -25,6 +25,10 @@ void *efs_rdcache_pin(efs_ino_t n,uint32_t ci,uint32_t len,const uint8_t **p){(v
 void efs_rdcache_unpin(void*p){assert(p==data);unpins++;}
 void efs_client_stage_touch(efs_ino_t n){(void)n;}
 static void maybe_prefetch(int pf,efs_ino_t n,uint64_t off,uint64_t end){(void)pf;(void)n;(void)off;(void)end;}
+/* W77: multi-chunk refs come from one map snapshot, rechecked after pinning. */
+static int snapshots,snap_rc,snap_same=1;
+int efs_client_map_snapshot(efs_ino_t n,uint32_t a,uint32_t b,uint64_t *k){(void)n;assert(a<b&&b-a<=EFS_PUB_UNIT_MAX);memset(k,0,(b-a)*sizeof(*k));snapshots++;return snap_rc;}
+int efs_client_map_snapshot_same(efs_ino_t n,uint32_t a,uint32_t b,const uint64_t *k){(void)n;(void)a;(void)b;(void)k;return snap_same;}
 '''+s[a:b]+r'''
 int main(void){struct efs_read_ref refs[2];pthread_mutex_init(&g_client.idx_mu,NULL);memset(refs,0x5a,sizeof(refs));struct efs_read_ref saved[2];memcpy(saved,refs,sizeof(refs));
  assert(efs_client_read_refs(42,0,131072,NULL,2)==EFS_ERR_INVAL&&!pins);
@@ -37,11 +41,16 @@ int main(void){struct efs_read_ref refs[2];pthread_mutex_init(&g_client.idx_mu,N
  window_rc=1;assert(efs_client_read_refs(42,0,262144,refs,2)==2&&pins==2&&!unpins&&refs[0].data==data&&refs[1].len==131072);for(int i=0;i<2;i++)efs_rdcache_unpin(refs[i].pin);assert(unpins==2);
  /* A mapping pulled within EFS_READ_MAP_TTL_MS needs no refresh. */
  int before=pulls;fresh=1;assert(efs_client_read_refs(42,0,262144,refs,2)==2&&pulls==before);for(int i=0;i<2;i++)efs_rdcache_unpin(refs[i].pin);
- fresh=0;assert(efs_client_read_refs(42,0,262144,refs,2)==2&&pulls==before+1);for(int i=0;i<2;i++)efs_rdcache_unpin(refs[i].pin);return 0;
+ fresh=0;assert(efs_client_read_refs(42,0,262144,refs,2)==2&&pulls==before+1);for(int i=0;i<2;i++)efs_rdcache_unpin(refs[i].pin);
+ /* W77: no snapshot, no refs; a snapshot that moved under the pins releases them. */
+ int s0=snapshots,u0=unpins,p0=pins;assert(s0>0);
+ snap_rc=EFS_ERR_BUSY;assert(!efs_client_read_refs(42,0,262144,refs,2)&&snapshots==s0+1&&pins==p0);snap_rc=EFS_OK;
+ snap_same=0;assert(!efs_client_read_refs(42,0,262144,refs,2)&&pins==p0+2&&unpins==u0+2);snap_same=1;
+ return 0;
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-read-refs-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(['cc','-std=gnu11','-pthread','-Wall','-Wextra','-Werror','-I'+str(root/'include'),'-I'+str(root/'src/client'),str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=5)
-print('read refs: failed PUT-window waits reject cache pins and preserve outputs; successful pins released; fresh mapping skips the refresh PASS')
+print('read refs: failed PUT-window waits reject cache pins and preserve outputs; successful pins released; fresh mapping skips the refresh; one-snapshot refs PASS')
