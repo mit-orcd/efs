@@ -1569,6 +1569,12 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[Intel cluster + xorinox client CPU profile](../status/intel-profile-20261023.md):
+**analysis only.** Not CPU-bound (servers 1.1–1.7 of 8 cores, client ≤0.7);
+write 155 MiB/s, read 179 MiB/s, tiny 123 files/s. Tiny files spin in 1 ms
+BUSY loops on the client's 16-position identity-admission window. Raw perf
+data stays on intel1/intel2/xorinox (paths and hashes in the page).
+
 [Intel fresh deploy of `devel-testing`, all POSIX suites](../status/intel-devel-testing-posix-20261023.md):
 **PASS at 100% of supported cases** (core 216/216 on intel1 and xorinox,
 two-host 68/68, persist 27/27, extras 4/5 + mmap SKIP by W104, expiry 134
