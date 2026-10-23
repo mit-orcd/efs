@@ -1505,3 +1505,85 @@ D39 remains proposed, W153a held, and the three user choices are unchanged.
 Consolidate the superseding rules into a single executable model before
 implementation. No code/deployment changes, legacy support or new flags are
 requested here; no live gate status is inferred from another session's recap.
+
+## 23. Response to the §22 review (parent session, devel `c5aeca3ff`)
+
+All four points accepted. They amend §21 as follows.
+
+**Snapshot terms.** The InstallSnapshot RPC carries two terms and they are
+treated as `on_snap_req` already does: the RPC term goes through ordinary
+Raft term processing (a stale RPC term is refused, a newer one updates the
+follower's term); the snapshot's last-included term is metadata only. It
+must not exceed the RPC term and, where the receiver holds an entry at the
+snapshot's last index, it is compared with that entry's term by the normal
+Raft conflict rule; it is never ordered against the receiver's current
+election term. The §21 clause "its term is not below the receiver's current
+term knowledge" is withdrawn. A snapshot at or below the receiver's applied
+index is acknowledged idempotently with no import, as today, never with an
+error that retries forever. Gates: the term-12 leader sending an index-1000
+snapshot whose last term is 9 to a term-12 follower applied through 900
+installs; a stale RPC term is refused; an already-applied snapshot returns
+the no-import acknowledgement.
+
+**Drain, with three binding slots per member.** Each member has `active`,
+`pending` and `draining` slots. A declaration that passes R2″ while the
+active binding has token holders does not wait: the new tuple becomes
+`pending` at once and the old becomes `draining`. Frames tagged with the
+pending tuple are admitted immediately for compatible control traffic and
+for new application work (the pending binding is the one new admissions
+use); frames tagged with the draining tuple are admitted only as
+continuations of operations admitted under it and as compatible Raft
+traffic; "redeclare required" applies only to a tuple that matches none of
+the three slots. When the draining in-flight count reaches zero, draining
+retires and pending becomes active; a draining binding never gains new
+application admissions, so its count cannot grow. The acknowledgement
+generated after the sender changed its tag therefore arrives on the pending
+tuple and is admitted; the circular wait of §22 does not arise. A
+continuation frame must resolve to a locally owned in-flight operation whose
+record binds member, admitting tuple, operation kind and permitted effects,
+and may perform only those effects; a transaction id alone authorizes no
+new mutation. Gates: two members transitioning at once with acknowledgements
+sent after their tag change and sustained heartbeats, both directions, with
+the original operations finishing and no new application work admitted on a
+draining binding.
+
+**Uncertain obligations: an atomic handoff, with named resolvers.** Before a
+token leaves the in-flight count as uncertain, under the binding lock, the
+operation is handed to a named owner with an immutable operation identity,
+its authorized effects and its resolution rule, and its staged state is
+either handed over with it or quiesced so it cannot publish; a transition
+completes only when every token is finished, proven aborted or handed off
+this way, never on bookkeeping alone. Resolvers by class, with their
+coverage:
+- *Client-identified metadata operations* (opid, receipt window):
+  resolved by the receipt when present; when absent the outcome is unknown
+  until the same identity is retried, and the retry is decided exactly once
+  by the existing decide-once rules (receipt STALE, the W64 outcome byte,
+  EXCL images). Absence never means abort.
+- *Raft entries*: a committed entry applies through the commit index; an
+  uncommitted entry may be overwritten by a new leader, so its obligation
+  is the proposer's re-proposal under the same operation identity, which the
+  rule above makes exactly-once; internal entries without an opid (MKFS,
+  SALT, CFG) are idempotent by construction (W37 keeps the first salt, CFG
+  installs a desired set).
+- *Data fragments*: a fragment becomes visible only through its metadata
+  publication (chunk map or pack ledger update), itself a client-identified
+  operation above; uncertain fragment I/O therefore cannot publish on its
+  own, its obligation is completion or cleanup, and the orphan discovery and
+  physical sweep reclaim an unpublished body. They are the cleanup path, not
+  a publication resolver, and are not claimed as one.
+Gates: uncertain fragment I/O completing after the transition stays
+unpublished until its publication operation resolves; a concurrent retry
+with the same identity publishes once; an uncommitted entry replaced by a
+new leader is re-proposed and applied once.
+
+**First boot.** `boot.bin` is created once, at store initialization, under
+the exclusive store lock, with an explicit encoding (magic, version,
+counter, checksum). At startup a store that is initialized but has a
+missing, short or corrupt counter file fails closed; a missing file is
+accepted only while the store is marked uninitialized, which is when it is
+created. Increments are checked for overflow. Tests: first formation of a
+fresh store succeeds; a damaged counter in an initialized store is refused;
+both on synthetic current-format stores.
+
+Proposed, untested, user choices unchanged, W153a held.

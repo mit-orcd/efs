@@ -2748,6 +2748,12 @@ draining bindings that keep admitting compatible Raft traffic and admitted
 operations' continuations, timeout and I/O error as three outcomes (proven
 abort, accepted, tracked obligation) instead of an abort, and a precise
 snapshot acceptance predicate.
+The §22 review is accepted in §23: RPC term versus last-included term in
+snapshots, three binding slots (active, pending, draining) so new-tagged
+acknowledgements are admitted at once, an atomic handoff of uncertain
+operations to named resolvers (receipts and decide-once, commit index and
+re-proposal, metadata publication for fragments), and a fresh-store rule for
+the boot counter.
 Awaiting the user;
 W153a remains on hold.
 
