@@ -38,10 +38,10 @@ matched failover gate is NOTRUN. **W52: shape A in tree; exact 20k gate and A/B
 NOTRUN.**
 
 [Recent devel integration review](devel-integration-review-20261022.md):
-**OPEN findings** through `e9ca0d07b` plus `95beaa053`: summary exit-status
-false success (reproduced), decision-sweep starvation, transaction encoding
-strictness, and whole-shutdown qualification gaps. Local checks only; merged
-cluster acceptance NOTRUN.
+**Second pass through `c71cd1066`: OPEN.** K22 log-lag election veto and K5
+mtime fence-capture counterexamples reproduced locally; session-latch data race
+identified. Earlier four findings remain open. K8 harness improvements credited;
+four targeted checks PASS, merged cluster acceptance NOTRUN.
 
 [K1 / W145 remaining parts](k01-w145-remaining-20261022.md): **merged into
 devel (`86b6ef567`). Near-follower snapshot fixed (a match-0 probe ACK reset

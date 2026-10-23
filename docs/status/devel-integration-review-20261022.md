@@ -1,6 +1,9 @@
 # Recent devel integration review — October 22, 2026
 
-**Verdict: actionable findings OPEN; not release qualification.** Reviewed
+**Current verdict: OPEN; second-pass review through `c71cd1066` below adds
+K22 election liveness and K5 fencing findings. Not release qualification.**
+
+First-pass scope: reviewed
 `2925c92b0..e9ca0d07b` (46 commits including merges, 125 changed files), plus
 status-only `95beaa053`. This starts after the preceding packing review.
 Inventoried the complete range; detailed source review concentrated on changed
@@ -134,3 +137,129 @@ whole-process stuck-worker and forced-exit reporting gates NOTRUN.**
 Fix R1 before using the summary runner as an automated acceptance verdict;
 address R2/R3 and qualify R4 before closing their alpha work items. No product
 code is changed by this review.
+
+
+## Second pass — devel through `c71cd1066`
+
+Requested re-review covers the 39 additional commits in
+`16083549b..c71cd1066`, including K5 session enforcement, K8 partial-write
+base handling, K9 append oracle, K15 transaction-finisher handoff and K22
+memory/admission bounds. Rechecked the earlier findings against this tree.
+Source review is concentrated on production behavior and acceptance harnesses;
+it is not exhaustive proof of all concurrent execution paths.
+
+### S1 — P1: log-lag election veto can prevent recovery with free capacity
+
+`src/raft/raft.c:low_capacity`, `capacity_hold`, `start_prevote` and
+`start_election` (K22, `1661d5439`/`2e1ea8dea`) use `last_index - last_applied`
+at 75% of the cap as an unconditional campaigning veto. That quantity includes
+entries not yet known committed. After losing the leader or restarting with a
+retained tail, applying those entries requires a leader to establish commitment.
+If every eligible voter has such a tail, no voter sends a pre-vote, so nothing
+can change the condition. Clearing KV pressure does not unblock it.
+
+**Reproduced against production Raft and memory-store code:** three voters,
+identical term-1 logs with 96 entries, applied/commit position 0, cap 128, no
+memory pressure, 1,000 ticks each. All remain followers, with 70/69/67 held
+campaigns and **zero messages sent**. The send callback merely counts: there
+is nothing to deliver, so network loss is not the cause. With only the cap
+removed as a diagnostic control, they send 412 messages (delivery is not
+modeled and this control does not claim election completion).
+
+Reproducer: `scripts/reviews/k22_capacity_tail.c`, with compile/run commands
+in its header. It uses only memory stores and `/tmp/k22-tail`; no deployment,
+flags or cluster data are changed. This demonstrates the state-machine veto;
+a host-level orderly-restart reproduction remains NOTRUN. The small cap scales
+the same threshold used by the host; it is not a proposed product setting.
+
+Preserve memory and admission limits, but distinguish inability to apply from
+an uncommitted tail that needs an election. Allow recovery leadership with
+bounded control-entry headroom and client admission held until safe. Do not
+apply uncommitted entries or weaken quorum rules. Add a three-voter test that
+actually delivers messages, elects a leader from this state, commits/applies
+the retained tail and resumes admission. The current capacity test only clears
+an explicit pressure bit; it misses this self-sustaining log-lag condition.
+
+### S2 — P1: mtime ownership can capture an already-fenced session row
+
+`src/meta/append_plan.c:82–100`, new `efs_meta_execute_mtime_owned` (K5),
+checks the session with `efs_session_accept`, then separately reads the local
+session row into `c.owner.expected`. A fence can land between the reads. The
+second row is checked only for length, copied unchanged, and used as the EXCL
+comparison image. Consequently the CAS can succeed against the **fenced** row
+and allow the old epoch's mtime transaction. A CAS protects changes after the
+capture, not authorization of the captured bytes. `host_regular_mtime` does
+not hold a lock across these reads and transaction preparation.
+
+**Wrapper counterexample reproduced:** the first acceptance returns OK for
+epoch 1; the second read supplies established=1/reject_below=2. The production
+wrapper returns OK and calls the executor/prepare callbacks with that fenced
+image. `scripts/reviews/k05_mtime_fence_capture.py` retains the reproduction.
+It extracts the production ownership wrapper, injects the two-read interleaving,
+and spies on the executor callback; it is not a full transaction/cluster test.
+
+Validate established epoch and rejection floor from the exact captured image
+before preparing it, as `efs_meta_execute_append_owned` already does. Retain
+the EXCL guard for fences after capture. Add a barrier-controlled test with
+real session rows: fence between accept and capture must refuse without inode
+or lane changes; fence after capture must conflict or wait for the established
+transaction order. Full transaction execution of this race is NOTRUN here.
+
+### S3 — P2: session latch mixes atomic reads with plain concurrent writes
+
+K5's `src/client/inode_rpc.c:efs_client_session_fence` writes
+`g_client.session_fenced` with a plain assignment under `opid_mu`, while
+`efs_client_session_fenced` reads it using `__atomic_load_n` without that mutex.
+The acquire read does not synchronize with a plain write. `session_started`
+has the same mixed-access pattern in session start/check. The fenced latch can
+be written by one RPC thread while another checks it; this is a C data race,
+not a safe publication scheme merely because integer stores are naturally
+aligned. Server fencing remains necessary independently of the local latch.
+
+Use consistent atomic accesses (including reads under the mutex), or use the
+same mutex for every access. Use an atomic exchange if logging only the first
+fence. Add a concurrent check/fence test under TSan. **Source-confirmed access
+pattern; sanitizer reproduction NOTRUN in this review.**
+
+### Earlier findings and packing harness recheck
+
+| Earlier issue | Current disposition |
+| --- | --- |
+| R1 summary exits 0 with failing tests | **OPEN.** `scripts/make_test_summary.sh` unchanged since the first review; earlier reproduction remains applicable. |
+| R2 live decision scan starvation | **OPEN.** `src/meta/txn.c` scan and host sweep still restart at the prefix beginning with a 32-record page. |
+| R3 DECIDE/TXN_RETIRE trailing bytes | **OPEN.** Their new decoder still uses minimum rather than exact lengths. |
+| R4 whole shutdown versus handler drain | **OPEN.** Daemon shutdown implementation unchanged; background stops remain outside the handler bound. |
+| W125 output reuse / mismatch context | **Improved by `23354597c`.** Existing OUT is refused; local mismatches gain expected version, lengths, hashes, inode and management output. Credit these fixes rather than repeating the old findings unchanged. |
+| W125 cleanup and remote/final evidence | **Still incomplete.** Mount absence is now checked, but owned daemon termination is not; helper still sends KILL and finishes with success. Cleanup return status is ignored. Remote reads still accept any version, and remote/final mismatch bytes are not captured. A hard link preserves inode reachability, not an immutable version: modifiers can continue changing it after the capture lock is released. |
+
+### Assessment and checks
+
+K8's change to reset a partial load's base generation is appropriate: an old
+UNCOND flag must not turn a partial update into unconditional replacement.
+The targeted unit checks both loaded-base and no-base cases. The original
+fixed-build modify campaign is still NOTRUN; do not translate the code fix into
+closure of every historical mismatch.
+
+K9's exact acknowledged-record oracle is useful and its INCOMPLETE verdict is
+honest. Allowing ambiguous failed appends in a diagnostic oracle is distinct
+from error-free acceptance; use its strict-error mode for normal-operation
+qualification. K15's explicit abort handoff preserves an already-decided COMMIT;
+the extracted test checks that distinction. K5's removal of unregistered
+mutation bypasses is directionally correct, but S2/S3 block treating session
+lifecycle as fully qualified. K22 must pass S1 and its documented plateau and
+snapshot-import gates before closure. No new product A/B modes or compatibility
+work is proposed.
+
+On macOS/Apple clang/Python 3.9, current source `c71cd1066`, no EFS mount or
+cluster, the following commands **PASS**:
+
+- `python3 tests/test_partial_uncond.py`
+- `python3 tests/test_append_oracle.py`
+- `python3 tests/test_mount_identity_rpc.py`
+- `python3 tests/test_fin_abort_handoff.py`
+
+The new diagnostic reproducers above expose defects; their successful execution
+is **not** a passing product gate. All generated binaries live in temporary
+locations; only reusable source is committed. Full Linux build/suites,
+RDMA/direct-I/O deployment, host restart and payload qualification are **NOTRUN**
+by this review. No production code is changed.
