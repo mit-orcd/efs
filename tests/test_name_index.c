@@ -5,6 +5,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include "test_tmpdir.h"
 
 static int failures;
 #define CHECK(c,m) do { if (!(c)) { fprintf(stderr,"FAIL %d: %s\n",__LINE__,m);failures++; } } while (0)
@@ -41,7 +42,7 @@ static int collect(void *user, const struct efs_name_entry *entry)
 }
 int main(void)
 {
-    snprintf(path,sizeof(path),"/tmp/efs-name-index-%d",getpid());cleanup();
+    efs_test_own(efs_test_path(path,sizeof(path),"efs-name-index-%d",getpid()));cleanup();
     struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};
     struct efs_kv *kv=efs_kv_lsm_open(path,&cfg);
     CHECK(kv!=NULL,"open store");if (!kv) return 1;

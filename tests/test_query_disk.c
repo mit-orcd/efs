@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <fcntl.h>
+#include "test_tmpdir.h"
 static int failures;
 #define CHECK(x) do { if(!(x)){fprintf(stderr,"FAIL %d: %s\n",__LINE__,#x);failures++;} }while(0)
 struct result { uint64_t count,hash; };
@@ -46,8 +47,8 @@ static unsigned view_count(const char *root)
 }
 static void test_catchup_retirement(void)
 {
-    char store[]="/tmp/efs-query-retire-kv-XXXXXX",root[]="/tmp/efs-query-retire-cache-XXXXXX";
-    CHECK(mkdtemp(store));CHECK(mkdtemp(root));
+    char store[EFS_TEST_PATH],root[EFS_TEST_PATH];efs_test_path(store,sizeof(store),"efs-query-retire-kv-XXXXXX");efs_test_path(root,sizeof(root),"efs-query-retire-cache-XXXXXX");
+    CHECK(efs_test_mkdtemp(store));CHECK(efs_test_mkdtemp(root));
     struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_SYNC,0,4,0};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
     CHECK(kv);if(!kv)return;
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t file;
@@ -79,8 +80,8 @@ static void test_catchup_retirement(void)
 }
 static void test_restart_catchup(void)
 {
-    char store[]="/tmp/efs-query-catchup-kv-XXXXXX",root[]="/tmp/efs-query-catchup-cache-XXXXXX";
-    CHECK(mkdtemp(store));CHECK(mkdtemp(root));
+    char store[EFS_TEST_PATH],root[EFS_TEST_PATH];efs_test_path(store,sizeof(store),"efs-query-catchup-kv-XXXXXX");efs_test_path(root,sizeof(root),"efs-query-catchup-cache-XXXXXX");
+    CHECK(efs_test_mkdtemp(store));CHECK(efs_test_mkdtemp(root));
     struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_SYNC,0,4,0};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
     CHECK(kv);if(!kv)return;
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t dir,file;
@@ -147,8 +148,8 @@ static void same_stat(struct efs_kv_lsm_snapshot *source,struct efs_query_catalo
  * generation has no exact rows and keeps the conservative filter. */
 static void test_dependency_rows(void)
 {
-    char store[]="/tmp/efs-query-deps-kv-XXXXXX",root[]="/tmp/efs-query-deps-cache-XXXXXX";
-    CHECK(mkdtemp(store));CHECK(mkdtemp(root));
+    char store[EFS_TEST_PATH],root[EFS_TEST_PATH];efs_test_path(store,sizeof(store),"efs-query-deps-kv-XXXXXX");efs_test_path(root,sizeof(root),"efs-query-deps-cache-XXXXXX");
+    CHECK(efs_test_mkdtemp(store));CHECK(efs_test_mkdtemp(root));
     struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
     CHECK(kv);if(!kv)return;
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t dir,ids[600];
@@ -210,7 +211,7 @@ static void test_dependency_rows(void)
 int main(void)
 {
     if(!getenv("EFS_QUERY_TEST_QUOTA") && !getenv("EFS_QUERY_TEST_NOSPACE")){test_restart_catchup();test_catchup_retirement();test_dependency_rows();}
-    char store[256],root[256];snprintf(store,sizeof(store),"/tmp/efs-query-disk-kv-%d",getpid());snprintf(root,sizeof(root),"/tmp/efs-query-disk-cache-%d",getpid());
+    char store[256],root[256];efs_test_own(efs_test_path(store,sizeof(store),"efs-query-disk-kv-%d",getpid()));efs_test_own(efs_test_path(root,sizeof(root),"efs-query-disk-cache-%d",getpid()));
     struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);CHECK(kv);if(!kv)return 1;
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t dir,sub,file;
     CHECK(!efs_meta_apply_init(kv,100));CHECK(!efs_meta_apply_mkdir(kv,&attrs,EFS_ROOT_INO,S_IFDIR|0755,"dir",&dir));

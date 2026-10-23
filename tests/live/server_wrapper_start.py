@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """W78 real wrapper startup must retain unrelated processes behind stale records."""
-import hashlib,json,os,socket,subprocess,tempfile,time
+import hashlib,json,os,shutil,socket,subprocess,tempfile,time
 from pathlib import Path
 source=Path(__file__).resolve().parents[2]
-work=Path(tempfile.mkdtemp(prefix='efs-wrapper-start-'));print('Evidence:',work,flush=True)
+# Scratch under TMPDIR: removed on success, kept and printed on failure (K25).
+work=Path(tempfile.mkdtemp(prefix='efs-wrapper-start-'));passed=False
 unrelated=subprocess.Popen(['sleep','180']);dead=subprocess.Popen(['true']);dead.wait(5)
 rows=[]
 try:
@@ -27,5 +28,8 @@ try:
         assert not (Path('/proc')/str(pid)).exists() or (Path('/proc')/str(pid)/'stat').read_text().rsplit(')',1)[1].split()[0]=='Z'
         print('wrapper real start/stop:',label,'unrelated process retained PASS',flush=True)
     (work/'result.json').write_text(json.dumps(dict(cases=rows,binary_sha256=hashlib.sha256((source/'efsd').read_bytes()).hexdigest(),passed=True),indent=2))
+    passed=True
 finally:
     if unrelated.poll() is None:unrelated.terminate();unrelated.wait(5)
+    if passed:shutil.rmtree(work,ignore_errors=True)
+    else:print('Evidence kept:',work,flush=True)

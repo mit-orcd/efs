@@ -6,11 +6,12 @@ static unsigned allocations;
 static void *count_malloc(size_t size){allocations++;return malloc(size);}
 #define malloc count_malloc
 #include "../src/kv/kv_seg.c"
+#include "test_tmpdir.h"
 #undef malloc
 static void forget_tail(struct kv_seg *s){free(s->last_key);s->last_key=NULL;s->last_klen=0;}
 int main(void)
 {
-    char path[]="/tmp/efs-query-tail-XXXXXX";int fd=mkstemp(path);assert(fd>=0);close(fd);unlink(path);
+    char path[EFS_TEST_PATH];efs_test_path(path,sizeof(path),"efs-query-tail-XXXXXX");int fd=efs_test_mkstemp(path);assert(fd>=0);close(fd);unlink(path);
     struct kv_seg_w *w;struct kv_seg *s;int excluded;
     assert(!kv_seg_w_open(path,&w));
     for(unsigned i=0;i<3;i++){uint8_t key=(uint8_t)('a'+i);assert(!kv_seg_w_add(w,KV_OP_PUT,&key,1,(const uint8_t *)"v",1));}

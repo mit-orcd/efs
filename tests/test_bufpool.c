@@ -14,6 +14,7 @@ int efs_rdma_zc_region_add(void *p, size_t n) { (void)p; (void)n; return 0; }
 #include "../src/client/bufpool.c"
 #include "../src/client/writer_state.c"
 #include "../src/client/publication_ack_owner.c"
+#include "test_tmpdir.h"
 #undef malloc
 #undef calloc
 
@@ -351,8 +352,8 @@ int main(void)
     writer_body_snapshot();
     writer_pending_fragment_bound();
 #if EFS_FAULTS
-    char fault_path[]="/tmp/efs-drain-budget-XXXXXX";
-    int fault_fd=mkstemp(fault_path);assert(fault_fd>=0);close(fault_fd);
+    char fault_path[EFS_TEST_PATH];efs_test_path(fault_path,sizeof(fault_path),"efs-drain-budget-XXXXXX");
+    int fault_fd=efs_test_mkstemp(fault_path);assert(fault_fd>=0);close(fault_fd);
     assert(!setenv("EFS_FAULT_DRAIN_FILE",fault_path,1));
     efs_buf_drain_enter();assert(!efs_buf_alloc(1));efs_buf_drain_leave();
     assert(fault_drain_count==512 && g_live==(64ull<<20));

@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#include "test_tmpdir.h"
 static void namespace_effects(void)
 {
  struct efs_kv *kv=efs_kv_mem_create();assert(kv);
@@ -70,7 +71,7 @@ static void shared_guards(void)
  * from its WAL, including the interval with one committed and one pending. */
 static void cold_shared_guards(void)
 {
- char root[]="/tmp/efs-namespace-guards-XXXXXX";assert(mkdtemp(root));
+ char root[EFS_TEST_PATH];efs_test_path(root,sizeof(root),"efs-namespace-guards-XXXXXX");assert(efs_test_mkdtemp(root));
  struct efs_kv_lsm_cfg cfg={0};
  struct efs_opid_req q={.id={.session_epoch=1,.seq=1}};q.id.client_uuid[15]=114;
  struct efs_txid first={{31}},second={{32}},late={{33}};

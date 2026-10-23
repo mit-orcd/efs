@@ -20,6 +20,7 @@ static int gc_unlink(const char*p){if(fault==4){errno=EACCES;return -1;}return u
 #include "../src/server/store.c"
 #include "../src/server/reclaim.c"
 #include "../src/server/segment_store.c"
+#include "test_tmpdir.h"
 #undef open
 #undef pread
 #undef unlink
@@ -116,7 +117,7 @@ static void test_identity(struct efsd_server *s,struct efs_export *ex,uint8_t *b
 }
 int main(int argc,char **argv){
  assert(argc==1 || (argc==2 && !strcmp(argv[1],"unlimited")));
- char a[]="/tmp/efs-gc-a-XXXXXX",b[]="/tmp/efs-gc-b-XXXXXX";assert(mkdtemp(a)&&mkdtemp(b));
+ char a[EFS_TEST_PATH],b[EFS_TEST_PATH];efs_test_path(a,sizeof(a),"efs-gc-a-XXXXXX");efs_test_path(b,sizeof(b),"efs-gc-b-XXXXXX");assert(efs_test_mkdtemp(a)&&efs_test_mkdtemp(b));
  struct efsd_server s={.id=1,.node_count=1,.storage_path_count=2,.quota=argc==2?0:1ull<<30};
  pthread_mutex_init(&s.lock,NULL);s.nodes[0].id=1;strcpy(s.storage_paths[0],a);strcpy(s.storage_paths[1],b);strcpy(s.storage_path,a);
  struct efs_export ex={.id=1,.chunk_size=EFS_DEFAULT_CHUNK_SIZE};

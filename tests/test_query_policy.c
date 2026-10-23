@@ -5,6 +5,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <dirent.h>
+#include "test_tmpdir.h"
 struct failing_kv {struct efs_kv *base;int read_error,write_error;unsigned writes;};
 static int fault_get(void *ctx,const uint8_t *key,uint32_t kl,uint8_t *value,uint32_t *vl)
 {
@@ -18,7 +19,7 @@ static int fault_put(void *ctx,const uint8_t *key,uint32_t kl,const uint8_t *val
 }
 int main(void)
 {
-    char dir[]="/tmp/efs-policy-XXXXXX";assert(mkdtemp(dir));
+    char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-policy-XXXXXX");assert(efs_test_mkdtemp(dir));
     struct efs_kv *kv=efs_kv_lsm_open(dir,NULL);assert(kv);
     uint64_t version;uint32_t mask;
     assert(!efs_query_policy_get(kv,&version,&mask) && !version && mask==3);

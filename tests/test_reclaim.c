@@ -20,6 +20,7 @@ int server_gc_sync_roots(struct efsd_server *s)
 {int rc=real_gc_sync_roots(s);if(!rc&&after_root_sync)after_root_sync();return rc;}
 #include "../src/server/reclaim.c"
 #include "../src/server/segment_store.c"
+#include "test_tmpdir.h"
 
 /* No Raft host: recovery asks this oracle instead. */
 static int host_active;
@@ -697,9 +698,8 @@ int main(void)
 {
     /* Under TMPDIR (make_test_summary.sh sets a disk path): the physical
      * guard keeps max(5%, 1 GiB) + 256 MiB free, more than a small tmpfs /tmp. */
-    const char *tmp=getenv("TMPDIR");if(!tmp||!*tmp)tmp="/tmp";
-    snprintf(roots[0],sizeof(roots[0]),"%s/efs-rj-a-XXXXXX",tmp);snprintf(roots[1],sizeof(roots[1]),"%s/efs-rj-b-XXXXXX",tmp);
-    assert(mkdtemp(roots[0])&&mkdtemp(roots[1]));
+    efs_test_path(roots[0],sizeof(roots[0]),"efs-rj-a-XXXXXX");efs_test_path(roots[1],sizeof(roots[1]),"efs-rj-b-XXXXXX");
+    assert(efs_test_mkdtemp(roots[0])&&efs_test_mkdtemp(roots[1]));
     assert(!posix_memalign((void**)&body,4096,EFS_FRAGMENT_SIZE));memset(body,0x61,EFS_FRAGMENT_SIZE);memset(sum,0x62,sizeof(sum));
     printf("reclaim journal:\n");
     run("accept/credit/fence/settle/retire",t_basic,0);

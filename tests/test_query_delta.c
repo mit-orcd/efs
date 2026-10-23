@@ -8,14 +8,15 @@
 #include <unistd.h>
 #include <ftw.h>
 #include <pthread.h>
+#include "test_tmpdir.h"
 static int failures;
 #define CHECK(x) do {if(!(x)){fprintf(stderr,"FAIL %d: %s\n",__LINE__,#x);failures++;}}while(0)
 static int clean_fixture(const char *path,const struct stat *st,int kind,struct FTW *walk)
 {(void)st;(void)kind;(void)walk;return remove(path);}
 static int run_fixture(void)
 {
-    char store[]="/tmp/efs-query-delta-kv-XXXXXX",cache[]="/tmp/efs-query-delta-cache-XXXXXX";
-    CHECK(mkdtemp(store));CHECK(mkdtemp(cache));
+    char store[EFS_TEST_PATH],cache[EFS_TEST_PATH];efs_test_path(store,sizeof(store),"efs-query-delta-kv-XXXXXX");efs_test_path(cache,sizeof(cache),"efs-query-delta-cache-XXXXXX");
+    CHECK(efs_test_mkdtemp(store));CHECK(efs_test_mkdtemp(cache));
     struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};
     struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);CHECK(kv);if(!kv)return 1;
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t dir;

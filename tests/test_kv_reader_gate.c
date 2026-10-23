@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "test_tmpdir.h"
 static void header(const char *dir,char out[128])
 {
     char path[8192];snprintf(path,sizeof(path),"%s/MANIFEST",dir);
@@ -30,7 +31,7 @@ static int cleanup(const char *path,const struct stat *st,int kind,struct FTW *f
 {(void)st;(void)f;return kind==FTW_DP?rmdir(path):unlink(path);}
 int main(void)
 {
-    char dir[]="/tmp/efs-kv-reader-gate-XXXXXX",line[128];assert(mkdtemp(dir));
+    char dir[EFS_TEST_PATH],line[128];efs_test_path(dir,sizeof(dir),"efs-kv-reader-gate-XXXXXX");assert(efs_test_mkdtemp(dir));
     struct efs_kv *kv=efs_kv_lsm_open(dir,NULL);assert(kv);
     const uint8_t key[]={0,1,250},value[]={41};
     assert(!efs_kv_put(kv,key,sizeof(key),value,sizeof(value)));assert(!efs_kv_lsm_flush(kv));

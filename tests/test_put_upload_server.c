@@ -2,6 +2,7 @@
 #include "../src/server/put_fence.c"
 #include "../src/server/put_upload.c"
 #include <assert.h>
+#include "test_tmpdir.h"
 static struct efsd_server server;
 static struct efs_export export;
 static struct efs_put_ticket expected;
@@ -34,7 +35,7 @@ void efs_store_nvme_bind(struct efs_store *st,struct efs_nvme_store *ctx,struct 
 {static const struct efs_store_ops ops={.put=store};(void)ctx;assert(s==&server&&ex==&export);st->ops=&ops;st->ctx=s;}
 int main(void)
 {
- char root[]="/tmp/efs-put-upload-XXXXXX";assert(mkdtemp(root));
+ char root[EFS_TEST_PATH];efs_test_path(root,sizeof(root),"efs-put-upload-XXXXXX");assert(efs_test_mkdtemp(root));
  server.storage_path_count=1;server.id=1;strcpy(server.storage_paths[0],root);pthread_mutex_init(&server.lock,NULL);
  export.id=1;export.chunk_size=EFS_DEFAULT_CHUNK_SIZE;
  struct efs_meta_pub p={.ino=4097,.inode_gen=7,.coding_profile_id=EFS_META_PROFILE_K2F1,.fresh_object=1,.put_fragment_len=EFS_MIN_CHUNK_SIZE/2,.put_member_mask=15};

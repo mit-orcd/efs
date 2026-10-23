@@ -12,6 +12,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include "test_tmpdir.h"
 
 #define NKEYS 1500u
 #define VLEN 96u
@@ -132,12 +133,9 @@ int main(int argc, char **argv)
     const char *scale_env = getenv("EFS_TEST_DEADLINE_SCALE");
     unsigned scale = scale_env && atoi(scale_env) > 0 ? (unsigned)atoi(scale_env) : 1;
     alarm(secs + 120 * (scale > 30 ? 30 : scale));
-    char dir[] = "/tmp/efs-kv-concurrent-XXXXXX";
-    const char *tmp = getenv("TMPDIR");
-    char path[512];
-    snprintf(path, sizeof(path), "%s/efs-kv-concurrent-XXXXXX", tmp && *tmp ? tmp : "/tmp");
-    char *d = mkdtemp(path);
-    (void)dir;
+    char path[EFS_TEST_PATH];
+    efs_test_path(path, sizeof(path), "efs-kv-concurrent-XXXXXX");
+    char *d = efs_test_mkdtemp(path);
     assert(d);
     efs_kv_lsm_bloom_enable(1);
     struct efs_kv_lsm_cfg cfg = {.sync_mode = EFS_KV_LSM_NOSYNC, .memtable_max = 96 * 1024, .l0_max = 2};

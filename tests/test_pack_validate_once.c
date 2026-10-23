@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "test_tmpdir.h"
 
 #define N EFS_PACK_MAX_RECORDS
 static struct efs_pack_record records[N];
@@ -322,10 +323,9 @@ static void rmtree(const char *dir)
 }
 static void abandon_sweep_work_bound(void)
 {
-    char dir[512];
-    const char *tmp = getenv("TMPDIR");
-    snprintf(dir, sizeof(dir), "%s/efs-pack-abandon-XXXXXX", tmp && *tmp ? tmp : "/tmp");
-    assert(mkdtemp(dir));
+    char dir[EFS_TEST_PATH];
+    efs_test_path(dir, sizeof(dir), "efs-pack-abandon-XXXXXX");
+    assert(efs_test_mkdtemp(dir));
     struct efs_kv_lsm_cfg cfg = {.sync_mode = EFS_KV_LSM_NOSYNC, .memtable_max = 16 * 1024 * 1024, .l0_max = 64};
     struct efs_kv *kv = efs_kv_lsm_open(dir, &cfg);
     assert(kv);

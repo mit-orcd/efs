@@ -9,6 +9,7 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include "test_tmpdir.h"
 
 static struct efs_pack_ref refs[16];
 static uint8_t ledger_key[]={0,1,250,1}, receipt_key[]={0,1,250,2};
@@ -38,7 +39,7 @@ static int cleanup(const char *path,const struct stat *st,int kind,struct FTW *f
 {(void)st;(void)f;return kind==FTW_DP?rmdir(path):unlink(path);}
 int main(void)
 {
-    char dir[]="/tmp/efs-pack-ledger-recovery-XXXXXX";assert(mkdtemp(dir));
+    char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-pack-ledger-recovery-XXXXXX");assert(efs_test_mkdtemp(dir));
     uint8_t image[EFS_SEGMENT_MAX_SIZE],payload[512];memset(payload,0x41,sizeof(payload));
     struct efs_pack_record records[16];
     for(unsigned i=0;i<16;i++) {

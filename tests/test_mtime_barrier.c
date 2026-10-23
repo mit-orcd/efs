@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include "test_tmpdir.h"
 static int decision(void *ctx,const struct efs_txid *t,uint32_t sh,int *d)
 { return efs_txn_decision_get(ctx,sh,t,d); }
 static int prepare(void *ctx,const struct efs_txid *t,const struct efs_txn_parts *p,
@@ -126,7 +127,7 @@ static void unit(void)
 }
 static void recovery(int verdict)
 {
-    char dir[]="/tmp/efs-mtime-XXXXXX";assert(mkdtemp(dir));
+    char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-mtime-XXXXXX");assert(efs_test_mkdtemp(dir));
     struct efs_kv *kv=efs_kv_lsm_open(dir,NULL);assert(kv);efs_ino_t ino;uint64_t gen;
     fixture(kv,&ino,&gen);efs_kv_lsm_close(kv);
     struct efs_txid t={{9}};pid_t child=fork();assert(child>=0);

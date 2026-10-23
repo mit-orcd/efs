@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include "test_tmpdir.h"
 static struct efs_meta_pub publication(efs_ino_t ino,uint64_t gen,uint64_t base,uint64_t object)
 {
     struct efs_meta_pub p={0};p.ino=ino;p.inode_gen=gen;p.candidate_gen=object;
@@ -239,7 +240,7 @@ int main(void)
     assert(efs_meta_apply_create_file(mem,&ma,EFS_ROOT_INO,S_IFREG|0644,"pending",&mi)==EFS_OK);
     assert(efs_meta_apply_get_inode(mem,mi,&mr)==EFS_OK);
     pending_admission(mem,mi,mr.generation);efs_kv_mem_free(mem);
-    folded_history_replay();failures();bounded_receipts();char dir[]="/tmp/efs-publication-XXXXXX";assert(mkdtemp(dir));
+    folded_history_replay();failures();bounded_receipts();char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-publication-XXXXXX");assert(efs_test_mkdtemp(dir));
     struct efs_kv *kv=efs_kv_lsm_open(dir,NULL);assert(kv);
     struct efs_meta_attrs at={0,0,1};efs_ino_t ino;struct efs_meta_row row;
     assert(efs_meta_apply_init(kv,1)==EFS_OK);

@@ -16,6 +16,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <sys/stat.h>
+#include "test_tmpdir.h"
 
 static int failures = 0;
 
@@ -5723,8 +5724,8 @@ static void test_reap_bounded_exact_keys(void)
  * that make the next (otherwise triggered) rebuild of those shards exact. */
 static void test_reap_cleanup_deferred(void)
 {
-    char dir[]="/tmp/efs-meta-reap-cleanup-XXXXXX";
-    CHECK(mkdtemp(dir) != NULL,"cleanup store dir");
+    char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-meta-reap-cleanup-XXXXXX");
+    CHECK(efs_test_mkdtemp(dir) != NULL,"cleanup store dir");
     struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};
     struct efs_kv *kv=efs_kv_lsm_open(dir,&cfg);
     CHECK(kv != NULL,"cleanup store");if(!kv)return;

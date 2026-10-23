@@ -8,6 +8,7 @@ static void *hash_calloc(size_t n,size_t size)
 { return refuse_hash ? NULL : calloc(n,size); }
 #define calloc hash_calloc
 #include "../src/kv/kv_seg.c"
+#include "test_tmpdir.h"
 #undef calloc
 
 static void key_for(unsigned n,uint8_t key[12])
@@ -76,7 +77,7 @@ static void block_checks(int measure)
 }
 static void eviction_checks(void)
 {
-    char path[]="/tmp/efs-block-hash-XXXXXX";int fd=mkstemp(path);assert(fd>=0);close(fd);unlink(path);
+    char path[EFS_TEST_PATH];efs_test_path(path,sizeof(path),"efs-block-hash-XXXXXX");int fd=efs_test_mkstemp(path);assert(fd>=0);close(fd);unlink(path);
     struct kv_seg_w *w;assert(!kv_seg_w_open(path,&w));uint8_t key[12],value[64]={0};
     for(unsigned i=0;i<40000;++i){key_for(i*2,key);assert(!kv_seg_w_add(w,KV_OP_PUT,key,12,value,64));}
     assert(!kv_seg_w_finish(w));struct kv_seg *s;assert(!kv_seg_open(path,&s));assert(s->nblocks>256);
