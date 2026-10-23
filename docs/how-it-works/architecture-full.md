@@ -1569,6 +1569,11 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[Full code-gate runtime review](../status/make-test-runtime-review-20261023.md):
+execution review complete; speedup NOTRUN. Fix the fault-daemon dependency,
+then build harnesses incrementally and schedule isolated cases concurrently.
+The fast/long split does not reduce full-gate work or qualify parallel safety.
+
 [Intel cluster + xorinox client CPU profile](../status/intel-profile-20261023.md):
 **analysis only.** Not CPU-bound (servers 1.1–1.7 of 8 cores, client ≤0.7);
 write 155 MiB/s, read 179 MiB/s, tiny 123 files/s. Tiny files spin in 1 ms
