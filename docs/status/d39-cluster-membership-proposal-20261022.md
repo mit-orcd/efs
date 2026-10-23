@@ -739,3 +739,77 @@ harness that drives every matrix cell and every §8, §10 and §12
 counterexample through the real declaration and peer-pool entry points on a
 private cluster, before any implementation of W153a or the formation
 protocol claims closure.
+
+
+## 14. Review of c6d19da6f — October 23
+
+**Verdict: voter semantics and connection directions improved; identity
+transition enforcement remains OPEN.** D39 is still a proposal. Source review
+at `c6d19da6f`, macOS, no daemon/cluster/workload run; new protocol gates are
+NOTRUN. The following are specification counterexamples, not claims of
+observed corruption in an implemented D39.
+
+### P1 — A declaration-time check cannot see a later conflicting identity
+
+The last paragraph of §13 says a conflicting pair is refused whenever it
+appears, but keeps pre-formation connections alive and checks the pair only
+on declaration. Consider A declaring `none` to B with pair P. A subsequently
+installs Q (Q != P); its existing connection remains permitted to send Raft
+to B. Nothing in the proposed wire rules makes Q appear on that connection
+until A voluntarily redeclares. Restricting the connection to Raft is not
+safe isolation: Raft carries terms, votes, log entries and snapshots.
+
+Make pair acquisition an explicit connection invalidation/revalidation event
+on **both endpoints**, including the transition from unknown to known, not
+only entry into `formed`. Bind each connection to local identity generation
+and the declared remote identity; check that binding before request dispatch
+and before accepting replies/snapshots. Define how queued/in-flight traffic
+is fenced and how peer-pool reuse notices invalidation. Reconnect or
+redeclare on change through the permitted discovery/catch-up paths; do not
+block the recovery elections already required by §12. Do not allow a later
+`pair=none` declaration to downgrade a previously bound connection.
+
+A wire generation/pair checked for every relevant frame is another possible
+implementation, but the design must choose and test one mechanism. Static
+connection permissions plus an optional redeclaration do not enforce the
+claimed invariant. Gates: `none -> P` stays open while the sender learns Q;
+the receiver learns P after a `none -> none` declaration; stale queued Raft
+and snapshot traffic and stale replies are rejected before effects. Matching
+pair transitions must reconnect and complete formation without deadlock.
+
+### P2 — Identity binding must cover the declaration reply too
+
+The matrix knows both endpoints' pairs, but §13 specifies the declarer's
+fields without specifying the admitter's response. Today's
+`efs_conn_declare`/`declare_check` in `src/common/protocol.c` establish protocol
+agreement; they do not verify the responder's cluster/member identity.
+Define a successful declaration reply carrying the responder's configured
+identity, digest, installed pair (or explicit unknown) and permitted channel.
+The outgoing peer-pool connection must validate it against the intended
+configured peer and local state before use. Forward and reverse connections
+are independent; a valid reverse connection cannot validate this one.
+Test a configured endpoint answering with the wrong member/pair and a stale
+reply crossing local identity installation. This is consistency enforcement
+under the trusted-network boundary, not a claim of authentication.
+
+### Keep service readiness conjunctive and make test sequencing executable
+
+The `P -> P` row's "everything a peer sends today" must explicitly remain
+subject to the **receiver's complete predicate and role/command allowlist**.
+Learning the same pair from group 0 does not prove group 2 installation. The
+earlier service restriction is correct; encode it in the authoritative table
+rather than requiring readers to reconcile prose from several revisions.
+Gate: both endpoints know P while group 2 is paused; Raft/formation progress
+is allowed, but forwarded client mutations and data service remain refused.
+
+A harness using the new matrix through real declaration/peer-pool code cannot
+run before those new fields and gates exist. Sequence the work as a protocol
+model/transition tests first, then minimal admission implementation plus tests
+through the real entry points, then private-cluster formation/failover gates.
+Do not count a pure table lookup as production integration evidence. This is
+a recommended work order after the pending user decisions, not authorization
+to start implementation or resume W153a.
+
+No new architecture decision is needed for these corrections. Retain voters'
+normal Raft rights, the trusted-network limitation, and 2+1-only alpha scope
+on 3, 4 and >4 nodes. Keep all proposed gates NOTRUN until executed.

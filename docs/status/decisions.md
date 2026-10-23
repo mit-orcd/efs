@@ -77,6 +77,13 @@ allow recovery elections during partial formation, and specify discovery and
 replication in both directions. Endpoint declarations check consistency, not
 peer authentication. D39 remains proposed and W153a held.
 
+**§14 review of `c6d19da6f`:** the expanded matrix fixes voter semantics and
+connection direction coverage, but declaration-only checks cannot enforce
+identity learned later on an existing connection. Specify invalidation or
+per-frame rebinding on both endpoints, validate declaration replies, and keep
+service permissions conditional on complete formation. D39 remains proposed;
+W153a held, protocol tests NOTRUN.
+
 ## D38 — metadata placement ladder across the alpha releases (accepted Oct 22)
 
 User wording:

@@ -1616,6 +1616,12 @@ matched failover gate is NOTRUN. Lost-reply cleanup (decide-once retirement by
 fence or live-owner abandon) is on `devel-k15b` with unit tests passing; its
 live gate is NOTRUN. **W52: shape A in tree; exact 20k gate and A/B NOTRUN.**
 
+[D39 latest review (§14)](../status/d39-cluster-membership-proposal-20261022.md):
+**OPEN:** `c6d19da6f` improves voter and connection semantics, but existing
+connections need identity-transition enforcement and declaration replies need
+peer identity checks. Same pair does not imply complete formation. Proposal
+only; W153a held, protocol gates NOTRUN.
+
 [D39 proposal: configured cluster membership](../status/d39-cluster-membership-proposal-20261022.md):
 **PROPOSED, awaiting the user.** One member list for every daemon and
 `raft-mkfs`, hashed into HELLO and the committed MKFS, replacing `--join`,
@@ -2717,6 +2723,13 @@ and omits required connection directions. Preserve Raft quorum membership,
 allow recovery elections during partial formation, and specify discovery and
 replication in both directions. Endpoint declarations check consistency, not
 peer authentication. D39 remains proposed and W153a held.
+
+**§14 review of `c6d19da6f`:** the expanded matrix fixes voter semantics and
+connection direction coverage, but declaration-only checks cannot enforce
+identity learned later on an existing connection. Specify invalidation or
+per-frame rebinding on both endpoints, validate declaration replies, and keep
+service permissions conditional on complete formation. D39 remains proposed;
+W153a held, protocol tests NOTRUN.
 
 ### D38 — metadata placement ladder across the alpha releases (accepted Oct 22)
 

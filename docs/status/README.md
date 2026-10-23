@@ -65,6 +65,12 @@ matched failover gate is NOTRUN. Lost-reply cleanup (decide-once retirement by
 fence or live-owner abandon) is on `devel-k15b` with unit tests passing; its
 live gate is NOTRUN. **W52: shape A in tree; exact 20k gate and A/B NOTRUN.**
 
+[D39 latest review (§14)](d39-cluster-membership-proposal-20261022.md):
+**OPEN:** `c6d19da6f` improves voter and connection semantics, but existing
+connections need identity-transition enforcement and declaration replies need
+peer identity checks. Same pair does not imply complete formation. Proposal
+only; W153a held, protocol gates NOTRUN.
+
 [D39 proposal: configured cluster membership](d39-cluster-membership-proposal-20261022.md):
 **PROPOSED, awaiting the user.** One member list for every daemon and
 `raft-mkfs`, hashed into HELLO and the committed MKFS, replacing `--join`,
