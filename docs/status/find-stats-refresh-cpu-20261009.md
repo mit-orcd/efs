@@ -322,7 +322,7 @@ its already existing test directory, so it adds no acceptance evidence.
 
 Raw deployment/profile evidence is retained in
 results/measure/20261009-catalog-incremental (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261009-catalog-incremental`)
-and on NUC at `/data1/efs/deploy-query-5084f8c2`. Native unit/build logs and private
+and on NUC at `/data1/efs/evidence/deploy-query-5084f8c2`. Native unit/build logs and private
 fixture logs remain under `/data1/efs/query-incremental-*`.
 
 

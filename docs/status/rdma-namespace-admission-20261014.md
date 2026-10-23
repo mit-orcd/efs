@@ -63,9 +63,9 @@ failure is also retained. Namespace passing evidence does not close W106.
 All quiet fixtures ran after native/fault builds finished, without profiling or
 tracing. All synthetic stores removed after clean shutdown; only installed
 mnt/mnt2 and four live daemons remain. Raw outputs outside Git:
-`/data1/efs/rdma-fixes-a7e2b6b7d`, fixture roots above, normal source tree
-`/data1/efs/rdma-merged-a7e2b6b7d`, fault source tree
-`/data1/efs/rdma-fault-a7e2b6b7d`. Controller exit0 records finished sequencing;
+`/data1/efs/evidence/rdma-fixes-a7e2b6b7d`, fixture roots above, normal source tree
+`/data1/efs/evidence/rdma-merged-a7e2b6b7d`, fault source tree
+`/data1/efs/evidence/rdma-fault-a7e2b6b7d`. Controller exit0 records finished sequencing;
 individual fixture exit codes are1,0,0. No raw captures/binaries/stores committed.
 
 The fix is qualified for this unchanged AMD mixed namespace workload, with no
@@ -98,7 +98,7 @@ All three peer67/67, cold prepare27/27 and verify27/27, W100 two-case
 refusal/recovery oracles PASS. Initial fixture overall exit1 due degraded read;
 third overall exit1 due core failures. Controller completion exit0 means its
 sequence finished, not that all gates passed. Raw evidence outside Git:
-`/data1/efs/rdma-fixes-ac22b8d70` and the three fixture roots above.
+`/data1/efs/evidence/rdma-fixes-ac22b8d70` and the three fixture roots above.
 
 The old fc unlink/link errors coincide with client `opid-admission` refusal:
 oldest350,next366,live1/window16; an older rename later succeeded after5.438s.
@@ -113,8 +113,8 @@ rename phases without changing deadlines. Its full mixed core PASS1512/1512
 in33.766s; a slow rename first targeted single-group node4 (473.769ms) and
 namespace forwarding paths remain active. Diagnostic code is not installed or
 accepted as frozen-source evidence. Artifact patch is at
-`/data1/efs/rdma-diag-artifacts-ac22/instrument.py`; outputs at
-`/data1/efs/rdma-qualification-79BDzq`. No quiet tracing/build overlap.
+`/data1/efs/evidence/rdma-diag-artifacts-ac22/instrument.py`; outputs at
+`/data1/efs/evidence/rdma-qualification-79BDzq`. No quiet tracing/build overlap.
 
 ## Fix and focused checks
 
@@ -158,7 +158,7 @@ actual process flag audit and binary hashes. Run after all builds finish:
 ```sh
 cd /data1/efs/src
 export EFS_TRANSPORT=rdma EFS_RDMA_DEV=rxe0 EFS_RDMA_GID_INDEX=1
-FAULT_SOURCE=/data1/efs/rdma-fault-a7e2b6b7d
+FAULT_SOURCE=/data1/efs/evidence/rdma-fault-a7e2b6b7d
 OUTPUT=$(mktemp -d /data1/efs/rdma-rerun-XXXXXX)
 # Both source trees must name the full frozen a7 commit in SOURCE_COMMIT.
 for r in 1 2 3; do

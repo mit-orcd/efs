@@ -267,7 +267,7 @@ A ten-million-entry repeat is running before the actual billions-entry gate.
 
 For the actual scale gate, a fresh 2 TiB sparse raw disk was attached live-only to
 xefs1 as vdc, serial W92SCALE20261010. Its uniquely identified blank device was
-formatted Btrfs and mounted at `/data1/efs/bench/w92-scale-2p32-20261010`, with
+formatted Btrfs and mounted at `/data1/efs/evidence/bench/w92-scale-2p32-20261010`, with
 forced zstd compression and noatime. Existing vda/vdb disks and persistent VM
 configuration were unchanged. Host backing is capped at 2 TiB with approximately
 3.2 TiB initially free; the fixture reserves 100 GiB physical free space and
@@ -457,7 +457,7 @@ evidence is retained here (archived raw evidence: `archive/raw-evidence-20261021
 
 The source-scale VM has been gracefully drained for a temporary increase from
 3 GiB to 24 GiB RAM. Its inactive original XML is preserved on the host at
-`/data1/efs/bench/w92-xefs1-original-20261010.xml`; existing authoritative and
+`/data1/efs/evidence/bench/w92-xefs1-original-20261010.xml`; existing authoritative and
 private test disks are retained without formatting. Deployment/recovery and
 the fresh actual 2^32-entry run follow this capacity provisioning.
 
@@ -1013,7 +1013,7 @@ throughput improvement.
 
 The complete native repeat runs in host screen `w92-raw-native-20261010`, with
 `raw-native.log`, `.exit` and `.finished` under
-`/data1/efs/bench/w92-phase-native-20261010`. This raw batching change has not
+`/data1/efs/evidence/bench/w92-phase-native-20261010`. This raw batching change has not
 been put into the live scale process, waiting cold oracle or cluster daemons;
 wait for the complete native verdict before advancing those binaries. The
 current large run and its watcher are still PID 554207/554216, and the 400 GiB

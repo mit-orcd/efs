@@ -38,7 +38,7 @@ Binary hashes not recorded in the run.
 ## Environment
 
 - xorinox host (NUC), local `efs-bench` runs; no cluster, VMs off.
-- Roots: root1 `/data1/efs/bench`, root2 `/home/efs/additional-work-dir/bench`.
+- Roots: root1 `/data1/efs/evidence/bench`, root2 `/home/efs/additional-work-dir/bench`.
 - Buffered body and checksum are separate writes, each synchronous; final
   exact-length handling also fsyncs. Direct writes retain their existing
   body/checksum writev. This deliberately conservative diagnostic is not

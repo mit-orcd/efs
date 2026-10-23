@@ -45,7 +45,7 @@ Mixed per gate (exactly as the raw exits support):
 NUC host (owner-exclusive). Regular 4-node service on ports 17432–17435
 (normally stopped during private fixtures); private 4-voter fixture on
 127.0.0.1:26590–26593, TCP/direct I/O, 1G quota each; private stores under
-`/data1/efs/gc-direct-dly7jx6q` (n1/n2) and `/home/efs/gc-direct-j16ejmaf`
+`/data1/efs/evidence/gc-direct-dly7jx6q` (n1/n2) and `/home/efs/gc-direct-j16ejmaf`
 (n3/n4); mounts `/data1/efs/mnt`, `mnt2`. Commands disabled, flow control=1,
 early-retire/overlap/noop/group-drain=0, applied interval 10 ms.
 

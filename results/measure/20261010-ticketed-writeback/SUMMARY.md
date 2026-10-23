@@ -50,7 +50,7 @@ Per-file source SHA256 for changed files in
 ## Environment
 
 One AMD host, four daemons, direct I/O, TCP transport; unique private stores
-(`/data1/efs/lease-retention-fixtures/gc-direct-*`) and the two authorized
+(`/data1/efs/evidence/lease-retention-fixtures/gc-direct-*`) and the two authorized
 test mounts (`/data1/efs/mnt`, `/data1/efs/mnt2`); installed service restored
 between cycles. No hardware power-loss or distributed hardware-RDMA claim; no
 D25/default FUSE activation implied.

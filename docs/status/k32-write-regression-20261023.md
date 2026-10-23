@@ -72,7 +72,7 @@ commits; run the ior write above; read Raft commits again.
 
 ## Raw evidence (outside Git)
 
-- node9901 `/data1/efs/traces/k32-20261023/`: perf call graphs of n1–n3
+- node9901 `/data1/efs/evidence/traces/k32-20261023/`: perf call graphs of n1–n3
   during a head write (`perf-n<i>.data`, 499 Hz, 45 s), Raft status before
   and after; manifest `SHA256SUMS` (sha256 `f25d65ca…700c`).
 - node9900 `/data1/efs/orcd-mini-client/prof/k32/`: client perf during the

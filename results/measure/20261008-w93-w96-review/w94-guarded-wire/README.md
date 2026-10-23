@@ -41,7 +41,7 @@ attempts lacked documentation/evidence dependencies; those were supplied from
 committed archives and the complete target passed. No test was weakened.
 
 `private-create-apply-fault.patch` is a test-only patch applied exclusively to
-`/data1/efs/w94-create-apply-fault-20261008`, built from the committed source plus
+`/data1/efs/evidence/w94-create-apply-fault-20261008`, built from the committed source plus
 the CREATE apply storage-error fix. It returns IO then NOMEM immediately before
 the first atomic CREATE batch per private process. Production sources/binaries
 have no fault hook. Actual phase markers must be present in daemon logs.

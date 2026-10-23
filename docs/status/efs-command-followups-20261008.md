@@ -76,7 +76,7 @@ W90 expiry and W93–W96 performance work remain separate.
 NUC safely drained both mounts and all four daemons, installed the named build,
 then restarted TCP/buffered with the existing 1024 MiB catalog cap and command
 opt-in. Existing stores and generated trees are preserved. Previous executables
-are in `/data1/efs/commands-rollback-d2573704`. The existing `tiny_files` screen
+are in `/data1/efs/evidence/commands-rollback-d2573704`. The existing `tiny_files` screen
 now runs eight workers into `/data1/efs/mnt/tiny-commands-d2573704`.
 
 Cold production stats succeeded before restoring the generator. Under resumed

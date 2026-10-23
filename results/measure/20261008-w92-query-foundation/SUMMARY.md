@@ -22,7 +22,7 @@ cluster `e9f974b4e148`.
 
 ## Environment
 
-NUC `/data1/efs/w92-build` (not the deployed cluster source); Mac Clang +
+NUC `/data1/efs/evidence/w92-build` (not the deployed cluster source); Mac Clang +
 ASan/UBSan.
 
 ## Method

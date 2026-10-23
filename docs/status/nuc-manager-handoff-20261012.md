@@ -43,7 +43,7 @@ mounts `/data1/efs/mnt` and `mnt2`; no pending regular writes were discarded.
 Active old fixture uses **`ba73f304-w52-nuc`**, source
 `/data1/efs/devel-nuc-20261011/catchup-base-src`, four private voters on
 `127.0.0.1:26590..26593`, TCP/direct I/O, quota 1G each. n1/n2 stores:
-`/data1/efs/gc-direct-dly7jx6q/n1,n2`; n3/n4:
+`/data1/efs/evidence/gc-direct-dly7jx6q/n1,n2`; n3/n4:
 `/home/efs/gc-direct-j16ejmaf/n3,n4`. These are private stores, not regular n1..n4.
 Regular ports are 17432..17435. NUC remains this owner's exclusive cluster;
 no AMD/Intel/ORCD changes were made.

@@ -26,8 +26,8 @@ nonexistent `tests/test_rdma` target; the corrected target is
 
 ## Isolation and gates
 
-Runner `/data1/efs/amd-w73-w64-rxe.sh` owns
-`/data1/efs/w73-w64-rxe.lock`. It gracefully drains the installed two mounts
+Runner `/data1/efs/evidence/amd-w73-w64-rxe.sh` owns
+`/data1/efs/evidence/w73-w64-rxe.lock`. It gracefully drains the installed two mounts
 and four daemons, borrows only AMD's policy-allowed `/data1/efs/mnt` and
 `mnt2`, and creates unique private stores under `/data1/efs`. Installed n1–n4
 stores remain intact. The exit path restores installed direct/TCP service;

@@ -60,14 +60,14 @@ Commands are in the table; the suite drivers and gate scripts are as in
 [the D25 deploy](orcd-mini-d25-deploy-20261022.md#reproduce). Raw outputs
 stay outside Git on node9901:
 - `/data1/efs/prof/suites-20261022-0434/`;
-- `/data1/efs/testsuite/private-08cc/` (`summary.txt`, `gc-efs.out`, `faults.out`);
-- `/data1/efs/testsuite/cm8-a/gc-direct-f4c3_ke9/`;
+- `/data1/efs/evidence/testsuite/private-08cc/` (`summary.txt`, `gc-efs.out`, `faults.out`);
+- `/data1/efs/evidence/testsuite/cm8-a/gc-direct-f4c3_ke9/`;
 - `/tmp/efs-fault-08cc/` (`results.jsonl`, `cluster/*/fuse-a-*.log`).
 
 ## Remaining gates
 
 - The reruns used the `08cc16af4` binaries with only
   `tests/faults/harness.py` and `tests/live/query_timing.py` taken from
-  `e4bd1b6d7` (outputs in `/data1/efs/testsuite/private-e4bd/`,
+  `e4bd1b6d7` (outputs in `/data1/efs/evidence/testsuite/private-e4bd/`,
   `/tmp/efs-fault-e4bd/`). `e4bd1b6d7` is merged into devel in `99c7a1c75`.
 - LeakSanitizer remains broken on node9901; Valgrind not run.

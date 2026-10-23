@@ -114,7 +114,7 @@ trace separately with `timeout -s INT 15 strace -f -ttt -T -s 16
 
 Raw output, exact temporary controllers, trace parser and SHA256SUMS:
 `/Users/mike/Documents/Codex/2026-10-10/n-x20/artifacts/intel-overlap-20261015/`.
-Remote captures/fixtures: `/data1/efs/overlap-20261015/` on both Intel hosts.
+Remote captures/fixtures: `/data1/efs/evidence/overlap-20261015/` on both Intel hosts.
 Random fixture hashes: Intel1
 `eb845af7d1d99f31e14c2efce77887b2c45d811e23fa14ecbdce89648af5ccbf`, Intel2
 `5742765b3e960ad28363954b60159d65fc7735b21538922dadbebfe240710863`.

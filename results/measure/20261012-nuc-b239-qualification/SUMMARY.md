@@ -40,7 +40,7 @@ Mixed / partial — NOTRUN for full acceptance:
 ## Environment
 
 NUC host, 4 f52 direct/TCP daemons (ports 17432–17435) plus private candidate
-cluster; stores/mounts under `/data1/efs/nuc-b239-qualification`,
+cluster; stores/mounts under `/data1/efs/evidence/nuc-b239-qualification`,
 `/data1/efs/mnt`, `/data1/efs/mnt2`. TCP, direct I/O for mounted gates;
 FLOW/EARLY_RETIRE/GROUP_DRAIN/overlap/noop all 0 (D25 disabled). Three
 voters, fixed leaders, SATA metadata, SATA+NVMe data (per approved W97 plan).
@@ -53,7 +53,7 @@ stop-partial.py, control-retry.py, hold-after-fixture.py, etc.). Sequence:
 verify 1,517-file input manifest → build normal/fault images → full native
 suites → 14 focused ASan/UBSan tests → drain original service → mounted full
 direct recipe (`tests/live/gc_reclamation.py`-style W52 fixture, raw root
-`/data1/efs/gc-direct-xaotwh8t`) → begin 20k gate → manager stop → orderly
+`/data1/efs/evidence/gc-direct-xaotwh8t`) → begin 20k gate → manager stop → orderly
 partial-stop with fsync + cold dual-mount verification → restore original f52
 service and verify 4 daemons/2 clients/5 hashes/36 payloads.
 

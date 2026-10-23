@@ -158,7 +158,7 @@ Do not borrow those old passes for this merged candidate.
 ## Sanitizer reproduction
 
 After quiet fixtures stop, export the same source to a fresh separate tree
-(`/data1/efs/rdma-san-fc2460b19`), then:
+(`/data1/efs/evidence/rdma-san-fc2460b19`), then:
 
 ```sh
 make -j8 CFLAGS='-O1 -g -fno-omit-frame-pointer -std=c99 -Wall -Wextra -D_GNU_SOURCE -fsanitize=address,undefined' LDFLAGS='-lpthread -lm -ldl -libverbs -fsanitize=address,undefined' tests/test_kv_lsm tests/test_store_durability
@@ -183,8 +183,8 @@ there are no generated placeholder targets. A complete detached checkout or
 full `git archive fc2460b191c30cdccd2346b25433d786b52bbc1a` also supplies all
 required assets; reproduction needs no external private run capture. The documentation-only historical
 assets are unchanged between ddf and finalfc. Native tree
-`/data1/efs/rdma-merged-fc2460b19`, separate fault-client tree
-`/data1/efs/rdma-fault-fc2460b19`, each SOURCE_COMMIT fullSHA above.
+`/data1/efs/evidence/rdma-merged-fc2460b19`, separate fault-client tree
+`/data1/efs/evidence/rdma-fault-fc2460b19`, each SOURCE_COMMIT fullSHA above.
 
 ```sh
 export EFS_TRANSPORT=rdma EFS_RDMA_DEV=rxe0 EFS_RDMA_GID_INDEX=1
@@ -202,11 +202,11 @@ four nodes at27432–27435 and independent mounts under `/home/efs`.
 
 ```sh
 cd /data1/efs/src
-mkdir -p /data1/efs/rdma-fixes-fc2460b19
+mkdir -p /data1/efs/evidence/rdma-fixes-fc2460b19
 for r in 1 2 3; do
  degraded=0; [ "$r" != 1 ] || degraded=1
- EFS_GATE_DEGRADED=$degraded EFS_GATE_EOF_SOURCE=/data1/efs/rdma-fault-fc2460b19 bash tests/live/rdma_four_node_qualification.sh > /data1/efs/rdma-fixes-fc2460b19/fresh-q$r.log 2>&1
- echo $? > /data1/efs/rdma-fixes-fc2460b19/fresh-q$r.exit
+ EFS_GATE_DEGRADED=$degraded EFS_GATE_EOF_SOURCE=/data1/efs/evidence/rdma-fault-fc2460b19 bash tests/live/rdma_four_node_qualification.sh > /data1/efs/evidence/rdma-fixes-fc2460b19/fresh-q$r.log 2>&1
+ echo $? > /data1/efs/evidence/rdma-fixes-fc2460b19/fresh-q$r.exit
 done
 ```
 
@@ -218,5 +218,5 @@ read keeps existing30s read/5s pair and180s outer. No timeouts/window widened.
 Driver clears faults, restores paused followers, drains mounts/stops owned
 nodes before discarding only synthetic stores; preserve failed/log markers.
 Cleanup failure retains owned fixtures and must be resolved before layering.
-All raw outputs are outside Git at `/data1/efs/rdma-fixes-fc2460b19`; summarize
+All raw outputs are outside Git at `/data1/efs/evidence/rdma-fixes-fc2460b19`; summarize
 verdicts and precise reproductions, never commit captures/binaries/stores.

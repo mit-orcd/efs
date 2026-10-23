@@ -100,7 +100,7 @@ EFS_EXPIRY=0 EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 make -j2 test
 Individual tests deliberately enable feature-specific synthetic cases; these
 unit tests do not enable the running cluster's deferred features. Raw build,
 sweep and native logs are outside Git under
-`/data1/efs/devel-integration-code-20261013` on AMD; local review diffs/archives
+`/data1/efs/evidence/devel-integration-code-20261013` on AMD; local review diffs/archives
 remain under `/private/tmp`. Test fixtures use private per-process directories
 and perform their own cleanup; retained failed logs are not acceptance PASS.
 

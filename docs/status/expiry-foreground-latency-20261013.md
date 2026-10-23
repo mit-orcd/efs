@@ -35,7 +35,7 @@ no fragment pending estimate, and ~47 MB data still allocated on sampled n3.
 The 100 ms namespace cadence alone cannot replace fast reap processing.
 Its first phase passed physical/cold checks, then its remaining experiment was
 interrupted through owned-harness cleanup; it is NOT a complete 30,000-file gate.
-Evidence `/data1/efs/expiry-d5b23c38-backlog/gc-direct-gylnyg93`, run log
+Evidence `/data1/efs/evidence/expiry-d5b23c38-backlog/gc-direct-gylnyg93`, run log
 `/home/efs/expiry-d5b23c38-backlog.log`.
 
 Refined candidate `99f6ef0c` retains fast reap/fragment work alongside expiry.
@@ -85,7 +85,7 @@ python3 tests/test_gc_backlog_idle.py
 python3 tests/test_expiry_cli.py ./efs-mgmt
 python3 tests/test_gc_status_expiry.py ./efs-mgmt
 bash tests/run_tests.sh posix expiry /data1/efs/mnt \
-  --root /data1/efs/expiry-99f6ef0c-backlog \
+  --root /data1/efs/evidence/expiry-99f6ef0c-backlog \
   --peer-mount /data1/efs/mnt2 --port 24410 --jobs 4 --backlog-files 10000
 ```
 
@@ -134,7 +134,7 @@ Normal expiry 24/24, POSIX 216/216 (26.2s), peer 67/67 (12.6s), final cold
 physical/queue/quota/fencing gates PASS. Clock-fault 25/25, POSIX 216/216 and peer 67/67 PASS.
 Sequential runs are not a randomized repeated A/B trial or a hardware ceiling.
 
-Normal primary evidence `/data1/efs/expiry-99f6ef0c-backlog/gc-direct-pbz2ikop`.
+Normal primary evidence `/data1/efs/evidence/expiry-99f6ef0c-backlog/gc-direct-pbz2ikop`.
 Mapped executable/environment records verify actual transport, direct-I/O and
 feature settings; logs and JSON/TSV remain outside Git.
 
@@ -159,7 +159,7 @@ Clock-fault reproduction from a separate clean source extraction:
 make -j4 EFS_FAULTS=1 EFS_GIT_ID=99f6ef0c \
   EFS_GIT_DESCRIBE=99f6ef0c EFS_GIT_BRANCH=devel-expiry efsd efs-fuse efs-mgmt
 bash tests/run_tests.sh posix expiry /data1/efs/mnt \
-  --root /data1/efs/expiry-99f6ef0c-fault \
+  --root /data1/efs/evidence/expiry-99f6ef0c-fault \
   --peer-mount /data1/efs/mnt2 --port 24410 --jobs 4 --clock-fault
 ```
 
@@ -169,7 +169,7 @@ Same host/configuration. Fault markers inject clock health, not the host clock.
 Fault aggregate PASS: expiry 25/25, core 216/216 (23.8s), peer 67/67 (12.3s),
 final physical inventory, queues, zero quota and late-PUT fencing. Both normal
 and fault commands exited zero. Primary fault evidence
-`/data1/efs/expiry-99f6ef0c-fault/gc-direct-x44el00x`.
+`/data1/efs/evidence/expiry-99f6ef0c-fault/gc-direct-x44el00x`.
 Final cleanup verified both mounts unmounted and no efsd processes remaining.
 Existing user stores preserved; all owned raw evidence retained outside Git.
 Normal RSS/free-space samples 76/79/82; minimum free bytes 207,470,972,928.

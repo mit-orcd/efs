@@ -58,13 +58,13 @@ Installed source/build: full14d SHA above, branchdevel-rdma,
 SHA256: `efsd`9f2d5cdebfb1b217bdeb23659d27937646ef4c5c185b19aaa62756aa5cba1a88;
 `efs-fuse`2ca46403aec9d6742b3a798d4125f32f7dd0103bb24f81431755bb2884bb379a;
 `efs-mgmt`e60a2a8177f78c391bf64422e0669667b8cd621d26b47eafb3158a0c8d6af511.
-Raw14d verdicts stay at `/data1/efs/rdma-fixes-14d621182`, intermediate07bd at
-`/data1/efs/rdma-fixes-07bd66e19`. Native build and source export are at the same
+Raw14d verdicts stay at `/data1/efs/evidence/rdma-fixes-14d621182`, intermediate07bd at
+`/data1/efs/evidence/rdma-fixes-07bd66e19`. Native build and source export are at the same
 paths described below; installed stores stay17G/node, private fixtures4G/node.
 
 Sanitizer reproduction: fresh exact14d export, then the sanitizer flags and
 options below, substituting target `tests/test_store_durability` and running
-that binary. `/data1/efs/rdma-san-14d621182` instrumented the full common library
+that binary. `/data1/efs/evidence/rdma-san-14d621182` instrumented the full common library
 and both included production storage units. Runtime daemons remain native.
 Native build/gates, from exact exported14d source:
 
@@ -87,7 +87,7 @@ Metadata diagnostics still show fresh quorum/remote-proof/apply waits; the
 profile establishes substantial shared-disk journal interference rather than
 proving every timeout is caused by that stack. Diagnostic cohort passed; it is
 not quiet acceptance. Raw profile/logs are external at
-`/data1/efs/rdma-timeouts-18be5d060` (55K samples, no lost samples).
+`/data1/efs/evidence/rdma-timeouts-18be5d060` (55K samples, no lost samples).
 
 **07bd66e19** lets initialized files targets reuse the existing bounded pinned
 inode ancestry proof (128 directory descriptors across all roots). Each PUT
@@ -126,8 +126,8 @@ independent fresh fixtures sequentially, retaining each failed verdict:
 ```sh
 for r in 1 2 3; do
  degraded=0; [ "$r" != 1 ] || degraded=1
- EFS_GATE_DEGRADED=$degraded bash tests/live/rdma_four_node_qualification.sh > /data1/efs/rdma-fixes-14d621182/fresh-q$r.log 2>&1
- echo $? > /data1/efs/rdma-fixes-14d621182/fresh-q$r.exit
+ EFS_GATE_DEGRADED=$degraded bash tests/live/rdma_four_node_qualification.sh > /data1/efs/evidence/rdma-fixes-14d621182/fresh-q$r.log 2>&1
+ echo $? > /data1/efs/evidence/rdma-fixes-14d621182/fresh-q$r.exit
 done
 ```
 
@@ -242,7 +242,7 @@ nodes127.0.0.1:17432–17435; files storage/direct I/O, retained **17G quota/nod
 Original10GiB file and tiny-files namespace retained. Every daemon/client strict
 `EFS_TRANSPORT=rdma`; `.efs` client/server, expiry and repair
 experiment OFF. Existing filesystem reserve checks unchanged. Test source lives
-at `/data1/efs/src`, native build at `/data1/efs/rdma-deploy-src`.
+at `/data1/efs/src`, native build at `/data1/efs/evidence/rdma-deploy-src`.
 
 Final test placement: installed cluster retains17G/node and user namespace;
 independent private qualification uses four **fresh4G** stores at ports27432–27435
@@ -271,7 +271,7 @@ processes before discarding only those synthetic stores, preserving logs/verdict
 its full source is2109eea0cb79bf57b2bb27d17db40d610cbbf4ac.
 
 Full-common-library sanitizer build in a separate fresh exported source tree
-(`/data1/efs/rdma-san-18be5d060`), after all quiet live fixtures stopped:
+(`/data1/efs/evidence/rdma-san-18be5d060`), after all quiet live fixtures stopped:
 
 ```sh
 make -B -j8 CFLAGS='-O1 -g -fno-omit-frame-pointer -std=c99 -Wall -Wextra -D_GNU_SOURCE -fsanitize=address,undefined' LDFLAGS='-lpthread -lm -ldl -libverbs -fsanitize=address,undefined' tests/test_rdma_segmented
@@ -387,11 +387,11 @@ for strict RDMA, files/direct and all disabled flags before starting.
 cd /data1/efs/src
 export EFS_TRANSPORT=rdma EFS_RDMA_DEV=rxe0 EFS_RDMA_GID_INDEX=1
 export EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0 EFS_REPAIR_EXPERIMENT=0
-for mode in normal interrupt tcp-violation deadline churn; do timeout 45s /data1/efs/rdma-deploy-src/tests/test_rdma_segmented "$mode" || exit; done
+for mode in normal interrupt tcp-violation deadline churn; do timeout 45s /data1/efs/evidence/rdma-deploy-src/tests/test_rdma_segmented "$mode" || exit; done
 # tcp-violation injects a forbidden byte after RDMA setup; it is not a TCP comparison.
 for t in get_pair_readiness get_pair_budget rdma_progress_ready rdma_reply_budget readindex_tickets readindex_pair readindex_admission readindex_result readindex_coalescer read_waiters; do python3 tests/test_$t.py || exit; done
-python3 -u tests/live/rdma_degraded_read.py /data1/efs/src /data1/efs/mnt /data1/efs/rdma-fixes-18be5d060/degraded1
-python3 -u tests/live/rdma_installed_load.py /data1/efs/src /data1/efs/rdma-fixes-18be5d060/load1
+python3 -u tests/live/rdma_degraded_read.py /data1/efs/src /data1/efs/mnt /data1/efs/evidence/rdma-fixes-18be5d060/degraded1
+python3 -u tests/live/rdma_installed_load.py /data1/efs/src /data1/efs/evidence/rdma-fixes-18be5d060/load1
 ```
 
 Installed affected-only seven-client reruns (quiet, after private fixtures):
@@ -424,9 +424,9 @@ it must match the recorded digest and exact length. No cached timing speedup cla
 Final independent cohorts (serial; default first also runs degraded32MiB):
 
 ```sh
-bash tests/live/rdma_four_node_qualification.sh > /data1/efs/rdma-fixes-18be5d060/fresh-q1.log 2>&1
-EFS_GATE_DEGRADED=0 bash tests/live/rdma_four_node_qualification.sh > /data1/efs/rdma-fixes-18be5d060/fresh-q2.log 2>&1
-EFS_GATE_DEGRADED=0 bash tests/live/rdma_four_node_qualification.sh > /data1/efs/rdma-fixes-18be5d060/fresh-q3.log 2>&1
+bash tests/live/rdma_four_node_qualification.sh > /data1/efs/evidence/rdma-fixes-18be5d060/fresh-q1.log 2>&1
+EFS_GATE_DEGRADED=0 bash tests/live/rdma_four_node_qualification.sh > /data1/efs/evidence/rdma-fixes-18be5d060/fresh-q2.log 2>&1
+EFS_GATE_DEGRADED=0 bash tests/live/rdma_four_node_qualification.sh > /data1/efs/evidence/rdma-fixes-18be5d060/fresh-q3.log 2>&1
 ```
 
 The402 intermediate also passed peer67/67 and prepare/verify27/27 in all

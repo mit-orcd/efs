@@ -80,7 +80,7 @@ files storage, RDMA/direct, repair disabled. Seven-client tests are NOTRUN.
 
 Product source/deployed commit: `c4178ea81c977c68a7cef0ef9e8a3ab5ccc33521`.
 All 948 tracked inputs under src/include/tests/scripts/deps plus Makefile
-match `/data1/efs/amd-durability-manifest.json`. Build on AMD with
+match `/data1/efs/evidence/amd-durability-manifest.json`. Build on AMD with
 `make -j8 EFS_GIT_ID=c4178ea81 EFS_GIT_DESCRIBE=c4178ea81
 EFS_GIT_BRANCH=devel-amd-durability-20261015 efsd efs-fuse efs-mgmt test`.
 AMD Ryzen AI MAX+395, Ubuntu kernel7.0.0-38-generic, XFS `/data1`,
@@ -131,8 +131,8 @@ Deployed SHA256:
 
 Raw evidence stays on AMD, outside Git:
 `/data1/efs/amd-durability-{native,store,smoke,client-asan,live}.log`,
-`/data1/efs/amd-durability-20261015-results/`, and
-`/data1/efs/async-commit-5ato3jwl/` (private stores removed after normal drain).
+`/data1/efs/evidence/amd-durability-20261015-results/`, and
+`/data1/efs/evidence/async-commit-5ato3jwl/` (private stores removed after normal drain).
 Source manifest SHA256:
 `3d3da8bbf669c3a0e81fecbe7985db8881cc221bea004802eb24d3f312a95c0a`.
 Private PASS result JSON SHA256:
@@ -241,8 +241,8 @@ profilers or another workload concurrently. The harness retains its original
 Never stop or unmount the independent Intel client. This is one mount/jobs16,
 not the excluded seven-client gate.
 
-Raw captures stay outside Git at `/data1/efs/timeout-diag-20261015` and
-`/data1/efs/metadata-waits-20261015`. The latter contains an exact 952-input
+Raw captures stay outside Git at `/data1/efs/evidence/timeout-diag-20261015` and
+`/data1/efs/evidence/metadata-waits-20261015`. The latter contains an exact 952-input
 SHA256 manifest, binary hashes, build/native logs, timing logs and quiet
 results. Build identity is explicitly `metadata-candidate`; source identity
 comes from the verified manifest, not that descriptive binary string.
@@ -287,8 +287,8 @@ acceptance worsened, so commit `1a009c5ab93bc92e8c80cb6ba0474a21ce1b8e44`
 **reverts it**. Final src/include/tests/Makefile content is byte-identical to
 `cf7f2798b`; the experiment is not part of the retained implementation.
 The failed experiment's raw evidence remains separately under
-`/data1/efs/metadata-waits-final-20261015`, despite that historical directory
-name. Restored validation is under `/data1/efs/metadata-waits-restored-20261015`.
+`/data1/efs/evidence/metadata-waits-final-20261015`, despite that historical directory
+name. Restored validation is under `/data1/efs/evidence/metadata-waits-restored-20261015`.
 
 W119 is **OPEN**. Do not infer timeout closure from the memtable regression,
 reduced REPORT latency or the scheduling experiment's safety tests. Next:
@@ -389,8 +389,8 @@ Build label is `metadata-candidate`; identify binaries by SHA256:
 - efs-mgmt: `8df0869f1934abdbeb757ee29de48a25c09d57846cc855acbc9d534078a99ea6`
 
 Raw build/validation/manifest evidence is outside Git at
-`/data1/efs/clean-verifier-20261015`; live logs and result are at
-`/data1/efs/async-commit-0myw7wuf`. Existing metadata-load failures above remain
+`/data1/efs/evidence/clean-verifier-20261015`; live logs and result are at
+`/data1/efs/evidence/async-commit-0myw7wuf`. Existing metadata-load failures above remain
 open and unchanged. No TCP comparison, seven-client or excluded-feature run.
 
 
@@ -430,7 +430,7 @@ availability limitations in the preceding section also remain OPEN.
 Reproduce from the installed source root, using the explicit profile above:
 
 ```sh
-out=/data1/efs/posix-reviewed-e53d20aa1
+out=/data1/efs/evidence/posix-reviewed-e53d20aa1
 mkdir -p "$out"
 for jobs in 16 1; do
   python3 -u tests/posix/posix_suite.py /data1/efs/mnt --suite core \
@@ -510,9 +510,9 @@ quiet PASS2.03s, profiled PASS6.61/2.43/2.10s; no lost samples. The wake symbol
 is no longer prominent as a standalone sample, but timing and other profile
 shares vary substantially: no controlled overall speedup or closure claimed.
 
-Raw evidence: `/data1/efs/names-only-20261015` (baseline),
-`/data1/efs/names-waiter-candidate-20261015` (build/quiet reruns), and
-`/data1/efs/names-after-20261015` (follow-up profile). All950 installed source
+Raw evidence: `/data1/efs/evidence/names-only-20261015` (baseline),
+`/data1/efs/evidence/names-waiter-candidate-20261015` (build/quiet reruns), and
+`/data1/efs/evidence/names-after-20261015` (follow-up profile). All950 installed source
 inputs match the committed manifest. Candidate efsd SHA256:
 `3e8c4b1bdb701a0b5d4fe3d843f74676eed9bab2423c2c06d4b0231703de73e0`;
 FUSE/mgmt hashes remain those in the clean-verifier section. Build label
@@ -595,8 +595,8 @@ Reproduce with exclusive AMD and no competing test controller:
    deadlines or force-discard as a passing substitute for clean shutdown.
 
 Raw first/second output and copied runtime logs remain outside Git in
-`/data1/efs/names-loaded-20261015` and
-`/data1/efs/names-loaded-complete-20261015`. Both controllers restored quiet
+`/data1/efs/evidence/names-loaded-20261015` and
+`/data1/efs/evidence/names-loaded-complete-20261015`. Both controllers restored quiet
 service after normal drains. No seven-client test, TCP comparison, feature
 activation or push. No new code optimization was accepted from these captures.
 
@@ -646,11 +646,11 @@ not the seven-client4G fixture. No deadline changes, TCP comparison or push.
   uninstrumented run was FAIL215/216 (names). No product optimization from
   this follow-up is accepted as closing the timeout.
 
-Raw outputs remain outside Git under `/data1/efs/queued-read-candidate-20261015`,
-`/data1/efs/close-phase-20261015`,
-`/data1/efs/close-phase-controller-20261015`,
-`/data1/efs/append-stripes-candidate-20261015`, and
-`/data1/efs/close-phase-restored-20261015`.
+Raw outputs remain outside Git under `/data1/efs/evidence/queued-read-candidate-20261015`,
+`/data1/efs/evidence/close-phase-20261015`,
+`/data1/efs/evidence/close-phase-controller-20261015`,
+`/data1/efs/evidence/append-stripes-candidate-20261015`, and
+`/data1/efs/evidence/close-phase-restored-20261015`.
 
 ### Reproduce and next work
 
@@ -722,12 +722,12 @@ Installed binaries (efsd reused the baseline build; FUSE label
 ## Move to exclusive NUC — October 15–16, 2026
 
 User reassigned this investigation to NUC; AMD was left untouched. Source
-`852caf1ae` built successfully in `/data1/efs/nuc-read-close-852caf1ae/src`
+`852caf1ae` built successfully in `/data1/efs/evidence/nuc-read-close-852caf1ae/src`
 with `make -j4 EFS_GIT_ID=852caf1ae EFS_GIT_DESCRIBE=852caf1ae
 EFS_GIT_BRANCH=devel-amd-durability-20261015 efsd efs-fuse efs-mgmt`.
 Environment: Intel i5-1135G7, Rocky Linux10.2, XFS `/data1`, kernel
 `6.12.0-211.64.1.el10_2.x86_64`. Build log is external at
-`/data1/efs/nuc-read-close-852caf1ae/build.log`.
+`/data1/efs/evidence/nuc-read-close-852caf1ae/build.log`.
 
 **Build PASS; seven focused regressions PASS; live RDMA POSIX NOTRUN/BLOCKED.**
 Run the following from that source directory with `python3 tests/NAME.py`:
@@ -765,9 +765,9 @@ checkpoint `1d5c0fa8d` contains documentation only. Binary hashes are the NUC
 hashes above. No new product fix was needed to start this baseline.
 
 Deployment uses clean scoped stores, with no old store deletion:
-`/data1/efs/nuc-read-close-852caf1ae/n1` and `n2`, and
+`/data1/efs/evidence/nuc-read-close-852caf1ae/n1` and `n2`, and
 `/data2/efs/nuc-read-close-852caf1ae/n3` and `n4`. Source/logs/mounts live
-under `/data1/efs/nuc-read-close-852caf1ae`; `/data2/efs` resolves to
+under `/data1/efs/evidence/nuc-read-close-852caf1ae`; `/data2/efs` resolves to
 `/home/efs/additional-work-dir`. Four files-engine daemons use localhost
 ports17432–17435 and17G per-node quota. Both mounts are `mnt`/`mnt2` under
 that base. Runtime inspection verified TCP/direct and disabled commands,
@@ -780,9 +780,9 @@ existing `/data1/efs/devops/start.sh` with a scoped cluster configuration
 
 ```sh
 HOST=nuc_efs
-BASE=/data1/efs/nuc-read-close-852caf1ae
+BASE=/data1/efs/evidence/nuc-read-close-852caf1ae
 PORTS=(17432 17433 17434 17435)
-STORDIRS=(/data1/efs/nuc-read-close-852caf1ae/n1 /data1/efs/nuc-read-close-852caf1ae/n2 /data2/efs/nuc-read-close-852caf1ae/n3 /data2/efs/nuc-read-close-852caf1ae/n4)
+STORDIRS=(/data1/efs/evidence/nuc-read-close-852caf1ae/n1 /data1/efs/evidence/nuc-read-close-852caf1ae/n2 /data2/efs/nuc-read-close-852caf1ae/n3 /data2/efs/nuc-read-close-852caf1ae/n4)
 QUOTA=17G
 ```
 
@@ -796,7 +796,7 @@ EFS_CLUSTER=nuc-read-close EFS_TRANSPORT=tcp EFS_DIRECT_IO=1 EFS_COMMANDS=0 EFS_
 From that source directory, choose new output paths and run sequentially:
 
 ```sh
-base=/data1/efs/nuc-read-close-852caf1ae
+base=/data1/efs/evidence/nuc-read-close-852caf1ae
 python3 -u tests/posix/posix_suite.py "$base/mnt" --suite core --jobs 1 --filter names_crazy_dirs --tag names-isolated --results "$base/names.tsv"
 python3 -u tests/posix/posix_suite.py "$base/mnt" --suite core --jobs 1 --filter dir_deep_nesting_beyond_64 --tag deep-isolated --results "$base/deep.tsv"
 python3 -u tests/posix/posix_suite.py "$base/mnt" --suite core --jobs 16 --tag nuc-tcp-baseline --results "$base/core.tsv"

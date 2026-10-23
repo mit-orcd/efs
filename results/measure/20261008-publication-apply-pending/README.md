@@ -1,6 +1,6 @@
 # D29 committed mapping / apply pending — AMD Oct 8, 2026
 
-Agent 4 private source and stores: `/data1/efs/agent4-d29-20261008`, Linux user
+Agent 4 private source and stores: `/data1/efs/evidence/agent4-d29-20261008`, Linux user
 `efs`, direct I/O/TCP, `EFS_FAULTS=1`, `EXTRA_DEFS=-Werror`, commands disabled,
 pressure admission enabled. Installed services and mounts remain untouched.
 

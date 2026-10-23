@@ -1,6 +1,6 @@
 # D29/W88 durable receipt locators — AMD, Oct 8, 2026
 
-Agent 4 private fixture: `/data1/efs/agent4-d29-20261008` on `amd_efs`, Linux user
+Agent 4 private fixture: `/data1/efs/evidence/agent4-d29-20261008` on `amd_efs`, Linux user
 `efs`. Direct I/O/TCP; `EFS_FAULTS=1`, `EXTRA_DEFS=-Werror`, commands disabled,
 pressure admission enabled in the private tests. Installed services are untouched.
 

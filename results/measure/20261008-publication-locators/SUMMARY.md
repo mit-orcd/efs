@@ -5,7 +5,7 @@ D29/W88 durable receipt locators on the agent-4 private AMD fixture.
 ## Purpose and linked item
 
 - **D29/W88** (durable receipt locators). Fixture
-  `/data1/efs/agent4-d29-20261008` on amd_efs.
+  `/data1/efs/evidence/agent4-d29-20261008` on amd_efs.
 
 ## Verdict
 

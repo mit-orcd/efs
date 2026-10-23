@@ -13,14 +13,14 @@ unchecked read/write/system returns) fixed and verified with -Werror.
 **PASS**: `make clean && make -j12 EXTRA_DEFS=-Werror test` exits 0, zero
 `warning:` diagnostics, full unit suite passes; default optimization/fortify/
 warning flags retained. Live smoke: `EFS_QUERY_RPC=1 python3
-tests/live/query_publication.py /data1/efs/warnings-query-20261008
+tests/live/query_publication.py /data1/efs/evidence/warnings-query-20261008
 --mode direct` exits 0 — four private TCP daemons; publication, RPC
 consumers/errors/redirects and persisted restart pass.
 
 ## Source commit and build identity
 
 Baseline `c2275423` + the six fixes (per SUMMARY.md), private
-`/data1/efs/warnings-src`.
+`/data1/efs/evidence/warnings-src`.
 
 ## Environment
 

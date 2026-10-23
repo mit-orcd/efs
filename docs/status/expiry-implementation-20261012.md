@@ -71,7 +71,7 @@ No universal TTL is selected. Explicit operator policy enables expiry.
 
 Commit `70ba0424` (foundation, before live integration) passed on NUC with four
 1-GiB-quota nodes, TCP/direct I/O, FILES default, `.efs` disabled.
-Stores were private under `/data1/efs/expiry-foundation-70ba0424/`, with both
+Stores were private under `/data1/efs/evidence/expiry-foundation-70ba0424/`, with both
 policy-approved mounts. Core POSIX: **216/216, 0 failures** (21.8 seconds).
 Peer POSIX: **67/67, 0 failures** (11.6 seconds). Graceful shutdown/restart,
 ordinary open-unlinked reclamation, late PUT fencing, zero quotas after cleanup
@@ -84,8 +84,8 @@ Reproduce from that commit on NUC:
 env EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_TRANSPORT=tcp \
   python3 tests/live/gc_reclamation.py --mode direct --transport tcp \
   --disable-efs-commands \
-  --root /data1/efs/expiry-foundation-70ba0424 \
-  --root /data1/efs/expiry-foundation-70ba0424 \
+  --root /data1/efs/evidence/expiry-foundation-70ba0424 \
+  --root /data1/efs/evidence/expiry-foundation-70ba0424 \
   --mount /data1/efs/mnt --peer-mount /data1/efs/mnt2 --posix --posix-jobs 4 --port 24410
 ```
 
@@ -113,7 +113,7 @@ reuse, disabled-subtree inheritance, namespace removal, physical reclamation,
 and continued read/write/fsync through an expired open descriptor. Core POSIX
 passed 216/216 in 24.6 seconds. Peer and final cleanup verdicts are still pending.
 Raw evidence: `/home/efs/expiry-integration-gates.log`; fixture
-`/data1/efs/expiry-integration/gc-direct-u31m8j3x`. This build reports `unknown`
+`/data1/efs/evidence/expiry-integration/gc-direct-u31m8j3x`. This build reports `unknown`
 and is preliminary evidence only, not a committed-source acceptance identity.
 
 The committed `--expiry` harness extends the lifecycle matrix with cold restart,
@@ -131,7 +131,7 @@ returned their last sample. The fix makes health inspection sample the kernel
 freshly even on followers; deletion already checks fresh health independently.
 A real operator `efs-mgmt expiry-clock NODE:PORT get|reset` is added.
 Raw diagnostic `/home/efs/expiry-31e1cbcb-gates.log`; fixture
-`/data1/efs/expiry-31e1cbcb/gc-direct-pchr9uwb`. Full acceptance remains pending.
+`/data1/efs/evidence/expiry-31e1cbcb/gc-direct-pchr9uwb`. Full acceptance remains pending.
 
 Clearing allows ordinary hard links. Renewal now guards the recorded name
 binding and refuses reactivation after that name is removed. A cleared record
@@ -157,7 +157,7 @@ Reproduce from this commit using the build/configuration below and add
 `--expiry-clock-fault` with a fault-enabled build. Raw log
 `/home/efs/expiry-54b193b3-gates.log`, SHA256
 `f05db272e6d9d5d6bd7795a4fc3fe1d66ef53a08ed292da5e5fc5dbc9f23bded`.
-Fixture `/data1/efs/expiry-54b193b3/gc-direct-haqk6fan` plus sibling node3/4
+Fixture `/data1/efs/evidence/expiry-54b193b3/gc-direct-haqk6fan` plus sibling node3/4
 root `gc-direct-1lyow2ty`. The harness stopped all owned clients/nodes.
 Binary SHA256: daemon `63d8a3e1809c94657965608c50f8759086bde2a77327ea231d2ef883dbed0fd2`;
 FUSE `6d6524125e74be1b0d3711afdfa3fda52967c38033fc8dd1582ccc6b79e065bd`;
@@ -225,7 +225,7 @@ real liveness failure after killing n2, the group-2 leader/first dual-group
 coordinator: a single-group replacement leader repeatedly chose that dead
 coordinator instead of the surviving n3. Namespace/data stayed safe but expiry
 stalled. Raw `/home/efs/expiry-0c68c032-fault-gates.log`, fixture
-`/data1/efs/expiry-0c68c032-fault/gc-direct-z9ikmd8x`, retained.
+`/data1/efs/evidence/expiry-0c68c032-fault/gc-direct-z9ikmd8x`, retained.
 
 The worker now remembers a failed coordinator and selects another eligible
 peer on its next bounded pass. Transport ambiguity is retryable only because
@@ -283,9 +283,9 @@ mounts/processes. Do not reuse paths or ports belonging to a running user cluste
 
 Raw evidence retained on NUC, outside Git:
 normal `/home/efs/expiry-0e975936-normal-gates.log`, manifest
-`/data1/efs/expiry-0e975936-normal/gc-direct-dqh7wp28/manifest.json`;
+`/data1/efs/evidence/expiry-0e975936-normal/gc-direct-dqh7wp28/manifest.json`;
 fault `/home/efs/expiry-0e975936-fault-gates.log`, manifest
-`/data1/efs/expiry-0e975936-fault/gc-direct-sjltj44x/manifest.json`.
+`/data1/efs/evidence/expiry-0e975936-fault/gc-direct-sjltj44x/manifest.json`.
 Build trees are `/home/efs/devel-expiry-0e975936-normal` and `-fault`.
 
 SHA256 (normal / fault):

@@ -24,7 +24,7 @@ mount directories are absent; create empty dedicated directories and retain the
 preflight failure. The second private invocation passes sync-write/APPEND,
 dirty-stop, mutation shutdown, WAL and physical-GC checks, then POSIX is
 211/212: concurrent_appends exceeds the unchanged 30-second case budget.
-Its fixture `/data1/efs/gc-direct-vt7vrt5g` and raw logs remain preserved.
+Its fixture `/data1/efs/evidence/gc-direct-vt7vrt5g` and raw logs remain preserved.
 
 The append log has all 200 eight-byte reservations for inode 4212: first
 11:55:41.389 UTC, last 11:56:11.163 UTC (29.774 seconds). Last close completes
@@ -85,7 +85,7 @@ write totals include other users and are not NAND write amplification.
 
 Controls/provenance: `results/measure/20261010-w97-latest-nvme/` locally,
 `/data1/efs/w97-latest-20261010` on NUC; candidate build is isolated at
-`/data1/efs/w97-latest-build`. Native/live gates and service deployment are complete. Continuous observation
+`/data1/efs/evidence/w97-latest-build`. Native/live gates and service deployment are complete. Continuous observation
 completed on this exact merged build. Final observation, restoration, cold
 payload checks and active executable/default-option verification all pass.
 

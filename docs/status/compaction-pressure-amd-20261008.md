@@ -64,7 +64,7 @@ metadata-memory guarantee.
 ## AMD evidence
 
 Raw evidence and measured summary (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-amd-compaction-pressure/summary.json`)
-come from `/data1/efs/compaction-pressure-20261008/cap-05`, three private daemons,
+come from `/data1/efs/evidence/compaction-pressure-20261008/cap-05`, three private daemons,
 direct I/O/TCP, synchronous production KV/log persistence, Linux user `efs`.
 All `.efs` commands were disabled. A compile-only hook inserts 1 MiB test values
 through real Raft into a private KV namespace. Sixteen repeatedly updated keys
@@ -150,7 +150,7 @@ using `~/git/devops/nuc-efs/deploy.sh` with `EFS_CLUSTER=amd`. AMD was already
 stopped and unmounted after returning; no forced stop or discard was used.
 Existing stores and format marker were preserved. Previous binaries, client
 scripts, devops scripts and a bundle of the previous installed source HEAD were
-saved under `/data1/efs/deploy-backups/pressure-10cbfaf8`.
+saved under `/data1/efs/evidence/deploy-backups/pressure-10cbfaf8`.
 
 The installed build identifies branch `devel-compaction-pressure`, commit
 `10cbfaf8`, build time `2026-10-09T01:15:32Z`. Four daemons and two clients run

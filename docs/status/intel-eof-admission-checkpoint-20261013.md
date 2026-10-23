@@ -113,7 +113,7 @@ Sanitizer compiler flags: `-fsanitize=address,undefined -fno-omit-frame-pointer
 -g -O1 -no-pie`; a compiler wrapper is used for tests that take `CC` as one path.
 
 Candidate source/binaries are retained on both hosts at
-`/data1/efs/acceptance-eof-20261013/candidate`, separate from installed `/data1/efs/src`.
+`/data1/efs/evidence/acceptance-eof-20261013/candidate`, separate from installed `/data1/efs/src`.
 1243 tracked non-results files SHA256-match committed1b3844d7 on both hosts.
 Source archive SHA256: `3aa28f1f4b98b1933f280b31fd0d3dd335783411587669169518ea8ec9b2962f`.
 Historical tracked native inputs/results copied from the previous native staging
@@ -128,7 +128,7 @@ make -j8 -B EFS_GIT_ID=1b3844d793d1b023b958eb5fc6e30585c421e83d EFS_GIT_DESCRIBE
 | Intel1 | 2026-10-13T20:31:37Z | `65da69ed4a182f19ec886d097d75ab88df4a61344a5d99f25e927116953c96d0` | `50ea614b1a4fbf9d204ae2d304b1c495a83da95c64c630c97305ebc609dc05d6` |
 | Intel2 | 2026-10-13T20:31:38Z | `7654d87df6e9adb9c844c4821960c733c9c99562faa20567de63d1cb99910208` | `60352ce1539627fbe88da1d77e1aaed6cfdb9ef1081eb830a89017bbb33221cd` |
 
-Raw output remains on both hosts under `/data1/efs/acceptance-eof-20261013`;
+Raw output remains on both hosts under `/data1/efs/evidence/acceptance-eof-20261013`;
 seven-client raw TSV/logs under `/data1/efs/package3-results/eof-baseline-20261013`
 and locally `/Users/mike/Documents/Codex/2026-10-10/n-x20/artifacts/intel-eof-correctness-20261013`.
 Temporary five clients drained and retired normally; baseline standalone

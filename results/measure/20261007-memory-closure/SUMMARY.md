@@ -39,7 +39,7 @@ path is unchanged when `EFS_FAULTS` is disabled.
 Example command (default-value direct variant):
 
 ```
-systemd-run --user --quiet --wait --pipe --unit=efs-memory-default-direct-20261007 -p MemoryMax=1G -p MemorySwapMax=0 --working-directory=/data1/efs/close-memory-default-src python3 tests/live/gc_reclamation.py --mode direct --production-budgets --publication-pressure --drain-pressure --memory-limit-bytes 1073741824 --client-binary ./efs-fuse --pressure --port 20970
+systemd-run --user --quiet --wait --pipe --unit=efs-memory-default-direct-20261007 -p MemoryMax=1G -p MemorySwapMax=0 --working-directory=/data1/efs/evidence/close-memory-default-src python3 tests/live/gc_reclamation.py --mode direct --production-budgets --publication-pressure --drain-pressure --memory-limit-bytes 1073741824 --client-binary ./efs-fuse --pressure --port 20970
 ```
 
 Buffered uses `--mode buffered` and its own unit. Smaller-budget variants

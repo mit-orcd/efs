@@ -46,7 +46,7 @@ small checks, not the broad I/O/recovery matrix assigned to AMD/Intel.
 
 Normal client drain and daemon TERM cleanup: no errors, all seven mounts
 unmounted, no remaining efsd. Private roots remain identified under
-`/data1/efs/nuc-ecdc-focus`; original service remains stopped. No old-binary/data
+`/data1/efs/evidence/nuc-ecdc-focus`; original service remains stopped. No old-binary/data
 retention or backwards qualification; unrelated host services/paths untouched.
 
 ## Interpretation and evidence

@@ -100,7 +100,7 @@ the state transitions and intervening mutations, not a literal two-week soak.
 
 NUC rollout completed with graceful mount/daemon drains and no store reset.
 Installed build: `1509e6e1-policy-a9f0a842`; previous executables remain in
-`/data1/efs/commands-rollback-policy-a9f0a842`. Commands are intentionally **on**
+`/data1/efs/evidence/commands-rollback-policy-a9f0a842`. Commands are intentionally **on**
 for all four daemons, verified by capability masks and their process environment.
 `nuc.env` explicitly persists the default-on server setting with shell override;
 its prior config is backed up as `nuc.env.before-server-command-policy-20261008`.

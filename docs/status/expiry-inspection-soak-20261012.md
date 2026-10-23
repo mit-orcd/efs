@@ -181,21 +181,21 @@ Exact commands used (from each recorded build tree):
 ```sh
 # /home/efs/devel-expiry-3b873839-fault, EFS_FAULTS=1
 bash tests/run_tests.sh posix expiry /data1/efs/mnt \
-  --root /data1/efs/expiry-3b873839-soak --peer-mount /data1/efs/mnt2 \
+  --root /data1/efs/evidence/expiry-3b873839-soak --peer-mount /data1/efs/mnt2 \
   --port 24410 --jobs 4 --clock-fault --soak-seconds 1800
 # /home/efs/devel-expiry-2da7a70a-normal, EFS_FAULTS=0
 bash tests/run_tests.sh posix expiry /data1/efs/mnt \
-  --root /data1/efs/expiry-2da7a70a-normal --peer-mount /data1/efs/mnt2 \
+  --root /data1/efs/evidence/expiry-2da7a70a-normal --peer-mount /data1/efs/mnt2 \
   --port 24410 --jobs 4 --soak-seconds 60
 ```
 
 Retained raw evidence on NUC, outside Git:
 
 - Long console `/home/efs/expiry-3b873839-soak.log`; fixture
-  `/data1/efs/expiry-3b873839-soak/gc-direct-_xt_r85c`, sibling
+  `/data1/efs/evidence/expiry-3b873839-soak/gc-direct-_xt_r85c`, sibling
   `gc-direct-1k59okx3` for n3/n4.
 - Normal console `/home/efs/expiry-2da7a70a-normal.log`; fixture
-  `/data1/efs/expiry-2da7a70a-normal/gc-direct-3cek4dph`, sibling
+  `/data1/efs/evidence/expiry-2da7a70a-normal/gc-direct-3cek4dph`, sibling
   `gc-direct-_aeiowzu` for n3/n4.
 - Each primary fixture retains manifest, actual mapped runtime/configuration proof,
   named lifecycle verdicts, soak summary/observations, core/peer TSVs and logs.

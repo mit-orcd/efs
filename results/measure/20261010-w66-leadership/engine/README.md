@@ -17,7 +17,7 @@ campaign prohibition, pressure refusal and transport failure. A two-of-four
 partition cannot elect or acquire read authority; normal quorum recovery
 preserves the committed bytes. Wire roundtrip preserves transfer fields.
 
-Commands on `/data1/efs/merged-storage-src-20261010`:
+Commands on `/data1/efs/evidence/merged-storage-src-20261010`:
 
 ```
 make -j8 efsd efs-mgmt tests/test_raft tests/test_wire

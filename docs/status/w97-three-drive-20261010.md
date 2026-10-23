@@ -151,7 +151,7 @@ force-discard or store wipe is used. Final tests/restore/run exit records are ze
 
 Raw evidence, controllers, launch/analysis provenance, retained failure and final
 restoration: `results/measure/20261010-w97-three-drive/`; remote evidence
-`/data1/efs/w97-three-drive-v2-20261010`. Private stores are
-`/home/efs/w97-three-nvme-v2-20261010` and `/data1/efs/w97-three-sata-v2-20261010`.
+`/data1/efs/evidence/w97-three-drive-v2-20261010`. Private stores are
+`/home/efs/w97-three-nvme-v2-20261010` and `/data1/efs/evidence/w97-three-sata-v2-20261010`.
 `analyze.py` regenerates minute/five-minute windows and pooled sync means;
 `health-summary.py` regenerates temperature/counter coverage. W97 stays open.

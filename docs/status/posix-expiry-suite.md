@@ -103,7 +103,7 @@ are the fault column of the preceding qualification. The wrapper source and
 companion scripts came from a clean archive of the runner commit.
 
 The clock-fault command above was used with root
-`/data1/efs/expiry-posix-runner-5b41b8d3` repeated twice. Four private 1-GiB-quota
+`/data1/efs/evidence/expiry-posix-runner-5b41b8d3` repeated twice. Four private 1-GiB-quota
 nodes, two mounts, XFS, TCP/direct I/O, FILES storage, `.efs` disabled,
 core concurrency four. All expiry lifecycle/fault gates,
 ordinary physical GC, cold empty inventory, drained queues and zero quotas
@@ -121,7 +121,7 @@ passes. Both `--suite expiry` and `--suite=expiry` reach the new suite.
 Retained evidence on NUC:
 `/home/efs/expiry-posix-runner-5b41b8d3.log`, SHA256
 `730ac46b3e83ddb0b7764de0de0be5dff62c2afd19f9c532f028f7af8a180974`;
-fixture `/data1/efs/expiry-posix-runner-5b41b8d3/gc-direct-oszl7ahi/`
+fixture `/data1/efs/evidence/expiry-posix-runner-5b41b8d3/gc-direct-oszl7ahi/`
 contains manifest, actual runtime proof, named expiry verdicts and POSIX TSVs.
 These raw artifacts are outside Git. This validates runner integration, not
 additional large-scale capacity or a broader expiry policy than D33.

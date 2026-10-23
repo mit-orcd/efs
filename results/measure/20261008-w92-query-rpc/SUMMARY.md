@@ -19,7 +19,7 @@ efs-fuse `2e3169c2…`, efs-mgmt `44e16fd6…`), built 2026-10-08T06:51:18Z on n
 README warns the version.o timestamp predates final linking.
 
 ## Environment
-Private NUC fixture `/data1/efs/w92-query-fixture-20261008l`: four daemons and
+Private NUC fixture `/data1/efs/evidence/w92-query-fixture-20261008l`: four daemons and
 two mounts owned by this test, TCP, buffered I/O, `--writers 0`, 1 GiB quota per
 node. Production `/data1/efs/src` loader/mounts unchanged.
 

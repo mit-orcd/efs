@@ -472,7 +472,7 @@ operation creates a new fragment.
 For example, repeat this comparison three times on a quiet host:
 
 ```sh
-./efs-bench.sh --modes data --data-rw split --data-full-paths --writers 0,2,auto --qds 1,16,64 --data-size 64M --time 3 --skip-ceiling --storage-root /data1/efs/bench --storage-root /home/efs/additional-work-dir/bench
+./efs-bench.sh --modes data --data-rw split --data-full-paths --writers 0,2,auto --qds 1,16,64 --data-size 64M --time 3 --skip-ceiling --storage-root /data1/efs/evidence/bench --storage-root /home/efs/additional-work-dir/bench
 ```
 
 Use `--writer-stats` for separate diagnostic runs. It enables production writer

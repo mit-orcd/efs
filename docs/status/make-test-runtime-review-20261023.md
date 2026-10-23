@@ -193,8 +193,8 @@ moves to the exclusive tail, the 29 commands run alone after the pool
 contents with `TMPDIR` paths normalized. Then run
 `scripts/make_test_summary.sh` twice and compare fingerprints per test.
 The wrapper used is on intel2 at
-`/data1/efs/build/ccwrap/ccwrap.py` (outside Git); its logs are
-`/data1/efs/build/cc-run{1,2}.log`.
+`/data1/efs/evidence/build/ccwrap/ccwrap.py` (outside Git); its logs are
+`/data1/efs/evidence/build/cc-run{1,2}.log`.
 
 ## Exclusive tail (October 23, follow-up)
 

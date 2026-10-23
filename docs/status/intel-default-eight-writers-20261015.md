@@ -118,7 +118,7 @@ client. No production/private PID matching by broad process name.
 Raw controllers, captures excluding binary perf.data, build logs, hashes and
 summary parser:
 `/Users/mike/Documents/Codex/2026-10-10/n-x20/artifacts/intel-default8-20261015/`.
-Remote raw perf recordings: `/data1/efs/default8-profile-warm-20261015` on Intel;
+Remote raw perf recordings: `/data1/efs/evidence/default8-profile-warm-20261015` on Intel;
 `/data1/efs/intel-client/default8-profile-warm-20261015` on AMD. First capture
 is retained alongside under names without `-warm`. SHA256SUMS indexes local
 artifacts. Input1GiB SHA256

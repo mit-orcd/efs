@@ -35,6 +35,13 @@ record their location and useful hashes in the summary. Reproduction must not
 depend on an unavailable private capture. Small deterministic regression
 fixtures needed by tests are source assets, not run artifacts.
 
+On test hosts, `/data1/efs` holds only infrastructure at the top level:
+cluster stores (`n1`–`n4`), `src`, `releases`, `devops`, `deps`, `logs`,
+mounts, client directories and VM images. Raw evidence that a summary cites
+goes under `/data1/efs/evidence/<name>` (cite that path), and scratch run
+trees go under `/tmp` or a run directory that is deleted when the run ends.
+Never leave work directories at the top of `/data1/efs`.
+
 Raw evidence committed before 2026-10-21 was moved off devel. It is preserved
 unchanged at tag `archive/raw-evidence-20261021`; read
 it with `git show archive/raw-evidence-20261021:<path>`. Devel keeps the

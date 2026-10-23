@@ -37,7 +37,7 @@ into every production flush/REPORT path.
 - Real four-daemon private fixture drops all admission replies, observes pending,
   refuses early retirement, kills/restarts all daemons, recovers pending from
   authoritative state, rejects an altered retry and records final rejection and
-  retirement. Fixture: `/data1/efs/pending-receipts-20261008-r2`.
+  retirement. Fixture: `/data1/efs/evidence/pending-receipts-20261008-r2`.
 - Installed four-daemon/two-mount AMD service remains running; no mounted export
   or installed stores/binaries changed. No new POSIX run or hardware durability
   claim; the live publication intent deliberately has an invalid FileID and

@@ -31,7 +31,7 @@ from old gc/pressure/lease runs, recovering roughly 40GiB; original stores and
 external evidence were retained. Safety checks were not bypassed.
 
 Build from exported runtime source, installed complete source at `/data1/efs/src`
-with `SOURCE_COMMIT`; private build `/data1/efs/rdma-deploy-src`:
+with `SOURCE_COMMIT`; private build `/data1/efs/evidence/rdma-deploy-src`:
 
 ```sh
 make -B -j8 EFS_GIT_ID=0ec2a8693447 EFS_GIT_DESCRIBE=0ec2a8693447 EFS_GIT_BRANCH=devel-rdma efsd efs-fuse efs-mgmt tests/test_rdma_segmented tests/test_rdma_xprt
@@ -153,7 +153,7 @@ end group=0/2 ... rc=0` and leader export byte counts; require multi-segment
 transfers, every writer's attribute/payload oracle, and both fixed applied
 watermarks. Do not start competing diagnostics during the measurement.
 
-External raw evidence: `/data1/efs/rdma-deployed-0ec2a869`; installed logs
+External raw evidence: `/data1/efs/evidence/rdma-deployed-0ec2a869`; installed logs
 `/data1/efs/logs/efsd-n*.log`, `/data1/efs/efs-fuse-mnt*.log`.
 Core TSV SHA256 `9c9bb4f86b439aad72da09ff77fc7652c12cadad6a10d6dadbd0f460197b18fe`;
 peer `b48395b65f5afb845b90c2e0798f82273d964ac08e6ef4e3c8fff166e46f44b4`;

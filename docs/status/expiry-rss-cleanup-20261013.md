@@ -136,7 +136,7 @@ python3 tests/test_gc_backlog_idle.py
 python3 tests/test_expiry_cli.py ./efs-mgmt
 python3 tests/test_gc_status_expiry.py ./efs-mgmt
 bash tests/run_tests.sh posix expiry /data1/efs/mnt \
-  --root /data1/efs/expiry-afbce294-backlog \
+  --root /data1/efs/evidence/expiry-afbce294-backlog \
   --peer-mount /data1/efs/mnt2 --port 24410 --jobs 4 --backlog-files 10000
 ```
 
@@ -148,7 +148,7 @@ Normal live run PASS. Clock-fault lifecycle 25/25, core 216/216 and peer 67/67 P
 
 Native build /home/efs/devel-expiry-afbce294-normal; build/native/run logs
 /home/efs/expiry-afbce294-{build,native,backlog}.log. Primary evidence
-/data1/efs/expiry-afbce294-backlog/gc-direct-uyhfs826. Heap/sanitizer captures and
+/data1/efs/evidence/expiry-afbce294-backlog/gc-direct-uyhfs826. Heap/sanitizer captures and
 private copies in /home/efs/expiry-rss-profile-20261013. Raw artifacts stay out
 of Git. Never point the probe at user storage: opening a log replays/truncates
 torn/reserved tails. Copy a stopped fixture first. Reproducer source:
@@ -208,14 +208,14 @@ build directory, then run (the marker does not change the host clock):
 make -j4 EFS_FAULTS=1 EFS_GIT_ID=afbce294 \
   EFS_GIT_DESCRIBE=afbce294 EFS_GIT_BRANCH=devel-expiry efsd efs-fuse efs-mgmt
 bash tests/run_tests.sh posix expiry /data1/efs/mnt \
-  --root /data1/efs/expiry-afbce294-fault \
+  --root /data1/efs/evidence/expiry-afbce294-fault \
   --peer-mount /data1/efs/mnt2 --port 24410 --jobs 4 --clock-fault
 ```
 
 Build `/home/efs/devel-expiry-afbce294-fault`; build/run logs
 `/home/efs/expiry-afbce294-fault-build.log` and
 `/home/efs/expiry-afbce294-fault.log`; primary evidence
-`/data1/efs/expiry-afbce294-fault/gc-direct-taw4w_rg`. Same host, four-node quota,
+`/data1/efs/evidence/expiry-afbce294-fault/gc-direct-taw4w_rg`. Same host, four-node quota,
 TCP/direct/FILES, disabled `.efs` configuration. Clock fault lifecycle
 25/25 PASS, including pause, operator reset and resumed physical reclamation.
 Aggregate PASS: core 216/216 (23.4s), peer 67/67 (11.5s), independent GC,

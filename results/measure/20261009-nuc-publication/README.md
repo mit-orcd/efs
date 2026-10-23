@@ -1,6 +1,6 @@
 # NUC publication and bounded cleanup evidence
 
-Private source and stores: `/data1/efs/agent4-publication-20261008` on `nuc_efs`.
+Private source and stores: `/data1/efs/evidence/agent4-publication-20261008` on `nuc_efs`.
 Baseline `863054ca` plus the bounded sweep change and deterministic manifest-test
 corruption fix. Build uses `EFS_FAULTS=1 EXTRA_DEFS=-Werror`; test policy is
 `EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_ADMISSION_PRESSURE=1 EFS_TRANSPORT=tcp`.

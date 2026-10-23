@@ -68,7 +68,7 @@ adjacent cohorts; n2's 41 zero-assigned-entry barriers are not proof of unnecess
 syncs. Physical-device flushes can coalesce across writers, so WAL calls are not
 physical flush counts. Approximate call reduction is arithmetic, not an A/B gain.
 
-Raw original `/data1/efs/durability-tracepoints-20261009/perf.data` is retained
+Raw original `/data1/efs/evidence/durability-tracepoints-20261009/perf.data` is retained
 on NUC (153,143,171 bytes), SHA256
 `839c83a6152c1f7360f8b49ccfc7a49b276cd8b7ac4ebc104b76d9ff8850f01c`.
 The repository retains the full compressed decoded event stream

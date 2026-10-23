@@ -34,7 +34,7 @@ were not repeated in this run.
 
 ## Method
 - Deploy via `deploy.sh`; workload driven by `loader.py` /
-  `/data1/efs/w97-replication-loader.py --max-depth 8 --max-files-per-folder
+  `/data1/efs/evidence/w97-replication-loader.py --max-depth 8 --max-files-per-folder
   1000 --max-files 2000000 --workers 8
   /data1/efs/mnt/tiny-w97-pump-phases-20261009` (seed 970001, tiny-file
   distributions, 8 workers, 300 s window, cooperative SIGUSR1 drain).

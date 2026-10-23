@@ -38,7 +38,7 @@ p99 confidence. All loaders must drain and replicas must cover the leader cut.
 After clean restoration, 512 exact first/last payload checks cover both cold
 mounts. No physical power-loss, distributed-RDMA or hardware-ceiling claim.
 
-Remote root: `/data1/efs/w93-closure-20261010`. Original failed stores and copied
+Remote root: `/data1/efs/evidence/w93-closure-20261010`. Original failed stores and copied
 follower KV remain on NUC. `collect-fixtures.py` retains only small fixture
 metadata and compressed logs; it neither removes nor copies service stores.
 All four cells pass: control/candidate/candidate/control rates are

@@ -25,13 +25,13 @@ The deterministic full-overwrite regression also fails when only the
 production merge function is replaced with its pre-fix `78b7feec` version.
 The failure is the full ownership/image-barrier assertion, not compilation.
 
-Live acceptance on private NUC `/data1/efs/review-20261006-writer-rpc`, ports
+Live acceptance on private NUC `/data1/efs/evidence/review-20261006-writer-rpc`, ports
 20432/20433/20434, with fresh clients started after the final build:
 
 - Single-client POSIX: **216 PASS, 0 FAIL, 1 mmap SKIP** (jobs=4).
 - Two-client POSIX: **64/64 PASS**.
 - Both clients cleanly stopped without discard.
-- Working-tree source snapshot `/data1/efs/review-20261006-lease/src` has no
+- Working-tree source snapshot `/data1/efs/evidence/review-20261006-lease/src` has no
   Git metadata and reports unknown build ID; private servers were unchanged
   in this client-only phase.
 Original production mounts and retained-write evidence are untouched.

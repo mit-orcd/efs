@@ -110,7 +110,7 @@ sha256 prefixes:
 ## Tests
 
 The tests are built and run on node9901 (RHEL 9.7) in the test tree
-`/data1/efs/testsuite/qcat1`. That tree is release `4aff22c62f9f` with this
+`/data1/efs/evidence/testsuite/qcat1`. That tree is release `4aff22c62f9f` with this
 change's files overlaid, built with `EFS_GIT_ID=qcat00000001`.
 
 - `tests/test_kv_lsm.c` `test_cleanup_scope_hints`: scoped INODE, LANE and

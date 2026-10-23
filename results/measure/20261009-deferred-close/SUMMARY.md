@@ -31,7 +31,7 @@ not activated: production FUSE still sends legacy HOLD.
 
 - Host: amd-395 (AMD), single host, four daemons, one failure domain.
 - Transport TCP, direct I/O; private fixture gc-direct-9yl816j0 (n1/n2) +
-  gc-direct-ykzuedwd (n3/n4) under /data1/efs/w66-gc-fixtures, port 29140,
+  gc-direct-ykzuedwd (n3/n4) under /data1/efs/evidence/w66-gc-fixtures, port 29140,
   pressure off, gates deferred_close + append_audit enabled (manifest.json).
 - Mounts /data1/efs/mnt and /data1/efs/mnt2.
 

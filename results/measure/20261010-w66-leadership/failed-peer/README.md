@@ -21,5 +21,5 @@ retained ownership and original-deadline restoration. Earlier open/close
 serialization coverage still executes the production helper.
 
 Raw complete original fixture logs remain on AMD in
-`/data1/efs/lease-retention-fixtures/gc-direct-fuai_vi1`; this directory retains
+`/data1/efs/evidence/lease-retention-fixtures/gc-direct-fuai_vi1`; this directory retains
 the test transcript and failing TSV. Installed service was restored.

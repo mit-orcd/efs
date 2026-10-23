@@ -18,7 +18,7 @@ Files storage, TCP, direct storage I/O. All six process environments verified:
 EFS_REPAIR_EXPERIMENT=0 EFS_TRANSPORT=tcp`. Existing GC admission=1 and idle=20ms retained.
 
 Export `git archive 96f40602b7bfc87d2837b1bd9e5cdaecc97c203c` to
-`/data1/efs/devel-merged-src` on AMD. Compile there:
+`/data1/efs/evidence/devel-merged-src` on AMD. Compile there:
 
 ```sh
 make -j8 EFS_GIT_ID=96f40602b7bf EFS_GIT_DESCRIBE=96f40602b7bf EFS_GIT_BRANCH=devel efsd efs-fuse efs-mgmt
@@ -44,8 +44,8 @@ Run the basic core suite, serially, with default original per-case deadlines
 (default minimum 15 seconds; longer decorator budgets retained):
 
 ```sh
-cd /data1/efs/devel-merged-src
-python3 tests/posix/posix_suite.py /data1/efs/mnt --suite core --jobs 1 --results /data1/efs/devel-merged-posix.tsv > /data1/efs/devel-merged-posix.log 2>&1
+cd /data1/efs/evidence/devel-merged-src
+python3 tests/posix/posix_suite.py /data1/efs/mnt --suite core --jobs 1 --results /data1/efs/evidence/devel-merged-posix.tsv > /data1/efs/evidence/devel-merged-posix.log 2>&1
 ```
 
 Expected: zero FAIL/NOTRUN, successful exit. Runner cleans its owned test
@@ -57,4 +57,4 @@ expiry, dedicated recovery or loaded seven-client acceptance is implied.
 PASS: core POSIX **216/216**, zero failures/skips/notrun, exit 0, **44.0 seconds**.
 Build and deployment PASS. Raw build/test logs
 remain outside Git at `/data1/efs/devel-merged-{build,posix}.log` and
-`/data1/efs/devel-merged-posix.tsv`.
+`/data1/efs/evidence/devel-merged-posix.tsv`.

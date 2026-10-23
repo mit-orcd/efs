@@ -35,7 +35,7 @@ post-repair acknowledged writes survive two further opens. Fault tests cover
 ENOSPC after a partial write, sync EIO and malformed atomic batches; normal and
 ASan/UBSan pass. AMD KV-LSM and Raft-store suites pass.
 
-Private AMD `/data1/efs/gc-direct-20dpw3sk` passes full POSIX 216/0/1, peer 64/64,
+Private AMD `/data1/efs/evidence/gc-direct-20dpw3sk` passes full POSIX 216/0/1, peer 64/64,
 append/sync/retry/stop/restart/GC gates, and deliberate invalid tails on all four
 WALs followed by new fsynced files and a second crash. Both files match exact
 cold bytes. Physical inventory/quota return to zero and late PUTs stay fenced.

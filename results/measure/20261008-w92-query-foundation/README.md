@@ -1,7 +1,7 @@
 # W92 query foundation tests
 
 Source commits: 3ecfec32 (snapshots/dirty hints), 5d7e1175 (name indexes).
-NUC build runs in /data1/efs/w92-build, not the deployed cluster source.
+NUC build runs in /data1/efs/evidence/w92-build, not the deployed cluster source.
 Full test_kv_lsm and test_name_index pass. Exact final source build logs include
 EFS_GIT_ID=5d7e1175; this does not change the live cluster e9f974b4e148.
 

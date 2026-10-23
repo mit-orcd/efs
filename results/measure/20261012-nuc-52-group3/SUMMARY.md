@@ -31,7 +31,7 @@ PASS — all three gates exited 0:
 ## Environment
 
 NUC host, 4-member cluster on private ports 24210–24213, stores under
-`/data1/efs/nuc-52-group3`, mounts `/data1/efs/mnt` and `/data1/efs/mnt2`.
+`/data1/efs/evidence/nuc-52-group3`, mounts `/data1/efs/mnt` and `/data1/efs/mnt2`.
 TCP transport, direct I/O, default FILES storage engine. Disabled: Raft flow,
 early retirement, group drain, batch overlap/noop, packed writes
 (`EFS_PACKED_WRITES=0`), repair activation. GC admission on, backlog idle 20 ms.
@@ -43,7 +43,7 @@ Controller-driven (`controller/matrix.py`, `controller/supervisor.py` on the
 NUC under `/home/efs/nuc-52-group3`). Gates:
 
 - `python3 -u tests/live/gc_reclamation.py --mode direct --transport tcp --root
-  /data1/efs/nuc-52-group3/posix-core-peer-direct (x2) --port 24210
+  /data1/efs/evidence/nuc-52-group3/posix-core-peer-direct (x2) --port 24210
   --mount /data1/efs/mnt --peer-mount /data1/efs/mnt2 --posix`
 - same fixture with `--mounted-packing-only`
 - native `tests/test_store_gc` (exit recorded in `native-store-gc-exit.txt`)
@@ -90,4 +90,4 @@ packing metadata queues drained.
 - `controller/inputs.json` — aaba545c92d5dc8d (frozen source input manifest)
 - `controller/results/normal-images.json` — binary sha256/version identity
 - `controller/results/build-exit.txt` / `build.json` — 5feceb66ffc86f38 / 326642b54efcacaf
-- `fixtures/data1/efs/nuc-52-group3/posix-core-peer-direct/gc-direct-fjw_b5np/posix.tsv` and `posix2.tsv` — POSIX core/peer case results
+- `fixtures/data1/efs/evidence/nuc-52-group3/posix-core-peer-direct/gc-direct-fjw_b5np/posix.tsv` and `posix2.tsv` — POSIX core/peer case results

@@ -1,6 +1,6 @@
 # W92 offline catalog validation, Oct 8
 
-These builds run only in NUC `/data1/efs/w92-build`; the running cluster is
+These builds run only in NUC `/data1/efs/evidence/w92-build`; the running cluster is
 unchanged and the population loader continues. Rsynced builds without Git
 metadata identify as unknown; the accompanying source commit is the identity
 for this offline component, not a deployed build ID.

@@ -21,7 +21,7 @@ Per-round binary sha256 in `production-verification.txt` (final.sh output).
 
 ## Environment
 
-/data1/efs mounts (mnt, mnt2), rounds 1–5 under /data1/efs/command-perf/round*;
+/data1/efs mounts (mnt, mnt2), rounds 1–5 under /data1/efs/evidence/command-perf/round*;
 tiny-command-perf-final tiny-files workload.
 
 ## Method

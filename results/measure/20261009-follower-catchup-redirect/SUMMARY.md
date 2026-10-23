@@ -29,14 +29,14 @@ catch-up timeout case only.
   `44b6c52b86d87bc3…`, efs-fuse `f4840d6e21f7a306…`, efs-mgmt
   `4d0b2af759ca429d…`; source tree sha256 `0b0fe46507f0109c…`, test script
   sha256 `8081aad3d42b3a4e…`. Fixture server binary:
-  `/data1/efs/txn-apply-fault-src-20261009/efsd`.
+  `/data1/efs/evidence/txn-apply-fault-src-20261009/efsd`.
 - No deployed-*.txt file; installed services untouched by this fixture.
 
 ## Environment
 
 AMD Linux host, four daemons on one host (private fixture roots
 `gc-direct-o9d7vxee` n1/n2 and `gc-direct-l7x7oyfd` n3/n4 under
-`/data1/efs/lease-retention-fixtures/`), direct I/O, TCP transport, port 30240,
+`/data1/efs/evidence/lease-retention-fixtures/`), direct I/O, TCP transport, port 30240,
 pressure off, `transaction_fault_seed` and `transaction_apply_retry` fault
 gates enabled (manifest.json). Mounts `/data1/efs/mnt` and `/data1/efs/mnt2`.
 

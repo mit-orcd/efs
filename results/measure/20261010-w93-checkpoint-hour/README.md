@@ -25,7 +25,7 @@ the isolated build copy; corrected complete candidate tests pass.
 The first diagnostic perf recording occurred after the short append test and
 measures idle/background work. The later `checkpoint-perf` captures a separate
 active diagnostic workload; its throughput is not acceptance. Raw perf binaries
-stay on NUC at `/data1/efs/w93-checkpoint-hour-20261010`, with retained SHA256
+stay on NUC at `/data1/efs/evidence/w93-checkpoint-hour-20261010`, with retained SHA256
 and decoded reports. Strace wall times aggregate threads and are not CPU time
 or exclusive device utilization. Intentional timeout/INT detach exit 124 is
 recorded. Raw log padding is retained.

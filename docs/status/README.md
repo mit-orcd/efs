@@ -713,7 +713,7 @@ TCP and RDMA PASS.
   "not indexed yet" in 34 ms; before, they returned EBUSY after retries.
 - All other temp clusters on node9900/node9901 are stopped. Old raw
   captures under `/tmp`, `/data1/efs/prof/ab`, `/data1/efs/work` and
-  `/data1/efs/testsuite` were deleted at the user's direction.
+  `/data1/efs/evidence/testsuite` were deleted at the user's direction.
 
 [orcd-mini deploy `8ad79fcd5` and full POSIX qualification](orcd-mini-deploy-8ad79fcd5-20261017.md):
 **deployed; core POSIX PASS.** smoke 216/216, XFS comparison PASS,

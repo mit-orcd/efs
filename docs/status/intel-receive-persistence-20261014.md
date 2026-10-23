@@ -206,8 +206,8 @@ Native/sanitizer logs `intel{1,2}_efs-persist4-*`; negative controls
 writer directories; `persistence-pause-fixed`; concurrent logs/TSVs and queue
 sample; `intel{1,2}_efs-full-gc.log`, two-fsync and cold logs;
 `cross-peer-prepared.log/.tsv`, initial invalid runner logs; final process JSONs.
-Remote GC roots `/data1/efs/gc-direct-atg56qow` (Intel1) and
-`/data1/efs/gc-direct-5a6ecapa` (Intel2); data2 companion roots are in manifests.
+Remote GC roots `/data1/efs/evidence/gc-direct-atg56qow` (Intel1) and
+`/data1/efs/evidence/gc-direct-5a6ecapa` (Intel2); data2 companion roots are in manifests.
 
 **Acceptance remains blocked:** reproduce/resolve loaded EBUSY and bounded
 operation timeouts without relaxing namespace/read authority, durable ACKs,

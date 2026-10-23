@@ -12,7 +12,7 @@ matrix. Four direct/TCP/FILES daemons with4G quota each; seven clients.
 Actual4+7 `/proc` environments and mapped images verify EFS_COMMANDS0,
 EFS_COMMANDS_SERVER0, flow/earlyretire/groupdrain0, repair0.
 `.efs` absent by actual listing/existence checks. No compiler/profiler/other
-EFS daemon during measurement. Isolated `/data1/efs/nuc-e59-focus` roots,
+EFS daemon during measurement. Isolated `/data1/efs/evidence/nuc-e59-focus` roots,
 ports24410–24413. Existing case assertions and30-second budgets unchanged.
 
 **PASS**:

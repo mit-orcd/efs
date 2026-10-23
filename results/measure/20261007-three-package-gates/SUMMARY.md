@@ -33,8 +33,8 @@ python3 tests/live/gc_reclamation.py --mode buffered --namespace-max --namespace
 python3 tests/live/gc_reclamation.py --mode direct --publication-pressure --client-binary ./efs-fuse --pressure --port 20870
 python3 tests/live/gc_reclamation.py --mode buffered --publication-pressure --client-binary ./efs-fuse --pressure --port 20870
 make -j8 test
-cc -O2 -g -D_GNU_SOURCE -Iinclude tests/measure/kv_pressure_recovery.c libefs.a -pthread -lm -ldl -libverbs -o /data1/efs/three-gates-kv-final
-/data1/efs/three-gates-kv-final /data1/efs/three-gates-kv-final-store /data1/efs/three-gates-kv-final-fault
+cc -O2 -g -D_GNU_SOURCE -Iinclude tests/measure/kv_pressure_recovery.c libefs.a -pthread -lm -ldl -libverbs -o /data1/efs/evidence/three-gates-kv-final
+/data1/efs/evidence/three-gates-kv-final /data1/efs/evidence/three-gates-kv-final-store /data1/efs/three-gates-kv-final-fault
 ```
 
 Pressure client and engine experiments explicitly link `EFS_FAULTS=1`; normal

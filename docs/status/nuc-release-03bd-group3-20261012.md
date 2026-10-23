@@ -110,7 +110,7 @@ Raw marked trace, reference script, counts and exit retained with gate evidence.
 build/images, command/env/source/exit/timing, logs and post-cleanup reference.
 `fixtures/` retains complete TSVs, manifests and physical reports.
 Collected archives retained. Remote `/home/efs/nuc-03bd-group3`, isolated stores
-`/data1/efs/nuc-03bd-group3`.
+`/data1/efs/evidence/nuc-03bd-group3`.
 All owned daemons and mounts stopped; no EFS cluster currently running. No
 old-binary/data retention/backwards qualification or unrelated host-service
 changes. Manager received exact failures and implementation analysis. Prior

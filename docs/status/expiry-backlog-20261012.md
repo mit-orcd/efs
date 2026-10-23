@@ -61,7 +61,7 @@ make -j4 EFS_FAULTS=0 EFS_GIT_ID=656fce08 \
 python3 tests/test_gc_status_expiry.py ./efs-mgmt
 python3 tests/test_expiry_cli.py ./efs-mgmt
 bash tests/run_tests.sh posix expiry /data1/efs/mnt \
-  --root /data1/efs/expiry-656fce08-backlog \
+  --root /data1/efs/evidence/expiry-656fce08-backlog \
   --peer-mount /data1/efs/mnt2 --port 24410 --jobs 4 --backlog-files 10000
 ```
 
@@ -143,7 +143,7 @@ macOS self-test hit a child-PID-file timing race; no macOS qualification claimed
 
 On NUC: build /home/efs/devel-expiry-656fce08-normal; log
 /home/efs/expiry-656fce08-backlog.log; build log /home/efs/expiry-656fce08-build.log.
-Fixture parents /data1/efs/expiry-656fce08-backlog/gc-direct-fjz6q4m8 (n1/n2,
+Fixture parents /data1/efs/evidence/expiry-656fce08-backlog/gc-direct-fjz6q4m8 (n1/n2,
 reports) and gc-direct-avjtxxv_ (n3/n4). Both mounts and all owned daemons stopped;
 final cold inventories empty, queues drained, quotas zero. Existing data preserved.
 Raw logs, stores and measurements remain outside Git. Inspect retained evidence

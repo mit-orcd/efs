@@ -43,7 +43,7 @@ include/efs/protocol.h). Build emitted no warnings
 One AMD host, four co-located daemons (single-host cluster; no hardware
 power-loss or distributed hardware RDMA claim). Direct (unbuffered) I/O, TCP
 transport. Private fixtures under
-`/data1/efs/lease-retention-fixtures/gc-direct-*`; installed service and
+`/data1/efs/evidence/lease-retention-fixtures/gc-direct-*`; installed service and
 mounts preserved (`final/merged-source-and-restoration.txt`). Gate flags in
 `final/manifest.json`: mode=direct, transport=tcp, posix=true,
 storage_session_fence_fault=true.

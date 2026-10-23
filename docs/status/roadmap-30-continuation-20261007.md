@@ -274,7 +274,7 @@ retired 4,581 owners / 77,746,176 capacity bytes, zero remaining owners, 3,292 K
 post-warmup RSS span. Allocation/growth/TLS failure units (128 retired workers)
 and subsequent physical GC/restart/valid-PUT gates pass. Log
 `/private/tmp/efs-roadmap-worker-retirement.log`; fixture
-`/data1/efs/gc-direct-zvlzgj9m/worker-retirement.json`. Default tracing is off.
+`/data1/efs/evidence/gc-direct-zvlzgj9m/worker-retirement.json`. Default tracing is off.
 This measures process behavior in that workload, not a general RSS ceiling.
 
 ## Round 27 — W67 bounded sparse pressure and cold-byte acceptance
@@ -284,7 +284,7 @@ Added owned live eight-file/256-write concurrent sparse gate above 1 GiB offsets
 peak RSS 121,556 KiB; cold remount verifies all written ranges and zero holes.
 Fragments are physically removed, counters rise and the remaining GC/restart/
 quota/valid-PUT gates pass. Log `/private/tmp/efs-roadmap-sparse-pressure.log`;
-fixture `/data1/efs/gc-direct-znd5nw4n/sparse-pressure.json`. Failed-publication
+fixture `/data1/efs/evidence/gc-direct-znd5nw4n/sparse-pressure.json`. Failed-publication
 and extended pressure/recovery coverage remain open; no general RSS bound claim.
 
 ## Round 28 — W76 actual lost-reply namespace replay
@@ -295,7 +295,7 @@ with the same operation identity; relay verifies same inode and all three replay
 results, and authoritative lookups confirm final removal. NUC direct fixture plus
 physical GC/restart/valid-PUT gates pass. Log
 `/private/tmp/efs-roadmap-namespace-lost-reply.log`; fixture
-`/data1/efs/gc-direct-uvt7yab1/namespace-lost-replies.json`. Maximum concurrency
+`/data1/efs/evidence/gc-direct-uvt7yab1/namespace-lost-replies.json`. Maximum concurrency
 and restart/leadership-change replay remain separate gates.
 
 ## Round 29 — final direct service integration and accepted-socket flags
@@ -333,7 +333,7 @@ test/binary hashes. Small evidence is retained under
 continuation evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261007-roadmap-continuation/buffered-manifest.json`).
 Logs `/private/tmp/efs-roadmap-round30-buffered-final.log` and
 `/private/tmp/efs-roadmap-round30-units.log`; fixture
-`/data1/efs/gc-buffered-it_redju`. Failed iterations remain in the preceding
+`/data1/efs/evidence/gc-buffered-it_redju`. Failed iterations remain in the preceding
 round30 logs; unrelated benchmark and GC-investigation work is preserved.
 
 ## Remaining correctness work

@@ -157,7 +157,7 @@ python3 tests/measure/intel_dd_sync_batch.py /data1/efs/intel-mnt /data1/efs/int
 ```
 
 Intel1 uses `/data1/efs/mnt` and local fixture directory
-`/data1/efs/sync-batch-measure`. Run clients serially, with no builds, profilers
+`/data1/efs/evidence/sync-batch-measure`. Run clients serially, with no builds, profilers
 or human I/O competing. Mounted four-client integrity uses the committed
 `tests/measure/intel_getattr_mount_smoke.py`: create roles0..3, read all four,
 then clean once. It checks fsync, shrink/regrow, exact EOF, contents and mtime.
@@ -166,4 +166,4 @@ Raw evidence is outside Git under
 `/Users/mike/Documents/Codex/2026-10-10/n-x20/artifacts/intel-sync-batch-20261014/`.
 Release source archive SHA256:
 `8845d169879ac288261e8d19c2c70e7a2d0a582a6ab190e894a72f6dbb9adfc2`.
-Isolated native workspace: `/data1/efs/sync-batch-work-20261014` on Intel1.
+Isolated native workspace: `/data1/efs/evidence/sync-batch-work-20261014` on Intel1.

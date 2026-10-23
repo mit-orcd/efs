@@ -32,7 +32,7 @@ manifest version changed.
 ## Exact qualification
 
 Environment: Intel1, Linux/GCC, isolated native tree
-`/data1/efs/query-peak-correctness-20261013`. No mounted command activation or
+`/data1/efs/evidence/query-peak-correctness-20261013`. No mounted command activation or
 production deployment. Intel production remains ordinary files/TCP/direct,
 `.efs` client/server and expiry disabled. Native synthetic
 query fixtures exercise excluded live features without enabling them.

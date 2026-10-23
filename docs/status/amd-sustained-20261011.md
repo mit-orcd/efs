@@ -272,7 +272,7 @@ exactly four installed `efsd` processes, two installed FUSE processes, both
 mounts accessible, canonical log/PID identities valid, direct/TCP, four metadata
 voters and commands disabled. No private fixture processes remain. Installed
 version is `715b1103-deploy-normal`; dedicated build source is
-`/data1/efs/devel-amd-gc-yield20-20261011`, while installed binaries are under
+`/data1/efs/evidence/devel-amd-gc-yield20-20261011`, while installed binaries are under
 `/data1/efs/src`. Existing stores were retained. The installed GC idle remains
 the default 1000 ms; 20 ms was explicitly set only on private acceptance nodes.
 Restoration audit (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261011-amd-sustained/evidence/yield20/restoration-proof.json`)

@@ -82,7 +82,7 @@ p50/p95/p99, RSS/pressure/replica lag, exact identities and 512 cold payload
 checks. No physical power-loss or distributed-RDMA acceptance is implied.
 
 Raw controls and evidence: `results/measure/20261010-w93-closure/` locally and
-`/data1/efs/w93-closure-20261010/` on NUC. Original failed private stores and
+`/data1/efs/evidence/w93-closure-20261010/` on NUC. Original failed private stores and
 copied follower metadata remain preserved. The service cluster is deployed with the frozen repaired build. It is restored
 to 10 ms defaults, `.efs` and diagnostics off, both preserved mounts up.
 

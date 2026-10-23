@@ -37,7 +37,7 @@ before `c10503f65cf8df78…`, fair `4c634faea10703d3…`.
 ## 4. Environment
 
 Single NUC host (8 CPUs; auto selected FOUR writers, vs 12 in the xorinox
-study). Root1 `/data1/efs/bench`: SATA MK0800GEYKE, XFS noatime logbsize=256k.
+study). Root1 `/data1/efs/evidence/bench`: SATA MK0800GEYKE, XFS noatime logbsize=256k.
 Root2 `/data2/efs/bench` → `/home/efs/additional-work-dir`: Samsung 970 EVO
 1 TB NVMe via LVM rl-home, XFS relatime logbsize=32k (see `provenance.txt`).
 Four live daemons retained; no deployment/restart or mount-setting change.

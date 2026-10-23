@@ -10,7 +10,7 @@ Full native build/tests and private direct/TCP POSIX/peer/sync/APPEND/dirty-stop
 shutdown/WAL/cold-GC gates precede deployment to preserved NUC stores.
 The first private gate refuses before execution because its new mount paths do
 not exist. Its failure is retained; create empty directories
-`/data1/efs/w97-latest-test-mnt` and `...-mnt2` before rerunning.
+`/data1/efs/evidence/w97-latest-test-mnt` and `...-mnt2` before rerunning.
 No service binary is replaced until final native/live exit records are zero.
 
 Continuous measurement uses one fresh tree and eight balanced workers, actual
@@ -52,7 +52,7 @@ after rest would be consistent with several explanations, including cleared
 replication/GC/compaction queues; it cannot alone prove NAND cache exhaustion.
 Host write bytes are not NAND write amplification or direct cache occupancy.
 
-Remote source: `/data1/efs/w97-latest-build`; evidence:
+Remote source: `/data1/efs/evidence/w97-latest-build`; evidence:
 `/data1/efs/w97-latest-20261010`. After cooperative loader drain and all-replica
 leader-cut catch-up, restore normal diagnostics-off defaults and both mounts,
 check exact sampled cold bytes and active executable identities. Do not wipe

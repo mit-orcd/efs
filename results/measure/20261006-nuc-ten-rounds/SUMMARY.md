@@ -23,7 +23,7 @@ The earlier root-filesystem capacity concern does not apply to n3/n4.
    only NOT_FOUND triggers one cold bootstrap call. BUSY, STALE and transport
    errors preserve the prior output and do not consult/adopt inode authority.
 
-NUC private `/data1/efs/review/ten-rounds` full build and full `make test` passed
+NUC private `/data1/efs/evidence/review/ten-rounds` full build and full `make test` passed
 for the first cold-wire round. New export/geometry host and client admission
 regressions pass locally. Live rollout/acceptance follows the implementation batch.
 

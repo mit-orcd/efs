@@ -166,7 +166,7 @@ checks, and successful-run cleanup; preserve any failing fixture for inspection.
 
 Raw builds, process inventories, manifests and readiness results remain outside
 Git under `/Users/mike/Documents/Codex/2026-10-10/n-x20/artifacts/intel-xorinox-deploy-20261014`.
-Remote summaries are under `/data1/efs/deploy-85f2a199aa39` on Intel and
+Remote summaries are under `/data1/efs/evidence/deploy-85f2a199aa39` on Intel and
 `/data1/efs/intel-client/deployment` on the external hosts; the initial xorinox
 sample manifest remains under its original `deploy-85f2a199aa39` directory.
 No raw logs, packet captures or generated payloads are committed.

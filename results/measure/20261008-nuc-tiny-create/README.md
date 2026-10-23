@@ -59,7 +59,7 @@ not simulate physical device power loss.
 Final candidate c22754236b38-tiny-rfinal passes Raft-store/KV-LSM suites,
 raw query RPC/bounds, all nine virtual gates, full POSIX and peer suites,
 and persisted restart rebuilding the independent112file/153dir/4212byte oracle.
-Private fixture /data1/efs/tiny-final-validation-20261008 retained; these are
+Private fixture /data1/efs/evidence/tiny-final-validation-20261008 retained; these are
 private buffered/TCP regression tests, not physical power-failure acceptance.
 Main service restarted preserving all stores. Generator resumed in existing
 screen1110701.tiny_files using /data1/efs/mnt/tiny-profile-final with original

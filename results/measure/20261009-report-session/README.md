@@ -6,7 +6,7 @@ floors are checked under the batch ReadIndex; missing/BUSY admission goes
 through authoritative global CREATE/REGISTER/ESTABLISH. Packed forwarding
 preserves variable delta records and flags; malformed/trailing wire bytes fail.
 
-Actual private fixture: `/data1/efs/lease-retention-fixtures/gc-direct-1pp2ve3g`.
+Actual private fixture: `/data1/efs/evidence/lease-retention-fixtures/gc-direct-1pp2ve3g`.
 Wire evidence (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261009-report-session/report-session-wire.txt`): discarded reply followed by exact
 mapping retry, real client REPORT, malformed suffix, completed revocation,
 first-touch rejection and cold revoked replay pass. Exact existing mapping

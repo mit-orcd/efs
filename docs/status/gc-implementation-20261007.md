@@ -76,16 +76,16 @@ crash/restart without a mounted client, offline fourth-member retention, quota
 recount, and late-PUT rejection on every member. Each fixture records source
 hashes and storage roots. Failed fixtures are retained for diagnosis.
 
-Direct fixture `/data1/efs/gc-direct-m_92r0h2`: **216/217 single-client tests pass
+Direct fixture `/data1/efs/evidence/gc-direct-m_92r0h2`: **216/217 single-client tests pass
 (one mmap skip), 64/64 peer tests pass**, then physical inventory and quota are
 zero after restart and late PUTs are fenced. Full production-fix unit run passed. The final post-W85/post-ticket direct fixture
-`/data1/efs/gc-direct-yzlxfnne` also passed 216 single-client tests (one skip),
+`/data1/efs/evidence/gc-direct-yzlxfnne` also passed 216 single-client tests (one skip),
 64 peer tests and the empty-inventory/zero-quota/restart gates. The full unit
 suite passed with ticket metadata included, and the final ticket test also
 passed after additional capacity, acknowledgement-order and fault checks.
 An attempted ASan/UBSan run could not link because the NUC lacks its sanitizer
 runtime libraries; no sanitizer pass is claimed.
-Buffered fixture `/data1/efs/gc-buffered-3ohdte4d`: focused GC checks passed; broad
+Buffered fixture `/data1/efs/evidence/gc-buffered-3ohdte4d`: focused GC checks passed; broad
 POSIX run failed both concurrent-append cases (missing records). Ten isolated
 repetitions of those two cases passed. This does **not** clear the load-dependent
 failure. At this checkpoint a traced full buffered rerun was in progress; record its

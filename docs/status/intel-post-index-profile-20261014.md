@@ -173,7 +173,7 @@ raw trace headers can include payload prefixes and stay outside Git.
 
 Raw evidence local:
 `/Users/mike/Documents/Codex/2026-10-10/n-x20/artifacts/intel-post-index-profile-20261014/`;
-remote on each host `/data1/efs/intel-post-index-profile-20261014-2033/`.
+remote on each host `/data1/efs/evidence/intel-post-index-profile-20261014-2033/`.
 Final retrieved archive SHA256:
 
 - AMD: `97e2de6ccf9ef3140b58aede91f29b15fe3d8bedb5038b9124f11e02ec0a50da`

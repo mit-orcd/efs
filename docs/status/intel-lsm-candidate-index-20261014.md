@@ -189,7 +189,7 @@ describe and common timestamp.
 
 Raw evidence outside Git:
 `/Users/mike/Documents/Codex/2026-10-10/n-x20/artifacts/intel-lsm-index-20261014/`;
-isolated native raw runs also under `/data1/efs/lsm-index-work` on each Intel
+isolated native raw runs also under `/data1/efs/evidence/lsm-index-work` on each Intel
 host. `artifact-sha256.json` covers source archive, timing records/summaries,
 process inventories, manifests and smoke outputs. Useful SHA256s:
 

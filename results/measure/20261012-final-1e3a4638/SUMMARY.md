@@ -34,7 +34,7 @@ The deep-directory 30 s timeout remains an ordinary-files blocker.
 ## Environment
 
 - Single AMD host (per `deep-0.tsv` header `host=amd-395`, paths under
-  `/data1/efs/amd-release-final-1e3a4638-20261012`).
+  `/data1/efs/evidence/amd-release-final-1e3a4638-20261012`).
 - Four private daemons, 4G quota each; seven concurrent FUSE clients, jobs16,
   original 30 s per-case deadlines.
 - Files engine, TCP transport, direct I/O; client env verified in

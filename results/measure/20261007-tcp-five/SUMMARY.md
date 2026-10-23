@@ -80,7 +80,7 @@ preserve the original stores.
   undecided.
 - D26/W44: fan-out candidate archived under `source/` only, not activated;
   all-member success and durable fencing remain mandatory.
-- Full `perf.data` remains at `/data1/efs/tcp-five-gc.data` on NUC (recorded
+- Full `perf.data` remains at `/data1/efs/evidence/tcp-five-gc.data` on NUC (recorded
   sha256 in provenance file), not in the repo.
 
 ## Evidence index

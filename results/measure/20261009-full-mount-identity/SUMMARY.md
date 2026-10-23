@@ -22,7 +22,7 @@ ticketed/fenced REPORT activation.
 
 - Baseline code commit `5c7a3332` (README); run added by `77d9b7b03`.
 - No deployed-sha256/identity.json in the run; fixture evidence under
-  `/data1/efs/lease-retention-fixtures/gc-direct-k9zcaap5`. Both installed
+  `/data1/efs/evidence/lease-retention-fixtures/gc-direct-k9zcaap5`. Both installed
   mounts restored afterward; installed stores untouched.
 
 ## Environment

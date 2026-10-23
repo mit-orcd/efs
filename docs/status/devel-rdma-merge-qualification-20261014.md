@@ -32,7 +32,7 @@ Installed binary SHA256:
 | Loaded O_EXCL/close visibility plus seven-client core |1000/1000 PASS in27.861s, max case1.437s; concurrent core1512/1512 in78.447s |
 | Focused ASan/UBSan with leak checking |read preference, queued-frame admission and pending EOF all PASS |
 
-Quiet fixtures: `/data1/efs/rdma-qualification-WNuuQH`34.775s,
+Quiet fixtures: `/data1/efs/evidence/rdma-qualification-WNuuQH`34.775s,
 `rdma-qualification-Y47OAa`30.784s, `rdma-qualification-qcLQnZ`40.199s;
 all exit0 and no logged opid-admission refusals in the quiet clients. The loaded
 visibility/core stress is additional evidence on installed17G/node, not folded
@@ -60,8 +60,8 @@ removed after clean shutdown. Installed namespace retained, no backwards
 compatibility effort or unrelated services touched.
 
 Raw summaries/logs/build/markers outside Git:
-`/data1/efs/rdma-fixes-a40428d9d`; native tree `/data1/efs/rdma-devel-a40428d9d`,
-fault tree `/data1/efs/rdma-fault-a40428d9d`, installed source `/data1/efs/src`
+`/data1/efs/evidence/rdma-fixes-a40428d9d`; native tree `/data1/efs/evidence/rdma-devel-a40428d9d`,
+fault tree `/data1/efs/evidence/rdma-fault-a40428d9d`, installed source `/data1/efs/src`
 with full SOURCE_COMMIT. All native, controller, standalone, fixture,
 visibility/stress and sanitizer exit markers0. No raw files/binaries committed.
 
@@ -135,7 +135,7 @@ On AMD, after all builds finish (OUTPUT is a fresh owned path and FAULT_SOURCE n
 cd /data1/efs/src
 export EFS_TRANSPORT=rdma EFS_RDMA_DEV=rxe0 EFS_RDMA_GID_INDEX=1
 OUTPUT=$(mktemp -d /data1/efs/rdma-merged-rerun-XXXXXX)
-FAULT_SOURCE=/data1/efs/rdma-fault-a40428d9d
+FAULT_SOURCE=/data1/efs/evidence/rdma-fault-a40428d9d
 for r in 1 2 3; do
  if python3 -u tests/live/rdma_degraded_read.py /data1/efs/src /data1/efs/mnt \
      "$OUTPUT/paused-r$r" > "$OUTPUT/paused-r$r.log" 2>&1; then code=0; else code=$?; fi

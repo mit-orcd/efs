@@ -33,9 +33,9 @@ The initial build emitted 20 warnings (ignored-result diagnostics, including
 benchmark paths, and an append planner type-limits guard). They remain recorded
 in `initial-build-and-mock-failure.log`; no warning-free build is claimed.
 
-Remote source: `/data1/efs/find-merge-src`. Query fixture:
-`/data1/efs/find-merge-query-20261008`; replay fixture:
-`/data1/efs/gc-direct-vgdatm01`. Raw server logs remain there.
+Remote source: `/data1/efs/evidence/find-merge-src`. Query fixture:
+`/data1/efs/evidence/find-merge-query-20261008`; replay fixture:
+`/data1/efs/evidence/gc-direct-vgdatm01`. Raw server logs remain there.
 
 Not closure of W92: 400 GiB namespace/load/checksums, loaded query latency/RSS,
 transaction/leader/outage/import faults and NFS/gateway acceptance remain.

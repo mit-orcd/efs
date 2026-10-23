@@ -99,7 +99,7 @@ make -j8 EFS_GIT_ID=19b14609 EFS_GIT_DESCRIBE=19b14609 EFS_GIT_BRANCH=devel efsd
 # In final candidate source 3409e0c6:
 make -j8 EFS_GIT_ID=3409e0c6 EFS_GIT_DESCRIBE=3409e0c6 EFS_GIT_BRANCH=devel-amd-package2 efsd efs-fuse efs-mgmt
 python3 tests/measure/amd_query_cache_transition.py \
-  /data1/efs/package2-v5-src /data1/efs/amd-package2-src /data1/efs/transition-new
+  /data1/efs/evidence/package2-v5-src /data1/efs/evidence/amd-package2-src /data1/efs/transition-new
 # --private-budget uses 64/80 MiB ONLY for the recorded ~30k-row control.
 # It is not a valid budget for the later larger namespace. It restores defaults.
 python3 tests/measure/amd_query_authority_loss.py /data1/efs/quorum-new
@@ -154,7 +154,7 @@ Final installed binaries:
 - efsd SHA256 `718987670c88d4c4b2f651d10d63b74d38bae4374d87e91d7775afeed18f3387`
 - efs-fuse SHA256 `b2d7f540d61b80329856d0a71045fe07071f957537ee02fdaab561a6a8a6185f`
 
-External final markers: `/data1/efs/package2-3409-normal.exit`, `-fault.exit`,
+External final markers: `/data1/efs/evidence/package2-3409-normal.exit`, `-fault.exit`,
 `-san.exit`, `-mounted.exit`, `-load.exit` all 0. Raw logs/runtime JSON remain
 outside Git. Duplicate historical results input copies were removed after the
 full native runs to regain filesystem headroom; future native reproduction
@@ -288,7 +288,7 @@ export EFS_CLUSTER=amd EFS_COMMANDS=1 EFS_COMMANDS_SERVER=1
 export EFS_EXPIRY=0 EFS_REPAIR_EXPERIMENT=0
 export EFS_TRANSPORT=tcp EFS_DIRECT_IO=1
 export EFS_QUERY_TEST_HOST=127.0.0.1 EFS_QUERY_TEST_PORT=17432
-python3 tests/measure/amd_query_cache_transition.py /data1/efs/package2-v5-src /data1/efs/amd-package2-src /data1/efs/transition-fresh
+python3 tests/measure/amd_query_cache_transition.py /data1/efs/evidence/package2-v5-src /data1/efs/evidence/amd-package2-src /data1/efs/transition-fresh
 python3 tests/measure/amd_query_authority_loss.py /data1/efs/quorum-fresh
 python3 tests/live/efs_commands.py /data1/efs/mnt /data1/efs/mnt2
 # Remove only the owned efs-options-gates fixture before rerunning its mkdir.

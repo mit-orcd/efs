@@ -11,8 +11,8 @@ partition and per-group cohort gates precede service deployment. The original
 ABBA method is repeated on this integrated binary, with preserved service stores
 and default restoration/cold checks. The completed acceptance is recorded below.
 
-Remote roots: `/data1/efs/w93-integrated-build` and
-`/data1/efs/w93-integrated-20261010`. Source/controller hashes are retained.
+Remote roots: `/data1/efs/evidence/w93-integrated-build` and
+`/data1/efs/evidence/w93-integrated-20261010`. Source/controller hashes are retained.
 
 The first merged engine cdc5c265 passed native/partition checks but returned
 EAGAIN in concurrent_appends (211/212). Retained logs identify a saturated

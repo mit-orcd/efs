@@ -31,7 +31,7 @@ comparison, multi-host failure-domain proof or 1000-active-client claim.
 
 ## Reproduce
 
-Source `/data1/efs/merged-storage-src-20261010`; binaries have identity `unknown`
+Source `/data1/efs/evidence/merged-storage-src-20261010`; binaries have identity `unknown`
 because the private source has no `.git`. This does not close exact-build-ID
 release gates. Baseline parent is `6c1a93b9`; engine commit is `bab3d1d7`.
 

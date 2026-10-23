@@ -34,7 +34,7 @@ Local writer-range/recovery and real cache ASan/UBSan regressions PASS.
 
 Local ASan/UBSan cache/state regressions and writer fence merge PASS.
 The first five rounds are commit 142b5473. Linux `make -j8 -B all` and full `make test` PASS in the private
-`/data1/efs/review/ten-rounds` source directory on the NUC host. Test output is
+`/data1/efs/evidence/review/ten-rounds` source directory on the NUC host. Test output is
 nuc-test.log (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261006-publication-ten-rounds/nuc-test.log`). This did not exercise the running four-node cluster.
 
 ## Activation boundary and next decision

@@ -156,7 +156,7 @@ this proposed pipeline remain NOTRUN. No such code change was made here.
 
 Local root:
 `/Users/mike/Documents/Codex/2026-10-10/n-x20/artifacts/intel-post-pressure-profile-20261014/`.
-Remote root on each measured host: `/data1/efs/post-pressure-profile-20261014`.
+Remote root on each measured host: `/data1/efs/evidence/post-pressure-profile-20261014`.
 Raw traces/perf/data are outside Git. `SHA256SUMS` covers initial host archives,
 subsequent write traces and both workload results. Valid write trace SHA-256:
 

@@ -6,7 +6,7 @@ enabled in the fixture only).
 ## Purpose and linked item
 
 - Apply-path expansion audit with fixed capacity; fixture
-  `/data1/efs/w66-gc-fixtures/gc-direct-ohu4urqa`.
+  `/data1/efs/evidence/w66-gc-fixtures/gc-direct-ohu4urqa`.
 
 ## Verdict
 

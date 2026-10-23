@@ -118,7 +118,7 @@ Original data and the old 50,000-file tree remain. A transient SSH timeout
 recovered during startup. client.sh's post-unmount PID race is handled only
 after verifying both mount and client process are gone; dirty retained mounts
 still refuse deployment. Old binaries are retained remotely under
-`/data1/efs/batch-internals-20261009/rollback`.
+`/data1/efs/evidence/batch-internals-20261009/rollback`.
 
 Measurement UTC: 06:34:13–06:39:13, 300 seconds, 61 host/process/disk samples.
 Per-node cumulative observation windows last about 300 seconds, with five-second

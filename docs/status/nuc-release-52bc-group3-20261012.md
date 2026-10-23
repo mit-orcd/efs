@@ -46,7 +46,7 @@ build log, command environments, per-gate exit/timing and logs.
 `fixtures/` retains POSIX TSVs, fixture manifests and fixture JSON. Archives are
 also retained as collected. Remote source/controller:
 `/home/efs/nuc-52-group3`; isolated stores:
-`/data1/efs/nuc-52-group3`. Private ports 24210–24213.
+`/data1/efs/evidence/nuc-52-group3`. Private ports 24210–24213.
 
 First trimmed staging archive omitted BLAKE3 dependencies: build refused before
 any service change. Complete manager archive replaced it. Initial manifest

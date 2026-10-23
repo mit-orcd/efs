@@ -55,7 +55,7 @@ processing), 12 samples per cell, all rc=0:
 - One inode per group, 12 samples per cell: no capacity or controlled hardware
   comparison. Times are end-to-end, not isolated server handler times.
 - Strace capture and probe dataset are from different moments; the full strace
-  capture remains externally at `/data1/efs/bench/tiny-strace-20261008T2100a`.
+  capture remains externally at `/data1/efs/evidence/bench/tiny-strace-20261008T2100a`.
 - Source excerpts were read from the installed tree; they are not a
   source-to-binary identity claim.
 - W66 remains open; next gates are listed in the linked status page

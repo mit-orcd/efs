@@ -27,7 +27,7 @@ Binary hashes not recorded in the run.
 ## Environment
 
 - xorinox host (NUC), local `efs-bench` engine-write benchmark; no cluster, VMs off.
-- Storage roots: root1 `/data1/efs/bench`, root2 `/home/efs/additional-work-dir/bench`.
+- Storage roots: root1 `/data1/efs/evidence/bench`, root2 `/home/efs/additional-work-dir/bench`.
 - Buffered and direct I/O both measured; 64 KiB fragments, 64 MiB bounded
   overwrite window (warm-window diagnostic, not sustained media or FUSE speed).
 

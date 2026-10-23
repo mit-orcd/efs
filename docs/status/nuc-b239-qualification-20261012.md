@@ -4,7 +4,7 @@ Manager approved `b239dc7de104ff8437e49d9333a529790601464c` for exclusive isolat
 
 ## Verified input and running prerequisites
 
-Complete archive `/tmp/efs-v030-b239dc7d-source.tar.gz` SHA256 `24f6ca3ec7d509a24c74de4b6a746d033bef872b7145eec9beb2e387a5caa548`. Input manifest SHA256 `1500601db39a388c5d033c1ab8c9c537e0d94d5fc2c1a2ef9ed8946da90696c7`; empty directory manifest SHA256 `911c85e28319837c62e30a5ab92fba394be649713ec3062b34442f58668197bb`. All 1,517 file hashes verified after remote extraction under `/data1/efs/nuc-b239-qualification/source`. Complete tracked results included; previous missing-doc-target packaging error is not carried forward.
+Complete archive `/tmp/efs-v030-b239dc7d-source.tar.gz` SHA256 `24f6ca3ec7d509a24c74de4b6a746d033bef872b7145eec9beb2e387a5caa548`. Input manifest SHA256 `1500601db39a388c5d033c1ab8c9c537e0d94d5fc2c1a2ef9ed8946da90696c7`; empty directory manifest SHA256 `911c85e28319837c62e30a5ab92fba394be649713ec3062b34442f58668197bb`. All 1,517 file hashes verified after remote extraction under `/data1/efs/evidence/nuc-b239-qualification/source`. Complete tracked results included; previous missing-doc-target packaging error is not carried forward.
 
 Normal/fault full native controller PID154899 started. Both full normal and fault native suites exited0; overall native run0. All14 focused ASan/UBSan tests passed (build0). Both native candidate and baseline runs0. Five images saved separately per variant after acceptance. Focused ASan/UBSan follows both native modes. Mounted acceptance and W97 remain pending; native acceptance is source-specific.
 
@@ -20,7 +20,7 @@ Manager reviewed minimal inverse root-stop delta in local `qualification-b239/w9
 
 After native/sanitizer/functional correctness acceptance, compare same merged source/scheduler/completion with only this reviewed delta. Three voters, fixed leaders, SATA metadata, SATA and NVMe data, base/root/root/base600s each, cold exact bytes and restoration. Report late throughput and change in fractional decline per repeat. This measures the root-stop optimization effect on b239, not all historical W97 fixes, drive cache behavior or hardware ceiling. W97 remains open until measured evidence supports a narrower verdict.
 
-Input receipts and executed controllers: qualification input (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-nuc-b239-qualification/input`). Raw live files remain under `/data1/efs/nuc-b239-qualification`; gate logs will be retained after verdicts.
+Input receipts and executed controllers: qualification input (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261012-nuc-b239-qualification/input`). Raw live files remain under `/data1/efs/evidence/nuc-b239-qualification`; gate logs will be retained after verdicts.
 
 ## Mounted progress and regression control input repair
 
@@ -36,9 +36,9 @@ The approved merged backlog splits historical W97 persistence slowdown into W111
 
 Verified the human manager-thread instruction: “we only need to do testing and fix true defects, no agent needs to work on optimiations.” Both root-stop/W111 and FLOW0/FLOW1 W97 performance comparisons are HOLD/NOTRUN; neither started. No optimization or benchmark controller is active. Staged inputs are preserved, not executed. Do not imply a measured W97 slowdown benefit. Continue approved original-budget correctness/fault/cold/physical gates only; AMD remains central editor and there is no production rollout.
 
-Full direct recipe exited0 at01:42:54UTC. POSIX216/216,0fail/0skip/0notrun (50.9s); peer67/67 (35.8s). Two-thousand unique4KiB records (8,192,000bytes), successful final fsync0.422231756s, exact warm primary/peer and cold bodies, physical deletion/GC/quota zero passed. Synchronous O_SYNC/O_DSYNC failures, retained-body stop/recovery, append lost replies/ACK retirement, shutdown mutations and repaired WAL tails all passed. Raw full direct evidence root `/data1/efs/gc-direct-xaotwh8t`, retained local in `live-direct/full`; binary store files excluded from copies and remain on NUC.
+Full direct recipe exited0 at01:42:54UTC. POSIX216/216,0fail/0skip/0notrun (50.9s); peer67/67 (35.8s). Two-thousand unique4KiB records (8,192,000bytes), successful final fsync0.422231756s, exact warm primary/peer and cold bodies, physical deletion/GC/quota zero passed. Synchronous O_SYNC/O_DSYNC failures, retained-body stop/recovery, append lost replies/ACK retirement, shutdown mutations and repaired WAL tails all passed. Raw full direct evidence root `/data1/efs/evidence/gc-direct-xaotwh8t`, retained local in `live-direct/full`; binary store files excluded from copies and remain on NUC.
 
-Separate20k direct gate began01:42:54UTC, private evidence root `/data1/efs/gc-direct-a1kmj9hw`. It is active, not accepted. Buffered ordinary/full/20k remain NOTRUN. Original f52 source/stores remain untouched and normally stopped during private fixtures; final restoration must pass actual four daemon/two client mappings, five installed executable hashes and all36 payloads.
+Separate20k direct gate began01:42:54UTC, private evidence root `/data1/efs/evidence/gc-direct-a1kmj9hw`. It is active, not accepted. Buffered ordinary/full/20k remain NOTRUN. Original f52 source/stores remain untouched and normally stopped during private fixtures; final restoration must pass actual four daemon/two client mappings, five installed executable hashes and all36 payloads.
 
 Additional actual host-flow Linux async sender and append receipt ASan/UBSan gates passed0 (`flow-sanitizers`). This is correctness evidence, not current W97 pressure acceptance or performance measurement. No new demonstrated NUC defect at this checkpoint.
 

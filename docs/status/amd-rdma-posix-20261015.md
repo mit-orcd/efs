@@ -222,14 +222,14 @@ tracer, profiler or private fixture is left running.
 Raw logs/traces/TSVs stay on AMD under `/data1/efs/amd-posix-20261015-*`,
 with build/native logs `/data1/efs/amd-posix-*-build.log` and
 `/data1/efs/amd-posix-*-native.log`. The isolated diagnostic uses
-`/data1/efs/rdma-qualification-Atc0aV`; its mount root is recorded there.
+`/data1/efs/evidence/rdma-qualification-Atc0aV`; its mount root is recorded there.
 No raw artifacts are committed. Final native logs are
-`/data1/efs/amd-posix-term-native.log` (exit0), strict transport log
-`/data1/efs/amd-posix-term-rdma-smoke.log` (exit0), and selected AMD barrier
-sanitizer log `/data1/efs/amd-posix-term-receive-sanitizer.log` (exit0). Final mixed-load evidence is
-`/data1/efs/amd-posix-20261015-term-results`; serial/peer/cold/degraded,
+`/data1/efs/evidence/amd-posix-term-native.log` (exit0), strict transport log
+`/data1/efs/evidence/amd-posix-term-rdma-smoke.log` (exit0), and selected AMD barrier
+sanitizer log `/data1/efs/evidence/amd-posix-term-receive-sanitizer.log` (exit0). Final mixed-load evidence is
+`/data1/efs/evidence/amd-posix-20261015-term-results`; serial/peer/cold/degraded,
 binary hashes and verified runtime are in
-`/data1/efs/amd-posix-20261015-term-final-results`.
+`/data1/efs/evidence/amd-posix-20261015-term-final-results`.
 
 **Next required work:** instrument the unusual-name worker's retained CREATE,
 first-touch session REGISTER/ESTABLISH, guarded OPEN, PUT/REPORT and CLOSE under

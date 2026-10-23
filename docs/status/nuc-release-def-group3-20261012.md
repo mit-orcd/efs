@@ -71,7 +71,7 @@ Raw source/build/command/exit/timing evidence:
 Complete TSVs, manifests, GC JSON, client logs and fixture reports:
 `results/measure/20261012-nuc-def-group3/fixtures/`. Collected archives retained.
 Remote source/controller `/home/efs/nuc-def-group3`; identified test stores
-`/data1/efs/nuc-def-group3`. Final matrix exit0 means controller queue completed;
+`/data1/efs/evidence/nuc-def-group3`. Final matrix exit0 means controller queue completed;
 individual seven-client result remainsFAIL, not aggregate acceptance.
 
 All owned fixture daemons and mounts stopped after gates; no efsd remains,

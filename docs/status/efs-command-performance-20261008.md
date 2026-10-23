@@ -62,7 +62,7 @@ script access, standalone getattr and dot-directory access retain their checks.
 
 Raw profiles, syscall traces, source patches, build/deploy logs and timing JSON
 are retained in [the evidence directory](../../results/measure/20261008-efs-command-perf)
-and on NUC under `/data1/efs/command-perf/`. The completed results and final gates
+and on NUC under `/data1/efs/evidence/command-perf/`. The completed results and final gates
 are recorded below.
 
 ## Round 4 — prune outside-scope candidates before KV reads
@@ -146,7 +146,7 @@ node versions, current Raft roles, mounts and capacity are recorded in
 `round5/production-verification.txt`. The observed leaders are n1/group 0 and
 n2/group 2; CPU captures included all four daemons and the queried FUSE client.
 
-Final clean fixture `/data1/efs/command-perf-fixture-r5-final-20261008` passed:
+Final clean fixture `/data1/efs/evidence/command-perf-fixture-r5-final-20261008` passed:
 
 - Catalog unit gates and 15 Python/codec command tests.
 - POSIX **216 passed, 0 failed, 1 skipped (16.3 s)**; peer **64/64 (10.4 s)**.
@@ -419,7 +419,7 @@ is 638 GiB on `/data1`, 752 GiB on the NVMe `/home` backing n3/n4, with 2% of
 `/data1` inodes used. Existing data and all previous trees remain intact.
 
 Evidence is in `round8-before/`, `round8/`, `round9/` and `round9-fixture/` under
-the linked measurement directory, and `/data1/efs/command-perf/` on NUC. Private
+the linked measurement directory, and `/data1/efs/evidence/command-perf/` on NUC. Private
 fixture stores and rollback binaries stay on NUC rather than being committed.
 The 400 GiB, broader fault/platform and live remote export-policy gates remain
 open; these two profiling rounds do not close W91/W92.

@@ -14,13 +14,13 @@ PASS — all unit, sanitizer and live wire-probe checks green; staged only
 
 ## Source commit and build identity
 
-Working-tree snapshot under `/data1/efs/review-20261006-lease/src`; without
+Working-tree snapshot under `/data1/efs/evidence/review-20261006-lease/src`; without
 Git metadata its displayed build ID is `unknown`. Feature commit named by
 the adding commit: `38e7256c9`.
 
 ## Environment
 
-Live private cluster `/data1/efs/review-20261006-writer-rpc` on the NUC:
+Live private cluster `/data1/efs/evidence/review-20261006-writer-rpc` on the NUC:
 3 fresh private stores, 2 GiB quota each. Original NUC mounts and older
 diagnostic clusters unchanged. The private cluster was initially launched
 before the updated server finished linking; clients were cleanly drained

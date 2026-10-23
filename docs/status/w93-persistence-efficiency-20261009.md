@@ -42,7 +42,7 @@ Review found that normal pump and shutdown ignored failed KV release when
 advancing applied markers. Commit 0bd7b5be gates both paths on successful KV
 sync and propagates marker failures, preserving old saved indexes. Actual-helper
 regressions prove a failed KV barrier writes no markers in either path. A
-private live EIO/cold-recovery fixture passes: `/data1/efs/efs-checkpoint-fault-ayu2b3ag`.
+private live EIO/cold-recovery fixture passes: `/data1/efs/evidence/efs-checkpoint-fault-ayu2b3ag`.
 It restores the pre-fault cold KV image after EIO and requires the retained
 durable Raft log to rebuild the exact acknowledged inode. This models unsynced
 KV loss, not physical power loss. The same fixture against the pre-fix c2ab465b
@@ -145,7 +145,7 @@ partial flush drains without discard; graceful active leader shutdown preserves
 18 acknowledged files; repaired KV WAL tails allow later acknowledged writes
 to survive a second cold crash. The accompanying GC harness verifies empty
 physical fragment inventory and late-PUT fencing on every member after restart.
-Fixture `/data1/efs/gc-direct-_7mx29mc`; exit 0. This is process-crash/injected
+Fixture `/data1/efs/evidence/gc-direct-_7mx29mc`; exit 0. This is process-crash/injected
 failure coverage, not physical power-loss certification.
 
 

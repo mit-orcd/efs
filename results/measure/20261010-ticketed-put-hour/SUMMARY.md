@@ -51,7 +51,7 @@ private AMD build reports unknown Git identity (noted in README).
 ## Environment
 
 One AMD host, four daemons; direct I/O, TCP transport; private stores under
-`/data1/efs/lease-retention-fixtures/gc-direct-*` and borrowed mounts;
+`/data1/efs/evidence/lease-retention-fixtures/gc-direct-*` and borrowed mounts;
 installed service restored after each fixture. No activation, push or forced
 write loss. No hardware power-loss durability or distributed hardware RDMA
 claim.

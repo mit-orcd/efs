@@ -93,7 +93,7 @@ are unchanged at the deployed revision; build/binary hashes in linked report.
 Local raw summaries, counter parser, dd trace and command logs:
 `/Users/mike/Documents/Codex/2026-10-10/n-x20/artifacts/intel-read-profile-20261015/`.
 Remote repeat captures including raw perf.data:
-`/data1/efs/read-repeat-profile-20261015` on Intel and
+`/data1/efs/evidence/read-repeat-profile-20261015` on Intel and
 `/data1/efs/intel-client/read-repeat-profile-20261015` on AMD. Initial partial
 captures use `read-profile-20261015`. AMD dd stderr/trace files are
 `/data1/efs/intel-client/dd-read-repeat-20261015.log` and `.trace`.

@@ -36,7 +36,7 @@ pressure-enabled legacy revocation is explicitly not certified.
 
 - Hosts: AMD cluster (`amd-395` per posix.tsv header), private fixture
   `gc-direct-x1nxvbaq` (n1/n2) and `gc-direct-3hsh0vpr` (n3/n4) under
-  `/data1/efs/w66-gc-fixtures/`, port 28940.
+  `/data1/efs/evidence/w66-gc-fixtures/`, port 28940.
 - Topology: 4 daemons, direct I/O, TCP transport, single storage root per
   daemon; mounts `/data1/efs/mnt` and `/data1/efs/mnt2`.
 - Pressure disabled (as in installed production); enabled gates per

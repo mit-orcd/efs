@@ -17,7 +17,7 @@ stores preserved, TCP/direct I/O, command service disabled.
 `off1/on1/off2` use native open/pread/close, both fixed old probe sets in all
 cases, warmed paths and phase samples. `perf-read/strace-read` are diagnostic
 only; their timings are not performance acceptance data. Raw perf remains on
-NUC at `/data1/efs/w93-read-pressure-hour-20261009/read-perf.data`, checksum
+NUC at `/data1/efs/evidence/w93-read-pressure-hour-20261009/read-perf.data`, checksum
 in `perf-sha256.txt`; decoded report and syscall summaries are local.
 
 Initial POSIX passes, but `peer.log/peer.tsv` preserve a 63/64 append/truncate

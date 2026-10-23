@@ -116,7 +116,7 @@ before controlled performance comparisons. Original failed logs are preserved.
 
 ## Frozen comparison and final gates
 
-Build `437b7890-read-pressure`, isolated `/data1/efs/w93-read-build`, is used
+Build `437b7890-read-pressure`, isolated `/data1/efs/evidence/w93-read-build`, is used
 for every late/early/late cell. FLOW=1, OVERLAP=1, NOOP=1, GROUP_DRAIN=0,
 OBS=1, COMMANDS_SERVER=0; only EARLY_RETIRE changes. The first two cells last 240
 seconds; the reverse control is shortened to 180 seconds to reserve time for

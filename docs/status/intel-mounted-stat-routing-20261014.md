@@ -274,8 +274,8 @@ mount using its own client.sh; never stop unrelated cluster controllers.
 
 Raw evidence:
 `/Users/mike/Documents/Codex/2026-10-10/n-x20/artifacts/intel-stat-slowdown-20261014/`.
-Remote captures `/data1/efs/intel-stat-slowdown-profile-20261014/`; isolated
-route work under `/data1/efs/intel-stat-route-work/` on AMD/xorinox.
+Remote captures `/data1/efs/evidence/intel-stat-slowdown-profile-20261014/`; isolated
+route work under `/data1/efs/evidence/intel-stat-route-work/` on AMD/xorinox.
 Useful retained SHA256 values:
 
 - Final source archive `final-source.tar`:

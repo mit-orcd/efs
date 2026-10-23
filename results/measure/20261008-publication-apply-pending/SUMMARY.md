@@ -6,7 +6,7 @@ fixture (faults enabled).
 ## Purpose and linked item
 
 - **D29** (committed mapping / apply pending). Fixture
-  `/data1/efs/agent4-d29-20261008`.
+  `/data1/efs/evidence/agent4-d29-20261008`.
 
 ## Verdict
 

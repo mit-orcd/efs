@@ -22,7 +22,7 @@ and the manifest govern identity.
 
 ## Environment
 
-Private AMD source `/data1/efs/warnings-src`.
+Private AMD source `/data1/efs/evidence/warnings-src`.
 
 ## Method
 

@@ -75,8 +75,8 @@ Digest-conflicting submit/query are refused as protocol errors without replacing
 the original result. Both same-group and cross-group lanes pass; the latter uses
 explicit FileID-bound lane bootstrap and exact geometry, never a missing-row guess.
 
-Fixtures: `/data1/efs/publication-replay-bytes-20261008-r3` and
-`/data1/efs/publication-replay-cross-20261008-r4`. The latter additionally checks
+Fixtures: `/data1/efs/evidence/publication-replay-bytes-20261008-r3` and
+`/data1/efs/evidence/publication-replay-cross-20261008-r4`. The latter additionally checks
 retired query and resubmit after the final crash. AMD is one physical host/four
 daemons; process crashes do not establish hardware power-loss durability.
 

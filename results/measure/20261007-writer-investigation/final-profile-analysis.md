@@ -9,7 +9,7 @@ Profiles filter to efs-bench threads; fio ceiling child processes are excluded. 
 Raw I/O profiles capture only the parallel timed loop; setup, read population and post-run validation are excluded by perf-control acknowledgement.
 These four data profiles isolate read/write phases with --data-rw split and --data-full-paths.
 
-Storage root `/data1/efs/bench`: filesystem device `259:0`, initial free bytes 3532525670400.
+Storage root `/data1/efs/evidence/bench`: filesystem device `259:0`, initial free bytes 3532525670400.
 
 | Case | Result | Baseline measurements | Hottest sampled symbols |
 |---|---|---|---|

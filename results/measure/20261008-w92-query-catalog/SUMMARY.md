@@ -4,7 +4,7 @@ W92 offline catalog validation on a NUC private build.
 
 ## Purpose and linked item
 
-- **W92** (offline catalog). Builds run only in NUC `/data1/efs/w92-build`; the
+- **W92** (offline catalog). Builds run only in NUC `/data1/efs/evidence/w92-build`; the
   running cluster is unchanged and the population loader continues.
 
 ## Verdict
@@ -22,7 +22,7 @@ deployed build ID.
 
 ## Environment
 
-NUC `/data1/efs/w92-build`, offline; live cluster untouched.
+NUC `/data1/efs/evidence/w92-build`, offline; live cluster untouched.
 
 ## Method
 

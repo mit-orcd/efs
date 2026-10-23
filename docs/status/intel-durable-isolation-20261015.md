@@ -51,7 +51,7 @@ remained active even during the phase called quiet. Accessible hwmon inspection
 did not expose NVMe temperature readings; no thermal or hardware-fault conclusion.
 
 The existing `efs-bench --bench principles` was compiled **separately**, from an
-archive of the exact deployed source, under `/data1/efs/durable-isolation-20261015/source`.
+archive of the exact deployed source, under `/data1/efs/evidence/durable-isolation-20261015/source`.
 No installed binary was overwritten. Build: `make -j4 efs-bench`, native GCC
 `-O3 -g -fno-omit-frame-pointer -march=native -mtune=native`. Exported source lacks
 `.git`, so embedded version/build ID says `unknown`; source provenance is the
@@ -210,7 +210,7 @@ crash/restart suite is required or claimed for this no-runtime-change experiment
 
 Raw artifacts outside Git:
 `/Users/mike/Documents/Codex/2026-10-10/n-x20/artifacts/intel-durable-isolation-20261015/`.
-Intel build/empty scratch directories: `/data1/efs/durable-isolation-20261015`.
+Intel build/empty scratch directories: `/data1/efs/evidence/durable-isolation-20261015`.
 Xorinox measurement script/stop marker:
 `/data1/efs/intel-client/durable-isolation-20261015`.
 

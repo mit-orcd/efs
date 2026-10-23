@@ -66,7 +66,7 @@ It was removed after that failed run. After the coordinated W64 fix, the callbac
 peer visibility before close and cold crash bytes; it does not require W73.
 A single large write followed by fsync passed. Repeated 128 KiB writes
 with fsync reproduced EIO without the W73 callback change in fixture
-`/data1/efs/gc-direct-6geaxxur`: ino 8193 successfully published through ci 1,
+`/data1/efs/evidence/gc-direct-6geaxxur`: ino 8193 successfully published through ci 1,
 then its next reserve returned NOT_PRIMARY (-15). This confirms that the
 routing blocker precedes W73; intermediate publication boundaries need their
 own gate.
@@ -133,7 +133,7 @@ EOF. Legacy request/log decoding remains available. REPORT completion uses
 coordinated inode/cursor/lane replacements too, and completion failure is now
 returned for retry rather than silently forgetting the owed completion.
 
-AMD direct/TCP fixture `/data1/efs/gc-direct-6np4w1hz` passes repeated 128 KiB
+AMD direct/TCP fixture `/data1/efs/evidence/gc-direct-6np4w1hz` passes repeated 128 KiB
 append+fsync through cross-group publication, two peer non-append extensions
 through holes followed by append at the authoritative EOF, peer visibility and
 exact bytes after a daemon crash. Lost replies, 32 identical requests, explicit
@@ -187,7 +187,7 @@ budget. Publication failure returns an error and retains recovery ownership;
 ordinary writes retain their existing behavior. O_DSYNC currently uses the
 same conservative full-publication fence as O_SYNC.
 
-AMD direct/TCP fixture `/data1/efs/gc-direct-po64tbre` passes 31-byte and 2 MiB
+AMD direct/TCP fixture `/data1/efs/evidence/gc-direct-po64tbre` passes 31-byte and 2 MiB
 writes for O_SYNC and O_DSYNC, with and without O_APPEND. A 2 MiB write must
 return all requested bytes; no short result is hidden or retried by the test.
 The peer verifies every body before the writer is allowed to close. Actual
@@ -271,17 +271,17 @@ live console (archived raw evidence: `archive/raw-evidence-20261021:results/meas
 contains compact manifests, exact replay replies, POSIX/peer tables, cold append
 hashes, physical GC outcomes and the rejected synchronous-write trace.
 
-- W64 leader-death fixture: `/data1/efs/gc-direct-efv7nr7n`;
+- W64 leader-death fixture: `/data1/efs/evidence/gc-direct-efv7nr7n`;
   AMD console `/tmp/efs-replay-leader-live.log`.
-- W71 combined fixture: `/data1/efs/gc-direct-amp_v4y6`;
+- W71 combined fixture: `/data1/efs/evidence/gc-direct-amp_v4y6`;
   AMD console `/tmp/efs-durable-live.log`.
-- W73 failed candidate: `/data1/efs/gc-direct-ezsewfi2`;
+- W73 failed candidate: `/data1/efs/evidence/gc-direct-ezsewfi2`;
   AMD console `/tmp/efs-sync-live.log`.
 - Combined committed-source unit suite: `/tmp/efs-readiness-final-unit.log`,
   exit 0. Resolver ownership also passes AMD ASan/UBSan.
 
-Private sources/builds are under `/data1/efs/replay-readiness-src` and
-`/data1/efs/readiness-durable-src`. Installed n1–n4 stores are untouched by
+Private sources/builds are under `/data1/efs/evidence/replay-readiness-src` and
+`/data1/efs/evidence/readiness-durable-src`. Installed n1–n4 stores are untouched by
 private fixtures; installed service is restored as direct-I/O/TCP after each
 gate. Installed binaries were not upgraded by this package. AMD is one host;
 process crashes and software RXE do not establish hardware power-loss or
@@ -325,7 +325,7 @@ the six-hour heartbeat remains authorized until its existing deadline.
 Final evidence review tightened the live failure gate to match only trace bytes
 emitted by the current write, preventing O_DSYNC from matching the prior O_SYNC
 trace. The stricter rerun passes with both flags and full GC/restart cleanup
-(`/data1/efs/gc-direct-rd5k0ll3`); `sync-fault-pass` now contains that rerun.
+(`/data1/efs/evidence/gc-direct-rd5k0ll3`); `sync-fault-pass` now contains that rerun.
 Installed four-daemon/two-mount direct/TCP service was restored at 07:46 UTC.
 
 ## D28–D30 acceptance — Oct 8, 2026

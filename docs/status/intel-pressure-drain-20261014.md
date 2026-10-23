@@ -73,7 +73,7 @@ REPORT-pressure and synchronous-write error tests remain relevant.
 
 Raw work and test evidence (outside Git):
 `/Users/mike/Documents/Codex/2026-10-10/n-x20/artifacts/intel-pressure-drain-20261014/`.
-Isolated native build: `/data1/efs/pressure-work-20261014` on Intel1.
+Isolated native build: `/data1/efs/evidence/pressure-work-20261014` on Intel1.
 Full POSIX/crash acceptance is not part of the requested smoke rollout.
 
 ## Final deployment and smoke

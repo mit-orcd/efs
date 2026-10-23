@@ -25,8 +25,8 @@ Isolated NUC live acceptance:
 - Single-client POSIX: **216 PASS, 0 FAIL, 1 mmap SKIP** (jobs=4).
 - Two-client POSIX: **64/64 PASS**.
 - Both private clients cleanly stopped without discard after testing.
-- Cluster `/data1/efs/review-20261006-writer-rpc`, ports 20432/20433/20434,
-  source `/data1/efs/review-20261006-lease/src`, working-tree snapshot with
+- Cluster `/data1/efs/evidence/review-20261006-writer-rpc`, ports 20432/20433/20434,
+  source `/data1/efs/evidence/review-20261006-lease/src`, working-tree snapshot with
   unknown build ID. Client binaries were restarted after the final build.
 
 Existing production mounts and older retained-write evidence are untouched. No logical truncate, history retirement, live epoch-aware FUSE

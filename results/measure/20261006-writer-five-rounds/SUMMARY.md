@@ -22,11 +22,11 @@ Working-tree source snapshot without Git metadata; displayed build ID is
 
 ## Environment
 
-Live cluster `/data1/efs/review-20261006-writer-rpc` on the NUC; all servers
+Live cluster `/data1/efs/evidence/review-20261006-writer-rpc` on the NUC; all servers
 and fresh clients restarted on matching binaries after the build (GETCHUNKS
 wire shapes changed and require matching binaries). Original mounts and
 earlier diagnostic clusters unchanged. POSIX mount
-`/data1/efs/review-20261006-writer-rpc/mnt`. Transport/features not
+`/data1/efs/evidence/review-20261006-writer-rpc/mnt`. Transport/features not
 recorded in the run.
 
 ## Method

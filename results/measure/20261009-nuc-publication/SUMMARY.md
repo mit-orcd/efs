@@ -21,7 +21,7 @@ EXTRA_DEFS=-Werror` (README.md).
 
 ## Environment
 
-Private source/stores `/data1/efs/agent4-publication-20261008` on nuc_efs;
+Private source/stores `/data1/efs/evidence/agent4-publication-20261008` on nuc_efs;
 test policy `EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_ADMISSION_PRESSURE=1
 EFS_TRANSPORT=tcp`.
 

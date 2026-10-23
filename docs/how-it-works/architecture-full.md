@@ -2264,7 +2264,7 @@ TCP and RDMA PASS.
   "not indexed yet" in 34 ms; before, they returned EBUSY after retries.
 - All other temp clusters on node9900/node9901 are stopped. Old raw
   captures under `/tmp`, `/data1/efs/prof/ab`, `/data1/efs/work` and
-  `/data1/efs/testsuite` were deleted at the user's direction.
+  `/data1/efs/evidence/testsuite` were deleted at the user's direction.
 
 [orcd-mini deploy `8ad79fcd5` and full POSIX qualification](../status/orcd-mini-deploy-8ad79fcd5-20261017.md):
 **deployed; core POSIX PASS.** smoke 216/216, XFS comparison PASS,
@@ -7020,7 +7020,7 @@ keep W87 open. [Retained failures and new gates](../status/devel-nuc-integration
 **Oct 8 AMD follow-up:** Retrieved the original NUC failure TSV/manifest: missing W1S0002 and W0S0004 records, beyond first-record loss. AMD broad buffered POSIX 216/0/1 skip and peer 64/64 pass, plus mixed-close append during GC and 800 exact cold records. The separate identical-RPC reservation race is fixed, but is not established as this incident's sole cause.
 See [the package evidence](../status/amd-functional-gates-20261008.md).
 
-**Class/state:** correctness investigation; failure recorded in the Oct 7 [GC checkpoint](../status/gc-implementation-20261007.md#tests-and-limits). Fixture `/data1/efs/gc-buffered-3ohdte4d` reportedly passed focused GC checks but failed both broad POSIX concurrent-append cases with missing records. Ten isolated repeats subsequently passed; they do not erase the original failure. Raw remote fixture logs were not inspected in this round.
+**Class/state:** correctness investigation; failure recorded in the Oct 7 [GC checkpoint](../status/gc-implementation-20261007.md#tests-and-limits). Fixture `/data1/efs/evidence/gc-buffered-3ohdte4d` reportedly passed focused GC checks but failed both broad POSIX concurrent-append cases with missing records. Ten isolated repeats subsequently passed; they do not erase the original failure. Raw remote fixture logs were not inspected in this round.
 
 **Next:** retain failing results, process/source hashes and reservation/publication traces; record the traced full buffered rerun's outcome. Distinguish append admission offsets, identity replay, byte ownership and publication before assigning a cause. W64 concerns durable failover replay; it is related coverage, not a proven explanation of this loaded buffered failure.
 
@@ -13092,7 +13092,7 @@ operation creates a new fragment.
 For example, repeat this comparison three times on a quiet host:
 
 ```sh
-./efs-bench.sh --modes data --data-rw split --data-full-paths --writers 0,2,auto --qds 1,16,64 --data-size 64M --time 3 --skip-ceiling --storage-root /data1/efs/bench --storage-root /home/efs/additional-work-dir/bench
+./efs-bench.sh --modes data --data-rw split --data-full-paths --writers 0,2,auto --qds 1,16,64 --data-size 64M --time 3 --skip-ceiling --storage-root /data1/efs/evidence/bench --storage-root /home/efs/additional-work-dir/bench
 ```
 
 Use `--writer-stats` for separate diagnostic runs. It enables production writer

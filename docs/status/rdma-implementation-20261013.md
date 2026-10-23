@@ -69,7 +69,7 @@ Negative control: in an isolated copy remove only
 `if (h.offset!=r->received) return fail(r);`, rebuild the same regression,
 expect a nonzero assertion exit in the valid-envelope overlap/gap cases.
 This negative control failed as expected on AMD, so the oracle detected it.
-Raw binaries/output outside Git: `/data1/efs/rdma-foundation`.
+Raw binaries/output outside Git: `/data1/efs/evidence/rdma-foundation`.
 
 ## Remaining implementation, in order
 

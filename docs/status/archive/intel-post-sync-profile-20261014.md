@@ -175,7 +175,7 @@ Git; remove only the newly created capture directory if cleanup is desired.
 Local raw root:
 `/Users/mike/Documents/Codex/2026-10-10/n-x20/artifacts/intel-post-sync-profile-20261014/`.
 Remote capture directory on each profiled host:
-`/data1/efs/post-sync-profile-20261014`.
+`/data1/efs/evidence/post-sync-profile-20261014`.
 Local host subdirectories retain perf data/reports, counters and syscall traces;
 root files include process inventories, RPC summary and subsequent trace copies.
 Archive SHA-256 (archives cover the main perf/syscall phase):

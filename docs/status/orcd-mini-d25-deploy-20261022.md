@@ -33,7 +33,7 @@ Final binaries:
 Environment: orcd-mini, three efsd on node9901 (RDMA mlx5_0, direct I/O,
 720 GiB quota per node), clients on node9901 `/data1/efs/mnt` and node9900
 `/data1/efs/orcd-mini-mnt`. The private suites ran on node9901 under
-`/data1/efs/testsuite` and `/tmp` on their own ports.
+`/data1/efs/evidence/testsuite` and `/tmp` on their own ports.
 
 | Suite | Build | Result |
 | --- | --- | --- |
@@ -90,8 +90,8 @@ for the restart A/B.
 
 Raw outputs stay outside Git on node9901:
 - `/data1/efs/prof/suites-20261022-0258/`;
-- `/data1/efs/testsuite/{suite,fault}-49679/` (`summary.txt`, `d25-out/`);
-- `/data1/efs/testsuite/gcfault-out/`.
+- `/data1/efs/evidence/testsuite/{suite,fault}-49679/` (`summary.txt`, `d25-out/`);
+- `/data1/efs/evidence/testsuite/gcfault-out/`.
 
 ## Limitations
 

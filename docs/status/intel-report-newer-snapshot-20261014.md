@@ -103,8 +103,8 @@ Raw output outside Git:
 Old native control logs are `newer-snapshot-old-negative-intel{1,2}_efs.log`;
 trace is `chmod-dcache-trace.log`; mounted outcomes are
 `chmod-truncate-{probe,fixed}*`; source archive is `fix2-source.tar`.
-Original isolated fixtures: Intel1 `/data1/efs/gc-direct-n9n_zi12`,
-Intel2 `/data1/efs/gc-direct-5e8lx9gp` (all owned processes stopped).
+Original isolated fixtures: Intel1 `/data1/efs/evidence/gc-direct-n9n_zi12`,
+Intel2 `/data1/efs/evidence/gc-direct-5e8lx9gp` (all owned processes stopped).
 
 The old diagnostic client correctly refused drain because the demonstrated
 missing bodies left unresolved publications. Before cleanup, an independent
@@ -129,8 +129,8 @@ Fresh independent four-node fixtures on each Intel host (loopback TCP/direct,
 recovery/GC controller: core216/216, local peer67/67 each, guarded ownership,
 operation IDs, integrity, namespace, allocation, tiny churn, full-node reroute,
 physical reclamation, fencing and crash/replay. Both aggregate exits0.
-Raw fixtures: Intel1 `/data1/efs/gc-direct-7u96onob`, Intel2
-`/data1/efs/gc-direct-3dxcums1`. These are separate local fixtures, not an
+Raw fixtures: Intel1 `/data1/efs/evidence/gc-direct-7u96onob`, Intel2
+`/data1/efs/evidence/gc-direct-3dxcums1`. These are separate local fixtures, not an
 additional physical cross-host peer qualification.
 
 Final fault clients (`5e3e8f3d-fault2`, EFS_FAULTS=1, separate build trees)

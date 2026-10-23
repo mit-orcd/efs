@@ -12,7 +12,7 @@ is required to measure remote network throughput. Daemon perf/strace diagnostics
 also remain. Historical measurement labels were preserved; current usage and
 status were updated.
 
-Validation on the NUC host, private `/data1/efs/review/ten-rounds` source:
+Validation on the NUC host, private `/data1/efs/evidence/review/ten-rounds` source:
 
 - Build of efsd and efs-bench PASS; full `make -j8 test` PASS.
 - CLI regression: help/ownership, invalid duration/writer options, incompatible

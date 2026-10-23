@@ -101,7 +101,7 @@ The earlier `3997575c` passed small-fixture gates but exposed production
 catalog capacity on rollout; it is not the final candidate. Exact source patch, untracked
 source hashes and raw logs live in
 `results/measure/20261008-efs-commands` (archived raw evidence: `archive/raw-evidence-20261021:results/measure/20261008-efs-commands`).
-NUC build uses `/data1/efs/command-build`, separate from running source/stores.
+NUC build uses `/data1/efs/evidence/command-build`, separate from running source/stores.
 Private fixture directories are new, never existing production stores.
 
 Completed development gates before the final named build:
@@ -157,7 +157,7 @@ gates before redeployment. Loaded publication and RSS evidence follow below.
 
 Final clean build `c22754236b38-cmd-58997ac5` passes catalog units and 14 command/
 codec/source tests on NUC. Its private four-node/two-mount fixture at
-`/data1/efs/commands-58997ac5-clean-20261008` passes direct script invocation,
+`/data1/efs/evidence/commands-58997ac5-clean-20261008` passes direct script invocation,
 source reads, JSON/NUL/raw-name/scoping, stats/find/ls, permissions, immutable
 FDs, collisions, identity exhaustion/recovery, full POSIX **216/0/1 (17.5 s)**,
 peer **64/64 (10.4 s)** and persisted restart-oracle gates. Raw evidence is in
@@ -167,7 +167,7 @@ peer **64/64 (10.4 s)** and persisted restart-oracle gates. Raw evidence is in
 NUC was redeployed with graceful client/node drains, no format/data reset, TCP
 and buffered I/O. All four startup logs identify the final fingerprint; both
 mounts serve commands. Old binaries remain in
-`/data1/efs/command-rollback-3997575c` and `command-rollback-58997ac5`.
+`/data1/efs/evidence/command-rollback-3997575c` and `command-rollback-58997ac5`.
 NUC's existing `devops/clusters/nuc.env` now explicitly exports command opt-in
 and the 1024 MiB budget, preserving both on ordinary local restarts (with env
 value overrides). A pre-change config copy is retained beside it. This is a

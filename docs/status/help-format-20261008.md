@@ -54,4 +54,4 @@ contains the interpreter and limit details. Root stats still returned a complete
 server snapshot after restart. Data/configuration was preserved. Generator PID
 2185374 at launch runs in the same screen, new directory
 `/data1/efs/mnt/tiny-help-abf6838b`. Binary rollback copies remain in
-`/data1/efs/help-rollback-abf6838b`. No code was committed during this update.
+`/data1/efs/evidence/help-rollback-abf6838b`. No code was committed during this update.

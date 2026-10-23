@@ -53,7 +53,7 @@ with active population, discard pending writes, wipe stores or delete baseline
 files. Resume only after confirming the pause has drained:
 
 ```sh
-ssh nuc_efs 'rm /data1/efs/w90-control/PAUSE; nohup flock -n /data1/efs/w90-control/loader.lock bash /data1/efs/w90-load-stages.sh >>/data1/efs/w90-control/overnight.log 2>&1 </dev/null & echo $! >/data1/efs/w90-control/loader.pid'
+ssh nuc_efs 'rm /data1/efs/w90-control/PAUSE; nohup flock -n /data1/efs/w90-control/loader.lock bash /data1/efs/evidence/w90-load-stages.sh >>/data1/efs/w90-control/overnight.log 2>&1 </dev/null & echo $! >/data1/efs/w90-control/loader.pid'
 ```
 
 `/data2/efs` resolves onto /home storage; inspect actual `n3`/`n4` paths with df,
@@ -121,7 +121,7 @@ Two focused commits extend this branch; neither is deployed to running NUC:
   build with BUSY. That local check alone does NOT prove cross-group assembly.
 
 NUC full KV suite and new name-index unit suite pass in isolated
-`/data1/efs/w92-build`; no cluster files, stores or deployed binaries were
+`/data1/efs/evidence/w92-build`; no cluster files, stores or deployed binaries were
 replaced. Focused new snapshot and name-index tests also pass Clang AddressSanitizer
 and UndefinedBehaviorSanitizer on the Mac (leak checking unavailable there).
 NUC lacks the ASan runtime. An attempted unfiltered Mac KV sanitizer run hit the

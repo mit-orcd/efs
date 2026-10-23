@@ -32,7 +32,7 @@ bounded partial progress, then re-accepted.
 - `installed-health.txt`: `efsd 978caaf7 (branch devel-w66, built
   2026-10-09T03:17:20Z on amd-395)`.
 - Installed backup of previous baseline `ab050595` retained at
-  `/data1/efs/w66-bounded-backup-20261009` (on-host, not in repo).
+  `/data1/efs/evidence/w66-bounded-backup-20261009` (on-host, not in repo).
 
 ## Environment
 
@@ -40,7 +40,7 @@ bounded partial progress, then re-accepted.
   37.5G each, TCP transport, direct I/O, both command masks disabled
   (`EFS_COMMANDS=0`, `EFS_COMMANDS_SERVER=0`), all processes as user `efs`.
 - Private direct/TCP four-daemon GC fixtures under
-  `/data1/efs/w66-gc-fixtures/` (fixture ids `gc-direct-dlqb3a0v`,
+  `/data1/efs/evidence/w66-gc-fixtures/` (fixture ids `gc-direct-dlqb3a0v`,
   `gc-direct-_iqvbemo`, failed `gc-direct-w_n7wv_v`), borrowing installed
   mounts `/data1/efs/mnt` and `/mnt2` under the amd-live reservation lock.
 - Note: local macOS full build cannot compile the existing fopencookie-based

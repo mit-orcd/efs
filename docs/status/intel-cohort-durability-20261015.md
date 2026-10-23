@@ -130,7 +130,7 @@ timed region only.
 **Environment.** intel1 `/dev/nvme0n1` and intel2 `/dev/nvme1n1` (`/data1`,
 "PCIe SSD", XFS `noatime,logbufs=8,logbsize=256k`, write-back cache), kernel
 6.12.0-211.64.1.el10_2, Rocky Linux 10.2. Scratch
-`/data1/efs/cohort-bench-20261015/run`, outside daemon roots. The Intel EFS
+`/data1/efs/evidence/cohort-bench-20261015/run`, outside daemon roots. The Intel EFS
 cluster (`49d721a4f180`) and the private w100 cluster were running but idle;
 the devices were not reserved. 4,096 records (256 MiB payload) per case, each
 case twice in palindromic order, both hosts concurrently on separate devices.
@@ -243,5 +243,5 @@ scratch parent is left empty. Peak usage is 272 MiB.
 `~/git/devops/profiling/runs/20261015-cohort-durability/` on the operator Mac:
 `intel1_efs.jsonl` (`11fc095154a98050833b45b81f6b13c28eaa0c29a0114d0188684efb18666b2a`),
 `intel2_efs.jsonl` (`071260e05ad1404b5a53eb4bd243dafa0da3959992be29fd1495e9cccff91151`).
-Tool and runner copies remain under `/data1/efs/cohort-bench-20261015/src` on
+Tool and runner copies remain under `/data1/efs/evidence/cohort-bench-20261015/src` on
 each Intel host; its `run` directory is empty.

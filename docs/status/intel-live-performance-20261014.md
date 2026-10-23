@@ -251,7 +251,7 @@ Do not remove ReadIndex or transaction visibility to win the comparison.
 
 Raw captures retained outside Git at
 `/Users/mike/Documents/Codex/2026-10-10/n-x20/artifacts/intel-live-profile-20261014/`
-and on each host at `/data1/efs/intel-profile-20261014-1931/`.
+and on each host at `/data1/efs/evidence/intel-profile-20261014-1931/`.
 Local final archive SHA256s:
 
 |Archive|SHA256|

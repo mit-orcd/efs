@@ -33,10 +33,10 @@ this directory, so only the retained JSON checkpoints are verifiable here.
 
 - NUC host, private four-node cluster (nodes n1–n4), TCP on port 20250.
 - Both buffered and direct I/O modes exercised (separate fixtures per mode).
-- Storage roots `/data1/efs/gc-buffered-it_redju/n1..n2`,
+- Storage roots `/data1/efs/evidence/gc-buffered-it_redju/n1..n2`,
   `/data2/efs/gc-buffered-0oaqdumb/n3..n4` (real paths for n3/n4 under
   `/home/efs/additional-work-dir/`). Direct fixture roots
-  `/data1/efs/gc-direct-znd5nw4n` and `/data1/efs/gc-direct-uvt7yab1` (per
+  `/data1/efs/evidence/gc-direct-znd5nw4n` and `/data1/efs/evidence/gc-direct-uvt7yab1` (per
   status page).
 - Manifest gate flags: posix/integrity/namespace_boundary/workers/opid enabled;
   namespace and pressure gates disabled for the buffered run.

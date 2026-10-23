@@ -21,7 +21,7 @@ match it (see [Revision after the review](#revision-after-the-review)).
 |---|---|
 | Branch | `claude/dead-code-review-ff72b6`, cut from devel |
 | Reviewed commit | `0bdf552569737e19a524154b4676523374df9cd8` (devel tip, October 21) |
-| Build host | node9901 (RHEL, gcc 11.5.0, fuse3 from `/data1/efs/deps/libfuse`), private tree `/data1/efs/testsuite/deadcode-0bdf55256` |
+| Build host | node9901 (RHEL, gcc 11.5.0, fuse3 from `/data1/efs/deps/libfuse`), private tree `/data1/efs/evidence/testsuite/deadcode-0bdf55256` |
 | Builds | `EFS_GIT_ID=0bdf55256-audit`, default `-O3` plus `-Wunused-macros -Wmissing-prototypes -Wmissing-declarations`, and a second `-O0 -fno-inline -ffunction-sections` build for linker reachability |
 | Scope | `src/`, `include/`, `tools/`, `scripts/`, `tests/`, `Makefile`, `deps` glue, docs that describe code paths |
 | Baseline | [dead-unused-code-20261011.md](dead-unused-code-20261011.md) (its status is updated in the last section) |
@@ -156,7 +156,7 @@ source lines** of the client library are reachable only from test harnesses
 
 Raw outputs are kept outside Git:
 - Mac: `~/git/devops/profiling/runs/20261021-dead-code-review/` (ignored by that repository).
-- node9901: `/data1/efs/testsuite/deadcode-out/`.
+- node9901: `/data1/efs/evidence/testsuite/deadcode-out/`.
 
 Hashes (sha256 prefix):
 
@@ -167,7 +167,7 @@ Hashes (sha256 prefix):
 | `make-test3.log` | `56b6825d323c183e` |
 | `summary` | `a3971cf7ab37eddf` |
 
-To clean up, remove `/data1/efs/testsuite/deadcode-0bdf55256` and
+To clean up, remove `/data1/efs/evidence/testsuite/deadcode-0bdf55256` and
 `deadcode-out` on node9901. Line numbers below are for `0bdf55256`.
 
 ---
@@ -936,7 +936,7 @@ checkout):**
 Remaining limits: external consumers of the public headers, other
 compilers, and peers or tools that can send a handled message are outside
 what a linker scan can show. Raw variant outputs:
-`/data1/efs/testsuite/deadcode-out/reach-EFS_FAULTS=1/` and
+`/data1/efs/evidence/testsuite/deadcode-out/reach-EFS_FAULTS=1/` and
 `reach-EFS_MEMCHECK=1/` on node9901.
 
 ## Follow-up review of `36d612b4d` — October 21
@@ -1020,7 +1020,7 @@ as such.
 | Marked tree inside a Git working tree (`/tmp/deadcode-guard/repo/sub`) | refuse | rc=2 |
 | Unsupported variant `FOO=1` | refuse | rc=2 |
 | OUT inside TREE | refuse | rc=2 |
-| Real default scan, relative OUT (`rel`, run from `/data1/efs/testsuite/deadcode-out`) | complete, same counts | rc=0, `COMPLETE`; 59 / 158 / 27, `diff` against the original classification empty |
+| Real default scan, relative OUT (`rel`, run from `/data1/efs/evidence/testsuite/deadcode-out`) | complete, same counts | rc=0, `COMPLETE`; 59 / 158 / 27, `diff` against the original classification empty |
 | Same scan with a failing `nm` stub first on PATH | fail closed | rc=2, `INCOMPLETE`: "nm failed on tests/test_rdma_segmented"; `classify.py` then exits 1 ("not a complete reachability.sh scan") |
 
 The four refusals happen before `make clean`, so the guarded trees were not
@@ -1038,7 +1038,7 @@ W127–W134 and are not part of this cleanup; W1, M7, S2, X1 and E3 stay with
 their owner decisions. Each batch was built and run with
 `scripts/make_test_summary.sh` (copied to the tree root,
 `ASAN_OPTIONS=detect_leaks=0`) on node9901, in a fresh `git archive` tree
-under `/data1/efs/testsuite/`, next to the same run of the unmodified base.
+under `/data1/efs/evidence/testsuite/`, next to the same run of the unmodified base.
 
 | Batch | Tree | Result | Base `a479018f6` |
 |---|---|---|---|

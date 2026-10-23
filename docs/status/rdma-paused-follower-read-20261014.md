@@ -81,8 +81,8 @@ Local macOS ASan leak mode was unavailable; repeat with detect_leaks0 passed.
 That unsupported option is not recorded as an implementation pass or failure.
 
 Raw native/build/fixture/sanitizer results:
-`/data1/efs/rdma-fixes-ade336daf`, the three fixture roots above; normal source
-`/data1/efs/rdma-merged-ade336daf`, fault source `/data1/efs/rdma-fault-ade336daf`.
+`/data1/efs/evidence/rdma-fixes-ade336daf`, the three fixture roots above; normal source
+`/data1/efs/evidence/rdma-merged-ade336daf`, fault source `/data1/efs/evidence/rdma-fault-ade336daf`.
 Normal installed `/data1/efs/src/SOURCE_COMMIT` names the full frozen source.
 Controller/native/three standalone/three fixture/sanitizer exit markers all0.
 No raw artifacts or binaries committed. No push.
@@ -99,7 +99,7 @@ On the installed a7 binary, an unchanged32MiB/180s diagnostic that logs each
 requested/returned read completed all four8MiB buffers; deterministic payload
 SHA256 `3cab1a5c8ff63b5d9d7375234c03a5fcae7beabdb5b600210586d07aa1deb586`.
 Each buffer was about22.6s. Failure is intermittent, not universal corruption.
-Raw evidence: `/data1/efs/rdma-paused-read-a7/diagnostic*`. The diagnostic adds
+Raw evidence: `/data1/efs/evidence/rdma-paused-read-a7/diagnostic*`. The diagnostic adds
 byte-count output but retains every original length/block/EOF assertion.
 
 Retained failure logs show repeated segmented-RDMA connection setup failures

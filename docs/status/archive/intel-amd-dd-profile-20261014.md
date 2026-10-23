@@ -136,7 +136,7 @@ Timeout exit124 is expected. Retrieve only completed captures; detach all
 profilers. No generated workload files need cleanup; leave the user's file/job
 untouched. Raw evidence is external to Git at
 `/Users/mike/Documents/Codex/2026-10-10/n-x20/artifacts/intel-amd-dd-20261014/`;
-remote profile directories `/data1/efs/intel-amd-dd-profile-20261014` on the
+remote profile directories `/data1/efs/evidence/intel-amd-dd-profile-20261014` on the
 three observed hosts. SHA256:
 
 - AMD archive: `d6f4b6fe5e187736870bd9f49c54c89f8e8ea8c5ac5be78bdcf78f0a998d9be3`

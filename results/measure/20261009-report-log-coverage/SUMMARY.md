@@ -38,7 +38,7 @@ an explicit INVAL requirement for a zero-node record.
 
 - AMD host (amd-395 per suite headers elsewhere in this batch), four private
   efsd daemons on one host, direct I/O, TCP transport, FUSE client, under
-  `/data1/efs/lease-retention-fixtures/`.
+  `/data1/efs/evidence/lease-retention-fixtures/`.
 - Fixture ids: `gc-direct-fvkizk15` (live.log), `gc-direct-gyil3xsd`
   (mount-sync.log), `gc-direct-cwx12oso` (sync-write.log),
   `gc-direct-txewwmg0` (partial-prefix.log). Installed 978caaf7 service

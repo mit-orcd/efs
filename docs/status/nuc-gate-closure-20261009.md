@@ -8,7 +8,7 @@ substituted. This report distinguishes that baseline from the repairs below.
 NUC is reachable again without a host reboot. Installed stores and existing
 user data are preserved. Tests use unique private stores and the two allowed
 mount paths under `/data1/efs`; n3/n4 private roots use `/data2/efs`. Runners
-serialize through `/data1/efs/w73-w64-gates-v2.lock`, gracefully drain installed
+serialize through `/data1/efs/evidence/w73-w64-gates-v2.lock`, gracefully drain installed
 mounts/daemons, then restore direct I/O/TCP with `EFS_COMMANDS=0` and
 `EFS_COMMANDS_SERVER=0`. No installed-store force discard, forced daemon kill,
 reboot, main-checkout change, merge or push was used.
@@ -59,7 +59,7 @@ still terminates the fixture rather than claiming later gates ran.
 
 ## Confirmed defect: close blocks the transaction needed by its cleanup
 
-Direct fixture `/data1/efs/gc-direct-agr8e5h7` records group 2 committed through
+Direct fixture `/data1/efs/evidence/gc-direct-agr8e5h7` records group 2 committed through
 14053, with all three replicas applied only through 14028. Entry 14029 is
 LEASE_CLOSE for inode 5516, generation 1. It falls between append PREPARE
 entries 14027/14028 and 14030; ABORT decisions follow at 14031 onward.

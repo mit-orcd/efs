@@ -100,7 +100,7 @@ remain NOTRUN. The pure codec tests cover malformed extents/IDs/FINAL, queue,
 per-connection/global/allocation refusal, concurrent reservations and credit
 replay/inflation; these do not substitute for all live QP fault permutations.
 
-Two initial `/data1/efs/rdma-gates` fixtures failed before POSIX at FUSE mount.
+Two initial `/data1/efs/evidence/rdma-gates` fixtures failed before POSIX at FUSE mount.
 Kernel audit proved AppArmor denied that mount path. Directory permissions did
 not fix it. Moving the isolated fixture to the already-permitted home path
 worked without changing host security policy. Failed raw evidence remains
@@ -184,7 +184,7 @@ Result TSV SHA256 (external, not committed):
 - TCP peer: `0aed1c774617f6fada74d3598bb61dce6392bed0052a0da850ac2110eafffeb3`
 
 Final native fault logs `/data1/efs/rdma-a325-fault-*.log`; sanitized source
-`/data1/efs/rdma-san-a325`, logs `/data1/efs/rdma-a325-san-*.log`. No sanitizer
+`/data1/efs/evidence/rdma-san-a325`, logs `/data1/efs/rdma-a325-san-*.log`. No sanitizer
 findings. Mac generated reentry-stub first launch once exceeded5s; identical
 rerun and Linux production-stub test passed, without changing its timeout.
 

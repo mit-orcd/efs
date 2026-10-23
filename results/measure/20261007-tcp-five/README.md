@@ -13,7 +13,7 @@ superseded by these six repeats and is not used as active-at-signal proof.
 
 Perf and strace are separate runs against the owned main fixture. Perf captures
 59344 samples with zero loss. Flat, by-thread and caller reports are retained;
-full `perf.data` remains `/data1/efs/tcp-five-gc.data` on NUC. The trace includes
+full `perf.data` remains `/data1/efs/evidence/tcp-five-gc.data` on NUC. The trace includes
 fsync/fdatasync from all four private daemons, with profiling overhead; it is
 not used as an untraced latency benchmark. Detailed reap timings separate scan,
 lane sweep, all-member death fence/inventory and REAP_DONE.

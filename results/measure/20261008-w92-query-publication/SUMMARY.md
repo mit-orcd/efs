@@ -24,7 +24,7 @@ final linking — SHA256 is the exact identity, not a clean build-ID claim.
 
 ## Environment
 Private TCP cluster of four owned daemons under
-`/data1/efs/w92-query-fixture-20261008c`, ports 24800–24803, on the NUC host.
+`/data1/efs/evidence/w92-query-fixture-20261008c`, ports 24800–24803, on the NUC host.
 Production `/data1/efs/src`, stores and mounts unchanged; population continues
 during the test. Tiny fixture (initial build 7–17 ms in an earlier fixture) —
 not a scalability measurement.

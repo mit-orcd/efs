@@ -4,10 +4,10 @@ Baseline: `c2275423`, with the six source changes recorded below.
 The previous clean AMD build reported 20 compiler warnings: one allocation-size
 comparison and 19 unchecked read/write/system return values.
 
-Validation on AMD, in private `/data1/efs/warnings-src`:
+Validation on AMD, in private `/data1/efs/evidence/warnings-src`:
 
 - `make clean && make -j12 EXTRA_DEFS=-Werror test`: exit 0; zero `warning:` diagnostics; full unit suite passed. Default optimization, fortify and warning flags retained.
-- `EFS_QUERY_RPC=1 python3 tests/live/query_publication.py /data1/efs/warnings-query-20261008 --mode direct`: exit 0. Four private TCP daemons; publication, RPC consumers/errors/redirects and persisted restart passed.
+- `EFS_QUERY_RPC=1 python3 tests/live/query_publication.py /data1/efs/evidence/warnings-query-20261008 --mode direct`: exit 0. Four private TCP daemons; publication, RPC consumers/errors/redirects and persisted restart passed.
 - Installed service/stores/mounts were not modified. This smoke is not a POSIX-suite or hardware durability gate.
 
 Diagnostics retry EINTR and preserve errno; eventfd operations retry EINTR and

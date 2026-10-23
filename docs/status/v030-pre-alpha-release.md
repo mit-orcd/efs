@@ -135,7 +135,7 @@ helper, foreign-group fresh reads and mutable epoch/state; combined
 REGISTER_ESTABLISH business/storage verdict coverage is also included. These
 are retained failed gate verdicts, not release acceptance.
 
-AMD builds use isolated `/data1/efs/release-v030-20261011`; normal stores and
+AMD builds use isolated `/data1/efs/evidence/release-v030-20261011`; normal stores and
 installed binaries remain intact. Preceding W97 comparisons and service
 restoration exited0 before release builds began.
 

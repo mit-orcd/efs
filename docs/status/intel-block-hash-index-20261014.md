@@ -196,7 +196,7 @@ Only its newly created RUN directory is removed.
 
 Raw artifacts remain outside Git:
 `/Users/mike/Documents/Codex/2026-10-10/n-x20/artifacts/intel-block-hash-20261014/`.
-Remote isolated native work: `/data1/efs/intel-block-hash-work/` on Intel1.
+Remote isolated native work: `/data1/efs/evidence/intel-block-hash-work/` on Intel1.
 Final source archive SHA256:
 `e64156e478cdb62b690e684810020f4ffdf693dfde0298996244e2a82580ec5f`.
 

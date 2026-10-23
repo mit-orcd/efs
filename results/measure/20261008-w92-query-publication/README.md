@@ -1,6 +1,6 @@
 # W92 private query publication smoke, Oct 8
 
-Private TCP cluster under /data1/efs/w92-query-fixture-20261008c, ports
+Private TCP cluster under /data1/efs/evidence/w92-query-fixture-20261008c, ports
 24800–24803. Production /data1/efs/src, stores and mounts unchanged; population
 continues. Four owned daemons terminated cleanly. Stores/logs retained remotely.
 The rsynced offline build has no Git metadata: --version says unknown; exact

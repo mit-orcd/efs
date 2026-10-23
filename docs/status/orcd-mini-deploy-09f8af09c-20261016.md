@@ -45,7 +45,7 @@ orcd-mini: three efsd on node9901 (10.1.99.1:17432–17434, storage
 `/data1/efs/n1`–`n3` on the xiRAID volume, 800 GiB quota each, files engine,
 direct I/O), RDMA mlx5_0, `.efs` commands on, expiry off. Clients: node9901
 `/data1/efs/mnt` and node9900 `/data1/efs/orcd-mini-mnt`. Raw outputs stay
-on node9901 under `/data1/efs/testsuite/09f8af09c2be-live/` and
+on node9901 under `/data1/efs/evidence/testsuite/09f8af09c2be-live/` and
 `/data1/efs/logs/`.
 
 ## Results
@@ -55,7 +55,7 @@ on node9901 under `/data1/efs/testsuite/09f8af09c2be-live/` and
 | POSIX, one mount | node9901 `EFS_CLUSTER=orcd-mini ./smoke.sh` (jobs 4, 30 s timeout) | **PASS 216/216**, 13.5 s (`posix-20261016-165512.tsv`) |
 | Two-client, node9901 + node9900 | `scripts/orcd_mini_posix2.py RESULTS.tsv` from the Mac | **PASS 67/67**, 287 s (round trips through the login node) |
 | Durability prepare / remount / verify | node9901 `EFS_CLUSTER=orcd-mini ./smoke-persist.sh` | **PASS 27/27** (`persist-{prepare,verify}-20261016-170115.tsv`) |
-| Unit suite `make test` | test tree `/data1/efs/testsuite/09f8af09c2be`, `run_all.sh` | 766 commands, **4 environmental failures** (see below) |
+| Unit suite `make test` | test tree `/data1/efs/evidence/testsuite/09f8af09c2be`, `run_all.sh` | 766 commands, **4 environmental failures** (see below) |
 | Private GC + POSIX gate, direct | `tests/live/gc_reclamation.py --mode direct --posix --root A --root B` | **FAIL** after 40 PASS lines: fsync EIO at `offline-member` after the crash-restart step |
 | Fault suite, integration, direct, RDMA | `EFS_FAULT_BIN=<tree> tests/faults/run_faults.sh /tmp/efs-fault-09f8af09c2be --integrate --mode direct --transport rdma --rdma-device mlx5_0` | sim **6/6 PASS**; integration **FAIL 4/4** (fsync EIO) |
 

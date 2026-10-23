@@ -105,7 +105,7 @@ partial size, new-epoch row kept across a late resume).
 
 The wedge was diagnosed by replaying the stuck entry against a copy of n3's
 `mdraft/kv` and `mdraft/log` with a throwaway harness, and by `perf record -g`
-of the live pump. Raw copies are on node9901 under `/data1/efs/debug-lf` (not
+of the live pump. Raw copies are on node9901 under `/data1/efs/evidence/debug-lf` (not
 in Git, deletable).
 
 ## Limitations and remaining gates

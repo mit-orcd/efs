@@ -16,7 +16,7 @@ Ten-GiB bulk: `gc-direct-kbglf4b1`; current harness one-GiB confirmation
 Initial direct IOR cleanup exceeded its 600-second timeout; original bulk
 fixture hit the client retirement race. Those failure logs are retained.
 Older reused scratch builds are excluded from acceptance; successful ecrawl
-and one-GiB repeats use unique `/data1/efs/gate-clean-RJ2Plx`.
+and one-GiB repeats use unique `/data1/efs/evidence/gate-clean-RJ2Plx`.
 The clean Linux unit suite uses a fresh archive of committed source and passes.
 
 Tool provenance: ecrawl source commit

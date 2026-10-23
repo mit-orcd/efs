@@ -49,7 +49,7 @@ max 50,000 files, 1–512-byte payloads, 300 s window 06:34:13–06:39:13 UTC,
 Cleanup: collector verifies loader exit; cluster restarted with
 `EFS_BATCH_OBS=0` (final state in `final-*.json/txt`); new data left at
 `/data1/efs/mnt/tiny-batch-internals-20261009`; old binaries under
-`/data1/efs/batch-internals-20261009/rollback`.
+`/data1/efs/evidence/batch-internals-20261009/rollback`.
 
 ## Results
 

@@ -159,7 +159,7 @@ to reproduce the procedure. All attachments finished; no profiler left running.
 
 Raw evidence outside Git:
 `/Users/mike/Documents/Codex/2026-10-10/n-x20/artifacts/intel-post-route-profile-20261014/`.
-Remote evidence `/data1/efs/intel-post-route-profile-20261014/` on each host.
+Remote evidence `/data1/efs/evidence/intel-post-route-profile-20261014/` on each host.
 Complete perf/summary archive SHA256:
 
 - Intel1 `82c0143fb2ddf8d0a89533e552503d689a31e5cc42bb6f326e4010341d19d42e`

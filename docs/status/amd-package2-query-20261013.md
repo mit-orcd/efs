@@ -27,7 +27,7 @@ Final installed SHA256:
 - efsd: `25225c865c01b26601084da0ccbb073c9df3ba9d5642750a2c589eb29e78509d`
 - efs-fuse: `2a95692ed68af3fe6969afafedbfbb04d715e671295f632b62dcc0febff31a0f`
 
-Source/build workspace on AMD is `/data1/efs/amd-package2-src`; installed
+Source/build workspace on AMD is `/data1/efs/evidence/amd-package2-src`; installed
 binaries are `/data1/efs/src/`. The latter directory's older source files are
 not the deployed source oracle. External raw outputs are
 `/data1/efs/package2-*.log`; they are not committed or required to reproduce.
@@ -84,8 +84,8 @@ export EFS_QUERY_TEST_PORT=17432
 python3 tests/live/efs_commands.py /data1/efs/mnt /data1/efs/mnt2
 # options script owns a fixed efs-options-gates directory: remove only its prior fixture.
 python3 tests/live/efs_command_options.py /data1/efs/mnt /data1/efs/mnt2
-mkdir -p /data1/efs/package2-pages
-python3 tests/live/efs_command_pages.py /data1/efs/mnt /data1/efs/mnt2 /data1/efs/package2-pages
+mkdir -p /data1/efs/evidence/package2-pages
+python3 tests/live/efs_command_pages.py /data1/efs/mnt /data1/efs/mnt2 /data1/efs/evidence/package2-pages
 python3 tests/live/efs_query_small_lifecycle.py /data1/efs/mnt /data1/efs/mnt2 prepare
 EFS_CLUSTER=amd /data1/efs/devops/stop.sh
 EFS_CLUSTER=amd /data1/efs/devops/start.sh

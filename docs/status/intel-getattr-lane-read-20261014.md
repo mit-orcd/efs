@@ -204,6 +204,6 @@ Raw evidence outside Git:
 `/Users/mike/Documents/Codex/2026-10-10/n-x20/artifacts/intel-getattr-lane-20261014/`;
 `artifact-sha256.json` covers source archive, all build identities, paired native
 runs, mounted samples, process inventories and smoke results. Remote native
-runs: `/data1/efs/getattr-lane-final/` on both Intel hosts. Source archive SHA256:
+runs: `/data1/efs/evidence/getattr-lane-final/` on both Intel hosts. Source archive SHA256:
 `497e0d4380fa9a5e7f79e7557c4fa76f6340d392f38bc59990141efb1ffad28a`;
 native summary: `aa271b671773d09db64562d720a47c541c4939856892392274a9be4c58164bae`.
