@@ -1758,6 +1758,8 @@ a cluster at four nodes, so ">4 nodes" is an implementation item or a
 narrower claim.** W145–W147 fixes read correct; `raft-resync` mark is not
 persisted; ior write regression needs a K row.
 
+[K32 write regression](../status/k32-write-regression-20261023.md): **OPEN.** orcd-mini (devel `757d76844`, fresh format) passes but ior easy write fell to ~0.36–0.5 GiB/s: K14 publishes every multi-chunk write as its own cross-group transaction (~20 Raft entries per 1 MiB write), K13 adds ~9.
+
 [K31 fixed, K27 closed, orcd-mini on devel `24e58fb1d`](../status/k31-k27-orcd-mini-20261023.md): **RDMA reply loss came from the K5 mount session starting before the daemon fork (poller thread lost); fixed in `24e58fb1d`. K27: no ior write regression on fresh formats. All orcd-mini suites PASS.**
 
 [D40, alpha 1.0 scope decisions Oct 23](#d40--alpha-10-scope-decisions-taken-oct-23-user-in-one-pass):
