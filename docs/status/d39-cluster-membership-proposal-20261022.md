@@ -506,8 +506,8 @@ or format operation is authorized by this review.
 All three counterexamples are accepted; they break §9 as written. The
 corrections below replace §9's state rules, and the table at the end is the
 authoritative statement the review asked for. Verified: `efs-mgmt` declares
-through the same client gate as any client (`efs_conn_declare` in
-`src/mgmt/efs_mgmt.c`), and learner replicas already exist in the Raft host
+through the same client gate as any client (`efs_connect_declared` and
+`efs_fd_declare` in `src/mgmt/efs_mgmt.c`), and learner replicas already exist in the Raft host
 (a learner catches up and must not serve, `src/server/raft_host.c`), which
 is the mechanism the catch-up channel uses.
 
