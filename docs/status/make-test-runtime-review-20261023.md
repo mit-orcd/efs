@@ -196,3 +196,31 @@ The wrapper used is on intel2 at
 `/data1/efs/build/ccwrap/ccwrap.py` (outside Git); its logs are
 `/data1/efs/build/cc-run{1,2}.log`.
 
+## Exclusive tail (October 23, follow-up)
+
+Tests that run alone after the pool are the floor of `test-all` at
+`EFS_TEST_JOBS=4`. Changes (no deadline or assertion changed):
+
+- **`test_shutdown_blocked_io.py`, 34 s → 11.4 s:** its three cases (write,
+  fsync, stderr) run concurrently. They have their own stores, daemons and
+  pipe, and ports are allocated up front from probes held open together.
+- **`test_shutdown_stuck_worker.py`, 13 s → 6.8 s:** its three groups run
+  concurrently, with the packer case followed by its restart.
+  `free_port()` never returns the same port twice in a process.
+- **`test_raft_ack_window.py`:** leaves the exclusive pattern. It builds
+  sanitizer variants and asserts no wall-clock timing.
+
+Each shutdown test passed three times in a row. Full runs on intel2:
+
+| Run | Result | Before |
+| --- | --- | --- |
+| 4 workers | 421 commands, 0 FAIL, 14 NOTRUN, 96 s | 132–152 s |
+| 4 workers | same, 95 s | |
+| serial | same, 185 s | 213 s |
+
+The exclusive group is now about 59 s. The largest remaining items are
+`test_opid_admission.py` (11.8 s of deliberate admission deadlines; see
+finding 5 before changing them), the shutdown tests, process discovery
+(`test_server_processes.py`, `test_client_processes.py`) and the two bench
+CLI tests.
+

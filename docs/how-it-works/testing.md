@@ -23,12 +23,13 @@ binary and Python test, and that no command runs in both groups.
 `EFS_TEST_JOBS=4` it runs tests in a bounded pool, each with its own
 `TMPDIR`. Tests that use real processes, shutdown, RDMA, timing,
 sanitizers, benchmarks or build introspection still run one at a time,
-after the pool. Measured on intel2 (8 cores, October 23):
+after the pool. The exclusive group, about 59 s, sets the floor for `test-all`.
+Measured on intel2 (8 cores, October 23):
 
 | Target | Serial | `EFS_TEST_JOBS=4` |
 | --- | --- | --- |
 | `test` | 43 s | 13 s |
-| `test-all` | 213 s | 132–152 s |
+| `test-all` | 185 s | 95–96 s |
 
 Verdicts were identical in both modes. A test that fails only in the
 pool belongs in the runner's `EXCLUSIVE` pattern. Do not retry it.
