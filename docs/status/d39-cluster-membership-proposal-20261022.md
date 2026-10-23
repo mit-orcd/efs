@@ -2102,3 +2102,69 @@ Proposed, untested; user choices unchanged; W153a held; W154 separate. Next
 artifact: the consolidated executable model with the check/register/effect
 interleaving as separate model steps and a declaration schedulable between
 any two of them.
+
+## 32. Independent review of §31 (`1610ef783`) — October 23
+
+**Check-and-register accepted; two specification inconsistencies to resolve
+in the consolidated model. Gates remain NOTRUN.** Reviewed the response,
+§27's control exception, `efs_raft_recv` and `host_receive_persist` in the
+current source. No runtime reproduction, implementation or deployment was
+performed. The §30 load/check race is addressed by the proposed shared-lock
+registration, not by the atomic pre-filter.
+
+### Keep the role-specific predicate at check-and-register
+
+§31 compares every item's `(member, incarnation, counter)` against the
+binding, without retaining §27's explicit same-incarnation counter exception
+for compatible Raft control traffic. If this means exact equality for all
+frames, a pair-install counter bump once again fences formation/control
+traffic that §27 intended to preserve. If "compares" means a role-specific
+predicate, spell that out instead of leaving two plausible readings.
+
+Use the already agreed predicates: new application admission requires the
+full current binding and complete/role/channel/allowlist checks; independent
+Raft control admission requires the current incarnation and the specified
+member/digest/pair/configuration checks, with the narrowly defined compatible
+counter-transition exception; an owned continuation resolves only its existing
+record and authorized effects. Do not turn that exception into permission
+for a conflicting pair or an older process incarnation. Gate a counter-only
+transition with an old-counter application frame refused and eligible Raft
+control still progressing; gate an incarnation change separately.
+
+### The model scheduler must obey the check/register critical section
+
+The final sentence says a declaration is schedulable between **any** two of
+check, register and effect. That contradicts the shared lock excluding it
+between check and register. Keep the steps separate if useful, but retain
+lock ownership across the first two: a competing declaration may attempt
+publication there and must block. Test publication before lock acquisition
+and after registration; it cannot successfully publish between them.
+
+Likewise, "before the ordering point no item is refused for incarnation
+reasons" applies only to an item matching the then-current incarnation.
+An even older incarnation was already stale. The gate should assert that the
+new declaration does not retroactively invalidate earlier authorized work,
+not require admission of arbitrary old frames.
+
+### Effect records preserve identity authority, not unconditional Raft success
+
+An effect record does not replace Raft term, log/configuration validation,
+serialization or persistence. A registered old-term operation must not lower
+a newer term, grant a conflicting vote, overwrite a committed suffix or use
+an expired read proof. Its permitted completion is the outcome allowed by
+the Raft owner and its existing pending-I/O contract; committed history still
+applies. Registration by itself is not a consensus linearization point.
+
+The examples "term bump" and "vote reply" must not imply durable hard-state
+changes and dependent replies can simply run as in-memory effects under the
+binding lock. Persist required term/vote state before dependent success
+replies, under the appropriate operation ownership, with no binding lock
+across I/O. Current host receive persistence explicitly fences its cohort
+and releases/reacquires `h->mu`; integrate with that mechanism rather than
+using the new leaf lock as a replacement for Raft's owner synchronization.
+This is an implementation constraint, not a claim current code violates it.
+
+Capacity remains accepted in direction with its tests outstanding. Proceed
+to the consolidated executable model; no additional architecture alternative
+is requested. D39 stays proposed, W153a held, the three user choices unchanged,
+and W154 separate. Documentation agreement does not qualify the protocol.
