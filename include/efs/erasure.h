@@ -22,6 +22,12 @@ int efs_decode_chunk(uint8_t *const fragments[EFS_NUM_FRAGMENTS], size_t chunk_s
                      int have_a, int have_b, int missing,
                      uint8_t *chunk, size_t chunk_len);
 
+/* W154: rebuild the one missing fragment of a 2+1 stripe from the two
+ * present ones. P = D1 ^ D2, so whichever index is missing is the XOR of
+ * the other two; out may alias neither input. frag_len 0 is INVAL. */
+int efs_rebuild_fragment(const uint8_t *a, const uint8_t *b, uint8_t *out,
+                         size_t frag_len);
+
 /* Segment codec for packed small-file segments (W125): each fragment is a
  * multiple of 4 KiB. A segment is a separately versioned object, not an
  * ordinary chunk. Geometry includes the packed body's headers and index but

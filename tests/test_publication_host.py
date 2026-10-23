@@ -24,6 +24,8 @@ source=r'''
 #define HOST_PUB_F_TICKETED 4
 #define HOST_PUB_F_LANE_LOCAL 1
 #define HOST_PUB_F_FRESH_OBJECT 2
+#define HOST_PUB_F_MISSING_SHIFT 4
+#define HOST_PUB_F_MISSING_MASK (((1u << EFS_NUM_FRAGMENTS) - 1u) << HOST_PUB_F_MISSING_SHIFT)
 #define APPLY_LOG(...) ((void)0)
 static int raft_dbg_on(void){return 0;}
 static void wr32be(uint8_t *p,uint32_t n){for(unsigned i=0;i<4;i++)p[i]=(uint8_t)(n>>(24-8*i));}
@@ -155,6 +157,12 @@ int main(void)
  assert(host_publication_command_valid(command,HOST_PUBLICATION_TICKET_LEN));
  assert(!host_publication_command_valid(command,HOST_PUBLICATION_LEN));
  assert(!host_publication_command_valid(command,HOST_PUBLICATION_TICKET_LEN-1));
+ /* W154: one missing fragment is a valid degraded publication; two are not. */
+ command[HOST_PUBLISH_LEN-1]|=1u<<HOST_PUB_F_MISSING_SHIFT;
+ assert(host_publication_command_valid(command,HOST_PUBLICATION_TICKET_LEN));
+ command[HOST_PUBLISH_LEN-1]|=2u<<HOST_PUB_F_MISSING_SHIFT;
+ assert(!host_publication_command_valid(command,HOST_PUBLICATION_TICKET_LEN));
+ command[HOST_PUBLISH_LEN-1]&=(uint8_t)~HOST_PUB_F_MISSING_MASK;
  command[HOST_PUBLISH_LEN-1]|=128;assert(!host_publication_command_valid(command,sizeof(command)));
  assert(!host_publication_command_valid(NULL,sizeof(command)));
  puts("publication host: lane-only authority, apply-ring loss, terminal recovery and unknown PASS");

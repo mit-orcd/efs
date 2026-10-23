@@ -4094,6 +4094,293 @@ static int gc_queue(struct efs_kv_item *it, uint32_t *n, uint32_t cap,
 }
 
 
+/* ---- W154 degraded marks ---- */
+
+/* Per-anchor mark count, the D26 GC watermark's rules: unknown until the
+ * rebuild pass derives it from one prefix count (process start, snapshot
+ * import); while unknown, inserts accumulate and removals are dropped, so
+ * the count can only overshoot, and a pass that finds the prefix empty
+ * clamps it back to zero. Adjusted after a batch commits. Zero lets a
+ * rewrite skip the per-superseded-object lookup. */
+static pthread_mutex_t dg_wm_mu = PTHREAD_MUTEX_INITIALIZER;
+static int64_t dg_wm_count[GC_WM_ANCHOR_MAX + 1];
+static int64_t dg_wm_pos[GC_WM_ANCHOR_MAX + 1];
+static int dg_wm_known[GC_WM_ANCHOR_MAX + 1];
+
+static void degraded_note(uint32_t anchor, int delta)
+{
+    if (anchor == 0 || anchor > GC_WM_ANCHOR_MAX || !delta)
+        return;
+    pthread_mutex_lock(&dg_wm_mu);
+    if (dg_wm_known[anchor]) {
+        dg_wm_count[anchor] += delta;
+        if (dg_wm_count[anchor] < 0)
+            dg_wm_count[anchor] = 0;
+    } else if (delta > 0) {
+        dg_wm_pos[anchor] += delta;
+    }
+    pthread_mutex_unlock(&dg_wm_mu);
+}
+
+int64_t efs_meta_degraded_count_peek(uint32_t anchor)
+{
+    int64_t r;
+
+    if (anchor == 0 || anchor > GC_WM_ANCHOR_MAX)
+        return 0;
+    pthread_mutex_lock(&dg_wm_mu);
+    r = dg_wm_known[anchor] ? dg_wm_count[anchor] : -1;
+    pthread_mutex_unlock(&dg_wm_mu);
+    return r;
+}
+
+void efs_meta_degraded_count_derived(uint32_t anchor, uint64_t n)
+{
+    if (anchor == 0 || anchor > GC_WM_ANCHOR_MAX)
+        return;
+    pthread_mutex_lock(&dg_wm_mu);
+    dg_wm_count[anchor] = (int64_t)n + dg_wm_pos[anchor];
+    dg_wm_pos[anchor] = 0;
+    dg_wm_known[anchor] = 1;
+    pthread_mutex_unlock(&dg_wm_mu);
+}
+
+void efs_meta_degraded_count_invalidate(uint32_t anchor)
+{
+    if (anchor == 0 || anchor > GC_WM_ANCHOR_MAX)
+        return;
+    pthread_mutex_lock(&dg_wm_mu);
+    dg_wm_known[anchor] = 0;
+    dg_wm_count[anchor] = 0;
+    dg_wm_pos[anchor] = 0;
+    pthread_mutex_unlock(&dg_wm_mu);
+}
+
+int efs_meta_degraded_count_zero_if(uint32_t anchor, int64_t expect)
+{
+    int ok = 0;
+
+    if (anchor == 0 || anchor > GC_WM_ANCHOR_MAX)
+        return 0;
+    pthread_mutex_lock(&dg_wm_mu);
+    if (dg_wm_known[anchor] && dg_wm_count[anchor] == expect) {
+        dg_wm_count[anchor] = 0;
+        ok = 1;
+    }
+    pthread_mutex_unlock(&dg_wm_mu);
+    return ok;
+}
+
+void efs_meta_pack_degraded(uint8_t *p, const struct efs_meta_degraded *d)
+{
+    int i;
+
+    be64(p, d->inode_gen);
+    p[8] = d->missing_mask;
+    p[9] = p[10] = p[11] = 0;
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
+        be32(p + 12 + (uint32_t)i * 4u, d->nodes[i]);
+    memcpy(p + 12 + 4 * EFS_NUM_FRAGMENTS, d->checksums,
+           EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
+}
+
+int efs_meta_unpack_degraded(const uint8_t *key, uint32_t klen,
+                             const uint8_t *val, uint32_t vlen,
+                             struct efs_meta_degraded *out)
+{
+    uint32_t shard;
+    int i;
+
+    if (!key || !val || !out || klen != 24 || key[2] != EFS_KV_KIND_DEGRADED ||
+        vlen != EFS_META_DEGRADED_VAL || val[9] || val[10] || val[11])
+        return EFS_ERR_PROTO;
+    memset(out, 0, sizeof(*out));
+    out->ino = rd64(key + 3);
+    out->object_gen = rd64(key + 11);
+    out->lane = key[19];
+    out->chunk_index = rd32(key + 20);
+    out->inode_gen = rd64(val);
+    out->missing_mask = val[8];
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
+        out->nodes[i] = rd32(val + 12 + (uint32_t)i * 4u);
+    memcpy(out->checksums, val + 12 + 4 * EFS_NUM_FRAGMENTS,
+           EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
+    shard = ((uint32_t)key[0] << 8) | key[1];
+    if (!out->ino || !out->inode_gen || !out->object_gen ||
+        out->lane >= EFS_META_LANES ||
+        out->lane != out->chunk_index % EFS_META_LANES ||
+        shard != efs_kv_anchor_shard(efs_kv_lane_shard(out->ino, out->lane)) ||
+        !out->missing_mask || !efs_chunk_missing_valid(out->missing_mask))
+        return EFS_ERR_PROTO;
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
+        if (!out->nodes[i] || out->nodes[i] > EFS_MAX_NODES)
+            return EFS_ERR_PROTO;
+    return EFS_OK;
+}
+
+static int degraded_key(efs_ino_t ino, uint64_t object_gen, uint8_t lane,
+                        uint32_t ci, uint8_t *key, uint32_t *kl)
+{
+    return efs_kv_key_degraded(efs_kv_anchor_shard(efs_kv_lane_shard(ino, lane)),
+                               ino, object_gen, lane, ci, key, kl);
+}
+
+int efs_meta_degraded_live(struct efs_kv *kv, const struct efs_meta_degraded *d)
+{
+    struct efs_meta_chunk ch;
+    struct efs_meta_delta ds[EFS_CHUNK_DELTA_MAX];
+    uint32_t n = 0, i;
+    int rc;
+
+    if (!kv || !d)
+        return EFS_ERR_INVAL;
+    rc = efs_meta_apply_get_chunk_row(kv, d->ino, d->inode_gen, d->chunk_index,
+                                      &ch, ds, EFS_CHUNK_DELTA_MAX, &n, NULL);
+    if (rc == EFS_ERR_NOT_FOUND)
+        return 0;
+    if (rc != EFS_OK)
+        return rc;
+    /* Generations are unique object names: a match is this object, and a
+     * placement that disagrees with the mark is a damaged row, not a
+     * reason to rebuild anything. */
+    if (ch.coding_profile_id != EFS_META_PROFILE_PACK &&
+        ch.generation == d->object_gen)
+        return memcmp(ch.nodes, d->nodes, sizeof(ch.nodes)) ||
+               memcmp(ch.checksums, d->checksums, sizeof(ch.checksums))
+                   ? EFS_ERR_PROTO : 1;
+    if (n > EFS_CHUNK_DELTA_MAX)
+        n = EFS_CHUNK_DELTA_MAX;
+    for (i = 0; i < n; i++) {
+        if (!ds[i].len || ds[i].generation != d->object_gen)
+            continue;
+        return memcmp(ds[i].nodes, d->nodes, sizeof(ds[i].nodes)) ||
+               memcmp(ds[i].checksums, d->checksums, sizeof(ds[i].checksums))
+                   ? EFS_ERR_PROTO : 1;
+    }
+    return 0;
+}
+
+int efs_meta_apply_degraded_clear(struct efs_kv *kv, const struct efs_meta_degraded *d,
+                                  int rebuilt, int *outcome)
+{
+    uint8_t key[EFS_KV_KEY_MAX], val[EFS_META_DEGRADED_VAL];
+    uint8_t gkey[EFS_KV_KEY_MAX], gval[EFS_META_GC_VAL];
+    struct efs_kv_item it[2];
+    struct efs_meta_degraded cur;
+    uint32_t kl = 0, gl = 0, vn, n = 0, anchor;
+    int rc, found = 0, new_gc = 0, fi;
+
+    if (outcome)
+        *outcome = EFS_META_DEGRADED_ABSENT;
+    if (!kv || !d || !d->ino || !d->object_gen || d->lane >= EFS_META_LANES ||
+        d->lane != d->chunk_index % EFS_META_LANES ||
+        !d->missing_mask || !efs_chunk_missing_valid(d->missing_mask))
+        return EFS_ERR_INVAL;
+    rc = degraded_key(d->ino, d->object_gen, d->lane, d->chunk_index, key, &kl);
+    if (rc != EFS_OK)
+        return rc;
+    anchor = ((uint32_t)key[0] << 8) | key[1];
+    vn = sizeof(val);
+    rc = efs_kv_get(kv, key, kl, val, &vn);
+    if (rc == EFS_OK) {
+        rc = efs_meta_unpack_degraded(key, kl, val, vn, &cur);
+        if (rc != EFS_OK)
+            return rc;
+        /* Delete only the mark this clear was decided for. */
+        if (cur.inode_gen == d->inode_gen && cur.missing_mask == d->missing_mask &&
+            !memcmp(cur.nodes, d->nodes, sizeof(cur.nodes)) &&
+            !memcmp(cur.checksums, d->checksums, sizeof(cur.checksums))) {
+            it[n++] = (struct efs_kv_item){EFS_KV_DEL, key, kl, NULL, 0};
+            found = 1;
+            if (outcome)
+                *outcome = EFS_META_DEGRADED_CLEARED;
+        }
+    } else if (rc != EFS_ERR_NOT_FOUND) {
+        return rc;
+    }
+    if (rebuilt) {
+        int live = efs_meta_degraded_live(kv, d);
+        if (live < 0)
+            return live;
+        if (!live) {
+            uint8_t ack_bits;
+            efs_node_id_t gnodes[EFS_NUM_FRAGMENTS];
+            uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
+
+            /* A rewrite (or unlink, truncate, pack) won the race: the GC
+             * record of the dead object may already have visited the
+             * rebuilt node, so the fragment just written there is
+             * queued again, checksum-guarded like any superseded one. */
+            fi = __builtin_ctz(d->missing_mask);
+            rc = efs_kv_key_gc(anchor, d->ino, d->object_gen, d->lane,
+                               d->chunk_index, gkey, &gl);
+            if (rc != EFS_OK)
+                return rc;
+            vn = sizeof(gval);
+            rc = efs_kv_get(kv, gkey, gl, gval, &vn);
+            if (rc == EFS_OK) {
+                rc = efs_meta_unpack_gc(gval, vn, gnodes, &ack_bits, sums);
+                if (rc != EFS_OK)
+                    return rc;
+                ack_bits &= (uint8_t)~(1u << fi);
+            } else if (rc == EFS_ERR_NOT_FOUND) {
+                memcpy(gnodes, d->nodes, sizeof(gnodes));
+                memcpy(sums, d->checksums, sizeof(sums));
+                ack_bits = (uint8_t)(((1u << EFS_NUM_FRAGMENTS) - 1u) & ~(1u << fi));
+                new_gc = 1;
+            } else {
+                return rc;
+            }
+            efs_meta_pack_gc(gval, gnodes, ack_bits,
+                             (const uint8_t (*)[EFS_HASH_SIZE])sums);
+            it[n++] = (struct efs_kv_item){EFS_KV_PUT, gkey, gl, gval, EFS_META_GC_VAL};
+            if (outcome)
+                *outcome = EFS_META_DEGRADED_ORPHANED;
+        }
+    }
+    if (!n)
+        return EFS_OK;
+    if (new_gc)
+        efs_meta_gc_pending_note(anchor, 1);
+    rc = meta_write_batch(kv, it, n);
+    if (rc == EFS_OK && found)
+        degraded_note(anchor, -1);
+    return rc;
+}
+
+/* Queue the deletion of `gen`'s degraded mark when one exists. A known-zero
+ * count for the anchor skips the lookup. *removed counts queued deletes. */
+static int degraded_retire(struct efs_kv *kv, struct efs_kv_item *it, uint32_t *n,
+                           uint32_t cap, uint8_t (*keys)[EFS_KV_KEY_MAX], uint32_t *nk,
+                           efs_ino_t ino, uint8_t lane, uint32_t ci, uint64_t gen,
+                           uint32_t *removed)
+{
+    uint8_t val[EFS_META_DEGRADED_VAL];
+    uint32_t kl = 0, vn = sizeof(val);
+    int rc;
+
+    if (!gen)
+        return EFS_OK;
+    if (efs_meta_degraded_count_peek(efs_kv_anchor_shard(efs_kv_lane_shard(ino, lane))) == 0)
+        return EFS_OK;
+    if (*n >= cap)
+        return EFS_ERR_NOMEM;
+    rc = degraded_key(ino, gen, lane, ci, keys[*nk], &kl);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_kv_get(kv, keys[*nk], kl, val, &vn);
+    if (rc == EFS_ERR_NOT_FOUND)
+        return EFS_OK;
+    if (rc != EFS_OK)
+        return rc;
+    it[*n] = (struct efs_kv_item){EFS_KV_DEL, keys[*nk], kl, NULL, 0};
+    (*n)++;
+    (*nk)++;
+    (*removed)++;
+    return EFS_OK;
+}
+
+
 static int evidence_ok(const struct efs_meta_pub *p)
 {
     int i, j;
@@ -4378,7 +4665,12 @@ static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
     uint64_t committed = 0;
     uint64_t inode_gen, mtime_gen, row_base_size = 0, row_active = 0;
     struct lane_rec ln;
-    struct efs_kv_item it[9 + EFS_CHUNK_DELTA_MAX];
+    /* W154: plus one mark delete per superseded object and one new mark. */
+    struct efs_kv_item it[11 + 2 * EFS_CHUNK_DELTA_MAX];
+    uint8_t k_dg[2 + EFS_CHUNK_DELTA_MAX][EFS_KV_KEY_MAX];
+    uint8_t v_dg[EFS_META_DEGRADED_VAL];
+    uint32_t ndg = 0, dg_removed = 0, dg_anchor;
+    int dg_added = 0;
     uint8_t k_cand[EFS_PACK_CANDIDATE_KEY_BYTES], v_cand[8];
     uint32_t n = 0;
     uint32_t ch_wlen = CHUNK_VAL;
@@ -4394,6 +4686,8 @@ static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
     rc = evidence_ok(p);
     if (rc != EFS_OK)
         return rc;
+    if (!efs_chunk_missing_valid(p->missing_mask))
+        return EFS_ERR_INVAL;
     if (p->durable_result && p->lane_local) {
         uint8_t ak[EFS_KV_KEY_MAX],av[EFS_META_LANE_AUTHORITY_BYTES];
         uint32_t kl=0,vl=sizeof(av),cs;uint64_t epoch,floor;
@@ -4740,6 +5034,61 @@ static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
                 return rc;
         }
     }
+    /* W154: a superseded object's degraded mark goes with it; the new
+     * object records its own when a fragment was not acknowledged. */
+    dg_anchor = efs_kv_anchor_shard(lsh);
+    if (!appending) {
+        uint32_t di;
+
+        if (committed != 0 && got.coding_profile_id != EFS_META_PROFILE_PACK &&
+            got.generation != stored.generation) {
+            rc = degraded_retire(kv, it, &n, (uint32_t)(sizeof(it) / sizeof(it[0])),
+                                 k_dg, &ndg, p->ino, lane, p->chunk_index,
+                                 got.generation, &dg_removed);
+            if (rc != EFS_OK)
+                return rc;
+        }
+        for (di = 0; di < nd_old; di++) {
+            struct efs_meta_delta dead_d;
+
+            rc = trailer_at(old_ch, ch_vlen, di, &dead_d);
+            if (rc != EFS_OK)
+                return rc;
+            if (dead_d.generation == 0 || dead_d.generation == stored.generation ||
+                dead_d.generation == got.generation)
+                continue;
+            rc = degraded_retire(kv, it, &n, (uint32_t)(sizeof(it) / sizeof(it[0])),
+                                 k_dg, &ndg, p->ino, lane, p->chunk_index,
+                                 dead_d.generation, &dg_removed);
+            if (rc != EFS_OK)
+                return rc;
+        }
+    }
+    if (p->missing_mask) {
+        struct efs_meta_degraded mark;
+        uint8_t have[EFS_META_DEGRADED_VAL];
+        uint32_t kl_dg = 0, hn = sizeof(have);
+
+        memset(&mark, 0, sizeof(mark));
+        mark.inode_gen = inode_gen;
+        mark.missing_mask = p->missing_mask;
+        memcpy(mark.nodes, p->ch.nodes, sizeof(mark.nodes));
+        memcpy(mark.checksums, p->ch.checksums, sizeof(mark.checksums));
+        rc = degraded_key(p->ino, p->candidate_gen, lane, p->chunk_index,
+                          k_dg[ndg], &kl_dg);
+        if (rc != EFS_OK)
+            return rc;
+        rc = efs_kv_get(kv, k_dg[ndg], kl_dg, have, &hn);
+        if (rc == EFS_ERR_NOT_FOUND) {
+            efs_meta_pack_degraded(v_dg, &mark);
+            it[n++] = (struct efs_kv_item){EFS_KV_PUT, k_dg[ndg], kl_dg, v_dg,
+                                           EFS_META_DEGRADED_VAL};
+            ndg++;
+            dg_added = 1;
+        } else if (rc != EFS_OK) {
+            return rc;
+        }
+    }
     uint8_t ticket_key[EFS_PUT_TICKET_KEY_LEN], ticket_val[EFS_PUT_TICKET_VAL_LEN];
     if (p->ticketed) {
         struct efs_put_ticket ticket;
@@ -4777,9 +5126,12 @@ static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
         memcpy(it + n, plan.items, plan.count * sizeof(it[0]));
         rc = meta_write_batch(kv, it, n + plan.count);
         efs_pack_mapping_plan_free(&plan);
-        return rc;
+    } else {
+        rc = meta_write_batch(kv, it, n);
     }
-    return meta_write_batch(kv, it, n);
+    if (rc == EFS_OK)
+        degraded_note(dg_anchor, dg_added - (int)dg_removed);
+    return rc;
 }
 
 int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)

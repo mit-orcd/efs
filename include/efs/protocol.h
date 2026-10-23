@@ -700,6 +700,13 @@ struct efs_msg_status_reply {
     uint64_t capacity_bytes;
     uint64_t available_bytes;
     uint64_t capacity_valid;
+    /* W154: degraded stripes awaiting rebuild on the groups this node
+     * leads (bit g/2 of degraded_sampled says groups[g/2] is current),
+     * and this node's rebuild totals since start. */
+    uint64_t degraded_chunks[2];
+    uint32_t degraded_sampled;
+    uint32_t reserved2;
+    uint64_t rebuilt_fragments, rebuild_failures, rebuild_retired;
 };
 
 /* DATA_COMMIT: make every data fragment this server acknowledged before
@@ -1170,6 +1177,21 @@ struct efs_msg_inode_flock {
  * Never valid in a publication or REPORT. */
 #define EFS_CHUNK_REC_F_PACKED 16u
 #define EFS_CHUNK_REC_PACKED_REF_BYTES 96u
+/* W154: bit 5 + i says fragment i of this PUT object was not durably
+ * acknowledged (2+1: at most one). The publication records the stripe as
+ * degraded and the group leader rebuilds the fragment when its node is
+ * reachable. Publication and REPORT only; not part of the intent digest. */
+#define EFS_CHUNK_REC_F_MISSING_SHIFT 5u
+#define EFS_CHUNK_REC_F_MISSING_MASK (((1u << EFS_NUM_FRAGMENTS) - 1u) << EFS_CHUNK_REC_F_MISSING_SHIFT)
+static inline uint32_t efs_chunk_rec_missing(uint32_t flags)
+{
+    return (flags & EFS_CHUNK_REC_F_MISSING_MASK) >> EFS_CHUNK_REC_F_MISSING_SHIFT;
+}
+/* A missing set the 2+1 code can rebuild: empty or exactly one fragment. */
+static inline int efs_chunk_missing_valid(uint32_t mask)
+{
+    return mask < (1u << EFS_NUM_FRAGMENTS) && (mask & (mask - 1u)) == 0;
+}
 struct efs_chunk_rec {
     efs_ino_t ino;
     uint32_t chunk_index;
@@ -1236,7 +1258,8 @@ static inline int efs_chunk_publish_epoch(const struct efs_chunk_rec *r,
 {
     if (!r || !out || (r->publish_flags &
         ~(EFS_CHUNK_REC_F_CAPTURED_EPOCH | EFS_CHUNK_REC_F_CAPTURED_FILEID |
-          EFS_CHUNK_REC_F_FRESH_OBJECT)) ||
+          EFS_CHUNK_REC_F_FRESH_OBJECT | EFS_CHUNK_REC_F_MISSING_MASK)) ||
+        !efs_chunk_missing_valid(efs_chunk_rec_missing(r->publish_flags)) ||
         ((r->publish_flags & EFS_CHUNK_REC_F_CAPTURED_FILEID) &&
          (!(r->publish_flags & EFS_CHUNK_REC_F_CAPTURED_EPOCH) || !r->file_generation)))
         return EFS_ERR_INVAL;

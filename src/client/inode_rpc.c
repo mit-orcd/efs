@@ -1876,6 +1876,9 @@ int efs_client_rpc_publication(const struct efs_msg_publication *request, int qu
     if(query_only<0 || query_only>2 || !out || !request)return EFS_ERR_INVAL;
     struct efs_msg_publication req=*request;
     memset(out,0,sizeof(*out));
+    /* W154: a two-fragment object publishes as degraded (not in the digest). */
+    req.rec.publish_flags|=efs_client_degraded_flags(req.rec.ino,req.rec.chunk_index,
+                                                     req.rec.chunk_generation);
     if(efs_publication_from_request(&req,&p)!=EFS_OK)return EFS_ERR_INVAL;
     if(efs_publication_digest(&p,digest)!=EFS_OK)return EFS_ERR_INVAL;
     if(!query_only) {
@@ -1927,6 +1930,8 @@ int efs_client_rpc_publication(const struct efs_msg_publication *request, int qu
         if(reply.state==EFS_PUBLICATION_REJECTED && reply.verdict==EFS_ERR_FENCED)
             efs_client_session_fence(EFS_ERR_FENCED);
         if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
+        if(reply.state==EFS_PUBLICATION_COMMITTED || reply.state==EFS_PUBLICATION_RETIRED)
+            efs_client_degraded_drop(req.rec.ino,req.rec.chunk_index,req.rec.chunk_generation);
         *out=reply;return EFS_OK;
     }
     return EFS_ERR_BUSY;
@@ -2823,7 +2828,17 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
     uint8_t *p = buf + sizeof(*hdr);
     if (count) {
         for (i = 0; i < count; i++) {
-            size_t n = efs_chunk_rec_pack(p, len - (size_t)(p - buf), &recs[i]);
+            /* W154: a two-fragment object publishes as degraded. */
+            uint32_t dgf = efs_client_degraded_flags(recs[i].ino, recs[i].chunk_index,
+                                                     recs[i].chunk_generation);
+            size_t n;
+            if (dgf) {
+                struct efs_chunk_rec stamped = recs[i];
+                stamped.publish_flags |= dgf;
+                n = efs_chunk_rec_pack(p, len - (size_t)(p - buf), &stamped);
+            } else {
+                n = efs_chunk_rec_pack(p, len - (size_t)(p - buf), &recs[i]);
+            }
             if (n == 0) {
                 free(buf);
                 return EFS_ERR_NOMEM;
@@ -2860,7 +2875,12 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
     free(buf);
     if (rc != EFS_OK)
         return rc;
-    return rpc_status_to_efs(r.status);
+    rc = rpc_status_to_efs(r.status);
+    if (rc == EFS_OK && efs_client_degraded_pending())
+        for (i = 0; i < count; i++)
+            efs_client_degraded_drop(recs[i].ino, recs[i].chunk_index,
+                                     recs[i].chunk_generation);
+    return rc;
 }
 
 int efs_client_rpc_xattr(efs_export_id_t export_id, efs_ino_t ino, uint8_t op,

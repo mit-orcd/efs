@@ -88,6 +88,8 @@ int efs_publication_from_rec(const struct efs_chunk_rec *r, uint64_t size,
     p->expected_gen = r->base_gen;
     p->candidate_gen = r->chunk_generation;
     p->fresh_object = !!(r->publish_flags & EFS_CHUNK_REC_F_FRESH_OBJECT);
+    /* W154: the stripe state at PUT; not part of the intent digest. */
+    p->missing_mask = (uint8_t)efs_chunk_rec_missing(r->publish_flags);
     p->content_epoch = epoch;
     p->coding_profile_id = EFS_META_PROFILE_K2F1;
     p->delta_off = r->delta_off;

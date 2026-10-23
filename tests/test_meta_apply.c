@@ -5148,6 +5148,243 @@ static void test_gc_watermark(void)
     efs_kv_mem_free(kv);
 }
 
+/* ---- W154 degraded marks ---- */
+struct dg_collect {
+    uint64_t n;
+    struct efs_meta_degraded last;
+    int bad;
+};
+
+static int dg_collect_cb(void *user, const uint8_t *key, uint32_t klen,
+                         const uint8_t *val, uint32_t vlen)
+{
+    struct dg_collect *c = user;
+
+    c->n++;
+    if (efs_meta_unpack_degraded(key, klen, val, vlen, &c->last) != EFS_OK)
+        c->bad++;
+    return 0;
+}
+
+static struct dg_collect dg_scan(struct efs_kv *kv, uint32_t anch)
+{
+    struct dg_collect c;
+    uint8_t pre[EFS_KV_KEY_MAX];
+    uint32_t plen = 0;
+
+    memset(&c, 0, sizeof(c));
+    if (efs_kv_key_degraded_prefix(anch, pre, &plen) != EFS_OK ||
+        efs_kv_scan_prefix(kv, pre, plen, dg_collect_cb, &c) != EFS_OK)
+        c.bad = -1;
+    return c;
+}
+
+static int dg_pub(struct efs_kv *kv, efs_ino_t ino, uint64_t gen, uint64_t expect,
+                  uint8_t missing, uint32_t doff, uint32_t dlen, uint32_t base_n,
+                  uint64_t base_seq, uint8_t tag)
+{
+    struct efs_meta_pub p;
+    struct efs_meta_row r;
+
+    memset(&p, 0, sizeof(p));
+    if (efs_meta_apply_get_inode(kv, ino, &r) != EFS_OK)
+        return EFS_ERR_NOT_FOUND;
+    p.ino = ino;
+    p.new_size = 128 * 1024;
+    p.expected_gen = expect;
+    p.candidate_gen = gen;
+    p.coding_profile_id = EFS_META_PROFILE_K2F1;
+    p.content_epoch = r.content_epoch;
+    p.now = T0 + gen;
+    fill_ch(&p.ch);
+    p.ch.checksums[0][1] = tag;
+    p.delta_off = doff;
+    p.delta_len = dlen;
+    p.delta_base_n = base_n;
+    p.delta_base_seq = base_seq;
+    if (!dlen && !base_n) {
+        /* A full image folds whatever list (tombstones too) is there. */
+        struct efs_meta_delta ds[EFS_CHUNK_DELTA_MAX];
+        if (efs_meta_apply_get_chunk_deltas(kv, ino, 0, ds, EFS_CHUNK_DELTA_MAX,
+                                            &p.delta_base_n, &p.delta_base_seq) != EFS_OK)
+            p.delta_base_n = 0, p.delta_base_seq = 0;
+    }
+    p.missing_mask = missing;
+    return efs_meta_apply_publish(kv, &p);
+}
+
+static void dg_from(struct efs_kv *kv, efs_ino_t ino, uint64_t gen, uint8_t missing,
+                    uint8_t tag, struct efs_meta_degraded *d)
+{
+    struct efs_meta_row r;
+
+    memset(d, 0, sizeof(*d));
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "dg row");
+    d->ino = ino;
+    d->inode_gen = r.generation;
+    d->object_gen = gen;
+    d->missing_mask = missing;
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        d->nodes[i] = (efs_node_id_t)(i + 1);
+        d->checksums[i][0] = (uint8_t)(0x10 + i);
+    }
+    d->checksums[0][1] = tag;
+}
+
+static int dg_gc_bits(struct efs_kv *kv, uint32_t anch, efs_ino_t ino, uint64_t gen,
+                      uint8_t *bits)
+{
+    uint8_t key[EFS_KV_KEY_MAX], val[EFS_META_GC_VAL], sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
+    efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
+    uint32_t kl = 0, vl = sizeof(val);
+    int rc = efs_kv_key_gc(anch, ino, gen, 0, 0, key, &kl);
+
+    if (rc == EFS_OK)
+        rc = efs_kv_get(kv, key, kl, val, &vl);
+    if (rc == EFS_OK)
+        rc = efs_meta_unpack_gc(val, vl, nodes, bits, sums);
+    return rc;
+}
+
+static void test_degraded_marks(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_degraded d;
+    struct dg_collect c;
+    struct efs_meta_delta ds[EFS_CHUNK_DELTA_MAX];
+    efs_ino_t ino = 0, ino2 = 0;
+    uint32_t anch, nd = 0;
+    uint64_t newest = 0;
+    uint8_t bits = 0;
+    int out = -1;
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "dg", &ino) == EFS_OK && ino, "create");
+    anch = efs_kv_anchor_shard(efs_kv_lane_shard(ino, 0));
+    efs_meta_degraded_count_invalidate(anch);
+    efs_meta_degraded_count_derived(anch, 0);
+
+    /* A degraded publication records exactly one mark in its own batch. */
+    CHECK(dg_pub(kv, ino, 0xA1, 0, 3, 0, 0, 0, 0, 1) == EFS_ERR_INVAL,
+          "two missing fragments are refused");
+    CHECK(dg_scan(kv, anch).n == 0, "refused publish writes nothing");
+    CHECK(dg_pub(kv, ino, 0xA1, 0, 4, 0, 0, 0, 0, 1) == EFS_OK, "degraded base");
+    c = dg_scan(kv, anch);
+    CHECK(c.n == 1 && !c.bad, "one mark");
+    CHECK(c.last.ino == ino && c.last.object_gen == 0xA1 && c.last.missing_mask == 4 &&
+              c.last.chunk_index == 0 && c.last.nodes[2] == 3 &&
+              c.last.checksums[0][1] == 1, "mark names object and placement");
+    CHECK(efs_meta_degraded_count_peek(anch) == 1, "count 1");
+    CHECK(efs_meta_degraded_live(kv, &c.last) == 1, "base object live");
+    CHECK(dg_pub(kv, ino, 0xA1, 0, 4, 0, 0, 0, 0, 1) == EFS_OK, "replay");
+    CHECK(dg_scan(kv, anch).n == 1 && efs_meta_degraded_count_peek(anch) == 1,
+          "replay adds no mark");
+
+    /* A rewrite of the chunk retires the superseded object's mark. */
+    CHECK(dg_pub(kv, ino, 0xB2, 0xA1, 0, 0, 0, 0, 0, 2) == EFS_OK, "clean rewrite");
+    CHECK(dg_scan(kv, anch).n == 0, "rewrite retired the mark");
+    CHECK(efs_meta_degraded_count_peek(anch) == 0, "count 0");
+
+    /* A degraded span is marked; the fold that supersedes it retires it. */
+    CHECK(dg_pub(kv, ino, 0xC3, 0xB2, 1, 0, 4096, 0, 0, 3) == EFS_OK, "degraded span");
+    c = dg_scan(kv, anch);
+    CHECK(c.n == 1 && c.last.object_gen == 0xC3 && c.last.missing_mask == 1, "span mark");
+    CHECK(efs_meta_degraded_live(kv, &c.last) == 1, "span live");
+    CHECK(efs_meta_apply_get_chunk_deltas(kv, ino, 0, ds, EFS_CHUNK_DELTA_MAX, &nd,
+                                          &newest) == EFS_OK && nd == 1, "one span");
+    CHECK(dg_pub(kv, ino, 0xD4, 0xB2, 2, 0, 0, nd, newest, 4) == EFS_OK,
+          "degraded fold");
+    c = dg_scan(kv, anch);
+    CHECK(c.n == 1 && c.last.object_gen == 0xD4 && c.last.missing_mask == 2,
+          "fold retired the span's mark and recorded its own");
+    CHECK(efs_meta_degraded_count_peek(anch) == 1, "count follows");
+
+    /* Rebuilt while live: the mark goes, no GC record; then idempotent. */
+    dg_from(kv, ino, 0xD4, 2, 4, &d);
+    CHECK(efs_meta_degraded_live(kv, &d) == 1, "fold live");
+    CHECK(efs_meta_apply_degraded_clear(kv, &d, 1, &out) == EFS_OK &&
+              out == EFS_META_DEGRADED_CLEARED, "clear rebuilt");
+    CHECK(dg_scan(kv, anch).n == 0 && efs_meta_degraded_count_peek(anch) == 0, "cleared");
+    CHECK(dg_gc_bits(kv, anch, ino, 0xD4, &bits) == EFS_ERR_NOT_FOUND,
+          "live rebuild queues no GC");
+    CHECK(efs_meta_apply_degraded_clear(kv, &d, 1, &out) == EFS_OK &&
+              out == EFS_META_DEGRADED_ABSENT, "clear replay is a no-op");
+
+    /* A clear decided for other content never deletes a newer mark. */
+    CHECK(dg_pub(kv, ino, 0xE5, 0xD4, 1, 0, 0, 0, 0, 5) == EFS_OK, "degraded E5");
+    dg_from(kv, ino, 0xE5, 1, 6, &d); /* wrong checksum tag */
+    CHECK(efs_meta_apply_degraded_clear(kv, &d, 0, &out) == EFS_OK &&
+              out == EFS_META_DEGRADED_ABSENT, "mismatched clear refused");
+    CHECK(dg_scan(kv, anch).n == 1, "mark kept");
+    CHECK(efs_meta_degraded_live(kv, &d) == EFS_ERR_PROTO,
+          "a row disagreeing with the mark fails closed");
+
+    /* Rebuild racing a rewrite: the rewrite retires the mark and queues GC
+     * for the dead object; the GC already visited the rebuilt node (its
+     * bit acked) when the rebuild's clear applies: the bit is reset. */
+    dg_from(kv, ino, 0xE5, 1, 5, &d);
+    CHECK(dg_pub(kv, ino, 0xF6, 0xE5, 0, 0, 0, 0, 0, 7) == EFS_OK, "rewrite wins");
+    CHECK(dg_scan(kv, anch).n == 0, "mark retired by the rewrite");
+    CHECK(efs_meta_degraded_live(kv, &d) == 0, "E5 dead");
+    CHECK(dg_gc_bits(kv, anch, ino, 0xE5, &bits) == EFS_OK && bits == 0, "GC queued");
+    {
+        struct efs_gc_ack_item a = {.ino = ino, .gen = 0xE5, .lane = 0, .ci = 0, .frag = 0};
+        CHECK(efs_meta_apply_gc_ack(kv, &a, 1) == EFS_OK, "GC acked fragment 0");
+    }
+    CHECK(efs_meta_apply_degraded_clear(kv, &d, 1, &out) == EFS_OK &&
+              out == EFS_META_DEGRADED_ORPHANED, "late rebuild is orphaned");
+    CHECK(dg_gc_bits(kv, anch, ino, 0xE5, &bits) == EFS_OK && bits == 0,
+          "fragment 0 queued again");
+    gc_ack_all(kv, ino, 0xE5, 0, 0, "drain E5");
+    CHECK(dg_gc_bits(kv, anch, ino, 0xE5, &bits) == EFS_ERR_NOT_FOUND, "E5 drained");
+    CHECK(efs_meta_apply_degraded_clear(kv, &d, 1, &out) == EFS_OK &&
+              out == EFS_META_DEGRADED_ORPHANED, "after the GC retired");
+    CHECK(dg_gc_bits(kv, anch, ino, 0xE5, &bits) == EFS_OK && bits == 6,
+          "one-fragment GC record for the rebuilt copy");
+    gc_ack_all(kv, ino, 0xE5, 0, 0, "drain again");
+
+    /* A mark whose object went with an unlink is stale: retired, no GC. */
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "dg2", &ino2) == EFS_OK && ino2, "create 2");
+    CHECK(dg_pub(kv, ino2, 0x71, 0, 4, 0, 0, 0, 0, 8) == EFS_OK, "degraded 2");
+    c = dg_scan(kv, efs_kv_anchor_shard(efs_kv_lane_shard(ino2, 0)));
+    CHECK(c.n == 1, "mark 2");
+    d = c.last;
+    {
+        struct efs_meta_row r;
+        CHECK(efs_meta_apply_get_inode(kv, ino2, &r) == EFS_OK, "row 2");
+        CHECK(efs_meta_apply_unlink(kv, EFS_ROOT_INO, "dg2", T0 + 9) == EFS_OK, "unlink 2");
+        CHECK(efs_meta_apply_lane_sweep(kv, ino2, r.generation, 0) == EFS_OK, "sweep 2");
+    }
+    CHECK(efs_meta_degraded_live(kv, &d) == 0, "unlinked object is not live");
+    CHECK(efs_meta_apply_degraded_clear(kv, &d, 0, &out) == EFS_OK &&
+              out == EFS_META_DEGRADED_CLEARED, "stale mark retired");
+    CHECK(dg_scan(kv, efs_kv_anchor_shard(efs_kv_lane_shard(ino2, 0))).n == 0, "gone");
+
+    /* Malformed rows fail closed. */
+    {
+        uint8_t key[EFS_KV_KEY_MAX], val[EFS_META_DEGRADED_VAL];
+        uint32_t kl = 0;
+        dg_from(kv, ino, 0x99, 4, 0, &d);
+        efs_meta_pack_degraded(val, &d);
+        CHECK(efs_kv_key_degraded(anch, ino, 0x99, 0, 0, key, &kl) == EFS_OK, "key");
+        CHECK(efs_meta_unpack_degraded(key, kl, val, sizeof(val), &d) == EFS_OK, "round trip");
+        val[8] = 6;
+        CHECK(efs_meta_unpack_degraded(key, kl, val, sizeof(val), &d) == EFS_ERR_PROTO,
+              "two-fragment mask refused");
+        val[8] = 4;
+        CHECK(efs_meta_unpack_degraded(key, kl, val, sizeof(val) - 1, &d) == EFS_ERR_PROTO,
+              "short row refused");
+        key[19] = 1;
+        CHECK(efs_meta_unpack_degraded(key, kl, val, sizeof(val), &d) == EFS_ERR_PROTO,
+              "lane that does not match the chunk refused");
+    }
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
+    efs_kv_mem_free(kv);
+}
+
 static void test_xattr(void)
 {
     struct efs_kv *kv = efs_kv_mem_create();
@@ -6289,6 +6526,7 @@ int main(void)
     test_gc_delta_batch_boundary();
     test_gc_tail_alias();
     test_gc_watermark();
+    test_degraded_marks();
     if (failures) {
         fprintf(stderr, "test_meta_apply: %d failure(s)\n", failures);
         return 1;
