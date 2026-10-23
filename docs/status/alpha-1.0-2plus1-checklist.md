@@ -163,7 +163,10 @@ PASS on efs2, NOTRUN on node9901. The W125 harness gap (cleanup,
 remote and final-verification evidence, self-tests) is merged (`56b7e48fe`).
 The merged devel passed `make test` with zero error lines on efs1 at
 `95beaa053`, 927/927 on efs2 at K5's HEAD, and (K8 session, Oct 22 evening)
-rc 0 on efs1 at `4090e717b`, which includes every K merge.
+rc 0 on efs1 at `4090e717b`, and rc 0 with zero error lines (15 NOTRUN, no
+kept scratch) on efs3 at `0eb1511d2`, the tree with every second-wave merge
+(`TMPDIR=/data1/tmp`; a one-line TMPDIR fix to K7's sweep test was needed
+after K25's hygiene gate met it).
 
 ### Proposed fix order
 

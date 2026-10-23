@@ -120,7 +120,8 @@ persisted; ior write regression needs a K row.
 REOPENED by the [integration review](devel-integration-review-20261022.md),
 all five (K1 R4, K5 S2/S3, K7 R2/R3, K22 S1, K25 R1, the two P1 findings
 included) are fixed again and merged; the K26 valgrind leak gate is merged;
-2 INCOMPLETE (K9, K15); live gates NOTRUN.** Highlights: W148 wrong-bytes root
+2 INCOMPLETE (K9, K15); live gates NOTRUN. devel `0eb1511d2` passes `make test`
+rc 0 on efs3.** Highlights: W148 wrong-bytes root
 cause fixed (UNCOND slot base), sessions registered on every mutation
 (protocol 4), identity-bound fragment format 2 (fresh format needed),
 follower memory/lag bound, pre-vote, bounded stops.
