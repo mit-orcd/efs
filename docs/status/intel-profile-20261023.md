@@ -26,7 +26,7 @@ loops.
 - **Capture:** 8 s after each phase started, 25 s of
   `perf record -F 499 -g -p <pids>`. On intel1 and intel2 this covered both
   efsd of the host; on xorinox, the intel-mnt efs-fuse only.
-- **Script:** the capture script is reproduced below; its text reports were
+- **Reports:** the per-host capture command is under "Raw data"; its text reports were
   `perf report --no-children`, `--children` and caller graphs.
 
 | Phase | Wall time | Throughput | CPU used (samples / 499 Hz / 25 s) |
