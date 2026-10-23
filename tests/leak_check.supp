@@ -1,0 +1,10 @@
+# Memcheck suppressions for `make leak-check` (tests/leak_check.sh).
+#
+# Only third-party noise belongs here: allocations owned by glibc, the
+# dynamic loader or system libraries that efs code cannot free. Never
+# suppress a stack whose allocating frame is efs code; fix the leak instead.
+# Each entry names the library, why it is not ours, and the host it was
+# seen on.
+#
+# (No entries yet: the K26 run on efs2, Fedora 42 aarch64, glibc 2.41,
+# valgrind 3.26.0, reported no third-party definite leaks.)

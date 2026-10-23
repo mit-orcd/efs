@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Two fresh admissions precede either send; older rounds cannot cover them."""
 from pathlib import Path
-import subprocess,tempfile
+import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1];s=(root/'src/server/raft_host.c').read_text()
 a=s.index('static int host_read_index_pair(');b=s.index('\n}',a)+2
 code=r'''
@@ -158,10 +158,13 @@ assert 'host_view_covers(&v, want, round, admitted_term)' in body
 with tempfile.TemporaryDirectory(prefix='efs-read-pair-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-pthread','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
- subprocess.run([str(p.with_suffix(''))],check=True)
- sanitized=Path(d)/'sanitized'
- subprocess.run(['cc','-std=gnu11','-pthread','-fsanitize=address,undefined','-fno-omit-frame-pointer','-I'+str(root/'include'),str(p),'-o',str(sanitized)],check=True)
- subprocess.run([str(sanitized)],check=True)
+ # make leak-check sets EFS_LEAK_WRAP (memcheck) and skips the ASan build.
+ wrap=shlex.split(os.environ.get('EFS_LEAK_WRAP',''))
+ subprocess.run([*wrap,str(p.with_suffix(''))],check=True)
+ if not wrap:
+  sanitized=Path(d)/'sanitized'
+  subprocess.run(['cc','-std=gnu11','-pthread','-fsanitize=address,undefined','-fno-omit-frame-pointer','-I'+str(root/'include'),str(p),'-o',str(sanitized)],check=True)
+  subprocess.run([str(sanitized)],check=True)
  negative=Path(d)/'late-round.c'
  old='uint64_t begun=__atomic_load_n(&g->ri_begun,__ATOMIC_SEQ_CST);'
  assert old in code

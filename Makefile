@@ -175,7 +175,7 @@ BLAKE3_OBJS = $(BLAKE3_DIR)/blake3.o \
               $(BLAKE3_DIR)/blake3_dispatch.o \
               $(BLAKE3_ARCH_SRCS:.c=.o)
 
-.PHONY: all clean tests test check test-client-memory docs-check blake3-bench FORCE
+.PHONY: all clean tests test check leak-check test-client-memory docs-check blake3-bench FORCE
 
 .PHONY: test-fence-read test-fence-view test-lookup-memo test-fold-observation test-create-errors test-report-pressure
 test-report-pressure:
@@ -345,8 +345,17 @@ FORCE:
 docs-check:
 	python3 docs/check-architecture.py
 
+# Valgrind memcheck leak gate (K26): bounded unit list, one PASS/FAIL line
+# per binary and a verdict; exit 1 on any definite leak, 3 (NOTRUN) without
+# valgrind. Builds its own baseline-ISA copy; see tests/leak_check.sh and
+# docs/how-it-works/testing.md. Works where LeakSanitizer cannot (ptrace).
+leak-check:
+	EFS_GIT_ID='$(EFS_GIT_ID)' EFS_GIT_DESCRIBE='$(EFS_GIT_DESCRIBE)' \
+	EFS_GIT_BRANCH='$(EFS_GIT_BRANCH)' EFS_BUILD_TIME='$(EFS_BUILD_TIME)' \
+	bash tests/leak_check.sh
+
 check:
-	@rc=0; $(MAKE) test || rc=1; $(MAKE) docs-check || rc=1; exit $$rc
+	@rc=0; $(MAKE) test || rc=1; $(MAKE) docs-check || rc=1; $(MAKE) leak-check || rc=1; exit $$rc
 
 test: all
 	python3 tests/test_retired_root_markers.py
@@ -631,6 +640,7 @@ test: all
 	python3 tests/test_namespace_receipt_pending.py
 	python3 tests/test_query_loaded_oracle.py
 	python3 tests/test_valgrind_verdict.py
+	python3 tests/test_leak_gate.py
 	python3 tests/test_txn_parts_bounds.py
 	python3 tests/test_prepare_bounds.py
 	python3 tests/test_raft_tail.py
