@@ -926,16 +926,15 @@ int efs_meta_abandon_append(struct efs_kv *kv,efs_ino_t ino,uint64_t len,
        q->ack>=q->id.seq || !tx || !ops || !ops->prepare || !ops->decide ||
        !ops->resolve || !retired)return EFS_ERR_INVAL;
     uint32_t shard=efs_kv_inode_shard(ino);
-    /* A fenced owner is retired by session cleanup (FENCED_HOLE), not here. */
+    /* A fenced owner is retired by session cleanup (FENCED_HOLE), not here.
+     * The EXCL image is validated from its own bytes (K5/T1): a fence that
+     * lands after the accept must refuse here, not become the CAS base. */
     int rc=efs_session_accept(kv,shard,q->id.client_uuid,q->id.session_epoch);
     if(rc!=EFS_OK)return rc;
     struct append_owner_context owner={.ops=ops,.ctx=ctx,.first=1};
-    rc=efs_kv_key_sess_local(shard,q->id.client_uuid,owner.owner.key,&owner.owner.klen);
-    owner.owner.expected_len=EFS_SESS_LOCAL_VAL;
-    if(rc==EFS_OK)rc=efs_kv_get(kv,owner.owner.key,owner.owner.klen,
-                                owner.owner.expected,&owner.owner.expected_len);
+    rc=session_owner_capture(kv,shard,q->id.client_uuid,q->id.session_epoch,
+        owner.owner.key,&owner.owner.klen,owner.owner.expected,&owner.owner.expected_len);
     if(rc!=EFS_OK)return rc;
-    if(owner.owner.expected_len!=EFS_SESS_LOCAL_VAL)return EFS_ERR_PROTO;
     owner.owner.op=EFS_TXN_PUT;owner.owner.new_len=EFS_SESS_LOCAL_VAL;
     memcpy(owner.owner.value,owner.owner.expected,EFS_SESS_LOCAL_VAL);
 

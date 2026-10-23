@@ -7,7 +7,8 @@
  *
  * The barrier is a KV wrapper around a real session/inode store: the Nth
  * read of the session row runs the fence (or a row removal) on the store
- * first, exactly between the executor's check and its capture. */
+ * first, exactly between the executor's check and its capture. The K15/W64
+ * abandon entry point (review T1) is covered the same way. */
 #include "efs/meta_apply.h"
 #include "efs/session.h"
 #include "efs/kv_key.h"
@@ -87,27 +88,40 @@ static unsigned spy_mode,prepares,owner_prepares;
 static uint32_t spy_shard;static uint8_t spy_uuid[EFS_OPID_UUID_LEN];
 static struct efs_txn_parts last_parts;
 static int is_owner(const uint8_t *key,uint32_t n){return n>=3 && key[2]==EFS_KV_KIND_SESS_LOCAL;}
+/* The owner image is prepared first; fence right before or right after it. */
+static void spy_before(struct efs_kv *kv,int owner)
+{
+    if(owner && spy_mode==SPY_FENCE_BEFORE_OWNER) {
+        assert(efs_session_fence_local(kv,spy_shard,spy_uuid,2)==EFS_OK);
+        bar.after_injection=fingerprint(kv);
+    }
+}
+static void spy_after(struct efs_kv *kv,int owner,int rc)
+{
+    if(owner && rc==EFS_OK && spy_mode==SPY_FENCE_AFTER_OWNER)
+        assert(efs_session_fence_local(kv,spy_shard,spy_uuid,2)==EFS_ERR_BUSY);
+}
 static int mtime_prepare(void *ctx,const struct efs_txid *t,const struct efs_txn_parts *p,
                          const struct efs_meta_mtime_image *q)
 {
     struct efs_kv *kv=ctx;int owner=is_owner(q->key,q->klen);
     prepares++;owner_prepares+=owner;last_parts=*p;
-    if(owner && spy_mode==SPY_FENCE_BEFORE_OWNER) {
-        assert(efs_session_fence_local(kv,spy_shard,spy_uuid,2)==EFS_OK);
-        bar.after_injection=fingerprint(kv);
-    }
+    spy_before(kv,owner);
     int rc=efs_txn_prepare_excl_value(kv,t,p,q->key,q->klen,q->expected,q->expected_len,
                                       EFS_TXN_PUT,q->value,q->new_len);
-    if(owner && rc==EFS_OK && spy_mode==SPY_FENCE_AFTER_OWNER)
-        assert(efs_session_fence_local(kv,spy_shard,spy_uuid,2)==EFS_ERR_BUSY);
+    spy_after(kv,owner,rc);
     return rc;
 }
 static int append_prepare(void *ctx,const struct efs_txid *t,const struct efs_txn_parts *p,
                           const struct efs_meta_append_image *q)
 {
-    struct efs_kv *kv=ctx;prepares++;owner_prepares+=is_owner(q->key,q->klen);last_parts=*p;
-    return efs_txn_prepare_excl_value(kv,t,p,q->key,q->klen,q->expected,q->expected_len,
+    struct efs_kv *kv=ctx;int owner=is_owner(q->key,q->klen);
+    prepares++;owner_prepares+=owner;last_parts=*p;
+    spy_before(kv,owner);
+    int rc=efs_txn_prepare_excl_value(kv,t,p,q->key,q->klen,q->expected,q->expected_len,
                                       q->op,q->value,q->new_len);
+    spy_after(kv,owner,rc);
+    return rc;
 }
 static int decide(void *ctx,const struct efs_txid *t,const struct efs_txn_parts *p,int d)
 { return efs_txn_decide(ctx,efs_txn_coordinator(t,p),t,d); }
@@ -248,6 +262,96 @@ static void completion_between(unsigned mode,int expect)
     free(plan);efs_kv_mem_free(kv);
 }
 
+/* K15/W64 abandon of a granted reservation whose reply was lost (T1). The
+ * grant leaves an applied receipt and an OPEN reservation; a refused
+ * abandon must leave both exactly as the fence left them. */
+static struct efs_kv *granted(efs_ino_t *ino,uint32_t *shard,struct efs_meta_append_plan *plan)
+{
+    struct efs_kv *kv=fixture(ino,shard);
+    struct efs_opid_req q=identity();
+    assert(efs_meta_capture_append(kv,*ino,8,&q,decision,kv,plan)==EFS_OK);
+    struct efs_txid t={{38}};
+    assert(efs_meta_execute_append_owned(kv,plan,&q,&t,&append_ops,kv)==EFS_OK);
+    prepares=owner_prepares=0;
+    uint32_t open=0;assert(efs_meta_apply_append_state(kv,*ino,NULL,NULL,&open)==EFS_OK && open==1);
+    return kv;
+}
+static int abandon(struct efs_kv *w,struct efs_kv *kv,efs_ino_t ino,uint8_t tag,unsigned *retired)
+{
+    struct efs_opid_req q=identity();struct efs_txid t={{39,tag}};
+    return efs_meta_abandon_append(w,ino,8,&q,&t,&append_ops,kv,retired);
+}
+static uint32_t open_count(struct efs_kv *kv,efs_ino_t ino)
+{uint32_t open=99;assert(efs_meta_apply_append_state(kv,ino,NULL,NULL,&open)==EFS_OK);return open;}
+
+/* Negative control: the pre-fix abandon capture (a plain read with only a
+ * length check) accepts the fenced row, and an owner PREPARE against those
+ * bytes succeeds, so the EXCL CAS alone cannot refuse it. */
+static void prefix_capture_admits(struct efs_kv *kv,uint32_t shard)
+{
+    uint8_t key[EFS_KV_KEY_MAX],image[EFS_SESS_LOCAL_VAL];
+    uint32_t kl=0,n=sizeof(image);
+    assert(efs_kv_key_sess_local(shard,spy_uuid,key,&kl)==EFS_OK);
+    assert(efs_kv_get(kv,key,kl,image,&n)==EFS_OK && n==EFS_SESS_LOCAL_VAL);
+    struct efs_txn_parts parts={0};parts.shard[parts.n++]=shard;
+    struct efs_txid t={{40}};
+    assert(efs_txn_prepare_excl_value(kv,&t,&parts,key,kl,image,n,EFS_TXN_PUT,image,n)==EFS_OK);
+    assert(decide(kv,&t,&parts,EFS_TXN_ABORT)==EFS_OK && resolve(kv,&t,&parts,EFS_TXN_ABORT)==EFS_OK);
+}
+
+/* Fence (or row removal) between accept and capture: refused from the
+ * captured image, nothing prepared, receipt and reservation unchanged. */
+static void abandon_between(unsigned mode,int expect)
+{
+    efs_ino_t ino;uint32_t shard;
+    struct efs_meta_append_plan *plan=malloc(sizeof(*plan));assert(plan);
+    struct efs_kv *kv=granted(&ino,&shard,plan);
+    struct efs_opid_req q=identity();unsigned retired=9;
+    struct efs_kv *w=barrier(kv,shard,q.id.client_uuid,2,mode); /* read 1: accept, 2: capture */
+    int rc=abandon(w,kv,ino,(uint8_t)mode,&retired);
+    if(rc!=expect)fprintf(stderr,"abandon between mode=%u rc=%d want %d\n",mode,rc,expect);
+    assert(bar.fired==1 && rc==expect && !retired && !prepares);
+    assert(fingerprint(kv)==bar.after_injection && open_count(kv,ino)==1);
+    if(mode==INJECT_FENCE)prefix_capture_admits(kv,shard);
+    free(plan);efs_kv_mem_free(kv);
+}
+
+/* Fence after capture, before the owner PREPARE: the exact-image CAS
+ * conflicts (STALE, which the host returns as retryable BUSY), nothing is
+ * retired; the retry is refused FENCED with no prepare. */
+static void abandon_after_capture(void)
+{
+    efs_ino_t ino;uint32_t shard;
+    struct efs_meta_append_plan *plan=malloc(sizeof(*plan));assert(plan);
+    struct efs_kv *kv=granted(&ino,&shard,plan);unsigned retired=9;
+    spy_mode=SPY_FENCE_BEFORE_OWNER;
+    assert(abandon(kv,kv,ino,10,&retired)==EFS_ERR_STALE && !retired);
+    assert(prepares==1 && owner_prepares==1);
+    assert(fingerprint(kv)==bar.after_injection && open_count(kv,ino)==1);
+    spy_mode=SPY_PLAIN;prepares=0;
+    assert(abandon(kv,kv,ino,11,&retired)==EFS_ERR_FENCED && !retired && !prepares);
+    assert(open_count(kv,ino)==1);
+    free(plan);efs_kv_mem_free(kv);
+}
+
+/* Fence after the owner PREPARE: the fence waits (BUSY) behind the intent,
+ * the abandon resolves first (reservation ABORTED_HOLE, frontier free),
+ * then the fence lands and the old epoch is refused. */
+static void abandon_after_prepare(void)
+{
+    efs_ino_t ino;uint32_t shard;
+    struct efs_meta_append_plan *plan=malloc(sizeof(*plan));assert(plan);
+    struct efs_kv *kv=granted(&ino,&shard,plan);unsigned retired=0;
+    spy_mode=SPY_FENCE_AFTER_OWNER;
+    assert(abandon(kv,kv,ino,12,&retired)==EFS_OK && retired==1);
+    assert(owner_prepares==1 && open_count(kv,ino)==0);
+    assert(efs_session_fence_local(kv,shard,spy_uuid,2)==EFS_OK);
+    spy_mode=SPY_PLAIN;prepares=0;uint64_t after=fingerprint(kv);
+    assert(abandon(kv,kv,ino,13,&retired)==EFS_ERR_FENCED && !retired && !prepares);
+    assert(fingerprint(kv)==after);
+    free(plan);efs_kv_mem_free(kv);
+}
+
 /* efs_session_prepare_owner: its EXCL image is its own second read. */
 static void prepare_owner_between(unsigned mode,int expect)
 {
@@ -274,8 +378,13 @@ int main(void)
     completion_between(INJECT_DELETE,EFS_ERR_UNREGISTERED);
     prepare_owner_between(INJECT_FENCE,EFS_ERR_FENCED);
     prepare_owner_between(INJECT_DELETE,EFS_ERR_UNREGISTERED);
+    abandon_between(INJECT_FENCE,EFS_ERR_FENCED);
+    abandon_between(INJECT_DELETE,EFS_ERR_UNREGISTERED);
+    abandon_after_capture();
+    abandon_after_prepare();
     puts("session-owned capture: fence/removal between check and capture refuses with no "
-         "inode, lane, append or intent change; fence after capture conflicts; fence after "
-         "owner PREPARE waits for the established transaction PASS");
+         "inode, lane, append, receipt or intent change (mtime, reserve, completion, "
+         "abandon, owner prepare); fence after capture conflicts; fence after owner "
+         "PREPARE waits for the established transaction PASS");
     return 0;
 }
