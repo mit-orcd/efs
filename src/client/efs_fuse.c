@@ -2325,7 +2325,7 @@ static int efs_open_acquire_fileid_mode(efs_ino_t ino, uint64_t create_generatio
          * keeps its exact identity. Both must retry outside the stripe so
          * an older owner on a colliding inode can finish and free capacity. */
         if(rc!=EFS_ERR_BUSY || !admission_busy)break;
-        usleep(1000);
+        efs_client_opid_wait(1);
     }
     efs_client_rpc_set_deadline_ms(previous);
     return rc;
@@ -4404,7 +4404,7 @@ static int efs_fuse_create_begin_wait(struct efs_client_create_request *request,
     while(!efs_client_rpc_past_deadline()) {
         rc=efs_client_create_begin(request,parent,name,mode,uid,gid);
         if(rc!=EFS_ERR_BUSY || request->active)break;
-        usleep(1000);
+        efs_client_opid_wait(1);
     }
     efs_client_rpc_set_deadline_ms(previous);
     return rc;
@@ -5023,7 +5023,7 @@ static int efs_fuse_release_ino(fuse_ino_t ino, struct fuse_file_info *fi)
             for (unsigned spin = 0; rc == EFS_ERR_BUSY && spin < CLOSE_ADMIT_SPINS &&
                  !efs_client_rpc_past_deadline() && efs_open_close_unadmitted(fh); spin++) {
                 pthread_mutex_unlock(edge);
-                usleep(1000);
+                efs_client_opid_wait(1);
                 pthread_mutex_lock(edge);
                 rc = efs_open_release_pending(fh);
             }

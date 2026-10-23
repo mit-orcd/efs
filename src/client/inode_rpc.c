@@ -382,6 +382,21 @@ static void opid_end(int slot)
             (unsigned long long)seq,slot,(unsigned long)pthread_self());
 }
 
+/* Wait until any identity ends or max_ms passes. Callers retry a refused
+ * admission after it: a retry then runs as soon as the window can move
+ * instead of after a fixed 1 ms sleep, and never later than one. */
+void efs_client_opid_wait(unsigned max_ms)
+{
+    struct timespec until;
+    clock_gettime(CLOCK_REALTIME, &until);
+    until.tv_nsec += (long)max_ms * 1000000;
+    until.tv_sec += until.tv_nsec / 1000000000;
+    until.tv_nsec %= 1000000000;
+    pthread_mutex_lock(&opid_mu);
+    pthread_cond_timedwait(&opid_cv, &opid_mu, &until);
+    pthread_mutex_unlock(&opid_mu);
+}
+
 /* A reservation identity lives across the entire FUSE BUSY retry loop,
  * not just one transport attempt. Share namespace's contiguous-ACK tracker;
  * append's distinct KV kind keeps its result namespace separate. The full

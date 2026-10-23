@@ -318,6 +318,8 @@ struct efs_client_create_request {
     uint64_t generation;
     int slot,active,attempted,admitted,complete,result,revoked;
 };
+/* Wait until an identity ends or max_ms passes (admission retry pacing). */
+void efs_client_opid_wait(unsigned max_ms);
 int efs_client_create_begin(struct efs_client_create_request *,efs_ino_t,
                              const char *,uint32_t,uid_t,gid_t);
 int efs_client_create_resume(struct efs_client_create_request *,int probe_only);
