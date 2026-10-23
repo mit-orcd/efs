@@ -149,8 +149,8 @@ rejections); after it passes, and the slow follower applies every committed
 entry once the batches arrive. The whole `test_raft` passes in both modes.
 
 **F2 — host: one TXN_BATCH entry per group for a transaction's PREPAREs
-and RESOLVEs** (`438d613d9`). New log command `TXN_BATCH` (86,
-`include/efs/meta_cmd.h`): `[86][sub][n:2]([len:2][command])*n`, `sub` is
+and RESOLVEs** (`438d613d9`). New log command `TXN_BATCH` (88 since the merge, `6b621993d`; 86 on the branch,
+`include/efs/meta_cmd.h`): `[88][sub][n:2] ([len:2][command]) × n`, `sub` is
 PREPARE or RESOLVE, at most 96 commands, all for the entry's group.
 
 - Apply (`apply_txn_batch_cmd`, `src/server/raft_host.c:2944`) checks the
