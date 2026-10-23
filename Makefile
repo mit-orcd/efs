@@ -693,8 +693,11 @@ test: all
 # .build_id.stamp changes content (and mtime) only when the git id changes,
 # so every object picks up a moved HEAD or dirty-flag flip — a stale object
 # keeping the old -DEFS_BUILD_ID splits the cluster at the HELLO gate.
-.build_id.stamp: FORCE
-	@echo '$(EFS_GIT_ID)' | cmp -s - $@ 2>/dev/null || echo '$(EFS_GIT_ID)' > $@
+# It is updated while this Makefile is parsed, not by a FORCE recipe: make
+# counts a FORCE target as remade under `make -n` and in every recursive
+# make, so all objects looked out of date and scripts/make_test_summary.sh
+# re-ran ~500 compiles serially from `make -n test`.
+_build_id_stamp := $(shell echo '$(EFS_GIT_ID)' | cmp -s - .build_id.stamp 2>/dev/null || echo '$(EFS_GIT_ID)' > .build_id.stamp)
 
 $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS) $(MGMT_OBJ) $(TEST_SRCS:.c=.o): \
 	$(wildcard include/efs/*.h) .build_id.stamp
