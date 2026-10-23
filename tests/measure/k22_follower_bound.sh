@@ -10,7 +10,7 @@
 #      (PORT default 18500). Kills only its own daemons and mount.
 #
 # Phases (durations in seconds, env-overridable):
-#   1. start nodes 1-2, raft-mkfs, start node 3 (follower of both groups)
+#   1. start nodes 1-3 (one cluster.conf), raft-mkfs, restart node 3 (follower of both groups)
 #      with EFS_FAULT_COMPACT_STALL=1, EFS_FAULT_L0_BYTES=$L0 and
 #      EFS_FAULT_MEMTABLE_BYTES=$MEMTABLE (fault-build hooks: the 1 GiB L0
 #      cap and 4 MiB memtable scaled down so the derived bound is reached in
@@ -43,7 +43,7 @@ ADDR=127.0.0.1
 MNT=$D/mnt
 FAULT=$D/fault
 S=$D/samples.tsv
-export EFS_TRANSPORT=tcp EFS_MD_RAFT_N=3
+export EFS_TRANSPORT=tcp
 
 say() { echo "[k22 $(date -u +%H:%M:%S)] $*" | tee -a "$D/driver.log"; }
 pid_of() { cat "$D/logs/n$1.pid" 2>/dev/null; }
@@ -64,27 +64,34 @@ for i in 1 2 3; do
     ss -ltnH "sport = :$((PORT+i))" | grep -q . && { echo "port $((PORT+i)) in use"; exit 1; }
 done
 mkdir -p "$D"/{n1,n2,n3,logs,mnt}
+# D39: the configured member list; efs-mgmt declares as management with it.
+for i in 1 2 3; do echo "$i $ADDR:$((PORT+i))"; done > "$D/cluster.conf"
+export EFS_CLUSTER_CONF="$D/cluster.conf"
 rm -f "$FAULT" "$D/load.stop" "$S"
 : > "$D/driver.log"
 
 start_node() {  # start_node ID [VAR=val...]
     local i=$1; shift
-    local join=""; [ "$i" -gt 1 ] && join="--join $ADDR:$((PORT+1))"
-    env EFS_RAFT_OBS=1 "$@" "$REL/efsd" --node-id "$i" --addr $ADDR --port $((PORT+i)) \
-        --storage "$D/n$i" --quota 8G --no-direct-io $join \
+    local mark; mark=$(grep -c listening "$D/logs/efsd-n$i.log" 2>/dev/null)
+    env EFS_RAFT_OBS=1 "$@" "$REL/efsd" --cluster "$D/cluster.conf" --addr $ADDR --port $((PORT+i)) \
+        --storage "$D/n$i" --quota 8G --no-direct-io \
         >> "$D/logs/efsd-n$i.log" 2>&1 < /dev/null &
     echo $! > "$D/logs/n$i.pid"
-    for _ in $(seq 120); do grep -q listening "$D/logs/efsd-n$i.log" && return 0; sleep 0.5; done
+    for _ in $(seq 120); do [ "$(grep -c listening "$D/logs/efsd-n$i.log")" -gt "${mark:-0}" ] && return 0; sleep 0.5; done
     say "FATAL node $i did not start"; exit 2
 }
 start_node 1
 start_node 2
+start_node 3
 ok=0
 for _ in $(seq 40); do
     "$REL/efs-mgmt" raft-mkfs $ADDR:$((PORT+1)) 2>&1 | grep -q 'raft-mkfs rc=0 ' && { ok=1; break; }
     sleep 1
 done
 [ $ok = 1 ] || { say "FATAL raft-mkfs"; exit 2; }
+# raft-mkfs needs every configured member (D39): node 3 restarts with the
+# fault hooks while 1+2 hold leadership and rejoins as a follower of both.
+kill "$(pid_of 3)"; for _ in $(seq 100); do kill -0 "$(pid_of 3)" 2>/dev/null || break; sleep 0.2; done
 start_node 3 EFS_FAULT_COMPACT_STALL=1 EFS_FAULT_COMPACT_FILE="$FAULT" EFS_FAULT_L0_BYTES="$L0" \
     EFS_FAULT_MEMTABLE_BYTES="$MEMTABLE"
 for _ in $(seq 120); do

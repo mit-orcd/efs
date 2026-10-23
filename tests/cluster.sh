@@ -10,8 +10,8 @@
 # A start rebuilds all four servers, so run it from node9901:
 #   efs-bg.sh start <name> 'bash ~/git/efs/tests/cluster.sh restart --perf'
 #
-# Servers are fcstor003–006. Storage is kept: no --join, no wipe, no
-# raft-mkfs. Transport is RDMA with EFS_RAFT_OBS=1. --perf and
+# Servers are fcstor003–006, one configured member list (D39, written by
+# roll_efsd.sh). Storage is kept: no wipe, no raft-mkfs. Transport is RDMA with EFS_RAFT_OBS=1. --perf and
 # --strace attach to the running efsd; the files are
 # /tmp/efs-perf/efsd.data and efsd.strace on each server. They apply
 # to the servers only.
@@ -43,7 +43,7 @@ say() { echo "[cluster] $*"; }
 
 usage() {
     echo "usage: $0 stop|start|restart [--clients] [--perf] [--strace] [--fresh]" >&2
-    echo "  --fresh: after tests/wipe_cluster.sh — seed + --join, then raft-mkfs" >&2
+    echo "  --fresh: after tests/wipe_cluster.sh — start all members, then raft-mkfs" >&2
     exit 2
 }
 

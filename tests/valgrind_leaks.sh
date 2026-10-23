@@ -16,8 +16,8 @@
 #
 # Step 11 port: the metadata engine is the raft host, so a single-node efsd
 # can no longer serve an export (no quorum). Every wire phase runs a 3-node
-# localhost raft group (EFS_MD_RAFT_N=3, node-ids 1..3 on ports PORT..PORT+2,
-# one storage dir per node) and `efs-mgmt raft-mkfs`.
+# localhost raft group (configured members 1..3 on ports PORT..PORT+2 in
+# one cluster.conf, one storage dir per node) and `efs-mgmt raft-mkfs`.
 #
 # Gate criteria (hard fail unless all hold):
 #   1. definitely lost  = 0 bytes   } the two real-leak kinds
@@ -240,17 +240,24 @@ PY_KILL
 }
 
 # Start a 3-node raft group on $ADDR ports $PORT..$PORT+2 with node 1 under
-# valgrind (log "$WORK"-group1.vg). Plain nodes 2+3 come up first and hold
-# quorum/leadership; the slow valgrind'd node 1 joins last as a follower and
-# still applies every committed entry (that is the server-side coverage).
+# valgrind (log "$WORK"-group1.vg). All three are configured members of one
+# list ($STORAGE/cluster.conf, D39) and raft-mkfs needs every member present,
+# so the slow valgrind'd node 1 starts first; plain nodes 2+3 hold
+# quorum/leadership and node 1 still applies every committed entry (that is
+# the server-side coverage).
 # $1 = EFS_TRANSPORT for the servers. NOTE: tcp makes efs_rdma_available()
 # return 0 process-wide (rdma.c), which disables the server's RDMA_SETUP
 # accept — so the RDMA phase must NOT pass tcp here or every client upgrade
 # is refused.
+write_conf() {
+    : > "$STORAGE/cluster.conf"
+    for id in 1 2 3; do echo "$id $ADDR:$((PORT + id - 1))" >> "$STORAGE/cluster.conf"; done
+}
+
 format_group() {
     local seed=$1 attempt result
     for attempt in $(seq 1 30); do
-        result=$(./efs-mgmt raft-mkfs "$seed" 2>&1)
+        result=$(./efs-mgmt --cluster "$STORAGE/cluster.conf" raft-mkfs "$seed" 2>&1)
         printf '%s\n' "$result" >> "$WORK-format.out"
         printf '%s\n' "$result" | grep -q 'raft-mkfs rc=0 ' && return 0
         sleep 1
@@ -261,16 +268,19 @@ format_group() {
 
 start_group_vg_server() {
     local xport=$1
-    local id port join out i
-    rm -rf "$STORAGE"; mkdir -p "$STORAGE"
+    local id port out i
+    rm -rf "$STORAGE"; mkdir -p "$STORAGE"; write_conf
+    EFS_TRANSPORT=$xport $VG --log-file="$WORK-group1.vg" \
+        ./efsd --cluster "$STORAGE/cluster.conf" --addr "$ADDR" --port "$PORT" \
+        --storage "$STORAGE/s1" --quota 1G --writers 0 "$IO_FLAG" \
+        >"$WORK-group1.out" 2>&1 &
+    record_ours "$!"
     for id in 2 3; do
         port=$((PORT + id - 1))
-        join="--join $ADDR:$((PORT + 1))"
-        [ "$id" = 2 ] && join=""                            # node 2 seeds
         out="$WORK-group$id.out"
-        EFS_MD_RAFT_N=3 EFS_TRANSPORT=$xport setsid ./efsd --node-id "$id" \
+        EFS_TRANSPORT=$xport setsid ./efsd --cluster "$STORAGE/cluster.conf" \
             --addr "$ADDR" --port "$port" --storage "$STORAGE/s$id" \
-            --quota 1G --writers 0 "$IO_FLAG" $join \
+            --quota 1G --writers 0 "$IO_FLAG" \
             >"$out" 2>&1 </dev/null &
         record_ours "$!"
         for i in $(seq 1 40); do
@@ -278,31 +288,23 @@ start_group_vg_server() {
         done
         grep -q listening "$out" || { echo "[leaks] node $id did not start"; cat "$out"; exit 2; }
     done
-    format_group "$ADDR:$((PORT + 1))"
-    # valgrind'd node 1 joins last; do not wait for it (slow under memcheck)
-    EFS_MD_RAFT_N=3 EFS_TRANSPORT=$xport $VG --log-file="$WORK-group1.vg" \
-        ./efsd --node-id 1 --addr "$ADDR" --port "$PORT" \
-        --storage "$STORAGE/s1" --quota 1G --writers 0 "$IO_FLAG" \
-        --join "$ADDR:$((PORT + 1))" >"$WORK-group1.out" 2>&1 &
-    record_ours "$!"
     for i in $(seq 1 240); do
         grep -q listening "$WORK-group1.out" 2>/dev/null && break; sleep 0.5
     done
-    grep -q listening "$WORK-group1.out" || { fail 'valgrind follower never listened'; exit 2; }
+    grep -q listening "$WORK-group1.out" || { fail 'valgrind member never listened'; exit 2; }
+    format_group "$ADDR:$((PORT + 1))"
 }
 
-# Start a plain 3-node group with node 1 as seed (used by the fuse phases).
+# Start a plain 3-node group (used by the fuse phases).
 start_group_plain() {
-    local id port join out i
-    rm -rf "$STORAGE"; mkdir -p "$STORAGE"
+    local id port out i
+    rm -rf "$STORAGE"; mkdir -p "$STORAGE"; write_conf
     for id in 1 2 3; do
         port=$((PORT + id - 1))
-        join="--join $ADDR:$PORT"
-        [ "$id" = 1 ] && join=""
         out="$WORK-group$id.out"
-        EFS_MD_RAFT_N=3 EFS_TRANSPORT=tcp setsid ./efsd --node-id "$id" \
+        EFS_TRANSPORT=tcp setsid ./efsd --cluster "$STORAGE/cluster.conf" \
             --addr "$ADDR" --port "$port" --storage "$STORAGE/s$id" \
-            --quota 1G --writers 0 "$IO_FLAG" $join \
+            --quota 1G --writers 0 "$IO_FLAG" \
             >"$out" 2>&1 </dev/null &
         record_ours "$!"
         for i in $(seq 1 40); do

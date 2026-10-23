@@ -80,8 +80,10 @@
 set -eu
 SSH="${SSH:-$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh}"
 PORT="${PORT:-19820}"
-SEED="172.16.223.57:${PORT}"
 SCRATCH=/tmp/efs-raft-scratch
+# D39: the configured member list on every host (outside the wiped scratch);
+# efs-mgmt declares as management with it.
+CONF=/tmp/efs-raft-cluster.conf
 SRC="$HOME/git/efs"
 HOSTS=(fcstor003 fcstor004 fcstor005 fcstor006)
 ADDRS=(172.16.223.57 172.16.223.58 172.16.223.59 172.16.223.60)
@@ -157,13 +159,11 @@ start_one() {
     local keep=${2:-}
     local h=${HOSTS[$idx]}
     local addr=${ADDRS[$idx]}
-    local nid=$((idx + 1))
-    local join=""
-    if [ "$idx" -gt 0 ]; then
-        join="--join $SEED"
-    fi
+    local conf_text
+    conf_text=$(for i in 0 1 2 3; do printf '%d %s:%s\\n' $((i + 1)) "${ADDRS[$i]}" "$PORT"; done)
     ssh_to 10 "$h" "
 set -e
+printf '$conf_text' > $CONF
 if [ '$keep' != keep ]; then
     rm -rf $SCRATCH
 fi
@@ -172,8 +172,8 @@ rm -f /tmp/efs-raft-scratch.log
 cd /tmp/efs
 export EFS_MD_RAFT=1
 export EFS_TRANSPORT=tcp
-setsid ./efsd --node-id $nid --addr $addr --port $PORT \
-    --storage $SCRATCH --quota 1G --writers 0 --no-direct-io $join \
+setsid ./efsd --cluster $CONF --addr $addr --port $PORT \
+    --storage $SCRATCH --quota 1G --writers 0 --no-direct-io \
     >/tmp/efs-raft-scratch.log 2>&1 </dev/null &
 "
 }
@@ -192,14 +192,14 @@ wait_listen() {
 g0_applied() {
     local idx=$1
     local st
-    st=$(ssh_to 10 "${HOSTS[$idx]}" "cd /tmp/efs && ./efs-mgmt raft-status ${ADDRS[$idx]}:${PORT}" 2>/dev/null || true)
+    st=$(ssh_to 10 "${HOSTS[$idx]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-status ${ADDRS[$idx]}:${PORT}" 2>/dev/null || true)
     echo "$st" | awk '/group 0 / {for(i=1;i<=NF;i++) if($i ~ /^applied=/) {split($i,a,"="); print a[2]; exit}}'
 }
 
 g0_commit() {
     local idx=$1
     local st
-    st=$(ssh_to 10 "${HOSTS[$idx]}" "cd /tmp/efs && ./efs-mgmt raft-status ${ADDRS[$idx]}:${PORT}" 2>/dev/null || true)
+    st=$(ssh_to 10 "${HOSTS[$idx]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-status ${ADDRS[$idx]}:${PORT}" 2>/dev/null || true)
     echo "$st" | awk '/group 0 / {for(i=1;i<=NF;i++) if($i ~ /^commit=/) {split($i,a,"="); print a[2]; exit}}'
 }
 
@@ -233,7 +233,7 @@ wait_g0_caught_up() {
 g0_leader() {
     local idx st l
     for idx in 0 1 2; do
-        st=$(ssh_to 10 "${HOSTS[$idx]}" "cd /tmp/efs && ./efs-mgmt raft-status ${ADDRS[$idx]}:${PORT}" 2>/dev/null || true)
+        st=$(ssh_to 10 "${HOSTS[$idx]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-status ${ADDRS[$idx]}:${PORT}" 2>/dev/null || true)
         l=$(echo "$st" | awk '/group 0 / {
             for (i = 1; i <= NF; i++)
                 if ($i ~ /^leader=/) { sub(/^leader=/, "", $i); print $i; exit }
@@ -251,7 +251,7 @@ g0_leader() {
 g0_serving() {
     local idx out
     for idx in 0 1 2; do
-        out=$(ssh_to 5 "${HOSTS[$idx]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$idx]}:${PORT} 1" 2>/dev/null || true)
+        out=$(ssh_to 5 "${HOSTS[$idx]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-getattr ${ADDRS[$idx]}:${PORT} 1" 2>/dev/null || true)
         if echo "$out" | grep -q 'status=0'; then
             echo "$idx"
             return 0
@@ -263,7 +263,7 @@ g0_serving() {
 root_on() {
     local idx=$1
     local st
-    st=$(ssh_to 10 "${HOSTS[$idx]}" "cd /tmp/efs && ./efs-mgmt raft-status ${ADDRS[$idx]}:${PORT}" 2>/dev/null || true)
+    st=$(ssh_to 10 "${HOSTS[$idx]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-status ${ADDRS[$idx]}:${PORT}" 2>/dev/null || true)
     echo "$st" | awk '/^node / {print $3}' | sed 's/root=//'
 }
 
@@ -292,7 +292,7 @@ g0_mgmt() {
         if [ -z "$lid" ] || [ "$lid" = "-1" ]; then
             continue
         fi
-        out=$(ssh_to $to "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt $cmd ${ADDRS[$lid]}:${PORT} $*" 2>/dev/null || true)
+        out=$(ssh_to $to "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt $cmd ${ADDRS[$lid]}:${PORT} $*" 2>/dev/null || true)
         # Empty is a 5s SSH miss, not a status. Same 8-try budget as
         # NOT_PRIMARY — do not treat it as NOT_FOUND / missing name.
         if [ -z "$out" ]; then
@@ -349,21 +349,21 @@ check_create() {
         bad "$tag: no leader"
         return
     fi
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
     say "$tag create: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag create not OK"
     echo "$out" | grep -q 'mode=0100644' || bad "$tag create mode"
     echo "$out" | grep -q 'nlink=1' || bad "$tag create nlink"
     ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
     [ -n "$ino" ] && [ "$ino" != "0" ] || bad "$tag create ino"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
     say "$tag lookup created: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag lookup created not OK"
     echo "$out" | grep -q "ino=$ino" || bad "$tag lookup ino mismatch"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
     say "$tag getattr created: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag getattr created not OK"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
     say "$tag create dup: $out"
     echo "$out" | grep -q 'status=2' || bad "$tag create dup not EXIST"
 }
@@ -381,7 +381,7 @@ check_mkdir() {
     fi
     for i in $(seq 0 31); do
         name="raft-smoke-d$i"
-        out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 $name 040755" 2>/dev/null || true)
+        out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 $name 040755" 2>/dev/null || true)
         say "$tag mkdir $name: $out"
         if echo "$out" | grep -q 'status=0'; then
             got=$name
@@ -392,7 +392,7 @@ check_mkdir() {
     done
     [ -n "$got" ] || bad "$tag mkdir none accepted"
     if [ -n "$got" ]; then
-        out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 $got" 2>/dev/null || true)
+        out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 $got" 2>/dev/null || true)
         say "$tag lookup mkdir: $out"
         echo "$out" | grep -q 'status=0' || bad "$tag lookup mkdir not OK"
         echo "$out" | grep -q 'mode=040755' || bad "$tag lookup mkdir mode"
@@ -406,7 +406,7 @@ check_cross_group() {
     local i out name ino got=""
     for i in $(seq 0 31); do
         name="raft-smoke-xg$i"
-        out=$(ssh_to 10 "${HOSTS[0]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[0]}:${PORT} 1 $name 040755" 2>/dev/null || true)
+        out=$(ssh_to 10 "${HOSTS[0]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-create ${ADDRS[0]}:${PORT} 1 $name 040755" 2>/dev/null || true)
         say "cross-group mkdir $name: $out"
         if echo "$out" | grep -q 'status=0'; then
             ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
@@ -414,13 +414,13 @@ check_cross_group() {
                 got=$name
                 break
             fi
-            out=$(ssh_to 10 "${HOSTS[0]}" "cd /tmp/efs && ./efs-mgmt raft-rmdir ${ADDRS[0]}:${PORT} 1 $name" 2>/dev/null || true)
+            out=$(ssh_to 10 "${HOSTS[0]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-rmdir ${ADDRS[0]}:${PORT} 1 $name" 2>/dev/null || true)
             say "cross-group rmdir odd $name: $out"
         fi
     done
     [ -n "$got" ] || bad "cross-group mkdir none even-shard"
     if [ -n "$got" ]; then
-        out=$(ssh_to 10 "${HOSTS[0]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[0]}:${PORT} 1 $got" 2>/dev/null || true)
+        out=$(ssh_to 10 "${HOSTS[0]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-lookup ${ADDRS[0]}:${PORT} 1 $got" 2>/dev/null || true)
         say "cross-group lookup: $out"
         echo "$out" | grep -q 'status=0' || bad "cross-group lookup not OK"
         echo "$out" | grep -q 'mode=040755' || bad "cross-group lookup mode"
@@ -438,17 +438,17 @@ check_unlink() {
         bad "$tag: no leader"
         return
     fi
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-u" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-u" 2>/dev/null || true)
     say "$tag unlink-prep create: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag unlink-prep create not OK"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-unlink ${ADDRS[$lid]}:${PORT} 1 raft-smoke-u" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-unlink ${ADDRS[$lid]}:${PORT} 1 raft-smoke-u" 2>/dev/null || true)
     say "$tag unlink: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag unlink not OK"
     echo "$out" | grep -q 'nlink=1' || bad "$tag unlink nlink"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-u" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-u" 2>/dev/null || true)
     say "$tag lookup unlinked: $out"
     echo "$out" | grep -q 'status=1' || bad "$tag lookup unlinked not NOT_FOUND"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-unlink ${ADDRS[$lid]}:${PORT} 1 raft-smoke-u" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-unlink ${ADDRS[$lid]}:${PORT} 1 raft-smoke-u" 2>/dev/null || true)
     say "$tag unlink again: $out"
     echo "$out" | grep -q 'status=1' || bad "$tag unlink again not NOT_FOUND"
 }
@@ -465,7 +465,7 @@ check_rmdir() {
     fi
     for i in $(seq 0 31); do
         name="raft-smoke-r$i"
-        out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 $name 040755" 2>/dev/null || true)
+        out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 $name 040755" 2>/dev/null || true)
         say "$tag rmdir-prep mkdir $name: $out"
         if echo "$out" | grep -q 'status=0'; then
             got=$name
@@ -475,16 +475,16 @@ check_rmdir() {
     [ -n "$got" ] || bad "$tag rmdir-prep mkdir none accepted"
     [ -n "$got" ] || return
     RMDIR_NAME=$got
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rmdir ${ADDRS[$lid]}:${PORT} 1 $got" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-rmdir ${ADDRS[$lid]}:${PORT} 1 $got" 2>/dev/null || true)
     say "$tag rmdir: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag rmdir not OK"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 $got" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 $got" 2>/dev/null || true)
     say "$tag lookup rmdir'd: $out"
     echo "$out" | grep -q 'status=1' || bad "$tag lookup rmdir'd not NOT_FOUND"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rmdir ${ADDRS[$lid]}:${PORT} 1 $got" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-rmdir ${ADDRS[$lid]}:${PORT} 1 $got" 2>/dev/null || true)
     say "$tag rmdir again: $out"
     echo "$out" | grep -q 'status=1' || bad "$tag rmdir again not NOT_FOUND"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rmdir ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-rmdir ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
     say "$tag rmdir file: $out"
     echo "$out" | grep -q 'status=6' || bad "$tag rmdir file not INVAL"
 }
@@ -499,37 +499,37 @@ check_link() {
         bad "$tag: no leader"
         return
     fi
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
     say "$tag link lookup src: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag link src lookup not OK"
     ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
     [ -n "$ino" ] && [ "$ino" != "0" ] || bad "$tag link src ino"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-link ${ADDRS[$lid]}:${PORT} $ino 1 raft-smoke-l" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-link ${ADDRS[$lid]}:${PORT} $ino 1 raft-smoke-l" 2>/dev/null || true)
     say "$tag link: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag link not OK"
     echo "$out" | grep -q 'nlink=2' || bad "$tag link nlink"
     if echo "$out" | grep -q 'status=0'; then
         LINK_NAME=raft-smoke-l
     fi
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-l" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-l" 2>/dev/null || true)
     say "$tag lookup linked: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag lookup linked not OK"
     echo "$out" | grep -q "ino=$ino" || bad "$tag lookup linked ino"
     echo "$out" | grep -q 'nlink=2' || bad "$tag lookup linked nlink"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
     say "$tag lookup src nlink: $out"
     echo "$out" | grep -q 'nlink=2' || bad "$tag src nlink after link"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-link ${ADDRS[$lid]}:${PORT} $ino 1 raft-smoke-l" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-link ${ADDRS[$lid]}:${PORT} $ino 1 raft-smoke-l" 2>/dev/null || true)
     say "$tag link dup: $out"
     echo "$out" | grep -q 'status=2' || bad "$tag link dup not EXIST"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-link ${ADDRS[$lid]}:${PORT} 999999 1 raft-smoke-l2" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-link ${ADDRS[$lid]}:${PORT} 999999 1 raft-smoke-l2" 2>/dev/null || true)
     say "$tag link miss: $out"
     echo "$out" | grep -q 'status=1' || bad "$tag link miss not NOT_FOUND"
     if [ -n "${MKDIR_NAME:-}" ]; then
-        out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 $MKDIR_NAME" 2>/dev/null || true)
+        out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 $MKDIR_NAME" 2>/dev/null || true)
         dino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
         if [ -n "$dino" ] && [ "$dino" != "0" ]; then
-            out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-link ${ADDRS[$lid]}:${PORT} $dino 1 raft-smoke-ld" 2>/dev/null || true)
+            out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-link ${ADDRS[$lid]}:${PORT} $dino 1 raft-smoke-ld" 2>/dev/null || true)
             say "$tag link dir: $out"
             echo "$out" | grep -q 'status=6' || bad "$tag link dir not INVAL"
         fi
@@ -546,33 +546,33 @@ check_unlink_nlink() {
         bad "$tag: no leader"
         return
     fi
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
     say "$tag unlink-nlink lookup src: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag unlink-nlink src lookup not OK"
     ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
     [ -n "$ino" ] && [ "$ino" != "0" ] || bad "$tag unlink-nlink src ino"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-link ${ADDRS[$lid]}:${PORT} $ino 1 raft-smoke-h" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-link ${ADDRS[$lid]}:${PORT} $ino 1 raft-smoke-h" 2>/dev/null || true)
     say "$tag unlink-nlink extra link: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag unlink-nlink extra link not OK"
     echo "$out" | grep -q 'nlink=3' || bad "$tag unlink-nlink extra nlink"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-unlink ${ADDRS[$lid]}:${PORT} 1 raft-smoke-h" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-unlink ${ADDRS[$lid]}:${PORT} 1 raft-smoke-h" 2>/dev/null || true)
     say "$tag unlink-nlink: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag unlink-nlink not OK"
     if echo "$out" | grep -q 'status=0'; then
         UNLINK_NLINK_NAME=raft-smoke-h
     fi
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-h" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-h" 2>/dev/null || true)
     say "$tag lookup unlinked extra: $out"
     echo "$out" | grep -q 'status=1' || bad "$tag lookup unlinked extra not NOT_FOUND"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
     say "$tag lookup src after nlink unlink: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag src missing after nlink unlink"
     echo "$out" | grep -q 'nlink=2' || bad "$tag src nlink after nlink unlink"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-l" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-l" 2>/dev/null || true)
     say "$tag lookup linked after nlink unlink: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag linked missing after nlink unlink"
     echo "$out" | grep -q 'nlink=2' || bad "$tag linked nlink after nlink unlink"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-unlink ${ADDRS[$lid]}:${PORT} 1 raft-smoke-h" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-unlink ${ADDRS[$lid]}:${PORT} 1 raft-smoke-h" 2>/dev/null || true)
     say "$tag unlink-nlink again: $out"
     echo "$out" | grep -q 'status=1' || bad "$tag unlink-nlink again not NOT_FOUND"
 }
@@ -587,41 +587,41 @@ check_rename() {
         bad "$tag: no leader"
         return
     fi
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-n" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-n" 2>/dev/null || true)
     say "$tag rename-prep create: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag rename-prep create not OK"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-n 1 raft-smoke-m" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-n 1 raft-smoke-m" 2>/dev/null || true)
     say "$tag rename: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag rename not OK"
     if echo "$out" | grep -q 'status=0'; then
         RENAME_NAME=raft-smoke-m
         RENAME_OLD=raft-smoke-n
     fi
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-n" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-n" 2>/dev/null || true)
     say "$tag lookup rename old: $out"
     echo "$out" | grep -q 'status=1' || bad "$tag lookup rename old not NOT_FOUND"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-m" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-m" 2>/dev/null || true)
     say "$tag lookup rename new: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag lookup rename new not OK"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-n 1 raft-smoke-m2" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-n 1 raft-smoke-m2" 2>/dev/null || true)
     say "$tag rename miss: $out"
     echo "$out" | grep -q 'status=1' || bad "$tag rename miss not NOT_FOUND"
     # Dedicated names so raft-smoke-f / raft-smoke-m stay put.
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-ne" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-ne" 2>/dev/null || true)
     echo "$out" | grep -q 'status=0' || bad "$tag rename-exist dest create"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-ns" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-ns" 2>/dev/null || true)
     echo "$out" | grep -q 'status=0' || bad "$tag rename-exist src create"
     ns_ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-ns 1 raft-smoke-ne" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-ns 1 raft-smoke-ne" 2>/dev/null || true)
     say "$tag rename exist: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag rename exist not OK"
     echo "$out" | grep -q "ino=$ns_ino" || bad "$tag rename exist ino"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-xd 040755" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-xd 040755" 2>/dev/null || true)
     echo "$out" | grep -q 'status=0' || bad "$tag rename cross-dir dest mkdir"
     xd_ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-xc" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-xc" 2>/dev/null || true)
     echo "$out" | grep -q 'status=0' || bad "$tag rename cross-dir src create"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-xc $xd_ino raft-smoke-x" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-xc $xd_ino raft-smoke-x" 2>/dev/null || true)
     say "$tag rename cross-dir: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag rename cross-dir not OK"
 }
@@ -636,39 +636,39 @@ check_dir_rename() {
         bad "$tag: no leader"
         return
     fi
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-rd 040755" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-rd 040755" 2>/dev/null || true)
     say "$tag dir-rename-prep mkdir: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag dir-rename-prep mkdir not OK"
     echo "$out" | grep -q 'mode=040755' || bad "$tag dir-rename-prep mode"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-rd 1 raft-smoke-re" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-rd 1 raft-smoke-re" 2>/dev/null || true)
     say "$tag dir-rename: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag dir-rename not OK"
     if echo "$out" | grep -q 'status=0'; then
         DIR_RENAME_NAME=raft-smoke-re
         DIR_RENAME_OLD=raft-smoke-rd
     fi
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-rd" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-rd" 2>/dev/null || true)
     say "$tag lookup dir-rename old: $out"
     echo "$out" | grep -q 'status=1' || bad "$tag lookup dir-rename old not NOT_FOUND"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-re" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-re" 2>/dev/null || true)
     say "$tag lookup dir-rename new: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag lookup dir-rename new not OK"
     echo "$out" | grep -q 'mode=040755' || bad "$tag lookup dir-rename mode"
     echo "$out" | grep -q 'nlink=2' || bad "$tag lookup dir-rename nlink"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-rd 1 raft-smoke-re2" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-rd 1 raft-smoke-re2" 2>/dev/null || true)
     say "$tag dir-rename miss: $out"
     echo "$out" | grep -q 'status=1' || bad "$tag dir-rename miss not NOT_FOUND"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-df" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-df" 2>/dev/null || true)
     echo "$out" | grep -q 'status=0' || bad "$tag dir-rename exist dest create"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-re 1 raft-smoke-df" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-re 1 raft-smoke-df" 2>/dev/null || true)
     say "$tag dir-rename exist: $out"
     echo "$out" | grep -qE 'status=2|status=6' || bad "$tag dir-rename exist not EXIST/INVAL"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-dd 040755" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-dd 040755" 2>/dev/null || true)
     echo "$out" | grep -q 'status=0' || bad "$tag dir-rename cross-dir dest mkdir"
     dd_ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-dc 040755" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-dc 040755" 2>/dev/null || true)
     echo "$out" | grep -q 'status=0' || bad "$tag dir-rename cross-dir src mkdir"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-dc $dd_ino raft-smoke-dx" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-rename ${ADDRS[$lid]}:${PORT} 1 raft-smoke-dc $dd_ino raft-smoke-dx" 2>/dev/null || true)
     say "$tag dir-rename cross-dir: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag dir-rename cross-dir not OK"
 }
@@ -1773,16 +1773,16 @@ check_setattr() {
         bad "$tag: no leader"
         return
     fi
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-lookup ${ADDRS[$lid]}:${PORT} 1 raft-smoke-f" 2>/dev/null || true)
     say "$tag setattr lookup: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag setattr lookup not OK"
     ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
     [ -n "$ino" ] && [ "$ino" != "0" ] || bad "$tag setattr ino"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} $ino 1 0600" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} $ino 1 0600" 2>/dev/null || true)
     say "$tag setattr mode: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag setattr not OK"
     echo "$out" | grep -q 'mode=0100600' || bad "$tag setattr mode"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
     say "$tag getattr setattr: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag getattr setattr not OK"
     echo "$out" | grep -q 'mode=0100600' || bad "$tag getattr setattr mode"
@@ -1798,18 +1798,18 @@ check_setattr() {
     say "$tag getattr size: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag getattr size not OK"
     echo "$out" | grep -q 'size=131072' || bad "$tag getattr size"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} $ino 9 0600" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} $ino 9 0600" 2>/dev/null || true)
     say "$tag setattr mixed size: $out"
     echo "$out" | grep -q 'status=6' || bad "$tag setattr mixed size not INVAL"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} $ino 16 1000000000" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} $ino 16 1000000000" 2>/dev/null || true)
     say "$tag setattr utimens: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag setattr utimens not OK"
     echo "$out" | grep -q 'mtime=1000000000' || bad "$tag setattr utimens mtime"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
     say "$tag getattr utimens: $out"
     echo "$out" | grep -q 'mtime=1000000000' || bad "$tag getattr utimens mtime"
     echo "$out" | grep -q 'size=131072' || bad "$tag getattr utimens size"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} 999999 1 0600" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} 999999 1 0600" 2>/dev/null || true)
     say "$tag setattr miss: $out"
     echo "$out" | grep -q 'status=1' || bad "$tag setattr miss not NOT_FOUND"
 }
@@ -1824,44 +1824,44 @@ check_publish() {
         bad "$tag: no leader"
         return
     fi
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-p" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-p" 2>/dev/null || true)
     say "$tag publish create: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag publish create not OK"
     ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
     [ -n "$ino" ] && [ "$ino" != "0" ] || bad "$tag publish ino"
     PUBLISH_NAME=raft-smoke-p
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getchunks ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-getchunks ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
     say "$tag getchunks empty: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag getchunks empty not OK"
     echo "$out" | grep -q 'count=0' || bad "$tag getchunks empty count"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-publish ${ADDRS[$lid]}:${PORT} $ino 0 131072" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-publish ${ADDRS[$lid]}:${PORT} $ino 0 131072" 2>/dev/null || true)
     say "$tag publish: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag publish not OK"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getchunks ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-getchunks ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
     say "$tag getchunks: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag getchunks not OK"
     echo "$out" | grep -q 'count=1' || bad "$tag getchunks count"
     echo "$out" | grep -q 'cis=0' || bad "$tag getchunks ci"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
     say "$tag getattr publish: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag getattr publish not OK"
     echo "$out" | grep -q 'size=131072' || bad "$tag getattr publish size"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} $ino 8 1000" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} $ino 8 1000" 2>/dev/null || true)
     say "$tag setattr tail: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag setattr tail not OK"
     echo "$out" | grep -q 'size=1000' || bad "$tag setattr tail size"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
     say "$tag getattr tail: $out"
     echo "$out" | grep -q 'size=1000' || bad "$tag getattr tail size"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getchunks ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-getchunks ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
     say "$tag getchunks tail: $out"
     echo "$out" | grep -q 'count=1' || bad "$tag getchunks tail count"
     echo "$out" | grep -q 'cis=0' || bad "$tag getchunks tail ci"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} $ino 8 0" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-setattr ${ADDRS[$lid]}:${PORT} $ino 8 0" 2>/dev/null || true)
     say "$tag setattr trunc0: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag setattr trunc0 not OK"
     echo "$out" | grep -q 'size=0' || bad "$tag setattr trunc0 size"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getchunks ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-getchunks ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
     say "$tag getchunks trunc0: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag getchunks trunc0 not OK"
     echo "$out" | grep -q 'count=0' || bad "$tag getchunks trunc0 count"
@@ -1878,28 +1878,28 @@ check_append() {
         bad "$tag: no leader"
         return
     fi
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-a" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-a" 2>/dev/null || true)
     say "$tag append create: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag append create not OK"
     ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
     [ -n "$ino" ] && [ "$ino" != "0" ] || bad "$tag append ino"
     APPEND_NAME=raft-smoke-a
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-append ${ADDRS[$lid]}:${PORT} $ino 131072" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-append ${ADDRS[$lid]}:${PORT} $ino 131072" 2>/dev/null || true)
     say "$tag append: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag append not OK"
     echo "$out" | grep -q 'size=131072' || bad "$tag append watermark"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
     say "$tag getattr after reserve: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag getattr after reserve not OK"
     echo "$out" | grep -q 'size=0' || bad "$tag getattr after reserve not frontier 0"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-publish ${ADDRS[$lid]}:${PORT} $ino 0 131072" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-publish ${ADDRS[$lid]}:${PORT} $ino 0 131072" 2>/dev/null || true)
     say "$tag append publish: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag append publish not OK"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
     say "$tag getattr after append pub: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag getattr after append pub not OK"
     echo "$out" | grep -q 'size=131072' || bad "$tag getattr after append pub size"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-append ${ADDRS[$lid]}:${PORT} 999999 4096" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-append ${ADDRS[$lid]}:${PORT} 999999 4096" 2>/dev/null || true)
     say "$tag append miss: $out"
     echo "$out" | grep -q 'status=1' || bad "$tag append miss not NOT_FOUND"
 }
@@ -1915,7 +1915,7 @@ check_symlink() {
         bad "$tag: no leader"
         return
     fi
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-s 0120777" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-s 0120777" 2>/dev/null || true)
     say "$tag symlink create: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag symlink create not OK"
     echo "$out" | grep -q 'mode=0120777' || bad "$tag symlink mode"
@@ -1923,24 +1923,24 @@ check_symlink() {
     ino=$(echo "$out" | awk '{for(i=1;i<=NF;i++) if($i ~ /^ino=/) {split($i,a,"="); print a[2]}}')
     [ -n "$ino" ] && [ "$ino" != "0" ] || bad "$tag symlink ino"
     SYMLINK_NAME=raft-smoke-s
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
     say "$tag getattr empty symlink: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag getattr empty symlink not OK"
     echo "$out" | grep -q 'size=0' || bad "$tag getattr empty symlink size"
     echo "$out" | grep -q 'mode=0120777' || bad "$tag getattr empty symlink mode"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-publish ${ADDRS[$lid]}:${PORT} $ino 0 11" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-publish ${ADDRS[$lid]}:${PORT} $ino 0 11" 2>/dev/null || true)
     say "$tag symlink publish: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag symlink publish not OK"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-getattr ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
     say "$tag getattr symlink: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag getattr symlink not OK"
     echo "$out" | grep -q 'size=11' || bad "$tag getattr symlink size"
     echo "$out" | grep -q 'mode=0120777' || bad "$tag getattr symlink mode"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-getchunks ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-getchunks ${ADDRS[$lid]}:${PORT} $ino" 2>/dev/null || true)
     say "$tag getchunks symlink: $out"
     echo "$out" | grep -q 'status=0' || bad "$tag getchunks symlink not OK"
     echo "$out" | grep -q 'count=1' || bad "$tag getchunks symlink count"
-    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-s 0120777" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$lid]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-create ${ADDRS[$lid]}:${PORT} 1 raft-smoke-s 0120777" 2>/dev/null || true)
     say "$tag symlink dup: $out"
     echo "$out" | grep -q 'status=2' || bad "$tag symlink dup not EXIST"
 }
@@ -2177,7 +2177,7 @@ fi
 say "raft-mkfs (try voters until accepted)"
 mkfs_ok=0
 for idx in 0 1 2; do
-    out=$(ssh_to 10 "${HOSTS[$idx]}" "cd /tmp/efs && ./efs-mgmt raft-mkfs ${ADDRS[$idx]}:${PORT}" 2>/dev/null || true)
+    out=$(ssh_to 10 "${HOSTS[$idx]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-mkfs ${ADDRS[$idx]}:${PORT}" 2>/dev/null || true)
     say "mkfs ${HOSTS[$idx]}: $out"
     echo "$out" | grep -q 'rc=0' && { mkfs_ok=1; break; }
 done
@@ -2370,7 +2370,7 @@ new_leader=""
 for i in $(seq 1 50); do
     for qidx in 0 1 2; do
         [ "$qidx" = "$leader_idx" ] && continue
-        st=$(ssh_to 10 "${HOSTS[$qidx]}" "cd /tmp/efs && ./efs-mgmt raft-status ${ADDRS[$qidx]}:${PORT}" 2>/dev/null || true)
+        st=$(ssh_to 10 "${HOSTS[$qidx]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-status ${ADDRS[$qidx]}:${PORT}" 2>/dev/null || true)
         cand=$(echo "$st" | awk '/group 0 / {
             for (i = 1; i <= NF; i++)
                 if ($i ~ /^leader=/) { sub(/^leader=/, "", $i); print $i; exit }
@@ -2387,7 +2387,7 @@ if [ -z "$new_leader" ] || [ "$new_leader" = "-1" ]; then
     # + data checks are the gate, not this intermediate poll.
     say "no new leader yet after kill"
     for qidx in 0 1 2 3; do
-        st=$(ssh_to 10 "${HOSTS[$qidx]}" "cd /tmp/efs && ./efs-mgmt raft-status ${ADDRS[$qidx]}:${PORT}" 2>/dev/null || true)
+        st=$(ssh_to 10 "${HOSTS[$qidx]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-status ${ADDRS[$qidx]}:${PORT}" 2>/dev/null || true)
         say "status ${HOSTS[$qidx]}: $st"
     done
 else
@@ -2426,7 +2426,7 @@ for i in $(seq 1 40); do
         continue
     fi
     after_lid=$cur
-    out=$(ssh_to 5 "${HOSTS[$cur]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$cur]}:${PORT} 1 no-such-efs-name" 2>/dev/null || true)
+    out=$(ssh_to 5 "${HOSTS[$cur]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-lookup ${ADDRS[$cur]}:${PORT} 1 no-such-efs-name" 2>/dev/null || true)
     if echo "$out" | grep -q 'status=1'; then
         leader=$cur
         ready=1
@@ -2450,9 +2450,9 @@ if [ -n "${HASHED_DIR:-}" ]; then
     hashed_ok=0
     for i in $(seq 1 80); do
         for idx in 0 1 2 3; do
-            out=$(ssh_to 5 "${HOSTS[$idx]}" "cd /tmp/efs && ./efs-mgmt raft-lookup ${ADDRS[$idx]}:${PORT} 1 $HASHED_DIR" 2>/dev/null || true)
+            out=$(ssh_to 5 "${HOSTS[$idx]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-lookup ${ADDRS[$idx]}:${PORT} 1 $HASHED_DIR" 2>/dev/null || true)
             if echo "$out" | grep -q 'status=0'; then
-                root=$(ssh_to 5 "${HOSTS[$idx]}" "cd /tmp/efs && ./efs-mgmt raft-getattr ${ADDRS[$idx]}:${PORT} 1" 2>/dev/null || true)
+                root=$(ssh_to 5 "${HOSTS[$idx]}" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-getattr ${ADDRS[$idx]}:${PORT} 1" 2>/dev/null || true)
                 if echo "$root" | grep -q 'status=0'; then
                     leader=$idx
                     hashed_ok=1

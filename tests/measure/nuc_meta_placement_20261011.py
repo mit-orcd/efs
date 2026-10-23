@@ -30,7 +30,7 @@ elif args.vary=='data':
   time.sleep(1)
 base=session/('meta-placement' if args.vary=='metadata' else 'data-placement');base.mkdir(exist_ok=False)
 src=Path('/data1/efs/src');port=26770;meta_roots=[]
-flags=dict(EFS_MD_RAFT_N='3',EFS_RAFT_BATCH_OVERLAP='0',EFS_RAFT_BATCH_NOOP='0',EFS_RAFT_APPLIED_INTERVAL_MS='10',EFS_COMMANDS_SERVER='0',EFS_COMMANDS='0',EFS_TRANSPORT='tcp',EFS_BATCH_OBS='1')
+flags=dict(EFS_RAFT_BATCH_OVERLAP='0',EFS_RAFT_BATCH_NOOP='0',EFS_RAFT_APPLIED_INTERVAL_MS='10',EFS_COMMANDS_SERVER='0',EFS_COMMANDS='0',EFS_TRANSPORT='tcp',EFS_BATCH_OBS='1')
 env=dict(os.environ,**flags);mount=base/'mnt';mount.mkdir(exist_ok=True);servers=[];handles=[];loader=None;counters=None;profilers=[]
 # Record actual identities; installed engine is frozen for both cells.
 identity={n:dict(sha256=hashlib.sha256((src/n).read_bytes()).hexdigest(),version=subprocess.check_output([str(src/n),'--version'],text=True)) for n in ('efsd','efs-fuse','efs-mgmt')}
@@ -96,11 +96,13 @@ def finish_profiles(validate=True):
  assert not errors,errors
 def start_private(roots,cell,suffix):
  assert not servers
+ # D39: the configured member list; efs-mgmt declares as management with it.
+ conf=cell/'cluster.conf';conf.write_text(''.join(f'{n} 127.0.0.1:{port+n-1}\n' for n in range(1,len(roots)+1)))
+ env['EFS_CLUSTER_CONF']=os.environ['EFS_CLUSTER_CONF']=str(conf)
  for n,root in enumerate(roots,1):
   root.mkdir(exist_ok=True);h=(cell/f'n{n}{suffix}.log').open('ab');handles.append(h)
-  args=[src/'efsd','--node-id',n,'--addr','127.0.0.1','--port',port+n-1,'--storage',root,'--quota','80G','--direct-io']
+  args=[src/'efsd','--cluster',conf,'--addr','127.0.0.1','--port',port+n-1,'--storage',root,'--quota','80G','--direct-io']
   args+=['--meta-storage',meta_roots[n-1]]
-  if n>1:args+=['--join',f'127.0.0.1:{port}']
   p=subprocess.Popen(list(map(str,args)),env=env,stdout=h,stderr=h);servers.append(p)
   wait(lambda:listening(port+n-1) if p.poll() is None else (_ for _ in ()).throw(RuntimeError('server exited')),120,'private listener')
  time.sleep(5)
@@ -208,7 +210,7 @@ finally:
  finally:
   if service_stopped:
    assert not servers and not os.path.ismount(mount),'private service cleanup incomplete'
-   normal=dict(env,EFS_MD_RAFT_N='4',EFS_BATCH_OBS='0',EFS_CLUSTER='nuc',EFS_DIRECT_IO='1')
+   normal=dict(env,EFS_BATCH_OBS='0',EFS_CLUSTER='nuc',EFS_DIRECT_IO='1')
    with (base/'restore.log').open('w') as out:run(['bash','/data1/efs/w97-latest-20261010/start-preserved.sh'],env=normal,stdout=out,stderr=subprocess.STDOUT)
    wait(lambda:all(listening(p) for p in range(17432,17436)),120,'restored service listeners')
    assert all(os.path.ismount('/data1/efs/'+m) for m in ('mnt','mnt2'))

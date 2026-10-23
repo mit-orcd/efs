@@ -68,12 +68,13 @@ try:
         fd=os.pidfd_open(int(pid));signal.pidfd_send_signal(fd,signal.SIGTERM);os.close(fd)
     wait(lambda:all(not Path('/proc',p).exists() for p in pids),180,'normal daemon drain')
     commands=[]
+    # D39: the configured member list of the private three-daemon fixture.
+    conf=cell/'cluster.conf';conf.write_text(''.join(f'{n} 127.0.0.1:{port+n-1}\n' for n in range(1,4)))
     for n in range(1,4):
         root=Path(f'/data1/efs/w97-data-placement-data-20261011-2/n{n}')
         metadata=Path(f'/data1/efs/w97-data-placement-meta-20261011-2/n{n}')
         assert root.is_dir() and metadata.is_dir()
-        command=[src/'efsd','--node-id',n,'--addr','127.0.0.1','--port',port+n-1,'--storage',root,'--quota','60G','--direct-io','--meta-storage',metadata]
-        if n>1:command+=['--join',f'127.0.0.1:{port}']
+        command=[src/'efsd','--cluster',conf,'--addr','127.0.0.1','--port',port+n-1,'--storage',root,'--quota','60G','--direct-io','--meta-storage',metadata]
         commands.append(list(map(str,command)))
         log=(cell/f'n{n}-cold-quota-retry.log').open('w');handles.append(log)
         p=subprocess.Popen(commands[-1],env=env,stdout=log,stderr=log);servers.append(p)
@@ -106,7 +107,7 @@ except BaseException:
 finally:
     stop_private()
     if stopped:
-        normal=dict(env,EFS_MD_RAFT_N='4',EFS_BATCH_OBS='0',EFS_CLUSTER='nuc',EFS_DIRECT_IO='1')
+        normal=dict(env,EFS_BATCH_OBS='0',EFS_CLUSTER='nuc',EFS_DIRECT_IO='1')
         with (out/'restore.log').open('w') as log:
             run(['bash','/data1/efs/w97-latest-20261010/start-preserved.sh'],env=normal,stdout=log,stderr=subprocess.STDOUT,timeout=300)
         wait(lambda:all(listening(p) for p in range(17432,17436)),180,'restored regular listeners')

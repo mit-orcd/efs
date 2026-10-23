@@ -18,11 +18,14 @@ rm -rf "$D"; mkdir -p "$D"/{n1,n2,n3,n4,mnt,logs}
 FUSE_LIBDIR=${FUSE_LIBDIR:-/data1/efs/deps/libfuse/lib64}
 [ -d "$FUSE_LIBDIR" ] && export LD_LIBRARY_PATH=$FUSE_LIBDIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
 export EFS_TRANSPORT=tcp
+# D39: the configured member list (members 1-4 at PORT..PORT+3).
+CONF="$D/cluster.conf"; : > "$CONF"
+for i in 1 2 3 4; do echo "$i 127.0.0.1:$((PORT+i-1))" >> "$CONF"; done
+export EFS_CLUSTER_CONF="$CONF"
 start() {  # node index 1-4
-  local i=$1 join=""
-  [ "$i" -gt 1 ] && join="--join 127.0.0.1:$PORT"
-  nohup "$REL/efsd" --node-id $i --addr 127.0.0.1 --port $((PORT+i-1)) --storage "$D/n$i" \
-    --quota 1G --direct-io $join >> "$D/logs/n$i.log" 2>&1 &
+  local i=$1
+  nohup "$REL/efsd" --cluster "$CONF" --addr 127.0.0.1 --port $((PORT+i-1)) --storage "$D/n$i" \
+    --quota 1G --direct-io >> "$D/logs/n$i.log" 2>&1 &
   echo $! > "$D/logs/n$i.pid"
 }
 cleanup() {
@@ -54,7 +57,7 @@ for _ in range(200):
     try: os.kill(pid,0); time.sleep(0.1)
     except ProcessLookupError: break
 down=[create(f'down{i}') for i in range(20)]; time.sleep(float(os.environ.get('DOWN_S','20')))
-subprocess.run(['bash','-c',f'cd {d}; nohup {rel}/efsd --node-id 2 --addr 127.0.0.1 --port {port+1} --storage {d}/n2 --quota 1G --direct-io --join 127.0.0.1:{port} >> {d}/logs/n2.log 2>&1 & echo $! > {d}/logs/n2.pid'],check=True)
+subprocess.run(['bash','-c',f'cd {d}; nohup {rel}/efsd --cluster {d}/cluster.conf --addr 127.0.0.1 --port {port+1} --storage {d}/n2 --quota 1G --direct-io >> {d}/logs/n2.log 2>&1 & echo $! > {d}/logs/n2.pid'],check=True)
 t0=time.time(); fails=[]; n=0
 while time.time()-t0<40:
     rc=create(f'after{n}'); n+=1

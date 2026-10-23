@@ -263,7 +263,11 @@ for path in sorted(inputs):
     "binary_sha256":{name:hashlib.sha256((a.server_binary if name=='efsd' and a.server_binary else a.client_binary if name=='efs-fuse' and a.client_binary else source/name).read_bytes()).hexdigest()
                       for name in ('efsd','efs-fuse','efs-mgmt')},
 },indent=2))
-env = dict(os.environ, EFS_MD_RAFT_N='4', EFS_TRANSPORT=a.transport)
+env = dict(os.environ, EFS_TRANSPORT=a.transport)
+# D39: the configured member list; efs-mgmt declares as management with it.
+conf = work/'cluster.conf'
+conf.write_text(''.join(f'{i+1} 127.0.0.1:{a.port+i}\n' for i in range(len(roots))))
+env['EFS_CLUSTER_CONF'] = str(conf)
 # Query gates expect a fresh catalog within seconds; production defaults to 60 s.
 env.setdefault('EFS_QUERY_REFRESH_MS', '2000')
 if a.expiry_backlog_files:
@@ -388,7 +392,7 @@ def start(prefer_single_host=False):
         root = roots[i]
         root.mkdir(exist_ok=True)
         log=open(work/f'n{i+1}.log','ab');handles.append(log)
-        cmd=[a.server_binary or source/'efsd','--node-id',str(i+1),'--addr','127.0.0.1','--port',str(a.port+i),'--storage',root,'--quota',a.fixture_quota or ('16G' if (a.ior_binary or a.gc_bulk_gib) else ('4G' if a.compactor_pressure else '1G')),'--'+('direct-io' if a.mode=='direct' else 'no-direct-io')]
+        cmd=[a.server_binary or source/'efsd','--cluster',conf,'--addr','127.0.0.1','--port',str(a.port+i),'--storage',root,'--quota',a.fixture_quota or ('16G' if (a.ior_binary or a.gc_bulk_gib) else ('4G' if a.compactor_pressure else '1G')),'--'+('direct-io' if a.mode=='direct' else 'no-direct-io')]
         if a.fixture_quota == '0':
             quota_arg = cmd.index('--quota');del cmd[quota_arg:quota_arg+2]
         if a.storage_roots==2:
@@ -396,7 +400,6 @@ def start(prefer_single_host=False):
             first.mkdir(exist_ok=True);second.mkdir(exist_ok=True)
             cmd[cmd.index(root)]=first
             cmd += ['--storage',second]
-        if i:cmd += ['--join',f'127.0.0.1:{a.port}']
         node_env=dict(env)
         if a.storage_session_fence_fault:node_env['LD_PRELOAD']=str(work/'put-session-fault.so')
         if a.put_barrier_fault:
@@ -527,10 +530,10 @@ def recv_exact(sock,n):
         body+=part
     return body
 
-HELLO=struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',5,0)  # CLIENT_HELLO, EFS_PROTOCOL_VERSION 5 (K13)
+HELLO=struct.pack('>IB',97,165)+b'EFSP'+struct.pack('=IQB7x',6,0,1)+bytes(72)  # CLIENT_HELLO, EFS_PROTOCOL_VERSION 6, role CLIENT (D39)
 def declare(sock):
     sock.sendall(HELLO);n=struct.unpack('>I',recv_exact(sock,4))[0];reply=recv_exact(sock,n)
-    assert n==9 and reply[0]==166 and struct.unpack('=iI',reply[1:])==(0,4),('declaration refused',reply)
+    assert n==89 and reply[0]==166 and struct.unpack('=iI',reply[1:9])==(0,6),('declaration refused',reply)
 
 def valid_put(node,ino):
     req=Put(eid=1,ino=ino,ci=0,fi=0,length=65536,gen=987654321)

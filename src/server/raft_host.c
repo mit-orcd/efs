@@ -1,6 +1,7 @@
 #include "../common/query_stage_trace.h"
 #include "efs/query_policy.h"
 #include "server_internal.h"
+#include "admission.h"
 #include "efs/checksum.h"
 #include "efs/raft.h"
 #include "efs/batch_obs.h"
@@ -142,6 +143,7 @@ _Static_assert((HOST_PUB_F_REJECT_GONE & (HOST_PUB_F_MISSING_MASK | 8u |
 struct host_inbox_item {
     uint8_t *buf;
     uint32_t len;
+    struct efs_identity tag; /* D39 C7: the declared tuple of the frame's connection */
     uint64_t queued_us; /* Opt-in monotonic observation; never admission state. */
     int read_noted; /* Early vote only; normal recv remains owed. */
 };
@@ -176,6 +178,7 @@ struct host_outbox {
      * queues behind forwarded client commands. Owned by the sender
      * thread only; reconnected on the next message after an error. */
     struct efs_conn *conn;
+    uint64_t conn_gen; /* D39 C2: identity generation conn declared at */
     unsigned pending_entries[HOST_NGROUPS];
     /* W14.2: two lanes. pri is heartbeats, AE replies, votes; ent is
      * entry-carrying AppendEntries and snapshot chunks, in order.
@@ -366,6 +369,12 @@ struct efs_raft_host {
     int n;
     uint64_t boot_id;
     uint64_t salt;
+    /* D39 C10: index of each group's first applied formation record here
+     * (0: not applied since start); the formation driver thread. */
+    uint64_t formation_index[2];
+    uint64_t inbox_fenced; /* drained Raft items refused by C7 (b) */
+    pthread_t formation_tid;
+    int formation_started, formation_running;
     /* Per-export MKDIR scatter salt (architecture.md §7.4). Cached after
      * the first successful KV read — it is written once at raft-mkfs and
      * never changes. Skipping the ROOT ReadIndex on every mkdir is the
@@ -743,10 +752,8 @@ static int raft_obs_on(void)
     return v;
 }
 
-/* Unset EFS_MD_RAFT_N keeps the four-node default; deployments set it to
- * the member count (node ids 1..n), 3..EFS_MAX_NODES. */
-#define EFS_MD_RAFT_N_DEFAULT 4
-_Static_assert(EFS_MD_RAFT_N_DEFAULT <= EFS_MAX_NODES, "default metadata N");
+/* D39: the member count n is the configured member list's (s->cluster);
+ * EFS_MD_RAFT_N is gone and efsd refuses it. */
 
 /* Default voters: the shared D38 rule (raft.h efs_md_group_voters). */
 static uint32_t group_voters(uint8_t group, int n)
@@ -896,8 +903,16 @@ static void *host_sender(void *arg)
                 free(bufs[i]);
             continue;
         }
-        if (!tx->conn)
+        /* D39 C2: an identity event retires this sender's connection; the
+         * next one redeclares the current tuple. */
+        if (tx->conn && tx->conn_gen != adm_generation()) {
+            efs_conn_destroy(tx->conn);
+            tx->conn = NULL;
+        }
+        if (!tx->conn) {
+            tx->conn_gen = adm_generation();
             tx->conn = server_peer_conn_new(host, port);
+        }
         pc = tx->conn;
         if (!pc) {
             tx->st_fail += (uint64_t)n;
@@ -1373,51 +1388,125 @@ static int host_send(void *net, const struct efs_raft_msg *msg)
     return EFS_OK;
 }
 
-static int apply_mkfs_cmd(struct efs_raft_host *h, const uint8_t *cmd,
-                          uint32_t clen, uint64_t index)
-{
-    uint64_t now, salt = 0;
-    int rc;
+#define HOST_MKFS_LEN 49u /* [tag][now:8][salt:8][digest:32] */
+#define HOST_SALT_LEN 45u /* [tag][anchor:4][salt:8][digest:32] */
+static void *host_formation_thread(void *arg);
+static int host_formation_rederive(struct efs_raft_host *h);
 
-    if (clen < 9)
-        return EFS_ERR_UNSUPPORTED;
-    now = rd64be(cmd + 1);
-    if (clen >= 17)
-        salt = rd64be(cmd + 9);
-    rc = efs_meta_apply_mkfs(h->kv, now, salt);
-    if (rc != EFS_OK) {
-        fprintf(stderr, "raft-host: apply mkfs rc=%d index=%llu\n",
-                rc, (unsigned long long)index);
-        return rc;
+static uint32_t formation_anchor(int gi)
+{
+    return gi == 0 ? efs_kv_inode_shard(EFS_ROOT_INO) : efs_kv_anchor_shard(2);
+}
+
+/* D39 C10: a formation record conflicting with the local pair stops the
+ * daemon with both identities; the store is never rewritten. */
+static int formation_conflict_stop(struct efs_raft_host *h, int gi, uint64_t index,
+                                   uint64_t salt)
+{
+    fprintf(stderr, "raft-host: group %d formation record index=%llu salt=%llu conflicts with "
+            "this member's pair; stopping\n", gi ? 2 : 0, (unsigned long long)index,
+            (unsigned long long)salt);
+    __atomic_store_n(&h->s->running, 0, __ATOMIC_RELEASE);
+    return EFS_ERR_UNSUPPORTED; /* halts the group's apply: never skipped */
+}
+
+/* Compare-and-install on the group's applied state (C10): the first applied
+ * pair wins, a later different pair applies as a no-op; an install or a
+ * matching repeat is a local identity event. pre: 1 before the record is
+ * written (conflict check only). */
+static int formation_apply(struct efs_raft_host *h, int gi, uint64_t index, uint64_t salt,
+                           const uint8_t *digest, int *install)
+{
+    uint64_t have = 0;
+    int rc = efs_meta_apply_anchor_salt(h->kv, formation_anchor(gi), &have);
+    *install = 0;
+    if (rc == EFS_OK) {
+        if (have != salt) {
+            fprintf(stderr, "raft-host: group %d formation record index=%llu salt=%llu: the "
+                    "group already holds salt %llu; no-op\n", gi ? 2 : 0,
+                    (unsigned long long)index, (unsigned long long)salt,
+                    (unsigned long long)have);
+            return EFS_OK;
+        }
+        *install = 1; /* matching repeat */
+        return EFS_OK;
     }
-    APPLY_LOG("raft-host: applied mkfs index=%llu salt=%llu\n",
-            (unsigned long long)index, (unsigned long long)salt);
+    if (rc != EFS_ERR_NOT_FOUND)
+        return rc;
+    uint64_t local = 0;
+    if (memcmp(digest, h->s->cluster.digest, EFS_CLUSTER_DIGEST_LEN) ||
+        (adm_pair(&local) && local != salt))
+        return formation_conflict_stop(h, gi, index, salt);
+    *install = 2; /* first install: the caller writes the record */
     return EFS_OK;
 }
 
-/* EFS_MD_CMD_SALT: [anchor:4][salt:8]. Carries the export salt to a group
- * that never applies MKFS (the even-shard group), so every node computes
- * the same efs_kv_mkdir_shard placement. */
+static int formation_installed(struct efs_raft_host *h, int gi, uint64_t index, uint64_t salt,
+                               const uint8_t *digest)
+{
+    if (!h->formation_index[gi])
+        h->formation_index[gi] = index;
+    if (adm_formation_install(gi, salt, digest) != EFS_OK)
+        return formation_conflict_stop(h, gi, index, salt);
+    return EFS_OK;
+}
+
+static int apply_mkfs_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                          uint32_t clen, uint64_t index)
+{
+    uint64_t now, salt;
+    int rc, install;
+
+    if (clen != HOST_MKFS_LEN)
+        return EFS_ERR_UNSUPPORTED;
+    now = rd64be(cmd + 1);
+    salt = rd64be(cmd + 9);
+    rc = formation_apply(h, 0, index, salt, cmd + 17, &install);
+    if (rc != EFS_OK || !install)
+        return rc;
+    if (install == 2) {
+        rc = efs_meta_apply_mkfs(h->kv, now, salt);
+        if (rc != EFS_OK) {
+            fprintf(stderr, "raft-host: apply mkfs rc=%d index=%llu\n",
+                    rc, (unsigned long long)index);
+            return rc;
+        }
+    }
+    APPLY_LOG("raft-host: applied mkfs index=%llu salt=%llu\n",
+            (unsigned long long)index, (unsigned long long)salt);
+    return formation_installed(h, 0, index, salt, cmd + 17);
+}
+
+/* EFS_MD_CMD_SALT: [anchor:4][salt:8][digest:32]. Carries the pair to the
+ * even-shard group (group 2), so every node computes the same
+ * efs_kv_mkdir_shard placement and every member can learn the pair. */
 static int apply_salt_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                           uint32_t clen, uint64_t index)
 {
     uint32_t anchor;
     uint64_t salt;
-    int rc;
+    int rc, install;
 
-    if (clen < 13)
+    if (clen != HOST_SALT_LEN)
         return EFS_ERR_UNSUPPORTED;
     anchor = rd32be(cmd + 1);
     salt = rd64be(cmd + 5);
-    rc = efs_meta_apply_salt_record(h->kv, anchor, salt);
-    if (rc != EFS_OK) {
-        fprintf(stderr, "raft-host: apply salt rc=%d index=%llu\n",
-                rc, (unsigned long long)index);
+    if (anchor != formation_anchor(1))
+        return EFS_ERR_UNSUPPORTED;
+    rc = formation_apply(h, 1, index, salt, cmd + 13, &install);
+    if (rc != EFS_OK || !install)
         return rc;
+    if (install == 2) {
+        rc = efs_meta_apply_salt_record(h->kv, anchor, salt);
+        if (rc != EFS_OK) {
+            fprintf(stderr, "raft-host: apply salt rc=%d index=%llu\n",
+                    rc, (unsigned long long)index);
+            return rc;
+        }
     }
     APPLY_LOG("raft-host: applied salt index=%llu anchor=%u salt=%llu\n",
               (unsigned long long)index, anchor, (unsigned long long)salt);
-    return EFS_OK;
+    return formation_installed(h, 1, index, salt, cmd + 13);
 }
 
 /* Same encoding as sim pack_create / apply_create_cmd. S_IFDIR is mkdir
@@ -4186,6 +4275,11 @@ static int host_rpc_submit(struct efs_raft_host *h, int rid, uint8_t group,
      * remapped that to NOT_PRIMARY (fio end_fsync -15). */
     if (rid < 0 || rid == h->raft_id || clen > EFS_WIRE_RAFT_MAX_CMD)
         return EFS_ERR_INVAL;
+    /* D39 C4: a forward is application work, admitted only on a formed
+     * channel; before this member's formation completes no peer would
+     * admit it, so do not open connections to be refused. */
+    if (!adm_complete())
+        return EFS_ERR_BUSY;
     plen = 1u + clen;
     if (clen > HOST_CMD_MAX) {
         payload = malloc(plen);
@@ -6921,6 +7015,8 @@ static void host_note_queued_reads(struct efs_raft_host *h,
 {
     for(int i=0;i<n;i++) {
         struct efs_raft_msg msg;
+        /* D39 C7 (b): per item, against the binding now. */
+        if(adm_check_control(&items[i].tag)!=EFS_OK)continue;
         if(items[i].len!=EFS_WIRE_RAFT_HDR_LEN ||
            items[i].buf[0]!=EFS_RAFT_MSG_AE_REQ ||
            efs_wire_raft_decode(items[i].buf,items[i].len,&msg,NULL,0)!=EFS_OK ||
@@ -7027,7 +7123,12 @@ static void drain_inbox(struct efs_raft_host *h)
                 BO_HIST(BH_INBOX_AGE_US, efs_batch_obs_now_us() - local[i].queued_us);
             if (local[i].len > EFS_WIRE_RAFT_HDR_LEN)
                 cmd_cap = local[i].len - EFS_WIRE_RAFT_HDR_LEN;
-            if (!cmd_cap || (cmd = malloc(cmd_cap)) != NULL)
+            /* D39 C7 (b): each drained item is checked against the binding
+             * now; an item obsolete since its receive takes no effect. */
+            if (adm_check_control(&local[i].tag) != EFS_OK) {
+                __atomic_add_fetch(&h->inbox_fenced, 1, __ATOMIC_RELAXED);
+                cmd_cap = 0;
+            } else if (!cmd_cap || (cmd = malloc(cmd_cap)) != NULL)
                 rc = efs_wire_raft_decode(local[i].buf, local[i].len,
                                            &msg, cmd, cmd_cap);
             free(local[i].buf);
@@ -8053,52 +8154,6 @@ static void *host_pump(void *arg)
     return NULL;
 }
 
-static uint64_t make_boot_id(void)
-{
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    return ((uint64_t)getpid() << 32) ^
-           ((uint64_t)ts.tv_sec << 16) ^ (uint64_t)ts.tv_nsec;
-}
-
-/* Boot ids fence stale incarnations (raft.c peer_boot): a peer drops any
- * message whose boot is LOWER than the last one it saw from us. pid^time is
- * NOT monotonic across restarts, so an unfenced restart could pick a lower
- * boot and be silently fenced forever (replies dropped, replication wedges).
- * Persist the last used boot in <mdraft>/boot.bin and always start at
- * max(fresh, saved+1), writing the chosen value back before use. */
-static int host_boot_bump(const char *dir, uint64_t *boot_io)
-{
-    char path[EFS_MAX_PATH];
-    uint64_t saved = 0, next;
-    ssize_t n;
-    int fd;
-
-    snprintf(path, sizeof(path), "%s/boot.bin", dir);
-    fd = open(path, O_RDWR | O_CREAT, 0644);
-    if (fd < 0)
-        return EFS_ERR_IO;
-    n = read(fd, &saved, sizeof(saved));
-    if (n < 0) {
-        close(fd);
-        return EFS_ERR_IO;
-    }
-    if (n < (ssize_t)sizeof(saved))
-        saved = 0; /* fresh file */
-    next = *boot_io;
-    if (saved >= next)
-        next = saved + 1;
-    if (lseek(fd, 0, SEEK_SET) < 0 ||
-        write(fd, &next, sizeof(next)) != (ssize_t)sizeof(next) ||
-        fsync(fd) != 0) {
-        close(fd);
-        return EFS_ERR_IO;
-    }
-    close(fd);
-    *boot_io = next;
-    return EFS_OK;
-}
-
 static uint64_t make_salt(uint64_t boot)
 {
     uint64_t s = 0;
@@ -8145,31 +8200,6 @@ static uint32_t load_desired(struct efs_raft_host *h, uint8_t group,
     close(fd);
     v = rd32be(buf);
     return efs_raft_voters_valid(v) ? v : fallback;
-}
-
-static int save_desired(struct efs_raft_host *h, uint8_t group, uint32_t voters)
-{
-    char path[EFS_MAX_PATH], tmp[EFS_MAX_PATH];
-    uint8_t buf[4];
-    int fd;
-
-    desired_path(h, group, path, sizeof(path));
-    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
-    wr32be(buf, voters);
-    fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (fd < 0)
-        return EFS_ERR_IO;
-    if (write(fd, buf, 4) != 4 || fsync(fd) != 0) {
-        close(fd);
-        unlink(tmp);
-        return EFS_ERR_IO;
-    }
-    close(fd);
-    if (rename(tmp, path) != 0) {
-        unlink(tmp);
-        return EFS_ERR_IO;
-    }
-    return EFS_OK;
 }
 
 /* cfg_voters is C_old (bootstrap map). efs_raft_new overlays persisted
@@ -8270,85 +8300,6 @@ static int attach_group(struct efs_raft_host *h, int gi, uint8_t group)
     if (!hosts_group(h->raft_id, boot) && !hosts_group(h->raft_id, want))
         return EFS_OK;
     return attach_replica(h, gi, boot);
-}
-
-static void host_cfg_fan_note(struct efs_raft_host *h, uint8_t group,
-                              uint32_t voters)
-{
-    uint8_t cmd[HOST_CFG_LEN];
-    struct efs_msg_raft_mkfs_reply rep;
-    int rid;
-
-    cmd[0] = EFS_MD_CMD_CFG;
-    cmd[1] = EFS_MD_CFG_NOTE;
-    wr32be(cmd + 2, voters);
-    for (rid = 0; rid < h->n; rid++) {
-        if (rid == h->raft_id)
-            continue;
-        memset(&rep, 0, sizeof(rep));
-        (void)host_rpc_submit(h, rid, group, cmd, HOST_CFG_LEN, &rep,
-                              HOST_SEND_IO_MS);
-    }
-}
-
-/* Operator desired ≠ actual (I18). Persist + attach a learner with C_old,
- * then the current leader calls efs_raft_change. Not a control-plane Raft
- * group — that stays sim-only until step 6's remainder is specified. */
-static int host_cfg(struct efs_raft_host *h, uint8_t group,
-                    const uint8_t *cmd, uint32_t clen, int *hint)
-{
-    uint32_t voters;
-    uint8_t sub;
-    struct host_group *s;
-    struct efs_raft *r;
-    struct efs_msg_raft_mkfs_reply rep;
-    int rc, lid = -1;
-
-    if (clen < HOST_CFG_LEN ||
-        (group != EFS_RAFT_GROUP_SHARD && group != EFS_RAFT_GROUP_SHARD2))
-        return EFS_ERR_INVAL;
-    sub = cmd[1];
-    voters = rd32be(cmd + 2);
-    if (!efs_raft_voters_valid(voters))
-        return EFS_ERR_INVAL;
-    if (sub != EFS_MD_CFG_NOTE && sub != EFS_MD_CFG_CHANGE)
-        return EFS_ERR_INVAL;
-    rc = save_desired(h, group, voters);
-    if (rc != EFS_OK)
-        return rc;
-    pthread_mutex_lock(&h->mu);
-    s = group_slot(h, group);
-    if (s)
-        s->desired = voters;
-    if (s && !s->r && hosts_group(h->raft_id, voters))
-        rc = attach_replica(h, (int)(s - h->g), group_voters(group, h->n));
-    pthread_mutex_unlock(&h->mu);
-    if (rc != EFS_OK)
-        return rc;
-    if (sub == EFS_MD_CFG_NOTE)
-        return EFS_OK;
-    host_cfg_fan_note(h, group, voters);
-    pthread_mutex_lock(&h->mu);
-    s = group_slot(h, group);
-    r = (s && s->r) ? s->r : NULL;
-    if (r) {
-        lid = efs_raft_leader(r);
-        if (hint)
-            *hint = lid;
-        if (efs_raft_role(r) == EFS_RAFT_LEADER) {
-            rc = efs_raft_change(r, voters);
-            __atomic_store_n(&s->voters, efs_raft_voters(r), __ATOMIC_RELEASE);
-            pthread_mutex_unlock(&h->mu);
-            host_pump_kick(h);
-            return rc;
-        }
-    }
-    pthread_mutex_unlock(&h->mu);
-    memset(&rep, 0, sizeof(rep));
-    rc = host_remote_cmd(h, group, cmd, clen, &rep, lid);
-    if (hint && rep.leader_hint >= 0)
-        *hint = rep.leader_hint;
-    return rc;
 }
 
 /* ---- background GC reaper (step-11 follow-up, spec L7) ----
@@ -12118,8 +12069,7 @@ int server_raft_host_start(struct efsd_server *s)
 {
     struct efs_raft_host *h;
     char dir[EFS_MAX_PATH];
-    const char *ns;
-    int n = EFS_MD_RAFT_N_DEFAULT;
+    int n;
     int rc;
 
     /* The Raft+KV engine is the only metadata path, so the host always
@@ -12147,17 +12097,11 @@ int server_raft_host_start(struct efsd_server *s)
         fprintf(stderr,"raft-host: EFS_RAFT_APPLIED_INTERVAL_MS must be 10..1000\n");
         return EFS_ERR_INVAL;
     }
-    ns = getenv("EFS_MD_RAFT_N");
-    if (ns && ns[0]) {
-        n = atoi(ns);
-        if (n < 3 || n > EFS_MAX_NODES) {
-            fprintf(stderr, "raft-host: EFS_MD_RAFT_N must be 3..%d\n",
-                    EFS_MAX_NODES);
-            return EFS_ERR_INVAL;
-        }
-    }
-    if (s->id < 1 || (int)s->id > n) {
-        fprintf(stderr, "raft-host: node-id %u out of 1..%d\n", s->id, n);
+    n = (int)s->cluster.n;
+    if (n < EFS_CLUSTER_MIN_MEMBERS || n > EFS_MAX_NODES || s->id < 1 || (int)s->id > n ||
+        !adm_ready() || adm_local_id() != s->id) {
+        fprintf(stderr, "raft-host: member %u is not a member of a %d-member configuration\n",
+                s->id, n);
         return EFS_ERR_INVAL;
     }
 
@@ -12177,7 +12121,9 @@ int server_raft_host_start(struct efsd_server *s)
     h->expiry_enabled=expiry_enabled;h->expiry_peer_skip=-1;
     h->raft_id = (int)s->id - 1;
     h->n = n;
-    h->boot_id = make_boot_id();
+    /* D39 C2: the incarnation is the store's durable boot counter, advanced
+     * by efsd before anything was advertised; Raft frames carry it as boot. */
+    h->boot_id = s->incarnation;
     h->salt = make_salt(h->boot_id);
     pthread_mutex_init(&h->mu, NULL);
     pthread_mutex_init(&h->snap_mu, NULL);
@@ -12231,12 +12177,6 @@ int server_raft_host_start(struct efsd_server *s)
         return EFS_ERR_IO;
     }
     host_snap_drop_parts(h);
-    rc = host_boot_bump(dir, &h->boot_id);
-    if (rc != EFS_OK) {
-        fprintf(stderr, "raft-host: boot persist %s failed\n", dir);
-        free(h);
-        return rc;
-    }
     {
         char kvdir[EFS_MAX_PATH], logdir[EFS_MAX_PATH];
         struct efs_kv_lsm_cfg kcfg;
@@ -12274,6 +12214,15 @@ int server_raft_host_start(struct efsd_server *s)
         free(h);
         return rc;
     }
+    rc = host_formation_rederive(h);
+    if (rc != EFS_OK) {
+        efs_raft_free(h->g[0].r);
+        efs_raft_free(h->g[1].r);
+        efs_raft_disk_close(h->disk);
+        efs_kv_lsm_close(h->kv);
+        free(h);
+        return rc;
+    }
     h->tx_running = 1;
     h->running = 1;
     efs_kv_lsm_query_tracking(h->kv,h->query_enabled);
@@ -12291,6 +12240,11 @@ int server_raft_host_start(struct efsd_server *s)
         return EFS_ERR_IO;
     }
     h->started = 1;
+    __atomic_store_n(&h->formation_running, 1, __ATOMIC_RELEASE);
+    if (efsd_pthread_create(&h->formation_tid, host_formation_thread, h) != 0) {
+        __atomic_store_n(&h->formation_running, 0, __ATOMIC_RELEASE);
+        fprintf(stderr, "raft-host: formation driver thread failed; formation needs a restart\n");
+    } else h->formation_started = 1;
     if (h->query_enabled) {
         __atomic_store_n(&h->query_running,1,__ATOMIC_RELEASE);
         if (efsd_pthread_create(&h->query_tid,host_query_thread,h)!=0) {
@@ -12373,7 +12327,11 @@ void server_raft_host_stop(void)
     pthread_rwlock_unlock(&h->query_lock);
     pthread_rwlock_destroy(&h->query_lock);
     /* Stop the GC reaper first: an in-flight host_propose_wait needs the
-     * pump alive to apply, and its peer RPCs need the conn pool. */
+     * pump alive to apply, and its peer RPCs need the conn pool. The
+     * formation driver likewise. */
+    __atomic_store_n(&h->formation_running, 0, __ATOMIC_RELEASE);
+    if (h->formation_started)
+        pthread_join(h->formation_tid, NULL);
     __atomic_store_n(&h->gc_running, 0, __ATOMIC_RELEASE);
     if (h->gc_started)
         pthread_join(h->gc_tid, NULL);
@@ -12503,7 +12461,7 @@ static int host_read_control(struct efs_raft_host *h,const uint8_t *p,uint32_t n
     return handled==1;
 }
 
-int server_raft_host_inbox(const uint8_t *payload, uint32_t plen)
+int server_raft_host_inbox(const uint8_t *payload, uint32_t plen, const struct efs_identity *tag)
 {
     struct efs_raft_host *h = g_host;
     uint8_t *copy;
@@ -12526,6 +12484,7 @@ int server_raft_host_inbox(const uint8_t *payload, uint32_t plen)
     h->inbox_bytes+=plen;
     if (h->inbox_bytes>h->inbox_bytes_hi) h->inbox_bytes_hi=h->inbox_bytes;
     h->inbox[h->inbox_n].buf=copy; h->inbox[h->inbox_n].len=plen;
+    h->inbox[h->inbox_n].tag=*tag;
     h->inbox[h->inbox_n].queued_us=BO_ON() ? efs_batch_obs_now_us() : 0;
     h->inbox[h->inbox_n].read_noted=0;
     h->inbox_n++;
@@ -12543,12 +12502,45 @@ busy:
     return EFS_ERR_BUSY;
 }
 
+static int host_hosts_gi(struct efs_raft_host *h, int gi)
+{
+    return gi >= 0 && gi < 2 && h->g[gi].hosted;
+}
+
+/* D39 C10: a configured member is present when it declared to us (we hold
+ * a binding) and a fresh outgoing connection to it declares and validates. */
+static uint32_t formation_absent_members(struct efs_raft_host *h)
+{
+    uint32_t absent = 0;
+    const struct efs_cluster_conf *c = &h->s->cluster;
+    for (uint32_t m = 1; m <= c->n; m++) {
+        if (m == h->s->id)
+            continue;
+        if (!adm_has_binding(m)) {
+            absent |= 1u << (m - 1);
+            continue;
+        }
+        struct efs_conn *pc = server_peer_conn_new(c->m[m - 1].addr, c->m[m - 1].port);
+        if (!pc)
+            absent |= 1u << (m - 1);
+        else
+            efs_conn_destroy(pc);
+    }
+    return absent;
+}
+
+/* RAFT_MKFS with an empty payload (mgmt role, digest already equal at the
+ * declaration). If group 0 holds a pair, reply it; not group 0's leader:
+ * NOT_PRIMARY with a hint; a configured member absent: BUSY naming them;
+ * otherwise propose MKFS(local salt, digest) locally and reply the
+ * committed pair after apply (it may be another proposal's). SALT follows
+ * from the group-2 leader's formation driver. */
 void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out)
 {
     struct efs_raft_host *h = g_host;
     struct efs_raft *r;
-    uint8_t cmd[17];
-    uint8_t scmd[13];
+    uint8_t cmd[HOST_MKFS_LEN];
+    uint64_t idx = 0, term = 0, salt = 0;
     int hint = -1;
     int rc;
 
@@ -12558,57 +12550,224 @@ void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out)
         out->rc = EFS_ERR_INVAL;
         return;
     }
-    out->salt = h->salt;
+    if (adm_known(0, &salt) ||
+        (host_hosts_gi(h, 0) &&
+         efs_meta_apply_anchor_salt(h->kv, formation_anchor(0), &salt) == EFS_OK)) {
+        out->rc = EFS_OK;
+        out->salt = salt;
+        out->index = h->formation_index[0];
+        return;
+    }
+    pthread_mutex_lock(&h->mu);
+    r = group_raft(h, EFS_RAFT_GROUP_SHARD);
+    int leading = r && efs_raft_role(r) == EFS_RAFT_LEADER;
+    hint = r ? efs_raft_leader(r) : -1;
+    pthread_mutex_unlock(&h->mu);
+    if (!leading) {
+        if (hint < 0 && !r) {
+            uint32_t v = group_voters(EFS_RAFT_GROUP_SHARD, h->n);
+            hint = efs_raft_preferred_voter(v, 0);
+        }
+        out->rc = EFS_ERR_NOT_PRIMARY;
+        out->leader_hint = hint;
+        return;
+    }
+    out->term = formation_absent_members(h);
+    if (out->term) {
+        fprintf(stderr, "raft-host: raft-mkfs refused: configured members absent (mask 0x%x)\n",
+                (unsigned)out->term);
+        out->rc = EFS_ERR_BUSY;
+        return;
+    }
     cmd[0] = EFS_MD_CMD_MKFS;
     wr64be(cmd + 1, now_ns());
     wr64be(cmd + 9, h->salt);
-    /* Wait for the group-0 commit, then replicate the salt to the
-     * even-shard group (EFS_MD_CMD_SALT anchored on shard 2): every MKDIR
-     * scatters via efs_kv_mkdir_shard(parent, name, salt) on EVERY group,
-     * and a node hosting only group 2 never applies MKFS — without this
-     * record its salt read returned 0 and its placement diverged (apply
-     * PROTO skip -> missing rows -> later EIO). mkfs only returns OK once
-     * both groups carry the salt. */
-    rc = host_propose_wait(h, EFS_RAFT_GROUP_SHARD, cmd, 17, &hint);
+    memcpy(cmd + 17, h->s->cluster.digest, EFS_CLUSTER_DIGEST_LEN);
+    rc = host_propose_mode(h, EFS_RAFT_GROUP_SHARD, cmd, sizeof(cmd), &idx, &term, &hint, 1);
+    if (rc == EFS_OK)
+        rc = host_wait_verdict(h, EFS_RAFT_GROUP_SHARD, idx, term, &hint);
     if (rc == EFS_OK) {
-        /* W37: the SALT step carries the salt the COMMITTED MKFS recorded,
-         * never this node's own. `efs_meta_apply_mkfs` on an existing root
-         * is a no-op that keeps the first salt, so a retry of mkfs from a
-         * second node used to commit MKFS "fine" and then replicate ITS
-         * salt to group 2 — `efs_meta_apply_salt_record` PROTO on every
-         * group-2 apply, only a wipe recovers (Oct 1). Read the record
-         * back (root shard's export key; group 2's anchor if this node
-         * holds only that); a node that holds neither cannot know the
-         * salt and answers BUSY — retry on a group-0 node. */
-        uint64_t committed = 0;
-        int src = efs_meta_apply_export_salt(h->kv, &committed);
-        if (src != EFS_OK) {
-            fprintf(stderr, "raft-host: raft-mkfs: MKFS committed but this "
-                    "node holds no salt record (rc=%d); retry on a group-0 "
-                    "node\n", src);
-            rc = EFS_ERR_BUSY;
-        } else if (committed != h->salt) {
-            fprintf(stderr, "raft-host: raft-mkfs: table exists with salt %llu; "
-                    "own salt %llu not used (mkfs once, on one node)\n",
-                    (unsigned long long)committed, (unsigned long long)h->salt);
-            h->salt = committed;
+        rc = efs_meta_apply_anchor_salt(h->kv, formation_anchor(0), &salt);
+        if (rc == EFS_OK && salt != h->salt)
+            fprintf(stderr, "raft-host: raft-mkfs: group 0 committed salt %llu; own %llu "
+                    "not used\n", (unsigned long long)salt, (unsigned long long)h->salt);
+    }
+    out->salt = salt;
+    out->index = h->formation_index[0] ? h->formation_index[0] : idx;
+    out->rc = rc;
+    out->leader_hint = hint;
+}
+
+/* FORMATION_READ: group g's committed pair, answered by its leader after a
+ * ReadIndex proof (C10). A non-leader answers NOT_PRIMARY with a hint. */
+void server_raft_host_formation_read(const struct efs_msg_formation_read *req,
+                                     struct efs_msg_formation_read_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    memset(out, 0, sizeof(*out));
+    out->leader_hint = -1;
+    out->group = req->group;
+    if (!h || !h->running || (req->group != 0 && req->group != 2)) {
+        out->rc = EFS_ERR_INVAL;
+        return;
+    }
+    int gi = req->group == 2;
+    uint8_t group = gi ? EFS_RAFT_GROUP_SHARD2 : EFS_RAFT_GROUP_SHARD;
+    if (!host_hosts_gi(h, gi)) {
+        out->rc = EFS_ERR_NOT_PRIMARY;
+        out->leader_hint = efs_raft_preferred_voter(group_voters(group, h->n), 0);
+        return;
+    }
+    pthread_mutex_lock(&h->mu);
+    struct efs_raft *r = group_raft(h, group);
+    int leading = r && efs_raft_role(r) == EFS_RAFT_LEADER;
+    out->leader_hint = r ? efs_raft_leader(r) : -1;
+    pthread_mutex_unlock(&h->mu);
+    if (!leading) {
+        out->rc = EFS_ERR_NOT_PRIMARY;
+        return;
+    }
+    int hint = -1;
+    int rc = host_read_index(h, group, &hint);
+    if (rc != EFS_OK) {
+        out->rc = rc;
+        out->leader_hint = hint;
+        return;
+    }
+    uint64_t salt = 0;
+    rc = efs_meta_apply_anchor_salt(h->kv, formation_anchor(gi), &salt);
+    if (rc == EFS_OK) {
+        out->known = 1;
+        out->salt = salt;
+        out->index = h->formation_index[gi];
+        memcpy(out->digest, h->s->cluster.digest, EFS_CLUSTER_DIGEST_LEN);
+    } else if (rc != EFS_ERR_NOT_FOUND) {
+        out->rc = rc;
+        return;
+    }
+    out->rc = EFS_OK;
+}
+
+/* Ask a configured voter of a non-hosted group for its formation record
+ * (C10). Accepted only from a voter of that group, on our own validated
+ * connection, as the reply to this request. */
+static int formation_read_remote(struct efs_raft_host *h, int gi, int *next_hint)
+{
+    uint8_t group = gi ? EFS_RAFT_GROUP_SHARD2 : EFS_RAFT_GROUP_SHARD;
+    uint32_t voters = group_voters(group, h->n);
+    const struct efs_cluster_conf *c = &h->s->cluster;
+    int order[EFS_RAFT_MAX_PEERS], no = 0;
+    if (*next_hint >= 0 && (voters & (1u << *next_hint)))
+        order[no++] = *next_hint;
+    for (int i = 0; i < EFS_RAFT_MAX_PEERS; i++)
+        if ((voters & (1u << i)) && i != *next_hint)
+            order[no++] = i;
+    *next_hint = -1;
+    for (int k = 0; k < no; k++) {
+        uint32_t m = (uint32_t)order[k] + 1;
+        if (m == h->s->id || m > c->n || !adm_has_binding(m))
+            continue;
+        struct efs_conn *pc = server_peer_read_conn_get(c->m[m - 1].addr, c->m[m - 1].port);
+        if (!pc)
+            continue;
+        struct efs_msg_formation_read rq = {.group = gi ? 2 : 0};
+        uint8_t type = 0;
+        void *reply = NULL;
+        uint32_t len = 0;
+        if (efs_conn_send_msg(pc, EFS_MSG_FORMATION_READ, &rq, sizeof(rq)) ||
+            efs_conn_recv_msg(pc, &type, &reply, &len)) {
+            free(reply);
+            server_peer_conn_drop(c->m[m - 1].addr, c->m[m - 1].port, pc);
+            continue;
+        }
+        server_peer_conn_release(c->m[m - 1].addr, c->m[m - 1].port, pc);
+        struct efs_msg_formation_read_reply rep;
+        int ok = type == EFS_MSG_FORMATION_READ_REPLY && len == sizeof(rep);
+        if (ok)
+            memcpy(&rep, reply, sizeof(rep));
+        free(reply);
+        if (!ok || rep.group != rq.group)
+            continue;
+        if (rep.rc == EFS_ERR_NOT_PRIMARY) {
+            if (rep.leader_hint >= 0 && rep.leader_hint < EFS_RAFT_MAX_PEERS)
+                *next_hint = rep.leader_hint;
+            continue;
+        }
+        if (rep.rc != EFS_OK || !rep.known)
+            return EFS_ERR_NOT_FOUND; /* unknown: ask again after a delay */
+        if (adm_formation_observe(gi, rep.salt, rep.digest) != EFS_OK) {
+            fprintf(stderr, "raft-host: group %d formation read from member %u conflicts with "
+                    "this member's pair; stopping\n", gi ? 2 : 0, m);
+            __atomic_store_n(&h->s->running, 0, __ATOMIC_RELEASE);
+            return EFS_ERR_FENCED;
+        }
+        return EFS_OK;
+    }
+    return EFS_ERR_BUSY;
+}
+
+/* D39 C10 formation driver, until complete: hosted groups learn their
+ * record by apply; the group-2 leader proposes SALT with the committed
+ * MKFS pair once group 2 has none; non-hosted groups are read with
+ * FORMATION_READ from a voter. */
+static void *host_formation_thread(void *arg)
+{
+    struct efs_raft_host *h = arg;
+    int hint[2] = {-1, -1};
+    uint64_t salt_sent_ms = 0;
+    while (__atomic_load_n(&h->formation_running, __ATOMIC_ACQUIRE) && !adm_complete()) {
+        for (int gi = 0; gi < 2; gi++) {
+            if (adm_known(gi, NULL))
+                continue;
+            if (!host_hosts_gi(h, gi)) {
+                (void)formation_read_remote(h, gi, &hint[gi]);
+                continue;
+            }
+            uint64_t pair = 0, have = 0;
+            if (gi != 1 || !adm_known(0, &pair) ||
+                efs_meta_apply_anchor_salt(h->kv, formation_anchor(1), &have) == EFS_OK)
+                continue;
+            pthread_mutex_lock(&h->mu);
+            struct efs_raft *r = group_raft(h, EFS_RAFT_GROUP_SHARD2);
+            int leading = r && efs_raft_role(r) == EFS_RAFT_LEADER;
+            pthread_mutex_unlock(&h->mu);
+            uint64_t now = now_ns() / 1000000ull;
+            if (!leading || (salt_sent_ms && now - salt_sent_ms < 5000))
+                continue;
+            uint8_t scmd[HOST_SALT_LEN];
+            uint64_t idx = 0, term = 0;
+            int lh = -1;
+            scmd[0] = EFS_MD_CMD_SALT;
+            wr32be(scmd + 1, formation_anchor(1));
+            wr64be(scmd + 5, pair);
+            memcpy(scmd + 13, h->s->cluster.digest, EFS_CLUSTER_DIGEST_LEN);
+            salt_sent_ms = now;
+            if (host_propose_mode(h, EFS_RAFT_GROUP_SHARD2, scmd, sizeof(scmd), &idx, &term,
+                                  &lh, 1) == EFS_OK)
+                (void)host_wait_verdict(h, EFS_RAFT_GROUP_SHARD2, idx, term, &lh);
+        }
+        for (int i = 0; i < 3 && __atomic_load_n(&h->formation_running, __ATOMIC_ACQUIRE); i++)
+            usleep(100 * 1000);
+    }
+    return NULL;
+}
+
+/* A restart re-derives `complete` before any application service: hosted
+ * groups from their applied record, which must equal the persisted pair. */
+static int host_formation_rederive(struct efs_raft_host *h)
+{
+    for (int gi = 0; gi < 2; gi++) {
+        uint64_t salt = 0;
+        if (!host_hosts_gi(h, gi) ||
+            efs_meta_apply_anchor_salt(h->kv, formation_anchor(gi), &salt) != EFS_OK)
+            continue;
+        if (adm_formation_observe(gi, salt, h->s->cluster.digest) != EFS_OK) {
+            fprintf(stderr, "raft-host: group %d applied formation record conflicts with the "
+                    "persisted pair; refusing start\n", gi ? 2 : 0);
+            return EFS_ERR_FENCED;
         }
     }
-    if (rc == EFS_OK) {
-        scmd[0] = EFS_MD_CMD_SALT;
-        wr32be(scmd + 1, efs_kv_anchor_shard(2));
-        wr64be(scmd + 5, h->salt);
-        rc = host_propose_wait(h, EFS_RAFT_GROUP_SHARD2, scmd, 13, &hint);
-    }
-    out->salt = h->salt;
-    pthread_mutex_lock(&h->mu);
-    r = group_raft(h, EFS_RAFT_GROUP_SHARD);
-    if (r)
-        out->index = efs_raft_applied(r);
-    pthread_mutex_unlock(&h->mu);
-    out->rc = rc;
-    if (hint >= 0)
-        out->leader_hint = hint;
+    return EFS_OK;
 }
 
 static int host_session_get_covered(struct efs_raft_host *h, const uint8_t *cmd,
@@ -13144,17 +13303,14 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         }
         out->rc=host_close_append_step(h,rd64be(cmd+1),cmd+9);return;
     }
-    if (clen >= HOST_CFG_LEN && cmd[0] == EFS_MD_CMD_CFG) {
-        rc = host_cfg(h, group, cmd, clen, &hint);
-        {
-            struct host_view v;
-            host_view_get(h, group, &v);
-            idx = v.applied;
-        }
-        out->rc = rc;
-        out->index = idx;
-        if (hint >= 0)
-            out->leader_hint = hint;
+    if (clen >= 1 && cmd[0] == EFS_MD_CMD_CFG) {
+        /* D39/D40: fixed configured membership; online membership change
+         * (RAFT_CHANGE / CFG) is not admitted. */
+        static int said;
+        if (!__atomic_exchange_n(&said, 1, __ATOMIC_RELAXED))
+            fprintf(stderr, "raft-host: refused a membership change: membership is fixed by "
+                    "the cluster configuration (D39)\n");
+        out->rc = EFS_ERR_UNSUPPORTED;
         return;
     }
     if(clen>=2 && cmd[0]==EFS_MD_CMD_SESSION && (cmd[1]==EFS_MD_SESS_LEASE_PROBE || cmd[1]==EFS_MD_SESS_LEASE_PROBE_DEFERRED)) {

@@ -2,6 +2,7 @@
 #include <errno.h>
 #include "efs/cli_help.h"
 #include "efs/common.h"
+#include "efs/cluster_conf.h"
 #include "efs/lock.h"
 #include "efs/protocol.h"
 #include "efs/network.h"
@@ -351,54 +352,6 @@ static int cmd_status(int argc, char **argv)
 
     close(fd);
     return (down_nodes > 0) ? 1 : 0;
-}
-
-static int cmd_add_node(int argc, char **argv)
-{
-    if (argc < 2) {
-        fprintf(stderr, "Usage:\n  efs-mgmt add-node <new-node:port> <existing-node:port>\n");
-        return 1;
-    }
-    char new_host[64], existing_host[64];
-    uint16_t new_port, existing_port;
-    if (parse_host_port(argv[0], new_host, sizeof(new_host), &new_port) != 0 ||
-        parse_host_port(argv[1], existing_host, sizeof(existing_host), &existing_port) != 0) {
-        fprintf(stderr, "Invalid addresses\n");
-        return 1;
-    }
-
-    int fd = efs_connect_declared(new_host, new_port);
-    if (fd < 0) {
-        fprintf(stderr, "Cannot connect to new node %s:%u\n", new_host, new_port);
-        return 1;
-    }
-    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
-    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-
-    struct efs_msg_join req;
-    memset(&req, 0, sizeof(req));
-    strncpy(req.peer_host, existing_host, sizeof(req.peer_host) - 1);
-    req.peer_port = existing_port;
-
-    uint8_t reply_type;
-    void *reply = NULL;
-    uint32_t reply_len = 0;
-    if (send_recv(fd, EFS_MSG_JOIN, &req, sizeof(req), &reply_type, &reply, &reply_len) != 0 ||
-        reply_type != EFS_MSG_JOIN_REPLY || reply_len != 1) {
-        fprintf(stderr, "Failed to send join request\n");
-        close(fd);
-        return 1;
-    }
-
-    uint8_t status = ((uint8_t *)reply)[0];
-    if (status == EFS_JOIN_OK)
-        printf("Node %s:%u joined cluster via %s:%u\n", new_host, new_port, existing_host, existing_port);
-    else
-        fprintf(stderr, "Join failed\n");
-
-    free(reply);
-    close(fd);
-    return (status == EFS_JOIN_OK) ? 0 : 1;
 }
 
 static int cmd_shrink_quota(int argc, char **argv)
@@ -965,82 +918,6 @@ static int cmd_raft_status(int argc, char **argv)
     return 0;
 }
 
-static int raft_cfg_submit(const char *host, uint16_t port, uint8_t group,
-                           uint8_t sub, uint32_t voters,
-                           struct efs_msg_raft_mkfs_reply *out, int io_ms)
-{
-    int fd;
-    uint8_t reply_type;
-    void *reply = NULL;
-    uint32_t reply_len = 0;
-    uint8_t payload[1 + 6];
-
-    payload[0] = group;
-    payload[1] = EFS_MD_CMD_CFG;
-    payload[2] = sub;
-    payload[3] = (uint8_t)(voters >> 24);
-    payload[4] = (uint8_t)(voters >> 16);
-    payload[5] = (uint8_t)(voters >> 8);
-    payload[6] = (uint8_t)voters;
-    fd = efs_connect_declared(host, port);
-    if (fd < 0)
-        return -1;
-    efs_set_recv_timeout(fd, io_ms);
-    efs_set_send_timeout(fd, io_ms);
-    if (send_recv(fd, EFS_MSG_RAFT_MKFS, payload, sizeof(payload), &reply_type,
-                  &reply, &reply_len) != 0 ||
-        reply_type != EFS_MSG_RAFT_MKFS_REPLY ||
-        reply_len != sizeof(*out)) {
-        free(reply);
-        close(fd);
-        return -1;
-    }
-    close(fd);
-    memcpy(out, reply, sizeof(*out));
-    free(reply);
-    return 0;
-}
-
-static int raft_change_converged(const char *host, uint16_t port, uint8_t group,
-                                 uint32_t voters)
-{
-    int fd;
-    uint8_t reply_type;
-    void *reply = NULL;
-    uint32_t reply_len = 0;
-    struct efs_msg_raft_status_reply *r;
-    uint32_t i;
-    int ok = 0;
-
-    fd = efs_connect_declared(host, port);
-    if (fd < 0)
-        return 0;
-    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
-    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-    if (send_recv(fd, EFS_MSG_RAFT_STATUS, NULL, 0, &reply_type, &reply,
-                  &reply_len) != 0 ||
-        reply_type != EFS_MSG_RAFT_STATUS_REPLY ||
-        reply_len != sizeof(*r)) {
-        free(reply);
-        close(fd);
-        return 0;
-    }
-    close(fd);
-    r = reply;
-    if (r->rc == EFS_OK) {
-        for (i = 0; i < r->ngroups && i < EFS_RAFT_HOST_MAX_GROUPS; i++) {
-            if (r->groups[i].group == group && r->groups[i].hosted &&
-                r->groups[i].voters == voters && !r->groups[i].joint)
-                ok = 1;
-        }
-    }
-    free(reply);
-    return ok;
-}
-
-/* W145 repair: ask one node to resync a group it follows from the
- * leader's snapshot. Only for a follower whose committed log conflicts
- * with the leader (raft-status: proto_drops rising); refused on a leader. */
 static int cmd_raft_resync(int argc, char **argv)
 {
     char host[64];
@@ -1141,122 +1018,170 @@ static int cmd_raft_step_down(int argc, char **argv)
     return out;
 }
 
-static int cmd_raft_change(int argc, char **argv)
+/* D39: efs-mgmt declares role MGMT with the configuration digest when
+ * --cluster FILE (or EFS_CLUSTER_CONF) names the configured member list. */
+static struct efs_cluster_conf g_mgmt_conf;
+static int g_mgmt_conf_set;
+
+static int mgmt_request(const char *host, uint16_t port, uint8_t type, const void *req,
+                        uint32_t len, uint8_t want, void *out, uint32_t outlen, int io_ms)
 {
-    char host[64];
-    uint16_t port;
-    uint8_t group;
-    uint32_t voters;
-    struct efs_msg_raft_mkfs_reply r;
-    int i, rc = EFS_ERR_BUSY;
-
-    if (argc < 3) {
-        fprintf(stderr, "Usage:\n  efs-mgmt raft-change <node:port> <group> <voters>\n");
-        return 1;
+    uint8_t reply_type = 0;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    int fd = efs_connect_declared(host, port);
+    if (fd < 0)
+        return -1;
+    efs_set_recv_timeout(fd, io_ms);
+    efs_set_send_timeout(fd, io_ms);
+    int rc = send_recv(fd, type, req, len, &reply_type, &reply, &reply_len);
+    close(fd);
+    if (rc != 0 || reply_type != want || reply_len != outlen) {
+        free(reply);
+        return -1;
     }
-    if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
-        fprintf(stderr, "Invalid address: %s\n", argv[0]);
-        return 1;
-    }
-    group = (uint8_t)strtoul(argv[1], NULL, 0);
-    voters = (uint32_t)strtoul(argv[2], NULL, 0);
-    if (group != EFS_RAFT_GROUP_SHARD && group != EFS_RAFT_GROUP_SHARD2) {
-        fprintf(stderr, "raft-change: group must be 0 or 2\n");
-        return 1;
-    }
-    memset(&r, 0, sizeof(r));
-    {
-        int lfd = efs_connect_declared(host, port);
-        uint8_t ltype = 0;
-        void *lrep = NULL;
-        uint32_t llen = 0;
-
-        if (lfd >= 0) {
-            efs_set_recv_timeout(lfd, 2000);
-            efs_set_send_timeout(lfd, 2000);
-            if (send_recv(lfd, EFS_MSG_LIST_NODES, NULL, 0, &ltype, &lrep,
-                          &llen) == 0 &&
-                ltype == EFS_MSG_LIST_NODES_REPLY &&
-                llen == sizeof(struct efs_msg_list_nodes_reply)) {
-                struct efs_msg_list_nodes_reply *list = lrep;
-                uint32_t n;
-
-                for (n = 0; n < list->node_count; n++)
-                    (void)raft_cfg_submit(list->nodes[n].addr,
-                                          list->nodes[n].port, group,
-                                          EFS_MD_CFG_NOTE, voters, &r, 2000);
-            }
-            free(lrep);
-            close(lfd);
-        }
-    }
-    /* Learner catch-up is BUSY until match_index >= commit (I18). */
-    for (i = 0; i < 80; i++) {
-        if (raft_cfg_submit(host, port, group, EFS_MD_CFG_CHANGE, voters, &r,
-                            EFS_IO_TIMEOUT_MS) != 0) {
-            fprintf(stderr, "Failed to raft-change\n");
-            return 1;
-        }
-        rc = r.rc;
-        if (rc != EFS_ERR_BUSY)
-            break;
-        usleep(100000);
-    }
-    if (rc == EFS_OK) {
-        for (i = 0; i < 80 && !raft_change_converged(host, port, group, voters);
-             i++)
-            usleep(100000);
-    }
-    printf("raft-change rc=%d group=%u voters=0x%x index=%llu hint=%d\n",
-           rc, group, voters, (unsigned long long)r.index, r.leader_hint);
-    return rc == EFS_OK ? 0 : 1;
+    memcpy(out, reply, outlen);
+    free(reply);
+    return 0;
 }
 
+static uint64_t mgmt_now_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000u + (uint64_t)ts.tv_nsec / 1000000u;
+}
+
+/* FORMATION_READ group g from the configured members, following leader
+ * hints. 1: known (pair in *out), 0: unknown everywhere asked, -1: no answer. */
+static int mgmt_formation_read(uint8_t group, struct efs_msg_formation_read_reply *out)
+{
+    struct efs_msg_formation_read rq = {.group = group};
+    int answered = 0, hint = -1;
+    for (uint32_t k = 0; k < 2 * g_mgmt_conf.n; k++) {
+        uint32_t m = hint >= 0 && (uint32_t)hint < g_mgmt_conf.n ? (uint32_t)hint + 1
+                                                                : k % g_mgmt_conf.n + 1;
+        hint = -1;
+        if (mgmt_request(g_mgmt_conf.m[m - 1].addr, g_mgmt_conf.m[m - 1].port,
+                         EFS_MSG_FORMATION_READ, &rq, sizeof(rq), EFS_MSG_FORMATION_READ_REPLY,
+                         out, sizeof(*out), 5000) != 0)
+            continue;
+        if (out->rc == EFS_ERR_NOT_PRIMARY) {
+            hint = out->leader_hint;
+            continue;
+        }
+        if (out->rc != EFS_OK)
+            continue;
+        answered = 1;
+        if (out->known)
+            return 1;
+    }
+    return answered ? 0 : -1;
+}
+
+static int cmd_formation_read(int argc, char **argv)
+{
+    if (argc != 1 || (strcmp(argv[0], "0") && strcmp(argv[0], "2"))) {
+        fprintf(stderr, "Usage:\n  efs-mgmt --cluster FILE formation-read <0|2>\n");
+        return 1;
+    }
+    if (!g_mgmt_conf_set) {
+        fprintf(stderr, "formation-read: --cluster FILE (or EFS_CLUSTER_CONF) is required\n");
+        return 1;
+    }
+    struct efs_msg_formation_read_reply r;
+    int k = mgmt_formation_read((uint8_t)atoi(argv[0]), &r);
+    if (k < 0) {
+        fprintf(stderr, "formation-read: no leader of group %s answered\n", argv[0]);
+        return 1;
+    }
+    if (!k) {
+        printf("group %s formation unknown\n", argv[0]);
+        return 2;
+    }
+    char dg[13];
+    efs_cluster_digest_short(r.digest, dg);
+    printf("group %s formation salt=%llu cfg=%s index=%llu\n", argv[0],
+           (unsigned long long)r.salt, dg, (unsigned long long)r.index);
+    return 0;
+}
+
+/* D39 C10: raft-mkfs needs the configuration (its digest admits the mgmt
+ * connection) and every configured member present. It follows the group-0
+ * leader hint, retries while members are absent, then waits until group 2
+ * holds the same pair (the group-2 leader proposes SALT). */
 static int cmd_raft_mkfs(int argc, char **argv)
 {
     char host[64];
     uint16_t port;
-    int fd;
-    uint8_t reply_type;
-    void *reply = NULL;
-    uint32_t reply_len = 0;
-    struct efs_msg_raft_mkfs_reply *r;
+    int wait_s = 120;
+    struct efs_msg_raft_mkfs_reply r;
 
-    if (argc != 1) {
-        fprintf(stderr, "Usage:\n  efs-mgmt mkfs|raft-mkfs <node:port>\n"
-                        "mkfs initializes the single cluster export and takes no label.\n");
+    if (argc != 1 && !(argc == 3 && !strcmp(argv[1], "--wait"))) {
+        fprintf(stderr, "Usage:\n  efs-mgmt --cluster FILE mkfs|raft-mkfs <node:port> [--wait SEC]\n"
+                        "mkfs initializes the single cluster export and takes no label.\n"
+                        "Every configured member must be running.\n");
+        return 1;
+    }
+    if (argc == 3)
+        wait_s = atoi(argv[2]);
+    if (!g_mgmt_conf_set) {
+        fprintf(stderr, "raft-mkfs: --cluster FILE (or EFS_CLUSTER_CONF) is required; it must be "
+                        "the configuration every daemon runs with\n");
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
         fprintf(stderr, "Invalid address: %s\n", argv[0]);
         return 1;
     }
-    fd = efs_connect_declared(host, port);
-    if (fd < 0) {
-        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
-        return 1;
+    uint64_t deadline = mgmt_now_ms() + (uint64_t)(wait_s > 0 ? wait_s : 1) * 1000u;
+    uint64_t said_absent = 0;
+    for (;;) {
+        memset(&r, 0, sizeof(r));
+        if (mgmt_request(host, port, EFS_MSG_RAFT_MKFS, NULL, 0, EFS_MSG_RAFT_MKFS_REPLY, &r,
+                         sizeof(r), EFS_IO_TIMEOUT_MS) != 0)
+            r.rc = EFS_ERR_NET;
+        if (r.rc == EFS_OK)
+            break;
+        if (r.rc == EFS_ERR_NOT_PRIMARY && r.leader_hint >= 0 &&
+            (uint32_t)r.leader_hint < g_mgmt_conf.n) {
+            snprintf(host, sizeof(host), "%s", g_mgmt_conf.m[r.leader_hint].addr);
+            port = g_mgmt_conf.m[r.leader_hint].port;
+        }
+        if (r.rc == EFS_ERR_BUSY && r.term && mgmt_now_ms() >= said_absent) {
+            fprintf(stderr, "raft-mkfs: waiting for absent configured members:");
+            for (uint32_t m = 1; m <= g_mgmt_conf.n; m++)
+                if (r.term & (1u << (m - 1)))
+                    fprintf(stderr, " %u (%s:%u)", m, g_mgmt_conf.m[m - 1].addr,
+                            g_mgmt_conf.m[m - 1].port);
+            fprintf(stderr, "\n");
+            said_absent = mgmt_now_ms() + 5000;
+        }
+        if (mgmt_now_ms() >= deadline) {
+            fprintf(stderr, "raft-mkfs failed rc=%d (%s)%s\n", r.rc, efs_strerror(r.rc),
+                    r.term ? ": configured members absent" : "");
+            return 1;
+        }
+        usleep(250 * 1000);
     }
-    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
-    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-    if (send_recv(fd, EFS_MSG_RAFT_MKFS, NULL, 0, &reply_type, &reply,
-                  &reply_len) != 0 ||
-        reply_type != EFS_MSG_RAFT_MKFS_REPLY ||
-        reply_len != sizeof(*r)) {
-        fprintf(stderr, "Failed to raft-mkfs\n");
-        free(reply);
-        close(fd);
-        return 1;
-    }
-    close(fd);
-    r = reply;
-    printf("raft-mkfs rc=%d leader_hint=%d index=%llu salt=%llu\n",
-           r->rc, r->leader_hint,
-           (unsigned long long)r->index,
-           (unsigned long long)r->salt);
-    {
-        int rc = r->rc;
-        free(reply);
-        return rc == EFS_OK ? 0 : 1;
+    printf("raft-mkfs rc=%d leader_hint=%d index=%llu salt=%llu\n", r.rc, r.leader_hint,
+           (unsigned long long)r.index, (unsigned long long)r.salt);
+    struct efs_msg_formation_read_reply f;
+    for (;;) {
+        if (mgmt_formation_read(2, &f) == 1) {
+            if (f.salt != r.salt) {
+                fprintf(stderr, "raft-mkfs: group 2 holds salt %llu, group 0 salt %llu\n",
+                        (unsigned long long)f.salt, (unsigned long long)r.salt);
+                return 1;
+            }
+            printf("formation pair salt=%llu in groups 0 and 2\n", (unsigned long long)f.salt);
+            return 0;
+        }
+        if (mgmt_now_ms() >= deadline) {
+            fprintf(stderr, "raft-mkfs: group 0 formed; group 2 has not learned the pair yet\n");
+            return 1;
+        }
+        usleep(250 * 1000);
     }
 }
 
@@ -3346,6 +3271,26 @@ int main(int argc, char **argv)
     if (efs_help_requested(argc,argv)) {
         return efs_mgmt_help(stdout,argc>2 ? argv[1] : NULL);
     }
+    {
+        const char *cluster = getenv("EFS_CLUSTER_CONF");
+        if (argc >= 3 && !strcmp(argv[1], "--cluster")) {
+            cluster = argv[2];
+            argv += 2;
+            argc -= 2;
+        }
+        if (cluster && *cluster) {
+            char err[512];
+            if (efs_cluster_conf_load(cluster, &g_mgmt_conf, err, sizeof(err)) != EFS_OK) {
+                fprintf(stderr, "cluster configuration refused: %s\n", err);
+                return 1;
+            }
+            struct efs_identity id;
+            memset(&id, 0, sizeof(id));
+            memcpy(id.digest, g_mgmt_conf.digest, EFS_CLUSTER_DIGEST_LEN);
+            efs_declare_set_identity(EFS_ROLE_MGMT, &id);
+            g_mgmt_conf_set = 1;
+        }
+    }
     if (argc < 2) { efs_cli_help(stderr,argv[0],NULL);return 1; }
 
     const char *cmd = argv[1];
@@ -3355,8 +3300,13 @@ int main(int argc, char **argv)
         return cmd_sync_status(argc - 2, argv + 2);
     if (strcmp(cmd, "data-commit") == 0)
         return cmd_data_commit(argc - 2, argv + 2);
-    if (strcmp(cmd, "add-node") == 0)
-        return cmd_add_node(argc - 2, argv + 2);
+    if (strcmp(cmd, "add-node") == 0 || strcmp(cmd, "raft-change") == 0) {
+        fprintf(stderr, "%s was removed (D39): membership is fixed by the cluster configuration\n",
+                cmd);
+        return 1;
+    }
+    if (strcmp(cmd, "formation-read") == 0)
+        return cmd_formation_read(argc - 2, argv + 2);
     if (strcmp(cmd, "shrink-quota") == 0)
         return cmd_shrink_quota(argc - 2, argv + 2);
     if (strcmp(cmd, "add-storage") == 0)
@@ -3388,8 +3338,6 @@ int main(int argc, char **argv)
         return cmd_commands_policy(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-mkfs") == 0)
         return cmd_raft_mkfs(argc - 2, argv + 2);
-    if (strcmp(cmd, "raft-change") == 0)
-        return cmd_raft_change(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-dir") == 0)
         return cmd_raft_dir(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-session") == 0)

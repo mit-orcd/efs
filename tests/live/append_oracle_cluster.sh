@@ -17,7 +17,7 @@
 set -u
 cmd=$1; REL=$2; D=$3; PORT=${4:-18200}
 ADDR=${EFS_K09_ADDR:-127.0.0.1}
-export EFS_TRANSPORT=tcp EFS_MD_RAFT_N=3
+export EFS_TRANSPORT=tcp
 IO=--no-direct-io; [ "${EFS_K09_DIRECT:-0}" = 1 ] && IO=--direct-io
 HERE=$(cd "$(dirname "$0")" && pwd)
 
@@ -26,10 +26,12 @@ start_daemons() {
     ss -ltnH "sport = :$((PORT+i))" | grep -q . && { echo "port $((PORT+i)) in use"; exit 1; }
   done
   mkdir -p "$D"/{n1,n2,n3,logs,mnt}
+  # D39: the configured member list; efs-mgmt declares as management with it.
+  for i in 1 2 3; do echo "$i $ADDR:$((PORT+i))"; done > "$D/cluster.conf"
+  export EFS_CLUSTER_CONF="$D/cluster.conf"
   for i in 1 2 3; do
-    join=""; [ $i -gt 1 ] && join="--join $ADDR:$((PORT+1))"
-    nohup "$REL/efsd" --node-id $i --addr $ADDR --port $((PORT+i)) --storage "$D/n$i" \
-      --quota "${EFS_K09_QUOTA:-4G}" $IO $join >> "$D/logs/efsd-n$i.log" 2>&1 &
+    nohup "$REL/efsd" --cluster "$D/cluster.conf" --addr $ADDR --port $((PORT+i)) --storage "$D/n$i" \
+      --quota "${EFS_K09_QUOTA:-4G}" $IO >> "$D/logs/efsd-n$i.log" 2>&1 &
     echo $! > "$D/logs/n$i.pid"
     for t in $(seq 60); do grep -q listening "$D/logs/efsd-n$i.log" && break; sleep 0.5; done
   done

@@ -6,9 +6,14 @@
 B=$1; L=$2; R=/tmp/qstart-$L; P=17760
 for p in 17761 17762 17763; do ss -ltn | grep -q ":$p " && { echo "port $p busy"; exit 1; }; done
 rm -rf $R; mkdir -p $R/n1 $R/n2 $R/n3 $R/mnt $R/logs
-export EFS_MD_RAFT_N=3 EFS_TRANSPORT=tcp EFS_COMMANDS=1 EFS_COMMANDS_SERVER=1 EFS_EXPIRY=0
-start(){ for i in 1 2 3; do j=""; [ $i -gt 1 ] && j="--join 127.0.0.1:$((P+1))"
-  setsid $B/efsd --node-id $i --addr 127.0.0.1 --port $((P+i)) --storage $R/n$i --quota 8G --direct-io $j >> $R/logs/n$i.log 2>&1 < /dev/null &
+# D39: the configured member list; the endpoint selects each member and
+# efs-mgmt declares as management with it (EFS_CLUSTER_CONF).
+CONF="$R/cluster.conf"; : > "$CONF"
+for i in 1 2 3; do echo "$i 127.0.0.1:$((P+i))" >> "$CONF"; done
+export EFS_CLUSTER_CONF="$CONF"
+export EFS_TRANSPORT=tcp EFS_COMMANDS=1 EFS_COMMANDS_SERVER=1 EFS_EXPIRY=0
+start(){ for i in 1 2 3; do
+  setsid $B/efsd --cluster "$CONF" --addr 127.0.0.1 --port $((P+i)) --storage $R/n$i --quota 8G --direct-io >> $R/logs/n$i.log 2>&1 < /dev/null &
   echo $! > $R/logs/n$i.pid; done
   for i in 1 2 3; do for t in $(seq 120); do [ $(grep -c listening $R/logs/n$i.log) -ge $1 ] && break; sleep 0.25; done; done; }
 stop(){ $B/scripts/client.sh stop $R/mnt > /dev/null 2>&1; for i in 1 2 3; do kill $(cat $R/logs/n$i.pid); done; for t in $(seq 40); do pgrep -f "storage $R/" > /dev/null || break; sleep 0.25; done; }

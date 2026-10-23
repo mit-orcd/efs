@@ -31,7 +31,7 @@ candidate = next((n for n, s in statuses.items() if s.count('role=FOLLOWER') == 
 assert candidate, statuses
 pid = int(Path(f'/data1/efs/logs/efsd-n{candidate}.pid').read_text())
 cmd = Path(f'/proc/{pid}/cmdline').read_bytes().replace(b'\0', b' ').decode()
-assert f'--node-id {candidate} ' in cmd
+assert f'--port {17431+candidate} ' in cmd  # D39: the endpoint selects the member
 (a.output/'before.json').write_text(json.dumps(dict(node=candidate, pid=pid, statuses=statuses), indent=2))
 children = []
 streams = []

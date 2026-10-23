@@ -86,8 +86,15 @@ static void test_policy(void)
     }
     CHECK(exempt == 2, "exactly two exempt messages");
 
-    struct efs_msg_client_hello h = {{'E', 'F', 'S', 'P'}, EFS_PROTOCOL_VERSION, 0};
+    struct efs_msg_client_hello h = {{'E', 'F', 'S', 'P'}, EFS_PROTOCOL_VERSION, 0, EFS_ROLE_CLIENT, {0}, {0}};
     CHECK(efs_client_hello_check(&h, sizeof(h)) == EFS_OK, "exact version accepted");
+    h.role = 0;
+    CHECK(efs_client_hello_check(&h, sizeof(h)) == EFS_ERR_PROTO, "a declaration names a role");
+    h.role = 9;
+    CHECK(efs_client_hello_check(&h, sizeof(h)) == EFS_ERR_PROTO, "unknown role refused");
+    h.role = EFS_ROLE_PEER;
+    CHECK(efs_client_hello_check(&h, sizeof(h)) == EFS_OK, "peer role well formed");
+    h.role = EFS_ROLE_CLIENT;
     h.features = ~0ull;
     CHECK(efs_client_hello_check(&h, sizeof(h)) == EFS_OK, "features do not gate");
     h.version = EFS_PROTOCOL_VERSION + 1;
@@ -146,7 +153,7 @@ static void run_gate_sequence(struct efs_conn *srv, int cli_fd, struct efs_conn 
     CHECK(type == EFS_MSG_HEARTBEAT && !g.declared, "heartbeat does not declare");
 
     /* 3. Wrong version: answered with EFS_ERR_PROTO + served version, refused. */
-    struct efs_msg_client_hello bad = {{'E', 'F', 'S', 'P'}, EFS_PROTOCOL_VERSION + 1, 0};
+    struct efs_msg_client_hello bad = {{'E', 'F', 'S', 'P'}, EFS_PROTOCOL_VERSION + 1, 0, EFS_ROLE_CLIENT, {0}, {0}};
     SEND(EFS_MSG_CLIENT_HELLO, &bad, sizeof(bad));
     CHECK(serve_one(srv, &g, NULL) == EFS_GATE_REFUSE, "newer declaration refused");
     CHECK(!g.declared, "refused declaration leaves the connection undeclared");
@@ -195,8 +202,8 @@ static void run_gate_sequence(struct efs_conn *srv, int cli_fd, struct efs_conn 
     SEND(EFS_MSG_HEARTBEAT, NULL, 0);
     CHECK(serve_one(srv, &g, NULL) == EFS_GATE_DISPATCH, "declared HEARTBEAT dispatched");
 
-    /* 5. A later mismatched declaration still refuses (fail-closed, never a
-     *    downgrade); a repeated exact one is simply answered again. */
+    /* 5. One declaration per connection (D39): a later declaration, exact
+     *    or mismatched, is answered with a refusal and closes it. */
     bad.version = EFS_PROTOCOL_VERSION + 7;
     memcpy(bad.magic, "EFSP", 4);
     SEND(EFS_MSG_CLIENT_HELLO, &bad, sizeof(bad));
@@ -207,13 +214,58 @@ static void run_gate_sequence(struct efs_conn *srv, int cli_fd, struct efs_conn 
         pthread_t th;
         CHECK(pthread_create(&th, NULL, cli ? conn_declare_thread : fd_declare_thread, &j) == 0,
               "redeclare thread");
-        CHECK(serve_one(srv, &g, NULL) == EFS_GATE_ANSWERED, "exact redeclaration answered");
+        CHECK(serve_one(srv, &g, NULL) == EFS_GATE_REFUSE, "exact redeclaration refused");
         pthread_join(th, NULL);
-        CHECK(j.rc == EFS_OK, "redeclaration accepted");
+        CHECK(j.rc == EFS_ERR_PROTO, "redeclaration refused");
     }
 #undef SEND
 #undef RECV
     printf("test_declaration_gate: %s frame path OK\n", path);
+}
+
+/* Without a daemon admission the gate admits the CLIENT role only: a peer
+ * or mgmt declaration is refused (fail-closed). */
+static void test_roles_without_admission(void)
+{
+    uint8_t roles[2] = {EFS_ROLE_PEER, EFS_ROLE_MGMT};
+    for (int i = 0; i < 2; i++) {
+        int sv[2];
+        CHECK(socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == 0, "socketpair");
+        struct efs_conn *srv = efs_conn_wrap_tcp(sv[1], 1);
+        struct efs_decl_gate g = {0};
+        struct efs_msg_client_hello h;
+        memset(&h, 0, sizeof(h));
+        memcpy(h.magic, "EFSP", 4);
+        h.version = EFS_PROTOCOL_VERSION;
+        h.role = roles[i];
+        CHECK(efs_send_msg(sv[0], EFS_MSG_CLIENT_HELLO, &h, sizeof(h)) == 0, "send");
+        CHECK(serve_one(srv, &g, NULL) == EFS_GATE_REFUSE && !g.declared, "role refused");
+        uint8_t type = 0;
+        void *rep = NULL;
+        uint32_t rlen = 0;
+        CHECK(efs_recv_msg(sv[0], &type, &rep, &rlen) == 0 && rlen == sizeof(struct efs_msg_client_hello_reply) &&
+              ((struct efs_msg_client_hello_reply *)rep)->rc != EFS_OK, "refusal answered");
+        free(rep);
+        efs_conn_destroy(srv);
+        close(sv[0]);
+    }
+    /* Roles have disjoint allowlists; JOIN and unknown types match none. */
+    CHECK(efs_role_allow(EFS_ROLE_CLIENT, EFS_MSG_RAFT, 80) == EFS_ALLOW_NONE, "client Raft");
+    CHECK(efs_role_allow(EFS_ROLE_CLIENT, EFS_MSG_RAFT_MKFS, 0) == EFS_ALLOW_NONE, "client mkfs");
+    CHECK(efs_role_allow(EFS_ROLE_CLIENT, EFS_MSG_INODE_LOOKUP, 8) == EFS_ALLOW_APP, "client lookup");
+    CHECK(efs_role_allow(EFS_ROLE_CLIENT, EFS_MSG_PACK_COMPACT, 8) == EFS_ALLOW_APP, "client maintenance once formed");
+    CHECK(efs_role_allow(EFS_ROLE_CLIENT, EFS_MSG_RAFT_STEP_DOWN, 8) == EFS_ALLOW_NONE, "step-down is mgmt-only");
+    CHECK(efs_role_allow(EFS_ROLE_MGMT, EFS_MSG_RAFT_MKFS, 0) == EFS_ALLOW_MGMT, "mgmt mkfs");
+    CHECK(efs_role_allow(EFS_ROLE_MGMT, EFS_MSG_RAFT_MKFS, 9) == EFS_ALLOW_APP, "mgmt submit");
+    CHECK(efs_role_allow(EFS_ROLE_PEER, EFS_MSG_RAFT, 80) == EFS_ALLOW_CONTROL, "peer Raft");
+    CHECK(efs_role_allow(EFS_ROLE_PEER, EFS_MSG_FORMATION_READ, 8) == EFS_ALLOW_CONTROL, "peer read");
+    CHECK(efs_role_allow(EFS_ROLE_PEER, EFS_MSG_RAFT_MKFS, 0) == EFS_ALLOW_NONE, "peer mkfs");
+    CHECK(efs_role_allow(EFS_ROLE_PEER, EFS_MSG_GC_FRAG_BATCH, 8) == EFS_ALLOW_APP, "peer data plane");
+    for (uint8_t r = EFS_ROLE_CLIENT; r <= EFS_ROLE_PEER; r++) {
+        CHECK(efs_role_allow(r, 16 /* JOIN */, 8) == EFS_ALLOW_NONE, "JOIN refused");
+        CHECK(efs_role_allow(r, 250, 8) == EFS_ALLOW_NONE, "unknown type refused");
+    }
+    printf("test_declaration_gate: roles without admission and allowlists OK\n");
 }
 
 static void test_tcp_path(void)
@@ -245,7 +297,10 @@ static void test_client_refuses_other_version(void)
     CHECK(len == sizeof(*h) && h->version == EFS_PROTOCOL_VERSION &&
           !memcmp(h->magic, "EFSP", 4), "client declares exactly EFS_PROTOCOL_VERSION");
     free(payload);
-    struct efs_msg_client_hello_reply rep = { EFS_OK, EFS_PROTOCOL_VERSION - 1 };
+    struct efs_msg_client_hello_reply rep;
+    memset(&rep, 0, sizeof(rep));
+    rep.rc = EFS_OK;
+    rep.version = EFS_PROTOCOL_VERSION - 1;
     CHECK(efs_send_msg(sv[1], EFS_MSG_CLIENT_HELLO_REPLY, &rep, sizeof(rep)) == 0, "reply");
     pthread_join(th, NULL);
     CHECK(j.rc == EFS_ERR_PROTO, "client refuses an accepting server of another version");
@@ -296,7 +351,10 @@ static void *accept_thread(void *arg)
         uint32_t len = 0;
         CHECK(efs_conn_recv_msg(srv, &type, &payload, &len) == 0, "recv");
         free(payload);
-        struct efs_msg_client_hello_reply rep = { EFS_OK, EFS_PROTOCOL_VERSION - 1 };
+        struct efs_msg_client_hello_reply rep;
+        memset(&rep, 0, sizeof(rep));
+        rep.rc = EFS_OK;
+        rep.version = EFS_PROTOCOL_VERSION - 1;
         efs_conn_send_msg(srv, EFS_MSG_CLIENT_HELLO_REPLY, &rep, sizeof(rep));
         a->saw = 1;
     }
@@ -377,6 +435,7 @@ static int test_rdma_path(void)
 int main(void)
 {
     test_policy();
+    test_roles_without_admission();
     test_tcp_path();
     test_client_refuses_other_version();
     test_connect_declared();

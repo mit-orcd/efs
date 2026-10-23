@@ -37,10 +37,10 @@ static inline void efs_cli_help(FILE *out,const char *program,const char *topic)
     const char *summary="",*syntax="",*commands=NULL,*options=NULL,*examples=NULL,*notes=NULL;
     if (!strcmp(name,"efsd")) {
         summary="Run an EFS storage node";
-        syntax="--node-id ID --addr ADDRESS --port PORT --storage PATH [options]";
-        options="--node-id ID          Node identifier\n--addr ADDRESS        Listen address\n--port PORT           Listen port\n--storage PATH        Storage roots; repeat or separate with commas\n--quota SIZE          Safe storage quota (default: automatic); K/M/G/T\n--direct-io           Use O_DIRECT for fragment I/O\n--no-direct-io        Use buffered fragment I/O (default)\n--writers N           Shared writer threads; 0 runs writes inline\n--join HOST:PORT      Join an existing cluster\n--meta-storage PATH   Raft/KV root (default: first storage root)\n--no-persist          Disable cluster configuration persistence\n--perf               Record a CPU profile\n--strace             Record system calls";
-        examples="efsd --node-id 1 --addr 127.0.0.1 --port 17432 --storage /data1/efs/n1";
-        notes="Metadata root changes do not move existing mdraft data.\nStorage roots use least-queue write placement across paths.\nEFS_COMMANDS_SERVER=0 disables query workers, tracking and query RPCs.\nSet the same policy on every node; changes require graceful restart.\nDefault: enabled. Re-enabling rebuilds from current persisted metadata.";
+        syntax="--cluster FILE --addr ADDRESS --port PORT --storage PATH [options]";
+        options="--cluster FILE        Configured member list (cluster.conf), the same on every node\n--addr ADDRESS        Advertised and listen IPv4 address; with --port it selects the member\n--port PORT           Listen port\n--storage PATH        Storage roots; repeat or separate with commas\n--quota SIZE          Safe storage quota (default: automatic); K/M/G/T\n--direct-io           Use O_DIRECT for fragment I/O\n--no-direct-io        Use buffered fragment I/O (default)\n--writers N           Shared writer threads; 0 runs writes inline\n--meta-storage PATH   Raft/KV root (default: first storage root)\n--perf               Record a CPU profile\n--strace             Record system calls";
+        examples="efsd --cluster /etc/efs/cluster.conf --addr 10.0.0.1 --port 17432 --storage /data1/efs/n1";
+        notes="cluster.conf: one `<id> <ipv4>:<port>` per line, ids exactly 1..N (3..16).\nThe record whose endpoint equals --addr:--port is this node; there is no --node-id.\nMetadata root changes do not move existing mdraft data.\nStorage roots use least-queue write placement across paths.\nEFS_COMMANDS_SERVER=0 disables query workers, tracking and query RPCs.\nSet the same policy on every node; changes require graceful restart.\nDefault: enabled. Re-enabling rebuilds from current persisted metadata.";
     } else if (!strcmp(name,"efs-fuse")) {
         summary="Mount an EFS export";
         syntax="NODE:PORT [NODE:PORT ...] MOUNTPOINT [options]";
@@ -48,10 +48,10 @@ static inline void efs_cli_help(FILE *out,const char *program,const char *topic)
         examples="efs-fuse 127.0.0.1:17432 /data1/efs/mnt\nEFS_COMMANDS=1 efs-fuse 127.0.0.1:17432 /data1/efs/mnt";
         notes="One node address is enough; the client discovers the other nodes.\nThere is one export; no export label argument.\nEFS_COMMANDS=1 enables .efs on this mount when server policy allows it.\nThose commands require Python 3 on the machine executing them.\nUse --stop MOUNTPOINT --force-discard only to discard pending writes.\nUse --help-fuse for the underlying FUSE option reference.";
     } else if (!strcmp(name,"efs-mgmt")) {
-        summary="Inspect and manage an EFS cluster";syntax="COMMAND [arguments]";
-        commands="status               Cluster status\nio-stats             I/O counters\ngc-status            Garbage-collection status\nversion              Node version\nadd-node             Add a node\nadd-storage          Add storage roots\nshrink-quota         Reduce a node quota\nmkfs, raft-mkfs      Format metadata\ncommands-policy      Get/set versioned command policy\nexpiry-policy        Get/set scratch expiry policy\nexpiry               Show path expiry or inspect/renew a deadline\nexpiry-status        Worker health, backlog and removal counters\nexpiry-clock         Inspect/reset node clock health\nexpiry-enable        Enable an existing file deadline\nexpiry-id            Inspect authoritative FileID\nraft-status          Raft group status\nraft-resync          Resync a follower's group from the leader snapshot\nraft-change          Change group voters\nraft-dir             Directory layout migration\nraft-session         Session lifecycle\nraft-getattr         Read inode attributes\nraft-lookup          Look up a name\nraft-lookup-path     Resolve a path\nraft-create          Create a file\nraft-unlink          Remove a file name\nraft-rmdir           Remove an empty directory\nraft-link            Create a hard link\nraft-setattr         Change attributes\nraft-rename          Rename a name\nraft-readdir         List directory entries\nraft-publish         Publish a chunk\nraft-getchunks       Read chunk mappings\nraft-append          Allocate an append range\nraft-hold            Open/close a lease\nraft-flock           Whole-file locking\nraft-fcntl           Byte-range locking";
+        summary="Inspect and manage an EFS cluster";syntax="[--cluster FILE] COMMAND [arguments]";
+        commands="status               Cluster status\nio-stats             I/O counters\ngc-status            Garbage-collection status\nversion              Node version\nadd-storage          Add storage roots\nshrink-quota         Reduce a node quota\nmkfs, raft-mkfs      Form the cluster (every configured member running)\nformation-read       A group's committed formation pair\ncommands-policy      Get/set versioned command policy\nexpiry-policy        Get/set scratch expiry policy\nexpiry               Show path expiry or inspect/renew a deadline\nexpiry-status        Worker health, backlog and removal counters\nexpiry-clock         Inspect/reset node clock health\nexpiry-enable        Enable an existing file deadline\nexpiry-id            Inspect authoritative FileID\nraft-status          Raft group status\nraft-resync          Resync a follower's group from the leader snapshot\nraft-dir             Directory layout migration\nraft-session         Session lifecycle\nraft-getattr         Read inode attributes\nraft-lookup          Look up a name\nraft-lookup-path     Resolve a path\nraft-create          Create a file\nraft-unlink          Remove a file name\nraft-rmdir           Remove an empty directory\nraft-link            Create a hard link\nraft-setattr         Change attributes\nraft-rename          Rename a name\nraft-readdir         List directory entries\nraft-publish         Publish a chunk\nraft-getchunks       Read chunk mappings\nraft-append          Allocate an append range\nraft-hold            Open/close a lease\nraft-flock           Whole-file locking\nraft-fcntl           Byte-range locking";
         examples="efs-mgmt status 127.0.0.1:17432\nefs-mgmt gc-status 127.0.0.1:17432";
-        notes="Run efs-mgmt COMMAND --help for its argument syntax.";
+        notes="Run efs-mgmt COMMAND --help for its argument syntax.\n--cluster FILE (or EFS_CLUSTER_CONF) names the configured member list; with it\nefs-mgmt declares as management and is served before formation completes.\nWithout it efs-mgmt is a client, served only by a formed cluster;\nraft-mkfs, formation-read and raft-step-down need it.";
     } else if (!strcmp(name,"blake3-bench") || (topic && !strcmp(topic,"blake3"))) {
         summary="Measure BLAKE3 hashing throughput";
         syntax=!strcmp(name,"blake3-bench") ? "[options]" : "--bench blake3 [options]";
@@ -97,7 +97,7 @@ static inline int efs_mgmt_help(FILE *out,const char *command)
 {
     static const struct { const char *name,*args; } specs[]={
         {"status","NODE:PORT"},{"io-stats","NODE:PORT"},{"gc-status","NODE:PORT"},
-        {"version","NODE:PORT"},{"add-node","NEW_NODE:PORT EXISTING_NODE:PORT"},
+        {"version","NODE:PORT"},{"formation-read","0|2"},
         {"shrink-quota","NODE:PORT AMOUNT[K|M|G|T]"},{"add-storage","NODE:PORT PATH[,PATH...]"},
         {"expiry-policy","NODE:PORT get ROOT GENERATION | set ROOT GENERATION EXPECTED_REV --expire-after DURATION [--renewal-limit DURATION] --flags FLAGS"},
         {"expiry-id","NODE:PORT INO"},
@@ -105,8 +105,8 @@ static inline int efs_mgmt_help(FILE *out,const char *command)
         {"expiry-clock","NODE:PORT get|reset"},
         {"expiry-status","NODE:PORT"},
         {"expiry","NODE:PORT show PATH [--mount MOUNT] | get INO GENERATION | renew INO GENERATION EXPECTED_REV DEADLINE_NS"},
-        {"commands-policy","NODE:PORT get | set MASK EXPECTED_VERSION"},{"mkfs","NODE:PORT"},{"raft-mkfs","NODE:PORT"},
-        {"raft-status","NODE:PORT"},{"raft-change","NODE:PORT GROUP VOTERS"},
+        {"commands-policy","NODE:PORT get | set MASK EXPECTED_VERSION"},{"mkfs","NODE:PORT [--wait SEC]"},{"raft-mkfs","NODE:PORT [--wait SEC]"},
+        {"raft-status","NODE:PORT"},
         {"raft-dir","NODE:PORT INO begin|migrate|finish"},
         {"raft-session","NODE:PORT create|register|establish|get|fence|cleanup-leases|cleanup-appends UUID_HEX [epoch|shard] [shard]"},
         {"raft-getattr","NODE:PORT [ino]"},{"raft-lookup","NODE:PORT PARENT NAME"},
@@ -142,7 +142,7 @@ static inline int efs_mgmt_help(FILE *out,const char *command)
             "Set requires operator UID 0 and server EFS_EXPIRY=1.\n"
             "Node addresses use HOST:PORT." :
             (!strcmp(command,"mkfs") || !strcmp(command,"raft-mkfs")) ?
-            "Single export; no label argument.\nNode addresses use HOST:PORT." :
+            "Needs --cluster FILE; every configured member must be running.\nSingle export; no label argument.\nNode addresses use HOST:PORT." :
             "Node addresses use HOST:PORT.");return 0;
     }
     fprintf(stderr,"Unknown command: %s\n",command);return 1;

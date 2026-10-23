@@ -16,9 +16,14 @@ p.add_argument('--mode',choices=('direct','buffered'),default='direct',help='own
 p.add_argument('--outage-seconds',type=int,default=0,help='with recovery, verify stable successful reads and no leader-term churn while each preferred leader is absent')
 p.add_argument('--recovery',action='store_true',help='after timing, stop each group leader and cold restart all owned daemons')
 a=p.parse_args();assert 10<=a.samples<=1000
+# D39/D40: membership is fixed by the configuration; raft-change is gone.
+assert not a.four_voters,'--four-voters needs online membership change, removed by D39'
 assert 0<=a.outage_seconds<=120 and (not a.outage_seconds or a.recovery)
 a.work.mkdir(parents=True,exist_ok=False)
-env=dict(os.environ,EFS_MD_RAFT_N='4',EFS_TRANSPORT='tcp',EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_READ_PROF='1',EFS_RAFT_OBS='1',EFS_DIRECT_IO='1' if a.mode=='direct' else '0',EFS_METADATA_BALANCE='1' if a.balance else '0')
+env=dict(os.environ,EFS_TRANSPORT='tcp',EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_READ_PROF='1',EFS_RAFT_OBS='1',EFS_DIRECT_IO='1' if a.mode=='direct' else '0',EFS_METADATA_BALANCE='1' if a.balance else '0')
+# D39: the configured member list; efs-mgmt declares as management with it.
+conf=a.work/'cluster.conf';conf.write_text(''.join(f'{n+1} 127.0.0.1:{a.port+n}\n' for n in range(4)))
+env['EFS_CLUSTER_CONF']=str(conf)
 procs=[];logs=[];mutation_attempts=[];stopped=set();commands=[];configuration=[]
 for port in range(a.port,a.port+4):
  with socket.socket() as s:
@@ -50,8 +55,7 @@ def snapshot():return [call(n,'raft-status') for n in range(4)]
 try:
  for node in range(4):
   root=a.work/f'n{node+1}';root.mkdir();log=(a.work/f'n{node+1}.log').open('w');logs.append(log)
-  args=[str(a.server),'--node-id',str(node+1),'--addr','127.0.0.1','--port',str(a.port+node),'--storage',str(root),'--quota','1G','--writers','0','--direct-io' if a.mode=='direct' else '--no-direct-io']
-  if node:args+=['--join',f'127.0.0.1:{a.port}']
+  args=[str(a.server),'--cluster',str(conf),'--addr','127.0.0.1','--port',str(a.port+node),'--storage',str(root),'--quota','1G','--writers','0','--direct-io' if a.mode=='direct' else '--no-direct-io']
   commands.append(args)
   procs.append(subprocess.Popen(args,env=env,stdout=log,stderr=log))
   wait(lambda:'listening' in (a.work/f'n{node+1}.log').read_text())

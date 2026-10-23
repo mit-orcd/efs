@@ -30,15 +30,19 @@
 set -u
 REL=$1; L=$2
 PORT=${PORT:-17650}; R=${D25_ROOT:-/tmp/d25-gates}/$L; A=${D25_ADDR:-127.0.0.1}
-export EFS_TRANSPORT=${EFS_TRANSPORT:-tcp} EFS_MD_RAFT_N=3 ASAN_OPTIONS=detect_leaks=0
+export EFS_TRANSPORT=${EFS_TRANSPORT:-tcp} ASAN_OPTIONS=detect_leaks=0
 for i in 1 2 3; do
   ss -ltnH "sport = :$((PORT+i))" | grep -q . && { echo "$L: port $((PORT+i)) in use"; exit 1; }
 done
 rm -rf "$R"; mkdir -p "$R"/{n1,n2,n3,logs,mA,mB}
+# D39: the configured member list; the endpoint selects each member and
+# efs-mgmt declares as management with it (EFS_CLUSTER_CONF).
+CONF="$R/cluster.conf"; : > "$CONF"
+for i in 1 2 3; do echo "$i $A:$((PORT+i))" >> "$CONF"; done
+export EFS_CLUSTER_CONF="$CONF"
 for i in 1 2 3; do
-  join=""; [ $i -gt 1 ] && join="--join $A:$((PORT+1))"
-  nohup "$REL/efsd" --node-id $i --addr "$A" --port $((PORT+i)) --storage "$R/n$i" \
-    --quota 8G --direct-io $join > "$R/logs/efsd-n$i.log" 2>&1 &
+  nohup "$REL/efsd" --cluster "$CONF" --addr "$A" --port $((PORT+i)) --storage "$R/n$i" \
+    --quota 8G --direct-io > "$R/logs/efsd-n$i.log" 2>&1 &
   echo $! > "$R/logs/n$i.pid"
   for t in $(seq 60); do grep -q listening "$R/logs/efsd-n$i.log" && break; sleep 0.5; done
   kill -0 "$(cat "$R/logs/n$i.pid")" 2>/dev/null || { echo "$L: efsd n$i exited"; tail -3 "$R/logs/efsd-n$i.log"; exit 1; }

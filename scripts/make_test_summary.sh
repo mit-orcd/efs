@@ -80,7 +80,7 @@ def run(c,env=None):
 # Commands that observe real processes or devices, or assert on wall-clock
 # timing under load, run alone after the parallel pool.
 EXCLUSIVE=re.compile(r"rdma|shutdown|client_processes|server_processes|cluster_stop|opid_admission|"
-                     r"tsan|leak|make_test|fork_oracle|stage_evict_lru|storage_root_inventory|"
+                     r"tsan|leak|make_test|fork_oracle|stage_evict_lru|storage_root_inventory|d39_daemons|"
                      r"bench")
 jobs=max(1,int(os.environ.get("EFS_TEST_JOBS","1")))
 fails=[]; notrun=[]; times=[]; t0=time.time(); done=0

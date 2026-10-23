@@ -690,43 +690,75 @@ int efs_conn_put_reply_watch(struct efs_conn *c, int budget_us)
     }
 }
 
-static int declare_check(uint8_t type, const void *reply, uint32_t len)
+static uint8_t g_declare_role = EFS_ROLE_CLIENT;
+static struct efs_identity g_declare_id;
+
+void efs_declare_set_identity(uint8_t role, const struct efs_identity *id)
+{
+    g_declare_role = role;
+    if (id)
+        g_declare_id = *id;
+    else
+        memset(&g_declare_id, 0, sizeof(g_declare_id));
+}
+
+static void declare_hello(struct efs_msg_client_hello *h, uint8_t role,
+                          const struct efs_identity *id)
+{
+    memset(h, 0, sizeof(*h));
+    memcpy(h->magic, "EFSP", 4);
+    h->version = EFS_PROTOCOL_VERSION;
+    h->role = role;
+    if (id)
+        h->id = *id;
+}
+
+static int declare_check(uint8_t type, const void *reply, uint32_t len,
+                         struct efs_msg_client_hello_reply *out)
 {
     const struct efs_msg_client_hello_reply *r = reply;
     if (type != EFS_MSG_CLIENT_HELLO_REPLY || len != sizeof(*r)) return EFS_ERR_PROTO;
+    if (out) *out = *r;
     if (r->rc != EFS_OK) return r->rc;
     /* One supported protocol: a server on any other version is refused,
      * even one that accepted us (a fail-open server must not be used). */
     return r->version == EFS_PROTOCOL_VERSION ? EFS_OK : EFS_ERR_PROTO;
 }
-int efs_conn_declare(struct efs_conn *c)
+int efs_conn_declare_as(struct efs_conn *c, uint8_t role, const struct efs_identity *id,
+                        struct efs_msg_client_hello_reply *out)
 {
-    struct efs_msg_client_hello h = {{'E', 'F', 'S', 'P'}, EFS_PROTOCOL_VERSION, 0};
+    struct efs_msg_client_hello h;
     uint8_t type = 0;
     void *reply = NULL;
     uint32_t len = 0;
     if (!c) return EFS_ERR_INVAL;
+    declare_hello(&h, role, id);
     if (efs_conn_send_msg(c, EFS_MSG_CLIENT_HELLO, &h, sizeof(h)) ||
         efs_conn_recv_msg(c, &type, &reply, &len)) {
         free(reply);
         return EFS_ERR_NET;
     }
-    int rc = declare_check(type, reply, len);
+    int rc = declare_check(type, reply, len, out);
     free(reply);
     return rc;
 }
+int efs_conn_declare(struct efs_conn *c)
+{
+    return efs_conn_declare_as(c, g_declare_role, &g_declare_id, NULL);
+}
 int efs_fd_declare(int fd)
 {
-    struct efs_msg_client_hello h = {{'E', 'F', 'S', 'P'}, EFS_PROTOCOL_VERSION, 0};
+    struct efs_msg_client_hello h;
     uint8_t type = 0;
     void *reply = NULL;
     uint32_t len = 0;
+    declare_hello(&h, g_declare_role, &g_declare_id);
     if (efs_send_msg(fd, EFS_MSG_CLIENT_HELLO, &h, sizeof(h)) ||
         efs_recv_msg(fd, &type, &reply, &len)) {
         free(reply);
         return EFS_ERR_NET;
     }
-    int rc = declare_check(type, reply, len);
+    int rc = declare_check(type, reply, len, NULL);
     free(reply);
     return rc;
 }
@@ -761,7 +793,104 @@ int efs_client_hello_check(const void *payload, uint32_t len)
     const struct efs_msg_client_hello *h = payload;
     if (!payload || len != sizeof(*h) || memcmp(h->magic, "EFSP", 4) != 0)
         return EFS_ERR_PROTO;
-    return h->version == EFS_PROTOCOL_VERSION ? EFS_OK : EFS_ERR_PROTO;
+    if (h->version != EFS_PROTOCOL_VERSION)
+        return EFS_ERR_PROTO;
+    return h->role == EFS_ROLE_CLIENT || h->role == EFS_ROLE_MGMT || h->role == EFS_ROLE_PEER
+               ? EFS_OK : EFS_ERR_PROTO;
+}
+
+static const struct efs_admission_ops *g_admission;
+
+void efs_decl_gate_set_admission(const struct efs_admission_ops *ops)
+{
+    __atomic_store_n(&g_admission, ops, __ATOMIC_RELEASE);
+}
+
+/* D39 C4 allowlists. Status-class reads are control for every role;
+ * RAFT_MKFS with an empty payload is the formation command, with a payload
+ * it submits a metadata command (application work). */
+static int status_class(uint8_t type)
+{
+    switch (type) {
+    case EFS_MSG_STATUS: case EFS_MSG_RAFT_STATUS: case EFS_MSG_VERSION:
+    case EFS_MSG_LIST_NODES: case EFS_MSG_GET_FEATURES: case EFS_MSG_IO_STATS:
+    case EFS_MSG_SYNC_STATS: case EFS_MSG_GC_STATUS: case EFS_MSG_QUERY_STATS:
+    case EFS_MSG_HEARTBEAT: case EFS_MSG_RDMA_SETUP:
+        return 1;
+    default:
+        return 0;
+    }
+}
+static int client_app(uint8_t type)
+{
+    switch (type) {
+    case EFS_MSG_GET_CHUNK: case EFS_MSG_PUT_CHUNK: case EFS_MSG_GET_SEGMENT:
+    case EFS_MSG_INODE_LOOKUP: case EFS_MSG_INODE_CREATE: case EFS_MSG_INODE_GETATTR:
+    case EFS_MSG_INODE_READDIR: case EFS_MSG_INODE_UNLINK: case EFS_MSG_INODE_SETATTR:
+    case EFS_MSG_INODE_LINK: case EFS_MSG_REPORT_CHUNKS: case EFS_MSG_INODE_GETCHUNKS:
+    case EFS_MSG_INODE_APPEND: case EFS_MSG_INODE_LOOKUP_PATH: case EFS_MSG_INODE_HOLD:
+    case EFS_MSG_INODE_FLOCK: case EFS_MSG_INODE_RENAME_AT: case EFS_MSG_XATTR:
+    case EFS_MSG_INODE_WRITER_VIEW: case EFS_MSG_LANE_WRITER_VIEW: case EFS_MSG_LANE_BOOTSTRAP:
+    case EFS_MSG_PUBLICATION: case EFS_MSG_PUBLICATION_STATUS: case EFS_MSG_PUBLICATION_RETIRE:
+    case EFS_MSG_QUERY_SNAPSHOT: case EFS_MSG_CREATE_RETAINED: case EFS_MSG_DATA_COMMIT:
+    case EFS_MSG_BENCH_PUT:
+        return 1;
+    default:
+        return 0;
+    }
+}
+/* Daemon-to-daemon data plane: peers only, as application work. */
+static int peer_app(uint8_t type)
+{
+    switch (type) {
+    case EFS_MSG_PUT_SEGMENT: case EFS_MSG_GC_INODE_BATCH: case EFS_MSG_GC_SEGMENT_BATCH:
+    case EFS_MSG_GC_FRAG_BATCH: case EFS_MSG_STORAGE_SESSION_FENCE: case EFS_MSG_PACK_OBJECT_READ:
+    case EFS_MSG_REBUILD_PUT:
+        return 1;
+    default:
+        return 0;
+    }
+}
+/* Maintenance commands (C12 leaves their retry rules unresolved): served
+ * like the client protocol, only once formation is complete. RAFT_STEP_DOWN
+ * is the model's disruptive mgmt command and stays mgmt-only. */
+static int mgmt_maintenance(uint8_t type)
+{
+    switch (type) {
+    case EFS_MSG_PACK_COMPACT: case EFS_MSG_RAFT_RESYNC: case EFS_MSG_SHRINK_QUOTA:
+    case EFS_MSG_ADD_STORAGE:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
+int efs_role_allow(uint8_t role, uint8_t type, uint32_t len)
+{
+    int mkfs = type == EFS_MSG_RAFT_MKFS && len == 0;
+    int submit = type == EFS_MSG_RAFT_MKFS && len > 0;
+    switch (role) {
+    case EFS_ROLE_PEER:
+        if (status_class(type) || type == EFS_MSG_RAFT || type == EFS_MSG_HELLO ||
+            type == EFS_MSG_FORMATION_READ)
+            return EFS_ALLOW_CONTROL;
+        if (client_app(type) || peer_app(type) || submit)
+            return EFS_ALLOW_APP;
+        return EFS_ALLOW_NONE;
+    case EFS_ROLE_MGMT:
+        if (status_class(type) || mkfs || type == EFS_MSG_FORMATION_READ ||
+            type == EFS_MSG_RAFT_STEP_DOWN)
+            return EFS_ALLOW_MGMT;
+        if (client_app(type) || submit || mgmt_maintenance(type))
+            return EFS_ALLOW_APP;
+        return EFS_ALLOW_NONE;
+    case EFS_ROLE_CLIENT:
+        if (status_class(type) || client_app(type) || submit || mgmt_maintenance(type))
+            return EFS_ALLOW_APP;
+        return EFS_ALLOW_NONE;
+    default:
+        return EFS_ALLOW_NONE;
+    }
 }
 
 /* One audible line per refused connection, bounded under a flood: the
@@ -779,14 +908,36 @@ static void gate_refuse_log(const char *what, unsigned detail)
 int efs_decl_gate_frame(struct efs_decl_gate *g, struct efs_conn *c, uint8_t type,
                         const void *payload, uint32_t len)
 {
+    const struct efs_admission_ops *ops = __atomic_load_n(&g_admission, __ATOMIC_ACQUIRE);
     if (type == EFS_MSG_CLIENT_HELLO) {
-        /* Always answered, so a mismatched client learns the served version;
-         * a refused declaration still closes the connection. */
-        struct efs_msg_client_hello_reply rep = {EFS_ERR_PROTO, EFS_PROTOCOL_VERSION};
-        int ok = efs_client_hello_check(payload, len) == EFS_OK;
+        /* Always answered, so a mismatched or refused declarer learns the
+         * served version and the responder; a refusal closes the connection.
+         * One declaration per connection: a second one is refused. */
+        struct efs_msg_client_hello_reply rep;
+        memset(&rep, 0, sizeof(rep));
+        rep.rc = EFS_ERR_PROTO;
+        rep.version = EFS_PROTOCOL_VERSION;
+        rep.role = EFS_ROLE_PEER;
+        int ok = !g->declared && efs_client_hello_check(payload, len) == EFS_OK;
         if (ok) {
-            rep.rc = EFS_OK;
-            g->declared = 1;
+            const struct efs_msg_client_hello *h = payload;
+            struct efs_decl_gate next;
+            memset(&next, 0, sizeof(next));
+            if (ops) {
+                rep.rc = ops->declare(h, &rep, &next);
+            } else if (h->role == EFS_ROLE_CLIENT) {
+                rep.rc = EFS_OK;
+                next.role = EFS_ROLE_CLIENT;
+                next.channel = EFS_CHANNEL_CLIENT;
+            } else {
+                rep.rc = EFS_ERR_UNSUPPORTED; /* no admission: client role only */
+            }
+            ok = rep.rc == EFS_OK;
+            if (ok) {
+                next.declared = 1;
+                *g = next;
+                rep.channel = g->channel;
+            }
         }
         efs_conn_send_msg(c, EFS_MSG_CLIENT_HELLO_REPLY, &rep, sizeof(rep));
         if (ok)
@@ -797,8 +948,19 @@ int efs_decl_gate_frame(struct efs_decl_gate *g, struct efs_conn *c, uint8_t typ
                             ? h->version : 0u);
         return EFS_GATE_REFUSE;
     }
-    if (!g->declared && efs_declaration_required(type)) {
-        gate_refuse_log("message", type);
+    if (!g->declared) {
+        if (efs_declaration_required(type)) {
+            gate_refuse_log("message", type);
+            return EFS_GATE_REFUSE;
+        }
+        return EFS_GATE_DISPATCH;
+    }
+    if (type == EFS_MSG_HEARTBEAT)
+        return EFS_GATE_DISPATCH;
+    if (ops)
+        return ops->frame(g, type, payload, len);
+    if (efs_role_allow(g->role, type, len) == EFS_ALLOW_NONE) {
+        gate_refuse_log("message outside the role allowlist", type);
         return EFS_GATE_REFUSE;
     }
     return EFS_GATE_DISPATCH;

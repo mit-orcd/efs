@@ -2,7 +2,8 @@
 """Bounded actual GET smoke: direct reader accepts both stored digest tails.
 
 Usage: python3 tests/live/fragment_tail_smoke.py [BINARY_DIRECTORY]
-Starts one temporary TCP/direct files daemon; never accesses a deployed store.
+Starts one temporary TCP/direct files daemon (member 1 of a formed three-member
+list, D39); never accesses a deployed store.
 """
 import ctypes as c
 import os
@@ -13,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from d39_cluster import Support
 
 source = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).resolve().parents[2]
 
@@ -33,10 +35,10 @@ def exact(sock, length):
         result += part
     return result
 
-HELLO=struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',5,0)  # CLIENT_HELLO, EFS_PROTOCOL_VERSION 5 (K13)
+HELLO=struct.pack('>IB',97,165)+b'EFSP'+struct.pack('=IQB7x',6,0,1)+bytes(72)  # CLIENT_HELLO, EFS_PROTOCOL_VERSION 6, role CLIENT (D39)
 def declare(sock):
     sock.sendall(HELLO);n=struct.unpack('>I',exact(sock,4))[0];reply=exact(sock,n)
-    assert n==9 and reply[0]==166 and struct.unpack('=iI',reply[1:])==(0,4),('declaration refused',reply)
+    assert n==89 and reply[0]==166 and struct.unpack('=iI',reply[1:9])==(0,6),('declaration refused',reply)
 
 with tempfile.TemporaryDirectory(prefix='efs-tail-smoke-') as work:
     root = Path(work)/'store'
@@ -52,10 +54,10 @@ with tempfile.TemporaryDirectory(prefix='efs-tail-smoke-') as work:
             return exact(sock, struct.unpack('>I', exact(sock, 4))[0])
 
     env = dict(os.environ, EFS_TRANSPORT='tcp', EFS_COMMANDS='0',
-               EFS_COMMANDS_SERVER='0', EFS_EXPIRY='0',
-               EFS_MD_RAFT_N='3')
+               EFS_COMMANDS_SERVER='0', EFS_EXPIRY='0')
     with (Path(work)/'daemon.log').open('w+') as log:
-        proc = subprocess.Popen([str(source/'efsd'), '--node-id', '1',
+        support = Support(source, work, port, env)
+        proc = subprocess.Popen([str(source/'efsd'), '--cluster', str(support.conf),
             '--addr', '127.0.0.1', '--port', str(port), '--storage', str(root),
             '--quota', '16M', '--direct-io'],
             env=env, stdout=log, stderr=log)
@@ -69,6 +71,8 @@ with tempfile.TemporaryDirectory(prefix='efs-tail-smoke-') as work:
                     time.sleep(.1)
             else:
                 raise AssertionError('startup timeout')
+            support.start()
+            support.form()
             put = Put(eid=1, ino=99, length=65536, gen=12345)
             put.sum[:] = bytes.fromhex('70ff942c316810ac5ffe7081fc049dba30713646b1d6d7272cd5948ad5579804')
             assert rpc(6, bytes(put)+b'x'*65536)[:2] == bytes([7, 0])
@@ -114,4 +118,5 @@ with tempfile.TemporaryDirectory(prefix='efs-tail-smoke-') as work:
             except subprocess.TimeoutExpired:
                 proc.kill()
                 proc.wait()
+            support.stop()
 print('direct GET stored-tail smoke PASS')
