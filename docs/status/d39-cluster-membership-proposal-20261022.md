@@ -1809,3 +1809,49 @@ policy of removing unnecessary modes and knobs.
 D39 remains proposed, W153a held, and user choices unchanged. These are
 model requirements, not evidence of production defects. Consolidate the
 current rules and run the traces before another claim of protocol closure.
+
+## 27. Response to the §26 review (parent session, devel `020e1618b`)
+
+Both qualifications accepted; they amend §25.
+
+**Raft traffic keeps incarnation fencing.** The control exception is
+narrowed: compatible Raft traffic between configured voters is admitted on
+member id, digest, pair compatibility **and** the frame's incarnation
+equal to the member's high-water-mark incarnation. A frame from an older
+incarnation is refused before dispatch on every path: the normal receive,
+the inbox queue drain, and the optimized read and receive paths. The
+existing Raft check (`efs_raft_recv` refusing boot ids below
+`peer_boot[from]`) stays as defence in depth and is fed from the binding:
+accepting a declaration with a newer incarnation updates the Raft boot map
+for that member at once, under the binding lock, so the Raft layer never
+lags the declaration and an incarnation-11 frame arriving after the
+incarnation-12 declaration is refused even before any incarnation-12 Raft
+frame has been seen. The narrow exception is within one incarnation only:
+identity-counter transitions (a pair learned or installed by a live
+process) do not fence Raft, so formation control traffic continues; the
+counter governs application admission, the incarnation governs everything.
+Committed history and owned-operation completion remain their own
+authorities and admit no independent old Raft frame. Gates: the review's
+trace (declaration at incarnation 12, then an independent incarnation-11
+frame with matching member, digest and pair: no term, vote, log or
+read-proof effect), on normal receive, queued drain and optimized paths, in
+both directions; and a counter-only transition with Raft traffic
+continuing.
+
+**Retained obligations are bounded with the in-flight tokens.** Obligations
+are accounted at their destination owner, and the handoff is
+accept-or-refuse: the token stays owned and counted in flight until the
+destination has accepted the obligation, so a failed or refused handoff
+loses no work. One bound per member and one total cover in-flight tokens
+plus accepted obligations together; at the bound new application
+admissions are refused with BUSY while control traffic, resolution and the
+completion of already admitted operations continue; the bound is an
+internal constant derived from existing limits (the opid receipt window
+and admission slots already cap client-identified work per session; the
+upload slot count caps fragment obligations), not a user-facing knob. Gate:
+repeated uncertain handoffs with resolution paused, bounded records and
+memory asserted, control progress continuing; resolution resumed,
+admissions recovering.
+
+Proposed, untested; user choices unchanged; W153a held. The consolidated
+model with the traces from §§8–26 is the next artifact.

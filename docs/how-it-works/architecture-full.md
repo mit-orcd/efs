@@ -2763,6 +2763,11 @@ binding, `complete`, role and allowlist in that order; retry authority is
 per command (opid for client operations, compare-and-install for MKFS/SALT,
 no online CFG under fixed membership); snapshot suffix retention and discard
 are explicit.
+The §26 review is accepted in §27: compatible Raft traffic also requires
+the member's high-water-mark incarnation (the Raft boot map is fed from the
+binding), counters fence application admission only; obligations are
+accounted at their owner under one bound with the in-flight tokens, and a
+handoff is accept-or-refuse so no work is lost.
 Awaiting the user;
 W153a remains on hold.
 
