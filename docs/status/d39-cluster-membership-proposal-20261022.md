@@ -1920,3 +1920,55 @@ D39 stays proposed, W153a held, and the three user policy decisions unchanged.
 Proceed to one consolidated model with these implementation constraints and
 the prior traces. Prose agreement is not a protocol PASS; no further design
 branch, backwards compatibility or cluster action is requested here.
+
+## 29. Response to the §28 review (parent session, devel `bc8280a0f`)
+
+Both constraints accepted; they go into the implementation contract of the
+consolidated model.
+
+**Raft fence synchronization: one ordering point, one owner, no new lock
+in Raft paths.** The phrase "update the Raft boot map at once, under the
+binding lock" is withdrawn. The contract is: (1) the per-member high-water
+mark is a word written only under the binding lock and read by atomic load
+everywhere else; the binding lock is a leaf lock (it never takes `h->mu`,
+never does I/O) so no inversion exists. (2) Acceptance of a declaration
+publishes the new high-water mark with that store; that store is the single
+observable ordering point: after it, every effect path compares the frame's
+or queued item's carried incarnation with the mark by atomic load before any
+effect, which covers `host_note_queued_reads` before normal inbox dispatch,
+the inbox drain, the batch receive and the optimized read and receive
+predicates, and the fenced-persistence interval where `h->mu` is released,
+because the check is per item at its effect boundary, not a property of the
+queue. (3) `peer_boot` stays private Raft state owned by the pump thread: the
+declaration handler enqueues a fence control item and the pump applies it
+to `peer_boot` in its own execution context, which keeps the existing Raft
+check as a cache that catches up; correctness never depends on when that
+cache catches up, only on the atomic mark. Already accepted I/O keeps its
+token authority and committed history completes as before. Gates: a
+declaration racing a queued read proof, a batch receive and the unlocked
+persistence interval, each with pre- and post-acceptance assertions
+(obsolete incarnation effects refused after the store, none refused before).
+
+**Capacity handoff transfers the reservation.** A handoff never needs a
+free slot: the token's charged units move to the obligation record in one
+accounting operation under the binding lock, and the obligation record's
+storage is pre-reserved at admission (every token carries the memory for
+its own obligation record), so conversion allocates nothing and cannot be
+refused for capacity; "accept-or-refuse" in §27 therefore means the
+destination's validation of the operation identity and resolution rule,
+not a capacity check. Destination-specific limits reserve at admission as
+well, so a continuation of already admitted work is never blocked by new
+admissions. The bound is daemon-wide, across sessions, mounts and paths:
+the charged unit is one operation record plus the bytes it has staged
+(fragment buffers, pending replies); the per-session receipt window and the
+upload slots are inputs to deriving the constants, not the proof. New
+application work is admitted only against the headroom left after reserved
+completion resources. Gates: exactly-full occupancy with every token handed
+off, destination refusal (identity or rule mismatch, not capacity), mixed
+sessions, resolution paused then resumed with recovery and no ownership
+dropped; available completion never deadlocks on the admission bound.
+
+Proposed, untested; user choices unchanged; W153a held. Next artifact: the
+consolidated model (one acceptance predicate, the state and role table,
+R1–R6 as amended by §§19–29, the operation lifecycle, these two contracts)
+with every trace from §§8–28 as its test list.

@@ -2776,6 +2776,11 @@ the member's high-water-mark incarnation (the Raft boot map is fed from the
 binding), counters fence application admission only; obligations are
 accounted at their owner under one bound with the in-flight tokens, and a
 handoff is accept-or-refuse so no work is lost.
+The §28 review is accepted in §29: the high-water mark is an atomic word
+written under a leaf binding lock and checked per item at every effect
+boundary, the Raft boot map is a cache the pump updates from a control
+item; a handoff transfers the token's reservation with pre-reserved
+obligation storage, so capacity never refuses it.
 Awaiting the user;
 W153a remains on hold.
 
