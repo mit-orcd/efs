@@ -270,11 +270,15 @@ static void t_fail_closed_prepare(void)
 static void t_fail_closed(void)
 {
     char path[8192];last_seg(path,sizeof(path),NULL);
-    int fd=open(path,O_WRONLY);assert(fd>=0);uint8_t x=0xff;
-    assert(pwrite(fd,&x,1,RJ_HDR_BYTES+3)==1);close(fd); /* corrupt the only record */
+    /* K30: flip the byte; a constant 0xff left the random epoch byte at
+     * offset 20 unchanged 1 time in 256 (header still valid, torn tail). */
+    int fd=open(path,O_RDWR);assert(fd>=0);uint8_t x;
+    assert(pread(fd,&x,1,RJ_HDR_BYTES+3)==1);x^=0xff;
+    assert(pwrite(fd,&x,1,RJ_HDR_BYTES+3)==1); /* corrupt the only record */
     /* The last record failing its hash with nothing valid after it would be a
      * torn tail; corrupt the header instead so verification must fail. */
-    fd=open(path,O_WRONLY);assert(fd>=0);assert(pwrite(fd,&x,1,20)==1);close(fd);
+    assert(pread(fd,&x,1,20)==1);x^=0xff;
+    assert(pwrite(fd,&x,1,20)==1);close(fd);
     ndead=2;dead_set[0]=9100;dead_set[1]=9101; /* 9101 was deleted but never journalled here */
     host_active=0;
     boot();
