@@ -500,3 +500,87 @@ the user. Before code, consolidate §§3 and 6–10 into one authoritative
 state/role transition table (including permitted RPCs and restart behavior),
 retaining the review history as rationale. W153a remains held; no deployment
 or format operation is authorized by this review.
+
+## 11. Response to the §10 review and the consolidated transition table (parent session, devel `7c6f1fee4`)
+
+All three counterexamples are accepted; they break §9 as written. The
+corrections below replace §9's state rules, and the table at the end is the
+authoritative statement the review asked for. Verified: `efs-mgmt` declares
+through the same client gate as any client (`efs_conn_declare` in
+`src/mgmt/efs_mgmt.c`), and learner replicas already exist in the Raft host
+(a learner catches up and must not serve, `src/server/raft_host.c`), which
+is the mechanism the catch-up channel uses.
+
+**P1, lagging voter.** A configured member whose store is not yet formed
+declares with role `peer`, the digest, its member id and state `forming`.
+A formed daemon admits that declaration into a **catch-up** channel instead
+of refusing it: on each group the lagging member is a configured voter of,
+the formed leader treats it as a learner (AppendEntries and snapshot
+install inbound, replies outbound, no campaign, no proposal, no forward, no
+client service) until the member has applied the formation records; the
+member installs the pair only from entries it applied itself. For a group
+it does not host, it asks a voter for the pair through a read-only
+`FORMATION_READ` answered after ReadIndex with the commit indices of MKFS
+and SALT. It redeclares as `formed` once §"completion" below holds. A
+persisted salt that conflicts with the discovered pair stops the daemon with
+both identities; a matching digest never excuses a conflicting salt.
+Raft history from a different cluster cannot enter because the learner's
+leader is itself bound to the pair and the catch-up channel accepts
+AppendEntries only from a declared, pair-bound leader of the same digest.
+
+**P1, cluster-wide completion.** Two predicates per daemon:
+`installed(g)` for each hosted group (the formation record is applied
+locally), and `complete` = MKFS committed in group 0 **and** SALT committed
+in group 2 with the same pair, evaluated from local apply where the daemon
+hosts the group and from `FORMATION_READ` to the other group's voters where
+it does not. Only `complete` unlocks client service and formed-peer refusal;
+`installed` only lets replication and recovery continue. Node 1 therefore
+stays `forming` until group 2's SALT is committed, and a daemon hosting
+neither group waits for both reads. Partial formation resumes from the
+committed MKFS record (re-propose SALT); an ordinary restart of a `formed`
+store needs no member but its quorum.
+
+**P2, management role.** The declaration carries a role: `peer`, `client`
+or `mgmt`. `mgmt` is admitted in every state for the formation and status
+set only (`RAFT_MKFS`, `FORMATION_READ`, status, `raft-step-down`, later
+`raft-change`); `client` is refused until `complete`; `peer` needs a
+configured member id and the digest. A self-asserted id never makes a
+client a peer: the peer role is admitted only when the declared endpoint
+matches the configured record for that id. Trust boundary: as today, the
+network; neither the digest nor the role is authentication, and
+authentication is outside D39 (noted for the security backlog, not added
+here).
+
+**Process.** Agreed: before staging a shared Markdown file I inspect its
+diff hunk by hunk and stage only mine (`git add -p` by hunk), or wait for
+the other session's commit.
+
+### Authoritative state and role table (replaces §9's rules)
+
+States of a daemon's store: `unformed` (no formation record), `forming`
+(MKFS or SALT applied in at least one hosted group, or the pair discovered,
+but `complete` false), `formed` (`complete` true; the pair persisted with
+the configuration). A `formed` store never returns to `unformed` or
+`forming` except by a fresh format.
+
+| Declaring role and state | Admitted into | Permitted after the declaration | Refused |
+| --- | --- | --- | --- |
+| `peer`, configured id and digest match, declarer `unformed`/`forming`, admitter `unformed`/`forming` | bootstrap channel | HELLO/status exchange, Raft for both groups between configured voters, MKFS/SALT apply | client service, forwards of client mutations |
+| `peer`, declarer `forming`, admitter `formed` | catch-up channel | learner replication inbound and replies, `FORMATION_READ`, status | campaign, proposals, forwards, client service, any write to the formed namespace |
+| `peer`, declarer `formed` with the committed pair, admitter `formed`, pair equal | formed channel | everything a peer does today | nothing new |
+| `peer`, pair or digest differs, or id/endpoint not in the configuration | none | nothing | refused with both identities logged; the store is untouched |
+| `mgmt`, any state | management channel | `RAFT_MKFS`, `FORMATION_READ`, status, `raft-step-down`, later `raft-change` | every other RPC |
+| `client`, admitter not `complete` | none | nothing | refused with "not formed" |
+| `client`, admitter `complete` | client channel | the client protocol as today | peer-only and mgmt-only RPCs |
+
+Transitions: `unformed` → `forming` on applying MKFS or SALT, or on a
+successful `FORMATION_READ` pair discovery; `forming` → `formed` when
+`complete` holds, which closes bootstrap and catch-up connections so peers
+redeclare; restart of a `formed` store: verify the persisted pair against
+each hosted group's applied record and, for non-hosted groups, against
+`FORMATION_READ`; mismatch stops the daemon. Restart of a `forming` store:
+resume the catch-up channel. The review's §8 and §10 gates stand; added:
+one voter delayed past the others' completion, group 2 paused after the
+group-0 MKFS with node 1 required to stay `forming`, a `client` sent before
+completion, a `mgmt` mkfs in `unformed`, and a `peer` with a self-asserted
+id whose endpoint is not configured.

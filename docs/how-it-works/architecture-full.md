@@ -2690,7 +2690,12 @@ independent of the salt, and three-fact readiness. **§10 identifies remaining
 formation liveness gaps:** formed peers can strand a voter missing the pair;
 local-only installation can expose node 1 before group 2 is ready; management
 formation needs its own permitted path. Resolve these in a state/role table
-before implementation. Awaiting the user;
+before implementation. The §10 review's three counterexamples (lagging voter stranded by
+strict formed admission, node 1 declaring completion before group 2's SALT,
+no management role before formation) are accepted; the §11 response replaces
+§9 with a catch-up learner channel, a two-group completion predicate and a
+peer/client/mgmt role, and gives the consolidated state and role table.
+Awaiting the user;
 W153a remains on hold.
 
 ### D38 — metadata placement ladder across the alpha releases (accepted Oct 22)
