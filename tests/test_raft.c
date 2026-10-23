@@ -52,6 +52,10 @@ struct net {
     int cap_n;
     int cap_ok;
     uint64_t cap_match, cap_read_context;
+    /* K29 two-lane outbox model: entry batches to defer_to wait in
+     * deferred[] while empty AppendEntries are delivered at once. */
+    int defer_on, defer_to, ndeferred;
+    struct efs_raft_msg *deferred[64];
 };
 
 static void msg_free_deep(struct efs_raft_msg *m)
@@ -244,6 +248,15 @@ static int send_now(void *net, const struct efs_raft_msg *msg)
         if (n->keep_on && msg->to == n->keep_to) {
             msg_free_deep(n->keep);
             n->keep = msg_copy_deep(msg);
+        }
+        if (n->defer_on && msg->to == n->defer_to && n->ndeferred < 64) {
+            struct efs_raft_msg *m = msg_copy_deep(msg);
+            if (!m)
+                return EFS_ERR_NOMEM;
+            m->wire = NULL;
+            m->wire_len = 0;
+            n->deferred[n->ndeferred++] = m;
+            return EFS_OK;
         }
     }
     if (msg->type == EFS_RAFT_MSG_AE_REP && n->cap_rep) {
@@ -2838,6 +2851,70 @@ static void test_ae_duplicate_ack_preserves_newer_window(void)
     }
 }
 
+/* K29: the host outbox sends empty AppendEntries (heartbeats, commit
+ * probes) from its priority lane ahead of entry batches queued in the
+ * entry lane. A commit probe that names the end of a batch still queued
+ * behind it as its prev_index reached the follower first; the follower
+ * rejected it (prev-beyond-log), and the leader cleared the window,
+ * rewound next_index and rebuilt the batch. Under sustained appends every
+ * commit advance did this (K15 live gates, Oct 23). A probe must claim only
+ * the follower's acknowledged prefix. */
+static void test_commit_probe_overtakes_batch(void)
+{
+    struct net n = {.n = 3};
+    struct efs_raft_store *st[3];
+    struct app app[3] = {{0}};
+    struct efs_raft_cfg cfg = {0};
+    struct efs_raft_log_progress before, after;
+    struct efs_raft_peer_progress pb, pa;
+    uint64_t idx = 0;
+    uint8_t c = 'k';
+    int i, leader, slow;
+
+    cfg.n = 3; cfg.send = send_now; cfg.net = &n; cfg.apply = apply_cmd;
+    cfg.heartbeat_ticks = 1;
+    for (i = 0; i < 3; i++) {
+        st[i] = efs_raft_mem_create(); cfg.id = i; cfg.store = st[i];
+        cfg.store_ctx = st[i]; cfg.election_ticks = (uint32_t)(4 + i * 4);
+        cfg.app = &app[i];
+        n.r[i] = test_raft_new(&cfg);
+        CHECK(n.r[i] != NULL, "probe order raft");
+    }
+    CHECK(elect(&n, 20) == 1, "probe order election");
+    leader = leader_id(&n);
+    slow = (leader + 1) % 3;
+    for (i = 0; i < 4; i++)
+        CHECK(efs_raft_tick(n.r[leader]) == EFS_OK, "settle after election");
+    CHECK(efs_raft_log_progress(n.r[slow], &before) == EFS_OK, "follower progress");
+    CHECK(efs_raft_peer_progress(n.r[leader], slow, &pb) == EFS_OK, "leader progress");
+    n.defer_on = 1; n.defer_to = slow;
+    for (i = 0; i < 6; i++)
+        CHECK(efs_raft_propose(n.r[leader], &c, 1, &idx) == EFS_OK, "propose");
+    CHECK(efs_raft_commit(n.r[leader]) == idx, "the other follower commits every entry");
+    CHECK(n.ndeferred >= 1, "entry batches wait behind the probes");
+    CHECK(efs_raft_log_progress(n.r[slow], &after) == EFS_OK, "follower progress after");
+    CHECK(efs_raft_peer_progress(n.r[leader], slow, &pa) == EFS_OK, "leader progress after");
+    CHECK(after.rejects_sent == before.rejects_sent,
+          "a probe overtaking its batch is not rejected prev-beyond-log");
+    CHECK(pa.rejects == pb.rejects, "leader sees no rejection from the slow follower");
+    CHECK(pa.next_index >= pb.next_index, "next_index is not rewound by a probe");
+    n.defer_on = 0;
+    for (i = 0; i < n.ndeferred; i++) {
+        CHECK(efs_raft_recv(n.r[slow], n.deferred[i]) == EFS_OK, "late batch delivered");
+        msg_free_deep(n.deferred[i]);
+    }
+    n.ndeferred = 0;
+    for (i = 0; i < 4; i++)
+        CHECK(efs_raft_tick(n.r[leader]) == EFS_OK, "tick after delivery");
+    CHECK(efs_raft_applied(n.r[slow]) == idx, "slow follower applies every committed entry");
+    CHECK(efs_raft_log_progress(n.r[slow], &after) == EFS_OK &&
+          after.rejects_sent == before.rejects_sent, "no rejection after delivery either");
+    for (i = 0; i < 3; i++) {
+        efs_raft_free(n.r[i]);
+        efs_raft_mem_free(st[i]);
+    }
+}
+
 static void test_ae_full_window_not_resent_per_propose(void)
 {
     struct net n = { .n = 3 };
@@ -3184,6 +3261,7 @@ int main(void)
         test_election_i1();
         test_ae_duplicate_ack_preserves_newer_window();
         test_ae_full_window_not_resent_per_propose();
+        test_commit_probe_overtakes_batch();
         test_step_down_no_campaign();
         test_replicate_and_readindex();
         test_readindex_outstanding_batch();

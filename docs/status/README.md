@@ -25,6 +25,13 @@ a fragment, after the session's revocation is complete and behind each
 member's storage floor, and retires the record only when every fragment is
 acknowledged. Cluster gates are NOTRUN, and unsettled tickets of dead clients
 are not collected yet.
+[K29 append stall under load](k29-append-stall-20261023.md):
+**cause established; two fixes on branch `claude/devel-k29-2185a1`, not
+merged; `make test-all` PASS on xorinox; load verification NOTRUN (orcd-mini).**
+Reservations and barrier retirements proposed one Raft entry per active
+writer lane (up to 139 group-0 entries per 4 KiB record), now one TXN_BATCH
+entry per group (11 per record); commit probes no longer overtake their
+batches (`prev-beyond-log`).
 
 [K13 / W86, W88, W137 ticketed PUT/REPORT default](k13-w86-ticket-default-20261023.md):
 **PASS (scoped) on branch `devel-k13`, not merged.** Every data PUT and REPORT

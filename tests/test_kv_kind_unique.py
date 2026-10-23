@@ -23,3 +23,15 @@ inside = [n for v, n in seen.items() if lo <= v <= hi]
 assert not inside, f'kinds inside the reserved range {lo}..{hi}: {inside}'
 assert all(0 < v < 256 for v in seen), 'a KV kind must fit the one-byte key field'
 print(f'KV kinds: {len(seen)} distinct, none in reserved {lo}..{hi} PASS')
+
+# Raft command and request tags share one byte on the wire: no two may collide
+# (Oct 23: K13-D31 PUT_ORPHAN_ACK and K29 TXN_BATCH both took 86 in parallel).
+meta = (Path(__file__).resolve().parents[1] / 'include/efs/meta_cmd.h').read_text()
+tags = {}
+for name, val in re.findall(r'^#define (EFS_MD_(?:CMD|REQ)_[A-Z0-9_]+)\s+(\d+)\b', meta, flags=re.M):
+    v = int(val)
+    assert v not in tags, f'Raft tag {v} used by both {tags[v]} and {name}'
+    tags[v] = name
+assert all(0 < v < 256 for v in tags), 'a Raft tag must fit one byte'
+print(f'Raft command/request tags: {len(tags)} distinct PASS')
+

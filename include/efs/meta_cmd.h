@@ -113,6 +113,13 @@
                                    4u * EFS_NUM_FRAGMENTS + EFS_HASH_SIZE * EFS_NUM_FRAGMENTS)
 #define EFS_MD_CMD_RESOLVE 7
 #define EFS_MD_CMD_DROP    8
+/* K29: one entry carrying a transaction's PREPAREs, or its RESOLVEs, for
+ * this group's shards: [TXN_BATCH][sub:1][n:2]([len:2][command])*n, sub is
+ * PREPARE or RESOLVE and every command carries that tag. Apply runs each
+ * command as its own entry would, in order, in the entry's one atomic KV
+ * scope; the verdict is the first non-OK command verdict. */
+#define EFS_MD_CMD_TXN_BATCH 88 /* K29; 86 is PUT_ORPHAN_ACK, 85 and 87 are requests */
+#define EFS_MD_TXN_BATCH_MAX 96u /* commands per entry */
 #define EFS_MD_CMD_SESSION 9 /* matches sim SIM_CMD_SESSION */
 #define EFS_MD_SESS_CREATE      1
 #define EFS_MD_SESS_REGISTER    2
@@ -245,7 +252,7 @@
     X(PACK_ADMIT) X(PACK_SWITCH) X(PACK_CANCEL) X(PACK_RETIRE) \
     X(PACK_UNINDEX) X(PACK_INDEX) \
     X(BOOTSTRAP_LANE) X(TRUNC_SWEEP) X(SWEEP_DONE) X(RETIRE) X(TXN_RETIRE) \
-    X(DEGRADED_CLEAR) X(PUT_ORPHAN_ACK)
+    X(DEGRADED_CLEAR) X(PUT_ORPHAN_ACK) X(TXN_BATCH)
 
 /* 1 when byte 0 of a log command names a command this build applies. */
 static inline int efs_md_cmd_applicable(uint8_t tag)
