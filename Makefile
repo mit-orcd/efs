@@ -465,6 +465,7 @@ test: all
 	python3 tests/test_bench_profile.py
 	python3 tests/test_storage_principles.py
 	python3 tests/test_make_test_recipe.py
+	python3 tests/test_make_test_summary_runner.py
 	python3 tests/test_pressure_cohort.py
 	python3 tests/test_alloc_value_guard.py
 	python3 tests/test_commands_load_payloads.py

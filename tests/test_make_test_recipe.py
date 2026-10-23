@@ -10,7 +10,8 @@ W139: every unit binary in TEST_BINS and every tests/test_*.py and
 tests/faults/test_*.py is run by the recipe, or is listed below with the
 reason it is not. A test that genuinely needs hardware or a tool the host
 lacks prints a `NOTRUN:` line and exits 0; scripts/make_test_summary.sh
-lists those commands under NOTRUN, so they never pass silently.
+lists those commands under NOTRUN and exits 3 (INCOMPLETE), so they never
+pass silently.
 """
 # Python tests the recipe does not run, each with its reason.
 NOT_WIRED = {
