@@ -146,3 +146,67 @@ for the record and one decision the user has to take now.
 Process note: the one-line uncommitted edit to
 `d39-consolidated-model-20261023.md` in the shared checkout is not mine and
 was left alone, as the amendment's commit did.
+
+## Independent review of `1085baade` (Oct 23)
+
+**Verdict: accept the implementation gap and K33/W157; qualify the rollback
+recommendation and three protocol statements.** Source inspected at
+`1085baade`: `src/server/efsd.c`, `src/mgmt/efs_mgmt.c`,
+`src/raft/raft.c`, `src/common/placement.c` and the D39 admission tests.
+Documentation review only; no binary, cluster, deployment or rollback run.
+
+1. **Noncompliant startup is not proof that no cluster can run devel.** The
+   daemon rejects join/count inputs and requires a member file; management
+   still implements file-based formation. This confirms failure to provide
+   the accepted interface, not universal inability to form a live cluster.
+   Existing orcd-mini launch scripts need adaptation to run that interface;
+   formation/failover qualification is separately NOTRUN. Unit success does
+   not supply that evidence either. The blanket claim that every other gate
+   is blocked is therefore not established. The reported orcd-mini revision
+   is historical context, not independently checked live in this review.
+
+2. **Prefer extending the merged implementation; do not require another user
+   policy decision before design work.** The user has settled the product
+   requirement. My engineering recommendation is to retain the admission and
+   store-safety work and extend its model/protocol for automatic formation and
+   additions. Keep an exact known-working baseline available for comparisons;
+   its results do not qualify changed code. A blanket merge revert would also
+   unwind driver/test and wire changes, including integration conflict fixes,
+   so it is not demonstrated to be the smallest or safest route. A selective
+   rollback remains an option if a concrete regression warrants it, with its
+   dependencies and retained safeguards tested. No rollback is authorized or
+   performed by this review. The fact that primitives are independent of a
+   file does not prove their extraction is independent of the merged call sites.
+
+3. **Discovery is required functionality, with explicit seed as an alternative.**
+   `efsd --join STORAGE` must work on a supported local network. Explicit-seed
+   startup permits routed or broadcast-filtered networks; it does not make
+   discovery optional for alpha acceptance. The ORCD fabric's discovery
+   capability is unverified here, and an explicit-seed run alone cannot qualify
+   automatic discovery. Neither path needs a permanent first-node coordinator.
+
+4. **One committed membership revision is necessary but insufficient for old
+   data.** Current placement computes destinations using node count and the
+   sorted member ring (`efs_place_fragments` and `efs_get_placement`). Merely
+   installing a larger ring changes those results. Specify how each existing
+   chunk/packed segment retains authoritative destinations or its placement
+   revision, and how old revisions remain usable for reads, repair and reclaim.
+   New writes may adopt the new placement only after its eligibility barrier;
+   pre-addition in-flight writes need defined publication authority. Full
+   rebalance can stay deferred. Do not treat a consistent current ring as proof
+   that existing data survives an addition.
+
+5. **Consensus allocation needs an explicit first-formation step.** Automatic
+   ids committed with membership are the right direction, but before the first
+   Raft configuration exists, candidates still need a stable provisional
+   identity and an agreed initial voter set. Model concurrent joins, seed
+   restart and competing formation attempts; commit the resulting initial
+   identities before service. The Raft engine's `efs_raft_change` still exists;
+   restoring the application path needs catch-up, joint consensus and
+   cross-group installation gates, not merely restoring the management command.
+   Stable cluster identity versus ordered membership revisions is accepted.
+
+**Next work:** extend the consolidated model with these formation/addition
+transitions, then implement and qualify the accepted CLI and live growth.
+K33/W157 remain OPEN; runtime and topology gates remain NOTRUN. No extra user
+choice is required to begin this work, and no fixed-file run closes A13.
