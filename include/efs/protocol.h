@@ -243,7 +243,19 @@ enum efs_msg_type {
      * EFS_PUT_REPLY_LEN PUT reply. */
     EFS_MSG_REBUILD_PUT = 175,
     EFS_MSG_REBUILD_PUT_REPLY = 176,
+    /* D31 + K13: the lane group leader's collection of one abandoned
+     * fragment. Payload EFS_PUT_ORPHAN_DELETE_LEN: export:4, fragment:4,
+     * then the 216-byte ticket. The member deletes fragment `fragment`
+     * only on itself (nodes[fragment]), behind its own storage session
+     * floor above the ticket's epoch, with the group's fresh orphan record
+     * as authority and only while the stored bytes carry the ticket's
+     * checksum. Reply struct efs_msg_put_orphan_delete_reply: OK when no
+     * copy remains, durably. */
+    EFS_MSG_PUT_ORPHAN_DELETE = 177,
+    EFS_MSG_PUT_ORPHAN_DELETE_REPLY = 178,
 };
+#define EFS_PUT_ORPHAN_DELETE_LEN (8u + 216u)
+struct efs_msg_put_orphan_delete_reply { int32_t rc; };
 #define EFS_REBUILD_MARK_LEN (8u + 8u + 8u + 4u + 1u + 1u + \
                               4u * EFS_NUM_FRAGMENTS + EFS_HASH_SIZE * EFS_NUM_FRAGMENTS)
 #define EFS_REBUILD_PUT_HEADER_LEN (4u + EFS_REBUILD_MARK_LEN)
@@ -722,6 +734,13 @@ struct efs_msg_status_reply {
     uint32_t degraded_sampled;
     uint32_t reserved2;
     uint64_t rebuilt_fragments, rebuild_failures, rebuild_retired;
+    /* D31: abandoned-upload records pending on the groups this node leads
+     * (bit g/2 of put_orphan_sampled says groups[g/2] finished a scan),
+     * and this node's collection totals since start. */
+    uint64_t put_orphan_pending[2];
+    uint32_t put_orphan_sampled;
+    uint32_t reserved3;
+    uint64_t put_orphan_collected, put_orphan_deleted, put_orphan_failures;
 };
 
 /* DATA_COMMIT: make every data fragment this server acknowledged before

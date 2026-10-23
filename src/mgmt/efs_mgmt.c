@@ -150,6 +150,9 @@ static int cmd_status(int argc, char **argv)
     /* W154: each group's leader reports its degraded-mark count. */
     uint64_t degraded[2] = {0, 0}, rebuilt = 0, rebuild_failed = 0, rebuild_retired = 0;
     uint32_t degraded_seen = 0;
+    /* D31: each group's leader reports its abandoned-upload records. */
+    uint64_t orphans[2] = {0, 0}, orphan_collected = 0, orphan_deleted = 0, orphan_failed = 0;
+    uint32_t orphan_seen = 0;
     for (uint32_t i = 0; i < list->node_count; i++) {
         /* Probe every advertised addr (may differ from the seed string we used). */
         struct efs_msg_status_reply current = {0};
@@ -167,6 +170,16 @@ static int cmd_status(int argc, char **argv)
             rebuilt += current.rebuilt_fragments;
             rebuild_failed += current.rebuild_failures;
             rebuild_retired += current.rebuild_retired;
+            for (int g = 0; g < 2; g++) {
+                if (!(current.put_orphan_sampled & (1u << g)))
+                    continue;
+                if (!(orphan_seen & (1u << g)) || current.put_orphan_pending[g] > orphans[g])
+                    orphans[g] = current.put_orphan_pending[g];
+                orphan_seen |= 1u << g;
+            }
+            orphan_collected += current.put_orphan_collected;
+            orphan_deleted += current.put_orphan_deleted;
+            orphan_failed += current.put_orphan_failures;
         }
         if (up)
             up_nodes++;
@@ -270,6 +283,24 @@ static int cmd_status(int argc, char **argv)
                degraded_seen & 2u ? "2" : (degraded_seen ? "" : "none"),
                (unsigned long long)rebuilt, (unsigned long long)rebuild_retired,
                (unsigned long long)rebuild_failed);
+
+    /* Abandoned ticketed uploads awaiting revocation-gated collection on
+     * every member that holds a fragment (D31). Unknown until both group
+     * leaders finished a scan of their orphan ledger. */
+    if (orphan_seen == 3u)
+        printf("Abandoned uploads: pending=%llu (group 0: %llu, group 2: %llu); collected=%llu "
+               "fragments_deleted=%llu failures=%llu\n",
+               (unsigned long long)(orphans[0] + orphans[1]),
+               (unsigned long long)orphans[0], (unsigned long long)orphans[1],
+               (unsigned long long)orphan_collected, (unsigned long long)orphan_deleted,
+               (unsigned long long)orphan_failed);
+    else
+        printf("Abandoned uploads: pending=unknown (group leaders reported: %s%s%s); "
+               "collected=%llu fragments_deleted=%llu failures=%llu\n",
+               orphan_seen & 1u ? "0" : "", orphan_seen == 3u ? "," : "",
+               orphan_seen & 2u ? "2" : (orphan_seen ? "" : "none"),
+               (unsigned long long)orphan_collected, (unsigned long long)orphan_deleted,
+               (unsigned long long)orphan_failed);
 
     uint32_t ncopy = list->node_count;
     if (ncopy > EFS_MAX_NODES)

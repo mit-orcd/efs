@@ -457,6 +457,14 @@ void server_handle_conn(struct efs_conn *conn)
             efs_conn_send_msg(conn,EFS_MSG_REBUILD_PUT_REPLY,reply,sizeof(reply));
             break;
         }
+        case EFS_MSG_PUT_ORPHAN_DELETE: {
+            /* D31: one abandoned fragment, deleted only behind this
+             * member's storage floor and the group's orphan record. */
+            struct efs_msg_put_orphan_delete_reply reply = {
+                .rc = server_put_orphan_delete(g_server, payload, payload_len)};
+            efs_conn_send_msg(conn, EFS_MSG_PUT_ORPHAN_DELETE_REPLY, &reply, sizeof(reply));
+            break;
+        }
         case EFS_MSG_GC_INODE_BATCH: {
             /* W124: journal-first acceptance of a reaped-inode batch. Each
              * rc is OK only once the record is fsynced and its fence set. */
@@ -710,6 +718,17 @@ void server_handle_conn(struct efs_conn *conn)
                 __atomic_load_n(&g_server->rebuild_failures, __ATOMIC_RELAXED);
             reply.rebuild_retired =
                 __atomic_load_n(&g_server->rebuild_retired, __ATOMIC_RELAXED);
+            for (int g = 0; g < 2; g++)
+                reply.put_orphan_pending[g] =
+                    __atomic_load_n(&g_server->put_orphan_pending[g], __ATOMIC_RELAXED);
+            reply.put_orphan_sampled =
+                __atomic_load_n(&g_server->put_orphan_sampled_mask, __ATOMIC_RELAXED);
+            reply.put_orphan_collected =
+                __atomic_load_n(&g_server->put_orphan_collected, __ATOMIC_RELAXED);
+            reply.put_orphan_deleted =
+                __atomic_load_n(&g_server->put_orphan_deleted, __ATOMIC_RELAXED);
+            reply.put_orphan_failures =
+                __atomic_load_n(&g_server->put_orphan_failures, __ATOMIC_RELAXED);
             efs_conn_send_msg(conn, EFS_MSG_STATUS_REPLY, &reply, sizeof(reply));
             break;
         }

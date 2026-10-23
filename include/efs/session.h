@@ -81,6 +81,12 @@ int efs_session_barrier_done(struct efs_kv *kv,
  * coordinator and must never be used on a replica with only cached state. */
 int efs_session_reclaimable(struct efs_kv *kv, uint32_t shard,
     const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t old_epoch);
+/* The shard-local half of that proof alone (D31 collector apply): OK only
+ * when this shard's durable rejection floor is above old_epoch; BUSY when the
+ * row is missing or the floor is not yet raised. The coordinator proves the
+ * global barrier separately, from the session group. */
+int efs_session_local_revoked(struct efs_kv *kv, uint32_t shard,
+    const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t old_epoch);
 
 int efs_session_establish(struct efs_kv *kv, uint32_t shard,
                           const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch);

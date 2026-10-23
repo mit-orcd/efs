@@ -71,7 +71,28 @@ int efs_put_ticket_reject(struct efs_kv *,const struct efs_put_ticket *);
  * retired REJECTED body is recorded in the orphan ledger. Idempotent once
  * retired. Requires the owner's active session on the lane shard. */
 int efs_put_ticket_settle(struct efs_kv *,const struct efs_put_ticket *);
-/* Orphan ledger lookup for tests and the collector: OK when this retired
- * REJECTED ticket's body is recorded. */
+/* D31 orphan ledger. A retired REJECTED ticket's body is recorded under its
+ * group's anchor shard, so the group leader's collector scans one prefix:
+ * [anchor:2][PUT_ORPHAN][lane shard:2][uuid:16][epoch:4][seq:8][ino:8]
+ * [inode_gen:8][ci:4]. The value is the ticket value with the fragments
+ * whose member acknowledged deletion. The record is removed in the apply
+ * that acknowledges the last fragment, never earlier. */
+#define EFS_PUT_ORPHAN_KEY_LEN 53u
+#define EFS_PUT_ORPHAN_ALL ((1u << EFS_NUM_FRAGMENTS) - 1u)
+/* OK when this retired REJECTED ticket's body is recorded and not yet
+ * collected; *acked (optional) gets the acknowledged fragment mask. */
+int efs_put_ticket_orphan_get(struct efs_kv *,const struct efs_put_ticket *,uint32_t *acked);
 int efs_put_ticket_orphan(struct efs_kv *,const struct efs_put_ticket *);
+/* Serialized apply of the collector's acknowledgement for fragments `frags`
+ * (bit i = fragment i on nodes[i], deleted and durable on that member).
+ * Refused (BUSY) until this lane shard's durable rejection floor is above
+ * the ticket's epoch. OK and idempotent once the record is retired; the
+ * record is retired only when every fragment is acknowledged. NOT_FOUND
+ * when no orphan was ever recorded (live, published or unknown ticket). */
+int efs_put_ticket_orphan_ack(struct efs_kv *,const struct efs_put_ticket *,uint32_t frags);
+/* Scan helpers: the group's orphan prefix, and one record back to its
+ * ticket and acknowledged mask (validated; PROTO on any mismatch). */
+void efs_put_ticket_orphan_prefix(uint32_t anchor,uint8_t prefix[3]);
+int efs_put_ticket_orphan_decode(const uint8_t *key,uint32_t kl,const uint8_t *val,
+                                 uint32_t vl,struct efs_put_ticket *,uint32_t *acked);
 #endif

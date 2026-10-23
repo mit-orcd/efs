@@ -123,3 +123,11 @@ int server_put_session_begin(struct efsd_server *s,const uint8_t uuid[16],uint32
 {return storage_fence_begin(s,uuid,epoch,guard);}
 int server_put_session_fence(struct efsd_server *s,const uint8_t uuid[16],uint32_t floor)
 {return storage_fence_seal(s,uuid,floor);}
+int server_put_session_floor(struct efsd_server *s,const uint8_t uuid[16],uint32_t *floor)
+{
+    char path[EFS_MAX_PATH+80];pthread_mutex_t *mu;
+    if(!floor)return EFS_ERR_INVAL;
+    *floor=0;int rc=storage_fence_path(s,uuid,path,&mu);if(rc!=EFS_OK)return rc;
+    pthread_mutex_lock(mu);rc=storage_fence_read(path,uuid,floor);pthread_mutex_unlock(mu);
+    return rc;
+}

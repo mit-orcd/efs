@@ -98,6 +98,17 @@
  * EFS_MSG_REBUILD_PUT. OK when the mark's group, after a ReadIndex, holds
  * exactly this mark; NOT_FOUND when absent; STALE when it differs. */
 #define EFS_MD_REQ_DEGRADED_CHECK 85
+/* D31 (K13) on the ticket's lane-shard group: [frags:1][ticket:216], 218 B.
+ * The members holding fragments `frags` deleted them durably; the apply
+ * records them (efs_put_ticket_orphan_ack) and retires the orphan record
+ * with the last one. Refused behind a missing shard rejection floor. */
+#define EFS_MD_CMD_PUT_ORPHAN_ACK 86
+#define EFS_MD_PUT_ORPHAN_ACK_LEN (2u + EFS_PUT_TICKET_WIRE_LEN)
+/* RPC only, never logged: [ticket:216]. After a ReadIndex: OK (salt = the
+ * acknowledged mask) when the orphan record exists and the shard's rejection
+ * floor is above the ticket's epoch; NOT_FOUND without a record; BUSY while
+ * the floor is not raised. A storage member's authority to delete. */
+#define EFS_MD_REQ_PUT_ORPHAN_STATUS 87
 #define EFS_MD_DEGRADED_CLEAR_LEN (1u + 1u + 8u + 8u + 8u + 4u + 1u + 1u + \
                                    4u * EFS_NUM_FRAGMENTS + EFS_HASH_SIZE * EFS_NUM_FRAGMENTS)
 #define EFS_MD_CMD_RESOLVE 7
@@ -234,7 +245,7 @@
     X(PACK_ADMIT) X(PACK_SWITCH) X(PACK_CANCEL) X(PACK_RETIRE) \
     X(PACK_UNINDEX) X(PACK_INDEX) \
     X(BOOTSTRAP_LANE) X(TRUNC_SWEEP) X(SWEEP_DONE) X(RETIRE) X(TXN_RETIRE) \
-    X(DEGRADED_CLEAR)
+    X(DEGRADED_CLEAR) X(PUT_ORPHAN_ACK)
 
 /* 1 when byte 0 of a log command names a command this build applies. */
 static inline int efs_md_cmd_applicable(uint8_t tag)
