@@ -19,8 +19,8 @@ full acceptance are separate states.
 ## Recent evidence and remaining acceptance
 
 [W153 committed membership](w153-committed-membership-20261023.md): **code
-fixed on branch `devel-w153`, not merged; `make test-all` on amd PASS with host
-limits; live formation and failover gates NOTRUN.** `raft-mkfs` commits the
+fixed and merged (`4026e254d`); merged-tree `make test-all` on intel2 0 FAIL;
+live formation and failover gates NOTRUN; needs a fresh format.** `raft-mkfs` commits the
 joined membership in both groups; count and voters come from it on every
 start; `EFS_MD_RAFT_N` removed; joins after formation refused (K33/W157).
 
@@ -30,7 +30,7 @@ automatic identity and formation, safe live additions, always 2+1; removal
 deferred. Supersedes mandatory cluster files and fixed-membership-only D39/D40.
 
 [W158 ticketed live harnesses](w158-ticketed-harness-20261023.md):
-**PASS (scoped) on branch `devel-w158`, not merged; intel expiry rerun NOTRUN.**
+**PASS, merged (`33c68a465`); intel expiry rerun passes every expiry check (fixture POSIX timeouts are W159).**
 `gc_reclamation.py` and three wire harnesses send the K13 ticket header and
 prove that an unticketed PUT is refused; a static `make test` check guards
 it. nuc `make test-all` PASS.
@@ -254,7 +254,7 @@ a cluster at four nodes, so ">4 nodes" is an implementation item or a
 narrower claim.** W145–W147 fixes read correct; `raft-resync` mark is not
 persisted; ior write regression needs a K row.
 
-[Intel deploy of devel `a23d45540`](intel-devel-a23d45540-20261023.md): **fresh format; make test-all 428/0 FAIL; core 216/216 (both mounts), two-client 68/68, durability 27+27, extras 4/5 (mmap skip); expiry fixture FAIL on a stale unticketed-PUT harness step (W158).** Eight live harnesses still expected protocol 4 (fixed `2791f211d`).
+[Intel deploy of devel `a23d45540`](intel-devel-a23d45540-20261023.md): **fresh format; make test-all 428/0 FAIL; core 216/216 (both mounts), two-client 68/68, durability 27+27, extras 4/5 (mmap skip); expiry fixture: first run stopped at a stale harness step (W158, fixed); rerun passes every expiry check, closing fixture POSIX 214/216 with two timeouts (W159).** Eight live harnesses still expected protocol 4 (fixed `2791f211d`).
 
 [Simple startup and node addition](alpha-1.0-node-addition-20261023.md): **user decision Oct 23: the `--cluster` file feature is removed; the D39 admission merge is reverted on devel; seed/`--join` is the only startup.** Alpha needs W153 (member count and voters from the committed membership, formation at three) and then node addition (K33/W157).
 

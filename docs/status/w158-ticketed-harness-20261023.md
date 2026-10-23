@@ -93,7 +93,10 @@ replies `NOT_FOUND`.
 
 - The `gc_reclamation.py` changes are checked statically, by the private
   four-member check of the same calls and by `py_compile`; the fixture
-  itself was not run here. The intel expiry rerun decides W158.
+  itself was not run here. Intel expiry rerun (Oct 23, after merge
+  `33c68a465`): the late-PUT control and every expiry check PASS; the
+  fixture's closing POSIX run had two timeouts, tracked as W159
+  ([intel run](intel-devel-a23d45540-20261023.md)).
 - The fault step's ticket stays ADMITTED and unreported (like the old
   extra generation): the four-member check shows unlink reclaims its
   fragments, but in the fixture it also meets the crash-with-pending-record

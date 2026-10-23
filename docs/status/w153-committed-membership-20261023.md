@@ -1,8 +1,8 @@
 # W153 — the member count and voters come from the committed membership (Oct 23, 2026)
 
 **Code gate: `make test-all` on amd PASS with host limits (430 commands, 0 `make … Error` lines; 9 RDMA FAILs that fail identically on the untouched base, 5 NOTRUN). Live formation, restart and
-single-loss failover gates NOTRUN (the parent session's). Branch `devel-w153`,
-not merged.**
+single-loss failover gates NOTRUN (the parent session's). Merged into devel
+`4026e254d`; merged-tree `make test-all` on intel2 0 FAIL.**
 
 Purpose: close the code side of [W153](work-queue.md) (alpha 1.0 blocker).
 Each daemon took the metadata member count from `EFS_MD_RAFT_N` with a silent
@@ -137,7 +137,17 @@ in 5.8 s.
 - Historical status pages, results summaries and the archive keep their
   `EFS_MD_RAFT_N` wording as records of past runs.
 
-## Changes needed outside this repository (not made)
+## Changes needed outside this repository (made Oct 23)
+
+Committed, not pushed: devops `c05eb59` (`nuc-efs/start.sh`), cluster
+`667ad2c` (`cluster.sh`, `orcd-test.py`, `portal/portal.py`; `cluster.sh`
+waits up to 300 s for every node in `efs-mgmt status` before `raft-mkfs`).
+Merged into devel as `4026e254d`; merged-tree `make test-all` on intel2:
+432 commands, 0 FAIL, 14 NOTRUN (no RDMA device, no cluster scripts, no
+valgrind headers). The shared `tests/live/ticket_put.py` harness now drops
+`EFS_MD_RAFT_N` and waits for every member before `raft-mkfs`.
+
+The list as reviewed:
 
 `~/git/devops`:
 
