@@ -36,8 +36,11 @@ final verification - saves the bytes it returned as DIR/N/NAME with
 DIR/N/meta.json: source, expected version (remote: the settled version or
 null, with every candidate version's length and hash), expected and actual
 lengths and sha256, first differing offset, inode, read time, host, argv
-and, for a remote read, settled/settle_time/settle_after_s/retries. --keep-dir hard-links the file there (on the same mount) so a deleter
-cannot destroy its server rows. --mgmt captures raft-getattr and
+and, for a remote read, settled/settle_time/settle_after_s/retries. With
+--keep-dir the file is re-read while the per-file lock is still held and
+the bytes are written to KEEP/N by exclusive create (a copy, not a hard
+link: a later modifier cannot change it); meta.json records the copy's
+length and hash and the re-read's. --mgmt captures raft-getattr and
 raft-getchunks for the inode at that moment. Artifact-write failures are
 recorded in meta.json and printed. The first SAVE_CAP reads per source are
 saved; a counter alone never stands in for a saved read.
@@ -77,7 +80,7 @@ ap.add_argument("--remote", action="store_true"); ap.add_argument("--deleted-out
 ap.add_argument("--modifiers", type=int, default=0)
 ap.add_argument("--mismatch-dir", help="save each mismatching read (local, remote, final) as DIR/N/NAME "
                "+ DIR/N/meta.json (N counts saved reads) for w125_modify_inspect.py DIR/N NAME")
-ap.add_argument("--keep-dir", help="hard-link each mismatching file here (same mount)")
+ap.add_argument("--keep-dir", help="copy each mismatching file here (same mount) under the per-file lock")
 ap.add_argument("--mgmt", help="'EFS-MGMT ADDR' to capture raft-getattr/raft-getchunks at a mismatch")
 
 RETRIES, RETRY_WAIT_S, SAVE_CAP = 3, 2.0, 20
@@ -131,8 +134,9 @@ def save_mismatch(name, got, v, want, source="local", read_time=None, locked=Tru
     version's length and hash is listed as a candidate and `version` is
     filled in by settle(). The caller holds the file's lock (locked=True), so
     the version and the re-read copy under --keep-dir belong to this read.
-    --keep-dir hard-links the file there (on the same mount) so a deleter
-    cannot destroy its server rows. --mgmt: 'MGMT raft-getattr INO' and
+    --keep-dir: re-read the file now and write those bytes to KEEP/N by
+    exclusive create, a copy a modifier cannot change afterwards (a hard link
+    would follow later versions). --mgmt: 'MGMT raft-getattr INO' and
     'MGMT raft-getchunks INO', saved next to the bytes."""
     if not a.mismatch_dir: return None
     with lock:
@@ -160,8 +164,12 @@ def save_mismatch(name, got, v, want, source="local", read_time=None, locked=Tru
         meta["ino"] = os.stat(src).st_ino
         if a.keep_dir:
             os.makedirs(a.keep_dir, exist_ok=True)
-            os.link(src, os.path.join(a.keep_dir, str(n)))
-            meta["kept"] = os.path.join(a.keep_dir, str(n))
+            with open(src, "rb") as f: again = f.read()
+            meta.update(reread_len=len(again), reread_sha256=sha(again), reread_same_as_read=again == got)
+            kept = os.path.join(a.keep_dir, str(n))
+            fd = os.open(kept, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o444)
+            with os.fdopen(fd, "wb") as f: f.write(again)
+            meta.update(kept=kept, kept_len=len(again), kept_sha256=sha(again))
         if a.mgmt:
             for cmd in ("raft-getattr", "raft-getchunks"):
                 m = a.mgmt.split()
