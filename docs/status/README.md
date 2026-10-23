@@ -54,6 +54,14 @@ identified. Earlier four findings remain open. [K5 S2/S3](k05-s2-s3-20261022.md)
 the W125 cleanup/remote-evidence row is addressed and merged (`devel-w125h`);
 four targeted checks PASS, merged cluster acceptance NOTRUN.
 
+[K1 / W145 R4 whole-shutdown deadline](k01b-r4-shutdown-deadline-20261022.md):
+**implemented on `devel-k01b` (not merged); unit, private-daemon and full
+`make test` PASS on efs3.** One 50 s deadline covers the handler drain and
+every stop phase. A stuck worker gives rc 3 with the phase and worker named,
+and the stop script reports "stopped, forced, stores preserved", never
+orderly. A devops `stop.sh` patch is required and not applied. orcd-mini
+`stop.sh` qualification NOTRUN.
+
 [K1 / W145 remaining parts](k01-w145-remaining-20261022.md): **merged into
 devel (`86b6ef567`). Near-follower snapshot fixed (a match-0 probe ACK reset
 `next_index` to 1); 30,929,219@62 was not acknowledged to any client;

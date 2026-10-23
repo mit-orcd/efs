@@ -2063,9 +2063,10 @@ void server_put_sync_abandon(void)
 }
 
 /* Final barrier, then mark every async root clean. */
-void server_put_sync_stop(struct efsd_server *s)
+int server_put_sync_stop(struct efsd_server *s)
 {
     (void)s;
+    int all_clean = 1;
     pthread_mutex_lock(&put_sync_mu);
     put_sync_stopped = 1;
     pthread_mutex_unlock(&put_sync_mu);
@@ -2091,7 +2092,10 @@ void server_put_sync_stop(struct efsd_server *s)
         fprintf(stderr, "store: put sync root=%s stopped %s durable_seq=%llu\n", r->root,
                 clean ? "clean" : "UNCLEAN (barrier failed)",
                 (unsigned long long)r->durable_seq);
+        if (!clean)
+            all_clean = 0;
     }
+    return all_clean ? 0 : -1;
 }
 #endif
 

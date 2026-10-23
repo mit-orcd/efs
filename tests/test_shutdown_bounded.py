@@ -12,8 +12,12 @@ Checks, on slices of the real sources:
    the connection before waiting for the next request, so a client's
    retries cannot keep a handler alive.
 2. efsd.c: shutdown_drain returns as soon as handlers are gone, and refuses
-   (logs, returns -1) when one is still live at the deadline; main exits
-   without teardown then, and the deadline is below stop.sh's 60 s.
+   (logs, returns -1) when one is still live at its share of the deadline.
+3. efsd.c (R4): one total deadline, below stop.sh's 60 s, covers the drain
+   and every later stop phase; the phases run on one teardown thread that
+   main waits for with a timed wait, never an unbounded join, and a missed
+   deadline exits rc 3 without teardown. The live stuck-worker run is
+   tests/test_shutdown_stuck_worker.py.
 """
 from pathlib import Path
 import os, re, shlex, subprocess, tempfile, time
@@ -34,15 +38,39 @@ wait = loop.index('efs_conn_wait_request(conn)')
 assert gate < wait, 'stop gate must run before waiting for the next request'
 assert loop.index('while (!close_conn) {') < gate
 
-# 2. Drain bound below the stop.sh wait; main refuses and exits untorn.
-drain_ms = int(re.search(r'#define EFS_SHUTDOWN_DRAIN_MS (\d+)u', efsd).group(1))
+# 2./3. One total deadline below the stop.sh wait; the drain gets 4/5.
+total_ms = int(re.search(r'#define EFS_SHUTDOWN_TOTAL_MS (\d+)u', efsd).group(1))
 stop_s = int(re.search(r'def retire\(pid,kind,value,expected=None,timeout=(\d+)\)', procs).group(1))
-assert drain_ms + 10000 <= stop_s * 1000, (drain_ms, stop_s)
+assert total_ms + 5000 <= stop_s * 1000, (total_ms, stop_s)
+assert 'return total_ms / 5u * 4u;' in fn(efsd, 'static unsigned shutdown_drain_share(')
 main_tail = efsd[efsd.index('stop_perf_recorder();\n\n'):]
-order = [main_tail.index(x) for x in ('server_handlers_begin_stop();', 'conn_wake_readers();',
-                                      'shutdown_drain(EFS_SHUTDOWN_DRAIN_MS)',
-                                      '_exit(EFS_SHUTDOWN_FORCED_RC);', 'server_packer_stop();')]
+assert main_tail.index('int exit_rc = shutdown_bounded(&server);') < main_tail.index('return exit_rc;')
+for stop in ('server_packer_stop', 'server_writer_pool_stop', 'server_put_sync_stop',
+             'server_reclaim_shutdown', 'server_usage_flush_dirty', 'server_raft_host_stop',
+             'server_peer_pool_shutdown', 'server_storage_roots_close'):
+    assert stop + '(' not in main_tail, f'{stop} outside the bounded teardown'
+bounded = fn(efsd, 'static int shutdown_bounded(struct efsd_server *s)')
+order = [bounded.index(x) for x in ('server_handlers_begin_stop();', 'conn_wake_readers();',
+                                    'shutdown_drain(shutdown_drain_share(total_ms))',
+                                    'shutdown_forced(s, "handler-drain"',
+                                    'efsd_pthread_create(&tid, shutdown_teardown_thread',
+                                    'pthread_cond_timedwait(&g_sd.cv, &g_sd.mu, &due)',
+                                    'shutdown_forced(s, p->name, p->worker',
+                                    'pthread_join(tid, NULL);')]
 assert order == sorted(order), order
+assert 'const uint64_t t0 = shutdown_now_ms(), end = t0 + total_ms;' in bounded
+assert 'pthread_condattr_setclock(&ca, CLOCK_MONOTONIC);' in bounded
+assert '_exit(EFS_SHUTDOWN_FORCED_RC);' in fn(efsd, 'static void shutdown_forced(')
+phases = efsd[efsd.index('} g_sd_phases[] = {'):efsd.index('};', efsd.index('} g_sd_phases[] = {'))]
+names = re.findall(r'\{ "([a-z-]+)", "[^"]+", sd_\w+, (-1|SD_\w+) \}', phases)
+assert names == [('packer', '-1'), ('writer-pool', '-1'), ('put-sync', 'SD_PUT_SYNC'),
+                 ('reclaim', 'SD_RECLAIM'), ('usage-flush', 'SD_USAGE'), ('raft-host', '-1'),
+                 ('peer-pool', '-1'), ('storage-roots', '-1')], names
+# Fault hooks exist only in EFS_FAULTS builds.
+park = fn(efsd, 'int server_shutdown_fault_park(const char *worker)')
+assert park.index('#if EFS_FAULTS') < park.index('getenv("EFS_FAULT_SHUTDOWN_PARK")') < park.index('#else')
+total = fn(efsd, 'static unsigned shutdown_total_ms(void)')
+assert total.index('#if EFS_FAULTS') < total.index('EFS_FAULT_SHUTDOWN_TOTAL_MS') < total.index('#endif')
 
 code = r'''
 #include <assert.h>

@@ -79,6 +79,8 @@ start_server_perf() {
 # Run from the project root so efsd is found.
 cd "$(dirname "$0")/.."
 
+# Exit status: 0 for no daemon or an orderly stop; 3 forced (stores
+# preserved); 4 barrier failed or outcome unknown. See server_processes.py.
 kill_from_pidfile() {
     local file=$1 storage=$2
     python3 ./scripts/server_processes.py stop-file "$file" "$storage"
@@ -95,11 +97,15 @@ kill_port_holder() {
     if [ -z "$pids" ]; then
         return 0
     fi
+    local rc=0 r
     for pid in $pids; do
         if [ -r "/proc/$pid/cmdline" ] && tr '\0' ' ' < "/proc/$pid/cmdline" | grep -q "efsd"; then
-            python3 ./scripts/server_processes.py stop-port "$pid" "$port"
+            r=0
+            python3 ./scripts/server_processes.py stop-port "$pid" "$port" || r=$?
+            [ "$rc" -ne 0 ] || rc=$r
         fi
     done
+    return "$rc"
 }
 
 cmd_stop() {
@@ -112,19 +118,31 @@ cmd_stop() {
     if [[ "$target" == *:* ]] && [[ "$target" != /* ]] && [[ "$target" != ./* ]]; then
         local port=${target##*:}
         if [[ "$port" =~ ^[0-9]+$ ]]; then
-    kill_port_holder "$port"
-    echo "Stopped efsd on port $port (if any)"
+    local rc=0
+    kill_port_holder "$port" || rc=$?
+    if [ "$rc" -eq 0 ]; then
+        echo "Stopped efsd on port $port (if any)"
+    else
+        echo "efsd on port $port stopped without an orderly shutdown (rc $rc); stores preserved" >&2
+    fi
     finish_perf_mark "$(perf_mark_port "$port")" || echo "WARNING: perf reports were not written" >&2
-    return 0
+    return "$rc"
         fi
     fi
     local storage=${target%:*}
     # Multi-path: PID lives under the first root.
     storage=${storage%%,*}
-    kill_from_pidfile "$storage/log/efsd.pid" "$storage"
-    kill_from_pidfile "$storage/efsd.pid" "$storage"
-    echo "Stopped efsd for storage $storage (if any)"
+    local rc=0 r=0
+    kill_from_pidfile "$storage/log/efsd.pid" "$storage" || rc=$?
+    kill_from_pidfile "$storage/efsd.pid" "$storage" || r=$?
+    [ "$rc" -ne 0 ] || rc=$r
+    if [ "$rc" -eq 0 ]; then
+        echo "Stopped efsd for storage $storage (if any)"
+    else
+        echo "efsd for storage $storage stopped without an orderly shutdown (rc $rc); stores preserved" >&2
+    fi
     finish_perf_mark "$(perf_mark_storage "$storage")" || echo "WARNING: perf reports were not written" >&2
+    return "$rc"
 }
 
 if [ $# -lt 1 ]; then
@@ -139,8 +157,9 @@ fi
 
 if [ "$1" = "stop" ]; then
     shift
-    cmd_stop "$@"
-    exit 0
+    stop_rc=0
+    cmd_stop "$@" || stop_rc=$?
+    exit "$stop_rc"
 fi
 
 if [ $# -lt 2 ]; then
@@ -187,9 +206,17 @@ done
 
 # New PID file location and legacy location at the storage root.
 PID_FILE="$FIRST_STORAGE/log/efsd.pid"
-kill_from_pidfile "$PID_FILE" "$FIRST_STORAGE"
-kill_from_pidfile "$FIRST_STORAGE/efsd.pid" "$FIRST_STORAGE"
-kill_port_holder "$PORT"
+# A previous daemon that did not stop orderly fails this start: its
+# stores are preserved and a rerun starts on them, never reported as an
+# orderly restart.
+prev_rc=0
+kill_from_pidfile "$PID_FILE" "$FIRST_STORAGE" || prev_rc=$?
+[ "$prev_rc" -ne 0 ] || { kill_from_pidfile "$FIRST_STORAGE/efsd.pid" "$FIRST_STORAGE" || prev_rc=$?; }
+[ "$prev_rc" -ne 0 ] || { kill_port_holder "$PORT" || prev_rc=$?; }
+if [ "$prev_rc" -ne 0 ]; then
+    echo "ERROR: the previous efsd for $FIRST_STORAGE did not stop orderly (rc $prev_rc); stores preserved, nothing started; rerun to start on them" >&2
+    exit "$prev_rc"
+fi
 
 # Derive a stable node id from the address and port.
 if [[ "$ADDR" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then

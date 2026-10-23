@@ -16,14 +16,25 @@ try:
             with (work/(label+'-start.log')).open('w') as out:
                 subprocess.run(start,cwd=source,stdout=out,stderr=subprocess.STDOUT,check=True,timeout=15)
             pid=int(pidfile.read_text());assert pid!=unrelated.pid and unrelated.poll() is None
-            with socket.create_connection(('127.0.0.1',port),2):pass
+            # server.sh returns 1 s after launch; a loaded VM can take longer
+            # to listen. SIGTERM before serving is not an orderly stop.
+            for attempt in range(150):
+                try:
+                    with socket.create_connection(('127.0.0.1',port),2):break
+                except ConnectionRefusedError:
+                    assert attempt<149,'efsd did not listen within 30 s'
+                    time.sleep(.2)
             stamp=json.loads(Path(str(pidfile)+'.identity').read_text())
             assert Path(stamp['exe']).resolve()==(source/'efsd').resolve()
             rows.append(dict(case=label,daemon_pid=pid,unrelated_pid=unrelated.pid,stamp=stamp,port=port))
         finally:
             with (work/(label+'-stop.log')).open('w') as out:
-                subprocess.run(['bash',str(source/'scripts/server.sh'),'stop',str(root)],cwd=source,stdout=out,stderr=subprocess.STDOUT,check=True,timeout=90)
+                # No check here: a failure above must not be masked by its stop.
+                stopped=subprocess.run(['bash',str(source/'scripts/server.sh'),'stop',str(root)],cwd=source,stdout=out,stderr=subprocess.STDOUT,timeout=90)
+        stop_log=(work/(label+'-stop.log')).read_text()
+        assert stopped.returncode==0,(stopped.returncode,stop_log)
         assert unrelated.poll() is None and not pidfile.exists()
+        assert f'efsd PID {pid} stopped, orderly (rc 0' in stop_log,stop_log
         assert not (Path('/proc')/str(pid)).exists() or (Path('/proc')/str(pid)/'stat').read_text().rsplit(')',1)[1].split()[0]=='Z'
         print('wrapper real start/stop:',label,'unrelated process retained PASS',flush=True)
     (work/'result.json').write_text(json.dumps(dict(cases=rows,binary_sha256=hashlib.sha256((source/'efsd').read_bytes()).hexdigest(),passed=True),indent=2))
