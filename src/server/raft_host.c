@@ -411,6 +411,10 @@ struct efs_raft_host {
     /* W83 decision retirement: RETIREs proposed OK / failed, live
      * decisions re-driven by the sweeper, sweeps with a failed RESOLVE. */
     uint64_t dec_retired, dec_retire_fail, dec_swept, dec_sweep_fail, rec_unknown;
+    /* R2: the decision sweeper's continuation per coordinator shard (GC
+     * thread only). Volatile leader state: a restarted or newly elected
+     * leader starts each shard at the prefix beginning. */
+    struct efs_txn_decision_scan dec_scan[EFS_KV_SHARD_MASK + 1];
     /* Txn finisher: a coordinator whose DECIDE COMMIT is in the log but
      * whose apply wait ran out (or whose RESOLVEs did not all land) hands
      * the txn here instead of leaving its intents for the 5 s recovery
@@ -2737,26 +2741,39 @@ static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
             host_rec_mark(h, ((uint32_t)key[0] << 8) | key[1]);
         break;
     case EFS_MD_CMD_DECIDE:
+        /* R3: [DECIDE][txid:16][coord:4][dec:1][n:1][shard:4]*n, exactly.
+         * Every structural field is checked before the transaction table
+         * is touched; a malformed entry is UNSUPPORTED (the group halts,
+         * W127), never a transaction verdict such as PROTO (a conflicting
+         * decision) that the log would advance past. */
         if (clen < 23)
             break;
         memcpy(t.bytes, cmd + 1, 16);
         shard = rd32be(cmd + 17);
         dec = cmd[21];
         p.n = cmd[22];
-        if (p.n == 0 || p.n > EFS_TXN_MAX_PART || clen < 23 + (uint32_t)p.n * 4u)
+        if (p.n == 0 || p.n > EFS_TXN_MAX_PART || clen != 23 + (uint32_t)p.n * 4u)
+            break;
+        if (shard > EFS_KV_SHARD_MASK ||
+            (dec != EFS_TXN_COMMIT && dec != EFS_TXN_ABORT))
             break;
         {
             uint8_t i;
             for (i = 0; i < p.n; i++)
                 p.shard[i] = rd32be(cmd + 23 + (uint32_t)i * 4u);
         }
+        if (!efs_txn_parts_valid(&p))
+            break; /* shard id out of range or repeated */
         rc = efs_txn_decide_parts(h->kv, shard, &t, &p, dec);
         break;
     case EFS_MD_CMD_TXN_RETIRE:
-        if (clen < HOST_RETIRE_LEN)
+        /* R3: [TXN_RETIRE][txid:16][coord:4][now_ns:8], exactly. */
+        if (clen != HOST_RETIRE_LEN)
             break;
         memcpy(t.bytes, cmd + 1, 16);
         shard = rd32be(cmd + 17);
+        if (shard > EFS_KV_SHARD_MASK)
+            break;
         rc = efs_txn_retire(h->kv, shard, &t, rd64be(cmd + 21));
         break;
     case EFS_MD_CMD_RESOLVE:
@@ -8972,6 +8989,14 @@ static void *host_fin_thread(void *arg)
 #define HOST_REC_AGE_NS  (5ull * 1000000000ull)
 #define HOST_REC_SHARDS  64u  /* due shards scanned per GC pass */
 #define HOST_REC_MAX     32u  /* txns handled per shard per pass */
+#define HOST_DEC_SCAN_WORK 256u /* decision keys (tombstones too) examined per shard per pass */
+/* Retention (txn.h) must stay well above the recovery age: a tombstone is
+ * reclaimed only after every participant's RESOLVE applied, and a sweeper
+ * acting on records HOST_REC_AGE_NS old, plus proposer clock skew, must
+ * always find the verdict still answered (K7 review). */
+_Static_assert(EFS_TXN_DECISION_RETAIN_NS >= 10ull * HOST_REC_AGE_NS,
+               "EFS_TXN_DECISION_RETAIN_NS must be at least 10x HOST_REC_AGE_NS: "
+               "a decision tombstone must outlive recovery and clock skew");
 #define HOST_REC_YIELD_US 1000
 
 static void host_rec_mark(struct efs_raft_host *h, uint32_t shard)
@@ -9097,20 +9122,31 @@ static void host_txn_recover_one(struct efs_raft_host *h, uint32_t shard,
  * so re-drive RESOLVE with the recorded verdict to each (idempotent; a
  * rejected verdict means that participant is not done) and then RETIRE.
  * Nothing here deletes by age: the verdict stays until every RESOLVE
- * verdict was observed. Returns the number of live decisions seen, which
- * keeps the shard's recovery mark armed. */
+ * verdict was observed.
+ *
+ * R2: each pass handles one page from the shard's continuation cursor
+ * (h->dec_scan, wraparound, HOST_DEC_SCAN_WORK keys at most), so live
+ * decisions that cannot resolve (participants unavailable) are passed over
+ * and retried on a later round instead of hiding everything after them.
+ * Returns nonzero while the shard may still hold a live decision: any live
+ * one seen this page, or a page that did not cover the whole prefix from
+ * its beginning. That keeps the shard's recovery mark armed, so the
+ * cursor goes round until a full clean page finds nothing. */
 static uint32_t host_txn_decision_sweep(struct efs_raft_host *h, uint32_t shard,
                                         uint64_t now)
 {
     struct efs_txn_decision_rec *recs;
+    struct efs_txn_decision_page pg;
     uint8_t cmd[22];
     uint32_t n = 0, i, j;
     int rc;
 
+    shard &= EFS_KV_SHARD_MASK;
     recs = calloc(HOST_REC_MAX, sizeof(*recs));
     if (!recs)
         return 1;
-    if (efs_txn_scan_decisions(h->kv, shard, recs, HOST_REC_MAX, &n) != EFS_OK) {
+    if (efs_txn_scan_decisions(h->kv, shard, &h->dec_scan[shard], HOST_DEC_SCAN_WORK,
+                               recs, HOST_REC_MAX, &n, &pg) != EFS_OK) {
         free(recs);
         return 1; /* retried next pass */
     }
@@ -9132,12 +9168,14 @@ static uint32_t host_txn_decision_sweep(struct efs_raft_host *h, uint32_t shard,
         }
         if (j < recs[i].parts.n) {
             h->dec_sweep_fail++;
-            continue; /* retried next pass; the decision stays live */
+            continue; /* retried on a later round; the decision stays live */
         }
         host_txn_retire(h, &recs[i].t, coord);
     }
     free(recs);
-    return n;
+    if (pg.live)
+        return pg.live;
+    return pg.complete ? 0 : 1;
 }
 
 static void host_txn_recover_pass(struct efs_raft_host *h)

@@ -225,13 +225,31 @@ no serializable history even though each commits atomically.
   Every input of the rule is replicated state or a field of the logged
   command (the proposer's clock rides in `TXN_RETIRE`), so all replicas delete
   the same keys at the same log index; no replica deletes on a local timer.
+  Both commands decode exactly: `DECIDE` is 23 + 4·n bytes with a COMMIT or
+  ABORT verdict, 1 ≤ n ≤ 144 distinct in-range participant shards and an
+  in-range coordinator; `TXN_RETIRE` is 29 bytes with an in-range
+  coordinator. Any other entry (short, trailing bytes, invalid field) is
+  refused before the store is touched and halts the group through the
+  unsupported-entry path (W127). A well-formed DECIDE with the other verdict
+  is a transaction conflict (PROTO verdict to the proposer), not malformed.
   Each apply touches a bounded window (one live record, at most 32 tombstones,
   one cursor/floor record), so retirement cannot stall the apply loop. The
   proposer of a transaction (its RESOLVE wait, the finisher, or recovery)
   proposes `TXN_RETIRE` after the last RESOLVE verdict. If that proposer dies
   or its RETIRE is lost, the decision stays live — never deleted by age — and
   the recovery sweep re-drives RESOLVE to the participants recorded in the
-  decision and then retires it. Recovery that meets an UNKNOWN decision for a
+  decision and then retires it. The sweep reads each coordinator shard's live
+  decisions one page per pass from a per-shard continuation cursor (at most
+  32 records and 256 examined keys, LSM deletion tombstones included), resumes
+  after the last key it examined and wraps to the prefix start at the end. A
+  decision whose participants cannot resolve stays live and is met again on
+  the next round, so it never hides the decisions after it. The cursor is the
+  leader's volatile hint, not replicated state: after a restart or a
+  leadership change the sweep starts at the prefix beginning. A shard stays
+  due for sweeping until one page that covered the whole prefix from its
+  start finds no live decision. Retention must stay at least 10× the 5 s
+  recovery age (a compile-time check in the host), so a verdict outlives
+  recovery and proposer clock skew. Recovery that meets an UNKNOWN decision for a
   pending record knows every RESOLVE already applied, so the record is a
   straggler PREPARE and is dropped on that shard only. A transaction whose
   txid time trails the floor (clock skew beyond the retention) cannot decide

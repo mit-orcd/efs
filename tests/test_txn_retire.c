@@ -407,20 +407,215 @@ static void test_scan_decisions(void)
     struct efs_kv *kv = efs_kv_mem_create();
     struct efs_txn_parts p = parts2(11, 12);
     struct efs_txn_decision_rec recs[4];
+    struct efs_txn_decision_scan sc;
+    struct efs_txn_decision_page pg;
     struct efs_txid t;
     uint32_t coord, n = 0;
 
+    memset(&sc, 0, sizeof(sc));
     mint(&t, T0, 5);
     coord = run_txn(kv, &t, &p, EFS_TXN_COMMIT, 5);
-    CHECK(efs_txn_scan_decisions(kv, coord, recs, 4, &n) == EFS_OK && n == 1 &&
+    CHECK(efs_txn_scan_decisions(kv, coord, &sc, 64, recs, 4, &n, &pg) == EFS_OK && n == 1 &&
               recs[0].decision == EFS_TXN_COMMIT && recs[0].parts.n == 2 &&
               recs[0].parts.shard[0] == 11 && recs[0].parts.shard[1] == 12 &&
-              !memcmp(recs[0].t.bytes, t.bytes, 16),
+              !memcmp(recs[0].t.bytes, t.bytes, 16) && pg.complete && pg.live == 1,
           "live decision carries verdict and participants");
     CHECK(efs_txn_retire(kv, coord, &t, T0) == EFS_OK, "retire");
-    CHECK(efs_txn_scan_decisions(kv, coord, recs, 4, &n) == EFS_OK && n == 0,
+    CHECK(efs_txn_scan_decisions(kv, coord, &sc, 64, recs, 4, &n, &pg) == EFS_OK && n == 0 &&
+              pg.complete && pg.live == 0,
           "retired decision is no longer swept");
+    CHECK(efs_txn_scan_decisions(kv, coord, &sc, 1, recs, 4, &n, &pg) == EFS_ERR_INVAL,
+          "a work bound below two keys is refused");
     efs_kv_mem_free(kv);
+}
+
+/* ---- R2: resumable live-decision sweep -------------------------------- */
+
+#define SW_COORD 21u
+#define SW_BLOCKED 22u /* unavailable participant */
+#define SW_OK 23u
+#define SW_NBLOCK 40
+#define SW_NOK 20
+
+static int txid_cmp(const void *a, const void *b)
+{
+    return memcmp(((const struct efs_txid *)a)->bytes, ((const struct efs_txid *)b)->bytes, 16);
+}
+
+/* Txids coordinated by SW_COORD for both participant pairs, sorted in key
+ * order: the first SW_NBLOCK (the first pages) get the unavailable
+ * participant, the later ones a resolvable pair. */
+static void sweep_fixture(struct efs_kv *kv, struct efs_txid *ids)
+{
+    struct efs_txn_parts pb = parts2(SW_COORD, SW_BLOCKED), po = parts2(SW_COORD, SW_OK);
+    uint64_t seq = 1000;
+    int i = 0;
+
+    while (i < SW_NBLOCK + SW_NOK) {
+        mint(&ids[i], T0 + seq * 1000, seq);
+        seq++;
+        if (ids[i].bytes[0] != 0 && /* key range after the LSM test's history */
+            efs_txn_coordinator(&ids[i], &pb) == SW_COORD &&
+            efs_txn_coordinator(&ids[i], &po) == SW_COORD)
+            i++;
+    }
+    qsort(ids, SW_NBLOCK + SW_NOK, sizeof(ids[0]), txid_cmp);
+    for (i = 0; i < SW_NBLOCK + SW_NOK; i++)
+        CHECK(efs_txn_decide_parts(kv, SW_COORD, &ids[i], i < SW_NBLOCK ? &pb : &po,
+                                   EFS_TXN_COMMIT) == EFS_OK, "fixture decide");
+}
+
+/* One sweeper round over a page: a decision with the unavailable
+ * participant fails and stays live; the others retire. */
+static int sweep_round(struct efs_kv *kv, struct efs_txn_decision_scan *sc, uint32_t work,
+                       uint64_t now, struct efs_txn_decision_page *pg)
+{
+    struct efs_txn_decision_rec recs[32];
+    uint32_t n = 0, i, j;
+    int retired = 0;
+
+    CHECK(efs_txn_scan_decisions(kv, SW_COORD, sc, work, recs, 32, &n, pg) == EFS_OK, "page");
+    CHECK(pg->visited <= work, "page within the work bound");
+    for (i = 0; i < n; i++) {
+        for (j = 0; j < recs[i].parts.n; j++)
+            if (recs[i].parts.shard[j] == SW_BLOCKED)
+                break;
+        if (j < recs[i].parts.n)
+            continue;
+        CHECK(efs_txn_retire(kv, SW_COORD, &recs[i].t, now) == EFS_OK, "sweep retire");
+        retired++;
+    }
+    return retired;
+}
+
+static void check_swept(struct efs_kv *kv, const struct efs_txid *ids, uint32_t history,
+                        const char *what)
+{
+    uint32_t live = 0, retired = 0;
+    int i, dec, blocked_live = 1, ok_retired = 1;
+
+    for (i = 0; i < SW_NBLOCK + SW_NOK; i++) {
+        uint8_t key[EFS_KV_KEY_MAX], v[EFS_TXN_DECISION_LIVE_MAX];
+        uint32_t kl = 0, vl = sizeof(v);
+        int is_live;
+
+        CHECK(efs_kv_key_decision(SW_COORD, ids[i].bytes, key, &kl) == EFS_OK, "key");
+        is_live = efs_kv_get(kv, key, kl, v, &vl) == EFS_OK;
+        CHECK(efs_txn_decision_get(kv, SW_COORD, &ids[i], &dec) == EFS_OK &&
+                  dec == EFS_TXN_COMMIT, "every verdict is still answered");
+        if (i < SW_NBLOCK && !is_live)
+            blocked_live = 0;
+        if (i >= SW_NBLOCK && is_live)
+            ok_retired = 0;
+    }
+    total_records(kv, SW_COORD, &live, &retired);
+    CHECK(blocked_live && live == SW_NBLOCK, what);
+    CHECK(ok_retired && retired == SW_NOK + history, what);
+}
+
+static void test_sweep_cursor(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_txid ids[SW_NBLOCK + SW_NOK];
+    struct efs_txn_decision_scan sc, fresh;
+    struct efs_txn_decision_page pg;
+    int round, retired = 0, wrapped_clean = 0;
+
+    sweep_fixture(kv, ids);
+    /* The old behaviour: always the first page. 32 blocked, nothing retires. */
+    memset(&fresh, 0, sizeof(fresh));
+    for (round = 0; round < 5; round++) {
+        memset(&fresh, 0, sizeof(fresh));
+        CHECK(sweep_round(kv, &fresh, 1024, T0, &pg) == 0, "first page is all blocked");
+    }
+    /* With the continuation: later resolvable decisions retire. */
+    memset(&sc, 0, sizeof(sc));
+    for (round = 0; round < 8; round++)
+        retired += sweep_round(kv, &sc, 1024, T0, &pg);
+    CHECK(retired == SW_NOK && sc.wraps >= 1, "continuation reaches every later decision");
+    check_swept(kv, ids, 0, "blocked decisions stay live, resolvable ones retired");
+    /* Blocked ones are retried every wrap and remain; a page never claims
+     * the shard is clean while they exist. */
+    for (round = 0; round < 6; round++) {
+        sweep_round(kv, &sc, 1024, T0, &pg);
+        if (pg.complete && !pg.live)
+            wrapped_clean = 1;
+    }
+    CHECK(!wrapped_clean, "a shard with blocked live decisions never looks clean");
+    {
+        uint64_t before = sc.wraps;
+        for (round = 0; round < 4; round++)
+            sweep_round(kv, &sc, 1024, T0, &pg);
+        CHECK(sc.wraps > before, "blocked decisions are revisited on later rounds");
+    }
+    printf("sweep cursor: %d blocked first, %d later retired, wraps=%llu\n", SW_NBLOCK,
+           retired, (unsigned long long)sc.wraps);
+    efs_kv_mem_free(kv);
+}
+
+/* LSM store: the work bound counts deletion tombstones, and a cold
+ * restart (new cursor, reopened store) still reaches every decision. */
+static void test_sweep_cursor_lsm(void)
+{
+    struct efs_txid ids[SW_NBLOCK + SW_NOK];
+    struct efs_txn_decision_scan sc;
+    struct efs_txn_decision_page pg;
+    struct efs_kv *kv;
+    struct efs_kv_lsm_cfg cfg;
+    char dir[256];
+    int round, retired = 0, i;
+
+    snprintf(dir, sizeof(dir), "/tmp/efs-txn-sweep-%d", (int)getpid());
+    rmtree(dir);
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.sync_mode = EFS_KV_LSM_NOSYNC;
+    kv = efs_kv_lsm_open(dir, &cfg); /* default memtable: tombstones stay merged */
+    CHECK(kv != NULL, "lsm open");
+    if (!kv)
+        return;
+    /* Retired history first in key order: 300 decisions whose live keys
+     * are now tombstones in the live-decision prefix. */
+    {
+        struct efs_txn_parts po = parts2(SW_COORD, SW_OK);
+        struct efs_txid t;
+        int made = 0;
+        uint64_t seq = 1;
+
+        while (made < 300) {
+            memset(&t, 0, sizeof(t));
+            t.bytes[0] = 0; /* sorts before the fixture's key range */
+            memcpy(t.bytes + 1, &seq, 8);
+            seq++;
+            if (efs_txn_coordinator(&t, &po) != SW_COORD)
+                continue;
+            CHECK(efs_txn_decide_parts(kv, SW_COORD, &t, &po, EFS_TXN_COMMIT) == EFS_OK, "h");
+            CHECK(efs_txn_retire(kv, SW_COORD, &t, T0) == EFS_OK, "h retire");
+            made++;
+        }
+    }
+    sweep_fixture(kv, ids);
+    for (i = 0; i < SW_NBLOCK + SW_NOK; i++)
+        CHECK(ids[i].bytes[0] != 0, "fixture after history");
+    memset(&sc, 0, sizeof(sc));
+    CHECK(sweep_round(kv, &sc, 64, T0, &pg) == 0 && !pg.complete && sc.cursor_len,
+          "a page over tombstones stops at the work bound and resumes");
+    /* Half way round, crash: reopen the store, start with a fresh cursor
+     * (as a restarted or newly elected leader does). */
+    for (round = 0; round < 4; round++)
+        retired += sweep_round(kv, &sc, 64, T0, &pg);
+    efs_kv_lsm_close(kv);
+    kv = efs_kv_lsm_open(dir, &cfg);
+    CHECK(kv != NULL, "lsm reopen");
+    if (!kv)
+        return;
+    memset(&sc, 0, sizeof(sc));
+    for (round = 0; round < 40 && retired < SW_NOK; round++)
+        retired += sweep_round(kv, &sc, 64, T0, &pg);
+    CHECK(retired == SW_NOK, "after restart every resolvable decision retires");
+    check_swept(kv, ids, 300, "after restart: blocked live, resolvable retired");
+    printf("sweep cursor lsm: 300 tombstones, work 64, %d retired across a restart\n", retired);
+    efs_kv_lsm_close(kv);
+    rmtree(dir);
 }
 
 int main(void)
@@ -428,6 +623,8 @@ int main(void)
     test_bounded();
     test_late_participant();
     test_scan_decisions();
+    test_sweep_cursor();
+    test_sweep_cursor_lsm();
     test_crash_restart_replay();
     if (failures) {
         fprintf(stderr, "test_txn_retire: %d failure(s)\n", failures);
