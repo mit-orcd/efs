@@ -1,5 +1,6 @@
 #include "efs/txn.h"
 #include "efs/kv_key.h"
+#include "efs/kv_lsm.h"
 #include "efs/dir_spread.h"
 #include "efs/dir_layout.h"
 #include "efs/meta_apply.h"
@@ -1219,70 +1220,132 @@ int efs_txn_retire(struct efs_kv *kv, uint32_t coord_shard,
     return rc;
 }
 
+/* Counting accumulator (efs_txn_decision_count). */
 struct dscan_acc {
     uint32_t shard;
-    struct efs_txn_decision_rec *out;
-    uint32_t cap, n;
     uint32_t live, retired;
-    int overflow;
 };
 
 static int dscan_cb(void *user, const uint8_t *key, uint32_t klen,
                     const uint8_t *val, uint32_t vlen)
 {
     struct dscan_acc *a = user;
-    struct efs_txn_decision_rec *r;
-    uint32_t i;
 
+    (void)val;
+    (void)vlen;
     if (klen != 19 || key_shard(key) != a->shard)
         return 0;
-    if (key[2] == EFS_KV_KIND_DECISION_RETIRED) {
+    if (key[2] == EFS_KV_KIND_DECISION_RETIRED)
         a->retired++;
-        return 0;
-    }
-    if (key[2] != EFS_KV_KIND_DECISION)
-        return 0;
-    a->live++;
-    if (!a->out)
-        return 0;
-    if (vlen < 2 || (val[0] != EFS_TXN_COMMIT && val[0] != EFS_TXN_ABORT) ||
-        val[1] > EFS_TXN_MAX_PART || vlen != 2u + 4u * val[1])
-        return 0;
-    if (a->n >= a->cap) {
-        a->overflow = 1;
-        return 1;
-    }
-    r = &a->out[a->n++];
-    memset(r, 0, sizeof(*r));
-    memcpy(r->t.bytes, key + 3, 16);
-    r->decision = val[0];
-    r->parts.n = val[1];
-    for (i = 0; i < r->parts.n; i++)
-        r->parts.shard[i] = rd32(val + 2 + 4 * i);
+    else if (key[2] == EFS_KV_KIND_DECISION)
+        a->live++;
     return 0;
 }
 
-int efs_txn_scan_decisions(struct efs_kv *kv, uint32_t shard,
-                           struct efs_txn_decision_rec *out, uint32_t cap,
-                           uint32_t *n)
-{
-    struct dscan_acc a;
-    uint8_t pref[3];
-    int rc;
+/* One page of the resumable live-decision scan (R2). Every key the
+ * callback is handed is consumed: it becomes the resume point, whether it
+ * was returned, skipped as malformed, or not this shard's. */
+struct dpage_acc {
+    uint32_t shard;
+    struct efs_txn_decision_rec *out;
+    uint32_t cap, n, work, visited, live;
+    uint8_t last[KEY_MAX];
+    uint32_t last_len;
+};
 
-    if (!kv || !out || !n || cap == 0)
+static int dpage_cb(void *user, const uint8_t *key, uint32_t klen,
+                    const uint8_t *val, uint32_t vlen)
+{
+    struct dpage_acc *a = user;
+    struct efs_txn_decision_rec *r;
+    uint32_t i;
+
+    if (klen > KEY_MAX)
+        return EFS_ERR_PROTO;
+    memcpy(a->last, key, klen);
+    a->last_len = klen;
+    a->visited++;
+    if (klen == 19 && key_shard(key) == a->shard && key[2] == EFS_KV_KIND_DECISION) {
+        a->live++;
+        if (vlen >= 2 && (val[0] == EFS_TXN_COMMIT || val[0] == EFS_TXN_ABORT) &&
+            val[1] <= EFS_TXN_MAX_PART && vlen == 2u + 4u * val[1]) {
+            r = &a->out[a->n++];
+            memset(r, 0, sizeof(*r));
+            memcpy(r->t.bytes, key + 3, 16);
+            r->decision = val[0];
+            r->parts.n = val[1];
+            for (i = 0; i < r->parts.n; i++)
+                r->parts.shard[i] = rd32(val + 2 + 4 * i);
+        }
+    }
+    return a->visited >= a->work || a->n >= a->cap;
+}
+
+int efs_txn_scan_decisions(struct efs_kv *kv, uint32_t shard,
+                           struct efs_txn_decision_scan *sc, uint32_t work,
+                           struct efs_txn_decision_rec *out, uint32_t cap,
+                           uint32_t *n, struct efs_txn_decision_page *pg)
+{
+    struct dpage_acc *a;
+    uint8_t pref[3], start[KEY_MAX + 1], resume[EFS_KV_KEY_MAX];
+    uint32_t slen, rlen = 0;
+    int rc, from_start;
+
+    if (!kv || !sc || !out || !n || cap == 0 || work < 2 ||
+        sc->cursor_len > sizeof(sc->cursor))
         return EFS_ERR_INVAL;
-    memset(&a, 0, sizeof(a));
-    a.shard = shard;
-    a.out = out;
-    a.cap = cap;
+    *n = 0;
+    if (pg)
+        memset(pg, 0, sizeof(*pg));
+    a = calloc(1, sizeof(*a));
+    if (!a)
+        return EFS_ERR_NOMEM;
+    a->shard = shard;
+    a->out = out;
+    a->cap = cap;
+    a->work = work;
     pref[0] = (uint8_t)(shard >> 8);
     pref[1] = (uint8_t)shard;
     pref[2] = EFS_KV_KIND_DECISION;
-    rc = efs_kv_scan_prefix(kv, pref, 3, dscan_cb, &a);
-    *n = a.n;
-    if (a.overflow)
-        return EFS_OK;
+    /* Strictly after the cursor: its key followed by a zero byte. */
+    from_start = sc->cursor_len == 0;
+    slen = from_start ? 0 : sc->cursor_len + 1;
+    memcpy(start, sc->cursor, sc->cursor_len);
+    start[sc->cursor_len] = 0;
+    /* The work bound counts merged keys including LSM tombstones (every
+     * retired decision leaves one in this prefix); the callback bounds the
+     * visited keys on any store. */
+    rc = efs_kv_lsm_scan_work(kv, pref, 3, slen ? start : NULL, slen, work,
+                              dpage_cb, a, resume, &rlen);
+    if (rc < 0)
+        goto out;
+    if (rc == 1 && (rlen || a->last_len)) {
+        /* Stopped (work bound or page full): resume after the last key
+         * consumed. A work stop's own cursor is at or past the callback's. */
+        if (rlen) {
+            memcpy(sc->cursor, resume, rlen);
+            sc->cursor_len = rlen;
+        } else {
+            memcpy(sc->cursor, a->last, a->last_len);
+            sc->cursor_len = a->last_len;
+        }
+    } else {
+        /* End of the prefix: the next call starts over. */
+        sc->cursor_len = 0;
+        sc->wraps++;
+        if (pg)
+            pg->complete = from_start;
+    }
+    sc->visited += a->visited;
+    *n = a->n;
+    if (pg) {
+        pg->live = a->live;
+        pg->visited = a->visited;
+        pg->from_start = from_start;
+    }
+    rc = EFS_OK;
+out:
+    free(a);
     return rc;
 }
 

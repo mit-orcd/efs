@@ -268,15 +268,39 @@ int efs_txn_retire(struct efs_kv *kv, uint32_t coord_shard,
 
 /* Live (unretired) decisions of one coordinator shard with their
  * participant sets: the sweeper re-drives RESOLVE for the old ones, then
- * RETIRE. A full page returns OK with *n == cap; sweep again. */
+ * RETIRE.
+ *
+ * The scan is resumable (R2): one call examines at most `work` keys of
+ * the shard's live-decision prefix (on an LSM store merged keys count,
+ * deletion tombstones included, so retired history cannot make a call
+ * unbounded), starting strictly after sc->cursor, and returns at most
+ * `cap` well-formed records. It resumes after the last key it consumed;
+ * reaching the end of the prefix resets the cursor (wraparound), so every
+ * live decision is returned within a bounded number of calls however many
+ * of the earlier ones stay live. A record the caller fails to retire is
+ * simply met again on a later round. The cursor is a caller-owned hint
+ * (the leader's sweep state, not replicated): a fresh one (zeroed) starts
+ * at the prefix beginning, after a restart or a leadership change. */
 struct efs_txn_decision_rec {
     struct efs_txid t;
     struct efs_txn_parts parts;
     int decision;
 };
+struct efs_txn_decision_scan {
+    uint8_t cursor[EFS_KV_KEY_MAX];
+    uint32_t cursor_len;      /* 0: the next call starts at the beginning */
+    uint64_t visited, wraps;  /* totals over calls */
+};
+/* What one call saw. complete: it started at the prefix beginning and
+ * reached its end, so `live` counts every live decision of the shard. */
+struct efs_txn_decision_page {
+    uint32_t live, visited;
+    int from_start, complete;
+};
 int efs_txn_scan_decisions(struct efs_kv *kv, uint32_t shard,
+                           struct efs_txn_decision_scan *sc, uint32_t work,
                            struct efs_txn_decision_rec *out, uint32_t cap,
-                           uint32_t *n);
+                           uint32_t *n, struct efs_txn_decision_page *pg);
 /* Diagnostics and tests: live and retired record counts on one shard. */
 int efs_txn_decision_count(struct efs_kv *kv, uint32_t shard,
                            uint32_t *live, uint32_t *retired);
