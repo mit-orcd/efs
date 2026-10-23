@@ -69,6 +69,11 @@ fails only where `ptrace_scope` is 2 (ORCD); `make check` runs it. No product
 leak found. Open: W126 peeks can wait behind a writer queued on `view_rw`.
 node9901 run NOTRUN.
 
+[K30 intermittent tests](k30-intermittent-tests-20261023.md): **fixed on
+`devel-k30`, not merged; 0/25 FAIL per case on amd.** `test_reclaim` was a
+product bug (same-second journal aside rename refused startup); the fork
+oracle and `test_kv_lsm` were test races. W126 peek limitation stays open.
+
 [K15 W52/W64 append gates](k15-w52-w64-20261022.md): **W64 INCOMPLETE**.
 A leader change left append transactions PREPARED until recovery, so writes
 failed with EBUSY. The fix and its regression test are on `devel-k15`, and the

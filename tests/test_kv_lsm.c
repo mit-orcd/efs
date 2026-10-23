@@ -1023,11 +1023,27 @@ static void *peeker(void *arg)
     pthread_mutex_unlock(&p->mu);
     return NULL;
 }
-static void test_peek_beside_reader(void)
+/* A writer that queues on view_rw behind the parked reader while holding
+ * mu, as the compactor's first lsm_lock or a cond-wait return does. */
+static void *queued_writer(void *arg)
+{
+    struct kv_lsm *l = arg;
+    lsm_lock(l);
+    lsm_unlock(l);
+    return NULL;
+}
+/* K30: the compactor's first lsm_lock raced the parked reader (1 of 3
+ * native runs on amd): scheduled late, it held mu queued on view_rw and the
+ * peeks waited on mu. Run 0 stops the compactor so no writer exists and
+ * the peeks must return. Run 1 queues a writer first and pins the open
+ * W126 limitation: peeks wait while a writer holding mu is queued behind a
+ * reader. When that is fixed, run 1 must expect done == 1. */
+static void peek_beside_reader(int queue_writer)
 {
     struct parked_scan p;
-    pthread_t rd, pk;
+    pthread_t rd, pk, wr;
     struct timespec ts;
+    struct kv_lsm *l;
 
     rmtree(g_dir);
     memset(&p, 0, sizeof(p));
@@ -1035,6 +1051,8 @@ static void test_peek_beside_reader(void)
     CHECK(p.kv != NULL, "open peek store");
     if (!p.kv)
         return;
+    l = p.kv->ctx;
+    kv_compactor_stop(l);
     pthread_mutex_init(&p.mu, NULL);
     pthread_cond_init(&p.cv, NULL);
     CHECK(put_s(p.kv, "pk/a", "1") == EFS_OK, "put peek row");
@@ -1043,23 +1061,51 @@ static void test_peek_beside_reader(void)
     while (!p.inside)
         pthread_cond_wait(&p.cv, &p.mu);
     pthread_mutex_unlock(&p.mu);
+    if (queue_writer) {
+        CHECK(pthread_create(&wr, NULL, queued_writer, l) == 0, "start writer");
+        /* Once mu is taken it stays taken: the writer cannot get view_rw
+         * until the reader is released. */
+        while (pthread_mutex_trylock(&l->mu) == 0) {
+            pthread_mutex_unlock(&l->mu);
+            usleep(1000);
+        }
+    }
     CHECK(pthread_create(&pk, NULL, peeker, &p) == 0, "start peeker");
     clock_gettime(CLOCK_REALTIME, &ts);
-    ts.tv_sec += 5;
+    if (queue_writer)
+        ts.tv_nsec += 200 * 1000 * 1000;
+    else
+        ts.tv_sec += 5;
+    if (ts.tv_nsec >= 1000000000) {
+        ts.tv_sec++;
+        ts.tv_nsec -= 1000000000;
+    }
     pthread_mutex_lock(&p.mu);
     while (!p.peeks_done &&
            pthread_cond_timedwait(&p.cv, &p.mu, &ts) == 0)
         ;
     int done = p.peeks_done;
-    p.release = 1; /* unblock the reader either way, then join both */
+    p.release = 1; /* unblock the reader either way, then join all */
     pthread_cond_broadcast(&p.cv);
     pthread_mutex_unlock(&p.mu);
-    CHECK(done == 1, "peeks return while a reader holds the view");
+    if (queue_writer)
+        CHECK(done == 0, "W126 known limitation: peeks wait behind a writer queued on view_rw");
+    else
+        CHECK(done == 1, "peeks return while a reader holds the view");
     pthread_join(rd, NULL);
     pthread_join(pk, NULL);
+    if (queue_writer)
+        pthread_join(wr, NULL);
+    CHECK(p.peeks_done == 1, "peeks complete once the reader leaves");
     pthread_cond_destroy(&p.cv);
     pthread_mutex_destroy(&p.mu);
     efs_kv_lsm_close(p.kv);
+}
+
+static void test_peek_beside_reader(void)
+{
+    peek_beside_reader(0);
+    peek_beside_reader(1);
 }
 
 /* A flush of two key[0] ranges is two L0 files. Compacting one range
@@ -1878,10 +1924,8 @@ int main(void)
     test_l1_grows();
     test_flush_nowait();
     test_pinned_view();
-    /* make leak-check (K26) skips this liveness case: under memcheck the
-     * compactor's first lsm_lock can be scheduled after the reader parks;
-     * it then holds mu while queued on view_rw and the peek waits for it.
-     * make test still runs it natively. */
+    /* K30 made this case deterministic (no compactor race); make
+     * leak-check (K26) still sets EFS_TEST_KV_SKIP_PEEK_LIVENESS. */
     if (!getenv("EFS_TEST_KV_SKIP_PEEK_LIVENESS"))
         test_peek_beside_reader();
     test_snapshot_scan_bounds();
