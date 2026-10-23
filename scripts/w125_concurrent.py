@@ -31,8 +31,8 @@ never settles is a mismatch ("unsettled"), never a transient. Both save
 the first non-matching bytes (--mismatch-dir) with the same sidecar as a
 local mismatch, plus whether and after how long the read settled.
 
-Evidence (--mismatch-dir DIR): every mismatching read - local or remote -
-saves the bytes it returned as DIR/N/NAME with
+Evidence (--mismatch-dir DIR): every mismatching read - local, remote or
+final verification - saves the bytes it returned as DIR/N/NAME with
 DIR/N/meta.json: source, expected version (remote: the settled version or
 null, with every candidate version's length and hash), expected and actual
 lengths and sha256, first differing offset, inode, read time, host, argv
@@ -75,7 +75,7 @@ ap.add_argument("--writers", type=int, default=4); ap.add_argument("--readers", 
 ap.add_argument("--deleters", type=int, default=2)
 ap.add_argument("--remote", action="store_true"); ap.add_argument("--deleted-out")
 ap.add_argument("--modifiers", type=int, default=0)
-ap.add_argument("--mismatch-dir", help="save each mismatching read (local, remote) as DIR/N/NAME "
+ap.add_argument("--mismatch-dir", help="save each mismatching read (local, remote, final) as DIR/N/NAME "
                "+ DIR/N/meta.json (N counts saved reads) for w125_modify_inspect.py DIR/N NAME")
 ap.add_argument("--keep-dir", help="hard-link each mismatching file here (same mount)")
 ap.add_argument("--mgmt", help="'EFS-MGMT ADDR' to capture raft-getattr/raft-getchunks at a mismatch")
@@ -329,7 +329,8 @@ def status_line(t0):
         s["errors"], s["saved"], s["artifact_errors"]))
 
 def final_verify():
-    """Verify every live file once more. Returns (bad, missing)."""
+    """Verify every live file once more; mismatches are saved like any other
+    (source "final"). Returns (bad, missing)."""
     bad, missing = 0, []
     for name in live:
         l = flock(name) if not a.remote else None
@@ -342,6 +343,8 @@ def final_verify():
                 v = ver.get(name, 0); want = contents(name, v); ok = got == want
             if not ok:
                 bad += 1; errs.append("final mismatch %s v%s: %d bytes" % (name, v if want is not None else "?", len(got)))
+                save_mismatch(name, got, v if want is not None else None, want, source="final", read_time=t,
+                              locked=l is not None)
         except FileNotFoundError:
             missing.append(name)
         except OSError as e:
