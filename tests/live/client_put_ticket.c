@@ -2,7 +2,9 @@
  * (tests/live/k13_ticket_cluster.py). Drives the production client ticket
  * ledger, the one ticketed PUT and the ticket-bound REPORT on real daemons:
  * exact retry, lost admission/PUT/REPORT replies, body collision, owner
- * settle, revocation, cold replay and the W88 folded-span host replay. */
+ * settle, revocation, cold replay and the W88 folded-span host replay.
+ * create/admit serve wire harnesses that build the PUT frame themselves
+ * (tests/live/ticket_put.py). */
 #include "../../src/client/client_internal.h"
 #include "efs/put_ticket.h"
 #include "efs/put_upload.h"
@@ -17,6 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <time.h>
 #define CHUNK EFS_DEFAULT_CHUNK_SIZE
@@ -143,7 +146,8 @@ static void load(const char *path,void *p,size_t n){FILE *f=fopen(path,"rb");ass
 struct w88_state {uint8_t first[EFS_PUT_TICKET_WIRE_LEN];struct efs_chunk_rec rec;uint64_t later;};
 
 /* Usage: port ino mgmt mode [file]. Modes: tickets <cross> <save>,
- * cold <ticket>, w88 <state> (then waits for a stdin line), w88-foreign <state>. */
+ * cold <ticket>, w88 <state> (then waits for a stdin line), w88-foreign <state>,
+ * create|unlink <name> (ino 0), admit <ci> <fill> <save>. */
 int main(int argc,char **argv)
 {
     assert(argc>=5);unsigned port=atoi(argv[1]);efs_ino_t ino=strtoull(argv[2],0,10);const char *mode=argv[4];
@@ -283,6 +287,41 @@ int main(int argc,char **argv)
         assert(rc!=EFS_OK);
         chunk_row(ino,ci,&row);assert(row.chunk_generation==st.later && !live_spans(&row,st.rec.chunk_generation));
         printf("live W88 replay under a foreign session refused (rc=%d), mapping unchanged PASS\n",rc);
+        return 0;
+    }
+    if(!strcmp(mode,"create")) {
+        /* For wire harnesses without a mount (tests/live/ticket_put.py):
+         * one empty regular file in the root directory. */
+        assert(argc==6);efs_ino_t created=0;struct efs_inode attr;
+        int rc=efs_client_rpc_create(1,EFS_ROOT_INO,argv[5],S_IFREG|0644,0,0,0,&created,&attr);
+        if(rc!=EFS_OK){fprintf(stderr,"create %s rc=%d\n",argv[5],rc);return 1;}
+        printf("ino=%llu\n",(unsigned long long)created);
+        return 0;
+    }
+    if(!strcmp(mode,"unlink")) {
+        assert(argc==6);int rc=efs_client_rpc_unlink(1,EFS_ROOT_INO,argv[5],0);
+        if(rc!=EFS_OK){fprintf(stderr,"unlink %s rc=%d\n",argv[5],rc);return 1;}
+        return 0;
+    }
+    if(!strcmp(mode,"admit")) {
+        /* Production admission of one full chunk image of `fill` at ino/ci,
+         * for a harness that builds the EFS_MSG_PUT_CHUNK frame itself.
+         * Saves the ticket wire and the three fragments; the verdict is
+         * printed either way (a refused admission is a harness check). */
+        assert(argc==8);uint32_t ci=(uint32_t)strtoul(argv[5],0,10);
+        image(chunk,(uint8_t)strtoul(argv[6],0,0),-1,0,frags,checksums);
+        efs_node_id_t nodes[3];efs_place_fragments(g_client.nodes,g_client.node_count,ino,ci,nodes);
+        int rc=efs_client_put_admit(ino,ci,nodes,(const uint8_t (*)[EFS_HASH_SIZE])checksums,FRAG,0,0,&t);
+        printf("admit rc=%d\n",rc);
+        if(rc!=EFS_OK)return 0;
+        assert(!efs_client_rpc_put_ticket(&t,1,&state) && state==EFS_PUT_TICKET_ADMITTED);
+        uint8_t wire[EFS_PUT_TICKET_WIRE_LEN];assert(!efs_put_ticket_encode(&t,wire));
+        FILE *f=fopen(argv[7],"wb");
+        assert(f && fwrite(wire,1,sizeof(wire),f)==sizeof(wire) && fwrite(frag_buf,1,3*FRAG,f)==3*FRAG && !fclose(f));
+        /* The harness uploads; this process no longer owns the upload. */
+        efs_client_put_release(t.id.seq,1);
+        printf("ticket ino=%llu ci=%u object=%llu nodes=%u,%u,%u fragment_len=%u\n",(unsigned long long)t.ino,t.ci,
+               (unsigned long long)t.object,(unsigned)t.nodes[0],(unsigned)t.nodes[1],(unsigned)t.nodes[2],t.fragment_len);
         return 0;
     }
     fprintf(stderr,"unknown mode %s\n",mode);return 2;

@@ -23,6 +23,12 @@ full acceptance are separate states.
 automatic identity and formation, safe live additions, always 2+1; removal
 deferred. Supersedes mandatory cluster files and fixed-membership-only D39/D40.
 
+[W158 ticketed live harnesses](w158-ticketed-harness-20261023.md):
+**PASS (scoped) on branch `devel-w158`, not merged; intel expiry rerun NOTRUN.**
+`gc_reclamation.py` and three wire harnesses send the K13 ticket header and
+prove that an unticketed PUT is refused; a static `make test` check guards
+it. nuc `make test-all` PASS.
+
 [K13 / D31 abandoned-upload collection](k13-d31-collection-20261023.md):
 **PASS (scoped, unit and in-process) on branch `devel-k13d31`, not merged.**
 The group leader deletes a settled abandoned body on every member that holds

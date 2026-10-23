@@ -523,6 +523,7 @@ test: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_rdma_fork_poller.py
 	python3 tests/test_kv_kind_unique.py
 	python3 tests/test_live_protocol_version.py
+	python3 tests/test_live_ticketed_put.py
 	./tests/test_data
 	./tests/test_kv
 	./tests/test_expiry

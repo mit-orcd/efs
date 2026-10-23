@@ -7,7 +7,6 @@ and processes are used; failed fixtures/logs are retained for diagnosis.
 """
 import argparse
 import errno
-import ctypes
 import concurrent.futures
 import struct
 import sys
@@ -24,6 +23,7 @@ import subprocess
 import select
 import tempfile
 from raft_tail import commands as raft_commands
+import ticket_put
 import time
 
 # Background shells can exec Python with SIGINT ignored. Restore a catchable
@@ -516,9 +516,6 @@ def files(ino):
         found += [x for x in folder.glob('*/*') if x.is_file() and '.sum' not in x.name]
     return found
 
-class Put(ctypes.Structure):
-    _fields_=[('eid',ctypes.c_uint32),('ino',ctypes.c_uint64),('ci',ctypes.c_uint32),('fi',ctypes.c_uint32),('sum',ctypes.c_uint8*32),('length',ctypes.c_uint32),('gen',ctypes.c_uint64),('hint',ctypes.c_uint32)]
-
 def recv_exact(sock,n):
     body=b''
     while len(body)<n:
@@ -532,15 +529,38 @@ def declare(sock):
     sock.sendall(HELLO);n=struct.unpack('>I',recv_exact(sock,4))[0];reply=recv_exact(sock,n)
     assert n==9 and reply[0]==166 and struct.unpack('=iI',reply[1:])==(0,5),('declaration refused',reply)
 
-def valid_put(node,ino):
-    req=Put(eid=1,ino=ino,ci=0,fi=0,length=65536,gen=987654321)
-    # BLAKE3 of exactly 65536 'x' bytes; same vector as fragment_integrity.py.
-    req.sum[:]=bytes.fromhex('70ff942c316810ac5ffe7081fc049dba30713646b1d6d7272cd5948ad5579804')
-    payload=bytes(req)+b'x'*65536
+def put_reply(node,body):
     with socket.create_connection(('127.0.0.1',a.port+node),timeout=5) as sock:
-        declare(sock);sock.sendall(struct.pack('>IB',len(payload)+1,6)+payload)
+        declare(sock);sock.sendall(struct.pack('>IB',len(body)+1,ticket_put.PUT_CHUNK)+body)
         length=struct.unpack('>I',recv_exact(sock,4))[0]
         return recv_exact(sock,length)
+
+# K13: a data PUT is valid only under an ADMITTED ticket. Admission runs
+# through the production client ledger (client_put_ticket.c 'admit'); the
+# frame carries the ticket header (tests/live/ticket_put.py).
+def ticket_helper():
+    return ticket_put.build_helper(source,work/'client-put-ticket',env)
+
+def admit(ino,save):
+    return ticket_put.admit(ticket_helper(),a.port,ino,work/save,members=4,env=env)
+
+def ticketed_put(ticket,fi):
+    # Fragment fi to its placed member. BUSY (leadership/pressure) is the
+    # only retryable verdict, with the same ticket and bytes.
+    deadline=time.monotonic()+15
+    while True:
+        reply=put_reply(ticket.nodes[fi]-1,ticket.body(fi))
+        # PUT_REPLY: status, path and 64-bit verifier (EFS_PUT_REPLY_LEN 10).
+        assert len(reply)==11 and reply[0]==7,(fi,reply)
+        if reply[1]!=ticket_put.BUSY or time.monotonic()>deadline:return reply[1]
+        time.sleep(.1)
+
+def unticketed_refused(ino):
+    before=sorted(files(ino))
+    for node in range(4):
+        reply=put_reply(node,ticket_put.unticketed_body(ino))
+        assert len(reply)==11 and reply[:2]==bytes([7,ticket_put.ERROR]),('unticketed PUT not refused',node,reply)
+    assert sorted(files(ino))==before,'a refused PUT stored a fragment'
 
 def create(name, body=None):
     path=mount/name
@@ -1295,8 +1315,7 @@ try:
         if a.storage_session_fence_fault:
             assert any('test-put-storage-fence: refusing certificate sync' in (work/f'n{i+1}.log').read_text() for i in range(4)), 'certificate fault never exercised'
 
-        tickets=work/'client-put-ticket'
-        run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_put_ticket.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',tickets])
+        tickets=ticket_helper()
         ticket_results=[];ticket_env={**env,'EFS_PROBE_NODES':'4'};ticket_files=[]
         for cross in (0,1):
             ticket_path=mount/f'put-ticket-{cross}';ticket_path.touch();ticket_files.append(ticket_path)
@@ -2941,11 +2960,13 @@ int main(int argc,char**argv){assert(argc==3);port=atoi(argv[1]);
     print(f'closed-unlinked inode allocated bytes: {before} -> 0 PASS',flush=True)
     # A failed disk read must retain the durable GC record, not ACK it away.
     path,fd,ino=create('fault');os.close(fd)
-    for node in range(4):
-        reply=valid_put(node,ino)
-        # PUT_REPLY: status, path and 64-bit verifier (EFS_PUT_REPLY_LEN 10).
-        assert len(reply)==11 and reply[:2]==bytes([7,0]),reply
-    print('valid late-PUT control accepted on live inode by every member PASS',flush=True)
+    rc,late=admit(ino,'late-put-ticket.bin')
+    assert rc==0 and late,('late-PUT admission refused on a live inode',rc)
+    statuses=[ticketed_put(late,fi) for fi in range(3)]
+    assert statuses==[ticket_put.OK]*3,statuses
+    print(f'valid ticketed late-PUT control (object {late.object}) accepted on live inode by every placed member {late.nodes} PASS',flush=True)
+    unticketed_refused(ino)
+    print('unticketed PUT refused (status 1) by every member, no fragment stored (K13) PASS',flush=True)
     blocked=files(ino)[0];blocked.chmod(0);blocked.parent.chmod(0o500)
     errors=sum(n[1]['delete_errors'] for n in status())
     os.unlink(path)
@@ -3075,6 +3096,10 @@ int main(int argc,char**argv){assert(argc==3);port=atoi(argv[1]);
     # is unavailable, even if the remaining three can still form a quorum.
     # Its crashes fence COMMIT, so it runs after this fixture's fsync gates.
     offline,fd,offline_ino=create('offline-member');os.close(fd)
+    # Held for the tail late-PUT check: admitted while the inode lives,
+    # uploaded only after its retirement and a restart.
+    rc,held=admit(offline_ino,'held-put-ticket.bin')
+    assert rc==0 and held,('admission refused on a live inode',rc)
     servers[3].kill();servers[3].wait()
     os.unlink(offline);time.sleep(3)
     remaining=status_available()
@@ -3150,13 +3175,16 @@ int main(int argc,char**argv){assert(argc==3);port=atoi(argv[1]);
     wait(drained,'restart orphan and GC queues drained',180)
     final=status()
     assert all(node[1]['data_usage_bytes']==0 for node in final),final
-    # A delayed valid-sized PUT must not resurrect the retired inode after
-    # restart. The wire uses native C headers inside its big-endian framing.
-    for i in range(4):
-        reply=valid_put(i,ino)
-        assert len(reply)==11 and reply[:2]==bytes([7,1]),reply
+    # A delayed PUT must not resurrect the retired inode after restart: the
+    # ticket admitted while it lived is refused by each placed member, a
+    # fresh admission is refused, and an unticketed PUT is refused everywhere.
+    statuses=[ticketed_put(held,fi) for fi in range(3)]
+    assert all(s not in (ticket_put.OK,ticket_put.BUSY) for s in statuses),('late ticketed PUT on a retired inode',statuses)
+    rc,fresh=admit(ino,'retired-put-ticket.bin')
+    assert rc!=0 and fresh is None,('ticket admitted on a retired inode',rc)
+    unticketed_refused(ino)
     assert not files(ino)
-    print('restart quota zero and late PUT fenced on every member PASS',flush=True)
+    print(f'restart quota zero and late PUT fenced on every member (held ticket statuses {statuses}, fresh admission rc={rc}, unticketed refused) PASS',flush=True)
     (work/'final-status.json').write_text(json.dumps(final,indent=2))
     print('physical fragment inventory empty after restart PASS',flush=True)
     if memory_group:
