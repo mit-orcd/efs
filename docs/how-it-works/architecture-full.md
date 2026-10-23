@@ -1592,15 +1592,17 @@ into a stalled follower is NOTRUN.
 [K15 W52/W64 append gates](../status/k15-w52-w64-20261022.md): **W64 INCOMPLETE**.
 A leader change left append transactions PREPARED until recovery, so writes
 failed with EBUSY. The fix and its regression test are on `devel-k15`, and the
-matched failover gate is NOTRUN. **W52: shape A in tree; exact 20k gate and A/B
-NOTRUN.**
+matched failover gate is NOTRUN. Lost-reply cleanup (decide-once retirement by
+fence or live-owner abandon) is on `devel-k15b` with unit tests passing; its
+live gate is NOTRUN. **W52: shape A in tree; exact 20k gate and A/B NOTRUN.**
 
 [Recent devel integration review](../status/devel-integration-review-20261022.md):
 **Second pass through `c71cd1066`: OPEN.** K22 log-lag election veto and K5
 mtime fence-capture counterexamples reproduced locally; session-latch data race
 identified. Earlier four findings remain open. [K5 S2/S3](../status/k05-s2-s3-20261022.md):
-**both FIXED on `devel-k05b` (not merged); regression and TSan tests in
+**both FIXED and merged into devel; regression and TSan tests in
 `make test`, PASS on efs1; fence cluster gate NOTRUN.** K8 harness improvements credited;
+the W125 cleanup/remote-evidence row is addressed and merged (`devel-w125h`);
 four targeted checks PASS, merged cluster acceptance NOTRUN.
 
 [K1 / W145 remaining parts](../status/k01-w145-remaining-20261022.md): **merged into
@@ -1625,8 +1627,10 @@ RDMA and hardware gates NOTRUN.
 **merged into devel `842a014b3` by user decision; read mismatch OPEN.** The
 mismatched file was 3.3–3.6 MB in every completed version; no demonstrated
 packed-read involvement. Overwrite followed by truncate-up is a hypothesis.
-Independent review of `a1ceff4cb` identifies remaining output-reuse, unchecked
-shutdown and mismatch-context gaps in the improved repro; qualification NOTRUN.
+Independent review of `a1ceff4cb` identified output-reuse, unchecked
+shutdown and mismatch-context gaps in the improved repro; the harness gaps
+(checked stop, remote/final mismatch sidecars, immutable captures,
+self-tests) are closed on `devel-w125h` (not merged); qualification NOTRUN.
 
 [K4 / W133 declaration gate](#w133-fix):
 **fixed on branch `devel-k04`, not merged.** Every request except
@@ -5527,6 +5531,17 @@ results dirs; move this plan's finished rows to project-history.
 <a id="w64"></a>
 
 ### W64 · Durable append reservation replay across leader changes (queue row 0t)
+
+**Oct 22 K15 part 2 (`devel-k15b`, not merged):** a reservation granted with
+a lost reply now retires decide-once. Session fencing resolves it as
+FENCED_HOLE, or the live owner abandons that exact identity: the receipt
+result becomes STALE and an OPEN row resolves as ABORTED_HOLE. The resolved
+row records its outcome. A late completion is refused STALE; a retirement
+never overtakes a completion. The client abandons after a failed sent reserve
+(`EFS_APPEND_ABANDON`). Unit tests through the real apply path pass
+(`tests/test_append_cleanup.c`). The live gate with injected lost replies
+(`append_failover.py --lose-reserve-every`) is **NOTRUN**, so W64 stays
+**INCOMPLETE**. [K15 evidence](../status/k15-w52-w64-20261022.md).
 
 **Oct 22 K15 (`devel-k15`):** a step-down gate (4 writers, both group
 leaders stepped down every 20 s) kept integrity: 596 acknowledged records
@@ -10998,11 +11013,44 @@ writes share an inode.
   ```text
   COMPLETED       the reservation's publication commits
   ABORTED_HOLE    the owning client is alive and its append failed:
-                  it commits the abort itself, and the reserved range
+                  it commits the abort itself (for a lost reserve reply,
+                  by abandoning the identity), and the reserved range
                   becomes a committed zero hole
   FENCED_HOLE     the owning session is fenced (sessions.md); recovery
                   commits the same zero hole on its behalf
   ```
+
+  **Retirement after a lost reply is decided once (K15/W64).** A reserve
+  whose reply never arrives leaves a committed OPEN reservation that its
+  owner cannot complete, because the owner never learned the offset. Only
+  two facts authorize retiring it; a timer is not one of them, because a
+  live owner that did receive the reply may still be writing:
+
+  ```text
+  owner fenced     global revocation done and the shard's local rejection
+                   floor is above the epoch -> cleanup-appends resolves its
+                   OPEN rows as FENCED_HOLE (session cleanup)
+  owner abandons   the live owner gives up on the write and sends an
+                   abandon for that exact identity (uuid, epoch, seq, len)
+                   under its established session -> the receipt result
+                   becomes STALE and an OPEN row resolves as ABORTED_HOLE
+  ```
+
+  Both run as one exact-image transaction over the owner's session row,
+  inode, receipt, reservation, cursor and lane barriers. The resolved row
+  records its outcome (completed, aborted hole or fenced hole). The first
+  resolution in the log wins. A retirement over a completed row is a no-op.
+  A completion over a hole-retired row is refused STALE and never applied.
+  A completion that is decided but not yet resolved holds its intents, so
+  a concurrent retirement aborts and retries rather than overtaking it.
+  Because the abandon retires the receipt, a delayed reserve or replay of
+  that identity is refused STALE and can never allocate or learn the
+  offset. A reserve that never applied is therefore never applied later.
+  On the wire, the abandon is the ordinary APPEND request with
+  `EFS_APPEND_ABANDON` set in `len`. If the abandon cannot be delivered,
+  the client still releases the identity, and its later ACK forbids any
+  new allocation under it. The stranded row then waits for session fencing
+  or the last-close drain, which is the fail-closed backstop.
 
   The client is *required* to resolve a reservation it cannot complete;
   session fencing is the backstop for a client that stops participating

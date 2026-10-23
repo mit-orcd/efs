@@ -365,3 +365,34 @@ Two more points for the same harness work:
 
 No code changed in this response. The harness fixes and the reruns stay
 NOTRUN.
+
+## Harness gaps closed on `devel-w125h` — October 22
+
+**Status: the three harness findings, the `--remote` point and the
+integration review's "cleanup and remote/final evidence" row are addressed
+on branch `devel-w125h` (from devel `1bf4bd45f`; not pushed, not merged).
+Checked by self-tests with stubbed cluster helpers, fake daemons and
+synthetic mismatches; no cluster, daemon or mount was started, so the
+cluster reruns and the read mismatch itself stay OPEN/NOTRUN.**
+
+| Finding | What landed | Commit |
+| --- | --- | --- |
+| 2. Unchecked stop | `w125_p0_cluster.sh` runs every daemon under `run-daemon`, which records pid and exit status. `stop` unmounts, verifies the mount is gone, TERMs the owned daemons, waits up to `W125_STOP_WAIT` (60 s) for all to exit 0, and reports `stopped clean` (rc 0) only then. A failed client stop, a mount that stays, a daemon that needed KILL (sent only after the wait), exited non-zero, was already gone or has no status is listed line by line as `stopped forced` (rc 1). `w125_modify_repro.sh` deletes the store only after PASS and a clean stop, keeps it after any forced or unverified stop, writes `stop=clean|forced` into `done`, records stop and delete status in `run.txt`, exits 3 for a forced stop and 4 when a passing store could not be deleted; the start-failure path records its stop status too. | `6228f019c` |
+| 3. Saved bytes tied to expected state | Every saved read (local, remote, final) gets `meta.json` with source, expected version, expected/actual lengths and sha256, first differing offset, inode, read time, host, argv and root; artifact-write failures are counted (`artifact_errors`) and printed; the first 20 reads per source are saved. | `32f2439f0` |
+| Remote reads save nothing | `remote_check()` saves the first non-matching bytes with the same sidecar plus every candidate version's length and hash; when the retries end it records `settled`, the settled version, `retries`, `settle_time` and `settle_after_s`. Torn reads during a peer's overwrite are still tolerated (3 re-reads, 2 s apart), but a read that never settles is a mismatch counted as `unsettled`, and settled reads are counted as `settled`; both appear in the status and final lines. | `32f2439f0` |
+| Final-verification mismatches | Captured the same way (source `final`), under the per-file lock on the local client. | `4a43577b4` |
+| Hard link is not an immutable version | `--keep-dir` re-reads the file while the lock is still held and writes those bytes to `KEEP/N` by exclusive create (a copy with one link, read-only); `meta.json` records the re-read's and the copy's length and hash. A later modifier changes the original, not the capture. Server rows at that moment still come from `--mgmt raft-getattr/raft-getchunks`. | `3b8094c4f` |
+| Failure-path tests | `tests/test_w125_harness.py`, in `make test`: real `stop` against fake `run-daemon` processes (orderly → clean; TERM-ignoring → `needed KILL` after the wait; non-zero exit and missing pid → forced); stub helper whose stop fails or needed KILL → wrapper exit 3, `stop=forced`, store kept; failing workload → kept, exit 1; reused OUT refused unchanged; start failure records stop status; real 1 s workload with clean stop → PASS and store deleted; synthetic mismatch → every sidecar field, copy unchanged after a post-capture modification, stale `KEEP/N` is an artifact error; stubbed remote read that never settles fails and is captured, one that settles is counted and captured; final mismatches captured on both clients. | `8df4de684` |
+
+Reproduce: `python3 tests/test_w125_harness.py` (about 15 s, temporary
+directory only). Not addressed here: the alternating fresh-cluster reruns,
+the overwrite/extend regression (K8 landed `tests/test_partial_uncond.py`
+separately) and the abandon-scan work-budget gate.
+
+Verification: self-tests PASS on macOS (Python 3.9). On efs3 (Fedora 42
+aarch64, gcc, Python 3.13, clean `git archive` of `8df4de684`,
+`TMPDIR=/data1/tmp`, no RDMA device or cluster scripts): `make -j4` rc 0,
+`make test` rc 0 with 75 unit binaries and 325 Python tests run, the
+harness self-test among them, and 10 NOTRUN lines (RDMA devices,
+valgrind, cluster scripts; none W125). Raw logs were not kept; the build
+tree on efs3 was deleted.

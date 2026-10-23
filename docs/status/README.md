@@ -49,8 +49,9 @@ live gate is NOTRUN. **W52: shape A in tree; exact 20k gate and A/B NOTRUN.**
 **Second pass through `c71cd1066`: OPEN.** K22 log-lag election veto and K5
 mtime fence-capture counterexamples reproduced locally; session-latch data race
 identified. Earlier four findings remain open. [K5 S2/S3](k05-s2-s3-20261022.md):
-**both FIXED on `devel-k05b` (not merged); regression and TSan tests in
+**both FIXED and merged into devel; regression and TSan tests in
 `make test`, PASS on efs1; fence cluster gate NOTRUN.** K8 harness improvements credited;
+the W125 cleanup/remote-evidence row is addressed and merged (`devel-w125h`);
 four targeted checks PASS, merged cluster acceptance NOTRUN.
 
 [K1 / W145 remaining parts](k01-w145-remaining-20261022.md): **merged into
@@ -75,8 +76,10 @@ RDMA and hardware gates NOTRUN.
 **merged into devel `842a014b3` by user decision; read mismatch OPEN.** The
 mismatched file was 3.3–3.6 MB in every completed version; no demonstrated
 packed-read involvement. Overwrite followed by truncate-up is a hypothesis.
-Independent review of `a1ceff4cb` identifies remaining output-reuse, unchecked
-shutdown and mismatch-context gaps in the improved repro; qualification NOTRUN.
+Independent review of `a1ceff4cb` identified output-reuse, unchecked
+shutdown and mismatch-context gaps in the improved repro; the harness gaps
+(checked stop, remote/final mismatch sidecars, immutable captures,
+self-tests) are closed on `devel-w125h` (not merged); qualification NOTRUN.
 
 [K4 / W133 declaration gate](../backlog/work-items.md#w133-fix):
 **fixed on branch `devel-k04`, not merged.** Every request except
