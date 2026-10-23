@@ -80,9 +80,11 @@ a cluster at four nodes, so ">4 nodes" is an implementation item or a
 narrower claim.** W145–W147 fixes read correct; `raft-resync` mark is not
 persisted; ior write regression needs a K row.
 
-[Alpha 1.0 Stage 1, Oct 22](alpha-1.0-2plus1-checklist.md#stage-1-tally-end-of-oct-22):
-**11 K rows fixed and merged (K1–K5, K7, K8, K16, K22, K24, K25), 2
-INCOMPLETE (K9, K15), live gates NOTRUN.** Highlights: W148 wrong-bytes root
+[Alpha 1.0 Stage 1, Oct 22](alpha-1.0-2plus1-checklist.md#stage-1-tally-end-of-oct-22-adjusted-after-the-integration-review):
+**6 K rows fixed and merged (K2, K3, K4, K8, K16, K24); 5 merged but
+REOPENED by the [integration review](devel-integration-review-20261022.md)
+(K1, K5, K7, K22, K25; two P1 findings: the K22 log-lag election veto and
+the K5 mtime fenced-row capture); 2 INCOMPLETE (K9, K15); live gates NOTRUN.** Highlights: W148 wrong-bytes root
 cause fixed (UNCOND slot base), sessions registered on every mutation
 (protocol 4), identity-bound fragment format 2 (fresh format needed),
 follower memory/lag bound, pre-vote, bounded stops.
