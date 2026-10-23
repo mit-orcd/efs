@@ -4,7 +4,7 @@
 Capture (unprivileged with kernel.perf_event_paranoid=-1):
     perf record -a -g -e sched:sched_switch -o off.data -- sleep 20
 Summarize the threads of the given processes:
-    perf script -i off.data -F tid,time,event,trace,ip,sym | \
+    perf script -i off.data -F pid,tid,time,event,trace,ip,sym | \
         offcpu_summary.py --pid 1234 --pid 5678 [--top 25] [--frames 6]
 
 A thread's off-CPU interval runs from its switch-out (prev_pid, with the
@@ -23,7 +23,8 @@ import sys
 # "comm:N [prio] S ==> comm:M [prio]" format of newer kernels.
 SWITCH = re.compile(r'prev_pid=(\d+) .*?prev_state=(\S+) ==> next_comm=.*? next_pid=(\d+)'
                     r'|:(\d+) \[-?\d+\] (\S+) ==> .*:(\d+) \[-?\d+\]')
-HEAD = re.compile(r'^\s*(\d+)\s+([\d.]+):\s+(\S+):')
+# "PID/TID TIME: EVENT:" (-F pid,tid,...) or "TID TIME: EVENT:" (-F tid,...).
+HEAD = re.compile(r'^\s*(?:(\d+)/)?(\d+)\s+([\d.]+):\s+(\S+):')
 
 # Leaf-most matching rule wins; frames are scanned from the leaf upward.
 CLASSES = [
@@ -56,7 +57,9 @@ def tids_of(pids):
 
 
 def parse(stream):
-    """Yield (tid, time, prev_pid, prev_state, next_pid, frames)."""
+    """Yield (pid, time, prev_tid, prev_state, next_tid, frames).
+
+    The event runs in the switching-out task, so its pid is prev's process."""
     cur = None
     frames = []
     for line in stream:
@@ -73,12 +76,13 @@ def parse(stream):
                 frames.append(('k:' if kernel else '') + parts[1].split('+')[0])
             continue
         m = HEAD.match(line)
-        if m and 'sched_switch' in m.group(3):
+        if m and 'sched_switch' in m.group(4):
             s = SWITCH.search(line)
             if s:
                 g = s.groups()
                 prev, state, nxt = g[0:3] if g[0] else g[3:6]
-                cur = (int(m.group(1)), float(m.group(2)), int(prev), state, int(nxt))
+                pid = int(m.group(1)) if m.group(1) else -1
+                cur = (pid, float(m.group(3)), int(prev), state, int(nxt))
                 frames = []
     if cur:
         yield cur + (frames,)
@@ -87,20 +91,25 @@ def parse(stream):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--pid', type=int, action='append', required=True, help='process to summarize (repeat)')
-    ap.add_argument('--tids', help='file of thread IDs (default: the pids\' current /proc tasks)')
+    ap.add_argument('--tids', help='file of extra thread IDs (threads are otherwise learned from the\n'
+                    'capture with -F pid,tid, or from the pids\' current /proc tasks)')
     ap.add_argument('--top', type=int, default=25)
     ap.add_argument('--frames', type=int, default=6, help='user frames kept per stack')
     a = ap.parse_args()
-    tids = set(int(x) for x in open(a.tids).read().split()) if a.tids else tids_of(a.pid)
+    tids = set(int(x) for x in open(a.tids).read().split()) if a.tids else set()
+    tids.update(tids_of(a.pid))
     tids.update(a.pid)
+    pids = set(a.pid)
     pending = {}
     by_stack = collections.Counter()
     by_class = collections.Counter()
     count = collections.Counter()
     first = last = None
-    for tid, t, prev, state, nxt, frames in parse(sys.stdin):
+    for pid, t, prev, state, nxt, frames in parse(sys.stdin):
         first = t if first is None else first
         last = t
+        if pid in pids:
+            tids.add(prev)  # a thread that exited before the analysis
         if prev in tids:
             # Keep the efs/libc frames that name the wait; drop kernel noise.
             user = [f for f in frames if not f.startswith(('k:', '['))]
