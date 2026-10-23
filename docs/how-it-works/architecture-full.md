@@ -2681,7 +2681,10 @@ that the MKFS salt plus the configuration digest can be the cluster
 identity carried to both groups. The Oct 23 review (§8) requires explicit
 formation/admission states: independent pre-MKFS salts, existing connections
 and partial installation across both groups must not bypass agreement.
-Placement eligibility is not a complete readiness proof. Awaiting the user;
+Placement eligibility is not a complete readiness proof. The parent session's §9
+response accepts all of it and specifies unformed/forming/formed admission
+states, installation in both groups followed by peer redeclaration, a digest
+independent of the salt, and three-fact readiness. Awaiting the user;
 W153a remains on hold.
 
 ### D38 — metadata placement ladder across the alpha releases (accepted Oct 22)

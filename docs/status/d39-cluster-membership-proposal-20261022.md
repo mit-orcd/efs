@@ -357,3 +357,56 @@ I/O profile, quota or workload were exercised. All proposed D39 protocol tests
 are NOTRUN. Documentation consistency is checked separately with
 `python3 docs/gen-architecture-full.py` and `make docs-check`. No production
 code changed; alpha remains 2+1 on 3, 4 and >4 nodes, and W153a remains held.
+
+## 9. Response to the §8 review (parent session, devel `2d2eddf06`)
+
+All four points verified against the source and accepted. `h->salt` starts
+as `make_salt(h->boot_id)` on every daemon until MKFS commits one
+(`server_raft_host_start`), `struct efs_decl_gate` holds only `declared`,
+and `efs_place_fragments` returns void over the local table. §7 understated
+this; the protocol needs the states below before implementation.
+
+- **Admission states.** Each daemon's store is `unformed`, `forming` or
+  `formed`, persisted with the recorded configuration. The declaration binds
+  (protocol, build, configuration digest, sender member id, state). In
+  `unformed`/`forming`, a peer connection is admitted on digest and member id
+  only and may carry only formation and recovery traffic (HELLO/status
+  exchange, Raft for both groups, MKFS, SALT); client declarations are
+  refused with "not formed". In `formed`, the declaration must also carry
+  the committed (salt, digest) pair, and a mismatch is refused. A `formed`
+  store never admits on the unformed rule again: a store that finds a
+  mismatch at start stops with the two identities in the error and is never
+  overwritten from a file.
+- **Formation installs in both groups, then re-admits.** MKFS carries the
+  digest and chooses the salt (as today); SALT carries the pair to group 2.
+  A daemon moves to `formed` only when every group it hosts has applied the
+  pair; nodes 5 and up move when a linearizable read from each group's
+  voters (group 0 and group 2, two reads) returns the same pair. On entering
+  `formed` the daemon closes every peer connection admitted under the
+  unformed rule; the peer pool reconnects and redeclares with the pair, so
+  no pre-formation connection carries formed traffic. A retried or
+  concurrent MKFS keeps the first committed pair (W37 already does this for
+  the salt); a restart between the group-0 commit and the group-2 install
+  resumes `forming` and re-proposes SALT from the committed MKFS record.
+- **Identity construction.** The digest is computed over the canonical
+  parsed configuration records only, never over the salt; the pair is two
+  independent values stored together, so there is no circularity. Snapshots
+  of both groups carry the pair.
+- **Readiness reporting.** Three facts, never one: configured metadata
+  quorum per group (from Raft state), observed peer health (the node table
+  and down markers, labelled as an observation), and the last write's
+  acknowledgement outcome (the fragment PUT and publication acknowledgements
+  the data path already requires). No preflight stands in for the write's
+  own acknowledgements, and no degraded-write promise is added.
+- **Acceptance.** The §8 additions are adopted in full (independent local
+  salts, concurrent and retried MKFS, restart between the two installs,
+  pre-formation connections crossing into `formed`, mismatched persisted
+  salt with matching configuration, data-only readiness during partial
+  formation, a declared client attempting peer traffic, stale health before
+  a write), each preserving the store and the committed identity.
+
+Scope and process: fixed membership for alpha 1.0 remains a recommendation
+for the user, and the two reviewers' agreement decides nothing on the user's
+behalf. One process note from how §8 reached devel: my `git add -A docs`
+swept another session's uncommitted edits into `2d2eddf06`; from here on I
+stage files by name in this shared checkout.
