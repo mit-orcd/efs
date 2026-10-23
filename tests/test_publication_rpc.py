@@ -52,6 +52,9 @@ int efs_conn_recv_msg(struct efs_conn *c,uint8_t *t,void **p,uint32_t *n)
 static unsigned session_checks,fences;static int session_ready;
 static int efs_client_session_check(void){session_checks++;return session_ready;}
 static void efs_client_session_fence(int rc){assert(rc==EFS_ERR_FENCED);fences++;}
+/* W154: no degraded objects in this harness. */
+static uint32_t efs_client_degraded_flags(efs_ino_t i,uint32_t c,uint64_t g){(void)i;(void)c;(void)g;return 0;}
+static void efs_client_degraded_drop(efs_ino_t i,uint32_t c,uint64_t g){(void)i;(void)c;(void)g;}
 static int rpc_status_to_efs(uint8_t s)
 {switch(s){case EFS_INODE_RPC_OK:return EFS_OK;case EFS_INODE_RPC_BUSY:return EFS_ERR_BUSY;
 case EFS_INODE_RPC_NOT_FOUND:return EFS_ERR_NOT_FOUND;case EFS_INODE_RPC_STALE:return EFS_ERR_STALE;default:return EFS_ERR_PROTO;}}

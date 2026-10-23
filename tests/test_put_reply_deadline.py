@@ -48,7 +48,10 @@ int main(void){
  for(mode=0;mode<8;mode++){
   drops=releases=fails=sends=checkouts=0;
   uint64_t start=report_clock_ms();deadline=mode==2?start:start+15;
-  int rc=put_fragments_parallel_once(1,0,nodes,fragments,1,hashes,failed,1,1);
+  int acked[3]={0,0,0};
+  int rc=put_fragments_parallel_once(1,0,nodes,fragments,1,hashes,failed,1,1,acked);
+  /* W154: an OK names the fragments that were acknowledged (at least two). */
+  if(rc==EFS_OK)assert(acked[0]+acked[1]+acked[2]>=2);
   uint64_t elapsed=report_clock_ms()-start;
   printf("mode=%u rc=%d elapsed_ms=%llu sent=%u drops=%u releases=%u peer_fail=%u\n",mode,rc,(unsigned long long)elapsed,sends,drops,releases,fails);fflush(stdout);
   assert(elapsed<150);assert(rc==((mode==1 || mode==6)?EFS_OK:mode==4?EFS_ERR_QUOTA:EFS_ERR_BUSY));
