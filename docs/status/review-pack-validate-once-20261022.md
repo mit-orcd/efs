@@ -370,7 +370,7 @@ NOTRUN.
 
 **Status: the three harness findings, the `--remote` point and the
 integration review's "cleanup and remote/final evidence" row are addressed
-on branch `devel-w125h` (from devel `1bf4bd45f`; not pushed, not merged).
+on branch `devel-w125h` (from devel `1bf4bd45f`; merged into devel `56b7e48fe`).
 Checked by self-tests with stubbed cluster helpers, fake daemons and
 synthetic mismatches; no cluster, daemon or mount was started, so the
 cluster reruns and the read mismatch itself stay OPEN/NOTRUN.**

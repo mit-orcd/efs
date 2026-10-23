@@ -19,7 +19,7 @@ full acceptance are separate states.
 ## Recent evidence and remaining acceptance
 
 [K28 / W151 cluster cap and packed-segment ring](k28-w151-cluster-cap-20261022.md):
-**implemented on `devel-k28` (not merged); unit tests and `make test` PASS on
+**merged into devel (`a2942cb0f`); unit tests and `make test` PASS on
 efs1; the live 5-node gate is NOTRUN (parent session).** Cap 16 nodes (not 64:
 uint32 node masks, 4 KiB node-table entries); each metadata group keeps three
 voters on nodes 1–4; packed segments use the data ring with a remote
@@ -79,7 +79,7 @@ packed-read involvement. Overwrite followed by truncate-up is a hypothesis.
 Independent review of `a1ceff4cb` identified output-reuse, unchecked
 shutdown and mismatch-context gaps in the improved repro; the harness gaps
 (checked stop, remote/final mismatch sidecars, immutable captures,
-self-tests) are closed on `devel-w125h` (not merged); qualification NOTRUN.
+self-tests) are closed and merged (`56b7e48fe`); qualification NOTRUN.
 
 [K4 / W133 declaration gate](../backlog/work-items.md#w133-fix):
 **fixed on branch `devel-k04`, not merged.** Every request except
@@ -94,10 +94,11 @@ narrower claim.** W145–W147 fixes read correct; `raft-resync` mark is not
 persisted; ior write regression needs a K row.
 
 [Alpha 1.0 Stage 1, Oct 22](alpha-1.0-2plus1-checklist.md#stage-1-tally-end-of-oct-22-adjusted-after-the-integration-review):
-**6 K rows fixed and merged (K2, K3, K4, K8, K16, K24); 5 merged but
-REOPENED by the [integration review](devel-integration-review-20261022.md)
-(K1, K5, K7, K22, K25; two P1 findings: the K22 log-lag election veto and
-the K5 mtime fenced-row capture); 2 INCOMPLETE (K9, K15); live gates NOTRUN.** Highlights: W148 wrong-bytes root
+**7 K rows fixed and merged (K2, K3, K4, K8, K16, K24, K28); of the 5 rows
+REOPENED by the [integration review](devel-integration-review-20261022.md),
+K5 (S2/S3), K7 (R2/R3) and K22 (S1, both P1 findings) are fixed again and
+merged; K1 (R4) and K25 (R1) are still open in sub-sessions; 2 INCOMPLETE
+(K9, K15); live gates NOTRUN.** Highlights: W148 wrong-bytes root
 cause fixed (UNCOND slot base), sessions registered on every mutation
 (protocol 4), identity-bound fragment format 2 (fresh format needed),
 follower memory/lag bound, pre-vote, bounded stops.
