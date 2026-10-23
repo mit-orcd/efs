@@ -18,6 +18,12 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Intel fresh deploy of `devel-testing`, all POSIX suites](intel-devel-testing-posix-20261023.md):
+**PASS at 100% of supported cases** (core 216/216 on intel1 and xorinox,
+two-host 68/68, persist 27/27, extras 4/5 + mmap SKIP by W104, expiry 134
+checks). No EFS defect; devops `smoke-persist.sh` `.efs` remount bug fixed
+(devops `ff9701f`).
+
 [K28 / W151 cluster cap and packed-segment ring](k28-w151-cluster-cap-20261022.md):
 **merged into devel (`a2942cb0f`); unit tests and `make test` PASS on
 efs1; the live 5-node gate is NOTRUN (parent session).** Cap 16 nodes (not 64:
