@@ -585,7 +585,7 @@ node hosts many.
 | transaction decision | `participant[hash(txid) % participant_count]` | `(txid)` | shard Raft |
 | membership / desired placement | control-plane group | — | control metadata authority (§2; current Raft baseline) |
 | file data | k+f distinct failure domains by placement | `(FileID, chunk_index, candidate_generation, fragment_index, coding_profile_id)` | k+f EC fragments |
-| packed segment (small files) | k+f nodes chosen by the packer; object row on the publication group's anchor shard | `(group, segment_id, segment_generation, fragment_index)`; files reference `(segment, offset, length, digest)` | k+f EC fragments, ledger in shard Raft |
+| packed segment (small files) | k+f distinct live members of the data ring, keyed by segment id (any node, not only voters); object row on the publication group's anchor shard | `(group, segment_id, segment_generation, fragment_index)`; files reference `(segment, offset, length, digest)` | k+f EC fragments, ledger in shard Raft |
 
 **Small files: background packing.** Files are written as before, with
 per-file chunk fragments and an unchanged close and fsync. A per-file
@@ -1569,6 +1569,13 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[K28 / W151 cluster cap and packed-segment ring](../status/k28-w151-cluster-cap-20261022.md):
+**implemented on `devel-k28` (not merged); unit tests and `make test` PASS on
+efs1; the live 5-node gate is NOTRUN (parent session).** Cap 16 nodes (not 64:
+uint32 node masks, 4 KiB node-table entries); each metadata group keeps three
+voters on nodes 1–4; packed segments use the data ring with a remote
+linearizable pack-object read on non-voter nodes.
+
 [W87/K9 append oracle on efs2](../status/w87-append-oracle-efs2-20261022.md):
 **INCOMPLETE: not reproduced, no root cause; W87 OPEN.** 23 exact rounds, 19,597 acknowledged records on
 a private 3-daemon TCP buffered cluster under churn/GC and POSIX load; no loss,
@@ -2464,7 +2471,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | modify-read-mismatch | **W148** · modify-under-load read returned wrong bytes (correct size) on a never-packed 3.6 MB file | data correctness | FIXED Oct 22 (`71ce4ff35`, alpha K8): a partial load never inherits an UNCOND slot base; the flush fetches the row and overlays only this write's ranges under a CAS. Reproduced 3× on node9901 before the fix; two-client regression 3/3. The fixed-build w125 rerun is NOTRUN | [review](../status/review-pack-validate-once-20261022.md) |
 | compact-die-env | **W149** · `EFS_KV_COMPACT_DIE` makes the daemon `_exit(99)` mid-compaction in normal builds | build hygiene / safety | OPEN: move it and `test_kv_lsm`'s use under `EFS_FAULTS`; alpha K24 | [checklist review](../status/alpha-1.0-2plus1-checklist.md) |
 | nfs-macos-clients | **W152** · NFS re-export and macOS clients | beta backlog | DECIDED out of alpha 1.0 (user, Oct 22); the W55 NFS/macOS triggers move here; alpha publishes "Linux FUSE client only" (F4) | [alpha checklist S1](../status/alpha-1.0-2plus1-checklist.md) |
-| node-cap | **W151** · the code caps a cluster at four nodes (`EFS_MAX_NODES` 4, `EFS_MD_RAFT_N` 3..4, voter sets only for n ≤ 4, placement ring clamped, client `leader_hint` bound), while alpha 1.0 and the spec (§1: 3–64) require >4 | implementation / scope | OPEN; alpha K28 and Stage 2 prerequisite of A3: raise the cap, define voter sets for n ≥ 5, placement/capacity tests at 5..max, membership and client tables, fresh format; no compatibility. Sub-item (D38, user Oct 22): packed segments move from the group's voters to the data ring across all N nodes, which needs a remote linearizable pack-object read for PUT_SEGMENT admission and reclaim on non-voter nodes | [review](../status/alpha-1.0-plan-review-20261022.md) · [D38](#appendix-4--decisions--taken-and-pending-register-d1d36) |
+| node-cap | **W151** · the code caps a cluster at four nodes (`EFS_MAX_NODES` 4, `EFS_MD_RAFT_N` 3..4, voter sets only for n ≤ 4, placement ring clamped, client `leader_hint` bound), while alpha 1.0 and the spec (§1: 3–64) require >4 | implementation / scope | IMPLEMENTED on `devel-k28` (not merged; [evidence](../status/k28-w151-cluster-cap-20261022.md)): cap 16, three voters per group, segments on the data ring; live 5-node gate NOTRUN. Was OPEN; alpha K28 and Stage 2 prerequisite of A3: raise the cap, define voter sets for n ≥ 5, placement/capacity tests at 5..max, membership and client tables, fresh format; no compatibility. Sub-item (D38, user Oct 22): packed segments move from the group's voters to the data ring across all N nodes, which needs a remote linearizable pack-object read for PUT_SEGMENT admission and reclaim on non-voter nodes | [review](../status/alpha-1.0-plan-review-20261022.md) · [D38](#appendix-4--decisions--taken-and-pending-register-d1d36) |
 | abandon-scan-test | **W150** · no test for the abandon scan's work-budget stop and resume (tombstones, term change, wraparound) | test coverage | FIXED on `devel-k25` (Oct 22): LSM work-budget stop/resume, wraparound, mid-pass mutation, term restart and budget edges in `test_pack_validate_once`; a dropped work cursor fails it | [item](#w150) · [review](../status/review-pack-validate-once-20261022.md) |
 | orcd-qualification | **W119** · ORCD normal-operation RDMA failures and blocked clean stop | correctness / liveness | OPEN: 150 concurrent failures /846 NOTRUN; cross-host peer59/67; enabled queries EBUSY; retained writes block clean stop. TCP/commands-off rerun also FAILs (120 failures,520 NOTRUN; peer61/67; clean stop refused); all23 successfully prepared cold cases verify after authorized forced restart. [TCP evidence](../status/orcd-tcp-direct-disabled-20261015.md). Preserve failures, isolate causes and rerun original gates; W100 stays closed. [AMD follow-up](../status/amd-rdma-posix-20261015.md): native/serial/peer/cold/degraded PASS at `c8d057391`; one-mount jobs16 remains215/216 with unusual-name timeout. [Async durability follow-up](../status/amd-async-durability-20261015.md) at `c4178ea81`: scoped durability/native/serial/peer/cold/degraded PASS; jobs16 FAIL214/216 (unusual names, concurrent creates,15s) | [Raft/KV follow-up](../status/orcd-raft-kv-20261016.md) · [evidence and gates](../status/orcd-devel-qualification-20261015.md) · [item](#w119) |
 | immediate-readback | **W121** · successful fsync followed by previous-file payload | data correctness | OPEN: 255/123,932 exact readbacks failed across both queued-vote variants on ORCD native RDMA/direct with enabled `.efs`; unique512-byte files, no expiry. Diagnosed FUSE kernel fork/read page-pinning defect; kernel remediation deferred by user. Fork-isolated experiments do not close W121 | [diagnosis](../status/orcd-w121-fork-read-20261016.md) · [experiment](../status/orcd-queued-read-vote-20261016.md) · [item](#w121) |
@@ -10137,13 +10144,31 @@ no serializable history even though each commits atomically.
   Every input of the rule is replicated state or a field of the logged
   command (the proposer's clock rides in `TXN_RETIRE`), so all replicas delete
   the same keys at the same log index; no replica deletes on a local timer.
+  Both commands decode exactly: `DECIDE` is 23 + 4·n bytes with a COMMIT or
+  ABORT verdict, 1 ≤ n ≤ 144 distinct in-range participant shards and an
+  in-range coordinator; `TXN_RETIRE` is 29 bytes with an in-range
+  coordinator. Any other entry (short, trailing bytes, invalid field) is
+  refused before the store is touched and halts the group through the
+  unsupported-entry path (W127). A well-formed DECIDE with the other verdict
+  is a transaction conflict (PROTO verdict to the proposer), not malformed.
   Each apply touches a bounded window (one live record, at most 32 tombstones,
   one cursor/floor record), so retirement cannot stall the apply loop. The
   proposer of a transaction (its RESOLVE wait, the finisher, or recovery)
   proposes `TXN_RETIRE` after the last RESOLVE verdict. If that proposer dies
   or its RETIRE is lost, the decision stays live — never deleted by age — and
   the recovery sweep re-drives RESOLVE to the participants recorded in the
-  decision and then retires it. Recovery that meets an UNKNOWN decision for a
+  decision and then retires it. The sweep reads each coordinator shard's live
+  decisions one page per pass from a per-shard continuation cursor (at most
+  32 records and 256 examined keys, LSM deletion tombstones included), resumes
+  after the last key it examined and wraps to the prefix start at the end. A
+  decision whose participants cannot resolve stays live and is met again on
+  the next round, so it never hides the decisions after it. The cursor is the
+  leader's volatile hint, not replicated state: after a restart or a
+  leadership change the sweep starts at the prefix beginning. A shard stays
+  due for sweeping until one page that covered the whole prefix from its
+  start finds no live decision. Retention must stay at least 10× the 5 s
+  recovery age (a compile-time check in the host), so a verdict outlives
+  recovery and proposer clock skew. Recovery that meets an UNKNOWN decision for a
   pending record knows every RESOLVE already applied, so the record is a
   straggler PREPARE and is dropped on that shard only. A transaction whose
   txid time trails the floor (clock skew beyond the retention) cannot decide
@@ -11048,9 +11073,17 @@ and encodes it 2+1.
    plus placement) with every record PENDING, before any fragment exists,
    and makes the store require reader capability PACK_V2 (older builds
    refuse the store).
+   Placement is three distinct live members of the data ring keyed by the
+   segment id (`efs_pack_destinations`), not the group's voters (D38): a
+   segment may live entirely on nodes that host no metadata group.
 2. `PUT_SEGMENT` (wire 157) writes each fragment to its node, which checks
    by a linearizable read that the object is admitted, ACTIVE and places
    this exact fragment there, and fsyncs file and directory before replying.
+   A node that hosts the group reads after its own ReadIndex; any other node
+   asks a voter with `PACK_OBJECT_READ` (wire 173/174: routed leader first,
+   then each voter; the voter answers only if it hosts the group, after its
+   ReadIndex). Any transport error, refusal or bad reply refuses the PUT;
+   segment reclaim uses the same read and stays BUSY on failure.
 3. `PACK_SWITCH` (MD 74) moves up to 128 files in one entry. Each member's
    source is the digest of its stored chunk-zero row; it switches only if
    the inode generation matches, the file is linked and unleased, the row
@@ -11080,7 +11113,7 @@ larger of two linear ramps:
 
 - unpacked candidate bytes, estimated as backlog × 64 KiB, from 64 GiB to
   128 GiB;
-- quota usage, from 50% to 80%.
+- the highest member quota usage, from 50% to 80%.
 
 The busy rate is `floor + (idle − floor) × pressure`. The backlog is
 counted every 30 s. A pass reads its segments' files on 16 threads and

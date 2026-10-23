@@ -18,7 +18,11 @@
 #define EFS_RAFT_CANDIDATE 1
 #define EFS_RAFT_LEADER    2
 
-#define EFS_RAFT_MAX_PEERS 7 /* Any nonempty voter set; quorum = floor(N/2)+1. */
+/* Any nonempty voter set; quorum = floor(N/2)+1. Raft id = node id - 1, so
+ * the peer space equals the cluster cap: every member may be addressed (a
+ * replacement replica can be placed on any node), while the default layout
+ * keeps three voters per group (efs_md_group_voters). */
+#define EFS_RAFT_MAX_PEERS EFS_MAX_NODES
 
 /* Engine and host must accept exactly the same membership masks. Even sets
  * retain strict majorities; accepting a mask does not select protection policy. */
@@ -71,6 +75,24 @@ static inline int efs_raft_preferred_voter(uint32_t voters, unsigned ordinal)
 #define EFS_RAFT_GROUP_SHARD  0
 #define EFS_RAFT_GROUP_CTRL   1
 #define EFS_RAFT_GROUP_SHARD2 2 /* even-shard metadata group (sim step 7) */
+
+/* K28/W151 + D38 default voter layout for a cluster of n nodes (node ids
+ * 1..n, raft id = node id - 1). n <= 3: every node votes in every group.
+ * n >= 4: three voters per group, a window of three consecutive nodes that
+ * starts at the group's ordinal: the shard group (ordinal 0) on nodes 1,2,3,
+ * every other group (ordinal 1, SHARD2) on nodes 2,3,4. This is the
+ * four-node layout unchanged; nodes 5..n host no metadata group and serve
+ * data and clients only (alpha 1.0: metadata on three voters per group).
+ * Operator reconfiguration (CFG CHANGE) may still move a voter anywhere in
+ * 0..EFS_RAFT_MAX_PEERS-1. Returns 0 for an n outside 1..EFS_MAX_NODES. */
+static inline uint32_t efs_md_group_voters(uint8_t group, int n)
+{
+    if (n < 1 || n > EFS_MAX_NODES)
+        return 0;
+    if (n <= 3)
+        return (1u << n) - 1u;
+    return group == EFS_RAFT_GROUP_SHARD ? 0x7u : 0xeu;
+}
 
 /* Odd shards (incl. ROOT ino 1) → group 0; even → group 2. Same mapping
  * the simulator uses; production must not drift. */

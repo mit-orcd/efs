@@ -254,7 +254,7 @@ void server_handle_conn(struct efs_conn *conn)
                     h->version == EFS_VERSION_PACK &&
                     strncmp(h->build_id, EFS_BUILD_ID, EFS_BUILD_ID_LEN) == 0;
                 if (!version_ok) {
-                    /* Heap: hello_ack embeds nodes[EFS_MAX_NODES] (~16KiB). */
+                    /* Heap: hello_ack embeds nodes[EFS_MAX_NODES] (~68 KiB at 16). */
                     struct efs_msg_hello_ack *rej = calloc(1, sizeof(*rej));
                     if (!rej)
                         break;
@@ -325,7 +325,7 @@ void server_handle_conn(struct efs_conn *conn)
                 }
 
                 server_dedupe_nodes_locked(g_server);
-                /* Heap: hello_ack embeds nodes[EFS_MAX_NODES] (~16KiB). */
+                /* Heap: hello_ack embeds nodes[EFS_MAX_NODES] (~68 KiB at 16). */
                 struct efs_msg_hello_ack *ack = calloc(1, sizeof(*ack));
                 if (!ack) {
                     pthread_mutex_unlock(&g_server->lock);
@@ -678,6 +678,16 @@ void server_handle_conn(struct efs_conn *conn)
             if(payload_len==sizeof(struct efs_msg_storage_session_fence))
                 server_raft_host_storage_session_fence(payload,&reply);
             efs_conn_send_msg(conn,EFS_MSG_STORAGE_SESSION_FENCE_REPLY,&reply,sizeof(reply));
+            break;
+        }
+        case EFS_MSG_PACK_OBJECT_READ: {
+            struct efs_msg_pack_object_read_reply *rep = calloc(1, sizeof(*rep));
+            if (!rep) { close_conn = 1; break; }
+            rep->rc = EFS_ERR_INVAL;
+            if (payload_len == sizeof(struct efs_msg_pack_object_read))
+                server_raft_host_pack_object_serve(payload, rep);
+            efs_conn_send_msg(conn, EFS_MSG_PACK_OBJECT_READ_REPLY, rep, sizeof(*rep));
+            free(rep);
             break;
         }
         case EFS_MSG_PACK_COMPACT: {

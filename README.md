@@ -10,7 +10,9 @@ rather than deriving the design from current code.
 A distributed filesystem in C with a Linux FUSE client, Raft metadata and
 2+1 erasure-coded storage. Supports TCP, InfiniBand/RoCE RDMA, multiple
 storage roots, quotas, garbage collection, and buffered or direct fragment I/O.
-The current runtime supports three or four servers and two metadata Raft groups.
+The current runtime supports 3 to 16 servers and two metadata Raft groups. Each
+group keeps three voters on nodes 1–4; data, including packed small files, uses
+every server.
 
 **Pre-alpha:** persistence, session fencing and automatic fragment repair
 remain unfinished. Use disposable data; see [implementation limits](docs/status/spec-implementation.md).

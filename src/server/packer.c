@@ -39,7 +39,7 @@
  * at its full point: unpacked bytes per node (each unpacked small file
  * holds one EFS_FRAGMENT_SIZE fragment on each node; the group's candidate
  * index is counted every PK_COUNT_NS) from EFS_PACK_UNPACKED_GIB to twice
- * that, and quota usage of the group's voters from EFS_PACK_SPACE_START_PCT
+ * that, and the highest member quota usage from EFS_PACK_SPACE_START_PCT
  * to EFS_PACK_SPACE_FULL_PCT. The busy rate is floor + (idle - floor) *
  * pressure.
  *
@@ -54,6 +54,7 @@
  * rates and counts below 1 are raised to 1 (the minimum age may be 0 for
  * tests). */
 #include "server_internal.h"
+#include "efs/placement.h"
 #include "efs/checksum.h"
 #include "efs/erasure.h"
 #include "efs/kv_key.h"
@@ -562,9 +563,11 @@ static uint32_t pk_segment(uint8_t group, uint64_t term, const struct efs_node *
     pk_owner(group, term, &owner);
     owner.seq = id;
     uint32_t members = 0;
+    efs_node_id_t dest[EFS_NUM_FRAGMENTS];
+    if (efs_pack_destinations(nodes, count, pk.s->id, id, dest) != EFS_OK) goto out;
     for (uint32_t i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        o->nodes[i] = nodes[i].id;
-        members |= 1u << (nodes[i].id - 1);
+        o->nodes[i] = dest[i];
+        members |= 1u << (dest[i] - 1);
         efs_hash(f[i], flen, o->checksums[i]);
     }
     if (efs_pack_ledger_init(image, geometry, refs, n, &owner, members, flags, &o->ledger) != EFS_OK) goto out;
@@ -1002,26 +1005,23 @@ static int pk_group(uint8_t group, uint64_t term)
     if (pk_now_ns() < pk.g[pk_gi(group)].backoff_until_ns) return 0;
     struct efs_kv *kv = server_raft_host_kv();
     if (!kv) return 0;
-    struct efs_node nodes[EFS_MAX_NODES];
+    EFS_NODE_TABLE(nodes);
     uint32_t count;
+    if (!nodes) return 0;
     pthread_mutex_lock(&pk.s->lock);
     count = pk.s->node_count;
     memcpy(nodes, pk.s->nodes, count * sizeof(nodes[0]));
     pthread_mutex_unlock(&pk.s->lock);
-    /* Segments live on voters of their group (the nodes that can check a
-     * PUT and a reclaim against the object), and only on live ones: the
-     * first EFS_NUM_FRAGMENTS of them are moved to the front. */
+    /* K28/W151 (D38): segments are data and live on the data ring, three
+     * distinct live members per segment (efs_pack_destinations, keyed by
+     * the segment id in pk_segment), not on the group's voters. A member
+     * that hosts no replica checks PUT and reclaim with a remote
+     * linearizable read (server_raft_host_pack_object). */
     {
-        uint32_t voters = server_raft_host_group_voters(group), m = 0;
-        for (uint32_t i = 0; i < count; i++) {
-            uint32_t id = nodes[i].id;
-            int voter = id && id <= EFS_MAX_NODES && (voters & (1u << (id - 1)));
-            int up = id == pk.s->id || !nodes[i].down_until_ms;
-            if (voter && up) { struct efs_node t = nodes[m]; nodes[m] = nodes[i]; nodes[i] = t; m++; }
-        }
-        if (m < EFS_NUM_FRAGMENTS) {
+        efs_node_id_t probe[EFS_NUM_FRAGMENTS];
+        if (efs_pack_destinations(nodes, count, pk.s->id, 0, probe) != EFS_OK) {
             pk_abandon(kv, group, term);
-            return 0; /* not enough live voters to place a segment */
+            return 0; /* not enough live members to place a segment */
         }
     }
     pk_abandon(kv, group, term);
@@ -1226,16 +1226,17 @@ static double pk_busy_rate(double pressure)
     if (pk.busy_rate >= pk.idle_rate) return pk.busy_rate;
     return pk.busy_rate + (pk.idle_rate - pk.busy_rate) * pressure;
 }
-/* Highest quota usage among the group's voters (the local row is exact,
- * peers' rows come from membership gossip). */
+/* Highest quota usage among the members (the local row is exact, peers'
+ * rows come from membership gossip). K28/W151 (D38): segments of every
+ * group land on the whole data ring, so every member's usage counts. */
 static double pk_used_frac(uint8_t group)
 {
-    uint32_t voters = server_raft_host_group_voters(group);
+    (void)group;
     double m = 0;
     pthread_mutex_lock(&pk.s->lock);
     for (uint32_t i = 0; i < pk.s->node_count; i++) {
         const struct efs_node *n = &pk.s->nodes[i];
-        if (!n->id || n->id > EFS_MAX_NODES || !(voters & (1u << (n->id - 1))) || !n->quota) continue;
+        if (!n->id || n->id > EFS_MAX_NODES || !n->quota) continue;
         double f = (double)n->used / (double)n->quota;
         if (f > m) m = f;
     }

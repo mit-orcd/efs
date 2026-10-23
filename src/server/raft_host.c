@@ -726,13 +726,15 @@ static int raft_obs_on(void)
     return v;
 }
 
+/* Unset EFS_MD_RAFT_N keeps the four-node default; deployments set it to
+ * the member count (node ids 1..n), 3..EFS_MAX_NODES. */
+#define EFS_MD_RAFT_N_DEFAULT 4
+_Static_assert(EFS_MD_RAFT_N_DEFAULT <= EFS_MAX_NODES, "default metadata N");
+
+/* Default voters: the shared D38 rule (raft.h efs_md_group_voters). */
 static uint32_t group_voters(uint8_t group, int n)
 {
-    if (n <= 3)
-        return (1u << n) - 1u;
-    if (group == EFS_RAFT_GROUP_SHARD)
-        return 0x7u; /* nodes 1,2,3 = raft ids 0,1,2 */
-    return 0xeu;     /* nodes 2,3,4 = raft ids 1,2,3 */
+    return efs_md_group_voters(group, n);
 }
 
 
@@ -8306,11 +8308,11 @@ static struct efs_export *host_gc_export(struct efs_raft_host *h)
 static void host_gc_inode_nodes_batch(struct efs_raft_host *h, const efs_ino_t *inos,
                                       const uint64_t *gens, uint32_t n, uint8_t *ok)
 {
-    struct efs_node nodes[EFS_MAX_NODES];
+    EFS_NODE_TABLE(nodes);
     struct efs_conn *pending[EFS_MAX_NODES] = {0};
     uint32_t count;
     for (uint32_t i = 0; i < n; i++) ok[i] = 0;
-    if (!n) return;
+    if (!n || !nodes) return;
     pthread_mutex_lock(&h->s->lock);
     count = h->s->node_count;
     memcpy(nodes, h->s->nodes, count * sizeof(nodes[0]));
@@ -8476,10 +8478,10 @@ static void host_gc_segment_nodes_batch(struct efs_raft_host *h, uint8_t group,
                                         const uint64_t *ids, const uint64_t *gens,
                                         const uint32_t *members, uint32_t n, uint8_t *ok)
 {
-    struct efs_node nodes[EFS_MAX_NODES];
+    EFS_NODE_TABLE(nodes);
     uint32_t count, present = 0, want = 0;
     for (uint32_t i = 0; i < n; i++) { ok[i] = 1; want |= members[i]; }
-    if (!n || n > EFS_GC_SEGMENT_BATCH_MAX) { for (uint32_t i = 0; i < n; i++) ok[i] = 0; return; }
+    if (!n || n > EFS_GC_SEGMENT_BATCH_MAX || !nodes) { for (uint32_t i = 0; i < n; i++) ok[i] = 0; return; }
     pthread_mutex_lock(&h->s->lock);
     count = h->s->node_count;
     memcpy(nodes, h->s->nodes, count * sizeof(nodes[0]));
@@ -8496,8 +8498,9 @@ static void host_gc_segment_nodes_batch(struct efs_raft_host *h, uint8_t group,
         goto out;
     }
     for (uint32_t ni = 0; ni < count; ni++) {
+        if (!nodes[ni].id || nodes[ni].id > EFS_MAX_NODES) continue;
         uint32_t bit = 1u << (nodes[ni].id - 1), m = 0;
-        if (!nodes[ni].id || nodes[ni].id > EFS_MAX_NODES || !(want & bit)) continue;
+        if (!(want & bit)) continue;
         for (uint32_t i = 0; i < n; i++) if ((members[i] & bit) && ok[i]) pick[m++] = i;
         if (!m) continue;
         req[0] = group;
@@ -9242,10 +9245,10 @@ static void host_gc_records(struct efs_raft_host *h, struct efs_export *ex,
                             const uint8_t (*vals)[EFS_META_GC_VAL], int n,
                             struct efs_gc_ack_item *acks, int *nack)
 {
-    struct efs_node nodes[EFS_MAX_NODES];
+    EFS_NODE_TABLE(nodes);
     uint32_t count;
     struct gc_frag_item { efs_ino_t ino; uint64_t gen; uint32_t ci; uint8_t lane, fi, node; uint8_t sum[EFS_HASH_SIZE]; };
-    struct gc_frag_item *it = calloc((size_t)n * EFS_NUM_FRAGMENTS, sizeof(*it));
+    struct gc_frag_item *it = nodes ? calloc((size_t)n * EFS_NUM_FRAGMENTS, sizeof(*it)) : NULL;
     uint32_t m = 0;
     if (!it) return;
     pthread_mutex_lock(&h->s->lock);
@@ -11500,7 +11503,7 @@ int server_raft_host_start(struct efsd_server *s)
     struct efs_raft_host *h;
     char dir[EFS_MAX_PATH];
     const char *ns;
-    int n = EFS_MAX_NODES;
+    int n = EFS_MD_RAFT_N_DEFAULT;
     int rc;
 
     /* The Raft+KV engine is the only metadata path, so the host always
@@ -12193,7 +12196,8 @@ static int host_dir_migrate(struct efs_raft_host *h, efs_ino_t dir,
 static int host_storage_fence_members(struct efs_raft_host *h,const uint8_t uuid[16],
                                       uint32_t floor,int check_only)
 {
-    struct efs_node members[EFS_MAX_NODES];uint32_t count;
+    EFS_NODE_TABLE(members);uint32_t count;
+    if(!members)return EFS_ERR_BUSY;
     pthread_mutex_lock(&h->s->lock);count=h->s->node_count;
     if(count<=EFS_MAX_NODES)memcpy(members,h->s->nodes,count*sizeof(*members));
     pthread_mutex_unlock(&h->s->lock);
@@ -12918,6 +12922,74 @@ int server_raft_host_inode_reaped(efs_ino_t ino, int *dead)
     return EFS_OK;
 }
 
+_Static_assert(EFS_PACK_OBJECT_READ_BYTES == EFS_PACK_OBJECT_MAX_BYTES,
+               "PACK_OBJECT_READ carries one encoded pack object");
+
+/* K28/W151 (D38): a segment fragment may live on a node that hosts no
+ * replica of the segment's group, so PUT_SEGMENT admission and segment
+ * reclaim there read the object from a voter: the routed leader first,
+ * then every other voter of the routing view. Only a hosting voter's
+ * answer after its ReadIndex counts (EFS_OK with the object, or NOT_FOUND:
+ * absent at a linearizable point). Transport errors, refusals, a wrong
+ * echo or an undecodable object never prove anything: they try the next
+ * voter and end in EFS_ERR_BUSY, so the PUT is refused and the reclaim
+ * stays BUSY. */
+static int host_pack_object_remote(struct efs_raft_host *h, uint32_t group, uint64_t id,
+                                   uint64_t gen, struct efs_pack_object *out)
+{
+    struct efs_msg_pack_object_read q = {.group = group, .id = id, .generation = gen};
+    struct efs_msg_pack_object_read_reply *r = calloc(1, sizeof(*r));
+    uint32_t voters = host_route_voters(h, (uint8_t)group), tried = 0;
+    int first = host_fwd_leader_pick(h, (uint8_t)group, -1), rc = EFS_ERR_BUSY;
+    if (!r) return EFS_ERR_BUSY;
+    for (int k = -1; k < EFS_RAFT_MAX_PEERS; k++) {
+        int rid = k < 0 ? first : k;
+        if (rid < 0 || rid >= EFS_RAFT_MAX_PEERS || rid == h->raft_id ||
+            !hosts_group(rid, voters) || (tried & (1u << rid)))
+            continue;
+        tried |= 1u << rid;
+        memset(r, 0, sizeof(*r));
+        if (host_inode_rpc_peer(h, rid, EFS_MSG_PACK_OBJECT_READ, &q, sizeof(q),
+                                EFS_MSG_PACK_OBJECT_READ_REPLY, r, sizeof(*r)) != 0)
+            continue;
+        if (r->group != group || r->id != id || r->generation != gen)
+            continue;
+        if (r->rc == EFS_ERR_NOT_FOUND) { rc = EFS_ERR_NOT_FOUND; break; }
+        if (r->rc != EFS_OK || !r->len || r->len > sizeof(r->object) ||
+            efs_pack_object_decode(r->object, r->len, out) != EFS_OK ||
+            out->ledger.segment_id != id || out->ledger.segment_generation != gen ||
+            out->ledger.publication_group != group)
+            continue;
+        rc = EFS_OK;
+        break;
+    }
+    free(r);
+    return rc;
+}
+
+void server_raft_host_pack_object_serve(const struct efs_msg_pack_object_read *q,
+                                        struct efs_msg_pack_object_read_reply *r)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_pack_object *o = NULL;
+    int hint = -1, rc;
+    size_t len = 0;
+    r->group = q->group; r->id = q->id; r->generation = q->generation; r->len = 0;
+    if (!h || !h->running || !h->kv) { r->rc = EFS_ERR_NOT_PRIMARY; return; }
+    if (q->reserved || q->group > 0xffu || !efs_pack_group_anchor(q->group) || !q->id ||
+        !q->generation) { r->rc = EFS_ERR_INVAL; return; }
+    /* Never forward: only a hosting voter's read is linearizable here. */
+    if (!host_hosts(h, (uint8_t)q->group)) { r->rc = EFS_ERR_NOT_PRIMARY; return; }
+    rc = host_read_index(h, (uint8_t)q->group, &hint);
+    if (rc == EFS_OK && !(o = malloc(sizeof(*o)))) rc = EFS_ERR_NOMEM;
+    if (rc == EFS_OK) rc = efs_pack_object_get(h->kv, q->group, q->id, q->generation, o);
+    if (rc == EFS_OK && efs_pack_object_encode(o, r->object, sizeof(r->object), &len) != EFS_OK)
+        rc = EFS_ERR_IO;
+    if (rc == EFS_OK) r->len = (uint32_t)len;
+    r->rc = rc;
+    free(o);
+}
+
 int server_raft_host_pack_object(uint32_t group, uint64_t id, uint64_t gen,
                                  struct efs_pack_object *out)
 {
@@ -12925,7 +12997,8 @@ int server_raft_host_pack_object(uint32_t group, uint64_t id, uint64_t gen,
     int hint = -1;
     if (!h || !h->running || !h->kv) return EFS_ERR_NOT_PRIMARY;
     if (!efs_pack_group_anchor(group)) return EFS_ERR_INVAL;
-    if (!host_hosts(h, (uint8_t)group)) return EFS_ERR_INVAL;
+    if (!host_hosts(h, (uint8_t)group))
+        return host_pack_object_remote(h, group, id, gen, out);
     int rc = host_read_index(h, (uint8_t)group, &hint);
     if (rc != EFS_OK) return rc;
     return efs_pack_object_get(h->kv, group, id, gen, out);

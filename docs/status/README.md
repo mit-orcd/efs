@@ -18,6 +18,13 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[K28 / W151 cluster cap and packed-segment ring](k28-w151-cluster-cap-20261022.md):
+**implemented on `devel-k28` (not merged); unit tests and `make test` PASS on
+efs1; the live 5-node gate is NOTRUN (parent session).** Cap 16 nodes (not 64:
+uint32 node masks, 4 KiB node-table entries); each metadata group keeps three
+voters on nodes 1–4; packed segments use the data ring with a remote
+linearizable pack-object read on non-voter nodes.
+
 [W87/K9 append oracle on efs2](w87-append-oracle-efs2-20261022.md):
 **INCOMPLETE: not reproduced, no root cause; W87 OPEN.** 23 exact rounds, 19,597 acknowledged records on
 a private 3-daemon TCP buffered cluster under churn/GC and POSIX load; no loss,

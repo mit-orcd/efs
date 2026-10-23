@@ -432,8 +432,73 @@ static void test_writer_view_reply(void)
     rt_struct("writer-view-reply", sizeof(r));
 }
 
+/* K28/W151: node tables at the cluster cap survive the frame codec, the
+ * last slot carries node id EFS_MAX_NODES, and Raft ids up to the cap
+ * round-trip (raft id = node id - 1). */
+static void test_node_tables_at_max(void)
+{
+    struct efs_msg_list_nodes_reply *ln = calloc(1, sizeof(*ln));
+    struct efs_msg_hello_ack *ack = calloc(1, sizeof(*ack));
+    uint32_t cap = (uint32_t)sizeof(*ack) + 64u, out_len = 0, plen = 0;
+    uint8_t *frame = malloc(cap), type = 0;
+    const uint8_t *pl = NULL;
+    CHECK(ln && ack && frame, "k28 oom");
+    if (!ln || !ack || !frame) { free(ln); free(ack); free(frame); return; }
+    CHECK(sizeof(*ack) > sizeof(*ln), "hello_ack is the larger table");
+    CHECK(efs_wire_frame_check_nlen(1u + (uint32_t)sizeof(*ack)) == EFS_OK, "hello_ack fits a frame");
+    CHECK(efs_wire_frame_check_nlen(1u + (uint32_t)sizeof(struct efs_msg_raft_status_reply)) == EFS_OK,
+          "raft status fits a frame");
+    ln->node_count = EFS_MAX_NODES;
+    for (uint32_t i = 0; i < EFS_MAX_NODES; i++) {
+        ln->nodes[i].id = i + 1;
+        ln->nodes[i].port = (uint16_t)(7432 + i);
+        snprintf(ln->nodes[i].addr, sizeof(ln->nodes[i].addr), "10.0.0.%u", i + 1);
+    }
+    CHECK(efs_wire_frame_encode(EFS_MSG_LIST_NODES_REPLY, ln, (uint32_t)sizeof(*ln), NULL, 0,
+                                frame, cap, &out_len) == EFS_OK, "k28 list encode");
+    CHECK(efs_wire_frame_decode(frame, out_len, &type, &pl, &plen) == EFS_OK &&
+          type == EFS_MSG_LIST_NODES_REPLY && plen == sizeof(*ln), "k28 list decode");
+    if (pl && plen == sizeof(*ln)) {
+        struct efs_msg_list_nodes_reply *back = calloc(1, sizeof(*back));
+        if (back) {
+            memcpy(back, pl, plen);
+            CHECK(back->node_count == EFS_MAX_NODES &&
+                  back->nodes[EFS_MAX_NODES - 1].id == EFS_MAX_NODES &&
+                  back->nodes[EFS_MAX_NODES - 1].port == 7432 + EFS_MAX_NODES - 1 &&
+                  !strcmp(back->nodes[EFS_MAX_NODES - 1].addr, "10.0.0.16"), "k28 last slot");
+            free(back);
+        }
+    }
+    ack->node_count = EFS_MAX_NODES;
+    ack->assigned_id = EFS_MAX_NODES;
+    memcpy(ack->nodes, ln->nodes, sizeof(ack->nodes));
+    CHECK(efs_wire_frame_encode(EFS_MSG_HELLO_ACK, ack, (uint32_t)sizeof(*ack), NULL, 0,
+                                frame, cap, &out_len) == EFS_OK &&
+          efs_wire_frame_decode(frame, out_len, &type, &pl, &plen) == EFS_OK &&
+          plen == sizeof(*ack) &&
+          ((const struct efs_msg_hello_ack *)(const void *)pl)->nodes[EFS_MAX_NODES - 1].id ==
+              EFS_MAX_NODES, "k28 hello_ack last slot");
+    {
+        struct efs_raft_msg a, b;
+        uint8_t buf[256], cmd_out[16];
+        uint32_t len = 0;
+        memset(&a, 0, sizeof(a));
+        a.type = EFS_RAFT_MSG_VOTE_REQ;
+        a.group = EFS_RAFT_GROUP_SHARD2;
+        a.from = EFS_RAFT_MAX_PEERS - 1;
+        a.to = EFS_RAFT_MAX_PEERS - 2;
+        a.term = 3;
+        CHECK(efs_wire_raft_encode(&a, buf, sizeof(buf), &len) == EFS_OK &&
+              efs_wire_raft_decode(buf, len, &b, cmd_out, sizeof(cmd_out)) == EFS_OK &&
+              b.from == EFS_MAX_NODES - 1 && b.to == EFS_MAX_NODES - 2, "k28 raft ids at max");
+    }
+    CHECK(EFS_RAFT_STATUS_PEERS == EFS_RAFT_MAX_PEERS, "raft status one entry per peer");
+    free(ln); free(ack); free(frame);
+}
+
 int main(void)
 {
+    test_node_tables_at_max();
     test_writer_view_reply();
     test_getchunks_reply_validation();
     test_getchunks_reply_length();

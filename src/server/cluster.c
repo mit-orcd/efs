@@ -169,7 +169,9 @@ static void gossip_hello_to(struct efsd_server *s, const struct efs_msg_hello *h
  * Call WITHOUT holding s->lock. */
 void server_gossip_membership(struct efsd_server *s, const struct efs_msg_hello *h)
 {
-    struct efs_node nodes[EFS_MAX_NODES];
+    EFS_NODE_TABLE(nodes);
+    if (!nodes)
+        return;
     pthread_mutex_lock(&s->lock);
     uint32_t node_count = s->node_count;
     if (node_count > EFS_MAX_NODES)

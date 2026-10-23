@@ -102,7 +102,8 @@ static void metadata(void)
     changed.member_mask = 3;
     assert(efs_put_ticket_admit(kv, &changed) == EFS_ERR_INVAL);
     changed = t;
-    changed.member_mask = 31;
+    /* K28: a member bit beyond the cluster cap is refused. */
+    changed.member_mask = t.member_mask | (1u << EFS_MAX_NODES);
     assert(efs_put_ticket_admit(kv, &changed) == EFS_ERR_INVAL);
     changed = t;
     changed.delta_off = 1;

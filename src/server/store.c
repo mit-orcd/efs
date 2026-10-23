@@ -3161,8 +3161,10 @@ void server_save_nodes(struct efsd_server *s)
 
     /* Snapshot membership under the lock, then do all disk I/O unlocked so a
      * slow fsync never serializes every connection handler behind s->lock. */
-    struct efs_node nodes_snap[EFS_MAX_NODES];
+    EFS_NODE_TABLE(nodes_snap);
     uint32_t node_count;
+    if (!nodes_snap)
+        return;
     pthread_mutex_lock(&s->lock);
     node_count = s->node_count;
     if (node_count > EFS_MAX_NODES)
@@ -3228,8 +3230,9 @@ void server_load_nodes(struct efsd_server *s)
         return;
     }
 
-    struct efs_node loaded[EFS_MAX_NODES];
-    if (fread(loaded, sizeof(struct efs_node), node_count, f) != node_count) {
+    EFS_NODE_TABLE(loaded);
+    EFS_NODE_TABLE(unique);
+    if (!loaded || !unique || fread(loaded, sizeof(struct efs_node), node_count, f) != node_count) {
         fclose(f);
         return;
     }
@@ -3237,7 +3240,6 @@ void server_load_nodes(struct efsd_server *s)
 
     /* Deduplicate by node id, keeping the first occurrence. */
     uint32_t unique_count = 0;
-    struct efs_node unique[EFS_MAX_NODES];
     for (uint32_t i = 0; i < node_count; i++) {
         int seen = 0;
         for (uint32_t j = 0; j < unique_count; j++) {
@@ -3251,7 +3253,7 @@ void server_load_nodes(struct efsd_server *s)
     }
 
     pthread_mutex_lock(&s->lock);
-    memcpy(s->nodes, unique, sizeof(unique));
+    memcpy(s->nodes, unique, sizeof(*unique) * EFS_MAX_NODES);
     s->node_count = unique_count;
     pthread_mutex_unlock(&s->lock);
 
@@ -3265,10 +3267,12 @@ void server_load_nodes(struct efsd_server *s)
 
 int server_rejoin_cluster(struct efsd_server *s)
 {
+    EFS_NODE_TABLE(nodes);
+    if (!nodes)
+        return -1;
     pthread_mutex_lock(&s->lock);
     uint32_t node_count = s->node_count;
-    struct efs_node nodes[EFS_MAX_NODES];
-    memcpy(nodes, s->nodes, sizeof(nodes));
+    memcpy(nodes, s->nodes, sizeof(*nodes) * EFS_MAX_NODES);
     pthread_mutex_unlock(&s->lock);
 
     if (node_count <= 1)
