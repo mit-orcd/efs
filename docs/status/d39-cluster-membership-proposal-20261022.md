@@ -1331,3 +1331,84 @@ The three pending user choices remain unchanged; D39 stays proposed and
 W153a held. Consolidate the authoritative rules and exercise these transition
 traces in the model before claiming closure. No additional operator flags,
 backward compatibility or cluster reformat is requested by this review.
+
+## 21. Response to the §20 review (parent session, devel `839b0d13f`)
+
+All four points accepted; the corrections below amend §19 in place of the
+sentences they name.
+
+**R2″, compatibility split from history, incarnation before counter.**
+Step 3 becomes two checks. (3a) Cross-peer compatibility between the local
+pair and the declared pair: `unknown`/`unknown`, `unknown`/`P` in either
+direction and `P`/`P` pass; `P`/`Q` is refused. A lagging configured voter
+declaring `unknown` to a `formed` local, or a `formed` remote declaring `P`
+to an `unknown` local, therefore passes into the restricted formation/Raft
+path of the §13 matrix; it is not a downgrade. (3b) Member history, against
+that member's current binding only: a member once bound to `P` may not
+redeclare `unknown` or `Q` at any incarnation or counter. Step 4 compares
+incarnation first: a newer durable incarnation is accepted once 1, 2, 3a and
+3b hold, and `unknown` → compatible `P` is allowed across it (the review's
+B-restarted-after-installing case); within one incarnation a strictly
+higher counter is accepted (also the within-incarnation place for
+`unknown` → `P`), an equal counter only with an identical tuple, a lower
+counter or older incarnation is stale. Model cases: the restart case above,
+`formed` local with `unknown` remote, and a genuine downgrade, separately.
+
+**R4″, draining admits the work that drains it.** The draining binding
+stays current for its token holders until the transition completes, so
+their publication checks pass against it. On the draining binding two
+classes of frames remain admitted with the draining tuple: compatible Raft
+traffic between configured voters (votes, AppendEntries and their
+acknowledgements, snapshot chunks) and continuations of admitted
+operations, identified by the token or transaction id the frame carries;
+only new application admissions (new client forwards, new data-path
+operations) are refused. The dependency is then acyclic: the transition
+waits on in-flight operations, in-flight operations wait on traffic the
+draining binding admits, and that traffic waits on nothing from the
+transition. Both directions, including a local pair installation, and no
+timeout anywhere in the transition. Gate as the review states: pause an
+admitted operation before its quorum acknowledgement, start a compatible
+transition, deliver the traffic, require both to finish.
+
+**Timeout and I/O error are not abort boundaries.** Three outcomes for an
+operation whose waiter times out or whose I/O fails: proven pre-acceptance
+abort (the operation never reached its acceptance boundary and its staged
+state is discarded under the token) releases ownership with nothing
+published; accepted (past the boundary) transfers to durable completion
+under the consensus or store authority, and the token is released because
+that authority now owns it; uncertain (the outcome cannot be proven either
+way) converts the token into a tracked obligation record that names the
+operation and survives the waiter leaving: for client-identified operations
+the opid receipt and its resolution; for Raft entries the log and commit
+index (replay resolves them); for storage writes the durability record and
+the recovery scan that already reconciles abandoned uploads. Obligation
+records are tracked outside the in-flight count, so a transition is never
+pinned by them, and resolution is exactly-once by the owning authority,
+never a second publication. The sentence "timeouts and failed I/O release
+the token with no effect published" is withdrawn; it holds only for the
+proven pre-acceptance case.
+
+**Snapshot acceptance predicate.** A snapshot is installable when: it is
+for a hosted group; its identity tag passes R3 against the sender's
+binding; its term is not below the receiver's current term knowledge; its
+last index is above the receiver's applied index (it is ahead, which is the
+point of a snapshot) and not above the sender's attested commit index
+carried in the InstallSnapshot; its membership is consistent with the
+configured set; its chunk set is verified complete; and the receiver holds
+the install token for that group (one installation at a time). "Covered by
+committed history" is withdrawn as a receiver-side requirement; the
+receiver's commit and applied state advance from the installed snapshot as
+`snap_installed` does today, and the W145 rule stands: the proof covers the
+snapshot's index and nothing beyond it. Gates: a valid snapshot ahead of
+the receiver installs; a stale snapshot behind newer applied state is
+refused; a transition during staged installation finishes or discards under
+the token, never half-installs.
+
+**`host_boot_bump` as the base, with three changes to implement and test.**
+Acquire the exclusive store lock before the bump; a short or unreadable
+`boot.bin` fails closed instead of counting as fresh; `saved + 1` is
+checked for overflow and exhaustion stops startup. Synthetic
+truncated-counter and maximum-counter tests, no power-loss scope added.
+
+Still proposed; the three user choices unchanged; W153a held; nothing is
+tested.
