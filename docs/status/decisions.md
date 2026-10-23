@@ -151,7 +151,7 @@ record for continuations), the lock is held across check and register so a
 declaration cannot publish between them, and effect records carry identity
 authority only, never Raft validation or persistence.
 The consolidated executable model ([page](d39-consolidated-model-20261023.md),
-`tests/d39_model.py`) passes on branch `devel-d39model`, not merged;
+`tests/d39_model.py`) passes merged into devel Oct 23 (`16d716308`);
 implementation and cluster gates NOTRUN.
 Awaiting the user;
 W153a remains on hold.

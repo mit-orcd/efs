@@ -25,7 +25,7 @@ The fast/long split does not reduce full-gate work or qualify parallel safety.
 
 [W155 modify oracle and correlation tooling](w155-oracle-correlation-20261023.md):
 **self-tests PASS on nuc; the W148 campaign rerun with it is NOTRUN** (branch
-`devel-w155h`, not merged). A failed modify records its syscall stages and
+`devel-w155h`, merged Oct 23 `92886b8e2`). A failed modify records its syscall stages and
 quarantines the file with syscall-boundary candidates. It is never a PASS.
 `w155_correlate.py` builds one table per failure and lists logging gaps
 G1–G8. The first is that no server line records a request's receipt. The
@@ -78,7 +78,7 @@ leak found. Open: W126 peeks can wait behind a writer queued on `view_rw`.
 node9901 run NOTRUN.
 
 [K30 intermittent tests](k30-intermittent-tests-20261023.md): **fixed on
-`devel-k30`, not merged; 0/25 FAIL per case on amd.** `test_reclaim` was a
+`devel-k30`, merged Oct 23 `b64dbe934`; 0/25 FAIL per case on amd.** `test_reclaim` was a
 product bug (same-second journal aside rename refused startup); the fork
 oracle and `test_kv_lsm` were test races. W126 peek limitation stays open.
 
@@ -105,7 +105,7 @@ is insufficient. K1's post-restart rc 4, loaded errors, raw-evidence losses
 and foreign-client discovery limits remain recorded.
 
 [D39 consolidated model](d39-consolidated-model-20261023.md): **MODEL PASS on
-branch `devel-d39model`, not merged.** The single authoritative statement of
+branch `devel-d39model`, merged Oct 23 `16d716308`.** The single authoritative statement of
 the accepted D39 rules, executable as `tests/d39_model.py` in `make test`:
 101 traces from §§8–33, 11 negative controls under superseded rules and a
 randomized interleaving search. It adds three model findings the proposal must
