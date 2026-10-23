@@ -91,6 +91,11 @@ struct efsd_server {
     uint64_t degraded_chunks[2];
     uint32_t degraded_sampled_mask;
     uint64_t rebuilt_fragments, rebuild_failures, rebuild_retired;
+    /* D31: orphan records on the anchors this node leads (bit g of
+     * put_orphan_sampled_mask: groups[g] finished a scan) and totals. */
+    uint64_t put_orphan_pending[2];
+    uint32_t put_orphan_sampled_mask;
+    uint64_t put_orphan_collected, put_orphan_deleted, put_orphan_failures;
     /* W124 node reclaim (reclaim.c). Bytes credited back to quota at
      * acceptance but still on disk; physical admission guard state. */
     uint64_t reclaim_pending_bytes;
@@ -138,6 +143,13 @@ struct efs_meta_degraded;
 void server_degraded_mark_encode(uint8_t *q, const struct efs_meta_degraded *d);
 int server_degraded_mark_decode(const uint8_t *q, struct efs_meta_degraded *d);
 int server_raft_host_degraded_check(const uint8_t mark[EFS_REBUILD_MARK_LEN]);
+/* D31: this member's durable storage session floor for uuid (0: none). */
+int server_put_session_floor(struct efsd_server *, const uint8_t uuid[16], uint32_t *floor);
+/* D31 + K13: EFS_MSG_PUT_ORPHAN_DELETE (src/server/put_orphan.c). */
+int server_put_orphan_delete(struct efsd_server *, const uint8_t *, uint32_t);
+/* The ticket's lane group, after a ReadIndex: OK when its orphan record
+ * exists behind the shard's rejection floor (EFS_MD_REQ_PUT_ORPHAN_STATUS). */
+int server_raft_host_put_orphan_status(const uint8_t ticket[216]);
 int server_put_session_fence(struct efsd_server *, const uint8_t uuid[16],
                              uint32_t reject_below);
 

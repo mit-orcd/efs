@@ -15,6 +15,7 @@
 #include "efs/query_filters.h"
 #include "efs/publication.h"
 #include "efs/put_ticket.h"
+#include "efs/put_orphan.h"
 #include "efs/meta_cmd.h"
 #include "efs/dir_layout.h"
 #include "efs/dir_spread.h"
@@ -497,6 +498,11 @@ struct efs_raft_host {
     uint8_t orphan_discovery_cursor[HOST_NGROUPS][EFS_KV_KEY_MAX];
     uint32_t orphan_discovery_len[HOST_NGROUPS];
     int orphan_discovery_done[HOST_NGROUPS];
+    /* D31 abandoned-upload collector: scan cursor and records seen in the
+     * current cycle of the group's orphan ledger. */
+    uint8_t put_orphan_cursor[HOST_NGROUPS][EFS_PUT_ORPHAN_KEY_LEN];
+    uint32_t put_orphan_cursor_len[HOST_NGROUPS];
+    uint64_t put_orphan_cycle[HOST_NGROUPS];
     /* EFS_RAFT_OBS: wait_applied timeouts, pump h->mu hold high-water, and
      * the last stats-dump timestamp (ms). */
     uint64_t obs_wait_timeouts;
@@ -2137,6 +2143,63 @@ static int host_degraded_check(struct efs_raft_host *h, const uint8_t *cmd, uint
            !memcmp(have.checksums, want.checksums, sizeof(want.checksums)) ? EFS_OK : EFS_ERR_STALE;
 }
 
+/* D31: the group of a ticket's lane shard (its orphan record's group). */
+static uint8_t put_ticket_group(const struct efs_put_ticket *t)
+{
+    return efs_raft_shard_group(efs_kv_lane_shard(t->ino, (uint8_t)(t->ci % EFS_META_LANES)));
+}
+
+/* Storage side of EFS_MSG_PUT_ORPHAN_DELETE: the ticket's group, after a
+ * ReadIndex, holds its orphan record behind the shard rejection floor. */
+int server_raft_host_put_orphan_status(const uint8_t ticket[EFS_PUT_TICKET_WIRE_LEN])
+{
+    struct efs_put_ticket t;
+    uint8_t query[2 + EFS_PUT_TICKET_WIRE_LEN];
+    struct efs_msg_raft_mkfs_reply out;
+    if (efs_put_ticket_decode(ticket, EFS_PUT_TICKET_WIRE_LEN, &t) != EFS_OK)
+        return EFS_ERR_INVAL;
+    query[0] = put_ticket_group(&t);
+    query[1] = EFS_MD_REQ_PUT_ORPHAN_STATUS;
+    memcpy(query + 2, ticket, EFS_PUT_TICKET_WIRE_LEN);
+    server_raft_host_submit(query, sizeof(query), &out);
+    return out.rc;
+}
+
+static int host_put_orphan_status(struct efs_raft_host *h, const uint8_t *cmd, uint32_t clen,
+                                  uint8_t group, int *hint, uint32_t *acked)
+{
+    struct efs_put_ticket t;
+    if (clen != 1u + EFS_PUT_TICKET_WIRE_LEN ||
+        efs_put_ticket_decode(cmd + 1, EFS_PUT_TICKET_WIRE_LEN, &t) != EFS_OK ||
+        group != put_ticket_group(&t))
+        return EFS_ERR_INVAL;
+    int rc = host_read_index(h, group, hint);
+    if (rc == EFS_OK)
+        rc = efs_session_local_revoked(h->kv, efs_kv_lane_shard(t.ino, (uint8_t)(t.ci % EFS_META_LANES)),
+                                       t.id.client_uuid, t.id.session_epoch);
+    if (rc == EFS_OK)
+        rc = efs_put_ticket_orphan_get(h->kv, &t, acked);
+    return rc;
+}
+
+/* EFS_MD_CMD_PUT_ORPHAN_ACK [frags:1][ticket:216]. A malformed entry halts;
+ * a refusal (floor not raised, no record) is a logical verdict. */
+static int apply_put_orphan_ack_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                                    uint32_t clen, uint8_t group)
+{
+    struct efs_put_ticket t;
+    if (clen != EFS_MD_PUT_ORPHAN_ACK_LEN || !cmd[1] || (cmd[1] & ~EFS_PUT_ORPHAN_ALL) ||
+        efs_put_ticket_decode(cmd + 2, EFS_PUT_TICKET_WIRE_LEN, &t) != EFS_OK)
+        return EFS_ERR_UNSUPPORTED;
+    if (group != put_ticket_group(&t))
+        return EFS_ERR_INVAL;
+    int rc = efs_put_ticket_orphan_ack(h->kv, &t, cmd[1]);
+    if (rc != EFS_OK && rc != EFS_ERR_BUSY && rc != EFS_ERR_NOT_FOUND)
+        fprintf(stderr, "raft-host: put-orphan ack ino=%llu ci=%u seq=%llu frags=%u rc=%d\n",
+                (unsigned long long)t.ino, t.ci, (unsigned long long)t.id.seq, cmd[1], rc);
+    return rc;
+}
+
 static int apply_degraded_clear_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                                     uint32_t clen, uint64_t index, uint8_t group)
 {
@@ -3079,7 +3142,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_SWITCH ||
            cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX || cmd[0] == EFS_MD_CMD_PACK_INDEX ||
            cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
-           cmd[0] == EFS_MD_CMD_DEGRADED_CLEAR ||
+           cmd[0] == EFS_MD_CMD_DEGRADED_CLEAR || cmd[0] == EFS_MD_CMD_PUT_ORPHAN_ACK ||
            cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP)
               ? EFS_OK
               : rc;
@@ -3112,7 +3175,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
          cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_SWITCH ||
          cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX || cmd[0] == EFS_MD_CMD_PACK_INDEX ||
          cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
-         cmd[0] == EFS_MD_CMD_DEGRADED_CLEAR ||
+         cmd[0] == EFS_MD_CMD_DEGRADED_CLEAR || cmd[0] == EFS_MD_CMD_PUT_ORPHAN_ACK ||
          cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_CREATE ||
          cmd[0] == EFS_MD_CMD_APPEND_CATCHUP || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
          cmd[0] == EFS_MD_CMD_REPORT_PUBLISH || cmd[0] == EFS_MD_CMD_ACTIVATE_LANE ||
@@ -3659,6 +3722,8 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         return apply_gc_ack_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_DEGRADED_CLEAR)
         return apply_degraded_clear_cmd(h, cmd, clen, index, group);
+    if (cmd[0] == EFS_MD_CMD_PUT_ORPHAN_ACK)
+        return apply_put_orphan_ack_cmd(h, cmd, clen, group);
     if (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
         cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP ||
         cmd[0] == EFS_MD_CMD_TXN_RETIRE)
@@ -10939,6 +11004,138 @@ out:
         free(buf[i]);
 }
 
+/* ---- D31 abandoned-upload collection (K13) ----
+ * The lane group's leader walks its orphan ledger (one anchored prefix),
+ * a bounded number of records per maintenance pass, and drives each through
+ * efs_put_orphan_collect: global revocation read from the session group,
+ * shard floor from this group, checksum-guarded deletes on the members that
+ * hold fragments, then PUT_ORPHAN_ACK through this group's log. The ledger's
+ * acknowledged mask is the only progress state, so a new leader resumes. */
+#define PUT_ORPHAN_PER_PASS 32u
+struct put_orphan_scan {
+    uint8_t skip[EFS_PUT_ORPHAN_KEY_LEN], last[EFS_PUT_ORPHAN_KEY_LEN];
+    uint32_t skip_len, last_len, n, bad, limit;
+    struct efs_put_ticket t[PUT_ORPHAN_PER_PASS];
+    uint32_t acked[PUT_ORPHAN_PER_PASS];
+};
+static int put_orphan_scan_cb(void *user, const uint8_t *key, uint32_t kl,
+                              const uint8_t *val, uint32_t vl)
+{
+    struct put_orphan_scan *scan = user;
+    if (scan->skip_len && kl == scan->skip_len && !memcmp(key, scan->skip, kl))
+        return 0;
+    if (kl != EFS_PUT_ORPHAN_KEY_LEN)
+        return -1;
+    memcpy(scan->last, key, kl);
+    scan->last_len = kl;
+    /* An unreadable record is never collected; count it, keep going. */
+    if (efs_put_ticket_orphan_decode(key, kl, val, vl, &scan->t[scan->n],
+                                     &scan->acked[scan->n]) != EFS_OK) {
+        scan->bad++;
+        return 0;
+    }
+    return ++scan->n == scan->limit;
+}
+struct put_orphan_host {
+    struct efs_raft_host *h;
+    uint8_t group;
+};
+static int put_orphan_revoked(void *ctx, const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch)
+{
+    (void)ctx;
+    uint8_t query[1 + HOST_SESS_CREATE_LEN] = {0};
+    uint32_t ssh = efs_kv_session_shard(uuid);
+    struct efs_msg_raft_mkfs_reply r;
+    query[0] = efs_raft_shard_group(ssh);
+    query[1] = EFS_MD_CMD_SESSION; /* sub 0: GET, a ReadIndex on the session group */
+    memcpy(query + 3, uuid, EFS_OPID_UUID_LEN);
+    wr32be(query + 19, ssh);
+    server_raft_host_submit(query, sizeof(query), &r);
+    if (r.rc != EFS_OK)
+        return r.rc;
+    uint32_t current = (uint32_t)r.salt, state = (uint32_t)((r.salt >> 32) & 255);
+    /* ACTIVE past the epoch: the barrier for it completed (FINISH). */
+    return state == EFS_SESSION_ACTIVE && current > epoch ? EFS_OK : EFS_ERR_BUSY;
+}
+static int put_orphan_delete(void *ctx, const struct efs_put_ticket *t, unsigned fi)
+{
+    struct put_orphan_host *c = ctx;
+    uint8_t frame[EFS_PUT_ORPHAN_DELETE_LEN];
+    struct efs_msg_put_orphan_delete_reply reply = {.rc = EFS_ERR_IO};
+    wr32be(frame, 1);
+    wr32be(frame + 4, fi);
+    if (efs_put_ticket_encode(t, frame + 8) != EFS_OK)
+        return EFS_ERR_INVAL;
+    if (t->nodes[fi] == c->h->s->id)
+        return server_put_orphan_delete(c->h->s, frame, sizeof(frame));
+    if (host_inode_rpc_peer(c->h, (int)t->nodes[fi] - 1, EFS_MSG_PUT_ORPHAN_DELETE, frame,
+                            sizeof(frame), EFS_MSG_PUT_ORPHAN_DELETE_REPLY, &reply,
+                            sizeof(reply)))
+        return EFS_ERR_IO; /* down or unreachable: the record waits for it */
+    return reply.rc;
+}
+static int put_orphan_ack(void *ctx, const struct efs_put_ticket *t, uint32_t frags)
+{
+    struct put_orphan_host *c = ctx;
+    uint8_t cmd[EFS_MD_PUT_ORPHAN_ACK_LEN] = {EFS_MD_CMD_PUT_ORPHAN_ACK, (uint8_t)frags};
+    if (efs_put_ticket_encode(t, cmd + 2) != EFS_OK)
+        return EFS_ERR_INVAL;
+    return host_gc_propose(c->h, c->group, cmd, sizeof(cmd));
+}
+static void host_put_orphan_pass(struct efs_raft_host *h, uint8_t group, uint32_t anchor)
+{
+    static uint32_t per_pass;
+    int gi = gc_gi(group);
+    if (!per_pass) {
+        const char *e = getenv("EFS_PUT_ORPHAN_PER_PASS");
+        long v = e ? strtol(e, NULL, 10) : 0;
+        per_pass = v > 0 && v <= (long)PUT_ORPHAN_PER_PASS ? (uint32_t)v : PUT_ORPHAN_PER_PASS;
+    }
+    struct put_orphan_scan *scan = calloc(1, sizeof(*scan));
+    if (!scan)
+        return;
+    uint8_t prefix[3];
+    efs_put_ticket_orphan_prefix(anchor, prefix);
+    scan->limit = per_pass;
+    scan->skip_len = h->put_orphan_cursor_len[gi];
+    memcpy(scan->skip, h->put_orphan_cursor[gi], scan->skip_len);
+    int rc = host_gc_scan_work(h, prefix, sizeof(prefix), scan->skip_len ? scan->skip : NULL,
+                               scan->skip_len, put_orphan_scan_cb, scan, scan->last,
+                               &scan->last_len, sizeof(scan->last));
+    if (rc < 0) {
+        __atomic_fetch_add(&h->s->gc_scan_errors, 1, __ATOMIC_RELAXED);
+        free(scan);
+        return;
+    }
+    struct put_orphan_host ctx = {h, group};
+    const struct efs_put_orphan_ops ops = {&ctx, put_orphan_revoked, put_orphan_delete,
+                                           put_orphan_ack};
+    struct efs_put_orphan_stats st = {0};
+    uint64_t skip = 0;
+    for (uint32_t i = 0; i < scan->n && __atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE); i++)
+        (void)efs_put_orphan_collect(h->kv, &scan->t[i], scan->acked[i], &ops, &skip, &st);
+    __atomic_fetch_add(&h->s->put_orphan_collected, st.collected, __ATOMIC_RELAXED);
+    __atomic_fetch_add(&h->s->put_orphan_deleted, st.deleted, __ATOMIC_RELAXED);
+    __atomic_fetch_add(&h->s->put_orphan_failures, st.failures + scan->bad, __ATOMIC_RELAXED);
+    /* Pending: records still in the ledger when a full cycle completes. */
+    h->put_orphan_cycle[gi] += scan->n + scan->bad - st.collected;
+    if (!rc) {
+        __atomic_store_n(&h->s->put_orphan_pending[gi], h->put_orphan_cycle[gi], __ATOMIC_RELAXED);
+        __atomic_fetch_or(&h->s->put_orphan_sampled_mask, 1u << gi, __ATOMIC_RELAXED);
+        h->put_orphan_cycle[gi] = 0;
+        h->put_orphan_cursor_len[gi] = 0;
+    } else if (scan->last_len) {
+        memcpy(h->put_orphan_cursor[gi], scan->last, scan->last_len);
+        h->put_orphan_cursor_len[gi] = scan->last_len;
+    }
+    if (env_on("EFS_GC_DBG") && (scan->n || scan->bad))
+        fprintf(stderr, "raft-host: put-orphan pass group=%u visited=%u bad=%u waiting=%llu "
+                "deleted=%llu collected=%llu failures=%llu\n", group, scan->n, scan->bad,
+                (unsigned long long)st.waiting, (unsigned long long)st.deleted,
+                (unsigned long long)st.collected, (unsigned long long)st.failures);
+    free(scan);
+}
+
 static void *host_gc_thread(void *arg)
 {
     struct efs_raft_host *h = arg;
@@ -10983,6 +11180,10 @@ static void *host_gc_thread(void *arg)
             if (!lead) {
                 h->orphan_discovery_done[g] = 0;
                 h->orphan_discovery_len[g] = 0;
+                h->put_orphan_cursor_len[gc_gi(h->g[g].group)] = 0;
+                h->put_orphan_cycle[gc_gi(h->g[g].group)] = 0;
+                __atomic_fetch_and(&h->s->put_orphan_sampled_mask, ~(1u << gc_gi(h->g[g].group)),
+                                   __ATOMIC_RELAXED);
                 __atomic_fetch_and(&h->s->gc_sampled_mask, ~(1u << g), __ATOMIC_RELAXED);
                 __atomic_fetch_and(&h->s->degraded_sampled_mask, ~(1u << g), __ATOMIC_RELAXED);
                 continue;
@@ -10998,6 +11199,7 @@ static void *host_gc_thread(void *arg)
                 host_gc_close_step_pass(h, h->g[g].group, anchor);
                 host_gc_close_pass(h, h->g[g].group, anchor);
                 host_gc_orphan_pass(h, h->g[g].group, anchor);
+                host_put_orphan_pass(h, h->g[g].group, anchor);
             }
             t_orphan += now_us_() - ta;
             ta = now_us_();
@@ -13042,6 +13244,18 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
             return;
         }
         out->rc=host_degraded_check(h,cmd,clen,group,&hint);out->leader_hint=hint;return;
+    }
+    if(clen && cmd[0]==EFS_MD_REQ_PUT_ORPHAN_STATUS) {
+        struct efs_put_ticket t;uint32_t acked=0;
+        if(clen!=1u+EFS_PUT_TICKET_WIRE_LEN || efs_put_ticket_decode(cmd+1,clen-1,&t)!=EFS_OK ||
+           group!=put_ticket_group(&t)){out->rc=EFS_ERR_INVAL;return;}
+        if(!host_hosts(h,group)) {
+            rc=host_remote_cmd(h,group,cmd,clen,out,-1);
+            if(rc!=EFS_OK)out->rc=rc;
+            return;
+        }
+        out->rc=host_put_orphan_status(h,cmd,clen,group,&hint,&acked);
+        out->salt=out->rc==EFS_OK?acked:0;out->leader_hint=hint;return;
     }
     if(clen && (cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT || cmd[0]==EFS_MD_REQ_PUT_TICKET_STATUS ||
                cmd[0]==EFS_MD_CMD_PUT_TICKET_SETTLE)) {

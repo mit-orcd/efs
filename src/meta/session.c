@@ -348,8 +348,16 @@ int efs_session_reclaimable(struct efs_kv *kv, uint32_t shard,
         return EFS_ERR_INVAL;
     int rc = efs_session_barrier_done(kv, uuid, old_epoch);
     if (rc != EFS_OK) return rc;
+    return efs_session_local_revoked(kv, shard, uuid, old_epoch);
+}
+
+int efs_session_local_revoked(struct efs_kv *kv, uint32_t shard,
+    const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t old_epoch)
+{
+    if (!kv || !uuid || shard >= EFS_SESSION_BITS || !old_epoch)
+        return EFS_ERR_INVAL;
     struct efs_sess_local loc;
-    rc = load_local(kv, shard, uuid, &loc);
+    int rc = load_local(kv, shard, uuid, &loc);
     if (rc == EFS_ERR_NOT_FOUND) return EFS_ERR_BUSY;
     if (rc != EFS_OK) return rc;
     return loc.reject_below > old_epoch ? EFS_OK : EFS_ERR_BUSY;

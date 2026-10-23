@@ -390,12 +390,28 @@ int efs_put_ticket_delete_ack(struct efs_kv *kv, const struct efs_put_ticket *t,
     wr32(val + 176, acked | member_bit);
     return efs_kv_put(kv, key, sizeof(key), val, sizeof(val));
 }
+/* D31: the orphan record key, on the anchor shard of the ticket's group. */
+static int orphan_key(const struct efs_put_ticket *t, uint8_t ok[EFS_PUT_ORPHAN_KEY_LEN])
+{
+    uint8_t key[51];
+    int rc = ticket_key(t, key);
+    if (rc != EFS_OK)
+        return rc;
+    uint32_t anchor = efs_kv_anchor_shard(ticket_shard(t));
+    ok[0] = (uint8_t)(anchor >> 8);
+    ok[1] = (uint8_t)anchor;
+    ok[2] = EFS_KV_KIND_PUT_ORPHAN;
+    ok[3] = key[0];
+    ok[4] = key[1];
+    memcpy(ok + 5, key + 3, 48);
+    return EFS_OK;
+}
 /* Retire the stream head. REJECTED moves its body into the orphan ledger in
  * the same batch; RECLAIMING requires every captured member's deletion ACK. */
 static int retire_head(struct efs_kv *kv, const struct efs_put_ticket *t,
                        const uint8_t key[51], uint32_t state)
 {
-    uint8_t fk[23], val[12], ok[51], ov[EFS_PUT_TICKET_VAL_LEN], ck[23], cv[8];
+    uint8_t fk[23], val[12], ok[EFS_PUT_ORPHAN_KEY_LEN], ov[EFS_PUT_TICKET_VAL_LEN], ck[23], cv[8];
     uint32_t live;
     struct ticket_scan s;
     int rc = stream_head(kv, key, &s);
@@ -417,10 +433,11 @@ static int retire_head(struct efs_kv *kv, const struct efs_put_ticket *t,
     unsigned n = 2;
     count_item(key, live - 1, ck, cv, &items[n++]);
     if (state == EFS_PUT_TICKET_REJECTED) {
-        memcpy(ok, key, sizeof(ok));
-        ok[2] = EFS_KV_KIND_PUT_ORPHAN;
+        rc = orphan_key(t, ok);
+        if (rc != EFS_OK)
+            return rc;
         ticket_value(t, EFS_PUT_TICKET_REJECTED, ov);
-        items[n++] = (struct efs_kv_item){EFS_KV_PUT, ok, 51, ov, sizeof(ov)};
+        items[n++] = (struct efs_kv_item){EFS_KV_PUT, ok, sizeof(ok), ov, sizeof(ov)};
     }
     return efs_kv_batch(kv, items, n);
 }
@@ -523,16 +540,86 @@ int efs_put_ticket_settle(struct efs_kv *kv,const struct efs_put_ticket *t)
     return retire_head(kv,t,key,state);
 }
 
-int efs_put_ticket_orphan(struct efs_kv *kv,const struct efs_put_ticket *t)
+/* The stored record must be exactly this ticket's REJECTED value plus a
+ * proper subset of its fragments acknowledged. */
+static int orphan_value_ok(const struct efs_put_ticket *t,const uint8_t *val,uint32_t len,
+                           uint32_t *acked)
 {
-    uint8_t key[51],val[EFS_PUT_TICKET_VAL_LEN],want[EFS_PUT_TICKET_VAL_LEN];
+    uint8_t want[EFS_PUT_TICKET_VAL_LEN];
+    if (len != EFS_PUT_TICKET_VAL_LEN) return EFS_ERR_PROTO;
+    ticket_value(t,EFS_PUT_TICKET_REJECTED,want);
+    uint32_t mask=rd32(val+176);
+    if (memcmp(val,want,176) || mask>=EFS_PUT_ORPHAN_ALL) return EFS_ERR_PROTO;
+    if (acked) *acked=mask;
+    return EFS_OK;
+}
+
+int efs_put_ticket_orphan_get(struct efs_kv *kv,const struct efs_put_ticket *t,uint32_t *acked)
+{
+    uint8_t key[EFS_PUT_ORPHAN_KEY_LEN],val[EFS_PUT_TICKET_VAL_LEN];
     uint32_t len=sizeof(val);
     if (!kv) return EFS_ERR_INVAL;
-    int rc=ticket_key(t,key);
+    int rc=orphan_key(t,key);
+    if (rc==EFS_OK) rc=efs_kv_get(kv,key,sizeof(key),val,&len);
+    return rc==EFS_OK?orphan_value_ok(t,val,len,acked):rc;
+}
+
+int efs_put_ticket_orphan(struct efs_kv *kv,const struct efs_put_ticket *t)
+{
+    return efs_put_ticket_orphan_get(kv,t,NULL);
+}
+
+int efs_put_ticket_orphan_ack(struct efs_kv *kv,const struct efs_put_ticket *t,uint32_t frags)
+{
+    uint8_t key[EFS_PUT_ORPHAN_KEY_LEN],val[EFS_PUT_TICKET_VAL_LEN];
+    uint32_t len=sizeof(val),acked;
+    if (!kv || !frags || (frags & ~EFS_PUT_ORPHAN_ALL)) return EFS_ERR_INVAL;
+    int rc=orphan_key(t,key);
+    /* Body deletion is acknowledged only behind this shard's durable
+     * rejection floor: no ADMIT, PUBLISH or SETTLE of the epoch applies. */
+    if (rc==EFS_OK) rc=efs_session_local_revoked(kv,ticket_shard(t),t->id.client_uuid,
+                                                t->id.session_epoch);
+    if (rc==EFS_OK) rc=efs_kv_get(kv,key,sizeof(key),val,&len);
+    if (rc==EFS_ERR_NOT_FOUND) {
+        /* Already collected (a retried acknowledgement), or never orphaned. */
+        int retired=0;
+        rc=efs_put_ticket_retired(kv,t,&retired);
+        return rc!=EFS_OK?rc:retired?EFS_OK:EFS_ERR_NOT_FOUND;
+    }
+    if (rc==EFS_OK) rc=orphan_value_ok(t,val,len,&acked);
     if (rc!=EFS_OK) return rc;
-    key[2]=EFS_KV_KIND_PUT_ORPHAN;
-    rc=efs_kv_get(kv,key,sizeof(key),val,&len);
-    if (rc!=EFS_OK) return rc;
-    ticket_value(t,EFS_PUT_TICKET_REJECTED,want);
-    return len==sizeof(val) && !memcmp(val,want,sizeof(val)) ? EFS_OK : EFS_ERR_PROTO;
+    acked|=frags;
+    if (acked==EFS_PUT_ORPHAN_ALL) return efs_kv_del(kv,key,sizeof(key));
+    if (acked==rd32(val+176)) return EFS_OK;
+    wr32(val+176,acked);
+    return efs_kv_put(kv,key,sizeof(key),val,sizeof(val));
+}
+
+void efs_put_ticket_orphan_prefix(uint32_t anchor,uint8_t prefix[3])
+{
+    prefix[0]=(uint8_t)(anchor>>8);prefix[1]=(uint8_t)anchor;prefix[2]=EFS_KV_KIND_PUT_ORPHAN;
+}
+
+int efs_put_ticket_orphan_decode(const uint8_t *key,uint32_t kl,const uint8_t *val,
+                                 uint32_t vl,struct efs_put_ticket *out,uint32_t *acked)
+{
+    if (!key || !val || !out) return EFS_ERR_INVAL;
+    if (kl!=EFS_PUT_ORPHAN_KEY_LEN || key[2]!=EFS_KV_KIND_PUT_ORPHAN ||
+        vl!=EFS_PUT_TICKET_VAL_LEN || rd32(val)!=1 || rd32(val+4)!=EFS_PUT_TICKET_REJECTED)
+        return EFS_ERR_PROTO;
+    struct efs_put_ticket t={0};
+    memcpy(t.id.client_uuid,key+5,16);t.id.session_epoch=rd32(key+21);t.id.seq=rd64(key+25);
+    t.ino=rd64(key+33);t.inode_gen=rd64(key+41);t.ci=rd32(key+49);
+    t.object=rd64(val+8);memcpy(t.body_digest,val+16,EFS_HASH_SIZE);
+    for (unsigned i=0;i<EFS_NUM_FRAGMENTS;i++) t.nodes[i]=rd32(val+48+4*i);
+    memcpy(t.checksums,val+60,sizeof(t.checksums));
+    t.delta_off=rd32(val+156);t.delta_len=rd32(val+160);t.coding_profile=rd32(val+164);
+    t.fragment_len=rd32(val+168);t.member_mask=rd32(val+172);
+    uint8_t want[EFS_PUT_ORPHAN_KEY_LEN];
+    /* The key must be the one this ticket derives (anchor and lane shard). */
+    if (orphan_key(&t,want)!=EFS_OK || memcmp(want,key,sizeof(want)))
+        return EFS_ERR_PROTO;
+    int rc=orphan_value_ok(&t,val,vl,acked);
+    if (rc==EFS_OK) *out=t;
+    return rc;
 }
