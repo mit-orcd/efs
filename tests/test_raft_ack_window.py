@@ -11,11 +11,13 @@ guard="""if (!r->preserve_ack_window || !in->success ||
 assert guard in source
 with tempfile.TemporaryDirectory(prefix='efs-raft-ack-window-') as directory:
  p=Path(directory);binary=p/'positive'
- flags=shlex.split(os.environ.get('EFS_TEST_CFLAGS','-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer'))
+ # make leak-check sets EFS_LEAK_WRAP (memcheck); ASan and memcheck cannot share a process.
+ wrap=shlex.split(os.environ.get('EFS_LEAK_WRAP',''))
+ flags=shlex.split(os.environ.get('EFS_TEST_CFLAGS','-O1 -g' if wrap else '-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer'))
  command=[os.environ.get('CC','cc'),'-std=c99','-D_GNU_SOURCE','-Wall','-Wextra','-pthread','-I'+str(root/'include')]
  dependencies=[str(root/'tests/test_raft.c'),str(root/'src/raft/raft_mem.c'),str(root/'src/common/batch_obs.c')]
  subprocess.run([*command,*flags,*dependencies,str(root/'src/raft/raft.c'),'-o',str(binary)],check=True)
- subprocess.run([str(binary)],check=True)
+ subprocess.run([*wrap,str(binary)],check=True)
  old=p/'old-retirement.c';old.write_text(source.replace(guard,'if (1)',1))
  binary=p/'old-negative'
  subprocess.run([*command,'-O1','-g',*dependencies,str(old),'-o',str(binary)],check=True)

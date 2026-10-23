@@ -115,14 +115,21 @@ int main(void)
         for(uint32_t j=0;j<got;j++) lru_requeue(old[j].ino,old[j].tick); }
     double dt=now_s()-t0;
     pthread_mutex_lock(&g_lru_mu); assert(g_lru_count==2000000); pthread_mutex_unlock(&g_lru_mu);
+#ifndef EFS_LEAK_WRAPPED
     assert(dt<1.0);
+#endif
     printf("stage LRU: model order, index, requeue, pass order and O(batch) passes (2000 passes over 2M in %.3fs) PASS\n",dt);
     return 0;
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-stage-lru-') as d:
     p=Path(d)/'test.c';p.write_text(code)
-    for extra in ([], ['-fsanitize=address,undefined','-fno-omit-frame-pointer']):
-        exe=p.with_suffix('.asan' if extra else '')
+    # make leak-check sets EFS_LEAK_WRAP (memcheck): run only the plain build
+    # under it, without the wall-clock bound memcheck's slowdown would break.
+    wrap=shlex.split(os.environ.get('EFS_LEAK_WRAP',''))
+    variants=([['-DEFS_LEAK_WRAPPED']] if wrap else
+              [[], ['-fsanitize=address,undefined','-fno-omit-frame-pointer']])
+    for extra in variants:
+        exe=p.with_suffix('.asan' if '-fno-omit-frame-pointer' in extra else '')
         subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-O2','-Wall','-Wextra','-Werror','-pthread',*extra,str(p),'-o',str(exe)],check=True)
-        subprocess.run([str(exe)],check=True)
+        subprocess.run([*wrap,str(exe)],check=True)

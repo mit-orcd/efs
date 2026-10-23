@@ -3003,7 +3003,8 @@ static void test_recv_batch(void)
         CHECK(efs_raft_recv(r,&msgs[0])==EFS_OK,"establish stable leader");
         recv_test.replies=recv_test.barriers=0;
         for(unsigned i=0;i<3;i++) {
-            msgs[i]=msgs[0];msgs[i].prev_index=i;msgs[i].prev_term=i?2:0;
+            if(i) msgs[i]=msgs[0]; /* no self-copy: gcc emits an overlapping memcpy */
+            msgs[i].prev_index=i;msgs[i].prev_term=i?2:0;
             msgs[i].nentries=1;msgs[i].entries[0].term=2;
             msgs[i].entries[0].cmd=(const uint8_t*)"a";msgs[i].entries[0].clen=1;
             msgs[i].leader_commit=i+1;msgs[i].last_log_index=10+i;

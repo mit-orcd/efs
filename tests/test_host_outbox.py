@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Exercise production priority replacement with interleaved Raft groups."""
 from pathlib import Path
-import os, subprocess, tempfile
+import os, shlex, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/server/raft_host.c').read_text()
 a=s.index('static int outbox_pri_replace(');b=s.index('\n}',a)+2
@@ -180,10 +180,13 @@ int main(void){
 with tempfile.TemporaryDirectory(prefix='efs-host-outbox-') as d:
  p=Path(d)/'test.c';p.write_text(code);binary=p.with_suffix('')
  subprocess.run([os.environ.get('CC','cc'),'-std=c99','-Wall','-Wextra','-Werror',str(p),'-o',str(binary)],check=True)
- subprocess.run([str(binary)],check=True)
- sanitized=Path(d)/'sanitized'
- subprocess.run([os.environ.get('CC','cc'),'-std=c99','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer',str(p),'-o',str(sanitized)],check=True)
- subprocess.run([str(sanitized)],check=True)
+ # make leak-check sets EFS_LEAK_WRAP (memcheck) and skips the ASan build.
+ wrap=shlex.split(os.environ.get('EFS_LEAK_WRAP',''))
+ subprocess.run([*wrap,str(binary)],check=True)
+ if not wrap:
+  sanitized=Path(d)/'sanitized'
+  subprocess.run([os.environ.get('CC','cc'),'-std=c99','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-omit-frame-pointer',str(p),'-o',str(sanitized)],check=True)
+  subprocess.run([str(sanitized)],check=True)
  p.write_text(code.replace('if(read_vote && rd64be(tx->pri[i].buf+28)>rd64be(buf+28))', 'if(0 && read_vote && rd64be(tx->pri[i].buf+28)>rd64be(buf+28))'))
  negative=Path(d)/'late-context-negative'
  subprocess.run([os.environ.get('CC','cc'),'-std=c99','-Wall','-Wextra','-Werror',str(p),'-o',str(negative)],check=True)
