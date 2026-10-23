@@ -1331,32 +1331,49 @@ static int become_leader(struct efs_raft *r)
 
 #define REJECT_LOG_TICKS 2000u
 
-/* K22/W23: this replica cannot serve as leader now. */
+/* K22/W23: this replica cannot serve as leader now: its state machine is
+ * at its watermark, or it cannot apply what is already committed (3/4 of
+ * max_unapplied committed past last_applied). The uncommitted part of the
+ * tail is not counted. Committing it needs a leader: after a leader loss
+ * or a restart with a retained tail every voter may hold one, and a veto
+ * on it left all voters followers with nothing sent (review S1, Oct 22).
+ * Such a replica may campaign and lead; admission (leader_over_bound,
+ * host_admit) still counts the whole tail, so recovery leadership commits
+ * its no-op and the tail but admits no new work until they are applied. */
 static int low_capacity(const struct efs_raft *r)
 {
-    uint64_t last_i = 0, last_t = 0;
-
     if (r->pressure)
         return 1;
-    if (!r->max_unapplied || last_log((struct efs_raft *)r, &last_i, &last_t) != EFS_OK)
+    if (!r->max_unapplied)
         return 0;
-    return (last_i > r->last_applied ? last_i - r->last_applied : 0) >=
+    return (r->commit_index > r->last_applied ? r->commit_index - r->last_applied : 0) >=
            r->max_unapplied / 4u * 3u;
 }
 
 /* K22/W23: an up-to-date log is not enough to lead; a replica that
- * cannot apply would refuse every proposal. Held before pre-vote and
- * before the election itself (a transfer's TimeoutNow included). */
+ * cannot apply its committed log would refuse every proposal. Held before
+ * pre-vote and before the election itself (a transfer's TimeoutNow
+ * included). An uncommitted tail never holds: see low_capacity. */
 static int capacity_hold(struct efs_raft *r)
 {
-    if (solo(r) || !low_capacity(r))
+    if (solo(r))
+        return 0;
+    /* Committed entries need no leader to apply. A follower retries a
+     * refused apply only on a leader's message; with the leader gone, a
+     * backlog that the state machine can now take would hold this replica
+     * forever. Retry here, once per election timeout; a refusal leaves
+     * the backlog for the next timeout. */
+    if (low_capacity(r) && r->commit_index > r->last_applied)
+        (void)apply_committed(r);
+    if (!low_capacity(r))
         return 0;
     r->campaigns_held++;
     if (r->campaigns_held == 1 || r->ticks - r->capacity_log_tick >= REJECT_LOG_TICKS) {
         r->capacity_log_tick = r->ticks;
         fprintf(stderr, "raft: group=%u election held: low capacity "
-                "(pressure=%d applied=%llu held=%llu)\n", r->group,
+                "(pressure=%d applied=%llu commit=%llu held=%llu)\n", r->group,
                 r->pressure, (unsigned long long)r->last_applied,
+                (unsigned long long)r->commit_index,
                 (unsigned long long)r->campaigns_held);
     }
     reset_election(r);
@@ -2311,6 +2328,8 @@ int efs_raft_tick(struct efs_raft *r)
         return EFS_ERR_IO;
     r->ticks++;
     if (r->role == EFS_RAFT_LEADER) {
+        /* Pressure or a committed backlog only: a leader whose sole lag
+         * is its own uncommitted tail keeps leading to commit it. */
         if (!solo(r) && low_capacity(r)) {
             if (++r->pressure_ticks >= 4u * (uint64_t)r->election_ticks) {
                 r->capacity_stepdowns++;

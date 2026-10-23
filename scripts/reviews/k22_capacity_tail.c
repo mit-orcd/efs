@@ -7,6 +7,12 @@
  *    src/raft/raft.c src/raft/raft_mem.c src/common/batch_obs.c -o /tmp/k22-tail
  * /tmp/k22-tail 128; /tmp/k22-tail 0
  * Prints observations, not a cluster PASS. Uses memory stores only.
+ * Fixed on devel-k22b: an uncommitted tail no longer vetoes campaigning
+ * (only KV pressure and a committed-but-unapplied backlog do), so at cap
+ * 128 the nodes now send pre-votes. The regression runs in `make test` as
+ * test_tail_campaigns (this scenario, counting sends) and
+ * test_tail_recovery (delivered messages: elect, commit and apply the
+ * tail, resume admission) in tests/test_follower_bound.c.
  */
 #include "efs/raft.h"
 #include <stdio.h>

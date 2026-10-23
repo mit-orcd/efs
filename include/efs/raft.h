@@ -57,10 +57,14 @@ static inline int efs_raft_preferred_voter(uint32_t voters, unsigned ordinal)
 #define EFS_RAFT_MSG_TIMEOUT_NOW 7
 /* K1/W145 pre-vote (Raft thesis 9.6). A follower whose election timer
  * fires asks first whether a quorum would vote for it at term+1, without
- * changing its own term. term = the prospective term; the reply echoes it
- * in prev_term. A voter grants only if it has not heard from a leader
+ * changing its own term. term carries the sender's current term (send_msg
+ * stamps it); the prospective term travels in prev_term in both the request
+ * and the reply. A voter grants only if it has not heard from a leader
  * within the minimum election timeout and the candidate's log is at least
- * as up to date. Neither message changes the receiver's term or vote. */
+ * as up to date. The request never changes the receiver's term or vote,
+ * and neither does a grant; a refusal from a higher term advances the
+ * candidate's term to it (as any higher-term reply would) and ends its
+ * pre-vote. */
 #define EFS_RAFT_MSG_PREVOTE_REQ 8
 #define EFS_RAFT_MSG_PREVOTE_REP 9
 
@@ -331,7 +335,8 @@ struct efs_raft_log_progress {
      * its cap (0 = unbounded), batches refused busy as a follower and
      * proposals refused EFS_ERR_BUSY as a leader. */
     uint64_t unapplied, max_unapplied, busy_sent, admit_busy;
-    uint64_t low_capacity;     /* 1 while the replica may not lead */
+    uint64_t low_capacity;     /* 1 while the replica may not lead (pressure
+                                * or committed backlog, not the tail) */
     uint64_t campaigns_held;   /* elections not started for capacity */
     uint64_t capacity_stepdowns;
 };
@@ -348,9 +353,13 @@ void efs_raft_set_max_unapplied(struct efs_raft *r, uint64_t max);
 uint64_t efs_raft_unapplied_cap(uint64_t mem_budget);
 /* K22/W23 (D30: leadership requires local capacity). The host reports its
  * state machine's memory pressure (KV at the admission watermark). A replica
- * under pressure, or holding >= 3/4 of max_unapplied, does not campaign; a
- * leader that stays so for four election timeouts steps down so a healthy
- * peer can lead. Votes are unaffected; a solo voter never steps down. */
+ * under pressure, or with >= 3/4 of max_unapplied committed but not applied,
+ * does not campaign; a leader that stays so for four election timeouts steps
+ * down so a healthy peer can lead. The uncommitted part of the log tail does
+ * not count: committing it needs a leader, so such a replica campaigns and
+ * may lead, while admission (EFS_ERR_BUSY at the cap here, at 3/4 in the
+ * host) still counts the whole tail until it is committed and applied.
+ * Votes are unaffected; a solo voter never steps down. */
 void efs_raft_set_pressure(struct efs_raft *r, int over);
 /* W145 repair, operator-triggered only: this follower's committed log
  * disagrees with the leader (a conflict at or below commit). While set,
