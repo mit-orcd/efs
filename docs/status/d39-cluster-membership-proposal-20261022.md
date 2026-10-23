@@ -1972,3 +1972,77 @@ Proposed, untested; user choices unchanged; W153a held. Next artifact: the
 consolidated model (one acceptance predicate, the state and role table,
 R1–R6 as amended by §§19–29, the operation lifecycle, these two contracts)
 with every trace from §§8–28 as its test list.
+
+## 30. Independent review of §29 (`535edcf6f`) — October 23
+
+**Capacity handoff accepted in direction; fencing specification still OPEN.
+Model and implementation gates NOTRUN.** Reviewed §29 against the earlier
+operation-authority contract and the current Raft receive/persistence paths.
+No code changed and no runtime failure was reproduced in this review.
+
+### P1 — An atomic comparison alone does not fence the following effect
+
+The atomic mark fixes visibility of the latest incarnation, but §29 again
+separates the comparison from acquiring the right to produce an effect.
+Concrete interleaving, even with sequentially consistent atomics:
+
+1. Old frame F loads incarnation 11, matches it, and pauses.
+2. Declaration D stores incarnation 12 and returns accepted.
+3. F resumes and changes a term, vote, log or read-proof state.
+
+F complied with "load before any effect", yet violates the promised "no
+obsolete effects after the store". Moving the load closer to the effect,
+using acquire/release, or updating the secondary `peer_boot` cache cannot
+remove this gap. The model must split check and effect into separate steps
+and schedule D between them; an atomic model action covering both would
+hide exactly the implementation race under review.
+
+Specify one of the already intended ownership mechanisms concretely. For
+example, under the binding leaf lock, check the authoritative binding and
+register an admitted operation/continuation with a defined scope; declaration
+publication serializes with that registration. Release the lock before I/O
+and allow only that registered work to complete under retained authority.
+Then the invariant is **no obsolete work may newly acquire authority after
+the declaration's ordering point**, while previously accepted work may
+complete afterward. That matches the earlier token contract, unlike the
+literal ban on every later effect. For a short effect that acquires no
+retained authority, check and effect need shared serialization with the
+transition. Do not introduce a global lock held across I/O.
+
+Cover queued read-proof inspection as well as normal/batched receive. Define
+which frame effects belong to a registered operation; unrelated later frames
+must not inherit its permission. The test list should distinguish F paused
+before registration (refuse after D) from F paused after registration (finish
+only its authorized effects). Ordinary Raft term/configuration/storage checks
+still apply; §29's "none refused before" cannot mean every pre-transition
+frame must succeed regardless of those checks.
+
+### Clarify the published state and atomic access contract
+
+§25's declaration high-water mark orders `(incarnation, counter)`; §29's
+single word appears to be only the incarnation fence. Name these separately.
+A counter-only change must still revoke old application admission even when
+that word is unchanged. Read the binding's counter, pair and permissions as
+one coherent validated state at admission, not unrelated atomic fields that
+can describe different declarations.
+
+All accesses to a word concurrently read atomically must follow the chosen
+atomic API, including the writer: holding a mutex used only by writers does
+not make a plain store safe against atomic readers in C. Specify publication
+ordering for any associated state. These are implementation details for the
+same contract, not an additional generation scheme or operator setting.
+
+### Capacity and next step
+
+The pre-reserved record, aggregate record/byte accounting and reservation
+transfer address §28's capacity issue. I have no further design objection to
+that mechanism. Its exactly-full and destination-refusal tests still need
+to demonstrate that ownership is retained until a successful transfer and
+that reserved bytes cover actual staged/completion allocations.
+
+The next artifact should be the consolidated executable model with the
+check/register/effect interleaving above. Do not replace the corrected token
+rule with another pre-effect check in a later summary. D39 remains proposed,
+W153a held and the three user decisions unchanged. W154 is separate and its
+policy is not decided by this review. No deployment, compatibility mode or
+new user-facing knob is requested.
