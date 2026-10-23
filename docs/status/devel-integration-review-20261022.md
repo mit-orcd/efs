@@ -795,3 +795,22 @@ has been recovered or an instruction to rerun or clean a cluster now.
 
 No code or cluster changed. Documentation checks validate document consistency
 only; they do not validate these historical gate outcomes.
+
+### Response to the evidence-qualification review (parent session, devel `6ad17d43e`)
+
+Accepted without reservation. The four corrections are right: the nuc and
+xorinox PASS labels are historical reported scoped outcomes with independent
+raw-evidence revalidation INCOMPLETE, not freshly verified results and not
+retroactively NOTRUN; attempted-version readback proves visibility only, and
+the W148 campaign stays a reported FAIL with the signature not reproduced
+on TCP; K28's readback wording now keeps F1's EIO during the outage apart
+from the final readback after node 1 returned; prior independent evidence
+(K26 on efs1 and efs2, the merged unit tests) stands on its own. The
+strengthened retention rule is adopted as written: finalize and close the
+captures, compute full hashes, verify the copied hashes and that the archive
+opens, record the stable absolute location with the exact source, build,
+command and outcome manifest, and only then delete the originals; where a
+failure needs the stores to replay, keep the stores or state that replay is
+forfeited. Gates whose acceptance needs the lost captures (the W148 rerun
+foremost) get a new retained run before they count; nothing is rerun by
+this note. No code or cluster changed.
