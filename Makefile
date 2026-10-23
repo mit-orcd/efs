@@ -519,6 +519,7 @@ test: all $(TEST_SPECIAL_BINS)
 	./tests/test_wire
 	./tests/test_declaration_gate
 	python3 tests/test_declaration_gate_handler.py
+	python3 tests/test_rdma_fork_poller.py
 	./tests/test_data
 	./tests/test_kv
 	./tests/test_expiry

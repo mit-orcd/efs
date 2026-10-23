@@ -7969,21 +7969,10 @@ int main(int argc, char **argv)
     }
     printf("export id=%u name=%s\n", g_client.export_id,
            g_client.export.name[0] ? g_client.export.name : g_client.export_name);
-    /* K5/I23: one session per mount, committed on its owner shard before
-     * the first mutation. Without it every mutation would be refused, so
-     * fail the mount instead of serving a read-only surprise. */
-    rc = efs_client_session_start();
-    if (rc != EFS_OK) {
-        fprintf(stderr, "Could not establish the mount session (%s).\n",
-                efs_strerror(rc));
-        return 1;
-    }
-    {
-        char hex[2 * EFS_OPID_UUID_LEN + 1];
-        for (unsigned i = 0; i < EFS_OPID_UUID_LEN; i++)
-            snprintf(hex + 2 * i, 3, "%02x", g_client.opid_uuid[i]);
-        printf("session uuid=%s epoch=%u\n", hex, g_client.opid_epoch);
-    }
+    /* K5/I23: the mount session is established after the daemon fork, in
+     * the process that serves the mount (K31): over RDMA the session RPC
+     * starts the device's completion poller thread, and fork() would leave
+     * the serving daemon without it. */
     {
         /* Post-step-11 there is no bootstrap table fetch: the staging table
          * starts empty and fills on demand (client-cache Part A bounds it
@@ -8153,6 +8142,27 @@ static int efs_fuse_main_mt(int argc, char *argv[])
         fprintf(stderr, "efs-fuse daemon pid=%d\n", (int)getpid());
         fflush(stderr);
     }
+    /* K5/I23: one session per mount, committed on its owner shard before
+     * the first mutation. Without it every mutation would be refused, so
+     * fail the mount instead of serving a read-only surprise. K31: here,
+     * after the daemon fork, so the RDMA poller it may start belongs to the
+     * serving process. A failure exits the child before FUSE_INIT; the
+     * waiting parent reports it. */
+    int session_rc = efs_client_session_start();
+    if (session_rc != EFS_OK) {
+        fprintf(stderr, "Could not establish the mount session (%s).\n",
+                efs_strerror(session_rc));
+        fflush(stderr);
+        ret = 1;
+        goto out;
+    }
+    {
+        char hex[2 * EFS_OPID_UUID_LEN + 1];
+        for (unsigned i = 0; i < EFS_OPID_UUID_LEN; i++)
+            snprintf(hex + 2 * i, 3, "%02x", g_client.opid_uuid[i]);
+        printf("session uuid=%s epoch=%u\n", hex, g_client.opid_epoch);
+    }
+    fflush(stdout);
 
     /* This is the process that serves the mount (the child, or the only
      * process under -f). Attach the recorder to it; the parent above has

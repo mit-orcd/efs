@@ -184,6 +184,7 @@ struct efs_rdma_dev {
     struct ibv_comp_channel *recv_chan;
     pthread_t poller;
     int poller_started;
+    pid_t poller_pid; /* K31: the process that owns the poller thread */
 };
 
 /* Syntax cap 128MiB covers the maximum 64MiB fragment plus all wire headers.
@@ -851,8 +852,23 @@ static void *recv_poller(void *arg)
 /* Lazily create the shared recv CQ + poller for a device (first conn). */
 static int dev_shared_cq_start(struct efs_rdma_dev *dev)
 {
-    if (dev->poller_started)
+    if (dev->poller_started) {
+        /* K31: fork() keeps only the calling thread. A device whose poller
+         * was started in another process has no poller here: completions
+         * would land in the CQ and never reach a connection (requests sent,
+         * replies silently lost). Refuse instead of hanging. */
+        if (dev->poller_pid != getpid()) {
+            static int warned;
+            if (!__sync_fetch_and_add(&warned, 1))
+                fprintf(stderr, "efs: RDMA device %s was initialized in pid %d and is "
+                        "used in pid %d after fork(); its completion poller did not "
+                        "survive the fork; refusing RDMA in this process\n",
+                        dev->ctx && dev->ctx->device ? ibv_get_device_name(dev->ctx->device) : "?",
+                        (int)dev->poller_pid, (int)getpid());
+            return -1;
+        }
         return 0;
+    }
     dev->recv_chan = ibv_create_comp_channel(dev->ctx);
     if (!dev->recv_chan)
         return -1;
@@ -874,6 +890,7 @@ static int dev_shared_cq_start(struct efs_rdma_dev *dev)
         ibv_destroy_cq(dev->recv_cq); dev->recv_cq = NULL; goto cq_fail;
     }
     pthread_detach(dev->poller);
+    dev->poller_pid = getpid();
     dev->poller_started = 1;
     return 0;
 cq_fail:
