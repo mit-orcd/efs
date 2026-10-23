@@ -20,7 +20,9 @@ commands each). Data publication, PUT tickets and session work are not
 counted; they do not depend on the lane count.
 
 Usage: make libefs.a && python3 scripts/k29_append_entry_count.py
-Prints one row per lane count: entries per record for group 0 and group 2.
+Prints one row per lane count: entries per record for group 0 and group 2
+with the retirement (sequential writer), and group 0 without it (several
+reservations in flight). The test inode's shard is in group 0.
 """
 from pathlib import Path
 import os, shlex, subprocess, sys, tempfile
@@ -70,7 +72,8 @@ static void entries(const struct count *c,unsigned inode_group,unsigned before[3
     unsigned rg=efs_raft_shard_group(c->coord);before[rg]++;after[rg]++; /* finisher RETIRE */
 }
 int main(void){
-    printf("lanes  group0_before  group0_after  group2_before  group2_after  total_before  total_after\n");
+    printf("lanes  group0_before  group0_after  group2_before  group2_after  total_before  total_after"
+           "  g0_no_retire_before  g0_no_retire_after\n");
     unsigned lanes[]={1,2,4,8,16,32,48,64};
     for(unsigned li=0;li<sizeof(lanes)/sizeof(lanes[0]);li++){
         struct efs_kv *kv=efs_kv_mem_create();assert(kv);
@@ -82,6 +85,7 @@ int main(void){
         struct efs_opid_req q={0};q.id.client_uuid[0]=42;q.id.session_epoch=1;
         assert(!efs_session_establish(kv,efs_kv_inode_shard(ino),q.id.client_uuid,1));
         unsigned ig=efs_raft_shard_group(efs_kv_inode_shard(ino)),before[3]={0},after[3]={0};
+        unsigned nr_before=0,nr_after=0;
         struct efs_meta_append_plan *plan=malloc(sizeof(*plan));assert(plan);
         uint64_t tx=0;
         for(unsigned record=0;record<3;record++){
@@ -100,10 +104,12 @@ int main(void){
             if(plan->parts.n==1){before[ig]++;after[ig]++;} /* APPEND_ATOMIC */
             else entries(&reserve,ig,before,after);
             before[ig]++;after[ig]++; /* completion entry */
+            nr_before=before[0];nr_after=after[0];
             entries(&retire,ig,before,after);
         }
-        printf("%5u  %13u  %12u  %13u  %12u  %12u  %11u\n",lanes[li],before[0],after[0],before[2],after[2],
-               before[0]+before[2],after[0]+after[2]);
+        assert(ig==0);
+        printf("%5u  %13u  %12u  %13u  %12u  %12u  %11u  %19u  %18u\n",lanes[li],before[0],after[0],before[2],after[2],
+               before[0]+before[2],after[0]+after[2],nr_before,nr_after);
         free(plan);efs_kv_mem_free(kv);
     }
     return 0;
