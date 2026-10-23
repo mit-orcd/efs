@@ -93,3 +93,56 @@ this amendment. Existing fixed-membership model results are historical scoped
 results, not node-addition qualification. Extend the model and protocol before
 claiming these gates complete. No runtime code or devops repo is changed by
 this policy update, and it grants no new deployment, wipe or reformat action.
+
+## Parent-session review of `64493ca8f` (Oct 23)
+
+The contract is clear and is the user's decision; it reverses the three D39
+choices of D40 taken earlier the same day, and the page says so. Four points
+for the record and one decision the user has to take now.
+
+1. **devel HEAD cannot run a cluster the way the contract requires.** The D39
+   admission merge (`246bae7cf`) makes `efsd` refuse `--node-id` and `--join`,
+   stop on a set `EFS_MD_RAFT_N`, and require `--cluster FILE`; `efs-mgmt
+   raft-mkfs` requires the file and every member present; the online
+   membership change (`raft-change`, `CFG`) was refused and removed; 28
+   committed shell drivers and 6 Python tests were converted to the file.
+   So the current devel is undeployable under this contract, and orcd-mini
+   stays on `6b621993d` (the last pre-D39 build). The code gate still passes
+   (431 commands, 0 FAIL at `1324cbd99`) because every test was converted
+   with the code.
+2. **Decision needed: revert or rework.** (a) `git revert` the admission
+   merge now, so devel is deployable again with today's seed/`--join`
+   startup (non-compliant with the amendment, but the working baseline the
+   new design replaces), and re-apply separately the parts the amendment
+   says to keep and that do not depend on a cluster file: the exclusive
+   store ownership lock, the durable boot counter with its fail-closed
+   checks, the identity digest machinery as library code with its tests,
+   and the uniqueness tests. The model (`tests/d39_model.py`) stays as the
+   base to extend. (b) Keep the merged layer and rework it in place to the
+   new contract, accepting that devel cannot be deployed to orcd-mini until
+   that lands. Recommendation: (a); the rework is a design task first (the
+   reviewers' work order: model, then code, then gates), and a devel that
+   no live cluster can run blocks every other orcd-mini gate meanwhile.
+3. **What the new design must settle before code** (the amendment names
+   the invariants; these are the mechanisms): automatic member identity is
+   allocated by consensus in the formation record and in each committed
+   addition, never by the HELLO table; the cluster identity is the MKFS salt
+   plus a formation digest, with membership revisions as a separate
+   committed sequence (the amendment's "stable identity apart from ordered
+   membership revisions"); the 3-to-4 transition reuses the existing
+   joint-consensus `CFG CHANGE` path for SHARD2 {1,2,3} → {2,3,4}, so that
+   path returns; added members take new placement only (no recomputation of
+   old placement) and the placement ring, pack ring and W154 rebuild read
+   one committed membership revision; discovery is a separate, optional
+   finder (the ORCD fabric may not carry multicast, so the explicit seed is
+   the qualified path there). W153/W153a's goal, no silent four-node
+   default, is met by deriving the member count from the committed
+   membership, not from an environment variable.
+4. **Tracking.** New Stage 1 row K33 and work item W157 point here;
+   W153/W153a stay OPEN with their direction redirected to the committed
+   membership. The D39 pages are marked historical where they conflict, as
+   the amendment did.
+
+Process note: the one-line uncommitted edit to
+`d39-consolidated-model-20261023.md` in the shared checkout is not mine and
+was left alone, as the amendment's commit did.
