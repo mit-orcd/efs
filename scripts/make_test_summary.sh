@@ -31,8 +31,9 @@ if [ -e build.failed ] || [ ! -s cmds.txt ]; then
     exit 1
 fi
 python3 - <<"EOP"
-# Reads cmds.txt in the current directory; writes summary.txt, progress.txt
-# and tmp/fail-<index>.log. tests/test_make_test_summary_runner.py runs this
+# Reads cmds.txt in the current directory; writes summary.txt, progress.txt,
+# timings.tsv (index, seconds, exit status, first command line; slowest
+# first) and tmp/fail-<index>.log. tests/test_make_test_summary_runner.py runs this
 # block on its own.
 import os, re, signal, subprocess, sys, time
 lines=open("cmds.txt").read().split("\n"); cmds=[]; cur=""
@@ -54,9 +55,11 @@ def run(c):
         except ProcessLookupError: pass
         out,_=p.communicate()
         return 124,text(out)+"\nTIMEOUT after %gs\n"%limit
-fails=[]; notrun=[]; t0=time.time()
+fails=[]; notrun=[]; times=[]; t0=time.time()
 for i,c in enumerate(cmds):
+    started=time.time()
     rc,out=run(c); head=c.split("\n")[0][:150]
+    times.append((i,time.time()-started,rc,head))
     if rc:
         log="tmp/fail-%d.log"%i
         with open(log,"w") as f: f.write("$ %s\n# exit %d\n%s"%(c,rc,out))
@@ -67,6 +70,9 @@ for i,c in enumerate(cmds):
         marks=[l for l in out.splitlines() if re.search(r"\b(NOTRUN|SKIP)\b",l)]
         if marks: notrun.append((i,head,marks[0].strip()[:200]))
     open("progress.txt","w").write("%d/%d fails=%d notrun=%d\n"%(i+1,len(cmds),len(fails),len(notrun)))
+with open("timings.tsv","w") as f:
+    f.write("index\tseconds\trc\tcommand\n")
+    for i,sec,rc,head in sorted(times,key=lambda t:-t[1]): f.write("%d\t%.1f\t%d\t%s\n"%(i,sec,rc,head))
 status,code=("FAIL",1) if fails or not cmds else ("INCOMPLETE",3) if notrun else ("PASS",0)
 open("summary.txt","w").write("TOTAL %d FAIL %d NOTRUN %d STATUS %s (%.0fs)\n"%(len(cmds),len(fails),len(notrun),status,time.time()-t0)
     +"".join("%d\t%d\t%s\t%s\t%s\n"%f for f in fails)+"".join("NOTRUN\t%d\t%s\t%s\n"%n for n in notrun))
