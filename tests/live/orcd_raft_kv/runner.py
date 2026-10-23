@@ -41,7 +41,7 @@ def start(label,variant,noop,overlap,interval,fresh=True):
 {'test ! -e '+root+'; mkdir '+root if fresh else 'test -d '+root}
 mkdir -p {d}
 cp efsd-{variant} efsd
-nohup ./efsd --cluster $CONF --addr 172.16.223.{i+56} --port 17432 --storage {root} --quota 17G --direct-io >{d}/efsd{'-restart' if not fresh else ''}.log 2>&1 </dev/null &
+nohup ./efsd --node-id {i} --addr 172.16.223.{i+56} --port 17432 --storage {root} --quota 17G --direct-io {'--join '+c.SEED if i>1 else ''} >{d}/efsd{'-restart' if not fresh else ''}.log 2>&1 </dev/null &
 echo $! >{d}/efsd.pid
 python3 scripts/server_processes.py record {d}/efsd.pid {root}
 ''')

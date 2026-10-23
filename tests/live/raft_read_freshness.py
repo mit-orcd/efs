@@ -26,8 +26,6 @@ parser.add_argument('--publication',action='store_true',help='test stored public
 parser.add_argument('--configuration',action='store_true',help='change group voters while the old leader is isolated')
 parser.add_argument('--mode',choices=('direct','buffered'),default='direct',help='private daemon storage mode (default: direct)')
 args=parser.parse_args()
-# D39/D40: membership is fixed by the configuration; raft-change is gone.
-assert not args.configuration, '--configuration needs online membership change, removed by D39'
 base, proxy_base, count = 21340, 21400, 3
 isolated = None
 stop = threading.Event()
@@ -123,11 +121,11 @@ def lost_mkfs_reply(node, command, work):
                     client.settimeout(10);server.settimeout(10)
                     # W133: efs-mgmt declares first; relay that exchange untouched.
                     header=exact(client,4);length=struct.unpack('>I',header)[0]
-                    assert length==97
-                    hello=exact(client,length);assert hello[0]==165 and hello[17]==2,hello.hex()  # role MGMT
+                    assert length==17
+                    hello=exact(client,length);assert hello[0]==165,hello.hex()
                     server.sendall(header+hello)
                     hello_header=exact(server,4);hello_reply=exact(server,struct.unpack('>I',hello_header)[0])
-                    assert hello_reply[0]==166 and struct.unpack('=iI',hello_reply[1:9])==(0,6),hello_reply.hex()
+                    assert hello_reply[0]==166 and struct.unpack('=iI',hello_reply[1:])==(0,4),hello_reply.hex()
                     client.sendall(hello_header+hello_reply)
                     header=exact(client,4);length=struct.unpack('>I',header)[0]
                     assert length==1
@@ -140,9 +138,9 @@ def lost_mkfs_reply(node, command, work):
                     evidence.append(dict(request_hex=request.hex(),successful_reply_hex=reply.hex(),delivered_bytes=0))
             except BaseException as error:errors.append(repr(error))
         worker=threading.Thread(target=drop);worker.start()
-        result=subprocess.run([str(source/'efs-mgmt'),command,f'127.0.0.1:{listener.getsockname()[1]}','--wait','2'],capture_output=True,text=True,timeout=20)
+        result=subprocess.run([str(source/'efs-mgmt'),command,f'127.0.0.1:{listener.getsockname()[1]}'],capture_output=True,text=True,timeout=20)
         worker.join(12);assert not worker.is_alive() and not errors,(errors,evidence)
-    assert evidence and result.returncode!=0 and 'raft-mkfs failed' in result.stderr,result
+    assert evidence and result.returncode!=0 and 'Failed to raft-mkfs' in result.stderr,result
     (work/(command+'-lost-reply.json')).write_text(json.dumps(dict(exchange=evidence,exit=result.returncode,stdout=result.stdout,stderr=result.stderr),indent=2))
 
 def wait(fn, label):
@@ -165,11 +163,6 @@ def leader(exclude=None):
     return None
 
 work = Path(tempfile.mkdtemp(prefix='efs-read-freshness-'))
-# D39: the configured member list (real endpoints; the shim proxies peer
-# connections); efs-mgmt declares as management with it.
-conf = work/'cluster.conf'
-conf.write_text(''.join(f'{n+1} 127.0.0.1:{base+n}\n' for n in range(count)))
-os.environ['EFS_CLUSTER_CONF'] = str(conf)
 print('Evidence:', work, 'mode:', args.mode, 'transport: tcp', flush=True)
 (work/'manifest.json').write_text(json.dumps({'mode':args.mode,'transport':'tcp','nodes':count,'transactions':args.transactions,'publication':args.publication,'configuration':args.configuration},indent=2))
 servers, logs, listeners = [], [], []
@@ -188,12 +181,14 @@ try:
         storage = work/f'n{node}'
         storage.mkdir()
         log = open(work/f'n{node}.log','w'); logs.append(log)
-        env = dict(os.environ,EFS_TRANSPORT='tcp',
+        env = dict(os.environ,EFS_MD_RAFT_N='3',EFS_TRANSPORT='tcp',
                    LD_PRELOAD=str(work/'connect.so'),TEST_BASE=str(base),
                    TEST_PROXY=str(proxy_base),TEST_NODE=str(node))
-        cmd = [str(source/'efsd'),'--cluster',str(conf),'--addr','127.0.0.1',
+        cmd = [str(source/'efsd'),'--node-id',str(node+1),'--addr','127.0.0.1',
                '--port',str(base+node),'--storage',str(storage),
                '--direct-io' if args.mode=='direct' else '--no-direct-io']
+        if node:
+            cmd += ['--join',f'127.0.0.1:{base}']
         servers.append(subprocess.Popen(cmd,env=env,stdout=log,stderr=log))
         def listening():
             assert servers[-1].poll() is None, 'daemon exited'
@@ -217,11 +212,11 @@ try:
     # QUERY_STATS_REPLY (26), never totals.
     with socket.create_connection(('127.0.0.1',base+old),10) as sock:
         sock.settimeout(10)
-        sock.sendall(struct.pack('>IB',97,165)+b'EFSP'+struct.pack('=IQB7x',6,0,1)+bytes(72))  # CLIENT_HELLO v6, role CLIENT (D39)
+        sock.sendall(struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',5,0))  # CLIENT_HELLO v5 (K13)
         hello=b''
         while len(hello)<13:
             chunk=sock.recv(13-len(hello));assert chunk,'declaration closed early';hello+=chunk
-        assert hello[4]==166 and struct.unpack('=iI',hello[5:13])==(0,6),hello.hex()
+        assert hello[4]==166 and struct.unpack('=iI',hello[5:13])==(0,4),hello.hex()
         sock.sendall(struct.pack('>IB',1,25))
         reply=b''
         while len(reply)<4 or len(reply)<4+struct.unpack('>I',reply[:4])[0]:

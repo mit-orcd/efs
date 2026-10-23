@@ -270,3 +270,30 @@ member file is an alternative for operators who want it, and it must pass
 the same formation, identity and safety rules (one code path for formation,
 two ways to learn the initial members). Consequence for K33/W157: restore
 seed/`--join` startup beside `--cluster`; do not remove the file mode.
+
+## User decision (Oct 23, final): the `--cluster` file feature is removed
+
+"Remove the --cluster file feature, I was wrong to accept it." The D39
+admission merge (`246bae7cf`) is reverted on devel: `efsd` starts with the
+seed/`--join` arguments again, `efs-mgmt raft-mkfs` takes no file, the
+configuration parser, member store, admission layer and their tests are
+removed from the tree, and every driver and test is back on the join
+startup. The evidence pages (`d39-admission-20261023.md`,
+`d39-consolidated-model-20261023.md`, the proposal) stay as history. The
+model (`tests/d39_model.py`) and its tests stay; they describe fixed
+membership and are superseded for the startup question.
+
+What alpha still needs from this thread, and nothing more:
+- **W153:** a daemon must learn the member count and the groups' voters
+  from the cluster's committed membership, never from `EFS_MD_RAFT_N` or a
+  default of four; a three-node cluster forms when three members have
+  joined and agreed (formation), and that agreement is what the count comes
+  from. `EFS_MD_RAFT_N` goes away in that fix.
+- **K33/W157:** node addition, because alpha supports more than four nodes:
+  a joined member becomes a member by committed agreement, the 3-to-4
+  SHARD2 voter transition, retained placement for existing data. Designed
+  as its own item, model first, after W153.
+
+The safety pieces the reverted layer carried (exclusive store ownership
+lock, durable boot counter, identity digest) return with the W153 fix where
+they are needed, not as a separate configuration surface.

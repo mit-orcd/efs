@@ -9,7 +9,7 @@ ADDRS=['172.16.223.%d'%i for i in range(57,61)]
 a=argparse.ArgumentParser();a.add_argument('mode',choices=['worker','controller','scale']);a.add_argument('run');a.add_argument('--seconds',type=int,default=7200);a.add_argument('--root');a.add_argument('--workers',type=int,default=32);args=a.parse_args()
 RUN=P(args.run).resolve(); SRC=RUN/'source'; HOST=socket.gethostname().split('.')[0]
 assert HOST in HOSTS
-ENV=dict(os.environ,EFS_TRANSPORT='rdma',EFS_RDMA_DEV='mlx5_2',EFS_COMMANDS='1',EFS_COMMANDS_SERVER='1',EFS_EXPIRY='0',EFS_QUERY_TEST_HOST='172.16.223.57',EFS_QUERY_TEST_PORT='17432',EFS_QUERY_TEST_NODES=json.dumps({str(i+1):[ADDRS[i],17432] for i in range(4)}))
+ENV=dict(os.environ,EFS_TRANSPORT='rdma',EFS_RDMA_DEV='mlx5_2',EFS_MD_RAFT_N='4',EFS_COMMANDS='1',EFS_COMMANDS_SERVER='1',EFS_EXPIRY='0',EFS_QUERY_TEST_HOST='172.16.223.57',EFS_QUERY_TEST_PORT='17432',EFS_QUERY_TEST_NODES=json.dumps({str(i+1):[ADDRS[i],17432] for i in range(4)}))
 ENV.pop('SSH_AUTH_SOCK',None)
 def save(path,data):
  path=P(path); tmp=path.with_name(path.name+'.tmp');tmp.write_text(json.dumps(data,indent=2));tmp.replace(path)
@@ -96,10 +96,9 @@ class Controller:
   if r['rc']:raise RuntimeError('control command failed '+str(j))
   return (RUN/'mail'/host/(j[1]+'.log')).read_text()
  def start_cluster(self):
-  # D39: one configured member list for every host; the endpoint selects the member.
-  (RUN/'cluster.conf').write_text(''.join('%d %s:17432\n'%(i+1,ADDRS[i]) for i in range(len(HOSTS))))
   for i,h in enumerate(HOSTS):
-   cmd=[str(SRC/'efsd'),'--cluster',str(RUN/'cluster.conf'),'--addr',ADDRS[i],'--port','17432','--storage','/data1/01/efs-orcd-test-campaign','--quota','2T','--direct-io']
+   cmd=[str(SRC/'efsd'),'--node-id',str(i+1),'--addr',ADDRS[i],'--port','17432','--storage','/data1/01/efs-orcd-test-campaign','--quota','2T','--direct-io']
+   if i:cmd+=['--join',ADDRS[0]+':17432']
    j=self.submit(h,cmd,15000);self.daemons.append(j)
    time.sleep(3)
    if (RUN/'mail'/h/(j[1]+'.result.json')).exists():raise RuntimeError('daemon failed '+h)
@@ -119,7 +118,7 @@ class Controller:
   self.status('PREFLIGHT')
   for h in HOSTS:self.shell(h,"test $(id -u) -ne 0; test -d /sys/class/infiniband/mlx5_2; test -w /data1/01; ! ss -ltn | grep -q ':17432 '; test ! -e /data1/01/efs-orcd-test-campaign; mkdir /data1/01/efs-orcd-test-campaign; sha256sum efsd efs-fuse efs-mgmt; ./efsd --version")
   self.start_cluster()
-  self.shell(HOSTS[0],"for i in $(seq 1 60); do o=$(./efs-mgmt --cluster "+str(RUN/'cluster.conf')+" raft-mkfs 172.16.223.57:17432); echo \"$o\"; if echo \"$o\" | grep -q 'rc=0'; then exit 0; fi; sleep 2; done; exit 1",150)
+  self.shell(HOSTS[0],"for i in $(seq 1 60); do o=$(./efs-mgmt raft-mkfs 172.16.223.57:17432); echo \"$o\"; if echo \"$o\" | grep -q 'rc=0'; then exit 0; fi; sleep 2; done; exit 1",150)
   self.mount()
   py=sys.executable;mnt='/tmp/efs-mount';peer='/tmp/efs-mount-peer'
   self.case('posix-core',[py,'tests/posix/posix_suite.py',mnt,'--suite','core','--jobs','4','--keep','--results',str(RUN/'posix.tsv')],1500)

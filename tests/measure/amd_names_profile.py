@@ -18,7 +18,7 @@ for p in Path('/proc').iterdir():
   env=dict(x.split('=',1) for x in (p/'environ').read_bytes().decode().split('\0') if '=' in x)
   assert env.get('EFS_TRANSPORT')=='rdma'
   assert all(env.get(k)=='0' for k in ('EFS_COMMANDS','EFS_COMMANDS_SERVER','EFS_EXPIRY'))
-  pids.append((int(p.name),'n'+str(int(args[args.index('--port')+1])-17431) if exe==str(root/'efsd') else 'fuse-'+Path(args[-2]).name))
+  pids.append((int(p.name),'n'+args[args.index('--node-id')+1] if '--node-id' in args else 'fuse-'+Path(args[-2]).name))
  except (FileNotFoundError,PermissionError):pass
 assert len(pids)==6,pids
 (out/'pids.json').write_text(json.dumps(pids))

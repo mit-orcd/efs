@@ -77,7 +77,7 @@ class Daemon:
             env['EFS_FAULT_SHUTDOWN_RECORD_PARK'] = record_park
         self.log = (store/'log/efsd.log').open('a')
         self.proc = subprocess.Popen(
-            [str(binary), '--cluster', str(self.conf()), '--addr', '127.0.0.1', '--port', str(self.port),
+            [str(binary), '--node-id', '1', '--addr', '127.0.0.1', '--port', str(self.port),
              '--storage', str(store), '--direct-io'],
             cwd=root, env=env, stdout=self.log,
             stderr=stderr_fd if stderr_fd is not None else subprocess.STDOUT)
@@ -92,13 +92,6 @@ class Daemon:
             pass
         subprocess.run([sys.executable, str(helper), 'record', str(self.pidfile), str(store)],
                        check=True, timeout=10)
-
-    def conf(self):
-        """D39: one member of a three-member configured list (the others
-        never start). The list belongs to the store: a restart reuses it."""
-        path = self.store.parent/(self.store.name + '.cluster.conf')
-        path.write_text(f'1 127.0.0.1:{self.port}\n2 127.0.0.2:{self.port}\n3 127.0.0.3:{self.port}\n')
-        return path
 
     def tail(self):
         if not self.log.closed:

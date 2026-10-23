@@ -136,8 +136,7 @@ with tempfile.TemporaryDirectory(prefix='efs-owner-') as work:
         assert 'without an orderly shutdown (rc 3); stores preserved' in out.stderr
         # A restart over a daemon that stops forced starts nothing and says so.
         daemon=owned('forced')
-        conf=directory/'cluster.conf';conf.write_text('1 127.0.0.1:21951\n2 127.0.0.2:21951\n3 127.0.0.3:21951\n')
-        out=subprocess.run(['bash',str(root/'scripts/server.sh'),'127.0.0.1:21951',str(storage),str(conf)],capture_output=True,text=True,timeout=10)
+        out=subprocess.run(['bash',str(root/'scripts/server.sh'),'127.0.0.1:21951',str(storage)],capture_output=True,text=True,timeout=10)
         assert daemon.wait(5)==3 and out.returncode==3,(out.stdout,out.stderr)
         assert 'did not stop orderly (rc 3); stores preserved, nothing started' in out.stderr
         assert 'efsd started' not in out.stdout and not pidfile.exists() and sentinel.read_bytes()==b'kept'

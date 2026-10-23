@@ -10,7 +10,6 @@ import struct
 import subprocess
 import tempfile
 import time
-from d39_cluster import Support
 
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--mode',choices=('direct','buffered'),default='buffered')
@@ -35,10 +34,10 @@ def exact(sock, length):
         result += part
     return result
 
-HELLO=struct.pack('>IB',97,165)+b'EFSP'+struct.pack('=IQB7x',6,0,1)+bytes(72)  # CLIENT_HELLO, EFS_PROTOCOL_VERSION 6, role CLIENT (D39)
+HELLO=struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',5,0)  # CLIENT_HELLO, EFS_PROTOCOL_VERSION 5 (K13)
 def declare(sock):
     sock.sendall(HELLO);n=struct.unpack('>I',exact(sock,4))[0];reply=exact(sock,n)
-    assert n==89 and reply[0]==166 and struct.unpack('=iI',reply[1:9])==(0,6),('declaration refused',reply)
+    assert n==9 and reply[0]==166 and struct.unpack('=iI',reply[1:])==(0,4),('declaration refused',reply)
 
 with socket.socket() as sock:
     sock.bind(('127.0.0.1', 0))
@@ -54,14 +53,10 @@ def status(command):
                                     f'127.0.0.1:{port}'], text=True)
 
 with tempfile.TemporaryDirectory(prefix='efs-io-stats-') as work:
-    # D39: member 1 of a formed three-member list; efs-mgmt declares as management.
-    support = Support(root, work, port)
-    os.environ['EFS_CLUSTER_CONF'] = str(support.conf)
-    os.mkdir(work+'/store')
     with open(work+'/daemon.log', 'w+') as log:
-        proc = subprocess.Popen([str(root/'efsd'), '--cluster', str(support.conf), '--addr',
-                                 '127.0.0.1', '--port', str(port), '--storage', work+'/store',
-                                 '--direct-io' if args.mode=='direct' else '--no-direct-io'], env=dict(os.environ),
+        proc = subprocess.Popen([str(root/'efsd'), '--node-id', '1', '--addr',
+                                 '127.0.0.1', '--port', str(port), '--storage', work,
+                                 '--direct-io' if args.mode=='direct' else '--no-direct-io'], env=dict(os.environ,EFS_MD_RAFT_N='3'),
                                 stdout=log, stderr=log)
         try:
             for _ in range(100):
@@ -70,7 +65,6 @@ with tempfile.TemporaryDirectory(prefix='efs-io-stats-') as work:
                     with socket.create_connection(('127.0.0.1',port), .1): break
                 except OSError: time.sleep(.1)
             else: raise AssertionError('daemon startup timeout')
-            support.start(); support.form()
             put=Put(eid=1,ino=99,length=65536,gen=12345)
             # BLAKE3 of 65536 bytes of 'x', computed with EFS's checksum implementation.
             checksum=bytes.fromhex('70ff942c316810ac5ffe7081fc049dba30713646b1d6d7272cd5948ad5579804')
@@ -96,4 +90,3 @@ with tempfile.TemporaryDirectory(prefix='efs-io-stats-') as work:
             proc.terminate()
             try: proc.wait(15)
             except subprocess.TimeoutExpired: proc.kill();proc.wait()
-            support.stop()

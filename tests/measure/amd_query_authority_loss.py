@@ -78,17 +78,16 @@ try:
 finally:
     # Restore daemons before touching FUSE mounts. The generic start script's
     # mkdir -p on a degraded mounted root can fail or block before node launch.
-    env.update(EFS_GC_BACKLOG_IDLE_MS='20')
+    env.update(EFS_MD_RAFT_N='4',EFS_GC_BACKLOG_IDLE_MS='20')
     for n in a.stop_nodes:
         pidfile=base/('logs/efsd-n%d.pid'%n)
         old=int(pidfile.read_text())
         if Path('/proc/%d'%old).exists(): continue
         with (base/('logs/efsd-n%d.log'%n)).open('ab') as log:
-            # D39: the configured member list the deployment started with
-            # (devops nuc-efs start.sh writes it to <base>/cluster.conf).
-            child=subprocess.Popen([str(base/'src/efsd'),'--cluster',str(base/'cluster.conf'),
+            child=subprocess.Popen([str(base/'src/efsd'),'--node-id',str(n),
                 '--addr','127.0.0.1','--port',str(17431+n),'--storage',str(base/('n%d'%n)),
-                '--quota',quota,'--direct-io'],
+                '--quota',quota,'--direct-io']+
+                (['--join','127.0.0.1:17432'] if n>1 else []),
                 env=env,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
         pidfile.write_text(str(child.pid)+'\n')
 deadline=time.monotonic()+30

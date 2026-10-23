@@ -75,16 +75,12 @@ run)
     rel=${2:?build dir}; label=${3:?label}; secs=${4:?seconds}; writers=${5:-16}
     ab=/tmp/efs-rot/run/$label
     rm -rf "$ab"; mkdir -p "$ab"/{n1,n2,n3,logs,mnt}
-    # D39: the configured member list; the endpoint selects each member and
-    # efs-mgmt declares as management with it (EFS_CLUSTER_CONF).
-    CONF="$ab/cluster.conf"; : > "$CONF"
-    for i in 1 2 3; do echo "$i 10.1.99.1:$((17630+i))" >> "$CONF"; done
-    export EFS_CLUSTER_CONF="$CONF"
-    export EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_0
+    export EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_0 EFS_MD_RAFT_N=3
     export LD_LIBRARY_PATH=/data1/efs/deps/libfuse/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
     for i in 1 2 3; do
-        setsid nohup "$rel/efsd" --cluster "$CONF" --addr 10.1.99.1 --port $((17630+i)) \
-            --storage "$ab/n$i" --quota 1000G --direct-io \
+        join=""; [ "$i" -gt 1 ] && join="--join 10.1.99.1:17631"
+        setsid nohup "$rel/efsd" --node-id $i --addr 10.1.99.1 --port $((17630+i)) \
+            --storage "$ab/n$i" --quota 1000G --direct-io $join \
             > "$ab/logs/efsd-n$i.log" 2>&1 < /dev/null &
         echo $! > "$ab/logs/n$i.pid"
         for t in $(seq 60); do grep -q listening "$ab/logs/efsd-n$i.log" && break; sleep 0.5; done

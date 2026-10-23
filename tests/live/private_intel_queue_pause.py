@@ -40,7 +40,7 @@ try:
  assert q.stat().st_uid==os.getuid()
  assert os.readlink(q/'exe')=={a.source+'/efsd'!r}
  args=(q/'cmdline').read_bytes().split(b'\\0')
- assert b'--port' in args and args[args.index(b'--port')+1]==b'27432'  # member 3: intel2:27432 (D39 endpoint)
+ assert b'--node-id' in args and args[args.index(b'--node-id')+1]==b'3'
  assert args[args.index(b'--storage')+1]=={storage.encode()!r}
  signal.pidfd_send_signal(fd,signal.SIGSTOP)
  try:

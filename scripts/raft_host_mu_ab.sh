@@ -24,18 +24,14 @@ set -u
 REL=$1; L=$2; LOAD=${3:-40}; DWARF_SECONDS=${DWARF_SECONDS:-3}; PORT=${PORT:-17650}
 AB=/tmp/efs-mu-ab/$L
 rm -rf "$AB"; mkdir -p "$AB"/{n1,n2,n3,logs,mnt,perf}
-# D39: the configured member list; the endpoint selects each member and
-# efs-mgmt declares as management with it (EFS_CLUSTER_CONF).
-CONF="$AB/cluster.conf"; : > "$CONF"
-for i in 1 2 3; do echo "$i 10.1.99.1:$((PORT+i))" >> "$CONF"; done
-export EFS_CLUSTER_CONF="$CONF"
-export EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_0 EFS_WRITE_PROF=1
+export EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_0 EFS_MD_RAFT_N=3 EFS_WRITE_PROF=1
 # efs-fuse links the private libfuse (FUSE >= 3.12) used by orcd-mini builds.
 FUSE_LIBDIR=${FUSE_LIBDIR:-/data1/efs/deps/libfuse/lib64}
 [ -d "$FUSE_LIBDIR" ] && export LD_LIBRARY_PATH=$FUSE_LIBDIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
 for i in 1 2 3; do
-  nohup "$REL/efsd" --cluster "$CONF" --addr 10.1.99.1 --port $((PORT+i)) --storage "$AB/n$i" \
-    --quota 30G --direct-io > "$AB/logs/efsd-n$i.log" 2>&1 &
+  join=""; [ $i -gt 1 ] && join="--join 10.1.99.1:$((PORT+1))"
+  nohup "$REL/efsd" --node-id $i --addr 10.1.99.1 --port $((PORT+i)) --storage "$AB/n$i" \
+    --quota 30G --direct-io $join > "$AB/logs/efsd-n$i.log" 2>&1 &
   echo $! > "$AB/logs/n$i.pid"
   for t in $(seq 60); do grep -q listening "$AB/logs/efsd-n$i.log" && break; sleep 0.5; done
 done

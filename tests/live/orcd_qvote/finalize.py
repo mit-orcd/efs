@@ -27,7 +27,7 @@ c.SRC='/tmp/efs'
 for i,h in enumerate(c.SERVERS,1):
  root=c.STORE_PREFIX+'-off2';d=f'{c.BASE}/final/{h}';ctl=f'/home/erbmi1/efs-runs/orcd-test/{h}'
  print(h,c.run(h,c.ENV+f'''cd /tmp/efs; mkdir -p {d} {ctl}
-nohup ./efsd --cluster $CONF --addr 172.16.223.{i+56} --port 17432 --storage {root} --quota 17G --direct-io >{d}/efsd.log 2>&1 </dev/null &
+nohup ./efsd --node-id {i} --addr 172.16.223.{i+56} --port 17432 --storage {root} --quota 17G --direct-io {'--join '+c.SEED if i>1 else ''} >{d}/efsd.log 2>&1 </dev/null &
 echo $! >{ctl}/efsd.pid
 python3 scripts/server_processes.py record {ctl}/efsd.pid {root}
 '''),flush=True)

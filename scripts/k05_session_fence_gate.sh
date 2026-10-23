@@ -19,7 +19,7 @@
 set -u
 REL=$(cd "$1" && pwd); D=$2; PORT=${3:-18600}
 ADDR=127.0.0.1
-export EFS_TRANSPORT=tcp
+export EFS_TRANSPORT=tcp EFS_MD_RAFT_N=3
 POSIX_JOBS=${K05_POSIX_JOBS:-2}
 fails=0
 check() { # name rc detail
@@ -57,15 +57,11 @@ done
 rm -f "$D"/.efs-mnt?.lock 2>/dev/null # client.sh lock files of an earlier run
 [ ! -e "$D" ] || [ -z "$(ls -A "$D")" ] || { echo "$D is not empty"; trap - EXIT; exit 1; }
 mkdir -p "$D"/{n1,n2,n3,logs,mntA,mntB}
-# D39: the configured member list; the endpoint selects each member and
-# efs-mgmt declares as management with it (EFS_CLUSTER_CONF).
-CONF="$D/cluster.conf"; : > "$CONF"
-for i in 1 2 3; do echo "$i $ADDR:$((PORT+i))" >> "$CONF"; done
-export EFS_CLUSTER_CONF="$CONF"
 (cd "$REL" && sha256sum efsd efs-fuse efs-mgmt | sed 's/^/binary /')
 for i in 1 2 3; do
-    nohup "$REL/efsd" --cluster "$CONF" --addr $ADDR --port $((PORT+i)) --storage "$D/n$i" \
-        --quota 2G --no-direct-io >> "$D/logs/efsd-n$i.log" 2>&1 &
+    join=""; [ $i -gt 1 ] && join="--join $ADDR:$((PORT+1))"
+    nohup "$REL/efsd" --node-id $i --addr $ADDR --port $((PORT+i)) --storage "$D/n$i" \
+        --quota 2G --no-direct-io $join >> "$D/logs/efsd-n$i.log" 2>&1 &
     echo $! > "$D/logs/n$i.pid"
     for t in $(seq 60); do grep -q listening "$D/logs/efsd-n$i.log" && break; sleep 0.5; done
 done

@@ -44,11 +44,8 @@ for d in roots + [mount]:
     d.mkdir(parents=True, exist_ok=True)
 # W125: keep the packer out of the way (an hour's minimum age) so every keep
 # file stays in per-file fragments; this gate checks W124 whole-inode reclaim.
-env = dict(os.environ, EFS_TRANSPORT='tcp', EFS_COMMANDS='0', EFS_COMMANDS_SERVER='0', EFS_PACK_MIN_AGE_MS='3600000')
-# D39: the configured member list; efs-mgmt declares as management with it.
-conf = base / 'cluster.conf'
-conf.write_text(''.join(f'{i+1} 127.0.0.1:{a.port+i}\n' for i in range(len(roots))))
-env['EFS_CLUSTER_CONF'] = str(conf)
+env = dict(os.environ, EFS_TRANSPORT='tcp', EFS_COMMANDS='0', EFS_COMMANDS_SERVER='0', EFS_MD_RAFT_N='3',
+           EFS_PACK_MIN_AGE_MS='3600000')
 procs = [None, None, None]
 logs = []
 client = None
@@ -77,8 +74,10 @@ def wait(pred, what, seconds=60):
 
 def start(i):
     f = open(base / f'n{i+1}.log', 'ab'); logs.append(f)
-    cmd = [str(src / 'efsd'), '--cluster', str(conf), '--addr', '127.0.0.1', '--port', str(a.port + i),
+    cmd = [str(src / 'efsd'), '--node-id', str(i + 1), '--addr', '127.0.0.1', '--port', str(a.port + i),
            '--storage', str(roots[i]), '--quota', '4G', '--direct-io']
+    if i:
+        cmd += ['--join', f'127.0.0.1:{a.port}']
     procs[i] = subprocess.Popen(cmd, env=env, stdout=f, stderr=f)
     wait(lambda: procs[i].poll() is None and listening(a.port + i), f'n{i+1} listening', 600)
 

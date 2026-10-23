@@ -2,7 +2,7 @@
 """K15 live gate for W52 (REPORT after many O_APPENDs) and W64 (append
 reservation replay across metadata leader changes).
 
-Starts a private three-daemon TCP cluster (one cluster.conf, D39) on 127.0.0.1,
+Starts a private three-daemon TCP cluster (EFS_MD_RAFT_N=3) on 127.0.0.1,
 ports PORT+1..PORT+3, stores under ROOT/n{1,2,3}, mounts one writer client and
 one peer client. WRITERS processes each open one shared file O_APPEND (one
 persistent descriptor each) and write RECORDS/WRITERS unique 4 KiB records,
@@ -158,24 +158,22 @@ class Cluster:
     def __init__(self, a):
         self.a, self.root, self.rel = a, Path(a.root), Path(a.rel)
         self.procs, self.clients = {}, {}
-        self.env = dict(os.environ, EFS_TRANSPORT='tcp')
+        self.env = dict(os.environ, EFS_MD_RAFT_N='3', EFS_TRANSPORT='tcp')
         if a.client_trace:
             self.env['EFS_REPORT_DBG'] = '1'
         (self.root / 'logs').mkdir(parents=True, exist_ok=True)
-        # D39: the configured member list; efs-mgmt declares as management with it.
-        self.conf = self.root / 'cluster.conf'
-        self.conf.write_text(''.join(f'{i} {self.addr(i)}\n' for i in (1, 2, 3)))
-        self.env['EFS_CLUSTER_CONF'] = str(self.conf)
 
     def addr(self, i):
         return f'127.0.0.1:{self.a.port + i}'
 
-    def start_node(self, i):
+    def start_node(self, i, join=True):
         d = self.root / f'n{i}'
         d.mkdir(exist_ok=True)
-        cmd = [self.rel / 'efsd', '--cluster', self.conf, '--addr', '127.0.0.1',
+        cmd = [self.rel / 'efsd', '--node-id', str(i), '--addr', '127.0.0.1',
                '--port', str(self.a.port + i), '--storage', d, '--quota', self.a.quota,
                '--direct-io' if self.a.direct else '--no-direct-io']
+        if i > 1 and join:
+            cmd += ['--join', self.addr(1)]
         log = open(self.root / 'logs' / f'efsd-n{i}.log', 'ab')
         self.procs[i] = subprocess.Popen([str(c) for c in cmd], env=self.env, stdout=log, stderr=log)
         for _ in range(120):

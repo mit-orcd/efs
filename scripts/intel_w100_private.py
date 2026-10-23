@@ -27,7 +27,7 @@ src = base + '/' + a.source
 runtime = base + '/runtime-' + a.run
 hosts = [('intel1_efs', '10.0.0.207', [1, 2]), ('intel2_efs', '10.0.0.209', [3, 4])]
 env = dict(EFS_TRANSPORT='tcp', EFS_COMMANDS='0', EFS_COMMANDS_SERVER='0',
-           EFS_EXPIRY='0',
+           EFS_EXPIRY='0', EFS_MD_RAFT_N='4',
            EFS_FAULT_REPORT_SIZE_FILE=runtime+'/omit-size',
            EFS_FAULT_REPORT_FILE=runtime+'/other-faults')
 if a.opid_trace:
@@ -53,7 +53,6 @@ if a.action == 'stop':
                            runtime+f'/n{node}.pid', storage])
     raise SystemExit(0)
 
-conf = ''.join('%d %s:%d\n' % (node, addr, 27432 + (node % 2 == 0)) for _, addr, ids in hosts for node in ids)
 for host, addr, ids in hosts:
     remote(host, f'''
 import os,pathlib,socket,subprocess,json
@@ -65,22 +64,21 @@ for port in (27432,27433):
     s=socket.socket();s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
     s.bind(({addr!r},port));s.close()
 (r/'omit-size').write_text('OFF\\n');(r/'other-faults').write_text('OFF\\n')
-# D39: the configured member list, the same on both hosts; the endpoint selects the member.
-(r/'cluster.conf').write_text({conf!r})
 env=os.environ.copy();env.update({env!r})
 for node in {ids!r}:
     storage=f'/data{{1 if node%2 else 2}}/efs/w100-private-{a.run}/n{{node}}'
     if {a.action=='start'!r}:pathlib.Path(storage).mkdir(parents=True,exist_ok=False)
     else:assert pathlib.Path(storage).is_dir(), 'missing owned storage directory'
-    args=[{src+'/efsd'!r},'--cluster',str(r/'cluster.conf'),'--addr',{addr!r},'--port',str(27432+(node%2==0)),
+    args=[{src+'/efsd'!r},'--node-id',str(node),'--addr',{addr!r},'--port',str(27432+(node%2==0)),
           '--storage',storage,'--quota',{a.quota!r},'--direct-io']
+    if node!=1:args+=['--join','10.0.0.207:27432']
     with (r/f'n{{node}}.log').open('ab') as out:
         p=subprocess.Popen(args,env=env,stdout=out,stderr=subprocess.STDOUT,start_new_session=True)
     (r/f'n{{node}}.pid').write_text(str(p.pid)+'\\n')
     print(json.dumps(dict(node=node,pid=p.pid,args=args)),flush=True)
 ''')
 
-ready = [src+'/efs-mgmt', '--cluster', runtime+'/cluster.conf', 'raft-mkfs', '10.0.0.207:27432'] if a.action=='start' else [src+'/efs-mgmt', 'commands-policy', '10.0.0.207:27432', 'get']
+ready = [src+'/efs-mgmt', 'raft-mkfs', '10.0.0.207:27432'] if a.action=='start' else [src+'/efs-mgmt', 'commands-policy', '10.0.0.207:27432', 'get']
 for attempt in range(45):
     r = subprocess.run(['ssh', hosts[0][0], shlex.join(ready)],
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)

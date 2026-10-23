@@ -28,7 +28,7 @@ set -u
 REL=$1; L=$2
 PORT=${PORT:-17850}; R=${D25_ROOT:-/tmp/d25-gates}/$L; A=${D25_ADDR:-127.0.0.1}
 ALLOC_GIB=${ALLOC_GIB:-2}; PACK_FILES=${PACK_FILES:-400}
-export EFS_TRANSPORT=${EFS_TRANSPORT:-tcp} ASAN_OPTIONS=detect_leaks=0
+export EFS_TRANSPORT=${EFS_TRANSPORT:-tcp} EFS_MD_RAFT_N=3 ASAN_OPTIONS=detect_leaks=0
 export EFS_FAULT_TRUNCATE_BEFORE_FILE=$R/fault-before EFS_FAULT_TRUNCATE_APPLY_FILE=$R/fault-apply
 export EFS_FAULT_TRUNCATE_DROP_REPLY_FILE=$R/fault-drop EFS_FAULT_TRUNC_SWEEP_HOLD_FILE=$R/sweep-hold
 export EFS_PACK_MIN_AGE_MS=500 EFS_PACK_SPACE_START_PCT=0 EFS_PACK_SPACE_FULL_PCT=1 EFS_PACK_COMPACT_IDLE_S=2 EFS_PACK_DBG=1
@@ -37,15 +37,11 @@ for i in 1 2 3; do
 done
 findmnt -rn -o TARGET | grep -q "^$R/" && { echo "$L: a mount under $R is still live"; exit 1; }
 rm -rf "$R"; mkdir -p "$R"/{n1,n2,n3,logs,mA,mB}
-# D39: the configured member list; the endpoint selects each member and
-# efs-mgmt declares as management with it (EFS_CLUSTER_CONF).
-CONF="$R/cluster.conf"; : > "$CONF"
-for i in 1 2 3; do echo "$i $A:$((PORT+i))" >> "$CONF"; done
-export EFS_CLUSTER_CONF="$CONF"
 start_daemons() {
   for i in 1 2 3; do
-    nohup "$REL/efsd" --cluster "$CONF" --addr "$A" --port $((PORT+i)) --storage "$R/n$i" \
-      --quota 64G --direct-io >> "$R/logs/efsd-n$i.log" 2>&1 &
+    join=""; [ $i -gt 1 ] && join="--join $A:$((PORT+1))"
+    nohup "$REL/efsd" --node-id $i --addr "$A" --port $((PORT+i)) --storage "$R/n$i" \
+      --quota 64G --direct-io $join >> "$R/logs/efsd-n$i.log" 2>&1 &
     echo $! > "$R/logs/n$i.pid"
     for t in $(seq 120); do grep -q listening "$R/logs/efsd-n$i.log" && break; sleep 0.5; done
     kill -0 "$(cat "$R/logs/n$i.pid")" 2>/dev/null || { echo "$L: efsd n$i exited"; tail -3 "$R/logs/efsd-n$i.log"; exit 1; }

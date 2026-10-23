@@ -7329,10 +7329,6 @@ static int protocol_check(void)
         close(fd);
         if (rc == EFS_OK) {
             accepted++;
-        } else if (rc == EFS_ERR_NOT_FORMED) {
-            /* D39: up, but its cluster formation is not complete (yet). */
-            fprintf(stderr, "node %s:%u: cluster formation not complete\n",
-                    g_client.nodes[i].addr, g_client.nodes[i].port);
         } else if (rc != EFS_ERR_NET) {
             refused++;
             fprintf(stderr, "node %s:%u refused protocol %u (rc=%d)\n", g_client.nodes[i].addr,

@@ -9,7 +9,6 @@ import struct
 import subprocess
 import tempfile
 import time
-from d39_cluster import Support, wait_listen
 
 source = Path(__file__).resolve().parents[2]
 class Put(c.Structure):
@@ -28,10 +27,10 @@ def exact(sock, length):
         result += part
     return result
 
-HELLO=struct.pack('>IB',97,165)+b'EFSP'+struct.pack('=IQB7x',6,0,1)+bytes(72)  # CLIENT_HELLO, EFS_PROTOCOL_VERSION 6, role CLIENT (D39)
+HELLO=struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',5,0)  # CLIENT_HELLO, EFS_PROTOCOL_VERSION 5 (K13)
 def declare(sock):
     sock.sendall(HELLO);n=struct.unpack('>I',exact(sock,4))[0];reply=exact(sock,n)
-    assert n==89 and reply[0]==166 and struct.unpack('=iI',reply[1:9])==(0,6),('declaration refused',reply)
+    assert n==9 and reply[0]==166 and struct.unpack('=iI',reply[1:])==(0,4),('declaration refused',reply)
 
 for direct in (False, True):
     for roots in (1, 2):
@@ -42,17 +41,13 @@ for direct in (False, True):
                 with socket.create_connection(('127.0.0.1', port), 5) as sock:
                     declare(sock);sock.sendall(struct.pack('>IB',len(body)+1,kind)+body)
                     return exact(sock,struct.unpack('>I',exact(sock,4))[0])
-            # D39: member 1 of a three-member list, formed with two support
-            # members; efs-mgmt declares as management (EFS_CLUSTER_CONF).
-            support=Support(source,work,port)
-            os.environ['EFS_CLUSTER_CONF']=str(support.conf)
-            cmd=[str(source/'efsd'),'--cluster',str(support.conf),'--addr','127.0.0.1',
+            cmd=[str(source/'efsd'),'--node-id','1','--addr','127.0.0.1',
                  '--port',str(port),'--quota','16M','--direct-io' if direct else '--no-direct-io']
             for index in range(roots):
                 root=Path(work)/f'root{index}';root.mkdir()
                 cmd += ['--storage',str(root)]
             with open(work+'/daemon.log','w+') as log:
-                proc=subprocess.Popen(cmd,env=dict(os.environ),stdout=log,stderr=log)
+                proc=subprocess.Popen(cmd,env=dict(os.environ,EFS_MD_RAFT_N='3'),stdout=log,stderr=log)
                 try:
                     for _ in range(100):
                         assert proc.poll() is None, 'daemon exited'
@@ -60,7 +55,6 @@ for direct in (False, True):
                             with socket.create_connection(('127.0.0.1',port),.1):break
                         except OSError:time.sleep(.1)
                     else:raise AssertionError('startup timeout')
-                    support.start();support.form()
                     malformed=Put(eid=1,ino=99,length=131072,gen=12345)
                     rejected=rpc(6,bytes(malformed)+b'z'*131072)
                     assert rejected[:2]==bytes([7,1]),rejected
@@ -127,7 +121,7 @@ for direct in (False, True):
                     bad('payload flip')
                     path.write_bytes(original);good()
                     proc.terminate();assert proc.wait(20)==0
-                    proc=subprocess.Popen(cmd,env=dict(os.environ),stdout=log,stderr=log)
+                    proc=subprocess.Popen(cmd,env=dict(os.environ,EFS_MD_RAFT_N='3'),stdout=log,stderr=log)
                     for _ in range(100):
                         assert proc.poll() is None,'daemon exited on restart'
                         try:
@@ -151,5 +145,4 @@ for direct in (False, True):
                     proc.terminate()
                     try:proc.wait(20)
                     except subprocess.TimeoutExpired:proc.kill();proc.wait()
-                    support.stop()
 print('Fragment corruption: buffered/direct, one/two roots PASS',flush=True)

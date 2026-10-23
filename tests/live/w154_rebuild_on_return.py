@@ -4,8 +4,7 @@
     w154_rebuild_on_return.py REL WORK [PORT]
 
 A private five-daemon TCP cluster on loopback (ports PORT+1..PORT+5, default
-PORT 19100), five configured members in WORK/cluster.conf (D39), stores
-WORK/n1..n5, one efs-fuse mount at
+PORT 19100), EFS_MD_RAFT_N=5, stores WORK/n1..n5, one efs-fuse mount at
 WORK/mnt. REL holds efsd, efs-fuse, efs-mgmt and scripts/ of one build.
 WORK must be absolute. Stops only the PIDs it started and unmounts only
 WORK/mnt. The F1 scenario (gates-xorinox-20261022.md):
@@ -46,9 +45,7 @@ ADDR = '127.0.0.1'
 MNT = WORK / 'mnt'
 LOGS = WORK / 'logs'
 MIB = 1 << 20
-# D39: the configured member list; efs-mgmt declares as management with it.
-CONF = WORK / 'cluster.conf'
-ENV = dict(os.environ, EFS_TRANSPORT='tcp', EFS_CLUSTER_CONF=str(CONF),
+ENV = dict(os.environ, EFS_TRANSPORT='tcp', EFS_MD_RAFT_N=str(N),
            EFS_REBUILD_PER_PASS='4')
 procs = {}
 manifest = {}
@@ -73,10 +70,10 @@ def listening(port):
 
 def start_node(i):
     assert not listening(PORT + i), f'port {PORT + i} in use'
-    if not CONF.exists():
-        CONF.write_text(''.join(f'{n} {ep(n)}\n' for n in range(1, N + 1)))
-    cmd = [str(REL / 'efsd'), '--cluster', str(CONF), '--addr', ADDR, '--port', str(PORT + i),
+    cmd = [str(REL / 'efsd'), '--node-id', str(i), '--addr', ADDR, '--port', str(PORT + i),
            '--storage', str(WORK / f'n{i}'), '--quota', '4G', '--no-direct-io']
+    if i > 1:
+        cmd += ['--join', ep(1)]
     log = open(LOGS / f'efsd-n{i}.log', 'a')
     procs[i] = subprocess.Popen(cmd, env=ENV, stdout=log, stderr=log)
     for _ in range(240):

@@ -2,8 +2,8 @@
 # gate_k28_five_node.sh start|stop|node-stop|node-start|counts|status REL DIR [ID]
 #
 # K28/W151 live gate helper: a private five-daemon TCP cluster on loopback,
-# ports 19001-19005 (EFS_K28_PORT base, default 19000), five configured
-# members in DIR/cluster.conf (D39), stores DIR/n1..n5, one efs-fuse
+# ports 19001-19005 (EFS_K28_PORT base, default 19000), EFS_MD_RAFT_N=5,
+# stores DIR/n1..n5, node 1 the seed and nodes 2-5 --join, one efs-fuse
 # mount at DIR/mnt. REL holds efsd, efs-fuse, efs-mgmt and scripts/ of one
 # build. Stops only the PIDs it recorded under DIR/logs and unmounts only
 # DIR/mnt. EFS_PACK_MIN_AGE_MS (default here 2000) lets the packer take
@@ -19,15 +19,14 @@
 set -u
 cmd=$1; REL=$2; D=$3; ID=${4:-}
 PORT=${EFS_K28_PORT:-19000}; ADDR=127.0.0.1; N=5
-export EFS_TRANSPORT=tcp EFS_PACK_MIN_AGE_MS=${EFS_PACK_MIN_AGE_MS:-2000}
+export EFS_TRANSPORT=tcp EFS_MD_RAFT_N=$N EFS_PACK_MIN_AGE_MS=${EFS_PACK_MIN_AGE_MS:-2000}
 
-# D39: the configured member list; efs-mgmt declares as management with it.
-export EFS_CLUSTER_CONF="$D/cluster.conf"
 start_node() {
-  local i=$1
+  local i=$1 join=""
+  [ "$i" -gt 1 ] && join="--join $ADDR:$((PORT+1))"
   ss -ltnH "sport = :$((PORT+i))" | grep -q . && { echo "port $((PORT+i)) in use"; return 1; }
-  nohup "$REL/efsd" --cluster "$D/cluster.conf" --addr $ADDR --port $((PORT+i)) --storage "$D/n$i" \
-    --quota "${EFS_K28_QUOTA:-8G}" --no-direct-io >> "$D/logs/efsd-n$i.log" 2>&1 &
+  nohup "$REL/efsd" --node-id "$i" --addr $ADDR --port $((PORT+i)) --storage "$D/n$i" \
+    --quota "${EFS_K28_QUOTA:-8G}" --no-direct-io $join >> "$D/logs/efsd-n$i.log" 2>&1 &
   echo $! > "$D/logs/n$i.pid"; touch "$D/logs/started-$i"
   for t in $(seq 120); do ss -ltnH "sport = :$((PORT+i))" | grep -q . && return 0; sleep 0.5; done
   echo "node $i not listening"; return 1
@@ -41,7 +40,6 @@ stop_node() {
 case $cmd in
 start)
   mkdir -p "$D"/{n1,n2,n3,n4,n5,logs,mnt}
-  for i in $(seq $N); do echo "$i $ADDR:$((PORT+i))"; done > "$D/cluster.conf"
   for i in $(seq $N); do start_node "$i" || exit 1; done
   for t in $(seq 60); do
     "$REL/efs-mgmt" raft-mkfs $ADDR:$((PORT+1)) > "$D/logs/mkfs.out" 2>&1

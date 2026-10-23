@@ -13,7 +13,7 @@
 # matches the other voters before touching the next node. Same build ID
 # only — after a new commit the HELLO gate rejects mixed IDs, so use --all:
 # it builds on all four in parallel, checks the four built IDs agree, kills
-# all four, starts all four from the configured member list, then waits for
+# all four, starts all four (storage is kept, so no --join), then waits for
 # both groups to elect and report commit == applied on every voter.
 #
 # Run it from node9901 via efs-bg.sh; each step is a short ssh. Exit 1 on
@@ -22,8 +22,8 @@
 set -u
 S="$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh"
 ALL=0; [ "${1:-}" = "--all" ] && { ALL=1; shift; }
-# --all --fresh: storage was wiped (tests/wipe_cluster.sh). All four start
-# from the configured member list (D39) and raft-mkfs runs on node 1 once
+# --all --fresh: storage was wiped (tests/wipe_cluster.sh). Node 1 is the
+# seed, nodes 2–4 start with --join, and raft-mkfs runs on node 1 once
 # all four are up. Refuses if any /data1/0*/efs on fcstor003 has content.
 FRESH=0; [ "${1:-}" = "--fresh" ] && { FRESH=1; shift; }
 [ $FRESH = 1 ] && [ $ALL = 0 ] && { echo "--fresh needs --all"; exit 1; }
@@ -49,10 +49,6 @@ esac
 STORAGE=/data1/01/efs,/data1/02/efs,/data1/03/efs,/data1/04/efs,/data1/05/efs,/data1/06/efs
 host_of() { echo "fcstor00$(( $1 + 2 ))"; }
 addr_of() { echo "172.16.223.$(( $1 + 56 ))"; }
-# D39: the configured member list, kept outside the rsync'd /tmp/efs tree and
-# rewritten on every start; efs-mgmt declares as management with it.
-CONF=/tmp/efs-cluster.conf
-CONF_TEXT=$(for n in 1 2 3 4; do printf '%d %s:19810\\n' $n "$(addr_of $n)"; done)
 
 ssh_() { local t=$1 h=$2; shift 2; EFS_SSH_TIMEOUT=$t "$S" "$h.ib" "$@" 2>&1 | grep -v '^Identity added'; }
 
@@ -60,7 +56,7 @@ ssh_() { local t=$1 h=$2; shift 2; EFS_SSH_TIMEOUT=$t "$S" "$h.ib" "$@" 2>&1 | g
 group_max_commit() {
     local g=$1 n best=0 c
     for n in 1 2 3 4; do
-        c=$(ssh_ 15 "$(host_of $n)" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-status $(addr_of $n):19810 2>/dev/null" \
+        c=$(ssh_ 15 "$(host_of $n)" "cd /tmp/efs && ./efs-mgmt raft-status $(addr_of $n):19810 2>/dev/null" \
             | awk -v g="group $g " 'index($0,g) && /hosted=1/ {for(i=1;i<=NF;i++) if($i ~ /^commit=/){sub("commit=","",$i); print $i}}')
         [ -n "$c" ] && [ "$c" -gt "$best" ] && best=$c
     done
@@ -73,7 +69,7 @@ BUILD_CMD="rsync -a --checksum --delete --exclude=/mnt/ --exclude='*.log' --excl
 # the cluster max. Prints the status lines; returns 0 when caught up.
 node_caught_up() {
     local h=$1 a=$2 st lag=0 line g c ap m
-    st=$(ssh_ 15 "$h" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-status $a:19810 2>/dev/null" | grep 'hosted=1')
+    st=$(ssh_ 15 "$h" "cd /tmp/efs && ./efs-mgmt raft-status $a:19810 2>/dev/null" | grep 'hosted=1')
     [ -n "$st" ] || return 1
     while read -r line; do
         g=$(echo "$line" | grep -o 'group [0-9]*' | awk '{print $2}')
@@ -112,7 +108,8 @@ if [ $ALL = 1 ]; then
     echo "== start all four"
     for n in 1 2 3 4; do
         h=$(host_of $n); a=$(addr_of $n)
-        ssh_ 30 "$h" "mkdir -p /tmp/efs-perf; rm -f /tmp/efs-perf/efsd.data /tmp/efs-perf/efsd.strace; printf '$CONF_TEXT' > $CONF; cd /tmp/efs && mv -f efsd.log efsd.log.prev 2>/dev/null; (env $EFSD_ENV $PERF_ENV setsid ./efsd --cluster $CONF --addr $a --port 19810 --storage $STORAGE --quota 36T --direct-io $EFSD_ARGS >efsd.log 2>&1 </dev/null &); sleep 1; echo $h up=\$(pgrep -x efsd | wc -l) perf=\$(pgrep -x perf | wc -l)"
+        join=""; [ $FRESH = 1 ] && [ "$n" != 1 ] && join="--join 172.16.223.57:19810"
+        ssh_ 30 "$h" "mkdir -p /tmp/efs-perf; rm -f /tmp/efs-perf/efsd.data /tmp/efs-perf/efsd.strace; cd /tmp/efs && mv -f efsd.log efsd.log.prev 2>/dev/null; (env $EFSD_ENV $PERF_ENV setsid ./efsd --node-id $n --addr $a --port 19810 --storage $STORAGE --quota 36T --direct-io $join $EFSD_ARGS >efsd.log 2>&1 </dev/null &); sleep 1; echo $h up=\$(pgrep -x efsd | wc -l) perf=\$(pgrep -x perf | wc -l)"
     done
     if [ $FRESH = 1 ]; then
         # Both groups need a leader first: mkfs commits MKFS on group 0
@@ -124,7 +121,7 @@ if [ $ALL = 1 ]; then
         echo "== wait for a leader in both groups (node 2 hosts both)"
         ok=0
         for i in $(seq 1 60); do
-            st=$(ssh_ 15 fcstor004 "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-status 172.16.223.58:19810 2>/dev/null" | grep 'hosted=1')
+            st=$(ssh_ 15 fcstor004 "cd /tmp/efs && ./efs-mgmt raft-status 172.16.223.58:19810 2>/dev/null" | grep 'hosted=1')
             if [ "$(echo "$st" | grep -c 'leader=[0-9]')" = 2 ]; then ok=1; break; fi
             sleep 2
         done
@@ -133,7 +130,7 @@ if [ $ALL = 1 ]; then
         echo "== raft-mkfs on node 1 only (same salt on every retry)"
         ok=0
         for i in $(seq 1 30); do
-            out=$(ssh_ 20 fcstor003 "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-mkfs 172.16.223.57:19810; echo mkfs_exit=\$?")
+            out=$(ssh_ 20 fcstor003 "cd /tmp/efs && ./efs-mgmt raft-mkfs 172.16.223.57:19810; echo mkfs_exit=\$?")
             echo "fcstor003: $(echo "$out" | tail -2 | tr '\n' ' ')"
             if echo "$out" | grep -q 'mkfs_exit=0'; then ok=1; break; fi
             sleep 2
@@ -158,6 +155,7 @@ fi
 
 for n in "${NODES[@]}"; do
     h=$(host_of "$n"); a=$(addr_of "$n")
+    join=""; [ "$n" != 1 ] && join="--join 172.16.223.57:19810"
     echo "== node $n ($h) build"
     out=$(ssh_ 240 "$h" "$BUILD_CMD")
     echo "$out"
@@ -168,11 +166,11 @@ for n in "${NODES[@]}"; do
         echo "FAIL: build id changed ($running -> $built): stop all four, then start all four"; exit 1
     fi
     echo "== node $n restart"
-    ssh_ 30 "$h" "mkdir -p /tmp/efs-perf; rm -f /tmp/efs-perf/efsd.data /tmp/efs-perf/efsd.strace; pkill -9 -x efsd; sleep 1; printf '$CONF_TEXT' > $CONF; cd /tmp/efs && mv -f efsd.log efsd.log.prev 2>/dev/null; (env $EFSD_ENV $PERF_ENV setsid ./efsd --cluster $CONF --addr $a --port 19810 --storage $STORAGE --quota 36T --direct-io $EFSD_ARGS >efsd.log 2>&1 </dev/null &); sleep 2; echo up=\$(pgrep -x efsd | wc -l) perf=\$(pgrep -x perf | wc -l)"
+    ssh_ 30 "$h" "mkdir -p /tmp/efs-perf; rm -f /tmp/efs-perf/efsd.data /tmp/efs-perf/efsd.strace; pkill -9 -x efsd; sleep 1; cd /tmp/efs && mv -f efsd.log efsd.log.prev 2>/dev/null; (env $EFSD_ENV $PERF_ENV setsid ./efsd --node-id $n --addr $a --port 19810 --storage $STORAGE --quota 36T --direct-io $join $EFSD_ARGS >efsd.log 2>&1 </dev/null &); sleep 2; echo up=\$(pgrep -x efsd | wc -l) perf=\$(pgrep -x perf | wc -l)"
     # Wait for catch-up: every hosted group commit==applied and within 2 of the cluster max.
     ok=0
     for i in $(seq 1 90); do
-        st=$(ssh_ 15 "$h" "cd /tmp/efs && EFS_CLUSTER_CONF=$CONF ./efs-mgmt raft-status $a:19810 2>/dev/null" | grep 'hosted=1')
+        st=$(ssh_ 15 "$h" "cd /tmp/efs && ./efs-mgmt raft-status $a:19810 2>/dev/null" | grep 'hosted=1')
         if [ -n "$st" ]; then
             lag=0
             while read -r line; do

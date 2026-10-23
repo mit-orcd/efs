@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise all four actual CLI/bootstrap parser wrappers without networking."""
+"""Exercise all five actual CLI/bootstrap parser wrappers without networking."""
 from pathlib import Path
 import argparse
 import os
@@ -14,7 +14,7 @@ parser.add_argument('--sanitize', action='store_true')
 args = parser.parse_args()
 files = [('src/client/efs_fuse.c','parse_addr'),('src/client/node_cache.c','parse_host_port'),
          ('src/mgmt/efs_mgmt.c','parse_host_port'),
-         ('src/client/efs_bench.c','parse_host_port')]
+         ('src/server/efsd.c','parse_host_port'),('src/client/efs_bench.c','parse_host_port')]
 source = '#include <assert.h>\n#include <stdlib.h>\n#include <stdio.h>\n#include "src/common/parse_host_port.h"\n'
 for i, (filename, name) in enumerate(files):
     text = (subprocess.check_output(['git','show',args.revision+':'+filename],cwd=root,text=True)
@@ -52,7 +52,7 @@ static void check(int (*parse)(const char *,char *,size_t,uint16_t *)) {
     assert(parse("a:80",host,0,&port)==-1);
 }
 int main(void) {
-    int (*parsers[])(const char *,char *,size_t,uint16_t *)={parse_0,parse_1,parse_2,parse_3};
+    int (*parsers[])(const char *,char *,size_t,uint16_t *)={parse_0,parse_1,parse_2,parse_3,parse_4};
     for(unsigned i=0;i<sizeof(parsers)/sizeof(parsers[0]);i++) check(parsers[i]);
     char host[8]="keep";uint16_t port=17;
     assert(efs_parse_host_port(NULL,host,sizeof(host),&port)==-1);
@@ -62,7 +62,7 @@ int main(void) {
         char input[32];snprintf(input,sizeof(input),"host:%u",value);
         assert(!efs_parse_host_port(input,host,sizeof(host),&port) && port==value);
     }
-    puts("address parsing: four actual wrappers, complete decimal port/range, host bounds and unchanged failure outputs PASS");
+    puts("address parsing: five actual wrappers, complete decimal port/range, host bounds and unchanged failure outputs PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-addr-test-') as tmp:

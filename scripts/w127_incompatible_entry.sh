@@ -17,12 +17,13 @@
 # Prints PASS/FAIL per check and exits nonzero on any failure.
 set -u
 T=$(cd "$1" && pwd -P); P=${2:-17631}; D=$T/w127
-export EFS_TRANSPORT=${EFS_TRANSPORT:-tcp}
+export EFS_TRANSPORT=${EFS_TRANSPORT:-tcp} EFS_MD_RAFT_N=3
 fail=0
 check() { if eval "$2"; then echo "PASS $1"; else echo "FAIL $1"; fail=1; fi; }
 start() {
   for i in 1 2 3; do
-    (cd "$T" || exit; nohup ./efsd --cluster "$CONF" --addr 127.0.0.1 --port $((P+i-1)) --storage "$D/n$i" --quota 1G \
+    j=""; [ $i -gt 1 ] && j="--join 127.0.0.1:$P"
+    (cd "$T" || exit; nohup ./efsd --node-id $i --addr 127.0.0.1 --port $((P+i-1)) --storage "$D/n$i" --quota 1G $j \
       >> "$D/logs/n$i.log" 2>&1 & echo $! > "$D/logs/n$i.pid")
     for t in $(seq 60); do tail -n 40 "$D/logs/n$i.log" | grep -q "listening\|refusing startup" && break; sleep 0.5; done
     tail -n 40 "$D/logs/n$i.log" | grep -q "refusing startup" && { echo "FAIL n$i did not start"; fail=1; }
@@ -34,10 +35,6 @@ stop() { for i in 1 2 3; do kill "$(cat "$D/logs/n$i.pid")" 2>/dev/null; done
          for i in 1 2 3; do kill -9 "$(cat "$D/logs/n$i.pid")" 2>/dev/null; done; sleep 2; }
 trap stop EXIT
 rm -rf "$D"; mkdir -p "$D"/{n1,n2,n3,logs}
-# D39: the configured member list (members 1-3 at P..P+2).
-CONF="$D/cluster.conf"; : > "$CONF"
-for i in 1 2 3; do echo "$i 127.0.0.1:$((P+i-1))" >> "$CONF"; done
-export EFS_CLUSTER_CONF="$CONF"
 start
 for t in $(seq 40); do "$T/efs-mgmt" raft-mkfs 127.0.0.1:$P 2>&1 | grep -q 'raft-mkfs rc=0 ' && break; sleep 1; done
 status() { "$T/efs-mgmt" raft-status 127.0.0.1:$((P+$1-1)) 2>/dev/null | grep "group $2 "; }
@@ -48,10 +45,10 @@ import socket,struct,sys
 body=bytes([0,200,1,2,3,4])
 s=socket.create_connection(('127.0.0.1',int(sys.argv[1])),60)
 # W133: declare the protocol (CLIENT_HELLO 165, version 4) before the proposal.
-s.sendall(struct.pack('>IB',97,165)+b'EFSP'+struct.pack('=IQB7x',6,0,1)+bytes(72))
+s.sendall(struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',5,0))
 hello=b''
 while len(hello)<13:hello+=s.recv(13-len(hello))
-assert hello[4]==166 and struct.unpack('=iI',hello[5:13])==(0,6),hello.hex()
+assert hello[4]==166 and struct.unpack('=iI',hello[5:13])==(0,4),hello.hex()
 s.sendall(struct.pack('>IB',len(body)+1,95)+body)
 n=struct.unpack('>I',s.recv(4))[0];data=b''
 while len(data)<n:data+=s.recv(n-len(data))
@@ -68,10 +65,8 @@ for i in 1 2 3; do
   check "n$i group 0 applied ($a) stays below index $index" "[ -n '$a' ] && [ '$a' -lt '$index' ]"
 done
 check "group 0 has no leader" "! (for i in 1 2 3; do status \$i 0; done | grep -q 'role=LEADER')"
-# A repeated raft-mkfs only reads the committed pair (D39), so probe with a
-# CREATE under the root directory, a group-0 entry.
-again=$("$T/efs-mgmt" raft-create 127.0.0.1:$P 1 w127-probe 2>&1 | head -2)
-check "group 0 refuses a new proposal" "! echo '$again' | grep -q 'status=0 '"
+again=$("$T/efs-mgmt" raft-mkfs 127.0.0.1:$P 2>&1 | head -2)  # MKFS is a group-0 entry
+check "group 0 refuses a new proposal" "! echo '$again' | grep -q 'raft-mkfs rc=0 '"
 check "group 2 keeps a leader" "for i in 1 2 3; do status \$i 2; done | grep -q 'role=LEADER'"
 for i in 1 2 3; do
   c=$(status $i 2 | field commit); a=$(status $i 2 | field applied)

@@ -4,7 +4,7 @@ import hashlib,json,os,signal,socket,subprocess,time
 from pathlib import Path
 base=Path('/data1/efs/devel-nuc-20261010');src=base/'src';out=base/'closure';out.mkdir(exist_ok=True)
 assert not (out/'build.log').exists(),'completed/active stages must not be overwritten'
-env=dict(os.environ,EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_TRANSPORT='tcp',EFS_RAFT_BATCH_OVERLAP='0',EFS_RAFT_BATCH_NOOP='0',EFS_RAFT_APPLIED_INTERVAL_MS='10',EFS_BATCH_OBS='0')
+env=dict(os.environ,EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_TRANSPORT='tcp',EFS_MD_RAFT_N='4',EFS_RAFT_BATCH_OVERLAP='0',EFS_RAFT_BATCH_NOOP='0',EFS_RAFT_APPLIED_INTERVAL_MS='10',EFS_BATCH_OBS='0')
 def wait(fn,limit,label):
     until=time.monotonic()+limit
     while time.monotonic()<until:

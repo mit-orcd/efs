@@ -21,10 +21,10 @@ def exact(s,n):
         out+=part
     return out
 
-HELLO=struct.pack('>IB',97,165)+b'EFSP'+struct.pack('=IQB7x',6,0,1)+bytes(72)  # CLIENT_HELLO, EFS_PROTOCOL_VERSION 6, role CLIENT (D39)
+HELLO=struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',5,0)  # CLIENT_HELLO, EFS_PROTOCOL_VERSION 5 (K13)
 def declare(sock):
     sock.sendall(HELLO);n=struct.unpack('>I',exact(sock,4))[0];reply=exact(sock,n)
-    assert n==89 and reply[0]==166 and struct.unpack('=iI',reply[1:9])==(0,6),('declaration refused',reply)
+    assert n==9 and reply[0]==166 and struct.unpack('=iI',reply[1:])==(0,4),('declaration refused',reply)
 
 
 def exercise(mount,port,work,wait,physical_files,restart,offline,forward_group,clock_fault=False):

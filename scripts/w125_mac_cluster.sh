@@ -21,17 +21,15 @@ start)
   for h in efs2 efs3; do
     ssh $h "grep -q ' $D/mnt' /proc/mounts" && { echo "$h: an efs mount under $D is still present; run stop first"; exit 1; }
   done
-  # D39: the same configured member list on every VM; the endpoint selects the member.
-  CONF="1 ${A[0]}:$((PORT + 1))\n2 ${A[1]}:$((PORT + 2))\n3 ${A[2]}:$((PORT + 3))\n"
   for i in 0 1 2; do
-    id=$((i + 1))
-    ssh "${H[$i]}" "mkdir -p $D/n$id $D/logs && printf '$CONF' > $D/cluster.conf && cd $SRC && env $PACKENV setsid -f ./efsd --cluster $D/cluster.conf \
-      --addr ${A[$i]} --port $((PORT + id)) --storage $D/n$id --quota $QUOTA \
+    id=$((i + 1)); join=""; [ $id -gt 1 ] && join="--join ${A[0]}:$((PORT + 1))"
+    ssh "${H[$i]}" "mkdir -p $D/n$id $D/logs && cd $SRC && env $PACKENV EFS_MD_RAFT_N=3 setsid -f ./efsd --node-id $id \
+      --addr ${A[$i]} --port $((PORT + id)) --storage $D/n$id --quota $QUOTA $join \
       >> $D/logs/efsd-n$id.log 2>&1 < /dev/null" || exit 1
     ssh "${H[$i]}" "for t in \$(seq 60); do grep -q listening $D/logs/efsd-n$id.log && break; sleep 0.5; done;
       grep -q listening $D/logs/efsd-n$id.log || { echo 'n$id did not start'; tail -5 $D/logs/efsd-n$id.log; exit 1; }" || exit 1
   done
-  ssh "${H[0]}" "cd $SRC && for t in \$(seq 30); do ./efs-mgmt --cluster $D/cluster.conf raft-mkfs ${A[0]}:$((PORT + 1)) 2>&1 | grep -q 'raft-mkfs rc=0 ' && break; sleep 1; done;
+  ssh "${H[0]}" "cd $SRC && for t in \$(seq 30); do ./efs-mgmt raft-mkfs ${A[0]}:$((PORT + 1)) 2>&1 | grep -q 'raft-mkfs rc=0 ' && break; sleep 1; done;
     mkdir -p $D/mnt && EFS_FUSE_LOG=$D/logs/fuse.log scripts/client.sh ${A[0]}:$((PORT + 1)) $D/mnt > $D/logs/client.out 2>&1;
     findmnt -rn $D/mnt > /dev/null && echo mounted $D/mnt || { echo mount failed; tail -5 $D/logs/client.out; exit 1; }"
   ;;

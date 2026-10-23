@@ -62,7 +62,7 @@ def remote(a):
                 label = 'client-%d' % list(map(str, mounts)).index(args[-1])
                 assert ':27432' in args[1]
             elif kind == 'efsd' and '--storage' in args and 'w100-private-deadline-posix/' in args[args.index('--storage') + 1]:
-                label = 'node-' + args[args.index('--storage') + 1].rstrip('/').rsplit('/n', 1)[1]
+                label = 'node-' + args[args.index('--node-id') + 1]
                 assert args[args.index('--port') + 1] in ('27432', '27433')
                 assert '--direct-io' in args
                 assert args[args.index('--quota') + 1] == '16G'

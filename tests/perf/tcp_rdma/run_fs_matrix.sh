@@ -80,16 +80,18 @@ echo "dio_flag='${DIO}'"
 
 cleanup
 on 20 "$SRV" "rm -rf $WORK && mkdir -p $WORK/s1 $WORK/s2 $WORK/s3 $MNT"
-# D39: the configured member list on the server host.
-on 20 "$SRV" "printf '1 ${ADDR}:${PORT}\\n2 ${ADDR}:$((PORT + 1))\\n3 ${ADDR}:$((PORT + 2))\\n' > $WORK/cluster.conf"
 on 20 "$WRITER" "rm -rf $WORK && mkdir -p $WORK $MNT"
 
 start_servers() {
-    local xport=$1
-    local id port
+    local xport=$1 joined=$2
+    local id port join
     for id in 1 2 3; do
         port=$((PORT + id - 1))
-        on 20 "$SRV" "cd /tmp/efs && EFS_TRANSPORT=$xport setsid -f ./efsd --cluster $WORK/cluster.conf --addr $ADDR --port $port --storage $WORK/s$id --quota 40G $DIO >$WORK/s$id.log 2>&1 </dev/null && echo started_id=$id"
+        join=""
+        if [ "$joined" != 1 ] && [ "$id" != 1 ]; then
+            join="--join ${ADDR}:${PORT}"
+        fi
+        on 20 "$SRV" "cd /tmp/efs && EFS_MD_RAFT_N=3 EFS_TRANSPORT=$xport setsid -f ./efsd --node-id $id --addr $ADDR --port $port --storage $WORK/s$id --quota 40G $DIO $join >$WORK/s$id.log 2>&1 </dev/null && echo started_id=$id"
     done
     local id
     for id in 1 2 3; do
@@ -112,13 +114,13 @@ start_servers() {
 wait_leader() {
     local i
     for i in $(seq 1 40); do
-        if on 15 "$SRV" "cd /tmp/efs && EFS_CLUSTER_CONF=$WORK/cluster.conf ./efs-mgmt raft-status ${ADDR}:${PORT}" | grep -q 'role=LEADER'; then
+        if on 15 "$SRV" "cd /tmp/efs && ./efs-mgmt raft-status ${ADDR}:${PORT}" | grep -q 'role=LEADER'; then
             return 0
         fi
         sleep 0.3
     done
     echo "no raft leader"
-    on 15 "$SRV" "cd /tmp/efs && EFS_CLUSTER_CONF=$WORK/cluster.conf ./efs-mgmt raft-status ${ADDR}:${PORT}" || true
+    on 15 "$SRV" "cd /tmp/efs && ./efs-mgmt raft-status ${ADDR}:${PORT}" || true
     exit 1
 }
 
@@ -127,7 +129,7 @@ start_servers tcp 0
 sleep 0.5
 mk=1
 for _ in $(seq 1 20); do
-    if on 20 "$SRV" "cd /tmp/efs && EFS_CLUSTER_CONF=$WORK/cluster.conf ./efs-mgmt raft-mkfs ${ADDR}:${PORT}"; then
+    if on 20 "$SRV" "cd /tmp/efs && ./efs-mgmt raft-mkfs ${ADDR}:${PORT}"; then
         mk=0
         break
     fi

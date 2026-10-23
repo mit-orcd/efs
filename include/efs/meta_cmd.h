@@ -163,7 +163,7 @@
 #define EFS_MD_CMD_TRUNCATE 15 /* D25 logical truncate, exactly 86 B (protocol
                                 * §1.2); matches sim SIM_CMD_TRUNCATE */
 #define EFS_MD_CMD_APPEND_RSV 16 /* matches sim SIM_CMD_APPEND_RSV */
-#define EFS_MD_CMD_MKFS 18 /* [now:8][salt:8][digest:32] (D39 pair); first install wins */
+#define EFS_MD_CMD_MKFS 18 /* [now:8][salt:8] — idempotent; salt absent = 0 */
 /* Cross-group lane support (a group's log only writes its own shards' keys,
  * so the first publish to a lane whose shard lives on ANOTHER group cannot
  * ride the publish entry's inode-row touch — see efs_meta_apply_publish).
@@ -204,7 +204,7 @@
  * shard (efs_kv_anchor_shard) so group snapshots carry it. Idempotent: a
  * matching existing record is OK, a mismatch is EFS_ERR_PROTO (never
  * overwrite — placement is derived from this value). */
-#define EFS_MD_CMD_SALT 26 /* [anchor:4][salt:8][digest:32] (D39 pair) */
+#define EFS_MD_CMD_SALT 26 /* [anchor:4][salt:8] */
 /* One extended-attribute update on the inode's shard. Apply reads the
  * current blob and folds this op in, so two names on one inode do not
  * lose each other. [op:1][ino:8][now:8][flags:4][nlen:2][vlen:4][name][value]

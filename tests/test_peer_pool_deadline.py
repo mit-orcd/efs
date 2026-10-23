@@ -32,13 +32,7 @@ struct efs_conn *efs_conn_wrap_tcp(int fd,int server){(void)fd;(void)server;retu
 void efs_conn_destroy(struct efs_conn *conn){(void)conn;destroys++;}
 int efs_rdma_available(void){return 0;}
 int efs_rdma_client_upgrade(struct efs_conn *conn){(void)conn;return -1;}
-int efs_conn_declare_as(struct efs_conn *c,uint8_t role,const struct efs_identity *id,struct efs_msg_client_hello_reply *r){(void)c;(void)role;(void)id;(void)r;return 0;}
-static struct efs_cluster_conf conf={.n=3};
-const struct efs_cluster_conf *efs_cluster_conf_current(void){return &conf;}
-uint32_t efs_cluster_conf_member_at(const struct efs_cluster_conf *c,const char *a,uint16_t p){(void)c;(void)a;(void)p;return 2;}
-void adm_local_identity(struct efs_identity *o){memset(o,0,sizeof(*o));}
-int adm_check_reply(uint32_t m,const struct efs_msg_client_hello_reply *r,char *w,size_t n){(void)m;(void)r;(void)w;(void)n;return 0;}
-uint64_t adm_generation(void){return 0;}
+int efs_conn_declare(struct efs_conn *c){(void)c;return 0;}
 int efs_rdma_transport(void){return EFS_TRANSPORT_TCP;}
 int main(void){struct efs_conn owners[EFS_PEER_CONNS_PER_NODE];
  struct peer_slot *p=peer_slot_for("127.0.0.1",17432);assert(p);

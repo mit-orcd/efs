@@ -12,7 +12,7 @@ for path in [root/'include', root/'src', root/'tests', root/'scripts']:
     for f in path.rglob('*'):
         if f.is_file() and f.suffix in ('.c', '.h', '.py', '.sh') and f != Path(__file__).resolve():
             assert 'EFS_PROTOCOL_' + 'MIN_VERSION' not in f.read_text(errors='replace'), f
-assert re.search(r'#define EFS_PROTOCOL_VERSION 6u\n', proto), 'protocol 6 = every request gated (W133), sessions (K5), tickets (K13), roles and member identity (D39)'
+assert re.search(r'#define EFS_PROTOCOL_VERSION 5u\n', proto), 'protocol 5 = every request gated, every mutation names a session (K5), every data PUT names a ticket (K13)'
 
 # The gate runs on every frame before the switch; a refusal closes the
 # connection without a reply; an answered declaration dispatches nothing.
@@ -53,17 +53,17 @@ assert disc.index('efs_fd_declare(fd)') < disc.index('EFS_MSG_LIST_NODES'), 'dis
 peer = (root/'src/server/peer_pool.c').read_text()
 pc = peer[peer.index('static struct efs_conn *peer_connect('):]
 pc = pc[:pc.index('\n}\n')]
-assert pc.index('efs_conn_declare_as(nc, EFS_ROLE_PEER') < pc.index('efs_rdma_client_upgrade(nc)'), 'peers declare before the RDMA upgrade'
+assert pc.index('efs_conn_declare(nc)') < pc.index('efs_rdma_client_upgrade(nc)'), 'peers declare before the RDMA upgrade'
 fuse = (root/'src/client/efs_fuse.c').read_text()
 boot = fuse[fuse.index('static int raft_bootstrap_metadata('):]
 boot = boot[:boot.index('\nready:')]
 assert boot.index('efs_fd_declare(fd)') < boot.index('EFS_MSG_RAFT_STATUS'), 'bootstrap declares before RAFT_STATUS'
 # Raw-socket Python senders and the W127 gate script declare too.
-hello = "struct.pack('>IB',97,165)+b'EFSP'+struct.pack('=IQB7x',6,0,1)+bytes(72)"
+hello = "struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',5,0)"
 for f in ['tests/live/expiry_lifecycle.py', 'tests/live/fragment_integrity.py', 'tests/live/fragment_tail_smoke.py',
           'tests/live/io_stats_smoke.py', 'tests/live/gc_reclamation.py', 'tests/live/query_rpc.py',
           'tests/live/raft_read_freshness.py', 'scripts/w127_incompatible_entry.sh']:
-    assert hello in (root/f).read_text(), (f, 'declares with CLIENT_HELLO v6, role CLIENT')
+    assert hello in (root/f).read_text(), (f, 'declares with CLIENT_HELLO v5')
 assert 'PASS 2 old client' in (root/'scripts/w125_p3_compat.sh').read_text() or \
        'check "2 daemons logged the refusal"' in (root/'scripts/w125_p3_compat.sh').read_text(), 'compat script expects refusal'
-print('declaration gate: handler gates every frame before dispatch; every opener declares; protocol 6 exact PASS')
+print('declaration gate: handler gates every frame before dispatch; every opener declares; protocol 5 exact PASS')

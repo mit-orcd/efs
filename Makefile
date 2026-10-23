@@ -66,7 +66,6 @@ COMMON_SRCS = src/meta/append_plan.c $(COMMON_DIR)/publication.c $(COMMON_DIR)/p
               $(COMMON_DIR)/batch_obs.c \
               $(COMMON_DIR)/version.c \
               $(COMMON_DIR)/protocol.c \
-              $(COMMON_DIR)/cluster_conf.c \
               src/wire/wire.c \
               src/data/erasure.c \
               src/data/store_mem.c \
@@ -128,11 +127,10 @@ TEST_SRCS += tests/test_retained_namespace_audit.c
 TEST_BINS += tests/test_retained_namespace_audit
 
 TEST_BINS += tests/test_kv_reader_gate
-TEST_BINS += tests/test_d39_admission
 
 SERVER_SRCS = src/server/put_fence.c src/server/put_upload.c src/server/put_orphan.c src/server/efsd.c src/server/store.c src/server/store_nvme.c src/server/storage_roots.c \
               src/server/handler.c \
-              src/server/cluster.c src/server/admission.c src/server/member_store.c \
+              src/server/cluster.c \
               src/server/peer_pool.c src/server/writer.c \
               src/server/iostats.c src/server/thread.c \
               src/server/raft_host.c src/server/reclaim.c src/server/segment_store.c \
@@ -522,8 +520,6 @@ test: all $(TEST_SPECIAL_BINS)
 	./tests/test_wire
 	./tests/test_declaration_gate
 	python3 tests/test_declaration_gate_handler.py
-	./tests/test_d39_admission
-	python3 tests/test_d39_admission.py
 	python3 tests/test_rdma_fork_poller.py
 	python3 tests/test_kv_kind_unique.py
 	./tests/test_data
@@ -745,10 +741,6 @@ tests/test_store_gc: tests/test_store_gc.c src/server/store.c src/server/reclaim
 
 tests/test_reclaim: tests/test_reclaim.c src/server/store.c src/server/reclaim.c src/server/segment_store.c src/server/server_internal.h src/bench/writer.o src/bench/storage_roots.o $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o src/bench/storage_roots.o $(LIB) $(LDFLAGS)
-
-# D39 admission through the real gate, member store and peer pool.
-tests/test_d39_admission: tests/test_d39_admission.c src/server/admission.c src/server/member_store.c src/server/peer_pool.c src/server/admission.h src/server/member_store.h src/server/server_internal.h $(LIB)
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ tests/test_d39_admission.c src/server/admission.c src/server/member_store.c src/server/peer_pool.c $(LIB) $(LDFLAGS)
 
 tests/test_writer_routing: tests/test_writer_routing.c src/server/writer.c src/server/server_internal.h
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -lpthread
@@ -980,7 +972,6 @@ test-long: all $(TEST_SPECIAL_BINS)
 	./tests/test_txn_retire
 	./tests/test_pub_stage
 	python3 tests/test_d39_model.py
-	python3 tests/test_d39_daemons.py
 	python3 tests/test_bench_cli.py
 	python3 tests/test_bench_profile.py
 	python3 tests/test_query_subtree_negative.py

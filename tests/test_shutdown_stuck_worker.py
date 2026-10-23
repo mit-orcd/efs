@@ -75,20 +75,15 @@ def read_record(store):
 
 class Daemon:
     def __init__(self, store, park=None):
-        self.store = store
-        known = store.parent/(store.name + '.cluster.conf')
-        # A restart on the same store keeps its configured endpoint (D39).
-        self.port = int(known.read_text().split()[1].rsplit(':', 1)[1]) if known.exists() else free_port()
+        self.store, self.port = store, free_port()
         (store/'log').mkdir(parents=True, exist_ok=True)
         env = dict(os.environ, EFS_FAULT_SHUTDOWN_TOTAL_MS=str(TOTAL_MS))
         env.pop('EFS_FAULT_SHUTDOWN_PARK', None)
         if park:
             env['EFS_FAULT_SHUTDOWN_PARK'] = park
         self.log = (store/'log/efsd.log').open('a')
-        # A restart reuses the port: only this start's banner counts.
-        self.mark = self.log.tell()
         self.proc = subprocess.Popen(
-            [str(binary), '--cluster', str(self.conf()), '--addr', '127.0.0.1', '--port', str(self.port),
+            [str(binary), '--node-id', '1', '--addr', '127.0.0.1', '--port', str(self.port),
              '--storage', str(store), '--direct-io'],
             cwd=root, env=env, stdout=self.log, stderr=subprocess.STDOUT)
         self.pidfile = store/'log/efsd.pid'
@@ -96,7 +91,7 @@ class Daemon:
         # The port accepts once bound, before SIGTERM is handled; the banner
         # is printed after the handler is installed, just before serving.
         deadline = time.monotonic() + 60
-        while f'listening on 127.0.0.1:{self.port}' not in self.since_start():
+        while f'listening on 127.0.0.1:{self.port}' not in self.tail():
             assert self.proc.poll() is None, f'efsd exited during start: {self.tail()}'
             assert time.monotonic() < deadline, f'efsd did not start serving: {self.tail()}'
             time.sleep(0.2)
@@ -104,19 +99,6 @@ class Daemon:
             pass
         subprocess.run([sys.executable, str(helper), 'record', str(self.pidfile), str(store)],
                        check=True, timeout=10)
-
-    def conf(self):
-        """D39: one member of a three-member configured list (the others
-        never start). The list belongs to the store: a restart reuses it."""
-        path = self.store.parent/(self.store.name + '.cluster.conf')
-        path.write_text(f'1 127.0.0.1:{self.port}\n2 127.0.0.2:{self.port}\n3 127.0.0.3:{self.port}\n')
-        return path
-
-    def since_start(self):
-        self.log.flush()
-        with (self.store/'log/efsd.log').open() as f:
-            f.seek(self.mark)
-            return f.read()
 
     def tail(self):
         if not self.log.closed:

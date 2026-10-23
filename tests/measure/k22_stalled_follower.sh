@@ -27,7 +27,7 @@ PORT=${PORT:-19013}
 WARM=${WARM:-60}; STOP=${STOP:-4500}; HOLD=${HOLD:-30}; DRAIN=${DRAIN:-900}
 WORKERS=${WORKERS:-8}; BENCH_FILES=${BENCH_FILES:-5000}
 ADDR=127.0.0.1; S=$D/samples.tsv
-export EFS_TRANSPORT=tcp
+export EFS_TRANSPORT=tcp EFS_MD_RAFT_N=3
 
 say() { echo "[k22s $(date -u +%H:%M:%S)] $*" | tee -a "$D/driver.log"; }
 pid_of() { cat "$D/logs/n$1.pid" 2>/dev/null; }
@@ -45,24 +45,18 @@ for i in 1 2 3; do
     ss -ltnH "sport = :$((PORT+i))" | grep -q . && { echo "port $((PORT+i)) in use"; exit 1; }
 done
 mkdir -p "$D"/{n1,n2,n3,logs}; rm -f "$D/load.stop" "$S" "$D/logs/load.pids"; : > "$D/driver.log"
-# D39: the configured member list; efs-mgmt declares as management with it.
-for i in 1 2 3; do echo "$i $ADDR:$((PORT+i))"; done > "$D/cluster.conf"
-export EFS_CLUSTER_CONF="$D/cluster.conf"
 start_node() {
-    local i=$1 mark; mark=$(grep -c listening "$D/logs/efsd-n$i.log" 2>/dev/null)
-    "$REL/efsd" --cluster "$D/cluster.conf" --addr $ADDR --port $((PORT+i)) --storage "$D/n$i" --quota 16G \
-        --no-direct-io >> "$D/logs/efsd-n$i.log" 2>&1 < /dev/null &
+    local i=$1 join=""; [ "$i" -gt 1 ] && join="--join $ADDR:$((PORT+1))"
+    "$REL/efsd" --node-id "$i" --addr $ADDR --port $((PORT+i)) --storage "$D/n$i" --quota 16G \
+        --no-direct-io $join >> "$D/logs/efsd-n$i.log" 2>&1 < /dev/null &
     echo $! > "$D/logs/n$i.pid"
-    for _ in $(seq 120); do [ "$(grep -c listening "$D/logs/efsd-n$i.log")" -gt "${mark:-0}" ] && return 0; sleep 0.5; done
+    for _ in $(seq 120); do grep -q listening "$D/logs/efsd-n$i.log" && return 0; sleep 0.5; done
     say "FATAL node $i did not start"; exit 2
 }
-start_node 1; start_node 2; start_node 3
+start_node 1; start_node 2
 for _ in $(seq 40); do
     "$REL/efs-mgmt" raft-mkfs $ADDR:$((PORT+1)) 2>&1 | grep -q 'raft-mkfs rc=0 ' && break; sleep 1
 done
-# raft-mkfs needs every configured member (D39): node 3 restarts while 1+2
-# hold leadership and rejoins as a follower of both groups.
-kill "$(pid_of 3)"; for _ in $(seq 100); do kill -0 "$(pid_of 3)" 2>/dev/null || break; sleep 0.2; done
 start_node 3
 for _ in $(seq 120); do
     [ "$("$REL/efs-mgmt" raft-status $ADDR:$((PORT+3)) 2>/dev/null | grep -c 'hosted=1 role=FOLLOWER')" = 2 ] && break

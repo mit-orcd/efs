@@ -22,7 +22,7 @@ while :; do
     g0=$(printf '%s\n' "$s" | grep '^group=0 ')
     g2=$(printf '%s\n' "$s" | grep '^group=2 ')
     gv() { printf '%s\n' "$1" | grep -o "\b$2=[^ ]*" | cut -d= -f2; }
-    pid=$(pgrep -f "efsd --cluster .*--port $port( |$)" | head -1)
+    pid=$(pgrep -f "efsd --node-id $i " | head -1)
     cpu=""
     [ -n "$pid" ] && cpu=$(awk '{print ($14+$15)/100}' /proc/$pid/stat 2>/dev/null)
     printf '%s\tn%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \

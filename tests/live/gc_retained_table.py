@@ -29,10 +29,7 @@ for number in range(port,port+4):
 mount=work/'quiet-mnt';mount.mkdir(exist_ok=True)
 assert subprocess.run(['mountpoint','-q',str(mount)]).returncode!=0
 output=work/('quiet-probe-'+str(time.time_ns()));output.mkdir()
-# D39: the retained fixture's configured member list (gc_reclamation.py wrote
-# it); a store is bound to it. efs-mgmt declares as management with it.
-conf=work/'cluster.conf';assert conf.is_file(),'retained fixture has no cluster.conf'
-env=dict(os.environ,EFS_TRANSPORT='tcp',EFS_CLUSTER_CONF=str(conf))
+env=dict(os.environ,EFS_MD_RAFT_N='4',EFS_TRANSPORT='tcp')
 servers=[];client=None;logs=[]
 def run(args,**kw):return subprocess.run([str(x) for x in args],check=True,env=env,timeout=kw.pop('timeout',60),**kw)
 def wait(fn,seconds=120):
@@ -50,7 +47,8 @@ def drained():
 try:
     for i,root in enumerate(roots):
         log=open(output/f'n{i+1}.log','ab');logs.append(log)
-        args=[source/'efsd','--cluster',conf,'--addr','127.0.0.1','--port',port+i,'--storage',root,'--quota','16G','--direct-io']
+        args=[source/'efsd','--node-id',i+1,'--addr','127.0.0.1','--port',port+i,'--storage',root,'--quota','16G','--direct-io']
+        if i:args+=['--join',f'127.0.0.1:{port}']
         servers.append(subprocess.Popen([str(x) for x in args],env=env,stdout=log,stderr=log))
     time.sleep(3)
     log=open(output/'fuse.log','ab');logs.append(log)

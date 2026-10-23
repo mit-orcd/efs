@@ -284,13 +284,13 @@ def transport_of(pid, log_path, expected="tcp", log_offset=0):
 
 
 class Server(object):
-    def __init__(self, node_id, port, storage, conf, binary, mode="buffered", transport="tcp", device=None):
+    def __init__(self, node_id, port, storage, join, binary, mode="buffered", transport="tcp", device=None):
         assert_safe_port(port)
         assert_safe_storage(storage)
         self.node_id = node_id
         self.port = port
         self.storage = storage
-        self.conf = conf  # D39: the configured member list (cluster.conf)
+        self.join = join
         self.binary = binary
         if mode not in ("direct", "buffered"):
             raise ValueError("invalid storage I/O mode")
@@ -302,11 +302,13 @@ class Server(object):
 
     def argv(self):
         args = [
-            self.binary, "--cluster", self.conf,
+            self.binary, "--node-id", str(self.node_id),
             "--addr", "127.0.0.1", "--port", str(self.port),
             "--storage", self.storage, "--quota", "1G",
             "--direct-io" if self.mode == "direct" else "--no-direct-io",
         ]
+        if self.join:
+            args += ["--join", self.join]
         return args
 
     def start(self):
@@ -376,15 +378,10 @@ class Cluster(object):
                 raise RuntimeError("missing binary %s" % path)
         ports = pick_ports(4)
         seed = "127.0.0.1:%d" % ports[0]
-        # D39: every member starts from the same configured member list; the
-        # endpoint (--addr:--port) selects each member's record.
-        self.conf = os.path.join(self.work, "cluster.conf")
-        with open(self.conf, "w") as f:
-            for i, port in enumerate(ports):
-                f.write("%d 127.0.0.1:%d\n" % (i + 1, port))
         for i, port in enumerate(ports):
             storage = os.path.join(self.work, "s%d" % (i + 1))
-            srv = Server(i + 1, port, storage, self.conf, self.efsd(), self.mode, self.transport, self.device)
+            join = None if i == 0 else seed
+            srv = Server(i + 1, port, storage, join, self.efsd(), self.mode, self.transport, self.device)
             self.servers.append(srv)
             srv.start()
         self.journal = Journal(os.path.join(self.work, "journal.jsonl"))
@@ -393,8 +390,7 @@ class Cluster(object):
         deadline = time.monotonic() + 30
         while True:
             rc, out, err = run_cmd(
-                [self.mgmt(), "--cluster", self.conf, "raft-mkfs", seed], timeout=20,
-                env=fixture_env(self.transport, self.device))
+                [self.mgmt(), "raft-mkfs", seed], timeout=20, env=fixture_env(self.transport, self.device))
             self.journal.record("raft-mkfs", rc=rc, stdout=out[-400:], stderr=err[-400:])
             if rc == 0:
                 break
@@ -1025,12 +1021,10 @@ def suite_exit(rows):
 def self_test():
     fails = []
     for mode, flag in (("direct", "--direct-io"), ("buffered", "--no-direct-io")):
-        server = Server(1, 25000, "/tmp/efs-fault-mode-test", "/tmp/cluster.conf", "/tmp/efsd", mode)
+        server = Server(1, 25000, "/tmp/efs-fault-mode-test", None, "/tmp/efsd", mode)
         argv = server.argv()
         if flag not in argv or ("--no-direct-io" if mode == "direct" else "--direct-io") in argv:
             fails.append("explicit integration I/O mode " + mode)
-        if argv[1:3] != ["--cluster", "/tmp/cluster.conf"] or "--node-id" in argv or "--join" in argv:
-            fails.append("efsd starts from the configured member list only")
     data_a = pattern(7, "a", 64)
     data_b = pattern(7, "b", 64)
     if data_a == data_b or 0 in data_a:

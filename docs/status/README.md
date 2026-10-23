@@ -242,7 +242,7 @@ a cluster at four nodes, so ">4 nodes" is an implementation item or a
 narrower claim.** W145–W147 fixes read correct; `raft-resync` mark is not
 persisted; ior write regression needs a K row.
 
-[Simple startup and node addition](alpha-1.0-node-addition-20261023.md): **user amendment Oct 23 supersedes D39 fixed membership (K33/W157).** devel HEAD's D39 admission requires `--cluster` and refuses `--join`, so it cannot run the contract. Review of `1085baade`: this does not prove all live deployment impossible; extend the model and merged safety work. Discovery is required, old placement needs explicit authority, and initial consensus bootstrap must be specified. K33/W157 OPEN; no further product-policy decision pending.
+[Simple startup and node addition](alpha-1.0-node-addition-20261023.md): **user decision Oct 23: the `--cluster` file feature is removed; the D39 admission merge is reverted on devel; seed/`--join` is the only startup.** Alpha needs W153 (member count and voters from the committed membership, formation at three) and then node addition (K33/W157).
 
 [K32 write regression](k32-write-regression-20261023.md): **OPEN.** orcd-mini (devel `757d76844`, fresh format) passes but ior easy write fell to ~0.36–0.5 GiB/s: K14 publishes every multi-chunk write as its own cross-group transaction (~20 Raft entries per 1 MiB write), K13 adds ~9.
 

@@ -73,11 +73,8 @@ int main(int argc,char **argv) {
 (work/'fault.c').write_text(shim);(work/'reader.c').write_text(reader)
 subprocess.run(['cc','-Wall','-Wextra','-Werror','-shared','-fPIC',work/'fault.c','-ldl','-o',work/'fault.so'],check=True)
 subprocess.run(['cc','-I'+str(source/'include'),work/'reader.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',work/'reader'],check=True)
-env=dict(os.environ,EFS_TRANSPORT='tcp',EFS_COMMANDS_SERVER='0',
+env=dict(os.environ,EFS_TRANSPORT='tcp',EFS_MD_RAFT_N='3',EFS_COMMANDS_SERVER='0',
          EFS_RAFT_BATCH_NOOP='1')
-# D39: the configured member list; efs-mgmt declares as management with it.
-conf=work/'cluster.conf';conf.write_text(''.join(f'{n+1} 127.0.0.1:{base+n}\n' for n in range(3)))
-env['EFS_CLUSTER_CONF']=os.environ['EFS_CLUSTER_CONF']=str(conf)
 servers=[];logs=[];generation=0
 def mgmt(node,cmd,*args):
     return subprocess.check_output([str(source/'efs-mgmt'),cmd,f'127.0.0.1:{base+node}',*[str(x) for x in args]],text=True,timeout=10)
@@ -106,8 +103,9 @@ def start():
         root=work/f'n{node}';root.mkdir(exist_ok=True)
         log=open(work/f'n{node}-{generation}.log','w');logs.append(log)
         child=dict(env,LD_PRELOAD=str(work/'fault.so'),TEST_KV_BARRIER_FILE=str(work/f'fail-{node}'))
-        cmd=[str(server),'--cluster',str(conf),'--addr','127.0.0.1','--port',str(base+node),'--storage',str(root),
+        cmd=[str(server),'--node-id',str(node+1),'--addr','127.0.0.1','--port',str(base+node),'--storage',str(root),
              '--direct-io' if options.mode=='direct' else '--no-direct-io']
+        if node:cmd+=['--join',f'127.0.0.1:{base}']
         proc=subprocess.Popen(cmd,env=child,stdout=log,stderr=log);servers.append(proc)
         def listening():
             assert proc.poll() is None,'server exited'

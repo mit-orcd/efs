@@ -36,7 +36,7 @@ if [ "$cmd" = run-daemon ]; then
 fi
 REL=$2; D=$3; PORT=${4:-17670}
 # W125_TRANSPORT=tcp runs the same cluster on a host without RDMA.
-export EFS_TRANSPORT=${W125_TRANSPORT:-rdma}
+export EFS_TRANSPORT=${W125_TRANSPORT:-rdma} EFS_MD_RAFT_N=3
 [ "$EFS_TRANSPORT" = tcp ] || export EFS_RDMA_DEV=${EFS_RDMA_DEV:-mlx5_0}
 FUSE_LIBDIR=${FUSE_LIBDIR:-/data1/efs/deps/libfuse/lib64}
 [ -d "$FUSE_LIBDIR" ] && export LD_LIBRARY_PATH=$FUSE_LIBDIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
@@ -51,15 +51,11 @@ start)
     ss -ltnH "sport = :$((PORT+i))" | grep -q . && { echo "port $((PORT+i)) in use"; exit 1; }
   done
   mkdir -p "$D"/{n1,n2,n3,logs,mnt}
-  # D39: the configured member list; the endpoint selects each member and
-  # efs-mgmt declares as management with it (EFS_CLUSTER_CONF).
-  CONF="$D/cluster.conf"; : > "$CONF"
-  for i in 1 2 3; do echo "$i $ADDR:$((PORT+i))" >> "$CONF"; done
-  export EFS_CLUSTER_CONF="$CONF"
   for i in 1 2 3; do
+    join=""; [ $i -gt 1 ] && join="--join $ADDR:$((PORT+1))"
     nohup "$0" run-daemon "$D/logs/n$i.pid" "$D/logs/n$i.rc" \
-      "$REL/efsd" --cluster "$CONF" --addr $ADDR --port $((PORT+i)) --storage "$D/n$i" \
-      --quota 200G --direct-io >> "$D/logs/efsd-n$i.log" 2>&1 &
+      "$REL/efsd" --node-id $i --addr $ADDR --port $((PORT+i)) --storage "$D/n$i" \
+      --quota 200G --direct-io $join >> "$D/logs/efsd-n$i.log" 2>&1 &
     for t in $(seq 60); do grep -q listening "$D/logs/efsd-n$i.log" 2>/dev/null && break; sleep 0.5; done
   done
   for t in $(seq 30); do "$REL/efs-mgmt" raft-mkfs $ADDR:$((PORT+1)) 2>&1 | grep -q 'raft-mkfs rc=0 ' && break; sleep 1; done

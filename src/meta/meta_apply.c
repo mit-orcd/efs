@@ -1319,30 +1319,6 @@ int efs_meta_apply_export_salt(struct efs_kv *kv, uint64_t *out)
     return EFS_OK;
 }
 
-/* D39 C10: one anchor's export-salt record only (group 0: the root shard,
- * group 2: efs_kv_anchor_shard(2)); NOT_FOUND when that group's formation
- * record is absent here. */
-int efs_meta_apply_anchor_salt(struct efs_kv *kv, uint32_t anchor, uint64_t *out)
-{
-    uint8_t k[EFS_KV_KEY_MAX], v[8];
-    uint32_t kl = 0, vl = 8;
-    int rc;
-
-    if (!kv || !out)
-        return EFS_ERR_INVAL;
-    *out = 0;
-    rc = efs_kv_key_export(anchor, k, &kl);
-    if (rc != EFS_OK)
-        return rc;
-    rc = efs_kv_get(kv, k, kl, v, &vl);
-    if (rc != EFS_OK)
-        return rc;
-    if (vl < 8)
-        return EFS_ERR_PROTO;
-    *out = rd64(v);
-    return EFS_OK;
-}
-
 /* EFS_MD_CMD_SALT apply: write the export-salt record on the given anchor
  * shard. Idempotent — an existing record must MATCH (placement is derived
  * from the salt; silently overwriting would fork the namespace). */

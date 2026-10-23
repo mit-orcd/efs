@@ -16,7 +16,7 @@ p.add_argument('work',type=Path)
 p.add_argument('--apply-pending',action='store_true')
 p.add_argument('--mode',choices=('direct','buffered'),default='direct')
 a=p.parse_args();work=a.work.resolve();work.mkdir(parents=True,exist_ok=False)
-env=dict(os.environ,EFS_TRANSPORT='tcp')
+env=dict(os.environ,EFS_MD_RAFT_N='4',EFS_TRANSPORT='tcp')
 gate=work/'park-publication-apply'
 if a.apply_pending:env['EFS_FAULT_PUBLICATION_APPLY_FILE']=str(gate)
 for base in range(25000,25200,4):
@@ -30,9 +30,6 @@ for base in range(25000,25200,4):
     finally:
         for s in sockets:s.close()
 else:raise RuntimeError('no free fixture ports')
-# D39: the configured member list; efs-mgmt declares as management with it.
-conf=work/'cluster.conf';conf.write_text(''.join(f'{n+1} 127.0.0.1:{base+n}\n' for n in range(4)))
-env['EFS_CLUSTER_CONF']=str(conf)
 probe=work/'probe'
 subprocess.run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),
                 '-I'+str(source/'src/client'),str(source/'tests/live/publication_pending.c'),str(source/'libefs.a'),
@@ -51,8 +48,9 @@ def mgmt(*args):
 def start(suffix):
     for n in range(4):
         f=(work/f'n{n+1}{suffix}.log').open('w');logs.append(f)
-        cmd=[str(source/'efsd'),'--cluster',str(conf),'--addr','127.0.0.1','--port',str(base+n),
+        cmd=[str(source/'efsd'),'--node-id',str(n+1),'--addr','127.0.0.1','--port',str(base+n),
              '--storage',str(work/f'n{n+1}'),'--quota','1G','--writers','0','--direct-io' if a.mode=='direct' else '--no-direct-io']
+        if n:cmd+=['--join',f'127.0.0.1:{base}']
         procs.append(subprocess.Popen(cmd,env=env,stdout=f,stderr=f))
         wait(lambda:'listening' in (work/f'n{n+1}{suffix}.log').read_text())
 def stop(crash=False):

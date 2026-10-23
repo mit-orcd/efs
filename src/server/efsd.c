@@ -1,3 +1,4 @@
+#include "../common/parse_host_port.h"
 #include "efs/cli_help.h"
 #include "efs/common.h"
 #include "efs/storage_capacity.h"
@@ -6,7 +7,6 @@
 #include "efs/version.h"
 #include "server_internal.h"
 #include "storage_roots.h"
-#include "admission.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -170,6 +170,11 @@ static void stop_perf_recorder(void)
 {
     stop_recorder(&g_strace_pid);
     stop_recorder(&g_perf_pid);
+}
+
+static int parse_host_port(const char *str, char *host, size_t host_len, uint16_t *port)
+{
+    return efs_parse_host_port(str, host, host_len, port);
 }
 
 /* Live handler threads (accept path). Used to cap concurrent conns. */
@@ -670,6 +675,7 @@ int main(int argc, char **argv)
 
     struct efsd_server server;
     memset(&server, 0, sizeof(server));
+    server.persist_nodes = 1;
     server.direct_io = 0; /* default: page cache; opt in with --direct-io */
     server.nwriters = EFS_DEFAULT_WRITERS; /* eight durable I/O workers; --writers overrides */
     server.listen_fd = -1;
@@ -678,17 +684,11 @@ int main(int argc, char **argv)
     pthread_cond_init(&server.export_idle_cv, NULL);
     server_peer_pool_init();
 
-    const char *cluster_path = NULL;
+    char *join_peer = NULL;
 
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--node-id") == 0 || strcmp(argv[i], "--join") == 0 ||
-            strcmp(argv[i], "--no-persist") == 0) {
-            fprintf(stderr, "%s was removed (D39): membership is the configured member list "
-                    "given with --cluster; this node is the record whose endpoint equals "
-                    "--addr:--port\n", argv[i]);
-            return 1;
-        } else if (strcmp(argv[i], "--cluster") == 0 && i + 1 < argc) {
-            cluster_path = argv[++i];
+        if (strcmp(argv[i], "--node-id") == 0 && i + 1 < argc) {
+            server.id = (efs_node_id_t)atoi(argv[++i]);
         } else if (strcmp(argv[i], "--addr") == 0 && i + 1 < argc) {
             strncpy(server.addr, argv[++i], sizeof(server.addr) - 1);
         } else if (strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
@@ -722,6 +722,10 @@ int main(int argc, char **argv)
                 return 1;
             }
             server.nwriters = n;
+        } else if (strcmp(argv[i], "--join") == 0 && i + 1 < argc) {
+            join_peer = argv[++i];
+        } else if (strcmp(argv[i], "--no-persist") == 0) {
+            server.persist_nodes = 0;
         } else if (strcmp(argv[i], "--perf") == 0) {
             server.perf = 1;
         } else if (strcmp(argv[i], "--strace") == 0) {
@@ -736,98 +740,13 @@ int main(int argc, char **argv)
         }
     }
 
-    if (!cluster_path || !server.addr[0] || server.port == 0 ||
-        server.storage_path_count == 0) {
+    if (server.id == 0 || server.port == 0 || server.storage_path_count == 0) {
         fprintf(stderr, "Missing required arguments\n");
         usage(argv[0]);
         return 1;
     }
     strncpy(server.storage_path, server.storage_paths[0], sizeof(server.storage_path) - 1);
     server.storage_path[sizeof(server.storage_path) - 1] = '\0';
-
-    /* D39 C1/W153a: the configured member list decides identity and the
-     * metadata group membership; a malformed or inconsistent configuration
-     * stops startup before anything is created or served. */
-    {
-        char err[512];
-        if (getenv("EFS_MD_RAFT_N")) {
-            fprintf(stderr, "EFS_MD_RAFT_N was removed (D39): the member count comes from "
-                    "--cluster; unset it\n");
-            return 1;
-        }
-        if (efs_cluster_conf_load(cluster_path, &server.cluster, err, sizeof(err)) != EFS_OK) {
-            fprintf(stderr, "cluster configuration refused: %s\n", err);
-            return 1;
-        }
-        server.id = efs_cluster_conf_member_at(&server.cluster, server.addr, server.port);
-        if (!server.id) {
-            char dg[13];
-            efs_cluster_digest_short(server.cluster.digest, dg);
-            fprintf(stderr, "advertised endpoint %s:%u is not a member record of %s "
-                    "(configuration %s, %u members); --addr must be the canonical IPv4 "
-                    "address of a configured member\n", server.addr, server.port,
-                    cluster_path, dg, server.cluster.n);
-            return 1;
-        }
-        efs_cluster_conf_set_current(&server.cluster);
-    }
-
-    {
-        /* Roots carrying these retired markers may hold a target write in
-         * flight that this build cannot finish or collect: refuse them. */
-        const char *markers[]={"repair-active","repair-store","repair-job"};
-        for(unsigned i=0;i<sizeof(markers)/sizeof(markers[0]);i++) {
-            char marker_path[EFS_MAX_PATH+80];struct stat marker_stat;
-            int nn=snprintf(marker_path,sizeof(marker_path),"%s/meta/%s",server.storage_paths[0],markers[i]);
-            if(nn<0 || (size_t)nn>=sizeof(marker_path))return 1;
-            if(!lstat(marker_path,&marker_stat) || errno!=ENOENT) {
-                fprintf(stderr,"storage: %s holds unsupported state %s; refusing\n",
-                        server.storage_paths[0],markers[i]);return 1;
-            }
-        }
-    }
-
-    /* D39 C2: own the member store before anything else touches it, then
-     * advance the durable boot counter (the incarnation) before anything is
-     * advertised. A refusal leaves the store as it was. */
-    {
-        char mdraft[EFS_MAX_PATH + 16], err[1024];
-        const char *meta_root = server.meta_storage[0] ? server.meta_storage : server.storage_path;
-        if (mkdir_p(meta_root) != 0 && errno != EEXIST) {
-            fprintf(stderr, "mkdir %s: %s\n", meta_root, strerror(errno));
-            return 1;
-        }
-        snprintf(mdraft, sizeof(mdraft), "%s/mdraft", meta_root);
-        if (member_store_open(&server.mstore, mdraft, server.id, server.cluster.digest, err,
-                              sizeof(err)) != EFS_OK) {
-            fprintf(stderr, "member store refused: %s\n", err);
-            return 1;
-        }
-        struct timespec ts;
-        clock_gettime(CLOCK_REALTIME, &ts);
-        uint64_t fresh = ((uint64_t)getpid() << 32) ^ ((uint64_t)ts.tv_sec << 16) ^
-                         (uint64_t)ts.tv_nsec;
-        if (member_store_boot(&server.mstore, fresh, &server.incarnation, err,
-                              sizeof(err)) != EFS_OK) {
-            fprintf(stderr, "member store refused: %s\n", err);
-            member_store_close(&server.mstore);
-            return 1;
-        }
-        if (adm_init(&server.cluster, server.id, server.incarnation, &server.mstore) != EFS_OK) {
-            fprintf(stderr, "admission: cannot initialize member %u\n", server.id);
-            member_store_close(&server.mstore);
-            return 1;
-        }
-        efs_decl_gate_set_admission(&adm_ops);
-        char dg[13];
-        efs_cluster_digest_short(server.cluster.digest, dg);
-        fprintf(stderr, "member %u of %u at %s:%u, configuration %s, incarnation %llu, "
-                "store %s%s%s\n", server.id, server.cluster.n, server.addr, server.port, dg,
-                (unsigned long long)server.incarnation,
-                member_store_state_name(server.mstore.state),
-                server.mstore.created ? " (initialized now)" : "",
-                server.mstore.pair_known ? "" : ", pair unknown");
-    }
 
     /* Line-buffer early so join/listen banners show up in harness logs promptly. */
     setlinebuf(stdout);
@@ -886,8 +805,31 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    {
+        /* Roots carrying these retired markers may hold a target write in
+         * flight that this build cannot finish or collect: refuse them. */
+        const char *markers[]={"repair-active","repair-store","repair-job"};
+        for(unsigned i=0;i<sizeof(markers)/sizeof(markers[0]);i++) {
+            char marker_path[EFS_MAX_PATH+80];struct stat marker_stat;
+            int nn=snprintf(marker_path,sizeof(marker_path),"%s/meta/%s",server.storage_paths[0],markers[i]);
+            if(nn<0 || (size_t)nn>=sizeof(marker_path))return 1;
+            if(!lstat(marker_path,&marker_stat) || errno!=ENOENT) {
+                fprintf(stderr,"storage: %s holds unsupported state %s; refusing\n",
+                        server.storage_paths[0],markers[i]);return 1;
+            }
+        }
+    }
 
-    server_membership_from_config(&server);
+    server.nodes[0].id = server.id;
+    strncpy(server.nodes[0].addr, server.addr, sizeof(server.nodes[0].addr) - 1);
+    server.nodes[0].port = server.port;
+    server_format_storage_paths(&server, server.nodes[0].storage_path,
+                                sizeof(server.nodes[0].storage_path));
+    server.nodes[0].quota = server.quota;
+    server.nodes[0].used = 0;
+    server.node_count = 1;
+
+    server_load_nodes(&server);
 
     /* Refresh this process's row by id — never smash nodes[0], which may be a peer
      * after load (that bug duplicated one id and dropped another). */
@@ -982,6 +924,37 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    if (join_peer) {
+        char host[64];
+        uint16_t port;
+        if (parse_host_port(join_peer, host, sizeof(host), &port) != 0) {
+            fprintf(stderr, "Invalid join address: %s\n", join_peer);
+            close(server.listen_fd);
+            return 1;
+        }
+        if (server_join_cluster(&server, host, port) != 0) {
+            fprintf(stderr,
+                    "Could not join cluster at %s; starting as standalone and retrying in background\n",
+                    join_peer);
+            strncpy(server.rejoin_addr, host, sizeof(server.rejoin_addr) - 1);
+            server.rejoin_addr[sizeof(server.rejoin_addr) - 1] = '\0';
+            server.rejoin_port = port;
+            server_start_rejoin(&server);
+        } else {
+            server_save_nodes(&server);
+        }
+    } else if (server.node_count > 1) {
+        if (server_rejoin_cluster(&server) != 0) {
+            fprintf(stderr,
+                    "Could not rejoin cluster from persisted peers; starting as standalone and retrying in background\n");
+            server_start_rejoin(&server);
+        } else {
+            server_save_nodes(&server);
+        }
+    } else {
+        server_save_nodes(&server);
+    }
+
     /* Do not rebuild 2+1 meta pages on this thread. A large export (tens of
      * thousands of pages) used to block accept() for minutes after a bounce,
      * so joiners never came up and the client timed out every GET. Catch-up
@@ -1005,7 +978,6 @@ int main(int argc, char **argv)
         return 1;
     }
     server_start_heartbeat(&server);
-    server_start_hello(&server);
     if (server_raft_host_start(&server) != 0) {
         fprintf(stderr, "raft-host: start failed\n");
         server_writer_pool_stop(&server);

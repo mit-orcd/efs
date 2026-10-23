@@ -4,7 +4,7 @@
 # K16 / W75 (I25) cluster gate for the identity-bound fragment record
 # (fragment record format 2, docs/how-it-works/protocols/data.md).
 # Private 3-daemon TCP cluster on ONE host: ports PORT+1..PORT+3 (default
-# 18401-18403), stores DIR/n{1,2,3}, DIR/cluster.conf (D39), one efs-fuse mount at
+# 18401-18403), stores DIR/n{1,2,3}, EFS_MD_RAFT_N=3, one efs-fuse mount at
 # DIR/mnt. REL is a build tree (efsd, efs-fuse, efs-mgmt, scripts/client.sh).
 # Never touches orcd-mini or w100. K16_DIRECT=1 (default) adds --direct-io.
 #
@@ -16,23 +16,16 @@
 set -u
 cmd=$1; REL=$2; D=$3; PORT=${4:-18400}
 ADDR=${K16_ADDR:-127.0.0.1}
-export EFS_TRANSPORT=tcp
+export EFS_TRANSPORT=tcp EFS_MD_RAFT_N=3
 DIO=""; [ "${K16_DIRECT:-1}" = 1 ] && DIO=--direct-io
 FAILS=0
 check() { if eval "$2"; then echo "PASS $1"; else echo "FAIL $1"; FAILS=$((FAILS+1)); fi; }
 
-# D39: the configured member list; the endpoint selects each member and
-# efs-mgmt declares as management with it (EFS_CLUSTER_CONF).
-export EFS_CLUSTER_CONF="$D/cluster.conf"
-write_conf() {
-  : > "$D/cluster.conf"
-  for i in 1 2 3; do echo "$i $ADDR:$((PORT+i))" >> "$D/cluster.conf"; done
-}
-
 start_node() {
-  local i=$1
-  nohup "$REL/efsd" --cluster "$D/cluster.conf" --addr "$ADDR" --port $((PORT+i)) --storage "$D/n$i" \
-    --quota 4G $DIO >> "$D/logs/efsd-n$i.log" 2>&1 &
+  local i=$1 join=""
+  [ "$i" -gt 1 ] && join="--join $ADDR:$((PORT+1))"
+  nohup "$REL/efsd" --node-id "$i" --addr "$ADDR" --port $((PORT+i)) --storage "$D/n$i" \
+    --quota 4G $DIO $join >> "$D/logs/efsd-n$i.log" 2>&1 &
   echo $! > "$D/logs/n$i.pid"
   for _ in $(seq 120); do grep -q listening "$D/logs/efsd-n$i.log" && return 0
     kill -0 "$(cat "$D/logs/n$i.pid")" 2>/dev/null || return 1; sleep 0.5; done
@@ -69,7 +62,6 @@ run)
   for i in 1 2 3; do ss -ltnH "sport = :$((PORT+i))" | grep -q . && { echo "port $((PORT+i)) in use"; exit 1; }; done
   [ -e "$D/n1" ] && { echo "$D not fresh"; exit 1; }
   mkdir -p "$D"/{n1,n2,n3,logs,mnt}
-  write_conf
   echo "build $("$REL/efsd" --version 2>&1 | head -1) direct=${K16_DIRECT:-1} transport=tcp"
   for i in 1 2 3; do start_node $i || { echo "FAIL start n$i"; exit 1; }; done
   for _ in $(seq 30); do "$REL/efs-mgmt" raft-mkfs "$ADDR:$((PORT+1))" 2>&1 | grep -q 'raft-mkfs rc=0 ' && break; sleep 1; done

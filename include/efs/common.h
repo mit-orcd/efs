@@ -151,9 +151,6 @@ _Static_assert(EFS_MAX_NODES >= EFS_NUM_FRAGMENTS && EFS_MAX_NODES < 32,
  * the shard (REGISTER + ESTABLISH) and resends the same identity. */
 #define EFS_ERR_FENCED      -27
 #define EFS_ERR_UNREGISTERED -28
-/* D39 C4: the admitter's cluster formation is not complete; a client or a
- * peer's application work is refused until it is. */
-#define EFS_ERR_NOT_FORMED  -29
 
 typedef uint64_t efs_ino_t;
 

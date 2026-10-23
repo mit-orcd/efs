@@ -46,7 +46,6 @@ rpc=r'''
 #include <stdio.h>
 #define HOST_CMD_MAX 512
 struct efs_raft_host {int raft_id;};
-static int formed=1;static int adm_complete(void){return formed;}
 static struct efs_conn peer;static int setters,drops,releases,sends,recvs,fail_send,fail_recv,bad_type,short_reply,expected_timeout,ordinary_gets,read_gets;
 static int peer_addr(struct efs_raft_host *h,int rid,char *a,size_t n,uint16_t *port)
 {(void)h;assert(rid==2);snprintf(a,n,"peer");*port=17432;return 0;}
@@ -73,10 +72,8 @@ int main(void){struct efs_raft_host h={.raft_id=0};struct efs_msg_raft_mkfs_repl
   reset(kind);bad_type=1;assert(host_rpc_submit(&h,2,2,NULL,0,&reply,400)==EFS_ERR_IO && drops==1 && !releases);
   reset(kind);short_reply=1;assert(host_rpc_submit(&h,2,2,NULL,0,&reply,400)==EFS_ERR_IO && drops==1 && !releases);
   reset(kind);assert(host_rpc_submit(&h,0,2,NULL,0,&reply,400)==EFS_ERR_INVAL && !setters && !sends);
-  /* D39: no forward (application work) before this member's formation completes. */
-  reset(kind);formed=0;assert(host_rpc_submit(&h,2,2,NULL,0,&reply,400)==EFS_ERR_BUSY && !ordinary_gets && !read_gets && !sends);formed=1;
  }
- puts("forwarded RPC: TCP/RDMA receive limits, previous timeout restoration, large-frame ownership, lost/short/wrong replies drop connections and refuse authority, no forward before formation PASS");}
+ puts("forwarded RPC: TCP/RDMA receive limits, previous timeout restoration, large-frame ownership, lost/short/wrong replies drop connections and refuse authority PASS");}
 '''
 with tempfile.TemporaryDirectory(prefix='efs-read-deadline-') as t:
     p=Path(t)

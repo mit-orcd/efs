@@ -15,11 +15,7 @@ SRC='/tmp/efs-'+RUN
 HOSTS=[f'fcstor{i:03}' for i in range(3,14)]; SERVERS=HOSTS[:4]; CLIENTS=HOSTS[4:]
 SEED='172.16.223.57:17432'
 LIB='/home/erbmi1/orcd/scratch/efs/orcd-test/deps/libfuse/lib'
-# D39: every remote command first writes the configured member list (the four
-# servers at 172.16.223.57-60:17432) and points efs-mgmt at it.
-CONF_TEXT=''.join('%d 172.16.223.%d:17432\\n'%(i,i+56) for i in range(1,5))
-ENV=('export EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_2 EFS_COMMANDS=1 EFS_COMMANDS_SERVER=1 EFS_EXPIRY=0\n'
-     "CONF=/tmp/efs-qvote-cluster.conf; printf '"+CONF_TEXT+"' > $CONF; export EFS_CLUSTER_CONF=$CONF\n")
+ENV='export EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_2 EFS_COMMANDS=1 EFS_COMMANDS_SERVER=1 EFS_EXPIRY=0 EFS_MD_RAFT_N=4\n'
 def run(h,body,timeout=120):
  cmd=['ssh','-A','-o','ConnectTimeout=20','erbmi1@orcd-login.mit.edu',shlex.join(['ssh','-o','BatchMode=yes','-o','ConnectTimeout=15',h,'bash -c '+shlex.quote('set -euo pipefail\n'+body)])]
  r=subprocess.run(cmd,capture_output=True,text=True,timeout=timeout)

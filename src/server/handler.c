@@ -270,24 +270,49 @@ void server_handle_conn(struct efs_conn *conn)
                     free(rej);
                     break;
                 }
-                /* D39: only a configured member at its configured endpoint
-                 * refreshes its own storage facts; nothing is added, removed
-                 * or readdressed. */
-                uint32_t member = h->node_id;
-                int accepted = member >= 1 && member <= g_server->cluster.n &&
-                               member != g_server->id &&
-                               h->port == g_server->cluster.m[member - 1].port &&
-                               !strncmp(h->addr, g_server->cluster.m[member - 1].addr,
-                                        sizeof(h->addr));
                 pthread_mutex_lock(&g_server->lock);
-                for (uint32_t i = 0; accepted && i < g_server->node_count; i++) {
-                    if (g_server->nodes[i].id != member)
-                        continue;
-                    struct efs_node *n = &g_server->nodes[i];
-                    strncpy(n->storage_path, h->storage_path, sizeof(n->storage_path) - 1);
+
+                /* Update existing entry or append a new one; never duplicate. */
+                uint32_t idx = g_server->node_count;
+                int changed = 0;
+                int accepted = 0;
+                for (uint32_t i = 0; i < g_server->node_count; i++) {
+                    if (g_server->nodes[i].id == h->node_id) {
+                        idx = i;
+                        break;
+                    }
+                }
+                if (idx < g_server->node_count) {
+                    /* Refresh an already-known peer. */
+                    struct efs_node *n = &g_server->nodes[idx];
+                    if (n->port != h->port ||
+                        strcmp(n->addr, h->addr) != 0 ||
+                        strcmp(n->storage_path, h->storage_path) != 0 ||
+                        n->quota != h->quota || n->used != h->used) {
+                        changed = 1;
+                    }
+                    strncpy(n->addr, h->addr, sizeof(n->addr) - 1);
+                    n->port = h->port;
+                    strncpy(n->storage_path, h->storage_path,
+                            sizeof(n->storage_path) - 1);
                     n->quota = h->quota;
                     n->used = h->used;
+                    accepted = 1;
+                } else if (g_server->node_count < EFS_MAX_NODES) {
+                    struct efs_node *n = &g_server->nodes[g_server->node_count];
+                    n->id = h->node_id;
+                    strncpy(n->addr, h->addr, sizeof(n->addr) - 1);
+                    n->port = h->port;
+                    strncpy(n->storage_path, h->storage_path,
+                            sizeof(n->storage_path) - 1);
+                    n->quota = h->quota;
+                    n->used = h->used;
+                    g_server->node_count++;
+                    changed = 1;
+                    accepted = 1;
                 }
+
+                server_dedupe_nodes_locked(g_server);
                 /* Heap: hello_ack embeds nodes[EFS_MAX_NODES] (~68 KiB at 16). */
                 struct efs_msg_hello_ack *ack = calloc(1, sizeof(*ack));
                 if (!ack) {
@@ -295,18 +320,25 @@ void server_handle_conn(struct efs_conn *conn)
                     break;
                 }
                 ack->epoch = g_server->epoch;
-                /* assigned_id == 0 means refused. */
+                /* assigned_id == 0 means reject (e.g. cluster at capacity). */
                 ack->assigned_id = accepted ? h->node_id : 0;
-                ack->reject_reason = accepted ? EFS_HELLO_REJECT_NONE : EFS_HELLO_REJECT_MEMBER;
+                ack->reject_reason =
+                    accepted ? EFS_HELLO_REJECT_NONE : EFS_HELLO_REJECT_FULL;
                 strncpy(ack->build_id, EFS_BUILD_ID, sizeof(ack->build_id) - 1);
                 ack->node_count = g_server->node_count;
                 memcpy(ack->nodes, g_server->nodes, sizeof(g_server->nodes));
+                /* Persist only when membership / addressing actually changed,
+                 * and never under the lock (fsync would stall every handler). */
+                if (changed)
+                    server_nodes_mark_dirty(g_server);
                 pthread_mutex_unlock(&g_server->lock);
-                if (!accepted)
-                    fprintf(stderr, "HELLO refused: member %u at %s:%u is not a configured "
-                            "member record\n", member, h->addr, h->port);
+                server_nodes_flush_dirty(g_server);
                 efs_conn_send_msg(conn, EFS_MSG_HELLO_ACK, ack, sizeof(*ack));
                 free(ack);
+                /* Converge the placement ring: relay this membership change to
+                 * every other peer (HELLO only updates the contacted node). */
+                if (changed)
+                    server_gossip_membership(g_server, h);
             }
             break;
         }
@@ -782,6 +814,16 @@ void server_handle_conn(struct efs_conn *conn)
             efs_conn_send_msg(conn, EFS_MSG_ADD_STORAGE_REPLY, &r, sizeof(r));
             break;
         }
+        case EFS_MSG_JOIN: {
+            if (payload_len >= sizeof(struct efs_msg_join)) {
+                struct efs_msg_join *req = payload;
+                uint8_t reply = EFS_JOIN_OK;
+                if (server_join_cluster(g_server, req->peer_host, req->peer_port) != 0)
+                    reply = EFS_JOIN_ERROR;
+                efs_conn_send_msg(conn, EFS_MSG_JOIN_REPLY, &reply, 1);
+            }
+            break;
+        }
         case EFS_MSG_CREATE_RETAINED: {
             struct efs_msg_create_retained_reply reply;
             memset(&reply,0,sizeof(reply));reply.rpc.status=EFS_INODE_RPC_INVAL;
@@ -1189,7 +1231,7 @@ void server_handle_conn(struct efs_conn *conn)
         }
         case EFS_MSG_RAFT:
             /* The empty reply is transport only, never a consensus ACK. */
-            (void)server_raft_host_inbox(payload, payload_len, &decl.id);
+            (void)server_raft_host_inbox(payload, payload_len);
             efs_conn_send_msg(conn, EFS_MSG_RAFT_REPLY, NULL, 0);
             break;
         case EFS_MSG_RAFT_MKFS: {
@@ -1199,15 +1241,6 @@ void server_handle_conn(struct efs_conn *conn)
             else
                 server_raft_host_mkfs(&r);
             efs_conn_send_msg(conn, EFS_MSG_RAFT_MKFS_REPLY, &r, sizeof(r));
-            break;
-        }
-        case EFS_MSG_FORMATION_READ: {
-            struct efs_msg_formation_read_reply r;
-            memset(&r, 0, sizeof(r));
-            r.rc = EFS_ERR_INVAL;
-            if (payload_len == sizeof(struct efs_msg_formation_read))
-                server_raft_host_formation_read(payload, &r);
-            efs_conn_send_msg(conn, EFS_MSG_FORMATION_READ_REPLY, &r, sizeof(r));
             break;
         }
         case EFS_MSG_RAFT_STATUS: {

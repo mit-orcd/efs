@@ -23,20 +23,16 @@ B=$(cd "$1" && pwd); D=$2; PORT=${3:-18100}
 GAP=${GAP:-15}; SETTLE=${SETTLE:-10}; STOP_WAIT=${STOP_WAIT:-20}
 MAX=${MAX_ELECTIONS:-3}; KEEP=${KEEP:-0}
 ADDR=127.0.0.1
-export EFS_TRANSPORT=tcp
+export EFS_TRANSPORT=tcp EFS_MD_RAFT_N=3
 for i in 1 2 3; do
   ss -ltnH "sport = :$((PORT+i))" | grep -q . && { echo "port $((PORT+i)) in use"; exit 2; }
 done
 mkdir -p "$D"/n1 "$D"/n2 "$D"/n3 "$D"/logs
-# D39: the configured member list; the endpoint selects each member and
-# efs-mgmt declares as management with it (EFS_CLUSTER_CONF).
-CONF="$D/cluster.conf"; : > "$CONF"
-for i in 1 2 3; do echo "$i $ADDR:$((PORT+i))" >> "$CONF"; done
-export EFS_CLUSTER_CONF="$CONF"
 start() {
-  local i=$1
-  nohup "$B/efsd" --cluster "$CONF" --addr $ADDR --port $((PORT+i)) --storage "$D/n$i" \
-    --quota 2G >> "$D/logs/efsd-n$i.log" 2>&1 &
+  local i=$1 join=""
+  [ "$i" -gt 1 ] && join="--join $ADDR:$((PORT+1))"
+  nohup "$B/efsd" --node-id "$i" --addr $ADDR --port $((PORT+i)) --storage "$D/n$i" \
+    --quota 2G $join >> "$D/logs/efsd-n$i.log" 2>&1 &
   echo $! > "$D/logs/n$i.pid"
 }
 stop_all() {
