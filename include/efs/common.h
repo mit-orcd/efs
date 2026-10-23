@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <limits.h>
 #include <sys/stat.h>
+#include <stdlib.h>
 
 #define EFS_VERSION_MAJOR 0
 #define EFS_VERSION_MINOR 1
@@ -43,7 +44,16 @@
 #define EFS_META_FRAGMENT_SIZE (EFS_META_PAGE_SIZE / 2)
 
 #define EFS_NUM_FRAGMENTS    3
-#define EFS_MAX_NODES        4
+/* K28/W151: cluster size cap. Data placement, membership and clients use
+ * every member up to this count; metadata groups keep three voters (D38,
+ * efs_md_group_voters in raft.h). 16, not the spec's 64: node-id masks are
+ * uint32 with (1u << EFS_MAX_NODES) - 1 (pack ledger, publication, put
+ * ticket, Raft voters), and each struct efs_node is ~4.2 KiB, so a node
+ * table is ~68 KiB at 16 but ~270 KiB at 64, both on the wire (HELLO_ACK,
+ * LIST_NODES_REPLY) and as stack copies on 1 MiB server threads. */
+#define EFS_MAX_NODES        16
+_Static_assert(EFS_MAX_NODES >= EFS_NUM_FRAGMENTS && EFS_MAX_NODES < 32,
+               "node-id masks are uint32 and need (1u << EFS_MAX_NODES)");
 /* Max TCP connections the client keeps open to each server (pool size).
  * Sized for many FUSE writers × fragment fanout × chunk pipeline. */
 #define EFS_CLIENT_CONNS_PER_NODE 256
@@ -179,6 +189,15 @@ struct efs_node {
     uint64_t down_until_ms; /* heartbeat-marked-down cooldown deadline */
     uint32_t hb_fail_streak;
 };
+
+/* K28: a node table is ~68 KiB at EFS_MAX_NODES 16 (struct efs_node carries
+ * a storage path), too much for a 1 MiB server thread stack. EFS_NODE_TABLE
+ * declares a heap table freed on every scope exit; the caller must check it
+ * for NULL and refuse (an allocation failure proves nothing). */
+static inline void efs_node_table_free(struct efs_node **table) { free(*table); }
+#define EFS_NODE_TABLE(name)                                               \
+    struct efs_node *name __attribute__((cleanup(efs_node_table_free))) = \
+        calloc(EFS_MAX_NODES, sizeof(struct efs_node))
 
 static inline bool efs_mode_is_dir(uint32_t mode) { return S_ISDIR(mode); }
 static inline bool efs_mode_is_lnk(uint32_t mode) { return S_ISLNK(mode); }

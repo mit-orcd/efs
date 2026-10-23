@@ -254,7 +254,7 @@ void server_handle_conn(struct efs_conn *conn)
                     h->version == EFS_VERSION_PACK &&
                     strncmp(h->build_id, EFS_BUILD_ID, EFS_BUILD_ID_LEN) == 0;
                 if (!version_ok) {
-                    /* Heap: hello_ack embeds nodes[EFS_MAX_NODES] (~16KiB). */
+                    /* Heap: hello_ack embeds nodes[EFS_MAX_NODES] (~68 KiB at 16). */
                     struct efs_msg_hello_ack *rej = calloc(1, sizeof(*rej));
                     if (!rej)
                         break;
@@ -325,7 +325,7 @@ void server_handle_conn(struct efs_conn *conn)
                 }
 
                 server_dedupe_nodes_locked(g_server);
-                /* Heap: hello_ack embeds nodes[EFS_MAX_NODES] (~16KiB). */
+                /* Heap: hello_ack embeds nodes[EFS_MAX_NODES] (~68 KiB at 16). */
                 struct efs_msg_hello_ack *ack = calloc(1, sizeof(*ack));
                 if (!ack) {
                     pthread_mutex_unlock(&g_server->lock);

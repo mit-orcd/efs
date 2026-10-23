@@ -1,5 +1,153 @@
 #include "efs/placement.h"
+#include "efs/raft.h"
 #include <stdio.h>
+#include <string.h>
+
+/* K28/W151: ring placement over n members (ids 1..n) for n = 5..max: three
+ * distinct members per stripe, every member used across many inodes, and
+ * one file's successive chunks rotate (the start walks with chunk_index). */
+static int k28_placement(uint32_t n)
+{
+    int failures = 0;
+    struct efs_node ring[EFS_MAX_NODES];
+    uint32_t hits[EFS_MAX_NODES + 1][EFS_NUM_FRAGMENTS];
+    efs_node_id_t f[EFS_NUM_FRAGMENTS], prev[EFS_NUM_FRAGMENTS] = {0};
+
+    memset(ring, 0, sizeof(ring));
+    memset(hits, 0, sizeof(hits));
+    /* Membership order is not ring order: list ids descending. */
+    for (uint32_t i = 0; i < n; i++)
+        ring[i].id = (efs_node_id_t)(n - i);
+    for (efs_ino_t ino = 1; ino <= 400; ino++) {
+        for (uint32_t ci = 0; ci < 16; ci++) {
+            efs_place_fragments(ring, n, ino, ci, f);
+            for (int k = 0; k < EFS_NUM_FRAGMENTS; k++) {
+                if (f[k] < 1 || f[k] > n) {
+                    fprintf(stderr, "FAIL k28 n=%u node %u out of range\n", n, f[k]);
+                    return failures + 1;
+                }
+                hits[f[k]][k]++;
+            }
+            if (f[0] == f[1] || f[0] == f[2] || f[1] == f[2]) {
+                fprintf(stderr, "FAIL k28 n=%u ino=%llu ci=%u duplicate (%u,%u,%u)\n",
+                        n, (unsigned long long)ino, ci, f[0], f[1], f[2]);
+                failures++;
+            }
+            /* Rotation: the next chunk of the same file moves its start. */
+            if (ci && f[0] == prev[0]) {
+                fprintf(stderr, "FAIL k28 n=%u ino=%llu ci=%u did not rotate\n",
+                        n, (unsigned long long)ino, ci);
+                failures++;
+            }
+            memcpy(prev, f, sizeof(prev));
+        }
+    }
+    /* Per-node load stays within 25% of the mean for every fragment slot. */
+    for (uint32_t id = 1; id <= n; id++) {
+        for (int k = 0; k < EFS_NUM_FRAGMENTS; k++) {
+            uint32_t mean = 400u * 16u / n;
+            if (!hits[id][k] || hits[id][k] < mean * 3 / 4 || hits[id][k] > mean * 5 / 4) {
+                fprintf(stderr, "FAIL k28 n=%u node %u fragment %d load %u (mean %u)\n",
+                        n, id, k, hits[id][k], mean);
+                failures++;
+            }
+        }
+    }
+    /* A file of n chunks touches every member. */
+    {
+        int seen[EFS_MAX_NODES + 1] = {0}, all = 1;
+        for (uint32_t ci = 0; ci < n; ci++) {
+            efs_place_fragments(ring, n, 77, ci, f);
+            for (int k = 0; k < EFS_NUM_FRAGMENTS; k++) seen[f[k]] = 1;
+        }
+        for (uint32_t id = 1; id <= n; id++) all &= seen[id];
+        if (!all) {
+            fprintf(stderr, "FAIL k28 n=%u one file did not touch every member\n", n);
+            failures++;
+        }
+    }
+    /* Ring is keyed by sorted ids: arbitrary ids map to the same ranks. */
+    {
+        struct efs_node sparse[EFS_MAX_NODES];
+        efs_node_id_t g[EFS_NUM_FRAGMENTS];
+        memset(sparse, 0, sizeof(sparse));
+        for (uint32_t i = 0; i < n; i++) sparse[i].id = (efs_node_id_t)(1000 + 7 * (i + 1));
+        for (uint32_t ci = 0; ci < 32; ci++) {
+            efs_place_fragments(ring, n, 99, ci, f);
+            efs_place_fragments(sparse, n, 99, ci, g);
+            for (int k = 0; k < EFS_NUM_FRAGMENTS; k++)
+                if (g[k] != 1000 + 7 * f[k]) {
+                    fprintf(stderr, "FAIL k28 n=%u sparse ids diverge\n", n);
+                    failures++;
+                    ci = 32;
+                    break;
+                }
+        }
+    }
+    /* Capacity: n equal nodes of C give 2nC/3; one huge node is capped. */
+    {
+        uint64_t caps[EFS_MAX_NODES];
+        const uint64_t C = 300ull << 30;
+        for (uint32_t i = 0; i < n; i++) caps[i] = C;
+        uint64_t got = efs_capacity_logical(caps, n), want = 2 * (n * C / 3);
+        if (got + 2 < want || got > want + 2) {
+            fprintf(stderr, "FAIL k28 capacity n=%u got %llu want %llu\n", n,
+                    (unsigned long long)got, (unsigned long long)want);
+            failures++;
+        }
+        /* One node with 100x: M = (n-1)C/2 when (n-1)C >= 2M, so 2M = (n-1)C. */
+        caps[0] = 100 * C;
+        got = efs_capacity_logical(caps, n);
+        want = (uint64_t)(n - 1) * C;
+        if (got + 2 < want || got > want + 2) {
+            fprintf(stderr, "FAIL k28 capacity skew n=%u got %llu want %llu\n", n,
+                    (unsigned long long)got, (unsigned long long)want);
+            failures++;
+        }
+        /* An empty member is not counted. */
+        caps[0] = 0;
+        got = efs_capacity_logical(caps, n);
+        want = 2 * ((uint64_t)(n - 1) * C / 3);
+        if (got + 2 < want || got > want + 2) {
+            fprintf(stderr, "FAIL k28 capacity empty n=%u got %llu want %llu\n", n,
+                    (unsigned long long)got, (unsigned long long)want);
+            failures++;
+        }
+    }
+    return failures;
+}
+
+/* K28/W151 + D38: three voters per group for n >= 4, nodes 5..n host no
+ * metadata, n <= 3 all nodes; every set is a valid Raft voter mask. */
+static int k28_voters(void)
+{
+    int failures = 0;
+    for (int n = 1; n <= EFS_MAX_NODES; n++) {
+        uint32_t a = efs_md_group_voters(EFS_RAFT_GROUP_SHARD, n);
+        uint32_t b = efs_md_group_voters(EFS_RAFT_GROUP_SHARD2, n);
+        uint32_t wa = n <= 3 ? (1u << n) - 1u : 0x7u;
+        uint32_t wb = n <= 3 ? (1u << n) - 1u : 0xeu;
+        if (a != wa || b != wb || !efs_raft_voters_valid(a) || !efs_raft_voters_valid(b) ||
+            (n >= 3 && (__builtin_popcount(a) != 3 || __builtin_popcount(b) != 3)) ||
+            (a | b) >> (n < 4 ? n : 4)) {
+            fprintf(stderr, "FAIL k28 voters n=%d shard=%#x shard2=%#x\n", n, a, b);
+            failures++;
+        }
+    }
+    if (efs_md_group_voters(EFS_RAFT_GROUP_SHARD, 0) ||
+        efs_md_group_voters(EFS_RAFT_GROUP_SHARD, EFS_MAX_NODES + 1)) {
+        fprintf(stderr, "FAIL k28 voters out-of-range n accepted\n");
+        failures++;
+    }
+    /* Every member id is a valid Raft peer (replacement may land anywhere). */
+    if (EFS_RAFT_MAX_PEERS != EFS_MAX_NODES ||
+        !efs_raft_voters_valid(1u << (EFS_MAX_NODES - 1)) ||
+        efs_raft_voters_valid(1u << EFS_MAX_NODES)) {
+        fprintf(stderr, "FAIL k28 raft peer space != cluster cap\n");
+        failures++;
+    }
+    return failures;
+}
 
 int main(void)
 {
@@ -177,6 +325,17 @@ int main(void)
          * not fit. 100/100/1000 at M=101 needs 303 and has 301. */
         if (efs_capacity_logical((const uint64_t[]){ 100, 100, 1000 }, 3) != 200) {
             fprintf(stderr, "FAIL capacity tightness\n");
+            failures++;
+        }
+    }
+
+    {
+        static const uint32_t ks[] = {5, 6, 7, 8, 9, 12, EFS_MAX_NODES};
+        for (size_t i = 0; i < sizeof(ks) / sizeof(ks[0]); i++)
+            failures += k28_placement(ks[i]);
+        failures += k28_voters();
+        if (EFS_MAX_NODES != 16) {
+            fprintf(stderr, "FAIL k28 cap changed: update the K28 evidence summary\n");
             failures++;
         }
     }

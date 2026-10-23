@@ -1002,8 +1002,9 @@ static int pk_group(uint8_t group, uint64_t term)
     if (pk_now_ns() < pk.g[pk_gi(group)].backoff_until_ns) return 0;
     struct efs_kv *kv = server_raft_host_kv();
     if (!kv) return 0;
-    struct efs_node nodes[EFS_MAX_NODES];
+    EFS_NODE_TABLE(nodes);
     uint32_t count;
+    if (!nodes) return 0;
     pthread_mutex_lock(&pk.s->lock);
     count = pk.s->node_count;
     memcpy(nodes, pk.s->nodes, count * sizeof(nodes[0]));

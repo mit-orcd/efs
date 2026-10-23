@@ -525,7 +525,7 @@ struct efs_msg_raft_mkfs_reply {
 
 /* Per-peer replication progress in raft-status (efs_raft_peer_progress).
  * Ages are Raft ticks (5 ms); UINT64_MAX = never. */
-#define EFS_RAFT_STATUS_PEERS 7 /* == EFS_RAFT_MAX_PEERS (raft.h) */
+#define EFS_RAFT_STATUS_PEERS EFS_MAX_NODES /* == EFS_RAFT_MAX_PEERS (raft.h) */
 struct efs_raft_peer_status {
     uint64_t next_index, match_index;
     uint64_t inflight, inflight_end;
