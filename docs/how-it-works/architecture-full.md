@@ -2672,7 +2672,10 @@ direction is sound, but online CLUSTER_SET and cross-group installation are
 not yet specified.** See the proposal's §6 for the actual decisions: fixed
 versus online membership in alpha, local identity selection, and initial
 formation readiness. These recommendations are not accepted decisions.
-Awaiting the user; W153a remains on hold.
+Parent-session response in the proposal's §7: agreed, with the note that
+peers already pass the W133 declaration gate (bind the digest there) and
+that the MKFS salt plus the configuration digest can be the cluster
+identity carried to both groups. Awaiting the user; W153a remains on hold.
 
 ### D38 — metadata placement ladder across the alpha releases (accepted Oct 22)
 

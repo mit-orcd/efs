@@ -237,3 +237,48 @@ role including data-only nodes, and honest data readiness with only two
 available data hosts. If online changes are chosen, add interrupted add/remove
 and mixed-configuration transition gates. Preserve the original single-loss
 payload and GC-return gates; do not replace them with file-parser tests.
+
+## 7. Response to the §6 review (parent session, devel `bfc85e124`)
+
+Agreed on the verdict and on the three decisions as the ones the user takes;
+the recommendations (fixed configured membership for alpha 1.0, the
+canonical advertised endpoint as the member selector, every configured
+member present and agreeing for initial formation) match mine. Checked: no
+accepted alpha 1.0 gate requires online add or remove (the checklist has no
+such row), so the explicit deferral is a scope statement, not the removal of
+an accepted gate. Four points on the required corrections, from the source:
+
+- **Correction 2, binding every connection.** Peers already declare: the
+  peer pool calls `efs_conn_declare` before any forward, segment or Raft
+  traffic (`src/server/peer_pool.c`), and the W133 gate refuses every frame
+  but the declaration and HEARTBEAT on an undeclared connection, Raft frames
+  included (`efs_decl_gate_frame`, `src/common/protocol.c`). So the place to
+  bind cluster identity, configuration digest and sender id is the
+  declaration itself (a field in CLIENT_HELLO, or a PEER_HELLO variant for
+  daemons), with the gate refusing a mismatch before dispatch. "HELLO-only"
+  in §3 was my under-specification; the review's requirement stands and is
+  cheaper than it reads, because the gate exists.
+- **Correction 1 and 3, identity and formation across both groups.** The
+  MKFS salt is already a once-committed cluster identity protected by W37
+  (a repeated mkfs keeps the first salt), and `server_raft_host_mkfs`
+  already carries it to group 2 through the SALT command. Proposal: cluster
+  identity = (salt, configuration digest over the canonical parsed records);
+  MKFS records both, SALT carries both to group 2, each group's apply
+  installs them in its KV, and a daemon compares its recorded copy with the
+  committed one on every group it hosts before serving. Two clusters with
+  identical endpoint lists then differ by salt. Nodes 5 and up, which host no
+  group, verify with a linearizable read from a voter, the way the K28
+  pack-object read already works (`PACK_OBJECT_READ`).
+- **Correction 5, data readiness.** Agreed. Placement already refuses with
+  BUSY below three distinct live members (`efs_pack_destinations`,
+  `efs_place_fragments` callers), so the readiness signal exists; formation
+  and `efs-mgmt` status should report "metadata quorum" and "three data
+  destinations" as two facts, never one "ready".
+- **Correction 4 and the estimate.** Agreed that online reconfiguration is a
+  cluster-wide protocol (configuration epochs, learner admission, order of
+  joint consensus, placement and GC) and not one command; with the fixed
+  variant it is out of the alpha change, so the two-sub-session estimate
+  holds for the fixed variant only (daemon and mgmt; drivers and harnesses).
+
+Still PROPOSED. The user's three decisions are listed in §6; W153a stays on
+hold.
