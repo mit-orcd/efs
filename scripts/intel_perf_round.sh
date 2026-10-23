@@ -30,9 +30,14 @@ fi
 printf 'workers\tfiles\tfiles_per_s\n' > "$OUT/sweep.tsv"
 for w in $WORKERS; do
   mark=$(ssh xorinox_efs "wc -l < $LOG")
+  # Disk activity mid-run: 60 s of iostat on both servers (w/s, f/s, util).
+  for h in intel1_efs intel2_efs; do
+    ssh $h "sleep 30; iostat -dx 60 2" 2>/dev/null | awk -v h=$h '/^Device/{n++} n==2 && /^nvme/{print h, $1, "w/s=" $8, "f/s=" $(NF-3), "w_await=" $12, "util=" $NF}' > "$OUT/iostat-w$w-$h.txt" &
+  done
   n=$(ssh xorinox_efs "d=$MNT/round-$ID-w$w-\$\$; timeout -s KILL $RUNSEC python3 $CB/tiny_files.py \$d --max-files 5000000 --workers $w --max-depth 2 >/dev/null 2>&1; find \$d -type f | wc -l")
+  wait
   printf '%s\t%s\t%s\n' $w $n $(python3 -c "print(round($n/$RUNSEC,1))") >> "$OUT/sweep.tsv"
   ssh xorinox_efs "tail -n +$((mark+1)) $LOG | grep 'opid-stats' || true" > "$OUT/opid-w$w.txt"
   log "workers=$w files=$n"
 done
-cat "$OUT/sweep.tsv"
+cat "$OUT/sweep.tsv"; cat "$OUT"/iostat-*.txt 2>/dev/null
