@@ -1597,8 +1597,8 @@ which the capacity gate on campaigning and leadership fixed. Snapshot import
 into a stalled follower is NOTRUN.
 
 [K26 leak gate](../status/k26-leak-gate-20261022.md): **`make leak-check` PASS on
-efs2 (25/25 unit binaries under valgrind memcheck, about 6 min) and `make test`
-PASS; merged into devel (`b8ef49e58`).** It works without LeakSanitizer, which
+efs2 and efs1 (25/25 unit binaries under valgrind memcheck, about 6 min) and
+`make test` PASS on both; merged into devel (`b8ef49e58`).** It works without LeakSanitizer, which
 fails only where `ptrace_scope` is 2 (ORCD); `make check` runs it. No product
 leak found. Open: W126 peeks can wait behind a writer queued on `view_rw`.
 node9901 run NOTRUN.
