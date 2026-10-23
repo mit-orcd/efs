@@ -206,6 +206,15 @@ kept scratch) on efs3 at `0eb1511d2`, the tree with every second-wave merge
 (`TMPDIR=/data1/tmp`; a one-line TMPDIR fix to K7's sweep test was needed
 after K25's hygiene gate met it).
 
+### D39 admission reverted, Oct 23
+
+User decision: the `--cluster` file feature is removed; the admission merge
+`246bae7cf` is reverted (`d7bca79d6`), seed/`--join` startup is back.
+`make test-all` at `d7bca79d6` on amd: 428 commands, 0 FAIL, 14 NOTRUN
+(environment). Alpha work from the membership thread: W153 (count and
+voters from committed membership, formation at three), then node addition
+(K33/W157). orcd-mini can run devel HEAD again without a devops change.
+
 ### Fifth wave merged, Oct 23
 
 W156 (`d58de2b2f`), K13 D31 collector (`00c865924`), K29 (`6b621993d`) and D39
