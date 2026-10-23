@@ -155,10 +155,9 @@ S3), K7 (R2, R3), K22 (S1), K25 (R1); S1 and S2 are P1 and come first.
 INCOMPLETE: K9 (W87 not reproduced; oracle in devel), K15 (W64 fix merged,
 failover gate and K5-dependent cleanup open). VERIFY on the real clusters:
 K6, K11, K12, K17–K21, K27. Waiting on the user: K10, K13, K14, K23. Open
-work: K26 (environment), K28 (W151, proposed as a session). The merged devel
-(`a443863b1` and later) passed `make test` with zero error lines on efs1 and
-927/927 on efs2 before the K8 and K9 merges; the run with K8 included is
-NOTRUN (hosts unreachable).
+work: K26 (environment), K28 (W151, proposed as a session). The merged devel passed `make test` with zero error lines on efs1 at
+`95beaa053`, 927/927 on efs2 at K5's HEAD, and (K8 session, Oct 22 evening)
+rc 0 on efs1 at `4090e717b`, which includes every K merge.
 
 ### Proposed fix order
 
