@@ -2344,6 +2344,33 @@ int efs_client_rpc_setattr(efs_export_id_t export_id, efs_ino_t ino,
     return EFS_OK;
 }
 
+/* K15/W64 fault build: lose the reply of every Nth granted reservation
+ * (EFS_FAULT_APPEND_LOSE_EVERY=N, at most EFS_FAULT_APPEND_LOSE_MAX, default
+ * 4). The server has committed the reservation; the client sees a transport
+ * loss for that identity, as after a dropped connection, and gives up. */
+#if EFS_FAULTS
+static int append_reply_fault(const struct efs_opid_req *q, efs_ino_t ino)
+{
+    static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
+    static unsigned granted, lost;
+    const char *every = getenv("EFS_FAULT_APPEND_LOSE_EVERY");
+    const char *max = getenv("EFS_FAULT_APPEND_LOSE_MAX");
+    unsigned n = every ? (unsigned)strtoul(every, NULL, 10) : 0;
+    unsigned cap = max ? (unsigned)strtoul(max, NULL, 10) : 4;
+    if (!n) return 0;
+    pthread_mutex_lock(&mu);
+    int lose = ++granted % n == 0 && lost < cap;
+    if (lose) lost++;
+    pthread_mutex_unlock(&mu);
+    if (lose) {
+        fprintf(stderr, "append-reserve fault ino=%llu seq=%llu lost-reply=1\n",
+                (unsigned long long)ino, (unsigned long long)q->id.seq);
+        fflush(stderr);
+    }
+    return lose;
+}
+#endif
+
 /* Cross-client O_APPEND: reserve the next len bytes at the owner.
  * new_size_out is this reservation's end; start_out is the reserved
  * offset (reply atime) when the host stamped reserved+len. */
@@ -2390,10 +2417,50 @@ int efs_client_rpc_append_reserve(efs_export_id_t export_id, efs_ino_t ino,
         return rc;
     if (r.status != EFS_INODE_RPC_OK)
         return rpc_status_to_efs(r.status);
+#if EFS_FAULTS
+    if (append_reply_fault(q, ino)) return EFS_ERR_NET;
+#endif
     if (new_size_out)
         *new_size_out = r.inode.size;
     if (start_out)
         *start_out = r.inode.atime;
+    return EFS_OK;
+}
+
+/* Same identity and suffix as the reserve; len carries EFS_APPEND_ABANDON.
+ * The contiguous ACK is refreshed exactly as for a reserve retry and never
+ * covers q itself (the caller still owns its in-flight slot). */
+int efs_client_rpc_append_abandon(efs_export_id_t export_id, efs_ino_t ino,
+                                  uint64_t len, const struct efs_opid_req *q,
+                                  int *retired)
+{
+    uint8_t buf[sizeof(struct efs_msg_inode_append) + EFS_APPEND_ACK_LEN];
+    struct efs_msg_inode_append *req = (struct efs_msg_inode_append *)buf;
+    struct efs_msg_inode_reply r;
+    if (retired) *retired = 0;
+    if (!efs_opid_req_valid(q) || q->ack >= q->id.seq || !len ||
+        (len & EFS_APPEND_ABANDON))
+        return EFS_ERR_INVAL;
+    memset(buf, 0, sizeof(buf));
+    req->export_id = export_id;
+    req->ino = ino;
+    req->len = len | EFS_APPEND_ABANDON;
+    struct efs_opid_req current = *q;
+    pthread_mutex_lock(&opid_mu);
+    uint64_t low = q->id.seq;
+    for (int i = 0; i < EFS_OPID_INFLIGHT; i++) {
+        uint64_t pending = g_client.opid_inflight[i];
+        if (pending && pending < low) low = pending;
+    }
+    if (low - 1 > current.ack) current.ack = low - 1;
+    pthread_mutex_unlock(&opid_mu);
+    efs_opid_req_pack(&current, buf + sizeof(*req));
+    int rc = rpc_send_recv_admitted(efs_kv_inode_shard(ino), &q->id,
+                                    EFS_MSG_INODE_APPEND, buf, sizeof(buf),
+                                    EFS_MSG_INODE_APPEND_REPLY, &r, sizeof(r), 0, NULL);
+    if (rc != EFS_OK) return rc;
+    if (r.status != EFS_INODE_RPC_OK) return rpc_status_to_efs(r.status);
+    if (retired) *retired = r.inode.nlink == 1;
     return EFS_OK;
 }
 

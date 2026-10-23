@@ -1116,6 +1116,17 @@ int efs_meta_retire_append_session(struct efs_kv *, uint32_t shard,
 int efs_meta_finish_append_fenced(struct efs_kv *, efs_ino_t, uint64_t generation,
     uint64_t offset, const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch,
     const struct efs_txid *, const struct efs_meta_append_ops *, void *ctx);
+/* K15/W64 cleanup-append under a live owner: retire the exact identity q
+ * whose reserve outcome the client never learned. Decide-once at the
+ * receipt: the identity's result becomes STALE, so a delayed reserve or a
+ * replay never allocates or learns an offset. A still-OPEN reservation of q
+ * resolves ABORTED_HOLE (*retired = 1) and the frontier passes it; a
+ * completion already in the log is left alone. Repeating it is a no-op.
+ * The owner must be established on the inode shard (a fenced owner is
+ * cleaned by efs_meta_finish_append_fenced). One exact-image transaction. */
+int efs_meta_abandon_append(struct efs_kv *, efs_ino_t, uint64_t len,
+    const struct efs_opid_req *q, const struct efs_txid *,
+    const struct efs_meta_append_ops *, void *ctx, unsigned *retired);
 /* Resolve OPEN reservations of (uuid, epoch) on this shard as FENCED_HOLE
  * (I23 / §7.3). Called from LEASE_DROP after the revocation barrier. */
 int efs_meta_apply_append_drop_session(struct efs_kv *kv, uint32_t shard,

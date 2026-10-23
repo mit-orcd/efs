@@ -404,6 +404,11 @@ int efs_client_rpc_link(efs_export_id_t export_id, efs_ino_t src_ino,
  * start is reply atime when the host stamped this reservation. */
 int efs_client_append_begin(struct efs_opid_req *);
 void efs_client_append_end(int slot);
+/* K15/W64: abandon identity q (same len) whose reserve outcome stayed
+ * unknown. *retired = 1 when an OPEN reservation was retired as a hole. */
+int efs_client_rpc_append_abandon(efs_export_id_t export_id, efs_ino_t ino,
+                                  uint64_t len, const struct efs_opid_req *q,
+                                  int *retired);
 int efs_client_rpc_append_reserve(efs_export_id_t export_id, efs_ino_t ino,
                                   uint64_t len, const struct efs_opid_req *q,
                                   uint64_t *new_size_out, uint64_t *start_out);

@@ -17,6 +17,15 @@ body, so exact-once and corruption checks need no other state.
 Writers keep going through the event; a failed write() is recorded as not
 acknowledged and its record must never become visible.
 
+--lose-reserve-every N (K15/W64, needs an EFS_FAULTS=1 client build) drops the
+reply of every Nth granted O_APPEND reservation on the writer mount, at most
+--lose-reserve-max times. The server has committed those reservations; the
+client gives up on the write and must abandon the identity under its live
+session (cleanup-append), so the reservation retires as one zero hole and
+the frontier advances. --peer-writers M runs M extra writers on the peer
+mount (a second session) concurrently, which a stranded reservation would
+block. Combine with --failover to lose replies across leader changes.
+
 Checks (each one recorded in the JSON report, the run fails on any miss):
   * final fsync per writer returns 0 within --report-bound seconds
     (W52: the client's REPORT receive bound, EFS_IO_TIMEOUT_MS = 30 s)
@@ -24,6 +33,10 @@ Checks (each one recorded in the JSON report, the run fails on any miss):
   * warm primary, warm peer and cold (all daemons + clients restarted) reads
     contain every acknowledged record exactly once, no unacknowledged record,
     per-writer order preserved, no torn or foreign block, size = 4 KiB x count
+  * lost-reply mode: at least one reply was lost; every loss was abandoned
+    with rc=0 and no write failed for another reason; zero-hole blocks equal
+    the abandons that retired a reservation, in every view; peer writers
+    completed (the frontier was never stranded)
 
 Raw logs stay under ROOT (outside Git). Usage: see docs/status/k15-w52-w64-20261022.md.
 """
@@ -66,8 +79,9 @@ def scan(path):
             out['blocks'] += 1
     return out
 
-def verify(path, acked, failed):
-    """acked/failed: {writer: [seq,...]}. Returns (ok, summary)."""
+def verify(path, acked, failed, holes=0):
+    """acked/failed: {writer: [seq,...]}. holes: zero blocks expected from
+    retired reservations (W64 lost-reply mode). Returns (ok, summary)."""
     s = scan(path)
     seen = {}
     for w, q in s['records']:
@@ -86,11 +100,13 @@ def verify(path, acked, failed):
             order_err += 1
         last[w] = q
     other = {k: v for k, v in s['kinds'].items() if k != 'ok'}
+    seen_holes = other.pop('hole', 0)
     ok = (not dup and not missing and not unacked_visible and not unknown and
-          not order_err and not other and s['size'] == REC * len(want) and
-          s['size'] % REC == 0)
+          not order_err and not other and seen_holes == holes and
+          s['size'] == REC * (len(want) + holes) and s['size'] % REC == 0)
     sha = hashlib.sha256(path.read_bytes()).hexdigest()
-    return ok, dict(size=s['size'], expected_size=REC * len(want), blocks=s['blocks'],
+    return ok, dict(size=s['size'], expected_size=REC * (len(want) + holes), blocks=s['blocks'],
+                    holes=seen_holes, expected_holes=holes,
                     acknowledged=len(want), visible_records=len(s['records']),
                     duplicates=len(dup), missing=len(missing),
                     unacknowledged_visible=len(unacked_visible), unknown=len(unknown),
@@ -186,13 +202,14 @@ class Cluster:
             raise RuntimeError(f'efs-mgmt {args}: {r.stdout}{r.stderr}')
         return r
 
-    def mount(self, name):
+    def mount(self, name, extra_env=None):
         m = self.root / name
         m.mkdir(exist_ok=True)
         log = open(self.root / 'logs' / f'fuse-{name}.log', 'ab')
         label = [self.a.client_label] if self.a.client_label else []
+        env = dict(self.env, **(extra_env or {}))
         p = subprocess.Popen([str(self.rel / 'efs-fuse'), self.addr(1), *label, str(m), '-f'],
-                             env=self.env, stdout=log, stderr=log)
+                             env=env, stdout=log, stderr=log)
         for _ in range(160):
             if p.poll() is not None:
                 raise RuntimeError(f'efs-fuse {name} exited')
@@ -307,12 +324,19 @@ def main():
     p.add_argument('--client-trace', action='store_true')
     p.add_argument('--client-label', default='', help="export label argument for older clients (e.g. 'default')")
     p.add_argument('--label', default='')
+    p.add_argument('--lose-reserve-every', type=int, default=0,
+                   help='W64: drop every Nth granted reserve reply on the writer mount (EFS_FAULTS=1 build)')
+    p.add_argument('--lose-reserve-max', type=int, default=4)
+    p.add_argument('--peer-writers', type=int, default=None,
+                   help='extra writers on the peer mount (default 1 with --lose-reserve-every, else 0)')
     a = p.parse_args()
+    if a.peer_writers is None:
+        a.peer_writers = 1 if a.lose_reserve_every else 0
     root = Path(a.root)
     if root.exists() and any(root.iterdir()):
         sys.exit(f'{root} must be empty or absent')
     root.mkdir(parents=True, exist_ok=True)
-    assert a.records % a.writers == 0
+    assert a.records % (a.writers + a.peer_writers) == 0
     for i in (1, 2, 3):
         if subprocess.run(['ss', '-ltnH', f'sport = :{a.port+i}'], capture_output=True, text=True).stdout.strip():
             sys.exit(f'port {a.port+i} in use')
@@ -331,14 +355,21 @@ def main():
             time.sleep(1)
         else:
             raise RuntimeError('raft-mkfs failed: ' + r.stdout + r.stderr)
-        mnt = c.mount('mnt')
+        fault = {}
+        if a.lose_reserve_every:
+            fault = dict(EFS_FAULT_APPEND_LOSE_EVERY=str(a.lose_reserve_every),
+                         EFS_FAULT_APPEND_LOSE_MAX=str(a.lose_reserve_max))
+        mnt = c.mount('mnt', fault)
         peer = c.mount('peer')
         path = mnt / 'append-shared'
         with open(path, 'xb'):
             pass
         q = mp.Queue()
-        per = a.records // a.writers
-        ws = [mp.Process(target=writer_main, args=(w, str(path), per, a.fsync_every, q)) for w in range(a.writers)]
+        nw = a.writers + a.peer_writers
+        per = a.records // nw
+        ws = [mp.Process(target=writer_main,
+                         args=(w, str(path if w < a.writers else peer / path.name), per, a.fsync_every, q))
+              for w in range(nw)]
         events = []
         import threading
         stop_evt = threading.Event()
@@ -350,7 +381,7 @@ def main():
             ft = threading.Thread(target=failover_loop, args=(c, a, stop_evt, events), daemon=True)
             ft.start()
         results = []
-        while len(results) < a.writers:
+        while len(results) < nw:
             try:
                 results.append(q.get(timeout=30))
             except Exception:
@@ -387,8 +418,27 @@ def main():
         srv = [grep_count(root / 'logs' / f'efsd-n{i}.log', r'report resolve .*rc=') for i in (1, 2, 3)]
         report['checks']['server_report_resolve_retries'] = sum(n for n, _ in srv)
         report['checks']['server_report_resolve_lines'] = [l for _, ls in srv for l in ls][:5]
-        ok_w, report['checks']['warm_primary'] = verify(path, acked, failed)
-        ok_p, report['checks']['warm_peer'] = verify(peer / path.name, acked, failed)
+        holes, ok_l = 0, True
+        if a.lose_reserve_every:
+            lost, lost_lines = grep_count(flog, r'append-reserve fault .*lost-reply=1')
+            ab_ok, _ = grep_count(flog, r'append-abandon .* rc=0 ')
+            ab_bad, ab_bad_lines = grep_count(flog, r'append-abandon .* rc=-')
+            retired, _ = grep_count(flog, r'append-abandon .* rc=0 retired=1')
+            # Each lost reply follows a committed reservation, so each leaves
+            # exactly one zero block, however it resolved (retired by the
+            # abandon, or already covered by a later REPORT of this mount).
+            holes = lost
+            nfailed = sum(len(v) for v in failed.values())
+            peer_ok = all(r['final_fsync_errno'] == 0 and not r['failed']
+                          for r in results if r['writer'] >= a.writers)
+            ok_l = lost >= 1 and ab_ok == lost and not ab_bad and nfailed == lost and peer_ok
+            report['checks']['lost_reserve'] = dict(
+                lost_replies=lost, abandons_ok=ab_ok, abandons_failed=ab_bad,
+                abandon_failed_lines=ab_bad_lines, retired_by_abandon=retired, expected_holes=holes,
+                failed_writes=nfailed, peer_writers_ok=peer_ok,
+                first_lost=lost_lines, ok=ok_l)
+        ok_w, report['checks']['warm_primary'] = verify(path, acked, failed, holes)
+        ok_p, report['checks']['warm_peer'] = verify(peer / path.name, acked, failed, holes)
         # Cold: drain clients, stop every daemon, restart, fresh mount.
         c.stop_all()
         time.sleep(2)
@@ -397,9 +447,9 @@ def main():
             time.sleep(1)
         time.sleep(3)
         mnt = c.mount('mnt-cold')
-        ok_c, report['checks']['cold'] = verify(mnt / path.name, acked, failed)
+        ok_c, report['checks']['cold'] = verify(mnt / path.name, acked, failed, holes)
         all_fsync_ok = report['checks']['final_fsync_zero'] and report['checks']['final_fsync_within_bound']
-        report['verdict'] = 'PASS' if (ok_w and ok_p and ok_c and all_fsync_ok and n67 == 0) else 'FAIL'
+        report['verdict'] = 'PASS' if (ok_w and ok_p and ok_c and ok_l and all_fsync_ok and n67 == 0) else 'FAIL'
         rc = 0 if report['verdict'] == 'PASS' else 1
     except Exception as e:
         report['exception'] = repr(e)

@@ -16,6 +16,7 @@ code=r'''
 #define EFS_OK 0
 #define EFS_ERR_BUSY -1
 #define EFS_ERR_IO -2
+#define EFS_ERR_FENCED -27
 #define EFS_CHUNK_SIZE 131072
 typedef uint64_t efs_ino_t;
 struct efs_opid_req {struct {uint64_t seq;} id;};
@@ -31,6 +32,15 @@ static uint64_t cached_size;
 static int flush_calls,flush_rc,clear_publish_on_sleep;
 static uint64_t now,deadline;static unsigned calls,begins,ends,sleeps,last_sleep;
 static int accept_after,rpc_expires,contend,begin_failure,begin_release_after,extent_failure,other_held;
+static int rpc_fail,fenced;static unsigned abandons;
+static int efs_client_session_fenced(void) {return fenced;}
+/* K15/W64: abandon runs after a sent attempt failed, before the identity is
+ * released, never while this thread owns the append stripe. */
+static void append_abandon_identity(efs_ino_t ino,uint64_t len,const struct efs_opid_req *q) {
+ (void)ino;assert(len==8 && q->id.seq==42 && !ends);
+ if(!other_held){assert(!pthread_mutex_trylock(&stripe));pthread_mutex_unlock(&stripe);}
+ abandons++;
+}
 static pthread_mutex_t *append_mu(efs_ino_t ino) {(void)ino;return &stripe;}
 static uint64_t stats_now_ms(void) {return now;}
 static uint64_t efs_client_rpc_deadline_ms(void) {return deadline;}
@@ -52,9 +62,11 @@ static int efs_client_append_begin(struct efs_opid_req *q) {
  return 7;
 }
 static void efs_client_append_end(int slot) {assert(slot==7);ends++;}
+
 static int efs_client_rpc_append_reserve(uint32_t export,efs_ino_t ino,uint64_t len,const struct efs_opid_req *q,uint64_t *end,uint64_t *start) {
  (void)export;(void)ino;assert(q->id.seq==42);calls++;
  if(rpc_expires)now=deadline;
+ if(rpc_fail)return rpc_fail;
  if(accept_after && calls==(unsigned)accept_after){*start=100;*end=100+len;return EFS_OK;}
  return EFS_ERR_BUSY;
 }
@@ -71,6 +83,7 @@ static int efs_append_flush_report(void *fi,efs_ino_t ino) {(void)fi;(void)ino;f
 static void reset(void) {
  now=1000;deadline=1100;calls=begins=ends=sleeps=last_sleep=0;
  accept_after=rpc_expires=contend=begin_failure=begin_release_after=extent_failure=other_held=0;
+ rpc_fail=fenced=0;abandons=0;
  cached_size=flush_calls=flush_rc=clear_publish_on_sleep=0;open_ref=(struct efs_open_ref){.ino=1};
  assert(!pthread_mutex_lock(&stripe));
 }
@@ -78,16 +91,24 @@ static void free_stripe(void) {assert(!pthread_mutex_trylock(&stripe));pthread_m
 int main(void) {
  off_t off=0;
  reset();deadline=1000;
- assert(append_reserve_offset(1,8,&off)==-EAGAIN && !calls && !begins && !ends);free_stripe();
+ assert(append_reserve_offset(1,8,&off)==-EAGAIN && !calls && !begins && !ends && !abandons);free_stripe();
  reset();rpc_expires=1;
- assert(append_reserve_offset(1,8,&off)==-EIO && calls==1 && !sleeps && ends==1);free_stripe();
+ assert(append_reserve_offset(1,8,&off)==-EIO && calls==1 && !sleeps && ends==1 && abandons==1);free_stripe();
+ /* Unknown outcome (transport loss after a granted reserve): abandon once. */
+ reset();rpc_fail=EFS_ERR_IO;
+ assert(append_reserve_offset(1,8,&off)==-EIO && calls==1 && ends==1 && abandons==1);free_stripe();
+ /* A fenced owner is cleaned by session cleanup, not by abandon. */
+ reset();rpc_fail=EFS_ERR_FENCED;
+ assert(append_reserve_offset(1,8,&off)==-EIO && calls==1 && ends==1 && !abandons);free_stripe();
+ reset();rpc_fail=EFS_ERR_IO;fenced=1;
+ assert(append_reserve_offset(1,8,&off)==-EIO && calls==1 && ends==1 && !abandons);free_stripe();
  reset();deadline=1001;
  assert(append_reserve_offset(1,8,&off)==-EIO && calls==1 && sleeps==1 && last_sleep==1000 && now==1001);free_stripe();
  reset();deadline=1005;contend=1;
  assert(append_reserve_offset(1,8,&off)==-EIO && calls==1 && now==1005 && ends==1);
  assert(pthread_mutex_trylock(&stripe)==EBUSY);pthread_mutex_unlock(&stripe);
  reset();accept_after=3;
- assert(!append_reserve_offset(1,8,&off) && off==100 && calls==3 && begins==1 && ends==1);
+ assert(!append_reserve_offset(1,8,&off) && off==100 && calls==3 && begins==1 && ends==1 && !abandons);
  assert(pthread_mutex_trylock(&stripe)==EBUSY);pthread_mutex_unlock(&stripe);
  reset();begin_failure=1;assert(append_reserve_offset(1,8,&off)==-EAGAIN && !calls && !ends && now==deadline && begins==100);free_stripe();
  reset();begin_failure=1;begin_release_after=3;deadline=3000;accept_after=1;
@@ -101,7 +122,7 @@ int main(void) {
  reset();open_ref.append_handoff_ms=1003;accept_after=1;
  assert(!append_reserve_offset(1,8,&off) && calls==1 && now==1003);pthread_mutex_unlock(&stripe);
  reset();open_ref.append_publishing=1;deadline=1005;
- assert(append_reserve_offset(1,8,&off)==-EIO && !calls && ends==1 && now==1005 && open_ref.append_publishing);free_stripe();
+ assert(append_reserve_offset(1,8,&off)==-EIO && !calls && ends==1 && now==1005 && open_ref.append_publishing && !abandons);free_stripe();
  reset();open_ref.append_publishing=1;clear_publish_on_sleep=1;accept_after=1;
  assert(!append_reserve_offset(1,8,&off) && calls==1 && sleeps==1 && !open_ref.append_publishing);pthread_mutex_unlock(&stripe);
  reset();pthread_mutex_unlock(&stripe);open_ref.append_burst=32;
@@ -115,4 +136,4 @@ with tempfile.TemporaryDirectory(prefix='efs-append-budget-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(['cc','-std=gnu11','-pthread','-Wall','-Wextra','-Werror',str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=5)
-print('append reservation: identity/deadline/stripe ownership, lower authoritative EOF, publication failure and bounded all-writer handoff PASS')
+print('append reservation: identity/deadline/stripe ownership, lower authoritative EOF, publication failure, bounded all-writer handoff and unknown-outcome abandon PASS')

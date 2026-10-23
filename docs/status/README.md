@@ -41,8 +41,9 @@ into a stalled follower is NOTRUN.
 [K15 W52/W64 append gates](k15-w52-w64-20261022.md): **W64 INCOMPLETE**.
 A leader change left append transactions PREPARED until recovery, so writes
 failed with EBUSY. The fix and its regression test are on `devel-k15`, and the
-matched failover gate is NOTRUN. **W52: shape A in tree; exact 20k gate and A/B
-NOTRUN.**
+matched failover gate is NOTRUN. Lost-reply cleanup (decide-once retirement by
+fence or live-owner abandon) is on `devel-k15b` with unit tests passing; its
+live gate is NOTRUN. **W52: shape A in tree; exact 20k gate and A/B NOTRUN.**
 
 [Recent devel integration review](devel-integration-review-20261022.md):
 **Second pass through `c71cd1066`: OPEN.** K22 log-lag election veto and K5
