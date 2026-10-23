@@ -99,6 +99,12 @@ per-frame rebinding on both endpoints, validate declaration replies, and keep
 service permissions conditional on complete formation. D39 remains proposed;
 W153a held, protocol tests NOTRUN.
 
+**§18 review of `bd94b2c41`:** compatibility checks must precede freshness;
+equal-version declarations must be identical. Reuse a durable-before-advertise
+incarnation mechanism, specify in-flight I/O ownership, and preserve committed
+history independently of live connection tags. D39 remains proposed; W153a
+held and protocol gates NOTRUN.
+
 ## D38 — metadata placement ladder across the alpha releases (accepted Oct 22)
 
 User wording:

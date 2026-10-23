@@ -1058,3 +1058,98 @@ after the declaration), a frame paused in the inbox across a local install
 declaration (refused, redeclaration completes), a restarted member with a
 persisted pair (binding replaced, old frames stale), and ordinary formation
 elections completing under all of it.
+
+
+## 18. Review of bd94b2c41 — October 23
+
+**Verdict: shared binding and exact frame equality are improvements; the
+acceptance and effect-ordering rules still need correction.** D39 remains
+PROPOSED and W153a held. Source inspected at `0dc3f7187`, including §17,
+`host_boot_bump`/its startup call and `apply_committed`. No cluster, binary,
+transport, I/O profile, quota or workload tested; proposed gates NOTRUN.
+
+### P1 — Incarnation freshness must never bypass identity compatibility
+
+R2 accepts a declaration if its incarnation is newer **or** if it has the
+same incarnation and a suitable counter/pair. As written, the first arm can
+accept a newer incarnation carrying a conflicting pair, contrary to the
+following sentence and R5. Specify the predicates in order, without an OR
+that bypasses compatibility: validate configured identity/digest and immutable
+pair compatibility/no downgrade first, then incarnation/counter freshness.
+A fresh process does not gain permission to replace a cluster's identity.
+
+At equal incarnation and equal counter, accept only the identical binding
+(idempotent redeclaration). R2 currently permits unknown -> P at equal
+counter, although R1 requires a counter bump and R3 calls equal-counter pair
+changes inconsistent. At a strictly higher counter, define the allowed
+unknown -> known transition; P -> Q remains refused at every generation.
+Gate these exact combinations, including newer-incarnation/conflicting-pair
+and equal-counter/different-pair declarations, not just data frames.
+
+### Restart: reuse and specify the existing durable incarnation mechanism
+
+"Process boot id persisted with the formation record on install" is not
+sufficient for unformed restarts or successive boots without a new formation
+record. Current code already recognizes that `make_boot_id` (PID/time XOR)
+is not monotonic: `host_boot_bump` persists a value greater than the saved
+one in `mdraft/boot.bin`, with fsync, before startup proceeds. D39 should
+explicitly reuse that durable-before-advertise concept for all formation
+states, instead of assuming any new boot ID compares newer.
+
+Define the authority's scope, fail-closed persistence failure, exhaustion,
+and single-process ownership of a member's store. Bindings at receivers may
+be rebuilt after their restart, but an old live process must not be able to
+reclaim the member identity through a delayed declaration. A locally bumped
+counter is not proof against two independently running copies of a member's
+store; either prevent that with the supported deployment/store-ownership
+contract or specify additional fencing. Do not promise unconditional "newer
+always wins". These are current-format correctness requirements, not an
+old-store migration or a request to implement power-loss recovery.
+
+### P1 — The I/O interval needs ownership, not merely another check
+
+R4 holds the lock for a comparison and a "first state change" but excludes
+I/O. If that state change only schedules a write, the operation can remain
+unlinearized while the lock is released and the write proceeds. An identity
+transition can then race the actual durable effect. A comparison immediately
+before starting I/O does not cancel I/O already in flight.
+
+Specify an admitted-operation token/reservation (or an equivalent ordered
+mechanism): under the binding lock, authorize and acquire the operation's
+right to proceed; define whether a transition waits for those operations,
+lets them finish under retained authority, or prevents their final publication.
+Release the lock during I/O, but retain the explicitly defined ownership until
+the relevant effect finishes. State handling of timeouts and failed I/O. This
+is a local admission/drain protocol, not a reason to serialize every cluster
+operation under a global lock. Demonstrate a paused storage operation crossing
+an identity transition; do not model a durable write as an instantaneous
+assignment and claim that covers the implementation.
+
+### Committed history is governed by durable authority, not live tags
+
+R4's exception correctly preserves already-linearized work, but "no later
+step ... may act on the stale tuple" must not block its mandatory completion.
+`apply_committed` applies log entries through commit_index without reference
+to a live sender connection. A leader/process identity change cannot cancel
+committed-but-not-yet-applied entries or make their application depend on a
+new declaration. Fence admission of new remote work; once the consensus/store
+operation has crossed its specified durable acceptance boundary, complete or
+replay it under that durable authority. Snapshot installation likewise needs
+its own defined acceptance/completion boundary. Distinguish refusing delivery
+of a stale RPC reply from rolling back the operation that produced it; retries
+must use existing operation identity/receipt semantics.
+
+Gates: commit an entry, pause before apply, change the sender incarnation,
+then require application exactly once; deliver the old reply afterward and
+verify retry resolves the committed result. Pair this with the genuinely
+unaccepted queued-frame case, which must be refused before effects. No change
+to ordinary Raft quorum, vote or campaign semantics is required.
+
+### Next step
+
+The three user policy choices remain unchanged. These are specification
+corrections, not additional operator knobs. Before implementation, express R2
+as one acceptance predicate and R4 as an explicit operation lifecycle in the
+model, including non-instantaneous I/O and committed-but-unapplied work. Do
+not declare the protocol ready from prose agreement alone. Alpha remains
+2+1 on 3, 4 and >4 nodes; no code, deployment or held-work status changed.

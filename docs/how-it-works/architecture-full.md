@@ -1622,11 +1622,11 @@ matched failover gate is NOTRUN. Lost-reply cleanup (decide-once retirement by
 fence or live-owner abandon) is on `devel-k15b` with unit tests passing; its
 live gate is NOTRUN. **W52: shape A in tree; exact 20k gate and A/B NOTRUN.**
 
-[D39 latest review (§16)](../status/d39-cluster-membership-proposal-20261022.md):
-**OPEN:** `e238e04c8` adds per-frame identity tags, but per-connection generation
-tracking does not fence other connections, and receive-time checks do not
-order queued effects against identity changes. Specify restart/incarnation
-and effect-boundary rules. D39 proposed, W153a held; protocol gates NOTRUN.
+[D39 latest review (§18)](../status/d39-cluster-membership-proposal-20261022.md):
+**OPEN:** `bd94b2c41` adds shared bindings, but newer incarnations must never
+bypass pair compatibility; restart needs durable incarnation ordering, and
+in-flight I/O needs explicit ownership. Committed history must complete
+independently of live peer tags. D39 proposed, W153a held; gates NOTRUN.
 
 [D39 proposal: configured cluster membership](../status/d39-cluster-membership-proposal-20261022.md):
 **PROPOSED, awaiting the user.** One member list for every daemon and
@@ -2751,6 +2751,12 @@ identity learned later on an existing connection. Specify invalidation or
 per-frame rebinding on both endpoints, validate declaration replies, and keep
 service permissions conditional on complete formation. D39 remains proposed;
 W153a held, protocol tests NOTRUN.
+
+**§18 review of `bd94b2c41`:** compatibility checks must precede freshness;
+equal-version declarations must be identical. Reuse a durable-before-advertise
+incarnation mechanism, specify in-flight I/O ownership, and preserve committed
+history independently of live connection tags. D39 remains proposed; W153a
+held and protocol gates NOTRUN.
 
 ### D38 — metadata placement ladder across the alpha releases (accepted Oct 22)
 
