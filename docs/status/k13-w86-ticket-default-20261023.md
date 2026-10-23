@@ -1,6 +1,7 @@
 # K13 / W86, W88, W137: the ticketed PUT/REPORT path as the default
 
-**Verdict: PASS (scoped) on branch `devel-k13`, not merged.** The default PUT
+**Verdict: PASS (scoped) on branch `devel-k13` (`c860c3dbd`, merged with
+devel in `a79b59de1`), not merged into devel.** The default PUT
 and flush now run only through durable PUT tickets (W86), the W88 folded-span
 retry no longer resurrects after trailer eviction in the production REPORT
 path, and W137 tests the real reply shape. **INCOMPLETE:** the D31
@@ -21,6 +22,53 @@ Limitations). **NOTRUN:** RDMA, orcd-mini, multi-host.
   were not touched. Private fixture: three `efsd` on 127.0.0.1:18700–18702,
   `EFS_MD_RAFT_N=3`, `EFS_TRANSPORT=tcp`, `--no-direct-io` (buffered I/O),
   `--quota 4G`, one `efs-fuse` mount, 128 KiB chunks.
+
+## Merge with devel `d2369a49d` (W154, K14, K30, W155, D39) — `a79b59de1`
+
+The branch was brought up to devel by a merge (`a79b59de1`), reviewed rules
+applied. Gates on `git archive a79b59de1`, intel1, same environment:
+**`make test-all` exit 0, 0 lines matching `^make(\[[0-9]+\])?: .*Error`,
+419 test commands, the same 15 NOTRUN lines; private ticket gate PASS**
+(now with a W154 phase).
+
+- **W154 kept on the ticketed PUT.** `put_fragments_parallel_once` still
+  reports which fragments were acknowledged. A two-fragment success is logged,
+  recorded in the bounded `dg_obj` table under the ticket's object and stamped
+  as `EFS_CHUNK_REC_F_MISSING` on the REPORT record; a full table fails the
+  write and gives the ticket up.
+- **Flag bits.** `HOST_PUB_F_REJECT_GONE` is 128 (W154 owns 16/32/64), with
+  a `_Static_assert` against the missing mask. The REPORT and publication
+  validators accept a valid missing mask and still require the ticket.
+- **K14 staged publication carries the ticket.** The stage record (version 2,
+  238 bytes) carries the ticket and the W154 missing mask, which version 1
+  dropped. RESOLVE COMMIT publishes the ticket in the batch that applies the
+  mapping. The owner's settle is BUSY while a stage on that chunk is pending,
+  so it never abandons an object a unit may still publish. Unit record
+  buffers hold the ticket trailer.
+- **W154 rebuild on the ticketed storage path.** A published object has no
+  ADMITTED ticket, so a rebuilt fragment for a remote member goes in a new
+  `EFS_MSG_REBUILD_PUT` (175/176). Storage stores it only when the mark's
+  group, after a ReadIndex, holds exactly that degraded mark (RPC-only
+  `EFS_MD_REQ_DEGRADED_CHECK`, tag 85).
+- **KV kinds** `PUT_ORPHAN` 53 and `PUT_COUNT` 54 (51 is taken). 129/130 are
+  listed as retired message IDs.
+- **Gate:** a three-daemon W154 phase was added. n3 stopped, a 4 MiB write
+  published degraded, n3 returned; all 32 missing fragments were stored on n3
+  through `EFS_MSG_REBUILD_PUT`, and the file then read exactly with n1
+  stopped. The leader-death check now treats a short read (a later page's
+  EIO) as unreadable after verifying its prefix.
+- **Captures:** `$HOME/efs-artifacts/k13-20261023/merge-a79b59de1/` on intel1:
+  `maketest-all-a79b59de1.log`
+  `1f114ac5f289e0357e50744abcce9b5242f1babe7a79479783ff5bf46b67c181`,
+  `gate1.out` `0874c82075792450bc0e7066014c7f9f864908e8921fc4eb6aa2a4952f886ea9`,
+  `gate1-logs.tar.gz`
+  `8c65d8762c801c5457a073d3aa98cfb0d9c7f9fd154371d6c6a84fb75f5ddb52`.
+  Binaries: `efsd` `6ad31542d82ef1d1167e613403c85089b8787f551517a27534003d6b4b45e58b`,
+  `efs-fuse` `a992978cf3a53e0179380123da0cd2b7738af9035624632eca9479636b70db0e`,
+  `efs-mgmt` `396a8aada67db92da64f5a91807f940d064f4695d34449ba021d73704a838e34`,
+  `libefs.a` `b86e99849e6eb92a9778c60bf7f59e833e2ed8f1e1abd4dc91f60b46667e50af`.
+- **Found in devel, not fixed here:** `EFS_KV_KIND_DEGRADED` (W154) and
+  `EFS_KV_KIND_PUB_STAGE` (K14) both use kind 51.
 
 ## What changed
 
