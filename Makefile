@@ -219,7 +219,7 @@ test-report-pressure:
 	python3 tests/test_append_host_authority.py
 	python3 tests/test_report_orphan.py
 
-test-create-errors: $(LIB)
+test-create-errors: $(LIB) tests/shutdown_faults/efsd
 	python3 tests/test_kv_wal_faults.py
 	python3 tests/test_create_errors.py
 	python3 tests/test_committed_directory_stage.py
@@ -230,7 +230,6 @@ test-create-errors: $(LIB)
 	python3 tests/test_gc_verdict.py
 	python3 tests/test_retired_messages.py
 	python3 tests/test_node_left_refused.py
-	$(MAKE) tests/shutdown_faults/efsd
 	python3 tests/test_shutdown_bounded.py
 	python3 tests/test_apply_unsupported.py
 	python3 tests/test_put_hint.py
@@ -332,6 +331,12 @@ test-client-stop:
 
 all: $(LIB) efsd efs-fuse efs-bench efs-mgmt tests
 
+# Test programs outside TEST_BINS that test recipes run (fault daemons and
+# helpers built with extra flags). They are real prerequisites of test and
+# test-long, never built inside a recipe, so test-long works on its own and a
+# parallel make cannot start a test before its binary exists.
+TEST_SPECIAL_BINS = tests/shutdown_faults/efsd tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_upload_client tests/test_data_commit tests/faults/test_kv_compact_crash
+
 # blake3-bench always relinks so a stale binary cannot linger after CPU changes.
 FORCE:
 
@@ -354,24 +359,25 @@ leak-check:
 check:
 	@rc=0; $(MAKE) test-all || rc=1; $(MAKE) docs-check || rc=1; $(MAKE) leak-check || rc=1; exit $$rc
 
+# Everything any test needs, built in one parallel make before tests start
+# (scripts/make_test_summary.sh).
+.PHONY: test-bins
+test-bins: all $(TEST_SPECIAL_BINS)
+
 # make test: the fast, CPU-bound unit suite for every edit (each command well
 # under a second; about a minute in all). Slow tests belong in test-long.
-test: all
+test: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_retired_root_markers.py
 	python3 tests/faults/test_create_retry_fault.py
 	python3 tests/faults/test_create_retry_integrated.py
 	python3 tests/faults/test_append_cleanup_retry.py
-	$(MAKE) tests/test_put_storage_fence
 	./tests/test_put_storage_fence
 	python3 tests/test_storage_fence_members.py
 	python3 tests/test_pack_object_remote.py
 	python3 tests/test_storage_fence_retry.py
 	python3 tests/test_session_finish_retry.py
-	$(MAKE) tests/test_put_upload_server
 	./tests/test_put_upload_server
-	$(MAKE) tests/test_put_upload_client
 	./tests/test_put_upload_client
-	$(MAKE) tests/test_data_commit
 	./tests/test_data_commit
 	python3 tests/test_applied_interval.py
 	python3 tests/test_cursor_checkpoint.py
@@ -541,7 +547,6 @@ test: all
 	python3 tests/test_host_retire.py
 	python3 tests/test_recv_overlap.py
 	python3 tests/test_kv_mtab_batch.py
-	$(MAKE) tests/faults/test_kv_compact_crash
 	./tests/faults/test_kv_compact_crash
 	./tests/test_query_policy
 	./tests/test_query_catalog
@@ -940,7 +945,7 @@ test: test-rdma-message
 # 8-core host). Not part of `make test`, the fast unit suite; `make test-all`
 # runs both and is what the gates run.
 .PHONY: test-long test-all
-test-long: all
+test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_shutdown_blocked_io.py
 	python3 tests/test_client_processes.py
 	python3 tests/test_shutdown_stuck_worker.py
