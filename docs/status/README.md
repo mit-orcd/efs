@@ -18,6 +18,12 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[W153 committed membership](w153-committed-membership-20261023.md): **code
+fixed on branch `devel-w153`, not merged; `make test-all` on amd PASS with host
+limits; live formation and failover gates NOTRUN.** `raft-mkfs` commits the
+joined membership in both groups; count and voters come from it on every
+start; `EFS_MD_RAFT_N` removed; joins after formation refused (K33/W157).
+
 [Alpha 1.0 simple startup and node addition](alpha-1.0-node-addition-20261023.md):
 **ACCEPTED; implementation OPEN, gates NOTRUN.** Minimal seed/join startup,
 automatic identity and formation, safe live additions, always 2+1; removal

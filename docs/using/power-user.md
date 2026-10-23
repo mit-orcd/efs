@@ -60,7 +60,7 @@ selects fragment I/O independently of transport; buffered is the daemon default.
 | `EFS_FUSE_SPLICE_READ` | opt into `FUSE_CAP_SPLICE_READ` for measurement (default off); the recorded profile found no gain, so copy savings are not an accepted result |
 | `EFS_FEATURES_TTL_MS` | exported-features cache TTL (default 2000) |
 | `EFS_NUMA_NODE` | `=none` disables NUMA pinning at startup; `=N` forces node N |
-| `EFS_MD_RAFT_N` | **server:** cluster size N, 3..16 (default 4); node IDs must be 1..N. Each metadata group has three voters (N = 3: all; N ≥ 4: nodes 1–3 and 2–4); nodes 5..N hold data only |
+| `EFS_MD_RAFT_N` | **removed (W153):** efsd stops when it is set. The member count N (3..16) is the membership `mkfs` commits; node IDs must be 1..N. Each metadata group has three voters (N = 3: all; N ≥ 4: nodes 1–3 and 2–4); nodes 5..N hold data only |
 | `EFS_RDMA_DEV` / `EFS_RDMA_GID_INDEX` | **server/client:** verbs device and RoCE GID selection |
 | `EFS_RDMA_BUFS` | RDMA buffer pool size |
 | `EFS_LOG_TS` | UTC timestamps are enabled by default; `=0` disables the timestamp wrapper |

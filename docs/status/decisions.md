@@ -208,7 +208,7 @@ voters elsewhere; the default masks are not a hard runtime placement limit.
 
 | Release | Metadata groups live on | Metadata protection | Data placement |
 | --- | --- | --- | --- |
-| alpha 1.0 | default: both groups on nodes 1–3 for N = 3; SHARD on 1–3 and SHARD2 on 2–4 for N ≥ 4 (amended Oct 22, T3); N is `EFS_MD_RAFT_N`, which deployments set to the member count (W153) | one loss per group (three replicas, quorum two) | all N nodes, 2+1 stripes |
+| alpha 1.0 | default: both groups on nodes 1–3 for N = 3; SHARD on 1–3 and SHARD2 on 2–4 for N ≥ 4 (amended Oct 22, T3); N is the member count committed at formation (W153; `EFS_MD_RAFT_N` removed) | one loss per group (three replicas, quorum two) | all N nodes, 2+1 stripes |
 | alpha 2.0 | at most 4 nodes | two losses (2+2; the D36 four-node metadata protocol) | all N nodes |
 | alpha 3.0 | N − M nodes, configured (M may be 0) | one loss | all N nodes |
 | alpha 4.0 | N − M nodes, configured | two losses | all N nodes |
