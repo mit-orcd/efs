@@ -876,15 +876,22 @@ static void ae_inflight_set(struct efs_raft *r, int to, uint64_t ni,
     r->ae_inflight_full[to] = 0;
 }
 
-/* Follower already has the outstanding batch (this is queued behind that
- * RPC). Tell it the commit index moved, without resending the entries. */
+/* Tell the follower the commit index moved, without resending the
+ * outstanding batch. K29: the probe's prefix is the follower's acknowledged
+ * match_index, not the end of that batch. The host sends empty
+ * AppendEntries from its priority lane ahead of queued entry batches, so a
+ * probe naming the batch end reached the follower before the batch: it was
+ * rejected prev-beyond-log, and the rejection cleared the window, rewound
+ * next_index and rebuilt the batch on every commit advance. The follower
+ * may commit only through the probe's prefix; the batch's own
+ * acknowledgement triggers the next probe. */
 static int send_commit_probe(struct efs_raft *r, int to)
 {
     struct efs_raft_msg m;
     uint64_t end, pt = 0;
     int rc;
 
-    end = r->ae_inflight_end[to];
+    end = r->match_index[to];
     memset(&m, 0, sizeof(m));
     m.type = EFS_RAFT_MSG_AE_REQ;
     m.to = to;
