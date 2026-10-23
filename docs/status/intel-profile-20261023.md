@@ -2,12 +2,14 @@
 
 **Analysis only; no fix or A/B in this report.** User request: profile the
 Intel cluster and its xorinox client, find the hot paths and report where the
-raw perf data is stored. All three workloads are **not CPU-bound**: the four
-efsd use 1.1–1.7 cores of 8 per host, and the client 0.4–0.7 of 16.
-On-CPU samples therefore show where cycles go, not what limits throughput.
-The clearest limiter is in the tiny-file phase: the client's 16-position
-identity-admission window turns opens and closes into 1 ms BUSY retry
-loops.
+raw perf data is stored. **Corrected after an independent review (see the
+end of this page).** Samples divided by the sampling rate suggest the four
+efsd use well under their cores and the client less, but that is a rough
+estimate: it cannot exclude serialization or short saturation. In the
+tiny-file phase, the client's identity admission keeps every new mutation
+within 16 sequence numbers of the oldest unresolved one. That makes opens,
+creates and closes wait behind the slowest operation (head-of-line blocking);
+whether it causes the files/s plateau is still a hypothesis.
 
 ## Build, environment and method
 
@@ -43,8 +45,10 @@ loops.
   lookup and XFS create for every fragment file, and 16% is the aligned
   direct-I/O write in XFS.
 - **Network:** receive 13.5% and send 13.3%.
-- **Hashing:** blake3 checksum verification is 5.6% and 10.9% self in the
-  two daemons.
+- **Hashing:** blake3 checksum verification is 5.6% and 10.9% self. These
+  are the efficiency-core and performance-core PMUs of the hybrid Intel CPU
+  (`cpu_atom`/`cpu_core`), which perf reports as two tables. They are not
+  the two daemons.
 - **LSM lookups:** `kv_mtab_pos` and `kv_seg_probe` show up at about 1.9%
   together.
 
@@ -63,19 +67,27 @@ loops.
 - **Network:** TCP send 17%.
 
 **Tiny files, client:**
-- **Admission retry sleeps, 21% of on-CPU samples:** these are
-  `clock_nanosleep` entries from 1 ms `usleep` loops. They come from the
+- **CPU around admission retry sleeps, 21% of on-CPU samples:** these are
+  `clock_nanosleep` entries from 1 ms `usleep` loops. They measure CPU
+  spent entering and leaving sleeps, not how long threads wait or how many
+  retries happen. They come from the
   release path (`efs_fuse_release_ino`, close admission spin, 790 samples),
   from create (`efs_open_acquire_created` → `efs_open_acquire_fileid_mode`,
   559) and from open (100).
-- **What the loops wait for:** both wait on the identity admission. The code
-  says it is "a 16-position window shared by every thread", and it answers
-  BUSY while full. With 32 writers the window is full most of the time.
+- **What the loops wait for:** both wait on the identity admission. The
+  binding limit is the sequence window, not the slots
+  (`src/client/inode_rpc.c`, `opid_take_locked`). The client has 512
+  in-flight slots, but refuses a new identity once it would be 16
+  (`EFS_OPID_REPLY_CACHE`) past the oldest unresolved one. So one slow
+  create, close or lease edge holds up every thread on the mount. (Earlier
+  wording, "32 workers fill 16 positions", was wrong.)
 - **Taking positions:** `opid_take_locked` is 6.8% self, through
   `efs_client_lease_begin` from `efs_open_release_pending` and
   `efs_open_retry_worker`.
-- **Conclusion:** this is the most likely cause of 123 files/s. It is not
-  measured as wall time; an off-CPU capture is needed to quantify it.
+- **Conclusion:** a hypothesis for the plateau (93, 128 and about 123–145
+  files/s at 8, 16 and 32 workers), still unmeasured. It needs refusal
+  counts by cause and the age of the oldest unresolved identity, from runs
+  without perf attached.
 
 **Tiny files, servers** (intel2, inclusive):
 - **RPC and Raft traffic:** `server_handle_conn` 27%, `efs_conn_send_msg` 20%,
@@ -139,3 +151,30 @@ xorinox with `-p` set to the intel-mnt efs-fuse PID.
 - **Other load on xorinox:** another session's gate clusters ran there at the
   same time. The capture was limited to the intel-mnt client PID, but CPU
   contention from that load is not excluded.
+
+## Corrections from the independent review (October 23)
+
+An independent review decoded the eight usable recordings and verified all
+nine hashes; the raw captures are unchanged. Its extracts are in
+`/tmp/efs-independent-perf-20261023/` on the user's Mac. Corrections,
+accepted here:
+1. **Two tables per Intel host:** these are the `cpu_atom` and `cpu_core`
+   PMUs, confirmed in the capture header. They are not the two daemons.
+2. **"Not CPU-bound" was too strong:** samples divided by the sampling rate
+   are only a rough CPU estimate.
+3. **Sleep stacks:** these are CPU spent around sleeps, not wait time or
+   retry counts.
+
+Refined figures:
+- **Write, servers:** fragment store 21–29%, `openat` 9–16%.
+- **Read:** fragment read and verify is 24–27% on intel1 and 40–45% on intel2;
+  verification alone is 23–30% on intel2.
+- **Tiny files:** the background `efs_open_retry_worker` is about 8% of
+  client samples.
+
+Head-of-line blocking at the sequence window (above) is the leading
+hypothesis for the tiny-file plateau. Do not widen `EFS_OPID_REPLY_CACHE`
+without data: it bounds per-client server receipt retention, and it would
+only move the wall to the next slow operation. The diagnostic follow-up is on
+branch `devel-performance` (`EFS_OPID_STATS`).
+
