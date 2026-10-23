@@ -23,6 +23,14 @@ execution review complete; speedup NOTRUN. Fix the fault-daemon dependency,
 then build harnesses incrementally and schedule isolated cases concurrently.
 The fast/long split does not reduce full-gate work or qualify parallel safety.
 
+[W155 modify oracle and correlation tooling](w155-oracle-correlation-20261023.md):
+**self-tests PASS on nuc; the W148 campaign rerun with it is NOTRUN** (branch
+`devel-w155h`, not merged). A failed modify records its syscall stages and
+quarantines the file with syscall-boundary candidates. It is never a PASS.
+`w155_correlate.py` builds one table per failure and lists logging gaps
+G1–G8. The first is that no server line records a request's receipt. The
+nuc W148 raw bundles are not lost: their location and sha256 are in the page.
+
 [Intel cluster + xorinox client CPU profile](intel-profile-20261023.md):
 **analysis only.** Not CPU-bound (servers 1.1–1.7 of 8 cores, client ≤0.7);
 write 155 MiB/s, read 179 MiB/s, tiny 123 files/s. Tiny files spin in 1 ms
