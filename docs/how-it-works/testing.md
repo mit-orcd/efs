@@ -14,6 +14,59 @@ their own acceptance gates. [Verification](verification.md) distinguishes
 simulation, process restart and hardware power loss.
 
 Everything must be green. There is no accepted-failure list.
+`make check` runs `test`, `docs-check` and `leak-check`, and fails if any
+of them fails.
+
+## `make leak-check`
+
+A Valgrind memcheck leak gate for unit binaries (K26). It works where
+LeakSanitizer cannot: LSan needs ptrace and aborts on hosts with
+`kernel.yama.ptrace_scope` 2, such as the ORCD build nodes. There the
+ASan-linked tests run with `ASAN_OPTIONS=detect_leaks=0`, and this gate
+does the leak check instead.
+
+- **Output.** One `PASS <name>` or `FAIL <name>: <reason>` line per binary,
+  then `VERDICT: PASS|FAIL`. A FAIL prints the first definite-loss stack.
+- **Exit status.** 0 PASS; 1 on any definite leak, memory error, test
+  failure, timeout or missing memcheck report; 3 with
+  `NOTRUN: valgrind missing` when valgrind is absent. Never 0 without a
+  complete report for every binary.
+- **List.** The four tests that relied on ASan for leaks
+  (`test_readindex_pair`, `test_raft_ack_window`, `test_host_outbox`,
+  `test_stage_evict_lru`), plus the binaries that own the long-lived heap
+  structures of the metadata path: KV (`test_kv`, `kv_lsm`,
+  `kv_insertion_buffer`, `kv_snapshot_tail`, `kv_seg_index`,
+  `kv_seg_bloom`, `kv_block_hash`, `kv_reader_gate`), Raft (`test_raft`,
+  `raft_store`, `follower_bound`, `meta_apply`), store
+  (`store_overwrite`, `store_durability`, `store_gc`, `reclaim`) and
+  `txn`, `txn_resolve_faults`, `txn_retire`, `session`, `lock`. Client,
+  wire and daemon leaks belong to `tests/run_tests.sh leaks`
+  (`tests/valgrind_leaks.sh`), which needs a node.
+- **Own build.** The gate copies the sources into its scratch directory
+  and builds the listed binaries with a baseline `-march`. On the efs VMs
+  `-march=native` emits LRCPC2 instructions that valgrind 3.26 cannot
+  decode. Your build tree is not modified.
+- **Verdict source.** The tested process's own memcheck report, not
+  `--error-exitcode`. Memcheck would also apply that code to forked
+  crash-simulation children, which `_exit` holding state on purpose.
+  Forked children are therefore not leak-checked.
+- **Python-driven tests** honour `EFS_LEAK_WRAP`: the gate sets it to the
+  memcheck command, and the test runs its plain positive binary under it
+  and skips its ASan build.
+- **Suppressions.** `tests/leak_check.supp` holds third-party noise only,
+  never a stack whose allocating frame is efs code. It is empty: only
+  "possibly lost" libnl constructor blocks appeared, and those do not fail
+  the gate.
+- **Knobs.** `EFS_LEAK_ONLY="kv raft"` selects entries,
+  `EFS_LEAK_TIMEOUT` sets the per-binary timeout (default 1800 s), and
+  `EFS_VALGRIND` names the valgrind binary.
+- **Runtime.** About 6 minutes on efs2 (4 vCPU aarch64): 24 s build and
+  316 s of runs, of which `test_txn_retire` takes 203 s
+  ([evidence](../status/k26-leak-gate-20261022.md)). That is short
+  enough for `make check`.
+- **Self-test.** `tests/test_leak_gate.py` runs under `make test`. A
+  leaking fixture must FAIL, a clean one PASS, valgrind absent NOTRUN
+  exit 3, and a run without a report must not pass.
 
 ## Current release acceptance and local POSIX suites
 
@@ -95,7 +148,7 @@ ID, both Raft leaders, `commit == applied`, idle commit rate, every mount
 | `posixpersist` | acknowledged data survives the selected remount/process-crash scenario; does not establish hardware power-loss durability ([W71](../backlog/work-items.md#w71)) |
 | `nvme` | the local `/data1/01-06` NVMe ceiling (no efs involved) |
 | `meta` | `efs-bench <seed:port> --meta` cluster RPC metadata op rates; distinct from local `--bench meta` |
-| `leaks` | valgrind memcheck, client and server, TCP and RDMA |
+| `leaks` | valgrind memcheck, client and server, TCP and RDMA (unit-only gate: `make leak-check`) |
 
 A timeout is a FAIL, not a skip.
 

@@ -1582,6 +1582,13 @@ informational only: one found the stalled follower winning an election,
 which the capacity gate on campaigning and leadership fixed. Snapshot import
 into a stalled follower is NOTRUN.
 
+[K26 leak gate](../status/k26-leak-gate-20261022.md): **`make leak-check` PASS on
+efs2 (25/25 unit binaries under valgrind memcheck, about 6 min) and `make test`
+PASS; branch `devel-k26`, not merged.** It works without LeakSanitizer, which
+fails only where `ptrace_scope` is 2 (ORCD); `make check` runs it. No product
+leak found. Open: W126 peeks can wait behind a writer queued on `view_rw`.
+node9901 run NOTRUN.
+
 [K15 W52/W64 append gates](../status/k15-w52-w64-20261022.md): **W64 INCOMPLETE**.
 A leader change left append transactions PREPARED until recovery, so writes
 failed with EBUSY. The fix and its regression test are on `devel-k15`, and the
