@@ -1237,3 +1237,97 @@ model; operations are a lifecycle with admission, non-instantaneous I/O,
 acceptance boundary and publication; committed-but-unapplied entries and
 snapshot installation are explicit model states. No readiness claim is
 made from this prose.
+
+## 20. Independent review of §19 (`8aef8d814`) — October 23
+
+**Verdict: specification still OPEN; implementation/model gates NOTRUN.**
+Reviewed the committed §19 against §§17–18 and current `src/raft/raft.c`
+(`snap_installed`, `apply_committed`) and `src/server/raft_host.c`
+(`host_boot_bump`). No runtime defect is claimed from these proposal
+counterexamples. No code, cluster or user policy decision changes here.
+
+The ordered compatibility-before-freshness predicate, durable incarnation,
+and retained operation authority are the right direction. The remaining
+work is to make their composition executable, rather than adding more
+independent fencing mechanisms.
+
+### P1 — Separate cross-peer compatibility from a member's monotonic history
+
+R2′ step 3 compares against both the local pair and the remote binding but
+uses directional unknown/known wording for both. Keep two distinct checks:
+local P with remote unknown must still permit the restricted formation/Raft
+path of a lagging configured voter; remote P with local unknown likewise
+permits catch-up. Two known different pairs conflict. Separately, a member
+previously bound to P cannot redeclare unknown or Q. This preserves the
+§13 connection matrix without treating a lagging peer as a local downgrade.
+
+Step 4 says that **same incarnation, higher counter is the only place**
+unknown -> known may happen. Counterexample: A last observed B as unknown
+at incarnation 10; B installed P and restarted before A saw that declaration;
+B now declares P at incarnation 11. Refusing this strands a compatible
+member. Permit unknown -> compatible P at a newer durable incarnation too;
+compare incarnation first and counters only within an incarnation. Keep
+same-incarnation/equal-counter changes forbidden. Model this case and the
+formed-local/unknown-remote connection separately from genuine downgrades.
+
+### P1 — Draining must not block the work that drains it
+
+R4′ refuses new admissions while waiting for token holders to complete or
+cross acceptance. An admitted forwarded mutation may still need Raft
+replication, an acknowledgement or formation progress involving that member.
+If those frames need new tokens on the draining binding, the transition
+waits for work whose progress it has disabled. R6's promise that recovery
+traffic continues does not yet specify how it bypasses this circular wait.
+
+Define a completion/control path for compatible Raft traffic and the
+continuations of admitted operations, or otherwise demonstrate an acyclic
+transition dependency. Keep conflicting identities refused and preserve
+ordinary voting/quorum semantics. State whether the draining binding remains
+current for its token holders until transition completion; otherwise the
+publication check can also wait for the transition that is waiting for it.
+Gate: pause an admitted operation before its quorum acknowledgement, start
+a compatible generation transition, then deliver the required traffic and
+require both operation and transition to finish. Do this in both directions,
+including a local pair installation. Do not solve it with a timeout that
+silently forgets accepted work.
+
+### P1 — Timeout is not an abort boundary
+
+"Timeouts and failed I/O release the token with no effect published" is too
+strong and conflicts with the next paragraph. A timeout can occur after
+commit or after a durability barrier, and an I/O error can leave an uncertain
+outcome. Only a proven pre-acceptance abort may discard staged work and
+release all ownership. Accepted work transfers to durable completion;
+uncertain work retains a tracked owner or follows a defined reconciliation
+path. The RPC waiter may leave without deleting that obligation. Keep receipt
+resolution for operations that actually have receipts; do not assume every
+Raft or storage operation uses the client opid mechanism.
+
+Model timeout before acceptance, after acceptance before reply, and an I/O
+error with an uncertain result. Each must resolve without forgotten work,
+false success, duplicate publication or a permanently pinned transition.
+
+### Snapshot acceptance needs its own precise predicate
+
+Verified bytes alone do not make a snapshot installable: preserve group,
+identity, index/term, membership and freshness checks plus an explicit
+installation ownership boundary. Conversely, "covered by committed history"
+must not require the lagging receiver already to have committed the snapshot
+index. `snap_installed` advances the receiver's applied/commit state from
+the installed snapshot; W145 explicitly prevents that proof from covering an
+unproven tail. Test a valid snapshot ahead of the receiver, a stale snapshot
+racing newer applied state, and a transition during staged installation.
+
+### Implementation notes and next step
+
+`host_boot_bump` is a useful base, not all of R5′ already implemented: today's
+code treats a short boot file as fresh and does not guard `saved + 1` against
+overflow. The proposed fail-closed/exhaustion gates and exclusive store lock
+must be verified in the implementation; acquire ownership before the bump.
+Synthetic truncated-counter and maximum-counter tests need no legacy support
+or expanded power-loss recovery scope.
+
+The three pending user choices remain unchanged; D39 stays proposed and
+W153a held. Consolidate the authoritative rules and exercise these transition
+traces in the model before claiming closure. No additional operator flags,
+backward compatibility or cluster reformat is requested by this review.

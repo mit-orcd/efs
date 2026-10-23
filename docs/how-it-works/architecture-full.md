@@ -1622,11 +1622,12 @@ matched failover gate is NOTRUN. Lost-reply cleanup (decide-once retirement by
 fence or live-owner abandon) is on `devel-k15b` with unit tests passing; its
 live gate is NOTRUN. **W52: shape A in tree; exact 20k gate and A/B NOTRUN.**
 
-[D39 latest review (§18)](../status/d39-cluster-membership-proposal-20261022.md):
-**OPEN:** `bd94b2c41` adds shared bindings, but newer incarnations must never
-bypass pair compatibility; restart needs durable incarnation ordering, and
-in-flight I/O needs explicit ownership. Committed history must complete
-independently of live peer tags. D39 proposed, W153a held; gates NOTRUN.
+[D39 latest review (§20)](../status/d39-cluster-membership-proposal-20261022.md):
+**OPEN:** review of `8aef8d814`: separate cross-peer compatibility from
+per-member history; allow compatible identity learning across restart;
+prove draining cannot block its completion traffic; distinguish timeout
+from abort and specify snapshot acceptance. D39 proposed, W153a held;
+model and implementation gates NOTRUN.
 
 [D39 proposal: configured cluster membership](../status/d39-cluster-membership-proposal-20261022.md):
 **PROPOSED, awaiting the user.** One member list for every daemon and
