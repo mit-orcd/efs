@@ -17,7 +17,11 @@
 
 #define EFS_OPID_UUID_LEN    16
 #define EFS_OPID_BITMAP_BITS 64
-#define EFS_OPID_REPLY_CACHE 16
+/* Receipts kept per client: also the client's in-flight mutation limit
+ * (src/client/inode_rpc.c opid_take_locked). 16 capped tiny-file creates at
+ * ~128 files/s from 16 workers on the Intel cluster (2026-10-23); 64 matches
+ * the bitmap, the hard bound on seq distance above the watermark. */
+#define EFS_OPID_REPLY_CACHE 64
 
 struct efs_opid {
     uint8_t client_uuid[EFS_OPID_UUID_LEN];
@@ -77,7 +81,8 @@ int efs_opid_complete(struct efs_opid_window *w, const struct efs_opid *id,
  * driven by a timer. */
 int efs_opid_ack(struct efs_opid_window *w, uint64_t contiguous_ack);
 
-#define EFS_OPID_VAL_MAX 512
+/* Packed window: 41 + EFS_OPID_REPLY_CACHE * 28 bytes (1,833 for 64). */
+#define EFS_OPID_VAL_MAX 2048
 int efs_opid_window_pack(const struct efs_opid_window *w, uint8_t *out, uint32_t *len);
 int efs_opid_window_unpack(struct efs_opid_window *w, const uint8_t *in, uint32_t len);
 

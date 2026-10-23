@@ -1,6 +1,9 @@
 #include "efs/opid.h"
 #include <string.h>
 
+_Static_assert(41u + EFS_OPID_REPLY_CACHE * 28u <= EFS_OPID_VAL_MAX,
+               "a full receipt window must fit EFS_OPID_VAL_MAX");
+
 static int uuid_eq(const uint8_t a[EFS_OPID_UUID_LEN],
                    const uint8_t b[EFS_OPID_UUID_LEN])
 {

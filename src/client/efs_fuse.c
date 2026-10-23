@@ -5013,7 +5013,7 @@ static int efs_fuse_release_ino(fuse_ino_t ino, struct fuse_file_info *fi)
     if (efs_close_note(fh, &leased)) {
         if (leased) {
             int rc = efs_open_release_pending(fh);
-            /* Identity admission is a 16-position window shared by every
+            /* Identity admission is an EFS_OPID_REPLY_CACHE-position window shared by every
              * thread; a momentarily full window is not a refusal. Wait for a
              * position like OPEN does, outside the stripe (an older owner on
              * a colliding stripe may need it to finish). Giving up left the

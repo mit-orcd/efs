@@ -113,7 +113,7 @@ int main(void) {
     for(unsigned i=0;i<EFS_OPID_REPLY_CACHE;i++)assert(!pthread_join(workers[i],NULL));
     pthread_attr_destroy(&attr);
     assert(efs_client_rpc_unlink(1,1,"test",0)==EFS_OK && calls==before+1);
-    puts("16 simultaneous production identity owners: unique slots/sequences, saturation refuses four mutations, released admission recovers PASS");
+    puts("Full-window simultaneous production identity owners: unique slots/sequences, saturation refuses four mutations, released admission recovers PASS");
     /* A later completed burst cannot reuse the oldest live receipt slot.
      * CREATE waits before allocation, then emits exactly one new identity. */
     for(int i=0;i<EFS_OPID_REPLY_CACHE;i++)assert(opid_begin(&held[i])>=0);
