@@ -693,3 +693,55 @@ flag-removal objective. This review does not silently remove the merged knob.
 
 D39's `e2da82bfb` response already has separate feedback in §26, committed
 as `020e1618b`; that review remains open. No duplicate D39 round is added.
+
+### Response to the Oct 23 gate review (parent session, devel `0804ae068`)
+
+Accepted in full; corrections applied in this commit.
+
+- **W154.** The recommendation is adopted as the proposed default for the
+  user's decision: no unconditional single-node-failure protection claim
+  until an acknowledged write has three fragments on distinct eligible
+  nodes, or degraded writes carry a tested re-protection and readiness
+  contract; restored liveness never reports restored protection; on four or
+  more nodes placement retries onto three live eligible nodes before any
+  degraded acknowledgement; on three nodes with one down the write either
+  waits or is refused, and that availability trade-off is the user's call.
+  The decision request stands (W154 row, checklist).
+- **W155.** My wording "EIO after a committed write" and "a wrong error for
+  a successful write" is withdrawn in the tally, README and K29 row: the
+  evidence shows ambiguous completion (the attempted version was visible at
+  a later read), not that the flush met every durability requirement, and
+  EIO promises no rollback. The row as rewritten by the review stands;
+  the investigation starts by correlating request, retry, receipt and
+  error stage, with bounded resolution of known outcomes and retained
+  ownership of unknown ones.
+- **Harness.** No blanket old-or-new rule. `w125_concurrent.py` is to record
+  the failing stage, bytes submitted and attempted content, quarantine an
+  unresolved file from further modelled mutations until classified, require
+  the final known successful version after quiescence, and keep errors and
+  unresolved outcomes as failures or INCOMPLETE. The W148 rerun is NOT
+  REPRODUCED on a TCP host, 3 of 9 attempts clean; not a matched A/B, not a
+  PASS.
+- **K1.** The row now says the restarted node's own later stop returned
+  rc 4 (`put_sync failed`, recovery-uncertain after the forced stop); the
+  restart served data, no durability certainty is claimed, and T2's
+  blocked-report case was not covered by this gate.
+- **K5, K22, K9, K26.** The loaded-run failures, the 31 and 25 failed bench
+  rounds, the one POSIX timeout and the still-NOTRUN node9901 leak gate stay
+  recorded in the evidence pages and rows as the review lists them.
+- **Evidence retention, a loss to record.** The nuc summary names a
+  session-notes folder for the W148 capture bundles with abbreviated hashes.
+  After that session was archived and deleted its scratchpad went with it,
+  and the folder cannot be found anywhere on the Mac. The bundles are gone;
+  the W148 rerun and the K1, K5 and K26 nuc gates are summary-only evidence,
+  which per AGENTS.md is not a passing gate for anything that needs the raw
+  analysis replayed. Process rule from now on: a session copies raw capture
+  bundles to a stable path outside Git (not its scratchpad or worktree),
+  records the exact path and full sha256 in the summary, and the parent
+  verifies the files exist before the session is archived.
+- **Discovery override.** `EFS_CLIENT_SKIP_FOREIGN` stays merged, opt-in,
+  as a test stopgap only, with the caveat recorded that it proves nothing
+  about foreign clients on the same target. **W156** opens for the proper
+  mechanism (target-mount and control-owner proof, refusal of ambiguous
+  ownership, adversarial tests) and for removing the switch afterwards, in
+  line with the alpha objective of fewer knobs.
