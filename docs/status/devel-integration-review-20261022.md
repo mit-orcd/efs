@@ -373,3 +373,57 @@ Full Linux build, TSan, leak check, cluster gates, full payload checks and
 blocked-report/abandon-race regressions are NOTRUN by this review. The other
 session's efs3 result is retained with its provenance. Production code is
 unchanged; these are review findings and status corrections.
+
+### Response to the third pass (parent session, devel `62d30994f`)
+
+Verified against the source at `62d30994f`; no code changed in this
+response. Verdicts on the two findings and the corrections:
+
+- **T1 confirmed, P1 stands.** `efs_meta_abandon_append`
+  (`src/meta/append_plan.c`, after the `efs_session_accept` call) builds the
+  owner image with a plain `efs_kv_get` of the `sess_local` row and checks
+  only its length; `session_owner_capture`, which every other session-owned
+  executor in the same file uses (reservation, mtime, completion, barrier
+  retirement, `efs_session_prepare_owner`), is not called. The image is the
+  EXCL compare base only, so a fence applied between acceptance and the
+  capture leaves bytes that the owner PREPARE matches, and the old epoch
+  retires its receipt or reservation after fencing. Same shape as S2, in
+  code written beside the S2 fix by a session that never saw it. The fix is
+  the one proposed: capture through `session_owner_capture` and extend
+  `test_session_owned_capture` to this entry point with the three
+  interleavings (fence before capture, fence after capture, fence after
+  owner prepare). K5 reopened for the invariant; K15 keeps the code gap.
+- **T2 confirmed, P2 stands.** `shutdown_forced` (`src/server/efsd.c`)
+  calls `shutdown_report` (open, write, fsync, close, rename on the first
+  storage root, then stderr) and two `fflush` calls before `_exit(3)`. A
+  stalled root or a blocked stderr pipe holds the exit past the 50 s budget,
+  and the 60 s stop-script wait then gives up without SIGKILL. Agreed fix:
+  write the record from a helper thread or with the remaining budget as a
+  hard bound, and `_exit` regardless; a record that could not be written is
+  already classified "unknown" by `server_processes.py`, which is the right
+  answer for that case. `stop_perf_recorder` runs before the clock starts and
+  belongs in the signal-to-exit statement. K1 reopened for the total bound.
+- **Status corrections accepted.** "Code: nothing open" and "no row stays
+  reopened" were premature and are withdrawn in `62d30994f`. The
+  `4090e717b` sentence is gone from the tally; the merged result is the
+  `0eb1511d2` run on efs3. The 15 NOTRUN lines on efs3 are the VM's
+  environment limits (no RDMA device, no fuse3 mount) counted by the summary
+  runner, so they are listed gates for node9901, not passes. The two
+  orphaned `test_reclaim` processes on efs1 had exited on their own by
+  23:00 (`pgrep` found none); efs1's `/tmp` scratch is cleared. `make test`
+  on an efs VM is suspended while the user's cluster runs there (`/tmp/efs`
+  deployment, efsd on efs1 and efs3 since about 22:57).
+- **`test_txn_apply_exact.py` NOTRUN here is expected**: it needs the Linux
+  build (`libefs.a`), as its docstring says; it ran in the efs3 `make test`.
+- **One addition, for the user's decision, not a defect (T3).** D38 alpha
+  1.0 says metadata groups live on "at most 3 nodes (three-voter groups, as
+  today)". K28 kept the four-node default layout: the shard group on nodes
+  1–3 and SHARD2 on nodes 2–4, so metadata voters span four nodes. Either
+  amend D38 to "at most 4 nodes, two three-voter groups, as today" or make
+  `efs_md_group_voters` place both groups on nodes 1–3 (a one-line change,
+  fresh format, cluster of three then carries all metadata). Recorded in
+  the K28 row as a VERIFY item pending that decision.
+
+Reopened rows and their next step: K5/T1 and K1/T2 are sub-session work
+(implement, regression test, `make test` on an efs VM once the user's
+cluster there is down), proposed to the user and not started.
