@@ -4,7 +4,7 @@
 # Private 3-daemon RDMA cluster for W125 P0 measurements on node9901 (or
 # another node: W125_ADDR=<its address>):
 # ports PORT+1..PORT+3 (default 17671-17673), stores under DIR/n{1,2,3},
-# --direct-io, one efs-fuse mount at DIR/mnt. Never touches orcd-mini
+# --direct-io, one efs-fuse mount at DIR/mnt (W125_TRANSPORT=tcp: TCP instead). Never touches orcd-mini
 # (17432-17434) or w100 (27432/27433). REL holds efsd, efs-fuse, efs-mgmt
 # and scripts/client.sh of one build.
 #
@@ -35,7 +35,9 @@ if [ "$cmd" = run-daemon ]; then
   exit "$rc"
 fi
 REL=$2; D=$3; PORT=${4:-17670}
-export EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_0 EFS_MD_RAFT_N=3
+# W125_TRANSPORT=tcp runs the same cluster on a host without RDMA.
+export EFS_TRANSPORT=${W125_TRANSPORT:-rdma} EFS_MD_RAFT_N=3
+[ "$EFS_TRANSPORT" = tcp ] || export EFS_RDMA_DEV=${EFS_RDMA_DEV:-mlx5_0}
 FUSE_LIBDIR=${FUSE_LIBDIR:-/data1/efs/deps/libfuse/lib64}
 [ -d "$FUSE_LIBDIR" ] && export LD_LIBRARY_PATH=$FUSE_LIBDIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
 mounted() {
