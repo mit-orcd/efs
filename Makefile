@@ -236,6 +236,7 @@ test-create-errors: $(LIB)
 	$(MAKE) tests/shutdown_faults/efsd
 	python3 tests/test_shutdown_bounded.py
 	python3 tests/test_shutdown_stuck_worker.py
+	python3 tests/test_shutdown_blocked_io.py
 	python3 tests/test_apply_unsupported.py
 	python3 tests/test_put_hint.py
 
@@ -925,8 +926,8 @@ tests/test_kv_reader_gate: tests/test_kv_reader_gate.c src/kv/kv_lsm.c src/kv/kv
 tests/faults/test_kv_compact_crash: tests/faults/test_kv_compact_crash.c src/kv/kv_compact.c src/kv/kv_lsm_internal.h $(LIB)
 	$(CC) $(CFLAGS) -DEFS_FAULTS=1 $(INCLUDES) -o $@ $< src/kv/kv_compact.c $(LIB) $(LDFLAGS)
 
-# K1/R4 stuck-worker shutdown test. EFS_FAULT_SHUTDOWN_PARK and
-# EFS_FAULT_SHUTDOWN_TOTAL_MS exist only behind EFS_FAULTS; this daemon
+# K1/R4 and T2 shutdown tests. EFS_FAULT_SHUTDOWN_PARK,
+# EFS_FAULT_SHUTDOWN_RECORD_PARK and EFS_FAULT_SHUTDOWN_TOTAL_MS exist only behind EFS_FAULTS; this daemon
 # compiles its own efsd.c and packer.c with the gate on, so ./efsd never
 # carries the hooks. Named efsd: the stop script only signals an efsd.
 SHUTDOWN_FAULT_OBJS = $(filter-out src/server/efsd.o src/server/packer.o,$(SERVER_OBJS))

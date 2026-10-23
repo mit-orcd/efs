@@ -18,6 +18,12 @@ Checks, on slices of the real sources:
    main waits for with a timed wait, never an unbounded join, and a missed
    deadline exits rc 3 without teardown. The live stuck-worker run is
    tests/test_shutdown_stuck_worker.py.
+4. efsd.c (T2): the deadline counts from the stop signal, the recorders
+   stop inside it, and after it the stopping thread does no storage or
+   stdio I/O itself: the exit report runs on helper threads waited for at
+   most EFS_SHUTDOWN_REPORT_MS, so deadline plus report bound stays at
+   least 5 s inside stop.sh's 60 s wait. The live blocked-I/O run is
+   tests/test_shutdown_blocked_io.py.
 """
 from pathlib import Path
 import os, re, shlex, subprocess, tempfile, time
@@ -41,29 +47,47 @@ assert loop.index('while (!close_conn) {') < gate
 # 2./3. One total deadline below the stop.sh wait; the drain gets 4/5.
 total_ms = int(re.search(r'#define EFS_SHUTDOWN_TOTAL_MS (\d+)u', efsd).group(1))
 stop_s = int(re.search(r'def retire\(pid,kind,value,expected=None,timeout=(\d+)\)', procs).group(1))
-assert total_ms + 5000 <= stop_s * 1000, (total_ms, stop_s)
+report_ms = int(re.search(r'#define EFS_SHUTDOWN_REPORT_MS (\d+)u', efsd).group(1))
+assert total_ms + report_ms + 5000 <= stop_s * 1000, (total_ms, report_ms, stop_s)
 assert 'return total_ms / 5u * 4u;' in fn(efsd, 'static unsigned shutdown_drain_share(')
-main_tail = efsd[efsd.index('stop_perf_recorder();\n\n'):]
-assert main_tail.index('int exit_rc = shutdown_bounded(&server);') < main_tail.index('return exit_rc;')
+main_tail = efsd[efsd.index('uint64_t stop_t0 = __atomic_load_n(&g_stop_signal_ms'):]
+assert main_tail.index('int exit_rc = shutdown_bounded(&server, stop_t0);') < main_tail.index('return exit_rc;')
+assert 'stop_perf_recorder' not in main_tail, 'recorders must stop inside the deadline'
+handler_fn = fn(efsd, 'static void sigint_handler(int sig)')
+assert '__atomic_compare_exchange_n(&g_stop_signal_ms, &unset, shutdown_now_ms()' in handler_fn
 for stop in ('server_packer_stop', 'server_writer_pool_stop', 'server_put_sync_stop',
              'server_reclaim_shutdown', 'server_usage_flush_dirty', 'server_raft_host_stop',
              'server_peer_pool_shutdown', 'server_storage_roots_close'):
     assert stop + '(' not in main_tail, f'{stop} outside the bounded teardown'
-bounded = fn(efsd, 'static int shutdown_bounded(struct efsd_server *s)')
+bounded = fn(efsd, 'static int shutdown_bounded(struct efsd_server *s, uint64_t t0)')
 order = [bounded.index(x) for x in ('server_handlers_begin_stop();', 'conn_wake_readers();',
-                                    'shutdown_drain(shutdown_drain_share(total_ms))',
+                                    'shutdown_drain(t0, t0 + shutdown_drain_share(total_ms))',
                                     'shutdown_forced(s, "handler-drain"',
                                     'efsd_pthread_create(&tid, shutdown_teardown_thread',
                                     'pthread_cond_timedwait(&g_sd.cv, &g_sd.mu, &due)',
                                     'shutdown_forced(s, p->name, p->worker',
                                     'pthread_join(tid, NULL);')]
 assert order == sorted(order), order
-assert 'const uint64_t t0 = shutdown_now_ms(), end = t0 + total_ms;' in bounded
+assert 'const uint64_t end = t0 + total_ms;' in bounded
 assert 'pthread_condattr_setclock(&ca, CLOCK_MONOTONIC);' in bounded
-assert '_exit(EFS_SHUTDOWN_FORCED_RC);' in fn(efsd, 'static void shutdown_forced(')
+forced = fn(efsd, 'static void shutdown_forced(')
+assert '_exit(EFS_SHUTDOWN_FORCED_RC);' in forced
+# After the deadline the stopping thread never touches stdio or storage: the
+# report's I/O is on helper threads, and its wait is bounded.
+report = fn(efsd, 'static int shutdown_report(')
+for body, name in ((forced, 'shutdown_forced'), (report, 'shutdown_report'),
+                   (fn(efsd, 'static int shutdown_drain('), 'shutdown_drain')):
+    for call in ('fprintf(', 'fputs(', 'fflush(', 'printf(', 'open(', 'fsync(', 'rename('):
+        assert call not in body.replace('snprintf(', '').replace('vsnprintf(', ''), (name, call)
+assert 'efsd_pthread_create(&tid, shutdown_record_thread, NULL)' in report
+assert 'efsd_pthread_create(&tid, shutdown_line_thread, NULL)' in report
+assert 'const uint64_t end = shutdown_now_ms() + EFS_SHUTDOWN_REPORT_MS;' in report
+assert 'shutdown_now_ms() < end)' in report
+record_park = fn(efsd, 'static void shutdown_fault_record_park(const char *step)')
+assert record_park.index('#if EFS_FAULTS') < record_park.index('EFS_FAULT_SHUTDOWN_RECORD_PARK') < record_park.index('#else')
 phases = efsd[efsd.index('} g_sd_phases[] = {'):efsd.index('};', efsd.index('} g_sd_phases[] = {'))]
 names = re.findall(r'\{ "([a-z-]+)", "[^"]+", sd_\w+, (-1|SD_\w+) \}', phases)
-assert names == [('packer', '-1'), ('writer-pool', '-1'), ('put-sync', 'SD_PUT_SYNC'),
+assert names == [('recorders', '-1'), ('packer', '-1'), ('writer-pool', '-1'), ('put-sync', 'SD_PUT_SYNC'),
                  ('reclaim', 'SD_RECLAIM'), ('usage-flush', 'SD_USAGE'), ('raft-host', '-1'),
                  ('peer-pool', '-1'), ('storage-roots', '-1')], names
 # Fault hooks exist only in EFS_FAULTS builds.
@@ -81,14 +105,17 @@ code = r'''
 #include <unistd.h>
 #define EFS_SHUTDOWN_FORCED_RC 3
 static volatile int g_live_conns;
+static uint64_t shutdown_now_ms(void){struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return (uint64_t)t.tv_sec*1000+t.tv_nsec/1000000;}
+static void shutdown_say(const char *fmt, ...){(void)fmt;}
 ''' + fn(handler, 'static int handler_stop_gate(void)').replace('static int handler_stop_gate', '''static int g_handlers_stopping;
 static uint64_t g_handler_stop_closes;
 void server_handlers_begin_stop(void)
 {
     __atomic_store_n(&g_handlers_stopping, 1, __ATOMIC_RELEASE);
 }
-static int handler_stop_gate''') + fn(efsd, 'static int shutdown_drain(unsigned deadline_ms)') + r'''
-static uint64_t ms(void){struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return (uint64_t)t.tv_sec*1000+t.tv_nsec/1000000;}
+static int handler_stop_gate''') + fn(efsd, 'static int shutdown_drain(uint64_t t0, uint64_t deadline)') + r'''
+#define ms shutdown_now_ms
+#define drain_for(d) shutdown_drain(ms(), ms() + (d))
 /* A client that retries forever on one pooled connection. */
 static int requests;
 static void *handler_thread(void *arg){
@@ -103,15 +130,15 @@ int main(void){
  g_live_conns=1;assert(!pthread_create(&t,NULL,handler_thread,NULL));
  usleep(100000);assert(requests>=3 && g_live_conns==1);
  server_handlers_begin_stop();
- uint64_t t0=ms();assert(shutdown_drain(5000)==0);uint64_t el=ms()-t0;
+ uint64_t t0=ms();assert(drain_for(5000)==0);uint64_t el=ms()-t0;
  printf("handler released %llu ms after stop (requests served %d)\n",(unsigned long long)el,requests);
  assert(el<500);pthread_join(t,NULL);
  assert(g_handler_stop_closes==1);
  /* Drain returns once handlers finish within the deadline. */
  g_live_conns=1;assert(!pthread_create(&t,NULL,stuck_then_done,NULL));
- t0=ms();assert(shutdown_drain(5000)==0);el=ms()-t0;assert(el>=100&&el<1000);pthread_join(t,NULL);
+ t0=ms();assert(drain_for(5000)==0);el=ms()-t0;assert(el>=100&&el<1000);pthread_join(t,NULL);
  /* A handler that never returns: refuse at the deadline, never hang. */
- g_live_conns=1;t0=ms();assert(shutdown_drain(300)==-1);el=ms()-t0;
+ g_live_conns=1;t0=ms();assert(drain_for(300)==-1);el=ms()-t0;
  printf("stuck handler refused after %llu ms\n",(unsigned long long)el);
  assert(el>=300&&el<1500);
  return 0;
