@@ -878,9 +878,17 @@ and encodes it 2+1.
    plus placement) with every record PENDING, before any fragment exists,
    and makes the store require reader capability PACK_V2 (older builds
    refuse the store).
+   Placement is three distinct live members of the data ring keyed by the
+   segment id (`efs_pack_destinations`), not the group's voters (D38): a
+   segment may live entirely on nodes that host no metadata group.
 2. `PUT_SEGMENT` (wire 157) writes each fragment to its node, which checks
    by a linearizable read that the object is admitted, ACTIVE and places
    this exact fragment there, and fsyncs file and directory before replying.
+   A node that hosts the group reads after its own ReadIndex; any other node
+   asks a voter with `PACK_OBJECT_READ` (wire 173/174: routed leader first,
+   then each voter; the voter answers only if it hosts the group, after its
+   ReadIndex). Any transport error, refusal or bad reply refuses the PUT;
+   segment reclaim uses the same read and stays BUSY on failure.
 3. `PACK_SWITCH` (MD 74) moves up to 128 files in one entry. Each member's
    source is the digest of its stored chunk-zero row; it switches only if
    the inode generation matches, the file is linked and unleased, the row
@@ -910,7 +918,7 @@ larger of two linear ramps:
 
 - unpacked candidate bytes, estimated as backlog × 64 KiB, from 64 GiB to
   128 GiB;
-- quota usage, from 50% to 80%.
+- the highest member quota usage, from 50% to 80%.
 
 The busy rate is `floor + (idle − floor) × pressure`. The backlog is
 counted every 30 s. A pass reads its segments' files on 16 threads and

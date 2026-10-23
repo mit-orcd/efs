@@ -5,6 +5,7 @@
 #include "efs/opid.h"
 #include "efs/metadata.h"
 #include "efs/meta_cmd.h"
+#include "efs/pack_ledger.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -225,6 +226,13 @@ enum efs_msg_type {
      * efs_msg_raft_step_down, reply struct efs_msg_raft_step_down_reply. */
     EFS_MSG_RAFT_STEP_DOWN = 171,
     EFS_MSG_RAFT_STEP_DOWN_REPLY = 172,
+    /* K28/W151 (D38): linearizable pack-object read for a node that holds
+     * a segment fragment but hosts no replica of the segment's group. A
+     * hosting voter answers after its ReadIndex; anything else refuses.
+     * Request struct efs_msg_pack_object_read, reply
+     * struct efs_msg_pack_object_read_reply. */
+    EFS_MSG_PACK_OBJECT_READ = 173,
+    EFS_MSG_PACK_OBJECT_READ_REPLY = 174,
 };
 
 /* Retired message IDs: no handler in this build. The server closes a
@@ -346,6 +354,19 @@ struct efs_msg_storage_session_fence { uint8_t uuid[16]; uint32_t floor, check_o
 struct efs_msg_storage_session_fence_reply { uint8_t uuid[16]; uint32_t floor; int32_t rc; };
 
 struct efs_msg_segment_put_reply { int32_t rc; };
+/* K28/W151: one encoded pack object (efs_pack_object_encode); equals
+ * EFS_PACK_OBJECT_MAX_BYTES (pack_mapping.h, asserted in raft_host.c). */
+#define EFS_PACK_OBJECT_READ_BYTES (128u + EFS_PACK_LEDGER_MAX_BYTES + EFS_HASH_SIZE)
+struct efs_msg_pack_object_read { uint32_t group, reserved; uint64_t id, generation; };
+/* rc: EFS_OK (object[0..len) is the encoded object), EFS_ERR_NOT_FOUND
+ * (absent after the ReadIndex: proven gone), anything else refuses. */
+struct efs_msg_pack_object_read_reply {
+    uint32_t group;
+    int32_t rc;
+    uint64_t id, generation;
+    uint32_t len, reserved;
+    uint8_t object[EFS_PACK_OBJECT_READ_BYTES];
+};
 /* Request: header then count items; reply: count int32 results in order.
  * EFS_OK = durably journalled and fenced (accepted for reclaim); BUSY = not
  * accepted (journal full, fail-closed or recovering), retry later. */

@@ -555,7 +555,7 @@ node hosts many.
 | transaction decision | `participant[hash(txid) % participant_count]` | `(txid)` | shard Raft |
 | membership / desired placement | control-plane group | — | control metadata authority (§2; current Raft baseline) |
 | file data | k+f distinct failure domains by placement | `(FileID, chunk_index, candidate_generation, fragment_index, coding_profile_id)` | k+f EC fragments |
-| packed segment (small files) | k+f nodes chosen by the packer; object row on the publication group's anchor shard | `(group, segment_id, segment_generation, fragment_index)`; files reference `(segment, offset, length, digest)` | k+f EC fragments, ledger in shard Raft |
+| packed segment (small files) | k+f distinct live members of the data ring, keyed by segment id (any node, not only voters); object row on the publication group's anchor shard | `(group, segment_id, segment_generation, fragment_index)`; files reference `(segment, offset, length, digest)` | k+f EC fragments, ledger in shard Raft |
 
 **Small files: background packing.** Files are written as before, with
 per-file chunk fragments and an unchanged close and fsync. A per-file

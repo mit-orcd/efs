@@ -104,6 +104,43 @@ void efs_place_fragments(const struct efs_node *nodes, uint32_t node_count,
     }
 }
 
+int efs_pack_destinations(const struct efs_node *members, uint32_t count,
+                          efs_node_id_t self, uint64_t segment_id,
+                          efs_node_id_t out[EFS_NUM_FRAGMENTS])
+{
+    efs_node_id_t ids[EFS_MAX_NODES], ranks[EFS_NUM_FRAGMENTS];
+    uint32_t n = 0;
+
+    memset(out, 0, sizeof(efs_node_id_t) * EFS_NUM_FRAGMENTS);
+    if (!members)
+        return EFS_ERR_BUSY;
+    if (count > EFS_MAX_NODES)
+        count = EFS_MAX_NODES;
+    for (uint32_t i = 0; i < count; i++) {
+        efs_node_id_t id = members[i].id;
+        int dup = 0;
+        if (!id || id > EFS_MAX_NODES || (id != self && members[i].down_until_ms))
+            continue;
+        for (uint32_t j = 0; j < n; j++)
+            dup |= ids[j] == id;
+        if (dup)
+            continue;
+        /* Stable ring: insert in ascending id order. */
+        uint32_t j = n++;
+        while (j > 0 && ids[j - 1] > id) {
+            ids[j] = ids[j - 1];
+            j--;
+        }
+        ids[j] = id;
+    }
+    if (n < EFS_NUM_FRAGMENTS)
+        return EFS_ERR_BUSY;
+    place_wide(n, (efs_ino_t)segment_id, 0, ranks);
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
+        out[i] = ids[ranks[i] - 1];
+    return EFS_OK;
+}
+
 static bool host_match(const char *a, const char *b)
 {
     size_t i = 0;

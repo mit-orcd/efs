@@ -556,6 +556,9 @@ int server_segment_scan(struct efsd_server *s,
                         void (*fn)(void *, uint32_t, uint64_t, uint64_t), void *arg);
 /* Linearizable read of a segment object from its group (ReadIndex, then the
  * local replica). NOT_FOUND when absent; INVAL when the group is not hosted. */
+/* K28/W151: answer EFS_MSG_PACK_OBJECT_READ (hosting voters only). */
+void server_raft_host_pack_object_serve(const struct efs_msg_pack_object_read *q,
+                                        struct efs_msg_pack_object_read_reply *r);
 int server_raft_host_pack_object(uint32_t group, uint64_t id, uint64_t gen,
                                  struct efs_pack_object *out);
 /* 1 = this node leads the group; term and commit index (optional). */

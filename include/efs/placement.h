@@ -21,6 +21,17 @@ void efs_place_fragments(const struct efs_node *nodes, uint32_t node_count,
                          efs_ino_t ino, uint32_t chunk_index,
                          efs_node_id_t fragment_nodes[EFS_NUM_FRAGMENTS]);
 
+/* K28/W151 (D38): fragment destinations of a packed segment. Packed
+ * segments are data, so they use the whole data ring, not the group's
+ * voters: three distinct live members chosen by efs_place_fragments'
+ * ring keyed by segment_id (successive segments rotate over all N).
+ * Live = an id in 1..EFS_MAX_NODES that the heartbeat has not marked down
+ * (self always counts as up). Returns EFS_ERR_BUSY, out[] zeroed, with
+ * fewer than EFS_NUM_FRAGMENTS live members. */
+int efs_pack_destinations(const struct efs_node *members, uint32_t count,
+                          efs_node_id_t self, uint64_t segment_id,
+                          efs_node_id_t out[EFS_NUM_FRAGMENTS]);
+
 /* Logical bytes that fit on nodes with per-node fragment capacities
  * caps[0..n-1] (bytes each node can still take, or its quota), given 2+1
  * EC: every 128 KiB chunk is three 64 KiB fragments on three DISTINCT

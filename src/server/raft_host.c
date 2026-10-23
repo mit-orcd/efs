@@ -12884,6 +12884,74 @@ int server_raft_host_inode_reaped(efs_ino_t ino, int *dead)
     return EFS_OK;
 }
 
+_Static_assert(EFS_PACK_OBJECT_READ_BYTES == EFS_PACK_OBJECT_MAX_BYTES,
+               "PACK_OBJECT_READ carries one encoded pack object");
+
+/* K28/W151 (D38): a segment fragment may live on a node that hosts no
+ * replica of the segment's group, so PUT_SEGMENT admission and segment
+ * reclaim there read the object from a voter: the routed leader first,
+ * then every other voter of the routing view. Only a hosting voter's
+ * answer after its ReadIndex counts (EFS_OK with the object, or NOT_FOUND:
+ * absent at a linearizable point). Transport errors, refusals, a wrong
+ * echo or an undecodable object never prove anything: they try the next
+ * voter and end in EFS_ERR_BUSY, so the PUT is refused and the reclaim
+ * stays BUSY. */
+static int host_pack_object_remote(struct efs_raft_host *h, uint32_t group, uint64_t id,
+                                   uint64_t gen, struct efs_pack_object *out)
+{
+    struct efs_msg_pack_object_read q = {.group = group, .id = id, .generation = gen};
+    struct efs_msg_pack_object_read_reply *r = calloc(1, sizeof(*r));
+    uint32_t voters = host_route_voters(h, (uint8_t)group), tried = 0;
+    int first = host_fwd_leader_pick(h, (uint8_t)group, -1), rc = EFS_ERR_BUSY;
+    if (!r) return EFS_ERR_BUSY;
+    for (int k = -1; k < EFS_RAFT_MAX_PEERS; k++) {
+        int rid = k < 0 ? first : k;
+        if (rid < 0 || rid >= EFS_RAFT_MAX_PEERS || rid == h->raft_id ||
+            !hosts_group(rid, voters) || (tried & (1u << rid)))
+            continue;
+        tried |= 1u << rid;
+        memset(r, 0, sizeof(*r));
+        if (host_inode_rpc_peer(h, rid, EFS_MSG_PACK_OBJECT_READ, &q, sizeof(q),
+                                EFS_MSG_PACK_OBJECT_READ_REPLY, r, sizeof(*r)) != 0)
+            continue;
+        if (r->group != group || r->id != id || r->generation != gen)
+            continue;
+        if (r->rc == EFS_ERR_NOT_FOUND) { rc = EFS_ERR_NOT_FOUND; break; }
+        if (r->rc != EFS_OK || !r->len || r->len > sizeof(r->object) ||
+            efs_pack_object_decode(r->object, r->len, out) != EFS_OK ||
+            out->ledger.segment_id != id || out->ledger.segment_generation != gen ||
+            out->ledger.publication_group != group)
+            continue;
+        rc = EFS_OK;
+        break;
+    }
+    free(r);
+    return rc;
+}
+
+void server_raft_host_pack_object_serve(const struct efs_msg_pack_object_read *q,
+                                        struct efs_msg_pack_object_read_reply *r)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_pack_object *o = NULL;
+    int hint = -1, rc;
+    size_t len = 0;
+    r->group = q->group; r->id = q->id; r->generation = q->generation; r->len = 0;
+    if (!h || !h->running || !h->kv) { r->rc = EFS_ERR_NOT_PRIMARY; return; }
+    if (q->reserved || q->group > 0xffu || !efs_pack_group_anchor(q->group) || !q->id ||
+        !q->generation) { r->rc = EFS_ERR_INVAL; return; }
+    /* Never forward: only a hosting voter's read is linearizable here. */
+    if (!host_hosts(h, (uint8_t)q->group)) { r->rc = EFS_ERR_NOT_PRIMARY; return; }
+    rc = host_read_index(h, (uint8_t)q->group, &hint);
+    if (rc == EFS_OK && !(o = malloc(sizeof(*o)))) rc = EFS_ERR_NOMEM;
+    if (rc == EFS_OK) rc = efs_pack_object_get(h->kv, q->group, q->id, q->generation, o);
+    if (rc == EFS_OK && efs_pack_object_encode(o, r->object, sizeof(r->object), &len) != EFS_OK)
+        rc = EFS_ERR_IO;
+    if (rc == EFS_OK) r->len = (uint32_t)len;
+    r->rc = rc;
+    free(o);
+}
+
 int server_raft_host_pack_object(uint32_t group, uint64_t id, uint64_t gen,
                                  struct efs_pack_object *out)
 {
@@ -12891,7 +12959,8 @@ int server_raft_host_pack_object(uint32_t group, uint64_t id, uint64_t gen,
     int hint = -1;
     if (!h || !h->running || !h->kv) return EFS_ERR_NOT_PRIMARY;
     if (!efs_pack_group_anchor(group)) return EFS_ERR_INVAL;
-    if (!host_hosts(h, (uint8_t)group)) return EFS_ERR_INVAL;
+    if (!host_hosts(h, (uint8_t)group))
+        return host_pack_object_remote(h, group, id, gen, out);
     int rc = host_read_index(h, (uint8_t)group, &hint);
     if (rc != EFS_OK) return rc;
     return efs_pack_object_get(h->kv, group, id, gen, out);

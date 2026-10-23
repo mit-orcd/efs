@@ -680,6 +680,16 @@ void server_handle_conn(struct efs_conn *conn)
             efs_conn_send_msg(conn,EFS_MSG_STORAGE_SESSION_FENCE_REPLY,&reply,sizeof(reply));
             break;
         }
+        case EFS_MSG_PACK_OBJECT_READ: {
+            struct efs_msg_pack_object_read_reply *rep = calloc(1, sizeof(*rep));
+            if (!rep) { close_conn = 1; break; }
+            rep->rc = EFS_ERR_INVAL;
+            if (payload_len == sizeof(struct efs_msg_pack_object_read))
+                server_raft_host_pack_object_serve(payload, rep);
+            efs_conn_send_msg(conn, EFS_MSG_PACK_OBJECT_READ_REPLY, rep, sizeof(*rep));
+            free(rep);
+            break;
+        }
         case EFS_MSG_PACK_COMPACT: {
             struct efs_msg_pack_compact_reply rep = {.rc = EFS_ERR_INVAL};
             if (payload_len == sizeof(struct efs_msg_pack_compact))

@@ -117,6 +117,92 @@ static int k28_placement(uint32_t n)
     return failures;
 }
 
+/* K28/W151 (D38): packed segments use the data ring, not the voters: three
+ * distinct live members per segment, non-voters (nodes 5..n) included, a
+ * down member never, self always live, and fewer than three live members
+ * refused. Deterministic in the segment id and the membership set. */
+static int k28_pack_destinations(uint32_t n)
+{
+    int failures = 0;
+    struct efs_node m[EFS_MAX_NODES], rev[EFS_MAX_NODES];
+    uint32_t used[EFS_MAX_NODES + 1] = {0}, with_nonvoter = 0;
+    efs_node_id_t d[EFS_NUM_FRAGMENTS], e[EFS_NUM_FRAGMENTS];
+    const efs_node_id_t self = 1, down = 3; /* node 3 votes in both groups */
+    const uint32_t voters = efs_md_group_voters(EFS_RAFT_GROUP_SHARD, (int)n) |
+                            efs_md_group_voters(EFS_RAFT_GROUP_SHARD2, (int)n);
+
+    memset(m, 0, sizeof(m));
+    for (uint32_t i = 0; i < n; i++) m[i].id = (efs_node_id_t)(i + 1);
+    m[down - 1].down_until_ms = 12345;
+    m[self - 1].down_until_ms = 1; /* stale own row: self still counts */
+    for (uint32_t i = 0; i < n; i++) rev[i] = m[n - 1 - i];
+    for (uint64_t t = 1; t <= 3000; t++) {
+        uint64_t id = (t * 1000003ull) << 8 | (t % n + 1);
+        if (efs_pack_destinations(m, n, self, id, d) != EFS_OK) {
+            fprintf(stderr, "FAIL k28 pack n=%u refused with %u live\n", n, n - 1);
+            return failures + 1;
+        }
+        if (efs_pack_destinations(rev, n, self, id, e) != EFS_OK || memcmp(d, e, sizeof(d))) {
+            fprintf(stderr, "FAIL k28 pack n=%u depends on membership order\n", n);
+            failures++;
+        }
+        int nv = 0;
+        for (int k = 0; k < EFS_NUM_FRAGMENTS; k++) {
+            if (!d[k] || d[k] > n || d[k] == down) {
+                fprintf(stderr, "FAIL k28 pack n=%u bad destination %u\n", n, d[k]);
+                failures++;
+                continue;
+            }
+            used[d[k]]++;
+            nv += !(voters >> (d[k] - 1) & 1u);
+        }
+        if (d[0] == d[1] || d[0] == d[2] || d[1] == d[2]) {
+            fprintf(stderr, "FAIL k28 pack n=%u duplicate destination\n", n);
+            failures++;
+        }
+        with_nonvoter += nv > 0;
+    }
+    for (uint32_t id = 1; id <= n; id++) {
+        if ((id == down) != !used[id]) {
+            fprintf(stderr, "FAIL k28 pack n=%u node %u used %u times\n", n, id, used[id]);
+            failures++;
+        }
+    }
+    /* Every non-voter (nodes 5..n) carries fragments: checked above via
+     * used[]; most segments include at least one once n >= 5. */
+    if (!with_nonvoter || (n >= 8 && with_nonvoter < 3000 / 2)) {
+        fprintf(stderr, "FAIL k28 pack n=%u too few segments on non-voters (%u)\n", n,
+                with_nonvoter);
+        failures++;
+    }
+    /* Three down of five live-capable members leaves two: refused. */
+    {
+        struct efs_node f[5];
+        memset(f, 0, sizeof(f));
+        for (uint32_t i = 0; i < 5; i++) f[i].id = i + 1;
+        f[1].down_until_ms = f[2].down_until_ms = f[3].down_until_ms = 1;
+        d[0] = d[1] = d[2] = 9;
+        if (efs_pack_destinations(f, 5, 1, 42, d) != EFS_ERR_BUSY || d[0] || d[1] || d[2]) {
+            fprintf(stderr, "FAIL k28 pack accepted two live members\n");
+            failures++;
+        }
+        /* Duplicate and out-of-range ids never count as members. */
+        f[1].down_until_ms = f[2].down_until_ms = f[3].down_until_ms = 0;
+        f[1].id = 1; f[2].id = 0; f[3].id = EFS_MAX_NODES + 1;
+        if (efs_pack_destinations(f, 5, 1, 42, d) != EFS_ERR_BUSY) {
+            fprintf(stderr, "FAIL k28 pack counted duplicate/invalid ids\n");
+            failures++;
+        }
+        f[3].id = 4;
+        if (efs_pack_destinations(f, 5, 1, 42, d) != EFS_OK ||
+            efs_pack_destinations(NULL, 5, 1, 42, d) != EFS_ERR_BUSY) {
+            fprintf(stderr, "FAIL k28 pack three-member edge\n");
+            failures++;
+        }
+    }
+    return failures;
+}
+
 /* K28/W151 + D38: three voters per group for n >= 4, nodes 5..n host no
  * metadata, n <= 3 all nodes; every set is a valid Raft voter mask. */
 static int k28_voters(void)
@@ -334,6 +420,8 @@ int main(void)
         for (size_t i = 0; i < sizeof(ks) / sizeof(ks[0]); i++)
             failures += k28_placement(ks[i]);
         failures += k28_voters();
+        for (size_t i = 0; i < sizeof(ks) / sizeof(ks[0]); i++)
+            failures += k28_pack_destinations(ks[i]);
         if (EFS_MAX_NODES != 16) {
             fprintf(stderr, "FAIL k28 cap changed: update the K28 evidence summary\n");
             failures++;
