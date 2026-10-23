@@ -620,7 +620,7 @@ static void *deleter_main(void *arg)
             int rc;
             if (copy.kind == EFS_RECLAIM_SUPERSEDED) {
                 rc = server_gc_superseded_delete(rj.s, copy.eid, copy.ino, copy.ci, copy.fi,
-                                                 copy.gen, copy.sum);
+                                                 copy.gen, copy.sum, 0);
             } else if (copy.kind == EFS_RECLAIM_SEGMENT) {
                 rc = server_segment_delete(rj.s, copy.eid & 0xffu, copy.ino, copy.gen, &counted);
                 if (!copy.credited && counted) {
