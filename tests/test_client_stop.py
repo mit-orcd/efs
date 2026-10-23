@@ -6,7 +6,8 @@ root=Path(__file__).resolve().parents[1]
 with tempfile.TemporaryDirectory(prefix='efs-client-stop-') as directory:
     task=Path(directory);(task/'scripts').mkdir();(task/'bin').mkdir()
     (task/'scripts/client.sh').write_text((root/'scripts/client.sh').read_text())
-    (task/'scripts/client_processes.py').write_text("import os,sys\nprint('PROCESS:'+sys.argv[1],file=open(os.environ['STOP_LOG'],'a'))\nsys.exit(int(os.environ.get('RETIRE_RC','0')) if sys.argv[1]=='retire' else int(os.environ.get('PROCESS_RC','1')))\n")
+    # `has` prints the proven controller (PID STARTTIME); retire gets it back.
+    (task/'scripts/client_processes.py').write_text("import os,sys\nprint('PROCESS:'+' '.join(sys.argv[1:]),file=open(os.environ['STOP_LOG'],'a'))\nrc=int(os.environ.get('RETIRE_RC','0')) if sys.argv[1]=='retire' else int(os.environ.get('PROCESS_RC','1'))\nif sys.argv[1]=='has' and rc==0: print('4242 77')\nsys.exit(rc)\n")
     scripts={
       'efs-fuse':'''#!/bin/bash
 echo "CONTROL:$*" >> "$STOP_LOG"
@@ -48,7 +49,7 @@ echo 0 > "$STOP_STATE"
     rc,log,state=run(True,CONTROL_RC=3,FAIL_NORMAL=1)
     assert rc==0 and state=='0' and '--force-discard' in log and 'UNMOUNT:-uz' in log
     rc,log,state=run(MOUNTED=0,PROCESS_RC=0)
-    assert rc==0 and 'CONTROL:--stop' in log and 'PROCESS:retire' in log
+    assert rc==0 and 'CONTROL:--stop' in log and 'PROCESS:retire /efs-test-mount 4242 77\n' in log
     rc,log,state=run(MOUNTED=0,PROCESS_RC=0,CONTROL_RC=1)
     assert rc!=0 and 'PROCESS:retire' not in log and 'UNMOUNT:' not in log
     rc,log,state=run(PROCESS_RC=2)

@@ -35,7 +35,7 @@
 set -u
 cmd=$1; REL=$2; D=$3; PORT=${4:-18800}; FREL=${5:-$REL}
 ADDR=127.0.0.1
-export EFS_TRANSPORT=tcp EFS_MD_RAFT_N=3 EFS_CLIENT_SKIP_FOREIGN=1
+export EFS_TRANSPORT=tcp EFS_MD_RAFT_N=3
 export EFS_FAULT_PUB_BARRIER="$D/fault" EFS_RAFT_OBS=1
 PHASES=" ${K14_PHASES:-1 2 3 4 5 6} "
 on() { case "$PHASES" in *" $1 "*) return 0;; esac; return 1; }
