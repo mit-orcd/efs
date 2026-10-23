@@ -111,6 +111,14 @@ of successful durability or rollback. A blanket old-or-new rewrite oracle
 is insufficient. K1's post-restart rc 4, loaded errors, raw-evidence losses
 and foreign-client discovery limits remain recorded.
 
+[D39 admission implementation](d39-admission-20261023.md): **stages 1–2 IMPLEMENTED, `make test-all` on amd PASS with host limits, on
+branch `devel-d39adm`, not merged.** `cluster.conf` replaces `--node-id`,
+`--join` and `EFS_MD_RAFT_N` (W153a refusals at start); store lock, encoded
+boot counter, protocol 6 roles and identity declarations, bindings, formation
+states, `FORMATION_READ` and C7 checks at receive and inbox drain landed.
+Effect registration, owned continuations and the stage-4 lifecycle are
+INCOMPLETE; private-cluster gates NOTRUN.
+
 [D39 consolidated model](d39-consolidated-model-20261023.md): **MODEL PASS on
 branch `devel-d39model`, merged Oct 23 `16d716308`.** The single authoritative statement of
 the accepted D39 rules, executable as `tests/d39_model.py` in `make test`:

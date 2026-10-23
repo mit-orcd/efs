@@ -153,6 +153,7 @@ authority only, never Raft validation or persistence.
 The consolidated executable model ([page](d39-consolidated-model-20261023.md),
 `tests/d39_model.py`) passes merged into devel Oct 23 (`16d716308`);
 implementation and cluster gates NOTRUN.
+The admission implementation ([page](d39-admission-20261023.md), branch `devel-d39adm`, not merged) lands stages 1–2 (`cluster.conf` with endpoint-selected identity, W153a refusals, store lock, boot counter, roles, formation states, `FORMATION_READ`) and the receive and drain checks of stage 3, with effect registration, owned continuations and the stage-4 operation lifecycle INCOMPLETE and cluster gates NOTRUN.
 Awaiting the user;
 W153a remains on hold.
 
