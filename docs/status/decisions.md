@@ -29,7 +29,28 @@ repair/recovery qualification. This is a release scheduling decision, not a
 change to the numbered architectural protection contracts. [Exact decision,
 remaining gates and limits](v030-release-scope-20261012.md). Execution stays stopped.
 
-## D39 — authoritative configured cluster membership (PROPOSED Oct 22)
+## D40 — alpha 1.0 scope decisions taken Oct 23 (user, in one pass)
+
+| Item | Decision |
+| --- | --- |
+| D39 scope | **Fixed configured membership** for alpha 1.0; online add/remove explicitly deferred past alpha 1.0 |
+| D39 local identity | **The canonical advertised endpoint** selects the member record; the separate `--node-id` input goes away |
+| D39 initial formation | **Every configured member present and agreeing** at `raft-mkfs`; ordinary restart and operation stay quorum-based |
+| W154 degraded stripes | **Rebuild on return**: a stripe acknowledged with two fragments is re-protected when the missing node returns; the write path logs the degraded acknowledgement; write availability on three nodes with one down is kept |
+| K10 / W121 | **Known limitation** in alpha 1.0: the FUSE kernel page-pinning readback (fsync then previous payload) is documented with its trigger; no client workaround in alpha |
+| K13 / W86, W88 | **Finish for alpha**: the PUT/flush ticket integration is completed and qualified in alpha 1.0; W137 stays a required test item |
+| K14 / W77 | **Fix in alpha**: multi-chunk publication and observation become atomic before alpha 1.0 |
+| K23 / W71, W74, W123 | **Stay deferred** past alpha 1.0; W154's rebuild-on-return is the only repair in alpha |
+| W153a | **Model first**: the consolidated D39 model and its tests come first; fail-closed count validation lands inside the admission implementation |
+| orcd-mini | Reformat (fragment format 2) and deploy current devel approved; run the NOTRUN live gates and the K27 ior A/B/A' there |
+
+Alpha stays 2+1 only on 3, 4 and more nodes; no compatibility, no new
+operator knob. D39 is therefore **accepted** with the three choices above;
+its implementation order is the §15 work order as amended (model with the
+§§8–33 traces, then admission code through the real entry points, then
+cluster gates).
+
+## D39 — authoritative configured cluster membership (accepted Oct 23, see D40; implementation model-first)
 
 Proposal written at the user's request after the W153 review:
 [d39-cluster-membership-proposal-20261022.md](d39-cluster-membership-proposal-20261022.md).

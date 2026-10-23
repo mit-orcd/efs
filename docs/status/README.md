@@ -174,6 +174,9 @@ a cluster at four nodes, so ">4 nodes" is an implementation item or a
 narrower claim.** W145–W147 fixes read correct; `raft-resync` mark is not
 persisted; ior write regression needs a K row.
 
+[D40, alpha 1.0 scope decisions Oct 23](decisions.md#d40--alpha-10-scope-decisions-taken-oct-23-user-in-one-pass):
+**D39 accepted (fixed membership, endpoint identity, all members at formation; model first); W154 rebuild on return; K10 known limitation; K13 and K14 fixed in alpha; K23 stays deferred; orcd-mini reformat and the K27 A/B approved.**
+
 [Alpha 1.0 Stage 1, Oct 22](alpha-1.0-2plus1-checklist.md#stage-1-tally-end-of-oct-22-adjusted-after-the-integration-review):
 **7 K rows fixed and merged (K2, K3, K4, K8, K16, K24, K28); of the 5 rows
 REOPENED by the [integration review](devel-integration-review-20261022.md),
