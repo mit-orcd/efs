@@ -190,7 +190,8 @@ substitute one for another.
 1. **It builds on a node** — never in the NFS home
    (see the fcstor deploy rule; a local `make` produces AVX-512 objects that
    SIGILL on the AMD test nodes).
-2. **Unit tests pass:** `make test` (`test_sim`, `test_meta_apply`,
+2. **Unit tests pass:** `make test` while editing, and `make test-all`
+   (fast and long groups) before handing off (`test_sim`, `test_meta_apply`,
    `test_raft`, `test_kv_lsm`, `test_stage_evict`, … — no accepted-failure
    list).
 3. **The gate from your routing row passes**, run with
@@ -236,7 +237,7 @@ Hard rules: no logic changes outside the task; no renames; no new
 dependencies; no files outside the ones named; if anything seems to
 need a design decision the spec does not contain, STOP and report —
 do not decide.
-Done means: builds on a test node (never in $HOME), make test passes,
+Done means: builds on a test node (never in $HOME), make test-all passes,
 the routing row's gate passes via tests/run_tests.sh, and you record
 the result directory. A timeout is a failure. Verify the mount with
 findmnt before trusting any suite result.

@@ -270,11 +270,15 @@ static void t_fail_closed_prepare(void)
 static void t_fail_closed(void)
 {
     char path[8192];last_seg(path,sizeof(path),NULL);
-    int fd=open(path,O_WRONLY);assert(fd>=0);uint8_t x=0xff;
-    assert(pwrite(fd,&x,1,RJ_HDR_BYTES+3)==1);close(fd); /* corrupt the only record */
+    /* K30: flip the byte; a constant 0xff left the random epoch byte at
+     * offset 20 unchanged 1 time in 256 (header still valid, torn tail). */
+    int fd=open(path,O_RDWR);assert(fd>=0);uint8_t x;
+    assert(pread(fd,&x,1,RJ_HDR_BYTES+3)==1);x^=0xff;
+    assert(pwrite(fd,&x,1,RJ_HDR_BYTES+3)==1); /* corrupt the only record */
     /* The last record failing its hash with nothing valid after it would be a
      * torn tail; corrupt the header instead so verification must fail. */
-    fd=open(path,O_WRONLY);assert(fd>=0);assert(pwrite(fd,&x,1,20)==1);close(fd);
+    assert(pread(fd,&x,1,20)==1);x^=0xff;
+    assert(pwrite(fd,&x,1,20)==1);close(fd);
     ndead=2;dead_set[0]=9100;dead_set[1]=9101; /* 9101 was deleted but never journalled here */
     host_active=0;
     boot();
@@ -357,9 +361,19 @@ static void t_old_meta_prepare(void)
 }
 static void t_old_meta(void)
 {
+    /* K30: earlier failures within the same second left non-empty asides
+     * under this second's name; setting the journal aside must not collide. */
+    char cmd[8192];time_t now=time(NULL);
+    for(int k=0;k<3;k++){
+        snprintf(cmd,sizeof(cmd),"mkdir -p %s/meta/gc-journal.broken.%lld && touch %s/meta/gc-journal.broken.%lld/seg",
+                 roots[0],(long long)now+k,roots[0],(long long)now+k);
+        assert(!system(cmd));
+    }
     host_active=0;
     boot();
     assert(S.reclaim_fail_closed);
+    snprintf(cmd,sizeof(cmd),"test -e %s/meta/gc-journal.broken.%lld/seg",roots[0],(long long)now);
+    assert(!system(cmd)); /* the earlier aside is kept */
     assert(put(9302,0,0)==EFS_ERR_IO);
     server_reclaim_shutdown(&S);
 }
@@ -426,6 +440,10 @@ static void *phys_writer(void *arg)
 static void t_phys(void)
 {
     boot();
+    /* K30: bg_main resamples every 500 ms; a sample it had started
+     * overwrote the forced budget below (1 of 25 on amd). PUT admission
+     * needs no reclaim threads, so stop them; run()'s shutdown is a no-op. */
+    server_reclaim_shutdown(&S);
     server_phys_sample(&S);
     assert(S.phys_fs[0] && S.phys_fs[0]==S.phys_fs[1]); /* both roots on one /tmp filesystem */
     uint8_t f=S.phys_fs[0]-1;

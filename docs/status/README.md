@@ -25,6 +25,19 @@ state; W137 uses the real reply shape. `make test` and a private three-daemon
 gate pass on intel1. The D31 abandoned-upload collector is INCOMPLETE; RDMA,
 orcd-mini and multi-host are NOTRUN.
 
+[Full code-gate runtime review](make-test-runtime-review-20261023.md):
+execution review complete; speedup NOTRUN. Fix the fault-daemon dependency,
+then build harnesses incrementally and schedule isolated cases concurrently.
+The fast/long split does not reduce full-gate work or qualify parallel safety.
+
+[W155 modify oracle and correlation tooling](w155-oracle-correlation-20261023.md):
+**self-tests PASS on nuc; the W148 campaign rerun with it is NOTRUN** (branch
+`devel-w155h`, not merged). A failed modify records its syscall stages and
+quarantines the file with syscall-boundary candidates. It is never a PASS.
+`w155_correlate.py` builds one table per failure and lists logging gaps
+G1–G8. The first is that no server line records a request's receipt. The
+nuc W148 raw bundles are not lost: their location and sha256 are in the page.
+
 [Intel cluster + xorinox client CPU profile](intel-profile-20261023.md):
 **analysis only.** Not CPU-bound (servers 1.1–1.7 of 8 cores, client ≤0.7);
 write 155 MiB/s, read 179 MiB/s, tiny 123 files/s. Tiny files spin in 1 ms
@@ -71,6 +84,11 @@ fails only where `ptrace_scope` is 2 (ORCD); `make check` runs it. No product
 leak found. Open: W126 peeks can wait behind a writer queued on `view_rw`.
 node9901 run NOTRUN.
 
+[K30 intermittent tests](k30-intermittent-tests-20261023.md): **fixed on
+`devel-k30`, not merged; 0/25 FAIL per case on amd.** `test_reclaim` was a
+product bug (same-second journal aside rename refused startup); the fork
+oracle and `test_kv_lsm` were test races. W126 peek limitation stays open.
+
 [K15 W52/W64 append gates](k15-w52-w64-20261022.md): **W64 INCOMPLETE**.
 A leader change left append transactions PREPARED until recovery, so writes
 failed with EBUSY. The fix and its regression test are on `devel-k15`, and the
@@ -92,6 +110,14 @@ needs a decision. W155 demonstrates ambiguous visible completion, not proof
 of successful durability or rollback. A blanket old-or-new rewrite oracle
 is insufficient. K1's post-restart rc 4, loaded errors, raw-evidence losses
 and foreign-client discovery limits remain recorded.
+
+[D39 consolidated model](d39-consolidated-model-20261023.md): **MODEL PASS on
+branch `devel-d39model`, not merged.** The single authoritative statement of
+the accepted D39 rules, executable as `tests/d39_model.py` in `make test`:
+101 traces from §§8–33, 11 negative controls under superseded rules and a
+randomized interleaving search. It adds three model findings the proposal must
+accept and lists nine unresolved points (C13). Implementation and cluster
+gates NOTRUN.
 
 [D39 latest review (§34)](d39-cluster-membership-proposal-20261022.md):
 `802416d39` resolves §32's predicate, critical-section scheduling and Raft
@@ -180,6 +206,8 @@ cluster refusal run are NOTRUN.
 a cluster at four nodes, so ">4 nodes" is an implementation item or a
 narrower claim.** W145–W147 fixes read correct; `raft-resync` mark is not
 persisted; ior write regression needs a K row.
+
+[K31 fixed, K27 closed, orcd-mini on devel `24e58fb1d`](k31-k27-orcd-mini-20261023.md): **RDMA reply loss came from the K5 mount session starting before the daemon fork (poller thread lost); fixed in `24e58fb1d`. K27: no ior write regression on fresh formats. All orcd-mini suites PASS.**
 
 [D40, alpha 1.0 scope decisions Oct 23](decisions.md#d40--alpha-10-scope-decisions-taken-oct-23-user-in-one-pass):
 **D39 accepted (fixed membership, endpoint identity, all members at formation; model first); W154 rebuild on return; K10 known limitation; K13 and K14 fixed in alpha; K23 stays deferred; orcd-mini reformat and the K27 A/B approved.**

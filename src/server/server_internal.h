@@ -86,6 +86,11 @@ struct efsd_server {
     uint64_t gc_trunc_seen[2]; /* D25 TRUNC_PENDING inodes at the last pass */
     uint64_t gc_reap_seen[2], gc_orphan_seen[2], gc_pending[2], gc_first_reap[2], gc_first_seen_us[2];
     uint64_t gc_missing_exports;
+    /* W154: degraded marks on the anchors this node leads (bit g of
+     * degraded_sampled_mask: groups[g] current) and rebuild totals. */
+    uint64_t degraded_chunks[2];
+    uint32_t degraded_sampled_mask;
+    uint64_t rebuilt_fragments, rebuild_failures, rebuild_retired;
     /* W124 node reclaim (reclaim.c). Bytes credited back to quota at
      * acceptance but still on disk; physical admission guard state. */
     uint64_t reclaim_pending_bytes;
@@ -126,6 +131,13 @@ void server_put_session_end(struct efs_put_storage_guard *);
 void server_raft_host_storage_session_fence(const struct efs_msg_storage_session_fence *,
     struct efs_msg_storage_session_fence_reply *);
 int server_put_upload(struct efsd_server *,const uint8_t *,uint32_t,uint8_t *);
+/* K13 + W154: EFS_MSG_REBUILD_PUT. Stores the one missing fragment of a
+ * degraded stripe only when the mark's group holds exactly that mark. */
+int server_rebuild_put(struct efsd_server *,const uint8_t *,uint32_t,uint8_t *);
+struct efs_meta_degraded;
+void server_degraded_mark_encode(uint8_t *q, const struct efs_meta_degraded *d);
+int server_degraded_mark_decode(const uint8_t *q, struct efs_meta_degraded *d);
+int server_raft_host_degraded_check(const uint8_t mark[EFS_REBUILD_MARK_LEN]);
 int server_put_session_fence(struct efsd_server *, const uint8_t uuid[16],
                              uint32_t reject_below);
 
@@ -443,6 +455,7 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
 void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
                              const struct efs_ino_size_rec *irecs,
                              uint32_t ino_count, uint32_t flags, const struct efs_opid *session,
+                             const struct efs_report_pubid *pubid,
                              struct efs_msg_inode_reply *out);
 void server_raft_host_lane_bootstrap_rpc(const struct efs_msg_lane_bootstrap *,
                                           struct efs_msg_lane_writer_view_reply *);
@@ -542,7 +555,7 @@ int server_gc_sync_roots(struct efsd_server *s);
  * chunk and inode directories if they are now empty. Debits `used`. */
 int server_gc_superseded_delete(struct efsd_server *s, efs_export_id_t eid, efs_ino_t ino,
                                 uint32_t ci, uint32_t fi, uint64_t gen,
-                                const uint8_t sum[EFS_HASH_SIZE]);
+                                const uint8_t sum[EFS_HASH_SIZE], int durable);
 
 /* ---- W125 packed segment store (src/server/segment_store.c) ---- */
 struct efs_pack_object;

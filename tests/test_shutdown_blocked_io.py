@@ -26,7 +26,7 @@ wait gives up (negative control: run one case per argument, e.g.
 `EFS_SHUTDOWN_FAULT_BINARY=<pre-fix daemon> tests/test_shutdown_blocked_io.py fsync`).
 """
 from pathlib import Path
-import os, shutil, socket, subprocess, sys, tempfile, time
+import os, shutil, socket, subprocess, sys, tempfile, threading, time
 
 root = Path(__file__).resolve().parents[1]
 binary = Path(os.environ.get('EFS_SHUTDOWN_FAULT_BINARY') or root/'tests/shutdown_faults/efsd')
@@ -44,10 +44,17 @@ work = Path(tempfile.mkdtemp(prefix='efs-shutdown-blocked-', dir=storage_tmp))
 print('work:', work, 'binary:', binary, flush=True)
 
 
-def free_port():
-    with socket.socket() as probe:
-        probe.bind(('127.0.0.1', 0))
-        return probe.getsockname()[1]
+def free_ports(n):
+    """n distinct free ports: the probes stay open together until all are
+    chosen, so concurrently run cases never pick the same one."""
+    probes = [socket.socket() for _ in range(n)]
+    try:
+        for probe in probes:
+            probe.bind(('127.0.0.1', 0))
+        return [probe.getsockname()[1] for probe in probes]
+    finally:
+        for probe in probes:
+            probe.close()
 
 
 def read_record(store):
@@ -60,8 +67,8 @@ def read_record(store):
 
 
 class Daemon:
-    def __init__(self, store, record_park=None, stderr_fd=None):
-        self.store, self.port = store, free_port()
+    def __init__(self, store, port, record_park=None, stderr_fd=None):
+        self.store, self.port = store, port
         (store/'log').mkdir(parents=True, exist_ok=True)
         env = dict(os.environ, EFS_FAULT_SHUTDOWN_TOTAL_MS=str(TOTAL_MS),
                    EFS_FAULT_SHUTDOWN_PARK='packer')
@@ -115,9 +122,9 @@ class Daemon:
             self.proc.wait(10)
 
 
-def record_parked_case(step):
+def record_parked_case(step, port):
     store = work/f'record-{step}-parked'
-    daemon = Daemon(store, record_park=step)
+    daemon = Daemon(store, port, record_park=step)
     try:
         rc, out, wall_ms = daemon.stop()
     finally:
@@ -133,11 +140,11 @@ def record_parked_case(step):
           'no record, stop script "unknown" rc 4 PASS', flush=True)
 
 
-def stderr_blocked_case():
+def stderr_blocked_case(port):
     store = work/'stderr-blocked'
     rfd, wfd = os.pipe()
     try:
-        daemon = Daemon(store, stderr_fd=wfd)
+        daemon = Daemon(store, port, stderr_fd=wfd)
         # Fill what the daemon left of the pipe; nobody ever reads it. Fill
         # through a second open file description: O_NONBLOCK on the shared
         # one would make the daemon's own writes fail instead of block. A
@@ -175,10 +182,28 @@ def stderr_blocked_case():
           flush=True)
 
 
-cases = {'write': lambda: record_parked_case('write'),
-         'fsync': lambda: record_parked_case('fsync'),
+cases = {'write': lambda port: record_parked_case('write', port),
+         'fsync': lambda port: record_parked_case('fsync', port),
          'stderr': stderr_blocked_case}
-for name in sys.argv[1:] or cases:  # e.g. one case per negative-control run
-    cases[name]()
+# The cases are independent (own store, port, daemon and pipe) and spend their
+# time waiting out real deadlines, so they run concurrently: the test takes
+# about as long as its longest case instead of the sum. Each keeps its bounds.
+names = sys.argv[1:] or list(cases)  # e.g. one case per negative-control run
+errors = {}
+def run_case(name, port):
+    try:
+        cases[name](port)
+    except BaseException as exc:  # reported after every case has finished
+        errors[name] = exc
+threads = [threading.Thread(target=run_case, args=(name, port))
+           for name, port in zip(names, free_ports(len(names)))]
+for t in threads:
+    t.start()
+for t in threads:
+    t.join()
+if errors:
+    for name, exc in errors.items():
+        print(f'{name}: FAIL {exc!r}', flush=True)
+    raise next(iter(errors.values()))
 shutil.rmtree(work)
 print('test_shutdown_blocked_io: OK')

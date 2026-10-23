@@ -233,12 +233,26 @@ enum efs_msg_type {
      * struct efs_msg_pack_object_read_reply. */
     EFS_MSG_PACK_OBJECT_READ = 173,
     EFS_MSG_PACK_OBJECT_READ_REPLY = 174,
+    /* W154 + K13: the group leader's rebuild of the one missing fragment of
+     * a degraded stripe. Header EFS_REBUILD_PUT_HEADER_LEN: export:4, then
+     * the degraded mark fixed-endian (EFS_REBUILD_MARK_LEN: ino:8
+     * inode_gen:8 object_gen:8 ci:4 lane:1 missing:1 nodes:4*3
+     * checksums:32*3); then the fragment. The object is published,
+     * so no ticket authorizes it: storage stores it only when the durable
+     * mark names exactly this fragment for this node. Reply: the
+     * EFS_PUT_REPLY_LEN PUT reply. */
+    EFS_MSG_REBUILD_PUT = 175,
+    EFS_MSG_REBUILD_PUT_REPLY = 176,
 };
+#define EFS_REBUILD_MARK_LEN (8u + 8u + 8u + 4u + 1u + 1u + \
+                              4u * EFS_NUM_FRAGMENTS + EFS_HASH_SIZE * EFS_NUM_FRAGMENTS)
+#define EFS_REBUILD_PUT_HEADER_LEN (4u + EFS_REBUILD_MARK_LEN)
 
 /* Retired message IDs: no handler in this build. The server closes a
  * connection that sends one (handler.c retired_refuse); never reuse them. */
 #define EFS_MSG_IS_RETIRED(t) \
     ((t) == 24 /* NODE_LEFT */ || \
+     (t) == 129 || (t) == 130 /* PUT_TICKETED (K13) */ || \
      (t) == 81 || (t) == 82 /* HEAL_STATUS */ || \
      (t) == 99 || (t) == 100 /* GC_FRAGMENT */ || \
      (t) == 121 || (t) == 122 /* GC_INODE */)
@@ -701,6 +715,13 @@ struct efs_msg_status_reply {
     uint64_t capacity_bytes;
     uint64_t available_bytes;
     uint64_t capacity_valid;
+    /* W154: degraded stripes awaiting rebuild on the groups this node
+     * leads (bit g/2 of degraded_sampled says groups[g/2] is current),
+     * and this node's rebuild totals since start. */
+    uint64_t degraded_chunks[2];
+    uint32_t degraded_sampled;
+    uint32_t reserved2;
+    uint64_t rebuilt_fragments, rebuild_failures, rebuild_retired;
 };
 
 /* DATA_COMMIT: make every data fragment this server acknowledged before
@@ -1171,6 +1192,29 @@ struct efs_msg_inode_flock {
  * Never valid in a publication or REPORT. */
 #define EFS_CHUNK_REC_F_PACKED 16u
 #define EFS_CHUNK_REC_PACKED_REF_BYTES 96u
+/* W154: bit 5 + i says fragment i of this PUT object was not durably
+ * acknowledged (2+1: at most one). The publication records the stripe as
+ * degraded and the group leader rebuilds the fragment when its node is
+ * reachable. Publication and REPORT only; not part of the intent digest. */
+#define EFS_CHUNK_REC_F_MISSING_SHIFT 5u
+#define EFS_CHUNK_REC_F_MISSING_MASK (((1u << EFS_NUM_FRAGMENTS) - 1u) << EFS_CHUNK_REC_F_MISSING_SHIFT)
+static inline uint32_t efs_chunk_rec_missing(uint32_t flags)
+{
+    return (flags & EFS_CHUNK_REC_F_MISSING_MASK) >> EFS_CHUNK_REC_F_MISSING_SHIFT;
+}
+/* A missing set the 2+1 code can rebuild: empty or exactly one fragment. */
+static inline int efs_chunk_missing_valid(uint32_t mask)
+{
+    return mask < (1u << EFS_NUM_FRAGMENTS) && (mask & (mask - 1u)) == 0;
+}
+/* REPORT only (W77): the next record belongs to the same atomic publication
+ * unit (one FUSE write request, or the closure of overlapping ones). A
+ * unit's records are adjacent, of one inode, at most EFS_PUB_UNIT_MAX, and
+ * publish all-or-nothing; the REPORT must carry EFS_REPORT_F_PUBID. */
+#define EFS_CHUNK_REC_F_UNIT_NEXT 256u /* bit 8: bits 5..7 are the W154 missing mask */
+#define EFS_PUB_UNIT_MAX 64u
+_Static_assert((EFS_CHUNK_REC_F_UNIT_NEXT & EFS_CHUNK_REC_F_MISSING_MASK) == 0,
+               "chunk-record flags: the W77 unit bit must not overlap the W154 missing mask");
 struct efs_chunk_rec {
     efs_ino_t ino;
     uint32_t chunk_index;
@@ -1245,7 +1289,9 @@ static inline int efs_chunk_publish_epoch(const struct efs_chunk_rec *r,
 {
     if (!r || !out || (r->publish_flags &
         ~(EFS_CHUNK_REC_F_CAPTURED_EPOCH | EFS_CHUNK_REC_F_CAPTURED_FILEID |
-          EFS_CHUNK_REC_F_FRESH_OBJECT)) ||
+          EFS_CHUNK_REC_F_FRESH_OBJECT | EFS_CHUNK_REC_F_MISSING_MASK |
+          EFS_CHUNK_REC_F_UNIT_NEXT)) ||
+        !efs_chunk_missing_valid(efs_chunk_rec_missing(r->publish_flags)) ||
         ((r->publish_flags & EFS_CHUNK_REC_F_CAPTURED_FILEID) &&
          (!(r->publish_flags & EFS_CHUNK_REC_F_CAPTURED_EPOCH) || !r->file_generation)))
         return EFS_ERR_INVAL;
@@ -1496,6 +1542,32 @@ static inline int efs_getchunks_reply_valid(
 #define EFS_REPORT_F_SYNC 1u
 #define EFS_REPORT_F_SESSION 2u
 #define EFS_REPORT_SESSION_LEN 20u
+/* W77: the REPORT's publication identity, minted by the client per built
+ * REPORT and reused verbatim when that REPORT is re-sent, so a retry joins
+ * the same request-wide decision. Wire: [mint_ns:8 BE][seq:8 BE] directly
+ * before the session suffix. */
+#define EFS_REPORT_F_PUBID 4u
+#define EFS_REPORT_PUBID_LEN 16u
+struct efs_report_pubid {
+    uint64_t mint_ns;
+    uint64_t seq;
+};
+static inline void efs_report_pubid_pack(uint8_t *p, const struct efs_report_pubid *id)
+{
+    for (unsigned i = 0; i < 8; i++) {
+        p[i] = (uint8_t)(id->mint_ns >> (56 - 8*i));
+        p[8+i] = (uint8_t)(id->seq >> (56 - 8*i));
+    }
+}
+static inline int efs_report_pubid_unpack(struct efs_report_pubid *id, const uint8_t *p)
+{
+    id->mint_ns = id->seq = 0;
+    for (unsigned i = 0; i < 8; i++) {
+        id->mint_ns = (id->mint_ns << 8) | p[i];
+        id->seq = (id->seq << 8) | p[8+i];
+    }
+    return id->mint_ns && id->seq;
+}
 static inline int efs_report_session_valid(const struct efs_opid *id)
 {
     uint8_t any = 0;

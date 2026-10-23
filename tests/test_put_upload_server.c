@@ -9,6 +9,7 @@ static struct efs_put_ticket expected;
 static uint8_t expected_wire[EFS_PUT_TICKET_WIRE_LEN];
 static int authority_rc,store_rc,race_fence,stores,authorities,export_refs;
 static uint32_t authority_state=EFS_PUT_TICKET_ADMITTED;
+static int rebuild_mode,mark_rc;static unsigned mark_checks;
 __thread int efs_tls_path_hint,efs_tls_path_used;
 void server_raft_host_submit(const uint8_t *p,uint32_t bytes,struct efs_msg_raft_mkfs_reply *r)
 {
@@ -17,6 +18,9 @@ void server_raft_host_submit(const uint8_t *p,uint32_t bytes,struct efs_msg_raft
  if(memcmp(p+2,expected_wire,sizeof(expected_wire)))r->rc=EFS_ERR_PROTO;
  if(race_fence)assert(!server_put_session_fence(&server,expected.id.client_uuid,2));
 }
+/* W154 rebuild (K13): the degraded mark is the authority. */
+int server_raft_host_degraded_check(const uint8_t mark[EFS_REBUILD_MARK_LEN])
+{struct efs_meta_degraded d;assert(!server_degraded_mark_decode(mark,&d)&&d.ino==expected.ino);mark_checks++;return mark_rc;}
 /* K13: no lane/FileID view RPC per fragment; the ticket is the authority. */
 void server_raft_host_writer_view(const struct efs_msg_inode_writer_view *q,struct efs_msg_inode_writer_view_reply *r)
 {(void)q;(void)r;assert(0);}
@@ -26,7 +30,7 @@ void server_export_put(struct efsd_server *s,struct efs_export *ex)
 {assert(s==&server);if(ex){assert(ex==&export&&export_refs==1);export_refs--;}}
 static int store(void *ctx,const struct efs_frag_id *id,const uint8_t *data,uint32_t bytes,const uint8_t sum[32])
 {
- assert(ctx==&server&&id->ino==expected.ino&&id->chunk_generation==expected.object&&id->inode_generation==7);
+ assert(ctx==&server&&id->ino==expected.ino&&id->chunk_generation==expected.object&&id->inode_generation==(rebuild_mode?0u:7u));
  assert(id->fragment_index==0&&bytes==expected.fragment_len&&data[0]==91&&sum[0]==expected.checksums[0][0]);
  assert(efs_tls_path_hint==-1);stores++;efs_tls_path_used=1;return store_rc;
 }
@@ -61,6 +65,23 @@ int main(void)
  assert(!server_put_upload(&server,frame,bytes,&path)&&stores==3); /* exact retry */
  race_fence=1;assert(server_put_upload(&server,frame,bytes,&path)==EFS_ERR_STALE&&stores==3&&!export_refs);
  race_fence=0;assert(server_put_upload(&server,frame,bytes,&path)==EFS_ERR_STALE&&stores==3);
- free(frame);char cert[EFS_MAX_PATH+80];pthread_mutex_t *mu;assert(!storage_fence_path(&server,expected.id.client_uuid,cert,&mu));assert(!unlink(cert));*strrchr(cert,'/')=0;assert(!rmdir(cert));*strrchr(cert,'/')=0;assert(!rmdir(cert));assert(!rmdir(root));
- puts("ticketed PUT receiver: exact frame/checksum, ADMITTED-only authority without a per-fragment lane view, IO retention, exact retry and revoke-before-store floor PASS");
+ /* W154 rebuild of fragment 0 on node 1: the mark, not a ticket, decides. */
+ rebuild_mode=1;stores=0;
+ struct efs_meta_degraded mark={.ino=expected.ino,.inode_gen=7,.object_gen=expected.object,.chunk_index=0,.lane=0,.missing_mask=1};
+ memcpy(mark.nodes,expected.nodes,sizeof(mark.nodes));memcpy(mark.checksums,expected.checksums,sizeof(mark.checksums));
+ uint32_t rb=EFS_REBUILD_PUT_HEADER_LEN+expected.fragment_len;uint8_t *rf=malloc(rb);assert(rf);
+ efs_put_upload_wr32(rf,1);server_degraded_mark_encode(rf+4,&mark);memset(rf+EFS_REBUILD_PUT_HEADER_LEN,91,expected.fragment_len);
+ struct efs_meta_degraded back;assert(!server_degraded_mark_decode(rf+4,&back)&&!memcmp(&back,&mark,sizeof(mark)));
+ assert(!server_rebuild_put(&server,rf,rb,&path)&&stores==1&&mark_checks==1&&path==1&&!export_refs);
+ mark_rc=EFS_ERR_NOT_FOUND;assert(server_rebuild_put(&server,rf,rb,&path)==EFS_ERR_STALE&&stores==1);
+ mark_rc=EFS_ERR_STALE;assert(server_rebuild_put(&server,rf,rb,&path)==EFS_ERR_STALE&&stores==1);mark_rc=0;
+ rf[EFS_REBUILD_PUT_HEADER_LEN]^=1;assert(server_rebuild_put(&server,rf,rb,&path)==EFS_ERR_PROTO&&mark_checks==3);rf[EFS_REBUILD_PUT_HEADER_LEN]^=1;
+ mark.missing_mask=2;server_degraded_mark_encode(rf+4,&mark); /* fragment 1 lives on node 2 */
+ assert(server_rebuild_put(&server,rf,rb,&path)==EFS_ERR_INVAL&&mark_checks==3);
+ mark.missing_mask=3;server_degraded_mark_encode(rf+4,&mark);
+ assert(server_rebuild_put(&server,rf,rb,&path)==EFS_ERR_INVAL&&mark_checks==3);
+ mark.missing_mask=1;server_degraded_mark_encode(rf+4,&mark);efs_put_upload_wr32(rf,2);
+ assert(server_rebuild_put(&server,rf,rb,&path)==EFS_ERR_INVAL);
+ free(rf);free(frame);char cert[EFS_MAX_PATH+80];pthread_mutex_t *mu;assert(!storage_fence_path(&server,expected.id.client_uuid,cert,&mu));assert(!unlink(cert));*strrchr(cert,'/')=0;assert(!rmdir(cert));*strrchr(cert,'/')=0;assert(!rmdir(cert));assert(!rmdir(root));
+ puts("ticketed PUT receiver: exact frame/checksum, ADMITTED-only authority without a per-fragment lane view, IO retention, exact retry and revoke-before-store floor PASS; rebuild PUT authorized only by the exact degraded mark PASS");
 }

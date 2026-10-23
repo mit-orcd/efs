@@ -521,6 +521,20 @@ int efs_kv_key_gc_prefix(uint32_t shard, uint8_t *out, uint32_t *len)
     return start(out, len, shard, EFS_KV_KIND_GC, 0, EFS_KV_KEY_MAX);
 }
 
+int efs_kv_key_degraded(uint32_t shard, efs_ino_t ino, uint64_t gen, uint8_t lane,
+                        uint32_t chunk_index, uint8_t *out, uint32_t *len)
+{
+    int rc = efs_kv_key_gc(shard, ino, gen, lane, chunk_index, out, len);
+    if (rc == EFS_OK)
+        out[2] = EFS_KV_KIND_DEGRADED;
+    return rc;
+}
+
+int efs_kv_key_degraded_prefix(uint32_t shard, uint8_t *out, uint32_t *len)
+{
+    return start(out, len, shard, EFS_KV_KIND_DEGRADED, 0, EFS_KV_KEY_MAX);
+}
+
 int efs_kv_key_reap(uint32_t shard, efs_ino_t ino, uint8_t *out,
                     uint32_t *len)
 {

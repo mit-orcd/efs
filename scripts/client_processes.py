@@ -8,6 +8,10 @@ import signal
 import sys
 import time
 
+# Seconds a client may take to leave on its own: a client without endpoint
+# ownership before refusal, and every retired client before giving up.
+NATURAL_RETIRE_S = 10
+
 
 def clients(proc=Path('/proc')):
     result = []
@@ -104,7 +108,7 @@ def retire(mount):
             # A naturally exiting client can close its control socket before
             # its last worker joins. Never signal without endpoint ownership;
             # allow bounded natural retirement instead.
-            deadline = time.monotonic() + 10
+            deadline = time.monotonic() + NATURAL_RETIRE_S
             while (pid, path, stamp) in clients() and time.monotonic() < deadline:
                 time.sleep(.1)
             if (pid, path, stamp) not in clients():
@@ -125,7 +129,7 @@ def retire(mount):
                     pass
         finally:
             os.close(fd)
-    deadline = time.monotonic() + 10
+    deadline = time.monotonic() + NATURAL_RETIRE_S
     while any(row[1] == mount for row in clients()):
         if time.monotonic() >= deadline:
             raise RuntimeError(f'client remains alive for {mount}; no forced kill attempted')

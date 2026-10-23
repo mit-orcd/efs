@@ -448,6 +448,15 @@ void server_handle_conn(struct efs_conn *conn)
                 efs_iostats_now_us()-start,result!=EFS_OK);
             break;
         }
+        case EFS_MSG_REBUILD_PUT: {
+            /* W154 rebuild of a published object's missing fragment: the
+             * durable degraded mark, not a ticket, authorizes it (K13). */
+            uint8_t reply[EFS_PUT_REPLY_LEN],path=0xff;
+            int result=server_rebuild_put(g_server,payload,payload_len,&path);
+            efs_put_reply_encode(result,path,g_server->put_boot_epoch,reply);
+            efs_conn_send_msg(conn,EFS_MSG_REBUILD_PUT_REPLY,reply,sizeof(reply));
+            break;
+        }
         case EFS_MSG_GC_INODE_BATCH: {
             /* W124: journal-first acceptance of a reaped-inode batch. Each
              * rc is OK only once the record is fsynced and its fence set. */
@@ -690,6 +699,17 @@ void server_handle_conn(struct efs_conn *conn)
                 g_server->storage_paths, g_server->storage_path_count,
                 reply.quota, reply.used, &reply.capacity_bytes,
                 &reply.available_bytes) == 0;
+            for (int g = 0; g < 2; g++)
+                reply.degraded_chunks[g] =
+                    __atomic_load_n(&g_server->degraded_chunks[g], __ATOMIC_RELAXED);
+            reply.degraded_sampled =
+                __atomic_load_n(&g_server->degraded_sampled_mask, __ATOMIC_RELAXED);
+            reply.rebuilt_fragments =
+                __atomic_load_n(&g_server->rebuilt_fragments, __ATOMIC_RELAXED);
+            reply.rebuild_failures =
+                __atomic_load_n(&g_server->rebuild_failures, __ATOMIC_RELAXED);
+            reply.rebuild_retired =
+                __atomic_load_n(&g_server->rebuild_retired, __ATOMIC_RELAXED);
             efs_conn_send_msg(conn, EFS_MSG_STATUS_REPLY, &reply, sizeof(reply));
             break;
         }
@@ -1025,6 +1045,7 @@ void server_handle_conn(struct efs_conn *conn)
             r.status = EFS_INODE_RPC_ERROR;
             int bad = 0;
             struct efs_opid session, *identity = NULL;
+            struct efs_report_pubid pubid, *publication = NULL;
             uint32_t flags = 0;
             uint32_t count = 0;
             uint32_t ino_count = 0;
@@ -1035,13 +1056,22 @@ void server_handle_conn(struct efs_conn *conn)
                 const uint8_t *raw = (const uint8_t *)payload + sizeof(*req);
                 size_t avail = payload_len - sizeof(*req);
                 flags = req->sync;
-                if (flags & ~(EFS_REPORT_F_SYNC | EFS_REPORT_F_SESSION)) bad = 1;
+                if (flags & ~(EFS_REPORT_F_SYNC | EFS_REPORT_F_SESSION |
+                              EFS_REPORT_F_PUBID)) bad = 1;
                 if (flags & EFS_REPORT_F_SESSION) {
                     if (avail < EFS_REPORT_SESSION_LEN) bad = 1;
                     else {
                         avail -= EFS_REPORT_SESSION_LEN;
                         if (!efs_report_session_unpack(&session, raw + avail)) bad = 1;
                         else identity = &session;
+                    }
+                }
+                if (!bad && (flags & EFS_REPORT_F_PUBID)) {
+                    if (avail < EFS_REPORT_PUBID_LEN) bad = 1;
+                    else {
+                        avail -= EFS_REPORT_PUBID_LEN;
+                        if (!efs_report_pubid_unpack(&pubid, raw + avail)) bad = 1;
+                        else publication = &pubid;
                     }
                 }
                 size_t used = 0;
@@ -1070,7 +1100,8 @@ void server_handle_conn(struct efs_conn *conn)
                 if (bad)
                     r.status = EFS_INODE_RPC_INVAL;
                 else
-                    server_raft_host_report(recs, count, irecs, ino_count, flags, identity, &r);
+                    server_raft_host_report(recs, count, irecs, ino_count, flags, identity,
+                                            publication, &r);
             }
             efs_conn_send_msg(conn, EFS_MSG_REPORT_CHUNKS_REPLY, &r,
                               sizeof(r));

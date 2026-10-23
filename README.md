@@ -25,7 +25,8 @@ machine class that runs the binaries (`-march=native`).
 
 ```bash
 make
-make test
+make test        # fast unit tests, about 45 s
+make test-long   # slow tests (deadlines, daemons, faults), about 3 min
 make docs-check
 ```
 

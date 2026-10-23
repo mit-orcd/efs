@@ -114,8 +114,8 @@ COMMON_SRCS = src/meta/append_plan.c $(COMMON_DIR)/publication.c $(COMMON_DIR)/p
 COMMON_OBJS = $(COMMON_SRCS:.c=.o)
 LIB = libefs.a
 
-TEST_SRCS = tests/test_rdma_segmented.c tests/test_expiry.c tests/test_query_policy.c tests/test_query_refresh.c tests/test_txn_resolve_faults.c tests/test_txn_retire.c tests/test_namespace_session.c tests/test_query_catalog.c tests/test_name_index.c tests/test_append_transaction.c tests/test_append_cleanup.c tests/test_store_durability.c tests/test_append_receipt.c tests/test_put_ticket.c tests/test_store_gc.c tests/test_reclaim.c tests/test_bench_latency.c tests/test_store_overwrite.c tests/test_writer_routing.c tests/test_kv_snapshot_tail.c tests/test_kv_seg_index.c tests/test_kv_seg_bloom.c tests/test_kv_lsm_concurrent.c tests/test_kv_block_hash.c tests/test_mtime_barrier.c tests/test_publication_session.c tests/test_publication_ack.c tests/test_publication_recovery.c tests/test_lane_bootstrap_recovery.c tests/test_fence_view.c tests/test_reply_buffers.c tests/test_bufpool.c tests/test_erasure.c tests/test_placement.c tests/test_rdma_xprt.c tests/test_wire.c tests/test_declaration_gate.c tests/test_data.c tests/test_kv.c tests/test_kv_lsm.c tests/test_raft_store.c tests/test_meta_apply.c tests/test_raft.c tests/test_follower_bound.c tests/test_sim.c tests/test_txn.c tests/test_session.c tests/test_lock.c tests/test_stage_evict.c tests/test_conn_fd.c tests/test_query_disk.c tests/test_query_delta.c tests/test_query_disk_io.c
-TEST_BINS = tests/test_rdma_segmented tests/test_expiry tests/test_query_policy tests/test_query_refresh tests/test_txn_resolve_faults tests/test_txn_retire tests/test_namespace_session tests/test_query_catalog tests/test_name_index tests/test_append_transaction tests/test_append_cleanup tests/test_store_durability tests/test_append_receipt tests/test_put_ticket tests/test_store_gc tests/test_reclaim tests/test_bench_latency tests/test_store_overwrite tests/test_writer_routing tests/test_kv_snapshot_tail tests/test_kv_seg_index tests/test_kv_seg_bloom tests/test_kv_lsm_concurrent tests/test_kv_block_hash tests/test_mtime_barrier tests/test_publication_session tests/test_publication_ack tests/test_publication_recovery tests/test_lane_bootstrap_recovery tests/test_fence_view tests/test_reply_buffers tests/test_bufpool tests/test_erasure tests/test_placement tests/test_rdma_xprt tests/test_wire tests/test_declaration_gate tests/test_data tests/test_kv tests/test_kv_lsm tests/test_raft_store tests/test_meta_apply tests/test_raft tests/test_follower_bound tests/test_sim tests/test_txn tests/test_session tests/test_lock tests/test_stage_evict tests/test_conn_fd tests/test_query_disk tests/test_query_delta tests/test_query_disk_io
+TEST_SRCS = tests/test_rdma_segmented.c tests/test_expiry.c tests/test_query_policy.c tests/test_query_refresh.c tests/test_txn_resolve_faults.c tests/test_txn_retire.c tests/test_pub_stage.c tests/test_namespace_session.c tests/test_query_catalog.c tests/test_name_index.c tests/test_append_transaction.c tests/test_append_cleanup.c tests/test_store_durability.c tests/test_append_receipt.c tests/test_put_ticket.c tests/test_store_gc.c tests/test_reclaim.c tests/test_bench_latency.c tests/test_store_overwrite.c tests/test_writer_routing.c tests/test_kv_snapshot_tail.c tests/test_kv_seg_index.c tests/test_kv_seg_bloom.c tests/test_kv_lsm_concurrent.c tests/test_kv_block_hash.c tests/test_mtime_barrier.c tests/test_publication_session.c tests/test_publication_ack.c tests/test_publication_recovery.c tests/test_lane_bootstrap_recovery.c tests/test_fence_view.c tests/test_reply_buffers.c tests/test_bufpool.c tests/test_erasure.c tests/test_placement.c tests/test_rdma_xprt.c tests/test_wire.c tests/test_declaration_gate.c tests/test_data.c tests/test_kv.c tests/test_kv_lsm.c tests/test_raft_store.c tests/test_meta_apply.c tests/test_raft.c tests/test_follower_bound.c tests/test_sim.c tests/test_txn.c tests/test_session.c tests/test_lock.c tests/test_stage_evict.c tests/test_conn_fd.c tests/test_query_disk.c tests/test_query_delta.c tests/test_query_disk_io.c
+TEST_BINS = tests/test_rdma_segmented tests/test_expiry tests/test_query_policy tests/test_query_refresh tests/test_txn_resolve_faults tests/test_txn_retire tests/test_pub_stage tests/test_namespace_session tests/test_query_catalog tests/test_name_index tests/test_append_transaction tests/test_append_cleanup tests/test_store_durability tests/test_append_receipt tests/test_put_ticket tests/test_store_gc tests/test_reclaim tests/test_bench_latency tests/test_store_overwrite tests/test_writer_routing tests/test_kv_snapshot_tail tests/test_kv_seg_index tests/test_kv_seg_bloom tests/test_kv_lsm_concurrent tests/test_kv_block_hash tests/test_mtime_barrier tests/test_publication_session tests/test_publication_ack tests/test_publication_recovery tests/test_lane_bootstrap_recovery tests/test_fence_view tests/test_reply_buffers tests/test_bufpool tests/test_erasure tests/test_placement tests/test_rdma_xprt tests/test_wire tests/test_declaration_gate tests/test_data tests/test_kv tests/test_kv_lsm tests/test_raft_store tests/test_meta_apply tests/test_raft tests/test_follower_bound tests/test_sim tests/test_txn tests/test_session tests/test_lock tests/test_stage_evict tests/test_conn_fd tests/test_query_disk tests/test_query_delta tests/test_query_disk_io
 TEST_SRCS += tests/test_kv_reader_gate.c
 TEST_SRCS += tests/test_directory_sync_group.c
 TEST_SRCS += tests/test_frag_record.c tests/test_small_segment.c tests/test_packed_segment.c tests/test_pack_ledger.c tests/test_pack_ledger_recovery.c tests/test_pack_switch.c tests/test_packed_reader.c tests/test_pack_validate_once.c
@@ -209,34 +209,28 @@ test-report-pressure:
 	python3 tests/test_read_peer_order.py
 	python3 tests/test_get_pair_budget.py
 	python3 tests/test_get_pair_readiness.py
-	python3 tests/test_put_retry_budget.py
 	python3 tests/test_put_reply_deadline.py
 	python3 tests/test_put_tcp_frame.py
 	python3 tests/test_put_window_deadline.py
 	python3 tests/test_write_budget.py
-	python3 tests/test_append_sequence.py
 	python3 tests/test_append_session_admission.py
 	python3 tests/test_append_session_host.py
 	python3 tests/test_session_read_proof.py
 	python3 tests/test_append_host_authority.py
 	python3 tests/test_report_orphan.py
 
-test-create-errors: $(LIB)
+test-create-errors: $(LIB) tests/shutdown_faults/efsd
 	python3 tests/test_kv_wal_faults.py
 	python3 tests/test_create_errors.py
 	python3 tests/test_committed_directory_stage.py
 	python3 tests/test_create_retry_identity.py
-	python3 tests/test_create_retry_ack.py
 	python3 tests/test_open_lease.py
 	python3 tests/test_open_busy.py
 	python3 tests/test_unlink_verdict.py
 	python3 tests/test_gc_verdict.py
 	python3 tests/test_retired_messages.py
 	python3 tests/test_node_left_refused.py
-	$(MAKE) tests/shutdown_faults/efsd
 	python3 tests/test_shutdown_bounded.py
-	python3 tests/test_shutdown_stuck_worker.py
-	python3 tests/test_shutdown_blocked_io.py
 	python3 tests/test_apply_unsupported.py
 
 test-fold-observation:
@@ -293,7 +287,6 @@ test-stop-control:
 	python3 tests/test_client_ready.py
 	python3 tests/test_stop_dirty_drain.py
 	python3 tests/test_fixture_interrupt.py
-	python3 tests/test_client_processes.py
 
 test-wb-runtime:
 	python3 tests/test_wb_runtime.py
@@ -310,6 +303,7 @@ test-wb-runtime:
 	python3 tests/test_inode_writer_view_budget.py
 	python3 tests/test_readdir_reply_boundary.py
 	python3 tests/test_report_frame_boundary.py
+	python3 tests/test_pub_units.py
 	python3 tests/test_report_forward.py
 	python3 tests/test_report_zero_eof.py
 	python3 tests/test_report_retry_eof.py
@@ -337,6 +331,12 @@ test-client-stop:
 
 all: $(LIB) efsd efs-fuse efs-bench efs-mgmt tests
 
+# Test programs outside TEST_BINS that test recipes run (fault daemons and
+# helpers built with extra flags). They are real prerequisites of test and
+# test-long, never built inside a recipe, so test-long works on its own and a
+# parallel make cannot start a test before its binary exists.
+TEST_SPECIAL_BINS = tests/shutdown_faults/efsd tests/test_put_storage_fence tests/test_put_upload_server tests/test_data_commit tests/faults/test_kv_compact_crash
+
 # blake3-bench always relinks so a stale binary cannot linger after CPU changes.
 FORCE:
 
@@ -357,22 +357,27 @@ leak-check:
 	bash tests/leak_check.sh
 
 check:
-	@rc=0; $(MAKE) test || rc=1; $(MAKE) docs-check || rc=1; $(MAKE) leak-check || rc=1; exit $$rc
+	@rc=0; $(MAKE) test-all || rc=1; $(MAKE) docs-check || rc=1; $(MAKE) leak-check || rc=1; exit $$rc
 
-test: all
+# Everything any test needs, built in one parallel make before tests start
+# (scripts/make_test_summary.sh).
+.PHONY: test-bins
+test-bins: all $(TEST_SPECIAL_BINS)
+
+# make test: the fast, CPU-bound unit suite for every edit (each command well
+# under a second; about a minute in all). Slow tests belong in test-long.
+test: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_retired_root_markers.py
+	python3 tests/test_d39_model.py
 	python3 tests/faults/test_create_retry_fault.py
 	python3 tests/faults/test_create_retry_integrated.py
 	python3 tests/faults/test_append_cleanup_retry.py
-	$(MAKE) tests/test_put_storage_fence
 	./tests/test_put_storage_fence
 	python3 tests/test_storage_fence_members.py
 	python3 tests/test_pack_object_remote.py
 	python3 tests/test_storage_fence_retry.py
 	python3 tests/test_session_finish_retry.py
-	$(MAKE) tests/test_put_upload_server
 	./tests/test_put_upload_server
-	$(MAKE) tests/test_data_commit
 	./tests/test_data_commit
 	python3 tests/test_applied_interval.py
 	python3 tests/test_cursor_checkpoint.py
@@ -409,7 +414,6 @@ test: all
 	python3 tests/test_readindex_coalescer.py
 	python3 tests/test_read_waiters.py
 	python3 tests/test_write_prof.py
-	python3 tests/test_apply_ring.py
 	python3 tests/test_readindex_remote_pair.py
 	python3 tests/test_read_retry_budget.py
 	python3 tests/test_host_read_deadline.py
@@ -418,7 +422,6 @@ test: all
 	python3 tests/test_lookup_path_authority.py
 	python3 tests/test_read_control_host.py
 	python3 tests/test_queued_read_control.py
-	python3 tests/test_raft_ack_window.py
 	python3 tests/test_raft_pending_reads.py
 	python3 tests/test_prepare_cohort.py
 	python3 tests/test_append_cohort.py
@@ -431,9 +434,6 @@ test: all
 	python3 tests/test_namespace_authority.py
 	python3 tests/test_w23_samples.py
 	python3 tests/test_read_verify.py
-	python3 tests/test_opid_admission.py
-	python3 tests/test_server_processes.py
-	python3 tests/test_storage_root_inventory.py
 	python3 tests/test_query_rpc_routing.py
 	python3 tests/test_mgmt_session_routing.py
 	python3 tests/test_mgmt_expiry_lookup.py
@@ -448,7 +448,6 @@ test: all
 	python3 tests/test_txn_read_reuse.py
 	python3 tests/test_publication_rpc.py
 	python3 tests/test_publication_session_rpc.py
-	python3 tests/test_session_latch_tsan.py
 	python3 tests/test_publication_session_reuse.py
 	python3 tests/test_lease_edge_rpc.py
 	python3 tests/test_lease_submission_proof.py
@@ -473,12 +472,6 @@ test: all
 	python3 tests/test_lock_apply_verdict.py
 	python3 tests/test_applied_cursor.py
 	python3 tests/test_tiny_fragment_audit.py
-	python3 tests/test_bench_cli.py
-	python3 tests/test_bench_profile.py
-	python3 tests/test_storage_principles.py
-	python3 tests/test_make_test_recipe.py
-	python3 tests/test_w125_harness.py
-	python3 tests/test_make_test_summary_runner.py
 	python3 tests/test_tmpdir_hygiene.py
 	python3 tests/test_pressure_cohort.py
 	python3 tests/test_alloc_value_guard.py
@@ -488,7 +481,6 @@ test: all
 	python3 tests/test_nuc_block_analysis.py
 	python3 tests/test_nuc_controller_timeout.py
 	python3 tests/test_orcd_ready.py
-	python3 tests/test_orcd_verify_resume.py
 	python3 tests/test_pressure_admission.py
 	python3 tests/test_pressure_background.py
 	python3 tests/test_pressure_index.py
@@ -518,7 +510,6 @@ test: all
 	python3 tests/test_read_failure_admission.py
 	python3 tests/test_read_refs_window.py
 	python3 tests/test_query_capacity_mount.py
-	python3 tests/test_client_memory.py
 	python3 tests/test_rollup_allocation_failure.py
 	python3 tests/test_rollup_budget.py
 	python3 tests/test_recorder_stop.py
@@ -529,6 +520,7 @@ test: all
 	./tests/test_wire
 	./tests/test_declaration_gate
 	python3 tests/test_declaration_gate_handler.py
+	python3 tests/test_rdma_fork_poller.py
 	./tests/test_data
 	./tests/test_kv
 	./tests/test_expiry
@@ -557,39 +549,26 @@ test: all
 	python3 tests/test_host_retire.py
 	python3 tests/test_recv_overlap.py
 	python3 tests/test_kv_mtab_batch.py
-	./tests/test_kv_lsm
-	./tests/test_kv_insertion_buffer
-	$(MAKE) tests/faults/test_kv_compact_crash
 	./tests/faults/test_kv_compact_crash
 	./tests/test_query_policy
 	./tests/test_query_catalog
 	./tests/test_query_disk
-	EFS_QUERY_DELTA_DIRS=1 ./tests/test_query_delta
-	EFS_QUERY_DELTA_PARENTS=64 EFS_QUERY_DELTA_LANES=1 EFS_QUERY_DELTA_MULTI_LANES=1 ./tests/test_query_delta
-	./tests/test_query_disk_io
-	python3 tests/test_query_sort_peak_negative.py
-	python3 tests/test_query_subtree_negative.py
 	./tests/test_query_refresh
 	./tests/test_name_index
 	./tests/test_bench_latency
 	./tests/test_store_overwrite
-	./tests/test_store_durability
 	./tests/test_directory_sync_group
 	python3 tests/test_meta_flush_batch.py
 	./tests/test_put_ticket
 	./tests/test_store_gc
 	./tests/test_store_gc unlimited
-	./tests/test_reclaim
 	./tests/test_writer_routing
 	./tests/test_kv_snapshot_tail
 	./tests/test_kv_seg_index
 	./tests/test_kv_seg_bloom
-	./tests/test_kv_lsm_concurrent 4
 	./tests/test_kv_block_hash
-	./tests/test_raft_store
 	python3 tests/test_raft_replay_reads.py
 	python3 tests/test_raft_append_offsets.py
-	python3 tests/test_raft_rotate_stall.py
 	./tests/test_mtime_barrier
 	./tests/test_session_owned_capture
 	python3 scripts/reviews/k05_mtime_fence_capture.py
@@ -597,7 +576,6 @@ test: all
 	./tests/test_publication_ack
 	./tests/test_publication_recovery
 	./tests/test_append_receipt
-	./tests/test_append_transaction
 	./tests/test_append_cleanup
 	python3 tests/test_append_prepare_batch.py
 	python3 tests/test_meta_cmd_namespace.py
@@ -605,7 +583,6 @@ test: all
 	python3 tests/test_append_catchup_host.py
 	python3 tests/test_fin_abort_handoff.py
 	python3 tests/test_append_single_host.py
-	./tests/test_meta_apply
 	./tests/test_retained_namespace_audit
 	./tests/test_lane_bootstrap_recovery
 	./tests/test_raft
@@ -614,7 +591,6 @@ test: all
 	./tests/test_sim
 	./tests/test_txn
 	./tests/test_txn_resolve_faults
-	./tests/test_txn_retire
 	python3 tests/test_txn_decision_sweep.py
 	python3 tests/test_txn_apply_exact.py
 	python3 tests/test_txn_apply_retry.py
@@ -651,20 +627,17 @@ test: all
 	python3 tests/test_namespace_receipt_pending.py
 	python3 tests/test_query_loaded_oracle.py
 	python3 tests/test_valgrind_verdict.py
-	python3 tests/test_leak_gate.py
 	python3 tests/test_txn_parts_bounds.py
 	python3 tests/test_prepare_bounds.py
 	python3 tests/test_raft_tail.py
 	python3 tests/test_query_policy_forward.py
 	python3 tests/test_command_policy_mount.py
-	python3 tests/test_efs_commands.py
 	python3 tests/test_query_rpc_retry.py
 	python3 tests/test_query_target_route.py
 	python3 tests/test_posix_query_budget.py
 	python3 tests/test_namespace_bounds.py
 	python3 tests/test_namespace_fixture.py
 	python3 tests/test_namespace_envelope_fixture.py
-	python3 tests/test_posix_phase_trace.py
 	python3 tests/test_deepsteps_transparent.py
 	python3 tests/test_query_work_trace.py
 	python3 tests/test_gc_fixture_drain.py
@@ -684,15 +657,17 @@ test: all
 	./tests/test_placement
 	./tests/test_lock
 	./tests/test_stage_evict
-	python3 tests/test_stage_evict_lru.py
 	./tests/test_conn_fd
 
 # Rebuild when public headers change (struct layouts in metadata.h, etc.).
 # .build_id.stamp changes content (and mtime) only when the git id changes,
 # so every object picks up a moved HEAD or dirty-flag flip — a stale object
 # keeping the old -DEFS_BUILD_ID splits the cluster at the HELLO gate.
-.build_id.stamp: FORCE
-	@echo '$(EFS_GIT_ID)' | cmp -s - $@ 2>/dev/null || echo '$(EFS_GIT_ID)' > $@
+# It is updated while this Makefile is parsed, not by a FORCE recipe: make
+# counts a FORCE target as remade under `make -n` and in every recursive
+# make, so all objects looked out of date and scripts/make_test_summary.sh
+# re-ran ~500 compiles serially from `make -n test`.
+_build_id_stamp := $(shell echo '$(EFS_GIT_ID)' | cmp -s - .build_id.stamp 2>/dev/null || echo '$(EFS_GIT_ID)' > .build_id.stamp)
 
 $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS) $(MGMT_OBJ) $(TEST_SRCS:.c=.o): \
 	$(wildcard include/efs/*.h) .build_id.stamp
@@ -964,6 +939,55 @@ test-rdma-message:
 	$(CC) -std=c99 -O2 -g -Wall -Wextra -Werror -Iinclude tests/test_rdma_message.c src/common/rdma_message.c -pthread -o "$$bin" && "$$bin"
 
 test: test-rdma-message
+
+# make test-long: tests that wait on real deadlines, start daemons or
+# processes, inject faults or carry heavy workloads (1 s or more each on an
+# 8-core host). Not part of `make test`, the fast unit suite; `make test-all`
+# runs both and is what the gates run.
+.PHONY: test-long test-all
+test-long: all $(TEST_SPECIAL_BINS)
+	python3 tests/test_shutdown_blocked_io.py
+	python3 tests/test_client_processes.py
+	python3 tests/test_shutdown_stuck_worker.py
+	./tests/test_reclaim
+	python3 tests/test_opid_admission.py
+	EFS_QUERY_DELTA_DIRS=1 ./tests/test_query_delta
+	python3 tests/test_raft_ack_window.py
+	./tests/test_kv_lsm
+	python3 tests/test_server_processes.py
+	python3 tests/test_w125_harness.py
+	./tests/test_append_transaction
+	python3 tests/test_orcd_verify_resume.py
+	./tests/test_kv_lsm_concurrent 4
+	./tests/test_txn_retire
+	./tests/test_pub_stage
+	python3 tests/test_bench_cli.py
+	python3 tests/test_bench_profile.py
+	python3 tests/test_query_subtree_negative.py
+	python3 tests/test_query_sort_peak_negative.py
+	EFS_QUERY_DELTA_PARENTS=64 EFS_QUERY_DELTA_LANES=1 EFS_QUERY_DELTA_MULTI_LANES=1 ./tests/test_query_delta
+	python3 tests/test_raft_rotate_stall.py
+	python3 tests/test_leak_gate.py
+	python3 tests/test_append_sequence.py
+	./tests/test_store_durability
+	python3 tests/test_storage_root_inventory.py
+	python3 tests/test_efs_commands.py
+	python3 tests/test_client_memory.py
+	python3 tests/test_storage_principles.py
+	python3 tests/test_session_latch_tsan.py
+	./tests/test_kv_insertion_buffer
+	python3 tests/test_make_test_summary_runner.py
+	./tests/test_query_disk_io
+	./tests/test_raft_store
+	./tests/test_meta_apply
+	python3 tests/test_put_retry_budget.py
+	python3 tests/test_make_test_recipe.py
+	python3 tests/test_stage_evict_lru.py
+	python3 tests/test_create_retry_ack.py
+	python3 tests/test_apply_ring.py
+	python3 tests/test_posix_phase_trace.py
+
+test-all: test test-long
 
 # Read routing hints must rebuild the production fragment selector.
 src/client/read.o: src/client/read_peer_order.h

@@ -3270,6 +3270,7 @@ int efs_export_set_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_in
                sizeof(efs_node_id_t) * EFS_NUM_FRAGMENTS);
         memcpy(ex->chunks[pos].checksums, checksums,
                EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
+        ex->chunks[pos].map_snap = 0;
         return EFS_OK;
     }
 
@@ -3374,6 +3375,7 @@ int efs_export_set_chunk_gen(struct efs_export *ex, efs_ino_t ino,
     if (chunk_idx_get(ex, ino, chunk_index, &pos) != 0)
         return EFS_ERR_NOT_FOUND;
     ex->chunks[pos].generation = generation;
+    ex->chunks[pos].map_snap = 0;
     memset(&ex->chunks[pos].packed, 0, sizeof(ex->chunks[pos].packed));
     memset(&ex->chunks[pos].read_view, 0, sizeof(ex->chunks[pos].read_view));
     /* A new base retires deltas patched onto the previous image. */
@@ -3412,6 +3414,23 @@ int efs_export_set_chunk_view(struct efs_export *ex, efs_ino_t ino,
     if (chunk_idx_get(ex, ino, ci, &pos) != 0)
         return EFS_ERR_NOT_FOUND;
     ex->chunks[pos].read_view = *view;
+    return EFS_OK;
+}
+
+int efs_export_set_chunk_snap(struct efs_export *ex, efs_ino_t ino,
+                              uint32_t ci, uint64_t snap)
+{
+    uint64_t pos;
+    if (!ex)
+        return EFS_ERR_INVAL;
+    if (export_is_sharded_root(ex)) {
+        struct efs_export *tab = chunk_tab_peek(ex, ino, ci);
+        if (tab && tab != ex)
+            return efs_export_set_chunk_snap(tab, ino, ci, snap);
+    }
+    if (chunk_idx_get(ex, ino, ci, &pos) != 0)
+        return EFS_ERR_NOT_FOUND;
+    ex->chunks[pos].map_snap = snap;
     return EFS_OK;
 }
 

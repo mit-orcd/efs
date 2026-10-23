@@ -3,19 +3,48 @@
 [Quick start](../using/quickstart.md) · [Operations](../operations/operations.md) ·
 [What to work on](../status/README.md) · [Verification plan](verification.md)
 
-## `make test`
+## `make test`, `make test-long` and `make test-all`
 
-Builds and runs the suites listed in the current Makefile, including the
+The code tests come in two groups, so that the everyday suite stays fast:
+
+| Target | What runs | Typical time (8-core host) | When |
+| --- | --- | --- | --- |
+| `make test` | Fast, CPU-bound unit tests; each command well under a second | about 45 s | Every edit |
+| `make test-long` | Tests that wait on real deadlines, start daemons or processes, inject faults, or carry heavy workloads (1 s or more each) | about 3 min | Before merging and in gates |
+| `make test-all` | Both | about 3.5 min | Gates, release checks, `make check` |
+
+A new test goes into `test` only if it is CPU-bound and finishes in well
+under a second; anything slower goes into `test-long`.
+`tests/test_make_test_recipe.py` checks that `test-all` runs every unit
+binary and Python test, and that no command runs in both groups.
+`scripts/make_test_summary.sh` runs `test-all` by default; set
+`EFS_TEST_TARGET=test` or `test-long` to run one group. It writes
+`timings.tsv`, slowest first, to keep the split honest. With
+`EFS_TEST_JOBS=4` it runs tests in a bounded pool, each with its own
+`TMPDIR`. Tests that use real processes, shutdown, RDMA, timing,
+sanitizers, benchmarks or build introspection still run one at a time,
+after the pool. The exclusive group, about 59 s, sets the floor for `test-all`.
+Measured on intel2 (8 cores, October 23):
+
+| Target | Serial | `EFS_TEST_JOBS=4` |
+| --- | --- | --- |
+| `test` | 43 s | 13 s |
+| `test-all` | 185 s | 95–96 s |
+
+Verdicts were identical in both modes. A test that fails only in the
+pool belongs in the runner's `EXCLUSIVE` pattern. Do not retry it.
+
+Together they run the suites listed in the current Makefile, including the
 simulator, metadata/session/transaction, store, buffer, publication and
-writeback gates. The list evolves; use `TEST_BINS` and the `test` target
-rather than this guide as a fixed suite inventory. Focused protocol tests
+writeback gates. The list evolves; use `TEST_BINS` and the `test` and
+`test-long` targets rather than this guide as a fixed suite inventory. Focused protocol tests
 exercise logical behavior; public callbacks, real storage and RDMA require
 their own acceptance gates. [Verification](verification.md) distinguishes
 simulation, process restart and hardware power loss.
 
 Everything must be green. There is no accepted-failure list.
-`make check` runs `test`, `docs-check` and `leak-check`, and fails if any
-of them fails.
+`make check` runs `test-all`, `docs-check` and `leak-check`, and fails if
+any of them fails.
 
 ## `make leak-check`
 

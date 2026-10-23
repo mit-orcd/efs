@@ -37,6 +37,7 @@ static int efs_open_release_pending(efs_ino_t i){assert(i==4097);holds++;return 
 static void efs_client_stage_evict_ino(efs_ino_t i){assert(i==4097);evicts++;}
 #define CLOSE_ADMIT_SPINS 250u
 static int usleep(unsigned u){(void)u;return 0;}
+void efs_client_opid_wait(unsigned max_ms){usleep(max_ms*1000u);}
 static int efs_client_rpc_past_deadline(void){return 0;}
 static int efs_open_close_unadmitted(efs_ino_t i){(void)i;return 0;}
 static int efs_wb_inode_stalled(efs_ino_t i){(void)i;return 0;}

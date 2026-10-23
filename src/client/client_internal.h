@@ -318,6 +318,8 @@ struct efs_client_create_request {
     uint64_t generation;
     int slot,active,attempted,admitted,complete,result,revoked;
 };
+/* Wait until an identity ends or max_ms passes (admission retry pacing). */
+void efs_client_opid_wait(unsigned max_ms);
 int efs_client_create_begin(struct efs_client_create_request *,efs_ino_t,
                              const char *,uint32_t,uid_t,gid_t);
 int efs_client_create_resume(struct efs_client_create_request *,int probe_only);
@@ -438,6 +440,22 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
                                      uint32_t count,
                                      const struct efs_ino_size_rec *irecs,
                                      uint32_t ino_count, int sync);
+/* As above, with the REPORT's publication id (W77; NULL: none). A REPORT
+ * carrying an atomic unit must name one. */
+int efs_client_rpc_report_dirty_pub(efs_export_id_t export_id,
+                                    const struct efs_chunk_rec *recs,
+                                    uint32_t count,
+                                    const struct efs_ino_size_rec *irecs,
+                                    uint32_t ino_count, int sync,
+                                    const struct efs_report_pubid *pubid);
+/* W77 · atomic publication units (write.c). A write request touching two
+ * or more chunks is one unit: begin links its chunks with every unpublished
+ * unit they overlap and holds it open until end. A REPORT publishes a unit
+ * whole, only when no write holds it and each chunk's newest image has
+ * landed; a sync REPORT waits for that. EFS_ERR_AGAIN from begin: the
+ * merged unit would exceed EFS_PUB_UNIT_MAX, so publish the file first. */
+int efs_client_unit_begin(efs_ino_t ino, uint64_t offset, uint64_t len);
+void efs_client_unit_end(efs_ino_t ino, uint64_t offset, uint64_t len);
 /* Phase 2b: snapshot the dirty set and report it to the primary (the flush
  * mechanism that replaces the blob flush). sync=1 = fsync barrier. */
 int efs_client_report_dirty(int sync);
@@ -504,6 +522,12 @@ void efs_rdcache_invalidate(efs_ino_t ino, uint32_t ci);
 void efs_client_epoch_note(efs_ino_t ino, uint64_t epoch);
 /* This client's own unreported PUT is the staging entry for (ino, ci). */
 int efs_client_putid_owns(efs_ino_t ino, uint32_t ci, uint64_t gen);
+/* W154: EFS_CHUNK_REC_F_MISSING bits for a PUT object two of three nodes
+ * acknowledged (0 for a full stripe); drop once a REPORT or publication
+ * carrying it succeeded. pending counts objects not yet published. */
+uint32_t efs_client_degraded_flags(efs_ino_t ino, uint32_t ci, uint64_t gen);
+void efs_client_degraded_drop(efs_ino_t ino, uint32_t ci, uint64_t gen);
+uint64_t efs_client_degraded_pending(void);
 uint64_t efs_client_epoch_get(efs_ino_t ino);
 
 /* Dirty assembled chunks: combine partial writes and PUT on flush/evict. */
@@ -756,5 +780,13 @@ uint64_t efs_client_map_clock(void);
 void efs_client_map_install(efs_ino_t ino, const struct efs_chunk_rec *recs,
                             uint32_t n, uint64_t pulled_us);
 void efs_client_prefetch_open(efs_ino_t ino, uint64_t size);
+/* W77 (I24, observation): make [ci0, ci1) (at most EFS_PUB_UNIT_MAX
+ * chunks) one server snapshot in the local map and return each chunk's
+ * read key (0 = hole). BUSY when no consistent snapshot was obtained. A
+ * multi-chunk read rechecks with _same after its fetches and retries on a
+ * change: it never returns chunks of two different snapshots. */
+int efs_client_map_snapshot(efs_ino_t ino, uint32_t ci0, uint32_t ci1, uint64_t *keys);
+int efs_client_map_snapshot_same(efs_ino_t ino, uint32_t ci0, uint32_t ci1,
+                                 const uint64_t *keys);
 
 #endif

@@ -32,6 +32,7 @@ static __attribute__((unused)) uint64_t stats_now_ms(void){return clock_ms;}
 int efs_client_rpc_past_deadline(void){return deadline && clock_ms>=deadline;}
 static __attribute__((unused)) int fixture_sleep(unsigned us){if(admission_sleep){pthread_mutex_t *mu=open_edge_mu(42);assert(!pthread_mutex_trylock(mu));pthread_mutex_unlock(mu);admission_sleep=0;}clock_ms+=(us+999)/1000;return 0;}
 #define usleep fixture_sleep
+void efs_client_opid_wait(unsigned max_ms){usleep(max_ms*1000u);}
 int efs_client_rpc_getchunks_fileid(efs_export_id_t ex,efs_ino_t ino,uint64_t gen,uint32_t start,struct efs_chunk_rec *r,uint32_t *n,uint64_t *out){
  (void)ex;(void)ino;(void)gen;(void)start;(void)r;(void)n;*out=99;return EFS_OK;
 }

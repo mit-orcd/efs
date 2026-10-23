@@ -18,7 +18,9 @@ code=r'''
 #define HOST_PUB_F_LANE_LOCAL 1
 #define HOST_PUB_F_FRESH_OBJECT 2
 #define HOST_PUB_F_TICKETED 4
-#define HOST_PUB_F_REJECT_GONE 16
+#define HOST_PUB_F_MISSING_SHIFT 4
+#define HOST_PUB_F_MISSING_MASK (7u << HOST_PUB_F_MISSING_SHIFT)
+#define HOST_PUB_F_REJECT_GONE 128
 #define HOST_REPORT_REC_LEN (HOST_PUBLISH_LEN + 16u)
 struct efs_raft_host { struct efs_kv *kv; };
 static unsigned effects,holds,releases,rejects;static int floor_rc,publish_rc,release_rc;
@@ -52,6 +54,10 @@ int main(void){struct efs_raft_host h={0};enum{R0=21,R1=21+HOST_REPORT_REC_LEN};
  cmd[R1+HOST_PUBLISH_LEN-1]=HOST_PUB_F_TICKETED|HOST_PUB_F_FRESH_OBJECT|8;assert(apply_report_publish_cmd(&h,cmd,sizeof(cmd),0)==EFS_ERR_PROTO && !effects);
  cmd[R1+HOST_PUBLISH_LEN-1]=HOST_PUB_F_TICKETED|HOST_PUB_F_FRESH_OBJECT;
  assert(!apply_report_publish_cmd(&h,cmd,sizeof(cmd),0) && effects==2 && holds==1 && releases==1);
+ /* W154 missing mask rides a ticketed record; two missing bits never do. */
+ cmd[R1+HOST_PUBLISH_LEN-1]|=16;assert(!apply_report_publish_cmd(&h,cmd,sizeof(cmd),0) && effects==4);
+ cmd[R1+HOST_PUBLISH_LEN-1]|=32;assert(apply_report_publish_cmd(&h,cmd,sizeof(cmd),0)==EFS_ERR_PROTO && effects==4);
+ cmd[R1+HOST_PUBLISH_LEN-1]&=(uint8_t)~48;effects=2;holds=releases=1;
  /* A GONE record settles its ticket only. */
  cmd[R1+HOST_PUBLISH_LEN-1]|=HOST_PUB_F_REJECT_GONE;assert(!apply_report_publish_cmd(&h,cmd,sizeof(cmd),0) && effects==3 && rejects==1);
  cmd[R1+HOST_PUBLISH_LEN-1]&=(uint8_t)~HOST_PUB_F_REJECT_GONE;
@@ -64,4 +70,4 @@ with tempfile.TemporaryDirectory(prefix='efs-report-session-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=5)
-print('REPORT apply: whole-frame validation, ticket-only records, GONE settle, strict missing/fenced floors, lane routing and WAL failures PASS')
+print('REPORT apply: whole-frame validation, ticket-only records with the W154 missing mask, GONE settle, strict missing/fenced floors, lane routing and WAL failures PASS')

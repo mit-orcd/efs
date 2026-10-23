@@ -37,7 +37,14 @@
  * remain commutative. Chunk mutations share the lane's exclusion even when
  * a sweep deletes rows before writing/deleting the lane stamp. Checks and
  * the final write are serialized by the participant's Raft apply log. */
-static int meta_write_check(struct efs_kv *kv, const uint8_t *key, uint32_t kl)
+static int pub_stage_owner(struct efs_kv *kv, const uint8_t *chunk_key,
+                           uint32_t kl, struct efs_txid *t,
+                           struct efs_txn_parts *parts);
+
+/* `self` is the transaction whose own staged publication is being resolved:
+ * its stage is the one exclusion that must not refuse the resolving batch. */
+static int meta_write_check_as(struct efs_kv *kv, const uint8_t *key, uint32_t kl,
+                               const struct efs_txid *self)
 {
     uint8_t lane_key[20];
     if (!key || kl < 3)
@@ -54,7 +61,20 @@ static int meta_write_check(struct efs_kv *kv, const uint8_t *key, uint32_t kl)
             return EFS_ERR_INVAL;
         memcpy(lane_key, key, sizeof(lane_key));
         lane_key[2] = EFS_KV_KIND_LANE;
-        return efs_txn_key_exclusive(kv, lane_key, sizeof(lane_key));
+        {
+            int rc = efs_txn_key_exclusive(kv, lane_key, sizeof(lane_key));
+            struct efs_txid owner;
+            if (rc != EFS_OK)
+                return rc;
+            /* W77: a staged publication owns its chunk until resolved. */
+            rc = pub_stage_owner(kv, key, kl, &owner, NULL);
+            if (rc == EFS_ERR_NOT_FOUND)
+                return EFS_OK;
+            if (rc != EFS_OK)
+                return rc;
+            return self && !memcmp(owner.bytes, self->bytes, EFS_TXN_ID_LEN)
+                       ? EFS_OK : EFS_ERR_BUSY;
+        }
     case EFS_KV_KIND_APPEND_CUR:
     case EFS_KV_KIND_APPEND_RECEIPT:
     case EFS_KV_KIND_TRUNCATE_RECEIPT:
@@ -73,15 +93,28 @@ static int meta_write_check(struct efs_kv *kv, const uint8_t *key, uint32_t kl)
     }
 }
 
-static int meta_write_batch(struct efs_kv *kv, const struct efs_kv_item *items,
-                             uint32_t count)
+static int meta_write_check(struct efs_kv *kv, const uint8_t *key, uint32_t kl)
+{
+    return meta_write_check_as(kv, key, kl, NULL);
+}
+
+/* `dry` runs every check and writes nothing: a staged publication's PREPARE
+ * proves the publish would apply now (W77). */
+static int meta_write_batch_as(struct efs_kv *kv, const struct efs_kv_item *items,
+                               uint32_t count, const struct efs_txid *self, int dry)
 {
     for (uint32_t i = 0; i < count; ++i) {
-        int rc = meta_write_check(kv, items[i].key, items[i].klen);
+        int rc = meta_write_check_as(kv, items[i].key, items[i].klen, self);
         if (rc != EFS_OK)
             return rc;
     }
-    return efs_kv_batch(kv, items, count);
+    return dry ? EFS_OK : efs_kv_batch(kv, items, count);
+}
+
+static int meta_write_batch(struct efs_kv *kv, const struct efs_kv_item *items,
+                             uint32_t count)
+{
+    return meta_write_batch_as(kv, items, count, NULL, 0);
 }
 
 static int meta_write_put(struct efs_kv *kv, const uint8_t *key, uint32_t kl,
@@ -4094,6 +4127,293 @@ static int gc_queue(struct efs_kv_item *it, uint32_t *n, uint32_t cap,
 }
 
 
+/* ---- W154 degraded marks ---- */
+
+/* Per-anchor mark count, the D26 GC watermark's rules: unknown until the
+ * rebuild pass derives it from one prefix count (process start, snapshot
+ * import); while unknown, inserts accumulate and removals are dropped, so
+ * the count can only overshoot, and a pass that finds the prefix empty
+ * clamps it back to zero. Adjusted after a batch commits. Zero lets a
+ * rewrite skip the per-superseded-object lookup. */
+static pthread_mutex_t dg_wm_mu = PTHREAD_MUTEX_INITIALIZER;
+static int64_t dg_wm_count[GC_WM_ANCHOR_MAX + 1];
+static int64_t dg_wm_pos[GC_WM_ANCHOR_MAX + 1];
+static int dg_wm_known[GC_WM_ANCHOR_MAX + 1];
+
+static void degraded_note(uint32_t anchor, int delta)
+{
+    if (anchor == 0 || anchor > GC_WM_ANCHOR_MAX || !delta)
+        return;
+    pthread_mutex_lock(&dg_wm_mu);
+    if (dg_wm_known[anchor]) {
+        dg_wm_count[anchor] += delta;
+        if (dg_wm_count[anchor] < 0)
+            dg_wm_count[anchor] = 0;
+    } else if (delta > 0) {
+        dg_wm_pos[anchor] += delta;
+    }
+    pthread_mutex_unlock(&dg_wm_mu);
+}
+
+int64_t efs_meta_degraded_count_peek(uint32_t anchor)
+{
+    int64_t r;
+
+    if (anchor == 0 || anchor > GC_WM_ANCHOR_MAX)
+        return 0;
+    pthread_mutex_lock(&dg_wm_mu);
+    r = dg_wm_known[anchor] ? dg_wm_count[anchor] : -1;
+    pthread_mutex_unlock(&dg_wm_mu);
+    return r;
+}
+
+void efs_meta_degraded_count_derived(uint32_t anchor, uint64_t n)
+{
+    if (anchor == 0 || anchor > GC_WM_ANCHOR_MAX)
+        return;
+    pthread_mutex_lock(&dg_wm_mu);
+    dg_wm_count[anchor] = (int64_t)n + dg_wm_pos[anchor];
+    dg_wm_pos[anchor] = 0;
+    dg_wm_known[anchor] = 1;
+    pthread_mutex_unlock(&dg_wm_mu);
+}
+
+void efs_meta_degraded_count_invalidate(uint32_t anchor)
+{
+    if (anchor == 0 || anchor > GC_WM_ANCHOR_MAX)
+        return;
+    pthread_mutex_lock(&dg_wm_mu);
+    dg_wm_known[anchor] = 0;
+    dg_wm_count[anchor] = 0;
+    dg_wm_pos[anchor] = 0;
+    pthread_mutex_unlock(&dg_wm_mu);
+}
+
+int efs_meta_degraded_count_zero_if(uint32_t anchor, int64_t expect)
+{
+    int ok = 0;
+
+    if (anchor == 0 || anchor > GC_WM_ANCHOR_MAX)
+        return 0;
+    pthread_mutex_lock(&dg_wm_mu);
+    if (dg_wm_known[anchor] && dg_wm_count[anchor] == expect) {
+        dg_wm_count[anchor] = 0;
+        ok = 1;
+    }
+    pthread_mutex_unlock(&dg_wm_mu);
+    return ok;
+}
+
+void efs_meta_pack_degraded(uint8_t *p, const struct efs_meta_degraded *d)
+{
+    int i;
+
+    be64(p, d->inode_gen);
+    p[8] = d->missing_mask;
+    p[9] = p[10] = p[11] = 0;
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
+        be32(p + 12 + (uint32_t)i * 4u, d->nodes[i]);
+    memcpy(p + 12 + 4 * EFS_NUM_FRAGMENTS, d->checksums,
+           EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
+}
+
+int efs_meta_unpack_degraded(const uint8_t *key, uint32_t klen,
+                             const uint8_t *val, uint32_t vlen,
+                             struct efs_meta_degraded *out)
+{
+    uint32_t shard;
+    int i;
+
+    if (!key || !val || !out || klen != 24 || key[2] != EFS_KV_KIND_DEGRADED ||
+        vlen != EFS_META_DEGRADED_VAL || val[9] || val[10] || val[11])
+        return EFS_ERR_PROTO;
+    memset(out, 0, sizeof(*out));
+    out->ino = rd64(key + 3);
+    out->object_gen = rd64(key + 11);
+    out->lane = key[19];
+    out->chunk_index = rd32(key + 20);
+    out->inode_gen = rd64(val);
+    out->missing_mask = val[8];
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
+        out->nodes[i] = rd32(val + 12 + (uint32_t)i * 4u);
+    memcpy(out->checksums, val + 12 + 4 * EFS_NUM_FRAGMENTS,
+           EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
+    shard = ((uint32_t)key[0] << 8) | key[1];
+    if (!out->ino || !out->inode_gen || !out->object_gen ||
+        out->lane >= EFS_META_LANES ||
+        out->lane != out->chunk_index % EFS_META_LANES ||
+        shard != efs_kv_anchor_shard(efs_kv_lane_shard(out->ino, out->lane)) ||
+        !out->missing_mask || !efs_chunk_missing_valid(out->missing_mask))
+        return EFS_ERR_PROTO;
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
+        if (!out->nodes[i] || out->nodes[i] > EFS_MAX_NODES)
+            return EFS_ERR_PROTO;
+    return EFS_OK;
+}
+
+static int degraded_key(efs_ino_t ino, uint64_t object_gen, uint8_t lane,
+                        uint32_t ci, uint8_t *key, uint32_t *kl)
+{
+    return efs_kv_key_degraded(efs_kv_anchor_shard(efs_kv_lane_shard(ino, lane)),
+                               ino, object_gen, lane, ci, key, kl);
+}
+
+int efs_meta_degraded_live(struct efs_kv *kv, const struct efs_meta_degraded *d)
+{
+    struct efs_meta_chunk ch;
+    struct efs_meta_delta ds[EFS_CHUNK_DELTA_MAX];
+    uint32_t n = 0, i;
+    int rc;
+
+    if (!kv || !d)
+        return EFS_ERR_INVAL;
+    rc = efs_meta_apply_get_chunk_row(kv, d->ino, d->inode_gen, d->chunk_index,
+                                      &ch, ds, EFS_CHUNK_DELTA_MAX, &n, NULL);
+    if (rc == EFS_ERR_NOT_FOUND)
+        return 0;
+    if (rc != EFS_OK)
+        return rc;
+    /* Generations are unique object names: a match is this object, and a
+     * placement that disagrees with the mark is a damaged row, not a
+     * reason to rebuild anything. */
+    if (ch.coding_profile_id != EFS_META_PROFILE_PACK &&
+        ch.generation == d->object_gen)
+        return memcmp(ch.nodes, d->nodes, sizeof(ch.nodes)) ||
+               memcmp(ch.checksums, d->checksums, sizeof(ch.checksums))
+                   ? EFS_ERR_PROTO : 1;
+    if (n > EFS_CHUNK_DELTA_MAX)
+        n = EFS_CHUNK_DELTA_MAX;
+    for (i = 0; i < n; i++) {
+        if (!ds[i].len || ds[i].generation != d->object_gen)
+            continue;
+        return memcmp(ds[i].nodes, d->nodes, sizeof(ds[i].nodes)) ||
+               memcmp(ds[i].checksums, d->checksums, sizeof(ds[i].checksums))
+                   ? EFS_ERR_PROTO : 1;
+    }
+    return 0;
+}
+
+int efs_meta_apply_degraded_clear(struct efs_kv *kv, const struct efs_meta_degraded *d,
+                                  int rebuilt, int *outcome)
+{
+    uint8_t key[EFS_KV_KEY_MAX], val[EFS_META_DEGRADED_VAL];
+    uint8_t gkey[EFS_KV_KEY_MAX], gval[EFS_META_GC_VAL];
+    struct efs_kv_item it[2];
+    struct efs_meta_degraded cur;
+    uint32_t kl = 0, gl = 0, vn, n = 0, anchor;
+    int rc, found = 0, new_gc = 0, fi;
+
+    if (outcome)
+        *outcome = EFS_META_DEGRADED_ABSENT;
+    if (!kv || !d || !d->ino || !d->object_gen || d->lane >= EFS_META_LANES ||
+        d->lane != d->chunk_index % EFS_META_LANES ||
+        !d->missing_mask || !efs_chunk_missing_valid(d->missing_mask))
+        return EFS_ERR_INVAL;
+    rc = degraded_key(d->ino, d->object_gen, d->lane, d->chunk_index, key, &kl);
+    if (rc != EFS_OK)
+        return rc;
+    anchor = ((uint32_t)key[0] << 8) | key[1];
+    vn = sizeof(val);
+    rc = efs_kv_get(kv, key, kl, val, &vn);
+    if (rc == EFS_OK) {
+        rc = efs_meta_unpack_degraded(key, kl, val, vn, &cur);
+        if (rc != EFS_OK)
+            return rc;
+        /* Delete only the mark this clear was decided for. */
+        if (cur.inode_gen == d->inode_gen && cur.missing_mask == d->missing_mask &&
+            !memcmp(cur.nodes, d->nodes, sizeof(cur.nodes)) &&
+            !memcmp(cur.checksums, d->checksums, sizeof(cur.checksums))) {
+            it[n++] = (struct efs_kv_item){EFS_KV_DEL, key, kl, NULL, 0};
+            found = 1;
+            if (outcome)
+                *outcome = EFS_META_DEGRADED_CLEARED;
+        }
+    } else if (rc != EFS_ERR_NOT_FOUND) {
+        return rc;
+    }
+    if (rebuilt) {
+        int live = efs_meta_degraded_live(kv, d);
+        if (live < 0)
+            return live;
+        if (!live) {
+            uint8_t ack_bits;
+            efs_node_id_t gnodes[EFS_NUM_FRAGMENTS];
+            uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
+
+            /* A rewrite (or unlink, truncate, pack) won the race: the GC
+             * record of the dead object may already have visited the
+             * rebuilt node, so the fragment just written there is
+             * queued again, checksum-guarded like any superseded one. */
+            fi = __builtin_ctz(d->missing_mask);
+            rc = efs_kv_key_gc(anchor, d->ino, d->object_gen, d->lane,
+                               d->chunk_index, gkey, &gl);
+            if (rc != EFS_OK)
+                return rc;
+            vn = sizeof(gval);
+            rc = efs_kv_get(kv, gkey, gl, gval, &vn);
+            if (rc == EFS_OK) {
+                rc = efs_meta_unpack_gc(gval, vn, gnodes, &ack_bits, sums);
+                if (rc != EFS_OK)
+                    return rc;
+                ack_bits &= (uint8_t)~(1u << fi);
+            } else if (rc == EFS_ERR_NOT_FOUND) {
+                memcpy(gnodes, d->nodes, sizeof(gnodes));
+                memcpy(sums, d->checksums, sizeof(sums));
+                ack_bits = (uint8_t)(((1u << EFS_NUM_FRAGMENTS) - 1u) & ~(1u << fi));
+                new_gc = 1;
+            } else {
+                return rc;
+            }
+            efs_meta_pack_gc(gval, gnodes, ack_bits,
+                             (const uint8_t (*)[EFS_HASH_SIZE])sums);
+            it[n++] = (struct efs_kv_item){EFS_KV_PUT, gkey, gl, gval, EFS_META_GC_VAL};
+            if (outcome)
+                *outcome = EFS_META_DEGRADED_ORPHANED;
+        }
+    }
+    if (!n)
+        return EFS_OK;
+    if (new_gc)
+        efs_meta_gc_pending_note(anchor, 1);
+    rc = meta_write_batch(kv, it, n);
+    if (rc == EFS_OK && found)
+        degraded_note(anchor, -1);
+    return rc;
+}
+
+/* Queue the deletion of `gen`'s degraded mark when one exists. A known-zero
+ * count for the anchor skips the lookup. *removed counts queued deletes. */
+static int degraded_retire(struct efs_kv *kv, struct efs_kv_item *it, uint32_t *n,
+                           uint32_t cap, uint8_t (*keys)[EFS_KV_KEY_MAX], uint32_t *nk,
+                           efs_ino_t ino, uint8_t lane, uint32_t ci, uint64_t gen,
+                           uint32_t *removed)
+{
+    uint8_t val[EFS_META_DEGRADED_VAL];
+    uint32_t kl = 0, vn = sizeof(val);
+    int rc;
+
+    if (!gen)
+        return EFS_OK;
+    if (efs_meta_degraded_count_peek(efs_kv_anchor_shard(efs_kv_lane_shard(ino, lane))) == 0)
+        return EFS_OK;
+    if (*n >= cap)
+        return EFS_ERR_NOMEM;
+    rc = degraded_key(ino, gen, lane, ci, keys[*nk], &kl);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_kv_get(kv, keys[*nk], kl, val, &vn);
+    if (rc == EFS_ERR_NOT_FOUND)
+        return EFS_OK;
+    if (rc != EFS_OK)
+        return rc;
+    it[*n] = (struct efs_kv_item){EFS_KV_DEL, keys[*nk], kl, NULL, 0};
+    (*n)++;
+    (*nk)++;
+    (*removed)++;
+    return EFS_OK;
+}
+
+
 static int evidence_ok(const struct efs_meta_pub *p)
 {
     int i, j;
@@ -4360,8 +4680,16 @@ int efs_meta_publication_result(struct efs_kv *kv,const struct efs_meta_pub *p,i
 {
     return efs_meta_publication_receipt(kv,p,verdict,NULL);
 }
-static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
-                         const struct efs_kv_item *receipt)
+/* How a publish writes: the ordinary path, a staged PREPARE's dry run, or
+ * the RESOLVE that applies its own stage (W77). */
+struct publish_mode {
+    int dry;
+    const struct efs_txid *self;
+};
+
+static int publish_inner_as(struct efs_kv *kv, const struct efs_meta_pub *p,
+                            const struct efs_kv_item *receipt,
+                            const struct publish_mode *mode)
 {
     struct efs_meta_row row;
     struct efs_meta_chunk stored, got;
@@ -4378,7 +4706,12 @@ static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
     uint64_t committed = 0;
     uint64_t inode_gen, mtime_gen, row_base_size = 0, row_active = 0;
     struct lane_rec ln;
-    struct efs_kv_item it[9 + EFS_CHUNK_DELTA_MAX];
+    /* W154: plus one mark delete per superseded object and one new mark. */
+    struct efs_kv_item it[11 + 2 * EFS_CHUNK_DELTA_MAX];
+    uint8_t k_dg[2 + EFS_CHUNK_DELTA_MAX][EFS_KV_KEY_MAX];
+    uint8_t v_dg[EFS_META_DEGRADED_VAL];
+    uint32_t ndg = 0, dg_removed = 0, dg_anchor;
+    int dg_added = 0;
     uint8_t k_cand[EFS_PACK_CANDIDATE_KEY_BYTES], v_cand[8];
     uint32_t n = 0;
     uint32_t ch_wlen = CHUNK_VAL;
@@ -4394,6 +4727,8 @@ static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
     rc = evidence_ok(p);
     if (rc != EFS_OK)
         return rc;
+    if (!efs_chunk_missing_valid(p->missing_mask))
+        return EFS_ERR_INVAL;
     if (p->durable_result && p->lane_local) {
         uint8_t ak[EFS_KV_KEY_MAX],av[EFS_META_LANE_AUTHORITY_BYTES];
         uint32_t kl=0,vl=sizeof(av),cs;uint64_t epoch,floor;
@@ -4740,6 +5075,61 @@ static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
                 return rc;
         }
     }
+    /* W154: a superseded object's degraded mark goes with it; the new
+     * object records its own when a fragment was not acknowledged. */
+    dg_anchor = efs_kv_anchor_shard(lsh);
+    if (!appending) {
+        uint32_t di;
+
+        if (committed != 0 && got.coding_profile_id != EFS_META_PROFILE_PACK &&
+            got.generation != stored.generation) {
+            rc = degraded_retire(kv, it, &n, (uint32_t)(sizeof(it) / sizeof(it[0])),
+                                 k_dg, &ndg, p->ino, lane, p->chunk_index,
+                                 got.generation, &dg_removed);
+            if (rc != EFS_OK)
+                return rc;
+        }
+        for (di = 0; di < nd_old; di++) {
+            struct efs_meta_delta dead_d;
+
+            rc = trailer_at(old_ch, ch_vlen, di, &dead_d);
+            if (rc != EFS_OK)
+                return rc;
+            if (dead_d.generation == 0 || dead_d.generation == stored.generation ||
+                dead_d.generation == got.generation)
+                continue;
+            rc = degraded_retire(kv, it, &n, (uint32_t)(sizeof(it) / sizeof(it[0])),
+                                 k_dg, &ndg, p->ino, lane, p->chunk_index,
+                                 dead_d.generation, &dg_removed);
+            if (rc != EFS_OK)
+                return rc;
+        }
+    }
+    if (p->missing_mask) {
+        struct efs_meta_degraded mark;
+        uint8_t have[EFS_META_DEGRADED_VAL];
+        uint32_t kl_dg = 0, hn = sizeof(have);
+
+        memset(&mark, 0, sizeof(mark));
+        mark.inode_gen = inode_gen;
+        mark.missing_mask = p->missing_mask;
+        memcpy(mark.nodes, p->ch.nodes, sizeof(mark.nodes));
+        memcpy(mark.checksums, p->ch.checksums, sizeof(mark.checksums));
+        rc = degraded_key(p->ino, p->candidate_gen, lane, p->chunk_index,
+                          k_dg[ndg], &kl_dg);
+        if (rc != EFS_OK)
+            return rc;
+        rc = efs_kv_get(kv, k_dg[ndg], kl_dg, have, &hn);
+        if (rc == EFS_ERR_NOT_FOUND) {
+            efs_meta_pack_degraded(v_dg, &mark);
+            it[n++] = (struct efs_kv_item){EFS_KV_PUT, k_dg[ndg], kl_dg, v_dg,
+                                           EFS_META_DEGRADED_VAL};
+            ndg++;
+            dg_added = 1;
+        } else if (rc != EFS_OK) {
+            return rc;
+        }
+    }
     uint8_t ticket_key[EFS_PUT_TICKET_KEY_LEN], ticket_val[EFS_PUT_TICKET_VAL_LEN];
     if (p->ticketed) {
         struct efs_put_ticket ticket;
@@ -4775,11 +5165,23 @@ static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
             efs_pack_mapping_plan_free(&plan); return EFS_ERR_NOMEM;
         }
         memcpy(it + n, plan.items, plan.count * sizeof(it[0]));
-        rc = meta_write_batch(kv, it, n + plan.count);
+        rc = meta_write_batch_as(kv, it, n + plan.count, mode ? mode->self : NULL,
+                                 mode && mode->dry);
         efs_pack_mapping_plan_free(&plan);
-        return rc;
+    } else {
+        rc = meta_write_batch_as(kv, it, n, mode ? mode->self : NULL, mode && mode->dry);
     }
-    return meta_write_batch(kv, it, n);
+    /* W154 count follows only a batch that was written: a K14 dry PREPARE
+     * checks the publication without writing its marks. */
+    if (rc == EFS_OK && !(mode && mode->dry))
+        degraded_note(dg_anchor, dg_added - (int)dg_removed);
+    return rc;
+}
+
+static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
+                         const struct efs_kv_item *receipt)
+{
+    return publish_inner_as(kv, p, receipt, NULL);
 }
 
 /* K13 REPORT publication. The ticket, not the evictable span trailer, is
@@ -4880,6 +5282,489 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     }
     int written=meta_write_batch(kv,completed,completed_n);
     return written==EFS_OK?rc:written;
+}
+
+/* ---- W77 staged publication (meta_apply.h) ----------------------------- */
+
+#define PUB_STAGE_VAL_MAX (16u + 1u + 4u * EFS_TXN_MAX_PART + EFS_PUB_STAGE_LEN)
+#define PUB_PIN_KEY_LEN (24u + EFS_TXN_ID_LEN)
+#define PUB_STAGE_F_LANE_LOCAL 1u
+#define PUB_STAGE_F_FRESH_OBJECT 2u
+#define PUB_STAGE_F_TICKETED 4u /* K13: mandatory */
+#define PUB_STAGE_F_MISSING_SHIFT 3u /* W154 missing mask, bits 3..5 */
+#define PUB_STAGE_F_MISSING_MASK (((1u << EFS_NUM_FRAGMENTS) - 1u) << PUB_STAGE_F_MISSING_SHIFT)
+
+int efs_meta_pub_stage_encode(const struct efs_meta_pub *p, const struct efs_opid *session,
+                              uint8_t out[EFS_PUB_STAGE_LEN])
+{
+    uint8_t *q;
+    int i;
+
+    /* Only the default REPORT publication is staged: no receipt or packed
+     * reference rides a staged request; its ticket (K13) and the W154 missing
+     * mask do. The ticket stream is the REPORT session's. */
+    if (!p || !session || !out || !p->ino || !p->inode_gen || p->durable_result ||
+        !p->ticketed || p->coding_profile_id == EFS_META_PROFILE_PACK ||
+        !efs_chunk_missing_valid(p->missing_mask) ||
+        p->put_id.session_epoch != session->session_epoch ||
+        memcmp(p->put_id.client_uuid, session->client_uuid, EFS_OPID_UUID_LEN))
+        return EFS_ERR_INVAL;
+    out[0] = EFS_PUB_STAGE_VERSION;
+    be64(out + 1, p->ino);
+    be32(out + 9, p->chunk_index);
+    be64(out + 13, p->new_size);
+    be64(out + 21, p->now);
+    be64(out + 29, p->expected_gen);
+    be64(out + 37, p->candidate_gen);
+    be64(out + 45, p->content_epoch);
+    be32(out + 53, p->coding_profile_id);
+    be64(out + 57, p->inode_gen);
+    be64(out + 65, p->mtime_gen);
+    out[73] = (uint8_t)((p->lane_local ? PUB_STAGE_F_LANE_LOCAL : 0) |
+                        (p->fresh_object ? PUB_STAGE_F_FRESH_OBJECT : 0) | PUB_STAGE_F_TICKETED |
+                        ((uint32_t)p->missing_mask << PUB_STAGE_F_MISSING_SHIFT));
+    be32(out + 74, p->delta_off);
+    be32(out + 78, p->delta_len);
+    be32(out + 82, p->delta_base_n);
+    be64(out + 86, p->delta_base_seq);
+    q = out + 94;
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++, q += 4)
+        be32(q, p->ch.nodes[i]);
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++, q += EFS_HASH_SIZE)
+        memcpy(q, p->ch.checksums[i], EFS_HASH_SIZE);
+    memcpy(q, session->client_uuid, EFS_OPID_UUID_LEN);
+    be32(q + EFS_OPID_UUID_LEN, session->session_epoch);
+    q += EFS_OPID_UUID_LEN + 4;
+    be64(q, p->put_id.seq);
+    be32(q + 8, p->put_fragment_len);
+    be32(q + 12, p->put_member_mask);
+    return EFS_OK;
+}
+
+int efs_meta_pub_stage_decode(const uint8_t *in, uint32_t n, struct efs_meta_pub *p,
+                              struct efs_opid *session)
+{
+    const uint8_t *q;
+    int i;
+
+    if (!in || !p || n != EFS_PUB_STAGE_LEN || in[0] != EFS_PUB_STAGE_VERSION ||
+        (in[73] & ~(PUB_STAGE_F_LANE_LOCAL | PUB_STAGE_F_FRESH_OBJECT | PUB_STAGE_F_TICKETED |
+                    PUB_STAGE_F_MISSING_MASK)) ||
+        !(in[73] & PUB_STAGE_F_TICKETED) ||
+        !efs_chunk_missing_valid((in[73] & PUB_STAGE_F_MISSING_MASK) >> PUB_STAGE_F_MISSING_SHIFT))
+        return EFS_ERR_PROTO;
+    memset(p, 0, sizeof(*p));
+    p->ino = rd64(in + 1);
+    p->chunk_index = rd32(in + 9);
+    p->new_size = rd64(in + 13);
+    p->now = rd64(in + 21);
+    p->expected_gen = rd64(in + 29);
+    p->candidate_gen = rd64(in + 37);
+    p->content_epoch = rd64(in + 45);
+    p->coding_profile_id = rd32(in + 53);
+    p->inode_gen = rd64(in + 57);
+    p->mtime_gen = rd64(in + 65);
+    p->lane_local = !!(in[73] & PUB_STAGE_F_LANE_LOCAL);
+    p->fresh_object = !!(in[73] & PUB_STAGE_F_FRESH_OBJECT);
+    p->missing_mask = (uint8_t)((in[73] & PUB_STAGE_F_MISSING_MASK) >> PUB_STAGE_F_MISSING_SHIFT);
+    p->delta_off = rd32(in + 74);
+    p->delta_len = rd32(in + 78);
+    p->delta_base_n = rd32(in + 82);
+    p->delta_base_seq = rd64(in + 86);
+    q = in + 94;
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++, q += 4)
+        p->ch.nodes[i] = rd32(q);
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++, q += EFS_HASH_SIZE)
+        memcpy(p->ch.checksums[i], q, EFS_HASH_SIZE);
+    p->ticketed = 1;
+    memcpy(p->put_id.client_uuid, q, EFS_OPID_UUID_LEN);
+    p->put_id.session_epoch = rd32(q + EFS_OPID_UUID_LEN);
+    p->put_id.seq = rd64(q + EFS_OPID_UUID_LEN + 4);
+    p->put_fragment_len = rd32(q + EFS_OPID_UUID_LEN + 12);
+    p->put_member_mask = rd32(q + EFS_OPID_UUID_LEN + 16);
+    p->publication_id = p->put_id;
+    if (session) {
+        memset(session, 0, sizeof(*session));
+        memcpy(session->client_uuid, q, EFS_OPID_UUID_LEN);
+        session->session_epoch = rd32(q + EFS_OPID_UUID_LEN);
+        session->seq = 1;
+    }
+    if (!p->ino || !p->inode_gen || p->coding_profile_id == EFS_META_PROFILE_PACK)
+        return EFS_ERR_PROTO;
+    return EFS_OK;
+}
+
+void efs_meta_pub_pin_encode(uint64_t inode_gen, uint64_t content_epoch,
+                             uint8_t out[EFS_PUB_PIN_LEN])
+{
+    out[0] = EFS_PUB_PIN_VERSION;
+    be64(out + 1, inode_gen);
+    be64(out + 9, content_epoch);
+}
+
+static int pub_stage_key(efs_ino_t ino, uint64_t gen, uint32_t ci,
+                         uint8_t key[24])
+{
+    uint8_t lane = (uint8_t)(ci % EFS_META_LANES);
+    uint32_t kl = 0;
+    int rc = efs_kv_key_chunk(efs_kv_lane_shard(ino, lane), ino, gen, lane, ci,
+                              key, &kl);
+    if (rc == EFS_OK && kl != 24)
+        rc = EFS_ERR_PROTO;
+    key[2] = EFS_KV_KIND_PUB_STAGE;
+    return rc;
+}
+
+/* Pin prefix [inode shard][PUB_STAGE][ino][gen][0xFF][0xFFFFFFFF]; each
+ * publication's pin appends its txid, so writers of one file never serialize
+ * on the pin (P1) while any of them keeps truncation out. */
+static void pub_pin_prefix(efs_ino_t ino, uint64_t gen, uint8_t key[24])
+{
+    uint32_t shard = efs_kv_inode_shard(ino);
+    key[0] = (uint8_t)(shard >> 8);
+    key[1] = (uint8_t)shard;
+    key[2] = EFS_KV_KIND_PUB_STAGE;
+    be64(key + 3, ino);
+    be64(key + 11, gen);
+    key[19] = EFS_PUB_STAGE_PIN_LANE;
+    be32(key + 20, UINT32_MAX);
+}
+
+static int pub_stage_owner(struct efs_kv *kv, const uint8_t *chunk_key,
+                           uint32_t kl, struct efs_txid *t,
+                           struct efs_txn_parts *parts)
+{
+    uint8_t sk[24], val[PUB_STAGE_VAL_MAX];
+    uint32_t vl = sizeof(val);
+    int rc;
+
+    if (kl != sizeof(sk))
+        return EFS_ERR_INVAL;
+    memcpy(sk, chunk_key, sizeof(sk));
+    sk[2] = EFS_KV_KIND_PUB_STAGE;
+    rc = efs_kv_get(kv, sk, sizeof(sk), val, &vl);
+    if (rc != EFS_OK)
+        return rc;
+    return efs_txn_record_head_parse(val, vl, t, parts, NULL);
+}
+
+int efs_meta_pub_stage_peek(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                            uint32_t chunk_index, struct efs_txid *t,
+                            struct efs_txn_parts *parts)
+{
+    uint8_t key[24];
+    struct efs_txid dummy;
+    int rc;
+
+    if (!kv || !ino)
+        return EFS_ERR_INVAL;
+    rc = pub_stage_key(ino, gen, chunk_index, key);
+    if (rc != EFS_OK)
+        return rc;
+    key[2] = EFS_KV_KIND_CHUNK;
+    return pub_stage_owner(kv, key, sizeof(key), t ? t : &dummy, parts);
+}
+
+static int pub_any_cb(void *user, const uint8_t *key, uint32_t klen,
+                      const uint8_t *val, uint32_t vlen)
+{
+    (void)key; (void)val; (void)vlen;
+    if (klen == PUB_PIN_KEY_LEN)
+        *(int *)user = 1;
+    return 0; /* a scan returns a nonzero callback value as its result */
+}
+
+int efs_meta_pub_pinned(struct efs_kv *kv, efs_ino_t ino, uint64_t gen)
+{
+    uint8_t pref[24];
+    int any = 0, rc;
+
+    if (!kv || !ino)
+        return EFS_ERR_INVAL;
+    pub_pin_prefix(ino, gen, pref);
+    rc = efs_kv_scan_prefix(kv, pref, sizeof(pref), pub_any_cb, &any);
+    if (rc != EFS_OK)
+        return rc;
+    return any ? EFS_ERR_BUSY : EFS_OK;
+}
+
+int efs_meta_pub_stage_visible(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                               uint32_t chunk_index, efs_txn_coord_fn coord,
+                               void *ctx, struct efs_txn_pending *pend)
+{
+    struct efs_txid t;
+    struct efs_txn_parts parts;
+    int dec = EFS_TXN_UNDECIDED, rc;
+
+    if (!coord)
+        return EFS_ERR_INVAL;
+    rc = efs_meta_pub_stage_peek(kv, ino, gen, chunk_index, &t, &parts);
+    if (rc == EFS_ERR_NOT_FOUND)
+        return EFS_OK;
+    if (rc != EFS_OK)
+        return rc;
+    rc = coord(ctx, &t, efs_txn_coordinator(&t, &parts), &dec);
+    if (rc == EFS_ERR_NOT_FOUND) {
+        efs_txn_pending_note(pend, &t, &parts);
+        return EFS_OK;
+    }
+    if (rc == EFS_ERR_STALE)
+        return EFS_ERR_BUSY; /* reclaimed: unknown, never the old mapping */
+    if (rc != EFS_OK)
+        return rc;
+    if (dec == EFS_TXN_COMMIT)
+        return EFS_ERR_BUSY;
+    if (dec == EFS_TXN_UNDECIDED)
+        efs_txn_pending_note(pend, &t, &parts);
+    return EFS_OK;
+}
+
+static int pub_parts_member(const struct efs_txn_parts *p, uint32_t shard)
+{
+    for (uint32_t i = 0; i < p->n; i++)
+        if (p->shard[i] == shard)
+            return 1;
+    return 0;
+}
+
+/* A matching record of the same transaction is an idempotent re-PREPARE;
+ * the same txid with another request is STALE (never a silent retry). */
+static int pub_record_same(const uint8_t *have, uint32_t hl, const struct efs_txid *t,
+                           const uint8_t *pay, uint32_t plen)
+{
+    struct efs_txid owner;
+    uint32_t used = 0;
+    int rc = efs_txn_record_head_parse(have, hl, &owner, NULL, &used);
+    if (rc != EFS_OK)
+        return rc;
+    if (memcmp(owner.bytes, t->bytes, EFS_TXN_ID_LEN))
+        return EFS_ERR_BUSY;
+    if (hl - used != plen)
+        return EFS_ERR_STALE;
+    /* The leader-stamped time (bytes 21..28) is a host timestamp, not part
+     * of the request, as in efs_publication_digest. */
+    if (plen == EFS_PUB_STAGE_LEN)
+        return !memcmp(have + used, pay, 21) &&
+               !memcmp(have + used + 29, pay + 29, plen - 29) ? EFS_OK : EFS_ERR_STALE;
+    return !memcmp(have + used, pay, plen) ? EFS_OK : EFS_ERR_STALE;
+}
+
+static int pub_pin_prepare(struct efs_kv *kv, const struct efs_txid *t,
+                           const struct efs_txn_parts *parts, const uint8_t *key,
+                           uint32_t klen, const uint8_t *pay, uint32_t plen)
+{
+    struct efs_meta_row row;
+    uint8_t pk[PUB_PIN_KEY_LEN], val[PUB_STAGE_VAL_MAX], have[PUB_STAGE_VAL_MAX];
+    uint32_t hl = sizeof(have), shard;
+    efs_ino_t ino;
+    uint64_t gen, epoch;
+    int head, rc;
+
+    if (klen != 11 || plen != EFS_PUB_PIN_LEN || pay[0] != EFS_PUB_PIN_VERSION)
+        return EFS_ERR_PROTO;
+    ino = rd64(key + 3);
+    gen = rd64(pay + 1);
+    epoch = rd64(pay + 9);
+    shard = ((uint32_t)key[0] << 8) | key[1];
+    /* The pin is retired with the decision, so the FileID's shard must be
+     * the coordinator that RETIREs it. */
+    if (!ino || !gen || shard != efs_kv_inode_shard(ino) ||
+        efs_txn_coordinator(t, parts) != shard)
+        return EFS_ERR_INVAL;
+    rc = efs_txn_key_exclusive(kv, key, klen);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_meta_apply_get_inode(kv, ino, &row);
+    if (rc == EFS_ERR_NOT_FOUND)
+        return EFS_ERR_STALE;
+    if (rc != EFS_OK)
+        return rc;
+    if (row.generation != gen || row.content_epoch != epoch)
+        return EFS_ERR_STALE;
+    pub_pin_prefix(ino, gen, pk);
+    memcpy(pk + 24, t->bytes, EFS_TXN_ID_LEN);
+    rc = efs_kv_get(kv, pk, sizeof(pk), have, &hl);
+    if (rc == EFS_OK)
+        return pub_record_same(have, hl, t, pay, plen);
+    if (rc != EFS_ERR_NOT_FOUND)
+        return rc;
+    head = efs_txn_record_head_pack(val, sizeof(val), t, parts);
+    if (head < 0)
+        return head;
+    memcpy(val + head, pay, plen);
+    return efs_kv_put(kv, pk, sizeof(pk), val, (uint32_t)head + plen);
+}
+
+int efs_meta_apply_publication_stage(struct efs_kv *kv, const struct efs_txid *t,
+                                     const struct efs_txn_parts *parts, const uint8_t *key,
+                                     uint32_t klen, const uint8_t *pay, uint32_t plen)
+{
+    struct efs_meta_pub p;
+    struct efs_opid session;
+    struct publish_mode dry = {1, t};
+    uint8_t ck[24], sk[24], val[PUB_STAGE_VAL_MAX], have[PUB_STAGE_VAL_MAX];
+    uint32_t hl = sizeof(have), shard;
+    int head, rc;
+
+    if (!kv || !t || !key || !pay || klen < 3 || !efs_txn_parts_valid(parts))
+        return EFS_ERR_PROTO;
+    shard = ((uint32_t)key[0] << 8) | key[1];
+    if (!pub_parts_member(parts, shard))
+        return EFS_ERR_INVAL;
+    if (key[2] == EFS_KV_KIND_INODE)
+        return pub_pin_prepare(kv, t, parts, key, klen, pay, plen);
+    if (key[2] != EFS_KV_KIND_CHUNK || klen != sizeof(ck))
+        return EFS_ERR_PROTO;
+    rc = efs_meta_pub_stage_decode(pay, plen, &p, &session);
+    if (rc != EFS_OK)
+        return rc;
+    rc = pub_stage_key(p.ino, p.inode_gen, p.chunk_index, sk);
+    if (rc != EFS_OK)
+        return rc;
+    memcpy(ck, sk, sizeof(ck));
+    ck[2] = EFS_KV_KIND_CHUNK;
+    if (memcmp(ck, key, sizeof(ck)))
+        return EFS_ERR_INVAL; /* never stage under another chunk's key */
+    rc = efs_kv_get(kv, sk, sizeof(sk), have, &hl);
+    if (rc == EFS_OK)
+        return pub_record_same(have, hl, t, pay, plen);
+    if (rc != EFS_ERR_NOT_FOUND)
+        return rc;
+    rc = efs_session_accept(kv, shard, session.client_uuid, session.session_epoch);
+    if (rc != EFS_OK)
+        return rc;
+    /* The publish would apply now; the stage keeps every other writer of
+     * this chunk out until RESOLVE, so it still applies then. */
+    rc = publish_inner_as(kv, &p, NULL, &dry);
+    if (rc != EFS_OK)
+        return rc;
+    head = efs_txn_record_head_pack(val, sizeof(val), t, parts);
+    if (head < 0)
+        return head;
+    memcpy(val + head, pay, plen);
+    return efs_kv_put(kv, sk, sizeof(sk), val, (uint32_t)head + plen);
+}
+
+struct pub_stage_scan {
+    struct efs_txid t;
+    int pins; /* 1: collect this txn's pins, 0: its chunk stages */
+    uint32_t n;
+    int overflow;
+    uint8_t keys[EFS_PUB_STAGE_RESOLVE_MAX][PUB_PIN_KEY_LEN];
+    uint8_t pay[EFS_PUB_STAGE_RESOLVE_MAX][EFS_PUB_STAGE_LEN];
+};
+
+static int pub_stage_scan_cb(void *user, const uint8_t *key, uint32_t klen,
+                             const uint8_t *val, uint32_t vlen)
+{
+    struct pub_stage_scan *a = user;
+    struct efs_txid owner;
+    uint32_t used = 0;
+
+    if (klen != (a->pins ? PUB_PIN_KEY_LEN : 24u) ||
+        efs_txn_record_head_parse(val, vlen, &owner, NULL, &used) != EFS_OK ||
+        memcmp(owner.bytes, a->t.bytes, EFS_TXN_ID_LEN))
+        return 0;
+    if (a->n >= EFS_PUB_STAGE_RESOLVE_MAX) {
+        a->overflow = 1;
+        return 1;
+    }
+    memcpy(a->keys[a->n], key, klen);
+    if (!a->pins) {
+        if (vlen - used != EFS_PUB_STAGE_LEN)
+            return 0;
+        memcpy(a->pay[a->n], val + used, EFS_PUB_STAGE_LEN);
+    }
+    a->n++;
+    return 0;
+}
+
+static int pub_stage_scan(struct efs_kv *kv, uint32_t shard, struct pub_stage_scan *a)
+{
+    uint8_t pref[3] = {(uint8_t)(shard >> 8), (uint8_t)shard, EFS_KV_KIND_PUB_STAGE};
+    int rc = efs_kv_scan_prefix(kv, pref, sizeof(pref), pub_stage_scan_cb, a);
+    return rc == 1 && a->overflow ? EFS_OK : rc; /* the callback stopped a full page */
+}
+
+/* COMMIT of one stage. A FileID that is gone (its row deleted after the
+ * decision) has no reader left; every other refusal keeps the stage. */
+static int pub_stage_commit(struct efs_kv *kv, const struct efs_txid *t,
+                            const uint8_t *sk, const uint8_t *pay)
+{
+    struct efs_meta_pub p;
+    struct efs_meta_row row;
+    struct publish_mode self = {0, t};
+    struct efs_kv_item del = {EFS_KV_DEL, sk, 24, NULL, 0};
+    uint8_t probe[PUB_STAGE_VAL_MAX];
+    uint32_t pl = sizeof(probe);
+    int rc = efs_meta_pub_stage_decode(pay, EFS_PUB_STAGE_LEN, &p, NULL);
+
+    if (rc != EFS_OK)
+        return rc;
+    rc = publish_inner_as(kv, &p, &del, &self);
+    if (rc == EFS_OK) {
+        /* A replay (or a P3 no-op) answers OK without writing its batch. */
+        rc = efs_kv_get(kv, sk, 24, probe, &pl);
+        if (rc == EFS_ERR_NOT_FOUND)
+            return EFS_OK;
+        return rc == EFS_OK ? efs_kv_del(kv, sk, 24) : rc;
+    }
+    if (!p.lane_local) {
+        int grc = efs_meta_apply_get_inode(kv, p.ino, &row);
+        if (grc == EFS_ERR_NOT_FOUND || (grc == EFS_OK && row.generation != p.inode_gen))
+            return efs_kv_del(kv, sk, 24);
+    }
+    return rc;
+}
+
+int efs_meta_apply_txn_resolve(struct efs_kv *kv, const struct efs_txid *t,
+                               uint32_t shard, int decision)
+{
+    struct pub_stage_scan *a;
+    int rc, first = EFS_OK;
+
+    if (!kv || !t || (decision != EFS_TXN_COMMIT && decision != EFS_TXN_ABORT))
+        return EFS_ERR_INVAL;
+    a = calloc(1, sizeof(*a));
+    if (!a)
+        return EFS_ERR_NOMEM;
+    a->t = *t;
+    rc = pub_stage_scan(kv, shard & EFS_KV_SHARD_MASK, a);
+    for (uint32_t i = 0; rc == EFS_OK && i < a->n; i++) {
+        int one = decision == EFS_TXN_COMMIT ? pub_stage_commit(kv, t, a->keys[i], a->pay[i])
+                                             : efs_kv_del(kv, a->keys[i], 24);
+        if (one == EFS_ERR_IO || one == EFS_ERR_NOMEM)
+            rc = one;
+        else if (one != EFS_OK && first == EFS_OK)
+            first = one;
+    }
+    if (rc == EFS_OK && a->overflow)
+        first = first == EFS_OK ? EFS_ERR_BUSY : first; /* re-driven RESOLVE finishes */
+    free(a);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_txn_resolve(kv, t, shard, decision);
+    return rc != EFS_OK ? rc : first;
+}
+
+int efs_meta_apply_txn_retire(struct efs_kv *kv, uint32_t coord_shard,
+                              const struct efs_txid *t, uint64_t now_ns)
+{
+    struct pub_stage_scan *a;
+    int rc = efs_txn_retire(kv, coord_shard, t, now_ns);
+
+    if (rc != EFS_OK)
+        return rc;
+    a = calloc(1, sizeof(*a));
+    if (!a)
+        return EFS_ERR_NOMEM;
+    a->t = *t;
+    a->pins = 1;
+    rc = pub_stage_scan(kv, coord_shard & EFS_KV_SHARD_MASK, a);
+    for (uint32_t i = 0; rc == EFS_OK && i < a->n; i++)
+        rc = efs_kv_del(kv, a->keys[i], PUB_PIN_KEY_LEN);
+    free(a);
+    return rc;
 }
 
 static int activate_lanes(struct efs_kv *kv, efs_ino_t ino, uint64_t mask,
@@ -4985,6 +5870,9 @@ int efs_meta_apply_content_fence(struct efs_kv *kv, efs_ino_t ino,
             return EFS_ERR_STALE;
         if (!S_ISREG(row.mode))
             return EFS_ERR_INVAL;
+        rc = efs_meta_pub_pinned(kv, ino, gen);
+        if (rc != EFS_OK)
+            return rc;
         current = row.content_epoch;
         rc = efs_kv_key_inode(efs_kv_inode_shard(ino), ino, key, &kl);
     } else {
@@ -5096,6 +5984,9 @@ int efs_meta_prepare_content_fence(struct efs_kv *kv, const struct efs_txid *t,
         !ino || !gen || authority > EFS_META_FENCE_INODE ||
         expected_epoch == UINT64_MAX || epoch != expected_epoch + 1)
         return EFS_ERR_INVAL;
+    if (authority == EFS_META_FENCE_INODE &&
+        (rc = efs_meta_pub_pinned(kv, ino, gen)) != EFS_OK)
+        return rc;
     if (authority == EFS_META_FENCE_INODE)
         rc = efs_kv_key_inode(efs_kv_inode_shard(ino), ino, key, &kl);
     else
@@ -6670,6 +7561,9 @@ int efs_meta_apply_epoch_fence(struct efs_kv *kv, efs_ino_t ino)
     rc = efs_meta_apply_get_inode(kv, ino, &row);
     if (rc != EFS_OK)
         return rc;
+    rc = efs_meta_pub_pinned(kv, ino, row.generation);
+    if (rc != EFS_OK)
+        return rc;
     row.content_epoch++;
     pack_inode(v_ino, &row);
     rc = efs_kv_key_inode(efs_kv_inode_shard(ino), ino, k_ino, &ki);
@@ -7032,6 +7926,9 @@ int efs_meta_apply_truncate_lazy(struct efs_kv *kv,
         return rc;
     if (row.generation != t->inode_gen)
         return EFS_ERR_STALE;
+    /* W77: a shrink moves the epoch staged publications were checked at. */
+    if (shrink && (rc = efs_meta_pub_pinned(kv, t->ino, row.generation)) != EFS_OK)
+        return rc;
     if (!S_ISREG(row.mode))
         return EFS_ERR_INVAL;
     /* Receipt first: a committed truncate retried under its identity

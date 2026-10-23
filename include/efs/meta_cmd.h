@@ -90,6 +90,16 @@
 #define EFS_MD_CMD_PREPARE 5 /* matches sim CMD_PREPARE */
 #define EFS_MD_CMD_DECIDE  6 /* [txid:16][coord:4][dec:1][n:1][shard:4]*n */
 #define EFS_MD_CMD_TXN_RETIRE 83 /* [txid:16][coord:4][now_ns:8]: every RESOLVE applied */
+/* W154 on the group of the mark's anchor shard: [rebuilt:1][ino:8]
+ * [inode_gen:8][object_gen:8][ci:4][lane:1][missing:1][nodes:4*3]
+ * [checksums:32*3], 140 B. Retires one degraded mark (efs_meta_apply_degraded_clear). */
+#define EFS_MD_CMD_DEGRADED_CLEAR 84
+/* RPC only (K13 + W154), never logged: [mark:EFS_REBUILD_MARK_LEN] as in
+ * EFS_MSG_REBUILD_PUT. OK when the mark's group, after a ReadIndex, holds
+ * exactly this mark; NOT_FOUND when absent; STALE when it differs. */
+#define EFS_MD_REQ_DEGRADED_CHECK 85
+#define EFS_MD_DEGRADED_CLEAR_LEN (1u + 1u + 8u + 8u + 8u + 4u + 1u + 1u + \
+                                   4u * EFS_NUM_FRAGMENTS + EFS_HASH_SIZE * EFS_NUM_FRAGMENTS)
 #define EFS_MD_CMD_RESOLVE 7
 #define EFS_MD_CMD_DROP    8
 #define EFS_MD_CMD_SESSION 9 /* matches sim SIM_CMD_SESSION */
@@ -223,7 +233,8 @@
     X(LANE_SWEEP_MULTI) X(REAP_MULTI) \
     X(PACK_ADMIT) X(PACK_SWITCH) X(PACK_CANCEL) X(PACK_RETIRE) \
     X(PACK_UNINDEX) X(PACK_INDEX) \
-    X(BOOTSTRAP_LANE) X(TRUNC_SWEEP) X(SWEEP_DONE) X(RETIRE) X(TXN_RETIRE)
+    X(BOOTSTRAP_LANE) X(TRUNC_SWEEP) X(SWEEP_DONE) X(RETIRE) X(TXN_RETIRE) \
+    X(DEGRADED_CLEAR)
 
 /* 1 when byte 0 of a log command names a command this build applies. */
 static inline int efs_md_cmd_applicable(uint8_t tag)

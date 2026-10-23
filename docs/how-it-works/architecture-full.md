@@ -1576,6 +1576,19 @@ state; W137 uses the real reply shape. `make test` and a private three-daemon
 gate pass on intel1. The D31 abandoned-upload collector is INCOMPLETE; RDMA,
 orcd-mini and multi-host are NOTRUN.
 
+[Full code-gate runtime review](../status/make-test-runtime-review-20261023.md):
+execution review complete; speedup NOTRUN. Fix the fault-daemon dependency,
+then build harnesses incrementally and schedule isolated cases concurrently.
+The fast/long split does not reduce full-gate work or qualify parallel safety.
+
+[W155 modify oracle and correlation tooling](../status/w155-oracle-correlation-20261023.md):
+**self-tests PASS on nuc; the W148 campaign rerun with it is NOTRUN** (branch
+`devel-w155h`, not merged). A failed modify records its syscall stages and
+quarantines the file with syscall-boundary candidates. It is never a PASS.
+`w155_correlate.py` builds one table per failure and lists logging gaps
+G1–G8. The first is that no server line records a request's receipt. The
+nuc W148 raw bundles are not lost: their location and sha256 are in the page.
+
 [Intel cluster + xorinox client CPU profile](../status/intel-profile-20261023.md):
 **analysis only.** Not CPU-bound (servers 1.1–1.7 of 8 cores, client ≤0.7);
 write 155 MiB/s, read 179 MiB/s, tiny 123 files/s. Tiny files spin in 1 ms
@@ -1622,6 +1635,11 @@ fails only where `ptrace_scope` is 2 (ORCD); `make check` runs it. No product
 leak found. Open: W126 peeks can wait behind a writer queued on `view_rw`.
 node9901 run NOTRUN.
 
+[K30 intermittent tests](../status/k30-intermittent-tests-20261023.md): **fixed on
+`devel-k30`, not merged; 0/25 FAIL per case on amd.** `test_reclaim` was a
+product bug (same-second journal aside rename refused startup); the fork
+oracle and `test_kv_lsm` were test races. W126 peek limitation stays open.
+
 [K15 W52/W64 append gates](../status/k15-w52-w64-20261022.md): **W64 INCOMPLETE**.
 A leader change left append transactions PREPARED until recovery, so writes
 failed with EBUSY. The fix and its regression test are on `devel-k15`, and the
@@ -1643,6 +1661,14 @@ needs a decision. W155 demonstrates ambiguous visible completion, not proof
 of successful durability or rollback. A blanket old-or-new rewrite oracle
 is insufficient. K1's post-restart rc 4, loaded errors, raw-evidence losses
 and foreign-client discovery limits remain recorded.
+
+[D39 consolidated model](../status/d39-consolidated-model-20261023.md): **MODEL PASS on
+branch `devel-d39model`, not merged.** The single authoritative statement of
+the accepted D39 rules, executable as `tests/d39_model.py` in `make test`:
+101 traces from §§8–33, 11 negative controls under superseded rules and a
+randomized interleaving search. It adds three model findings the proposal must
+accept and lists nine unresolved points (C13). Implementation and cluster
+gates NOTRUN.
 
 [D39 latest review (§34)](../status/d39-cluster-membership-proposal-20261022.md):
 `802416d39` resolves §32's predicate, critical-section scheduling and Raft
@@ -1731,6 +1757,8 @@ cluster refusal run are NOTRUN.
 a cluster at four nodes, so ">4 nodes" is an implementation item or a
 narrower claim.** W145–W147 fixes read correct; `raft-resync` mark is not
 persisted; ior write regression needs a K row.
+
+[K31 fixed, K27 closed, orcd-mini on devel `24e58fb1d`](../status/k31-k27-orcd-mini-20261023.md): **RDMA reply loss came from the K5 mount session starting before the daemon fork (poller thread lost); fixed in `24e58fb1d`. K27: no ior write regression on fresh formats. All orcd-mini suites PASS.**
 
 [D40, alpha 1.0 scope decisions Oct 23](#d40--alpha-10-scope-decisions-taken-oct-23-user-in-one-pass):
 **D39 accepted (fixed membership, endpoint identity, all members at formation; model first); W154 rebuild on return; K10 known limitation; K13 and K14 fixed in alpha; K23 stays deferred; orcd-mini reformat and the K27 A/B approved.**
@@ -2543,7 +2571,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | crash-recovery-feature | **W123** · automatic crash recovery through per-file durable versions | new feature / durability recovery | PROPOSED: design review before code; implementation, migration and acceptance NOTRUN; W71 remains open | [feature and gates](../backlog/crash-safe-durable-versions.md) |
 | fast-delete | **W124** · fast delete: batched reclaim, quota credit at commit, then packing (W125) | performance / capacity | PROPOSED: design review before code; implementation, private A/B and orcd-mini acceptance NOTRUN | [proposal and gates](../backlog/fast-delete-reclaim.md) · [evidence](../status/orcd-mini-gc-delete-profile-5d673efa8-20261018.md) |
 | small-file-packing | **W125** · small-file packing by default (background packer after close) | capacity / performance | PROPOSED: revised to background packing 2026-10-18; write path unchanged, packer always on, no switch, prior state kept as a tag; port and acceptance NOTRUN | [proposal and gates](../backlog/small-file-packing-default.md) · [plan](../backlog/small-file-packing-plan.md) · [D37](#appendix-4--decisions--taken-and-pending-register-d1d36) |
-| kv-reader-convoy | **W126** · KV readers convoy behind exclusive LSM phases on a busy leader | performance | DEPLOYED on orcd-mini `8fb4247ad` (steps 1 and 3): `make test` 813/813 (1 environmental docs-check failure), POSIX smoke 216/216; A/B lock-wait gate PASS (leader LSM waits 2–4× lower), create-rate gate FAIL (no measurable gain; bounded by `h->mu` and fsync); step 4 deferred | [item](#w126) · [A/B](../status/orcd-mini-w126-ab-8fb4247ad-20261022.md) · [origin](../status/orcd-mini-profile-47ba6b590-20261021.md) |
+| kv-reader-convoy | **W126** · KV readers convoy behind exclusive LSM phases on a busy leader | performance | DEPLOYED on orcd-mini `8fb4247ad` (steps 1 and 3): `make test` 813/813 (1 environmental docs-check failure), POSIX smoke 216/216; A/B lock-wait gate PASS (leader LSM waits 2–4× lower), create-rate gate FAIL (no measurable gain; bounded by `h->mu` and fsync); step 4 deferred; K30 (`devel-k30`): peeks still wait on `mu` behind any writer queued on `view_rw` behind a reader, now pinned by a deterministic `test_kv_lsm` case ([K30](../status/k30-intermittent-tests-20261023.md)) | [item](#w126) · [A/B](../status/orcd-mini-w126-ab-8fb4247ad-20261022.md) · [origin](../status/orcd-mini-profile-47ba6b590-20261021.md) |
 | apply-unknown-tag | **W127** · metadata apply accepts unknown command tags as applied | correctness | FIXED, merged into devel `08cc16af4`; private RDMA gate PASS (`scripts/w127_incompatible_entry.sh`); unit gates PASS, private 3-node gate PASS; RDMA/multi-host NOTRUN ([implementation](#w127-w131-fix)) | [item](#w127) · [audit](../reviews/dead-code-review-20261021.md) |
 | apply-unknown-subtag | **W128** · unknown sub-tags and short frames apply as success (DIR/SESSION/TXN) | correctness | FIXED, merged into devel `08cc16af4`; private RDMA gate PASS (`scripts/w127_incompatible_entry.sh`); unit gates PASS; RDMA/multi-host NOTRUN ([implementation](#w127-w131-fix)) | [item](#w128) · [audit](../reviews/dead-code-review-20261021.md) |
 | apply-proto-normalized | **W129** · `host_apply` turns decoder errors into success and commits the cursor | correctness | FIXED, merged into devel `08cc16af4`; private RDMA gate PASS (`scripts/w127_incompatible_entry.sh`); unit gates PASS; RDMA/multi-host NOTRUN ([implementation](#w127-w131-fix)) | [item](#w129) · [audit](../reviews/dead-code-review-20261021.md) |
@@ -2565,11 +2593,11 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | deposed-leader-stuck | **W145** · a follower commits its own unproven log tail after an InstallSnapshot (orcd-mini n2 applied 30929219@62 against the cluster's 63, then wedged) | Raft safety | OPEN (fix deployed, n2 repaired): fix `76614e8e8` with a regression test; n2 repaired 16:20Z via `efs-mgmt raft-resync` (`613bb2c78`) after W146/W147; all nodes in sync, smoke 216/216; open: acknowledged-write check, snapshot sent to a near follower, restart election storms, `stop.sh` with a blocked handler | [item](#w145) · [evidence](../status/orcd-mini-profile-08cc16af4-20261022.md) |
 | snapshot-4gib | **W146** · a snapshot image over 4 GiB can never be installed (32-bit import read; orcd-mini group 2 is 5.2 GB) | correctness / liveness | Closed (Oct 22): fixed in `e75391268`; gate PASS, n2 installed the 5.2 GB image on orcd-mini | [item](#w146) |
 | snapshot-restart | **W147** · a snapshot transfer restarts on every send while the leader commits (stored snapshot point without a file) | liveness | Closed (Oct 22): fixed in `a569de971` with a regression test that FAILs on the old code; gate PASS, n2's transfer completed while group 2 committed | [item](#w147) |
-| modify-read-mismatch | **W148** · modify-under-load read returned wrong bytes (correct size) on a never-packed 3.6 MB file | data correctness | FIXED Oct 22 (`71ce4ff35`, alpha K8): a partial load never inherits an UNCOND slot base; the flush fetches the row and overlays only this write's ranges under a CAS. Reproduced 3× on node9901 before the fix; two-client regression 3/3. Fixed-build rerun on nuc (TCP, 9 × 600 s, `163241584`, merged Oct 23 (`2213a4120`)): W148 signature 0/9 and checked stop clean 9/9, but the gate FAILs (3 harness mismatches in 2 attempts were exact committed versions after a rewrite returned EIO, a new finding; EBUSY errors in 5 attempts) ([evidence](../status/gates-nuc-20261022.md#w148-modify-under-load-rerun-on-the-fixed-build)) | [review](../status/review-pack-validate-once-20261022.md) |
+| modify-read-mismatch | **W148** · modify-under-load read returned wrong bytes (correct size) on a never-packed 3.6 MB file | data correctness | FIXED Oct 22 (`71ce4ff35`, alpha K8): a partial load never inherits an UNCOND slot base; the flush fetches the row and overlays only this write's ranges under a CAS. Reproduced 3× on node9901 before the fix; two-client regression 3/3. Fixed-build rerun on nuc (TCP, 9 × 600 s, `163241584`, merged Oct 23 (`2213a4120`)): W148 signature 0/9 and checked stop clean 9/9, but the gate FAILs (3 harness mismatches in 2 attempts were exact committed versions after a rewrite returned EIO, a new finding; EBUSY errors in 5 attempts) ([evidence](../status/gates-nuc-20261022.md#w148-modify-under-load-rerun-on-the-fixed-build)); a rerun with the operation-aware W155 oracle (`devel-w155h`) is NOTRUN ([oracle](../status/w155-oracle-correlation-20261023.md)) | [review](../status/review-pack-validate-once-20261022.md) |
 | compact-die-env | **W149** · `EFS_KV_COMPACT_DIE` makes the daemon `_exit(99)` mid-compaction in normal builds | build hygiene / safety | OPEN: move it and `test_kv_lsm`'s use under `EFS_FAULTS`; alpha K24 | [checklist review](../status/alpha-1.0-2plus1-checklist.md) |
 | md-raft-n-default | **W153** · unset/empty `EFS_MD_RAFT_N` defaults to 4; on three nodes SHARD2 includes absent node 4 and cannot tolerate loss of node 2 or 3; `atoi` also accepts malformed numeric prefixes | fail-open configuration / protection correctness | **OPEN — alpha 1.0 blocker.** Derive bootstrap topology from authoritative configured membership; validate full input and consistent member identities, never infer membership from live reachability. Inspected drivers set the count, but running deployments were not audited. Startup, inconsistent-config and single-loss live gates NOTRUN. Parent-session response (`f2093fc9f` review): also blocks all-member GC inode reclaim silently; split into **W153a** fail-closed count validation (after the consolidated D39 model, user Oct 23) and the configured-membership design question, now [D39 proposal](../status/d39-cluster-membership-proposal-20261022.md) awaiting the user | [review](../status/devel-integration-review-20261022.md#review-of-a76b63f42--w153-is-an-alpha-correctness-gate), [D38](#appendix-4--decisions--taken-and-pending-register-d1d36) |
 | degraded-stripe-reprotect | **W154** · a stripe acknowledged with two fragments while a node was down stays at two fragments after that node returns: no rebuild, no warning at acknowledgement; one later single-node outage made the file EIO until the second node returned (K28 five-node gate, F1, xorinox Oct 23: 4 of 512 chunks written in the window before the client marked node 5 down) | data protection / deferred repair | FIX (decided Oct 23, D40: rebuild on return): re-protect a stripe acknowledged with two fragments when the missing node returns, log the degraded acknowledgement, keep write availability; no unconditional single-node-failure protection claim until this is in and gated | [gates-xorinox](../status/gates-xorinox-20261022.md), K28 |
-| eio-after-commit | **W155** · flush/close returned EIO after a receive timeout/BUSY sequence; later reads matched the attempted rewrite version (nuc b1/b2). Visibility does not prove the full durability contract succeeded; exact request/receipt and failure stage need correlation. | ambiguous completion / error resolution / harness | OPEN; investigate bounded same-identity outcome resolution. Record completed syscall stages and quarantine unresolved files; do not assume rollback or blanket old-or-new atomicity. Preserve EIO/EBUSY as gate failures. | [gates-nuc](../status/gates-nuc-20261022.md), [review](../status/devel-integration-review-20261022.md#review-of-the-oct-23-gate-merges-and-recap--october-23), K8, K29 |
+| eio-after-commit | **W155** · flush/close returned EIO after a receive timeout/BUSY sequence; later reads matched the attempted rewrite version (nuc b1/b2). Visibility does not prove the full durability contract succeeded; exact request/receipt and failure stage need correlation. | ambiguous completion / error resolution / harness | OPEN; investigate bounded same-identity outcome resolution. Record completed syscall stages and quarantine unresolved files; do not assume rollback or blanket old-or-new atomicity. Preserve EIO/EBUSY as gate failures. Oracle and correlation tooling on `devel-w155h` (not merged): the modifier records stages and quarantines unresolved files with syscall-boundary candidates, never PASSes with an error, and `w155_correlate.py` lists logging gaps G1–G8, led by the missing per-request receipt (G2) ([evidence](../status/w155-oracle-correlation-20261023.md)). | [gates-nuc](../status/gates-nuc-20261022.md), [review](../status/devel-integration-review-20261022.md#review-of-the-oct-23-gate-merges-and-recap--october-23), K8, K29 |
 | client-discovery-ownership | **W156** · `scripts/client_processes.py` cannot inspect another user's `efs-fuse` on a shared host (relative mount argv needs that process's cwd), so non-root test users could not stop their own mounts; the merged opt-in `EFS_CLIENT_SKIP_FOREIGN=1` (`2213a4120`) skips uninspectable foreign clients, which proves nothing about foreign clients on the same target | test ownership / operator path | OPEN: prove target-mount and control-owner identity independently, refuse ambiguous ownership, test foreign clients on the same and on unrelated targets, then remove the switch (alpha: fewer knobs) | [gates-nuc](../status/gates-nuc-20261022.md), [review](../status/devel-integration-review-20261022.md#review-of-the-oct-23-gate-merges-and-recap--october-23) |
 | nfs-macos-clients | **W152** · NFS re-export and macOS clients | beta backlog | DECIDED out of alpha 1.0 (user, Oct 22); the W55 NFS/macOS triggers move here; alpha publishes "Linux FUSE client only" (F4) | [alpha checklist S1](../status/alpha-1.0-2plus1-checklist.md) |
 | node-cap | **W151** · the code caps a cluster at four nodes (`EFS_MAX_NODES` 4, `EFS_MD_RAFT_N` 3..4, voter sets only for n ≤ 4, placement ring clamped, client `leader_hint` bound), while alpha 1.0 and the spec (§1: 3–64) require >4 | implementation / scope | FIXED, merged into devel Oct 22 (`a2942cb0f`; [evidence](../status/k28-w151-cluster-cap-20261022.md)): cap 16, three voters per group, segments on the data ring; single-host five-daemon TCP/buffered gate scoped PASS ([evidence](../status/gates-xorinox-20261022.md)), with W154 protection finding. Multi-host/RDMA/direct-I/O qualification NOTRUN. Was OPEN; alpha K28 and Stage 2 prerequisite of A3: raise the cap, define voter sets for n ≥ 5, placement/capacity tests at 5..max, membership and client tables, fresh format; no compatibility. Sub-item (D38, user Oct 22): packed segments move from the group's voters to the data ring across all N nodes, which needs a remote linearizable pack-object read for PUT_SEGMENT admission and reclaim on non-voter nodes | [review](../status/alpha-1.0-plan-review-20261022.md) · [D38](#appendix-4--decisions--taken-and-pending-register-d1d36) |
@@ -2630,7 +2658,7 @@ positions do not assign an execution order or override the active handoff.
 | spec4 | **W74** · protection profiles, debt and automatic repair | recovery feature gap | repair experiment removed from devel 2026-10-16 (tag `archive/experimental-group-a-20261016`); earlier ordinary-fragment standalone repair qualification ([ledger](../status/orcd-default-repair-20261012.md)) applies only to that tag; no repair path in devel; automatic/unplanned repair deferred; protection/profile cutover remain unclosed | [evidence and gate](#w74) |
 | spec5 | **W75** · fragment integrity trust / missing checksum fallback | integrity correctness | missing/corrupt evidence fails closed; captured metadata digest and PUT validation gates pass on NUC; K16 identity-bound fragment record (format 2) implemented on `devel-k16`, efs1 unit + private TCP cluster gates (see [K16 summary](../status/k16-w75-identity-format-20261022.md)); not merged; inode generation/salt binding, RDMA and hardware gates open | [evidence and gate](#w75) |
 | spec6 | **W76** · opid table exhaustion sends unprotected namespace retries | conditional correctness | Closed: bounded identity admission refuses saturation safely; Oct9 reserves receipt capacity with16 unacknowledged positions (512 tracker slots); all four lost-reply mutations replay across leader death/restart with one effect | [evidence and gate](#w76) |
-| spec7 | **W77** · atomic multi-chunk public publication/observation | integration gap | per-group REPORT/per-chunk publication; request-wide decision/read-validation gate unestablished | [evidence and gate](#w77) |
+| spec7 | **W77** · atomic multi-chunk public publication/observation | integration gap | per-group REPORT/per-chunk publication; request-wide decision/read-validation gate unestablished. Fixed on branch `devel-k14` (`00c14c355`), not merged: request-wide publication transaction and snapshot-validated multi-chunk reads, intel2 cluster gate PASS, RDMA/orcd-mini/multi-host NOTRUN ([K14 evidence](../status/k14-w77-atomic-publication-20261023.md)) | [evidence and gate](#w77) |
 | op2 | **W78** · server wrapper trusts PID-file process identity | conditional operator correctness | Closed Oct11: actual NUC startup/stop retains unrelated processes; absent/dead/invalid/wrong-storage/stale-start and recorder ownership gates pass; shutdown remains W65 | [closure](../status/devel-nuc-closure-20261010.md) |
 | op3 | **W79** · mkfs help/name argument disagrees with single-export handler | operator observability | Closed Oct11: aliases/help/argument refusals, ignored label, consumed successful replies and explicit retry preserve namespace/salt in both NUC I/O modes | [closure](../status/devel-nuc-closure-20261010.md) |
 | op4 | **W80** · efs-query reports retired zero-filled statistics as totals | operator observability | Closed Oct11 for retired endpoint: nonempty namespace normal/raw, help, legacy and malformed replies pass; mounted stats/scale remain W92 | [closure](../status/devel-nuc-closure-20261010.md) |
@@ -2831,6 +2859,9 @@ incarnation with the counter-transition exception for Raft control, own
 record for continuations), the lock is held across check and register so a
 declaration cannot publish between them, and effect records carry identity
 authority only, never Raft validation or persistence.
+The consolidated executable model ([page](../status/d39-consolidated-model-20261023.md),
+`tests/d39_model.py`) passes on branch `devel-d39model`, not merged;
+implementation and cluster gates NOTRUN.
 Awaiting the user;
 W153a remains on hold.
 
@@ -13265,7 +13296,8 @@ substitute one for another.
 1. **It builds on a node** — never in the NFS home
    (see the fcstor deploy rule; a local `make` produces AVX-512 objects that
    SIGILL on the AMD test nodes).
-2. **Unit tests pass:** `make test` (`test_sim`, `test_meta_apply`,
+2. **Unit tests pass:** `make test` while editing, and `make test-all`
+   (fast and long groups) before handing off (`test_sim`, `test_meta_apply`,
    `test_raft`, `test_kv_lsm`, `test_stage_evict`, … — no accepted-failure
    list).
 3. **The gate from your routing row passes**, run with
@@ -13311,7 +13343,7 @@ Hard rules: no logic changes outside the task; no renames; no new
 dependencies; no files outside the ones named; if anything seems to
 need a design decision the spec does not contain, STOP and report —
 do not decide.
-Done means: builds on a test node (never in $HOME), make test passes,
+Done means: builds on a test node (never in $HOME), make test-all passes,
 the routing row's gate passes via tests/run_tests.sh, and you record
 the result directory. A timeout is a failure. Verify the mount with
 findmnt before trusting any suite result.

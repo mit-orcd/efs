@@ -18,6 +18,7 @@
 #define EFS_KV_KIND_PACK_CANDIDATE 46 /* group anchor/epoch/FileID: W125 packing candidate */
 #define EFS_KV_KIND_TRUNCATE_RECEIPT 47 /* inode/session: D25 truncate opid window */
 #define EFS_KV_KIND_TRUNC_PENDING 48 /* inode anchor/ino: D25 history awaiting sweep */
+#define EFS_KV_KIND_DEGRADED 51 /* group anchor/FileID/object/chunk: W154 stripe awaiting rebuild */
 /* 36-41 are reserved: never reuse. Snapshot import refuses them. */
 #define EFS_KV_KIND_RESERVED_MIN 36
 #define EFS_KV_KIND_RESERVED_MAX 41
@@ -29,8 +30,8 @@
 #define EFS_KV_KIND_APPEND_RECEIPT 31 /* inode/session: bounded reservation results */
 #define EFS_KV_KIND_PUT_TICKET 29 /* admitted immutable body, session-owned */
 #define EFS_KV_KIND_PUT_FLOOR 30 /* retired ticket sequence; durable replay fence */
-#define EFS_KV_KIND_PUT_ORPHAN 51 /* retired REJECTED ticket: body awaiting revocation-gated collection */
-#define EFS_KV_KIND_PUT_COUNT 52 /* live tickets in one session/lane-shard stream (admission bound) */
+#define EFS_KV_KIND_PUT_ORPHAN 53 /* retired REJECTED ticket: body awaiting revocation-gated collection */
+#define EFS_KV_KIND_PUT_COUNT 54 /* live tickets in one session/lane-shard stream (admission bound) */
 #define EFS_KV_KIND_ORPHAN 28 /* zero-link inode awaiting lease/txn-safe reclamation */
 #define EFS_KV_KIND_PUBLICATION_FLOOR 27 /* stream replay barrier, never expires */
 #define EFS_KV_KIND_PUBLICATION 26 /* FileID/chunk/intent digest: durable verdict */
@@ -48,6 +49,9 @@
 #define EFS_KV_KIND_DECISION 11 /* live coordinator decision: verdict + participants */
 #define EFS_KV_KIND_DECISION_RETIRED 49 /* retired decision: verdict + retire time */
 #define EFS_KV_KIND_DECISION_CURSOR 50 /* per-shard retired-decision reclaim cursor */
+/* W77 staged publication: a chunk's prepared publication (lane shard, chunk
+ * key layout) or a FileID truncate pin (inode shard, lane 0xFF + txid). */
+#define EFS_KV_KIND_PUB_STAGE 51
 #define EFS_KV_KIND_DSEQ     12 /* per-(dir, dentry-shard) emptiness witness */
 #define EFS_KV_KIND_SESSION  13 /* session record on hash(uuid) shard */
 #define EFS_KV_KIND_SESS_LOCAL 14 /* per-shard established epoch + fence */
@@ -155,6 +159,13 @@ int efs_kv_key_append_rsv_shard_prefix(uint32_t shard, uint8_t *out,
 int efs_kv_key_gc(uint32_t shard, efs_ino_t ino, uint64_t gen, uint8_t lane,
                   uint32_t chunk_index, uint8_t *out, uint32_t *len);
 int efs_kv_key_gc_prefix(uint32_t shard, uint8_t *out, uint32_t *len);
+/* W154 degraded mark for one published object (base or span) with a
+ * fragment missing: the GC key layout under its own kind, so a rebuild pass
+ * scans one prefix per group. `shard` is the anchor of the chunk's lane
+ * shard; `gen` is the object (chunk) generation. */
+int efs_kv_key_degraded(uint32_t shard, efs_ino_t ino, uint64_t gen, uint8_t lane,
+                        uint32_t chunk_index, uint8_t *out, uint32_t *len);
+int efs_kv_key_degraded_prefix(uint32_t shard, uint8_t *out, uint32_t *len);
 /* Reap marker for one dead inode: [reap anchor shard][REAP][ino:8].
  * `shard` is the anchor shard of the inode's shard. */
 int efs_kv_key_reap(uint32_t shard, efs_ino_t ino, uint8_t *out,

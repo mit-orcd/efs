@@ -26,6 +26,25 @@ Checks (docs/status/review-pack-validate-once-20261022.md, harness findings
            version; a final-verification mismatch is captured too.
   capture: the --keep-dir copy is unchanged after the file is modified
            once the lock is released (a hard link would have followed).
+W155 (docs/status/w155-oracle-correlation-20261023.md), with a fault hook
+instead of a cluster:
+  stages:  a modify failing at open, truncate (not applied / applied),
+           the second write(2) and close (not applied / applied, the nuc b1
+           shape) records the failing stage, bytes submitted, inode and
+           attempted digest; the file becomes unresolved with exactly the
+           syscall-boundary candidates it reached, and final verification
+           classifies it base / intermediate / attempted. A create and an
+           unlink that fail are recorded too.
+  quarantine: modifiers and deleters leave an unresolved file alone; reads
+           matching a candidate are observations, mixed bytes are a
+           mismatch and foreign at final verification (saved, verdict FAIL).
+  verdict: errors or unresolved files never PASS (FAIL 1, INCOMPLETE 5);
+           the wrapper writes INCOMPLETE and copies the daemon logs.
+  correlate: scripts/w155_correlate.py on sample client/server lines from
+           the nuc b1 capture: the retry, report-loop, flush-meta, failed
+           report-split, raft change, missing receipt and final version
+           land in the failure's table; a legacy OUT (a.txt + meta.json)
+           is anchored by inode; every logging gap is listed.
 """
 import hashlib, importlib.util, json, os, pathlib, shutil, stat, subprocess, sys, tempfile, time
 
@@ -185,6 +204,8 @@ def test_wrapper(tmp):
     assert "final live=" in a and "RC=0" in a and "mismatch=0" in a, a
     assert "delete_rc=0" in (out / "run.txt").read_text()
     assert not (out / "mismatch").exists()
+    assert "verdict=PASS" in a and "unresolved=0" in a, a
+    assert (out / "attempts.jsonl").read_text() == "", "a clean run records no failed attempt"
     print("wrapper: forced stop (fail/KILL) keeps store, failing workload, reused OUT, start failure, PASS deletes PASS")
 
 def load_workload():
@@ -309,6 +330,284 @@ def test_inspect_still_reads_model(tmp):
     assert "exact=[3]" in p.stdout, p.stdout
     print("inspect: content model still importable PASS")
 
+import errno as _errno
+
+def find_name(m, op, minlen=0, base_min=0):
+    """The first writer name whose v1 operation is OP with at least MINLEN bytes."""
+    for i in range(100000):
+        name = "w0/d%03d/f%06d" % (i % 50, i)
+        o = m.op_of(name, 1)
+        if o[0] == op and (op != "rewrite" or len(o[1]) >= minlen) and len(m.contents(name, 0)) >= base_min:
+            return name
+    raise AssertionError("no %s name" % op)
+
+def eio_at(stage_name, nth=1, apply=False):
+    """A fault hook: the NTH call of STAGE_NAME raises EIO, after running it when APPLY."""
+    seen = {}
+    def hook(rec, st, fn):
+        seen[st] = seen.get(st, 0) + 1
+        if st == stage_name and seen[st] == nth:
+            if apply: fn()
+            raise OSError(_errno.EIO, "Input/output error")
+        return fn()
+    return hook
+
+def w155_setup(tmp, tag, name, extra=()):
+    m = load_workload()
+    c, mm = tmp / tag / "c", tmp / tag / "mm"
+    m.configure([str(c), "0", "--mismatch-dir", str(mm), "--modify-log", str(tmp / tag / "attempts.jsonl")] + list(extra))
+    f = c / name; f.parent.mkdir(parents=True); f.write_bytes(m.contents(name, 0))
+    m.live.append(name)
+    return m, f, mm
+
+def one_modify(m):
+    """One modifier pass: stop as soon as the single live file was attempted."""
+    import threading
+    name = m.live[0]
+    t = threading.Thread(target=m.modifier, args=(0,)); t.start()
+    for _ in range(500):
+        if m.ver.get(name, 0) or name in m.unresolved: break
+        time.sleep(0.01)
+    m.stop.set(); t.join(timeout=10); m.stop.clear()
+
+def test_w155_stages(tmp):
+    cases = [  # (tag, op, stage, nth, apply, failed_stage, bytes_submitted(chunks), candidate labels, final class)
+        ("open", "rewrite", "open", 1, False, "open", 0, ["base v0"], "base"),
+        ("trunc", "rewrite", "truncate", 1, False, "truncate", 0, ["base v0", "truncate 0 (failing call)"], "base"),
+        ("trunc-applied", "rewrite", "truncate", 1, True, "truncate", 0, ["base v0", "truncate 0 (failing call)"],
+         "intermediate:truncate 0 (failing call)"),
+        ("write2", "rewrite", "write", 2, False, "write", 1, None, "intermediate:write"),
+        ("close", "rewrite", "close", 1, False, "close", None, None, "attempted"),
+        ("close-applied", "rewrite", "close", 1, True, "close", None, None, "attempted"),
+        ("shrink", "shrink", "truncate", 1, False, "truncate", 0, None, "base"),
+    ]
+    for tag, op, st, nth, apply, failed, chunks, labels, final in cases:
+        m0 = load_workload()
+        name = find_name(m0, op, minlen=int(2.5 * m0.WRITE_CHUNK), base_min=1000)
+        m, f, mm = w155_setup(tmp / "w155", tag, name)
+        m.fault = eio_at(st, nth, apply)     # close not applied: the bytes written are visible anyway
+        one_modify(m)
+        m.fault = None
+        assert name in m.unresolved, (tag, m.errs)
+        u = m.unresolved[name]
+        assert u["failed_stage"] == failed and u["errno"] == _errno.EIO, (tag, u["failed_stage"], u["errno"])
+        assert u["ino"] == (f.stat().st_ino if failed != "open" else None), (tag, u["ino"])
+        new = m.contents(name, 1)
+        assert u["attempted_sha256"] == sha(new) and u["attempted_len"] == len(new)
+        assert u["base_sha256"] == sha(m.contents(name, 0)) and u["version"] == 1 and u["base_version"] == 0
+        fs = [x for x in u["stages"] if x["errno"]]
+        assert fs[0]["stage"] == failed and fs[0]["t0"] <= fs[0]["t1"] and u["t_fail"] == fs[0]["t0"], (tag, u["stages"])
+        if chunks is not None and op == "rewrite":
+            assert u["bytes_submitted"] == chunks * m.WRITE_CHUNK, (tag, u["bytes_submitted"])
+        if failed == "close":
+            assert u["bytes_submitted"] == u["bytes_total"] == len(new), (tag, u["bytes_submitted"])
+        labs = [c["label"] for c in u["candidates"]]
+        if labels is not None: assert labs == labels, (tag, labs)
+        if tag == "write2":
+            assert labs == ["base v0", "truncate 0", "write %d/%d" % (m.WRITE_CHUNK, len(new)),
+                            "write %d+%d/%d (failing call)" % (m.WRITE_CHUNK, m.WRITE_CHUNK, len(new))], labs
+        if failed == "close":
+            assert labs[-1].endswith("= attempted v1") and labs[:2] == ["base v0", "truncate 0"], labs
+            assert all(c["label"] != labs[-1] or c["sha256"] == sha(new) for c in u["candidates"])
+        assert m.ver.get(name, 0) == 0, "a failed modify never advances the known version"
+        assert m.st["unresolved"] == 1 and m.st["errors"] == 1 and m.st["modified"] == 0
+        assert any(("stage=%s" % failed) in e and "ino=" in e and "@20" in e for e in m.errs), m.errs
+        bad, missing = m.final_verify()
+        assert bad == 0 and not missing, (tag, bad, missing)
+        cls = u["final"]["classification"]
+        assert cls == final or (final.endswith(":write") and cls.startswith("intermediate:write ")), (tag, cls)
+        assert m.verdict(bad) == 1, "an EIO modify is a FAIL, whatever the file holds"
+        recs = [json.loads(l) for l in (tmp / "w155" / tag / "attempts.jsonl").read_text().splitlines()]
+        assert [r["kind"] for r in recs] == ["modify", "final-classification"], recs
+        assert recs[0]["failed_stage"] == failed and recs[0]["candidates"] == u["candidates"] and "cands" not in recs[0]
+        assert recs[1]["classification"] == cls and recs[1]["name"] == name
+        if tag == "close-applied": big = (m, name, f, u)
+    # a create that fails at rename and an unlink that fails are recorded with stage and time
+    m = load_workload(); c = tmp / "w155/cw/c"
+    m.configure([str(c), "0", "--modify-log", str(tmp / "w155/cw/attempts.jsonl")])
+    m.fault = eio_at("rename")
+    import threading
+    t = threading.Thread(target=m.writer, args=(0,)); t.start(); time.sleep(0.2); m.stop.set(); t.join(10)
+    m.fault = None
+    cr = [r for r in m.attempts if r["kind"] == "create"]
+    assert cr and cr[0]["failed_stage"] == "rename" and cr[0]["ino"] and cr[0]["bytes_submitted"] == cr[0]["attempted_len"]
+    assert cr[0]["name"] not in m.live, "an unpublished create is not modelled"
+    print("w155 stages: open/truncate/write/close failures recorded, candidates per boundary, classified PASS")
+    return big
+
+def test_w155_quarantine(tmp):
+    import threading
+    m0 = load_workload(); name = find_name(m0, "rewrite", minlen=int(2.5 * m0.WRITE_CHUNK), base_min=1000)
+    m, f, mm = w155_setup(tmp / "w155q", "q", name)
+    m.fault = eio_at("close", apply=True); one_modify(m); m.fault = None
+    u = m.unresolved[name]; new = m.contents(name, 1)
+    assert f.read_bytes() == new, "the applied-then-EIO close left the attempted version visible"
+    # quarantine: a modifier never attempts it again; a deleter never deletes it
+    t = threading.Thread(target=m.modifier, args=(0,)); t.start(); time.sleep(0.3); m.stop.set(); t.join(10); m.stop.clear()
+    assert len(m.attempts) == 1 and m.ver.get(name, 0) == 0 and f.read_bytes() == new
+    others = []
+    for i in range(30):
+        o = "w9/d000/f%06d" % i; p = m.a.root + "/" + o
+        os.makedirs(os.path.dirname(p), exist_ok=True); open(p, "wb").write(m.body(o)); others.append(o)
+    m.live.extend(others); m.st["written"] = 1000
+    t = threading.Thread(target=m.deleter, args=(0,)); t.start()
+    for _ in range(300):
+        if m.st["deleted"] >= 15: break
+        time.sleep(0.01)
+    m.stop.set(); t.join(10); m.stop.clear()
+    assert m.st["deleted"] >= 10 and name in m.live and f.exists(), (m.st["deleted"], name in m.live)
+    # reads: a candidate is an observation, not a mismatch; a mix is a mismatch with the candidates saved
+    assert m.check_unresolved(name, new, time.time()) and m.check_unresolved(name, m.contents(name, 0), time.time())
+    assert m.st["mismatch"] == 0 and m.st["unresolved_reads"] == 2
+    assert set(u["observed"]) == {u["candidates"][0]["label"], u["candidates"][-1]["label"]}, u["observed"]
+    old = m.contents(name, 0)
+    mixed = new[:m.WRITE_CHUNK // 2] + old[m.WRITE_CHUNK // 2:] if len(old) > m.WRITE_CHUNK else old + new[len(old):]
+    assert mixed not in [c for _, c in u["cands"]]
+    assert not m.check_unresolved(name, mixed, time.time())
+    assert m.st["mismatch"] == 1 and m.verdict(0) == 1
+    meta = meta_of(mm, 1)
+    assert meta["unresolved"] is True and meta["version"] is None and [c["label"] for c in meta["candidates"]] == \
+        [c["label"] for c in u["candidates"]] and meta["actual_sha256"] == sha(mixed)
+    # the reader thread routes an unresolved file through its candidates
+    f.write_bytes(new); r0 = m.st["unresolved_reads"]
+    t = threading.Thread(target=m.reader, args=(0,)); t.start()
+    for _ in range(300):
+        if m.st["unresolved_reads"] > r0: break
+        time.sleep(0.01)
+    m.stop.set(); t.join(10); m.stop.clear()
+    assert m.st["unresolved_reads"] > r0 and m.st["mismatch"] == 1, (m.st["unresolved_reads"], m.st["mismatch"])
+    f.write_bytes(mixed)
+    bad, missing = m.final_verify()
+    assert bad == 1 and u["final"]["classification"] == "foreign" and m.st["cls_foreign"] == 1
+    assert meta_of(mm, 2)["source"] == "final" and meta_of(mm, 2)["unresolved"] is True
+    assert any(e.startswith("final unresolved") for e in m.errs)
+    # verdict: unresolved without any counted error is INCOMPLETE, never PASS
+    m2 = load_workload(); m2.configure([str(tmp / "w155q/v"), "0"])
+    assert m2.verdict(0) == 0 and m2.verdict_name(0) == "PASS"
+    m2.st["unresolved"] = 1
+    assert m2.verdict(0) == m2.INCOMPLETE_RC == 5 and m2.verdict_name(5) == "INCOMPLETE"
+    m2.st["errors"] = 1
+    assert m2.verdict(0) == 1
+    m2.st.update(errors=0, unresolved=0, cls_missing=1)
+    assert m2.verdict(0) == 5
+    print("w155 quarantine: no modify/delete of an unresolved file, candidates accepted, mix is a mismatch, "
+          "foreign at final, INCOMPLETE/FAIL never PASS")
+
+def test_w155_main(tmp):
+    """main() end to end: one modify fails at close (applied), the run is FAIL with the file listed."""
+    import contextlib, io
+    m = load_workload()
+    def hook(rec, st, fn):
+        if rec["kind"] == "modify" and st == "close" and not hook.done:
+            hook.done = True; fn(); raise OSError(_errno.EIO, "Input/output error")
+        return fn()
+    hook.done = False; m.fault = hook
+    log = tmp / "w155m/attempts.jsonl"; log.parent.mkdir(parents=True)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = m.main([str(tmp / "w155m/c"), "1", "--writers", "1", "--readers", "1", "--deleters", "0",
+                     "--modifiers", "1", "--modify-log", str(log)])
+    o = buf.getvalue()
+    assert hook.done and rc == 1 and "verdict=FAIL" in o and "unresolved=1 " in o, o
+    assert "classified base=0 attempted=1 " in o and "UNRESOLVED " in o and "stage=close errno=5" in o, o
+    assert "final=attempted (" in o and "ERR errors modify " in o, o
+    kinds = [json.loads(l)["kind"] for l in log.read_text().splitlines()]
+    assert kinds == ["modify", "final-classification"], kinds
+    print("w155 main: applied-then-EIO close -> verdict=FAIL, UNRESOLVED line, classified attempted PASS")
+
+def test_w155_wrapper(tmp):
+    stub = tmp / "stub_incomplete.py"; stub_workload(stub, 5)
+    rel = fake_rel(tmp / "wi"); stub_helper(rel)
+    h = rel / "scripts/w125_p0_cluster.sh"
+    h.write_text(h.read_text().replace('echo "started stub" > "$D/logs/fuse.log";',
+                                       'echo "started stub" > "$D/logs/fuse.log"; echo n1 > "$D/logs/efsd-n1.log";'))
+    run, out = tmp / "wi-run", tmp / "wi-out"
+    p = sh(WRAPPER, rel, out, 17900, 1, 3000, env=dict(wrapper_env(tmp), W125_RUN=str(run), W125_WORKLOAD=str(stub)), ok=False)
+    assert p.returncode == 5, (p.returncode, p.stdout)
+    assert (out / "done").read_text().startswith("INCOMPLETE workload_rc=5 stop_rc=0 stop=clean store="), (out / "done").read_text()
+    assert run.is_dir() and (out / "efsd-n1.log").read_text() == "n1\n"
+    assert "--modify-log" in (out / "a.txt").read_text() and str(out / "attempts.jsonl") in (out / "a.txt").read_text()
+    print("w155 wrapper: INCOMPLETE recorded, store kept, daemon logs copied, --modify-log passed PASS")
+
+# Verbatim lines from the nuc W148 rerun, attempt b1 (fuse.log and efsd-n1/n2.log,
+# 2026-10-23 04:03:2x-04:04:0x UTC); times are rebased onto the synthetic failure.
+B1_CLIENT = [
+    (-2.0, "opid-admission: BUSY oldest=38401 next=38417 live=1 window=16"),
+    (0.0, "inode-rpc: retry type=67 attempt=0 why=recv rc=-6 req_len=8892 recv_ms=30012"),
+    (0.0, "report-loop ino={ino} rounds=1 stale=0 busy=1 ms=3099 rpc_ms=3099 replay_ms=0 sleep_ms=0 recs=25 rc=-13"),
+    (0.0, "efs-fuse flush-meta: resource busy (efs_rc=-13) ino={ino} off=0 len=0"),
+    (0.04, "efs: rename_at 2438/f000535.tmp -> 2438/f000535 rc=-13 after 2 tries"),
+    (0.136, "inode-rpc: retry type=87 attempt=0 why=recv rc=-6"),
+    (2.0, "inode-rpc: slow-ok type=87 attempts=1 saw_busy=0 status=0 us=1261517"),
+    (300.0, "inode-rpc: retry type=67 attempt=0 why=recv rc=-6 req_len=100 recv_ms=30000"),
+]
+B1_N1 = [
+    (-25.0, "report-split nrec=12 pack_ms=0 push_ms=0 finish_ms=119 skip=0 stale=0 inval=0 rc=0 fail=-/0"),
+    (-20.0, "raft: group=0 prevote refused for=1 term=2 cand_last=7289/1 my_last=7289/1 my_term=1 leader=-1"),
+    (1.3, "report-split nrec=11 pack_ms=0 push_ms=0 finish_ms=150 skip=0 stale=0 inval=0 rc=-14 fail=finish/-14"),
+    (1.5, "raft-host: txn-recover shard=3 coord=2 parts=2 age=31.0s -> COMMIT (resolved)"),
+    (2.0, "kv-flush: files=139 io_ms=3155 manifest_ms=91 view_yielded=1 rc=0"),
+]
+B1_N2 = [(-29.0, "raft: group=0 became leader term=2 noop=7290 commit=7289 applied=7289 events=3 skipped=1"),
+         (-10.0, "raft-host: apply-sleep x"), (1.0, "raft-host: apply-sleep y")]
+
+def write_log(path, base, lines, ino):
+    with open(path, "w") as f:
+        for dt, text in lines:
+            t = base + dt
+            f.write("%s %s\n" % (time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(t)) + ".%03dZ" % int(t % 1 * 1000),
+                                 text.format(ino=ino)))
+
+def test_w155_correlate(tmp, big):
+    m, name, f, u = big
+    out = tmp / "corr-out"; out.mkdir()
+    # attempts.jsonl as the harness wrote it (the close-applied case), with its final classification
+    shutil.copy(pathlib.Path(m.a.modify_log), out / "attempts.jsonl")
+    fs = [x for x in u["stages"] if x["errno"]][0]
+    end = fs["t1"]
+    write_log(out / "fuse.log", end, B1_CLIENT, u["ino"])
+    write_log(out / "efsd-n1.log", end, B1_N1, u["ino"])
+    write_log(out / "efsd-n2.log", end, B1_N2, u["ino"])
+    js = tmp / "corr.json"
+    p = sh(sys.executable, ROOT / "scripts/w155_correlate.py", out, "--json", js, ok=True)
+    res = json.loads(js.read_text())
+    assert len(res) == 1, res
+    r = res[0]
+    assert r["failure"]["name"] == name and r["failure"]["failed_stage"] == "close" and r["anchor"] == "failing stage close"
+    rt = r["client"]["retries"]
+    assert [(x["type"], x["type_name"], x["why"], x["recv_ms"]) for x in rt] == \
+        [(67, "REPORT_CHUNKS", "recv", 30012), (87, "INODE_RENAME_AT", "recv", None)], rt
+    assert [x["ino"] for x in r["client"]["report_loop"]] == [u["ino"]] and r["client"]["report_loop"][0]["rc"] == "-13"
+    assert [(x["where"], x["efs_rc"], x["ino"]) for x in r["client"]["fuse_errors"]] == [("flush-meta", -13, u["ino"])]
+    assert r["client"]["admission_busy"][0]["oldest"] == "38401" and r["client"]["rename_at"][0]["rc"] == -13
+    n1, n2 = r["servers"]["n1"], r["servers"]["n2"]
+    assert [x["fail"] for x in n1["report_split_failed"]] == ["finish/-14"] and n1["report_split"] == 1
+    assert len(n1["txn_recover"]) == 1 and n1["kv_flush"][0]["io_ms"] == "3155" and n1["raft"] == []
+    assert n2["apply_sleep"] == 1 and n2["raft"] == [] and n2["silence_s"] >= 10
+    assert r["receipt"] == [] and "not logged" in p.stdout and "(gap G2)" in p.stdout
+    assert r["failure"]["final"]["classification"] == "attempted" and "final observed" in p.stdout
+    for g in ("G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8"): assert "- %s " % g in p.stdout, g
+    assert "REPORT_CHUNKS" in p.stdout and "sent~" in p.stdout and "## failure 1: modify " + name in p.stdout
+    # legacy OUT (pre-W155): a.txt ERR line, the inode from meta.json, the capture exactly v1
+    lo = tmp / "corr-legacy"; (lo / "mismatch/1" / os.path.dirname(name)).mkdir(parents=True)
+    new = m.contents(name, 1)
+    (lo / "mismatch/1" / name).write_bytes(new)
+    (lo / "mismatch/1/meta.json").write_text(json.dumps(dict(name=name, ino=u["ino"], source="local", version=0,
+        read_time=end + 50, actual_len=len(new), actual_sha256=sha(new), capture="/elsewhere/" + name)))
+    (lo / "a.txt").write_text("final live=1\nERR errors modify %s v1 rewrite: [Errno 5] Input/output error\n"
+                              "ERR errors unlink w1/d048/f000148: [Errno 16] Device or resource busy: '/x'\n" % name)
+    write_log(lo / "fuse.log", end, B1_CLIENT, u["ino"])
+    js2 = tmp / "corr2.json"
+    p = sh(sys.executable, ROOT / "scripts/w155_correlate.py", lo, "--json", js2, ok=True)
+    res = json.loads(js2.read_text())
+    assert [x["failure"]["kind"] for x in res] == ["modify", "unlink"], res
+    assert res[0]["anchor"].startswith("client lines naming ino=%d" % u["ino"]) and res[0]["client"]["retries"][0]["type"] == 67
+    assert res[0]["failure"]["final"]["captures"][0]["exact_version"] == 1 and "exactly v1" in p.stdout
+    assert res[1]["window"] is None and "1 failure(s) here could not be anchored" in p.stdout
+    assert "legacy OUT" in p.stdout and r["servers"] and res[0]["servers"] == {}
+    print("w155 correlate: retry/report-loop/flush-meta/report-split/txn-recover/silence/receipt gap/final version "
+          "tabled; legacy OUT anchored by inode; gaps G1-G8 listed PASS")
+
 def main():
     with tempfile.TemporaryDirectory(prefix="w125-harness-") as t:
         tmp = pathlib.Path(t)
@@ -317,6 +616,11 @@ def main():
         test_sidecar_and_capture(tmp)
         test_remote(tmp)
         test_inspect_still_reads_model(tmp)
+        big = test_w155_stages(tmp)
+        test_w155_quarantine(tmp)
+        test_w155_main(tmp)
+        test_w155_wrapper(tmp)
+        test_w155_correlate(tmp, big)
     print("w125 harness self-tests PASS")
 
 if __name__ == "__main__":

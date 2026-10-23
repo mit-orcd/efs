@@ -416,6 +416,11 @@ struct efs_meta_pub {
     uint32_t put_member_mask; /* all configured members, not just EC placement */
     uint32_t put_fragment_len; /* ticket manifest: actual fragment payload length */
     uint8_t ticketed; /* require ticket and publish ownership atomically (K13) */
+    /* W154: fragments of this object that were not durably acknowledged
+     * (bit i = fragment i; at most one). Nonzero writes a degraded mark in
+     * the same batch. Excluded from the intent digest: it describes the
+     * object's state at PUT, not the publication intent. */
+    uint8_t missing_mask;
     uint8_t durable_result; /* atomically record exact immutable publication result */
     /* delta_len > 0 appends an immutable span instead of CAS-replacing
      * the chunk image. expected_gen is still the base image's generation
@@ -921,6 +926,64 @@ int efs_meta_publication_result(struct efs_kv *, const struct efs_meta_pub *, in
 /* Legacy receipts have a zero locator. A locator alone never proves a mapping. */
 int efs_meta_publication_receipt(struct efs_kv *, const struct efs_meta_pub *,
     int *verdict, struct efs_publication_locator *);
+/* W77/K14 · request-wide publication (architecture §7.3, I24).
+ *
+ * One multi-chunk publication is ONE transaction (txn.h). Each chunk's
+ * publication is PREPAREd (EFS_TXN_PUBLISH, chunk key) on its lane shard
+ * as a staged record: the prepare runs the ordinary publish checks without
+ * writing, then stores the immutable request. A stage blocks every other
+ * writer of that chunk (BUSY) and is invisible to readers. The inode shard
+ * is always a participant and the coordinator; its PREPARE (inode key)
+ * checks the FileID and content epoch and leaves a pin that keeps
+ * truncation and content fences BUSY until the decision is RETIREd, so the
+ * epoch every stage was checked at cannot move under an undecided or
+ * unresolved publication. The DECIDE record is the single request-wide
+ * decision every stage is validated against.
+ *
+ * RESOLVE COMMIT applies each stage through the ordinary publish in the
+ * same KV batch that deletes it; ABORT deletes it. A stage whose commit
+ * cannot apply stays (fail closed: readers keep answering BUSY) and the
+ * RESOLVE verdict reports why. Readers: an undecided or aborted stage
+ * shows the previous mapping (and an undecided one is rechecked), a
+ * committed one is BUSY until resolved, an unknown decision is BUSY. */
+#define EFS_PUB_STAGE_VERSION 2u /* 2: ticket trailer, W154 missing mask (K13) */
+#define EFS_PUB_PIN_VERSION 2u
+#define EFS_PUB_STAGE_LEN 238u
+#define EFS_PUB_PIN_LEN 17u
+#define EFS_PUB_STAGE_PIN_LANE 0xFFu
+/* Most stage records one RESOLVE applies on one shard. */
+#define EFS_PUB_STAGE_RESOLVE_MAX 64u
+int efs_meta_pub_stage_encode(const struct efs_meta_pub *p, const struct efs_opid *session,
+                              uint8_t out[EFS_PUB_STAGE_LEN]);
+int efs_meta_pub_stage_decode(const uint8_t *in, uint32_t n, struct efs_meta_pub *p,
+                              struct efs_opid *session);
+void efs_meta_pub_pin_encode(uint64_t inode_gen, uint64_t content_epoch,
+                             uint8_t out[EFS_PUB_PIN_LEN]);
+int efs_meta_apply_publication_stage(struct efs_kv *kv, const struct efs_txid *t,
+                                     const struct efs_txn_parts *p, const uint8_t *key,
+                                     uint32_t klen, const uint8_t *pay, uint32_t plen);
+/* RESOLVE of one participant: staged publications first, then the generic
+ * transaction records (efs_txn_resolve). Pins stay until RETIRE. */
+int efs_meta_apply_txn_resolve(struct efs_kv *kv, const struct efs_txid *t,
+                               uint32_t shard, int decision);
+/* RETIRE at the coordinator, then the transaction's pins on that shard. */
+int efs_meta_apply_txn_retire(struct efs_kv *kv, uint32_t coord_shard,
+                              const struct efs_txid *t, uint64_t now_ns);
+/* The staged publication on one chunk: OK with its txid/participants,
+ * NOT_FOUND when none. */
+int efs_meta_pub_stage_peek(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                            uint32_t chunk_index, struct efs_txid *t,
+                            struct efs_txn_parts *parts);
+/* BUSY while any publication pins this FileID. */
+int efs_meta_pub_pinned(struct efs_kv *kv, efs_ino_t ino, uint64_t gen);
+/* Read validation of one chunk's stored mapping: OK when it is the visible
+ * one (no stage, an aborted stage, or an undecided one, which `pend`
+ * records for the collect's recheck); BUSY while a committed stage is not
+ * yet resolved or its decision is unknown (reclaimed). Authority errors
+ * from `coord` are returned (I9: never read as absence). */
+int efs_meta_pub_stage_visible(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                               uint32_t chunk_index, efs_txn_coord_fn coord,
+                               void *ctx, struct efs_txn_pending *pend);
 /* Which rule STALEd the last efs_meta_apply_publish on this thread. */
 enum {
     EFS_PUB_STALE_NONE = 0,
@@ -986,6 +1049,47 @@ int efs_meta_apply_activate_lanes(struct efs_kv *kv, efs_ino_t ino,
  * gone and the record may be acked). */
 #define EFS_META_GC_VAL (4 * EFS_NUM_FRAGMENTS + 4 + \
                          EFS_HASH_SIZE * EFS_NUM_FRAGMENTS) /* 112 */
+/* W154 degraded mark value (EFS_KV_KIND_DEGRADED, key as the GC record):
+ * [inode_generation:8][missing_mask:1][0:3][nodes:4*3][checksums:32*3].
+ * A full-image publication over the chunk deletes the marks of the
+ * objects it supersedes in its own batch; a pass on the group leader
+ * rebuilds the rest (efs_meta_apply_degraded_clear retires them). */
+#define EFS_META_DEGRADED_VAL (8 + 4 + 4 * EFS_NUM_FRAGMENTS + \
+                               EFS_HASH_SIZE * EFS_NUM_FRAGMENTS) /* 120 */
+struct efs_meta_degraded {
+    efs_ino_t ino;
+    uint64_t inode_gen;
+    uint64_t object_gen;
+    uint32_t chunk_index;
+    uint8_t lane;
+    uint8_t missing_mask;
+    efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
+    uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
+};
+void efs_meta_pack_degraded(uint8_t *p, const struct efs_meta_degraded *d);
+/* Decode one mark from its key and value. PROTO on a malformed row or a
+ * missing set the 2+1 code cannot rebuild (never exactly one fragment). */
+int efs_meta_unpack_degraded(const uint8_t *key, uint32_t klen,
+                             const uint8_t *val, uint32_t vlen,
+                             struct efs_meta_degraded *out);
+/* 1 when (ino, inode_gen, chunk_index) still references object_gen as its
+ * base or as a live span, 0 when it does not (rewritten, truncated away,
+ * packed, unlinked), else an error. Fragment files are named by object
+ * generation, so a row that references another generation never reads
+ * this object's files. */
+int efs_meta_degraded_live(struct efs_kv *kv, const struct efs_meta_degraded *d);
+/* EFS_MD_CMD_DEGRADED clear, serialized apply on the anchor's group.
+ * Deletes the mark when it still names exactly this object and fragment
+ * set (absent: idempotent OK). rebuilt=1 says the leader wrote the missing
+ * fragment: when the object is no longer live, a GC record for that one
+ * fragment is queued (or its ack bit reset) in the same batch, so a rebuild
+ * that raced a rewrite never leaves an orphan behind. *outcome receives
+ * EFS_META_DEGRADED_CLEARED, _ABSENT or _ORPHANED. */
+#define EFS_META_DEGRADED_CLEARED 0
+#define EFS_META_DEGRADED_ABSENT 1
+#define EFS_META_DEGRADED_ORPHANED 2
+int efs_meta_apply_degraded_clear(struct efs_kv *kv, const struct efs_meta_degraded *d,
+                                  int rebuilt, int *outcome);
 /* Reap marker value: [inode_generation:8][active_lanes:8]. */
 #define EFS_META_REAP_VAL 16
 
@@ -1065,6 +1169,12 @@ void efs_meta_gc_pending_note(uint32_t anchor, int delta);
 int64_t efs_meta_gc_pending_peek(uint32_t anchor);
 void efs_meta_gc_pending_derived(uint32_t anchor, uint64_t n);
 void efs_meta_gc_pending_invalidate(uint32_t anchor);
+/* W154: degraded-mark count per anchor, same rules as the GC watermark
+ * (-1 unknown; overshoots only; zero_if clamps after an empty scan). */
+int64_t efs_meta_degraded_count_peek(uint32_t anchor);
+void efs_meta_degraded_count_derived(uint32_t anchor, uint64_t n);
+void efs_meta_degraded_count_invalidate(uint32_t anchor);
+int efs_meta_degraded_count_zero_if(uint32_t anchor, int64_t expect);
 /* Clamp an upward drift: the GC thread calls this after a pass scanned
  * the anchor's whole prefix and found nothing. Fails (returns 0) if a
  * note raced the scans, so a live record is never zeroed away. */

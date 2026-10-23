@@ -27,8 +27,18 @@ static void reroute_untried_fragments(efs_node_id_t *n){(void)n;}
 static void efs_client_conn_invalidate_node(efs_node_id_t n){(void)n;invalidations++;}
 static void efs_client_nodes_force_reprobe(void){reprobes++;}
 const char *efs_strerror(int rc){(void)rc;return "injected";}
-static int put_fragments_parallel_once(const struct efs_put_ticket *t,const uint8_t **fragments,int *failed)
-{(void)fragments;assert(t->object==77&&t->id.seq==admits);assert(deadline);calls++;for(unsigned i=0;i<3;i++)failed[i]=hard_fail?1:2;usleep(5000);return recover_busy && calls>2 ? EFS_OK : terminal;}
+/* W154: degrade=1 leaves fragment 2 unacknowledged on the OK attempt. */
+static int degrade,note_rc=EFS_OK;static unsigned notes,logs;static uint32_t noted_mask;
+static int dgobj_note(efs_ino_t ino,uint32_t ci,uint64_t gen,uint32_t mask)
+{(void)ino;(void)ci;assert(gen==77);notes++;noted_mask=mask;return note_rc;}
+static void degraded_ack_log(efs_ino_t ino,uint32_t ci,uint64_t gen,const efs_node_id_t *nodes,int fi)
+{(void)ino;(void)ci;(void)gen;(void)nodes;assert(fi==2);logs++;}
+static int put_fragments_parallel_once(const struct efs_put_ticket *t,const uint8_t **fragments,int *failed,int *acked)
+{(void)fragments;assert(t->object==77&&t->id.seq==admits);assert(deadline&&acked);calls++;for(unsigned i=0;i<3;i++)failed[i]=hard_fail?1:2;usleep(5000);
+ int rc=recover_busy && calls>2 ? EFS_OK : terminal;
+ /* Acks from an earlier attempt of the same object still count. */
+ if(rc==EFS_OK)for(unsigned i=0;i<3;i++)if(!degrade||i!=2)acked[i]=1;
+ return rc;}
 '''+fn('report_retry_pause')+fn('put_fragments_parallel_run')+fn('efs_client_put_fragments_parallel')+r'''
 #define PUT(t) efs_client_put_fragments_parallel(1,0,nodes,fragments,1,checksums,0,0,t)
 int main(void){
@@ -59,6 +69,17 @@ int main(void){
  assert(PUT(&t)==EFS_ERR_NET);
  assert(calls==4&&admits==before+1&&invalidations==12&&!reprobes);
  hard_fail=0;invalidations=0;
+ /* W154: a two-fragment success is recorded and logged; an unrecordable
+  * one fails the write and gives its ticket up. */
+ calls=0;terminal=EFS_OK;degrade=1;deadline=report_clock_ms()+100;
+ assert(PUT(&t)==EFS_OK);
+ assert(calls==1&&notes==1&&noted_mask==4&&logs==1);
+ calls=0;note_rc=EFS_ERR_NOMEM;deadline=report_clock_ms()+100;before=releases;
+ assert(PUT(&t)==EFS_ERR_NOMEM);
+ assert(notes==2&&logs==1&&releases==before+1);
+ degrade=0;note_rc=EFS_OK;
+ calls=0;terminal=EFS_OK;deadline=report_clock_ms()+100;
+ assert(PUT(&t)==EFS_OK&&notes==2);
  /* An admission failure sends nothing. */
  calls=0;admit_rc=EFS_ERR_FENCED;deadline=report_clock_ms()+100;
  assert(PUT(&t)==EFS_ERR_FENCED && !calls);admit_rc=0;
@@ -67,6 +88,9 @@ int main(void){
  return 0;
 }
 '''
+# Moved from the retired tests/test_put_hint.py (W154): every outer attempt
+# resends the same object (the admitted ticket) and unions its acknowledgements.
+assert 'rc = put_fragments_parallel_once(ticket, fragments, failed, acked);' in s
 with tempfile.TemporaryDirectory(prefix='efs-put-retry-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)

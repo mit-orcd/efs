@@ -24,7 +24,7 @@ scripts/server_processes.py stop-file exactly as stop.sh does:
 3. no fault: rc 0, "stopped, orderly", every barrier done.
 """
 from pathlib import Path
-import os, shutil, socket, subprocess, sys, tempfile, time
+import os, shutil, socket, subprocess, sys, tempfile, threading, time
 
 root = Path(__file__).resolve().parents[1]
 binary = root/'tests/shutdown_faults/efsd'
@@ -40,10 +40,21 @@ work = Path(tempfile.mkdtemp(prefix='efs-shutdown-stuck-', dir=storage_tmp))
 print('work:', work, flush=True)
 
 
+_ports_lock = threading.Lock()
+_ports_given = set()
+
+
 def free_port():
-    with socket.socket() as probe:
-        probe.bind(('127.0.0.1', 0))
-        return probe.getsockname()[1]
+    """A free port never handed out before in this process: the case groups
+    run concurrently, and a just-closed probe port can be returned again."""
+    with _ports_lock:
+        while True:
+            with socket.socket() as probe:
+                probe.bind(('127.0.0.1', 0))
+                port = probe.getsockname()[1]
+            if port not in _ports_given:
+                _ports_given.add(port)
+                return port
 
 
 def transient(name):
@@ -188,10 +199,39 @@ def orderly_case(name, store):
 
 
 # The drain gets four fifths of the total; teardown phases get the rest.
-packer_store = forced_case('packer-parked', 'packer', 'packer', 'packer thread', TOTAL_MS + 200)
-after_forced_case('restart-after-forced', packer_store)
-forced_case('connection-parked', 'conn', 'handler-drain', 'connection handlers',
-            TOTAL_MS * 4 // 5 + 400, hold_connection=True)
-orderly_case('orderly', work/'orderly')
+# Three independent groups (own stores, ports and daemons) run concurrently;
+# they mostly wait out real deadlines, and each keeps its bounds. The restart
+# reuses the packer case's store, so those two stay in order.
+def packer_then_restart():
+    packer_store = forced_case('packer-parked', 'packer', 'packer', 'packer thread', TOTAL_MS + 200)
+    after_forced_case('restart-after-forced', packer_store)
+
+
+groups = {
+    'packer': packer_then_restart,
+    'connection': lambda: forced_case('connection-parked', 'conn', 'handler-drain',
+                                      'connection handlers', TOTAL_MS * 4 // 5 + 400,
+                                      hold_connection=True),
+    'orderly': lambda: orderly_case('orderly', work/'orderly'),
+}
+errors = {}
+
+
+def run_group(name):
+    try:
+        groups[name]()
+    except BaseException as exc:  # reported after every group has finished
+        errors[name] = exc
+
+
+threads = [threading.Thread(target=run_group, args=(name,)) for name in groups]
+for t in threads:
+    t.start()
+for t in threads:
+    t.join()
+if errors:
+    for name, exc in errors.items():
+        print(f'{name}: FAIL {exc!r}', flush=True)
+    raise next(iter(errors.values()))
 shutil.rmtree(work)
 print('test_shutdown_stuck_worker: OK')

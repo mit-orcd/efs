@@ -240,18 +240,59 @@ int efs_client_put_id(struct efs_opid *out)
 }
 
 /* opid_mu is held. Allocation and the receipt-window check are one action;
- * both waiting namespace admission and lock-owning lease admission use it. */
-static int opid_take_locked(struct efs_opid_req *q)
+ * both waiting namespace admission and lock-owning lease admission use it.
+ * `who` names the admitting call site for the diagnostics. */
+static int opid_take_locked(struct efs_opid_req *q, const void *who)
 {
-    int slot=-1;uint64_t low=0;
+    /* Admission diagnostics (EFS_OPID_STATS=1, observability only): why
+     * takes are refused, and how old the oldest unresolved identity is when
+     * the sequence window blocks. Function-local so the tests that compile
+     * this function alone keep working; every field is guarded by opid_mu. */
+    static struct {
+        uint64_t start_ms[EFS_OPID_INFLIGHT];
+        const void *who[EFS_OPID_INFLIGHT];
+        uint64_t taken, refused_slot, refused_window, last_report_ms, age_max_ms;
+        const void *age_max_who;
+    } st;
+    static int st_on = -1;
+    int slot=-1,low_slot=-1;uint64_t low=0,now_ms=0;
     opid_seed_locked();
+    if (st_on < 0)
+        st_on = getenv("EFS_OPID_STATS") != NULL;
+    if (st_on) {
+        struct timespec t;
+        clock_gettime(CLOCK_MONOTONIC, &t);
+        now_ms = (uint64_t)t.tv_sec * 1000 + t.tv_nsec / 1000000;
+    }
     for(unsigned i=0;i<EFS_OPID_INFLIGHT;i++) {
         uint64_t seq=g_client.opid_inflight[i];
         if(!seq){if(slot<0)slot=(int)i;}
-        else if(!low || seq<low)low=seq;
+        else if(!low || seq<low){low=seq;low_slot=(int)i;}
     }
     if(g_client.opid_next==UINT64_MAX)return -2;
-    if(slot<0 || (low && g_client.opid_next-low>=EFS_OPID_REPLY_CACHE))return -1;
+    if(slot<0 || (low && g_client.opid_next-low>=EFS_OPID_REPLY_CACHE)) {
+        if (st_on) {
+            uint64_t age = low_slot >= 0 ? now_ms - st.start_ms[low_slot] : 0;
+            if (slot >= 0) st.refused_window++; else st.refused_slot++;
+            if (age > st.age_max_ms) { st.age_max_ms = age; st.age_max_who = st.who[low_slot]; }
+            if (now_ms - st.last_report_ms >= 1000) {
+                st.last_report_ms = now_ms;
+                fprintf(stderr, "opid-stats: taken=%llu refused_window=%llu refused_slot=%llu "
+                        "oldest_age_ms=%llu oldest_who=%p max_age_ms=%llu max_who=%p\n",
+                        (unsigned long long)st.taken, (unsigned long long)st.refused_window,
+                        (unsigned long long)st.refused_slot, (unsigned long long)age,
+                        low_slot >= 0 ? st.who[low_slot] : NULL,
+                        (unsigned long long)st.age_max_ms, st.age_max_who);
+                st.age_max_ms = 0;
+            }
+        }
+        return -1;
+    }
+    if (st_on) {
+        st.taken++;
+        st.start_ms[slot] = now_ms;
+        st.who[slot] = who;
+    }
     uint64_t seq=g_client.opid_next++;
     g_client.opid_inflight[slot]=seq;
     memcpy(q->id.client_uuid,g_client.opid_uuid,EFS_OPID_UUID_LEN);
@@ -282,7 +323,7 @@ static int opid_begin(struct efs_opid_req *q)
         uint64_t now_ms = (uint64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000;
         if (now_ms >= deadline || efs_client_rpc_past_deadline()) break;
         pthread_mutex_lock(&opid_mu);
-        int slot=opid_take_locked(q);
+        int slot=opid_take_locked(q, __builtin_return_address(0));
         if(slot>=0) {
             pthread_mutex_unlock(&opid_mu);
             if (env_opid_verbose)
@@ -339,6 +380,21 @@ static void opid_end(int slot)
     if (env_opid_verbose)
         fprintf(stderr,"opid-end: seq=%llu slot=%d thread=%lu\n",
             (unsigned long long)seq,slot,(unsigned long)pthread_self());
+}
+
+/* Wait until any identity ends or max_ms passes. Callers retry a refused
+ * admission after it: a retry then runs as soon as the window can move
+ * instead of after a fixed 1 ms sleep, and never later than one. */
+void efs_client_opid_wait(unsigned max_ms)
+{
+    struct timespec until;
+    clock_gettime(CLOCK_REALTIME, &until);
+    until.tv_nsec += (long)max_ms * 1000000;
+    until.tv_sec += until.tv_nsec / 1000000000;
+    until.tv_nsec %= 1000000000;
+    pthread_mutex_lock(&opid_mu);
+    pthread_cond_timedwait(&opid_cv, &opid_mu, &until);
+    pthread_mutex_unlock(&opid_mu);
 }
 
 /* A reservation identity lives across the entire FUSE BUSY retry loop,
@@ -1685,7 +1741,7 @@ static int opid_try_begin(struct efs_opid_req *q)
     memset(q,0,sizeof(*q));
     if(efs_client_rpc_past_deadline())return -1;
     pthread_mutex_lock(&opid_mu);
-    int slot=opid_take_locked(q);
+    int slot=opid_take_locked(q, __builtin_return_address(0));
     pthread_mutex_unlock(&opid_mu);
     if(slot>=0 && env_opid_verbose)
         fprintf(stderr,"opid-begin: seq=%llu ack=%llu slot=%d thread=%lu deadline_ms=%llu\n",
@@ -1885,6 +1941,9 @@ int efs_client_rpc_publication(const struct efs_msg_publication *request, int qu
     if(query_only<0 || query_only>2 || !out || !request)return EFS_ERR_INVAL;
     struct efs_msg_publication req=*request;
     memset(out,0,sizeof(*out));
+    /* W154: a two-fragment object publishes as degraded (not in the digest). */
+    req.rec.publish_flags|=efs_client_degraded_flags(req.rec.ino,req.rec.chunk_index,
+                                                     req.rec.chunk_generation);
     if(efs_publication_from_request(&req,&p)!=EFS_OK)return EFS_ERR_INVAL;
     if(efs_publication_digest(&p,digest)!=EFS_OK)return EFS_ERR_INVAL;
     if(!query_only) {
@@ -1936,6 +1995,8 @@ int efs_client_rpc_publication(const struct efs_msg_publication *request, int qu
         if(reply.state==EFS_PUBLICATION_REJECTED && reply.verdict==EFS_ERR_FENCED)
             efs_client_session_fence(EFS_ERR_FENCED);
         if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
+        if(reply.state==EFS_PUBLICATION_COMMITTED || reply.state==EFS_PUBLICATION_RETIRED)
+            efs_client_degraded_drop(req.rec.ino,req.rec.chunk_index,req.rec.chunk_generation);
         *out=reply;return EFS_OK;
     }
     return EFS_ERR_BUSY;
@@ -2790,6 +2851,17 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
                                      const struct efs_ino_size_rec *irecs,
                                      uint32_t ino_count, int sync)
 {
+    return efs_client_rpc_report_dirty_pub(export_id, recs, count, irecs,
+                                           ino_count, sync, NULL);
+}
+
+int efs_client_rpc_report_dirty_pub(efs_export_id_t export_id,
+                                    const struct efs_chunk_rec *recs,
+                                    uint32_t count,
+                                    const struct efs_ino_size_rec *irecs,
+                                    uint32_t ino_count, int sync,
+                                    const struct efs_report_pubid *pubid)
+{
     if (count == 0 && ino_count == 0 && !sync)
         return EFS_OK;
     if ((count && !recs) || (ino_count && !irecs))
@@ -2797,7 +2869,8 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
     if (efs_client_rpc_past_deadline())
         return EFS_ERR_BUSY;
     size_t limit = EFS_MSG_MAX_LEN - 1u;
-    size_t len = sizeof(struct efs_msg_report_chunks) + EFS_REPORT_SESSION_LEN;
+    size_t len = sizeof(struct efs_msg_report_chunks) + EFS_REPORT_SESSION_LEN +
+                 (pubid ? EFS_REPORT_PUBID_LEN : 0u);
     /* Reject impossible counts before touching arrays or allocating. Keep
      * every subtraction in size_t and the eventual wire cast representable. */
     if (ino_count > (limit - len) / sizeof(struct efs_ino_size_rec))
@@ -2827,12 +2900,23 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
     struct efs_msg_report_chunks *hdr = (struct efs_msg_report_chunks *)buf;
     hdr->export_id = export_id;
     hdr->count = count;
-    hdr->sync = (sync ? EFS_REPORT_F_SYNC : 0u) | EFS_REPORT_F_SESSION;
+    hdr->sync = (sync ? EFS_REPORT_F_SYNC : 0u) | EFS_REPORT_F_SESSION |
+                (pubid ? EFS_REPORT_F_PUBID : 0u);
     hdr->ino_count = ino_count;
     uint8_t *p = buf + sizeof(*hdr);
     if (count) {
         for (i = 0; i < count; i++) {
-            size_t n = efs_chunk_rec_pack(p, len - (size_t)(p - buf), &recs[i]);
+            /* W154: a two-fragment object publishes as degraded. */
+            uint32_t dgf = efs_client_degraded_flags(recs[i].ino, recs[i].chunk_index,
+                                                     recs[i].chunk_generation);
+            size_t n;
+            if (dgf) {
+                struct efs_chunk_rec stamped = recs[i];
+                stamped.publish_flags |= dgf;
+                n = efs_chunk_rec_pack(p, len - (size_t)(p - buf), &stamped);
+            } else {
+                n = efs_chunk_rec_pack(p, len - (size_t)(p - buf), &recs[i]);
+            }
             if (n == 0) {
                 free(buf);
                 return EFS_ERR_NOMEM;
@@ -2854,6 +2938,10 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
         memcpy(p, irecs, (size_t)ino_count * sizeof(*irecs));
     p += (size_t)ino_count * sizeof(*irecs);
 #endif
+    if (pubid) {
+        efs_report_pubid_pack(p, pubid);
+        p += EFS_REPORT_PUBID_LEN;
+    }
     efs_report_session_pack(p, &session);
     uint32_t wire_len = (uint32_t)(p + EFS_REPORT_SESSION_LEN - buf);
     struct efs_msg_inode_reply r;
@@ -2869,7 +2957,12 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
     free(buf);
     if (rc != EFS_OK)
         return rc;
-    return rpc_status_to_efs(r.status);
+    rc = rpc_status_to_efs(r.status);
+    if (rc == EFS_OK && efs_client_degraded_pending())
+        for (i = 0; i < count; i++)
+            efs_client_degraded_drop(recs[i].ino, recs[i].chunk_index,
+                                     recs[i].chunk_generation);
+    return rc;
 }
 
 int efs_client_rpc_xattr(efs_export_id_t export_id, efs_ino_t ino, uint8_t op,

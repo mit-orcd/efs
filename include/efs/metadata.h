@@ -44,6 +44,9 @@ struct efs_chunk_entry {
     struct efs_fence_view read_view; /* authoritative GETCHUNKS masks; count 0 = local row */
     struct efs_chunk_delta deltas[EFS_CHUNK_DELTA_MAX];
     struct efs_pack_ref packed; /* W125: segment_id zero means an ordinary base */
+    /* W77: client-local id of the GETCHUNKS snapshot this mapping came from;
+     * 0 = not a server snapshot (a local write, or a new base). */
+    uint64_t map_snap;
 };
 
 /* A late fetch retains the identity it captured. Include every byte/view
@@ -505,6 +508,9 @@ int efs_export_set_chunk_packed(struct efs_export *, efs_ino_t, uint32_t, const 
  * base generation or its fragment set. */
 int efs_export_set_chunk_view(struct efs_export *ex, efs_ino_t ino,
                                uint32_t ci, const struct efs_fence_view *view);
+/* W77: stamp the mapping's GETCHUNKS snapshot id (efs_chunk_entry.map_snap). */
+int efs_export_set_chunk_snap(struct efs_export *ex, efs_ino_t ino,
+                              uint32_t ci, uint64_t snap);
 int efs_export_set_chunk_deltas(struct efs_export *ex, efs_ino_t ino,
                                 uint32_t chunk_index,
                                 const struct efs_chunk_delta *deltas,

@@ -67,6 +67,10 @@ static int report_dirty_ino_run(efs_ino_t ino, int sync) {
     assert(!sync || (deadline && deadline<=report_clock_ms()+8000));
     return EFS_ERR_BUSY;
 }
+/* W77: a held-back unit (AGAIN) is waited for; not exercised here. */
+static int unit_wait_idle(efs_ino_t ino) { (void)ino; return EFS_OK; }
+int efs_dcache_flush_ino(efs_ino_t ino) { (void)ino; return EFS_OK; }
+int efs_dcache_flush_all(void) { return EFS_OK; }
 '''+function('efs_client_report_dirty_ino')+r'''
 static void *request(void *arg) {
     (void)arg;

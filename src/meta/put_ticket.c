@@ -5,6 +5,7 @@
 #include "efs/kv_key.h"
 #include "efs/publication.h"
 #include "efs/session.h"
+#include "efs/txn.h"
 #include <string.h>
 
 static void wr32(uint8_t *p, uint32_t v)
@@ -509,6 +510,12 @@ int efs_put_ticket_settle(struct efs_kv *kv,const struct efs_put_ticket *t)
     if (state==EFS_PUT_TICKET_RETIRED) return EFS_OK;
     if (state==EFS_PUT_TICKET_RECLAIMING) return EFS_ERR_BUSY;
     if (state==EFS_PUT_TICKET_ADMITTED) {
+        /* A staged multi-chunk publication (K14) may still publish this
+         * object at RESOLVE; never abandon under it. Settle later. */
+        struct efs_txid tx;struct efs_txn_parts parts;
+        int staged=efs_meta_pub_stage_peek(kv,t->ino,t->inode_gen,t->ci,&tx,&parts);
+        if (staged==EFS_OK) return EFS_ERR_BUSY;
+        if (staged!=EFS_ERR_NOT_FOUND) return staged;
         rc=efs_put_ticket_reject(kv,t);
         if (rc!=EFS_OK) return rc;
         state=EFS_PUT_TICKET_REJECTED;

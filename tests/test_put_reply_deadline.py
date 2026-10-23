@@ -49,7 +49,10 @@ int main(void){
  for(mode=0;mode<9;mode++){
   drops=releases=fails=sends=checkouts=0;
   uint64_t start=report_clock_ms();deadline=mode==2?start:start+15;
-  int rc=put_fragments_parallel_once(&ticket,fragments,failed);
+  int acked[3]={0,0,0};
+  int rc=put_fragments_parallel_once(&ticket,fragments,failed,acked);
+  /* W154: an OK names the fragments that were acknowledged (at least two). */
+  if(rc==EFS_OK)assert(acked[0]+acked[1]+acked[2]>=2);
   uint64_t elapsed=report_clock_ms()-start;
   printf("mode=%u rc=%d elapsed_ms=%llu sent=%u drops=%u releases=%u peer_fail=%u\n",mode,rc,(unsigned long long)elapsed,sends,drops,releases,fails);fflush(stdout);
   /* mode 8: one member refuses the ticket; a quorum of ACKs never publishes it. */

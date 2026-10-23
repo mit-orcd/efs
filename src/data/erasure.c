@@ -39,6 +39,15 @@ static void xor_into(uint8_t *dst, const uint8_t *a, const uint8_t *b, size_t n)
 #include <string.h>
 #include <stdio.h>
 
+int efs_rebuild_fragment(const uint8_t *a, const uint8_t *b, uint8_t *out,
+                         size_t frag_len)
+{
+    if (!a || !b || !out || !frag_len || out == a || out == b)
+        return EFS_ERR_INVAL;
+    xor_into(out, a, b, frag_len);
+    return EFS_OK;
+}
+
 static int encode(const uint8_t *chunk, size_t chunk_len, size_t chunk_size,
                   uint8_t *fragments[EFS_NUM_FRAGMENTS], size_t minimum, size_t maximum)
 {

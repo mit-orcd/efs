@@ -2326,7 +2326,7 @@ static int efs_open_acquire_fileid_mode(efs_ino_t ino, uint64_t create_generatio
          * keeps its exact identity. Both must retry outside the stripe so
          * an older owner on a colliding inode can finish and free capacity. */
         if(rc!=EFS_ERR_BUSY || !admission_busy)break;
-        usleep(1000);
+        efs_client_opid_wait(1);
     }
     efs_client_rpc_set_deadline_ms(previous);
     return rc;
@@ -3917,6 +3917,36 @@ static int fuse_write_admit(size_t size)
     return -EAGAIN;
 }
 
+static int efs_fuse_write_store(const char *path, const char *buf, size_t size,
+                                off_t offset, efs_ino_t ino, int append);
+static int efs_fuse_write_buf_store(struct fuse_bufvec *buf, size_t size,
+                                    off_t offset, efs_ino_t ino, int append);
+
+/* W77: one FUSE write request is one atomic publication unit. When joining
+ * the units it overlaps would exceed EFS_PUB_UNIT_MAX chunks, publish this
+ * file's pending units first (an O_APPEND caller already holds append_mu). */
+static int fuse_unit_begin(efs_ino_t ino, uint64_t offset, size_t size, int append_held)
+{
+    for (unsigned round = 0; ; round++) {
+        int rc = efs_client_unit_begin(ino, offset, size);
+        if (rc != EFS_ERR_AGAIN)
+            return rc == EFS_OK ? 0 : fuse_stat_errno(rc);
+        if (round == 8)
+            return -EBUSY;
+        if (append_held) {
+            rc = efs_wb_sync_ino(ino);
+            if (rc == EFS_OK)
+                rc = efs_dcache_flush_ino(ino);
+            if (rc == EFS_OK)
+                rc = efs_client_report_dirty_ino(ino, 1);
+        } else {
+            rc = efs_append_flush_report(NULL, ino);
+        }
+        if (rc != EFS_OK)
+            return fuse_stat_errno(rc);
+    }
+}
+
 static int efs_fuse_write_admitted_run(const char *path, const char *buf, size_t size,
                           off_t offset, struct fuse_file_info *fi)
 {
@@ -3944,6 +3974,25 @@ static int efs_fuse_write_admitted_run(const char *path, const char *buf, size_t
         rc = append_reserve_offset(ino, (uint64_t)size, &offset);
         if (rc != 0)return rc; /* reserve failure already released stripe */
     }
+    rc = fuse_unit_begin(ino, (uint64_t)offset, size, append);
+    if (rc != 0) {
+        if (append) {
+            efs_client_stage_unpin(ino);
+            pthread_mutex_unlock(append_mu(ino));
+        }
+        return rc;
+    }
+    rc = efs_fuse_write_store(path, buf, size, offset, ino, append);
+    efs_client_unit_end(ino, (uint64_t)offset, size);
+    return rc;
+}
+
+/* The request's bytes into the dcache or the writeback pool. With O_APPEND
+ * the caller holds append_mu and the stage pin; every path releases them. */
+static int efs_fuse_write_store(const char *path, const char *buf, size_t size,
+                                off_t offset, efs_ino_t ino, int append)
+{
+    int rc;
     if ((append ? efs_dcache_try_patch_sparse
                 : efs_dcache_try_patch)(ino, (uint64_t)offset, (uint32_t)size,
                                         (const uint8_t *)buf) == 0) {
@@ -4083,6 +4132,25 @@ static int efs_fuse_write_buf_admitted_run(const char *path, struct fuse_bufvec 
         rc = append_reserve_offset(ino, (uint64_t)size, &offset);
         if (rc != 0)return rc; /* reserve failure already released stripe */
     }
+    rc = fuse_unit_begin(ino, (uint64_t)offset, size, append);
+    if (rc != 0) {
+        if (append) {
+            efs_client_stage_unpin(ino);
+            pthread_mutex_unlock(append_mu(ino));
+        }
+        return rc;
+    }
+    rc = efs_fuse_write_buf_store(buf, size, offset, ino, append);
+    efs_client_unit_end(ino, (uint64_t)offset, size);
+    return rc;
+}
+
+/* write_buf's bytes into the dcache or the writeback pool; O_APPEND state
+ * as for efs_fuse_write_store. */
+static int efs_fuse_write_buf_store(struct fuse_bufvec *buf, size_t size,
+                                    off_t offset, efs_ino_t ino, int append)
+{
+    int rc = 0;
 
     /* W15.3: walk the write in chunk-sized pieces. Each whole chunk is
      * one fuse_buf_copy into a pool buffer the dcache owns (libfuse
@@ -4405,7 +4473,7 @@ static int efs_fuse_create_begin_wait(struct efs_client_create_request *request,
     while(!efs_client_rpc_past_deadline()) {
         rc=efs_client_create_begin(request,parent,name,mode,uid,gid);
         if(rc!=EFS_ERR_BUSY || request->active)break;
-        usleep(1000);
+        efs_client_opid_wait(1);
     }
     efs_client_rpc_set_deadline_ms(previous);
     return rc;
@@ -5024,7 +5092,7 @@ static int efs_fuse_release_ino(fuse_ino_t ino, struct fuse_file_info *fi)
             for (unsigned spin = 0; rc == EFS_ERR_BUSY && spin < CLOSE_ADMIT_SPINS &&
                  !efs_client_rpc_past_deadline() && efs_open_close_unadmitted(fh); spin++) {
                 pthread_mutex_unlock(edge);
-                usleep(1000);
+                efs_client_opid_wait(1);
                 pthread_mutex_lock(edge);
                 rc = efs_open_release_pending(fh);
             }
@@ -7987,21 +8055,10 @@ int main(int argc, char **argv)
     }
     printf("export id=%u name=%s\n", g_client.export_id,
            g_client.export.name[0] ? g_client.export.name : g_client.export_name);
-    /* K5/I23: one session per mount, committed on its owner shard before
-     * the first mutation. Without it every mutation would be refused, so
-     * fail the mount instead of serving a read-only surprise. */
-    rc = efs_client_session_start();
-    if (rc != EFS_OK) {
-        fprintf(stderr, "Could not establish the mount session (%s).\n",
-                efs_strerror(rc));
-        return 1;
-    }
-    {
-        char hex[2 * EFS_OPID_UUID_LEN + 1];
-        for (unsigned i = 0; i < EFS_OPID_UUID_LEN; i++)
-            snprintf(hex + 2 * i, 3, "%02x", g_client.opid_uuid[i]);
-        printf("session uuid=%s epoch=%u\n", hex, g_client.opid_epoch);
-    }
+    /* K5/I23: the mount session is established after the daemon fork, in
+     * the process that serves the mount (K31): over RDMA the session RPC
+     * starts the device's completion poller thread, and fork() would leave
+     * the serving daemon without it. */
     {
         /* Post-step-11 there is no bootstrap table fetch: the staging table
          * starts empty and fills on demand (client-cache Part A bounds it
@@ -8171,6 +8228,27 @@ static int efs_fuse_main_mt(int argc, char *argv[])
         fprintf(stderr, "efs-fuse daemon pid=%d\n", (int)getpid());
         fflush(stderr);
     }
+    /* K5/I23: one session per mount, committed on its owner shard before
+     * the first mutation. Without it every mutation would be refused, so
+     * fail the mount instead of serving a read-only surprise. K31: here,
+     * after the daemon fork, so the RDMA poller it may start belongs to the
+     * serving process. A failure exits the child before FUSE_INIT; the
+     * waiting parent reports it. */
+    int session_rc = efs_client_session_start();
+    if (session_rc != EFS_OK) {
+        fprintf(stderr, "Could not establish the mount session (%s).\n",
+                efs_strerror(session_rc));
+        fflush(stderr);
+        ret = 1;
+        goto out;
+    }
+    {
+        char hex[2 * EFS_OPID_UUID_LEN + 1];
+        for (unsigned i = 0; i < EFS_OPID_UUID_LEN; i++)
+            snprintf(hex + 2 * i, 3, "%02x", g_client.opid_uuid[i]);
+        printf("session uuid=%s epoch=%u\n", hex, g_client.opid_epoch);
+    }
+    fflush(stdout);
 
     /* This is the process that serves the mount (the child, or the only
      * process under -f). Attach the recorder to it; the parent above has

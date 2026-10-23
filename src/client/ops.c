@@ -259,9 +259,20 @@ static int chunk_rec_valid(const struct efs_chunk_rec *r)
     return EFS_OK;
 }
 
+/* W77: every GETCHUNKS reply is one server snapshot (the host
+ * double-collects its window); its mappings carry one fresh id. */
+static uint64_t g_map_snap;
+
+static uint64_t map_snap_next(void)
+{
+    return __atomic_add_fetch(&g_map_snap, 1, __ATOMIC_RELAXED);
+}
+
 static void apply_chunk_recs(efs_ino_t lock_ino, const struct efs_chunk_rec *recs,
                              uint32_t n)
 {
+    uint64_t snap = map_snap_next();
+
     efs_client_lock_dir(lock_ino);
     pthread_mutex_lock(&g_client.idx_mu);
     for (uint32_t i = 0; i < n; i++) {
@@ -297,6 +308,8 @@ static void apply_chunk_recs(efs_ino_t lock_ino, const struct efs_chunk_rec *rec
                 (void)efs_export_set_chunk_packed(&g_client.export, recs[i].ino,
                                                   recs[i].chunk_index, &ref);
         }
+        (void)efs_export_set_chunk_snap(&g_client.export, recs[i].ino,
+                                        recs[i].chunk_index, snap);
         if (!same)
             efs_rdcache_invalidate(recs[i].ino, recs[i].chunk_index);
         efs_client_stage_touch(recs[i].ino);
@@ -579,6 +592,112 @@ static int pull_chunks_range(efs_ino_t ino, uint32_t start_ci, uint32_t end_ci,
 uint64_t efs_client_map_clock(void)
 {
     return map_fresh_now_us();
+}
+
+/* Read keys of [ci0, ci1) (0 = no row). 1 when every row carries one
+ * snapshot id; `holes` admits absent rows (only right after a pull). A row
+ * this client wrote and has not seen published is served from its own
+ * cache (read-your-writes) and needs no snapshot. */
+static int map_snap_keys(efs_ino_t ino, uint32_t ci0, uint32_t ci1, int holes,
+                         uint64_t *keys)
+{
+    uint64_t snap = 0, row_snap[EFS_PUB_UNIT_MAX];
+    int ok = 1;
+
+    pthread_mutex_lock(&g_client.idx_mu);
+    for (uint32_t ci = ci0; ci < ci1; ci++) {
+        struct efs_chunk_entry ce;
+        if (efs_export_get_chunk(&g_client.export, ino, ci, &ce) != EFS_OK) {
+            keys[ci - ci0] = 0;
+            row_snap[ci - ci0] = 0;
+            ok &= holes;
+            continue;
+        }
+        keys[ci - ci0] = efs_chunk_read_key(&ce);
+        row_snap[ci - ci0] = ce.map_snap;
+    }
+    pthread_mutex_unlock(&g_client.idx_mu);
+    for (uint32_t ci = ci0; ok && ci < ci1; ci++) {
+        uint64_t rs = row_snap[ci - ci0];
+        if (!keys[ci - ci0])
+            continue;
+        if (!rs) {
+            ok = efs_dcache_has(ino, ci) || efs_client_putid_owns(ino, ci, 0);
+            continue;
+        }
+        if (snap && rs != snap)
+            ok = 0;
+        snap = rs;
+    }
+    return ok;
+}
+
+/* One id for a range validated across windows, only while every row is
+ * still the one validated. */
+static int map_snap_restamp(efs_ino_t ino, uint32_t ci0, uint32_t ci1,
+                            const uint64_t *keys)
+{
+    uint64_t snap = map_snap_next();
+    int same = 1;
+
+    pthread_mutex_lock(&g_client.idx_mu);
+    for (uint32_t ci = ci0; same && ci < ci1; ci++) {
+        struct efs_chunk_entry ce;
+        int have = efs_export_get_chunk(&g_client.export, ino, ci, &ce) == EFS_OK;
+        same = have ? efs_chunk_read_key(&ce) == keys[ci - ci0] : keys[ci - ci0] == 0;
+    }
+    for (uint32_t ci = ci0; same && ci < ci1; ci++)
+        if (keys[ci - ci0])
+            (void)efs_export_set_chunk_snap(&g_client.export, ino, ci, snap);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    return same;
+}
+
+#define MAP_SNAPSHOT_TRIES 4
+int efs_client_map_snapshot(efs_ino_t ino, uint32_t ci0, uint32_t ci1, uint64_t *keys)
+{
+    uint64_t again[EFS_PUB_UNIT_MAX];
+    uint32_t last;
+
+    if (!ino || ci0 >= ci1 || ci1 - ci0 > EFS_PUB_UNIT_MAX || !keys)
+        return EFS_ERR_INVAL;
+    if (efs_client_map_fresh(ino, ci0, ci1) && map_snap_keys(ino, ci0, ci1, 0, keys))
+        return EFS_OK;
+    last = (ci1 - 1) & ~(EFS_CHUNK_GROUP_SIZE - 1u);
+    for (unsigned attempt = 0; attempt < MAP_SNAPSHOT_TRIES; attempt++) {
+        int rc = pull_chunks_range(ino, ci0, ci1, NULL);
+        if (rc != EFS_OK)
+            return rc;
+        if (last <= ci0) {
+            /* One window, one reply. */
+            if (map_snap_keys(ino, ci0, ci1, 1, keys))
+                return EFS_OK;
+            continue;
+        }
+        /* Windows are separate snapshots: re-read every earlier one after
+         * the last. Unchanged mappings were the state when the last window
+         * was read, so the range is one state of the file. */
+        (void)map_snap_keys(ino, ci0, ci1, 1, keys);
+        rc = pull_chunks_range(ino, ci0, last, NULL);
+        if (rc != EFS_OK)
+            return rc;
+        (void)map_snap_keys(ino, ci0, ci1, 1, again);
+        if (!memcmp(keys, again, (ci1 - ci0) * sizeof(*keys)) &&
+            map_snap_restamp(ino, ci0, ci1, keys))
+            return EFS_OK;
+    }
+    return EFS_ERR_BUSY;
+}
+
+int efs_client_map_snapshot_same(efs_ino_t ino, uint32_t ci0, uint32_t ci1,
+                                 const uint64_t *keys)
+{
+    uint64_t now[EFS_PUB_UNIT_MAX];
+
+    if (!ino || ci0 >= ci1 || ci1 - ci0 > EFS_PUB_UNIT_MAX || !keys)
+        return 0;
+    (void)map_snap_keys(ino, ci0, ci1, 1, now);
+    return !memcmp(keys, now, (ci1 - ci0) * sizeof(*keys));
 }
 
 /* Records an open's FileID GETCHUNKS already carried: apply them like a

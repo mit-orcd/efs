@@ -241,7 +241,11 @@ try:
         with open(stream, 'rb', buffering=0) as f:
             def block(i):
                 got = os.pread(f.fileno(), 1 << 20, i << 20)
-                assert got == pattern(data_seed + i, 1 << 20), (label, 'wrong bytes in block', i)
+                want = pattern(data_seed + i, 1 << 20)
+                # A later page's EIO shortens the read: the prefix must still
+                # be exact, and the block counts as unreadable for now.
+                assert got == want[:len(got)], (label, 'wrong bytes in block', i)
+                if len(got) < len(want): raise OSError(5, 'short read')
             for i in range(a.stream_mib):
                 try: block(i); exact += 1
                 except OSError as e:
@@ -262,6 +266,40 @@ try:
     after = leaders()
     log(f'leader death mid-PUT: {part_a} MiB fsynced, then SIGKILL n{victim+1} (leader of groups {groups}) during the next {a.stream_mib-part_a} MiB, restart after 4 s; '
         f'part B fsync={b_fsync[0]}; warm read {exact} blocks exact at once, {eio} EIO of which {late} fsynced blocks exact once the member served again, 0 wrong; leaders now {after} PASS')
+
+    # W154 on the ticketed path: with n3 stopped every chunk is acknowledged
+    # by two of three members and published degraded; when n3 returns the
+    # group leaders rebuild the missing fragments (EFS_MSG_REBUILD_PUT,
+    # authorized by the degraded mark), and the file then survives losing a
+    # different member.
+    def degraded_status():
+        r = subprocess.run([str(src / 'efs-mgmt'), 'status', f'127.0.0.1:{a.port}'], env=env,
+                           capture_output=True, text=True, timeout=30)
+        m = re.search(r'Degraded chunks: (\d+).*?rebuilt=(\d+)', r.stdout)
+        return (int(m.group(1)), int(m.group(2))) if m else (None, None)
+    servers[2].send_signal(signal.SIGTERM); servers[2].wait(timeout=60)
+    dg_data = pattern(77, 4 << 20)
+    # close() only: a COMMIT to a stopped member fails fsync (W154 limitation).
+    p = write_file('degraded', [(0, dg_data)], fsync=False)
+    expected['degraded'] = hashlib.sha256(dg_data).hexdigest()
+    assert sha(p) == expected['degraded']
+    wait(lambda: (degraded_status()[0] or 0) > 0, 'degraded marks recorded', 60)
+    marked = degraded_status()[0]
+    start_node(2)
+    wait(lambda: degraded_status()[0] == 0, 'degraded stripes rebuilt after n3 returned', 300)
+    rebuilt = degraded_status()[1]
+    servers[0].send_signal(signal.SIGTERM); servers[0].wait(timeout=60)
+    def read_without_n1():
+        try: return sha(p) == expected['degraded']
+        except OSError: return False
+    wait(read_without_n1, 'degraded file exact with n1 stopped', 90)
+    start_node(0)
+    time.sleep(3)
+    remote = sum(1 for l in (work / 'n3.log').read_text(errors='replace').splitlines()
+                 if 'rebuild-put ' in l and l.endswith('rc=0'))
+    log(f'W154 on the ticketed path: n3 stopped, 4 MiB written ({marked} degraded marks), n3 back, '
+        f'all rebuilt (rebuilt={rebuilt}, {remote} stored on n3 through EFS_MSG_REBUILD_PUT), '
+        f'then exact bytes with n1 stopped PASS')
 
     unmount()
     fuse_text = (work / 'fuse.log').read_text(errors='replace')

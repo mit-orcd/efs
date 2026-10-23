@@ -147,6 +147,9 @@ static int cmd_status(int argc, char **argv)
      * efs_capacity_logical (same model as FUSE statfs). */
     uint64_t cap_quota[EFS_MAX_NODES], cap_room[EFS_MAX_NODES];
     uint32_t ncap = 0;
+    /* W154: each group's leader reports its degraded-mark count. */
+    uint64_t degraded[2] = {0, 0}, rebuilt = 0, rebuild_failed = 0, rebuild_retired = 0;
+    uint32_t degraded_seen = 0;
     for (uint32_t i = 0; i < list->node_count; i++) {
         /* Probe every advertised addr (may differ from the seed string we used). */
         struct efs_msg_status_reply current = {0};
@@ -154,6 +157,16 @@ static int cmd_status(int argc, char **argv)
         if (up) {
             list->nodes[i].used = current.used;
             list->nodes[i].quota = current.quota;
+            for (int g = 0; g < 2; g++) {
+                if (!(current.degraded_sampled & (1u << g)))
+                    continue;
+                if (!(degraded_seen & (1u << g)) || current.degraded_chunks[g] > degraded[g])
+                    degraded[g] = current.degraded_chunks[g];
+                degraded_seen |= 1u << g;
+            }
+            rebuilt += current.rebuilt_fragments;
+            rebuild_failed += current.rebuild_failures;
+            rebuild_retired += current.rebuild_retired;
         }
         if (up)
             up_nodes++;
@@ -240,6 +253,23 @@ static int cmd_status(int argc, char **argv)
         cluster_state = "FULL";
     printf("Cluster state: %s (%d up, %d down)\n", cluster_state, up_nodes,
            down_nodes);
+    /* Stripes acknowledged with two of three fragments, awaiting rebuild
+     * when the missing node is reachable (W154). Unknown until both
+     * metadata groups' leaders have reported a pass. */
+    if (degraded_seen == 3u)
+        printf("Degraded chunks: %llu (group 0: %llu, group 2: %llu); rebuilt=%llu "
+               "retired=%llu failures=%llu\n",
+               (unsigned long long)(degraded[0] + degraded[1]),
+               (unsigned long long)degraded[0], (unsigned long long)degraded[1],
+               (unsigned long long)rebuilt, (unsigned long long)rebuild_retired,
+               (unsigned long long)rebuild_failed);
+    else
+        printf("Degraded chunks: unknown (group leaders reported: %s%s%s); rebuilt=%llu "
+               "retired=%llu failures=%llu\n",
+               degraded_seen & 1u ? "0" : "", degraded_seen == 3u ? "," : "",
+               degraded_seen & 2u ? "2" : (degraded_seen ? "" : "none"),
+               (unsigned long long)rebuilt, (unsigned long long)rebuild_retired,
+               (unsigned long long)rebuild_failed);
 
     uint32_t ncopy = list->node_count;
     if (ncopy > EFS_MAX_NODES)

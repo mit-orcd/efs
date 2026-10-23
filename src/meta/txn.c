@@ -362,6 +362,34 @@ static int parse_parts_txid(const uint8_t *in, uint32_t n, struct efs_txid *t,
     return unpack_parts(in + 16, n - 16, p, used);
 }
 
+int efs_txn_record_head_pack(uint8_t *out, uint32_t cap, const struct efs_txid *t,
+                             const struct efs_txn_parts *p)
+{
+    int pn;
+
+    if (!out || !t || cap < 16 || !parts_ok(p))
+        return EFS_ERR_INVAL;
+    pn = pack_parts(out + 16, cap - 16u, p);
+    if (pn < 0)
+        return pn;
+    memcpy(out, t->bytes, 16);
+    return 16 + pn;
+}
+
+int efs_txn_record_head_parse(const uint8_t *in, uint32_t n, struct efs_txid *t,
+                              struct efs_txn_parts *p, uint32_t *used)
+{
+    uint32_t pu = 0;
+    int rc;
+
+    if (!t)
+        return EFS_ERR_INVAL;
+    rc = parse_parts_txid(in, n, t, p, &pu);
+    if (rc == EFS_OK && used)
+        *used = 16u + pu;
+    return rc;
+}
+
 int efs_txn_prepare_excl(struct efs_kv *kv, const struct efs_txid *t,
                          const struct efs_txn_parts *p, const uint8_t *key,
                          uint32_t klen, uint64_t expected_ver, int op,
@@ -838,6 +866,8 @@ int efs_txn_apply_prepare(struct efs_kv *kv, int kind, const struct efs_txid *t,
         return efs_meta_apply_lane_bootstrap(kv, t, p, key, klen, pay, plen);
     case EFS_TXN_RESERVED_9:
         return EFS_ERR_PROTO;
+    case EFS_TXN_PUBLISH:
+        return efs_meta_apply_publication_stage(kv, t, p, key, klen, pay, plen);
     case EFS_TXN_GUARD:
         if (plen < EFS_TXN_GUARD_WIRE)
             return EFS_ERR_PROTO;
@@ -915,11 +945,18 @@ static int drop_cb(void *user, const uint8_t *key, uint32_t klen,
             return 0;
         return drop_add(a, key, klen);
     }
+    if (key[2] == EFS_KV_KIND_PUB_STAGE) {
+        if (parse_parts_txid(val, vlen, &have, NULL, NULL) != EFS_OK ||
+            !same_txid(have.bytes, &a->t))
+            return 0;
+        return drop_add(a, key, klen);
+    }
     return 0;
 }
 
-/* The transaction records of one shard live under exactly three key kinds.
- * Visit those three prefixes, never the whole shard: a 2-byte shard scan
+/* The transaction records of one shard live under exactly four key kinds
+ * (W77 staged publications are the fourth). Visit those prefixes, never
+ * the whole shard: a 2-byte shard scan
  * walks every inode, dentry, chunk and lane key the shard holds (and every
  * tombstone the LSM has not compacted yet) through the full segment merge,
  * under the KV lock and the apply lock. On the mount root's shard that was
@@ -932,14 +969,14 @@ static int txn_scan_kinds(struct efs_kv *kv, uint32_t shard,
                                     uint32_t vlen),
                           void *user)
 {
-    static const uint8_t kinds[3] = { EFS_KV_KIND_INTENT, EFS_KV_KIND_GUARD,
-                                      EFS_KV_KIND_REDUCE };
+    static const uint8_t kinds[4] = { EFS_KV_KIND_INTENT, EFS_KV_KIND_GUARD,
+                                      EFS_KV_KIND_REDUCE, EFS_KV_KIND_PUB_STAGE };
     uint8_t pref[3];
     int i, rc;
 
     pref[0] = (uint8_t)(shard >> 8);
     pref[1] = (uint8_t)shard;
-    for (i = 0; i < 3; i++) {
+    for (i = 0; i < 4; i++) {
         pref[2] = kinds[i];
         rc = efs_kv_scan_prefix(kv, pref, 3, cb, user);
         if (rc != EFS_OK)
@@ -1499,6 +1536,13 @@ static void pend_add(struct efs_txn_pending *p, const struct efs_txid *t,
     p->n++;
 }
 
+void efs_txn_pending_note(struct efs_txn_pending *pend, const struct efs_txid *t,
+                          const struct efs_txn_parts *parts)
+{
+    if (t && parts)
+        pend_add(pend, t, parts);
+}
+
 int efs_txn_pending_recheck(const struct efs_txn_pending *pend,
                             efs_txn_coord_fn coord, void *ctx, int *moved)
 {
@@ -1943,7 +1987,7 @@ static int pend_cb(void *user, const uint8_t *key, uint32_t klen,
     if (klen < 3 || key_shard(key) != a->shard)
         return 0;
     if (key[2] != EFS_KV_KIND_INTENT && key[2] != EFS_KV_KIND_GUARD &&
-        key[2] != EFS_KV_KIND_REDUCE)
+        key[2] != EFS_KV_KIND_REDUCE && key[2] != EFS_KV_KIND_PUB_STAGE)
         return 0;
     /* Every record kind starts its value with txid[16] + parts. */
     if (parse_parts_txid(val, vlen, &t, &p, &used) != EFS_OK)

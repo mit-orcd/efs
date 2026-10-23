@@ -15,10 +15,10 @@ source=r'''
 struct {efs_export_id_t export_id;} g_client;
 static unsigned calls,count;static int rpc_error;
 static struct efs_chunk_rec sent[3];
-static int efs_client_rpc_report_dirty_raft(efs_export_id_t id,
+static int efs_client_rpc_report_dirty_pub(efs_export_id_t id,
     const struct efs_chunk_rec *r,uint32_t n,const struct efs_ino_size_rec *in,
-    uint32_t ni,int sync) {
-    (void)id;(void)in;(void)ni;(void)sync;calls++;count=n;
+    uint32_t ni,int sync,const struct efs_report_pubid *pubid) {
+    (void)id;(void)in;(void)ni;(void)sync;(void)pubid;calls++;count=n;
     for(unsigned i=0;i<n;i++)sent[i]=r[i];
     return rpc_error;
 }
@@ -28,25 +28,25 @@ int main(void) {
        {.ino=42,.chunk_index=1},{.ino=43,.chunk_index=0}};
     assert(!setenv("EFS_FAULT_WITHHOLD","42:0",1));
 #if EFS_FAULTS
-    assert(report_send_records(r,3,NULL,0,1)==EFS_ERR_STALE);
+    assert(report_send_records(r,3,NULL,0,1,NULL)==EFS_ERR_STALE);
     assert(calls==1&&count==2&&sent[0].chunk_index==1&&sent[1].ino==43);
     assert(r[0].ino==42&&r[0].chunk_index==0); /* original snapshot survives */
-    assert(report_send_records(r,1,NULL,0,1)==EFS_ERR_STALE&&calls==1);
+    assert(report_send_records(r,1,NULL,0,1,NULL)==EFS_ERR_STALE&&calls==1);
     rpc_error=EFS_ERR_NET;
-    assert(report_send_records(r,3,NULL,0,1)==EFS_ERR_NET&&count==2);
+    assert(report_send_records(r,3,NULL,0,1,NULL)==EFS_ERR_NET&&count==2);
     rpc_error=0;
     FILE *f=fopen(EFS_FAULT_FILE,"w");assert(f);fputs("OFF\n",f);fclose(f);
-    assert(report_send_records(r,3,NULL,0,1)==EFS_OK&&count==3);
+    assert(report_send_records(r,3,NULL,0,1,NULL)==EFS_OK&&count==3);
     f=fopen(EFS_FAULT_FILE,"w");assert(f);fputs("WITHHOLD 42:1\n",f);fclose(f);
-    assert(report_send_records(r,3,NULL,0,1)==EFS_ERR_STALE&&count==2);
+    assert(report_send_records(r,3,NULL,0,1,NULL)==EFS_ERR_STALE&&count==2);
     assert(sent[0].chunk_index==0&&sent[1].ino==43);
     f=fopen(EFS_FAULT_FILE,"w");assert(f);fputs("WITHHOLD 42:1garbage\n",f);fclose(f);
-    assert(report_send_records(r,3,NULL,0,1)==EFS_OK&&count==3);
+    assert(report_send_records(r,3,NULL,0,1,NULL)==EFS_OK&&count==3);
     remove(EFS_FAULT_FILE);
     assert(!unsetenv("EFS_FAULT_WITHHOLD"));
-    assert(report_send_records(r,3,NULL,0,1)==EFS_OK&&count==3);
+    assert(report_send_records(r,3,NULL,0,1,NULL)==EFS_OK&&count==3);
 #else
-    assert(report_send_records(r,3,NULL,0,1)==EFS_OK&&count==3);
+    assert(report_send_records(r,3,NULL,0,1,NULL)==EFS_OK&&count==3);
 #endif
     puts("WITHHOLD: outgoing omission, retained snapshot, runtime disable and production exclusion PASS");
 }
