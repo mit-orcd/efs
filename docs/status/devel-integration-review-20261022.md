@@ -428,3 +428,48 @@ response. Verdicts on the two findings and the corrections:
 Reopened rows and their next step: K5/T1 and K1/T2 are sub-session work
 (implement, regression test, `make test` on an efs VM once the user's
 cluster there is down), proposed to the user and not started.
+
+
+## Review of the D38 amendment at e328744ad
+
+**T3 CLOSED as a default-placement decision; live qualification NOTRUN.**
+The amendment matches `include/efs/raft.h:efs_md_group_voters` and requires
+no code or format change. Retain the recorded decision; no new placement
+switch, compatibility path or migration is needed. This does not waive a
+fresh-format requirement introduced by a different implementation change.
+
+Corrections made by this review:
+
+- State N = 3 explicitly: both groups use nodes 1–3. For N ≥ 4, SHARD uses
+  1–3 and SHARD2 uses 2–4. “Nodes 1–4 whatever the cluster size” was wrong
+  for the three-node alpha gate.
+- Update the roadmap, which still said metadata was confined to three nodes,
+  and D38's stale present-tense claim that packed segments use voter-only
+  placement. K28's data-ring placement and remote object lookup are merged;
+  their five-node live gate remains NOTRUN.
+- Distinguish three replicated metadata voters (majority two) from 2+1
+  erasure-coded data. One arbitrary node loss leaves both metadata groups
+  with a quorum. Four physical metadata hosts do not give two-loss protection:
+  losing nodes 2 and 3 leaves one voter per group. More than four cluster
+  nodes add data participation under this default, not more metadata groups
+  or metadata leaders.
+- Call this the **default layout**, not an enforced four-node limit: the Raft
+  membership API can reconfigure voters beyond node 4. This review does not
+  claim that such reconfiguration has been qualified for alpha.
+
+Local validation: macOS / Apple clang; source `e328744ad`; no cluster, mount,
+transport, I/O profile or quota. `scripts/reviews/d38_default_voters.c` uses
+the production header, checks the default masks for N = 3 through 16 and
+checks that every single-node removal leaves at least two voters per group.
+**PASS**, arithmetic only; no election, failover, payload or live acceptance
+claim. Reproduce from the repository root:
+
+```sh
+cc -std=gnu11 -Iinclude scripts/reviews/d38_default_voters.c -o /tmp/efs-d38-check
+/tmp/efs-d38-check
+rm /tmp/efs-d38-check
+```
+
+Existing `tests/test_placement.c:k28_voters` also tests the default masks.
+No production code changed. K5/T1 and K1/T2 remain open and on hold; K9/K15
+remain INCOMPLETE and the existing live gates/scope decisions remain open.

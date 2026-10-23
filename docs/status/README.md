@@ -59,6 +59,11 @@ matched failover gate is NOTRUN. Lost-reply cleanup (decide-once retirement by
 fence or live-owner abandon) is on `devel-k15b` with unit tests passing; its
 live gate is NOTRUN. **W52: shape A in tree; exact 20k gate and A/B NOTRUN.**
 
+[D38 amendment review](devel-integration-review-20261022.md#review-of-the-d38-amendment-at-e328744ad):
+**T3 CLOSED for the default layout.** Three nodes: both groups on 1–3;
+four or more: groups on 1–3 and 2–4. Roadmap and packed-placement wording
+corrected; local quorum arithmetic PASS, live qualification NOTRUN.
+
 [Recent devel integration review](devel-integration-review-20261022.md):
 **Third pass at `0eb1511d2`: OPEN.** Original S1–S3 and R1–R3 fixes are
 merged. New T1 (P1): append-abandon repeats the session capture/fence race

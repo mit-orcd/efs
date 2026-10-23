@@ -15,7 +15,9 @@ The [alpha 1.0 checklist](alpha-1.0-2plus1-checklist.md) is the release gate,
 including A6–A12: audit behavior switches, choose built-in policies, remove
 competing A/B paths and reduce the combinatorial qualification matrix.
 **Metadata placement ladder ([D38](decisions.md), October 22):** alpha 1.0
-keeps metadata on at most three nodes (2+1) while data uses every node; alpha
+keeps two three-voter metadata groups: both on nodes 1–3 for N = 3, and
+on 1–3 and 2–4 for N ≥ 4 (default layout; D38 amendment). Data uses every
+node with 2+1 stripes. Metadata uses full Raft replicas, quorum two. Alpha
 2.0 adds 2+2 metadata across at most four nodes (the D36 four-node protocol);
 alpha 3.0 and 4.0 add configurable metadata placement on N − M of N nodes at
 one and two losses. The diagrams below describe the final architecture; their

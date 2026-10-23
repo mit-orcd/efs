@@ -57,9 +57,9 @@ Alpha 1.0 is reached in three stages, in this order:
 | More than 4 | Still three distinct nodes per stripe | Independent stripes use different subsets across the supported node set | More capacity/work distribution, not stronger per-stripe protection |
 
 Metadata placement follows [D38](decisions.md): in alpha 1.0 every metadata
-group has three voters (one loss) and the two groups keep today's layout on
-nodes 1–4 (amended Oct 22, T3), whatever the cluster size; data placement
-uses all nodes. Later alphas widen metadata
+group has three voters (one loss). For three nodes, both groups use nodes
+1–3; for four or more, the default groups use 1–3 and 2–4 (amended Oct 22,
+T3). Data placement uses all nodes. Later alphas widen metadata
 placement (2.0: 2+2 on four nodes; 3.0/4.0: N − M configurable). Packed
 segments are data and follow the data ring across all N nodes in alpha 1.0
 (D38, decided Oct 22; W151 sub-item).
@@ -481,7 +481,8 @@ round says which physical or software limiter it hit.
 - [ ] **F3** Complete the topology ledger below, link exact reproduction commands
   or committed drivers and evidence summaries. Raw captures stay outside Git.
 - [ ] **F4** Publish alpha limitations: fixed metadata-group count and
-  placement of two three-voter groups on nodes 1–4 (D38 as amended), actual packing placement, supported
+  default placement of two three-voter groups (both on 1–3 for N = 3; on
+  1–3 and 2–4 for N ≥ 4, D38 as amended), actual packing placement, supported
   node range, Linux FUSE client only, deferred unplanned repair, no
   degraded-state indication, and lack of 2+2/two-loss protection on 4+ nodes.
 - [ ] **F5** Review the integrated candidate and approve alpha 1.0 only when all
@@ -519,4 +520,5 @@ configurable 2+1 metadata placement on N − M nodes; alpha 4.0 the same at 2+2.
 More metadata groups and distributed ownership (W66/W98/W81), 2+2 data
 stripes, broader background-work efficiency and integrated scale acceptance
 follow the same path. D36 remains the final protection contract; alpha 1.0 is
-explicitly the 2+1 milestone with three-voter metadata groups on nodes 1–4 and data on all.
+explicitly the 2+1 milestone: default three-voter metadata groups both on
+1–3 for N = 3, on 1–3 and 2–4 for N ≥ 4, and data placement across all nodes.

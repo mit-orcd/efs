@@ -48,24 +48,31 @@ Data placement uses every cluster node from alpha 1.0 on.
 
 **Amendment (user, Oct 22, T3 of the third integration pass):** "at most 3
 nodes" in alpha 1.0 means each metadata *group* has three voters (2+1, one
-loss); the two groups keep today's default layout and together span nodes
-1–4. K28's `efs_md_group_voters` layout stands; nodes 5 and up host no
-metadata group.
+loss). For N = 3, both groups use nodes 1–3. For N ≥ 4, the default
+is SHARD on nodes 1–3 and SHARD2 on nodes 2–4, spanning four nodes.
+K28's `efs_md_group_voters` layout stands; nodes 5 and up host no metadata
+group in this default layout. These are three full Raft replicas with a
+majority of two, not erasure-coded metadata fragments. The data path uses
+2+1 erasure coding. One arbitrary node loss leaves a quorum in each group;
+this does not promise two-node-loss availability or distribute metadata work
+onto nodes 5 and up. Explicit Raft membership reconfiguration can place
+voters elsewhere; the default masks are not a hard runtime placement limit.
 
 | Release | Metadata groups live on | Metadata protection | Data placement |
 | --- | --- | --- | --- |
-| alpha 1.0 | at most 4 nodes: two three-voter groups, as today (shard group on nodes 1–3, SHARD2 on nodes 2–4; amended Oct 22, T3) | one loss (2+1) per group | all N nodes, 2+1 stripes |
+| alpha 1.0 | default: both groups on nodes 1–3 for N = 3; SHARD on 1–3 and SHARD2 on 2–4 for N ≥ 4 (amended Oct 22, T3) | one loss (2+1) per group | all N nodes, 2+1 stripes |
 | alpha 2.0 | at most 4 nodes | two losses (2+2; the D36 four-node metadata protocol) | all N nodes |
 | alpha 3.0 | N − M nodes, configured (M may be 0) | one loss | all N nodes |
 | alpha 4.0 | N − M nodes, configured | two losses | all N nodes |
 
 Consequences recorded now:
 - **W151 (raise the four-node cap) is alpha 1.0 data-placement work only.**
-  Metadata stays on three voters per group (two groups on nodes 1–4); a fifth
-  and later node serves data and clients and hosts no metadata group. This
+  Metadata stays on three voters per group (both on 1–3 for N = 3; on
+  1–3 and 2–4 for N ≥ 4); a fifth and later node serves data and clients
+  and hosts no metadata group in the default layout. This
   matches the W151 brief.
-- **Packed segments are data, but today they live on a group's voters**
-  (`packer.c`). Under this ladder, "data placement = N" means small-file
+- **Packed segments are data. Before K28 they were placed on a group's
+  voters** (`packer.c`). Under this ladder, "data placement = N" means small-file
   packed data should also use all N nodes in alpha 1.0; keeping it on the
   three voters would confine small files to three nodes. **Decided (user,
   Oct 22): packed segments are data; alpha 1.0 places them on the data ring
@@ -75,7 +82,9 @@ Consequences recorded now:
   PUT_SEGMENT admission check (`segment_store.c`) and the reclaim check
   (`reclaim.c` `segment_acceptable`) depend on that read, so non-voter nodes
   need a linearizable remote object read from a group voter before they can
-  accept or reclaim a segment fragment.
+  accept or reclaim a segment fragment. **Implemented and merged in K28
+  (`a2942cb0f`):** data-ring placement and the remote object read are in
+  devel; the five-node live gate remains NOTRUN.
 - The alpha 3.0/4.0 setting (N, data = N, metadata = N − M) is a deployment
   input in the sense of A8, not an A/B switch.
 - D36's final contract is unchanged; alpha 2.0 is where its four-node metadata
