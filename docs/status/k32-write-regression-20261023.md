@@ -18,10 +18,15 @@ steps listed in Reproduction).
 | `f47a32754` | devel + W154 | 1,322 | 4.9 | 1,567 / 1,316 | 0.1 |
 | `bd2cb0d5a` | + K14 (and K30, W155, D39 model, kind fix) | 661 | 2.8 | 131,462 / 194,084 | 19.8 |
 | `757d76844` | + K13 (head) | 359 | 8.9 | 202,813 / 266,065 | 28.6 |
+| `6b621993d` | + K29 (TXN_BATCH, commit probe), W156, K13 D31 | 444 | 11.2 | 154,171 / 203,125 | 21.8 |
 
 Earlier fresh-format runs agree: `24e58fb1d` (before the wave) 1,242 mean;
 pre-K13 three runs 749 / 632 / 661; head 509 / 492 / 483 and 527 / 481 /
 463. Reads stay at 4.3–6.2 GiB/s on every build.
+
+K29's batching of a transaction's PREPAREs and RESOLVEs into one entry per
+group cut 28.6 to 21.8 entries per write and raised write by about 24%;
+K32 stays OPEN, the per-write K14 transaction is still the main cost.
 
 ## Cause
 
