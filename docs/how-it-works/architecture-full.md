@@ -1655,6 +1655,14 @@ of successful durability or rollback. A blanket old-or-new rewrite oracle
 is insufficient. K1's post-restart rc 4, loaded errors, raw-evidence losses
 and foreign-client discovery limits remain recorded.
 
+[D39 consolidated model](../status/d39-consolidated-model-20261023.md): **MODEL PASS on
+branch `devel-d39model`, not merged.** The single authoritative statement of
+the accepted D39 rules, executable as `tests/d39_model.py` in `make test`:
+101 traces from §§8–33, 11 negative controls under superseded rules and a
+randomized interleaving search. It adds three model findings the proposal must
+accept and lists nine unresolved points (C13). Implementation and cluster
+gates NOTRUN.
+
 [D39 latest review (§34)](../status/d39-cluster-membership-proposal-20261022.md):
 `802416d39` resolves §32's predicate, critical-section scheduling and Raft
 ownership concerns; accepted with no new findings. Next: the consolidated
@@ -2844,6 +2852,9 @@ incarnation with the counter-transition exception for Raft control, own
 record for continuations), the lock is held across check and register so a
 declaration cannot publish between them, and effect records carry identity
 authority only, never Raft validation or persistence.
+The consolidated executable model ([page](../status/d39-consolidated-model-20261023.md),
+`tests/d39_model.py`) passes on branch `devel-d39model`, not merged;
+implementation and cluster gates NOTRUN.
 Awaiting the user;
 W153a remains on hold.
 

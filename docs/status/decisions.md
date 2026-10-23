@@ -150,6 +150,9 @@ incarnation with the counter-transition exception for Raft control, own
 record for continuations), the lock is held across check and register so a
 declaration cannot publish between them, and effect records carry identity
 authority only, never Raft validation or persistence.
+The consolidated executable model ([page](d39-consolidated-model-20261023.md),
+`tests/d39_model.py`) passes on branch `devel-d39model`, not merged;
+implementation and cluster gates NOTRUN.
 Awaiting the user;
 W153a remains on hold.
 

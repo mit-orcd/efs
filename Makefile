@@ -368,6 +368,7 @@ test-bins: all $(TEST_SPECIAL_BINS)
 # under a second; about a minute in all). Slow tests belong in test-long.
 test: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_retired_root_markers.py
+	python3 tests/test_d39_model.py
 	python3 tests/faults/test_create_retry_fault.py
 	python3 tests/faults/test_create_retry_integrated.py
 	python3 tests/faults/test_append_cleanup_retry.py
