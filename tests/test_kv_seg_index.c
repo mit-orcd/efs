@@ -4,13 +4,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include "test_tmpdir.h"
 static uint32_t u32(const uint8_t *p)
 { return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24; }
 static void key_for(unsigned i,uint8_t key[4])
 { key[0]=1;key[1]=(uint8_t)(i>>16);key[2]=(uint8_t)(i>>8);key[3]=(uint8_t)i; }
 int main(void)
 {
-    char path[]="/tmp/efs-seg-index-XXXXXX";int fd=mkstemp(path);assert(fd>=0);close(fd);unlink(path);
+    char path[EFS_TEST_PATH];efs_test_path(path,sizeof(path),"efs-seg-index-XXXXXX");int fd=efs_test_mkstemp(path);assert(fd>=0);close(fd);unlink(path);
     struct kv_seg_w *w;assert(kv_seg_w_open(path,&w)==EFS_OK);
     uint8_t value[4096],key[4];
     for(unsigned i=0;i<700;++i) {

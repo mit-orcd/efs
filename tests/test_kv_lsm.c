@@ -22,6 +22,7 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+#include "test_tmpdir.h"
 
 static int failures = 0;
 
@@ -664,7 +665,7 @@ static void test_kv_group_snap(void)
         uint32_t i;
 
         memcpy(saved, g_dir, sizeof(saved));
-        snprintf(g_dir, sizeof(g_dir), "/tmp/efs-kvlsm-snap-%d", (int)getpid());
+        efs_test_own(efs_test_path(g_dir,sizeof(g_dir),"efs-kvlsm-snap-%d",(int)getpid()));
         rmtree(g_dir);
         lsm = open_store(EFS_KV_LSM_NOSYNC, 0);
         CHECK(lsm != NULL, "lsm snap");
@@ -1846,7 +1847,7 @@ static void test_tombstone_work_pages(void)
 
 int main(void)
 {
-    snprintf(g_dir, sizeof(g_dir), "/tmp/efs-kvlsm-%d", (int)getpid());
+    efs_test_own(efs_test_path(g_dir,sizeof(g_dir),"efs-kvlsm-%d",(int)getpid()));
     rmtree(g_dir);
     test_tombstone_work_pages();
     if (getenv("EFS_TEST_KV_WORK_ONLY")) goto report;

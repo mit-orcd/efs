@@ -21,11 +21,12 @@ with tempfile.TemporaryDirectory(prefix='efs-sort-unaccounted-') as directory:
     binary = work/'negative'
     command = [os.environ.get('CC', 'cc'), '-O1', '-g', '-std=gnu11',
                '-D_GNU_SOURCE', '-I'+str(root/'include'), '-I'+str(root/'src/meta'),
-               '-I'+str(root/'src/common'), '-I'+str(root/'deps/blake3'), '-I'+str(root),
+               '-I'+str(root/'src/common'), '-I'+str(root/'deps/blake3'), '-I'+str(root), '-I'+str(root/'tests'),
                str(test), str(root/'libefs.a'), '-lpthread', '-lm', '-ldl', '-libverbs',
                '-o', str(binary)]
     subprocess.run(command, check=True, capture_output=True)
-    result = subprocess.run([str(binary)], capture_output=True, timeout=120)
+    # The mutant is expected to abort and keep its scratch: keep it inside work.
+    result = subprocess.run([str(binary)], env=dict(os.environ, TMPDIR=str(work)), capture_output=True, timeout=120)
     assert result.returncode != 0, 'unaccounted scratch passed the oracle'
     assert b'bytes<=peak_disk->disk_bytes' in result.stderr, result.stderr[-2000:]
 print('sort scratch negative control: actual file-byte peak rejects omitted charge PASS')

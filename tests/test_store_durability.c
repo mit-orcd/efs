@@ -48,6 +48,7 @@ static int barrier_close(int fd)
 #include "../src/server/store.c"
 #include "../src/server/reclaim.c"
 #include "../src/server/segment_store.c"
+#include "test_tmpdir.h"
 #undef open
 #undef fsync
 #undef close
@@ -72,7 +73,7 @@ static int async_put(struct put_sync_root *r, const char *path, uint8_t *data)
  * Every configured root must agree before any new running record is written. */
 static void test_clean_verifier_selection(void)
 {
-    char base[]="/tmp/efs-verifier-XXXXXX";assert(mkdtemp(base));
+    char base[EFS_TEST_PATH];efs_test_path(base,sizeof(base),"efs-verifier-XXXXXX");assert(efs_test_mkdtemp(base));
     struct efsd_server *server=calloc(1,sizeof(*server));assert(server);
     server->storage_path_count=2;
     struct put_sync_root roots[2]={0};
@@ -124,8 +125,8 @@ static void reattach(struct put_sync_root *r,const char *root)
 static void abandon_reset(void){put_sync_serving=0;put_sync_stopped=0;}
 static void test_startup_abandon(uint8_t *data)
 {
-    const char *tmp=getenv("TMPDIR");char root[1024],path[1100],rec[1100];
-    snprintf(root,sizeof(root),"%s/efs-abandon-XXXXXX",tmp&&*tmp?tmp:"/tmp");assert(mkdtemp(root));
+    char root[1024],path[1100],rec[1100];
+    efs_test_path(root,sizeof(root),"efs-abandon-XXXXXX");assert(efs_test_mkdtemp(root));
     snprintf(rec,sizeof(rec),"%s/%s",root,PUT_SYNC_RECORD);
     struct put_sync_root *r=&put_sync_roots[0];struct put_sync_record record;int fd;
     /* Fresh root: abandoning the first boot removes the record it created. */
@@ -177,8 +178,8 @@ static void test_startup_abandon(uint8_t *data)
 
 static int test_async_durability(uint8_t *data)
 {
-    const char *tmp=getenv("TMPDIR");char root[1024],path[1100],rec[1100];
-    snprintf(root,sizeof(root),"%s/efs-async-XXXXXX",tmp&&*tmp?tmp:"/tmp");assert(mkdtemp(root));
+    char root[1024],path[1100],rec[1100];
+    efs_test_path(root,sizeof(root),"efs-async-XXXXXX");assert(efs_test_mkdtemp(root));
     struct statfs fs;assert(!statfs(root,&fs));
     if((unsigned long)fs.f_type!=XFS_SUPER_MAGIC_){assert(!rmdir(root));return 0;}
     put_sync_window_ms=100;put_sync_window_bytes=1ull<<20;
@@ -267,7 +268,7 @@ static int test_async_durability(uint8_t *data)
  * fragment data is refused at startup; a fresh root is marked format 1. */
 static void test_root_format(void)
 {
-    char dir[]="/tmp/efs-root-format-XXXXXX";assert(mkdtemp(dir));
+    char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-root-format-XXXXXX");assert(efs_test_mkdtemp(dir));
     struct efsd_server *server=calloc(1,sizeof(*server));assert(server);
     server->storage_path_count=1;strcpy(server->storage_paths[0],dir);
     booting=1;assert(!server_storage_roots_init(server));booting=0;
@@ -308,7 +309,7 @@ int main(void)
     assert(!target_at(routes,"/storage-other/body"));
     routes->storage_roots[0]=&inner;routes->storage_roots[1]=&outer;
     assert(target_at(routes,"/storage/nested/data/body")==&inner);free(routes);
-    char dir[]="/tmp/efs-store-durability-XXXXXX";assert(mkdtemp(dir));
+    char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-store-durability-XXXXXX");assert(efs_test_mkdtemp(dir));
     char path[1024];snprintf(path,sizeof(path),"%s/a/b/body",dir);
     uint8_t *data;assert(!posix_memalign((void **)&data,4096,65536));memset(data,0x37,65536);
     uint8_t sum[EFS_FRAG_RECORD_BYTES];memset(sum,0x42,sizeof(sum)); /* opaque record */
@@ -317,9 +318,11 @@ int main(void)
     assert(!pthread_mutex_init(&server->lock,NULL));
     server->storage_path_count=1;strcpy(server->storage_paths[0],dir);
     a.s=server;
-    /* A configured but unsealed root cannot shorten the ACK barrier. */
+    /* A configured but unsealed root cannot shorten the ACK barrier: every
+     * ancestor up to "/" is synced, one per '/' in the path ($TMPDIR depth). */
+    unsigned ancestors=0;for(const char *c=path;*c;c++)ancestors+=*c=='/';
     file_syncs=directory_syncs=0;shard_io_thread(&a);
-    assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==5);
+    assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==ancestors);
     /* Real initialized files target, with an initially empty pinned cache. */
     booting=1;assert(!server_storage_roots_init(server));booting=0;
     file_syncs=directory_syncs=0;shard_io_thread(&a);
@@ -377,7 +380,7 @@ int main(void)
     /* A textual prefix is not an initialized ancestor; retain all barriers. */
     server->storage_paths[0][strlen(dir)-1]=0;
     file_syncs=directory_syncs=0;shard_io_thread(&a);
-    assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==5);
+    assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==ancestors);
     server_storage_roots_close(server);
     assert(!pthread_mutex_destroy(&server->lock));free(server);
     assert(!unlink(path));snprintf(path,sizeof(path),"%s/a/b",dir);assert(!rmdir(path));

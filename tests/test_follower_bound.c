@@ -28,6 +28,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include "test_tmpdir.h"
 
 static int failures;
 #define CHECK(c, m) do { if (!(c)) { fprintf(stderr, "FAIL %s:%d: %s\n", \
@@ -575,12 +576,12 @@ static void stall_release(void) { unlink(fault_path); }
 static void test_stalled_compactor(void)
 {
     struct net n;
-    char dir[] = "/tmp/efs-k22-XXXXXX";
+    char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-k22-XXXXXX");
     struct efs_kv_lsm_cfg kc;
     struct efs_kv_lsm_stats ks;
     FILE *f;
 
-    CHECK(mkdtemp(dir) != NULL, "tmpdir");
+    CHECK(efs_test_mkdtemp(dir) != NULL, "tmpdir");
     snprintf(fault_path, sizeof(fault_path), "%s/fault", dir);
     f = fopen(fault_path, "w");
     CHECK(f != NULL, "fault file");

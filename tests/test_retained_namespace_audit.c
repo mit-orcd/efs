@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include "test_tmpdir.h"
 static int cancel(void *ctx){(void)ctx;return 1;}
 static struct retained_audit audit(struct efs_kv *kv,efs_ino_t ino) {
     struct efs_kv_lsm_snapshot *s=NULL;assert(!efs_kv_lsm_snapshot_pin(kv,8<<20,&s));
@@ -51,7 +52,7 @@ static struct efs_kv *partial_replacement(struct efs_kv *kv,const char *path,
     return kv;
 }
 int main(void) {
-    char path[]="/tmp/efs-retained-audit-XXXXXX";assert(mkdtemp(path));
+    char path[EFS_TEST_PATH];efs_test_path(path,sizeof(path),"efs-retained-audit-XXXXXX");assert(efs_test_mkdtemp(path));
     struct efs_kv_lsm_cfg cfg={0,0,4,0};struct efs_kv *kv=efs_kv_lsm_open(path,&cfg);assert(kv);
     struct efs_meta_attrs at={1000,1000,100};efs_ino_t parent,child,replacement;
     assert(!efs_meta_apply_init(kv,100));

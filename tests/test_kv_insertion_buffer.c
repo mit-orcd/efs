@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "test_tmpdir.h"
 #define KEYS 8192
 static uint8_t key[KEYS][8],present[KEYS],frozen_present[KEYS];
 static uint64_t value[KEYS],frozen_value[KEYS];
@@ -51,7 +52,7 @@ static void changes(struct efs_kv *kv,unsigned rounds)
 }
 int main(void)
 {
- char dir[]="/tmp/efs-kv-insertion-XXXXXX";assert(mkdtemp(dir));
+ char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-kv-insertion-XXXXXX");assert(efs_test_mkdtemp(dir));
  struct efs_kv_lsm_cfg cfg={.sync_mode=EFS_KV_LSM_SYNC,.memtable_max=32u<<20,.l0_max=4};
  struct efs_kv *kv=efs_kv_lsm_open(dir,&cfg);assert(kv);
  for(unsigned i=0;i<KEYS;i++){be32(key[i],i*2654435761u);be32(key[i]+4,i);}

@@ -271,21 +271,21 @@ test-fence-view: tests/test_fence_view
 
 .PHONY: test-dirty-ranges
 test-dirty-ranges:
-	@set -e; ranges_test=$$(mktemp /tmp/efs-test-dirty-ranges.XXXXXX); \
+	@set -e; ranges_test=$$(mktemp "$${TMPDIR:-/tmp}/efs-test-dirty-ranges.XXXXXX"); \
 	trap 'rm -f "$$ranges_test"' EXIT; \
 	$(CC) $(CFLAGS) $(INCLUDES) -o "$$ranges_test" tests/test_dirty_ranges.c; \
 	"$$ranges_test"
 
 .PHONY: test-writer-ranges
 test-writer-ranges:
-	@set -e; writer_test=$$(mktemp /tmp/efs-test-writer-ranges.XXXXXX); \
+	@set -e; writer_test=$$(mktemp "$${TMPDIR:-/tmp}/efs-test-writer-ranges.XXXXXX"); \
 	trap 'rm -f "$$writer_test"' EXIT; \
 	$(CC) $(CFLAGS) $(INCLUDES) -o "$$writer_test" tests/test_writer_ranges.c src/common/common.c; \
 	"$$writer_test"
 
 .PHONY: test-wb-recovery test-wb-runtime test-stop-control
 test-stop-control:
-	@set -e; stop_test=$$(mktemp /tmp/efs-test-stop-control.XXXXXX); \
+	@set -e; stop_test=$$(mktemp "$${TMPDIR:-/tmp}/efs-test-stop-control.XXXXXX"); \
 	trap 'rm -f "$$stop_test"' EXIT; \
 	$(CC) $(CFLAGS) $(INCLUDES) -Isrc/client -pthread -o "$$stop_test" tests/test_stop_control.c; \
 	"$$stop_test"
@@ -322,7 +322,7 @@ test-wb-runtime:
 	python3 tests/test_host_durable_dispatch.py
 
 test-wb-recovery:
-	@set -e; wb_test=$$(mktemp /tmp/efs-test-wb-recovery.XXXXXX); \
+	@set -e; wb_test=$$(mktemp "$${TMPDIR:-/tmp}/efs-test-wb-recovery.XXXXXX"); \
 	trap 'rm -f "$$wb_test"' EXIT; \
 	$(CC) $(CFLAGS) $(INCLUDES) -o "$$wb_test" tests/test_wb_recovery.c; \
 	"$$wb_test"
@@ -470,6 +470,8 @@ test: all
 	python3 tests/test_storage_principles.py
 	python3 tests/test_make_test_recipe.py
 	python3 tests/test_w125_harness.py
+	python3 tests/test_make_test_summary_runner.py
+	python3 tests/test_tmpdir_hygiene.py
 	python3 tests/test_pressure_cohort.py
 	python3 tests/test_alloc_value_guard.py
 	python3 tests/test_commands_load_payloads.py
@@ -951,7 +953,7 @@ src/server/efsd.o src/client/efs_fuse.o src/client/efs_bench.o: src/common/recor
 
 .PHONY: test-rdma-message
 test-rdma-message:
-	@bin=$$(mktemp /tmp/efs-rdma-message.XXXXXX); trap 'rm -f "$$bin"' EXIT; \
+	@bin=$$(mktemp "$${TMPDIR:-/tmp}/efs-rdma-message.XXXXXX"); trap 'rm -f "$$bin"' EXIT; \
 	$(CC) -std=c99 -O2 -g -Wall -Wextra -Werror -Iinclude tests/test_rdma_message.c src/common/rdma_message.c -pthread -o "$$bin" && "$$bin"
 
 test: test-rdma-message

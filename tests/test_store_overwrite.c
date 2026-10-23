@@ -68,6 +68,7 @@ static ssize_t test_writev(int fd, const struct iovec *iov, int n)
 #include "../src/server/store.c"
 #include "../src/server/reclaim.c"
 #include "../src/server/segment_store.c"
+#include "test_tmpdir.h"
 #undef close
 #undef open
 #undef fsync
@@ -102,7 +103,7 @@ static void check(const char *path, const uint8_t *body, size_t len,
 }
 int main(void)
 {
-    char dir[] = "/tmp/efs-overwrite-XXXXXX"; assert(mkdtemp(dir));
+    char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-overwrite-XXXXXX"); assert(efs_test_mkdtemp(dir));
     char path[1024]; snprintf(path, sizeof(path), "%s/body", dir);
     uint8_t *aligned; assert(posix_memalign((void **)&aligned, 4096, 65536) == 0);
     memset(aligned, 0x37, 65536); uint8_t sum[EFS_FRAG_RECORD_BYTES]; memset(sum, 0x42, sizeof(sum)); /* opaque record bytes */

@@ -6,6 +6,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include "test_tmpdir.h"
 static int failures;
 #define CHECK(c,m) do { if (!(c)) { fprintf(stderr,"FAIL %d: %s\n",__LINE__,m); failures++; } } while (0)
 static char store[256];
@@ -76,7 +77,7 @@ static int capture(struct efs_kv *kv,const struct efs_query_catalog *old,struct 
     }
     if(!rc){
         struct efs_query_catalog *full=NULL,*disk=NULL;
-        if(!disk_root[0])snprintf(disk_root,sizeof(disk_root),"/tmp/efs-query-incremental-%d",getpid());
+        if(!disk_root[0])efs_test_own(efs_test_path(disk_root,sizeof(disk_root),"efs-query-incremental-%d",getpid()));
         CHECK(!efs_query_catalog_build(s,NULL,32<<20,NULL,NULL,&full),"fresh RAM oracle for disk incremental");
         struct efs_query_rollup before,after;int retained=disk_previous && !efs_query_catalog_stats(disk_previous,EFS_ROOT_INO,&before);
         int drc=efs_query_catalog_build_disk(disk_root,s,disk_previous,4<<20,NULL,NULL,&disk);
@@ -112,7 +113,7 @@ static int page_collect(void *ctx,const struct efs_name_entry *e,const char *pat
 static int cancel(void *ctx) { (void)ctx;return 1; }
 int main(void)
 {
-    snprintf(store,sizeof(store),"/tmp/efs-query-catalog-%d",getpid());cleanup();
+    efs_test_own(efs_test_path(store,sizeof(store),"efs-query-catalog-%d",getpid()));cleanup();
     struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};
     struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
     CHECK(kv!=NULL,"open");if (!kv) return 1;

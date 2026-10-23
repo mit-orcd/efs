@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include "../src/server/directory_sync_group.h"
+#include "test_tmpdir.h"
 static struct directory_sync_group group=DIRECTORY_SYNC_GROUP_INIT;
 static pthread_mutex_t gate=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t changed=PTHREAD_COND_INITIALIZER;
@@ -53,7 +54,7 @@ static void wait_queued(int n)
 }
 int main(void)
 {
-    char path[]="/tmp/efs-dir-sync-group-XXXXXX";assert(mkdtemp(path));
+    char path[EFS_TEST_PATH];efs_test_path(path,sizeof(path),"efs-dir-sync-group-XXXXXX");assert(efs_test_mkdtemp(path));
     int fd=open(path,O_RDONLY|O_DIRECTORY);assert(fd>=0);
     struct job first={fd,999},next[8];pthread_t leader,followers[8];
     assert(!pthread_create(&leader,NULL,run,&first));wait_call(1);

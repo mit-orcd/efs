@@ -9,6 +9,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <dirent.h>
+#include "test_tmpdir.h"
 #define NS 1000000000ull
 static void apply(struct efs_kv *kv,uint64_t ino,uint64_t revision,struct efs_expiry_record *r)
 {struct efs_expiry_change c;assert(!efs_expiry_plan(kv,ino,1,revision,r,&c));assert(c.count<=3);assert(!efs_kv_batch(kv,c.items,c.count));}
@@ -121,7 +122,7 @@ int main(void)
 {
  inheritance_gates();
  namespace_gates();
- char path[]="/tmp/efs-expiry-XXXXXX";assert(mkdtemp(path));
+ char path[EFS_TEST_PATH];efs_test_path(path,sizeof(path),"efs-expiry-XXXXXX");assert(efs_test_mkdtemp(path));
  struct efs_kv *kv=efs_kv_lsm_open(path,NULL);assert(kv);
  struct efs_expiry_policy p;assert(!efs_expiry_policy_get(kv,1,1,&p));assert(!p.enabled && !p.revision);
  struct efs_expiry_record r;assert(!efs_expiry_materialize(&p,1,1,NS,&r));assert(!r.deadline_ns);

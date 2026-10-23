@@ -8,6 +8,7 @@ static unsigned sync_calls,fail_sync;
 static int storage_fsync(int fd){sync_calls++;if(sync_calls==fail_sync){errno=EIO;return -1;}return fsync(fd);}
 #define fsync storage_fsync
 #include "../src/server/put_fence.c"
+#include "test_tmpdir.h"
 #undef fsync
 static struct efsd_server server;
 static uint8_t uuid[16]={1,2,3,4};
@@ -22,7 +23,7 @@ static void *fencer(void *unused)
 }
 int main(void)
 {
-    char root[]="/tmp/efs-put-session-XXXXXX";assert(mkdtemp(root));
+    char root[EFS_TEST_PATH];efs_test_path(root,sizeof(root),"efs-put-session-XXXXXX");assert(efs_test_mkdtemp(root));
     server.storage_path_count=1;strcpy(server.storage_paths[0],root);
     struct efs_put_storage_guard guard={0};uint8_t zero[16]={0};
     assert(server_put_session_begin(&server,zero,1,&guard)==EFS_ERR_INVAL);

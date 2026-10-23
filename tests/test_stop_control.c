@@ -2,6 +2,7 @@
 #include "stop_control.h"
 #include <assert.h>
 #include <signal.h>
+#include "test_tmpdir.h"
 static int mode, released, calls, forced;
 static int drain(uint64_t deadline,int force)
 {
@@ -17,8 +18,8 @@ static int drain(uint64_t deadline,int force)
 int main(void)
 {
     signal(SIGPIPE,SIG_IGN);
-    char mount[]="/tmp/efs-control-test-XXXXXX";
-    assert(mkdtemp(mount));
+    char mount[EFS_TEST_PATH];efs_test_path(mount,sizeof(mount),"efs-control-test-XXXXXX");
+    assert(efs_test_mkdtemp(mount));
     char first[108],second[108];
     assert(!efs_stop_path("/tmp/nonexistent/../efs-target/",first,sizeof(first)));
     assert(!efs_stop_path("/tmp/./efs-target",second,sizeof(second)));

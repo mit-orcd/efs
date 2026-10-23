@@ -25,6 +25,13 @@ uint32 node masks, 4 KiB node-table entries); each metadata group keeps three
 voters on nodes 1–4; packed segments use the data ring with a remote
 linearizable pack-object read on non-voter nodes.
 
+[K25b summary-runner exit status and test TMPDIR](k25b-summary-exit-tmpdir-20261022.md):
+**PASS (scoped), merged into devel; R1 closed.**
+`make_test_summary.sh` exits 1 on any failure or timeout and 3 (INCOMPLETE)
+on NOTRUN, which fixes R1. Tests keep scratch under `$TMPDIR` and remove it on success.
+Two consecutive `make test` runs on efs2 passed without scratch growth. One
+earlier run hit a `server.sh` start flake, which is unresolved.
+
 [W87/K9 append oracle on efs2](w87-append-oracle-efs2-20261022.md):
 **INCOMPLETE: not reproduced, no root cause; W87 OPEN.** 23 exact rounds, 19,597 acknowledged records on
 a private 3-daemon TCP buffered cluster under churn/GC and POSIX load; no loss,

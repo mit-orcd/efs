@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include "test_tmpdir.h"
 
 static int failures = 0;
 
@@ -80,7 +81,7 @@ static void test_register_establish(void)
     CHECK(efs_session_register_establish(kv,uuid,2,7)==EFS_ERR_BUSY,"compound cannot overwrite prepared floor");
     CHECK(!efs_txn_resolve(kv,&tx,7,EFS_TXN_ABORT),"drain owner guard");
     efs_kv_mem_free(kv);
-    char directory[]="/tmp/efs-session-admission-cold-XXXXXX";CHECK(mkdtemp(directory)!=NULL,"cold admission directory");
+    char directory[EFS_TEST_PATH];efs_test_path(directory,sizeof(directory),"efs-session-admission-cold-XXXXXX");CHECK(efs_test_mkdtemp(directory)!=NULL,"cold admission directory");
     struct efs_kv_lsm_cfg cfg={0};kv=efs_kv_lsm_open(directory,&cfg);CHECK(kv!=NULL,"cold admission KV");
     if(kv){
         CHECK(!efs_session_create(kv,uuid,1) && !efs_session_register_establish(kv,uuid,1,7),"durable two-row admission");
@@ -280,9 +281,9 @@ static void test_pending_create_ownership(void)
  * Recovery must preserve the token and the independent normal-owner bit. */
 static void test_negative_create_cold(void)
 {
-    char dir[]="/tmp/efs-negative-create-XXXXXX";
+    char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-negative-create-XXXXXX");
     struct efs_kv_lsm_cfg cfg={0};uint8_t uuid[EFS_OPID_UUID_LEN];uuid_of(uuid,23);
-    CHECK(mkdtemp(dir)!=NULL,"negative cold directory");
+    CHECK(efs_test_mkdtemp(dir)!=NULL,"negative cold directory");
     struct efs_opid_req q={0};memcpy(q.id.client_uuid,uuid,sizeof(uuid));q.id.session_epoch=1;q.id.seq=1;
     for(unsigned phase=0;phase<2;phase++) {
         pid_t pid=fork();CHECK(pid>=0,"negative cold fork");if(pid<0)break;
@@ -320,14 +321,14 @@ static void test_negative_create_cold(void)
 static void test_pending_cold_edges(void)
 {
   for (unsigned guarded=0;guarded<2;guarded++) {
-    char dir[] = "/tmp/efs-pending-lease-XXXXXX";
+    char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-pending-lease-XXXXXX");
     struct efs_kv_lsm_cfg cfg = {0};
     uint8_t uuid[EFS_OPID_UUID_LEN], key[EFS_KV_KEY_MAX];
     uint32_t klen = 0;
     efs_ino_t ino = 0;
     const uint64_t token = 1;
     uuid_of(uuid, 10);
-    if (!mkdtemp(dir)) { CHECK(0, "pending cold directory"); return; }
+    if (!efs_test_mkdtemp(dir)) { CHECK(0, "pending cold directory"); return; }
     for (unsigned phase = 0; phase < 4+2*guarded; phase++) {
         pid_t pid = fork();
         CHECK(pid >= 0, "pending cold fork");
@@ -883,8 +884,8 @@ static void test_prepared_owner_fence(void)
 static void test_prepared_owner_cold(void)
 {
     for (unsigned commit = 0; commit < 2; commit++) {
-        char dir[] = "/tmp/efs-prepared-owner-XXXXXX";
-        if (!mkdtemp(dir)) {
+        char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-prepared-owner-XXXXXX");
+        if (!efs_test_mkdtemp(dir)) {
             CHECK(0, "cold owner root");
             return;
         }
@@ -1239,8 +1240,8 @@ static void test_deferred_close_identity(void)
 /* Cold replay across 8+1 ownership pages; retirement retains epoch fencing. */
 static void test_guarded_retire_cold(void)
 {
-    char dir[]="/tmp/efs-retire-cold-XXXXXX";
-    CHECK(mkdtemp(dir)!=NULL,"retire cold root");
+    char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-retire-cold-XXXXXX");
+    CHECK(efs_test_mkdtemp(dir)!=NULL,"retire cold root");
     struct efs_kv_lsm_cfg cfg={0};
     uint8_t uuid[16];uuid_of(uuid,219);
     for(unsigned phase=0;phase<5;phase++) {

@@ -31,7 +31,9 @@ assert hashlib.sha256(shape((root/'tests/posix/posix_suite.py').read_text(), "na
 saved = dict(os.environ)
 try:
     os.environ.pop('EFS_POSIX_PHASE_SOCKET', None)
-    with tempfile.TemporaryDirectory(prefix='efs-phase-check-', dir='/tmp') as temp:
+    # TMPDIR, unless its Unix socket paths would pass the 107-byte sun_path limit.
+    scratch = tempfile.gettempdir() if len(tempfile.gettempdir()) <= 48 else '/tmp'
+    with tempfile.TemporaryDirectory(prefix='efs-phase-check-', dir=scratch) as temp:
         work = Path(temp)
         with Collector(work, False):
             assert suite.invoke(suite.dir_deep_nesting, str(work/'quiet')) == ('PASS', '')

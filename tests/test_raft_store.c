@@ -22,6 +22,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <sys/resource.h>
+#include "test_tmpdir.h"
 
 static int failures = 0;
 
@@ -1044,7 +1045,7 @@ done:
 
 int main(void)
 {
-    snprintf(g_dir, sizeof(g_dir), "/tmp/efs-raftstore-test-%d", (int)getpid());
+    efs_test_own(efs_test_path(g_dir,sizeof(g_dir),"efs-raftstore-test-%d",(int)getpid()));
     rmtree(g_dir);
 
     test_index_reserve_failure();

@@ -178,6 +178,7 @@ static int counted_snapshot_scan(struct efs_kv_lsm_snapshot *source,
 #define sync_file_range fault_writeback
 #endif
 #include "../src/meta/query_disk.c"
+#include "test_tmpdir.h"
 #undef pthread_create
 #undef efs_kv_lsm_snapshot_scan
 #undef unlink
@@ -226,8 +227,8 @@ static void sort_budget_test(void)
     int before=failures;
     for(unsigned scenario=0;scenario<13;scenario++){
         unsigned count=scenario==9?0:scenario==10?1:SORT_ROWS*4+1;
-        char store[]="/tmp/efs-sort-kv-XXXXXX",root[]="/tmp/efs-sort-budget-XXXXXX";
-        CHECK(mkdtemp(store));CHECK(mkdtemp(root));
+        char store[EFS_TEST_PATH],root[EFS_TEST_PATH];efs_test_path(store,sizeof(store),"efs-sort-kv-XXXXXX");efs_test_path(root,sizeof(root),"efs-sort-budget-XXXXXX");
+        CHECK(efs_test_mkdtemp(store));CHECK(efs_test_mkdtemp(root));
         struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
         CHECK(kv);if(!kv)continue;
         for(unsigned i=0;i<count;i++){
@@ -241,7 +242,7 @@ static void sort_budget_test(void)
         struct efs_query_disk *d=calloc(1,sizeof(*d));CHECK(d);if(!d)continue;
         d->budget_fd=-1;d->disk_limit=UINT64_MAX;d->disk_bytes=sizeof(d->part)+96;
         pthread_mutex_init(&d->mutex,NULL);for(unsigned i=0;i<FD_CACHE;i++)d->fds[i].fd=-1;
-        snprintf(d->path,sizeof(d->path),"%s/view-XXXXXX",root);CHECK(mkdtemp(d->path));CHECK(!register_disk(d));
+        snprintf(d->path,sizeof(d->path),"%s/view-XXXXXX",root);CHECK(efs_test_mkdtemp(d->path));CHECK(!register_disk(d));
         struct raw_sync_batch sync={0};CHECK(!raw_build(d,source,1,&sync));CHECK(!raw_sync_finish(d,&sync,0));
         /* Retained generation is real on disk and remains unchanged while
          * the candidate sorts. root_bytes includes this old immutable view. */
@@ -307,8 +308,8 @@ static void sort_budget_test(void)
  * subsequent lookups read the new zeroed rows, not those retained links. */
 static void rebuild_cache_test(void)
 {
-    char store[]="/tmp/efs-query-rebuild-kv-XXXXXX",cache[]="/tmp/efs-query-rebuild-cache-XXXXXX";
-    CHECK(mkdtemp(store));CHECK(mkdtemp(cache));
+    char store[EFS_TEST_PATH],cache[EFS_TEST_PATH];efs_test_path(store,sizeof(store),"efs-query-rebuild-kv-XXXXXX");efs_test_path(cache,sizeof(cache),"efs-query-rebuild-cache-XXXXXX");
+    CHECK(efs_test_mkdtemp(store));CHECK(efs_test_mkdtemp(cache));
     struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};
     struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);CHECK(kv);if(!kv)return;
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t dir,file;
@@ -347,8 +348,8 @@ static int local_page_busy(void *ctx,const struct efs_name_entry *entry,const ch
 static int local_page_stop(void *ctx){(void)ctx;return 1;}
 static void local_page_test(void)
 {
-    char store[]="/tmp/efs-query-local-kv-XXXXXX",cache[]="/tmp/efs-query-local-cache-XXXXXX";
-    CHECK(mkdtemp(store));CHECK(mkdtemp(cache));
+    char store[EFS_TEST_PATH],cache[EFS_TEST_PATH];efs_test_path(store,sizeof(store),"efs-query-local-kv-XXXXXX");efs_test_path(cache,sizeof(cache),"efs-query-local-cache-XXXXXX");
+    CHECK(efs_test_mkdtemp(store));CHECK(efs_test_mkdtemp(cache));
     struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
     CHECK(kv);if(!kv)return;
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t leaf,outside,file;
@@ -430,7 +431,7 @@ static void local_page_test(void)
 static int cancel_budget(void *ctx){(void)ctx;return 1;}
 static void raw_sync_batch_test(void)
 {
-    char root[]="/tmp/efs-query-sync-batch-XXXXXX";CHECK(mkdtemp(root));
+    char root[EFS_TEST_PATH];efs_test_path(root,sizeof(root),"efs-query-sync-batch-XXXXXX");CHECK(efs_test_mkdtemp(root));
     struct efs_query_disk *d=calloc(1,sizeof(*d));CHECK(d);if(!d)return;
     unsigned modes=3;
 #ifdef __linux__
@@ -472,8 +473,8 @@ static void raw_sync_batch_test(void)
 }
 static void budget_test(void)
 {
-    char root[]="/tmp/efs-query-budget-XXXXXX",a[EFS_MAX_PATH],b[EFS_MAX_PATH],c[EFS_MAX_PATH],path[EFS_MAX_PATH];
-    CHECK(mkdtemp(root));
+    char root[EFS_TEST_PATH],a[EFS_MAX_PATH],b[EFS_MAX_PATH],c[EFS_MAX_PATH],path[EFS_MAX_PATH];efs_test_path(root,sizeof(root),"efs-query-budget-XXXXXX");
+    CHECK(efs_test_mkdtemp(root));
     snprintf(a,sizeof(a),"%s/view-a",root);snprintf(b,sizeof(b),"%s/view-b",root);snprintf(c,sizeof(c),"%s/view-orphan",root);
     CHECK(!mkdir(a,0700));CHECK(!mkdir(b,0700));CHECK(!mkdir(c,0700));
     char source[EFS_MAX_PATH];snprintf(source,sizeof(source),"%s/part",a);
@@ -511,7 +512,7 @@ static void budget_test(void)
 }
 static void merge_test(void)
 {
-    char root[]="/tmp/efs-query-merge-XXXXXX";CHECK(mkdtemp(root));
+    char root[EFS_TEST_PATH];efs_test_path(root,sizeof(root),"efs-query-merge-XXXXXX");CHECK(efs_test_mkdtemp(root));
     struct efs_query_disk *d=calloc(1,sizeof(*d));CHECK(d);if(!d)return;
     for(unsigned kind=0;kind<2;kind++) {
         size_t width=kind?sizeof(struct disk_alias):sizeof(struct efs_name_entry);
@@ -555,7 +556,7 @@ static void merge_test(void)
 }
 static void alias_batch_test(void)
 {
-    char root[]="/tmp/efs-query-alias-batch-XXXXXX";CHECK(mkdtemp(root));
+    char root[EFS_TEST_PATH];efs_test_path(root,sizeof(root),"efs-query-alias-batch-XXXXXX");CHECK(efs_test_mkdtemp(root));
     struct efs_query_disk *d=calloc(1,sizeof(*d));CHECK(d);if(!d)return;
     d->budget_fd=-1;d->disk_limit=UINT64_MAX;strcpy(d->path,root);
     pthread_mutex_init(&d->mutex,NULL);
@@ -601,7 +602,7 @@ static void names_peak_test(void)
 {
     const unsigned count=2*SORT_ROWS+17;
     for(unsigned kind=0;kind<2;kind++)for(unsigned mode=0;mode<7;mode++){
-        char root[]="/tmp/efs-query-names-XXXXXX";CHECK(mkdtemp(root));
+        char root[EFS_TEST_PATH];efs_test_path(root,sizeof(root),"efs-query-names-XXXXXX");CHECK(efs_test_mkdtemp(root));
         struct efs_query_disk *d=calloc(1,sizeof(*d));CHECK(d);if(!d)return;
         d->budget_fd=-1;d->disk_limit=UINT64_MAX;strcpy(d->path,root);
         pthread_mutex_init(&d->mutex,NULL);
@@ -695,8 +696,8 @@ static void *subtree_reader(void *ctx)
 static void subtree_page_test(void)
 {
     int before=failures;
-    char store[]="/tmp/efs-subtree-kv-XXXXXX",cache[]="/tmp/efs-subtree-cache-XXXXXX";
-    CHECK(mkdtemp(store));CHECK(mkdtemp(cache));
+    char store[EFS_TEST_PATH],cache[EFS_TEST_PATH];efs_test_path(store,sizeof(store),"efs-subtree-kv-XXXXXX");efs_test_path(cache,sizeof(cache),"efs-subtree-cache-XXXXXX");
+    CHECK(efs_test_mkdtemp(store));CHECK(efs_test_mkdtemp(cache));
     struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
     CHECK(kv);if(!kv)return;
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t unrelated,root,child,empty,file;
@@ -804,7 +805,7 @@ static void changed_journal_test(void)
 {
     const unsigned count=2*SORT_ROWS+17,shards=FD_CACHE*2;
     for(unsigned mode=0;mode<7;mode++){
-        char root[]="/tmp/efs-query-changes-XXXXXX";CHECK(mkdtemp(root));
+        char root[EFS_TEST_PATH];efs_test_path(root,sizeof(root),"efs-query-changes-XXXXXX");CHECK(efs_test_mkdtemp(root));
         struct efs_query_disk *d=calloc(1,sizeof(*d));struct incremental *state=calloc(1,sizeof(*state));
         CHECK(d && state);if(!d || !state){free(d);free(state);continue;}
         d->budget_fd=-1;d->disk_limit=UINT64_MAX;strcpy(d->path,root);pthread_mutex_init(&d->mutex,NULL);
@@ -854,8 +855,8 @@ static void changed_journal_test(void)
 
 static void pending_preflight_test(void)
 {
-    char store[]="/tmp/efs-query-pending-kv-XXXXXX",cache[]="/tmp/efs-query-pending-cache-XXXXXX";
-    CHECK(mkdtemp(store));CHECK(mkdtemp(cache));
+    char store[EFS_TEST_PATH],cache[EFS_TEST_PATH];efs_test_path(store,sizeof(store),"efs-query-pending-kv-XXXXXX");efs_test_path(cache,sizeof(cache),"efs-query-pending-cache-XXXXXX");
+    CHECK(efs_test_mkdtemp(store));CHECK(efs_test_mkdtemp(cache));
     struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);CHECK(kv);if(!kv)return;
     struct efs_meta_attrs attrs={1000,1000,100};CHECK(!efs_meta_apply_init(kv,100));
     for(unsigned i=0;i<32;i++){
@@ -889,8 +890,8 @@ static void pending_preflight_test(void)
 
 static void orphan_preflight_test(void)
 {
-    char store[]="/tmp/efs-query-orphan-kv-XXXXXX",cache[]="/tmp/efs-query-orphan-cache-XXXXXX";
-    CHECK(mkdtemp(store));CHECK(mkdtemp(cache));
+    char store[EFS_TEST_PATH],cache[EFS_TEST_PATH];efs_test_path(store,sizeof(store),"efs-query-orphan-kv-XXXXXX");efs_test_path(cache,sizeof(cache),"efs-query-orphan-cache-XXXXXX");
+    CHECK(efs_test_mkdtemp(store));CHECK(efs_test_mkdtemp(cache));
     struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};
     struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);CHECK(kv);if(!kv)return;
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t parent,child;
@@ -978,8 +979,8 @@ static int current_is(const char *cache,const char *generation)
  * (v5/v6) is refused at recovery and left untouched, never migrated. */
 static void publication_and_format_test(void)
 {
-    char store[]="/tmp/efs-query-format-kv-XXXXXX",cache[]="/tmp/efs-query-format-cache-XXXXXX";
-    CHECK(mkdtemp(store));CHECK(mkdtemp(cache));
+    char store[EFS_TEST_PATH],cache[EFS_TEST_PATH];efs_test_path(store,sizeof(store),"efs-query-format-kv-XXXXXX");efs_test_path(cache,sizeof(cache),"efs-query-format-cache-XXXXXX");
+    CHECK(efs_test_mkdtemp(store));CHECK(efs_test_mkdtemp(cache));
     struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};struct efs_kv *kv=efs_kv_lsm_open(store,&cfg);
     CHECK(kv);if(!kv)return;
     struct efs_meta_attrs attrs={1000,1000,100};efs_ino_t file;
@@ -1057,8 +1058,8 @@ int main(void)
     struct efs_query_disk *d=calloc(1,sizeof(*d));if(!d)return 1;
     d->budget_fd=-1;
     d->disk_limit=UINT64_MAX;
-    strcpy(d->path,"/tmp/efs-query-window-XXXXXX");
-    if(!mkdtemp(d->path)){free(d);return 1;}
+    efs_test_path(d->path,sizeof(d->path),"efs-query-window-XXXXXX");
+    if(!efs_test_mkdtemp(d->path)){free(d);return 1;}
     pthread_mutex_init(&d->mutex,NULL);
     for(int i=0;i<FD_CACHE;i++)d->fds[i].fd=-1;
     uint8_t data[READ_WINDOW*3+17],got[READ_WINDOW*2],change[31];
@@ -1228,8 +1229,8 @@ int main(void)
     CHECK(!disk_io(d,0,'r',got,17,100,0));CHECK(!memcmp(got,data+100,17));
     /* Copy-on-write must detach the cached descriptor and preserve the old
      * inode even when the candidate write is short and fails with ENOSPC. */
-    char retained[]="/tmp/efs-query-retained-XXXXXX",derived[EFS_MAX_PATH];
-    int oldfd=mkstemp(retained);CHECK(oldfd>=0);
+    char retained[EFS_TEST_PATH],derived[EFS_MAX_PATH];efs_test_path(retained,sizeof(retained),"efs-query-retained-XXXXXX");
+    int oldfd=efs_test_mkstemp(retained);CHECK(oldfd>=0);
     if(oldfd>=0){
         CHECK(!io_at(oldfd,data,sizeof(data),0,1));
         CHECK(!filename(d,SHARDS-2,'d',derived,sizeof(derived)));CHECK(!link(retained,derived));d->shared_d[SHARDS-2]=1;
@@ -1257,8 +1258,8 @@ int main(void)
     /* A new raw/index inode has one checked writing-handle barrier. Inject
      * failures in every persisted file class; none may return a candidate or
      * replace the checkpoint of a previously completed generation. */
-    char kvroot[]="/tmp/efs-query-sync-kv-XXXXXX",cache[]="/tmp/efs-query-sync-cache-XXXXXX";
-    CHECK(mkdtemp(kvroot));CHECK(mkdtemp(cache));
+    char kvroot[EFS_TEST_PATH],cache[EFS_TEST_PATH];efs_test_path(kvroot,sizeof(kvroot),"efs-query-sync-kv-XXXXXX");efs_test_path(cache,sizeof(cache),"efs-query-sync-cache-XXXXXX");
+    CHECK(efs_test_mkdtemp(kvroot));CHECK(efs_test_mkdtemp(cache));
     struct efs_kv_lsm_cfg cfg={EFS_KV_LSM_NOSYNC,0,4,0};
     struct efs_kv *kv=efs_kv_lsm_open(kvroot,&cfg);CHECK(kv);
     struct efs_kv_lsm_snapshot *source=NULL;struct efs_query_disk *old=NULL,*next=NULL;

@@ -18,7 +18,7 @@ int main(int argc,char **argv) {
  assert(descriptors()==before);puts("nonblocking trace calls complete, descriptors balanced");
 }
 '''
-with tempfile.TemporaryDirectory(prefix='efs-work-trace-', dir='/tmp') as temp:
+with tempfile.TemporaryDirectory(prefix='efs-work-trace-') as temp:
     base=Path(temp); source=base/'test.c'; binary=base/'test'
     source.write_text(code)
     subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-D_GNU_SOURCE','-Wall','-Wextra','-Werror',

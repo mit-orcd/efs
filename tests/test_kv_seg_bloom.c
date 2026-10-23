@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "test_tmpdir.h"
 
 static uint32_t key_for(unsigned i, uint8_t key[16])
 {
@@ -20,8 +21,8 @@ static uint32_t key_for(unsigned i, uint8_t key[16])
 
 int main(void)
 {
-    char path[] = "/tmp/efs-seg-bloom-XXXXXX";
-    int fd = mkstemp(path);
+    char path[EFS_TEST_PATH];efs_test_path(path,sizeof(path),"efs-seg-bloom-XXXXXX");
+    int fd = efs_test_mkstemp(path);
     assert(fd >= 0); close(fd); unlink(path);
     struct kv_seg_w *w;
     assert(kv_seg_w_open(path, &w) == EFS_OK);

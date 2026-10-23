@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include "test_tmpdir.h"
 static int decision(void *ctx, const struct efs_txid *t, uint32_t sh, int *d)
 { return efs_txn_decision_get(ctx, sh, t, d); }
 static void prepare(struct efs_kv *kv, const struct efs_txid *t,
@@ -22,7 +23,7 @@ static void prepare(struct efs_kv *kv, const struct efs_txid *t,
 }
 static void run(int verdict)
 {
-    char dir[]="/tmp/efs-bootstrap-XXXXXX"; assert(mkdtemp(dir));
+    char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-bootstrap-XXXXXX"); assert(efs_test_mkdtemp(dir));
     struct efs_kv *kv=efs_kv_lsm_open(dir,NULL); assert(kv);
     struct efs_meta_attrs at={1000,1000,1}; efs_ino_t ino=0;
     struct efs_meta_row row; struct efs_txid t={{0x75}};

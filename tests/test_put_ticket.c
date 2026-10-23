@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include "test_tmpdir.h"
 
 static struct efs_meta_pub make_pub(efs_ino_t ino, uint64_t gen, uint64_t seq)
 {
@@ -203,8 +204,8 @@ static void capacity(void)
 }
 static void restart(void)
 {
-    char dir[] = "/tmp/efs-put-ticket-XXXXXX";
-    assert(mkdtemp(dir));
+    char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-put-ticket-XXXXXX");
+    assert(efs_test_mkdtemp(dir));
     pid_t pid = fork();
     assert(pid >= 0);
     if (!pid) {

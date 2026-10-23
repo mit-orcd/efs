@@ -18,6 +18,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include "../test_tmpdir.h"
 
 #if !EFS_FAULTS
 #error "tests/faults/test_kv_compact_crash needs -DEFS_FAULTS=1 (see the Makefile rule)"
@@ -140,7 +141,7 @@ static void test_compact_crash(void)
 
 int main(void)
 {
-    snprintf(g_dir, sizeof(g_dir), "/tmp/efs-kvcrash-%d", (int)getpid());
+    efs_test_own(efs_test_path(g_dir,sizeof(g_dir),"efs-kvcrash-%d",(int)getpid()));
     rmtree(g_dir);
     test_compact_crash();
     rmtree(g_dir);

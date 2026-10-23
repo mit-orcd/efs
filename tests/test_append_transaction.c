@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include "test_tmpdir.h"
 static int decision(void *ctx,const struct efs_txid *t,uint32_t sh,int *d)
 { return efs_txn_decision_get(ctx,sh,t,d); }
 static int prepare(void *ctx,const struct efs_txid *t,const struct efs_txn_parts *p,
@@ -277,7 +278,7 @@ static void completion(void)
 }
 static void recovery(int committed)
 {
- char dir[]="/tmp/efs-append-txn-XXXXXX";assert(mkdtemp(dir));
+ char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-append-txn-XXXXXX");assert(efs_test_mkdtemp(dir));
  struct efs_kv *kv=efs_kv_lsm_open(dir,NULL);assert(kv);efs_ino_t ino;uint64_t gen,off=999;
  fixture(kv,&ino,&gen);efs_kv_lsm_close(kv);
  struct efs_txid t={{90}};struct efs_opid_req q=identity(1,0);
@@ -448,8 +449,8 @@ static int owner_prepare(void *kv,const struct efs_txid *t,const struct efs_txn_
 }
 static void session_owned_append(int cold)
 {
- char dir[]="/tmp/efs-owned-append-XXXXXX";
- if(cold)assert(mkdtemp(dir));
+ char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-owned-append-XXXXXX");
+ if(cold)assert(efs_test_mkdtemp(dir));
  struct efs_kv *kv=cold?efs_kv_lsm_open(dir,NULL):efs_kv_mem_create();assert(kv);
  efs_ino_t ino;uint64_t gen;fixture(kv,&ino,&gen);
  struct efs_opid_req q=identity(1,0);uint32_t shard=efs_kv_inode_shard(ino);
@@ -482,7 +483,7 @@ static void session_owned_append(int cold)
 }
 static void retired_append_receipts(int cold)
 {
- char dir[]="/tmp/efs-retired-append-XXXXXX";if(cold)assert(mkdtemp(dir));
+ char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-retired-append-XXXXXX");if(cold)assert(efs_test_mkdtemp(dir));
  struct efs_kv *kv=cold?efs_kv_lsm_open(dir,NULL):efs_kv_mem_create();assert(kv);
  efs_ino_t ino;uint64_t gen;fixture(kv,&ino,&gen);
  struct efs_meta_append_plan *plan=malloc(sizeof(*plan));assert(plan);
@@ -574,8 +575,8 @@ static void retired_append_receipts(int cold)
 }
 static void session_owned_completion(int cold)
 {
- char dir[]="/tmp/efs-owned-completion-XXXXXX";
- if(cold)assert(mkdtemp(dir));
+ char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-owned-completion-XXXXXX");
+ if(cold)assert(efs_test_mkdtemp(dir));
  struct efs_kv *kv=cold?efs_kv_lsm_open(dir,NULL):efs_kv_mem_create();assert(kv);
  efs_ino_t ino;uint64_t gen;fixture(kv,&ino,&gen);
  struct efs_opid_req q=identity(1,0);uint32_t shard=efs_kv_inode_shard(ino);
@@ -616,7 +617,7 @@ static void session_owned_completion(int cold)
 
 static void completion_batch(int cold,int owned,int reverse,int wide)
 {
- char dir[]="/tmp/efs-batch-completion-XXXXXX";if(cold)assert(mkdtemp(dir));
+ char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-batch-completion-XXXXXX");if(cold)assert(efs_test_mkdtemp(dir));
  struct efs_kv *kv=cold?efs_kv_lsm_open(dir,NULL):efs_kv_mem_create();assert(kv);
  efs_ino_t ino;uint64_t gen;fixture(kv,&ino,&gen);
  if(wide)assert(efs_meta_apply_activate_lanes(kv,ino,UINT64_MAX)==EFS_OK);
@@ -706,9 +707,9 @@ static int catchup_fault_batch(void *ctx,const struct efs_kv_item *items,uint32_
 {return catchup_fault?catchup_fault:catchup_original->batch(ctx,items,count);}
 static void caught_up(unsigned count,int cold)
 {
- char directory[]="/tmp/efs-catchup-XXXXXX";
+ char directory[EFS_TEST_PATH];efs_test_path(directory,sizeof(directory),"efs-catchup-XXXXXX");
  struct efs_kv *kv;
- if(cold){assert(mkdtemp(directory));kv=efs_kv_lsm_open(directory,NULL);}
+ if(cold){assert(efs_test_mkdtemp(directory));kv=efs_kv_lsm_open(directory,NULL);}
  else kv=efs_kv_mem_create();
  assert(kv);efs_ino_t ino;uint64_t gen;fixture(kv,&ino,&gen);
  assert(efs_meta_apply_activate_lanes(kv,ino,UINT64_MAX)==EFS_OK);
@@ -825,9 +826,9 @@ static void caught_up(unsigned count,int cold)
 }
 static void bounded_completed_bursts(int cold)
 {
- char dir[]="/tmp/efs-append-bursts-XXXXXX";
+ char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-append-bursts-XXXXXX");
  struct efs_kv *kv;
- if(cold){assert(mkdtemp(dir));kv=efs_kv_lsm_open(dir,NULL);}else kv=efs_kv_mem_create();
+ if(cold){assert(efs_test_mkdtemp(dir));kv=efs_kv_lsm_open(dir,NULL);}else kv=efs_kv_mem_create();
  assert(kv);efs_ino_t ino;uint64_t gen;fixture(kv,&ino,&gen);
  struct efs_meta_append_plan *plan=malloc(sizeof(*plan));assert(plan);
  struct efs_txid tx={{0}};struct efs_opid_req q;uint64_t off;
@@ -866,7 +867,7 @@ static void bounded_completed_bursts(int cold)
 
 static void atomic_reservation(int cold)
 {
- char dir[]="/tmp/efs-atomic-append-XXXXXX";if(cold)assert(mkdtemp(dir));
+ char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-atomic-append-XXXXXX");if(cold)assert(efs_test_mkdtemp(dir));
  struct efs_kv *kv=cold?efs_kv_lsm_open(dir,NULL):efs_kv_mem_create();assert(kv);
  efs_ino_t ino;uint64_t gen;fixture(kv,&ino,&gen);
  struct efs_meta_row row;assert(!efs_meta_apply_get_inode(kv,ino,&row));
@@ -943,7 +944,7 @@ static int completion_apply(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,uint64_
 }
 static void atomic_completion(int cold)
 {
- char dir[]="/tmp/efs-complete-atomic-XXXXXX";if(cold)assert(mkdtemp(dir));
+ char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-complete-atomic-XXXXXX");if(cold)assert(efs_test_mkdtemp(dir));
  struct efs_kv *kv=cold?efs_kv_lsm_open(dir,NULL):efs_kv_mem_create();assert(kv);
  efs_ino_t ino;uint64_t gen;fixture(kv,&ino,&gen);
  struct efs_meta_row row;assert(!efs_meta_apply_get_inode(kv,ino,&row));

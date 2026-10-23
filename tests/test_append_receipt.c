@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include "test_tmpdir.h"
 static int coord(void *ctx,const struct efs_txid *t,uint32_t shard,int *decision)
 { return efs_txn_decision_get(ctx,shard,t,decision); }
 static struct efs_opid_req identity(uint64_t seq,uint64_t ack)
@@ -55,7 +56,7 @@ static efs_ino_t create(struct efs_kv *kv)
 }
 static void cold_bounded_sweep(void)
 {
-    char dir[]="/tmp/efs-sweep-batch-XXXXXX"; assert(mkdtemp(dir));
+    char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-sweep-batch-XXXXXX"); assert(efs_test_mkdtemp(dir));
     struct efs_kv *kv=efs_kv_lsm_open(dir,NULL); assert(kv);
     efs_ino_t ino=create(kv); struct efs_meta_row row;
     assert(efs_meta_apply_get_inode(kv,ino,&row)==EFS_OK);
@@ -116,7 +117,7 @@ int main(void)
     q=identity(17,16);assert(efs_meta_append_result(kv,ino,8,&q,&off)==EFS_ERR_NOT_FOUND);
     assert(efs_meta_apply_get_inode(kv,ino,&row)==EFS_ERR_NOT_FOUND);
     efs_kv_mem_free(kv);
-    char dir[]="/tmp/efs-append-receipt-XXXXXX";assert(mkdtemp(dir));
+    char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-append-receipt-XXXXXX");assert(efs_test_mkdtemp(dir));
     kv=efs_kv_lsm_open(dir,NULL);assert(kv);ino=create(kv);efs_kv_lsm_close(kv);
     pid_t child=fork();assert(child>=0);
     if(!child){kv=efs_kv_lsm_open(dir,NULL);assert(kv);exercise(kv,ino);_exit(0);}

@@ -11,6 +11,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <dirent.h>
+#include "test_tmpdir.h"
 static struct efs_meta_pub intent(efs_ino_t ino,uint64_t gen,uint64_t seq)
 {
     struct efs_meta_pub p={0};p.ino=ino;p.inode_gen=gen;p.candidate_gen=seq;
@@ -85,7 +86,7 @@ int main(void)
 {
     struct efs_kv *kv=efs_kv_mem_create();assert(kv);
     struct efs_meta_pub p=setup(kv,1);fenced(kv,p);next_epoch(kv,p);efs_kv_mem_free(kv);
-    char dir[]="/tmp/efs-publication-session-XXXXXX";assert(mkdtemp(dir));
+    char dir[EFS_TEST_PATH];efs_test_path(dir,sizeof(dir),"efs-publication-session-XXXXXX");assert(efs_test_mkdtemp(dir));
     pid_t child=fork();assert(child>=0);
     if(!child) {kv=efs_kv_lsm_open(dir,NULL);assert(kv);setup(kv,0);_exit(0);}
     int status;assert(waitpid(child,&status,0)==child && WIFEXITED(status) && !WEXITSTATUS(status));

@@ -11,6 +11,7 @@ source=r'''
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include "test_tmpdir.h"
 static int write_fail, sync_fail, calls;
 static pthread_mutex_t sync_gate=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t sync_cv=PTHREAD_COND_INITIALIZER;
@@ -48,7 +49,7 @@ static int count_record(void *u,uint8_t op,const uint8_t *k,uint32_t kl,const ui
     (void)op;(void)k;(void)kl;(void)v;(void)vl;(*(unsigned*)u)++;return EFS_OK;
 }
 static void reservation(void) {
-    char path[]="/tmp/efs-wal-reserve-XXXXXX";int fd=mkstemp(path);assert(fd>=0);close(fd);
+    char path[EFS_TEST_PATH];efs_test_path(path,sizeof(path),"efs-wal-reserve-XXXXXX");int fd=efs_test_mkstemp(path);assert(fd>=0);close(fd);
     struct kv_wal *w;uint64_t seq;char val[1024];memset(val,0x5a,sizeof(val));
     struct efs_kv_item item={EFS_KV_PUT,(const uint8_t*)"X",1,(const uint8_t*)val,sizeof(val)};
     assert(kv_wal_open(path,EFS_KV_LSM_SYNC,&w)==EFS_OK);assert(kv_wal_hold(w,1)==EFS_OK);
@@ -70,7 +71,7 @@ static int record(void *u,uint8_t op,const uint8_t *k,uint32_t kl,const uint8_t 
     (void)u;(void)op;(void)v;(void)vl;assert(kl==1);mask|=1u<<(*k-'A');return EFS_OK;
 }
 static void run(int sync_error) {
-    char path[]="/tmp/efs-wal-fault-XXXXXX";int fd=mkstemp(path);assert(fd>=0);close(fd);
+    char path[EFS_TEST_PATH];efs_test_path(path,sizeof(path),"efs-wal-fault-XXXXXX");int fd=efs_test_mkstemp(path);assert(fd>=0);close(fd);
     struct kv_wal *w;uint64_t seq;
     struct efs_kv_item item={EFS_KV_PUT,(const uint8_t*)"A",1,(const uint8_t*)"a",1};
     assert(kv_wal_open(path,EFS_KV_LSM_SYNC,&w)==EFS_OK);
@@ -93,7 +94,7 @@ static void allocation_fallback(void) {
 #ifdef __linux__
     int errors[]={EOPNOTSUPP,ENOSPC};
     for(unsigned i=0;i<sizeof(errors)/sizeof(errors[0]);i++) {
-        char path[]="/tmp/efs-wal-fallback-XXXXXX";int fd=mkstemp(path);assert(fd>=0);close(fd);
+        char path[EFS_TEST_PATH];efs_test_path(path,sizeof(path),"efs-wal-fallback-XXXXXX");int fd=efs_test_mkstemp(path);assert(fd>=0);close(fd);
         struct kv_wal *w;uint64_t seq;
         struct efs_kv_item item={EFS_KV_PUT,(const uint8_t*)"A",1,(const uint8_t*)"a",1};
         assert(kv_wal_open(path,EFS_KV_LSM_SYNC,&w)==EFS_OK);
@@ -107,7 +108,7 @@ static void allocation_fallback(void) {
 #endif
 }
 static void malformed_batch(void) {
-    char path[]="/tmp/efs-wal-malformed-XXXXXX";int fd=mkstemp(path);assert(fd>=0);
+    char path[EFS_TEST_PATH];efs_test_path(path,sizeof(path),"efs-wal-malformed-XXXXXX");int fd=efs_test_mkstemp(path);assert(fd>=0);
     uint8_t bytes[24]={0};
     put_u32(bytes+4,16);put_u32(bytes+8,2);
     bytes[12]=KV_OP_PUT;put_u32(bytes+13,1);put_u32(bytes+17,1);
@@ -119,7 +120,7 @@ static void malformed_batch(void) {
 }
 static void interior_damage(void) {
     for(unsigned gap=0;gap<2;gap++) {
-        char path[]="/tmp/efs-wal-interior-XXXXXX";int fd=mkstemp(path);assert(fd>=0);close(fd);
+        char path[EFS_TEST_PATH];efs_test_path(path,sizeof(path),"efs-wal-interior-XXXXXX");int fd=efs_test_mkstemp(path);assert(fd>=0);close(fd);
         struct kv_wal *w;uint64_t seq;
         struct efs_kv_item item={EFS_KV_PUT,(const uint8_t*)"A",1,(const uint8_t*)"a",1};
         assert(kv_wal_open(path,EFS_KV_LSM_SYNC,&w)==EFS_OK);
@@ -145,7 +146,7 @@ static void interior_damage(void) {
 struct prefix_job {struct kv_wal *w;uint64_t prefix;int rc;};
 static void *flush_prefix(void *p){struct prefix_job *j=p;j->rc=kv_wal_sync_prefix(j->w,j->prefix);return NULL;}
 static void detached_prefix(void) {
- char path[]="/tmp/efs-wal-prefix-XXXXXX";int fd=mkstemp(path);assert(fd>=0);close(fd);
+ char path[EFS_TEST_PATH];efs_test_path(path,sizeof(path),"efs-wal-prefix-XXXXXX");int fd=efs_test_mkstemp(path);assert(fd>=0);close(fd);
  struct kv_wal *w;uint64_t seq,prefix;assert(!kv_wal_open(path,EFS_KV_LSM_SYNC,&w));
  struct efs_kv_item item={EFS_KV_PUT,(const uint8_t*)"P",1,(const uint8_t*)"V",1};
  assert(!kv_wal_hold(w,1));assert(!kv_wal_hold(w,1));
@@ -182,7 +183,7 @@ int main(void){run(0);run(1);malformed_batch();interior_damage();reservation();a
 '''
 with tempfile.TemporaryDirectory(prefix='efs-wal-faults-') as directory:
     p=Path(directory)/'test.c';p.write_text(source)
-    command=shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-D_GNU_SOURCE','-Wall','-Wextra','-Werror','-pthread','-DBLAKE3_USE_NEON=0','-DBLAKE3_NO_SSE2','-DBLAKE3_NO_SSE41','-DBLAKE3_NO_AVX2','-DBLAKE3_NO_AVX512','-I'+str(root/'include'),'-I'+str(root/'src/kv'),'-I'+str(root/'deps/blake3')]
+    command=shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-D_GNU_SOURCE','-Wall','-Wextra','-Werror','-pthread','-DBLAKE3_USE_NEON=0','-DBLAKE3_NO_SSE2','-DBLAKE3_NO_SSE41','-DBLAKE3_NO_AVX2','-DBLAKE3_NO_AVX512','-I'+str(root/'include'),'-I'+str(root/'tests'),'-I'+str(root/'src/kv'),'-I'+str(root/'deps/blake3')]
     command+=shlex.split(os.environ.get('WAL_TEST_CFLAGS',''))
     command += [str(p),str(root/'src/common/checksum.c'),str(root/'deps/blake3/blake3.c'),str(root/'deps/blake3/blake3_dispatch.c'),str(root/'deps/blake3/blake3_portable.c'),'-o',str(p.with_suffix(''))]
     subprocess.run(command,check=True);subprocess.run([str(p.with_suffix(''))],check=True)

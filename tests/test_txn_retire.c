@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "test_tmpdir.h"
 
 static int failures;
 
@@ -358,7 +359,7 @@ static void test_crash_restart_replay(void)
         c.now = now;
         log[n++] = c;
     }
-    snprintf(dir, sizeof(dir), "/tmp/efs-txn-retire-%d", (int)getpid());
+    efs_test_own(efs_test_path(dir,sizeof(dir),"efs-txn-retire-%d",(int)getpid()));
     rmtree(dir);
     for (i = 0; i < n; i++)
         CHECK(apply_cmd(ref, &log[i], i) == EFS_OK, "reference apply");
