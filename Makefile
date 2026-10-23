@@ -438,6 +438,7 @@ test: all
 	python3 tests/test_txn_read_reuse.py
 	python3 tests/test_publication_rpc.py
 	python3 tests/test_publication_session_rpc.py
+	python3 tests/test_session_latch_tsan.py
 	python3 tests/test_publication_session_reuse.py
 	python3 tests/test_lease_edge_rpc.py
 	python3 tests/test_lease_submission_proof.py

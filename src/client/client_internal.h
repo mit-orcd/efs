@@ -122,8 +122,9 @@ struct efs_client {
     /* Mount session lifecycle (K5, I23). started: the session was created on
      * its owner shard with this mount's uuid/epoch. fenced: an authority
      * refused the epoch; every later mutation fails EFS_ERR_FENCED locally
-     * and nothing is resent under the old epoch. Both under opid_mu, read
-     * atomically on the fast path. */
+     * and nothing is resent under the old epoch. Every access to either
+     * flag is a __atomic builtin (release store / acquire load, exchange
+     * for the first fence); never a plain read or write, never opid_mu. */
     int session_started;
     int session_fenced;
 
