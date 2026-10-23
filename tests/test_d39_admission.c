@@ -757,6 +757,9 @@ int main(int argc, char **argv)
         return 0;
     }
     signal(SIGPIPE, SIG_IGN);
+    /* The forked admitter serves frames, not an RDMA setup: keep the peer
+     * pool on TCP (efs_rdma_available() is 0 under EFS_TRANSPORT=tcp). */
+    setenv("EFS_TRANSPORT", "tcp", 1);
     efs_test_path(tmp_root, sizeof(tmp_root), "efs-d39-admission-XXXXXX");
     CHECK(efs_test_mkdtemp(tmp_root) != NULL, "mkdtemp");
     test_conf();
