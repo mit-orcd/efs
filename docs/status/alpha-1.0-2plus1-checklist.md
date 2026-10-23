@@ -202,6 +202,17 @@ kept scratch) on efs3 at `0eb1511d2`, the tree with every second-wave merge
 (`TMPDIR=/data1/tmp`; a one-line TMPDIR fix to K7's sweep test was needed
 after K25's hygiene gate met it).
 
+### Fourth wave merged, Oct 23
+
+W154 (`f47a32754`), K14 (`d2369a49d`), K30 (`b64dbe934`), W155 oracle
+(`92886b8e2`), D39 model (`16d716308`) and K13 (`1f3b25997`, after its
+rebase) are in devel; a KV-kind collision between W154 and K14 (both 51)
+was fixed with a uniqueness test (`bd2cb0d5a`). `make test-all` on intel1 at
+`1f3b25997`: 425 commands, 0 FAIL, 14 NOTRUN (no RDMA device, no valgrind
+header, no cluster scripts), ThreadSanitizer gates included. All of it was
+tested over TCP only; the orcd-mini RDMA gates for W154, K14 and K13 are
+NOTRUN.
+
 ### Third wave, Oct 22 night (sub-sessions, Opus 5.5 medium)
 
 User direction: everything left on Stage 1 that is code or a runnable gate
