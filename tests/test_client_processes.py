@@ -12,6 +12,7 @@ from contextlib import nullcontext
 root=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('clients',root/'scripts/client_processes.py')
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+m.NATURAL_RETIRE_S=1  # the refusal cases wait out the full bound; keep it short
 with tempfile.TemporaryDirectory(prefix='efs-processes-') as directory:
     proc=Path(directory)
     p=proc/'123';p.mkdir();(p/'comm').write_text('efs-fuse\n')
