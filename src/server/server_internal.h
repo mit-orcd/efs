@@ -344,6 +344,9 @@ int server_raft_host_start(struct efsd_server *s);
 void server_raft_host_stop(void);
 /* K1/W145: handlers close their connection before the next request. */
 void server_handlers_begin_stop(void);
+/* EFS_FAULTS builds: parks the named worker forever when
+ * EFS_FAULT_SHUTDOWN_PARK names it; production returns 0 at once. */
+int server_shutdown_fault_park(const char *worker);
 /* Copy one encoded efs_raft_msg into the pump inbox. Delivery ack is the
  * caller's job (EFS_MSG_RAFT_REPLY). BUSY accepts no frame; Raft retries. */
 int server_raft_host_inbox(const uint8_t *payload, uint32_t plen);
@@ -482,7 +485,9 @@ struct efs_msg_sync_stats_reply;
 int server_put_sync_init(struct efsd_server *s);
 int server_put_sync_commit(struct efsd_server *s, uint32_t *roots);
 void server_put_sync_stats(struct efsd_server *s, struct efs_msg_sync_stats_reply *out);
-void server_put_sync_stop(struct efsd_server *s);
+/* 0 when every PUT-sync root stopped clean (barrier, syncfs and clean
+ * record); -1 when any root's final barrier failed. */
+int server_put_sync_stop(struct efsd_server *s);
 /* Mark the start of serving; before it, an exit restores each untouched
  * root's previous durability record (server_put_sync_abandon, atexit). */
 void server_put_sync_serving(void);

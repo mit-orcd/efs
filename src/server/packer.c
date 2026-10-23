@@ -1302,6 +1302,7 @@ static void *pk_main(void *arg)
         for (uint64_t w = 0; !more && w < pk.interval_ms && !__atomic_load_n(&pk.stop, __ATOMIC_ACQUIRE); w += 50)
             usleep(50000);
     }
+    server_shutdown_fault_park("packer"); /* EFS_FAULTS builds only */
     return NULL;
 }
 

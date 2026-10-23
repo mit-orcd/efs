@@ -233,7 +233,9 @@ test-create-errors: $(LIB)
 	python3 tests/test_gc_verdict.py
 	python3 tests/test_retired_messages.py
 	python3 tests/test_node_left_refused.py
+	$(MAKE) tests/shutdown_faults/efsd
 	python3 tests/test_shutdown_bounded.py
+	python3 tests/test_shutdown_stuck_worker.py
 	python3 tests/test_apply_unsupported.py
 	python3 tests/test_put_hint.py
 
@@ -812,7 +814,7 @@ clean:
 	rm -f $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS) $(MGMT_OBJ)
 	rm -f src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_ns.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o src/sim/sim_disk.o src/sim/opid.o
 	rm -f $(LIB) efsd efs-fuse efs-bench efs-mgmt blake3-bench
-	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim tests/faults/test_kv_compact_crash
+	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim tests/faults/test_kv_compact_crash tests/shutdown_faults/efsd
 	rm -f $(TEST_BINS) tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_upload_client
 	rm -f tests/test_data_commit tests/measure/*_smoke tests/measure/bench_query_disk_scale tests/measure/bench_query_disk_concurrent
 	rm -f .build_id.stamp
@@ -902,6 +904,15 @@ tests/test_kv_reader_gate: tests/test_kv_reader_gate.c src/kv/kv_lsm.c src/kv/kv
 # on, so a plain build of $(LIB) and the daemons never carries the hook.
 tests/faults/test_kv_compact_crash: tests/faults/test_kv_compact_crash.c src/kv/kv_compact.c src/kv/kv_lsm_internal.h $(LIB)
 	$(CC) $(CFLAGS) -DEFS_FAULTS=1 $(INCLUDES) -o $@ $< src/kv/kv_compact.c $(LIB) $(LDFLAGS)
+
+# K1/R4 stuck-worker shutdown test. EFS_FAULT_SHUTDOWN_PARK and
+# EFS_FAULT_SHUTDOWN_TOTAL_MS exist only behind EFS_FAULTS; this daemon
+# compiles its own efsd.c and packer.c with the gate on, so ./efsd never
+# carries the hooks. Named efsd: the stop script only signals an efsd.
+SHUTDOWN_FAULT_OBJS = $(filter-out src/server/efsd.o src/server/packer.o,$(SERVER_OBJS))
+tests/shutdown_faults/efsd: src/server/efsd.c src/server/packer.c $(SHUTDOWN_FAULT_OBJS) $(LIB)
+	@mkdir -p tests/shutdown_faults
+	$(CC) $(CFLAGS) -DEFS_FAULTS=1 $(INCLUDES) -o $@ src/server/efsd.c src/server/packer.c $(SHUTDOWN_FAULT_OBJS) $(LIB) $(LDFLAGS)
 
 src/kv/kv_lsm.o src/kv/kv_wal.o src/kv/kv_compact.o src/kv/kv_seg.o: src/kv/kv_lsm_internal.h
 src/kv/kv_lsm.o: src/kv/kv_candidates.h
