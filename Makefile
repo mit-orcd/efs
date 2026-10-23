@@ -598,6 +598,7 @@ test: all
 	./tests/test_txn_resolve_faults
 	./tests/test_txn_retire
 	python3 tests/test_txn_decision_sweep.py
+	python3 tests/test_txn_apply_exact.py
 	python3 tests/test_txn_apply_retry.py
 	python3 tests/test_publication_persistence.py
 	python3 tests/test_follower_read_redirect.py

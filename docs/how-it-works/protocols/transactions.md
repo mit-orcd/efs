@@ -225,6 +225,13 @@ no serializable history even though each commits atomically.
   Every input of the rule is replicated state or a field of the logged
   command (the proposer's clock rides in `TXN_RETIRE`), so all replicas delete
   the same keys at the same log index; no replica deletes on a local timer.
+  Both commands decode exactly: `DECIDE` is 23 + 4·n bytes with a COMMIT or
+  ABORT verdict, 1 ≤ n ≤ 144 distinct in-range participant shards and an
+  in-range coordinator; `TXN_RETIRE` is 29 bytes with an in-range
+  coordinator. Any other entry (short, trailing bytes, invalid field) is
+  refused before the store is touched and halts the group through the
+  unsupported-entry path (W127). A well-formed DECIDE with the other verdict
+  is a transaction conflict (PROTO verdict to the proposer), not malformed.
   Each apply touches a bounded window (one live record, at most 32 tombstones,
   one cursor/floor record), so retirement cannot stall the apply loop. The
   proposer of a transaction (its RESOLVE wait, the finisher, or recovery)

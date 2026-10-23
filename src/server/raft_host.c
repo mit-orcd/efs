@@ -2741,26 +2741,39 @@ static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
             host_rec_mark(h, ((uint32_t)key[0] << 8) | key[1]);
         break;
     case EFS_MD_CMD_DECIDE:
+        /* R3: [DECIDE][txid:16][coord:4][dec:1][n:1][shard:4]*n, exactly.
+         * Every structural field is checked before the transaction table
+         * is touched; a malformed entry is UNSUPPORTED (the group halts,
+         * W127), never a transaction verdict such as PROTO (a conflicting
+         * decision) that the log would advance past. */
         if (clen < 23)
             break;
         memcpy(t.bytes, cmd + 1, 16);
         shard = rd32be(cmd + 17);
         dec = cmd[21];
         p.n = cmd[22];
-        if (p.n == 0 || p.n > EFS_TXN_MAX_PART || clen < 23 + (uint32_t)p.n * 4u)
+        if (p.n == 0 || p.n > EFS_TXN_MAX_PART || clen != 23 + (uint32_t)p.n * 4u)
+            break;
+        if (shard > EFS_KV_SHARD_MASK ||
+            (dec != EFS_TXN_COMMIT && dec != EFS_TXN_ABORT))
             break;
         {
             uint8_t i;
             for (i = 0; i < p.n; i++)
                 p.shard[i] = rd32be(cmd + 23 + (uint32_t)i * 4u);
         }
+        if (!efs_txn_parts_valid(&p))
+            break; /* shard id out of range or repeated */
         rc = efs_txn_decide_parts(h->kv, shard, &t, &p, dec);
         break;
     case EFS_MD_CMD_TXN_RETIRE:
-        if (clen < HOST_RETIRE_LEN)
+        /* R3: [TXN_RETIRE][txid:16][coord:4][now_ns:8], exactly. */
+        if (clen != HOST_RETIRE_LEN)
             break;
         memcpy(t.bytes, cmd + 1, 16);
         shard = rd32be(cmd + 17);
+        if (shard > EFS_KV_SHARD_MASK)
+            break;
         rc = efs_txn_retire(h->kv, shard, &t, rd64be(cmd + 21));
         break;
     case EFS_MD_CMD_RESOLVE:

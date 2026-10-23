@@ -247,6 +247,9 @@ int efs_txn_apply_prepare(struct efs_kv *kv, int kind, const struct efs_txid *t,
 #define EFS_TXN_DECISION_LIVE_MAX (2u + 4u * EFS_TXN_MAX_PART)
 
 uint64_t efs_txid_ns(const struct efs_txid *t);
+/* 1 when 1 <= n <= EFS_TXN_MAX_PART, every shard id is in range and none
+ * repeats: the structural rule for a logged participant list. */
+int efs_txn_parts_valid(const struct efs_txn_parts *p);
 
 /* Idempotent for the same verdict (live or retired); PROTO for a different
  * one; STALE when the decision is unknown (see above). The replicated

@@ -61,6 +61,13 @@ uint32_t efs_txn_coordinator(const struct efs_txid *t,
     return p->shard[efs_txn_hash(t) % p->n];
 }
 
+static int parts_ok(const struct efs_txn_parts *p);
+
+int efs_txn_parts_valid(const struct efs_txn_parts *p)
+{
+    return parts_ok(p);
+}
+
 static int parts_ok(const struct efs_txn_parts *p)
 {
     if (!p || !p->n || p->n > EFS_TXN_MAX_PART)
