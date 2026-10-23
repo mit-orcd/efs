@@ -162,3 +162,37 @@ binaries used. Executed `python3 tests/test_make_test_summary_runner.py` and
 scheduler/cache: NOTRUN. Source inspection is reproducible with the named
 commit, Makefile and scripts; no private raw timing capture is needed for
 these findings. No test implementation or scheduling change is claimed here.
+
+## Measurement: harness compilation (October 23, follow-up)
+
+**Finding 3 deferred: caching the generated C harnesses would save at most
+about 30 s of serial compile time.** Every compile can be reused, but there
+are too few to matter.
+- **Method:** a logging wrapper in front of `cc`/`gcc` on intel2 (8 cores,
+  devel `6a8a95bab` tree plus the runner). It recorded each compile's owning
+  Python test, its duration, and a fingerprint of the C inputs and flags,
+  with temporary paths normalized.
+- **Runs:** two full `test-all` runs (`EFS_TEST_JOBS=4`), both 421 commands,
+  0 FAIL, 14 NOTRUN.
+
+| Measure | Value |
+| --- | --- |
+| Python tests that compile C | 291 |
+| Compiler invocations per run | 361 (259 tests compile once, the rest 2–5 times, one test 25) |
+| Compile time per run | 31.5 s |
+| Compiles identical in both runs (reusable) | all 361 (31.5 s) |
+| Python test time per run (sum of per-command times) | about 172 s |
+
+**Decision (user):** a harness cache is not worth it for about 30 s. Work
+moves to the exclusive tail, the 29 commands run alone after the pool
+(about 87 s), which bounds `test-all` at 4 workers.
+
+**Reproduce:** put a `cc`/`gcc` wrapper earlier in `PATH` that runs
+`/usr/bin/cc` and logs the owning `tests/test_*.py` (found by walking
+`/proc` parents), the seconds, and a sha256 of the arguments and `.c`/`.h`
+contents with `TMPDIR` paths normalized. Then run
+`scripts/make_test_summary.sh` twice and compare fingerprints per test.
+The wrapper used is on intel2 at
+`/data1/efs/build/ccwrap/ccwrap.py` (outside Git); its logs are
+`/data1/efs/build/cc-run{1,2}.log`.
+
