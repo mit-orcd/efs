@@ -7,6 +7,7 @@
 #include "efs/version.h"
 #include "server_internal.h"
 #include "storage_roots.h"
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -215,8 +216,8 @@ static void conn_wake_readers(void)
 /* K1/W145 part 4 and R4: the whole stop is bounded, not only the handler
  * drain. stop.sh stops each daemon through scripts/server_processes.py
  * stop-file, which waits 60 s for the process to exit and then gives up
- * without SIGKILL. One deadline, EFS_SHUTDOWN_TOTAL_MS from the moment the
- * accept loop ends, covers every phase: handlers get at most four fifths of
+ * without SIGKILL. One deadline, EFS_SHUTDOWN_TOTAL_MS from the moment
+ * SIGTERM/SIGINT is received, covers every phase: handlers get at most four fifths of
  * it (server_handlers_begin_stop closes each connection before its next
  * request; a group read or apply wait is bounded at 400 ms; forwarded
  * mutations by their RPC timeout), and each later stop phase runs on one
@@ -231,8 +232,19 @@ static void conn_wake_readers(void)
  * whether each durability barrier (PUT sync, reclaim journal, usage flush)
  * completed, so the stop script can tell an orderly exit from a forced
  * one. rc 0 is orderly with every barrier done; rc 4 is a completed
- * teardown whose barrier failed. */
+ * teardown whose barrier failed.
+ * T2: the perf/strace recorders stop in the first teardown phase, inside
+ * the same deadline. After the deadline nothing waits on storage or stdio:
+ * the exit record and the stderr lines are written by helper threads, the
+ * exiting thread waits at most EFS_SHUTDOWN_REPORT_MS for them and then
+ * calls _exit(3) whether or not they finished; a record that could not be
+ * written in time reads as "unknown" to the stop script. Signal to exit is
+ * therefore at most EFS_SHUTDOWN_TOTAL_MS + EFS_SHUTDOWN_REPORT_MS = 55 s
+ * plus scheduling, 5 s inside the stop script's 60 s wait. (A thread in an
+ * uninterruptible kernel wait still delays the kernel's process teardown;
+ * no user-space bound can cover that.) */
 #define EFS_SHUTDOWN_TOTAL_MS 50000u
+#define EFS_SHUTDOWN_REPORT_MS 5000u
 #define EFS_SHUTDOWN_FORCED_RC 3
 #define EFS_SHUTDOWN_BARRIER_RC 4
 #define EFS_SHUTDOWN_EXIT_RECORD "log/efsd.exit"
@@ -278,25 +290,53 @@ int server_shutdown_fault_park(const char *worker)
 #endif
 }
 
-static int shutdown_drain(unsigned deadline_ms)
+/* Stop-time messages never go through stdio on the stopping thread: a
+ * full stderr pipe, or another thread blocked while holding stderr's
+ * lock, would hold the stop past its deadline. Each line goes out on a
+ * detached helper thread; one that blocks is abandoned at exit. */
+static void *shutdown_say_thread(void *arg)
 {
-    unsigned waited_ms = 0;
+    fputs(arg, stderr);
+    fflush(stderr);
+    free(arg);
+    return NULL;
+}
 
-    while (__sync_add_and_fetch(&g_live_conns, 0) > 0) {
-        if (waited_ms >= deadline_ms) {
-            fprintf(stderr, "shutdown: %d live handlers after %u ms; refusing to tear "
-                    "down shared state under them; exiting without teardown (rc=%d)\n",
-                    __sync_add_and_fetch(&g_live_conns, 0), waited_ms,
-                    EFS_SHUTDOWN_FORCED_RC);
-            return -1;
+__attribute__((format(printf, 1, 2)))
+static void shutdown_say(const char *fmt, ...)
+{
+    char *line = malloc(512);
+    if (!line) return;
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(line, 512, fmt, ap);
+    va_end(ap);
+    pthread_t tid;
+    if (efsd_pthread_create(&tid, shutdown_say_thread, line) != 0) {
+        free(line);
+        return;
+    }
+    pthread_detach(tid);
+}
+
+/* Waits for every handler until DEADLINE (monotonic ms); -1 if any is
+ * still live then. */
+static int shutdown_drain(uint64_t t0, uint64_t deadline)
+{
+    uint64_t next_note = t0 + 5000;
+
+    for (;;) {
+        int live = __sync_add_and_fetch(&g_live_conns, 0);
+        if (live <= 0) return 0;
+        uint64_t now = shutdown_now_ms();
+        if (now >= deadline) return -1;
+        if (now >= next_note) {
+            shutdown_say("shutdown: waiting for %d live handlers (%llu of %llu ms)\n", live,
+                         (unsigned long long)(now - t0), (unsigned long long)(deadline - t0));
+            next_note += 5000;
         }
         usleep(50 * 1000);
-        waited_ms += 50;
-        if (waited_ms % 5000 == 0)
-            fprintf(stderr, "shutdown: waiting for %d live handlers (%u of %u ms)\n",
-                    __sync_add_and_fetch(&g_live_conns, 0), waited_ms, deadline_ms);
     }
-    return 0;
 }
 
 /* Durability barriers the exit record reports. */
@@ -307,6 +347,7 @@ static const char *const sd_barrier_names[SD_NBARRIERS] = {
 };
 static const char *const sd_state_names[] = { "not_reached", "done", "failed", "stuck" };
 
+static int sd_recorders(struct efsd_server *s) { (void)s; stop_perf_recorder(); return 0; }
 static int sd_packer(struct efsd_server *s) { (void)s; server_packer_stop(); return 0; }
 static int sd_writers(struct efsd_server *s) { server_writer_pool_stop(s); return 0; }
 static int sd_put_sync(struct efsd_server *s) { return server_put_sync_stop(s); }
@@ -329,6 +370,7 @@ static const struct shutdown_phase {
     int (*run)(struct efsd_server *s);
     int barrier;          /* SD_* index, or -1 */
 } g_sd_phases[] = {
+    { "recorders", "perf/strace recorder processes", sd_recorders, -1 },
     { "packer", "packer thread", sd_packer, -1 },
     { "writer-pool", "writer threads", sd_writers, -1 },
     { "put-sync", "PUT sync committer and scanner threads", sd_put_sync, SD_PUT_SYNC },
@@ -368,75 +410,146 @@ static void *shutdown_teardown_thread(void *arg)
     return NULL;
 }
 
-/* One line on stderr and the same fields in the exit record. A record
- * that cannot be written leaves the outcome unknown to the stop script,
- * which then never reports an orderly stop. */
-static void shutdown_report(const struct efsd_server *s, const char *outcome, int rc,
-                            const char *phase, const char *worker,
-                            uint64_t elapsed_ms, unsigned total_ms,
-                            const int barrier[SD_NBARRIERS])
+/* The exit report: one stderr line and the same fields in the exit
+ * record. Both are written on detached helper threads; the caller waits
+ * at most EFS_SHUTDOWN_REPORT_MS and goes on whether or not they finished,
+ * so a stalled storage root or a blocked stderr cannot hold the exit. A
+ * record that is not written in time, or not at all, leaves the outcome
+ * unknown to the stop script, which then never reports an orderly stop.
+ * One report per process. */
+static struct {
+    char path[8192], tmp[8300];
+    char record[1024];
+    size_t record_len;
+    char line[2048];
+    int done;                /* helpers finished */
+} g_report;
+
+/* Test-only (EFS_FAULTS builds): EFS_FAULT_SHUTDOWN_RECORD_PARK=write or
+ * =fsync parks the exit-record helper forever before that step, as a
+ * stalled storage root would. */
+static void shutdown_fault_record_park(const char *step)
 {
-    char buf[1024];
-    int n = snprintf(buf, sizeof(buf),
+#if EFS_FAULTS
+    const char *v = getenv("EFS_FAULT_SHUTDOWN_RECORD_PARK");
+    if (v && !strcmp(v, step))
+        for (;;) sleep(60);
+#else
+    (void)step;
+#endif
+}
+
+static void *shutdown_record_thread(void *arg)
+{
+    (void)arg;
+    int fd = open(g_report.tmp, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+    int ok = fd >= 0;
+    if (ok) shutdown_fault_record_park("write");
+    for (size_t off = 0; ok && off < g_report.record_len;) {
+        ssize_t w = write(fd, g_report.record + off, g_report.record_len - off);
+        if (w < 0 && errno == EINTR) continue;
+        if (w <= 0) ok = 0; else off += (size_t)w;
+    }
+    if (ok) shutdown_fault_record_park("fsync");
+    if (ok && fsync(fd) != 0) ok = 0;
+    if (fd >= 0 && close(fd) != 0) ok = 0;
+    if (ok && rename(g_report.tmp, g_report.path) != 0) ok = 0;
+    if (!ok) {
+        int e = errno;
+        (void)unlink(g_report.tmp);
+        fprintf(stderr, "shutdown: could not write exit record %s: %s\n", g_report.path,
+                strerror(e));
+    }
+    __atomic_add_fetch(&g_report.done, 1, __ATOMIC_RELEASE);
+    return NULL;
+}
+
+static void *shutdown_line_thread(void *arg)
+{
+    (void)arg;
+    fputs(g_report.line, stderr);
+    fflush(stderr);
+    fflush(stdout);
+    __atomic_add_fetch(&g_report.done, 1, __ATOMIC_RELEASE);
+    return NULL;
+}
+
+/* PREFACE, if set, is stderr text written before the outcome line. Returns
+ * 0 when both helpers finished within the bound. */
+static int shutdown_report(const struct efsd_server *s, const char *preface,
+                           const char *outcome, int rc, const char *phase,
+                           const char *worker, uint64_t elapsed_ms, unsigned total_ms,
+                           const int barrier[SD_NBARRIERS])
+{
+    char *buf = g_report.record;
+    const size_t cap = sizeof(g_report.record);
+    int n = snprintf(buf, cap,
                      "efsd-exit 1\npid=%ld\noutcome=%s\nrc=%d\nphase=%s\nworker=%s\n"
                      "elapsed_ms=%llu\ndeadline_ms=%u\n",
                      (long)getpid(), outcome, rc, phase, worker,
                      (unsigned long long)elapsed_ms, total_ms);
-    for (int b = 0; b < SD_NBARRIERS && n > 0 && (size_t)n < sizeof(buf); b++)
-        n += snprintf(buf + n, sizeof(buf) - (size_t)n, "%s=%s\n",
+    for (int b = 0; b < SD_NBARRIERS && n > 0 && (size_t)n < cap; b++)
+        n += snprintf(buf + n, cap - (size_t)n, "%s=%s\n",
                       sd_barrier_names[b], sd_state_names[barrier[b]]);
-    if (n > 0 && (size_t)n < sizeof(buf))
-        n += snprintf(buf + n, sizeof(buf) - (size_t)n, "stores=%s\n",
+    if (n > 0 && (size_t)n < cap)
+        n += snprintf(buf + n, cap - (size_t)n, "stores=%s\n",
                       rc == EFS_SHUTDOWN_FORCED_RC ? "preserved" : "closed");
-    if (n <= 0 || (size_t)n >= sizeof(buf)) {
-        fprintf(stderr, "shutdown: exit record overflow\n");
-        return;
+    if (n <= 0 || (size_t)n >= cap) {
+        shutdown_say("%sshutdown: exit record overflow\n", preface ? preface : "");
+        return -1;
     }
-    fprintf(stderr, "shutdown: outcome=%s rc=%d phase=%s worker=\"%s\" elapsed_ms=%llu "
-            "deadline_ms=%u put_sync=%s reclaim_journal=%s usage_flush=%s\n",
-            outcome, rc, phase, worker, (unsigned long long)elapsed_ms, total_ms,
-            sd_state_names[barrier[SD_PUT_SYNC]], sd_state_names[barrier[SD_RECLAIM]],
-            sd_state_names[barrier[SD_USAGE]]);
+    g_report.record_len = (size_t)n;
+    snprintf(g_report.line, sizeof(g_report.line),
+             "%sshutdown: outcome=%s rc=%d phase=%s worker=\"%s\" elapsed_ms=%llu "
+             "deadline_ms=%u put_sync=%s reclaim_journal=%s usage_flush=%s\n",
+             preface ? preface : "", outcome, rc, phase, worker,
+             (unsigned long long)elapsed_ms, total_ms,
+             sd_state_names[barrier[SD_PUT_SYNC]], sd_state_names[barrier[SD_RECLAIM]],
+             sd_state_names[barrier[SD_USAGE]]);
+    snprintf(g_report.path, sizeof(g_report.path), "%s/" EFS_SHUTDOWN_EXIT_RECORD,
+             s->storage_path);
+    snprintf(g_report.tmp, sizeof(g_report.tmp), "%s.tmp.%ld", g_report.path, (long)getpid());
 
-    char path[8192], tmp[8300];
-    snprintf(path, sizeof(path), "%s/" EFS_SHUTDOWN_EXIT_RECORD, s->storage_path);
-    snprintf(tmp, sizeof(tmp), "%s.tmp.%ld", path, (long)getpid());
-    int fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
-    int ok = fd >= 0;
-    for (ssize_t off = 0; ok && off < n;) {
-        ssize_t w = write(fd, buf + off, (size_t)(n - off));
-        if (w < 0 && errno == EINTR) continue;
-        if (w <= 0) ok = 0; else off += w;
+    int started = 0;
+    pthread_t tid;
+    if (efsd_pthread_create(&tid, shutdown_line_thread, NULL) == 0) {
+        pthread_detach(tid);
+        started++;
     }
-    if (ok && fsync(fd) != 0) ok = 0;
-    if (fd >= 0 && close(fd) != 0) ok = 0;
-    if (ok && rename(tmp, path) != 0) ok = 0;
-    if (!ok) {
-        fprintf(stderr, "shutdown: could not write exit record %s: %s\n", path, strerror(errno));
-        (void)unlink(tmp);
+    if (efsd_pthread_create(&tid, shutdown_record_thread, NULL) == 0) {
+        pthread_detach(tid);
+        started++;
     }
+    const uint64_t end = shutdown_now_ms() + EFS_SHUTDOWN_REPORT_MS;
+    while (__atomic_load_n(&g_report.done, __ATOMIC_ACQUIRE) < started &&
+           shutdown_now_ms() < end)
+        usleep(10 * 1000);
+    return started == 2 && __atomic_load_n(&g_report.done, __ATOMIC_ACQUIRE) == 2 ? 0 : -1;
 }
 
+/* Never returns. After the deadline nothing here waits on storage, stdio
+ * locks or fflush beyond the report bound. */
 static void shutdown_forced(const struct efsd_server *s, const char *phase,
                             const char *worker, uint64_t elapsed_ms, unsigned total_ms,
                             const int barrier[SD_NBARRIERS])
 {
-    fprintf(stderr, "shutdown: deadline %u ms passed in phase %s with %s still live; "
-            "refusing to tear down shared state under it; exiting without teardown, "
-            "stores preserved (rc=%d)\n", total_ms, phase, worker, EFS_SHUTDOWN_FORCED_RC);
-    shutdown_report(s, "forced", EFS_SHUTDOWN_FORCED_RC, phase, worker, elapsed_ms,
-                    total_ms, barrier);
-    fflush(stdout);
-    fflush(stderr);
+    char preface[512];
+    snprintf(preface, sizeof(preface),
+             "shutdown: deadline %u ms passed in phase %s with %s still live; "
+             "refusing to tear down shared state under it; exiting without teardown, "
+             "stores preserved (rc=%d)\n", total_ms, phase, worker, EFS_SHUTDOWN_FORCED_RC);
+    (void)shutdown_report(s, preface, "forced", EFS_SHUTDOWN_FORCED_RC, phase, worker,
+                          elapsed_ms, total_ms, barrier);
     _exit(EFS_SHUTDOWN_FORCED_RC);
 }
 
-/* Runs the stop after the accept loop ends. Returns the exit status of an
- * orderly or barrier-failed stop; a forced stop never returns. */
-static int shutdown_bounded(struct efsd_server *s)
+/* Runs the stop; T0 is when the stop signal arrived (monotonic ms).
+ * Returns the exit status of an orderly or barrier-failed stop; a forced
+ * stop never returns. */
+static int shutdown_bounded(struct efsd_server *s, uint64_t t0)
 {
     const unsigned total_ms = shutdown_total_ms();
-    const uint64_t t0 = shutdown_now_ms(), end = t0 + total_ms;
+    const uint64_t end = t0 + total_ms;
     int none[SD_NBARRIERS] = { SD_NOT_REACHED, SD_NOT_REACHED, SD_NOT_REACHED };
 
     /* Busy handlers close before their next request; idle pooled readers
@@ -444,7 +557,7 @@ static int shutdown_bounded(struct efsd_server *s)
      * handler and its TLS cleanup has completed. */
     server_handlers_begin_stop();
     conn_wake_readers();
-    if (shutdown_drain(shutdown_drain_share(total_ms)) != 0) {
+    if (shutdown_drain(t0, t0 + shutdown_drain_share(total_ms)) != 0) {
         char worker[64];
         snprintf(worker, sizeof(worker), "%d connection handlers",
                  __sync_add_and_fetch(&g_live_conns, 0));
@@ -487,8 +600,11 @@ static int shutdown_bounded(struct efsd_server *s)
     int rc = 0;
     for (int b = 0; b < SD_NBARRIERS; b++)
         if (barrier[b] != SD_DONE) rc = EFS_SHUTDOWN_BARRIER_RC;
-    shutdown_report(s, rc ? "barrier-failed" : "orderly", rc, "done", "none",
-                    shutdown_now_ms() - t0, total_ms, barrier);
+    /* A report still blocked would hold exit()'s stdio flush: leave
+     * without it, like the forced path. */
+    if (shutdown_report(s, NULL, rc ? "barrier-failed" : "orderly", rc, "done", "none",
+                        shutdown_now_ms() - t0, total_ms, barrier) != 0)
+        _exit(rc);
     return rc;
 }
 
@@ -517,9 +633,17 @@ static void *conn_thread(void *arg)
     return NULL;
 }
 
+/* When the first SIGTERM/SIGINT arrived (monotonic ms); 0 before. The
+ * shutdown deadline counts from here. */
+static uint64_t g_stop_signal_ms;
+
 static void sigint_handler(int sig)
 {
     (void)sig;
+    uint64_t unset = 0;
+    /* clock_gettime is async-signal-safe. */
+    __atomic_compare_exchange_n(&g_stop_signal_ms, &unset, shutdown_now_ms(), 0,
+                                __ATOMIC_RELEASE, __ATOMIC_RELAXED);
     /* Async-signal-safe only: flip the flag. Do not close(listen_fd) here —
      * racing accept()/other threads on a closed fd has segfaulted on Engaging.
      * Without SA_RESTART, accept() returns EINTR and the loop exits. */
@@ -920,7 +1044,7 @@ int main(int argc, char **argv)
             if (errno == EAGAIN || errno == EWOULDBLOCK) continue;
             if (errno == EINTR) {
                 /* SIGINT/SIGTERM clear running. Leaving the loop is
-                 * what runs stop_perf_recorder; staying here left efsd
+                 * what runs the bounded stop; staying here left efsd
                  * up and the perf file without a footer. */
                 if (!server.running)
                     break;
@@ -978,9 +1102,11 @@ int main(int argc, char **argv)
         close(server.listen_fd);
         server.listen_fd = -1;
     }
-    stop_perf_recorder();
-
-    int exit_rc = shutdown_bounded(&server);
+    /* The recorders stop in the first teardown phase, inside the deadline. */
+    uint64_t stop_t0 = __atomic_load_n(&g_stop_signal_ms, __ATOMIC_ACQUIRE);
+    if (!stop_t0)
+        stop_t0 = shutdown_now_ms(); /* the accept loop ended without a signal */
+    int exit_rc = shutdown_bounded(&server, stop_t0);
     pthread_mutex_destroy(&server.lock);
     for (uint32_t i = 0; i < server.export_count; i++)
         efs_export_free(&server.exports[i]);
