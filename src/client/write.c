@@ -198,6 +198,14 @@ static int dcache_replay_stale_ex(efs_ino_t ino, uint32_t ci, int absent);
 static int report_replay_stale(efs_ino_t ino);
 
 static int dcache_pending_of(efs_ino_t ino, uint32_t ci);
+struct unit_sent;
+struct report_held;
+static int report_units_shape(struct efs_chunk_rec *crecs, uint64_t *cseq, uint32_t *pcn,
+                              struct unit_sent **sent, uint32_t *nsent,
+                              struct report_held **held, uint32_t *nheld);
+static void report_units_published(const struct unit_sent *sent, uint32_t nsent);
+static void report_units_remark(const struct report_held *held, uint32_t nheld);
+static int unit_wait_idle(efs_ino_t ino);
 
 /* A pulled span-only row has no local PUT identity. Retain its report mark
  * only when local cache ownership proves there are bytes still to publish. */
@@ -1702,7 +1710,7 @@ static int report_fault_withhold(efs_ino_t ino, uint32_t ci)
  * repull; the local batch remains incomplete while an omitted record exists. */
 static int report_send_records(const struct efs_chunk_rec *records, uint32_t n,
                                 const struct efs_ino_size_rec *inodes, uint32_t ni,
-                                int sync)
+                                int sync, const struct efs_report_pubid *pubid)
 {
 #if EFS_FAULTS
     uint32_t withheld = 0;
@@ -1716,15 +1724,16 @@ static int report_send_records(const struct efs_chunk_rec *records, uint32_t n,
         for (uint32_t i = 0; i < n; ++i)
             if (!report_fault_withhold(records[i].ino, records[i].chunk_index))
                 send[count++] = records[i];
-        int rc = count || ni ? efs_client_rpc_report_dirty_raft(
-            g_client.export_id, send, count, inodes, ni, sync) : EFS_OK;
+        int rc = count || ni ? efs_client_rpc_report_dirty_pub(
+            g_client.export_id, send, count, inodes, ni, sync, pubid) : EFS_OK;
         free(send);
         return count < n && rc == EFS_OK ? EFS_ERR_STALE : rc;
     }
 #endif
-    return efs_client_rpc_report_dirty_raft(g_client.export_id, records,
-                                            n, inodes, ni, sync);
+    return efs_client_rpc_report_dirty_pub(g_client.export_id, records,
+                                           n, inodes, ni, sync, pubid);
 }
+
 
 static int report_retry_pause(unsigned delay_us)
 {
@@ -1736,6 +1745,18 @@ static int report_retry_pause(unsigned delay_us)
         delay_us = (unsigned)(deadline - now) * 1000u;
     usleep(delay_us);
     return efs_client_rpc_past_deadline() ? EFS_ERR_BUSY : EFS_OK;
+}
+
+/* W77: one publication id per built REPORT; a re-send of the same records
+ * reuses it, a rebuild mints a new one. */
+static void report_pubid_mint(struct efs_report_pubid *id)
+{
+    static uint64_t seq;
+    struct timespec ts;
+
+    clock_gettime(CLOCK_REALTIME, &ts);
+    id->mint_ns = (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+    id->seq = __atomic_add_fetch(&seq, 1, __ATOMIC_RELAXED);
 }
 
 /* A single-file REPORT snapshots only that inode's marks and rows. Taking
@@ -1846,6 +1867,12 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
      * and the server rejects the batch (visible EIO, retained, retried). */
     efs_ino_t repair[EFS_REPORT_REPAIR_MAX];
     uint32_t n_repair = 0;
+    /* W77: units this REPORT carries whole, and records held back. */
+    struct unit_sent *usent = NULL;
+    struct report_held *uheld = NULL;
+    uint32_t nusent = 0, nuheld = 0;
+    struct efs_report_pubid pubid;
+    int shape_rc;
     /* A chunk rec whose ino has no irec is REJECTED by the server
      * (raft_host.c report loop, "pack-nosize"): an EOF guessed from the
      * chunk end would commit to the grow-only lane MAX and a later irec
@@ -1913,6 +1940,20 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
             continue;
         }
         cn++;
+    }
+    shape_rc = report_units_shape(crecs, cseq, &cn, &usent, &nusent, &uheld, &nuheld);
+    report_pubid_mint(&pubid);
+    if (shape_rc != EFS_OK) {
+        free(crecs);
+        free(cseq);
+        free(irecs);
+        free(usent);
+        free(uheld);
+        dirty_snap_remark_locked(&ds);
+        pub_release(pub);
+        dirty_snap_free(&ds);
+        report_snapshot_unlock(only_ino);
+        return shape_rc;
     }
     for (uint64_t i = 0; i <= ds.ino_mask; i++) {
         if (!ds.ino_keys || !ds.ino_keys[i])
@@ -2021,9 +2062,12 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
         free(crecs);
         free(cseq);
         free(irecs);
+        free(usent);
+        report_units_remark(uheld, nuheld);
+        free(uheld);
         pub_release(pub);
         dirty_snap_free(&ds);
-        return EFS_OK;
+        return nuheld ? EFS_ERR_AGAIN : EFS_OK;
     }
 
     /* Send the report as ONE batch to a dual-host voter (a node that is a
@@ -2069,7 +2113,7 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
 
             for (uint32_t k = 0; k < cn; ++k)
                 dcache_cycle_sent(&crecs[k], cseq[k]);
-            rc = report_send_records(crecs, cn, irecs, in, sync);
+            rc = report_send_records(crecs, cn, irecs, in, sync, &pubid);
             t_rpc_ms += report_mono_ms() - t0;
         }
         if (rc == EFS_ERR_STALE)
@@ -2149,7 +2193,15 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
                 }
                 cn++;
             }
+            /* A rebuilt REPORT is a new publication with its own units. */
+            shape_rc = report_units_shape(crecs, cseq, &cn, &usent, &nusent,
+                                          &uheld, &nuheld);
+            report_pubid_mint(&pubid);
             report_snapshot_unlock(only_ino);
+            if (shape_rc != EFS_OK) {
+                rc = shape_rc;
+                break;
+            }
             continue;
         }
         /* NOT_FOUND here is not a missing inode: the server skips a
@@ -2213,11 +2265,19 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
             putid_drop_snapshot(crecs[k].ino, crecs[k].chunk_index,
                                 crecs[k].chunk_generation, cseq[k]);
         }
+        report_units_published(usent, nusent);
+        /* Held-back units stay dirty for the next REPORT; a sync caller
+         * waits for them (efs_client_report_dirty_ino). */
+        report_units_remark(uheld, nuheld);
+        if (nuheld)
+            rc = EFS_ERR_AGAIN;
     }
+    free(usent);
+    free(uheld);
     free(crecs);
     free(cseq);
     free(irecs);
-    if (rc == EFS_OK) {
+    if (rc == EFS_OK || rc == EFS_ERR_AGAIN) {
         /* The owner now has these sizes: stop reporting them as
          * in-flight. */
         pub_release(pub);
@@ -2247,6 +2307,19 @@ int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
             efs_client_rpc_set_deadline_ms(deadline);
     }
     int rc = report_dirty_ino_run(only_ino, sync);
+    /* W77: a unit was held back (a write still open on it, or a chunk not
+     * yet landed). A sync caller must still publish it: wait for its
+     * writers, land its chunks, report again. An async REPORT leaves it to
+     * the next one. */
+    for (unsigned round = 0; sync && rc == EFS_ERR_AGAIN && round < 16; round++) {
+        rc = unit_wait_idle(only_ino);
+        if (rc == EFS_OK)
+            rc = only_ino ? efs_dcache_flush_ino(only_ino) : efs_dcache_flush_all();
+        if (rc == EFS_OK)
+            rc = report_dirty_ino_run(only_ino, sync);
+    }
+    if (rc == EFS_ERR_AGAIN)
+        rc = sync ? EFS_ERR_BUSY : EFS_OK;
     if (sync)
         efs_client_rpc_set_deadline_ms(outer);
     return rc;
@@ -6849,6 +6922,386 @@ static int dcache_object_of(efs_ino_t ino, uint32_t ci, struct efs_chunk_rec *re
     }
     pthread_mutex_unlock(dcache_mu(s));
     return hit;
+}
+
+/* ---- W77 · atomic publication units (client_internal.h) -------------------
+ *
+ * A unit is a closed interval of chunk indices of one inode: the chunks of
+ * one multi-chunk write request, merged with every unpublished unit they
+ * share a chunk with (a write that rewrote a chunk of an older unit must
+ * become visible with it). `writers` counts requests still copying into it;
+ * `version` changes on every merge, so a REPORT retires only the unit it
+ * actually published. Lock order: g_unit_mu, then putid / dcache locks. */
+#define UNIT_BUCKETS 256u
+struct unit_span {
+    uint32_t lo, hi, writers;
+    uint64_t version;
+};
+struct unit_ino {
+    struct unit_ino *next;
+    efs_ino_t ino;
+    uint32_t n, cap;
+    struct unit_span *span;
+};
+static struct unit_ino *g_units[UNIT_BUCKETS];
+static pthread_mutex_t g_unit_mu = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t g_unit_cv = PTHREAD_COND_INITIALIZER;
+static uint64_t g_unit_version;
+
+/* Caller holds g_unit_mu. */
+static struct unit_ino *unit_find(efs_ino_t ino, int create)
+{
+    struct unit_ino **b = &g_units[(ino * 0x9E3779B97F4A7C15ull) >> 56], *u;
+
+    for (u = *b; u; u = u->next)
+        if (u->ino == ino)
+            return u;
+    if (!create)
+        return NULL;
+    u = calloc(1, sizeof(*u));
+    if (!u)
+        return NULL;
+    u->ino = ino;
+    u->next = *b;
+    *b = u;
+    return u;
+}
+
+static int unit_range(uint64_t offset, uint64_t len, uint32_t *lo, uint32_t *hi)
+{
+    uint32_t cs = data_chunk_size();
+
+    if (!cs || !len || len > UINT64_MAX - offset)
+        return 0;
+    *lo = (uint32_t)(offset / cs);
+    *hi = (uint32_t)((offset + len - 1) / cs);
+    /* One chunk is atomic by its own CAS; past the unit cap is above the
+     * atomicity boundary (max_write) and claims nothing. */
+    return *hi > *lo && *hi - *lo + 1 <= EFS_PUB_UNIT_MAX;
+}
+
+int efs_client_unit_begin(efs_ino_t ino, uint64_t offset, uint64_t len)
+{
+    uint32_t lo, hi, writers = 1, k;
+    struct unit_ino *u;
+    int grew = 1;
+
+    if (!unit_range(offset, len, &lo, &hi))
+        return EFS_OK;
+    pthread_mutex_lock(&g_unit_mu);
+    u = unit_find(ino, 1);
+    if (!u) {
+        pthread_mutex_unlock(&g_unit_mu);
+        return EFS_ERR_NOMEM;
+    }
+    while (grew) { /* a widened interval can reach one more unit */
+        grew = 0;
+        for (k = 0; k < u->n; k++)
+            if (u->span[k].lo <= hi && u->span[k].hi >= lo &&
+                (u->span[k].lo < lo || u->span[k].hi > hi)) {
+                lo = u->span[k].lo < lo ? u->span[k].lo : lo;
+                hi = u->span[k].hi > hi ? u->span[k].hi : hi;
+                grew = 1;
+            }
+    }
+    if (hi - lo + 1 > EFS_PUB_UNIT_MAX) {
+        pthread_mutex_unlock(&g_unit_mu);
+        return EFS_ERR_AGAIN;
+    }
+    for (k = 0; k < u->n; ) {
+        if (u->span[k].lo >= lo && u->span[k].hi <= hi) {
+            writers += u->span[k].writers;
+            u->span[k] = u->span[--u->n];
+            continue;
+        }
+        k++;
+    }
+    if (u->n == u->cap) {
+        uint32_t nc = u->cap ? u->cap * 2 : 4;
+        struct unit_span *ns = realloc(u->span, nc * sizeof(*ns));
+        if (!ns) {
+            pthread_mutex_unlock(&g_unit_mu);
+            return EFS_ERR_NOMEM; /* the merged units were dropped: refuse */
+        }
+        u->span = ns;
+        u->cap = nc;
+    }
+    u->span[u->n++] = (struct unit_span){lo, hi, writers, ++g_unit_version};
+    pthread_mutex_unlock(&g_unit_mu);
+    return EFS_OK;
+}
+
+void efs_client_unit_end(efs_ino_t ino, uint64_t offset, uint64_t len)
+{
+    uint32_t lo, hi, k;
+    struct unit_ino *u;
+
+    if (!unit_range(offset, len, &lo, &hi))
+        return;
+    pthread_mutex_lock(&g_unit_mu);
+    u = unit_find(ino, 0);
+    for (k = 0; u && k < u->n; k++)
+        if (u->span[k].lo <= lo && u->span[k].hi >= hi && u->span[k].writers) {
+            u->span[k].writers--;
+            break;
+        }
+    pthread_cond_broadcast(&g_unit_cv);
+    pthread_mutex_unlock(&g_unit_mu);
+}
+
+/* A sync REPORT that held a unit back waits for that unit's writers. */
+static int unit_wait_idle(efs_ino_t ino)
+{
+    int rc = EFS_OK;
+
+    pthread_mutex_lock(&g_unit_mu);
+    for (;;) {
+        int busy = 0;
+        for (uint32_t b = 0; b < UNIT_BUCKETS && !busy; b++)
+            for (struct unit_ino *u = g_units[b]; u && !busy; u = u->next)
+                if (!ino || u->ino == ino)
+                    for (uint32_t k = 0; k < u->n && !busy; k++)
+                        busy = u->span[k].writers != 0;
+        if (!busy)
+            break;
+        if (efs_client_rpc_past_deadline()) {
+            rc = EFS_ERR_BUSY;
+            break;
+        }
+        struct timespec until;
+        clock_gettime(CLOCK_REALTIME, &until);
+        until.tv_nsec += 20 * 1000000L;
+        until.tv_sec += until.tv_nsec / 1000000000L;
+        until.tv_nsec %= 1000000000L;
+        pthread_cond_timedwait(&g_unit_cv, &g_unit_mu, &until);
+    }
+    pthread_mutex_unlock(&g_unit_mu);
+    return rc;
+}
+
+/* 1 when (ino, ci) has nothing in motion: no unflushed bytes and no PUT in
+ * flight. *object names the newest landed object no REPORT published yet
+ * (0: nothing to publish), in report_fill_owned's order. */
+static int unit_chunk_state(efs_ino_t ino, uint32_t ci, uint64_t *object)
+{
+    struct put_id *p;
+    struct dcache_ent *e;
+    uint64_t gen = 0;
+    uint32_t s;
+    int settled = 1;
+
+    pthread_mutex_lock(&g_putid_mu);
+    p = putid_find(ino, ci);
+    if (p && p->gen)
+        gen = p->gen;
+    pthread_mutex_unlock(&g_putid_mu);
+    dcache_ensure();
+    s = dcache_slot(ino, ci);
+    pthread_mutex_lock(dcache_mu(s));
+    e = dcache_find_meta(s, ino, ci);
+    if (e) {
+        if (e->dirty || e->stalled || e->snap_seq > e->object_seq)
+            settled = 0;
+        if (!gen && e->object_gen && dcache_unpublished(e))
+            gen = e->object_gen;
+    }
+    pthread_mutex_unlock(dcache_mu(s));
+    *object = gen;
+    return settled;
+}
+
+/* A unit the REPORT carries whole. */
+struct unit_sent {
+    efs_ino_t ino;
+    uint32_t lo, hi;
+    uint64_t version;
+};
+
+struct report_held {
+    efs_ino_t ino;
+    uint32_t ci;
+};
+
+static __thread const struct efs_chunk_rec *unit_sort_recs;
+
+static int unit_ord_cmp(const void *a, const void *b)
+{
+    const struct efs_chunk_rec *x = &unit_sort_recs[*(const uint32_t *)a];
+    const struct efs_chunk_rec *y = &unit_sort_recs[*(const uint32_t *)b];
+    if (x->ino != y->ino)
+        return x->ino < y->ino ? -1 : 1;
+    return x->chunk_index < y->chunk_index ? -1 : x->chunk_index > y->chunk_index;
+}
+
+/* Sorted position of (ino run [a, b), ci), or -1. */
+static int64_t unit_rec_find(const struct efs_chunk_rec *crecs, const uint32_t *ord,
+                             uint32_t a, uint32_t b, uint32_t ci)
+{
+    while (a < b) {
+        uint32_t m = a + (b - a) / 2;
+        uint32_t c = crecs[ord[m]].chunk_index;
+        if (c == ci)
+            return m;
+        if (c < ci)
+            a = m + 1;
+        else
+            b = m;
+    }
+    return -1;
+}
+
+/* Shape a built REPORT into units: a unit whose chunks are all settled and
+ * whose records name each chunk's newest landed object goes as adjacent
+ * records joined by EFS_CHUNK_REC_F_UNIT_NEXT; any other unit is held back
+ * whole (appended to *held, for the caller to re-mark) and a later REPORT
+ * carries it. Records outside units keep their order. *sent lists the
+ * units carried. NOMEM leaves the REPORT untouched and fails it. */
+static int report_units_shape(struct efs_chunk_rec *crecs, uint64_t *cseq, uint32_t *pcn,
+                              struct unit_sent **sent, uint32_t *nsent,
+                              struct report_held **held, uint32_t *nheld)
+{
+    uint32_t cn = *pcn, *ord, *tag, nunits = 0, out = 0, i;
+    struct efs_chunk_rec *rec_out = NULL;
+    uint64_t *seq_out = NULL;
+    int rc = EFS_OK;
+
+    *nsent = 0;
+    if (!cn)
+        return EFS_OK;
+    ord = malloc((size_t)cn * sizeof(*ord));
+    tag = calloc(cn, sizeof(*tag)); /* 0 outside, 1 held, 2+k unit k */
+    if (!ord || !tag) {
+        free(ord);
+        free(tag);
+        return EFS_ERR_NOMEM;
+    }
+    for (i = 0; i < cn; i++) {
+        ord[i] = i;
+        crecs[i].publish_flags &= ~EFS_CHUNK_REC_F_UNIT_NEXT;
+    }
+    unit_sort_recs = crecs;
+    qsort(ord, cn, sizeof(*ord), unit_ord_cmp);
+    pthread_mutex_lock(&g_unit_mu);
+    for (uint32_t a = 0, b; a < cn && rc == EFS_OK; a = b) {
+        efs_ino_t ino = crecs[ord[a]].ino;
+        struct unit_ino *u = unit_find(ino, 0);
+        for (b = a + 1; b < cn && crecs[ord[b]].ino == ino; b++)
+            ;
+        for (uint32_t k = 0; u && k < u->n && rc == EFS_OK; ) {
+            struct unit_span *sp = &u->span[k];
+            int whole = sp->writers == 0, any = 0;
+            uint32_t t = 1;
+            for (uint32_t ci = sp->lo; ci <= sp->hi; ci++) {
+                int64_t j = unit_rec_find(crecs, ord, a, b, ci);
+                uint64_t object = 0;
+                any |= j >= 0;
+                if (!unit_chunk_state(ino, ci, &object) ||
+                    (j >= 0 ? crecs[ord[j]].chunk_generation != object : object != 0))
+                    whole = 0;
+            }
+            if (!any) {
+                if (whole) { /* published (or gone) and idle: retire it */
+                    u->span[k] = u->span[--u->n];
+                    continue;
+                }
+                k++;
+                continue;
+            }
+            if (whole) {
+                struct unit_sent *ns = realloc(*sent, (*nsent + 1) * sizeof(*ns));
+                if (!ns) {
+                    rc = EFS_ERR_NOMEM;
+                    break;
+                }
+                *sent = ns;
+                ns[(*nsent)++] = (struct unit_sent){ino, sp->lo, sp->hi, sp->version};
+                t = 2 + nunits++;
+            }
+            for (uint32_t ci = sp->lo; ci <= sp->hi; ci++) {
+                int64_t j = unit_rec_find(crecs, ord, a, b, ci);
+                if (j >= 0)
+                    tag[ord[j]] = t;
+            }
+            k++;
+        }
+    }
+    pthread_mutex_unlock(&g_unit_mu);
+    if (rc == EFS_OK) {
+        rec_out = malloc((size_t)cn * sizeof(*rec_out));
+        seq_out = malloc((size_t)cn * sizeof(*seq_out));
+        if (!rec_out || !seq_out)
+            rc = EFS_ERR_NOMEM;
+    }
+    for (i = 0; rc == EFS_OK && i < cn; i++) {
+        if (tag[i] == 1) {
+            struct report_held *nh = realloc(*held, (*nheld + 1) * sizeof(*nh));
+            if (!nh) {
+                rc = EFS_ERR_NOMEM;
+                break;
+            }
+            *held = nh;
+            nh[(*nheld)++] = (struct report_held){crecs[i].ino, crecs[i].chunk_index};
+        }
+    }
+    if (rc != EFS_OK) {
+        free(rec_out);
+        free(seq_out);
+        free(ord);
+        free(tag);
+        *nsent = 0;
+        return rc;
+    }
+    for (i = 0; i < cn; i++)
+        if (!tag[i]) {
+            rec_out[out] = crecs[i];
+            seq_out[out++] = cseq[i];
+        }
+    /* Units are disjoint intervals per inode: in (ino, ci) order each one
+     * is one run of records. */
+    for (i = 0; i < cn; i++) {
+        uint32_t x = ord[i];
+        if (tag[x] < 2)
+            continue;
+        rec_out[out] = crecs[x];
+        seq_out[out] = cseq[x];
+        if (i + 1 < cn && tag[ord[i + 1]] == tag[x])
+            rec_out[out].publish_flags |= EFS_CHUNK_REC_F_UNIT_NEXT;
+        out++;
+    }
+    memcpy(crecs, rec_out, (size_t)out * sizeof(*crecs));
+    memcpy(cseq, seq_out, (size_t)out * sizeof(*cseq));
+    free(rec_out);
+    free(seq_out);
+    free(ord);
+    free(tag);
+    *pcn = out;
+    return EFS_OK;
+}
+
+/* After a successful REPORT: retire the units it carried, unless a write
+ * merged into one since (that unit now also holds unpublished bytes). */
+static void report_units_published(const struct unit_sent *sent, uint32_t nsent)
+{
+    pthread_mutex_lock(&g_unit_mu);
+    for (uint32_t i = 0; i < nsent; i++) {
+        struct unit_ino *u = unit_find(sent[i].ino, 0);
+        for (uint32_t k = 0; u && k < u->n; k++)
+            if (u->span[k].version == sent[i].version && !u->span[k].writers) {
+                u->span[k] = u->span[--u->n];
+                break;
+            }
+    }
+    pthread_cond_broadcast(&g_unit_cv);
+    pthread_mutex_unlock(&g_unit_mu);
+}
+
+/* Held-back records go back to the dirty set, with their inode's size. */
+static void report_units_remark(const struct report_held *held, uint32_t nheld)
+{
+    for (uint32_t i = 0; i < nheld; i++) {
+        efs_client_mark_chunk_dirty(held[i].ino, held[i].ci);
+        efs_client_mark_ino_dirty(held[i].ino);
+    }
 }
 
 /* The host committed OUR object `gen` for (ino,ci): the slot's CAS base is

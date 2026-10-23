@@ -2112,6 +2112,11 @@ int efs_client_read_refs(efs_ino_t ino, uint64_t offset, size_t size,
     int n = (int)(size / cs);
     uint32_t ci0 = (uint32_t)(offset / cs);
     int got = 0;
+    /* W77: zero-copy refs follow the same one-snapshot rule as reads. */
+    uint64_t snap_keys[EFS_PUB_UNIT_MAX];
+    int snap = n >= 2 && n <= (int)EFS_PUB_UNIT_MAX;
+    if (snap && efs_client_map_snapshot(ino, ci0, ci0 + (uint32_t)n, snap_keys) != EFS_OK)
+        return 0;
     for (int i = 0; i < n; i++) {
         uint32_t ci = ci0 + (uint32_t)i;
         struct efs_chunk_entry sce;
@@ -2131,7 +2136,8 @@ int efs_client_read_refs(efs_ino_t ino, uint64_t offset, size_t size,
         refs[i].len = cs;
         got++;
     }
-    if (got < n) {
+    if (got < n ||
+        (snap && !efs_client_map_snapshot_same(ino, ci0, ci0 + (uint32_t)n, snap_keys))) {
         for (int i = 0; i < got; i++)
             efs_rdcache_unpin(refs[i].pin);
         return 0;
@@ -2148,7 +2154,8 @@ int efs_client_read_refs(efs_ino_t ino, uint64_t offset, size_t size,
     return got;
 }
 
-int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size_t *out_len)
+static int client_read_run(efs_ino_t ino, uint64_t offset, size_t size, char *buf,
+                           size_t *out_len, int *moved)
 {
     if (!out_len || (!buf && size))
         return EFS_ERR_INVAL;
@@ -2274,6 +2281,19 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
                 return EFS_OK;
             }
         }
+    }
+    /* W77 (I24, observation): a read of several chunks returns one state of
+     * the file. Its mappings come from one server snapshot, and a change
+     * under the fetches sends the whole read round again. Larger reads are
+     * above the atomicity unit (max_read) and make no such claim. */
+    uint64_t snap_keys[EFS_PUB_UNIT_MAX];
+    uint32_t snap_c0 = (uint32_t)(offset / chunk_size);
+    uint32_t snap_c1 = (uint32_t)((end - 1) / chunk_size) + 1;
+    int snap = snap_c1 - snap_c0 >= 2 && snap_c1 - snap_c0 <= EFS_PUB_UNIT_MAX;
+    if (snap) {
+        int src = efs_client_map_snapshot(ino, snap_c0, snap_c1, snap_keys);
+        if (src != EFS_OK)
+            return src;
     }
     uint32_t pipe = EFS_WRITE_PIPELINE;
     if (pipe < 1)
@@ -2423,6 +2443,25 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
         }
     }
 
+    if (snap && !efs_client_map_snapshot_same(ino, snap_c0, snap_c1, snap_keys)) {
+        *moved = 1;
+        return EFS_OK;
+    }
     *out_len = total;
     return EFS_OK;
+}
+
+#define READ_SNAPSHOT_ROUNDS 4
+int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size_t *out_len)
+{
+    for (unsigned round = 0; round < READ_SNAPSHOT_ROUNDS; round++) {
+        int moved = 0;
+        int rc = client_read_run(ino, offset, size, buf, out_len, &moved);
+        if (rc != EFS_OK || !moved)
+            return rc;
+        if (out_len)
+            *out_len = 0;
+    }
+    /* Never a splice of two states: the reader retries. */
+    return EFS_ERR_BUSY;
 }

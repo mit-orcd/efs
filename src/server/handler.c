@@ -1133,6 +1133,7 @@ void server_handle_conn(struct efs_conn *conn)
             r.status = EFS_INODE_RPC_ERROR;
             int bad = 0;
             struct efs_opid session, *identity = NULL;
+            struct efs_report_pubid pubid, *publication = NULL;
             uint32_t flags = 0;
             uint32_t count = 0;
             uint32_t ino_count = 0;
@@ -1143,13 +1144,22 @@ void server_handle_conn(struct efs_conn *conn)
                 const uint8_t *raw = (const uint8_t *)payload + sizeof(*req);
                 size_t avail = payload_len - sizeof(*req);
                 flags = req->sync;
-                if (flags & ~(EFS_REPORT_F_SYNC | EFS_REPORT_F_SESSION)) bad = 1;
+                if (flags & ~(EFS_REPORT_F_SYNC | EFS_REPORT_F_SESSION |
+                              EFS_REPORT_F_PUBID)) bad = 1;
                 if (flags & EFS_REPORT_F_SESSION) {
                     if (avail < EFS_REPORT_SESSION_LEN) bad = 1;
                     else {
                         avail -= EFS_REPORT_SESSION_LEN;
                         if (!efs_report_session_unpack(&session, raw + avail)) bad = 1;
                         else identity = &session;
+                    }
+                }
+                if (!bad && (flags & EFS_REPORT_F_PUBID)) {
+                    if (avail < EFS_REPORT_PUBID_LEN) bad = 1;
+                    else {
+                        avail -= EFS_REPORT_PUBID_LEN;
+                        if (!efs_report_pubid_unpack(&pubid, raw + avail)) bad = 1;
+                        else publication = &pubid;
                     }
                 }
                 size_t used = 0;
@@ -1178,7 +1188,8 @@ void server_handle_conn(struct efs_conn *conn)
                 if (bad)
                     r.status = EFS_INODE_RPC_INVAL;
                 else
-                    server_raft_host_report(recs, count, irecs, ino_count, flags, identity, &r);
+                    server_raft_host_report(recs, count, irecs, ino_count, flags, identity,
+                                            publication, &r);
             }
             efs_conn_send_msg(conn, EFS_MSG_REPORT_CHUNKS_REPLY, &r,
                               sizeof(r));

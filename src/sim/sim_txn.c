@@ -213,7 +213,7 @@ int sim_txn_apply(struct sim_server *s, uint8_t group, const uint8_t *cmd,
         memcpy(t.bytes, cmd + 1, 16);
         shard = rd32(cmd + 17);
         dec = cmd[21];
-        rc = efs_txn_resolve(s->disk, &t, shard, dec);
+        rc = efs_meta_apply_txn_resolve(s->disk, &t, shard, dec);
         break;
     case CMD_DROP:
         if (clen < 1 + 16 + 4)

@@ -2842,6 +2842,17 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
                                      const struct efs_ino_size_rec *irecs,
                                      uint32_t ino_count, int sync)
 {
+    return efs_client_rpc_report_dirty_pub(export_id, recs, count, irecs,
+                                           ino_count, sync, NULL);
+}
+
+int efs_client_rpc_report_dirty_pub(efs_export_id_t export_id,
+                                    const struct efs_chunk_rec *recs,
+                                    uint32_t count,
+                                    const struct efs_ino_size_rec *irecs,
+                                    uint32_t ino_count, int sync,
+                                    const struct efs_report_pubid *pubid)
+{
     if (count == 0 && ino_count == 0 && !sync)
         return EFS_OK;
     if ((count && !recs) || (ino_count && !irecs))
@@ -2849,7 +2860,8 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
     if (efs_client_rpc_past_deadline())
         return EFS_ERR_BUSY;
     size_t limit = EFS_MSG_MAX_LEN - 1u;
-    size_t len = sizeof(struct efs_msg_report_chunks) + EFS_REPORT_SESSION_LEN;
+    size_t len = sizeof(struct efs_msg_report_chunks) + EFS_REPORT_SESSION_LEN +
+                 (pubid ? EFS_REPORT_PUBID_LEN : 0u);
     /* Reject impossible counts before touching arrays or allocating. Keep
      * every subtraction in size_t and the eventual wire cast representable. */
     if (ino_count > (limit - len) / sizeof(struct efs_ino_size_rec))
@@ -2879,7 +2891,8 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
     struct efs_msg_report_chunks *hdr = (struct efs_msg_report_chunks *)buf;
     hdr->export_id = export_id;
     hdr->count = count;
-    hdr->sync = (sync ? EFS_REPORT_F_SYNC : 0u) | EFS_REPORT_F_SESSION;
+    hdr->sync = (sync ? EFS_REPORT_F_SYNC : 0u) | EFS_REPORT_F_SESSION |
+                (pubid ? EFS_REPORT_F_PUBID : 0u);
     hdr->ino_count = ino_count;
     uint8_t *p = buf + sizeof(*hdr);
     if (count) {
@@ -2916,6 +2929,10 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
         memcpy(p, irecs, (size_t)ino_count * sizeof(*irecs));
     p += (size_t)ino_count * sizeof(*irecs);
 #endif
+    if (pubid) {
+        efs_report_pubid_pack(p, pubid);
+        p += EFS_REPORT_PUBID_LEN;
+    }
     efs_report_session_pack(p, &session);
     uint32_t wire_len = (uint32_t)(p + EFS_REPORT_SESSION_LEN - buf);
     struct efs_msg_inode_reply r;

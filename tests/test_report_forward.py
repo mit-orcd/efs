@@ -15,7 +15,7 @@ code = r'''
 struct efs_raft_host { int n; };
 static struct efs_chunk_rec expected[3];
 static struct efs_ino_size_rec inode;
-static unsigned calls; static struct efs_opid session;
+static unsigned calls; static struct efs_opid session; static int with_pubid;
 static int host_pick_peer(struct efs_raft_host *h,const uint8_t *g,int n,int skip)
 {(void)h;assert(g && n==1);return skip<0?1:2;}
 static int host_inode_rpc_peer(struct efs_raft_host *h,int rid,uint8_t type,
@@ -28,8 +28,10 @@ static int host_inode_rpc_peer(struct efs_raft_host *h,int rid,uint8_t type,
  struct efs_chunk_rec got[3];size_t used=0;
  assert(!efs_chunk_recs_unpack((const uint8_t *)buf+sizeof(*hdr),len-sizeof(*hdr),3,got,&used));
  for(unsigned i=0;i<3;i++)assert(!memcmp(&got[i],&expected[i],efs_chunk_rec_wire_size(&expected[i])));
- assert(len==sizeof(*hdr)+used+sizeof(inode)+EFS_REPORT_SESSION_LEN);
- assert(hdr->sync==(EFS_REPORT_F_SYNC|EFS_REPORT_F_SESSION));
+ size_t pid=with_pubid?EFS_REPORT_PUBID_LEN:0;
+ assert(len==sizeof(*hdr)+used+sizeof(inode)+pid+EFS_REPORT_SESSION_LEN);
+ assert(hdr->sync==(EFS_REPORT_F_SYNC|EFS_REPORT_F_SESSION|(with_pubid?EFS_REPORT_F_PUBID:0)));
+ if(with_pubid){struct efs_report_pubid p;assert(efs_report_pubid_unpack(&p,(const uint8_t*)buf+len-EFS_REPORT_SESSION_LEN-pid)&&p.mint_ns==9&&p.seq==3);}
  struct efs_opid id;assert(efs_report_session_unpack(&id,(const uint8_t*)buf+len-EFS_REPORT_SESSION_LEN));
  assert(id.session_epoch==session.session_epoch&&!memcmp(id.client_uuid,session.client_uuid,16));
  assert(!memcmp((const uint8_t *)buf+sizeof(*hdr)+used,&inode,sizeof(inode)));
@@ -43,12 +45,16 @@ int main(void)
  for(unsigned i=0;i<3;i++){expected[i].ino=100+i;expected[i].chunk_index=i;expected[i].delta_base_n=i;memset(expected[i].deltas,7+i,i*sizeof(expected[i].deltas[0]));}
  session.client_uuid[0]=7;session.session_epoch=42;session.seq=1;
  inode.ino=100;inode.size=123456;
- host_fwd_report(&h,expected,3,&inode,1,EFS_REPORT_F_SYNC|EFS_REPORT_F_SESSION,&session,&out,groups,1);
+ host_fwd_report(&h,expected,3,&inode,1,EFS_REPORT_F_SYNC|EFS_REPORT_F_SESSION,&session,NULL,&out,groups,1);
  assert(out.status==EFS_INODE_RPC_OK && calls==2);
- host_fwd_report(&h,expected,UINT32_MAX,&inode,1,EFS_REPORT_F_SYNC|EFS_REPORT_F_SESSION,&session,&out,groups,1);
+ host_fwd_report(&h,expected,UINT32_MAX,&inode,1,EFS_REPORT_F_SYNC|EFS_REPORT_F_SESSION,&session,NULL,&out,groups,1);
  assert(out.status==EFS_INODE_RPC_INVAL && calls==2);
- host_fwd_report(&h,expected,3,NULL,1,EFS_REPORT_F_SYNC|EFS_REPORT_F_SESSION,&session,&out,groups,1);
+ host_fwd_report(&h,expected,3,NULL,1,EFS_REPORT_F_SYNC|EFS_REPORT_F_SESSION,&session,NULL,&out,groups,1);
  assert(out.status==EFS_INODE_RPC_INVAL && calls==2);
+ /* W77: the publication id is forwarded verbatim before the session. */
+ struct efs_report_pubid pubid={9,3};with_pubid=1;
+ host_fwd_report(&h,expected,3,&inode,1,EFS_REPORT_F_SYNC|EFS_REPORT_F_SESSION|EFS_REPORT_F_PUBID,&session,&pubid,&out,groups,1);
+ assert(out.status==EFS_INODE_RPC_OK && calls==4);
  return 0;
 }
 '''
@@ -57,4 +63,4 @@ with tempfile.TemporaryDirectory(prefix='efs-report-forward-') as d:
     p.write_text(code)
     subprocess.run(['cc', '-std=gnu11', '-Wall', '-Wextra', '-Werror', '-I'+str(root/'include'), str(p), '-o', str(p.with_suffix(''))], check=True)
     subprocess.run([str(p.with_suffix(''))], check=True, timeout=5)
-print('REPORT forwarding: unequal chains, inode boundary, peer retry and impossible counts PASS')
+print('REPORT forwarding: unequal chains, inode boundary, peer retry, impossible counts and publication id PASS')

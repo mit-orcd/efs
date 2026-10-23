@@ -2,9 +2,11 @@
 """Production read admission must not turn metadata/PUT-wait failures into EOF."""
 from pathlib import Path
 import subprocess,tempfile
-root=Path(__file__).resolve().parents[1];s=(root/'src/client/read.c').read_text();a=s.index('int efs_client_read(');b=s.index('    uint64_t file_size = inode.size;',a)
+root=Path(__file__).resolve().parents[1];s=(root/'src/client/read.c').read_text();a=s.index('static int client_read_run(');b=s.index('    uint64_t file_size = inode.size;',a)
 # Admission is compiled from production; data decoding is tested separately.
-f=s[a:b]+'    return EFS_OK;\n}'
+# The W77 wrapper (one-snapshot rounds) calls the admission it wraps.
+w=s.index('#define READ_SNAPSHOT_ROUNDS')
+f=s[a:b]+'    (void)moved;\n    return EFS_OK;\n}\n'+s[w:s.index('\n}',s.index('int efs_client_read(',w))+2]
 code=r'''
 #include "client_internal.h"
 #include "efs/write_extent.h"

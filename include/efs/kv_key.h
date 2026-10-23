@@ -47,6 +47,9 @@
 #define EFS_KV_KIND_DECISION 11 /* live coordinator decision: verdict + participants */
 #define EFS_KV_KIND_DECISION_RETIRED 49 /* retired decision: verdict + retire time */
 #define EFS_KV_KIND_DECISION_CURSOR 50 /* per-shard retired-decision reclaim cursor */
+/* W77 staged publication: a chunk's prepared publication (lane shard, chunk
+ * key layout) or a FileID truncate pin (inode shard, lane 0xFF + txid). */
+#define EFS_KV_KIND_PUB_STAGE 51
 #define EFS_KV_KIND_DSEQ     12 /* per-(dir, dentry-shard) emptiness witness */
 #define EFS_KV_KIND_SESSION  13 /* session record on hash(uuid) shard */
 #define EFS_KV_KIND_SESS_LOCAL 14 /* per-shard established epoch + fence */
