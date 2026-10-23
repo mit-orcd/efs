@@ -15,7 +15,7 @@ ADDR=${W125_ADDR:-10.1.99.1} # node address; node9900 is 10.1.99.0
 HERE=$(cd "$(dirname "$0")" && pwd); REL=$1; R=${2:-/tmp/w125-p7-crash}; shift 2 2>/dev/null
 POINTS=${*:-admitted uploaded switched gc_accepted retire_accepted}
 PORT=17680; FAIL=0
-export EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_0 EFS_MD_RAFT_N=3 LD_LIBRARY_PATH=/data1/efs/deps/libfuse/lib64
+export EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_0 LD_LIBRARY_PATH=/data1/efs/deps/libfuse/lib64
 inv() { local t=0; for i in 1 2 3; do t=$((t + $(find $R/n$i/data/exports $R/n$i/data/segments -type f 2>/dev/null | wc -l))); done; echo $t; }
 for point in $POINTS; do
   "$HERE/w125_p0_cluster.sh" stop "$REL" $R $PORT >/dev/null 2>&1; rm -rf $R

@@ -745,6 +745,18 @@ int main(int argc, char **argv)
         usage(argv[0]);
         return 1;
     }
+    if (server.id > EFS_MAX_NODES) {
+        fprintf(stderr, "--node-id must be 1..%d\n", EFS_MAX_NODES);
+        return 1;
+    }
+    /* W153: the member count is the membership committed at formation
+     * (efs-mgmt raft-mkfs); a set variable is a stale deployment input. */
+    if (getenv("EFS_MD_RAFT_N")) {
+        fprintf(stderr, "EFS_MD_RAFT_N was removed (W153): the member count and the metadata "
+                "voters come from the membership committed at formation (efs-mgmt raft-mkfs). "
+                "Unset it and start again.\n");
+        return 1;
+    }
     strncpy(server.storage_path, server.storage_paths[0], sizeof(server.storage_path) - 1);
     server.storage_path[sizeof(server.storage_path) - 1] = '\0';
 
@@ -820,6 +832,47 @@ int main(int argc, char **argv)
         }
     }
 
+    /* Own the member store before anything else touches it, then advance
+     * the durable boot counter (the incarnation, the Raft boot id) before
+     * anything is served. A refusal leaves the store as it was. */
+    {
+        char mdraft[EFS_MAX_PATH + 16], err[1024];
+        const char *meta_root = server.meta_storage[0] ? server.meta_storage : server.storage_path;
+        snprintf(mdraft, sizeof(mdraft), "%s/mdraft", meta_root);
+        if (member_store_open(&server.mstore, mdraft, server.id, err, sizeof(err)) != EFS_OK) {
+            fprintf(stderr, "member store refused: %s\n", err);
+            return 1;
+        }
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+        uint64_t fresh = ((uint64_t)getpid() << 32) ^ ((uint64_t)ts.tv_sec << 16) ^
+                         (uint64_t)ts.tv_nsec;
+        if (member_store_boot(&server.mstore, fresh, &server.incarnation, err,
+                              sizeof(err)) != EFS_OK) {
+            fprintf(stderr, "member store refused: %s\n", err);
+            member_store_close(&server.mstore);
+            return 1;
+        }
+        if (server.mstore.state == EFS_MEMBER_FORMED) {
+            const struct efs_member *self = efs_membership_find(&server.mstore.members, server.id);
+            if (!self || self->port != server.port || strcmp(self->addr, server.addr)) {
+                fprintf(stderr, "member store refused: %s is node %u of a formed cluster at "
+                        "%s:%u; this daemon advertises %s:%u\n", mdraft, server.id,
+                        self ? self->addr : "?", self ? self->port : 0, server.addr, server.port);
+                member_store_close(&server.mstore);
+                return 1;
+            }
+        }
+        fprintf(stderr, "node %u: store %s, incarnation %llu%s, %s", server.id, mdraft,
+                (unsigned long long)server.incarnation,
+                server.mstore.created ? " (initialized now)" : "",
+                member_store_state_name(server.mstore.state));
+        if (server.mstore.state == EFS_MEMBER_FORMED)
+            fprintf(stderr, " (%u committed members)\n", server.mstore.members.count);
+        else
+            fprintf(stderr, " (formation: start at least three members, then efs-mgmt raft-mkfs)\n");
+    }
+
     server.nodes[0].id = server.id;
     strncpy(server.nodes[0].addr, server.addr, sizeof(server.nodes[0].addr) - 1);
     server.nodes[0].port = server.port;
@@ -830,6 +883,8 @@ int main(int argc, char **argv)
     server.node_count = 1;
 
     server_load_nodes(&server);
+    if (server.mstore.state == EFS_MEMBER_FORMED)
+        server_nodes_keep_members(&server, &server.mstore.members);
 
     /* Refresh this process's row by id — never smash nodes[0], which may be a peer
      * after load (that bug duplicated one id and dropped another). */
@@ -932,7 +987,12 @@ int main(int argc, char **argv)
             close(server.listen_fd);
             return 1;
         }
-        if (server_join_cluster(&server, host, port) != 0) {
+        int joined = server_join_cluster(&server, host, port);
+        if (joined == EFS_JOIN_REFUSED_FORMED) {
+            close(server.listen_fd);
+            return 1;
+        }
+        if (joined != 0) {
             fprintf(stderr,
                     "Could not join cluster at %s; starting as standalone and retrying in background\n",
                     join_peer);

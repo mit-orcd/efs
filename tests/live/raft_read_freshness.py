@@ -181,7 +181,7 @@ try:
         storage = work/f'n{node}'
         storage.mkdir()
         log = open(work/f'n{node}.log','w'); logs.append(log)
-        env = dict(os.environ,EFS_MD_RAFT_N='3',EFS_TRANSPORT='tcp',
+        env = dict(os.environ,EFS_TRANSPORT='tcp',
                    LD_PRELOAD=str(work/'connect.so'),TEST_BASE=str(base),
                    TEST_PROXY=str(proxy_base),TEST_NODE=str(node))
         cmd = [str(source/'efsd'),'--node-id',str(node+1),'--addr','127.0.0.1',
@@ -200,7 +200,8 @@ try:
     def formatted():
         reply=mgmt(old,'raft-mkfs')
         if 'rc=0' in reply:return True
-        assert re.search(r'rc=-(13|15)\b',reply),reply
+        # W153: refused until every member joined (formation commits them).
+        assert re.search(r'rc=-(13|15)\b',reply) or 'missing: node' in reply,reply
         return None
     wait(formatted,'both groups formatted')
     assert 'status=0' in mgmt(old,'raft-setattr',1,1,'0755')

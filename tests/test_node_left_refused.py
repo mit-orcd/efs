@@ -84,7 +84,9 @@ int efs_decl_gate_frame(struct efs_decl_gate *g, struct efs_conn *c, uint8_t typ
  * loop iteration proceeds to read the next frame (the real gate is in
  * handler.c and covered by tests/test_shutdown_bounded.py). */
 static int handler_stop_gate(void) { return 0; }
-''' + fn('retired_refuse') + prefix + r'''
+/* W153: a formed cluster; the unformed refusal is test_w153_formation's. */
+int server_raft_host_formed(void) { return 1; }
+''' + fn('retired_refuse') + fn('unformed_metadata') + prefix + r'''
         default:
             (void)rc;
             dispatched++;

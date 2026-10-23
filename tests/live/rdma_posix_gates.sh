@@ -4,7 +4,7 @@ set -euo pipefail
 src=$(cd "$(dirname "$0")/../.." && pwd)
 mode=${EFS_TRANSPORT:-rdma}
 case "$mode" in tcp|rdma) ;; *) echo 'Use explicit tcp or rdma' >&2; exit 2;; esac
-export EFS_TRANSPORT=$mode EFS_MD_RAFT_N=4
+export EFS_TRANSPORT=$mode
 export EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0
 export EFS_RDMA_DEV=${EFS_RDMA_DEV:-rxe0}
 if [ "$mode" = rdma ]; then
@@ -39,6 +39,11 @@ for id in 1 2 3 4; do
         kill -0 "${pids[-1]}" || break; sleep .5
     done
     [ "$ready" = 1 ] || { cat "$run/n$id.log"; exit 1; }
+done
+# W153: formation commits the members joined at that moment; wait for all four.
+for attempt in $(seq 1 120); do
+    "$src/efs-mgmt" status 127.0.0.1:27432 2>/dev/null | grep -q 'Cluster nodes (4)' && break
+    sleep .5
 done
 formatted=0
 for attempt in $(seq 1 60); do

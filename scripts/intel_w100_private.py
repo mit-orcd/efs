@@ -27,7 +27,7 @@ src = base + '/' + a.source
 runtime = base + '/runtime-' + a.run
 hosts = [('intel1_efs', '10.0.0.207', [1, 2]), ('intel2_efs', '10.0.0.209', [3, 4])]
 env = dict(EFS_TRANSPORT='tcp', EFS_COMMANDS='0', EFS_COMMANDS_SERVER='0',
-           EFS_EXPIRY='0', EFS_MD_RAFT_N='4',
+           EFS_EXPIRY='0',
            EFS_FAULT_REPORT_SIZE_FILE=runtime+'/omit-size',
            EFS_FAULT_REPORT_FILE=runtime+'/other-faults')
 if a.opid_trace:
@@ -78,7 +78,9 @@ for node in {ids!r}:
     print(json.dumps(dict(node=node,pid=p.pid,args=args)),flush=True)
 ''')
 
-ready = [src+'/efs-mgmt', 'raft-mkfs', '10.0.0.207:27432'] if a.action=='start' else [src+'/efs-mgmt', 'commands-policy', '10.0.0.207:27432', 'get']
+# W153: formation commits the members joined at that moment; wait for all four.
+ready = ['sh', '-c', f"{src}/efs-mgmt status 10.0.0.207:27432 | grep -q 'Cluster nodes (4)' && "
+         f"{src}/efs-mgmt raft-mkfs 10.0.0.207:27432"] if a.action=='start' else [src+'/efs-mgmt', 'commands-policy', '10.0.0.207:27432', 'get']
 for attempt in range(45):
     r = subprocess.run(['ssh', hosts[0][0], shlex.join(ready)],
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)

@@ -52,8 +52,7 @@ with tempfile.TemporaryDirectory(prefix='efs-tail-smoke-') as work:
             return exact(sock, struct.unpack('>I', exact(sock, 4))[0])
 
     env = dict(os.environ, EFS_TRANSPORT='tcp', EFS_COMMANDS='0',
-               EFS_COMMANDS_SERVER='0', EFS_EXPIRY='0',
-               EFS_MD_RAFT_N='3')
+               EFS_COMMANDS_SERVER='0', EFS_EXPIRY='0')
     with (Path(work)/'daemon.log').open('w+') as log:
         proc = subprocess.Popen([str(source/'efsd'), '--node-id', '1',
             '--addr', '127.0.0.1', '--port', str(port), '--storage', str(root),

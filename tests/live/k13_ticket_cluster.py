@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """K13 private three-daemon gate: the ticketed PUT/REPORT path end to end.
 
-Starts three efsd on 127.0.0.1 (EFS_MD_RAFT_N=3, EFS_TRANSPORT=tcp) with
+Starts three efsd on 127.0.0.1 (three committed members, EFS_TRANSPORT=tcp) with
 stores under --work, one FUSE mount, and checks:
   * default PUT/flush: written files read back exactly (warm and cold),
     fsync succeeds, unflushed deletes and overwrites settle, and a clean
@@ -31,7 +31,7 @@ assert 18700 <= a.port and a.port + 2 <= 18799, 'ports must stay in 18700-18799'
 work.mkdir(parents=True, exist_ok=True)
 mnt = work / 'mnt'; mnt.mkdir(exist_ok=True)
 roots = [work / f'n{i+1}' for i in range(3)]
-env = dict(os.environ, EFS_MD_RAFT_N='3', EFS_TRANSPORT='tcp', TMPDIR=str(work / 'tmp'))
+env = dict(os.environ, EFS_TRANSPORT='tcp', TMPDIR=str(work / 'tmp'))
 (work / 'tmp').mkdir(exist_ok=True)
 servers = {}
 client = None

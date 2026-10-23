@@ -2,7 +2,8 @@
 """Compile the actual W124 all-member reclaim handoff: every remote request is
 sent before the local acceptance and before any reply is read; an item counts
 only when every member accepted it; failures and malformed replies refuse the
-whole batch and drain every connection."""
+whole batch and drain every connection. W153: the members are the committed
+formation membership, never the HELLO table; unformed refuses everything."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
@@ -10,6 +11,7 @@ s=(root/'src/server/raft_host.c').read_text()
 a=s.index('static void host_gc_inode_nodes_batch(');b=s.index('/* Propose one GC command',a)
 code=r'''
 #include "efs/common.h"
+#include "efs/membership.h"
 #include <assert.h>
 #include <pthread.h>
 #include <stdlib.h>
@@ -22,7 +24,7 @@ code=r'''
 #define EFS_MSG_GC_INODE_BATCH_REPLY 2
 struct efs_conn { int kind,fd; };
 struct server { pthread_mutex_t lock; unsigned node_count; struct efs_node nodes[EFS_MAX_NODES]; efs_node_id_t id; };
-struct efs_raft_host { struct server *s; int n; };
+struct efs_raft_host { struct server *s; int n; int formed; struct efs_membership members; };
 struct efs_msg_gc_inode_batch { uint32_t export_id,count; struct { uint64_t ino,generation; } items[]; };
 struct efs_msg_gc_inode_batch_reply { uint32_t count,reserved; int32_t rc[]; };
 struct efs_reclaim_item { uint32_t export_id; efs_ino_t ino; uint64_t generation; };
@@ -63,10 +65,12 @@ static uint64_t gens[N]={90,91,92,93,94};
 static uint8_t ok[N];
 static int accepted(void){int k=0;for(unsigned i=0;i<N;i++)k+=ok[i];return k;}
 static int exercise(void) {
- struct server server={.lock=PTHREAD_MUTEX_INITIALIZER,.node_count=4,.id=1};
- struct efs_raft_host h={&server,4};
+ struct server server={.lock=PTHREAD_MUTEX_INITIALIZER,.node_count=0,.id=1};
+ static struct efs_raft_host h;
+ h.s=&server;h.n=4;h.formed=1;h.members.count=4;
  sent=received=local_done=released=dropped=0;
- for(unsigned i=0;i<4;i++){server.nodes[i].id=i+1;server.nodes[i].port=i;conns[i].fd=i;conns[i].kind=EFS_CONN_TCP;}
+ for(unsigned i=0;i<4;i++){h.members.m[i].id=i+1;h.members.m[i].port=(uint16_t)i;strcpy(h.members.m[i].addr,"127.0.0.1");
+  conns[i].fd=i;conns[i].kind=EFS_CONN_TCP;}
  memset(ok,0xee,sizeof(ok));
  host_gc_inode_nodes_batch(&h,inos,gens,N,ok);
  assert(released+dropped==3-(missing>=1&&missing<=3));
@@ -83,15 +87,15 @@ int main(void) {
  wrong_size=3;assert(exercise()==0 && dropped==1);wrong_size=-1;
  wrong_count=3;assert(exercise()==0 && dropped==1);wrong_count=-1;
  missing=3;assert(exercise()==0 && sent==2 && received==2);missing=-1;
- /* Incomplete membership proves nothing: no RPC, no local acceptance. */
- struct server server={.lock=PTHREAD_MUTEX_INITIALIZER,.node_count=3,.id=1};struct efs_raft_host h={&server,4};
- for(unsigned i=0;i<3;i++){server.nodes[i].id=i+1;server.nodes[i].port=i;}
+ /* No committed membership proves nothing: no RPC, no local acceptance, even
+  * with a full HELLO table. */
+ struct server server={.lock=PTHREAD_MUTEX_INITIALIZER,.node_count=4,.id=1};
+ static struct efs_raft_host h;h.s=&server;h.n=3;h.formed=0;
+ for(unsigned i=0;i<4;i++){server.nodes[i].id=i+1;server.nodes[i].port=i;}
  sent=received=local_done=0;memset(ok,1,sizeof(ok));
  host_gc_inode_nodes_batch(&h,inos,gens,N,ok);assert(!accepted() && !sent && !local_done);
- server.node_count=0;memset(ok,1,sizeof(ok));
- host_gc_inode_nodes_batch(&h,inos,gens,N,ok);assert(!accepted() && !sent);
  pthread_mutex_destroy(&server.lock);
- puts("GC reclaim handoff: all sends before local accept and waits, per-item all-member verdict, failure/malformed replies refuse the batch PASS");
+ puts("GC reclaim handoff: all sends before local accept and waits, per-item all-member verdict, failure/malformed replies refuse the batch, committed members only, unformed refused PASS");
 }
 '''
 # Only inodes every member accepted may complete their REAP marker.

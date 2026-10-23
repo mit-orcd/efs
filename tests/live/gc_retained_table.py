@@ -29,7 +29,7 @@ for number in range(port,port+4):
 mount=work/'quiet-mnt';mount.mkdir(exist_ok=True)
 assert subprocess.run(['mountpoint','-q',str(mount)]).returncode!=0
 output=work/('quiet-probe-'+str(time.time_ns()));output.mkdir()
-env=dict(os.environ,EFS_MD_RAFT_N='4',EFS_TRANSPORT='tcp')
+env=dict(os.environ,EFS_TRANSPORT='tcp')
 servers=[];client=None;logs=[]
 def run(args,**kw):return subprocess.run([str(x) for x in args],check=True,env=env,timeout=kw.pop('timeout',60),**kw)
 def wait(fn,seconds=120):

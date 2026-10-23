@@ -4,7 +4,7 @@
 # K16 / W75 (I25) cluster gate for the identity-bound fragment record
 # (fragment record format 2, docs/how-it-works/protocols/data.md).
 # Private 3-daemon TCP cluster on ONE host: ports PORT+1..PORT+3 (default
-# 18401-18403), stores DIR/n{1,2,3}, EFS_MD_RAFT_N=3, one efs-fuse mount at
+# 18401-18403), stores DIR/n{1,2,3}, three committed members, one efs-fuse mount at
 # DIR/mnt. REL is a build tree (efsd, efs-fuse, efs-mgmt, scripts/client.sh).
 # Never touches orcd-mini or w100. K16_DIRECT=1 (default) adds --direct-io.
 #
@@ -16,7 +16,7 @@
 set -u
 cmd=$1; REL=$2; D=$3; PORT=${4:-18400}
 ADDR=${K16_ADDR:-127.0.0.1}
-export EFS_TRANSPORT=tcp EFS_MD_RAFT_N=3
+export EFS_TRANSPORT=tcp
 DIO=""; [ "${K16_DIRECT:-1}" = 1 ] && DIO=--direct-io
 FAILS=0
 check() { if eval "$2"; then echo "PASS $1"; else echo "FAIL $1"; FAILS=$((FAILS+1)); fi; }

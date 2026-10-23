@@ -93,7 +93,7 @@ COMMON_SRCS = src/meta/append_plan.c $(COMMON_DIR)/publication.c $(COMMON_DIR)/p
               src/raft/raft_mem.c \
               src/raft/raft_disk.c \
               src/raft/raft_log.c \
-              $(COMMON_DIR)/placement.c \
+              $(COMMON_DIR)/placement.c $(COMMON_DIR)/membership.c \
               $(COMMON_DIR)/checksum.c \
               $(COMMON_DIR)/network.c \
               $(COMMON_DIR)/rdma.c \
@@ -117,6 +117,8 @@ LIB = libefs.a
 TEST_SRCS = tests/test_rdma_segmented.c tests/test_expiry.c tests/test_query_policy.c tests/test_query_refresh.c tests/test_txn_resolve_faults.c tests/test_txn_retire.c tests/test_pub_stage.c tests/test_namespace_session.c tests/test_query_catalog.c tests/test_name_index.c tests/test_append_transaction.c tests/test_append_cleanup.c tests/test_store_durability.c tests/test_append_receipt.c tests/test_put_ticket.c tests/test_put_orphan.c tests/test_store_gc.c tests/test_reclaim.c tests/test_bench_latency.c tests/test_store_overwrite.c tests/test_writer_routing.c tests/test_kv_snapshot_tail.c tests/test_kv_seg_index.c tests/test_kv_seg_bloom.c tests/test_kv_lsm_concurrent.c tests/test_kv_block_hash.c tests/test_mtime_barrier.c tests/test_publication_session.c tests/test_publication_ack.c tests/test_publication_recovery.c tests/test_lane_bootstrap_recovery.c tests/test_fence_view.c tests/test_reply_buffers.c tests/test_bufpool.c tests/test_erasure.c tests/test_placement.c tests/test_rdma_xprt.c tests/test_wire.c tests/test_declaration_gate.c tests/test_data.c tests/test_kv.c tests/test_kv_lsm.c tests/test_raft_store.c tests/test_meta_apply.c tests/test_raft.c tests/test_follower_bound.c tests/test_sim.c tests/test_txn.c tests/test_session.c tests/test_lock.c tests/test_stage_evict.c tests/test_conn_fd.c tests/test_query_disk.c tests/test_query_delta.c tests/test_query_disk_io.c
 TEST_BINS = tests/test_rdma_segmented tests/test_expiry tests/test_query_policy tests/test_query_refresh tests/test_txn_resolve_faults tests/test_txn_retire tests/test_pub_stage tests/test_namespace_session tests/test_query_catalog tests/test_name_index tests/test_append_transaction tests/test_append_cleanup tests/test_store_durability tests/test_append_receipt tests/test_put_ticket tests/test_put_orphan tests/test_store_gc tests/test_reclaim tests/test_bench_latency tests/test_store_overwrite tests/test_writer_routing tests/test_kv_snapshot_tail tests/test_kv_seg_index tests/test_kv_seg_bloom tests/test_kv_lsm_concurrent tests/test_kv_block_hash tests/test_mtime_barrier tests/test_publication_session tests/test_publication_ack tests/test_publication_recovery tests/test_lane_bootstrap_recovery tests/test_fence_view tests/test_reply_buffers tests/test_bufpool tests/test_erasure tests/test_placement tests/test_rdma_xprt tests/test_wire tests/test_declaration_gate tests/test_data tests/test_kv tests/test_kv_lsm tests/test_raft_store tests/test_meta_apply tests/test_raft tests/test_follower_bound tests/test_sim tests/test_txn tests/test_session tests/test_lock tests/test_stage_evict tests/test_conn_fd tests/test_query_disk tests/test_query_delta tests/test_query_disk_io
 TEST_SRCS += tests/test_kv_reader_gate.c
+TEST_SRCS += tests/test_membership.c
+TEST_BINS += tests/test_membership
 TEST_SRCS += tests/test_directory_sync_group.c
 TEST_SRCS += tests/test_frag_record.c tests/test_small_segment.c tests/test_packed_segment.c tests/test_pack_ledger.c tests/test_pack_ledger_recovery.c tests/test_pack_switch.c tests/test_packed_reader.c tests/test_pack_validate_once.c
 TEST_BINS += tests/test_frag_record tests/test_small_segment tests/test_packed_segment tests/test_pack_ledger tests/test_pack_ledger_recovery tests/test_pack_switch tests/test_packed_reader tests/test_pack_validate_once
@@ -134,7 +136,7 @@ SERVER_SRCS = src/server/put_fence.c src/server/put_upload.c src/server/put_orph
               src/server/peer_pool.c src/server/writer.c \
               src/server/iostats.c src/server/thread.c \
               src/server/raft_host.c src/server/reclaim.c src/server/segment_store.c \
-              src/server/packer.c
+              src/server/packer.c src/server/member_store.c
 SERVER_OBJS = $(SERVER_SRCS:.c=.o)
 
 CLIENT_SRCS = src/client/efs_fuse.c
@@ -658,6 +660,7 @@ test: all $(TEST_SPECIAL_BINS)
 	./tests/test_pack_validate_once
 	./tests/test_kv_reader_gate
 	./tests/test_placement
+	./tests/test_membership
 	./tests/test_lock
 	./tests/test_stage_evict
 	./tests/test_conn_fd
@@ -746,6 +749,9 @@ tests/test_writer_routing: tests/test_writer_routing.c src/server/writer.c src/s
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -lpthread
 
 tests: $(TEST_BINS)
+
+tests/test_membership: tests/test_membership.c src/server/member_store.c src/server/member_store.h $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ tests/test_membership.c src/server/member_store.c $(LIB) $(LDFLAGS)
 
 src/sim/sim.o: src/sim/sim.c src/sim/sim_internal.h include/efs/sim.h include/efs/store.h include/efs/kv.h include/efs/meta_apply.h include/efs/transport.h include/efs/opid.h include/efs/raft.h
 	$(CC) $(CFLAGS) $(INCLUDES) -Isrc/sim -c -o $@ $<
@@ -957,6 +963,7 @@ test: test-rdma-message
 .PHONY: test-long test-all
 test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_shutdown_blocked_io.py
+	python3 tests/test_w153_formation.py
 	python3 tests/test_client_processes.py
 	python3 tests/test_shutdown_stuck_worker.py
 	./tests/test_reclaim

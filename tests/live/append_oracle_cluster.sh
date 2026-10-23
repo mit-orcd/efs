@@ -17,7 +17,7 @@
 set -u
 cmd=$1; REL=$2; D=$3; PORT=${4:-18200}
 ADDR=${EFS_K09_ADDR:-127.0.0.1}
-export EFS_TRANSPORT=tcp EFS_MD_RAFT_N=3
+export EFS_TRANSPORT=tcp
 IO=--no-direct-io; [ "${EFS_K09_DIRECT:-0}" = 1 ] && IO=--direct-io
 HERE=$(cd "$(dirname "$0")" && pwd)
 

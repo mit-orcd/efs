@@ -27,7 +27,7 @@ PORT=${PORT:-19013}
 WARM=${WARM:-60}; STOP=${STOP:-4500}; HOLD=${HOLD:-30}; DRAIN=${DRAIN:-900}
 WORKERS=${WORKERS:-8}; BENCH_FILES=${BENCH_FILES:-5000}
 ADDR=127.0.0.1; S=$D/samples.tsv
-export EFS_TRANSPORT=tcp EFS_MD_RAFT_N=3
+export EFS_TRANSPORT=tcp
 
 say() { echo "[k22s $(date -u +%H:%M:%S)] $*" | tee -a "$D/driver.log"; }
 pid_of() { cat "$D/logs/n$1.pid" 2>/dev/null; }

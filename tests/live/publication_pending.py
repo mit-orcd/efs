@@ -16,7 +16,7 @@ p.add_argument('work',type=Path)
 p.add_argument('--apply-pending',action='store_true')
 p.add_argument('--mode',choices=('direct','buffered'),default='direct')
 a=p.parse_args();work=a.work.resolve();work.mkdir(parents=True,exist_ok=False)
-env=dict(os.environ,EFS_MD_RAFT_N='4',EFS_TRANSPORT='tcp')
+env=dict(os.environ,EFS_TRANSPORT='tcp')
 gate=work/'park-publication-apply'
 if a.apply_pending:env['EFS_FAULT_PUBLICATION_APPLY_FILE']=str(gate)
 for base in range(25000,25200,4):
@@ -64,6 +64,8 @@ def stop(crash=False):
 try:
     start('')
     def format_cluster():
+        # W153: formation commits the members joined at that moment.
+        if 'Cluster nodes (4)' not in mgmt('status',f'127.0.0.1:{base}').stdout:return False
         for n in range(4):
             result=mgmt('raft-mkfs',f'127.0.0.1:{base+n}')
             if not result.returncode:return True

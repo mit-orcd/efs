@@ -16,7 +16,7 @@
 #
 # Step 11 port: the metadata engine is the raft host, so a single-node efsd
 # can no longer serve an export (no quorum). Every wire phase runs a 3-node
-# localhost raft group (EFS_MD_RAFT_N=3, node-ids 1..3 on ports PORT..PORT+2,
+# localhost raft group (three committed members, node-ids 1..3 on ports PORT..PORT+2,
 # one storage dir per node) and `efs-mgmt raft-mkfs`.
 #
 # Gate criteria (hard fail unless all hold):
@@ -268,7 +268,7 @@ start_group_vg_server() {
         join="--join $ADDR:$((PORT + 1))"
         [ "$id" = 2 ] && join=""                            # node 2 seeds
         out="$WORK-group$id.out"
-        EFS_MD_RAFT_N=3 EFS_TRANSPORT=$xport setsid ./efsd --node-id "$id" \
+        EFS_TRANSPORT=$xport setsid ./efsd --node-id "$id" \
             --addr "$ADDR" --port "$port" --storage "$STORAGE/s$id" \
             --quota 1G --writers 0 "$IO_FLAG" $join \
             >"$out" 2>&1 </dev/null &
@@ -280,7 +280,7 @@ start_group_vg_server() {
     done
     format_group "$ADDR:$((PORT + 1))"
     # valgrind'd node 1 joins last; do not wait for it (slow under memcheck)
-    EFS_MD_RAFT_N=3 EFS_TRANSPORT=$xport $VG --log-file="$WORK-group1.vg" \
+    EFS_TRANSPORT=$xport $VG --log-file="$WORK-group1.vg" \
         ./efsd --node-id 1 --addr "$ADDR" --port "$PORT" \
         --storage "$STORAGE/s1" --quota 1G --writers 0 "$IO_FLAG" \
         --join "$ADDR:$((PORT + 1))" >"$WORK-group1.out" 2>&1 &
@@ -300,7 +300,7 @@ start_group_plain() {
         join="--join $ADDR:$PORT"
         [ "$id" = 1 ] && join=""
         out="$WORK-group$id.out"
-        EFS_MD_RAFT_N=3 EFS_TRANSPORT=tcp setsid ./efsd --node-id "$id" \
+        EFS_TRANSPORT=tcp setsid ./efsd --node-id "$id" \
             --addr "$ADDR" --port "$port" --storage "$STORAGE/s$id" \
             --quota 1G --writers 0 "$IO_FLAG" $join \
             >"$out" 2>&1 </dev/null &

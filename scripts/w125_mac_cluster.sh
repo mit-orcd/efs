@@ -23,7 +23,7 @@ start)
   done
   for i in 0 1 2; do
     id=$((i + 1)); join=""; [ $id -gt 1 ] && join="--join ${A[0]}:$((PORT + 1))"
-    ssh "${H[$i]}" "mkdir -p $D/n$id $D/logs && cd $SRC && env $PACKENV EFS_MD_RAFT_N=3 setsid -f ./efsd --node-id $id \
+    ssh "${H[$i]}" "mkdir -p $D/n$id $D/logs && cd $SRC && env $PACKENV setsid -f ./efsd --node-id $id \
       --addr ${A[$i]} --port $((PORT + id)) --storage $D/n$id --quota $QUOTA $join \
       >> $D/logs/efsd-n$id.log 2>&1 < /dev/null" || exit 1
     ssh "${H[$i]}" "for t in \$(seq 60); do grep -q listening $D/logs/efsd-n$id.log && break; sleep 0.5; done;

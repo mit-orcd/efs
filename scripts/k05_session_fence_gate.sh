@@ -19,7 +19,7 @@
 set -u
 REL=$(cd "$1" && pwd); D=$2; PORT=${3:-18600}
 ADDR=127.0.0.1
-export EFS_TRANSPORT=tcp EFS_MD_RAFT_N=3
+export EFS_TRANSPORT=tcp
 POSIX_JOBS=${K05_POSIX_JOBS:-2}
 fails=0
 check() { # name rc detail

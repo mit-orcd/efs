@@ -18,7 +18,7 @@ for direct in (False,True):
             logpath=Path(work)/'daemon.log'
             sockets=[];stop=threading.Event()
             with logpath.open('w') as log:
-                proc=subprocess.Popen([str(source/'efsd'),'--node-id','1','--addr','127.0.0.1','--port',str(port),'--storage',work,'--direct-io' if direct else '--no-direct-io'],env=dict(os.environ,EFS_MD_RAFT_N='3',EFS_TRANSPORT='tcp'),stdout=log,stderr=log)
+                proc=subprocess.Popen([str(source/'efsd'),'--node-id','1','--addr','127.0.0.1','--port',str(port),'--storage',work,'--direct-io' if direct else '--no-direct-io'],env=dict(os.environ,EFS_TRANSPORT='tcp'),stdout=log,stderr=log)
                 def churn():
                     while not stop.is_set():
                         try:

@@ -385,9 +385,15 @@ class Cluster(object):
             self.servers.append(srv)
             srv.start()
         self.journal = Journal(os.path.join(self.work, "journal.jsonl"))
-        # A listening socket precedes joining/election. Retry only the
-        # idempotent initialization of this newly owned disposable cluster.
+        # A listening socket precedes joining/election. Formation commits the
+        # members joined at that moment (W153): wait for all four first. Retry
+        # only the idempotent initialization of this newly owned cluster.
         deadline = time.monotonic() + 30
+        while "Cluster nodes (4)" not in run_cmd(
+                [self.mgmt(), "status", seed], timeout=20, env=fixture_env(self.transport, self.device))[1]:
+            if time.monotonic() >= deadline:
+                raise RuntimeError("four members never joined")
+            time.sleep(.2)
         while True:
             rc, out, err = run_cmd(
                 [self.mgmt(), "raft-mkfs", seed], timeout=20, env=fixture_env(self.transport, self.device))

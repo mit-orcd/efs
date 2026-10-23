@@ -24,7 +24,7 @@ home = Path(tempfile.mkdtemp(prefix='async-commit-', dir=Path.home()))
 print(work, flush=True)
 env = os.environ.copy()
 env.update(EFS_TRANSPORT='rdma', EFS_RDMA_DEV='rxe0', EFS_RDMA_GID_INDEX='1',
-           EFS_MD_RAFT_N='4', EFS_METADATA_BALANCE='1', EFS_DIRECT_IO='1',
+           EFS_METADATA_BALANCE='1', EFS_DIRECT_IO='1',
            EFS_COMMANDS='0', EFS_COMMANDS_SERVER='0',            EFS_EXPIRY='0', EFS_PUT_SYNC_MS='10000',
            EFS_GC_BACKLOG_IDLE_MS='20')
 for key in ('EFS_RPC_PROF','EFS_READ_PROF','EFS_BATCH_OBS'):
@@ -79,6 +79,11 @@ def stats(label):
 
 try:
     for i in range(1,5): start(i)
+    until=time.monotonic()+60  # W153: formation commits the members joined now
+    while b'Cluster nodes (4)' not in sp.run([str(src/'efs-mgmt'),'status','127.0.0.1:%d'%base],
+                                             env=env,capture_output=True,timeout=10).stdout:
+        assert time.monotonic()<until,'four members never joined'
+        time.sleep(.25)
     r=command([src/'efs-mgmt','raft-mkfs','127.0.0.1:%d'%base],capture_output=True)
     assert b'rc=0 ' in r.stdout, r.stdout
     a=mount('a');b=mount('b')

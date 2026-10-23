@@ -88,6 +88,11 @@ int efs_kv_key_export(uint32_t shard, uint8_t *out, uint32_t *len)
     return start(out, len, shard, EFS_KV_KIND_EXPORT, 0, EFS_KV_KEY_MAX);
 }
 
+int efs_kv_key_membership(uint32_t shard, uint8_t *out, uint32_t *len)
+{
+    return start(out, len, shard, EFS_KV_KIND_MEMBERSHIP, 0, EFS_KV_KEY_MAX);
+}
+
 int efs_kv_key_inode(uint32_t shard, efs_ino_t ino, uint8_t *out, uint32_t *len)
 {
     int rc = start(out, len, shard, EFS_KV_KIND_INODE, 8, EFS_KV_KEY_MAX);

@@ -50,7 +50,7 @@ try:
     (evidence/'exit.txt').write_text('0\n')
 finally:
     if stopped:
-        env=dict(os.environ,EFS_CLUSTER='nuc',EFS_DIRECT_IO='1',EFS_TRANSPORT='tcp',EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_MD_RAFT_N='4',EFS_BATCH_OBS='0')
+        env=dict(os.environ,EFS_CLUSTER='nuc',EFS_DIRECT_IO='1',EFS_TRANSPORT='tcp',EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_BATCH_OBS='0')
         with (evidence/'restore.log').open('w') as out:
             run(['bash','/data1/efs/w97-latest-20261010/start-preserved.sh'],env=env,stdout=out,stderr=subprocess.STDOUT)
         wait(lambda:all(listening(p) for p in range(17432,17436)),180,'regular service listeners')

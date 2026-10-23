@@ -91,7 +91,7 @@ start_servers() {
         if [ "$joined" != 1 ] && [ "$id" != 1 ]; then
             join="--join ${ADDR}:${PORT}"
         fi
-        on 20 "$SRV" "cd /tmp/efs && EFS_MD_RAFT_N=3 EFS_TRANSPORT=$xport setsid -f ./efsd --node-id $id --addr $ADDR --port $port --storage $WORK/s$id --quota 40G $DIO $join >$WORK/s$id.log 2>&1 </dev/null && echo started_id=$id"
+        on 20 "$SRV" "cd /tmp/efs && EFS_TRANSPORT=$xport setsid -f ./efsd --node-id $id --addr $ADDR --port $port --storage $WORK/s$id --quota 40G $DIO $join >$WORK/s$id.log 2>&1 </dev/null && echo started_id=$id"
     done
     local id
     for id in 1 2 3; do

@@ -106,7 +106,7 @@ except BaseException:
 finally:
     stop_private()
     if stopped:
-        normal=dict(env,EFS_MD_RAFT_N='4',EFS_BATCH_OBS='0',EFS_CLUSTER='nuc',EFS_DIRECT_IO='1')
+        normal=dict(env,EFS_BATCH_OBS='0',EFS_CLUSTER='nuc',EFS_DIRECT_IO='1')
         with (out/'restore.log').open('w') as log:
             run(['bash','/data1/efs/w97-latest-20261010/start-preserved.sh'],env=normal,stdout=log,stderr=subprocess.STDOUT,timeout=300)
         wait(lambda:all(listening(p) for p in range(17432,17436)),180,'restored regular listeners')

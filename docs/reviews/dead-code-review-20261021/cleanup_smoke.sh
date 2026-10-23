@@ -8,7 +8,7 @@
 set -u
 T=$(cd "$1" && pwd -P); D=$T/smoke; P=${2:-17631}
 cd $T; rm -rf $D; mkdir -p $D/{n1,n2,n3,logs}
-export EFS_TRANSPORT=tcp EFS_MD_RAFT_N=3
+export EFS_TRANSPORT=tcp
 for i in 1 2 3; do
   j=""; [ $i -gt 1 ] && j="--join 127.0.0.1:$P"
   nohup ./efsd --node-id $i --addr 127.0.0.1 --port $((P+i-1)) --storage $D/n$i --quota 1G $j >> $D/logs/n$i.log 2>&1 &

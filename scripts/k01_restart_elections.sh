@@ -23,7 +23,7 @@ B=$(cd "$1" && pwd); D=$2; PORT=${3:-18100}
 GAP=${GAP:-15}; SETTLE=${SETTLE:-10}; STOP_WAIT=${STOP_WAIT:-20}
 MAX=${MAX_ELECTIONS:-3}; KEEP=${KEEP:-0}
 ADDR=127.0.0.1
-export EFS_TRANSPORT=tcp EFS_MD_RAFT_N=3
+export EFS_TRANSPORT=tcp
 for i in 1 2 3; do
   ss -ltnH "sport = :$((PORT+i))" | grep -q . && { echo "port $((PORT+i)) in use"; exit 2; }
 done

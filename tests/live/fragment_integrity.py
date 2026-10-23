@@ -47,7 +47,7 @@ for direct in (False, True):
                 root=Path(work)/f'root{index}';root.mkdir()
                 cmd += ['--storage',str(root)]
             with open(work+'/daemon.log','w+') as log:
-                proc=subprocess.Popen(cmd,env=dict(os.environ,EFS_MD_RAFT_N='3'),stdout=log,stderr=log)
+                proc=subprocess.Popen(cmd,env=dict(os.environ),stdout=log,stderr=log)
                 try:
                     for _ in range(100):
                         assert proc.poll() is None, 'daemon exited'
@@ -121,7 +121,7 @@ for direct in (False, True):
                     bad('payload flip')
                     path.write_bytes(original);good()
                     proc.terminate();assert proc.wait(20)==0
-                    proc=subprocess.Popen(cmd,env=dict(os.environ,EFS_MD_RAFT_N='3'),stdout=log,stderr=log)
+                    proc=subprocess.Popen(cmd,env=dict(os.environ),stdout=log,stderr=log)
                     for _ in range(100):
                         assert proc.poll() is None,'daemon exited on restart'
                         try:

@@ -78,7 +78,7 @@ try:
 finally:
     # Restore daemons before touching FUSE mounts. The generic start script's
     # mkdir -p on a degraded mounted root can fail or block before node launch.
-    env.update(EFS_MD_RAFT_N='4',EFS_GC_BACKLOG_IDLE_MS='20')
+    env.update(EFS_GC_BACKLOG_IDLE_MS='20')
     for n in a.stop_nodes:
         pidfile=base/('logs/efsd-n%d.pid'%n)
         old=int(pidfile.read_text())

@@ -18,7 +18,7 @@ p.add_argument('--recovery',action='store_true',help='after timing, stop each gr
 a=p.parse_args();assert 10<=a.samples<=1000
 assert 0<=a.outage_seconds<=120 and (not a.outage_seconds or a.recovery)
 a.work.mkdir(parents=True,exist_ok=False)
-env=dict(os.environ,EFS_MD_RAFT_N='4',EFS_TRANSPORT='tcp',EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_READ_PROF='1',EFS_RAFT_OBS='1',EFS_DIRECT_IO='1' if a.mode=='direct' else '0',EFS_METADATA_BALANCE='1' if a.balance else '0')
+env=dict(os.environ,EFS_TRANSPORT='tcp',EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_READ_PROF='1',EFS_RAFT_OBS='1',EFS_DIRECT_IO='1' if a.mode=='direct' else '0',EFS_METADATA_BALANCE='1' if a.balance else '0')
 procs=[];logs=[];mutation_attempts=[];stopped=set();commands=[];configuration=[]
 for port in range(a.port,a.port+4):
  with socket.socket() as s:
@@ -55,6 +55,7 @@ try:
   commands.append(args)
   procs.append(subprocess.Popen(args,env=env,stdout=log,stderr=log))
   wait(lambda:'listening' in (a.work/f'n{node+1}.log').read_text())
+ wait(lambda:'Cluster nodes (4)' in call(0,'status')['text'])  # W153: all four joined
  wait(lambda:any(call(n,'raft-mkfs')['exit']==0 for n in range(4)))
  if a.four_voters:
   for group in (0,2):

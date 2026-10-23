@@ -2,7 +2,7 @@
 """K15 live gate for W52 (REPORT after many O_APPENDs) and W64 (append
 reservation replay across metadata leader changes).
 
-Starts a private three-daemon TCP cluster (EFS_MD_RAFT_N=3) on 127.0.0.1,
+Starts a private three-daemon TCP cluster (three committed members) on 127.0.0.1,
 ports PORT+1..PORT+3, stores under ROOT/n{1,2,3}, mounts one writer client and
 one peer client. WRITERS processes each open one shared file O_APPEND (one
 persistent descriptor each) and write RECORDS/WRITERS unique 4 KiB records,
@@ -158,7 +158,7 @@ class Cluster:
     def __init__(self, a):
         self.a, self.root, self.rel = a, Path(a.root), Path(a.rel)
         self.procs, self.clients = {}, {}
-        self.env = dict(os.environ, EFS_MD_RAFT_N='3', EFS_TRANSPORT='tcp')
+        self.env = dict(os.environ, EFS_TRANSPORT='tcp')
         if a.client_trace:
             self.env['EFS_REPORT_DBG'] = '1'
         (self.root / 'logs').mkdir(parents=True, exist_ok=True)

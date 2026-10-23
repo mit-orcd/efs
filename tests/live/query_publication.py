@@ -31,7 +31,7 @@ for mount in mount_paths:
 io_flag='--direct-io' if args.mode=='direct' else '--no-direct-io'
 work.mkdir(parents=True,exist_ok=False)
 logs=[];procs=[];fuse_procs=[];mounts=[];held_stream=None
-env=dict(os.environ,EFS_MD_RAFT_N='4',EFS_TRANSPORT='tcp')
+env=dict(os.environ,EFS_TRANSPORT='tcp')
 # Publication gates expect a fresh catalog within seconds; production defaults to 60 s.
 env.setdefault('EFS_QUERY_REFRESH_MS','2000')
 if os.environ.get('EFS_QUERY_FUSE')=='1': env['EFS_COMMANDS']='1'
@@ -81,6 +81,8 @@ try:
         procs.append(subprocess.Popen(args,env=env,stdout=log,stderr=log))
         wait_for(lambda: 'listening' in (work/f'n{node}.log').read_text(),10)
     def mkfs():
+        # W153: formation commits the members joined at that moment.
+        if 'Cluster nodes (4)' not in run('status',f'127.0.0.1:{base}').stdout:return False
         for node in range(4):
             result=run('raft-mkfs',f'127.0.0.1:{base+node}')
             print(result.stdout.strip(),flush=True)

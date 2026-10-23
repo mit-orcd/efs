@@ -36,7 +36,7 @@ if [ "$cmd" = run-daemon ]; then
 fi
 REL=$2; D=$3; PORT=${4:-17670}
 # W125_TRANSPORT=tcp runs the same cluster on a host without RDMA.
-export EFS_TRANSPORT=${W125_TRANSPORT:-rdma} EFS_MD_RAFT_N=3
+export EFS_TRANSPORT=${W125_TRANSPORT:-rdma}
 [ "$EFS_TRANSPORT" = tcp ] || export EFS_RDMA_DEV=${EFS_RDMA_DEV:-mlx5_0}
 FUSE_LIBDIR=${FUSE_LIBDIR:-/data1/efs/deps/libfuse/lib64}
 [ -d "$FUSE_LIBDIR" ] && export LD_LIBRARY_PATH=$FUSE_LIBDIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}

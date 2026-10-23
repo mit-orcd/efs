@@ -664,6 +664,10 @@ struct efs_msg_hello_ack {
 #define EFS_HELLO_REJECT_NONE    0
 #define EFS_HELLO_REJECT_FULL    1
 #define EFS_HELLO_REJECT_VERSION 2
+/* W153: the cluster committed its membership and the joiner is not one of
+ * its members (or advertises another endpoint than its committed one).
+ * Adding a node to a formed cluster is node addition (K33/W157). */
+#define EFS_HELLO_REJECT_FORMED  3
 
 struct efs_msg_get_chunk {
     efs_export_id_t export_id;

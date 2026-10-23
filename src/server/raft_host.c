@@ -21,6 +21,7 @@
 #include "efs/dir_spread.h"
 #include "efs/opid.h"
 #include "efs/kv_key.h"
+#include "efs/membership.h"
 #include "efs/txn.h"
 #include "efs/session.h"
 #include "efs/lock.h"
@@ -364,7 +365,13 @@ struct efs_raft_host {
     struct efsd_server *s;
     int raft_id;
     int balance_enabled; /* Opt-in until W66 distribution/failover gates pass. */
+    /* W153: member count. Before formation EFS_FORMATION_MIN (group 0 on
+     * nodes 1..3 is all formation needs); from formation on the committed
+     * membership's count. Changes once, under mu, release-stored after
+     * members and before formed; read with an acquire load. */
     int n;
+    int formed;
+    struct efs_membership members; /* committed at formation; immutable after */
     uint64_t boot_id;
     uint64_t salt;
     /* Per-export MKDIR scatter salt (architecture.md §7.4). Cached after
@@ -749,12 +756,8 @@ static int raft_obs_on(void)
     return v;
 }
 
-/* Unset EFS_MD_RAFT_N keeps the four-node default; deployments set it to
- * the member count (node ids 1..n), 3..EFS_MAX_NODES. */
-#define EFS_MD_RAFT_N_DEFAULT 4
-_Static_assert(EFS_MD_RAFT_N_DEFAULT <= EFS_MAX_NODES, "default metadata N");
-
-/* Default voters: the shared D38 rule (raft.h efs_md_group_voters). */
+/* Default voters: the shared D38 rule (raft.h efs_md_group_voters) over the
+ * committed member count (W153; before formation only group 0 is hosted). */
 static uint32_t group_voters(uint8_t group, int n)
 {
     return efs_md_group_voters(group, n);
@@ -1385,12 +1388,17 @@ static int apply_mkfs_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     uint64_t now, salt = 0;
     int rc;
 
-    if (clen < 9)
+    struct efs_membership m;
+
+    /* W153: [now:8][salt:8][membership record]; the record is mandatory. */
+    if (clen <= 17 || efs_membership_decode(cmd + 17, clen - 17, &m) != EFS_OK)
         return EFS_ERR_UNSUPPORTED;
     now = rd64be(cmd + 1);
-    if (clen >= 17)
-        salt = rd64be(cmd + 9);
+    salt = rd64be(cmd + 9);
     rc = efs_meta_apply_mkfs(h->kv, now, salt);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_membership_record(h->kv, efs_kv_inode_shard(EFS_ROOT_INO),
+                                              cmd + 17, clen - 17, 1);
     if (rc != EFS_OK) {
         fprintf(stderr, "raft-host: apply mkfs rc=%d index=%llu\n",
                 rc, (unsigned long long)index);
@@ -1401,9 +1409,10 @@ static int apply_mkfs_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return EFS_OK;
 }
 
-/* EFS_MD_CMD_SALT: [anchor:4][salt:8]. Carries the export salt to a group
- * that never applies MKFS (the even-shard group), so every node computes
- * the same efs_kv_mkdir_shard placement. */
+/* EFS_MD_CMD_SALT: [anchor:4][salt:8][membership record]. Carries the
+ * export salt to a group that never applies MKFS (the even-shard group), so
+ * every node computes the same efs_kv_mkdir_shard placement, and the
+ * committed formation membership (W153), which must match an existing one. */
 static int apply_salt_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                           uint32_t clen, uint64_t index)
 {
@@ -1411,11 +1420,15 @@ static int apply_salt_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     uint64_t salt;
     int rc;
 
-    if (clen < 13)
+    struct efs_membership m;
+
+    if (clen <= 13 || efs_membership_decode(cmd + 13, clen - 13, &m) != EFS_OK)
         return EFS_ERR_UNSUPPORTED;
     anchor = rd32be(cmd + 1);
     salt = rd64be(cmd + 5);
-    rc = efs_meta_apply_salt_record(h->kv, anchor, salt);
+    rc = efs_meta_apply_membership_record(h->kv, anchor, cmd + 13, clen - 13, 0);
+    if (rc == EFS_OK)
+        rc = efs_meta_apply_salt_record(h->kv, anchor, salt);
     if (rc != EFS_OK) {
         fprintf(stderr, "raft-host: apply salt rc=%d index=%llu\n",
                 rc, (unsigned long long)index);
@@ -4198,12 +4211,12 @@ static int host_fwd_leader_pick(struct efs_raft_host *h, uint8_t group,
         rid = host_local_leader(h, group);
     if (rid < 0)
         rid = __atomic_load_n(&g_fwd_leader[group >> 1], __ATOMIC_RELAXED);
-    if (rid < 0 || rid >= h->n || rid == h->raft_id || rid == skip)
+    if (rid < 0 || rid >= __atomic_load_n(&h->n,__ATOMIC_ACQUIRE) || rid == h->raft_id || rid == skip)
         return -1;
     {
         struct host_group *s = group_slot(h, group);
         uint32_t voters = (s && s->r) ? efs_raft_voters(s->r)
-                          : (s ? s->voters : group_voters(group, h->n));
+                          : (s ? s->voters : group_voters(group, __atomic_load_n(&h->n,__ATOMIC_ACQUIRE)));
         if (!hosts_group(rid, voters))
             return -1;
     }
@@ -4227,7 +4240,7 @@ static int host_pick_peer(struct efs_raft_host *h, const uint8_t *groups, int ng
         if (rid >= 0)
             return rid;
     }
-    for (rid = 0; rid < h->n; rid++) {
+    for (rid = 0; rid < __atomic_load_n(&h->n,__ATOMIC_ACQUIRE); rid++) {
         int ok = 1;
         if (rid == h->raft_id || rid == skip)
             continue;
@@ -4235,7 +4248,7 @@ static int host_pick_peer(struct efs_raft_host *h, const uint8_t *groups, int ng
             struct host_group *s = group_slot(h, groups[i]);
             uint32_t voters = (s && s->r) ? efs_raft_voters(s->r)
                               : (s ? s->voters
-                                 : group_voters(groups[i], h->n));
+                                 : group_voters(groups[i], __atomic_load_n(&h->n,__ATOMIC_ACQUIRE)));
             if (!hosts_group(rid, voters)) {
                 ok = 0;
                 break;
@@ -4254,7 +4267,7 @@ static uint32_t host_route_voters(struct efs_raft_host *h,uint8_t group)
 {
     struct host_group *g=group_slot(h,group);
     struct host_view v;
-    if(!g)return group_voters(group,h->n);
+    if(!g)return group_voters(group,__atomic_load_n(&h->n,__ATOMIC_ACQUIRE));
     host_view_get(h,group,&v);
     if(v.has)return v.voters;
     return __atomic_load_n(&g->voters,__ATOMIC_ACQUIRE);
@@ -4275,7 +4288,7 @@ static int host_leader_cover_pick(struct efs_raft_host *h,uint8_t group,
     struct host_view v;
     host_view_get(h,group,&v);
     int leader=v.has?v.leader:-1;
-    if(leader>=0 && leader<h->n && leader!=h->raft_id) {
+    if(leader>=0 && leader<__atomic_load_n(&h->n,__ATOMIC_ACQUIRE) && leader!=h->raft_id) {
         peer=leader;
         for(int i=0;i<count;i++) {
             if(!hosts_group(leader,host_route_voters(h,need[i]))){peer=-1;break;}
@@ -4928,7 +4941,7 @@ static int host_read_index_admitted(struct efs_raft_host *h, uint8_t group,
                 read_prof_add(&g_read_prof.ri_remote, p1 - p0);
             if (rc == EFS_OK) {
                 rc = host_wait_applied(h, group, ridx, leader_hint);
-                rc = host_follower_read_result(rc,h->raft_id,h->n,rhint,leader_hint);
+                rc = host_follower_read_result(rc,h->raft_id,__atomic_load_n(&h->n,__ATOMIC_ACQUIRE),rhint,leader_hint);
             }
             if (prof)
                 read_prof_add(&g_read_prof.ri_remote_wait, now_us_() - p1);
@@ -5776,7 +5789,7 @@ static void host_inode_forward(struct efs_raft_host *h, uint8_t req_type,
 
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_NOT_PRIMARY;
-    for (tries = 0; tries < h->n; tries++) {
+    for (tries = 0; tries < __atomic_load_n(&h->n,__ATOMIC_ACQUIRE); tries++) {
         rid = host_pick_peer(h, groups, ng, skip);
         if (rid < 0)
             return;
@@ -6003,7 +6016,7 @@ static void host_fwd_lookup_path(struct efs_raft_host *h, efs_ino_t start,
         strncpy(req.path, path, sizeof(req.path) - 1);
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_NOT_PRIMARY;
-    for (tries = 0; tries < h->n; tries++) {
+    for (tries = 0; tries < __atomic_load_n(&h->n,__ATOMIC_ACQUIRE); tries++) {
         rid = host_pick_peer(h, groups, ng, skip);
         if (rid < 0)
             return;
@@ -6037,7 +6050,7 @@ static void host_fwd_readdir(struct efs_raft_host *h, efs_ino_t parent,
         strncpy(req.after_name, after_name, EFS_MAX_NAME - 1);
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_NOT_PRIMARY;
-    for (tries = 0; tries < h->n; tries++) {
+    for (tries = 0; tries < __atomic_load_n(&h->n,__ATOMIC_ACQUIRE); tries++) {
         rid = host_pick_peer(h, groups, ng, skip);
         if (rid < 0)
             return;
@@ -6119,7 +6132,7 @@ static void host_fwd_getchunks(struct efs_raft_host *h, efs_export_id_t export_i
     req.generation = generation;
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_NOT_PRIMARY;
-    for (tries = 0; tries < h->n; tries++) {
+    for (tries = 0; tries < __atomic_load_n(&h->n,__ATOMIC_ACQUIRE); tries++) {
         rid = host_pick_peer(h, groups, ng, skip);
         if (rid < 0)
             return;
@@ -6200,7 +6213,7 @@ static void host_fwd_report(struct efs_raft_host *h,
     }
     if (session) efs_report_session_pack(p, session);
     out->status = EFS_INODE_RPC_NOT_PRIMARY;
-    for (tries = 0; tries < h->n; tries++) {
+    for (tries = 0; tries < __atomic_load_n(&h->n,__ATOMIC_ACQUIRE); tries++) {
         rid = host_pick_peer(h, groups, ng, skip);
         if (rid < 0)
             break;
@@ -8186,52 +8199,6 @@ static void *host_pump(void *arg)
     return NULL;
 }
 
-static uint64_t make_boot_id(void)
-{
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    return ((uint64_t)getpid() << 32) ^
-           ((uint64_t)ts.tv_sec << 16) ^ (uint64_t)ts.tv_nsec;
-}
-
-/* Boot ids fence stale incarnations (raft.c peer_boot): a peer drops any
- * message whose boot is LOWER than the last one it saw from us. pid^time is
- * NOT monotonic across restarts, so an unfenced restart could pick a lower
- * boot and be silently fenced forever (replies dropped, replication wedges).
- * Persist the last used boot in <mdraft>/boot.bin and always start at
- * max(fresh, saved+1), writing the chosen value back before use. */
-static int host_boot_bump(const char *dir, uint64_t *boot_io)
-{
-    char path[EFS_MAX_PATH];
-    uint64_t saved = 0, next;
-    ssize_t n;
-    int fd;
-
-    snprintf(path, sizeof(path), "%s/boot.bin", dir);
-    fd = open(path, O_RDWR | O_CREAT, 0644);
-    if (fd < 0)
-        return EFS_ERR_IO;
-    n = read(fd, &saved, sizeof(saved));
-    if (n < 0) {
-        close(fd);
-        return EFS_ERR_IO;
-    }
-    if (n < (ssize_t)sizeof(saved))
-        saved = 0; /* fresh file */
-    next = *boot_io;
-    if (saved >= next)
-        next = saved + 1;
-    if (lseek(fd, 0, SEEK_SET) < 0 ||
-        write(fd, &next, sizeof(next)) != (ssize_t)sizeof(next) ||
-        fsync(fd) != 0) {
-        close(fd);
-        return EFS_ERR_IO;
-    }
-    close(fd);
-    *boot_io = next;
-    return EFS_OK;
-}
-
 static uint64_t make_salt(uint64_t boot)
 {
     uint64_t s = 0;
@@ -8319,7 +8286,7 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
         return EFS_ERR_IO;
     memset(&cfg, 0, sizeof(cfg));
     cfg.id = h->raft_id;
-    cfg.n = h->n;
+    cfg.n = __atomic_load_n(&h->n,__ATOMIC_ACQUIRE);
     cfg.voters = cfg_voters;
     cfg.election_ticks = HOST_ELECT_BASE;
     cfg.heartbeat_ticks = HOST_HB_TICKS;
@@ -8379,7 +8346,7 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
 
 static int attach_group(struct efs_raft_host *h, int gi, uint8_t group)
 {
-    uint32_t boot = group_voters(group, h->n);
+    uint32_t boot = group_voters(group, __atomic_load_n(&h->n,__ATOMIC_ACQUIRE));
     uint32_t want;
 
     h->g[gi].group = group;
@@ -8398,6 +8365,13 @@ static int attach_group(struct efs_raft_host *h, int gi, uint8_t group)
      * is never a log entry, so no waiter can match a cleared slot. */
     for (int s = 0; s < HOST_APPLY_RC_RING; s++)
         efs_arc_store(&h->g[gi].arc[s], 0, 0, 0, 0, 0);
+    /* W153: before formation the member count is unknown, so group 2 has
+     * no voters and nothing is hosted; host_learn_membership attaches it. */
+    if (group != EFS_RAFT_GROUP_SHARD && !__atomic_load_n(&h->formed, __ATOMIC_ACQUIRE)) {
+        __atomic_store_n(&h->g[gi].voters, 0, __ATOMIC_RELEASE);
+        h->g[gi].desired = 0;
+        return EFS_OK;
+    }
     want = load_desired(h, group, boot);
     h->g[gi].desired = want;
     if (!hosts_group(h->raft_id, boot) && !hosts_group(h->raft_id, want))
@@ -8415,7 +8389,7 @@ static void host_cfg_fan_note(struct efs_raft_host *h, uint8_t group,
     cmd[0] = EFS_MD_CMD_CFG;
     cmd[1] = EFS_MD_CFG_NOTE;
     wr32be(cmd + 2, voters);
-    for (rid = 0; rid < h->n; rid++) {
+    for (rid = 0; rid < __atomic_load_n(&h->n,__ATOMIC_ACQUIRE); rid++) {
         if (rid == h->raft_id)
             continue;
         memset(&rep, 0, sizeof(rep));
@@ -8440,6 +8414,8 @@ static int host_cfg(struct efs_raft_host *h, uint8_t group,
     if (clen < HOST_CFG_LEN ||
         (group != EFS_RAFT_GROUP_SHARD && group != EFS_RAFT_GROUP_SHARD2))
         return EFS_ERR_INVAL;
+    if (!__atomic_load_n(&h->formed, __ATOMIC_ACQUIRE))
+        return EFS_ERR_UNFORMED;
     sub = cmd[1];
     voters = rd32be(cmd + 2);
     if (!efs_raft_voters_valid(voters))
@@ -8454,7 +8430,7 @@ static int host_cfg(struct efs_raft_host *h, uint8_t group,
     if (s)
         s->desired = voters;
     if (s && !s->r && hosts_group(h->raft_id, voters))
-        rc = attach_replica(h, (int)(s - h->g), group_voters(group, h->n));
+        rc = attach_replica(h, (int)(s - h->g), group_voters(group, __atomic_load_n(&h->n,__ATOMIC_ACQUIRE)));
     pthread_mutex_unlock(&h->mu);
     if (rc != EFS_OK)
         return rc;
@@ -8482,6 +8458,118 @@ static int host_cfg(struct efs_raft_host *h, uint8_t group,
     if (hint && rep.leader_hint >= 0)
         *hint = rep.leader_hint;
     return rc;
+}
+
+/* W153: install the committed formation membership on this node. It is
+ * persisted in the member store (fsync) before anything acts on it; then
+ * the count, the voters derived from it and the formed flag are published,
+ * group 2 is attached where this node is one of its voters, and non-members
+ * leave the HELLO table. The same record again is OK; a different one, or
+ * one in which this node is not the member at its endpoint, is FENCED and
+ * changes nothing. */
+static int host_learn_membership(struct efs_raft_host *h, const struct efs_membership *m)
+{
+    const struct efs_member *self;
+    struct host_group *g2;
+    char err[512];
+    uint32_t boot, want;
+    int rc = EFS_OK;
+
+    if (!efs_membership_valid(m))
+        return EFS_ERR_INVAL;
+    pthread_mutex_lock(&h->mu);
+    if (__atomic_load_n(&h->formed, __ATOMIC_ACQUIRE)) {
+        rc = efs_membership_equal(&h->members, m) ? EFS_OK : EFS_ERR_FENCED;
+        pthread_mutex_unlock(&h->mu);
+        if (rc != EFS_OK)
+            fprintf(stderr, "raft-host: formation record of %u members conflicts with the "
+                    "committed membership of %u members; refused\n", m->count, h->members.count);
+        return rc;
+    }
+    self = efs_membership_find(m, h->s->id);
+    if (!self || self->port != h->s->port || strcmp(self->addr, h->s->addr)) {
+        pthread_mutex_unlock(&h->mu);
+        fprintf(stderr, "raft-host: formation record of %u members does not hold node %u at "
+                "%s:%u; refused\n", m->count, h->s->id, h->s->addr, h->s->port);
+        return EFS_ERR_FENCED;
+    }
+    rc = member_store_learn(&h->s->mstore, m, err, sizeof(err));
+    if (rc != EFS_OK) {
+        pthread_mutex_unlock(&h->mu);
+        fprintf(stderr, "raft-host: formation not persisted: %s\n", err);
+        return rc;
+    }
+    h->members = *m;
+    __atomic_store_n(&h->n, (int)m->count, __ATOMIC_RELEASE);
+    __atomic_store_n(&h->formed, 1, __ATOMIC_RELEASE);
+    g2 = &h->g[1];
+    boot = group_voters(EFS_RAFT_GROUP_SHARD2, (int)m->count);
+    want = load_desired(h, EFS_RAFT_GROUP_SHARD2, boot);
+    g2->desired = want;
+    __atomic_store_n(&g2->voters, boot, __ATOMIC_RELEASE);
+    if (!g2->r && (hosts_group(h->raft_id, boot) || hosts_group(h->raft_id, want)))
+        rc = attach_replica(h, 1, boot);
+    pthread_mutex_unlock(&h->mu);
+    server_nodes_keep_members(h->s, m);
+    fprintf(stderr, "raft-host: formed: %u members, g0 voters 0x%x, g2 voters 0x%x, g2 %s\n",
+            m->count, group_voters(EFS_RAFT_GROUP_SHARD, (int)m->count), boot,
+            __atomic_load_n(&g2->hosted, __ATOMIC_ACQUIRE) ? "hosted" : "off");
+    if (rc != EFS_OK)
+        fprintf(stderr, "raft-host: group-2 attach after formation failed rc=%d\n", rc);
+    host_pump_kick(h);
+    return rc;
+}
+
+/* W153 restart: a committed record in this node's KV (group 0's on the root
+ * anchor, group 2's on its anchor) must equal the member store's; a store
+ * that applied MKFS or SALT but stopped before recording the formation
+ * notice learns the record from its own KV. A malformed record stops. */
+static int host_membership_reconcile(struct efs_raft_host *h)
+{
+    const uint32_t anchors[2] = {efs_kv_inode_shard(EFS_ROOT_INO), efs_kv_anchor_shard(2)};
+    uint8_t rec[EFS_MEMBERSHIP_MAX_LEN];
+    struct efs_membership m;
+    char err[512];
+
+    for (int i = 0; i < 2; i++) {
+        uint32_t len = 0;
+        int rc = efs_meta_membership_get(h->kv, anchors[i], rec, sizeof(rec), &len);
+        if (rc == EFS_ERR_NOT_FOUND)
+            continue;
+        if (rc == EFS_OK)
+            rc = efs_membership_decode(rec, len, &m);
+        if (rc != EFS_OK) {
+            fprintf(stderr, "raft-host: committed membership record on anchor %u is unreadable "
+                    "or malformed (rc=%d); refusing to start\n", anchors[i], rc);
+            return rc == EFS_ERR_UNSUPPORTED ? rc : EFS_ERR_DECODE;
+        }
+        if (h->formed) {
+            if (!efs_membership_equal(&h->members, &m)) {
+                fprintf(stderr, "raft-host: committed membership on anchor %u (%u members) "
+                        "differs from the member store's (%u members); refusing to start\n",
+                        anchors[i], m.count, h->members.count);
+                return EFS_ERR_FENCED;
+            }
+            continue;
+        }
+        const struct efs_member *self = efs_membership_find(&m, h->s->id);
+        if (!self || self->port != h->s->port || strcmp(self->addr, h->s->addr)) {
+            fprintf(stderr, "raft-host: committed membership does not hold node %u at %s:%u; "
+                    "refusing to start\n", h->s->id, h->s->addr, h->s->port);
+            return EFS_ERR_FENCED;
+        }
+        rc = member_store_learn(&h->s->mstore, &m, err, sizeof(err));
+        if (rc != EFS_OK) {
+            fprintf(stderr, "raft-host: %s\n", err);
+            return rc;
+        }
+        h->members = m;
+        h->n = (int)m.count;
+        h->formed = 1;
+        fprintf(stderr, "raft-host: formation learned from the committed record (%u members)\n",
+                m.count);
+    }
+    return EFS_OK;
 }
 
 /* ---- background GC reaper (step-11 follow-up, spec L7) ----
@@ -8646,20 +8734,18 @@ static void host_gc_inode_nodes_batch(struct efs_raft_host *h, const efs_ino_t *
     uint32_t count;
     for (uint32_t i = 0; i < n; i++) ok[i] = 0;
     if (!n || !nodes) return;
-    pthread_mutex_lock(&h->s->lock);
-    count = h->s->node_count;
-    memcpy(nodes, h->s->nodes, count * sizeof(nodes[0]));
-    pthread_mutex_unlock(&h->s->lock);
-    uint32_t present = 0;
-    for (uint32_t i = 0; i < count; i++) {
-        if (!nodes[i].id || nodes[i].id > (uint32_t)h->n) return;
-        present |= 1u << (nodes[i].id - 1);
-    }
-    if (present != ((1u << h->n) - 1u)) {
+    /* W153: every member of the committed membership, never the HELLO
+     * table; before formation there is no membership to prove anything. */
+    if (!__atomic_load_n(&h->formed, __ATOMIC_ACQUIRE)) {
         if (env_on("EFS_GC_DBG"))
-            fprintf(stderr, "raft-host: gc reclaim batch refused: members=%u present=%x n=%d\n",
-                    count, present, h->n);
+            fprintf(stderr, "raft-host: gc reclaim batch refused: cluster not formed\n");
         return;
+    }
+    count = h->members.count;
+    for (uint32_t i = 0; i < count; i++) {
+        nodes[i].id = h->members.m[i].id;
+        snprintf(nodes[i].addr, sizeof(nodes[i].addr), "%s", h->members.m[i].addr);
+        nodes[i].port = h->members.m[i].port;
     }
     size_t req_len = sizeof(struct efs_msg_gc_inode_batch) + (size_t)n * 16u;
     struct efs_msg_gc_inode_batch *req = calloc(1, req_len);
@@ -12388,8 +12474,8 @@ int server_raft_host_start(struct efsd_server *s)
 {
     struct efs_raft_host *h;
     char dir[EFS_MAX_PATH];
-    const char *ns;
-    int n = EFS_MD_RAFT_N_DEFAULT;
+    int n = EFS_FORMATION_MIN;
+    int formed = s && s->mstore.state == EFS_MEMBER_FORMED;
     int rc;
 
     /* The Raft+KV engine is the only metadata path, so the host always
@@ -12417,17 +12503,15 @@ int server_raft_host_start(struct efsd_server *s)
         fprintf(stderr,"raft-host: EFS_RAFT_APPLIED_INTERVAL_MS must be 10..1000\n");
         return EFS_ERR_INVAL;
     }
-    ns = getenv("EFS_MD_RAFT_N");
-    if (ns && ns[0]) {
-        n = atoi(ns);
-        if (n < 3 || n > EFS_MAX_NODES) {
-            fprintf(stderr, "raft-host: EFS_MD_RAFT_N must be 3..%d\n",
-                    EFS_MAX_NODES);
-            return EFS_ERR_INVAL;
-        }
-    }
-    if (s->id < 1 || (int)s->id > n) {
-        fprintf(stderr, "raft-host: node-id %u out of 1..%d\n", s->id, n);
+    /* W153: the member count and both groups' voters come from the
+     * membership committed at formation (the member store), never from the
+     * environment or the HELLO table. Unformed: group 0 on nodes 1..3. */
+    if (formed)
+        n = (int)s->mstore.members.count;
+    if (s->id < 1 || s->id > EFS_MAX_NODES ||
+        (formed && !efs_membership_find(&s->mstore.members, s->id))) {
+        fprintf(stderr, "raft-host: node-id %u is not a member (%s, %d members)\n", s->id,
+                formed ? "committed membership" : "unformed", formed ? n : 0);
         return EFS_ERR_INVAL;
     }
 
@@ -12447,7 +12531,11 @@ int server_raft_host_start(struct efsd_server *s)
     h->expiry_enabled=expiry_enabled;h->expiry_peer_skip=-1;
     h->raft_id = (int)s->id - 1;
     h->n = n;
-    h->boot_id = make_boot_id();
+    h->formed = formed;
+    if (formed)
+        h->members = s->mstore.members;
+    /* The store's durable boot counter, advanced at this start (efsd.c). */
+    h->boot_id = s->incarnation;
     h->salt = make_salt(h->boot_id);
     pthread_mutex_init(&h->mu, NULL);
     pthread_mutex_init(&h->snap_mu, NULL);
@@ -12501,12 +12589,6 @@ int server_raft_host_start(struct efsd_server *s)
         return EFS_ERR_IO;
     }
     host_snap_drop_parts(h);
-    rc = host_boot_bump(dir, &h->boot_id);
-    if (rc != EFS_OK) {
-        fprintf(stderr, "raft-host: boot persist %s failed\n", dir);
-        free(h);
-        return rc;
-    }
     {
         char kvdir[EFS_MAX_PATH], logdir[EFS_MAX_PATH];
         struct efs_kv_lsm_cfg kcfg;
@@ -12532,7 +12614,9 @@ int server_raft_host_start(struct efsd_server *s)
             return EFS_ERR_IO;
         }
     }
-    rc = attach_group(h, 0, EFS_RAFT_GROUP_SHARD);
+    rc = host_membership_reconcile(h);
+    if (rc == EFS_OK)
+        rc = attach_group(h, 0, EFS_RAFT_GROUP_SHARD);
     if (rc == EFS_OK)
         rc = attach_group(h, 1, EFS_RAFT_GROUP_SHARD2);
     if (rc != EFS_OK) {
@@ -12597,9 +12681,10 @@ int server_raft_host_start(struct efsd_server *s)
         h->fin_started = 1;
     }
     fprintf(stderr,
-            "raft-host: up raft_id=%d n=%d boot=%llu salt=%llu "
+            "raft-host: up raft_id=%d n=%d %s boot=%llu salt=%llu "
             "g0=%s g2=%s\n",
-            h->raft_id, h->n,
+            h->raft_id, __atomic_load_n(&h->n,__ATOMIC_ACQUIRE),
+            h->formed ? "formed" : "unformed (formation: efs-mgmt raft-mkfs)",
             (unsigned long long)h->boot_id,
             (unsigned long long)h->salt,
             h->g[0].hosted ? "hosted" : "off",
@@ -12813,12 +12898,95 @@ busy:
     return EFS_ERR_BUSY;
 }
 
+/* W153: after MKFS committed, this node's own KV must show the committed
+ * salt and membership (group 0's root anchor). A forwarded proposal returns
+ * once the leader applied it, so a follower may lag: wait a bounded time.
+ * A node that does not host group 0 cannot read them and answers BUSY. */
+static int host_mkfs_committed(struct efs_raft_host *h, struct efs_membership *m,
+                               uint64_t *salt)
+{
+    uint8_t rec[EFS_MEMBERSHIP_MAX_LEN];
+    uint32_t len = 0;
+    int rc = EFS_ERR_NOT_FOUND;
+
+    if (!hosts_group(h->raft_id, __atomic_load_n(&h->g[0].voters, __ATOMIC_ACQUIRE))) {
+        fprintf(stderr, "raft-host: raft-mkfs: MKFS committed but this node hosts no group-0 "
+                "replica to read it back; retry on node 1, 2 or 3\n");
+        return EFS_ERR_BUSY;
+    }
+    for (int tries = 0; tries < 250; tries++) {
+        rc = efs_meta_membership_get(h->kv, efs_kv_inode_shard(EFS_ROOT_INO), rec,
+                                     sizeof(rec), &len);
+        if (rc == EFS_OK)
+            rc = efs_meta_apply_export_salt(h->kv, salt);
+        if (rc != EFS_ERR_NOT_FOUND)
+            break;
+        usleep(20000);
+    }
+    if (rc == EFS_ERR_NOT_FOUND) {
+        fprintf(stderr, "raft-host: raft-mkfs: MKFS committed but not applied here yet; retry\n");
+        return EFS_ERR_BUSY;
+    }
+    if (rc == EFS_OK && efs_membership_decode(rec, len, m) != EFS_OK) {
+        fprintf(stderr, "raft-host: raft-mkfs: committed membership record is malformed\n");
+        return EFS_ERR_DECODE;
+    }
+    return rc;
+}
+
+/* W153: tell every member the committed membership (EFS_MD_REQ_FORMED),
+ * this node first. A member that does not record it serves no metadata;
+ * it is named, and a retried raft-mkfs repeats the notice. */
+static int host_formation_notify(struct efs_raft_host *h, const struct efs_membership *m)
+{
+    uint8_t cmd[1 + EFS_MEMBERSHIP_MAX_LEN];
+    char missed[1024] = "";
+    size_t rlen = 0, ml = 0;
+    int rc;
+
+    cmd[0] = EFS_MD_REQ_FORMED;
+    rc = efs_membership_encode(m, cmd + 1, sizeof(cmd) - 1, &rlen);
+    if (rc == EFS_OK)
+        rc = host_learn_membership(h, m);
+    if (rc != EFS_OK)
+        return rc;
+    for (uint32_t i = 0; i < m->count; i++) {
+        const struct efs_member *p = &m->m[i];
+        struct efs_msg_raft_mkfs_reply rep;
+        if (p->id == h->s->id)
+            continue;
+        int r = host_rpc_submit(h, (int)p->id - 1, EFS_RAFT_GROUP_SHARD, cmd,
+                                (uint32_t)(1 + rlen), &rep, 5000);
+        if (r == EFS_OK)
+            r = rep.rc;
+        if (r != EFS_OK && ml < sizeof(missed))
+            ml += (size_t)snprintf(missed + ml, sizeof(missed) - ml, "%snode %u at %s:%u "
+                                   "(rc=%d)", ml ? ", " : "", p->id, p->addr, p->port, r);
+    }
+    if (!ml)
+        return EFS_OK;
+    fprintf(stderr, "raft-host: raft-mkfs: membership committed, but these members did not "
+            "record it: %s; they serve no metadata until they do; retry raft-mkfs\n", missed);
+    return EFS_ERR_NET;
+}
+
+/* Formation (W153). The first raft-mkfs commits, alongside the export salt,
+ * the membership that has joined at this moment: MKFS on group 0, then every
+ * member records it and attaches group 2 where it votes, then SALT on group
+ * 2. Fewer than EFS_FORMATION_MIN members, a gap in node ids 1..n or a
+ * shared endpoint is refused before anything is proposed. A repeated mkfs
+ * keeps the first committed membership and salt (W37) and repeats the
+ * notice and SALT, so it also finishes an interrupted formation. */
 void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out)
 {
     struct efs_raft_host *h = g_host;
     struct efs_raft *r;
-    uint8_t cmd[17];
-    uint8_t scmd[13];
+    struct efs_membership want, committed;
+    uint8_t cmd[17 + EFS_MEMBERSHIP_MAX_LEN];
+    uint8_t scmd[13 + EFS_MEMBERSHIP_MAX_LEN];
+    char err[1024];
+    size_t rlen = 0;
+    uint64_t salt = 0;
     int hint = -1;
     int rc;
 
@@ -12829,46 +12997,65 @@ void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out)
         return;
     }
     out->salt = h->salt;
+    if (__atomic_load_n(&h->formed, __ATOMIC_ACQUIRE)) {
+        want = h->members;
+    } else {
+        EFS_NODE_TABLE(nodes);
+        uint32_t count;
+        if (!nodes) {
+            out->rc = EFS_ERR_NOMEM;
+            return;
+        }
+        pthread_mutex_lock(&h->s->lock);
+        count = h->s->node_count > EFS_MAX_NODES ? EFS_MAX_NODES : h->s->node_count;
+        memcpy(nodes, h->s->nodes, count * sizeof(nodes[0]));
+        pthread_mutex_unlock(&h->s->lock);
+        rc = efs_membership_from_nodes(nodes, count, &want, err, sizeof(err));
+        if (rc != EFS_OK) {
+            fprintf(stderr, "raft-host: raft-mkfs refused: %s\n", err);
+            out->rc = rc;
+            return;
+        }
+    }
     cmd[0] = EFS_MD_CMD_MKFS;
     wr64be(cmd + 1, now_ns());
     wr64be(cmd + 9, h->salt);
-    /* Wait for the group-0 commit, then replicate the salt to the
-     * even-shard group (EFS_MD_CMD_SALT anchored on shard 2): every MKDIR
-     * scatters via efs_kv_mkdir_shard(parent, name, salt) on EVERY group,
-     * and a node hosting only group 2 never applies MKFS — without this
-     * record its salt read returned 0 and its placement diverged (apply
-     * PROTO skip -> missing rows -> later EIO). mkfs only returns OK once
-     * both groups carry the salt. */
-    rc = host_propose_wait(h, EFS_RAFT_GROUP_SHARD, cmd, 17, &hint);
+    rc = efs_membership_encode(&want, cmd + 17, EFS_MEMBERSHIP_MAX_LEN, &rlen);
+    if (rc == EFS_OK)
+        rc = host_propose_wait(h, EFS_RAFT_GROUP_SHARD, cmd, (uint32_t)(17 + rlen), &hint);
     if (rc == EFS_OK) {
         /* W37: the SALT step carries the salt the COMMITTED MKFS recorded,
-         * never this node's own. `efs_meta_apply_mkfs` on an existing root
-         * is a no-op that keeps the first salt, so a retry of mkfs from a
-         * second node used to commit MKFS "fine" and then replicate ITS
-         * salt to group 2 — `efs_meta_apply_salt_record` PROTO on every
-         * group-2 apply, only a wipe recovers (Oct 1). Read the record
-         * back (root shard's export key; group 2's anchor if this node
-         * holds only that); a node that holds neither cannot know the
-         * salt and answers BUSY — retry on a group-0 node. */
-        uint64_t committed = 0;
-        int src = efs_meta_apply_export_salt(h->kv, &committed);
-        if (src != EFS_OK) {
-            fprintf(stderr, "raft-host: raft-mkfs: MKFS committed but this "
-                    "node holds no salt record (rc=%d); retry on a group-0 "
-                    "node\n", src);
-            rc = EFS_ERR_BUSY;
-        } else if (committed != h->salt) {
+         * never this node's own: `efs_meta_apply_mkfs` on an existing root
+         * keeps the first salt, and SALT on group 2 must match the anchor's
+         * record. W153: the same for the membership. */
+        rc = host_mkfs_committed(h, &committed, &salt);
+    }
+    if (rc == EFS_OK) {
+        if (salt != h->salt) {
             fprintf(stderr, "raft-host: raft-mkfs: table exists with salt %llu; "
                     "own salt %llu not used (mkfs once, on one node)\n",
-                    (unsigned long long)committed, (unsigned long long)h->salt);
-            h->salt = committed;
+                    (unsigned long long)salt, (unsigned long long)h->salt);
+            h->salt = salt;
         }
+        if (!efs_membership_equal(&want, &committed))
+            fprintf(stderr, "raft-host: raft-mkfs: the cluster formed earlier with %u members; "
+                    "this request's %u members not used\n", committed.count, want.count);
+        rc = host_formation_notify(h, &committed);
     }
     if (rc == EFS_OK) {
         scmd[0] = EFS_MD_CMD_SALT;
         wr32be(scmd + 1, efs_kv_anchor_shard(2));
         wr64be(scmd + 5, h->salt);
-        rc = host_propose_wait(h, EFS_RAFT_GROUP_SHARD2, scmd, 13, &hint);
+        rc = efs_membership_encode(&committed, scmd + 13, EFS_MEMBERSHIP_MAX_LEN, &rlen);
+        /* Group 2 was attached by the notice just now: allow its first
+         * election before giving up. */
+        for (int tries = 0; rc == EFS_OK && tries < 200; tries++) {
+            rc = host_propose_wait(h, EFS_RAFT_GROUP_SHARD2, scmd, (uint32_t)(13 + rlen), &hint);
+            if (rc != EFS_ERR_NOT_PRIMARY && rc != EFS_ERR_BUSY && rc != EFS_ERR_NO_QUORUM &&
+                rc != EFS_ERR_AGAIN && rc != EFS_ERR_NET)
+                break;
+            usleep(50000);
+        }
     }
     out->salt = h->salt;
     pthread_mutex_lock(&h->mu);
@@ -13152,6 +13339,20 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
      * log (W140); RPC-only requests answer above that gate. */
     if(clen && EFS_MD_CMD_IS_RESERVED(cmd[0])) {
         out->rc=EFS_ERR_PROTO;return;
+    }
+    /* W153: the formation notice, and before formation nothing but the
+     * group-0 MKFS a raft-mkfs forwards to the group-0 leader. */
+    if (clen && cmd[0] == EFS_MD_REQ_FORMED) {
+        struct efs_membership m;
+        out->rc = efs_membership_decode(cmd + 1, clen - 1, &m);
+        if (out->rc == EFS_OK)
+            out->rc = host_learn_membership(h, &m);
+        return;
+    }
+    if (!__atomic_load_n(&h->formed, __ATOMIC_ACQUIRE) &&
+        !(clen && cmd[0] == EFS_MD_CMD_MKFS && group == EFS_RAFT_GROUP_SHARD)) {
+        out->rc = EFS_ERR_UNFORMED;
+        return;
     }
     if(clen && (cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK || cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK_RESET)) {
         if(clen!=(cmd[0]==EFS_MD_REQ_EXPIRY_CLOCK?1u:5u)) {out->rc=EFS_ERR_INVAL;return;}
@@ -13691,7 +13892,7 @@ void server_raft_host_status(struct efs_msg_raft_status_reply *out)
                 gs->capacity_stepdowns = lp.capacity_stepdowns;
             }
             gs->resync_pending = efs_raft_resync_pending(h->g[i].r) ? 1u : 0u;
-            gs->npeers = h->n < EFS_RAFT_STATUS_PEERS ? (uint32_t)h->n :
+            gs->npeers = __atomic_load_n(&h->n,__ATOMIC_ACQUIRE) < EFS_RAFT_STATUS_PEERS ? (uint32_t)__atomic_load_n(&h->n,__ATOMIC_ACQUIRE) :
                          EFS_RAFT_STATUS_PEERS;
             for (uint32_t p = 0; p < gs->npeers; p++) {
                 struct efs_raft_peer_progress pp;
@@ -13801,6 +14002,52 @@ int server_raft_host_active(void)
 {
     struct efs_raft_host *h = g_host;
     return h && h->running;
+}
+
+/* W153: the committed membership, or NULL before formation. Before the
+ * host starts, the member store loaded by efsd.c (nothing changes it until
+ * the host runs); afterwards the host's copy, immutable once formed. */
+static const struct efs_membership *committed_membership(void)
+{
+    struct efs_raft_host *h = g_host;
+    if (h)
+        return __atomic_load_n(&h->formed, __ATOMIC_ACQUIRE) ? &h->members : NULL;
+    return g_server && g_server->mstore.state == EFS_MEMBER_FORMED ? &g_server->mstore.members
+                                                                     : NULL;
+}
+
+int server_raft_host_formed(void)
+{
+    return committed_membership() != NULL;
+}
+
+int server_member_check(efs_node_id_t id, const char *addr, uint16_t port, uint32_t *count)
+{
+    const struct efs_membership *m = committed_membership();
+    const struct efs_member *p;
+
+    if (count)
+        *count = m ? m->count : 0;
+    if (!m)
+        return EFS_OK;
+    p = efs_membership_find(m, id);
+    return p && p->port == port && addr && !strcmp(p->addr, addr) ? EFS_OK : EFS_ERR_FENCED;
+}
+
+uint32_t server_member_filter(struct efs_node *nodes, uint32_t count)
+{
+    const struct efs_membership *m = committed_membership();
+    uint32_t kept = 0;
+
+    if (!m)
+        return count;
+    for (uint32_t i = 0; i < count; i++)
+        if (efs_membership_find(m, nodes[i].id)) {
+            if (kept != i)
+                nodes[kept] = nodes[i];
+            kept++;
+        }
+    return kept;
 }
 
 /* W124 fail-closed recovery: *dead = 1 only on proof that ino was deleted.
@@ -15177,7 +15424,7 @@ static void host_retained_create_forward(struct efs_raft_host *h,
 {
     int skip=-1;
     out->rpc.status=EFS_INODE_RPC_NOT_PRIMARY;
-    for(int attempt=0;attempt<h->n;attempt++) {
+    for(int attempt=0;attempt<__atomic_load_n(&h->n,__ATOMIC_ACQUIRE);attempt++) {
         int peer=host_pick_peer(h,groups,ng,skip);
         if(peer<0)return;
         if(host_inode_rpc_peer(h,peer,EFS_MSG_CREATE_RETAINED,request,
@@ -17205,7 +17452,7 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
 static int host_namespace_leader_hint(struct efs_raft_host *h,uint8_t group)
 {
     int rid=host_local_leader(h,group);
-    if (rid<0 || rid>=h->n || rid==h->raft_id) return -1;
+    if (rid<0 || rid>=__atomic_load_n(&h->n,__ATOMIC_ACQUIRE) || rid==h->raft_id) return -1;
     /* W144: every LOOKUP/GETATTR on a group follower asks this, so read the
      * committed voters from the published view (host_route_voters), not
      * under h->mu: 22% of a split leader's lock waits on orcd-mini. A hint
@@ -21354,7 +21601,7 @@ void server_raft_host_publication(const struct efs_msg_publication *req, int que
     uint8_t group=efs_raft_shard_group(shard);
     if(!host_hosts(h,group)) {
         int skip=-1;out->rpc.status=EFS_INODE_RPC_NOT_PRIMARY;
-        for(int tries=0;tries<h->n;tries++) {
+        for(int tries=0;tries<__atomic_load_n(&h->n,__ATOMIC_ACQUIRE);tries++) {
             int rid=host_pick_peer(h,&group,1,skip);if(rid<0)return;
             if(host_inode_rpc_peer(h,rid,query_only==2?EFS_MSG_PUBLICATION_RETIRE:query_only?EFS_MSG_PUBLICATION_STATUS:EFS_MSG_PUBLICATION,
                req,sizeof(*req),query_only==2?EFS_MSG_PUBLICATION_RETIRE_REPLY:query_only?EFS_MSG_PUBLICATION_STATUS_REPLY:EFS_MSG_PUBLICATION_REPLY,
@@ -21459,7 +21706,7 @@ void server_raft_host_lane_bootstrap_rpc(const struct efs_msg_lane_bootstrap *re
     if (!host_hosts(h, groups[0]) || !host_hosts(h, groups[ng - 1])) {
         int skip = -1;
         out->view.status = EFS_INODE_RPC_NOT_PRIMARY;
-        for (int i = 0; i < h->n; ++i) {
+        for (int i = 0; i < __atomic_load_n(&h->n,__ATOMIC_ACQUIRE); ++i) {
             int rid = host_pick_peer(h, groups, ng, skip);
             if (rid < 0)
                 return;
@@ -21519,7 +21766,7 @@ void server_raft_host_lane_writer_view(const struct efs_msg_lane_writer_view *re
     if (!host_hosts(h, group)) {
         int skip = -1;
         out->view.status = EFS_INODE_RPC_NOT_PRIMARY;
-        for (int tries = 0; tries < h->n; ++tries) {
+        for (int tries = 0; tries < __atomic_load_n(&h->n,__ATOMIC_ACQUIRE); ++tries) {
             int rid = host_pick_peer(h, &group, 1, skip);
             if (rid < 0)
                 return;
@@ -21567,7 +21814,7 @@ void server_raft_host_writer_view_reuse(const struct efs_msg_inode_writer_view *
     if (!host_hosts(h, groups[0]) || !host_hosts(h, groups[ng - 1])) {
         int skip = -1;
         out->status = EFS_INODE_RPC_NOT_PRIMARY;
-        for (int tries = 0; tries < h->n; ++tries) {
+        for (int tries = 0; tries < __atomic_load_n(&h->n,__ATOMIC_ACQUIRE); ++tries) {
             int rid = host_pick_peer(h, groups, ng, skip);
             if (rid < 0)
                 return;

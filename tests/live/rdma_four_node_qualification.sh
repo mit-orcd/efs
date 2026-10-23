@@ -6,7 +6,7 @@ export EFS_TRANSPORT=rdma EFS_RDMA_DEV=${EFS_RDMA_DEV:-rxe0} EFS_RDMA_GID_INDEX=
 export EFS_GC_BACKLOG_IDLE_MS=20
 # Explicit placement qualification.
 export EFS_METADATA_BALANCE=1
-export EFS_MD_RAFT_N=4 EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0
+export EFS_COMMANDS=0 EFS_COMMANDS_SERVER=0 EFS_EXPIRY=0
 unset EFS_READ_PROF EFS_RPC_PROF EFS_DEEP_PATH_PROF EFS_READ_FRAG_PROF
 base=${EFS_GATE_BASE_PORT:-27432}
 work=$(mktemp -d /data1/efs/rdma-qualification-XXXXXX)
@@ -49,6 +49,11 @@ mount_clients() {
  done
 }
 start_nodes
+# W153: formation commits the members joined at that moment; wait for all four.
+for attempt in $(seq 1 120); do
+ "$src/efs-mgmt" status "127.0.0.1:$base" 2>/dev/null | grep -q 'Cluster nodes (4)' && break
+ sleep .5
+done
 formatted=0
 for attempt in $(seq 1 60); do
  reply=$("$src/efs-mgmt" raft-mkfs "127.0.0.1:$base") || true

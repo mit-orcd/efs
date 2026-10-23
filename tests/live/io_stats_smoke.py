@@ -56,7 +56,7 @@ with tempfile.TemporaryDirectory(prefix='efs-io-stats-') as work:
     with open(work+'/daemon.log', 'w+') as log:
         proc = subprocess.Popen([str(root/'efsd'), '--node-id', '1', '--addr',
                                  '127.0.0.1', '--port', str(port), '--storage', work,
-                                 '--direct-io' if args.mode=='direct' else '--no-direct-io'], env=dict(os.environ,EFS_MD_RAFT_N='3'),
+                                 '--direct-io' if args.mode=='direct' else '--no-direct-io'], env=dict(os.environ),
                                 stdout=log, stderr=log)
         try:
             for _ in range(100):

@@ -4,7 +4,7 @@
 # K14 / W77 (I24) cluster gate: atomic multi-chunk publication and
 # observation. Private 3-daemon TCP cluster on ONE host: ports
 # PORT+1..PORT+3 (default 18801-18803), stores DIR/n{1,2,3},
-# EFS_MD_RAFT_N=3, two efs-fuse mounts: DIR/mntA (writers) and DIR/mntB
+# three committed members, two efs-fuse mounts: DIR/mntA (writers) and DIR/mntB
 # (readers, a different client with its own caches). REL is a build tree
 # (efs-fuse, efs-mgmt, scripts/client.sh); efsd comes from FAULT_REL
 # (default REL), which must be built with EFS_FAULTS=1 for phases 4-6.
@@ -35,7 +35,7 @@
 set -u
 cmd=$1; REL=$2; D=$3; PORT=${4:-18800}; FREL=${5:-$REL}
 ADDR=127.0.0.1
-export EFS_TRANSPORT=tcp EFS_MD_RAFT_N=3
+export EFS_TRANSPORT=tcp
 export EFS_FAULT_PUB_BARRIER="$D/fault" EFS_RAFT_OBS=1
 PHASES=" ${K14_PHASES:-1 2 3 4 5 6} "
 on() { case "$PHASES" in *" $1 "*) return 0;; esac; return 1; }
