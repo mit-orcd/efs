@@ -26,7 +26,7 @@ cap(){ # host dir comm
 }
 summ(){ # host dir pids
   args=$(for p in $3; do printf -- '--pid %s ' $p; done)
-  ssh $1 "cd $2 && perf script -i off.data -F tid,time,event,trace,ip,sym 2>/dev/null | python3 /tmp/offcpu_summary.py $args --top 30 --frames 8 > summary.txt; sha256sum off.data; du -h off.data | cut -f1"
+  ssh $1 "cd $2 && perf script -i off.data -F pid,tid,time,event,trace,ip,sym 2>/dev/null | python3 /tmp/offcpu_summary.py $args --top 30 --frames 8 > summary.txt; sha256sum off.data; du -h off.data | cut -f1"
 }
 for c in $CASES; do
   case $c in

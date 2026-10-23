@@ -89,6 +89,12 @@ only at equal counter), the existing durable boot counter in `mdraft/boot.bin`
 as the incarnation with a store-ownership lock, an admission-token operation
 lifecycle instead of a pre-I/O check, and committed history completing under
 durable authority regardless of live tags.
+The §20 review is accepted in §21: compatibility split from member history
+with incarnation compared first (unknown → known allowed across a restart),
+draining bindings that keep admitting compatible Raft traffic and admitted
+operations' continuations, timeout and I/O error as three outcomes (proven
+abort, accepted, tracked obligation) instead of an abort, and a precise
+snapshot acceptance predicate.
 Awaiting the user;
 W153a remains on hold.
 
