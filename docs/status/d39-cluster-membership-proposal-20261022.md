@@ -670,3 +670,72 @@ round of untested agreement. This review does not authorize implementation or
 resume held W153a. No new user policy choices are needed for these corrections.
 Alpha remains 2+1 on 3, 4 and >4 nodes; no compatibility or additional product
 mode is introduced. Documentation only; no production code changed.
+
+## 13. Response to the §12 review (parent session, devel `8cd691b3a`)
+
+All three points accepted. §11's table is superseded by the matrix below,
+which is still a proposal and is not claimed closed: the deterministic
+transition harness the review asks for comes before any closure claim.
+
+**P1, voters stay voters.** Formation state is decoupled from Raft
+membership entirely. A configured voter keeps its vote, its AppendEntries
+acknowledgements, its place in commit counting and its campaign eligibility
+in every state; nothing about formation changes a voter mask or a quorum,
+and the word "learner" is withdrawn from this proposal (learners remain
+what `efs_raft_change` makes of prospective members). Formation state gates
+only application service: client declarations, forwards of client
+mutations, and the data path. Consequently a cold restart between MKFS and
+SALT elects a leader by ordinary Raft freshness and quorum rules among the
+configured voters, finishes formation, and opens no client service until
+`complete`.
+
+**P1, the connection matrix.** Every peer connection is opened by a
+declarer and accepted by an admitter; the declaration carries role, digest,
+member id and the committed pair when the declarer has one (`pair=none`
+otherwise). Replies always travel on the connection that carried the
+request. The matrix is state-independent for Raft and formation traffic
+and depends only on whether the pairs conflict:
+
+| Declarer → admitter (both configured, digest equal) | Admitted | Requests the declarer may send | Requests the admitter may send back on this connection |
+| --- | --- | --- | --- |
+| `pair=none` → `pair=none` | yes | Raft (both groups), HELLO/status, `FORMATION_READ` (answered "unformed") | none (connections are request/reply; the admitter opens its own) |
+| `pair=none` → `pair=P` | yes | Raft, HELLO/status, `FORMATION_READ` (answered `P` with the MKFS and SALT commit indices) | none |
+| `pair=P` → `pair=none` | yes | Raft (a formed leader replicating to a lagging or restarted voter), HELLO/status | none |
+| `pair=P` → `pair=P` | yes | everything a peer sends today, including forwards | none |
+| `pair=P` → `pair=Q`, P ≠ Q (either direction) | no | nothing; refused with both pairs logged; neither store is touched | none |
+| digest differs, or id not configured, or declared endpoint ≠ the configured record for that id | no | nothing; refused with both digests logged | none |
+
+So pair discovery needs no prior knowledge of the pair (`none → P`), a
+formed leader's pooled connection to a forming voter is admitted
+(`P → none`), and an absent member that has never formed reaches a formed
+cluster (`none → P`) and becomes `forming` from the read. Each direction is
+a separate connection through the peer pool and its declaration, tested
+through those entry points, not by a table lookup.
+
+Roles: `peer` as above; `mgmt` admitted in every state with an explicit
+command allowlist (`RAFT_MKFS`, `FORMATION_READ`, status; `raft-step-down`
+listed separately as a disruptive operation; `raft-change` absent under
+fixed membership; unknown commands refused); `client` admitted only when
+the admitter is `complete`, with the client protocol as today and no peer
+or mgmt command. Local states and transitions are unchanged from §11
+(`unformed` → `forming` on an applied formation record or a successful
+`FORMATION_READ`; `forming` → `formed` on `complete`; a `formed` store never
+goes back except by a fresh format; restart verifies the persisted pair
+against hosted groups and `FORMATION_READ`). Entering `formed` no longer
+closes connections: the pair check is per declaration and a conflicting
+pair is refused whenever it appears, so an existing `none → P` connection
+simply keeps its restricted request set until the declarer redeclares.
+
+**P2, endpoint matching.** Corrected wording: matching the declared id and
+endpoint against the configured record checks consistency of honest
+configurations; it does not authenticate the peer, and malicious
+impersonation is not prevented within the trusted-network boundary this
+proposal keeps. The negative test for an unconfigured endpoint is a
+consistency test only.
+
+**Next step, agreed.** After the user's three choices: one consolidated
+table (this matrix plus §11's states), then a deterministic transition
+harness that drives every matrix cell and every §8, §10 and §12
+counterexample through the real declaration and peer-pool entry points on a
+private cluster, before any implementation of W153a or the formation
+protocol claims closure.

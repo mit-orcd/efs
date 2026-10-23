@@ -2704,7 +2704,12 @@ strict formed admission, node 1 declaring completion before group 2's SALT,
 no management role before formation) are accepted; the §11 response replaces
 §9 with a catch-up learner channel, a two-group completion predicate and a
 peer/client/mgmt role, and gives the consolidated state and role table.
-Awaiting the user;
+The §12 review then showed that a lagging configured voter cannot be
+demoted to a learner and that the table needed every connection direction;
+the §13 response decouples formation state from Raft membership (voters
+always vote, acknowledge and may campaign) and replaces the table with a
+declarer/admitter matrix keyed on pair conflict, with a deterministic
+transition harness required before any closure claim. Awaiting the user;
 W153a remains on hold.
 
 **Oct 23 §12 review:** the table still conflates lagging voters with learners
