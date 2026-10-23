@@ -180,6 +180,24 @@ kept scratch) on efs3 at `0eb1511d2`, the tree with every second-wave merge
 (`TMPDIR=/data1/tmp`; a one-line TMPDIR fix to K7's sweep test was needed
 after K25's hygiene gate met it).
 
+### Third wave, Oct 22 night (sub-sessions, Opus 5.5 medium)
+
+User direction: everything left on Stage 1 that is code or a runnable gate
+goes to sub-sessions; build and test hosts are now the bare-metal machines
+amd, intel1, intel2, xorinox and nuc (one session per host, private
+daemons on 18xxx/19xxx ports under `$HOME`, the user's live clusters on
+17432–17435 untouched, hosts cleaned at the end); the efs1–3 VMs carry the
+user's own cluster and are not used. Sessions and branches: K5/T1 fix
+(`devel-k05t1`, amd); K1/T2 fix (`devel-k01t2`, intel1); K15 live gates
+W52 20k, W64 failover and lost-reply (`devel-k15gates`, intel2); gates on
+nuc: K26 leak-check x86, K5 fence gate, K1 stop qualification, W148 rerun
+(`devel-gates-nuc`); gates on xorinox: K28 five-node, K22 plateau and
+stalled follower, K9 W87 oracle (`devel-gates-xor`). Not sent: W153a (held
+for the D39 decision), K27 (orcd-mini restart needs the user), the RDMA
+multi-host VERIFY rows K6 and K18 and the remaining VERIFY rows K11, K12,
+K17, K19–K21 (next wave once hosts free up), and the user's decisions K10,
+K13, K14, K23.
+
 ### Proposed fix order
 
 Each step is one change or a small group. A sub-session implements it with
