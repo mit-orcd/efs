@@ -410,3 +410,93 @@ for the user, and the two reviewers' agreement decides nothing on the user's
 behalf. One process note from how §8 reached devel: my `git add -A docs`
 swept another session's uncommitted edits into `2d2eddf06`; from here on I
 stage files by name in this shared checkout.
+
+
+## 10. Review of 8e8a8e4c0 — formation transition still needs correction
+
+**Verdict: PROPOSED, not implementation-ready.** The existing declaration
+gate, independent configuration digest, immutable committed identity, honest
+readiness reporting and adoption of the §8 tests are sound. The following
+are protocol counterexamples to §9, not reproduced defects in deployed code:
+D39 is not implemented. Source baseline `8e8a8e4c0`; read-only review on macOS,
+no cluster/transport/I/O profile/fixture or quota. All new protocol gates are
+NOTRUN. Alpha scope remains only 2+1 on 3, 4 and >4 nodes.
+
+### P1: strict formed admission can strand a lagging voter
+
+Even when every configured member was present initially, apply and delivery
+are asynchronous. A majority can apply the formation entries while one
+configured voter has not learned the committed pair. The first formed nodes
+close bootstrap connections and require that pair on reconnection. The lagging
+node cannot provide it, so it cannot receive the replication needed to learn
+it. The same problem arises after partial formation or with a configured
+node that was absent. Requiring all members present at MKFS does not establish
+that all have durably applied both identity records.
+
+Keep formed-cluster **service** fail-closed, but distinguish that from a narrow
+identity-discovery/catch-up channel for configured members. Specify how a
+member without an installed pair obtains and validates the authoritative pair
+without being allowed to serve, mutate the formed namespace, overwrite a
+conflicting persisted identity, or inject a different cluster's Raft history.
+A read-only discovery step followed by identity-bound redeclaration is one
+possible design; it still needs a defined trust/authority check and installation
+rule. This is a current-format bootstrap/recovery transition, not a legacy
+fallback. Merely permitting all Raft traffic on digest/member ID is not a
+sufficient restriction: Raft messages carry log entries, so the allowed
+formation state and history must also be constrained.
+
+Gate: delay one voter's installation while the others form and close their
+bootstrap connections. Reconnect/restart the lagging voter and require it to
+catch up without reopening ordinary service or changing the committed pair.
+Also test a matching digest with a conflicting persisted salt: refuse it.
+
+### P1: local group installation is not cluster-wide formation
+
+For N ≥ 4, node 1 hosts only group 0 and node 4 hosts only group 2
+(`include/efs/raft.h:efs_md_group_voters`). Under §9, node 1 can become formed
+as soon as MKFS applies locally, before SALT has committed to group 2. It can
+then reject forming peers or expose service while the second authority is
+uninitialized. Even nodes 2/3 need a clear distinction between local installed
+state and completion visible to the whole cluster.
+
+Define one formation-completion predicate covering both groups and use it for
+**every** daemon's service readiness, not only data-only nodes. Keep local
+installation progress separately so replication/recovery can continue. Define
+how the committed pair is verified across both authorities, how partial state
+is resumed, and which operations remain permitted before completion. This
+need not make every ordinary restart wait for all members; it must preserve
+quorum operation after the initial formation has completed.
+
+Gate: pause group 2 after group-0 MKFS. Node 1 must not report complete
+formation or admit ordinary service; resume group 2 and require completion
+without deadlock. Repeat with restart and a node hosting neither group.
+
+### P2: distinguish formation management from ordinary clients
+
+§9 refuses client declarations before formation, but today's `efs-mgmt`
+formation request reaches the same declaration-gated handler as other RPCs.
+The new protocol must explicitly admit the management identity/role and the
+small set of formation/status operations; otherwise refusing clients also
+prevents the operation that forms the cluster. A self-asserted daemon ID must
+not make an ordinary client a configured peer. Specify the operational trust
+boundary; a configuration hash alone is not authentication.
+
+Gate: `raft-mkfs` and status work in unformed/forming states through the
+intended management path; ordinary client mutations and peer-only RPCs remain
+refused. Restrict messages by role **and** current formation state, not only
+by a global declared flag.
+
+### Process and next step
+
+Staging named files is an improvement, but two sessions can edit the same
+named Markdown file. Before staging, inspect its exact diff and stage only
+owned hunks, or use an isolated worktree for simultaneous edits. A filename
+allowlist alone would not have prevented the previous shared-file capture.
+
+No additional user policy decision is needed for these three corrections:
+they are implementation obligations for whichever formation policy is chosen.
+The three pending §6 choices remain pending; reviewers do not approve them for
+the user. Before code, consolidate §§3 and 6–10 into one authoritative
+state/role transition table (including permitted RPCs and restart behavior),
+retaining the review history as rationale. W153a remains held; no deployment
+or format operation is authorized by this review.

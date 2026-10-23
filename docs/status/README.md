@@ -68,7 +68,9 @@ specification.** User decisions are scope, identity selector and initial
 formation policy; W153a remains held. **Oct 23 response review (§8): reuse
 the existing declaration gate; specify pre/post-MKFS admission and partial
 formation before implementing salt+digest identity.** Protocol gates NOTRUN;
-no code changed.
+no code changed. **§10 review of `8e8a8e4c0`: formed-peer admission can
+strand lagging voters; local group installation is not global formation;
+formation management needs an explicit role/path.** D39 remains proposed.
 
 [W153 startup review](devel-integration-review-20261022.md#review-of-a76b63f42--w153-is-an-alpha-correctness-gate):
 **OPEN, alpha 1.0 blocker.** Unset/empty metadata count defaults to four;

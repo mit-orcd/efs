@@ -54,7 +54,11 @@ and partial installation across both groups must not bypass agreement.
 Placement eligibility is not a complete readiness proof. The parent session's §9
 response accepts all of it and specifies unformed/forming/formed admission
 states, installation in both groups followed by peer redeclaration, a digest
-independent of the salt, and three-fact readiness. Awaiting the user;
+independent of the salt, and three-fact readiness. **§10 identifies remaining
+formation liveness gaps:** formed peers can strand a voter missing the pair;
+local-only installation can expose node 1 before group 2 is ready; management
+formation needs its own permitted path. Resolve these in a state/role table
+before implementation. Awaiting the user;
 W153a remains on hold.
 
 ## D38 — metadata placement ladder across the alpha releases (accepted Oct 22)
