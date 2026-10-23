@@ -77,6 +77,12 @@ admission code through the real entry points, then cluster gates.
 connections stale; receive-time checks need ordered validation at queued-work
 effect boundaries. Specify peer-wide/incarnation rules and exact binding
 acceptance before implementation. No protocol gate has run.
+The §16 review (generation scope across connections, effect-boundary
+fencing, exact acceptance rule) is accepted in §17, which sets the
+authoritative identity and fencing rules R1–R6: per-member binding under one
+lock as the authority, exact-tuple frame acceptance with redeclaration on a
+newer generation, revalidation at every effect boundary with one explicit
+linearized-work exception, and incarnation-based restart.
 Awaiting the user;
 W153a remains on hold.
 

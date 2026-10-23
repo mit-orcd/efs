@@ -975,3 +975,86 @@ through real entry points; then private-cluster gates. Tags and test-case
 lists alone are not a proof. Consolidate the final rules into the authoritative
 protocol rather than leaving an implementer to infer which historical review
 paragraph controls a race.
+
+## 17. Response to the §16 review: identity and fencing rules, version 4 (parent session, devel `8bc949662`)
+
+All three points accepted. §15's per-frame tag is kept as the carrier, but
+the authority it is compared against, the ordering point, the effect
+boundary and the exact acceptance rule were missing. The rules below are
+the authoritative statement for an implementer and supersede the fencing
+prose of §13 and §15; the §15 table's rows stand with these rules applied.
+
+**R1, identity and generation.** A daemon's identity is
+`(member id, incarnation, counter, digest, pair or none)`. `incarnation` is
+the process boot id persisted with the store's formation record on
+install; `counter` increments on every local identity change (pair learned
+or installed, incarnation change). Generations are compared only between
+tuples of the same remote member and only by the receiver's own binding
+history: a counter from one node is never compared with another node's,
+and no generation is a cluster epoch.
+
+**R2, per-peer binding, the authority.** Each daemon keeps one binding per
+remote member, not per connection: `(incarnation, counter, pair or none,
+permitted channel)`, guarded by the binding lock together with the daemon's
+own identity. A declaration is the only operation that changes a binding,
+under that lock: it is accepted when its incarnation is newer than the bound
+one, or equal with a counter greater than or equal to the bound one and a
+pair that does not conflict (none → P allowed, P → none refused, P → Q
+refused), and it then becomes the binding for every connection from that
+member. An observed newer declaration therefore invalidates every older
+connection from that member at once; a declaration that would downgrade or
+conflict is refused and changes nothing. Reconnection carries no history of
+its own: it is checked against the member binding.
+
+**R3, frame acceptance.** A frame's tag must equal its member's current
+binding exactly: same incarnation, same counter, same pair. Lower counter
+or older incarnation: stale, refused. Higher counter or newer incarnation:
+refused with "redeclare required"; a frame never upgrades a binding or a
+channel. Equal counter with a different pair: refused as inconsistent. The
+same rule applies to declaration replies and to every reply before its
+effect is consumed.
+
+**R4, the ordering point and the effect boundary.** New identity knowledge
+(a local install or an accepted declaration) becomes authoritative at the
+moment the binding lock releases after the change. Every admitted request,
+queued Raft frame, staged snapshot chunk, early-read inspection and pending
+reply carries the tuple it was admitted under. At its effect boundary (the
+pump drain for `host_inbox_item`, snapshot install, apply of a forwarded
+result, consumption of a reply, deferred storage work) the executor takes
+the binding lock, compares the carried tuple with the current binding and
+the daemon's current identity, and refuses on any difference before any
+term, vote, log, store or read-proof effect; the lock is held only for the
+comparison and the first state change that commits the effect, never
+across I/O. One explicit exception: work that has already reached its
+linearization point (a Raft entry whose commit index was advanced, a store
+write whose durability barrier returned) completes; its visible effects are
+by then part of the history the identity rules protect, and the gate for
+that case is that no later step of the same operation may act on the stale
+tuple.
+
+**R5, restart.** A restarted daemon has a new incarnation; its first
+declaration replaces its bindings everywhere (R2), and every frame from the
+old incarnation is stale (R3). Its own store carries the persisted pair, so
+it declares with it; a persisted pair that conflicts with the cluster's stops
+the daemon (unchanged). A volatile counter reset is impossible by
+construction because the incarnation changes first; a node is never
+excluded permanently because a newer incarnation always wins the binding.
+
+**R6, formation liveness under these rules.** Votes and AppendEntries pass
+whenever the pairs do not conflict (`none`/`none`, `none`/`P`, `P`/`none`,
+`P`/`P`), so recovery elections among configured voters proceed; a pair
+installation on one side only requires that side to redeclare, which the
+peer pool does on its generation bump, and until it does, that side's new
+frames are refused with "redeclare required" rather than silently accepted.
+
+**Model and gates (added to §15's work order, step 1).** The model carries
+two connections per peer, reordered declarations and frames, reconnects,
+restarts with a new incarnation, a receive queue with a pause point between
+admission and effect, snapshot staging and reply consumption; counterexamples:
+C1 bound at `none` while C2 declares `P` (C1's queued `none` frames refused
+after the declaration), a frame paused in the inbox across a local install
+(refused at the drain), an operation linearized before the transition
+(completes, later steps refused), a higher-counter frame without a
+declaration (refused, redeclaration completes), a restarted member with a
+persisted pair (binding replaced, old frames stale), and ordinary formation
+elections completing under all of it.
