@@ -530,7 +530,7 @@ def recv_exact(sock,n):
 HELLO=struct.pack('>IB',17,165)+b'EFSP'+struct.pack('=IQ',5,0)  # CLIENT_HELLO, EFS_PROTOCOL_VERSION 5 (K13)
 def declare(sock):
     sock.sendall(HELLO);n=struct.unpack('>I',recv_exact(sock,4))[0];reply=recv_exact(sock,n)
-    assert n==9 and reply[0]==166 and struct.unpack('=iI',reply[1:])==(0,4),('declaration refused',reply)
+    assert n==9 and reply[0]==166 and struct.unpack('=iI',reply[1:])==(0,5),('declaration refused',reply)
 
 def valid_put(node,ino):
     req=Put(eid=1,ino=ino,ci=0,fi=0,length=65536,gen=987654321)
