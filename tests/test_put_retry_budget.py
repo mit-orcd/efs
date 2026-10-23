@@ -23,8 +23,18 @@ static void reroute_untried_fragments(efs_node_id_t *n){(void)n;}
 static void efs_client_conn_invalidate_node(efs_node_id_t n){(void)n;invalidations++;}
 static void efs_client_nodes_force_reprobe(void){reprobes++;}
 const char *efs_strerror(int rc){(void)rc;return "injected";}
-static int put_fragments_parallel_once(efs_ino_t ino,uint32_t ci,const efs_node_id_t *nodes,const uint8_t **fragments,uint32_t len,const uint8_t checksums[3][EFS_HASH_SIZE],int *failed,uint64_t gen,int first)
-{(void)ino;(void)ci;(void)nodes;(void)fragments;(void)len;(void)checksums;assert(gen==77&&first==(calls==0));assert(deadline);calls++;for(unsigned i=0;i<3;i++)failed[i]=hard_fail?1:2;usleep(5000);return recover_busy && calls>2 ? EFS_OK : terminal;}
+/* W154: degrade=1 leaves fragment 2 unacknowledged on the OK attempt. */
+static int degrade,note_rc=EFS_OK;static unsigned notes,logs;static uint32_t noted_mask;
+static int dgobj_note(efs_ino_t ino,uint32_t ci,uint64_t gen,uint32_t mask)
+{(void)ino;(void)ci;assert(gen==77);notes++;noted_mask=mask;return note_rc;}
+static void degraded_ack_log(efs_ino_t ino,uint32_t ci,uint64_t gen,const efs_node_id_t *nodes,int fi)
+{(void)ino;(void)ci;(void)gen;(void)nodes;assert(fi==2);logs++;}
+static int put_fragments_parallel_once(efs_ino_t ino,uint32_t ci,const efs_node_id_t *nodes,const uint8_t **fragments,uint32_t len,const uint8_t checksums[3][EFS_HASH_SIZE],int *failed,uint64_t gen,int first,int *acked)
+{(void)ino;(void)ci;(void)nodes;(void)fragments;(void)len;(void)checksums;assert(gen==77&&first==(calls==0));assert(deadline&&acked);calls++;for(unsigned i=0;i<3;i++)failed[i]=hard_fail?1:2;usleep(5000);
+ int rc=recover_busy && calls>2 ? EFS_OK : terminal;
+ /* Acks from an earlier attempt of the same object still count. */
+ if(rc==EFS_OK)for(unsigned i=0;i<3;i++)if(!degrade||i!=2)acked[i]=1;
+ return rc;}
 '''+fn('report_retry_pause')+fn('put_fragments_parallel_run')+fn('efs_client_put_fragments_parallel')+r'''
 int main(void){
  efs_node_id_t nodes[3]={1,2,3};const uint8_t *fragments[3]={0};const uint8_t checksums[3][EFS_HASH_SIZE]={{0}};uint64_t object=99;
@@ -49,6 +59,15 @@ int main(void){
  assert(efs_client_put_fragments_parallel(1,0,nodes,fragments,1,checksums,&object)==EFS_ERR_NET);
  assert(calls==4&&gens==1&&invalidations==12&&!reprobes);
  hard_fail=0;invalidations=0;
+ calls=gens=0;terminal=EFS_OK;degrade=1;deadline=report_clock_ms()+100;
+ assert(efs_client_put_fragments_parallel(1,0,nodes,fragments,1,checksums,&object)==EFS_OK);
+ assert(calls==1&&notes==1&&noted_mask==4&&logs==1); /* recorded and logged */
+ calls=gens=0;note_rc=EFS_ERR_NOMEM;deadline=report_clock_ms()+100;
+ assert(efs_client_put_fragments_parallel(1,0,nodes,fragments,1,checksums,&object)==EFS_ERR_NOMEM);
+ assert(notes==2&&logs==1); /* an unrecordable degraded ack fails the write */
+ degrade=0;note_rc=EFS_OK;
+ calls=gens=0;terminal=EFS_OK;deadline=report_clock_ms()+100;
+ assert(efs_client_put_fragments_parallel(1,0,nodes,fragments,1,checksums,&object)==EFS_OK&&notes==2);
  calls=gens=0;terminal=EFS_ERR_QUOTA;deadline=0;
  assert(efs_client_put_fragments_parallel(1,0,nodes,fragments,1,checksums,&object)==EFS_ERR_QUOTA && calls==1 && !deadline);
  return 0;

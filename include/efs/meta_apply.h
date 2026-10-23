@@ -416,6 +416,11 @@ struct efs_meta_pub {
     uint32_t put_member_mask; /* staged: all configured members, not just EC placement */
     uint32_t put_fragment_len; /* staged ticket manifest: actual fragment payload length */
     uint8_t ticketed; /* staged: require ticket and publish ownership atomically */
+    /* W154: fragments of this object that were not durably acknowledged
+     * (bit i = fragment i; at most one). Nonzero writes a degraded mark in
+     * the same batch. Excluded from the intent digest: it describes the
+     * object's state at PUT, not the publication intent. */
+    uint8_t missing_mask;
     uint8_t durable_result; /* atomically record exact immutable publication result */
     /* delta_len > 0 appends an immutable span instead of CAS-replacing
      * the chunk image. expected_gen is still the base image's generation
@@ -978,6 +983,47 @@ int efs_meta_apply_activate_lanes(struct efs_kv *kv, efs_ino_t ino,
  * gone and the record may be acked). */
 #define EFS_META_GC_VAL (4 * EFS_NUM_FRAGMENTS + 4 + \
                          EFS_HASH_SIZE * EFS_NUM_FRAGMENTS) /* 112 */
+/* W154 degraded mark value (EFS_KV_KIND_DEGRADED, key as the GC record):
+ * [inode_generation:8][missing_mask:1][0:3][nodes:4*3][checksums:32*3].
+ * A full-image publication over the chunk deletes the marks of the
+ * objects it supersedes in its own batch; a pass on the group leader
+ * rebuilds the rest (efs_meta_apply_degraded_clear retires them). */
+#define EFS_META_DEGRADED_VAL (8 + 4 + 4 * EFS_NUM_FRAGMENTS + \
+                               EFS_HASH_SIZE * EFS_NUM_FRAGMENTS) /* 120 */
+struct efs_meta_degraded {
+    efs_ino_t ino;
+    uint64_t inode_gen;
+    uint64_t object_gen;
+    uint32_t chunk_index;
+    uint8_t lane;
+    uint8_t missing_mask;
+    efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
+    uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
+};
+void efs_meta_pack_degraded(uint8_t *p, const struct efs_meta_degraded *d);
+/* Decode one mark from its key and value. PROTO on a malformed row or a
+ * missing set the 2+1 code cannot rebuild (never exactly one fragment). */
+int efs_meta_unpack_degraded(const uint8_t *key, uint32_t klen,
+                             const uint8_t *val, uint32_t vlen,
+                             struct efs_meta_degraded *out);
+/* 1 when (ino, inode_gen, chunk_index) still references object_gen as its
+ * base or as a live span, 0 when it does not (rewritten, truncated away,
+ * packed, unlinked), else an error. Fragment files are named by object
+ * generation, so a row that references another generation never reads
+ * this object's files. */
+int efs_meta_degraded_live(struct efs_kv *kv, const struct efs_meta_degraded *d);
+/* EFS_MD_CMD_DEGRADED clear, serialized apply on the anchor's group.
+ * Deletes the mark when it still names exactly this object and fragment
+ * set (absent: idempotent OK). rebuilt=1 says the leader wrote the missing
+ * fragment: when the object is no longer live, a GC record for that one
+ * fragment is queued (or its ack bit reset) in the same batch, so a rebuild
+ * that raced a rewrite never leaves an orphan behind. *outcome receives
+ * EFS_META_DEGRADED_CLEARED, _ABSENT or _ORPHANED. */
+#define EFS_META_DEGRADED_CLEARED 0
+#define EFS_META_DEGRADED_ABSENT 1
+#define EFS_META_DEGRADED_ORPHANED 2
+int efs_meta_apply_degraded_clear(struct efs_kv *kv, const struct efs_meta_degraded *d,
+                                  int rebuilt, int *outcome);
 /* Reap marker value: [inode_generation:8][active_lanes:8]. */
 #define EFS_META_REAP_VAL 16
 
@@ -1057,6 +1103,12 @@ void efs_meta_gc_pending_note(uint32_t anchor, int delta);
 int64_t efs_meta_gc_pending_peek(uint32_t anchor);
 void efs_meta_gc_pending_derived(uint32_t anchor, uint64_t n);
 void efs_meta_gc_pending_invalidate(uint32_t anchor);
+/* W154: degraded-mark count per anchor, same rules as the GC watermark
+ * (-1 unknown; overshoots only; zero_if clamps after an empty scan). */
+int64_t efs_meta_degraded_count_peek(uint32_t anchor);
+void efs_meta_degraded_count_derived(uint32_t anchor, uint64_t n);
+void efs_meta_degraded_count_invalidate(uint32_t anchor);
+int efs_meta_degraded_count_zero_if(uint32_t anchor, int64_t expect);
 /* Clamp an upward drift: the GC thread calls this after a pass scanned
  * the anchor's whole prefix and found nothing. Fails (returns 0) if a
  * note raced the scans, so a live record is never zeroed away. */

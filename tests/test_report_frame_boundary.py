@@ -10,6 +10,10 @@ code=r'''
 #include <string.h>
 static unsigned allocations,rpcs;static int expired;
 static int efs_client_publication_id(uint64_t seq,struct efs_opid *id){memset(id,0,sizeof(*id));id->client_uuid[0]=9;id->session_epoch=4;id->seq=seq;return EFS_OK;}
+/* W154: no degraded objects in this harness. */
+static uint32_t efs_client_degraded_flags(efs_ino_t i,uint32_t c,uint64_t g){(void)i;(void)c;(void)g;return 0;}
+static uint64_t efs_client_degraded_pending(void){return 0;}
+static void efs_client_degraded_drop(efs_ino_t i,uint32_t c,uint64_t g){(void)i;(void)c;(void)g;}
 int efs_client_rpc_past_deadline(void){return expired;}
 static void *test_malloc(size_t n){allocations++;assert(n<10000);return malloc(n);}
 #define malloc test_malloc

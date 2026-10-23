@@ -86,6 +86,11 @@ struct efsd_server {
     uint64_t gc_trunc_seen[2]; /* D25 TRUNC_PENDING inodes at the last pass */
     uint64_t gc_reap_seen[2], gc_orphan_seen[2], gc_pending[2], gc_first_reap[2], gc_first_seen_us[2];
     uint64_t gc_missing_exports;
+    /* W154: degraded marks on the anchors this node leads (bit g of
+     * degraded_sampled_mask: groups[g] current) and rebuild totals. */
+    uint64_t degraded_chunks[2];
+    uint32_t degraded_sampled_mask;
+    uint64_t rebuilt_fragments, rebuild_failures, rebuild_retired;
     /* W124 node reclaim (reclaim.c). Bytes credited back to quota at
      * acceptance but still on disk; physical admission guard state. */
     uint64_t reclaim_pending_bytes;

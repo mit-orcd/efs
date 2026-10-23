@@ -787,6 +787,17 @@ void server_handle_conn(struct efs_conn *conn)
                 g_server->storage_paths, g_server->storage_path_count,
                 reply.quota, reply.used, &reply.capacity_bytes,
                 &reply.available_bytes) == 0;
+            for (int g = 0; g < 2; g++)
+                reply.degraded_chunks[g] =
+                    __atomic_load_n(&g_server->degraded_chunks[g], __ATOMIC_RELAXED);
+            reply.degraded_sampled =
+                __atomic_load_n(&g_server->degraded_sampled_mask, __ATOMIC_RELAXED);
+            reply.rebuilt_fragments =
+                __atomic_load_n(&g_server->rebuilt_fragments, __ATOMIC_RELAXED);
+            reply.rebuild_failures =
+                __atomic_load_n(&g_server->rebuild_failures, __ATOMIC_RELAXED);
+            reply.rebuild_retired =
+                __atomic_load_n(&g_server->rebuild_retired, __ATOMIC_RELAXED);
             efs_conn_send_msg(conn, EFS_MSG_STATUS_REPLY, &reply, sizeof(reply));
             break;
         }

@@ -505,6 +505,12 @@ void efs_rdcache_invalidate(efs_ino_t ino, uint32_t ci);
 void efs_client_epoch_note(efs_ino_t ino, uint64_t epoch);
 /* This client's own unreported PUT is the staging entry for (ino, ci). */
 int efs_client_putid_owns(efs_ino_t ino, uint32_t ci, uint64_t gen);
+/* W154: EFS_CHUNK_REC_F_MISSING bits for a PUT object two of three nodes
+ * acknowledged (0 for a full stripe); drop once a REPORT or publication
+ * carrying it succeeded. pending counts objects not yet published. */
+uint32_t efs_client_degraded_flags(efs_ino_t ino, uint32_t ci, uint64_t gen);
+void efs_client_degraded_drop(efs_ino_t ino, uint32_t ci, uint64_t gen);
+uint64_t efs_client_degraded_pending(void);
 uint64_t efs_client_epoch_get(efs_ino_t ino);
 
 /* Dirty assembled chunks: combine partial writes and PUT on flush/evict. */

@@ -2550,13 +2550,186 @@ static int put_recv_reply(efs_node_id_t nid, struct efs_conn *conn,
     return -1;
 }
 
-/* failed_out[i]=1 marks placement slots that need invalidate/retry. */
+/* W154: PUT objects that two of three nodes acknowledged, keyed by
+ * (ino, ci, object generation), until a REPORT or publication carrying the
+ * object succeeds. The send paths stamp EFS_CHUNK_REC_F_MISSING bits from
+ * here, so the metadata records the stripe as degraded in the publication's
+ * own batch and the group leader rebuilds the fragment when its node
+ * returns. Bounded: an insert into a full table fails the PUT (never an
+ * undeclared two-fragment stripe). */
+struct dg_obj {
+    efs_ino_t ino; /* 0 = empty, DGOBJ_TOMB = deleted */
+    uint32_t ci;
+    uint32_t mask;
+    uint64_t gen;
+};
+#define DGOBJ_TOMB ((efs_ino_t)~0ull)
+#define DGOBJ_MIN 1024u
+#define DGOBJ_CAP (1u << 21) /* slots; at most half live */
+static struct dg_obj *g_dgobj;
+static uint64_t g_dgobj_mask, g_dgobj_live, g_dgobj_used;
+static pthread_mutex_t g_dgobj_mu = PTHREAD_MUTEX_INITIALIZER;
+
+static uint64_t dgobj_hash(efs_ino_t ino, uint32_t ci, uint64_t gen)
+{
+    uint64_t h = ((uint64_t)ino * 1315423911ull) ^ ((uint64_t)ci << 1) ^ gen;
+    h *= 0x9E3779B97F4A7C15ull;
+    return h ^ (h >> 29);
+}
+
+/* Caller holds g_dgobj_mu. */
+static struct dg_obj *dgobj_find(efs_ino_t ino, uint32_t ci, uint64_t gen)
+{
+    uint64_t i, n;
+
+    if (!g_dgobj)
+        return NULL;
+    i = dgobj_hash(ino, ci, gen) & g_dgobj_mask;
+    for (n = 0; n <= g_dgobj_mask; n++, i = (i + 1) & g_dgobj_mask) {
+        struct dg_obj *p = &g_dgobj[i];
+        if (p->ino == 0)
+            return NULL;
+        if (p->ino == ino && p->ci == ci && p->gen == gen)
+            return p;
+    }
+    return NULL;
+}
+
+/* Caller holds g_dgobj_mu. */
+static int dgobj_rehash(uint64_t cap)
+{
+    struct dg_obj *nt = calloc(cap, sizeof(*nt));
+
+    if (!nt)
+        return -1;
+    for (uint64_t i = 0; g_dgobj && i <= g_dgobj_mask; i++) {
+        struct dg_obj *p = &g_dgobj[i];
+        uint64_t j;
+        if (p->ino == 0 || p->ino == DGOBJ_TOMB)
+            continue;
+        j = dgobj_hash(p->ino, p->ci, p->gen) & (cap - 1);
+        while (nt[j].ino)
+            j = (j + 1) & (cap - 1);
+        nt[j] = *p;
+    }
+    free(g_dgobj);
+    g_dgobj = nt;
+    g_dgobj_mask = cap - 1;
+    g_dgobj_used = g_dgobj_live;
+    return 0;
+}
+
+static int dgobj_note(efs_ino_t ino, uint32_t ci, uint64_t gen, uint32_t mask)
+{
+    struct dg_obj *p;
+    int rc = EFS_OK;
+
+    if (!ino || ino == DGOBJ_TOMB || !gen || !mask || !efs_chunk_missing_valid(mask))
+        return EFS_ERR_INVAL;
+    pthread_mutex_lock(&g_dgobj_mu);
+    p = dgobj_find(ino, ci, gen);
+    if (!p) {
+        uint64_t cap = g_dgobj ? g_dgobj_mask + 1 : 0;
+        if (!g_dgobj || (g_dgobj_live + 1) * 2 > cap) {
+            if (cap >= DGOBJ_CAP || dgobj_rehash(cap ? cap * 2 : DGOBJ_MIN) != 0)
+                rc = EFS_ERR_NOMEM;
+        } else if ((g_dgobj_used + 1) * 4 > cap * 3 && dgobj_rehash(cap) != 0) {
+            rc = EFS_ERR_NOMEM;
+        }
+        if (rc == EFS_OK) {
+            uint64_t i = dgobj_hash(ino, ci, gen) & g_dgobj_mask;
+            while (g_dgobj[i].ino && g_dgobj[i].ino != DGOBJ_TOMB)
+                i = (i + 1) & g_dgobj_mask;
+            if (!g_dgobj[i].ino)
+                g_dgobj_used++;
+            p = &g_dgobj[i];
+            p->ino = ino;
+            p->ci = ci;
+            p->gen = gen;
+            __atomic_store_n(&g_dgobj_live, g_dgobj_live + 1, __ATOMIC_RELEASE);
+        }
+    }
+    if (p)
+        p->mask = mask;
+    pthread_mutex_unlock(&g_dgobj_mu);
+    return rc;
+}
+
+uint32_t efs_client_degraded_flags(efs_ino_t ino, uint32_t ci, uint64_t gen)
+{
+    uint32_t flags = 0;
+    struct dg_obj *p;
+
+    if (!__atomic_load_n(&g_dgobj_live, __ATOMIC_ACQUIRE) || !gen)
+        return 0;
+    pthread_mutex_lock(&g_dgobj_mu);
+    p = dgobj_find(ino, ci, gen);
+    if (p)
+        flags = p->mask << EFS_CHUNK_REC_F_MISSING_SHIFT;
+    pthread_mutex_unlock(&g_dgobj_mu);
+    return flags;
+}
+
+void efs_client_degraded_drop(efs_ino_t ino, uint32_t ci, uint64_t gen)
+{
+    struct dg_obj *p;
+
+    if (!__atomic_load_n(&g_dgobj_live, __ATOMIC_ACQUIRE) || !gen)
+        return;
+    pthread_mutex_lock(&g_dgobj_mu);
+    p = dgobj_find(ino, ci, gen);
+    if (p) {
+        p->ino = DGOBJ_TOMB;
+        __atomic_store_n(&g_dgobj_live, g_dgobj_live - 1, __ATOMIC_RELEASE);
+    }
+    pthread_mutex_unlock(&g_dgobj_mu);
+}
+
+uint64_t efs_client_degraded_pending(void)
+{
+    return __atomic_load_n(&g_dgobj_live, __ATOMIC_ACQUIRE);
+}
+
+/* One line per degraded acknowledgement; past 100 in a second the rest of
+ * that second are counted and summarized. */
+static void degraded_ack_log(efs_ino_t ino, uint32_t ci, uint64_t gen,
+                             const efs_node_id_t nodes[EFS_NUM_FRAGMENTS], int fi)
+{
+    static uint64_t sec, n, suppressed;
+    uint64_t now = report_clock_ms() / 1000u;
+    uint64_t was = __atomic_load_n(&sec, __ATOMIC_RELAXED);
+
+    if (was != now && __atomic_compare_exchange_n(&sec, &was, now, 0, __ATOMIC_RELAXED,
+                                                  __ATOMIC_RELAXED)) {
+        uint64_t s = __atomic_exchange_n(&suppressed, 0, __ATOMIC_RELAXED);
+        __atomic_store_n(&n, 0, __ATOMIC_RELAXED);
+        if (s)
+            fprintf(stderr, "put_fragments: %llu more degraded acknowledgements in the "
+                    "previous second (log capped at 100/s)\n", (unsigned long long)s);
+    }
+    if (__atomic_fetch_add(&n, 1, __ATOMIC_RELAXED) >= 100) {
+        __atomic_fetch_add(&suppressed, 1, __ATOMIC_RELAXED);
+        return;
+    }
+    fprintf(stderr,
+            "put_fragments ino=%llu chunk=%u gen=%llx nodes=%u,%u,%u: degraded "
+            "acknowledgement, fragment %d for node %u not acknowledged; published "
+            "degraded for rebuild on return\n",
+            (unsigned long long)ino, ci, (unsigned long long)gen,
+            (unsigned)nodes[0], (unsigned)nodes[1], (unsigned)nodes[2], fi,
+            (unsigned)nodes[fi]);
+    fflush(stderr);
+}
+
+/* failed_out[i]=1 marks placement slots that need invalidate/retry.
+ * acked_out[i]=1 (when given) marks the slots this attempt acknowledged. */
 static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                                       const efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
                                       const uint8_t *fragments[EFS_NUM_FRAGMENTS],
                                       uint32_t frag_len,
                                       const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE],
-                                      int failed_out[EFS_NUM_FRAGMENTS], uint64_t object_gen, int first_send)
+                                      int failed_out[EFS_NUM_FRAGMENTS], uint64_t object_gen, int first_send,
+                                      int acked_out[EFS_NUM_FRAGMENTS])
 {
     struct efs_conn *conns[EFS_NUM_FRAGMENTS];
     int pending[EFS_NUM_FRAGMENTS];
@@ -2698,8 +2871,10 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
             int w = efs_conn_put_reply_watch(conns[i], 0);
             if (w == EFS_CONN_REPLY_READY) {
                 int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i);
-                if (r > 0)
+                if (r > 0) {
                     acks++;
+                    if (acked_out) acked_out[i] = 1;
+                }
                 else if (r == 0)
                     quota_errors++;
                 else if (r == -2) {
@@ -2730,8 +2905,10 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
             int w = efs_conn_put_reply_watch(conns[i], 24);
             if (w == EFS_CONN_REPLY_READY) {
                 int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i);
-                if (r > 0)
+                if (r > 0) {
                     acks++;
+                    if (acked_out) acked_out[i] = 1;
+                }
                 else if (r == 0)
                     quota_errors++;
                 else if (r == -2) {
@@ -2763,8 +2940,10 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
             int w = efs_conn_put_reply_watch(conns[i], 0);
             if (w == EFS_CONN_REPLY_READY) {
                 int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i);
-                if (r > 0)
+                if (r > 0) {
                     acks++;
+                    if (acked_out) acked_out[i] = 1;
+                }
                 else if (r == 0)
                     quota_errors++;
                 else if (r == -2) {
@@ -2837,8 +3016,10 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                 efs_client_node_note_fail(nodes[i]);
                 r = -1;
             }
-            if (r > 0)
+            if (r > 0) {
                 acks++;
+                if (acked_out) acked_out[i] = 1;
+            }
             else if (r == 0)
                 quota_errors++;
             else if (r == -2) {
@@ -2873,7 +3054,9 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                     continue;
                 int w = efs_conn_put_reply_watch(conns[i], 0);
                 if (w == EFS_CONN_REPLY_READY) {
-                    put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i);
+                    if (put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i) > 0 &&
+                        acked_out)
+                        acked_out[i] = 1;
                     conns[i] = NULL;
                     pending[i] = 0;
                     continue;
@@ -2905,9 +3088,11 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                     continue;
                 int watch = efs_conn_put_reply_watch(conns[i], 0);
                 if (watch >= 0) continue;
-                if (watch == EFS_CONN_REPLY_READY)
-                    put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i);
-                else efs_client_conn_drop(nodes[i], conns[i]);
+                if (watch == EFS_CONN_REPLY_READY) {
+                    if (put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i) > 0 &&
+                        acked_out)
+                        acked_out[i] = 1;
+                } else efs_client_conn_drop(nodes[i], conns[i]);
                 conns[i] = NULL;
                 pending[i] = 0;
             }
@@ -2994,6 +3179,9 @@ static int put_fragments_parallel_run(efs_ino_t ino, uint32_t chunk_index,
     /* Retry transient blips; only invalidate peers that actually failed. */
     int rc = EFS_ERR_NET;
     int failed[EFS_NUM_FRAGMENTS] = {0, 0, 0};
+    /* W154: every attempt PUTs the same object, so an ack from any attempt
+     * is a stored fragment of it. */
+    int acked[EFS_NUM_FRAGMENTS] = {0, 0, 0};
     int hard_attempts = 0;
     for (int attempt = 1; attempt <= 128; attempt++) {
         /* A lost reply can follow a successful remote write. Relocating
@@ -3002,8 +3190,29 @@ static int put_fragments_parallel_run(efs_ino_t ino, uint32_t chunk_index,
         if (attempt == 1)
             reroute_untried_fragments(nodes);
         rc = put_fragments_parallel_once(ino, chunk_index, nodes, fragments,
-                                         frag_len, checksums, failed, object_gen, attempt == 1);
-        if (rc == EFS_OK || rc == EFS_ERR_QUOTA)
+                                         frag_len, checksums, failed, object_gen, attempt == 1,
+                                         acked);
+        if (rc == EFS_OK) {
+            uint32_t missing = 0;
+            for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
+                if (!acked[i])
+                    missing |= 1u << i;
+            if (!missing)
+                return rc;
+            /* Two acks (the quorum loop) leave exactly one missing. Write
+             * availability is kept (D40): record and announce it. */
+            if (dgobj_note(ino, chunk_index, object_gen, missing) != EFS_OK) {
+                fprintf(stderr,
+                        "put_fragments ino=%llu chunk=%u: degraded acknowledgement "
+                        "could not be recorded (missing=%x) — refusing the write\n",
+                        (unsigned long long)ino, chunk_index, missing);
+                fflush(stderr);
+                return EFS_ERR_NOMEM;
+            }
+            degraded_ack_log(ino, chunk_index, object_gen, nodes, __builtin_ctz(missing));
+            return rc;
+        }
+        if (rc == EFS_ERR_QUOTA)
             return rc;
         if (efs_client_rpc_past_deadline())
             return EFS_ERR_BUSY;

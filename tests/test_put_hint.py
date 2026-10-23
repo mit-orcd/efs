@@ -41,7 +41,7 @@ int main(void) {
 # The first-send proof belongs to the lifetime of the newly generated object,
 # outside the evictable hint table; all outer retry attempts reuse that object.
 assert 'first_send ? EFS_PATH_HINT_NEW :' in source
-assert 'failed, object_gen, attempt == 1)' in source
+assert 'failed, object_gen, attempt == 1,' in source
 with tempfile.TemporaryDirectory() as d:
     p = Path(d) / 'hint.c'
     p.write_text(code)

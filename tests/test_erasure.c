@@ -1,4 +1,5 @@
 #include "efs/erasure.h"
+#include "efs/checksum.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -108,6 +109,49 @@ int main(void)
         free(parity);
         free(decoded);
         free(sep);
+    }
+
+    /* W154: each fragment is the XOR of the other two, whichever is missing,
+     * and the rebuilt bytes hash to the published checksum. */
+    {
+        size_t cs = EFS_CHUNK_SIZE, fl = cs / 2;
+        uint8_t *chunk = malloc(cs), *buf = malloc(4 * fl);
+        if (!chunk || !buf) {
+            fprintf(stderr, "FAIL rebuild oom\n");
+            failures++;
+        } else {
+            uint8_t *frags[EFS_NUM_FRAGMENTS] = {buf, buf + fl, buf + 2 * fl};
+            uint8_t *out = buf + 3 * fl;
+            for (size_t i = 0; i < cs; i++)
+                chunk[i] = (uint8_t)(i * 131 + (i >> 9));
+            if (efs_encode_chunk(chunk, cs - 777, cs, frags) != 0) {
+                fprintf(stderr, "FAIL rebuild encode\n");
+                failures++;
+            }
+            for (int m = 0; m < EFS_NUM_FRAGMENTS; m++) {
+                uint8_t want[EFS_HASH_SIZE], got[EFS_HASH_SIZE];
+                efs_hash(frags[m], fl, want);
+                memset(out, 0xEE, fl);
+                if (efs_rebuild_fragment(frags[(m + 1) % 3], frags[(m + 2) % 3], out, fl) != 0 ||
+                    memcmp(out, frags[m], fl) != 0) {
+                    fprintf(stderr, "FAIL rebuild fragment %d\n", m);
+                    failures++;
+                }
+                efs_hash(out, fl, got);
+                if (memcmp(got, want, sizeof(got)) != 0) {
+                    fprintf(stderr, "FAIL rebuild checksum %d\n", m);
+                    failures++;
+                }
+            }
+            if (efs_rebuild_fragment(frags[0], frags[1], frags[0], fl) != EFS_ERR_INVAL ||
+                efs_rebuild_fragment(frags[0], frags[1], out, 0) != EFS_ERR_INVAL ||
+                efs_rebuild_fragment(NULL, frags[1], out, fl) != EFS_ERR_INVAL) {
+                fprintf(stderr, "FAIL rebuild argument checks\n");
+                failures++;
+            }
+        }
+        free(chunk);
+        free(buf);
     }
 
     if (!efs_chunk_size_valid(EFS_DEFAULT_CHUNK_SIZE) ||
