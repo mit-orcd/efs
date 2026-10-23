@@ -888,3 +888,90 @@ admission implementation (declaration fields, reply fields, frame tag,
 `FORMATION_READ`, states) with tests through the real declaration and
 peer-pool entry points; 3. private-cluster formation and failover gates.
 Table lookups count as model evidence only.
+
+
+## 16. Review of e238e04c8 — October 23
+
+**Verdict: per-frame tags are a useful mechanism, but version 3 does not yet
+establish its claimed fencing invariant.** D39 remains proposed, W153a held.
+No new scope decision is needed for the corrections below. Alpha remains
+2+1 only on 3, 4 and >4 nodes. No production code or deployment changed.
+
+### P1 — Per-connection generations do not fence other connections
+
+§15 rejects a generation lower than the one previously seen from that sender
+**on that connection**. A peer can have several pooled connections. If C1
+was admitted at generation 0 with pair unknown and C2 declares generation 1
+with pair P, C1 still accepts queued generation-0/unknown frames according
+to the proposed rule. Reconnecting creates another initially empty comparison
+history. A tag is not sufficient unless the receiver defines the authority
+against which it is compared.
+
+Define identity generation scope, a per-peer acceptance state shared across
+connections, and its synchronization with local identity installation and
+queued work. Specify whether an observed newer declaration invalidates older
+connections/frames and what happens to legitimate in-flight operations.
+On restart, define either durable monotonic generation or a distinct process
+incarnation plus the rule for replacing its bindings; a volatile counter
+reset must not silently make stale frames current or permanently exclude a
+restarted node. Do not equate a sender-local generation with a cluster-global
+configuration epoch, or compare counters from independent nodes.
+
+The guarantee must be stated at a receiver-observable ordering point. A
+receiver cannot reject an old frame merely because the sender changed state
+elsewhere if no evidence of that change has reached it. State precisely when
+new identity knowledge becomes authoritative and what earlier work may finish.
+The model must include two connections from one peer, reordered declarations
+and frames, reconnects and restarts; one-connection increasing-counter tests
+cannot establish this invariant.
+
+### P1 — Checking before dispatch is not checking before effects
+
+Current `server_raft_host_inbox` queues frames for later processing;
+`host_inbox_item` retains the buffer and observation fields, not an admission
+context. The pump drains a slice later, and `host_note_queued_reads` can also
+inspect queued frames before normal processing. A frame may pass the network
+gate while identity is unknown, wait in this queue, then affect consensus
+after a conflicting identity is installed. Snapshot staging/install and
+asynchronous storage work have analogous boundaries to audit.
+
+Carry the admission identity/generation with queued work, or retain its wire
+tag, and revalidate at the actual effect boundary under an ordering mechanism
+shared with identity transitions. A second unsynchronized check still leaves
+a check/use race. Specify serialization or pin/drain semantics; do not blindly
+hold a global mutex across slow I/O. Include early-read handling, snapshot
+installation, reply consumption and deferred work, not just the handler switch.
+A transition may allow already-linearized work to finish, but that exception
+must be explicit and tested rather than claiming all queued traffic is fenced.
+
+Gate: pause a valid frame after handler admission, install the new local or
+remote binding, then release the queue; require refusal before any prohibited
+term/log/store/read-proof effect. Also test the operation linearizing before
+the transition, and prove ordinary formation elections still make progress.
+
+### P2 — Define the exact generation acceptance rule
+
+"Lower than seen" leaves higher-than-declared and equal-generation/different-
+pair frames unspecified. Treat declarations as the binding protocol: state
+whether a higher generation requires redeclaration (recommended), and reject
+any frame whose identity tuple is inconsistent with its admitted binding.
+Do not let a frame silently upgrade channel permissions. The declaration reply
+and the peer-wide/local generation checks need the same rule. Use the allowed
+unknown/known combinations to support formation; never relax pair-conflict or
+no-downgrade checks to make a test pass.
+
+### Validation and next step
+
+Source review on devel `e238e04c8`, macOS; inspected `host_inbox_item`,
+`host_inbox_take`, `host_note_queued_reads`, `server_raft_host_inbox` and the
+proposal's §15. No runtime test, cluster, transport, I/O profile, fixture or
+quota was exercised. These are design counterexamples; all new protocol gates
+are NOTRUN. Documentation consistency is checked by the docs gate.
+
+The work order in §15 remains appropriate after the user's pending decisions:
+a model that explicitly includes multiple connections, receive queues,
+identity transitions and restart; minimal admission implementation with tests
+through real entry points; then private-cluster gates. Tags and test-case
+lists alone are not a proof. Consolidate the final rules into the authoritative
+protocol rather than leaving an implementer to infer which historical review
+paragraph controls a race.

@@ -1616,11 +1616,11 @@ matched failover gate is NOTRUN. Lost-reply cleanup (decide-once retirement by
 fence or live-owner abandon) is on `devel-k15b` with unit tests passing; its
 live gate is NOTRUN. **W52: shape A in tree; exact 20k gate and A/B NOTRUN.**
 
-[D39 latest review (§14)](../status/d39-cluster-membership-proposal-20261022.md):
-**OPEN:** `c6d19da6f` improves voter and connection semantics, but existing
-connections need identity-transition enforcement and declaration replies need
-peer identity checks. Same pair does not imply complete formation. Proposal
-only; W153a held, protocol gates NOTRUN.
+[D39 latest review (§16)](../status/d39-cluster-membership-proposal-20261022.md):
+**OPEN:** `e238e04c8` adds per-frame identity tags, but per-connection generation
+tracking does not fence other connections, and receive-time checks do not
+order queued effects against identity changes. Specify restart/incarnation
+and effect-boundary rules. D39 proposed, W153a held; protocol gates NOTRUN.
 
 [D39 proposal: configured cluster membership](../status/d39-cluster-membership-proposal-20261022.md):
 **PROPOSED, awaiting the user.** One member list for every daemon and
@@ -2720,6 +2720,10 @@ reply, conjunctive service) is accepted in §15, which chooses a per-frame
 identity tag with generation, binds the reply, folds the `complete` predicate
 into the table (version 3) and fixes the work order: model tests, then
 admission code through the real entry points, then cluster gates.
+**§16 review:** generation checks scoped to one connection leave other
+connections stale; receive-time checks need ordered validation at queued-work
+effect boundaries. Specify peer-wide/incarnation rules and exact binding
+acceptance before implementation. No protocol gate has run.
 Awaiting the user;
 W153a remains on hold.
 

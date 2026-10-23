@@ -73,6 +73,10 @@ reply, conjunctive service) is accepted in §15, which chooses a per-frame
 identity tag with generation, binds the reply, folds the `complete` predicate
 into the table (version 3) and fixes the work order: model tests, then
 admission code through the real entry points, then cluster gates.
+**§16 review:** generation checks scoped to one connection leave other
+connections stale; receive-time checks need ordered validation at queued-work
+effect boundaries. Specify peer-wide/incarnation rules and exact binding
+acceptance before implementation. No protocol gate has run.
 Awaiting the user;
 W153a remains on hold.
 
