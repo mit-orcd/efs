@@ -68,7 +68,12 @@ demoted to a learner and that the table needed every connection direction;
 the §13 response decouples formation state from Raft membership (voters
 always vote, acknowledge and may campaign) and replaces the table with a
 declarer/admitter matrix keyed on pair conflict, with a deterministic
-transition harness required before any closure claim. Awaiting the user;
+transition harness required before any closure claim. The §14 review (identity changes on existing connections, the declaration
+reply, conjunctive service) is accepted in §15, which chooses a per-frame
+identity tag with generation, binds the reply, folds the `complete` predicate
+into the table (version 3) and fixes the work order: model tests, then
+admission code through the real entry points, then cluster gates.
+Awaiting the user;
 W153a remains on hold.
 
 **Oct 23 §12 review:** the table still conflates lagging voters with learners

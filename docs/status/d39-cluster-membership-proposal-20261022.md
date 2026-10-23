@@ -813,3 +813,78 @@ to start implementation or resume W153a.
 No new architecture decision is needed for these corrections. Retain voters'
 normal Raft rights, the trusted-network limitation, and 2+1-only alpha scope
 on 3, 4 and >4 nodes. Keep all proposed gates NOTRUN until executed.
+
+## 15. Response to the §14 review and the consolidated table, version 3 (parent session, devel `b8d4e8495`)
+
+All three points accepted. The §13 matrix is superseded by the table below,
+which folds the service predicate in so no reader reconciles prose across
+revisions. Still a proposal; nothing here is tested.
+
+**P1, identity on existing connections: one mechanism, chosen.** Every
+peer frame carries an identity tag: (digest, pair or `none`, sender identity
+generation). A daemon's identity generation increments whenever it learns
+or installs a pair, and the peer pool invalidates its outgoing connections
+on that event (drop, reconnect, redeclare); the tag, not the invalidation,
+is the enforced invariant. The receiver checks the tag before dispatching
+any request and the requester checks the reply's tag before applying any
+effect (replies, snapshot chunks and forwarded results included), so queued
+and in-flight traffic is fenced frame by frame. Rules: a frame whose pair
+conflicts with the receiver's known pair is refused and logged with both
+pairs; a frame with `none` on a connection whose binding already carries a
+pair is refused (no downgrade); a frame whose pair is the receiver's own, or
+`none` where the receiver has `none`, passes; a tag whose generation is
+lower than the one already seen from that sender on that connection is
+refused as stale. Recovery elections are unaffected: votes and
+AppendEntries between configured voters pass under `none`/`none`,
+`none`/`P` and `P`/`none` exactly as the §13 matrix says, and are refused
+only on a conflicting pair. Gates: `none → P` connection kept open while
+the sender installs Q, with queued Raft and snapshot frames refused before
+effects; a receiver that learns P after a `none → none` declaration refuses
+the next `none` frame from a sender that has since bound P; matching
+transitions reconnect and complete without deadlock.
+
+**P2, the declaration reply.** A successful declaration reply carries the
+responder's configured member id, digest, pair or `unknown`, identity
+generation and the permitted channel. The peer pool validates it against
+the intended configured peer (id and endpoint) and the local pair before
+the connection is used; a wrong id, a conflicting pair or a stale generation
+discards the connection. Forward and reverse connections validate
+independently. Gates: a configured endpoint answering with the wrong member
+or pair; a reply crossing the requester's own pair installation.
+
+**Service stays conjunctive.** Encoded in the table: application service
+and forwards of client mutations require the receiver's `complete`
+predicate (MKFS in group 0 and SALT in group 2 with the same pair) and the
+role's command allowlist, whatever the two pairs say; `P → P` alone enables
+nothing beyond Raft, formation and status.
+
+### Authoritative table, version 3 (supersedes §11 and §13)
+
+Local states: `unformed`, `forming`, `formed`, as in §11; `complete` as in
+§11. Every frame carries the identity tag above; every connection is bound
+at declaration to (remote id, remote pair or `none`, remote generation) and
+the binding is re-checked per frame.
+
+| Declarer → admitter (configured ids, digest equal) | Admitted | Permitted requests on this connection | Always refused |
+| --- | --- | --- | --- |
+| `none → none` | yes | Raft (votes, AppendEntries, snapshots) between configured voters; HELLO/status; `FORMATION_READ` answered "unknown" | client forwards, data service |
+| `none → P` | yes | Raft; HELLO/status; `FORMATION_READ` answered `P` with both commit indices | client forwards, data service |
+| `P → none` | yes | Raft (a formed leader replicating to a lagging or restarted voter); HELLO/status | client forwards, data service, `FORMATION_READ` answered with a pair the admitter does not hold |
+| `P → P` | yes | Raft; HELLO/status; formation and status commands; **client forwards and data service only if the admitter is `complete`** | anything outside the peer allowlist |
+| `P → Q`, P ≠ Q, or a `none` frame on a `P`-bound connection, or a stale generation | no | nothing; refused before dispatch with both identities logged; stores untouched | everything |
+| digest differs, id not configured, or endpoint ≠ the configured record | no | nothing; refused with both digests logged | everything |
+| `mgmt`, any state | yes | `RAFT_MKFS`, `FORMATION_READ`, status; `raft-step-down` (disruptive, listed separately); no `raft-change` under fixed membership | unknown commands |
+| `client`, admitter `complete` | yes | the client protocol as today | peer and mgmt commands |
+| `client`, admitter not `complete` | no | nothing; "not formed" | everything |
+
+Transitions as in §11, with one change from §13 kept: entering `formed`
+does not close connections; the per-frame tag and the generation bump make
+stale bindings refuse themselves and the peer pool reconnects.
+
+**Work order, agreed** (after the user's three choices, not authorization):
+1. a protocol model with transition tests over this table and the §8, §10,
+§12 and §14 counterexamples, in `tests/`, no daemon; 2. the minimal
+admission implementation (declaration fields, reply fields, frame tag,
+`FORMATION_READ`, states) with tests through the real declaration and
+peer-pool entry points; 3. private-cluster formation and failover gates.
+Table lookups count as model evidence only.
