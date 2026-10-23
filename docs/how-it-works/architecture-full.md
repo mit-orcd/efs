@@ -1627,7 +1627,10 @@ the existing declaration gate; specify pre/post-MKFS admission and partial
 formation before implementing salt+digest identity.** Protocol gates NOTRUN;
 no code changed. **§10 review of `8e8a8e4c0`: formed-peer admission can
 strand lagging voters; local group installation is not global formation;
-formation management needs an explicit role/path.** D39 remains proposed.
+formation management needs an explicit role/path.** §12 reviews the new
+§11 table: preserve configured voters during catch-up, cover both connection
+directions and recovery elections; declared endpoints do not authenticate
+peers. D39 remains proposed; W153a held.
 
 [W153 startup review](../status/devel-integration-review-20261022.md#review-of-a76b63f42--w153-is-an-alpha-correctness-gate):
 **OPEN, alpha 1.0 blocker.** Unset/empty metadata count defaults to four;
@@ -2703,6 +2706,12 @@ no management role before formation) are accepted; the §11 response replaces
 peer/client/mgmt role, and gives the consolidated state and role table.
 Awaiting the user;
 W153a remains on hold.
+
+**Oct 23 §12 review:** the table still conflates lagging voters with learners
+and omits required connection directions. Preserve Raft quorum membership,
+allow recovery elections during partial formation, and specify discovery and
+replication in both directions. Endpoint declarations check consistency, not
+peer authentication. D39 remains proposed and W153a held.
 
 ### D38 — metadata placement ladder across the alpha releases (accepted Oct 22)
 

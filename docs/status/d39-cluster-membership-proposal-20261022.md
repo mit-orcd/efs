@@ -584,3 +584,89 @@ one voter delayed past the others' completion, group 2 paused after the
 group-0 MKFS with node 1 required to stay `forming`, a `client` sent before
 completion, a `mgmt` mkfs in `unformed`, and a `peer` with a self-asserted
 id whose endpoint is not configured.
+
+
+## 12. Review of 9886acbf9 and 3cf52e893 — October 23
+
+**Verdict: §11 improves the structure but does not yet close the formation
+liveness gaps. D39 remains PROPOSED; protocol tests NOTRUN.** Reviewed §11
+and the declaration helpers, `host_hosts`/`host_cfg` in
+`src/server/raft_host.c`, and learner admission/election behavior in
+`src/raft/raft.c`, on devel `7e6daa314`. No cluster or binary was run; no
+transport, I/O, quota or payload qualification is claimed.
+
+### P1 — A configured voter is not a learner
+
+Existing learners are prospective members: `efs_raft_change` adds learner
+bits for `new_voters & ~log_old`; `host_hosts` withholds service until the
+committed voter configuration includes the node. This is not a mechanism
+for demoting an existing voter because its formation records lag.
+
+Keep committed/configured quorum membership unchanged during formation and
+catch-up. Restrict application service and accepted traffic independently of
+Raft voter status. Explicitly specify votes, AppendEntries acknowledgements,
+commit counting and campaign eligibility. Silently excluding a voter can
+prevent the quorum needed to finish; silently reducing the quorum would
+violate consensus safety. Calling a replica a learner without changing its
+membership merely hides the ambiguity.
+
+The blanket "cannot campaign until formation completes" rule also needs a
+recovery exception/design: after a restart during partial formation, there
+may be no complete node, or the only up-to-date logs may be on forming nodes.
+Those configured voters must be able to elect a leader and finish formation,
+without opening client service. Use normal Raft log freshness and quorum
+rules; do not require globally complete formation as a prerequisite for the
+consensus that completes it.
+
+Gates: cold restart all nodes between MKFS and SALT; leave a quorum whose
+freshest logs are on forming replicas; verify election and formation finish
+without changing voter masks or acknowledging premature application writes.
+
+### P1 — The state/role table still omits required connection directions
+
+The table includes a forming declarer connecting to a formed admitter, but
+not a **formed declarer connecting to a forming admitter**, which is how a
+leader's pooled replication connection can deliver AppendEntries/snapshots.
+"Inbound" and "outbound" must be stated relative to named endpoints, not to
+an ambiguous catch-up channel. It also omits an **unformed declarer contacting
+a formed admitter**. That member cannot become forming via FORMATION_READ if
+there is no admissible connection on which to perform the read.
+
+Specify all sender/receiver state combinations with separate request and
+reply permissions; pair discovery must be possible before requiring knowledge
+of that pair. Keep same-digest/conflicting-persisted-salt refusal. Do not
+assume one TCP/RDMA connection is bidirectional for all initiated RPCs merely
+because it carries replies. Add tests that drive each direction through the
+actual peer-pool/declaration entry points, not only a table lookup.
+
+Gates: a formed leader opens a new connection to a lagging forming voter;
+a previously absent configured member with no formation record discovers the
+pair and catches up; reconnect in both directions during the transition.
+
+### P2 — Declared endpoint matching is consistency checking, not identity proof
+
+A caller can self-assert both a configured ID and its matching advertised
+endpoint. Thus §11's statement that this prevents a self-asserted client from
+being a peer is too strong. Under the explicitly trusted-network scope, say
+that honest roles/configurations are checked and **malicious peer impersonation
+is not prevented**. Do not describe the negative test for an unconfigured
+endpoint as proof against impersonation. No authentication project is required
+by this review; retain the stated boundary and future security work. A
+source-address check alone would not establish daemon identity either.
+
+Also label `raft-step-down` as a disruptive management operation, not status.
+Keep `raft-change` unavailable for the proposed fixed-membership alpha unless
+a separate decision and complete transition protocol enable it. Role names
+must map to an explicit command allowlist, with unknown commands refused.
+
+### Next step and status
+
+Retain §11 as a proposed table **subject to these corrections**, not a proven
+protocol. After the user's pending scope/identity/initial-formation choices,
+consolidate one table and implement a deterministic transition harness covering
+the counterexamples in §§8, 10 and 12 before claiming closure. A narrow
+executable state-machine or actual Raft harness is more useful now than another
+round of untested agreement. This review does not authorize implementation or
+resume held W153a. No new user policy choices are needed for these corrections.
+Alpha remains 2+1 on 3, 4 and >4 nodes; no compatibility or additional product
+mode is introduced. Documentation only; no production code changed.

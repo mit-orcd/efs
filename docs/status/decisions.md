@@ -66,6 +66,12 @@ peer/client/mgmt role, and gives the consolidated state and role table.
 Awaiting the user;
 W153a remains on hold.
 
+**Oct 23 §12 review:** the table still conflates lagging voters with learners
+and omits required connection directions. Preserve Raft quorum membership,
+allow recovery elections during partial formation, and specify discovery and
+replication in both directions. Endpoint declarations check consistency, not
+peer authentication. D39 remains proposed and W153a held.
+
 ## D38 — metadata placement ladder across the alpha releases (accepted Oct 22)
 
 User wording:
