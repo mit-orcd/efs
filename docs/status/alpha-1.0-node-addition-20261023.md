@@ -210,3 +210,53 @@ Documentation review only; no binary, cluster, deployment or rollback run.
 transitions, then implement and qualify the accepted CLI and live growth.
 K33/W157 remain OPEN; runtime and topology gates remain NOTRUN. No extra user
 choice is required to begin this work, and no fixed-file run closes A13.
+
+## Parent-session response to `21cf86ef0` (Oct 23)
+
+All five corrections accepted; the blanket-revert recommendation is
+withdrawn.
+
+1. **"Undeployable" was too strong.** devel HEAD runs a live cluster given a
+   member file; what it cannot do is the contract's seed/`--join` startup.
+   For orcd-mini the gap is one devops change: `start.sh` writes a
+   three-member `cluster.conf` from its node list and passes `--cluster`.
+   I will propose that change to the user for the devops repo rather than
+   make it; until then orcd-mini stays on `6b621993d`. The other orcd-mini
+   gates are blocked by that change, not by the admission layer itself.
+2. **Keep the merged work and extend it.** Agreed: a merge revert would also
+   unwind the driver and test conversions and the three collision fixes
+   (tags 88, message types 179/180, kind 52), and the store lock, boot
+   counter and digest code are called from the merged startup path, so their
+   extraction is not free. The revert-or-rework question is withdrawn; the
+   next step is the model extension, no further user decision needed.
+3. **Discovery is required.** Agreed; explicit seed is the alternative for
+   routed networks, not a substitute for qualifying discovery. The
+   qualification host needs a LAN that carries the discovery traffic; the
+   ORCD fabric is unverified for that, so the bare-metal 10.0.0.x hosts are
+   the likely place (parent-session work, scheduled with their owner).
+4. **Retained placement authority, with a finding from the source.** The
+   client read path (`src/client/read.c`, `read_chunk`) first computes the
+   stripe from the live member list (`efs_place_fragments(g_client.nodes,
+   g_client.node_count, ...)`) and then overrides it with the chunk table's
+   `fragment_nodes` only when the entry carries them ("the chunk table is
+   the source of truth"). Chunk entries whose `fragment_nodes` are zero
+   would therefore be read from a recomputed ring after an addition, and
+   `efs_get_placement(node_count, ...)` changes with the count. Packed
+   segments carry their member mask in the ledger. Design requirements
+   added: every chunk entry records its fragment nodes at publication (or
+   its placement revision), reads, repair and reclaim never fall back to the
+   live ring, and the audit of every `efs_place_fragments` caller
+   (`read.c`, `write.c`, `efs_fuse.c`, `efs_bench.c`, `packer.c`) is a model
+   and test item before any addition is attempted.
+5. **First formation before additions.** Agreed: candidates need a stable
+   provisional identity (the boot counter plus endpoint is available) and an
+   agreed initial voter set, committed before service; concurrent joins,
+   seed restart and competing formation attempts are model cases; the
+   `CFG CHANGE` application path returns with catch-up, joint consensus and
+   cross-group installation gates, not just the management command.
+
+Next work, no user input needed: extend `tests/d39_model.py` with
+formation (provisional identity, three-member agreement, both groups),
+addition (pending member, identity allocation, voter transition, placement
+revision, eligibility barrier) and the retained-placement rule; then the
+implementation through the real entry points; then live gates.
