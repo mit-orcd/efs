@@ -29,6 +29,20 @@ repair/recovery qualification. This is a release scheduling decision, not a
 change to the numbered architectural protection contracts. [Exact decision,
 remaining gates and limits](v030-release-scope-20261012.md). Execution stays stopped.
 
+## D39 — authoritative configured cluster membership (PROPOSED Oct 22)
+
+Proposal written at the user's request after the W153 review:
+[d39-cluster-membership-proposal-20261022.md](d39-cluster-membership-proposal-20261022.md).
+Today identity (`--node-id`), membership (`--join` + HELLO + persisted node
+table) and metadata topology (`EFS_MD_RAFT_N`, default 4) have no shared
+source of truth, which is the W153 defect. Options: A, strict per-daemon
+count (W153a only); **B (recommended for alpha 1.0), one configured member
+list passed to every daemon and to `raft-mkfs`, hashed into HELLO and the
+committed MKFS, replacing `--join`, `--node-id` and `EFS_MD_RAFT_N`, with
+later changes through `raft-change` plus a replicated `CLUSTER_SET`**; C,
+control-plane group (post-alpha). Awaiting the user's decision; W153a is on
+hold until then.
+
 ## D38 — metadata placement ladder across the alpha releases (accepted Oct 22)
 
 User wording:

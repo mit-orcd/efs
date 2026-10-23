@@ -1610,6 +1610,11 @@ matched failover gate is NOTRUN. Lost-reply cleanup (decide-once retirement by
 fence or live-owner abandon) is on `devel-k15b` with unit tests passing; its
 live gate is NOTRUN. **W52: shape A in tree; exact 20k gate and A/B NOTRUN.**
 
+[D39 proposal: configured cluster membership](../status/d39-cluster-membership-proposal-20261022.md):
+**PROPOSED, awaiting the user.** One member list for every daemon and
+`raft-mkfs`, hashed into HELLO and the committed MKFS, replacing `--join`,
+`--node-id` and `EFS_MD_RAFT_N` (option B); W153a held until decided.
+
 [W153 startup review](../status/devel-integration-review-20261022.md#review-of-a76b63f42--w153-is-an-alpha-correctness-gate):
 **OPEN, alpha 1.0 blocker.** Unset/empty metadata count defaults to four;
 three-node deployments can lose their promised single-loss tolerance.
@@ -2508,7 +2513,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | snapshot-restart | **W147** · a snapshot transfer restarts on every send while the leader commits (stored snapshot point without a file) | liveness | Closed (Oct 22): fixed in `a569de971` with a regression test that FAILs on the old code; gate PASS, n2's transfer completed while group 2 committed | [item](#w147) |
 | modify-read-mismatch | **W148** · modify-under-load read returned wrong bytes (correct size) on a never-packed 3.6 MB file | data correctness | FIXED Oct 22 (`71ce4ff35`, alpha K8): a partial load never inherits an UNCOND slot base; the flush fetches the row and overlays only this write's ranges under a CAS. Reproduced 3× on node9901 before the fix; two-client regression 3/3. The fixed-build w125 rerun is NOTRUN | [review](../status/review-pack-validate-once-20261022.md) |
 | compact-die-env | **W149** · `EFS_KV_COMPACT_DIE` makes the daemon `_exit(99)` mid-compaction in normal builds | build hygiene / safety | OPEN: move it and `test_kv_lsm`'s use under `EFS_FAULTS`; alpha K24 | [checklist review](../status/alpha-1.0-2plus1-checklist.md) |
-| md-raft-n-default | **W153** · unset/empty `EFS_MD_RAFT_N` defaults to 4; on three nodes SHARD2 includes absent node 4 and cannot tolerate loss of node 2 or 3; `atoi` also accepts malformed numeric prefixes | fail-open configuration / protection correctness | **OPEN — alpha 1.0 blocker.** Derive bootstrap topology from authoritative configured membership; validate full input and consistent member identities, never infer membership from live reachability. Inspected drivers set the count, but running deployments were not audited. Startup, inconsistent-config and single-loss live gates NOTRUN. Parent-session response (`f2093fc9f` review): also blocks all-member GC inode reclaim silently; split into **W153a** fail-closed count validation (alpha, sub-session) and the configured-membership design question (user decision) | [review](../status/devel-integration-review-20261022.md#review-of-a76b63f42--w153-is-an-alpha-correctness-gate), [D38](#appendix-4--decisions--taken-and-pending-register-d1d36) |
+| md-raft-n-default | **W153** · unset/empty `EFS_MD_RAFT_N` defaults to 4; on three nodes SHARD2 includes absent node 4 and cannot tolerate loss of node 2 or 3; `atoi` also accepts malformed numeric prefixes | fail-open configuration / protection correctness | **OPEN — alpha 1.0 blocker.** Derive bootstrap topology from authoritative configured membership; validate full input and consistent member identities, never infer membership from live reachability. Inspected drivers set the count, but running deployments were not audited. Startup, inconsistent-config and single-loss live gates NOTRUN. Parent-session response (`f2093fc9f` review): also blocks all-member GC inode reclaim silently; split into **W153a** fail-closed count validation (alpha, sub-session; **on hold**, user Oct 22) and the configured-membership design question, now [D39 proposal](../status/d39-cluster-membership-proposal-20261022.md) awaiting the user | [review](../status/devel-integration-review-20261022.md#review-of-a76b63f42--w153-is-an-alpha-correctness-gate), [D38](#appendix-4--decisions--taken-and-pending-register-d1d36) |
 | nfs-macos-clients | **W152** · NFS re-export and macOS clients | beta backlog | DECIDED out of alpha 1.0 (user, Oct 22); the W55 NFS/macOS triggers move here; alpha publishes "Linux FUSE client only" (F4) | [alpha checklist S1](../status/alpha-1.0-2plus1-checklist.md) |
 | node-cap | **W151** · the code caps a cluster at four nodes (`EFS_MAX_NODES` 4, `EFS_MD_RAFT_N` 3..4, voter sets only for n ≤ 4, placement ring clamped, client `leader_hint` bound), while alpha 1.0 and the spec (§1: 3–64) require >4 | implementation / scope | FIXED, merged into devel Oct 22 (`a2942cb0f`; [evidence](../status/k28-w151-cluster-cap-20261022.md)): cap 16, three voters per group, segments on the data ring; live 5-node gate NOTRUN. Was OPEN; alpha K28 and Stage 2 prerequisite of A3: raise the cap, define voter sets for n ≥ 5, placement/capacity tests at 5..max, membership and client tables, fresh format; no compatibility. Sub-item (D38, user Oct 22): packed segments move from the group's voters to the data ring across all N nodes, which needs a remote linearizable pack-object read for PUT_SEGMENT admission and reclaim on non-voter nodes | [review](../status/alpha-1.0-plan-review-20261022.md) · [D38](#appendix-4--decisions--taken-and-pending-register-d1d36) |
 | abandon-scan-test | **W150** · no test for the abandon scan's work-budget stop and resume (tombstones, term change, wraparound) | test coverage | FIXED on `devel-k25` (Oct 22): LSM work-budget stop/resume, wraparound, mid-pass mutation, term restart and budget edges in `test_pack_validate_once`; a dropped work cursor fails it | [item](#w150) · [review](../status/review-pack-validate-once-20261022.md) |
@@ -2647,6 +2652,20 @@ The user limits this release to TCP/direct I/O/files and defers containers and
 repair/recovery qualification. This is a release scheduling decision, not a
 change to the numbered architectural protection contracts. [Exact decision,
 remaining gates and limits](../status/v030-release-scope-20261012.md). Execution stays stopped.
+
+### D39 — authoritative configured cluster membership (PROPOSED Oct 22)
+
+Proposal written at the user's request after the W153 review:
+[d39-cluster-membership-proposal-20261022.md](../status/d39-cluster-membership-proposal-20261022.md).
+Today identity (`--node-id`), membership (`--join` + HELLO + persisted node
+table) and metadata topology (`EFS_MD_RAFT_N`, default 4) have no shared
+source of truth, which is the W153 defect. Options: A, strict per-daemon
+count (W153a only); **B (recommended for alpha 1.0), one configured member
+list passed to every daemon and to `raft-mkfs`, hashed into HELLO and the
+committed MKFS, replacing `--join`, `--node-id` and `EFS_MD_RAFT_N`, with
+later changes through `raft-change` plus a replicated `CLUSTER_SET`**; C,
+control-plane group (post-alpha). Awaiting the user's decision; W153a is on
+hold until then.
 
 ### D38 — metadata placement ladder across the alpha releases (accepted Oct 22)
 

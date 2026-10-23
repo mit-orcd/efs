@@ -59,6 +59,11 @@ matched failover gate is NOTRUN. Lost-reply cleanup (decide-once retirement by
 fence or live-owner abandon) is on `devel-k15b` with unit tests passing; its
 live gate is NOTRUN. **W52: shape A in tree; exact 20k gate and A/B NOTRUN.**
 
+[D39 proposal: configured cluster membership](d39-cluster-membership-proposal-20261022.md):
+**PROPOSED, awaiting the user.** One member list for every daemon and
+`raft-mkfs`, hashed into HELLO and the committed MKFS, replacing `--join`,
+`--node-id` and `EFS_MD_RAFT_N` (option B); W153a held until decided.
+
 [W153 startup review](devel-integration-review-20261022.md#review-of-a76b63f42--w153-is-an-alpha-correctness-gate):
 **OPEN, alpha 1.0 blocker.** Unset/empty metadata count defaults to four;
 three-node deployments can lose their promised single-loss tolerance.
