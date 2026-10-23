@@ -547,6 +547,17 @@ round says which physical or software limiter it hit.
   1–3 and 2–4 for N ≥ 4, D38 as amended), actual packing placement, supported
   node range, Linux FUSE client only, deferred unplanned repair, no
   degraded-state indication, and lack of 2+2/two-loss protection on 4+ nodes.
+  Release-notes entries decided so far (D40, Oct 23), one each:
+  - **K10/W121 readback after fsync:** a read issued right after a
+    successful fsync can return the previous file's payload; triggered by
+    the FUSE kernel fork/page-pinning read path, no client workaround in
+    alpha ([diagnosis](orcd-w121-fork-read-20261016.md)).
+  - **Erasure profile:** 2+1 only, on 3, 4 and more than 4 nodes.
+  - **Membership:** fixed configured membership; no online add or remove.
+  - **Clients:** Linux FUSE client only (no NFS re-export, no macOS; W152).
+  - **Repair:** automatic repair is deferred except W154 rebuild-on-return of
+    stripes acknowledged with two fragments.
+  - **Power loss:** no power-loss (sudden host power-off) qualification.
 - [ ] **F5** Review the integrated candidate and approve alpha 1.0 only when all
   mandatory in-scope gates pass. Identify any excluded platform/feature explicitly;
   a required gate left NOTRUN blocks that support claim. Then perform the

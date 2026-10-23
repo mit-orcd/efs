@@ -7,13 +7,11 @@
 # REL is $GATES/src (a `git archive` of the tested commit, built with make);
 # every attempt keeps its own run directory $GATES/w125/run-bN-PORT-STAMP and
 # output $GATES/w125/out-bN; one summary line per attempt goes to
-# $GATES/w125/campaign.txt. EFS_CLIENT_SKIP_FOREIGN=1 lets client.sh stop
-# work for a non-root user on a host that also runs another user's client
-# (see scripts/client_processes.py). Raw output stays outside Git.
+# $GATES/w125/campaign.txt. Raw output stays outside Git.
 set -u
 GATES=${GATES:-$HOME/efs-gates-nuc}
 REL=$GATES/src; W=$GATES/w125; N=${1:-9}
-export EFS_CLIENT_SKIP_FOREIGN=1 W125_TRANSPORT=tcp W125_ADDR=127.0.0.1 TMPDIR=$GATES/tmp
+export W125_TRANSPORT=tcp W125_ADDR=127.0.0.1 TMPDIR=$GATES/tmp
 mkdir -p "$W"
 for a in $(seq "$N"); do
   port=$(( a % 2 ? 18920 : 18925 ))

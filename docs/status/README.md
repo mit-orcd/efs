@@ -89,6 +89,12 @@ node9901 run NOTRUN.
 product bug (same-second journal aside rename refused startup); the fork
 oracle and `test_kv_lsm` were test races. W126 peek limitation stays open.
 
+[W156 client discovery](w156-client-discovery-20261023.md): **fixed on
+`devel-w156` (`dca4dd544`), not merged; `make test-all` on nuc PASS without a
+switch.** Mount owner from mountinfo, controller proven by the control
+endpoint and `/dev/fuse`; foreign processes are never inspected;
+`EFS_CLIENT_SKIP_FOREIGN` removed. Live foreign-client case NOTRUN.
+
 [K15 W52/W64 append gates](k15-w52-w64-20261022.md): **W64 INCOMPLETE**.
 A leader change left append transactions PREPARED until recovery, so writes
 failed with EBUSY. The fix and its regression test are on `devel-k15`, and the

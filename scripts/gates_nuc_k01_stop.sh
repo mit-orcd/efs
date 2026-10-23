@@ -19,7 +19,7 @@
 set -u
 GATES=${GATES:-$HOME/efs-gates-nuc}
 REL=$GATES/src; K=$GATES/k01; A=127.0.0.1
-export EFS_TRANSPORT=tcp EFS_MD_RAFT_N=3 TMPDIR=$GATES/tmp EFS_CLIENT_SKIP_FOREIGN=1
+export EFS_TRANSPORT=tcp EFS_MD_RAFT_N=3 TMPDIR=$GATES/tmp
 cd "$REL" || exit 2
 ms() { date +%s%3N; }
 for p in 18910 18911 18912; do ss -ltnH "sport = :$p" | grep -q . && { echo "port $p in use"; exit 1; }; done

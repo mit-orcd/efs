@@ -290,8 +290,8 @@ PY
         listed=1
     fi
 
-    local process_rc=0
-    python3 ./scripts/client_processes.py has "$mnt" || process_rc=$?
+    local process_rc=0 owner
+    owner=$(python3 ./scripts/client_processes.py has "$mnt") || process_rc=$?
     if [ "$process_rc" -gt 1 ]; then
         echo "ERROR: cannot discover client processes; stop refused" >&2
         return 1
@@ -329,7 +329,8 @@ PY
     fi
 
     if [ "$process_rc" -eq 0 ]; then
-        python3 ./scripts/client_processes.py retire "$mnt" || return 1
+        # Retire exactly the controller proven before the drain (PID STARTTIME).
+        python3 ./scripts/client_processes.py retire "$mnt" $owner || return 1
     fi
     if [ "$listed" -eq 1 ]; then
         echo "Unmounted $mnt"
