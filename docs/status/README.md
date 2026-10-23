@@ -38,7 +38,7 @@ a private 3-daemon TCP buffered cluster under churn/GC and POSIX load; no loss,
 duplicate or reorder warm or cold. No fix; bounded rerun NOTRUN.
 
 [K22 / W23 follower memory/lag bound](../../results/measure/20261022-k22-follower-bound/SUMMARY.md):
-**implemented on `devel-k22` (not merged); unit test (EFS_FAULTS stall
+**merged into devel; unit test (EFS_FAULTS stall
 hook) and `make test` PASS on efs3; the plateau measurement on a real cluster
 is NOTRUN (parent session).** Two earlier scaled runs on efs3 are
 informational only: one found the stalled follower winning an election,
@@ -47,7 +47,7 @@ into a stalled follower is NOTRUN.
 
 [K26 leak gate](k26-leak-gate-20261022.md): **`make leak-check` PASS on
 efs2 (25/25 unit binaries under valgrind memcheck, about 6 min) and `make test`
-PASS; branch `devel-k26`, not merged.** It works without LeakSanitizer, which
+PASS; merged into devel (`b8ef49e58`).** It works without LeakSanitizer, which
 fails only where `ptrace_scope` is 2 (ORCD); `make check` runs it. No product
 leak found. Open: W126 peeks can wait behind a writer queued on `view_rw`.
 node9901 run NOTRUN.
@@ -69,7 +69,7 @@ the W125 cleanup/remote-evidence row is addressed and merged (`devel-w125h`);
 four targeted checks PASS, merged cluster acceptance NOTRUN.
 
 [K1 / W145 R4 whole-shutdown deadline](k01b-r4-shutdown-deadline-20261022.md):
-**implemented on `devel-k01b` (not merged); unit, private-daemon and full
+**implemented on `devel-k01b`, merged `9fd38ffb4`; unit, private-daemon and full
 `make test` PASS on efs3.** One 50 s deadline covers the handler drain and
 every stop phase. A stuck worker gives rc 3 with the phase and worker named,
 and the stop script reports "stopped, forced, stores preserved", never
@@ -104,7 +104,7 @@ shutdown and mismatch-context gaps in the improved repro; the harness gaps
 self-tests) are closed and merged (`56b7e48fe`); qualification NOTRUN.
 
 [K4 / W133 declaration gate](../backlog/work-items.md#w133-fix):
-**fixed on branch `devel-k04`, not merged.** Every request except
+**fixed, merged into devel.** Every request except
 CLIENT_HELLO and HEARTBEAT needs an accepted declaration of exactly
 protocol 3. Unit gates PASS on efs3 over TCP; the RDMA unit path and the
 cluster refusal run are NOTRUN.
@@ -118,9 +118,9 @@ persisted; ior write regression needs a K row.
 [Alpha 1.0 Stage 1, Oct 22](alpha-1.0-2plus1-checklist.md#stage-1-tally-end-of-oct-22-adjusted-after-the-integration-review):
 **7 K rows fixed and merged (K2, K3, K4, K8, K16, K24, K28); of the 5 rows
 REOPENED by the [integration review](devel-integration-review-20261022.md),
-K5 (S2/S3), K7 (R2/R3) and K22 (S1, both P1 findings) are fixed again and
-merged; K1 (R4) and K25 (R1) are still open in sub-sessions; 2 INCOMPLETE
-(K9, K15); live gates NOTRUN.** Highlights: W148 wrong-bytes root
+all five (K1 R4, K5 S2/S3, K7 R2/R3, K22 S1, K25 R1, the two P1 findings
+included) are fixed again and merged; the K26 valgrind leak gate is merged;
+2 INCOMPLETE (K9, K15); live gates NOTRUN.** Highlights: W148 wrong-bytes root
 cause fixed (UNCOND slot base), sessions registered on every mutation
 (protocol 4), identity-bound fragment format 2 (fresh format needed),
 follower memory/lag bound, pre-vote, bounded stops.
