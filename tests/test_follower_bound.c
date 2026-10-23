@@ -12,7 +12,13 @@
  * unapplied log never exceeds the cap, its KV memtable stays at the budget,
  * the healthy quorum keeps committing, and after the stall clears the
  * follower applies every committed entry. A third arm checks that a leader
- * at its own cap refuses proposals with EFS_ERR_BUSY and recovers. */
+ * at its own cap refuses proposals with EFS_ERR_BUSY and recovers.
+ * Review S1 (Oct 22) arms: three voters restarted with identical 96-entry
+ * uncommitted tails at cap 128 campaign (the counting arm is the former
+ * scripts/reviews/k22_capacity_tail.c reproducer), elect a leader with
+ * messages delivered, commit and apply the tail, and resume admission; the
+ * leader does not step down for its own uncommitted tail. A committed but
+ * unapplied backlog still holds campaigning until it applies. */
 #include "efs/raft.h"
 #include "efs/kv.h"
 #include "efs/kv_lsm.h"
@@ -36,6 +42,8 @@ struct net {
     struct qmsg q[QMAX];
     unsigned head, tail;
     uint64_t busy_rejects_seen, data_to_busy;
+    unsigned down;    /* replicas cut off: nothing to or from them */
+    int drop_ae_rep;  /* lose every AppendEntries reply */
 };
 
 struct app {
@@ -81,7 +89,10 @@ static void deliver(struct net *n)
 {
     while (n->head != n->tail) {
         struct efs_raft_msg *m = n->q[n->head++ % QMAX].m;
-        if (m && m->to >= 0 && m->to < NR && n->r[m->to])
+        if (m && m->to >= 0 && m->to < NR && n->r[m->to] &&
+            !(n->down & (1u << m->to)) &&
+            !(m->from >= 0 && m->from < NR && (n->down & (1u << m->from))) &&
+            !(n->drop_ae_rep && m->type == EFS_RAFT_MSG_AE_REP))
             (void)efs_raft_recv(n->r[m->to], m);
         deep_free(m);
     }
@@ -359,6 +370,204 @@ static void test_capacity_leadership(void)
     shutdown_net(&n);
 }
 
+
+/* The host's admission watermark (host_admit): new work is refused while
+ * the whole unapplied tail, committed or not, is at 3/4 of the cap. */
+static int host_admission_held(struct efs_raft *r)
+{
+    struct efs_raft_log_progress lp;
+    if (efs_raft_log_progress(r, &lp) != EFS_OK) return 1;
+    return lp.max_unapplied && lp.unapplied >= lp.max_unapplied / 4u * 3u;
+}
+
+#define TAIL_LEN 96
+#define TAIL_CAP 128
+
+static int counted_sends;
+static int count_send(void *p, const struct efs_raft_msg *m)
+{
+    (void)p; (void)m;
+    counted_sends++;
+    return EFS_OK;
+}
+
+/* Three voters restarted with identical term-1 tails of TAIL_LEN entries,
+ * none known committed (commit = applied = 0), cap TAIL_CAP, no pressure,
+ * all campaign-enabled. send = NULL delivers through the queued net. */
+static void boot_tail(struct net *n, efs_raft_send_fn send)
+{
+    struct efs_raft_cfg cfg;
+    memset(n, 0, sizeof(*n));
+    memset(apps, 0, sizeof(apps));
+    for (int i = 0; i < NR; i++) {
+        uint8_t c = 0x7a;
+        st[i] = efs_raft_mem_create();
+        CHECK(st[i]->save_hard(st[i], 1, -1) == EFS_OK, "save hard state");
+        for (uint64_t j = 1; j <= TAIL_LEN; j++)
+            CHECK(st[i]->append(st[i], j, 1, &c, 1) == EFS_OK, "preload tail");
+        memset(&cfg, 0, sizeof(cfg));
+        cfg.id = i;
+        cfg.n = NR;
+        cfg.election_ticks = 10;
+        cfg.heartbeat_ticks = 2;
+        cfg.boot_id = 1;
+        cfg.rng_seed = 7 + (uint64_t)i;
+        cfg.store = st[i];
+        cfg.store_ctx = st[i];
+        cfg.send = send ? send : q_send;
+        cfg.net = n;
+        cfg.apply = app_apply;
+        cfg.app = &apps[i];
+        n->r[i] = efs_raft_new(&cfg);
+        CHECK(n->r[i] != NULL, "raft new");
+        if (n->r[i]) efs_raft_set_max_unapplied(n->r[i], TAIL_CAP);
+    }
+}
+
+/* S1 reproducer (formerly scripts/reviews/k22_capacity_tail.c): the send
+ * callback only counts. Before the fix, 1,000 ticks sent nothing and every
+ * replica held its campaigns. */
+static void test_tail_campaigns(void)
+{
+    struct net n;
+    struct efs_raft_log_progress lp;
+    fprintf(stderr, "test_tail_campaigns (S1 reproducer, counting only)\n");
+    counted_sends = 0;
+    boot_tail(&n, count_send);
+    for (int t = 0; t < 1000; t++)
+        for (int i = 0; i < NR; i++) (void)efs_raft_tick(n.r[i]);
+    for (int i = 0; i < NR; i++) {
+        CHECK(efs_raft_log_progress(n.r[i], &lp) == EFS_OK, "progress");
+        fprintf(stderr, "  node=%d role=%d last=%llu unapplied=%llu low=%llu held=%llu\n",
+                i, efs_raft_role(n.r[i]), (unsigned long long)lp.last_index,
+                (unsigned long long)lp.unapplied, (unsigned long long)lp.low_capacity,
+                (unsigned long long)lp.campaigns_held);
+        CHECK(lp.unapplied == TAIL_LEN, "tail retained, nothing applied");
+        CHECK(lp.low_capacity == 0, "an uncommitted tail is not low capacity");
+        CHECK(lp.campaigns_held == 0, "no campaign held for an uncommitted tail");
+        CHECK(efs_raft_applied(n.r[i]) == 0, "uncommitted entries not applied");
+    }
+    fprintf(stderr, "  messages sent=%d\n", counted_sends);
+    CHECK(counted_sends > 0, "replicas with uncommitted tails send pre-votes");
+    shutdown_net(&n);
+}
+
+/* S1 recovery with delivery: a leader is elected from the tails, holds
+ * admission and does not step down while the tail is uncommitted, then
+ * commits and applies it and admits again. */
+static void test_tail_recovery(void)
+{
+    struct net n;
+    struct efs_raft_log_progress lp;
+    int l = -1, t;
+    fprintf(stderr, "test_tail_recovery (S1, delivering)\n");
+    boot_tail(&n, NULL);
+    /* Phase 1: AppendEntries replies are lost, so the leader cannot
+     * commit anything; votes and heartbeats still flow. */
+    n.drop_ae_rep = 1;
+    for (t = 0; t < 400 && (l = leader_of(&n)) < 0; t++) tick_all(&n);
+    CHECK(l >= 0, "a leader is elected from uncommitted tails");
+    if (l < 0) { shutdown_net(&n); return; }
+    uint64_t term = efs_raft_term(n.r[l]);
+    for (t = 0; t < 100; t++) tick_all(&n); /* > 4 election timeouts */
+    CHECK(leader_of(&n) == l && efs_raft_term(n.r[l]) == term,
+          "leader with only an uncommitted tail keeps leading");
+    CHECK(efs_raft_log_progress(n.r[l], &lp) == EFS_OK, "leader progress");
+    CHECK(lp.capacity_stepdowns == 0, "no capacity step-down for the own tail");
+    CHECK(lp.low_capacity == 0, "uncommitted tail is not low capacity");
+    CHECK(lp.last_index == TAIL_LEN + 1, "leader appended only its no-op");
+    CHECK(efs_raft_commit(n.r[l]) == 0, "nothing committed without acks");
+    CHECK(host_admission_held(n.r[l]), "admission held while the tail is uncommitted");
+    for (int i = 0; i < NR; i++)
+        CHECK(efs_raft_applied(n.r[i]) == 0, "no uncommitted entry applied");
+    /* Phase 2: replies flow; the no-op commits the tail everywhere. */
+    n.drop_ae_rep = 0;
+    for (t = 0; t < 200; t++) {
+        int done = 1;
+        tick_all(&n);
+        for (int i = 0; i < NR; i++)
+            if (efs_raft_applied(n.r[i]) < TAIL_LEN + 1) done = 0;
+        if (done) break;
+    }
+    CHECK(leader_of(&n) == l, "same leader after commit");
+    CHECK(efs_raft_commit(n.r[l]) == TAIL_LEN + 1, "tail and no-op committed");
+    for (int i = 0; i < NR; i++) {
+        fprintf(stderr, "  node=%d role=%d commit=%llu applied=%llu\n", i,
+                efs_raft_role(n.r[i]), (unsigned long long)efs_raft_commit(n.r[i]),
+                (unsigned long long)efs_raft_applied(n.r[i]));
+        CHECK(efs_raft_applied(n.r[i]) == TAIL_LEN + 1, "tail applied on every replica");
+        CHECK(unapplied(n.r[i]) == 0, "nothing left unapplied");
+    }
+    CHECK(!host_admission_held(n.r[l]), "admission watermark released");
+    {
+        uint64_t idx = 0;
+        uint8_t cmd[8] = {0x7a};
+        CHECK(efs_raft_propose(n.r[l], cmd, sizeof(cmd), &idx) == EFS_OK,
+              "leader admits new work");
+        for (t = 0; t < 20; t++) tick_all(&n);
+        for (int i = 0; i < NR; i++)
+            CHECK(efs_raft_applied(n.r[i]) >= idx, "new work applied everywhere");
+    }
+    shutdown_net(&n);
+}
+
+/* A committed but unapplied backlog at 3/4 of the cap still holds
+ * campaigning, also after the leader is gone; once the state machine can
+ * take it, the replica applies it locally and campaigns. */
+static void test_committed_backlog_holds(void)
+{
+    struct net n;
+    struct efs_raft_log_progress lp;
+    /* The busy advisory parks a follower one full batch below the cap;
+     * at eight batches that is past the 3/4 watermark. */
+    uint64_t cap = 8u * EFS_RAFT_AE_MAX;
+    int t;
+    fprintf(stderr, "test_committed_backlog_holds, cap=%llu\n", (unsigned long long)cap);
+    boot(&n, cap);
+    apps[1].park = 1;
+    for (int i = 0; i < (int)cap * 2; i++) {
+        (void)propose_one(&n, (uint64_t)i, 32);
+        if (i % 8 == 0) tick_all(&n);
+    }
+    for (t = 0; t < 60; t++) tick_all(&n);
+    CHECK(efs_raft_log_progress(n.r[1], &lp) == EFS_OK, "progress");
+    fprintf(stderr, "  f1: commit=%llu applied=%llu last=%llu low=%llu\n",
+            (unsigned long long)efs_raft_commit(n.r[1]),
+            (unsigned long long)efs_raft_applied(n.r[1]),
+            (unsigned long long)lp.last_index, (unsigned long long)lp.low_capacity);
+    CHECK(efs_raft_commit(n.r[1]) - efs_raft_applied(n.r[1]) >= cap / 4u * 3u,
+          "follower holds a committed backlog at 3/4 of the cap");
+    CHECK(lp.low_capacity == 1, "committed backlog is low capacity");
+    /* The leader is lost; replica 1 may campaign, replica 2 only votes. */
+    uint64_t term = efs_raft_term(n.r[1]);
+    n.down = 1u << 0;
+    efs_raft_allow_campaign(n.r[1], 1);
+    for (t = 0; t < 200; t++) tick_all(&n);
+    CHECK(efs_raft_log_progress(n.r[1], &lp) == EFS_OK && lp.campaigns_held > 0,
+          "replica with a committed backlog held its campaigns");
+    CHECK(efs_raft_term(n.r[1]) == term && efs_raft_role(n.r[1]) != EFS_RAFT_LEADER,
+          "held replica did not start an election");
+    /* The state machine recovers: no leader is needed to drain, and the
+     * replica stops holding. Its log is shorter than replica 2's, so it
+     * cannot win; once replica 2 may campaign too, a leader emerges. */
+    apps[1].park = 0;
+    for (t = 0; t < 4 * 20; t++) tick_all(&n);
+    CHECK(efs_raft_applied(n.r[1]) == efs_raft_commit(n.r[1]),
+          "committed backlog applied without a leader");
+    CHECK(efs_raft_log_progress(n.r[1], &lp) == EFS_OK && lp.low_capacity == 0,
+          "capacity regained");
+    uint64_t held = lp.campaigns_held;
+    for (t = 0; t < 100; t++) tick_all(&n);
+    CHECK(efs_raft_log_progress(n.r[1], &lp) == EFS_OK && lp.campaigns_held == held,
+          "drained replica campaigns without holding");
+    efs_raft_allow_campaign(n.r[2], 1);
+    /* Replica 0 is cut off and still believes it leads; look at 2. */
+    for (t = 0; t < 400 && efs_raft_role(n.r[2]) != EFS_RAFT_LEADER; t++) tick_all(&n);
+    CHECK(efs_raft_role(n.r[2]) == EFS_RAFT_LEADER, "the up-to-date voter leads");
+    n.down = 0;
+    shutdown_net(&n);
+}
+
 #if EFS_FAULTS
 static char fault_path[256];
 static void stall_release(void) { unlink(fault_path); }
@@ -417,6 +626,9 @@ int main(void)
     test_sim();
     test_leader_admission();
     test_capacity_leadership();
+    test_tail_campaigns();
+    test_tail_recovery();
+    test_committed_backlog_holds();
 #if EFS_FAULTS
     test_stalled_compactor();
 #else
