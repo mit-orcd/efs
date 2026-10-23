@@ -23,6 +23,7 @@
 #include "efs/kv_key.h"
 #include "efs/txn.h"
 #include "efs/session.h"
+#include "efs/put_ticket.h"
 #include "efs/raft.h"
 #include "efs/common.h"
 #include <stdio.h>
@@ -63,27 +64,45 @@ static void establish_session(struct efs_kv *kv)
         (void)efs_session_establish(kv, shard, g_session.client_uuid, 1);
 }
 
+/* K13: every staged publication names an admitted PUT ticket; `tag` is the
+ * ticket sequence and the object name derives from it (G). */
+static uint64_t G(uint32_t ci, uint64_t tag)
+{
+    return efs_meta_candidate_gen(g_session.client_uuid, 1, tag, ci, 0);
+}
+
 static struct efs_meta_pub pub_of(const struct fixture *f, uint32_t ci,
-                                  uint64_t expected, uint64_t candidate)
+                                  uint64_t expected, uint64_t tag)
 {
     struct efs_meta_pub p;
+    struct efs_put_ticket t;
 
     memset(&p, 0, sizeof(p));
     p.ino = f->ino;
     p.chunk_index = ci;
     p.new_size = 2ull * CS;
     p.now = T0 + 10;
-    p.expected_gen = expected;
-    p.candidate_gen = candidate;
+    p.expected_gen = expected ? G(ci, expected) : 0;
+    p.candidate_gen = G(ci, tag);
     p.content_epoch = f->row.content_epoch;
     p.coding_profile_id = EFS_META_PROFILE_K2F1;
     p.inode_gen = f->row.generation;
     p.mtime_gen = f->row.mtime_gen;
     p.lane_local = ci % EFS_META_LANES != 0; /* lane 1 lives off the inode shard */
+    p.fresh_object = 1;
+    p.ticketed = 1;
+    p.put_id = g_session;
+    p.put_id.seq = tag;
+    p.publication_id = p.put_id;
+    p.put_fragment_len = CS / 2;
+    p.put_member_mask = 7;
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         p.ch.nodes[i] = (efs_node_id_t)(i + 1);
-        p.ch.checksums[i][0] = (uint8_t)candidate;
+        p.ch.checksums[i][0] = (uint8_t)tag;
     }
+    /* Admit once; a published or retired ticket simply stays as it is. */
+    if (efs_put_ticket_from_pub(&p, &t) == EFS_OK)
+        (void)efs_put_ticket_admit(f->kv, &t);
     return p;
 }
 
@@ -231,13 +250,32 @@ static void test_encoding(void)
     p.fresh_object = 1;
     CHECK(efs_meta_pub_stage_encode(&p, &g_session, pay) == EFS_OK, "encode");
     CHECK(efs_meta_pub_stage_decode(pay, sizeof(pay), &q, &s) == EFS_OK, "decode");
-    CHECK(q.ino == p.ino && q.chunk_index == 1 && q.expected_gen == 0xB0 &&
-          q.candidate_gen == 0xB1 && q.inode_gen == p.inode_gen && q.lane_local &&
+    CHECK(q.ino == p.ino && q.chunk_index == 1 && q.expected_gen == G(1, 0xB0) &&
+          q.candidate_gen == G(1, 0xB1) && q.inode_gen == p.inode_gen && q.lane_local &&
           q.fresh_object && q.delta_off == 7 && q.delta_len == 9 &&
           q.delta_base_n == 2 && q.delta_base_seq == 33 &&
           !memcmp(q.ch.checksums, p.ch.checksums, sizeof(q.ch.checksums)) &&
           !memcmp(s.client_uuid, g_session.client_uuid, sizeof(s.client_uuid)) &&
-          s.session_epoch == 1, "round trip");
+          s.session_epoch == 1 && q.ticketed && q.put_id.seq == 0xB1 &&
+          q.put_fragment_len == CS / 2 && q.put_member_mask == 7 &&
+          !memcmp(&q.put_id, &q.publication_id, sizeof(q.put_id)), "round trip");
+    p.missing_mask = 4;
+    CHECK(efs_meta_pub_stage_encode(&p, &g_session, pay) == EFS_OK &&
+          efs_meta_pub_stage_decode(pay, sizeof(pay), &q, NULL) == EFS_OK &&
+          q.missing_mask == 4, "the W154 missing mask rides the stage");
+    p.missing_mask = 5;
+    CHECK(efs_meta_pub_stage_encode(&p, &g_session, pay) == EFS_ERR_INVAL,
+          "two missing fragments are never staged");
+    p.missing_mask = 0;
+    p.ticketed = 0;
+    CHECK(efs_meta_pub_stage_encode(&p, &g_session, pay) == EFS_ERR_INVAL,
+          "K13: an unticketed publication is never staged");
+    p.ticketed = 1;
+    p.put_id.session_epoch = 2;
+    CHECK(efs_meta_pub_stage_encode(&p, &g_session, pay) == EFS_ERR_INVAL,
+          "the ticket stream is the REPORT session's");
+    p.put_id.session_epoch = 1;
+    CHECK(efs_meta_pub_stage_encode(&p, &g_session, pay) == EFS_OK, "encode again");
     pay[0] = 9;
     CHECK(efs_meta_pub_stage_decode(pay, sizeof(pay), &q, NULL) == EFS_ERR_PROTO,
           "unknown version refused");
@@ -276,9 +314,18 @@ static void test_commit(void)
     CHECK(prep_chunk(&f, &t, &parts, &p0) == EFS_OK, "stage chunk 0");
     CHECK(prep_chunk(&f, &t, &parts, &p1) == EFS_OK, "stage chunk 1");
     CHECK(prep_pin(&f, &t, &parts, f.row.content_epoch) == EFS_OK, "pin");
+    {
+        /* K13: the owner cannot abandon a ticket a pending stage may publish. */
+        struct efs_put_ticket tk;
+        uint32_t state = 0;
+        CHECK(efs_put_ticket_from_pub(&p1, &tk) == EFS_OK &&
+              efs_put_ticket_settle(f.kv, &tk) == EFS_ERR_BUSY &&
+              efs_put_ticket_get(f.kv, &tk, &state) == EFS_OK &&
+              state == EFS_PUT_TICKET_ADMITTED, "settle waits for a staged ticket");
+    }
 
     /* 1. invisible, exclusive, idempotent */
-    CHECK(gen_of(&f, 0) == 0xA0 && gen_of(&f, 1) == 0xB0, "previous mappings stay");
+    CHECK(gen_of(&f, 0) == G(0, 0xA0) && gen_of(&f, 1) == G(1, 0xB0), "previous mappings stay");
     other = pub_of(&f, 1, 0xB0, 0xC1);
     CHECK(efs_meta_apply_publish(f.kv, &other) == EFS_ERR_BUSY,
           "an ordinary writer of a staged chunk is BUSY");
@@ -331,7 +378,7 @@ static void test_commit(void)
     /* 4. resolve, lane first: a reader of the unresolved one stays BUSY */
     CHECK(efs_meta_apply_txn_resolve(f.kv, &t, f.lsh1, EFS_TXN_COMMIT) == EFS_OK,
           "resolve lane 1");
-    CHECK(gen_of(&f, 1) == 0xB1 && gen_of(&f, 0) == 0xA0, "lane 1 applied");
+    CHECK(gen_of(&f, 1) == G(1, 0xB1) && gen_of(&f, 0) == G(0, 0xA0), "lane 1 applied");
     CHECK(efs_meta_pub_stage_peek(f.kv, f.ino, f.row.generation, 1, NULL, NULL) ==
               EFS_ERR_NOT_FOUND, "its stage left in the same batch");
     CHECK(efs_meta_pub_stage_visible(f.kv, f.ino, f.row.generation, 0, coord_fn, &cc,
@@ -339,10 +386,17 @@ static void test_commit(void)
           "the other chunk is BUSY until resolved");
     CHECK(efs_meta_apply_txn_resolve(f.kv, &t, f.ish, EFS_TXN_COMMIT) == EFS_OK,
           "resolve inode shard");
-    CHECK(gen_of(&f, 0) == 0xA1, "chunk 0 applied");
+    CHECK(gen_of(&f, 0) == G(0, 0xA1), "chunk 0 applied");
     CHECK(efs_meta_apply_txn_resolve(f.kv, &t, f.ish, EFS_TXN_COMMIT) == EFS_OK &&
           efs_meta_apply_txn_resolve(f.kv, &t, f.lsh1, EFS_TXN_COMMIT) == EFS_OK &&
-          gen_of(&f, 0) == 0xA1 && gen_of(&f, 1) == 0xB1, "re-RESOLVE is idempotent");
+          gen_of(&f, 0) == G(0, 0xA1) && gen_of(&f, 1) == G(1, 0xB1), "re-RESOLVE is idempotent");
+    {
+        struct efs_put_ticket tk;
+        uint32_t state = 0;
+        CHECK(efs_put_ticket_from_pub(&p1, &tk) == EFS_OK &&
+              efs_put_ticket_get(f.kv, &tk, &state) == EFS_OK &&
+              state == EFS_PUT_TICKET_PUBLISHED, "K13: RESOLVE COMMIT publishes the ticket");
+    }
     CHECK(prep_chunk(&f, &t2, &parts2, &other) == EFS_ERR_STALE,
           "a publication built on the old base is STALE after commit");
     CHECK(shrink(&f) == EFS_ERR_BUSY, "the pin outlives RESOLVE");
@@ -382,7 +436,7 @@ static void test_abort_and_refusals(void)
     CHECK(efs_meta_apply_txn_resolve(f.kv, &t, f.lsh1, EFS_TXN_ABORT) == EFS_OK &&
           efs_meta_apply_txn_resolve(f.kv, &t, f.ish, EFS_TXN_ABORT) == EFS_OK,
           "resolve abort");
-    CHECK(gen_of(&f, 0) == 0xA0 && gen_of(&f, 1) == 0xB0, "nothing applied");
+    CHECK(gen_of(&f, 0) == G(0, 0xA0) && gen_of(&f, 1) == G(1, 0xB0), "nothing applied");
     CHECK(efs_meta_pub_stage_peek(f.kv, f.ino, f.row.generation, 0, NULL, NULL) ==
               EFS_ERR_NOT_FOUND &&
           efs_meta_pub_stage_peek(f.kv, f.ino, f.row.generation, 1, NULL, NULL) ==
@@ -432,7 +486,7 @@ static void test_abort_and_refusals(void)
               EFS_ERR_NOT_FOUND &&
           efs_meta_pub_stage_peek(f.kv, f.ino, f.row.generation, 1, NULL, NULL) ==
               EFS_ERR_NOT_FOUND, "drop removed stages and pin");
-    CHECK(gen_of(&f, 0) == 0xA0 && gen_of(&f, 1) == 0xB0, "drop applied nothing");
+    CHECK(gen_of(&f, 0) == G(0, 0xA0) && gen_of(&f, 1) == G(1, 0xB0), "drop applied nothing");
     CHECK(efs_meta_apply_check(f.kv) == EFS_OK, "check");
     efs_kv_mem_free(f.kv);
 }

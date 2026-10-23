@@ -5184,9 +5184,71 @@ static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
     return publish_inner_as(kv, p, receipt, NULL);
 }
 
+/* K13 REPORT publication. The ticket, not the evictable span trailer, is
+ * the durable replay authority: a PUBLISHED ticket is an exact no-op (D1,
+ * I16) and a settled or retired one never takes effect again (W88). A lost
+ * CAS leaves the ticket ADMITTED: its owner may retry the same immutable
+ * object against a fresh base, or settle (abandon) it. */
+static int publish_ticketed(struct efs_kv *kv, const struct efs_meta_pub *p)
+{
+    struct efs_put_ticket ticket;
+    uint32_t state;
+    int rc = efs_put_ticket_from_pub(p, &ticket);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_put_ticket_state(kv, &ticket, &state);
+    if (rc == EFS_ERR_NOT_FOUND)
+        return EFS_ERR_STALE; /* never admitted: no unticketed publication */
+    if (rc != EFS_OK)
+        return rc;
+    if (state == EFS_PUT_TICKET_PUBLISHED)
+        return EFS_OK;
+    if (state != EFS_PUT_TICKET_ADMITTED)
+        return EFS_ERR_STALE;
+    rc = publish_inner(kv, p, NULL);
+    if (rc == EFS_OK) {
+        /* Every mutation carried the PUBLISHED item. A no-op leaves the
+         * ticket ADMITTED; never let a later settle abandon a body a
+         * mapping may name. */
+        rc = efs_put_ticket_get(kv, &ticket, &state);
+        if (rc == EFS_OK && state == EFS_PUT_TICKET_ADMITTED) {
+            uint8_t key[EFS_PUT_TICKET_KEY_LEN], val[EFS_PUT_TICKET_VAL_LEN];
+            struct efs_kv_item item;
+            rc = efs_put_ticket_publish_item(kv, &ticket, key, val, &item);
+            if (rc == EFS_OK)
+                rc = meta_write_batch(kv, &item, 1);
+        }
+        return rc;
+    }
+    return rc;
+}
+
+/* The host found the file deleted: settle the ADMITTED ticket as REJECTED
+ * (its body joins the orphan ledger at retirement). A PUBLISHED one already
+ * took effect. verdict is returned after a reject (EFS_OK, P3 no-op). */
+int efs_meta_apply_publish_reject(struct efs_kv *kv, const struct efs_meta_pub *p,
+                                  int verdict)
+{
+    struct efs_put_ticket ticket;
+    uint32_t state;
+    if (!kv || !p || !p->ticketed || p->durable_result) return EFS_ERR_INVAL;
+    int rc = efs_put_ticket_from_pub(p, &ticket);
+    if (rc == EFS_OK) rc = efs_put_ticket_state(kv, &ticket, &state);
+    if (rc == EFS_ERR_NOT_FOUND) return EFS_ERR_STALE;
+    if (rc != EFS_OK) return rc;
+    if (state == EFS_PUT_TICKET_PUBLISHED) return EFS_OK;
+    if (state == EFS_PUT_TICKET_ADMITTED) {
+        rc = efs_put_ticket_reject(kv, &ticket);
+        if (rc != EFS_OK) return rc;
+        return verdict;
+    }
+    return EFS_ERR_STALE;
+}
+
 int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
 {
-    if (p && p->ticketed && (!p->durable_result || !p->fresh_object)) return EFS_ERR_INVAL;
+    if (p && p->ticketed && !p->fresh_object) return EFS_ERR_INVAL;
+    if (p && p->ticketed && !p->durable_result) return kv ? publish_ticketed(kv, p) : EFS_ERR_INVAL;
     if(!p || !p->durable_result) return publish_inner(kv,p,NULL);
     if(!publication_locator_valid(&p->receipt_locator))return EFS_ERR_INVAL;
     uint8_t digest[EFS_HASH_SIZE],key[51],value[PUBLICATION_RECEIPT_V2];int verdict;
@@ -5228,6 +5290,9 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
 #define PUB_PIN_KEY_LEN (24u + EFS_TXN_ID_LEN)
 #define PUB_STAGE_F_LANE_LOCAL 1u
 #define PUB_STAGE_F_FRESH_OBJECT 2u
+#define PUB_STAGE_F_TICKETED 4u /* K13: mandatory */
+#define PUB_STAGE_F_MISSING_SHIFT 3u /* W154 missing mask, bits 3..5 */
+#define PUB_STAGE_F_MISSING_MASK (((1u << EFS_NUM_FRAGMENTS) - 1u) << PUB_STAGE_F_MISSING_SHIFT)
 
 int efs_meta_pub_stage_encode(const struct efs_meta_pub *p, const struct efs_opid *session,
                               uint8_t out[EFS_PUB_STAGE_LEN])
@@ -5235,10 +5300,14 @@ int efs_meta_pub_stage_encode(const struct efs_meta_pub *p, const struct efs_opi
     uint8_t *q;
     int i;
 
-    /* Only the default REPORT publication is staged: no receipt, ticket or
-     * packed reference rides a staged request. */
+    /* Only the default REPORT publication is staged: no receipt or packed
+     * reference rides a staged request; its ticket (K13) and the W154 missing
+     * mask do. The ticket stream is the REPORT session's. */
     if (!p || !session || !out || !p->ino || !p->inode_gen || p->durable_result ||
-        p->ticketed || p->coding_profile_id == EFS_META_PROFILE_PACK)
+        !p->ticketed || p->coding_profile_id == EFS_META_PROFILE_PACK ||
+        !efs_chunk_missing_valid(p->missing_mask) ||
+        p->put_id.session_epoch != session->session_epoch ||
+        memcmp(p->put_id.client_uuid, session->client_uuid, EFS_OPID_UUID_LEN))
         return EFS_ERR_INVAL;
     out[0] = EFS_PUB_STAGE_VERSION;
     be64(out + 1, p->ino);
@@ -5252,7 +5321,8 @@ int efs_meta_pub_stage_encode(const struct efs_meta_pub *p, const struct efs_opi
     be64(out + 57, p->inode_gen);
     be64(out + 65, p->mtime_gen);
     out[73] = (uint8_t)((p->lane_local ? PUB_STAGE_F_LANE_LOCAL : 0) |
-                        (p->fresh_object ? PUB_STAGE_F_FRESH_OBJECT : 0));
+                        (p->fresh_object ? PUB_STAGE_F_FRESH_OBJECT : 0) | PUB_STAGE_F_TICKETED |
+                        ((uint32_t)p->missing_mask << PUB_STAGE_F_MISSING_SHIFT));
     be32(out + 74, p->delta_off);
     be32(out + 78, p->delta_len);
     be32(out + 82, p->delta_base_n);
@@ -5264,6 +5334,10 @@ int efs_meta_pub_stage_encode(const struct efs_meta_pub *p, const struct efs_opi
         memcpy(q, p->ch.checksums[i], EFS_HASH_SIZE);
     memcpy(q, session->client_uuid, EFS_OPID_UUID_LEN);
     be32(q + EFS_OPID_UUID_LEN, session->session_epoch);
+    q += EFS_OPID_UUID_LEN + 4;
+    be64(q, p->put_id.seq);
+    be32(q + 8, p->put_fragment_len);
+    be32(q + 12, p->put_member_mask);
     return EFS_OK;
 }
 
@@ -5274,7 +5348,10 @@ int efs_meta_pub_stage_decode(const uint8_t *in, uint32_t n, struct efs_meta_pub
     int i;
 
     if (!in || !p || n != EFS_PUB_STAGE_LEN || in[0] != EFS_PUB_STAGE_VERSION ||
-        (in[73] & ~(PUB_STAGE_F_LANE_LOCAL | PUB_STAGE_F_FRESH_OBJECT)))
+        (in[73] & ~(PUB_STAGE_F_LANE_LOCAL | PUB_STAGE_F_FRESH_OBJECT | PUB_STAGE_F_TICKETED |
+                    PUB_STAGE_F_MISSING_MASK)) ||
+        !(in[73] & PUB_STAGE_F_TICKETED) ||
+        !efs_chunk_missing_valid((in[73] & PUB_STAGE_F_MISSING_MASK) >> PUB_STAGE_F_MISSING_SHIFT))
         return EFS_ERR_PROTO;
     memset(p, 0, sizeof(*p));
     p->ino = rd64(in + 1);
@@ -5289,6 +5366,7 @@ int efs_meta_pub_stage_decode(const uint8_t *in, uint32_t n, struct efs_meta_pub
     p->mtime_gen = rd64(in + 65);
     p->lane_local = !!(in[73] & PUB_STAGE_F_LANE_LOCAL);
     p->fresh_object = !!(in[73] & PUB_STAGE_F_FRESH_OBJECT);
+    p->missing_mask = (uint8_t)((in[73] & PUB_STAGE_F_MISSING_MASK) >> PUB_STAGE_F_MISSING_SHIFT);
     p->delta_off = rd32(in + 74);
     p->delta_len = rd32(in + 78);
     p->delta_base_n = rd32(in + 82);
@@ -5298,6 +5376,13 @@ int efs_meta_pub_stage_decode(const uint8_t *in, uint32_t n, struct efs_meta_pub
         p->ch.nodes[i] = rd32(q);
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++, q += EFS_HASH_SIZE)
         memcpy(p->ch.checksums[i], q, EFS_HASH_SIZE);
+    p->ticketed = 1;
+    memcpy(p->put_id.client_uuid, q, EFS_OPID_UUID_LEN);
+    p->put_id.session_epoch = rd32(q + EFS_OPID_UUID_LEN);
+    p->put_id.seq = rd64(q + EFS_OPID_UUID_LEN + 4);
+    p->put_fragment_len = rd32(q + EFS_OPID_UUID_LEN + 12);
+    p->put_member_mask = rd32(q + EFS_OPID_UUID_LEN + 16);
+    p->publication_id = p->put_id;
     if (session) {
         memset(session, 0, sizeof(*session));
         memcpy(session->client_uuid, q, EFS_OPID_UUID_LEN);

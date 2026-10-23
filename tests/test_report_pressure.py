@@ -30,6 +30,7 @@ static pthread_cond_t pub_cv=PTHREAD_COND_INITIALIZER;
 static __thread uint64_t deadline;
 static int drain_mode, kicks;
 void efs_client_ensure_dir_locks(void) {}
+void efs_client_put_settle_kick(void) {}
 uint64_t efs_client_rpc_deadline_ms(void) { return deadline; }
 '''+w[a:b]+'\n'+function('pub_release')+'\n'+structure('dirty_snap')+r'''
 static struct ino_dirty restored;

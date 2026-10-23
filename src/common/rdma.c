@@ -63,13 +63,13 @@ static inline void cpu_relax(void)
 #define EFS_RDMA_CREDIT_SPIN_US 200 /* reap a busy control slot before deferring */
 
 /* Recv SGEs are posted this far into each recv buffer so the fragment data
- * of a PUT_CHUNK (5-byte frame header + efs_msg_put_chunk) lands exactly on
+ * of a PUT_CHUNK (5-byte frame header + EFS_PUT_HEADER_LEN) lands exactly on
  * a 4096 boundary. The server's O_DIRECT fragment write can then go
  * DMA->disk with no bounce-buffer copy (that copy was ~11% of efsd CPU
  * under a 9-client write load). Only PUT data needs the alignment; other
  * payloads simply sit at an unaligned offset, which they never notice. */
 #define EFS_RDMA_RECV_ALIGN \
-    ((4096 - ((5 + sizeof(struct efs_msg_put_chunk)) % 4096)) % 4096)
+    ((4096 - ((5 + EFS_PUT_HEADER_LEN) % 4096)) % 4096)
 #define EFS_RDMA_RECV_STRIDE   4096 /* extra slack per recv buffer */
 
 #define SEND_WRID_POOL   0x1000

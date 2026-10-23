@@ -10,6 +10,7 @@ def block(name):
 a=s.index('#define PUT_POOL_QDEPTH');b=s.index('static void *put_pool_thread(',a)
 code=r'''
 #include "client_internal.h"
+#include "efs/put_ticket.h"
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>

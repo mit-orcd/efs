@@ -184,8 +184,8 @@ enum efs_msg_type {
     EFS_MSG_CREATE_RETAINED_REPLY = 126,
     EFS_MSG_STORAGE_SESSION_FENCE = 127,
     EFS_MSG_STORAGE_SESSION_FENCE_REPLY = 128,
-    EFS_MSG_PUT_TICKETED = 129,
-    EFS_MSG_PUT_TICKETED_REPLY = 130,
+    /* 129/130 retired: the staged PUT_TICKETED opcode. Every data PUT is
+     * EFS_MSG_PUT_CHUNK carrying an admitted ticket (K13). */
     /* 131-150 are reserved: never reuse. */
     /* Asynchronous PUT durability: COMMIT (client fsync) and stats. */
     EFS_MSG_DATA_COMMIT = 151,
@@ -233,12 +233,26 @@ enum efs_msg_type {
      * struct efs_msg_pack_object_read_reply. */
     EFS_MSG_PACK_OBJECT_READ = 173,
     EFS_MSG_PACK_OBJECT_READ_REPLY = 174,
+    /* W154 + K13: the group leader's rebuild of the one missing fragment of
+     * a degraded stripe. Header EFS_REBUILD_PUT_HEADER_LEN: export:4, then
+     * the degraded mark fixed-endian (EFS_REBUILD_MARK_LEN: ino:8
+     * inode_gen:8 object_gen:8 ci:4 lane:1 missing:1 nodes:4*3
+     * checksums:32*3); then the fragment. The object is published,
+     * so no ticket authorizes it: storage stores it only when the durable
+     * mark names exactly this fragment for this node. Reply: the
+     * EFS_PUT_REPLY_LEN PUT reply. */
+    EFS_MSG_REBUILD_PUT = 175,
+    EFS_MSG_REBUILD_PUT_REPLY = 176,
 };
+#define EFS_REBUILD_MARK_LEN (8u + 8u + 8u + 4u + 1u + 1u + \
+                              4u * EFS_NUM_FRAGMENTS + EFS_HASH_SIZE * EFS_NUM_FRAGMENTS)
+#define EFS_REBUILD_PUT_HEADER_LEN (4u + EFS_REBUILD_MARK_LEN)
 
 /* Retired message IDs: no handler in this build. The server closes a
  * connection that sends one (handler.c retired_refuse); never reuse them. */
 #define EFS_MSG_IS_RETIRED(t) \
     ((t) == 24 /* NODE_LEFT */ || \
+     (t) == 129 || (t) == 130 /* PUT_TICKETED (K13) */ || \
      (t) == 81 || (t) == 82 /* HEAL_STATUS */ || \
      (t) == 99 || (t) == 100 /* GC_FRAGMENT */ || \
      (t) == 121 || (t) == 122 /* GC_INODE */)
@@ -304,7 +318,7 @@ struct efs_msg_pack_compact_reply {
  * Version history: 2 = packed references in GETCHUNKS (W125);
  * 3 = every request gated, exact version match (W133);
  * 4 = every metadata mutation carries a registered session (K5/W134). */
-#define EFS_PROTOCOL_VERSION 4u
+#define EFS_PROTOCOL_VERSION 5u
 struct efs_msg_client_hello { uint8_t magic[4]; uint32_t version; uint64_t features; };
 struct efs_msg_client_hello_reply { int32_t rc; uint32_t version; };
 /* Send the declaration and check the reply; 0 when accepted. */
@@ -658,31 +672,32 @@ struct efs_msg_get_chunk {
  * the reader treats it as unavailable and decodes from verified siblings. */
 #define EFS_GET_CHUNK_INTEGRITY 3
 
-/* PUT/BENCH frame: this header followed by data_len payload bytes. */
-struct efs_msg_put_chunk {
+/* Data PUT frame (K13, W86): fixed-endian export id, fragment index and the
+ * immutable admitted ticket (put_upload.h), then exactly ticket.fragment_len
+ * bytes. There is no unticketed data PUT; storage refuses any other shape.
+ * No path hint: an ambiguous retry must probe every storage root. */
+#define EFS_PUT_HEADER_LEN 224u
+/* Network bench only (EFS_MSG_BENCH_PUT): header + data_len bytes, discarded. */
+struct efs_msg_bench_put {
     efs_export_id_t export_id;
     efs_ino_t ino;
     uint32_t chunk_index;
     uint32_t fragment_index;
     uint8_t checksum[EFS_HASH_SIZE];
     uint32_t data_len;
-    /* Candidate identity, nonzero; generation 0 is refused. */
     uint64_t chunk_generation;
-    /* W14.4: 0 = no hint (probe every root). Else the storage-root index
-     * from the previous PUT of this (ino, chunk, fragment), plus one.
-     * EFS_PATH_HINT_NEW means this generation has never been PUT: the
-     * server creates on the least-queued root and does not access().
-     * A retry of a failed reply sends 0, not NEW. */
     uint32_t path_hint;
     /* uint8_t data[data_len]; */
 };
 
-#define EFS_PATH_HINT_NEW    0xffffffffu
-
+/* PUT reply: EFS_PUT_REPLY_LEN bytes, status + path + boot verifier. */
 #define EFS_PUT_CHUNK_OK     0
 #define EFS_PUT_CHUNK_ERROR  1
 #define EFS_PUT_CHUNK_QUOTA_EXCEEDED 2
 #define EFS_PUT_CHUNK_BUSY 3 /* transient admission; no durable PUT receipt */
+/* Terminal: the ticket is not ADMITTED (settled, retired, unknown) or its
+ * session is fenced. Never retried with the same ticket. */
+#define EFS_PUT_CHUNK_STALE 4
 
 #define EFS_BENCH_PUT_OK     0
 #define EFS_BENCH_PUT_ERROR  1
@@ -1207,9 +1222,17 @@ struct efs_chunk_rec {
     uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
     uint64_t base_gen;
     uint64_t chunk_generation;
-    uint64_t file_generation; /* exact FileID when CAPTURED_FILEID is set */
+    uint64_t file_generation; /* exact FileID: REPORT ticket FileID (always); CAPTURED_FILEID also binds the authority check */
     uint64_t publish_epoch; /* byte-backed view used by this PUT */
     uint32_t publish_flags;
+    /* REPORT (K13): the admitted PUT ticket that names chunk_generation.
+     * put_seq is the mount's PUT stream sequence (uuid/epoch come from the
+     * REPORT session), file_generation is the ticket's FileID. Every
+     * REPORT record carries one; zero only on GETCHUNKS. */
+    uint32_t put_fragment_len;
+    uint64_t put_seq;
+    uint32_t put_member_mask;
+    uint32_t put_pad; /* zero */
     /* delta_len > 0: this rec is one immutable span [delta_off, +len),
      * not a full-chunk CAS. chunk_generation names a full-chunk object;
      * readers copy only that range. delta_len == 0: full-chunk publish
@@ -1241,9 +1264,9 @@ struct efs_msg_publication {
     struct efs_opid id;
     struct efs_chunk_rec rec;
     uint64_t size;
-    /* Staged ticketed envelope. Zero fields preserve unticketed semantics;
-     * ticketed=1 binds immutable pre-PUT identity separately from CAS identity.
-     * Exact payload length gates older staged clients; default REPORT unchanged. */
+    /* Ticketed envelope: ticketed=1 binds the immutable pre-PUT identity
+     * separately from CAS identity. The host refuses ticketed=0 (INVAL, K13);
+     * the codec still parses it for the staged client cache tests. */
     struct efs_opid put_id;
     uint32_t put_fragment_len, put_member_mask, ticketed;
 };

@@ -70,7 +70,9 @@
 #define EFS_MD_CMD_APPEND_CATCHUP 52 /* ino/gen/epoch/published EOF + optional REPORT session */
 #define EFS_MD_REQ_QUERY_POLICY 44 /* ReadIndex only, reply index=version/salt=mask */
 #define EFS_MD_CMD_REPORT_PUBLISH 41
-#define EFS_MD_CMD_PUT_TICKET_RETIRE_PUBLISHED 42
+/* Client settle (K13): ADMITTED -> REJECTED, then retire a PUBLISHED or
+ * REJECTED ticket that heads its stream. One 216-byte ticket body. */
+#define EFS_MD_CMD_PUT_TICKET_SETTLE 42
 #define EFS_MD_CMD_PUT_TICKET_ADMIT 39
 #define EFS_MD_REQ_PUT_TICKET_STATUS 40
 #define EFS_MD_REQ_SESSION_APPEND_NEXT 38 /* RPC only: [uuid:16][epoch:4][shard:4] */
@@ -92,6 +94,10 @@
  * [inode_gen:8][object_gen:8][ci:4][lane:1][missing:1][nodes:4*3]
  * [checksums:32*3], 140 B. Retires one degraded mark (efs_meta_apply_degraded_clear). */
 #define EFS_MD_CMD_DEGRADED_CLEAR 84
+/* RPC only (K13 + W154), never logged: [mark:EFS_REBUILD_MARK_LEN] as in
+ * EFS_MSG_REBUILD_PUT. OK when the mark's group, after a ReadIndex, holds
+ * exactly this mark; NOT_FOUND when absent; STALE when it differs. */
+#define EFS_MD_REQ_DEGRADED_CHECK 85
 #define EFS_MD_DEGRADED_CLEAR_LEN (1u + 1u + 8u + 8u + 8u + 4u + 1u + 1u + \
                                    4u * EFS_NUM_FRAGMENTS + EFS_HASH_SIZE * EFS_NUM_FRAGMENTS)
 #define EFS_MD_CMD_RESOLVE 7
@@ -221,7 +227,7 @@
     X(APPEND_RSV) X(MKFS) X(ACTIVATE_LANE) X(GC_ACK) X(RMDIR) X(SALT) \
     X(XATTR) X(PUBLICATION) X(PUBLICATION_RETIRE) X(ORPHAN_REAP) \
     X(PUBLICATION_ADMIT) X(CLOSE_CLEANUP) X(CLOSE_STEP) X(PUT_TICKET_ADMIT) \
-    X(REPORT_PUBLISH) X(PUT_TICKET_RETIRE_PUBLISHED) X(QUERY_POLICY) \
+    X(REPORT_PUBLISH) X(PUT_TICKET_SETTLE) X(QUERY_POLICY) \
     X(APPEND_CATCHUP) X(APPEND_ATOMIC) X(APPEND_COMPLETE_ATOMIC) \
     X(EXPIRY_POLICY) X(EXPIRY_RENEW) X(CREATE_REFUSAL) \
     X(LANE_SWEEP_MULTI) X(REAP_MULTI) \

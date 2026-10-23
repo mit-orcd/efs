@@ -413,9 +413,9 @@ struct efs_meta_pub {
     struct efs_publication_locator receipt_locator; /* assigned by replicated apply, excluded from intent digest */
     struct efs_opid publication_id; /* mount/session + unique snapshot sequence */
     struct efs_opid put_id; /* immutable PUT identity, separate from CAS retries */
-    uint32_t put_member_mask; /* staged: all configured members, not just EC placement */
-    uint32_t put_fragment_len; /* staged ticket manifest: actual fragment payload length */
-    uint8_t ticketed; /* staged: require ticket and publish ownership atomically */
+    uint32_t put_member_mask; /* all configured members, not just EC placement */
+    uint32_t put_fragment_len; /* ticket manifest: actual fragment payload length */
+    uint8_t ticketed; /* require ticket and publish ownership atomically (K13) */
     /* W154: fragments of this object that were not durably acknowledged
      * (bit i = fragment i; at most one). Nonzero writes a degraded mark in
      * the same batch. Excluded from the intent digest: it describes the
@@ -901,7 +901,15 @@ int efs_meta_apply_readdir(struct efs_kv *kv, efs_ino_t dir,
  * never strand the chunks. */
 int efs_meta_apply_reclaim(struct efs_kv *kv, efs_ino_t ino);
 int efs_meta_apply_orphan_reclaim(struct efs_kv *, efs_ino_t, uint64_t generation);
+/* A ticketed non-durable pub is the K13 REPORT path: the ticket must be
+ * ADMITTED (publish) or PUBLISHED (exact replay no-op); any other state is
+ * STALE and never takes effect. Unticketed pubs remain only for the in-process
+ * simulator and metadata unit tests; the host refuses them on the wire. */
 int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p);
+/* Host REPORT pack found the file deleted: reject an ADMITTED ticket and
+ * return verdict (EFS_OK). A lost CAS never rejects a ticket. */
+int efs_meta_apply_publish_reject(struct efs_kv *kv, const struct efs_meta_pub *p,
+                                  int verdict);
 /* NOT_FOUND means unknown, NEVER permission to rebase. Read under lane ReadIndex. */
 /* Retired is a replay barrier, not evidence of commit or rejection. */
 #define EFS_META_PUBLICATION_RETIRED 1
@@ -938,9 +946,9 @@ int efs_meta_publication_receipt(struct efs_kv *, const struct efs_meta_pub *,
  * RESOLVE verdict reports why. Readers: an undecided or aborted stage
  * shows the previous mapping (and an undecided one is rechecked), a
  * committed one is BUSY until resolved, an unknown decision is BUSY. */
-#define EFS_PUB_STAGE_VERSION 1u
+#define EFS_PUB_STAGE_VERSION 2u /* 2: ticket trailer, W154 missing mask (K13) */
 #define EFS_PUB_PIN_VERSION 2u
-#define EFS_PUB_STAGE_LEN 222u
+#define EFS_PUB_STAGE_LEN 238u
 #define EFS_PUB_PIN_LEN 17u
 #define EFS_PUB_STAGE_PIN_LANE 0xFFu
 /* Most stage records one RESOLVE applies on one shard. */

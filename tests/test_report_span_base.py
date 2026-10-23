@@ -26,6 +26,7 @@ def struct(name):
 
 code = r'''
 #include "client_internal.h"
+#include "efs/put_ticket.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -54,19 +55,24 @@ static void putid_miss_note(efs_ino_t ino,uint32_t ci,const efs_node_id_t *nodes
  (void)ino;(void)ci;(void)nodes;missed++;
 }
 static void report_retry_without_identity(efs_ino_t ino,uint32_t ci) {(void)ino;(void)ci;}
-''' + '\n'.join([fn(current,'putid_note'), fn(readers,'putid_fill'),
+static unsigned done_calls;static uint64_t done_object;
+void efs_client_put_done(efs_ino_t ino,uint32_t ci,uint64_t object) {(void)ino;(void)ci;if(object){done_calls++;done_object=object;}}
+''' + '\n'.join([fn(current,'rec_ticket'), fn(current,'putid_note'), fn(readers,'putid_fill'),
     fn(current,'dcache_unpublished'), fn(readers,'dcache_object_of'),
     fn(current,'report_fill_owned')]) + r'''
 static efs_node_id_t nodes[3]={1,2,3};
 static uint8_t checksums[3][EFS_HASH_SIZE];
 static void capture(uint64_t object,uint64_t sequence,uint32_t length,uint64_t base) {
- putid_note(42,0,object,sequence,nodes,checksums,0,length,0,0,NULL,base);
+ struct efs_put_ticket t={.object=object,.id={.seq=sequence+100},.inode_gen=5,.fragment_len=64,.member_mask=7};
+ putid_note(42,0,object,sequence,nodes,checksums,0,length,0,0,NULL,base,&t);
 }
 static struct efs_chunk_rec report(uint64_t newer_base) {
  struct efs_chunk_rec rec={.ino=42,.base_gen=newer_base};uint64_t seq=0;
  assert(report_fill_owned(42,0,&rec,&seq,nodes));
  assert(rec.nodes[0]==1 && rec.nodes[1]==2 && rec.nodes[2]==3);
  if(rec.delta_len)assert(rec.base_gen!=EFS_CHUNK_BASE_UNCOND);
+ /* K13: the record carries the ticket of exactly that object. */
+ assert(rec.put_seq && rec.file_generation==5 && rec.put_fragment_len==64 && rec.put_member_mask==7 && !rec.put_pad);
  return rec;
 }
 int main(void) {
@@ -80,15 +86,18 @@ int main(void) {
  /* Late completion cannot replace a newer retained PUT contract. */
  capture(88,2,10,2);rec=report(EFS_CHUNK_BASE_UNCOND);
  assert(rec.chunk_generation==11 && rec.base_gen==7);
+ assert(!done_calls);
  capture(12,4,10,13);rec=report(EFS_CHUNK_BASE_UNCOND);
- assert(rec.chunk_generation==12 && rec.base_gen==13);
+ assert(rec.chunk_generation==12 && rec.base_gen==13 && rec.put_seq==104);
+ assert(done_calls==1 && done_object==11); /* the superseded object's ticket is settled */
  /* Ordinary full-image base progression stays with its existing owner. */
  capture(14,5,0,0);rec=report(EFS_CHUNK_BASE_UNCOND);
  assert(!rec.delta_len && rec.base_gen==EFS_CHUNK_BASE_UNCOND);
  have_owned=0;
  slot.ino=42;slot.base_gen=EFS_CHUNK_BASE_UNCOND;
  slot.object_gen=11;slot.object_seq=3;slot.object_span_base_gen=7;
- slot.object_delta_len=10;
+ slot.object_delta_len=10;slot.object_put_seq=103;slot.object_file_generation=5;
+ slot.object_put_fragment_len=64;slot.object_put_member_mask=7;
  memcpy(slot.object_nodes,nodes,sizeof(nodes));
  rec=report(slot.base_gen);assert(rec.chunk_generation==11 && rec.base_gen==7);
  slot.object_span_base_gen=0;rec=report(slot.base_gen);assert(!rec.base_gen);

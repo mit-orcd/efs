@@ -7,7 +7,7 @@ s=(root/'src/client/write.c').read_text()
 a=s.index('static void meta_flush_enqueue(efs_ino_t ino)\n{')
 b=s.index('void efs_client_enable_meta_batch',a)
 c=s.index('int efs_client_note_meta_change(int force)')
-e=s.index('/* Consume one PUT_CHUNK',c)
+e=s.index('/* A fault build can lose the first accepted reply',c)
 code=r'''
 #include <pthread.h>
 #include <stdint.h>

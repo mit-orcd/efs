@@ -78,7 +78,7 @@ static int ensure_tls_reqs(uint32_t frag_len)
     free(tls_msgs);
     tls_msgs = NULL;
     tls_frag_len = frag_len;
-    tls_msg_size = sizeof(struct efs_msg_put_chunk) + frag_len;
+    tls_msg_size = sizeof(struct efs_msg_bench_put) + frag_len;
     tls_msgs = calloc(EFS_NUM_FRAGMENTS, tls_msg_size);
     if (!tls_msgs)
         return -1;
@@ -110,10 +110,11 @@ static int put_chunk_fanout(efs_ino_t ino, uint32_t chunk_index,
                             struct efs_conn **sticky_conns)
 {
     (void)zero_frag; /* templates stay zero-filled */
-    uint8_t msg_type = store ? EFS_MSG_PUT_CHUNK : EFS_MSG_BENCH_PUT;
-    uint8_t reply_type_want =
-        store ? EFS_MSG_PUT_CHUNK_REPLY : EFS_MSG_BENCH_PUT_REPLY;
-    uint8_t ok_status = store ? EFS_PUT_CHUNK_OK : EFS_BENCH_PUT_OK;
+    /* Network bench only; store mode is refused at argument parsing. */
+    if (store) return EFS_ERR_UNSUPPORTED;
+    uint8_t msg_type = EFS_MSG_BENCH_PUT;
+    uint8_t reply_type_want = EFS_MSG_BENCH_PUT_REPLY;
+    uint8_t ok_status = EFS_BENCH_PUT_OK;
     uint32_t bench_frag_len = EFS_FRAGMENT_SIZE;
 
     if (ensure_tls_reqs(bench_frag_len) != 0)
@@ -185,8 +186,8 @@ static int put_chunk_fanout(efs_ino_t ino, uint32_t chunk_index,
                 sticky_conns[idx] = conns[i];
             sticky_owned[i] = sticky_conns ? 1 : 0;
         }
-        struct efs_msg_put_chunk *req =
-            (struct efs_msg_put_chunk *)(tls_msgs + (size_t)i * tls_msg_size);
+        struct efs_msg_bench_put *req =
+            (struct efs_msg_bench_put *)(tls_msgs + (size_t)i * tls_msg_size);
         req->export_id = store ? EFS_BENCH_EXPORT_ID : 0;
         req->ino = ino;
         req->chunk_index = chunk_index;
@@ -201,8 +202,8 @@ static int put_chunk_fanout(efs_ino_t ino, uint32_t chunk_index,
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         if (!conns[i])
             continue;
-        struct efs_msg_put_chunk *req =
-            (struct efs_msg_put_chunk *)(tls_msgs + (size_t)i * tls_msg_size);
+        struct efs_msg_bench_put *req =
+            (struct efs_msg_bench_put *)(tls_msgs + (size_t)i * tls_msg_size);
         if (efs_conn_send_msg(conns[i], msg_type, req,
                               (uint32_t)tls_msg_size) != 0) {
             efs_client_conn_drop(nodes[i], conns[i]);
@@ -1244,6 +1245,13 @@ int main(int argc, char **argv)
     if (mode == BENCH_MODE_STORE && !have_time && size_bytes == 0) {
         fprintf(stderr, "--store requires --size and/or --time\n");
         return 1;
+    }
+    /* K13: storage stores only fragments of an ADMITTED PUT ticket. A raw
+     * remote store/read bench has no ticket and is refused, not faked. */
+    if (mode == BENCH_MODE_STORE || mode == BENCH_MODE_READ) {
+        fprintf(stderr, "efs-bench: remote --store/--read is unavailable: every data PUT "
+                        "needs an admitted ticket (K13); measure writes through a mount\n");
+        return 2;
     }
 
     char host[64];

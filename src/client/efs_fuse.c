@@ -3,6 +3,7 @@
 #define FUSE_USE_VERSION 312
 
 #include "client_internal.h"
+#include "efs/put_ticket.h"
 #include "efs/session.h"
 #include "reply_buffers.h"
 #include "stop_control.h"
@@ -7608,26 +7609,43 @@ struct bench_put_arg {
 static void *bench_put_worker(void *arg)
 {
     struct bench_put_arg *a = arg;
-    efs_ino_t ino = ((efs_ino_t)0xBEEF << 32) | (uint64_t)(a->tid + 1);
-    uint32_t ci_base = (uint32_t)a->tid * (1u << 22);
+    /* K13: every PUT admits a ticket of a real file. The level makes one
+     * scratch file per worker; its objects are never published (released
+     * as given up, so settle abandons them) and the file is removed. */
+    char name[64];
+    snprintf(name, sizeof(name), "bench-%d-p%d", (int)getpid(), a->tid);
+    struct fuse_file_info fi;
+    memset(&fi, 0, sizeof(fi));
+    fi.flags = O_WRONLY | O_CREAT | O_TRUNC;
+    efs_ino_t ino = 0;
+    if (efs_fuse_create_at(EFS_ROOT_INO, name, 0644, &fi, &ino, NULL) != 0) {
+        a->errors++;
+        return NULL;
+    }
     uint32_t seq = 0;
     uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
     while (bench_now_sec() < a->deadline) {
-        uint32_t ci = ci_base + seq++;
+        uint32_t ci = seq++;
         efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
         efs_place_fragments(g_client.nodes, g_client.node_count, ino, ci, nodes);
         /* Production hashes every fragment of every chunk; no skipped hash. */
         for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
             efs_hash(a->frags[i], EFS_FRAGMENT_SIZE, sums[i]);
         uint64_t t0 = fuse_now_us();
+        struct efs_put_ticket ticket;
         int rc = efs_client_put_fragments_parallel(
-            ino, ci, nodes, (const uint8_t **)a->frags, EFS_FRAGMENT_SIZE, sums, NULL);
+            ino, ci, nodes, (const uint8_t **)a->frags, EFS_FRAGMENT_SIZE, sums, 0, 0,
+            &ticket);
         bench_lat_add(&a->lat, fuse_now_us() - t0);
-        if (rc == EFS_OK)
+        if (rc == EFS_OK) {
+            efs_client_put_release(ticket.id.seq, 0);
             a->ops++;
-        else
+        } else {
             a->errors++;
+        }
     }
+    (void)efs_fuse_release_ino(ino, &fi);
+    (void)efs_client_unlink(EFS_ROOT_INO, name, false);
     return NULL;
 }
 

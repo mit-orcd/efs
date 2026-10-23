@@ -18,6 +18,13 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[K13 / W86, W88, W137 ticketed PUT/REPORT default](k13-w86-ticket-default-20261023.md):
+**PASS (scoped) on branch `devel-k13`, not merged.** Every data PUT and REPORT
+record is bound to an admitted ticket; the W88 retry is refused by ticket
+state; W137 uses the real reply shape. `make test` and a private three-daemon
+gate pass on intel1. The D31 abandoned-upload collector is INCOMPLETE; RDMA,
+orcd-mini and multi-host are NOTRUN.
+
 [Full code-gate runtime review](make-test-runtime-review-20261023.md):
 execution review complete; speedup NOTRUN. Fix the fault-daemon dependency,
 then build harnesses incrementally and schedule isolated cases concurrently.

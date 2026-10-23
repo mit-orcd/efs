@@ -34,18 +34,6 @@ static __thread uint32_t tls_payload_cap;
 static __thread uint8_t *tls_reply;
 static __thread uint32_t tls_reply_cap;
 
-/* Data PUT evidence must match the received payload before storage or quota
- * mutation. Metadata tables retain their separate root-checksum protocol. */
-static int data_payload_valid(efs_ino_t ino, const uint8_t *data, uint32_t len,
-                              const uint8_t expected[EFS_HASH_SIZE])
-{
-    uint8_t actual[EFS_HASH_SIZE];
-    if (efs_ino_is_meta_table(ino))
-        return 1;
-    efs_hash(data, len, actual);
-    return memcmp(actual, expected, EFS_HASH_SIZE) == 0;
-}
-
 /* Optional op-id suffix on a directory RPC (protocol.h EFS_DIROP_OPID_LEN):
  * present iff the payload is exactly struct + suffix and names a real
  * identity. Anything else = no op-id (pre-I16 client). */
@@ -447,102 +435,26 @@ void server_handle_conn(struct efs_conn *conn)
             }
             break;
         }
-        case EFS_MSG_PUT_TICKETED: {
+        case EFS_MSG_PUT_CHUNK: {
+            /* K13: the one data PUT. The header names an ADMITTED ticket;
+             * server_put_upload validates it, the session storage fence and
+             * the exact fragment bytes before storing. Nothing else stores. */
             uint64_t start=efs_iostats_now_us();
-            uint8_t reply[EFS_PUT_UPLOAD_REPLY_LEN],path=0xff;
+            uint8_t reply[EFS_PUT_REPLY_LEN],path=0xff;
             int result=server_put_upload(g_server,payload,payload_len,&path);
-            efs_put_upload_wr32(reply,(uint32_t)result);reply[4]=path;
-            efs_put_epoch_write(reply+5,g_server->put_boot_epoch);
-            efs_conn_send_msg(conn,EFS_MSG_PUT_TICKETED_REPLY,reply,sizeof(reply));
+            efs_put_reply_encode(result,path,g_server->put_boot_epoch,reply);
+            efs_conn_send_msg(conn,EFS_MSG_PUT_CHUNK_REPLY,reply,sizeof(reply));
             efs_iostats_add(EFS_IOSTAT_PUT,result==EFS_OK?payload_len-EFS_PUT_UPLOAD_HEADER_LEN:0,
                 efs_iostats_now_us()-start,result!=EFS_OK);
             break;
         }
-        case EFS_MSG_PUT_CHUNK: {
-            if (payload_len >= sizeof(struct efs_msg_put_chunk)) {
-                struct efs_msg_put_chunk *req = payload;
-                uint64_t io_t0 = efs_iostats_now_us();
-                const uint8_t *data =
-                    (const uint8_t *)payload + sizeof(struct efs_msg_put_chunk);
-                /* Do not learn layout from rejected traffic. Validate the
-                 * bounded body once before changing the export's size. */
-                int payload_valid = req->data_len <= payload_len - sizeof(*req) &&
-                    (efs_ino_is_meta_table(req->ino) ||
-                     efs_chunk_size_valid(req->data_len * 2u)) &&
-                    data_payload_valid(req->ino, data, req->data_len, req->checksum);
-                pthread_mutex_lock(&g_server->lock);
-                /* Auto-create so GET after restart (no PUT yet) and
-                 * meta-page PUTs before the EFSR root both work. */
-                struct efs_export *ex =
-                    server_export_acquire_or_create_locked(g_server,
-                                                          req->export_id);
-                /* Learn data chunk_size from first non-meta PUT when still
-                 * default (peer may not have applied EFSR yet). */
-                if (ex && payload_valid && !efs_ino_is_meta_table(req->ino) &&
-                    req->data_len > 0 &&
-                    (ex->chunk_size == 0 ||
-                     ex->chunk_size == EFS_DEFAULT_CHUNK_SIZE) &&
-                    efs_chunk_size_valid(req->data_len * 2u) &&
-                    req->data_len != EFS_META_FRAGMENT_SIZE) {
-                    ex->chunk_size = req->data_len * 2u;
-                }
-                pthread_mutex_unlock(&g_server->lock);
-
-                uint8_t reply = EFS_PUT_CHUNK_ERROR;
-                if (ex) {
-                    uint32_t expect = server_frag_len(ex, req->ino);
-                    if (req->data_len != expect ||
-                        payload_len < sizeof(*req) + req->data_len ||
-                        !payload_valid) {
-                        reply = EFS_PUT_CHUNK_ERROR;
-                    } else {
-                        /* ACK after length + store. */
-                        struct efs_store st;
-                        struct efs_nvme_store nctx;
-                        struct efs_frag_id fid = {
-                            .export_id = ex->id,
-                            .ino = req->ino,
-                            .chunk_index = req->chunk_index,
-                            .fragment_index = req->fragment_index,
-                            .chunk_generation = req->chunk_generation,
-                        };
-                        efs_store_nvme_bind(&st, &nctx, g_server, ex);
-                        efs_tls_path_used = -1;
-                        if (req->path_hint == EFS_PATH_HINT_NEW)
-                            efs_tls_path_hint = EFS_PATH_HINT_SKIP;
-                        else if (req->path_hint > 0)
-                            efs_tls_path_hint = (int)req->path_hint - 1;
-                        else
-                            efs_tls_path_hint = -1;
-                        rc = efs_store_put(&st, &fid, data, expect,
-                                           req->checksum);
-                        efs_tls_path_hint = -1;
-                        if (rc == 0) {
-                            reply = EFS_PUT_CHUNK_OK;
-                        } else if (rc == EFS_ERR_QUOTA) {
-                            reply = EFS_PUT_CHUNK_QUOTA_EXCEEDED;
-                        } else if (rc == EFS_ERR_BUSY) {
-                            reply = EFS_PUT_CHUNK_BUSY;
-                        }
-                    }
-                }
-                server_export_put(g_server, ex);
-                {
-                    uint8_t rep[EFS_PUT_REPLY_LEN];
-                    rep[0] = reply;
-                    rep[1] = (efs_tls_path_used >= 0 &&
-                              efs_tls_path_used < 256)
-                                 ? (uint8_t)efs_tls_path_used
-                                 : 0xff;
-                    efs_tls_path_used = -1;
-                    efs_put_epoch_write(rep+2,g_server->put_boot_epoch);
-                    efs_conn_send_msg(conn, EFS_MSG_PUT_CHUNK_REPLY, rep, sizeof(rep));
-                }
-                efs_iostats_add(EFS_IOSTAT_PUT,
-                                reply == EFS_PUT_CHUNK_OK ? req->data_len : 0,
-                                efs_iostats_now_us() - io_t0,
-                                reply != EFS_PUT_CHUNK_OK);
-            }
+        case EFS_MSG_REBUILD_PUT: {
+            /* W154 rebuild of a published object's missing fragment: the
+             * durable degraded mark, not a ticket, authorizes it (K13). */
+            uint8_t reply[EFS_PUT_REPLY_LEN],path=0xff;
+            int result=server_rebuild_put(g_server,payload,payload_len,&path);
+            efs_put_reply_encode(result,path,g_server->put_boot_epoch,reply);
+            efs_conn_send_msg(conn,EFS_MSG_REBUILD_PUT_REPLY,reply,sizeof(reply));
             break;
         }
         case EFS_MSG_GC_INODE_BATCH: {
@@ -745,8 +657,8 @@ void server_handle_conn(struct efs_conn *conn)
         case EFS_MSG_BENCH_PUT: {
             /* Network bench: accept mount-shaped PUT payload, ACK, discard. */
             uint8_t reply = EFS_BENCH_PUT_ERROR;
-            if (payload_len >= sizeof(struct efs_msg_put_chunk)) {
-                struct efs_msg_put_chunk *req = payload;
+            if (payload_len >= sizeof(struct efs_msg_bench_put)) {
+                struct efs_msg_bench_put *req = payload;
                 if (payload_len >= sizeof(*req) + req->data_len)
                     reply = EFS_BENCH_PUT_OK;
             }

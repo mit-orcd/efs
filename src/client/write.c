@@ -9,6 +9,7 @@
 #include "efs/writer_state.h"
 #include "efs/publication.h"
 #include "efs/put_ticket.h"
+#include "efs/put_upload.h"
 #include "efs/write_extent.h"
 #include "efs/pack_mapping.h"
 #include <errno.h>
@@ -215,36 +216,10 @@ static void report_retry_without_identity(efs_ino_t ino, uint32_t ci)
         efs_client_mark_chunk_dirty(ino, ci);
 }
 
-/* Each new PUT owns a fresh object name. A content-derived name can be
- * republished after supersession while an older GC record still names it.
- * Retries of this PUT retain its name; another PUT of identical bytes does
- * not revive an object already scheduled for collection. */
-static pthread_once_t object_uuid_once = PTHREAD_ONCE_INIT;
-static uint8_t object_uuid[EFS_OPID_UUID_LEN];
-static int object_uuid_ready;
-static uint64_t object_sequence;
-static void object_uuid_init(void)
-{
-    int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
-    if (fd < 0) return;
-    size_t n = 0;
-    while (n < sizeof(object_uuid)) {
-        ssize_t got = read(fd, object_uuid + n, sizeof(object_uuid) - n);
-        if (got < 0 && errno == EINTR) continue;
-        if (got <= 0) break;
-        n += (size_t)got;
-    }
-    close(fd);
-    object_uuid_ready = n == sizeof(object_uuid);
-}
-static uint64_t new_chunk_object_gen(uint32_t ci)
-{
-    pthread_once(&object_uuid_once, object_uuid_init);
-    if (!object_uuid_ready) return 0;
-    uint64_t seq = __atomic_add_fetch(&object_sequence, 1, __ATOMIC_RELAXED);
-    if (!seq) return 0;
-    return efs_meta_candidate_gen(object_uuid, 0, seq, ci, 0);
-}
+/* Each new PUT owns a fresh object name: the admitted ticket's sequence
+ * derives it (K13). A content-derived name could be republished after
+ * supersession while an older GC record still names it. Retries of this
+ * PUT retain its ticket and name. */
 
 /* Last successful PUT, independent of dcache_find (which requires e->data).
  * GETCHUNKS/apply_chunk_recs must not be the source of REPORT mappings —
@@ -277,6 +252,11 @@ struct put_id {
     uint64_t delta_base_seq;
     uint64_t publish_epoch;
     uint32_t publish_flags;
+    /* The admitted ticket that names gen (K13); REPORT carries it. */
+    uint64_t put_seq;
+    uint64_t file_generation;
+    uint32_t put_fragment_len;
+    uint32_t put_member_mask;
 };
 #define PUTID_TOMB ((efs_ino_t)~0ull)
 #define PUTID_MIN 65536u
@@ -381,11 +361,13 @@ static void putid_note(efs_ino_t ino, uint32_t ci, uint64_t gen, uint64_t seq,
                       const uint8_t cks[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE],
                       uint32_t delta_off, uint32_t delta_len,
                       uint32_t delta_base_n, uint64_t delta_base_seq,
-                      const struct efs_chunk_entry *obs, uint64_t span_base_gen)
+                      const struct efs_chunk_entry *obs, uint64_t span_base_gen,
+                      const struct efs_put_ticket *ticket)
 {
     struct put_id *p;
+    uint64_t superseded = 0;
 
-    if (!ino || !gen || ino == PUTID_TOMB)
+    if (!ino || !gen || ino == PUTID_TOMB || !ticket || ticket->object != gen)
         return;
     pthread_mutex_lock(&g_putid_mu);
     p = putid_find(ino, ci);
@@ -393,6 +375,8 @@ static void putid_note(efs_ino_t ino, uint32_t ci, uint64_t gen, uint64_t seq,
         pthread_mutex_unlock(&g_putid_mu);
         return;
     }
+    if (p && p->gen != gen)
+        superseded = p->gen;
     if (!p) {
         p = putid_insert_slot(ino, ci);
         if (!p) {
@@ -422,7 +406,24 @@ static void putid_note(efs_ino_t ino, uint32_t ci, uint64_t gen, uint64_t seq,
     p->publish_epoch = obs ? obs->read_view.fence_epoch : 0;
     p->publish_flags = EFS_CHUNK_REC_F_FRESH_OBJECT |
         (obs && obs->read_view.count ? EFS_CHUNK_REC_F_CAPTURED_EPOCH : 0);
+    p->put_seq = ticket->id.seq;
+    p->file_generation = ticket->inode_gen;
+    p->put_fragment_len = ticket->fragment_len;
+    p->put_member_mask = ticket->member_mask;
     pthread_mutex_unlock(&g_putid_mu);
+    /* No REPORT carries the superseded object any more (K13 settle). */
+    efs_client_put_done(ino, ci, superseded);
+}
+
+/* Ticket fields of one REPORT record. */
+static void rec_ticket(struct efs_chunk_rec *rec, uint64_t put_seq, uint64_t file_generation,
+                       uint32_t fragment_len, uint32_t member_mask)
+{
+    rec->put_seq = put_seq;
+    rec->file_generation = file_generation;
+    rec->put_fragment_len = fragment_len;
+    rec->put_member_mask = member_mask;
+    rec->put_pad = 0;
 }
 
 static int putid_fill(efs_ino_t ino, uint32_t ci, struct efs_chunk_rec *rec,
@@ -451,6 +452,8 @@ static int putid_fill(efs_ino_t ino, uint32_t ci, struct efs_chunk_rec *rec,
         rec->delta_base_seq = p->delta_base_seq;
         rec->publish_epoch = p->publish_epoch;
         rec->publish_flags = p->publish_flags;
+        rec_ticket(rec, p->put_seq, p->file_generation, p->put_fragment_len,
+                   p->put_member_mask);
         hit = 1;
     }
     pthread_mutex_unlock(&g_putid_mu);
@@ -481,27 +484,33 @@ static void putid_drop(efs_ino_t ino, uint32_t ci, uint64_t gen)
 
     if (!ino)
         return;
+    uint64_t dropped = 0;
     pthread_mutex_lock(&g_putid_mu);
     p = putid_find(ino, ci);
     if (p && (gen == 0 || p->gen == gen)) {
+        dropped = p->gen;
         p->ino = PUTID_TOMB;
         p->gen = 0;
         g_putid_live--;
     }
     pthread_mutex_unlock(&g_putid_mu);
+    efs_client_put_done(ino, ci, dropped);
 }
 
 static void putid_drop_snapshot(efs_ino_t ino, uint32_t ci, uint64_t gen,
                                  uint64_t seq)
 {
+    int dropped = 0;
     pthread_mutex_lock(&g_putid_mu);
     struct put_id *p = putid_find(ino, ci);
     if (p && p->gen == gen && p->seq == seq) {
         p->ino = PUTID_TOMB;
         p->gen = 0;
         g_putid_live--;
+        dropped = 1;
     }
     pthread_mutex_unlock(&g_putid_mu);
+    if (dropped) efs_client_put_done(ino, ci, gen);
 }
 
 /* The REPORT rec builder had neither a putid nor a dcache object for a
@@ -2322,6 +2331,8 @@ int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
         rc = sync ? EFS_ERR_BUSY : EFS_OK;
     if (sync)
         efs_client_rpc_set_deadline_ms(outer);
+    /* Settle off this thread: an fsync never waits for ticket retirement. */
+    efs_client_put_settle_kick();
     return rc;
 }
 
@@ -2478,6 +2489,8 @@ void efs_client_stop_meta_flush(void)
     pthread_mutex_unlock(&g_client.dirty_mu);
     if (left)
         (void)efs_client_report_dirty_ino(0, 1);
+    /* Retire what this mount settled; the rest stays for the collector. */
+    efs_client_put_settle_stop();
 }
 
 int efs_client_note_meta_change(int force)
@@ -2514,54 +2527,8 @@ int efs_client_note_meta_change(int force)
     return EFS_OK;
 }
 
-/* Consume one PUT_CHUNK reply from a conn that reply_watch marked ready
- * (or whose poll fd fired). Returns 1 on OK ack, 0 on quota, -1 when the
- * conn was dropped. */
-/* Root hints are an evictable placement cache, never retry history. The
- * owning PUT attempt decides NEW; a cache miss on a retry always probes. */
-#define PATH_HINT_N 4096
-struct path_hint_slot {
-    efs_node_id_t nid;
-    efs_ino_t ino;
-    uint32_t ci;
-    uint8_t fi, path, valid;
-};
-static struct path_hint_slot g_path_hint[PATH_HINT_N];
-static pthread_mutex_t g_path_hint_mu = PTHREAD_MUTEX_INITIALIZER;
-
-static uint32_t path_hint_index(efs_node_id_t nid, efs_ino_t ino, uint32_t ci,
-                                uint8_t fi)
-{
-    uint32_t h = (uint32_t)ino * 1315423911u ^ (ci * 2654435761u) ^
-                 ((uint32_t)nid << 8) ^ fi;
-    return h % PATH_HINT_N;
-}
-
-static uint32_t path_hint_get(efs_node_id_t nid, efs_ino_t ino, uint32_t ci,
-                              uint8_t fi)
-{
-    uint32_t hint = 0;
-    pthread_mutex_lock(&g_path_hint_mu);
-    struct path_hint_slot *e = &g_path_hint[path_hint_index(nid, ino, ci, fi)];
-    if (e->valid && e->nid == nid && e->ino == ino && e->ci == ci && e->fi == fi)
-        hint = (uint32_t)e->path + 1u;
-    pthread_mutex_unlock(&g_path_hint_mu);
-    return hint;
-}
-
-static void path_hint_put(efs_node_id_t nid, efs_ino_t ino, uint32_t ci,
-                          uint8_t fi, uint8_t path)
-{
-    if (path == 0xff) return;
-    pthread_mutex_lock(&g_path_hint_mu);
-    struct path_hint_slot *e = &g_path_hint[path_hint_index(nid, ino, ci, fi)];
-    e->nid = nid; e->ino = ino; e->ci = ci; e->fi = fi;
-    e->path = path; e->valid = 1;
-    pthread_mutex_unlock(&g_path_hint_mu);
-}
-
 /* A fault build can lose the first accepted reply for each fragment of one
- * object and overwrite its hint slot before the real outer retry. */
+ * object before the real outer retry: the same ticket and bytes are resent. */
 #if EFS_FAULTS
 static int put_reply_fault(efs_node_id_t nid, efs_ino_t ino, uint32_t ci,
                             uint8_t fi)
@@ -2576,25 +2543,32 @@ static int put_reply_fault(efs_node_id_t nid, efs_ino_t ino, uint32_t ci,
     int lose = target == ino && chunk == ci && !(mask & (1u << fi));
     if (lose) mask |= 1u << fi;
     pthread_mutex_unlock(&mu);
-    if (lose) {
-        path_hint_put(nid, ino + PATH_HINT_N, ci, fi, 0);
-        fprintf(stderr, "put-reply fault ino=%llu ci=%u fi=%u collision=1\n",
-                (unsigned long long)ino, ci, fi);
-    }
+    if (lose)
+        fprintf(stderr, "put-reply fault node=%u ino=%llu ci=%u fi=%u lost=1\n",
+                (unsigned)nid, (unsigned long long)ino, ci, fi);
     return lose;
 }
 #endif
 
+/* Consume one PUT reply from a conn that reply_watch marked ready (or whose
+ * poll fd fired). 1: stored; 0: quota; -2: retryable pressure/leadership;
+ * -3: terminal ticket refusal (not ADMITTED or session fenced); -1: the
+ * conn was dropped. */
 static int put_recv_reply(efs_node_id_t nid, struct efs_conn *conn,
                           efs_ino_t ino, uint32_t ci, uint8_t fi)
 {
     uint8_t reply_type = 0, status = 0, path = 0xff;
     uint64_t epoch = 0;
+    (void)ino; (void)ci; (void)fi;
     if (efs_conn_recv_put_reply(conn, &reply_type, &status, &path, &epoch) != 0 ||
         reply_type != EFS_MSG_PUT_CHUNK_REPLY || !epoch) {
         efs_client_conn_drop(nid, conn);
         efs_client_node_note_fail(nid);
         return -1;
+    }
+    if (status == EFS_PUT_CHUNK_STALE) {
+        efs_client_conn_release(nid, conn);
+        return -3;
     }
     if (status == EFS_PUT_CHUNK_OK) {
         /* Acknowledged (not yet durable): fsync must COMMIT this node. */
@@ -2605,7 +2579,6 @@ static int put_recv_reply(efs_node_id_t nid, struct efs_conn *conn,
             return -1;
         }
 #endif
-        path_hint_put(nid, ino, ci, fi, path);
         efs_client_node_note_ok(nid);
         efs_client_conn_release(nid, conn);
         return 1;
@@ -2795,21 +2768,24 @@ static void degraded_ack_log(efs_ino_t ino, uint32_t ci, uint64_t gen,
 }
 
 /* failed_out[i]=1 marks placement slots that need invalidate/retry.
- * acked_out[i]=1 (when given) marks the slots this attempt acknowledged. */
-static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
-                                      const efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
+ * acked_out[i]=1 (when given) marks the slots this attempt acknowledged.
+ * Every attempt sends the same admitted ticket and bytes (K13). */
+static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
                                       const uint8_t *fragments[EFS_NUM_FRAGMENTS],
-                                      uint32_t frag_len,
-                                      const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE],
-                                      int failed_out[EFS_NUM_FRAGMENTS], uint64_t object_gen, int first_send,
+                                      int failed_out[EFS_NUM_FRAGMENTS],
                                       int acked_out[EFS_NUM_FRAGMENTS])
 {
+    efs_ino_t ino = ticket->ino;
+    uint32_t chunk_index = ticket->ci;
+    const efs_node_id_t *nodes = ticket->nodes;
+    uint32_t frag_len = ticket->fragment_len;
     struct efs_conn *conns[EFS_NUM_FRAGMENTS];
     int pending[EFS_NUM_FRAGMENTS];
-    struct efs_msg_put_chunk hdrs[EFS_NUM_FRAGMENTS];
+    uint8_t hdrs[EFS_NUM_FRAGMENTS][EFS_PUT_UPLOAD_HEADER_LEN];
     int acks = 0;
     int quota_errors = 0;
     int busy_errors = 0;
+    int stale_errors = 0;
     int reachable = 0;
     /* One budget spans checkout, sends, quorum replies and optional drain.
      * Starting it after sends gave an inherited 8s flush a fresh 30s poll. */
@@ -2826,7 +2802,7 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         conns[i] = NULL;
         pending[i] = 0;
-        memset(&hdrs[i], 0, sizeof(hdrs[i]));
+        memset(hdrs[i], 0, sizeof(hdrs[i]));
     }
 
     /* Unreachable peers count as missing acks — do not abort the whole PUT. */
@@ -2860,23 +2836,18 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
             continue;
         }
         reachable++;
-        hdrs[i].export_id = g_client.export_id;
-        hdrs[i].ino = ino;
-        hdrs[i].chunk_index = chunk_index;
-        hdrs[i].fragment_index = (uint32_t)i;
-        hdrs[i].data_len = frag_len;
-        memcpy(hdrs[i].checksum, checksums[i], EFS_HASH_SIZE);
-        hdrs[i].chunk_generation = object_gen;
-        /* This new object identity has never been sent on attempt one.
-         * Once any send is possible, every later attempt probes or uses an
-         * acknowledged root, even if the evictable hint cache lost it. */
-        hdrs[i].path_hint = first_send ? EFS_PATH_HINT_NEW :
-            path_hint_get(nodes[i], ino, chunk_index, (uint8_t)i);
+        if (efs_put_upload_header(ticket, g_client.export_id, (uint32_t)i, hdrs[i]) != EFS_OK) {
+            efs_client_conn_release(nodes[i], conns[i]);
+            conns[i] = NULL;
+            if (failed_out) failed_out[i] = 2;
+            continue;
+        }
 #if EFS_FAULTS
         if (getenv("EFS_FAULT_PUT_REPLY_COLLISION"))
-            fprintf(stderr, "put-attempt ino=%llu ci=%u fi=%d gen=%llu first=%d hint=%u\n",
+            fprintf(stderr, "put-attempt ino=%llu ci=%u fi=%d gen=%llu seq=%llu\n",
                     (unsigned long long)ino, chunk_index, i,
-                    (unsigned long long)object_gen, first_send, hdrs[i].path_hint);
+                    (unsigned long long)ticket->object,
+                    (unsigned long long)ticket->id.seq);
 #endif
     }
 
@@ -2919,7 +2890,7 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
             }
         }
         if (efs_conn_send_msg_parts(conns[i], EFS_MSG_PUT_CHUNK,
-                                    &hdrs[i], (uint32_t)sizeof(hdrs[i]),
+                                    hdrs[i], (uint32_t)sizeof(hdrs[i]),
                                     fragments[i], frag_len) != 0) {
             efs_client_conn_drop(nodes[i], conns[i]);
             efs_client_node_note_fail(nodes[i]);
@@ -2952,6 +2923,9 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                     quota_errors++;
                 else if (r == -2) {
                     busy_errors++;
+                    if (failed_out) failed_out[i] = 2;
+                } else if (r == -3) {
+                    stale_errors++;
                     if (failed_out) failed_out[i] = 2;
                 } else if (failed_out)
                     failed_out[i] = 1;
@@ -2987,6 +2961,9 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                 else if (r == -2) {
                     busy_errors++;
                     if (failed_out) failed_out[i] = 2;
+                } else if (r == -3) {
+                    stale_errors++;
+                    if (failed_out) failed_out[i] = 2;
                 } else if (failed_out)
                     failed_out[i] = 1;
                 conns[i] = NULL;
@@ -3021,6 +2998,9 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                     quota_errors++;
                 else if (r == -2) {
                     busy_errors++;
+                    if (failed_out) failed_out[i] = 2;
+                } else if (r == -3) {
+                    stale_errors++;
                     if (failed_out) failed_out[i] = 2;
                 } else if (failed_out)
                     failed_out[i] = 1;
@@ -3097,6 +3077,9 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                 quota_errors++;
             else if (r == -2) {
                 busy_errors++;
+                if (failed_out) failed_out[i] = 2;
+            } else if (r == -3) {
+                stale_errors++;
                 if (failed_out) failed_out[i] = 2;
             } else if (failed_out)
                 failed_out[i] = 1;
@@ -3187,6 +3170,10 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
         pending[i] = 0;
     }
 
+    /* A ticket refusal is authoritative (fresh ReadIndex STATUS): never
+     * publish an object any member refused, even with a quorum of ACKs. */
+    if (stale_errors)
+        return EFS_ERR_STALE;
     if (quota_errors >= 2)
         return EFS_ERR_QUOTA;
     if (acks >= 2)
@@ -3224,31 +3211,13 @@ static void reroute_untried_fragments(efs_node_id_t nodes[EFS_NUM_FRAGMENTS])
     }
 }
 
-static int put_fragments_parallel_run(efs_ino_t ino, uint32_t chunk_index,
-                                      efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
-                                      const uint8_t *fragments[EFS_NUM_FRAGMENTS],
-                                      uint32_t frag_len,
-                                      const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE],
-                                      uint64_t *object_out)
+/* Retries reuse the ticket: same object name, placement and bytes. */
+static int put_fragments_parallel_run(const struct efs_put_ticket *ticket,
+                                      const uint8_t *fragments[EFS_NUM_FRAGMENTS])
 {
-    if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
-    uint64_t object_gen = new_chunk_object_gen(chunk_index);
-    if (!object_gen) return EFS_ERR_IO;
-    if (object_out) *object_out = object_gen;
-    /* 2+1 EC requires 3 distinct nodes. On a 1-2 node ring placement wraps and
-     * two fragments land on one machine, so a "2-ack quorum" can be a single
-     * disk — losing that node loses the chunk. Refuse rather than store
-     * undurably. */
-    if (nodes[0] == nodes[1] || nodes[1] == nodes[2] || nodes[0] == nodes[2]) {
-        fprintf(stderr,
-                "put_fragments ino=%llu chunk=%u: EC needs 3 distinct nodes "
-                "(got %u,%u,%u) — refusing undurable write\n",
-                (unsigned long long)ino, chunk_index,
-                (unsigned)nodes[0], (unsigned)nodes[1], (unsigned)nodes[2]);
-        fflush(stderr);
-        return EFS_ERR_NO_QUORUM;
-    }
-
+    efs_ino_t ino = ticket->ino;
+    uint32_t chunk_index = ticket->ci;
+    const efs_node_id_t *nodes = ticket->nodes;
     /* Retry transient blips; only invalidate peers that actually failed. */
     int rc = EFS_ERR_NET;
     int failed[EFS_NUM_FRAGMENTS] = {0, 0, 0};
@@ -3257,14 +3226,7 @@ static int put_fragments_parallel_run(efs_ino_t ino, uint32_t chunk_index,
     int acked[EFS_NUM_FRAGMENTS] = {0, 0, 0};
     int hard_attempts = 0;
     for (int attempt = 1; attempt <= 128; attempt++) {
-        /* A lost reply can follow a successful remote write. Relocating
-         * this generation would abandon that copy outside its publication.
-         * Only an object that has never been sent can change placement. */
-        if (attempt == 1)
-            reroute_untried_fragments(nodes);
-        rc = put_fragments_parallel_once(ino, chunk_index, nodes, fragments,
-                                         frag_len, checksums, failed, object_gen, attempt == 1,
-                                         acked);
+        rc = put_fragments_parallel_once(ticket, fragments, failed, acked);
         if (rc == EFS_OK) {
             uint32_t missing = 0;
             for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
@@ -3274,7 +3236,7 @@ static int put_fragments_parallel_run(efs_ino_t ino, uint32_t chunk_index,
                 return rc;
             /* Two acks (the quorum loop) leave exactly one missing. Write
              * availability is kept (D40): record and announce it. */
-            if (dgobj_note(ino, chunk_index, object_gen, missing) != EFS_OK) {
+            if (dgobj_note(ino, chunk_index, ticket->object, missing) != EFS_OK) {
                 fprintf(stderr,
                         "put_fragments ino=%llu chunk=%u: degraded acknowledgement "
                         "could not be recorded (missing=%x) — refusing the write\n",
@@ -3282,14 +3244,14 @@ static int put_fragments_parallel_run(efs_ino_t ino, uint32_t chunk_index,
                 fflush(stderr);
                 return EFS_ERR_NOMEM;
             }
-            degraded_ack_log(ino, chunk_index, object_gen, nodes, __builtin_ctz(missing));
+            degraded_ack_log(ino, chunk_index, ticket->object, nodes, __builtin_ctz(missing));
             return rc;
         }
-        if (rc == EFS_ERR_QUOTA)
+        if (rc == EFS_ERR_QUOTA || rc == EFS_ERR_STALE)
             return rc;
         if (efs_client_rpc_past_deadline())
             return EFS_ERR_BUSY;
-        /* Pressure is a healthy negative reply. Keep the same generation and
+        /* Pressure is a healthy negative reply. Keep the same ticket and
          * placement, retry only inside the inherited whole-operation budget. */
         if (rc == EFS_ERR_BUSY) {
             int pause_rc = report_retry_pause(50000);
@@ -3350,20 +3312,53 @@ static int put_fragments_parallel_run(efs_ino_t ino, uint32_t chunk_index,
     return rc;
 }
 
-/* Legacy reclaim/direct paths may enter without a request budget. Bound the
- * entire object retry cycle, not each attempt, and restore the caller's TLS. */
+/* The one data PUT (K13). Placement is final before admission: an admitted
+ * ticket names its nodes and the object name derives from its sequence. On
+ * EFS_OK the ticket is admitted and every retry used it; the caller records
+ * the object in its tables and then calls efs_client_put_release(seq, 1), or
+ * (seq, 0) when it gives the object up. On error the ticket is released as
+ * done here. An all-zero chunk is never stored: it only admits a ticket. */
 int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
                                       efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
                                       const uint8_t *fragments[EFS_NUM_FRAGMENTS],
                                       uint32_t frag_len,
                                       const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE],
-                                      uint64_t *object_out)
+                                      uint32_t delta_off, uint32_t delta_len,
+                                      struct efs_put_ticket *ticket)
 {
+    if (!ticket) return EFS_ERR_INVAL;
+    memset(ticket, 0, sizeof(*ticket));
     uint64_t previous = efs_client_rpc_deadline_ms();
     if (!previous)
         efs_client_rpc_set_deadline_ms(report_clock_ms() + EFS_IO_TIMEOUT_MS);
-    int rc = put_fragments_parallel_run(ino, chunk_index, nodes, fragments,
-                                        frag_len, checksums, object_out);
+    int rc = EFS_OK;
+    if (efs_client_rpc_past_deadline()) rc = EFS_ERR_BUSY;
+    /* Only an object that has never been sent can change placement. */
+    if (rc == EFS_OK) reroute_untried_fragments(nodes);
+    /* 2+1 EC requires 3 distinct nodes. On a 1-2 node ring placement wraps and
+     * two fragments land on one machine, so a "2-ack quorum" can be a single
+     * disk — losing that node loses the chunk. Refuse rather than store
+     * undurably. */
+    if (rc == EFS_OK &&
+        (nodes[0] == nodes[1] || nodes[1] == nodes[2] || nodes[0] == nodes[2])) {
+        fprintf(stderr,
+                "put_fragments ino=%llu chunk=%u: EC needs 3 distinct nodes "
+                "(got %u,%u,%u) — refusing undurable write\n",
+                (unsigned long long)ino, chunk_index,
+                (unsigned)nodes[0], (unsigned)nodes[1], (unsigned)nodes[2]);
+        fflush(stderr);
+        rc = EFS_ERR_NO_QUORUM;
+    }
+    if (rc == EFS_OK)
+        rc = efs_client_put_admit(ino, chunk_index, nodes, checksums, frag_len,
+                                  delta_off, delta_len, ticket);
+    if (rc == EFS_OK) {
+        rc = put_fragments_parallel_run(ticket, fragments);
+        if (rc != EFS_OK) efs_client_put_release(ticket->id.seq, 0);
+    }
+    if (rc != EFS_OK && getenv("EFS_PUT_TICKET_DBG"))
+        fprintf(stderr, "put ino=%llu ci=%u seq=%llu rc=%d\n", (unsigned long long)ino,
+                chunk_index, (unsigned long long)ticket->id.seq, rc);
     efs_client_rpc_set_deadline_ms(previous);
     return rc;
 }
@@ -3518,6 +3513,7 @@ struct chunk_put_job {
     struct put_batch *bp;
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
     uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
+    struct efs_put_ticket ticket; /* admitted ticket of object_gen (K13) */
 };
 
 static void *chunk_put_worker(void *arg);
@@ -3613,6 +3609,9 @@ struct dcache_ent {
     uint64_t object_file_generation;
     uint64_t object_publish_epoch;
     uint32_t object_publish_flags;
+    uint32_t object_put_fragment_len; /* ticket of object_gen (K13) */
+    uint64_t object_put_seq;
+    uint32_t object_put_member_mask;
     struct dcache_ent *next;
     /* W18: per-shard dirty list. on_dirty is 1 while linked. Every dirty
      * entry is on its list (dirty ⟹ on_dirty): the close path reads the
@@ -4051,12 +4050,14 @@ static int dcache_put_now_budgeted(efs_ino_t ino, uint32_t ci, const uint8_t *ch
 
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
     efs_place_fragments(g_client.nodes, g_client.node_count, ino, ci, nodes);
-    uint64_t object_gen = 0;
+    struct efs_put_ticket ticket;
     int rc = efs_client_put_fragments_parallel(ino, ci, nodes, cfrags, frag_len,
-                                               checksums, &object_gen);
+                                               checksums, span ? delta_off : 0,
+                                               span ? delta_len : 0, &ticket);
     efs_buf_free(parity, frag_len);
     if (rc != EFS_OK)
         return rc;
+    uint64_t object_gen = ticket.object;
 
     /* The servers now hold newer data than any cached copy. A have_base=0
      * flush reads the OLD published chunk as its merge base, which populates
@@ -4066,8 +4067,10 @@ static int dcache_put_now_budgeted(efs_ino_t ino, uint32_t ci, const uint8_t *ch
 
     if (!export_chunk_exists(ino, ci)) {
         int room = efs_client_ensure_meta_room(0, 1);
-        if (room != EFS_OK)
+        if (room != EFS_OK) {
+            efs_client_put_release(ticket.id.seq, 0);
             return room;
+        }
     }
     if (efs_export_needs_chunk_grow(&g_client.export))
         export_reserve_chunks_locked(4096);
@@ -4140,19 +4143,16 @@ static int dcache_put_now_budgeted(efs_ino_t ino, uint32_t ci, const uint8_t *ch
                  * full image could tombstone bytes it never loaded. Keep
                  * the old table/PUT identity and let the caller retain
                  * its dirty body for a fresh merge on retry. */
-                if (!obs) {
-                    pthread_mutex_unlock(&g_client.idx_mu);
-                    efs_client_unlock_dir(ino);
+                pthread_mutex_unlock(&g_client.idx_mu);
+                efs_client_unlock_dir(ino);
+                efs_client_put_release(ticket.id.seq, 0);
+                if (!obs)
                     return EFS_ERR_STALE;
-                }
-                obs_n = obs->ndelta;
-                obs_seq = obs->delta_seq;
-                efs_client_set_chunk(&g_client.export, ino, ci, nodes,
-                                     checksums);
-                (void)efs_export_set_chunk_gen(
-                    &g_client.export, ino, ci,
-                    object_gen);
-                span = 0;
+                /* K13: the admitted ticket names this object as a span.
+                 * The byte-backed observation lets the same body publish as
+                 * a full image, but only under its own full-image ticket. */
+                return dcache_put_now_budgeted(ino, ci, chunk, chunk_size, base_gen,
+                                               snap_seq, 0, 0, obs);
             }
         } else {
             efs_client_set_chunk(&g_client.export, ino, ci, nodes, checksums);
@@ -4166,16 +4166,18 @@ static int dcache_put_now_budgeted(efs_ino_t ino, uint32_t ci, const uint8_t *ch
         pthread_mutex_unlock(&g_client.idx_mu);
         efs_client_unlock_dir(ino);
         putid_note(ino, ci, obj, snap_seq, nodes, checksums,
-                   span ? delta_off : 0, span ? delta_len : 0, obs_n, obs_seq, tag, base_gen);
+                   span ? delta_off : 0, span ? delta_len : 0, obs_n, obs_seq, tag, base_gen,
+                   &ticket);
     }
     {
-        uint64_t obj = object_gen;
+        uint64_t obj = object_gen, superseded = 0;
         uint32_t sl = dcache_slot(ino, ci);
         struct dcache_ent *de;
         pthread_mutex_lock(dcache_mu(sl));
         de = dcache_find_meta(sl, ino, ci);
         if (de && (!snap_seq || snap_seq >= de->object_seq)) {
             dcache_index_set(g_dcache.pressure_slots, sl);
+            if (de->object_gen != obj) superseded = de->object_gen;
             de->object_gen = obj;
             de->object_seq = snap_seq;
             de->object_span_base_gen = base_gen;
@@ -4185,7 +4187,10 @@ static int dcache_put_now_budgeted(efs_ino_t ino, uint32_t ci, const uint8_t *ch
             de->object_delta_len = span ? delta_len : 0;
             de->object_delta_base_n = obs_n;
             de->object_delta_base_seq = obs_seq;
-            de->object_file_generation = 0;
+            de->object_file_generation = ticket.inode_gen;
+            de->object_put_seq = ticket.id.seq;
+            de->object_put_fragment_len = ticket.fragment_len;
+            de->object_put_member_mask = ticket.member_mask;
             de->object_publish_epoch = tag ? tag->read_view.fence_epoch : 0;
             de->object_publish_flags = EFS_CHUNK_REC_F_FRESH_OBJECT |
                 (tag && tag->read_view.count ? EFS_CHUNK_REC_F_CAPTURED_EPOCH : 0);
@@ -4196,7 +4201,9 @@ static int dcache_put_now_budgeted(efs_ino_t ino, uint32_t ci, const uint8_t *ch
                    (unsigned long long)obj, (unsigned long long)snap_seq);
         }
         pthread_mutex_unlock(dcache_mu(sl));
+        efs_client_put_done(ino, ci, superseded);
     }
+    efs_client_put_release(ticket.id.seq, 1);
     efs_client_mark_chunk_dirty(ino, ci);
     report_landed_note(ino);
     /* Mark the ino too so the next report carries its size/mtime irec. The
@@ -6915,12 +6922,35 @@ static int dcache_object_of(efs_ino_t ino, uint32_t ci, struct efs_chunk_rec *re
             rec->base_gen = e->object_span_base_gen;
         rec->delta_base_n = e->object_delta_base_n;
         rec->delta_base_seq = e->object_delta_base_seq;
-        rec->file_generation = e->object_file_generation;
         rec->publish_epoch = e->object_publish_epoch;
         rec->publish_flags = e->object_publish_flags;
+        rec_ticket(rec, e->object_put_seq, e->object_file_generation,
+                   e->object_put_fragment_len, e->object_put_member_mask);
         hit = 1;
     }
     pthread_mutex_unlock(dcache_mu(s));
+    return hit;
+}
+
+/* K13 ledger sweep: 1 while putid or the dcache slot still names object, so
+ * a REPORT may still carry its ticket. Takes the table locks itself. */
+int efs_client_put_referenced(efs_ino_t ino, uint32_t ci, uint64_t object)
+{
+    int hit = 0;
+    if (!ino || !object)
+        return 0;
+    pthread_mutex_lock(&g_putid_mu);
+    struct put_id *p = putid_find(ino, ci);
+    hit = p && p->gen == object;
+    pthread_mutex_unlock(&g_putid_mu);
+    if (hit)
+        return 1;
+    dcache_ensure();
+    uint32_t sl = dcache_slot(ino, ci);
+    pthread_mutex_lock(dcache_mu(sl));
+    struct dcache_ent *e = dcache_find_meta(sl, ino, ci);
+    hit = e && e->object_gen == object;
+    pthread_mutex_unlock(dcache_mu(sl));
     return hit;
 }
 
@@ -8208,10 +8238,19 @@ static void *chunk_put_worker(void *arg)
                                 job->ci, job->nodes);
             /* Do not PUT all-zero fragments. The chunk table stores the
              * well-known zero digest; decode synthesizes zeros on read.
-             * dd if=/dev/zero was spending ~1 GB/s on 2-ack PUTs of zeros. */
+             * dd if=/dev/zero was spending ~1 GB/s on 2-ack PUTs of zeros.
+             * The mapping still names an admitted ticket (K13). */
             efs_dcache_drop(job->ino, job->ci);
-            job->object_gen = new_chunk_object_gen(job->ci);
-            job->rc = job->object_gen ? EFS_OK : EFS_ERR_IO;
+            {
+                efs_node_id_t zn[EFS_NUM_FRAGMENTS];
+                uint8_t zck[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
+                memcpy(zn, job->nodes, sizeof(zn));
+                memcpy(zck, job->checksums, sizeof(zck));
+                job->rc = efs_client_put_admit(job->ino, job->ci, zn,
+                                               (const uint8_t (*)[EFS_HASH_SIZE])zck,
+                                               frag_len, 0, 0, &job->ticket);
+            }
+            job->object_gen = job->ticket.object;
             return NULL;
         }
 
@@ -8240,7 +8279,9 @@ static void *chunk_put_worker(void *arg)
         efs_place_fragments(g_client.nodes, g_client.node_count, job->ino,
                             job->ci, job->nodes);
         job->rc = efs_client_put_fragments_parallel(
-            job->ino, job->ci, job->nodes, cfrags2, frag_len, job->checksums, &job->object_gen);
+            job->ino, job->ci, job->nodes, cfrags2, frag_len, job->checksums, 0, 0,
+            &job->ticket);
+        job->object_gen = job->ticket.object;
         if (frag_len > EFS_FRAGMENT_SIZE)
             free(parity);
         efs_rdcache_invalidate(job->ino, job->ci);
@@ -8291,7 +8332,9 @@ static void *chunk_put_worker(void *arg)
     efs_place_fragments(g_client.nodes, g_client.node_count, job->ino, job->ci,
                         job->nodes);
     job->rc = efs_client_put_fragments_parallel(job->ino, job->ci, job->nodes,
-                                                cfrags, frag_len, job->checksums, &job->object_gen);
+                                                cfrags, frag_len, job->checksums, 0, 0,
+                                                &job->ticket);
+    job->object_gen = job->ticket.object;
     efs_rdcache_invalidate(job->ino, job->ci);
     if (job->rc != EFS_OK)
         (void)dcache_store(job->ino, job->ci, chunk, chunk_size);
@@ -8375,19 +8418,22 @@ static int client_write_run(efs_ino_t ino, uint64_t offset, size_t size, const c
         hash_write_fragments(cfrags, frag_len, chunk_size, from_zero, chunk_start,
                              wr_start, wr_end, checksums);
 
-        uint64_t object_gen = 0;
+        struct efs_put_ticket ticket;
         int rc = efs_client_put_fragments_parallel(ino, ci, nodes, cfrags, frag_len,
-                                                   checksums, &object_gen);
+                                                   checksums, 0, 0, &ticket);
         efs_buf_free(chunk, chunk_size);
         if (frag_buf != frag_tls)
             free(frag_buf);
         if (rc != EFS_OK)
             return rc;
+        uint64_t object_gen = ticket.object;
 
         if (!export_chunk_exists(ino, ci)) {
             int room = efs_client_ensure_meta_room(0, 1);
-            if (room != EFS_OK)
+            if (room != EFS_OK) {
+                efs_client_put_release(ticket.id.seq, 0);
                 return room;
+            }
         }
         if (efs_export_needs_chunk_grow(&g_client.export))
             export_reserve_chunks_locked(4096);
@@ -8398,7 +8444,8 @@ static int client_write_run(efs_ino_t ino, uint64_t offset, size_t size, const c
                                        object_gen);
         pthread_mutex_unlock(&g_client.idx_mu);
         efs_client_unlock_dir(ino);
-        putid_note(ino,ci,object_gen,0,nodes,checksums,0,0,0,0,NULL,0);
+        putid_note(ino,ci,object_gen,0,nodes,checksums,0,0,0,0,NULL,0,&ticket);
+        efs_client_put_release(ticket.id.seq, 1);
         efs_client_mark_chunk_dirty(ino, ci);
     }
 
@@ -8518,14 +8565,15 @@ static int write_chunks_no_replicate(efs_ino_t ino, uint64_t offset, size_t size
         put_pool_run(jobs, batch);
 
         for (uint32_t i = 0; i < batch; i++) {
-            if (jobs[i].rc != EFS_OK)
-                return jobs[i].rc;
-            if (jobs[i].deferred)
+            if (jobs[i].rc != EFS_OK || jobs[i].deferred)
                 continue;
             if (!export_chunk_exists(ino, jobs[i].ci)) {
                 int room = efs_client_ensure_meta_room(0, 1);
-                if (room != EFS_OK)
-                    return room;
+                if (room != EFS_OK) {
+                    efs_client_put_release(jobs[i].ticket.id.seq, 0);
+                    jobs[i].rc = room;
+                    continue;
+                }
             }
             if (efs_export_needs_chunk_grow(&g_client.export))
                 export_reserve_chunks_locked(4096);
@@ -8570,7 +8618,9 @@ static int write_chunks_no_replicate(efs_ino_t ino, uint64_t offset, size_t size
                            jobs[i].object_gen,
                            0, jobs[i].nodes, jobs[i].checksums, 0, 0,
                            have ? prev.ndelta : 0,
-                           have ? prev.delta_seq : 0, NULL, 0);
+                           have ? prev.delta_seq : 0, NULL, 0, &jobs[i].ticket);
+                efs_client_put_release(jobs[i].ticket.id.seq, 1);
+                jobs[i].ticket.id.seq = 0;
                 /* Same placement + new checksums is a new immutable
                  * generation. Skipping REPORT left KV on the ftruncate
                  * stub gen while PUT wrote `{ci}.{fi}.{G}` — remount
@@ -8586,6 +8636,11 @@ static int write_chunks_no_replicate(efs_ino_t ino, uint64_t offset, size_t size
                 }
             }
         }
+        /* Every landed job is recorded above (its ticket released as
+         * landed); a failed one already released its ticket as done. */
+        for (uint32_t i = 0; i < batch; i++)
+            if (jobs[i].rc != EFS_OK)
+                return jobs[i].rc;
         base += batch;
     }
 

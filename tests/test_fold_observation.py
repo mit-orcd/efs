@@ -23,6 +23,7 @@ start = write.index("struct dcache_ent {")
 entry = write[start:write.index("\n};", start) + 3]
 source = r'''
 #include "client_internal.h"
+#include "efs/put_ticket.h"
 #include "efs/erasure.h"
 #include "efs/placement.h"
 #include <assert.h>
@@ -91,11 +92,16 @@ static void hash_write_fragments(const uint8_t *p[EFS_NUM_FRAGMENTS],uint32_t n,
                                  uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE]) {
     (void)p;(void)n;(void)cs;(void)z;(void)c;(void)a;(void)b;memset(sums,42,EFS_NUM_FRAGMENTS*EFS_HASH_SIZE);
 }
+static unsigned puts_sent,released_landed,released_given_up;
+static uint32_t put_off[4],put_len[4];
 int efs_client_put_fragments_parallel(efs_ino_t ino,uint32_t ci,
                                     efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
                                     const uint8_t *buf[EFS_NUM_FRAGMENTS],uint32_t len,
-                                    const uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE], uint64_t *object_out) {
-    *object_out=42;
+                                    const uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE],
+                                    uint32_t off,uint32_t span,struct efs_put_ticket *ticket) {
+    memset(ticket,0,sizeof(*ticket));ticket->object=42;ticket->id.seq=++puts_sent;ticket->inode_gen=9;
+    ticket->delta_off=off;ticket->delta_len=span;
+    if(puts_sent<=4){put_off[puts_sent-1]=off;put_len[puts_sent-1]=span;}
     (void)ino;(void)ci;(void)nodes;(void)buf;(void)len;(void)sums;
     assert(len==CS/2);memcpy(uploaded,buf[0],len);memcpy(uploaded+len,buf[1],len);
     if (race) {
@@ -129,8 +135,11 @@ static void putid_note(efs_ino_t ino,uint32_t ci,uint64_t obj,uint64_t seq,
                        const efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
                        const uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE],
                        uint32_t off,uint32_t len,uint32_t n,uint64_t newest,
-                      const struct efs_chunk_entry *obs,uint64_t span_base_gen) {
+                      const struct efs_chunk_entry *obs,uint64_t span_base_gen,
+                      const struct efs_put_ticket *ticket) {
     (void)span_base_gen;
+    /* The recorded span geometry is exactly the admitted ticket's. */
+    assert(ticket && ticket->object==obj && ticket->delta_off==off && ticket->delta_len==len);
     (void)ino;(void)ci;(void)obj;(void)seq;(void)nodes;(void)sums;
     if (obs && obs->read_view.count) {
         /* A fetched view (epoch 6), or an UNCOND image's formation tag. */
@@ -140,6 +149,8 @@ static void putid_note(efs_ino_t ino,uint32_t ci,uint64_t obj,uint64_t seq,
     ++notes;noted_off=off;noted_len=len;noted_n=n;noted_seq=newest;
 }
 void efs_client_mark_chunk_dirty(efs_ino_t ino,uint32_t ci) { (void)ino;(void)ci;++dirty_marks; }
+void efs_client_put_release(uint64_t seq,int landed) { assert(seq && seq<=puts_sent);if(landed)++released_landed;else ++released_given_up; }
+void efs_client_put_done(efs_ino_t ino,uint32_t ci,uint64_t object) { (void)ino;(void)ci;(void)object; }
 void efs_client_mark_ino_dirty(efs_ino_t ino) { (void)ino; }
 static void report_landed_note(efs_ino_t ino) { (void)ino; }
 ''' + "\n".join(function(name) for name in (["dcache_index_set"] if "static void dcache_index_set(" in write else []) + ["chunk_obs_has_live_spans", "chunk_obs_masked",
@@ -153,6 +164,7 @@ static void reset(void) {
     remote.deltas[0].generation=8;remote.deltas[0].off=500;remote.deltas[0].len=4256;
     memset(remote_bytes,'A',CS);memset(remote_bytes+500,'P',4256);
     captures=notes=dirty_marks=replacements=0;put_error=add_error=race=0;
+    puts_sent=released_landed=released_given_up=0;
 }
 static void replay_tests(void) {
     for(int ranges=0;ranges<2;++ranges) {
@@ -197,6 +209,7 @@ static void put_tests(void) {
     memset(slot.data+100,'N',64);
     assert(dcache_put_now_budgeted(1,0,slot.data,CS,7,1,100,64,NULL)==EFS_ERR_STALE);
     assert(!notes && !dirty_marks && !replacements && !memcmp(&map,&before,sizeof(map)));
+    assert(puts_sent==1 && released_given_up==1 && !released_landed); /* span ticket abandoned */
     assert(!slot.object_delta_len && slot.object_seq==17);
     dcache_flush_keep(1,0,slot.data,CS,0,1);
     assert(slot.dirty && slot.nrange==1 && slot.data[100]=='N');free(slot.data);
@@ -206,12 +219,16 @@ static void put_tests(void) {
     memcpy(slot.data,remote_bytes,CS);
     assert(dcache_put_now_budgeted(1,0,slot.data,CS,7,1,100,64,&before)==EFS_OK);
     assert(notes==1 && !noted_off && !noted_len && noted_n==1 && noted_seq==9);
+    /* K13: the span ticket cannot publish a full image; the same body is
+     * re-PUT under its own full-image ticket and the span ticket abandoned. */
+    assert(puts_sent==2 && put_off[0]==100 && put_len[0]==64 && !put_off[1] && !put_len[1]);
+    assert(released_given_up==1 && released_landed==1);
     assert(uploaded[500]=='P');
     assert(slot.object_publish_epoch==6 &&
            slot.object_publish_flags==(EFS_CHUNK_REC_F_CAPTURED_EPOCH|EFS_CHUNK_REC_F_FRESH_OBJECT));free(slot.data);
     reset();put_error=EFS_ERR_IO;
     assert(dcache_put_now_budgeted(1,0,slot.data,CS,7,1,100,64,NULL)==EFS_ERR_IO);
-    assert(!notes && !dirty_marks && !replacements);free(slot.data);
+    assert(!notes && !dirty_marks && !replacements && !released_landed);free(slot.data);
 }
 int main(void) {
     assert(!pthread_mutex_init(&g_client.idx_mu,NULL));

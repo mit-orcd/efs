@@ -16,7 +16,6 @@ pass silently.
 """
 # Python tests the recipe does not run, each with its reason.
 NOT_WIRED = {
-    'tests/test_live_ticket_retry.py': 'W137: fake reply length; decided with the PUT-ticket stack (alpha K13)',
 }
 from pathlib import Path
 import os, re, subprocess
