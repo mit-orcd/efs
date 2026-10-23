@@ -581,3 +581,115 @@ loaded. Three additions:
   W153a except the cross-node inconsistency gate, which depends on the design
   decision: with a per-daemon count there is no cross-node agreement to test
   beyond `raft-mkfs` and `--join` refusing a node whose count differs.
+
+## Review of the Oct 23 gate merges and recap — October 23
+
+**Verdict: useful scoped evidence, not alpha qualification.** Reviewed merges
+`306a01fd4` and `2213a4120`, status commit `022b96e7b`, their retained
+[xorinox](gates-xorinox-20261022.md) and [nuc](gates-nuc-20261022.md)
+summaries, and the merged harness/client paths. No tests were rerun for this
+review. Test binaries were based on `163241584306`, with the documented
+script overlays; this is not a full test of today's merged devel. Remote
+cleanup and archived sessions were not independently inspected here.
+
+### W154: scope the placement PASS separately from protection acceptance
+
+The five-daemon placement/remote pack-object path passed its stated checks.
+It did not qualify five physical failure domains, RDMA or direct I/O. F1 is
+more than a performance limitation: a successfully acknowledged stripe had
+only two available fragments, stayed degraded after the missing node returned,
+and became unreadable during the next single-node outage. No permanent data
+loss was demonstrated; data became readable when the other node returned.
+
+My alpha recommendation is to block any unconditional single-node-failure
+protection claim until successful durable writes establish three fragments
+on distinct eligible nodes, or degraded writes have an explicit, tested
+re-protection/readiness contract. Restoring node liveness alone must not
+report restored protection. On 4+ nodes, retrying placement onto three live
+eligible nodes may avoid requiring general repair; on three nodes with one
+down, requiring all three necessarily sacrifices write availability. Track
+that tradeoff explicitly. Deferring unplanned recovery does not itself decide
+whether a normal acknowledged write may remain under-protected. This is a
+recommendation for the user's existing alpha decision, not authorization to
+expand recovery scope or change the selected policy.
+
+### W155: observed ambiguous completion, not proof that EIO was false
+
+The retained report shows exact attempted-version bytes after a rewrite
+reported EIO. That establishes visibility at the later read, not necessarily
+successful completion of every durability/publication requirement at the
+failed flush. EIO does not promise transactional rollback. Calling it a
+"definite failure" or automatically a wrong error for a successful durable
+write overstates the evidence. Keep W155 open as an ambiguous-completion and
+error-resolution investigation; keep the service errors as failures.
+
+The proposed same-identity receipt resolution is worth investigating, but
+first correlate the precise request, retry, receipt and error stage. A
+`report-loop busy=1` line records a returned BUSY; by itself it does not
+identify the admission point or prove which original request committed.
+`efs_fuse_flush_ino` maps non-quota flush failures to EIO, while the report
+loop can exhaust a bounded retry budget. Resolve already-known outcomes
+within a bounded policy, retain unknown ownership, and never report success
+without all required durability evidence. Do not replace uncertainty with
+an unbounded wait or presume every REPORT sub-operation shares one receipt.
+
+### P1 — A blanket old-or-new harness rule would assert unprovided atomicity
+
+`scripts/w125_concurrent.py:modifier` rewrites with `truncate(0)` followed by
+buffered `write`, with close on leaving the context. It does not issue an
+explicit fsync, and its exception handler leaves the expected version
+unchanged. The error may arise at truncate, write, buffer flush or close.
+This multi-syscall, potentially multi-chunk sequence is not automatically
+one atomic old-or-new operation. A legitimate partial outcome must be
+classified from completed steps and the EFS contract; conversely, accepting
+any historical version would mask freshness defects.
+
+Record the failing stage, bytes successfully submitted, candidate operation
+identity and attempted content. Quarantine an unresolved file from further
+modeled mutations until its state is classified; do not silently reuse its
+version number against an obsolete base. Only use a two-version oracle for
+an operation whose actual contract guarantees that outcome. After quiescence,
+require the final known successful version; retain unresolved/error outcomes
+as separate failures or INCOMPLETE, never a clean campaign PASS. The original
+W148 signature occurring in 0/9 attempts is NOT REPRODUCED on this
+TCP host, not a matched RDMA A/B or overall PASS. Only 3/9 attempts passed.
+
+### Other gate qualifications that must remain visible
+
+- K1 restart served an 8 MiB readback after the forced stop. Its subsequent
+  stop returned rc 4 with `put_sync failed` and recovery-uncertain state.
+  The recap's "clean restart" must not imply restored durability certainty
+  or a later orderly stop. The forced-exit report-I/O T2 gate was not covered.
+- K5 passed on an otherwise idle private workload, on a host whose user
+  cluster remained running. Its first loaded run failed two POSIX timeouts;
+  append-abandon T1 was not covered. Neither failure disappears in the rerun.
+- K22's bound/catch-up invariants passed at the stated scope, but the two
+  runs had 31 and 25 failed bench rounds. No production-scale plateau,
+  snapshot-import or leader-admission-at-3/4 result exists.
+- K9's oracle was exact for 84,480 acknowledged records; one background
+  POSIX pass still timed out. W87 remains open. K26's 25/25 x86_64 result
+  is useful but does not substitute for the separately named node9901 gate.
+
+### Evidence retention and the discovery override
+
+The xorinox raw outputs and failing nuc stores were deleted, and the nuc
+summary names a session-notes folder plus abbreviated hashes. Those limits
+prevent this review from independently replaying the raw analysis. Preserve
+the summaries, correct their stale "not merged" introductions, and obtain a
+stable exact path/full hash manifest for the retained nuc bundles before
+further cleanup. Future failing runs need evidence copied outside disposable
+worktrees before teardown; missing evidence is not a passing gate.
+
+`EFS_CLIENT_SKIP_FOREIGN` changes a fail-closed operator-discovery path even
+though it is opt-in and not C code. Skipping an uninspectable foreign client
+proves only that the selected user's visible clients were considered, not
+that every relevant mount/client is gone. Before relying on it for teardown,
+prove the target mount and control-owner identity independently, refuse
+ambiguous ownership, and test foreign clients on the same target as well as
+unrelated ones. The note reports tests run with the environment switch; it
+does not establish those adversarial cases. Prefer scoped test ownership
+that does not add a permanent A/B operator mode, consistent with alpha's
+flag-removal objective. This review does not silently remove the merged knob.
+
+D39's `e2da82bfb` response already has separate feedback in §26, committed
+as `020e1618b`; that review remains open. No duplicate D39 round is added.

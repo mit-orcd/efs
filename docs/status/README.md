@@ -71,6 +71,13 @@ matched failover gate is NOTRUN. Lost-reply cleanup (decide-once retirement by
 fence or live-owner abandon) is on `devel-k15b` with unit tests passing; its
 live gate is NOTRUN. **W52: shape A in tree; exact 20k gate and A/B NOTRUN.**
 
+[Oct 23 gate-merge review](devel-integration-review-20261022.md#review-of-the-oct-23-gate-merges-and-recap--october-23):
+**Qualification remains OPEN.** Scoped passes stand; W154 protection policy
+needs a decision. W155 demonstrates ambiguous visible completion, not proof
+of successful durability or rollback. A blanket old-or-new rewrite oracle
+is insufficient. K1's post-restart rc 4, loaded errors, raw-evidence losses
+and foreign-client discovery limits remain recorded.
+
 [D39 latest review (§26)](d39-cluster-membership-proposal-20261022.md):
 **OPEN:** repeated §23 review already committed as `1ca24fec6`; newer §25
 (`e2da82bfb`) addresses it, subject to preserving Raft incarnation fencing

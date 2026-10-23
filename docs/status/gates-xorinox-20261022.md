@@ -3,7 +3,7 @@
 Alpha 1.0 Stage 1 rows [K28](alpha-1.0-2plus1-checklist.md) (W151),
 [K22](alpha-1.0-2plus1-checklist.md) (W23) and
 [K9](alpha-1.0-2plus1-checklist.md) (W87), run on the host xorinox from
-branch `devel-gates-xor`. Not merged.
+branch `devel-gates-xor`; merged into devel at `306a01fd4`.
 
 | Gate | Verdict |
 | --- | --- |
