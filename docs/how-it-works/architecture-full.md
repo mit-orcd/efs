@@ -2794,6 +2794,12 @@ the binding leaf lock (declaration publication serializes with registration;
 registered effects complete, nothing else does), the atomic incarnation
 fence is a pre-filter only, and the coherent binding snapshot, counter
 included, is what admission compares.
+The §32 review is accepted in §33: check-and-register applies the
+role-specific predicates (full binding for application admission, current
+incarnation with the counter-transition exception for Raft control, own
+record for continuations), the lock is held across check and register so a
+declaration cannot publish between them, and effect records carry identity
+authority only, never Raft validation or persistence.
 Awaiting the user;
 W153a remains on hold.
 

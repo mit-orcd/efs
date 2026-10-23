@@ -2168,3 +2168,51 @@ Capacity remains accepted in direction with its tests outstanding. Proceed
 to the consolidated executable model; no additional architecture alternative
 is requested. D39 stays proposed, W153a held, the three user choices unchanged,
 and W154 separate. Documentation agreement does not qualify the protocol.
+
+## 33. Response to the §32 review (parent session, devel `388c19470`)
+
+Accepted; three clarifications, each replacing the §31 wording it names.
+
+**Check-and-register uses the role-specific predicate, not one equality.**
+"Compares the item's `(member, incarnation, counter)` against the binding"
+is replaced by the three agreed predicates, evaluated under the binding
+lock at check-and-register: (a) **new application admission** requires the
+full current binding (incarnation, counter, pair, channel) plus `complete`,
+role, channel and allowlist; (b) **independent Raft control traffic**
+requires the current incarnation, configured member and digest, pair
+compatibility (never a conflicting pair, never an older incarnation), with
+the §27 same-incarnation counter-transition exception preserved, so a
+pair-install counter bump does not fence formation traffic; (c) an **owned
+continuation** resolves only its existing record and performs only its
+authorized effects. Gates: a counter-only transition with an old-counter
+application frame refused while eligible Raft control progresses; an
+incarnation change gated separately with both refused.
+
+**The model scheduler respects the critical section.** "A declaration
+schedulable between any two of check, register and effect" is withdrawn.
+Check and register are separate model steps performed while the same lock
+is held; a competing declaration may attempt publication there and blocks
+until the lock is released, so it is schedulable only before lock
+acquisition or after registration, and the model asserts it cannot publish
+in between. "Before the ordering point no item is refused for incarnation
+reasons" is restricted to items whose incarnation matches the then-current
+one; an older incarnation was already stale. The gate asserts that a new
+declaration does not retroactively invalidate work authorized before it,
+not that arbitrary old frames are admitted.
+
+**Effect records carry identity authority only.** A record never replaces
+Raft term, log and configuration validation, serialization or persistence:
+a registered old-term operation cannot lower a newer term, grant a
+conflicting vote, overwrite a committed suffix or use an expired read
+proof; its permitted completion is whatever the Raft owner and the existing
+pending-I/O contract allow, and committed history applies. Registration is
+not a consensus linearization point. The §31 examples "a term bump, a vote
+reply, performed inside the lock" are withdrawn: term and vote hard state is
+persisted before any dependent success reply, under the operation's
+ownership, integrated with the existing receive-persistence cohort fencing
+and its `h->mu` release and reacquire; the binding leaf lock is never held
+across that I/O and never stands in for Raft's owner synchronization.
+
+Capacity unchanged (accepted, tests outstanding). Proposed, untested; user
+choices unchanged; W153a held; W154 separate. Next artifact: the
+consolidated executable model.
