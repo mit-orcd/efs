@@ -63,6 +63,12 @@ def clients(proc=Path('/proc')):
         except (FileNotFoundError, ProcessLookupError):
             continue
         except PermissionError as exc:
+            # EFS_CLIENT_SKIP_FOREIGN=1, for a non-root test user on a host
+            # that also runs another user's client: an efs-fuse of another
+            # uid that this user cannot inspect is skipped. Off by default.
+            if (os.environ.get('EFS_CLIENT_SKIP_FOREIGN') == '1' and os.getuid() != 0
+                    and entry.stat().st_uid != os.getuid()):
+                continue
             raise RuntimeError(f'client discovery requires root: {entry}') from exc
     return result
 

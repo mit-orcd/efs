@@ -131,11 +131,11 @@ cluster. No row was found already fixed.
 
 | Row | Finding on devel |
 | --- | --- |
-| K1 | Fixed Oct 22 (`86b6ef567`); R4 fixed and merged Oct 22 (`9fd38ffb4`); reopened by T2, fixed and merged Oct 23 (`c083b98b5`); see the K row. `stop.sh` qualification NOTRUN (gates-nuc session). |
-| K2 | Fixed Oct 22 (`a5eb7e6ff`); see the K row. |
-| K3 | Fixed Oct 22 (`1fad577e2`); see the K row. |
-| K4 | Fixed Oct 22 (`918ed9207`); see the K row. |
-| K5 | Fixed Oct 22 on devel (`a443863b1`); reopened by S2/S3, both fixed and merged Oct 22 (`3bcde5e2a`); reopened by T1, fixed and merged Oct 23 (`9a88e332e`); see the K row. Fence cluster gate NOTRUN (gates-nuc session). |
+| K1 | Fixed Oct 22 (`86b6ef567`); R4 fixed and merged Oct 22 (`9fd38ffb4`); reopened by T2, fixed and merged Oct 23 (`c083b98b5`); see the K row. `stop.sh` qualification NOTRUN (gates-nuc session). Live stop gate PASS on nuc at `163241584` (idle 3-daemon cluster stops orderly rc 0, every barrier done, under 1 s; a parked packer is forced to rc 3 at its 6000 ms deadline with stores preserved and a restart serves), on branch `devel-gates-nuc`, not merged ([evidence](gates-nuc-20261022.md)). |
+| K2 | Fixed Oct 22 (`a5eb7e6ff`); see the K row.  |
+| K3 | Fixed Oct 22 (`1fad577e2`); see the K row.  |
+| K4 | Fixed Oct 22 (`918ed9207`); see the K row.  |
+| K5 | Fixed Oct 22 on devel (`a443863b1`); reopened by S2/S3, both fixed and merged Oct 22 (`3bcde5e2a`); reopened by T1, fixed and merged Oct 23 (`9a88e332e`); see the K row. Fence cluster gate NOTRUN (gates-nuc session). Fence cluster gate PASS on nuc at `163241584` (run 2, idle host; run 1 FAIL on two 15 s POSIX timeouts under load, every fence check passed), on branch `devel-gates-nuc`, not merged ([evidence](gates-nuc-20261022.md)). |
 | K6 | Merged. Remaining: the W130 one-replica DIR fault injection, and multi-host runs. |
 | K7 | Fixed Oct 22 (`907a5891f`); R2/R3 fixed and merged Oct 22 (`85d8dd438`); see the K row. |
 | K8 | Fixed Oct 22 (`71ce4ff35`); see the K row. |
@@ -147,7 +147,7 @@ cluster. No row was found already fixed.
 | K23 | Deferred by the current alpha scope; needs the user's confirmation. |
 | K24 | Fixed Oct 22 (`19555889f`); see the K row. |
 | K25 | Fixed Oct 22 (`35647dd0f`); R1 fixed and merged Oct 22 (`6df08cc3a`); see the K row. |
-| K26 | Gate done and merged Oct 22 (`b8ef49e58`): `make leak-check` PASS on efs2 and efs1 ([evidence](k26-leak-gate-20261022.md)); NOTRUN on node9901. |
+| K26 | Gate done and merged Oct 22 (`b8ef49e58`): `make leak-check` PASS on efs2 and efs1 ([evidence](k26-leak-gate-20261022.md)); NOTRUN on node9901. x86_64: `make leak-check` PASS 25/25 (291 s) on nuc at `163241584`, on branch `devel-gates-nuc`, not merged ([evidence](gates-nuc-20261022.md)). |
 | K29 | Open (found Oct 23 by the K15 live gates); needs a dedicated-host rerun. |
 | K30 | Open (found Oct 23 on amd); intermittent on unmodified devel. |
 
