@@ -1611,18 +1611,17 @@ fence or live-owner abandon) is on `devel-k15b` with unit tests passing; its
 live gate is NOTRUN. **W52: shape A in tree; exact 20k gate and A/B NOTRUN.**
 
 [Recent devel integration review](../status/devel-integration-review-20261022.md):
-**Second pass through `c71cd1066`: OPEN.** K22 log-lag election veto and K5
-mtime fence-capture counterexamples reproduced locally; session-latch data race
-identified. Earlier four findings remain open. [K5 S2/S3](../status/k05-s2-s3-20261022.md):
-**both FIXED and merged into devel; regression and TSan tests in
-`make test`, PASS on efs1; fence cluster gate NOTRUN.** K8 harness improvements credited;
-the W125 cleanup/remote-evidence row is addressed and merged (`devel-w125h`);
-four targeted checks PASS, merged cluster acceptance NOTRUN.
+**Third pass at `0eb1511d2`: OPEN.** Original S1–S3 and R1–R3 fixes are
+merged. New T1 (P1): append-abandon repeats the session capture/fence race
+(K5/K15). T2 (P2): synchronous forced-exit reporting can exceed K1's shutdown
+deadline. Reopen K5 and K1; K15 stays INCOMPLETE with a code gap. Focused
+local checks PASS; linked transaction test NOTRUN (missing `libefs.a`).
+The efs3 merged-suite pass is reported by `af0996a3d`; live gates remain open.
 
 [K1 / W145 R4 whole-shutdown deadline](../status/k01b-r4-shutdown-deadline-20261022.md):
 **implemented on `devel-k01b`, merged `9fd38ffb4`; unit, private-daemon and full
-`make test` PASS on efs3.** One 50 s deadline covers the handler drain and
-every stop phase. A stuck worker gives rc 3 with the phase and worker named,
+`make test` PASS on efs3.** A 50 s deadline covers the handler drain and
+teardown phases; T2 remains OPEN for blocking exit-report I/O after that deadline. A stuck worker gives rc 3 with the phase and worker named,
 and the stop script reports "stopped, forced, stores preserved", never
 orderly. A devops `stop.sh` patch is required and not applied. orcd-mini
 `stop.sh` qualification NOTRUN.
@@ -1669,10 +1668,10 @@ persisted; ior write regression needs a K row.
 [Alpha 1.0 Stage 1, Oct 22](../status/alpha-1.0-2plus1-checklist.md#stage-1-tally-end-of-oct-22-adjusted-after-the-integration-review):
 **7 K rows fixed and merged (K2, K3, K4, K8, K16, K24, K28); of the 5 rows
 REOPENED by the [integration review](../status/devel-integration-review-20261022.md),
-all five (K1 R4, K5 S2/S3, K7 R2/R3, K22 S1, K25 R1, the two P1 findings
-included) are fixed again and merged; the K26 valgrind leak gate is merged;
-2 INCOMPLETE (K9, K15); live gates NOTRUN. devel `0eb1511d2` passes `make test`
-rc 0 on efs3.** Highlights: W148 wrong-bytes root
+their fixes are merged, but the third review reopens K1 (T2) and K5 (T1),
+with T1 also affecting K15; the K26 valgrind leak gate is merged;
+2 INCOMPLETE (K9, K15); live gates NOTRUN. devel `0eb1511d2` returned `make test`
+rc 0 on efs3 with 15 NOTRUN: executed checks passed, full qualification INCOMPLETE.** Highlights: W148 wrong-bytes root
 cause fixed (UNCOND slot base), sessions registered on every mutation
 (protocol 4), identity-bound fragment format 2 (fresh format needed),
 follower memory/lag bound, pre-vote, bounded stops.

@@ -263,3 +263,113 @@ is **not** a passing product gate. All generated binaries live in temporary
 locations; only reusable source is committed. Full Linux build/suites,
 RDMA/direct-I/O deployment, host restart and payload qualification are **NOTRUN**
 by this review. No production code is changed.
+
+
+## Third pass — merged fixes at 0eb1511d2
+
+**Verdict: OPEN.** Review of the merged implementation, not a cluster
+qualification. All 15 named fix/evidence tips in the handoff are ancestors of
+`0eb1511d2`: `e842d1f87`, `468513a96`, `42c631852`, `78e9100fd`,
+`ded93816b`, `ba9f41dc2`, `4087f3f21`, `95160cc8d`, `b4a6c5a68`,
+`8df4de684`, `12bfbe9e8`, `8c630edd5`, `aea319575`, `2fea76916`,
+`4262ba8c1`. The subsequent documentation commit `af0996a3d` records the
+merged `0eb1511d2` efs3 `make test` rc 0, with **15 NOTRUN** in the
+checklist. This is success for executed checks, not complete qualification;
+retain those 15 omissions in any release summary. That is reported evidence from the
+other session, not a run performed or independently inspected here.
+
+The original S1–S3 and R1–R3 mechanisms have been addressed: committed rather
+than uncommitted backlog controls election eligibility; captured session rows
+are checked in the existing owned wrappers and mount latches use atomics;
+decision scanning has a bounded continuation; DECIDE/RETIRE validate exact
+encodings; the summary runner returns failure/incomplete and retains failed
+command output. The W125 harness now checks cleanup and records remote/final
+mismatches. These improvements do not close the original mounted mismatch or
+any outstanding live gate. K28 increases the cap and distributes packed data;
+it still has two metadata groups with default voters confined to nodes 1–4,
+not metadata throughput distributed over every additional node.
+
+### T1 — P1: K15 introduces the K5 capture race in append-abandon
+
+`src/meta/append_plan.c:929–940`, `efs_meta_abandon_append`, first calls
+`efs_session_accept`, then separately reads the session row into the EXCL
+comparison image. It checks only the image length. Unlike the repaired
+reservation, mtime, completion and retirement wrappers, it does not call
+`session_owner_capture` or check the captured established epoch/reject floor.
+`host_append_abandon` (`src/server/raft_host.c`) does not serialize this
+sequence against replicated fencing.
+
+Interleaving: epoch 1 passes admission; FENCE_LOC raises reject_below to 2;
+abandon captures that already-fenced row; its owner PREPARE compares the row
+against those same bytes and can succeed. An old session can therefore retire
+its receipt/reservation after fencing, contrary to this function's own promise
+that a fenced owner uses session cleanup instead. This is a new integration
+gap; it does not invalidate the existing mtime fix or claim demonstrated
+payload corruption. **Source-confirmed; live/interleaving reproduction NOTRUN.**
+
+Use the existing `session_owner_capture` in abandon, and extend the real-KV
+barrier test to this entry point. Test fence/removal between acceptance and
+capture (no prepare or receipt/reservation change), fence after capture
+(conflict), and fence after owner prepare (wait for transaction resolution).
+Reopen K5 for the authority invariant and K15 for this cleanup implementation;
+K15 already remains INCOMPLETE for live failover/lost-reply qualification.
+
+### T2 — P2: K1's forced-exit path can block beyond its deadline
+
+`src/server/efsd.c:420–431` calls `shutdown_report`, then `fflush`, before
+`_exit(3)` after the deadline has expired. `shutdown_report` at lines 395–416
+performs synchronous stdio, open/write/fsync/close/rename on the storage root.
+A stalled storage operation or blocked output pipe can prevent reaching
+`_exit` indefinitely. The teardown worker's timed wait does not bound these
+operations on the supervising thread. The current stuck-packer/handler test
+exercises healthy reporting I/O and cannot establish the claimed whole-stop
+bound. **Source-confirmed; blocked-report fault injection NOTRUN.**
+
+Keep the outcome record and honest forced/unknown classifications, but make
+reporting best-effort under an independent exit deadline; the final exit path
+must not wait for filesystem I/O or stdio locks/flushes. Add blocked exit-record
+I/O and blocked stderr tests alongside the stuck-worker test. Also account for
+`stop_perf_recorder`, which runs before `shutdown_bounded` starts its clock,
+when describing a signal-to-exit or stop-script deadline. Reopen K1's total
+bound; the implemented phase deadlines and exit classification remain useful.
+
+### Status corrections and verification limits
+
+“Code: nothing open” and “no row reopened” are not supported after integration:
+T1 and T2 require code changes. Existing live gates, K9's non-reproduction,
+K15's incomplete qualification and scope decisions remain unchanged. A test
+suite pass does not establish that every concurrency interleaving was tested.
+The older `4090e717b` run predates the follow-up merges, so its claim to include
+“every K merge” must be removed; use the exact merged `0eb1511d2` result instead.
+No fresh-format deployment, store deletion, new product toggle or compatibility
+requirement is proposed. The reported orphaned efs1 test processes were not
+inspected or stopped in this review and cannot be declared cleaned up.
+
+Local environment: macOS, Apple clang, Python 3.9, source `0eb1511d2` (later
+`af0996a3d` changes documentation only), no EFS daemon/mount/cluster; transport,
+I/O profile, fixture quota and RDMA are not applicable to these local checks.
+Temporary fixtures/binaries only, no raw output committed. Commands run:
+
+- `python3 scripts/reviews/k05_mtime_fence_capture.py` — PASS; existing mtime
+  wrapper refuses the fenced image before any prepare, not coverage of abandon.
+- `python3 tests/test_make_test_summary_runner.py` — PASS, including failure,
+  timeout, NOTRUN, empty command list and retained failure output.
+- `python3 tests/test_w125_harness.py` — PASS; synthetic cleanup and evidence
+  checks, not a rerun of the original mounted mismatch.
+- `python3 tests/test_shutdown_bounded.py` — PASS; cooperative handler 55 ms,
+  stuck-handler refusal 324 ms. This is not the whole-daemon reporting test.
+- `python3 tests/test_pack_object_remote.py` — PASS; extracted code/callback
+  checks, not the five-node live gate.
+- `cc -std=gnu11 -pthread -Iinclude scripts/reviews/k22_capacity_tail.c
+  src/raft/raft.c src/raft/raft_mem.c src/common/batch_obs.c
+  -o /tmp/efs-k22-review` then `/tmp/efs-k22-review 128` — the former all-held
+  counterexample now sends 412 messages, zero held campaigns. This harness
+  does not deliver messages: no claim of a completed election or plateau gate.
+- `python3 tests/test_txn_apply_exact.py` — NOTRUN: compilation failed because
+  this checkout has no `libefs.a`; no transaction assertions executed. Use the
+  Linux build prerequisites and test command documented by that test.
+
+Full Linux build, TSan, leak check, cluster gates, full payload checks and
+blocked-report/abandon-race regressions are NOTRUN by this review. The other
+session's efs3 result is retained with its provenance. Production code is
+unchanged; these are review findings and status corrections.
