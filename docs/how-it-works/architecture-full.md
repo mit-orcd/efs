@@ -3002,7 +3002,13 @@ A6 Raft and query selectors, user Oct 24:
 - `EFS_QUERY_BACKEND`: **disk only**; remove the `ram` backend and the variable (bounded query storage with restart catch-up).
 - `EFS_RDMA_FIRST`: **trace only, renamed `EFS_RDMA_TRACE`**; off by default, and it changes only diagnostics.
 
-Still open: `EFS_COMMANDS`, `EFS_COMMANDS_SERVER`, `EFS_EXPIRY`, `EFS_FUSE_EXPORT`, `EFS_UNMOUNT_REVOKE`, `--no-persist`, `EFS_TRANSPORT`, and the documented default for buffered versus direct I/O.
+A6 feature selectors, user Oct 24:
+
+- `EFS_COMMANDS` (client) and `EFS_COMMANDS_SERVER`: **remove both.** The versioned cluster commands-policy is the single authority for `.efs`, enforced by the server, with no competing client or server environment toggle. Query workers run automatically and use minimal resources when idle.
+- `EFS_EXPIRY`: **excluded from the alpha product**, not left as an unsupported runtime mode.
+- `EFS_FUSE_EXPORT`: **remove** the NFS re-export capability switch and its gateway-script settings (W152).
+
+Still open: `EFS_UNMOUNT_REVOKE`, `--no-persist`, `EFS_TRANSPORT`, and the documented default for buffered versus direct I/O.
 
 ### D41 — K9 / W87 closed without resolution (user, Oct 24)
 
