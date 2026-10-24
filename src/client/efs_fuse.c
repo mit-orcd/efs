@@ -3371,11 +3371,6 @@ static int efs_append_flush_report_run(struct fuse_file_info *fi, efs_ino_t ino)
     if(profile)t2=stats_now_ms();
     rc = efs_dcache_flush_ino(ino);
     if(profile)t3=stats_now_ms();
-#if EFS_FAULTS
-    /* Data PUT, REPORT not yet sent, stripe held. */
-    if (rc == EFS_OK)
-        (void)efs_client_append_barrier("published", ino);
-#endif
     if (rc == EFS_OK)
         rc = efs_client_report_dirty_ino(ino, 1);
     pthread_mutex_unlock(amu);
@@ -3978,10 +3973,6 @@ static int efs_fuse_write_admitted_run(const char *path, const char *buf, size_t
             return fuse_stat_errno(lock_rc);
         rc = append_reserve_offset(ino, (uint64_t)size, &offset);
         if (rc != 0)return rc; /* reserve failure already released stripe */
-#if EFS_FAULTS
-        /* Granted and reflected, stripe held, bytes not yet cached. */
-        (void)efs_client_append_barrier("reserved", ino);
-#endif
     }
     rc = fuse_unit_begin(ino, (uint64_t)offset, size, append);
     if (rc != 0) {
@@ -4140,10 +4131,6 @@ static int efs_fuse_write_buf_admitted_run(const char *path, struct fuse_bufvec 
             return fuse_stat_errno(lock_rc);
         rc = append_reserve_offset(ino, (uint64_t)size, &offset);
         if (rc != 0)return rc; /* reserve failure already released stripe */
-#if EFS_FAULTS
-        /* Granted and reflected, stripe held, bytes not yet cached. */
-        (void)efs_client_append_barrier("reserved", ino);
-#endif
     }
     rc = fuse_unit_begin(ino, (uint64_t)offset, size, append);
     if (rc != 0) {

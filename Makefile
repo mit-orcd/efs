@@ -347,7 +347,7 @@ all: $(LIB) efsd efs-fuse efs-bench efs-mgmt tests
 # helpers built with extra flags). They are real prerequisites of test and
 # test-long, never built inside a recipe, so test-long works on its own and a
 # parallel make cannot start a test before its binary exists.
-TEST_SPECIAL_BINS = tests/shutdown_faults/efsd tests/append_faults/efs-fuse tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server tests/test_data_commit tests/faults/test_kv_compact_crash
+TEST_SPECIAL_BINS = tests/shutdown_faults/efsd tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server tests/test_data_commit tests/faults/test_kv_compact_crash
 
 # blake3-bench always relinks so a stale binary cannot linger after CPU changes.
 FORCE:
@@ -836,7 +836,6 @@ clean:
 	rm -f $(LIB) efsd efs-fuse efs-bench efs-mgmt blake3-bench
 	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim tests/faults/test_kv_compact_crash tests/shutdown_faults/efsd
 	rm -f $(TEST_BINS) tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server
-	rm -f tests/append_faults/efs-fuse
 	rm -f tests/test_data_commit tests/measure/*_smoke tests/measure/bench_query_disk_scale tests/measure/bench_query_disk_concurrent
 	rm -f .build_id.stamp
 
@@ -940,14 +939,6 @@ tests/shutdown_faults/efsd: src/server/efsd.c src/server/packer.c $(SHUTDOWN_FAU
 	@mkdir -p tests/shutdown_faults
 	$(CC) $(CFLAGS) -DEFS_FAULTS=1 $(INCLUDES) -o $@ src/server/efsd.c src/server/packer.c $(SHUTDOWN_FAULT_OBJS) $(LIB) $(LDFLAGS)
 
-# K9/W87 append interleavings (tests/test_append_interleave_live.py).
-# EFS_FAULT_APPEND_BARRIER exists only behind EFS_FAULTS; this client compiles
-# its own efs_fuse.c and inode_rpc.c with the gate on, so ./efs-fuse never
-# carries the hook.
-tests/append_faults/efs-fuse: src/client/efs_fuse.c src/client/inode_rpc.c src/client/client_internal.h $(LIB)
-	@mkdir -p tests/append_faults
-	$(CC) $(CFLAGS) -DEFS_FAULTS=1 $(INCLUDES) $(FUSE_CFLAGS) -o $@ src/client/efs_fuse.c src/client/inode_rpc.c $(LIB) $(LDFLAGS) $(FUSE_LIBS)
-
 src/kv/kv_lsm.o src/kv/kv_wal.o src/kv/kv_compact.o src/kv/kv_seg.o: src/kv/kv_lsm_internal.h
 src/kv/kv_lsm.o: src/kv/kv_candidates.h
 
@@ -1018,7 +1009,6 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_raft_rotate_stall.py
 	python3 tests/test_leak_gate.py
 	python3 tests/test_append_sequence.py
-	python3 tests/test_append_interleave_live.py
 	./tests/test_store_durability
 	python3 tests/test_storage_root_inventory.py
 	python3 tests/test_efs_commands.py

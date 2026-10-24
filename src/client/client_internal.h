@@ -434,10 +434,6 @@ int efs_client_rpc_append_abandon(efs_export_id_t export_id, efs_ino_t ino,
 int efs_client_rpc_append_reserve(efs_export_id_t export_id, efs_ino_t ino,
                                   uint64_t len, const struct efs_opid_req *q,
                                   uint64_t *new_size_out, uint64_t *start_out);
-#if EFS_FAULTS
-/* K9/W87 fault build: park at a named append point (inode_rpc.c). */
-int efs_client_append_barrier(const char *point, efs_ino_t ino);
-#endif
 int efs_client_rpc_hold(efs_export_id_t export_id, efs_ino_t ino, int open,
                         uint64_t owner);
 int efs_client_rpc_flock(efs_export_id_t export_id, efs_ino_t ino, uint32_t op,

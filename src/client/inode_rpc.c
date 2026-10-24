@@ -2626,44 +2626,6 @@ static int append_reply_fault(const struct efs_opid_req *q, efs_ino_t ino)
 }
 #endif
 
-/* K9/W87 fault build: one-shot barrier at a named O_APPEND point. With
- * EFS_FAULT_APPEND_BARRIER=DIR, the first arrival at POINT while
- * DIR/POINT-arm exists claims DIR/POINT-entered (O_EXCL) and waits, at most
- * 60 s, until the test removes the arm file. Returns 1 when it parked. */
-#if EFS_FAULTS
-int efs_client_append_barrier(const char *point, efs_ino_t ino)
-{
-    const char *dir = getenv("EFS_FAULT_APPEND_BARRIER");
-    char arm[1024], entered[1024];
-    if (!dir || !point ||
-        snprintf(arm, sizeof(arm), "%s/%s-arm", dir, point) >= (int)sizeof(arm) ||
-        snprintf(entered, sizeof(entered), "%s/%s-entered", dir, point) >= (int)sizeof(entered) ||
-        access(arm, F_OK))
-        return 0;
-    int fd = open(entered, O_CREAT | O_WRONLY | O_EXCL, 0600);
-    if (fd < 0)
-        return 0;
-    close(fd);
-    fprintf(stderr, "append-barrier point=%s ino=%llu parked\n", point,
-            (unsigned long long)ino);
-    fflush(stderr);
-    struct timespec t0, t;
-    clock_gettime(CLOCK_MONOTONIC, &t0);
-    for (;;) {
-        if (access(arm, F_OK))
-            break;
-        clock_gettime(CLOCK_MONOTONIC, &t);
-        if (t.tv_sec - t0.tv_sec >= 60)
-            break;
-        usleep(1000);
-    }
-    fprintf(stderr, "append-barrier point=%s ino=%llu released\n", point,
-            (unsigned long long)ino);
-    fflush(stderr);
-    return 1;
-}
-#endif
-
 /* Cross-client O_APPEND: reserve the next len bytes at the owner.
  * new_size_out is this reservation's end; start_out is the reserved
  * offset (reply atime) when the host stamped reserved+len. */
@@ -2712,9 +2674,6 @@ int efs_client_rpc_append_reserve(efs_export_id_t export_id, efs_ino_t ino,
         return rpc_status_to_efs(r.status);
 #if EFS_FAULTS
     if (append_reply_fault(q, ino)) return EFS_ERR_NET;
-    /* Granted, reply dropped; parked so the test can move leadership
-     * before this write gives up and abandons the identity. */
-    if (efs_client_append_barrier("lose", ino)) return EFS_ERR_NET;
 #endif
     if (new_size_out)
         *new_size_out = r.inode.size;
