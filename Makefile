@@ -391,6 +391,7 @@ test-bins: all $(TEST_SPECIAL_BINS)
 test: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_env_inventory.py
 	python3 tests/test_env_removed.py
+	python3 tests/test_cli_surface.py
 	python3 tests/test_direct_io_required.py
 	python3 tests/test_rdma_trace.py
 	python3 tests/test_transport_select.py
@@ -1014,6 +1015,8 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_k33_seed_loss.py
 	python3 tests/test_k33_bookkeeping.py
 	python3 tests/test_k34_stop_put.py
+	python3 tests/test_operator_workflows.py
+	python3 tests/test_member_limit.py
 	python3 tests/test_client_processes.py
 	python3 tests/test_shutdown_stuck_worker.py
 	./tests/test_reclaim

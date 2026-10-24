@@ -194,19 +194,15 @@ without a remount. Online removal is not available in alpha. The loopback
 daemon tests of additions pass; the multi-host addition gates, including
 addition under client load, are NOTRUN.
 
-### Add storage to a node
+### Add storage
 
-Either restart the node with the longer root list, or attach a root live:
-
-```bash
-./efs-mgmt add-storage 10.0.0.11:17432 /data2/efs
-```
-
-`add-storage` attaches the root to the running daemon only. The node does
-not remember it: add the root to its `STORAGE` list before the next restart,
-or the fragments written there are missing from that node after restart.
-The automatic quota is computed at startup, so the added space counts after
-that restart. This command has no test yet (finding F11); prefer the restart.
+A node's storage roots are fixed when its store is created: give every
+root in its first `STORAGE` list, and restart it with the same list in the
+same order. A restart with a root added, missing or moved is refused
+(`storage: ... a node's storage roots are fixed when its store is created`),
+because packed segments are placed by position among the roots. To add
+capacity, add a node (above). `efs-mgmt add-storage` was removed and is
+refused (finding F11).
 
 ### Stop, restart and orderly shutdown
 

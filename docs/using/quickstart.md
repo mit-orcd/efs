@@ -18,6 +18,14 @@ process-control wrappers. FUSE needs `fusermount3` and permission to mount at
 the selected path. See the [build prerequisites](../../README.md#build-and-start).
 Use free ports 17432–17434 and three empty storage roots for this disposable
 example; the wrapper retires an existing daemon on a reused port/path.
+The roots must be on a filesystem that supports `O_DIRECT` (ext4, XFS; not
+an older tmpfs) with free space above its startup reserve: efsd keeps 20% of
+the filesystem (at least 1 GiB) free and refuses to start when nothing is
+left above that. A small tmpfs `/tmp` fails both checks, so the example
+uses a directory under `$HOME` (set `EFS_DEMO_DIR` to use another disk).
+The quota is automatic (the free space above the reserve); the three servers
+share one filesystem here, so their quotas overlap: this is a demonstration,
+not a capacity layout.
 
 The first server creates the cluster; the second and third join it. The
 cluster forms by itself once three servers are there (node ids come from the
@@ -25,10 +33,10 @@ cluster: the first is 1, the others follow in address order):
 
 ```bash
 export EFS_TRANSPORT=tcp
-EFS_DEMO_ROOT=$(mktemp -d /tmp/efs-demo.XXXXXX)
-./scripts/server.sh 127.0.0.1:17432 "$EFS_DEMO_ROOT/s1:5G"
-./scripts/server.sh 127.0.0.1:17433 "$EFS_DEMO_ROOT/s2:5G" 127.0.0.1:17432
-./scripts/server.sh 127.0.0.1:17434 "$EFS_DEMO_ROOT/s3:5G" 127.0.0.1:17432
+EFS_DEMO_ROOT=$(mktemp -d "${EFS_DEMO_DIR:-$HOME}/efs-demo.XXXXXX")
+./scripts/server.sh 127.0.0.1:17432 "$EFS_DEMO_ROOT/s1"
+./scripts/server.sh 127.0.0.1:17433 "$EFS_DEMO_ROOT/s2" 127.0.0.1:17432
+./scripts/server.sh 127.0.0.1:17434 "$EFS_DEMO_ROOT/s3" 127.0.0.1:17432
 ```
 
 There is no node id, member count or cluster file to give (efsd refuses the

@@ -7,7 +7,6 @@
  * digest tails and is refused, never read. */
 #define EFS_STORAGE_ROOT_FORMAT 1u
 int server_storage_roots_init(struct efsd_server *s);
-int server_storage_files_attach(struct efsd_server *s, const char *root, unsigned index);
 void server_storage_roots_close(struct efsd_server *s);
 int server_storage_sync_parents_with(struct efsd_server *s, const char *path,
                                     int (*sync)(void *,int), void *context);

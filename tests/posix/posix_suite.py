@@ -738,6 +738,39 @@ def dir_rename_noreplace(d):
 
 
 @test
+def dir_rename_noreplace_free_name(d):
+    """F13: the client refuses every renameat2 flag, also RENAME_NOREPLACE
+    onto a free name (EOPNOTSUPP); nothing moves."""
+    import ctypes
+    a, b = os.path.join(d, "a"), os.path.join(d, "b")
+    wr(a, b"noreplace payload")
+    libc = ctypes.CDLL("libc.so.6", use_errno=True)
+    rc = libc.renameat2(-100, os.fsencode(a), -100, os.fsencode(b), 1)
+    if rc == 0:
+        raise Fail("RENAME_NOREPLACE onto a free name succeeded; the documented "
+                   "result is EOPNOTSUPP")
+    eq(ctypes.get_errno(), errno.EOPNOTSUPP, "RENAME_NOREPLACE onto a free name")
+    eq(rd(a), b"noreplace payload", "source unchanged")
+    eq(os.path.exists(b), False, "no target created")
+
+
+@test
+def mknod_special_files_refused(d):
+    """F13: mknod makes regular files only; a FIFO, a socket, a character
+    and a block device fail EPERM and leave no name."""
+    for name, mode, dev in (("fifo", statmod.S_IFIFO, 0), ("sock", statmod.S_IFSOCK, 0),
+                            ("chr", statmod.S_IFCHR, os.makedev(1, 3)),
+                            ("blk", statmod.S_IFBLK, os.makedev(7, 0))):
+        p = os.path.join(d, name)
+        expect_err(errno.EPERM, os.mknod, p, mode | 0o644, dev)
+        eq(os.path.lexists(p), False, "%s: no name after the refusal" % name)
+    expect_err(errno.EPERM, os.mkfifo, os.path.join(d, "fifo2"))
+    p = os.path.join(d, "reg")
+    os.mknod(p, statmod.S_IFREG | 0o644)
+    eq(statmod.S_ISREG(os.stat(p).st_mode), True, "regular mknod creates a file")
+
+
+@test
 def dir_rename_exchange_preserves_both_files(d):
     import ctypes
     a, b = os.path.join(d, "a"), os.path.join(d, "b")

@@ -61,7 +61,7 @@ expiry is compiled out of the product (findings F7 and F8 closed).
 | `--stop MOUNTPOINT --force-discard` | in, explicit loss | Discards unresolved writes; for a client that cannot drain |
 | `--help`, `--help-fuse`, `--version` | in | |
 | `--perf`, `--strace` | out | Profiling only |
-| `--bench`, `--bench-time`, `--bench-mib` | out | Undocumented developer benchmark modes in the user binary (finding F5) |
+| `--bench`, `--bench-time`, `--bench-mib` | removed | Refused: the in-process client benchmark left the product binary; nothing used it (finding F5). Use `efs-bench` |
 
 ## `efs-mgmt` commands
 
@@ -70,18 +70,18 @@ expiry is compiled out of the product (findings F7 and F8 closed).
 | `status` | in | Members, reachability, quota/usage, usable 2+1 capacity, cluster state, degraded chunks, abandoned uploads |
 | `raft-status` | in | Per-group term, commit, applied, voters and follower bound |
 | `version`, `io-stats`, `gc-status` | in | Read-only diagnostics |
-| `sync-status` | in, *proposed* | Read-only durability state per root; missing from `--help` (finding F3) |
+| `sync-status` | in, *proposed* | Read-only durability state per root |
 | `mkfs` / `raft-mkfs` | in | Optional: forms at once before automatic formation; afterwards a no-op |
 | `commands-policy` | in | `.efs` is in the alpha profile; the durable versioned mask |
-| `add-storage` | in, limited | Attaches roots to a running node; not remembered at restart and untested (finding F11) |
-| `pack-compact` | in, *proposed* | Packing control: summary (`0`) or on-demand compaction of shared segments; missing from `--help` (finding F3) |
-| `raft-resync` | in, *proposed* | Recovery of a follower's group from the leader snapshot; its `--help` fails (finding F2); no `make test` case |
-| `add-node` | out, *proposed* | Sends a legacy JOIN to a running node; the alpha way to add a node is `efsd --join` (K33). Untested (finding F4) |
+| `pack-compact` | in, *proposed* | Packing control: summary (`0`) or on-demand compaction of shared segments |
+| `raft-resync` | in, *proposed* | Recovery of a follower's group from the leader snapshot; daemon test `tests/test_operator_workflows.py` (finding F20) |
 | `shrink-quota` | out, *proposed* | Reduces the running quota only; lost at restart; no migration. Use `--quota` |
-| `raft-step-down` | out, *proposed* | Leader transfer used by the failover harness; missing from `--help`; no operator workflow |
-| `data-commit` | out, *proposed* | Durability barrier; the orderly stop already runs it; missing from `--help` |
+| `raft-step-down` | out, *proposed* | Leader transfer used by the failover harness; no operator workflow |
+| `data-commit` | out, *proposed* | Durability barrier; the orderly stop already runs it |
 | `raft-change` | out | Manual voter change; K33 changes the voters itself, and a manual change leaves the default layout |
 | `raft-dir`, `raft-session` and every `raft-<op>` (`raft-create`, `raft-lookup`, `raft-rename`, `raft-publish`, `raft-flock`, …) | out | Debug commands that bypass FUSE and change metadata directly |
+| `add-node` | removed | Refused, naming `efsd --join`: one way to add a node (K33, finding F4) |
+| `add-storage` | removed | Refused: a node's storage roots are fixed when its store is created; a restart with other roots is refused (finding F11) |
 | `expiry`, `expiry-policy`, `expiry-status`, `expiry-clock`, `expiry-enable`, `expiry-id` | removed | Compiled out of the product (D42); only an `EFS_BUILD_EXPIRY` development build has them |
 
 `efs-mgmt` has no authentication: any host that reaches a daemon port can

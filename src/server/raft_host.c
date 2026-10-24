@@ -15188,6 +15188,15 @@ void server_member_hello_join(const char *addr, uint16_t port, uint64_t token,
             ack->reject_reason = EFS_HELLO_REJECT_FORMED;
             return;
         }
+        /* F14: a full cluster refuses the store outright (the joiner exits)
+         * rather than queueing an addition that can never commit. */
+        if (m.count >= EFS_MAX_NODES) {
+            fprintf(stderr, "membership: joining store %016llx at %s:%u refused: the cluster "
+                    "has the maximum of %d members\n", (unsigned long long)token, addr, port,
+                    EFS_MAX_NODES);
+            ack->reject_reason = EFS_HELLO_REJECT_FULL;
+            return;
+        }
         struct efs_member j;
         memset(&j, 0, sizeof(j));
         j.port = port;

@@ -903,35 +903,6 @@ void server_handle_conn(struct efs_conn *conn)
             efs_conn_send_msg(conn, EFS_MSG_SHRINK_QUOTA_REPLY, &reply, 1);
             break;
         }
-        case EFS_MSG_ADD_STORAGE: {
-            struct efs_msg_add_storage_reply r;
-            memset(&r, 0, sizeof(r));
-            r.status = EFS_ADD_STORAGE_INVALID;
-            if (payload_len >= sizeof(struct efs_msg_add_storage)) {
-                struct efs_msg_add_storage *req = payload;
-                req->paths[sizeof(req->paths) - 1] = '\0';
-                uint32_t n = 0;
-                r.status = (uint8_t)server_add_storage_paths(g_server, req->paths, &n);
-                r.path_count = n;
-                if (r.status == EFS_ADD_STORAGE_OK && n == 0) {
-                    pthread_mutex_lock(&g_server->lock);
-                    r.path_count = g_server->storage_path_count;
-                    pthread_mutex_unlock(&g_server->lock);
-                }
-            }
-            efs_conn_send_msg(conn, EFS_MSG_ADD_STORAGE_REPLY, &r, sizeof(r));
-            break;
-        }
-        case EFS_MSG_JOIN: {
-            if (payload_len >= sizeof(struct efs_msg_join)) {
-                struct efs_msg_join *req = payload;
-                uint8_t reply = EFS_JOIN_OK;
-                if (server_join_cluster(g_server, req->peer_host, req->peer_port) != 0)
-                    reply = EFS_JOIN_ERROR;
-                efs_conn_send_msg(conn, EFS_MSG_JOIN_REPLY, &reply, 1);
-            }
-            break;
-        }
         case EFS_MSG_CREATE_RETAINED: {
             struct efs_msg_create_retained_reply reply;
             memset(&reply,0,sizeof(reply));reply.rpc.status=EFS_INODE_RPC_INVAL;

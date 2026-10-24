@@ -297,6 +297,44 @@ static void test_root_format(void)
     snprintf(path,sizeof(path),"%s/.efs-engine-lock",dir);unlink(path);
     free(server);assert(!rmdir(dir));
 }
+/* F11: a node's roots are fixed, in order, when they are first marked; a
+ * root added, dropped or moved later is refused and nothing is marked. */
+static void root_set_init(struct efsd_server *server,const char *const *roots,unsigned n,int want)
+{
+    server->storage_path_count=n;
+    for(unsigned i=0;i<n;i++)strcpy(server->storage_paths[i],roots[i]);
+    booting=1;int rc=server_storage_roots_init(server);booting=0;
+    assert(want ? rc==EFS_OK : rc==EFS_ERR_IO);
+    if(!rc)server_storage_roots_close(server);
+}
+static void test_root_set(void)
+{
+    char a[EFS_TEST_PATH],b[EFS_TEST_PATH],c[EFS_TEST_PATH],path[1100];
+    efs_test_path(a,sizeof(a),"efs-root-set-a-XXXXXX");assert(efs_test_mkdtemp(a));
+    efs_test_path(b,sizeof(b),"efs-root-set-b-XXXXXX");assert(efs_test_mkdtemp(b));
+    efs_test_path(c,sizeof(c),"efs-root-set-c-XXXXXX");assert(efs_test_mkdtemp(c));
+    struct efsd_server *server=calloc(1,sizeof(*server));assert(server);
+    const char *ab[]={a,b},*ba[]={b,a},*abc[]={a,b,c},*only_a[]={a};
+    root_set_init(server,ab,2,1);
+    root_set_init(server,ab,2,1);
+    root_set_init(server,abc,3,0);
+    snprintf(path,sizeof(path),"%s/.efs-engine",c);assert(access(path,F_OK)); /* not marked */
+    root_set_init(server,only_a,1,0);
+    root_set_init(server,ba,2,0);
+    root_set_init(server,ab,2,1);
+    /* A marker without a root set (an earlier build): refused. */
+    snprintf(path,sizeof(path),"%s/.efs-engine",b);
+    uint8_t page[128];int fd=open(path,O_RDWR);assert(fd>=0 && pread(fd,page,128,0)==128);
+    memset(page+32,0,64);efs_hash(page,96,page+96);assert(pwrite(fd,page,128,0)==128);close(fd);
+    root_set_init(server,ab,2,0);
+    const char *dirs[]={a,b,c};
+    for(unsigned i=0;i<3;i++){
+        snprintf(path,sizeof(path),"%s/.efs-engine",dirs[i]);unlink(path);
+        snprintf(path,sizeof(path),"%s/.efs-engine-lock",dirs[i]);unlink(path);
+        assert(!rmdir(dirs[i]));
+    }
+    free(server);
+}
 int main(void)
 {
     test_clean_verifier_selection();
@@ -390,6 +428,7 @@ int main(void)
     snprintf(path,sizeof(path),"%s/.efs-engine-lock",dir);assert(!unlink(path));
     assert(!rmdir(dir));
     test_root_format();
+    test_root_set();
     int async_ran=test_async_durability(data);
     test_startup_abandon(data);
     if(!async_ran)puts("async durability: SKIP (TMPDIR is not XFS)");
