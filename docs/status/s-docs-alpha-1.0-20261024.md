@@ -5,9 +5,12 @@
 documentation and the alpha limitations, check every claim against the code,
 and list every disagreement between docs and code.
 
-**Verdict: DRAFTS DONE, not approved.** The drafts and the findings are on
-branch `claude/devel-s-docs-e654d8`. The docs gate passes. `make test-all` on
-nuc: see [Gate](#gate). S4 is structure only: it depends on the A6 inventory
+**Verdict: DRAFTS DONE, not approved; code gate FAIL (intermittent).** The
+drafts and the findings are on branch `claude/devel-s-docs-e654d8`. The docs
+gate passes. On nuc, `make -k test-all` passed once (exit 0), but
+`tests/test_k33_payload.py` failed in 4 of 6 runs of the unchanged base
+code: a file acknowledged during a single-member outage read back `EIO`
+(finding F24, proposed K34). See [Gate](#gate). S4 is structure only: it depends on the A6 inventory
 and on a user decision about W122. Rows marked *proposed* in the drafts wait
 for the user. No product code was changed.
 
@@ -74,16 +77,47 @@ drafts.
 | F18 | Docs | The [project README](../../README.md) says persistence, session fencing and automatic fragment repair "remain unfinished"; session fencing (K5) landed and W154 rebuild on return exists. Not changed here: the README is the release front page and waits for the release wording | `README.md` |
 | F19 | Docs | The [quick start](../using/quickstart.md) puts three 5 GiB stores under `mktemp -d /tmp/...`; on a small tmpfs `/tmp` the headroom rule refuses startup (K26). Not changed: it is a disposable example, but it fails on such hosts | `storage_capacity.h` |
 | F20 | Test gap | S3 asks each operator workflow to be covered by a test: `raft-resync` runs only in `scripts/w145_deposed_leader.sh`, `add-storage` nowhere, `add-node` nowhere | `tests/`, `scripts/` |
+| F22 | Scope | D40 keeps "write availability on three nodes with one down", and the drafts first said I/O continues; but `fsync`/`fdatasync` COMMIT on every storage node (`efs_fuse_fsync_ino` → `efs_client_data_commit`) and return `EIO` while any member is down. Recorded as a W154 limitation only, not in the register or F4 | `data_commit.c` |
+| F23 | Scope | After an unclean stop (crash, `SIGKILL`, forced exit rc 3, power loss) a root stays "recovery uncertain" and COMMIT returns `EIO` "until verified recovery or fresh format", across later orderly restarts. No verified recovery exists (W71/W123 deferred) and a member cannot be removed, so every client's `fsync` fails from then on unless that store is reformatted and joined again under a new id, leaving the old id `DOWN` (which F22 makes fail too) | `store.c` `recovery_uncertain` |
+| F24 | Code defect | With one of five members stopped in order, a chunk was acknowledged "degraded" with its two acknowledged fragments on the stopping node (node 2, acknowledged just before its stop) and node 4, the third (node 3, up) not acknowledged. Reads of that file then failed `decode error (efs_rc=-9)` → `EIO` until node 2 returned. The guide's "one node down: reads reconstruct" does not hold for such chunks. Cause not established; seen in 4 of 6 runs of `tests/test_k33_payload.py` on nuc | `put_fragments` degraded acknowledgement (W154), [gate](#gate) |
 | F21 | Docs, fixed | `operations.md` and `power-user.md` called identity-bound fragment integrity open (W75), and `operations.md` sent a quota-refused fragment to W42; K16 landed fragment format 2 and W154 records such stripes as degraded | K16, W154 |
 
 ## Gate
 
 - **Docs gate:** `python3 docs/check-architecture.py`: all 5 checks pass after
   `cd docs && python3 gen-architecture-full.py`.
-- **`make test-all` on nuc:** pending; recorded below when it finishes.
+- **`make test-all` on nuc** (8 CPUs, Rocky Linux, Python 3.12, TCP only):
+  tree `git archive a6615c6a0` (docs-only commit on `a2326a369`) under
+  `$HOME`, built with `make -j8 EFS_GIT_ID=a6615c6a0 … all`, `TMPDIR` under
+  `$HOME`, in `screen`.
+
+  | Run | Command | Result |
+  | --- | --- | --- |
+  | 1 | `make test-all` | FAIL: stopped at `tests/test_k33_payload.py`, `OSError: [Errno 5]` in `verify(a, 'node k down')` (line 190); every earlier test PASS |
+  | 2–4 | `python3 tests/test_k33_payload.py` | 1 PASS (386.6 s), 2 FAIL (same line, within about 40 s) |
+  | 5 | `make -k test-all` | **exit 0**: every command PASS, `test_k33_payload.py` PASS (437.8 s); NOTRUN host limits only (no RDMA device: `test_rdma_xprt`, `test_rdma_segmented` ×7, the RDMA frame path of `test_declaration_gate`; no `valgrind/memcheck.h`: RDMA Memcheck and leak gates; `~/git/cluster` absent; `test_stalled_compactor` needs `EFS_FAULTS=1`) |
+  | 6 | `EFS_K33_KEEP=1 python3 tests/test_k33_payload.py` | FAIL, work directory kept for F24 |
+
+  In run 6 the outage was node 2 (orderly stop, `shutdown: outcome=orderly`
+  at 07:53:56.058Z). The client logged `put_fragments ino=1785857 chunk=2 …
+  nodes=2,3,4: degraded acknowledgement, fragment 1 for node 3 not
+  acknowledged` at 07:53:56.254Z, then `fetch published ino=1785857 ci=2
+  rc=-9` and `efs-fuse read: decode error (efs_rc=-9)` at 07:53:57 and
+  07:54:03. Group 2 (voters 2–4) elected node 3 at 07:53:56.577Z; node 3
+  counted one PUT error in that interval.
+
+  Raw logs (gate, standalone and kept-run text logs) on nuc:
+  `~/efs-artifacts/s-docs-k33-payload-20261024/`, `SHA256SUMS`
+  `ddda1454…7ffd`; the five 385 MB run stores were pruned (`PRUNED.txt`).
+  **Reproduce:** at `a2326a369` on nuc, `make -j8 all`, then
+  `TMPDIR=$HOME/tmp EFS_K33_KEEP=1 python3 tests/test_k33_payload.py`
+  (repeat until it fails; about 1–7 min per run; it uses free loopback
+  ports, never 17xxx); delete the kept directory with `edelete`.
 
 ## Limitations of this work
 
+- The code gate is not a clean PASS: one `make -k test-all` passed, but the
+  same base fails `test_k33_payload.py` intermittently (F24).
 - The POSIX results cited are from `cb970ca7c` and `163241584`, before the
   base; no suite ran on `a2326a369`. C1 on 3, 4 and more than 4 distinct hosts
   is NOTRUN.

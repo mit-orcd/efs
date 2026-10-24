@@ -68,7 +68,8 @@ Each line is covered by the named suite cases, all PASS in both runs above.
   and `fcntl` byte-range locks, also across two clients (`flock_*`,
   `fcntl_*`, `peer_flock_exclusive`, `peer_fcntl_range_*`).
 - **Sync:** `fsync`, `fdatasync`, `fsync` on a directory; a reopen after
-  `fsync` sees the bytes (`fsync_*`, `fdatasync_write`).
+  `fsync` sees the bytes (`fsync_*`, `fdatasync_write`), with every member
+  up (P15).
 - **`O_DIRECT`:** aligned reads and writes; 4 KiB read-modify-write inside a
   chunk; unaligned `O_DIRECT` fails `EINVAL`, as on a local file system
   (`direct_*`).
@@ -114,6 +115,7 @@ Each line is covered by the named suite cases, all PASS in both runs above.
 | P12 | Reserved `.efs` name | With `.efs` on, every directory resolves `.efs` to the command directory unless a real `.efs` entry exists, which wins; the command directory is not listed and not writable | `virt_find_not_a_real_dir` (not listed, not writable); the precedence of a real `.efs` has no POSIX case | Documented behavior |
 | P13 | W159 | On a private four-member fixture on one host, the closing core run failed `dir_times_mkdir_rmdir` with `rmdir` `EBUSY` (orcd-mini) or timed out `dir_many_files` and `concurrent_creates_same_dir` (Intel); the same builds passed on the clusters | `dir_times_mkdir_rmdir`, `dir_many_files`, `concurrent_creates_same_dir` | OPEN, cause not established |
 | P14 | Concurrent `O_APPEND` record loss (K9/W87) was never reproduced and has no root cause | No known symptom; the item reopens if a loss is seen | `concurrent_appends`, `peer_concurrent_append` PASS | Closed without resolution (D41) |
+| P15 | `fsync` needs every storage node | `fsync`/`fdatasync` return `EIO` while any member is down, and for good after any member's unclean stop (its COMMIT is fenced until a fresh format) | Not in the POSIX suites; W154 notes; `tests/test_k33_payload.py` avoids `fsync` for this reason | Limitation, *proposed* (findings F22, F23) |
 
 Not POSIX deviations, but limits a user meets: no expiry (rejected by the
 commands), no NFS re-export, no macOS client, one export per cluster.

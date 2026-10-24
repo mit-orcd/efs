@@ -217,25 +217,32 @@ Stop clients before servers, so pending writes can drain. A daemon stops on
 `SIGTERM` within at most 55 s: it drains handlers, flushes fragment syncs,
 the reclaim journal and usage, and writes `log/efsd.exit` with the outcome.
 `server.sh stop` exits 0 only for an orderly stop; 3 means a forced exit
-(stores preserved) and 4 a failed barrier. A start after a non-orderly
+(stores preserved) and 4 a failed barrier or an unknown outcome. A start after a non-orderly
 stop is refused until rerun. Restart a node with the command it was started
 with (the first node with its address, a joiner with `--join`); the store
 keeps its cluster, node id and endpoint, and another endpoint or another
-cluster's store is refused. A whole-cluster restart needs a quorum of each
+cluster's store is refused. A restart after a stop that was not orderly
+leaves that node refusing COMMIT, so `fsync` fails everywhere (see failure
+behavior). A whole-cluster restart needs a quorum of each
 metadata group back before clients are served.
 
 ## Failure behavior
 
 | Event | What happens | What the user sees |
 | --- | --- | --- |
-| One node down | Reads reconstruct from the other two fragments; writes go on with two fragments and are recorded as degraded; each metadata group keeps a quorum | I/O continues. Requests to the lost node time out (about 30 s) until the client marks it down (after four failures, for 30 s); `status` shows the node `DOWN`, `Cluster state: DEGRADED` and the degraded-chunk count |
+| One node down | Reads reconstruct from the other two fragments; writes go on with two fragments and are recorded as degraded; each metadata group keeps a quorum. `fsync` and `fdatasync` commit on every storage node, so they fail | Reads, writes and `close` continue; **every `fsync`/`fdatasync` returns `EIO`** (after at most 60 s) until the node is back. Requests to the lost node time out (about 30 s) until the client marks it down (after four failures, for 30 s); `status` shows the node `DOWN`, `Cluster state: DEGRADED` and the degraded-chunk count. Packing waits (segments need three acknowledgements) |
+| A node stops while writes are in flight | Known defect (F24, proposed K34): a chunk can be acknowledged with its two fragments on the stopping node and one other | That file reads `EIO` until the node returns |
+| A node hangs without exiting | Untested gray failure | Requests to it time out after 30 s; an `open` was seen to return `EIO` (W154 notes) |
 | The node returns | Rebuild on return (W154): each group leader rebuilds the missing fragment of every degraded stripe, at most 256 per pass, and clears its mark | `Degraded chunks` falls to 0; `rebuilt=` rises. No other repair exists |
-| A node lost for good | Degraded stripes stay degraded; there is no rebuild to another node and no removal | Data stays readable while every other node is up; a second loss then makes those stripes unreadable |
+| A node lost for good | Degraded stripes stay degraded; there is no rebuild to another node and no removal | Data stays readable while every other node is up; a second loss then makes those stripes unreadable. `fsync` returns `EIO` for good, since the lost node stays a member |
 | Two nodes down at once | Stripes with fragments on both are unreadable; a metadata group with two of its three voters down has no quorum | `EIO` or timeouts for the affected files; with two of nodes 1–4 down in one group, metadata operations on that group stop until a node returns |
 | Client process dies | Writes it had not yet published are lost (D28); its abandoned uploads are collected | `Abandoned uploads` counters in `status` |
-| Sudden power loss | Not qualified (W71, deferred) | Unknown |
+| A daemon crashes, is killed or stops forced (rc 3) | Its roots restart "recovery uncertain": the node refuses COMMIT until verified recovery, which does not exist in alpha (W71, W123), or a fresh format | After the restart, **every client's `fsync` returns `EIO`** for good; reads and writes go on. The log says `recovery uncertain; COMMIT returns EIO until verified recovery or fresh format`; `sync-status` shows `previous stop UNCLEAN` |
+| Sudden power loss | Not qualified (W71, deferred); the restart is unclean as above | Unknown durability; then as above |
 
 There is no automatic repair beyond rebuild on return, no indication of
-degraded state on the mount itself, and no two-loss protection on any
-cluster size. The [release notes draft](../release-notes/alpha-1.0.md) lists
+degraded state on the mount itself, no two-loss protection on any cluster
+size, and no `fsync` while a member is down or after a member's unclean stop.
+Stop daemons only with `server.sh stop` (or `SIGTERM`) and check that it
+exits 0. The [release notes draft](../release-notes/alpha-1.0.md) lists
 every alpha limitation.

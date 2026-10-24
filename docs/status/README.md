@@ -24,9 +24,14 @@ full acceptance are separate states.
 [POSIX subset](../using/alpha-1.0-posix.md),
 [guide](../using/alpha-1.0-guide.md) and
 [release notes draft](../release-notes/alpha-1.0.md), checked against
-`a2326a369`; 21 docs/code findings (help gaps, untested `add-storage`, no
+`a2326a369`; 24 docs/code findings (help gaps, untested `add-storage`, no
 port authentication, profile defaults); stale claims in `operations.md` and
 `power-user.md` corrected. S4 waits for A6 and the W122 decision.
+**Code gate on nuc: `make -k test-all` exit 0 once, but `test_k33_payload.py`
+fails 4 of 6 runs of the unchanged base: a file acknowledged during a
+member's orderly stop reads `EIO` until it returns (F24, proposed K34).**
+Also found: `fsync` returns `EIO` while any member is down, and for good
+after a member's unclean stop (F22, F23).
 
 [D41: K9 / W87 closed without resolution](decisions.md#d41--k9--w87-closed-without-resolution-user-oct-24):
 **user decision Oct 24: the append record loss was never reproduced and has no root cause; K9 is closed and reopens if a loss is seen again.** Not a passing gate.

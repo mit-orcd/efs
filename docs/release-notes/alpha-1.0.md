@@ -32,9 +32,11 @@ fragments is rebuilt when the missing node returns.
 | L2 | Fixed metadata group count and placement: two groups of three voters; both on nodes 1–3 at N = 3, nodes 1–3 and 2–4 at N ≥ 4 | Any cluster | Nodes 5 and up hold data only; metadata work and leadership stay on nodes 1–4, and leaders are not balanced (W66) | D38 as amended Oct 22 |
 | L3 | Packed small files are data and use the data ring across all N nodes | Small files after close | Packed segments land on every node; a node that hosts no group reads the pack object from a voter. The placement audit (B4) is NOTRUN | D37, D38, K28 |
 | L4 | Supported range 3 to 16 nodes on distinct hosts | Fewer than 3 members, more than 16, or several members per host | Fewer than 3: the cluster never forms. A 17th member is not added (the member tables hold 16); no test covers what that joiner sees (finding F14). Several daemons per host are not independent failure domains. Qualification on 3, 4 and more than 4 distinct hosts is NOTRUN (A3, A4) | `EFS_MAX_NODES` 16, K28, K33 |
-| L5 | Online addition only; online removal deferred | A node is retired or lost for good | It stays a member, shown `DOWN`; its stripes stay degraded; there is no remove or replace command | A13, D40 |
+| L5 | Online addition only; online removal deferred | A node is retired or lost for good | It stays a member, shown `DOWN`; its stripes stay degraded; `fsync` fails for good (L27); there is no remove or replace command | A13, D40 |
 | L6 | No repair beyond rebuild on return | A node does not come back, or a fragment is lost or corrupt while all nodes are up | Nothing re-protects the stripe elsewhere; a second loss makes it unreadable. Rebuild runs only for stripes acknowledged with two fragments, when the missing node returns | K23, D40, W154; W74 deferred |
 | L7 | No sudden power-loss qualification; crash recovery deferred | Host power-off or kernel crash | Not qualified: acknowledged writes may or may not survive | W71, W123 (K23) |
+| L27 | `fsync` unavailable with a member down, *proposed* | Any storage node down or unreachable | `fsync` and `fdatasync` return `EIO` (after at most 60 s); reads, writes and `close` go on | W154 limitations; finding F22 |
+| L28 | An unclean stop fences `fsync` until a fresh format, *proposed* | A daemon crash, `SIGKILL`, forced exit (rc 3) or power loss, then restart | That node refuses COMMIT ("recovery uncertain"), so every client's `fsync` returns `EIO` from then on; verified recovery is deferred (W71, W123) and the node cannot be removed or replaced (L5) | `store.c` put sync; finding F23 |
 | L8 | Degraded state is shown to the operator only | One node down, degraded stripes | `efs-mgmt status`: `Cluster state: DEGRADED`, `Degraded chunks: N`. The mount and applications get no indication | W154; finding F10 |
 
 ### Client and POSIX
@@ -77,3 +79,7 @@ K22 (production-scale follower bound NOTRUN), K33 (live multi-host, cross-subnet
 RDMA and orcd-mini addition gates NOTRUN), and the NOTRUN cluster gates of
 the FIXED rows K1, K2, K4, K5, K8, K13, K14, K16, K32. W159 (POSIX `rmdir`
 `EBUSY` and timeouts on a one-host fixture) is open, cause not established.
+Proposed K34 (found Oct 24, [finding F24](../status/s-docs-alpha-1.0-20261024.md)):
+a chunk acknowledged during a member's orderly stop can hold its only
+acknowledged fragments on that member and one other, so the file reads
+`EIO` until the member returns.
