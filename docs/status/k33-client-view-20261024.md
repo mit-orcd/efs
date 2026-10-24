@@ -4,7 +4,7 @@
 at `8b4cfbe77`: exit 0, no `make` error, 5 min 34 s). The live multi-host
 addition under client load and RDMA are NOTRUN (the parent session's).
 Branch `claude/devel-k33-client-view-0c8db4` on `merge-k32-k33`
-(`8118d81d1`), not pushed.**
+(`0497d9ff1`: K32 + K33 merge with devel), not pushed.**
 
 Purpose: close the K33 gap "live client view refresh" of
 [K33](alpha-1.0-2plus1-checklist.md) / [W157](work-queue.md) and the
