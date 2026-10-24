@@ -29,7 +29,7 @@ def run(host):
    subprocess.run(['scp',str(Path(__file__).with_name('deepsteps_sitecustomize.py')),host+':'+observer+'/sitecustomize.py'],check=True)
    subprocess.run(['scp',str(Path(__file__).with_name('posix_phase_runner.py')),host+':'+root+'/phase-runner.py'],check=True)
   mounts=[a.mount];created=[]
-  seed=('10.0.0.209' if host=='intel1_efs' else '10.0.0.207')+':'+str(a.seed_port)
+  seed=('10.1.0.210' if host=='intel1_efs' else '10.1.0.208')+':'+str(a.seed_port)
   try:
    for client in range(1,4 if host=='intel1_efs' else 3):
     mount=a.extra_mount_root+'/'+a.run_id+'-'+str(client)

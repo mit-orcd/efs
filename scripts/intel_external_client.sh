@@ -4,7 +4,7 @@
 set -euo pipefail
 client_base=/data1/efs/intel-client
 client_mount=/data1/efs/intel-mnt
-client_seed=10.0.0.207:17432
+client_seed=10.1.0.208:17432
 case "${1:-start}" in
     start)
         [ "$(id -un)" = efs ] && [ "$(id -u)" -ne 0 ] || {

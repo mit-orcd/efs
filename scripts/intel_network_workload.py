@@ -7,7 +7,7 @@ Only uniquely owned fixtures are created/removed. Failed fixtures are retained.
 import argparse, concurrent.futures, hashlib, json, os, pathlib, re, shlex
 import subprocess, sys, time
 HOSTS=['intel1_efs','intel2_efs']
-IPS=['10.0.0.207','10.0.0.209']
+IPS=['10.1.0.208','10.1.0.210']
 FLAGS={'EFS_TRANSPORT':'tcp','EFS_COMMANDS':'0','EFS_COMMANDS_SERVER':'0',
        'EFS_EXPIRY':'0','EFS_RPC_PROF':'1'}
 def command(args,**kwargs):

@@ -25,7 +25,7 @@ for label in (a.run, a.source):
 base = '/data1/efs/w100-private'
 src = base + '/' + a.source
 runtime = base + '/runtime-' + a.run
-hosts = [('intel1_efs', '10.0.0.207', [1, 2]), ('intel2_efs', '10.0.0.209', [3, 4])]
+hosts = [('intel1_efs', '10.1.0.208', [1, 2]), ('intel2_efs', '10.1.0.210', [3, 4])]
 env = dict(EFS_TRANSPORT='tcp', EFS_COMMANDS='0', EFS_COMMANDS_SERVER='0',
            EFS_EXPIRY='0',
            EFS_FAULT_REPORT_SIZE_FILE=runtime+'/omit-size',
@@ -71,7 +71,7 @@ for node in {ids!r}:
     else:assert pathlib.Path(storage).is_dir(), 'missing owned storage directory'
     args=[{src+'/efsd'!r},'--node-id',str(node),'--addr',{addr!r},'--port',str(27432+(node%2==0)),
           '--storage',storage,'--quota',{a.quota!r},'--direct-io']
-    if node!=1:args+=['--join','10.0.0.207:27432']
+    if node!=1:args+=['--join','10.1.0.208:27432']
     with (r/f'n{{node}}.log').open('ab') as out:
         p=subprocess.Popen(args,env=env,stdout=out,stderr=subprocess.STDOUT,start_new_session=True)
     (r/f'n{{node}}.pid').write_text(str(p.pid)+'\\n')
@@ -79,8 +79,8 @@ for node in {ids!r}:
 ''')
 
 # W153: formation commits the members joined at that moment; wait for all four.
-ready = ['sh', '-c', f"{src}/efs-mgmt status 10.0.0.207:27432 | grep -q 'Cluster nodes (4)' && "
-         f"{src}/efs-mgmt raft-mkfs 10.0.0.207:27432"] if a.action=='start' else [src+'/efs-mgmt', 'commands-policy', '10.0.0.207:27432', 'get']
+ready = ['sh', '-c', f"{src}/efs-mgmt status 10.1.0.208:27432 | grep -q 'Cluster nodes (4)' && "
+         f"{src}/efs-mgmt raft-mkfs 10.1.0.208:27432"] if a.action=='start' else [src+'/efs-mgmt', 'commands-policy', '10.1.0.208:27432', 'get']
 for attempt in range(45):
     r = subprocess.run(['ssh', hosts[0][0], shlex.join(ready)],
                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -93,11 +93,11 @@ for attempt in range(45):
 else:
     raise RuntimeError('private readiness failed; preserve logs and stop owned fixture')
 if a.action=='start':
-    command(hosts[0][0], [src+'/efs-mgmt', 'commands-policy', '10.0.0.207:27432', 'set', '0', '0'])
+    command(hosts[0][0], [src+'/efs-mgmt', 'commands-policy', '10.1.0.208:27432', 'set', '0', '0'])
 else:
-    command(hosts[0][0], [src+'/efs-mgmt', 'commands-policy', '10.0.0.207:27432', 'get'])
+    command(hosts[0][0], [src+'/efs-mgmt', 'commands-policy', '10.1.0.208:27432', 'get'])
 for host, _, _ in hosts:
-    seed = '10.0.0.209:27432' if host == 'intel1_efs' else '10.0.0.207:27432'
+    seed = '10.1.0.210:27432' if host == 'intel1_efs' else '10.1.0.208:27432'
     prefix = ['env']+[k+'='+v for k,v in env.items()]
     command(host, prefix+[src+'/scripts/client.sh', seed, runtime+'/mnt'])
 print(json.dumps(dict(runtime=runtime, source=src, features=env)), flush=True)

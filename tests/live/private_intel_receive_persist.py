@@ -22,7 +22,7 @@ runtime=base+'runtime-merged-aa508c820'
 for s in [a.source,a.fault_source]:
     if not s.startswith(base) or '..' in s.split('/'):p.error('private source paths required')
 a.output.mkdir(parents=True,exist_ok=True)
-hosts=['intel1_efs','intel2_efs'];addresses=['10.0.0.207','10.0.0.209']
+hosts=['intel1_efs','intel2_efs'];addresses=['10.1.0.208','10.1.0.210']
 
 def call(h,args,**kw):
     return subprocess.run(['ssh','-o','ConnectTimeout=5',h,shlex.join(args)],check=True,text=True,**kw)

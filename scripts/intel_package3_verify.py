@@ -23,6 +23,6 @@ for proc in pathlib.Path('/proc').iterdir():
 assert len(rows)==3,rows
 assert os.path.ismount(root/'mnt')
 assert not (root/'mnt/.efs').exists(),'virtual commands unexpectedly visible'
-policy=subprocess.check_output([str(root/'src/efs-mgmt'),'commands-policy','10.0.0.207:17432','get'],text=True,timeout=30)
+policy=subprocess.check_output([str(root/'src/efs-mgmt'),'commands-policy','10.1.0.208:17432','get'],text=True,timeout=30)
 assert 'rc=0 ' in policy and 'mask=0 ' in policy,policy
 print(json.dumps({'status':'PASS','processes':rows,'policy':policy.strip()}))
