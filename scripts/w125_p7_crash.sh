@@ -6,7 +6,7 @@
 # each point (default: admitted uploaded switched gc_accepted
 # retire_accepted) node 1, the leader of a fresh cluster, exits as if killed
 # the first time it reaches that packer/reclaim step
-# (EFS_PACK_CRASH, EFS_PACK_CRASH_NODE=1). The node is restarted without the
+# (EFS_FAULT_PACK_CRASH, EFS_FAULT_PACK_CRASH_NODE=1). The node is restarted without the
 # fault; then every file must read back byte for byte, and after deleting
 # everything no per-file fragment and no segment file may remain on any node
 # (no orphan from the interrupted step).
@@ -19,7 +19,7 @@ export EFS_TRANSPORT=rdma EFS_RDMA_DEV=mlx5_0 LD_LIBRARY_PATH=/data1/efs/deps/li
 inv() { local t=0; for i in 1 2 3; do t=$((t + $(find $R/n$i/data/exports $R/n$i/data/segments -type f 2>/dev/null | wc -l))); done; echo $t; }
 for point in $POINTS; do
   "$HERE/w125_p0_cluster.sh" stop "$REL" $R $PORT >/dev/null 2>&1; rm -rf $R
-  EFS_PACK_MIN_AGE_MS=2000 EFS_PACK_CRASH=$point EFS_PACK_CRASH_NODE=1 \
+  EFS_PACK_MIN_AGE_MS=2000 EFS_FAULT_PACK_CRASH=$point EFS_FAULT_PACK_CRASH_NODE=1 \
     "$HERE/w125_p0_cluster.sh" start "$REL" $R $PORT >/dev/null 2>&1
   python3 "$HERE/w125_p3_readback.py" write $R/mnt/keep 600 >/dev/null
   python3 "$HERE/w125_p3_readback.py" write $R/mnt/drop 600 >/dev/null

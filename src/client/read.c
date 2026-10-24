@@ -104,8 +104,8 @@ static int read_frag_prof;
 /* A span/parity fragment attempt, including cold connection declaration and
  * retries, waits at most read_frag_timeout_ms before the next fragment is
  * tried, so a frozen or partitioned peer costs one bounded wait, not the
- * whole operation budget. EFS_READ_FRAG_TIMEOUT_MS overrides (default 2 s). */
-static int read_frag_timeout_ms = 2000;
+ * whole operation budget (2 s, built in since A6). */
+static const int read_frag_timeout_ms = 2000;
 
 static void read_verify_init(void)
 {
@@ -113,8 +113,6 @@ static void read_verify_init(void)
     read_verify = value && *value && strcmp(value, "0") != 0;
     value = getenv("EFS_READ_FRAG_PROF");
     read_frag_prof = value && *value && strcmp(value, "0") != 0;
-    value = getenv("EFS_READ_FRAG_TIMEOUT_MS");
-    if (value && atoi(value) > 0) read_frag_timeout_ms = atoi(value);
 }
 
 static int fragment_reply_verified(const uint8_t *data, uint32_t len,

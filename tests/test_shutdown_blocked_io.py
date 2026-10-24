@@ -4,8 +4,8 @@ record or stderr cannot be written.
 
 After the shutdown deadline efsd writes the exit record and its stderr
 lines on helper threads and waits at most EFS_SHUTDOWN_REPORT_MS (5 s) for
-them before _exit(3). Runs tests/shutdown_faults/efsd (EFS_FAULTS build;
-`make tests/shutdown_faults/efsd`, or EFS_SHUTDOWN_FAULT_BINARY=<path>) as a
+them before _exit(3). Runs tests/faults/efsd (EFS_FAULTS build;
+`make tests/faults/efsd`, or EFS_SHUTDOWN_FAULT_BINARY=<path>) as a
 private single-node daemon on a disposable root with the packer parked
 (EFS_FAULT_SHUTDOWN_PARK=packer) and the total deadline shortened to
 TOTAL_MS, and stops it through scripts/server_processes.py stop-file as
@@ -29,7 +29,7 @@ from pathlib import Path
 import os, shutil, socket, subprocess, sys, tempfile, threading, time
 
 root = Path(__file__).resolve().parents[1]
-binary = Path(os.environ.get('EFS_SHUTDOWN_FAULT_BINARY') or root/'tests/shutdown_faults/efsd')
+binary = Path(os.environ.get('EFS_SHUTDOWN_FAULT_BINARY') or root/'tests/faults/efsd')
 helper = root/'scripts/server_processes.py'
 TOTAL_MS = 6000
 REPORT_MS = 5000
@@ -37,7 +37,7 @@ SLACK_MS = 4000  # process exit (threads in kernel I/O), pidfd wake, Python star
 BOUND_MS = TOTAL_MS + REPORT_MS + SLACK_MS
 
 if not binary.exists():
-    sys.exit(f'{binary} missing: run `make tests/shutdown_faults/efsd` first')
+    sys.exit(f'{binary} missing: run `make tests/faults/efsd` first')
 
 storage_tmp = os.environ.get('EFS_TEST_STORAGE_TMPDIR') or None
 work = Path(tempfile.mkdtemp(prefix='efs-shutdown-blocked-', dir=storage_tmp))

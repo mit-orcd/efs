@@ -355,11 +355,24 @@ alternatives reduces both product complexity and the supported test matrix.
   Find readers that take the name as an argument (`env_u64("EFS_…")` and the
   `getenv(name)` helpers in `bufpool.c`, `write.c`, `packer.c`, `raft_host.c`,
   `sim_disk.c`); grepping `getenv("` alone undercounts.
+  **Oct 24 (branch `claude/devel-a6-inventory-7f975e`, not merged):
+  [inventory](a6-settings-inventory-20261024.md) of every variable, CLI
+  option, runtime management setting and compile-time mode, found by
+  `scripts/env_inventory.py` (helpers by fixed point); `make test` fails a
+  new `EFS_*` reader, mode or removed name without a row. Before figure:
+  139 variables read on `a2326a369` (13 A/B, 44 numeric, 9 deployment, 34
+  observability, 37 fault/test hooks of which 3 honored by normal builds,
+  2 other); 127 on the branch.**
 - [ ] **A7 — Decide and remove alternatives.** For behavior-changing A/B switches,
   select and qualify one supported implementation or automatic policy. Remove the
   losing code path, parser/environment reader and obsolete tests/docs together.
   Do not merely hide the flag, change its default or force every switch on.
   No replacement compatibility switch or fallback to the retired behavior.
+  **Oct 24: the 15 selectors (13 variables, `--direct-io`/`--no-direct-io`
+  and `--no-persist`) are in a
+  [decision table](a6-settings-inventory-20261024.md#decision-table-for-the-parent-a7)
+  with a recommendation each, for the user; none removed. `EFS_RDMA_FIRST`
+  turned out to be trace only, not a selector.**
 - [ ] **A8 — Keep only justified configuration.** Retain deployment inputs such as
   nodes, disks, addresses and quotas. Prefer built-in or automatically derived
   internal batching/concurrency/maintenance settings; justify any remaining
@@ -368,6 +381,15 @@ alternatives reduces both product complexity and the supported test matrix.
   in test builds and must not be a normal deployment option. Record a disposition
   for every inventoried setting; intentional transport/platform support is not
   automatically an obsolete A/B implementation.
+  **Oct 24, decision-free part (branch `claude/devel-a6-inventory-7f975e`):
+  every setting has a disposition; 11 numeric tunables that no test or
+  launch script sets are built in; `EFS_GC_DISABLE` and
+  `EFS_TEST_MEMBER_EXIT`/`_ONCE`, honored by normal builds, are
+  `EFS_FAULT_*` hooks in `EFS_FAULTS` builds (`tests/faults/efsd`); the 34
+  observability switches change no behavior; no dead setting in the
+  product; 19 removed names stop efsd and efs-fuse at startup. Open: the
+  33 remaining numeric tunables need a qualified built-in value or bound,
+  and the A7 decisions.**
 - [ ] **A9 — Metadata leadership.** Remove `EFS_METADATA_BALANCE` as an operator
   choice after selecting and qualifying the automatic policy. Do not force its
   present common-voter/co-located-leader preference on as a substitute for that

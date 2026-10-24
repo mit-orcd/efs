@@ -1004,10 +1004,12 @@ leader scan of inode shards, for stores written before packing.
 | `EFS_PACK_SEGMENTS_PER_PASS` (8) | segments per pass, and compaction per daily pass |
 | `EFS_PACK_COMPACT_IDLE_S` (60) | idle time before idle compaction |
 | `EFS_PACK_COMPACT_IDLE_SEGS` (256) | output segments per idle batch |
-| `EFS_PACK_COMPACT_IDLE_MS` (10000) | work cap per idle batch |
-| `EFS_PACK_COMPACT_DAILY_START_MIN` / `_DAILY_MIN` (180 / 120) | daily window, UTC minute of day and length |
-| `EFS_PACK_COMPACT_COLD_S` (86400) | age at which a segment counts as fully cold |
+| `EFS_PACK_COMPACT_DAILY_START_MIN` (180) | daily window start, UTC minute of day |
 | `EFS_PACK_BACKFILL_SHARDS` (64) | inode shards scanned per backfill step |
+
+Built in since A6 (a set variable stops efsd): a 10 s work cap per idle
+compaction batch, a 120 min daily window and full coldness at 86400 s
+([inventory](../../status/a6-settings-inventory-20261024.md)).
 
 **Reads.** GETCHUNKS returns a packed base with `EFS_CHUNK_REC_F_PACKED`
 and the 96-byte reference; nodes and checksums are the segment's. The

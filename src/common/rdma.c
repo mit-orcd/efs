@@ -101,23 +101,8 @@ static int rdma_first_log(void)
     return v;
 }
 
-/* RNR retry count for the send QP. 7 means retry forever; see qp_rts.
- * The default keeps the shipped behaviour; the knob exists so a hang can be
- * turned into a loud error completion. Setting it finite is what disproved
- * the "first inode LOOKUP is stuck in an RNR retry loop" hypothesis. */
-static int rdma_rnr_retry(void)
-{
-    static int v = -1;
-    if (v < 0) {
-        const char *e = getenv("EFS_RDMA_RNR_RETRY");
-        v = (e && *e) ? atoi(e) : 7;
-        if (v < 0)
-            v = 0;
-        if (v > 7)
-            v = 7;
-    }
-    return v;
-}
+/* RNR retry count for the send QP. 7 means retry forever; see qp_rts. */
+#define RDMA_RNR_RETRY 7
 
 int efs_rdma_transport(void)
 {
@@ -1049,12 +1034,12 @@ static int qp_rts(struct efs_rdma_conn *rc)
     attr.qp_state = IBV_QPS_RTS;
     attr.timeout = 14;
     attr.retry_cnt = 7;
-    /* rnr_retry 7 means retry FOREVER. With a bounded RQ that turns
+    /* rnr_retry 7 means retry FOREVER. With a bounded RQ that can turn
      * "responder momentarily out of recv buffers" into a send that never
-     * completes and never errors -- the wedge this exists to prevent. A
-     * finite count yields IBV_WC_RNR_RETRY_EXC_ERR, a real CQE the send
-     * path already handles. */
-    attr.rnr_retry = (uint8_t)rdma_rnr_retry();
+     * completes and never errors. A finite count would yield
+     * IBV_WC_RNR_RETRY_EXC_ERR, a real CQE the send path already handles;
+     * the shipped value stays 7 (open A8 question, see the A6 inventory). */
+    attr.rnr_retry = RDMA_RNR_RETRY;
     attr.sq_psn = rc->psn;
     attr.max_rd_atomic = 1;
     return ibv_modify_qp(rc->qp, &attr,

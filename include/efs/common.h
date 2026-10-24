@@ -215,11 +215,15 @@ static inline uint32_t efs_frag_size(uint32_t chunk_size)
 int efs_chunk_size_valid(uint32_t chunk_size);
 
 const char *efs_strerror(int rc);
-/* W149: in a build without EFS_FAULTS every EFS_FAULT_* variable (and the
- * removed EFS_KV_COMPACT_DIE) has no effect. Print one stderr line per such
- * variable in the environment, naming prog; returns how many. Called from
- * the daemons' main under #if !EFS_FAULTS (the gate is per binary). */
+/* W149: in a build without EFS_FAULTS every EFS_FAULT_* variable has no
+ * effect. Print one stderr line per such variable in the environment,
+ * naming prog; returns how many. Called from the daemons' main under
+ * #if !EFS_FAULTS (the gate is per binary). */
 unsigned efs_faults_env_ignored(const char *prog);
+/* A6: print one stderr line per removed setting present in the
+ * environment (set, even empty), naming prog; returns how many. efsd and
+ * efs-fuse stop when it is not 0. */
+unsigned efs_env_removed_refuse(const char *prog);
 
 /* Parse a size/quota string. Accepts plain bytes or suffixes: T/TiB, G/GiB,
  * M/MiB, K/KiB. Returns 0 on error. */

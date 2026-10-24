@@ -2,8 +2,8 @@
 """K1/W145 R4: the whole efsd stop is bounded, and a forced stop is reported
 as forced, never as an orderly one.
 
-Runs tests/shutdown_faults/efsd (efsd.c and packer.c built with EFS_FAULTS;
-`make tests/shutdown_faults/efsd`) as a private single-node daemon on a
+Runs tests/faults/efsd (every server source built with EFS_FAULTS;
+`make tests/faults/efsd`) as a private single-node daemon on a
 disposable root, with the total shutdown deadline shortened to TOTAL_MS by
 EFS_FAULT_SHUTDOWN_TOTAL_MS, and stops it through
 scripts/server_processes.py stop-file exactly as stop.sh does:
@@ -27,13 +27,13 @@ from pathlib import Path
 import os, shutil, socket, subprocess, sys, tempfile, threading, time
 
 root = Path(__file__).resolve().parents[1]
-binary = root/'tests/shutdown_faults/efsd'
+binary = root/'tests/faults/efsd'
 helper = root/'scripts/server_processes.py'
 TOTAL_MS = 6000
 SLACK_MS = 2500  # process exit, pidfd wake and Python start-up
 
 if not binary.exists():
-    sys.exit(f'{binary} missing: run `make tests/shutdown_faults/efsd` first')
+    sys.exit(f'{binary} missing: run `make tests/faults/efsd` first')
 
 storage_tmp = os.environ.get('EFS_TEST_STORAGE_TMPDIR') or None
 work = Path(tempfile.mkdtemp(prefix='efs-shutdown-stuck-', dir=storage_tmp))

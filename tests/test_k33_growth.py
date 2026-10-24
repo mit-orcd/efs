@@ -11,12 +11,12 @@ M1-M9.
    raft-mkfs); group 0 and group 2 vote on {1,2,3}; metadata is served.
    A FUSE client writes files (when FUSE is available).
 3. Node 4 joins through node 2, which ends right after committing it
-   (EFS_TEST_MEMBER_EXIT=after-members-commit): the joiner asks another
+   (EFS_FAULT_MEMBER_EXIT=after-members-commit): the joiner asks another
    member the answer named and learns revision 2; node 2 restarts and
    learns it from its own replica. Group 2 moves {1,2,3} -> {2,3,4} by
    joint consensus; node 4 hosts it.
 4. Node 5 ends when the committed record naming it arrives, before
-   persisting it (EFS_TEST_MEMBER_EXIT=before-learn); restarted (a retried
+   persisting it (EFS_FAULT_MEMBER_EXIT=before-learn); restarted (a retried
    join), it is the same committed member 5. Node 5 hosts no metadata group.
 5. The seed (node 1) stops. Three joining stores start at once, through
    nodes 2, 4 and 5 (node 5 has no group-0 replica and forwards): each gets
@@ -37,8 +37,8 @@ for b in (EFSD, MGMT):
         sys.exit(f'{b} missing: run make first')
 work = Path(tempfile.mkdtemp(prefix='efs-k33-', dir=os.environ.get('TMPDIR')))
 env = dict(os.environ)
-env.pop('EFS_TEST_MEMBER_EXIT', None)
-env['EFS_GC_DISABLE'] = '1'
+env.pop('EFS_FAULT_MEMBER_EXIT', None)
+env['EFS_FAULT_GC_DISABLE'] = '1'
 
 
 def mgmt(*args):
@@ -105,7 +105,7 @@ try:
     c.start(1)
     c.wait_log(1, r'raft-host: up raft_id=0 n=3 unformed')
     c.wait_log(1, r'raft-host: unready: formation needs 3 members')
-    c.start(2, join=1, extra_env={'EFS_TEST_MEMBER_EXIT': 'after-members-commit'})
+    c.start(2, join=1, extra_env={'EFS_FAULT_MEMBER_EXIT': 'after-members-commit'})
     c.wait_log(2, r'join: waiting at .* is forming \(2 joined; formation needs 3\)')
     time.sleep(2.5)
     rc, out = mgmt('raft-getattr', c.ep(1), '1')
@@ -138,7 +138,7 @@ try:
     # 3. Node 4 through node 2; node 2 ends right after the commit.
     c.start(4, join=2)
     c.wait_log(2, r'membership: committed .* as member 4 \(revision 2\)', run=False)
-    c.wait_log(2, r'EFS_TEST_MEMBER_EXIT at after-members-commit', run=False)
+    c.wait_log(2, r'EFS_FAULT_MEMBER_EXIT at after-members-commit', run=False)
     assert c.wait_exit(2) == 86
     c.wait_log(4, r'Joined cluster [0-9a-f]+ as node 4 .*committed member: 4 members')
     c.wait_log(4, r'raft-host: up raft_id=3 n=4 formed')
@@ -156,8 +156,8 @@ try:
 
     # 4. Node 5 ends when the record naming it arrives; restarted (a
     # retried join with the same store) it is the same member.
-    c.start(5, join=3, extra_env={'EFS_TEST_MEMBER_EXIT': 'before-learn'})
-    c.wait_log(5, r'EFS_TEST_MEMBER_EXIT at before-learn')
+    c.start(5, join=3, extra_env={'EFS_FAULT_MEMBER_EXIT': 'before-learn'})
+    c.wait_log(5, r'EFS_FAULT_MEMBER_EXIT at before-learn')
     assert c.wait_exit(5) == 86
     assert 'Joined cluster' not in c.log(5)
     c.wait_log(3, r'membership: committed .* as member 5 \(revision 3\)', run=False)

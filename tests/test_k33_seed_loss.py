@@ -32,8 +32,8 @@ for b in (EFSD, MGMT):
     if not b.exists():
         sys.exit(f'{b} missing: run make first')
 work = Path(tempfile.mkdtemp(prefix='efs-k33s-', dir=os.environ.get('TMPDIR')))
-env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_TEST_MEMBER_EXIT')}
-env['EFS_GC_DISABLE'] = '1'
+env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_FAULT_MEMBER_EXIT')}
+env['EFS_FAULT_GC_DISABLE'] = '1'
 FUSE = fuse_ok()
 files, notes, mounts = {}, [], []
 

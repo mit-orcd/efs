@@ -27,8 +27,8 @@ for b in (EFSD, MGMT):
     if not b.exists():
         sys.exit(f'{b} missing: run make first')
 work = Path(tempfile.mkdtemp(prefix='efs-w153-', dir=os.environ.get('TMPDIR')))
-env = {k: v for k, v in os.environ.items() if k not in ('EFS_MD_RAFT_N', 'EFS_TEST_MEMBER_EXIT')}
-env['EFS_GC_DISABLE'] = '1'
+env = {k: v for k, v in os.environ.items() if k not in ('EFS_MD_RAFT_N', 'EFS_FAULT_MEMBER_EXIT')}
+env['EFS_FAULT_GC_DISABLE'] = '1'
 
 
 def mgmt(*args):

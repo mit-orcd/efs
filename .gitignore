@@ -118,4 +118,5 @@ tests/test_directory_sync_group
 tests/test_kv_insertion_buffer
 tests/test_retained_namespace_audit
 tests/test_kv_reader_gate
-/tests/shutdown_faults/
+/tests/faults/efsd
+/tests/faults/server/

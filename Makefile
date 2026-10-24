@@ -228,7 +228,7 @@ test-report-pressure:
 	python3 tests/test_append_host_authority.py
 	python3 tests/test_report_orphan.py
 
-test-create-errors: $(LIB) tests/shutdown_faults/efsd
+test-create-errors: $(LIB) tests/faults/efsd
 	python3 tests/test_kv_wal_faults.py
 	python3 tests/test_create_errors.py
 	python3 tests/test_committed_directory_stage.py
@@ -347,7 +347,7 @@ all: $(LIB) efsd efs-fuse efs-bench efs-mgmt tests
 # helpers built with extra flags). They are real prerequisites of test and
 # test-long, never built inside a recipe, so test-long works on its own and a
 # parallel make cannot start a test before its binary exists.
-TEST_SPECIAL_BINS = tests/shutdown_faults/efsd tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server tests/test_data_commit tests/faults/test_kv_compact_crash
+TEST_SPECIAL_BINS = tests/faults/efsd tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server tests/test_data_commit tests/faults/test_kv_compact_crash
 
 # blake3-bench always relinks so a stale binary cannot linger after CPU changes.
 FORCE:
@@ -379,6 +379,8 @@ test-bins: all $(TEST_SPECIAL_BINS)
 # make test: the fast, CPU-bound unit suite for every edit (each command well
 # under a second; about a minute in all). Slow tests belong in test-long.
 test: all $(TEST_SPECIAL_BINS)
+	python3 tests/test_env_inventory.py
+	python3 tests/test_env_removed.py
 	python3 tests/test_retired_root_markers.py
 	python3 tests/faults/test_create_retry_fault.py
 	python3 tests/faults/test_create_retry_integrated.py
@@ -835,7 +837,8 @@ clean:
 	rm -f $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS) $(MGMT_OBJ)
 	rm -f src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_ns.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o src/sim/sim_disk.o src/sim/opid.o
 	rm -f $(LIB) efsd efs-fuse efs-bench efs-mgmt blake3-bench
-	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim tests/faults/test_kv_compact_crash tests/shutdown_faults/efsd
+	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim tests/faults/test_kv_compact_crash tests/faults/efsd
+	rm -rf tests/faults/server
 	rm -f $(TEST_BINS) tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server
 	rm -f tests/test_data_commit tests/measure/*_smoke tests/measure/bench_query_disk_scale tests/measure/bench_query_disk_concurrent
 	rm -f .build_id.stamp
@@ -931,14 +934,18 @@ tests/test_kv_reader_gate: tests/test_kv_reader_gate.c src/kv/kv_lsm.c src/kv/kv
 tests/faults/test_kv_compact_crash: tests/faults/test_kv_compact_crash.c src/kv/kv_compact.c src/kv/kv_lsm_internal.h $(LIB)
 	$(CC) $(CFLAGS) -DEFS_FAULTS=1 $(INCLUDES) -o $@ $< src/kv/kv_compact.c $(LIB) $(LDFLAGS)
 
-# K1/R4 and T2 shutdown tests. EFS_FAULT_SHUTDOWN_PARK,
-# EFS_FAULT_SHUTDOWN_RECORD_PARK and EFS_FAULT_SHUTDOWN_TOTAL_MS exist only behind EFS_FAULTS; this daemon
-# compiles its own efsd.c and packer.c with the gate on, so ./efsd never
-# carries the hooks. Named efsd: the stop script only signals an efsd.
-SHUTDOWN_FAULT_OBJS = $(filter-out src/server/efsd.o src/server/packer.o,$(SERVER_OBJS))
-tests/shutdown_faults/efsd: src/server/efsd.c src/server/packer.c $(SHUTDOWN_FAULT_OBJS) $(LIB)
-	@mkdir -p tests/shutdown_faults
-	$(CC) $(CFLAGS) -DEFS_FAULTS=1 $(INCLUDES) -o $@ src/server/efsd.c src/server/packer.c $(SHUTDOWN_FAULT_OBJS) $(LIB) $(LDFLAGS)
+# Daemon tests with server fault hooks: K1/R4 and T2 shutdown
+# (EFS_FAULT_SHUTDOWN_*), the K33 interruption and GC hooks
+# (EFS_FAULT_MEMBER_EXIT, EFS_FAULT_GC_DISABLE) and packer crash points
+# (EFS_FAULT_PACK_CRASH). The hooks exist only behind EFS_FAULTS; this daemon
+# compiles every server source with the gate on, so ./efsd never carries
+# them. Named efsd: the stop script only signals an efsd.
+FAULT_SERVER_OBJS = $(patsubst src/server/%.c,tests/faults/server/%.o,$(SERVER_SRCS))
+tests/faults/server/%.o: src/server/%.c src/server/server_internal.h $(wildcard src/server/*.h) $(wildcard include/efs/*.h) .build_id.stamp
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -DEFS_FAULTS=1 $(INCLUDES) -c -o $@ $<
+tests/faults/efsd: $(FAULT_SERVER_OBJS) $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(FAULT_SERVER_OBJS) $(LIB) $(LDFLAGS)
 
 src/kv/kv_lsm.o src/kv/kv_wal.o src/kv/kv_compact.o src/kv/kv_seg.o: src/kv/kv_lsm_internal.h
 src/kv/kv_lsm.o: src/kv/kv_candidates.h

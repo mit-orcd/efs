@@ -1548,11 +1548,6 @@ static void put_sync_config(void)
             unsigned long v = strtoul(w, NULL, 10);
             if (v >= 1 && v <= 10000) put_sync_window_ms = v;
         }
-        const char *b = getenv("EFS_PUT_SYNC_BYTES");
-        if (b && *b) {
-            unsigned long long v = strtoull(b, NULL, 10);
-            if (v >= (1ull << 20) && v <= (16ull << 30)) put_sync_window_bytes = v;
-        }
     }
 }
 

@@ -885,6 +885,10 @@ int main(int argc, char **argv)
     /* Install before any work — imagenet load has produced silent SIGSEGVs. */
     efsd_install_crash_handlers();
     efs_log_timestamps_install();
+    /* A6: a removed setting (W153's EFS_MD_RAFT_N among them) is a stale
+     * deployment input; stop before anything is served. */
+    if (efs_env_removed_refuse("efsd"))
+        return 1;
 #if !EFS_FAULTS
     efs_faults_env_ignored("efsd");
 #endif
@@ -1028,14 +1032,6 @@ int main(int argc, char **argv)
     if (parse_storage_arg(&server, storage) != 0 || server.storage_path_count == 0) {
         fprintf(stderr, "Invalid STORAGE: %s\n", storage);
         usage(argv[0]);
-        return 1;
-    }
-    /* W153: the member count is the membership committed at formation
-     * (efs-mgmt raft-mkfs); a set variable is a stale deployment input. */
-    if (getenv("EFS_MD_RAFT_N")) {
-        fprintf(stderr, "EFS_MD_RAFT_N was removed (W153): the member count and the metadata "
-                "voters come from the membership committed at formation (efs-mgmt raft-mkfs). "
-                "Unset it and start again.\n");
         return 1;
     }
     strncpy(server.storage_path, server.storage_paths[0], sizeof(server.storage_path) - 1);

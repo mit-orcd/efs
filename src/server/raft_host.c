@@ -11594,19 +11594,13 @@ static int put_orphan_ack(void *ctx, const struct efs_put_ticket *t, uint32_t fr
 }
 static void host_put_orphan_pass(struct efs_raft_host *h, uint8_t group, uint32_t anchor)
 {
-    static uint32_t per_pass;
     int gi = gc_gi(group);
-    if (!per_pass) {
-        const char *e = getenv("EFS_PUT_ORPHAN_PER_PASS");
-        long v = e ? strtol(e, NULL, 10) : 0;
-        per_pass = v > 0 && v <= (long)PUT_ORPHAN_PER_PASS ? (uint32_t)v : PUT_ORPHAN_PER_PASS;
-    }
     struct put_orphan_scan *scan = calloc(1, sizeof(*scan));
     if (!scan)
         return;
     uint8_t prefix[3];
     efs_put_ticket_orphan_prefix(anchor, prefix);
-    scan->limit = per_pass;
+    scan->limit = PUT_ORPHAN_PER_PASS;
     scan->skip_len = h->put_orphan_cursor_len[gi];
     memcpy(scan->skip, h->put_orphan_cursor[gi], scan->skip_len);
     int rc = host_gc_scan_work(h, prefix, sizeof(prefix), scan->skip_len ? scan->skip : NULL,
@@ -12234,14 +12228,6 @@ static void *host_query_thread(void *ctx)
     else if(interval_ms!=HOST_QUERY_T_MS)
         fprintf(stderr,"query-config: refresh interval %u ms\n",interval_ms);
     __atomic_store_n(&host_query_interval_ms,interval_ms,__ATOMIC_RELAXED);
-    const char *budget=getenv("EFS_QUERY_CATALOG_MIB");
-    if (budget && *budget) {
-        char *end=NULL;errno=0;
-        unsigned long long mib=strtoull(budget,&end,10);
-        if (!errno && end && !*end && mib>=64 && mib<=1024)
-            catalog_bytes=(uint64_t)mib<<20;
-        else fprintf(stderr,"query-config: invalid EFS_QUERY_CATALOG_MIB; using 256 (allowed 64..1024)\n");
-    }
     while (__atomic_load_n(&h->query_running,__ATOMIC_ACQUIRE)) {
         usleep(efs_query_refresh_poll_ms(cut_retry)*1000u);
         query_page_sweep(0);
@@ -13117,15 +13103,18 @@ int server_raft_host_start(struct efsd_server *s)
     } else fprintf(stderr,"raft-host: .efs server queries disabled; no catalog worker or query tracking\n");
     /* GC reaper after the pump: its proposals need the pump to apply. A
      * spawn failure only leaks fragments (logged), never corrupts.
-     * EFS_GC_DISABLE is an operational escape hatch (A/B, emergencies):
-     * with it the metadata side still writes reap markers/GC records,
-     * they just are never driven to fragment deletes. */
+     * EFS_FAULT_GC_DISABLE (EFS_FAULTS builds, daemon tests): the
+     * metadata side still writes reap markers/GC records, they just are
+     * never driven to fragment deletes. */
     __atomic_store_n(&h->gc_running, 1, __ATOMIC_RELEASE);
-    if (env_on("EFS_GC_DISABLE")) {
-        fprintf(stderr, "raft-host: GC reaper DISABLED (EFS_GC_DISABLE); "
+#if EFS_FAULTS
+    if (env_on("EFS_FAULT_GC_DISABLE")) {
+        fprintf(stderr, "raft-host: GC reaper DISABLED (EFS_FAULT_GC_DISABLE); "
                 "unlinked fragments will leak\n");
         __atomic_store_n(&h->gc_running, 0, __ATOMIC_RELEASE);
-    } else if (efsd_pthread_create(&h->gc_tid, host_gc_thread, h) != 0) {
+    } else
+#endif
+    if (efsd_pthread_create(&h->gc_tid, host_gc_thread, h) != 0) {
         fprintf(stderr, "raft-host: GC reaper thread failed; "
                 "unlinked fragments will leak\n");
         __atomic_store_n(&h->gc_running, 0, __ATOMIC_RELEASE);
@@ -22885,14 +22874,11 @@ static int g_report_receipt_trace;
 
 static void host_report_receipts_init(void)
 {
-    const char *cap = getenv("EFS_REPORT_RECEIPTS");
     const char *join = getenv("EFS_REPORT_RECEIPT_JOIN_MS");
-    unsigned long n = cap && *cap ? strtoul(cap, NULL, 10) : 4096ul;
     if (join && *join)
         g_report_receipt_join_ms = (unsigned)strtoul(join, NULL, 10);
     g_report_receipt_trace = getenv("EFS_RECEIPT_TRACE") != NULL;
-    g_report_receipts_ok = efs_receipt_table_init(&g_report_receipts,
-                                                  n ? (uint32_t)n : 4096u) == EFS_OK;
+    g_report_receipts_ok = efs_receipt_table_init(&g_report_receipts, 4096u) == EFS_OK;
     if (!g_report_receipts_ok)
         fprintf(stderr, "report-receipt: table allocation failed; REPORTs run "
                 "without receipts and receipt queries answer absent\n");
