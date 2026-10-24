@@ -3204,27 +3204,31 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
 
 /* If a stripe member is down (or failed the last attempt), put that
  * fragment on an unused live node. Four-node cluster, one down: the
- * remaining three still take a full 2+1 stripe. */
-static void reroute_untried_fragments(efs_node_id_t nodes[EFS_NUM_FRAGMENTS])
+ * remaining three still take a full 2+1 stripe. The spare is hashed per
+ * (ino, chunk, slot) over the live members, so a down node's share
+ * spreads over all of them rather than the first in the list. */
+static void reroute_untried_fragments(efs_ino_t ino, uint32_t chunk_index,
+                                      efs_node_id_t nodes[EFS_NUM_FRAGMENTS])
 {
+    efs_node_id_t live[EFS_MAX_NODES];
+    uint32_t nlive = 0;
+    int built = 0;
+
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         int bad = (nodes[i] == 0) || efs_client_node_is_down(nodes[i]);
         if (!bad)
             continue;
-        for (uint32_t n = 0; n < g_client.node_count; n++) {
-            efs_node_id_t id = g_client.nodes[n].id;
-            if (id == 0 || efs_client_node_is_down(id))
-                continue;
-            int used = 0;
-            for (int j = 0; j < EFS_NUM_FRAGMENTS; j++) {
-                if (j != i && nodes[j] == id)
-                    used = 1;
+        if (!built) {
+            for (uint32_t n = 0; n < g_client.node_count && nlive < EFS_MAX_NODES; n++) {
+                efs_node_id_t id = g_client.nodes[n].id;
+                if (id != 0 && !efs_client_node_is_down(id))
+                    live[nlive++] = id;
             }
-            if (!used) {
-                nodes[i] = id;
-                break;
-            }
+            built = 1;
         }
+        efs_node_id_t spare = efs_place_spare(live, nlive, ino, chunk_index, i, nodes);
+        if (spare)
+            nodes[i] = spare;
     }
 }
 
@@ -3351,7 +3355,7 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
     int rc = EFS_OK;
     if (efs_client_rpc_past_deadline()) rc = EFS_ERR_BUSY;
     /* Only an object that has never been sent can change placement. */
-    if (rc == EFS_OK) reroute_untried_fragments(nodes);
+    if (rc == EFS_OK) reroute_untried_fragments(ino, chunk_index, nodes);
     /* 2+1 EC requires 3 distinct nodes. On a 1-2 node ring placement wraps and
      * two fragments land on one machine, so a "2-ack quorum" can be a single
      * disk — losing that node loses the chunk. Refuse rather than store

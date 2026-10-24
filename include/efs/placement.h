@@ -8,9 +8,12 @@
  * efs_place_fragments() for live clusters whose node ids are arbitrary.
  *
  * User data: 3 distinct ranks, spaced around the ring, walking by chunk
- * so one file does not pile onto the same 3-node window. Metadata pages
- * (EFS_META_TABLE_INO) keep the original consecutive hash so existing
- * EFSR fragments stay findable. */
+ * so one file does not pile onto the same 3-node window; the start is a
+ * full-avalanche hash of the inode, so inode numbers that differ only in
+ * high bits (one shard steps by 2^shard_bits) still spread. Metadata
+ * pages (EFS_META_TABLE_INO) use consecutive ranks from the same hash.
+ * New writes only: readers use the fragment nodes recorded in the chunk
+ * table, so a placement change never moves existing data. */
 void efs_get_placement(uint32_t node_count, efs_ino_t ino, uint32_t chunk_index,
                        efs_node_id_t fragment_nodes[EFS_NUM_FRAGMENTS]);
 
@@ -31,6 +34,19 @@ void efs_place_fragments(const struct efs_node *nodes, uint32_t node_count,
 int efs_pack_destinations(const struct efs_node *members, uint32_t count,
                           efs_node_id_t self, uint64_t segment_id,
                           efs_node_id_t out[EFS_NUM_FRAGMENTS]);
+
+/* A hashed index in [0, n) over the pair (a, b): every input bit moves
+ * every output bit, reduced without modulo. 0 when n == 0. */
+uint32_t efs_place_index(uint64_t a, uint64_t b, uint32_t n);
+
+/* Spare for stripe slot `slot` whose member is down: one of `live` that is
+ * not already in stripe[] (any slot), chosen by hash of (ino, chunk_index,
+ * slot) over the candidates in ascending id order, so displaced fragments
+ * spread over every eligible member instead of the first in the list.
+ * Returns 0 when no candidate is left. */
+efs_node_id_t efs_place_spare(const efs_node_id_t *live, uint32_t count,
+                              efs_ino_t ino, uint32_t chunk_index, int slot,
+                              const efs_node_id_t stripe[EFS_NUM_FRAGMENTS]);
 
 /* Logical bytes that fit on nodes with per-node fragment capacities
  * caps[0..n-1] (bytes each node can still take, or its quota), given 2+1

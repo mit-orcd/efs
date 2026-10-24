@@ -2646,12 +2646,17 @@ def comparable(a, b):
     return a.extends(b) or b.extends(a)
 
 
-def _fnv1a(key):
-    h = 14695981039346656037
-    for i in range(8):
-        h ^= (key >> (i * 8)) & 0xff
-        h = (h * 1099511628211) & 0xffffffffffffffff
-    return h
+_M64 = 0xffffffffffffffff
+
+
+def _place_mix(x):
+    """src/common/placement.c place_mix: murmur3 fmix64."""
+    x ^= x >> 33
+    x = (x * 0xff51afd7ed558ccd) & _M64
+    x ^= x >> 33
+    x = (x * 0xc4ceb9fe1a85ec53) & _M64
+    x ^= x >> 33
+    return x
 
 
 def place_wide(ids, ino, ci=0):
@@ -2659,7 +2664,7 @@ def place_wide(ids, ino, ci=0):
     sorted id list, mapped to ids."""
     ids = sorted(ids)
     n = len(ids)
-    start = (_fnv1a(ino) + ci) % n
+    start = (((_place_mix(ino & _M64) * n) >> 64) + ci) % n
     stride = max(1, n // 3)
     used, out = set(), []
     for i in range(3):

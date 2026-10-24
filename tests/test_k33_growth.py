@@ -25,7 +25,7 @@ M1-M9.
 6. A wiped store at a member's endpoint (new token) is refused and exits;
    the member stays a member. Orderly restarts keep every count and voter set.
 7. The files written in step 2 read back exactly through a new mount, and
-   new files place fragments on the added nodes (usable capacity).
+   new files place fragments on every added node (usable capacity).
 """
 import hashlib, os, re, shutil, subprocess, sys, tempfile, time
 from pathlib import Path
@@ -220,7 +220,10 @@ try:
         for name, size in files.items():
             assert (mounts[0].path / name).read_bytes() == payload(name, size), name
         added = {i: fragments(c.dir / f'n{i}') for i in (4, 6, 7, 8)}
-        assert sum(added.values()) > 0, added
+        # Every added node takes new fragments: 48 new stripes over eight
+        # members (node 5 down, its share goes to hashed spares). The old
+        # FNV start left nodes 3 and 4 with none (K33 increment 2 finding).
+        assert all(v > 0 for v in added.values()), added
         notes.append(f'fragments on added nodes {added}')
 finally:
     for m in mounts:
