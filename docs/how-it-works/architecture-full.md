@@ -1592,6 +1592,15 @@ at 8 jobs reports 443 commands, 0 FAIL, 14 NOTRUN host limits (twice).
 - The merged K33 client-view test now waits for the increment-2 joiner
   lines.
 
+[W126 peek ordering fix](../status/w126-peek-order-20261024.md): **PASS (scoped) on
+`claude/devel-w126-peek-8a1155` (`680a7d0dd`), not merged.** Peeks take a
+separate `peek_mu` after `view_rw`, so a writer queued on `view_rw` behind
+a reader no longer holds them back (the K30 pinned case is now a liveness
+test). On intel1: TSan clean on the KV tests, `make leak-check` 25/25, and
+`make test-all` 442 commands with 1 FAIL and 14 host NOTRUN. The FAIL,
+`test_k33_client_view.py`, fails 5/5 on base `3e01ba95c` too. The orcd-mini
+A/B rerun is NOTRUN.
+
 [orcd-mini fresh deploy of `cb970ca7c` (RDMA, direct I/O)](../status/orcd-mini-deploy-cb970ca7c-20261024.md):
 **core 216/216, extras 4/5 + mmap SKIP, durability 27/27, `.efs` 10/10,
 two-client 68/68 PASS; expiry 29/29 checks PASS** after the fixture's
@@ -1773,13 +1782,13 @@ into a stalled follower is NOTRUN.
 efs2 and efs1 (25/25 unit binaries under valgrind memcheck, about 6 min) and
 `make test` PASS on both; merged into devel (`b8ef49e58`).** It works without LeakSanitizer, which
 fails only where `ptrace_scope` is 2 (ORCD); `make check` runs it. No product
-leak found. Open: W126 peeks can wait behind a writer queued on `view_rw`.
+leak found. The W126 peek case it skipped now runs (see the W126 peek fix).
 node9901 run NOTRUN.
 
 [K30 intermittent tests](../status/k30-intermittent-tests-20261023.md): **fixed on
 `devel-k30`, merged Oct 23 `b64dbe934`; 0/25 FAIL per case on amd.** `test_reclaim` was a
 product bug (same-second journal aside rename refused startup); the fork
-oracle and `test_kv_lsm` were test races. W126 peek limitation stays open.
+oracle and `test_kv_lsm` were test races. The W126 peek limitation is fixed (W126 peek fix above).
 
 [W156 client discovery](../status/w156-client-discovery-20261023.md): **fixed on
 `devel-w156` (`dca4dd544`), not merged; `make test-all` on nuc PASS without a
@@ -2733,7 +2742,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | crash-recovery-feature | **W123** · automatic crash recovery through per-file durable versions | new feature / durability recovery | PROPOSED: design review before code; implementation, migration and acceptance NOTRUN; W71 remains open | [feature and gates](../backlog/crash-safe-durable-versions.md) |
 | fast-delete | **W124** · fast delete: batched reclaim, quota credit at commit, then packing (W125) | performance / capacity | PROPOSED: design review before code; implementation, private A/B and orcd-mini acceptance NOTRUN | [proposal and gates](../backlog/fast-delete-reclaim.md) · [evidence](../status/orcd-mini-gc-delete-profile-5d673efa8-20261018.md) |
 | small-file-packing | **W125** · small-file packing by default (background packer after close) | capacity / performance | PROPOSED: revised to background packing 2026-10-18; write path unchanged, packer always on, no switch, prior state kept as a tag; port and acceptance NOTRUN | [proposal and gates](../backlog/small-file-packing-default.md) · [plan](../backlog/small-file-packing-plan.md) · [D37](#appendix-4--decisions--taken-and-pending-register-d1d36) |
-| kv-reader-convoy | **W126** · KV readers convoy behind exclusive LSM phases on a busy leader | performance | DEPLOYED on orcd-mini `8fb4247ad` (steps 1 and 3): `make test` 813/813 (1 environmental docs-check failure), POSIX smoke 216/216; A/B lock-wait gate PASS (leader LSM waits 2–4× lower), create-rate gate FAIL (no measurable gain; bounded by `h->mu` and fsync); step 4 deferred; K30 (`devel-k30`): peeks still wait on `mu` behind any writer queued on `view_rw` behind a reader, now pinned by a deterministic `test_kv_lsm` case ([K30](../status/k30-intermittent-tests-20261023.md)) | [item](#w126) · [A/B](../status/orcd-mini-w126-ab-8fb4247ad-20261022.md) · [origin](../status/orcd-mini-profile-47ba6b590-20261021.md) |
+| kv-reader-convoy | **W126** · KV readers convoy behind exclusive LSM phases on a busy leader | performance | DEPLOYED on orcd-mini `8fb4247ad` (steps 1 and 3): `make test` 813/813 (1 environmental docs-check failure), POSIX smoke 216/216; A/B lock-wait gate PASS (leader LSM waits 2–4× lower), create-rate gate FAIL (no measurable gain; bounded by `h->mu` and fsync); step 4 deferred; peek ordering defect pinned by K30 FIXED on `claude/devel-w126-peek-8a1155` (`680a7d0dd`, not merged): peeks take `peek_mu` after `view_rw`, so a writer queued behind a reader no longer holds them back; intel1: TSan clean, `make leak-check` 25/25, `make test-all` 442 with 1 FAIL that also fails on base (`test_k33_client_view.py`) and 14 host NOTRUN; orcd-mini A/B rerun NOTRUN ([peek fix](../status/w126-peek-order-20261024.md), [K30](../status/k30-intermittent-tests-20261023.md)) | [item](#w126) · [A/B](../status/orcd-mini-w126-ab-8fb4247ad-20261022.md) · [origin](../status/orcd-mini-profile-47ba6b590-20261021.md) |
 | apply-unknown-tag | **W127** · metadata apply accepts unknown command tags as applied | correctness | FIXED, merged into devel `08cc16af4`; private RDMA gate PASS (`scripts/w127_incompatible_entry.sh`); unit gates PASS, private 3-node gate PASS; RDMA/multi-host NOTRUN ([implementation](#w127-w131-fix)) | [item](#w127) · [audit](../reviews/dead-code-review-20261021.md) |
 | apply-unknown-subtag | **W128** · unknown sub-tags and short frames apply as success (DIR/SESSION/TXN) | correctness | FIXED, merged into devel `08cc16af4`; private RDMA gate PASS (`scripts/w127_incompatible_entry.sh`); unit gates PASS; RDMA/multi-host NOTRUN ([implementation](#w127-w131-fix)) | [item](#w128) · [audit](../reviews/dead-code-review-20261021.md) |
 | apply-proto-normalized | **W129** · `host_apply` turns decoder errors into success and commits the cursor | correctness | FIXED, merged into devel `08cc16af4`; private RDMA gate PASS (`scripts/w127_incompatible_entry.sh`); unit gates PASS; RDMA/multi-host NOTRUN ([implementation](#w127-w131-fix)) | [item](#w129) · [audit](../reviews/dead-code-review-20261021.md) |
@@ -9013,7 +9022,8 @@ remove this ([`h->mu` plan](../status/raft-host-mu-plan-20261016.md)).
 - the query-refresh revision reads (`metadata_revisions`,
   `transaction_revision`/`activity`, `cleanup_deferred`).
 
-Peeks keep `lsm_lock`'s fail-fast abort inside a read section.
+Peeks kept `lsm_lock`'s fail-fast abort inside a read section (removed
+by the October 24 peek-ordering fix below).
 `tests/test_kv_lsm.c` `test_peek_beside_reader` parks a reader inside a scan
 callback and requires every peek to return. It FAILs on `47ba6b590` and
 PASSes with the change. On node9901, the patched tree passes `test_kv_lsm`,
@@ -9049,6 +9059,19 @@ memtable still clears only after the MANIFEST write succeeds.
 The remaining leader waits are `h->mu` in `host_pump`, proposals and REPORT
 ([`h->mu` plan](../status/raft-host-mu-plan-20261016.md)), plus XFS log
 fsync waits.
+
+**Peek ordering (October 24, `680a7d0dd` on
+`claude/devel-w126-peek-8a1155`, not merged).** K30 pinned a remaining
+defect: peeks took `mu`, and a writer holds `mu` while it waits on
+`view_rw` for readers, so every peek waited for the longest reader. Peeks
+now take a separate `peek_mu`, which a writer holds exactly while it owns
+`view_rw` exclusively (order `mu`, `view_rw`, `peek_mu`). Yield, reclaim
+and cond waits release and retake it with the view, so peeks also run
+during flush I/O. A peek inside a read section is now allowed.
+`test_peek_beside_reader` is a liveness test in four modes, and there are
+new peek storms beside flushes and compactions. `make leak-check` no
+longer skips the case. [Evidence](../status/w126-peek-order-20261024.md);
+the orcd-mini A/B rerun is NOTRUN.
 
 **Remaining.** Step 4 (bound how long `merge_scan` holds the shared view) is
 deferred until LSM waits rise again. Create throughput on orcd-mini is not

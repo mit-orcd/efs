@@ -1373,6 +1373,7 @@ static void lsm_destroy(void *ctx)
     pthread_mutex_destroy(&l->mu);
     pthread_rwlock_destroy(&l->writers);
     pthread_rwlock_destroy(&l->view_rw);
+    pthread_mutex_destroy(&l->peek_mu);
     pthread_mutex_destroy(&l->cand_mu);
     free(l);
 }
@@ -1494,8 +1495,14 @@ struct efs_kv *efs_kv_lsm_open(const char *dir, const struct efs_kv_lsm_cfg *cfg
         /* Raft apply must not starve behind a stream of metadata reads. */
         pthread_rwlockattr_setkind_np(&ra, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
 #endif
-        if (pthread_rwlock_init(&l->view_rw, &ra) != 0 ||
-            pthread_mutex_init(&l->cand_mu, NULL) != 0) {
+        int vrc = pthread_rwlock_init(&l->view_rw, &ra);
+        int prc = vrc ? -1 : pthread_mutex_init(&l->peek_mu, NULL);
+        int crc = prc ? -1 : pthread_mutex_init(&l->cand_mu, NULL);
+        if (crc != 0) {
+            if (prc == 0)
+                pthread_mutex_destroy(&l->peek_mu);
+            if (vrc == 0)
+                pthread_rwlock_destroy(&l->view_rw);
             pthread_rwlockattr_destroy(&ra);
             pthread_rwlock_destroy(&l->writers);
             pthread_cond_destroy(&l->compact_cv);

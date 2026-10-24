@@ -38,6 +38,15 @@ at 8 jobs reports 443 commands, 0 FAIL, 14 NOTRUN host limits (twice).
 - The merged K33 client-view test now waits for the increment-2 joiner
   lines.
 
+[W126 peek ordering fix](w126-peek-order-20261024.md): **PASS (scoped) on
+`claude/devel-w126-peek-8a1155` (`680a7d0dd`), not merged.** Peeks take a
+separate `peek_mu` after `view_rw`, so a writer queued on `view_rw` behind
+a reader no longer holds them back (the K30 pinned case is now a liveness
+test). On intel1: TSan clean on the KV tests, `make leak-check` 25/25, and
+`make test-all` 442 commands with 1 FAIL and 14 host NOTRUN. The FAIL,
+`test_k33_client_view.py`, fails 5/5 on base `3e01ba95c` too. The orcd-mini
+A/B rerun is NOTRUN.
+
 [orcd-mini fresh deploy of `cb970ca7c` (RDMA, direct I/O)](orcd-mini-deploy-cb970ca7c-20261024.md):
 **core 216/216, extras 4/5 + mmap SKIP, durability 27/27, `.efs` 10/10,
 two-client 68/68 PASS; expiry 29/29 checks PASS** after the fixture's
@@ -219,13 +228,13 @@ into a stalled follower is NOTRUN.
 efs2 and efs1 (25/25 unit binaries under valgrind memcheck, about 6 min) and
 `make test` PASS on both; merged into devel (`b8ef49e58`).** It works without LeakSanitizer, which
 fails only where `ptrace_scope` is 2 (ORCD); `make check` runs it. No product
-leak found. Open: W126 peeks can wait behind a writer queued on `view_rw`.
+leak found. The W126 peek case it skipped now runs (see the W126 peek fix).
 node9901 run NOTRUN.
 
 [K30 intermittent tests](k30-intermittent-tests-20261023.md): **fixed on
 `devel-k30`, merged Oct 23 `b64dbe934`; 0/25 FAIL per case on amd.** `test_reclaim` was a
 product bug (same-second journal aside rename refused startup); the fork
-oracle and `test_kv_lsm` were test races. W126 peek limitation stays open.
+oracle and `test_kv_lsm` were test races. The W126 peek limitation is fixed (W126 peek fix above).
 
 [W156 client discovery](w156-client-discovery-20261023.md): **fixed on
 `devel-w156` (`dca4dd544`), not merged; `make test-all` on nuc PASS without a
