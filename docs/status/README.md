@@ -18,6 +18,18 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[K36 / F23: verified recovery after an unclean stop](k36-verified-recovery-20261024.md):
+**PASS (scoped, loopback), not merged** (branch `claude/devel-k36-recovery-70f9de`, code `e8d25cc22`).
+A crashed or killed store now proves itself (boot counter, reclaim journal,
+session certificates, every local fragment, each hosted metadata group at its
+leader's commit, every published reference against its digest), drops what it
+cannot prove, marks those stripes for W154 rebuild and clears the COMMIT
+fence; a client holding writes of the crashed run keeps failing `fsync`.
+Daemon crash tests during PUT, publication, reclaim, KV compaction and
+recovery PASS (8 of 8 runs). intel1 gate: `make test` PASS, `make test-long`
+PASS (host-limit NOTRUNs); the first-run `test_k33_payload.py` FAIL is
+K34/F24 and fails 1 of 3 runs on the base `55ad94072` too. Power-loss qualification, multi-host and RDMA NOTRUN.
+
 [Oct 24 merge: A6 inventory, S1–S5/F4 docs, B1–B5, Stage 2 driver](a6-settings-inventory-20261024.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `c894ec5ae`: 456 commands, 0 FAIL, 14 NOTRUN host limits (1,831 s; raw: intel2 `~/efs-artifacts/merge-wave4-20261024/`, `SHA256SUMS` `2bf6bbe2…1f10`).** `test_k33_payload.py` passed in this run; it fails intermittently (K34, fix in progress). Open for the user: the A/B decision table (A7) and findings F22/F23 (fsync with a member down; unclean-stop stores).
 
