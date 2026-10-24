@@ -434,17 +434,45 @@ facts for A6, not decisions.
   and crash recovery (K23). **Decided out (user, Oct 22):** NFS re-export and
   macOS clients, on the beta backlog as **W152**; alpha supports the Linux FUSE
   client only, and F4 says so.
+  **DRAFT Oct 24 ([surface list](../using/alpha-1.0-surface.md),
+  [evidence](s-docs-alpha-1.0-20261024.md)):** every binary, `efsd`/`efs-fuse`
+  option, `efs-mgmt` and `.efs` command and user-settable environment
+  variable marked in or out with a reason, checked against `a2326a369`.
+  Rows marked *proposed* (for example `--no-direct-io`, `--writers`,
+  `--no-persist`, `add-node`, `shrink-quota`, `raft-step-down`) wait for the
+  user; findings F2–F8, F11, F12 list help-text gaps and profile defaults.
 - [ ] **S2 — POSIX subset.** Publish the supported operations and every known
   gap (for example, mmap is skipped in the extras suite). Each gap is either
   fixed or justified as a limitation (F4). No gap counts as PASS.
+  **DRAFT Oct 24 ([POSIX subset](../using/alpha-1.0-posix.md)):** supported
+  operations from the core (216), extras (5), two-client (68) and
+  durability (27) cases; deviations P1–P14 with their suite cases (shared
+  mmap W104, K10 fork readback, `renameat2` flags, `fallocate` modes,
+  non-`user.` xattrs, `mknod`, D28, D32, W159 open). Recorded runs are on
+  `cb970ca7c` and `163241584`; none on the base; C1 per topology NOTRUN.
 - [ ] **S3 — Operator workflows.** Format, start, stop, status, `df`,
   quotas, `raft-status`, `raft-resync`, packing control, and failure
   messages. Each one is documented and covered by a test.
+  **DRAFT Oct 24 ([alpha guide](../using/alpha-1.0-guide.md)):** format
+  (automatic at three members, optional `mkfs`), start, status, mount and
+  unmount, `df`, quotas, adding a node, adding storage, stop, restart and
+  orderly shutdown with the current CLI. Test coverage gaps: `add-storage`
+  and `add-node` have no test, `raft-resync` only a gate script (F11, F20).
 - [ ] **S4 — Effective settings.** Decide whether **W122**, the listing of
   effective settings, is in alpha. It supports A8 and A10.
+  **STRUCTURE Oct 24 ([effective settings](../using/alpha-1.0-surface.md#s4--effective-settings)):**
+  where each effective value is visible today (startup log, `status`,
+  `raft-status`, `version`, `sync-status`, `commands-policy get`; tunables
+  not at all) and the page layout once A6 lands. **Waits for** the A6
+  inventory (`a6-settings-inventory-20261024.md`) and the user's W122
+  decision.
 - [ ] **S5 — User documentation.** Install, configuration, supported
   topologies, the reduced configuration matrix (A11) and the published
   limitations.
+  **DRAFT Oct 24 ([alpha guide](../using/alpha-1.0-guide.md)):** install,
+  configuration, topology (3–16 nodes, 2+1, distinct hosts), transport and
+  direct I/O, quotas, failure behavior (one node down, rebuild on return,
+  two down). The A11 matrix waits for A11.
 
 ## B. Verify geometry, placement and usable capacity
 
@@ -581,8 +609,13 @@ round says which physical or software limiter it hit.
 - [ ] **F4** Publish alpha limitations: fixed metadata-group count and
   default placement of two three-voter groups (both on 1–3 for N = 3; on
   1–3 and 2–4 for N ≥ 4, D38 as amended), actual packing placement, supported
-  node range, Linux FUSE client only, deferred unplanned repair, no
-  degraded-state indication, and lack of 2+2/two-loss protection on 4+ nodes.
+  node range, Linux FUSE client only, deferred unplanned repair, degraded
+  state shown only to the operator (`efs-mgmt status` has shown it since
+  W154; the mount does not, finding F10), and lack of 2+2/two-loss
+  protection on 4+ nodes.
+  **DRAFT Oct 24 ([release notes](../release-notes/alpha-1.0.md)):**
+  limitations L1–L26 with trigger, what the user sees and reference, and
+  the open K rows that must close or be added before release.
   Release-notes entries decided so far (D40, Oct 23), one each:
   - **K10/W121 readback after fsync:** a read issued right after a
     successful fsync can return the previous file's payload; triggered by

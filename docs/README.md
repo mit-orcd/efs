@@ -26,6 +26,7 @@ in this repository. Pick the guide below for your task.
 - **Power user / operator of a mount** → [using/power-user.md](using/power-user.md) — mount options, environment variables, quotas, `efs-mgmt`, `df`/`du` semantics.
 
 - **Directory-local commands** → [using/efs-commands.md](using/efs-commands.md) — listing, dates, sorting, search filters, snapshots and limits.
+- **Alpha 1.0 (draft)** → [using/alpha-1.0-guide.md](using/alpha-1.0-guide.md) — install, configuration, topology, operator workflows, failure behavior; [using/alpha-1.0-surface.md](using/alpha-1.0-surface.md) — what is in and out, effective settings; [using/alpha-1.0-posix.md](using/alpha-1.0-posix.md) — the POSIX subset and its deviations; [release-notes/alpha-1.0.md](release-notes/alpha-1.0.md) — limitations.
 
 ## How it works
 

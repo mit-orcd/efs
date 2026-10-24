@@ -139,7 +139,8 @@ Fragment payload length depends on the object; an ordinary full data chunk
 produces 64 KiB fragments. Direct-I/O writes append a 4 KiB tail page holding
 the 32-byte digest; buffered writes append the digest itself. Server GET fails closed on missing/corrupt checksum evidence;
 client GET paths compare replies with captured metadata digests where available.
-Identity-bound fragment format and repair remain [W75](../backlog/work-items.md#w75).
+Fragment record format 2 binds the fragment identity and payload digest (K16,
+W75); the only repair is W154 rebuild on return.
 
 The former advice to wipe an older sidecar store as an upgrade had no verified
 migration gate. Preserve existing stores and establish format compatibility
@@ -163,7 +164,9 @@ store keeps its cluster, node id and endpoint (another endpoint is refused):
 If peers are down it starts standalone and retries in the background. Local
 data is kept.
 
-Disable loading/saving the membership list (not a data or metadata wipe):
+Disable loading/saving the joined-node table `meta/cluster_nodes.bin` (not a
+data or metadata wipe; the committed membership in `mdraft/identity.bin` is
+persisted regardless; outside the [alpha surface](../using/alpha-1.0-surface.md)):
 
 ```bash
 ./scripts/server.sh 127.0.0.1:17432 /tmp/efs/s1:5G --no-persist
@@ -180,8 +183,8 @@ Disable loading/saving the membership list (not a data or metadata wipe):
 Suffixes: `T`, `G`, `M`, `K`. The quota belongs to the node across its storage
 roots, not independently to each path. A PUT returns QUOTA after at least two
 stripe quota failures, mapping to application `ENOSPC`. One quota-rejected
-fragment with two ACKs can still return success; W42 tracks protection/repair
-acceptance for that case.
+fragment with two ACKs can still return success; the stripe is then recorded
+as degraded (W154) and rebuilt once that node accepts the fragment.
 
 ```bash
 ./efs-mgmt status 127.0.0.1:17432
@@ -207,17 +210,18 @@ for the active incident and validation limits.
 
 `shrink-quota <node> <amount>` subtracts the amount from the running node
 quota immediately and refuses a result below current usage. It does not start
-background migration. The current CLI misleadingly says migration started
-([W70](../backlog/work-items.md#w70)); do not treat that text as evacuation
-progress or a persistence guarantee.
+background migration, and the reduction lives only in the running daemon: a
+restart applies `--quota` (or the automatic quota) again.
+
+`add-storage` attaches roots to the running daemon only. Add them to the
+node's `STORAGE` list before its next restart; the daemon does not remember
+them.
 
 `mkfs` initializes the single Raft export. Repeated application preserves an
 existing root and its committed placement salt; it does not fail on an existing
-name or create another named export. The current CLI help still advertises a
-name argument, which the handler silently ignores ([W79](../backlog/work-items.md#w79)).
-Use only the seed argument shown above. The FUSE binary still requires an
-export-name token (`fs`, as used by `client.sh`); its current bootstrap builds
-a local shell using that token, rather than selecting a separately created export.
+name or create another named export. It takes exactly one argument, the node
+address, and refuses a label. `efs-fuse` takes no export label either: a word
+after the mountpoint is refused.
 
 Applied-marker experiment (W93): `EFS_RAFT_APPLIED_INTERVAL_MS=10` is the
 historical default. Explicit integers 10–1,000 select a best-effort checkpoint
@@ -280,8 +284,9 @@ The production fragment persistence gap is [W71](../backlog/work-items.md#w71).
 ## Profiling a server
 
 `efsd --perf` attaches `perf record -g` to itself after it is listening and
-writes `/tmp/efs-perf/efsd.data`; `--strace` does the same with `strace -f
--tt -T` to `/tmp/efs-perf/efsd.strace`. SIGTERM stops the recorders first
+writes `STORAGE/log/perf.data` (first root; `EFS_PERF_PATH` overrides);
+`--strace` does the same with `strace -f -tt -T` to `STORAGE/log/strace.txt`
+(`EFS_STRACE_PATH` overrides). SIGTERM stops the recorders first
 (that is what writes the perf footer), then the daemon. Never start a
 daemon under an external `strace` and quote its throughput.
 
@@ -311,10 +316,11 @@ This list is not blanket POSIX/concurrency acceptance: staged logical truncate
 and public-path gates remain in the [queue](../status/README.md) and
 [capability matrix](../status/spec-implementation.md).
 
-Each directory has a **lookup-only** virtual `.stats` file (`cat dir/.stats`).
-`ls` does not list it. It is not a real inode. Creating a file named `.stats`
-is rejected. Contents: immediate and subtree file/dir counts, bytes, min/max
-timestamps.
+With `EFS_COMMANDS=1` on the mount, each directory has a **lookup-only**
+`.efs/` command directory (`.efs/ls`, `.efs/find`, `.efs/stats`, `.efs/help`;
+[commands](../using/efs-commands.md)). `ls` does not list it, and a real
+`.efs` entry takes precedence. The former `.stats` and `.find` virtual files
+no longer exist (W92).
 
 The old whole-table `efs-query` tool was removed on October 21, 2026. The
 server still refuses its `QUERY_STATS` request as unsupported, and never

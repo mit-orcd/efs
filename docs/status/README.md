@@ -18,6 +18,16 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Alpha 1.0 user docs and limitations, S1–S5 and F4](s-docs-alpha-1.0-20261024.md):
+**drafts on `claude/devel-s-docs-e654d8`, not merged, not approved.**
+[Surface list and effective settings](../using/alpha-1.0-surface.md),
+[POSIX subset](../using/alpha-1.0-posix.md),
+[guide](../using/alpha-1.0-guide.md) and
+[release notes draft](../release-notes/alpha-1.0.md), checked against
+`a2326a369`; 21 docs/code findings (help gaps, untested `add-storage`, no
+port authentication, profile defaults); stale claims in `operations.md` and
+`power-user.md` corrected. S4 waits for A6 and the W122 decision.
+
 [D41: K9 / W87 closed without resolution](decisions.md#d41--k9--w87-closed-without-resolution-user-oct-24):
 **user decision Oct 24: the append record loss was never reproduced and has no root cause; K9 is closed and reopens if a loss is seen again.** Not a passing gate.
 
