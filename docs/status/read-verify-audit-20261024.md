@@ -125,11 +125,71 @@ never served.
 
 ## CPU cost
 
-PENDING
+`scripts/read_verify_cost.sh` on intel2, idle host (no gate running):
+private 3-daemon TCP loopback cluster, `--direct-io`, one efs-fuse mount,
+one 2 GiB random file, four cold reads per run (remount before each, so the
+client read cache is empty; `dd bs=1M`), efs-fuse CPU from `/proc`. Two
+passes, alternating base and branch:
+
+```bash
+scripts/read_verify_cost.sh run REL DIR 18820 2048 4   # REL = base or branch tree
+scripts/read_verify_cost.sh stop REL DIR 18820         # then delete DIR
+```
+
+| Build | efs-fuse CPU s per GiB read (rounds 2–4, both passes) | Read MiB/s | Round 1 (with sha256 check) |
+| --- | --- | --- | --- |
+| Base `55ad94072`, `EFS_READ_VERIFY` unset | 0.770–0.830, mean **0.81** | 1835–2079, mean 1923 | 0.64 / 0.68 CPU s/GiB, sha256 equal |
+| Branch (re-hash built in) | 1.230–1.360, mean **1.30** | 1754–1960, mean 1816 | 1.24 / 1.22 CPU s/GiB, sha256 equal |
+
+- **Cost: +0.49 CPU s per GiB read on the client (+60 % of efs-fuse CPU on
+  this loopback read), throughput −6 %.** A cold read hashes two data
+  fragments per chunk, 1 GiB of payload per GiB read; parity only when a
+  data fragment is refused.
+- The hash itself, single thread, 64 KiB fragments from `libefs.a`
+  (BLAKE3 with SIMD dispatch): 19.5–19.9 µs per fragment, 3.1 GiB/s,
+  0.32 CPU s per GiB. The measured increase is larger (+0.49), plausibly
+  because the received payload is hashed after it has left the cache in a
+  parallel prefetch pipeline. Not profiled further.
+- On loopback the servers share the host and the network costs nothing, so
+  the relative figure says little about a real network; the absolute
+  increase per GiB is client work and should carry over, but no
+  multi-host or RDMA measurement was made.
+- Both runs: no refusal, no read error. Raw per-run output and fuse logs:
+  `cost/` under the raw-output directory.
 
 ## Gate
 
-PENDING
+- **Tested source:** `dff495ed6` (code, tests and this page with the cost
+  and gate sections still empty; the later commit only fills them in),
+  copied to intel2 with `git archive`, built with `EFS_GIT_ID=dff495ed6`.
+  The cost run used a tree whose `src/` is identical to it (checked with
+  `diff -r`).
+- **Command** (screen on intel2, both trees):
+  `EFS_TEST_JOBS=4 scripts/make_test_summary.sh` (target `test-all`).
+
+| Tree | Commands | FAIL | NOTRUN | Time |
+| --- | ---: | ---: | ---: | ---: |
+| Base `55ad94072` | 456 | 1 | 14 | 509 s |
+| Branch `dff495ed6` | 456 | **0** | 14 | 821 s |
+
+The base failure is `tests/test_k33_payload.py` (`OSError: [Errno 5]
+Input/output error`), the known intermittent K34 read during a member's
+stop; it passed on the branch. The 14 NOTRUNs are the same host limits on
+both: no RDMA device (`test_rdma_xprt`, 7× `test_rdma_segmented`,
+`test_declaration_gate` RDMA path), no valgrind (`test_rdma_memcheck`,
+`test_leak_gate`), no `~/git/cluster` (`test_cluster_stop`), no
+`EFS_FAULTS` build for one `test_follower_bound` case, and the runner's
+own NOTRUN fixture. `tests/test_get_integrity.py` takes 0.3 s.
+`EFS_READ_VERIFY=1 ./efsd …` prints `efsd: EFS_READ_VERIFY was removed (D42
+GET-path audit) …` and exits; `tests/test_env_removed.py` checks every row
+for efsd and efs-fuse.
+
+**Raw outputs:** intel2 `~/efs-artifacts/read-verify-20261024/` (23 files,
+320 KB; `SHA256SUMS` sha256 `640ce6a6…d0a4`): `base-gate/` and
+`branch-gate/` (summary, progress, timings, runner and build logs, the base
+failure log), `cost/` (four cost runs with their fuse logs),
+`base-verify-off-cases.txt` with `base_variant.py` and the test it ran.
+Work trees under `~/efs-readverify/` are deleted after the run.
 
 ## Limitations and remaining gates
 
