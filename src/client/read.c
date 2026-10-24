@@ -96,10 +96,7 @@ static uint8_t *decode_frag_scratch(uint32_t need)
     return (uint8_t *)reply_buffer_get(0, need);
 }
 
-/* One synchronized option value for every GET path. Even zero digests
- * require hashing the received bytes when verification is requested. */
-static pthread_once_t read_verify_once = PTHREAD_ONCE_INIT;
-static int read_verify;
+static pthread_once_t read_frag_prof_once = PTHREAD_ONCE_INIT;
 static int read_frag_prof;
 /* A span/parity fragment attempt, including cold connection declaration and
  * retries, waits at most read_frag_timeout_ms before the next fragment is
@@ -107,21 +104,22 @@ static int read_frag_prof;
  * whole operation budget (2 s, built in since A6). */
 static const int read_frag_timeout_ms = 2000;
 
-static void read_verify_init(void)
+static void read_frag_prof_init(void)
 {
-    const char *value = getenv("EFS_READ_VERIFY");
-    read_verify = value && *value && strcmp(value, "0") != 0;
-    value = getenv("EFS_READ_FRAG_PROF");
+    const char *value = getenv("EFS_READ_FRAG_PROF");
     read_frag_prof = value && *value && strcmp(value, "0") != 0;
 }
 
+/* Every chunk fragment reply is hashed on receive, zero payloads too,
+ * before any byte of it is decoded or returned (READ_VERIFY audit,
+ * Oct 24). The node verified its record and payload before sending, but
+ * that does not cover the wire or this client's receive buffers: the TCP
+ * checksum is 16 bits and offloaded, RDMA's ICRC ends at the HCA. Packed
+ * segment reads, W154 rebuild and the packer already re-hash. */
 static int fragment_reply_verified(const uint8_t *data, uint32_t len,
                                    const uint8_t sum[EFS_HASH_SIZE])
 {
     uint8_t actual[EFS_HASH_SIZE];
-    pthread_once(&read_verify_once, read_verify_init);
-    if (!read_verify)
-        return 1;
     efs_hash(data, len, actual);
     return memcmp(actual, sum, EFS_HASH_SIZE) == 0;
 }
@@ -471,6 +469,7 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
     }
 
     int rc = EFS_ERR_DECODE;
+    int integrity = 0; /* a fragment was refused: report that, not DECODE */
     for (int attempt = 0; attempt < max_attempts; attempt++) {
         if (efs_client_rpc_past_deadline())
             return EFS_ERR_BUSY;
@@ -506,6 +505,8 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
          * pool's condvar hop was ~16 futex per chunk (Oct 1). */
         get_two_parallel(jobs);
         for (int i = 0; i < 2; i++) {
+            if (jobs[i].rc == EFS_ERR_CHECKSUM)
+                integrity = 1;
             if (jobs[i].rc == EFS_ERR_NET || jobs[i].rc == EFS_ERR_BUSY)
                 efs_read_peer_defer(&read_peer_order, jobs[i].node,
                     read_peer_now_ms(), efs_client_rpc_deadline_ms());
@@ -530,6 +531,8 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
             jobs[2].chunk_generation = have_ce ? ce.generation : 0;
             jobs[2].expected_sum = have_ce ? ce.checksums[fi] : NULL;
             frag_get_thread(&jobs[2]); /* single fetch: run inline */
+            if (jobs[2].rc == EFS_ERR_CHECKSUM)
+                integrity = 1;
             if (jobs[2].rc == 0 && jobs[2].len == frag_len && !have[fi]) {
                 efs_read_peer_succeeded(&read_peer_order, jobs[2].node);
                 have[fi] = 1;
@@ -537,7 +540,7 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
             }
         }
 
-        pthread_once(&read_verify_once, read_verify_init);
+        pthread_once(&read_frag_prof_once, read_frag_prof_init);
         if (good < 2 && read_frag_prof) {
             static unsigned failures;
             if (__atomic_fetch_add(&failures, 1, __ATOMIC_RELAXED) < 64)
@@ -584,7 +587,7 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
             break;
         }
     }
-    return rc;
+    return rc != EFS_OK && integrity ? EFS_ERR_CHECKSUM : rc;
 }
 
 static int fetch_published_once(efs_ino_t ino, uint32_t ci, uint8_t *buf,
@@ -859,7 +862,6 @@ int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino,
                             uint32_t *data_len, uint8_t checksum[EFS_HASH_SIZE],
                             uint64_t chunk_generation)
 {
-    pthread_once(&read_verify_once, read_verify_init);
     uint64_t previous = efs_client_rpc_deadline_ms();
     uint64_t deadline = read_peer_now_ms() + (uint64_t)read_frag_timeout_ms;
     if (previous && previous < deadline)
@@ -1080,7 +1082,7 @@ static int overlay_one_delta(efs_ino_t ino, uint32_t ci, uint8_t *buf,
     uint8_t *decoded, *fbuf;
     uint8_t *frags[EFS_NUM_FRAGMENTS];
     int have[EFS_NUM_FRAGMENTS];
-    int a = -1, b = -1, missing = -1;
+    int a = -1, b = -1, missing = -1, integrity = 0;
 
     if (!d || d->len == 0 || (uint64_t)d->off + d->len > chunk_len ||
         (chunk_len % 2u) != 0)
@@ -1108,6 +1110,8 @@ static int overlay_one_delta(efs_ino_t ino, uint32_t ci, uint8_t *buf,
             memcmp(sum, d->checksums[i], EFS_HASH_SIZE) == 0) {
             have[i] = 1;
             ngood++;
+        } else if (grc == EFS_ERR_CHECKSUM || grc == EFS_OK) {
+            integrity = 1;
         }
     }
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
@@ -1125,7 +1129,7 @@ static int overlay_one_delta(efs_ino_t ino, uint32_t ci, uint8_t *buf,
                          chunk_len) != 0) {
         free(decoded);
         free(fbuf);
-        return EFS_ERR_DECODE;
+        return integrity ? EFS_ERR_CHECKSUM : EFS_ERR_DECODE;
     }
     memcpy(buf + d->off, decoded + d->off, d->len);
     free(decoded);

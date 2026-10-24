@@ -132,6 +132,8 @@ static const struct { const char *name, *why; } removed_env[] = {
     { "EFS_RDMA_RNR_RETRY", "A6): the RNR retry count is 7 (retry forever)" },
     { "EFS_READ_FRAG_TIMEOUT_MS", "A6): a fragment attempt waits at most 2000 ms" },
     { "EFS_REPORT_RECEIPTS", "A6): the REPORT receipt table holds 4096 entries" },
+    { "EFS_READ_VERIFY", "D42 GET-path audit): the client always re-hashes fragment "
+      "payloads on GET receive" },
 };
 
 unsigned efs_env_removed_refuse(const char *prog)

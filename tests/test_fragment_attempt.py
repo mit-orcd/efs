@@ -13,11 +13,9 @@ code=r'''
 typedef uint32_t efs_node_id_t;
 typedef uint64_t efs_ino_t;
 #define EFS_HASH_SIZE 32
-static pthread_once_t read_verify_once=PTHREAD_ONCE_INIT;
 static int read_frag_timeout_ms=2000;
 static uint64_t current, expected;
 static int result;
-static void read_verify_init(void) {}
 static uint64_t read_peer_now_ms(void) { return 10000; }
 static uint64_t efs_client_rpc_deadline_ms(void) { return current; }
 static void efs_client_rpc_set_deadline_ms(uint64_t d) { current=d; }

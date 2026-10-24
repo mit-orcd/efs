@@ -97,9 +97,10 @@ but not qualified.
 ### 1.4 Fragment integrity format and repair remain incomplete
 
 The current GET path fails closed on missing/corrupt checksum evidence,
-compares returned digests with the captured metadata view where available,
-and applies optional `EFS_READ_VERIFY=1` payload re-hashing to parallel and
-fallback receive paths. NUC corruption/metadata-digest gates are recorded in
+compares returned digests with the captured metadata view, and re-hashes
+every received fragment payload before decode (built in since the
+[D42 audit](../status/read-verify-audit-20261024.md); `EFS_READ_VERIFY` is
+removed). NUC corruption/metadata-digest gates are recorded in
 [W75](work-items.md#w75). The older inventory's fresh-hash fallback and
 parallel-path bypass statements are superseded.
 

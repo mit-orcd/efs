@@ -109,7 +109,17 @@ static void test_identity(struct efsd_server *s,struct efs_export *ex,uint8_t *b
    if(direct)assert(server_delete_fragment_if_sum(s,ex,ino,2,0,good)==EFS_ERR_FRAG_FORMAT);
    assert(!access(p[2],F_OK));
   }
-  assert(server_fragment_refusals()>=refused+6);
+  /* D42 audit: an unclean stop leaves a torn file (record cut short, or
+   * the payload itself). Refused on GET, never served short or padded. */
+  for(uint32_t ci=4;ci<6;ci++){
+   assert(!server_write_fragment_with_sum_sync(s,ex,ino,ci,0,body,EFS_FRAGMENT_SIZE,good));
+   char t[8192];fragment_path_at(s,0,ex,ino,ci,0,t,sizeof(t));
+   assert(!truncate(t,ci==4?EFS_FRAGMENT_SIZE+EFS_FRAG_RECORD_BYTES/2:EFS_FRAGMENT_SIZE/2));
+   len=EFS_FRAGMENT_SIZE;
+   assert(server_read_fragment_with_sum(s,ex,ino,ci,0,out,&len,sum,&ok)==EFS_ERR_CHECKSUM&&!ok);
+   assert(!unlink(t));
+  }
+  assert(server_fragment_refusals()>=refused+8);
   assert(gc_inode(s,1,ino)==EFS_OK);
   startup_inventory(s);assert(!s->nodes[0].used);
  }

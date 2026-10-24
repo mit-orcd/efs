@@ -114,7 +114,7 @@ and waits for the A6 inventory and the A7/A8 decisions.
 | `EFS_CLIENT_META_MB`, `EFS_DCACHE_HARD_BYTES`, `EFS_DCACHE_DRAIN_BYTES`, `EFS_DCACHE_BYTES`, `EFS_CLIENT_CONNS_PER_NODE`, `EFS_RDMA_BUFS`, `EFS_NUMA_NODE` | client | out, pending A8 | Capacity and placement tunables; defaults are the qualified values |
 | `EFS_QUERY_DISK_MAX_MIB`, `EFS_QUERY_DISK_TOTAL_MIB`, `EFS_QUERY_DISK_RESERVE_MIB`, `EFS_QUERY_REFRESH_MS`, `EFS_QUERY_EXPORT_MAX_MS` | server | out, pending A8 | Query-cache sizing; a large namespace may need them, so A8 must decide |
 | `EFS_PACK_*`, `EFS_REBUILD_PER_PASS` | server | out | Internal tunables; D37 allows no setting that disables the packer |
-| `EFS_READ_VERIFY`, `EFS_READ_PREFETCH`, `EFS_FUSE_SPLICE_READ`, `EFS_METADATA_BALANCE`, `EFS_QUERY_BACKEND`, `EFS_RAFT_APPLIED_INTERVAL_MS`, `EFS_GC_BACKLOG_IDLE_MS`, `EFS_RDMA_FIRST`, `EFS_KV_BLOOM` | both | out | A/B selectors and experiments; A7 removes or decides them |
+| `EFS_READ_PREFETCH`, `EFS_FUSE_SPLICE_READ`, `EFS_METADATA_BALANCE`, `EFS_QUERY_BACKEND`, `EFS_RAFT_APPLIED_INTERVAL_MS`, `EFS_GC_BACKLOG_IDLE_MS`, `EFS_RDMA_FIRST`, `EFS_KV_BLOOM` | both | out | A/B selectors and experiments; A7 removes or decides them |
 | `EFS_FAULT_GC_DISABLE` | server | out | Test builds only (`EFS_FAULTS=1`); was `EFS_GC_DISABLE` |
 | `*_DBG`, `*_TRACE`, `*_PROF`, `*_OBS`, `EFS_LOG_TS`, `EFS_PERF_*`, `EFS_STRACE_*` | both | out | Observability and profiling |
 | `EFS_FAULT_*` | both | out | Test builds only; a normal build names them as ignored at startup (W149) |

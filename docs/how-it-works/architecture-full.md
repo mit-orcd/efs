@@ -1572,6 +1572,15 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[D42 `EFS_READ_VERIFY`: GET-path integrity audit](../status/read-verify-audit-20261024.md):
+**PASS (scoped), branch `claude/devel-read-verify-08e19c`, not merged.** The
+storage node's record check does not cover the wire or the client's
+buffers; with verification off the base returned wrong bytes in 12 of 51
+negative cases (chunk GET, parity reconstruction, retries, spans; packed
+reads were already verified). The client re-hash is now built in on every
+chunk path, `EFS_READ_VERIFY` is removed and stops efsd/efs-fuse when set.
+Gate and CPU cost on the page.
+
 [Oct 24 merge: A6 inventory, S1–S5/F4 docs, B1–B5, Stage 2 driver](../status/a6-settings-inventory-20261024.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `c894ec5ae`: 456 commands, 0 FAIL, 14 NOTRUN host limits (1,831 s; raw: intel2 `~/efs-artifacts/merge-wave4-20261024/`, `SHA256SUMS` `2bf6bbe2…1f10`).** `test_k33_payload.py` passed in this run; it fails intermittently (K34, fix in progress). Open for the user: the A/B decision table (A7) and findings F22/F23 (fsync with a member down; unclean-stop stores).
 
@@ -11995,7 +12004,11 @@ A refused fragment is never served. The node replies with GET status
 client logs `read: I25 node refused fragment` and treats the fragment as
 unavailable. A read then decodes from the other two fragments, which pass the
 same server-side checks and are compared with the chunk-map digests captured
-by the reader. Two refused fragments fail the read with EIO. Nothing is
+by the reader. The node's check ends at its reply buffer, so the client
+hashes every received fragment payload (BLAKE3) and compares it with the
+reply's digest before the fragment is decoded: TCP checksums and RDMA's ICRC
+do not cover host memory or the receive path. There is no switch
+([D42 audit](../status/read-verify-audit-20261024.md)). Two refused fragments fail the read with EIO. Nothing is
 repaired automatically (W74).
 
 **GC.** The checksum-conditional delete reads the record, verifies identity

@@ -1182,7 +1182,11 @@ A refused fragment is never served. The node replies with GET status
 client logs `read: I25 node refused fragment` and treats the fragment as
 unavailable. A read then decodes from the other two fragments, which pass the
 same server-side checks and are compared with the chunk-map digests captured
-by the reader. Two refused fragments fail the read with EIO. Nothing is
+by the reader. The node's check ends at its reply buffer, so the client
+hashes every received fragment payload (BLAKE3) and compares it with the
+reply's digest before the fragment is decoded: TCP checksums and RDMA's ICRC
+do not cover host memory or the receive path. There is no switch
+([D42 audit](../../status/read-verify-audit-20261024.md)). Two refused fragments fail the read with EIO. Nothing is
 repaired automatically (W74).
 
 **GC.** The checksum-conditional delete reads the record, verifies identity
