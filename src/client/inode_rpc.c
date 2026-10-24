@@ -1638,18 +1638,27 @@ static int session_command_reply(uint32_t shard,const uint8_t *command,uint32_t 
     if(probe==2 && (!known || bytes!=22 || command[0]!=EFS_MD_CMD_SESSION ||
                     command[1]!=0))return EFS_ERR_INVAL;
     body[0]=efs_raft_shard_group(shard);memcpy(body+1,command,bytes);
-    efs_node_id_t target=0;
+    efs_node_id_t target=0,skip=0;
+    int lost=0;
     for (unsigned attempt=0;attempt<8;attempt++) {
-        if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
+        if (efs_client_rpc_past_deadline()) return lost?EFS_ERR_NET:EFS_ERR_BUSY;
         efs_node_id_t nid=target;
-        struct efs_conn *conn=target?efs_client_conn_get(target):rpc_owner_conn_shard(shard,&nid);
-        if (!conn) return EFS_ERR_NET;
-        if (efs_conn_send_msg(conn,EFS_MSG_RAFT_MKFS,body,bytes+1)) {
-            efs_client_conn_drop(nid,conn);return EFS_ERR_NET;
-        }
+        struct efs_conn *conn=target?efs_client_conn_get(target):
+            raft_voter_conn_skip(shard,&nid,skip);
         uint8_t type=0;uint32_t len=0;void *payload=NULL;
-        if (efs_conn_recv_msg(conn,&type,&payload,&len)) {
-            free(payload);efs_client_conn_drop(nid,conn);return EFS_ERR_NET;
+        /* K34: a group leader in orderly stop closes its connections; one
+         * failed exchange is not the verdict. Re-pick another voter after a
+         * pause (the identical identified command: same UUID, epoch, seq),
+         * as inode RPCs do; NET only once the attempts or the budget are
+         * used up, so the caller keeps the request as unknown. */
+        if (!conn || efs_conn_send_msg(conn,EFS_MSG_RAFT_MKFS,body,bytes+1) ||
+            efs_conn_recv_msg(conn,&type,&payload,&len)) {
+            free(payload);
+            if (conn) efs_client_conn_drop(nid,conn);
+            rpc_retry_peer(shard,nid,&target,&skip,conn!=NULL);
+            lost=1;
+            if (rpc_writer_retry_pause(attempt)!=EFS_OK) return EFS_ERR_NET;
+            continue;
         }
         efs_client_conn_release(nid,conn);
         if (type!=EFS_MSG_RAFT_MKFS_REPLY || len!=sizeof(struct efs_msg_raft_mkfs_reply)) {
@@ -1682,7 +1691,7 @@ static int session_command_reply(uint32_t shard,const uint8_t *command,uint32_t 
         }
         if (rpc_writer_retry_pause(attempt)!=EFS_OK) return EFS_ERR_BUSY;
     }
-    return EFS_ERR_BUSY;
+    return lost?EFS_ERR_NET:EFS_ERR_BUSY;
 }
 
 int efs_client_rpc_identity_revoked(const struct efs_opid *id,int *revoked)

@@ -128,6 +128,11 @@ void server_handlers_begin_stop(void)
     __atomic_store_n(&g_handlers_stopping, 1, __ATOMIC_RELEASE);
 }
 
+int server_handlers_stopping(void)
+{
+    return __atomic_load_n(&g_handlers_stopping, __ATOMIC_ACQUIRE);
+}
+
 static int handler_stop_gate(void)
 {
     if (!__atomic_load_n(&g_handlers_stopping, __ATOMIC_ACQUIRE))

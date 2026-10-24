@@ -33,6 +33,18 @@ throughput.
 [Oct 24 merge: A6 inventory, S1–S5/F4 docs, B1–B5, Stage 2 driver](a6-settings-inventory-20261024.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `c894ec5ae`: 456 commands, 0 FAIL, 14 NOTRUN host limits (1,831 s; raw: intel2 `~/efs-artifacts/merge-wave4-20261024/`, `SHA256SUMS` `2bf6bbe2…1f10`).** `test_k33_payload.py` passed in this run; it fails intermittently (K34, fix in progress). Open for the user: the A/B decision table (A7) and findings F22/F23 (fsync with a member down; unclean-stop stores).
 
+[K34: acknowledged files unreadable while one member stops](k34-stop-put-ack-20261024.md):
+**PASS (scoped), on branch `claude/devel-k34-954d00` (`6c09649a3`), not merged.**
+`tests/test_k33_payload.py` read `EIO` with one member stopping, for three
+reasons: a chunk acknowledged on the stopping member and one other while
+the third answered BUSY; lease/session commands that gave up at the first
+failed exchange with a stopping leader; and a stale client down-mark that
+skipped a member that was back. Fixed in efsd (no acknowledgement while
+stopping) and the client (complete the stripe, re-pick a voter, probe a
+down-marked member). New `tests/test_k34_stop_put.py`. On nuc: `make
+test-all` 450 commands, 0 FAIL, 14 NOTRUN host limits; `tests/test_k33_payload.py` 20 of 20 runs PASS (base: 2 of 8 FAIL). Live
+multi-host stop under load NOTRUN.
+
 [Oct 24 merge: placement spread, K33 acceptance, test hygiene, W126, K15/K29 rule](k33-acceptance-20261024.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `a2326a369`: 449 commands, 0 FAIL, 14 NOTRUN host limits (1,340 s; raw: intel2 `~/efs-artifacts/merge-wave3-20261024/`, `SHA256SUMS` `3e1f0f95…b2c`).** Placement needs a fresh format. Live gates for all five stay NOTRUN.
 
