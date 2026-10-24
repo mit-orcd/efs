@@ -401,6 +401,9 @@ int server_raft_host_start(struct efsd_server *s);
 void server_raft_host_stop(void);
 /* K1/W145: handlers close their connection before the next request. */
 void server_handlers_begin_stop(void);
+int server_handlers_stopping(void);
+/* K34: a stop signal arrived or the handlers began to stop. */
+int server_stop_requested(void);
 /* EFS_FAULTS builds: parks the named worker forever when
  * EFS_FAULT_SHUTDOWN_PARK names it; production returns 0 at once. */
 int server_shutdown_fault_park(const char *worker);

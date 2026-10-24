@@ -29,6 +29,8 @@ static void efs_client_nodes_force_reprobe(void){reprobes++;}
 const char *efs_strerror(int rc){(void)rc;return "injected";}
 /* W154: degrade=1 leaves fragment 2 unacknowledged on the OK attempt. */
 static int degrade,note_rc=EFS_OK;static unsigned notes,logs;static uint32_t noted_mask;
+/* K34: busy_third>0 makes member 3 answer BUSY on that many OK attempts. */
+static int busy_third;
 static int dgobj_note(efs_ino_t ino,uint32_t ci,uint64_t gen,uint32_t mask)
 {(void)ino;(void)ci;assert(gen==77);notes++;noted_mask=mask;return note_rc;}
 static void degraded_ack_log(efs_ino_t ino,uint32_t ci,uint64_t gen,const efs_node_id_t *nodes,int fi)
@@ -38,6 +40,7 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *t,const uint
  int rc=recover_busy && calls>2 ? EFS_OK : terminal;
  /* Acks from an earlier attempt of the same object still count. */
  if(rc==EFS_OK)for(unsigned i=0;i<3;i++)if(!degrade||i!=2)acked[i]=1;
+ if(rc==EFS_OK && busy_third){busy_third--;failed[2]=3;if(!busy_third)acked[2]=1;}
  return rc;}
 '''+fn('report_retry_pause')+fn('put_fragments_parallel_run')+fn('efs_client_put_fragments_parallel')+r'''
 #define PUT(t) efs_client_put_fragments_parallel(1,0,nodes,fragments,1,checksums,0,0,t)
@@ -80,6 +83,14 @@ int main(void){
  degrade=0;note_rc=EFS_OK;
  calls=0;terminal=EFS_OK;deadline=report_clock_ms()+100;
  assert(PUT(&t)==EFS_OK&&notes==2);
+ /* K34: two acks and a BUSY third member is not a degraded stripe: the
+  * missing fragment is resent until stored, and a budget that runs out
+  * fails the write rather than acknowledging two fragments. */
+ calls=0;degrade=1;busy_third=3;deadline=report_clock_ms()+1000;
+ assert(PUT(&t)==EFS_OK&&calls==3&&notes==2&&logs==1);
+ calls=0;busy_third=1000;deadline=report_clock_ms()+120;before=releases;
+ assert(PUT(&t)==EFS_ERR_BUSY&&notes==2&&logs==1&&releases==before+1&&calls<=4);
+ busy_third=0;degrade=0;
  /* An admission failure sends nothing. */
  calls=0;admit_rc=EFS_ERR_FENCED;deadline=report_clock_ms()+100;
  assert(PUT(&t)==EFS_ERR_FENCED && !calls);admit_rc=0;
@@ -95,4 +106,4 @@ with tempfile.TemporaryDirectory(prefix='efs-put-retry-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=5)
-print('PUT retry: admission inside the budget, one ticket per object across retries, inherited backoff, no expired sends/reprobes, terminal STALE/QUOTA/NET release the ticket PASS')
+print('PUT retry: admission inside the budget, one ticket per object across retries, inherited backoff, no expired sends/reprobes, terminal STALE/QUOTA/NET release the ticket, a BUSY third member completed or the write failed, never degraded (K34) PASS')

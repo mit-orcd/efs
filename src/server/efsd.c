@@ -639,6 +639,12 @@ static void *conn_thread(void *arg)
  * shutdown deadline counts from here. */
 static uint64_t g_stop_signal_ms;
 
+int server_stop_requested(void)
+{
+    return __atomic_load_n(&g_stop_signal_ms, __ATOMIC_ACQUIRE) != 0 ||
+           server_handlers_stopping();
+}
+
 static void sigint_handler(int sig)
 {
     (void)sig;
