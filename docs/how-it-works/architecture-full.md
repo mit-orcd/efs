@@ -1615,6 +1615,15 @@ deferred. Supersedes mandatory cluster files and fixed-membership-only D39/D40.
 prove that an unticketed PUT is refused; a static `make test` check guards
 it. nuc `make test-all` PASS.
 
+[K13 / D31 dead and departing clients](../status/k13-d31-drain-20261024.md):
+**PASS (scoped, unit and in-process) on branch
+`claude/devel-d31-drain-4a341a` (`59a2308b8`), not merged; amd `make
+test-all` FAILs (RDMA, one pool timeout) also fail on the base; live gates
+NOTRUN.** After revocation the group leader drains a dead client's ticket
+streams into the orphan ledger (anchored stream index, DRAIN refused while a
+K14 stage is pending), and a clean unmount revokes its own session. The
+unused RECLAIMING path is gone. New numbers: KV kind 250, Raft tag 250.
+
 [K13 / D31 abandoned-upload collection](../status/k13-d31-collection-20261023.md):
 **PASS (scoped, unit and in-process) on branch `devel-k13d31`, not merged.**
 The group leader deletes a settled abandoned body on every member that holds
@@ -2752,7 +2761,7 @@ positions do not assign an execution order or override the active handoff.
 | proto2 | **W83** · transaction decision records lack safe retirement | metadata lifecycle gap | resolve/drop remove participant records; no decision acknowledgement/GC path found | [evidence and gate](#w83) |
 | proto3 | **W84** · bounded namespace transactions | namespace completeness | Closed for accepted D32 144-participant envelope: distinct EOVERFLOW, prompt atomic refusal diagnostics, mixed boundaries, full64-lane removal/replacement, exact144 PREPARE/COMMIT cold recovery and AMD normal/fault POSIX/GC gates pass; larger-operation protocol deferred | [closure and limits](../status/w84-closure-20261009.md) |
 | storage1 | **W85** · path-hint eviction loses ambiguous PUT retry history | conditional accounting/storage correctness | Closed: ambiguous PUT placement retained in 389a8baf; direct/buffered real lost-ACK collision and two-root physical/quota/restart gates pass | [evidence and gate](#w85) |
-| gc-own | **W86** · durable PUT ticket integration | feature / safe reclamation | metadata ledger, budgeted retained admission and ticket-bound durable publication receipts implemented (`22c8c1f9`, `70daa5a4`); AMD same/cross-group lost replies, leader death, cold replay, collision and revocation pass; default PUT/flush, storage fences and all-member abandoned collection remain staged. **Oct 23: default ticketed PUT/flush with storage fences FIXED on branch `devel-k13`, not merged; the all-member abandoned collection is INCOMPLETE ([evidence](../status/k13-w86-ticket-default-20261023.md))**. **Oct 23: revocation-gated all-member collection of settled abandoned uploads PASS (unit and in-process) on branch `devel-k13d31`, not merged; cluster gate NOTRUN, unsettled tickets of dead clients still open ([evidence](../status/k13-d31-collection-20261023.md)).** | [evidence and gate](#w86) · [D31](#d31--recorded-abandoned-upload-policy) |
+| gc-own | **W86** · durable PUT ticket integration | feature / safe reclamation | metadata ledger, budgeted retained admission and ticket-bound durable publication receipts implemented (`22c8c1f9`, `70daa5a4`); AMD same/cross-group lost replies, leader death, cold replay, collision and revocation pass; default PUT/flush, storage fences and all-member abandoned collection remain staged. **Oct 23: default ticketed PUT/flush with storage fences FIXED on branch `devel-k13`, not merged; the all-member abandoned collection is INCOMPLETE ([evidence](../status/k13-w86-ticket-default-20261023.md))**. **Oct 23: revocation-gated all-member collection of settled abandoned uploads PASS (unit and in-process) on branch `devel-k13d31`, not merged; cluster gate NOTRUN, unsettled tickets of dead clients still open ([evidence](../status/k13-d31-collection-20261023.md)).** **Oct 24: dead and departing clients closed on branch `claude/devel-d31-drain-4a341a` (`59a2308b8`), not merged: revoked-stream drain into the orphan ledger, unmount revokes its own session, RECLAIMING path removed; unit and in-process PASS, amd `make test-all` FAILs are host limits shared with the base; live collection gates NOTRUN ([evidence](../status/k13-d31-drain-20261024.md)).** | [evidence and gate](#w86) · [D31](#d31--recorded-abandoned-upload-policy) |
 | append-load | **W87** · buffered concurrent append loses records under load | correctness investigation | failure recorded in private GC fixture; isolated repeats pass; Oct 22 efs2 exact-oracle attempt (23 rounds, 19,597 records, churn/GC/POSIX load) did not reproduce; full traced acceptance owed | [evidence and gate](#w87) · [Oct 22 attempt](../status/w87-append-oracle-efs2-20261022.md) |
 | replay-span | **W88** · folded span retry resurrects after bounded history eviction | publication/retry correctness | partial — actual cross-group typed cache/host replay preserves peer bytes and cold mappings on AMD direct/TCP; production flush/ticket integration and full replay gates remain open. **Oct 23: FIXED on branch `devel-k13`, not merged: the REPORT path refuses the retry by ticket state, in a unit replay with a negative control and live through the host before and after a cold restart ([evidence](../status/k13-w86-ticket-default-20261023.md))** | [evidence and gate](#w88) · [Oct9 checkpoint](../status/dependency-package-20261009.md#retained-typed-publication-writeback--staged-amd-gated) |
 | measure-fields | **W89** · W23 TSV field merging shifts derived metrics | verification correctness | Closed measurement defect: explicit schema and raw-field identity regressions pass; fresh AMD real-cap/quorum/recovery/cold-value gate passes (276 observations); D30/W23 bounds remain open | [closure and limits](../status/amd-non-rdma-20261010.md#w89) |
@@ -3192,7 +3201,7 @@ This review assigns the missing register identity to that recorded policy; it
 does not create a new approval or independently recover the approving exchange.
 
 **Implementation:** [W86](#w86), pure metadata
-state machine committed in `b3a11877`, staged for integration; production integration and distributed fault gates remain open.
+state machine committed in `b3a11877`, staged for integration; production integration and distributed fault gates remain open. Oct 24: dead clients' unsettled tickets are drained into the orphan ledger after revocation, and a clean unmount revokes its own session ([evidence](../status/k13-d31-drain-20261024.md)).
 Completed global revocation, durable lane/storage rejection floors, all-member
 deletion acknowledgements and replay-floor retirement are required. Age,
 disconnect and missing receipt are not authority. D28 accepts loss of unpublished buffered writes after client death and defers

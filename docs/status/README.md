@@ -61,6 +61,15 @@ deferred. Supersedes mandatory cluster files and fixed-membership-only D39/D40.
 prove that an unticketed PUT is refused; a static `make test` check guards
 it. nuc `make test-all` PASS.
 
+[K13 / D31 dead and departing clients](k13-d31-drain-20261024.md):
+**PASS (scoped, unit and in-process) on branch
+`claude/devel-d31-drain-4a341a` (`59a2308b8`), not merged; amd `make
+test-all` FAILs (RDMA, one pool timeout) also fail on the base; live gates
+NOTRUN.** After revocation the group leader drains a dead client's ticket
+streams into the orphan ledger (anchored stream index, DRAIN refused while a
+K14 stage is pending), and a clean unmount revokes its own session. The
+unused RECLAIMING path is gone. New numbers: KV kind 250, Raft tag 250.
+
 [K13 / D31 abandoned-upload collection](k13-d31-collection-20261023.md):
 **PASS (scoped, unit and in-process) on branch `devel-k13d31`, not merged.**
 The group leader deletes a settled abandoned body on every member that holds
