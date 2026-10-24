@@ -217,11 +217,23 @@ the converged membership.
   is used only for a chunk without a published entry (nothing to read).
 - **New capacity is used by new writes.** New placements use the committed
   member view (`LIST_NODES` returns committed members; the packer and the
-  storage-session fence use the server's committed table). A client sees
-  members at mount; a mounted client keeps its view until remount (live
-  refresh is a remaining increment). In-flight writes keep the nodes their
-  admitted ticket names; all of them stay members (no removal), so their
-  publication authority is unchanged.
+  storage-session fence use the server's committed table). In-flight
+  writes keep the nodes their admitted ticket names; all of them stay
+  members (no removal), so their publication authority is unchanged.
+- **Client view (implemented, [evidence](k33-client-view-20261024.md)).** A
+  client mounts with the committed record of a member
+  (`EFS_MSG_MEMBERSHIP_READ`, wire types 245/246) and refuses to mount when
+  its `LIST_NODES` table contradicts it. While mounted it asks one member
+  (rotating) for its record every second and installs a later revision:
+  same cluster, same formation, the installed members unchanged as its
+  prefix (`include/efs/member_view.h`). New members are appended to the
+  node table and the count is published last; rows are never rewritten.
+  Another cluster, a divergent record or an invalid reply is refused and
+  logged; an older revision (a member that has not learned yet) is
+  ignored. A request for a node id the table lacks wakes the view and waits
+  for one round over every member (at most 2 s). New writes place over the
+  installed members; existing chunks keep their recorded nodes. Peer
+  connections to added members open on demand (TCP, RDMA upgrade).
 
 ## M8 Unreachable members and the other consumers
 
@@ -276,5 +288,6 @@ store started as a seed. No refusal removes a member.
 1. ~~Automatic ids and the positional CLI, M4′ promise formation~~ and
    ~~discovery on the local subnet, explicit seed across subnets~~: built in
    increment 2 (live multi-host and cross-subnet gates NOTRUN).
-2. Live client view refresh on a new revision (mounted clients).
+2. ~~Live client view refresh on a new revision (mounted clients).~~ Done
+   ([evidence](k33-client-view-20261024.md)).
 3. Rebalance (not required), removal (deferred).

@@ -1585,6 +1585,15 @@ batched per Raft group (new tags 90, 91). Counted entries per 1 MiB write:
 what the base fails, and the K14 torn-read gate passes 30/30. **The ior
 easy write gate on orcd-mini is NOTRUN** (parent session).
 
+[K33 live client view refresh](../status/k33-client-view-20261024.md):
+**code gate PASS with host limits (intel1 `make -k test-all` at `8b4cfbe77`,
+exit 0); on branch `claude/devel-k33-client-view-0c8db4`, not merged; live
+addition under client load and RDMA NOTRUN.** A mounted FUSE client reads
+the committed membership record (`MEMBERSHIP_READ`, wire types 245/246),
+installs later revisions without a remount, refuses another cluster or a
+divergent record, places new writes on added members and keeps old data's
+recorded placement.
+
 [K33/W157 automatic formation and node addition](../status/k33-w157-formation-addition-20261023.md):
 **model PASS; implementation merged (`0098e06c4`;
 increment 1, operator node ids; Raft tags renumbered to 92, 93 at merge;
@@ -1595,12 +1604,11 @@ member: a committed membership revision (store tokens, one cluster
 identity), group 2 moves {1,2,3} → {2,3,4} by joint consensus with
 catch-up, later nodes add storage only, old data keeps its recorded
 placement. [Protocol](../status/k33-membership-protocol-20261023.md) (M1–M9).
-Remaining: live client view refresh.
+Live client view refresh: [above](../status/k33-client-view-20261024.md).
 
 [K33/W157 increment 2: automatic node ids, positional CLI, discovery](../status/k33-w157-autoid-discovery-20261024.md):
 **code gate PASS with host limits (xorinox `make test-all` at `53080d744`:
-436 commands, 0 FAIL, 13 NOTRUN); model PASS; branch
-`claude/devel-k33-inc2-e4299e`, not merged; live multi-host, cross-subnet,
+436 commands, 0 FAIL, 13 NOTRUN); model PASS; merged into devel; live multi-host, cross-subnet,
 RDMA and orcd-mini gates NOTRUN; needs a fresh format.** `efsd ADDR:PORT
 STORAGE` creates a cluster or restarts; `efsd --join [SEED] STORAGE` joins
 through a member or a cluster found on the local subnet; no node id (the

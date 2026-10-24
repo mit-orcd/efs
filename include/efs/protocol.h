@@ -254,6 +254,19 @@ enum efs_msg_type {
      * copy remains, durably. */
     EFS_MSG_PUT_ORPHAN_DELETE = 177,
     EFS_MSG_PUT_ORPHAN_DELETE_REPLY = 178,
+    /* K33 live client view: this node's committed membership record, for a
+     * mounted client to install a later revision without a remount
+     * (efs/member_view.h). No request payload; reply
+     * struct efs_msg_membership_reply sent as EFS_MEMBERSHIP_REPLY_HDR + len
+     * bytes; rc EFS_ERR_UNFORMED before this node learned a formation. */
+    EFS_MSG_MEMBERSHIP_READ = 245,
+    EFS_MSG_MEMBERSHIP_READ_REPLY = 246,
+};
+#define EFS_MEMBERSHIP_REPLY_HDR 8u
+struct efs_msg_membership_reply {
+    int32_t rc;
+    uint32_t len;                            /* record bytes that follow */
+    uint8_t record[EFS_MEMBERSHIP_MAX_LEN];  /* efs_membership_encode */
 };
 #define EFS_PUT_ORPHAN_DELETE_LEN (8u + 216u)
 struct efs_msg_put_orphan_delete_reply { int32_t rc; };

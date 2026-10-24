@@ -5226,6 +5226,7 @@ static void efs_fuse_destroy(void *userdata)
     }
     pthread_mutex_unlock(&g_find_res_mu);
     efs_open_retry_stop();
+    efs_client_view_stop();
     efs_client_shutdown();
 }
 
@@ -5647,6 +5648,7 @@ static void efs_fuse_init(void *userdata, struct fuse_conn_info *conn)
     (void)userdata;
     efs_dcache_init();
     efs_open_retry_start();
+    (void)efs_client_view_start();
     /* Timeouts are per lookup/getattr reply (always 0). There is no
      * fuse_config on the low-level API. */
     if (conn) {
@@ -8039,6 +8041,10 @@ int main(int argc, char **argv)
                 efs_strerror(rc));
         return 1;
     }
+    /* K33: the committed record this mount starts from; the serving process
+     * installs later revisions without a remount (efs_client_view_start). */
+    if (efs_client_view_mount() != EFS_OK)
+        return 1;
     /* PUTs carry export_id; do not leave the hardcoded 1 if meta says otherwise. */
     g_client.export_id = g_client.export.id ? g_client.export.id : 1;
     if (g_client.export.name[0] &&

@@ -4,6 +4,7 @@
 #include "efs/protocol.h"
 #include "efs/network.h"
 #include "efs/rdma.h"
+#include "efs/member_view.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -138,11 +139,353 @@ static int node_index_for_id(efs_node_id_t node_id)
 {
     if (node_id == 0)
         return -1;
-    for (uint32_t i = 0; i < g_client.node_count; i++) {
+    /* K33: the live view appends rows and then publishes the count with
+     * release order (efs_member_view_publish); rows below it never change. */
+    uint32_t n = __atomic_load_n(&g_client.node_count, __ATOMIC_ACQUIRE);
+    for (uint32_t i = 0; i < n; i++) {
         if (g_client.nodes[i].id == node_id)
             return (int)i;
     }
     return -1;
+}
+
+/* K33 live client view (efs/member_view.h): the mount installs the committed
+ * record it mounted with; one thread asks a member for its record every
+ * EFS_VIEW_POLL_MS (rotating over the members) and installs a later
+ * revision. A request for a node id the table lacks (a chunk another client
+ * wrote on an added member) wakes it and waits up to EFS_VIEW_AWAIT_MS for
+ * a round that asks every member. Peer connections to added members then
+ * open on demand through the ordinary pool (TCP, RDMA upgrade). */
+#define EFS_VIEW_POLL_MS   1000 /* EFS_CLIENT_VIEW_POLL_MS overrides (50..60000) */
+#define EFS_VIEW_AWAIT_MS  2000
+#define EFS_VIEW_MISS_MS   1000
+#define EFS_VIEW_REFUSE_LOG_MS 30000
+
+static struct {
+    pthread_mutex_t mu;
+    pthread_cond_t cv;
+    struct efs_membership cur; /* the installed record */
+    int have, running, stop, kick;
+    uint64_t rounds;           /* completed poll rounds */
+    uint32_t next;             /* rotating member index */
+    int poll_ms;
+    int64_t miss_until[EFS_MAX_NODES + 1];
+    int last_refusal;
+    efs_node_id_t last_refusal_node;
+    int64_t last_refusal_ms;
+    uint64_t installs, refusals;
+    pthread_t th;
+} g_view = {.mu = PTHREAD_MUTEX_INITIALIZER, .cv = PTHREAD_COND_INITIALIZER};
+static __thread int view_thread_self;
+
+static int view_reply(int fd, struct efs_conn *c, struct efs_membership *out)
+{
+    uint8_t type = 0;
+    void *payload = NULL;
+    uint32_t len = 0;
+    int rc;
+    if (c)
+        rc = efs_conn_send_msg(c, EFS_MSG_MEMBERSHIP_READ, NULL, 0) == 0 &&
+             efs_conn_recv_msg(c, &type, &payload, &len) == 0;
+    else
+        rc = efs_send_msg(fd, EFS_MSG_MEMBERSHIP_READ, NULL, 0) == 0 &&
+             efs_recv_msg(fd, &type, &payload, &len) == 0;
+    if (!rc) {
+        free(payload);
+        return EFS_ERR_NET;
+    }
+    rc = type == EFS_MSG_MEMBERSHIP_READ_REPLY ? efs_member_view_parse_reply(payload, len, out)
+                                               : EFS_ERR_PROTO;
+    free(payload);
+    return rc;
+}
+
+static void view_note_local(uint32_t from, uint32_t to)
+{
+    if (g_client.local_node_id)
+        return;
+    for (uint32_t i = from; i < to; i++)
+        if (resolve_local(g_client.nodes[i].addr)) {
+            g_client.local_node_id = g_client.nodes[i].id;
+            return;
+        }
+}
+
+uint32_t efs_client_view_revision(void)
+{
+    pthread_mutex_lock(&g_view.mu);
+    uint32_t r = g_view.have ? efs_member_view_revision(&g_view.cur) : 0;
+    pthread_mutex_unlock(&g_view.mu);
+    return r;
+}
+
+void efs_client_view_counters(uint64_t *installs, uint64_t *refusals)
+{
+    pthread_mutex_lock(&g_view.mu);
+    if (installs)
+        *installs = g_view.installs;
+    if (refusals)
+        *refusals = g_view.refusals;
+    pthread_mutex_unlock(&g_view.mu);
+}
+
+int efs_client_view_mount(void)
+{
+    char err[256] = "";
+    int last = EFS_ERR_NET;
+    for (int attempt = 0; attempt < 40; attempt++) {
+        uint32_t n = __atomic_load_n(&g_client.node_count, __ATOMIC_ACQUIRE);
+        for (uint32_t i = 0; i < n; i++) {
+            struct efs_membership m;
+            int fd = efs_connect_declared(g_client.nodes[i].addr, g_client.nodes[i].port);
+            if (fd < 0)
+                continue;
+            efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+            efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+            last = view_reply(fd, NULL, &m);
+            close(fd);
+            if (last != EFS_OK)
+                continue;
+            pthread_mutex_lock(&g_client.lock);
+            uint32_t old = g_client.node_count;
+            last = efs_member_view_publish(g_client.nodes, &g_client.node_count, &m, err,
+                                           sizeof(err));
+            uint32_t now = g_client.node_count;
+            pthread_mutex_unlock(&g_client.lock);
+            if (last != EFS_OK) {
+                fprintf(stderr, "membership view: refused to mount: the node table does not "
+                        "match the committed record of node %u: %s\n", g_client.nodes[i].id,
+                        err);
+                return last;
+            }
+            view_note_local(old, now);
+            pthread_mutex_lock(&g_view.mu);
+            g_view.cur = m;
+            g_view.have = 1;
+            pthread_mutex_unlock(&g_view.mu);
+            printf("membership view: revision %u, %u members, cluster %016llx (from node %u)\n",
+                   efs_member_view_revision(&m), m.count, (unsigned long long)m.cluster,
+                   g_client.nodes[i].id);
+            return EFS_OK;
+        }
+        usleep(250000);
+    }
+    fprintf(stderr, "membership view: no member returned the committed membership record "
+            "(rc=%d)\n", last);
+    return last;
+}
+
+/* g_view.mu held. Log a refusal once per (verdict, node) and then at most
+ * every EFS_VIEW_REFUSE_LOG_MS. */
+static void view_refused_locked(int verdict, efs_node_id_t from, const struct efs_membership *m,
+                                const char *detail)
+{
+    int64_t now = monotonic_ms();
+    g_view.refusals++;
+    if (verdict == g_view.last_refusal && from == g_view.last_refusal_node &&
+        now - g_view.last_refusal_ms < EFS_VIEW_REFUSE_LOG_MS)
+        return;
+    g_view.last_refusal = verdict;
+    g_view.last_refusal_node = from;
+    g_view.last_refusal_ms = now;
+    fprintf(stderr, "membership view: refused the record from node %u: %s (its revision %u, "
+            "%u members, cluster %016llx; installed revision %u, %u members, cluster %016llx)"
+            "%s%s\n", from, efs_view_verdict_name(verdict), efs_member_view_revision(m),
+            m->count, (unsigned long long)m->cluster, efs_member_view_revision(&g_view.cur),
+            g_view.cur.count, (unsigned long long)g_view.cur.cluster, detail ? ": " : "",
+            detail ? detail : "");
+}
+
+/* Judge one member's record and install it when it is a later revision.
+ * 1 installed, 0 otherwise. Only the view thread installs after the mount,
+ * so g_view.cur cannot change between the judgement and the install. The
+ * table is extended without g_client.lock: rows below the old count are not
+ * written and the count is published last (a FUSE thread that holds the
+ * lock and waits in view_await would otherwise stall the install). */
+static int view_consider(efs_node_id_t from, const struct efs_membership *m)
+{
+    char err[256] = "";
+    pthread_mutex_lock(&g_view.mu);
+    int verdict = efs_member_view_judge(&g_view.cur, m);
+    uint32_t r0 = efs_member_view_revision(&g_view.cur);
+    if (verdict != EFS_VIEW_ADVANCE) {
+        /* An older revision is a member that has not learned yet: expected
+         * for a moment after a commit, so not a refusal. */
+        if (verdict != EFS_VIEW_SAME && verdict != EFS_VIEW_OLDER)
+            view_refused_locked(verdict, from, m, NULL);
+        pthread_mutex_unlock(&g_view.mu);
+        return 0;
+    }
+    pthread_mutex_unlock(&g_view.mu);
+    uint32_t old = __atomic_load_n(&g_client.node_count, __ATOMIC_ACQUIRE);
+    int rc = efs_member_view_publish(g_client.nodes, &g_client.node_count, m, err, sizeof(err));
+    uint32_t now = __atomic_load_n(&g_client.node_count, __ATOMIC_ACQUIRE);
+    pthread_mutex_lock(&g_view.mu);
+    if (rc != EFS_OK) {
+        view_refused_locked(EFS_VIEW_DIVERGENT, from, m, err);
+        pthread_mutex_unlock(&g_view.mu);
+        return 0;
+    }
+    g_view.cur = *m;
+    g_view.installs++;
+    pthread_cond_broadcast(&g_view.cv);
+    pthread_mutex_unlock(&g_view.mu);
+    view_note_local(old, now);
+    for (uint32_t i = old; i < now; i++)
+        printf("membership view: revision %u -> %u from node %u: added member %u at %s:%u "
+               "(%u members, no remount)\n", r0, efs_member_view_revision(m), from,
+               g_client.nodes[i].id, g_client.nodes[i].addr, g_client.nodes[i].port, now);
+    fflush(stdout);
+    return 1;
+}
+
+/* One round: ask the next member (all members when all is set) until one
+ * gives a later revision. */
+static void view_round(int all)
+{
+    uint32_t n = __atomic_load_n(&g_client.node_count, __ATOMIC_ACQUIRE);
+    for (uint32_t k = 0; k < n; k++) {
+        uint32_t idx;
+        pthread_mutex_lock(&g_view.mu);
+        idx = g_view.next++ % n;
+        pthread_mutex_unlock(&g_view.mu);
+        efs_node_id_t id = g_client.nodes[idx].id;
+        if (efs_client_node_is_down(id))
+            continue;
+        struct efs_conn *c = efs_client_conn_get(id);
+        if (!c)
+            continue;
+        struct efs_membership m;
+        int rc = view_reply(-1, c, &m);
+        if (rc == EFS_ERR_NET || rc == EFS_ERR_PROTO || rc == EFS_ERR_DECODE)
+            efs_client_conn_drop(id, c);
+        else
+            efs_client_conn_release(id, c);
+        if (rc == EFS_OK) {
+            if (view_consider(id, &m) || !all)
+                return;
+        } else if (rc != EFS_ERR_UNFORMED) {
+            pthread_mutex_lock(&g_view.mu);
+            if (rc == EFS_ERR_DECODE || rc == EFS_ERR_UNSUPPORTED)
+                view_refused_locked(EFS_VIEW_INVALID, id, &g_view.cur, "undecodable reply");
+            pthread_mutex_unlock(&g_view.mu);
+        }
+        if (!all)
+            return;
+    }
+}
+
+static void *view_thread(void *arg)
+{
+    (void)arg;
+    view_thread_self = 1;
+    pthread_mutex_lock(&g_view.mu);
+    while (!g_view.stop) {
+        if (!g_view.kick) {
+            struct timespec ts;
+            clock_gettime(CLOCK_REALTIME, &ts);
+            ts.tv_sec += g_view.poll_ms / 1000;
+            ts.tv_nsec += (long)(g_view.poll_ms % 1000) * 1000000;
+            ts.tv_sec += ts.tv_nsec / 1000000000;
+            ts.tv_nsec %= 1000000000;
+            pthread_cond_timedwait(&g_view.cv, &g_view.mu, &ts);
+            if (g_view.stop)
+                break;
+        }
+        int all = g_view.kick;
+        g_view.kick = 0;
+        pthread_mutex_unlock(&g_view.mu);
+        view_round(all);
+        pthread_mutex_lock(&g_view.mu);
+        g_view.rounds++;
+        pthread_cond_broadcast(&g_view.cv);
+    }
+    pthread_mutex_unlock(&g_view.mu);
+    return NULL;
+}
+
+int efs_client_view_start(void)
+{
+    pthread_mutex_lock(&g_view.mu);
+    if (!g_view.have || g_view.running) {
+        pthread_mutex_unlock(&g_view.mu);
+        return g_view.have ? EFS_OK : EFS_ERR_INVAL;
+    }
+    g_view.stop = 0;
+    g_view.poll_ms = EFS_VIEW_POLL_MS;
+    const char *pe = getenv("EFS_CLIENT_VIEW_POLL_MS");
+    if (pe && atoi(pe) >= 50 && atoi(pe) <= 60000)
+        g_view.poll_ms = atoi(pe);
+    if (pthread_create(&g_view.th, NULL, view_thread, NULL) != 0) {
+        pthread_mutex_unlock(&g_view.mu);
+        fprintf(stderr, "membership view: refresh thread not started; members added after "
+                "this mount are used only after a remount\n");
+        return EFS_ERR_NOMEM;
+    }
+    g_view.running = 1;
+    pthread_mutex_unlock(&g_view.mu);
+    return EFS_OK;
+}
+
+void efs_client_view_stop(void)
+{
+    pthread_mutex_lock(&g_view.mu);
+    if (!g_view.running) {
+        pthread_mutex_unlock(&g_view.mu);
+        return;
+    }
+    g_view.stop = 1;
+    pthread_cond_broadcast(&g_view.cv);
+    pthread_mutex_unlock(&g_view.mu);
+    pthread_join(g_view.th, NULL);
+    pthread_mutex_lock(&g_view.mu);
+    g_view.running = 0;
+    pthread_cond_broadcast(&g_view.cv);
+    pthread_mutex_unlock(&g_view.mu);
+}
+
+/* A node id the table lacks: wake the view thread and wait (bounded by the
+ * caller's RPC deadline) for a round over every member that started after
+ * this call. 1 when the id is a member now. */
+static int view_await(efs_node_id_t id)
+{
+    if (id == 0 || id > EFS_MAX_NODES || view_thread_self)
+        return 0;
+    int64_t now = monotonic_ms(), end = now + EFS_VIEW_AWAIT_MS;
+    uint64_t outer = efs_client_rpc_deadline_ms();
+    if (outer && (int64_t)outer < end)
+        end = (int64_t)outer;
+    pthread_mutex_lock(&g_view.mu);
+    if (!g_view.running || g_view.stop || now < g_view.miss_until[id]) {
+        pthread_mutex_unlock(&g_view.mu);
+        return 0;
+    }
+    uint64_t want = g_view.rounds + 2;
+    g_view.kick = 1;
+    pthread_cond_broadcast(&g_view.cv);
+    int found = 0;
+    while (!(found = node_index_for_id(id) >= 0) && g_view.running && !g_view.stop &&
+           g_view.rounds < want && (now = monotonic_ms()) < end) {
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+        int64_t w = end - now > 100 ? 100 : end - now;
+        ts.tv_nsec += (long)w * 1000000;
+        ts.tv_sec += ts.tv_nsec / 1000000000;
+        ts.tv_nsec %= 1000000000;
+        pthread_cond_timedwait(&g_view.cv, &g_view.mu, &ts);
+    }
+    if (!found)
+        g_view.miss_until[id] = monotonic_ms() + EFS_VIEW_MISS_MS;
+    pthread_mutex_unlock(&g_view.mu);
+    return found;
+}
+
+static int node_index_or_await(efs_node_id_t id)
+{
+    int idx = node_index_for_id(id);
+    if (idx < 0 && view_await(id))
+        idx = node_index_for_id(id);
+    return idx;
 }
 
 void efs_client_node_note_ok(efs_node_id_t node_id)
@@ -158,7 +501,7 @@ void efs_client_node_note_ok(efs_node_id_t node_id)
 
 int efs_client_node_is_down(efs_node_id_t node_id)
 {
-    int idx = node_index_for_id(node_id);
+    int idx = node_index_or_await(node_id);
     if (idx < 0)
         return 1;
     pthread_mutex_lock(&g_client.conn_lock[idx]);
@@ -328,7 +671,7 @@ static void node_probe_maybe_start(int idx, int64_t now)
 
 struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
 {
-    int idx = node_index_for_id(node_id);
+    int idx = node_index_or_await(node_id);
     if (idx < 0)
         return NULL;
     int n = pool_size();

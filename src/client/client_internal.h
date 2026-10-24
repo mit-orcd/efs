@@ -728,6 +728,16 @@ void efs_client_init_nodes(struct efs_client *c, const char *node_list[EFS_MAX_N
 
 /* Discover the full cluster membership by asking one server. Returns 0 on success. */
 int efs_client_discover_nodes(struct efs_client *c, const char *host, uint16_t port);
+/* K33 live client view (efs/member_view.h). view_mount reads the committed
+ * record from a member before the mount serves, checks the node table
+ * against it and adds members the table lacks (fail: refuse the mount);
+ * view_start runs the refresh thread in the serving process; view_stop ends
+ * it. view_revision is the installed revision (0 none). */
+int efs_client_view_mount(void);
+int efs_client_view_start(void);
+void efs_client_view_stop(void);
+uint32_t efs_client_view_revision(void);
+void efs_client_view_counters(uint64_t *installs, uint64_t *refusals);
 
 /* Borrow a live conn for node_id (1-based). Blocks until a pool slot is
  * free. Caller must efs_client_conn_release(node_id, conn) or _drop(...). */

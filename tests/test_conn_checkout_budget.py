@@ -22,6 +22,8 @@ static int64_t monotonic_ms(void) {return real_ms()+__atomic_load_n(&advance,__A
 uint64_t efs_client_rpc_deadline_ms(void) {return deadline;}
 void efs_client_rpc_set_deadline_ms(uint64_t d) {deadline=d;}
 static int node_index_for_id(efs_node_id_t id) {assert(id==1);return 0;}
+/* K33 live view: an unknown id waits for the view; id 1 is always known here. */
+static int node_index_or_await(efs_node_id_t id) {return node_index_for_id(id);}
 static int pool_size(void) {return 1;}
 static int conn_fd_is_dead(struct efs_conn *c) {(void)c;return 0;}
 int efs_connect_tcp(const char *h,uint16_t p) {(void)h;(void)p;assert(late && deadline && deadline<= (uint64_t)monotonic_ms()+5000);if(late!=3 && late!=5)__atomic_fetch_add(&advance,late==4?6000:2000,__ATOMIC_RELAXED);errno=connect_errno;return late==1 || late==5?42:-1;}

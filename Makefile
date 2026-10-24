@@ -93,7 +93,7 @@ COMMON_SRCS = src/meta/append_plan.c $(COMMON_DIR)/publication.c $(COMMON_DIR)/p
               src/raft/raft_mem.c \
               src/raft/raft_disk.c \
               src/raft/raft_log.c \
-              $(COMMON_DIR)/placement.c $(COMMON_DIR)/membership.c \
+              $(COMMON_DIR)/placement.c $(COMMON_DIR)/membership.c $(COMMON_DIR)/member_view.c \
               $(COMMON_DIR)/checksum.c \
               $(COMMON_DIR)/network.c \
               $(COMMON_DIR)/rdma.c \
@@ -119,6 +119,8 @@ TEST_BINS = tests/test_rdma_segmented tests/test_expiry tests/test_query_policy 
 TEST_SRCS += tests/test_kv_reader_gate.c
 TEST_SRCS += tests/test_membership.c
 TEST_BINS += tests/test_membership
+TEST_SRCS += tests/test_member_view.c
+TEST_BINS += tests/test_member_view
 TEST_SRCS += tests/test_directory_sync_group.c
 TEST_SRCS += tests/test_frag_record.c tests/test_small_segment.c tests/test_packed_segment.c tests/test_pack_ledger.c tests/test_pack_ledger_recovery.c tests/test_pack_switch.c tests/test_packed_reader.c tests/test_pack_validate_once.c
 TEST_BINS += tests/test_frag_record tests/test_small_segment tests/test_packed_segment tests/test_pack_ledger tests/test_pack_ledger_recovery tests/test_pack_switch tests/test_packed_reader tests/test_pack_validate_once
@@ -665,6 +667,7 @@ test: all $(TEST_SPECIAL_BINS)
 	./tests/test_kv_reader_gate
 	./tests/test_placement
 	./tests/test_membership
+	./tests/test_member_view
 	./tests/test_lock
 	./tests/test_stage_evict
 	./tests/test_conn_fd
@@ -970,6 +973,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_w153_formation.py
 	python3 tests/test_k33_growth.py
 	python3 tests/test_k33_autoid.py
+	python3 tests/test_k33_client_view.py
 	python3 tests/test_client_processes.py
 	python3 tests/test_shutdown_stuck_worker.py
 	./tests/test_reclaim

@@ -786,6 +786,25 @@ void server_handle_conn(struct efs_conn *conn)
             free(reply);
             break;
         }
+        case EFS_MSG_MEMBERSHIP_READ: {
+            /* K33 live client view: the committed record this node holds
+             * (never the HELLO table). The client judges and installs it. */
+            struct efs_msg_membership_reply *mr = calloc(1, sizeof(*mr));
+            struct efs_membership mb;
+            size_t mlen = 0;
+            if (!mr)
+                break;
+            if (!server_membership_get(&mb))
+                mr->rc = EFS_ERR_UNFORMED;
+            else if (efs_membership_encode(&mb, mr->record, sizeof(mr->record), &mlen) != EFS_OK)
+                mr->rc = EFS_ERR_INVAL;
+            else
+                mr->len = (uint32_t)mlen;
+            efs_conn_send_msg(conn, EFS_MSG_MEMBERSHIP_READ_REPLY, mr,
+                              EFS_MEMBERSHIP_REPLY_HDR + mr->len);
+            free(mr);
+            break;
+        }
         case EFS_MSG_STATUS: {
             pthread_mutex_lock(&g_server->lock);
             struct efs_msg_status_reply reply;
