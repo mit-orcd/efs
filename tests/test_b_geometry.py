@@ -35,7 +35,8 @@ build); EFS_B_ARTIFACTS=DIR keeps the driver's JSON results there.
 import errno, json, os, re, shutil, sys, tempfile, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from k33_daemons import Cluster as _Cluster, Mount, EFSD, MGMT, HOST, fuse_ok, mgmt as _mgmt, payload  # noqa: E402
+from k33_daemons import (Cluster as _Cluster, Mount, EFSD, MGMT, HOST, fuse_ok, mgmt as _mgmt,  # noqa: E402
+                         payload, voters_ok)
 
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root / 'scripts'))
@@ -239,6 +240,9 @@ def grow_phase():
         for i in range(1, n):
             wait_formed(c, i, n)
         assert c.node_id(n) == n, c.node_id(n)
+        # Group 2 moves to {2,3,4} by joint consensus after the fourth
+        # member; the driver records the settled voter sets.
+        c.wait_voters(list(range(1, n + 1)), lambda i, v: voters_ok(i, v, n), timeout=90)
         wait_mount(m1, rf'membership view: revision \d+ -> \d+ from node \d+: added member {n} at '
                    rf'{HOST}:{c.ports[n]} \({n} members, no remount\)')
         mn = Mount(c, n, f'mnt-{n}')
