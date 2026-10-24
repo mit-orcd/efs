@@ -131,7 +131,8 @@ try:
     f3 = (out1 / 'f3-row.md').read_text()
     assert '| Placement/capacity and decode | FAIL (stub-pass PASS, stub-fail FAIL' in f3, f3
     assert '| Full payloads + orderly restart | NOTRUN (no gate selected in this run' in f3
-    assert '| Scale/progress evidence (E4, D4) | NOTRUN (not covered by this driver' in f3
+    # D4 is a gate now (d4-progress); this run did not select it.
+    assert '| Scale/progress evidence (E4, D4) | NOTRUN (no gate selected in this run' in f3
 
     # 2. The destructive stub runs once allowed and the step is listed.
     out2 = tmp / 'out2'

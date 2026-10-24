@@ -969,6 +969,11 @@ static int cmd_pack_compact(int argc, char **argv)
                    (unsigned long long)x->segments, (unsigned long long)(x->live_bytes >> 10),
                    (unsigned long long)(x->dead_bytes >> 10), (unsigned long long)x->holes,
                    (unsigned long long)x->small, (unsigned long long)x->compacted_total);
+            for (int g = 0; g < 2; g++)
+                if (x->led_groups & (1u << g))
+                    printf("  backlog group=%d candidates=%llu lag_ms=%llu counted_ms_ago=%llu\n", g * 2,
+                           (unsigned long long)x->backlog[g], (unsigned long long)x->lag_ms[g],
+                           (unsigned long long)x->backlog_age_ms[g]);
         } else {
             printf("node %u %s:%u: leads no group\n", n->id, n->addr, n->port);
         }
@@ -1049,10 +1054,11 @@ static int cmd_raft_status(int argc, char **argv)
            r->ngroups);
     /* K22/W23: the node's memory/lag bound. */
     printf("  bound kv_mt_bytes=%llu kv_mem_budget=%llu kv_l0_bytes=%llu kv_l0_cap=%llu "
-           "kv_apply_deferred=%llu admit_busy=%llu\n",
+           "kv_apply_deferred=%llu admit_busy=%llu kv_flushes=%llu kv_compactions=%llu\n",
            (unsigned long long)r->kv_mt_bytes, (unsigned long long)r->kv_mem_budget,
            (unsigned long long)r->kv_l0_bytes, (unsigned long long)r->kv_l0_cap,
-           (unsigned long long)r->kv_apply_deferred, (unsigned long long)r->admit_busy);
+           (unsigned long long)r->kv_apply_deferred, (unsigned long long)r->admit_busy,
+           (unsigned long long)r->kv_flushes, (unsigned long long)r->kv_compactions);
     /* Leader placement as this node sees it (node ids; 0 = unknown). */
     printf("  leaders");
     for (i = 0; i < r->ngroups && i < EFS_RAFT_HOST_MAX_GROUPS; i++)

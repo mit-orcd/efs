@@ -7,6 +7,9 @@ import subprocess
 import tempfile
 root=Path(__file__).resolve().parents[1]
 s=Path(os.environ.get('EFS_RAFT_HOST_SOURCE',root/'src/server/raft_host.c')).read_text()
+refresh=(root/'src/server/query_refresh.h').read_text()
+unsettled=refresh[refresh.index('static inline int efs_query_refresh_unsettled('):]
+unsettled=unsettled[:unsettled.index('\n}')+2]
 def fn(name):
     starts=['static int '+name+'(', 'int '+name+'(']
     a=next(s.index(x) for x in starts if x in s)
@@ -24,6 +27,7 @@ code=r"""
 #define EFS_ERR_BUSY -13
 #define EFS_ERR_NOT_PRIMARY -15
 #define EFS_ERR_NODATA -21
+#define EFS_ERR_UNFORMED -29
 struct efs_raft {int leader;uint32_t voters;};
 struct host_group {struct efs_raft *r;uint32_t voters;};
 struct efs_server_query_view {void *catalog;};
@@ -47,7 +51,7 @@ static int host_read_index_pair(struct efs_raft_host*h,uint8_t a,uint8_t b,int *
 {assert(a==0&&b==2);(void)hint;barriers++;if(lose_capability)h->capable=0;return barrier_rc;}
 static int consume(void *ctx,const struct efs_server_query_view*v,int error)
 {assert(ctx==g_host&&v==&g_host->query_view&&!error);consumed++;return 0;}
-"""+fn('host_pick_peer')+s[s.index('static uint32_t host_route_voters('):s.index('\n}',s.index('static uint32_t host_route_voters('))+2]+fn('host_leader_cover_pick')+fn('server_raft_host_query_read')+r"""
+"""+unsettled+fn('host_pick_peer')+s[s.index('static uint32_t host_route_voters('):s.index('\n}',s.index('static uint32_t host_route_voters('))+2]+fn('host_leader_cover_pick')+fn('server_raft_host_query_read')+r"""
 int main(void){struct efs_raft r[2]={{2,7},{3,14}};
  struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.query_lock=PTHREAD_RWLOCK_INITIALIZER,.n=4,.raft_id=0,.groups={{&r[0],0},{&r[1],0}},.query_view={(void*)1}};
  g_host=&h;uint16_t target=0;uint8_t need[2]={0,2};
@@ -76,11 +80,13 @@ int main(void){struct efs_raft r[2]={{2,7},{3,14}};
  assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_IO&&consumed==1);
  h.query_error=EFS_ERR_BUSY; /* transient refresh refusal: still not indexed yet */
  assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_NODATA&&consumed==1);
+ h.query_error=EFS_ERR_UNFORMED; /* D4: first capture before formation, same */
+ assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_NODATA&&consumed==1);
  h.query_error=0;h.query_view.catalog=(void*)1;
  barrier_rc=0;lose_capability=1;
  assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_BUSY&&consumed==1);
  pthread_rwlock_destroy(&h.query_lock);pthread_mutex_destroy(&h.mu);
- puts("query target: actual dual leader preference, single/unknown/removed fallback, capable local serve, unpublished catalog NODATA and fresh refusal PASS");
+ puts("query target: actual dual leader preference, single/unknown/removed fallback, capable local serve, unpublished catalog NODATA (BUSY/UNFORMED refresh too) and fresh refusal PASS");
 }
 """
 with tempfile.TemporaryDirectory(prefix='efs-query-route-') as d:

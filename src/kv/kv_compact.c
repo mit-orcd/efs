@@ -208,6 +208,8 @@ int kv_flush_locked(struct kv_lsm *l)
         lsm_view_reclaim(l, yielded);
     }
     t_pub = mono_ms() - t_pub;
+    if (rc == EFS_OK)
+        __atomic_add_fetch(&l->flushes, 1, __ATOMIC_RELAXED);
     if (t_io + t_pub >= 100)
         fprintf(stderr, "kv-flush: files=%u io_ms=%llu manifest_ms=%llu "
                 "view_yielded=%d rc=%d\n", nneu, (unsigned long long)t_io,
@@ -813,6 +815,7 @@ int kv_compact_locked(struct kv_lsm *l, int async)
         kv_seg_close(doomed[i].seg);
     }
     kv_sync_dir(l->dir);
+    __atomic_add_fetch(&l->compactions, 1, __ATOMIC_RELAXED);
     fprintf(stderr, "kv-compact: end bytes=%llu ms=%llu l0=%u l1=%u rc=0\n",
             (unsigned long long)c.bytes, (unsigned long long)(mono_ms() - t0),
             l->n_l0, l->n_l1);

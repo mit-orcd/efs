@@ -1,4 +1,5 @@
 #include "server_internal.h"
+#include "dest_fault.h"
 #include "efs/put_upload.h"
 #include "efs/store.h"
 #include "efs/checksum.h"
@@ -105,6 +106,7 @@ static int put_upload(struct efsd_server *s,const uint8_t *body,uint32_t bytes,
      * never holds one of its two fragments there. */
     if(server_stop_requested())return put_refuse_stopping(&ticket,fi);
     if(put_test_busy())return EFS_ERR_BUSY;
+    if((rc=server_test_dest_fault("put"))!=EFS_OK)return rc;
 
     uint8_t query[2+EFS_PUT_TICKET_WIRE_LEN];
     query[0]=efs_raft_shard_group(efs_kv_lane_shard(ticket.ino,ticket.ci%EFS_META_LANES));

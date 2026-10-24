@@ -84,6 +84,13 @@ int main(void)
      * after about a second, not a full interval; failed builds keep backoff. */
     assert(efs_query_refresh_initial_retry(EFS_ERR_BUSY,1));
     assert(efs_query_refresh_initial_retry(EFS_ERR_NOT_PRIMARY,1));
+    /* D4: a seed whose cluster has not formed yet retries its first
+     * catalog promptly, and that refusal is ordinary, not a build failure. */
+    assert(efs_query_refresh_initial_retry(EFS_ERR_UNFORMED,1));
+    assert(!efs_query_refresh_initial_retry(EFS_ERR_UNFORMED,0));
+    assert(efs_query_refresh_unsettled(EFS_ERR_UNFORMED));
+    assert(!efs_query_refresh_unsettled(EFS_ERR_IO));
+    assert(efs_query_refresh_failures(3,EFS_ERR_UNFORMED,EFS_ERR_UNFORMED)==1);
     assert(!efs_query_refresh_initial_retry(EFS_ERR_BUSY,0));
     assert(!efs_query_refresh_initial_retry(EFS_ERR_IO,1));
     assert(!efs_query_refresh_due_reason(1999,0,1000,0,1,1,EFS_QUERY_RETRY_INITIAL,256,60000));

@@ -502,6 +502,7 @@ test: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_applied_cursor.py
 	python3 tests/test_tiny_fragment_audit.py
 	python3 tests/test_b_checks_driver.py
+	python3 tests/test_d4_driver.py
 	python3 tests/test_read_recorded_nodes.py
 	python3 tests/test_tmpdir_hygiene.py
 	python3 tests/test_pressure_cohort.py
@@ -851,7 +852,7 @@ clean:
 	rm -f src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_ns.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o src/sim/sim_disk.o src/sim/opid.o
 	rm -f $(LIB) efsd efs-fuse efs-bench efs-mgmt blake3-bench
 	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim tests/faults/test_kv_compact_crash tests/faults/efsd tests/nodirect_fs
-	rm -rf tests/faults/server
+	rm -rf tests/faults/server tests/faults/kv
 	rm -f $(TEST_BINS) tests/test_expiry tests/test_put_storage_fence tests/test_put_upload_server tests/test_put_orphan_server
 	rm -f tests/test_data_commit tests/measure/*_smoke tests/measure/bench_query_disk_scale tests/measure/bench_query_disk_concurrent
 	rm -f .build_id.stamp
@@ -950,15 +951,22 @@ tests/faults/test_kv_compact_crash: tests/faults/test_kv_compact_crash.c src/kv/
 # Daemon tests with server fault hooks: K1/R4 and T2 shutdown
 # (EFS_FAULT_SHUTDOWN_*), the K33 interruption and GC hooks
 # (EFS_FAULT_MEMBER_EXIT, EFS_FAULT_GC_DISABLE) and packer crash points
-# (EFS_FAULT_PACK_CRASH). The hooks exist only behind EFS_FAULTS; this daemon
-# compiles every server source with the gate on, so ./efsd never carries
-# them. Named efsd: the stop script only signals an efsd.
+# (EFS_FAULT_PACK_CRASH), the B6 unavailable destination
+# (EFS_FAULT_DEST_FILE) and the KV size hooks (EFS_FAULT_MEMTABLE_BYTES,
+# EFS_FAULT_L0_BYTES, D4). The hooks exist only behind EFS_FAULTS; this daemon
+# compiles every server source and the KV LSM and compactor with the gate on
+# (linked ahead of $(LIB), so the archive's plain copies are not used), so
+# ./efsd never carries them. Named efsd: the stop script only signals an efsd.
 FAULT_SERVER_OBJS = $(patsubst src/server/%.c,tests/faults/server/%.o,$(SERVER_SRCS))
+FAULT_KV_OBJS = tests/faults/kv/kv_lsm.o tests/faults/kv/kv_compact.o
 tests/faults/server/%.o: src/server/%.c src/server/server_internal.h $(wildcard src/server/*.h) $(wildcard include/efs/*.h) .build_id.stamp
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -DEFS_FAULTS=1 $(INCLUDES) -c -o $@ $<
-tests/faults/efsd: $(FAULT_SERVER_OBJS) $(LIB)
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(FAULT_SERVER_OBJS) $(LIB) $(LDFLAGS)
+tests/faults/kv/%.o: src/kv/%.c src/kv/kv_lsm_internal.h src/kv/kv_candidates.h $(wildcard include/efs/*.h)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -DEFS_FAULTS=1 $(INCLUDES) -c -o $@ $<
+tests/faults/efsd: $(FAULT_SERVER_OBJS) $(FAULT_KV_OBJS) $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(FAULT_SERVER_OBJS) $(FAULT_KV_OBJS) $(LIB) $(LDFLAGS)
 
 src/kv/kv_lsm.o src/kv/kv_wal.o src/kv/kv_compact.o src/kv/kv_seg.o: src/kv/kv_lsm_internal.h
 src/kv/kv_lsm.o: src/kv/kv_candidates.h
@@ -1014,6 +1022,9 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_k33_seed_loss.py
 	python3 tests/test_k33_bookkeeping.py
 	python3 tests/test_k34_stop_put.py
+	python3 tests/test_b6_unavailable.py
+	python3 tests/test_d4_progress.py
+	python3 tests/test_query_first_catalog.py
 	python3 tests/test_client_processes.py
 	python3 tests/test_shutdown_stuck_worker.py
 	./tests/test_reclaim

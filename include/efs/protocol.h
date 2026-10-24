@@ -328,6 +328,11 @@ struct efs_msg_pack_compact_reply {
     /* Last fragmentation summary of the led groups (summed). */
     uint64_t segments, live_bytes, dead_bytes, holes, small;
     struct efs_packer_status packer;
+    /* D4: per led group (index 0 = group 0, 1 = group 2; zero when not
+     * led): candidate-index entries (files waiting to be packed), the
+     * oldest eligible candidate's wait beyond the minimum age, and the age
+     * of that count (a full count runs at most every 30 s past 4096). */
+    uint64_t backlog[2], lag_ms[2], backlog_age_ms[2];
 };
 
 /* Connection declaration (W125, tightened by W133). The first message on
@@ -639,6 +644,8 @@ struct efs_msg_raft_status_reply {
      * proposals refused at the 3/4 admission watermark. */
     uint64_t kv_mt_bytes, kv_mem_budget, kv_l0_bytes, kv_l0_cap;
     uint64_t kv_apply_deferred, admit_busy;
+    /* D4: KV memtable flushes and compactions completed since start. */
+    uint64_t kv_flushes, kv_compactions;
     struct efs_raft_group_status groups[EFS_RAFT_HOST_MAX_GROUPS];
 };
 

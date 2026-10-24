@@ -24,6 +24,7 @@
  * installs the segment's fence under the write guard, and a PUT checks the
  * fence under the read guard, so no PUT lands after acceptance. */
 #include "server_internal.h"
+#include "dest_fault.h"
 #include "efs/checksum.h"
 #include "efs/frag_record.h"
 #include "efs/pack_mapping.h"
@@ -232,6 +233,8 @@ int server_segment_put(struct efsd_server *s, const uint8_t *body, uint32_t byte
         geometry < EFS_SEGMENT_ALIGNMENT || geometry > EFS_SEGMENT_MAX_SIZE ||
         geometry % EFS_SEGMENT_ALIGNMENT || bytes - EFS_SEGMENT_PUT_HEADER != len)
         return EFS_ERR_INVAL;
+    int frc = server_test_dest_fault("segput");
+    if (frc) return frc;
     uint8_t got[EFS_HASH_SIZE];
     efs_hash(data, len, got);
     if (memcmp(got, sum, EFS_HASH_SIZE)) return EFS_ERR_CHECKSUM;
@@ -318,6 +321,8 @@ int server_segment_get(struct efsd_server *s, const uint8_t *req, uint32_t bytes
     if (!efs_pack_group_anchor(group) || fi >= EFS_NUM_FRAGMENTS || !id || !gen ||
         geometry < EFS_SEGMENT_ALIGNMENT || geometry > EFS_SEGMENT_MAX_SIZE ||
         geometry % EFS_SEGMENT_ALIGNMENT) return EFS_ERR_INVAL;
+    int frc = server_test_dest_fault("segget");
+    if (frc) return frc;
     uint32_t len = geometry / 2;
     uint8_t *r = malloc(EFS_SEGMENT_GET_REPLY + len);
     if (!r) return EFS_ERR_NOMEM;

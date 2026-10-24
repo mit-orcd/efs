@@ -11,6 +11,7 @@
 #include "efs/version.h"
 #include "efs/storage_capacity.h"
 #include "server_internal.h"
+#include "dest_fault.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -468,7 +469,7 @@ void server_handle_conn(struct efs_conn *conn)
                     reply = tls_reply;
                 }
                 uint32_t out_len = 1;
-                if (!ex) {
+                if (!ex || server_test_dest_fault("get")) {
                     reply[0] = EFS_GET_CHUNK_ERROR;
                 } else {
                     uint32_t data_len = 0;
@@ -538,7 +539,8 @@ void server_handle_conn(struct efs_conn *conn)
             /* W154 rebuild of a published object's missing fragment: the
              * durable degraded mark, not a ticket, authorizes it (K13). */
             uint8_t reply[EFS_PUT_REPLY_LEN],path=0xff;
-            int result=server_rebuild_put(g_server,payload,payload_len,&path);
+            int result=server_test_dest_fault("rebuild");
+            if(result==EFS_OK)result=server_rebuild_put(g_server,payload,payload_len,&path);
             efs_put_reply_encode(result,path,g_server->put_boot_epoch,reply);
             efs_conn_send_msg(conn,EFS_MSG_REBUILD_PUT_REPLY,reply,sizeof(reply));
             break;
@@ -845,7 +847,9 @@ void server_handle_conn(struct efs_conn *conn)
             memset(&reply, 0, sizeof(reply));
             /* K35 test hook: a member that dies during a client's COMMIT. */
             server_test_member_exit("data-commit");
-            reply.rc = server_put_sync_commit(g_server, &reply.roots);
+            reply.rc = server_test_dest_fault("commit");
+            if (reply.rc == EFS_OK)
+                reply.rc = server_put_sync_commit(g_server, &reply.roots);
             reply.boot_epoch = g_server->put_boot_epoch;
             efs_conn_send_msg(conn, EFS_MSG_DATA_COMMIT_REPLY, &reply, sizeof(reply));
             break;

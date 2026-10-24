@@ -1362,6 +1362,10 @@ void server_packer_compact_request(const struct efs_msg_pack_compact *req, struc
         out->segments += pk.g[g].fs_segs; out->live_bytes += pk.g[g].fs_live;
         out->dead_bytes += pk.g[g].fs_dead; out->holes += pk.g[g].fs_holes; out->small += pk.g[g].fs_small;
         pthread_mutex_unlock(&pk.mu);
+        uint64_t now = pk_now_ns(), counted = __atomic_load_n(&pk.g[g].count_ns, __ATOMIC_RELAXED);
+        out->backlog[g] = __atomic_load_n(&pk.g[g].backlog, __ATOMIC_RELAXED);
+        out->lag_ms[g] = __atomic_load_n(&pk.g[g].lag_ns, __ATOMIC_RELAXED) / 1000000ull;
+        out->backlog_age_ms[g] = counted && now > counted ? (now - counted) / 1000000ull : 0;
     }
 }
 
