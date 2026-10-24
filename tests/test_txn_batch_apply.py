@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """K29: a TXN_BATCH entry applies exactly as its commands would one by one.
 
-Compiles the production apply_txn_cmd, txn_batch_shard and apply_txn_batch_cmd
+Compiles the production apply_txn_cmd, txn_batch_shard, txn_batch_frame_check and apply_txn_batch_cmd
 with the production PREPARE/DECIDE/RESOLVE encoders over the real metadata
 library and an in-memory KV. Two KVs receive the same transaction: one as
 single-command entries, one as TXN_BATCH entries. Checked: identical KV
@@ -43,7 +43,8 @@ static uint64_t rd64be(const uint8_t *p){uint64_t v=0;for(int i=0;i<8;i++)v=v<<8
 static void wr32be(uint8_t *p,uint32_t v){p[0]=v>>24;p[1]=v>>16;p[2]=v>>8;p[3]=v;}
 ''' + function('static uint32_t pack_prep_raw(') + function('static uint32_t pack_decide(') \
     + function('static void pack_resolve(') + function('static int apply_txn_cmd(') \
-    + function('static uint32_t txn_batch_shard(') + function('static int apply_txn_batch_cmd(') + r'''
+    + function('static uint32_t txn_batch_shard(') + function('static int txn_batch_frame_check(') \
+    + function('static int apply_txn_batch_cmd(') + r'''
 /* KV image: every key/value, in scan order. */
 struct dump {uint32_t n,len;uint8_t buf[1<<16];};
 static int dump_cb(void *u,const uint8_t *k,uint32_t kl,const uint8_t *v,uint32_t vl){
