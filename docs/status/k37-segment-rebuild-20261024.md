@@ -66,8 +66,9 @@ packed file during the next outage, `tmp/fail-412.log` kept in the raw
 outputs); it now also waits for `Degraded segments: 0` and passed 2 of 2
 dedicated runs (283 s, 133 s) and the gate. The stricter alternative,
 cancelling any copy without three acknowledgements (the behaviour before
-K37), never lowers protection at the cost of packing a few seconds later;
-it is a one-line policy change in `pk_segment` if the user prefers it.
+K37), never lowers protection at the cost of packing a few seconds later.
+**Decided (Oct 24, the user): keep the K37 policy** — a segment copied with
+two acknowledged fragments is marked and rebuilt on return.
 
 ## Tests
 
