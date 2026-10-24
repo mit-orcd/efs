@@ -1,13 +1,14 @@
 # K33 — placement spread for more than four nodes (Oct 24, 2026)
 
-**Verdict: fix and unit tests done; distribution PASS (tables below); the
-code gate (`make test-all` on amd) is PENDING — amd and every other
-bare-metal test host were unreachable from the Mac when the fix was ready
-(no ARP answer for 10.0.0.201/203/205/207/209). Branch
-`claude/devel-placement-spread-b6a3c4` on `merge-wave2` (`3e01ba95c`), not
-pushed. Live multi-host, RDMA and orcd-mini gates NOTRUN (parent session).
-Needs a fresh format for new placement (no compatibility; recorded
-placement of existing chunks still reads).**
+**Verdict: code gate PASS with host limits (`make test-all` on amd at
+`f7553b06e`: 442 commands, 11 FAIL, 5 NOTRUN; every FAIL also fails on
+the untouched base `3e01ba95c`, which has 12). Distribution PASS for
+N = 3..16 (tables below); real daemons: every added node now takes new
+fragments (`{4: 25, 6: 22, 7: 21, 8: 18}`, base `{4: 0, 6: 24, 7: 24,
+8: 24}`). Branch `claude/devel-placement-spread-b6a3c4` on `merge-wave2`
+(`3e01ba95c`), not pushed. Live multi-host, RDMA and orcd-mini gates
+NOTRUN (parent session). New placement needs a fresh format (no
+compatibility); recorded placement of existing chunks still reads.**
 
 Purpose: close the open finding of
 [K33 increment 2](k33-w157-autoid-discovery-20261024.md) ("placement
@@ -224,17 +225,75 @@ and 5) and can never be its spare.
 
 ## Code gate
 
-PENDING: `make test-all` on amd (private tree under `$HOME`, `git archive`
-of the tested commit, base `3e01ba95c` run for comparison) was not run:
-amd (10.0.0.205), intel1, intel2, xorinox and nuc did not answer on the
-LAN (ARP incomplete, ssh timeouts) on Oct 24; the efs1–3 VMs run the
-user's own cluster and are not test hosts. Run locally on the Mac instead
-(EFS itself does not build on macOS): `tests/test_placement.c` with
-`src/common/placement.c` (OK, 0.1 s) and `python3 tests/test_d39_model.py`
-(118 passed, 0 failed).
+Host amd (`amd-395`, 32 CPU, Ubuntu, Python 3.14), private trees under
+`~/efs-placement-spread/` (removed after the run), `TMPDIR` inside each
+tree, loopback ports chosen by the tests (never 17xxx; the user's amd
+cluster and mounts were not touched). Topology of the daemon tests: up to
+eight efsd processes on 127.0.0.1/127.0.0.2, TCP, buffered I/O, 2+1, one
+store each. Tested source: `f7553b06e` (code identical to `95a0e678a`;
+the later commit adds only docs) and base `3e01ba95c`, each a
+`git archive` of the commit, built by the runner (build 12 s each).
+Both ran one after the other in one `screen`; the amd hosts were
+unreachable earlier on Oct 24 and were back about 01:00 local.
+
+```sh
+git archive f7553b06e | ssh amd 'tar -x -C ~/efs-placement-spread/fix/src'
+git archive 3e01ba95c | ssh amd 'tar -x -C ~/efs-placement-spread/base/src'
+# per tree (gate.sh):
+TMPDIR=<tree>/tmp EFS_GIT_ID=<commit> EFS_GIT_BRANCH=<branch> EFS_GIT_DESCRIBE=<commit> \
+  EFS_TEST_TARGET=test-all EFS_TEST_JOBS=8 bash scripts/make_test_summary.sh
+# the growth test alone, for its fragment counts (growth.sh):
+TMPDIR=<tree>/tmp-growth python3 tests/test_k33_growth.py
+```
+
+| tree | commit | commands | FAIL | NOTRUN | time |
+|---|---|---:|---:|---:|---:|
+| fix | `f7553b06e` | 442 | 11 | 5 | 137 s |
+| base | `3e01ba95c` | 442 | 12 | 5 | 136 s |
+
+FAILs in the fix tree, all failing the same way on the base (host limits):
+
+- `tests/test_rdma_xprt`, `tests/test_rdma_segmented` × 7,
+  `tests/test_declaration_gate` (its RDMA case): `server_accept` / client
+  upgrade fail. amd has an RDMA device (`uverbs0`), but no RDMA
+  connection gets through; RDMA gates belong to the parent session.
+- `tests/test_k33_client_view.py`: `node 4: 'raft-host: formed: 4
+  members' not seen`, identical on the base.
+- `tests/faults/test_create_retry_fault.py`: case binary timed out after
+  30 s, identical on the base.
+
+The base also failed `tests/test_reclaim` (`accept_range: Assertion
+rc[i]==expect`); it passed in the fix tree. The change does not touch
+reclaim; one base flake, recorded.
+
+NOTRUN (both trees): `test_cluster_stop.py` (no `~/git/cluster`),
+`test_follower_bound` stalled compactor (needs `EFS_FAULTS=1`),
+`test_leak_gate.py` (no valgrind), `test_store_durability` async (TMPDIR
+not XFS), and the runner's self-test NOTRUN line.
+
+Placement tests in the fix tree: `./tests/test_placement` PASS (0.1 s);
+`tests/test_k33_growth.py` PASS (66.7 s in the gate; 65.9 s alone).
+
+### Real daemons: fragments on the added nodes (growth test, 24 new files)
+
+| tree | node 4 | node 6 | node 7 | node 8 |
+|---|---:|---:|---:|---:|
+| base `3e01ba95c` | **0** | 24 | 24 | 24 |
+| fix `f7553b06e` | 25 | 22 | 21 | 18 |
+
+(Counts are fragment files on each store, after the 24 files of 256 KiB;
+node 5 is down at that point, so its share goes to spares.) The base's
+`{4: 0, …}` reproduces the finding; the fix tree asserts every added node
+is non-zero.
+
+Raw output (outside Git): amd `~/efs-artifacts/placement-spread-20261024/`
+(`gate.log`, `gate.sh`, `growth.sh`, per tree `summary.txt`,
+`timings.tsv`, `cmds.txt`, `fail-*.log`, `growth.out`), `SHA256SUMS`
+sha256 `db8dd439…2181`, 224 KiB. Local runs on the Mac:
+`tests/test_placement.c` with `src/common/placement.c` OK, and
+`python3 tests/test_d39_model.py` 118 passed, 0 failed.
 
 ## NOTRUN
 
-- `make test-all` on amd, fix and base (host unreachable; see above).
 - Live multi-host addition with client load, RDMA, orcd-mini (parent
   session).

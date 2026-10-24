@@ -32,14 +32,15 @@ what the base fails, and the K14 torn-read gate passes 30/30. **The ior
 easy write gate on orcd-mini is NOTRUN** (parent session).
 
 [K33 placement spread for more than four nodes](k33-placement-spread-20261024.md):
-**fix and unit tests done (`95a0e678a`, branch
-`claude/devel-placement-spread-b6a3c4`, not merged); code gate on amd
-PENDING (host unreachable); live gates NOTRUN.** The stripe start was
+**code gate PASS with host limits (amd `make test-all` at `f7553b06e`:
+442 commands, 11 FAIL, all also failing on the base); branch
+`claude/devel-placement-spread-b6a3c4`, not merged; live gates NOTRUN.** The stripe start was
 `fnv1a(ino) % n`; inodes of one shard differ only in high bits, so runs of
 new files started on one rank (eight members: a node got nothing). Start,
 packed segments and down-node spares now use fmix64 with a multiply-shift
 reduction; every N = 3..16 stays within ±10 % and no 64-file window leaves
-a member idle. New writes only; needs a fresh format.
+a member idle; in the daemon growth test added node 4 went from 0 to 25
+new fragments. New writes only; needs a fresh format.
 
 [K33 live client view refresh](k33-client-view-20261024.md):
 **code gate PASS with host limits (intel1 `make -k test-all` at `8b4cfbe77`,
