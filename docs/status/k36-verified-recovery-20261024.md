@@ -140,6 +140,44 @@ development runs there (`dev-*.log`) show the test's own fixes (waiting for
 first gate attempt on `48c091fd5` is under `gate1-48c091fd5/` (its
 stuck-worker assertion read a truncated log tail; fixed in `e8d25cc22`).
 
+## Merged tree (merge-wave5)
+
+K36 merged onto `merge-wave5` (devel + READ_VERIFY + K34 + A7 + K35):
+merge `9fa0079c7`, fixes `87034b518`, merge of `1898c4c63` (the
+`test_get_integrity.py` stub for K34) at `c19bf9fdb`. Changes against the
+branch version above:
+
+- K35 took Raft tag 249 for its fsync `EFS_MD_CMD_DEGRADED_MARK`; K36's
+  command is now `EFS_MD_CMD_RECOVERY_MARK`, tag **248**
+  (`EFS_MD_RECOVERY_MARK_LEN`, `efs_meta_apply_recovery_mark`,
+  `apply_recovery_mark_cmd`). The two applies stay separate: K35 builds the
+  mark from the chunk row and a node, K36 checks a full mark against it.
+- Recovery reads fragment files through A7's O_DIRECT helpers
+  (`server_frag_open`, `server_frag_pread`); the unit fixtures use the
+  payload || 4 KiB tail layout.
+- The `reclaim-accepted` crash point moved into `server_reclaim_accept` (a GC
+  leader accepts its own batch without the handler); the hook is weak so
+  storage unit tests link without `recovery.c`.
+- Step 4 follows K35's per-stripe fsync: while node 3 is fenced a fresh
+  fsync proves its stripe on the other two (`2 of 3 durable; marked
+  degraded`); after recovery on all three; the fragments node 3's crashed
+  run acknowledged never count durable in mount A's fsync (state `K`, never
+  `D`, in its log).
+
+**Gate on intel1** (same host as above), tree `git archive 87034b518`,
+`EFS_GIT_ID=87034b518`, `TMPDIR` under `$HOME`, in `screen`:
+
+| Run | Command | Result |
+| --- | --- | --- |
+| A | `make -k EFS_GIT_ID=87034b518 test-all` (19:13–19:41Z) | build OK; **`test-long` all 53 commands PASS** (`test_k33_payload.py` 349 s, `test_k36_recovery.py` 100 s); `test` stopped at `tests/test_get_integrity.py` (its stub source did not declare K34's `read_reprobe_down`; `merge-wave5` fixed that in `1898c4c63` after this merge) |
+| B | `make -i EFS_GIT_ID=87034b518 test` | 419 commands: every one PASS except that same `test_get_integrity.py` (the only ignored error) |
+| C | `c19bf9fdb` (= `87034b518` + the two-line test fix): `make -j8 all`, `python3 tests/test_get_integrity.py` | PASS |
+| repeat | `python3 tests/test_k36_recovery.py` ×6 on the merged code | 6 of 6 PASS (64–96 s) |
+
+NOTRUN host limits as above (RDMA ×9, valgrind ×2, `~/git/cluster`,
+`test_stalled_compactor`). Raw logs: intel1
+`~/efs-artifacts/k36-merge-20261024/`, `SHA256SUMS` `2a1adf2b…d6dc`.
+
 ## Limitations and remaining gates
 
 - **NOTRUN:** full power-loss qualification (D42: a separate scope

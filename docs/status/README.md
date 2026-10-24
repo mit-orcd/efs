@@ -19,16 +19,16 @@ full acceptance are separate states.
 ## Recent evidence and remaining acceptance
 
 [K36 / F23: verified recovery after an unclean stop](k36-verified-recovery-20261024.md):
-**PASS (scoped, loopback), not merged** (branch `claude/devel-k36-recovery-70f9de`, code `e8d25cc22`).
+**PASS (scoped, loopback), merged onto `merge-wave5` at `c19bf9fdb`, not in devel** (branch `claude/devel-k36-recovery-70f9de`; recovery mark is Raft tag 248, K35 holds 249).
 A crashed or killed store now proves itself (boot counter, reclaim journal,
 session certificates, every local fragment, each hosted metadata group at its
 leader's commit, every published reference against its digest), drops what it
 cannot prove, marks those stripes for W154 rebuild and clears the COMMIT
 fence; fragments the crashed run acknowledged stay unproven in their client's `fsync`.
 Daemon crash tests during PUT, publication, reclaim, KV compaction and
-recovery PASS (8 of 8 runs). intel1 gate: `make test` PASS, `make test-long`
-PASS (host-limit NOTRUNs); the first-run `test_k33_payload.py` FAIL is
-K34/F24 and fails 1 of 3 runs on the base `55ad94072` too. Power-loss qualification, multi-host and RDMA NOTRUN.
+recovery PASS (8 of 8 runs). Merged-tree gate on intel1 at `87034b518`: `test-long` 53/53 PASS,
+`test` 418 of 419 PASS, the other `test_get_integrity.py` (a merge-wave5 stub gap, fixed by
+`1898c4c63`; PASS at `c19bf9fdb`); host-limit NOTRUNs only. Power-loss qualification, multi-host and RDMA NOTRUN.
 
 [D42 `EFS_READ_VERIFY`: GET-path integrity audit](read-verify-audit-20261024.md):
 **PASS (scoped), branch `claude/devel-read-verify-08e19c`, not merged.** The
