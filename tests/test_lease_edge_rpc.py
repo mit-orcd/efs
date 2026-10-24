@@ -25,8 +25,12 @@ static uint64_t salt;static int result,hint;static uint32_t route;
 static int efs_client_rpc_past_deadline(void){return expired;}
 static unsigned fences;static void efs_client_session_fence(int rc){if(rc==EFS_ERR_FENCED)fences++;}
 static struct efs_conn *efs_client_conn_get(efs_node_id_t n){assert(n==3);return &connection;}
-static struct efs_conn *rpc_owner_conn_shard(uint32_t shard,efs_node_id_t *nid)
-{route=shard;*nid=1;return &connection;}
+/* K34: a failed exchange re-picks a voter (skip the one that failed). */
+static unsigned peer_retries;
+static struct efs_conn *raft_voter_conn_skip(uint32_t shard,efs_node_id_t *nid,efs_node_id_t skip)
+{route=shard;(void)skip;*nid=1;return &connection;}
+static void rpc_retry_peer(uint32_t shard,efs_node_id_t nid,efs_node_id_t *target,efs_node_id_t *skip,int failed)
+{(void)shard;(void)failed;*target=0;*skip=nid;peer_retries++;}
 static void efs_client_conn_drop(efs_node_id_t n,struct efs_conn *c){(void)n;(void)c;drops++;}
 static void efs_client_conn_release(efs_node_id_t n,struct efs_conn *c){(void)n;(void)c;}
 static int rpc_writer_retry_pause(unsigned n){(void)n;return EFS_OK;}
@@ -51,7 +55,8 @@ int efs_conn_recv_msg(struct efs_conn *c,uint8_t *type,void **out,uint32_t *n)
  else if(busy){busy--;reply.rc=EFS_ERR_BUSY;reply.salt=0;}
  *type=EFS_MSG_RAFT_MKFS_REPLY;*n=sizeof(reply)-malformed;*out=malloc(sizeof(reply));memcpy(*out,&reply,sizeof(reply));
  if(expire_receive)expired=1;
- return fail_receive;
+ if(fail_receive){fail_receive--;return 1;}
+ return 0;
 }
 ''' + s[a:b] + s[c:d] + r'''
 static void reset(void)
@@ -75,8 +80,11 @@ int main(void)
  reset();result=EFS_ERR_NOT_PRIMARY;salt=0;hint=EFS_MAX_NODES;assert(invoke(&known)==EFS_ERR_PROTO && !known);
  reset();result=EFS_ERR_NO_QUORUM;assert(invoke(&known)==EFS_ERR_PROTO && !known);
  reset();query=1;result=EFS_ERR_NOT_FOUND;assert(invoke(&known)==EFS_ERR_NOT_FOUND && known==1 && calls==1);
- reset();fail_receive=1;assert(invoke(&known)==EFS_ERR_NET && !known && drops==1);
- fail_receive=0;assert(invoke(&known)==EFS_OK && known==1 && calls==2); /* same identity/body */
+ /* K34: a lost exchange is retried on another voter with the same body;
+  * NET (unknown, request kept) only once all attempts are used up. */
+ reset();peer_retries=0;fail_receive=99;assert(invoke(&known)==EFS_ERR_NET && !known && drops==8 && calls==8 && peer_retries==8);
+ fail_receive=0;assert(invoke(&known)==EFS_OK && known==1 && calls==9); /* same identity/body */
+ reset();fail_receive=1;assert(invoke(&known)==EFS_OK && known==1 && calls==2 && drops==1);
  reset();expired=1;assert(invoke(&known)==EFS_ERR_BUSY && !known && !calls);
  reset();expire_receive=1;assert(invoke(&known)==EFS_ERR_BUSY && !known && calls==1);
  reset();malformed=1;assert(invoke(&known)==EFS_ERR_PROTO && !known && calls==1);
@@ -86,7 +94,7 @@ int main(void)
  assert(efs_client_rpc_lease_edge(4097,8,&identity,1,42,0,&known)==EFS_ERR_INVAL);
  assert(efs_client_rpc_lease_edge(4097,8,&identity,1,0,2,&known)==EFS_ERR_INVAL);
  assert(!memcmp(&identity,&original,sizeof(identity)));
- puts("lease RPC: immutable body, stored verdict proof, unknown probe, ambiguity, redirects and deadline PASS");
+ puts("lease RPC: immutable body, stored verdict proof, unknown probe, ambiguity, a lost exchange retried on another voter (K34), redirects and deadline PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-lease-rpc-') as t:

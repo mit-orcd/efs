@@ -2572,7 +2572,8 @@ static int put_reply_fault(efs_node_id_t nid, efs_ino_t ino, uint32_t ci,
  * -3: terminal ticket refusal (not ADMITTED or session fenced); -1: the
  * conn was dropped. */
 static int put_recv_reply(efs_node_id_t nid, struct efs_conn *conn,
-                          efs_ino_t ino, uint32_t ci, uint8_t fi)
+                          efs_ino_t ino, uint32_t ci, uint8_t fi,
+                          uint64_t *seq_out, uint64_t *epoch_out)
 {
     uint8_t reply_type = 0, status = 0, path = 0xff;
     uint64_t epoch = 0;
@@ -2588,8 +2589,9 @@ static int put_recv_reply(efs_node_id_t nid, struct efs_conn *conn,
         return -3;
     }
     if (status == EFS_PUT_CHUNK_OK) {
-        /* Acknowledged (not yet durable): fsync must COMMIT this node. */
-        efs_client_commit_note(nid, epoch);
+        /* Acknowledged (not yet durable): fsync proves it by a COMMIT
+         * from this incarnation (K35). */
+        uint64_t seq = efs_client_commit_note(nid);
 #if EFS_FAULTS
         if (put_reply_fault(nid, ino, ci, fi)) {
             efs_client_conn_drop(nid, conn);
@@ -2598,6 +2600,10 @@ static int put_recv_reply(efs_node_id_t nid, struct efs_conn *conn,
 #endif
         efs_client_node_note_ok(nid);
         efs_client_conn_release(nid, conn);
+        if (seq_out)
+            *seq_out = seq;
+        if (epoch_out)
+            *epoch_out = epoch;
         return 1;
     }
     if (status == EFS_PUT_CHUNK_QUOTA_EXCEEDED) {
@@ -2784,17 +2790,47 @@ static void degraded_ack_log(efs_ino_t ino, uint32_t ci, uint64_t gen,
     fflush(stderr);
 }
 
-/* failed_out[i]=1 marks placement slots that need invalidate/retry.
- * acked_out[i]=1 (when given) marks the slots this attempt acknowledged.
+/* A reply that arrives after the quorum (the drain). K34: it still counts.
+ * A BUSY member is alive and may complete the stripe on a retry; a ticket
+ * refusal is as terminal here as before the quorum; a full member (B5) is
+ * named in quota_out, also when its refusal arrives here. */
+static void put_drain_verdict(int r, int i, int failed_out[EFS_NUM_FRAGMENTS],
+                              int acked_out[EFS_NUM_FRAGMENTS],
+                              int quota_out[EFS_NUM_FRAGMENTS], int *stale_errors)
+{
+    if (r > 0) {
+        if (acked_out) acked_out[i] = 1;
+    } else if (r == 0) {
+        if (quota_out) quota_out[i] = 1;
+    } else if (r == -2) {
+        if (failed_out) failed_out[i] = 3;
+    } else if (r == -3) {
+        (*stale_errors)++;
+        if (failed_out) failed_out[i] = 2;
+    } else if (r < 0 && failed_out)
+        failed_out[i] = 1;
+}
+
+/* failed_out[i]=1 marks placement slots that need invalidate/retry, 2 a
+ * slot this attempt could not send or finish (budget, backpressure, a
+ * terminal ticket refusal), 3 a member that answered BUSY: alive, its
+ * fragment not stored (K34). acked_out[i]=1 (when given) marks the slots
+ * acknowledged; a slot already set on entry was acknowledged by an earlier
+ * attempt of the same object, is not resent and counts toward the two.
+ * ack_seq/ack_epoch[i] then hold that acknowledgement's sequence and the
+ * acknowledging incarnation's PUT verifier (K35); a slot acknowledged by an
+ * earlier attempt keeps the values that attempt stored.
  * quota_out[i]=1 (when given) marks the slots whose member refused the
  * fragment as full (QUOTA), also when the refusal arrives after the
- * quorum, in the drain. Every attempt sends the same admitted ticket and
- * bytes (K13). */
+ * quorum, in the drain (B5). Every attempt sends the same admitted ticket
+ * and bytes (K13). */
 static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
                                       const uint8_t *fragments[EFS_NUM_FRAGMENTS],
                                       int failed_out[EFS_NUM_FRAGMENTS],
                                       int acked_out[EFS_NUM_FRAGMENTS],
-                                      int quota_out[EFS_NUM_FRAGMENTS])
+                                      int quota_out[EFS_NUM_FRAGMENTS],
+                                      uint64_t ack_seq[EFS_NUM_FRAGMENTS],
+                                      uint64_t ack_epoch[EFS_NUM_FRAGMENTS])
 {
     efs_ino_t ino = ticket->ino;
     uint32_t chunk_index = ticket->ci;
@@ -2824,10 +2860,18 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
         conns[i] = NULL;
         pending[i] = 0;
         memset(hdrs[i], 0, sizeof(hdrs[i]));
+        /* An acknowledgement from an earlier attempt of this object stands
+         * (W154, K35): only the slots still missing are sent again. */
+        if (acked_out && acked_out[i])
+            acks++;
     }
 
     /* Unreachable peers count as missing acks — do not abort the whole PUT. */
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        if (acked_out && acked_out[i]) {
+            acks++;
+            continue;
+        }
         if ((int64_t)report_clock_ms() >= deadline_ms) {
             if (failed_out) failed_out[i] = 2; /* local budget, not peer health */
             continue;
@@ -2935,7 +2979,8 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
                 continue;
             int w = efs_conn_put_reply_watch(conns[i], 0);
             if (w == EFS_CONN_REPLY_READY) {
-                int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i);
+                int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i,
+                                       &ack_seq[i], &ack_epoch[i]);
                 if (r > 0) {
                     acks++;
                     if (acked_out) acked_out[i] = 1;
@@ -2946,7 +2991,7 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
                 }
                 else if (r == -2) {
                     busy_errors++;
-                    if (failed_out) failed_out[i] = 2;
+                    if (failed_out) failed_out[i] = 3;
                 } else if (r == -3) {
                     stale_errors++;
                     if (failed_out) failed_out[i] = 2;
@@ -2974,7 +3019,8 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
                 continue;
             int w = efs_conn_put_reply_watch(conns[i], 24);
             if (w == EFS_CONN_REPLY_READY) {
-                int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i);
+                int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i,
+                                       &ack_seq[i], &ack_epoch[i]);
                 if (r > 0) {
                     acks++;
                     if (acked_out) acked_out[i] = 1;
@@ -2985,7 +3031,7 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
                 }
                 else if (r == -2) {
                     busy_errors++;
-                    if (failed_out) failed_out[i] = 2;
+                    if (failed_out) failed_out[i] = 3;
                 } else if (r == -3) {
                     stale_errors++;
                     if (failed_out) failed_out[i] = 2;
@@ -3014,7 +3060,8 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
                 continue;
             int w = efs_conn_put_reply_watch(conns[i], 0);
             if (w == EFS_CONN_REPLY_READY) {
-                int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i);
+                int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i,
+                                       &ack_seq[i], &ack_epoch[i]);
                 if (r > 0) {
                     acks++;
                     if (acked_out) acked_out[i] = 1;
@@ -3025,7 +3072,7 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
                 }
                 else if (r == -2) {
                     busy_errors++;
-                    if (failed_out) failed_out[i] = 2;
+                    if (failed_out) failed_out[i] = 3;
                 } else if (r == -3) {
                     stale_errors++;
                     if (failed_out) failed_out[i] = 2;
@@ -3090,7 +3137,8 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
             if (watch >= 0) continue;
             int r;
             if (watch == EFS_CONN_REPLY_READY)
-                r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i);
+                r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i,
+                                   &ack_seq[i], &ack_epoch[i]);
             else {
                 efs_client_conn_drop(nodes[i], conns[i]);
                 efs_client_node_note_fail(nodes[i]);
@@ -3106,7 +3154,7 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
             }
             else if (r == -2) {
                 busy_errors++;
-                if (failed_out) failed_out[i] = 2;
+                if (failed_out) failed_out[i] = 3;
             } else if (r == -3) {
                 stale_errors++;
                 if (failed_out) failed_out[i] = 2;
@@ -3139,11 +3187,9 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
                     continue;
                 int w = efs_conn_put_reply_watch(conns[i], 0);
                 if (w == EFS_CONN_REPLY_READY) {
-                    int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i);
-                    if (r > 0 && acked_out)
-                        acked_out[i] = 1;
-                    else if (r == 0 && quota_out)
-                        quota_out[i] = 1;
+                    int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i,
+                                           &ack_seq[i], &ack_epoch[i]);
+                    put_drain_verdict(r, i, failed_out, acked_out, quota_out, &stale_errors);
                     conns[i] = NULL;
                     pending[i] = 0;
                     continue;
@@ -3176,11 +3222,9 @@ static int put_fragments_parallel_once(const struct efs_put_ticket *ticket,
                 int watch = efs_conn_put_reply_watch(conns[i], 0);
                 if (watch >= 0) continue;
                 if (watch == EFS_CONN_REPLY_READY) {
-                    int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i);
-                    if (r > 0 && acked_out)
-                        acked_out[i] = 1;
-                    else if (r == 0 && quota_out)
-                        quota_out[i] = 1;
+                    int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i,
+                                           &ack_seq[i], &ack_epoch[i]);
+                    put_drain_verdict(r, i, failed_out, acked_out, quota_out, &stale_errors);
                 } else efs_client_conn_drop(nodes[i], conns[i]);
                 conns[i] = NULL;
                 pending[i] = 0;
@@ -3237,6 +3281,26 @@ static int node_is_full(efs_node_id_t id)
            __atomic_load_n(&g_node_full_until_ms[id], __ATOMIC_RELAXED) > report_clock_ms();
 }
 
+/* K35 (D42): a member that failed a PUT hard takes no new placement for
+ * PUT_AWAY_MARK_MS, before the four failures that mark it down. With four
+ * or more members its fragment goes to an available one instead of being
+ * acknowledged degraded. */
+#define PUT_AWAY_MARK_MS 10000u
+static uint64_t g_node_away_until_ms[EFS_MAX_NODES + 1];
+
+static void node_note_away(efs_node_id_t id)
+{
+    if (id && id <= EFS_MAX_NODES)
+        __atomic_store_n(&g_node_away_until_ms[id], report_clock_ms() + PUT_AWAY_MARK_MS,
+                         __ATOMIC_RELAXED);
+}
+
+static int node_is_away(efs_node_id_t id)
+{
+    return id && id <= EFS_MAX_NODES &&
+           __atomic_load_n(&g_node_away_until_ms[id], __ATOMIC_RELAXED) > report_clock_ms();
+}
+
 /* If a stripe member is down or full (or failed the last attempt), put
  * that fragment on an unused live member that is not full. Four-node
  * cluster, one down or full: the remaining three still take a full 2+1
@@ -3252,13 +3316,14 @@ static void reroute_untried_fragments(efs_ino_t ino, uint32_t chunk_index,
 
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         int bad = (nodes[i] == 0) || efs_client_node_is_down(nodes[i]) ||
-                  node_is_full(nodes[i]);
+                  node_is_full(nodes[i]) || node_is_away(nodes[i]);
         if (!bad)
             continue;
         if (!built) {
             for (uint32_t n = 0; n < g_client.node_count && nlive < EFS_MAX_NODES; n++) {
                 efs_node_id_t id = g_client.nodes[n].id;
-                if (id != 0 && !efs_client_node_is_down(id) && !node_is_full(id))
+                if (id != 0 && !efs_client_node_is_down(id) && !node_is_full(id) &&
+                    !node_is_away(id))
                     live[nlive++] = id;
             }
             built = 1;
@@ -3269,11 +3334,35 @@ static void reroute_untried_fragments(efs_ino_t ino, uint32_t chunk_index,
     }
 }
 
+/* Two acks (the quorum loop) leave exactly one missing. Write availability
+ * is kept (D40): record and announce it, or refuse the write. */
+static int degraded_record(efs_ino_t ino, uint32_t chunk_index, uint64_t object,
+                           const efs_node_id_t nodes[EFS_NUM_FRAGMENTS], uint32_t missing)
+{
+    if (dgobj_note(ino, chunk_index, object, missing) != EFS_OK) {
+        fprintf(stderr,
+                "put_fragments ino=%llu chunk=%u: degraded acknowledgement "
+                "could not be recorded (missing=%x) — refusing the write\n",
+                (unsigned long long)ino, chunk_index, missing);
+        fflush(stderr);
+        return EFS_ERR_NOMEM;
+    }
+    degraded_ack_log(ino, chunk_index, object, nodes, __builtin_ctz(missing));
+    return EFS_OK;
+}
+
 /* Retries reuse the ticket: same object name, placement and bytes.
- * *quota_mask gets the slots whose member refused the object as full. */
+ * *quota_mask gets the slots whose member refused the object as full.
+ * On EFS_OK seq/epoch hold each acknowledged slot's acknowledgement (0 for
+ * the slot of a degraded acknowledgement) and *unreachable_mask the
+ * missing slot when its member failed hard (connect, send, reply), not by
+ * pressure or the local budget. */
 static int put_fragments_parallel_run(const struct efs_put_ticket *ticket,
                                       const uint8_t *fragments[EFS_NUM_FRAGMENTS],
-                                      uint32_t *quota_mask)
+                                      uint32_t *quota_mask,
+                                      uint64_t seq[EFS_NUM_FRAGMENTS],
+                                      uint64_t epoch[EFS_NUM_FRAGMENTS],
+                                      uint32_t *unreachable_mask)
 {
     efs_ino_t ino = ticket->ino;
     uint32_t chunk_index = ticket->ci;
@@ -3285,38 +3374,76 @@ static int put_fragments_parallel_run(const struct efs_put_ticket *ticket,
      * is a stored fragment of it. */
     int acked[EFS_NUM_FRAGMENTS] = {0, 0, 0};
     int quota[EFS_NUM_FRAGMENTS] = {0, 0, 0};
-    int hard_attempts = 0;
+    int hard_attempts = 0, resent = 0;
     *quota_mask = 0;
+    *unreachable_mask = 0;
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
+        seq[i] = epoch[i] = 0;
+    int reprobed = 0;
     for (int attempt = 1; attempt <= 128; attempt++) {
-        rc = put_fragments_parallel_once(ticket, fragments, failed, acked, quota);
+        rc = put_fragments_parallel_once(ticket, fragments, failed, acked, quota, seq, epoch);
         for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
             if (quota[i] && !acked[i])
                 *quota_mask |= 1u << i;
         if (rc == EFS_OK) {
             uint32_t missing = 0;
             for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
-                if (!acked[i])
+                if (!acked[i]) {
                     missing |= 1u << i;
+                    seq[i] = epoch[i] = 0;
+                    if (failed[i] == 1)
+                        *unreachable_mask |= 1u << i;
+                }
             if (!missing)
                 return rc;
+            /* K35: a member that failed hard while the other two
+             * acknowledged is often only a stale pooled connection (the
+             * peer restarted). Send its fragment once more on a fresh
+             * connection, same ticket, before the stripe is acknowledged
+             * degraded or placed again. */
+            int slot = __builtin_ctz(missing);
+            if (!resent && (*unreachable_mask & (1u << slot)) && !(missing & *quota_mask) &&
+                !efs_client_node_is_down(nodes[slot]) && !efs_client_rpc_past_deadline()) {
+                resent = 1;
+                *unreachable_mask = 0;
+                efs_client_conn_invalidate_node(nodes[slot]);
+                continue;
+            }
             /* B5: a full member is not an outage. Acknowledging the stripe
              * on two fragments would create protection debt that no
              * rebuild can pay while the member stays full; the caller
              * places the object again without it, or reports ENOSPC. */
             if (missing & *quota_mask)
                 return EFS_ERR_QUOTA;
-            /* Two acks (the quorum loop) leave exactly one missing. Write
-             * availability is kept (D40): record and announce it. */
-            if (dgobj_note(ino, chunk_index, ticket->object, missing) != EFS_OK) {
-                fprintf(stderr,
-                        "put_fragments ino=%llu chunk=%u: degraded acknowledgement "
-                        "could not be recorded (missing=%x) — refusing the write\n",
-                        (unsigned long long)ino, chunk_index, missing);
-                fflush(stderr);
-                return EFS_ERR_NOMEM;
+            /* K34: two acks with the third member alive but BUSY (its
+             * ticket read during a group leader change, pressure) are not
+             * a degraded stripe: either acknowledging member may be the
+             * next to stop, and the object then has one fragment. Resend
+             * the missing fragment only, within the operation budget; a
+             * budget that runs out fails the write, nothing acknowledged. */
+            int mi = __builtin_ctz(missing);
+            if (failed[mi] == 3 && nodes[mi] != 0 && !efs_client_node_is_down(nodes[mi])) {
+                if (efs_client_rpc_past_deadline())
+                    return EFS_ERR_BUSY;
+                int pause_rc = report_retry_pause(50000);
+                if (pause_rc != EFS_OK) return pause_rc;
+                continue;
             }
-            degraded_ack_log(ino, chunk_index, ticket->object, nodes, __builtin_ctz(missing));
-            return rc;
+            /* A member skipped only by this client's down-mark (a cooldown
+             * from an earlier stop) may be back: probe it once and resend
+             * before naming it missing. */
+            if (!reprobed && nodes[mi] != 0 && efs_client_node_is_down(nodes[mi]) &&
+                efs_client_node_reprobe(nodes[mi])) {
+                reprobed = 1;
+                continue;
+            }
+            /* Two acks leave exactly one missing: its member is unreachable or
+             * failed it. */
+            /* K35: an unreachable member may still be placed around; the
+             * caller records the degraded acknowledgement if it is not. */
+            if (*unreachable_mask)
+                return rc;
+            return degraded_record(ino, chunk_index, ticket->object, nodes, missing);
         }
         if (rc == EFS_ERR_QUOTA || rc == EFS_ERR_STALE)
             return rc;
@@ -3380,7 +3507,9 @@ static int put_fragments_parallel_run(const struct efs_put_ticket *ticket,
             if (pause_rc != EFS_OK) return pause_rc;
         }
     }
-    return rc;
+    /* Attempts ran out while completing a stripe: never an undeclared
+     * two-fragment object. */
+    return rc == EFS_OK ? EFS_ERR_BUSY : rc;
 }
 
 /* The one data PUT (K13). Placement is final before admission: an admitted
@@ -3426,14 +3555,53 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
      * collected as an abandoned upload). With no such member left, QUOTA:
      * ENOSPC, never a two-fragment acknowledgement. */
     for (int placement = 0; rc == EFS_OK; placement++) {
-        uint32_t quota_mask = 0;
+        uint32_t quota_mask = 0, away_mask = 0;
+        uint64_t ack_seq[EFS_NUM_FRAGMENTS], ack_epoch[EFS_NUM_FRAGMENTS];
         rc = efs_client_put_admit(ino, chunk_index, nodes, checksums, frag_len,
                                   delta_off, delta_len, ticket);
         if (rc != EFS_OK)
             break;
-        rc = put_fragments_parallel_run(ticket, fragments, &quota_mask);
-        if (rc == EFS_OK)
-            break;
+        rc = put_fragments_parallel_run(ticket, fragments, &quota_mask, ack_seq, ack_epoch,
+                                        &away_mask);
+        if (rc == EFS_OK && away_mask && placement < EFS_NUM_FRAGMENTS - 1 &&
+            !efs_client_rpc_past_deadline()) {
+            /* K35: a member failed hard and the stripe was acknowledged on
+             * two fragments. Where an available member is left (four or
+             * more), place the object again there rather than create
+             * protection debt; the given-up fragments are collected as an
+             * abandoned upload (D31), as for a full member below. */
+            efs_node_id_t before[EFS_NUM_FRAGMENTS];
+            memcpy(before, nodes, sizeof(before));
+            for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
+                if (away_mask & (1u << i))
+                    node_note_away(nodes[i]);
+            reroute_untried_fragments(ino, chunk_index, nodes);
+            int moved = 1;
+            for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
+                if ((away_mask & (1u << i)) && nodes[i] == before[i])
+                    moved = 0;
+            if (moved) {
+                efs_client_put_release(ticket->id.seq, 0);
+                fprintf(stderr, "put_fragments ino=%llu chunk=%u: member(s) %u,%u,%u "
+                        "unreachable (mask %x); placing again on %u,%u,%u\n",
+                        (unsigned long long)ino, chunk_index, (unsigned)before[0],
+                        (unsigned)before[1], (unsigned)before[2], away_mask,
+                        (unsigned)nodes[0], (unsigned)nodes[1], (unsigned)nodes[2]);
+                fflush(stderr);
+                memset(ticket, 0, sizeof(*ticket));
+                continue;
+            }
+            memcpy(nodes, before, sizeof(before));
+        }
+        if (rc == EFS_OK && away_mask) /* stays on two fragments */
+            rc = degraded_record(ino, chunk_index, ticket->object, ticket->nodes, away_mask);
+        if (rc == EFS_OK) {
+            /* K35: fsync proves this object from its acknowledgements. */
+            rc = efs_client_stripe_note(ticket, ack_seq, ack_epoch);
+            if (rc == EFS_OK)
+                break;
+            efs_client_degraded_drop(ino, chunk_index, ticket->object);
+        }
         efs_client_put_release(ticket->id.seq, 0);
         if (rc != EFS_ERR_QUOTA || !quota_mask || placement >= EFS_NUM_FRAGMENTS - 1 ||
             efs_client_rpc_past_deadline())

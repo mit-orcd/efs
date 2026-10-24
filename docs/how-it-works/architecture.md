@@ -244,16 +244,24 @@ this list, before it ships.
   publication machine; both callbacks explicitly publish before replying).
   Mount `-o sync` acceptance remains separately owed under W73. An
   `fsync` drains this client's pending publishes of the file that precede
-  it — one in flight, or retrying on contention, is awaited. It then sends
-  DATA_COMMIT to every current storage node, covering already-acknowledged
-  peer data too; it does not drain another client's unpublished buffer.
+  it — one in flight, or retrying on contention, is awaited. It then
+  proves every stripe this client's writes to the file touched (K35, D42):
+  DATA_COMMIT goes only to the nodes holding those stripes' unproven
+  fragments, and a stripe is proven with at least two of its three fragments
+  durable, a third that is not being covered by a durable degraded mark (the
+  W154 mark its publication carried, or EFS_MD_CMD_DEGRADED_MARK proposed
+  before the call returns). Fewer than two durable fragments, or a mark that
+  cannot be written, is EIO with the stripe named in the client log; the
+  record stays, so a later fsync proves it or fails again. It covers neither
+  peer data nor another client's unpublished buffer.
   PUT acknowledgement is asynchronous. PUT and COMMIT carry a nonzero
   durability-history verifier. Proven clean restarts preserve it only when
   every configured root has a checksummed clean record agreeing on the
-  verifier and root count. Other restarts rotate it: losing an unresolved
-  verifier returns sticky client-wide EIO, because the client may no longer
-  retain retransmission bytes. COMMIT retries a failed transport once within
-  its original deadline.
+  verifier and root count. Other restarts rotate it: a fragment acknowledged
+  under a verifier that changed before its COMMIT is lost (never resent,
+  because the client may no longer retain the bytes), so its stripe is
+  marked degraded or, when that fragment is needed, fails EIO for good.
+  COMMIT retries a failed transport once within its original deadline.
   An unclean storage-root restart fences COMMIT even for a fresh client,
   across orderly restarts, until verified recovery proves the store (K36,
   D42): log and KV applied to the leader's commit, every local fragment

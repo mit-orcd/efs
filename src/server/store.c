@@ -47,6 +47,78 @@ static int writev_all(int fd, struct iovec *iov, int n)
     return 0;
 }
 
+/* Fragment files are opened only with O_DIRECT (D42): there is no buffered
+ * fragment path and no fallback. A file is payload || 4 KiB tail page, so
+ * every offset a reader asks for is 4 KiB aligned. */
+int server_frag_open(const char *path, int flags, mode_t mode)
+{
+    int fd;
+    do { fd = open(path, flags | O_DIRECT | O_CLOEXEC, mode); }
+    while (fd < 0 && errno == EINTR);
+    return fd;
+}
+
+/* O_DIRECT pread of len bytes at a 4 KiB aligned off into any buffer, through
+ * an aligned bounce. Returns the bytes read (short at EOF) or -1. */
+ssize_t server_frag_pread(int fd, void *out, size_t len, off_t off)
+{
+    if (off & 4095) { errno = EINVAL; return -1; }
+    size_t alloc = (len + 4095u) & ~(size_t)4095u;
+    if (!alloc) alloc = 4096;
+    uint8_t *bounce = NULL;
+    if (posix_memalign((void **)&bounce, 4096, alloc) != 0) { errno = ENOMEM; return -1; }
+    size_t done = 0;
+    while (done < alloc) {
+        ssize_t n = pread(fd, bounce + done, alloc - done, off + (off_t)done);
+        if (n < 0 && errno == EINTR) continue;
+        if (n < 0) { int e = errno; free(bounce); errno = e; return -1; }
+        if (n == 0) break;
+        done += (size_t)n;
+        if (done & 4095) break; /* EOF inside the last page */
+    }
+    size_t copy = done < len ? done : len;
+    memcpy(out, bounce, copy);
+    free(bounce);
+    return (ssize_t)copy;
+}
+
+/* Startup refusal (D42): a storage root whose filesystem cannot open, write
+ * and read back an aligned page with O_DIRECT is refused with the reason. */
+int server_storage_direct_io_check(const char *dir, char *why, size_t why_len)
+{
+    char path[EFS_MAX_PATH + 64];
+    snprintf(path, sizeof(path), "%s/.efs-direct-io-probe.%ld", dir, (long)getpid());
+    (void)unlink(path);
+    uint8_t *page = NULL;
+    if (posix_memalign((void **)&page, 4096, 4096) != 0) {
+        snprintf(why, why_len, "out of memory");
+        return EFS_ERR_NOMEM;
+    }
+    for (int i = 0; i < 4096; i++) page[i] = (uint8_t)(i * 31 + 7);
+    const char *step = "open";
+    int fd = server_frag_open(path, O_WRONLY | O_CREAT | O_EXCL, 0600), rc = EFS_OK, e = 0;
+    if (fd < 0) { e = errno; rc = EFS_ERR_IO; }
+    else {
+        ssize_t n = pwrite(fd, page, 4096, 0);
+        if (n != 4096) { e = n < 0 ? errno : EIO; step = "write"; rc = EFS_ERR_IO; }
+        if (close(fd) && rc == EFS_OK) { e = errno; step = "close"; rc = EFS_ERR_IO; }
+    }
+    if (rc == EFS_OK) {
+        uint8_t back[4096];
+        fd = server_frag_open(path, O_RDONLY, 0);
+        ssize_t n = fd < 0 ? -1 : server_frag_pread(fd, back, sizeof(back), 0);
+        if (n != 4096 || memcmp(back, page, 4096)) {
+            e = n < 0 ? errno : EIO; step = "read back"; rc = EFS_ERR_IO;
+        }
+        if (fd >= 0) close(fd);
+    }
+    (void)unlink(path);
+    free(page);
+    if (rc != EFS_OK)
+        snprintf(why, why_len, "O_DIRECT %s of %s failed: %s", step, path, strerror(e));
+    return rc;
+}
+
 /* mkdir -p, leaf first. `path` is writable and is restored before return.
  * The top-down walk did mkdir("/data1"), mkdir("/data1/06"), ... on every
  * new fragment directory: 9 304 mkdir for 2 360 fragment writes in one
@@ -497,7 +569,9 @@ void server_gc_status(struct efsd_server *s, struct efs_msg_gc_status_reply *out
     pthread_mutex_unlock(&s->lock);
 #undef GC_AGE
 #undef GC_LOAD
+#if EFS_BUILD_EXPIRY
     server_raft_host_expiry_status(&out->expiry);
+#endif /* else out->expiry stays zero: not in this build (D42) */
     server_reclaim_status(s, &out->reclaim);
 }
 
@@ -569,15 +643,11 @@ static pthread_mutex_t *fragment_mutex(efs_export_id_t eid, efs_ino_t ino, uint3
     return &frag_locks[(h ^ (h >> 32)) & (FRAG_LOCKS - 1)];
 }
 
-/* GC/restart accounting must decode the stored format, not today's mount
- * mode or transient export geometry. PUT bodies are multiples of 4 KiB. */
+/* GC/restart accounting decodes the stored format, not transient export
+ * geometry: payload (a 4 KiB multiple) || 4 KiB tail page. Any other size is
+ * not a fragment this build wrote. */
 static int fragment_payload_bytes(uint64_t bytes, uint64_t *payload)
 {
-    if (bytes >= EFS_FRAG_RECORD_BYTES &&
-        (bytes - EFS_FRAG_RECORD_BYTES) % 4096 == 0) {
-        *payload = bytes - EFS_FRAG_RECORD_BYTES;
-        return EFS_OK;
-    }
     if (bytes >= 4096 && bytes % 4096 == 0) {
         *payload = bytes - 4096;
         return EFS_OK;
@@ -676,8 +746,7 @@ int server_delete_fragment_if_sum(struct efsd_server *s, struct efs_export *ex,
         uint64_t payload;
         fragment_path_at(s, ri, ex, ino, chunk_index, fragment_index, path,
                          sizeof(path));
-        /* A small buffered record read works for both stored tail layouts. */
-        int fd = open(path, O_RDONLY);
+        int fd = server_frag_open(path, O_RDONLY, 0);
         if (fd < 0) {
             if (errno == ENOENT) {
                 rc = t_gc_defer_sync ? EFS_OK : fragment_parent_sync(s, path);
@@ -699,9 +768,7 @@ int server_delete_fragment_if_sum(struct efsd_server *s, struct efs_export *ex,
         }
         uint64_t read_start = gc_clock_us();
         ssize_t rn;
-        do {
-            rn = pread(fd, rec, sizeof(rec), (off_t)payload);
-        } while (rn < 0 && errno == EINTR);
+        rn = server_frag_pread(fd, rec, sizeof(rec), (off_t)payload);
         int read_errno = errno;
         gc_io_add(s, 0, read_start, rn > 0 ? (uint64_t)rn : 0,
                   rn != (ssize_t)sizeof(rec));
@@ -1258,72 +1325,37 @@ int server_gc_sync_roots(struct efsd_server *s)
     return EFS_OK;
 }
 
-/* direct: caller decides per-ino — data fragments only. Metadata pages
- * stay buffered. rec, when non-NULL, receives the I25 fragment record
- * stored at offset want_len (the start of a 4 KiB O_DIRECT tail page, or
- * EFS_FRAG_RECORD_BYTES buffered bytes); *rec_ok says whether all of its
- * bytes were present. The caller verifies it (efs_frag_verify). */
+/* rec, when non-NULL, receives the I25 fragment record that starts the
+ * 4 KiB tail page at offset want_len; *rec_ok says whether all of its bytes
+ * were present. The caller verifies it (efs_frag_verify). O_DIRECT only. */
 static int read_file_bytes(const char *path,
                            uint8_t *buf, uint32_t want_len, uint32_t *got,
-                           int direct, uint8_t *rec, int *rec_ok)
+                           uint8_t *rec, int *rec_ok)
 {
-    int flags = O_RDONLY;
-    if (direct)
-        flags |= O_DIRECT;
-    int fd = open(path, flags);
+    int fd = server_frag_open(path, O_RDONLY, 0);
     if (fd < 0)
-        return EFS_ERR_NOT_FOUND;
-
-    ssize_t n;
-    if (direct) {
-        uint8_t *aligned = NULL;
-        uint32_t alloc = (want_len + 4095u) & ~4095u;
-        if (alloc < 4096)
-            alloc = 4096;
-        if (posix_memalign((void **)&aligned, 4096, alloc) != 0) {
-            close(fd);
-            return EFS_ERR_NOMEM;
-        }
-        n = read(fd, aligned, alloc);
-        if (n > 0) {
-            uint32_t copy = (uint32_t)n;
-            if (copy > want_len)
-                copy = want_len;
-            memcpy(buf, aligned, copy);
-            *got = copy;
-        } else {
-            *got = 0;
-        }
-        free(aligned);
-    } else {
-        n = read(fd, buf, want_len);
-        *got = (n > 0) ? (uint32_t)n : 0;
+        return errno == ENOENT ? EFS_ERR_NOT_FOUND : EFS_ERR_IO;
+    /* One aligned read carries the payload and, when asked, the tail page.
+     * Only a whole tail page is this build's layout; anything shorter (a
+     * torn write, a bare 128-byte record) has no record. */
+    uint32_t span = (want_len + 4095u) & ~4095u;
+    size_t alloc = (size_t)span + (rec ? 4096u : 0u);
+    if (alloc < 4096)
+        alloc = 4096;
+    uint8_t *aligned = NULL;
+    if (posix_memalign((void **)&aligned, 4096, alloc) != 0) {
+        close(fd);
+        return EFS_ERR_NOMEM;
     }
+    ssize_t n = server_frag_pread(fd, aligned, alloc, 0);
+    *got = n > 0 ? (uint32_t)((size_t)n < want_len ? (size_t)n : want_len) : 0;
+    memcpy(buf, aligned, *got);
     if (rec && rec_ok && n > 0) {
-        *rec_ok = 0;
-        if (direct) {
-            uint8_t *tail = NULL;
-            if (posix_memalign((void **)&tail, 4096, 4096) == 0) {
-                ssize_t rn = pread(fd, tail, 4096, (off_t)want_len);
-                /* Buffered writers persist only the record, whereas direct
-                 * writers pad it to an aligned page. An aligned O_DIRECT
-                 * read may return a short final page at EOF. Both layouts
-                 * carry the same complete record; require its bytes. */
-                if (rn >= (ssize_t)EFS_FRAG_RECORD_BYTES) {
-                    memcpy(rec, tail, EFS_FRAG_RECORD_BYTES);
-                    *rec_ok = 1;
-                }
-                free(tail);
-            }
-        } else {
-            uint8_t tmp[EFS_FRAG_RECORD_BYTES];
-            ssize_t rn = pread(fd, tmp, EFS_FRAG_RECORD_BYTES, (off_t)want_len);
-            if (rn == (ssize_t)EFS_FRAG_RECORD_BYTES) {
-                memcpy(rec, tmp, EFS_FRAG_RECORD_BYTES);
-                *rec_ok = 1;
-            }
-        }
+        *rec_ok = n == (ssize_t)span + 4096;
+        if (*rec_ok)
+            memcpy(rec, aligned + span, EFS_FRAG_RECORD_BYTES);
     }
+    free(aligned);
     close(fd);
     if (n < 0)
         return EFS_ERR_IO;
@@ -1338,7 +1370,7 @@ struct shard_io_arg {
     uint8_t *buf;
     uint32_t len;
     int is_write;
-    int direct; /* data fragments only; meta stays buffered */
+    uint32_t src_len; /* valid bytes at buf when fewer than len (0 = len) */
     int no_create; /* write only if the file already exists (overwrite probe) */
     int excl;      /* O_CREAT|O_EXCL: EEXIST -> EFS_ERR_EXIST, no second open */
     const uint8_t *rec; /* EFS_FRAG_RECORD_BYTES I25 record after the payload */
@@ -1348,10 +1380,10 @@ struct shard_io_arg {
     struct put_sync_root *sync_root;
 };
 
-/* Preserve buffered extents for same-size rewrites, while retaining the exact payload
+/* Preserve extents for same-size rewrites, while retaining the exact payload
  * and checksum-tail length for shrinking writes. Never acknowledge failure
  * to establish that length. This does not add or remove a durability barrier. */
-static int finish_shard_write(int fd, size_t bytes, int sync_write, int direct)
+static int finish_shard_write(int fd, size_t bytes, int sync_write, int osync)
 {
     struct stat st;
     int rc;
@@ -1366,9 +1398,10 @@ static int finish_shard_write(int fd, size_t bytes, int sync_write, int direct)
             rc = ftruncate(fd, (off_t)bytes);
         } while (rc < 0 && errno == EINTR);
     }
-    /* O_SYNC persists direct writes; only a later length change needs
-     * another barrier. Buffered benchmark semantics retain their barrier. */
-    if (rc == 0 && sync_write && (!direct || resized)) {
+    /* O_DIRECT alone is not durable: it bypasses the page cache but not the
+     * device cache or the inode size. sync_write is an explicit fsync; a
+     * benchmark fd opened O_SYNC needs it only after a length change. */
+    if (rc == 0 && sync_write && (!osync || resized)) {
         do { rc = fsync(fd); } while (rc < 0 && errno == EINTR);
     }
     /* Close may report delayed storage errors even after a successful
@@ -2119,7 +2152,7 @@ int server_recovery_prove_file(const char *path, struct efs_frag_ident *want,
                                const uint8_t *expect, uint64_t *bytes)
 {
     *bytes = 0;
-    int fd = open(path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+    int fd = server_frag_open(path, O_RDONLY | O_NOFOLLOW, 0);
     if (fd < 0)
         return errno == ENOENT ? EFS_ERR_NOT_FOUND : EFS_ERR_IO;
     struct stat st;
@@ -2140,18 +2173,8 @@ int server_recovery_prove_file(const char *path, struct efs_frag_ident *want,
         close(fd);
         return EFS_ERR_NOMEM;
     }
-    size_t done = 0;
-    int rc = EFS_OK;
-    while (done < (size_t)st.st_size) {
-        ssize_t r = pread(fd, buf + done, (size_t)st.st_size - done, (off_t)done);
-        if (r < 0 && errno == EINTR)
-            continue;
-        if (r <= 0) {
-            rc = EFS_ERR_IO;
-            break;
-        }
-        done += (size_t)r;
-    }
+    int rc = server_frag_pread(fd, buf, (size_t)st.st_size, 0) == (ssize_t)st.st_size
+                 ? EFS_OK : EFS_ERR_IO;
     close(fd);
     if (rc == EFS_OK) {
         uint8_t digest[EFS_HASH_SIZE], got[EFS_HASH_SIZE];
@@ -2334,15 +2357,15 @@ static int finish_fragment_put(struct shard_io_arg *a, int fd, size_t bytes)
 {
 #ifdef EFS_BENCH_BUILD
     /* Benchmark sync remains opt-in and keeps its existing O_SYNC semantics. */
-    return finish_shard_write(fd, bytes, a->sync_write, a->direct);
+    return finish_shard_write(fd, bytes, a->sync_write, a->sync_write);
 #else
-    /* Production PUT ACKs must be durable for both buffered and direct I/O.
-     * Production does not open O_SYNC, so always establish an explicit file
-     * barrier, including same-length direct writes and checksum tails. */
+    /* Production PUT ACKs must be durable. O_DIRECT is not a barrier and
+     * production does not open O_SYNC, so always establish an explicit file
+     * barrier, including same-length writes and checksum tails. */
     if (a->sync_root) {
         /* Acknowledged now; durable at the root's next barrier or when a
          * client COMMIT (fsync) asks for one. */
-        int rc = finish_shard_write(fd, bytes, 0, a->direct);
+        int rc = finish_shard_write(fd, bytes, 0, 0);
         if (rc != EFS_OK)
             return rc;
         put_sync_note(a->sync_root, bytes);
@@ -2404,9 +2427,7 @@ static void *shard_io_thread(void *arg)
             flags |= O_CREAT;
         if (a->excl)
             flags |= O_EXCL;
-        if (a->direct)
-            flags |= O_DIRECT;
-        int fd = open(a->path, flags, 0644);
+        int fd = server_frag_open(a->path, flags, 0644);
         if (fd < 0 && errno == EEXIST && a->excl) {
             a->result = EFS_ERR_EXIST; /* caller: overwrite, do not charge */
             return NULL;
@@ -2417,157 +2438,136 @@ static void *shard_io_thread(void *arg)
         }
         if (fd < 0 && errno == ENOENT) {
             make_dir_for_file(a->path);
-            fd = open(a->path, flags, 0644);
+            fd = server_frag_open(a->path, flags, 0644);
         }
         if (fd < 0) {
             a->result = EFS_ERR_IO;
             return NULL;
         }
         size_t written = 0;
-        if (a->direct) {
-            uint32_t alloc = (a->len + 4095u) & ~4095u;
-            if (alloc < 4096)
-                alloc = 4096;
-            /* The record lives in a 4 KiB tail after the payload so one
-             * O_DIRECT write carries both. No .sum inode. */
-            if (a->rec && alloc < a->len + 4096u)
-                alloc = a->len + 4096u;
-            /* Zero payloads (store-bench / dd if=/dev/zero): write from a
-             * process-wide pre-zeroed O_DIRECT buffer — no per-PUT memset
-             * or memcpy of the 64 KiB fragment. */
-            int is_zero = !a->rec && (a->len > 0) &&
-                          (efs_tls_write_known_zero ||
-                           efs_bytes_are_zero(a->buf, a->len));
-            const uint8_t *wbuf;
-            if (is_zero) {
-                /* Never free after publish: writers may still reference the
-                 * prior buffer. Grow by replacing the pointer without free. */
-                static uint8_t *zero_dio;
-                static uint32_t zero_dio_alloc;
-                static pthread_mutex_t zero_dio_mu = PTHREAD_MUTEX_INITIALIZER;
-                pthread_mutex_lock(&zero_dio_mu);
-                if (!zero_dio || zero_dio_alloc < alloc) {
-                    uint8_t *fresh = NULL;
-                    if (posix_memalign((void **)&fresh, 4096, alloc) != 0) {
-                        pthread_mutex_unlock(&zero_dio_mu);
-                        close(fd);
-                        a->result = EFS_ERR_NOMEM;
-                        return NULL;
-                    }
-                    memset(fresh, 0, alloc);
-                    zero_dio = fresh;
-                    zero_dio_alloc = alloc;
-                }
-                wbuf = zero_dio;
-                pthread_mutex_unlock(&zero_dio_mu);
-            } else if (((uintptr_t)a->buf & 4095u) == 0 && a->len > 0 &&
-                       (a->len & 4095u) == 0) {
-                /* Fast path: the RDMA recv layout places the frame payload
-                 * on a 4096 boundary, so O_DIRECT can write straight out of
-                 * the recv buffer — no 64 KiB bounce copy per fragment.
-                 * Only when no pad is needed: the bounce path zero-pads
-                 * short tails and the on-disk image must not change.
-                 * With a digest (D20) the 4 KiB tail page is a second
-                 * iovec from a per-thread aligned page; one writev carries
-                 * payload + tail. Until Oct 1 the digest forced every
-                 * fragment through the 64 KiB memcpy below. */
-                if (a->rec) {
-                    struct shard_io_buffers *buffers = shard_io_buffers_get();
-                    if (!buffers || (!buffers->tail &&
-                        posix_memalign((void **)&buffers->tail, 4096, 4096) != 0)) {
-                        close(fd);
-                        a->result = EFS_ERR_NOMEM;
-                        return NULL;
-                    }
-                    memcpy(buffers->tail, a->rec, EFS_FRAG_RECORD_BYTES);
-                    memset(buffers->tail + EFS_FRAG_RECORD_BYTES, 0,
-                           4096 - EFS_FRAG_RECORD_BYTES);
-                    static int once_zc;
-                    if (!once_zc && __sync_bool_compare_and_swap(&once_zc, 0, 1))
-                        fprintf(stderr, "store: put O_DIRECT zero-copy "
-                                "(payload+record writev) len=%u\n", a->len);
-                    struct iovec iov[2] = {
-                        { .iov_base = a->buf, .iov_len = a->len },
-                        { .iov_base = buffers->tail, .iov_len = 4096 },
-                    };
-                    int rc = writev_all(fd, iov, 2);
-                    if (rc != 0) {
-                        close(fd);
-                        a->result = EFS_ERR_IO;
-                        return NULL;
-                    }
-                    a->result = finish_fragment_put(a, fd, (size_t)a->len + 4096);
-                    return NULL;
-                }
-                wbuf = a->buf;
-            } else {
-                /* Per-thread O_DIRECT bounce buffer for unaligned sources
-                 * (TCP fallback path). posix_memalign+free per PUT was pure
-                 * churn, so the buffer is cached per thread. */
-                struct shard_io_buffers *buffers = shard_io_buffers_get();
-                if (!buffers) {
+        /* Payload padded to 4 KiB, then the record on its own 4 KiB tail
+         * page, so one O_DIRECT write carries both. No .sum inode. A short
+         * or unaligned payload is zero-padded through the bounce buffer. */
+        uint32_t span = (a->len + 4095u) & ~4095u;
+        if (span < 4096)
+            span = 4096;
+        uint32_t alloc = span + (a->rec ? 4096u : 0u);
+        uint32_t src = a->src_len && a->src_len < a->len ? a->src_len : a->len;
+        /* Zero payloads (store-bench / dd if=/dev/zero): write from a
+         * process-wide pre-zeroed O_DIRECT buffer — no per-PUT memset
+         * or memcpy of the 64 KiB fragment. */
+        int is_zero = !a->rec && (a->len > 0) &&
+                      (efs_tls_write_known_zero ||
+                       efs_bytes_are_zero(a->buf, src));
+        const uint8_t *wbuf;
+        if (is_zero) {
+            /* Never free after publish: writers may still reference the
+             * prior buffer. Grow by replacing the pointer without free. */
+            static uint8_t *zero_dio;
+            static uint32_t zero_dio_alloc;
+            static pthread_mutex_t zero_dio_mu = PTHREAD_MUTEX_INITIALIZER;
+            pthread_mutex_lock(&zero_dio_mu);
+            if (!zero_dio || zero_dio_alloc < alloc) {
+                uint8_t *fresh = NULL;
+                if (posix_memalign((void **)&fresh, 4096, alloc) != 0) {
+                    pthread_mutex_unlock(&zero_dio_mu);
                     close(fd);
                     a->result = EFS_ERR_NOMEM;
                     return NULL;
                 }
-                if (buffers->bounce_len < alloc) {
-                    free(buffers->bounce);
-                    buffers->bounce = NULL;
-                    buffers->bounce_len = 0;
-                    if (posix_memalign((void **)&buffers->bounce, 4096, alloc) != 0) {
-                        close(fd);
-                        a->result = EFS_ERR_NOMEM;
-                        return NULL;
-                    }
-                    buffers->bounce_len = alloc;
-                }
-                static int once_bounce;
-                if (a->rec && !once_bounce &&
-                    __sync_bool_compare_and_swap(&once_bounce, 0, 1))
-                    fprintf(stderr, "store: put O_DIRECT bounce copy "
-                            "(buf align=%u len=%u)\n",
-                            (unsigned)((uintptr_t)a->buf & 4095u), a->len);
-                memcpy(buffers->bounce, a->buf, a->len);
-                if (a->len < alloc)
-                    memset(buffers->bounce + a->len, 0, alloc - a->len);
-                if (a->rec)
-                    memcpy(buffers->bounce + a->len, a->rec, EFS_FRAG_RECORD_BYTES);
-                wbuf = buffers->bounce;
+                memset(fresh, 0, alloc);
+                zero_dio = fresh;
+                zero_dio_alloc = alloc;
             }
-            while (written < alloc) {
-                ssize_t n = write(fd, wbuf + written, alloc - written);
-                if (n <= 0) {
-                    close(fd);
-                    a->result = EFS_ERR_IO;
-                    return NULL;
-                }
-                written += (size_t)n;
-            }
-        } else {
-            while (written < a->len) {
-                ssize_t n = write(fd, a->buf + written, a->len - written);
-                if (n <= 0) {
-                    close(fd);
-                    a->result = EFS_ERR_IO;
-                    return NULL;
-                }
-                written += (size_t)n;
-            }
+            wbuf = zero_dio;
+            pthread_mutex_unlock(&zero_dio_mu);
+        } else if (((uintptr_t)a->buf & 4095u) == 0 && a->len > 0 &&
+                   (a->len & 4095u) == 0 && src == a->len) {
+            /* Fast path: the RDMA recv layout places the frame payload
+             * on a 4096 boundary, so O_DIRECT can write straight out of
+             * the recv buffer — no 64 KiB bounce copy per fragment.
+             * Only when no pad is needed: the bounce path zero-pads
+             * short tails and the on-disk image must not change.
+             * With a digest (D20) the 4 KiB tail page is a second
+             * iovec from a per-thread aligned page; one writev carries
+             * payload + tail. Until Oct 1 the digest forced every
+             * fragment through the 64 KiB memcpy below. */
             if (a->rec) {
-                ssize_t n = write(fd, a->rec, EFS_FRAG_RECORD_BYTES);
-                if (n != (ssize_t)EFS_FRAG_RECORD_BYTES) {
+                struct shard_io_buffers *buffers = shard_io_buffers_get();
+                if (!buffers || (!buffers->tail &&
+                    posix_memalign((void **)&buffers->tail, 4096, 4096) != 0)) {
+                    close(fd);
+                    a->result = EFS_ERR_NOMEM;
+                    return NULL;
+                }
+                memcpy(buffers->tail, a->rec, EFS_FRAG_RECORD_BYTES);
+                memset(buffers->tail + EFS_FRAG_RECORD_BYTES, 0,
+                       4096 - EFS_FRAG_RECORD_BYTES);
+                static int once_zc;
+                if (!once_zc && __sync_bool_compare_and_swap(&once_zc, 0, 1))
+                    fprintf(stderr, "store: put O_DIRECT zero-copy "
+                            "(payload+record writev) len=%u\n", a->len);
+                struct iovec iov[2] = {
+                    { .iov_base = a->buf, .iov_len = a->len },
+                    { .iov_base = buffers->tail, .iov_len = 4096 },
+                };
+                int rc = writev_all(fd, iov, 2);
+                if (rc != 0) {
                     close(fd);
                     a->result = EFS_ERR_IO;
                     return NULL;
                 }
-                written += EFS_FRAG_RECORD_BYTES;
+                a->result = finish_fragment_put(a, fd, (size_t)a->len + 4096);
+                return NULL;
             }
+            wbuf = a->buf;
+        } else {
+            /* Per-thread O_DIRECT bounce buffer for unaligned sources
+             * (TCP receive buffers, short payloads). posix_memalign+free per PUT was pure
+             * churn, so the buffer is cached per thread. */
+            struct shard_io_buffers *buffers = shard_io_buffers_get();
+            if (!buffers) {
+                close(fd);
+                a->result = EFS_ERR_NOMEM;
+                return NULL;
+            }
+            if (buffers->bounce_len < alloc) {
+                free(buffers->bounce);
+                buffers->bounce = NULL;
+                buffers->bounce_len = 0;
+                if (posix_memalign((void **)&buffers->bounce, 4096, alloc) != 0) {
+                    close(fd);
+                    a->result = EFS_ERR_NOMEM;
+                    return NULL;
+                }
+                buffers->bounce_len = alloc;
+            }
+            static int once_bounce;
+            if (a->rec && !once_bounce &&
+                __sync_bool_compare_and_swap(&once_bounce, 0, 1))
+                fprintf(stderr, "store: put O_DIRECT bounce copy "
+                        "(buf align=%u len=%u)\n",
+                        (unsigned)((uintptr_t)a->buf & 4095u), a->len);
+            memcpy(buffers->bounce, a->buf, src);
+            memset(buffers->bounce + src, 0, alloc - src);
+            if (a->rec)
+                memcpy(buffers->bounce + span, a->rec, EFS_FRAG_RECORD_BYTES);
+            wbuf = buffers->bounce;
+        }
+        while (written < alloc) {
+            ssize_t n = write(fd, wbuf + written, alloc - written);
+            if (n <= 0) {
+                close(fd);
+                a->result = EFS_ERR_IO;
+                return NULL;
+            }
+            written += (size_t)n;
         }
         a->result = finish_fragment_put(a, fd, written);
     } else {
         uint32_t got = 0;
         a->result = read_file_bytes(a->path, a->buf, a->len, &got,
-                                    a->direct, NULL, NULL);
+                                    NULL, NULL);
         if (a->result == EFS_OK && got < a->len)
             memset(a->buf + got, 0, a->len - got);
     }
@@ -2660,7 +2660,6 @@ static int read_fragment_impl(struct efsd_server *s, struct efs_export *ex,
     uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
     if (n != 1) {
         uint32_t want = server_frag_len(ex, ino);
-        int direct = s->direct_io && !efs_ino_is_meta_table(ino);
         char path[8300];
         int plen = 0;
         uint32_t got = 0;
@@ -2676,7 +2675,7 @@ static int read_fragment_impl(struct efsd_server *s, struct efs_export *ex,
             fragment_path_at(s, loc->root, ex, ino, chunk_index,
                              fragment_index, path, sizeof(path));
             plen = (int)strlen(path);
-            rc = read_file_bytes(path, data, want, &got, direct, rec,
+            rc = read_file_bytes(path, data, want, &got, rec,
                                  rec_ok);
             if (rc == EFS_ERR_NOT_FOUND) {
                 loc->valid = 0;
@@ -2690,7 +2689,7 @@ static int read_fragment_impl(struct efsd_server *s, struct efs_export *ex,
                 fragment_path_at(s, ri, ex, ino, chunk_index,
                                  fragment_index, path, sizeof(path));
                 plen = (int)strlen(path);
-                rc = read_file_bytes(path, data, want, &got, direct, rec,
+                rc = read_file_bytes(path, data, want, &got, rec,
                                      rec_ok);
                 if (rc == EFS_OK)
                     frag_loc_note(ex->id, ino, chunk_index, fragment_index,
@@ -2708,7 +2707,6 @@ static int read_fragment_impl(struct efsd_server *s, struct efs_export *ex,
     }
 
     uint32_t want = server_frag_len(ex, ino);
-    int direct = s->direct_io && !efs_ino_is_meta_table(ino);
     char path[8300];
     int plen;
     uint32_t got = 0;
@@ -2716,7 +2714,7 @@ static int read_fragment_impl(struct efsd_server *s, struct efs_export *ex,
     fragment_path_at(s, 0, ex, ino, chunk_index, fragment_index, path,
                      sizeof(path));
     plen = (int)strlen(path);
-    rc = read_file_bytes(path, data, want, &got, direct, rec, rec_ok);
+    rc = read_file_bytes(path, data, want, &got, rec, rec_ok);
     if (rc != EFS_OK)
         return rc;
     *data_len = got;
@@ -3149,7 +3147,7 @@ int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export
 
 /* path must be the server_fragment_path() result for this fragment.
  * Every fragment file carries the I25 record (frag_record.h) after its
- * payload: a 4 KiB tail page under O_DIRECT, 128 bytes otherwise. checksum
+ * 4 KiB-padded payload: a 4 KiB tail page written with O_DIRECT. checksum
  * is the payload digest the caller already verified (data PUT) or NULL,
  * in which case the payload is hashed here. */
 static int server_write_fragment_to_path(struct efsd_server *s, struct efs_export *ex,
@@ -3172,10 +3170,12 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
     memset(&arg, 0, sizeof(arg));
     arg.s = s;
     arg.buf = (uint8_t *)data;
-    arg.len = data_len;
-    arg.direct = s->direct_io && !efs_ino_is_meta_table(ino);
-    if (arg.direct)
-        arg.len = server_frag_len(ex, ino);
+    /* The stored payload is the fixed fragment length; a shorter body is
+     * zero-padded, so a caller's digest must cover the padded payload. */
+    arg.len = server_frag_len(ex, ino);
+    arg.src_len = data_len;
+    if (data_len > arg.len)
+        return EFS_ERR_INVAL;
     arg.is_write = 1;
 #ifdef EFS_BENCH_BUILD
     arg.sync_write = s->bench_sync;
@@ -3183,7 +3183,16 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
     uint8_t digest[EFS_HASH_SIZE], rec[EFS_FRAG_RECORD_BYTES];
     struct efs_frag_ident ident;
     if (!checksum) {
-        efs_hash(data, data_len, digest);
+        if (data_len == arg.len) {
+            efs_hash(data, data_len, digest);
+        } else {
+            uint8_t *padded = calloc(1, arg.len);
+            if (!padded)
+                return EFS_ERR_NOMEM;
+            memcpy(padded, data, data_len);
+            efs_hash(padded, arg.len, digest);
+            free(padded);
+        }
         checksum = digest;
     }
     fragment_ident(ex, ino, chunk_index, fragment_index, arg.len, &ident);
@@ -3369,11 +3378,13 @@ int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export
 #define EFS_NODES_MAGIC "EFSN"
 #define EFS_NODES_VERSION 2 /* K33: struct efs_node carries the store token */
 
+#ifndef EFS_BENCH_BUILD
 static void nodes_path_at(struct efsd_server *s, uint32_t root_idx,
                           char *path, size_t path_len)
 {
     snprintf(path, path_len, "%s/meta/cluster_nodes.bin", s->storage_paths[root_idx]);
 }
+#endif
 
 void server_nodes_mark_dirty(struct efsd_server *s)
 {
@@ -3392,8 +3403,10 @@ void server_nodes_flush_dirty(struct efsd_server *s)
 
 void server_save_nodes(struct efsd_server *s)
 {
-    if (!s->persist_nodes)
-        return;
+#ifdef EFS_BENCH_BUILD
+    (void)s;
+    return; /* the store benchmark has no cluster membership */
+#else
 
     /* Snapshot membership under the lock, then do all disk I/O unlocked so a
      * slow fsync never serializes every connection handler behind s->lock. */
@@ -3432,12 +3445,15 @@ void server_save_nodes(struct efsd_server *s)
         fsync(fileno(f));
         fclose(f);
     }
+#endif
 }
 
 void server_load_nodes(struct efsd_server *s)
 {
-    if (!s->persist_nodes)
-        return;
+#ifdef EFS_BENCH_BUILD
+    (void)s;
+    return;
+#else
 
     char path[8192];
     uint32_t nroots = s->storage_path_count ? s->storage_path_count : 1;
@@ -3499,6 +3515,7 @@ void server_load_nodes(struct efsd_server *s)
         printf("  persisted node %u: %s:%u\n",
                unique[i].id, unique[i].addr, unique[i].port);
     }
+#endif
 }
 
 int server_rejoin_cluster(struct efsd_server *s)

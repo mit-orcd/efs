@@ -63,10 +63,10 @@ member count or cluster file.
 | Storage roots | `STORAGE`: one to 24 directories, comma-separated | — |
 | Quota | `--quota SIZE` (`K`, `M`, `G`, `T`) | Automatic safe quota: 20 % (at least 1 GiB) of each filesystem kept free, 7/8 of the rest for fragments |
 | Metadata root | `--meta-storage PATH` | The first storage root |
-| Fragment I/O | `--direct-io` (alpha profile) | Buffered (`--no-direct-io`) |
+| Fragment I/O | always `O_DIRECT`; a root that cannot do it is refused | — |
 | Transport | `EFS_TRANSPORT=auto\|tcp\|rdma`, `EFS_RDMA_DEV`, `EFS_RDMA_GID_INDEX` on servers and clients | `auto` |
 | Discovery | `--discovery-port N` (0 off), `--discover-on IFACE` | UDP 17430 on every interface |
-| `.efs` commands | `EFS_COMMANDS=1` on the mount; server policy with `efs-mgmt commands-policy` | Off on the mount |
+| `.efs` commands | the cluster commands-policy, `efs-mgmt commands-policy` | On |
 
 The endpoint must be a real local IPv4 address (not `0.0.0.0`); peers
 connect back to it. Startup refuses a quota above the safe maximum and a
@@ -76,15 +76,16 @@ headroom; refusing startup`), for example a small tmpfs.
 ## Transport and direct I/O
 
 - **TCP or RDMA.** `auto` uses RDMA when an active verbs device is present,
-  otherwise TCP; `rdma` refuses to fall back. Native InfiniBand needs an
+  otherwise TCP, and logs which (`transport auto: ...`); `rdma` refuses to
+  start without a usable device and never falls back. Native InfiniBand needs an
   active port; RoCE needs an active Ethernet verbs device and a nonzero GID
   (`EFS_RDMA_GID_INDEX` pins one). Set the same transport variables on every
   daemon and client. The recorded RDMA runs use one host's devices or
   software RXE; cross-host RDMA acceptance is NOTRUN.
-- **Direct fragment I/O** (`--direct-io`) reads and writes fragments with
-  `O_DIRECT`. It is a server setting, independent of the transport and of
-  the client, which always bypasses the kernel page cache. `O_DIRECT` alone
-  does not make a write survive power loss (W71, deferred).
+- **Direct fragment I/O.** efsd reads and writes fragments only with
+  `O_DIRECT` (D42), independent of the transport and of the client, which
+  always bypasses the kernel page cache. `O_DIRECT` alone does not make a
+  write durable; the explicit barriers remain (W71 power loss deferred).
 
 ## Operator workflows
 
@@ -102,14 +103,14 @@ order) and starts serving.
 
 ```bash
 # host 10.0.0.11: first node, creates the cluster
-./scripts/server.sh 10.0.0.11:17432 /data/efs --direct-io
+./scripts/server.sh 10.0.0.11:17432 /data/efs
 # hosts 10.0.0.12 and 10.0.0.13: join through the first node
-./scripts/server.sh 10.0.0.12:17432 /data/efs 10.0.0.11:17432 --direct-io
-./scripts/server.sh 10.0.0.13:17432 /data/efs 10.0.0.11:17432 --direct-io
+./scripts/server.sh 10.0.0.12:17432 /data/efs 10.0.0.11:17432
+./scripts/server.sh 10.0.0.13:17432 /data/efs 10.0.0.11:17432
 ```
 
-The same with the binaries: `efsd 10.0.0.11:17432 /data/efs --direct-io`,
-then `efsd --join 10.0.0.11:17432 /data/efs --direct-io` on each joiner. A
+The same with the binaries: `efsd 10.0.0.11:17432 /data/efs`,
+then `efsd --join 10.0.0.11:17432 /data/efs` on each joiner. A
 quota goes after the roots in the wrapper (`/data/efs:2T`) or as
 `--quota 2T`. With the word `join` instead of a seed address
 (`efsd --join /data/efs`), the joiner finds the cluster by UDP broadcast on
@@ -132,9 +133,11 @@ answers `NOT_PRIMARY` right after the members join, repeat it.
 
 `status` lists every member with reachability (`up`/`DOWN`), used bytes,
 quota and roots, then the usable 2+1 capacity, the cluster state (`OK`,
-`DEGRADED` with a node down, `FULL` when two or more nodes are full,
-`UNAVAILABLE` with fewer than two up), the degraded-chunk counters and the
-abandoned-upload counters. `raft-status` shows each metadata group's term,
+`DEGRADED` with a node down or with degraded chunks not yet rebuilt, `FULL`
+when two or more nodes are full, `UNAVAILABLE` with fewer than two up), the
+degraded-chunk counters, a `Protection:` line (`full`, or `DEGRADED` with the
+number of chunks on two of three fragments) and the abandoned-upload
+counters. `raft-status` shows each metadata group's term,
 commit and applied index, voters and follower bound. `efs-mgmt version`,
 `io-stats`, `gc-status` and `sync-status` are further read-only views.
 
@@ -180,7 +183,7 @@ runtime `shrink-quota` is lost at restart and out of alpha).
 Start a new host with a fresh store and `--join`:
 
 ```bash
-./scripts/server.sh 10.0.0.14:17432 /data/efs 10.0.0.11:17432 --direct-io
+./scripts/server.sh 10.0.0.14:17432 /data/efs 10.0.0.11:17432
 ```
 
 The node is added online with the next id. At the fourth member, metadata
@@ -210,7 +213,7 @@ that restart. This command has no test yet (finding F11); prefer the restart.
 ```bash
 ./scripts/client.sh stop /mnt/efs                 # every client first
 ./scripts/server.sh stop /data/efs                # on each host (or: stop 10.0.0.11:17432)
-./scripts/server.sh 10.0.0.11:17432 /data/efs --direct-io      # restart: the same command
+./scripts/server.sh 10.0.0.11:17432 /data/efs      # restart: the same command
 ```
 
 Stop clients before servers, so pending writes can drain. A daemon stops on
@@ -222,27 +225,29 @@ stop is refused until rerun. Restart a node with the command it was started
 with (the first node with its address, a joiner with `--join`); the store
 keeps its cluster, node id and endpoint, and another endpoint or another
 cluster's store is refused. A restart after a stop that was not orderly
-leaves that node refusing COMMIT, so `fsync` fails everywhere (see failure
-behavior). A whole-cluster restart needs a quorum of each
+leaves that node refusing COMMIT, so its fragments are never proven durable:
+`fsync` marks the stripes it holds degraded, and fails for a stripe that
+also needs another missing fragment (see failure behavior). A whole-cluster restart needs a quorum of each
 metadata group back before clients are served.
 
 ## Failure behavior
 
 | Event | What happens | What the user sees |
 | --- | --- | --- |
-| One node down | Reads reconstruct from the other two fragments; writes go on with two fragments and are recorded as degraded; each metadata group keeps a quorum. `fsync` and `fdatasync` commit on every storage node, so they fail | Reads, writes and `close` continue; **every `fsync`/`fdatasync` returns `EIO`** (after at most 60 s) until the node is back. Requests to the lost node time out (about 30 s) until the client marks it down (after four failures, for 30 s); `status` shows the node `DOWN`, `Cluster state: DEGRADED` and the degraded-chunk count. Packing waits (segments need three acknowledgements) |
+| One node down | Reads reconstruct from the other two fragments; each metadata group keeps a quorum. On four or more nodes new writes place all three fragments on the available nodes; on three, writes go on with two fragments and are recorded as degraded. `fsync` and `fdatasync` commit only on the nodes holding the file's fragments (K35, D42): a stripe with two fragments proven durable succeeds after its degraded mark is durable | Reads, writes, `close`, `fsync` and `fdatasync` continue. Stripes left on two fragments have no fault tolerance until rebuilt: the client logs `fsync ino=… marked degraded for rebuild on return`, `status` shows the node `DOWN`, `Cluster state: DEGRADED`, the degraded-chunk count and `Protection: DEGRADED`. Requests to the lost node time out (about 30 s) until the client marks it down (after four failures, for 30 s). Packing waits (segments need three acknowledgements) |
 | A node stops while writes are in flight | Known defect (F24, proposed K34): a chunk can be acknowledged with its two fragments on the stopping node and one other | That file reads `EIO` until the node returns |
 | A node hangs without exiting | Untested gray failure | Requests to it time out after 30 s; an `open` was seen to return `EIO` (W154 notes) |
 | The node returns | Rebuild on return (W154): each group leader rebuilds the missing fragment of every degraded stripe, at most 256 per pass, and clears its mark | `Degraded chunks` falls to 0; `rebuilt=` rises. No other repair exists |
-| A node lost for good | Degraded stripes stay degraded; there is no rebuild to another node and no removal | Data stays readable while every other node is up; a second loss then makes those stripes unreadable. `fsync` returns `EIO` for good, since the lost node stays a member |
-| Two nodes down at once | Stripes with fragments on both are unreadable; a metadata group with two of its three voters down has no quorum | `EIO` or timeouts for the affected files; with two of nodes 1–4 down in one group, metadata operations on that group stop until a node returns |
+| A node lost for good | Degraded stripes stay degraded; there is no rebuild to another node and no removal | Data stays readable while every other node is up; a second loss then makes those stripes unreadable. `fsync` goes on, marking the stripes on that node degraded |
+| Two nodes down at once | Stripes with fragments on both are unreadable; a metadata group with two of its three voters down has no quorum | `EIO` or timeouts for the affected files; `fsync`/`fdatasync` of a file with such a stripe return `EIO` and the client log names the stripe (`1 of 3 durable; need 2`) until a node returns; with two of nodes 1–4 down in one group, metadata operations on that group stop until a node returns |
 | Client process dies | Writes it had not yet published are lost (D28); its abandoned uploads are collected | `Abandoned uploads` counters in `status` |
-| A daemon crashes, is killed or stops forced (rc 3) | Its roots restart "recovery uncertain". Verified recovery (K36) proves the store, drops what it cannot prove, marks those stripes for rebuild on return and then clears the fence | Until then COMMIT returns `EIO`, so `fsync` fails; reads and writes go on. Afterwards `fsync` works again, except in a client that held unsynced writes of the crashed run: it keeps getting `EIO` until it is remounted. The log says `recovery: verified in N ms`; `sync-status` shows `recovery verified` with its counts, or `recovery FAILED` and the reason (the node then stays fenced until a restart verifies it) |
+| A daemon crashes, is killed or stops forced (rc 3) | Its roots restart "recovery uncertain". Verified recovery (K36) proves the store, drops what it cannot prove, marks those stripes for rebuild on return and then clears the fence | Until then the node refuses COMMIT: `fsync` marks every stripe with a fragment on that node degraded and returns `EIO` for a stripe that needs that fragment; reads and writes go on. Afterwards the node COMMITs again and the marked stripes are rebuilt on it. A write acknowledged by the crashed run and not yet committed is not proven by recovery (K35 treats that fragment as lost). The log says `recovery: verified in N ms`; `sync-status` shows `recovery verified` with its counts, or `recovery FAILED` and the reason (the node then stays fenced until a restart verifies it) |
 | Sudden power loss | Not qualified (W71, deferred); the restart is unclean as above | Unknown durability; then as above |
 
 There is no automatic repair beyond rebuild on return, no indication of
-degraded state on the mount itself, no two-loss protection on any cluster
-size, and no `fsync` while a member is down or after a member's unclean stop.
+degraded state on the mount itself (only in `status` and the client log), no
+two-loss protection on any cluster size, and a stripe that `fsync` left on two
+fragments survives no further loss until it is rebuilt.
 Stop daemons only with `server.sh stop` (or `SIGTERM`) and check that it
 exits 0. The [release notes draft](../release-notes/alpha-1.0.md) lists
 every alpha limitation.

@@ -32,18 +32,18 @@ fragments is rebuilt when the missing node returns.
 | L2 | Fixed metadata group count and placement: two groups of three voters; both on nodes 1–3 at N = 3, nodes 1–3 and 2–4 at N ≥ 4 | Any cluster | Nodes 5 and up hold data only; metadata work and leadership stay on nodes 1–4, and leaders are not balanced (W66) | D38 as amended Oct 22 |
 | L3 | Packed small files are data and use the data ring across all N nodes | Small files after close | Packed segments land on every node; a node that hosts no group reads the pack object from a voter. The placement audit (B4) is NOTRUN | D37, D38, K28 |
 | L4 | Supported range 3 to 16 nodes on distinct hosts | Fewer than 3 members, more than 16, or several members per host | Fewer than 3: the cluster never forms. A 17th member is not added (the member tables hold 16); no test covers what that joiner sees (finding F14). Several daemons per host are not independent failure domains. Qualification on 3, 4 and more than 4 distinct hosts is NOTRUN (A3, A4) | `EFS_MAX_NODES` 16, K28, K33 |
-| L5 | Online addition only; online removal deferred | A node is retired or lost for good | It stays a member, shown `DOWN`; its stripes stay degraded; `fsync` fails for good (L27); there is no remove or replace command | A13, D40 |
+| L5 | Online addition only; online removal deferred | A node is retired or lost for good | It stays a member, shown `DOWN`; its stripes stay degraded and `fsync` marks new ones degraded (L27); there is no remove or replace command | A13, D40 |
 | L6 | No repair beyond rebuild on return | A node does not come back, or a fragment is lost or corrupt while all nodes are up | Nothing re-protects the stripe elsewhere; a second loss makes it unreadable. Rebuild runs only for stripes acknowledged with two fragments, when the missing node returns | K23, D40, W154; W74 deferred |
 | L7 | No sudden power-loss qualification; crash recovery deferred | Host power-off or kernel crash | Not qualified: acknowledged writes may or may not survive | W71, W123 (K23) |
-| L27 | `fsync` unavailable with a member down, *proposed* | Any storage node down or unreachable | `fsync` and `fdatasync` return `EIO` (after at most 60 s); reads, writes and `close` go on | W154 limitations; finding F22 |
-| L28 | An unclean stop fences `fsync` until a fresh format, *proposed* | A daemon crash, `SIGKILL`, forced exit (rc 3) or power loss, then restart | That node refuses COMMIT ("recovery uncertain"), so every client's `fsync` returns `EIO` from then on; verified recovery is deferred (W71, W123) and the node cannot be removed or replaced (L5) | `store.c` put sync; finding F23 |
+| L27 | `fsync` with a member down leaves stripes without tolerance, *proposed* | A storage node down or unreachable | `fsync` and `fdatasync` succeed with two fragments proven durable, after marking the stripe degraded; the stripe survives no further loss until the rebuild on return; with two of a stripe's nodes down they return `EIO` | K35 (D42), finding F22 |
+| L28 | An unclean stop leaves a node's fragments unproven until a fresh format, *proposed* | A daemon crash, `SIGKILL`, forced exit (rc 3) or power loss, then restart | That node refuses COMMIT ("recovery uncertain"), so `fsync` marks every stripe with a fragment there degraded and returns `EIO` for a stripe that needs it; verified recovery is deferred (W71, W123, K36) and the node cannot be removed or replaced (L5) | `store.c` put sync; finding F23 |
 | L8 | Degraded state is shown to the operator only | One node down, degraded stripes | `efs-mgmt status`: `Cluster state: DEGRADED`, `Degraded chunks: N`. The mount and applications get no indication | W154; finding F10 |
 
 ### Client and POSIX
 
 | ID | Limitation | Trigger | What the user sees | Reference |
 | --- | --- | --- | --- | --- |
-| L9 | Linux FUSE client only | NFS re-export, macOS | Not supported; `EFS_FUSE_EXPORT` is outside the alpha surface | W152 (user, Oct 22) |
+| L9 | Linux FUSE client only | NFS re-export, macOS | Not supported; the `EFS_FUSE_EXPORT` switch is removed (D42) | W152 (user, Oct 22) |
 | L10 | Read after fork (K10/W121) | A process forks while another of its threads has a read in flight on EFS, on a kernel without the FUSE direct-I/O page-pinning fix (upstream `738adade96b2`; the diagnosis host ran RHEL 9 `5.14.0-687.39.1.el9_8`) | The read succeeds but the caller's buffer keeps its previous bytes; a reread is correct. No EFS workaround in alpha; `posix_spawn` instead of `fork` avoids it | D40, [diagnosis](../status/orcd-w121-fork-read-20261016.md) |
 | L11 | Shared mmap not supported | `mmap(MAP_SHARED)` of an EFS file | The mapping fails; `MAP_PRIVATE` works | W104 |
 | L12 | `renameat2` flags not supported, *proposed* | `RENAME_EXCHANGE`, `RENAME_WHITEOUT`, `RENAME_NOREPLACE` onto a free name | `EOPNOTSUPP`, nothing renamed (`RENAME_NOREPLACE` onto an existing name gets `EEXIST`) | [POSIX P3](../using/alpha-1.0-posix.md#known-deviations) |
@@ -65,7 +65,7 @@ fragments is rebuilt when the missing node returns.
 | L23 | Same build everywhere; no upgrade in place | A peer or client of another build; a format change | The connection is refused; a format change needs a fresh format, no migration and no downgrade | AGENTS.md (no backward compatibility) |
 | L24 | No effective-settings listing, unless W122 enters alpha | An operator wants every effective value | Only the startup log and the status commands show settings | S4, W122 |
 | L25 | Cross-host RDMA not qualified | RDMA between hosts | Recorded RDMA runs use one host's devices or software RXE | W106, A2 |
-| L26 | The alpha profile is not all defaults, *proposed* | A daemon started without `--direct-io`, a mount without `EFS_COMMANDS=1` | Buffered fragment I/O, no `.efs`; both differ from the qualified profile until A7 decides | Findings F7, F8 |
+| L26 | The alpha profile is the only behavior (A7, D42) | — | Fragment I/O is always `O_DIRECT`, `.efs` follows the cluster commands-policy, expiry is compiled out; removed settings are refused at startup | Findings F7, F8 (closed by A7) |
 
 ## Open items that are not yet limitations
 

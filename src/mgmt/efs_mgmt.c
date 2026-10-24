@@ -53,14 +53,16 @@ static void format_bytes(uint64_t bytes, char *buf, size_t len)
 /* Short STATUS probe so a dead peer does not stall status for EFS_IO_TIMEOUT_MS. */
 #define EFS_STATUS_PROBE_MS 2000
 
-static int probe_node_up(const char *nhost, uint16_t nport, struct efs_msg_status_reply *status)
+/* One request/reply with a member under the short bound: connect,
+ * declaration and reply, not efs_connect_declared's. reply_len is exact. */
+static int probe_node_rpc(const char *nhost, uint16_t nport, uint8_t msg, uint8_t want,
+                          void *out, uint32_t reply_len)
 {
     int pfd = efs_connect_tcp(nhost, nport);
     if (pfd < 0)
         return 0;
     efs_set_recv_timeout(pfd, EFS_STATUS_PROBE_MS);
     efs_set_send_timeout(pfd, EFS_STATUS_PROBE_MS);
-    /* Declared under the same short bound, not efs_connect_declared's. */
     if (efs_fd_declare(pfd) != EFS_OK) {
         close(pfd);
         return 0;
@@ -69,17 +71,23 @@ static int probe_node_up(const char *nhost, uint16_t nport, struct efs_msg_statu
     void *preply = NULL;
     uint32_t preply_len = 0;
     int ok = 0;
-    if (efs_send_msg(pfd, EFS_MSG_STATUS, NULL, 0) == 0 &&
+    if (efs_send_msg(pfd, msg, NULL, 0) == 0 &&
         efs_recv_msg(pfd, &type, &preply, &preply_len) == 0 &&
-        type == EFS_MSG_STATUS_REPLY &&
-        preply_len == sizeof(struct efs_msg_status_reply)) {
-        if (status)
-            memcpy(status, preply, sizeof(*status));
+        type == want && preply_len == reply_len) {
+        if (out)
+            memcpy(out, preply, reply_len);
         ok = 1;
     }
     free(preply);
     close(pfd);
     return ok;
+}
+
+static int probe_node_up(const char *nhost, uint16_t nport, struct efs_msg_status_reply *status)
+{
+    struct efs_msg_status_reply scratch;
+    return probe_node_rpc(nhost, nport, EFS_MSG_STATUS, EFS_MSG_STATUS_REPLY,
+                          status ? status : &scratch, sizeof(scratch));
 }
 
 /* Build hosts and timestamps are diagnostics, not source identity. Keep the
@@ -91,6 +99,73 @@ static void status_version_identity(const char *version, char *identity, size_t 
     if (built && !strstr(identity, "no git metadata")) {
         built[0] = ')'; built[1] = '\0';
     }
+}
+
+/* One member's RAFT_STATUS reply, or -1 when it cannot be read. */
+static int raft_status_fetch(const char *host, uint16_t port,
+                             struct efs_msg_raft_status_reply *out)
+{
+    if (!probe_node_rpc(host, port, EFS_MSG_RAFT_STATUS, EFS_MSG_RAFT_STATUS_REPLY,
+                        out, sizeof(*out)))
+        return -1;
+    return out->rc == EFS_OK ? 0 : -1;
+}
+
+/* A9/D42: actual metadata leader placement, as each member reports its own
+ * role (elections only; no placement policy moves leaders). A group with no
+ * self-reported leader, or with two in different terms, is shown as such. */
+static void status_leader_placement(const struct efs_node *nodes, const uint8_t *up, uint32_t n)
+{
+    struct efs_msg_raft_status_reply *r = calloc(1, sizeof(*r));
+    if (!r)
+        return;
+    uint32_t led[EFS_RAFT_HOST_MAX_GROUPS] = {0}, ngroups = 0, reachable = 0;
+    uint32_t leader_of[EFS_RAFT_HOST_MAX_GROUPS][4], group_id[EFS_RAFT_HOST_MAX_GROUPS];
+    uint64_t term_of[EFS_RAFT_HOST_MAX_GROUPS][4];
+    uint32_t leads[EFS_MAX_NODES] = {0};
+    printf("Metadata leader placement (self-reported):\n");
+    for (uint32_t i = 0; i < n; i++) {
+        if (!up[i] || raft_status_fetch(nodes[i].addr, nodes[i].port, r) != 0) {
+            printf("  node %u: %s\n", nodes[i].id, up[i] ? "unreachable" : "down");
+            continue;
+        }
+        reachable++;
+        char list[96] = "";
+        size_t used = 0;
+        for (uint32_t g = 0; g < r->ngroups && g < EFS_RAFT_HOST_MAX_GROUPS; g++) {
+            const struct efs_raft_group_status *gs = &r->groups[g];
+            if (g >= ngroups) ngroups = g + 1;
+            group_id[g] = gs->group;
+            if (!gs->hosted || gs->role != EFS_RAFT_LEADER)
+                continue;
+            if (led[g] < 4) {
+                leader_of[g][led[g]] = nodes[i].id;
+                term_of[g][led[g]] = gs->term;
+            }
+            led[g]++;
+            leads[i]++;
+            used += (size_t)snprintf(list + used, used < sizeof(list) ? sizeof(list) - used : 0,
+                                     "%sgroup %u (term %llu)", used ? ", " : "", gs->group,
+                                     (unsigned long long)gs->term);
+        }
+        printf("  node %u: leads %s\n", nodes[i].id, used ? list : "none");
+    }
+    uint32_t distinct = 0, have = 0;
+    for (uint32_t i = 0; i < n; i++)
+        distinct += leads[i] ? 1 : 0;
+    for (uint32_t g = 0; g < ngroups; g++) {
+        if (led[g] == 1)
+            have++;
+        else if (led[g] == 0)
+            printf("  group %u: no leader reported\n", group_id[g]);
+        else
+            for (uint32_t k = 0; k < led[g] && k < 4; k++)
+                printf("  group %u: leader claim by node %u term %llu\n", group_id[g],
+                       leader_of[g][k], (unsigned long long)term_of[g][k]);
+    }
+    printf("  leaders: %u/%u groups on %u distinct node(s); %u/%u members reported\n",
+           have, ngroups, distinct, reachable, n);
+    free(r);
 }
 
 static int cmd_status(int argc, char **argv)
@@ -155,6 +230,7 @@ static int cmd_status(int argc, char **argv)
     /* D31: each group's leader reports its abandoned-upload records. */
     uint64_t orphans[2] = {0, 0}, orphan_collected = 0, orphan_deleted = 0, orphan_failed = 0;
     uint32_t orphan_seen = 0;
+    uint8_t node_up[EFS_MAX_NODES] = {0};
     for (uint32_t i = 0; i < list->node_count; i++) {
         /* Probe every advertised addr (may differ from the seed string we used). */
         struct efs_msg_status_reply current = {0};
@@ -187,6 +263,8 @@ static int cmd_status(int argc, char **argv)
             up_nodes++;
         else
             down_nodes++;
+        if (i < EFS_MAX_NODES)
+            node_up[i] = (uint8_t)up;
 
         char used_str[32], quota_str[32];
         format_bytes(list->nodes[i].used, used_str, sizeof(used_str));
@@ -269,12 +347,15 @@ static int cmd_status(int argc, char **argv)
     }
 
     const char *cluster_state = "OK";
+    uint64_t degraded_total = degraded[0] + degraded[1];
     if (up_nodes < 2)
         cluster_state = "UNAVAILABLE";
     else if (down_nodes > 0)
         cluster_state = "DEGRADED";
     else if (full_nodes >= 2)
         cluster_state = "FULL";
+    else if (degraded_seen == 3u && degraded_total)
+        cluster_state = "DEGRADED"; /* every node up, protection not restored yet */
     printf("Cluster state: %s (%d up, %d down)\n", cluster_state, up_nodes,
            down_nodes);
     /* Stripes acknowledged with two of three fragments, awaiting rebuild
@@ -294,6 +375,17 @@ static int cmd_status(int argc, char **argv)
                degraded_seen & 2u ? "2" : (degraded_seen ? "" : "none"),
                (unsigned long long)rebuilt, (unsigned long long)rebuild_retired,
                (unsigned long long)rebuild_failed);
+
+    /* K35 (D42): a stripe on two durable fragments survives no further
+     * loss until the rebuild on return restores its third. */
+    if (degraded_seen != 3u)
+        printf("Protection: unknown (degraded-chunk count not reported by both groups)\n");
+    else if (degraded_total)
+        printf("Protection: DEGRADED: %llu chunks on two of three fragments, no fault "
+               "tolerance until rebuilt (W154 rebuilds when the missing node is up)\n",
+               (unsigned long long)degraded_total);
+    else
+        printf("Protection: full (2+1: every chunk tolerates one lost node)\n");
 
     /* Abandoned ticketed uploads awaiting revocation-gated collection on
      * every member that holds a fragment (D31). Unknown until both group
@@ -379,6 +471,8 @@ static int cmd_status(int argc, char **argv)
                        have[i] ? vers[i] : "unreachable");
         }
     }
+
+    status_leader_placement(nodes_copy, node_up, ncopy);
 
     /* Operational state of the contacted node (always active today). */
     if (send_recv(fd, EFS_MSG_STATUS, NULL, 0, &reply_type, &reply, &reply_len) == 0 &&
@@ -693,7 +787,9 @@ static int cmd_version(int argc, char **argv)
     return 0;
 }
 
+#if EFS_BUILD_EXPIRY
 static void expiry_duration(uint64_t ns,char *out,size_t n);
+#endif
 
 static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
 {
@@ -721,6 +817,7 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
         return 1;
     }
     struct efs_msg_gc_status_reply *g = payload;
+#if EFS_BUILD_EXPIRY
     if(expiry_only) {
         if(!g->expiry.available) {
             fprintf(stderr,"Expiry worker status unavailable on this node.\n");free(payload);return 1;
@@ -745,6 +842,9 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
         printf("Physical reclamation: separate GC totals; no expiry-only physical byte attribution\n");
         free(payload);return 0;
     }
+#else
+    (void)expiry_only;
+#endif
     printf("node=%u stage=%u group=%u exports=%u passes=%llu elapsed_ms=%llu "
            "last_pass_age_ms=%llu last_delete_age_ms=%llu\n",
            g->node_id, g->stage, g->group, g->exports, (unsigned long long)g->passes,
@@ -772,6 +872,7 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
                (unsigned long long)g->first_seen_age_ms[i]);
     printf("trunc_pending group0=%llu group2=%llu\n",
            (unsigned long long)g->trunc_pending[0], (unsigned long long)g->trunc_pending[1]);
+#if EFS_BUILD_EXPIRY
     {
         const struct efs_expiry_status *e=&g->expiry;
         const char *state=!e->available?"unavailable":!e->enabled?"disabled":
@@ -788,6 +889,7 @@ static int cmd_gc_status_mode(int argc, char **argv,int expiry_only)
                "overdue_capped=%u expiry_sample_age_ms=%llu\n",i*2,(e->sampled_mask>>i)&1,
                (unsigned long long)e->due_lower_bound[i],e->due_capped[i],(unsigned long long)e->sample_age_ms[i]);
     }
+#endif
     {
         const struct efs_reclaim_status *c=&g->reclaim;
         printf("reclaim_state=%s reclaim_accepted=%llu reclaim_deleted=%llu reclaim_checkpointed=%llu "
@@ -894,7 +996,9 @@ static int cmd_pack_compact(int argc, char **argv)
 }
 
 static int cmd_gc_status(int argc,char **argv) {return cmd_gc_status_mode(argc,argv,0);}
+#if EFS_BUILD_EXPIRY
 static int cmd_expiry_status(int argc,char **argv) {return cmd_gc_status_mode(argc,argv,1);}
+#endif
 
 static int cmd_raft_status(int argc, char **argv)
 {
@@ -949,6 +1053,12 @@ static int cmd_raft_status(int argc, char **argv)
            (unsigned long long)r->kv_mt_bytes, (unsigned long long)r->kv_mem_budget,
            (unsigned long long)r->kv_l0_bytes, (unsigned long long)r->kv_l0_cap,
            (unsigned long long)r->kv_apply_deferred, (unsigned long long)r->admit_busy);
+    /* Leader placement as this node sees it (node ids; 0 = unknown). */
+    printf("  leaders");
+    for (i = 0; i < r->ngroups && i < EFS_RAFT_HOST_MAX_GROUPS; i++)
+        printf(" group%u=node%d", r->groups[i].group,
+               r->groups[i].leader >= 0 ? r->groups[i].leader + 1 : 0);
+    printf("\n");
     for (i = 0; i < r->ngroups && i < EFS_RAFT_HOST_MAX_GROUPS; i++) {
         struct efs_raft_group_status *g = &r->groups[i];
         printf("  group %u hosted=%u role=%s leader=%d term=%llu "
@@ -1490,6 +1600,7 @@ static int cmd_commands_policy(int argc,char **argv)
     return rc?1:0;
 }
 
+#if EFS_BUILD_EXPIRY
 static int cmd_expiry_clock(int argc,char **argv)
 {
     int reset=argc==2 && !strcmp(argv[1],"reset");
@@ -1772,9 +1883,11 @@ usage:
                    "Reading/writing does not renew expiry. Repeated explicit renewals may extend lifetime.\n"
                    "Renewal limit must be at least expire-after; it is not a maximum lifetime.\n"
                    "FLAGS: bit 0 enables future-file defaults; bit 1 permits owner clearing.\n"
-                   "Server EFS_EXPIRY=1 required. Set requires uid 0. Renewal requires ownership.\n");
+                   "An EFS_BUILD_EXPIRY build is required. Set requires uid 0. Renewal requires ownership.\n");
     return 1;
 }
+
+#endif
 
 static void sess_pack_hdr(uint8_t *payload, uint8_t group, uint8_t sub,
                           const uint8_t uuid[EFS_OPID_UUID_LEN])
@@ -3280,12 +3393,14 @@ int main(int argc, char **argv)
         return cmd_raft_resync(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-step-down") == 0)
         return cmd_raft_step_down(argc - 2, argv + 2);
+#if EFS_BUILD_EXPIRY
     if (strcmp(cmd,"expiry-status")==0)return cmd_expiry_status(argc-2,argv+2);
     if (strcmp(cmd,"expiry-id")==0)return cmd_expiry_id(argc-2,argv+2);
     if (strcmp(cmd,"expiry-enable")==0)return cmd_expiry_enable(argc-2,argv+2);
     if (strcmp(cmd,"expiry-clock")==0)return cmd_expiry_clock(argc-2,argv+2);
     if (strcmp(cmd,"expiry-policy")==0)return cmd_expiry(argc-2,argv+2,1);
     if (strcmp(cmd,"expiry")==0)return cmd_expiry(argc-2,argv+2,0);
+#endif
     if (strcmp(cmd, "commands-policy") == 0)
         return cmd_commands_policy(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-mkfs") == 0)

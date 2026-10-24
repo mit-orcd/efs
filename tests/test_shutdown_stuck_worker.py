@@ -86,8 +86,7 @@ class Daemon:
         self.log = (store/'log/efsd.log').open('a')
         self.offset = self.log.tell()  # a restart on the same port appends
         self.proc = subprocess.Popen(
-            [str(binary), f'127.0.0.1:{self.port}', str(store), '--discovery-port', '0',
-             '--direct-io'],
+            [str(binary), f'127.0.0.1:{self.port}', str(store), '--discovery-port', '0'],
             cwd=root, env=env, stdout=self.log, stderr=subprocess.STDOUT)
         self.pidfile = store/'log/efsd.pid'
         self.pidfile.write_text(f'{self.proc.pid}\n')

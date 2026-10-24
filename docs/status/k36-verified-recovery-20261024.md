@@ -50,7 +50,7 @@ client saw never turns into success. Test step 4 checks both.
 
 | Kind | Number | Name |
 | --- | --- | --- |
-| Raft log command | 249 | `EFS_MD_CMD_DEGRADED_MARK` (`[tag][mark]`, 139 B; apply `efs_meta_apply_degraded_mark`) |
+| Raft log command | 248 | `EFS_MD_CMD_RECOVERY_MARK` (`[tag][mark]`, 139 B; apply `efs_meta_apply_recovery_mark`; 249 is K35's `EFS_MD_CMD_DEGRADED_MARK`) |
 | Wire message | 243 / 244 | `EFS_MSG_RECOVERY_SCAN` / `_REPLY` (inventory page from a member hosting a group this node does not host) |
 | KV kind | none | marks reuse W154's `EFS_KV_KIND_DEGRADED` (51) |
 

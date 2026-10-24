@@ -274,16 +274,24 @@ this list, before it ships.
   publication machine; both callbacks explicitly publish before replying).
   Mount `-o sync` acceptance remains separately owed under W73. An
   `fsync` drains this client's pending publishes of the file that precede
-  it — one in flight, or retrying on contention, is awaited. It then sends
-  DATA_COMMIT to every current storage node, covering already-acknowledged
-  peer data too; it does not drain another client's unpublished buffer.
+  it — one in flight, or retrying on contention, is awaited. It then
+  proves every stripe this client's writes to the file touched (K35, D42):
+  DATA_COMMIT goes only to the nodes holding those stripes' unproven
+  fragments, and a stripe is proven with at least two of its three fragments
+  durable, a third that is not being covered by a durable degraded mark (the
+  W154 mark its publication carried, or EFS_MD_CMD_DEGRADED_MARK proposed
+  before the call returns). Fewer than two durable fragments, or a mark that
+  cannot be written, is EIO with the stripe named in the client log; the
+  record stays, so a later fsync proves it or fails again. It covers neither
+  peer data nor another client's unpublished buffer.
   PUT acknowledgement is asynchronous. PUT and COMMIT carry a nonzero
   durability-history verifier. Proven clean restarts preserve it only when
   every configured root has a checksummed clean record agreeing on the
-  verifier and root count. Other restarts rotate it: losing an unresolved
-  verifier returns sticky client-wide EIO, because the client may no longer
-  retain retransmission bytes. COMMIT retries a failed transport once within
-  its original deadline.
+  verifier and root count. Other restarts rotate it: a fragment acknowledged
+  under a verifier that changed before its COMMIT is lost (never resent,
+  because the client may no longer retain the bytes), so its stripe is
+  marked degraded or, when that fragment is needed, fails EIO for good.
+  COMMIT retries a failed transport once within its original deadline.
   An unclean storage-root restart fences COMMIT even for a fresh client,
   across orderly restarts, until verified recovery proves the store (K36,
   D42): log and KV applied to the leader's commit, every local fragment
@@ -1589,8 +1597,47 @@ recovery PASS (8 of 8 runs). intel1 gate: `make test` PASS, `make test-long`
 PASS (host-limit NOTRUNs); the first-run `test_k33_payload.py` FAIL is
 K34/F24 and fails 1 of 3 runs on the base `55ad94072` too. Power-loss qualification, multi-host and RDMA NOTRUN.
 
+[D42 `EFS_READ_VERIFY`: GET-path integrity audit](../status/read-verify-audit-20261024.md):
+**PASS (scoped), branch `claude/devel-read-verify-08e19c`, not merged.** The
+storage node's record check does not cover the wire or the client's
+buffers; with verification off the base returned wrong bytes in 12 of 51
+negative cases (chunk GET, parity reconstruction, retries, spans; packed
+reads were already verified). The client re-hash is now built in on every
+chunk path, `EFS_READ_VERIFY` is removed and stops efsd/efs-fuse when set.
+intel2 `make test-all` at `dff495ed6`: 456 commands, 0 FAIL, 14 NOTRUN host
+limits (base: 1 FAIL, the intermittent K34 `test_k33_payload.py`). Cost on a
+loopback cold read: +0.49 efs-fuse CPU s per GiB (0.81 → 1.30), −6 %
+throughput.
+
+[Oct 24: A7 removals decided in D42](../status/a7-removals-20261024.md):
+**PASS (scoped): `make test-all` on amd at `735b82562` fails only the 11 commands that also fail on the base (RDMA on rxe0, a fault-test timeout, K34 in `test_k33_payload.py`); live qualification NOTRUN.** Direct I/O only (storage without `O_DIRECT` refused),
+12 selectors and 3 efsd flags removed and refused, expiry compiled out,
+`EFS_RDMA_TRACE`, strict `EFS_TRANSPORT=rdma`; A/B selectors 15 → 1
+(`EFS_READ_VERIFY`). Branch `claude/devel-a7-removals-d55c03`, not merged.
+External launch/portal changes for the parent are listed there.
+
+[K35: fsync with a member down, only with proof (D42, F22)](../status/k35-fsync-degraded-20261024.md):
+**FIXED, PASS (scoped, loopback), not merged; branch `claude/devel-k35-fsync-b63807`, code `817a71b1f`, `36ac1b7a6`; xorinox `make test-all`: exit 0 at `36ac1b7a6`, 452 test commands, 0 FAIL, 14 NOTRUN host limits (raw: xorinox `~/efs-artifacts/k35-20261024/`, `SHA256SUMS` `06836fd2…6a1e`).**
+fsync COMMITs only the nodes holding the file's unproven fragments and succeeds
+per stripe with two durable fragments and a durable degraded mark (new Raft tag
+249), else `EIO` with the stripe logged; on four or more members fragments go
+to available members; `status` shows `Protection:`. Live multi-host and RDMA
+verification NOTRUN (parent).
+
 [Oct 24 merge: A6 inventory, S1–S5/F4 docs, B1–B5, Stage 2 driver](../status/a6-settings-inventory-20261024.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `c894ec5ae`: 456 commands, 0 FAIL, 14 NOTRUN host limits (1,831 s; raw: intel2 `~/efs-artifacts/merge-wave4-20261024/`, `SHA256SUMS` `2bf6bbe2…1f10`).** `test_k33_payload.py` passed in this run; it fails intermittently (K34, fix in progress). Open for the user: the A/B decision table (A7) and findings F22/F23 (fsync with a member down; unclean-stop stores).
+
+[K34: acknowledged files unreadable while one member stops](../status/k34-stop-put-ack-20261024.md):
+**PASS (scoped), on branch `claude/devel-k34-954d00` (`6c09649a3`), not merged.**
+`tests/test_k33_payload.py` read `EIO` with one member stopping, for three
+reasons: a chunk acknowledged on the stopping member and one other while
+the third answered BUSY; lease/session commands that gave up at the first
+failed exchange with a stopping leader; and a stale client down-mark that
+skipped a member that was back. Fixed in efsd (no acknowledgement while
+stopping) and the client (complete the stripe, re-pick a voter, probe a
+down-marked member). New `tests/test_k34_stop_put.py`. On nuc: `make
+test-all` 450 commands, 0 FAIL, 14 NOTRUN host limits; `tests/test_k33_payload.py` 20 of 20 runs PASS (base: 2 of 8 FAIL). Live
+multi-host stop under load NOTRUN.
 
 [Oct 24 merge: placement spread, K33 acceptance, test hygiene, W126, K15/K29 rule](../status/k33-acceptance-20261024.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `a2326a369`: 449 commands, 0 FAIL, 14 NOTRUN host limits (1,340 s; raw: intel2 `~/efs-artifacts/merge-wave3-20261024/`, `SHA256SUMS` `3e1f0f95…b2c`).** Placement needs a fresh format. Live gates for all five stay NOTRUN.
@@ -12012,7 +12059,11 @@ A refused fragment is never served. The node replies with GET status
 client logs `read: I25 node refused fragment` and treats the fragment as
 unavailable. A read then decodes from the other two fragments, which pass the
 same server-side checks and are compared with the chunk-map digests captured
-by the reader. Two refused fragments fail the read with EIO. Nothing is
+by the reader. The node's check ends at its reply buffer, so the client
+hashes every received fragment payload (BLAKE3) and compares it with the
+reply's digest before the fragment is decoded: TCP checksums and RDMA's ICRC
+do not cover host memory or the receive path. There is no switch
+([D42 audit](../status/read-verify-audit-20261024.md)). Two refused fragments fail the read with EIO. Nothing is
 repaired automatically (W74).
 
 **GC.** The checksum-conditional delete reads the record, verifies identity
@@ -12092,7 +12143,7 @@ sync never clears the fence. The phases, each shown in
    after the ReadIndex, or with `EFS_MSG_RECOVERY_SCAN` (243/244) from a member
    hosting a group this node does not host. A missing or mismatching fragment
    is dropped and its stripe gets a W154 degraded mark through Raft
-   (`EFS_MD_CMD_DEGRADED_MARK`, tag 249): the mark is written only while the
+   (`EFS_MD_CMD_RECOVERY_MARK`, tag 248): the mark is written only while the
    chunk row still references exactly that object; an identical mark is
    left as it is; a mark for another fragment of the same object is never
    overwritten (a second loss the 2+1 code cannot rebuild, counted
@@ -13164,7 +13215,7 @@ Local engine benchmarks now belong to `efs-bench` (Oct 6 2026):
 ```
 
 Roots must be empty scratch directories; the tool refuses nonempty roots.
-Data supports repeated/comma-separated storage roots, `--direct-io`, and `--perf`;
+Data supports repeated/comma-separated storage roots (always `O_DIRECT`) and `--perf`;
 metadata also accepts the first `--storage` root. The implementation reuses the
 production fragment store, writer pool, KV and Raft log, with no cluster startup
 or network. Existing seed-based network/store/read/metadata benchmark commands

@@ -8,7 +8,7 @@
 static int fault;
 static int gc_fsync(int fd){if(fault==5){errno=EIO;return -1;}return fsync(fd);}
 static int gc_syncfs(int fd){if(fault==5){errno=EIO;return -1;}return syncfs(fd);}
-static int gc_open(const char *p,int f,...){int m=0;if(f&O_CREAT){va_list a;va_start(a,f);m=va_arg(a,int);va_end(a);}if(fault==1&&f==O_RDONLY){errno=EACCES;return -1;}return open(p,f,m);}
+static int gc_open(const char *p,int f,...){int m=0;if(f&O_CREAT){va_list a;va_start(a,f);m=va_arg(a,int);va_end(a);}if(fault==1&&(f&O_ACCMODE)==O_RDONLY&&(f&O_DIRECT)){errno=EACCES;return -1;}return open(p,f,m);}
 static ssize_t gc_pread(int f,void*b,size_t n,off_t o){if(fault==2){errno=EIO;return -1;}if(fault==3)return 1;return pread(f,b,n,o);}
 static int gc_unlink(const char*p){if(fault==4){errno=EACCES;return -1;}return unlink(p);}
 #define EFS_BENCH_BUILD
@@ -27,7 +27,9 @@ static int gc_unlink(const char*p){if(fault==4){errno=EACCES;return -1;}return u
 #undef fsync
 #undef syncfs
 /* No Raft host exists in this physical-store fixture. */
+#if EFS_BUILD_EXPIRY
 void server_raft_host_expiry_status(struct efs_expiry_status *out){memset(out,0,sizeof(*out));}
+#endif
 int server_raft_host_active(void){return 0;}
 int server_raft_host_inode_reaped(efs_ino_t ino,int *dead){(void)ino;*dead=0;return EFS_ERR_NOT_PRIMARY;}
 /* The reclaim deleter's two durable steps: death bit, then whole-inode delete. */
@@ -67,10 +69,10 @@ static void test_identity(struct efsd_server *s,struct efs_export *ex,uint8_t *b
 {
  uint8_t good[EFS_HASH_SIZE],sum[EFS_HASH_SIZE];efs_hash(body,EFS_FRAGMENT_SIZE,good);
  uint8_t *out;assert(!posix_memalign((void**)&out,4096,EFS_FRAGMENT_SIZE));
- for(int direct=0;direct<=1;direct++){
-  efs_ino_t ino=9000+(efs_ino_t)direct; /* reclaimed inodes are never reused */
-  s->direct_io=direct;ex->chunk_size=EFS_DEFAULT_CHUNK_SIZE;
-  efs_tls_chunk_gen=300+direct;efs_tls_write_root=0;efs_tls_path_hint=-1;
+ {
+  efs_ino_t ino=9000;
+  ex->chunk_size=EFS_DEFAULT_CHUNK_SIZE;
+  efs_tls_chunk_gen=300;efs_tls_write_root=0;efs_tls_path_hint=-1;
   for(uint32_t ci=0;ci<4;ci++)
    assert(!server_write_fragment_with_sum_sync(s,ex,ino,ci,0,body,EFS_FRAGMENT_SIZE,good));
   char p[4][8192];for(int i=0;i<4;i++)fragment_path_at(s,0,ex,ino,(uint32_t)i,0,p[i],sizeof(p[i]));
@@ -84,11 +86,11 @@ static void test_identity(struct efsd_server *s,struct efs_export *ex,uint8_t *b
   assert(server_read_fragment_with_sum(s,ex,ino,0,0,out,&len,sum,&ok)==EFS_ERR_FRAG_IDENTITY&&!ok);
   assert(server_delete_fragment_if_sum(s,ex,ino,0,0,good)==EFS_ERR_FRAG_IDENTITY&&!access(p[0],F_OK));
   /* Another generation of the same name. */
-  efs_tls_chunk_gen=400+direct;len=EFS_FRAGMENT_SIZE;
+  efs_tls_chunk_gen=400;len=EFS_FRAGMENT_SIZE;
   char g[8192];fragment_path_at(s,0,ex,ino,1,0,g,sizeof(g));
   assert(!rename(p[1],g)); /* gen-300 bytes now named generation 400 */
   assert(server_read_fragment_with_sum(s,ex,ino,1,0,out,&len,sum,&ok)==EFS_ERR_FRAG_IDENTITY);
-  assert(!rename(g,p[1]));efs_tls_chunk_gen=300+direct;
+  assert(!rename(g,p[1]));efs_tls_chunk_gen=300;
   /* Payload rot. */
   flip_byte(p[2],100);len=EFS_FRAGMENT_SIZE;
   assert(server_read_fragment_with_sum(s,ex,ino,2,0,out,&len,sum,&ok)==EFS_ERR_CHECKSUM);
@@ -96,20 +98,42 @@ static void test_identity(struct efsd_server *s,struct efs_export *ex,uint8_t *b
   flip_byte(p[3],EFS_FRAGMENT_SIZE+24);len=EFS_FRAGMENT_SIZE;
   assert(server_read_fragment_with_sum(s,ex,ino,3,0,out,&len,sum,&ok)==EFS_ERR_CHECKSUM);
   assert(server_delete_fragment_if_sum(s,ex,ino,3,0,good)==EFS_ERR_CHECKSUM&&!access(p[3],F_OK));
-  /* The previous on-disk format: payload then a bare 32-byte digest
-   * (buffered) or a 4 KiB tail page starting with it (direct). */
+  /* The previous on-disk format: payload then a 4 KiB tail page starting
+   * with a bare digest. */
   {
    int z=open(p[2],O_WRONLY|O_TRUNC);assert(z>=0);
    assert(pwrite(z,body,EFS_FRAGMENT_SIZE,0)==EFS_FRAGMENT_SIZE);
    uint8_t tail[4096]={0};memcpy(tail,good,EFS_HASH_SIZE);
-   size_t tl=direct?sizeof(tail):EFS_HASH_SIZE;
-   assert(pwrite(z,tail,tl,EFS_FRAGMENT_SIZE)==(ssize_t)tl);close(z);
+   assert(pwrite(z,tail,sizeof(tail),EFS_FRAGMENT_SIZE)==(ssize_t)sizeof(tail));close(z);
    len=EFS_FRAGMENT_SIZE;int rc=server_read_fragment_with_sum(s,ex,ino,2,0,out,&len,sum,&ok);
-   assert(rc==(direct?EFS_ERR_FRAG_FORMAT:EFS_ERR_CHECKSUM)&&!ok);
-   if(direct)assert(server_delete_fragment_if_sum(s,ex,ino,2,0,good)==EFS_ERR_FRAG_FORMAT);
+   assert(rc==EFS_ERR_FRAG_FORMAT&&!ok);
+   assert(server_delete_fragment_if_sum(s,ex,ino,2,0,good)==EFS_ERR_FRAG_FORMAT);
    assert(!access(p[2],F_OK));
   }
-  assert(server_fragment_refusals()>=refused+6);
+  /* D42: the removed buffered layout (payload || bare 128-byte record) is
+   * not this build's format, even with a valid record: GET and GC refuse it. */
+  {
+   uint8_t rec[4096];int z=open(p[1],O_RDONLY);assert(z>=0);
+   assert(pread(z,rec,sizeof(rec),EFS_FRAGMENT_SIZE)==(ssize_t)sizeof(rec));close(z);
+   z=open(p[1],O_WRONLY|O_TRUNC);assert(z>=0);
+   assert(pwrite(z,body,EFS_FRAGMENT_SIZE,0)==EFS_FRAGMENT_SIZE);
+   assert(pwrite(z,rec,EFS_FRAG_RECORD_BYTES,EFS_FRAGMENT_SIZE)==EFS_FRAG_RECORD_BYTES);close(z);
+   len=EFS_FRAGMENT_SIZE;
+   assert(server_read_fragment_with_sum(s,ex,ino,1,0,out,&len,sum,&ok)!=EFS_OK&&!ok);
+   assert(server_delete_fragment_if_sum(s,ex,ino,1,0,good)!=EFS_OK&&!access(p[1],F_OK));
+  }
+  assert(!unlink(p[1])); /* the refused file is left for an operator */
+  /* D42 audit: an unclean stop leaves a torn file (record cut short, or
+   * the payload itself). Refused on GET, never served short or padded. */
+  for(uint32_t ci=4;ci<6;ci++){
+   assert(!server_write_fragment_with_sum_sync(s,ex,ino,ci,0,body,EFS_FRAGMENT_SIZE,good));
+   char t[8192];fragment_path_at(s,0,ex,ino,ci,0,t,sizeof(t));
+   assert(!truncate(t,ci==4?EFS_FRAGMENT_SIZE+EFS_FRAG_RECORD_BYTES/2:EFS_FRAGMENT_SIZE/2));
+   len=EFS_FRAGMENT_SIZE;
+   assert(server_read_fragment_with_sum(s,ex,ino,ci,0,out,&len,sum,&ok)==EFS_ERR_CHECKSUM&&!ok);
+   assert(!unlink(t));
+  }
+  assert(server_fragment_refusals()>=refused+8);
   assert(gc_inode(s,1,ino)==EFS_OK);
   startup_inventory(s);assert(!s->nodes[0].used);
  }
@@ -123,15 +147,15 @@ int main(int argc,char **argv){
  struct efs_export ex={.id=1,.chunk_size=EFS_DEFAULT_CHUNK_SIZE};
  uint8_t *body;assert(!posix_memalign((void**)&body,4096,EFS_FRAGMENT_SIZE));memset(body,0x61,EFS_FRAGMENT_SIZE);
  uint8_t sum[EFS_HASH_SIZE],wrong[EFS_HASH_SIZE];memset(sum,0x62,sizeof(sum));memset(wrong,0x63,sizeof(wrong));
- for(int direct=0;direct<=1;direct++){
-  s.direct_io=direct;ex.chunk_size=EFS_DEFAULT_CHUNK_SIZE;
-  efs_tls_chunk_gen=100+direct;
+ for(int pass=0;pass<=1;pass++){
+  ex.chunk_size=EFS_DEFAULT_CHUNK_SIZE;
+  efs_tls_chunk_gen=100+pass;
   char paths[2][8192];
   for(int root=0;root<2;root++){efs_tls_write_root=root;assert(!server_write_fragment_with_sum_sync(&s,&ex,42,0,0,body,EFS_FRAGMENT_SIZE,sum));fragment_path_at(&s,root,&ex,42,0,0,paths[root],sizeof(paths[root]));}
   assert(s.nodes[0].used==2*EFS_FRAGMENT_SIZE);
   assert(server_compute_local_usage(&s)==2*EFS_FRAGMENT_SIZE);
   server_usage_save(&s); /* deliberately stale after the subsequent deletes */
-  s.direct_io=!direct;ex.chunk_size=EFS_MAX_CHUNK_SIZE; /* restart with no learned geometry */
+  ex.chunk_size=EFS_MAX_CHUNK_SIZE; /* restart with no learned geometry */
   assert(server_delete_fragment_if_sum(&s,&ex,42,0,0,wrong)==EFS_ERR_EXIST);
   for(int f=1;f<=4;f++){fault=f;assert(server_delete_fragment_if_sum(&s,&ex,42,0,0,sum)==EFS_ERR_IO);fault=0;assert(!access(paths[0],F_OK)&&!access(paths[1],F_OK));assert(s.nodes[0].used==2*EFS_FRAGMENT_SIZE);}
   uint64_t removed=s.gc_removed_fragments;
@@ -161,7 +185,7 @@ int main(int argc,char **argv){
  assert(server_delete_fragment_if_sum(NULL,&ex,42,0,0,sum)==EFS_ERR_INVAL);
  /* Lost ACK: retry may be scheduled on another root, but probe must
   * find the original body and charge exactly once. */
- s.direct_io=0;ex.chunk_size=EFS_DEFAULT_CHUNK_SIZE;
+ ex.chunk_size=EFS_DEFAULT_CHUNK_SIZE;
  efs_tls_chunk_gen=777;efs_tls_write_root=0;efs_tls_path_hint=EFS_PATH_HINT_SKIP;
  assert(!server_write_fragment_with_sum_sync(&s,&ex,777,0,0,body,EFS_FRAGMENT_SIZE,sum));
  assert(s.nodes[0].used==EFS_FRAGMENT_SIZE);
@@ -173,7 +197,7 @@ int main(int argc,char **argv){
  char duplicate[8192];fragment_path_at(&s,1,&ex,777,0,0,duplicate,sizeof(duplicate));assert(access(duplicate,F_OK));
  assert(gc_inode(&s,1,777)==EFS_OK&&s.nodes[0].used==0);
  efs_tls_path_hint=-1;
- s.direct_io=0;ex.chunk_size=EFS_DEFAULT_CHUNK_SIZE;efs_tls_chunk_gen=200;
+ ex.chunk_size=EFS_DEFAULT_CHUNK_SIZE;efs_tls_chunk_gen=200;
  for(int root=0;root<2;root++)for(unsigned ci=0;ci<70;ci++){
   efs_tls_write_root=root;
   assert(!server_write_fragment_with_sum_sync(&s,&ex,84,ci,0,body,EFS_FRAGMENT_SIZE,sum));
@@ -210,5 +234,5 @@ int main(int argc,char **argv){
  __atomic_fetch_add(&inode_gc_epoch,1,__ATOMIC_RELEASE);
  assert(server_write_fragment_with_sum_sync(&s,&ex,8276,0,0,body,EFS_FRAGMENT_SIZE,sum)==EFS_ERR_IO);
  assert(!s.nodes[0].used);
- free(body);printf("store GC: two roots, buffered/direct format switch, quota recount, checksum protection, I25 identity/format refusal, syscall failures and idempotent deletion PASS\n");return 0;
+ free(body);printf("store GC: two roots, O_DIRECT only (buffered layout refused), quota recount, checksum protection, I25 identity/format refusal, syscall failures and idempotent deletion PASS\n");return 0;
 }

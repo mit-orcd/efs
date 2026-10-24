@@ -25,7 +25,7 @@
  *   metadata   every published object (chunk base and live span) placing a
  *              fragment here is checked against the published digest. A
  *              missing or mismatching fragment is dropped and its stripe
- *              gets a W154 degraded mark (EFS_MD_CMD_DEGRADED_MARK), so the
+ *              gets a W154 degraded mark (EFS_MD_CMD_RECOVERY_MARK), so the
  *              group leader rebuilds it from the two peers. Every packed
  *              segment holding switched files is checked the same way; one
  *              not proven is dropped and counted (no segment rebuild);

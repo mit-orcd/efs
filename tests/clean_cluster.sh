@@ -24,11 +24,11 @@ start_efsd() { # host node-id addr [join]  (K33: node-id is only a label; the cl
     # setsid detaches; the ssh session may linger (harmless) so allow rc=124.
     # Optional trace variables are forwarded only when the caller set them.
     local prof=""
-    # RDMA handshake / first-frame trace (rdma-first: lines on both sides).
-    [ -n "${EFS_RDMA_FIRST:-}" ] && prof="$prof EFS_RDMA_FIRST=$EFS_RDMA_FIRST"
+    # RDMA handshake / first-frame trace (rdma-trace: lines on both sides).
+    [ -n "${EFS_RDMA_TRACE:-}" ] && prof="$prof EFS_RDMA_TRACE=$EFS_RDMA_TRACE"
     [ -n "${EFS_TRANSPORT:-}" ] && prof="$prof EFS_TRANSPORT=$EFS_TRANSPORT"
     ssh_to 15 "$h" "cd /tmp/efs && $prof \
-        setsid ./efsd $j $STORAGE --quota 36T --direct-io \
+        setsid ./efsd $j $STORAGE --quota 36T \
         >efsd.log 2>&1 </dev/null & sleep 3; pgrep -x efsd >/dev/null && echo UP" \
         2>/dev/null | grep -q UP
 }

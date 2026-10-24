@@ -7,6 +7,13 @@ both; base fails 11). Branch `claude/devel-a6-inventory-7f975e` on
 `merge-wave3` = `a2326a369`; not merged, not pushed. The A/B selectors are
 listed for a user decision and are **not** removed.
 
+**A7 update (D42, Oct 24).** The A/B selectors below are now removed on
+branch `claude/devel-a7-removals-d55c03` ([evidence](a7-removals-20261024.md)):
+13 environment variables and 3 efsd flags are gone and refused, `EFS_RDMA_FIRST`
+is `EFS_RDMA_TRACE`, expiry is compiled out (`EFS_BUILD_EXPIRY`), and
+`EFS_READ_VERIFY` was removed after its GET-path audit (the re-hash is built in). The tables on this page show the
+state after A7; the counts section keeps the A6 figures and adds the A7 column.
+
 - **Purpose:** alpha 1.0 Stage 2 "one supported behavior",
   [A6–A8](alpha-1.0-2plus1-checklist.md#a6a12-one-supported-behavior-audit-and-remove-ab-modes).
   A6: inventory every environment variable, CLI option and compile-time
@@ -90,6 +97,24 @@ included), plus one `environ` scanner and 14 compile-time modes.
 | Dead (read nowhere in the product, or read with no effect) | 0 | 0 | none in the product; `EFS_RDMA_SPIN_US` is dead in the portal |
 | **Total read** | **139** | **129** | 19 names refused at startup; +2 K36 fault hooks |
 
+After A7 (D42), counted the same way on `devel` `55ad94072` (127 read, 14
+modes, 19 refused) and this page's branch:
+
+| Kind | Before A7 | After A7 | Change |
+| --- | ---: | ---: | --- |
+| A/B behavior selector (environment) | 13 | 1 | 12 removed and refused; `EFS_READ_VERIFY` waits on its audit (D42) |
+| A/B behavior selector (CLI: `--direct-io`/`--no-direct-io`, `--no-persist`) | 2 | 0 | removed and refused |
+| Observability or trace | 34 | 34 | `EFS_RDMA_FIRST` renamed `EFS_RDMA_TRACE` |
+| Compile-time modes | 14 | 15 | `EFS_BUILD_EXPIRY` (development builds only) |
+| **Total read** | **127** | **115** | 32 names refused at startup |
+
+Reachable A/B combinations: 2^15 = 32,768 before A7, 2^1 = 2 after
+(`EFS_READ_VERIFY`), before transport and numeric tunables.
+
+**Oct 24, after this page:** `EFS_READ_VERIFY` is removed
+([D42 audit](read-verify-audit-20261024.md)): one A/B selector fewer and one
+more refused name; with it, A/B behavior selectors are 15 → 0 and reachable A/B combinations 2^15 → 1, before transport (an A8 support dimension) and numeric tunables.
+
 Reachable configurations: the 15 binary A/B selectors (13 environment, 2
 CLI) allow up to 2^15 = 32,768 combinations, before transport (`auto`, `tcp`,
 `rdma`) and the 33 numeric tunables. This counts switches, not tested
@@ -97,8 +122,12 @@ combinations; no claim of coverage follows from it (A11).
 
 ## Decision table for the parent (A7)
 
-Every A/B behavior selector, with a recommendation; **none is removed on this
-branch**. "Every gate" means the qualification and gate runs recorded in
+**A7 status (D42):** every row below is now
+implemented as the user decided ([A7 evidence](a7-removals-20261024.md));
+direct I/O became the only fragment I/O, replacing the "both" option.
+
+Every A/B behavior selector, with a recommendation; **none is removed on the
+A6 branch**. "Every gate" means the qualification and gate runs recorded in
 `docs/status/` used the default unless a row says otherwise.
 
 | Selector | Default today | Alternative | Set by launch/tests | Recommendation | Why |
@@ -106,7 +135,7 @@ branch**. "Every gate" means the qualification and gate runs recorded in
 | `EFS_METADATA_BALANCE` | `0`: no placement, elections decide leaders | `1`: a pump moves both groups' leaders to a common voter | `cluster/orcd-test.py`; W66 measure and RDMA qualification tests | Keep `0`: remove the variable and the balance pump; show leadership in `raft-status` | A9 forbids forcing the present preference on in place of a qualified automatic policy. Co-location measured better (1.07× gap; spreading 27 % slower, [tiny-files profile](orcd-test-tiny-files-profile-20261022.md)), but its W66 distribution and failover gates never passed, and the default is what the gates ran. If the user wants co-location, it becomes the automatic policy and is qualified under A9/A11 instead |
 | `EFS_QUERY_BACKEND` | `disk` (`query-cache/`) | `ram` ("comparison backend") | none | Keep `disk`; remove `ram` and the variable | Default everywhere; restart catch-up (`QUERY-REVISIONS`), capacity bounds and the query-cache closure exist only on disk ([backend](query-disk-backend-20261009.md)) |
 | `EFS_RDMA_FIRST` | unset | set: `rdma-first:` lines and destroy backtraces | `tests/rdma_first_inode.sh`, `clean_cluster.sh` | **Not a selector.** Keep as trace (optionally rename `EFS_RDMA_TRACE`) | Every use only prints (`handler.c`, `rdma.c`, `network.c`, `protocol.c`) |
-| `EFS_READ_VERIFY` | off | client re-hashes fragment payloads on GET receive | `test_read_verify.py`; portal observes | Keep off: remove the switch and the client re-hash | Fragment records bind identity and payload digest and GET refuses INTEGRITY (K16); every gate ran off. Alternative: always on, after a CPU-cost measurement |
+| `EFS_READ_VERIFY` | off | client re-hashes fragment payloads on GET receive | `test_read_verify.py`; portal observes | **Done (D42 audit, Oct 24): the re-hash is built in, the variable removed and refused at startup** | The [GET-path audit](read-verify-audit-20261024.md) found the node's record check does not cover the wire or the client's buffers: with the switch off, 12 of 51 negative cases returned wrong bytes. Packed reads already re-hashed |
 | `EFS_READ_PREFETCH` | 16 chunks | `0` off, `N` deeper (capped at the write pipeline) | none; portal observes | Keep 16 built in; remove the variable | Never set in a test or launch; 32 measured worse (project history, Oct 1) |
 | `EFS_FUSE_SPLICE_READ` | off | `FUSE_CAP_SPLICE_READ` | none; portal observes | Keep off; remove | The recorded profile found no gain (power-user.md); needs a larger `fs.pipe-max-size` |
 | `EFS_KV_BLOOM` | on | `0`: no segment bloom filters | none; portal observes | Keep on; remove the `0` path | Never set off anywhere; the filters spare a probe of every segment per read |
@@ -202,19 +231,7 @@ Every row here is an A/B behavior selector. None is removed on this branch; each
 
 | Setting | Readers | Default; effect when set | Kind | Launch / portal | Tests | Disposition |
 | --- | --- | --- | --- | --- | --- | --- |
-| `EFS_COMMANDS` | `client/efs_fuse.c:581` (commands_enabled) | unset/0: `.efs` commands off on this mount; `1` enables them when the server policy allows | A/B selector | cluster:orcd-test.py, devops:env.sh, devops:intel.env, devops:orcd-mini.env +3; portal (observed only) | `fragment_tail_smoke.py`, `gc_reclamation.py` +35; `intel_external_client.sh`, `intel_network_workload.py` +9 | Decision (A7) |
-| `EFS_COMMANDS_SERVER` | `server/raft_host.c:12926` (server_raft_host_start) | `1` (default): query workers, tracking and query RPCs; `0` disables them; other values refuse startup | A/B selector | cluster:orcd-test.py, devops:env.sh, devops:intel.env, devops:orcd-mini.env +2; portal (observed only) | `checkpoint_sync_fault.py`, `fragment_tail_smoke.py` +36; `intel_external_client.sh`, `intel_network_workload.py` +9 | Decision (A7) |
-| `EFS_EXPIRY` | `server/raft_host.c:12937` (server_raft_host_start) | `0` (default): scratch expiry off; `1` runs the expiry worker; other values refuse startup | A/B selector | cluster:orcd-test.py, devops:env.sh, devops:intel.env, devops:orcd-mini.env +2; portal (observed only) | `fragment_tail_smoke.py`, `gc_reclamation.py` +12; `intel_external_client.sh`, `intel_network_workload.py` +8 | Decision (A7) |
-| `EFS_FUSE_EXPORT` | `client/efs_fuse.c:5720` (efs_fuse_init) | off; non-`0` requests `FUSE_CAP_EXPORT_SUPPORT` (NFS re-export) | A/B selector | cluster:ct-up.sh, cluster:gw-up.sh | — | Decision (A7) |
-| `EFS_FUSE_SPLICE_READ` | `client/efs_fuse.c:5703` (efs_fuse_init) | off; non-`0` requests `FUSE_CAP_SPLICE_READ` | A/B selector | portal (observed only) | — | Decision (A7) |
-| `EFS_KV_BLOOM` | `server/raft_host.c:13047` (server_raft_host_start) | on; `0` stops the KV segment bloom filters (reads probe every segment) | A/B selector | portal (observed only) | — | Decision (A7) |
-| `EFS_METADATA_BALANCE` | `server/raft_host.c:12959` (server_raft_host_start) | `0` (default): no leader placement; `1` moves both groups' leaders to a common voter; other values refuse startup | A/B selector | cluster:orcd-test.py; portal (observed only) | `rdma_async_commit.py`, `rdma_four_node_qualification.sh` +1 | Decision (A7, A9) |
-| `EFS_QUERY_BACKEND` | `server/raft_host.c:12205` (host_query_thread) | `disk` (default) query catalog in `query-cache/`; `ram` in memory; anything else disables the publisher | A/B selector | portal (observed only) | — | Decision (A7) |
-| `EFS_RAFT_BATCH_NOOP` | `server/raft_host.c:8582` (attach_replica) | `1` (default): follower batches no-op AppendEntries into one durable ACK; `0` off; other values refuse the group | A/B selector | devops:intel.env, devops:start.sh, devops:test_start_mode.py; portal (observed only) | `checkpoint_sync_fault.py`, `runner.py` +14 | Decision (A7) |
-| `EFS_RAFT_BATCH_OVERLAP` | `server/raft_host.c:8583` (attach_replica) | `1` (default): follower admits the new suffix of an overlapping AppendEntries into a batch; `0` off | A/B selector | devops:intel.env, devops:start.sh, devops:test_start_mode.py; portal (observed only) | `runner.py`, `nuc_append_comparison_20261011.py` +13 | Decision (A7) |
-| `EFS_READ_PREFETCH` | `client/read.c:1937` (prefetch_depth) | 16 chunks ahead; `0` turns read-ahead off, larger values are capped at the write pipeline depth | A/B selector | portal (observed only) | — | Decision (A7) |
-| `EFS_READ_VERIFY` | `client/read.c:112` (read_verify_init) | off; non-`0` re-hashes fragment payloads on GET receive | A/B selector | portal (observed only) | `test_read_verify.py` | Decision (A7) |
-| `EFS_UNMOUNT_REVOKE` | `client/inode_rpc.c:3524` (efs_client_session_end) | revoke the session at clean unmount (D31); `0` keeps it open | A/B selector | — | — | Decision (A7) |
+| `EFS_READ_VERIFY` | removed | was: non-`0` re-hashed fragment payloads on GET receive; now always (D42 audit) | removed (refused at startup) | — | `test_read_verify.py` | Done: re-hash built in |
 
 ### Transport and platform (efsd, efs-fuse)
 
@@ -302,7 +319,7 @@ Allowed under A8. Each reader was traced to every use of its flag: all guard std
 | `EFS_RAFT_AE_DBG` | `raft/raft.c:1690` (on_ae_req) +4 | off; AppendEntries receive lines | observability | — | — | Keep: trace only |
 | `EFS_RAFT_DBG` | `raft/raft.c:813` (send_snap) +5 | off; snapshot send/install and apply lines | observability | — | — | Keep: trace only |
 | `EFS_RAFT_OBS` | `kv/kv_compact.c:911` (kv_maybe_flush_locked) +3 | off; `raft-obs` timing lines (sender, apply, flush) | observability | cluster:cluster.sh | `cluster.sh`, `gc_reclamation.py` +5; `k14_atomic_cluster.sh` | Keep: trace only |
-| `EFS_RDMA_FIRST` | `common/network.c:488` (efs_conn_destroy) +5 | off; set: `rdma-first:` connection lines and destroy backtraces | observability | — | `clean_cluster.sh`, `rdma_first_inode.sh` | Keep: trace only (not a selector; see decision table) |
+| `EFS_RDMA_TRACE` | `common/common.c` (efs_rdma_trace_on), 7 guarded sites in `network.c`, `protocol.c`, `rdma.c`, `handler.c` | off; `1`: `rdma-trace:` connection lines and destroy backtraces | observability | — | `test_rdma_trace.py`; `clean_cluster.sh`, `rdma_first_inode.sh` | Keep: trace only, renamed from `EFS_RDMA_FIRST` (D42); `test_rdma_trace.py` checks every guarded site prints only |
 | `EFS_READ_FRAG_PROF` | `client/read.c:114` (read_verify_init) | off; fragment read failure lines (64 at most) | observability | — | `rdma_four_node_qualification.sh`, `test_read_verify.py` | Keep: trace only |
 | `EFS_READ_PROF` | `server/raft_host.c:4786` (read_prof_on) via `env_on` | off; server read-path timing counters | observability | cluster:cluster.sh, devops:start.sh, devops:test_start_mode.py | `rdma_async_commit.py`, `rdma_four_node_qualification.sh` +2 | Keep: trace only |
 | `EFS_RECEIPT_TRACE` | `server/raft_host.c:22880` (host_report_receipts_init) | off; REPORT receipt lines | observability | — | — | Keep: trace only |
@@ -336,6 +353,8 @@ Every row is read only inside `#if EFS_FAULTS`; a normal build names any `EFS_FA
 | `EFS_FAULT_L0_BYTES` | `kv/kv_lsm.c:1435` (efs_kv_lsm_open) | off; KV L0 cap override | fault/test hook | — | `k22_follower_bound.sh` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_LOOKUP_BARRIER` | `client/efs_fuse.c:5755` (lookup_reply_barrier) | off; park a LOOKUP reply at a barrier directory | fault/test hook | — | `gc_reclamation.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_MEMBER_EXIT` | `server/cluster.c:298` (server_test_member_exit) | off; `_exit(86)` at a named K33 handoff point (was `EFS_TEST_MEMBER_EXIT`) | fault/test hook | — | `k33_daemons.py`, `test_k33_autoid.py` +7 | Keep in `EFS_FAULTS` builds |
+| `EFS_FAULT_PUT_BUSY_FILE` | `server/put_upload.c` (put_test_busy) | off; this member answers fragment PUTs BUSY while the named file exists (K34; was `EFS_TEST_PUT_BUSY_FILE` on its branch) | fault/test hook | — | `test_k34_stop_put.py` | Keep in `EFS_FAULTS` builds |
+| `EFS_FAULT_PUT_STOP_AFTER` | `server/put_upload.c` (put_test_stop_after_store) | off; SIGTERM on this member right after its n-th stored fragment (K34; was `EFS_TEST_PUT_STOP_AFTER` on its branch) | fault/test hook | — | `test_k34_stop_put.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_MEMBER_EXIT_ONCE` | `server/cluster.c:298` (server_test_member_exit) | off; one-shot prefix for `EFS_FAULT_MEMBER_EXIT` (was `EFS_TEST_MEMBER_EXIT_ONCE`) | fault/test hook | — | `test_k33_interrupt.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_MEMTABLE_BYTES` | `kv/kv_lsm.c:1443` (efs_kv_lsm_open) | off; KV memtable size override | fault/test hook | — | `k22_follower_bound.sh` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_PACK_CRASH` | `server/packer.c:138` (server_pack_crash_point) | off; `_exit(137)` at a packer crash point (was `EFS_PACK_CRASH`) | fault/test hook | — | `w125_p7_crash.sh` | Keep in `EFS_FAULTS` builds |
@@ -409,12 +428,26 @@ W153 wording. An `EFS_FAULTS` build refuses the old fault-hook names too.
 | `EFS_RDMA_RNR_RETRY` | `common/rdma.c` (rdma_rnr_retry) | built in: 7 (retry forever) | none; portal observes |
 | `EFS_READ_FRAG_TIMEOUT_MS` | `client/read.c` (read_verify_init) | built in: 2000 ms | none |
 | `EFS_REPORT_RECEIPTS` | `server/raft_host.c` (host_report_receipts_init) | built in: 4096 | none |
+| `EFS_METADATA_BALANCE` | `server/raft_host.c` (balance pump), A7 | elections alone; `efs-mgmt status` reports leader placement per group and node | rdma qualification scripts, W66 measure (updated); cluster `orcd-test.py` |
+| `EFS_RAFT_BATCH_NOOP` | `server/raft_host.c` → `raft.c` cfg, A7 | always on | nuc measure scripts, `runner.py`, `checkpoint_sync_fault.py` (updated); devops `start.sh`, `intel.env` |
+| `EFS_RAFT_BATCH_OVERLAP` | as above, A7 | always on | as above |
+| `EFS_QUERY_BACKEND` | `server/raft_host.c` (host_query_thread), A7 | disk catalog only | none; portal observes |
+| `EFS_READ_PREFETCH` | `client/read.c` (prefetch_depth), A7 | built in: 16 chunks | none; portal observes |
+| `EFS_FUSE_SPLICE_READ` | `client/efs_fuse.c` (efs_fuse_init), A7 | off, no switch | none; portal observes |
+| `EFS_KV_BLOOM` | `server/raft_host.c`, `kv_seg.c` enable switch, A7 | always on | none; portal observes |
+| `EFS_UNMOUNT_REVOKE` | `client/inode_rpc.c` (efs_client_session_end), A7 | always revoke after the last settle; failures exit 1 | none |
+| `EFS_COMMANDS` | `client/efs_fuse.c` (commands_enabled), A7 | the cluster commands-policy (`efs-mgmt commands-policy`) | many test harnesses and launch env files (updated here; external listed in the [A7 evidence](a7-removals-20261024.md)) |
+| `EFS_COMMANDS_SERVER` | `server/raft_host.c` (server_raft_host_start), A7 | query workers always run | as above |
+| `EFS_EXPIRY` | `server/raft_host.c` (server_raft_host_start), A7 | none: expiry compiled out (`EFS_BUILD_EXPIRY`, development builds only) | launch env files, expiry tests |
+| `EFS_FUSE_EXPORT` | `client/efs_fuse.c` (efs_fuse_init), A7 | none: no NFS re-export | cluster `ct-up.sh`, `gw-up.sh` |
+| `EFS_RDMA_FIRST` | `common/network.c` +5, A7 | `EFS_RDMA_TRACE=1` | `clean_cluster.sh`, `rdma_first_inode.sh` (updated) |
 
 ## Compile-time modes
 
 | Setting | Where | Effect | Kind | Disposition |
 | --- | --- | --- | --- | --- |
 | `EFS_FAULTS` | `Makefile` (`EFS_FAULTS=1`), 48 sites; `tests/faults/efsd`, `test_kv_compact_crash` | compiles every fault hook in; normal builds have none | fault/test build | Keep: test builds only (K24, W149) |
+| `EFS_BUILD_EXPIRY` | `Makefile` (`EFS_BUILD_EXPIRY=1`), `meta_apply.c`, `raft_host.c`, `efs_mgmt.c`, `store.c`, `cli_help.h`; `src/meta/expiry.c` is linked only then | compiles the D33 scratch expiry feature in; product builds have none and refuse its requests | development build | Keep out of every gate: `make test-expiry` in such a tree (D42) |
 | `EFS_BENCH_BUILD` | `src/server/store.c` (6 sites), `src/bench/*.o` | the efs-bench copy of the store/writer code without daemon startup | build variant | Keep: efs-bench only |
 | `EFS_MEMCHECK` | `Makefile` (`EFS_MEMCHECK=1`), `rdma_memcheck.h` | valgrind client requests for RDMA buffers (`make leak-check`) | test build | Keep: leak gate only |
 | `EFS_BUILD_ID` | `include/efs/common.h`; `Makefile` from git | build identity, the HELLO cluster gate | build identity | Keep |
@@ -442,8 +475,8 @@ W153 wording. An `EFS_FAULTS` build refuses the old fault-hook names too.
 | `--quota SIZE` | efsd | automatic safe quota | deployment input | launch, tests | Keep |
 | `--meta-storage PATH` | efsd | first storage root | deployment input | launch | Keep |
 | `--writers N` | efsd | 8 durable I/O workers; `0` inline | numeric tunable | tests | Keep until A8 |
-| `--direct-io` / `--no-direct-io` | efsd | buffered | A/B selector | launch (`EFS_DIRECT_IO`) | [Decision](#decision-table-for-the-parent-a7) |
-| `--no-persist` | efsd | persist the member table | A/B selector | none | [Decision](#decision-table-for-the-parent-a7) |
+| `--direct-io` / `--no-direct-io` | efsd, `efs-bench --bench data/meta` | refused (D42): fragment I/O is always `O_DIRECT`; storage that cannot do it is refused at startup | removed | launch (`EFS_DIRECT_IO`), external | Keep refusing |
+| `--no-persist` | efsd | refused (D42): membership is always persisted | removed | none | Keep refusing |
 | `--perf`, `--strace` | efsd, efs-fuse | record a CPU profile / system calls | observability | `scripts/server.sh`, `client.sh` | Keep |
 | `--help`, `-h`, `--version` | all | help, version | — | — | Keep |
 | `--node-id`, `--addr`, `--port`, `--storage` | efsd | refused (K33) | removed | — | Keep refusing |
@@ -452,9 +485,10 @@ W153 wording. An `EFS_FAULTS` build refuses the old fault-hook names too.
 | `--stop MOUNTPOINT [--force-discard]`, `--resume MOUNTPOINT` | efs-fuse | drain/stop or resume a mounted client | operator command | `scripts/client.sh`, tests | Keep |
 | `--help-fuse` | efs-fuse | libfuse option reference | — | — | Keep |
 | `--bench KIND`, `--bench-time SEC`, `--bench-mib N` | efs-fuse | undocumented client bench ladder instead of mounting | bench hook in a product binary | none found | Follow-up: move to efs-bench (not a selector, nothing to decide) |
-| `efs-mgmt commands-policy` | efs-mgmt | versioned cluster `.efs` command policy | runtime management setting | tests, launch | Keep; the single switch if the `EFS_COMMANDS*` variables go |
-| `efs-mgmt expiry-policy`, `expiry-enable`, `expiry-clock` | efs-mgmt | scratch expiry policy and clock health | runtime management setting | expiry tests | Follows the `EFS_EXPIRY` decision |
+| `efs-mgmt commands-policy` | efs-mgmt | versioned cluster `.efs` command policy | runtime management setting | tests, launch | Keep: the only `.efs` authority (D42) |
+| `efs-mgmt expiry-policy`, `expiry-enable`, `expiry-clock`, `expiry-status`, `expiry` | efs-mgmt | scratch expiry policy and clock health | development build only | expiry tests (`make test-expiry`) | Compiled out of the product (D42) |
 | `efs-mgmt shrink-quota`, `add-storage`, `add-node` | efs-mgmt | quota and capacity changes | runtime management setting | tests | Keep |
+| `efs-mgmt status` | efs-mgmt | cluster status; now also metadata leader placement per group and node (self-reported) | operator command | K33 tests | Keep (A9 measurement, D42) |
 | `efs-mgmt raft-dir` | efs-mgmt | directory layout migration | runtime management setting | tests | Keep |
 | `efs-bench` options | efs-bench | bench tool (`efs-bench --help`, `--bench io/data/meta/principles/blake3 --help`) | bench tool | bench scripts | Keep: not in the product path |
 
@@ -467,7 +501,8 @@ refused setting:
    settings view at about line 1189): drop `EFS_RDMA_SPIN_US`,
    `EFS_RDMA_RNR_RETRY`, `EFS_META_BATCH_OPS`, `EFS_PUT_SYNC_BYTES`,
    `EFS_QUERY_CATALOG_MIB` (removed, refused when set); after the A7
-   decisions also the removed selectors.
+   decisions also the removed selectors, starting with `EFS_READ_VERIFY`
+   (removed Oct 24, refused when set).
 2. **devops `nuc-efs/start.sh`** sets `EFS_RAFT_APPLIED_INTERVAL_MS`
    default `1000` while the code default is 100 ms; the A8 qualification of
    that tunable has to pick one. It and `intel.env` set

@@ -224,6 +224,8 @@ unsigned efs_faults_env_ignored(const char *prog);
  * environment (set, even empty), naming prog; returns how many. efsd and
  * efs-fuse stop when it is not 0. */
 unsigned efs_env_removed_refuse(const char *prog);
+/* D42: EFS_RDMA_TRACE=1 (off by default); diagnostics only. */
+int efs_rdma_trace_on(void);
 
 /* Parse a size/quota string. Accepts plain bytes or suffixes: T/TiB, G/GiB,
  * M/MiB, K/KiB. Returns 0 on error. */

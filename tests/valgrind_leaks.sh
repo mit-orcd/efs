@@ -59,8 +59,9 @@ SEED="127.0.0.1:$PORT"
 STORAGE="$WORK/storage"
 MNT="$WORK/mnt"
 EXPORT="vgtest"
-MODE=${EFS_VG_MODE:-buffered}
-case "$MODE" in direct) IO_FLAG=--direct-io;; buffered) IO_FLAG=--no-direct-io;; *) echo 'invalid EFS_VG_MODE' >&2; exit 2;; esac
+# D42: fragment I/O is O_DIRECT only; EFS_VG_MODE stays for its log line.
+MODE=${EFS_VG_MODE:-direct}
+case "$MODE" in direct) ;; *) echo 'invalid EFS_VG_MODE (direct only: D42)' >&2; exit 2;; esac
 VG_BUILD_ARGS=()
 # Optional private, annotated verbs runtime. System libraries and ordinary
 # builds are untouched. Rebuild all objects so DMA annotations cannot be lost
@@ -272,7 +273,7 @@ start_group_vg_server() {
         local ep="$ADDR:$port"
         [ -n "$join" ] && ep="$join --listen $ADDR:$port"
         EFS_TRANSPORT=$xport setsid ./efsd $ep "$STORAGE/s$id" \
-            --quota 1G --writers 0 "$IO_FLAG" --discovery-port 0 \
+            --quota 1G --writers 0 --discovery-port 0 \
             >"$out" 2>&1 </dev/null &
         record_ours "$!"
         for i in $(seq 1 40); do
@@ -285,7 +286,7 @@ start_group_vg_server() {
     # for its promise, so format after it has started.
     EFS_TRANSPORT=$xport $VG --log-file="$WORK-group1.vg" \
         ./efsd --join "$ADDR:$((PORT + 1))" --listen "$ADDR:$PORT" \
-        "$STORAGE/s1" --quota 1G --writers 0 "$IO_FLAG" --discovery-port 0 \
+        "$STORAGE/s1" --quota 1G --writers 0 --discovery-port 0 \
         >"$WORK-group1.out" 2>&1 &
     record_ours "$!"
     for i in $(seq 1 240); do
@@ -307,7 +308,7 @@ start_group_plain() {
         local ep="$ADDR:$port"
         [ -n "$join" ] && ep="$join --listen $ADDR:$port"
         EFS_TRANSPORT=tcp setsid ./efsd $ep "$STORAGE/s$id" \
-            --quota 1G --writers 0 "$IO_FLAG" --discovery-port 0 \
+            --quota 1G --writers 0 --discovery-port 0 \
             >"$out" 2>&1 </dev/null &
         record_ours "$!"
         for i in $(seq 1 40); do

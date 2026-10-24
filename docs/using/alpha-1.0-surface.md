@@ -15,9 +15,9 @@ outside the alpha support claim.
 
 The alpha profile (A2) is: Linux FUSE client, RDMA or TCP, direct fragment
 I/O, `.efs` commands on, background packing on, expiry off, containers
-absent. The daemon defaults are not all the alpha profile: fragment I/O is
-buffered unless `--direct-io` is given, and a mount has no `.efs` unless
-`EFS_COMMANDS=1` is set (findings F7 and F8).
+absent. Since A7 (D42) these are the only behaviors: fragment I/O is always
+`O_DIRECT`, `.efs` follows the cluster commands-policy (on by default), and
+expiry is compiled out of the product (findings F7 and F8 closed).
 
 ## Binaries and scripts
 
@@ -29,7 +29,7 @@ buffered unless `--direct-io` is given, and a mount has no `.efs` unless
 | `scripts/server.sh`, `scripts/client.sh` | in | Start, stop and mount wrappers with orderly-stop checks (`server_processes.py`, `client_processes.py`) |
 | `efs-bench`, `blake3-bench` | out | Developer measurement tools; no user workflow depends on them |
 | `tests/cluster.sh`, devops and portal deployment scripts | out | Test-cluster harnesses, not shipped product; the portal is not in this repository |
-| NFS re-export (`EFS_FUSE_EXPORT=1` and a gateway) | out | Decided out of alpha (user, Oct 22; beta backlog W152) |
+| NFS re-export | out | Decided out of alpha (user, Oct 22; beta backlog W152); the switch is removed (D42) |
 | macOS client | out | Decided out of alpha (user, Oct 22; W152) |
 | Containers | out | Removed from devel (D37) |
 
@@ -43,11 +43,10 @@ buffered unless `--direct-io` is given, and a mount has no `.efs` unless
 | `--listen ADDR:PORT` | in | A joiner's own endpoint; needed when it cannot be derived (several nodes on one host) |
 | `--discovery-port N`, `--discover-on IFACE` | in | Deployment input for discovery (default UDP 17430; 0 turns it off) |
 | `--quota SIZE` | in | Deployment input; default is the automatic safe quota |
-| `--direct-io` | in | The alpha profile's fragment I/O (A2) |
-| `--no-direct-io` | out, *proposed* | Buffered I/O is the daemon default but not the alpha profile; A7 decides whether one mode stays (finding F7) |
+| `--direct-io`, `--no-direct-io` | removed | Fragment I/O is always `O_DIRECT`; efsd refuses both flags and a root without `O_DIRECT` (D42) |
 | `--meta-storage PATH` | in | Deployment input: Raft/KV on another root; it does not move an existing `mdraft/` |
 | `--writers N` | out, *proposed* | Tuning switch (default 8); A8 has not justified it as operator configuration |
-| `--no-persist` | out, *proposed* | Turns off only the joined-node table (`meta/cluster_nodes.bin`); the committed membership is persisted regardless. No alpha workflow needs it (finding F6) |
+| `--no-persist` | removed | Membership is always persisted; efsd refuses the flag (D42, finding F6) |
 | `--perf`, `--strace` | out | Profiling; needs `perf`/`strace` and `ptrace_scope` 0; not a supported operation |
 | `--help`, `--version` | in | |
 | `--node-id`, `--addr`, `--port`, `--storage`, `EFS_MD_RAFT_N` | removed | Refused with an error naming the replacement (K33, W153) |
@@ -83,7 +82,7 @@ buffered unless `--direct-io` is given, and a mount has no `.efs` unless
 | `data-commit` | out, *proposed* | Durability barrier; the orderly stop already runs it; missing from `--help` |
 | `raft-change` | out | Manual voter change; K33 changes the voters itself, and a manual change leaves the default layout |
 | `raft-dir`, `raft-session` and every `raft-<op>` (`raft-create`, `raft-lookup`, `raft-rename`, `raft-publish`, `raft-flock`, …) | out | Debug commands that bypass FUSE and change metadata directly |
-| `expiry`, `expiry-policy`, `expiry-status`, `expiry-clock`, `expiry-enable`, `expiry-id` | out | Expiry is disabled in the alpha profile (W90; A7 decides removal) |
+| `expiry`, `expiry-policy`, `expiry-status`, `expiry-clock`, `expiry-enable`, `expiry-id` | removed | Compiled out of the product (D42); only an `EFS_BUILD_EXPIRY` development build has them |
 
 `efs-mgmt` has no authentication: any host that reaches a daemon port can
 run every command, including the mutating ones (finding F12). Keep the
@@ -105,16 +104,15 @@ and waits for the A6 inventory and the A7/A8 decisions.
 
 | Variable | Side | Alpha | Reason |
 | --- | --- | --- | --- |
-| `EFS_TRANSPORT=auto\|tcp\|rdma` | both | in | Transport choice; default `auto` |
+| `EFS_TRANSPORT=auto\|tcp\|rdma` | both | in | Transport choice; default `auto` (logs the transport used); `rdma` refuses to start without a usable device |
 | `EFS_RDMA_DEV`, `EFS_RDMA_GID_INDEX` | both | in | RDMA device and RoCE GID selection |
-| `EFS_COMMANDS=1` | client | in | Turns `.efs` on for this mount (required by the alpha profile) |
-| `EFS_COMMANDS_SERVER=0\|1` | server | in | Default 1; 0 stops a node serving queries; set it the same on every node |
-| `EFS_EXPIRY` | server | out | Expiry is off in alpha |
-| `EFS_FUSE_EXPORT` | client | out | NFS re-export is out (W152) |
+| `EFS_COMMANDS`, `EFS_COMMANDS_SERVER`, `EFS_EXPIRY`, `EFS_FUSE_EXPORT` | both | removed | Refused at startup (D42): `.efs` follows `efs-mgmt commands-policy`; expiry and NFS re-export are not in alpha |
 | `EFS_CLIENT_META_MB`, `EFS_DCACHE_HARD_BYTES`, `EFS_DCACHE_DRAIN_BYTES`, `EFS_DCACHE_BYTES`, `EFS_CLIENT_CONNS_PER_NODE`, `EFS_RDMA_BUFS`, `EFS_NUMA_NODE` | client | out, pending A8 | Capacity and placement tunables; defaults are the qualified values |
 | `EFS_QUERY_DISK_MAX_MIB`, `EFS_QUERY_DISK_TOTAL_MIB`, `EFS_QUERY_DISK_RESERVE_MIB`, `EFS_QUERY_REFRESH_MS`, `EFS_QUERY_EXPORT_MAX_MS` | server | out, pending A8 | Query-cache sizing; a large namespace may need them, so A8 must decide |
 | `EFS_PACK_*`, `EFS_REBUILD_PER_PASS` | server | out | Internal tunables; D37 allows no setting that disables the packer |
-| `EFS_READ_VERIFY`, `EFS_READ_PREFETCH`, `EFS_FUSE_SPLICE_READ`, `EFS_METADATA_BALANCE`, `EFS_QUERY_BACKEND`, `EFS_RAFT_APPLIED_INTERVAL_MS`, `EFS_GC_BACKLOG_IDLE_MS`, `EFS_RDMA_FIRST`, `EFS_KV_BLOOM` | both | out | A/B selectors and experiments; A7 removes or decides them |
+| `EFS_READ_PREFETCH`, `EFS_FUSE_SPLICE_READ`, `EFS_METADATA_BALANCE`, `EFS_QUERY_BACKEND`, `EFS_KV_BLOOM`, `EFS_RAFT_BATCH_NOOP`, `EFS_RAFT_BATCH_OVERLAP`, `EFS_UNMOUNT_REVOKE`, `EFS_RDMA_FIRST` | both | removed | Refused at startup (D42); one built-in behavior each. `EFS_RDMA_FIRST` is now `EFS_RDMA_TRACE=1` (diagnostics only) |
+| `EFS_READ_VERIFY` | client | removed | The client re-hash is built in (D42 GET-path audit); a set value stops efs-fuse |
+| `EFS_RAFT_APPLIED_INTERVAL_MS`, `EFS_GC_BACKLOG_IDLE_MS` | server | out, pending A8 | Numeric tunables |
 | `EFS_FAULT_GC_DISABLE` | server | out | Test builds only (`EFS_FAULTS=1`); was `EFS_GC_DISABLE` |
 | `*_DBG`, `*_TRACE`, `*_PROF`, `*_OBS`, `EFS_LOG_TS`, `EFS_PERF_*`, `EFS_STRACE_*` | both | out | Observability and profiling |
 | `EFS_FAULT_*` | both | out | Test builds only; a normal build names them as ignored at startup (W149) |

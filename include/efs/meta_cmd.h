@@ -64,6 +64,17 @@
 #define EFS_MD_CMD_EXPIRY_RENEW 59 /* ino/gen/uid/expected/leader-now/deadline:45 */
 #define EFS_MD_REQ_EXPIRY_POLICY 60 /* root/gen:17; fresh revision/TTL/max */
 #define EFS_MD_REQ_EXPIRY_RECORD 61 /* ino/gen:17; fresh revision/deadline/root */
+/* Expiry requests and commands (D33). Excluded from the alpha product
+ * (D42): a build without EFS_BUILD_EXPIRY refuses them, never proposes them. */
+static inline int efs_md_is_expiry(uint8_t op)
+{
+    return op == EFS_MD_CMD_EXPIRY_POLICY || op == EFS_MD_CMD_EXPIRY_RENEW ||
+           (op >= EFS_MD_REQ_EXPIRY_POLICY && op <= EFS_MD_REQ_EXPIRY_RECORD) ||
+           op == EFS_MD_REQ_EXPIRY_CLOCK || op == EFS_MD_REQ_EXPIRY_CLOCK_RESET ||
+           (op >= EFS_MD_REQ_EXPIRY_DELETE && op <= EFS_MD_REQ_EXPIRY_ID) ||
+           op == EFS_MD_REQ_EXPIRY_POLICY_INFO || op == EFS_MD_REQ_EXPIRY_ORIGIN ||
+           op == EFS_MD_REQ_EXPIRY_PARENT;
+}
 #define EFS_MD_CMD_APPEND_COMPLETE_ATOMIC 54 /* ino/gen/offset/UUID/epoch/content epoch/reservation: 101 bytes */
 #define EFS_MD_CMD_APPEND_ATOMIC 53
 #define EFS_MD_CMD_QUERY_POLICY 43 /* expected version:8, mask:4 */
@@ -155,15 +166,24 @@
  * ledger (efs_put_ticket_drain). Refused (BUSY) behind a missing shard
  * rejection floor or a pending K14 stage; a logical verdict. */
 #define EFS_MD_CMD_PUT_TICKET_DRAIN 250
+/* K35 (D42, W154) on the lane shard's group, proposed by a client fsync:
+ * [tag][ino:8][inode_gen:8][object_gen:8][ci:4][fragment:1][node:4], 34 B.
+ * COMMIT proved two fragments of a published object durable but not this
+ * one (its node down, uncertain or of another incarnation): record the
+ * object's degraded mark from its chunk row (efs_meta_apply_degraded_mark)
+ * so the rebuild on return restores it. A logical verdict: OK marked (or
+ * already marked so), NOT_FOUND no longer live, STALE the row disagrees. */
+#define EFS_MD_CMD_DEGRADED_MARK 249
+#define EFS_MD_DEGRADED_MARK_LEN 34u
 /* K36 verified recovery, on the group of the mark's anchor shard:
  * [ino:8][inode_gen:8][object_gen:8][ci:4][lane:1][missing:1][nodes:4*3]
  * [checksums:32*3] after the tag, 139 B. A recovering storage node dropped
  * its fragment of a published object (missing, torn or mismatching); the
  * apply writes the W154 degraded mark so the leader rebuilds it
- * (efs_meta_apply_degraded_mark). Verdicts OK, NOT_FOUND (object no longer
+ * (efs_meta_apply_recovery_mark). Verdicts OK, NOT_FOUND (object no longer
  * live) and STALE (another fragment already marked) are logical. */
-#define EFS_MD_CMD_DEGRADED_MARK 249
-#define EFS_MD_DEGRADED_MARK_LEN (1u + 8u + 8u + 8u + 4u + 1u + 1u + \
+#define EFS_MD_CMD_RECOVERY_MARK 248 /* 249 is K35's DEGRADED_MARK */
+#define EFS_MD_RECOVERY_MARK_LEN (1u + 8u + 8u + 8u + 4u + 1u + 1u + \
                                   4u * EFS_NUM_FRAGMENTS + EFS_HASH_SIZE * EFS_NUM_FRAGMENTS)
 #define EFS_MD_PUT_TICKET_DRAIN_LEN 25u
 #define EFS_MD_TXN_BATCH_MAX 96u /* commands per entry */
@@ -301,7 +321,7 @@
     X(BOOTSTRAP_LANE) X(TRUNC_SWEEP) X(SWEEP_DONE) X(RETIRE) X(TXN_RETIRE) \
     X(DEGRADED_CLEAR) X(PUT_ORPHAN_ACK) X(TXN_BATCH) \
     X(PUT_TICKET_ADMIT_BATCH) X(PUT_TICKET_SETTLE_BATCH) X(MEMBERS) \
-    X(PUT_TICKET_DRAIN) X(DEGRADED_MARK)
+    X(PUT_TICKET_DRAIN) X(DEGRADED_MARK) X(RECOVERY_MARK)
 
 /* 1 when byte 0 of a log command names a command this build applies. */
 static inline int efs_md_cmd_applicable(uint8_t tag)

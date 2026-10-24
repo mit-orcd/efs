@@ -52,7 +52,7 @@ source = r'''
 #define EFS_HANDLER_TLS_MAX (1024 * 1024)
 static __thread uint8_t *tls_payload;
 static __thread uint32_t tls_payload_cap;
-static int rdma_first_on(void) { return 0; }
+int efs_rdma_trace_on(void) { return 0; }
 int efs_conn_wait_request(struct efs_conn *c) { (void)c; return EFS_CONN_TCP; }
 int efs_rdma_message_wait(struct efs_rdma_conn *rc, int ms) { (void)rc; (void)ms; abort(); }
 void *efs_rdma_message_frame(struct efs_rdma_conn *rc, uint32_t *len) { (void)rc; (void)len; abort(); }

@@ -1,3 +1,4 @@
+#include "efs/rdma.h"
 #include "../common/parse_host_port.h"
 #include "efs/cli_help.h"
 #include "efs/common.h"
@@ -641,6 +642,12 @@ static void *conn_thread(void *arg)
  * shutdown deadline counts from here. */
 static uint64_t g_stop_signal_ms;
 
+int server_stop_requested(void)
+{
+    return __atomic_load_n(&g_stop_signal_ms, __ATOMIC_ACQUIRE) != 0 ||
+           server_handlers_stopping();
+}
+
 static void sigint_handler(int sig)
 {
     (void)sig;
@@ -894,6 +901,8 @@ int main(int argc, char **argv)
 #if !EFS_FAULTS
     efs_faults_env_ignored("efsd");
 #endif
+    if (efs_transport_startup("efsd") != EFS_OK)
+        return 1;
 
     /* The 1024-fd soft cap put accept() into EMFILE backoff under conn
      * storms (~500 live conns + data files), which wedged new mounts and
@@ -910,8 +919,6 @@ int main(int argc, char **argv)
 
     struct efsd_server server;
     memset(&server, 0, sizeof(server));
-    server.persist_nodes = 1;
-    server.direct_io = 0; /* default: page cache; opt in with --direct-io */
     server.nwriters = EFS_DEFAULT_WRITERS; /* eight durable I/O workers; --writers overrides */
     server.listen_fd = -1;
     g_server = &server;
@@ -952,10 +959,6 @@ int main(int argc, char **argv)
                 usage(argv[0]);
                 return 1;
             }
-        } else if (strcmp(argv[i], "--direct-io") == 0) {
-            server.direct_io = 1;
-        } else if (strcmp(argv[i], "--no-direct-io") == 0) {
-            server.direct_io = 0;
         } else if (strcmp(argv[i], "--writers") == 0 && i + 1 < argc) {
             int n = atoi(argv[++i]);
             if (n < 0 || n > EFS_MAX_WRITERS) {
@@ -965,8 +968,6 @@ int main(int argc, char **argv)
                 return 1;
             }
             server.nwriters = n;
-        } else if (strcmp(argv[i], "--no-persist") == 0) {
-            server.persist_nodes = 0;
         } else if (strcmp(argv[i], "--perf") == 0) {
             server.perf = 1;
         } else if (strcmp(argv[i], "--strace") == 0) {
@@ -974,6 +975,15 @@ int main(int argc, char **argv)
         } else if (strcmp(argv[i], "--help") == 0) {
             usage(argv[0]);
             return 0;
+        } else if (!strcmp(argv[i], "--direct-io") || !strcmp(argv[i], "--no-direct-io")) {
+            fprintf(stderr, "%s was removed (D42): fragment I/O is always O_DIRECT; storage "
+                    "that cannot do O_DIRECT is refused at startup\n", argv[i]);
+            usage(argv[0]);
+            return 1;
+        } else if (!strcmp(argv[i], "--no-persist")) {
+            fprintf(stderr, "--no-persist was removed (D42): membership is always persisted\n");
+            usage(argv[0]);
+            return 1;
         } else if (!strcmp(argv[i], "--node-id") || !strcmp(argv[i], "--addr") ||
                    !strcmp(argv[i], "--port") || !strcmp(argv[i], "--storage")) {
             fprintf(stderr, "%s was removed (K33): node ids come from the cluster; start a "
@@ -1071,6 +1081,14 @@ int main(int argc, char **argv)
         char subdir[8192];
         snprintf(subdir, sizeof(subdir), "%s/data", server.storage_paths[pi]);
         mkdir_p(subdir);
+        /* D42: fragments are O_DIRECT only. Refuse a root whose filesystem
+         * cannot do it; never fall back to buffered I/O. */
+        char why[EFS_MAX_PATH + 160];
+        if (server_storage_direct_io_check(subdir, why, sizeof(why)) != EFS_OK) {
+            fprintf(stderr, "storage root %s refused: fragment I/O requires O_DIRECT (%s)\n",
+                    server.storage_paths[pi], why);
+            return 1;
+        }
         snprintf(subdir, sizeof(subdir), "%s/meta", server.storage_paths[pi]);
         mkdir_p(subdir);
         snprintf(subdir, sizeof(subdir), "%s/log", server.storage_paths[pi]);
@@ -1088,7 +1106,6 @@ int main(int argc, char **argv)
     /* Any refusal below exits before serving; it must not leave the roots
      * marked as an unclean boot (that fences COMMIT until K36 recovery). */
     atexit(server_put_sync_abandon);
-    fprintf(stderr, "direct_io=%s\n", server.direct_io ? "on" : "off");
     if (server.meta_storage[0] &&
         mkdir_p(server.meta_storage) != 0 && errno != EEXIST) {
         fprintf(stderr, "mkdir meta-storage %s: %s\n", server.meta_storage,
@@ -1399,14 +1416,13 @@ int main(int argc, char **argv)
             used_disp = local->used;
         char ver[256];
         printf("%s, build=%s: node %u listening on %s:%u, storage=%s "
-               "(%u paths, stripe=%s), used=%llu, quota=%llu, direct_io=%s, "
+               "(%u paths, stripe=%s), used=%llu, quota=%llu, direct_io=on, "
                "writers=%d shared\n",
                efs_version_string("efsd", ver, sizeof(ver)), EFS_BUILD_ID,
                server.id, server.addr, server.port, storage_disp,
                server.storage_path_count, stripe,
                (unsigned long long)used_disp,
                (unsigned long long)server.quota,
-               server.direct_io ? "on" : "off",
                server.nwriters);
     }
     fflush(stdout);

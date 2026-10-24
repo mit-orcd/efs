@@ -137,7 +137,6 @@ int main(int argc, char **argv)
     efs_test_path(path, sizeof(path), "efs-kv-concurrent-XXXXXX");
     char *d = efs_test_mkdtemp(path);
     assert(d);
-    efs_kv_lsm_bloom_enable(1);
     struct efs_kv_lsm_cfg cfg = {.sync_mode = EFS_KV_LSM_NOSYNC, .memtable_max = 96 * 1024, .l0_max = 2};
     kv = efs_kv_lsm_open(d, &cfg);
     assert(kv);

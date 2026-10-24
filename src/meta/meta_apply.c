@@ -1458,6 +1458,7 @@ int efs_meta_apply_create_refusal(struct efs_kv *kv,uint32_t shard,
     rc=meta_write_batch(kv,&item,1);return rc==EFS_OK?EFS_ERR_EXIST:rc;
 }
 
+#if EFS_BUILD_EXPIRY
 static int expiry_local_default(struct efs_kv *kv, efs_ino_t parent,
                                  uint8_t group, uint64_t now,
                                  struct efs_expiry_record *out)
@@ -1489,6 +1490,7 @@ static int expiry_local_default(struct efs_kv *kv, efs_ino_t parent,
     return EFS_ERR_IO;
 }
 
+#endif
 static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
                              efs_ino_t parent, uint32_t mode,
                              const char *name, const struct efs_opid_req *q,
@@ -1505,9 +1507,13 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
     uint8_t v_opid[EFS_OPID_VAL_MAX];
     uint32_t kd = 0, ki = 0, ka = 0;
     struct efs_kv_item it[14];
+#if EFS_BUILD_EXPIRY
     struct efs_expiry_change expiry_change;
     struct efs_expiry_record expiry_record;
     int has_expiry=0;
+#else
+    (void)expiry_enabled;
+#endif
     uint8_t k_lease[EFS_KV_KEY_MAX], lease_one = 1;
     uint8_t lease_pending[EFS_LEASE_PENDING_VALUE_LEN];
     uint32_t lease_len = 0;
@@ -1643,6 +1649,7 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
     dent.ino = ino;
     dent.generation = row.generation;
     dent.type = mode & S_IFMT;
+#if EFS_BUILD_EXPIRY
     if(expiry_enabled && S_ISREG(mode)) {
         rc=expiry_local_default(kv,parent,efs_raft_shard_group(shard),
                                  at->now,&expiry_record);
@@ -1655,6 +1662,7 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
             has_expiry=1;
         }
     }
+#endif
     pack_inode(v_ino, &row);
     pack_dentry(v_dent, &dent);
     be64(v_alloc, next);
@@ -1779,10 +1787,12 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
                          lease_token ? EFS_LEASE_PENDING_VALUE_LEN : 1};
     }
 
+#if EFS_BUILD_EXPIRY
     if(has_expiry) {
         if(n+expiry_change.count>sizeof(it)/sizeof(it[0]))return EFS_ERR_OVERFLOW;
         for(uint32_t i=0;i<expiry_change.count;i++)it[n++]=expiry_change.items[i];
     }
+#endif
     rc = meta_write_batch(kv, it, n);
     if (rc != EFS_OK)
         return rc;
@@ -1874,6 +1884,7 @@ int efs_meta_apply_create_file_log_pending(struct efs_kv *kv,
                              ino ? layout : -1, uuid, epoch, q->id.seq, 0, out);
 }
 
+#if EFS_BUILD_EXPIRY
 int efs_meta_apply_create_expiring(struct efs_kv *kv,
                                      const struct efs_meta_attrs *at,
                                      efs_ino_t parent,uint32_t mode,
@@ -1881,6 +1892,7 @@ int efs_meta_apply_create_expiring(struct efs_kv *kv,
 {
     return create_file_batch(kv,at,parent,mode,name,NULL,0,0,-1,NULL,0,0,1,out);
 }
+#endif
 
 static int mkdir_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
                        efs_ino_t parent, uint32_t mode, const char *name,
@@ -2488,6 +2500,7 @@ static int apply_orphan_unlink(struct efs_kv *kv, efs_ino_t parent,
     return meta_write_batch(kv,it,n);
 }
 
+#if EFS_BUILD_EXPIRY
 int efs_meta_apply_expiry_policy(struct efs_kv *kv, efs_ino_t root,
                                  uint64_t gen, uint32_t caller_uid,
                                  uint64_t expected,
@@ -2534,6 +2547,7 @@ int efs_meta_apply_expiry_renew(struct efs_kv *kv, efs_ino_t ino,
     if(rc!=EFS_OK)return rc;
     return meta_write_batch(kv,change.items,change.count);
 }
+#endif
 
 static int unlink_batch(struct efs_kv *kv, efs_ino_t parent, const char *name,
                              uint64_t now, const struct efs_opid_req *q,
@@ -2551,7 +2565,9 @@ static int unlink_batch(struct efs_kv *kv, efs_ino_t parent, const char *name,
     uint8_t k_xa[EFS_KV_KEY_MAX];
     uint32_t kl = 0, kh = 0, ki = 0, kp = 0, kln = 0, kr = 0, kxa = 0;
     struct efs_kv_item it[16];
+#if EFS_BUILD_EXPIRY
     struct efs_expiry_change expiry_change;
+#endif
     uint32_t n = 0, psh, hsh, dsh, nlink_after = 0;
     int rc, held = 0;
     int touch_parent = 0;
@@ -2584,6 +2600,7 @@ static int unlink_batch(struct efs_kv *kv, efs_ino_t parent, const char *name,
         return rc;
     if (S_ISDIR(row.mode))
         return EFS_ERR_INVAL;
+#if EFS_BUILD_EXPIRY
     if (expiry) {
         struct efs_expiry_record current;
         if (!S_ISREG(row.mode) || row.nlink != 1 ||
@@ -2602,6 +2619,7 @@ static int unlink_batch(struct efs_kv *kv, efs_ino_t parent, const char *name,
                              &current,&expiry_change);
         if (rc != EFS_OK) return rc;
     }
+#endif
     nlink_after = row.nlink <= 1 ? 0 : row.nlink - 1;
     rc = efs_meta_apply_get_inode(kv, parent, &prow);
     if (rc != EFS_OK)
@@ -2792,11 +2810,13 @@ static int unlink_batch(struct efs_kv *kv, efs_ino_t parent, const char *name,
             return rc;
         n += (uint32_t)rc;
     }
+#if EFS_BUILD_EXPIRY
     if (expiry) {
         if (n + expiry_change.count > sizeof(it)/sizeof(it[0]))
             return EFS_ERR_OVERFLOW;
         for (uint32_t i=0;i<expiry_change.count;i++)it[n++]=expiry_change.items[i];
     }
+#endif
     return meta_write_batch(kv, it, n);
 }
 
@@ -2804,12 +2824,14 @@ int efs_meta_apply_unlink_op(struct efs_kv *kv, efs_ino_t parent, const char *na
                              uint64_t now, const struct efs_opid_req *q)
 { return unlink_batch(kv,parent,name,now,q,NULL); }
 
+#if EFS_BUILD_EXPIRY
 int efs_meta_apply_expire(struct efs_kv *kv, efs_ino_t parent, const char *name,
                           uint64_t committed_now, const struct efs_expiry_due *due)
 {
     if (!due || !due->revision || !due->deadline_ns) return EFS_ERR_INVAL;
     return unlink_batch(kv,parent,name,committed_now,NULL,due);
 }
+#endif
 
 int efs_meta_apply_link(struct efs_kv *kv, efs_ino_t src_parent, const char *src_name,
                         efs_ino_t dst_parent, const char *dst_name, uint64_t now)
@@ -2837,10 +2859,12 @@ int efs_meta_apply_link(struct efs_kv *kv, efs_ino_t src_parent, const char *src
         return rc;
     if (S_ISDIR(row.mode))
         return EFS_ERR_INVAL;
+#if EFS_BUILD_EXPIRY
     struct efs_expiry_record expiry;
     rc=efs_expiry_get(kv,row.ino,row.generation,&expiry);
     if(rc!=EFS_OK)return rc;
     if(expiry.deadline_ns)return EFS_ERR_INVAL;
+#endif
     rc = efs_meta_apply_get_inode(kv, dst_parent, &dprow);
     if (rc != EFS_OK)
         return rc;
@@ -3063,7 +3087,9 @@ int efs_meta_apply_rename(struct efs_kv *kv, efs_ino_t src_parent,
     uint32_t ksl = 0, ksh = 0, kd = 0, ki = 0, ksp = 0, kdp = 0;
     uint32_t ksln = 0, kdln = 0, kss = 0, kds = 0, kpv = 0;
     struct efs_kv_item it[16];
+#if EFS_BUILD_EXPIRY
     struct efs_expiry_change expiry_change;int expiry_move=0;
+#endif
     uint32_t n = 0, dsh;
     int rc, same_dir, is_dir, touch_src = 0, stamp_src = 0, touch_dst = 0,
         stamp_dst = 0;
@@ -3099,6 +3125,7 @@ int efs_meta_apply_rename(struct efs_kv *kv, efs_ino_t src_parent,
     if (rc != EFS_ERR_NOT_FOUND)
         return rc;
 
+#if EFS_BUILD_EXPIRY
     if(S_ISREG(row.mode)) {
         struct efs_expiry_record expiry;
         rc=efs_expiry_get(kv,row.ino,row.generation,&expiry);
@@ -3113,6 +3140,7 @@ int efs_meta_apply_rename(struct efs_kv *kv, efs_ino_t src_parent,
             expiry_move=1;
         }
     }
+#endif
     same_dir = src_parent == dst_parent;
     if (is_dir && !same_dir) {
         if (sprow.nlink < 3)
@@ -3277,10 +3305,12 @@ int efs_meta_apply_rename(struct efs_kv *kv, efs_ino_t src_parent,
         it[n].vlen = 8;
         n++;
     }
+#if EFS_BUILD_EXPIRY
     if(expiry_move) {
         if(n+expiry_change.count>sizeof(it)/sizeof(it[0]))return EFS_ERR_OVERFLOW;
         for(uint32_t i=0;i<expiry_change.count;i++)it[n++]=expiry_change.items[i];
     }
+#endif
     return meta_write_batch(kv, it, n);
 }
 
@@ -4431,7 +4461,82 @@ int efs_meta_apply_degraded_clear(struct efs_kv *kv, const struct efs_meta_degra
     return rc;
 }
 
-int efs_meta_apply_degraded_mark(struct efs_kv *kv, const struct efs_meta_degraded *d)
+int efs_meta_apply_degraded_mark(struct efs_kv *kv, efs_ino_t ino, uint64_t inode_gen,
+                                 uint64_t object_gen, uint32_t ci, uint32_t fi,
+                                 efs_node_id_t node, int *added)
+{
+    struct efs_meta_chunk ch;
+    struct efs_meta_delta ds[EFS_CHUNK_DELTA_MAX];
+    struct efs_meta_degraded d, cur;
+    uint8_t key[EFS_KV_KEY_MAX], val[EFS_META_DEGRADED_VAL];
+    struct efs_kv_item it;
+    uint32_t n = 0, i, kl = 0, vn = sizeof(val);
+    int rc, found = 0;
+
+    if (added)
+        *added = 0;
+    if (!kv || !ino || !inode_gen || !object_gen || fi >= EFS_NUM_FRAGMENTS || !node ||
+        node > EFS_MAX_NODES)
+        return EFS_ERR_INVAL;
+    memset(&d, 0, sizeof(d));
+    rc = efs_meta_apply_get_chunk_row(kv, ino, inode_gen, ci, &ch, ds, EFS_CHUNK_DELTA_MAX,
+                                      &n, NULL);
+    if (rc != EFS_OK)
+        return rc;
+    /* The same object test as efs_meta_degraded_live: the base (never a
+     * packed reference) or a live span with this generation. */
+    if (ch.coding_profile_id != EFS_META_PROFILE_PACK && ch.generation == object_gen) {
+        memcpy(d.nodes, ch.nodes, sizeof(d.nodes));
+        memcpy(d.checksums, ch.checksums, sizeof(d.checksums));
+        found = 1;
+    }
+    if (n > EFS_CHUNK_DELTA_MAX)
+        n = EFS_CHUNK_DELTA_MAX;
+    for (i = 0; !found && i < n; i++) {
+        if (!ds[i].len || ds[i].generation != object_gen)
+            continue;
+        memcpy(d.nodes, ds[i].nodes, sizeof(d.nodes));
+        memcpy(d.checksums, ds[i].checksums, sizeof(d.checksums));
+        found = 1;
+    }
+    if (!found)
+        return EFS_ERR_NOT_FOUND;
+    if (d.nodes[fi] != node)
+        return EFS_ERR_STALE;
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
+        if (!d.nodes[i] || d.nodes[i] > EFS_MAX_NODES)
+            return EFS_ERR_PROTO;
+    d.ino = ino;
+    d.inode_gen = inode_gen;
+    d.object_gen = object_gen;
+    d.chunk_index = ci;
+    d.lane = (uint8_t)(ci % EFS_META_LANES);
+    d.missing_mask = (uint8_t)(1u << fi);
+    rc = degraded_key(ino, object_gen, d.lane, ci, key, &kl);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_kv_get(kv, key, kl, val, &vn);
+    if (rc == EFS_OK) {
+        rc = efs_meta_unpack_degraded(key, kl, val, vn, &cur);
+        if (rc != EFS_OK)
+            return rc;
+        /* Published degraded already (or marked by an earlier fsync). */
+        return cur.missing_mask == d.missing_mask ? EFS_OK : EFS_ERR_STALE;
+    }
+    if (rc != EFS_ERR_NOT_FOUND)
+        return rc;
+    efs_meta_pack_degraded(val, &d);
+    it = (struct efs_kv_item){EFS_KV_PUT, key, kl, val, EFS_META_DEGRADED_VAL};
+    rc = meta_write_batch(kv, &it, 1);
+    if (rc != EFS_OK)
+        return rc;
+    degraded_note(((uint32_t)key[0] << 8) | key[1], 1);
+    if (added)
+        *added = 1;
+    return EFS_OK;
+}
+
+int efs_meta_apply_recovery_mark(struct efs_kv *kv, const struct efs_meta_degraded *d)
 {
     uint8_t key[EFS_KV_KEY_MAX], val[EFS_META_DEGRADED_VAL];
     struct efs_meta_degraded cur;
@@ -7202,7 +7307,9 @@ int efs_meta_apply_reap_done(struct efs_kv *kv, efs_ino_t ino, uint64_t gen)
 {
     struct efs_meta_row row;
     struct efs_kv_item it[6];
+#if EFS_BUILD_EXPIRY
     struct efs_expiry_change expiry_change;
+#endif
     uint8_t k_reap[EFS_KV_KEY_MAX], k_cur[EFS_KV_KEY_MAX];
     uint8_t k_ino[EFS_KV_KEY_MAX], k_xa[EFS_KV_KEY_MAX];
     uint32_t kr = 0, kc = 0, ki = 0, kxa = 0, n = 0;
@@ -7308,6 +7415,7 @@ int efs_meta_apply_reap_done(struct efs_kv *kv, efs_ino_t ino, uint64_t gen)
             return rc;
         n += (uint32_t)xa;
     }
+#if EFS_BUILD_EXPIRY
     if(drop_row || efs_meta_apply_get_inode(kv,ino,&row)==EFS_ERR_NOT_FOUND) {
         struct efs_expiry_record expiry;
         rc=efs_expiry_get(kv,ino,gen,&expiry);
@@ -7322,6 +7430,7 @@ int efs_meta_apply_reap_done(struct efs_kv *kv, efs_ino_t ino, uint64_t gen)
             for(uint32_t i=0;i<expiry_change.count;i++)it[n++]=expiry_change.items[i];
         }
     }
+#endif
     /* The row is absent or has nlink 0 and no lease (checked above). */
     return meta_cleanup_batch(kv, it, n);
 }

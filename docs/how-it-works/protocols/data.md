@@ -1182,7 +1182,11 @@ A refused fragment is never served. The node replies with GET status
 client logs `read: I25 node refused fragment` and treats the fragment as
 unavailable. A read then decodes from the other two fragments, which pass the
 same server-side checks and are compared with the chunk-map digests captured
-by the reader. Two refused fragments fail the read with EIO. Nothing is
+by the reader. The node's check ends at its reply buffer, so the client
+hashes every received fragment payload (BLAKE3) and compares it with the
+reply's digest before the fragment is decoded: TCP checksums and RDMA's ICRC
+do not cover host memory or the receive path. There is no switch
+([D42 audit](../../status/read-verify-audit-20261024.md)). Two refused fragments fail the read with EIO. Nothing is
 repaired automatically (W74).
 
 **GC.** The checksum-conditional delete reads the record, verifies identity
@@ -1262,7 +1266,7 @@ sync never clears the fence. The phases, each shown in
    after the ReadIndex, or with `EFS_MSG_RECOVERY_SCAN` (243/244) from a member
    hosting a group this node does not host. A missing or mismatching fragment
    is dropped and its stripe gets a W154 degraded mark through Raft
-   (`EFS_MD_CMD_DEGRADED_MARK`, tag 249): the mark is written only while the
+   (`EFS_MD_CMD_RECOVERY_MARK`, tag 248): the mark is written only while the
    chunk row still references exactly that object; an identical mark is
    left as it is; a mark for another fragment of the same object is never
    overwritten (a second loss the 2+1 code cannot rebuild, counted

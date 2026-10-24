@@ -56,7 +56,7 @@ rounds=[
  ('W67 sparse bounded admission direct',gc('direct','--pressure')),
  ('W67 sparse bounded admission buffered',gc('buffered','--pressure')),
  ('W75/W85 RPC integrity, ambiguous PUT/restart/accounting', ['python3','tests/live/fragment_integrity.py']),
- ('W75 parallel GET payload and metadata anchor', ['python3','tests/test_read_verify.py']),
+ ('W75/D42 GET payload and identity on every read path', ['python3','tests/test_get_integrity.py']),
  ('W65 pooled/partial-reader signal shutdown', ['python3','tests/live/server_shutdown.py']),
  ('W82 reachable stale leader partitions', ['python3','tests/live/raft_read_freshness.py']),
  ('W76 lost committed namespace replies direct',gc('direct','--opid')),

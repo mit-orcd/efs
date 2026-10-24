@@ -153,7 +153,7 @@ Local engine benchmarks now belong to `efs-bench` (Oct 6 2026):
 ```
 
 Roots must be empty scratch directories; the tool refuses nonempty roots.
-Data supports repeated/comma-separated storage roots, `--direct-io`, and `--perf`;
+Data supports repeated/comma-separated storage roots (always `O_DIRECT`) and `--perf`;
 metadata also accepts the first `--storage` root. The implementation reuses the
 production fragment store, writer pool, KV and Raft log, with no cluster startup
 or network. Existing seed-based network/store/read/metadata benchmark commands

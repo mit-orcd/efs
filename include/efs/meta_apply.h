@@ -621,9 +621,11 @@ int efs_meta_apply_lookup_path(struct efs_kv *kv, efs_ino_t start,
 /* Staged one-group CREATE: materialize effective fixed policy and index in
  * the namespace batch. Ordinary CREATE wrappers remain expiry-disabled. */
 int efs_meta_apply_create_refusal(struct efs_kv *,uint32_t shard,const struct efs_opid_req *);
+#if EFS_BUILD_EXPIRY
 int efs_meta_apply_create_expiring(struct efs_kv *,const struct efs_meta_attrs *,
                                      efs_ino_t parent,uint32_t mode,
                                      const char *name,efs_ino_t *out);
+#endif
 int efs_meta_apply_create_file(struct efs_kv *kv, const struct efs_meta_attrs *at,
                                efs_ino_t parent, uint32_t mode,
                                const char *name, efs_ino_t *out);
@@ -683,6 +685,7 @@ int efs_meta_apply_mkdir_log_op(struct efs_kv *kv, const struct efs_meta_attrs *
  * ino = the removed inode; extra = nlink after, unlink only). */
 /* Single-group policy/renewal applies. The root and file policy must be on
  * this participant's group; cross-group callers need guarded transactions. */
+#if EFS_BUILD_EXPIRY
 int efs_meta_apply_expiry_policy(struct efs_kv *, efs_ino_t root,
                                  uint64_t gen, uint32_t caller_uid,
                                  uint64_t expected,
@@ -695,6 +698,7 @@ int efs_meta_apply_expiry_renew(struct efs_kv *, efs_ino_t ino,
  * clock decision. This never reads a replica wall clock or deletes fragments. */
 int efs_meta_apply_expire(struct efs_kv *, efs_ino_t parent, const char *name,
                           uint64_t committed_now, const struct efs_expiry_due *);
+#endif
 int efs_meta_apply_unlink_op(struct efs_kv *kv, efs_ino_t parent, const char *name,
                              uint64_t now, const struct efs_opid_req *q);
 int efs_meta_apply_rmdir_op(struct efs_kv *kv, efs_ino_t parent, const char *name,
@@ -1109,14 +1113,24 @@ int efs_meta_degraded_live(struct efs_kv *kv, const struct efs_meta_degraded *d)
 #define EFS_META_DEGRADED_ORPHANED 2
 int efs_meta_apply_degraded_clear(struct efs_kv *kv, const struct efs_meta_degraded *d,
                                   int rebuilt, int *outcome);
-/* K36 EFS_MD_CMD_DEGRADED_MARK, serialized apply on the anchor's group: a
+/* EFS_MD_CMD_DEGRADED_MARK apply (K35): mark fragment `fi` of object_gen
+ * (the base or a live span of the chunk row) missing, nodes and checksums
+ * taken from the row. OK when written or already present with the same
+ * fragment; NOT_FOUND when the row no longer references the object; STALE
+ * when the row names another node for `fi` or a mark names another
+ * fragment (the stripe would rest on one fragment). *added is 1 when
+ * this call wrote the mark. */
+int efs_meta_apply_degraded_mark(struct efs_kv *kv, efs_ino_t ino, uint64_t inode_gen,
+                                 uint64_t object_gen, uint32_t ci, uint32_t fi,
+                                 efs_node_id_t node, int *added);
+/* K36 EFS_MD_CMD_RECOVERY_MARK, serialized apply on the anchor's group: a
  * storage node's verified recovery found its fragment of a published object
  * missing or unprovable and dropped it. Writes the mark when the chunk row
  * still references exactly this object (efs_meta_degraded_live); OK when it
  * did or the same mark is already there, NOT_FOUND when the object is no
  * longer live (nothing to rebuild), STALE when a mark for another fragment
  * of the object exists (a second loss the 2+1 code cannot rebuild). */
-int efs_meta_apply_degraded_mark(struct efs_kv *kv, const struct efs_meta_degraded *d);
+int efs_meta_apply_recovery_mark(struct efs_kv *kv, const struct efs_meta_degraded *d);
 /* K36 recovery inventory: every object (base, live span) of the chunk rows
  * of `shard` that places a fragment on `node`, in key order after `after`
  * (exclusive; alen 0 starts at the first row). The callback gets the mark

@@ -65,7 +65,7 @@ static void test_record(const uint8_t *data, uint8_t rec[EFS_FRAG_RECORD_BYTES])
 static int async_put(struct put_sync_root *r, const char *path, uint8_t *data)
 {
     uint8_t rec[EFS_FRAG_RECORD_BYTES];test_record(data,rec);
-    struct shard_io_arg a={.buf=data,.len=4096,.is_write=1,.rec=rec,.direct=1,.sync_root=r};
+    struct shard_io_arg a={.buf=data,.len=4096,.is_write=1,.rec=rec,.sync_root=r};
     strcpy(a.path,path);shard_io_thread(&a);
     return a.result;
 }
@@ -291,8 +291,9 @@ static void write_frag(struct efsd_server *s,efs_ino_t ino,uint32_t ci,uint32_t 
     struct efs_frag_ident id;fragment_ident(&ex,rec_ino,ci,fi,4096,&id);efs_tls_chunk_gen=0;
     efs_hash(data,4096,d);assert(!efs_frag_record_encode(&id,d,rec));
     make_dir_for_file(path);
+    uint8_t tail[4096]={0};memcpy(tail,rec,sizeof(rec)); /* payload || 4 KiB tail page */
     int fd=open(path,O_CREAT|O_TRUNC|O_WRONLY,0644);assert(fd>=0);
-    assert(write(fd,data,4096)==4096 && write(fd,rec,sizeof(rec))==(ssize_t)sizeof(rec));close(fd);
+    assert(write(fd,data,4096)==4096 && write(fd,tail,sizeof(tail))==(ssize_t)sizeof(tail));close(fd);
 }
 static void test_recovery_local(uint8_t *data)
 {
@@ -304,7 +305,7 @@ static void test_recovery_local(uint8_t *data)
     s->node_count=1;s->nodes[0].id=s->id=1;s->nodes[0].used=1<<20;
     write_frag(s,12345,7,1,0x77,12345,data,good,sizeof(good));
     write_frag(s,12345,8,1,0x78,12345,data,torn,sizeof(torn));
-    assert(!truncate(torn,4096+64));
+    assert(!truncate(torn,4096+100));
     write_frag(s,12345,9,1,0x79,99999,data,other,sizeof(other));
     write_frag(s,12345,10,1,0x7a,12345,data,flip,sizeof(flip));
     {int fd=open(flip,O_WRONLY);assert(fd>=0 && pwrite(fd,"X",1,100)==1);close(fd);}
@@ -315,10 +316,10 @@ static void test_recovery_local(uint8_t *data)
     booting=1; /* recovery removes names, nothing to fence first */
     assert(server_recovery_scan_local(s,&c,&stop)==EFS_OK);
     /* The torn file is no fragment size: its whole size goes back. */
-    assert(c.checked==5 && c.dropped==3 && c.foreign==1 && c.bytes_dropped==4160+2*4096);
+    assert(c.checked==5 && c.dropped==3 && c.foreign==1 && c.bytes_dropped==4196+2*4096);
     assert(!access(good,F_OK) && !access(pub,F_OK) && !access(foreign,F_OK));
     assert(access(torn,F_OK) && access(other,F_OK) && access(flip,F_OK));
-    assert(s->nodes[0].used==(1<<20)-4160-2*4096);
+    assert(s->nodes[0].used==(1<<20)-4196-2*4096);
     /* Against the published digest: matching is proven, another is dropped. */
     uint8_t want[EFS_HASH_SIZE],wrong[EFS_HASH_SIZE];efs_hash(data,4096,want);
     memcpy(wrong,want,sizeof(wrong));wrong[0]^=1;
@@ -403,8 +404,10 @@ int main(void)
     assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==3);
     file_syncs=directory_syncs=0;shard_io_thread(&a);
     assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==1);
-    for(int direct=0;direct<2;direct++) for(int bounce=0;bounce<2;bounce++) {
-        a.direct=direct;a.buf=data+bounce;
+    /* O_DIRECT is not a barrier: aligned and bounce writes both take the
+     * explicit file and directory barriers before the ACK. */
+    for(int bounce=0;bounce<2;bounce++) {
+        a.buf=data+bounce;
         for(int attempt=0;attempt<2;attempt++) {
             file_syncs=directory_syncs=0;shard_io_thread(&a);
             assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==1 && !sync_opens);
@@ -424,7 +427,7 @@ int main(void)
     /* Short TCP worker lifetimes must retire both direct-I/O cache pages.
      * Valgrind sees lost buffers after join if either TLS destructor is absent. */
     for (int i=0;i<32;i++) {
-        pthread_t thread;a.direct=1;a.buf=data+(i%2);
+        pthread_t thread;a.buf=data+(i%2);
         file_syncs=directory_syncs=0;
         assert(!pthread_create(&thread,NULL,shard_io_thread,&a));
         assert(!pthread_join(thread,NULL));
@@ -467,6 +470,6 @@ int main(void)
     test_recovery_local(data);
     if(!async_ran)puts("async durability: SKIP (TMPDIR is not XFS)");
     free(data);
-    puts("production PUT durability: buffered/direct/bounce file and pathname barriers, pinned ancestry, restart/recreation, retries, fault refusal and asynchronous acknowledgement PASS");
+    puts("production PUT durability: O_DIRECT aligned/bounce file and pathname barriers, pinned ancestry, restart/recreation, retries, fault refusal and asynchronous acknowledgement PASS");
     return 0;
 }

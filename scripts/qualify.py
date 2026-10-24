@@ -43,7 +43,7 @@ shell-quoted, so never quote them in the template):
      "seed": "10.0.0.1:17432",
      "nodes": [{"addr": "10.0.0.1:17432", "host": "h1"}, ...],
      "mounts": [{"path": "/mnt/a", "host": "h1"}, {"path": "/mnt/b", "host": "h2"}],
-     "transport": "rdma", "direct_io": true,
+     "transport": "rdma", "direct_io": true,  # always true since D42
      "features": {"packing": true, "efs_commands": true, "expiry": false},
      "quota": "...", "hardware": "...", "notes": "...",
      "mgmt_host": "local",                   # where efs-mgmt reaches the nodes
@@ -315,7 +315,7 @@ class Loopback(Controller):
     owned = True
 
     def __init__(self, args, work):
-        self.n, self.work, self.direct = args.loopback, work, not args.buffered
+        self.n, self.work = args.loopback, work
         self.base = args.port_base
         ports = list(range(self.base, self.base + self.n))
         if any(p in RESERVED_PORTS for p in ports + [self.base + 9]) or not 1024 < self.base < 65000:
@@ -333,17 +333,16 @@ class Loopback(Controller):
         self.stores = [work / 'loopback' / f'n{i + 1}' for i in range(self.n)]
         self.mounts = [work / 'loopback' / 'mnt-a', work / 'loopback' / 'mnt-b']
         self.procs, self.c = {}, {}
-        # The A2 profile enables .efs commands (opt-in on clients and servers).
-        self.env = dict(os.environ, EFS_TRANSPORT='tcp', TMPDIR=str(work / 'tmp'),
-                        EFS_COMMANDS='1', EFS_COMMANDS_SERVER='1')
+        # .efs follows the cluster commands-policy, enabled by default (D42).
+        self.env = dict(os.environ, EFS_TRANSPORT='tcp', TMPDIR=str(work / 'tmp'))
 
     def description(self, private_base):
         return dict(name=f'loopback-{self.n}', candidate=None, source=str(ROOT),
                     seed=self.addrs[0], owned=True,
                     nodes=[dict(addr=a, host='local', id=i + 1) for i, a in enumerate(self.addrs)],
                     mounts=[dict(path=str(m), host='local') for m in self.mounts],
-                    transport='tcp', direct_io=self.direct,
-                    features=dict(efs_commands='EFS_COMMANDS=1 EFS_COMMANDS_SERVER=1',
+                    transport='tcp', direct_io=True,
+                    features=dict(efs_commands='cluster commands-policy (default: enabled)',
                                   packing='build default (not set by the driver)'),
                     quota='1G per daemon', hardware=f'{socket.gethostname()} (one host, loopback)',
                     private=dict(host='local', root=str(self.work / 'live'), port_base=private_base),
@@ -356,8 +355,7 @@ class Loopback(Controller):
                     str(self.stores[i])]
         else:
             argv = [str(ROOT / 'efsd'), self.addrs[i], str(self.stores[i])]
-        argv += ['--quota', '1G', '--discovery-port', '0',
-                 '--direct-io' if self.direct else '--no-direct-io']
+        argv += ['--quota', '1G', '--discovery-port', '0']
         log = open(self.work / 'loopback' / f'efsd-n{i + 1}.log', 'ab')
         log.write(f'\n==== {now()} {" ".join(argv)}\n'.encode())
         log.flush()
@@ -456,7 +454,7 @@ class Loopback(Controller):
 
     def client_start(self, g, m):
         return g.run('client-start', 'local', f'cd {shlex.quote(str(ROOT))} && export '
-                     f'EFS_TRANSPORT=tcp EFS_COMMANDS=1 && scripts/client.sh {self.addrs[0]} {shlex.quote(m["path"])}',
+                     f'EFS_TRANSPORT=tcp && scripts/client.sh {self.addrs[0]} {shlex.quote(m["path"])}',
                      300)
 
     def stop_cluster(self, g):
@@ -807,10 +805,9 @@ def live_gate(build):
 
 def b_append(q, src, work, port):
     args = q.fixture['append_failover_args']
-    direct = ' --direct' if q.cluster.get('direct_io') else ''
     return [('append-failover', f'python3 tests/live/append_failover.py --rel {shlex.quote(src)} '
-             f'--root {shlex.quote(work)}/run --port {port} {args}{direct}', False)], \
-        dict(args=args + direct, ports=f'{port + 1}-{port + 3}', rule='K15/K29 account()')
+             f'--root {shlex.quote(work)}/run --port {port} {args}', False)], \
+        dict(args=args, ports=f'{port + 1}-{port + 3}', rule='K15/K29 account()')
 
 
 def b_k14(q, src, work, port):
@@ -833,11 +830,11 @@ def b_k13(q, src, work, port):
 
 def b_fragment(q, src, work, port):
     return [('fragment-integrity', f'mkdir -p {shlex.quote(work)}/tmp && TMPDIR={shlex.quote(work)}/tmp '
-             f'python3 tests/live/fragment_integrity.py', False)], dict(configs='buffered/direct x 1/2 roots')
+             f'python3 tests/live/fragment_integrity.py', False)], dict(configs='O_DIRECT x 1/2 roots')
 
 
 def b_gc(q, src, work, port):
-    mode = 'direct' if q.cluster.get('direct_io') else 'buffered'
+    mode = 'direct'  # O_DIRECT only (D42)
     w = shlex.quote(work)
     return [('gc-reclamation', f'mkdir -p {w}/p1 {w}/p2 && python3 tests/live/gc_reclamation.py '
              f'--mode {mode} --root {w}/p1 --root {w}/p2 --port {port + 30} {q.fixture["gc_args"]}',
@@ -1561,7 +1558,6 @@ def main(argv=None):
     r.add_argument('--loopback', type=int, default=0, help='start an owned private N-daemon cluster')
     r.add_argument('--port-base', type=int, default=18740, help='loopback daemon ports (N of them)')
     r.add_argument('--private-port-base', type=int, default=18700, help='live harness ports with --loopback')
-    r.add_argument('--buffered', action='store_true', help='loopback daemons with buffered I/O')
     r.add_argument('--out', type=Path, required=True)
     r.add_argument('--work', type=Path, help='scratch and owned stores (default OUT.work)')
     r.add_argument('--gates', type=lambda v: [x for x in v.split(',') if x], default=[])

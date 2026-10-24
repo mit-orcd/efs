@@ -6,7 +6,7 @@ import tempfile
 root = Path(__file__).resolve().parents[1]
 s = (root / 'src/server/handler.c').read_text()
 a = s.index('        case EFS_MSG_RDMA_SETUP: {')
-b = s.index('            if (rdma_first_on())', a)
+b = s.index('            if (efs_rdma_trace_on())', a)
 case = s[a:b] + 'break; }'
 code = r'''
 #include "efs/network.h"

@@ -202,7 +202,7 @@ static inline void seg_slot_set(struct seg_slot *sl, struct kv_seg *s)
 {
     sl->seg = s;
     kv_seg_range(s, &sl->rlo, &sl->rhi);
-    kv_seg_bloom_request(s); /* live segments only; no-op unless enabled */
+    kv_seg_bloom_request(s); /* live segments only */
 }
 
 static inline int seg_slot_excludes(const struct seg_slot *sl, int r)
@@ -560,7 +560,6 @@ int kv_seg_install(struct kv_seg *s, const struct kv_seg_io *io, uint8_t *blk,
                    const uint8_t *key, uint32_t klen, struct kv_buf *val,
                    uint8_t *op);
 void kv_seg_pin(struct kv_seg *s);
-void kv_seg_bloom_enable(int on);
 void kv_seg_bloom_build_now(struct kv_seg *s);
 int kv_seg_has_bloom(const struct kv_seg *s);
 void kv_seg_unpin(struct kv_seg *s);

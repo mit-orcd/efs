@@ -1638,18 +1638,27 @@ static int session_command_reply(uint32_t shard,const uint8_t *command,uint32_t 
     if(probe==2 && (!known || bytes!=22 || command[0]!=EFS_MD_CMD_SESSION ||
                     command[1]!=0))return EFS_ERR_INVAL;
     body[0]=efs_raft_shard_group(shard);memcpy(body+1,command,bytes);
-    efs_node_id_t target=0;
+    efs_node_id_t target=0,skip=0;
+    int lost=0;
     for (unsigned attempt=0;attempt<8;attempt++) {
-        if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
+        if (efs_client_rpc_past_deadline()) return lost?EFS_ERR_NET:EFS_ERR_BUSY;
         efs_node_id_t nid=target;
-        struct efs_conn *conn=target?efs_client_conn_get(target):rpc_owner_conn_shard(shard,&nid);
-        if (!conn) return EFS_ERR_NET;
-        if (efs_conn_send_msg(conn,EFS_MSG_RAFT_MKFS,body,bytes+1)) {
-            efs_client_conn_drop(nid,conn);return EFS_ERR_NET;
-        }
+        struct efs_conn *conn=target?efs_client_conn_get(target):
+            raft_voter_conn_skip(shard,&nid,skip);
         uint8_t type=0;uint32_t len=0;void *payload=NULL;
-        if (efs_conn_recv_msg(conn,&type,&payload,&len)) {
-            free(payload);efs_client_conn_drop(nid,conn);return EFS_ERR_NET;
+        /* K34: a group leader in orderly stop closes its connections; one
+         * failed exchange is not the verdict. Re-pick another voter after a
+         * pause (the identical identified command: same UUID, epoch, seq),
+         * as inode RPCs do; NET only once the attempts or the budget are
+         * used up, so the caller keeps the request as unknown. */
+        if (!conn || efs_conn_send_msg(conn,EFS_MSG_RAFT_MKFS,body,bytes+1) ||
+            efs_conn_recv_msg(conn,&type,&payload,&len)) {
+            free(payload);
+            if (conn) efs_client_conn_drop(nid,conn);
+            rpc_retry_peer(shard,nid,&target,&skip,conn!=NULL);
+            lost=1;
+            if (rpc_writer_retry_pause(attempt)!=EFS_OK) return EFS_ERR_NET;
+            continue;
         }
         efs_client_conn_release(nid,conn);
         if (type!=EFS_MSG_RAFT_MKFS_REPLY || len!=sizeof(struct efs_msg_raft_mkfs_reply)) {
@@ -1682,7 +1691,7 @@ static int session_command_reply(uint32_t shard,const uint8_t *command,uint32_t 
         }
         if (rpc_writer_retry_pause(attempt)!=EFS_OK) return EFS_ERR_BUSY;
     }
-    return EFS_ERR_BUSY;
+    return lost?EFS_ERR_NET:EFS_ERR_BUSY;
 }
 
 int efs_client_rpc_identity_revoked(const struct efs_opid *id,int *revoked)
@@ -2117,6 +2126,57 @@ int efs_client_rpc_put_ticket_batch(const struct efs_put_ticket *tickets,uint32_
                                     int settle,uint32_t *mask)
 {
     return rpc_put_ticket(tickets,n,settle?4:3,mask);
+}
+
+/* K35: propose the degraded mark of one published object's fragment on the
+ * lane shard's group and wait for its verdict. */
+int efs_client_rpc_degraded_mark(efs_ino_t ino,uint64_t inode_gen,uint64_t object,
+                                 uint32_t ci,uint32_t fi,efs_node_id_t node)
+{
+    if(!ino || !inode_gen || !object || fi>=EFS_NUM_FRAGMENTS || !node || node>EFS_MAX_NODES)
+        return EFS_ERR_INVAL;
+    uint8_t body[1+EFS_MD_DEGRADED_MARK_LEN];
+    uint32_t shard=efs_kv_lane_shard(ino,(uint8_t)(ci%EFS_META_LANES));
+    body[0]=efs_raft_shard_group(shard);
+    body[1]=EFS_MD_CMD_DEGRADED_MARK;
+    for(int i=0;i<8;i++){
+        body[2+i]=(uint8_t)(ino>>(56-8*i));
+        body[10+i]=(uint8_t)(inode_gen>>(56-8*i));
+        body[18+i]=(uint8_t)(object>>(56-8*i));
+    }
+    for(int i=0;i<4;i++){
+        body[26+i]=(uint8_t)(ci>>(24-8*i));
+        body[31+i]=(uint8_t)((uint32_t)node>>(24-8*i));
+    }
+    body[30]=(uint8_t)fi;
+    efs_node_id_t target=0;
+    for(unsigned attempt=0;attempt<8;attempt++) {
+        if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
+        efs_node_id_t nid=target;
+        struct efs_conn *conn=target?efs_client_conn_get(target):rpc_owner_conn_shard(shard,&nid);
+        if(!conn)return EFS_ERR_NET;
+        if(efs_conn_send_msg(conn,EFS_MSG_RAFT_MKFS,body,sizeof(body))) {
+            efs_client_conn_drop(nid,conn);return EFS_ERR_NET;
+        }
+        uint8_t type=0;uint32_t bytes=0;void *payload=NULL;
+        if(efs_conn_recv_msg(conn,&type,&payload,&bytes)) {
+            free(payload);efs_client_conn_drop(nid,conn);return EFS_ERR_NET;
+        }
+        efs_client_conn_release(nid,conn);
+        if(type!=EFS_MSG_RAFT_MKFS_REPLY || bytes!=sizeof(struct efs_msg_raft_mkfs_reply)) {
+            free(payload);return EFS_ERR_PROTO;
+        }
+        struct efs_msg_raft_mkfs_reply reply;memcpy(&reply,payload,bytes);free(payload);
+        if(reply.rc==EFS_ERR_NOT_PRIMARY) {
+            if(reply.leader_hint< -1 || reply.leader_hint>=EFS_MAX_NODES)return EFS_ERR_PROTO;
+            target=reply.leader_hint>=0 && (efs_node_id_t)(reply.leader_hint+1)!=nid?
+                (efs_node_id_t)(reply.leader_hint+1):0;
+        } else if(reply.rc!=EFS_ERR_BUSY && reply.rc!=EFS_ERR_NO_QUORUM) {
+            return reply.rc;
+        }
+        if(rpc_writer_retry_pause(attempt)!=EFS_OK)return EFS_ERR_BUSY;
+    }
+    return EFS_ERR_BUSY;
 }
 
 int efs_client_rpc_publication(const struct efs_msg_publication *request, int query_only,
@@ -3518,14 +3578,12 @@ static int session_revoke_submit(void *ctx,const uint8_t *payload,uint32_t plen,
  * collectable without an operator: the group leaders drain its streams
  * into the orphan ledger and collect them. The barrier is the operator's
  * (efs_session_revoke); a failure leaves it resumable by `efs-mgmt
- * raft-session fence`. EFS_UNMOUNT_REVOKE=0 keeps the session open. */
+ * raft-session fence`. Always (D42): there is no keep-open mode. */
 int efs_client_session_end(void)
 {
-    const char *keep=getenv("EFS_UNMOUNT_REVOKE");
     if (!__atomic_load_n(&g_client.session_started,__ATOMIC_ACQUIRE) ||
         efs_client_session_fenced())
         return EFS_OK;
-    if (keep && !strcmp(keep,"0")) return EFS_OK;
     struct efs_opid id;
     int rc=efs_client_publication_id(1,&id);
     if (rc!=EFS_OK) return rc;

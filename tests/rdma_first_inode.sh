@@ -27,7 +27,7 @@ start_one() {
     local ep="$ADDR:$port"
     [ -n "$join" ] && ep="$join --listen $ADDR:$port"
     EFS_TRANSPORT=auto setsid ./efsd $ep "$WORK/store/s$id" \
-        --quota 1G --writers 0 --no-direct-io --discovery-port 0 \
+        --quota 1G --writers 0 --discovery-port 0 \
         >"$WORK/s$id.log" 2>&1 </dev/null &
     local i
     for i in $(seq 1 40); do
@@ -63,7 +63,7 @@ if [ "$mk" != 0 ]; then
 fi
 
 rm -f "$WORK/fuse.log"
-EFS_TRANSPORT=rdma EFS_RDMA_FIRST=1 setsid ./efs-fuse "$ADDR:$PORT" \
+EFS_TRANSPORT=rdma EFS_RDMA_TRACE=1 setsid ./efs-fuse "$ADDR:$PORT" \
     "$MNT" >"$WORK/fuse.log" 2>&1 </dev/null &
 
 served=0

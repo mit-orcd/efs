@@ -920,12 +920,13 @@ out:
 }
 
 /* One process-wide builder, newest request first (a fresh flush or
- * compaction output is the segment lookups probe first). */
+ * compaction output is the segment lookups probe first). Every live segment
+ * gets a filter (D42: no off path). */
 static pthread_mutex_t g_bloom_mu = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t g_bloom_cv = PTHREAD_COND_INITIALIZER;
 static struct kv_seg **g_bloom_q;
 static uint32_t g_bloom_n, g_bloom_cap;
-static int g_bloom_on, g_bloom_started;
+static int g_bloom_started;
 
 static void *seg_bloom_main(void *arg)
 {
@@ -943,20 +944,11 @@ static void *seg_bloom_main(void *arg)
     return NULL;
 }
 
-void kv_seg_bloom_enable(int on)
-{
-    pthread_mutex_lock(&g_bloom_mu);
-    g_bloom_on = on;
-    pthread_mutex_unlock(&g_bloom_mu);
-}
-
 void kv_seg_bloom_request(struct kv_seg *s)
 {
     if (!s || __atomic_load_n(&s->bloom, __ATOMIC_ACQUIRE))
         return;
     pthread_mutex_lock(&g_bloom_mu);
-    if (!g_bloom_on)
-        goto out;
     if (!g_bloom_started) {
         pthread_t t;
         pthread_attr_t a;

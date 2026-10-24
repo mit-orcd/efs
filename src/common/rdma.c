@@ -93,14 +93,6 @@ static int64_t now_us(void)
     return (int64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
 }
 
-static int rdma_first_log(void)
-{
-    static int v = -1;
-    if (v < 0)
-        v = getenv("EFS_RDMA_FIRST") ? 1 : 0;
-    return v;
-}
-
 /* RNR retry count for the send QP. 7 means retry forever; see qp_rts. */
 #define RDMA_RNR_RETRY 7
 
@@ -548,14 +540,56 @@ int efs_rdma_numa_node_for_host(const char *host, uint16_t port,
     return node;
 }
 
+/* The device a connection would use when no route picks one: EFS_RDMA_DEV
+ * when set (it must open), else the first usable HCA; NULL when none. */
+static struct efs_rdma_dev *dev_default(void)
+{
+    const char *env = getenv("EFS_RDMA_DEV");
+    return env && *env ? dev_cached(env) : dev_probe_first();
+}
+
 int efs_rdma_available(void)
 {
     static int avail = -1;
     if (efs_rdma_transport() == EFS_TRANSPORT_TCP)
         return 0;
     if (avail < 0)
-        avail = (dev_probe_first() != NULL) ? 1 : 0;
+        avail = (dev_default() != NULL) ? 1 : 0;
     return avail;
+}
+
+/* A8 (D42): resolve EFS_TRANSPORT once at efsd/efs-fuse start. auto (the
+ * default; also unset or empty), tcp or rdma. An unknown value, or rdma
+ * without a usable RDMA device, refuses to start: an explicit rdma never
+ * falls back to TCP. auto may choose TCP; the line names what is used. */
+int efs_transport_startup(const char *prog)
+{
+    const char *v = getenv("EFS_TRANSPORT");
+    if (v && *v && strcmp(v, "auto") && strcmp(v, "tcp") && strcmp(v, "rdma")) {
+        fprintf(stderr, "%s: EFS_TRANSPORT=%s is not auto, tcp or rdma; refusing to start\n",
+                prog, v);
+        return EFS_ERR_INVAL;
+    }
+    int mode = efs_rdma_transport();
+    if (mode == EFS_TRANSPORT_TCP) {
+        fprintf(stderr, "%s: transport tcp (EFS_TRANSPORT=tcp)\n", prog);
+        return EFS_OK;
+    }
+    struct efs_rdma_dev *d = efs_rdma_available() ? dev_default() : NULL;
+    const char *dev = getenv("EFS_RDMA_DEV");
+    if (mode == EFS_TRANSPORT_RDMA && !d) {
+        fprintf(stderr, "%s: EFS_TRANSPORT=rdma but no usable RDMA device%s%s; refusing to "
+                "start (unset it or use auto to allow TCP)\n", prog,
+                dev && *dev ? " named by EFS_RDMA_DEV=" : "", dev && *dev ? dev : "");
+        return EFS_ERR_UNSUPPORTED;
+    }
+    if (d)
+        fprintf(stderr, "%s: transport %s: rdma on %s (TCP carries setup)\n", prog,
+                mode == EFS_TRANSPORT_RDMA ? "rdma" : "auto", d->name);
+    else
+        fprintf(stderr, "%s: transport auto: tcp (no usable RDMA device%s%s)\n", prog,
+                dev && *dev ? " named by EFS_RDMA_DEV=" : "", dev && *dev ? dev : "");
+    return EFS_OK;
 }
 
 /* ---------------- connection ---------------- */
@@ -706,11 +740,11 @@ static inline void efd_disarm(struct efs_rdma_conn *rc)
 
 static void harvest_recv_wcs(struct ibv_wc *wcs, int n)
 {
-    if (rdma_first_log()) {
+    if (efs_rdma_trace_on()) {
         static int nh;
         int k = __sync_fetch_and_add(&nh, 1);
         if (k < 6)
-            fprintf(stderr, "rdma-first: harvest n=%d status0=%d len0=%u\n",
+            fprintf(stderr, "rdma-trace: harvest n=%d status0=%d len0=%u\n",
                     n, n > 0 ? (int)wcs[0].status : -1,
                     n > 0 ? wcs[0].byte_len : 0);
     }

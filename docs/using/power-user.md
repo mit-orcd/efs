@@ -44,8 +44,9 @@ export EFS_TRANSPORT=rdma EFS_RDMA_DEV=rxe0 EFS_RDMA_GID_INDEX=1
 
 The device/index must exist locally; use `rdma link` and inspect its GID table.
 AMD's [four-mode acceptance](../status/v020-amd-release.md) used software RXE,
-not hardware RoCE or cross-host offload. Server `--direct-io` / `--no-direct-io`
-selects fragment I/O independently of transport; buffered is the daemon default.
+not hardware RoCE or cross-host offload. Fragment I/O is always `O_DIRECT`,
+independently of transport (D42). `EFS_TRANSPORT=rdma` refuses to start
+without a usable device; `auto` logs the transport it uses.
 
 ## Environment variables (client, unless noted)
 
@@ -56,9 +57,6 @@ selects fragment I/O independently of transport; buffered is the daemon default.
 | `EFS_DCACHE_DRAIN_BYTES` | reserved drain/recovery body capacity (default 64 MiB) |
 | `EFS_DCACHE_BYTES` | soft dirty-body reclaim target in bytes (default 128 MiB); not the hard allocation bound |
 | `EFS_CLIENT_CONNS_PER_NODE` | pooled connections per server node |
-| `EFS_READ_PREFETCH` | read prefetch depth override |
-| `EFS_READ_VERIFY=1` | enable payload re-hashing on GET receive paths (off by default); returned digests are checked against the captured metadata view where available; fragment format 2 binds identity and digest (K16/W75) |
-| `EFS_FUSE_SPLICE_READ` | opt into `FUSE_CAP_SPLICE_READ` for measurement (default off); the recorded profile found no gain, so copy savings are not an accepted result |
 | `EFS_NUMA_NODE` | `=none` disables NUMA pinning at startup; `=N` forces node N |
 | `EFS_MD_RAFT_N` | **removed (W153):** efsd stops when it is set. The member count N (3..16) is the membership committed at formation and grown by later joins; node ids come from the cluster (K33). Each metadata group has three voters (N = 3: all; N ≥ 4: nodes 1–3 and 2–4); nodes 5..N hold data only |
 | `EFS_RDMA_DEV` / `EFS_RDMA_GID_INDEX` | **server/client:** verbs device and RoCE GID selection |
@@ -88,7 +86,7 @@ message naming it.
 
 - Per-node quota across its storage paths (`--quota`, suffixes `T/G/M/K`);
   a PUT returns QUOTA when at least two stripe replies are quota failures: [operations.md § Quotas](../operations/operations.md#quotas).
-- Storage layout, auto-rejoin, writer threads and `--direct-io`:
+- Storage layout, auto-rejoin, writer threads and direct I/O:
   [operations.md § Storage layout](../operations/operations.md#storage-layout),
   [§ Auto-rejoin](../operations/operations.md#auto-rejoin),
   [§ Writer threads and direct I/O](../operations/operations.md#writer-threads-and-direct-io).

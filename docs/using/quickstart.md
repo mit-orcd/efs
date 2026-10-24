@@ -26,9 +26,9 @@ cluster: the first is 1, the others follow in address order):
 ```bash
 export EFS_TRANSPORT=tcp
 EFS_DEMO_ROOT=$(mktemp -d /tmp/efs-demo.XXXXXX)
-./scripts/server.sh 127.0.0.1:17432 "$EFS_DEMO_ROOT/s1:5G" --no-direct-io
-./scripts/server.sh 127.0.0.1:17433 "$EFS_DEMO_ROOT/s2:5G" 127.0.0.1:17432 --no-direct-io
-./scripts/server.sh 127.0.0.1:17434 "$EFS_DEMO_ROOT/s3:5G" 127.0.0.1:17432 --no-direct-io
+./scripts/server.sh 127.0.0.1:17432 "$EFS_DEMO_ROOT/s1:5G"
+./scripts/server.sh 127.0.0.1:17433 "$EFS_DEMO_ROOT/s2:5G" 127.0.0.1:17432
+./scripts/server.sh 127.0.0.1:17434 "$EFS_DEMO_ROOT/s3:5G" 127.0.0.1:17432
 ```
 
 There is no node id, member count or cluster file to give (efsd refuses the
@@ -71,7 +71,7 @@ InfiniBand (active port/LID) and RoCE (active Ethernet verbs device/GID).
 For RoCE, set `EFS_RDMA_DEV` and optionally `EFS_RDMA_GID_INDEX` on every
 participating daemon/client; [power-user transport setup](power-user.md#mounting-and-transport)
 shows an explicit example. GPU device-memory DMA remains unvalidated.
-Use `--direct-io` instead of `--no-direct-io` to select direct fragment I/O.
+Fragment I/O is always `O_DIRECT`; a storage root whose filesystem cannot do it is refused at startup.
 See [script shutdown limits](../operations/operations.md#scripts) before reusing a
 server path or stopping a busy server.
 Restarting a server on its existing storage needs no join address;

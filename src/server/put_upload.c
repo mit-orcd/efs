@@ -9,6 +9,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
+#include <unistd.h>
 
 /* The one data PUT path (K13): every fragment names an ADMITTED ticket.
  * Ticket authority is read before taking the local write guard. Holding the
@@ -17,6 +19,56 @@
  * storage; a seal in progress waits for this guarded store to finish. */
 static int put_upload(struct efsd_server *s,const uint8_t *body,uint32_t bytes,
                       uint8_t *path_used);
+
+static int put_refuse_stopping(const struct efs_put_ticket *t,uint32_t fi)
+{
+    static uint64_t refused;
+    uint64_t n=__atomic_add_fetch(&refused,1,__ATOMIC_RELAXED);
+    if(n<=10 || !(n%1000))
+        fprintf(stderr,"put-upload: stopping; fragment not acknowledged ino=%llu ci=%u fi=%u "
+                "(%llu so far)\n",(unsigned long long)t->ino,t->ci,fi,(unsigned long long)n);
+    return EFS_ERR_IO;
+}
+
+#if EFS_FAULTS
+/* K34 fault hooks (tests/test_k34_stop_put.py), EFS_FAULTS builds only (A6):
+ * EFS_FAULT_PUT_BUSY_FILE=<path> answers this member's fragment PUTs BUSY
+ * while <path> exists (a ticket read during a group leader change);
+ * EFS_FAULT_PUT_STOP_AFTER=<n> raises SIGTERM on this member right after it
+ * stored its n-th fragment, so the orderly stop begins with that PUT in
+ * hand. */
+static int put_test_busy(void)
+{
+    static const char *path;
+    static int init;
+    if(!__atomic_load_n(&init,__ATOMIC_ACQUIRE)){
+        path=getenv("EFS_FAULT_PUT_BUSY_FILE");__atomic_store_n(&init,1,__ATOMIC_RELEASE);
+    }
+    if(!path || !*path || access(path,F_OK)!=0)return 0;
+    static uint64_t n;
+    if(__atomic_add_fetch(&n,1,__ATOMIC_RELAXED)<=10)
+        fprintf(stderr,"put-upload: EFS_FAULT_PUT_BUSY_FILE present; answering BUSY\n");
+    return 1;
+}
+
+static void put_test_stop_after_store(void)
+{
+    static int limit=-1;
+    static uint32_t stored;
+    int n=__atomic_load_n(&limit,__ATOMIC_ACQUIRE);
+    if(n<0){
+        const char *e=getenv("EFS_FAULT_PUT_STOP_AFTER");
+        n=e?atoi(e):0;__atomic_store_n(&limit,n,__ATOMIC_RELEASE);
+    }
+    if(n<=0 || __atomic_add_fetch(&stored,1,__ATOMIC_RELAXED)!=(uint32_t)n)return;
+    fprintf(stderr,"put-upload: EFS_FAULT_PUT_STOP_AFTER=%d reached; raising SIGTERM\n",n);
+    raise(SIGTERM);
+}
+#else
+static int put_test_busy(void) { return 0; }
+static void put_test_stop_after_store(void) { }
+#endif
+
 int server_put_upload(struct efsd_server *s,const uint8_t *body,uint32_t bytes,
                        uint8_t *path_used)
 {
@@ -46,6 +98,13 @@ static int put_upload(struct efsd_server *s,const uint8_t *body,uint32_t bytes,
     const uint8_t *data=body+EFS_PUT_UPLOAD_HEADER_LEN;
     efs_hash(data,ticket.fragment_len,checksum);
     if(memcmp(checksum,ticket.checksums[fi],EFS_HASH_SIZE))return EFS_ERR_PROTO;
+
+    /* K34: a member in orderly stop acknowledges no fragment. The client
+     * counts the refusal (PUT_CHUNK_ERROR) as a member that is gone, so a
+     * two-fragment object names the leaving member as missing (W154) and
+     * never holds one of its two fragments there. */
+    if(server_stop_requested())return put_refuse_stopping(&ticket,fi);
+    if(put_test_busy())return EFS_ERR_BUSY;
 
     uint8_t query[2+EFS_PUT_TICKET_WIRE_LEN];
     query[0]=efs_raft_shard_group(efs_kv_lane_shard(ticket.ino,ticket.ci%EFS_META_LANES));
@@ -88,9 +147,13 @@ static int put_upload(struct efsd_server *s,const uint8_t *body,uint32_t bytes,
         if(rc==EFS_OK && efs_tls_path_used>=0 && efs_tls_path_used<256)
             *path_used=(uint8_t)efs_tls_path_used;
         efs_tls_path_used=-1;
+        if(rc==EFS_OK)put_test_stop_after_store();
     }
     server_export_put(s,ex);
     server_put_session_end(&guard);
+    /* A stop that began while the fragment was stored: stored, never
+     * acknowledged (an unacknowledged object is the orphan path's). */
+    if(rc==EFS_OK && server_stop_requested()){*path_used=0xff;rc=put_refuse_stopping(&ticket,fi);}
     return rc;
 }
 

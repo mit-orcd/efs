@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""efs-mgmt reads only the current GC status reply (version 5, exact length)."""
+"""efs-mgmt reads only the current GC status reply (version 5, exact length).
+Without EFS_BUILD_EXPIRY (the product, D42) it prints no expiry fields and
+has no expiry-status command."""
 import socket
 import struct
 import subprocess
@@ -53,10 +55,28 @@ def probe(binary,command,version,payload_size=None,healthy=1,uncertain=0):
 
 def main():
     binary=Path(sys.argv[1] if len(sys.argv)>1 else './efs-mgmt').resolve()
+    # D42: the product build has no expiry (an EFS_BUILD_EXPIRY build does).
+    built=subprocess.run([str(binary),'--help'],capture_output=True,text=True).stdout
+    expiry='expiry-status' in built
     result=probe(binary,'gc-status',5)
     assert 'trunc_pending group0=3 group2=4' in result.stdout,result
-    assert result.returncode==0 and 'expired_files=17' in result.stdout and 'expired_size_unknown_files=2' in result.stdout,result
     assert 'reclaim_state=ok' in result.stdout and 'gc_io=dir_sync' in result.stdout,result
+    if not expiry:
+        assert result.returncode==0 and 'expir' not in result.stdout,result
+        result=subprocess.run([str(binary),'expiry-status','127.0.0.1:1'],capture_output=True,text=True,timeout=15)
+        assert result.returncode!=0 and 'expiry' not in result.stdout,result
+    else:
+        assert result.returncode==0 and 'expired_files=17' in result.stdout and 'expired_size_unknown_files=2' in result.stdout,result
+        expiry_status(binary)
+    # Older layouts (versions 1-4, shorter replies) and wrong lengths are refused.
+    for version,size in ((1,231),(2,328),(3,456),(4,568),(5,568),(5,583),(4,None),(6,None)):
+        result=probe(binary,'gc-status',version,size)
+        assert result.returncode!=0 and 'unavailable' in result.stderr,(version,size,result)
+    print('GC status: current v5 reply%s and reclaim fields; older layouts and malformed replies refused PASS'
+          % (' with expiry' if expiry else ' (no expiry in this build)'))
+
+
+def expiry_status(binary):
     result=probe(binary,'expiry-status',5)
     assert result.returncode==0 and '17 files' in result.stdout and 'at least 64' in result.stdout,result
     assert '2 seconds ago' in result.stdout and 'size_unknown=2' in result.stdout,result
@@ -64,11 +84,6 @@ def main():
     assert result.returncode==0 and 'waiting: clock health sample' in result.stdout and 'operator reset required' not in result.stdout,result
     result=probe(binary,'expiry-status',5,healthy=0,uncertain=1)
     assert result.returncode==0 and 'paused: clock uncertain' in result.stdout and 'operator reset required' in result.stdout,result
-    # Older layouts (versions 1-4, shorter replies) and wrong lengths are refused.
-    for version,size in ((1,231),(2,328),(3,456),(4,568),(5,568),(5,583),(4,None),(6,None)):
-        result=probe(binary,'gc-status',version,size)
-        assert result.returncode!=0 and 'unavailable' in result.stderr,(version,size,result)
-    print('GC status: current v5 reply with expiry and reclaim fields; older layouts and malformed replies refused PASS')
 
 
 if __name__=='__main__':main()

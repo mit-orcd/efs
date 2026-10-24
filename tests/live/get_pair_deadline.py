@@ -9,8 +9,7 @@ s=(root/'src/client/read.c').read_text()
 def fn(signature):
     a=s.index(signature+'\n{');return s[a:s.index('\n}',a)+2]
 a=s.index('struct frag_get_job {');job=s[a:s.index('\n};',a)+3]
-functions=[fn(x) for x in ['static void read_verify_init(void)',
- 'static int fragment_reply_verified(const uint8_t *data, uint32_t len,\n                                   const uint8_t sum[EFS_HASH_SIZE])',
+functions=[fn(x) for x in ['static int fragment_reply_verified(const uint8_t *data, uint32_t len,\n                                   const uint8_t sum[EFS_HASH_SIZE])',
  'static int get_one_reply(struct efs_conn *conn, struct frag_get_job *j)']]
 if 'static void get_two_parallel_run(' in s:
     functions.append(fn('static void get_two_parallel_run(struct frag_get_job *jobs)'))
@@ -29,8 +28,6 @@ code=r'''
 #include <sys/socket.h>
 #include <time.h>
 #include <unistd.h>
-static pthread_once_t read_verify_once=PTHREAD_ONCE_INIT;
-static int read_verify;
 '''+job+'\n'+'\n'.join(functions)+r'''
 struct peer {int listener;atomic_int done;};
 static uint64_t now_ms(void){struct timespec t;assert(!clock_gettime(CLOCK_MONOTONIC,&t));return (uint64_t)t.tv_sec*1000+(uint64_t)t.tv_nsec/1000000;}

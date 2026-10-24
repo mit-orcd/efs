@@ -142,9 +142,8 @@ the cache is local derived metadata, not a user-visible directory or an addition
 copy of file contents. Only hosts with both metadata groups can publish complete
 catalogs. Adding storage nodes does not automatically add full publishers.
 
-Set `EFS_QUERY_BACKEND=ram` at daemon startup to use the comparison backend, or
-`disk` for the default backend. Any other value leaves the query publisher
-unavailable (logged as `query-config: invalid EFS_QUERY_BACKEND`). The per-candidate
+The disk catalog is the only backend (`EFS_QUERY_BACKEND` was removed, D42;
+efsd refuses it). The per-candidate
 allocation budget is a built-in 256 MiB (it is not a process RSS limit);
 `EFS_QUERY_CATALOG_MIB` was removed (A6) and stops efsd when set.
 `EFS_QUERY_REFRESH_MS` (default 60000, range 200..3600000) is the minimum time
@@ -193,29 +192,18 @@ mask. A stale version is refused. After a lost reply, get the current state
 before deciding whether another set is needed. Policy survives restart. This
 interface does not add authenticated administration or multiple exports.
 
-The mount still requires `EFS_COMMANDS=1`. A node started with
-`EFS_COMMANDS_SERVER=0` cannot serve commands even when durable policy permits
-them. Fresh queries and export pages check server policy and current quorum;
+This policy is the only switch for `.efs` (D42): `EFS_COMMANDS` and
+`EFS_COMMANDS_SERVER` were removed and are refused at startup. Every node runs
+its query worker, which idles when nothing changed. Fresh queries and export pages check server policy and current quorum;
 already acquired immutable bytes remain readable. Ordinary file I/O continues
 when command policy is disabled. Final scale/platform acceptance is
 tracked in the [W92 ledger](../status/query-cache-closure-20261010.md).
 
 ## NFS gateways
 
-The gateway FUSE mount needs export support as well as command opt-in:
-
-```sh
-EFS_COMMANDS=1 EFS_FUSE_EXPORT=1 EFS_TRANSPORT=tcp \
-  ./scripts/client.sh SEED:17432 /mnt/efs -o allow_other
-```
-
-Use the cluster gateway helper for its NFS export setup. The tested protocol is
-NFSv4.0, including macOS clients. A FUSE or NFS restart can stale existing client
-handles; remount affected clients before testing. NFS restart grace can delay new
-opens (90 seconds on Xorinox). Keep the normal gateway mount opted out after
-testing by omitting `EFS_COMMANDS=1`, while retaining `EFS_FUSE_EXPORT=1`.
-NFS credential mapping remains the export administrator's responsibility; a
-client mapped to root does not prove per-user ACL isolation.
+NFS re-export of an efs mount is not supported in alpha 1.0 (W152, D42): the
+client never advertises FUSE export support, and `EFS_FUSE_EXPORT` was removed
+(refused at startup).
 
 Long listings resolve names using the executing host's account database (NSS).
 User and group lookups are independent. An invocation caches up to 2,048

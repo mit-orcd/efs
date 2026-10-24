@@ -5385,6 +5385,94 @@ static void test_degraded_marks(void)
     efs_kv_mem_free(kv);
 }
 
+/* K35: a client fsync marks a published object degraded when COMMIT proved
+ * two of its fragments durable but not the third (EFS_MD_CMD_DEGRADED_MARK). */
+static void test_degraded_mark_after_publish(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_row r;
+    struct dg_collect c;
+    struct efs_meta_delta ds[EFS_CHUNK_DELTA_MAX];
+    efs_ino_t ino = 0;
+    uint32_t anch, nd = 0;
+    uint64_t newest = 0;
+    int added = -1, out = -1;
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "k35", &ino) == EFS_OK && ino, "create");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "row");
+    anch = efs_kv_anchor_shard(efs_kv_lane_shard(ino, 0));
+    efs_meta_degraded_count_invalidate(anch);
+    efs_meta_degraded_count_derived(anch, 0);
+    CHECK(dg_pub(kv, ino, 0xA1, 0, 0, 0, 0, 0, 0, 1) == EFS_OK, "full base");
+    CHECK(dg_scan(kv, anch).n == 0, "no mark for a full stripe");
+
+    /* Invalid requests write nothing. */
+    CHECK(efs_meta_apply_degraded_mark(kv, ino, r.generation, 0xA1, 0, 3, 3, &added) ==
+              EFS_ERR_INVAL && !added, "fragment index out of range");
+    CHECK(efs_meta_apply_degraded_mark(kv, ino, r.generation, 0xA1, 0, 2, 0, &added) ==
+              EFS_ERR_INVAL, "node 0");
+    CHECK(efs_meta_apply_degraded_mark(kv, ino, r.generation, 0, 0, 2, 3, &added) ==
+              EFS_ERR_INVAL, "object 0");
+    /* Not the published version: nothing to mark. */
+    CHECK(efs_meta_apply_degraded_mark(kv, ino, r.generation, 0x55, 0, 2, 3, &added) ==
+              EFS_ERR_NOT_FOUND && !added, "unknown object");
+    CHECK(efs_meta_apply_degraded_mark(kv, ino, r.generation + 1, 0xA1, 0, 2, 3, &added) ==
+              EFS_ERR_NOT_FOUND, "another inode generation");
+    CHECK(efs_meta_apply_degraded_mark(kv, ino, r.generation, 0xA1, 1, 2, 3, &added) ==
+              EFS_ERR_NOT_FOUND, "another chunk");
+    /* The row names another node for that fragment. */
+    CHECK(efs_meta_apply_degraded_mark(kv, ino, r.generation, 0xA1, 0, 2, 9, &added) ==
+              EFS_ERR_STALE && dg_scan(kv, anch).n == 0, "placement disagrees");
+
+    /* Fragment 2 (node 3) unproven: one mark from the row, counted once. */
+    CHECK(efs_meta_apply_degraded_mark(kv, ino, r.generation, 0xA1, 0, 2, 3, &added) ==
+              EFS_OK && added == 1, "mark");
+    c = dg_scan(kv, anch);
+    CHECK(c.n == 1 && !c.bad && c.last.object_gen == 0xA1 && c.last.missing_mask == 4 &&
+              c.last.inode_gen == r.generation && c.last.nodes[0] == 1 &&
+              c.last.nodes[2] == 3 && c.last.checksums[0][1] == 1 &&
+              c.last.checksums[2][0] == 0x12, "mark names the row's placement");
+    CHECK(efs_meta_degraded_count_peek(anch) == 1, "count 1");
+    CHECK(efs_meta_degraded_live(kv, &c.last) == 1, "the rebuild pass sees it live");
+    CHECK(efs_meta_apply_degraded_mark(kv, ino, r.generation, 0xA1, 0, 2, 3, &added) ==
+              EFS_OK && !added && efs_meta_degraded_count_peek(anch) == 1, "replay");
+    /* Another fragment on top would leave one: refused. */
+    CHECK(efs_meta_apply_degraded_mark(kv, ino, r.generation, 0xA1, 0, 1, 2, &added) ==
+              EFS_ERR_STALE && dg_scan(kv, anch).n == 1, "second fragment refused");
+    /* The rebuild on return clears it like a published mark. */
+    CHECK(efs_meta_apply_degraded_clear(kv, &c.last, 1, &out) == EFS_OK &&
+              out == EFS_META_DEGRADED_CLEARED, "rebuilt and cleared");
+    CHECK(dg_scan(kv, anch).n == 0 && efs_meta_degraded_count_peek(anch) == 0, "cleared");
+
+    /* A span: marked from its own placement. */
+    CHECK(dg_pub(kv, ino, 0xC3, 0xA1, 0, 0, 4096, 0, 0, 3) == EFS_OK, "span");
+    CHECK(efs_meta_apply_degraded_mark(kv, ino, r.generation, 0xC3, 0, 0, 1, &added) ==
+              EFS_OK && added == 1, "span mark");
+    c = dg_scan(kv, anch);
+    CHECK(c.n == 1 && c.last.object_gen == 0xC3 && c.last.missing_mask == 1 &&
+              c.last.checksums[0][1] == 3, "span mark names the span");
+    /* A fold supersedes the span: its mark goes, a late request is moot. */
+    CHECK(efs_meta_apply_get_chunk_deltas(kv, ino, 0, ds, EFS_CHUNK_DELTA_MAX, &nd,
+                                          &newest) == EFS_OK && nd == 1, "one span");
+    CHECK(dg_pub(kv, ino, 0xD4, 0xA1, 0, 0, 0, nd, newest, 4) == EFS_OK, "fold");
+    CHECK(dg_scan(kv, anch).n == 0, "fold retired the span's mark");
+    CHECK(efs_meta_apply_degraded_mark(kv, ino, r.generation, 0xC3, 0, 0, 1, &added) ==
+              EFS_ERR_NOT_FOUND, "superseded span");
+    /* Published degraded already: the same fragment is a no-op, another is
+     * refused. */
+    CHECK(dg_pub(kv, ino, 0xE5, 0xD4, 2, 0, 0, 0, 0, 5) == EFS_OK, "degraded rewrite");
+    CHECK(efs_meta_apply_degraded_mark(kv, ino, r.generation, 0xE5, 0, 1, 2, &added) ==
+              EFS_OK && !added, "already published degraded");
+    CHECK(efs_meta_apply_degraded_mark(kv, ino, r.generation, 0xE5, 0, 0, 1, &added) ==
+              EFS_ERR_STALE, "a second missing fragment refused");
+    CHECK(dg_scan(kv, anch).n == 1 && efs_meta_degraded_count_peek(anch) == 1, "one mark");
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
+    efs_kv_mem_free(kv);
+}
+
 /* ---- K36 recovery inventory and marks ---- */
 struct refs_collect {
     uint32_t n, stop_at;
@@ -5461,20 +5549,20 @@ static void test_recovery_marks(void)
     /* The recovering node's mark: written once, idempotent, never over a
      * mark for another fragment, and only for a live object. */
     dg_from(kv, ino, 0xA1, 2, 1, &d);
-    CHECK(efs_meta_apply_degraded_mark(kv, &d) == EFS_OK, "mark written");
+    CHECK(efs_meta_apply_recovery_mark(kv, &d) == EFS_OK, "mark written");
     CHECK(dg_scan(kv, anch).n == 1 && efs_meta_degraded_count_peek(anch) == 1, "one mark");
     CHECK(efs_meta_degraded_live(kv, &d) == 1, "marked object live");
-    CHECK(efs_meta_apply_degraded_mark(kv, &d) == EFS_OK && dg_scan(kv, anch).n == 1 &&
+    CHECK(efs_meta_apply_recovery_mark(kv, &d) == EFS_OK && dg_scan(kv, anch).n == 1 &&
               efs_meta_degraded_count_peek(anch) == 1, "replay adds nothing");
     dg_from(kv, ino, 0xA1, 4, 1, &d);
-    CHECK(efs_meta_apply_degraded_mark(kv, &d) == EFS_ERR_STALE, "second loss refused");
+    CHECK(efs_meta_apply_recovery_mark(kv, &d) == EFS_ERR_STALE, "second loss refused");
     dg_from(kv, ino, 0x55, 2, 1, &d);
-    CHECK(efs_meta_apply_degraded_mark(kv, &d) == EFS_ERR_NOT_FOUND, "dead object not marked");
+    CHECK(efs_meta_apply_recovery_mark(kv, &d) == EFS_ERR_NOT_FOUND, "dead object not marked");
     dg_from(kv, ino, 0xA1, 2, 9, &d);
-    CHECK(efs_meta_apply_degraded_mark(kv, &d) == EFS_ERR_PROTO,
+    CHECK(efs_meta_apply_recovery_mark(kv, &d) == EFS_ERR_PROTO,
           "a mark disagreeing with the row fails closed");
     dg_from(kv, ino, 0xA1, 3, 1, &d);
-    CHECK(efs_meta_apply_degraded_mark(kv, &d) == EFS_ERR_INVAL, "two fragments refused");
+    CHECK(efs_meta_apply_recovery_mark(kv, &d) == EFS_ERR_INVAL, "two fragments refused");
     /* W154 then retires it like a publication's own mark. */
     dg_from(kv, ino, 0xA1, 2, 1, &d);
     int out = -1;
@@ -6628,6 +6716,7 @@ int main(void)
     test_gc_watermark();
     test_degraded_marks();
     test_recovery_marks();
+    test_degraded_mark_after_publish();
     if (failures) {
         fprintf(stderr, "test_meta_apply: %d failure(s)\n", failures);
         return 1;
