@@ -35,8 +35,12 @@ uint32_t efs_kv_session_shard(const uint8_t uuid[EFS_OPID_UUID_LEN]){assert(uuid
 static int efs_client_rpc_past_deadline(void){return expired;}
 void efs_client_session_fence(int rc);
 static struct efs_conn *efs_client_conn_get(efs_node_id_t n){assert(n==3);return &connection;}
-static struct efs_conn *rpc_owner_conn_shard(uint32_t shard,efs_node_id_t *nid)
-{routing=shard;*nid=1;return &connection;}
+/* K34: a failed exchange re-picks a voter (skip the one that failed). */
+static unsigned peer_retries;
+static struct efs_conn *raft_voter_conn_skip(uint32_t shard,efs_node_id_t *nid,efs_node_id_t skip)
+{routing=shard;(void)skip;*nid=1;return &connection;}
+static void rpc_retry_peer(uint32_t shard,efs_node_id_t nid,efs_node_id_t *target,efs_node_id_t *skip,int failed)
+{(void)shard;(void)failed;*target=0;*skip=nid;peer_retries++;}
 static void efs_client_conn_drop(efs_node_id_t n,struct efs_conn *c){(void)n;(void)c;drops++;}
 static void efs_client_conn_release(efs_node_id_t n,struct efs_conn *c){(void)n;(void)c;}
 static int rpc_writer_retry_pause(unsigned n){(void)n;return EFS_OK;}
@@ -70,7 +74,8 @@ int efs_conn_recv_msg(struct efs_conn *c,uint8_t *type,void **out,uint32_t *n)
   else stage++;
  }
  *type=EFS_MSG_RAFT_MKFS_REPLY;*n=sizeof(r)-malformed;*out=malloc(sizeof(r));memcpy(*out,&r,sizeof(r));
- return fail_receive;
+ if(fail_receive){fail_receive--;return 1;}
+ return 0;
 }
 ''' + s[a:b] + r'''
 static void reset(void){calls=stage=redirect=busy=drops=expired=malformed=fail_receive=creates=0;failure=existing=0;query_salt=0;participant=18;
@@ -113,9 +118,12 @@ int main(void)
  assert(efs_client_rpc_publication_session(participant,&identity)==EFS_OK && calls==5 && stage==3);
  reset();failure=EFS_ERR_STALE;
  assert(efs_client_rpc_publication_session(participant,&identity)==EFS_ERR_STALE && calls==1 && !stage && !g_client.session_fenced);
- reset();existing=1;query_salt=ACTIVE1;fail_receive=1;
- assert(efs_client_rpc_publication_session(participant,&identity)==EFS_ERR_NET && calls==1 && drops==1 && !stage);
+ reset();existing=1;query_salt=ACTIVE1;fail_receive=99;
+ assert(efs_client_rpc_publication_session(participant,&identity)==EFS_ERR_NET && calls==8 && drops==8 && !stage);
  fail_receive=0;assert(efs_client_rpc_publication_session(participant,&identity)==EFS_OK && stage==3);
+ /* K34: one lost exchange (a leader in orderly stop) is retried, not EIO. */
+ reset();existing=1;query_salt=ACTIVE1;fail_receive=1;
+ assert(efs_client_rpc_publication_session(participant,&identity)==EFS_OK && stage==3 && drops==1);
  reset();busy=99;assert(efs_client_rpc_publication_session(participant,&identity)==EFS_ERR_BUSY && calls==8 && !stage);
  reset();malformed=1;assert(efs_client_rpc_publication_session(participant,&identity)==EFS_ERR_PROTO && calls==1);
  reset();expired=1;assert(efs_client_rpc_publication_session(participant,&identity)==EFS_ERR_BUSY && !calls);

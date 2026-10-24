@@ -114,11 +114,14 @@ def writer(mref):
         if not run_writer.wait(0.1):
             continue
         name, size = f'w-{k}', LARGE[k % len(LARGE)]
+        step = 'write'
         try:
             put(mref[0], name, size)
+            step = 'read back'
             assert (mref[0].path / name).read_bytes() == payload(name, size), name
         except Exception as e:  # noqa: BLE001 - reported by the main thread
-            writer_err.append(repr(e))
+            stamp = time.strftime('%H:%M:%S', time.gmtime()) + f'.{int(time.time() * 1000) % 1000:03d}Z'
+            writer_err.append(f'{name} {step} at {stamp}: {e!r}')
             return
         stats['written'] += 1
         k += 1
