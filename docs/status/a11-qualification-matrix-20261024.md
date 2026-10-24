@@ -93,16 +93,16 @@ item that does not exist.
 | A5 | `topology` (profile, members, storage roots), every gate's fixture | same | recorded by every run | fresh format when the candidate changed a store, log or fragment format since the cluster was formatted |
 | A13 | `a13-node-addition` **(stub)**, code | 3→4→5 × TCP, RDMA | about 30 min (estimate) | driver-owned cluster (membership changes), spare hosts, fresh format |
 | B1–B4 | `b-checks` (`scripts/b_checks.py`) | 3/4/5 × TCP, RDMA | about 2–10 min (pack wait up to 300 s) | quiet cluster; mounts on one host; `--store` only where stores are local |
-| B2 | also `fragment-integrity` (`tests/live/fragment_integrity.py`) | once (TCP) | up to 1 h | K33 CLI fix of `ticket_put.py` |
+| B2 | also `fragment-integrity` (`tests/live/fragment_integrity.py`) | once (TCP) | up to 1 h | none |
 | B5 | `b-checks`, code (`tests/test_b_geometry.py`: full member, growth) | 3/4/5 × TCP, RDMA | within `b-checks` | quiet cluster (cost figures count every writer) |
 | B6 | `b6-unavailable` **(stub)**, code (`test_k33_payload.py`, `test_k34_stop_put.py`, `test_k35_fsync_degraded.py`) | 3/4/5 × TCP, RDMA | about 20 min (estimate) | K34/K35 merged, K36 open; per-member stop/start (driver-owned clusters) |
 | C1 | `posix-core`, `posix-extras`, `posix-2client` | 3/4/5 × TCP, RDMA | 3–4 min on loopback; about 30 min on real hosts (two-client suite about 13 min on orcd-mini) | two mounts with the same path on two client hosts, or two mounts on one |
 | C2 | `posix-core`, `posix-durability` | same | plus 1 min | `--allow remount` |
 | C3 | `posix-2client`, `posix-core`, `append-failover` | same; append-failover once | append-failover about 17 min | — |
-| C4 | `append-failover`, `k14-torn-read`, `k13-tickets` | once (TCP) | up to 3 h (deadlines) | K33 CLI fix of `k13_ticket_cluster.py`, `k14_atomic_cluster.sh`; an `EFS_FAULTS` build for K14 phases beyond 1 2 3 7 |
+| C4 | `append-failover`, `k14-torn-read`, `k13-tickets` | once (TCP) | up to 3 h (deadlines) | an `EFS_FAULTS` build for K14 phases beyond 1 2 3 7 |
 | C5 | code; `c5-protocol-live` **(stub)** | once; stub per cell | `make test-all` about 30 min | candidate tree on the code-gate host |
 | D1 | `d1-packing` **(stub)**; `b-checks` B4 shows packed segments | 3/4/5 × TCP, RDMA | about 20 min (estimate) | `--allow restart` |
-| D2 | `gc-reclamation` (`tests/live/gc_reclamation.py`) | once (TCP) | up to 2 h | K33 CLI fix of `gc_reclamation.py` |
+| D2 | `gc-reclamation` (`tests/live/gc_reclamation.py`) | once (TCP) | up to 2 h | a clean `client.sh stop` after a long unmount revoke (finding 1) |
 | D3 | `posix-extras`; `d3-efs-load` **(stub)** for the load part (`tests/live/efs_commands_load.py` exists, not wired) | 3/4/5 × TCP, RDMA | extras under 1 min; load about 30 min (estimate) | `.efs` catalog indexed (per-case timeout 150 s on a fresh directory) |
 | D4 | `d4-progress` **(stub)** | same | about 1 h (estimate) | E4 fixture running |
 | E1 | `e1-manifest` | same | about 1 min plus an orderly restart | `--allow restart`; stop/start control |
@@ -129,7 +129,7 @@ roots per member.
 | `identity`, `posix-*`, `e1-manifest`, `e2-client-stop`, `e3-turnover` | run (nuc runs below) |
 | `b-checks` | **was broken:** the default plugin called `b_checks.py --cluster … --out DIR`, which `b_checks.py` does not accept (`--mount`/`--seed` required, exit 2 = FAIL). Fixed: it now runs on the first mount's host through that host's mounts with `--expect-members N` and prints the JSON result into the gate log. PASS on nuc |
 | `append-failover` | runs |
-| `k14-torn-read`, `k13-tickets`, `fragment-integrity`, `gc-reclamation` | exist, FAIL at once: their harnesses start efsd with `--node-id`, removed by K33 (same as the [driver evidence](stage2-qualify-driver-20261024.md)). C4, B2 and D2 have no live evidence until they move to the seed/`--join` CLI |
+| `k14-torn-read`, `k13-tickets`, `fragment-integrity`, `gc-reclamation` | run: moved to the K33 seed/`--join` CLI (finding 3, fixed). On amd k14, k13 and fragment-integrity PASS; gc-reclamation FAIL on finding 1 (amd run below) |
 
 ## Runnable topologies
 
@@ -228,10 +228,18 @@ Findings for the parent (candidate `376369aa8` code; not changed here):
    missing or duplicated, but one REPORT RPC timed out after 30 s
    (`inode-rpc: retry type=67 attempt=11 … recv_ms=30001`), which the
    harness counts as a failure.
-3. **Four live harnesses use the removed `--node-id`** (known since the driver
+3. **Four live harnesses used the removed `--node-id`** (known since the driver
    evidence): `k14_atomic_cluster.sh`, `ticket_put.py`
    (fragment-integrity), `gc_reclamation.py`, `k13_ticket_cluster.py`; the
-   K13 harness also hard-codes ports 18700–18799.
+   K13 harness also hard-coded ports 18700–18799. **Fixed** (amd run below):
+   the seed starts as `efsd ADDR:PORT STORE`, the first start of every other
+   node as `efsd --join SEED --listen ADDR:PORT STORE`, restarts by endpoint,
+   all with `--discovery-port 0`; k14 waits for "listening" only after all
+   three started (a joiner logs it once the cluster forms); `ticket_put.py`
+   retries `raft-mkfs` NOT_PRIMARY through `raft_form.form`;
+   `gc_reclamation.py` rejoins n2–n4 after a fresh format; K13 takes any
+   port base. `qualify.py run --matrix` now lets `--port-base` and
+   `--private-port-base` override the topology's.
 
 Raw evidence: nuc `~/efs-artifacts/a11-20261024/` (run directories with
 their own `SHA256SUMS`; `python3 scripts/qualify.py verify-sums DIR`):
@@ -246,6 +254,30 @@ their own `SHA256SUMS`; `python3 scripts/qualify.py verify-sums DIR`):
 
 Stores, mounts and scratch were deleted by the driver; daemon and client logs
 are in each run's `gates/_teardown/` (driver-owned) or `loopback/`.
+
+### K33 harness port (amd)
+
+Purpose: finding 3 (C4, B2, D2 live harnesses). Commit `4d1a583cc` (branch
+`claude/gifted-pascal-31d5ba`: this branch plus the K33 harness port), `git
+archive` to amd `~/efs-k33h/src3`, `make -j24 all` (build identity
+`unknown`). amd (32 CPUs, Ubuntu), TCP loopback, `O_DIRECT`, private ports
+18600–18699, trees under `$HOME`; the user's amd cluster on 17432–17435 was
+not touched. Command:
+
+```bash
+python3 scripts/qualify.py run --matrix scripts/qualify_matrix.json --topology loopback-3 --gates k14-torn-read,k13-tickets,fragment-integrity,gc-reclamation --port-base 18640 --private-port-base 18600 --out OUT
+```
+
+| Gate | Verdict | Seconds | Notes |
+| --- | --- | ---: | --- |
+| `k14-torn-read` | PASS | 171 | phases 1 2 3 7, 0 torn reads |
+| `k13-tickets` | PASS | 44 | 256 MiB stream, leader death, cold replay |
+| `fragment-integrity` | PASS | 10 | one and two roots |
+| `gc-reclamation` | **FAIL** | 254 | 56 checks PASS (POSIX 2-client 68/68), then `client.sh stop` refused: the unmount settled its tickets and had not revoked its session 10 s later (finding 1) |
+
+The same gc-reclamation FAIL at the same step reproduced in a standalone
+run before the commit. Raw: amd `~/efs-artifacts/k33-harnesses-20261024/r2`
+(106 files, `SHA256SUMS` sha256 `eb8d726c…0384`); private trees deleted.
 
 ### Code gate
 
@@ -318,8 +350,8 @@ addresses of a private topology).
   the host gaps above are closed; every cell is NOTRUN.
 - 7 stub gates must become harnesses before B6, D1, D3 (load), D4, E4, A13
   (real host) and C5 (per topology) can PASS.
-- The four live harnesses with the removed `--node-id` CLI block C4, B2 and
-  D2 live evidence.
+- D2 (`gc-reclamation`) live evidence is blocked by finding 1: the POSIX
+  phase passes, then `client.sh stop` is refused.
 - The live harnesses run on TCP loopback only; RDMA for them is not driven.
 - The orcd-mini and intel control lines have not run.
 - The E3 retry path is not exercised by a recorded run: in

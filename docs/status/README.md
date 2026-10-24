@@ -32,8 +32,9 @@ three-host RDMA). Driver fixes: the `b-checks` plugin called
 `b_checks.py` with options it rejects; E3 did not retry a step-down refused
 with "retry". Findings on nuc: a clean `client.sh stop` is refused when the
 unmount session revoke takes over 10 s (2 of 2 full private runs); one
-30 s REPORT timeout in append failover (8,000/8,000 records exact); four
-live harnesses still use `--node-id`. nuc `make test-all` at `8d858a791`:
+30 s REPORT timeout in append failover (8,000/8,000 records exact). The four
+live harnesses now use the K33 CLI: on amd k14, k13 and fragment-integrity
+PASS, gc-reclamation FAIL on the same refused client stop. nuc `make test-all` at `8d858a791`:
 458 commands, 1 FAIL, 14 NOTRUN host limits; the FAIL,
 `tests/test_get_integrity.py`, no longer compiles on `merge-wave5` (no stub
 for K34's `read_reprobe_down`) and fails the same on the base `376369aa8`.

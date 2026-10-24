@@ -104,7 +104,7 @@
     "turnover",
     "remount"
    ],
-   "duration": "about 26 minutes measured on nuc (append-failover 19 minutes; the four stale harnesses fail at once); up to about 3 hours once they run (deadlines 1 h, gc 2 h)",
+   "duration": "about 26 minutes measured on nuc (append-failover 19 minutes; k14 3 minutes, k13 1 minute, fragment-integrity 10 s and gc-reclamation 4 minutes to its FAIL measured on amd); up to about 3 hours (deadlines 1 h, gc 2 h)",
    "covers": [
     "C4, B2, D2 live harnesses (TCP, one host)",
     "driver regression"
@@ -896,8 +896,7 @@
    ],
    "duration": "b-checks about 10 minutes; fragment-integrity up to 1 hour",
    "prerequisites": [
-    "quiet cluster",
-    "fragment-integrity: K33 CLI fix of ticket_put.py (stale --node-id)"
+    "quiet cluster"
    ]
   },
   "B3": {
@@ -1058,7 +1057,6 @@
    ],
    "duration": "up to 3 hours (deadlines)",
    "prerequisites": [
-    "K33 CLI fix of k13_ticket_cluster.py, k14_atomic_cluster.sh (stale --node-id)",
     "an EFS_FAULTS build for K14 phases beyond 1 2 3 7 and lost-reply mode"
    ],
    "note": "RDMA not driven: the live harnesses run on TCP loopback"
@@ -1117,7 +1115,7 @@
    ],
    "duration": "up to 2 hours",
    "prerequisites": [
-    "K33 CLI fix of gc_reclamation.py (stale --node-id)"
+    "a clean client.sh stop after a long unmount revoke (A11 finding 1)"
    ]
   },
   "D3": {
