@@ -3,7 +3,7 @@
 **Verdict: code gate PASS with host limits (`make test-all` on xorinox at
 `53080d744`: 436 commands, 0 FAIL, 13 NOTRUN host limits); model PASS.
 Live multi-host, cross-subnet, RDMA and orcd-mini gates NOTRUN (the parent
-session's). Branch `claude/devel-k33-inc2-e4299e` (base `merge-k32-k33`
+session's). Branch merged into devel (`60f91b0d3`) (base `merge-k32-k33`
 `2d03d9837`), not merged, not pushed.**
 
 Purpose: increments 1 and 2 of "Remaining increments" in the
@@ -308,3 +308,7 @@ Kept outside Git on xorinox at `~/efs-artifacts/k33-inc2-20261024/` with
 
 Full hashes for every file are in `SHA256SUMS` there. The working trees
 `~/efs-k33b/src` and `~/efs-k33b/gate` are deleted.
+
+## After the merge
+
+Merged-tree `make test-all` on intel2 (W155, D31 drain, K33 increment 2 and live client view at `910bbeef4`): 442 commands, 0 FAIL, 14 NOTRUN host limits (raw: intel2 `~/efs-artifacts/merge-wave2-20261024/`, `SHA256SUMS` `0d13a146…4ecf`). The first run at `3e01ba95c` failed only `tests/test_k33_client_view.py`, which waited for a joiner log line that increment 2 renamed; fixed in `910bbeef4`.

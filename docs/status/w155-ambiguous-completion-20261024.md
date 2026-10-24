@@ -1,6 +1,6 @@
 # W155: per-request receipts and bounded same-identity resolution (Oct 24)
 
-**Verdict: code fix PASS (scoped) on branch `claude/devel-w155-ab5120`,
+**Verdict: code fix PASS (scoped) merged into devel (`3e01ba95c`),
 commit `b36710b65`, not merged, not pushed. `make test-all` on nuc PASS
 (serial, rc 0, no `make … Error` line); the parallel summary runner shows
 438 commands, 1 FAIL that fails the same way on the base, 14 NOTRUN host
@@ -14,7 +14,7 @@ limits. The nuc b1/b2 live reruns are NOTRUN** (parent session).
   whether a timed-out request had been applied, and the logs could not
   either: gap G2 of the [correlation page](w155-oracle-correlation-20261023.md)
   is the server's missing per-request receipt; G1–G8 are the logging gaps.
-- **Tested source:** branch `claude/devel-w155-ab5120` on base
+- **Tested source:** branch merged into devel (`3e01ba95c`) on base
   `merge-k32-k33` = `2d03d9837` (devel plus K32 and K33/W157 increment 1).
   Code, tests and the protocol doc are commit `b36710b65`; this page is the
   docs commit after it.
@@ -266,8 +266,12 @@ Gate trees on nuc: `~/efs-w155/g-b36710b657c5`, `~/efs-w155/g-f9f0c85ba717`,
 `~/efs-w155/src` (an iteration tree, with a stray empty `.git` from a
 mistaken `git init`; the gate trees were built with explicit
 `EFS_GIT_ID`, so it touched no build identity) and
-`~/efs-w155/base-2d03d9837`. **Not deleted:** nuc has no `edelete`
-(`~/bin/edelete` and `command -v edelete` both absent), and trees are not
-removed with `rm -rf`; listed for the parent. The screen sessions have
+`~/efs-w155/base-2d03d9837`. Deleted by the parent session on Oct 24 with
+`edelete` (installed on nuc then); the cited raw evidence stays in
+`~/efs-artifacts/w155-20261024/` (`SHA256SUMS` verified first). The screen sessions have
 ended. No daemon, mount or port was started outside the tests' own
 loopback fixtures; no cluster port (17432–17435, 27432/27433) was touched.
+
+## After the merge
+
+Merged-tree `make test-all` on intel2 (W155, D31 drain, K33 increment 2 and live client view at `910bbeef4`): 442 commands, 0 FAIL, 14 NOTRUN host limits (raw: intel2 `~/efs-artifacts/merge-wave2-20261024/`, `SHA256SUMS` `0d13a146…4ecf`). The first run at `3e01ba95c` failed only `tests/test_k33_client_view.py`, which waited for a joiner log line that increment 2 renamed; fixed in `910bbeef4`.

@@ -3,7 +3,7 @@
 **Verdict: code gate PASS with host limits (`make -k test-all` on intel1
 at `8b4cfbe77`: exit 0, no `make` error, 5 min 34 s). The live multi-host
 addition under client load and RDMA are NOTRUN (the parent session's).
-Branch `claude/devel-k33-client-view-0c8db4` on `merge-k32-k33`
+Branch merged into devel (`f00cfdd75`) on `merge-k32-k33`
 (`0497d9ff1`: K32 + K33 merge with devel), not pushed.**
 
 Purpose: close the K33 gap "live client view refresh" of
@@ -147,3 +147,7 @@ Raw output (outside Git): intel1 `~/efs-artifacts/k33c-20261024/`:
   one poll interval (or at once when it meets an unknown node id). Replies
   do not carry the revision.
 - Removal is deferred (K33), so the view only grows.
+
+## After the merge
+
+Merged-tree `make test-all` on intel2 (W155, D31 drain, K33 increment 2 and live client view at `910bbeef4`): 442 commands, 0 FAIL, 14 NOTRUN host limits (raw: intel2 `~/efs-artifacts/merge-wave2-20261024/`, `SHA256SUMS` `0d13a146…4ecf`). The first run at `3e01ba95c` failed only `tests/test_k33_client_view.py`, which waited for a joiner log line that increment 2 renamed; fixed in `910bbeef4`.

@@ -18,6 +18,9 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Oct 24 merge: W155, D31 drain, K33 increment 2, K33 client view](k33-client-view-20261024.md#after-the-merge):
+**merged into devel; Merged-tree `make test-all` on intel2 (W155, D31 drain, K33 increment 2 and live client view at `910bbeef4`): 442 commands, 0 FAIL, 14 NOTRUN host limits (raw: intel2 `~/efs-artifacts/merge-wave2-20261024/`, `SHA256SUMS` `0d13a146…4ecf`). The first run at `3e01ba95c` failed only `tests/test_k33_client_view.py`, which waited for a joiner log line that increment 2 renamed; fixed in `910bbeef4`.** Before the next deploy, devops `start.sh` and cluster `cluster.sh` must move to the positional `efsd ADDR:PORT STORAGE` / `efsd --join SEED STORAGE` form (`--node-id` is refused), and every store needs a fresh format.
+
 [orcd-mini fresh deploy of `cb970ca7c` (RDMA, direct I/O)](orcd-mini-deploy-cb970ca7c-20261024.md):
 **core 216/216, extras 4/5 + mmap SKIP, durability 27/27, `.efs` 10/10,
 two-client 68/68 PASS; expiry 29/29 checks PASS** after the fixture's
@@ -33,7 +36,7 @@ easy write gate on orcd-mini is NOTRUN** (parent session).
 
 [K33 live client view refresh](k33-client-view-20261024.md):
 **code gate PASS with host limits (intel1 `make -k test-all` at `8b4cfbe77`,
-exit 0); on branch `claude/devel-k33-client-view-0c8db4`, not merged; live
+exit 0); merged into devel (`f00cfdd75`); live
 addition under client load and RDMA NOTRUN.** A mounted FUSE client reads
 the committed membership record (`MEMBERSHIP_READ`, wire types 245/246),
 installs later revisions without a remount, refuses another cluster or a
@@ -80,8 +83,7 @@ prove that an unticketed PUT is refused; a static `make test` check guards
 it. nuc `make test-all` PASS.
 
 [K13 / D31 dead and departing clients](k13-d31-drain-20261024.md):
-**PASS (scoped, unit and in-process) on branch
-`claude/devel-d31-drain-4a341a` (`59a2308b8`), not merged; amd `make
+**PASS (scoped, unit and in-process) merged into devel (`e6a21692d`; tested at `59a2308b8`); amd `make
 test-all` FAILs (RDMA, one pool timeout) also fail on the base; live gates
 NOTRUN.** After revocation the group leader drains a dead client's ticket
 streams into the orphan ledger (anchored stream index, DRAIN refused while a
@@ -116,8 +118,7 @@ then build harnesses incrementally and schedule isolated cases concurrently.
 The fast/long split does not reduce full-gate work or qualify parallel safety.
 
 [W155 per-request receipts and same-identity resolution](w155-ambiguous-completion-20261024.md):
-**code fix PASS (scoped), branch `claude/devel-w155-ab5120` (`b36710b65`), not
-merged; `make test-all` on nuc PASS (the one parallel-runner FAIL,
+**code fix PASS (scoped), branch merged into devel (`3e01ba95c`; tested at `b36710b65`); `make test-all` on nuc PASS (the one parallel-runner FAIL,
 `test_k32_entry_count`, fails the same way on the base); nuc b1/b2 live reruns NOTRUN.** A REPORT runs under a
 receipt keyed by session and publication id; a sync REPORT or identified
 directory op whose reply was lost is resolved by identity before failing, and
