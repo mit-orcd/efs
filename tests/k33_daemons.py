@@ -9,12 +9,17 @@ The seed starts as `efsd ADDR:PORT STORAGE`; a joiner as `efsd --join
 order, so the formation proposal (endpoint order) gives node ids that match
 the logical numbers of the nodes that formed, and an addition started on its
 own gets the next id.
+
+The daemon is tests/faults/efsd (`make tests/faults/efsd`): every server
+source built with EFS_FAULTS, so the tests can interrupt a handoff
+(EFS_FAULT_MEMBER_EXIT) and stop GC (EFS_FAULT_GC_DISABLE). ./efsd carries
+neither hook.
 """
 import os, re, signal, socket, subprocess, time
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
-EFSD, MGMT, FUSE = root / 'efsd', root / 'efs-mgmt', root / 'efs-fuse'
+EFSD, MGMT, FUSE = root / 'tests/faults/efsd', root / 'efs-mgmt', root / 'efs-fuse'
 HOST = '127.0.0.1'
 
 

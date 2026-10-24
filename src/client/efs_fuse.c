@@ -285,20 +285,7 @@ static uint64_t g_feat_cache_ms;
 static int g_feat_cache_valid;
 static pthread_mutex_t g_feat_mu = PTHREAD_MUTEX_INITIALIZER;
 
-static uint32_t features_ttl_ms(void)
-{
-    static int ttl = -1; /* benign idempotent race on first init */
-    if (ttl < 0) {
-        ttl = 2000;
-        const char *e = getenv("EFS_FEATURES_TTL_MS");
-        if (e && *e) {
-            unsigned long v = strtoul(e, NULL, 10);
-            if (v <= 600000)
-                ttl = (int)v;
-        }
-    }
-    return (uint32_t)ttl;
-}
+#define FEATURES_TTL_MS 2000u
 
 /* Query each seed node for the export's current feature mask. Returns 1 and
  * sets *out on a definitive reply, 0 if no node answered. */
@@ -364,7 +351,7 @@ static uint32_t features_current(void)
 {
     uint64_t now = stats_now_ms();
     pthread_mutex_lock(&g_feat_mu);
-    if (g_feat_cache_valid && now - g_feat_cache_ms < features_ttl_ms()) {
+    if (g_feat_cache_valid && now - g_feat_cache_ms < FEATURES_TTL_MS) {
         uint32_t f = g_feat_cache;
         pthread_mutex_unlock(&g_feat_mu);
         return f;
@@ -5742,16 +5729,9 @@ static void efs_fuse_init(void *userdata, struct fuse_conn_info *conn)
         if (conn->congestion_threshold < 96)
             conn->congestion_threshold = 96;
     }
-    uint32_t batch = 4096;
-    const char *env = getenv("EFS_META_BATCH_OPS");
-    if (env && *env) {
-        unsigned long v = strtoul(env, NULL, 10);
-        if (v > 0 && v < 1000000)
-            batch = (uint32_t)v;
-    }
     efs_client_stage_set_pin_hooks(efs_client_ino_is_open,
                                    efs_client_ino_has_plock);
-    efs_client_enable_meta_batch(batch);
+    efs_client_enable_meta_batch(4096);
     efs_fuse_note_serving();
 }
 
@@ -7897,6 +7877,8 @@ int main(int argc, char **argv)
         fuse_cmdline_help();fuse_lowlevel_help();return 0;
     }
     if (efs_help_requested(argc,argv)) { efs_cli_help(stdout,argv[0],NULL);return 0; }
+    if (efs_env_removed_refuse("efs-fuse"))
+        return 1;
 #if !EFS_FAULTS
     efs_faults_env_ignored("efs-fuse");
 #endif

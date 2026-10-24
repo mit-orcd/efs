@@ -2,10 +2,10 @@
 """K33 acceptance: additions interrupted at every durable handoff.
 
 Real efsd daemons on loopback (tests/k33_daemons.py), private stores under
-TMPDIR, free ports (never 17xxx), discovery off. The EFS_TEST_MEMBER_EXIT
+TMPDIR, free ports (never 17xxx), discovery off. The EFS_FAULT_MEMBER_EXIT
 hooks end a daemon (status 86) at one handoff of
 docs/status/k33-membership-protocol-20261023.md M9; with
-EFS_TEST_MEMBER_EXIT_ONCE the hook is given to every member and only the
+EFS_FAULT_MEMBER_EXIT_ONCE the hook is given to every member and only the
 first one to reach the point ends (the leader of the step, whichever node
 that is). After every interruption the ended daemon is restarted (or the
 join retried) and the test checks one membership: every member reports the
@@ -43,8 +43,8 @@ for b in (EFSD, MGMT):
     if not b.exists():
         sys.exit(f'{b} missing: run make first')
 work = Path(tempfile.mkdtemp(prefix='efs-k33i-', dir=os.environ.get('TMPDIR')))
-env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_TEST_MEMBER_EXIT')}
-env.update(EFS_GC_DISABLE='1', EFS_PACK_MIN_AGE_MS='3600000')
+env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_FAULT_MEMBER_EXIT')}
+env.update(EFS_FAULT_GC_DISABLE='1', EFS_PACK_MIN_AGE_MS='3600000')
 CHUNK = 128 * 1024
 SIZES = (1, 4096, 100000, CHUNK, 3 * CHUNK + 17)
 FUSE = fuse_ok()
@@ -53,7 +53,7 @@ clusters, mounts = [], []
 
 
 def hook(point):
-    return {'EFS_TEST_MEMBER_EXIT': point, 'EFS_TEST_MEMBER_EXIT_ONCE': str(work / 'once')}
+    return {'EFS_FAULT_MEMBER_EXIT': point, 'EFS_FAULT_MEMBER_EXIT_ONCE': str(work / 'once')}
 
 
 def form(name, n, member_env=None):
@@ -106,7 +106,7 @@ def check(c, live, count, files):
 def interrupted(c, ids, point, timeout=60):
     i, rc = c.wait_any_exit(ids, timeout)
     assert rc == 86, (i, rc, c.last_run(i)[-2000:])
-    c.wait_log(i, f'EFS_TEST_MEMBER_EXIT at {point}')
+    c.wait_log(i, f'EFS_FAULT_MEMBER_EXIT at {point}')
     return i
 
 
@@ -123,7 +123,7 @@ try:
     check(c, [1, 2, 3, 4], 4, files)
     files.update(write_files(c, 2, 'a1'))
 
-    c.start(5, join=2, extra_env={'EFS_TEST_MEMBER_EXIT': 'after-learn'})
+    c.start(5, join=2, extra_env={'EFS_FAULT_MEMBER_EXIT': 'after-learn'})
     assert interrupted(c, [5], 'after-learn') == 5
     assert 'Joined cluster' not in c.last_run(5)
     c.restart(5)
@@ -131,7 +131,7 @@ try:
     check(c, [1, 2, 3, 4, 5], 5, files)
 
     c.stop(4)
-    c.restart(4, extra_env={'EFS_TEST_MEMBER_EXIT': 'after-learn'})
+    c.restart(4, extra_env={'EFS_FAULT_MEMBER_EXIT': 'after-learn'})
     c.wait_log(4, r'raft-host: up raft_id=3 n=5 formed')
     c.start(6, join=3)
     assert interrupted(c, [4, 6], 'after-learn') == 4
@@ -141,18 +141,18 @@ try:
     check(c, [1, 2, 3, 4, 5, 6], 6, files)
 
     c.stop(2)
-    c.restart(2, extra_env={'EFS_TEST_MEMBER_EXIT': 'after-members-commit'})
+    c.restart(2, extra_env={'EFS_FAULT_MEMBER_EXIT': 'after-members-commit'})
     c.wait_log(2, r'raft-host: up raft_id=1 n=6 formed')
     c.wait_voters([1, 2, 3], lambda i, v: v[0] == (1, 7))
     c.start(7, join=2)
-    c.start(8, join=5, extra_env={'EFS_TEST_MEMBER_EXIT': 'before-learn'})
+    c.start(8, join=5, extra_env={'EFS_FAULT_MEMBER_EXIT': 'before-learn'})
     ended = set()
     while ended != {2, 8}:
         i, rc = c.wait_any_exit([k for k in (2, 7, 8) if k not in ended], 90)
         assert i in (2, 8) and rc == 86, (i, rc, c.last_run(i)[-2000:])
         ended.add(i)
-    c.wait_log(2, r'EFS_TEST_MEMBER_EXIT at after-members-commit')
-    c.wait_log(8, r'EFS_TEST_MEMBER_EXIT at before-learn')
+    c.wait_log(2, r'EFS_FAULT_MEMBER_EXIT at after-members-commit')
+    c.wait_log(8, r'EFS_FAULT_MEMBER_EXIT at before-learn')
     c.restart(2)
     c.start(8, join=5)
     for i in (7, 8):

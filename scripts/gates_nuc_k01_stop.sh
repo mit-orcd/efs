@@ -3,11 +3,11 @@
 #
 # K1 stop qualification (gates-nuc, Oct 22) on a private 3-daemon TCP
 # cluster, ports 18910-18912, stores under $GATES/k01 (must not exist),
-# REL = $GATES/src built with make and `make tests/shutdown_faults/efsd`.
+# REL = $GATES/src built with make and `make tests/faults/efsd`.
 # (a) three idle daemons started with scripts/server.sh, raft-mkfs, 20 s
 #     idle, each stopped with `scripts/server.sh stop <storage>`: expects
 #     script rc 0 and an exit record with every barrier done.
-# (b) n1, n2 normal, n3 from tests/shutdown_faults/efsd with
+# (b) n1, n2 normal, n3 from tests/faults/efsd with
 #     EFS_FAULT_SHUTDOWN_PARK=packer EFS_FAULT_SHUTDOWN_TOTAL_MS=6000:
 #     expects stop rc 3, record outcome=forced phase=packer, no store file
 #     lost; then n3 restarts from the normal build on the preserved store,
@@ -50,7 +50,7 @@ start3_b() {
   # n3 from the fault build, same node id and arguments as server.sh would use
   NODE=3
   EFS_FAULT_SHUTDOWN_PARK=packer EFS_FAULT_SHUTDOWN_TOTAL_MS=6000 \
-    ./tests/shutdown_faults/efsd --node-id $NODE --addr $A --port 18912 --storage $K/n3 \
+    ./tests/faults/efsd --node-id $NODE --addr $A --port 18912 --storage $K/n3 \
     --quota 2G --join $A:18910 >> $K/n3/log/efsd.log 2>&1 &
   echo $! > $K/n3/log/efsd.pid
   python3 ./scripts/server_processes.py record $K/n3/log/efsd.pid $K/n3

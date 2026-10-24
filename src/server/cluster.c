@@ -282,18 +282,20 @@ int server_join_as_new(struct efsd_server *s, const char *peer_host, uint16_t pe
     return rc;
 }
 
-/* K33 test hook (tests/test_k33_growth.py, tests/test_k33_interrupt.py):
- * EFS_TEST_MEMBER_EXIT=<point>[,<point>...] ends the process with status 86
+/* K33 test hook (tests/test_k33_growth.py, tests/test_k33_interrupt.py),
+ * EFS_FAULTS builds only (tests/faults/efsd):
+ * EFS_FAULT_MEMBER_EXIT=<point>[,<point>...] ends the process with status 86
  * at that durable handoff, so a test interrupts it deterministically. With
- * EFS_TEST_MEMBER_EXIT_ONCE=<prefix> only the first process to create the
+ * EFS_FAULT_MEMBER_EXIT_ONCE=<prefix> only the first process to create the
  * file <prefix>.<point> exits there (a cluster-wide one-shot per point: the
  * env can be given to every member, the one that reaches the point first
  * ends, the others and every restart continue). Points: after-members-commit,
  * before-learn, after-learn, learner-added, joint-started, after-g2-copy
- * (raft_host.c and the joiner path above). Unset in every deployment. */
+ * (raft_host.c and the joiner path above). */
 void server_test_member_exit(const char *point)
 {
-    const char *e = getenv("EFS_TEST_MEMBER_EXIT"), *once = getenv("EFS_TEST_MEMBER_EXIT_ONCE");
+#if EFS_FAULTS
+    const char *e = getenv("EFS_FAULT_MEMBER_EXIT"), *once = getenv("EFS_FAULT_MEMBER_EXIT_ONCE");
     size_t n = strlen(point);
     int hit = 0;
 
@@ -313,10 +315,13 @@ void server_test_member_exit(const char *point)
             return;
         close(fd);
     }
-    fprintf(stderr, "membership: EFS_TEST_MEMBER_EXIT at %s; exiting\n", point);
+    fprintf(stderr, "membership: EFS_FAULT_MEMBER_EXIT at %s; exiting\n", point);
     fflush(stderr);
     fflush(stdout);
     _exit(86);
+#else
+    (void)point;
+#endif
 }
 
 void server_nodes_keep_members(struct efsd_server *s, const struct efs_membership *m)

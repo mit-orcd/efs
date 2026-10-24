@@ -135,7 +135,7 @@ void server_pack_crash_point(const char *point)
 {
 #if EFS_FAULTS
     static int fired;
-    const char *want = getenv("EFS_PACK_CRASH"), *node = getenv("EFS_PACK_CRASH_NODE");
+    const char *want = getenv("EFS_FAULT_PACK_CRASH"), *node = getenv("EFS_FAULT_PACK_CRASH_NODE");
     if (fired || !want || strcmp(want, point) || !pk.s) return;
     if (node && (uint32_t)strtoul(node, NULL, 10) != pk.s->id) return;
     fired = 1;
@@ -1324,13 +1324,12 @@ int server_packer_start(struct efsd_server *s)
     /* An output segment is at most 128 KiB (often only ~15 files of
      * ~8 KiB): 8 per idle minute left thousands of holed segments after an
      * hour of churn (closure C5, 2026-10-21). 256 per batch, capped at
-     * EFS_PACK_COMPACT_IDLE_MS of work per batch. */
+     * 10 s of work per batch. */
     pk.compact_idle_segs = (uint32_t)env_u64("EFS_PACK_COMPACT_IDLE_SEGS", 256, 1);
-    pk.compact_batch_budget_ns = env_u64("EFS_PACK_COMPACT_IDLE_MS", 10000, 1) * 1000000ull;
+    pk.compact_batch_budget_ns = 10000ull * 1000000ull;
     pk.compact_daily_start = (uint32_t)env_u64("EFS_PACK_COMPACT_DAILY_START_MIN", 180, 0) % 1440;
-    pk.compact_daily_min = (uint32_t)env_u64("EFS_PACK_COMPACT_DAILY_MIN", 120, 1);
-    if (pk.compact_daily_min > 1440) pk.compact_daily_min = 1440;
-    pk.compact_cold_ns = env_u64("EFS_PACK_COMPACT_COLD_S", 86400, 1) * 1000000000ull;
+    pk.compact_daily_min = 120;
+    pk.compact_cold_ns = 86400ull * 1000000000ull;
     pk.backfill_shards = (uint32_t)env_u64("EFS_PACK_BACKFILL_SHARDS", 64, 1);
     if (pthread_create(&pk.tid, NULL, pk_main, NULL)) return -1;
     pk.started = 1;

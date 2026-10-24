@@ -1578,6 +1578,18 @@ full acceptance are separate states.
 [D41: K9 / W87 closed without resolution](#d41--k9--w87-closed-without-resolution-user-oct-24):
 **user decision Oct 24: the append record loss was never reproduced and has no root cause; K9 is closed and reopens if a loss is seen again.** Not a passing gate.
 
+[A6 settings inventory and the decision-free part of A7/A8](../status/a6-settings-inventory-20261024.md):
+**PASS (scoped), on `claude/devel-a6-inventory-7f975e`, not merged.** amd `make test-all` fails only what the untouched base fails (RDMA on rxe0, one fault-test timeout).
+Before figure for A11: 139 `EFS_*` variables read on the base (13 A/B
+selectors, 44 numeric tunables, 34 observability, 3 test hooks in normal
+builds), 127 on the branch. `make test` fails a new reader without an
+inventory row. Removed: 11 unset tunables (built-in values), the three
+normal-build test hooks (now `EFS_FAULT_*` in `EFS_FAULTS` builds); 19
+removed names stop efsd and efs-fuse. The 15 A/B selectors (13 variables,
+2 efsd options) are in a [decision table](../status/a6-settings-inventory-20261024.md#decision-table-for-the-parent-a7)
+for the user; none removed. Portal and launch-script changes listed for the
+parent.
+
 [K15/K29 append harness accounting rule](../status/k15-k29-accounting-rule-20261024.md):
 **PASS (scoped), merged into devel (`a2326a369`).**
 `tests/live/append_failover.py` accounts a write the client saw fail (record
@@ -11713,10 +11725,12 @@ leader scan of inode shards, for stores written before packing.
 | `EFS_PACK_SEGMENTS_PER_PASS` (8) | segments per pass, and compaction per daily pass |
 | `EFS_PACK_COMPACT_IDLE_S` (60) | idle time before idle compaction |
 | `EFS_PACK_COMPACT_IDLE_SEGS` (256) | output segments per idle batch |
-| `EFS_PACK_COMPACT_IDLE_MS` (10000) | work cap per idle batch |
-| `EFS_PACK_COMPACT_DAILY_START_MIN` / `_DAILY_MIN` (180 / 120) | daily window, UTC minute of day and length |
-| `EFS_PACK_COMPACT_COLD_S` (86400) | age at which a segment counts as fully cold |
+| `EFS_PACK_COMPACT_DAILY_START_MIN` (180) | daily window start, UTC minute of day |
 | `EFS_PACK_BACKFILL_SHARDS` (64) | inode shards scanned per backfill step |
+
+Built in since A6 (a set variable stops efsd): a 10 s work cap per idle
+compaction batch, a 120 min daily window and full coldness at 86400 s
+([inventory](../status/a6-settings-inventory-20261024.md)).
 
 **Reads.** GETCHUNKS returns a packed base with `EFS_CHUNK_REC_F_PACKED`
 and the 96-byte reference; nodes and checksums are the segment's. The

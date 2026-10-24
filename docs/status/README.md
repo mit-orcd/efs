@@ -24,6 +24,18 @@ full acceptance are separate states.
 [D41: K9 / W87 closed without resolution](decisions.md#d41--k9--w87-closed-without-resolution-user-oct-24):
 **user decision Oct 24: the append record loss was never reproduced and has no root cause; K9 is closed and reopens if a loss is seen again.** Not a passing gate.
 
+[A6 settings inventory and the decision-free part of A7/A8](a6-settings-inventory-20261024.md):
+**PASS (scoped), on `claude/devel-a6-inventory-7f975e`, not merged.** amd `make test-all` fails only what the untouched base fails (RDMA on rxe0, one fault-test timeout).
+Before figure for A11: 139 `EFS_*` variables read on the base (13 A/B
+selectors, 44 numeric tunables, 34 observability, 3 test hooks in normal
+builds), 127 on the branch. `make test` fails a new reader without an
+inventory row. Removed: 11 unset tunables (built-in values), the three
+normal-build test hooks (now `EFS_FAULT_*` in `EFS_FAULTS` builds); 19
+removed names stop efsd and efs-fuse. The 15 A/B selectors (13 variables,
+2 efsd options) are in a [decision table](a6-settings-inventory-20261024.md#decision-table-for-the-parent-a7)
+for the user; none removed. Portal and launch-script changes listed for the
+parent.
+
 [K15/K29 append harness accounting rule](k15-k29-accounting-rule-20261024.md):
 **PASS (scoped), merged into devel (`a2326a369`).**
 `tests/live/append_failover.py` accounts a write the client saw fail (record

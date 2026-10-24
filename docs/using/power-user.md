@@ -58,7 +58,6 @@ selects fragment I/O independently of transport; buffered is the daemon default.
 | `EFS_READ_PREFETCH` | read prefetch depth override |
 | `EFS_READ_VERIFY=1` | enable payload re-hashing on GET receive paths (off by default); returned digests are checked against the captured metadata view where available; identity-bound integrity/repair remain [W75](../backlog/work-items.md#w75) |
 | `EFS_FUSE_SPLICE_READ` | opt into `FUSE_CAP_SPLICE_READ` for measurement (default off); the recorded profile found no gain, so copy savings are not an accepted result |
-| `EFS_FEATURES_TTL_MS` | exported-features cache TTL (default 2000) |
 | `EFS_NUMA_NODE` | `=none` disables NUMA pinning at startup; `=N` forces node N |
 | `EFS_MD_RAFT_N` | **removed (W153):** efsd stops when it is set. The member count N (3..16) is the membership `mkfs` commits; node IDs must be 1..N. Each metadata group has three voters (N = 3: all; N ≥ 4: nodes 1–3 and 2–4); nodes 5..N hold data only |
 | `EFS_RDMA_DEV` / `EFS_RDMA_GID_INDEX` | **server/client:** verbs device and RoCE GID selection |
@@ -70,13 +69,19 @@ selects fragment I/O independently of transport; buffered is the daemon default.
 | `EFS_STAGE_DBG=1` | client staging-table debug |
 | `EFS_FLOCK_DBG=1` | client POSIX-lock debug |
 | `EFS_GC_DBG=1` | **server:** log every GC frag/reap pass (otherwise only passes over 5 ms print a `gc-pass` line) |
-| `EFS_GC_DISABLE=1` | **server:** disable the GC loops (debug only) |
+| `EFS_FAULT_GC_DISABLE=1` | **server, test only:** no GC reaper; `EFS_FAULTS=1` builds only (`tests/faults/efsd`; was `EFS_GC_DISABLE`) |
 | `EFS_RAFT_OBS=1` | **server:** `raft-obs` observability lines (incl. `pub_p50`/`pub_max`) |
 | `EFS_PERF_DIR` | recorder directory for `server.sh` / `client.sh` wrappers (default under `~/orcd/scratch/efs/perf`) |
 | `EFS_PERF_PATH` / `EFS_STRACE_PATH` | output paths for recorders started by the binaries themselves |
 | `EFS_STRACE_EXPR` | strace syscall filter |
 | `EFS_FAULT_WITHHOLD=<ino>:<ci>` | **client:** implemented only in `EFS_FAULTS=1` builds; omits that REPORT record before serialization; `/tmp/efs/fault` containing `WITHHOLD <ino>:<ci>` overrides the environment, and `OFF` disables it |
 | `EFS_FAULT_COMPACT_DIE=<n>` | **test only:** `_exit(99)` after the n-th finished compaction output segment, before the manifest rename; compiled only with `EFS_FAULTS=1` and exercised by `tests/faults/test_kv_compact_crash` (K24; was `EFS_KV_COMPACT_DIE`, read in every build). A normal `efsd` or `efs-fuse` prints `<prog>: <VAR> ignored: this build has no fault hooks` at startup for each `EFS_FAULT_*` and for `EFS_KV_COMPACT_DIE` in its environment (W149) |
+
+Every setting the binaries read, with its kind and disposition, is in the
+[A6 settings inventory](../status/a6-settings-inventory-20261024.md). A
+removed setting that is still set (for example `EFS_MD_RAFT_N`,
+`EFS_GC_DISABLE`, `EFS_FEATURES_TTL_MS`) stops efsd and efs-fuse with a
+message naming it.
 
 ## Quotas and capacity
 

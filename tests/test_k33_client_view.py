@@ -24,7 +24,7 @@ import hashlib, os, re, shutil, signal, socket, subprocess, sys, tempfile, threa
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
-EFSD, MGMT, FUSE = root / 'efsd', root / 'efs-mgmt', root / 'efs-fuse'
+EFSD, MGMT, FUSE = root / 'tests/faults/efsd', root / 'efs-mgmt', root / 'efs-fuse'  # EFS_FAULTS build (k33_daemons.py)
 for b in (EFSD, MGMT):
     if not b.exists():
         sys.exit(f'{b} missing: run make first')
@@ -35,8 +35,8 @@ HOST = '127.0.0.1'
 MiB = 1024 * 1024
 work = Path(tempfile.mkdtemp(prefix='efs-k33cv-', dir=os.environ.get('TMPDIR')))
 env = dict(os.environ)
-env.pop('EFS_TEST_MEMBER_EXIT', None)
-env['EFS_GC_DISABLE'] = '1'
+env.pop('EFS_FAULT_MEMBER_EXIT', None)
+env['EFS_FAULT_GC_DISABLE'] = '1'
 
 
 def free_port():
