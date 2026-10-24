@@ -5693,7 +5693,8 @@ remove this ([`h->mu` plan](../status/raft-host-mu-plan-20261016.md)).
 - the query-refresh revision reads (`metadata_revisions`,
   `transaction_revision`/`activity`, `cleanup_deferred`).
 
-Peeks keep `lsm_lock`'s fail-fast abort inside a read section.
+Peeks kept `lsm_lock`'s fail-fast abort inside a read section (removed
+by the October 24 peek-ordering fix below).
 `tests/test_kv_lsm.c` `test_peek_beside_reader` parks a reader inside a scan
 callback and requires every peek to return. It FAILs on `47ba6b590` and
 PASSes with the change. On node9901, the patched tree passes `test_kv_lsm`,
@@ -5729,6 +5730,19 @@ memtable still clears only after the MANIFEST write succeeds.
 The remaining leader waits are `h->mu` in `host_pump`, proposals and REPORT
 ([`h->mu` plan](../status/raft-host-mu-plan-20261016.md)), plus XFS log
 fsync waits.
+
+**Peek ordering (October 24, `680a7d0dd` on
+`claude/devel-w126-peek-8a1155`, not merged).** K30 pinned a remaining
+defect: peeks took `mu`, and a writer holds `mu` while it waits on
+`view_rw` for readers, so every peek waited for the longest reader. Peeks
+now take a separate `peek_mu`, which a writer holds exactly while it owns
+`view_rw` exclusively (order `mu`, `view_rw`, `peek_mu`). Yield, reclaim
+and cond waits release and retake it with the view, so peeks also run
+during flush I/O. A peek inside a read section is now allowed.
+`test_peek_beside_reader` is a liveness test in four modes, and there are
+new peek storms beside flushes and compactions. `make leak-check` no
+longer skips the case. [Evidence](../status/w126-peek-order-20261024.md);
+the orcd-mini A/B rerun is NOTRUN.
 
 **Remaining.** Step 4 (bound how long `merge_scan` holds the shared view) is
 deferred until LSM waits rise again. Create throughput on orcd-mini is not
