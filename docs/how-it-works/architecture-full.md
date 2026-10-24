@@ -1575,6 +1575,21 @@ full acceptance are separate states.
 [Oct 24 merge: placement spread, K33 acceptance, test hygiene, W126, K15/K29 rule](../status/k33-acceptance-20261024.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `a2326a369`: 449 commands, 0 FAIL, 14 NOTRUN host limits (1,340 s; raw: intel2 `~/efs-artifacts/merge-wave3-20261024/`, `SHA256SUMS` `3e1f0f95…b2c`).** Placement needs a fresh format. Live gates for all five stay NOTRUN.
 
+[Alpha 1.0 user docs and limitations, S1–S5 and F4](../status/s-docs-alpha-1.0-20261024.md):
+**drafts on `claude/devel-s-docs-e654d8`, not merged, not approved.**
+[Surface list and effective settings](../using/alpha-1.0-surface.md),
+[POSIX subset](../using/alpha-1.0-posix.md),
+[guide](../using/alpha-1.0-guide.md) and
+[release notes draft](../release-notes/alpha-1.0.md), checked against
+`a2326a369`; 24 docs/code findings (help gaps, untested `add-storage`, no
+port authentication, profile defaults); stale claims in `operations.md` and
+`power-user.md` corrected. S4 waits for A6 and the W122 decision.
+**Code gate on nuc: `make -k test-all` exit 0 once, but `test_k33_payload.py`
+fails 4 of 6 runs of the unchanged base: a file acknowledged during a
+member's orderly stop reads `EIO` until it returns (F24, proposed K34).**
+Also found: `fsync` returns `EIO` while any member is down, and for good
+after a member's unclean stop (F22, F23).
+
 [D41: K9 / W87 closed without resolution](#d41--k9--w87-closed-without-resolution-user-oct-24):
 **user decision Oct 24: the append record loss was never reproduced and has no root cause; K9 is closed and reopens if a loss is seen again.** Not a passing gate.
 

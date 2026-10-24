@@ -32,8 +32,9 @@ does. The normative text is the linked section, never this page.
   disabled by default, so 8 MiB is not a default-mount prerequisite.
   Enable only for explicit measurement; the recorded profile found no gain.
 - Supported FUSE surface (`chmod`/`chown`/`truncate`/`rename`/`utimens`,
-  the lookup-only `.stats` virtual file):
-  [operations.md § FUSE surface](../operations/operations.md#fuse-surface).
+  the lookup-only `.efs/` command directory):
+  [operations.md § FUSE surface](../operations/operations.md#fuse-surface);
+  the alpha 1.0 subset is in [alpha-1.0-posix.md](alpha-1.0-posix.md).
 
 Example for an already configured RXE device (this does not create it):
 
@@ -56,10 +57,10 @@ selects fragment I/O independently of transport; buffered is the daemon default.
 | `EFS_DCACHE_BYTES` | soft dirty-body reclaim target in bytes (default 128 MiB); not the hard allocation bound |
 | `EFS_CLIENT_CONNS_PER_NODE` | pooled connections per server node |
 | `EFS_READ_PREFETCH` | read prefetch depth override |
-| `EFS_READ_VERIFY=1` | enable payload re-hashing on GET receive paths (off by default); returned digests are checked against the captured metadata view where available; identity-bound integrity/repair remain [W75](../backlog/work-items.md#w75) |
+| `EFS_READ_VERIFY=1` | enable payload re-hashing on GET receive paths (off by default); returned digests are checked against the captured metadata view where available; fragment format 2 binds identity and digest (K16/W75) |
 | `EFS_FUSE_SPLICE_READ` | opt into `FUSE_CAP_SPLICE_READ` for measurement (default off); the recorded profile found no gain, so copy savings are not an accepted result |
 | `EFS_NUMA_NODE` | `=none` disables NUMA pinning at startup; `=N` forces node N |
-| `EFS_MD_RAFT_N` | **removed (W153):** efsd stops when it is set. The member count N (3..16) is the membership `mkfs` commits; node IDs must be 1..N. Each metadata group has three voters (N = 3: all; N ≥ 4: nodes 1–3 and 2–4); nodes 5..N hold data only |
+| `EFS_MD_RAFT_N` | **removed (W153):** efsd stops when it is set. The member count N (3..16) is the membership committed at formation and grown by later joins; node ids come from the cluster (K33). Each metadata group has three voters (N = 3: all; N ≥ 4: nodes 1–3 and 2–4); nodes 5..N hold data only |
 | `EFS_RDMA_DEV` / `EFS_RDMA_GID_INDEX` | **server/client:** verbs device and RoCE GID selection |
 | `EFS_RDMA_BUFS` | RDMA buffer pool size |
 | `EFS_LOG_TS` | UTC timestamps are enabled by default; `=0` disables the timestamp wrapper |

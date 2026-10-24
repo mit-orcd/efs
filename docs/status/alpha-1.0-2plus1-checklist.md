@@ -126,6 +126,7 @@ row is checked again on current devel before work starts.
 | K31 | **Devel RDMA clients lose larger replies.** On orcd-mini, freshly formatted, devel `bf16436e8` daemons healthy (both groups led, peers in sync), every FUSE client over RDMA (node9900 and node9901, mlx5_0, segmented-v1) stalls: small replies arrive, but the first reply of a few hundred bytes (a 453-byte INODE_GETATTR reply to a 21-byte request, server counters show it sent) never reaches the client; each reconnect repeats it, so LOOKUP/GETATTR time out at 30 s and mkdir returns EIO. The same client over TCP against the same cluster works (stat, mkdir). The last good RDMA build here was `d94ca85bf`; candidate changes since then include K28 (`EFS_MAX_NODES` 16, larger structs), K5/W72 session fields, W133 declaration gate and K16. Every Oct 22–23 sub-session gate ran over TCP, and RDMA unit tests are NOTRUN on hosts without RDMA, so nothing caught it. | correctness / transport, alpha blocker | FIX: bisect `d94ca85bf..bf16436e8` on an RDMA host (node9901 private cluster), find the reply-size or segmentation change, add an RDMA reply-size regression to the RDMA tests. Found Oct 23 during K27. **FIXED Oct 23 (`24e58fb1d`): K5 started the mount session before the daemon fork, so over RDMA the CQ poller thread lived in the parent and the daemon had none; the session now starts after the fork and a foreign process is refused; RDMA probe and all orcd-mini suites PASS ([evidence](k31-k27-orcd-mini-20261023.md)).** |
 | K32 | ior easy write fell from ~1.3 GiB/s to ~0.36–0.5 GiB/s after the fourth wave; reads unchanged. K14 makes every multi-chunk FUSE write its own cross-group transaction (~20 Raft entries per 1 MiB write, from 0.1); K13 adds ~9 (per-object ticket admission and settle). Latency-bound, servers mostly idle. | performance regression, alpha blocker | FIX: batch many K14 units per transaction (a superset published atomically keeps each unit's contract) and batch K13 admissions/settles; gate: ior easy write ≥ ~1.2 GiB/s with the K14 torn-read and K13 ticket gates still passing. Found Oct 23 ([evidence](k32-write-regression-20261023.md)). **Code fixed Oct 23 and merged (`ea2dc4443`).** Consecutive units of one file in a REPORT publish as one transaction, with PREPAREs in TXN_BATCH. Admissions are one ADMIT_BATCH per group per write, and settles are packed per group (Raft tags 90, 91). Counted entries per 1 MiB write: 23.0 → 3.0 at eight writes per REPORT. amd `make test-all` fails only what the base fails. The K14 torn-read gate passes 30/30, including a new eight-units-per-transaction phase. **The ior easy write gate on orcd-mini is NOTRUN** ([fix evidence](k32-write-fix-20261023.md)). |
 | K33 | **W157** simple startup and safe online node addition (user amendment Oct 23, supersedes D39/D40 fixed membership): seed/`--join` startup with no cluster file, node id or member count; automatic formation at three agreeing members; safe additions with the 3-to-4 SHARD2 voter transition and usable added capacity; removal deferred. The `--cluster` feature is removed and the D39 admission merge reverted (`d7bca79d6`); W153 (merged `4026e254d`) derives the count and voters from the committed membership. | scope / implementation gap, alpha blocker | IN PROGRESS: model and [protocol](k33-membership-protocol-20261023.md) done; increment 1 merged (`0098e06c4`) ([evidence](k33-w157-formation-addition-20261023.md)): automatic formation, committed revisions with store tokens, pending joiners, SHARD2 {1,2,3} → {2,3,4} by joint consensus with catch-up, storage-only members from five, retained placement; code gate PASS with host limits (xorinox `make test-all` at `0098e06c4`: 433 commands, 0 FAIL, 13 NOTRUN). Increment 2 merged (`53080d744`) ([evidence](k33-w157-autoid-discovery-20261024.md)): no operator node ids (`efsd ADDR:PORT STORAGE` creates or restarts, `efsd --join [SEED] STORAGE` joins; `--node-id` removed), M4′ promise formation (the seed proposes ids in endpoint order, each joiner persists a promise, group 0 commits), additions take `count + 1` (concurrent joiners distinct, a retried join the same id), local-subnet discovery by UDP broadcast on each interface's own subnet (several clusters need a seed; no answer is said and waited; finds peers only), identity v3 (fresh format); code gate PASS with host limits (xorinox `make test-all` at `53080d744`: 436 commands, 0 FAIL, 13 NOTRUN). Live client view refresh merged (`8b4cfbe77`) ([evidence](k33-client-view-20261024.md)): mounted clients install later revisions without a remount (wire types 245/246); code gate PASS with host limits (intel1 `make -k test-all` at `8b4cfbe77`, exit 0). Placement spread fix merged (`95a0e678a`) ([evidence](k33-placement-spread-20261024.md)): the stripe start, packed segments and spares use a full-avalanche hash (fmix64, multiply-shift); unit tests for N = 3..16 PASS; code gate PASS with host limits (amd `make test-all` at `f7553b06e`: 442 commands, 11 FAIL, all also failing on the base `3e01ba95c`, 5 NOTRUN); real daemons: every added node takes new fragments (`{4: 25, 6: 22, 7: 21, 8: 18}`, base `{4: 0, …}`). Acceptance qualification merged (`2ebd4fd85`) ([evidence](k33-acceptance-20261024.md)): interrupted additions at every handoff (new hooks after-learn, learner-added, joint-started, after-g2-copy; concurrent interrupted joins), exact packed and unpacked payloads across additions, a whole-cluster restart and each single-member outage at five, seed loss, and growth bookkeeping 3→6 (capacity, df, protection and abandoned-upload reporting, automatic quota, reclaim, W154) PASS as loopback daemon tests; fixed: reclaim stalled once node 1's group-2 replica retired, and a whole-cluster restart waited 30 s per starting peer; code gate PASS with host limits (xorinox `make test-all`: 446 commands, 0 FAIL, 13 NOTRUN). Remaining: live multi-host (including addition under client load), cross-subnet, RDMA and orcd-mini gates NOTRUN (parent). |
+| K34 | (proposed, found Oct 24 by the S-docs gate on nuc) A chunk written while a member stops in order is acknowledged degraded with its two acknowledged fragments on the stopping member and one other; the file reads `EIO` (`decode error efs_rc=-9`) until that member returns. `tests/test_k33_payload.py` failed 4 of 6 runs on nuc at `a2326a369` ([F24](s-docs-alpha-1.0-20261024.md)) | data availability, single-loss | NEW, cause not established. Next: find why node 3 (up, new group-2 leader) did not acknowledge, and decide whether a fragment acknowledged by a member that then stops may count toward the two. Raw logs on nuc `~/efs-artifacts/s-docs-k33-payload-20261024/` |
 
 ### Recheck on devel `ab1920fae` (October 22)
 
@@ -456,17 +457,45 @@ facts for A6, not decisions.
   and crash recovery (K23). **Decided out (user, Oct 22):** NFS re-export and
   macOS clients, on the beta backlog as **W152**; alpha supports the Linux FUSE
   client only, and F4 says so.
+  **DRAFT Oct 24 ([surface list](../using/alpha-1.0-surface.md),
+  [evidence](s-docs-alpha-1.0-20261024.md)):** every binary, `efsd`/`efs-fuse`
+  option, `efs-mgmt` and `.efs` command and user-settable environment
+  variable marked in or out with a reason, checked against `a2326a369`.
+  Rows marked *proposed* (for example `--no-direct-io`, `--writers`,
+  `--no-persist`, `add-node`, `shrink-quota`, `raft-step-down`) wait for the
+  user; findings F2–F8, F11, F12 list help-text gaps and profile defaults.
 - [ ] **S2 — POSIX subset.** Publish the supported operations and every known
   gap (for example, mmap is skipped in the extras suite). Each gap is either
   fixed or justified as a limitation (F4). No gap counts as PASS.
+  **DRAFT Oct 24 ([POSIX subset](../using/alpha-1.0-posix.md)):** supported
+  operations from the core (216), extras (5), two-client (68) and
+  durability (27) cases; deviations P1–P14 with their suite cases (shared
+  mmap W104, K10 fork readback, `renameat2` flags, `fallocate` modes,
+  non-`user.` xattrs, `mknod`, D28, D32, W159 open). Recorded runs are on
+  `cb970ca7c` and `163241584`; none on the base; C1 per topology NOTRUN.
 - [ ] **S3 — Operator workflows.** Format, start, stop, status, `df`,
   quotas, `raft-status`, `raft-resync`, packing control, and failure
   messages. Each one is documented and covered by a test.
+  **DRAFT Oct 24 ([alpha guide](../using/alpha-1.0-guide.md)):** format
+  (automatic at three members, optional `mkfs`), start, status, mount and
+  unmount, `df`, quotas, adding a node, adding storage, stop, restart and
+  orderly shutdown with the current CLI. Test coverage gaps: `add-storage`
+  and `add-node` have no test, `raft-resync` only a gate script (F11, F20).
 - [ ] **S4 — Effective settings.** Decide whether **W122**, the listing of
   effective settings, is in alpha. It supports A8 and A10.
+  **STRUCTURE Oct 24 ([effective settings](../using/alpha-1.0-surface.md#s4--effective-settings)):**
+  where each effective value is visible today (startup log, `status`,
+  `raft-status`, `version`, `sync-status`, `commands-policy get`; tunables
+  not at all) and the page layout once A6 lands. **Waits for** the A6
+  inventory (`a6-settings-inventory-20261024.md`) and the user's W122
+  decision.
 - [ ] **S5 — User documentation.** Install, configuration, supported
   topologies, the reduced configuration matrix (A11) and the published
   limitations.
+  **DRAFT Oct 24 ([alpha guide](../using/alpha-1.0-guide.md)):** install,
+  configuration, topology (3–16 nodes, 2+1, distinct hosts), transport and
+  direct I/O, quotas, failure behavior (one node down, rebuild on return,
+  two down). The A11 matrix waits for A11.
 
 ## B. Verify geometry, placement and usable capacity
 
@@ -603,8 +632,13 @@ round says which physical or software limiter it hit.
 - [ ] **F4** Publish alpha limitations: fixed metadata-group count and
   default placement of two three-voter groups (both on 1–3 for N = 3; on
   1–3 and 2–4 for N ≥ 4, D38 as amended), actual packing placement, supported
-  node range, Linux FUSE client only, deferred unplanned repair, no
-  degraded-state indication, and lack of 2+2/two-loss protection on 4+ nodes.
+  node range, Linux FUSE client only, deferred unplanned repair, degraded
+  state shown only to the operator (`efs-mgmt status` has shown it since
+  W154; the mount does not, finding F10), and lack of 2+2/two-loss
+  protection on 4+ nodes.
+  **DRAFT Oct 24 ([release notes](../release-notes/alpha-1.0.md)):**
+  limitations L1–L28 with trigger, what the user sees and reference, and
+  the open K rows that must close or be added before release.
   Release-notes entries decided so far (D40, Oct 23), one each:
   - **K10/W121 readback after fsync:** a read issued right after a
     successful fsync can return the previous file's payload; triggered by
