@@ -22,7 +22,14 @@
  * read linearizably from the group (server_raft_host_pack_object). The
  * segment's guard orders a PUT against reclaim acceptance: acceptance
  * installs the segment's fence under the write guard, and a PUT checks the
- * fence under the read guard, so no PUT lands after acceptance. */
+ * fence under the read guard, so no PUT lands after acceptance.
+ *
+ * K37: a rebuild PUT (EFS_SEGMENT_PUT_F_REBUILD) restores the one missing
+ * fragment of a published segment. Its authority is the same object read
+ * plus the segment's degraded mark at that read, which must name exactly
+ * this fragment; a torn or foreign file under the name is replaced. The
+ * audit (server_segment_check) gives the group leader evidence of a
+ * missing or bad fragment: a full read and verification of the file. */
 #include "server_internal.h"
 #include "efs/checksum.h"
 #include "efs/frag_record.h"
@@ -64,6 +71,15 @@ __attribute__((weak)) int server_raft_host_pack_object(uint32_t group, uint64_t 
                                                        struct efs_pack_object *out)
 {
     (void)group; (void)id; (void)gen; (void)out;
+    return EFS_ERR_NOT_PRIMARY;
+}
+#endif
+#ifndef EFS_SEGMENT_TEST_PACK_STATE
+__attribute__((weak)) int server_raft_host_pack_state(uint32_t group, uint64_t id, uint64_t gen,
+                                                      struct efs_pack_object *out, uint32_t *degraded)
+{
+    (void)group; (void)id; (void)gen; (void)out;
+    if (degraded) *degraded = EFS_PACK_READ_DEGRADED_BAD;
     return EFS_ERR_NOT_PRIMARY;
 }
 #endif
@@ -228,6 +244,8 @@ int server_segment_put(struct efsd_server *s, const uint8_t *body, uint32_t byte
     uint64_t id = sg_get64(body + 8), gen = sg_get64(body + 16);
     const uint8_t *sum = body + 24, *data = body + EFS_SEGMENT_PUT_HEADER;
     uint32_t len = geometry / 2;
+    int rebuild = body[2] == EFS_SEGMENT_PUT_F_REBUILD;
+    if ((body[2] && !rebuild) || body[3]) return EFS_ERR_INVAL;
     if (!efs_pack_group_anchor(group) || fi >= EFS_NUM_FRAGMENTS || !id || !gen ||
         geometry < EFS_SEGMENT_ALIGNMENT || geometry > EFS_SEGMENT_MAX_SIZE ||
         geometry % EFS_SEGMENT_ALIGNMENT || bytes - EFS_SEGMENT_PUT_HEADER != len)
@@ -235,18 +253,35 @@ int server_segment_put(struct efsd_server *s, const uint8_t *body, uint32_t byte
     uint8_t got[EFS_HASH_SIZE];
     efs_hash(data, len, got);
     if (memcmp(got, sum, EFS_HASH_SIZE)) return EFS_ERR_CHECKSUM;
+#if EFS_FAULTS
+    /* K37 tests: EFS_FAULT_SEGMENT_PUT_REFUSE=<dir> makes this node refuse
+     * the packer's segment PUTs while <dir>/refuse-<node id> exists. */
+    {
+        const char *d = getenv("EFS_FAULT_SEGMENT_PUT_REFUSE");
+        char flag[EFS_MAX_PATH + 32];
+        if (d && !rebuild) {
+            snprintf(flag, sizeof(flag), "%s/refuse-%u", d, s->id);
+            if (!access(flag, F_OK)) return EFS_ERR_IO;
+        }
+    }
+#endif
     /* Linearizable authority: the object must be admitted, still ACTIVE,
-     * with records left to switch, and place this exact fragment here. */
+     * with records left to switch, and place this exact fragment here.
+     * K37 rebuild: published (live records), and the degraded mark at the
+     * same read names exactly this fragment. */
     struct efs_pack_object *o = malloc(sizeof(*o));
     if (!o) return EFS_ERR_NOMEM;
-    int rc = server_raft_host_pack_object(group, id, gen, o);
+    uint32_t degraded = EFS_PACK_READ_DEGRADED_BAD;
+    int rc = rebuild ? server_raft_host_pack_state(group, id, gen, o, &degraded)
+                     : server_raft_host_pack_object(group, id, gen, o);
     if (rc == EFS_ERR_NOT_FOUND) rc = EFS_ERR_STALE;
     if (rc == EFS_OK) {
         struct efs_pack_ledger_usage u;
         efs_pack_ledger_usage(&o->ledger, &u);
-        if (o->ledger.phase != EFS_PACK_ACTIVE || !u.pending) rc = EFS_ERR_STALE;
+        if (o->ledger.phase != EFS_PACK_ACTIVE || !(rebuild ? u.live : u.pending)) rc = EFS_ERR_STALE;
         else if (o->ledger.geometry != geometry || o->nodes[fi] != s->id ||
                  memcmp(o->checksums[fi], sum, EFS_HASH_SIZE)) rc = EFS_ERR_INVAL;
+        else if (rebuild && degraded != (1u << fi)) rc = EFS_ERR_STALE;
     }
     free(o);
     if (rc != EFS_OK) return rc;
@@ -257,6 +292,38 @@ int server_segment_put(struct efsd_server *s, const uint8_t *body, uint32_t byte
     if (server_reclaim_fenced(EFS_RECLAIM_SEGMENT_EID(group), id)) {
         pthread_rwlock_unlock(g);
         return EFS_ERR_STALE;
+    }
+    if (rebuild) {
+        /* A good copy already here (a retried rebuild) is success; a torn,
+         * foreign or corrupt file under the name is removed first so the
+         * exclusive create below writes the rebuilt fragment. */
+        uint32_t v = server_segment_check(s, group, id, gen, fi, geometry, sum);
+        if (v == EFS_SEGMENT_AUDIT_OK) {
+            pthread_rwlock_unlock(g);
+            return EFS_OK;
+        }
+        if (v == EFS_SEGMENT_AUDIT_ERROR) {
+            pthread_rwlock_unlock(g);
+            return EFS_ERR_IO;
+        }
+        if (v == EFS_SEGMENT_AUDIT_BAD) {
+            struct stat st;
+            uint64_t old = !stat(path, &st) && (uint64_t)st.st_size > SG_TAIL
+                           ? (uint64_t)st.st_size - SG_TAIL : 0;
+            char dir[EFS_MAX_PATH + 64];
+            sg_dir(s, group, id, dir, sizeof(dir));
+            if ((unlink(path) && errno != ENOENT) || sg_sync_path(dir) != EFS_OK) {
+                pthread_rwlock_unlock(g);
+                return EFS_ERR_IO;
+            }
+            fprintf(stderr, "segment: rebuild g%u id=%016llx gen=%llx fi=%u: removed a bad "
+                    "copy before writing the rebuilt fragment\n", group, (unsigned long long)id,
+                    (unsigned long long)gen, fi);
+            pthread_mutex_lock(&s->lock);
+            struct efs_node *on = server_local_node(s);
+            if (on && old) on->used = on->used >= old ? on->used - old : 0;
+            pthread_mutex_unlock(&s->lock);
+        }
     }
     /* Charge the payload like a fragment before writing it. A segment may
      * use a reserve above the quota: it replaces up to 512 per-file
@@ -287,6 +354,96 @@ int server_segment_put(struct efsd_server *s, const uint8_t *body, uint32_t byte
     server_usage_mark_dirty(s);
     pthread_rwlock_unlock(g);
     return rc;
+}
+
+/* K37: one placed fragment, read and verified in full: the file exists with
+ * exactly the payload length and tail page, its I25 record names exactly
+ * this fragment, and both the recorded digest and the payload hash equal
+ * the segment's checksum for it. ERROR is an I/O failure that proves
+ * nothing either way. */
+uint32_t server_segment_check(struct efsd_server *s, uint32_t group, uint64_t id, uint64_t gen,
+                              uint32_t fi, uint32_t geometry, const uint8_t sum[EFS_HASH_SIZE])
+{
+    char path[EFS_MAX_PATH + 128];
+    uint32_t len = geometry / 2;
+    server_segment_path(s, group, id, gen, fi, path, sizeof(path));
+    int fd = server_frag_open(path, O_RDONLY, 0);
+    if (fd < 0) return errno == ENOENT ? EFS_SEGMENT_AUDIT_MISSING : EFS_SEGMENT_AUDIT_ERROR;
+    struct stat st;
+    uint32_t v = EFS_SEGMENT_AUDIT_OK;
+    uint8_t have[EFS_HASH_SIZE], got[EFS_HASH_SIZE];
+    uint8_t *buf = malloc(len ? len : 1);
+    if (!buf || fstat(fd, &st)) v = EFS_SEGMENT_AUDIT_ERROR;
+    else if ((uint64_t)st.st_size != (uint64_t)len + SG_TAIL) v = EFS_SEGMENT_AUDIT_BAD;
+    if (v == EFS_SEGMENT_AUDIT_OK) {
+        int rc = sg_read_tail(fd, group, id, gen, fi, len, have);
+        if (rc == EFS_ERR_IO) v = EFS_SEGMENT_AUDIT_ERROR;
+        else if (rc != EFS_OK || memcmp(have, sum, EFS_HASH_SIZE)) v = EFS_SEGMENT_AUDIT_BAD;
+    }
+    if (v == EFS_SEGMENT_AUDIT_OK) {
+        ssize_t n = server_frag_pread(fd, buf, len, 0);
+        if (n < 0) v = EFS_SEGMENT_AUDIT_ERROR;
+        else if ((size_t)n != len) v = EFS_SEGMENT_AUDIT_BAD;
+        else {
+            efs_hash(buf, len, got);
+            if (memcmp(got, sum, EFS_HASH_SIZE)) v = EFS_SEGMENT_AUDIT_BAD;
+        }
+    }
+    free(buf);
+    close(fd);
+    return v;
+}
+
+void server_segment_audit(struct efsd_server *s, const uint8_t *req, uint32_t bytes,
+                          uint8_t **reply, uint32_t *reply_len)
+{
+    uint32_t count = 0, rc = EFS_OK;
+    *reply = NULL;
+    *reply_len = 0;
+    if (bytes >= EFS_SEGMENT_AUDIT_HEADER) count = sg_get32(req + 4);
+    uint8_t *r = calloc(1, EFS_SEGMENT_AUDIT_REPLY + EFS_SEGMENT_AUDIT_MAX);
+    if (!r) return;
+    uint32_t group = bytes >= EFS_SEGMENT_AUDIT_HEADER ? req[0] : 0;
+    uint32_t flags = bytes >= EFS_SEGMENT_AUDIT_HEADER ? req[1] : 0;
+    uint64_t inc = bytes >= EFS_SEGMENT_AUDIT_HEADER ? sg_get64(req + 8) : 0;
+    uint32_t bit = group == 0 ? 1u : 2u, out = 0;
+    int settled = server_put_sync_settled();
+    if (!s || bytes < EFS_SEGMENT_AUDIT_HEADER || !efs_pack_group_anchor(group) ||
+        (flags & ~EFS_SEGMENT_AUDIT_F_COMPLETE) || req[2] || req[3] ||
+        count > EFS_SEGMENT_AUDIT_MAX || bytes != EFS_SEGMENT_AUDIT_HEADER + count * EFS_SEGMENT_AUDIT_ITEM ||
+        ((flags & EFS_SEGMENT_AUDIT_F_COMPLETE) && count))
+        rc = (uint32_t)EFS_ERR_INVAL;
+    else if (inc && inc != s->incarnation)
+        rc = (uint32_t)EFS_ERR_STALE; /* restarted since the sweep began */
+    else if (count && !settled)
+        rc = (uint32_t)EFS_ERR_BUSY; /* recovery uncertain: no evidence yet */
+    else if (flags & EFS_SEGMENT_AUDIT_F_COMPLETE) {
+        if (settled && inc == s->incarnation)
+            __atomic_fetch_or(&s->segment_audited_mask, bit, __ATOMIC_RELAXED);
+    } else {
+        for (uint32_t i = 0; i < count; i++) {
+            const uint8_t *it = req + EFS_SEGMENT_AUDIT_HEADER + (size_t)i * EFS_SEGMENT_AUDIT_ITEM;
+            uint64_t id = sg_get64(it), gen = sg_get64(it + 8);
+            uint32_t fi = it[16], geometry = sg_get32(it + 20);
+            if (!id || !gen || fi >= EFS_NUM_FRAGMENTS || it[17] || it[18] || it[19] ||
+                geometry < EFS_SEGMENT_ALIGNMENT || geometry > EFS_SEGMENT_MAX_SIZE ||
+                geometry % EFS_SEGMENT_ALIGNMENT) {
+                rc = (uint32_t)EFS_ERR_INVAL;
+                out = 0;
+                break;
+            }
+            r[EFS_SEGMENT_AUDIT_REPLY + out++] =
+                (uint8_t)server_segment_check(s, group, id, gen, fi, geometry, it + 24);
+        }
+    }
+    sg_put32(r, rc);
+    sg_put32(r + 4, out);
+    uint64_t me = s ? s->incarnation : 0;
+    for (int i = 0; i < 8; i++) r[8 + i] = (uint8_t)(me >> (56 - 8 * i));
+    sg_put32(r + 16, s ? __atomic_load_n(&s->segment_audited_mask, __ATOMIC_RELAXED) : 0);
+    sg_put32(r + 20, (uint32_t)settled);
+    *reply = r;
+    *reply_len = EFS_SEGMENT_AUDIT_REPLY + out;
 }
 
 int server_segment_read(struct efsd_server *s, uint32_t group, uint64_t id, uint64_t gen,

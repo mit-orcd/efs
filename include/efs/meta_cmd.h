@@ -173,6 +173,21 @@ static inline int efs_md_is_expiry(uint8_t op)
  * object's degraded mark from its chunk row (efs_meta_apply_degraded_mark)
  * so the rebuild on return restores it. A logical verdict: OK marked (or
  * already marked so), NOT_FOUND no longer live, STALE the row disagrees. */
+/* K37 (W154 for packed segments), on the segment's publication group,
+ * proposed by that group's leader (packer or segment rebuild):
+ * [tag][group:1][op:1][id:8][generation:8][mask:1][reason:1], 21 B. The
+ * segment's degraded mark (EFS_KV_KIND_PACK_DEGRADED) is the one authority
+ * for "this segment lacks fragments": MARK adds mask bits (a mark with two
+ * bits is unrecoverable and never cleared by a rebuild); CLEAR deletes the
+ * mark after a proven rebuild only when it still names exactly mask, one
+ * fragment; RETIRE deletes it only when the segment is gone or holds no
+ * live or pending record. Byte 1 is the group, as for every pack command.
+ * Logical verdicts (STALE: nothing to do) never halt the log. */
+#define EFS_MD_CMD_PACK_DEGRADED 247
+#define EFS_MD_PACK_DEGRADED_LEN 21u
+#define EFS_MD_PACK_DEGRADED_MARK 1u
+#define EFS_MD_PACK_DEGRADED_CLEAR 2u
+#define EFS_MD_PACK_DEGRADED_RETIRE 3u
 #define EFS_MD_CMD_DEGRADED_MARK 249
 #define EFS_MD_DEGRADED_MARK_LEN 34u
 #define EFS_MD_PUT_TICKET_DRAIN_LEN 25u
@@ -311,7 +326,7 @@ static inline int efs_md_is_expiry(uint8_t op)
     X(BOOTSTRAP_LANE) X(TRUNC_SWEEP) X(SWEEP_DONE) X(RETIRE) X(TXN_RETIRE) \
     X(DEGRADED_CLEAR) X(PUT_ORPHAN_ACK) X(TXN_BATCH) \
     X(PUT_TICKET_ADMIT_BATCH) X(PUT_TICKET_SETTLE_BATCH) X(MEMBERS) \
-    X(PUT_TICKET_DRAIN) X(DEGRADED_MARK)
+    X(PUT_TICKET_DRAIN) X(DEGRADED_MARK) X(PACK_DEGRADED)
 
 /* 1 when byte 0 of a log command names a command this build applies. */
 static inline int efs_md_cmd_applicable(uint8_t tag)

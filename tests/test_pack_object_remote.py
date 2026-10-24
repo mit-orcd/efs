@@ -9,7 +9,7 @@ from pathlib import Path
 import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/server/raft_host.c').read_text()
-a=s.index('static int host_pack_object_remote(')
+a=s.index('static uint32_t host_pack_degraded_mask(')
 b=s.index('\n}',s.index('int server_raft_host_pack_object(uint32_t group'))+2
 code=r'''
 #include "src/server/server_internal.h"
@@ -29,6 +29,10 @@ static int host_fwd_leader_pick(struct efs_raft_host *h,uint8_t g,int skip){(voi
 static int host_hosts(struct efs_raft_host *h,uint8_t g){(void)h;(void)g;return hosted;}
 static int host_read_index(struct efs_raft_host *h,uint8_t g,int *hint){(void)h;(void)g;*hint=-1;reads++;return read_rc;}
 uint32_t efs_pack_group_anchor(uint32_t g){return g==0?1:g==2?2:0;}
+static int mark_rc=EFS_ERR_NOT_FOUND;static uint8_t mark_mask;
+int efs_pack_degraded_get(struct efs_kv *kv,uint32_t g,uint64_t id,uint64_t gen,uint8_t *m,uint8_t *why){
+ (void)kv;(void)g;(void)id;(void)gen;(void)why;if(mark_rc==EFS_OK)*m=mark_mask;return mark_rc;}
+static uint32_t remote_degraded;
 int efs_pack_object_get(struct efs_kv *kv,uint32_t g,uint64_t id,uint64_t gen,struct efs_pack_object *o){
  (void)kv;if(get_rc)return get_rc;
  memset(o,0,sizeof(*o));
@@ -56,7 +60,8 @@ static int host_inode_rpc_peer(struct efs_raft_host *h,int rid,uint8_t type,cons
  struct efs_pack_object o;memset(&o,0,sizeof(o));
  o.ledger.segment_id=q->id+(bad_object[rid]?1:0);o.ledger.segment_generation=q->generation;
  o.ledger.publication_group=q->group;o.nodes[0]=5;
- size_t len;efs_pack_object_encode(&o,r->object,sizeof(r->object),&len);r->len=(uint32_t)len;r->rc=EFS_OK;return 0;}
+ size_t len;efs_pack_object_encode(&o,r->object,sizeof(r->object),&len);r->len=(uint32_t)len;r->rc=EFS_OK;
+ r->degraded=remote_degraded;return 0;}
 static void reset(void){calls=0;memset(asked,0,sizeof(asked));memset(fail,0,sizeof(fail));memset(refuse,0,sizeof(refuse));
  memset(missing,0,sizeof(missing));memset(bad_echo,0,sizeof(bad_echo));memset(bad_object,0,sizeof(bad_object));}
 '''+s[a:b]+r'''
@@ -83,9 +88,19 @@ int main(void){
  /* Voters of the other group are not asked for this one. */
  reset();voters=0x7u;fail[0]=fail[1]=fail[2]=1;assert(server_raft_host_pack_object(0,9,1,&o)==EFS_ERR_BUSY&&calls==3&&!asked[3]);
  voters=0xeu;
+ /* K37: the degraded mask rides the remote answer; refusals leave it BAD. */
+ uint32_t dg=0;
+ reset();remote_degraded=4;assert(server_raft_host_pack_state(2,77,3,&o,&dg)==EFS_OK&&dg==4);
+ reset();fail[1]=fail[2]=fail[3]=1;assert(server_raft_host_pack_state(2,77,3,&o,&dg)==EFS_ERR_BUSY&&dg==EFS_PACK_READ_DEGRADED_BAD);
+ remote_degraded=0;
  /* A hosting node reads locally: ReadIndex then the KV, no RPC. */
  reset();hosted=1;reads=0;host.raft_id=1;assert(server_raft_host_pack_object(2,77,3,&o)==EFS_OK&&!calls&&reads==1);
  read_rc=EFS_ERR_BUSY;assert(server_raft_host_pack_object(2,77,3,&o)==EFS_ERR_BUSY&&!calls);read_rc=0;
+ /* K37 local read: unmarked 0, the mark's mask, an unreadable mark BAD. */
+ assert(server_raft_host_pack_state(2,77,3,&o,&dg)==EFS_OK&&dg==0);
+ mark_rc=EFS_OK;mark_mask=2;assert(server_raft_host_pack_state(2,77,3,&o,&dg)==EFS_OK&&dg==2);
+ mark_rc=EFS_ERR_PROTO;assert(server_raft_host_pack_state(2,77,3,&o,&dg)==EFS_OK&&dg==EFS_PACK_READ_DEGRADED_BAD);
+ mark_rc=EFS_ERR_NOT_FOUND;
  /* Serving side. */
  struct efs_msg_pack_object_read q={.group=2,.id=77,.generation=3};
  struct efs_msg_pack_object_read_reply *r=calloc(1,sizeof(*r));assert(r);
@@ -94,7 +109,9 @@ int main(void){
  server_raft_host_pack_object_serve(&q,r);assert(r->rc==EFS_ERR_STALE&&reads==1&&!r->len);
  read_rc=0;server_raft_host_pack_object_serve(&q,r);assert(r->rc==EFS_ERR_NOT_FOUND&&!r->len);
  get_rc=0;server_raft_host_pack_object_serve(&q,r);
- assert(r->rc==EFS_OK&&r->len==24&&r->group==2&&r->id==77&&r->generation==3);
+ assert(r->rc==EFS_OK&&r->len==24&&r->group==2&&r->id==77&&r->generation==3&&!r->degraded);
+ mark_rc=EFS_OK;mark_mask=5;server_raft_host_pack_object_serve(&q,r);assert(r->rc==EFS_OK&&r->degraded==5);
+ mark_rc=EFS_ERR_NOT_FOUND;
  q.reserved=1;server_raft_host_pack_object_serve(&q,r);assert(r->rc==EFS_ERR_INVAL);q.reserved=0;
  q.group=1;server_raft_host_pack_object_serve(&q,r);assert(r->rc==EFS_ERR_INVAL);q.group=2;
  q.id=0;server_raft_host_pack_object_serve(&q,r);assert(r->rc==EFS_ERR_INVAL);
@@ -107,4 +124,4 @@ with tempfile.TemporaryDirectory(prefix='efs-pack-object-remote-') as directory:
     p=Path(directory)/'t.c';p.write_text(code)
     subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror','-pthread','-I'+str(root),'-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
     subprocess.run([str(p.with_suffix(''))],check=True)
-print('pack object remote read: leader then voters, hosting-voter ReadIndex only, every failure BUSY (never NOT_FOUND), local path unchanged PASS')
+print('pack object remote read: leader then voters, hosting-voter ReadIndex only, every failure BUSY (never NOT_FOUND), local path unchanged, K37 degraded mask beside the object PASS')

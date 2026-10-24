@@ -11,6 +11,7 @@
 #include <unistd.h>
 #define EFS_BENCH_BUILD
 #define EFS_SEGMENT_TEST_AUTHORITY
+#define EFS_SEGMENT_TEST_PACK_STATE
 #define server_gc_sync_roots real_gc_sync_roots
 #include "../src/server/store.c"
 #undef server_gc_sync_roots
@@ -48,6 +49,16 @@ int server_raft_host_pack_object(uint32_t group, uint64_t id, uint64_t gen, stru
     *out = seg_obj;
     out->ledger.phase = seg_phase;
     return EFS_OK;
+}
+
+/* K37: the segment's degraded-mark mask beside the object. */
+static uint32_t seg_mark;
+int server_raft_host_pack_state(uint32_t group, uint64_t id, uint64_t gen, struct efs_pack_object *out,
+                                uint32_t *degraded)
+{
+    int rc = server_raft_host_pack_object(group, id, gen, out);
+    if (degraded) *degraded = seg_mark;
+    return rc;
 }
 
 static char roots[2][256];
@@ -549,6 +560,112 @@ static void t_segment(void)
     assert(!seg_file(0x5e60001) && used() == base && pending() == 0);
     assert(server_compute_local_usage(&S) == base);
 }
+/* K37: the local verdict on a placed fragment, the audit exchange and the
+ * rebuild PUT: missing, torn (short) and corrupt (payload) copies are
+ * evidence; a rebuild is stored only while the mark names exactly this
+ * fragment of a published segment, replaces a bad copy and is idempotent. */
+static void seg_audit_req(uint8_t *req, uint32_t flags, uint64_t inc, uint64_t id, uint32_t n)
+{
+    memset(req, 0, EFS_SEGMENT_AUDIT_HEADER + EFS_SEGMENT_AUDIT_ITEM);
+    req[1] = (uint8_t)flags;
+    req[7] = (uint8_t)n;
+    for (int i = 0; i < 8; i++) req[8 + i] = (uint8_t)(inc >> (56 - 8 * i));
+    uint8_t *it = req + EFS_SEGMENT_AUDIT_HEADER;
+    for (int i = 0; i < 8; i++) { it[i] = (uint8_t)(id >> (56 - 8 * i)); it[8 + i] = i == 7; }
+    it[16] = 0;
+    it[22] = 0x40; /* geometry 16384 */
+    memcpy(it + 24, seg_obj.checksums[0], EFS_HASH_SIZE);
+}
+static int32_t seg_audit(uint32_t flags, uint64_t inc, uint64_t id, uint32_t n, uint32_t *v,
+                         uint32_t *audited)
+{
+    uint8_t req[EFS_SEGMENT_AUDIT_HEADER + EFS_SEGMENT_AUDIT_ITEM], *r = NULL;
+    uint32_t rl = 0;
+    seg_audit_req(req, flags, inc, id, n);
+    server_segment_audit(&S, req, EFS_SEGMENT_AUDIT_HEADER + n * EFS_SEGMENT_AUDIT_ITEM, &r, &rl);
+    assert(r && rl >= EFS_SEGMENT_AUDIT_REPLY);
+    int32_t rc = (int32_t)(((uint32_t)r[0] << 24) | ((uint32_t)r[1] << 16) | ((uint32_t)r[2] << 8) | r[3]);
+    uint32_t cnt = r[7];
+    assert(rl == EFS_SEGMENT_AUDIT_REPLY + cnt && (rc != EFS_OK || cnt == n));
+    uint64_t me = 0;
+    for (int i = 0; i < 8; i++) me = (me << 8) | r[8 + i];
+    assert(me == S.incarnation && r[23] == 1); /* settled: no uncertain root */
+    if (v) *v = cnt ? r[EFS_SEGMENT_AUDIT_REPLY] : 99;
+    if (audited) *audited = r[19];
+    free(r);
+    return rc;
+}
+static void t_segment_audit_rebuild(void)
+{
+    boot();
+    S.incarnation = 42;
+    const uint64_t id = 0x5e60201;
+    uint32_t v = 0, audited = 9;
+    char path[8192];
+    server_segment_path(&S, 0, id, 1, 0, path, sizeof(path));
+    seg_setup(id);
+    seg_mark = 0;
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_OK);
+    assert(server_segment_check(&S, 0, id, 1, 0, 16384, seg_obj.checksums[0]) == EFS_SEGMENT_AUDIT_OK);
+    assert(seg_audit(0, 0, id, 1, &v, &audited) == EFS_OK && v == EFS_SEGMENT_AUDIT_OK && !audited);
+    assert(seg_audit(0, 42, id, 1, &v, NULL) == EFS_OK && v == EFS_SEGMENT_AUDIT_OK);
+    assert(seg_audit(0, 41, id, 1, NULL, NULL) == EFS_ERR_STALE); /* restarted since */
+    /* Missing, torn (short file) and corrupt (payload) copies. */
+    assert(!unlink(path));
+    assert(seg_audit(0, 42, id, 1, &v, NULL) == EFS_OK && v == EFS_SEGMENT_AUDIT_MISSING);
+    seg_obj.ledger.state[0] = EFS_PACK_LIVE; /* switched: published, nothing pending */
+    seg_mark = 1;
+    seg_body[2] = EFS_SEGMENT_PUT_F_REBUILD;
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_OK);
+    assert(seg_audit(0, 42, id, 1, &v, NULL) == EFS_OK && v == EFS_SEGMENT_AUDIT_OK);
+    assert(!truncate(path, 4096));
+    assert(server_segment_check(&S, 0, id, 1, 0, 16384, seg_obj.checksums[0]) == EFS_SEGMENT_AUDIT_BAD);
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_OK); /* replaces the torn copy */
+    assert(server_segment_check(&S, 0, id, 1, 0, 16384, seg_obj.checksums[0]) == EFS_SEGMENT_AUDIT_OK);
+    {
+        int fd = open(path, O_RDWR);
+        uint8_t x = 0;
+        assert(fd >= 0 && pread(fd, &x, 1, 100) == 1);
+        x ^= 0xff;
+        assert(pwrite(fd, &x, 1, 100) == 1 && !fsync(fd));
+        close(fd);
+    }
+    assert(seg_audit(0, 42, id, 1, &v, NULL) == EFS_OK && v == EFS_SEGMENT_AUDIT_BAD);
+    /* No authority, no rebuild: unmarked, another fragment, two bits. */
+    seg_mark = 0;
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_ERR_STALE);
+    seg_mark = 2;
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_ERR_STALE);
+    seg_mark = 3;
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_ERR_STALE);
+    seg_mark = EFS_PACK_READ_DEGRADED_BAD;
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_ERR_STALE);
+    assert(server_segment_check(&S, 0, id, 1, 0, 16384, seg_obj.checksums[0]) == EFS_SEGMENT_AUDIT_BAD);
+    seg_body[2] = 0; /* the packer's copy path needs pending records */
+    seg_mark = 1;
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_ERR_STALE);
+    seg_body[2] = EFS_SEGMENT_PUT_F_REBUILD;
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_OK);
+    assert(server_segment_check(&S, 0, id, 1, 0, 16384, seg_obj.checksums[0]) == EFS_SEGMENT_AUDIT_OK);
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_OK); /* retried: already good */
+    uint8_t out[8192], s2[EFS_HASH_SIZE];
+    assert(!server_segment_read(&S, 0, id, 1, 0, 8192, out, s2));
+    assert(!memcmp(out, seg_body + EFS_SEGMENT_PUT_HEADER, 8192));
+    /* Header refusals. */
+    seg_body[2] = 2;
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_ERR_INVAL);
+    seg_body[2] = EFS_SEGMENT_PUT_F_REBUILD; seg_body[3] = 1;
+    assert(server_segment_put(&S, seg_body, sizeof(seg_body)) == EFS_ERR_INVAL);
+    seg_body[2] = seg_body[3] = 0;
+    /* A sweep completes only for this incarnation; COMPLETE carries no items. */
+    assert(seg_audit(EFS_SEGMENT_AUDIT_F_COMPLETE, 42, id, 1, NULL, NULL) == EFS_ERR_INVAL);
+    assert(seg_audit(EFS_SEGMENT_AUDIT_F_COMPLETE, 7, id, 0, NULL, NULL) == EFS_ERR_STALE);
+    assert(seg_audit(0, 0, id, 0, NULL, &audited) == EFS_OK && !audited);
+    assert(seg_audit(EFS_SEGMENT_AUDIT_F_COMPLETE, 42, id, 0, NULL, &audited) == EFS_OK && audited == 1);
+    assert(seg_audit(2, 42, id, 0, NULL, NULL) == EFS_ERR_INVAL);
+    seg_obj.ledger.state[0] = EFS_PACK_PENDING;
+    seg_mark = 0;
+}
 /* Crash after a segment acceptance: the version 2 record replays. */
 static void t_segment_crash(void)
 {
@@ -752,6 +869,7 @@ int main(void)
     run("superseded crash after accept",t_superseded_crash,1);
     run("superseded record replays",t_superseded_replay,0);
     run("segment PUT at a full quota uses the reserve",t_segment_quota,0);
+    run("K37 segment audit and rebuild PUT",t_segment_audit_rebuild,0);
     snprintf(cmd,sizeof(cmd),"rm -rf %s %s",roots[0],roots[1]);(void)system(cmd);
     printf("reclaim journal: PASS\n");
     return 0;

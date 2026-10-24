@@ -19,6 +19,7 @@
 #define EFS_KV_KIND_TRUNCATE_RECEIPT 47 /* inode/session: D25 truncate opid window */
 #define EFS_KV_KIND_TRUNC_PENDING 48 /* inode anchor/ino: D25 history awaiting sweep */
 #define EFS_KV_KIND_DEGRADED 51 /* group anchor/FileID/object/chunk: W154 stripe awaiting rebuild */
+#define EFS_KV_KIND_PACK_DEGRADED 249 /* group anchor/segment id/generation: K37 segment awaiting rebuild */
 /* 36-41 are reserved: never reuse. Snapshot import refuses them. */
 #define EFS_KV_KIND_RESERVED_MIN 36
 #define EFS_KV_KIND_RESERVED_MAX 41

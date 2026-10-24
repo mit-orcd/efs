@@ -590,6 +590,18 @@ shared packed segment:
   runs in idle batches, in a daily window, and on demand
   (`efs-mgmt pack-compact`). Tiny holes and cold segments go first, so an
   idle cluster ends with no holes.
+- **Protection (K37):** a segment holds files only with at least two of
+  its three fragments durable. One with a fragment missing carries a
+  degraded mark on its group's anchor shard (Raft tag 247, KV kind 249):
+  written with one PUT unacknowledged (packing or compaction), found
+  missing or torn by the group leader's audit of a member that returned
+  with a new incarnation, or a source proved lost during a rebuild. The
+  leader rebuilds the fragment from the other two, verifies it against the
+  segment's checksums, stores it on its placement node and clears the mark
+  only after that node read it back and verified it. A segment with two
+  fragments lost is reported unrecoverable and keeps its mark until its
+  files are rewritten or removed. `efs-mgmt status` counts degraded
+  segments, and the cluster state stays DEGRADED until they clear.
 
 There is no switch that disables the packer. The protocol is in
 [data plane: packed small files](protocols/data.md#packed-small-files-w125);

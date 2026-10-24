@@ -26,6 +26,27 @@ int efs_pack_object_key(uint32_t group, uint64_t id, uint64_t generation,
     put(out + 3, id, 8); put(out + 11, generation, 8);
     return EFS_OK;
 }
+int efs_pack_degraded_key(uint32_t group, uint64_t id, uint64_t generation,
+    uint8_t out[EFS_PACK_OBJECT_KEY_BYTES])
+{
+    int rc = efs_pack_object_key(group, id, generation, out);
+    if (rc == EFS_OK) out[2] = EFS_KV_KIND_PACK_DEGRADED;
+    return rc;
+}
+int efs_pack_degraded_get(struct efs_kv *kv, uint32_t group, uint64_t id, uint64_t generation,
+    uint8_t *mask, uint8_t *reasons)
+{
+    uint8_t key[EFS_PACK_OBJECT_KEY_BYTES], v[EFS_PACK_DEGRADED_VAL + 1];
+    uint32_t vl = sizeof(v);
+    if (!kv) return EFS_ERR_INVAL;
+    int rc = efs_pack_degraded_key(group, id, generation, key);
+    if (rc == EFS_OK) rc = efs_kv_get(kv, key, sizeof(key), v, &vl);
+    if (rc != EFS_OK) return rc;
+    if (vl != EFS_PACK_DEGRADED_VAL || !v[0] || v[0] > 7 || v[2] || v[3]) return EFS_ERR_PROTO;
+    if (mask) *mask = v[0];
+    if (reasons) *reasons = v[1];
+    return EFS_OK;
+}
 static int placement_valid(const struct efs_pack_object *o)
 {
     if (!o || !efs_pack_group_anchor(o->ledger.publication_group)) return 0;

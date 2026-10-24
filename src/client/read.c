@@ -453,7 +453,10 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
                 (const uint8_t (*)[EFS_HASH_SIZE])ce.checksums, packed_fetch, &pctx,
                 chunk_out, chunk_size, scratch, needed);
         efs_buf_free(scratch, (uint32_t)needed);
-        return prc;
+        /* K37: a segment fragment its node does not have is lost data, not
+         * a missing file: fewer than two fragments read is EIO, never
+         * ENOENT on an open file. */
+        return prc == EFS_ERR_NOT_FOUND ? EFS_ERR_IO : prc;
     }
     if (have_ce) {
         uint8_t zck[EFS_HASH_SIZE];

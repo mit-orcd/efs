@@ -180,6 +180,65 @@ int main(void)
     assert(efs_meta_apply_get_chunk(kv, ino[4], 0, &still) == EFS_OK &&
            still.coding_profile_id == EFS_META_PROFILE_K2F1 && still.generation == 0x204);
 
+    /* K37 segment degraded marks: one authority row per segment. */
+    {
+        const uint32_t G = EFS_RAFT_GROUP_SHARD;
+        uint8_t m = 0, why = 0;
+        int out = 9;
+        assert(efs_pack_degraded_get(kv, G, 77, 1, &m, &why) == EFS_ERR_NOT_FOUND);
+        /* Malformed commands are refused and write nothing. */
+        assert(efs_meta_apply_pack_degraded(kv, G, EFS_MD_PACK_DEGRADED_MARK, 77, 1, 0,
+                                            EFS_PACK_DEGRADED_R_WRITE, &out) == EFS_ERR_INVAL);
+        assert(efs_meta_apply_pack_degraded(kv, G, EFS_MD_PACK_DEGRADED_MARK, 77, 1, 8,
+                                            EFS_PACK_DEGRADED_R_WRITE, &out) == EFS_ERR_INVAL);
+        assert(efs_meta_apply_pack_degraded(kv, G, EFS_MD_PACK_DEGRADED_MARK, 77, 1, 4, 0, &out) ==
+               EFS_ERR_INVAL);
+        assert(efs_meta_apply_pack_degraded(kv, G, EFS_MD_PACK_DEGRADED_CLEAR, 77, 1, 3, 0, &out) ==
+               EFS_ERR_INVAL);
+        assert(efs_meta_apply_pack_degraded(kv, G, 9, 77, 1, 4, 0, &out) == EFS_ERR_INVAL);
+        assert(efs_meta_apply_pack_degraded(kv, EFS_RAFT_GROUP_SHARD2 + 1, EFS_MD_PACK_DEGRADED_MARK,
+                                            77, 1, 4, 1, &out) == EFS_ERR_INVAL);
+        /* An unknown segment holds nothing to protect. */
+        assert(efs_meta_apply_pack_degraded(kv, G, EFS_MD_PACK_DEGRADED_MARK, 999, 1, 4,
+                                            EFS_PACK_DEGRADED_R_WRITE, &out) == EFS_ERR_STALE && !out);
+        assert(efs_pack_degraded_get(kv, G, 999, 1, &m, &why) == EFS_ERR_NOT_FOUND);
+        /* Written degraded: fragment 2 not acknowledged. */
+        assert(efs_meta_apply_pack_degraded(kv, G, EFS_MD_PACK_DEGRADED_MARK, 77, 1, 4,
+                                            EFS_PACK_DEGRADED_R_WRITE, &out) == EFS_OK && out == 1);
+        assert(efs_pack_degraded_get(kv, G, 77, 1, &m, &why) == EFS_OK && m == 4 &&
+               why == EFS_PACK_DEGRADED_R_WRITE);
+        assert(efs_meta_apply_pack_degraded(kv, G, EFS_MD_PACK_DEGRADED_MARK, 77, 1, 4,
+                                            EFS_PACK_DEGRADED_R_WRITE, &out) == EFS_OK && !out);
+        /* A live segment's mark is never retired, and a clear decided for
+         * another fragment changes nothing. */
+        assert(efs_meta_apply_pack_degraded(kv, G, EFS_MD_PACK_DEGRADED_RETIRE, 77, 1, 4, 0, &out) ==
+               EFS_ERR_STALE && !out);
+        assert(efs_meta_apply_pack_degraded(kv, G, EFS_MD_PACK_DEGRADED_CLEAR, 77, 1, 1, 0, &out) ==
+               EFS_ERR_STALE && !out);
+        assert(efs_pack_degraded_get(kv, G, 77, 1, &m, NULL) == EFS_OK && m == 4);
+        /* The proven rebuild clears it; a replayed clear is a no-op. */
+        assert(efs_meta_apply_pack_degraded(kv, G, EFS_MD_PACK_DEGRADED_CLEAR, 77, 1, 4, 0, &out) ==
+               EFS_OK && out == 1);
+        assert(efs_pack_degraded_get(kv, G, 77, 1, &m, NULL) == EFS_ERR_NOT_FOUND);
+        assert(efs_meta_apply_pack_degraded(kv, G, EFS_MD_PACK_DEGRADED_CLEAR, 77, 1, 4, 0, &out) ==
+               EFS_OK && !out);
+        /* A second loss before the rebuild: two bits, unrecoverable. No
+         * clear removes it while the segment holds live records. */
+        assert(efs_meta_apply_pack_degraded(kv, G, EFS_MD_PACK_DEGRADED_MARK, 77, 1, 1,
+                                            EFS_PACK_DEGRADED_R_MISSING, &out) == EFS_OK && out == 1);
+        assert(efs_meta_apply_pack_degraded(kv, G, EFS_MD_PACK_DEGRADED_MARK, 77, 1, 2,
+                                            EFS_PACK_DEGRADED_R_SOURCE, &out) == EFS_OK && out == 1);
+        assert(efs_pack_degraded_get(kv, G, 77, 1, &m, &why) == EFS_OK && m == 3 &&
+               why == (EFS_PACK_DEGRADED_R_MISSING | EFS_PACK_DEGRADED_R_SOURCE));
+        assert(efs_meta_apply_pack_degraded(kv, G, EFS_MD_PACK_DEGRADED_CLEAR, 77, 1, 1, 0, &out) ==
+               EFS_ERR_STALE);
+        assert(efs_meta_apply_pack_degraded(kv, G, EFS_MD_PACK_DEGRADED_CLEAR, 77, 1, 2, 0, &out) ==
+               EFS_ERR_STALE);
+        assert(efs_meta_apply_pack_degraded(kv, G, EFS_MD_PACK_DEGRADED_RETIRE, 77, 1, 3, 0, &out) ==
+               EFS_ERR_STALE);
+        assert(efs_pack_degraded_get(kv, G, 77, 1, &m, NULL) == EFS_OK && m == 3);
+    }
+
     /* A replayed switch changes nothing: members are no longer PENDING. */
     assert(efs_meta_apply_pack_switch(kv, sw, &live) == EFS_OK && live == 0);
     assert(gc_records(kv) == gc0 + 4);
@@ -208,6 +267,16 @@ int main(void)
     assert(gc_records(kv) == gc0 + 4);
     /* A switch into a reclaiming segment is refused outright. */
     assert(efs_meta_apply_pack_switch(kv, sw, &live) == EFS_ERR_STALE);
+    /* K37: a reclaiming segment takes no new mark; its unrecoverable mark
+     * stays until the segment is retired (below). */
+    {
+        uint8_t m = 0;
+        int out = 9;
+        assert(efs_meta_apply_pack_degraded(kv, EFS_RAFT_GROUP_SHARD, EFS_MD_PACK_DEGRADED_MARK, 77, 1,
+                                            4, EFS_PACK_DEGRADED_R_MISSING, &out) == EFS_ERR_STALE &&
+               !out);
+        assert(efs_pack_degraded_get(kv, EFS_RAFT_GROUP_SHARD, 77, 1, &m, NULL) == EFS_OK && m == 3);
+    }
 
     /* RETIRE forgets a reclaiming segment, skips an ACTIVE one, and a
      * replay (or an unknown id) is a no-op. */
@@ -218,12 +287,33 @@ int main(void)
         assert(!efs_pack_ledger_init(image, geometry, refs, 1, &owner, 0x7, 0, &act->ledger));
         for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) act->nodes[i] = (efs_node_id_t)(i + 1);
         assert(efs_meta_apply_pack_admit(kv, EFS_RAFT_GROUP_SHARD, act) == EFS_OK);
+        /* K37: an ACTIVE segment's mark survives a RETIRE that skips it; a
+         * malformed mark row is reported and never overwritten. */
+        int out = 0;
+        uint8_t m = 0;
+        assert(efs_meta_apply_pack_degraded(kv, EFS_RAFT_GROUP_SHARD, EFS_MD_PACK_DEGRADED_MARK, 78, 1,
+                                            2, EFS_PACK_DEGRADED_R_BAD, &out) == EFS_OK && out == 1);
         uint64_t ids[3] = {77, 78, 999}, gens[3] = {1, 1, 1};
         uint32_t retired = 9;
         assert(efs_meta_apply_pack_retire(kv, EFS_RAFT_GROUP_SHARD, ids, gens, 3, &retired) == EFS_OK);
         assert(retired == 1);
         assert(efs_pack_object_get(kv, EFS_RAFT_GROUP_SHARD, 77, 1, cur) == EFS_ERR_NOT_FOUND);
         assert(efs_pack_object_get(kv, EFS_RAFT_GROUP_SHARD, 78, 1, cur) == EFS_OK);
+        /* The retired segment's mark went with it in the same apply. */
+        assert(efs_pack_degraded_get(kv, EFS_RAFT_GROUP_SHARD, 77, 1, &m, NULL) == EFS_ERR_NOT_FOUND);
+        assert(efs_pack_degraded_get(kv, EFS_RAFT_GROUP_SHARD, 78, 1, &m, NULL) == EFS_OK && m == 2);
+        {
+            uint8_t key[EFS_PACK_OBJECT_KEY_BYTES], bad[4] = {5, 1, 0, 0};
+            assert(efs_pack_degraded_key(EFS_RAFT_GROUP_SHARD, 78, 1, key) == EFS_OK);
+            assert(efs_kv_put(kv, key, sizeof(key), bad, sizeof(bad)) == EFS_OK);
+            assert(efs_pack_degraded_get(kv, EFS_RAFT_GROUP_SHARD, 78, 1, &m, NULL) == EFS_OK && m == 5);
+            bad[2] = 1;
+            assert(efs_kv_put(kv, key, sizeof(key), bad, sizeof(bad)) == EFS_OK);
+            assert(efs_pack_degraded_get(kv, EFS_RAFT_GROUP_SHARD, 78, 1, &m, NULL) == EFS_ERR_PROTO);
+            assert(efs_meta_apply_pack_degraded(kv, EFS_RAFT_GROUP_SHARD, EFS_MD_PACK_DEGRADED_MARK, 78,
+                                                1, 1, EFS_PACK_DEGRADED_R_BAD, &out) == EFS_ERR_PROTO);
+            assert(efs_kv_del(kv, key, sizeof(key)) == EFS_OK);
+        }
         assert(efs_meta_apply_pack_retire(kv, EFS_RAFT_GROUP_SHARD, ids, gens, 3, &retired) == EFS_OK &&
                retired == 0);
         free(act);
@@ -231,6 +321,6 @@ int main(void)
 
     free(image); free(o); free(sw); free(wire); free(back); free(cur);
     efs_kv_mem_free(kv);
-    puts("pack switch: admit, exact-source CAS, cancel, replay, overwrite release, sweep release, retire, candidate index, backfill cursor PASS");
+    puts("pack switch: admit, exact-source CAS, cancel, replay, overwrite release, sweep release, retire, candidate index, backfill cursor, K37 degraded marks PASS");
     return 0;
 }

@@ -589,6 +589,16 @@ void server_handle_conn(struct efs_conn *conn)
             efs_conn_send_msg(conn, EFS_MSG_PUT_SEGMENT_REPLY, &rep, sizeof(rep));
             break;
         }
+        case EFS_MSG_SEGMENT_AUDIT: {
+            /* K37: verify the named segment fragments placed on this node. */
+            uint8_t *reply = NULL;
+            uint32_t rlen = 0;
+            server_segment_audit(g_server, payload, payload_len, &reply, &rlen);
+            if (!reply) { close_conn = 1; break; }
+            efs_conn_send_msg(conn, EFS_MSG_SEGMENT_AUDIT_REPLY, reply, rlen);
+            free(reply);
+            break;
+        }
         case EFS_MSG_GET_SEGMENT: {
             uint8_t *reply = NULL;
             uint32_t rlen = 0;
@@ -835,6 +845,24 @@ void server_handle_conn(struct efs_conn *conn)
                 __atomic_load_n(&g_server->put_orphan_deleted, __ATOMIC_RELAXED);
             reply.put_orphan_failures =
                 __atomic_load_n(&g_server->put_orphan_failures, __ATOMIC_RELAXED);
+            for (int g = 0; g < 2; g++) {
+                reply.degraded_segments[g] =
+                    __atomic_load_n(&g_server->degraded_segments[g], __ATOMIC_RELAXED);
+                reply.unrecoverable_segments[g] =
+                    __atomic_load_n(&g_server->unrecoverable_segments[g], __ATOMIC_RELAXED);
+            }
+            reply.segment_sampled =
+                __atomic_load_n(&g_server->segment_sampled_mask, __ATOMIC_RELAXED);
+            reply.segments_rebuilt =
+                __atomic_load_n(&g_server->segments_rebuilt, __ATOMIC_RELAXED);
+            reply.segment_rebuild_failures =
+                __atomic_load_n(&g_server->segment_rebuild_failures, __ATOMIC_RELAXED);
+            reply.segment_marks_retired =
+                __atomic_load_n(&g_server->segment_marks_retired, __ATOMIC_RELAXED);
+            reply.segment_audit_marked =
+                __atomic_load_n(&g_server->segment_audit_marked, __ATOMIC_RELAXED);
+            reply.segment_audit_checked =
+                __atomic_load_n(&g_server->segment_audit_checked, __ATOMIC_RELAXED);
             efs_conn_send_msg(conn, EFS_MSG_STATUS_REPLY, &reply, sizeof(reply));
             break;
         }
