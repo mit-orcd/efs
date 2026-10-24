@@ -63,7 +63,8 @@ def capacity_logical(caps):
 
 def status(i):
     rc, out = mgmt(env, 'status', c.ep(i))
-    assert rc == 0, out
+    # status exits non-zero while a member is down; the report still counts.
+    assert 'Cluster nodes (' in out, out
     return out
 
 

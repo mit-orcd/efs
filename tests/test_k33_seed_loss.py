@@ -15,9 +15,10 @@ TMPDIR, free ports (never 17xxx), discovery off; efs-fuse when available.
    through node 5 (storage only: it forwards). Every member that is up
    reports six members; node 1 is listed as down, never dropped.
 4. Node 5 is frozen (SIGSTOP) for longer than the heartbeat down threshold,
-   then node 6 stops too: both are unreachable, both stay members (six in
-   every table, ids unchanged); a file written meanwhile reads back.
-   Node 5 resumes and node 6 restarts.
+   then node 6 stops too: with the seed, three members are unreachable and
+   all three stay members (six in every table, ids unchanged). Node 5 resumes and node 6 restarts; new files are
+   written with only the seed away (three unreachable members exceed the
+   one failure 2+1 keeps for writes).
 5. The seed restarts from its store: it learns revisions 2 to 4 (six
    members) without any operator step, group 0 voters stay {1,2,3}, node 1
    is retired from group 2. A new mount through node 1 reads every file.
@@ -108,12 +109,20 @@ try:
         t = c.members(i)
         assert sorted(t) == [1, 2, 3, 4, 5, 6], (i, t)
         assert {1, 6} <= down_rows(c, i), (i, t)
-    if a:
-        write(a, 'f3')
-        verify(a, 'nodes 1, 5 and 6 unreachable')
     c.procs[5].send_signal(signal.SIGCONT)
     c.restart(6)
     c.wait_log(6, r'raft-host: up raft_id=5 n=6 formed', timeout=60)
+    end = time.time() + 60
+    while down_rows(c, 2) != {1} and time.time() < end:
+        time.sleep(0.5)
+    assert down_rows(c, 2) == {1}, c.members(2)
+    if a:
+        # Writes need three reachable fragment nodes per stripe (2+1 keeps
+        # one failure): with three of six members away a stripe can have two
+        # of them, so new files are written once only the seed is away.
+        verify(a, 'seed down, nodes 5 and 6 back')
+        write(a, 'f3')
+        verify(a, 'seed down, new files')
 
     # 5. The seed returns and learns what it missed.
     c.start(1)
