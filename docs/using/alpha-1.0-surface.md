@@ -111,13 +111,13 @@ and waits for the A6 inventory and the A7/A8 decisions.
 | `EFS_COMMANDS_SERVER=0\|1` | server | in | Default 1; 0 stops a node serving queries; set it the same on every node |
 | `EFS_EXPIRY` | server | out | Expiry is off in alpha |
 | `EFS_FUSE_EXPORT` | client | out | NFS re-export is out (W152) |
-| `EFS_CLIENT_META_MB`, `EFS_DCACHE_HARD_BYTES`, `EFS_DCACHE_DRAIN_BYTES`, `EFS_DCACHE_BYTES`, `EFS_CLIENT_CONNS_PER_NODE`, `EFS_RDMA_BUFS`, `EFS_NUMA_NODE`, `EFS_FEATURES_TTL_MS` | client | out, pending A8 | Capacity and placement tunables; defaults are the qualified values |
-| `EFS_QUERY_DISK_MAX_MIB`, `EFS_QUERY_DISK_TOTAL_MIB`, `EFS_QUERY_DISK_RESERVE_MIB`, `EFS_QUERY_CATALOG_MIB`, `EFS_QUERY_REFRESH_MS`, `EFS_QUERY_EXPORT_MAX_MS` | server | out, pending A8 | Query-cache sizing; a large namespace may need them, so A8 must decide |
+| `EFS_CLIENT_META_MB`, `EFS_DCACHE_HARD_BYTES`, `EFS_DCACHE_DRAIN_BYTES`, `EFS_DCACHE_BYTES`, `EFS_CLIENT_CONNS_PER_NODE`, `EFS_RDMA_BUFS`, `EFS_NUMA_NODE` | client | out, pending A8 | Capacity and placement tunables; defaults are the qualified values |
+| `EFS_QUERY_DISK_MAX_MIB`, `EFS_QUERY_DISK_TOTAL_MIB`, `EFS_QUERY_DISK_RESERVE_MIB`, `EFS_QUERY_REFRESH_MS`, `EFS_QUERY_EXPORT_MAX_MS` | server | out, pending A8 | Query-cache sizing; a large namespace may need them, so A8 must decide |
 | `EFS_PACK_*`, `EFS_REBUILD_PER_PASS` | server | out | Internal tunables; D37 allows no setting that disables the packer |
 | `EFS_READ_VERIFY`, `EFS_READ_PREFETCH`, `EFS_FUSE_SPLICE_READ`, `EFS_METADATA_BALANCE`, `EFS_QUERY_BACKEND`, `EFS_RAFT_APPLIED_INTERVAL_MS`, `EFS_GC_BACKLOG_IDLE_MS`, `EFS_RDMA_FIRST`, `EFS_KV_BLOOM` | both | out | A/B selectors and experiments; A7 removes or decides them |
-| `EFS_GC_DISABLE` | server | out | Debug only; stops reclaim |
+| `EFS_FAULT_GC_DISABLE` | server | out | Test builds only (`EFS_FAULTS=1`); was `EFS_GC_DISABLE` |
 | `*_DBG`, `*_TRACE`, `*_PROF`, `*_OBS`, `EFS_LOG_TS`, `EFS_PERF_*`, `EFS_STRACE_*` | both | out | Observability and profiling |
-| `EFS_FAULT_*`, `EFS_KV_COMPACT_DIE` | both | out | Test builds only; a normal build names them as ignored at startup (W149) |
+| `EFS_FAULT_*` | both | out | Test builds only; a normal build names them as ignored at startup (W149) |
 | `EFS_FUSE_LOG`, `FUSE_THREAD_STACK`, `MALLOC_ARENA_MAX` | `client.sh` | in, wrapper defaults | The wrapper sets the last two when unset |
 
 The [power-user page](power-user.md) describes most of these variables; its
@@ -146,3 +146,5 @@ removed), its default, whether its effective value is visible and where,
 and the A11 configuration dimension it belongs to. If W122 is taken into
 alpha, its listing replaces the last three rows of the table above; if not,
 F4 lists "no effective-settings listing" as a limitation.
+
+Removed settings (A6, `docs/status/a6-settings-inventory-20261024.md`) such as `EFS_FEATURES_TTL_MS`, `EFS_QUERY_CATALOG_MIB`, `EFS_GC_DISABLE` and `EFS_KV_COMPACT_DIE` are not settings any more: efsd and efs-fuse stop with a message naming one that is still set.
