@@ -4431,6 +4431,81 @@ int efs_meta_apply_degraded_clear(struct efs_kv *kv, const struct efs_meta_degra
     return rc;
 }
 
+int efs_meta_apply_degraded_mark(struct efs_kv *kv, efs_ino_t ino, uint64_t inode_gen,
+                                 uint64_t object_gen, uint32_t ci, uint32_t fi,
+                                 efs_node_id_t node, int *added)
+{
+    struct efs_meta_chunk ch;
+    struct efs_meta_delta ds[EFS_CHUNK_DELTA_MAX];
+    struct efs_meta_degraded d, cur;
+    uint8_t key[EFS_KV_KEY_MAX], val[EFS_META_DEGRADED_VAL];
+    struct efs_kv_item it;
+    uint32_t n = 0, i, kl = 0, vn = sizeof(val);
+    int rc, found = 0;
+
+    if (added)
+        *added = 0;
+    if (!kv || !ino || !inode_gen || !object_gen || fi >= EFS_NUM_FRAGMENTS || !node ||
+        node > EFS_MAX_NODES)
+        return EFS_ERR_INVAL;
+    memset(&d, 0, sizeof(d));
+    rc = efs_meta_apply_get_chunk_row(kv, ino, inode_gen, ci, &ch, ds, EFS_CHUNK_DELTA_MAX,
+                                      &n, NULL);
+    if (rc != EFS_OK)
+        return rc;
+    /* The same object test as efs_meta_degraded_live: the base (never a
+     * packed reference) or a live span with this generation. */
+    if (ch.coding_profile_id != EFS_META_PROFILE_PACK && ch.generation == object_gen) {
+        memcpy(d.nodes, ch.nodes, sizeof(d.nodes));
+        memcpy(d.checksums, ch.checksums, sizeof(d.checksums));
+        found = 1;
+    }
+    if (n > EFS_CHUNK_DELTA_MAX)
+        n = EFS_CHUNK_DELTA_MAX;
+    for (i = 0; !found && i < n; i++) {
+        if (!ds[i].len || ds[i].generation != object_gen)
+            continue;
+        memcpy(d.nodes, ds[i].nodes, sizeof(d.nodes));
+        memcpy(d.checksums, ds[i].checksums, sizeof(d.checksums));
+        found = 1;
+    }
+    if (!found)
+        return EFS_ERR_NOT_FOUND;
+    if (d.nodes[fi] != node)
+        return EFS_ERR_STALE;
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
+        if (!d.nodes[i] || d.nodes[i] > EFS_MAX_NODES)
+            return EFS_ERR_PROTO;
+    d.ino = ino;
+    d.inode_gen = inode_gen;
+    d.object_gen = object_gen;
+    d.chunk_index = ci;
+    d.lane = (uint8_t)(ci % EFS_META_LANES);
+    d.missing_mask = (uint8_t)(1u << fi);
+    rc = degraded_key(ino, object_gen, d.lane, ci, key, &kl);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_kv_get(kv, key, kl, val, &vn);
+    if (rc == EFS_OK) {
+        rc = efs_meta_unpack_degraded(key, kl, val, vn, &cur);
+        if (rc != EFS_OK)
+            return rc;
+        /* Published degraded already (or marked by an earlier fsync). */
+        return cur.missing_mask == d.missing_mask ? EFS_OK : EFS_ERR_STALE;
+    }
+    if (rc != EFS_ERR_NOT_FOUND)
+        return rc;
+    efs_meta_pack_degraded(val, &d);
+    it = (struct efs_kv_item){EFS_KV_PUT, key, kl, val, EFS_META_DEGRADED_VAL};
+    rc = meta_write_batch(kv, &it, 1);
+    if (rc != EFS_OK)
+        return rc;
+    degraded_note(((uint32_t)key[0] << 8) | key[1], 1);
+    if (added)
+        *added = 1;
+    return EFS_OK;
+}
+
 /* Queue the deletion of `gen`'s degraded mark when one exists. A known-zero
  * count for the anchor skips the lookup. *removed counts queued deletes. */
 static int degraded_retire(struct efs_kv *kv, struct efs_kv_item *it, uint32_t *n,

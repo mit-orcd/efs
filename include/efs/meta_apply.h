@@ -1109,6 +1109,16 @@ int efs_meta_degraded_live(struct efs_kv *kv, const struct efs_meta_degraded *d)
 #define EFS_META_DEGRADED_ORPHANED 2
 int efs_meta_apply_degraded_clear(struct efs_kv *kv, const struct efs_meta_degraded *d,
                                   int rebuilt, int *outcome);
+/* EFS_MD_CMD_DEGRADED_MARK apply (K35): mark fragment `fi` of object_gen
+ * (the base or a live span of the chunk row) missing, nodes and checksums
+ * taken from the row. OK when written or already present with the same
+ * fragment; NOT_FOUND when the row no longer references the object; STALE
+ * when the row names another node for `fi` or a mark names another
+ * fragment (the stripe would rest on one fragment). *added is 1 when
+ * this call wrote the mark. */
+int efs_meta_apply_degraded_mark(struct efs_kv *kv, efs_ino_t ino, uint64_t inode_gen,
+                                 uint64_t object_gen, uint32_t ci, uint32_t fi,
+                                 efs_node_id_t node, int *added);
 /* Reap marker value: [inode_generation:8][active_lanes:8]. */
 #define EFS_META_REAP_VAL 16
 

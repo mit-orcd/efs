@@ -219,6 +219,7 @@ test-report-pressure:
 	python3 tests/test_get_pair_budget.py
 	python3 tests/test_get_pair_readiness.py
 	python3 tests/test_put_reply_deadline.py
+	python3 tests/test_k35_placement.py
 	python3 tests/test_put_tcp_frame.py
 	python3 tests/test_put_window_deadline.py
 	python3 tests/test_write_budget.py
@@ -1000,6 +1001,7 @@ test-long: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_k33_client_view.py
 	python3 tests/test_k33_interrupt.py
 	python3 tests/test_k33_payload.py
+	python3 tests/test_k35_fsync_degraded.py
 	python3 tests/test_b_geometry.py
 	python3 tests/test_k33_seed_loss.py
 	python3 tests/test_k33_bookkeeping.py

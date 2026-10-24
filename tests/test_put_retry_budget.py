@@ -25,7 +25,13 @@ static void efs_client_put_release(uint64_t seq,int landed){assert(seq==admits&&
 static int efs_client_node_is_down(efs_node_id_t n){(void)n;return 0;}
 static void node_note_full(efs_node_id_t n){assert(n==3);fulls++;}
 /* B5: a full member's slot moves to the spare (node 4) while one is left. */
-static void reroute_untried_fragments(efs_ino_t i,uint32_t c,efs_node_id_t *n){(void)i;(void)c;if(fulls&&spare_left&&n[2]==3){n[2]=4;spare_left--;}}
+static unsigned aways,stripes,drops;static int stripe_rc=EFS_OK,degrade_hard;
+static void node_note_away(efs_node_id_t n){assert(n==3);aways++;}
+static void reroute_untried_fragments(efs_ino_t i,uint32_t c,efs_node_id_t *n){(void)i;(void)c;if((fulls||aways)&&spare_left&&n[2]==3){n[2]=4;spare_left--;}}
+/* K35: every acknowledged object is recorded with its acknowledgements. */
+static int efs_client_stripe_note(const struct efs_put_ticket *t,const uint64_t *seq,const uint64_t *epoch)
+{assert(t->object==77);for(unsigned i=0;i<3;i++)assert(seq[i]?epoch[i]==9:!epoch[i]);stripes++;return stripe_rc;}
+static void efs_client_degraded_drop(efs_ino_t ino,uint32_t ci,uint64_t gen){assert(ino==1&&!ci&&gen==77);drops++;}
 static void efs_client_conn_invalidate_node(efs_node_id_t n){(void)n;invalidations++;}
 static void efs_client_nodes_force_reprobe(void){reprobes++;}
 const char *efs_strerror(int rc){(void)rc;return "injected";}
@@ -35,13 +41,13 @@ static int dgobj_note(efs_ino_t ino,uint32_t ci,uint64_t gen,uint32_t mask)
 {(void)ino;(void)ci;assert(gen==77);notes++;noted_mask=mask;return note_rc;}
 static void degraded_ack_log(efs_ino_t ino,uint32_t ci,uint64_t gen,const efs_node_id_t *nodes,int fi)
 {(void)ino;(void)ci;(void)gen;(void)nodes;assert(fi==2);logs++;}
-static int put_fragments_parallel_once(const struct efs_put_ticket *t,const uint8_t **fragments,int *failed,int *acked,int *quota)
-{(void)fragments;assert(t->object==77&&t->id.seq==admits);assert(deadline&&acked&&quota);calls++;for(unsigned i=0;i<3;i++)failed[i]=hard_fail?1:2;usleep(5000);
+static int put_fragments_parallel_once(const struct efs_put_ticket *t,const uint8_t **fragments,int *failed,int *acked,int *quota,uint64_t *seq,uint64_t *epoch)
+{(void)fragments;assert(t->object==77&&t->id.seq==admits);assert(deadline&&acked&&quota&&seq&&epoch);calls++;for(unsigned i=0;i<3;i++)failed[i]=hard_fail||(degrade_hard&&i==2&&t->nodes[2]==3)?1:2;usleep(5000);
  int rc=recover_busy && calls>2 ? EFS_OK : terminal;
  /* full_slot: that member refuses as full after the other two ACK. */
  if(full_slot>=0 && t->nodes[full_slot]==3){for(unsigned i=0;i<3;i++){if((int)i==full_slot)quota[i]=1;else acked[i]=1;}return EFS_OK;}
  /* Acks from an earlier attempt of the same object still count. */
- if(rc==EFS_OK)for(unsigned i=0;i<3;i++)if(!degrade||i!=2)acked[i]=1;
+ if(rc==EFS_OK)for(unsigned i=0;i<3;i++)if(!degrade||i!=2||t->nodes[2]!=3){acked[i]=1;seq[i]=calls*3+i+1;epoch[i]=9;}
  return rc;}
 '''+fn('report_retry_pause')+fn('put_fragments_parallel_run')+fn('efs_client_put_fragments_parallel')+r'''
 #define PUT(t) efs_client_put_fragments_parallel(1,0,nodes,fragments,1,checksums,0,0,t)
@@ -102,14 +108,36 @@ int main(void){
  assert(PUT(&t)==EFS_ERR_QUOTA);
  assert(admits==before+1&&releases==rel+1&&fulls==1&&notes==nb&&nodes[2]==3);
  full_slot=-1;
+ /* K35: a member that failed hard on a two-fragment acknowledgement: with
+  * a spare the object is placed again there (new ticket, the degraded one
+  * released and its W154 record dropped) and stored on three; without one
+  * the degraded acknowledgement stands. Either way the stored object is
+  * recorded for fsync, and an unrecordable one fails the write. */
+ calls=0;terminal=EFS_OK;degrade=1;degrade_hard=1;spare_left=1;aways=0;fulls=0;before=admits;rel=releases;
+ unsigned st=stripes,dr=drops,inv=invalidations;nb=notes;deadline=report_clock_ms()+500;
+ /* Only node 3 is dead: the object placed again on node 4 is a full stripe. */
+ assert(PUT(&t)==EFS_OK);
+ assert(aways==1&&admits==before+2&&releases==rel+1&&drops==dr+1&&nodes[2]==4&&t.nodes[2]==4);
+ assert(stripes==st+1&&notes==nb+1);
+ /* The missing fragment was sent once more on a fresh connection first. */
+ assert(calls==3&&invalidations==inv+1);
+ nodes[2]=3;calls=0;spare_left=0;aways=0;before=admits;rel=releases;st=stripes;dr=drops;inv=invalidations;
+ deadline=report_clock_ms()+500;
+ assert(PUT(&t)==EFS_OK);
+ assert(aways==1&&admits==before+1&&releases==rel&&drops==dr&&nodes[2]==3&&stripes==st+1&&notes==nb+2);
+ assert(calls==2&&invalidations==inv+1);
+ degrade=0;degrade_hard=0;stripe_rc=EFS_ERR_BUSY;calls=0;rel=releases;dr=drops;
+ deadline=report_clock_ms()+500;
+ assert(PUT(&t)==EFS_ERR_BUSY&&releases==rel+1&&drops==dr+1);
+ stripe_rc=EFS_OK;
  return 0;
 }
 '''
 # Moved from the retired tests/test_put_hint.py (W154): every outer attempt
 # resends the same object (the admitted ticket) and unions its acknowledgements.
-assert 'rc = put_fragments_parallel_once(ticket, fragments, failed, acked, quota);' in s
+assert 'rc = put_fragments_parallel_once(ticket, fragments, failed, acked, quota, seq, epoch);' in s
 with tempfile.TemporaryDirectory(prefix='efs-put-retry-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=5)
-print('PUT retry: admission inside the budget, one ticket per object across retries, inherited backoff, no expired sends/reprobes, terminal STALE/QUOTA/NET release the ticket, a full member is placed around or ENOSPC, never degraded PASS')
+print('PUT retry: admission inside the budget, one ticket per object across retries, inherited backoff, no expired sends/reprobes, terminal STALE/QUOTA/NET release the ticket, a full member is placed around or ENOSPC, never degraded, an unreachable one resent once, then placed around where a spare exists (K35), every stored object recorded for fsync PASS')

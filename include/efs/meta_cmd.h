@@ -155,6 +155,15 @@
  * ledger (efs_put_ticket_drain). Refused (BUSY) behind a missing shard
  * rejection floor or a pending K14 stage; a logical verdict. */
 #define EFS_MD_CMD_PUT_TICKET_DRAIN 250
+/* K35 (D42, W154) on the lane shard's group, proposed by a client fsync:
+ * [tag][ino:8][inode_gen:8][object_gen:8][ci:4][fragment:1][node:4], 34 B.
+ * COMMIT proved two fragments of a published object durable but not this
+ * one (its node down, uncertain or of another incarnation): record the
+ * object's degraded mark from its chunk row (efs_meta_apply_degraded_mark)
+ * so the rebuild on return restores it. A logical verdict: OK marked (or
+ * already marked so), NOT_FOUND no longer live, STALE the row disagrees. */
+#define EFS_MD_CMD_DEGRADED_MARK 249
+#define EFS_MD_DEGRADED_MARK_LEN 34u
 #define EFS_MD_PUT_TICKET_DRAIN_LEN 25u
 #define EFS_MD_TXN_BATCH_MAX 96u /* commands per entry */
 #define EFS_MD_CMD_SESSION 9 /* matches sim SIM_CMD_SESSION */
@@ -291,7 +300,7 @@
     X(BOOTSTRAP_LANE) X(TRUNC_SWEEP) X(SWEEP_DONE) X(RETIRE) X(TXN_RETIRE) \
     X(DEGRADED_CLEAR) X(PUT_ORPHAN_ACK) X(TXN_BATCH) \
     X(PUT_TICKET_ADMIT_BATCH) X(PUT_TICKET_SETTLE_BATCH) X(MEMBERS) \
-    X(PUT_TICKET_DRAIN)
+    X(PUT_TICKET_DRAIN) X(DEGRADED_MARK)
 
 /* 1 when byte 0 of a log command names a command this build applies. */
 static inline int efs_md_cmd_applicable(uint8_t tag)

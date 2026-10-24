@@ -2407,6 +2407,47 @@ static int apply_degraded_clear_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return rc;
 }
 
+/* K35: the lane shard group of an EFS_MD_CMD_DEGRADED_MARK (the mark's
+ * group, as for DEGRADED_CLEAR). */
+static uint8_t degraded_mark_cmd_group(const uint8_t *cmd)
+{
+    return efs_raft_shard_group(efs_kv_lane_shard(rd64be(cmd + 1),
+                                                  (uint8_t)(rd32be(cmd + 25) % EFS_META_LANES)));
+}
+
+/* EFS_MD_CMD_DEGRADED_MARK [ino:8][inode_gen:8][object_gen:8][ci:4][fi:1]
+ * [node:4]. A malformed entry halts; NOT_FOUND / STALE are verdicts. */
+static int apply_degraded_mark_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                                   uint32_t clen, uint64_t index, uint8_t group)
+{
+    efs_ino_t ino;
+    uint32_t ci, fi;
+    int added = 0, rc;
+
+    if (clen != EFS_MD_DEGRADED_MARK_LEN || !rd64be(cmd + 1) || !rd64be(cmd + 9) ||
+        !rd64be(cmd + 17) || cmd[29] >= EFS_NUM_FRAGMENTS || !rd32be(cmd + 30) ||
+        rd32be(cmd + 30) > EFS_MAX_NODES)
+        return EFS_ERR_UNSUPPORTED;
+    if (group != degraded_mark_cmd_group(cmd))
+        return EFS_ERR_INVAL;
+    ino = rd64be(cmd + 1);
+    ci = rd32be(cmd + 25);
+    fi = cmd[29];
+    rc = efs_meta_apply_degraded_mark(h->kv, ino, rd64be(cmd + 9), rd64be(cmd + 17), ci, fi,
+                                      rd32be(cmd + 30), &added);
+    if (rc == EFS_OK && added)
+        fprintf(stderr, "raft-host: degraded mark ino=%llu ci=%u gen=%llx fragment=%u "
+                "node=%u: COMMIT did not prove it durable; rebuild on return\n",
+                (unsigned long long)ino, ci, (unsigned long long)rd64be(cmd + 17), fi,
+                rd32be(cmd + 30));
+    else if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND)
+        fprintf(stderr, "raft-host: apply degraded-mark rc=%d index=%llu ino=%llu ci=%u "
+                "gen=%llx fragment=%u\n", rc, (unsigned long long)index,
+                (unsigned long long)ino, ci, (unsigned long long)rd64be(cmd + 17), fi);
+    h->apply_extra = (uint64_t)added;
+    return rc;
+}
+
 /* EFS_MD_CMD_GC_ACK on the group whose anchor shard holds the records:
  * [cnt:2][(ino:8)(gen:8)(lane:1)(ci:4)(frag:1)]*cnt — one fragment of each
  * record was deleted (or was already gone) on its target node. */
@@ -3433,7 +3474,8 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_SWITCH ||
            cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX || cmd[0] == EFS_MD_CMD_PACK_INDEX ||
            cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
-           cmd[0] == EFS_MD_CMD_DEGRADED_CLEAR || cmd[0] == EFS_MD_CMD_PUT_ORPHAN_ACK ||
+           cmd[0] == EFS_MD_CMD_DEGRADED_CLEAR || cmd[0] == EFS_MD_CMD_DEGRADED_MARK ||
+           cmd[0] == EFS_MD_CMD_PUT_ORPHAN_ACK ||
            cmd[0] == EFS_MD_CMD_PUT_TICKET_DRAIN ||
            cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP)
               ? EFS_OK
@@ -3467,7 +3509,8 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
          cmd[0] == EFS_MD_CMD_PACK_ADMIT || cmd[0] == EFS_MD_CMD_PACK_SWITCH ||
          cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX || cmd[0] == EFS_MD_CMD_PACK_INDEX ||
          cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
-         cmd[0] == EFS_MD_CMD_DEGRADED_CLEAR || cmd[0] == EFS_MD_CMD_PUT_ORPHAN_ACK ||
+         cmd[0] == EFS_MD_CMD_DEGRADED_CLEAR || cmd[0] == EFS_MD_CMD_DEGRADED_MARK ||
+           cmd[0] == EFS_MD_CMD_PUT_ORPHAN_ACK ||
          cmd[0] == EFS_MD_CMD_PUT_TICKET_DRAIN ||
          cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_CREATE ||
          cmd[0] == EFS_MD_CMD_APPEND_CATCHUP || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
@@ -4021,6 +4064,8 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         return apply_gc_ack_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_DEGRADED_CLEAR)
         return apply_degraded_clear_cmd(h, cmd, clen, index, group);
+    if (cmd[0] == EFS_MD_CMD_DEGRADED_MARK)
+        return apply_degraded_mark_cmd(h, cmd, clen, index, group);
     if (cmd[0] == EFS_MD_CMD_PUT_ORPHAN_ACK)
         return apply_put_orphan_ack_cmd(h, cmd, clen, group);
     if (cmd[0] == EFS_MD_CMD_PUT_TICKET_DRAIN)
@@ -14581,6 +14626,16 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
             return;
         }
         out->rc=host_degraded_check(h,cmd,clen,group,&hint);out->leader_hint=hint;return;
+    }
+    if(clen && cmd[0]==EFS_MD_CMD_DEGRADED_MARK) {
+        if(clen!=EFS_MD_DEGRADED_MARK_LEN || group!=degraded_mark_cmd_group(cmd)){out->rc=EFS_ERR_INVAL;return;}
+        if(!host_hosts(h,group)) {
+            rc=host_remote_cmd(h,group,cmd,clen,out,-1);
+            if(rc!=EFS_OK)out->rc=rc;
+            return;
+        }
+        out->rc=host_propose_wait_idx(h,group,cmd,clen,&hint,&idx);
+        out->index=idx;out->leader_hint=hint;return;
     }
     if(clen && cmd[0]==EFS_MD_REQ_PUT_ORPHAN_STATUS) {
         struct efs_put_ticket t;uint32_t acked=0;

@@ -269,12 +269,15 @@ static int cmd_status(int argc, char **argv)
     }
 
     const char *cluster_state = "OK";
+    uint64_t degraded_total = degraded[0] + degraded[1];
     if (up_nodes < 2)
         cluster_state = "UNAVAILABLE";
     else if (down_nodes > 0)
         cluster_state = "DEGRADED";
     else if (full_nodes >= 2)
         cluster_state = "FULL";
+    else if (degraded_seen == 3u && degraded_total)
+        cluster_state = "DEGRADED"; /* every node up, protection not restored yet */
     printf("Cluster state: %s (%d up, %d down)\n", cluster_state, up_nodes,
            down_nodes);
     /* Stripes acknowledged with two of three fragments, awaiting rebuild
@@ -294,6 +297,17 @@ static int cmd_status(int argc, char **argv)
                degraded_seen & 2u ? "2" : (degraded_seen ? "" : "none"),
                (unsigned long long)rebuilt, (unsigned long long)rebuild_retired,
                (unsigned long long)rebuild_failed);
+
+    /* K35 (D42): a stripe on two durable fragments survives no further
+     * loss until the rebuild on return restores its third. */
+    if (degraded_seen != 3u)
+        printf("Protection: unknown (degraded-chunk count not reported by both groups)\n");
+    else if (degraded_total)
+        printf("Protection: DEGRADED: %llu chunks on two of three fragments, no fault "
+               "tolerance until rebuilt (W154 rebuilds when the missing node is up)\n",
+               (unsigned long long)degraded_total);
+    else
+        printf("Protection: full (2+1: every chunk tolerates one lost node)\n");
 
     /* Abandoned ticketed uploads awaiting revocation-gated collection on
      * every member that holds a fragment (D31). Unknown until both group
