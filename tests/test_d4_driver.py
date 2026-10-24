@@ -54,7 +54,7 @@ assert d.rss_kib('Name:\tx\n') is None
 
 
 def args(**kw):
-    a = dict(fg_deadline_s=10.0, client_rss_mib=1024.0, server_rss_mib=2048.0, pack_backlog=1000,
+    a = dict(index_ready_s=60.0, fg_deadline_s=10.0, client_rss_mib=1024.0, server_rss_mib=2048.0, pack_backlog=1000,
              index_age_s=60.0, drain_s=100.0, no_l0_check=False, threads=2)
     a.update(kw)
     return argparse.Namespace(**a)
@@ -82,6 +82,9 @@ def run(a=None, edit=None, drained=5.0, bad=()):
     r.live = {f'f{i}': 1 for i in range(90)}
     r.fg_files = {'g0': 1}
     r.members = {1: 'a:1', 2: 'b:2'}
+    r.index_ready, r.index_not_ready = 0.5, [0.1]
+    r.lock = __import__('threading').Lock()
+    r.t0 = __import__('time').time()
     if edit:
         edit(r)
     return r.verdict(r.samples[0], r.samples[3], drained, list(bad), 0.5)
@@ -170,11 +173,31 @@ fails_with('not drained', drained=None)
 fails_with('not exact', bad=['/m/x'])
 
 
+def never_ready(r):
+    r.index_ready = None
+fails_with('never answered', edit=never_ready)
+
+
+# "not indexed yet": tolerated within the initial window (another member's
+# catalog may still be missing after one answered), an error past it.
+def early_not_ready(r):
+    r.not_ready(OSError(61, 'not indexed yet'))
+    assert r.index_not_ready == [0.1, 0.0] and not r.errors, (r.index_not_ready, r.errors)
+v, fails, m = run(edit=early_not_ready)
+assert v == 'PASS' and m['index_not_ready_initial'] == [0.1, 0.0], (fails, m)
+
+
+def late_not_ready(r):
+    r.t0 -= 100
+    r.not_ready(OSError(61, 'not indexed yet'))
+fails_with('operation errors', edit=late_not_ready)
+
+
 def unsampled(r):
     for s in r.samples:
         s['client_rss_kib'] = {'/m': None}
 fails_with('client RSS', edit=unsampled)
 print('D4 driver: raft-status, pack-compact and .efs/stats parsers; PASS and one negative control per '
       'bound (deadline, errors, client/server RSS, memtable, L0, pack backlog, index age, packing, index, '
-      'flush and compaction progress, '
+      'flush and compaction progress, index readiness, '
       'drain, exact files) PASS')

@@ -49,7 +49,11 @@ during the load files_packed grows, the index generation advances, and some
 member completes a KV memtable flush and a compaction (raft-status
 kv_flushes/kv_compactions); after the load stops (the foreground then only
 reads and queries) the pack backlog and the index pending changes reach 0
-and stay 0 within --drain-s. Every file the load acknowledged and did not unlink, and
+and stay 0 within --drain-s. `.efs/stats` answering "not indexed yet"
+(the answering member's first catalog not published) is counted and
+tolerated within --index-ready-s of the start (initial catalog creation,
+D3); any other failure, or that answer later, is an error, and the index
+must have answered at least once. Every file the load acknowledged and did not unlink, and
 every foreground file, then reads back exactly.
 
 A repeated stall is diagnosed, not tolerated: a foreground operation over
@@ -117,6 +121,13 @@ def parse_index(text, now_ns=None):
     return {'generation': int(s['generation']), 'pending': pending,
             'pending_age_ms': at_sample + since if pending else 0, 'pending_age_at_sample_ms': at_sample,
             'error': int(s['refresh_error']), 'overdue': bool(s['refresh_overdue'])}
+
+
+class IndexNotReady(OSError):
+    """`.efs/stats` answered "not indexed yet" (ENODATA, exit 75): the
+    answering member's first catalog is not published (each member builds
+    its own). A bounded, documented refusal while the catalogs are first
+    created, an error after that window."""
 
 
 def rss_kib(status_text):
@@ -211,6 +222,8 @@ class Run:
         self.samples = []
         self.inflight = {}      # thread name -> (kind, start)
         self.stalls = 0
+        self.index_ready = None  # seconds from the start to the first .efs answer
+        self.index_not_ready = []  # "not indexed yet" before that, tolerated
 
     # load
     def writer(self, t):
@@ -255,9 +268,11 @@ class Run:
             self.inflight[me] = (kind, t)
         try:
             fn()
+        except IndexNotReady as e:
+            self.not_ready(e)
         except (OSError, AssertionError, ValueError, subprocess.SubprocessError) as e:
             with self.lock:
-                self.errors.append(f'{kind}: {e}')
+                self.errors.append(f'{kind} at {round(time.time() - self.t0, 2)} s: {e}')
         finally:
             dt = time.time() - t
             with self.lock:
@@ -325,9 +340,25 @@ class Run:
         p = subprocess.run([sys.executable, str(Path(self.a.fg_mount) / '.efs' / 'stats'), '--json'],
                            capture_output=True, text=True, timeout=self.a.fg_deadline_s * 3,
                            cwd=self.a.fg_mount)
+        if p.returncode == 75 and 'not indexed yet' in p.stderr:
+            raise IndexNotReady(errno.ENODATA, f'.efs/stats: {p.stderr.strip()[:200]}')
         if p.returncode:
             raise OSError(errno.EIO, f'.efs/stats rc={p.returncode}: {p.stderr.strip()[:200]}')
-        return parse_index(p.stdout.strip().splitlines()[-1], time.time_ns())
+        out = parse_index(p.stdout.strip().splitlines()[-1], time.time_ns())
+        with self.lock:
+            if self.index_ready is None:
+                self.index_ready = time.time() - self.t0
+        return out
+
+    def not_ready(self, e):
+        """Count an IndexNotReady: tolerated within --index-ready-s of the
+        start (initial catalog creation); an error after it."""
+        with self.lock:
+            t = round(time.time() - self.t0, 2)
+            if t <= self.a.index_ready_s:
+                self.index_not_ready.append(t)
+            else:
+                self.errors.append(f'.efs/stats at {t} s (index ready at {self.index_ready} s): {e}')
 
     # sampling
     def sample(self, phase):
@@ -345,6 +376,10 @@ class Run:
             s['pack']['led'] = sorted(s['pack']['led'])
         try:
             s['index'] = self.index_sample()
+        except IndexNotReady as e:
+            s['index'] = None
+            s['index_error'] = str(e)[:200]
+            self.not_ready(e)
         except (OSError, ValueError, KeyError, subprocess.SubprocessError) as e:
             s['index'] = None
             s['index_error'] = str(e)[:200]
@@ -488,6 +523,8 @@ class Run:
              'files_packed_during_load': packed[-1] - packed[0] if len(packed) > 1 else 0,
              'index_generations_during_load': gens[-1] - gens[0] if len(gens) > 1 else 0,
              'index_pending_age_ms_max': index_age, 'drain_s': drained_at and round(drained_at, 1),
+             'index_first_ready_s': self.index_ready and round(self.index_ready, 2),
+             'index_not_ready_initial': self.index_not_ready[:20],
              'load_created': self.counts['created'], 'load_unlinked': self.counts['unlinked'],
              'load_create_errors': self.counts['create_errors'], 'load_live_files': len(self.live),
              'fg_files': len(self.fg_files), 'verify_s': round(verify_s, 1), 'verify_bad': bad[:20],
@@ -509,6 +546,8 @@ class Run:
             fails.append('raft-status bound line never sampled')
         if backlog is None or backlog > a.pack_backlog:
             fails.append(f'pack backlog {backlog} (bound {a.pack_backlog})')
+        if self.index_ready is None:
+            fails.append('the .efs index never answered')
         if index_age is None or index_age > a.index_age_s * 1000:
             fails.append(f'index pending age {index_age} ms (bound {a.index_age_s} s)')
         if m['files_packed_during_load'] <= 0:
@@ -577,6 +616,8 @@ def main(argv=None):
     p.add_argument('--server-rss-mib', type=float, default=4096.0)
     p.add_argument('--pack-backlog', type=int, default=200000)
     p.add_argument('--index-age-s', type=float, default=300.0)
+    p.add_argument('--index-ready-s', type=float, default=60.0,
+                   help='"not indexed yet" is tolerated only this long after the start')
     p.add_argument('--no-l0-check', action='store_true',
                    help='do not require a KV compaction during the load (large memtables, short load)')
     p.add_argument('--keep', action='store_true')
