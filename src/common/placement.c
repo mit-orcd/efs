@@ -4,24 +4,45 @@
 #include <unistd.h>
 #include <netdb.h>
 
-static uint64_t fnv1a_u64(uint64_t key)
+/* Placement hash: the murmur3 64-bit finalizer, so every output bit
+ * depends on every input bit. FNV-1a (used before) keeps the low output
+ * bits a function of the low bits of each input byte only; inode numbers
+ * of one shard step by 2^shard_bits, so with a power-of-two member count
+ * every new file started on the same rank (K33 increment 2 finding). */
+static uint64_t place_mix(uint64_t x)
 {
-    uint64_t hash = 14695981039346656037ULL;
-    for (int i = 0; i < 8; i++) {
-        hash ^= (key >> (i * 8)) & 0xFFULL;
-        hash *= 1099511628211ULL;
-    }
-    return hash;
+    x ^= x >> 33;
+    x *= 0xff51afd7ed558ccdULL;
+    x ^= x >> 33;
+    x *= 0xc4ceb9fe1a85ec53ULL;
+    x ^= x >> 33;
+    return x;
 }
 
-/* Original ring: consecutive ranks from hash(ino, chunk). Meta pages are
- * located this way and must not move. */
+/* Two keys into one hash; the odd multiplier keeps (a, b) and (b, a) apart. */
+static uint64_t place_mix2(uint64_t a, uint64_t b)
+{
+    return place_mix(place_mix(a) ^ (b * 0x9e3779b97f4a7c15ULL + 0x632be59bd9b4e019ULL));
+}
+
+/* h -> [0, n) from the high bits (multiply-shift, no modulo): each value
+ * has floor or ceil of 2^64/n preimages, a relative bias below n/2^64. */
+static uint32_t place_range(uint64_t h, uint32_t n)
+{
+    return (uint32_t)(((unsigned __int128)h * n) >> 64);
+}
+
+uint32_t efs_place_index(uint64_t a, uint64_t b, uint32_t n)
+{
+    return n ? place_range(place_mix2(a, b), n) : 0;
+}
+
+/* Consecutive ranks from hash(ino, chunk): meta table pages. */
 static void place_consecutive(uint32_t node_count, efs_ino_t ino,
                               uint32_t chunk_index,
                               efs_node_id_t fragment_nodes[EFS_NUM_FRAGMENTS])
 {
-    uint64_t key = ((uint64_t)ino << 32) | (uint64_t)chunk_index;
-    uint32_t start = (uint32_t)(fnv1a_u64(key) % (uint64_t)node_count);
+    uint32_t start = efs_place_index((uint64_t)ino, chunk_index, node_count);
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
         fragment_nodes[i] = (efs_node_id_t)((start + i) % node_count + 1);
 }
@@ -31,9 +52,10 @@ static void place_consecutive(uint32_t node_count, efs_ino_t ino,
 static void place_wide(uint32_t node_count, efs_ino_t ino, uint32_t chunk_index,
                        efs_node_id_t fragment_nodes[EFS_NUM_FRAGMENTS])
 {
-    uint32_t start = (uint32_t)((fnv1a_u64((uint64_t)ino) +
-                                 (uint64_t)chunk_index) %
-                                (uint64_t)node_count);
+    /* Hashed per file, then +1 per chunk: across files the start is
+     * uniform, and one file's chunks walk every rank evenly. */
+    uint32_t start = (uint32_t)(((uint64_t)place_range(place_mix((uint64_t)ino), node_count) +
+                                 chunk_index) % node_count);
     uint32_t stride = node_count / (uint32_t)EFS_NUM_FRAGMENTS;
     if (stride < 1)
         stride = 1;
@@ -139,6 +161,37 @@ int efs_pack_destinations(const struct efs_node *members, uint32_t count,
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
         out[i] = ids[ranks[i] - 1];
     return EFS_OK;
+}
+
+efs_node_id_t efs_place_spare(const efs_node_id_t *live, uint32_t count,
+                              efs_ino_t ino, uint32_t chunk_index, int slot,
+                              const efs_node_id_t stripe[EFS_NUM_FRAGMENTS])
+{
+    efs_node_id_t c[EFS_MAX_NODES];
+    uint32_t m = 0;
+
+    if (!live || !stripe || slot < 0 || slot >= EFS_NUM_FRAGMENTS)
+        return 0;
+    for (uint32_t i = 0; i < count && m < EFS_MAX_NODES; i++) {
+        efs_node_id_t id = live[i];
+        int skip = id == 0;
+        for (int k = 0; k < EFS_NUM_FRAGMENTS; k++)
+            skip |= stripe[k] == id;
+        for (uint32_t j = 0; j < m; j++)
+            skip |= c[j] == id;
+        if (skip)
+            continue;
+        /* Ascending ids: the choice does not depend on list order. */
+        uint32_t j = m++;
+        while (j > 0 && c[j - 1] > id) {
+            c[j] = c[j - 1];
+            j--;
+        }
+        c[j] = id;
+    }
+    if (!m)
+        return 0;
+    return c[efs_place_index((uint64_t)ino, ((uint64_t)chunk_index << 8) | (uint32_t)slot, m)];
 }
 
 static bool host_match(const char *a, const char *b)

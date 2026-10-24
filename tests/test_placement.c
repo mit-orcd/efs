@@ -235,6 +235,200 @@ static int k28_voters(void)
     return failures;
 }
 
+/* K33 increment 2 finding: the stripe start was fnv1a(ino) % n, whose low
+ * bits ignore the high bits of each byte; inode numbers of one shard step
+ * by 2^shard_bits, so with 8 members every new file started on one rank.
+ * Patterns: the item k (file or segment) -> inode and chunk count. */
+#define SPREAD_ITEMS 8192u
+static efs_ino_t spread_ino(int p, uint32_t k, uint32_t *chunks)
+{
+    *chunks = 1;
+    switch (p) {
+    case 0: *chunks = 2; return 4096ull * (k + 1) + 7; /* one shard, bits 12 */
+    case 1: return 8ull * (k + 1) + 3;                 /* one shard, bits 3 */
+    case 2: return 4096ull * (k / 64 + 1) + k % 64;    /* across 64 shards */
+    case 3: return k + 2;                              /* sequential */
+    default: return (0x1234ull << 40) | (4096ull * k); /* high prefix */
+    }
+}
+#define SPREAD_PATTERNS 7 /* 0..4 inodes, 5..6 packed segments */
+
+static void spread_load(int p, uint32_t n, uint32_t from, uint32_t to,
+                        uint64_t c[EFS_MAX_NODES + 1])
+{
+    struct efs_node m[EFS_MAX_NODES];
+    efs_node_id_t f[EFS_NUM_FRAGMENTS];
+
+    memset(m, 0, sizeof(m));
+    memset(c, 0, sizeof(uint64_t) * (EFS_MAX_NODES + 1));
+    for (uint32_t i = 0; i < n; i++) m[i].id = i + 1;
+    for (uint32_t k = from; k < to; k++) {
+        if (p >= 5) {
+            /* packer.c pk_segment_id: now_ns << 8 | self, with a microsecond
+             * clock (p 5) and a nanosecond one (p 6). */
+            uint64_t ns = 1700000000000000000ull + (p == 5 ? 37000ull : 4099ull) * k;
+            if (efs_pack_destinations(m, n, 1, ns << 8 | 1, f) == EFS_OK)
+                for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) c[f[i]]++;
+            continue;
+        }
+        uint32_t chunks;
+        efs_ino_t ino = spread_ino(p, k, &chunks);
+        for (uint32_t ci = 0; ci < chunks; ci++) {
+            efs_place_fragments(m, n, ino, ci, f);
+            for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) c[f[i]]++;
+        }
+    }
+}
+
+/* Every member count 3..16 and pattern: over 8192 items each node holds
+ * within 10 % of the mean, and no window of 64 consecutive items leaves
+ * any member without a fragment. */
+static int spread_fair(void)
+{
+    int failures = 0;
+    uint64_t c[EFS_MAX_NODES + 1];
+
+    for (uint32_t n = 3; n <= EFS_MAX_NODES; n++) {
+        for (int p = 0; p < SPREAD_PATTERNS; p++) {
+            uint64_t sum = 0;
+            spread_load(p, n, 0, SPREAD_ITEMS, c);
+            for (uint32_t i = 1; i <= n; i++) sum += c[i];
+            for (uint32_t i = 1; i <= n; i++) {
+                if (c[i] * 10 * n < sum * 9 || c[i] * 10 * n > sum * 11) {
+                    fprintf(stderr, "FAIL spread n=%u pattern %d node %u load %llu mean %llu\n",
+                            n, p, i, (unsigned long long)c[i],
+                            (unsigned long long)(sum / n));
+                    failures++;
+                }
+            }
+            for (uint32_t w = 0; w < SPREAD_ITEMS; w += 64) {
+                spread_load(p, n, w, w + 64, c);
+                for (uint32_t i = 1; i <= n; i++)
+                    if (!c[i]) {
+                        fprintf(stderr, "FAIL spread n=%u pattern %d window %u: node %u idle\n",
+                                n, p, w, i);
+                        failures++;
+                        i = n;
+                    }
+            }
+        }
+        /* Large files: one file's chunks walk every rank exactly evenly. */
+        {
+            struct efs_node m[EFS_MAX_NODES];
+            efs_node_id_t f[EFS_NUM_FRAGMENTS];
+            memset(m, 0, sizeof(m));
+            memset(c, 0, sizeof(c));
+            for (uint32_t i = 0; i < n; i++) m[i].id = i + 1;
+            for (uint32_t ci = 0; ci < 64 * n; ci++) {
+                efs_place_fragments(m, n, 4096ull * 5 + 7, ci, f);
+                for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) c[f[i]]++;
+            }
+            for (uint32_t i = 1; i <= n; i++)
+                if (c[i] != 64 * 3) {
+                    fprintf(stderr, "FAIL spread n=%u large file node %u load %llu\n", n, i,
+                            (unsigned long long)c[i]);
+                    failures++;
+                }
+        }
+    }
+    return failures;
+}
+
+/* The finding's case: eight members, 24 new files of 256 KiB (two chunks)
+ * in one shard. Before: per node 9,0,15,24,24,24,24,24 (rank 2 idle, and
+ * by member id the added nodes 3 and 4 idle in the daemon test). */
+static int spread_eight_member_regression(void)
+{
+    struct efs_node m[8];
+    efs_node_id_t f[EFS_NUM_FRAGMENTS];
+    uint64_t c[9] = {0};
+    int failures = 0;
+
+    memset(m, 0, sizeof(m));
+    for (uint32_t i = 0; i < 8; i++) m[i].id = i + 1;
+    for (uint32_t k = 0; k < 24; k++)
+        for (uint32_t ci = 0; ci < 2; ci++) {
+            efs_place_fragments(m, 8, 4096ull * (k + 1) + 7, ci, f);
+            for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) c[f[i]]++;
+        }
+    /* 144 fragments over 8 nodes: mean 18; demand at least half of it. */
+    for (int i = 1; i <= 8; i++)
+        if (c[i] < 9) {
+            fprintf(stderr, "FAIL spread 8 members node %d got %llu of 144 fragments\n", i,
+                    (unsigned long long)c[i]);
+            failures++;
+        }
+    return failures;
+}
+
+/* A down member's share goes to spares hashed over the eligible live
+ * members: never a stripe member or the down node, independent of list
+ * order, and no single member takes it all (before: the first live
+ * member outside the stripe took every displaced fragment). */
+static int spread_spares(void)
+{
+    int failures = 0;
+
+    for (uint32_t n = 4; n <= EFS_MAX_NODES; n++) {
+        struct efs_node m[EFS_MAX_NODES];
+        efs_node_id_t live[EFS_MAX_NODES], rev[EFS_MAX_NODES], f[EFS_NUM_FRAGMENTS];
+        uint64_t c[EFS_MAX_NODES + 1] = {0}, sum = 0, hi = 0;
+        uint32_t nl = 0, receivers = 0;
+
+        memset(m, 0, sizeof(m));
+        for (uint32_t i = 0; i < n; i++) m[i].id = i + 1;
+        for (uint32_t i = 1; i < n; i++) live[nl++] = i + 1; /* node 1 down */
+        for (uint32_t i = 0; i < nl; i++) rev[i] = live[nl - 1 - i];
+        for (uint32_t k = 0; k < SPREAD_ITEMS; k++) {
+            efs_ino_t ino = 4096ull * (k + 1) + 7;
+            for (uint32_t ci = 0; ci < 2; ci++) {
+                efs_place_fragments(m, n, ino, ci, f);
+                for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+                    if (f[i] != 1)
+                        continue;
+                    efs_node_id_t s = efs_place_spare(live, nl, ino, ci, i, f);
+                    if (!s || s == 1 || s == f[0] || s == f[1] || s == f[2] ||
+                        s != efs_place_spare(rev, nl, ino, ci, i, f)) {
+                        fprintf(stderr, "FAIL spare n=%u ino=%llu ci=%u slot %d -> %u\n", n,
+                                (unsigned long long)ino, ci, i, s);
+                        failures++;
+                        continue;
+                    }
+                    c[s]++;
+                }
+            }
+        }
+        for (uint32_t i = 2; i <= n; i++) {
+            sum += c[i];
+            hi = c[i] > hi ? c[i] : hi;
+            receivers += c[i] != 0;
+        }
+        /* Node 1's stripe-mates can never be its spare: with stride n/3
+         * and 3 | n they are fixed, so n - 3 receivers is the floor. */
+        if (receivers < n - 3 || hi * receivers > sum * 7 / 4) {
+            fprintf(stderr, "FAIL spare n=%u receivers %u max %llu of %llu\n", n, receivers,
+                    (unsigned long long)hi, (unsigned long long)sum);
+            failures++;
+        }
+    }
+    /* Edges: no candidate left -> 0; bad slot -> 0; index stays in range. */
+    {
+        efs_node_id_t live[3] = {1, 2, 3}, f[EFS_NUM_FRAGMENTS] = {1, 2, 3};
+        if (efs_place_spare(live, 3, 9, 0, 0, f) || efs_place_spare(live, 3, 9, 0, 3, f) ||
+            efs_place_spare(NULL, 3, 9, 0, 0, f) || efs_place_index(1, 2, 0)) {
+            fprintf(stderr, "FAIL spare edges\n");
+            failures++;
+        }
+        for (uint32_t n = 1; n <= EFS_MAX_NODES; n++)
+            for (uint64_t a = 0; a < 64; a++)
+                if (efs_place_index(a << 40, a, n) >= n) {
+                    fprintf(stderr, "FAIL place_index out of range n=%u\n", n);
+                    failures++;
+                }
+    }
+    return failures;
+}
+
 int main(void)
 {
     int failures = 0;
@@ -342,7 +536,7 @@ int main(void)
         failures++;
     }
 
-    /* Meta placement must stay on the original consecutive hash. */
+    /* Meta pages: consecutive ranks, stable for one (ino, chunk). */
     efs_node_id_t meta_a[EFS_NUM_FRAGMENTS], meta_b[EFS_NUM_FRAGMENTS];
     efs_get_placement(4, EFS_META_TABLE_INO, 0, meta_a);
     efs_get_placement(4, EFS_META_TABLE_INO, 0, meta_b);
@@ -420,6 +614,9 @@ int main(void)
         for (size_t i = 0; i < sizeof(ks) / sizeof(ks[0]); i++)
             failures += k28_placement(ks[i]);
         failures += k28_voters();
+        failures += spread_fair();
+        failures += spread_eight_member_regression();
+        failures += spread_spares();
         for (size_t i = 0; i < sizeof(ks) / sizeof(ks[0]); i++)
             failures += k28_pack_destinations(ks[i]);
         if (EFS_MAX_NODES != 16) {

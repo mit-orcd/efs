@@ -23,7 +23,7 @@ static int efs_client_put_admit(efs_ino_t ino,uint32_t ci,const efs_node_id_t no
 {(void)checksums;assert(ino==1&&!ci&&len==1&&!off&&!dlen&&nodes[2]==3&&deadline);admits++;if(admit_rc)return admit_rc;memset(t,0,sizeof(*t));t->ino=ino;t->object=77;t->id.seq=admits;memcpy(t->nodes,nodes,12);return EFS_OK;}
 static void efs_client_put_release(uint64_t seq,int landed){assert(seq==admits&&!landed);releases++;}
 static int efs_client_node_is_down(efs_node_id_t n){(void)n;return 0;}
-static void reroute_untried_fragments(efs_node_id_t *n){(void)n;}
+static void reroute_untried_fragments(efs_ino_t i,uint32_t c,efs_node_id_t *n){(void)i;(void)c;(void)n;}
 static void efs_client_conn_invalidate_node(efs_node_id_t n){(void)n;invalidations++;}
 static void efs_client_nodes_force_reprobe(void){reprobes++;}
 const char *efs_strerror(int rc){(void)rc;return "injected";}
