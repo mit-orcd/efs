@@ -21,14 +21,16 @@ grow by the batch); large files (64 KiB + 1 to 1 MiB + 3) are never packed.
 5. Each single-member outage at five members, node 1 to node 5 in turn:
    SIGTERM the node, write batch S3.k and large files while it is down (the
    writer keeps going), read every file written so far through mount A,
-   restart the node, wait until it is up, then read everything again.
+   restart the node, wait until it is up and every stripe acknowledged
+   degraded meanwhile is rebuilt (W154, `Degraded chunks: 0`), then read
+   everything again; only then is the next member stopped.
 6. A fresh mount through node 5 reads every file: every byte matches.
 Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
 """
 import os, re, shutil, sys, tempfile, threading, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from k33_daemons import Cluster, EFSD, MGMT, Mount, fuse_ok, payload, voters_ok  # noqa: E402
+from k33_daemons import Cluster, EFSD, MGMT, Mount, fuse_ok, mgmt, payload, voters_ok  # noqa: E402
 
 for b in (EFSD, MGMT):
     if not b.exists():
@@ -91,6 +93,21 @@ def wait_packed(c, base, n, timeout=60):
             return packed_total(c)
         time.sleep(0.2)
     raise AssertionError(f'packer moved {packed_total(c) - base} of {n} files')
+
+
+def wait_protected(c, node, timeout=120):
+    """W154: every stripe acknowledged degraded while a member was away is
+    rebuilt (`Degraded chunks: 0`). Until then the cluster is not back to
+    single-loss protection, and stopping another member is a second loss
+    (K34: one run stopped node 2 four seconds after node 1 returned)."""
+    end, out = time.time() + timeout, ''
+    while time.time() < end:
+        out = mgmt(c.env, 'status', c.ep(node))[1]
+        m = re.search(r'Degraded chunks: (\d+) \(', out)
+        if m and int(m.group(1)) == 0:
+            return
+        time.sleep(0.5)
+    raise AssertionError(f'degraded stripes not rebuilt in {timeout} s:\n{out[-2000:]}')
 
 
 def verify(m, what):
@@ -196,6 +213,7 @@ try:
         c.wait_members([1, 2, 3, 4, 5], 5)
         c.wait_voters([1, 2, 3, 4, 5], lambda i, v: voters_ok(i, v, 5))
         wait_packed(c, base, len(SMALL))
+        wait_protected(c, k % 5 + 1)
         verify(a, f'node {k} back')
         assert not writer_err, writer_err
     stop_writer.set()
