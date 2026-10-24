@@ -24,7 +24,7 @@ two-client 68/68 PASS; expiry NOTRUN** (fixture's single `raft-mkfs` gets
 NOT_PRIMARY before a leader exists, a harness defect since W153).
 
 [K32 fix: batched K14 publication and K13 tickets](k32-write-fix-20261023.md):
-**code fix PASS (scoped), merged into devel (`ea2dc4443`).** A REPORT's consecutive units of one file publish as one
+**code fix PASS (scoped), merged into devel (`ea2dc4443`).** Merged-tree `make test-all` on intel2 (K32 + K33 at `2d03d9837`): 435 commands, 0 FAIL, 14 NOTRUN host limits (raw: intel2 `~/efs-artifacts/merge-k32-k33-20261024/`, `SHA256SUMS` `b5649ea9…8c1c`). A REPORT's consecutive units of one file publish as one
 transaction, with PREPAREs in TXN_BATCH. Ticket admissions and settles are
 batched per Raft group (new tags 90, 91). Counted entries per 1 MiB write:
 23.0 → 3.0 at eight writes per REPORT. On amd, `make test-all` fails only
@@ -33,7 +33,8 @@ easy write gate on orcd-mini is NOTRUN** (parent session).
 
 [K33/W157 automatic formation and node addition](k33-w157-formation-addition-20261023.md):
 **model PASS; implementation merged (`0098e06c4`;
-increment 1, operator node ids; Raft tags renumbered to 92, 93 at merge), code gate PASS with host limits (xorinox `make test-all` at `0098e06c4`: 433 commands, 0 FAIL, 13 NOTRUN); live addition
+increment 1, operator node ids; Raft tags renumbered to 92, 93 at merge;
+merged-tree `make test-all` on intel2 0 FAIL), code gate PASS with host limits (xorinox `make test-all` at `0098e06c4`: 433 commands, 0 FAIL, 13 NOTRUN); live addition
 gates NOTRUN.** Three joined members form without `raft-mkfs`; one or two
 stay unready; a node with the next id joins a live cluster by `--join` any
 member: a committed membership revision (store tokens, one cluster

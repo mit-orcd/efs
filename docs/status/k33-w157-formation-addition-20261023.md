@@ -3,7 +3,7 @@
 **Verdict: model PASS; code gate PASS with host limits (`make test-all` on
 xorinox at `0098e06c4`: 433 commands, 0 FAIL, 13 NOTRUN host limits). Live
 addition gates NOTRUN (the parent session's). Increment 1 of the contract;
-branch `claude/vibrant-lalande-556adb`, not merged, not pushed.**
+branch `claude/vibrant-lalande-556adb`, merged into devel (`2d03d9837`, tags renumbered to 92 and 93), not pushed.**
 
 Purpose: the code side of [K33](alpha-1.0-2plus1-checklist.md) /
 [W157](work-queue.md), an alpha 1.0 blocker: the cluster forms by itself
@@ -222,3 +222,7 @@ Kept outside Git on xorinox at `~/efs-artifacts/k33-20261023/` with
 
 Full hashes for every file are in `SHA256SUMS` there. The working trees
 `~/efs-k33/src` and `~/efs-k33/gate` are deleted.
+
+## After the merge
+
+Merged-tree `make test-all` on intel2 (K32 + K33 at `2d03d9837`): 435 commands, 0 FAIL, 14 NOTRUN host limits (raw: intel2 `~/efs-artifacts/merge-k32-k33-20261024/`, `SHA256SUMS` `b5649ea9…8c1c`).
