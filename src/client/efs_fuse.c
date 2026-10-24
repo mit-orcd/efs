@@ -4409,8 +4409,14 @@ static int efs_fuse_flush_ino(fuse_ino_t ino, struct fuse_file_info *fi)
     if (virt_kind(file)) return 0;
     int was_stalled = efs_wb_inode_stalled(file);
     int rc = efs_append_flush_report(fi, file);
+    int report_rc = rc;
     rc = efs_file_sync_error(fi, file, was_stalled, rc);
     if (rc != EFS_OK) {
+        /* G5: which stage failed: the flush+REPORT (report-loop and
+         * report-resolve name it) or a stalled write-back (wb). */
+        fprintf(stderr, "flush-meta stage=%s ino=%llu report_rc=%d rc=%d stalled=%d\n",
+                report_rc != EFS_OK ? "report" : "writeback", (unsigned long long)file,
+                report_rc, rc, was_stalled);
         efs_fuse_log_err("flush-meta", rc, ino, 0, 0, NULL);
         return rc == EFS_ERR_QUOTA ? -ENOSPC : -EIO;
     }

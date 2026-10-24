@@ -76,7 +76,15 @@ int efs_conn_recv_msg(struct efs_conn *c,uint8_t *type,void **payload,uint32_t *
  return 0;
 }
 '''
-code += '\n'.join(function(n) for n in ['rpc_status_to_efs','stale_retryable','opid_suffix','rpc_retry_peer','rpc_type_mutates','rpc_send_recv_shard','rpc_send_recv_owner'])
+code += r'''
+static __thread uint64_t rpc_tl_sent;static __thread unsigned rpc_tl_lost; /* W155 */
+static void efs_client_rpc_set_deadline_ms(uint64_t d){(void)d;}
+'''
+code += '\n'.join(function(n) for n in ['rpc_status_to_efs','stale_retryable','opid_suffix','rpc_retry_peer','rpc_type_mutates','rpc_identified','rpc_req_ident','rpc_resolve_ms','rpc_send_recv_shard_once'])
+code += r'''
+static int rpc_send_recv_dual_once(uint8_t type,const void *req,uint32_t len,uint8_t expect,void *reply,uint32_t size,int unused){(void)unused;return rpc_send_recv_shard_once(1,type,req,len,expect,reply,size,0,NULL);}
+'''
+code += '\n'.join(function(n) for n in ['rpc_resolve_identified','rpc_send_recv_shard','rpc_send_recv_owner'])
 code += r'''
 static int rpc_send_recv_dual(uint8_t type,const void *req,uint32_t len,uint8_t expect,void *reply,uint32_t size,int unused){(void)unused;return rpc_send_recv_shard(1,type,req,len,expect,reply,size,0,NULL);}
 '''+function('efs_client_rpc_create')+r'''

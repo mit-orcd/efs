@@ -1881,6 +1881,7 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
     struct report_held *uheld = NULL;
     uint32_t nusent = 0, nuheld = 0;
     struct efs_report_pubid pubid;
+    uint64_t report_sent = 0; /* W155: nodes this pubid reached (bit nid-1) */
     int shape_rc;
     /* A chunk rec whose ino has no irec is REJECTED by the server
      * (raft_host.c report loop, "pack-nosize"): an EOF guessed from the
@@ -1952,6 +1953,7 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
     }
     shape_rc = report_units_shape(crecs, cseq, &cn, &usent, &nusent, &uheld, &nuheld);
     report_pubid_mint(&pubid);
+    report_sent = 0;
     if (shape_rc != EFS_OK) {
         free(crecs);
         free(cseq);
@@ -2123,6 +2125,7 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
             for (uint32_t k = 0; k < cn; ++k)
                 dcache_cycle_sent(&crecs[k], cseq[k]);
             rc = report_send_records(crecs, cn, irecs, in, sync, &pubid);
+            report_sent |= efs_client_rpc_last_sent();
             t_rpc_ms += report_mono_ms() - t0;
         }
         if (rc == EFS_ERR_STALE)
@@ -2206,6 +2209,7 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
             shape_rc = report_units_shape(crecs, cseq, &cn, &usent, &nusent,
                                           &uheld, &nuheld);
             report_pubid_mint(&pubid);
+            report_sent = 0;
             report_snapshot_unlock(only_ino);
             if (shape_rc != EFS_OK) {
                 rc = shape_rc;
@@ -2240,15 +2244,28 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
         now = (uint64_t)ts.tv_sec * 1000ull +
               (uint64_t)ts.tv_nsec / 1000000ull;
         ms = now > budget0 ? now - budget0 : 0;
+        /* G3: the publication id joins this line to report-resolve and
+         * the server's report-receipt lines. */
         fprintf(stderr, "report-loop ino=%llu rounds=%d stale=%d busy=%d "
-                "ms=%llu rpc_ms=%llu replay_ms=%llu sleep_ms=%llu recs=%u rc=%d\n",
+                "ms=%llu rpc_ms=%llu replay_ms=%llu sleep_ms=%llu recs=%u rc=%d "
+                "pub=%llx:%llu sent=%llx\n",
                 (unsigned long long)only_ino, rounds, nstale, nbusy,
                 (unsigned long long)ms, (unsigned long long)t_rpc_ms,
                 (unsigned long long)t_replay_ms,
-                (unsigned long long)t_sleep_ms, cn, rc);
+                (unsigned long long)t_sleep_ms, cn, rc,
+                (unsigned long long)pubid.mint_ns, (unsigned long long)pubid.seq,
+                (unsigned long long)report_sent);
         if (rc == EFS_OK)
             rc = EFS_ERR_IO;
     }
+    /* W155: a sync REPORT that reached a host and then ran out of budget or
+     * lost its reply has an unknown outcome; it may have applied. Resolve it
+     * against its receipt (same identity, bounded) before failing: applied
+     * is success, a definite verdict stands, and only a still-unknown
+     * outcome becomes EIO (efs_client_rpc_report_resolve logs which). */
+    if (sync && report_sent && cn)
+        rc = efs_client_rpc_report_resolve(g_client.export_id, crecs, cn, irecs, in, sync,
+                                           &pubid, report_sent, rc, only_ino);
     if (dcache_trace_on()) {
         for (uint32_t k = 0; k < cn; k++)
             fprintf(stderr, "report ino=%llu ci=%u only=%llu sync=%d rc=%d\n",

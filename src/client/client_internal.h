@@ -465,6 +465,19 @@ int efs_client_rpc_report_dirty_pub(efs_export_id_t export_id,
                                     const struct efs_ino_size_rec *irecs,
                                     uint32_t ino_count, int sync,
                                     const struct efs_report_pubid *pubid);
+/* W155: bounded same-identity resolution of a sync REPORT whose outcome is
+ * not known (reply lost, or the budget ran out after a send). sent: the
+ * nodes the REPORT reached (bit nid-1). EFS_OK when a receipt or a re-send
+ * proves it applied; a definite verdict (e.g. STALE) as answered;
+ * EFS_ERR_IO when the outcome is still unknown after EFS_RESOLVE_MS. */
+int efs_client_rpc_report_resolve(efs_export_id_t export_id,
+                                  const struct efs_chunk_rec *recs, uint32_t count,
+                                  const struct efs_ino_size_rec *irecs,
+                                  uint32_t ino_count, int sync,
+                                  const struct efs_report_pubid *pubid, uint64_t sent,
+                                  int rc, efs_ino_t ino);
+/* Nodes the calling thread's last metadata RPC was sent to (bit nid-1). */
+uint64_t efs_client_rpc_last_sent(void);
 /* W77 · atomic publication units (write.c). A write request touching two
  * or more chunks is one unit: begin links its chunks with every unpublished
  * unit they overlap and holds it open until end. A REPORT publishes a unit

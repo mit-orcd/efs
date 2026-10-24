@@ -303,6 +303,43 @@ Transaction decision records
 reclaimable once every participant has acknowledged the decision and no
 recovering participant can still ask for it.
 
+### Ambiguous completion is resolved by identity (W155)
+
+A request whose reply was lost after it was sent, or whose retry budget ran
+out after a send, has an **unknown** outcome: the server may have applied
+it. The client never turns that into an error by guessing. Before failing
+it resolves the request against its receipt, under the **same identity**
+and a fresh bounded window (`EFS_RESOLVE_MS`, default 8 s):
+
+```text
+identified directory op    receipt = the op-id window above (durable)
+  (CREATE/UNLINK/LINK/      re-send the identical request: a completed id is
+   RENAME_AT)               answered from the window, a new one runs once
+REPORT_CHUNKS (sync)       receipt = per-host table keyed by (session,
+                            publication id), in memory and bounded
+                            ask each host the REPORT reached
+                            (EFS_REPORT_F_RECEIPT, runs nothing):
+                              applied  -> success
+                              partial  -> STALE (replay the CAS losers)
+                              pending  -> wait and ask again
+                              else     -> re-send the same publication id
+```
+
+The REPORT receipt is not in Raft on purpose (an entry per REPORT would undo
+K32). Its absence (eviction, a restarted or different host) is never read
+as "not applied": the same publication id is sent again, which the REPORT
+path already makes idempotent (a committed record skips, a W77 unit joins
+its deterministic transaction). A duplicate that reaches a host while the
+first attempt still runs there joins it instead of running beside it.
+
+Only an outcome still unknown when the window ends is an error (EIO for a
+flush or close), and the client line says so with the request identity
+(`report-resolve id=… outcome=unknown`, `inode-rpc: resolve … outcome=unknown`).
+The server lines carry the same identity (`report-receipt`, `opid-receipt`),
+so a failure, its retries and the server's verdict join exactly. Nothing
+here assumes rollback or old-or-new atomicity: a resolved request is the
+server's recorded verdict, an unresolved one stays unknown.
+
 ## Open-unlinked inode lifetime
 
 I6/I7 allow `nlink = 0` while a file is open. The lifecycle:

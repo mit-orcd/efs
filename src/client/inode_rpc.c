@@ -1,5 +1,6 @@
 #include "client_internal.h"
 #include "efs/opid.h"
+#include "efs/request_receipt.h"
 #include "efs/protocol.h"
 #include "efs/network.h"
 #include "efs/raft.h"
@@ -60,6 +61,87 @@ static void rpc_note_slow_ok(uint8_t type, int attempt, int saw_busy,
     fprintf(stderr, "inode-rpc: slow-ok type=%u attempts=%d saw_busy=%d "
             "status=%d us=%llu\n",
             type, attempt + 1, saw_busy, status, us);
+}
+
+/* W155: what the current rpc_send_recv_* call put on the wire. Bit nid-1
+ * of rpc_tl_sent: a send of the call's request to nid succeeded.
+ * rpc_tl_lost: replies lost after a successful send (receive failure or
+ * timeout), i.e. sends whose outcome the client does not know. */
+static __thread uint64_t rpc_tl_sent;
+static __thread unsigned rpc_tl_lost;
+
+/* 1 for a directory mutation framed with its op-id suffix (I16). */
+static int rpc_identified(uint8_t type, uint32_t req_len)
+{
+    return (type == EFS_MSG_INODE_CREATE &&
+            req_len == sizeof(struct efs_msg_inode_create) + EFS_OPID_WIRE_LEN) ||
+           (type == EFS_MSG_INODE_UNLINK &&
+            req_len == sizeof(struct efs_msg_inode_unlink) + EFS_OPID_WIRE_LEN) ||
+           (type == EFS_MSG_INODE_LINK &&
+            req_len == sizeof(struct efs_msg_inode_link) + EFS_OPID_WIRE_LEN) ||
+           (type == EFS_MSG_INODE_RENAME_AT &&
+            req_len == sizeof(struct efs_msg_inode_rename_at) + EFS_OPID_WIRE_LEN);
+}
+
+/* G1/G4: the request identity for log lines. An identified directory op
+ * prints uuid8/epoch/seq from its op-id suffix (native u32 epoch, native
+ * u64 seq); a REPORT prints uuid8/epoch/mint:seq from its session and
+ * publication suffixes (big-endian); anything else "-". The same strings
+ * appear in the server's opid-receipt / report-receipt lines. */
+static const char *rpc_req_ident(uint8_t type, const void *req, uint32_t len,
+                                 char *buf, size_t cap)
+{
+    const uint8_t *p = req;
+
+    snprintf(buf, cap, "-");
+    if (!req)
+        return buf;
+    if (rpc_identified(type, len)) {
+        uint32_t epoch;
+        uint64_t seq;
+        const uint8_t *q = p + len - EFS_OPID_WIRE_LEN;
+        memcpy(&epoch, q + EFS_OPID_UUID_LEN, 4);
+        memcpy(&seq, q + EFS_OPID_UUID_LEN + 4, 8);
+        snprintf(buf, cap, "%02x%02x%02x%02x/%u/%llu", q[0], q[1], q[2], q[3], epoch,
+                 (unsigned long long)seq);
+    } else if (type == EFS_MSG_REPORT_CHUNKS &&
+               len >= sizeof(struct efs_msg_report_chunks) + EFS_REPORT_SESSION_LEN) {
+        const struct efs_msg_report_chunks *hdr = req;
+        uint32_t flags;
+        const uint8_t *sp = p + len - EFS_REPORT_SESSION_LEN;
+        uint32_t epoch = 0;
+        uint64_t mint = 0, seq = 0;
+        memcpy(&flags, &hdr->sync, sizeof(flags));
+        if (!(flags & EFS_REPORT_F_SESSION))
+            return buf;
+        for (unsigned i = 0; i < 4; i++)
+            epoch = (epoch << 8) | sp[16 + i];
+        if ((flags & EFS_REPORT_F_PUBID) &&
+            len >= sizeof(*hdr) + EFS_REPORT_SESSION_LEN + EFS_REPORT_PUBID_LEN) {
+            const uint8_t *pp = sp - EFS_REPORT_PUBID_LEN;
+            for (unsigned i = 0; i < 8; i++) {
+                mint = (mint << 8) | pp[i];
+                seq = (seq << 8) | pp[8 + i];
+            }
+        }
+        snprintf(buf, cap, "%02x%02x%02x%02x/%u/%llx:%llu", sp[0], sp[1], sp[2], sp[3],
+                 epoch, (unsigned long long)mint, (unsigned long long)seq);
+    }
+    return buf;
+}
+
+/* W155: how long a client may spend resolving a request whose reply was
+ * lost, on top of the budget that expired. EFS_RESOLVE_MS overrides; read
+ * once. */
+static uint64_t rpc_resolve_ms(void)
+{
+    static long ms = -1;
+    if (ms < 0) {
+        const char *e = getenv("EFS_RESOLVE_MS");
+        long v = e && *e ? strtol(e, NULL, 10) : 8000;
+        ms = v < 0 ? 0 : v;
+    }
+    return (uint64_t)ms;
 }
 
 static int rpc_prof_enabled(void)
@@ -635,6 +717,9 @@ static struct efs_conn *rpc_owner_conn_shard(uint32_t shard,
 static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
                               uint8_t expect, void *reply, uint32_t reply_len,
                               int recv_ms);
+static int rpc_send_recv_dual_once(uint8_t type, const void *req, uint32_t req_len,
+                                   uint8_t expect, void *reply, uint32_t reply_len,
+                                   int recv_ms);
 
 /* Send to the owner of `shard`. Retry NOT_PRIMARY. */
 static int rpc_writer_retry_pause(unsigned attempt);
@@ -759,11 +844,13 @@ static int rpc_type_mutates(uint8_t type, const void *req, uint32_t req_len)
     }
 }
 
-static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
-                               uint32_t req_len, uint8_t expect, void *reply,
-                               uint32_t reply_len, uint32_t copy_cap,
-                               uint32_t *copied)
+static int rpc_send_recv_shard_once(uint32_t shard, uint8_t type, const void *req,
+                                    uint32_t req_len, uint8_t expect, void *reply,
+                                    uint32_t reply_len, uint32_t copy_cap,
+                                    uint32_t *copied)
 {
+    rpc_tl_sent = 0;
+    rpc_tl_lost = 0;
     if (rpc_type_mutates(type, req, req_len)) {
         int ready = efs_client_session_check();
         if (ready != EFS_OK)
@@ -826,6 +913,8 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
             return EFS_ERR_NET;
         }
         unsigned long long t2 = prof ? rpc_prof_now_us() : 0;
+        if (nid && nid <= 64)
+            rpc_tl_sent |= 1ull << (nid - 1);
         uint8_t rtype = 0;
         void *payload = NULL;
         uint32_t plen = 0;
@@ -835,12 +924,15 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
 #endif
         unsigned long long t3 = prof ? rpc_prof_now_us() : 0;
         if (rc != 0) {
+            char ident[64];
             free(payload);
+            rpc_tl_lost++;
             efs_client_conn_drop(nid, conn);
             rpc_retry_peer(shard, nid, &target, &skip, 1);
             if (attempt + 1 < 16) {
-                fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=recv rc=%d\n",
-                        type, attempt, rc);
+                fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=recv rc=%d "
+                        "nid=%u id=%s\n", type, attempt, rc, nid,
+                        rpc_req_ident(type, req, req_len, ident, sizeof(ident)));
                 if (rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
                     return EFS_ERR_BUSY;
                 continue;
@@ -851,6 +943,7 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
         efs_client_node_note_ok(nid);
         if (efs_client_rpc_past_deadline()) {
             free(payload);
+            rpc_tl_lost++; /* a reply arrived too late to be used */
             return EFS_ERR_BUSY;
         }
         if (rtype != expect || plen < reply_len) {
@@ -967,10 +1060,80 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
      * on dir-rename under load (isolated PASS). Say so: an app-visible
      * EBUSY after 10 s of retries on an idle cluster is a server bug and
      * the server line (raft-host: mkdir/create/unlink ... rc=) is the pair. */
-    if (saw_busy)
+    if (saw_busy) {
+        char ident[64];
         fprintf(stderr, "inode-rpc: shard=%u type=%u exhausted 16 BUSY/STALE "
-                "retries (%.1f s) -> EBUSY\n", shard, type, 10.35);
+                "retries (%.1f s) -> EBUSY id=%s\n", shard, type, 10.35,
+                rpc_req_ident(type, req, req_len, ident, sizeof(ident)));
+    }
     return saw_busy ? EFS_ERR_BUSY : EFS_ERR_NOT_PRIMARY;
+}
+
+/* W155: an identified directory op (I16 op-id) whose reply was lost after
+ * a successful send, and whose retry loop then ran out of budget, has an
+ * unknown outcome: the server may have applied it. Its durable receipt is
+ * the op-id window on the serving shard, which answers a same-identity
+ * re-send with the recorded verdict instead of running it again
+ * (`opid-receipt: replay` on the server). So resolve by re-sending the
+ * identical request under a fresh, bounded deadline (rpc_resolve_ms): an
+ * applied op returns its original reply, an unapplied one runs now. Only
+ * when the bound also passes without an answer does the caller see the
+ * error, and the line says the outcome is unknown. */
+static int rpc_resolve_identified(int dual, uint32_t shard, uint8_t type,
+                                  const void *req, uint32_t req_len, uint8_t expect,
+                                  void *reply, uint32_t reply_len, uint32_t copy_cap,
+                                  uint32_t *copied, int recv_ms, int rc)
+{
+    char ident[64];
+    uint64_t bound = rpc_resolve_ms();
+    uint64_t previous, start, end;
+    unsigned passes = 0, lost = rpc_tl_lost;
+    int first = rc;
+
+    if (!bound || !rpc_identified(type, req_len) || !rpc_tl_lost ||
+        (rc != EFS_ERR_BUSY && rc != EFS_ERR_NET))
+        return rc;
+    rpc_req_ident(type, req, req_len, ident, sizeof(ident));
+    previous = efs_client_rpc_deadline_ms();
+    start = rpc_prof_now_us() / 1000ull;
+    end = start + bound;
+    fprintf(stderr, "inode-rpc: resolve type=%u id=%s rc=%d lost=%u: reply lost, "
+            "same-identity lookup for %llu ms\n", type, ident, rc, lost,
+            (unsigned long long)bound);
+    while (rpc_prof_now_us() / 1000ull < end) {
+        efs_client_rpc_set_deadline_ms(end);
+        passes++;
+        rc = dual ? rpc_send_recv_dual_once(type, req, req_len, expect, reply, reply_len,
+                                            recv_ms)
+                  : rpc_send_recv_shard_once(shard, type, req, req_len, expect, reply,
+                                             reply_len, copy_cap, copied);
+        lost += rpc_tl_lost;
+        if (rc != EFS_ERR_BUSY && rc != EFS_ERR_NET)
+            break;
+    }
+    efs_client_rpc_set_deadline_ms(previous);
+    if (rc == EFS_OK)
+        fprintf(stderr, "inode-rpc: resolve type=%u id=%s outcome=answered status=%u "
+                "passes=%u ms=%llu\n", type, ident,
+                ((const struct efs_msg_inode_reply *)reply)->status, passes,
+                (unsigned long long)(rpc_prof_now_us() / 1000ull - start));
+    else
+        fprintf(stderr, "inode-rpc: resolve type=%u id=%s outcome=%s rc=%d first_rc=%d "
+                "passes=%u lost=%u ms=%llu\n", type, ident,
+                rc == EFS_ERR_BUSY || rc == EFS_ERR_NET ? "unknown" : "refused", rc, first,
+                passes, lost, (unsigned long long)(rpc_prof_now_us() / 1000ull - start));
+    return rc;
+}
+
+static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
+                               uint32_t req_len, uint8_t expect, void *reply,
+                               uint32_t reply_len, uint32_t copy_cap,
+                               uint32_t *copied)
+{
+    int rc = rpc_send_recv_shard_once(shard, type, req, req_len, expect, reply,
+                                      reply_len, copy_cap, copied);
+    return rpc_resolve_identified(0, shard, type, req, req_len, expect, reply, reply_len,
+                                  copy_cap, copied, 0, rc);
 }
 
 static int rpc_send_recv_owner(efs_ino_t ino, uint8_t type, const void *req,
@@ -2702,10 +2865,12 @@ int efs_client_rpc_past_deadline(void)
  * recv timeout on a request the server is still executing re-sends the
  * whole request (Oct 1 2026: 8 × 20 GiB close REPORTs, attempts=6,
  * 116 s). */
-static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
-                              uint8_t expect, void *reply, uint32_t reply_len,
-                              int recv_ms)
+static int rpc_send_recv_dual_once(uint8_t type, const void *req, uint32_t req_len,
+                                   uint8_t expect, void *reply, uint32_t reply_len,
+                                   int recv_ms)
 {
+    rpc_tl_sent = 0;
+    rpc_tl_lost = 0;
     if (rpc_type_mutates(type, req, req_len)) {
         int ready = efs_client_session_check();
         if (ready != EFS_OK)
@@ -2756,6 +2921,8 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
             return EFS_ERR_NET;
         }
         unsigned long long t2 = prof ? rpc_prof_now_us() : 0;
+        if (nid && nid <= 64)
+            rpc_tl_sent |= 1ull << (nid - 1);
         uint8_t rtype = 0;
         void *payload = NULL;
         uint32_t plen = 0;
@@ -2764,13 +2931,16 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
         int rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
         unsigned long long t3 = prof ? rpc_prof_now_us() : 0;
         if (rc != 0) {
+            char ident[64];
             free(payload);
+            rpc_tl_lost++;
             efs_client_conn_drop(nid, conn);
             if (attempt + 1 < attempts) {
                 fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=recv rc=%d "
-                        "req_len=%u recv_ms=%d\n",
+                        "req_len=%u recv_ms=%d nid=%u id=%s\n",
                         type, attempt, rc, req_len,
-                        recv_ms > 0 ? recv_ms : EFS_IO_TIMEOUT_MS);
+                        recv_ms > 0 ? recv_ms : EFS_IO_TIMEOUT_MS, nid,
+                        rpc_req_ident(type, req, req_len, ident, sizeof(ident)));
                 if (rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
                     return EFS_ERR_BUSY;
                 continue;
@@ -2782,6 +2952,7 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
         efs_client_conn_release(nid, conn);
         if (efs_client_rpc_past_deadline()) {
             free(payload);
+            rpc_tl_lost++; /* a reply arrived too late to be used */
             return EFS_ERR_BUSY;
         }
         if (rtype != expect || plen < reply_len) {
@@ -2849,6 +3020,175 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
     return saw_busy ? EFS_ERR_BUSY : EFS_ERR_NOT_PRIMARY;
 }
 
+static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
+                              uint8_t expect, void *reply, uint32_t reply_len,
+                              int recv_ms)
+{
+    int rc = rpc_send_recv_dual_once(type, req, req_len, expect, reply, reply_len, recv_ms);
+    return rpc_resolve_identified(1, 0, type, req, req_len, expect, reply, reply_len, 0,
+                                  NULL, recv_ms, rc);
+}
+
+uint64_t efs_client_rpc_last_sent(void)
+{
+    return rpc_tl_sent;
+}
+
+/* W155: ask nid for its receipt of an earlier REPORT (EFS_REPORT_F_RECEIPT).
+ * Runs nothing on the host. EFS_OK and *out filled when nid answered. */
+static int rpc_report_receipt_query(efs_node_id_t nid, const struct efs_opid *session,
+                                    const struct efs_report_pubid *pubid,
+                                    struct efs_msg_report_receipt_reply *out)
+{
+    uint8_t buf[sizeof(struct efs_msg_report_chunks) + EFS_REPORT_PUBID_LEN +
+                EFS_REPORT_SESSION_LEN];
+    struct efs_msg_report_chunks *hdr = (struct efs_msg_report_chunks *)buf;
+    struct efs_conn *conn;
+    uint8_t rtype = 0;
+    void *payload = NULL;
+    uint32_t plen = 0;
+    int rc;
+
+    memset(buf, 0, sizeof(buf));
+    hdr->export_id = g_client.export_id;
+    hdr->sync = EFS_REPORT_F_SESSION | EFS_REPORT_F_PUBID | EFS_REPORT_F_RECEIPT;
+    efs_report_pubid_pack(buf + sizeof(*hdr), pubid);
+    efs_report_session_pack(buf + sizeof(*hdr) + EFS_REPORT_PUBID_LEN, session);
+    conn = efs_client_conn_get(nid);
+    if (!conn)
+        return EFS_ERR_NET;
+    if (efs_conn_send_msg(conn, EFS_MSG_REPORT_CHUNKS, buf, sizeof(buf)) != 0) {
+        efs_client_conn_drop(nid, conn);
+        return EFS_ERR_NET;
+    }
+    efs_conn_set_recv_timeout(conn, 2000);
+    rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
+    if (rc != 0) {
+        free(payload);
+        efs_client_conn_drop(nid, conn);
+        return EFS_ERR_NET;
+    }
+    efs_conn_set_recv_timeout(conn, 0);
+    efs_client_conn_release(nid, conn);
+    if (rtype != EFS_MSG_REPORT_CHUNKS_REPLY || plen < sizeof(*out)) {
+        free(payload);
+        return EFS_ERR_PROTO;
+    }
+    memcpy(out, payload, sizeof(*out));
+    free(payload);
+    return out->rpc.status == EFS_INODE_RPC_OK ? EFS_OK : rpc_status_to_efs(out->rpc.status);
+}
+
+/* REPORT rcs that say nothing definite about the request. */
+static int report_rc_transient(int rc)
+{
+    return rc == EFS_ERR_NET || rc == EFS_ERR_BUSY || rc == EFS_ERR_NO_QUORUM ||
+           rc == EFS_ERR_NOT_PRIMARY || rc == EFS_ERR_NOT_FOUND;
+}
+
+int efs_client_rpc_report_resolve(efs_export_id_t export_id,
+                                  const struct efs_chunk_rec *recs, uint32_t count,
+                                  const struct efs_ino_size_rec *irecs,
+                                  uint32_t ino_count, int sync,
+                                  const struct efs_report_pubid *pubid, uint64_t sent,
+                                  int rc, efs_ino_t ino)
+{
+    struct efs_opid session;
+    struct efs_receipt_key key;
+    char ident[64];
+    uint64_t bound = rpc_resolve_ms(), previous, start, end;
+    unsigned queries = 0, resends = 0, pass = 0;
+    const char *outcome = "unknown";
+    efs_node_id_t from = 0;
+    int first = rc, last_asked = 0, last_none = 0;
+
+    if (!pubid || !sent || !bound || !report_rc_transient(rc))
+        return rc;
+    if (efs_client_publication_id(1, &session) != EFS_OK ||
+        !efs_report_session_valid(&session))
+        return rc;
+    memset(&key, 0, sizeof(key));
+    memcpy(key.uuid, session.client_uuid, sizeof(key.uuid));
+    key.epoch = session.session_epoch;
+    key.mint_ns = pubid->mint_ns;
+    key.seq = pubid->seq;
+    efs_receipt_key_format(&key, ident, sizeof(ident));
+    previous = efs_client_rpc_deadline_ms();
+    start = rpc_prof_now_us() / 1000ull;
+    end = start + bound;
+    fprintf(stderr, "report-resolve id=%s ino=%llu recs=%u rc=%d sent=%llx: outcome not "
+            "known; same-identity lookup for %llu ms\n", ident, (unsigned long long)ino,
+            count, rc, (unsigned long long)sent, (unsigned long long)bound);
+    efs_client_rpc_set_deadline_ms(end);
+    while (rpc_prof_now_us() / 1000ull < end) {
+        int pending = 0, none = 0, asked = 0;
+
+        for (efs_node_id_t nid = 1; nid <= 64 && nid <= g_client.node_count; nid++) {
+            struct efs_msg_report_receipt_reply rr;
+
+            if (!(sent & (1ull << (nid - 1))))
+                continue;
+            asked++;
+            queries++;
+            if (rpc_report_receipt_query(nid, &session, pubid, &rr) != EFS_OK)
+                continue;
+            if (rr.state == EFS_RECEIPT_STATE_PENDING) {
+                pending = 1;
+            } else if (rr.state == EFS_RECEIPT_STATE_DONE) {
+                if (rr.outcome == EFS_RECEIPT_OUT_APPLIED) {
+                    rc = EFS_OK;
+                    outcome = "applied";
+                    from = nid;
+                    goto done;
+                }
+                if (rr.outcome == EFS_RECEIPT_OUT_PARTIAL) {
+                    rc = EFS_ERR_STALE;
+                    outcome = "partial";
+                    from = nid;
+                    goto done;
+                }
+                if (rr.outcome == EFS_RECEIPT_OUT_NONE)
+                    none++;
+            }
+        }
+        last_asked = asked;
+        last_none = none;
+        if (!pending) {
+            /* Nothing proves it applied: send the same identity again. A
+             * host that applied it answers from its receipt or skips the
+             * committed records; one that did not runs it now. */
+            resends++;
+            rc = efs_client_rpc_report_dirty_pub(export_id, recs, count, irecs, ino_count,
+                                                 sync, pubid);
+            sent |= rpc_tl_sent;
+            if (rc == EFS_OK) {
+                outcome = "resent";
+                goto done;
+            }
+            if (!report_rc_transient(rc)) {
+                outcome = "answered"; /* a definite verdict, e.g. STALE */
+                goto done;
+            }
+        }
+        if (rpc_writer_retry_pause(pass < 3 ? pass : 3) != EFS_OK)
+            break;
+        pass++;
+    }
+done:
+    efs_client_rpc_set_deadline_ms(previous);
+    /* none=a/b: of the b hosts asked last, a held a receipt saying nothing
+     * was proposed. That is not proof (a host can restart or evict), so an
+     * unresolved request stays unknown. */
+    fprintf(stderr, "report-resolve id=%s ino=%llu outcome=%s rc=%d first_rc=%d from=%u "
+            "queries=%u resends=%u none=%d/%d ms=%llu%s\n", ident, (unsigned long long)ino,
+            outcome, rc, first, from, queries, resends, last_none, last_asked,
+            (unsigned long long)(rpc_prof_now_us() / 1000ull - start),
+            strcmp(outcome, "unknown") ? "" : " -> EIO, outcome unknown after the bound");
+    if (!strcmp(outcome, "unknown"))
+        return EFS_ERR_IO;
+    return rc;
+}
+
 #if EFS_FAULTS
 /* Private EOF-contract fault: omit one size record after valid construction.
  * File contains OMIT_SIZE <ino>; OFF or a missing file disables it. */
@@ -2882,6 +3222,8 @@ int efs_client_rpc_report_dirty_pub(efs_export_id_t export_id,
                                     uint32_t ino_count, int sync,
                                     const struct efs_report_pubid *pubid)
 {
+    rpc_tl_sent = 0; /* W155: what this call sends, for report-resolve */
+    rpc_tl_lost = 0;
     if (count == 0 && ino_count == 0 && !sync)
         return EFS_OK;
     if ((count && !recs) || (ino_count && !irecs))

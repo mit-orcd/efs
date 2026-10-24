@@ -39,7 +39,10 @@ import argparse, calendar, glob, importlib.util, json, os, re, sys, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 TS = re.compile(r"^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d+))?Z (.*)$")
 RETRY = re.compile(r"inode-rpc: retry type=(\d+) attempt=(\d+) why=([\w-]+)(?: rc=(-?\d+))?"
-                   r"(?: req_len=(\d+) recv_ms=(\d+))?(?: from=(\d+))?")
+                   r"(?: req_len=(\d+) recv_ms=(\d+))?(?: from=(\d+))?(?: nid=(\d+))?(?: id=(\S+))?")
+# W155 product lines (closing G1-G6): request identities and receipts.
+IDENT = re.compile(r"\bid=([0-9a-f]{8}/\d+/[0-9a-f]+(?::\d+)?)")
+PUB = re.compile(r"\bpub=([0-9a-f]+:\d+)")
 SLOW = re.compile(r"inode-rpc: slow-ok type=(\d+) attempts=(\d+) saw_busy=(\d+) status=(-?\d+) us=(\d+)")
 ADMIT = re.compile(r"opid-admission: BUSY oldest=(\d+) next=(\d+) live=(\d+) window=(\d+)")
 RLOOP = re.compile(r"report-loop ino=(\d+) (.*)")
@@ -176,7 +179,8 @@ def correlate(r, client, servers, names, pad):
         if lo <= t <= hi or (sent is not None and lo <= sent <= hi):
             ty = int(m.group(1))
             retries.append(dict(time=t, type=ty, type_name=names.get(ty, "?"), attempt=int(m.group(2)),
-                                why=m.group(3), rc=m.group(4), req_len=m.group(5), recv_ms=recv, sent=sent))
+                                why=m.group(3), rc=m.group(4), req_len=m.group(5), recv_ms=recv, sent=sent,
+                                nid=m.group(8), id=m.group(9)))
     c = res["client"]
     c["retries"] = retries
     slow = [SLOW.search(x) for t, x in inw]; slow = [m for m in slow if m]
@@ -213,6 +217,24 @@ def correlate(r, client, servers, names, pad):
             silence_s=round(gap, 3), silence_from=at)
         if ino:
             res["receipt"] += [dict(server=name, time=t, text=x) for t, x in sw if re.search(r"\bino=%d\b" % ino, x)]
+    # W155: join by request identity, exactly. The ids of this failure: its
+    # retries in the window, and resolve/report-loop lines naming its inode.
+    ids = set(x["id"] for x in retries if x.get("id") and x["id"] != "-")
+    for t, x in inw:
+        if ino and re.search(r"\bino=%d\b" % ino, x):
+            ids.update(IDENT.findall(x))
+            for pub in PUB.findall(x):
+                ids.update(i for _, y in client for i in IDENT.findall(y) if i.endswith("/" + pub))
+    ident = res["identity"] = []
+    for i in sorted(ids):
+        pub = i.split("/")[-1] if ":" in i else None
+        mine = lambda x: ("id=" + i) in x or (pub is not None and ("pub=" + pub) in x)
+        e = dict(id=i, client=[dict(time=t, text=x) for t, x in client if mine(x) and not RETRY.search(x)],
+                 servers=[dict(server=n, time=t, text=x) for n, lines in servers.items() for t, x in lines if mine(x)])
+        ident.append(e)
+        res["receipt"] += [dict(server=x["server"], time=x["time"], text=x["text"]) for x in e["servers"]
+                           if x not in res["receipt"]]
+    c["flush_stage"] = [dict(time=t, **kv(x)) for t, x in inw if x.startswith("flush-meta stage=")]
     return res
 
 def fmt_final(r):
@@ -282,6 +304,14 @@ def table(n, res):
             if s["silence_from"] is not None:
                 parts.append("longest silence %.1fs from %s" % (s["silence_s"], utc(s["silence_from"])))
             add(name, "; ".join(parts))
+        for e in res.get("identity", []):
+            add("request " + e["id"], "; ".join(
+                ["client %s %s" % (utc(x["time"]), x["text"][:110]) for x in e["client"]] +
+                ["%s %s %s" % (x["server"], utc(x["time"]), x["text"][:110]) for x in e["servers"]]) or
+                "no line beyond the retry names it")
+        if c.get("flush_stage"):
+            add("flush stage", "; ".join("%s stage=%s report_rc=%s rc=%s" % (
+                utc(x["time"]), x.get("stage"), x.get("report_rc"), x.get("rc")) for x in c["flush_stage"]))
         add("receipt/admission", "; ".join("%s %s %s" % (x["server"], utc(x["time"]), x["text"][:120])
                                            for x in res["receipt"]) or "not logged: no server line names this inode, "
                                                                        "request or opid (gap G2)")
@@ -299,6 +329,30 @@ def gaps(results):
     rc = [x for r in results for x in r["receipt"]]
     sp = sum(s["report_split"] for r in results for s in r["servers"].values())
     nores = sum(1 for r in results if r["window"] is None)
+    idrt = [x for x in rt if x.get("id")]
+    ids = [e for r in results for e in r.get("identity", [])]
+    srv_ids = sum(len(e["servers"]) for e in ids)
+    resolve = sum(1 for e in ids for x in e["client"] if "resolve" in x["text"])
+    stage = sum(len(r["client"].get("flush_stage", [])) for r in results)
+    if idrt or srv_ids or stage:
+        # A run of a W155 build: say which joins the identities made.
+        return [
+            "G1 retry identity: %d of %d inode-rpc retry lines name the target node and request id "
+            "(closed by W155)." % (len(idrt), len(rt)),
+            "G2 server receipt: %d server receipt line(s) (report-receipt, opid-receipt, report-split pub=) "
+            "join the failures' %d request id(s) exactly." % (srv_ids, len(ids)),
+            "G3 opid join: report-loop names the publication id (pub=) and report-resolve the request id; "
+            "%d opid-admission BUSY line(s) still name no request type." % len(ad),
+            "G4 retry outcome: %d client resolve line(s) give the same-identity outcome (applied, resent, "
+            "answered or unknown)." % resolve,
+            "G5 flush stage: %d flush-meta stage= line(s) say whether the REPORT or a stalled write-back "
+            "failed." % stage,
+            "G6 namespace ops: retries and the BUSY exhaustion line name the op id; rename_at/unlink "
+            "application lines still do not.",
+            "G7 server stalls: the longest silence per daemon is measurable but no line says why a daemon stopped "
+            "logging (apply, compaction, I/O or lock wait).",
+            "G8 harness: %d failure(s) here could not be anchored." % nores,
+        ]
     return [
         "G1 retry identity: %d inode-rpc retry lines in failure windows; they name type, attempt, rc and recv_ms but "
         "no inode, file handle, opid, request id or target node, so a retry is attributed to a failure by time "
