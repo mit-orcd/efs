@@ -28,7 +28,7 @@ Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
 import os, re, shutil, sys, tempfile, threading, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from k33_daemons import Cluster, EFSD, MGMT, Mount, fuse_ok, payload  # noqa: E402
+from k33_daemons import Cluster, EFSD, MGMT, Mount, fuse_ok, payload, voters_ok  # noqa: E402
 
 for b in (EFSD, MGMT):
     if not b.exists():
@@ -174,7 +174,7 @@ try:
         c.wait_log(i, rf'raft-host: up raft_id={i - 1} n=5 formed', timeout=60)
         assert c.node_id(i) == i, i
     c.wait_members([1, 2, 3, 4, 5], 5)
-    c.wait_voters([1, 2, 3, 4, 5], lambda i, v: v[0][1] == 7 and v[2][1] == 0xe)
+    c.wait_voters([1, 2, 3, 4, 5], lambda i, v: voters_ok(i, v, 5))
     a = Mount(c, 1, 'mnt-a2')
     mounts.append(a)
     mref[0] = a
@@ -191,7 +191,7 @@ try:
         c.restart(k)
         c.wait_log(k, rf'raft-host: up raft_id={k - 1} n=5 formed', timeout=60)
         c.wait_members([1, 2, 3, 4, 5], 5)
-        c.wait_voters([1, 2, 3, 4, 5], lambda i, v: v[0][1] == 7 and v[2][1] == 0xe)
+        c.wait_voters([1, 2, 3, 4, 5], lambda i, v: voters_ok(i, v, 5))
         wait_packed(c, base, len(SMALL))
         verify(a, f'node {k} back')
         assert not writer_err, writer_err

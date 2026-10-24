@@ -9178,12 +9178,21 @@ static int host_bg_propose(struct efs_raft_host *h, uint8_t group,
     }
     if (r)
         lid = efs_raft_leader(r);
+    struct host_group *gs = group_slot(h, group);
+    int retired = gs && __atomic_load_n(&gs->retired, __ATOMIC_ACQUIRE);
     pthread_mutex_unlock(&h->mu);
     memset(&rep, 0, sizeof(rep));
     /* The forward path's rep.rc IS the leader's apply verdict. */
     rc = host_remote_cmd(h, group, cmd, clen, &rep, lid);
     if (rc != EFS_OK)
         return rc;
+    /* K33 (M6): a retired replica is removed from the configuration and may
+     * never apply this entry; like a node without a replica, the leader's
+     * verdict is the answer. Waiting on it stalled every GC reap pass of the
+     * group-0 leader (node 1) once four members retired its group-2 replica:
+     * deleted files were never reclaimed (tests/test_k33_bookkeeping.py). */
+    if (retired)
+        return EFS_OK;
     return host_wait_applied(h, group, rep.index, NULL);
 }
 

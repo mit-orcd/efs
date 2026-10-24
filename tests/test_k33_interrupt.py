@@ -37,7 +37,7 @@ import os, shutil, sys, tempfile, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from k33_daemons import (Cluster, EFSD, MGMT, Mount, fuse_ok, payload,  # noqa: E402
-                         fragments)
+                         fragments, voters_ok)
 
 for b in (EFSD, MGMT):
     if not b.exists():
@@ -89,10 +89,7 @@ def check(c, live, count, files):
     for i in live:
         assert tab[c.node_id(i)] == c.ep(i), (i, c.node_id(i), tab)
     assert len({c.node_id(i) for i in live}) == len(live)
-    g2 = 0xe if count >= 4 else 7
-    c.wait_voters(live, lambda i, v: v[0][1] == 7 and v[2][1] == g2 and
-                  (v[2][0] == 1) == (c.node_id(i) in (2, 3, 4) if count >= 4 else True),
-                  timeout=90)
+    c.wait_voters(live, lambda i, v: voters_ok(c.node_id(i), v, count), timeout=90)
     if not files:
         return
     m = Mount(c, live[-1], f'mnt-check-{count}-{len(mounts)}')

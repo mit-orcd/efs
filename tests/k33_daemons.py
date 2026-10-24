@@ -169,7 +169,8 @@ class Cluster:
     def members(self, i):
         """{node id: (endpoint, 'up'|'down')} from `efs-mgmt status` on node i."""
         rc, out = mgmt(self.env, 'status', self.ep(i))
-        assert rc == 0, out
+        # status exits non-zero while a member is down; the table still counts.
+        assert re.search(r'Cluster nodes \(\d+\)', out), out
         n = int(re.search(r'Cluster nodes \((\d+)\)', out).group(1))
         rows = re.findall(r'^\s+node (\d+): (\S+)\s+(up|DOWN)\b', out, re.M)
         assert len(rows) == n, out
@@ -192,6 +193,19 @@ class Cluster:
                 return tabs[0]
             time.sleep(0.3)
         raise AssertionError(f'members never settled at {count}: {last}')
+
+
+def voters_ok(nid, v, count):
+    """raft-status of member nid (`Cluster.status`) under `count` members:
+    group 0 votes on {1,2,3}; group 2 on {1,2,3} at three and {2,3,4} from
+    four, served exactly by its voters. Node 1's group-2 replica is retired
+    from four members: it never serves and may never learn the COLD that
+    removed it (protocol M6), so its own voter view is not checked."""
+    if count >= 4 and nid == 1:
+        return v[0] == (1, 7) and v[2][0] == 0
+    g2 = 0xe if count >= 4 else 7
+    return (v[0][1] == 7 and (v[0][0] == 1) == (nid <= 3) and v[2][1] == g2 and
+            (v[2][0] == 1) == (nid in ((2, 3, 4) if count >= 4 else (1, 2, 3))))
 
 
 def fuse_ok():

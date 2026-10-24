@@ -25,7 +25,7 @@ TMPDIR, free ports (never 17xxx), discovery off; efs-fuse when available.
 import os, shutil, signal, sys, tempfile, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from k33_daemons import Cluster, EFSD, MGMT, Mount, fuse_ok, mgmt, payload  # noqa: E402
+from k33_daemons import Cluster, EFSD, MGMT, Mount, fuse_ok, mgmt, payload, voters_ok  # noqa: E402
 
 for b in (EFSD, MGMT):
     if not b.exists():
@@ -84,7 +84,7 @@ try:
     # 3. Additions with the seed down.
     c.start(4, join=3)
     c.wait_log(4, r'raft-host: up raft_id=3 n=4 formed', timeout=60)
-    c.wait_voters([2, 3, 4], lambda i, v: v[0][1] == 7 and v[2] == (1, 0xe), timeout=90)
+    c.wait_voters([2, 3, 4], lambda i, v: voters_ok(i, v, 4), timeout=90)
     c.start(5, join=4)
     c.wait_log(5, r'raft-host: up raft_id=4 n=5 formed', timeout=60)
     c.start(6, join=5)
@@ -120,8 +120,7 @@ try:
     c.wait_log(1, r'raft-host: (up raft_id=0 n=6 formed|membership revision 4: 6 members)',
                timeout=60)
     c.wait_members([1, 2, 3, 4, 5, 6], 6, timeout=90)
-    c.wait_voters([1, 2, 3, 4, 5, 6], lambda i, v: v[0][1] == 7 and v[2][1] == 0xe and
-                  (v[2][0] == 1) == (i in (2, 3, 4)), timeout=90)
+    c.wait_voters([1, 2, 3, 4, 5, 6], lambda i, v: voters_ok(i, v, 6), timeout=90)
     if a:
         b = Mount(c, 1, 'mnt-b')
         mounts.append(b)
