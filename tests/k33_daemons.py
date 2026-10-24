@@ -91,7 +91,21 @@ class Cluster:
                     return
                 break
             time.sleep(0.05)
-        raise AssertionError(f'node {i}: {pattern!r} not seen\n{self.last_run(i)[-3000:]}')
+        raise AssertionError(f'node {i}: {pattern!r} not seen\n{self.last_run(i)[-3000:]}\n' +
+                             self.others(i))
+
+    def others(self, i):
+        """State and log tail of every other daemon, for a failure message."""
+        out = []
+        for k in sorted(self.ports):
+            if k == i or not (self.dir / f'n{k}.log').exists():
+                continue
+            p = self.procs.get(k)
+            st = 'not running' if p is None else ('running' if p.poll() is None
+                                                  else f'exited {p.returncode}')
+            tail = self.last_run(k).strip().splitlines()[-4:]
+            out.append(f'-- node {k} ({st}):\n' + '\n'.join(t[:300] for t in tail))
+        return '\n'.join(out)
 
     def wait_exit(self, i, timeout=30):
         rc = self.procs[i].wait(timeout=timeout)
