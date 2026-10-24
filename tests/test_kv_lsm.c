@@ -1191,7 +1191,9 @@ static void test_peek_beside_reader(void)
 
 /* W126: peeks and readers beside flushes and compaction swaps. The peeker
  * checks each cut is consistent; the reader checks no row is lost while
- * the levels change under it. TSan checks the peeked fields. */
+ * the levels change under it. TSan checks the peeked fields. The loops
+ * pause between calls: memcheck's unfair thread lock let syscall-free
+ * spinners starve the flusher (a 316 s MANIFEST phase, leak-check timeout). */
 struct peek_storm {
     struct efs_kv *kv;
     int stop;
@@ -1206,6 +1208,7 @@ static void *storm_peeker(void *arg)
         if (!run_peeks(s->kv))
             __atomic_store_n(&s->bad_peek, 1, __ATOMIC_RELEASE);
         __atomic_add_fetch(&s->peeks, 1, __ATOMIC_RELAXED);
+        usleep(100);
     }
     return NULL;
 }
@@ -1217,6 +1220,7 @@ static void *storm_reader(void *arg)
         if (get_is(s->kv, "storm/base", "keep") != EFS_OK)
             __atomic_store_n(&s->bad_read, 1, __ATOMIC_RELEASE);
         __atomic_add_fetch(&s->reads, 1, __ATOMIC_RELAXED);
+        usleep(100);
     }
     return NULL;
 }
