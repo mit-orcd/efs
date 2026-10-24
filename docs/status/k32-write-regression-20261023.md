@@ -2,7 +2,10 @@
 
 **OPEN, alpha 1.0 blocker (performance).** After the fourth-wave merges,
 orcd-mini ior easy write fell from about 1.3 GiB/s to about 0.36–0.5 GiB/s;
-reads are unchanged. Attribution and cause below; no fix yet.
+reads are unchanged. Attribution and cause below. **Code fix Oct 23 on
+branch `claude/cool-rubin-66cca4` (`ea2dc4443`), not merged:** counted
+entries per 1 MiB write fall from 23.0 to 3.0, and the ior gate on
+orcd-mini is NOTRUN ([fix evidence](k32-write-fix-20261023.md)).
 
 ## Measurement
 

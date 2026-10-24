@@ -18,6 +18,15 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[K32 fix: batched K14 publication and K13 tickets](k32-write-fix-20261023.md):
+**code fix PASS (scoped) on branch `claude/cool-rubin-66cca4` (`ea2dc4443`),
+not merged.** A REPORT's consecutive units of one file publish as one
+transaction, with PREPAREs in TXN_BATCH. Ticket admissions and settles are
+batched per Raft group (new tags 90, 91). Counted entries per 1 MiB write:
+23.0 → 3.0 at eight writes per REPORT. On amd, `make test-all` fails only
+what the base fails, and the K14 torn-read gate passes 30/30. **The ior
+easy write gate on orcd-mini is NOTRUN** (parent session).
+
 [W153 committed membership](w153-committed-membership-20261023.md): **code
 fixed and merged (`4026e254d`); merged-tree `make test-all` on intel2 0 FAIL;
 live formation and failover gates NOTRUN; needs a fresh format.** `raft-mkfs` commits the
@@ -258,7 +267,7 @@ persisted; ior write regression needs a K row.
 
 [Simple startup and node addition](alpha-1.0-node-addition-20261023.md): **user decision Oct 23: the `--cluster` file feature is removed; the D39 admission merge is reverted on devel; seed/`--join` is the only startup.** Alpha needs W153 (member count and voters from the committed membership, formation at three) and then node addition (K33/W157).
 
-[K32 write regression](k32-write-regression-20261023.md): **OPEN.** orcd-mini (devel `757d76844`, fresh format) passes but ior easy write fell to ~0.36–0.5 GiB/s: K14 publishes every multi-chunk write as its own cross-group transaction (~20 Raft entries per 1 MiB write), K13 adds ~9.
+[K32 write regression](k32-write-regression-20261023.md): **OPEN; code fix on a branch ([fix evidence](k32-write-fix-20261023.md)).** orcd-mini (devel `757d76844`, fresh format) passes but ior easy write fell to ~0.36–0.5 GiB/s: K14 publishes every multi-chunk write as its own cross-group transaction (~20 Raft entries per 1 MiB write), K13 adds ~9.
 
 [K31 fixed, K27 closed, orcd-mini on devel `24e58fb1d`](k31-k27-orcd-mini-20261023.md): **RDMA reply loss came from the K5 mount session starting before the daemon fork (poller thread lost); fixed in `24e58fb1d`. K27: no ior write regression on fresh formats. All orcd-mini suites PASS.**
 
