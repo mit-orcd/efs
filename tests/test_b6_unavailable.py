@@ -39,7 +39,9 @@ In each mode:
     fsynced: success (a degraded acknowledgement with its W154 mark, never
     from node 3), or an explicit error (full: ENOSPC, no degraded mark).
     The degraded state shows: `Degraded chunks:` > 0 and `Protection:
-    DEGRADED` (down, refuse, slow).
+    DEGRADED` (down, refuse); slow: that, or W154 already rebuilding the
+    marks onto the slow member during the fault (status rebuilt=N rises:
+    the member is up and its rebuild PUTs succeed after 8 s).
  6. Restore in order: fault off, node 3 stopped in order and started again
     (full: with a 1 GiB quota). W154 rebuilds every mark (`Degraded
     chunks: 0`, `Protection: full`); every acknowledged file (R, P, F, W,
@@ -107,6 +109,12 @@ def wait_degraded(c, pred, what, timeout):
             return got
         time.sleep(0.5)
     raise AssertionError(f'{what}: degraded count {got}\n{status(c)}')
+
+
+def rebuilt(c, i=1):
+    """W154 rebuilds the group leaders report (`status` rebuilt=N)."""
+    m = re.search(r'^Degraded chunks: .*?rebuilt=(\d+)', status(c, i), re.M)
+    return int(m.group(1)) if m else 0
 
 
 def packed_total(c):
@@ -297,6 +305,7 @@ def run_mode(mode):
         assert not th.is_alive(), f'{mode}: the in-flight write is still running'
         r.out['inflight_write'] = inflight['v']
     pk_before = packed_total(c)
+    rebuilt_before = rebuilt(c)
 
     # 3. Read through a fresh mount.
     b = r.mount('mnt-b')
@@ -377,9 +386,26 @@ def run_mode(mode):
     else:
         assert all(v == 'ok' for v, _ in ws.values()), f'{mode}: writes refused: {ws}'
         assert from_3 and set(from_3) == {'3'}, f'{mode}: degraded acks {from_3}\n' + alog[-3000:]
-        n = wait_degraded(c, lambda n: n > 0, f'{mode}: during the fault', 60)
-        st = status(c)
-        assert 'Protection: DEGRADED' in st, st
+        if mode == 'slow':
+            # A slow member is up and answers, late: the W154 pass may
+            # rebuild its marks during the fault (rebuild PUTs wait 8 s and
+            # succeed), so the count can be back at 0 before a sample. The
+            # degraded state then shows as rebuilds the leaders report.
+            end, n = time.time() + 60, 0
+            while time.time() < end:
+                n = degraded(c) or 0
+                if n > 0 or rebuilt(c) > rebuilt_before:
+                    break
+                time.sleep(0.5)
+            r.out['rebuilt_during_fault'] = rebuilt(c) - rebuilt_before
+            assert n > 0 or r.out['rebuilt_during_fault'] > 0, \
+                f'{mode}: degraded state never shown (count 0, no rebuild)\n{status(c)}'
+            if n > 0:
+                assert 'Protection: DEGRADED' in status(c) or degraded(c) == 0, status(c)
+        else:
+            n = wait_degraded(c, lambda n: n > 0, f'{mode}: during the fault', 60)
+            st = status(c)
+            assert 'Protection: DEGRADED' in st, st
         r.out['degraded_during'] = n
     # While the fault lasts no file is switched into a segment that misses
     # node 3's fragment: the packer needs all three destinations.
