@@ -1,6 +1,9 @@
 # A6 settings inventory, and the decision-free part of A7/A8 (Oct 24)
 
-**Verdict: @@VERDICT@@** Branch `claude/devel-a6-inventory-7f975e` on
+**Verdict: PASS (scoped).** On amd at `ed9e3e26d`, `make test-all` through
+the summary runner fails only the 10 commands that also fail on the
+untouched base (RDMA on software rxe0 and one fault test that times out on
+both; base fails 11). Branch `claude/devel-a6-inventory-7f975e` on
 `merge-wave3` = `a2326a369`; not merged, not pushed. The A/B selectors are
 listed for a user decision and are **not** removed.
 
@@ -12,12 +15,15 @@ listed for a user decision and are **not** removed.
   keep observability (and confirm it does not change behavior), replace
   numeric tunables that nobody sets with their built-in values, and refuse
   every removed setting at startup.
-- **Tested source:** @@TESTED@@
+- **Tested source:** `ed9e3e26d` (code, tests and this page; the later
+  commit only fills in this gate section). Copied to amd with `git archive`
+  (no `.git`; build id `EFS_GIT_ID=ed9e3e26d`). Base for comparison:
+  `a2326a369`, copied the same way.
 - **Host:** amd (`amd-395`, 32 CPUs, 125 GB RAM, Linux, TCP only), private
   trees under `~/a6-*`, `TMPDIR` under the tree. No cluster, mount, `efs`
   user or port outside what the tests start on loopback was touched.
 - **Raw outputs:** `amd:~/efs-artifacts/a6-20261024/` with `SHA256SUMS`
-  (@@SUMS@@).
+  (`SHA256SUMS` sha256 `c9ef614e…3b23`, 34 files, 324 KB): runner logs, summaries, timings, failure logs, build logs and the runner wrapper `a6-run.sh`.
 
 ## How the inventory is built
 
@@ -474,4 +480,61 @@ refused setting:
    names on an `EFS_FAULTS=1` build; a normal build now refuses the old
    names and ignores (names) the new ones.
 
-@@GATE@@
+## Gate
+
+Command, for each tree (`~/a6-base` at `a2326a369`, `~/a6-branch` at
+`ed9e3e26d`), in a `screen` on amd:
+
+```bash
+cd ~/a6-branch && EFS_GIT_ID=ed9e3e26d EFS_TEST_JOBS=8 ./scripts/make_test_summary.sh
+```
+
+The runner builds `test-bins`, enumerates `make test-all` and runs every
+command (8 at a time, exclusive ones alone), continuing past failures.
+Clean up afterwards with `edelete --force --delete ~/a6-base` and the same for `~/a6-branch` (done).
+
+| Tree | Commands | FAIL | NOTRUN | Time |
+| --- | ---: | ---: | ---: | ---: |
+| base `a2326a369` | 449 | 11 | 5 | 299 s |
+| branch `ed9e3e26d` | 451 | 10 | 5 | 327 s |
+
+The branch adds two commands (`test_env_inventory.py`,
+`test_env_removed.py`), both PASS. Its 10 failures also fail on the base:
+
+- `tests/test_rdma_xprt`, the seven `tests/test_rdma_segmented` cases and
+  `tests/test_declaration_gate` (its RDMA part; the TCP frame path passes):
+  `server_accept` / `efs_rdma_client_upgrade` fail on amd's software RXE
+  device `rxe0`. Host limit.
+- `tests/faults/test_create_retry_fault.py`: its probe times out after 30 s
+  on both trees. Not touched by this branch; recorded, not investigated.
+
+The base also failed `tests/test_k33_payload.py` once (EIO reading a file
+through its FUSE mount); it passed on the branch, where the K33 tests run on
+`tests/faults/efsd`. A single run each, so this shows neither a fix nor a
+regression. NOTRUN on both: `~/git/cluster` absent, the stalled-compactor
+case needs a full `EFS_FAULTS=1` build, no valgrind, `TMPDIR` not XFS, and
+the runner self-test's own NOTRUN line.
+
+Also run: `python3 docs/check-architecture.py` (5/5) after
+`cd docs && python3 gen-architecture-full.py`, and an earlier `make test` on
+a working-tree copy (`iter-make-test-ed9e3e26d-pre.log`; it stops at
+`test_declaration_gate`, the RDMA host limit above, after both new tests
+passed).
+
+## Limitations and remaining gates
+
+- **A7 decisions are open.** No A/B selector is removed; the table above is
+  for the user.
+- **A8 qualification.** 33 numeric tunables stay because a test or launch
+  script sets them; each needs a qualified built-in value or bound. The RNR
+  retry value is an open RDMA question.
+- **No cluster run.** Unit and loopback daemon tests only; the removals are
+  value-preserving (defaults unchanged) except that the old hook names now
+  stop efsd/efs-fuse. A deploy with a launch script that still sets a
+  removed name stops at startup, by design; see the parent list above.
+- The CLI inventory covers efsd, efs-fuse and efs-mgmt's settings commands;
+  efs-mgmt's per-operation `raft-*` commands and efs-bench options are
+  operator and bench commands, not settings, and are not listed one by one.
+- The Oct 22 count (118) and this one (139) used different methods; compare
+  later counts with `scripts/env_inventory.py` only.
+
