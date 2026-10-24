@@ -18,6 +18,9 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Oct 24 merge: READ_VERIFY, K34, A7 removals, K35, K36](decisions.md#d42--alpha-10-decisions-taken-oct-24-user-with-review-conditions):
+**merged into devel; merged-tree `make test-all` on intel2 at `0f0a79eac`: 459 commands, 0 FAIL, 14 NOTRUN host limits (1,839 s; raw: intel2 `~/efs-artifacts/merge-wave5-0f0a79eac-20261024/`, `SHA256SUMS` `01b2d681…dcd9`).** The intermediate gate at `376369aa8` had one FAIL (a missing K34 stub in `test_get_integrity.py`, fixed in `1898c4c63`). K36's recovery mark is Raft tag 248 beside K35's tag 249. devops `8bc872e` and cluster `1402762` drop the removed settings (not pushed). Every store needs a fresh format. Live gates stay NOTRUN.
+
 [K36 / F23: verified recovery after an unclean stop](k36-verified-recovery-20261024.md):
 **PASS (scoped, loopback), merged onto `merge-wave5` at `c19bf9fdb`, not in devel** (branch `claude/devel-k36-recovery-70f9de`; recovery mark is Raft tag 248, K35 holds 249).
 A crashed or killed store now proves itself (boot counter, reclaim journal,
@@ -31,7 +34,7 @@ recovery PASS (8 of 8 runs). Merged-tree gate on intel1 at `87034b518`: `test-lo
 `1898c4c63`; PASS at `c19bf9fdb`); host-limit NOTRUNs only. Power-loss qualification, multi-host and RDMA NOTRUN.
 
 [D42 `EFS_READ_VERIFY`: GET-path integrity audit](read-verify-audit-20261024.md):
-**PASS (scoped), branch `claude/devel-read-verify-08e19c`, not merged.** The
+**PASS (scoped), merged into devel (`ae3e7ab75`).** The
 storage node's record check does not cover the wire or the client's
 buffers; with verification off the base returned wrong bytes in 12 of 51
 negative cases (chunk GET, parity reconstruction, retries, spans; packed
@@ -46,7 +49,7 @@ throughput.
 **PASS (scoped): `make test-all` on amd at `735b82562` fails only the 11 commands that also fail on the base (RDMA on rxe0, a fault-test timeout, K34 in `test_k33_payload.py`); live qualification NOTRUN.** Direct I/O only (storage without `O_DIRECT` refused),
 12 selectors and 3 efsd flags removed and refused, expiry compiled out,
 `EFS_RDMA_TRACE`, strict `EFS_TRANSPORT=rdma`; A/B selectors 15 → 1
-(`EFS_READ_VERIFY`). Branch `claude/devel-a7-removals-d55c03`, not merged.
+(`EFS_READ_VERIFY`). Branch merged into devel (`6069ada62`).
 External launch/portal changes for the parent are listed there.
 
 [K35: fsync with a member down, only with proof (D42, F22)](k35-fsync-degraded-20261024.md):
@@ -61,7 +64,7 @@ verification NOTRUN (parent).
 **merged into devel; merged-tree `make test-all` on intel2 at `c894ec5ae`: 456 commands, 0 FAIL, 14 NOTRUN host limits (1,831 s; raw: intel2 `~/efs-artifacts/merge-wave4-20261024/`, `SHA256SUMS` `2bf6bbe2…1f10`).** `test_k33_payload.py` passed in this run; it fails intermittently (K34, fix in progress). Open for the user: the A/B decision table (A7) and findings F22/F23 (fsync with a member down; unclean-stop stores).
 
 [K34: acknowledged files unreadable while one member stops](k34-stop-put-ack-20261024.md):
-**PASS (scoped), on branch `claude/devel-k34-954d00` (`6c09649a3`), not merged.**
+**PASS (scoped), merged into devel (`fc5c1d64e`; tested at `6c09649a3`).**
 `tests/test_k33_payload.py` read `EIO` with one member stopping, for three
 reasons: a chunk acknowledged on the stopping member and one other while
 the third answered BUSY; lease/session commands that gave up at the first

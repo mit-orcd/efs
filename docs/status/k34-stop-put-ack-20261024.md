@@ -1,6 +1,6 @@
 # K34: acknowledged files unreadable while one member stops (Oct 24)
 
-**Verdict: PASS (scoped), on branch `claude/devel-k34-954d00`, not merged,
+**Verdict: PASS (scoped), merged into devel (`fc5c1d64e`),
 not pushed.** On nuc at `6c09649a3`: `tests/test_k33_payload.py` 20 of 20
 runs PASS (two loops of 10 side by side, 301–484 s each), and `make
 test-all` 450 commands, 0 FAIL, 14 NOTRUN host limits (1,204 s). The new
