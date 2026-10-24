@@ -55,3 +55,42 @@ int efs_put_orphan_collect(struct efs_kv *kv, const struct efs_put_ticket *t, ui
     }
     return rc == EFS_OK ? EFS_ERR_BUSY : rc;
 }
+
+int efs_put_drain_stream(struct efs_kv *kv, const struct efs_put_stream *s,
+                         const struct efs_put_drain_ops *ops, uint32_t budget,
+                         struct efs_put_drain_stats *st)
+{
+    if (!kv || !s || !ops || !ops->revoked || !ops->drain || !st || !budget)
+        return EFS_ERR_INVAL;
+    int rc = efs_put_ticket_stream_live(kv, s);
+    if (rc == EFS_ERR_NOT_FOUND)
+        return EFS_OK;
+    if (rc == EFS_OK)
+        rc = ops->revoked(ops->ctx, s->uuid, s->epoch);
+    if (rc == EFS_OK)
+        rc = efs_session_local_revoked(kv, s->shard, s->uuid, s->epoch);
+    if (rc != EFS_OK) {
+        if (rc == EFS_ERR_BUSY || rc == EFS_ERR_NOT_FOUND) {
+            st->waiting++;
+            return EFS_ERR_BUSY;
+        }
+        return rc;
+    }
+    for (uint32_t i = 0; i < budget; i++) {
+        rc = ops->drain(ops->ctx, s);
+        if (rc != EFS_OK) {
+            if (rc == EFS_ERR_BUSY)
+                st->blocked++;
+            return rc;
+        }
+        st->commands++;
+        rc = efs_put_ticket_stream_live(kv, s);
+        if (rc == EFS_ERR_NOT_FOUND) {
+            st->drained++;
+            return EFS_OK;
+        }
+        if (rc != EFS_OK)
+            return rc;
+    }
+    return EFS_ERR_BUSY;
+}

@@ -57,7 +57,7 @@ int main(void) {
  reset();salt=4;assert(RUN==EFS_ERR_PROTO && !state);
  reset();salt=2;assert(RUN==EFS_ERR_STALE && !state);
  reset();query=1;salt=2;assert(!RUN && state==2);
- reset();query=1;salt=3;assert(!RUN && state==3);
+ reset();query=1;salt=3;assert(RUN==EFS_ERR_PROTO && !state); /* 3 (was RECLAIMING) is refused */
  reset();query=1;salt=5;assert(!RUN && state==5); /* REJECTED */
  reset();query=1;salt=4;assert(RUN==EFS_ERR_PROTO && !state); /* RETIRED is never a stored state */
  reset();query=1;salt=0;result=EFS_ERR_NOT_FOUND;assert(RUN==EFS_ERR_NOT_FOUND && !state && calls==1);

@@ -35,7 +35,7 @@ static uint64_t rd64(const uint8_t *p)
 static int state_stored(uint32_t state)
 {
     return state == EFS_PUT_TICKET_ADMITTED || state == EFS_PUT_TICKET_PUBLISHED ||
-           state == EFS_PUT_TICKET_RECLAIMING || state == EFS_PUT_TICKET_REJECTED;
+           state == EFS_PUT_TICKET_REJECTED;
 }
 static uint32_t ticket_shard(const struct efs_put_ticket *t)
 {
@@ -208,8 +208,7 @@ int efs_put_ticket_get(struct efs_kv *kv, const struct efs_put_ticket *t,
         return EFS_ERR_PROTO;
     uint8_t expected[EFS_PUT_TICKET_VAL_LEN];
     ticket_value(t, rd32(val + 4), expected);
-    if (memcmp(expected, val, 176) || (rd32(val + 176) & ~t->member_mask) ||
-        (rd32(val + 4) != EFS_PUT_TICKET_RECLAIMING && rd32(val + 176)))
+    if (memcmp(expected, val, EFS_PUT_TICKET_VAL_LEN))
         return EFS_ERR_PROTO;
     *state = rd32(val + 4);
     return EFS_OK;
@@ -274,12 +273,32 @@ static void count_item(const uint8_t key[51], uint32_t count, uint8_t ck[23], ui
     *item = count ? (struct efs_kv_item){EFS_KV_PUT, ck, 23, cv, 8}
                   : (struct efs_kv_item){EFS_KV_DEL, ck, 23, NULL, 0};
 }
+/* D31 stream index on the group's anchor shard, present while the stream
+ * holds a ticket. Same batch as the count transition 0 -> 1 / 1 -> 0. */
+static void stream_index_key(const uint8_t key[23], uint8_t ik[EFS_PUT_STREAM_KEY_LEN])
+{
+    uint32_t sh = ((uint32_t)key[0] << 8) | key[1], anchor = efs_kv_anchor_shard(sh);
+    ik[0] = (uint8_t)(anchor >> 8);
+    ik[1] = (uint8_t)anchor;
+    ik[2] = EFS_KV_KIND_PUT_STREAM;
+    memcpy(ik + 3, key + 3, 20); /* uuid, epoch */
+    ik[23] = key[0];
+    ik[24] = key[1];
+}
+static void stream_index_item(const uint8_t key[51], int live, uint8_t ik[EFS_PUT_STREAM_KEY_LEN],
+                              uint8_t iv[4], struct efs_kv_item *item)
+{
+    stream_index_key(key, ik);
+    wr32(iv, 1);
+    *item = live ? (struct efs_kv_item){EFS_KV_PUT, ik, EFS_PUT_STREAM_KEY_LEN, iv, 4}
+                 : (struct efs_kv_item){EFS_KV_DEL, ik, EFS_PUT_STREAM_KEY_LEN, NULL, 0};
+}
 /* A new stream entry in state ADMITTED (admission) or REJECTED (settle of a
  * ticket whose admission never applied: a late admission then finds it). */
 static int insert_ticket(struct efs_kv *kv, const struct efs_put_ticket *t,
                          const uint8_t key[51], uint32_t state)
 {
-    uint8_t val[EFS_PUT_TICKET_VAL_LEN], ck[23], cv[8];
+    uint8_t val[EFS_PUT_TICKET_VAL_LEN], ck[23], cv[8], ik[EFS_PUT_STREAM_KEY_LEN], iv[4];
     uint32_t live;
     int rc = stream_count(kv, key, &live);
     if (rc != EFS_OK)
@@ -297,9 +316,12 @@ static int insert_ticket(struct efs_kv *kv, const struct efs_put_ticket *t,
     if (same.count)
         return EFS_ERR_PROTO;
     ticket_value(t, state, val);
-    struct efs_kv_item items[2] = {{EFS_KV_PUT, key, 51, val, sizeof(val)}};
-    count_item(key, live + 1, ck, cv, &items[1]);
-    return efs_kv_batch(kv, items, 2);
+    struct efs_kv_item items[3] = {{EFS_KV_PUT, key, 51, val, sizeof(val)}};
+    unsigned n = 1;
+    count_item(key, live + 1, ck, cv, &items[n++]);
+    if (!live)
+        stream_index_item(key, 1, ik, iv, &items[n++]);
+    return efs_kv_batch(kv, items, n);
 }
 int efs_put_ticket_admit(struct efs_kv *kv, const struct efs_put_ticket *t)
 {
@@ -342,54 +364,6 @@ int efs_put_ticket_publish_item(struct efs_kv *kv, const struct efs_put_ticket *
     *item = (struct efs_kv_item){EFS_KV_PUT, key, 51, val, EFS_PUT_TICKET_VAL_LEN};
     return EFS_OK;
 }
-int efs_put_ticket_reclaim_begin(struct efs_kv *kv, const struct efs_put_ticket *t)
-{
-    uint8_t key[51], val[EFS_PUT_TICKET_VAL_LEN];
-    uint32_t state;
-    if (!kv)
-        return EFS_ERR_INVAL;
-    int rc = ticket_key(t, key);
-    if (rc == EFS_OK)
-        rc = efs_session_reclaimable(kv, ticket_shard(t), t->id.client_uuid,
-                                     t->id.session_epoch);
-    if (rc == EFS_OK)
-        rc = efs_put_ticket_get(kv, t, &state);
-    if (rc != EFS_OK)
-        return rc;
-    if (state == EFS_PUT_TICKET_PUBLISHED)
-        return EFS_ERR_BUSY;
-    if (state == EFS_PUT_TICKET_RECLAIMING)
-        return EFS_OK;
-    ticket_value(t, EFS_PUT_TICKET_RECLAIMING, val);
-    return efs_kv_put(kv, key, sizeof(key), val, sizeof(val));
-}
-/* Coordinator accepts a member ACK only after that member durably fences
- * old-epoch PUTs and confirms deletion. The ledger itself preserves every
- * missing member across leadership changes and restart. */
-int efs_put_ticket_delete_ack(struct efs_kv *kv, const struct efs_put_ticket *t,
-                              uint32_t member_bit)
-{
-    uint8_t key[51], val[EFS_PUT_TICKET_VAL_LEN];
-    uint32_t len = sizeof(val), state;
-    if (!kv || !t || !member_bit || (member_bit & (member_bit - 1)) ||
-        !(t->member_mask & member_bit))
-        return EFS_ERR_INVAL;
-    int rc = efs_put_ticket_get(kv, t, &state);
-    if (rc != EFS_OK)
-        return rc;
-    if (state != EFS_PUT_TICKET_RECLAIMING)
-        return EFS_ERR_BUSY;
-    rc = ticket_key(t, key);
-    if (rc == EFS_OK)
-        rc = efs_kv_get(kv, key, sizeof(key), val, &len);
-    if (rc != EFS_OK)
-        return rc;
-    uint32_t acked = rd32(val + 176);
-    if (acked & member_bit)
-        return EFS_OK;
-    wr32(val + 176, acked | member_bit);
-    return efs_kv_put(kv, key, sizeof(key), val, sizeof(val));
-}
 /* D31: the orphan record key, on the anchor shard of the ticket's group. */
 static int orphan_key(const struct efs_put_ticket *t, uint8_t ok[EFS_PUT_ORPHAN_KEY_LEN])
 {
@@ -407,11 +381,12 @@ static int orphan_key(const struct efs_put_ticket *t, uint8_t ok[EFS_PUT_ORPHAN_
     return EFS_OK;
 }
 /* Retire the stream head. REJECTED moves its body into the orphan ledger in
- * the same batch; RECLAIMING requires every captured member's deletion ACK. */
+ * the same batch; the last ticket also drops the stream's index entry. */
 static int retire_head(struct efs_kv *kv, const struct efs_put_ticket *t,
                        const uint8_t key[51], uint32_t state)
 {
     uint8_t fk[23], val[12], ok[EFS_PUT_ORPHAN_KEY_LEN], ov[EFS_PUT_TICKET_VAL_LEN], ck[23], cv[8];
+    uint8_t ik[EFS_PUT_STREAM_KEY_LEN], iv[4];
     uint32_t live;
     struct ticket_scan s;
     int rc = stream_head(kv, key, &s);
@@ -428,10 +403,12 @@ static int retire_head(struct efs_kv *kv, const struct efs_put_ticket *t,
     fk[2] = EFS_KV_KIND_PUT_FLOOR;
     wr32(val, 1);
     wr64(val + 4, t->id.seq);
-    struct efs_kv_item items[4] = {{EFS_KV_DEL, key, 51, NULL, 0},
+    struct efs_kv_item items[5] = {{EFS_KV_DEL, key, 51, NULL, 0},
                                    {EFS_KV_PUT, fk, 23, val, sizeof(val)}};
     unsigned n = 2;
     count_item(key, live - 1, ck, cv, &items[n++]);
+    if (live == 1)
+        stream_index_item(key, 0, ik, iv, &items[n++]);
     if (state == EFS_PUT_TICKET_REJECTED) {
         rc = orphan_key(t, ok);
         if (rc != EFS_OK)
@@ -441,37 +418,6 @@ static int retire_head(struct efs_kv *kv, const struct efs_put_ticket *t,
     }
     return efs_kv_batch(kv, items, n);
 }
-int efs_put_ticket_retire(struct efs_kv *kv, const struct efs_put_ticket *t)
-{
-    uint8_t key[51];
-    uint32_t state;
-    uint64_t floor;
-    if (!kv)
-        return EFS_ERR_INVAL;
-    int rc = ticket_key(t, key);
-    if (rc == EFS_OK)
-        rc = ticket_floor(kv, key, &floor);
-    if (rc != EFS_OK)
-        return rc;
-    if (t->id.seq <= floor)
-        return EFS_OK;
-    rc = efs_put_ticket_get(kv, t, &state);
-    if (rc != EFS_OK)
-        return rc;
-    if (state == EFS_PUT_TICKET_ADMITTED)
-        return EFS_ERR_BUSY;
-    if (state == EFS_PUT_TICKET_RECLAIMING) {
-        uint8_t pending[EFS_PUT_TICKET_VAL_LEN];
-        uint32_t len = sizeof(pending);
-        rc = efs_kv_get(kv, key, sizeof(key), pending, &len);
-        if (rc != EFS_OK)
-            return rc;
-        if (rd32(pending + 176) != t->member_mask)
-            return EFS_ERR_BUSY;
-    }
-    return retire_head(kv, t, key, state);
-}
-
 int efs_put_ticket_retired(struct efs_kv *kv,const struct efs_put_ticket *t,int *out)
 {
     if (!kv || !out) return EFS_ERR_INVAL;
@@ -503,10 +449,18 @@ int efs_put_ticket_reject(struct efs_kv *kv,const struct efs_put_ticket *t)
     if (rc==EFS_OK) rc=efs_put_ticket_get(kv,t,&state);
     if (rc!=EFS_OK) return rc;
     if (state==EFS_PUT_TICKET_REJECTED) return EFS_OK;
-    if (state==EFS_PUT_TICKET_PUBLISHED) return EFS_ERR_STALE;
-    if (state!=EFS_PUT_TICKET_ADMITTED) return EFS_ERR_BUSY;
+    if (state!=EFS_PUT_TICKET_ADMITTED) return EFS_ERR_STALE; /* PUBLISHED */
     ticket_value(t,EFS_PUT_TICKET_REJECTED,val);
     return efs_kv_put(kv,key,sizeof(key),val,sizeof(val));
+}
+
+/* A staged multi-chunk publication (K14) may still publish this object at
+ * RESOLVE; never abandon a ticket under it (BUSY). OK when none. */
+static int stage_pending(struct efs_kv *kv,const struct efs_put_ticket *t)
+{
+    struct efs_txid tx;struct efs_txn_parts parts;
+    int staged=efs_meta_pub_stage_peek(kv,t->ino,t->inode_gen,t->ci,&tx,&parts);
+    return staged==EFS_OK?EFS_ERR_BUSY:staged==EFS_ERR_NOT_FOUND?EFS_OK:staged;
 }
 
 int efs_put_ticket_settle(struct efs_kv *kv,const struct efs_put_ticket *t)
@@ -525,15 +479,9 @@ int efs_put_ticket_settle(struct efs_kv *kv,const struct efs_put_ticket *t)
     }
     if (rc!=EFS_OK) return rc;
     if (state==EFS_PUT_TICKET_RETIRED) return EFS_OK;
-    if (state==EFS_PUT_TICKET_RECLAIMING) return EFS_ERR_BUSY;
     if (state==EFS_PUT_TICKET_ADMITTED) {
-        /* A staged multi-chunk publication (K14) may still publish this
-         * object at RESOLVE; never abandon under it. Settle later. */
-        struct efs_txid tx;struct efs_txn_parts parts;
-        int staged=efs_meta_pub_stage_peek(kv,t->ino,t->inode_gen,t->ci,&tx,&parts);
-        if (staged==EFS_OK) return EFS_ERR_BUSY;
-        if (staged!=EFS_ERR_NOT_FOUND) return staged;
-        rc=efs_put_ticket_reject(kv,t);
+        rc=stage_pending(kv,t);
+        if (rc==EFS_OK) rc=efs_put_ticket_reject(kv,t);
         if (rc!=EFS_OK) return rc;
         state=EFS_PUT_TICKET_REJECTED;
     }
@@ -622,4 +570,110 @@ int efs_put_ticket_orphan_decode(const uint8_t *key,uint32_t kl,const uint8_t *v
     int rc=orphan_value_ok(&t,val,vl,acked);
     if (rc==EFS_OK) *out=t;
     return rc;
+}
+
+void efs_put_ticket_stream_prefix(uint32_t anchor,uint8_t prefix[3])
+{
+    prefix[0]=(uint8_t)(anchor>>8);prefix[1]=(uint8_t)anchor;prefix[2]=EFS_KV_KIND_PUT_STREAM;
+}
+
+/* The stream's ticket-key prefix [lane shard:2][PUT_TICKET][uuid][epoch]. */
+static int stream_prefix(const struct efs_put_stream *s,uint8_t pre[23])
+{
+    unsigned nonzero=0;
+    if (!s || !s->epoch || s->shard>EFS_KV_SHARD_MASK) return EFS_ERR_INVAL;
+    for (unsigned i=0;i<EFS_OPID_UUID_LEN;i++) nonzero|=s->uuid[i];
+    if (!nonzero) return EFS_ERR_INVAL;
+    pre[0]=(uint8_t)(s->shard>>8);pre[1]=(uint8_t)s->shard;pre[2]=EFS_KV_KIND_PUT_TICKET;
+    memcpy(pre+3,s->uuid,16);wr32(pre+19,s->epoch);
+    return EFS_OK;
+}
+
+int efs_put_ticket_stream_decode(const uint8_t *key,uint32_t kl,const uint8_t *val,uint32_t vl,
+                                 struct efs_put_stream *out)
+{
+    if (!key || !val || !out) return EFS_ERR_INVAL;
+    if (kl!=EFS_PUT_STREAM_KEY_LEN || key[2]!=EFS_KV_KIND_PUT_STREAM || vl!=4 || rd32(val)!=1)
+        return EFS_ERR_PROTO;
+    struct efs_put_stream s;uint8_t pre[23],want[EFS_PUT_STREAM_KEY_LEN];
+    memcpy(s.uuid,key+3,16);s.epoch=rd32(key+19);s.shard=((uint32_t)key[23]<<8)|key[24];
+    if (stream_prefix(&s,pre)!=EFS_OK) return EFS_ERR_PROTO;
+    stream_index_key(pre,want); /* the anchor must be the lane shard's */
+    if (memcmp(want,key,sizeof(want))) return EFS_ERR_PROTO;
+    *out=s;return EFS_OK;
+}
+
+int efs_put_ticket_stream_live(struct efs_kv *kv,const struct efs_put_stream *s)
+{
+    uint8_t pre[23],ik[EFS_PUT_STREAM_KEY_LEN],iv[4];uint32_t len=sizeof(iv);
+    if (!kv) return EFS_ERR_INVAL;
+    int rc=stream_prefix(s,pre);
+    if (rc!=EFS_OK) return rc;
+    stream_index_key(pre,ik);
+    rc=efs_kv_get(kv,ik,sizeof(ik),iv,&len);
+    if (rc==EFS_OK && (len!=4 || rd32(iv)!=1)) return EFS_ERR_PROTO;
+    return rc;
+}
+
+/* The stream head as a full ticket, rebuilt from its row and validated
+ * against the key it derives (NOT_FOUND: the stream is empty). */
+struct head_row {
+    uint8_t key[51],val[EFS_PUT_TICKET_VAL_LEN];
+    int found,bad;
+};
+static int head_row_cb(void *user,const uint8_t *key,uint32_t kl,const uint8_t *val,uint32_t vl)
+{
+    struct head_row *h=user;
+    if (kl!=51 || vl!=EFS_PUT_TICKET_VAL_LEN) { h->bad=1;return 1; }
+    memcpy(h->key,key,51);memcpy(h->val,val,vl);h->found=1;
+    return 1;
+}
+static int stream_head_ticket(struct efs_kv *kv,const uint8_t pre[23],struct efs_put_ticket *t,
+                              uint32_t *state)
+{
+    struct head_row h={0};
+    int rc=efs_kv_scan_prefix(kv,pre,23,head_row_cb,&h);
+    if (rc!=EFS_OK && rc!=1) return rc;
+    if (h.bad) return EFS_ERR_PROTO;
+    if (!h.found) return EFS_ERR_NOT_FOUND;
+    memset(t,0,sizeof(*t));
+    memcpy(t->id.client_uuid,h.key+3,16);t->id.session_epoch=rd32(h.key+19);
+    t->id.seq=rd64(h.key+23);t->ino=rd64(h.key+31);t->inode_gen=rd64(h.key+39);
+    t->ci=rd32(h.key+47);t->object=rd64(h.val+8);memcpy(t->body_digest,h.val+16,EFS_HASH_SIZE);
+    for (unsigned i=0;i<EFS_NUM_FRAGMENTS;i++) t->nodes[i]=rd32(h.val+48+4*i);
+    memcpy(t->checksums,h.val+60,sizeof(t->checksums));
+    t->delta_off=rd32(h.val+156);t->delta_len=rd32(h.val+160);t->coding_profile=rd32(h.val+164);
+    t->fragment_len=rd32(h.val+168);t->member_mask=rd32(h.val+172);
+    uint8_t want[51];
+    if (ticket_key(t,want)!=EFS_OK || memcmp(want,h.key,51)) return EFS_ERR_PROTO;
+    rc=efs_put_ticket_get(kv,t,state);
+    return rc==EFS_ERR_NOT_FOUND || rc==EFS_ERR_STALE?EFS_ERR_PROTO:rc;
+}
+
+int efs_put_ticket_drain(struct efs_kv *kv,const struct efs_put_stream *s,uint32_t max,
+                         uint32_t *moved)
+{
+    uint8_t pre[23],key[51];
+    uint32_t n=0,state;
+    struct efs_put_ticket t;
+    if (moved) *moved=0;
+    if (!kv || !max || max>EFS_PUT_TICKET_DRAIN_MAX) return EFS_ERR_INVAL;
+    int rc=stream_prefix(s,pre);
+    /* Behind the floor: the owner's epoch can no longer change this stream. */
+    if (rc==EFS_OK) rc=efs_session_local_revoked(kv,s->shard,s->uuid,s->epoch);
+    if (rc!=EFS_OK) return rc;
+    while (n<max) {
+        rc=stream_head_ticket(kv,pre,&t,&state);
+        if (rc==EFS_ERR_NOT_FOUND) { rc=EFS_OK;break; }
+        if (rc==EFS_OK && state==EFS_PUT_TICKET_ADMITTED) {
+            rc=stage_pending(kv,&t);
+            state=EFS_PUT_TICKET_REJECTED; /* abandoned: never published */
+        }
+        if (rc==EFS_OK) rc=ticket_key(&t,key);
+        if (rc==EFS_OK) rc=retire_head(kv,&t,key,state);
+        if (rc!=EFS_OK) break;
+        n++;
+    }
+    if (moved) *moved=n;
+    return n && rc==EFS_ERR_BUSY?EFS_OK:rc;
 }

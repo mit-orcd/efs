@@ -10,6 +10,7 @@ b=s.index('\n}\n',rpc)+3  # only the named helper, not adjacent CLI commands
 source=r'''
 #include "efs/protocol.h"
 #include "efs/meta_cmd.h"
+#include "efs/session_revoke.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>

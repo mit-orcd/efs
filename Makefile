@@ -93,7 +93,7 @@ COMMON_SRCS = src/meta/append_plan.c $(COMMON_DIR)/publication.c $(COMMON_DIR)/p
               src/raft/raft_mem.c \
               src/raft/raft_disk.c \
               src/raft/raft_log.c \
-              $(COMMON_DIR)/placement.c $(COMMON_DIR)/membership.c \
+              $(COMMON_DIR)/placement.c $(COMMON_DIR)/membership.c $(COMMON_DIR)/session_revoke.c \
               $(COMMON_DIR)/checksum.c \
               $(COMMON_DIR)/network.c \
               $(COMMON_DIR)/rdma.c \
@@ -459,6 +459,7 @@ test: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_put_ticket_rpc.py
 	python3 tests/test_put_ticket_owner.py
 	python3 tests/test_put_ticket_batch.py
+	python3 tests/test_put_drain.py
 	python3 tests/test_k32_entry_count.py
 	python3 tests/test_live_ticket_retry.py
 	python3 tests/test_put_submission_proof.py

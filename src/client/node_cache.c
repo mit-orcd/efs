@@ -584,6 +584,10 @@ void efs_client_shutdown(void)
     /* Stop the flush thread before freeing state it might be using; join
      * blocks until any in-flight flush completes. */
     efs_client_stop_meta_flush();
+    /* Settle what this mount can, then revoke its session (D31): the
+     * leaders drain and collect what is left. Needs the connections. */
+    (void)efs_client_put_settle();
+    (void)efs_client_session_end();
 
     /* Stop the staging-table evictor (it takes the table locks; must be
      * gone before the export is freed). */

@@ -64,6 +64,14 @@ static void finish(struct efs_kv *kv, const struct efs_meta_pub *p)
     assert(efs_session_ack_fence(kv, u, efs_kv_lane_shard(p->ino, 0)) == EFS_OK);
     assert(efs_session_finish_fence(kv, u) == EFS_OK);
 }
+static struct efs_put_stream stream_of(const struct efs_put_ticket *t)
+{
+    struct efs_put_stream s;
+    memcpy(s.uuid, t->id.client_uuid, EFS_OPID_UUID_LEN);
+    s.epoch = t->id.session_epoch;
+    s.shard = efs_kv_lane_shard(t->ino, (uint8_t)(t->ci % EFS_META_LANES));
+    return s;
+}
 static void codec(void)
 {
     struct efs_meta_pub p=make_pub(4097,8,0x0102030405060708ull);
@@ -122,8 +130,11 @@ static void metadata(void)
     changed = t;
     changed.ino += 4096;
     assert(efs_put_ticket_admit(kv, &changed) == EFS_ERR_PROTO);
-    assert(efs_put_ticket_retire(kv, &t) == EFS_ERR_BUSY);
-    assert(efs_put_ticket_reclaim_begin(kv, &t) == EFS_ERR_BUSY);
+    /* A live owner's stream is never drained: no shard rejection floor. */
+    struct efs_put_stream ps = stream_of(&t);
+    uint32_t moved = 99;
+    assert(efs_put_ticket_stream_live(kv, &ps) == EFS_OK);
+    assert(efs_put_ticket_drain(kv, &ps, 8, &moved) == EFS_ERR_BUSY && !moved);
     /* Faulting the atomic batch cannot publish a mapping without ownership. */
     assert(efs_kv_mem_fail_next_batch(kv) == EFS_OK);
     assert(efs_meta_apply_publish(kv, &p) == EFS_ERR_IO);
@@ -146,38 +157,29 @@ static void metadata(void)
     assert(efs_put_ticket_from_pub(&q, &rebased) == EFS_OK);
     assert(!memcmp(rebased.body_digest, orphan.body_digest, EFS_HASH_SIZE));
     revoke_session(kv, &q);
-    assert(efs_put_ticket_reclaim_begin(kv, &orphan) == EFS_ERR_BUSY);
     assert(efs_meta_apply_publish(kv, &q) == EFS_ERR_FENCED);
     finish(kv, &q);
-    assert(efs_put_ticket_reclaim_begin(kv, &t) ==
-           EFS_ERR_BUSY); /* live mapping protected */
-    assert(efs_put_ticket_reclaim_begin(kv, &orphan) == EFS_OK);
-    assert(efs_put_ticket_reclaim_begin(kv, &orphan) == EFS_OK);
-    assert(efs_put_ticket_retire(kv, &orphan) ==
-           EFS_ERR_BUSY); /* deletion ACKs missing */
-    /* After revocation the owner cannot settle; only the collector acts. */
+    /* After revocation the owner cannot settle; the leader's drain acts. */
     assert(efs_put_ticket_settle(kv,&orphan)==EFS_ERR_FENCED);
-    assert(efs_put_ticket_delete_ack(kv, &orphan, 3) == EFS_ERR_INVAL);
-    for (unsigned bit = 1; bit <= 4; bit <<= 1)
-        assert(efs_put_ticket_delete_ack(kv, &orphan, bit) == EFS_OK);
-    assert(efs_put_ticket_retire(kv, &orphan) ==
-           EFS_ERR_BUSY); /* fourth member still offline */
-    assert(efs_put_ticket_delete_ack(kv, &orphan, 8) == EFS_OK);
-    assert(efs_put_ticket_delete_ack(kv, &orphan, 8) == EFS_OK);
-    assert(efs_put_ticket_retire(kv, &orphan) ==
-           EFS_ERR_BUSY); /* first ticket still outstanding */
-    assert(efs_put_ticket_delete_ack(kv, &t, 1) == EFS_ERR_BUSY);
+    assert(efs_put_ticket_drain(kv, &ps, 0, &moved) == EFS_ERR_INVAL);
+    assert(efs_put_ticket_drain(kv, &ps, EFS_PUT_TICKET_DRAIN_MAX + 1, &moved) == EFS_ERR_INVAL);
     assert(efs_kv_mem_fail_next_batch(kv) == EFS_OK);
-    assert(efs_put_ticket_retire(kv, &t) == EFS_ERR_IO);
+    assert(efs_put_ticket_drain(kv, &ps, 8, &moved) == EFS_ERR_IO && !moved);
     assert(efs_put_ticket_get(kv, &t, &state) == EFS_OK &&
            state == EFS_PUT_TICKET_PUBLISHED);
-    assert(efs_put_ticket_retire(kv,&t)==EFS_OK);
+    /* The PUBLISHED head retires with no orphan record; the mapping stays. */
+    assert(efs_put_ticket_drain(kv, &ps, 1, &moved) == EFS_OK && moved == 1);
     int retired=0;assert(!efs_put_ticket_retired(kv,&t,&retired) && retired);
-    assert(!efs_put_ticket_retire(kv,&t));
-    assert(efs_put_ticket_retire(kv, &orphan) == EFS_OK);
+    assert(efs_put_ticket_orphan(kv, &t) == EFS_ERR_NOT_FOUND);
+    assert(efs_put_ticket_stream_live(kv, &ps) == EFS_OK);
+    /* The ADMITTED body is abandoned into the orphan ledger. */
+    assert(efs_put_ticket_drain(kv, &ps, 8, &moved) == EFS_OK && moved == 1);
+    assert(efs_put_ticket_orphan(kv, &orphan) == EFS_OK);
+    assert(efs_put_ticket_stream_live(kv, &ps) == EFS_ERR_NOT_FOUND);
+    assert(efs_put_ticket_drain(kv, &ps, 8, &moved) == EFS_OK && !moved); /* idempotent */
     assert(efs_put_ticket_get(kv, &orphan, &state) == EFS_ERR_STALE);
     assert(efs_put_ticket_admit(kv, &orphan) == EFS_ERR_FENCED);
-    assert(efs_put_ticket_retire(kv, &orphan) == EFS_OK);
+    assert(efs_put_ticket_settle(kv, &orphan) == EFS_ERR_FENCED);
     assert(efs_meta_apply_get_chunk(kv, p.ino, 0, &ch) == EFS_OK &&
            ch.generation == p.candidate_gen);
     efs_kv_mem_free(kv);
@@ -199,7 +201,7 @@ static void capacity(void)
     struct efs_put_ticket first;
     assert(efs_put_ticket_from_pub(&p, &first) == EFS_OK);
     assert(efs_meta_apply_publish(kv, &p) == EFS_OK);
-    assert(efs_put_ticket_retire(kv, &first) == EFS_OK);
+    assert(efs_put_ticket_settle(kv, &first) == EFS_OK);
     assert(efs_put_ticket_admit(kv, &t) == EFS_OK); /* bounded window makes progress */
     efs_kv_mem_free(kv);
 }
@@ -230,29 +232,24 @@ static void restart(void)
     struct efs_meta_pub p = make_pub(d.ino, row.generation, 1);
     struct efs_put_ticket t;
     assert(efs_put_ticket_from_pub(&p, &t) == EFS_OK);
-    assert(efs_put_ticket_reclaim_begin(kv, &t) == EFS_ERR_BUSY);
+    /* The crash kept the shard floor: the drain applies (its leader also
+     * proves the global barrier before proposing, as the collector does). */
+    struct efs_put_stream ps = stream_of(&t);
+    uint32_t moved = 0, state;
+    assert(efs_put_ticket_drain(kv, &ps, 8, &moved) == EFS_OK && moved == 1);
+    efs_kv_lsm_close(kv);
+    kv = efs_kv_lsm_open(dir, NULL);
+    assert(kv);
+    assert(efs_put_ticket_get(kv, &t, &state) == EFS_ERR_STALE);
+    assert(efs_put_ticket_orphan(kv, &t) == EFS_OK);
+    assert(efs_put_ticket_stream_live(kv, &ps) == EFS_ERR_NOT_FOUND);
     finish(kv, &p);
-    assert(efs_put_ticket_reclaim_begin(kv, &t) == EFS_OK);
-    efs_kv_lsm_close(kv);
-    kv = efs_kv_lsm_open(dir, NULL);
-    assert(kv);
-    uint32_t state;
-    assert(efs_put_ticket_get(kv, &t, &state) == EFS_OK &&
-           state == EFS_PUT_TICKET_RECLAIMING);
-    assert(efs_put_ticket_retire(kv, &t) == EFS_ERR_BUSY);
-    assert(efs_put_ticket_delete_ack(kv, &t, 1) == EFS_OK);
-    efs_kv_lsm_close(kv);
-    kv = efs_kv_lsm_open(dir, NULL);
-    assert(kv);
-    assert(efs_put_ticket_retire(kv, &t) == EFS_ERR_BUSY);
-    for (unsigned bit = 2; bit <= 8; bit <<= 1)
-        assert(efs_put_ticket_delete_ack(kv, &t, bit) == EFS_OK);
-    assert(efs_put_ticket_retire(kv, &t) == EFS_OK);
     efs_kv_lsm_close(kv);
     kv = efs_kv_lsm_open(dir, NULL);
     assert(kv);
     assert(efs_put_ticket_admit(kv, &t) == EFS_ERR_FENCED);
     assert(efs_put_ticket_get(kv, &t, &state) == EFS_ERR_STALE);
+    assert(efs_put_ticket_drain(kv, &ps, 8, &moved) == EFS_OK && !moved);
     efs_kv_lsm_close(kv);
     DIR *dp = opendir(dir);
     assert(dp);

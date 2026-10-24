@@ -297,6 +297,8 @@ int efs_client_session_check(void);
 void efs_client_session_forget(uint32_t shard);
 void efs_client_session_fence(int rc);
 int efs_client_session_fenced(void);
+/* D31: revoke this mount's own session at clean unmount (inode_rpc.c). */
+int efs_client_session_end(void);
 /* ReadIndex of global owner: ACTIVE newer epoch proves completed revocation.
  * Missing owner/fencing state/transport failure never proves revocation. */
 int efs_client_rpc_identity_revoked(const struct efs_opid *,int *);

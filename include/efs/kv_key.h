@@ -32,6 +32,7 @@
 #define EFS_KV_KIND_PUT_FLOOR 30 /* retired ticket sequence; durable replay fence */
 #define EFS_KV_KIND_PUT_ORPHAN 53 /* retired REJECTED ticket: body awaiting revocation-gated collection */
 #define EFS_KV_KIND_PUT_COUNT 54 /* live tickets in one session/lane-shard stream (admission bound) */
+#define EFS_KV_KIND_PUT_STREAM 250 /* group anchor/session/epoch/lane shard: D31 live ticket stream index */
 #define EFS_KV_KIND_MEMBERSHIP 55 /* group anchor: W153 committed formation membership */
 #define EFS_KV_KIND_ORPHAN 28 /* zero-link inode awaiting lease/txn-safe reclamation */
 #define EFS_KV_KIND_PUBLICATION_FLOOR 27 /* stream replay barrier, never expires */

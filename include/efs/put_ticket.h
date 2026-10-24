@@ -8,16 +8,18 @@
  * PUT is preceded by an admitted ticket; its immutable body digest excludes
  * publication CAS/size/time. A ticket ends PUBLISHED (with its mapping) or
  * REJECTED (lost CAS, deleted file, or abandoned by its live owner), and the
- * owner retires it in sequence order behind a durable floor. A retired
- * REJECTED body moves to the orphan ledger; bodies are discarded only after
- * durable session revocation. Never authorize deletion from age, missing
+ * owner retires it in sequence order behind a durable floor; once the owner
+ * is revoked, the group leader drains what it left the same way
+ * (efs_put_ticket_drain). A retired REJECTED body moves to the orphan
+ * ledger; bodies are discarded only after durable session revocation. Never authorize deletion from age, missing
  * state, or a local fence alone. */
 #define EFS_PUT_TICKET_MAX 4096u /* live tickets per session/lane-shard stream */
 #define EFS_PUT_TICKET_SETTLE_MAX 32u /* tickets in one SETTLE command */
 #define EFS_PUT_TICKET_BATCH_MAX 32u /* tickets in one ADMIT_BATCH/SETTLE_BATCH (K32) */
 #define EFS_PUT_TICKET_ADMITTED 1u
 #define EFS_PUT_TICKET_PUBLISHED 2u
-#define EFS_PUT_TICKET_RECLAIMING 3u
+/* 3 was RECLAIMING (per-member deletion on the stream itself); bodies are
+ * collected from the orphan ledger only. A stored 3 is refused (PROTO). */
 #define EFS_PUT_TICKET_RETIRED 4u /* transport floor proof only; never stored as a ticket */
 #define EFS_PUT_TICKET_REJECTED 5u /* terminal, never published; body retained */
 #define EFS_PUT_TICKET_KEY_LEN 51u
@@ -50,22 +52,13 @@ int efs_put_ticket_publish_item(struct efs_kv *, const struct efs_put_ticket *,
                                 uint8_t key[EFS_PUT_TICKET_KEY_LEN],
                                 uint8_t val[EFS_PUT_TICKET_VAL_LEN],
                                 struct efs_kv_item *);
-/* Both authoritative session and shard views must be colocated in this KV.
- * A distributed caller cannot supply an unverified cached global epoch. */
-int efs_put_ticket_reclaim_begin(struct efs_kv *, const struct efs_put_ticket *);
-/* Only after storage has durably fenced old PUTs and acknowledged deletion
- * on every member. PUBLISHED tickets need no body deletion. Advance only
- * over the first outstanding ticket; the compact floor survives retirement. */
-int efs_put_ticket_delete_ack(struct efs_kv *, const struct efs_put_ticket *,
-                              uint32_t member_bit);
-int efs_put_ticket_retire(struct efs_kv *, const struct efs_put_ticket *);
 /* Floor proof cannot reconstruct the publication verdict or release bytes. */
 int efs_put_ticket_retired(struct efs_kv *,const struct efs_put_ticket *,int *);
 /* State including RETIRED (seq at or below the floor). NOT_FOUND: never
  * admitted. Validates the stored body against this exact ticket. */
 int efs_put_ticket_state(struct efs_kv *,const struct efs_put_ticket *,uint32_t *state);
 /* ADMITTED -> REJECTED; idempotent on REJECTED. PUBLISHED is STALE (a
- * published ticket is never abandoned), RECLAIMING is BUSY. */
+ * published ticket is never abandoned). */
 int efs_put_ticket_reject(struct efs_kv *,const struct efs_put_ticket *);
 /* Owner settle: reject an ADMITTED ticket, then retire a PUBLISHED/REJECTED
  * ticket that heads its stream (BUSY otherwise; the reject persists). A
@@ -96,4 +89,37 @@ int efs_put_ticket_orphan_ack(struct efs_kv *,const struct efs_put_ticket *,uint
 void efs_put_ticket_orphan_prefix(uint32_t anchor,uint8_t prefix[3]);
 int efs_put_ticket_orphan_decode(const uint8_t *key,uint32_t kl,const uint8_t *val,
                                  uint32_t vl,struct efs_put_ticket *,uint32_t *acked);
+/* D31 revoked-stream drain. Every session/lane-shard stream that holds a
+ * ticket is indexed on its group's anchor shard, written and removed in the
+ * same batch as the stream's live count goes 0 -> 1 and 1 -> 0:
+ * [anchor:2][PUT_STREAM][uuid:16][epoch:4][lane shard:2], value [1:4]. The
+ * group leader scans one prefix to find streams whose owner was revoked,
+ * instead of every lane shard. */
+#define EFS_PUT_STREAM_KEY_LEN 25u
+#define EFS_PUT_TICKET_DRAIN_MAX 64u /* tickets one DRAIN apply retires */
+struct efs_put_stream {
+    uint8_t uuid[EFS_OPID_UUID_LEN];
+    uint32_t epoch;
+    uint32_t shard; /* lane shard */
+};
+void efs_put_ticket_stream_prefix(uint32_t anchor,uint8_t prefix[3]);
+int efs_put_ticket_stream_decode(const uint8_t *key,uint32_t kl,const uint8_t *val,uint32_t vl,
+                                 struct efs_put_stream *);
+/* OK while the stream holds a ticket (indexed), NOT_FOUND once empty. */
+int efs_put_ticket_stream_live(struct efs_kv *,const struct efs_put_stream *);
+/* Serialized apply of EFS_MD_CMD_PUT_TICKET_DRAIN, at most `max` tickets
+ * from the stream head, in sequence order, behind the floor:
+ *   - refused (BUSY) until this lane shard's durable rejection floor is
+ *     above the epoch: no ADMIT, PUBLISH, REPORT or SETTLE of the epoch
+ *     applies here any more;
+ *   - PUBLISHED heads retire (floor advances, no orphan record);
+ *   - REJECTED heads retire into the orphan ledger, as SETTLE does;
+ *   - ADMITTED heads are abandoned (REJECTED) and retire into the ledger,
+ *     except while a K14 stage is pending on that chunk: its RESOLVE may
+ *     still publish this object, so the drain stops there.
+ * OK when it retired at least one ticket or the stream is empty (*moved
+ * counts them); BUSY when nothing could retire; idempotent. Bodies are
+ * deleted only by the orphan collector, under its own four conditions. */
+int efs_put_ticket_drain(struct efs_kv *,const struct efs_put_stream *,uint32_t max,
+                         uint32_t *moved);
 #endif

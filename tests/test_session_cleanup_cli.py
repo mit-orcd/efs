@@ -3,8 +3,8 @@
 from pathlib import Path
 import os, shlex, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
-s=Path(os.environ.get('EFS_CLEANUP_CLIENT_SOURCE',root/'src/mgmt/efs_mgmt.c')).read_text()
-a=s.index('static int sess_cleanup_bounded(')
+s=Path(os.environ.get('EFS_CLEANUP_CLIENT_SOURCE',root/'src/common/session_revoke.c')).read_text()
+a=s.index('int efs_session_cleanup_bounded(')
 f=s[a:s.index('\n}',a)+2]
 server=Path(os.environ.get('EFS_CLEANUP_SERVER_SOURCE',root/'src/server/raft_host.c')).read_text()
 start=server.index('    if (clen>=2 && cmd[0]==EFS_MD_CMD_SESSION && cmd[1]==EFS_MD_SESS_LEASE_LOCK_NEXT) {')
@@ -14,6 +14,7 @@ c=r'''
 #include "efs/protocol.h"
 #include "efs/meta_cmd.h"
 #include "efs/session.h"
+#include "efs/session_revoke.h"
 #include <assert.h>
 #include <string.h>
 #include <time.h>
@@ -30,13 +31,14 @@ static int fake_clock(clockid_t id,struct timespec *t)
 {assert(id==CLOCK_MONOTONIC);t->tv_sec=tick;t->tv_nsec=0;return 0;}
 #define clock_gettime fake_clock
 static unsigned efs_raft_shard_group(unsigned s){assert(s==7);return 2;}
-static void wr32be_mgmt(uint8_t *p,uint32_t n){for(unsigned i=0;i<4;i++)p[i]=n>>(24-8*i);}
+static void wr32be_sess(uint8_t *p,uint32_t n){for(unsigned i=0;i<4;i++)p[i]=n>>(24-8*i);}
 static void sess_pack_hdr(uint8_t *p,uint8_t g,uint8_t sub,const uint8_t *uuid)
 {p[0]=g;p[1]=EFS_MD_CMD_SESSION;p[2]=sub;memcpy(p+3,uuid,16);}
-static int sess_rpc(const char *host,uint16_t port,const uint8_t *p,uint32_t n,
+static int owned;
+static int sess_rpc(const struct efs_session_rpc *rpc,const uint8_t *p,uint32_t n,
                     struct efs_msg_raft_mkfs_reply *r)
 {
- assert(!strcmp(host,"owned") && port==123 && n==(append_mode?26:27));
+ assert(rpc->ctx==&owned && n==(append_mode?26:27));
  if(append_mode) {
    assert(p[0]==2 && p[1]==EFS_MD_REQ_SESSION_APPEND_NEXT && p[18]==0 && p[21]==1 && p[22]==0 && p[25]==7);
    for(unsigned i=2;i<18;i++)assert(p[i]==42);
@@ -73,49 +75,50 @@ static int sess_rpc(const char *host,uint16_t port,const uint8_t *p,uint32_t n,
 '''+f+r'''
 int main(void) {
  uint8_t uuid[16];memset(uuid,42,16);struct efs_msg_raft_mkfs_reply r;
- assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_OK && calls==4);
+ const struct efs_session_rpc rpc={&owned,NULL};
+ assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_OK && calls==4);
  for(mode=1;mode<=3;mode++) {
-   calls=0;assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==
+   calls=0;assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==
       (mode==1?EFS_ERR_IO:mode==2?EFS_ERR_BUSY:EFS_ERR_PROTO) && calls==1);
  }
- mode=4;calls=0;assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==4096);
- mode=5;calls=0;assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1);
+ mode=4;calls=0;assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==4096);
+ mode=5;calls=0;assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1);
  append_mode=1;mode=0;calls=0;tick=0;
- assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_OK && calls==4);
+ assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_OK && calls==4);
  assert(!deadline);
  for(append_mode=0;append_mode<2;append_mode++) {
    mode=6;calls=waits=0;tick=0;
-   assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_OK && calls==16 && waits==12 && !deadline);
+   assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_OK && calls==16 && waits==12 && !deadline);
    mode=7;calls=waits=0;tick=0;
-   assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==30 && waits==30 && !deadline);
+   assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==30 && waits==30 && !deadline);
    for(mode=8;mode<=9;mode++) {
      calls=waits=0;tick=0;
-     assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==(mode==8?EFS_ERR_STALE:EFS_ERR_INVAL) && calls==1 && !waits && !deadline);
+     assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==(mode==8?EFS_ERR_STALE:EFS_ERR_INVAL) && calls==1 && !waits && !deadline);
    }
    mode=7;calls=waits=0;tick=0;deadline=3000;
-   assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==3 && waits==3 && deadline==3000);
+   assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==3 && waits==3 && deadline==3000);
    deadline=0;
  }
  append_mode=0;mode=10;calls=waits=0;tick=0;
- assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_OK && calls==16 && waits==12 && !deadline);
+ assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_OK && calls==16 && waits==12 && !deadline);
  for(mode=11;mode<=13;mode++) {
    calls=waits=0;tick=0;
-   assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1 && !waits && !deadline);
+   assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1 && !waits && !deadline);
  }
  append_mode=1;mode=10;calls=waits=0;tick=0;
- assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1 && !waits && !deadline);
+ assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1 && !waits && !deadline);
  mode=14;calls=waits=0;tick=0;
- assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_OK && calls==16 && waits==12 && !deadline);
+ assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_OK && calls==16 && waits==12 && !deadline);
  for(mode=15;mode<=17;mode++) {
    calls=waits=0;tick=0;
-   assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1 && !waits && !deadline);
+   assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1 && !waits && !deadline);
  }
  append_mode=0;mode=14;calls=waits=0;tick=0;
- assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1 && !waits && !deadline);
+ assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1 && !waits && !deadline);
  append_mode=1;mode=18;calls=waits=0;tick=0;deadline=3000;
- assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==3 && waits==3 && deadline==3000);
+ assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==3 && waits==3 && deadline==3000);
  deadline=0;mode=19;calls=waits=0;tick=0;
- assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_ERR_PROTO && calls==1 && !waits && !deadline);
+ assert(efs_session_cleanup_bounded(&rpc,uuid,1,7,append_mode,&r)==EFS_ERR_PROTO && calls==1 && !waits && !deadline);
  puts("session CLI: bounded batches, explicit empty proof, ambiguity stops, deadline and work budget PASS");
 }
 '''
