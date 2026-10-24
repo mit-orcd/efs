@@ -1046,8 +1046,6 @@ def b_k14(q, src, work, port):
 
 
 def b_k13(q, src, work, port):
-    if not 18700 <= port + 10 <= 18797:
-        return (NOTRUN, f'k13_ticket_cluster.py only uses ports 18700-18799 (private base {port})'), {}
     return [('k13', f'python3 tests/live/k13_ticket_cluster.py --source {shlex.quote(src)} '
              f'--work {shlex.quote(work)}/run --port {port + 10}', False)], \
         dict(ports=f'{port + 10}-{port + 12}', stream_mib=256)

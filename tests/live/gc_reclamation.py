@@ -386,6 +386,8 @@ def wait_joined():
         [str(source/'efs-mgmt'),'status',f'127.0.0.1:{a.port}'],env=env,capture_output=True,
         text=True,timeout=10).stdout,'all members joined')
 
+joined=set()
+
 def start(prefer_single_host=False):
     # Follower-persistence gates fault n3, which hosts both groups. Start its
     # other voters first and allow them to elect before n3 joins; otherwise
@@ -398,15 +400,21 @@ def start(prefer_single_host=False):
         root = roots[i]
         root.mkdir(exist_ok=True)
         log=open(work/f'n{i+1}.log','ab');handles.append(log)
-        cmd=[a.server_binary or source/'efsd','--node-id',str(i+1),'--addr','127.0.0.1','--port',str(a.port+i),'--storage',root,'--quota',a.fixture_quota or ('16G' if (a.ior_binary or a.gc_bulk_gib) else ('4G' if a.compactor_pressure else '1G'))]
-        if a.fixture_quota == '0':
-            quota_arg = cmd.index('--quota');del cmd[quota_arg:quota_arg+2]
+        store=str(root)
         if a.storage_roots==2:
             first=root/'storage0';second=root/'storage1'
             first.mkdir(exist_ok=True);second.mkdir(exist_ok=True)
-            cmd[cmd.index(root)]=first
-            cmd += ['--storage',second]
-        if i:cmd += ['--join',f'127.0.0.1:{a.port}']
+            store=f'{first},{second}'
+        # K33 CLI: the seed and every restart as `efsd ADDR:PORT STORE`; the
+        # first start of every other node joins the seed.
+        ep=f'127.0.0.1:{a.port+i}'
+        if i and i not in joined:
+            cmd=[a.server_binary or source/'efsd','--join',f'127.0.0.1:{a.port}','--listen',ep,store];joined.add(i)
+        else:
+            cmd=[a.server_binary or source/'efsd',ep,store]
+        cmd += ['--discovery-port','0']
+        if a.fixture_quota != '0':
+            cmd += ['--quota',a.fixture_quota or ('16G' if (a.ior_binary or a.gc_bulk_gib) else ('4G' if a.compactor_pressure else '1G'))]
         node_env=dict(env)
         if a.storage_session_fence_fault:node_env['LD_PRELOAD']=str(work/'put-session-fault.so')
         if a.put_barrier_fault:

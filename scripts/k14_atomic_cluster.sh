@@ -53,10 +53,11 @@ FAILS=0
 check() { if eval "$2"; then echo "PASS $1"; else echo "FAIL $1"; FAILS=$((FAILS+1)); fi; }
 
 start_node() {
-  local i=$1 join=""
-  [ "$i" -gt 1 ] && join="--join $ADDR:$((PORT+1))"
-  nohup "$FREL/efsd" --node-id "$i" --addr "$ADDR" --port $((PORT+i)) --storage "$D/n$i" \
-    --quota 4G $join >> "$D/logs/efsd-n$i.log" 2>&1 &
+  # K33 CLI: node 1 is the seed (`efsd ADDR:PORT STORE`); 2 and 3 join it.
+  local i=$1 ep="$ADDR:$((PORT+i))"
+  if [ "$i" -gt 1 ]; then set -- --join "$ADDR:$((PORT+1))" --listen "$ep" "$D/n$i"
+  else set -- "$ep" "$D/n$i"; fi
+  nohup "$FREL/efsd" "$@" --quota 4G --discovery-port 0 >> "$D/logs/efsd-n$i.log" 2>&1 &
   echo $! > "$D/logs/n$i.pid"
   for _ in $(seq 120); do grep -q listening "$D/logs/efsd-n$i.log" && return 0
     kill -0 "$(cat "$D/logs/n$i.pid")" 2>/dev/null || return 1; sleep 0.5; done
