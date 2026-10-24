@@ -39,7 +39,7 @@ int efs_conn_reply_watch_quick(struct efs_conn *c){return ((mode==1 && c!=&conns
 int efs_conn_reply_watch_us(struct efs_conn *c,int budget){(void)budget;return efs_conn_reply_watch_quick(c);}
 int efs_conn_put_reply_watch(struct efs_conn *c,int budget){(void)budget;return efs_conn_reply_watch_quick(c);}
 static void efs_client_node_note_ok(efs_node_id_t n){(void)n;}
-static void efs_client_commit_note(efs_node_id_t n,uint64_t epoch){(void)n;assert(epoch==123);}
+static uint64_t noted;static uint64_t efs_client_commit_note(efs_node_id_t n){(void)n;return ++noted;}
 int efs_conn_recv_put_reply(struct efs_conn *c,uint8_t *t,uint8_t *status,uint8_t *path,uint64_t *epoch){(void)c;*epoch=123;*t=EFS_MSG_PUT_CHUNK_REPLY;*status=mode==11 && c==&conns[2]?EFS_PUT_CHUNK_QUOTA_EXCEEDED:(mode==8 && c==&conns[1]) || (mode==10 && c==&conns[2])?EFS_PUT_CHUNK_STALE:mode==6 && c==&conns[2]?EFS_PUT_CHUNK_BUSY:mode==7 && c!=&conns[0]?EFS_PUT_CHUNK_BUSY:mode==4?EFS_PUT_CHUNK_QUOTA_EXCEEDED:mode==5?EFS_PUT_CHUNK_BUSY:EFS_PUT_CHUNK_OK;*path=0xff;return 0;}
 '''+reply_fn+drain_fn+f+r'''
 int main(void){
@@ -52,14 +52,18 @@ int main(void){
   uint64_t start=report_clock_ms();deadline=mode==2?start:start+15;
   /* mode 9: fragments 0 and 1 were acknowledged by an earlier attempt of
    * this object: only fragment 2 is sent, and the two count (K34). */
-  int acked[3]={mode==9,mode==9,0},quota[3]={0,0,0};
-  int rc=put_fragments_parallel_once(&ticket,fragments,failed,acked,quota);
+  int acked[3]={mode==9,mode==9,0},quota[3]={0,0,0};uint64_t seq[3]={0,0,0},epoch[3]={0,0,0};
+  int rc=put_fragments_parallel_once(&ticket,fragments,failed,acked,quota,seq,epoch);
   if(mode==9)assert(sends==1&&checkouts==1&&acked[0]&&acked[1]&&!acked[2]);
   /* mode 6: the third member answers BUSY after the quorum: alive, its
    * fragment not stored, so the caller may complete the stripe (K34). */
   if(mode==6)assert(failed[2]==3&&!acked[2]&&acked[0]&&acked[1]);
   /* W154: an OK names the fragments that were acknowledged (at least two). */
   if(rc==EFS_OK)assert(acked[0]+acked[1]+acked[2]>=2);
+  /* K35: each acknowledgement carries its sequence and the verifier. */
+  /* mode 9's slots 0 and 1 were acknowledged by an earlier attempt: their
+   * sequence and verifier belong to that attempt (checked by the case below). */
+  for(unsigned i=0;i<3;i++)if(!(mode==9&&i<2))assert(acked[i]?seq[i]&&seq[i]<=noted&&epoch[i]==123:!seq[i]&&!epoch[i]);
   uint64_t elapsed=report_clock_ms()-start;
   printf("mode=%u rc=%d elapsed_ms=%llu sent=%u drops=%u releases=%u peer_fail=%u\n",mode,rc,(unsigned long long)elapsed,sends,drops,releases,fails);fflush(stdout);
   /* mode 8: one member refuses the ticket; a quorum of ACKs never publishes
@@ -73,6 +77,14 @@ int main(void){
   assert(!fails);assert(drops+releases==checkouts);
   if(mode==2)assert(!sends && !checkouts);
  }
+ /* K35: an attempt after two acknowledgements sends only the missing slot
+  * and waits for its reply within the drain. */
+ {
+  mode=8;drops=releases=fails=sends=checkouts=0;deadline=report_clock_ms()+100;
+  int acked[3]={1,1,0},quota[3]={0,0,0};uint64_t seq[3]={7,8,0},epoch[3]={123,123,0};
+  int rc=put_fragments_parallel_once(&ticket,fragments,failed,acked,quota,seq,epoch);
+  assert(rc==EFS_OK&&sends==1&&checkouts==1&&acked[2]&&seq[2]&&epoch[2]==123&&seq[0]==7&&seq[1]==8);
+ }
  close(pp[0]);close(pp[1]);return 0;
 }
 '''
@@ -82,4 +94,4 @@ with tempfile.TemporaryDirectory(prefix='efs-put-reply-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror','-Wno-unused-function','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=5)
-print('parallel ticketed PUT: caller-bound quorum/drain, expired admission, one-ACK refusal, negative replies, terminal ticket refusal (also after the quorum), earlier acknowledgements not resent, a BUSY third member reported, full members named (also after the quorum) and no false peer failures PASS')
+print('parallel ticketed PUT: caller-bound quorum/drain, expired admission, one-ACK refusal, negative replies, terminal ticket refusal (also after the quorum), earlier acknowledgements not resent, a BUSY third member reported, full members named (also after the quorum), acknowledgement sequence and verifier per fragment, resend of the missing slot only (K35) and no false peer failures PASS')

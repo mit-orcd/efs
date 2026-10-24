@@ -2128,6 +2128,57 @@ int efs_client_rpc_put_ticket_batch(const struct efs_put_ticket *tickets,uint32_
     return rpc_put_ticket(tickets,n,settle?4:3,mask);
 }
 
+/* K35: propose the degraded mark of one published object's fragment on the
+ * lane shard's group and wait for its verdict. */
+int efs_client_rpc_degraded_mark(efs_ino_t ino,uint64_t inode_gen,uint64_t object,
+                                 uint32_t ci,uint32_t fi,efs_node_id_t node)
+{
+    if(!ino || !inode_gen || !object || fi>=EFS_NUM_FRAGMENTS || !node || node>EFS_MAX_NODES)
+        return EFS_ERR_INVAL;
+    uint8_t body[1+EFS_MD_DEGRADED_MARK_LEN];
+    uint32_t shard=efs_kv_lane_shard(ino,(uint8_t)(ci%EFS_META_LANES));
+    body[0]=efs_raft_shard_group(shard);
+    body[1]=EFS_MD_CMD_DEGRADED_MARK;
+    for(int i=0;i<8;i++){
+        body[2+i]=(uint8_t)(ino>>(56-8*i));
+        body[10+i]=(uint8_t)(inode_gen>>(56-8*i));
+        body[18+i]=(uint8_t)(object>>(56-8*i));
+    }
+    for(int i=0;i<4;i++){
+        body[26+i]=(uint8_t)(ci>>(24-8*i));
+        body[31+i]=(uint8_t)((uint32_t)node>>(24-8*i));
+    }
+    body[30]=(uint8_t)fi;
+    efs_node_id_t target=0;
+    for(unsigned attempt=0;attempt<8;attempt++) {
+        if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
+        efs_node_id_t nid=target;
+        struct efs_conn *conn=target?efs_client_conn_get(target):rpc_owner_conn_shard(shard,&nid);
+        if(!conn)return EFS_ERR_NET;
+        if(efs_conn_send_msg(conn,EFS_MSG_RAFT_MKFS,body,sizeof(body))) {
+            efs_client_conn_drop(nid,conn);return EFS_ERR_NET;
+        }
+        uint8_t type=0;uint32_t bytes=0;void *payload=NULL;
+        if(efs_conn_recv_msg(conn,&type,&payload,&bytes)) {
+            free(payload);efs_client_conn_drop(nid,conn);return EFS_ERR_NET;
+        }
+        efs_client_conn_release(nid,conn);
+        if(type!=EFS_MSG_RAFT_MKFS_REPLY || bytes!=sizeof(struct efs_msg_raft_mkfs_reply)) {
+            free(payload);return EFS_ERR_PROTO;
+        }
+        struct efs_msg_raft_mkfs_reply reply;memcpy(&reply,payload,bytes);free(payload);
+        if(reply.rc==EFS_ERR_NOT_PRIMARY) {
+            if(reply.leader_hint< -1 || reply.leader_hint>=EFS_MAX_NODES)return EFS_ERR_PROTO;
+            target=reply.leader_hint>=0 && (efs_node_id_t)(reply.leader_hint+1)!=nid?
+                (efs_node_id_t)(reply.leader_hint+1):0;
+        } else if(reply.rc!=EFS_ERR_BUSY && reply.rc!=EFS_ERR_NO_QUORUM) {
+            return reply.rc;
+        }
+        if(rpc_writer_retry_pause(attempt)!=EFS_OK)return EFS_ERR_BUSY;
+    }
+    return EFS_ERR_BUSY;
+}
+
 int efs_client_rpc_publication(const struct efs_msg_publication *request, int query_only,
                                struct efs_msg_publication_reply *out)
 {

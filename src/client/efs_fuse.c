@@ -4349,10 +4349,12 @@ static int efs_fuse_fsync_ino(fuse_ino_t ino, int isdatasync,
     int was_stalled = efs_wb_inode_stalled(file);
     rc = efs_append_flush_report(fi, file);
     rc = efs_file_sync_error(fi, file, was_stalled, rc);
-    /* Published is not durable when servers acknowledge asynchronously:
-     * COMMIT every storage node, including data published by peer clients. */
+    /* Published is not durable when servers acknowledge asynchronously.
+     * K35 (D42): prove each stripe this client wrote to the file, COMMIT
+     * on the nodes holding its fragments only; with one of them away the
+     * stripe is marked degraded before success, with two away EIO. */
     if (rc == EFS_OK)
-        rc = efs_client_data_commit();
+        rc = efs_client_data_commit(file);
     t1 = stats_now_ms();
     if (rc == EFS_ERR_QUOTA) {
         efs_fuse_log_err("fsync", rc, ino, 0, 0, NULL);

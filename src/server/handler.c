@@ -843,6 +843,8 @@ void server_handle_conn(struct efs_conn *conn)
              * request is durable when the reply is OK. */
             struct efs_msg_data_commit_reply reply;
             memset(&reply, 0, sizeof(reply));
+            /* K35 test hook: a member that dies during a client's COMMIT. */
+            server_test_member_exit("data-commit");
             reply.rc = server_put_sync_commit(g_server, &reply.roots);
             reply.boot_epoch = g_server->put_boot_epoch;
             efs_conn_send_msg(conn, EFS_MSG_DATA_COMMIT_REPLY, &reply, sizeof(reply));

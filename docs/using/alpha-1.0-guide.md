@@ -133,9 +133,11 @@ answers `NOT_PRIMARY` right after the members join, repeat it.
 
 `status` lists every member with reachability (`up`/`DOWN`), used bytes,
 quota and roots, then the usable 2+1 capacity, the cluster state (`OK`,
-`DEGRADED` with a node down, `FULL` when two or more nodes are full,
-`UNAVAILABLE` with fewer than two up), the degraded-chunk counters and the
-abandoned-upload counters. `raft-status` shows each metadata group's term,
+`DEGRADED` with a node down or with degraded chunks not yet rebuilt, `FULL`
+when two or more nodes are full, `UNAVAILABLE` with fewer than two up), the
+degraded-chunk counters, a `Protection:` line (`full`, or `DEGRADED` with the
+number of chunks on two of three fragments) and the abandoned-upload
+counters. `raft-status` shows each metadata group's term,
 commit and applied index, voters and follower bound. `efs-mgmt version`,
 `io-stats`, `gc-status` and `sync-status` are further read-only views.
 
@@ -223,27 +225,29 @@ stop is refused until rerun. Restart a node with the command it was started
 with (the first node with its address, a joiner with `--join`); the store
 keeps its cluster, node id and endpoint, and another endpoint or another
 cluster's store is refused. A restart after a stop that was not orderly
-leaves that node refusing COMMIT, so `fsync` fails everywhere (see failure
-behavior). A whole-cluster restart needs a quorum of each
+leaves that node refusing COMMIT, so its fragments are never proven durable:
+`fsync` marks the stripes it holds degraded, and fails for a stripe that
+also needs another missing fragment (see failure behavior). A whole-cluster restart needs a quorum of each
 metadata group back before clients are served.
 
 ## Failure behavior
 
 | Event | What happens | What the user sees |
 | --- | --- | --- |
-| One node down | Reads reconstruct from the other two fragments; writes go on with two fragments and are recorded as degraded; each metadata group keeps a quorum. `fsync` and `fdatasync` commit on every storage node, so they fail | Reads, writes and `close` continue; **every `fsync`/`fdatasync` returns `EIO`** (after at most 60 s) until the node is back. Requests to the lost node time out (about 30 s) until the client marks it down (after four failures, for 30 s); `status` shows the node `DOWN`, `Cluster state: DEGRADED` and the degraded-chunk count. Packing waits (segments need three acknowledgements) |
+| One node down | Reads reconstruct from the other two fragments; each metadata group keeps a quorum. On four or more nodes new writes place all three fragments on the available nodes; on three, writes go on with two fragments and are recorded as degraded. `fsync` and `fdatasync` commit only on the nodes holding the file's fragments (K35, D42): a stripe with two fragments proven durable succeeds after its degraded mark is durable | Reads, writes, `close`, `fsync` and `fdatasync` continue. Stripes left on two fragments have no fault tolerance until rebuilt: the client logs `fsync ino=… marked degraded for rebuild on return`, `status` shows the node `DOWN`, `Cluster state: DEGRADED`, the degraded-chunk count and `Protection: DEGRADED`. Requests to the lost node time out (about 30 s) until the client marks it down (after four failures, for 30 s). Packing waits (segments need three acknowledgements) |
 | A node stops while writes are in flight | Known defect (F24, proposed K34): a chunk can be acknowledged with its two fragments on the stopping node and one other | That file reads `EIO` until the node returns |
 | A node hangs without exiting | Untested gray failure | Requests to it time out after 30 s; an `open` was seen to return `EIO` (W154 notes) |
 | The node returns | Rebuild on return (W154): each group leader rebuilds the missing fragment of every degraded stripe, at most 256 per pass, and clears its mark | `Degraded chunks` falls to 0; `rebuilt=` rises. No other repair exists |
-| A node lost for good | Degraded stripes stay degraded; there is no rebuild to another node and no removal | Data stays readable while every other node is up; a second loss then makes those stripes unreadable. `fsync` returns `EIO` for good, since the lost node stays a member |
-| Two nodes down at once | Stripes with fragments on both are unreadable; a metadata group with two of its three voters down has no quorum | `EIO` or timeouts for the affected files; with two of nodes 1–4 down in one group, metadata operations on that group stop until a node returns |
+| A node lost for good | Degraded stripes stay degraded; there is no rebuild to another node and no removal | Data stays readable while every other node is up; a second loss then makes those stripes unreadable. `fsync` goes on, marking the stripes on that node degraded |
+| Two nodes down at once | Stripes with fragments on both are unreadable; a metadata group with two of its three voters down has no quorum | `EIO` or timeouts for the affected files; `fsync`/`fdatasync` of a file with such a stripe return `EIO` and the client log names the stripe (`1 of 3 durable; need 2`) until a node returns; with two of nodes 1–4 down in one group, metadata operations on that group stop until a node returns |
 | Client process dies | Writes it had not yet published are lost (D28); its abandoned uploads are collected | `Abandoned uploads` counters in `status` |
-| A daemon crashes, is killed or stops forced (rc 3) | Its roots restart "recovery uncertain": the node refuses COMMIT until verified recovery, which does not exist in alpha (W71, W123), or a fresh format | After the restart, **every client's `fsync` returns `EIO`** for good; reads and writes go on. The log says `recovery uncertain; COMMIT returns EIO until verified recovery or fresh format`; `sync-status` shows `previous stop UNCLEAN` |
+| A daemon crashes, is killed or stops forced (rc 3) | Its roots restart "recovery uncertain": the node refuses COMMIT until verified recovery, which does not exist in alpha (W71, W123, K36), or a fresh format | After the restart, `fsync` marks every stripe with a fragment on that node degraded (it is not rebuilt there while the node refuses COMMIT) and returns `EIO` for a stripe that needs that fragment. The log says `recovery uncertain; COMMIT returns EIO until verified recovery or fresh format`; `sync-status` shows `previous stop UNCLEAN` |
 | Sudden power loss | Not qualified (W71, deferred); the restart is unclean as above | Unknown durability; then as above |
 
 There is no automatic repair beyond rebuild on return, no indication of
-degraded state on the mount itself, no two-loss protection on any cluster
-size, and no `fsync` while a member is down or after a member's unclean stop.
+degraded state on the mount itself (only in `status` and the client log), no
+two-loss protection on any cluster size, and a stripe that `fsync` left on two
+fragments survives no further loss until it is rebuilt.
 Stop daemons only with `server.sh stop` (or `SIGTERM`) and check that it
 exits 0. The [release notes draft](../release-notes/alpha-1.0.md) lists
 every alpha limitation.

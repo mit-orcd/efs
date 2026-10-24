@@ -499,13 +499,21 @@ void efs_client_node_note_ok(efs_node_id_t node_id)
     pthread_mutex_unlock(&g_client.conn_lock[idx]);
 }
 
+static void node_probe_maybe_start(int idx, int64_t now);
+
 int efs_client_node_is_down(efs_node_id_t node_id)
 {
     int idx = node_index_or_await(node_id);
     if (idx < 0)
         return 1;
     pthread_mutex_lock(&g_client.conn_lock[idx]);
-    int down = g_client.node_down_until_ms[idx] > monotonic_ms();
+    int64_t now = monotonic_ms();
+    int down = g_client.node_down_until_ms[idx] > now;
+    /* K35: PUT placement asks here and never checks out a connection to a
+     * peer in cooldown, so the reprobe must start here too, or a returned
+     * peer took no fragment for the rest of the 30 s (degraded stripes). */
+    if (down)
+        node_probe_maybe_start(idx, now);
     pthread_mutex_unlock(&g_client.conn_lock[idx]);
     return down;
 }
