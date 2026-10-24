@@ -26,6 +26,21 @@ the frontier advances. --peer-writers M runs M extra writers on the peer
 mount (a second session) concurrently, which a stranded reservation would
 block. Combine with --failover to lose replies across leader changes.
 
+Accounting rule (K15/K29, account() below; tests/test_append_failover_accounting.py):
+  * a write the client saw fail (errno) is ACCOUNTED, not a mismatch, when
+    its record is absent and every zero hole is explained: an injected lost
+    reply leaves exactly one hole; a real failure whose abandon retired the
+    reservation (rc=0 retired=1) leaves exactly one; a real failure whose
+    abandon retired nothing or did not complete (BUSY) leaves at most one
+    (the reservation may never have applied, or session/last-close cleanup
+    resolved it); a failure with no abandon (refused before reserving)
+    leaves none. Accounted failures and holes are reported separately.
+  * MISMATCH: an acknowledged record missing, duplicated, torn, corrupt or
+    out of order; a failed write's record visible; an unknown block; more
+    holes than the abandons explain or fewer than the retirements require;
+    an injected loss without an rc=0 abandon of its identity; a size that is
+    not 4 KiB x (acknowledged + holes).
+
 Checks (each one recorded in the JSON report, the run fails on any miss):
   * final fsync per writer returns 0 within --report-bound seconds
     (W52: the client's REPORT receive bound, EFS_IO_TIMEOUT_MS = 30 s)
@@ -33,10 +48,9 @@ Checks (each one recorded in the JSON report, the run fails on any miss):
   * warm primary, warm peer and cold (all daemons + clients restarted) reads
     contain every acknowledged record exactly once, no unacknowledged record,
     per-writer order preserved, no torn or foreign block, size = 4 KiB x count
-  * lost-reply mode: at least one reply was lost; every loss was abandoned
-    with rc=0 and no write failed for another reason; zero-hole blocks equal
-    the abandons that retired a reservation, in every view; peer writers
-    completed (the frontier was never stranded)
+  * lost-reply mode: at least one reply was lost; every injected loss was
+    abandoned with rc=0; peer writers completed (the frontier was never
+    stranded); other failed writes are accounted under the rule above
 
 Raw logs stay under ROOT (outside Git). Usage: see docs/status/k15-w52-w64-20261022.md.
 """
@@ -79,9 +93,12 @@ def scan(path):
             out['blocks'] += 1
     return out
 
-def verify(path, acked, failed, holes=0):
-    """acked/failed: {writer: [seq,...]}. holes: zero blocks expected from
-    retired reservations (W64 lost-reply mode). Returns (ok, summary)."""
+def verify(path, acked, failed, holes=0, holes_max=None):
+    """acked/failed: {writer: [seq,...]}. holes..holes_max: zero blocks the
+    abandons explain (account()); holes_max defaults to holes. Returns
+    (ok, summary)."""
+    if holes_max is None:
+        holes_max = holes
     s = scan(path)
     seen = {}
     for w, q in s['records']:
@@ -102,17 +119,66 @@ def verify(path, acked, failed, holes=0):
     other = {k: v for k, v in s['kinds'].items() if k != 'ok'}
     seen_holes = other.pop('hole', 0)
     ok = (not dup and not missing and not unacked_visible and not unknown and
-          not order_err and not other and seen_holes == holes and
-          s['size'] == REC * (len(want) + holes) and s['size'] % REC == 0)
+          not order_err and not other and holes <= seen_holes <= holes_max and
+          s['size'] == REC * (len(want) + seen_holes) and s['size'] % REC == 0)
     sha = hashlib.sha256(path.read_bytes()).hexdigest()
-    return ok, dict(size=s['size'], expected_size=REC * (len(want) + holes), blocks=s['blocks'],
-                    holes=seen_holes, expected_holes=holes,
+    return ok, dict(size=s['size'], expected_size=REC * (len(want) + seen_holes), blocks=s['blocks'],
+                    holes=seen_holes, expected_holes=[holes, holes_max],
                     acknowledged=len(want), visible_records=len(s['records']),
                     duplicates=len(dup), missing=len(missing),
                     unacknowledged_visible=len(unacked_visible), unknown=len(unknown),
                     order_errors=order_err, non_record_blocks=other, sha256=sha,
                     first_missing=missing[:5], first_duplicate=dup[:5],
                     first_unacked_visible=unacked_visible[:5])
+
+ABANDON_RX = re.compile(r'append-abandon ino=\d+ seq=(\d+) len=\d+ rc=(-?\d+) retired=(\d)')
+LOST_RX = re.compile(r'append-reserve fault ino=\d+ seq=(\d+) lost-reply=1')
+
+def client_events(text, mount):
+    """Injected losses and abandons from one client log."""
+    lost = [dict(mount=mount, seq=int(m.group(1))) for m in LOST_RX.finditer(text)]
+    ab = [dict(mount=mount, seq=int(m.group(1)), rc=int(m.group(2)), retired=int(m.group(3)))
+          for m in ABANDON_RX.finditer(text)]
+    return lost, ab
+
+def account(failed, lost, abandons):
+    """K15/K29 rule: which failed writes and zero holes are explained.
+
+    failed: {writer: [seq...]} writes that returned an error. lost: injected
+    reply losses [{mount, seq}] (seq = append identity). abandons: [{mount,
+    seq, rc, retired}] from the client logs. Returns a dict with the hole
+    interval the views must fall in, the accounted (non-injected) failures,
+    and the protocol mismatches found here (record-level ones are verify's).
+    """
+    nfailed = sum(len(v) for v in failed.values())
+    key = lambda e: (e['mount'], e['seq'])
+    by_id = {}
+    for e in abandons:
+        by_id.setdefault(key(e), []).append(e)
+    mismatches = []
+    lost_ids = {key(e) for e in lost}
+    for e in lost:
+        if not any(x['rc'] == 0 for x in by_id.get(key(e), [])):
+            mismatches.append(f"injected loss {e['mount']} seq={e['seq']} has no rc=0 abandon")
+    real = [x for k, xs in by_id.items() if k not in lost_ids for x in xs[-1:]]
+    retired = [x for x in real if x['rc'] == 0 and x['retired']]
+    unresolved = [x for x in real if not (x['rc'] == 0 and x['retired'])]
+    holes_min = len(lost_ids) + len(retired)
+    holes_max = holes_min + len(unresolved)
+    if len(lost_ids) + len(real) > nfailed:
+        mismatches.append(f'{len(lost_ids) + len(real)} abandoned identities but only {nfailed} failed writes')
+    holes_max = min(holes_max, nfailed)
+    if holes_min > holes_max:
+        mismatches.append(f'retirements need {holes_min} holes, failed writes allow {holes_max}')
+    return dict(injected_losses=len(lost_ids), failed_writes=nfailed,
+                accounted_failures=nfailed - len(lost_ids),
+                accounted_abandons=dict(retired=len(retired),
+                                        retired_nothing=sum(1 for x in unresolved if x['rc'] == 0),
+                                        not_completed=sum(1 for x in unresolved if x['rc'] != 0),
+                                        lines=real[:10]),
+                accounted_without_abandon=max(0, nfailed - len(lost_ids) - len(real)),
+                holes_min=holes_min, holes_max=holes_max, mismatches=mismatches,
+                ok=not mismatches)
 
 def writer_main(index, path, count, fsync_every, q):
     acked, failed, lat, errors = [], [], [], []
@@ -166,14 +232,17 @@ class Cluster:
     def addr(self, i):
         return f'127.0.0.1:{self.a.port + i}'
 
-    def start_node(self, i, join=True):
+    def start_node(self, i, join=False):
+        """K33 positional CLI: the seed (and every restart) as `efsd
+        ADDR:PORT STORAGE`; a first start of node 2/3 joins node 1."""
         d = self.root / f'n{i}'
         d.mkdir(exist_ok=True)
-        cmd = [self.rel / 'efsd', '--node-id', str(i), '--addr', '127.0.0.1',
-               '--port', str(self.a.port + i), '--storage', d, '--quota', self.a.quota,
-               '--direct-io' if self.a.direct else '--no-direct-io']
         if i > 1 and join:
-            cmd += ['--join', self.addr(1)]
+            cmd = [self.rel / 'efsd', '--join', self.addr(1), '--listen', self.addr(i), d]
+        else:
+            cmd = [self.rel / 'efsd', self.addr(i), d]
+        cmd += ['--quota', self.a.quota, '--discovery-port', '0',
+                '--direct-io' if self.a.direct else '--no-direct-io']
         log = open(self.root / 'logs' / f'efsd-n{i}.log', 'ab')
         self.procs[i] = subprocess.Popen([str(c) for c in cmd], env=self.env, stdout=log, stderr=log)
         for _ in range(120):
@@ -307,7 +376,8 @@ def grep_count(path, pattern):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument('--rel', required=True, help='build dir with efsd, efs-fuse, efs-mgmt, scripts/client.sh')
+    p.add_argument('--rel', required=True, type=lambda v: str(Path(v).resolve()),
+                   help='build dir with efsd, efs-fuse, efs-mgmt, scripts/client.sh')
     p.add_argument('--root', required=True, help='private fresh directory (e.g. /data1/k15/run1)')
     p.add_argument('--port', type=int, default=18300, help='base port; nodes use PORT+1..PORT+3')
     p.add_argument('--records', type=int, default=20000)
@@ -346,15 +416,16 @@ def main():
     rc = 1
     try:
         for i in (1, 2, 3):
-            c.start_node(i)
+            c.start_node(i, join=True)
             time.sleep(1)
-        for _ in range(60):
-            r = c.mgmt('raft-mkfs', c.addr(1))
-            if 'raft-mkfs rc=0 ' in r.stdout:
+        # K33: the three members form and create the root themselves.
+        for _ in range(120):
+            r = c.mgmt('raft-getattr', c.addr(1), 1)
+            if r.returncode == 0:
                 break
             time.sleep(1)
         else:
-            raise RuntimeError('raft-mkfs failed: ' + r.stdout + r.stderr)
+            raise RuntimeError('cluster never formed: ' + r.stdout + r.stderr)
         fault = {}
         if a.lose_reserve_every:
             fault = dict(EFS_FAULT_APPEND_LOSE_EVERY=str(a.lose_reserve_every),
@@ -418,27 +489,32 @@ def main():
         srv = [grep_count(root / 'logs' / f'efsd-n{i}.log', r'report resolve .*rc=') for i in (1, 2, 3)]
         report['checks']['server_report_resolve_retries'] = sum(n for n, _ in srv)
         report['checks']['server_report_resolve_lines'] = [l for _, ls in srv for l in ls][:5]
-        holes, ok_l = 0, True
+        texts = {}
+        for name in ('mnt', 'peer'):
+            try:
+                texts[name] = (root / 'logs' / f'fuse-{name}.log').read_text(errors='replace')
+            except FileNotFoundError:
+                texts[name] = ''
+        lost, abandons = [], []
+        for name, text in texts.items():
+            l, ab = client_events(text, name)
+            lost += l
+            abandons += ab
+        acct = account(failed, lost, abandons)
+        report['checks']['accounting'] = acct
+        holes, holes_max = acct['holes_min'], acct['holes_max']
+        ok_l = acct['ok']
         if a.lose_reserve_every:
-            lost, lost_lines = grep_count(flog, r'append-reserve fault .*lost-reply=1')
-            ab_ok, _ = grep_count(flog, r'append-abandon .* rc=0 ')
-            ab_bad, ab_bad_lines = grep_count(flog, r'append-abandon .* rc=-')
-            retired, _ = grep_count(flog, r'append-abandon .* rc=0 retired=1')
-            # Each lost reply follows a committed reservation, so each leaves
-            # exactly one zero block, however it resolved (retired by the
-            # abandon, or already covered by a later REPORT of this mount).
-            holes = lost
-            nfailed = sum(len(v) for v in failed.values())
-            peer_ok = all(r['final_fsync_errno'] == 0 and not r['failed']
+            # Each injected loss follows a committed reservation; the frontier
+            # must never strand the peer session (W64).
+            peer_ok = all(r['final_fsync_errno'] == 0 and len(r['acked']) + len(r['failed']) == per
                           for r in results if r['writer'] >= a.writers)
-            ok_l = lost >= 1 and ab_ok == lost and not ab_bad and nfailed == lost and peer_ok
+            ok_l = ok_l and acct['injected_losses'] >= 1 and peer_ok
             report['checks']['lost_reserve'] = dict(
-                lost_replies=lost, abandons_ok=ab_ok, abandons_failed=ab_bad,
-                abandon_failed_lines=ab_bad_lines, retired_by_abandon=retired, expected_holes=holes,
-                failed_writes=nfailed, peer_writers_ok=peer_ok,
-                first_lost=lost_lines, ok=ok_l)
-        ok_w, report['checks']['warm_primary'] = verify(path, acked, failed, holes)
-        ok_p, report['checks']['warm_peer'] = verify(peer / path.name, acked, failed, holes)
+                lost_replies=acct['injected_losses'], first_lost=[e['seq'] for e in lost[:5]],
+                peer_writers_ok=peer_ok, ok=ok_l)
+        ok_w, report['checks']['warm_primary'] = verify(path, acked, failed, holes, holes_max)
+        ok_p, report['checks']['warm_peer'] = verify(peer / path.name, acked, failed, holes, holes_max)
         # Cold: drain clients, stop every daemon, restart, fresh mount.
         c.stop_all()
         time.sleep(2)
@@ -447,9 +523,14 @@ def main():
             time.sleep(1)
         time.sleep(3)
         mnt = c.mount('mnt-cold')
-        ok_c, report['checks']['cold'] = verify(mnt / path.name, acked, failed, holes)
+        ok_c, report['checks']['cold'] = verify(mnt / path.name, acked, failed, holes, holes_max)
+        same = len({report['checks'][v]['sha256'] for v in ('warm_primary', 'warm_peer', 'cold')}) == 1
+        report['checks']['views_identical'] = same
         all_fsync_ok = report['checks']['final_fsync_zero'] and report['checks']['final_fsync_within_bound']
-        report['verdict'] = 'PASS' if (ok_w and ok_p and ok_c and ok_l and all_fsync_ok and n67 == 0) else 'FAIL'
+        report['verdict'] = 'PASS' if (ok_w and ok_p and ok_c and same and ok_l and all_fsync_ok and n67 == 0) else 'FAIL'
+        # Accounted failures never fail the integrity verdict; they are listed.
+        report['integrity'] = 'PASS' if (ok_w and ok_p and ok_c and same and acct['ok']) else 'FAIL'
+        report['accounted_failures'] = acct['accounted_failures']
         rc = 0 if report['verdict'] == 'PASS' else 1
     except Exception as e:
         report['exception'] = repr(e)
@@ -457,7 +538,8 @@ def main():
     finally:
         report['finished'] = time.time()
         out.write_text(json.dumps(report, indent=2, default=str))
-        print(json.dumps({k: report.get(k) for k in ('label', 'verdict', 'wall_seconds', 'checks')}, indent=1, default=str)[:6000], flush=True)
+        print(json.dumps({k: report.get(k) for k in ('label', 'verdict', 'integrity', 'accounted_failures',
+                                                     'wall_seconds', 'checks')}, indent=1, default=str)[:6000], flush=True)
         try:
             c.stop_all()
         except Exception as e:
