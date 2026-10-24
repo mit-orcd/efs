@@ -1,10 +1,12 @@
 /* K14 / W77 observation workload (scripts/k14_atomic_cluster.sh).
  *
- *   writer FILE OFF LEN SECONDS LOG [FIRST_VERSION]
+ *   writer FILE OFF LEN SECONDS LOG [FIRST_VERSION [COUNT]]
  *       Rewrites [OFF, OFF+LEN) with version v = FIRST.. as ONE pwrite
  *       (O_DIRECT, so one FUSE write request when LEN <= max_write), then
  *       fsync; appends "published v" to LOG after each successful fsync and
- *       "attempted v" before it. Write/fsync errors are logged and the next
+ *       "attempted v" before it. COUNT > 1 (K32): COUNT adjacent regions
+ *       [OFF + i*LEN, +LEN), each its own pwrite of version v, then one
+ *       fsync, so one REPORT carries COUNT units. Write/fsync errors are logged and the next
  *       version is tried (a dead mount ends the writer with status 3).
  *   reader FILE OFF LEN RLEN SECONDS SEED
  *       O_DIRECT preads of RLEN at random 4 KiB-aligned offsets inside the
@@ -71,19 +73,23 @@ static int writer(int argc, char **argv)
     double secs = atof(argv[5]);
     FILE *log = fopen(argv[6], "a");
     uint64_t v = argc > 7 ? strtoull(argv[7], NULL, 0) : 1;
+    uint64_t count = argc > 8 ? strtoull(argv[8], NULL, 0) : 1;
     uint64_t *buf = abuf(len);
     int fd = open(file, O_RDWR | O_CREAT | O_DIRECT, 0644), dead = 0;
     double end = now_s() + secs;
 
-    if (!log || !buf || fd < 0) {
+    if (!log || !buf || fd < 0 || !count) {
         fprintf(stderr, "writer: setup %s: %s\n", file, strerror(errno));
         return 2;
     }
     setvbuf(log, NULL, _IOLBF, 0);
     while (now_s() < end) {
-        fill(buf, v, off, len);
         fprintf(log, "attempted %" PRIu64 "\n", v);
-        ssize_t n = pwrite(fd, buf, len, (off_t)off);
+        ssize_t n = (ssize_t)len;
+        for (uint64_t i = 0; i < count && n == (ssize_t)len; i++) {
+            fill(buf, v, off + i * len, len);
+            n = pwrite(fd, buf, len, (off_t)(off + i * len));
+        }
         int rc = n == (ssize_t)len ? fsync(fd) : -1;
         if (rc == 0) {
             fprintf(log, "published %" PRIu64 "\n", v);

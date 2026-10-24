@@ -3488,6 +3488,7 @@ struct put_batch {
     pthread_mutex_t mu;
     pthread_cond_t cv;
     int remaining;
+    struct efs_put_admit_cohort cohort; /* K32: one ADMIT_BATCH per group */
 };
 
 struct chunk_put_job {
@@ -8072,10 +8073,13 @@ static void *put_pool_thread(void *arg)
 
         uint64_t previous = efs_client_rpc_deadline_ms();
         efs_client_rpc_set_deadline_ms(job->deadline);
-        if (efs_client_rpc_past_deadline())
+        if (efs_client_rpc_past_deadline()) {
             job->rc = EFS_ERR_BUSY;
-        else
+        } else {
+            efs_client_put_cohort_enter(&job->bp->cohort);
             chunk_put_worker(job);
+            efs_client_put_cohort_leave();
+        }
         efs_client_rpc_set_deadline_ms(previous);
 
         struct put_batch *bp = job->bp;
@@ -8151,6 +8155,7 @@ static int put_pool_run(struct chunk_put_job *jobs, uint32_t batch)
     pthread_mutex_init(&bp.mu, NULL);
     pthread_cond_init(&bp.cv, NULL);
     bp.remaining = (int)batch;
+    memset(&bp.cohort, 0, sizeof(bp.cohort));
     int base = (int)__sync_fetch_and_add(&g_put_pool.rr, 1);
     for (i = 0; i < batch; i++) {
         int si = (int)(((unsigned)base + i) % (unsigned)g_put_pool.nworkers);

@@ -347,6 +347,18 @@ int efs_client_put_admit(efs_ino_t ino, uint32_t ci,
                          uint32_t frag_len, uint32_t delta_off, uint32_t delta_len,
                          struct efs_put_ticket *out);
 void efs_client_put_release(uint64_t seq, int landed);
+/* K32: admissions group-commit per Raft group (one ADMIT_BATCH entry for
+ * every ticket queued while the previous one is in flight). A cohort is a
+ * set of concurrently running PUT jobs (one put_pool_run): the thread that
+ * sends waits, at most EFS_PUT_ADMIT_LINGER_US, until every running member
+ * of its own cohort has queued its ticket or finished without one. The
+ * enter/leave calls bracket one job on its worker thread. */
+#define EFS_PUT_ADMIT_LINGER_US 1000u
+struct efs_put_admit_cohort {
+    unsigned running; /* entered, not yet queued or left (under the admit lock) */
+};
+void efs_client_put_cohort_enter(struct efs_put_admit_cohort *);
+void efs_client_put_cohort_leave(void);
 /* No REPORT will carry this object again (confirmed or superseded). */
 void efs_client_put_done(efs_ino_t ino, uint32_t ci, uint64_t object);
 /* 1 while a client table still names the object (write.c). */
@@ -360,6 +372,11 @@ uint32_t efs_client_put_outstanding(void);
 /* STATUS does not establish a session; state is not a PUT permit. */
 int efs_client_rpc_put_ticket(const struct efs_put_ticket *,int probe_only,uint32_t *state);
 int efs_client_rpc_put_ticket_settle(const struct efs_put_ticket *,uint32_t n,uint32_t *retired);
+/* K32: ADMIT_BATCH (settle 0) or SETTLE_BATCH (settle 1) of 2..
+ * EFS_PUT_TICKET_BATCH_MAX tickets on one Raft group; *mask bit i set when
+ * ticket i is ADMITTED / retired. A clear bit says nothing about why. */
+int efs_client_rpc_put_ticket_batch(const struct efs_put_ticket *,uint32_t n,int settle,
+                                    uint32_t *mask);
 int efs_client_rpc_publication(const struct efs_msg_publication *, int query_only, /* 0 submit, 1 status, 2 exact retirement */
                                struct efs_msg_publication_reply *);
 int efs_client_rpc_lane_writer_view(efs_ino_t ino, uint64_t generation,

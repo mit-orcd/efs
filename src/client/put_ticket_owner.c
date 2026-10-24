@@ -1,6 +1,7 @@
 #include "client_internal.h"
 #include "efs/put_ticket.h"
 #include "efs/kv_key.h"
+#include "efs/raft.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -153,6 +154,125 @@ static void ledger_mark_sent(uint64_t seq)
     pthread_mutex_unlock(&g_ledger.mu);
 }
 
+/* ---- K32 · admission group commit ------------------------------------------
+ *
+ * One ADMIT entry per object was eight Raft entries per 1 MiB write. Tickets
+ * queue per Raft group; one queued thread at a time sends every ticket
+ * queued for its group (up to EFS_PUT_TICKET_BATCH_MAX) as one ADMIT_BATCH,
+ * so the queue fills while the previous batch is in flight. The sender
+ * first waits, bounded by EFS_PUT_ADMIT_LINGER_US, for the running members
+ * of its own cohort (the other chunks of its write). A ticket the batch did
+ * not admit, a failed batch RPC and a lone ticket all take the single ADMIT
+ * path below, with its exact verdicts and retries; admission is idempotent,
+ * so a batch that committed unseen costs nothing. */
+#define ADMIT_GROUPS 4u /* Raft group ids (efs_raft_shard_group) */
+struct admit_slot {
+    struct admit_slot *next;
+    struct efs_put_ticket *ticket;
+    int done, admitted;
+};
+static struct {
+    pthread_mutex_t mu;
+    pthread_cond_t cv;
+    struct admit_slot *head[ADMIT_GROUPS], **tail[ADMIT_GROUPS];
+    uint32_t queued[ADMIT_GROUPS];
+    int sending[ADMIT_GROUPS];
+} g_admit = {PTHREAD_MUTEX_INITIALIZER, PTHREAD_COND_INITIALIZER, {0}, {0}, {0}, {0}};
+static __thread struct efs_put_admit_cohort *tl_cohort;
+static __thread int tl_cohort_queued;
+
+void efs_client_put_cohort_enter(struct efs_put_admit_cohort *c)
+{
+    pthread_mutex_lock(&g_admit.mu);
+    tl_cohort = c;
+    tl_cohort_queued = 0;
+    if (c) c->running++;
+    pthread_mutex_unlock(&g_admit.mu);
+}
+
+/* Caller holds g_admit.mu. */
+static void cohort_arrived(void)
+{
+    if (tl_cohort && !tl_cohort_queued && tl_cohort->running) {
+        tl_cohort->running--;
+        pthread_cond_broadcast(&g_admit.cv);
+    }
+    tl_cohort_queued = 1;
+}
+
+void efs_client_put_cohort_leave(void)
+{
+    pthread_mutex_lock(&g_admit.mu);
+    cohort_arrived();
+    tl_cohort = NULL;
+    pthread_mutex_unlock(&g_admit.mu);
+}
+
+static void admit_deadline(struct timespec *ts, long us)
+{
+    clock_gettime(CLOCK_REALTIME, ts);
+    ts->tv_nsec += us * 1000L;
+    ts->tv_sec += ts->tv_nsec / 1000000000L;
+    ts->tv_nsec %= 1000000000L;
+}
+
+/* 1 when a batch admitted *t; 0: use the single form. */
+static int admit_batched(struct efs_put_ticket *t)
+{
+    uint32_t g = efs_raft_shard_group(ticket_shard(t));
+    struct admit_slot me = {NULL, t, 0, 0};
+    struct efs_put_admit_cohort *mine = tl_cohort;
+
+    if (g >= ADMIT_GROUPS) return 0;
+    pthread_mutex_lock(&g_admit.mu);
+    if (!g_admit.tail[g]) g_admit.tail[g] = &g_admit.head[g];
+    *g_admit.tail[g] = &me;
+    g_admit.tail[g] = &me.next;
+    g_admit.queued[g]++;
+    cohort_arrived();
+    while (!me.done) {
+        if (g_admit.sending[g]) {
+            pthread_cond_wait(&g_admit.cv, &g_admit.mu);
+            continue;
+        }
+        g_admit.sending[g] = 1;
+        struct timespec until;
+        admit_deadline(&until, EFS_PUT_ADMIT_LINGER_US);
+        while (mine && mine->running && g_admit.queued[g] < EFS_PUT_TICKET_BATCH_MAX &&
+               pthread_cond_timedwait(&g_admit.cv, &g_admit.mu, &until) == 0)
+            ;
+        struct admit_slot *take[EFS_PUT_TICKET_BATCH_MAX];
+        struct efs_put_ticket batch[EFS_PUT_TICKET_BATCH_MAX];
+        uint32_t n = 0, mask = 0;
+        while (g_admit.head[g] && n < EFS_PUT_TICKET_BATCH_MAX) {
+            take[n] = g_admit.head[g];
+            g_admit.head[g] = take[n]->next;
+            batch[n] = *take[n]->ticket;
+            n++;
+        }
+        if (!g_admit.head[g]) g_admit.tail[g] = &g_admit.head[g];
+        g_admit.queued[g] -= n;
+        pthread_mutex_unlock(&g_admit.mu);
+        int rc = EFS_ERR_INVAL;
+        if (n >= 2) {
+            for (uint32_t i = 0; i < n; i++) ledger_mark_sent(batch[i].id.seq);
+            rc = efs_client_rpc_put_ticket_batch(batch, n, 0, &mask);
+            if (ticket_debug())
+                fprintf(stderr, "put-ticket admit batch group=%u n=%u mask=%#x rc=%d\n",
+                        g, n, mask, rc);
+        }
+        pthread_mutex_lock(&g_admit.mu);
+        for (uint32_t i = 0; i < n; i++) {
+            take[i]->admitted = rc == EFS_OK && (mask >> i & 1u);
+            take[i]->done = 1;
+        }
+        g_admit.sending[g] = 0;
+        pthread_cond_broadcast(&g_admit.cv);
+    }
+    pthread_mutex_unlock(&g_admit.mu);
+    return me.admitted;
+}
+
 int efs_client_put_admit(efs_ino_t ino, uint32_t ci,
                          const efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
                          const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE],
@@ -176,6 +296,8 @@ int efs_client_put_admit(efs_ino_t ino, uint32_t ci,
      * know this session first (K5); the client caches that per shard. */
     uint32_t state = 0;
     rc = efs_client_session_admit(ticket_shard(out), &out->id);
+    if (rc == EFS_OK && admit_batched(out))
+        return EFS_OK;
     for (unsigned attempt = 0; rc == EFS_OK; attempt++) {
         if (!attempt) ledger_mark_sent(out->id.seq);
         rc = efs_client_rpc_put_ticket(out, 0, &state);
@@ -247,6 +369,83 @@ struct settle_batch {
 };
 static struct settle_batch g_pass[PASS_STREAMS];
 
+/* Ledger entries of these sequences, until the first one that is gone. */
+static uint32_t settle_tickets(const uint64_t *seq, uint32_t n, struct efs_put_ticket *t)
+{
+    uint32_t got = 0;
+    pthread_mutex_lock(&g_ledger.mu);
+    for (uint32_t j = 0; j < n; j++) {
+        struct ledger_entry *e = ledger_find(seq[j]);
+        if (!e) break;
+        t[got++] = e->ticket;
+    }
+    pthread_mutex_unlock(&g_ledger.mu);
+    return got;
+}
+
+static void settle_forget(const struct efs_put_ticket *t, uint32_t n, uint32_t mask, int leading)
+{
+    pthread_mutex_lock(&g_ledger.mu);
+    for (uint32_t j = 0; j < n; j++) {
+        if (leading ? j >= mask : !(mask >> j & 1u)) continue;
+        struct ledger_entry *gone = ledger_find(t[j].id.seq);
+        if (!gone) continue;
+        uint32_t at = (uint32_t)(gone - g_ledger.e);
+        memmove(gone, gone + 1, (size_t)(g_ledger.n - at - 1) * sizeof(*gone));
+        g_ledger.n--;
+    }
+    pthread_mutex_unlock(&g_ledger.mu);
+}
+
+/* (Raft group, lane shard) order of the pass's streams (g_pass indices). */
+static int settle_stream_cmp(const void *x, const void *y)
+{
+    const struct settle_batch *a = &g_pass[*(const uint32_t *)x], *b = &g_pass[*(const uint32_t *)y];
+    uint32_t ga = efs_raft_shard_group(a->shard), gb = efs_raft_shard_group(b->shard);
+    if (ga != gb) return ga < gb ? -1 : 1;
+    return a->shard < b->shard ? -1 : a->shard > b->shard;
+}
+
+/* One stream, one SETTLE (*state = leading retired count). */
+static int settle_stream(const struct settle_batch *sb, int *progress)
+{
+    struct efs_put_ticket t[EFS_PUT_TICKET_SETTLE_MAX];
+    uint32_t retired = 0, n = settle_tickets(sb->seq, sb->n, t);
+    if (!n) return EFS_OK;
+    int rc = efs_client_rpc_put_ticket_settle(t, n, &retired);
+    if (ticket_debug())
+        fprintf(stderr, "put-ticket settle shard=%u n=%u first=%llu retired=%u rc=%d\n",
+                sb->shard, n, (unsigned long long)t[0].id.seq, retired, rc);
+    if (rc == EFS_OK && retired) {
+        settle_forget(t, n, retired, 1);
+        *progress = 1;
+    }
+    return rc;
+}
+
+/* Several streams of one group, one SETTLE_BATCH (mask of retired). */
+static int settle_streams(const uint32_t *k, uint32_t nk, int *progress)
+{
+    struct efs_put_ticket t[EFS_PUT_TICKET_BATCH_MAX];
+    uint32_t n = 0, mask = 0;
+    for (uint32_t i = 0; i < nk; i++)
+        n += settle_tickets(g_pass[k[i]].seq, g_pass[k[i]].n, t + n);
+    if (n < 2) {
+        if (!n) return EFS_OK;
+        struct settle_batch one = {ticket_shard(&t[0]), 1, 0, {t[0].id.seq}};
+        return settle_stream(&one, progress);
+    }
+    int rc = efs_client_rpc_put_ticket_batch(t, n, 1, &mask);
+    if (ticket_debug())
+        fprintf(stderr, "put-ticket settle batch streams=%u n=%u mask=%#x rc=%d\n",
+                nk, n, mask, rc);
+    if (rc == EFS_OK && mask) {
+        settle_forget(t, n, mask, 0);
+        *progress = 1;
+    }
+    return rc;
+}
+
 static int settle_pass(int *progress)
 {
     uint32_t nb = 0;
@@ -283,34 +482,22 @@ static int settle_pass(int *progress)
         if (!done) { g_pass[k].closed = 1; continue; }
         g_pass[k].seq[g_pass[k].n++] = t.id.seq;
     }
+    /* K32: the streams of one Raft group share SETTLE_BATCH entries (one
+     * entry per stream was most of a write's settle cost: a file's chunks
+     * spread over 64 lane-shard streams). Whole streams only, sorted by
+     * lane shard; a stream alone keeps the single SETTLE. */
+    uint32_t order[PASS_STREAMS], no = 0;
+    for (uint32_t k = 0; k < nb; k++)
+        if (g_pass[k].n) order[no++] = k;
+    qsort(order, no, sizeof(order[0]), settle_stream_cmp);
     int result = EFS_OK;
-    for (uint32_t k = 0; k < nb; k++) {
-        struct efs_put_ticket t[EFS_PUT_TICKET_SETTLE_MAX];
-        uint32_t n = 0, retired = 0;
-        pthread_mutex_lock(&g_ledger.mu);
-        for (uint32_t j = 0; j < g_pass[k].n; j++) {
-            struct ledger_entry *e = ledger_find(g_pass[k].seq[j]);
-            if (!e) break;
-            t[n++] = e->ticket;
-        }
-        pthread_mutex_unlock(&g_ledger.mu);
-        if (!n) continue;
-        int rc = efs_client_rpc_put_ticket_settle(t, n, &retired);
-        if (ticket_debug())
-            fprintf(stderr, "put-ticket settle shard=%u n=%u first=%llu retired=%u rc=%d\n",
-                    g_pass[k].shard, n, (unsigned long long)t[0].id.seq, retired, rc);
-        if (rc == EFS_OK && retired) {
-            pthread_mutex_lock(&g_ledger.mu);
-            for (uint32_t j = 0; j < retired; j++) {
-                struct ledger_entry *gone = ledger_find(t[j].id.seq);
-                if (!gone) continue;
-                uint32_t at = (uint32_t)(gone - g_ledger.e);
-                memmove(gone, gone + 1, (size_t)(g_ledger.n - at - 1) * sizeof(*gone));
-                g_ledger.n--;
-            }
-            pthread_mutex_unlock(&g_ledger.mu);
-            *progress = 1;
-        }
+    for (uint32_t a = 0, b; a < no; a = b) {
+        uint32_t g = efs_raft_shard_group(g_pass[order[a]].shard), total = g_pass[order[a]].n;
+        for (b = a + 1; b < no && efs_raft_shard_group(g_pass[order[b]].shard) == g &&
+                        total + g_pass[order[b]].n <= EFS_PUT_TICKET_BATCH_MAX; b++)
+            total += g_pass[order[b]].n;
+        int rc = b - a == 1 ? settle_stream(&g_pass[order[a]], progress)
+                            : settle_streams(order + a, b - a, progress);
         if (rc != EFS_OK && rc != EFS_ERR_BUSY && result == EFS_OK) result = rc;
         if (rc == EFS_ERR_FENCED || rc == EFS_ERR_NET) break;
     }

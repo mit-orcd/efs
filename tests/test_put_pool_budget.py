@@ -27,6 +27,9 @@ static uint64_t report_clock_ms(void) {struct timespec t;clock_gettime(CLOCK_MON
 uint64_t efs_client_rpc_deadline_ms(void) {return deadline;}
 void efs_client_rpc_set_deadline_ms(uint64_t d) {deadline=d;}
 int efs_client_rpc_past_deadline(void) {return deadline&&report_clock_ms()>=deadline;}
+static unsigned cohort_in,cohort_out;
+void efs_client_put_cohort_enter(struct efs_put_admit_cohort *c) {assert(c);__sync_fetch_and_add(&cohort_in,1);}
+void efs_client_put_cohort_leave(void) {__sync_fetch_and_add(&cohort_out,1);}
 static void *chunk_put_worker(void *p) {struct chunk_put_job *j=p;assert(deadline&&!efs_client_rpc_past_deadline());__sync_fetch_and_add(&writes,1);usleep(1000);j->rc=EFS_OK;return NULL;}
 static int (*real_create)(pthread_t *,const pthread_attr_t *,void *(*)(void *),void *)=pthread_create;
 static int test_create(pthread_t *t,const pthread_attr_t *a,void *(*f)(void *),void *p) {creates++;if(fail_create&&creates==2)return EAGAIN;return real_create(t,a,f,p);}

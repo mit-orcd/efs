@@ -15,7 +15,7 @@ code=r'''
 #include <stdio.h>
 struct efs_conn {int unused;};static struct efs_conn connection;
 static unsigned calls,drops,redirect,busy,expired,expire_receive,malformed,fail_receive,query;
-static uint64_t salt;static int result,hint,invalid;static uint8_t original[4+2*216];static uint32_t sent;
+static uint64_t salt;static int result,hint,invalid;static uint8_t original[4+EFS_PUT_TICKET_BATCH_MAX*216];static uint32_t sent;
 static int efs_client_rpc_past_deadline(void){return expired;}
 static int session_ready;static unsigned fences,session_checks;
 static int efs_client_session_check(void){session_checks++;return session_ready;}
@@ -29,9 +29,11 @@ int efs_put_ticket_encode(const struct efs_put_ticket *t,uint8_t out[EFS_PUT_TIC
  assert(t->ino==4097 && t->ci==0);memset(out,0x39,EFS_PUT_TICKET_WIRE_LEN);return invalid?EFS_ERR_INVAL:EFS_OK;
 }
 int efs_conn_send_msg(struct efs_conn *c,uint8_t type,const void *data,uint32_t bytes) {
- (void)c;assert(type==EFS_MSG_RAFT_MKFS && bytes==(query==2?4u+sent*216u:218u));const uint8_t *p=data;
- assert(p[0]==efs_raft_shard_group(1) && p[1]==(query==2?EFS_MD_CMD_PUT_TICKET_SETTLE:query?EFS_MD_REQ_PUT_TICKET_STATUS:EFS_MD_CMD_PUT_TICKET_ADMIT));
- if(query==2)assert(p[2]==0 && p[3]==sent);
+ (void)c;assert(type==EFS_MSG_RAFT_MKFS && bytes==(query>=2?4u+sent*216u:218u));const uint8_t *p=data;
+ static const uint8_t tag[5]={EFS_MD_CMD_PUT_TICKET_ADMIT,EFS_MD_REQ_PUT_TICKET_STATUS,EFS_MD_CMD_PUT_TICKET_SETTLE,
+  EFS_MD_CMD_PUT_TICKET_ADMIT_BATCH,EFS_MD_CMD_PUT_TICKET_SETTLE_BATCH};
+ assert(p[0]==efs_raft_shard_group(1) && p[1]==tag[query]);
+ if(query>=2)assert(p[2]==0 && p[3]==sent);
  if(calls)assert(!memcmp(original,p,bytes));else memcpy(original,p,bytes);calls++;return 0;
 }
 int efs_conn_recv_msg(struct efs_conn *c,uint8_t *type,void **out,uint32_t *bytes) {
@@ -80,13 +82,30 @@ int main(void) {
  reset();assert(efs_client_rpc_put_ticket_settle(two,0,&done)==EFS_ERR_INVAL && !calls);
  reset();assert(efs_client_rpc_put_ticket_settle(two,EFS_PUT_TICKET_SETTLE_MAX+1,&done)==EFS_ERR_INVAL && !calls);
  reset();session_ready=EFS_ERR_FENCED;query=2;sent=1;assert(efs_client_rpc_put_ticket_settle(two,1,&done)==EFS_ERR_FENCED && !calls);
+ /* K32: ADMIT_BATCH / SETTLE_BATCH: 2..EFS_PUT_TICKET_BATCH_MAX tickets, the
+  * reply is a mask of those tickets only; errors and redirects as above. */
+ struct efs_put_ticket many[EFS_PUT_TICKET_BATCH_MAX+1];uint32_t mask=99;
+ for(unsigned i=0;i<=EFS_PUT_TICKET_BATCH_MAX;i++)many[i]=(struct efs_put_ticket){.ino=4097};
+ for(int settle=0;settle<2;settle++){
+  reset();query=3+settle;sent=3;salt=5;assert(!efs_client_rpc_put_ticket_batch(many,3,settle,&mask) && mask==5 && calls==1);
+  reset();query=3+settle;sent=3;salt=0;assert(!efs_client_rpc_put_ticket_batch(many,3,settle,&mask) && !mask);
+  reset();query=3+settle;sent=3;salt=8;assert(efs_client_rpc_put_ticket_batch(many,3,settle,&mask)==EFS_ERR_PROTO && !mask);
+  reset();query=3+settle;sent=EFS_PUT_TICKET_BATCH_MAX;salt=0xffffffffu;
+  assert(!efs_client_rpc_put_ticket_batch(many,EFS_PUT_TICKET_BATCH_MAX,settle,&mask) && mask==0xffffffffu);
+  reset();query=3+settle;sent=2;salt=3;redirect=1;assert(!efs_client_rpc_put_ticket_batch(many,2,settle,&mask) && mask==3 && calls==2);
+  reset();query=3+settle;sent=2;salt=0;result=EFS_ERR_STALE;assert(efs_client_rpc_put_ticket_batch(many,2,settle,&mask)==EFS_ERR_STALE && !mask);
+  reset();query=3+settle;sent=2;fail_receive=1;assert(efs_client_rpc_put_ticket_batch(many,2,settle,&mask)==EFS_ERR_NET && drops==1);
+  reset();assert(efs_client_rpc_put_ticket_batch(many,1,settle,&mask)==EFS_ERR_INVAL && !calls);
+  reset();assert(efs_client_rpc_put_ticket_batch(many,EFS_PUT_TICKET_BATCH_MAX+1,settle,&mask)==EFS_ERR_INVAL && !calls);
+  reset();session_ready=EFS_ERR_FENCED;query=3+settle;sent=2;assert(efs_client_rpc_put_ticket_batch(many,2,settle,&mask)==EFS_ERR_FENCED && !calls);
+ }
  /* K5: a fenced mount admits no ticket (probes still run); a FENCED
   * admission refusal latches the mount fenced. */
  reset();session_ready=EFS_ERR_FENCED;assert(RUN==EFS_ERR_FENCED && !calls && session_checks==1);
  reset();session_ready=EFS_ERR_FENCED;query=1;assert(!RUN && calls==1 && !session_checks);
  reset();salt=0;result=EFS_ERR_FENCED;assert(RUN==EFS_ERR_FENCED && fences==1 && !state);
  reset();salt=0;result=EFS_ERR_UNREGISTERED;assert(RUN==EFS_ERR_UNREGISTERED && !fences && !state);
- puts("PUT ticket RPC: immutable retries, pure probe, exact state, revoked/body-error refusal, redirects, deadlines and fenced mount PASS");
+ puts("PUT ticket RPC: immutable retries, pure probe, exact state, revoked/body-error refusal, redirects, deadlines and fenced mount; K32 ADMIT_BATCH/SETTLE_BATCH framing and mask replies PASS");
 }
 '''
 with tempfile.TemporaryDirectory() as td:

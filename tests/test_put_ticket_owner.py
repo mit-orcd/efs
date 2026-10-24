@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """Execute the K13 mount ticket ledger: admission before PUT, ambiguity
 retention, FileID binding, sweep of unreferenced objects and ordered,
-batched settle per lane-shard stream."""
+batched settle per lane-shard stream.
+
+K32: concurrent admissions of one cohort (one write's chunk jobs) share one
+ADMIT_BATCH per Raft group; a ticket the batch did not admit takes the
+single ADMIT; the settle pass packs the streams of one group into
+SETTLE_BATCH entries and keeps the tickets whose bit is clear."""
 from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
@@ -9,6 +14,7 @@ code=r'''
 #include "client_internal.h"
 #include "efs/put_ticket.h"
 #include "efs/kv_key.h"
+#include "efs/raft.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
@@ -54,11 +60,55 @@ int efs_client_rpc_put_ticket_settle(const struct efs_put_ticket *t,uint32_t n,u
  pthread_mutex_unlock(&mock_mu);
  return rc;
 }
+static unsigned batch_admits,batch_admitted,batch_settles,batch_settled,batch_clear_bit;
+int efs_client_rpc_put_ticket_batch(const struct efs_put_ticket *t,uint32_t n,int settle,uint32_t *mask)
+{
+ pthread_mutex_lock(&mock_mu);
+ assert(n>=2 && n<=EFS_PUT_TICKET_BATCH_MAX);
+ uint8_t g=efs_raft_shard_group(efs_kv_lane_shard(t[0].ino,t[0].ci%EFS_META_LANES));
+ for(uint32_t i=0;i<n;i++){
+  uint32_t sh=efs_kv_lane_shard(t[i].ino,t[i].ci%EFS_META_LANES);
+  assert(efs_raft_shard_group(sh)==g);
+  if(settle && i){
+   uint32_t prev=efs_kv_lane_shard(t[i-1].ino,t[i-1].ci%EFS_META_LANES);
+   assert(sh>prev || (sh==prev && t[i].id.seq>t[i-1].id.seq));
+  }
+ }
+ *mask=(uint32_t)((1ull<<n)-1);
+ if(batch_clear_bit){*mask&=~(1u<<(batch_clear_bit-1));batch_clear_bit=0;}
+ if(settle){batch_settles++;for(uint32_t i=0;i<n;i++)if(*mask>>i&1){batch_settled++;settled[nsettled++%64]=t[i].id.seq;}}
+ else{batch_admits++;batch_admitted+=n;}
+ pthread_mutex_unlock(&mock_mu);
+ return EFS_OK;
+}
 int efs_client_put_referenced(efs_ino_t ino,uint32_t ci,uint64_t object){(void)ino;(void)ci;return object==referenced_object;}
 #include "put_ticket_owner.c"
 static const efs_node_id_t nodes[3]={1,2,3};
 static uint8_t cks[3][EFS_HASH_SIZE];
 static int admit(uint32_t ci,struct efs_put_ticket *t){return efs_client_put_admit(4097,ci,nodes,(const uint8_t (*)[EFS_HASH_SIZE])cks,32,0,0,t);}
+/* K32: eight chunk jobs of one write, each on its own worker thread. */
+static struct efs_put_admit_cohort cohort;
+static pthread_mutex_t gate_mu=PTHREAD_MUTEX_INITIALIZER;static pthread_cond_t gate_cv=PTHREAD_COND_INITIALIZER;
+static unsigned entered;
+struct job{uint32_t ci;struct efs_put_ticket t;int rc;};
+static void *job_main(void *arg)
+{
+ struct job *j=arg;
+ efs_client_put_cohort_enter(&cohort);
+ pthread_mutex_lock(&gate_mu);entered++;pthread_cond_broadcast(&gate_cv);
+ while(entered<8)pthread_cond_wait(&gate_cv,&gate_mu);
+ pthread_mutex_unlock(&gate_mu);
+ j->rc=admit(j->ci,&j->t);
+ efs_client_put_cohort_leave();
+ return NULL;
+}
+static void write8(uint32_t ci0,struct job *jobs)
+{
+ pthread_t th[8];entered=0;
+ for(unsigned i=0;i<8;i++){jobs[i].ci=ci0+i;assert(!pthread_create(&th[i],NULL,job_main,&jobs[i]));}
+ for(unsigned i=0;i<8;i++)pthread_join(th[i],NULL);
+ assert(!cohort.running);
+}
 int main(void){
  g_client.node_count=4;g_client.export_id=1;for(unsigned i=0;i<4;i++)g_client.nodes[i].id=i+1;
  for(unsigned i=0;i<3;i++)memset(cks[i],i+1,EFS_HASH_SIZE);
@@ -109,8 +159,31 @@ int main(void){
  /* A stale admission is released as done, then settled (abandoned). */
  admit_rc=EFS_ERR_STALE;assert(admit(4,&a)==EFS_ERR_STALE && efs_client_put_outstanding()==1);admit_rc=0;
  assert(!efs_client_put_settle() && !efs_client_put_outstanding());
+
+ /* K32: one write's eight admissions are one ADMIT_BATCH per group (four
+  * chunks each: adjacent chunks alternate groups), no single ADMIT. */
+ unsigned g0=0;for(unsigned i=0;i<8;i++)g0+=efs_raft_shard_group(efs_kv_lane_shard(4097,8+i))==0;
+ assert(g0==4);
+ struct job jobs[8];unsigned singles=admits;
+ write8(8,jobs);
+ for(unsigned i=0;i<8;i++)assert(!jobs[i].rc && jobs[i].t.ci==8+i);
+ assert(batch_admits==2 && batch_admitted==8 && admits==singles);
+ /* Settle: eight one-ticket streams, two groups: two SETTLE_BATCH entries. */
+ for(unsigned i=0;i<8;i++)efs_client_put_release(jobs[i].t.id.seq,0);
+ unsigned s0=settles;
+ assert(!efs_client_put_settle() && !efs_client_put_outstanding());
+ assert(batch_settles==2 && batch_settled==8 && settles==s0);
+ /* A ticket the batch did not admit is resolved by the single ADMIT. */
+ batch_clear_bit=2;write8(16,jobs);
+ for(unsigned i=0;i<8;i++)assert(!jobs[i].rc);
+ assert(batch_admits==4 && batch_admitted==16 && admits==singles+1);
+ /* A clear settle bit keeps that ticket for the next pass (alone: single). */
+ for(unsigned i=0;i<8;i++)efs_client_put_release(jobs[i].t.id.seq,0);
+ batch_clear_bit=1;s0=settles;
+ assert(!efs_client_put_settle() && !efs_client_put_outstanding());
+ assert(batch_settles==4 && batch_settled==15 && settles==s0+1);
  efs_client_put_settle_stop();
- puts("K13 ticket ledger: FileID binding, admission before PUT, lost/stale admission retention, putting protection, sweep, ordered per-stream batched settle, partial and fenced retirement PASS");
+ puts("K13 ticket ledger: FileID binding, admission before PUT, lost/stale admission retention, putting protection, sweep, ordered per-stream batched settle, partial and fenced retirement; K32 cohort ADMIT_BATCH per group, single-ADMIT fallback, multi-stream SETTLE_BATCH PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-put-owner-') as d:

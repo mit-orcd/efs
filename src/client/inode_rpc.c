@@ -1859,28 +1859,38 @@ int efs_client_lease_reset(struct efs_client_lease_request *r)
 }
 
 /* probe_only 0: ADMIT, 1: STATUS, 2: SETTLE of n tickets of one stream
- * (*state = how many leading tickets are retired). */
+ * (*state = how many leading tickets are retired); K32: 3: ADMIT_BATCH,
+ * 4: SETTLE_BATCH of 2..EFS_PUT_TICKET_BATCH_MAX tickets of one group
+ * (*state = bit i set when ticket i is ADMITTED / retired). */
 static int rpc_put_ticket(const struct efs_put_ticket *ticket,uint32_t n,int probe_only,
                           uint32_t *state)
 {
     if(!state)return EFS_ERR_INVAL;
     *state=0;
-    if(probe_only<0 || probe_only>2 || !n || n>(probe_only==2?EFS_PUT_TICKET_SETTLE_MAX:1u))
+    if(probe_only<0 || probe_only>4 || !n ||
+       n>(probe_only==2?EFS_PUT_TICKET_SETTLE_MAX:probe_only>2?EFS_PUT_TICKET_BATCH_MAX:1u) ||
+       (probe_only>2 && n<2))
         return EFS_ERR_INVAL;
     if(probe_only!=1) {
         int ready=efs_client_session_check();
         if(ready!=EFS_OK)return ready;
     }
-    uint8_t body[4+EFS_PUT_TICKET_SETTLE_MAX*EFS_PUT_TICKET_WIRE_LEN];uint32_t len;
+    _Static_assert(EFS_PUT_TICKET_BATCH_MAX<=32u,"batch reply mask is 32 bits");
+    uint8_t body[4+(EFS_PUT_TICKET_SETTLE_MAX>EFS_PUT_TICKET_BATCH_MAX?
+                    EFS_PUT_TICKET_SETTLE_MAX:EFS_PUT_TICKET_BATCH_MAX)*EFS_PUT_TICKET_WIRE_LEN];
+    uint32_t len;
     uint8_t *at=body+2;
-    if(probe_only==2){body[2]=(uint8_t)(n>>8);body[3]=(uint8_t)n;at=body+4;}
+    if(probe_only>=2){body[2]=(uint8_t)(n>>8);body[3]=(uint8_t)n;at=body+4;}
     for(uint32_t i=0;i<n;i++){
         int rc=efs_put_ticket_encode(&ticket[i],at+i*EFS_PUT_TICKET_WIRE_LEN);if(rc!=EFS_OK)return rc;
     }
     len=(uint32_t)(at-body)+n*EFS_PUT_TICKET_WIRE_LEN;
     uint32_t shard=efs_kv_lane_shard(ticket->ino,ticket->ci%EFS_META_LANES);
     body[0]=efs_raft_shard_group(shard);
-    body[1]=probe_only==2?EFS_MD_CMD_PUT_TICKET_SETTLE:probe_only?EFS_MD_REQ_PUT_TICKET_STATUS:EFS_MD_CMD_PUT_TICKET_ADMIT;
+    static const uint8_t tag[5]={EFS_MD_CMD_PUT_TICKET_ADMIT,EFS_MD_REQ_PUT_TICKET_STATUS,
+        EFS_MD_CMD_PUT_TICKET_SETTLE,EFS_MD_CMD_PUT_TICKET_ADMIT_BATCH,
+        EFS_MD_CMD_PUT_TICKET_SETTLE_BATCH};
+    body[1]=tag[probe_only];
     efs_node_id_t target=0;
     for(unsigned attempt=0;attempt<8;attempt++) {
         if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
@@ -1900,6 +1910,10 @@ static int rpc_put_ticket(const struct efs_put_ticket *ticket,uint32_t n,int pro
         }
         struct efs_msg_raft_mkfs_reply reply;memcpy(&reply,payload,bytes);free(payload);
         if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
+        if(reply.rc==EFS_OK && probe_only>2) {
+            if(reply.salt>>n)return EFS_ERR_PROTO;
+            *state=(uint32_t)reply.salt;return EFS_OK;
+        }
         if(reply.rc==EFS_OK) {
             if(probe_only==2 ? reply.salt>n :
                (reply.salt!=EFS_PUT_TICKET_ADMITTED && reply.salt!=EFS_PUT_TICKET_PUBLISHED &&
@@ -1932,6 +1946,12 @@ int efs_client_rpc_put_ticket_settle(const struct efs_put_ticket *tickets,uint32
                                      uint32_t *retired)
 {
     return rpc_put_ticket(tickets,n,2,retired);
+}
+
+int efs_client_rpc_put_ticket_batch(const struct efs_put_ticket *tickets,uint32_t n,
+                                    int settle,uint32_t *mask)
+{
+    return rpc_put_ticket(tickets,n,settle?4:3,mask);
 }
 
 int efs_client_rpc_publication(const struct efs_msg_publication *request, int query_only,

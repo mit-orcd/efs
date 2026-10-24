@@ -549,6 +549,9 @@ struct efs_raft_host {
      * GETCHUNKS windows whose double collect moved, collects BUSY on a
      * committed-unresolved stage. Atomic. */
     uint64_t obs_pub_units, obs_pub_unit_aborts, obs_getchunks_moved, obs_stage_busy;
+    /* K32: publication transactions (sets of units) and sets republished
+     * unit by unit after a STALE member. */
+    uint64_t obs_pub_sets, obs_pub_set_splits;
     /* I16: directory RPCs answered from the op-id window (a client retry
      * of an op that had already committed). Handler threads, atomic. */
     uint64_t obs_opid_replay;
@@ -2726,6 +2729,8 @@ static int apply_lock_cmd(struct efs_raft_host *h, const uint8_t *cmd,
  * tail). clen may be N * HOST_PUBLISH_LEN — one Raft entry, many pubs. */
 static int host_unpack_settle(const uint8_t *cmd, uint32_t clen,
                               struct efs_put_ticket *tickets, uint32_t *count);
+static int host_unpack_ticket_batch(const uint8_t *cmd, uint32_t clen,
+                                    struct efs_put_ticket *tickets, uint32_t *count);
 static int host_publication_command_valid(const uint8_t *cmd, uint32_t len)
 {
     /* K13: the ticket trailer is mandatory; no unticketed publication. */
@@ -3058,6 +3063,32 @@ static int apply_txn_batch_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return verdict;
 }
 
+/* K32: ADMIT_BATCH / SETTLE_BATCH apply (meta_cmd.h). */
+static int apply_put_ticket_batch_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                                      uint32_t clen, uint8_t group)
+{
+    struct efs_put_ticket tickets[EFS_PUT_TICKET_BATCH_MAX];uint32_t n=0,i;
+    uint8_t stopped[EFS_PUT_TICKET_BATCH_MAX]={0};
+    if(host_unpack_ticket_batch(cmd,clen,tickets,&n)!=EFS_OK)return EFS_ERR_UNSUPPORTED;
+    for(i=0;i<n;i++)
+        if(group!=efs_raft_shard_group(efs_kv_lane_shard(tickets[i].ino,tickets[i].ci%EFS_META_LANES)))
+            return EFS_ERR_INVAL;
+    /* K32: each ticket as its own ADMIT / per-stream SETTLE would; a
+     * refused ticket is its own verdict (the RPC reads the state). */
+    for(i=0;i<n;i++) {
+        int one;
+        if(cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT_BATCH)one=efs_put_ticket_admit(h->kv,&tickets[i]);
+        else if(i && stopped[i-1] &&
+                efs_kv_lane_shard(tickets[i].ino,tickets[i].ci%EFS_META_LANES)==
+                efs_kv_lane_shard(tickets[i-1].ino,tickets[i-1].ci%EFS_META_LANES))
+            one=EFS_ERR_BUSY; /* this stream stopped: settle stays in order */
+        else one=efs_put_ticket_settle(h->kv,&tickets[i]);
+        if(one==EFS_ERR_IO || one==EFS_ERR_NOMEM)return one;
+        stopped[i]=one!=EFS_OK;
+    }
+    return EFS_OK;
+}
+
 static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t term, uint8_t group,
                                const uint8_t *cmd, uint32_t clen);
 
@@ -3208,6 +3239,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_CREATE || cmd[0] == EFS_MD_CMD_PUBLISH ||
            cmd[0] == EFS_MD_CMD_REPORT_PUBLISH ||
            cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
+           cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT_BATCH || cmd[0] == EFS_MD_CMD_PUT_TICKET_SETTLE_BATCH ||
            cmd[0] == EFS_MD_CMD_XATTR || cmd[0] == EFS_MD_CMD_SALT ||
            cmd[0] == EFS_MD_CMD_LOCK ||
            cmd[0] == EFS_MD_CMD_UNLINK || cmd[0] == EFS_MD_CMD_SETATTR ||
@@ -3255,6 +3287,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
          cmd[0] == EFS_MD_CMD_DEGRADED_CLEAR || cmd[0] == EFS_MD_CMD_PUT_ORPHAN_ACK ||
          cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_CREATE ||
          cmd[0] == EFS_MD_CMD_APPEND_CATCHUP || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
+         cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT_BATCH || cmd[0] == EFS_MD_CMD_PUT_TICKET_SETTLE_BATCH ||
          cmd[0] == EFS_MD_CMD_REPORT_PUBLISH || cmd[0] == EFS_MD_CMD_ACTIVATE_LANE ||
          cmd[0] == EFS_MD_CMD_BOOTSTRAP_LANE || cmd[0] == EFS_MD_CMD_TRUNC_SWEEP ||
          cmd[0] == EFS_MD_CMD_SWEEP_DONE || cmd[0] == EFS_MD_CMD_RETIRE ||
@@ -3725,6 +3758,8 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         }
         return EFS_OK;
     }
+    if(cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT_BATCH || cmd[0]==EFS_MD_CMD_PUT_TICKET_SETTLE_BATCH)
+        return apply_put_ticket_batch_cmd(h,cmd,clen,group);
     if (cmd[0] == EFS_MD_CMD_REPORT_PUBLISH)
         return apply_report_publish_cmd(h, cmd, clen, group);
     /* K13: a bare PUBLISH carries no ticket. Only REPORT_PUBLISH records and
@@ -6517,6 +6552,38 @@ static int host_unpack_settle(const uint8_t *cmd, uint32_t clen,
     return EFS_OK;
 }
 
+/* K32: EFS_MD_CMD_PUT_TICKET_ADMIT_BATCH / SETTLE_BATCH (meta_cmd.h). One
+ * mount session; distinct sequences; SETTLE_BATCH sorted by (lane shard,
+ * sequence). Group membership is the caller's check. */
+static int host_unpack_ticket_batch(const uint8_t *cmd, uint32_t clen,
+                                    struct efs_put_ticket *tickets, uint32_t *count)
+{
+    if (!cmd || clen < 3 || (cmd[0] != EFS_MD_CMD_PUT_TICKET_ADMIT_BATCH &&
+                             cmd[0] != EFS_MD_CMD_PUT_TICKET_SETTLE_BATCH))
+        return EFS_ERR_INVAL;
+    uint32_t n = ((uint32_t)cmd[1] << 8) | cmd[2];
+    if (n < 2 || n > EFS_PUT_TICKET_BATCH_MAX || clen != 3u + n * EFS_PUT_TICKET_WIRE_LEN)
+        return EFS_ERR_INVAL;
+    for (uint32_t i = 0; i < n; i++) {
+        int rc = efs_put_ticket_decode(cmd + 3 + i * EFS_PUT_TICKET_WIRE_LEN,
+                                       EFS_PUT_TICKET_WIRE_LEN, &tickets[i]);
+        if (rc != EFS_OK) return rc;
+        if (tickets[i].id.session_epoch != tickets[0].id.session_epoch ||
+            memcmp(tickets[i].id.client_uuid, tickets[0].id.client_uuid, 16))
+            return EFS_ERR_INVAL;
+        for (uint32_t j = 0; j < i; j++)
+            if (tickets[j].id.seq == tickets[i].id.seq) return EFS_ERR_INVAL;
+        if (i && cmd[0] == EFS_MD_CMD_PUT_TICKET_SETTLE_BATCH) {
+            uint32_t a = efs_kv_lane_shard(tickets[i - 1].ino, tickets[i - 1].ci % EFS_META_LANES);
+            uint32_t b = efs_kv_lane_shard(tickets[i].ino, tickets[i].ci % EFS_META_LANES);
+            if (b < a || (b == a && tickets[i].id.seq <= tickets[i - 1].id.seq))
+                return EFS_ERR_INVAL;
+        }
+    }
+    *count = n;
+    return EFS_OK;
+}
+
 /* K13 REPORT record: PUBLISH body + ticket trailer (uuid/epoch from the
  * REPORT session). reject is 0 or HOST_PUB_F_REJECT_GONE. */
 static int pack_report_rec(uint8_t *out, uint32_t *len, const struct efs_meta_pub *p,
@@ -7466,9 +7533,11 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
     if (__atomic_load_n(&h->obs_pub_units, __ATOMIC_RELAXED) ||
         __atomic_load_n(&h->obs_pub_unit_aborts, __ATOMIC_RELAXED) ||
         __atomic_load_n(&h->obs_getchunks_moved, __ATOMIC_RELAXED))
-        fprintf(stderr, "raft-obs-w77: pub_units=%llu pub_unit_aborts=%llu "
-                "getchunks_moved=%llu stage_busy=%llu\n",
+        fprintf(stderr, "raft-obs-w77: pub_units=%llu pub_sets=%llu pub_set_splits=%llu "
+                "pub_unit_aborts=%llu getchunks_moved=%llu stage_busy=%llu\n",
                 (unsigned long long)__atomic_load_n(&h->obs_pub_units, __ATOMIC_RELAXED),
+                (unsigned long long)__atomic_load_n(&h->obs_pub_sets, __ATOMIC_RELAXED),
+                (unsigned long long)__atomic_load_n(&h->obs_pub_set_splits, __ATOMIC_RELAXED),
                 (unsigned long long)__atomic_load_n(&h->obs_pub_unit_aborts, __ATOMIC_RELAXED),
                 (unsigned long long)__atomic_load_n(&h->obs_getchunks_moved, __ATOMIC_RELAXED),
                 (unsigned long long)__atomic_load_n(&h->obs_stage_busy, __ATOMIC_RELAXED));
@@ -13310,6 +13379,67 @@ static int host_storage_fence_members(struct efs_raft_host *h,const uint8_t uuid
  * Session GET (sub=0) is a ReadIndex, not a
  * log command: salt carries epoch + state + touched-bit (10.5c-35a). */
 
+/* K32: the ADMIT_BATCH / SETTLE_BATCH RPC. One entry for many tickets of
+ * one group; each ticket's admission or settle proof is exactly the single
+ * form's, read after the entry applied (or after a fresh ReadIndex when its
+ * outcome is unknown). */
+static void host_put_ticket_batch_submit(struct efs_raft_host *h, uint8_t group,
+                                         const uint8_t *cmd, uint32_t clen,
+                                         struct efs_msg_raft_mkfs_reply *out)
+{
+    uint64_t idx=0,salt=0;
+    int hint=-1,rc;
+    struct efs_put_ticket tickets[EFS_PUT_TICKET_BATCH_MAX];uint32_t n=0,i,j;
+    uint32_t shards[EFS_PUT_TICKET_BATCH_MAX],ns=0;
+    rc=host_unpack_ticket_batch(cmd,clen,tickets,&n);
+    for(i=0;rc==EFS_OK && i<n;i++)
+        if(group!=efs_raft_shard_group(efs_kv_lane_shard(tickets[i].ino,tickets[i].ci%EFS_META_LANES)))
+            rc=EFS_ERR_INVAL;
+    if(rc!=EFS_OK){out->rc=rc;return;}
+    if(!host_hosts(h,group)) {
+        rc=host_remote_cmd(h,group,cmd,clen,out,-1);
+        if(rc!=EFS_OK)out->rc=rc;
+        return;
+    }
+    for(i=0;i<n;i++) {
+        uint32_t shard=efs_kv_lane_shard(tickets[i].ino,tickets[i].ci%EFS_META_LANES);
+        for(j=0;j<ns && shards[j]!=shard;j++);
+        if(j<ns)continue;
+        shards[ns++]=shard;
+        uint8_t admission[HOST_SESS_REG_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_ESTABLISH};
+        memcpy(admission+2,tickets[0].id.client_uuid,16);
+        wr32be(admission+18,tickets[0].id.session_epoch);wr32be(admission+22,shard);
+        rc=host_session_establish_admit(h,admission,sizeof(admission),group,&hint);
+        if(rc!=EFS_OK){out->rc=rc;out->leader_hint=hint;return;}
+    }
+    rc=host_propose_wait_idx(h,group,cmd,clen,&hint,&idx);
+    if(rc==EFS_OK || rc==EFS_ERR_BUSY || rc==EFS_ERR_STALE) {
+        int proof=rc==EFS_OK && idx?EFS_OK:host_read_index(h,group,&hint);
+        uint64_t mask=0;
+        for(i=0;i<n && proof==EFS_OK;i++) {
+            uint32_t shard=efs_kv_lane_shard(tickets[i].ino,tickets[i].ci%EFS_META_LANES);
+            int one=efs_session_accept(h->kv,shard,tickets[i].id.client_uuid,
+                                       tickets[i].id.session_epoch),retired=0;
+            uint32_t state=0;
+            if(one==EFS_OK && cmd[0]==EFS_MD_CMD_PUT_TICKET_SETTLE_BATCH) {
+                one=efs_put_ticket_retired(h->kv,&tickets[i],&retired);
+                if(one==EFS_OK && retired)mask|=1ull<<i;
+            } else if(one==EFS_OK) {
+                one=efs_put_ticket_get(h->kv,&tickets[i],&state);
+                if(one==EFS_OK && state==EFS_PUT_TICKET_ADMITTED)mask|=1ull<<i;
+            }
+            /* Absent: that ticket's bit stays clear and the client
+             * resolves it with the single form. Session refusal fails
+             * the whole reply, as it does the single form's. */
+            if(one!=EFS_OK && one!=EFS_ERR_NOT_FOUND)proof=one;
+        }
+        if(proof==EFS_OK){rc=EFS_OK;salt=mask;}
+        else rc=proof;
+    }
+    out->rc=rc;out->salt=rc==EFS_OK?salt:0;out->index=idx;
+    out->leader_hint=hint;
+}
+
 void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
                              struct efs_msg_raft_mkfs_reply *out)
 {
@@ -13525,6 +13655,11 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         }
         out->rc=host_put_orphan_status(h,cmd,clen,group,&hint,&acked);
         out->salt=out->rc==EFS_OK?acked:0;out->leader_hint=hint;return;
+    }
+    if(clen && (cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT_BATCH ||
+               cmd[0]==EFS_MD_CMD_PUT_TICKET_SETTLE_BATCH)) {
+        host_put_ticket_batch_submit(h,group,cmd,clen,out);
+        return;
     }
     if(clen && (cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT || cmd[0]==EFS_MD_REQ_PUT_TICKET_STATUS ||
                cmd[0]==EFS_MD_CMD_PUT_TICKET_SETTLE)) {
@@ -20743,7 +20878,19 @@ static int host_pub_batch_wait(struct efs_raft_host *h, struct host_pub_batch *b
  * chunk on its lane shard, DECIDE at the inode shard, RESOLVE every
  * participant. The unit's chunks always span both groups once it has two
  * adjacent chunks (odd lane stride); a unit left with one mapping change is
- * one ordinary REPORT entry. */
+ * one ordinary REPORT entry.
+ *
+ * K32: consecutive units of one FileID in a REPORT publish as ONE such
+ * transaction (a "set"), and its PREPAREs share one TXN_BATCH entry per
+ * group (K29). Publishing a superset of units all-or-nothing keeps every
+ * unit's contract: each unit is still all-or-nothing and a reader still sees
+ * one state of it. Per REPORT of U units that is about six entries (PREPARE
+ * per group, DECIDE, RESOLVE per group, RETIRE) instead of about 13 per
+ * unit. A set never repeats a chunk, holds at most HOST_PUB_SET_MAX stages
+ * and at most EFS_PUB_STAGE_RESOLVE_MAX per lane shard (one RESOLVE applies
+ * them all). A set lost to a STALE member is republished unit by unit, so
+ * only the losing unit is retried, as before K32. */
+#define HOST_PUB_SET_MAX 512u
 struct host_pub_unit {
     struct host_pub_unit *next;
     efs_ino_t ino;
@@ -20751,6 +20898,40 @@ struct host_pub_unit {
     uint8_t cmd[EFS_PUB_UNIT_MAX][HOST_REPORT_REC_LEN];
     uint8_t group[EFS_PUB_UNIT_MAX];
 };
+
+/* K32: how many units from u on publish as one set (at least one). */
+static uint32_t host_pub_set_len(const struct host_pub_unit *u)
+{
+    uint32_t ci[HOST_PUB_SET_MAX], n = 0, units = 0;
+    uint8_t lane_n[EFS_META_LANES];
+    const struct host_pub_unit *x;
+
+    memset(lane_n, 0, sizeof(lane_n));
+    for (x = u; x; x = x->next, units++) {
+        uint8_t add[EFS_META_LANES];
+        uint32_t i, j;
+        int fits = x->ino == u->ino && n + x->n <= HOST_PUB_SET_MAX;
+
+        memset(add, 0, sizeof(add));
+        for (i = 0; fits && i < x->n; i++) {
+            uint32_t c = rd32be(x->cmd[i] + 9);
+            uint8_t lane = (uint8_t)(c % EFS_META_LANES);
+            for (j = 0; j < n && ci[j] != c; j++)
+                ;
+            if (j < n || lane_n[lane] + add[lane] >= EFS_PUB_STAGE_RESOLVE_MAX)
+                fits = 0;
+            else
+                add[lane]++;
+        }
+        if (!fits)
+            break;
+        for (i = 0; i < x->n; i++)
+            ci[n++] = rd32be(x->cmd[i] + 9);
+        for (i = 0; i < EFS_META_LANES; i++)
+            lane_n[i] = (uint8_t)(lane_n[i] + add[i]);
+    }
+    return units ? units : 1;
+}
 
 /* Structural unit rules, checked before any authority or proposal. */
 static int host_pub_units_valid(const struct efs_chunk_rec *recs, uint32_t count,
@@ -20778,20 +20959,24 @@ static int host_pub_units_valid(const struct efs_chunk_rec *recs, uint32_t count
     return EFS_OK;
 }
 
-/* Deterministic in (session, publication id, FileID, first chunk), so a
- * re-sent REPORT joins the same decision on any host. The participant
+/* Deterministic in (session, publication id, FileID, first chunk; for a
+ * K32 set of nunits > 1 also the unit count and the last unit's first
+ * chunk), so a re-sent REPORT joins the same decision on any host. The
+ * set's units are a function of the REPORT's records. The participant
  * order puts the inode shard where efs_txn_coordinator lands, so the pin's
  * shard decides and RETIREs. A client clock that disagrees with this host
  * by more than half the decision retention gets host time instead: that
  * retry is a new transaction, still exclusive through the stages. */
-static int host_pub_unit_txn(const struct host_pub_unit *u, const struct efs_opid *session,
+static int host_pub_unit_txn(const struct host_pub_unit *u, uint32_t nunits,
+                             const struct efs_opid *session,
                              const struct efs_report_pubid *pubid,
                              struct efs_txid *t, struct efs_txn_parts *parts)
 {
-    uint32_t ish = efs_kv_inode_shard(u->ino), lanes[EFS_PUB_UNIT_MAX + 1], nl = 0;
+    uint32_t ish = efs_kv_inode_shard(u->ino), lanes[EFS_META_LANES + 1], nl = 0;
     uint64_t mint = pubid->mint_ns, now = now_ns(), hsh = 1469598103934665603ull;
-    uint8_t seed[16 + 4 + 8 + 8 + 4];
-    uint32_t i, j, at;
+    uint8_t seed[16 + 4 + 8 + 8 + 4 + 4 + 4];
+    uint32_t i, j, at, m, slen = 16 + 4 + 8 + 8 + 4;
+    const struct host_pub_unit *x, *last = u;
 
     if ((mint > now ? mint - now : now - mint) > EFS_TXN_DECISION_RETAIN_NS / 2) {
         static int logged;
@@ -20806,20 +20991,29 @@ static int host_pub_unit_txn(const struct host_pub_unit *u, const struct efs_opi
     wr64be(seed + 20, pubid->seq);
     wr64be(seed + 28, u->ino);
     wr32be(seed + 36, u->ci0);
-    for (i = 0; i < sizeof(seed); i++) {
+    for (m = 1; m < nunits && last->next; m++)
+        last = last->next;
+    if (nunits > 1) {
+        wr32be(seed + 40, nunits);
+        wr32be(seed + 44, last->ci0);
+        slen = sizeof(seed);
+    }
+    for (i = 0; i < slen; i++) {
         hsh ^= seed[i];
         hsh *= 1099511628211ull;
     }
     memset(t, 0, sizeof(*t));
     memcpy(t->bytes, &mint, 8); /* host order: efs_txid_ns */
     memcpy(t->bytes + 8, &hsh, 8);
-    for (i = 0; i < u->n; i++) {
-        uint32_t sh = efs_kv_lane_shard(u->ino, (uint8_t)(rd32be(u->cmd[i] + 9) % EFS_META_LANES));
-        for (j = 0; j < nl && lanes[j] != sh; j++)
-            ;
-        if (j == nl && sh != ish)
-            lanes[nl++] = sh;
-    }
+    for (x = u, m = 0; x && m < nunits; x = x->next, m++)
+        for (i = 0; i < x->n; i++) {
+            uint32_t sh = efs_kv_lane_shard(x->ino,
+                                            (uint8_t)(rd32be(x->cmd[i] + 9) % EFS_META_LANES));
+            for (j = 0; j < nl && lanes[j] != sh; j++)
+                ;
+            if (j == nl && sh != ish && nl < EFS_META_LANES)
+                lanes[nl++] = sh;
+        }
     for (i = 1; i < nl; i++) /* sorted: one participant set, one order */
         for (j = i; j > 0 && lanes[j - 1] > lanes[j]; j--) {
             uint32_t x = lanes[j];
@@ -20882,18 +21076,24 @@ static void host_pub_unit_abort(struct efs_raft_host *h, const struct efs_txid *
     host_fin_add(h, t, parts, coord, rc == EFS_OK);
 }
 
+/* PREPARE entries of one set: (HOST_PUB_SET_MAX + 1) commands in
+ * EFS_MD_TXN_BATCH_MAX-command entries, per group, plus a cap split. */
+#define HOST_PUB_SET_REFS 16
+
+/* nunits units from u on (host_pub_set_len) as one transaction. */
 static int host_pub_unit_commit(struct efs_raft_host *h, const struct host_pub_unit *u,
-                                const struct efs_opid *session,
+                                uint32_t nunits, const struct efs_opid *session,
                                 const struct efs_report_pubid *pubid, int *hint)
 {
     struct efs_txid t;
     struct efs_txn_parts parts;
     struct efs_meta_row row;
-    struct host_idx_ref refs[EFS_PUB_UNIT_MAX + 1];
-    int rcs[EFS_PUB_UNIT_MAX + 1];
-    struct host_command_cohort cohort;
-    uint8_t key[EFS_KV_KEY_MAX], pay[EFS_PUB_STAGE_LEN];
-    uint32_t klen = 0, ish = efs_kv_inode_shard(u->ino), i;
+    struct host_idx_ref refs[HOST_PUB_SET_REFS];
+    int rcs[HOST_PUB_SET_REFS];
+    struct host_txn_batch batch;
+    uint8_t key[EFS_KV_KEY_MAX], pay[EFS_PUB_STAGE_LEN], cmd[EFS_TXN_PREPARE_MAX];
+    uint32_t klen = 0, ish = efs_kv_inode_shard(u->ino), i, m, clen = 0, stages = 0;
+    const struct host_pub_unit *x;
     uint64_t epoch = 0;
     int rc, k = 0, verdict = EFS_OK;
 
@@ -20902,48 +21102,54 @@ static int host_pub_unit_commit(struct efs_raft_host *h, const struct host_pub_u
         return EFS_OK; /* deleted: stale publication, harmless (P3) */
     if (rc != EFS_OK)
         return rc;
-    rc = host_pub_unit_txn(u, session, pubid, &t, &parts);
+    rc = host_pub_unit_txn(u, nunits, session, pubid, &t, &parts);
     if (rc != EFS_OK)
         return rc;
-    host_command_cohort_begin(&cohort, h);
-    for (i = 0; i < u->n && rc == EFS_OK; i++) {
-        struct efs_meta_pub p;
-        uint8_t lane;
+    /* K32: one TXN_BATCH entry per group (split at EFS_MD_TXN_BATCH_MAX),
+     * proposed as each fills and at the end; every verdict is waited below. */
+    host_txn_batch_init(&batch, HOST_TXN_BATCH_BYTES, 0, refs, &k, HOST_PUB_SET_REFS);
+    for (x = u, m = 0; x && m < nunits && rc == EFS_OK; x = x->next, m++)
+        for (i = 0; i < x->n && rc == EFS_OK; i++) {
+            struct efs_meta_pub p;
+            uint8_t lane;
+            uint32_t lsh;
 
-        unpack_publication(u->cmd[i], &p, 0, 0, u->group[i]);
-        unpack_report_ticket(u->cmd[i], session, &p); /* K13: the stage keeps its ticket */
-        if (p.inode_gen && p.inode_gen != row.generation)
-            rc = EFS_ERR_STALE;
-        p.inode_gen = row.generation;
-        if (!p.lane_local)
-            p.mtime_gen = 0; /* the inode group's apply reads the row's */
-        if (i == 0)
-            epoch = p.content_epoch;
-        else if (p.content_epoch != epoch)
-            rc = EFS_ERR_STALE; /* one unit, one content epoch */
-        lane = (uint8_t)(p.chunk_index % EFS_META_LANES);
-        if (rc == EFS_OK)
-            rc = efs_meta_pub_stage_encode(&p, session, pay);
-        if (rc == EFS_OK)
-            rc = efs_kv_key_chunk(efs_kv_lane_shard(p.ino, lane), p.ino, p.inode_gen,
-                                  lane, p.chunk_index, key, &klen);
-        if (rc == EFS_OK)
-            rc = host_prep_raw(h, efs_kv_lane_shard(p.ino, lane), EFS_TXN_PUBLISH, &t,
-                               &parts, key, klen, pay, sizeof(pay), &refs[k], hint);
-        if (rc == EFS_OK)
-            k++;
-    }
+            unpack_publication(x->cmd[i], &p, 0, 0, x->group[i]);
+            unpack_report_ticket(x->cmd[i], session, &p); /* K13: the stage keeps its ticket */
+            if (p.inode_gen && p.inode_gen != row.generation)
+                rc = EFS_ERR_STALE;
+            p.inode_gen = row.generation;
+            if (!p.lane_local)
+                p.mtime_gen = 0; /* the inode group's apply reads the row's */
+            if (stages++ == 0)
+                epoch = p.content_epoch;
+            else if (p.content_epoch != epoch)
+                rc = EFS_ERR_STALE; /* one transaction, one content epoch */
+            lane = (uint8_t)(p.chunk_index % EFS_META_LANES);
+            lsh = efs_kv_lane_shard(p.ino, lane);
+            if (rc == EFS_OK)
+                rc = efs_meta_pub_stage_encode(&p, session, pay);
+            if (rc == EFS_OK)
+                rc = efs_kv_key_chunk(lsh, p.ino, p.inode_gen, lane, p.chunk_index, key, &klen);
+            if (rc == EFS_OK)
+                rc = host_prep_raw_pack(cmd, &clen, EFS_TXN_PUBLISH, &t, &parts, key, klen,
+                                        pay, sizeof(pay));
+            if (rc == EFS_OK)
+                rc = host_txn_batch_add(h, &batch, efs_raft_shard_group(lsh), cmd, clen, hint);
+        }
     if (rc == EFS_OK) {
         uint8_t pin[EFS_PUB_PIN_LEN];
         efs_meta_pub_pin_encode(row.generation, epoch, pin);
         rc = efs_kv_key_inode(ish, u->ino, key, &klen);
         if (rc == EFS_OK)
-            rc = host_prep_raw(h, ish, EFS_TXN_PUBLISH, &t, &parts, key, klen,
-                               pin, sizeof(pin), &refs[k], hint);
+            rc = host_prep_raw_pack(cmd, &clen, EFS_TXN_PUBLISH, &t, &parts, key, klen,
+                                    pin, sizeof(pin));
         if (rc == EFS_OK)
-            k++;
+            rc = host_txn_batch_add(h, &batch, efs_raft_shard_group(ish), cmd, clen, hint);
     }
-    rc = host_command_cohort_end(&cohort, rc, hint);
+    if (rc == EFS_OK)
+        rc = host_txn_batch_flush(h, &batch, hint);
+    host_txn_batch_drop(&batch);
     if (rc == EFS_OK)
         rc = host_wait_refs_each(h, refs, k, rcs, hint);
     for (int j = 0; rc == EFS_OK && j < k; j++) {
@@ -20962,8 +21168,10 @@ static int host_pub_unit_commit(struct efs_raft_host *h, const struct host_pub_u
 #if EFS_FAULTS
         host_pub_unit_active = 0;
 #endif
-        if (rc == EFS_OK)
-            __atomic_fetch_add(&h->obs_pub_units, 1, __ATOMIC_RELAXED);
+        if (rc == EFS_OK) {
+            __atomic_fetch_add(&h->obs_pub_units, nunits, __ATOMIC_RELAXED);
+            __atomic_fetch_add(&h->obs_pub_sets, 1, __ATOMIC_RELAXED);
+        }
         if (rc != EFS_ERR_PROTO && rc != EFS_ERR_STALE)
             return rc;
         /* Decided ABORT before this attempt (recovery of an earlier attempt
@@ -20982,9 +21190,50 @@ static int host_pub_unit_commit(struct efs_raft_host *h, const struct host_pub_u
     if (k)
         host_pub_unit_abort(h, &t, &parts, ish, hint);
     if (raft_dbg_on() || (rc != EFS_OK && rc != EFS_ERR_BUSY))
-        fprintf(stderr, "raft-host: publication unit ino=%llu ci=%u n=%u rc=%d verdict=%d\n",
-                (unsigned long long)u->ino, u->ci0, u->n, rc, verdict);
+        fprintf(stderr, "raft-host: publication unit ino=%llu ci=%u n=%u units=%u rc=%d verdict=%d\n",
+                (unsigned long long)u->ino, u->ci0, stages, nunits, rc, verdict);
     return rc != EFS_OK ? rc : verdict;
+}
+
+/* The REPORT's W77 units in order, set by set (K32): a set lost to a STALE
+ * member publishes unit by unit, so only the loser retries (a set never
+ * weakens progress). *lost counts STALE units; any other error stops the
+ * rest. Nothing is published unless go; the list is freed either way. */
+static int host_pub_units_publish(struct efs_raft_host *h, struct host_pub_unit *units,
+                                  int go, const struct efs_opid *session,
+                                  const struct efs_report_pubid *pubid, uint32_t *lost,
+                                  int *hint)
+{
+    int rc = EFS_OK;
+
+    while (units) {
+        struct host_pub_unit *u = units, *x;
+        uint32_t nset = host_pub_set_len(u), m;
+        int urc = go && rc == EFS_OK ? host_pub_unit_commit(h, u, nset, session, pubid, hint)
+                                     : EFS_OK;
+
+        if (go && rc == EFS_OK && urc == EFS_ERR_STALE && nset > 1) {
+            __atomic_fetch_add(&h->obs_pub_set_splits, 1, __ATOMIC_RELAXED);
+            urc = EFS_OK;
+            for (x = u, m = 0; m < nset && urc == EFS_OK; x = x->next, m++) {
+                int one = host_pub_unit_commit(h, x, 1, session, pubid, hint);
+                if (one == EFS_ERR_STALE)
+                    ++*lost;
+                else
+                    urc = one;
+            }
+        }
+        if (urc == EFS_ERR_STALE)
+            ++*lost;
+        else if (urc != EFS_OK)
+            rc = urc;
+        for (m = 0; m < nset && units; m++) {
+            x = units;
+            units = x->next;
+            free(x);
+        }
+    }
+    return rc;
 }
 
 void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
@@ -21437,21 +21686,20 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
         /* W77 units run after the batch: their PREPARE/DECIDE/RESOLVE
          * proposals wait for apply, which the REPORT log hold must not
          * cover. A STALE unit is retried by the client like a loser. */
-        while (units) {
-            struct host_pub_unit *u = units;
-            units = u->next;
-            if (rc == EFS_OK) {
-                int urc = host_pub_unit_commit(h, u, session, pubid, &hint);
-                if (urc == EFS_ERR_STALE) {
-                    had_stale = 1;
-                    n_stale++;
-                } else if (urc != EFS_OK) {
-                    rc = urc;
-                    fail_phase = "unit";
-                    fail_rc = urc;
-                }
+        {
+            uint32_t lost = 0;
+            int urc = host_pub_units_publish(h, units, rc == EFS_OK, session, pubid, &lost,
+                                             &hint);
+            units = NULL;
+            if (lost) {
+                had_stale = 1;
+                n_stale += lost;
             }
-            free(u);
+            if (rc == EFS_OK && urc != EFS_OK) {
+                rc = urc;
+                fail_phase = "unit";
+                fail_rc = urc;
+            }
         }
         t_fin1 = now_us_();
         /* Committed everything committable; tell the client to retry the
