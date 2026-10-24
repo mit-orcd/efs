@@ -21,6 +21,7 @@
 #include "efs/dir_layout.h"
 #include "efs/dir_spread.h"
 #include "efs/opid.h"
+#include "efs/request_receipt.h"
 #include "efs/kv_key.h"
 #include "efs/membership.h"
 #include "efs/txn.h"
@@ -591,6 +592,11 @@ struct efs_raft_host {
 };
 
 static struct efs_raft_host *g_host;
+/* W155: what one REPORT attempt did, for its receipt. proposed is set once
+ * the attempt may have proposed anything (forwarded, or past the ReadIndex
+ * and session admission); before that a failure published nothing. */
+static __thread struct { int proposed; const char *phase; } host_report_note;
+
 
 static void wr64be(uint8_t *p, uint64_t v)
 {
@@ -16378,8 +16384,15 @@ static int host_opid_replay(struct efs_raft_host *h, uint32_t shard,
          * Re-probe after the free-key check to cover concurrent RESOLVE. */
         hit = efs_meta_apply_opid_probe(h->kv, shard, &q->id, rep);
     }
-    if (hit > 0)
+    if (hit > 0) {
         __atomic_fetch_add(&h->obs_opid_replay, 1, __ATOMIC_RELAXED);
+        /* W155 G2/G4: a same-identity retry answered from the durable
+         * receipt (the op-id window), not run again. */
+        fprintf(stderr, "opid-receipt: replay shard=%u id=%02x%02x%02x%02x/%u/%llu "
+                "rc=%d ino=%llu\n", shard, q->id.client_uuid[0], q->id.client_uuid[1],
+                q->id.client_uuid[2], q->id.client_uuid[3], q->id.session_epoch,
+                (unsigned long long)q->id.seq, rep->rc, (unsigned long long)rep->ino);
+    }
     return hit;
 }
 
@@ -22367,6 +22380,8 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
     }
     for (i = 0; i < (uint32_t)nn; i++) {
         if (!host_hosts(h, need[i])) {
+            host_report_note.proposed = 1; /* the peer's receipt has the verdict */
+            host_report_note.phase = "forward";
             host_fwd_report(h, recs, count, irecs, ino_count, flags, session, pubid, out,
                             need, nn);
             return;
@@ -22392,6 +22407,10 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
      * round per chunk. Missing local state is never authority to resurrect. */
     if (session && rc == EFS_OK)
         rc = host_report_session_admit(h, recs, count, session, &hint);
+    if (rc == EFS_OK)
+        host_report_note.proposed = 1;
+    else
+        host_report_note.phase = "read-index/admit";
     {
         efs_ino_t uino[32];
         uint64_t usz[32];
@@ -22771,15 +22790,20 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
          * round, matching the old whole-batch STALE behavior. */
         if (rc == EFS_OK && had_stale)
             rc = EFS_ERR_STALE;
+        host_report_note.phase = fail_phase;
+        /* G2: name the request, so a failed split joins its receipt. */
         if (count >= 256u || n_inval ||
             (t_pack + t_push + (t_fin1 - t_fin0)) >= 100000ull)
             fprintf(stderr,
-                    "report-split nrec=%u pack_ms=%llu push_ms=%llu finish_ms=%llu skip=%u stale=%u inval=%u rc=%d fail=%s/%d\n",
+                    "report-split nrec=%u pack_ms=%llu push_ms=%llu finish_ms=%llu skip=%u stale=%u inval=%u rc=%d fail=%s/%d ino=%llu pub=%llx:%llu\n",
                     (unsigned)count,
                     (unsigned long long)(t_pack / 1000ull),
                     (unsigned long long)(t_push / 1000ull),
                     (unsigned long long)((t_fin1 - t_fin0) / 1000ull),
-                    n_skip, n_stale, n_inval, rc, fail_phase, fail_rc);
+                    n_skip, n_stale, n_inval, rc, fail_phase, fail_rc,
+                    (unsigned long long)recs[0].ino,
+                    (unsigned long long)(pubid ? pubid->mint_ns : 0),
+                    (unsigned long long)(pubid ? pubid->seq : 0));
         /* Deleted inode is already OK (skipped above). A NOT_FOUND
          * that remains is a log index the snapshot removed under the
          * propose. Map it to BUSY so the report is retried. The log
@@ -22801,6 +22825,170 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
         }
     }
     set_inode_rc(out, rc, hint);
+}
+
+/* ---- W155 · REPORT receipts (include/efs/request_receipt.h) ----
+ * Every REPORT that names a publication id runs under a receipt keyed by
+ * (session, publication id) on the host that received it. A duplicate of an
+ * applied request is answered OK without running; a duplicate of a running
+ * one joins it; a receipt query (EFS_REPORT_F_RECEIPT) reads the receipt and
+ * runs nothing. Lines (G2): `report-receipt` per duplicate, per repeated,
+ * failed (not STALE or a route bounce) or slow attempt, and per query; every
+ * attempt with EFS_RECEIPT_TRACE set. */
+static struct efs_receipt_table g_report_receipts;
+static pthread_once_t g_report_receipts_once = PTHREAD_ONCE_INIT;
+static int g_report_receipts_ok;
+static unsigned g_report_receipt_join_ms = 5000;
+static int g_report_receipt_trace;
+
+static void host_report_receipts_init(void)
+{
+    const char *cap = getenv("EFS_REPORT_RECEIPTS");
+    const char *join = getenv("EFS_REPORT_RECEIPT_JOIN_MS");
+    unsigned long n = cap && *cap ? strtoul(cap, NULL, 10) : 4096ul;
+    if (join && *join)
+        g_report_receipt_join_ms = (unsigned)strtoul(join, NULL, 10);
+    g_report_receipt_trace = getenv("EFS_RECEIPT_TRACE") != NULL;
+    g_report_receipts_ok = efs_receipt_table_init(&g_report_receipts,
+                                                  n ? (uint32_t)n : 4096u) == EFS_OK;
+    if (!g_report_receipts_ok)
+        fprintf(stderr, "report-receipt: table allocation failed; REPORTs run "
+                "without receipts and receipt queries answer absent\n");
+}
+
+static void host_report_receipt_key(const struct efs_opid *session,
+                                    const struct efs_report_pubid *pubid,
+                                    struct efs_receipt_key *k)
+{
+    memset(k, 0, sizeof(*k));
+    memcpy(k->uuid, session->client_uuid, sizeof(k->uuid));
+    k->epoch = session->session_epoch;
+    k->mint_ns = pubid->mint_ns;
+    k->seq = pubid->seq;
+}
+
+struct host_report_call {
+    const struct efs_chunk_rec *recs;
+    uint32_t count;
+    const struct efs_ino_size_rec *irecs;
+    uint32_t ino_count, flags;
+    const struct efs_opid *session;
+    const struct efs_report_pubid *pubid;
+    struct efs_msg_inode_reply *out;
+};
+
+/* The rc a REPORT reply status stands for (inverse of rc_to_inode_status
+ * for the statuses a REPORT answers). */
+static int host_report_status_rc(uint8_t status)
+{
+    switch (status) {
+    case EFS_INODE_RPC_OK: return EFS_OK;
+    case EFS_INODE_RPC_NOT_FOUND: return EFS_ERR_NOT_FOUND;
+    case EFS_INODE_RPC_QUOTA: return EFS_ERR_QUOTA;
+    case EFS_INODE_RPC_BUSY: return EFS_ERR_BUSY;
+    case EFS_INODE_RPC_INVAL: return EFS_ERR_INVAL;
+    case EFS_INODE_RPC_NOT_PRIMARY: return EFS_ERR_NOT_PRIMARY;
+    case EFS_INODE_RPC_STALE: return EFS_ERR_STALE;
+    case EFS_INODE_RPC_FENCED: return EFS_ERR_FENCED;
+    case EFS_INODE_RPC_UNREGISTERED: return EFS_ERR_UNREGISTERED;
+    default: return EFS_ERR_IO;
+    }
+}
+
+static int host_report_exec(void *ctx, int *proposed, const char **phase)
+{
+    struct host_report_call *c = ctx;
+    int rc;
+
+    host_report_note.proposed = 0;
+    host_report_note.phase = NULL;
+    server_raft_host_report(c->recs, c->count, c->irecs, c->ino_count, c->flags,
+                            c->session, c->pubid, c->out);
+    *proposed = host_report_note.proposed;
+    *phase = host_report_note.phase;
+    rc = host_report_status_rc(c->out->status);
+    return rc;
+}
+
+static const char *host_receipt_how_name(int how)
+{
+    return how == EFS_RECEIPT_REPLAY ? "replay" : how == EFS_RECEIPT_JOINED ? "joined" :
+           how == EFS_RECEIPT_WAITING ? "waiting" : "ran";
+}
+
+void server_raft_host_report_receipted(const struct efs_chunk_rec *recs, uint32_t count,
+                                       const struct efs_ino_size_rec *irecs,
+                                       uint32_t ino_count, uint32_t flags,
+                                       const struct efs_opid *session,
+                                       const struct efs_report_pubid *pubid,
+                                       struct efs_msg_inode_reply *out)
+{
+    struct host_report_call call = {recs, count, irecs, ino_count, flags, session, pubid, out};
+    struct efs_receipt_key k;
+    struct efs_receipt r;
+    char id[64];
+    int how = EFS_RECEIPT_RAN, rc;
+
+    pthread_once(&g_report_receipts_once, host_report_receipts_init);
+    if (!session || !pubid || !count || !recs || !g_report_receipts_ok) {
+        server_raft_host_report(recs, count, irecs, ino_count, flags, session, pubid, out);
+        return;
+    }
+    host_report_receipt_key(session, pubid, &k);
+    memset(&r, 0, sizeof(r));
+    memset(out, 0, sizeof(*out));
+    rc = efs_receipt_run(&g_report_receipts, &k, recs[0].ino, count,
+                         g_report_receipt_join_ms, host_report_exec, &call, &how, &r);
+    if (how != EFS_RECEIPT_RAN)
+        set_inode_rc(out, rc, -1);
+    /* A CAS loss (STALE) and the one-record route bounce (NOT_PRIMARY) are
+     * routine answers, not ambiguity: no line unless traced. */
+    if (how != EFS_RECEIPT_RAN || r.attempts > 1 || r.end_ms - r.begin_ms >= 1000u ||
+        g_report_receipt_trace ||
+        (rc != EFS_OK && rc != EFS_ERR_STALE && rc != EFS_ERR_NOT_PRIMARY)) {
+        efs_receipt_key_format(&k, id, sizeof(id));
+        fprintf(stderr, "report-receipt id=%s ino=%llu nrec=%u how=%s rc=%d "
+                "outcome=%s attempts=%u joined=%u replayed=%u phase=%s ms=%llu\n",
+                id, (unsigned long long)recs[0].ino, count, host_receipt_how_name(how),
+                rc, efs_receipt_outcome_name(r.outcome), r.attempts, r.joined,
+                r.replayed, r.phase,
+                (unsigned long long)(r.end_ms > r.begin_ms ? r.end_ms - r.begin_ms : 0));
+    }
+}
+
+void server_raft_host_report_receipt(const struct efs_opid *session,
+                                     const struct efs_report_pubid *pubid,
+                                     struct efs_msg_report_receipt_reply *out)
+{
+    struct efs_receipt_key k;
+    struct efs_receipt r;
+    char id[64];
+
+    memset(out, 0, sizeof(*out));
+    pthread_once(&g_report_receipts_once, host_report_receipts_init);
+    if (!session || !pubid) {
+        out->rpc.status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    host_report_receipt_key(session, pubid, &k);
+    out->rpc.status = EFS_INODE_RPC_OK;
+    if (g_report_receipts_ok && efs_receipt_lookup(&g_report_receipts, &k, &r)) {
+        struct timespec ts;
+        uint64_t now;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        now = (uint64_t)ts.tv_sec * 1000ull + (uint64_t)ts.tv_nsec / 1000000ull;
+        out->state = r.state;
+        out->outcome = r.outcome;
+        out->rc = r.rc;
+        out->attempts = r.attempts;
+        out->age_ms = r.state == EFS_RECEIPT_STATE_DONE && now > r.end_ms ? now - r.end_ms : 0;
+    } else {
+        out->state = EFS_RECEIPT_STATE_ABSENT;
+    }
+    efs_receipt_key_format(&k, id, sizeof(id));
+    fprintf(stderr, "report-receipt query id=%s state=%u outcome=%s rc=%d attempts=%u "
+            "age_ms=%llu\n", id, out->state, efs_receipt_outcome_name(out->outcome),
+            out->rc, out->attempts, (unsigned long long)out->age_ms);
 }
 
 /* A fresh quorum round proves current leadership and the committed prefix,

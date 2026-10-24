@@ -1629,6 +1629,20 @@ static inline int efs_report_pubid_unpack(struct efs_report_pubid *id, const uin
     }
     return id->mint_ns && id->seq;
 }
+/* W155: read-only receipt query. A REPORT with this flag carries no records
+ * (count = ino_count = 0), the session and the publication id of an earlier
+ * REPORT, and runs nothing: the host answers what its receipt for that
+ * identity says (include/efs/request_receipt.h). The reply is
+ * struct efs_msg_report_receipt_reply. */
+#define EFS_REPORT_F_RECEIPT 8u
+struct efs_msg_report_receipt_reply {
+    struct efs_msg_inode_reply rpc; /* OK: the query was answered */
+    uint32_t state;    /* EFS_RECEIPT_STATE_* */
+    uint32_t outcome;  /* EFS_RECEIPT_OUT_* */
+    int32_t rc;        /* the last attempt's rc on this host */
+    uint32_t attempts; /* attempts executed on this host */
+    uint64_t age_ms;   /* since the last attempt ended (0 while pending) */
+};
 static inline int efs_report_session_valid(const struct efs_opid *id)
 {
     uint8_t any = 0;

@@ -66,6 +66,7 @@ COMMON_SRCS = src/meta/append_plan.c $(COMMON_DIR)/publication.c $(COMMON_DIR)/p
               $(COMMON_DIR)/batch_obs.c \
               $(COMMON_DIR)/version.c \
               $(COMMON_DIR)/protocol.c \
+              $(COMMON_DIR)/request_receipt.c \
               src/wire/wire.c \
               src/data/erasure.c \
               src/data/store_mem.c \
@@ -312,6 +313,9 @@ test-wb-runtime:
 	python3 tests/test_report_forward.py
 	python3 tests/test_report_zero_eof.py
 	python3 tests/test_report_retry_eof.py
+	python3 tests/test_w155_receipt_table.py
+	python3 tests/test_w155_report_resolve.py
+	python3 tests/test_w155_identified_resolve.py
 	python3 tests/test_report_span_base.py
 	python3 tests/test_inode_pending_eof.py
 	python3 tests/test_report_session_apply.py
@@ -949,6 +953,8 @@ $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(MGMT_OBJ) $(BENCH_CLIENT_OBJ) $(B
 
 
 src/server/raft_host.o: src/server/publication_session_fast.h
+# W155 request receipts (server table, client resolve, receipt query wire).
+src/common/request_receipt.o src/server/raft_host.o src/server/handler.o src/client/inode_rpc.o src/client/write.o: include/efs/request_receipt.h include/efs/protocol.h
 # Read-only pinned snapshot audit; isolated real-LSM fixtures only.
 tests/test_retained_namespace_audit: tests/test_retained_namespace_audit.c tests/retained_namespace_audit.h $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(LIB) $(LDFLAGS)

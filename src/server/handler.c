@@ -1188,7 +1188,7 @@ void server_handle_conn(struct efs_conn *conn)
                 size_t avail = payload_len - sizeof(*req);
                 flags = req->sync;
                 if (flags & ~(EFS_REPORT_F_SYNC | EFS_REPORT_F_SESSION |
-                              EFS_REPORT_F_PUBID)) bad = 1;
+                              EFS_REPORT_F_PUBID | EFS_REPORT_F_RECEIPT)) bad = 1;
                 if (flags & EFS_REPORT_F_SESSION) {
                     if (avail < EFS_REPORT_SESSION_LEN) bad = 1;
                     else {
@@ -1227,12 +1227,27 @@ void server_handle_conn(struct efs_conn *conn)
             } else {
                 bad = 1;
             }
+            if (!bad && (flags & EFS_REPORT_F_RECEIPT)) {
+                /* W155 receipt query: an identity and nothing to run. */
+                struct efs_msg_report_receipt_reply rr;
+                memset(&rr, 0, sizeof(rr));
+                rr.rpc.status = EFS_INODE_RPC_ERROR;
+                if (count || ino_count || !identity || !publication ||
+                    (flags & ~(EFS_REPORT_F_SESSION | EFS_REPORT_F_PUBID |
+                               EFS_REPORT_F_RECEIPT)))
+                    rr.rpc.status = EFS_INODE_RPC_INVAL;
+                else if (server_raft_host_active())
+                    server_raft_host_report_receipt(identity, publication, &rr);
+                efs_conn_send_msg(conn, EFS_MSG_REPORT_CHUNKS_REPLY, &rr, sizeof(rr));
+                free(recs);
+                break;
+            }
             if (server_raft_host_active()) {
                 if (bad)
                     r.status = EFS_INODE_RPC_INVAL;
                 else
-                    server_raft_host_report(recs, count, irecs, ino_count, flags, identity,
-                                            publication, &r);
+                    server_raft_host_report_receipted(recs, count, irecs, ino_count, flags,
+                                                      identity, publication, &r);
             }
             efs_conn_send_msg(conn, EFS_MSG_REPORT_CHUNKS_REPLY, &r,
                               sizeof(r));

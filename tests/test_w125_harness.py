@@ -551,6 +551,28 @@ B1_N1 = [
 B1_N2 = [(-29.0, "raft: group=0 became leader term=2 noop=7290 commit=7289 applied=7289 events=3 skipped=1"),
          (-10.0, "raft-host: apply-sleep x"), (1.0, "raft-host: apply-sleep y")]
 
+# The same failure as a W155 build logs it: the retry names node and request
+# id, report-loop the publication id, the client resolves by identity and the
+# server answers the receipt query (synthetic ids, b1 shape).
+W155_ID = "55150000/7/1a2b:9"
+W155_CLIENT = [
+    (0.0, "inode-rpc: retry type=67 attempt=0 why=recv rc=-6 req_len=8892 recv_ms=30012 nid=1 id=" + W155_ID),
+    (0.0, "report-loop ino={ino} rounds=1 stale=0 busy=1 ms=3099 rpc_ms=3099 replay_ms=0 sleep_ms=0 recs=25 "
+          "rc=-13 pub=1a2b:9 sent=1"),
+    (0.0, "report-resolve id=" + W155_ID + " ino={ino} recs=25 rc=-13 sent=1: outcome not known; same-identity "
+          "lookup for 8000 ms"),
+    (0.1, "report-resolve id=" + W155_ID + " ino={ino} outcome=applied rc=0 first_rc=-13 from=1 queries=1 "
+          "resends=0 none=0/1 ms=3"),
+    (0.2, "flush-meta stage=report ino={ino} report_rc=-1 rc=-1 stalled=0"),
+]
+W155_N1 = [
+    (-29.0, "report-split nrec=25 pack_ms=0 push_ms=0 finish_ms=119 skip=0 stale=0 inval=0 rc=0 fail=-/0 "
+            "ino={ino} pub=1a2b:9"),
+    (-29.0, "report-receipt id=" + W155_ID + " ino={ino} nrec=25 how=ran rc=0 outcome=applied attempts=1 "
+            "joined=0 replayed=0 phase=- ms=30200"),
+    (0.05, "report-receipt query id=" + W155_ID + " state=2 outcome=applied rc=0 attempts=1 age_ms=29000"),
+]
+
 def write_log(path, base, lines, ino):
     with open(path, "w") as f:
         for dt, text in lines:
@@ -605,8 +627,24 @@ def test_w155_correlate(tmp, big):
     assert res[0]["failure"]["final"]["captures"][0]["exact_version"] == 1 and "exactly v1" in p.stdout
     assert res[1]["window"] is None and "1 failure(s) here could not be anchored" in p.stdout
     assert "legacy OUT" in p.stdout and r["servers"] and res[0]["servers"] == {}
+    # W155 build: identities join the retry, report-loop, resolve and the server receipts exactly
+    wo = tmp / "corr-w155"; wo.mkdir()
+    shutil.copy(pathlib.Path(m.a.modify_log), wo / "attempts.jsonl")
+    write_log(wo / "fuse.log", end, W155_CLIENT, u["ino"])
+    write_log(wo / "efsd-n1.log", end, W155_N1, u["ino"])
+    js3 = tmp / "corr3.json"
+    p = sh(sys.executable, ROOT / "scripts/w155_correlate.py", wo, "--json", js3, ok=True)
+    r3 = json.loads(js3.read_text())[0]
+    assert r3["client"]["retries"][0]["id"] == W155_ID and r3["client"]["retries"][0]["nid"] == "1"
+    assert [e["id"] for e in r3["identity"]] == [W155_ID], r3["identity"]
+    e = r3["identity"][0]
+    assert len(e["servers"]) == 3 and len(e["client"]) == 3, e  # split+receipt+query; loop+2 resolve
+    assert any("outcome=applied" in x["text"] for x in e["client"]) and r3["receipt"]
+    assert "request " + W155_ID in p.stdout and "(closed by W155)" in p.stdout and "not logged" not in p.stdout
+    assert r3["client"]["flush_stage"][0]["stage"] == "report" and "flush stage" in p.stdout
+    for g in ("G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8"): assert "- %s " % g in p.stdout, g
     print("w155 correlate: retry/report-loop/flush-meta/report-split/txn-recover/silence/receipt gap/final version "
-          "tabled; legacy OUT anchored by inode; gaps G1-G8 listed PASS")
+          "tabled; legacy OUT anchored by inode; W155 identities joined to receipts; gaps G1-G8 listed PASS")
 
 def main():
     with tempfile.TemporaryDirectory(prefix="w125-harness-") as t:

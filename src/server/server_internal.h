@@ -532,6 +532,18 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
                              uint32_t ino_count, uint32_t flags, const struct efs_opid *session,
                              const struct efs_report_pubid *pubid,
                              struct efs_msg_inode_reply *out);
+/* W155: the REPORT entry point; runs server_raft_host_report under the
+ * request's receipt (session + publication id). */
+void server_raft_host_report_receipted(const struct efs_chunk_rec *recs, uint32_t count,
+                                       const struct efs_ino_size_rec *irecs,
+                                       uint32_t ino_count, uint32_t flags,
+                                       const struct efs_opid *session,
+                                       const struct efs_report_pubid *pubid,
+                                       struct efs_msg_inode_reply *out);
+/* W155: EFS_REPORT_F_RECEIPT query; reads the receipt, runs nothing. */
+void server_raft_host_report_receipt(const struct efs_opid *session,
+                                     const struct efs_report_pubid *pubid,
+                                     struct efs_msg_report_receipt_reply *out);
 void server_raft_host_lane_bootstrap_rpc(const struct efs_msg_lane_bootstrap *,
                                           struct efs_msg_lane_writer_view_reply *);
 void server_raft_host_publication(const struct efs_msg_publication *, int query_only, /* 0 submit, 1 status, 2 exact retirement */

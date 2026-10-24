@@ -1669,6 +1669,15 @@ execution review complete; speedup NOTRUN. Fix the fault-daemon dependency,
 then build harnesses incrementally and schedule isolated cases concurrently.
 The fast/long split does not reduce full-gate work or qualify parallel safety.
 
+[W155 per-request receipts and same-identity resolution](../status/w155-ambiguous-completion-20261024.md):
+**code fix PASS (scoped), branch `claude/devel-w155-ab5120` (`b36710b65`), not
+merged; `make test-all` on nuc PASS (the one parallel-runner FAIL,
+`test_k32_entry_count`, fails the same way on the base); nuc b1/b2 live reruns NOTRUN.** A REPORT runs under a
+receipt keyed by session and publication id; a sync REPORT or identified
+directory op whose reply was lost is resolved by identity before failing, and
+EIO remains only for an outcome still unknown after the bound. Client and
+server lines carry the request identity (G1–G6).
+
 [W155 modify oracle and correlation tooling](../status/w155-oracle-correlation-20261023.md):
 **self-tests PASS on nuc; the W148 campaign rerun with it is NOTRUN** (branch
 `devel-w155h`, merged Oct 23 `92886b8e2`). A failed modify records its syscall stages and
@@ -2706,7 +2715,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | compact-die-env | **W149** · `EFS_KV_COMPACT_DIE` makes the daemon `_exit(99)` mid-compaction in normal builds | build hygiene / safety | OPEN: move it and `test_kv_lsm`'s use under `EFS_FAULTS`; alpha K24 | [checklist review](../status/alpha-1.0-2plus1-checklist.md) |
 | md-raft-n-default | **W153** · unset/empty `EFS_MD_RAFT_N` defaults to 4; on three nodes SHARD2 includes absent node 4 and cannot tolerate loss of node 2 or 3; `atoi` also accepts malformed numeric prefixes | fail-open configuration / protection correctness | **CODE FIXED and merged (`4026e254d`); live gates NOTRUN — stays an alpha 1.0 blocker until the live formation, restart and single-loss gates pass.** Merged-tree `make test-all` on intel2: 432 commands, 0 FAIL, 14 NOTRUN (RDMA devices, cluster scripts, valgrind headers). Post-merge builds refuse stores from earlier builds: fresh format needed. devops `c05eb59` and cluster `667ad2c` drop `EFS_MD_RAFT_N` (committed, not pushed). `raft-mkfs` commits the membership joined at that moment (node ids 1..n ≥ 3, endpoints, count) with MKFS and SALT in both groups; fewer members or a gap is refused naming who is missing; a repeat keeps the first. Every daemon derives the count and both groups' voters from that record on start and restart (member store), never from the environment or the HELLO table; group 2 exists from formation on. `EFS_MD_RAFT_N` is removed (a set value stops efsd); no client metadata before formation; a node joining after formation is refused (node addition is K33/W157); node-id check, all-member GC handoff and client placement use the committed membership; store lock and durable boot counter restored. `make test-all` on amd PASS with host limits (9 RDMA FAILs identical on base), [evidence](../status/w153-committed-membership-20261023.md); devops/cluster changes made (see above). History: the D39 admission (`--cluster`, merged `246bae7cf`) was reverted (`d7bca79d6`) by the Oct 23 user decision | [review](../status/devel-integration-review-20261022.md#review-of-a76b63f42--w153-is-an-alpha-correctness-gate), [D38](#appendix-4--decisions--taken-and-pending-register-d1d36) |
 | degraded-stripe-reprotect | **W154** · a stripe acknowledged with two fragments while a node was down stays at two fragments after that node returns: no rebuild, no warning at acknowledgement; one later single-node outage made the file EIO until the second node returned (K28 five-node gate, F1, xorinox Oct 23: 4 of 512 chunks written in the window before the client marked node 5 down) | data protection / deferred repair | FIX (decided Oct 23, D40: rebuild on return): re-protect a stripe acknowledged with two fragments when the missing node returns, log the degraded acknowledgement, keep write availability; no unconditional single-node-failure protection claim until this is in and gated | [gates-xorinox](../status/gates-xorinox-20261022.md), K28 |
-| eio-after-commit | **W155** · flush/close returned EIO after a receive timeout/BUSY sequence; later reads matched the attempted rewrite version (nuc b1/b2). Visibility does not prove the full durability contract succeeded; exact request/receipt and failure stage need correlation. | ambiguous completion / error resolution / harness | OPEN; investigate bounded same-identity outcome resolution. Record completed syscall stages and quarantine unresolved files; do not assume rollback or blanket old-or-new atomicity. Preserve EIO/EBUSY as gate failures. Oracle and correlation tooling merged into devel Oct 23 (`92886b8e2`): the modifier records stages and quarantines unresolved files with syscall-boundary candidates, never PASSes with an error, and `w155_correlate.py` lists logging gaps G1–G8, led by the missing per-request receipt (G2) ([evidence](../status/w155-oracle-correlation-20261023.md)). | [gates-nuc](../status/gates-nuc-20261022.md), [review](../status/devel-integration-review-20261022.md#review-of-the-oct-23-gate-merges-and-recap--october-23), K8, K29 |
+| eio-after-commit | **W155** · flush/close returned EIO after a receive timeout/BUSY sequence; later reads matched the attempted rewrite version (nuc b1/b2). Visibility does not prove the full durability contract succeeded; exact request/receipt and failure stage need correlation. | ambiguous completion / error resolution / harness | **FIX on branch `claude/devel-w155-ab5120` (`b36710b65`, not merged): per-request REPORT receipts keyed by (session, publication id) with join, replay and a read-only receipt query; a sync REPORT or an identified directory op with an open outcome is resolved by a bounded same-identity lookup before failing, EIO only when still unknown (logged with the identity); G1–G6 logged, G7 open. Deterministic reply-loss tests in `make test`; nuc b1/b2 live reruns NOTRUN ([evidence](../status/w155-ambiguous-completion-20261024.md)).** Earlier: OPEN; investigate bounded same-identity outcome resolution. Record completed syscall stages and quarantine unresolved files; do not assume rollback or blanket old-or-new atomicity. Preserve EIO/EBUSY as gate failures. Oracle and correlation tooling merged into devel Oct 23 (`92886b8e2`): the modifier records stages and quarantines unresolved files with syscall-boundary candidates, never PASSes with an error, and `w155_correlate.py` lists logging gaps G1–G8, led by the missing per-request receipt (G2) ([evidence](../status/w155-oracle-correlation-20261023.md)). | [gates-nuc](../status/gates-nuc-20261022.md), [review](../status/devel-integration-review-20261022.md#review-of-the-oct-23-gate-merges-and-recap--october-23), K8, K29 |
 | client-discovery-ownership | **W156** · `scripts/client_processes.py` cannot inspect another user's `efs-fuse` on a shared host (relative mount argv needs that process's cwd), so non-root test users could not stop their own mounts; the merged opt-in `EFS_CLIENT_SKIP_FOREIGN=1` (`2213a4120`) skips uninspectable foreign clients, which proves nothing about foreign clients on the same target | test ownership / operator path | FIXED on `devel-w156` (Oct 23, `dca4dd544`, not merged): owner from mountinfo `user_id=`, controller is the one inspectable `efs-fuse` holding the mount's control endpoint and `/dev/fuse`; foreign or ambiguous ownership refused, foreign processes never inspected; `EFS_CLIENT_SKIP_FOREIGN` removed. Synthetic same-target/unrelated/ambiguous tests PASS; `make test-all` on nuc PASS without a switch. Live foreign-client case NOTRUN (nuc's client was not running) ([evidence](../status/w156-client-discovery-20261023.md)) | [gates-nuc](../status/gates-nuc-20261022.md), [review](../status/devel-integration-review-20261022.md#review-of-the-oct-23-gate-merges-and-recap--october-23) |
 | simple-startup-node-add | **W157** · simple seed/`--join` startup, automatic formation and safe online node addition (user amendment Oct 23; supersedes the D39 mandatory cluster file and fixed membership; removal deferred) | scope / implementation, alpha blocker | IN PROGRESS: increment 1 on branch `claude/vibrant-lalande-556adb`, not merged: model C16–C22 clean (8 negative controls), [protocol](../status/k33-membership-protocol-20261023.md); automatic formation at three joined members, committed membership revisions (store tokens, stable cluster identity), pending joiners, SHARD2 {1,2,3} → {2,3,4} by joint consensus with catch-up, retired replicas, storage-only members from five, retained placement; code gate PASS with host limits (xorinox `make test-all` at `0098e06c4`: 433 commands, 0 FAIL, 13 NOTRUN) ([evidence](../status/k33-w157-formation-addition-20261023.md)). Increment 2 on branch `claude/devel-k33-inc2-e4299e`, not merged (`53080d744`) ([evidence](../status/k33-w157-autoid-discovery-20261024.md)): no operator node ids (`efsd ADDR:PORT STORAGE` creates or restarts, `efsd --join [SEED] STORAGE` joins; `--node-id` removed), M4′ promise formation (the seed proposes ids in endpoint order, each joiner persists a promise, group 0 commits), additions take `count + 1` (concurrent joiners distinct, a retried join the same id), local-subnet discovery by UDP broadcast on each interface's own subnet (several clusters need a seed; no answer is said and waited; finds peers only), identity v3 (fresh format); code gate PASS with host limits (xorinox `make test-all` at `53080d744`: 436 commands, 0 FAIL, 13 NOTRUN). Open finding: `place_wide` collapses for power-of-two member counts (eight members: two nodes got no new fragment). Remaining: live client view refresh; live multi-host, cross-subnet, RDMA and orcd-mini gates NOTRUN (parent) | [contract](../status/alpha-1.0-node-addition-20261023.md), K33, D39, W153 |
 | harness-unticketed-put | **W158** · `tests/live/gc_reclamation.py` hand-builds an unticketed PUT for its "valid late-PUT control"; since K13 every PUT needs an admitted ticket, so storage refuses it and the expiry fixture stops before its expiry checks | test correctness (K13 drift) | FIXED, merged (`33c68a465`): the late-PUT control admits a ticket and checks that an unticketed PUT is refused; the same fix in `fragment_integrity`, `fragment_tail_smoke`, `io_stats_smoke`; static test in `make test`; nuc `make test-all` PASS. Intel expiry fixture rerun: every expiry check PASS; the fixture's closing POSIX run is W159 | [W158 evidence](../status/w158-ticketed-harness-20261023.md), [intel run](../status/intel-devel-a23d45540-20261023.md), K13 |
@@ -12478,6 +12487,43 @@ Transaction decision records
 ([transactions.md](#appendix-9--protocol--cross-shard-transactions)) have the matching condition:
 reclaimable once every participant has acknowledged the decision and no
 recovering participant can still ask for it.
+
+#### Ambiguous completion is resolved by identity (W155)
+
+A request whose reply was lost after it was sent, or whose retry budget ran
+out after a send, has an **unknown** outcome: the server may have applied
+it. The client never turns that into an error by guessing. Before failing
+it resolves the request against its receipt, under the **same identity**
+and a fresh bounded window (`EFS_RESOLVE_MS`, default 8 s):
+
+```text
+identified directory op    receipt = the op-id window above (durable)
+  (CREATE/UNLINK/LINK/      re-send the identical request: a completed id is
+   RENAME_AT)               answered from the window, a new one runs once
+REPORT_CHUNKS (sync)       receipt = per-host table keyed by (session,
+                            publication id), in memory and bounded
+                            ask each host the REPORT reached
+                            (EFS_REPORT_F_RECEIPT, runs nothing):
+                              applied  -> success
+                              partial  -> STALE (replay the CAS losers)
+                              pending  -> wait and ask again
+                              else     -> re-send the same publication id
+```
+
+The REPORT receipt is not in Raft on purpose (an entry per REPORT would undo
+K32). Its absence (eviction, a restarted or different host) is never read
+as "not applied": the same publication id is sent again, which the REPORT
+path already makes idempotent (a committed record skips, a W77 unit joins
+its deterministic transaction). A duplicate that reaches a host while the
+first attempt still runs there joins it instead of running beside it.
+
+Only an outcome still unknown when the window ends is an error (EIO for a
+flush or close), and the client line says so with the request identity
+(`report-resolve id=… outcome=unknown`, `inode-rpc: resolve … outcome=unknown`).
+The server lines carry the same identity (`report-receipt`, `opid-receipt`),
+so a failure, its retries and the server's verdict join exactly. Nothing
+here assumes rollback or old-or-new atomicity: a resolved request is the
+server's recorded verdict, an unresolved one stays unknown.
 
 ### Open-unlinked inode lifetime
 
