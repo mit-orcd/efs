@@ -2722,8 +2722,9 @@ class GrowthViolation(Violation):
 
 class Growth:
     """One bounded scenario. `actors` are (endpoint, requested id); actor 0 is the
-    seed. mode 'manual': ids are the operator's (the K33 increment, --node-id);
-    mode 'auto': ids are allocated by the committed record (the target design)."""
+    seed. mode 'manual': ids are the operator's (K33 increment 1, --node-id);
+    mode 'auto': ids are allocated by the seed's proposal and the committed
+    record (M4', built in K33 increment 2)."""
 
     def __init__(self, actors, mode='manual', rules=GROWTH, crashes=1, wipes=0, writes=0,
                  drops=True, settle_every=1, max_states=400000, from_formed=0):
@@ -2778,7 +2779,16 @@ class Growth:
             return [a for a in (self.actor_of_id(s, s.g0, i) for i in (1, 2, 3)) if a is not None]
         if self.mode == 'manual':
             return [a for a, x in enumerate(self.actors) if 1 <= x.req <= 3 and s.stores[a]]
-        return []
+        # automatic ids (M4'): a store that promised the proposal at id 1..3
+        # hosts a group-0 replica (it knows its id and the boot voters).
+        if s.seed_prop is None:
+            return []
+        out = []
+        for a, x in enumerate(self.actors):
+            st, e = s.stores[a], s.seed_prop.by_ep(x.ep)
+            if st and st[0] == 'P' and e and e[0] <= 3 and st[1] == e[2]:
+                out.append(a)
+        return out
 
     def g0_quorum(self, s):
         ids = self.g0_ids(s)
@@ -2886,11 +2896,16 @@ class Growth:
             e = s.seed_prop.by_ep(self.actors[a].ep)
             if e and e[2] == st[1]:
                 out.append(('promise', a, replace(s, stores=_set(s.stores, a, ('P', st[1], s.seed_prop)))))
-        if (a == 0 and s.seed_prop is not None and s.g0 is None and
-                all(self._promised(s, e) for e in s.seed_prop.members)):
+        # The formation commits through group 0 (K33 increment 2): a promised
+        # group-0 member that leads proposes MKFS with the proposal once every
+        # proposed store promised (it sees each one's HELLO at its proposed
+        # id); the proposal may be lost and is proposed again. Every member,
+        # the seed included, then learns the record (M5 step 3).
+        if (st[0] == 'P' and s.seed_prop is not None and s.g0 is None and a in self.g0_ids(s) and
+                self.g0_quorum(s) and all(self._promised(s, e) for e in s.seed_prop.members)):
             rec = s.seed_prop
-            out.append(('formation-commit', a, self._install_g0(
-                replace(s, stores=_set(s.stores, a, ('F', st[1], rec))), rec)))
+            if ('MKFS', rec) not in s.inflight:
+                out.append(('formation-commit', a, replace(s, inflight=s.inflight | {('MKFS', rec)})))
         return out
 
     def _promised(self, s, e):
