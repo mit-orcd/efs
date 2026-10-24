@@ -14,6 +14,7 @@
  * state, or a local fence alone. */
 #define EFS_PUT_TICKET_MAX 4096u /* live tickets per session/lane-shard stream */
 #define EFS_PUT_TICKET_SETTLE_MAX 32u /* tickets in one SETTLE command */
+#define EFS_PUT_TICKET_BATCH_MAX 32u /* tickets in one ADMIT_BATCH/SETTLE_BATCH (K32) */
 #define EFS_PUT_TICKET_ADMITTED 1u
 #define EFS_PUT_TICKET_PUBLISHED 2u
 #define EFS_PUT_TICKET_RECLAIMING 3u

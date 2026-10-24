@@ -125,6 +125,17 @@
  * is OK, a different one FENCED. */
 #define EFS_MD_REQ_FORMED 89
 #define EFS_MD_CMD_TXN_BATCH 88 /* K29; 86 is PUT_ORPHAN_ACK, 85 and 87 are requests */
+/* K32 (K13 batching), on one Raft group: [tag][n:2][ticket:216]*n,
+ * 2 <= n <= EFS_PUT_TICKET_BATCH_MAX, every ticket on a lane shard of the
+ * entry's group and of one mount session. ADMIT_BATCH admits each ticket as
+ * its own ADMIT would (no order; distinct sequences). SETTLE_BATCH carries
+ * several streams' SETTLE runs: tickets sorted by (lane shard, sequence),
+ * strictly increasing sequence per stream; each stream settles in order and
+ * stops at its first ticket that cannot retire. Apply verdict is OK (IO and
+ * NOMEM retry); the RPC answers salt = bit i set when ticket i is ADMITTED
+ * (ADMIT_BATCH) or retired (SETTLE_BATCH), read after the apply. */
+#define EFS_MD_CMD_PUT_TICKET_ADMIT_BATCH 90
+#define EFS_MD_CMD_PUT_TICKET_SETTLE_BATCH 91
 #define EFS_MD_TXN_BATCH_MAX 96u /* commands per entry */
 #define EFS_MD_CMD_SESSION 9 /* matches sim SIM_CMD_SESSION */
 #define EFS_MD_SESS_CREATE      1
@@ -258,7 +269,8 @@
     X(PACK_ADMIT) X(PACK_SWITCH) X(PACK_CANCEL) X(PACK_RETIRE) \
     X(PACK_UNINDEX) X(PACK_INDEX) \
     X(BOOTSTRAP_LANE) X(TRUNC_SWEEP) X(SWEEP_DONE) X(RETIRE) X(TXN_RETIRE) \
-    X(DEGRADED_CLEAR) X(PUT_ORPHAN_ACK) X(TXN_BATCH)
+    X(DEGRADED_CLEAR) X(PUT_ORPHAN_ACK) X(TXN_BATCH) \
+    X(PUT_TICKET_ADMIT_BATCH) X(PUT_TICKET_SETTLE_BATCH)
 
 /* 1 when byte 0 of a log command names a command this build applies. */
 static inline int efs_md_cmd_applicable(uint8_t tag)

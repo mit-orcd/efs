@@ -1005,8 +1005,11 @@ backstop). The visible frontier advances over contiguous *resolved*
 reservations; data movement is parallel. **Sub-chunk writes** use generation
 CAS; disjoint ranges both land (I12), and pay RMW amplification by design.
 
-**One write syscall publishes atomically** via a §7.2 transaction (I24) —
-and I24 has a **read side too**: an atomic write decision does not stop a
+**One write syscall publishes atomically** via a §7.2 transaction (I24).
+The host may publish several such writes of one file, reported together, as
+one transaction (K32): a superset published all-or-nothing keeps every
+write's contract, and a set refused for one write is republished write by
+write. I24 has a **read side too**: an atomic write decision does not stop a
 reader that fetches chunk A, waits, then fetches chunk B from splicing old
 and new. A multi-chunk read is a **validated collect** (collect chunk-map
 versions → fetch in parallel → revalidate versions **and any undecided

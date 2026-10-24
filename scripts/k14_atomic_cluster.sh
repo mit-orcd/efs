@@ -27,8 +27,15 @@
 #                  read the old version or are refused (EBUSY), never a mix
 #   6 aborted      units are aborted after their PREPAREs: nothing new is
 #                  visible; released, writers progress again
+#   7 sets (K32)   sets.dat: eight adjacent 1 MiB regions, each its own
+#                  O_DIRECT pwrite of version v, then one fsync, so one
+#                  REPORT carries eight units and the servers publish them as
+#                  one transaction; readers per region on B must see one
+#                  version, and the servers' raft-obs-w77 counters must show
+#                  sets of several units (pub_units grows by more than
+#                  pub_sets)
 # Final: both files read back as one version >= the last published one.
-# K14_PHASES selects phases (default "1 2 3 4 5 6"); "1" alone runs on any
+# K14_PHASES selects phases (default "1 2 3 4 5 6 7"); "1" alone runs on any
 # build, so the same workload is a control against a build without W77.
 # Prints PASS/FAIL per check; exit 1 on any FAIL. Raw logs stay in DIR/logs
 # (outside Git). Cleanup: `stop`, then delete DIR.
@@ -37,7 +44,7 @@ cmd=$1; REL=$2; D=$3; PORT=${4:-18800}; FREL=${5:-$REL}
 ADDR=127.0.0.1
 export EFS_TRANSPORT=tcp
 export EFS_FAULT_PUB_BARRIER="$D/fault" EFS_RAFT_OBS=1
-PHASES=" ${K14_PHASES:-1 2 3 4 5 6} "
+PHASES=" ${K14_PHASES:-1 2 3 4 5 6 7} "
 on() { case "$PHASES" in *" $1 "*) return 0;; esac; return 1; }
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 MIB=$((1<<20)); KIB64=65536; RLEN=$((512<<10))
@@ -105,6 +112,15 @@ reads_total() { cat "$D"/logs/"$1"-reader-*.out 2>/dev/null | sed -n 's/.* reads
 changes_total() { cat "$D"/logs/"$1"-reader-*.out 2>/dev/null | sed -n 's/.* changes=\([0-9]*\).*/\1/p' | awk '{s+=$1} END {print s+0}'; }
 versions_of() { cat "$D"/logs/"$1"-reader-"$2"-*.out | sed -n 's/.* versions=\([0-9]*\)\.\.\([0-9]*\).*/\1 \2/p'; }
 summary() { echo "  $1: reads=$(reads_total "$1") torn=$(torn_total "$1") version_changes=$(changes_total "$1")"; }
+# Sum over the nodes of a counter in each node's latest raft-obs-w77 line.
+obs_sum() {
+  local i s=0 v
+  for i in 1 2 3; do
+    v=$(grep raft-obs-w77 "$D/logs/efsd-n$i.log" | tail -1 | sed -n "s/.* $1=\([0-9]*\).*/\1/p")
+    s=$((s+${v:-0}))
+  done
+  echo $s
+}
 
 case $cmd in
 run)
@@ -209,6 +225,32 @@ run)
   check "p6 servers aborted units" 'grep -q "W77 fault: publication unit aborted" "$D"/logs/efsd-n*.log'
   "$WL" writer "$D/mntA/aligned.dat" 0 $MIB 2 "$D/logs/w-aligned.log" $((L+1000))
   check "p6 released: writers publish again" '[ "$(last_published "$D/logs/w-aligned.log")" -ge $((L+1000)) ]'
+  fi
+
+  if on 7; then
+  echo "phase 7: K32 sets (eight 1 MiB writes per fsync, one transaction)"
+  "$WL" writer "$D/mntA/sets.dat" 0 $MIB 0.01 "$D/logs/w-sets.log" 1 8
+  sleep 6; U0=$(obs_sum pub_units); S0=$(obs_sum pub_sets)
+  "$WL" writer "$D/mntA/sets.dat" 0 $MIB 30 "$D/logs/w-sets.log" 2 8 &
+  WP=$!
+  RPIDS=""
+  for r in 0 3 7; do
+    "$WL" reader "$D/mntB/sets.dat" $((r*MIB)) $MIB $RLEN 30 $((r*104729+7)) \
+      > "$D/logs/p7-reader-sets-$r.out" 2> "$D/logs/p7-reader-sets-$r.err" &
+    RPIDS="$RPIDS $!"
+  done
+  wait "$WP"; wait_all "$RPIDS"; summary p7
+  sleep 6; U1=$(obs_sum pub_units); S1=$(obs_sum pub_sets)
+  P7=$(grep -c '^published' "$D/logs/w-sets.log")
+  echo "  versions published: $P7; units committed $((U1-U0)) in $((S1-S0)) transactions"
+  check "p7 no torn read" '[ "$(torn_total p7)" = 0 ]'
+  check "p7 readers observed new versions" '[ "$(changes_total p7)" -gt 5 ]'
+  check "p7 sets: more units than transactions (at least 4 per transaction)" \
+    '[ $((S1-S0)) -gt 0 ] && [ $((U1-U0)) -ge $((4*(S1-S0))) ]'
+  for r in 0 3 7; do
+    got=$("$WL" check "$D/mntB/sets.dat" $((r*MIB)) $MIB); want=$(last_published "$D/logs/w-sets.log")
+    check "p7 region $r is one version, the last published $want" '[ "$got" = "version $want" ]'
+  done
   fi
 
   echo "final"
