@@ -3271,6 +3271,7 @@ static int put_fragments_parallel_run(const struct efs_put_ticket *ticket,
      * is a stored fragment of it. */
     int acked[EFS_NUM_FRAGMENTS] = {0, 0, 0};
     int hard_attempts = 0;
+    int reprobed = 0;
     for (int attempt = 1; attempt <= 128; attempt++) {
         rc = put_fragments_parallel_once(ticket, fragments, failed, acked);
         if (rc == EFS_OK) {
@@ -3292,6 +3293,14 @@ static int put_fragments_parallel_run(const struct efs_put_ticket *ticket,
                     return EFS_ERR_BUSY;
                 int pause_rc = report_retry_pause(50000);
                 if (pause_rc != EFS_OK) return pause_rc;
+                continue;
+            }
+            /* A member skipped only by this client's down-mark (a cooldown
+             * from an earlier stop) may be back: probe it once and resend
+             * before naming it missing. */
+            if (!reprobed && nodes[mi] != 0 && efs_client_node_is_down(nodes[mi]) &&
+                efs_client_node_reprobe(nodes[mi])) {
+                reprobed = 1;
                 continue;
             }
             /* Two acks (the quorum loop) leave exactly one missing: its

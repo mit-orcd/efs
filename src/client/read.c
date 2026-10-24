@@ -378,6 +378,20 @@ static int packed_fetch(void *context, efs_node_id_t node, uint64_t id, uint64_t
     return rc;
 }
 
+/* K34: a read that found fewer than two fragments may have skipped a member
+ * only by this client's down-mark (a 30 s cooldown from an earlier stop),
+ * although the member is back. Probe each down-marked placement member (a
+ * TCP connect clears the mark when it answers); 1 when one came back, so the
+ * caller reads again instead of failing on a single live fragment. */
+static int read_reprobe_down(const efs_node_id_t nodes[EFS_NUM_FRAGMENTS])
+{
+    int back = 0;
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
+        if (nodes[i] && efs_client_node_is_down(nodes[i]) && efs_client_node_reprobe(nodes[i]))
+            back = 1;
+    return back;
+}
+
 /* Reconstruct one logical chunk from any 2 of 3 fragments. The three GETs run
  * concurrently so one slow/dead peer overlaps the others instead of adding a
  * full RTT; decode only needs any two, so we don't serialize on a straggler. */
@@ -440,6 +454,10 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
         int prc = efs_packed_read_base_scratch(&ce.packed, ce.fragment_nodes,
             (const uint8_t (*)[EFS_HASH_SIZE])ce.checksums, packed_fetch, &pctx,
             chunk_out, chunk_size, scratch, needed);
+        if (prc == EFS_ERR_NET && read_reprobe_down(ce.fragment_nodes))
+            prc = efs_packed_read_base_scratch(&ce.packed, ce.fragment_nodes,
+                (const uint8_t (*)[EFS_HASH_SIZE])ce.checksums, packed_fetch, &pctx,
+                chunk_out, chunk_size, scratch, needed);
         efs_buf_free(scratch, (uint32_t)needed);
         return prc;
     }
@@ -473,6 +491,7 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
     }
 
     int rc = EFS_ERR_DECODE;
+    int reprobed = 0;
     for (int attempt = 0; attempt < max_attempts; attempt++) {
         if (efs_client_rpc_past_deadline())
             return EFS_ERR_BUSY;
@@ -574,7 +593,15 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
             }
         }
         if (a < 0 || b < 0 || missing < 0) {
-            /* Fewer than 2 good fragments — brief backoff before refetch. */
+            /* Fewer than 2 good fragments: a member skipped by a stale
+             * down-mark is read at once if it answers (K34); otherwise a
+             * brief backoff before refetch. */
+            if (!reprobed && read_reprobe_down(nodes)) {
+                reprobed = 1;
+                if (attempt + 1 == max_attempts)
+                    max_attempts++;
+                continue;
+            }
             if (attempt + 1 < max_attempts &&
                 read_retry_pause(100000u * (unsigned)(attempt + 1)) != EFS_OK)
                 return EFS_ERR_BUSY;

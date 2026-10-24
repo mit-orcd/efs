@@ -22,6 +22,10 @@ node 3 missing, and read EIO with node 2 down. Now:
    through a fresh mount on node 3; every degraded acknowledgement names
    node 2, the member that went away, never node 3.
 3. Node 2 restarts; the file still reads back exactly.
+4. Stale down-mark (B6): mount A marked node 2 down in step 1 (a 30 s
+   cooldown) and it is back. A small file written now is packed into a
+   segment on all three members; node 3 then stops, and the file must read
+   back from nodes 1 and 2 (the read probes node 2 instead of skipping it).
 Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
 """
 import os, re, shutil, sys, tempfile, threading, time
@@ -37,8 +41,27 @@ if not fuse_ok():
     sys.exit(0)
 work = Path(tempfile.mkdtemp(prefix='efs-k34-', dir=os.environ.get('TMPDIR')))
 env = {k: v for k, v in os.environ.items() if not k.startswith('EFS_TEST_')}
+env.update(EFS_PACK_MIN_AGE_MS='500', EFS_PACK_INTERVAL_MS='200')
+env.pop('EFS_GC_DISABLE', None)
 busy = work / 'node3-busy'
 SIZE = 8 * 1024 * 1024 + 5
+
+
+def packed_total(c):
+    """Files the packers switched into segments, summed over every daemon
+    run and metadata group (as in tests/test_k33_payload.py)."""
+    total = 0
+    for i in c.ports:
+        if not (c.dir / f'n{i}.log').exists():
+            continue
+        for run in c.log(i).split('==== start')[1:]:
+            last = {}
+            for g, t, n in re.findall(r'packer: group=(\d+) term=(\d+) .*?packed_total=(\d+)', run):
+                last[(g, t)] = int(n)
+            total += sum(last.values())
+    return total
+
+
 t0 = time.time()
 c = Cluster(work, 'p', [1, 2, 3], env)
 mounts = []
@@ -63,6 +86,7 @@ try:
     th = threading.Thread(target=write, daemon=True)
     th.start()
     rc = c.wait_exit(2, timeout=60)
+    stopped = time.time()  # mount A marks node 2 down about now, for 30 s
     assert rc == 0, f'node 2 stop was not orderly: {rc}\n{c.log(2)[-3000:]}'
     c.wait_log(3, r'EFS_TEST_PUT_BUSY_FILE present', run=False)
     busy.unlink()
@@ -89,8 +113,22 @@ try:
     c.wait_log(2, r'raft-host: up raft_id=1 n=3 formed', timeout=60)
     c.wait_members([1, 2, 3], 3)
     assert (d.path / 'f').read_bytes() == want, 'mount D: f differs after node 2 returned'
+
+    # 4. Packed file, node 3 stops while mount A still marks node 2 down.
+    base = packed_total(c)
+    small = payload('k34-small', 4096)
+    (a.path / 'small').write_bytes(small)
+    end = time.time() + 30
+    while packed_total(c) <= base and time.time() < end:
+        time.sleep(0.2)
+    assert packed_total(c) > base, 'the small file was never packed'
+    c.stop(3)
+    late = time.time() - stopped
+    assert late < 28, f'step 4 began {late:.1f} s after node 2 stopped: the client cooldown may be over'
+    assert (a.path / 'small').read_bytes() == small, 'mount A: packed file differs with node 3 down'
     note = (f'{len(degraded)} degraded acknowledgements (all node 2), '
-            f'{alog.count("attempt")} retried PUT attempts logged')
+            f'{alog.count("attempt")} retried PUT attempts logged, packed read {late:.1f} s '
+            'after node 2 stopped')
 finally:
     if busy.exists():
         busy.unlink()
@@ -103,5 +141,5 @@ finally:
         shutil.rmtree(work, ignore_errors=True)
 print(note)
 print('K34 orderly stop with a multi-chunk write in flight: no acknowledgement from the stopping '
-      'member, BUSY member completed, exact with it down and after it returned: '
+      'member, BUSY member completed, exact with it down and after it returned, packed read past a stale down-mark: '
       f'PASS ({time.time() - t0:.1f} s)')

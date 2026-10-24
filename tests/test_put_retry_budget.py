@@ -22,7 +22,11 @@ static int efs_client_rpc_past_deadline(void){return deadline&&report_clock_ms()
 static int efs_client_put_admit(efs_ino_t ino,uint32_t ci,const efs_node_id_t nodes[3],const uint8_t checksums[3][EFS_HASH_SIZE],uint32_t len,uint32_t off,uint32_t dlen,struct efs_put_ticket *t)
 {(void)checksums;assert(ino==1&&!ci&&len==1&&!off&&!dlen&&nodes[2]==3&&deadline);admits++;if(admit_rc)return admit_rc;memset(t,0,sizeof(*t));t->ino=ino;t->object=77;t->id.seq=admits;memcpy(t->nodes,nodes,12);return EFS_OK;}
 static void efs_client_put_release(uint64_t seq,int landed){assert(seq==admits&&!landed);releases++;}
-static int efs_client_node_is_down(efs_node_id_t n){(void)n;return 0;}
+/* K34: down_third marks member 3 down in this client; reprobe_ok says
+ * whether it answers a probe. */
+static int down_third,reprobe_ok;static unsigned probes;
+static int efs_client_node_is_down(efs_node_id_t n){return down_third && n==3;}
+static int efs_client_node_reprobe(efs_node_id_t n){assert(n==3);probes++;if(reprobe_ok)down_third=0;return reprobe_ok;}
 static void reroute_untried_fragments(efs_ino_t i,uint32_t c,efs_node_id_t *n){(void)i;(void)c;(void)n;}
 static void efs_client_conn_invalidate_node(efs_node_id_t n){(void)n;invalidations++;}
 static void efs_client_nodes_force_reprobe(void){reprobes++;}
@@ -90,7 +94,14 @@ int main(void){
  assert(PUT(&t)==EFS_OK&&calls==3&&notes==2&&logs==1);
  calls=0;busy_third=1000;deadline=report_clock_ms()+120;before=releases;
  assert(PUT(&t)==EFS_ERR_BUSY&&notes==2&&logs==1&&releases==before+1&&calls<=4);
- busy_third=0;degrade=0;
+ busy_third=0;
+ /* K34: a third member skipped only by a stale down-mark is probed once
+  * before the stripe is acknowledged degraded naming it. */
+ calls=0;down_third=1;reprobe_ok=1;deadline=report_clock_ms()+1000;unsigned n0=notes;
+ assert(PUT(&t)==EFS_OK&&probes==1&&calls==2&&notes==n0+1);
+ calls=0;down_third=1;reprobe_ok=0;probes=0;deadline=report_clock_ms()+1000;
+ assert(PUT(&t)==EFS_OK&&probes==1&&calls==1&&notes==n0+2);
+ down_third=0;degrade=0;
  /* An admission failure sends nothing. */
  calls=0;admit_rc=EFS_ERR_FENCED;deadline=report_clock_ms()+100;
  assert(PUT(&t)==EFS_ERR_FENCED && !calls);admit_rc=0;
@@ -106,4 +117,4 @@ with tempfile.TemporaryDirectory(prefix='efs-put-retry-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=5)
-print('PUT retry: admission inside the budget, one ticket per object across retries, inherited backoff, no expired sends/reprobes, terminal STALE/QUOTA/NET release the ticket, a BUSY third member completed or the write failed, never degraded (K34) PASS')
+print('PUT retry: admission inside the budget, one ticket per object across retries, inherited backoff, no expired sends/reprobes, terminal STALE/QUOTA/NET release the ticket, a BUSY third member completed or the write failed, never degraded, a down-marked third member probed once (K34) PASS')
