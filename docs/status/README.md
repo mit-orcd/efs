@@ -31,6 +31,21 @@ batched per Raft group (new tags 90, 91). Counted entries per 1 MiB write:
 what the base fails, and the K14 torn-read gate passes 30/30. **The ior
 easy write gate on orcd-mini is NOTRUN** (parent session).
 
+[K33 acceptance: node addition against the alpha checklist](k33-acceptance-20261024.md):
+**code gate PASS with host limits (xorinox `make test-all` at `2ebd4fd85`:
+446 commands, 0 FAIL, 13 NOTRUN); on branch
+`claude/devel-k33-acceptance-75e95e`, not merged; live multi-host, RDMA and
+orcd-mini NOTRUN.** Loopback daemon tests for four checklist items: additions
+interrupted at every durable handoff (new hooks) and concurrent interrupted
+joins converge to one membership without duplicate ids or orphaned
+fragments; packed and unpacked payloads exact across 3→4→5 under a writer,
+a whole-cluster restart and each single-member outage at five; seed loss
+with joins through other members, unreachable members kept; 3→6 capacity,
+`df`, protection and abandoned-upload reporting, automatic quota, reclaim
+and W154 rebuild. Fixed: reclaim stalled after growth (a retired group-2
+replica waited on its own apply) and a whole-cluster restart waited 30 s
+per starting peer.
+
 [K33 live client view refresh](k33-client-view-20261024.md):
 **code gate PASS with host limits (intel1 `make -k test-all` at `8b4cfbe77`,
 exit 0); on branch `claude/devel-k33-client-view-0c8db4`, not merged; live
