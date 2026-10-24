@@ -11,6 +11,10 @@ the predicate over all 256 tag values, then the production gate in front
 of a real single-voter Raft log: an unknown tag answers EFS_ERR_PROTO,
 the log and the applied count do not move, a following CREATE commits at
 the next index, and the refusal line is rate-limited to one per second.
+A TXN_BATCH (88) carries its commands' tags inside the frame: the gate
+runs the apply's own frame check (txn_batch_frame_check), so a batch with
+an inner tag other than PREPARE/RESOLVE or a malformed frame is refused
+like an unknown tag, and a well-formed one passes.
 Not covered here: the submit RPC's branches and forwarding, which all end
 in host_propose_impl (source shape only); a cluster run is W140's
 remaining gate.
@@ -59,6 +63,9 @@ assert 'host_propose_impl(' in function('static int host_bg_propose(')
 assert 'host_bg_propose(' in function('int server_raft_host_pack_propose(')
 gate = function('static int host_tag_refused(')
 assert 'efs_md_cmd_applicable(cmd[0])' in gate
+assert 'txn_batch_frame_check(cmd, clen, group, &foreign) == EFS_OK' in gate
+frame = function('static uint32_t txn_batch_shard(') + '\n' + function('static int txn_batch_frame_check(') + '\n'
+assert 'rc = txn_batch_frame_check(cmd, clen, group, &foreign);' in function('static int apply_txn_batch_cmd(')
 
 predicate = r'''
 #include "efs/meta_cmd.h"
@@ -84,13 +91,16 @@ log = r'''
 #include "efs/raft.h"
 #include "efs/common.h"
 #include "efs/meta_cmd.h"
+#include "efs/kv_key.h"
+#include "efs/txn.h"
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 static uint64_t clock_us=5000000;
 static uint64_t now_us_(void){return clock_us;}
-''' + gate + r'''
+static uint32_t rd32be(const uint8_t *p){return (uint32_t)p[0]<<24|(uint32_t)p[1]<<16|(uint32_t)p[2]<<8|p[3];}
+''' + frame + gate + r'''
 static int applied_n;static uint8_t last_tag;
 static int apply_cmd(void *app,uint64_t index,uint64_t term,const uint8_t *cmd,uint32_t clen){
     (void)app;(void)index;(void)term;if(clen)last_tag=cmd[0];applied_n++;return EFS_OK;}
@@ -133,8 +143,25 @@ int main(void){
     clock_us+=1000000;assert(propose(r,unknown,sizeof unknown,&got)==EFS_ERR_PROTO);
     clock_us+=999999;assert(propose(r,unknown,sizeof unknown,&got)==EFS_ERR_PROTO);
     assert(last_index(st)==before+1);
+    /* TXN_BATCH: two RESOLVEs pass (a foreign shard is an apply verdict);
+     * an inner tag 200, an inner PUBLISH, mixed inner tags, a count of 1,
+     * a short, cut or trailing frame, a too-short RESOLVE and an
+     * out-of-range shard are refused. */
+    uint8_t tb[4+2*(2+22)]={EFS_MD_CMD_TXN_BATCH,EFS_MD_CMD_RESOLVE,0,2};
+    for(unsigned i=0;i<2;i++){uint8_t *c=tb+4+i*24;c[0]=0;c[1]=22;c[2]=EFS_MD_CMD_RESOLVE;c[2+20]=(uint8_t)i;}
+    assert(!host_tag_refused(0,tb,sizeof tb) && !host_tag_refused(2,tb,sizeof tb));
+    tb[1]=200;tb[6]=200;tb[30]=200;assert(host_tag_refused(0,tb,sizeof tb));
+    tb[1]=tb[6]=tb[30]=EFS_MD_CMD_PUBLISH;assert(host_tag_refused(0,tb,sizeof tb));
+    tb[1]=tb[6]=tb[30]=EFS_MD_CMD_RESOLVE;assert(!host_tag_refused(0,tb,sizeof tb));
+    tb[30]=EFS_MD_CMD_PREPARE;assert(host_tag_refused(0,tb,sizeof tb));tb[30]=EFS_MD_CMD_RESOLVE;
+    tb[3]=1;assert(host_tag_refused(0,tb,sizeof tb));tb[3]=2;
+    assert(host_tag_refused(0,tb,3) && host_tag_refused(0,tb,sizeof tb-1));
+    uint8_t tb2[sizeof tb+1];memcpy(tb2,tb,sizeof tb);tb2[sizeof tb]=0;assert(host_tag_refused(0,tb2,sizeof tb2));
+    tb[29]=21;assert(host_tag_refused(0,tb,sizeof tb-1));tb[29]=22;
+    tb[2+4+17]=0xff;assert(host_tag_refused(0,tb,sizeof tb));tb[2+4+17]=0;
+    assert(!host_tag_refused(0,tb,sizeof tb));
     efs_raft_free(r);efs_raft_mem_free(st);
-    puts("submit unknown tag: refused with PROTO before the log, log and applied unchanged, next CREATE commits PASS");
+    puts("submit unknown tag: refused with PROTO before the log, log and applied unchanged, next CREATE commits, TXN_BATCH frame gated PASS");
     return 0;
 }
 '''

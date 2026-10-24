@@ -3188,12 +3188,16 @@ static uint32_t txn_batch_shard(const uint8_t *cmd, uint32_t clen)
  * exactly as its own entry would. A storage failure returns at once, so the
  * scope is dropped and the whole entry retries; business verdicts do not stop
  * the remaining commands, as consecutive entries would not. */
-static int apply_txn_batch_cmd(struct efs_raft_host *h, const uint8_t *cmd,
-                               uint32_t clen, uint8_t group)
+/* The TXN_BATCH frame check, shared by the apply and the W140 proposal gate
+ * (host_tag_refused): EFS_ERR_UNSUPPORTED for a frame the apply halts on
+ * (an inner tag other than PREPARE/RESOLVE, a bad count, length or shard),
+ * else EFS_OK with *foreign set when a command names another group's shard. */
+static int txn_batch_frame_check(const uint8_t *cmd, uint32_t clen, uint8_t group,
+                                 int *foreign)
 {
     uint32_t n, i, at, len, shard;
-    int rc, verdict = EFS_OK, foreign = 0;
 
+    *foreign = 0;
     if (clen < 4)
         return EFS_ERR_UNSUPPORTED;
     n = ((uint32_t)cmd[2] << 8) | cmd[3];
@@ -3211,12 +3215,23 @@ static int apply_txn_batch_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         if (shard > EFS_KV_SHARD_MASK)
             return EFS_ERR_UNSUPPORTED;
         if (efs_raft_shard_group(shard) != group)
-            foreign = 1;
+            *foreign = 1;
     }
-    if (at != clen)
-        return EFS_ERR_UNSUPPORTED;
+    return at == clen ? EFS_OK : EFS_ERR_UNSUPPORTED;
+}
+
+static int apply_txn_batch_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                               uint32_t clen, uint8_t group)
+{
+    uint32_t n, i, at, len;
+    int rc, verdict = EFS_OK, foreign = 0;
+
+    rc = txn_batch_frame_check(cmd, clen, group, &foreign);
+    if (rc != EFS_OK)
+        return rc;
     if (foreign)
         return EFS_ERR_INVAL;
+    n = ((uint32_t)cmd[2] << 8) | cmd[3];
     for (i = 0, at = 4; i < n; i++, at += len) {
         len = ((uint32_t)cmd[at] << 8) | cmd[at + 1];
         at += 2;
@@ -5503,14 +5518,21 @@ static int host_mark_durable_covered(struct efs_raft_host *h, uint8_t group,
  * group at apply (W127), so every proposal path passes here: the submit
  * RPC, the inode RPC handlers, background reclaim and the packer
  * (host_bg_propose / server_raft_host_pack_propose). A forwarded command
- * meets the same gate on the leader. Logged at most once per second, with
- * the number of refusals suppressed since the previous line. */
+ * meets the same gate on the leader. A TXN_BATCH carries the tags of its
+ * commands inside the frame: one the apply would halt on (inner tag other
+ * than PREPARE/RESOLVE, malformed frame) is refused the same way; a foreign
+ * shard is a verdict at apply, not a halt, and passes. Logged at most once
+ * per second, with the number of refusals suppressed since the previous
+ * line. */
 static int host_tag_refused(uint8_t group, const uint8_t *cmd, uint32_t clen)
 {
     static uint64_t last_us, suppressed;
     uint64_t now, last, skipped;
+    int foreign;
 
-    if (!clen || efs_md_cmd_applicable(cmd[0]))
+    if (!clen || (efs_md_cmd_applicable(cmd[0]) &&
+                  (cmd[0] != EFS_MD_CMD_TXN_BATCH ||
+                   txn_batch_frame_check(cmd, clen, group, &foreign) == EFS_OK)))
         return 0;
     now = now_us_();
     last = __atomic_load_n(&last_us, __ATOMIC_RELAXED);

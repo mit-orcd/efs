@@ -15,7 +15,14 @@ Part B runs the production K13 mount ticket ledger
 (src/client/put_ticket_owner.c) with the RPCs replaced by a counter: each
 write is one cohort of 8 chunk jobs on 8 threads, every ticket lands and is
 confirmed, and a settle pass runs every P writes. "before" disables the
-K32 admission batching and settle packing in the slice.
+K32 admission batching and settle packing in the slice. The counted runs
+compile a 20 s cohort linger: the sender's wait ends when all eight
+members have queued, so the exact counts hold however the threads are
+scheduled (with the production 1 ms bound a worker descheduled past it
+under parallel load takes the single ADMIT: 65+64, the old flake). A
+third run keeps the 1 ms linger and stalls one member per write 100 ms:
+that member must be admitted alone by the single ADMIT (the sender did
+not wait for it) and the rest still batch.
 
 Checks: every set's PREPAREs name each chunk once plus one pin, one DECIDE,
 every participant RESOLVEd once, one RETIRE; a STALE member republishes the
@@ -311,6 +318,7 @@ struct efs_client g_client;
 static uint64_t next_seq = 1;
 static pthread_mutex_t mock_mu = PTHREAD_MUTEX_INITIALIZER;
 static unsigned admit_e[3], settle_e[3];
+static unsigned char single_ci[4096], batched_ci[4096];
 int efs_client_rpc_past_deadline(void) { return 0; }
 static __thread uint64_t deadline;
 uint64_t efs_client_rpc_deadline_ms(void) { return deadline; }
@@ -323,13 +331,15 @@ int efs_client_rpc_getchunks_fileid(efs_export_id_t e, efs_ino_t ino, uint64_t g
 { (void)e; (void)g; (void)start; (void)r; (void)n; (void)ino; *resolved = 7; return EFS_OK; }
 static uint8_t grp(const struct efs_put_ticket *t) { return efs_raft_shard_group(efs_kv_lane_shard(t->ino, t->ci % EFS_META_LANES)); }
 int efs_client_rpc_put_ticket(const struct efs_put_ticket *t, int probe, uint32_t *state)
-{ assert(!probe); pthread_mutex_lock(&mock_mu); admit_e[grp(t)]++; pthread_mutex_unlock(&mock_mu);
+{ assert(!probe); pthread_mutex_lock(&mock_mu); admit_e[grp(t)]++; single_ci[t->ci]++; pthread_mutex_unlock(&mock_mu);
   *state = EFS_PUT_TICKET_ADMITTED; return EFS_OK; }
 int efs_client_session_admit(uint32_t shard, const struct efs_opid *id) { (void)shard; (void)id; return EFS_OK; }
 int efs_client_rpc_put_ticket_settle(const struct efs_put_ticket *t, uint32_t n, uint32_t *retired)
 { pthread_mutex_lock(&mock_mu); settle_e[grp(t)]++; pthread_mutex_unlock(&mock_mu); *retired = n; return EFS_OK; }
 int efs_client_rpc_put_ticket_batch(const struct efs_put_ticket *t, uint32_t n, int settle, uint32_t *mask)
-{ pthread_mutex_lock(&mock_mu); (settle ? settle_e : admit_e)[grp(t)]++; pthread_mutex_unlock(&mock_mu);
+{ pthread_mutex_lock(&mock_mu); (settle ? settle_e : admit_e)[grp(t)]++;
+  for (uint32_t i = 0; i < n && !settle; i++) batched_ci[t[i].ci]++;
+  pthread_mutex_unlock(&mock_mu);
   for (uint32_t i = 1; i < n; i++) assert(grp(&t[i]) == grp(t));
   *mask = (uint32_t)((1ull << n) - 1); return EFS_OK; }
 int efs_client_put_referenced(efs_ino_t ino, uint32_t ci, uint64_t object) { (void)ino; (void)ci; (void)object; return 0; }
@@ -340,6 +350,7 @@ static struct efs_put_admit_cohort cohort;
 static pthread_mutex_t gate_mu = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t gate_cv = PTHREAD_COND_INITIALIZER;
 static unsigned entered;
+static int late; /* stall the last chunk of every write past the linger */
 struct job { uint32_t ci; struct efs_put_ticket t; };
 static void *job_main(void *arg)
 {
@@ -348,14 +359,16 @@ static void *job_main(void *arg)
     pthread_mutex_lock(&gate_mu); entered++; pthread_cond_broadcast(&gate_cv);
     while (entered < 8) pthread_cond_wait(&gate_cv, &gate_mu);
     pthread_mutex_unlock(&gate_mu);
+    if (late && j->ci % 8 == 7) usleep(100000);
     assert(efs_client_put_admit(4097, j->ci, nodes, (const uint8_t (*)[EFS_HASH_SIZE])cks, 32, 0, 0, &j->t) == EFS_OK);
     efs_client_put_cohort_leave();
     return NULL;
 }
 int main(int argc, char **argv)
 {
-    assert(argc == 2);
-    unsigned N = 64, P = (unsigned)atoi(argv[1]);
+    assert(argc == 2 || argc == 3);
+    late = argc == 3 && !strcmp(argv[2], "late");
+    unsigned N = late ? 8 : 64, P = (unsigned)atoi(argv[1]);
     g_client.node_count = 4; g_client.export_id = 1;
     for (unsigned i = 0; i < 4; i++) g_client.nodes[i].id = i + 1;
     for (unsigned w = 0; w < N; w++) {
@@ -366,12 +379,24 @@ int main(int argc, char **argv)
         if ((w + 1) % P == 0) assert(efs_client_put_settle() == EFS_OK);
     }
     assert(!efs_client_put_outstanding());
+    if (late) {
+        unsigned singles = 0;
+        for (unsigned c = 0; c < 8 * N; c++) {
+            assert(single_ci[c] + batched_ci[c] >= 1);
+            singles += single_ci[c];
+            if (c % 8 == 7) assert(single_ci[c] == 1 && !batched_ci[c]);
+        }
+        printf("B late linger_us=%u writes=%u late_single=%u singles=%u admit=%u+%u\n", EFS_PUT_ADMIT_LINGER_US,
+               N, N, singles, admit_e[0], admit_e[2]);
+        return 0;
+    }
     printf("B %s P=%u writes=%u admit=%u+%u settle=%u+%u per_write=%.3f+%.3f\n", MODE, P, N,
            admit_e[0], admit_e[2], settle_e[0], settle_e[2],
            (double)(admit_e[0] + admit_e[2]) / N, (double)(settle_e[0] + settle_e[2]) / N);
     return 0;
 }
 '''
+LINGER = ['-DEFS_PUT_ADMIT_LINGER_US=20000000u']
 def build_run(d, name, src, defs, args_list, libs):
     p = Path(d) / (name + '.c')
     p.write_text(src)
@@ -393,12 +418,14 @@ with tempfile.TemporaryDirectory(prefix='k32-entry-count-') as d:
     (Path(d) / 'owner_after.c').write_text(o)
     for mode in ('before', 'after'):
         rows += build_run(d, 'b_' + mode, client.replace('OWNER', str(Path(d) / ('owner_%s.c' % mode))),
-                          ['-DMODE="%s"' % mode], [['8'], ['32']], lib)
+                          ['-DMODE="%s"' % mode] + LINGER, [['8'], ['32']], lib)
+    rows += build_run(d, 'b_late', client.replace('OWNER', str(Path(d) / 'owner_after.c')),
+                      ['-DMODE="late"'], [['8', 'late']], lib)
 for r in rows:
     print(r)
 b = {}
 for r in rows:
-    if r.startswith('B '):
+    if r.startswith('B ') and not r.startswith('B late '):
         f = dict(x.split('=', 1) for x in r.split()[2:])
         b[(r.split()[1], f['P'])] = f
 # Admission: one entry per ticket before; one ADMIT_BATCH per group per write after.
@@ -418,4 +445,7 @@ for u in ('1', '8', '64'):
     print('total U=%s P=32: before %.3f after %.3f entries per 1 MiB write' %
           (u, per_write('before', u, '32'), per_write('after', u, '32')))
 assert per_write('before', '8', '32') == 23.0 and per_write('after', '8', '32') == 3.0
-print('K32 entry count: publication sets and TXN_BATCH PREPAREs, cohort ADMIT_BATCH, multi-stream SETTLE_BATCH PASS')
+# Production 1 ms linger: a member past it is admitted alone (C asserts it).
+late = [r for r in rows if r.startswith('B late ')]
+assert len(late) == 1 and 'linger_us=1000 ' in late[0], late
+print('K32 entry count: publication sets and TXN_BATCH PREPAREs, cohort ADMIT_BATCH, 1 ms linger bound with single-ADMIT fallback, multi-stream SETTLE_BATCH PASS')

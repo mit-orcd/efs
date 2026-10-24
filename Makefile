@@ -468,6 +468,7 @@ test: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_put_ticket_batch.py
 	python3 tests/test_put_drain.py
 	python3 tests/test_k32_entry_count.py
+	python3 tests/test_faults_env_ignored.py
 	python3 tests/test_live_ticket_retry.py
 	python3 tests/test_put_submission_proof.py
 	python3 tests/test_put_identity.py

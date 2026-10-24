@@ -354,8 +354,13 @@ void efs_client_put_release(uint64_t seq, int landed);
  * set of concurrently running PUT jobs (one put_pool_run): the thread that
  * sends waits, at most EFS_PUT_ADMIT_LINGER_US, until every running member
  * of its own cohort has queued its ticket or finished without one. The
- * enter/leave calls bracket one job on its worker thread. */
+ * enter/leave calls bracket one job on its worker thread. The linger is a
+ * bound, not a promise: a member that reaches admission after it (a
+ * descheduled thread, a slow session admit) takes the single ADMIT, one
+ * extra entry. Tests that count entries exactly set a longer linger. */
+#ifndef EFS_PUT_ADMIT_LINGER_US
 #define EFS_PUT_ADMIT_LINGER_US 1000u
+#endif
 struct efs_put_admit_cohort {
     unsigned running; /* entered, not yet queued or left (under the admit lock) */
 };

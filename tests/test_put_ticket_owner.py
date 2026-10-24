@@ -6,7 +6,13 @@ batched settle per lane-shard stream.
 K32: concurrent admissions of one cohort (one write's chunk jobs) share one
 ADMIT_BATCH per Raft group; a ticket the batch did not admit takes the
 single ADMIT; the settle pass packs the streams of one group into
-SETTLE_BATCH entries and keeps the tickets whose bit is clear."""
+SETTLE_BATCH entries and keeps the tickets whose bit is clear.
+
+The batch counts are exact only when every member queues within the
+linger; the test compiles a 20 s linger so a descheduled worker under
+parallel load cannot miss its batch (the wait ends when the cohort has
+queued, not on the timer). tests/test_k32_entry_count.py checks the
+production 1 ms bound."""
 from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
@@ -188,5 +194,5 @@ int main(void){
 '''
 with tempfile.TemporaryDirectory(prefix='efs-put-owner-') as d:
  p=Path(d)/'test.c';p.write_text(code)
- subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),'-I'+str(root/'src/client'),str(p),str(root/'libefs.a'),'-pthread','-lm','-o',str(p.with_suffix(''))],check=True)
+ subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),'-I'+str(root/'src/client'),'-DEFS_PUT_ADMIT_LINGER_US=20000000u',str(p),str(root/'libefs.a'),'-pthread','-lm','-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True)
