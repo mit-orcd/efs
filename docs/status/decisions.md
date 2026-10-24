@@ -29,6 +29,16 @@ repair/recovery qualification. This is a release scheduling decision, not a
 change to the numbered architectural protection contracts. [Exact decision,
 remaining gates and limits](v030-release-scope-20261012.md). Execution stays stopped.
 
+## D41 — K9 / W87 closed without resolution (user, Oct 24)
+
+The buffered concurrent append record loss (K9 / W87) is **closed without a
+root cause or fix**. It was never reproduced: 23 oracle rounds, 19,597
+records, churn/GC/POSIX load on efs2
+([attempt](w87-append-oracle-efs2-20261022.md)). The oracle
+(`tests/live/append_oracle.py`, `append_oracle_cluster.sh`) stays in the
+tree. If a record loss is seen again, K9 reopens with that evidence. This is
+not a passing gate: no run showed the defect fixed.
+
 ## D40 — alpha 1.0 scope decisions taken Oct 23 (user, in one pass)
 
 | Item | Decision |

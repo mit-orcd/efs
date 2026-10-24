@@ -1572,6 +1572,9 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[D41: K9 / W87 closed without resolution](#d41--k9--w87-closed-without-resolution-user-oct-24):
+**user decision Oct 24: the append record loss was never reproduced and has no root cause; K9 is closed and reopens if a loss is seen again.** Not a passing gate.
+
 [Oct 24 merge: W155, D31 drain, K33 increment 2, K33 client view](../status/k33-client-view-20261024.md#after-the-merge):
 **merged into devel; Merged-tree `make test-all` on intel2 (W155, D31 drain, K33 increment 2 and live client view at `910bbeef4`): 442 commands, 0 FAIL, 14 NOTRUN host limits (raw: intel2 `~/efs-artifacts/merge-wave2-20261024/`, `SHA256SUMS` `0d13a146…4ecf`). The first run at `3e01ba95c` failed only `tests/test_k33_client_view.py`, which waited for a joiner log line that increment 2 renamed; fixed in `910bbeef4`.** Before the next deploy, devops `start.sh` and cluster `cluster.sh` must move to the positional `efsd ADDR:PORT STORAGE` / `efsd --join SEED STORAGE` form (`--node-id` is refused), and every store needs a fresh format.
 
@@ -2790,7 +2793,7 @@ positions do not assign an execution order or override the active handoff.
 | proto3 | **W84** · bounded namespace transactions | namespace completeness | Closed for accepted D32 144-participant envelope: distinct EOVERFLOW, prompt atomic refusal diagnostics, mixed boundaries, full64-lane removal/replacement, exact144 PREPARE/COMMIT cold recovery and AMD normal/fault POSIX/GC gates pass; larger-operation protocol deferred | [closure and limits](../status/w84-closure-20261009.md) |
 | storage1 | **W85** · path-hint eviction loses ambiguous PUT retry history | conditional accounting/storage correctness | Closed: ambiguous PUT placement retained in 389a8baf; direct/buffered real lost-ACK collision and two-root physical/quota/restart gates pass | [evidence and gate](#w85) |
 | gc-own | **W86** · durable PUT ticket integration | feature / safe reclamation | metadata ledger, budgeted retained admission and ticket-bound durable publication receipts implemented (`22c8c1f9`, `70daa5a4`); AMD same/cross-group lost replies, leader death, cold replay, collision and revocation pass; default PUT/flush, storage fences and all-member abandoned collection remain staged. **Oct 23: default ticketed PUT/flush with storage fences FIXED on branch `devel-k13`, not merged; the all-member abandoned collection is INCOMPLETE ([evidence](../status/k13-w86-ticket-default-20261023.md))**. **Oct 23: revocation-gated all-member collection of settled abandoned uploads PASS (unit and in-process) on branch `devel-k13d31`, not merged; cluster gate NOTRUN, unsettled tickets of dead clients still open ([evidence](../status/k13-d31-collection-20261023.md)).** **Oct 24: dead and departing clients closed, merged into devel (`e6a21692d`; tested at `59a2308b8`): revoked-stream drain into the orphan ledger, unmount revokes its own session, RECLAIMING path removed; unit and in-process PASS, amd `make test-all` FAILs are host limits shared with the base; live collection gates NOTRUN ([evidence](../status/k13-d31-drain-20261024.md)).** | [evidence and gate](#w86) · [D31](#d31--recorded-abandoned-upload-policy) |
-| append-load | **W87** · buffered concurrent append loses records under load | correctness investigation | failure recorded in private GC fixture; isolated repeats pass; Oct 22 efs2 exact-oracle attempt (23 rounds, 19,597 records, churn/GC/POSIX load) did not reproduce; full traced acceptance owed | [evidence and gate](#w87) · [Oct 22 attempt](../status/w87-append-oracle-efs2-20261022.md) |
+| append-load | **W87** · buffered concurrent append loses records under load | correctness investigation | **CLOSED without resolution (user, Oct 24, [D41](#appendix-4--decisions--taken-and-pending-register-d1d36)); reopens if a record loss is seen again.** Was: failure recorded in private GC fixture; isolated repeats pass; Oct 22 efs2 exact-oracle attempt (23 rounds, 19,597 records, churn/GC/POSIX load) did not reproduce; full traced acceptance owed | [evidence and gate](#w87) · [Oct 22 attempt](../status/w87-append-oracle-efs2-20261022.md) |
 | replay-span | **W88** · folded span retry resurrects after bounded history eviction | publication/retry correctness | partial — actual cross-group typed cache/host replay preserves peer bytes and cold mappings on AMD direct/TCP; production flush/ticket integration and full replay gates remain open. **Oct 23: FIXED on branch `devel-k13`, not merged: the REPORT path refuses the retry by ticket state, in a unit replay with a negative control and live through the host before and after a cold restart ([evidence](../status/k13-w86-ticket-default-20261023.md))** | [evidence and gate](#w88) · [Oct9 checkpoint](../status/dependency-package-20261009.md#retained-typed-publication-writeback--staged-amd-gated) |
 | measure-fields | **W89** · W23 TSV field merging shifts derived metrics | verification correctness | Closed measurement defect: explicit schema and raw-field identity regressions pass; fresh AMD real-cap/quorum/recovery/cold-value gate passes (276 observations); D30/W23 bounds remain open | [closure and limits](../status/amd-non-rdma-20261010.md#w89) |
 
@@ -2859,6 +2862,16 @@ The user limits this release to TCP/direct I/O/files and defers containers and
 repair/recovery qualification. This is a release scheduling decision, not a
 change to the numbered architectural protection contracts. [Exact decision,
 remaining gates and limits](../status/v030-release-scope-20261012.md). Execution stays stopped.
+
+### D41 — K9 / W87 closed without resolution (user, Oct 24)
+
+The buffered concurrent append record loss (K9 / W87) is **closed without a
+root cause or fix**. It was never reproduced: 23 oracle rounds, 19,597
+records, churn/GC/POSIX load on efs2
+([attempt](../status/w87-append-oracle-efs2-20261022.md)). The oracle
+(`tests/live/append_oracle.py`, `append_oracle_cluster.sh`) stays in the
+tree. If a record loss is seen again, K9 reopens with that evidence. This is
+not a passing gate: no run showed the defect fixed.
 
 ### D40 — alpha 1.0 scope decisions taken Oct 23 (user, in one pass)
 
