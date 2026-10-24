@@ -997,16 +997,25 @@ def g_e2(q, g):
 
 
 def leaders(q, g, label):
-    """{group: (leader addr, term)} by the nodes' own reports, plus each view."""
+    """{group: (leader addr, term, leader raft id, voter ids)} by the nodes'
+    own reports, plus each node's view (addr, role, leader id, term)."""
     views, out = {}, {}
     for node in q.cluster.get('nodes', []):
         rc, text = q.mgmt(g, label, 'raft-status', node['addr'], deadline=30)
-        for m in re.finditer(r'group (\d+) hosted=1 role=(\w+) leader=(-?\d+) term=(\d+)', text):
-            group, role, term = int(m.group(1)), m.group(2), int(m.group(4))
-            views.setdefault(group, []).append((node['addr'], role, int(m.group(3)), term))
+        for m in re.finditer(r'group (\d+) hosted=1 role=(\w+) leader=(-?\d+) term=(\d+)'
+                             r'(?:.*? voters=0x([0-9a-f]+))?', text):
+            group, role, lid, term = int(m.group(1)), m.group(2), int(m.group(3)), int(m.group(4))
+            views.setdefault(group, []).append((node['addr'], role, lid, term))
+            voters = [b for b in range(64) if int(m.group(5) or '0', 16) >> b & 1]
             if role == 'LEADER' and term >= out.get(group, ('', -1))[1]:
-                out[group] = (node['addr'], term)
+                out[group] = (node['addr'], term, lid, voters)
     return out, views
+
+
+def agreed(views, lid, term):
+    """Every hosting node follows leader lid at term >= term (no stale leader)."""
+    return bool(views) and all(v[2] == lid and v[3] >= term and v[1] in ('LEADER', 'FOLLOWER')
+                               for v in views)
 
 
 def applied(q, g, addr, label):
@@ -1023,7 +1032,7 @@ def g_e3(q, g):
     before, views = leaders(q, g, 'leaders-before')
     if q.plan:
         return NOTRUN, 'plan'
-    g.fixture['leaders_before'] = {k: list(v) for k, v in before.items()}
+    g.fixture['leaders_before'] = {k: list(v[:2]) for k, v in before.items()}
     if not before:
         return FAIL, 'no metadata group leader observed'
     seconds = int(q.fixture['e3_seconds'])
@@ -1036,30 +1045,36 @@ def g_e3(q, g):
     t_start = time.monotonic()
     time.sleep(min(5, seconds / 4))
     events = []
-    for group, (addr, term) in sorted(before.items()):
-        g.step('turnover', f'raft-step-down group {group} on leader {addr} (term {term})')
+    for group, (addr, term, lid, voters) in sorted(before.items()):
+        # Name the successor: an untargeted step-down may be re-won by the
+        # same node at a higher term, which is no turnover.
+        others = [v for v in voters if v != lid]
+        target = sorted(others, key=lambda v: (v - lid) % 64)[0] + 1 if others else None
+        g.step('turnover', f'raft-step-down group {group} on leader {addr} (term {term}) to node {target}')
         t0 = time.monotonic()
-        rc, text = q.mgmt(g, f'step-down-g{group}', 'raft-step-down', addr, group)
+        rc, text = q.mgmt(g, f'step-down-g{group}', 'raft-step-down', addr, group,
+                          *([target] if target else []))
         new = None
         while time.monotonic() - t0 < q.fixture['turnover_timeout_s']:
             now_leaders, views = leaders(q, g, f'leaders-g{group}')
             cur = now_leaders.get(group)
-            if cur and cur[1] > term:
+            if cur and cur[1] > term and cur[0] != addr and agreed(views.get(group), cur[2], cur[1]):
                 new = cur
                 break
             time.sleep(1)
-        events.append(dict(group=group, old=addr, old_term=term, rc=rc,
+        events.append(dict(group=group, old=addr, old_term=term, target_node=target, rc=rc,
                            new=new and new[0], new_term=new and new[1],
                            seconds=round(time.monotonic() - t0, 3),
                            views=views.get(group)))
         if new is None:
             workload.wait()
             g.fixture['events'] = events
-            return FAIL, f'group {group}: no new leader within {q.fixture["turnover_timeout_s"]}s'
+            return FAIL, (f'group {group}: leadership did not move off {addr} to an agreed new leader '
+                          f'within {q.fixture["turnover_timeout_s"]}s')
     g.fixture['events'] = events
     catchup = None
     if 'restart' in q.allow and q.control.can_restart_nodes():
-        group, (addr, _) = sorted(before.items())[0]
+        group, (addr, *_) = sorted(before.items())[0]
         node = next(n for n in q.cluster['nodes'] if n['addr'] == addr)
         g.step('restart', f'orderly stop and start of member {addr} (returning member catch-up)')
         rc, text = q.control.stop_node(g, node)
@@ -1074,7 +1089,7 @@ def g_e3(q, g):
             # The leaders' commit first, then the member's applied index: the
             # member has caught up once it applied what was committed before.
             lead, _ = leaders(q, g, 'catchup-leaders')
-            ref = {gr: applied(q, g, la, 'catchup-leader').get(gr, (0, 0))[0] for gr, (la, _) in lead.items()}
+            ref = {gr: applied(q, g, la, 'catchup-leader').get(gr, (0, 0))[0] for gr, (la, *_) in lead.items()}
             mine = applied(q, g, addr, 'catchup-member')
             ref = {gr: v for gr, v in ref.items() if gr in mine}
             if mine and ref and all(mine[gr][1] >= ref[gr] for gr in ref):

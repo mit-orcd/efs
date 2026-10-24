@@ -42,6 +42,9 @@ assert Q.outcome_from_rc(124, '', timed_out=True) == ('FAIL', 'deadline exceeded
 assert Q.count_marks('test\tresult\tdetail\na\tPASS\t\nb\tFAIL\tx\nc\tSKIP\t\nd\tPASS\t\n') == \
     {'PASS': 2, 'FAIL': 1, 'SKIP': 1}
 assert Q.worst(['PASS', 'NOTRUN']) == 'NOTRUN' and Q.worst(['NOTRUN', 'FAIL', 'PASS']) == 'FAIL'
+views = [('a', 'FOLLOWER', 1, 3), ('b', 'LEADER', 1, 3), ('c', 'FOLLOWER', 1, 3)]
+assert Q.agreed(views, 1, 3) and not Q.agreed(views, 2, 3) and not Q.agreed(views, 1, 4)
+assert not Q.agreed(views[:2] + [('c', 'CANDIDATE', 1, 3)], 1, 3) and not Q.agreed([], 1, 3)
 three = dict(nodes=[dict(addr=f'10.0.0.{i}:17432', host=f'h{i}') for i in (1, 2, 3)])
 assert Q.topology_column(three) == '3 physical nodes'
 shared = dict(nodes=[dict(addr=f'10.0.0.1:{p}', host='h1') for p in (1, 2, 3, 4, 5)])
