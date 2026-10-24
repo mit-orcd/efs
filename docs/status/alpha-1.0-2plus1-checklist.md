@@ -112,7 +112,7 @@ row is checked again on current devel before work starts.
 | K17 | **0a/D27** STALE replay convergence: orcd-mini C1 rerun | correctness | VERIFY |
 | K18 | **W54**, **W38** fold/GC data loss: multi-host hardware RDMA gate | correctness | VERIFY |
 | K19 | **W61**, **W62**, **W63** GC: final drain and lost-ledger reconciliation | reclaim correctness | VERIFY |
-| K20 | **W42** capacity reporting on any node count; protection debt (with B5) | correctness | VERIFY |
+| K20 | **W42** capacity reporting on any node count; protection debt (with B5) | correctness | VERIFY. **Oct 24 (B5, branch `claude/devel-b-geometry-fbcf5b`, not merged): the open one-QUOTA-member question is answered and FIXED: a full member no longer creates silent protection debt (placed around, or ENOSPC at three); status/df equal the 3-of-N bound at 3 to 8 loopback members ([evidence](b-geometry-capacity-20261024.md)). Named real-host capacity acceptance NOTRUN.** |
 | K21 | **W119** concurrent RDMA failures and blocked clean stop (recorded Oct 15, before many fixes); **W65** graceful-shutdown wait | correctness / liveness | VERIFY first, then FIX |
 | K22 | **W23** universal follower memory/lag bound | resource bound | FIXED, merged into devel Oct 22 (derived KV memory budget, unapplied-log bound with busy AppendEntries replies, leader admission at 3/4, leadership requires capacity per D30; `efs-mgmt raft-status` shows the bound). VERIFY: the production-scale plateau measurement, snapshot import into a stalled follower and multi-host/RDMA runs are NOTRUN for the parent session ([summary](../../results/measure/20261022-k22-follower-bound/SUMMARY.md)) **REOPENED Oct 22 (S1 P1): `low_capacity` counts `last_index − last_applied`, which includes entries not yet known committed; after a leader loss or a restart with a retained tail every voter can be vetoed from campaigning, nothing clears it, and no messages are sent (reproduced: `scripts/reviews/k22_capacity_tail.c`, three voters, 96-entry tails, cap 128, zero messages in 1,000 ticks). FIX: distinguish an uncommitted tail that needs an election from inability to apply; allow recovery leadership with bounded headroom while admission stays held; a delivering three-voter test that elects, commits the tail and resumes**. **S1 FIXED, merged Oct 22 (`001b5da30`): `low_capacity` counts only `commit_index − last_applied`, so an uncommitted tail never vetoes a campaign; `capacity_hold` retries `apply_committed`; the three-voter delivering test in `test_follower_bound` elects, commits a 96-entry tail and resumes; `make test` PASS on an efs VM.** **Live on xorinox (Oct 23, merged Oct 23 (`306a01fd4`)): PASS (scoped) for a 302 s plateau at fault-build caps (32,768 entries, 8 MiB budget, follower RSS flat at about 100 MB, quorum commit rate unchanged) and for SIGSTOP stall and AppendEntries catch-up; NOTRUN: the production-scale plateau (about 6 h here), snapshot import (needs a 1 GiB log lag) and live leader admission at 3/4 ([evidence](gates-xorinox-20261022.md#k22--w23-follower-memory-and-lag-bound)).** |
 | K23 | **W71** hardware power-loss gate; **W74** automatic repair; **W123** crash recovery | durability scope | DECIDED Oct 23 (D40): W71, W74 and W123 stay deferred past alpha 1.0; W154 rebuild-on-return is the only repair in alpha. Was DECIDE (deferred by current scope) |
@@ -451,18 +451,51 @@ facts for A6, not decisions.
 - [ ] **B1** Check ordinary chunks and packed segments use exactly D1/D2/P, each
   on a distinct eligible node. Verify actual persisted fragment inventories and
   authoritative mappings, not just placement-function outputs.
+  **Oct 24 (branch `claude/devel-b-geometry-fbcf5b`, not merged): loopback
+  PASS at 3 to 8 members: every chunk row, span and pack object of the test
+  files names D1/D2/P on three distinct members, and every store's fragment
+  records match them (on the row's node, nowhere else). FIXED: the reader
+  decoded a row without valid nodes from placement recomputed now; it is
+  refused. Real-host run NOTRUN ([evidence](b-geometry-capacity-20261024.md)).**
 - [ ] **B2** Check partial chunks, empty files, alignment/padding, checksums and
   boundary sizes. Reconstruct exact payloads from each valid two-fragment pair;
   reject corrupt or mismatched fragments rather than returning fabricated bytes.
+  **Oct 24: loopback PASS: 19 boundary sizes (0 B to 1 MiB + 3) exact
+  through every mount; on the stores D1, D2 and P = D1 ^ D2 and every pair
+  rebuilds the chunk; a partial chunk is a whole 2+1 span object; a corrupt
+  D1, or another chunk's D1, is refused and the bytes come from D2 + P; two
+  corrupt fragments are EIO. Unit: every pair for empty/page/half-chunk/
+  chunk edges at 128 KiB to 1 MiB chunks and segments. Real-host run
+  NOTRUN ([evidence](b-geometry-capacity-20261024.md)).**
 - [ ] **B3** With diverse inodes/chunk indexes, confirm 3-node placement uses all
   three; 4-node placement rotates the omitted node; larger placement uses the
   intended node set. Report placement histograms, roles and per-node writes.
+  **Oct 24: loopback PASS, grown 3 -> 8 one member at a time: three use all
+  three for every chunk, four rotate the omitted member (the two chunks of a
+  file omit different members), five to eight give every member every role;
+  histograms in the evidence. Unit: exact rotation at four, every role
+  within 10 % of the mean at 3 to 8 (dense and gapped ids). Real-host run
+  NOTRUN ([evidence](b-geometry-capacity-20261024.md)).**
 - [ ] **B4** Audit packing placement separately: record group voters and eligible
   fragment destinations, demonstrating what capacity is actually usable. Do not
   infer packed placement from ordinary-file placement results.
+  **Oct 24: loopback PASS: packed segments recorded per pack object; group
+  2 votes on {2,3,4} from four members while segment fragments land on
+  every member (voters' share 0.73 at four, 0.38 to 0.44 at seven and eight); usable
+  packing capacity is the ring's 3-of-N bound, not the voters'. Real-host
+  run NOTRUN ([evidence](b-geometry-capacity-20261024.md)).**
 - [ ] **B5** Verify logical quota versus physical accounting, small-file overhead,
   reserved headroom and ENOSPC. Report actual usage; 1.5x coding overhead excludes
   metadata, alignment and other storage overhead. No false free-space claims.
+  **Oct 24: loopback PASS. FIXED: one full stripe member was acknowledged as
+  a degraded two-fragment stripe (base: 200 MiB acknowledged with a 16 MiB
+  member full, never ENOSPC); now the object is placed on a member that is
+  not full, or the write fails ENOSPC. Measured: whole chunks 1.5x payload
+  (1.59x allocated with record pages), a partial chunk a whole stripe
+  (192 KiB payload), packed small files about 1.7x; status on every member
+  and df on every mount equal the 3-of-N bound, +2/3 GiB per 1 GiB
+  addition; three members with one full report 0 free; automatic quota =
+  headroom budget. Real-host run NOTRUN ([evidence](b-geometry-capacity-20261024.md)).**
 - [ ] **B6** Exercise a deliberately unavailable fragment/destination under a
   bounded controlled test. Reads reconstruct or fail explicitly; writes must
   never report success without their documented durable publication requirement.

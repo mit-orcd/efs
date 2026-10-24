@@ -18,6 +18,19 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[B1–B5 geometry, placement and usable capacity](b-geometry-capacity-20261024.md):
+**PASS (scoped, loopback) on `claude/devel-b-geometry-fbcf5b`, not merged.**
+xorinox `make test-all` at `17aac881c`: 453 commands, 0 FAIL, 13 NOTRUN
+host limits. New `tests/test_b_geometry.c` (unit) and
+`tests/test_b_geometry.py` (3 to 8 members, every store's fragment records
+against the chunk rows and pack objects) plus the driver
+`scripts/b_checks.py` for real hosts. FIXED: a full stripe member was
+acknowledged as a degraded stripe (silent protection debt; base took
+200 MiB with a 16 MiB member full) and is now placed around or ENOSPC; the
+reader no longer decodes from recomputed placement. Real-host driver run
+NOTRUN (parent). Found: `test_k33_payload.py` EIO on a packed read with a
+member down (base 2/3, branch 1/3), B6 follow-up.
+
 [D41: K9 / W87 closed without resolution](decisions.md#d41--k9--w87-closed-without-resolution-user-oct-24):
 **user decision Oct 24: the append record loss was never reproduced and has no root cause; K9 is closed and reopens if a loss is seen again.** Not a passing gate.
 
