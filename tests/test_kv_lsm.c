@@ -975,22 +975,42 @@ static void test_pinned_view(void)
 }
 
 /* W126: a peek at writer-owned state (REPORT's l0-hot check, stats,
- * query revisions) takes mu only. A reader parked inside a scan callback
- * holds view_rw shared; the peeks must still return, where an exclusive
- * view would wait for that reader and, under writer preference, stall
- * every newer reader behind it. */
+ * query revisions) takes peek_mu only. A reader parked inside a scan
+ * callback holds view_rw shared; the peeks must still return, where an
+ * exclusive view would wait for that reader and, under writer
+ * preference, stall every newer reader behind it. */
 struct parked_scan {
     struct efs_kv *kv;
     pthread_mutex_t mu;
     pthread_cond_t cv;
-    int inside, release, peeks_done;
+    int inside, release, peeks_done, inner_peek;
 };
+static int run_peeks(struct efs_kv *kv)
+{
+    struct efs_kv_lsm_stats st;
+    uint64_t rev[4096], txn = 0, act[8];
+    uint32_t l0 = 0, l1 = 0;
+    int ok = efs_kv_lsm_l0_hot(kv) == 0 &&
+             efs_kv_lsm_stats(kv, &st) == EFS_OK &&
+             efs_kv_lsm_seg_count(kv, &l0, &l1) == EFS_OK &&
+             efs_kv_lsm_metadata_revisions(kv, rev, 4096) == EFS_OK &&
+             efs_kv_lsm_transaction_revision(kv, &txn) == EFS_OK &&
+             efs_kv_lsm_transaction_activity(kv, act) == EFS_OK;
+    (void)efs_kv_lsm_cleanup_deferred(kv);
+    /* One peek is one consistent cut: no L0 file means no L0 bytes. */
+    if (ok && (st.n_l0 == 0) != (st.l0_bytes == 0))
+        ok = 0;
+    return ok;
+}
 static int parked_cb(void *user, const uint8_t *key, uint32_t klen,
                      const uint8_t *val, uint32_t vlen)
 {
     struct parked_scan *p = user;
     (void)key; (void)klen; (void)val; (void)vlen;
+    /* A peek inside a read section is allowed (view_rw, then peek_mu). */
+    int inner = run_peeks(p->kv) ? 1 : -1;
     pthread_mutex_lock(&p->mu);
+    p->inner_peek = inner;
     p->inside = 1;
     pthread_cond_broadcast(&p->cv);
     while (!p->release)
@@ -1007,46 +1027,98 @@ static void *parked_reader(void *arg)
 static void *peeker(void *arg)
 {
     struct parked_scan *p = arg;
-    struct efs_kv_lsm_stats st;
-    uint64_t rev[4096], txn = 0, act[8];
-    uint32_t l0 = 0, l1 = 0;
-    int ok = efs_kv_lsm_l0_hot(p->kv) == 0 &&
-             efs_kv_lsm_stats(p->kv, &st) == EFS_OK &&
-             efs_kv_lsm_seg_count(p->kv, &l0, &l1) == EFS_OK &&
-             efs_kv_lsm_metadata_revisions(p->kv, rev, 4096) == EFS_OK &&
-             efs_kv_lsm_transaction_revision(p->kv, &txn) == EFS_OK &&
-             efs_kv_lsm_transaction_activity(p->kv, act) == EFS_OK;
-    (void)efs_kv_lsm_cleanup_deferred(p->kv);
+    int ok = run_peeks(p->kv);
     pthread_mutex_lock(&p->mu);
     p->peeks_done = ok ? 1 : -1;
     pthread_cond_broadcast(&p->cv);
     pthread_mutex_unlock(&p->mu);
     return NULL;
 }
-/* A writer that queues on view_rw behind the parked reader while holding
- * mu, as the compactor's first lsm_lock or a cond-wait return does. */
+/* Writers that hold mu while they wait for the parked reader. Mode 1 is
+ * a plain lsm_lock (the compactor's first lsm_lock, a cond-wait return);
+ * mode 2 is a flush that yielded the view for its file I/O before the
+ * reader entered and reclaims it once go is set. Mode 3 stays in the
+ * yielded state (flush I/O) until release. state: 1 = yielded, 2 = got
+ * the view and released it, -1 = a peek failed. */
+struct queued_wr {
+    struct kv_lsm *l;
+    struct parked_scan *p;
+    int mode;
+    int state;
+    int go, release;
+};
 static void *queued_writer(void *arg)
 {
-    struct kv_lsm *l = arg;
+    struct queued_wr *w = arg;
+    struct kv_lsm *l = w->l;
+    int y;
+
     lsm_lock(l);
+    if (w->mode >= 2) {
+        y = lsm_view_yield(l);
+        pthread_mutex_lock(&w->p->mu);
+        w->state = 1;
+        pthread_cond_broadcast(&w->p->cv);
+        while (!(w->mode == 2 ? w->go : w->release))
+            pthread_cond_wait(&w->p->cv, &w->p->mu);
+        pthread_mutex_unlock(&w->p->mu);
+        /* A yielded owner peeks with peek_mu, like any thread. */
+        int yok = run_peeks(w->p->kv);
+        lsm_view_reclaim(l, y);
+        if (!yok) {
+            pthread_mutex_lock(&w->p->mu);
+            w->state = -1;
+            pthread_mutex_unlock(&w->p->mu);
+        }
+    }
+    /* The owner holds peek_mu; its own peek must not wait on itself. */
+    int ok = run_peeks(w->p->kv);
     lsm_unlock(l);
+    pthread_mutex_lock(&w->p->mu);
+    if (w->state >= 0)
+        w->state = ok ? 2 : -1;
+    pthread_cond_broadcast(&w->p->cv);
+    pthread_mutex_unlock(&w->p->mu);
     return NULL;
 }
-/* K30: the compactor's first lsm_lock raced the parked reader (1 of 3
- * native runs on amd): scheduled late, it held mu queued on view_rw and the
- * peeks waited on mu. Run 0 stops the compactor so no writer exists and
- * the peeks must return. Run 1 queues a writer first and pins the open
- * W126 limitation: peeks wait while a writer holding mu is queued behind a
- * reader. When that is fixed, run 1 must expect done == 1. */
-static void peek_beside_reader(int queue_writer)
+static int mu_taken(struct kv_lsm *l)
+{
+    if (pthread_mutex_trylock(&l->mu) != 0)
+        return 1;
+    pthread_mutex_unlock(&l->mu);
+    return 0;
+}
+/* Waits (5 s at most) until *flag reaches want. Caller holds p->mu. */
+static int wait_flag(struct parked_scan *p, int *flag, int want)
+{
+    struct timespec ts;
+
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_sec += 5;
+    while (*flag != want && *flag >= 0 &&
+           pthread_cond_timedwait(&p->cv, &p->mu, &ts) == 0)
+        ;
+    return *flag == want;
+}
+/* K30 pinned the W126 ordering defect here: a writer holding mu queued on
+ * view_rw behind a parked reader made every peek wait for that reader.
+ * Now peeks wait only for a writer that owns the view. Mode 0: no writer
+ * (the compactor is stopped). Mode 1: plain queued lsm_lock. Mode 2: a
+ * flush-style reclaim after a yield queues behind the reader. Mode 3: a
+ * writer parked in its yielded file-I/O window, then a reader. In every
+ * mode the peeks must return while the reader is still parked and the
+ * writer has not got the view. */
+static void peek_beside_reader(int mode)
 {
     struct parked_scan p;
+    struct queued_wr w;
     pthread_t rd, pk, wr;
-    struct timespec ts;
     struct kv_lsm *l;
+    int done, wstate;
 
     rmtree(g_dir);
     memset(&p, 0, sizeof(p));
+    memset(&w, 0, sizeof(w));
     p.kv = open_store(EFS_KV_LSM_NOSYNC, 0);
     CHECK(p.kv != NULL, "open peek store");
     if (!p.kv)
@@ -1056,47 +1128,54 @@ static void peek_beside_reader(int queue_writer)
     pthread_mutex_init(&p.mu, NULL);
     pthread_cond_init(&p.cv, NULL);
     CHECK(put_s(p.kv, "pk/a", "1") == EFS_OK, "put peek row");
+    w.l = l;
+    w.p = &p;
+    w.mode = mode;
+    if (mode >= 2) {
+        /* Writer first: it yields and parks, then the reader enters. */
+        CHECK(pthread_create(&wr, NULL, queued_writer, &w) == 0, "start writer");
+        pthread_mutex_lock(&p.mu);
+        CHECK(wait_flag(&p, &w.state, 1), "writer yielded");
+        pthread_mutex_unlock(&p.mu);
+    }
     CHECK(pthread_create(&rd, NULL, parked_reader, &p) == 0, "start reader");
     pthread_mutex_lock(&p.mu);
-    while (!p.inside)
-        pthread_cond_wait(&p.cv, &p.mu);
+    CHECK(wait_flag(&p, &p.inside, 1), "reader parked");
     pthread_mutex_unlock(&p.mu);
-    if (queue_writer) {
-        CHECK(pthread_create(&wr, NULL, queued_writer, l) == 0, "start writer");
+    CHECK(p.inner_peek == 1, "peek inside a read section returns");
+    if (mode == 1) {
+        CHECK(pthread_create(&wr, NULL, queued_writer, &w) == 0, "start writer");
         /* Once mu is taken it stays taken: the writer cannot get view_rw
          * until the reader is released. */
-        while (pthread_mutex_trylock(&l->mu) == 0) {
-            pthread_mutex_unlock(&l->mu);
+        while (!mu_taken(l))
             usleep(1000);
-        }
+    } else if (mode == 2) {
+        /* The writer reclaims: it holds mu and queues on view_rw. */
+        pthread_mutex_lock(&p.mu);
+        w.go = 1;
+        pthread_cond_broadcast(&p.cv);
+        pthread_mutex_unlock(&p.mu);
+        usleep(20 * 1000); /* let it reach the view_rw wait */
     }
     CHECK(pthread_create(&pk, NULL, peeker, &p) == 0, "start peeker");
-    clock_gettime(CLOCK_REALTIME, &ts);
-    if (queue_writer)
-        ts.tv_nsec += 200 * 1000 * 1000;
-    else
-        ts.tv_sec += 5;
-    if (ts.tv_nsec >= 1000000000) {
-        ts.tv_sec++;
-        ts.tv_nsec -= 1000000000;
-    }
     pthread_mutex_lock(&p.mu);
-    while (!p.peeks_done &&
-           pthread_cond_timedwait(&p.cv, &p.mu, &ts) == 0)
-        ;
-    int done = p.peeks_done;
+    done = wait_flag(&p, &p.peeks_done, 1);
+    wstate = w.state;
     p.release = 1; /* unblock the reader either way, then join all */
+    w.release = 1;
     pthread_cond_broadcast(&p.cv);
     pthread_mutex_unlock(&p.mu);
-    if (queue_writer)
-        CHECK(done == 0, "W126 known limitation: peeks wait behind a writer queued on view_rw");
-    else
-        CHECK(done == 1, "peeks return while a reader holds the view");
+    CHECK(done, "W126: peeks return beside a reader and a queued writer");
+    if (mode)
+        CHECK(wstate == 1 || (mode == 1 && wstate == 0),
+              "writer had not got the view while the reader was parked");
     pthread_join(rd, NULL);
     pthread_join(pk, NULL);
-    if (queue_writer)
+    if (mode)
         pthread_join(wr, NULL);
-    CHECK(p.peeks_done == 1, "peeks complete once the reader leaves");
+    CHECK(p.peeks_done == 1, "peeks consistent");
+    if (mode)
+        CHECK(w.state == 2, "writer got the view after the reader; owner peeks ok");
     pthread_cond_destroy(&p.cv);
     pthread_mutex_destroy(&p.mu);
     efs_kv_lsm_close(p.kv);
@@ -1104,8 +1183,103 @@ static void peek_beside_reader(int queue_writer)
 
 static void test_peek_beside_reader(void)
 {
-    peek_beside_reader(0);
-    peek_beside_reader(1);
+    int mode;
+
+    for (mode = 0; mode <= 3; mode++)
+        peek_beside_reader(mode);
+}
+
+/* W126: peeks and readers beside flushes and compaction swaps. The peeker
+ * checks each cut is consistent; the reader checks no row is lost while
+ * the levels change under it. TSan checks the peeked fields. */
+struct peek_storm {
+    struct efs_kv *kv;
+    int stop;
+    int bad_peek, bad_read;
+    unsigned long peeks, reads;
+};
+static void *storm_peeker(void *arg)
+{
+    struct peek_storm *s = arg;
+
+    while (!__atomic_load_n(&s->stop, __ATOMIC_ACQUIRE)) {
+        if (!run_peeks(s->kv))
+            __atomic_store_n(&s->bad_peek, 1, __ATOMIC_RELEASE);
+        __atomic_add_fetch(&s->peeks, 1, __ATOMIC_RELAXED);
+    }
+    return NULL;
+}
+static void *storm_reader(void *arg)
+{
+    struct peek_storm *s = arg;
+
+    while (!__atomic_load_n(&s->stop, __ATOMIC_ACQUIRE)) {
+        if (get_is(s->kv, "storm/base", "keep") != EFS_OK)
+            __atomic_store_n(&s->bad_read, 1, __ATOMIC_RELEASE);
+        __atomic_add_fetch(&s->reads, 1, __ATOMIC_RELAXED);
+    }
+    return NULL;
+}
+static void peeks_during_changes(int compact)
+{
+    struct peek_storm s;
+    pthread_t pk[2], rd;
+    char k[32], v[32];
+    unsigned long before;
+    int i, round, fl = 0;
+
+    rmtree(g_dir);
+    memset(&s, 0, sizeof(s));
+    s.kv = open_store(EFS_KV_LSM_NOSYNC, 0);
+    CHECK(s.kv != NULL, "open storm store");
+    if (!s.kv)
+        return;
+    if (!compact)
+        kv_compactor_stop(s.kv->ctx); /* flushes only; L0 grows */
+    CHECK(put_s(s.kv, "storm/base", "keep") == EFS_OK, "put base");
+    for (i = 0; i < 2; i++)
+        CHECK(pthread_create(&pk[i], NULL, storm_peeker, &s) == 0, "peeker");
+    CHECK(pthread_create(&rd, NULL, storm_reader, &s) == 0, "reader");
+    for (round = 0; round < 12; round++) {
+        for (i = 0; i < 64; i++) {
+            snprintf(k, sizeof(k), "storm/%02d/%03d", round, i);
+            snprintf(v, sizeof(v), "v%d", i);
+            if (put_s(s.kv, k, v) != EFS_OK)
+                fl++;
+        }
+        before = __atomic_load_n(&s.peeks, __ATOMIC_RELAXED);
+        if (efs_kv_lsm_flush(s.kv) != EFS_OK)
+            fl++;
+        /* BUSY: nothing left to merge; the compactor thread got there. */
+        if (compact) {
+            int rc = efs_kv_lsm_compact(s.kv);
+            if (rc != EFS_OK && rc != EFS_ERR_BUSY)
+                fl++;
+        }
+        /* The peekers kept running across the change (no hang). */
+        while (__atomic_load_n(&s.peeks, __ATOMIC_RELAXED) == before)
+            usleep(100);
+    }
+    __atomic_store_n(&s.stop, 1, __ATOMIC_RELEASE);
+    for (i = 0; i < 2; i++)
+        pthread_join(pk[i], NULL);
+    pthread_join(rd, NULL);
+    CHECK(fl == 0, "puts, flushes and compactions succeed");
+    CHECK(!s.bad_peek, "every peek saw a consistent cut");
+    CHECK(!s.bad_read, "readers kept the row across level changes");
+    CHECK(s.peeks > 0 && s.reads > 0, "peekers and reader ran");
+    CHECK(get_is(s.kv, "storm/11/063", "v63") == EFS_OK, "last row readable");
+    efs_kv_lsm_close(s.kv);
+}
+
+static void test_peeks_during_flush(void)
+{
+    peeks_during_changes(0);
+}
+
+static void test_peeks_during_compaction(void)
+{
+    peeks_during_changes(1);
 }
 
 /* A flush of two key[0] ranges is two L0 files. Compacting one range
@@ -1924,10 +2098,9 @@ int main(void)
     test_l1_grows();
     test_flush_nowait();
     test_pinned_view();
-    /* K30 made this case deterministic (no compactor race); make
-     * leak-check (K26) still sets EFS_TEST_KV_SKIP_PEEK_LIVENESS. */
-    if (!getenv("EFS_TEST_KV_SKIP_PEEK_LIVENESS"))
-        test_peek_beside_reader();
+    test_peek_beside_reader();
+    test_peeks_during_flush();
+    test_peeks_during_compaction();
     test_snapshot_scan_bounds();
     test_full_snapshot();
     test_snapshot_batch_cut();

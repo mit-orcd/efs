@@ -87,7 +87,7 @@ raft_ack_window|py:tests/test_raft_ack_window.py
 host_outbox|py:tests/test_host_outbox.py
 stage_evict_lru|py:tests/test_stage_evict_lru.py
 kv|tests/test_kv
-kv_lsm|EFS_TEST_KV_SKIP_PEEK_LIVENESS=1 tests/test_kv_lsm
+kv_lsm|tests/test_kv_lsm
 kv_insertion_buffer|tests/test_kv_insertion_buffer
 kv_snapshot_tail|tests/test_kv_snapshot_tail
 kv_seg_index|tests/test_kv_seg_index

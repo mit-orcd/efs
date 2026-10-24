@@ -241,6 +241,9 @@ struct kv_lsm {
      * it exclusively, taken after mu on the thread's first (outermost) mu
      * acquisition; see lsm_lock. */
     pthread_rwlock_t view_rw;
+    /* Peeks only (lsm_peek_lock). A writer takes it after view_rw and
+     * holds it exactly while it holds view_rw exclusively. */
+    pthread_mutex_t peek_mu;
     pthread_mutex_t cand_mu; /* lazy candidate-index build by readers */
     pthread_cond_t cv;
     /* Compaction runs on compact_thr so a full-L1 rewrite never holds mu
@@ -285,9 +288,12 @@ static inline void kv_candidates_changed(struct kv_lsm *l)
  * acquisition to its last release, so everything a reader touches is
  * stable while readers hold it shared. A thread that already owns the
  * writer side (recursive callers, apply) reads without the shared lock.
- * Order: mu, then view_rw; readers never take mu. Oct 16 Intel profile:
- * ~43 metadata threads queued on mu on the leader. */
-struct lsm_owner { const struct kv_lsm *l; unsigned depth; };
+ * Order: mu, then view_rw, then peek_mu; readers never take mu. Oct 16
+ * Intel profile: ~43 metadata threads queued on mu on the leader.
+ * W126: peek_mu is the peeks' lock. A writer holds it from the moment
+ * it owns view_rw until it gives view_rw up, so a writer still waiting
+ * for readers (holding mu only) never holds a peek back. */
+struct lsm_owner { const struct kv_lsm *l; unsigned depth; int yielded; };
 #define LSM_OWNER_SLOTS 4
 extern __thread struct lsm_owner lsm_owned[LSM_OWNER_SLOTS];
 /* Shared-side depth. Scan callbacks read the same KV (transaction
@@ -334,14 +340,18 @@ static inline void lsm_lock(struct kv_lsm *l)
     pthread_mutex_lock(&l->mu);
     struct lsm_owner *o = lsm_owner_slot(l, 1);
     if (!o) abort(); /* more than LSM_OWNER_SLOTS LSMs held by one thread */
-    if (o->depth++ == 0)
+    if (o->depth++ == 0) {
         pthread_rwlock_wrlock(&l->view_rw);
+        pthread_mutex_lock(&l->peek_mu);
+        o->yielded = 0;
+    }
 }
 
 static inline void lsm_unlock(struct kv_lsm *l)
 {
     struct lsm_owner *o = lsm_owner_slot(l, 0);
     if (o && --o->depth == 0) {
+        pthread_mutex_unlock(&l->peek_mu);
         pthread_rwlock_unlock(&l->view_rw);
         o->l = NULL;
     }
@@ -349,27 +359,34 @@ static inline void lsm_unlock(struct kv_lsm *l)
 }
 
 /* Read-only peek at writer-owned state (flags, counters, level sizes):
- * every write to it happens under mu and readers only read it, so mu
- * alone gives a consistent value. Unlike lsm_lock it leaves view_rw
- * alone: a peek neither waits for in-flight readers nor, as a queued
- * writer under writer preference, holds new readers back. W126: the
- * apply's flag check and REPORT's l0-hot check each drained the
- * leader's LOOKUP readers once per call. Never wait on cv or change
- * state under a peek. */
+ * every write to it happens with view_rw exclusive, hence under peek_mu,
+ * so peek_mu alone gives a consistent value. A peek takes neither mu nor
+ * view_rw: it neither waits for in-flight readers nor, as a queued
+ * writer under writer preference, holds new readers back, and it does
+ * not wait for a writer that holds mu while it waits for readers (K30's
+ * pinned case). It waits only while a writer owns the view exclusively.
+ * W126: the apply's flag check and REPORT's l0-hot check each drained
+ * the leader's LOOKUP readers once per call. A peek inside a read
+ * section is fine (view_rw, then peek_mu). Never wait on cv or change
+ * reader-visible state under a peek. */
+static inline int lsm_peek_owned(const struct kv_lsm *l)
+{
+    /* The owning writer already holds peek_mu unless it yielded; that
+     * state cannot change between a peek's lock and unlock. */
+    const struct lsm_owner *o = lsm_owner_slot(l, 0);
+    return o && !o->yielded;
+}
+
 static inline void lsm_peek_lock(struct kv_lsm *l)
 {
-    /* Same order rule as lsm_lock: mu after view_rw would deadlock
-     * against a writer that holds mu and waits for this reader. */
-    if (lsm_slot_in(lsm_reading, l, 0)) {
-        fprintf(stderr, "kv-lsm: peek requested inside a read section\n");
-        abort();
-    }
-    pthread_mutex_lock(&l->mu);
+    if (!lsm_peek_owned(l))
+        pthread_mutex_lock(&l->peek_mu);
 }
 
 static inline void lsm_peek_unlock(struct kv_lsm *l)
 {
-    pthread_mutex_unlock(&l->mu);
+    if (!lsm_peek_owned(l))
+        pthread_mutex_unlock(&l->peek_mu);
 }
 
 /* W126: let readers in during a writer's file I/O. At the outermost
@@ -383,30 +400,41 @@ static inline int lsm_view_yield(struct kv_lsm *l)
     struct lsm_owner *o = lsm_owner_slot(l, 0);
     if (!o || o->depth != 1)
         return 0;
+    /* Peeks run during the I/O too, so the yielded holder must not
+     * change anything a peek reads either (next_seq is not peeked). */
+    o->yielded = 1;
+    pthread_mutex_unlock(&l->peek_mu);
     pthread_rwlock_unlock(&l->view_rw);
     return 1;
 }
 
 static inline void lsm_view_reclaim(struct kv_lsm *l, int yielded)
 {
-    if (yielded)
-        pthread_rwlock_wrlock(&l->view_rw);
+    if (!yielded)
+        return;
+    pthread_rwlock_wrlock(&l->view_rw);
+    pthread_mutex_lock(&l->peek_mu);
+    lsm_owner_slot(l, 0)->yielded = 0;
 }
 
 /* Callers wait at depth 1 (a recursive mutex releases one level). */
 static inline void lsm_cond_wait(struct kv_lsm *l, pthread_cond_t *cv)
 {
+    pthread_mutex_unlock(&l->peek_mu);
     pthread_rwlock_unlock(&l->view_rw);
     pthread_cond_wait(cv, &l->mu);
     pthread_rwlock_wrlock(&l->view_rw);
+    pthread_mutex_lock(&l->peek_mu);
 }
 
 static inline int lsm_cond_timedwait(struct kv_lsm *l, pthread_cond_t *cv,
                                      const struct timespec *ts)
 {
+    pthread_mutex_unlock(&l->peek_mu);
     pthread_rwlock_unlock(&l->view_rw);
     int rc = pthread_cond_timedwait(cv, &l->mu, ts);
     pthread_rwlock_wrlock(&l->view_rw);
+    pthread_mutex_lock(&l->peek_mu);
     return rc;
 }
 
