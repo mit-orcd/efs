@@ -112,7 +112,7 @@ row is checked again on current devel before work starts.
 | K17 | **0a/D27** STALE replay convergence: orcd-mini C1 rerun | correctness | VERIFY |
 | K18 | **W54**, **W38** fold/GC data loss: multi-host hardware RDMA gate | correctness | VERIFY |
 | K19 | **W61**, **W62**, **W63** GC: final drain and lost-ledger reconciliation | reclaim correctness | VERIFY |
-| K20 | **W42** capacity reporting on any node count; protection debt (with B5) | correctness | VERIFY. **Oct 24 (B5, branch `claude/devel-b-geometry-fbcf5b`, not merged): the open one-QUOTA-member question is answered and FIXED: a full member no longer creates silent protection debt (placed around, or ENOSPC at three); status/df equal the 3-of-N bound at 3 to 8 loopback members ([evidence](b-geometry-capacity-20261024.md)). Named real-host capacity acceptance NOTRUN.** |
+| K20 | **W42** capacity reporting on any node count; protection debt (with B5) | correctness | VERIFY. **Oct 24 (B5, branch merged into devel (`5a09fd938`)): the open one-QUOTA-member question is answered and FIXED: a full member no longer creates silent protection debt (placed around, or ENOSPC at three); status/df equal the 3-of-N bound at 3 to 8 loopback members ([evidence](b-geometry-capacity-20261024.md)). Named real-host capacity acceptance NOTRUN.** |
 | K21 | **W119** concurrent RDMA failures and blocked clean stop (recorded Oct 15, before many fixes); **W65** graceful-shutdown wait | correctness / liveness | VERIFY first, then FIX |
 | K22 | **W23** universal follower memory/lag bound | resource bound | FIXED, merged into devel Oct 22 (derived KV memory budget, unapplied-log bound with busy AppendEntries replies, leader admission at 3/4, leadership requires capacity per D30; `efs-mgmt raft-status` shows the bound). VERIFY: the production-scale plateau measurement, snapshot import into a stalled follower and multi-host/RDMA runs are NOTRUN for the parent session ([summary](../../results/measure/20261022-k22-follower-bound/SUMMARY.md)) **REOPENED Oct 22 (S1 P1): `low_capacity` counts `last_index − last_applied`, which includes entries not yet known committed; after a leader loss or a restart with a retained tail every voter can be vetoed from campaigning, nothing clears it, and no messages are sent (reproduced: `scripts/reviews/k22_capacity_tail.c`, three voters, 96-entry tails, cap 128, zero messages in 1,000 ticks). FIX: distinguish an uncommitted tail that needs an election from inability to apply; allow recovery leadership with bounded headroom while admission stays held; a delivering three-voter test that elects, commits the tail and resumes**. **S1 FIXED, merged Oct 22 (`001b5da30`): `low_capacity` counts only `commit_index − last_applied`, so an uncommitted tail never vetoes a campaign; `capacity_hold` retries `apply_committed`; the three-voter delivering test in `test_follower_bound` elects, commits a 96-entry tail and resumes; `make test` PASS on an efs VM.** **Live on xorinox (Oct 23, merged Oct 23 (`306a01fd4`)): PASS (scoped) for a 302 s plateau at fault-build caps (32,768 entries, 8 MiB budget, follower RSS flat at about 100 MB, quorum commit rate unchanged) and for SIGSTOP stall and AppendEntries catch-up; NOTRUN: the production-scale plateau (about 6 h here), snapshot import (needs a 1 GiB log lag) and live leader admission at 3/4 ([evidence](gates-xorinox-20261022.md#k22--w23-follower-memory-and-lag-bound)).** |
 | K23 | **W71** hardware power-loss gate; **W74** automatic repair; **W123** crash recovery | durability scope | DECIDED Oct 23 (D40): W71, W74 and W123 stay deferred past alpha 1.0; W154 rebuild-on-return is the only repair in alpha. Was DECIDE (deferred by current scope) |
@@ -356,7 +356,7 @@ alternatives reduces both product complexity and the supported test matrix.
   Find readers that take the name as an argument (`env_u64("EFS_…")` and the
   `getenv(name)` helpers in `bufpool.c`, `write.c`, `packer.c`, `raft_host.c`,
   `sim_disk.c`); grepping `getenv("` alone undercounts.
-  **Oct 24 (branch `claude/devel-a6-inventory-7f975e`, not merged):
+  **Oct 24 (branch merged into devel (`6ed4be4a8`)):
   [inventory](a6-settings-inventory-20261024.md) of every variable, CLI
   option, runtime management setting and compile-time mode, found by
   `scripts/env_inventory.py` (helpers by fixed point); `make test` fails a
@@ -502,7 +502,7 @@ facts for A6, not decisions.
 - [ ] **B1** Check ordinary chunks and packed segments use exactly D1/D2/P, each
   on a distinct eligible node. Verify actual persisted fragment inventories and
   authoritative mappings, not just placement-function outputs.
-  **Oct 24 (branch `claude/devel-b-geometry-fbcf5b`, not merged): loopback
+  **Oct 24 (branch merged into devel (`5a09fd938`)): loopback
   PASS at 3 to 8 members: every chunk row, span and pack object of the test
   files names D1/D2/P on three distinct members, and every store's fragment
   records match them (on the row's node, nowhere else). FIXED: the reader

@@ -1572,11 +1572,14 @@ full acceptance are separate states.
 
 ### Recent evidence and remaining acceptance
 
+[Oct 24 merge: A6 inventory, S1–S5/F4 docs, B1–B5, Stage 2 driver](../status/a6-settings-inventory-20261024.md):
+**merged into devel; merged-tree `make test-all` on intel2 at `c894ec5ae`: 456 commands, 0 FAIL, 14 NOTRUN host limits (1,831 s; raw: intel2 `~/efs-artifacts/merge-wave4-20261024/`, `SHA256SUMS` `2bf6bbe2…1f10`).** `test_k33_payload.py` passed in this run; it fails intermittently (K34, fix in progress). Open for the user: the A/B decision table (A7) and findings F22/F23 (fsync with a member down; unclean-stop stores).
+
 [Oct 24 merge: placement spread, K33 acceptance, test hygiene, W126, K15/K29 rule](../status/k33-acceptance-20261024.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `a2326a369`: 449 commands, 0 FAIL, 14 NOTRUN host limits (1,340 s; raw: intel2 `~/efs-artifacts/merge-wave3-20261024/`, `SHA256SUMS` `3e1f0f95…b2c`).** Placement needs a fresh format. Live gates for all five stay NOTRUN.
 
 [Alpha 1.0 user docs and limitations, S1–S5 and F4](../status/s-docs-alpha-1.0-20261024.md):
-**drafts on `claude/devel-s-docs-e654d8`, not merged, not approved.**
+**drafts merged into devel (`3a2b44706`), not approved.**
 [Surface list and effective settings](../using/alpha-1.0-surface.md),
 [POSIX subset](../using/alpha-1.0-posix.md),
 [guide](../using/alpha-1.0-guide.md) and
@@ -1591,7 +1594,7 @@ Also found: `fsync` returns `EIO` while any member is down, and for good
 after a member's unclean stop (F22, F23).
 
 [B1–B5 geometry, placement and usable capacity](../status/b-geometry-capacity-20261024.md):
-**PASS (scoped, loopback) on `claude/devel-b-geometry-fbcf5b`, not merged.**
+**PASS (scoped, loopback) merged into devel (`5a09fd938`).**
 xorinox `make test-all` at `17aac881c`: 453 commands, 0 FAIL, 13 NOTRUN
 host limits. New `tests/test_b_geometry.c` (unit) and
 `tests/test_b_geometry.py` (3 to 8 members, every store's fragment records
@@ -1607,7 +1610,7 @@ member down (base 2/3, branch 1/3), B6 follow-up.
 **user decision Oct 24: the append record loss was never reproduced and has no root cause; K9 is closed and reopens if a loss is seen again.** Not a passing gate.
 
 [A6 settings inventory and the decision-free part of A7/A8](../status/a6-settings-inventory-20261024.md):
-**PASS (scoped), on `claude/devel-a6-inventory-7f975e`, not merged.** amd `make test-all` fails only what the untouched base fails (RDMA on rxe0, one fault-test timeout).
+**PASS (scoped), merged into devel (`6ed4be4a8`).** amd `make test-all` fails only what the untouched base fails (RDMA on rxe0, one fault-test timeout).
 Before figure for A11: 139 `EFS_*` variables read on the base (13 A/B
 selectors, 44 numeric tunables, 34 observability, 3 test hooks in normal
 builds), 127 on the branch. `make test` fails a new reader without an
@@ -1619,7 +1622,7 @@ for the user; none removed. Portal and launch-script changes listed for the
 parent.
 
 [Stage 2 qualification driver `scripts/qualify.py`](../status/stage2-qualify-driver-20261024.md):
-**driver PASS (scoped), on `claude/devel-qual-driver-f46b04`, not merged.**
+**driver PASS (scoped), merged into devel (`ebfdbfe78`).**
 One command runs the POSIX suites, the live harnesses, E1–E3 and a pluggable
 B-checks gate against a described cluster, with per-gate commands, deadlines,
 verdicts, live build identity and fixtures, `SHA256SUMS`, a summary draft and

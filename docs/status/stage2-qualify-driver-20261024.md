@@ -4,7 +4,7 @@
 (stale harness CLI; EIO during a member outage); code gate on intel1 PASS
 with host limits except `tests/test_k33_payload.py`, which fails as often on
 the base (proposed K34).** Branch
-`claude/devel-qual-driver-f46b04`, not merged. Real-host qualification runs
+merged into devel (`ebfdbfe78`). Real-host qualification runs
 belong to the parent session: this page qualifies the driver, not a topology.
 
 ## Purpose
