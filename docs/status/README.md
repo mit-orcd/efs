@@ -18,6 +18,14 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[K35: fsync with a member down, only with proof (D42, F22)](k35-fsync-degraded-20261024.md):
+**FIXED, PASS (scoped, loopback), not merged; branch `claude/devel-k35-fsync-b63807`, code `817a71b1f`, `36ac1b7a6`; xorinox `make test-all`: exit 0 at `36ac1b7a6`, 452 test commands, 0 FAIL, 14 NOTRUN host limits (raw: xorinox `~/efs-artifacts/k35-20261024/`, `SHA256SUMS` `06836fd2…6a1e`).**
+fsync COMMITs only the nodes holding the file's unproven fragments and succeeds
+per stripe with two durable fragments and a durable degraded mark (new Raft tag
+249), else `EIO` with the stripe logged; on four or more members fragments go
+to available members; `status` shows `Protection:`. Live multi-host and RDMA
+verification NOTRUN (parent).
+
 [Oct 24 merge: A6 inventory, S1–S5/F4 docs, B1–B5, Stage 2 driver](a6-settings-inventory-20261024.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `c894ec5ae`: 456 commands, 0 FAIL, 14 NOTRUN host limits (1,831 s; raw: intel2 `~/efs-artifacts/merge-wave4-20261024/`, `SHA256SUMS` `2bf6bbe2…1f10`).** `test_k33_payload.py` passed in this run; it fails intermittently (K34, fix in progress). Open for the user: the A/B decision table (A7) and findings F22/F23 (fsync with a member down; unclean-stop stores).
 
