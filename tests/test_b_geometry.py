@@ -102,6 +102,11 @@ def driver(c, ids, mounts, tag, extra=()):
         {k: v for k, v in res['items'].items() if v['verdict'] != 'PASS'}, indent=1)[:6000]
     for k in ('B1', 'B2', 'B3', 'B5'):
         assert res['items'][k]['verdict'] == 'PASS', (tag, k)
+    # K33 voters: group 2 on {1,2,3} at three members, {2,3,4} from four;
+    # segment destinations are the ring, not those voters.
+    assert res['voters']['2'] == ([2, 3, 4] if len(ids) >= 4 else [1, 2, 3]), res['voters']
+    if len(ids) >= 4:
+        assert res['items']['B4']['on_voters_share'] < 1, res['items']['B4']
     # Every store was readable here: the inventory is complete.
     assert not [x for x in res['items']['B1']['notrun']], res['items']['B1']['notrun']
     assert res['items']['B1']['inventory_checked'] > 0

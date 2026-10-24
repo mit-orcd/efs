@@ -42,7 +42,13 @@ RAFT = '''raft-status 127.0.0.1:40002 node=2
   group 0 hosted=1 role=leader leader=1 term=3 commit=9 applied=9 voters=0x7 joint=0 retired=0 last=9
   group 2 hosted=1 role=follower leader=2 term=2 commit=9 applied=9 voters=0xe joint=0 retired=0 last=9
 '''
-assert b.parse_voters(RAFT) == {0: (1, [1, 2, 3]), 2: (1, [2, 3, 4])}
+assert b.parse_voters(RAFT) == {0: (True, 'leader', [1, 2, 3]), 2: (True, 'follower', [2, 3, 4])}
+# Node 1's retired group-2 replica still shows {1,2,3}; it does not count.
+RETIRED = RAFT.replace('voters=0xe joint=0 retired=0', 'voters=0x7 joint=0 retired=1')
+assert b.parse_voters(RETIRED)[2] == (False, 'follower', [1, 2, 3])
+LEADER = RAFT.replace('role=leader', 'role=follower').replace('role=follower leader=2', 'role=leader leader=2')
+assert b.group_voters([b.parse_voters(RETIRED), b.parse_voters(RAFT)]) == {0: [1, 2, 3], 2: [2, 3, 4]}
+assert b.group_voters([b.parse_voters(RETIRED)]) == {0: [1, 2, 3]}
 
 CHUNKS = '''raft-getchunks status=0 primary=2 ino=81927 count=3 cis=0,1,2
   ci=0 nodes=1,2,3 base_gen=0 obj_gen=11 ck0=0a0b0c0d spans=0 seq=0

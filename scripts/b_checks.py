@@ -73,12 +73,26 @@ def parse_status(text):
 
 
 def parse_voters(text):
-    """`efs-mgmt raft-status` -> {group: (hosted, [voter node ids])} (raft id = node id - 1)."""
+    """`efs-mgmt raft-status` -> {group: (serves, role, [voter node ids])}
+    (raft id = node id - 1). A retired replica (K33 M6) does not serve and
+    may keep a voter set it was removed from."""
     out = {}
-    for g, hosted, mask in re.findall(r'group (\d+) hosted=(\d+) .*?voters=(0x[0-9a-f]+)', text):
+    for g, hosted, role, mask, retired in re.findall(
+            r'group (\d+) hosted=(\d+) role=(\S+) .*?voters=(0x[0-9a-f]+) joint=\d+ retired=(\d+)', text):
         v = int(mask, 16)
-        out[int(g)] = (int(hosted), [b + 1 for b in range(32) if v >> b & 1])
+        out[int(g)] = (int(hosted) == 1 and retired == '0', role, [b + 1 for b in range(32) if v >> b & 1])
     return out
+
+
+def group_voters(views):
+    """{group: voters} from the raft-status views of all members: the
+    leader's view, else any serving replica's."""
+    best = {}
+    for view in views:
+        for g, (serves, role, v) in view.items():
+            if serves and (g not in best or role == 'leader'):
+                best[g] = v
+    return best
 
 
 def parse_getchunks(text):
@@ -453,11 +467,7 @@ def main(argv=None):
     result['members'] = {str(i): members[i] for i in ids}
     result['state'] = st0['state']
     result['versions'] = {str(i): c.version(members[i]['ep']) for i in ids}
-    voters = {}
-    for i in ids:
-        for g, (hosted, v) in c.voters(members[i]['ep']).items():
-            if hosted:
-                voters.setdefault(g, v)
+    voters = group_voters(c.voters(members[i]['ep']) for i in ids)
     result['voters'] = {str(g): v for g, v in voters.items()}
     down = [i for i in ids if not members[i]['up']]
     if a.expect_members and n != a.expect_members:
