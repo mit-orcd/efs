@@ -76,7 +76,7 @@ selects fragment I/O independently of transport; buffered is the daemon default.
 | `EFS_PERF_PATH` / `EFS_STRACE_PATH` | output paths for recorders started by the binaries themselves |
 | `EFS_STRACE_EXPR` | strace syscall filter |
 | `EFS_FAULT_WITHHOLD=<ino>:<ci>` | **client:** implemented only in `EFS_FAULTS=1` builds; omits that REPORT record before serialization; `/tmp/efs/fault` containing `WITHHOLD <ino>:<ci>` overrides the environment, and `OFF` disables it |
-| `EFS_FAULT_COMPACT_DIE=<n>` | **test only:** `_exit(99)` after the n-th finished compaction output segment, before the manifest rename; compiled only with `EFS_FAULTS=1` and exercised by `tests/faults/test_kv_compact_crash` (K24; was `EFS_KV_COMPACT_DIE`, read in every build) |
+| `EFS_FAULT_COMPACT_DIE=<n>` | **test only:** `_exit(99)` after the n-th finished compaction output segment, before the manifest rename; compiled only with `EFS_FAULTS=1` and exercised by `tests/faults/test_kv_compact_crash` (K24; was `EFS_KV_COMPACT_DIE`, read in every build). A normal `efsd` or `efs-fuse` prints `<prog>: <VAR> ignored: this build has no fault hooks` at startup for each `EFS_FAULT_*` and for `EFS_KV_COMPACT_DIE` in its environment (W149) |
 
 ## Quotas and capacity
 

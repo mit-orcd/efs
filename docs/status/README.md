@@ -18,6 +18,20 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[Test hygiene: K32 entry-count flake, W149, W140](test-hygiene-k32-w149-w140-20261024.md):
+**PASS (scoped) on branch `claude/devel-test-hygiene-8e9443`, not merged.**
+On nuc at `8cd6e42be`, serial `make test-all` PASS, and the summary runner
+at 8 jobs reports 443 commands, 0 FAIL, 14 NOTRUN host limits (twice).
+
+- `test_k32_entry_count` failed 40/48 on the base under the runner. The
+  test was wrong: the 1 ms cohort linger is a bound with a single-ADMIT
+  fallback. Its counts no longer depend on scheduling: 0/288 FAIL.
+- W149: normal builds name fault variables as ignored.
+- W140: a TXN_BATCH with an inner tag the apply halts on is now refused at
+  the gate. The cluster gate is NOTRUN.
+- The merged K33 client-view test now waits for the increment-2 joiner
+  lines.
+
 [orcd-mini fresh deploy of `cb970ca7c` (RDMA, direct I/O)](orcd-mini-deploy-cb970ca7c-20261024.md):
 **core 216/216, extras 4/5 + mmap SKIP, durability 27/27, `.efs` 10/10,
 two-client 68/68 PASS; expiry 29/29 checks PASS** after the fixture's
