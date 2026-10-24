@@ -19,28 +19,28 @@ the selected path. See the [build prerequisites](../../README.md#build-and-start
 Use free ports 17432–17434 and three empty storage roots for this disposable
 example; the wrapper retires an existing daemon on a reused port/path.
 
-Start **all** servers first: `mkfs` commits the members that have joined at
-that moment as the cluster membership; the second and third join the first:
+The first server creates the cluster; the second and third join it. The
+cluster forms by itself once three servers are there (node ids come from the
+cluster: the first is 1, the others follow in address order):
 
 ```bash
 export EFS_TRANSPORT=tcp
 EFS_DEMO_ROOT=$(mktemp -d /tmp/efs-demo.XXXXXX)
-./scripts/server.sh 127.0.0.1:17432 "$EFS_DEMO_ROOT/s1:5G" --node-id 1 --no-direct-io
-./scripts/server.sh 127.0.0.1:17433 "$EFS_DEMO_ROOT/s2:5G" 127.0.0.1:17432 --node-id 2 --no-direct-io
-./scripts/server.sh 127.0.0.1:17434 "$EFS_DEMO_ROOT/s3:5G" 127.0.0.1:17432 --node-id 3 --no-direct-io
+./scripts/server.sh 127.0.0.1:17432 "$EFS_DEMO_ROOT/s1:5G" --no-direct-io
+./scripts/server.sh 127.0.0.1:17433 "$EFS_DEMO_ROOT/s2:5G" 127.0.0.1:17432 --no-direct-io
+./scripts/server.sh 127.0.0.1:17434 "$EFS_DEMO_ROOT/s3:5G" 127.0.0.1:17432 --no-direct-io
 ```
 
-Node IDs must be 1..N with no gaps; specify them rather than relying on the
-wrapper's address-derived ID. The member count and the metadata voters come
-from the membership `mkfs` commits, so there is no count to configure (efsd
-refuses the removed `EFS_MD_RAFT_N`). Confirm all three logs under
-`$EFS_DEMO_ROOT/s*/log/efsd.log` show listening and
-`./efs-mgmt status 127.0.0.1:17432` lists all three nodes before
-initialization: `mkfs` refuses fewer than three and names the missing ones,
-and a node that joins after `mkfs` is refused (adding a node to a formed
-cluster is not implemented yet).
+There is no node id, member count or cluster file to give (efsd refuses the
+removed `--node-id` and `EFS_MD_RAFT_N`). One or two servers stay unready and
+say so in `$EFS_DEMO_ROOT/s*/log/efsd.log`; with the third the logs show
+`raft-host: formed: 3 members`. A server started later with the address of
+any member (or `join` instead of an address, to find the cluster on the local
+subnet) is added online. `./efs-mgmt status 127.0.0.1:17432` lists the
+members. `mkfs` below is optional: it forms at once if the automatic
+formation has not happened yet, and changes nothing afterwards.
 
-Initialize the single export through one seed, then mount:
+Mount:
 
 ```bash
 ./efs-mgmt mkfs 127.0.0.1:17432          # initialize the single export

@@ -33,10 +33,12 @@ back to it.
 identity, then uses a Linux pidfd to send SIGTERM and wait up to 60 seconds.
 A timeout retains the process and reports failure; it does not escalate to
 SIGKILL. Stale PID identity is not authority to signal an unrelated process.
-Use explicit `--node-id 1..N` (no gaps): the wrapper's derived address ID is
-not a valid member id. The member count and the metadata voters come from the
-membership `mkfs` commits; efsd refuses the removed `EFS_MD_RAFT_N`. If startup exits
-immediately, the wrapper prints the last log lines.
+There is no node id to give: the first node is 1 and the cluster assigns the
+others (K33). The member count and the metadata voters come from the committed
+membership; efsd refuses the removed `--node-id` and `EFS_MD_RAFT_N`. A third
+positional argument joins: a member's `addr:port`, or `join` to find the
+cluster on the local subnet. If startup exits immediately, the wrapper prints
+the last log lines.
 
 The client needs **one** server address; it discovers the rest. If it runs on
 the same host as a server, it prefers the local fragment.
@@ -77,27 +79,39 @@ instructions can make binaries incompatible with a different host.
 ```bash
 # Disposable empty roots and free ports; do not reuse an active cluster here.
 export EFS_TRANSPORT=tcp
-./efsd --node-id 1 --addr 127.0.0.1 --port 17432 --storage /tmp/efs/s1 &
-./efsd --node-id 2 --addr 127.0.0.1 --port 17433 --storage /tmp/efs/s2 --join 127.0.0.1:17432 &
-./efsd --node-id 3 --addr 127.0.0.1 --port 17434 --storage /tmp/efs/s3 --join 127.0.0.1:17432 &
+./efsd 127.0.0.1:17432 /tmp/efs/s1 &                                    # creates the cluster
+./efsd --join 127.0.0.1:17432 --listen 127.0.0.1:17433 /tmp/efs/s2 &    # joins it
+./efsd --join 127.0.0.1:17432 --listen 127.0.0.1:17434 /tmp/efs/s3 &    # third: forms
 
-# Wait for all three listeners and membership; inspect status before mkfs.
 ./efs-mgmt status 127.0.0.1:17432
-./efs-mgmt mkfs 127.0.0.1:17432
 mkdir -p /mnt/efs
 ./efs-fuse 127.0.0.1:17432 /mnt/efs
 ```
 
-`mkfs` is an alias for `raft-mkfs`. It forms the cluster: it commits the
-members that have joined at that moment (node ids, endpoints, count) in both
-metadata groups, and every daemon derives the member count and the voters
-from that record from then on, across restarts. Start every server first and
-only then create the export: `mkfs` refuses fewer than three members or a gap
-in node ids and names who is missing, and a node that joins after formation
-is refused (node addition is not implemented yet). Before formation a daemon
-serves no client metadata. A repeated `mkfs` keeps the first membership.
+`efsd ADDR:PORT STORAGE` creates a cluster in fresh storage (this node is
+node 1 and mints the cluster identity) or restarts the node of that store.
+`efsd --join [SEED] STORAGE` joins: through SEED (any member's
+`ADDR:PORT`, across subnets too) or, without SEED, through a cluster found on
+the local subnet (UDP broadcast on each interface's own subnet, port 17430;
+`--discovery-port`, `--discover-on IFACE`). A joiner takes the address of the
+interface that reaches the cluster and the cluster's service port unless
+`--listen ADDR:PORT` names its endpoint (needed for several nodes on one
+host). Several clusters answering need a SEED; when nobody answers the node
+says so and waits; discovery never creates a cluster and never decides
+membership.
 
-Several `--storage` roots (1–24) are allowed. New writes go to the path with
+The cluster forms by itself once the first node and two joiners are there:
+the first node proposes node ids in endpoint order, each joiner persists a
+promise for that proposal, and the cluster commits it in both metadata
+groups (docs/status/k33-membership-protocol-20261023.md, M4'). Every daemon
+derives the member count and the voters from the committed record from then
+on, across restarts. A node that joins later is added online with the next
+id; group 2 moves to {2,3,4} at four members and later nodes add storage.
+Before formation a daemon serves no client metadata. `mkfs` (an alias for
+`raft-mkfs`) is optional: before formation it proposes at once on the first
+node; afterwards it repeats the notices and keeps the first membership.
+
+Several storage roots (1–24, separated with commas in STORAGE) are allowed. New writes go to the path with
 the shortest writer queue (fairness-weighted by bytes already assigned).
 Overwrites stay on the existing path.
 
@@ -110,7 +124,7 @@ logs/PID files use the first root. Metadata uses the first root unless
 | Dir | Contents |
 |---|---|
 | `data/` | fragments (file chunks) |
-| `mdraft/` | metadata: this node's Raft log, KV segments, applied index per group; `owner.lock` (one daemon per store), `boot.bin` (durable boot counter) and `identity.bin` (node id and the committed membership) |
+| `mdraft/` | metadata: this node's Raft log, KV segments, applied index per group; `owner.lock` (one daemon per store), `boot.bin` (durable boot counter) and `identity.bin` (store token, cluster identity, node id and endpoint, the formation promise or the committed membership) |
 | `meta/` | node table (`cluster_nodes.bin`, the joined nodes; not the committed membership) and `usage.bin` |
 | `log/` | logs, PID file, optional `perf` output |
 
@@ -133,16 +147,17 @@ and a verified data migration before any destructive procedure. `mkfs` is
 initialization, not a fragment-format converter.
 
 `--meta-storage <root>` puts `mdraft/` on a root the fragment writers do not
-use. Default is the first `--storage` root; the flag does not move an
+use. Default is the first storage root; the flag does not move an
 existing `mdraft/`.
 
 ## Auto-rejoin
 
-Membership is saved under the storage path. Restart with the **same path and
-node id** and the server rejoins by itself — no `--join`:
+Membership is saved under the storage path. Restart with the **same
+storage** and the server rejoins by itself through its persisted peers; the
+store keeps its cluster, node id and endpoint (another endpoint is refused):
 
 ```bash
-./efsd --node-id 3 --addr 127.0.0.1 --port 17434 --storage /tmp/efs/s3 &
+./efsd 127.0.0.1:17434 /tmp/efs/s3 &                    # or the same --join command
 ```
 
 If peers are down it starts standalone and retries in the background. Local
@@ -159,8 +174,7 @@ Disable loading/saving the membership list (not a data or metadata wipe):
 ```bash
 ./scripts/server.sh 127.0.0.1:17432 /tmp/efs/s1:5G
 # or
-./efsd --node-id 1 --addr 127.0.0.1 --port 17432 \
-       --storage /tmp/efs/s1 --quota 5G
+./efsd 127.0.0.1:17432 /tmp/efs/s1 --quota 5G
 ```
 
 Suffixes: `T`, `G`, `M`, `K`. The quota belongs to the node across its storage
@@ -257,8 +271,7 @@ Fragment I/O uses the page cache unless you pass `--direct-io` (`O_DIRECT`,
 often better on local NVMe):
 
 ```bash
-./efsd --node-id 1 --addr 127.0.0.1 --port 17432 \
-       --storage /tmp/efs/s1 --direct-io
+./efsd 127.0.0.1:17432 /tmp/efs/s1 --direct-io
 ```
 
 `O_DIRECT` bypasses the page cache; it does not itself establish persistence.
