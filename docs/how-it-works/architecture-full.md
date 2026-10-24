@@ -2988,7 +2988,14 @@ remaining gates and limits](../status/v030-release-scope-20261012.md). Execution
 | A9 `EFS_METADATA_BALANCE` | **Elections only for alpha.** Remove the co-location pump and its variable; an unqualified tiny-file speedup does not justify another production mode. Elections alone do not guarantee distributed leaders: measure and report actual leader placement, and keep the metadata-distribution roadmap. This does not complete the "nothing concentrated on one node" goal. |
 | Buffered and direct fragment I/O | **Both may stay, at a cost.** They are deployment choices, not correctness modes: both must give the same `fsync`, recovery and protection guarantees, and both pass every Stage 2 gate. EFS keeps one documented default that users get by omitting the flag. The smaller alpha alternative is one qualified mode, with the second only for a concrete deployment need with its gates complete (open: which default). Durability is one invariant, never a selectable mode. |
 
-The other A6 selectors ([table](../status/a6-settings-inventory-20261024.md#decision-table-for-the-parent-a7)) are not decided yet.
+A6 read-path selectors ([table](../status/a6-settings-inventory-20261024.md#decision-table-for-the-parent-a7)), user Oct 24:
+
+- `EFS_READ_PREFETCH`: **16 chunks built in**; remove the variable.
+- `EFS_FUSE_SPLICE_READ`: **off**; remove the switch and the splice path.
+- `EFS_KV_BLOOM`: **always on**; remove the `0` path.
+- `EFS_READ_VERIFY`: **open until a code audit** confirms that every GET path, packed reads and reconstruction included, validates the requested identity and payload integrity before returning bytes. K16's record format and gates run with verification off do not prove that coverage. If the audit confirms the client re-hash is redundant, remove it; otherwise make verification the one built-in behavior. No toggle either way.
+
+The remaining A6 selectors are not decided yet.
 
 ### D41 — K9 / W87 closed without resolution (user, Oct 24)
 
