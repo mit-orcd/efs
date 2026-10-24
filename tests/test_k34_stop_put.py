@@ -23,9 +23,10 @@ node 3 missing, and read EIO with node 2 down. Now:
    node 2, the member that went away, never node 3.
 3. Node 2 restarts; the file still reads back exactly.
 4. Stale down-mark (B6): mount A marked node 2 down in step 1 (a 30 s
-   cooldown) and it is back. A small file written now is packed into a
-   segment on all three members; node 3 then stops, and the file must read
-   back from nodes 1 and 2 (the read probes node 2 instead of skipping it).
+   cooldown) and it is back. A small file packed at the start into a
+   segment on all three members (written through its own mount) must read
+   back through mount A with node 3 stopped, from nodes 1 and 2: the read
+   probes node 2 instead of skipping it.
 Skipped (NOTRUN, exit 0) without /dev/fuse, fusermount3 or efs-fuse.
 """
 import os, re, shutil, sys, tempfile, threading, time
@@ -72,6 +73,17 @@ try:
     c.start(3, join=1, extra_env={'EFS_TEST_PUT_BUSY_FILE': str(busy)})
     for i in (1, 2, 3):
         c.wait_log(i, r'raft-host: formed: 3 members')
+    # 0. A small file, packed into a segment on all three members, written
+    # through its own mount so mount A never caches it.
+    base = packed_total(c)
+    w = Mount(c, 1, 'mnt-w')
+    small = payload('k34-small', 4096)
+    (w.path / 'small').write_bytes(small)
+    w.close()
+    end = time.time() + 60
+    while packed_total(c) <= base and time.time() < end:
+        time.sleep(0.2)
+    assert packed_total(c) > base, 'the small file was never packed'
     a = Mount(c, 1, 'mnt-a')
     mounts.append(a)
     busy.touch()
@@ -114,14 +126,7 @@ try:
     c.wait_members([1, 2, 3], 3)
     assert (d.path / 'f').read_bytes() == want, 'mount D: f differs after node 2 returned'
 
-    # 4. Packed file, node 3 stops while mount A still marks node 2 down.
-    base = packed_total(c)
-    small = payload('k34-small', 4096)
-    (a.path / 'small').write_bytes(small)
-    end = time.time() + 30
-    while packed_total(c) <= base and time.time() < end:
-        time.sleep(0.2)
-    assert packed_total(c) > base, 'the small file was never packed'
+    # 4. The packed file, node 3 stopped, while mount A still marks node 2 down.
     c.stop(3)
     late = time.time() - stopped
     assert late < 28, f'step 4 began {late:.1f} s after node 2 stopped: the client cooldown may be over'
