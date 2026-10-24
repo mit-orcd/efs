@@ -49,7 +49,7 @@ class Cluster:
     def ep(self, i):
         return f'{self.hosts.get(i, HOST)}:{self.ports[i]}'
 
-    def start(self, i, join=None, store=None, extra_env=None, listen=True, args=()):
+    def start(self, i, join=None, store=None, extra_env=None, listen=True, args=(), quota='1G'):
         """join: None (seed / restart by endpoint), a node number, 'discover'
         (no SEED: local-subnet discovery on lo) or an ADDR:PORT string."""
         store = self.dir / (store or f'n{i}')
@@ -65,7 +65,9 @@ class Cluster:
             if listen:
                 argv += ['--listen', self.ep(i)]
             argv += [str(store)]
-        argv += ['--quota', '1G', '--writers', '2', '--discovery-port', str(self.disc_port), *args]
+        if quota:
+            argv += ['--quota', quota]
+        argv += ['--writers', '2', '--discovery-port', str(self.disc_port), *args]
         with open(self.dir / f'n{i}.log', 'a') as log:
             log.write(f'\n==== start {time.time():.3f} {" ".join(argv)}\n')
             log.flush()
@@ -145,3 +147,100 @@ class Cluster:
             time.sleep(0.3)
         raise AssertionError(f'voters never settled: {got}\n' +
                              '\n'.join(self.last_run(i)[-1500:] for i in ids))
+
+    def restart(self, i, extra_env=None, quota='1G'):
+        """Start logical node i again from its store: the seed store by its
+        endpoint, a joined store with --join through a live member."""
+        seed = None if i == 1 else next((k for k in sorted(self.procs)
+                                          if k != i and self.alive(k)), 1)
+        return self.start(i, join=seed, extra_env=extra_env, quota=quota)
+
+    def wait_any_exit(self, ids, timeout=60):
+        """The first of ids whose daemon ends; returns (node, status)."""
+        end = time.time() + timeout
+        while time.time() < end:
+            for i in ids:
+                if i in self.procs and self.procs[i].poll() is not None:
+                    return i, self.wait_exit(i)
+            time.sleep(0.05)
+        raise AssertionError(f'none of {ids} ended\n' +
+                             '\n'.join(self.last_run(i)[-1500:] for i in ids))
+
+    def members(self, i):
+        """{node id: (endpoint, 'up'|'down')} from `efs-mgmt status` on node i."""
+        rc, out = mgmt(self.env, 'status', self.ep(i))
+        assert rc == 0, out
+        n = int(re.search(r'Cluster nodes \((\d+)\)', out).group(1))
+        rows = re.findall(r'^\s+node (\d+): (\S+)\s+(up|DOWN)\b', out, re.M)
+        assert len(rows) == n, out
+        return {int(k): (ep, st.lower()) for k, ep, st in rows}
+
+    def wait_members(self, ids, count, timeout=60):
+        """Every node in ids reports the same `count` members: ids 1..count,
+        distinct endpoints (no duplicate identity). Returns the table."""
+        end, last = time.time() + timeout, {}
+        while time.time() < end:
+            try:
+                last = {i: self.members(i) for i in ids}
+            except AssertionError as e:
+                last = {'error': str(e)}
+                time.sleep(0.3)
+                continue
+            tabs = [{k: v[0] for k, v in t.items()} for t in last.values()]
+            if all(t == tabs[0] for t in tabs) and sorted(tabs[0]) == list(range(1, count + 1)):
+                assert len(set(tabs[0].values())) == count, tabs[0]
+                return tabs[0]
+            time.sleep(0.3)
+        raise AssertionError(f'members never settled at {count}: {last}')
+
+
+def fuse_ok():
+    import shutil
+    return FUSE.exists() and os.access('/dev/fuse', os.R_OK | os.W_OK) and \
+        bool(shutil.which('fusermount3'))
+
+
+class Mount:
+    def __init__(self, c, node, name, env=None):
+        self.path = c.dir / name
+        self.path.mkdir()
+        self.logp = c.dir / f'{name}.log'
+        self.log = open(self.logp, 'w')
+        self.p = subprocess.Popen([str(FUSE), c.ep(node), str(self.path), '-f'],
+                                  stdout=self.log, stderr=subprocess.STDOUT,
+                                  env=env or c.env)
+        end = time.time() + 30
+        while time.time() < end and not os.path.ismount(self.path):
+            if self.p.poll() is not None:
+                raise AssertionError(self.logp.read_text()[-2000:])
+            time.sleep(0.1)
+        assert os.path.ismount(self.path), self.logp.read_text()[-2000:]
+
+    def close(self):
+        subprocess.run(['fusermount3', '-u', str(self.path)], capture_output=True)
+        try:
+            self.p.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            subprocess.run(['fusermount3', '-uz', str(self.path)], capture_output=True)
+            self.p.kill()
+            self.p.wait()
+
+
+def payload(name, size):
+    import hashlib
+    out, k = bytearray(), 0
+    while len(out) < size:
+        out += hashlib.sha256(f'{name}:{k}'.encode()).digest()
+        k += 1
+    return bytes(out[:size])
+
+
+def fragments(store):
+    """Fragment files (<chunk>.<fragment>.<generation>) under one store,
+    metadata (Raft, KV) excluded."""
+    n = 0
+    for dirpath, dirnames, files in os.walk(store):
+        if '/mdraft/' in dirpath + '/' or '/meta/' in dirpath + '/':
+            continue
+        n += sum(1 for f in files if re.match(r'^\d+\.\d+\.\d+$', f))
+    return n

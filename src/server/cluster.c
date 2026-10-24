@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 
@@ -252,16 +253,14 @@ int server_join_as_new(struct efsd_server *s, const char *peer_host, uint16_t pe
                     "%s:%u; ignored\n", peer_host, peer_port, s->addr, s->port);
         } else {
             int promise = ack->reject_reason == EFS_HELLO_PROMISE;
-            /* K33 test hook (tests/test_k33_growth.py): the record arrived,
-             * nothing is persisted yet. Unset in every deployment. */
-            const char *tx = getenv("EFS_TEST_MEMBER_EXIT");
-            if (!promise && tx && !strcmp(tx, "before-learn")) {
-                fprintf(stderr, "membership: EFS_TEST_MEMBER_EXIT at before-learn; exiting\n");
-                fflush(stderr);
-                _exit(86);
-            }
+            /* K33 test hook: the record arrived, nothing is persisted yet. */
+            if (!promise)
+                server_test_member_exit("before-learn");
             rc = promise ? member_store_promise(&s->mstore, &m, err, sizeof(err))
                          : member_store_learn(&s->mstore, &m, err, sizeof(err));
+            /* K33 test hook: persisted, not acknowledged and not serving. */
+            if (!promise && rc == EFS_OK)
+                server_test_member_exit("after-learn");
             if (rc != EFS_OK) {
                 fprintf(stderr, "Join: %s refused: %s\n", promise ? "promise" : "membership",
                         err);
@@ -281,6 +280,43 @@ int server_join_as_new(struct efsd_server *s, const char *peer_host, uint16_t pe
     }
     free(payload);
     return rc;
+}
+
+/* K33 test hook (tests/test_k33_growth.py, tests/test_k33_interrupt.py):
+ * EFS_TEST_MEMBER_EXIT=<point>[,<point>...] ends the process with status 86
+ * at that durable handoff, so a test interrupts it deterministically. With
+ * EFS_TEST_MEMBER_EXIT_ONCE=<prefix> only the first process to create the
+ * file <prefix>.<point> exits there (a cluster-wide one-shot per point: the
+ * env can be given to every member, the one that reaches the point first
+ * ends, the others and every restart continue). Points: after-members-commit,
+ * before-learn, after-learn, learner-added, joint-started, after-g2-copy
+ * (raft_host.c and the joiner path above). Unset in every deployment. */
+void server_test_member_exit(const char *point)
+{
+    const char *e = getenv("EFS_TEST_MEMBER_EXIT"), *once = getenv("EFS_TEST_MEMBER_EXIT_ONCE");
+    size_t n = strlen(point);
+    int hit = 0;
+
+    for (const char *q = e; q && n && !hit;) {
+        hit = !strncmp(q, point, n) && (q[n] == ',' || q[n] == '\0');
+        q = strchr(q, ',');
+        if (q)
+            q++;
+    }
+    if (!hit)
+        return;
+    if (once && *once) {
+        char path[4096];
+        snprintf(path, sizeof(path), "%s.%s", once, point);
+        int fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
+        if (fd < 0)
+            return;
+        close(fd);
+    }
+    fprintf(stderr, "membership: EFS_TEST_MEMBER_EXIT at %s; exiting\n", point);
+    fflush(stderr);
+    fflush(stdout);
+    _exit(86);
 }
 
 void server_nodes_keep_members(struct efsd_server *s, const struct efs_membership *m)
