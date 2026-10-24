@@ -447,7 +447,7 @@ test: all $(TEST_SPECIAL_BINS)
 	python3 tests/test_session_combined_group.py
 	python3 tests/test_namespace_authority.py
 	python3 tests/test_w23_samples.py
-	python3 tests/test_read_verify.py
+	python3 tests/test_get_integrity.py
 	python3 tests/test_query_rpc_routing.py
 	python3 tests/test_mgmt_session_routing.py
 	python3 tests/test_mgmt_expiry_lookup.py

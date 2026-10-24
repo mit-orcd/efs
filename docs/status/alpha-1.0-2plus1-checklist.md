@@ -376,6 +376,11 @@ alternatives reduces both product complexity and the supported test matrix.
   [decision table](a6-settings-inventory-20261024.md#decision-table-for-the-parent-a7)
   with a recommendation each, for the user; none removed. `EFS_RDMA_FIRST`
   turned out to be trace only, not a selector.**
+  **`EFS_READ_VERIFY` (D42): done Oct 24.** The
+  [GET-path audit](read-verify-audit-20261024.md) found the client re-hash
+  not redundant (with it off, 12 of 51 negative cases returned wrong bytes
+  on chunk GET, reconstruction, retries and spans); the re-hash is built in,
+  the variable is removed and refused at startup.
 - [ ] **A8 — Keep only justified configuration.** Retain deployment inputs such as
   nodes, disks, addresses and quotas. Prefer built-in or automatically derived
   internal batching/concurrency/maintenance settings; justify any remaining

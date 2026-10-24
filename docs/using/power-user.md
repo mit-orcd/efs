@@ -57,7 +57,6 @@ selects fragment I/O independently of transport; buffered is the daemon default.
 | `EFS_DCACHE_BYTES` | soft dirty-body reclaim target in bytes (default 128 MiB); not the hard allocation bound |
 | `EFS_CLIENT_CONNS_PER_NODE` | pooled connections per server node |
 | `EFS_READ_PREFETCH` | read prefetch depth override |
-| `EFS_READ_VERIFY=1` | enable payload re-hashing on GET receive paths (off by default); returned digests are checked against the captured metadata view where available; fragment format 2 binds identity and digest (K16/W75) |
 | `EFS_FUSE_SPLICE_READ` | opt into `FUSE_CAP_SPLICE_READ` for measurement (default off); the recorded profile found no gain, so copy savings are not an accepted result |
 | `EFS_NUMA_NODE` | `=none` disables NUMA pinning at startup; `=N` forces node N |
 | `EFS_MD_RAFT_N` | **removed (W153):** efsd stops when it is set. The member count N (3..16) is the membership committed at formation and grown by later joins; node ids come from the cluster (K33). Each metadata group has three voters (N = 3: all; N ≥ 4: nodes 1–3 and 2–4); nodes 5..N hold data only |

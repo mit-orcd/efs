@@ -18,6 +18,18 @@ full acceptance are separate states.
 
 ## Recent evidence and remaining acceptance
 
+[D42 `EFS_READ_VERIFY`: GET-path integrity audit](read-verify-audit-20261024.md):
+**PASS (scoped), branch `claude/devel-read-verify-08e19c`, not merged.** The
+storage node's record check does not cover the wire or the client's
+buffers; with verification off the base returned wrong bytes in 12 of 51
+negative cases (chunk GET, parity reconstruction, retries, spans; packed
+reads were already verified). The client re-hash is now built in on every
+chunk path, `EFS_READ_VERIFY` is removed and stops efsd/efs-fuse when set.
+intel2 `make test-all` at `dff495ed6`: 456 commands, 0 FAIL, 14 NOTRUN host
+limits (base: 1 FAIL, the intermittent K34 `test_k33_payload.py`). Cost on a
+loopback cold read: +0.49 efs-fuse CPU s per GiB (0.81 → 1.30), −6 %
+throughput.
+
 [Oct 24 merge: A6 inventory, S1–S5/F4 docs, B1–B5, Stage 2 driver](a6-settings-inventory-20261024.md):
 **merged into devel; merged-tree `make test-all` on intel2 at `c894ec5ae`: 456 commands, 0 FAIL, 14 NOTRUN host limits (1,831 s; raw: intel2 `~/efs-artifacts/merge-wave4-20261024/`, `SHA256SUMS` `2bf6bbe2…1f10`).** `test_k33_payload.py` passed in this run; it fails intermittently (K34, fix in progress). Open for the user: the A/B decision table (A7) and findings F22/F23 (fsync with a member down; unclean-stop stores).
 
