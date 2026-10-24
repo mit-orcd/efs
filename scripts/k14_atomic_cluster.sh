@@ -59,6 +59,10 @@ start_node() {
   else set -- "$ep" "$D/n$i"; fi
   nohup "$FREL/efsd" "$@" --quota 4G --discovery-port 0 >> "$D/logs/efsd-n$i.log" 2>&1 &
   echo $! > "$D/logs/n$i.pid"
+}
+# A joiner logs "listening" only once the cluster forms (all three joined).
+wait_node() {
+  local i=$1
   for _ in $(seq 120); do grep -q listening "$D/logs/efsd-n$i.log" && return 0
     kill -0 "$(cat "$D/logs/n$i.pid")" 2>/dev/null || return 1; sleep 0.5; done
   return 1
@@ -130,7 +134,8 @@ run)
   mkdir -p "$D"/{n1,n2,n3,logs,mntA,mntB}
   cc -O2 -Wall -Wextra -o "$WL" "$HERE/tests/live/k14_atomic_publication.c" || { echo "FAIL build workload"; exit 1; }
   echo "efsd $("$FREL/efsd" --version 2>&1 | head -1) | efs-fuse $("$REL/efs-fuse" --version 2>&1 | head -1)"
-  for i in 1 2 3; do start_node $i || { echo "FAIL start n$i"; exit 1; }; done
+  for i in 1 2 3; do start_node $i; done
+  for i in 1 2 3; do wait_node $i || { echo "FAIL start n$i"; exit 1; }; done
   for _ in $(seq 30); do "$REL/efs-mgmt" raft-mkfs "$ADDR:$((PORT+1))" 2>&1 | grep -q 'raft-mkfs rc=0 ' && break; sleep 1; done
   mount_client A || { echo "FAIL mount A"; tail -5 "$D/logs/clientA.out"; exit 1; }
   mount_client B || { echo "FAIL mount B"; tail -5 "$D/logs/clientB.out"; exit 1; }

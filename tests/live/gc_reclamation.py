@@ -645,6 +645,7 @@ def fresh_format(label):
     """
     unmount();stop(crash=True)
     for root in roots:shutil.rmtree(root)
+    joined.clear()  # empty stores: n2-n4 join the new seed again
     start()
     wait_joined()
     form(source/'efs-mgmt',f'127.0.0.1:{a.port}',env=env)

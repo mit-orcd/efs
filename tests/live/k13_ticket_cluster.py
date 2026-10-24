@@ -158,7 +158,7 @@ try:
     start_all()
     form(src / 'efs-mgmt', f'127.0.0.1:{a.port}', env=env, quiet=True)
     mount()
-    log('three daemons (RAFT_N=3, tcp, buffered I/O) and one mount serving PASS')
+    log('three daemons (RAFT_N=3, tcp, O_DIRECT) and one mount serving PASS')
 
     # Default PUT/flush through FUSE.
     cases = {
