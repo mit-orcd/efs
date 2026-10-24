@@ -3008,7 +3008,13 @@ A6 feature selectors, user Oct 24:
 - `EFS_EXPIRY`: **excluded from the alpha product**, not left as an unsupported runtime mode.
 - `EFS_FUSE_EXPORT`: **remove** the NFS re-export capability switch and its gateway-script settings (W152).
 
-Still open: `EFS_UNMOUNT_REVOKE`, `--no-persist`, `EFS_TRANSPORT`, and the documented default for buffered versus direct I/O.
+A6 remaining selectors, user Oct 24:
+
+- `EFS_UNMOUNT_REVOKE`: **always revoke** at clean unmount; remove the variable. A clean unmount first drains and settles accepted writes, then revokes its session. Failures stay visible and are never reported as a clean completion.
+- `--no-persist`: **remove.** Authoritative membership is always persisted through the agreed membership protocol, so a restart keeps identity and quorum configuration.
+- `EFS_TRANSPORT`: **keep** as an A8 support dimension. `auto` is the normal default; `tcp` and `rdma` stay as overrides for deployment needs and diagnostics. Both transports are qualified with identical correctness and durability guarantees. An explicit `rdma` fails clearly when RDMA is unavailable; `auto` may choose TCP and reports the transport it uses.
+
+Still open: the documented default for buffered versus direct I/O.
 
 ### D41 — K9 / W87 closed without resolution (user, Oct 24)
 
