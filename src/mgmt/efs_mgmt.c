@@ -3076,11 +3076,35 @@ static int cmd_sync_status(int argc, char **argv)
                    o->boot, (unsigned long long)o->current_seq, (unsigned long long)o->durable_seq,
                    (unsigned long long)o->barriers, (unsigned long long)o->barrier_failures,
                    (unsigned long long)o->last_barrier_ms_ago, (unsigned long long)o->last_barrier_us);
-            if (!o->prev_clean)
-                printf("    previous stop UNCLEAN: recovery %s scanned=%llu bad=%llu\n",
-                       o->recovery_done ? "done" : "running",
-                       (unsigned long long)o->recovery_scanned, (unsigned long long)o->recovery_bad);
-            if (o->error || o->recovery_bad)
+            if (o->uncertain)
+                printf("    recovery uncertain: fenced (COMMIT returns EIO) until verified\n");
+            if (o->error)
+                rc_all = 1;
+        }
+        /* K36 verified recovery of the store after an unclean stop. */
+        const struct efs_recovery_stats *v = &r->recovery;
+        static const char *const states[] = {"none", "running", "verified", "FAILED"};
+        if (v->state != EFS_RECOVERY_NONE) {
+            printf("  recovery %s%s%s %llu ms: files checked=%llu dropped=%llu (%llu bytes) "
+                   "foreign=%llu; refs checked=%llu missing=%llu marked=%llu already_marked=%llu "
+                   "superseded=%llu unrecoverable=%llu rebuilt=%llu rebuild_waiting=%llu; "
+                   "tickets checked=%llu waiting=%llu; segments checked=%llu missing=%llu; "
+                   "groups proven=%u/%u incarnation=%llu\n",
+                   v->state < 4 ? states[v->state] : "?", v->phase ? " phase=" : "",
+                   v->phase ? efs_recovery_phase_name(v->phase) : "",
+                   (unsigned long long)v->elapsed_ms, (unsigned long long)v->files_checked,
+                   (unsigned long long)v->files_dropped, (unsigned long long)v->bytes_dropped,
+                   (unsigned long long)v->files_foreign, (unsigned long long)v->refs_checked,
+                   (unsigned long long)v->refs_missing, (unsigned long long)v->marked,
+                   (unsigned long long)v->already_marked, (unsigned long long)v->superseded,
+                   (unsigned long long)v->unrecoverable, (unsigned long long)v->rebuilt,
+                   (unsigned long long)v->rebuild_waiting,
+                   (unsigned long long)v->tickets_checked, (unsigned long long)v->tickets_waiting,
+                   (unsigned long long)v->segments_checked, (unsigned long long)v->segments_missing,
+                   v->groups_proven, v->groups, (unsigned long long)v->incarnation);
+            if (v->reason[0])
+                printf("    reason: %.*s\n", (int)sizeof(v->reason), v->reason);
+            if (v->state != EFS_RECOVERY_VERIFIED)
                 rc_all = 1;
         }
         free(reply);

@@ -1487,10 +1487,10 @@ static int fragment_root_lookup(struct efsd_server *s, const char *path,
  * seq) and is written only after the fragments it covers are durable.
  * A failed barrier is sticky until restart: COMMIT and fsync return EIO;
  * PUTs continue. Shutdown runs a final barrier and marks the record
- * clean; an unclean restart logs the exposure and verifies the checksum
- * tails of data fragments modified since the last durable time (report
- * only: parity reads and scrub repair a bad fragment). Metadata-table
- * fragments keep their per-file barriers. */
+ * clean. After an unclean stop every root is recovery uncertain: COMMIT
+ * returns EIO, across later restarts, until K36 verified recovery
+ * (recovery.c) proves the store and calls server_put_sync_recovered.
+ * Metadata-table fragments keep their per-file barriers. */
 #define PUT_SYNC_RECORD ".efs-durable-epoch"
 #define PUT_SYNC_RECORD_LEN 192
 struct put_sync_root {
@@ -1498,21 +1498,18 @@ struct put_sync_root {
     int fd, record_fd;
     pthread_mutex_t mu;
     pthread_cond_t cv;
-    pthread_t thread, scanner;
-    int thread_started, scanner_started;
+    pthread_t thread;
+    int thread_started;
     uint32_t boot, root_count;
     uint64_t verifier; /* retained only across a proven all-root clean stop */
     uint64_t seq, durable_seq;            /* open epoch, last durable epoch */
     uint64_t cur_bytes, cur_frags, cur_first_ns;
     uint64_t inflight_bytes, inflight_frags, inflight_first_ns;
     int want_now, stop, error;
-    int recovery_uncertain; /* persists until verified recovery or fresh format */
+    int recovery_uncertain; /* persists until K36 verified recovery or fresh format */
     uint64_t acked_bytes, synced_bytes, barriers, failures;
     uint64_t last_barrier_ns, last_barrier_us;
     uint32_t prev_clean;
-    uint64_t prev_durable_ns;
-    uint64_t scanned, bad;
-    int scan_done;
     /* The record as found at attach, restored if startup is abandoned
      * before this boot could acknowledge any PUT (see put_sync_abandon). */
     uint8_t prev_record[PUT_SYNC_RECORD_LEN];
@@ -1737,87 +1734,8 @@ static int put_sync_commit_root(struct put_sync_root *r)
     return rc;
 }
 
-/* Report-only verification after an unclean stop: data fragments modified
- * since the last durable barrier (minus a margin) must still carry a valid
- * checksum tail. A missing or torn fragment is served from parity on read
- * and rebuilt by scrub; this pass bounds and reports the exposure. */
-static void put_sync_scan_dir(struct put_sync_root *r, const char *dir,
-                              uint64_t since_ns, int depth)
-{
-    DIR *d = opendir(dir);
-    if (!d || depth > 32) { if (d) closedir(d); return; }
-    struct dirent *e;
-    while ((e = readdir(d))) {
-        if (e->d_name[0] == '.')
-            continue;
-        char path[8192];
-        snprintf(path, sizeof(path), "%s/%s", dir, e->d_name);
-        struct stat st;
-        if (lstat(path, &st) != 0)
-            continue;
-        if (S_ISDIR(st.st_mode)) {
-            put_sync_scan_dir(r, path, since_ns, depth + 1);
-            continue;
-        }
-        if (!S_ISREG(st.st_mode))
-            continue;
-        uint64_t mt = (uint64_t)st.st_mtim.tv_sec * 1000000000ull + (uint64_t)st.st_mtim.tv_nsec;
-        if (mt < since_ns)
-            continue;
-        uint64_t payload = 0;
-        int ok = 0;
-        if (fragment_payload_bytes((uint64_t)st.st_size, &payload) == EFS_OK &&
-            payload <= (64ull << 20)) {
-            uint8_t *buf = malloc((size_t)st.st_size);
-            int fd = buf ? open(path, O_RDONLY | O_CLOEXEC) : -1;
-            if (fd >= 0) {
-                ssize_t got = pread(fd, buf, (size_t)st.st_size, 0);
-                close(fd);
-                uint8_t sum[EFS_HASH_SIZE], want[EFS_HASH_SIZE];
-                struct efs_frag_ident id;
-                /* Self-consistency of the I25 record (the identity is the
-                 * name; GET checks it against the request) plus payload. */
-                if (got == (ssize_t)st.st_size &&
-                    efs_frag_record_parse(buf + payload,
-                                          (size_t)st.st_size - (size_t)payload,
-                                          &id, want) == EFS_OK &&
-                    id.payload_len == payload) {
-                    efs_hash(buf, (size_t)payload, sum);
-                    ok = !memcmp(sum, want, EFS_HASH_SIZE);
-                }
-            }
-            free(buf);
-        }
-        pthread_mutex_lock(&r->mu);
-        r->scanned++;
-        if (!ok) {
-            r->bad++;
-            if (r->bad <= 64)
-                fprintf(stderr, "store: put sync recovery bad fragment %s\n", path);
-        }
-        pthread_mutex_unlock(&r->mu);
-    }
-    closedir(d);
-}
-
-static void *put_sync_scan_thread(void *arg)
-{
-    struct put_sync_root *r = arg;
-    char data[EFS_MAX_PATH + 8];
-    snprintf(data, sizeof(data), "%s/data", r->root);
-    uint64_t margin = 5000000000ull;
-    uint64_t since = r->prev_durable_ns > margin ? r->prev_durable_ns - margin : 0;
-    put_sync_scan_dir(r, data, since, 0);
-    pthread_mutex_lock(&r->mu);
-    r->scan_done = 1;
-    fprintf(stderr, "store: put sync recovery root=%s scanned=%llu bad=%llu\n", r->root,
-            (unsigned long long)r->scanned, (unsigned long long)r->bad);
-    pthread_mutex_unlock(&r->mu);
-    return NULL;
-}
-
-/* Attach one root. Reads the previous record, starts a new boot, and on an
- * unclean previous stop starts the verification scan. */
+/* Attach one root. Reads the previous record and starts a new boot; an
+ * unclean previous stop leaves the root fenced until verified recovery. */
 static void put_sync_attach(struct put_sync_root *r, const char *root,
                             uint64_t verifier, uint32_t roots)
 {
@@ -1853,9 +1771,8 @@ static void put_sync_attach(struct put_sync_root *r, const char *root,
     }
     r->prev_clean = !existed || previous.clean;
     r->recovery_uncertain = !r->prev_clean;
-    /* A checksum scan cannot find lost creates. Keep clean=0 until verified
-     * recovery, including across later orderly shutdowns. */
-    r->prev_durable_ns = previous.time_ns;
+    /* Keep clean=0 until verified recovery, including across later orderly
+     * shutdowns: only recovery can prove what an unclean stop lost. */
     r->boot = previous.boot + 1;
     r->verifier=verifier;r->root_count=roots;
     r->seq = 1;
@@ -1873,15 +1790,10 @@ static void put_sync_attach(struct put_sync_root *r, const char *root,
             close(r->record_fd); close(r->fd); r->fd = -1; return;
         }
     }
-    if (!r->prev_clean) {
-        fprintf(stderr, "store: root=%s recovery uncertain; COMMIT returns EIO until verified recovery or fresh format\n", root);
-        fprintf(stderr, "store: put sync root=%s unclean previous stop: writes acknowledged "
-                "after boot=%u seq=%llu were not durable; verifying fragments modified since\n",
+    if (!r->prev_clean)
+        fprintf(stderr, "store: root=%s recovery uncertain (unclean stop after boot=%u "
+                "durable seq=%llu); COMMIT returns EIO until verified recovery\n",
                 root, previous.boot, (unsigned long long)previous.seq);
-        r->scanner_started = pthread_create(&r->scanner, NULL, put_sync_scan_thread, r) == 0;
-    } else {
-        r->scan_done = 1;
-    }
     r->thread_started = pthread_create(&r->thread, NULL, put_sync_thread, r) == 0;
     if (!r->thread_started) {
         close(r->record_fd);
@@ -1983,6 +1895,7 @@ void server_put_sync_stats(struct efsd_server *s, struct efs_msg_sync_stats_repl
         pthread_mutex_lock(&r->mu);
         o->mode = 2;
         o->error = (uint32_t)(r->error || r->recovery_uncertain);
+        o->uncertain = (uint32_t)r->recovery_uncertain;
         o->unsynced_bytes = r->cur_bytes + r->inflight_bytes;
         o->unsynced_fragments = r->cur_frags + r->inflight_frags;
         uint64_t first = r->inflight_first_ns ? r->inflight_first_ns : r->cur_first_ns;
@@ -1997,9 +1910,6 @@ void server_put_sync_stats(struct efsd_server *s, struct efs_msg_sync_stats_repl
         o->barrier_failures = r->failures;
         o->last_barrier_ms_ago = r->last_barrier_ns ? (now - r->last_barrier_ns) / 1000000 : 0;
         o->last_barrier_us = r->last_barrier_us;
-        o->recovery_scanned = r->scanned;
-        o->recovery_bad = r->bad;
-        o->recovery_done = (uint32_t)r->scan_done;
         pthread_mutex_unlock(&r->mu);
     }
 }
@@ -2086,18 +1996,337 @@ int server_put_sync_stop(struct efsd_server *s)
         pthread_mutex_unlock(&r->mu);
         if (r->thread_started)
             pthread_join(r->thread, NULL);
-        if (r->scanner_started)
-            pthread_join(r->scanner, NULL);
         int clean = ok && !r->error &&
                     syncfs(r->fd) == 0 &&
                     put_sync_record_write(r, r->durable_seq, 1) == EFS_OK;
         fprintf(stderr, "store: put sync root=%s stopped %s durable_seq=%llu\n", r->root,
-                clean ? "clean" : "UNCLEAN (barrier failed)",
+                clean ? "clean" : r->recovery_uncertain && !r->error
+                    ? "UNCLEAN (recovery not verified)" : "UNCLEAN (barrier failed)",
                 (unsigned long long)r->durable_seq);
         if (!clean)
             all_clean = 0;
     }
     return all_clean ? 0 : -1;
+}
+
+/* ---- K36 verified recovery: the store side (recovery.c drives it) ---- */
+
+int server_put_sync_uncertain(void)
+{
+    int any = 0;
+    for (uint32_t i = 0; i < EFS_MAX_STORAGE_PATHS; ++i) {
+        pthread_mutex_lock(&put_sync_mu);
+        int on = put_sync_state[i] > 0;
+        pthread_mutex_unlock(&put_sync_mu);
+        if (!on)
+            continue;
+        pthread_mutex_lock(&put_sync_roots[i].mu);
+        any |= put_sync_roots[i].recovery_uncertain;
+        pthread_mutex_unlock(&put_sync_roots[i].mu);
+    }
+    return any;
+}
+
+/* The boot counter: every attached root's record, read back from disk,
+ * names this boot (previous + 1) as running (clean=0) under this process's
+ * verifier and root count. A record that does not prove that fails. */
+int server_put_sync_identity(struct efsd_server *s, char *why, size_t n)
+{
+    uint32_t attached = 0;
+    for (uint32_t i = 0; i < EFS_MAX_STORAGE_PATHS; ++i) {
+        pthread_mutex_lock(&put_sync_mu);
+        int st = put_sync_state[i];
+        pthread_mutex_unlock(&put_sync_mu);
+        if (st <= 0)
+            continue;
+        struct put_sync_root *r = &put_sync_roots[i];
+        struct put_sync_record rec;
+        int rc = EFS_ERR_IO;
+        attached++;
+        /* A barrier rewrites the record in place (pwrite, mu dropped): a
+         * read racing it can see a torn copy. Only a stable bad read fails. */
+        for (int k = 0; k < 20 && rc != EFS_OK; k++) {
+            if (k)
+                usleep(10000);
+            rc = put_sync_record_read(r->record_fd, &rec);
+        }
+        if (rc != EFS_OK) {
+            snprintf(why, n, "durability record of %s unreadable", r->root);
+            return EFS_ERR_IO;
+        }
+        if (rec.boot != r->boot || rec.clean || rec.verifier != r->verifier ||
+            rec.roots != r->root_count) {
+            snprintf(why, n, "durability record of %s names boot=%u clean=%u, this boot is %u",
+                     r->root, rec.boot, rec.clean, r->boot);
+            return EFS_ERR_STALE;
+        }
+    }
+    if (!s || attached != s->storage_path_count) {
+        snprintf(why, n, "%u of %u roots attached", attached, s ? s->storage_path_count : 0);
+        return EFS_ERR_IO;
+    }
+    return EFS_OK;
+}
+
+/* Verified: clear every root's fence. The record stays clean=0 until an
+ * orderly stop proves its final barrier, as for any running boot. */
+void server_put_sync_recovered(void)
+{
+    for (uint32_t i = 0; i < EFS_MAX_STORAGE_PATHS; ++i) {
+        pthread_mutex_lock(&put_sync_mu);
+        int on = put_sync_state[i] > 0;
+        pthread_mutex_unlock(&put_sync_mu);
+        if (!on)
+            continue;
+        pthread_mutex_lock(&put_sync_roots[i].mu);
+        put_sync_roots[i].recovery_uncertain = 0;
+        pthread_mutex_unlock(&put_sync_roots[i].mu);
+    }
+}
+
+/* Remove an unprovable fragment file durably and give its bytes back to
+ * the quota. ENOENT counts as removed (a reclaim deleter got there). */
+int server_recovery_drop(struct efsd_server *s, const char *path, uint64_t bytes, int charged,
+                         struct server_recovery_files *c)
+{
+    if (unlink(path) && errno != ENOENT)
+        return EFS_ERR_IO;
+    int rc = fragment_parent_sync(s, path);
+    if (rc != EFS_OK)
+        return rc;
+    __atomic_fetch_add(&c->dropped, 1, __ATOMIC_RELAXED);
+    __atomic_fetch_add(&c->bytes_dropped, bytes, __ATOMIC_RELAXED);
+    if (charged) {
+        pthread_mutex_lock(&s->lock);
+        struct efs_node *ln = server_local_node(s);
+        if (ln)
+            ln->used = ln->used >= bytes ? ln->used - bytes : 0;
+        pthread_mutex_unlock(&s->lock);
+        server_usage_mark_dirty(s);
+    }
+    fprintf(stderr, "store: recovery dropped %s (%llu bytes)\n", path,
+            (unsigned long long)bytes);
+    return EFS_OK;
+}
+
+/* Read a whole fragment file and prove it: an I25 record naming exactly
+ * `want` (its payload length from the file size), BLAKE3(payload) equal to
+ * the record's digest and, when `expect` is set, to `expect`. EFS_OK
+ * proven, NOT_FOUND absent, CHECKSUM/FRAG_* unprovable (*bytes: its
+ * payload, or its size when the size is no fragment size), IO when the
+ * file could not be read. */
+int server_recovery_prove_file(const char *path, struct efs_frag_ident *want,
+                               const uint8_t *expect, uint64_t *bytes)
+{
+    *bytes = 0;
+    int fd = open(path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+    if (fd < 0)
+        return errno == ENOENT ? EFS_ERR_NOT_FOUND : EFS_ERR_IO;
+    struct stat st;
+    uint64_t payload = 0;
+    if (fstat(fd, &st) || !S_ISREG(st.st_mode)) {
+        close(fd);
+        return EFS_ERR_IO;
+    }
+    *bytes = (uint64_t)st.st_size;
+    if (fragment_payload_bytes((uint64_t)st.st_size, &payload) != EFS_OK ||
+        payload > (64ull << 20)) {
+        close(fd);
+        return EFS_ERR_FRAG_FORMAT; /* torn: no fragment has this size */
+    }
+    *bytes = payload;
+    uint8_t *buf = malloc((size_t)st.st_size ? (size_t)st.st_size : 1);
+    if (!buf) {
+        close(fd);
+        return EFS_ERR_NOMEM;
+    }
+    size_t done = 0;
+    int rc = EFS_OK;
+    while (done < (size_t)st.st_size) {
+        ssize_t r = pread(fd, buf + done, (size_t)st.st_size - done, (off_t)done);
+        if (r < 0 && errno == EINTR)
+            continue;
+        if (r <= 0) {
+            rc = EFS_ERR_IO;
+            break;
+        }
+        done += (size_t)r;
+    }
+    close(fd);
+    if (rc == EFS_OK) {
+        uint8_t digest[EFS_HASH_SIZE], got[EFS_HASH_SIZE];
+        const char *field = NULL;
+        want->payload_len = (uint32_t)payload;
+        rc = efs_frag_record_verify(buf + payload, (size_t)st.st_size - (size_t)payload, want,
+                                    digest, &field);
+        if (rc == EFS_OK) {
+            efs_hash(buf, (size_t)payload, got);
+            if (memcmp(got, digest, EFS_HASH_SIZE) ||
+                (expect && memcmp(digest, expect, EFS_HASH_SIZE)))
+                rc = EFS_ERR_CHECKSUM;
+        }
+    }
+    free(buf);
+    return rc;
+}
+
+/* One chunk fragment name on one root, under the object lock a PUT holds:
+ * proven, absent, or unprovable and dropped. */
+static int recovery_chunk_path(struct efsd_server *s, uint32_t root, efs_export_id_t eid,
+                               efs_ino_t ino, uint32_t ci, uint32_t fi, uint64_t gen,
+                               const uint8_t *expect, struct server_recovery_files *c)
+{
+    char path[8192];
+    struct efs_export ex = {.id = eid};
+    uint64_t saved = efs_tls_chunk_gen, bytes = 0;
+    efs_tls_chunk_gen = gen;
+    fragment_path_at(s, root, &ex, ino, ci, fi, path, sizeof(path));
+    struct efs_frag_ident want;
+    fragment_ident(&ex, ino, ci, fi, 0, &want);
+    efs_tls_chunk_gen = saved;
+    pthread_mutex_t *mu = fragment_mutex(eid, ino, ci, fi);
+    pthread_mutex_lock(mu);
+    int rc = server_recovery_prove_file(path, &want, expect, &bytes);
+    if (rc != EFS_ERR_NOT_FOUND)
+        __atomic_fetch_add(&c->checked, 1, __ATOMIC_RELAXED);
+    if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND && rc != EFS_ERR_NOMEM) {
+        /* Unreadable counts as unprovable: never served, so drop it. */
+        rc = server_recovery_drop(s, path, bytes, !efs_ino_is_meta_table(ino), c) == EFS_OK
+                 ? EFS_ERR_NOT_FOUND : EFS_ERR_IO;
+    }
+    pthread_mutex_unlock(mu);
+    return rc;
+}
+
+int server_recovery_fragment_check(struct efsd_server *s, efs_export_id_t eid, efs_ino_t ino,
+                                   uint32_t ci, uint32_t fi, uint64_t gen,
+                                   const uint8_t expect[EFS_HASH_SIZE],
+                                   struct server_recovery_files *c)
+{
+    uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
+    int proven = 0;
+    if (!eid || !ino || !gen || fi >= EFS_NUM_FRAGMENTS)
+        return EFS_ERR_INVAL;
+    for (uint32_t r = 0; r < n; r++) {
+        int rc = recovery_chunk_path(s, r, eid, ino, ci, fi, gen, expect, c);
+        if (rc == EFS_OK)
+            proven = 1;
+        else if (rc != EFS_ERR_NOT_FOUND)
+            return rc;
+    }
+    return proven ? EFS_OK : EFS_ERR_NOT_FOUND;
+}
+
+/* Strict decimal component: digits only, no sign, at most `max` digits. */
+static int recovery_digits(const char *p, unsigned max, uint64_t *out)
+{
+    uint64_t v = 0;
+    unsigned k = 0;
+    for (; p[k]; k++) {
+        if (p[k] < '0' || p[k] > '9' || k >= max || v > (UINT64_MAX - 9) / 10)
+            return 0;
+        v = v * 10 + (uint64_t)(p[k] - '0');
+    }
+    *out = v;
+    return k > 0;
+}
+
+/* "<ci>.<fi>.<gen>" */
+static int recovery_frag_name(const char *name, uint32_t *ci, uint32_t *fi, uint64_t *gen)
+{
+    char tmp[96];
+    uint64_t a, b;
+    if (strlen(name) >= sizeof(tmp))
+        return 0;
+    strcpy(tmp, name);
+    char *d1 = strchr(tmp, '.'), *d2 = d1 ? strchr(d1 + 1, '.') : NULL;
+    if (!d1 || !d2)
+        return 0;
+    *d1 = *d2 = 0;
+    if (!recovery_digits(tmp, 10, &a) || !recovery_digits(d1 + 1, 1, &b) ||
+        !recovery_digits(d2 + 1, 20, gen) || a > UINT32_MAX || b >= EFS_NUM_FRAGMENTS || !*gen)
+        return 0;
+    *ci = (uint32_t)a;
+    *fi = (uint32_t)b;
+    return 1;
+}
+
+struct recovery_walk {
+    struct efsd_server *s;
+    struct server_recovery_files *c;
+    const int *stop;
+    uint32_t root;
+    int rc;
+};
+
+/* exports/<eid>/<s4>/<s3>/<s2>/<s1>/<s0>/<ci/1024>/<ci>.<fi>.<gen>: level
+ * 0 is the export directory, levels 1..5 the inode segments, 6 the chunk
+ * group, 7 the fragment files. Anything else is counted, never touched. */
+static void recovery_walk_dir(struct recovery_walk *w, const char *dir, int level,
+                              uint64_t eid, uint64_t ino, uint64_t cdir)
+{
+    DIR *d = opendir(dir);
+    if (!d) {
+        if (errno != ENOENT && w->rc == EFS_OK)
+            w->rc = EFS_ERR_IO;
+        return;
+    }
+    struct dirent *e;
+    while (w->rc == EFS_OK && !__atomic_load_n(w->stop, __ATOMIC_RELAXED) && (e = readdir(d))) {
+        if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, ".."))
+            continue;
+        char path[8192];
+        snprintf(path, sizeof(path), "%s/%s", dir, e->d_name);
+        uint64_t v = 0;
+        if (level == 7) {
+            uint32_t ci, fi;
+            uint64_t gen;
+            if (e->d_type != DT_REG && e->d_type != DT_UNKNOWN) {
+                __atomic_fetch_add(&w->c->foreign, 1, __ATOMIC_RELAXED);
+                continue;
+            }
+            if (!recovery_frag_name(e->d_name, &ci, &fi, &gen) || ci >> 10 != cdir) {
+                __atomic_fetch_add(&w->c->foreign, 1, __ATOMIC_RELAXED);
+                continue;
+            }
+            int rc = recovery_chunk_path(w->s, w->root, (efs_export_id_t)eid, ino, ci, fi, gen,
+                                         NULL, w->c);
+            if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND)
+                w->rc = rc;
+            continue;
+        }
+        int ok = level == 0 ? recovery_digits(e->d_name, 10, &v) && v && v <= UINT32_MAX
+               : level <= 5 ? strlen(e->d_name) == 4 && recovery_digits(e->d_name, 4, &v)
+                            : recovery_digits(e->d_name, 7, &v);
+        if (!ok || (e->d_type != DT_DIR && e->d_type != DT_UNKNOWN)) {
+            __atomic_fetch_add(&w->c->foreign, 1, __ATOMIC_RELAXED);
+            continue;
+        }
+        if (level == 0)
+            recovery_walk_dir(w, path, 1, v, 0, 0);
+        else if (level <= 5)
+            recovery_walk_dir(w, path, level + 1, eid, ino * 10000u + v, 0);
+        else
+            recovery_walk_dir(w, path, 7, eid, ino, v);
+    }
+    closedir(d);
+}
+
+int server_recovery_scan_local(struct efsd_server *s, struct server_recovery_files *c,
+                               const int *stop)
+{
+    uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
+    for (uint32_t r = 0; r < n; r++) {
+        char top[EFS_MAX_PATH + 32];
+        struct recovery_walk w = {s, c, stop, r, EFS_OK};
+        snprintf(top, sizeof(top), "%s/data/exports", s->storage_paths[r]);
+        recovery_walk_dir(&w, top, 0, 0, 0, 0);
+        if (w.rc != EFS_OK)
+            return w.rc;
+        if (__atomic_load_n(stop, __ATOMIC_RELAXED))
+            return EFS_ERR_BUSY;
+    }
+    return server_segment_recovery_scan(s, c, stop);
 }
 #endif
 

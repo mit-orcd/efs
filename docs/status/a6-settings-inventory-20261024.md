@@ -84,11 +84,11 @@ included), plus one `environ` scanner and 14 compile-time modes.
 | Deployment input (transport, RDMA, NUMA, query-cache capacity) | 9 | 9 | kept |
 | Observability or trace | 34 | 34 | kept; none changes behavior |
 | Fault or test hook honored by **normal** builds | 3 | 0 | `EFS_GC_DISABLE`, `EFS_TEST_MEMBER_EXIT`, `_ONCE` moved under `EFS_FAULTS` |
-| Fault or test hook in `EFS_FAULTS` builds (or the test simulator) | 34 | 37 | +3 moved; these 3 and the 2 `EFS_PACK_CRASH*` hooks now carry the `EFS_FAULT_` prefix |
+| Fault or test hook in `EFS_FAULTS` builds (or the test simulator) | 34 | 39 | +3 moved; these 3 and the 2 `EFS_PACK_CRASH*` hooks now carry the `EFS_FAULT_` prefix; +2 K36 crash-recovery hooks (Oct 24) |
 | Tool input (efs-mgmt) | 1 | 1 | kept |
 | Read only to refuse it (`EFS_MD_RAFT_N`) | 1 | 0 | now a `removed_env[]` row |
 | Dead (read nowhere in the product, or read with no effect) | 0 | 0 | none in the product; `EFS_RDMA_SPIN_US` is dead in the portal |
-| **Total read** | **139** | **127** | 19 names refused at startup |
+| **Total read** | **139** | **129** | 19 names refused at startup; +2 K36 fault hooks |
 
 Reachable configurations: the 15 binary A/B selectors (13 environment, 2
 CLI) allow up to 2^15 = 32,768 combinations, before transport (`auto`, `tcp`,
@@ -326,6 +326,7 @@ Every row is read only inside `#if EFS_FAULTS`; a normal build names any `EFS_FA
 | `EFS_FAULT_COMPACT_DIE` | `kv/kv_compact.c:51` (compact_maybe_die) | off; `_exit(99)` after the Nth compaction output | fault/test hook | — | `test_kv_compact_crash.c`, `test_faults_env_ignored.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_COMPACT_FILE` | `kv/kv_compact.c:36` (fault_compact_file) | off; marker path for the compaction stall | fault/test hook | — | `gc_reclamation.py`, `k22_follower_bound.sh` +1 | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_COMPACT_STALL` | `kv/kv_compact.c:41` (fault_compact_stall_on) | off; stall compaction while the marker exists | fault/test hook | — | `gc_reclamation.py`, `k22_follower_bound.sh` +2 | Keep in `EFS_FAULTS` builds |
+| `EFS_FAULT_CRASH` | `server/recovery.c` (server_fault_crash) | off; `_exit(137)` at the nth pass of a named point (`put-acked`, `publish-apply`, `reclaim-accepted`, `recovery-local`, `recovery-marked`) | fault/test hook | — | `test_k36_recovery.py` | Keep in `EFS_FAULTS` builds (K36) |
 | `EFS_FAULT_CREATE_ADOPT_NEGATIVE_FILE` | `client/inode_rpc.c:1941` (efs_client_lease_begin) | off; corrupt one CREATE adopt FileID (marker) | fault/test hook | — | `gc_reclamation.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_CREATE_ADOPT_REPLY_FILE` | `client/inode_rpc.c:2006` (efs_client_lease_resume) | off; hide one CREATE adopt reply (marker) | fault/test hook | — | `gc_reclamation.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_CREATE_RETRY_FILE` | `client/inode_rpc.c:744` (rpc_fault_create_reply) | off; lose CREATE replies while the marker exists | fault/test hook | — | `test_create_retry_fault.py`, `test_create_retry_integrated.py` +1 | Keep in `EFS_FAULTS` builds |
@@ -342,6 +343,7 @@ Every row is read only inside `#if EFS_FAULTS`; a normal build names any `EFS_FA
 | `EFS_FAULT_PUBLICATION_APPLY_FILE` | `server/raft_host.c:3373` (host_apply) | off; refuse PUBLICATION at apply (marker) | fault/test hook | — | `publication_pending.c`, `publication_pending.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_PUB_BARRIER` | `server/raft_host.c:17070` (host_pub_fault) | off; park publication at a named stage | fault/test hook | — | `k14_atomic_cluster.sh` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_PUT_REPLY_COLLISION` | `client/write.c:2556` (put_reply_fault) +1 | off; lose one PUT reply per fragment | fault/test hook | — | `gc_reclamation.py` | Keep in `EFS_FAULTS` builds |
+| `EFS_FAULT_RECOVERY_HOLD_FILE` | `server/recovery.c` (rv_held) | off; verified recovery waits before clearing the fence while the file exists | fault/test hook | — | `test_k36_recovery.py` | Keep in `EFS_FAULTS` builds (K36) |
 | `EFS_FAULT_RECV_PERSIST_FILE` | `server/raft_host.c:7370` (host_note_queued_reads) | off; hold the receive-persist cohort at its barrier | fault/test hook | — | `private_intel_receive_persist.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_REPLY_BUFFER` | `client/reply_buffers.h:62` (reply_buffers_init) | off; client reply-buffer allocation faults | fault/test hook | — | `gc_reclamation.py` | Keep in `EFS_FAULTS` builds |
 | `EFS_FAULT_REPORT_FILE` | `client/write.c:1697` (report_fault_withhold) | off; REPORT withhold control file | fault/test hook | — | `gc_reclamation.py`, `rdma_four_node_qualification.sh`; `intel_w100_private.py` | Keep in `EFS_FAULTS` builds |

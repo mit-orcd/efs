@@ -89,6 +89,11 @@ int efs_put_ticket_orphan_ack(struct efs_kv *,const struct efs_put_ticket *,uint
 void efs_put_ticket_orphan_prefix(uint32_t anchor,uint8_t prefix[3]);
 int efs_put_ticket_orphan_decode(const uint8_t *key,uint32_t kl,const uint8_t *val,
                                  uint32_t vl,struct efs_put_ticket *,uint32_t *acked);
+/* K36 recovery inventory: one stored ticket row (kind PUT_TICKET, a lane
+ * shard's prefix) back to its ticket and state; PROTO unless the key is
+ * the one the decoded ticket derives. */
+int efs_put_ticket_row_decode(const uint8_t *key,uint32_t kl,const uint8_t *val,uint32_t vl,
+                              struct efs_put_ticket *,uint32_t *state);
 /* D31 revoked-stream drain. Every session/lane-shard stream that holds a
  * ticket is indexed on its group's anchor shard, written and removed in the
  * same batch as the stream's live count goes 0 -> 1 and 1 -> 0:

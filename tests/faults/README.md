@@ -45,11 +45,12 @@ cluster or mounted store. Expected payload bytes and hashes live outside EFS.
   exact peer reads; new writes may succeed with two generation-matched holders
   under the degraded-write contract, without claiming three-copy protection.
 - Restart the same stores: acknowledged name and bytes survive cold clients.
-- After that unclean stop, a new fsync returns EIO (`restart_fence`): the
-  restarted root keeps `recovery_uncertain` and refuses COMMIT until verified
-  recovery or fresh format (W71). Because every fsync commits every current
-  node, each server-kill case runs in its own fresh cluster (`lost-1`..`lost-4`);
-  corruption and client-crash cases share one further cluster (`shared`).
+- After that unclean stop the restarted root is `recovery_uncertain` and
+  refuses COMMIT (fsync EIO) until K36 verified recovery proves it; a cold
+  client's fsync then succeeds (`restart_recovered`, bounded at 120 s).
+  Because every fsync commits every current node, each server-kill case runs
+  in its own fresh cluster (`lost-1`..`lost-4`); corruption and client-crash
+  cases share one further cluster (`shared`).
 - Flip each fragment role while retaining its checksum: exact reconstruction,
   without claiming that a read repairs the damaged copy.
 - Remove a checksum and flip payload: exact peer bytes or explicit error;

@@ -1109,6 +1109,26 @@ int efs_meta_degraded_live(struct efs_kv *kv, const struct efs_meta_degraded *d)
 #define EFS_META_DEGRADED_ORPHANED 2
 int efs_meta_apply_degraded_clear(struct efs_kv *kv, const struct efs_meta_degraded *d,
                                   int rebuilt, int *outcome);
+/* K36 EFS_MD_CMD_DEGRADED_MARK, serialized apply on the anchor's group: a
+ * storage node's verified recovery found its fragment of a published object
+ * missing or unprovable and dropped it. Writes the mark when the chunk row
+ * still references exactly this object (efs_meta_degraded_live); OK when it
+ * did or the same mark is already there, NOT_FOUND when the object is no
+ * longer live (nothing to rebuild), STALE when a mark for another fragment
+ * of the object exists (a second loss the 2+1 code cannot rebuild). */
+int efs_meta_apply_degraded_mark(struct efs_kv *kv, const struct efs_meta_degraded *d);
+/* K36 recovery inventory: every object (base, live span) of the chunk rows
+ * of `shard` that places a fragment on `node`, in key order after `after`
+ * (exclusive; alen 0 starts at the first row). The callback gets the mark
+ * the object would carry if that fragment were lost (missing_mask = that
+ * fragment) and the row key; a nonzero return stops the scan and is
+ * returned. EFS_OK when the shard was exhausted; PROTO on a row that does
+ * not decode (never skipped). */
+typedef int (*efs_meta_chunk_ref_fn)(void *user, const struct efs_meta_degraded *ref,
+                                     const uint8_t *key, uint32_t klen);
+int efs_meta_chunk_refs_scan(struct efs_kv *kv, uint32_t shard, const uint8_t *after,
+                             uint32_t alen, efs_node_id_t node, efs_meta_chunk_ref_fn cb,
+                             void *user);
 /* Reap marker value: [inode_generation:8][active_lanes:8]. */
 #define EFS_META_REAP_VAL 16
 

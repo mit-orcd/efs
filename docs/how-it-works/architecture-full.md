@@ -284,11 +284,16 @@ this list, before it ships.
   verifier returns sticky client-wide EIO, because the client may no longer
   retain retransmission bytes. COMMIT retries a failed transport once within
   its original deadline.
-  An unclean storage-root restart fences COMMIT even for a fresh client;
-  a checksum scan alone cannot prove that every published create survived.
-  This fence persists across orderly restarts until verified recovery or
-  a fresh format; no automatic recovery is implemented by this change.
-  See [AMD durability fixes](../status/amd-async-durability-20261015.md). A transient failure of that drain
+  An unclean storage-root restart fences COMMIT even for a fresh client,
+  across orderly restarts, until verified recovery proves the store (K36,
+  D42): log and KV applied to the leader's commit, every local fragment
+  proven, every published reference to the store checked against its digest,
+  the reclaim journal, the ticket ledgers and the boot counter. What it
+  cannot prove is dropped and its stripe marked degraded for rebuild; then
+  the fence clears. An earlier ambiguous write is not thereby proven: the
+  verifier changed, so its client keeps failing `fsync`. See
+  [verified recovery](protocols/data.md#verified-recovery-k36) and
+  [AMD durability fixes](../status/amd-async-durability-20261015.md). A transient failure of that drain
   (transport, RPC budget, node down) returns EIO from that call with the
   bytes retained as pending; the next `fsync` retries. If a publish of
   the file has been classified **stalled** (D27, [decisions.md](../status/decisions.md): repeated
@@ -12011,8 +12016,9 @@ Segment GET, a retried segment PUT that finds an existing file, and segment
 reads all verify the record against `(group, segment id, segment generation,
 fragment index, length)` before comparing digests.
 
-**Restart scan.** After an unclean stop the report-only scan checks each
-recently modified file's record for self-consistency and its payload digest.
+**Restart after an unclean stop.** Verified recovery (below) reads every
+fragment file whole and proves its record and payload digest; it replaced the
+report-only scan of recently modified files.
 
 **Identity fields not in the record.** `content_epoch` is a fence, not
 object identity (see above), so it is not bound. The inode generation and
@@ -12037,6 +12043,69 @@ format 1: payload-only digest tail); this build reads only root format 1
 old-format file found inside a format-1 root is refused per file as
 `EFS_ERR_FRAG_FORMAT`, or as `EFS_ERR_CHECKSUM` when its 32-byte tail is too
 short to hold a record.
+
+#### Verified recovery (K36)
+
+A crash, `SIGKILL`, forced exit (rc 3) or power loss leaves every storage
+root of the node "recovery uncertain": PUT acknowledgement is asynchronous,
+so fragments acknowledged after the last durable barrier may be missing or
+torn. The node fences COMMIT (`fsync` and DATA_COMMIT return `EIO`), across
+orderly restarts, until a recovery thread (`src/server/recovery.c`) proves
+the store; decision D42, finding F23. A restart, a sampled check or a forced
+sync never clears the fence. The phases, each shown in
+`efs-mgmt sync-status` and the log:
+
+1. **identity**: every root's durability record names this boot (previous
+   boot + 1) as running under this process's verifier; the member store
+   advanced the incarnation before anything was served.
+2. **journal**: the reclaim journal was verified and replayed at startup, or
+   rebuilt by its own recovery thread after a failed verification.
+3. **ledgers**: every storage session certificate (the K13 PUT floor) reads
+   back intact; `*.tmp.*` leftovers of an interrupted seal are removed.
+4. **fragments**: every chunk and segment fragment file is read whole, under
+   the lock a PUT of that object holds. Its record must name exactly the
+   object its file name names, and BLAKE3 of the payload must equal the
+   record's digest. A torn, misnamed or corrupt file is dropped (unlinked,
+   directory synced, quota credited). A name that is not a fragment name is
+   counted and left alone.
+5. **raft**: each metadata group the node hosts answers a ReadIndex from this
+   node, which returns only once the local replica applied everything its
+   leader had committed. A replica whose apply missed a committed row is
+   resynced from the leader's snapshot first (as `raft-resync`).
+6. **tickets**: every ADMITTED ticket (K13) placing a fragment here whose
+   fragment is not proven here is remembered; it may still be published.
+7. **metadata**: every published object (chunk base and live span) placing a
+   fragment here is checked against the published digest. The inventory is
+   read page by page (`EFS_RECOVERY_SCAN_PAGE` records) from the local KV
+   after the ReadIndex, or with `EFS_MSG_RECOVERY_SCAN` (243/244) from a member
+   hosting a group this node does not host. A missing or mismatching fragment
+   is dropped and its stripe gets a W154 degraded mark through Raft
+   (`EFS_MD_CMD_DEGRADED_MARK`, tag 249): the mark is written only while the
+   chunk row still references exactly that object; an identical mark is
+   left as it is; a mark for another fragment of the same object is never
+   overwritten (a second loss the 2+1 code cannot rebuild, counted
+   `unrecoverable`). Every ACTIVE packed segment holding switched files that
+   places a fragment here is checked the same way; one not proven is dropped
+   and counted `segments missing`: its two peers still serve it, and W154 has
+   no segment rebuild.
+8. **fence**: every root's fence clears and COMMIT works again.
+
+After the fence the thread waits for each remembered ticket to leave
+ADMITTED (a published one is marked as in 7) and counts the marked fragments
+the group leaders rebuild here (`rebuilt`, `rebuild_waiting`). Nothing a
+client was promised depends on that tail: the PUT verifier changed with the
+unclean boot, so a client that held acknowledgements of the previous boot
+keeps failing `fsync` (an error it saw never turns into success), and a
+crash before the tail finishes is caught by the next recovery's inventory.
+
+A transient obstacle (no leader yet, a peer unreachable) is retried and shown
+as the reason. A failed verification (an unreadable certificate, a fragment
+that cannot be removed, a row that does not decode) leaves the node fenced
+with `recovery FAILED` and the reason until a restart verifies it. Every step
+is idempotent, so a crash during recovery leaves the record unclean and the
+next start recovers again. A single node that never formed a cluster cannot
+prove its groups and stays fenced. Full power-loss qualification is a
+separate scope decision.
 
 
 ## Appendix 11 — Protocol — directory placement & spreading

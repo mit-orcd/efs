@@ -415,3 +415,94 @@ int server_segment_scan(struct efsd_server *s,
     }
     return EFS_OK;
 }
+
+/* K36 verified recovery: one segment fragment file, under the segment's
+ * write guard (a PUT holds the read guard while it writes): proven,
+ * absent, or unprovable and dropped. */
+int server_segment_recovery_check(struct efsd_server *s, uint32_t group, uint64_t id,
+                                  uint64_t gen, uint32_t fi, const uint8_t *expect,
+                                  struct server_recovery_files *c)
+{
+    char path[EFS_MAX_PATH + 128];
+    struct efs_frag_ident want;
+    uint64_t bytes = 0;
+    server_segment_path(s, group, id, gen, fi, path, sizeof(path));
+    sg_ident(group, id, gen, fi, 0, &want);
+    pthread_rwlock_t *g = server_segment_guard(group, id);
+    pthread_rwlock_wrlock(g);
+    int rc = server_recovery_prove_file(path, &want, expect, &bytes);
+    if (rc != EFS_ERR_NOT_FOUND)
+        __atomic_fetch_add(&c->checked, 1, __ATOMIC_RELAXED);
+    if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND && rc != EFS_ERR_NOMEM)
+        rc = server_recovery_drop(s, path, bytes, 1, c) == EFS_OK ? EFS_ERR_NOT_FOUND
+                                                                 : EFS_ERR_IO;
+    pthread_rwlock_unlock(g);
+    return rc;
+}
+
+/* Every segment fragment file on every root; a name on a root its id does
+ * not select is never read, so it is counted, not checked. */
+int server_segment_recovery_scan(struct efsd_server *s, struct server_recovery_files *c,
+                                 const int *stop)
+{
+    uint32_t nroot = s->storage_path_count ? s->storage_path_count : 1;
+    int rc = EFS_OK;
+    for (uint32_t r = 0; r < nroot && rc == EFS_OK; r++) {
+        char top[EFS_MAX_PATH + 32];
+        snprintf(top, sizeof(top), "%s/data/segments", s->storage_paths[r]);
+        DIR *gd = opendir(top);
+        if (!gd) {
+            if (errno != ENOENT) rc = EFS_ERR_IO;
+            continue;
+        }
+        struct dirent *ge;
+        while (rc == EFS_OK && (ge = readdir(gd))) {
+            unsigned group;
+            char extra;
+            if (ge->d_name[0] == '.') continue;
+            if (sscanf(ge->d_name, "g%u%c", &group, &extra) != 1 || !efs_pack_group_anchor(group)) {
+                __atomic_fetch_add(&c->foreign, 1, __ATOMIC_RELAXED);
+                continue;
+            }
+            char gpath[EFS_MAX_PATH + 64];
+            snprintf(gpath, sizeof(gpath), "%s/%s", top, ge->d_name);
+            DIR *bd = opendir(gpath);
+            if (!bd) { rc = EFS_ERR_IO; break; }
+            struct dirent *be;
+            while (rc == EFS_OK && (be = readdir(bd))) {
+                if (be->d_name[0] == '.') continue;
+                char bpath[EFS_MAX_PATH + 96];
+                snprintf(bpath, sizeof(bpath), "%s/%s", gpath, be->d_name);
+                DIR *fd = opendir(bpath);
+                if (!fd) {
+                    __atomic_fetch_add(&c->foreign, 1, __ATOMIC_RELAXED);
+                    continue;
+                }
+                struct dirent *fe;
+                while (rc == EFS_OK && !__atomic_load_n(stop, __ATOMIC_RELAXED) &&
+                       (fe = readdir(fd))) {
+                    unsigned long long id, gen;
+                    unsigned fi;
+                    int used = 0;
+                    if (fe->d_name[0] == '.') continue;
+                    char want[96];
+                    if (sscanf(fe->d_name, "%16llx.%llx.%u%n", &id, &gen, &fi, &used) != 3 ||
+                        fe->d_name[used] || fi >= EFS_NUM_FRAGMENTS || !id || !gen ||
+                        sg_root(s, id) != r ||
+                        (snprintf(want, sizeof(want), "%016llx.%llx.%u", id, gen, fi),
+                         strcmp(want, fe->d_name))) {
+                        __atomic_fetch_add(&c->foreign, 1, __ATOMIC_RELAXED);
+                        continue;
+                    }
+                    int k = server_segment_recovery_check(s, group, id, gen, fi, NULL, c);
+                    if (k != EFS_OK && k != EFS_ERR_NOT_FOUND) rc = k;
+                }
+                closedir(fd);
+            }
+            closedir(bd);
+        }
+        closedir(gd);
+        if (rc == EFS_OK && __atomic_load_n(stop, __ATOMIC_RELAXED)) rc = EFS_ERR_BUSY;
+    }
+    return rc;
+}

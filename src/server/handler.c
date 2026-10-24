@@ -538,6 +538,7 @@ void server_handle_conn(struct efs_conn *conn)
             efs_conn_send_msg(conn,EFS_MSG_PUT_CHUNK_REPLY,reply,sizeof(reply));
             efs_iostats_add(EFS_IOSTAT_PUT,result==EFS_OK?payload_len-EFS_PUT_UPLOAD_HEADER_LEN:0,
                 efs_iostats_now_us()-start,result!=EFS_OK);
+            if(result==EFS_OK)server_fault_crash_point("put-acked");
             break;
         }
         case EFS_MSG_REBUILD_PUT: {
@@ -582,6 +583,7 @@ void server_handle_conn(struct efs_conn *conn)
                     rep->rc[i] = EFS_ERR_BUSY;
                 }
                 (void)server_reclaim_accept(g_server, items, cnt, rep->rc);
+                server_fault_crash_point("reclaim-accepted"); /* journaled, not answered */
             }
             efs_iostats_add(EFS_IOSTAT_GC_DELETE, 0, efs_iostats_now_us() - start, !ok);
             efs_conn_send_msg(conn,EFS_MSG_GC_INODE_BATCH_REPLY,rep,(uint32_t)rlen);
@@ -640,6 +642,7 @@ void server_handle_conn(struct efs_conn *conn)
                     rep->rc[i] = EFS_ERR_BUSY;
                 }
                 (void)server_reclaim_accept(g_server, items, cnt, rep->rc);
+                server_fault_crash_point("reclaim-accepted"); /* journaled, not answered */
             }
             efs_conn_send_msg(conn, EFS_MSG_GC_SEGMENT_BATCH_REPLY, rep, (uint32_t)rlen);
             free(items);
@@ -679,6 +682,7 @@ void server_handle_conn(struct efs_conn *conn)
                     rep->rc[i] = EFS_ERR_BUSY;
                 }
                 (void)server_reclaim_accept(g_server, items, cnt, rep->rc);
+                server_fault_crash_point("reclaim-accepted"); /* journaled, not answered */
             }
             efs_conn_send_msg(conn, EFS_MSG_GC_FRAG_BATCH_REPLY, rep, (uint32_t)rlen);
             free(items);
@@ -699,6 +703,17 @@ void server_handle_conn(struct efs_conn *conn)
             if (payload_len == sizeof(struct efs_msg_pack_object_read))
                 server_raft_host_pack_object_serve(payload, rep);
             efs_conn_send_msg(conn, EFS_MSG_PACK_OBJECT_READ_REPLY, rep, sizeof(*rep));
+            free(rep);
+            break;
+        }
+        case EFS_MSG_RECOVERY_SCAN: {
+            /* K36: a recovering member's inventory page of a group it does
+             * not host; answered only by a hosting member, never forwarded. */
+            uint8_t *rep = NULL;
+            uint32_t rlen = 0;
+            server_raft_host_recovery_scan_serve(payload, payload_len, &rep, &rlen);
+            if (!rep) { close_conn = 1; break; }
+            efs_conn_send_msg(conn, EFS_MSG_RECOVERY_SCAN_REPLY, rep, rlen);
             free(rep);
             break;
         }
@@ -859,6 +874,7 @@ void server_handle_conn(struct efs_conn *conn)
             if (!reply)
                 break;
             server_put_sync_stats(g_server, reply);
+            server_recovery_stats(&reply->recovery);
             efs_conn_send_msg(conn, EFS_MSG_SYNC_STATS_REPLY, reply, sizeof(*reply));
             free(reply);
             break;

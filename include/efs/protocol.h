@@ -261,6 +261,44 @@ enum efs_msg_type {
      * bytes; rc EFS_ERR_UNFORMED before this node learned a formation. */
     EFS_MSG_MEMBERSHIP_READ = 245,
     EFS_MSG_MEMBERSHIP_READ_REPLY = 246,
+    /* K36 verified recovery: one page of a metadata group's inventory for
+     * a recovering storage node that hosts no replica of that group. The
+     * receiver must host the group; it answers after its own ReadIndex and
+     * never forwards. Request struct efs_msg_recovery_scan; reply
+     * struct efs_msg_recovery_scan_reply followed by n fixed records
+     * (EFS_RECOVERY_SCAN_CHUNKS: EFS_REBUILD_MARK_LEN marks;
+     * EFS_RECOVERY_SCAN_TICKETS: EFS_PUT_TICKET_WIRE_LEN tickets;
+     * EFS_RECOVERY_SCAN_SEGMENTS: EFS_RECOVERY_SEGMENT_REC_LEN records). */
+    EFS_MSG_RECOVERY_SCAN = 243,
+    EFS_MSG_RECOVERY_SCAN_REPLY = 244,
+};
+/* K36 inventory kinds: every published object (chunk base or live span)
+ * that places a fragment on `node`, as the degraded mark it would carry if
+ * that fragment were lost; every ADMITTED ticket that does; every ACTIVE
+ * packed segment with LIVE records that does, as [group:4][id:8]
+ * [generation:8][fragment:4][geometry:4][checksum:32] big-endian. */
+#define EFS_RECOVERY_SCAN_CHUNKS 1u
+#define EFS_RECOVERY_SCAN_TICKETS 2u
+#define EFS_RECOVERY_SCAN_SEGMENTS 3u
+#define EFS_RECOVERY_SEGMENT_REC_LEN (4u + 8u + 8u + 4u + 4u + 32u)
+#define EFS_RECOVERY_SCAN_PAGE 128u
+#define EFS_RECOVERY_CURSOR_MAX 64u
+#define EFS_RECOVERY_SHARD_END 4096u
+/* Resume point: the next shard to scan and, within it, the last key
+ * returned (len 0 = from the start). shard EFS_RECOVERY_SHARD_END = done. */
+struct efs_recovery_cursor {
+    uint32_t shard;
+    uint32_t len;
+    uint8_t key[EFS_RECOVERY_CURSOR_MAX];
+};
+struct efs_msg_recovery_scan {
+    uint32_t group, what, node, reserved;
+    struct efs_recovery_cursor at;
+};
+struct efs_msg_recovery_scan_reply {
+    int32_t rc;
+    uint32_t n;
+    struct efs_recovery_cursor next;
 };
 #define EFS_MEMBERSHIP_REPLY_HDR 8u
 struct efs_msg_membership_reply {
@@ -800,6 +838,7 @@ struct efs_sync_root_stats {
     char root[160];
     uint32_t mode;
     uint32_t error;               /* barrier failed or recovery uncertain; COMMIT returns EIO */
+    uint32_t uncertain;           /* recovery uncertain: fenced until K36 recovery verifies */
     uint64_t unsynced_bytes;      /* acknowledged, not yet durable */
     uint64_t unsynced_fragments;
     uint64_t oldest_unsynced_ms;  /* age of the oldest unsynced fragment */
@@ -810,14 +849,63 @@ struct efs_sync_root_stats {
     uint64_t current_seq, durable_seq;
     uint64_t barriers, barrier_failures;
     uint64_t last_barrier_ms_ago, last_barrier_us;
-    uint64_t recovery_scanned, recovery_bad;  /* after an unclean restart */
-    uint32_t recovery_done, reserved;
+};
+/* K36 verified recovery of this store after an unclean stop. state NONE:
+ * the previous stop was clean (nothing to recover). RUNNING: the fence
+ * holds (COMMIT returns EIO) while recovery proves the store; VERIFIED:
+ * proven, fence cleared, COMMIT allowed again (rebuilds of what it dropped
+ * may still be running); FAILED: verification itself failed, the store
+ * stays fenced until restart, `reason` says why. Counts are this run's. */
+#define EFS_RECOVERY_NONE 0u
+#define EFS_RECOVERY_RUNNING 1u
+#define EFS_RECOVERY_VERIFIED 2u
+#define EFS_RECOVERY_FAILED 3u
+/* Phases in order; names in efs_recovery_phase_name. */
+#define EFS_RECOVERY_PHASE_IDENTITY 1u  /* incarnation and boot counters */
+#define EFS_RECOVERY_PHASE_JOURNAL 2u   /* reclaim journal verified and replayed */
+#define EFS_RECOVERY_PHASE_LEDGERS 3u   /* storage session certificates (K13) */
+#define EFS_RECOVERY_PHASE_FRAGMENTS 4u /* every local fragment file verified */
+#define EFS_RECOVERY_PHASE_RAFT 5u      /* each hosted group applied to the leader's commit */
+#define EFS_RECOVERY_PHASE_TICKETS 6u   /* ADMITTED tickets naming this store */
+#define EFS_RECOVERY_PHASE_METADATA 7u  /* every published reference checked, losses marked */
+#define EFS_RECOVERY_PHASE_FENCE 8u     /* clearing the fence */
+#define EFS_RECOVERY_PHASE_REBUILD 9u   /* VERIFIED: tickets settling, W154 rebuilding the marked */
+static inline const char *efs_recovery_phase_name(uint32_t p)
+{
+    static const char *const n[] = {"-", "identity", "journal", "ledgers", "fragments", "raft",
+                                    "tickets", "metadata", "fence", "rebuild"};
+    return p < sizeof(n) / sizeof(n[0]) ? n[p] : "?";
+}
+struct efs_recovery_stats {
+    uint32_t state, phase;          /* phase: EFS_RECOVERY_PHASE_* while RUNNING */
+    uint64_t elapsed_ms;            /* since start; frozen at VERIFIED/FAILED */
+    uint64_t files_checked;         /* local fragment files read and verified */
+    uint64_t files_dropped;         /* torn, mismatching or misnamed: removed */
+    uint64_t bytes_dropped;
+    uint64_t files_foreign;         /* not fragment names: left alone, counted */
+    uint64_t refs_checked;          /* metadata references to this store */
+    uint64_t refs_missing;          /* of those, no proven copy here */
+    uint64_t marked;                /* degraded marks this recovery wrote */
+    uint64_t already_marked;        /* identical mark already present */
+    uint64_t superseded;            /* object no longer live: nothing to rebuild */
+    uint64_t unrecoverable;         /* another fragment of the stripe already lost */
+    uint64_t tickets_checked, tickets_waiting;
+    uint64_t segments_checked;      /* referenced packed-segment fragments */
+    uint64_t segments_missing;      /* of those, no proven copy: readable from
+                                     * the peers, no rebuild path (W154 covers
+                                     * chunk stripes only) */
+    uint64_t rebuilt;               /* marked fragments rebuilt here by W154 */
+    uint64_t rebuild_waiting;       /* marks not yet retired */
+    uint32_t groups_proven, groups;
+    uint64_t incarnation;
+    char reason[160];               /* FAILED: why; RUNNING: what it waits for */
 };
 struct efs_msg_sync_stats_reply {
     uint32_t count;
     uint32_t sync_window_ms;
     uint64_t sync_window_bytes;
     struct efs_sync_root_stats roots[EFS_SYNC_STATS_ROOTS];
+    struct efs_recovery_stats recovery;
 };
 
 /* IO_STATS reply: one row per op class (0 = GET_CHUNK handler, 1 =

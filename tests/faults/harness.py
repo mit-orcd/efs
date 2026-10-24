@@ -669,10 +669,11 @@ def row(case, status, **fields):
 def case_one_server_lost(cluster, seed, node_id):
     """Kill one server; SIGKILL is an unclean stop.
 
-    Since c4178ea81 the restarted root keeps recovery_uncertain and refuses
-    COMMIT (fsync EIO) until verified recovery or fresh format, and every
-    fsync commits every current node. Each node therefore gets its own fresh
-    cluster; after restart the expected refusal is asserted, not bypassed.
+    The restarted root is recovery uncertain and refuses COMMIT (fsync EIO)
+    until K36 verified recovery proves it; then COMMIT works again. Every
+    fsync commits every current node, so each node gets its own fresh
+    cluster; after restart a cold client's fsync must succeed once recovery
+    verified, within a bound, and never before by skipping the fence.
     """
     results = []
     mount_a, mount_b = (item[0] for item in cluster.mounts)
@@ -750,17 +751,25 @@ def case_one_server_lost(cluster, seed, node_id):
                 node_id, st.st_size),
             node_id=node_id, expected_sha256=sha256(data),
             actual_sha256=sha256(got2)))
-    # Fail-closed W71 contract: the uncertain root must refuse COMMIT.
-    err3 = fsync_errno(mount_a, "fence-%d" % node_id, cluster.journal, cluster.work)
-    if err3 == errno.EIO:
+    # K36: EIO while the uncertain root recovers, success once verified.
+    deadline, refused, k = time.monotonic() + 120, 0, 0
+    while True:
+        err3 = fsync_errno(mount_a, "fence-%d-%d" % (node_id, k), cluster.journal, cluster.work)
+        k += 1
+        if err3 != errno.EIO or time.monotonic() >= deadline:
+            break
+        refused += 1
+        time.sleep(1)
+    if err3 == 0:
         results.append(row(
-            "restart_fence", "PASS", readable=None,
-            detail="fsync EIO after unclean stop of node %d (recovery uncertain)" % node_id,
+            "restart_recovered", "PASS", readable=None,
+            detail="fsync OK after verified recovery of node %d (%d EIO while fenced)" % (
+                node_id, refused),
             node_id=node_id))
     else:
         results.append(row(
-            "restart_fence", "FAIL", readable=None,
-            detail="fsync after unclean stop of node %d returned %s, want EIO" % (
+            "restart_recovered", "FAIL", readable=None,
+            detail="fsync after unclean stop of node %d returned %s, want OK after recovery" % (
                 node_id, err3),
             node_id=node_id))
     return results

@@ -87,7 +87,8 @@ record_park = fn(efsd, 'static void shutdown_fault_record_park(const char *step)
 assert record_park.index('#if EFS_FAULTS') < record_park.index('EFS_FAULT_SHUTDOWN_RECORD_PARK') < record_park.index('#else')
 phases = efsd[efsd.index('} g_sd_phases[] = {'):efsd.index('};', efsd.index('} g_sd_phases[] = {'))]
 names = re.findall(r'\{ "([a-z-]+)", "[^"]+", sd_\w+, (-1|SD_\w+) \}', phases)
-assert names == [('recorders', '-1'), ('packer', '-1'), ('writer-pool', '-1'), ('put-sync', 'SD_PUT_SYNC'),
+assert names == [('recorders', '-1'), ('recovery', '-1'), ('packer', '-1'), ('writer-pool', '-1'),
+                 ('put-sync', 'SD_PUT_SYNC'),
                  ('reclaim', 'SD_RECLAIM'), ('usage-flush', 'SD_USAGE'), ('raft-host', '-1'),
                  ('peer-pool', '-1'), ('storage-roots', '-1')], names
 # Fault hooks exist only in EFS_FAULTS builds.

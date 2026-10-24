@@ -129,6 +129,9 @@ static void test_startup_abandon(uint8_t *data)
     efs_test_path(root,sizeof(root),"efs-abandon-XXXXXX");assert(efs_test_mkdtemp(root));
     snprintf(rec,sizeof(rec),"%s/%s",root,PUT_SYNC_RECORD);
     struct put_sync_root *r=&put_sync_roots[0];struct put_sync_record record;int fd;
+    /* Abandon syncs the root after removing a record: no new name whose
+     * bytes would need fencing first (barrier_sync's ordering check). */
+    file_syncs=1;
     /* Fresh root: abandoning the first boot removes the record it created. */
     abandon_reset();booting=1;put_sync_attach(r,root,101,1);booting=0;put_sync_state[0]=1;
     assert(r->fd>=0 && !r->prev_existed && !access(rec,F_OK));
@@ -213,9 +216,9 @@ static int test_async_durability(uint8_t *data)
     assert(!put_sync_record_read(fd,&record));close(fd);
     assert(record.boot==1 && record.clean && record.verifier==101 && record.roots==1);
     close(r->fd);close(r->record_fd);memset(r,0,sizeof(*r));put_sync_state[0]=0;
-    /* Restart after a clean stop: next boot, no scan. */
+    /* Restart after a clean stop: next boot, not fenced. */
     booting=1;put_sync_attach(r,root,101,1);booting=0;
-    assert(r->fd>=0 && r->boot==2 && r->prev_clean && r->scan_done);
+    assert(r->fd>=0 && r->boot==2 && r->prev_clean && !r->recovery_uncertain);
     put_sync_state[0]=1;
     /* A failed barrier is sticky until restart: COMMIT fails even after a
      * later barrier succeeds; PUTs stay asynchronous. */
@@ -229,29 +232,41 @@ static int test_async_durability(uint8_t *data)
     assert(put_sync_commit_root(r)==EFS_ERR_IO);
     server_put_sync_stop(NULL);
     close(r->fd);close(r->record_fd);memset(r,0,sizeof(*r));put_sync_state[0]=0;
-    /* Unclean previous stop (the failed barrier left clean=0): the scan
-     * verifies fragments modified since and reports a corrupted one. */
+    /* Unclean previous stop (the failed barrier left clean=0): the root is
+     * fenced until K36 recovery verifies the store. */
     snprintf(path,sizeof(path),"%s/data/a/f5",root);
-    {   /* f5: a valid fragment, then its payload corrupted */
-        uint8_t rec[EFS_FRAG_RECORD_BYTES];test_record(data,rec);
-        struct shard_io_arg a={.buf=data,.len=4096,.is_write=1,.rec=rec,.direct=1};
-        strcpy(a.path,path);file_syncs=0;shard_io_thread(&a);assert(a.result==EFS_OK);
-        int cf=open(path,O_WRONLY);assert(cf>=0 && pwrite(cf,"X",1,0)==1);close(cf);
-    }
     booting=1;put_sync_attach(r,root,101,1);booting=0;
-    assert(r->fd>=0 && r->boot==3 && !r->prev_clean && r->scanner_started);
-    pthread_join(r->scanner,NULL);r->scanner_started=0;
-    assert(r->scan_done && r->scanned>=4 && r->bad==1);
+    assert(r->fd>=0 && r->boot==3 && !r->prev_clean && r->recovery_uncertain);
+    put_sync_state[0]=1;
+    assert(server_put_sync_uncertain());
     /* A fresh client must not mistake an empty new-boot counter for durable
      * old data. Even a successful new barrier cannot clear uncertainty. */
-    assert(r->recovery_uncertain && put_sync_commit_root(r)==EFS_ERR_IO);
+    assert(put_sync_commit_root(r)==EFS_ERR_IO);
     assert(async_put(r,path,data)==EFS_OK);
     assert(put_sync_commit_root(r)==EFS_ERR_IO);
-    put_sync_state[0]=1;server_put_sync_stop(NULL);
+    /* Nor an orderly stop: the record stays unclean across restarts. */
+    server_put_sync_stop(NULL);
     close(r->fd);close(r->record_fd);memset(r,0,sizeof(*r));put_sync_state[0]=0;
     booting=1;put_sync_attach(r,root,101,1);booting=0;
-    assert(r->fd>=0 && !r->prev_clean && r->recovery_uncertain);
+    assert(r->fd>=0 && !r->prev_clean && r->recovery_uncertain && r->boot==4);
+    put_sync_state[0]=1;
     assert(put_sync_commit_root(r)==EFS_ERR_IO);
+    /* Verified recovery clears the fence: COMMIT and the orderly stop's
+     * clean record follow, and the next boot starts unfenced. */
+    {
+        struct efsd_server *one=calloc(1,sizeof(*one));char why[160];assert(one);
+        one->storage_path_count=1;strcpy(one->storage_paths[0],root);
+        assert(server_put_sync_identity(one,why,sizeof(why))==EFS_OK);
+        one->storage_path_count=2;
+        assert(server_put_sync_identity(one,why,sizeof(why))!=EFS_OK);free(one);
+    }
+    server_put_sync_recovered();
+    assert(!server_put_sync_uncertain() && put_sync_commit_root(r)==EFS_OK);
+    assert(async_put(r,path,data)==EFS_OK && put_sync_commit_root(r)==EFS_OK);
+    server_put_sync_stop(NULL);
+    close(r->fd);close(r->record_fd);memset(r,0,sizeof(*r));put_sync_state[0]=0;
+    booting=1;put_sync_attach(r,root,101,1);booting=0;
+    assert(r->fd>=0 && r->prev_clean && !r->recovery_uncertain && r->boot==5);
     put_sync_state[0]=1;server_put_sync_stop(NULL);
     close(r->fd);close(r->record_fd);memset(r,0,sizeof(*r));put_sync_state[0]=0;
     for(int i=1;i<=5;i++){snprintf(path,sizeof(path),"%s/data/a/f%d",root,i);unlink(path);}
@@ -263,6 +278,65 @@ static int test_async_durability(uint8_t *data)
     assert(!unlink(rec));assert(!rmdir(root));
     return 1;
 }
+/* K36: the local half of verified recovery. Real fragment names under a
+ * root: a valid file is kept, a torn one (truncated), one whose record names
+ * another object, one with a flipped payload byte and one whose digest
+ * differs from the published one are dropped and their bytes given back;
+ * a foreign name is counted and left alone; an absent fragment is absent. */
+static void write_frag(struct efsd_server *s,efs_ino_t ino,uint32_t ci,uint32_t fi,uint64_t gen,
+                       uint64_t rec_ino,const uint8_t *data,char *path,size_t n)
+{
+    struct efs_export ex={.id=1};uint8_t rec[EFS_FRAG_RECORD_BYTES],d[EFS_HASH_SIZE];
+    efs_tls_chunk_gen=gen;fragment_path_at(s,0,&ex,ino,ci,fi,path,n);
+    struct efs_frag_ident id;fragment_ident(&ex,rec_ino,ci,fi,4096,&id);efs_tls_chunk_gen=0;
+    efs_hash(data,4096,d);assert(!efs_frag_record_encode(&id,d,rec));
+    make_dir_for_file(path);
+    int fd=open(path,O_CREAT|O_TRUNC|O_WRONLY,0644);assert(fd>=0);
+    assert(write(fd,data,4096)==4096 && write(fd,rec,sizeof(rec))==(ssize_t)sizeof(rec));close(fd);
+}
+static void test_recovery_local(uint8_t *data)
+{
+    char root[1024],good[8192],torn[8192],other[8192],flip[8192],pub[8192],foreign[8300];
+    efs_test_path(root,sizeof(root),"efs-recovery-XXXXXX");assert(efs_test_mkdtemp(root));
+    struct efsd_server *s=calloc(1,sizeof(*s));assert(s);
+    assert(!pthread_mutex_init(&s->lock,NULL));
+    s->storage_path_count=1;strcpy(s->storage_paths[0],root);
+    s->node_count=1;s->nodes[0].id=s->id=1;s->nodes[0].used=1<<20;
+    write_frag(s,12345,7,1,0x77,12345,data,good,sizeof(good));
+    write_frag(s,12345,8,1,0x78,12345,data,torn,sizeof(torn));
+    assert(!truncate(torn,4096+64));
+    write_frag(s,12345,9,1,0x79,99999,data,other,sizeof(other));
+    write_frag(s,12345,10,1,0x7a,12345,data,flip,sizeof(flip));
+    {int fd=open(flip,O_WRONLY);assert(fd>=0 && pwrite(fd,"X",1,100)==1);close(fd);}
+    write_frag(s,12345,11,1,0x7b,12345,data,pub,sizeof(pub));
+    snprintf(foreign,sizeof(foreign),"%s.sum",good);
+    {int fd=open(foreign,O_CREAT|O_WRONLY,0644);assert(fd>=0);close(fd);}
+    struct server_recovery_files c={0};int stop=0;
+    booting=1; /* recovery removes names, nothing to fence first */
+    assert(server_recovery_scan_local(s,&c,&stop)==EFS_OK);
+    /* The torn file is no fragment size: its whole size goes back. */
+    assert(c.checked==5 && c.dropped==3 && c.foreign==1 && c.bytes_dropped==4160+2*4096);
+    assert(!access(good,F_OK) && !access(pub,F_OK) && !access(foreign,F_OK));
+    assert(access(torn,F_OK) && access(other,F_OK) && access(flip,F_OK));
+    assert(s->nodes[0].used==(1<<20)-4160-2*4096);
+    /* Against the published digest: matching is proven, another is dropped. */
+    uint8_t want[EFS_HASH_SIZE],wrong[EFS_HASH_SIZE];efs_hash(data,4096,want);
+    memcpy(wrong,want,sizeof(wrong));wrong[0]^=1;
+    memset(&c,0,sizeof(c));
+    assert(server_recovery_fragment_check(s,1,12345,7,1,0x77,want,&c)==EFS_OK && !c.dropped);
+    assert(server_recovery_fragment_check(s,1,12345,11,1,0x7b,wrong,&c)==EFS_ERR_NOT_FOUND &&
+           c.dropped==1 && access(pub,F_OK));
+    assert(server_recovery_fragment_check(s,1,12345,8,1,0x78,want,&c)==EFS_ERR_NOT_FOUND);
+    /* Idempotent: a second pass (a crash during recovery) changes nothing. */
+    memset(&c,0,sizeof(c));
+    assert(server_recovery_scan_local(s,&c,&stop)==EFS_OK && c.checked==1 && !c.dropped);
+    booting=0;
+    unlink(good);unlink(foreign);
+    char cmd[1200];snprintf(cmd,sizeof(cmd),"rm -rf '%s'",root);assert(!system(cmd));
+    assert(!pthread_mutex_destroy(&s->lock));free(s);
+    puts("store durability: K36 local recovery keeps proven fragments, drops torn, misnamed, corrupt and mismatching ones PASS");
+}
+
 /* I25 / fragment format 2: no legacy reader. A root marked with format 0
  * (payload-only digest tails) or an unmarked root that already holds
  * fragment data is refused at startup; a fresh root is marked format 1. */
@@ -390,6 +464,7 @@ int main(void)
     test_root_format();
     int async_ran=test_async_durability(data);
     test_startup_abandon(data);
+    test_recovery_local(data);
     if(!async_ran)puts("async durability: SKIP (TMPDIR is not XFS)");
     free(data);
     puts("production PUT durability: buffered/direct/bounce file and pathname barriers, pinned ancestry, restart/recreation, retries, fault refusal and asynchronous acknowledgement PASS");

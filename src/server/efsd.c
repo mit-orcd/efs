@@ -350,6 +350,7 @@ static const char *const sd_barrier_names[SD_NBARRIERS] = {
 static const char *const sd_state_names[] = { "not_reached", "done", "failed", "stuck" };
 
 static int sd_recorders(struct efsd_server *s) { (void)s; stop_perf_recorder(); return 0; }
+static int sd_recovery(struct efsd_server *s) { (void)s; server_recovery_stop(); return 0; }
 static int sd_packer(struct efsd_server *s) { (void)s; server_packer_stop(); return 0; }
 static int sd_writers(struct efsd_server *s) { server_writer_pool_stop(s); return 0; }
 static int sd_put_sync(struct efsd_server *s) { return server_put_sync_stop(s); }
@@ -373,9 +374,10 @@ static const struct shutdown_phase {
     int barrier;          /* SD_* index, or -1 */
 } g_sd_phases[] = {
     { "recorders", "perf/strace recorder processes", sd_recorders, -1 },
+    { "recovery", "K36 verified recovery thread", sd_recovery, -1 },
     { "packer", "packer thread", sd_packer, -1 },
     { "writer-pool", "writer threads", sd_writers, -1 },
-    { "put-sync", "PUT sync committer and scanner threads", sd_put_sync, SD_PUT_SYNC },
+    { "put-sync", "PUT sync committer threads", sd_put_sync, SD_PUT_SYNC },
     { "reclaim", "reclaim journal, deleter and recovery threads", sd_reclaim, SD_RECLAIM },
     { "usage-flush", "usage record write", sd_usage, SD_USAGE },
     { "raft-host", "Raft host threads", sd_raft, -1 },
@@ -1084,7 +1086,7 @@ int main(int argc, char **argv)
     if (server_storage_roots_init(&server) != EFS_OK) return 1;
     if (server_put_sync_init(&server) != EFS_OK) return 1;
     /* Any refusal below exits before serving; it must not leave the roots
-     * marked as an unclean boot (that fences COMMIT until W71 recovery). */
+     * marked as an unclean boot (that fences COMMIT until K36 recovery). */
     atexit(server_put_sync_abandon);
     fprintf(stderr, "direct_io=%s\n", server.direct_io ? "on" : "off");
     if (server.meta_storage[0] &&
@@ -1373,6 +1375,11 @@ int main(int argc, char **argv)
         server_writer_pool_stop(&server);
         return 1;
     }
+    /* K36: after an unclean stop the roots stay fenced until verified
+     * recovery proves the store; it needs the metadata groups, so it starts
+     * once they run and serves in the background. */
+    if (server_recovery_start(&server) != EFS_OK)
+        fprintf(stderr, "recovery: cannot start; the store stays fenced\n");
     if (server.discovery_port) {
         if (efs_disc_responder_start(server.discovery_port, discovery_info) != 0)
             fprintf(stderr, "discovery: cannot answer on UDP port %u: %s; joiners must name a "

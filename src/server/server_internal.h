@@ -415,6 +415,21 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
 void server_raft_host_expiry_status(struct efs_expiry_status *out);
 void server_raft_host_status(struct efs_msg_raft_status_reply *out);
 void server_raft_host_resync(const struct efs_msg_raft_resync *in, struct efs_msg_raft_resync_reply *out);
+/* K36 verified recovery (raft_host.c): group slot gi (0..1) is group
+ * gi*2; *hosted when this node serves it. prove: OK once a ReadIndex from
+ * this node proved its replica applied to the leader's commit (BUSY while
+ * a resync from the leader runs, NOT_FOUND when not hosted). scan: one page
+ * of the group's inventory for `node` (EFS_RECOVERY_SCAN_*), local after a
+ * ReadIndex or from a hosting member. mark: propose EFS_MD_CMD_DEGRADED_MARK,
+ * returns the apply verdict. */
+int server_raft_host_recovery_group(int gi, uint8_t *group, int *hosted);
+int server_raft_host_recovery_prove(uint8_t group, char *why, size_t n);
+int server_raft_host_recovery_scan(uint8_t group, uint32_t what, efs_node_id_t node,
+                                   struct efs_recovery_cursor *cur, uint8_t *recs, uint32_t *n);
+void server_raft_host_recovery_scan_serve(const uint8_t *payload, uint32_t len,
+                                          uint8_t **reply, uint32_t *rlen);
+struct efs_meta_degraded;
+int server_raft_host_recovery_mark(const struct efs_meta_degraded *d);
 void server_raft_host_step_down(const struct efs_msg_raft_step_down *in, struct efs_msg_raft_step_down_reply *out);
 int server_raft_host_active(void);
 /* W153/K33: the committed membership. formed: a revision is committed and
@@ -598,6 +613,55 @@ int server_put_sync_stop(struct efsd_server *s);
  * root's previous durability record (server_put_sync_abandon, atexit). */
 void server_put_sync_serving(void);
 void server_put_sync_abandon(void);
+
+/* K36 verified recovery after an unclean stop (recovery.c drives it; the
+ * store primitives are store.c and segment_store.c). */
+struct server_recovery_files {
+    uint64_t checked, dropped, bytes_dropped, foreign; /* updated atomically */
+};
+struct efs_frag_ident;
+struct efs_recovery_stats;
+/* 1 while any attached root is fenced (recovery uncertain). */
+int server_put_sync_uncertain(void);
+/* OK when every root's durability record names this boot as running. */
+int server_put_sync_identity(struct efsd_server *s, char *why, size_t n);
+/* Recovery verified: clear every root's fence (COMMIT allowed again). */
+void server_put_sync_recovered(void);
+/* Prove one fragment file: OK, NOT_FOUND (absent) or the refusal. */
+int server_recovery_prove_file(const char *path, struct efs_frag_ident *want,
+                               const uint8_t *expect, uint64_t *bytes);
+int server_recovery_drop(struct efsd_server *s, const char *path, uint64_t bytes, int charged,
+                         struct server_recovery_files *c);
+/* Every root's copy of one chunk fragment, under the PUT's object lock:
+ * unprovable copies (torn, other identity, digest other than `expect`
+ * when set) are dropped. OK when a proven copy remains, NOT_FOUND when
+ * none does, IO when an unprovable copy could not be removed. */
+int server_recovery_fragment_check(struct efsd_server *s, efs_export_id_t eid, efs_ino_t ino,
+                                   uint32_t ci, uint32_t fi, uint64_t gen,
+                                   const uint8_t expect[EFS_HASH_SIZE],
+                                   struct server_recovery_files *c);
+/* Every local fragment file (chunk and segment) proven or dropped. */
+int server_recovery_scan_local(struct efsd_server *s, struct server_recovery_files *c,
+                               const int *stop);
+int server_segment_recovery_check(struct efsd_server *s, uint32_t group, uint64_t id,
+                                  uint64_t gen, uint32_t fi, const uint8_t *expect,
+                                  struct server_recovery_files *c);
+int server_segment_recovery_scan(struct efsd_server *s, struct server_recovery_files *c,
+                                 const int *stop);
+/* Start once serving (raft host and packer up); no-op after a clean stop. */
+int server_recovery_start(struct efsd_server *s);
+void server_recovery_stop(void);
+void server_recovery_stats(struct efs_recovery_stats *out);
+/* EFS_FAULTS builds: EFS_FAULT_CRASH=<point>[:<n>] exits 137 at the nth
+ * pass of that point (default the first); points put-acked,
+ * publish-apply, reclaim-accepted, recovery-local, recovery-marked. A
+ * normal build compiles every point out. */
+#if EFS_FAULTS
+void server_fault_crash(const char *point);
+#define server_fault_crash_point(p) server_fault_crash(p)
+#else
+#define server_fault_crash_point(p) ((void)0)
+#endif
 
 
 /* ---- W124 node reclaim (src/server/reclaim.c) ----

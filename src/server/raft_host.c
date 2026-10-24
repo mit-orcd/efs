@@ -2407,6 +2407,29 @@ static int apply_degraded_clear_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return rc;
 }
 
+/* K36 EFS_MD_CMD_DEGRADED_MARK: [tag][mark, EFS_REBUILD_MARK_LEN]. A
+ * malformed entry halts; NOT_FOUND (object superseded) and STALE (another
+ * fragment already marked) are logical verdicts for the recovering node. */
+static int apply_degraded_mark_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                                   uint32_t clen, uint64_t index, uint8_t group)
+{
+    struct efs_meta_degraded d;
+    if (clen != EFS_MD_DEGRADED_MARK_LEN || server_degraded_mark_decode(cmd + 1, &d) != EFS_OK)
+        return EFS_ERR_UNSUPPORTED;
+    if (d.lane >= EFS_META_LANES ||
+        group != efs_raft_shard_group(efs_kv_lane_shard(d.ino, d.lane)))
+        return EFS_ERR_INVAL;
+    int rc = efs_meta_apply_degraded_mark(h->kv, &d);
+    fprintf(stderr, "raft-host: degraded-mark ino=%llu ci=%u gen=%llx fragment=%d node=%u: %s "
+            "index=%llu\n", (unsigned long long)d.ino, d.chunk_index,
+            (unsigned long long)d.object_gen, __builtin_ctz(d.missing_mask),
+            d.nodes[__builtin_ctz(d.missing_mask)],
+            rc == EFS_OK ? "marked" : rc == EFS_ERR_NOT_FOUND ? "object not live"
+            : rc == EFS_ERR_STALE ? "another fragment already marked" : efs_strerror(rc),
+            (unsigned long long)index);
+    return rc;
+}
+
 /* EFS_MD_CMD_GC_ACK on the group whose anchor shard holds the records:
  * [cnt:2][(ino:8)(gen:8)(lane:1)(ci:4)(frag:1)]*cnt — one fragment of each
  * record was deleted (or was already gone) on its target node. */
@@ -3434,6 +3457,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX || cmd[0] == EFS_MD_CMD_PACK_INDEX ||
            cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
            cmd[0] == EFS_MD_CMD_DEGRADED_CLEAR || cmd[0] == EFS_MD_CMD_PUT_ORPHAN_ACK ||
+           cmd[0] == EFS_MD_CMD_DEGRADED_MARK ||
            cmd[0] == EFS_MD_CMD_PUT_TICKET_DRAIN ||
            cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP)
               ? EFS_OK
@@ -3468,6 +3492,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
          cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX || cmd[0] == EFS_MD_CMD_PACK_INDEX ||
          cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
          cmd[0] == EFS_MD_CMD_DEGRADED_CLEAR || cmd[0] == EFS_MD_CMD_PUT_ORPHAN_ACK ||
+         cmd[0] == EFS_MD_CMD_DEGRADED_MARK ||
          cmd[0] == EFS_MD_CMD_PUT_TICKET_DRAIN ||
          cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_CREATE ||
          cmd[0] == EFS_MD_CMD_APPEND_CATCHUP || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
@@ -3918,6 +3943,8 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         return apply_rmdir_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT) {
         if (!host_publication_command_valid(cmd,clen)) return EFS_ERR_UNSUPPORTED;
+        if (cmd[0] == EFS_MD_CMD_PUBLICATION)
+            server_fault_crash_point("publish-apply"); /* committed, not yet applied here */
         return apply_one_publish(h,cmd,index,term,group);
     }
     if(EFS_MD_CMD_IS_RESERVED(cmd[0]))
@@ -3947,8 +3974,10 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
     }
     if(cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT_BATCH || cmd[0]==EFS_MD_CMD_PUT_TICKET_SETTLE_BATCH)
         return apply_put_ticket_batch_cmd(h,cmd,clen,group);
-    if (cmd[0] == EFS_MD_CMD_REPORT_PUBLISH)
+    if (cmd[0] == EFS_MD_CMD_REPORT_PUBLISH) {
+        server_fault_crash_point("publish-apply"); /* committed, not yet applied here */
         return apply_report_publish_cmd(h, cmd, clen, group);
+    }
     /* K13: a bare PUBLISH carries no ticket. Only REPORT_PUBLISH records and
      * ticketed PUBLICATION commands publish; never apply or skip one. */
     if (cmd[0] == EFS_MD_CMD_PUBLISH)
@@ -4021,6 +4050,8 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         return apply_gc_ack_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_DEGRADED_CLEAR)
         return apply_degraded_clear_cmd(h, cmd, clen, index, group);
+    if (cmd[0] == EFS_MD_CMD_DEGRADED_MARK)
+        return apply_degraded_mark_cmd(h, cmd, clen, index, group);
     if (cmd[0] == EFS_MD_CMD_PUT_ORPHAN_ACK)
         return apply_put_orphan_ack_cmd(h, cmd, clen, group);
     if (cmd[0] == EFS_MD_CMD_PUT_TICKET_DRAIN)
@@ -15033,6 +15064,322 @@ void server_raft_host_resync(const struct efs_msg_raft_resync *in,
         if (h->g[i].group == in->group && h->g[i].hosted && h->g[i].r)
             out->rc = efs_raft_request_resync(h->g[i].r);
     pthread_mutex_unlock(&h->mu);
+}
+
+/* ---- K36 verified recovery: the metadata side (recovery.c drives it) ----
+ *
+ * Groups are 0 and 2. A group this node hosts (a non-retired voter) is
+ * proven by a ReadIndex from this node: it returns only once the local
+ * replica has applied everything the leader had committed when the read
+ * began, so the replayed log and KV are at a proven state. A replica whose
+ * apply missed a committed row (kv_incomplete) is resynced from the
+ * leader's snapshot first (raft-resync). Inventory pages are read from the
+ * local KV after that ReadIndex, or from a hosting member
+ * (EFS_MSG_RECOVERY_SCAN) for a group this node does not host. */
+int server_raft_host_recovery_group(int gi, uint8_t *group, int *hosted)
+{
+    struct efs_raft_host *h = g_host;
+    if (!h || !h->running || gi < 0 || gi >= HOST_NGROUPS)
+        return EFS_ERR_BUSY;
+    *group = (uint8_t)(gi << 1);
+    *hosted = host_hosts(h, *group);
+    return EFS_OK;
+}
+
+int server_raft_host_recovery_prove(uint8_t group, char *why, size_t n)
+{
+    struct efs_raft_host *h = g_host;
+    int hint = -1, rc;
+    if (!h || !h->running) {
+        snprintf(why, n, "raft host not running");
+        return EFS_ERR_BUSY;
+    }
+    if (!__atomic_load_n(&h->formed, __ATOMIC_ACQUIRE)) {
+        snprintf(why, n, "cluster not formed");
+        return EFS_ERR_UNFORMED;
+    }
+    if (!host_hosts(h, group))
+        return EFS_ERR_NOT_FOUND;
+    if (host_group_incompatible(h, group)) {
+        snprintf(why, n, "group %u halted at an entry this build cannot apply", group);
+        return EFS_ERR_UNSUPPORTED;
+    }
+    pthread_mutex_lock(&h->mu);
+    struct host_group *g = group_slot(h, group);
+    int incomplete = g && g->kv_incomplete, pending = g && g->r && efs_raft_resync_pending(g->r);
+    if (incomplete && !pending && g->r)
+        rc = efs_raft_request_resync(g->r);
+    pthread_mutex_unlock(&h->mu);
+    if (incomplete || pending) {
+        snprintf(why, n, "group %u replica incomplete: resync from the leader's snapshot%s",
+                 group, pending ? " in progress" : " requested");
+        return EFS_ERR_BUSY;
+    }
+    rc = host_read_index(h, group, &hint);
+    if (rc != EFS_OK)
+        snprintf(why, n, "group %u: ReadIndex not proven yet (%s)", group, efs_strerror(rc));
+    return rc;
+}
+
+struct recovery_page {
+    uint32_t what, cap, n;
+    efs_node_id_t node;
+    uint8_t *recs;
+    uint8_t last[EFS_RECOVERY_CURSOR_MAX];
+    uint32_t last_len;
+    int rc;
+    struct efs_pack_object *obj; /* segments: decode buffer (a ledger is large) */
+};
+
+static uint32_t recovery_rec_len(uint32_t what)
+{
+    return what == EFS_RECOVERY_SCAN_CHUNKS ? EFS_REBUILD_MARK_LEN
+         : what == EFS_RECOVERY_SCAN_SEGMENTS ? EFS_RECOVERY_SEGMENT_REC_LEN
+                                              : EFS_PUT_TICKET_WIRE_LEN;
+}
+
+/* Segments: one ACTIVE object with LIVE records (files switched into it,
+ * so every member's copy was durable before the switch) placing a fragment
+ * on the node. Pending-only objects are skipped: their uploads may still
+ * be running. */
+static int recovery_segment_cb(void *user, const uint8_t *key, uint32_t klen,
+                               const uint8_t *val, uint32_t vlen)
+{
+    struct recovery_page *p = user;
+    struct efs_pack_object *o = p->obj;
+    struct efs_pack_ledger_usage u;
+    if (p->last_len && klen == p->last_len && !memcmp(key, p->last, klen))
+        return 0;
+    if (p->n >= p->cap)
+        return 1;
+    if (klen > EFS_RECOVERY_CURSOR_MAX || !o || efs_pack_object_decode(val, vlen, o) != EFS_OK)
+        return p->rc = EFS_ERR_PROTO, 1; /* never skipped */
+    memcpy(p->last, key, klen);
+    p->last_len = klen;
+    efs_pack_ledger_usage(&o->ledger, &u);
+    if (o->ledger.phase != EFS_PACK_ACTIVE || !u.live)
+        return 0;
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        if (o->nodes[i] != p->node)
+            continue;
+        uint8_t *r = p->recs + (size_t)p->n * EFS_RECOVERY_SEGMENT_REC_LEN;
+        wr32be(r, o->ledger.publication_group);
+        wr64be(r + 4, o->ledger.segment_id);
+        wr64be(r + 12, o->ledger.segment_generation);
+        wr32be(r + 20, (uint32_t)i);
+        wr32be(r + 24, o->ledger.geometry);
+        memcpy(r + 28, o->checksums[i], EFS_HASH_SIZE);
+        p->n++;
+        break;
+    }
+    return 0;
+}
+
+/* Rows are never split across pages: a row starts only while the page has
+ * room for every object it can hold (base and EFS_CHUNK_DELTA_MAX spans). */
+static int recovery_chunk_cb(void *user, const struct efs_meta_degraded *ref,
+                             const uint8_t *key, uint32_t klen)
+{
+    struct recovery_page *p = user;
+    if (klen > EFS_RECOVERY_CURSOR_MAX)
+        return p->rc = EFS_ERR_PROTO, 1;
+    if (p->last_len != klen || memcmp(p->last, key, klen)) {
+        if (p->n + 1u + EFS_CHUNK_DELTA_MAX > p->cap)
+            return 1;
+        memcpy(p->last, key, klen);
+        p->last_len = klen;
+    }
+    server_degraded_mark_encode(p->recs + (size_t)p->n * EFS_REBUILD_MARK_LEN, ref);
+    p->n++;
+    return 0;
+}
+
+static int recovery_ticket_cb(void *user, const uint8_t *key, uint32_t klen,
+                              const uint8_t *val, uint32_t vlen)
+{
+    struct recovery_page *p = user;
+    struct efs_put_ticket t;
+    uint32_t state = 0;
+    if (p->last_len && klen == p->last_len && !memcmp(key, p->last, klen))
+        return 0;
+    if (p->n >= p->cap)
+        return 1;
+    if (klen > EFS_RECOVERY_CURSOR_MAX ||
+        efs_put_ticket_row_decode(key, klen, val, vlen, &t, &state) != EFS_OK)
+        return p->rc = EFS_ERR_PROTO, 1; /* never skipped */
+    memcpy(p->last, key, klen);
+    p->last_len = klen;
+    if (state != EFS_PUT_TICKET_ADMITTED)
+        return 0;
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
+        if (t.nodes[i] == p->node) {
+            if (efs_put_ticket_encode(&t, p->recs + (size_t)p->n * EFS_PUT_TICKET_WIRE_LEN))
+                return p->rc = EFS_ERR_PROTO, 1;
+            p->n++;
+            break;
+        }
+    return 0;
+}
+
+static int host_recovery_scan_local(struct efs_raft_host *h, uint8_t group, uint32_t what,
+                                    efs_node_id_t node, struct efs_recovery_cursor *cur,
+                                    uint8_t *recs, uint32_t *n)
+{
+    int hint = -1, rc = host_read_index(h, group, &hint);
+    *n = 0;
+    if (rc != EFS_OK)
+        return rc;
+    if (cur->len > EFS_RECOVERY_CURSOR_MAX)
+        return EFS_ERR_INVAL;
+    struct efs_pack_object *obj = NULL;
+    if (what == EFS_RECOVERY_SCAN_SEGMENTS && !(obj = malloc(sizeof(*obj))))
+        return EFS_ERR_NOMEM;
+    rc = EFS_OK;
+    for (uint32_t shard = cur->shard; shard < EFS_RECOVERY_SHARD_END; shard++) {
+        int resume = shard == cur->shard && cur->len;
+        if (efs_raft_shard_group(shard) != group ||
+            (what == EFS_RECOVERY_SCAN_SEGMENTS && shard != efs_pack_group_anchor(group)))
+            continue;
+        struct recovery_page p = {what, EFS_RECOVERY_SCAN_PAGE, *n, node, recs, {0}, 0, EFS_OK, obj};
+        if (resume) {
+            memcpy(p.last, cur->key, cur->len);
+            p.last_len = cur->len;
+        }
+        uint8_t start[EFS_RECOVERY_CURSOR_MAX];
+        uint32_t slen = p.last_len;
+        memcpy(start, p.last, slen);
+        if (what == EFS_RECOVERY_SCAN_CHUNKS) {
+            rc = efs_meta_chunk_refs_scan(h->kv, shard, slen ? start : NULL, slen, node,
+                                          recovery_chunk_cb, &p);
+        } else if (what == EFS_RECOVERY_SCAN_SEGMENTS) {
+            uint8_t prefix[3] = {(uint8_t)(shard >> 8), (uint8_t)shard, EFS_KV_KIND_PACK_SEGMENT};
+            rc = slen ? efs_kv_scan_from(h->kv, prefix, 3, start, slen, recovery_segment_cb, &p)
+                      : efs_kv_scan_prefix(h->kv, prefix, 3, recovery_segment_cb, &p);
+        } else {
+            uint8_t prefix[3] = {(uint8_t)(shard >> 8), (uint8_t)shard, EFS_KV_KIND_PUT_TICKET};
+            rc = slen ? efs_kv_scan_from(h->kv, prefix, 3, start, slen, recovery_ticket_cb, &p)
+                      : efs_kv_scan_prefix(h->kv, prefix, 3, recovery_ticket_cb, &p);
+        }
+        if (p.rc != EFS_OK || rc < 0) {
+            free(obj);
+            return p.rc != EFS_OK ? p.rc : rc;
+        }
+        *n = p.n;
+        if (rc > 0) { /* page full: resume after the last row taken */
+            cur->shard = shard;
+            cur->len = p.last_len;
+            memcpy(cur->key, p.last, p.last_len);
+            free(obj);
+            return EFS_OK;
+        }
+    }
+    free(obj);
+    cur->shard = EFS_RECOVERY_SHARD_END;
+    cur->len = 0;
+    return EFS_OK;
+}
+
+static int host_recovery_scan_remote(struct efs_raft_host *h, uint8_t group, uint32_t what,
+                                     efs_node_id_t node, struct efs_recovery_cursor *cur,
+                                     uint8_t *recs, uint32_t *n)
+{
+    struct efs_msg_recovery_scan req = {.group = group, .what = what, .node = node, .at = *cur};
+    char addr[64];
+    uint16_t port = 0;
+    uint8_t type = 0;
+    void *reply = NULL;
+    uint32_t rlen = 0, reclen = recovery_rec_len(what);
+    int rid = host_pick_peer(h, &group, 1, -1); /* as host_remote_cmd_impl: no h->mu */
+    *n = 0;
+    if (rid < 0 || peer_addr(h, rid, addr, sizeof(addr), &port) != 0)
+        return EFS_ERR_NOT_PRIMARY;
+    struct efs_conn *pc = server_peer_conn_get(addr, port);
+    if (!pc)
+        return EFS_ERR_NET;
+    if (efs_conn_send_msg(pc, EFS_MSG_RECOVERY_SCAN, &req, sizeof(req)) ||
+        efs_conn_recv_msg(pc, &type, &reply, &rlen)) {
+        server_peer_conn_drop(addr, port, pc);
+        free(reply);
+        return EFS_ERR_NET;
+    }
+    server_peer_conn_release(addr, port, pc);
+    const struct efs_msg_recovery_scan_reply *r = reply;
+    int rc = EFS_ERR_PROTO;
+    if (type == EFS_MSG_RECOVERY_SCAN_REPLY && rlen >= sizeof(*r)) {
+        rc = r->rc;
+        if (rc == EFS_OK &&
+            (r->n > EFS_RECOVERY_SCAN_PAGE || rlen != sizeof(*r) + (size_t)r->n * reclen ||
+             r->next.len > EFS_RECOVERY_CURSOR_MAX || r->next.shard > EFS_RECOVERY_SHARD_END))
+            rc = EFS_ERR_PROTO;
+        if (rc == EFS_OK) {
+            memcpy(recs, (const uint8_t *)reply + sizeof(*r), (size_t)r->n * reclen);
+            *n = r->n;
+            *cur = r->next;
+        }
+    }
+    free(reply);
+    return rc;
+}
+
+/* One page (at most EFS_RECOVERY_SCAN_PAGE records) of group's inventory
+ * from *cur; *cur moves past it (shard EFS_RECOVERY_SHARD_END: done). */
+int server_raft_host_recovery_scan(uint8_t group, uint32_t what, efs_node_id_t node,
+                                   struct efs_recovery_cursor *cur, uint8_t *recs, uint32_t *n)
+{
+    struct efs_raft_host *h = g_host;
+    if (!h || !h->running)
+        return EFS_ERR_BUSY;
+    if ((what != EFS_RECOVERY_SCAN_CHUNKS && what != EFS_RECOVERY_SCAN_TICKETS &&
+         what != EFS_RECOVERY_SCAN_SEGMENTS) || !node ||
+        (group >> 1) >= HOST_NGROUPS || (group & 1))
+        return EFS_ERR_INVAL;
+    return host_hosts(h, group) ? host_recovery_scan_local(h, group, what, node, cur, recs, n)
+                                : host_recovery_scan_remote(h, group, what, node, cur, recs, n);
+}
+
+/* EFS_MSG_RECOVERY_SCAN on a member that hosts the group; never forwarded. */
+void server_raft_host_recovery_scan_serve(const uint8_t *payload, uint32_t len,
+                                          uint8_t **reply, uint32_t *rlen)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_msg_recovery_scan req = {0};
+    struct efs_msg_recovery_scan_reply hdr = {.rc = EFS_ERR_INVAL};
+    uint8_t *out = calloc(1, sizeof(hdr) + (size_t)EFS_RECOVERY_SCAN_PAGE * EFS_PUT_TICKET_WIRE_LEN);
+    uint32_t n = 0;
+    *reply = out;
+    *rlen = 0;
+    if (!out)
+        return;
+    if (len == sizeof(req)) {
+        memcpy(&req, payload, sizeof(req));
+        hdr.next = req.at;
+        if (!h || !h->running || req.group > 255 || !host_hosts(h, (uint8_t)req.group))
+            hdr.rc = EFS_ERR_NOT_PRIMARY;
+        else if (req.at.len <= EFS_RECOVERY_CURSOR_MAX && req.at.shard <= EFS_RECOVERY_SHARD_END &&
+                 (req.what == EFS_RECOVERY_SCAN_CHUNKS || req.what == EFS_RECOVERY_SCAN_TICKETS ||
+                  req.what == EFS_RECOVERY_SCAN_SEGMENTS) &&
+                 req.node && !(req.group & 1) && (req.group >> 1) < HOST_NGROUPS)
+            hdr.rc = host_recovery_scan_local(h, (uint8_t)req.group, req.what, req.node,
+                                              &hdr.next, out + sizeof(hdr), &n);
+    }
+    if (hdr.rc != EFS_OK)
+        n = 0;
+    hdr.n = n;
+    memcpy(out, &hdr, sizeof(hdr));
+    *rlen = (uint32_t)sizeof(hdr) + n * (hdr.rc == EFS_OK ? recovery_rec_len(req.what) : 0);
+}
+
+/* Write the W154 mark for a fragment this store dropped (through the mark
+ * group's leader); the apply verdict comes back. */
+int server_raft_host_recovery_mark(const struct efs_meta_degraded *d)
+{
+    struct efs_raft_host *h = g_host;
+    uint8_t cmd[EFS_MD_DEGRADED_MARK_LEN];
+    if (!h || !h->running)
+        return EFS_ERR_BUSY;
+    cmd[0] = EFS_MD_CMD_DEGRADED_MARK;
+    server_degraded_mark_encode(cmd + 1, d);
+    return host_bg_propose(h, degraded_mark_group(d), cmd, sizeof(cmd), 1);
 }
 
 /* W64 failover harness: stop leading one hosted group. A plain step-down

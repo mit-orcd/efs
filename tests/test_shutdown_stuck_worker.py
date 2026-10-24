@@ -14,10 +14,11 @@ scripts/server_processes.py stop-file exactly as stop.sh does:
    barrier reached. The stop script exits 3 and prints
    "stopped, forced, stores preserved". No store file is removed, and an
    unparked restart on the same root starts and serves. Like any unclean
-   stop, the forced one leaves the root recovery-uncertain (W71: COMMIT
-   EIO until verified recovery or fresh format), so that restart's own
-   stop cannot complete the PUT-sync barrier: it must report rc 4,
-   "durability barrier failed", never orderly.
+   stop, the forced one leaves the root recovery-uncertain (COMMIT EIO
+   until K36 verified recovery). A single daemon never forms a cluster, so
+   its recovery waits at the raft phase and that restart's own stop cannot
+   complete the PUT-sync barrier: it must report rc 4, "durability barrier
+   failed", never orderly.
 2. connection parked (EFS_FAULT_SHUTDOWN_PARK=conn) with one open client
    connection: its handler never finishes; efsd exits rc 3 at the drain's
    share of the deadline naming phase handler-drain.
@@ -175,15 +176,16 @@ def after_forced_case(name, store, port):
     finally:
         daemon.kill()
     record = read_record(store)
-    log = daemon.tail()
-    assert 'recovery uncertain; COMMIT returns EIO' in log, log
+    log = (store/'log/efsd.log').read_text()[daemon.offset:]  # this run, from its start
+    assert 'recovery uncertain' in log and 'COMMIT returns EIO until verified recovery' in log, log
+    assert 'recovery: started after an unclean stop' in log and 'recovery: verified' not in log, log
     assert daemon.proc.returncode == 4 and rc == 4, (daemon.proc.returncode, rc, out)
     assert 'durability barrier failed, stores preserved' in out and 'put_sync failed' in out, out
     assert record['outcome'] == 'barrier-failed' and record['put_sync'] == 'failed', record
     assert record['reclaim_journal'] == 'done' and record['usage_flush'] == 'done', record
     assert not files - store_files(store), 'restart removed store files'
     print(f'{name}: restarted on the preserved root; its stop reports rc 4 put_sync failed '
-          '(W71 recovery-uncertain fence), not orderly PASS', flush=True)
+          '(K36 recovery not verified: unformed), not orderly PASS', flush=True)
 
 
 def orderly_case(name, store):

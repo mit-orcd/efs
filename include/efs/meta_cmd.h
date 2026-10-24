@@ -155,6 +155,16 @@
  * ledger (efs_put_ticket_drain). Refused (BUSY) behind a missing shard
  * rejection floor or a pending K14 stage; a logical verdict. */
 #define EFS_MD_CMD_PUT_TICKET_DRAIN 250
+/* K36 verified recovery, on the group of the mark's anchor shard:
+ * [ino:8][inode_gen:8][object_gen:8][ci:4][lane:1][missing:1][nodes:4*3]
+ * [checksums:32*3] after the tag, 139 B. A recovering storage node dropped
+ * its fragment of a published object (missing, torn or mismatching); the
+ * apply writes the W154 degraded mark so the leader rebuilds it
+ * (efs_meta_apply_degraded_mark). Verdicts OK, NOT_FOUND (object no longer
+ * live) and STALE (another fragment already marked) are logical. */
+#define EFS_MD_CMD_DEGRADED_MARK 249
+#define EFS_MD_DEGRADED_MARK_LEN (1u + 8u + 8u + 8u + 4u + 1u + 1u + \
+                                  4u * EFS_NUM_FRAGMENTS + EFS_HASH_SIZE * EFS_NUM_FRAGMENTS)
 #define EFS_MD_PUT_TICKET_DRAIN_LEN 25u
 #define EFS_MD_TXN_BATCH_MAX 96u /* commands per entry */
 #define EFS_MD_CMD_SESSION 9 /* matches sim SIM_CMD_SESSION */
@@ -291,7 +301,7 @@
     X(BOOTSTRAP_LANE) X(TRUNC_SWEEP) X(SWEEP_DONE) X(RETIRE) X(TXN_RETIRE) \
     X(DEGRADED_CLEAR) X(PUT_ORPHAN_ACK) X(TXN_BATCH) \
     X(PUT_TICKET_ADMIT_BATCH) X(PUT_TICKET_SETTLE_BATCH) X(MEMBERS) \
-    X(PUT_TICKET_DRAIN)
+    X(PUT_TICKET_DRAIN) X(DEGRADED_MARK)
 
 /* 1 when byte 0 of a log command names a command this build applies. */
 static inline int efs_md_cmd_applicable(uint8_t tag)

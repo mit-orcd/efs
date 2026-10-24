@@ -628,6 +628,27 @@ static int head_row_cb(void *user,const uint8_t *key,uint32_t kl,const uint8_t *
     memcpy(h->key,key,51);memcpy(h->val,val,vl);h->found=1;
     return 1;
 }
+int efs_put_ticket_row_decode(const uint8_t *key,uint32_t kl,const uint8_t *val,uint32_t vl,
+                              struct efs_put_ticket *out,uint32_t *state)
+{
+    if (!key || !val || !out || !state) return EFS_ERR_INVAL;
+    if (kl!=EFS_PUT_TICKET_KEY_LEN || key[2]!=EFS_KV_KIND_PUT_TICKET ||
+        vl!=EFS_PUT_TICKET_VAL_LEN || rd32(val)!=1 || !state_stored(rd32(val+4)))
+        return EFS_ERR_PROTO;
+    struct efs_put_ticket t={0};
+    memcpy(t.id.client_uuid,key+3,16);t.id.session_epoch=rd32(key+19);
+    t.id.seq=rd64(key+23);t.ino=rd64(key+31);t.inode_gen=rd64(key+39);
+    t.ci=rd32(key+47);t.object=rd64(val+8);memcpy(t.body_digest,val+16,EFS_HASH_SIZE);
+    for (unsigned i=0;i<EFS_NUM_FRAGMENTS;i++) t.nodes[i]=rd32(val+48+4*i);
+    memcpy(t.checksums,val+60,sizeof(t.checksums));
+    t.delta_off=rd32(val+156);t.delta_len=rd32(val+160);t.coding_profile=rd32(val+164);
+    t.fragment_len=rd32(val+168);t.member_mask=rd32(val+172);
+    uint8_t want[EFS_PUT_TICKET_KEY_LEN];
+    if (ticket_key(&t,want)!=EFS_OK || memcmp(want,key,sizeof(want))) return EFS_ERR_PROTO;
+    *out=t;*state=rd32(val+4);
+    return EFS_OK;
+}
+
 static int stream_head_ticket(struct efs_kv *kv,const uint8_t pre[23],struct efs_put_ticket *t,
                               uint32_t *state)
 {

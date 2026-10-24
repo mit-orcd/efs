@@ -102,6 +102,8 @@ int efs_kv_key_dentry(uint32_t shard, efs_ino_t parent, const char *name,
                       uint8_t *out, uint32_t *len);
 int efs_kv_key_dentry_prefix(uint32_t shard, efs_ino_t parent,
                              uint8_t *out, uint32_t *len);
+/* [shard:2][CHUNK][ino:8][inode_gen:8][lane:1][chunk_index:4] */
+#define EFS_KV_CHUNK_KEY_LEN 24u
 int efs_kv_key_chunk(uint32_t shard, efs_ino_t ino, uint64_t gen, uint8_t lane,
                      uint32_t chunk_index, uint8_t *out, uint32_t *len);
 int efs_kv_key_lane(uint32_t shard, efs_ino_t ino, uint64_t gen, uint8_t lane,

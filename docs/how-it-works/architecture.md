@@ -254,11 +254,16 @@ this list, before it ships.
   verifier returns sticky client-wide EIO, because the client may no longer
   retain retransmission bytes. COMMIT retries a failed transport once within
   its original deadline.
-  An unclean storage-root restart fences COMMIT even for a fresh client;
-  a checksum scan alone cannot prove that every published create survived.
-  This fence persists across orderly restarts until verified recovery or
-  a fresh format; no automatic recovery is implemented by this change.
-  See [AMD durability fixes](../status/amd-async-durability-20261015.md). A transient failure of that drain
+  An unclean storage-root restart fences COMMIT even for a fresh client,
+  across orderly restarts, until verified recovery proves the store (K36,
+  D42): log and KV applied to the leader's commit, every local fragment
+  proven, every published reference to the store checked against its digest,
+  the reclaim journal, the ticket ledgers and the boot counter. What it
+  cannot prove is dropped and its stripe marked degraded for rebuild; then
+  the fence clears. An earlier ambiguous write is not thereby proven: the
+  verifier changed, so its client keeps failing `fsync`. See
+  [verified recovery](protocols/data.md#verified-recovery-k36) and
+  [AMD durability fixes](../status/amd-async-durability-20261015.md). A transient failure of that drain
   (transport, RPC budget, node down) returns EIO from that call with the
   bytes retained as pending; the next `fsync` retries. If a publish of
   the file has been classified **stalled** (D27, [decisions.md](../status/decisions.md): repeated

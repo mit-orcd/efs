@@ -5385,6 +5385,106 @@ static void test_degraded_marks(void)
     efs_kv_mem_free(kv);
 }
 
+/* ---- K36 recovery inventory and marks ---- */
+struct refs_collect {
+    uint32_t n, stop_at;
+    struct efs_meta_degraded r[4];
+    uint8_t key[EFS_KV_KEY_MAX];
+    uint32_t klen;
+};
+
+static int refs_cb(void *user, const struct efs_meta_degraded *ref, const uint8_t *key,
+                   uint32_t klen)
+{
+    struct refs_collect *c = user;
+    if (c->stop_at && c->n == c->stop_at)
+        return 7;
+    if (c->n < 4)
+        c->r[c->n] = *ref;
+    c->n++;
+    memcpy(c->key, key, klen);
+    c->klen = klen;
+    return 0;
+}
+
+static void test_recovery_marks(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct refs_collect c;
+    struct efs_meta_degraded d;
+    struct efs_meta_delta ds[EFS_CHUNK_DELTA_MAX];
+    efs_ino_t ino = 0;
+    uint32_t anch, shard, nd = 0;
+    uint64_t newest = 0;
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "rv", &ino) == EFS_OK && ino, "create");
+    shard = efs_kv_lane_shard(ino, 0);
+    anch = efs_kv_anchor_shard(shard);
+    efs_meta_degraded_count_invalidate(anch);
+    efs_meta_degraded_count_derived(anch, 0);
+    CHECK(dg_pub(kv, ino, 0xA1, 0, 0, 0, 0, 0, 0, 1) == EFS_OK, "clean base");
+
+    /* Every object placing a fragment on node 2 (fragment 1), as its mark. */
+    memset(&c, 0, sizeof(c));
+    CHECK(efs_meta_chunk_refs_scan(kv, shard, NULL, 0, 2, refs_cb, &c) == EFS_OK && c.n == 1,
+          "one ref for node 2");
+    CHECK(c.r[0].ino == ino && c.r[0].object_gen == 0xA1 && c.r[0].missing_mask == 2 &&
+              c.r[0].chunk_index == 0 && c.r[0].lane == 0 && c.r[0].nodes[1] == 2 &&
+              c.r[0].checksums[1][0] == 0x11 && c.klen == EFS_KV_CHUNK_KEY_LEN,
+          "ref names object, fragment and placement");
+    memset(&c, 0, sizeof(c));
+    CHECK(efs_meta_chunk_refs_scan(kv, shard, NULL, 0, 9, refs_cb, &c) == EFS_OK && !c.n,
+          "no ref for a node outside the placement");
+    /* A live span is a second object of the same row. */
+    CHECK(dg_pub(kv, ino, 0xC3, 0xA1, 0, 0, 4096, 0, 0, 3) == EFS_OK, "span");
+    CHECK(efs_meta_apply_get_chunk_deltas(kv, ino, 0, ds, EFS_CHUNK_DELTA_MAX, &nd,
+                                          &newest) == EFS_OK && nd == 1, "one span");
+    memset(&c, 0, sizeof(c));
+    CHECK(efs_meta_chunk_refs_scan(kv, shard, NULL, 0, 3, refs_cb, &c) == EFS_OK && c.n == 2 &&
+              c.r[0].object_gen == 0xA1 && c.r[1].object_gen == 0xC3 &&
+              c.r[1].missing_mask == 4, "base and span for node 3");
+    /* A callback stop is returned; a resume after the row key sees nothing. */
+    uint8_t key[EFS_KV_KEY_MAX];
+    uint32_t klen = c.klen;
+    memcpy(key, c.key, klen);
+    memset(&c, 0, sizeof(c));
+    c.stop_at = 1;
+    CHECK(efs_meta_chunk_refs_scan(kv, shard, NULL, 0, 3, refs_cb, &c) == 7 && c.n == 1,
+          "callback stop returned");
+    memset(&c, 0, sizeof(c));
+    CHECK(efs_meta_chunk_refs_scan(kv, shard, key, klen, 3, refs_cb, &c) == EFS_OK && !c.n,
+          "resume after the last row");
+
+    /* The recovering node's mark: written once, idempotent, never over a
+     * mark for another fragment, and only for a live object. */
+    dg_from(kv, ino, 0xA1, 2, 1, &d);
+    CHECK(efs_meta_apply_degraded_mark(kv, &d) == EFS_OK, "mark written");
+    CHECK(dg_scan(kv, anch).n == 1 && efs_meta_degraded_count_peek(anch) == 1, "one mark");
+    CHECK(efs_meta_degraded_live(kv, &d) == 1, "marked object live");
+    CHECK(efs_meta_apply_degraded_mark(kv, &d) == EFS_OK && dg_scan(kv, anch).n == 1 &&
+              efs_meta_degraded_count_peek(anch) == 1, "replay adds nothing");
+    dg_from(kv, ino, 0xA1, 4, 1, &d);
+    CHECK(efs_meta_apply_degraded_mark(kv, &d) == EFS_ERR_STALE, "second loss refused");
+    dg_from(kv, ino, 0x55, 2, 1, &d);
+    CHECK(efs_meta_apply_degraded_mark(kv, &d) == EFS_ERR_NOT_FOUND, "dead object not marked");
+    dg_from(kv, ino, 0xA1, 2, 9, &d);
+    CHECK(efs_meta_apply_degraded_mark(kv, &d) == EFS_ERR_PROTO,
+          "a mark disagreeing with the row fails closed");
+    dg_from(kv, ino, 0xA1, 3, 1, &d);
+    CHECK(efs_meta_apply_degraded_mark(kv, &d) == EFS_ERR_INVAL, "two fragments refused");
+    /* W154 then retires it like a publication's own mark. */
+    dg_from(kv, ino, 0xA1, 2, 1, &d);
+    int out = -1;
+    CHECK(efs_meta_apply_degraded_clear(kv, &d, 1, &out) == EFS_OK &&
+              out == EFS_META_DEGRADED_CLEARED && dg_scan(kv, anch).n == 0 &&
+              efs_meta_degraded_count_peek(anch) == 0, "rebuilt and retired");
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
+    efs_kv_mem_free(kv);
+}
+
 static void test_xattr(void)
 {
     struct efs_kv *kv = efs_kv_mem_create();
@@ -6527,6 +6627,7 @@ int main(void)
     test_gc_tail_alias();
     test_gc_watermark();
     test_degraded_marks();
+    test_recovery_marks();
     if (failures) {
         fprintf(stderr, "test_meta_apply: %d failure(s)\n", failures);
         return 1;
