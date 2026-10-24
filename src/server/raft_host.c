@@ -4376,6 +4376,14 @@ static int host_hosts(struct efs_raft_host *h, uint8_t group)
     return hosts_group(h->raft_id, efs_raft_voters(s->r));
 }
 
+/* K33 (M6): this node's replica of the group is retired (removed from its
+ * configuration by the committed membership; it may never apply again). */
+static int host_group_retired(struct efs_raft_host *h, uint8_t group)
+{
+    struct host_group *s = group_slot(h, group);
+    return s && __atomic_load_n(&s->retired, __ATOMIC_ACQUIRE);
+}
+
 static int host_hosts_all(struct efs_raft_host *h, const uint8_t *g, int n)
 {
     int i;
@@ -9178,8 +9186,7 @@ static int host_bg_propose(struct efs_raft_host *h, uint8_t group,
     }
     if (r)
         lid = efs_raft_leader(r);
-    struct host_group *gs = group_slot(h, group);
-    int retired = gs && __atomic_load_n(&gs->retired, __ATOMIC_ACQUIRE);
+    int retired = host_group_retired(h, group);
     pthread_mutex_unlock(&h->mu);
     memset(&rep, 0, sizeof(rep));
     /* The forward path's rep.rc IS the leader's apply verdict. */

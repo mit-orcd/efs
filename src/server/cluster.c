@@ -581,8 +581,11 @@ void server_start_heartbeat(struct efsd_server *s)
 static void *rejoin_thread(void *arg)
 {
     struct efsd_server *s = arg;
+    int first = 1;
     while (s->running) {
-        sleep(2);
+        if (!first || !s->rejoin_announce)
+            sleep(2);
+        first = 0;
 
         pthread_mutex_lock(&s->lock);
         uint32_t node_count = s->node_count;
@@ -590,8 +593,9 @@ static void *rejoin_thread(void *arg)
 
         /* Already in a cluster with at least one peer and a member: done.
          * K33: an unformed node (a pending joiner, or one formation left
-         * out) keeps saying HELLO until its store learned a revision. */
-        if (node_count > 1 && server_raft_host_formed())
+         * out) keeps saying HELLO until its store learned a revision; a
+         * restarted member until one persisted peer answered (announce). */
+        if (node_count > 1 && server_raft_host_formed() && !s->rejoin_announce)
             break;
 
         int rc;
@@ -616,6 +620,7 @@ static void *rejoin_thread(void *arg)
         } else {
             rc = server_rejoin_cluster(s);
             if (rc == 0) {
+                s->rejoin_announce = 0;
                 pthread_mutex_lock(&s->lock);
                 server_nodes_mark_dirty(s);
                 pthread_mutex_unlock(&s->lock);

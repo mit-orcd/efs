@@ -79,6 +79,9 @@ struct efsd_server {
     pthread_t rejoin_tid; /* background rejoin retry thread */
     char rejoin_addr[64]; /* explicit --join target to keep retrying; empty = use persisted peers */
     uint16_t rejoin_port;
+    /* K33: a restarted formed member says HELLO to its persisted peers from
+     * the rejoin thread (once one answers) instead of before it serves. */
+    int rejoin_announce;
     uint16_t discovery_port;  /* K33: UDP port of local-subnet discovery; 0 off */
     char discover_on[64];     /* K33: probe only this interface (name or address) */
 
