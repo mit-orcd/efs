@@ -79,6 +79,9 @@ struct efsd_server {
     pthread_t rejoin_tid; /* background rejoin retry thread */
     char rejoin_addr[64]; /* explicit --join target to keep retrying; empty = use persisted peers */
     uint16_t rejoin_port;
+    /* K33: a restarted formed member says HELLO to its persisted peers from
+     * the rejoin thread (once one answers) instead of before it serves. */
+    int rejoin_announce;
     uint16_t discovery_port;  /* K33: UDP port of local-subnet discovery; 0 off */
     char discover_on[64];     /* K33: probe only this interface (name or address) */
 
@@ -447,6 +450,9 @@ void server_member_hello_join(const char *addr, uint16_t port, uint64_t token,
                               struct efs_msg_hello_ack *ack);
 uint32_t server_member_filter(struct efs_node *nodes, uint32_t count);
 void server_nodes_keep_members(struct efsd_server *s, const struct efs_membership *m);
+/* K33 test hook: end the process (exit 86) at durable handoff `point` when
+ * EFS_TEST_MEMBER_EXIT names it (cluster.c). Unset in every deployment. */
+void server_test_member_exit(const char *point);
 int server_raft_host_inode_reaped(efs_ino_t ino, int *dead);
 /* Borrowed immutable query image; group slots are 0 and 2. Only background
  * refresh builds catalogs. The callback must enforce fresh authorization and

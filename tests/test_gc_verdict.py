@@ -35,6 +35,7 @@ static int __attribute__((unused)) efs_raft_durable(struct efs_raft*r,uint64_t i
 static int host_wait_settled(struct efs_raft_host*h,uint8_t g,uint64_t i,uint64_t t,int*p){(void)h;(void)g;(void)p;assert(i==expected_index&&t==expected_term);settled_calls++;return settled_rc;}
 static int host_wait_verdict(struct efs_raft_host*h,uint8_t g,uint64_t i,uint64_t t,int*p){(void)h;(void)g;(void)p;assert(i==expected_index&&t==expected_term);waits++;return verdict;}
 static int host_wait_applied(struct efs_raft_host*h,uint8_t g,uint64_t i,int*p){(void)h;(void)g;(void)p;assert(i==41);waits++;return 0;}
+static int retired;static int host_group_retired(struct efs_raft_host*h,uint8_t g){(void)h;(void)g;return retired;}
 static int host_remote_cmd(struct efs_raft_host*h,uint8_t g,const uint8_t*c,uint32_t n,struct efs_msg_raft_mkfs_reply*p,int lid){(void)h;(void)g;(void)c;(void)n;assert(lid==2);forwards++;p->index=41;return verdict;}
 static int host_propose_impl(struct efs_raft_host*h,uint8_t g,const uint8_t*c,uint32_t n,uint64_t*i,uint64_t*t,int*hint,int local){
  (void)g;(void)c;(void)n;assert(!hint);
@@ -157,6 +158,12 @@ int main(void){
  h.r.leader=0;assert(!host_bg_propose(&h,0,cmd,18,1));h.r.leader=1;
  assert(!host_bg_propose(&h,0,cmd,18,1));
  assert(cohort_calls==count);
+ /* K33: a retired replica takes the forwarded verdict without waiting on
+  * its own apply (it may never apply again). */
+ h.r.leader=0;verdict=0;int w0=waits,f0=forwards;retired=1;
+ assert(!host_bg_propose(&h,0,cmd,18,1)&&forwards==f0+1&&waits==w0);
+ verdict=EFS_ERR_FENCED;assert(host_bg_propose(&h,0,cmd,18,1)==EFS_ERR_FENCED);
+ retired=0;verdict=0;assert(!host_bg_propose(&h,0,cmd,18,1)&&waits==w0+1);h.r.leader=1;
  verdict=0;durable=EFS_ERR_IO;assert(host_gc_propose(&h,0,cmd,18)==EFS_ERR_IO);
  durable=0;settled_rc=EFS_ERR_NOT_PRIMARY;
  assert(host_bg_propose(&h,0,cmd,18,0)==EFS_ERR_NOT_PRIMARY);

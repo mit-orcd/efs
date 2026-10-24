@@ -85,6 +85,11 @@ by removing D39 checks or reinstating uncommitted HELLO-table membership.
 - [ ] Update model, code, help, normal launch scripts and live drivers to this
   contract; retain exact-source evidence and all failed attempts.
 
+Status (Oct 24): the items on exact payloads, interrupted additions, seed
+loss and growth bookkeeping pass as single-host loopback daemon tests at
+`2ebd4fd85` ([evidence](k33-acceptance-20261024.md), two defects fixed);
+they stay unticked until the live multi-host runs pass.
+
 ## Current implementation and handoff
 
 At devel `f77daf110`, D39 admission is merged via `246bae7cf`, but startup

@@ -1326,14 +1326,15 @@ int main(int argc, char **argv)
             server_start_rejoin(&server);
         }
     } else if (server.node_count > 1) {
+        /* K33: a formed member restarts from its committed record; the
+         * HELLO to its persisted peers only refreshes their tables. It runs
+         * in the background: said here, before this node accepts, it waited
+         * up to 30 s on each peer that was itself starting (a whole-cluster
+         * restart chained those waits past a minute;
+         * tests/test_k33_payload.py). */
         server.rejoin_addr[0] = '\0';
-        if (server_rejoin_cluster(&server) != 0) {
-            fprintf(stderr,
-                    "Could not rejoin cluster from persisted peers; starting as standalone and retrying in background\n");
-            server_start_rejoin(&server);
-        } else {
-            server_save_nodes(&server);
-        }
+        server.rejoin_announce = 1;
+        server_start_rejoin(&server);
     } else {
         server_save_nodes(&server);
     }

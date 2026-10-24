@@ -4376,6 +4376,14 @@ static int host_hosts(struct efs_raft_host *h, uint8_t group)
     return hosts_group(h->raft_id, efs_raft_voters(s->r));
 }
 
+/* K33 (M6): this node's replica of the group is retired (removed from its
+ * configuration by the committed membership; it may never apply again). */
+static int host_group_retired(struct efs_raft_host *h, uint8_t group)
+{
+    struct host_group *s = group_slot(h, group);
+    return s && __atomic_load_n(&s->retired, __ATOMIC_ACQUIRE);
+}
+
 static int host_hosts_all(struct efs_raft_host *h, const uint8_t *g, int n)
 {
     int i;
@@ -8732,20 +8740,16 @@ static void host_retire_check(struct efs_raft_host *h)
     }
 }
 
-/* K33 test hook (tests/test_k33_growth.py): EFS_TEST_MEMBER_EXIT=<point>
- * ends the process at that durable handoff, so a test interrupts it
- * deterministically. Points: after-members-commit (the proposer, MEMBERS
- * committed, nothing learned or notified), before-learn (a member got its
- * notice, nothing persisted; a joining store's twin is in cluster.c).
- * Unset in every deployment. */
+/* K33 test hook: see server_test_member_exit (cluster.c). Points here:
+ * after-members-commit (the proposer, MEMBERS committed, nothing learned or
+ * notified), before-learn (a member got its notice, nothing persisted),
+ * after-learn (persisted, nothing published), learner-added (group-2
+ * leader: the new voter is a learner, not caught up), joint-started
+ * (group-2 leader: JOINT appended, not committed), after-g2-copy (group-0
+ * leader: the revision is on group 2, the copy not yet noted). */
 static void host_test_exit(const char *point)
 {
-    const char *e = getenv("EFS_TEST_MEMBER_EXIT");
-    if (e && !strcmp(e, point)) {
-        fprintf(stderr, "membership: EFS_TEST_MEMBER_EXIT at %s; exiting\n", point);
-        fflush(stderr);
-        _exit(86);
-    }
+    server_test_member_exit(point);
 }
 
 /* W153/K33 (M3, M5): install a committed membership revision on this node.
@@ -8797,6 +8801,8 @@ static int host_learn_membership(struct efs_raft_host *h, const struct efs_membe
         fprintf(stderr, "raft-host: membership not persisted: %s\n", err);
         return rc;
     }
+    if (prev && m->count > prev)
+        host_test_exit("after-learn");
     h->members = *m;
     mview_publish(m);
     __atomic_store_n(&h->n, (int)m->count, __ATOMIC_RELEASE);
@@ -9180,12 +9186,20 @@ static int host_bg_propose(struct efs_raft_host *h, uint8_t group,
     }
     if (r)
         lid = efs_raft_leader(r);
+    int retired = host_group_retired(h, group);
     pthread_mutex_unlock(&h->mu);
     memset(&rep, 0, sizeof(rep));
     /* The forward path's rep.rc IS the leader's apply verdict. */
     rc = host_remote_cmd(h, group, cmd, clen, &rep, lid);
     if (rc != EFS_OK)
         return rc;
+    /* K33 (M6): a retired replica is removed from the configuration and may
+     * never apply this entry; like a node without a replica, the leader's
+     * verdict is the answer. Waiting on it stalled every GC reap pass of the
+     * group-0 leader (node 1) once four members retired its group-2 replica:
+     * deleted files were never reclaimed (tests/test_k33_bookkeeping.py). */
+    if (retired)
+        return EFS_OK;
     return host_wait_applied(h, group, rep.index, NULL);
 }
 
@@ -13938,8 +13952,11 @@ static void host_notice_pump(struct efs_raft_host *h, uint64_t now)
         wr64be(scmd + 5, salt);
         memcpy(scmd + 13, cmd + 1, rlen);
         if (host_propose_wait(h, EFS_RAFT_GROUP_SHARD2, scmd, (uint32_t)(13 + rlen), &hint) ==
-            EFS_OK)
+            EFS_OK) {
+            if (m.count > m.formed)
+                host_test_exit("after-g2-copy");
             h->mb_g2_copied = m.count;
+        }
     }
 }
 
@@ -13960,6 +13977,9 @@ static void host_voter_reconcile(struct efs_raft_host *h)
             (cur = efs_raft_voters(r)) != target) {
             rc = efs_raft_change(r, target);
             __atomic_store_n(&h->g[gi].voters, efs_raft_voters(r), __ATOMIC_RELEASE);
+            if (h->g[gi].group == EFS_RAFT_GROUP_SHARD2)
+                host_test_exit(rc == EFS_OK ? "joint-started" :
+                               rc == EFS_ERR_BUSY ? "learner-added" : "");
         }
         pthread_mutex_unlock(&h->mu);
         if (cur && cur != target && logged[gi] != (target | (uint32_t)(rc == EFS_OK) << 31)) {
