@@ -164,13 +164,8 @@ store keeps its cluster, node id and endpoint (another endpoint is refused):
 If peers are down it starts standalone and retries in the background. Local
 data is kept.
 
-Disable loading/saving the joined-node table `meta/cluster_nodes.bin` (not a
-data or metadata wipe; the committed membership in `mdraft/identity.bin` is
-persisted regardless; outside the [alpha surface](../using/alpha-1.0-surface.md)):
-
-```bash
-./scripts/server.sh 127.0.0.1:17432 /tmp/efs/s1:5G --no-persist
-```
+Membership is always persisted (`--no-persist` was removed, D42; efsd
+refuses it).
 
 ## Quotas
 
@@ -271,14 +266,14 @@ preserves FIFO within a file and rotates that file’s queued chunks behind othe
 queued files after service. Busy streams cannot monopolize admission ahead of
 a tiny write.
 
-Fragment I/O uses the page cache unless you pass `--direct-io` (`O_DIRECT`,
-often better on local NVMe):
+Fragment I/O is always `O_DIRECT` (D42). At startup efsd writes and reads
+back one aligned page on every storage root and refuses a root whose
+filesystem cannot do `O_DIRECT` (`storage root ... refused: fragment I/O
+requires O_DIRECT`); there is no buffered fallback. The removed
+`--direct-io` and `--no-direct-io` flags are refused.
 
-```bash
-./efsd 127.0.0.1:17432 /tmp/efs/s1 --direct-io
-```
-
-`O_DIRECT` bypasses the page cache; it does not itself establish persistence.
+`O_DIRECT` bypasses the page cache; it does not itself establish persistence:
+acknowledged fragments still take explicit `fsync`/`syncfs` barriers.
 The production fragment persistence gap is [W71](../backlog/work-items.md#w71).
 
 ## Profiling a server

@@ -172,11 +172,16 @@ static struct efs_conn *peer_connect(const char *host, uint16_t port)
         efs_conn_destroy(nc);
         return NULL;
     }
-    if (efs_rdma_available() &&
-        efs_rdma_client_upgrade(nc) != 0 &&
-        efs_rdma_transport() == EFS_TRANSPORT_RDMA) {
-        efs_conn_destroy(nc);
-        return NULL;
+    if (efs_rdma_available() && efs_rdma_client_upgrade(nc) != 0) {
+        if (efs_rdma_transport() == EFS_TRANSPORT_RDMA) {
+            efs_conn_destroy(nc);
+            return NULL;
+        }
+        /* auto: this connection stays TCP; say so (bounded). */
+        static int noted;
+        if (__sync_fetch_and_add(&noted, 1) < 5)
+            fprintf(stderr, "efsd: transport auto: RDMA upgrade to %s:%u failed; "
+                    "this peer connection uses tcp\n", host, port);
     }
     return nc;
 }

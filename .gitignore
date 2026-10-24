@@ -120,3 +120,4 @@ tests/test_retained_namespace_audit
 tests/test_kv_reader_gate
 /tests/faults/efsd
 /tests/faults/server/
+/tests/nodirect_fs

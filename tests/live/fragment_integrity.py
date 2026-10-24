@@ -40,10 +40,10 @@ def declare(sock):
     sock.sendall(HELLO);n=struct.unpack('>I',exact(sock,4))[0];reply=exact(sock,n)
     assert n==9 and reply[0]==166 and struct.unpack('=iI',reply[1:])==(0,5),('declaration refused',reply)
 
-for direct in (False, True):
+for direct in (True,):  # D42: O_DIRECT only
     for roots in (1, 2):
         with tempfile.TemporaryDirectory(prefix='efs-integrity-') as work:
-            cluster=ticket_put.Cluster(source,work,extra=['--quota','16M','--direct-io' if direct else '--no-direct-io'],
+            cluster=ticket_put.Cluster(source,work,extra=['--quota','16M'],
                                        storage=lambda i:[Path(work)/f'n{i+1}'/f'root{index}' for index in range(roots)],
                                        env=os.environ)
             try:
@@ -147,4 +147,4 @@ for direct in (False, True):
                 path.write_bytes(original);good()
             finally:
                 cluster.close()
-print('Fragment corruption: buffered/direct, one/two roots PASS',flush=True)
+print('Fragment corruption: O_DIRECT, one/two roots PASS',flush=True)

@@ -12,7 +12,8 @@ struct efs_conn;         /* network.h */
 struct efs_rdma_conn;    /* opaque, rdma.c */
 
 /* EFS_TRANSPORT=auto|rdma|tcp (default auto: try RDMA, fall back to TCP).
- * "rdma" is strict: the client fails the connect when the upgrade fails. */
+ * "rdma" is strict: no start without a usable device, and a connection
+ * whose upgrade fails is closed, never kept as TCP. */
 #define EFS_TRANSPORT_AUTO 0
 #define EFS_TRANSPORT_RDMA 1
 #define EFS_TRANSPORT_TCP  2
@@ -26,6 +27,9 @@ struct efs_rdma_conn;    /* opaque, rdma.c */
 
 int efs_rdma_transport(void);       /* EFS_TRANSPORT_* */
 int efs_rdma_available(void);       /* transport != tcp and a usable IB dev */
+/* Startup check and report (efsd, efs-fuse): EFS_OK, or a refusal already
+ * printed (unknown value; rdma without a usable device). */
+int efs_transport_startup(const char *prog);
 
 /* NUMA node of the HCA on the route to host:port (EFS_RDMA_DEV wins),
  * -1 when unknown or TCP. devname (optional) receives the HCA name. */

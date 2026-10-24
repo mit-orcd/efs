@@ -575,12 +575,11 @@ static fuse_ino_t virt_commands_ino(efs_ino_t parent)
 {
     return EFS_VIRT_STATS | EFS_VIRT_FIND | (parent & EFS_VIRT_PARENT_MASK);
 }
-/* Initial opt-in is scoped to this mounted export, never a global default. */
+/* .efs follows the cluster's versioned commands-policy as the server
+ * enforces it (D42); there is no client-side switch. */
 static int commands_enabled(void)
 {
-    const char *v=getenv("EFS_COMMANDS");
-    return v && !strcmp(v,"1") &&
-           (features_current() & EFS_FEATURES_DEFAULT)!=0;
+    return (features_current() & EFS_FEATURES_DEFAULT)!=0;
 }
 static int command_script(const char *term)
 {
@@ -5150,15 +5149,21 @@ static int efs_control_drain(uint64_t deadline, int force)
     return result;
 }
 
+/* Nonzero once a clean unmount failed to flush, report, settle or revoke:
+ * efs-fuse then exits 1, never reporting a clean completion (D42). */
+static int g_unmount_unclean;
+
 static void efs_fuse_destroy(void *userdata)
 {
     (void)userdata;
     fuse_pressure_stop();
     int wrc = efs_wb_sync();
     int drc = efs_dcache_flush_all();
-    if (wrc != EFS_OK || drc != EFS_OK)
+    if (wrc != EFS_OK || drc != EFS_OK) {
         fprintf(stderr, "efs-fuse: unmount: data flush incomplete "
                         "(writeback=%d dcache=%d)\n", wrc, drc);
+        g_unmount_unclean = 1;
+    }
     if (g_wb.ready) {
         pthread_mutex_lock(&g_wb.mu);
         g_wb.shutdown = 1;
@@ -5205,10 +5210,12 @@ static void efs_fuse_destroy(void *userdata)
                 break;
             usleep(200000);
         }
-        if (mrc != EFS_OK)
+        if (mrc != EFS_OK) {
             fprintf(stderr, "efs-fuse: UNMOUNT DATA LOSS: metadata flush "
                             "still failing (rc=%d) after %lds; writes that "
                             "were never reported are gone\n", mrc, drain_s);
+            g_unmount_unclean = 1;
+        }
     }
     /* Free cached .find query results. */
     pthread_mutex_lock(&g_find_res_mu);
@@ -5220,7 +5227,8 @@ static void efs_fuse_destroy(void *userdata)
     pthread_mutex_unlock(&g_find_res_mu);
     efs_open_retry_stop();
     efs_client_view_stop();
-    efs_client_shutdown();
+    if (efs_client_shutdown() != EFS_OK)
+        g_unmount_unclean = 1;
 }
 
 static int efs_fuse_rename_at(fuse_ino_t parent, const char *name,
@@ -5689,42 +5697,18 @@ static void efs_fuse_init(void *userdata, struct fuse_conn_info *conn)
         conn->want &= ~FUSE_CAP_WRITEBACK_CACHE;
 #endif
 #ifdef FUSE_CAP_SPLICE_READ
-        /* W15.5 asked for this (Sep 29 15:40Z) and the first profile
-         * with it (fstor007 ecopy, 17:35Z) showed no gain: libfuse
-         * splices /dev/fuse into a pipe and the write handler's
-         * fuse_buf_copy then read()s the pipe into the dcache buffer,
-         * which is the same one kernel->user copy read(/dev/fuse) does,
-         * plus one splice per request (24 668 in 67 s, 17 072 of them
-         * header-sized). `copyout` under `pipe_read` was 5.2% of the
-         * client. Leave it off; fs.pipe-max-size no longer matters.
-         * EFS_FUSE_SPLICE_READ=1 turns it back on for a measurement
-         * (a 1 MiB streaming write is two copies without it). */
-        {
-            const char *sp = getenv("EFS_FUSE_SPLICE_READ");
-
-            if (sp && *sp && strcmp(sp, "0") != 0)
-                conn->want |= FUSE_CAP_SPLICE_READ;
-            else
-                conn->want &= ~FUSE_CAP_SPLICE_READ;
-        }
+        /* Off, with no switch (D42). W15.5 asked for splice reads (Sep 29)
+         * and the first profile with it (fstor007 ecopy) showed no gain:
+         * libfuse splices /dev/fuse into a pipe and the write handler's
+         * fuse_buf_copy then read()s the pipe into the dcache buffer, the
+         * same kernel->user copy read(/dev/fuse) does, plus one splice per
+         * request (24 668 in 67 s, 17 072 of them header-sized). */
+        conn->want &= ~FUSE_CAP_SPLICE_READ;
 #endif
 #ifdef FUSE_CAP_EXPORT_SUPPORT
-        /* NFS re-export of an efs mount (e.g. a gateway VM exporting to
-         * clients that only speak NFS) needs the kernel to build file
-         * handles via fs/fuse/export.c, which requires this cap. libfuse
-         * keeps the nodeid->(parent,name) table, so by-handle lookups ride
-         * the normal lookup/forget path. Handles do not survive an
-         * efs-fuse restart. Off by default; EFS_FUSE_EXPORT=1 at mount
-         * time enables it. */
-        {
-            const char *ex = getenv("EFS_FUSE_EXPORT");
-
-            if (ex && *ex && strcmp(ex, "0") != 0 &&
-                (conn->capable & FUSE_CAP_EXPORT_SUPPORT))
-                conn->want |= FUSE_CAP_EXPORT_SUPPORT;
-            else
-                conn->want &= ~FUSE_CAP_EXPORT_SUPPORT;
-        }
+        /* No NFS re-export (D42, W152 out of alpha): the kernel never
+         * builds file handles for an efs mount. */
+        conn->want &= ~FUSE_CAP_EXPORT_SUPPORT;
 #endif
         if (conn->congestion_threshold < 96)
             conn->congestion_threshold = 96;
@@ -5832,11 +5816,6 @@ static int efs_fuse_lookup_at(fuse_ino_t parent, const char *name,
     if (strlen(name) > 255)
         return -ENAMETOOLONG;
 
-    /* FUSE_EXPORT_SUPPORT reconstructs a disconnected file handle using
-     * LOOKUP(nodeid, "."), including regular virtual files. Attribute lookup
-     * keeps feature/authorization checks and the original immutable size. */
-    if (virt_kind(parent)==3 && !strcmp(name,"."))
-        return lookup_fill(parent,e,NULL);
     if (virt_kind(parent)==4) {
         if (!commands_enabled()) return -ENOENT;
         rc=virtual_access(virt_parent(parent));if (rc) return rc;
@@ -7901,6 +7880,8 @@ int main(int argc, char **argv)
     setvbuf(stderr, NULL, _IOLBF, 0);
     efs_log_timestamps_install();
     efs_fuse_install_crash_handlers();
+    if (efs_transport_startup("efs-fuse") != EFS_OK)
+        return 1;
 
     int perf = 0, strace_opt = 0;
     for (int i = 1; i < argc; i++) {
@@ -8128,8 +8109,14 @@ int main(int argc, char **argv)
 
     int ret = efs_fuse_main_mt(fuse_argc, fuse_argv);
     stop_perf_recorder();
-    /* destroy() already shut down on clean unmount; call again is a no-op. */
-    efs_client_shutdown();
+    /* destroy() already shut down on clean unmount; a repeat returns its
+     * result. A failed flush, settle or revoke is not a clean exit. */
+    if (efs_client_shutdown() != EFS_OK)
+        g_unmount_unclean = 1;
+    if (!ret && g_unmount_unclean) {
+        fprintf(stderr, "efs-fuse: unmount did not complete cleanly; exit 1\n");
+        ret = 1;
+    }
     return ret;
 }
 

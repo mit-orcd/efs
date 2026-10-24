@@ -31,21 +31,6 @@ static inline int efs_raft_voters_valid(uint32_t voters)
     return voters != 0 && !(voters >> EFS_RAFT_MAX_PEERS);
 }
 
-/* Placement preference only; an election still requires a quorum. Ordinals
- * rotate over the actual voter set, not an assumed contiguous node list. */
-static inline int efs_raft_preferred_voter(uint32_t voters, unsigned ordinal)
-{
-    unsigned count = 0, rank;
-    if (!efs_raft_voters_valid(voters)) return -1;
-    for (int i = 0; i < EFS_RAFT_MAX_PEERS; i++)
-        if (voters & (1u << i)) count++;
-    rank = ordinal % count;
-    for (int i = 0; i < EFS_RAFT_MAX_PEERS; i++)
-        if ((voters & (1u << i)) && rank-- == 0) return i;
-    return -1;
-}
-
-
 #define EFS_RAFT_MSG_VOTE_REQ 1
 #define EFS_RAFT_MSG_VOTE_REP 2
 #define EFS_RAFT_MSG_AE_REQ   3
@@ -250,11 +235,6 @@ struct efs_raft_cfg {
     efs_raft_send_fn send;
     efs_raft_send_ready_fn send_ready;
     efs_raft_recv_persist_fn recv_persist;
-    /* Experimental: keep proven no-op AE requests inside an open cohort.
-     * Fresh reads and any hard-state/conflict boundary still flush it. */
-    int batch_noop;
-    /* Experimental: verified overlap may start/extend a suffix-only hold. */
-    int batch_overlap;
     /* A successful ACK below the outstanding window's first index cannot
      * retire that newer window. The server host enables it; 0 keeps the
      * original retirement for the core tests. */

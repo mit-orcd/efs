@@ -1925,34 +1925,16 @@ static void rdcache_cancel(efs_ino_t ino, uint32_t ci)
     pthread_mutex_unlock(mu);
 }
 
-/* Chunks ahead of the demand window. 0 disables. libfuse 3.10.2 does not
- * negotiate FUSE_MAX_PAGES, so DIO sequential reads arrive as 128 KiB
- * FUSE requests; this is what keeps queue depth off the kernel. */
-#define EFS_READ_PREFETCH_DEFAULT 16
-static uint32_t prefetch_depth(void)
-{
-    static uint32_t n;
-    static int once;
-    if (!once) {
-        const char *e = getenv("EFS_READ_PREFETCH");
-        unsigned long v;
-        n = EFS_READ_PREFETCH_DEFAULT;
-        if (e && *e) {
-            v = strtoul(e, NULL, 10);
-            if (v <= (unsigned long)EFS_WRITE_PIPELINE)
-                n = (uint32_t)v;
-            else
-                n = EFS_WRITE_PIPELINE;
-        }
-        once = 1;
-    }
-    return n;
-}
+/* Chunks ahead of the demand window: 16, built in (D42). libfuse 3.10.2
+ * does not negotiate FUSE_MAX_PAGES, so DIO sequential reads arrive as
+ * 128 KiB FUSE requests; this is what keeps queue depth off the kernel. */
+#define EFS_READ_PREFETCH_DEPTH 16u
+_Static_assert(EFS_READ_PREFETCH_DEPTH <= EFS_WRITE_PIPELINE, "prefetch within the pipeline");
 
 static void prefetch_ahead(efs_ino_t ino, uint32_t from_ci, uint64_t file_size)
 {
     uint32_t cs = data_chunk_size();
-    uint32_t depth = prefetch_depth();
+    uint32_t depth = EFS_READ_PREFETCH_DEPTH;
     uint32_t max_ci;
     uint32_t i;
 
@@ -2024,7 +2006,7 @@ static void maybe_prefetch(int want, efs_ino_t ino, uint64_t end_off,
      * the file still fails the read; this only warms the map. */
     if (file_size > end_off) {
         uint32_t max_ci = (uint32_t)((file_size + cs - 1) / cs);
-        uint32_t depth = prefetch_depth();
+        uint32_t depth = EFS_READ_PREFETCH_DEPTH;
         uint32_t a0 = next_ci + depth;
         int have = 1;
 

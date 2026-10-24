@@ -28,7 +28,7 @@ struct efs_raft {int leader;uint32_t voters;};
 struct host_group {struct efs_raft *r;uint32_t voters;};
 struct efs_server_query_view {void *catalog;};
 struct efs_raft_host {pthread_mutex_t mu;pthread_rwlock_t query_lock;
- int n,raft_id,query_enabled,query_error,capable;struct host_group groups[2];struct efs_server_query_view query_view;};
+ int n,raft_id,query_error,capable;struct host_group groups[2];struct efs_server_query_view query_view;};
 static struct efs_raft_host *g_host;
 static int barriers,consumed,barrier_rc,lose_capability;
 static struct host_group *group_slot(struct efs_raft_host*h,uint8_t g){assert(g==0||g==2);return &h->groups[g>>1];}
@@ -49,7 +49,7 @@ static int consume(void *ctx,const struct efs_server_query_view*v,int error)
 {assert(ctx==g_host&&v==&g_host->query_view&&!error);consumed++;return 0;}
 """+fn('host_pick_peer')+s[s.index('static uint32_t host_route_voters('):s.index('\n}',s.index('static uint32_t host_route_voters('))+2]+fn('host_leader_cover_pick')+fn('server_raft_host_query_read')+r"""
 int main(void){struct efs_raft r[2]={{2,7},{3,14}};
- struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.query_lock=PTHREAD_RWLOCK_INITIALIZER,.n=4,.raft_id=0,.query_enabled=1,.groups={{&r[0],0},{&r[1],0}},.query_view={(void*)1}};
+ struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.query_lock=PTHREAD_RWLOCK_INITIALIZER,.n=4,.raft_id=0,.groups={{&r[0],0},{&r[1],0}},.query_view={(void*)1}};
  g_host=&h;uint16_t target=0;uint8_t need[2]={0,2};
  assert(host_leader_cover_pick(&h,0,need,2)==2);
  assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_NOT_PRIMARY&&target==3&&!barriers&&!consumed);
@@ -79,8 +79,6 @@ int main(void){struct efs_raft r[2]={{2,7},{3,14}};
  h.query_error=0;h.query_view.catalog=(void*)1;
  barrier_rc=0;lose_capability=1;
  assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_BUSY&&consumed==1);
- h.query_enabled=0;
- assert(server_raft_host_query_read(consume,&h,&target)==EFS_ERR_NOT_FOUND&&consumed==1);
  pthread_rwlock_destroy(&h.query_lock);pthread_mutex_destroy(&h.mu);
  puts("query target: actual dual leader preference, single/unknown/removed fallback, capable local serve, unpublished catalog NODATA and fresh refusal PASS");
 }

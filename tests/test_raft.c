@@ -1329,12 +1329,6 @@ static void test_grow_3_to_5(void)
 
 static void test_leadership_transfer(void)
 {
-    CHECK(efs_raft_preferred_voter(0,0)==-1, "empty preference refused");
-    CHECK(efs_raft_preferred_voter(0x7,0)==0 &&
-          efs_raft_preferred_voter(0xe,1)==2 &&
-          efs_raft_preferred_voter(0xf,1)==1 &&
-          efs_raft_preferred_voter(0x52,5)==6,
-          "preference rotates across actual sparse membership");
     for (int count = 3; count <= 4; count++) {
         struct net n;
         struct efs_raft_store *st[4];
@@ -3146,7 +3140,6 @@ static void test_recv_batch(void)
  * proves no log change and carries no fresh read. Failure sends no ACK. */
 static void test_recv_batch_noop(void)
 {
-    for (unsigned enabled=0; enabled<2; enabled++)
     for (unsigned kind=0; kind<4; kind++)
     for (unsigned fail=0; fail<2; fail++) {
         memset(&recv_test,0,sizeof(recv_test));
@@ -3157,7 +3150,6 @@ static void test_recv_batch_noop(void)
         struct efs_raft_cfg cfg={0};cfg.id=1;cfg.n=3;cfg.group=2;
         cfg.election_ticks=10;cfg.heartbeat_ticks=1;cfg.store=&ops;
         cfg.store_ctx=store;cfg.send=recv_test_send;cfg.apply=recv_test_apply;
-        cfg.batch_noop=(int)enabled;
         struct efs_raft *r=test_raft_new(&cfg);CHECK(r!=NULL,"noop fixture");
         struct efs_raft_msg m[3];memset(m,0,sizeof(m));
         m[0].type=EFS_RAFT_MSG_AE_REQ;m[0].from=0;m[0].to=1;
@@ -3184,9 +3176,16 @@ static void test_recv_batch_noop(void)
         } else {
             CHECK(rc==EFS_OK && recv_test.replies==3 && recv_test.applies==2,
                   "noop replies and committed data preserved");
-            CHECK(recv_test.barriers==(enabled && kind<2 ? 1u : 2u),
+            CHECK(recv_test.barriers==(kind<2 ? 1u : 2u),
                   "only proven ordinary no-ops remove a durable boundary");
             CHECK(recv_test.first_ack_applies==0,"noop cohort ACK remains ahead of apply");
+            /* Recovery: a restart from the same store keeps every ACKed
+             * entry and the term the cohort persisted under. */
+            efs_raft_free(r);
+            r=test_raft_new(&cfg);CHECK(r!=NULL,"noop restart");
+            uint64_t last=0,term=0;
+            CHECK(store->last(store,&last,&term)==EFS_OK && last==2 && term==2 &&
+                  efs_raft_term(r)==2,"noop cohort ACKed log and term survive restart");
         }
         CHECK(!recv_test.depth,"noop hold released on every path");
         efs_raft_free(r);efs_raft_mem_free(store);
@@ -3197,7 +3196,6 @@ static void test_recv_batch_noop(void)
  * Exercise starting and extending holds, fresh reads, conflicts and EIO. */
 static void test_recv_batch_overlap(void)
 {
-    for (unsigned enabled=0;enabled<2;enabled++)
     for (unsigned kind=0;kind<10;kind++) {
         if(kind==6)continue; /* former admission-refusal case */
         memset(&recv_test,0,sizeof(recv_test));
@@ -3206,7 +3204,6 @@ static void test_recv_batch_overlap(void)
         ops.append=recv_test_append;ops.batch_begin=recv_test_begin;ops.batch_end=recv_test_end;
         struct efs_raft_cfg cfg={0};cfg.id=1;cfg.n=3;cfg.group=2;cfg.election_ticks=10;cfg.heartbeat_ticks=1;
         cfg.store=&ops;cfg.store_ctx=store;cfg.send=recv_test_send;cfg.apply=recv_test_apply;
-        cfg.batch_overlap=(int)enabled;
         struct efs_raft *r=test_raft_new(&cfg);CHECK(r!=NULL,"overlap fixture");
         struct efs_raft_msg m[3];memset(m,0,sizeof(m));
         m[0].type=EFS_RAFT_MSG_AE_REQ;m[0].from=0;m[0].to=1;m[0].group=2;m[0].term=2;m[0].boot_id=2;
@@ -3239,7 +3236,13 @@ static void test_recv_batch_overlap(void)
         else if(kind==8)CHECK(rc==EFS_OK && recv_test.barriers==3 && recv_test.applies==3,"uncommitted conflict keeps separate persistence/truncation boundaries");
         else {
             CHECK(rc==EFS_OK && recv_test.applies==3,"overlap applies exact committed suffix");
-            CHECK(recv_test.barriers==(enabled?((kind==1||kind==9)?2u:1u):(kind==4?2u:3u)),"only verified non-read overlap joins durable boundaries");
+            CHECK(recv_test.barriers==((kind==1||kind==9)?2u:1u),"only verified non-read overlap joins durable boundaries");
+            /* Recovery: the suffix-only hold persisted the whole ACKed log. */
+            efs_raft_free(r);
+            r=test_raft_new(&cfg);CHECK(r!=NULL,"overlap restart");
+            uint64_t last=0,term=0;
+            CHECK(store->last(store,&last,&term)==EFS_OK && last==3 && term==2 &&
+                  efs_raft_term(r)==2,"overlap cohort ACKed log and term survive restart");
         }
         CHECK(!recv_test.depth,"overlap releases every hold");
         efs_raft_free(r);efs_raft_mem_free(store);

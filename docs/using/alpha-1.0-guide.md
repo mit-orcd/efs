@@ -63,10 +63,10 @@ member count or cluster file.
 | Storage roots | `STORAGE`: one to 24 directories, comma-separated | — |
 | Quota | `--quota SIZE` (`K`, `M`, `G`, `T`) | Automatic safe quota: 20 % (at least 1 GiB) of each filesystem kept free, 7/8 of the rest for fragments |
 | Metadata root | `--meta-storage PATH` | The first storage root |
-| Fragment I/O | `--direct-io` (alpha profile) | Buffered (`--no-direct-io`) |
+| Fragment I/O | always `O_DIRECT`; a root that cannot do it is refused | — |
 | Transport | `EFS_TRANSPORT=auto\|tcp\|rdma`, `EFS_RDMA_DEV`, `EFS_RDMA_GID_INDEX` on servers and clients | `auto` |
 | Discovery | `--discovery-port N` (0 off), `--discover-on IFACE` | UDP 17430 on every interface |
-| `.efs` commands | `EFS_COMMANDS=1` on the mount; server policy with `efs-mgmt commands-policy` | Off on the mount |
+| `.efs` commands | the cluster commands-policy, `efs-mgmt commands-policy` | On |
 
 The endpoint must be a real local IPv4 address (not `0.0.0.0`); peers
 connect back to it. Startup refuses a quota above the safe maximum and a
@@ -76,15 +76,16 @@ headroom; refusing startup`), for example a small tmpfs.
 ## Transport and direct I/O
 
 - **TCP or RDMA.** `auto` uses RDMA when an active verbs device is present,
-  otherwise TCP; `rdma` refuses to fall back. Native InfiniBand needs an
+  otherwise TCP, and logs which (`transport auto: ...`); `rdma` refuses to
+  start without a usable device and never falls back. Native InfiniBand needs an
   active port; RoCE needs an active Ethernet verbs device and a nonzero GID
   (`EFS_RDMA_GID_INDEX` pins one). Set the same transport variables on every
   daemon and client. The recorded RDMA runs use one host's devices or
   software RXE; cross-host RDMA acceptance is NOTRUN.
-- **Direct fragment I/O** (`--direct-io`) reads and writes fragments with
-  `O_DIRECT`. It is a server setting, independent of the transport and of
-  the client, which always bypasses the kernel page cache. `O_DIRECT` alone
-  does not make a write survive power loss (W71, deferred).
+- **Direct fragment I/O.** efsd reads and writes fragments only with
+  `O_DIRECT` (D42), independent of the transport and of the client, which
+  always bypasses the kernel page cache. `O_DIRECT` alone does not make a
+  write durable; the explicit barriers remain (W71 power loss deferred).
 
 ## Operator workflows
 
@@ -102,14 +103,14 @@ order) and starts serving.
 
 ```bash
 # host 10.0.0.11: first node, creates the cluster
-./scripts/server.sh 10.0.0.11:17432 /data/efs --direct-io
+./scripts/server.sh 10.0.0.11:17432 /data/efs
 # hosts 10.0.0.12 and 10.0.0.13: join through the first node
-./scripts/server.sh 10.0.0.12:17432 /data/efs 10.0.0.11:17432 --direct-io
-./scripts/server.sh 10.0.0.13:17432 /data/efs 10.0.0.11:17432 --direct-io
+./scripts/server.sh 10.0.0.12:17432 /data/efs 10.0.0.11:17432
+./scripts/server.sh 10.0.0.13:17432 /data/efs 10.0.0.11:17432
 ```
 
-The same with the binaries: `efsd 10.0.0.11:17432 /data/efs --direct-io`,
-then `efsd --join 10.0.0.11:17432 /data/efs --direct-io` on each joiner. A
+The same with the binaries: `efsd 10.0.0.11:17432 /data/efs`,
+then `efsd --join 10.0.0.11:17432 /data/efs` on each joiner. A
 quota goes after the roots in the wrapper (`/data/efs:2T`) or as
 `--quota 2T`. With the word `join` instead of a seed address
 (`efsd --join /data/efs`), the joiner finds the cluster by UDP broadcast on
@@ -180,7 +181,7 @@ runtime `shrink-quota` is lost at restart and out of alpha).
 Start a new host with a fresh store and `--join`:
 
 ```bash
-./scripts/server.sh 10.0.0.14:17432 /data/efs 10.0.0.11:17432 --direct-io
+./scripts/server.sh 10.0.0.14:17432 /data/efs 10.0.0.11:17432
 ```
 
 The node is added online with the next id. At the fourth member, metadata
@@ -210,7 +211,7 @@ that restart. This command has no test yet (finding F11); prefer the restart.
 ```bash
 ./scripts/client.sh stop /mnt/efs                 # every client first
 ./scripts/server.sh stop /data/efs                # on each host (or: stop 10.0.0.11:17432)
-./scripts/server.sh 10.0.0.11:17432 /data/efs --direct-io      # restart: the same command
+./scripts/server.sh 10.0.0.11:17432 /data/efs      # restart: the same command
 ```
 
 Stop clients before servers, so pending writes can drain. A daemon stops on

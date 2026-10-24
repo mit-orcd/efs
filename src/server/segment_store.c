@@ -13,9 +13,9 @@
  * generation = segment generation, fragment index, payload length). Reads,
  * retried PUTs and scans verify the record names exactly this file's
  * segment fragment; an older tail ("EFSSEG1") is an unknown format.
- * Written once with O_EXCL (O_DIRECT when the node uses direct I/O), then
- * fsynced with its directory before the PUT is acknowledged: the packer's
- * switch requires the copy durable on every member.
+ * Written once with O_EXCL and read with O_DIRECT only (D42), then fsynced
+ * with its directory before the PUT is acknowledged: O_DIRECT is not a
+ * barrier, and the packer's switch requires the copy durable on every member.
  *
  * A PUT is admitted only for an admitted, ACTIVE segment object whose
  * placement names this node for that fragment with exactly that checksum,
@@ -141,7 +141,7 @@ static int sg_read_tail(int fd, uint32_t group, uint64_t id, uint64_t gen, uint3
                         uint32_t len, uint8_t sum[EFS_HASH_SIZE])
 {
     uint8_t t[EFS_FRAG_RECORD_BYTES];
-    ssize_t n = pread(fd, t, sizeof(t), len);
+    ssize_t n = server_frag_pread(fd, t, sizeof(t), len);
     if (n < 0) return EFS_ERR_IO;
     struct efs_frag_ident want;
     const char *field = NULL;
@@ -183,15 +183,13 @@ static int sg_write(struct efsd_server *s, const char *path, uint32_t group, uin
         free(buf);
         return EFS_ERR_INVAL;
     }
-    int flags = O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC;
-    if (s->direct_io) flags |= O_DIRECT;
-    int fd = open(path, flags, 0644);
-    if (fd < 0 && errno == EINVAL && (flags & O_DIRECT)) fd = open(path, flags & ~O_DIRECT, 0644);
+    (void)s;
+    int fd = server_frag_open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
     if (fd < 0) {
         free(buf);
         if (errno != EEXIST) return EFS_ERR_IO;
         uint8_t have[EFS_HASH_SIZE];
-        fd = open(path, O_RDONLY | O_CLOEXEC);
+        fd = server_frag_open(path, O_RDONLY, 0);
         if (fd < 0) return EFS_ERR_IO;
         rc = sg_read_tail(fd, group, id, gen, fi, len, have);
         close(fd);
@@ -296,18 +294,11 @@ int server_segment_read(struct efsd_server *s, uint32_t group, uint64_t id, uint
 {
     char path[EFS_MAX_PATH + 128];
     server_segment_path(s, group, id, gen, fi, path, sizeof(path));
-    int fd = open(path, O_RDONLY | O_CLOEXEC);
+    int fd = server_frag_open(path, O_RDONLY, 0);
     if (fd < 0) return errno == ENOENT ? EFS_ERR_NOT_FOUND : EFS_ERR_IO;
     int rc = sg_read_tail(fd, group, id, gen, fi, len, sum);
-    if (rc == EFS_OK) {
-        size_t done = 0;
-        while (done < len) {
-            ssize_t r = pread(fd, out + done, len - done, (off_t)done);
-            if (r < 0 && errno == EINTR) continue;
-            if (r <= 0) { rc = EFS_ERR_IO; break; }
-            done += (size_t)r;
-        }
-    }
+    if (rc == EFS_OK && server_frag_pread(fd, out, len, 0) != (ssize_t)len)
+        rc = EFS_ERR_IO;
     close(fd);
     if (rc == EFS_OK) {
         uint8_t got[EFS_HASH_SIZE];

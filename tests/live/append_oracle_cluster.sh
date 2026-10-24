@@ -3,7 +3,7 @@
 #
 # W87 live appender gate on a private 3-daemon TCP cluster (loopback,
 # ports PORT+1..PORT+3, default 18201-18203, stores under DIR/n{1,2,3},
-# server page cache (--no-direct-io) unless EFS_K09_DIRECT=1, one efs-fuse
+# O_DIRECT fragment I/O (the only mode, D42), one efs-fuse
 # mount at DIR/mnt). REL holds efsd, efs-fuse, efs-mgmt and scripts/ of one
 # build. Never touches orcd-mini (17432-17434) or w100 (27432/27433).
 #
@@ -18,7 +18,6 @@ set -u
 cmd=$1; REL=$2; D=$3; PORT=${4:-18200}
 ADDR=${EFS_K09_ADDR:-127.0.0.1}
 export EFS_TRANSPORT=tcp
-IO=--no-direct-io; [ "${EFS_K09_DIRECT:-0}" = 1 ] && IO=--direct-io
 HERE=$(cd "$(dirname "$0")" && pwd)
 
 start_daemons() {
@@ -34,7 +33,7 @@ start_daemons() {
     else
       set -- $ADDR:$((PORT+i)) "$D/n$i"
     fi
-    nohup "$REL/efsd" "$@" --quota "${EFS_K09_QUOTA:-4G}" --discovery-port 0 $IO \
+    nohup "$REL/efsd" "$@" --quota "${EFS_K09_QUOTA:-4G}" --discovery-port 0 \
       >> "$D/logs/efsd-n$i.log" 2>&1 &
     echo $! > "$D/logs/n$i.pid"
     for t in $(seq 60); do grep -q listening "$D/logs/efsd-n$i.log" && break; sleep 0.5; done

@@ -64,6 +64,17 @@
 #define EFS_MD_CMD_EXPIRY_RENEW 59 /* ino/gen/uid/expected/leader-now/deadline:45 */
 #define EFS_MD_REQ_EXPIRY_POLICY 60 /* root/gen:17; fresh revision/TTL/max */
 #define EFS_MD_REQ_EXPIRY_RECORD 61 /* ino/gen:17; fresh revision/deadline/root */
+/* Expiry requests and commands (D33). Excluded from the alpha product
+ * (D42): a build without EFS_BUILD_EXPIRY refuses them, never proposes them. */
+static inline int efs_md_is_expiry(uint8_t op)
+{
+    return op == EFS_MD_CMD_EXPIRY_POLICY || op == EFS_MD_CMD_EXPIRY_RENEW ||
+           (op >= EFS_MD_REQ_EXPIRY_POLICY && op <= EFS_MD_REQ_EXPIRY_RECORD) ||
+           op == EFS_MD_REQ_EXPIRY_CLOCK || op == EFS_MD_REQ_EXPIRY_CLOCK_RESET ||
+           (op >= EFS_MD_REQ_EXPIRY_DELETE && op <= EFS_MD_REQ_EXPIRY_ID) ||
+           op == EFS_MD_REQ_EXPIRY_POLICY_INFO || op == EFS_MD_REQ_EXPIRY_ORIGIN ||
+           op == EFS_MD_REQ_EXPIRY_PARENT;
+}
 #define EFS_MD_CMD_APPEND_COMPLETE_ATOMIC 54 /* ino/gen/offset/UUID/epoch/content epoch/reservation: 101 bytes */
 #define EFS_MD_CMD_APPEND_ATOMIC 53
 #define EFS_MD_CMD_QUERY_POLICY 43 /* expected version:8, mask:4 */

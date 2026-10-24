@@ -56,10 +56,10 @@ int main(void){
  failure=EFS_ERR_NET;assert(efs_fuse_lookup_at(1,"old-directory",&e)==-EIO&&!adopted);
  failure=0;authoritative_ino=84;assert(!efs_fuse_lookup_at(1,"old-directory",&e)&&e.ino==84&&adopted==1);
  fuse_ino_t virtual_file=(1ULL<<60)|42;
- assert(!efs_fuse_lookup_at(virtual_file,".",&e)&&e.ino==virtual_file);
+ /* D42: no NFS re-export, so no LOOKUP(virtual file, ".") handle
+  * reconstruction: "." under a virtual file is ENOENT like any child. */
  assert(efs_fuse_lookup_at(virtual_file,"child",&e)==-ENOENT);
- dot_result=-EACCES;assert(efs_fuse_lookup_at(virtual_file,".",&e)==-EACCES);
- dot_result=-ENOENT;assert(efs_fuse_lookup_at(virtual_file,".",&e)==-ENOENT);
+ dot_result=0;assert(efs_fuse_lookup_at(virtual_file,".",&e)==-ENOENT);
  return 0;
 }
 '''

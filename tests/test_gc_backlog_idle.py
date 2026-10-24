@@ -5,7 +5,7 @@ import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/server/raft_host.c').read_text()
 a=s.index('static int host_gc_backlog_config(')
-b=s.index('static int host_expiry_clock_read(',a)
+b=s.index('#if EFS_BUILD_EXPIRY\n/* Progress is confirmed by the expiry',a)
 code='''#include "efs/common.h"
 #include <assert.h>
 #include <errno.h>
@@ -29,11 +29,6 @@ int main(void) {
   assert(host_gc_backlog_idle(ms,1,2,1)==1000);
   assert(host_gc_backlog_idle(ms,1,1,2)==ms);
  }
- assert(host_gc_expiry_idle(1000,0)==1000);
- assert(host_gc_expiry_idle(1000,1)==100);
- assert(host_gc_expiry_idle(20,1)==20);
- assert(host_gc_expiry_idle(100,1)==100);
- assert(host_gc_expiry_idle(40,0)==40);
  puts("GC backlog idle: strict config, default/idle/blocked/reset backoff and bounded progress PASS");
 }
 '''
@@ -42,9 +37,11 @@ thread=s[s.index('static void *host_gc_thread(',b):s.index('/* W92 query publica
 assert 'host_gc_reap_pass(h, h->g[g].group' in thread
 assert 'backlog_capped |= __atomic_load_n' in thread
 assert 'backlog_capped |= host_gc_frag_pass(' in thread
-assert 'expiry_progress |= host_gc_expiry_pass(' in thread
-assert 'idle_ms = host_gc_expiry_idle(idle_ms, expiry_progress)' in thread
-assert 'expiry_progress = host_gc_expiry_groups(h)' in thread
+# The expiry pacing exists only in EFS_BUILD_EXPIRY builds (D42).
+for line in ('expiry_progress |= host_gc_expiry_pass(', 'idle_ms = host_gc_expiry_idle(idle_ms, expiry_progress)',
+             'expiry_progress = host_gc_expiry_groups(h)'):
+    at = thread.index(line)
+    assert thread.rindex('#if EFS_BUILD_EXPIRY', 0, at) > thread.rfind('#endif', 0, at), line
 assert 'efs_iostats_now_us() < idle_end' in thread
 yield_code=thread[thread.index('uint64_t idle_end ='):]
 assert 'now_us_()' not in yield_code

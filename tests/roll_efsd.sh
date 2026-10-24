@@ -109,7 +109,7 @@ if [ $ALL = 1 ]; then
     for n in 1 2 3 4; do
         h=$(host_of $n); a=$(addr_of $n)
         ep="$a:19810"; [ $FRESH = 1 ] && [ "$n" != 1 ] && ep="--join 172.16.223.57:19810 --listen $a:19810"
-        ssh_ 30 "$h" "mkdir -p /tmp/efs-perf; rm -f /tmp/efs-perf/efsd.data /tmp/efs-perf/efsd.strace; cd /tmp/efs && mv -f efsd.log efsd.log.prev 2>/dev/null; (env $EFSD_ENV $PERF_ENV setsid ./efsd $ep $STORAGE --quota 36T --direct-io $EFSD_ARGS >efsd.log 2>&1 </dev/null &); sleep 1; echo $h up=\$(pgrep -x efsd | wc -l) perf=\$(pgrep -x perf | wc -l)"
+        ssh_ 30 "$h" "mkdir -p /tmp/efs-perf; rm -f /tmp/efs-perf/efsd.data /tmp/efs-perf/efsd.strace; cd /tmp/efs && mv -f efsd.log efsd.log.prev 2>/dev/null; (env $EFSD_ENV $PERF_ENV setsid ./efsd $ep $STORAGE --quota 36T $EFSD_ARGS >efsd.log 2>&1 </dev/null &); sleep 1; echo $h up=\$(pgrep -x efsd | wc -l) perf=\$(pgrep -x perf | wc -l)"
     done
     if [ $FRESH = 1 ]; then
         # W153: formation commits the members joined at that moment, and
@@ -165,7 +165,7 @@ for n in "${NODES[@]}"; do
         echo "FAIL: build id changed ($running -> $built): stop all four, then start all four"; exit 1
     fi
     echo "== node $n restart"
-    ssh_ 30 "$h" "mkdir -p /tmp/efs-perf; rm -f /tmp/efs-perf/efsd.data /tmp/efs-perf/efsd.strace; pkill -9 -x efsd; sleep 1; cd /tmp/efs && mv -f efsd.log efsd.log.prev 2>/dev/null; (env $EFSD_ENV $PERF_ENV setsid ./efsd $ep $STORAGE --quota 36T --direct-io $EFSD_ARGS >efsd.log 2>&1 </dev/null &); sleep 2; echo up=\$(pgrep -x efsd | wc -l) perf=\$(pgrep -x perf | wc -l)"
+    ssh_ 30 "$h" "mkdir -p /tmp/efs-perf; rm -f /tmp/efs-perf/efsd.data /tmp/efs-perf/efsd.strace; pkill -9 -x efsd; sleep 1; cd /tmp/efs && mv -f efsd.log efsd.log.prev 2>/dev/null; (env $EFSD_ENV $PERF_ENV setsid ./efsd $ep $STORAGE --quota 36T $EFSD_ARGS >efsd.log 2>&1 </dev/null &); sleep 2; echo up=\$(pgrep -x efsd | wc -l) perf=\$(pgrep -x perf | wc -l)"
     # Wait for catch-up: every hosted group commit==applied and within 2 of the cluster max.
     ok=0
     for i in $(seq 1 90); do

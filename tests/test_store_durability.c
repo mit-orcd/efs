@@ -65,7 +65,7 @@ static void test_record(const uint8_t *data, uint8_t rec[EFS_FRAG_RECORD_BYTES])
 static int async_put(struct put_sync_root *r, const char *path, uint8_t *data)
 {
     uint8_t rec[EFS_FRAG_RECORD_BYTES];test_record(data,rec);
-    struct shard_io_arg a={.buf=data,.len=4096,.is_write=1,.rec=rec,.direct=1,.sync_root=r};
+    struct shard_io_arg a={.buf=data,.len=4096,.is_write=1,.rec=rec,.sync_root=r};
     strcpy(a.path,path);shard_io_thread(&a);
     return a.result;
 }
@@ -234,7 +234,7 @@ static int test_async_durability(uint8_t *data)
     snprintf(path,sizeof(path),"%s/data/a/f5",root);
     {   /* f5: a valid fragment, then its payload corrupted */
         uint8_t rec[EFS_FRAG_RECORD_BYTES];test_record(data,rec);
-        struct shard_io_arg a={.buf=data,.len=4096,.is_write=1,.rec=rec,.direct=1};
+        struct shard_io_arg a={.buf=data,.len=4096,.is_write=1,.rec=rec};
         strcpy(a.path,path);file_syncs=0;shard_io_thread(&a);assert(a.result==EFS_OK);
         int cf=open(path,O_WRONLY);assert(cf>=0 && pwrite(cf,"X",1,0)==1);close(cf);
     }
@@ -329,8 +329,10 @@ int main(void)
     assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==3);
     file_syncs=directory_syncs=0;shard_io_thread(&a);
     assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==1);
-    for(int direct=0;direct<2;direct++) for(int bounce=0;bounce<2;bounce++) {
-        a.direct=direct;a.buf=data+bounce;
+    /* O_DIRECT is not a barrier: aligned and bounce writes both take the
+     * explicit file and directory barriers before the ACK. */
+    for(int bounce=0;bounce<2;bounce++) {
+        a.buf=data+bounce;
         for(int attempt=0;attempt<2;attempt++) {
             file_syncs=directory_syncs=0;shard_io_thread(&a);
             assert(a.result==EFS_OK && file_syncs==1 && directory_syncs==1 && !sync_opens);
@@ -350,7 +352,7 @@ int main(void)
     /* Short TCP worker lifetimes must retire both direct-I/O cache pages.
      * Valgrind sees lost buffers after join if either TLS destructor is absent. */
     for (int i=0;i<32;i++) {
-        pthread_t thread;a.direct=1;a.buf=data+(i%2);
+        pthread_t thread;a.buf=data+(i%2);
         file_syncs=directory_syncs=0;
         assert(!pthread_create(&thread,NULL,shard_io_thread,&a));
         assert(!pthread_join(thread,NULL));
@@ -392,6 +394,6 @@ int main(void)
     test_startup_abandon(data);
     if(!async_ran)puts("async durability: SKIP (TMPDIR is not XFS)");
     free(data);
-    puts("production PUT durability: buffered/direct/bounce file and pathname barriers, pinned ancestry, restart/recreation, retries, fault refusal and asynchronous acknowledgement PASS");
+    puts("production PUT durability: O_DIRECT aligned/bounce file and pathname barriers, pinned ancestry, restart/recreation, retries, fault refusal and asynchronous acknowledgement PASS");
     return 0;
 }

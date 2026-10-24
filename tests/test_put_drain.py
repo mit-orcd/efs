@@ -48,14 +48,22 @@ gc = fn('static void *host_gc_thread(')
 assert gc.index('host_put_drain_pass(h, h->g[g].group, anchor);') < gc.index('host_put_orphan_pass(h, h->g[g].group, anchor);')
 assert 'h->put_drain_cursor_len[gc_gi(h->g[g].group)] = 0;' in gc, 'cursor reset on lost leadership'
 nc = (root / 'src/client/node_cache.c').read_text()
-sd = nc[nc.index('void efs_client_shutdown(void)'):]
-order = [sd.index(x) for x in ('efs_client_stop_meta_flush();', '(void)efs_client_put_settle();',
-                               '(void)efs_client_session_end();', 'if (conn_pool_inited)')]
+sd = nc[nc.index('int efs_client_shutdown(void)'):]
+order = [sd.index(x) for x in ('efs_client_stop_meta_flush();', 'settle_rc = efs_client_put_settle();',
+                               'revoke_rc = efs_client_session_end();', 'unmount not clean',
+                               'if (conn_pool_inited)')]
 assert order == sorted(order), order
 ir = (root / 'src/client/inode_rpc.c').read_text()
 end = ir[ir.index('int efs_client_session_end(void)'):]
 end = end[:end.index('\n}\n')]
 assert 'efs_session_revoke(&rpc,id.client_uuid,&res)' in end and 'session_fenced,1' in end
+# D42: always revoke (no keep-open switch); a failed flush, settle or revoke
+# makes efs-fuse exit 1 instead of reporting a clean unmount.
+assert 'getenv' not in end, 'clean unmount revoke has no switch'
+assert 'return result;' in sd
+fz = (root / 'src/client/efs_fuse.c').read_text()
+assert 'if (efs_client_shutdown() != EFS_OK)\n        g_unmount_unclean = 1;' in fz
+assert 'if (!ret && g_unmount_unclean) {' in fz and 'ret = 1;' in fz
 mg = (root / 'src/mgmt/efs_mgmt.c').read_text()
 assert 'efs_session_revoke(&rpc, uuid, &res)' in mg, 'efs-mgmt fence uses the same coordinator'
 

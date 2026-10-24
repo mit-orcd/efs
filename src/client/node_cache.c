@@ -783,11 +783,18 @@ struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
                     }
                 }
                 if (nc && efs_rdma_available() &&
-                    efs_rdma_client_upgrade(nc) != 0 &&
-                    efs_rdma_transport() == EFS_TRANSPORT_RDMA) {
-                    /* Strict mode: no silent TCP fallback. */
-                    efs_conn_destroy(nc);
-                    nc = NULL;
+                    efs_rdma_client_upgrade(nc) != 0) {
+                    if (efs_rdma_transport() == EFS_TRANSPORT_RDMA) {
+                        /* Strict mode: no silent TCP fallback. */
+                        efs_conn_destroy(nc);
+                        nc = NULL;
+                    } else {
+                        /* auto: this connection stays TCP; say so (bounded). */
+                        static int noted;
+                        if (__sync_fetch_and_add(&noted, 1) < 5)
+                            fprintf(stderr, "efs-fuse: transport auto: RDMA upgrade to node %u "
+                                    "failed; this connection uses tcp\n", node_id);
+                    }
                 }
             }
             efs_client_rpc_set_deadline_ms(previous);
@@ -911,26 +918,32 @@ void efs_client_conn_drop(efs_node_id_t node_id, struct efs_conn *conn)
     pthread_mutex_unlock(&g_client.conn_lock[idx]);
 }
 
-void efs_client_shutdown(void)
+int efs_client_shutdown(void)
 {
-    static int done;
+    static int done, result;
     if (done)
-        return;
+        return result;
     done = 1;
 
     /* Quiesce the reclaim pool first: its in-flight GET/PUT would otherwise
      * race the connection teardown below. */
     efs_dcache_reclaim_stop();
     /* Persist any write-combined chunks before tearing down connections. */
-    (void)efs_dcache_flush_all();
+    int flush_rc = efs_dcache_flush_all();
 
     /* Stop the flush thread before freeing state it might be using; join
      * blocks until any in-flight flush completes. */
     efs_client_stop_meta_flush();
-    /* Settle what this mount can, then revoke its session (D31): the
-     * leaders drain and collect what is left. Needs the connections. */
-    (void)efs_client_put_settle();
-    (void)efs_client_session_end();
+    /* Settle what this mount can, then revoke its session (D31, always:
+     * D42): the leaders drain and collect what is left. Needs the
+     * connections. A failure is reported, never a clean completion. */
+    int settle_rc = efs_client_put_settle();
+    int revoke_rc = efs_client_session_end();
+    if (flush_rc != EFS_OK || settle_rc != EFS_OK || revoke_rc != EFS_OK) {
+        fprintf(stderr, "efs: unmount not clean: flush rc=%d settle rc=%d revoke rc=%d\n",
+                flush_rc, settle_rc, revoke_rc);
+        result = flush_rc != EFS_OK ? flush_rc : settle_rc != EFS_OK ? settle_rc : revoke_rc;
+    }
 
     /* Stop the staging-table evictor (it takes the table locks; must be
      * gone before the export is freed). */
@@ -967,6 +980,7 @@ void efs_client_shutdown(void)
         pthread_mutex_destroy(&g_client.idx_mu);
         g_client.dir_locks_ready = 0;
     }
+    return result;
 }
 
 void efs_client_init_nodes(struct efs_client *c, const char *node_list[EFS_MAX_NODES],

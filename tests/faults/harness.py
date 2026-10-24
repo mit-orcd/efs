@@ -161,9 +161,9 @@ def data_fragment_set(before, after, minimum=3):
 
 
 def checksum_tail_offset(size):
-    # Buffered objects append the 32-byte digest; direct-I/O objects pad
-    # that same digest to a 4 KiB trailer. Data fragment lengths are aligned.
-    for trailer in (32, 4096):
+    # The record sits in a 4 KiB trailer page (O_DIRECT only, D42). Data
+    # fragment lengths are aligned.
+    for trailer in (4096,):
         payload = size - trailer
         if payload >= 65536 and payload % 4096 == 0:
             return payload
@@ -284,7 +284,7 @@ def transport_of(pid, log_path, expected="tcp", log_offset=0):
 
 
 class Server(object):
-    def __init__(self, node_id, port, storage, join, binary, mode="buffered", transport="tcp", device=None):
+    def __init__(self, node_id, port, storage, join, binary, mode="direct", transport="tcp", device=None):
         assert_safe_port(port)
         assert_safe_storage(storage)
         self.node_id = node_id
@@ -292,8 +292,8 @@ class Server(object):
         self.storage = storage
         self.join = join
         self.binary = binary
-        if mode not in ("direct", "buffered"):
-            raise ValueError("invalid storage I/O mode")
+        if mode != "direct":
+            raise ValueError("invalid storage I/O mode (O_DIRECT only, D42)")
         self.mode = mode
         self.transport = transport
         self.device = device
@@ -305,8 +305,7 @@ class Server(object):
         # it and name their own endpoint. Node ids come from the cluster.
         ep = "127.0.0.1:%d" % self.port
         args = [self.binary] + (["--join", self.join, "--listen", ep] if self.join else [ep])
-        args += [self.storage, "--quota", "1G", "--discovery-port", "0",
-                 "--direct-io" if self.mode == "direct" else "--no-direct-io"]
+        args += [self.storage, "--quota", "1G", "--discovery-port", "0"]
         return args
 
     def wait_banner(self, timeout=60):
@@ -360,7 +359,7 @@ def kill_owned_one(proc):
 
 
 class Cluster(object):
-    def __init__(self, work, binary_dir, mode="buffered", transport="tcp", device=None):
+    def __init__(self, work, binary_dir, mode="direct", transport="tcp", device=None):
         self.work = work
         self.binary_dir = binary_dir
         self.mode = mode
@@ -946,7 +945,7 @@ def case_name(fn):
     return getattr(fn, "__name__", None) or fn.func.__name__
 
 
-def integrate(work, binary_dir, seed, mode="buffered", transport="tcp", device=None):
+def integrate(work, binary_dir, seed, mode="direct", transport="tcp", device=None):
     signal.signal(signal.SIGTERM, _on_signal)
     signal.signal(signal.SIGINT, _on_signal)
     results = []
@@ -1042,11 +1041,14 @@ def suite_exit(rows):
 
 def self_test():
     fails = []
-    for mode, flag in (("direct", "--direct-io"), ("buffered", "--no-direct-io")):
-        server = Server(1, 25000, "/tmp/efs-fault-mode-test", None, "/tmp/efsd", mode)
-        argv = server.argv()
-        if flag not in argv or ("--no-direct-io" if mode == "direct" else "--direct-io") in argv:
-            fails.append("explicit integration I/O mode " + mode)
+    argv = Server(1, 25000, "/tmp/efs-fault-mode-test", None, "/tmp/efsd").argv()
+    if any("direct-io" in a for a in argv):
+        fails.append("integration daemons pass a removed I/O flag")
+    try:
+        Server(1, 25000, "/tmp/efs-fault-mode-test", None, "/tmp/efsd", "buffered")
+        fails.append("buffered I/O mode accepted")
+    except ValueError:
+        pass
     data_a = pattern(7, "a", 64)
     data_b = pattern(7, "b", 64)
     if data_a == data_b or 0 in data_a:
@@ -1072,8 +1074,13 @@ def self_test():
     if set(groups.get(("1/0000", 0, "101"), {})) != {0, 1, 2} or set(groups.get(("1/0000", 0, "102"), {})) != {2}:
         fails.append("cross-server candidate grouping %s" % groups)
 
-    if checksum_tail_offset(65536 + 32) != 65536 or checksum_tail_offset(65536 + 4096) != 65536:
-        fails.append("buffered/direct checksum tail offsets")
+    if checksum_tail_offset(65536 + 4096) != 65536:
+        fails.append("checksum tail offset")
+    try:
+        checksum_tail_offset(65536 + 32)
+        fails.append("removed buffered trailer accepted")
+    except ValueError:
+        pass
     try:
         checksum_tail_offset(123)
         fails.append("invalid checksum trailer accepted")
@@ -1138,8 +1145,8 @@ def main(argv):
     parser.add_argument("--out", default="")
     parser.add_argument("--integrate", action="store_true",
                         help="start a private 4-server cluster")
-    parser.add_argument("--mode", choices=("direct", "buffered"), default="buffered",
-                        help="private integration daemon storage mode (default: buffered)")
+    parser.add_argument("--mode", choices=("direct",), default="direct",
+                        help="private integration daemon storage mode (O_DIRECT only, D42)")
     parser.add_argument("--transport", choices=("tcp", "rdma"), default="tcp")
     parser.add_argument("--rdma-device", default=None)
     parser.add_argument("--seed", type=int, default=101)

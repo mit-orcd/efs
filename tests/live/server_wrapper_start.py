@@ -12,7 +12,7 @@ try:
         root=work/label;(root/'log').mkdir(parents=True);pidfile=root/'log/efsd.pid';pidfile.write_text(value)
         with socket.socket() as probe:
             probe.bind(('127.0.0.1',0));port=probe.getsockname()[1]
-        start=['bash',str(source/'scripts/server.sh'),f'127.0.0.1:{port}',str(root),'--discovery-port','0','--direct-io']
+        start=['bash',str(source/'scripts/server.sh'),f'127.0.0.1:{port}',str(root),'--discovery-port','0']
         try:
             with (work/(label+'-start.log')).open('w') as out:
                 subprocess.run(start,cwd=source,stdout=out,stderr=subprocess.STDOUT,check=True,timeout=15)
