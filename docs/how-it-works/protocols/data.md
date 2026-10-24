@@ -1280,9 +1280,10 @@ After the fence the thread waits for each remembered ticket to leave
 ADMITTED (a published one is marked as in 7) and counts the marked fragments
 the group leaders rebuild here (`rebuilt`, `rebuild_waiting`). Nothing a
 client was promised depends on that tail: the PUT verifier changed with the
-unclean boot, so a client that held acknowledgements of the previous boot
-keeps failing `fsync` (an error it saw never turns into success), and a
-crash before the tail finishes is caught by the next recovery's inventory.
+unclean boot, so a fragment the previous boot acknowledged and did not
+COMMIT stays lost in its client's `fsync` (K35: proven on the other two with
+a degraded mark, or `EIO`), never durable, and a crash before the tail
+finishes is caught by the next recovery's inventory.
 
 A transient obstacle (no leader yet, a peer unreachable) is retried and shown
 as the reason. A failed verification (an unreadable certificate, a fragment

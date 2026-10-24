@@ -668,8 +668,10 @@ void server_recovery_stats(struct efs_recovery_stats *out);
  * publish-apply, reclaim-accepted, recovery-local, recovery-marked. A
  * normal build compiles every point out. */
 #if EFS_FAULTS
-void server_fault_crash(const char *point);
-#define server_fault_crash_point(p) server_fault_crash(p)
+/* Weak: a storage unit test that includes reclaim.c without recovery.c
+ * links with no hook. */
+void server_fault_crash(const char *point) __attribute__((weak));
+#define server_fault_crash_point(p) do { if (server_fault_crash) server_fault_crash(p); } while (0)
 #else
 #define server_fault_crash_point(p) ((void)0)
 #endif

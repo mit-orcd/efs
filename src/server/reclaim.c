@@ -560,7 +560,13 @@ int server_reclaim_accept(struct efsd_server *s, const struct efs_reclaim_item *
                           uint32_t n, int32_t *rc)
 {
     if (!s || (n && (!items || !rc))) return EFS_ERR_INVAL;
-    return accept_internal(items, n, rc, 0);
+    int r = accept_internal(items, n, rc, 0);
+    for (uint32_t i = 0; i < n; i++)
+        if (rc[i] == EFS_OK) {
+            server_fault_crash_point("reclaim-accepted"); /* journaled, not answered */
+            break;
+        }
+    return r;
 }
 
 /* ---- background work ---- */

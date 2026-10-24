@@ -24,7 +24,7 @@ A crashed or killed store now proves itself (boot counter, reclaim journal,
 session certificates, every local fragment, each hosted metadata group at its
 leader's commit, every published reference against its digest), drops what it
 cannot prove, marks those stripes for W154 rebuild and clears the COMMIT
-fence; a client holding writes of the crashed run keeps failing `fsync`.
+fence; fragments the crashed run acknowledged stay unproven in their client's `fsync`.
 Daemon crash tests during PUT, publication, reclaim, KV compaction and
 recovery PASS (8 of 8 runs). intel1 gate: `make test` PASS, `make test-long`
 PASS (host-limit NOTRUNs); the first-run `test_k33_payload.py` FAIL is

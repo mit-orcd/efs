@@ -20,11 +20,11 @@ store, since a process kill keeps the page cache.
    first degraded mark; it restarts again and recovery restarts safely.
 4. The fence holds until proven: with EFS_FAULT_RECOVERY_HOLD_FILE recovery
    parks just before clearing it; sync-status shows `recovery running
-   phase=fence`, data-commit to node 3 fails and a fresh mount's fsync gets
-   EIO. Released: `recovery: verified`, the fence clears, data-commit
-   succeeds and a fresh mount's fsync succeeds; mount A, which held
-   acknowledgements of node 3's previous boot, keeps failing fsync (the
-   earlier error never turns into success). The interrupted run dropped the
+   phase=fence`, data-commit to node 3 fails and a fresh mount's fsync
+   proves its stripe on the other two only (K35: marked degraded). Released:
+   `recovery: verified`, data-commit succeeds and a fresh fsync proves all
+   three fragments; the fragments node 3's crashed run acknowledged to
+   mount A stay lost in its fsync (the ambiguous write is not proven). The interrupted run dropped the
    torn file; sync-status counts both losses as missing and marked; W154
    rebuilds every marked fragment (`rebuilt=2` or more, `rebuild_waiting=0`).
 5. No acknowledged byte is lost while two peers hold it: node 1 stops and a
@@ -278,17 +278,37 @@ try:
     assert rc != 0, ('data-commit while fenced', out)
     b = Mount(c, 2, 'mnt-b')
     mounts.append(b)
-    e = fsync_rc(b, 'fresh-fenced')
-    assert e == errno.EIO, ('fresh fsync while node 3 is fenced', e)
-    files.pop('fresh-fenced', None)  # its fsync failed: bytes not promised
+    # K35 proves fsync per stripe: while node 3 refuses COMMIT, a fresh write
+    # is durable only on the other two, so its stripe is marked degraded
+    # ("2 of 3 durable"), never counted with node 3's copy.
+    assert fsync_rc(b, 'fresh-fenced') == 0, 'fresh fsync while node 3 is fenced'
+    fenced_marks = b.logp.read_text().count('marked degraded for rebuild on return')
+    assert fenced_marks >= 1, b.logp.read_text()[-2000:]
     hold.unlink()
     st = verified(c, 3)
     rc, out = mgmt(c.env, 'data-commit', c.ep(3))
     assert rc == 0, ('data-commit after recovery', out)
     assert fsync_rc(b, 'fresh-ok') == 0, 'fresh fsync after recovery'
-    e = fsync_rc(a, 'old-client')
-    assert e == errno.EIO, ('mount A held node 3 acknowledgements of the old boot', e)
-    files.pop('old-client', None)
+    log_b = b.logp.read_text()
+    assert log_b.count('marked degraded for rebuild on return') == fenced_marks, \
+        ('after recovery node 3 COMMITs again: all three fragments durable', log_b[-2000:])
+    # The earlier ambiguous write stays unproven: mount A's fragments that
+    # node 3's crashed run acknowledged are lost (another incarnation), so
+    # its fsync of W1 never counts them durable.
+    old_a = a.logp.read_text().count('\n')
+    if 'W1' in files:
+        try:
+            with open(a.path / 'W1', 'rb+') as f:
+                os.fsync(f.fileno())
+        except OSError as e:
+            notes.append(f'W1 fsync after recovery: {e}')
+        tail = ''.join(a.logp.read_text().splitlines(True)[old_a:])
+        rows = re.findall(r'fsync ino=\d+ chunk=\d+ gen=\S+ nodes=(\d+),(\d+),(\d+) '
+                          r'fragments=([A-Z])([A-Z])([A-Z])', tail)
+        n3 = [r[3 + r[:3].index(str(c.node_id(3)))] for r in rows if str(c.node_id(3)) in r[:3]]
+        assert n3 and 'D' not in n3, ('crashed-run fragments of node 3 counted durable', tail[-2000:])
+        notes.append(f'W1 fsync after recovery: {len(n3)} stripes, node 3 fragment states '
+                     f'{"".join(sorted(set(n3)))} (never D)')
     # Every mark this recovery wrote or found is retired by W154 (tickets the
     # client left ADMITTED may still settle later; nothing waits on them).
     st = wait_status(c, 3, lambda s: s['rebuilt'] >= 2 and s['rebuild_waiting'] == 0,
@@ -298,9 +318,9 @@ try:
     notes.append('node 3 recovery: ' + ' '.join(f'{k}={st[k]}' for k in
                  ('checked', 'dropped', 'missing', 'marked', 'already_marked',
                   'rebuilt', 'superseded', 'unrecoverable', 'waiting')))
-    print('4. fence held until verified (data-commit and fresh fsync EIO), then cleared '
-          '(data-commit and fresh fsync OK); old client fsync stays EIO; torn and missing '
-          f'fragments rebuilt ({notes[-1]}) PASS', flush=True)
+    print('4. fence held until verified (data-commit EIO, fresh fsync only 2 of 3 durable), '
+          'then cleared (data-commit OK, fresh fsync 3 of 3); crashed-run fragments stay lost; '
+          f'torn and missing fragments rebuilt ({notes[-1]}) PASS', flush=True)
 
     # 5. No acknowledged byte lost while two peers hold it.
     verify(b, 'all three up')
@@ -482,5 +502,5 @@ finally:
 for n in notes:
     print(n)
 print(f'K36 recovery: crash during PUT, publication, reclaim, compaction and recovery; torn and '
-      f'missing fragments; fence held then cleared; COMMIT after recovery, old fsync stays '
-      f'failed; no acknowledged byte lost: PASS ({time.time() - t0:.1f} s)')
+      f'missing fragments; fence held then cleared; COMMIT after recovery, crashed-run '
+      f'fragments stay unproven; no acknowledged byte lost: PASS ({time.time() - t0:.1f} s)')

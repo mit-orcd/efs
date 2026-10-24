@@ -41,9 +41,11 @@ The report-only restart scan of recently modified files is removed.
 
 **Two outcomes stay separate.** A recovered store serves and COMMITs again.
 An earlier ambiguous write is not thereby proven: the PUT verifier changed
-with the unclean boot, so a client holding acknowledgements of the previous
-boot keeps failing `fsync` (client `data_commit.c`, unchanged), and an error a
-client saw never turns into success. Test step 4 checks both.
+with the unclean boot, so a fragment the crashed run acknowledged and did not
+COMMIT stays lost in its client's per-stripe `fsync` (K35, `data_commit.c`):
+the stripe is proven on its other two fragments with a degraded mark, or is
+`EIO` when it needs that fragment, and never counts it durable. Test step 4
+checks both.
 
 **New numbers** (taken from the high end of each free range; unique per
 `tests/test_kv_kind_unique.py`):
@@ -81,7 +83,7 @@ kill keeps the page cache).
 | 1 | — | three nodes form; four files written and fsynced |
 | 2 | crash during a PUT; torn and missing fragment | node 3 exits after its 5th PUT acknowledgement while a file is written without fsync; one of its fragments of the fsynced files truncated, another deleted; the fsynced files read exact from the two peers |
 | 3 | crash during recovery | restart exits right after recovery's first degraded mark; the next start recovers again (idempotent; the torn file was dropped by the interrupted run) |
-| 4 | fence holds until proven, then clears; COMMIT after recovery; earlier failed fsync stays failed | held before the fence: `sync-status` `recovery running phase=fence`, `data-commit` to node 3 fails, a fresh mount's fsync `EIO`; released: `recovery: verified`, `data-commit` OK, fresh fsync OK, the old mount's fsync still `EIO`; every mark retired, the torn and deleted fragments rebuilt |
+| 4 | fence holds until proven, then clears; COMMIT after recovery; the earlier ambiguous write stays unproven | held before the fence: `sync-status` `recovery running phase=fence`, `data-commit` to node 3 fails, a fresh mount's fsync proves its stripe on the other two only (K35 `2 of 3 durable; marked degraded`); released: `recovery: verified`, `data-commit` OK, a fresh fsync proves all three fragments (no new mark); mount A's fsync of the file written while node 3 died never counts node 3's crashed-run fragments durable; every mark retired, the torn and deleted fragments rebuilt |
 | 5 | no acknowledged byte lost while two peers hold it | node 1 down, a fresh mount on node 2 reads every file exact (needs node 3's rebuilt fragments) |
 | 6 | crash during publication | node 2 exits applying its first publication entry; verified on restart, `data-commit` OK, files exact |
 | 7 | crash during reclaim | node 3 exits after journaling a reclaim batch (packed small files, deletions); journal replayed, verified |

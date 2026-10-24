@@ -269,7 +269,8 @@ this list, before it ships.
   the reclaim journal, the ticket ledgers and the boot counter. What it
   cannot prove is dropped and its stripe marked degraded for rebuild; then
   the fence clears. An earlier ambiguous write is not thereby proven: the
-  verifier changed, so its client keeps failing `fsync`. See
+  verifier changed, so a fragment the crashed run acknowledged stays lost
+  to its client's `fsync`. See
   [verified recovery](protocols/data.md#verified-recovery-k36) and
   [AMD durability fixes](../status/amd-async-durability-20261015.md). A transient failure of that drain
   (transport, RPC budget, node down) returns EIO from that call with the

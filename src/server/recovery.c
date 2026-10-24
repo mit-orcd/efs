@@ -35,8 +35,8 @@
  *
  * What recovery cannot prove is dropped, never served. It does not prove
  * an earlier ambiguous write: the PUT verifier changed with this boot, so
- * a client holding acknowledgements of the previous boot keeps failing
- * fsync (client data_commit.c), and an error a client saw stays an error.
+ * a fragment the previous boot acknowledged stays lost to its client's
+ * fsync (client data_commit.c, K35), and an error a client saw stays one.
  * A transient obstacle (no leader yet, a peer unreachable) is retried and
  * shown as the reason; a failed verification leaves the store fenced with
  * that reason until restart. Every step is idempotent, so a crash during

@@ -577,7 +577,6 @@ void server_handle_conn(struct efs_conn *conn)
                     rep->rc[i] = EFS_ERR_BUSY;
                 }
                 (void)server_reclaim_accept(g_server, items, cnt, rep->rc);
-                server_fault_crash_point("reclaim-accepted"); /* journaled, not answered */
             }
             efs_iostats_add(EFS_IOSTAT_GC_DELETE, 0, efs_iostats_now_us() - start, !ok);
             efs_conn_send_msg(conn,EFS_MSG_GC_INODE_BATCH_REPLY,rep,(uint32_t)rlen);
@@ -636,7 +635,6 @@ void server_handle_conn(struct efs_conn *conn)
                     rep->rc[i] = EFS_ERR_BUSY;
                 }
                 (void)server_reclaim_accept(g_server, items, cnt, rep->rc);
-                server_fault_crash_point("reclaim-accepted"); /* journaled, not answered */
             }
             efs_conn_send_msg(conn, EFS_MSG_GC_SEGMENT_BATCH_REPLY, rep, (uint32_t)rlen);
             free(items);
@@ -676,7 +674,6 @@ void server_handle_conn(struct efs_conn *conn)
                     rep->rc[i] = EFS_ERR_BUSY;
                 }
                 (void)server_reclaim_accept(g_server, items, cnt, rep->rc);
-                server_fault_crash_point("reclaim-accepted"); /* journaled, not answered */
             }
             efs_conn_send_msg(conn, EFS_MSG_GC_FRAG_BATCH_REPLY, rep, (uint32_t)rlen);
             free(items);

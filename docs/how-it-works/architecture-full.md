@@ -299,7 +299,8 @@ this list, before it ships.
   the reclaim journal, the ticket ledgers and the boot counter. What it
   cannot prove is dropped and its stripe marked degraded for rebuild; then
   the fence clears. An earlier ambiguous write is not thereby proven: the
-  verifier changed, so its client keeps failing `fsync`. See
+  verifier changed, so a fragment the crashed run acknowledged stays lost
+  to its client's `fsync`. See
   [verified recovery](protocols/data.md#verified-recovery-k36) and
   [AMD durability fixes](../status/amd-async-durability-20261015.md). A transient failure of that drain
   (transport, RPC budget, node down) returns EIO from that call with the
@@ -1591,7 +1592,7 @@ A crashed or killed store now proves itself (boot counter, reclaim journal,
 session certificates, every local fragment, each hosted metadata group at its
 leader's commit, every published reference against its digest), drops what it
 cannot prove, marks those stripes for W154 rebuild and clears the COMMIT
-fence; a client holding writes of the crashed run keeps failing `fsync`.
+fence; fragments the crashed run acknowledged stay unproven in their client's `fsync`.
 Daemon crash tests during PUT, publication, reclaim, KV compaction and
 recovery PASS (8 of 8 runs). intel1 gate: `make test` PASS, `make test-long`
 PASS (host-limit NOTRUNs); the first-run `test_k33_payload.py` FAIL is
@@ -12157,9 +12158,10 @@ After the fence the thread waits for each remembered ticket to leave
 ADMITTED (a published one is marked as in 7) and counts the marked fragments
 the group leaders rebuild here (`rebuilt`, `rebuild_waiting`). Nothing a
 client was promised depends on that tail: the PUT verifier changed with the
-unclean boot, so a client that held acknowledgements of the previous boot
-keeps failing `fsync` (an error it saw never turns into success), and a
-crash before the tail finishes is caught by the next recovery's inventory.
+unclean boot, so a fragment the previous boot acknowledged and did not
+COMMIT stays lost in its client's `fsync` (K35: proven on the other two with
+a degraded mark, or `EIO`), never durable, and a crash before the tail
+finishes is caught by the next recovery's inventory.
 
 A transient obstacle (no leader yet, a peer unreachable) is retried and shown
 as the reason. A failed verification (an unreadable certificate, a fragment
