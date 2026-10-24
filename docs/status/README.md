@@ -21,6 +21,20 @@ full acceptance are separate states.
 [D41: K9 / W87 closed without resolution](decisions.md#d41--k9--w87-closed-without-resolution-user-oct-24):
 **user decision Oct 24: the append record loss was never reproduced and has no root cause; K9 is closed and reopens if a loss is seen again.** Not a passing gate.
 
+[Stage 2 qualification driver `scripts/qualify.py`](stage2-qualify-driver-20261024.md):
+**driver PASS (scoped), on `claude/devel-qual-driver-f46b04`, not merged.**
+One command runs the POSIX suites, the live harnesses, E1–E3 and a pluggable
+B-checks gate against a described cluster, with per-gate commands, deadlines,
+verdicts, live build identity and fixtures, `SHA256SUMS`, a summary draft and
+the F3 row; destructive steps need `--allow`. Bookkeeping test in `make test`.
+Loopback dry run on intel1 (three daemons, one host): POSIX core 216/216,
+2-client, durability, append failover, E1, E2 PASS; K13, K14, fragment
+integrity and GC reclamation FAIL on their stale `--node-id` CLI; E3 FAIL:
+EIO on the mount while one member is stopped orderly (turnover itself clean).
+intel1 `make test-all`: 450 commands, 0 FAIL except `tests/test_k33_payload.py`,
+a read EIO in its member-outage phase that fails 3 of 5 runs on the base too
+(proposed K34). Real-host runs NOTRUN (parent).
+
 [K15/K29 append harness accounting rule](k15-k29-accounting-rule-20261024.md):
 **PASS (scoped), on `claude/devel-k9-append-836bbe`, not merged.**
 `tests/live/append_failover.py` accounts a write the client saw fail (record
