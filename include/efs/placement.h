@@ -35,6 +35,12 @@ int efs_pack_destinations(const struct efs_node *members, uint32_t count,
                           efs_node_id_t self, uint64_t segment_id,
                           efs_node_id_t out[EFS_NUM_FRAGMENTS]);
 
+/* B1: a recorded stripe is usable only as exactly three non-zero, distinct
+ * node ids in 1..EFS_MAX_NODES (D1, D2, P). Readers take fragment nodes from
+ * the chunk row or pack object and refuse anything else; they never
+ * recompute placement. Returns 1 when valid, 0 otherwise. */
+int efs_fragment_nodes_valid(const efs_node_id_t nodes[EFS_NUM_FRAGMENTS]);
+
 /* A hashed index in [0, n) over the pair (a, b): every input bit moves
  * every output bit, reduced without modulo. 0 when n == 0. */
 uint32_t efs_place_index(uint64_t a, uint64_t b, uint32_t n);

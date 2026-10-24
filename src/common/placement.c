@@ -37,6 +37,20 @@ uint32_t efs_place_index(uint64_t a, uint64_t b, uint32_t n)
     return n ? place_range(place_mix2(a, b), n) : 0;
 }
 
+int efs_fragment_nodes_valid(const efs_node_id_t nodes[EFS_NUM_FRAGMENTS])
+{
+    if (!nodes)
+        return 0;
+    for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        if (nodes[i] == 0 || nodes[i] > EFS_MAX_NODES)
+            return 0;
+        for (int j = 0; j < i; j++)
+            if (nodes[i] == nodes[j])
+                return 0;
+    }
+    return 1;
+}
+
 /* Consecutive ranks from hash(ino, chunk): meta table pages. */
 static void place_consecutive(uint32_t node_count, efs_ino_t ino,
                               uint32_t chunk_index,

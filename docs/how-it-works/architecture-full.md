@@ -1590,6 +1590,19 @@ member's orderly stop reads `EIO` until it returns (F24, proposed K34).**
 Also found: `fsync` returns `EIO` while any member is down, and for good
 after a member's unclean stop (F22, F23).
 
+[B1–B5 geometry, placement and usable capacity](../status/b-geometry-capacity-20261024.md):
+**PASS (scoped, loopback) on `claude/devel-b-geometry-fbcf5b`, not merged.**
+xorinox `make test-all` at `17aac881c`: 453 commands, 0 FAIL, 13 NOTRUN
+host limits. New `tests/test_b_geometry.c` (unit) and
+`tests/test_b_geometry.py` (3 to 8 members, every store's fragment records
+against the chunk rows and pack objects) plus the driver
+`scripts/b_checks.py` for real hosts. FIXED: a full stripe member was
+acknowledged as a degraded stripe (silent protection debt; base took
+200 MiB with a 16 MiB member full) and is now placed around or ENOSPC; the
+reader no longer decodes from recomputed placement. Real-host driver run
+NOTRUN (parent). Found: `test_k33_payload.py` EIO on a packed read with a
+member down (base 2/3, branch 1/3), B6 follow-up.
+
 [D41: K9 / W87 closed without resolution](#d41--k9--w87-closed-without-resolution-user-oct-24):
 **user decision Oct 24: the append record loss was never reproduced and has no root cause; K9 is closed and reopens if a loss is seen again.** Not a passing gate.
 
@@ -5511,7 +5524,7 @@ third fragment. Trace and validate protection debt/repair before closing W42.
 
 **Follow-up steps.** mechanical: replace `total_logical = 2 × min_quota` (`efs_fuse_statfs`, `efs_fuse.c:3108–3120`) and `usable_cap = 2 × min_quota` / `usable_free = 2 × min_free` (`efs_mgmt.c:129–185`) with the 3-of-N placement bound: the largest `M` (chunks) with `Σ_i min(c_i, M) ≥ 3M`, `c_i` = node `i`'s quota (or free) in 64 KiB fragments, times 128 KiB; count only up nodes with a quota, as today. Reduces to `2 × min` on three nodes and to `Σ × 2/3` on N equal nodes. Also make `f_blocks` and the used figure come from the same model (statfs today derives used from `Σ phys × 2/3` and total from `2 × min`, so on four nodes used can exceed total and `avail` clamps to 0 while writes still succeed). Unit test with 3 equal, 4 equal, 3 unequal (100/100/1000 → 200, not 800). Then verify on 19810 (`df` vs `efs-mgmt status` vs `4 × 36T × 2/3`)
 
-**Evidence and limits.** Both comments say "every chunk places one fragment on each node" — true for three nodes only. Four 500 GiB nodes show 1000 GiB instead of 1333. Not a data-path change; no decision needed. **Verify while there:** what a PUT does when exactly one stripe member answers `EFS_ERR_QUOTA` (`put_fragments_parallel_once`: `quota_errors >= 2` → QUOTA, `acks >= 2` → OK) — if the chunk publishes with two fragments, a full node creates protection debt silently ([product-gaps](../backlog/product-gaps.md) §1.2); if `reroute_down_fragments` moves it, say so in [the failure-tolerance table](#appendix-8--failure-tolerance--derivation)
+**Evidence and limits.** Both comments say "every chunk places one fragment on each node" — true for three nodes only. Four 500 GiB nodes show 1000 GiB instead of 1333. Not a data-path change; no decision needed. **Verify while there:** what a PUT does when exactly one stripe member answers `EFS_ERR_QUOTA` (`put_fragments_parallel_once`: `quota_errors >= 2` → QUOTA, `acks >= 2` → OK) — if the chunk publishes with two fragments, a full node creates protection debt silently ([product-gaps](../backlog/product-gaps.md) §1.2); if `reroute_down_fragments` moves it, say so in [the failure-tolerance table](#appendix-8--failure-tolerance--derivation). **Answered Oct 24 (B5, [evidence](../status/b-geometry-capacity-20261024.md)):** it published with two fragments (silent debt); now a QUOTA refusal is never a degraded acknowledgement: the object is placed again on a member that is neither down nor full, or the write fails ENOSPC; [failure-tolerance](#appendix-8--failure-tolerance--derivation) says so
 
 
 ### W27 · REPORT identity from the staging table (queue row 0b)
@@ -10454,6 +10467,16 @@ plane has *decided* are unavailable and recorded as such; it is never used
 because a target is merely *slow*. In an asynchronous network a client
 cannot distinguish the two, and letting it try would let any latency spike
 quietly lower the protection level of freshly written data.
+
+**A full member is not an unavailable one (B5, Oct 24).** A stripe member
+that refuses a fragment as full (`EFS_ERR_QUOTA`, quota or physical space)
+never turns the write into a degraded acknowledgement: no rebuild could pay
+that debt while the member stays full. The client gives the object up,
+marks the member full for 10 s and places a new object with the full
+member's slot on a spare that is neither down nor full; with no such spare
+(three members) the write fails `ENOSPC`. `df` and `efs-mgmt status` agree:
+the full member's room is 0 in the 3-of-N bound, so three members with one
+full report 0 free.
 
 
 ## Appendix 9 — Protocol — cross-shard transactions

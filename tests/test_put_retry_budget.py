@@ -14,16 +14,18 @@ code=r'''
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
-static uint64_t deadline;static unsigned calls,admits,releases,invalidations,reprobes;static int terminal=EFS_ERR_NET;static int recover_busy,hard_fail,admit_rc;
+static uint64_t deadline;static unsigned calls,admits,releases,invalidations,reprobes;static efs_node_id_t admitted_on[8];static unsigned fulls,spare_left;static int full_slot=-1;static int terminal=EFS_ERR_NET;static int recover_busy,hard_fail,admit_rc;
 static uint64_t report_clock_ms(void){struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return (uint64_t)t.tv_sec*1000+t.tv_nsec/1000000;}
 static uint64_t efs_client_rpc_deadline_ms(void){return deadline;}
 static void efs_client_rpc_set_deadline_ms(uint64_t d){deadline=d;}
 static int efs_client_rpc_past_deadline(void){return deadline&&report_clock_ms()>=deadline;}
 static int efs_client_put_admit(efs_ino_t ino,uint32_t ci,const efs_node_id_t nodes[3],const uint8_t checksums[3][EFS_HASH_SIZE],uint32_t len,uint32_t off,uint32_t dlen,struct efs_put_ticket *t)
-{(void)checksums;assert(ino==1&&!ci&&len==1&&!off&&!dlen&&nodes[2]==3&&deadline);admits++;if(admit_rc)return admit_rc;memset(t,0,sizeof(*t));t->ino=ino;t->object=77;t->id.seq=admits;memcpy(t->nodes,nodes,12);return EFS_OK;}
+{(void)checksums;assert(ino==1&&!ci&&len==1&&!off&&!dlen&&(nodes[2]==3||nodes[2]==4)&&deadline);admitted_on[admits%8]=nodes[2];admits++;if(admit_rc)return admit_rc;memset(t,0,sizeof(*t));t->ino=ino;t->object=77;t->id.seq=admits;memcpy(t->nodes,nodes,12);return EFS_OK;}
 static void efs_client_put_release(uint64_t seq,int landed){assert(seq==admits&&!landed);releases++;}
 static int efs_client_node_is_down(efs_node_id_t n){(void)n;return 0;}
-static void reroute_untried_fragments(efs_ino_t i,uint32_t c,efs_node_id_t *n){(void)i;(void)c;(void)n;}
+static void node_note_full(efs_node_id_t n){assert(n==3);fulls++;}
+/* B5: a full member's slot moves to the spare (node 4) while one is left. */
+static void reroute_untried_fragments(efs_ino_t i,uint32_t c,efs_node_id_t *n){(void)i;(void)c;if(fulls&&spare_left&&n[2]==3){n[2]=4;spare_left--;}}
 static void efs_client_conn_invalidate_node(efs_node_id_t n){(void)n;invalidations++;}
 static void efs_client_nodes_force_reprobe(void){reprobes++;}
 const char *efs_strerror(int rc){(void)rc;return "injected";}
@@ -33,9 +35,11 @@ static int dgobj_note(efs_ino_t ino,uint32_t ci,uint64_t gen,uint32_t mask)
 {(void)ino;(void)ci;assert(gen==77);notes++;noted_mask=mask;return note_rc;}
 static void degraded_ack_log(efs_ino_t ino,uint32_t ci,uint64_t gen,const efs_node_id_t *nodes,int fi)
 {(void)ino;(void)ci;(void)gen;(void)nodes;assert(fi==2);logs++;}
-static int put_fragments_parallel_once(const struct efs_put_ticket *t,const uint8_t **fragments,int *failed,int *acked)
-{(void)fragments;assert(t->object==77&&t->id.seq==admits);assert(deadline&&acked);calls++;for(unsigned i=0;i<3;i++)failed[i]=hard_fail?1:2;usleep(5000);
+static int put_fragments_parallel_once(const struct efs_put_ticket *t,const uint8_t **fragments,int *failed,int *acked,int *quota)
+{(void)fragments;assert(t->object==77&&t->id.seq==admits);assert(deadline&&acked&&quota);calls++;for(unsigned i=0;i<3;i++)failed[i]=hard_fail?1:2;usleep(5000);
  int rc=recover_busy && calls>2 ? EFS_OK : terminal;
+ /* full_slot: that member refuses as full after the other two ACK. */
+ if(full_slot>=0 && t->nodes[full_slot]==3){for(unsigned i=0;i<3;i++){if((int)i==full_slot)quota[i]=1;else acked[i]=1;}return EFS_OK;}
  /* Acks from an earlier attempt of the same object still count. */
  if(rc==EFS_OK)for(unsigned i=0;i<3;i++)if(!degrade||i!=2)acked[i]=1;
  return rc;}
@@ -85,14 +89,27 @@ int main(void){
  assert(PUT(&t)==EFS_ERR_FENCED && !calls);admit_rc=0;
  calls=0;terminal=EFS_ERR_QUOTA;deadline=0;
  assert(PUT(&t)==EFS_ERR_QUOTA && calls==1 && !deadline);
+ /* B5: one full member is never a degraded acknowledgement. With a spare
+  * the object is placed again (new ticket, the refused one released) and
+  * stored on three members; without one the write is QUOTA (ENOSPC). */
+ calls=0;terminal=EFS_OK;full_slot=2;spare_left=1;fulls=0;before=admits;unsigned rel=releases,nb=notes;
+ deadline=report_clock_ms()+500;
+ assert(PUT(&t)==EFS_OK);
+ assert(admits==before+2&&admitted_on[before%8]==3&&admitted_on[(before+1)%8]==4);
+ assert(releases==rel+1&&fulls==1&&notes==nb&&nodes[2]==4&&t.nodes[2]==4);
+ nodes[2]=3;calls=0;fulls=0;spare_left=0;before=admits;rel=releases;
+ deadline=report_clock_ms()+500;
+ assert(PUT(&t)==EFS_ERR_QUOTA);
+ assert(admits==before+1&&releases==rel+1&&fulls==1&&notes==nb&&nodes[2]==3);
+ full_slot=-1;
  return 0;
 }
 '''
 # Moved from the retired tests/test_put_hint.py (W154): every outer attempt
 # resends the same object (the admitted ticket) and unions its acknowledgements.
-assert 'rc = put_fragments_parallel_once(ticket, fragments, failed, acked);' in s
+assert 'rc = put_fragments_parallel_once(ticket, fragments, failed, acked, quota);' in s
 with tempfile.TemporaryDirectory(prefix='efs-put-retry-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=5)
-print('PUT retry: admission inside the budget, one ticket per object across retries, inherited backoff, no expired sends/reprobes, terminal STALE/QUOTA/NET release the ticket PASS')
+print('PUT retry: admission inside the budget, one ticket per object across retries, inherited backoff, no expired sends/reprobes, terminal STALE/QUOTA/NET release the ticket, a full member is placed around or ENOSPC, never degraded PASS')

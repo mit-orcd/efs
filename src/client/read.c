@@ -391,9 +391,7 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
     struct efs_chunk_entry ce;
     int have_ce;
 
-    efs_place_fragments(g_client.nodes, g_client.node_count, ino, chunk_index,
-                        nodes);
-
+    memset(nodes, 0, sizeof(nodes));
     if (max_attempts < 1)
         max_attempts = 1;
 
@@ -451,12 +449,14 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
             memset(chunk_out, 0, chunk_size);
             return EFS_OK;
         }
-        /* Writes may have steered a fragment onto a spare when a stripe
-         * member was down. The chunk table is the source of truth. */
-        if (ce.fragment_nodes[0] || ce.fragment_nodes[1] ||
-            ce.fragment_nodes[2])
-            memcpy(nodes, ce.fragment_nodes, sizeof(nodes));
     }
+    /* B1: the chunk row is the only source of fragment nodes (writes may
+     * have steered a fragment onto a spare, and membership changes move
+     * placement). A missing row or one without a valid D1/D2/P stripe is
+     * refused, never decoded from placement recomputed now. */
+    if (!have_ce || !efs_fragment_nodes_valid(ce.fragment_nodes))
+        return EFS_ERR_PROTO;
+    memcpy(nodes, ce.fragment_nodes, sizeof(nodes));
 
     int order[EFS_NUM_FRAGMENTS] = {0, 1, 2};
     if (g_client.local_node_id != 0) {
