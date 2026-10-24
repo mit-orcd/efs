@@ -2979,6 +2979,17 @@ repair/recovery qualification. This is a release scheduling decision, not a
 change to the numbered architectural protection contracts. [Exact decision,
 remaining gates and limits](../status/v030-release-scope-20261012.md). Execution stays stopped.
 
+### D42 — alpha 1.0 decisions taken Oct 24 (user, with review conditions)
+
+| Question | Decision and binding conditions |
+| --- | --- |
+| F22: `fsync` with a member down | **Degraded success, only with proof of durability.** Today COMMIT goes to every known storage node (`data_commit.c`), so an unrelated unavailable node fails the call; that contradicts D40. The replacement must prove, for every affected stripe: (1) enough durably stored fragments that match the acknowledged version to reconstruct it; (2) durable metadata naming that version and its placement; (3) no unresolved publication or storage-incarnation ambiguity. Ignoring failed COMMIT replies is not a fix. With 2+1 a stripe on two durable fragments has no tolerance left until rebuilt: W154 restores protection and the degraded state stays visible. On four or more nodes, place all three fragments on available eligible nodes first. |
+| F23: store after an unclean stop | **Verified recovery.** A crash must not disable a recoverable store for good. "Verified" means recovery establishes the required consistency of log, metadata, fragments and journal before the uncertainty fence clears; a restart, a sampled check or a forced sync is not enough. Two outcomes stay distinct: a recovered store may serve again; an earlier ambiguous write is not thereby proven, and its error never turns into success. Crash-recovery implementation and tests are in alpha; full power-loss qualification remains a separate scope decision. |
+| A9 `EFS_METADATA_BALANCE` | **Elections only for alpha.** Remove the co-location pump and its variable; an unqualified tiny-file speedup does not justify another production mode. Elections alone do not guarantee distributed leaders: measure and report actual leader placement, and keep the metadata-distribution roadmap. This does not complete the "nothing concentrated on one node" goal. |
+| Buffered and direct fragment I/O | **Both may stay, at a cost.** They are deployment choices, not correctness modes: both must give the same `fsync`, recovery and protection guarantees, and both pass every Stage 2 gate. EFS keeps one documented default that users get by omitting the flag. The smaller alpha alternative is one qualified mode, with the second only for a concrete deployment need with its gates complete (open: which default). Durability is one invariant, never a selectable mode. |
+
+The other A6 selectors ([table](../status/a6-settings-inventory-20261024.md#decision-table-for-the-parent-a7)) are not decided yet.
+
 ### D41 — K9 / W87 closed without resolution (user, Oct 24)
 
 The buffered concurrent append record loss (K9 / W87) is **closed without a
