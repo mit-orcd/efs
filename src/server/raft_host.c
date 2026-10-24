@@ -281,6 +281,11 @@ struct host_group {
     /* W127: a committed entry this build cannot apply. Sticky until restart
      * with a build that can; the entry is never skipped. */
     int incompatible;
+    /* K33 (M6): this node is not a target voter of the group under the
+     * committed count (node 1 of group 2 from four members). Its replica
+     * never campaigns and never serves locally; it still answers votes and
+     * entries while a joint configuration includes it. Under mu. */
+    int retired;
     uint64_t incompat_index, incompat_term;
     uint32_t incompat_len;
     uint8_t incompat_tag, incompat_sub;
@@ -365,13 +370,33 @@ struct efs_raft_host {
     struct efsd_server *s;
     int raft_id;
     int balance_enabled; /* Opt-in until W66 distribution/failover gates pass. */
-    /* W153: member count. Before formation EFS_FORMATION_MIN (group 0 on
-     * nodes 1..3 is all formation needs); from formation on the committed
-     * membership's count. Changes once, under mu, release-stored after
-     * members and before formed; read with an acquire load. */
+    /* W153/K33: member count. Before formation EFS_FORMATION_MIN (group 0
+     * on nodes 1..3 is all formation needs); from formation on the count of
+     * the newest committed revision this node learned. Grows only, under
+     * mu, release-stored after members and before formed; read with an
+     * acquire load. */
     int n;
     int formed;
-    struct efs_membership members; /* committed at formation; immutable after */
+    struct efs_membership members; /* newest committed revision learned (under mu) */
+    /* K33 membership thread (host_member_thread): automatic formation, the
+     * notice pump and group-2 copy on the group-0 leader, the group-2 voter
+     * reconciler, and the joiners waiting for their addition. mb_mu guards
+     * the join queue and the kick flag; the pump state is thread-owned. */
+    pthread_mutex_t mb_mu;
+    pthread_cond_t mb_cv;
+    pthread_t mb_tid;
+    int mb_running, mb_started, mb_kick;
+    struct efs_member mb_join[EFS_MAX_NODES];
+    int mb_njoin;
+    /* Pending joiners recently seen (HELLO answered pending, or a table row
+     * a formation left out), by id slot; raft-mkfs adds them in id order. */
+    struct efs_member mb_seen[EFS_MAX_NODES];
+    uint64_t mb_seen_us[EFS_MAX_NODES];
+    uint32_t mb_acked[EFS_MAX_NODES]; /* count each member acknowledged */
+    uint64_t mb_retry_us[EFS_MAX_NODES];
+    uint64_t mb_term;                 /* group-0 term of the pump state */
+    uint32_t mb_g2_copied;            /* count group 2 is known to hold */
+    uint64_t mb_sig, mb_sig_us, mb_log_us;
     uint64_t boot_id;
     uint64_t salt;
     /* Per-export MKDIR scatter salt (architecture.md §7.4). Cached after
@@ -763,6 +788,49 @@ static uint32_t group_voters(uint8_t group, int n)
     return efs_md_group_voters(group, n);
 }
 
+/* K33 (M6): a replica's boot configuration is the voters at the formation
+ * count, never the current count; the log and snapshot overlay every later
+ * JOINT/COLD, so a first-time learner (node 4) starts outside the
+ * configuration. Caller holds mu or runs before the host is shared. */
+static uint32_t host_boot_voters(const struct efs_raft_host *h, uint8_t group)
+{
+    return group_voters(group, h->formed ? (int)h->members.formed : h->n);
+}
+
+/* K33: the newest committed revision this node learned, published for
+ * readers outside h->mu (HELLO, LIST_NODES, peer addresses, the GC
+ * handoff). mview_mu is a leaf lock: nothing else is taken while held. */
+static pthread_mutex_t mview_mu = PTHREAD_MUTEX_INITIALIZER;
+static struct efs_membership mview;
+static int mview_formed;
+
+static void mview_publish(const struct efs_membership *m)
+{
+    pthread_mutex_lock(&mview_mu);
+    mview = *m;
+    mview_formed = 1;
+    pthread_mutex_unlock(&mview_mu);
+}
+
+/* 1 and a copy of the committed membership, or 0 before formation. Before
+ * the host publishes, the member store loaded by efsd.c (nothing changes it
+ * until the host runs). */
+static int membership_copy(struct efs_membership *out)
+{
+    int formed;
+    pthread_mutex_lock(&mview_mu);
+    formed = mview_formed;
+    if (formed && out)
+        *out = mview;
+    pthread_mutex_unlock(&mview_mu);
+    if (!formed && g_server && g_server->mstore.state == EFS_MEMBER_FORMED) {
+        formed = 1;
+        if (out)
+            *out = g_server->mstore.members;
+    }
+    return formed;
+}
+
 
 static int hosts_group(int raft_id, uint32_t voters)
 {
@@ -791,6 +859,15 @@ static int peer_addr(struct efs_raft_host *h, int raft_id,
         }
     }
     pthread_mutex_unlock(&h->s->lock);
+    /* K33: a member learned from a revision before its HELLO reached this
+     * node's table (the joiner of an addition): the record's endpoint. */
+    struct efs_membership mb;
+    const struct efs_member *p;
+    if (membership_copy(&mb) && (p = efs_membership_find(&mb, nid))) {
+        snprintf(host, hlen, "%s", p->addr);
+        *port = p->port;
+        return 0;
+    }
     return -1;
 }
 
@@ -1398,7 +1475,9 @@ static int apply_mkfs_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     rc = efs_meta_apply_mkfs(h->kv, now, salt);
     if (rc == EFS_OK)
         rc = efs_meta_apply_membership_record(h->kv, efs_kv_inode_shard(EFS_ROOT_INO),
-                                              cmd + 17, clen - 17, 1);
+                                              cmd + 17, clen - 17, EFS_MEMBERSHIP_KEEP_FIRST);
+    if (rc == EFS_OK)
+        __atomic_store_n(&h->mb_kick, 1, __ATOMIC_RELEASE);
     if (rc != EFS_OK) {
         fprintf(stderr, "raft-host: apply mkfs rc=%d index=%llu\n",
                 rc, (unsigned long long)index);
@@ -1411,8 +1490,9 @@ static int apply_mkfs_cmd(struct efs_raft_host *h, const uint8_t *cmd,
 
 /* EFS_MD_CMD_SALT: [anchor:4][salt:8][membership record]. Carries the
  * export salt to a group that never applies MKFS (the even-shard group), so
- * every node computes the same efs_kv_mkdir_shard placement, and the
- * committed formation membership (W153), which must match an existing one. */
+ * every node computes the same efs_kv_mkdir_shard placement, and a copy of
+ * the committed membership (W153/K33): installed when absent or a later
+ * revision; the same or an earlier one is OK; a divergent one FENCED. */
 static int apply_salt_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                           uint32_t clen, uint64_t index)
 {
@@ -1426,9 +1506,12 @@ static int apply_salt_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         return EFS_ERR_UNSUPPORTED;
     anchor = rd32be(cmd + 1);
     salt = rd64be(cmd + 5);
-    rc = efs_meta_apply_membership_record(h->kv, anchor, cmd + 13, clen - 13, 0);
+    rc = efs_meta_apply_membership_record(h->kv, anchor, cmd + 13, clen - 13,
+                                          EFS_MEMBERSHIP_EXTEND_ANY);
     if (rc == EFS_OK)
         rc = efs_meta_apply_salt_record(h->kv, anchor, salt);
+    if (rc == EFS_OK)
+        __atomic_store_n(&h->mb_kick, 1, __ATOMIC_RELEASE);
     if (rc != EFS_OK) {
         fprintf(stderr, "raft-host: apply salt rc=%d index=%llu\n",
                 rc, (unsigned long long)index);
@@ -1437,6 +1520,31 @@ static int apply_salt_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     APPLY_LOG("raft-host: applied salt index=%llu anchor=%u salt=%llu\n",
               (unsigned long long)index, anchor, (unsigned long long)salt);
     return EFS_OK;
+}
+
+/* K33 EFS_MD_CMD_MEMBERS: [record], group 0 only (the membership
+ * authority, root anchor): installs the one-member extension of the stored
+ * revision. The verdict (OK installed or already history, FENCED a competing
+ * revision, UNFORMED) reaches the proposer; it never halts the group. The
+ * membership thread learns an installed revision from the KV. */
+static int apply_members_cmd(struct efs_raft_host *h, uint8_t group, const uint8_t *cmd,
+                             uint32_t clen, uint64_t index)
+{
+    struct efs_membership m;
+    int rc;
+
+    if (clen <= 1 || efs_membership_decode(cmd + 1, clen - 1, &m) != EFS_OK)
+        return EFS_ERR_UNSUPPORTED;
+    if (group != EFS_RAFT_GROUP_SHARD)
+        return EFS_ERR_INVAL;
+    rc = efs_meta_apply_membership_record(h->kv, efs_kv_inode_shard(EFS_ROOT_INO), cmd + 1,
+                                          clen - 1, EFS_MEMBERSHIP_EXTEND_ONE);
+    if (rc == EFS_OK)
+        __atomic_store_n(&h->mb_kick, 1, __ATOMIC_RELEASE);
+    else
+        fprintf(stderr, "raft-host: apply members index=%llu (%u members): rc=%d\n",
+                (unsigned long long)index, m.count, rc);
+    return rc;
 }
 
 /* Same encoding as sim pack_create / apply_create_cmd. S_IFDIR is mkdir
@@ -3107,7 +3215,7 @@ static void host_clear_incomplete(struct host_group *g)
     if (!g || !g->r || !g->kv_incomplete)
         return;
     g->kv_incomplete = 0;
-    efs_raft_allow_campaign(g->r, 1);
+    efs_raft_allow_campaign(g->r, !g->retired);
     fprintf(stderr, "raft-host: group=%u KV complete — campaign allowed\n",
             g->group);
 }
@@ -3209,6 +3317,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_REPORT_PUBLISH ||
            cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
            cmd[0] == EFS_MD_CMD_XATTR || cmd[0] == EFS_MD_CMD_SALT ||
+           cmd[0] == EFS_MD_CMD_MEMBERS ||
            cmd[0] == EFS_MD_CMD_LOCK ||
            cmd[0] == EFS_MD_CMD_UNLINK || cmd[0] == EFS_MD_CMD_SETATTR ||
            cmd[0] == EFS_MD_CMD_UTIMENS || cmd[0] == EFS_MD_CMD_TRUNCATE ||
@@ -3260,6 +3369,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
          cmd[0] == EFS_MD_CMD_SWEEP_DONE || cmd[0] == EFS_MD_CMD_RETIRE ||
          cmd[0] == EFS_MD_CMD_PUBLISH || cmd[0] == EFS_MD_CMD_PUBLICATION ||
          cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE ||
+         cmd[0] == EFS_MD_CMD_MEMBERS ||
          (cmd[0] == EFS_MD_CMD_APPEND_RSV && clen == HOST_APPEND_RSV_LEN) ||
          cmd[0] == EFS_MD_CMD_APPEND_COMPLETE_ATOMIC || cmd[0] == EFS_MD_CMD_APPEND_ATOMIC ||
          (cmd[0] == EFS_MD_CMD_LOCK && clen >= HOST_LOCK_LEN)) &&
@@ -3690,6 +3800,8 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         return apply_mkfs_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_SALT)
         return apply_salt_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_MEMBERS)
+        return apply_members_cmd(h, group, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_CREATE)
         return apply_create_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_UNLINK)
@@ -4160,8 +4272,9 @@ static int host_hosts(struct efs_raft_host *h, uint8_t group)
     struct host_group *s = group_slot(h, group);
 
     /* A learner replica exists so it can catch up; it must not serve
-     * inode RPCs until COLD puts this id in app_old. */
-    if (!s || !s->r)
+     * inode RPCs until COLD puts this id in app_old. A retired replica
+     * (K33) never serves: it may never learn the COLD that removed it. */
+    if (!s || !s->r || __atomic_load_n(&s->retired, __ATOMIC_ACQUIRE))
         return 0;
     return hosts_group(h->raft_id, efs_raft_voters(s->r));
 }
@@ -8346,11 +8459,12 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
 
 static int attach_group(struct efs_raft_host *h, int gi, uint8_t group)
 {
-    uint32_t boot = group_voters(group, __atomic_load_n(&h->n,__ATOMIC_ACQUIRE));
+    uint32_t boot = host_boot_voters(h, group);
+    uint32_t target = group_voters(group, __atomic_load_n(&h->n,__ATOMIC_ACQUIRE));
     uint32_t want;
 
     h->g[gi].group = group;
-    __atomic_store_n(&h->g[gi].voters, boot, __ATOMIC_RELEASE);
+    __atomic_store_n(&h->g[gi].voters, target, __ATOMIC_RELEASE);
     h->g[gi].host = h;
     __atomic_store_n(&h->g[gi].hosted, 0, __ATOMIC_RELEASE);
     h->g[gi].snap_fd = -1;
@@ -8372,9 +8486,10 @@ static int attach_group(struct efs_raft_host *h, int gi, uint8_t group)
         h->g[gi].desired = 0;
         return EFS_OK;
     }
-    want = load_desired(h, group, boot);
+    want = load_desired(h, group, target);
     h->g[gi].desired = want;
-    if (!hosts_group(h->raft_id, boot) && !hosts_group(h->raft_id, want))
+    if (!hosts_group(h->raft_id, boot) && !hosts_group(h->raft_id, target) &&
+        !hosts_group(h->raft_id, want))
         return EFS_OK;
     return attach_replica(h, gi, boot);
 }
@@ -8430,7 +8545,7 @@ static int host_cfg(struct efs_raft_host *h, uint8_t group,
     if (s)
         s->desired = voters;
     if (s && !s->r && hosts_group(h->raft_id, voters))
-        rc = attach_replica(h, (int)(s - h->g), group_voters(group, __atomic_load_n(&h->n,__ATOMIC_ACQUIRE)));
+        rc = attach_replica(h, (int)(s - h->g), host_boot_voters(h, group));
     pthread_mutex_unlock(&h->mu);
     if (rc != EFS_OK)
         return rc;
@@ -8460,70 +8575,133 @@ static int host_cfg(struct efs_raft_host *h, uint8_t group,
     return rc;
 }
 
-/* W153: install the committed formation membership on this node. It is
- * persisted in the member store (fsync) before anything acts on it; then
- * the count, the voters derived from it and the formed flag are published,
- * group 2 is attached where this node is one of its voters, and non-members
- * leave the HELLO table. The same record again is OK; a different one, or
- * one in which this node is not the member at its endpoint, is FENCED and
- * changes nothing. */
+static void host_member_kick(struct efs_raft_host *h);
+static void *host_member_thread(void *arg);
+
+/* K33 (M6): mark each attached replica retired when this node is not a
+ * target voter of its group under the committed count, and stop it from
+ * campaigning. Caller holds mu (or runs before the host is shared). */
+static void host_retire_check(struct efs_raft_host *h)
+{
+    if (!h->formed)
+        return;
+    for (int gi = 0; gi < HOST_NGROUPS; gi++) {
+        struct host_group *g = &h->g[gi];
+        if (!g->r)
+            continue;
+        int ret = !hosts_group(h->raft_id, group_voters(g->group, (int)h->members.count));
+        if (ret == g->retired)
+            continue;
+        __atomic_store_n(&g->retired, ret, __ATOMIC_RELEASE);
+        efs_raft_allow_campaign(g->r, !ret && !g->kv_incomplete && !g->incompatible);
+        if (ret && efs_raft_role(g->r) == EFS_RAFT_LEADER)
+            efs_raft_step_down(g->r);
+        fprintf(stderr, "raft-host: group %u replica %s: this node is %sa voter under %u members\n",
+                g->group, ret ? "retired" : "active", ret ? "not " : "", h->members.count);
+    }
+}
+
+/* K33 test hook (tests/test_k33_growth.py): EFS_TEST_MEMBER_EXIT=<point>
+ * ends the process at that durable handoff, so a test interrupts it
+ * deterministically. Points: after-members-commit (the proposer, MEMBERS
+ * committed, nothing learned or notified), before-learn (a joiner got its
+ * notice, nothing persisted). Unset in every deployment. */
+static void host_test_exit(const char *point)
+{
+    const char *e = getenv("EFS_TEST_MEMBER_EXIT");
+    if (e && !strcmp(e, point)) {
+        fprintf(stderr, "membership: EFS_TEST_MEMBER_EXIT at %s; exiting\n", point);
+        fflush(stderr);
+        _exit(86);
+    }
+}
+
+/* W153/K33 (M3, M5): install a committed membership revision on this node.
+ * It must name this node at its endpoint with its store token and extend
+ * what this node holds; it is persisted in the member store (fsync) before
+ * anything acts on it. Then the count, the voters derived from it and the
+ * formed flag are published, group 2 is attached where this node is a boot
+ * or target voter, and the node table follows the record. The same or an
+ * earlier revision is OK and changes nothing; another cluster, a divergent
+ * record, or one that names another store at this node's id is FENCED. */
 static int host_learn_membership(struct efs_raft_host *h, const struct efs_membership *m)
 {
     const struct efs_member *self;
     struct host_group *g2;
     char err[512];
-    uint32_t boot, want;
+    uint32_t boot, target, want, prev = 0;
     int rc = EFS_OK;
 
     if (!efs_membership_valid(m))
         return EFS_ERR_INVAL;
     pthread_mutex_lock(&h->mu);
     if (__atomic_load_n(&h->formed, __ATOMIC_ACQUIRE)) {
-        rc = efs_membership_equal(&h->members, m) ? EFS_OK : EFS_ERR_FENCED;
-        pthread_mutex_unlock(&h->mu);
-        if (rc != EFS_OK)
-            fprintf(stderr, "raft-host: formation record of %u members conflicts with the "
-                    "committed membership of %u members; refused\n", m->count, h->members.count);
-        return rc;
+        prev = h->members.count;
+        if (efs_membership_extends(&h->members, m)) {
+            pthread_mutex_unlock(&h->mu);
+            return EFS_OK;
+        }
+        if (!efs_membership_extends(m, &h->members)) {
+            pthread_mutex_unlock(&h->mu);
+            fprintf(stderr, "raft-host: membership record of %u members (cluster %016llx) "
+                    "conflicts with the committed revision of %u members (cluster %016llx); "
+                    "refused\n", m->count, (unsigned long long)m->cluster, h->members.count,
+                    (unsigned long long)h->members.cluster);
+            return EFS_ERR_FENCED;
+        }
     }
     self = efs_membership_find(m, h->s->id);
-    if (!self || self->port != h->s->port || strcmp(self->addr, h->s->addr)) {
+    if (!self || self->port != h->s->port || strcmp(self->addr, h->s->addr) ||
+        self->token != h->s->mstore.token) {
         pthread_mutex_unlock(&h->mu);
-        fprintf(stderr, "raft-host: formation record of %u members does not hold node %u at "
-                "%s:%u; refused\n", m->count, h->s->id, h->s->addr, h->s->port);
+        fprintf(stderr, "raft-host: membership record of %u members does not hold node %u at "
+                "%s:%u with this store (token %016llx); refused\n", m->count, h->s->id,
+                h->s->addr, h->s->port, (unsigned long long)h->s->mstore.token);
         return EFS_ERR_FENCED;
     }
     rc = member_store_learn(&h->s->mstore, m, err, sizeof(err));
     if (rc != EFS_OK) {
         pthread_mutex_unlock(&h->mu);
-        fprintf(stderr, "raft-host: formation not persisted: %s\n", err);
+        fprintf(stderr, "raft-host: membership not persisted: %s\n", err);
         return rc;
     }
     h->members = *m;
+    mview_publish(m);
     __atomic_store_n(&h->n, (int)m->count, __ATOMIC_RELEASE);
     __atomic_store_n(&h->formed, 1, __ATOMIC_RELEASE);
     g2 = &h->g[1];
-    boot = group_voters(EFS_RAFT_GROUP_SHARD2, (int)m->count);
-    want = load_desired(h, EFS_RAFT_GROUP_SHARD2, boot);
+    boot = host_boot_voters(h, EFS_RAFT_GROUP_SHARD2);
+    target = group_voters(EFS_RAFT_GROUP_SHARD2, (int)m->count);
+    want = load_desired(h, EFS_RAFT_GROUP_SHARD2, target);
     g2->desired = want;
-    __atomic_store_n(&g2->voters, boot, __ATOMIC_RELEASE);
-    if (!g2->r && (hosts_group(h->raft_id, boot) || hosts_group(h->raft_id, want)))
+    if (!g2->r)
+        __atomic_store_n(&g2->voters, target, __ATOMIC_RELEASE);
+    if (!g2->r && (hosts_group(h->raft_id, boot) || hosts_group(h->raft_id, target) ||
+                   hosts_group(h->raft_id, want)))
         rc = attach_replica(h, 1, boot);
+    host_retire_check(h);
     pthread_mutex_unlock(&h->mu);
     server_nodes_keep_members(h->s, m);
-    fprintf(stderr, "raft-host: formed: %u members, g0 voters 0x%x, g2 voters 0x%x, g2 %s\n",
-            m->count, group_voters(EFS_RAFT_GROUP_SHARD, (int)m->count), boot,
-            __atomic_load_n(&g2->hosted, __ATOMIC_ACQUIRE) ? "hosted" : "off");
+    if (!prev)
+        fprintf(stderr, "raft-host: formed: %u members, g0 voters 0x%x, g2 voters 0x%x, g2 %s\n",
+                m->count, group_voters(EFS_RAFT_GROUP_SHARD, (int)m->count), target,
+                __atomic_load_n(&g2->hosted, __ATOMIC_ACQUIRE) ? "hosted" : "off");
+    else
+        fprintf(stderr, "raft-host: membership revision %u: %u members (was %u), g2 target "
+                "voters 0x%x, g2 %s\n", m->count - m->formed + 1, m->count, prev, target,
+                __atomic_load_n(&g2->hosted, __ATOMIC_ACQUIRE) ? "hosted" : "off");
     if (rc != EFS_OK)
-        fprintf(stderr, "raft-host: group-2 attach after formation failed rc=%d\n", rc);
+        fprintf(stderr, "raft-host: group-2 attach after the membership change failed rc=%d\n", rc);
+    host_member_kick(h);
     host_pump_kick(h);
     return rc;
 }
 
-/* W153 restart: a committed record in this node's KV (group 0's on the root
- * anchor, group 2's on its anchor) must equal the member store's; a store
- * that applied MKFS or SALT but stopped before recording the formation
- * notice learns the record from its own KV. A malformed record stops. */
+/* W153/K33 restart: a committed record in this node's KV (group 0's on the
+ * root anchor, group 2's on its anchor) and the member store's must be
+ * revisions of one history. A store that applied a later revision (or
+ * MKFS/SALT) than it recorded learns it from its own KV; a store ahead of
+ * its lagging KV keeps its own. A divergent or malformed record stops. */
 static int host_membership_reconcile(struct efs_raft_host *h)
 {
     const uint32_t anchors[2] = {efs_kv_inode_shard(EFS_ROOT_INO), efs_kv_anchor_shard(2)};
@@ -8544,18 +8722,23 @@ static int host_membership_reconcile(struct efs_raft_host *h)
             return rc == EFS_ERR_UNSUPPORTED ? rc : EFS_ERR_DECODE;
         }
         if (h->formed) {
-            if (!efs_membership_equal(&h->members, &m)) {
-                fprintf(stderr, "raft-host: committed membership on anchor %u (%u members) "
-                        "differs from the member store's (%u members); refusing to start\n",
-                        anchors[i], m.count, h->members.count);
+            if (efs_membership_extends(&h->members, &m))
+                continue;
+            if (!efs_membership_extends(&m, &h->members)) {
+                fprintf(stderr, "raft-host: committed membership on anchor %u (%u members, "
+                        "cluster %016llx) diverges from the member store's (%u members, "
+                        "cluster %016llx); refusing to start\n", anchors[i], m.count,
+                        (unsigned long long)m.cluster, h->members.count,
+                        (unsigned long long)h->members.cluster);
                 return EFS_ERR_FENCED;
             }
-            continue;
         }
         const struct efs_member *self = efs_membership_find(&m, h->s->id);
-        if (!self || self->port != h->s->port || strcmp(self->addr, h->s->addr)) {
-            fprintf(stderr, "raft-host: committed membership does not hold node %u at %s:%u; "
-                    "refusing to start\n", h->s->id, h->s->addr, h->s->port);
+        if (!self || self->port != h->s->port || strcmp(self->addr, h->s->addr) ||
+            self->token != h->s->mstore.token) {
+            fprintf(stderr, "raft-host: committed membership does not hold node %u at %s:%u with "
+                    "this store (token %016llx); refusing to start\n", h->s->id, h->s->addr,
+                    h->s->port, (unsigned long long)h->s->mstore.token);
             return EFS_ERR_FENCED;
         }
         rc = member_store_learn(&h->s->mstore, &m, err, sizeof(err));
@@ -8564,10 +8747,11 @@ static int host_membership_reconcile(struct efs_raft_host *h)
             return rc;
         }
         h->members = m;
+        mview_publish(&m);
         h->n = (int)m.count;
         h->formed = 1;
-        fprintf(stderr, "raft-host: formation learned from the committed record (%u members)\n",
-                m.count);
+        fprintf(stderr, "raft-host: membership learned from the committed record (%u members, "
+                "revision %u)\n", m.count, m.count - m.formed + 1);
     }
     return EFS_OK;
 }
@@ -8741,11 +8925,14 @@ static void host_gc_inode_nodes_batch(struct efs_raft_host *h, const efs_ino_t *
             fprintf(stderr, "raft-host: gc reclaim batch refused: cluster not formed\n");
         return;
     }
-    count = h->members.count;
+    struct efs_membership mb;
+    if (!membership_copy(&mb))
+        return;
+    count = mb.count;
     for (uint32_t i = 0; i < count; i++) {
-        nodes[i].id = h->members.m[i].id;
-        snprintf(nodes[i].addr, sizeof(nodes[i].addr), "%s", h->members.m[i].addr);
-        nodes[i].port = h->members.m[i].port;
+        nodes[i].id = mb.m[i].id;
+        snprintf(nodes[i].addr, sizeof(nodes[i].addr), "%s", mb.m[i].addr);
+        nodes[i].port = mb.m[i].port;
     }
     size_t req_len = sizeof(struct efs_msg_gc_inode_batch) + (size_t)n * 16u;
     struct efs_msg_gc_inode_batch *req = calloc(1, req_len);
@@ -12532,13 +12719,17 @@ int server_raft_host_start(struct efsd_server *s)
     h->raft_id = (int)s->id - 1;
     h->n = n;
     h->formed = formed;
-    if (formed)
+    if (formed) {
         h->members = s->mstore.members;
+        mview_publish(&h->members);
+    }
     /* The store's durable boot counter, advanced at this start (efsd.c). */
     h->boot_id = s->incarnation;
     h->salt = make_salt(h->boot_id);
     pthread_mutex_init(&h->mu, NULL);
     pthread_mutex_init(&h->snap_mu, NULL);
+    pthread_mutex_init(&h->mb_mu, NULL);
+    pthread_cond_init(&h->mb_cv, NULL);
     pthread_rwlockattr_t query_attr;
     pthread_rwlockattr_init(&query_attr);
 #ifdef __linux__
@@ -12619,6 +12810,8 @@ int server_raft_host_start(struct efsd_server *s)
         rc = attach_group(h, 0, EFS_RAFT_GROUP_SHARD);
     if (rc == EFS_OK)
         rc = attach_group(h, 1, EFS_RAFT_GROUP_SHARD2);
+    if (rc == EFS_OK)
+        host_retire_check(h);
     if (rc != EFS_OK) {
         fprintf(stderr, "raft-host: attach failed rc=%d\n", rc);
         efs_raft_free(h->g[0].r);
@@ -12669,6 +12862,17 @@ int server_raft_host_start(struct efsd_server *s)
     } else {
         h->gc_started = 1;
     }
+    /* K33 membership thread: automatic formation, additions, the notice
+     * pump, the group-2 copy and the voter reconciler. Without it a node
+     * still learns revisions from notices, but nothing forms or grows. */
+    __atomic_store_n(&h->mb_running, 1, __ATOMIC_RELEASE);
+    if (efsd_pthread_create(&h->mb_tid, host_member_thread, h) != 0) {
+        fprintf(stderr, "raft-host: membership thread failed; formation and node addition "
+                "need efs-mgmt raft-mkfs and a restart\n");
+        __atomic_store_n(&h->mb_running, 0, __ATOMIC_RELEASE);
+    } else {
+        h->mb_started = 1;
+    }
     /* Txn finisher (see host_fin_one). Without it recovery still resolves
      * an abandoned commit, only 5 s later. */
     h->fin_running = h->fin != NULL;
@@ -12684,7 +12888,7 @@ int server_raft_host_start(struct efsd_server *s)
             "raft-host: up raft_id=%d n=%d %s boot=%llu salt=%llu "
             "g0=%s g2=%s\n",
             h->raft_id, __atomic_load_n(&h->n,__ATOMIC_ACQUIRE),
-            h->formed ? "formed" : "unformed (formation: efs-mgmt raft-mkfs)",
+            h->formed ? "formed" : "unformed (forms automatically with 3 members)",
             (unsigned long long)h->boot_id,
             (unsigned long long)h->salt,
             h->g[0].hosted ? "hosted" : "off",
@@ -12727,8 +12931,15 @@ void server_raft_host_stop(void)
     h->query_view.catalog=NULL;
     pthread_rwlock_unlock(&h->query_lock);
     pthread_rwlock_destroy(&h->query_lock);
-    /* Stop the GC reaper first: an in-flight host_propose_wait needs the
-     * pump alive to apply, and its peer RPCs need the conn pool. */
+    /* Stop the membership thread and the GC reaper first: an in-flight
+     * host_propose_wait needs the pump alive to apply, and their peer RPCs
+     * need the conn pool. */
+    pthread_mutex_lock(&h->mb_mu);
+    __atomic_store_n(&h->mb_running, 0, __ATOMIC_RELEASE);
+    pthread_cond_broadcast(&h->mb_cv);
+    pthread_mutex_unlock(&h->mb_mu);
+    if (h->mb_started)
+        pthread_join(h->mb_tid, NULL);
     __atomic_store_n(&h->gc_running, 0, __ATOMIC_RELEASE);
     if (h->gc_started)
         pthread_join(h->gc_tid, NULL);
@@ -12970,59 +13181,26 @@ static int host_formation_notify(struct efs_raft_host *h, const struct efs_membe
     return EFS_ERR_NET;
 }
 
-/* Formation (W153). The first raft-mkfs commits, alongside the export salt,
- * the membership that has joined at this moment: MKFS on group 0, then every
- * member records it and attaches group 2 where it votes, then SALT on group
- * 2. Fewer than EFS_FORMATION_MIN members, a gap in node ids 1..n or a
- * shared endpoint is refused before anything is proposed. A repeated mkfs
- * keeps the first committed membership and salt (W37) and repeats the
- * notice and SALT, so it also finishes an interrupted formation. */
-void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out)
+/* Formation (W153, K33 M4): MKFS on group 0 with `want`, then every member
+ * records the committed record and attaches group 2 where it votes, then
+ * SALT on group 2. A repeated formation keeps the first committed record
+ * and salt (W37) and repeats the notice and SALT, so it also finishes an
+ * interrupted one. */
+static int host_form(struct efs_raft_host *h, const struct efs_membership *want, int *hint)
 {
-    struct efs_raft_host *h = g_host;
-    struct efs_raft *r;
-    struct efs_membership want, committed;
+    struct efs_membership committed;
     uint8_t cmd[17 + EFS_MEMBERSHIP_MAX_LEN];
     uint8_t scmd[13 + EFS_MEMBERSHIP_MAX_LEN];
-    char err[1024];
     size_t rlen = 0;
     uint64_t salt = 0;
-    int hint = -1;
     int rc;
 
-    memset(out, 0, sizeof(*out));
-    out->leader_hint = -1;
-    if (!h || !h->running) {
-        out->rc = EFS_ERR_INVAL;
-        return;
-    }
-    out->salt = h->salt;
-    if (__atomic_load_n(&h->formed, __ATOMIC_ACQUIRE)) {
-        want = h->members;
-    } else {
-        EFS_NODE_TABLE(nodes);
-        uint32_t count;
-        if (!nodes) {
-            out->rc = EFS_ERR_NOMEM;
-            return;
-        }
-        pthread_mutex_lock(&h->s->lock);
-        count = h->s->node_count > EFS_MAX_NODES ? EFS_MAX_NODES : h->s->node_count;
-        memcpy(nodes, h->s->nodes, count * sizeof(nodes[0]));
-        pthread_mutex_unlock(&h->s->lock);
-        rc = efs_membership_from_nodes(nodes, count, &want, err, sizeof(err));
-        if (rc != EFS_OK) {
-            fprintf(stderr, "raft-host: raft-mkfs refused: %s\n", err);
-            out->rc = rc;
-            return;
-        }
-    }
     cmd[0] = EFS_MD_CMD_MKFS;
     wr64be(cmd + 1, now_ns());
     wr64be(cmd + 9, h->salt);
-    rc = efs_membership_encode(&want, cmd + 17, EFS_MEMBERSHIP_MAX_LEN, &rlen);
+    rc = efs_membership_encode(want, cmd + 17, EFS_MEMBERSHIP_MAX_LEN, &rlen);
     if (rc == EFS_OK)
-        rc = host_propose_wait(h, EFS_RAFT_GROUP_SHARD, cmd, (uint32_t)(17 + rlen), &hint);
+        rc = host_propose_wait(h, EFS_RAFT_GROUP_SHARD, cmd, (uint32_t)(17 + rlen), hint);
     if (rc == EFS_OK) {
         /* W37: the SALT step carries the salt the COMMITTED MKFS recorded,
          * never this node's own: `efs_meta_apply_mkfs` on an existing root
@@ -13037,9 +13215,9 @@ void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out)
                     (unsigned long long)salt, (unsigned long long)h->salt);
             h->salt = salt;
         }
-        if (!efs_membership_equal(&want, &committed))
+        if (!efs_membership_extends(&committed, want))
             fprintf(stderr, "raft-host: raft-mkfs: the cluster formed earlier with %u members; "
-                    "this request's %u members not used\n", committed.count, want.count);
+                    "this request's %u members not used\n", committed.formed, want->count);
         rc = host_formation_notify(h, &committed);
     }
     if (rc == EFS_OK) {
@@ -13050,12 +13228,99 @@ void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out)
         /* Group 2 was attached by the notice just now: allow its first
          * election before giving up. */
         for (int tries = 0; rc == EFS_OK && tries < 200; tries++) {
-            rc = host_propose_wait(h, EFS_RAFT_GROUP_SHARD2, scmd, (uint32_t)(13 + rlen), &hint);
+            rc = host_propose_wait(h, EFS_RAFT_GROUP_SHARD2, scmd, (uint32_t)(13 + rlen), hint);
             if (rc != EFS_ERR_NOT_PRIMARY && rc != EFS_ERR_BUSY && rc != EFS_ERR_NO_QUORUM &&
                 rc != EFS_ERR_AGAIN && rc != EFS_ERR_NET)
                 break;
             usleep(50000);
         }
+        if (rc == EFS_OK)
+            h->mb_g2_copied = committed.count;
+    }
+    return rc;
+}
+
+/* The node table now (with tokens), at most EFS_MAX_NODES rows. */
+static uint32_t host_table_copy(struct efs_raft_host *h, struct efs_node *nodes)
+{
+    uint32_t count;
+    pthread_mutex_lock(&h->s->lock);
+    count = h->s->node_count > EFS_MAX_NODES ? EFS_MAX_NODES : h->s->node_count;
+    memcpy(nodes, h->s->nodes, count * sizeof(nodes[0]));
+    pthread_mutex_unlock(&h->s->lock);
+    return count;
+}
+
+static int host_member_add(struct efs_raft_host *h, const struct efs_member *j);
+
+/* Formation (W153, K33 M4), from efs-mgmt raft-mkfs or automatically: the
+ * membership that has joined at this moment (the contiguous node ids
+ * 1..k, k >= 3, of the node table) is formed; then every table node whose
+ * id is the next one is added (M5), so the call returns once the committed
+ * count covers the contiguous joined ids. Fewer than EFS_FORMATION_MIN
+ * members, a shared endpoint or a missing store token is refused before
+ * anything is proposed. */
+void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_raft *r;
+    struct efs_membership want;
+    char err[1024];
+    int hint = -1;
+    int rc;
+    EFS_NODE_TABLE(nodes);
+    uint32_t count = 0;
+
+    memset(out, 0, sizeof(*out));
+    out->leader_hint = -1;
+    if (!h || !h->running || !nodes) {
+        out->rc = !nodes ? EFS_ERR_NOMEM : EFS_ERR_INVAL;
+        return;
+    }
+    out->salt = h->salt;
+    count = host_table_copy(h, nodes);
+    if (__atomic_load_n(&h->formed, __ATOMIC_ACQUIRE)) {
+        pthread_mutex_lock(&h->mu);
+        want = h->members;
+        pthread_mutex_unlock(&h->mu);
+    } else {
+        rc = efs_membership_from_nodes(nodes, count, h->salt, &want, err, sizeof(err));
+        if (rc != EFS_OK) {
+            fprintf(stderr, "raft-host: raft-mkfs refused: %s\n", err);
+            out->rc = rc;
+            return;
+        }
+    }
+    rc = host_form(h, &want, &hint);
+    /* K33: add the joined nodes after the formed prefix, in id order: the
+     * table's, and the pending joiners seen in the last 30 s (a formation
+     * that ran first left them out of the table). */
+    for (efs_node_id_t next = 0; rc == EFS_OK && next <= EFS_MAX_NODES;) {
+        struct efs_member j;
+        pthread_mutex_lock(&h->mu);
+        next = h->members.count + 1;
+        pthread_mutex_unlock(&h->mu);
+        if (next > EFS_MAX_NODES)
+            break;
+        uint32_t i;
+        memset(&j, 0, sizeof(j));
+        for (i = 0; i < count && nodes[i].id != next; i++)
+            ;
+        if (i < count) {
+            j.id = next;
+            j.port = nodes[i].port;
+            j.token = nodes[i].token;
+            snprintf(j.addr, sizeof(j.addr), "%s", nodes[i].addr);
+        } else {
+            pthread_mutex_lock(&h->mb_mu);
+            if (h->mb_seen[next - 1].id == next &&
+                now_us_() - h->mb_seen_us[next - 1] < 30000000ull)
+                j = h->mb_seen[next - 1];
+            pthread_mutex_unlock(&h->mb_mu);
+        }
+        if (j.id != next)
+            break;
+        rc = host_member_add(h, &j);
     }
     out->salt = h->salt;
     pthread_mutex_lock(&h->mu);
@@ -13066,6 +13331,354 @@ void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out)
     out->rc = rc;
     if (hint >= 0)
         out->leader_hint = hint;
+}
+
+/* ---- K33 node addition (docs/status/k33-membership-protocol-20261023.md M5) */
+
+/* Forward an eligible joiner to a group-0 member (this node hosts no
+ * group-0 replica): EFS_MD_REQ_MEMBER_ADD, first member that answers. */
+static int host_member_add_forward(struct efs_raft_host *h, const struct efs_member *j)
+{
+    uint8_t cmd[16 + EFS_MEMBER_ADDR_MAX];
+    size_t alen = strlen(j->addr);
+    int rc = EFS_ERR_NET;
+
+    cmd[0] = EFS_MD_REQ_MEMBER_ADD;
+    wr32be(cmd + 1, j->id);
+    cmd[5] = (uint8_t)(j->port >> 8);
+    cmd[6] = (uint8_t)j->port;
+    wr64be(cmd + 7, j->token);
+    cmd[15] = (uint8_t)alen;
+    memcpy(cmd + 16, j->addr, alen);
+    /* Every group-0 member in turn (any of them may be down); stop at a
+     * verdict: OK, FENCED, or BUSY (the joiner's id is not next yet). */
+    for (int rid = 0; rid < (int)EFS_FORMATION_MIN; rid++) {
+        struct efs_msg_raft_mkfs_reply rep;
+        if (rid == h->raft_id)
+            continue;
+        memset(&rep, 0, sizeof(rep));
+        rc = host_rpc_submit(h, rid, EFS_RAFT_GROUP_SHARD, cmd, (uint32_t)(16 + alen), &rep,
+                             5000);
+        if (rc != EFS_OK)
+            continue; /* unreachable (its transport may say BUSY): the next one */
+        rc = rep.rc;
+        if (rc == EFS_OK || rc == EFS_ERR_FENCED || rc == EFS_ERR_BUSY) {
+            fprintf(stderr, "membership: forwarded node %u at %s:%u to member %d: rc=%d\n",
+                    j->id, j->addr, j->port, rid + 1, rc);
+            break;
+        }
+    }
+    return rc;
+}
+
+static int host_member_add_decode(const uint8_t *cmd, uint32_t clen, struct efs_member *j)
+{
+    if (clen < 16 || cmd[15] < 1 || cmd[15] > EFS_MEMBER_ADDR_MAX || clen != 16u + cmd[15])
+        return EFS_ERR_INVAL;
+    memset(j, 0, sizeof(*j));
+    j->id = rd32be(cmd + 1);
+    j->port = (uint16_t)(cmd[5] << 8 | cmd[6]);
+    j->token = rd64be(cmd + 7);
+    memcpy(j->addr, cmd + 16, cmd[15]);
+    j->addr[cmd[15]] = '\0';
+    return EFS_OK;
+}
+
+/* Add joiner j: commit the one-member extension of the record this node
+ * holds on group 0 (MEMBERS), then learn it. Already a member with this
+ * identity: OK. Its id or endpoint held by another store: FENCED. An id
+ * after the next one: BUSY (it waits). Idempotent and safe to run on
+ * several members at once: group 0 installs one revision per id. */
+static int host_member_add(struct efs_raft_host *h, const struct efs_member *j)
+{
+    struct efs_membership view, next;
+    const struct efs_member *e;
+    uint8_t cmd[1 + EFS_MEMBERSHIP_MAX_LEN];
+    char err[512];
+    size_t rlen = 0;
+    int hint = -1, rc;
+
+    if (!__atomic_load_n(&h->formed, __ATOMIC_ACQUIRE))
+        return EFS_ERR_UNFORMED;
+    pthread_mutex_lock(&h->mu);
+    view = h->members;
+    pthread_mutex_unlock(&h->mu);
+    e = efs_membership_find_ep(&view, j->addr, j->port);
+    if (e)
+        return e->id == j->id && e->token == j->token ? EFS_OK : EFS_ERR_FENCED;
+    if (j->id <= view.count)
+        return EFS_ERR_FENCED;
+    if (j->id != view.count + 1)
+        return EFS_ERR_BUSY;
+    if (!hosts_group(h->raft_id, group_voters(EFS_RAFT_GROUP_SHARD, (int)view.count)))
+        return host_member_add_forward(h, j);
+    rc = efs_membership_plus(&view, j->addr, j->port, j->token, &next, err, sizeof(err));
+    if (rc != EFS_OK) {
+        fprintf(stderr, "membership: addition refused: %s\n", err);
+        return EFS_ERR_FENCED;
+    }
+    cmd[0] = EFS_MD_CMD_MEMBERS;
+    rc = efs_membership_encode(&next, cmd + 1, sizeof(cmd) - 1, &rlen);
+    if (rc == EFS_OK)
+        rc = host_propose_wait(h, EFS_RAFT_GROUP_SHARD, cmd, (uint32_t)(1 + rlen), &hint);
+    if (rc != EFS_OK) {
+        fprintf(stderr, "membership: adding node %u at %s:%u (token %016llx) as member %u: "
+                "rc=%d%s\n", j->id, j->addr, j->port, (unsigned long long)j->token, next.count,
+                rc, rc == EFS_ERR_FENCED ? " (another store committed this id first)" : "");
+        return rc;
+    }
+    fprintf(stderr, "membership: committed node %u at %s:%u (token %016llx) as member %u "
+            "(revision %u)\n", j->id, j->addr, j->port, (unsigned long long)j->token, next.count,
+            next.count - next.formed + 1);
+    host_test_exit("after-members-commit");
+    /* OK means `next` is part of the committed history: learn it (a later
+     * revision learned meanwhile makes this a no-op). */
+    return host_learn_membership(h, &next);
+}
+
+static void host_member_kick(struct efs_raft_host *h)
+{
+    pthread_mutex_lock(&h->mb_mu);
+    h->mb_kick = 1;
+    pthread_cond_signal(&h->mb_cv);
+    pthread_mutex_unlock(&h->mb_mu);
+}
+
+static void host_join_enqueue(struct efs_raft_host *h, const struct efs_member *j)
+{
+    pthread_mutex_lock(&h->mb_mu);
+    int i;
+    for (i = 0; i < h->mb_njoin; i++)
+        if (h->mb_join[i].port == j->port && !strcmp(h->mb_join[i].addr, j->addr) &&
+            h->mb_join[i].token == j->token)
+            break;
+    if (i == h->mb_njoin && h->mb_njoin < EFS_MAX_NODES) {
+        h->mb_join[h->mb_njoin++] = *j;
+        fprintf(stderr, "membership: node %u at %s:%u (token %016llx) is pending; adding it\n",
+                j->id, j->addr, j->port, (unsigned long long)j->token);
+    }
+    pthread_cond_signal(&h->mb_cv);
+    pthread_mutex_unlock(&h->mb_mu);
+}
+
+/* Learn a later revision from this node's own replicas (group 0's root
+ * anchor, group 2's anchor): the KV half of M5 step 3. */
+static void host_member_learn_kv(struct efs_raft_host *h)
+{
+    const uint8_t groups[2] = {EFS_RAFT_GROUP_SHARD, EFS_RAFT_GROUP_SHARD2};
+    const uint32_t anchors[2] = {efs_kv_inode_shard(EFS_ROOT_INO), efs_kv_anchor_shard(2)};
+    uint8_t rec[EFS_MEMBERSHIP_MAX_LEN];
+    struct efs_membership m, cur;
+
+    for (int i = 0; i < 2; i++) {
+        uint32_t len = 0;
+        int formed;
+        pthread_mutex_lock(&h->mu);
+        struct host_group *g = group_slot(h, groups[i]);
+        int hosted = g && g->r;
+        formed = h->formed;
+        cur = h->members;
+        pthread_mutex_unlock(&h->mu);
+        if (!hosted ||
+            efs_meta_membership_get(h->kv, anchors[i], rec, sizeof(rec), &len) != EFS_OK ||
+            efs_membership_decode(rec, len, &m) != EFS_OK)
+            continue;
+        if (formed && efs_membership_extends(&cur, &m))
+            continue;
+        (void)host_learn_membership(h, &m);
+    }
+}
+
+/* Unformed: the group-0 leader forms automatically once the contiguous ids
+ * 1..k (k >= 3) of its table, with their tokens, are unchanged for one
+ * second (M4). Every unformed node says why it is unready every 10 s. */
+#define HOST_FORM_QUIET_US 1000000ull
+static void host_auto_form(struct efs_raft_host *h, uint64_t now)
+{
+    EFS_NODE_TABLE(nodes);
+    struct efs_membership want;
+    char err[1024];
+    uint64_t sig = 1469598103934665603ull;
+
+    if (!nodes)
+        return;
+    uint32_t count = host_table_copy(h, nodes);
+    int rc = efs_membership_from_nodes(nodes, count, h->salt, &want, err, sizeof(err));
+    if (rc != EFS_OK || host_local_leader(h, EFS_RAFT_GROUP_SHARD) != h->raft_id) {
+        if (now - h->mb_log_us >= 10000000ull) {
+            h->mb_log_us = now;
+            fprintf(stderr, "raft-host: unready: the cluster is not formed; %s\n",
+                    rc != EFS_OK ? err : "formation waits for the group-0 leader");
+        }
+        h->mb_sig = 0;
+        return;
+    }
+    for (uint32_t i = 0; i < want.count; i++)
+        sig = (sig ^ want.m[i].token ^ ((uint64_t)want.m[i].port << 32 | want.m[i].id)) *
+              1099511628211ull;
+    if (sig != h->mb_sig) {
+        h->mb_sig = sig;
+        h->mb_sig_us = now;
+        return;
+    }
+    if (now - h->mb_sig_us < HOST_FORM_QUIET_US)
+        return;
+    struct efs_msg_raft_mkfs_reply rep;
+    fprintf(stderr, "raft-host: forming automatically with %u members\n", want.count);
+    server_raft_host_mkfs(&rep);
+    if (rep.rc != EFS_OK)
+        fprintf(stderr, "raft-host: automatic formation: rc=%d; retrying\n", rep.rc);
+    h->mb_sig = 0;
+}
+
+/* Group-0 leader (M5 steps 3 and 5): send the current record to every
+ * member until each acknowledged it (again after a leader change; every
+ * two seconds for a member that did not answer), and copy it to group 2. */
+static void host_notice_pump(struct efs_raft_host *h, uint64_t now)
+{
+    struct efs_membership m;
+    uint8_t cmd[1 + EFS_MEMBERSHIP_MAX_LEN];
+    size_t rlen = 0;
+    uint64_t term = 0;
+
+    pthread_mutex_lock(&h->mu);
+    struct efs_raft *r = group_raft(h, EFS_RAFT_GROUP_SHARD);
+    if (r)
+        term = efs_raft_term(r);
+    m = h->members;
+    pthread_mutex_unlock(&h->mu);
+    if (term != h->mb_term) {
+        h->mb_term = term;
+        memset(h->mb_acked, 0, sizeof(h->mb_acked));
+        memset(h->mb_retry_us, 0, sizeof(h->mb_retry_us));
+        h->mb_g2_copied = 0;
+    }
+    cmd[0] = EFS_MD_REQ_FORMED;
+    if (efs_membership_encode(&m, cmd + 1, sizeof(cmd) - 1, &rlen) != EFS_OK)
+        return;
+    for (uint32_t i = 0; i < m.count && __atomic_load_n(&h->mb_running, __ATOMIC_ACQUIRE); i++) {
+        const struct efs_member *p = &m.m[i];
+        struct efs_msg_raft_mkfs_reply rep;
+        if (p->id == h->s->id || h->mb_acked[i] >= m.count || now < h->mb_retry_us[i])
+            continue;
+        memset(&rep, 0, sizeof(rep));
+        int rc = host_rpc_submit(h, (int)p->id - 1, EFS_RAFT_GROUP_SHARD, cmd,
+                                 (uint32_t)(1 + rlen), &rep, 2000);
+        if (rc == EFS_OK)
+            rc = rep.rc;
+        if (rc == EFS_OK) {
+            h->mb_acked[i] = m.count;
+        } else {
+            if (!h->mb_retry_us[i])
+                fprintf(stderr, "membership: member %u at %s:%u has not recorded revision %u "
+                        "(rc=%d); retrying every 2 s\n", p->id, p->addr, p->port,
+                        m.count - m.formed + 1, rc);
+            h->mb_retry_us[i] = now + 2000000ull;
+        }
+    }
+    if (h->mb_g2_copied < m.count) {
+        uint8_t scmd[13 + EFS_MEMBERSHIP_MAX_LEN];
+        uint64_t salt = 0;
+        int hint = -1;
+        if (efs_meta_apply_export_salt(h->kv, &salt) != EFS_OK)
+            return;
+        scmd[0] = EFS_MD_CMD_SALT;
+        wr32be(scmd + 1, efs_kv_anchor_shard(2));
+        wr64be(scmd + 5, salt);
+        memcpy(scmd + 13, cmd + 1, rlen);
+        if (host_propose_wait(h, EFS_RAFT_GROUP_SHARD2, scmd, (uint32_t)(13 + rlen), &hint) ==
+            EFS_OK)
+            h->mb_g2_copied = m.count;
+    }
+}
+
+/* Group-2 (and group-0) leader (M6): move the voters to the target of the
+ * record this node holds. efs_raft_change adds the new voters as learners
+ * and answers BUSY until they caught up, then appends JOINT and COLD; it
+ * is retried every tick, so a leader change or restart resumes it. */
+static void host_voter_reconcile(struct efs_raft_host *h)
+{
+    static uint32_t logged[HOST_NGROUPS];
+    for (int gi = 0; gi < HOST_NGROUPS; gi++) {
+        pthread_mutex_lock(&h->mu);
+        struct efs_raft *r = h->g[gi].r;
+        uint32_t target = group_voters(h->g[gi].group, (int)h->members.count);
+        int rc = EFS_OK;
+        uint32_t cur = 0;
+        if (r && efs_raft_role(r) == EFS_RAFT_LEADER && !efs_raft_joint(r) &&
+            (cur = efs_raft_voters(r)) != target) {
+            rc = efs_raft_change(r, target);
+            __atomic_store_n(&h->g[gi].voters, efs_raft_voters(r), __ATOMIC_RELEASE);
+        }
+        pthread_mutex_unlock(&h->mu);
+        if (cur && cur != target && logged[gi] != (target | (uint32_t)(rc == EFS_OK) << 31)) {
+            logged[gi] = target | (uint32_t)(rc == EFS_OK) << 31;
+            fprintf(stderr, "membership: group %u voters 0x%x -> 0x%x: %s (rc=%d)\n",
+                    h->g[gi].group, cur, target,
+                    rc == EFS_OK ? "joint consensus started" :
+                    rc == EFS_ERR_BUSY ? "waiting for the new voters to catch up" : "refused",
+                    rc);
+        }
+        if (cur && cur != target)
+            host_pump_kick(h);
+    }
+}
+
+static void *host_member_thread(void *arg)
+{
+    struct efs_raft_host *h = arg;
+    uint64_t last_kv = 0;
+
+    while (__atomic_load_n(&h->mb_running, __ATOMIC_ACQUIRE)) {
+        struct efs_member j;
+        int have_join = 0, kick;
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_nsec += 200000000L;
+        if (ts.tv_nsec >= 1000000000L) {
+            ts.tv_sec++;
+            ts.tv_nsec -= 1000000000L;
+        }
+        pthread_mutex_lock(&h->mb_mu);
+        if (!h->mb_kick && !h->mb_njoin && __atomic_load_n(&h->mb_running, __ATOMIC_ACQUIRE))
+            pthread_cond_timedwait(&h->mb_cv, &h->mb_mu, &ts);
+        kick = h->mb_kick;
+        h->mb_kick = 0;
+        if (h->mb_njoin) {
+            j = h->mb_join[0];
+            memmove(h->mb_join, h->mb_join + 1, (size_t)(h->mb_njoin - 1) * sizeof(j));
+            h->mb_njoin--;
+            have_join = 1;
+        }
+        pthread_mutex_unlock(&h->mb_mu);
+        if (!__atomic_load_n(&h->mb_running, __ATOMIC_ACQUIRE))
+            break;
+        uint64_t now = now_us_();
+        if (kick || now - last_kv >= 1000000ull) {
+            last_kv = now;
+            host_member_learn_kv(h);
+        }
+        if (have_join) {
+            int rc = host_member_add(h, &j);
+            if (rc != EFS_OK && rc != EFS_ERR_FENCED && rc != EFS_ERR_BUSY)
+                fprintf(stderr, "membership: addition of node %u at %s:%u not finished (rc=%d); "
+                        "its next HELLO retries it\n", j.id, j.addr, j.port, rc);
+        }
+        if (!__atomic_load_n(&h->formed, __ATOMIC_ACQUIRE)) {
+            if (h->raft_id < (int)EFS_FORMATION_MIN)
+                host_auto_form(h, now);
+            else if (now - h->mb_log_us >= 10000000ull) {
+                h->mb_log_us = now;
+                fprintf(stderr, "raft-host: unready: the cluster is not formed (or this node "
+                        "is not a member yet); waiting\n");
+            }
+            continue;
+        }
+        if (host_local_leader(h, EFS_RAFT_GROUP_SHARD) == h->raft_id)
+            host_notice_pump(h, now);
+        host_voter_reconcile(h);
+    }
+    return NULL;
 }
 
 static int host_session_get_covered(struct efs_raft_host *h, const uint8_t *cmd,
@@ -13345,8 +13958,20 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     if (clen && cmd[0] == EFS_MD_REQ_FORMED) {
         struct efs_membership m;
         out->rc = efs_membership_decode(cmd + 1, clen - 1, &m);
+        if (out->rc == EFS_OK && !__atomic_load_n(&h->formed, __ATOMIC_ACQUIRE))
+            host_test_exit("before-learn");
         if (out->rc == EFS_OK)
             out->rc = host_learn_membership(h, &m);
+        return;
+    }
+    /* K33: an eligible joiner forwarded by a member without a group-0
+     * replica; never forwarded again (host_member_add on a group-0 host). */
+    if (clen && cmd[0] == EFS_MD_REQ_MEMBER_ADD) {
+        struct efs_member j;
+        out->rc = host_member_add_decode(cmd, clen, &j);
+        if (out->rc == EFS_OK)
+            out->rc = hosts_group(h->raft_id, group_voters(EFS_RAFT_GROUP_SHARD, h->n))
+                          ? host_member_add(h, &j) : EFS_ERR_NOT_PRIMARY;
         return;
     }
     if (!__atomic_load_n(&h->formed, __ATOMIC_ACQUIRE) &&
@@ -13862,6 +14487,7 @@ void server_raft_host_status(struct efs_msg_raft_status_reply *out)
         struct efs_raft_group_status *gs = &out->groups[i];
         gs->group = h->g[i].group;
         gs->hosted = h->g[i].hosted;
+        gs->retired = (uint8_t)__atomic_load_n(&h->g[i].retired, __ATOMIC_ACQUIRE);
         gs->voters = h->g[i].voters;
         gs->leader = -1;
         gs->joint = 0;
@@ -14004,42 +14630,82 @@ int server_raft_host_active(void)
     return h && h->running;
 }
 
-/* W153: the committed membership, or NULL before formation. Before the
- * host starts, the member store loaded by efsd.c (nothing changes it until
- * the host runs); afterwards the host's copy, immutable once formed. */
-static const struct efs_membership *committed_membership(void)
-{
-    struct efs_raft_host *h = g_host;
-    if (h)
-        return __atomic_load_n(&h->formed, __ATOMIC_ACQUIRE) ? &h->members : NULL;
-    return g_server && g_server->mstore.state == EFS_MEMBER_FORMED ? &g_server->mstore.members
-                                                                     : NULL;
-}
-
 int server_raft_host_formed(void)
 {
-    return committed_membership() != NULL;
+    return membership_copy(NULL);
 }
 
-int server_member_check(efs_node_id_t id, const char *addr, uint16_t port, uint32_t *count)
+int server_membership_get(struct efs_membership *out)
 {
-    const struct efs_membership *m = committed_membership();
+    return membership_copy(out);
+}
+
+static void host_join_enqueue(struct efs_raft_host *h, const struct efs_member *j);
+
+/* K33 (M5): admission of a HELLO. See server_internal.h. */
+uint32_t server_member_hello(efs_node_id_t id, const char *addr, uint16_t port, uint64_t token,
+                             uint64_t cluster, uint32_t *count)
+{
+    struct efs_membership m;
     const struct efs_member *p;
 
     if (count)
-        *count = m ? m->count : 0;
-    if (!m)
-        return EFS_OK;
-    p = efs_membership_find(m, id);
-    return p && p->port == port && addr && !strcmp(p->addr, addr) ? EFS_OK : EFS_ERR_FENCED;
+        *count = 0;
+    /* Unformed here: a formed sender is a member this node has not learned
+     * about yet, or of another cluster. Either way it must not enter the
+     * formation table; it waits (pending) while this node learns. */
+    if (!membership_copy(&m))
+        return cluster ? EFS_HELLO_REJECT_PENDING : EFS_HELLO_REJECT_NONE;
+    if (count)
+        *count = m.count;
+    if (!addr || !token || (cluster && cluster != m.cluster)) {
+        fprintf(stderr, "membership: HELLO from node %u at %s:%u refused: %s\n", id,
+                addr ? addr : "?", port, !token ? "no store token" : "another cluster");
+        return EFS_HELLO_REJECT_FORMED;
+    }
+    p = efs_membership_find(&m, id);
+    if (p)
+        return p->port == port && !strcmp(p->addr, addr) && p->token == token
+                   ? EFS_HELLO_REJECT_NONE : EFS_HELLO_REJECT_FORMED;
+    if (efs_membership_find_ep(&m, addr, port) || id < 1 || id > EFS_MAX_NODES)
+        return EFS_HELLO_REJECT_FORMED;
+    server_member_pending_note(id, addr, port, token);
+    if (id == m.count + 1 && g_host) {
+        struct efs_member j;
+        memset(&j, 0, sizeof(j));
+        j.id = id;
+        j.port = port;
+        j.token = token;
+        snprintf(j.addr, sizeof(j.addr), "%s", addr);
+        host_join_enqueue(g_host, &j);
+    }
+    return EFS_HELLO_REJECT_PENDING;
+}
+
+void server_member_pending_note(efs_node_id_t id, const char *addr, uint16_t port,
+                                uint64_t token)
+{
+    struct efs_raft_host *h = g_host;
+    if (!h || id < 1 || id > EFS_MAX_NODES || !token || !addr)
+        return;
+    pthread_mutex_lock(&h->mb_mu);
+    struct efs_member *e = &h->mb_seen[id - 1];
+    memset(e, 0, sizeof(*e));
+    e->id = id;
+    e->port = port;
+    e->token = token;
+    snprintf(e->addr, sizeof(e->addr), "%s", addr);
+    h->mb_seen_us[id - 1] = now_us_();
+    pthread_mutex_unlock(&h->mb_mu);
 }
 
 uint32_t server_member_filter(struct efs_node *nodes, uint32_t count)
 {
-    const struct efs_membership *m = committed_membership();
+    struct efs_membership mb;
+    const struct efs_membership *m = &mb;
     uint32_t kept = 0;
 
-    if (!m)
+    if (!membership_copy(&mb))
         return count;
     for (uint32_t i = 0; i < count; i++)
         if (efs_membership_find(m, nodes[i].id)) {

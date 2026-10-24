@@ -118,12 +118,24 @@
  * PREPARE or RESOLVE and every command carries that tag. Apply runs each
  * command as its own entry would, in order, in the entry's one atomic KV
  * scope; the verdict is the first non-OK command verdict. */
-/* W153: host-only formation notice, never a log command (EFS_MSG_RAFT_MKFS
- * submit, any group byte): [tag][committed membership record]. The member
- * persists the record (member store), derives the count and both groups'
- * voters from it and attaches its group-2 replica; the same record again
- * is OK, a different one FENCED. */
+/* W153/K33: host-only membership notice, never a log command
+ * (EFS_MSG_RAFT_MKFS submit, any group byte): [tag][committed membership
+ * record]. The member persists the record (member store) when it names
+ * this store and extends what the store holds, derives the count and both
+ * groups' voters from it and attaches the groups it votes in; the same or
+ * an earlier revision is OK, another cluster or a divergent record FENCED. */
 #define EFS_MD_REQ_FORMED 89
+/* K33 node addition, group 0, the membership authority:
+ * [tag][record] = the proposer's committed record plus one member with id
+ * count + 1. Applied with EFS_MEMBERSHIP_EXTEND_ONE on the root anchor;
+ * verdict OK (installed, or already part of the committed history),
+ * FENCED (a competing revision committed) or UNFORMED. */
+#define EFS_MD_CMD_MEMBERS 90
+/* K33: host-only, never a log command. A member that hosts no group-0
+ * replica forwards an eligible joiner to a group-0 member:
+ * [tag][id:4][port:2][token:8][alen:1][addr]. The receiver runs the
+ * addition (MEMBERS, notice); the reply is its verdict. */
+#define EFS_MD_REQ_MEMBER_ADD 91
 #define EFS_MD_CMD_TXN_BATCH 88 /* K29; 86 is PUT_ORPHAN_ACK, 85 and 87 are requests */
 #define EFS_MD_TXN_BATCH_MAX 96u /* commands per entry */
 #define EFS_MD_CMD_SESSION 9 /* matches sim SIM_CMD_SESSION */
@@ -258,7 +270,7 @@
     X(PACK_ADMIT) X(PACK_SWITCH) X(PACK_CANCEL) X(PACK_RETIRE) \
     X(PACK_UNINDEX) X(PACK_INDEX) \
     X(BOOTSTRAP_LANE) X(TRUNC_SWEEP) X(SWEEP_DONE) X(RETIRE) X(TXN_RETIRE) \
-    X(DEGRADED_CLEAR) X(PUT_ORPHAN_ACK) X(TXN_BATCH)
+    X(DEGRADED_CLEAR) X(PUT_ORPHAN_ACK) X(TXN_BATCH) X(MEMBERS)
 
 /* 1 when byte 0 of a log command names a command this build applies. */
 static inline int efs_md_cmd_applicable(uint8_t tag)

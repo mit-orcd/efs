@@ -9,9 +9,11 @@
  *                 magic, version, counter, checksum. Created once at store
  *                 initialization (counter 0); every start writes
  *                 max(fresh, saved + 1) with fsync before anything is served.
- *   identity.bin  the node id the store belongs to, the formation state
- *                 (unformed / formed) and, once formed, the committed
- *                 membership record (efs/membership.h), checksummed.
+ *   identity.bin  the node id the store belongs to, the store token (K33:
+ *                 64 random bits minted once at initialization; a wiped
+ *                 store is a new token), the formation state (unformed /
+ *                 formed) and, once formed, the newest committed membership
+ *                 revision it learned (efs/membership.h), checksummed.
  * identity.bin is the "initialized" mark: it is written after boot.bin, so
  * a store with boot.bin and no identity.bin crashed during initialization
  * and is refused, as is a store holding Raft or KV data but no identity (a
@@ -26,12 +28,13 @@
 #define EFS_MEMBER_FORMED   1u
 
 #define EFS_BOOT_FILE_LEN 32u
-#define EFS_IDENTITY_FILE_LEN (24u + EFS_MEMBERSHIP_MAX_LEN + 32u)
+#define EFS_IDENTITY_FILE_LEN (32u + EFS_MEMBERSHIP_MAX_LEN + 32u)
 
 struct member_store {
     char dir[4096];
     int lockfd;
     uint32_t member_id;
+    uint64_t token;
     uint32_t state;
     struct efs_membership members; /* valid when state == EFS_MEMBER_FORMED */
     int created; /* this start initialized the store */
@@ -45,8 +48,12 @@ int member_store_open(struct member_store *ms, const char *dir, uint32_t member_
 /* Advance the boot counter: writes and returns max(fresh, saved + 1). */
 int member_store_boot(struct member_store *ms, uint64_t fresh, uint64_t *incarnation,
                       char *err, size_t errlen);
-/* Persist the committed membership (unformed -> formed). The same record
- * again is EFS_OK; a different one is EFS_ERR_FENCED and never written. */
+/* Persist a committed membership revision naming this store (its member
+ * id with its token): unformed -> formed, or a later revision of the stored
+ * one. The same or an earlier revision of the stored one is EFS_OK and
+ * changes nothing; a record of another cluster, one that diverges from the
+ * stored one, or one that does not name this store's token at its id is
+ * EFS_ERR_FENCED and never written. */
 int member_store_learn(struct member_store *ms, const struct efs_membership *m,
                        char *err, size_t errlen);
 void member_store_close(struct member_store *ms);

@@ -301,24 +301,30 @@ void server_handle_conn(struct efs_conn *conn)
                     free(rej);
                     break;
                 }
-                /* W153: a formed cluster admits only its committed members at
-                 * their committed endpoints; node addition is K33/W157. */
+                /* W153/K33 (M5): a formed cluster admits its committed members
+                 * at their committed endpoint and store; a node that is not a
+                 * member yet is pending (its addition runs when its id is
+                 * next); anything else is refused and the sender exits. */
                 {
                     char haddr[sizeof(h->addr)];
                     uint32_t committed = 0;
                     memcpy(haddr, h->addr, sizeof(haddr));
                     haddr[sizeof(haddr) - 1] = '\0';
-                    if (server_member_check(h->node_id, haddr, h->port, &committed) != EFS_OK) {
+                    uint32_t why = server_member_hello(h->node_id, haddr, h->port, h->token,
+                                                       h->cluster, &committed);
+                    if (why != EFS_HELLO_REJECT_NONE) {
                         struct efs_msg_hello_ack *rej = calloc(1, sizeof(*rej));
                         if (!rej)
                             break;
-                        rej->reject_reason = EFS_HELLO_REJECT_FORMED;
+                        rej->reject_reason = why;
                         rej->node_count = committed;
                         strncpy(rej->build_id, EFS_BUILD_ID, sizeof(rej->build_id) - 1);
-                        fprintf(stderr, "HELLO refused: node %u (%s:%u) is not a committed member "
-                                "of this formed cluster (%u members); adding nodes is node "
-                                "addition (K33/W157), not implemented\n",
-                                h->node_id, haddr, h->port, committed);
+                        if (why == EFS_HELLO_REJECT_FORMED)
+                            fprintf(stderr, "HELLO refused: node %u (%s:%u, store %016llx) cannot "
+                                    "be a member of this cluster (%u members): its id or "
+                                    "endpoint belongs to another store, or it belongs to "
+                                    "another cluster\n", h->node_id, haddr, h->port,
+                                    (unsigned long long)h->token, committed);
                         efs_conn_send_msg(conn, EFS_MSG_HELLO_ACK, rej, sizeof(*rej));
                         free(rej);
                         break;
@@ -330,13 +336,24 @@ void server_handle_conn(struct efs_conn *conn)
                 uint32_t idx = g_server->node_count;
                 int changed = 0;
                 int accepted = 0;
+                int dup = 0;
                 for (uint32_t i = 0; i < g_server->node_count; i++) {
                     if (g_server->nodes[i].id == h->node_id) {
                         idx = i;
                         break;
                     }
                 }
-                if (idx < g_server->node_count) {
+                if (idx < g_server->node_count && g_server->nodes[idx].token &&
+                    g_server->nodes[idx].token != h->token) {
+                    /* K33 (M2): before formation one store per node id. */
+                    fprintf(stderr, "HELLO refused: node id %u is held by store %016llx at "
+                            "%s:%u; %s:%u announces store %016llx\n", h->node_id,
+                            (unsigned long long)g_server->nodes[idx].token,
+                            g_server->nodes[idx].addr, g_server->nodes[idx].port, h->addr,
+                            h->port, (unsigned long long)h->token);
+                    idx = EFS_MAX_NODES + 1; /* neither refreshed nor appended */
+                    dup = 1;
+                } else if (idx < g_server->node_count) {
                     /* Refresh an already-known peer. */
                     struct efs_node *n = &g_server->nodes[idx];
                     if (n->port != h->port ||
@@ -351,8 +368,11 @@ void server_handle_conn(struct efs_conn *conn)
                             sizeof(n->storage_path) - 1);
                     n->quota = h->quota;
                     n->used = h->used;
+                    if (n->token != h->token)
+                        changed = 1;
+                    n->token = h->token;
                     accepted = 1;
-                } else if (g_server->node_count < EFS_MAX_NODES) {
+                } else if (idx == g_server->node_count && g_server->node_count < EFS_MAX_NODES) {
                     struct efs_node *n = &g_server->nodes[g_server->node_count];
                     n->id = h->node_id;
                     strncpy(n->addr, h->addr, sizeof(n->addr) - 1);
@@ -361,6 +381,7 @@ void server_handle_conn(struct efs_conn *conn)
                             sizeof(n->storage_path) - 1);
                     n->quota = h->quota;
                     n->used = h->used;
+                    n->token = h->token;
                     g_server->node_count++;
                     changed = 1;
                     accepted = 1;
@@ -376,8 +397,8 @@ void server_handle_conn(struct efs_conn *conn)
                 ack->epoch = g_server->epoch;
                 /* assigned_id == 0 means reject (e.g. cluster at capacity). */
                 ack->assigned_id = accepted ? h->node_id : 0;
-                ack->reject_reason =
-                    accepted ? EFS_HELLO_REJECT_NONE : EFS_HELLO_REJECT_FULL;
+                ack->reject_reason = accepted ? EFS_HELLO_REJECT_NONE
+                                     : dup ? EFS_HELLO_REJECT_FORMED : EFS_HELLO_REJECT_FULL;
                 strncpy(ack->build_id, EFS_BUILD_ID, sizeof(ack->build_id) - 1);
                 ack->node_count = g_server->node_count;
                 memcpy(ack->nodes, g_server->nodes, sizeof(g_server->nodes));

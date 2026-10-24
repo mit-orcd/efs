@@ -188,6 +188,7 @@ struct efs_node {
     char storage_path[EFS_MAX_PATH];
     uint64_t quota; /* max bytes this node may store; 0 means unlimited */
     uint64_t used;  /* bytes currently stored on this node */
+    uint64_t token; /* K33: the node's store token from its HELLO; 0 unknown */
     /* Failure detection (in-memory; reset on heartbeat reply / HELLO). */
     uint64_t down_until_ms; /* heartbeat-marked-down cooldown deadline */
     uint32_t hb_fail_streak;

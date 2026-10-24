@@ -942,7 +942,7 @@ static int cmd_raft_status(int argc, char **argv)
     for (i = 0; i < r->ngroups && i < EFS_RAFT_HOST_MAX_GROUPS; i++) {
         struct efs_raft_group_status *g = &r->groups[i];
         printf("  group %u hosted=%u role=%s leader=%d term=%llu "
-               "commit=%llu applied=%llu voters=0x%x joint=%u "
+               "commit=%llu applied=%llu voters=0x%x joint=%u retired=%u "
                "last=%llu last_term=%llu snap=%llu rejects_sent=%llu proto_drops=%llu "
                "unapplied=%llu max_unapplied=%llu busy_sent=%llu admit_busy=%llu "
                "low_capacity=%llu campaigns_held=%llu capacity_stepdowns=%llu%s\n",
@@ -952,7 +952,7 @@ static int cmd_raft_status(int argc, char **argv)
                (unsigned long long)g->term,
                (unsigned long long)g->commit_index,
                (unsigned long long)g->applied_index,
-               g->voters, g->joint,
+               g->voters, g->joint, g->retired,
                (unsigned long long)g->last_log_index,
                (unsigned long long)g->last_log_term,
                (unsigned long long)g->snap_index,
@@ -1284,14 +1284,16 @@ static int cmd_raft_mkfs(int argc, char **argv)
         const struct efs_msg_list_nodes_reply *list = reply;
         struct efs_membership m;
         char err[1024];
-        if (efs_membership_from_nodes(list->nodes, list->node_count, &m, err,
+        /* Preflight only: the daemon supplies the cluster identity. */
+        if (efs_membership_from_nodes(list->nodes, list->node_count, 1, &m, err,
                                       sizeof(err)) != EFS_OK) {
             fprintf(stderr, "raft-mkfs refused: %s\n", err);
             free(reply);
             close(fd);
             return 1;
         }
-        printf("raft-mkfs: forming with %u members\n", m.count);
+        printf("raft-mkfs: %u joined members with node ids 1..%u (formation forms "
+               "automatically; this forms now and adds them)\n", m.count, m.count);
     }
     free(reply);
     reply = NULL;

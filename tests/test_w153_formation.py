@@ -5,15 +5,17 @@ Real efsd daemons on loopback, private ports and stores under TMPDIR:
 1. EFS_MD_RAFT_N set (even empty) stops efsd before it serves.
 2. Two joined members: efs-mgmt raft-mkfs is refused and names node 3 as
    missing; client metadata is refused before formation.
-3. A third member joins; raft-mkfs commits the three-member membership.
-   Every node reports group 0 and group 2 on voters 0x7; metadata is served.
-4. A fourth node joining the formed cluster is refused and exits, pointing
-   at node addition (K33); the node table still holds three members.
+3. A third member joins; the cluster forms (automatically since K33; the
+   optional raft-mkfs agrees). Every node reports group 0 and group 2 on
+   voters 0x7; metadata is served.
+4. A node whose id is not the next one (5 while 4 is absent) is pending:
+   it is told so, stays out of the node table and keeps retrying (K33).
 5. A repeated raft-mkfs keeps the first membership; a restarted member
    derives the count and voters from its store, not the environment.
 6. A second efsd on a running member's metadata store is refused (owner lock).
-7. A second cluster of five: group 0 on {1,2,3}, group 2 on {2,3,4} on
-   every node; node 5 hosts neither group.
+7. A second cluster of five (formed automatically at three or more, the
+   rest added as they retry HELLO; raft-mkfs is optional): group 0 on
+   {1,2,3}, group 2 on {2,3,4}; node 5 hosts neither group.
 """
 import os, re, shutil, signal, socket, subprocess, sys, tempfile, time
 from pathlib import Path
@@ -135,21 +137,21 @@ try:
     c.start(3, join=1)
     c.wait_log(3, r'Joined cluster with 3 nodes')
     out = c.mkfs_until_ok(1)
-    assert 'forming with 3 members' in out, out
+    assert '3 joined members' in out, out
     for i in (1, 2, 3):
         c.wait_log(i, r'raft-host: formed: 3 members, g0 voters 0x7, g2 voters 0x7, g2 hosted')
         assert c.voters(i) == {0: (1, 7), 2: (1, 7)}, (i, c.voters(i))
     rc, out = mgmt('raft-getattr', c.ep(1), '1')
     assert rc == 0, out
 
-    # 4. A joiner after formation is refused and stops.
-    p4 = c.start(4, join=1)
-    assert p4.wait(timeout=30) == 1, c.log(4)[-1500:]
-    assert 'already formed with 3 committed members' in c.log(4) and 'K33' in c.log(4), c.log(4)[-1500:]
-    assert 'HELLO refused: node 4' in c.log(1), c.log(1)[-1500:]
-    c.procs.pop(4)
+    # 4. Node 5 while node 4 is absent: pending, not in the table.
+    c.start(5, join=1)
+    c.wait_log(5, r'Join pending at .* the cluster has 3 committed members')
+    time.sleep(2.5)
     rc, out = mgmt('status', c.ep(1))
     assert 'Cluster nodes (3)' in out, out
+    assert 'raft-host: formed' not in c.log(5), c.log(5)[-1500:]
+    c.stop(5)
 
     # 5. A repeated mkfs keeps the first membership; a restart derives the
     # count and voters from the member store.
@@ -177,14 +179,21 @@ try:
     c.wait_log(1, r'raft-host: up raft_id=0 n=3 unformed')
     for i in range(2, 6):
         c.start(i, join=1)
-        c.wait_log(i, r'Joined cluster with')
-    out = c.mkfs_until_ok(1)
-    assert 'forming with 5 members' in out, out
-    want = {1: {0: (1, 7), 2: (0, 0xe)}, 2: {0: (1, 7), 2: (1, 0xe)}, 3: {0: (1, 7), 2: (1, 0xe)},
+        c.wait_log(i, r'Joined cluster with|Join pending at')
+    c.mkfs_until_ok(1)
+    # Node 1 keeps a retired group-2 replica when the cluster formed at
+    # three and grew (K33 M6); the others are exact.
+    want = {2: {0: (1, 7), 2: (1, 0xe)}, 3: {0: (1, 7), 2: (1, 0xe)},
             4: {0: (0, 7), 2: (1, 0xe)}, 5: {0: (0, 7), 2: (0, 0xe)}}
     for i in range(1, 6):
-        c.wait_log(i, r'raft-host: formed: 5 members, g0 voters 0x7, g2 voters 0xe')
+        c.wait_log(i, r'raft-host: (formed|membership revision \d+): 5 members')
+    end = time.time() + 60
+    while time.time() < end and any(c.voters(i) != want[i] for i in want):
+        time.sleep(0.3)
+    for i in want:
         assert c.voters(i) == want[i], (i, c.voters(i))
+    v1 = c.voters(1)
+    assert v1[0] == (1, 7), v1
 finally:
     for c in clusters:
         c.stop_all()
@@ -193,6 +202,6 @@ finally:
     else:
         shutil.rmtree(work, ignore_errors=True)
 print('W153 formation: EFS_MD_RAFT_N refused; 2 members refused (node 3 named); 3 committed '
-      '(g0/g2 voters 0x7 everywhere); metadata refused before formation; joiner after '
-      'formation refused; repeat mkfs and restart keep the membership; store lock; 5 committed '
+      '(g0/g2 voters 0x7 everywhere); metadata refused before formation; out-of-order joiner '
+      'pending; repeat mkfs and restart keep the membership; store lock; 5 members '
       f'(g0 0x7, g2 0xe, node 5 hosts none): PASS ({time.time() - t0:.1f} s)')

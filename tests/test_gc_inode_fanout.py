@@ -2,8 +2,9 @@
 """Compile the actual W124 all-member reclaim handoff: every remote request is
 sent before the local acceptance and before any reply is read; an item counts
 only when every member accepted it; failures and malformed replies refuse the
-whole batch and drain every connection. W153: the members are the committed
-formation membership, never the HELLO table; unformed refuses everything."""
+whole batch and drain every connection. W153/K33: the members are the newest
+committed revision this node learned (membership_copy), never the HELLO table;
+unformed refuses everything."""
 from pathlib import Path
 import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
@@ -59,6 +60,9 @@ static int efs_conn_recv_msg(struct efs_conn *c,uint8_t *type,void **v,uint32_t 
 static void server_peer_conn_drop(const char *a,unsigned p,struct efs_conn *c) { (void)a;(void)p;(void)c;dropped++; }
 static void server_peer_conn_release(const char *a,unsigned p,struct efs_conn *c) { (void)a;(void)p;(void)c;released++; }
 static int env_on(const char *s){(void)s;return 0;}
+/* K33: the handoff reads the published committed revision. */
+static struct efs_raft_host *cur;
+static int membership_copy(struct efs_membership *out){if(!cur->formed)return 0;*out=cur->members;return 1;}
 '''+s[a:b]+r'''
 static efs_ino_t inos[N]={70,71,72,73,74};
 static uint64_t gens[N]={90,91,92,93,94};
@@ -72,7 +76,7 @@ static int exercise(void) {
  for(unsigned i=0;i<4;i++){h.members.m[i].id=i+1;h.members.m[i].port=(uint16_t)i;strcpy(h.members.m[i].addr,"127.0.0.1");
   conns[i].fd=i;conns[i].kind=EFS_CONN_TCP;}
  memset(ok,0xee,sizeof(ok));
- host_gc_inode_nodes_batch(&h,inos,gens,N,ok);
+ cur=&h;host_gc_inode_nodes_batch(&h,inos,gens,N,ok);
  assert(released+dropped==3-(missing>=1&&missing<=3));
  pthread_mutex_destroy(&server.lock);return accepted();
 }
@@ -93,7 +97,7 @@ int main(void) {
  static struct efs_raft_host h;h.s=&server;h.n=3;h.formed=0;
  for(unsigned i=0;i<4;i++){server.nodes[i].id=i+1;server.nodes[i].port=i;}
  sent=received=local_done=0;memset(ok,1,sizeof(ok));
- host_gc_inode_nodes_batch(&h,inos,gens,N,ok);assert(!accepted() && !sent && !local_done);
+ cur=&h;host_gc_inode_nodes_batch(&h,inos,gens,N,ok);assert(!accepted() && !sent && !local_done);
  pthread_mutex_destroy(&server.lock);
  puts("GC reclaim handoff: all sends before local accept and waits, per-item all-member verdict, failure/malformed replies refuse the batch, committed members only, unformed refused PASS");
 }

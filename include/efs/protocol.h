@@ -590,7 +590,8 @@ struct efs_raft_group_status {
     uint8_t joint;   /* 1 while C_old,C_new overlapping (I18) */
     int32_t leader;  /* peer id, -1 unknown */
     uint32_t voters; /* committed voting-set bitmask (app_old) */
-    uint32_t pad2;
+    uint8_t retired; /* K33: not a target voter; never campaigns or serves */
+    uint8_t pad2[3];
     uint64_t term;
     uint64_t commit_index;
     uint64_t applied_index;
@@ -650,6 +651,8 @@ struct efs_msg_hello {
     uint64_t quota; /* local storage quota in bytes; 0 = unlimited */
     uint64_t used;  /* bytes currently stored on this node */
     char build_id[EFS_BUILD_ID_LEN]; /* git build id; must match the cluster's */
+    uint64_t token;   /* K33: the sender's member-store token (never 0) */
+    uint64_t cluster; /* K33: its committed cluster identity; 0 while unformed */
 };
 
 struct efs_msg_hello_ack {
@@ -664,10 +667,15 @@ struct efs_msg_hello_ack {
 #define EFS_HELLO_REJECT_NONE    0
 #define EFS_HELLO_REJECT_FULL    1
 #define EFS_HELLO_REJECT_VERSION 2
-/* W153: the cluster committed its membership and the joiner is not one of
- * its members (or advertises another endpoint than its committed one).
- * Adding a node to a formed cluster is node addition (K33/W157). */
+/* W153/K33: the joiner can never be a member of this formed cluster: its
+ * id or endpoint is a member with another store token, it belongs to
+ * another cluster, or its store does not match. The joiner exits. */
 #define EFS_HELLO_REJECT_FORMED  3
+/* K33: the joiner is not a member yet; its addition is in progress (or
+ * waits for a lower node id). The joiner retries HELLO until its store has
+ * learned a committed revision naming it. Before formation: its id is held
+ * by another store token (refused, exits) -- see EFS_HELLO_REJECT_FORMED. */
+#define EFS_HELLO_REJECT_PENDING 4
 
 struct efs_msg_get_chunk {
     efs_export_id_t export_id;
