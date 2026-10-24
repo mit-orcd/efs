@@ -398,7 +398,7 @@ This review assigns the missing register identity to that recorded policy; it
 does not create a new approval or independently recover the approving exchange.
 
 **Implementation:** [W86](../backlog/work-items.md#w86), pure metadata
-state machine committed in `b3a11877`, staged for integration; production integration and distributed fault gates remain open.
+state machine committed in `b3a11877`, staged for integration; production integration and distributed fault gates remain open. Oct 24: dead clients' unsettled tickets are drained into the orphan ledger after revocation, and a clean unmount revokes its own session ([evidence](k13-d31-drain-20261024.md)).
 Completed global revocation, durable lane/storage rejection floors, all-member
 deletion acknowledgements and replay-floor retirement are required. Age,
 disconnect and missing receipt are not authority. D28 accepts loss of unpublished buffered writes after client death and defers

@@ -8,6 +8,7 @@
 #include "efs/publication.h"
 #include "efs/put_ticket.h"
 #include "efs/session.h"
+#include "efs/session_revoke.h"
 #include "metadata_read_route.h"
 #include <stddef.h>
 #include <string.h>
@@ -1663,6 +1664,7 @@ int efs_client_session_check(void)
     return efs_client_session_start();
 }
 
+
 /* REGISTER/ESTABLISH refuse an epoch that is no longer the owner's ACTIVE
  * epoch, or that lies below the participant's rejection floor, with STALE:
  * for this mount that is a fence. */
@@ -1917,7 +1919,7 @@ static int rpc_put_ticket(const struct efs_put_ticket *ticket,uint32_t n,int pro
         if(reply.rc==EFS_OK) {
             if(probe_only==2 ? reply.salt>n :
                (reply.salt!=EFS_PUT_TICKET_ADMITTED && reply.salt!=EFS_PUT_TICKET_PUBLISHED &&
-                reply.salt!=EFS_PUT_TICKET_RECLAIMING && reply.salt!=EFS_PUT_TICKET_REJECTED))
+                reply.salt!=EFS_PUT_TICKET_REJECTED))
                 return EFS_ERR_PROTO;
             if(!probe_only && reply.salt!=EFS_PUT_TICKET_ADMITTED)return EFS_ERR_STALE;
             *state=(uint32_t)reply.salt;return EFS_OK;
@@ -3125,4 +3127,76 @@ int efs_client_rpc_query_snapshot_v4_at(const struct efs_msg_query_snapshot_v4 *
 {
     if (!req || preferred>EFS_MAX_NODES || req->base.version!=EFS_QUERY_PAGE_VERSION) return EFS_ERR_INVAL;
     return query_snapshot_rpc(&req->base,sizeof(*req),reply,text,preferred);
+}
+
+/* Transport of the shared revocation coordinator (session_revoke.h): one
+ * EFS_MSG_RAFT_MKFS to a voter of the payload's group, NOT_PRIMARY redirects,
+ * BUSY repeated only where efs_session_busy_retry_ok allows. A transport
+ * failure is ambiguous and never resent. */
+static int session_revoke_submit(void *ctx,const uint8_t *payload,uint32_t plen,
+                                 struct efs_msg_raft_mkfs_reply *out)
+{
+    (void)ctx;
+    /* Any shard of the group routes to its voters; its anchor will do. */
+    uint32_t shard=payload[0]==EFS_RAFT_GROUP_SHARD?1u:2u;
+    efs_node_id_t target=0;
+    memset(out,0,sizeof(*out));out->leader_hint=-1;out->rc=EFS_ERR_BUSY;
+    for (unsigned attempt=0;attempt<8;attempt++) {
+        if (efs_client_rpc_past_deadline()) return out->rc=EFS_ERR_BUSY;
+        efs_node_id_t nid=target;
+        struct efs_conn *conn=target?efs_client_conn_get(target):rpc_owner_conn_shard(shard,&nid);
+        if (!conn) return out->rc=EFS_ERR_NET;
+        if (efs_conn_send_msg(conn,EFS_MSG_RAFT_MKFS,payload,plen)) {
+            efs_client_conn_drop(nid,conn);return out->rc=EFS_ERR_NET;
+        }
+        uint8_t type=0;uint32_t len=0;void *reply=NULL;
+        if (efs_conn_recv_msg(conn,&type,&reply,&len)) {
+            free(reply);efs_client_conn_drop(nid,conn);return out->rc=EFS_ERR_NET;
+        }
+        efs_client_conn_release(nid,conn);
+        if (type!=EFS_MSG_RAFT_MKFS_REPLY || len!=sizeof(*out)) {
+            free(reply);return out->rc=EFS_ERR_PROTO;
+        }
+        memcpy(out,reply,sizeof(*out));free(reply);
+        if (out->rc==EFS_ERR_BUSY && efs_session_busy_retry_ok(payload,plen)) {
+            if (rpc_writer_retry_pause(attempt)!=EFS_OK) return out->rc;
+            continue;
+        }
+        if (out->rc!=EFS_ERR_NOT_PRIMARY) return out->rc;
+        if (out->leader_hint<-1 || out->leader_hint>=EFS_MAX_NODES) return out->rc=EFS_ERR_PROTO;
+        target=out->leader_hint>=0 && (efs_node_id_t)(out->leader_hint+1)!=nid ?
+            (efs_node_id_t)(out->leader_hint+1):0;
+        if (rpc_writer_retry_pause(attempt)!=EFS_OK) return out->rc;
+    }
+    return out->rc;
+}
+
+/* D31: a clean unmount revokes its own session after its last settle, so
+ * the bodies it abandoned (and the tickets it could not settle) become
+ * collectable without an operator: the group leaders drain its streams
+ * into the orphan ledger and collect them. The barrier is the operator's
+ * (efs_session_revoke); a failure leaves it resumable by `efs-mgmt
+ * raft-session fence`. EFS_UNMOUNT_REVOKE=0 keeps the session open. */
+int efs_client_session_end(void)
+{
+    const char *keep=getenv("EFS_UNMOUNT_REVOKE");
+    if (!__atomic_load_n(&g_client.session_started,__ATOMIC_ACQUIRE) ||
+        efs_client_session_fenced())
+        return EFS_OK;
+    if (keep && !strcmp(keep,"0")) return EFS_OK;
+    struct efs_opid id;
+    int rc=efs_client_publication_id(1,&id);
+    if (rc!=EFS_OK) return rc;
+    uint64_t saved=efs_client_rpc_deadline_ms();
+    efs_client_rpc_set_deadline_ms(0);
+    const struct efs_session_rpc rpc={NULL,session_revoke_submit};
+    struct efs_session_revoke_result res;
+    rc=efs_session_revoke(&rpc,id.client_uuid,&res);
+    efs_client_rpc_set_deadline_ms(saved);
+    /* Latch: nothing may run under the revoked epoch from here on. */
+    __atomic_store_n(&g_client.session_fenced,1,__ATOMIC_RELEASE);
+    fprintf(stderr,"efs: session revoked at unmount: epoch=%u touched=%u rc=%d%s%s\n",
+            id.session_epoch,res.ntouch,rc,rc==EFS_OK?"":" phase=",
+            rc==EFS_OK?"":res.phase);
+    return rc;
 }

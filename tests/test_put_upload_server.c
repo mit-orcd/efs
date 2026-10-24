@@ -58,7 +58,7 @@ int main(void)
  authority_rc=EFS_ERR_NOT_FOUND;assert(server_put_upload(&server,frame,bytes,&path)==EFS_ERR_NOT_FOUND&&!stores);
  authority_rc=EFS_ERR_IO;assert(server_put_upload(&server,frame,bytes,&path)==EFS_ERR_IO&&!stores);authority_rc=0;
  authority_state=EFS_PUT_TICKET_PUBLISHED;assert(server_put_upload(&server,frame,bytes,&path)==EFS_ERR_STALE&&!stores);
- authority_state=EFS_PUT_TICKET_RECLAIMING;assert(server_put_upload(&server,frame,bytes,&path)==EFS_ERR_STALE&&!stores);authority_state=1;
+ authority_state=EFS_PUT_TICKET_REJECTED;assert(server_put_upload(&server,frame,bytes,&path)==EFS_ERR_STALE&&!stores);authority_state=1;
  export.chunk_size=EFS_DEFAULT_CHUNK_SIZE*2;assert(server_put_upload(&server,frame,bytes,&path)==EFS_ERR_INVAL&&!stores&&!export_refs&&export.chunk_size==EFS_DEFAULT_CHUNK_SIZE*2);export.chunk_size=EFS_DEFAULT_CHUNK_SIZE;
  store_rc=EFS_ERR_IO;assert(server_put_upload(&server,frame,bytes,&path)==EFS_ERR_IO&&path==255&&stores==1&&!export_refs);
  store_rc=0;assert(!server_put_upload(&server,frame,bytes,&path)&&path==1&&stores==2&&!export_refs);

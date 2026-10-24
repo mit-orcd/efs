@@ -539,6 +539,8 @@ struct efs_raft_host {
     uint8_t put_orphan_cursor[HOST_NGROUPS][EFS_PUT_ORPHAN_KEY_LEN];
     uint32_t put_orphan_cursor_len[HOST_NGROUPS];
     uint64_t put_orphan_cycle[HOST_NGROUPS];
+    uint8_t put_drain_cursor[HOST_NGROUPS][EFS_PUT_STREAM_KEY_LEN];
+    uint32_t put_drain_cursor_len[HOST_NGROUPS];
     /* EFS_RAFT_OBS: wait_applied timeouts, pump h->mu hold high-water, and
      * the last stats-dump timestamp (ms). */
     uint64_t obs_wait_timeouts;
@@ -2351,6 +2353,29 @@ static int apply_put_orphan_ack_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return rc;
 }
 
+/* EFS_MD_CMD_PUT_TICKET_DRAIN [uuid:16][epoch:4][lane shard:4]. A malformed
+ * entry halts; a refusal (floor not raised, K14 stage) is a logical verdict. */
+static int apply_put_ticket_drain_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                                      uint32_t clen, uint8_t group)
+{
+    struct efs_put_stream st;
+    uint32_t moved = 0;
+    if (clen != EFS_MD_PUT_TICKET_DRAIN_LEN)
+        return EFS_ERR_UNSUPPORTED;
+    memcpy(st.uuid, cmd + 1, EFS_OPID_UUID_LEN);
+    st.epoch = rd32be(cmd + 17);
+    st.shard = rd32be(cmd + 21);
+    if (!st.epoch || st.shard > EFS_KV_SHARD_MASK)
+        return EFS_ERR_UNSUPPORTED;
+    if (group != efs_raft_shard_group(st.shard))
+        return EFS_ERR_INVAL;
+    int rc = efs_put_ticket_drain(h->kv, &st, EFS_PUT_TICKET_DRAIN_MAX, &moved);
+    if (rc != EFS_OK && rc != EFS_ERR_BUSY)
+        fprintf(stderr, "raft-host: put-ticket drain shard=%u epoch=%u moved=%u rc=%d\n",
+                st.shard, st.epoch, moved, rc);
+    return rc;
+}
+
 static int apply_degraded_clear_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                                     uint32_t clen, uint64_t index, uint8_t group)
 {
@@ -3388,6 +3413,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX || cmd[0] == EFS_MD_CMD_PACK_INDEX ||
            cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
            cmd[0] == EFS_MD_CMD_DEGRADED_CLEAR || cmd[0] == EFS_MD_CMD_PUT_ORPHAN_ACK ||
+           cmd[0] == EFS_MD_CMD_PUT_TICKET_DRAIN ||
            cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP)
               ? EFS_OK
               : rc;
@@ -3421,6 +3447,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
          cmd[0] == EFS_MD_CMD_PACK_CANCEL || cmd[0] == EFS_MD_CMD_PACK_RETIRE || cmd[0] == EFS_MD_CMD_PACK_UNINDEX || cmd[0] == EFS_MD_CMD_PACK_INDEX ||
          cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
          cmd[0] == EFS_MD_CMD_DEGRADED_CLEAR || cmd[0] == EFS_MD_CMD_PUT_ORPHAN_ACK ||
+         cmd[0] == EFS_MD_CMD_PUT_TICKET_DRAIN ||
          cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_CREATE ||
          cmd[0] == EFS_MD_CMD_APPEND_CATCHUP || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
          cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT_BATCH || cmd[0] == EFS_MD_CMD_PUT_TICKET_SETTLE_BATCH ||
@@ -3975,6 +4002,8 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         return apply_degraded_clear_cmd(h, cmd, clen, index, group);
     if (cmd[0] == EFS_MD_CMD_PUT_ORPHAN_ACK)
         return apply_put_orphan_ack_cmd(h, cmd, clen, group);
+    if (cmd[0] == EFS_MD_CMD_PUT_TICKET_DRAIN)
+        return apply_put_ticket_drain_cmd(h, cmd, clen, group);
     if (cmd[0] == EFS_MD_CMD_TXN_BATCH)
         return apply_txn_batch_cmd(h, cmd, clen, group);
     if (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
@@ -9160,7 +9189,8 @@ static int host_gc_propose(struct efs_raft_host *h, uint8_t group,
     if (!__atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE))
         return EFS_ERR_BUSY;
     int rc = host_bg_propose(h, group, cmd, clen, 1);
-    if (rc != EFS_OK && !(rc == EFS_ERR_BUSY && (cmd[0] == EFS_MD_REQ_SWEEP_NEXT || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_LANE_SWEEP_MULTI))) {
+    if (rc != EFS_OK && !(rc == EFS_ERR_BUSY && (cmd[0] == EFS_MD_REQ_SWEEP_NEXT || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_LANE_SWEEP_MULTI ||
+                                                 cmd[0] == EFS_MD_CMD_PUT_TICKET_DRAIN))) {
         uint64_t *counter = (cmd[0] == EFS_MD_REQ_SWEEP_NEXT || cmd[0] == EFS_MD_CMD_LANE_SWEEP_MULTI) ? &h->s->gc_sweep_errors :
                             (cmd[0] == EFS_MD_CMD_ORPHAN_REAP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_REAP_MULTI) ? &h->s->gc_reap_errors :
                             &h->s->gc_ack_errors;
@@ -11574,6 +11604,103 @@ static void host_put_orphan_pass(struct efs_raft_host *h, uint8_t group, uint32_
     free(scan);
 }
 
+/* ---- D31 revoked-stream drain (K13) ----
+ * Before collection: the leader walks its group's stream index (one anchored
+ * prefix, a bounded number of streams per pass, with a cursor). For a stream
+ * whose owner's global revocation it proved, it commits DRAIN commands that
+ * retire the stream into the orphan ledger, which host_put_orphan_pass then
+ * collects. The index and the log are the only progress state. */
+#define PUT_DRAIN_PER_PASS 32u
+#define PUT_DRAIN_BUDGET 8u /* DRAIN commands per stream per pass */
+struct put_drain_scan {
+    uint8_t skip[EFS_PUT_STREAM_KEY_LEN], last[EFS_PUT_STREAM_KEY_LEN];
+    uint32_t skip_len, last_len, n, bad;
+    struct efs_put_stream s[PUT_DRAIN_PER_PASS];
+};
+static int put_drain_scan_cb(void *user, const uint8_t *key, uint32_t kl,
+                             const uint8_t *val, uint32_t vl)
+{
+    struct put_drain_scan *scan = user;
+    if (scan->skip_len && kl == scan->skip_len && !memcmp(key, scan->skip, kl))
+        return 0;
+    if (kl != EFS_PUT_STREAM_KEY_LEN)
+        return -1;
+    memcpy(scan->last, key, kl);
+    scan->last_len = kl;
+    if (efs_put_ticket_stream_decode(key, kl, val, vl, &scan->s[scan->n]) != EFS_OK) {
+        scan->bad++;
+        return 0;
+    }
+    return ++scan->n == PUT_DRAIN_PER_PASS;
+}
+/* One fresh session-group read per owner per pass: the index is sorted by
+ * (uuid, epoch), so a session's streams are adjacent. */
+struct put_drain_host {
+    struct efs_raft_host *h;
+    uint8_t group, have;
+    uint8_t uuid[EFS_OPID_UUID_LEN];
+    uint32_t epoch;
+    int verdict;
+};
+static int put_drain_revoked(void *ctx, const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch)
+{
+    struct put_drain_host *c = ctx;
+    if (c->have && c->epoch == epoch && !memcmp(c->uuid, uuid, EFS_OPID_UUID_LEN))
+        return c->verdict;
+    c->verdict = put_orphan_revoked(NULL, uuid, epoch);
+    memcpy(c->uuid, uuid, EFS_OPID_UUID_LEN);
+    c->epoch = epoch;
+    c->have = 1;
+    return c->verdict;
+}
+static int put_drain_cmd(void *ctx, const struct efs_put_stream *st)
+{
+    struct put_drain_host *c = ctx;
+    uint8_t cmd[EFS_MD_PUT_TICKET_DRAIN_LEN] = {EFS_MD_CMD_PUT_TICKET_DRAIN};
+    memcpy(cmd + 1, st->uuid, EFS_OPID_UUID_LEN);
+    wr32be(cmd + 17, st->epoch);
+    wr32be(cmd + 21, st->shard);
+    return host_gc_propose(c->h, c->group, cmd, sizeof(cmd));
+}
+static void host_put_drain_pass(struct efs_raft_host *h, uint8_t group, uint32_t anchor)
+{
+    int gi = gc_gi(group);
+    struct put_drain_scan *scan = calloc(1, sizeof(*scan));
+    if (!scan)
+        return;
+    uint8_t prefix[3];
+    efs_put_ticket_stream_prefix(anchor, prefix);
+    scan->skip_len = h->put_drain_cursor_len[gi];
+    memcpy(scan->skip, h->put_drain_cursor[gi], scan->skip_len);
+    int rc = host_gc_scan_work(h, prefix, sizeof(prefix), scan->skip_len ? scan->skip : NULL,
+                               scan->skip_len, put_drain_scan_cb, scan, scan->last,
+                               &scan->last_len, sizeof(scan->last));
+    if (rc < 0) {
+        __atomic_fetch_add(&h->s->gc_scan_errors, 1, __ATOMIC_RELAXED);
+        free(scan);
+        return;
+    }
+    struct put_drain_host ctx = {.h = h, .group = group};
+    const struct efs_put_drain_ops ops = {&ctx, put_drain_revoked, put_drain_cmd};
+    struct efs_put_drain_stats st = {0};
+    for (uint32_t i = 0; i < scan->n && __atomic_load_n(&h->gc_running, __ATOMIC_ACQUIRE); i++)
+        (void)efs_put_drain_stream(h->kv, &scan->s[i], &ops, PUT_DRAIN_BUDGET, &st);
+    if (!rc)
+        h->put_drain_cursor_len[gi] = 0;
+    else if (scan->last_len) {
+        memcpy(h->put_drain_cursor[gi], scan->last, scan->last_len);
+        h->put_drain_cursor_len[gi] = scan->last_len;
+    }
+    if (scan->bad)
+        __atomic_fetch_add(&h->s->put_orphan_failures, scan->bad, __ATOMIC_RELAXED);
+    if (env_on("EFS_GC_DBG") && (scan->n || scan->bad))
+        fprintf(stderr, "raft-host: put-drain pass group=%u streams=%u bad=%u waiting=%llu "
+                "blocked=%llu commands=%llu drained=%llu\n", group, scan->n, scan->bad,
+                (unsigned long long)st.waiting, (unsigned long long)st.blocked,
+                (unsigned long long)st.commands, (unsigned long long)st.drained);
+    free(scan);
+}
+
 static void *host_gc_thread(void *arg)
 {
     struct efs_raft_host *h = arg;
@@ -11620,6 +11747,7 @@ static void *host_gc_thread(void *arg)
                 h->orphan_discovery_len[g] = 0;
                 h->put_orphan_cursor_len[gc_gi(h->g[g].group)] = 0;
                 h->put_orphan_cycle[gc_gi(h->g[g].group)] = 0;
+                h->put_drain_cursor_len[gc_gi(h->g[g].group)] = 0;
                 __atomic_fetch_and(&h->s->put_orphan_sampled_mask, ~(1u << gc_gi(h->g[g].group)),
                                    __ATOMIC_RELAXED);
                 __atomic_fetch_and(&h->s->gc_sampled_mask, ~(1u << g), __ATOMIC_RELAXED);
@@ -11637,6 +11765,7 @@ static void *host_gc_thread(void *arg)
                 host_gc_close_step_pass(h, h->g[g].group, anchor);
                 host_gc_close_pass(h, h->g[g].group, anchor);
                 host_gc_orphan_pass(h, h->g[g].group, anchor);
+                host_put_drain_pass(h, h->g[g].group, anchor);
                 host_put_orphan_pass(h, h->g[g].group, anchor);
             }
             t_orphan += now_us_() - ta;

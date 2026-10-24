@@ -44,4 +44,34 @@ struct efs_put_orphan_stats {
 int efs_put_orphan_collect(struct efs_kv *, const struct efs_put_ticket *, uint32_t acked,
                            const struct efs_put_orphan_ops *, uint64_t *skip,
                            struct efs_put_orphan_stats *);
+
+/* D31 revoked-stream drain, the group leader's half. A client that died (or
+ * was fenced) before SETTLE leaves ADMITTED, REJECTED or PUBLISHED tickets in
+ * its streams. The leader walks the anchored stream index; for a stream whose
+ * owner's revocation it proved, it commits DRAIN commands
+ * (efs_put_ticket_drain) that retire the stream into the orphan ledger, where
+ * efs_put_orphan_collect reclaims the bodies. */
+struct efs_put_drain_ops {
+    void *ctx;
+    /* As efs_put_orphan_ops.revoked: the completed global barrier. */
+    int (*revoked)(void *ctx, const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch);
+    /* Commit EFS_MD_CMD_PUT_TICKET_DRAIN for the stream through its group's
+     * log, wait for its local apply and return the apply verdict. */
+    int (*drain)(void *ctx, const struct efs_put_stream *);
+};
+struct efs_put_drain_stats {
+    uint64_t waiting;  /* streams whose revocation is not proven yet */
+    uint64_t blocked;  /* DRAIN refused: K14 stage pending (or floor) */
+    uint64_t commands; /* DRAIN commands committed */
+    uint64_t drained;  /* streams emptied */
+};
+/* One indexed stream: revocation (fresh, then this replica's shard floor),
+ * then at most `budget` DRAIN commands while the stream stays indexed and
+ * each one makes progress. OK when the stream is empty; BUSY while it stays
+ * (not revoked, a stage pending, or the budget spent); other errors as
+ * returned. Progress lives in the log only: a new leader resumes from the
+ * index, and a DRAIN committed twice is a no-op the second time. */
+int efs_put_drain_stream(struct efs_kv *, const struct efs_put_stream *,
+                         const struct efs_put_drain_ops *, uint32_t budget,
+                         struct efs_put_drain_stats *);
 #endif

@@ -148,6 +148,14 @@
  * (ADMIT_BATCH) or retired (SETTLE_BATCH), read after the apply. */
 #define EFS_MD_CMD_PUT_TICKET_ADMIT_BATCH 90
 #define EFS_MD_CMD_PUT_TICKET_SETTLE_BATCH 91
+/* D31 revoked-stream drain, on the lane shard's group, proposed by its
+ * leader once the stream owner's revocation is proven:
+ * [tag][uuid:16][epoch:4][lane shard:4], 25 B. Retires up to
+ * EFS_PUT_TICKET_DRAIN_MAX tickets from the stream head into the orphan
+ * ledger (efs_put_ticket_drain). Refused (BUSY) behind a missing shard
+ * rejection floor or a pending K14 stage; a logical verdict. */
+#define EFS_MD_CMD_PUT_TICKET_DRAIN 250
+#define EFS_MD_PUT_TICKET_DRAIN_LEN 25u
 #define EFS_MD_TXN_BATCH_MAX 96u /* commands per entry */
 #define EFS_MD_CMD_SESSION 9 /* matches sim SIM_CMD_SESSION */
 #define EFS_MD_SESS_CREATE      1
@@ -282,7 +290,8 @@
     X(PACK_UNINDEX) X(PACK_INDEX) \
     X(BOOTSTRAP_LANE) X(TRUNC_SWEEP) X(SWEEP_DONE) X(RETIRE) X(TXN_RETIRE) \
     X(DEGRADED_CLEAR) X(PUT_ORPHAN_ACK) X(TXN_BATCH) \
-    X(PUT_TICKET_ADMIT_BATCH) X(PUT_TICKET_SETTLE_BATCH) X(MEMBERS)
+    X(PUT_TICKET_ADMIT_BATCH) X(PUT_TICKET_SETTLE_BATCH) X(MEMBERS) \
+    X(PUT_TICKET_DRAIN)
 
 /* 1 when byte 0 of a log command names a command this build applies. */
 static inline int efs_md_cmd_applicable(uint8_t tag)
