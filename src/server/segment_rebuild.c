@@ -39,6 +39,7 @@
 #include "efs/erasure.h"
 #include "efs/kv.h"
 #include "efs/kv_key.h"
+#include "efs/kv_lsm.h"
 #include "efs/meta_cmd.h"
 #include "efs/network.h"
 #include "efs/pack_mapping.h"
@@ -55,6 +56,7 @@
 #define SR_IO_MS 5000
 #define SR_REBUILD_PER_PASS 64u
 #define SR_MARKS_MAX 256u
+#define SR_SCAN_KEYS 1024u /* merged index keys per audit page */
 #define SR_KEY EFS_PACK_OBJECT_KEY_BYTES
 
 struct sr_audit {
@@ -291,9 +293,20 @@ static void sr_audit_node(struct efsd_server *s, struct efs_kv *kv, uint8_t grou
     uint8_t prefix[3] = {(uint8_t)(anchor >> 8), (uint8_t)anchor, EFS_KV_KIND_PACK_SEGMENT};
     c->group = group; c->node = id; c->max = EFS_SEGMENT_AUDIT_MAX; c->kv = kv; c->items = items;
     c->skip = a->cursor; c->skip_len = a->cursor_len;
-    if (efs_kv_scan_from(kv, prefix, sizeof(prefix), a->cursor_len ? a->cursor : NULL, a->cursor_len,
-                         sr_collect_cb, c) < 0)
+    /* One bounded page of the index per pass: the KV read lock is never
+     * held for a whole large index (apply waits on it). */
+    uint8_t resume[EFS_KV_KEY_MAX];
+    uint32_t resume_len = 0;
+    int src = efs_kv_lsm_scan_work(kv, prefix, sizeof(prefix), a->cursor_len ? a->cursor : NULL,
+                                   a->cursor_len, SR_SCAN_KEYS, sr_collect_cb, c, resume, &resume_len);
+    if (src < 0)
         goto out;
+    if (resume_len == SR_KEY && !c->full) {
+        /* Stopped by the page bound: resume after the last merged key. */
+        memcpy(c->last, resume, SR_KEY);
+        c->last_len = SR_KEY;
+        c->full = 1;
+    }
     if (c->n) {
         memset(&rep, 0, sizeof(rep));
         int rc = sr_audit_call(s, nodes, count, id, group, 0, a->inc, items, c->n, &rep);
