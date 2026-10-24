@@ -2026,8 +2026,9 @@ def matrix_topology(a, p):
     a.matrix_fixture = topo.get('fixture', {})
     if 'loopback' in topo:
         a.loopback = topo['loopback']
-        a.port_base = topo.get('port_base', a.port_base)
-        a.private_port_base = topo.get('private_port_base', a.private_port_base)
+        # The command line wins: another host passes its own port range.
+        a.port_base = a.port_base or topo.get('port_base')
+        a.private_port_base = a.private_port_base or topo.get('private_port_base')
         return None
     return dict(topo['cluster'], name=topo['cluster'].get('name', a.topology))
 
@@ -2049,8 +2050,10 @@ def main(argv=None):
     r = sub.add_parser('run')
     r.add_argument('--cluster', type=Path)
     r.add_argument('--loopback', type=int, default=0, help='start an owned private N-daemon cluster')
-    r.add_argument('--port-base', type=int, default=18740, help='loopback daemon ports (N of them)')
-    r.add_argument('--private-port-base', type=int, default=18700, help='live harness ports with --loopback')
+    r.add_argument('--port-base', type=int, help='loopback daemon ports (N of them; default 18740 '
+                   'or the topology\'s)')
+    r.add_argument('--private-port-base', type=int, help='live harness ports with --loopback '
+                   '(default 18700 or the topology\'s)')
     r.add_argument('--out', type=Path, required=True)
     r.add_argument('--work', type=Path, help='scratch and owned stores (default OUT.work)')
     r.add_argument('--gates', type=lambda v: [x for x in v.split(',') if x], default=[])
@@ -2141,6 +2144,8 @@ def main(argv=None):
         if not (a.matrix and a.topology) or a.cluster or a.loopback:
             p.error('--matrix needs --topology and excludes --cluster and --loopback')
         described = matrix_topology(a, p)
+    a.port_base = a.port_base or 18740
+    a.private_port_base = a.private_port_base or 18700
     for name in a.allow:
         if name not in DESTRUCTIVE:
             p.error(f'--allow {name}: expected {",".join(DESTRUCTIVE)} or all')
