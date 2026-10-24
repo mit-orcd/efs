@@ -104,7 +104,7 @@
     "turnover",
     "remount"
    ],
-   "duration": "about 25 minutes measured on intel1 with the four stale harnesses failing at once; up to about 3 hours once they run (deadlines 1 h, gc 2 h)",
+   "duration": "about 26 minutes measured on nuc (append-failover 19 minutes; the four stale harnesses fail at once); up to about 3 hours once they run (deadlines 1 h, gc 2 h)",
    "covers": [
     "C4, B2, D2 live harnesses (TCP, one host)",
     "driver regression"
@@ -201,7 +201,7 @@
     "turnover",
     "remount"
    ],
-   "duration": "about 15 minutes",
+   "duration": "about 7 minutes measured on nuc",
    "covers": [
     "private-cluster control path: formation, E1 restart, E3 member catch-up"
    ],

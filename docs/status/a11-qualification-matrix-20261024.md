@@ -197,7 +197,57 @@ never to 17432–17435):
 
 ## Validation runs (nuc)
 
-TODO-RUNS
+These runs check that the planned gates run, not a topology (one host, A4).
+Tree: `git archive` of this branch to nuc `~/efs-qual-matrix/src`, built with
+`EFS_GIT_ID`/`EFS_GIT_DESCRIBE`/`EFS_GIT_BRANCH`. Runs `r1`/`r2` used the
+working tree before commit `ea3360a75`, identity `g376369aa8-a11wip`; the
+`ea3360a75` runs used the commit. Host nuc (8 CPUs, 30 GB, Rocky 10,
+`/home` XFS), TCP, `O_DIRECT`, 4 G quota per daemon (1 G on loopback), the
+user's nuc cluster running alongside on 17432–17435 (not touched).
+
+| Run | Gates | Result |
+| --- | --- | --- |
+| `nuc-private-3-r1` (wip) | all 17 | setup (formation via `_node`, two mounts) PASS; identity, b-checks (89 s), posix-core, posix-extras (4 pass, 1 SKIP), posix-2client, e3-turnover (with member stop/start and catch-up) PASS; **posix-durability FAIL** (finding 1); e1/e2 NOTRUN because that stop left the mount unmounted; 7 stubs NOTRUN |
+| `nuc-private-3-r2` (wip) | identity, posix-durability, e1-manifest, e2-client-stop | all PASS; E1: 240 files, 140,120,143 B verified before and after the driver-owned orderly stop/start |
+| `nuc-private-3-r3-ea3360a75` | all 17 | same as r1: setup 6.6 s, six PASS, **posix-durability FAIL** (finding 1), E3 member catch-up 2.1 s; teardown kept the daemon and client logs, deleted the stores |
+| `loopback-3-r1` (wip) | the 15 loopback gates | identity, b-checks, posix-core, posix-extras, posix-2client, posix-durability, e1, e2 PASS; topology NOTRUN (one host); **append-failover FAIL** (finding 2); k14, fragment-integrity, gc-reclamation FAIL (`--node-id`); k13 NOTRUN (its ports are fixed to 18700–18799, outside nuc's range); **e3-turnover FAIL**: the targeted step-down was refused "target not caught up …; retry" and the driver did not retry (driver bug, fixed) |
+| `loopback-3-r2-ea3360a75` | identity, posix-extras, e3-turnover | all PASS (extras with the 150 s per-case timeout now taken from the matrix) |
+
+Findings for the parent (candidate `376369aa8` code; not changed here):
+
+1. **Clean client stop refused after a long unmount revoke (E2, C2).** In 2
+   of 2 full nuc-private-3 runs, `scripts/client.sh stop` (no force) failed
+   in posix-durability: `efs-fuse` unmounted, settled its put tickets, then
+   needed about 11 s to revoke its session (`touched=765`), while
+   `client_processes.py` allows 10 s (`NATURAL_RETIRE_S`) after SIGTERM and
+   then reports "client remains alive … no forced kill". It passed when the
+   session was small (r2) and on loopback-3. The mount is gone but the stop
+   reports failure, so E2's clean-stop gate cannot pass on a busy client.
+2. **One REPORT receive timeout under leader step-downs (C3/C4, K15 W52).**
+   loopback-3 append-failover: 8,000 of 8,000 records exact in every view, 0
+   missing or duplicated, but one REPORT RPC timed out after 30 s
+   (`inode-rpc: retry type=67 attempt=11 … recv_ms=30001`), which the
+   harness counts as a failure.
+3. **Four live harnesses use the removed `--node-id`** (known since the driver
+   evidence): `k14_atomic_cluster.sh`, `ticket_put.py`
+   (fragment-integrity), `gc_reclamation.py`, `k13_ticket_cluster.py`; the
+   K13 harness also hard-codes ports 18700–18799.
+
+Raw evidence: nuc `~/efs-artifacts/a11-20261024/` (run directories with
+their own `SHA256SUMS`; `python3 scripts/qualify.py verify-sums DIR`):
+
+| Run directory | Files | `SHA256SUMS` sha256 |
+| --- | ---: | --- |
+| `nuc-private-3-r1` | 204 | `622ab186…fbb47` |
+| `nuc-private-3-r2` | 117 | `19165ff3…faa3` |
+| `nuc-private-3-r3-ea3360a75` | 209 | `2abc9958…36cc` |
+| `loopback-3-r1` | 381 | `11ae424f…d4e1` |
+| `loopback-3-r2-ea3360a75` | 73 | `9c7f5ea9…b97b3d` |
+
+Stores, mounts and scratch were deleted by the driver; daemon and client logs
+are in each run's `gates/_teardown/` (driver-owned) or `loopback/`.
+
+TODO-GATE
 
 ## Code changes
 
@@ -208,8 +258,11 @@ TODO-RUNS
   `private_cluster` descriptions with the `PrivateCluster` controller and the
   `_node start|stop` helper; `run --matrix … --topology …` with
   `--user-approved`/`--ignore-blocked`; `plan [--topology] [--check]`;
-  `fuser -m` checks ignore its permission messages; the client and daemon
-  host values reach the `client_stop`/`client_start` templates as `{host}`.
+  `fuser -m` checks ignore its permission messages; the mount's host reaches
+  the `client_stop`/`client_start` templates as `{host}`; E3 re-issues a
+  targeted step-down the leader refused with "retry" (target not caught up)
+  until the turnover timeout; a matrix topology's `fixture` applies to
+  loopback runs too.
 - `scripts/qualify_matrix.json` (new): dimensions, cells, seven topologies,
   the 25 Stage 2 items.
 - `tests/test_qualify_driver.py` (in `make test`, about 3 s): topology gate
@@ -221,7 +274,21 @@ TODO-RUNS
 
 ## Reproduction and cleanup
 
-TODO-REPRO
+```bash
+python3 scripts/qualify.py plan                      # the matrix, validated
+git archive HEAD | ssh nuc 'mkdir -p ~/efs-qual-matrix/src && tar -x -C ~/efs-qual-matrix/src'
+ssh nuc 'cd ~/efs-qual-matrix/src && EFS_GIT_ID=ea3360a75 EFS_GIT_DESCRIBE=gea3360a75 \
+  EFS_GIT_BRANCH=claude/devel-a11-matrix-2bfd14 make -j8'
+ssh nuc 'cd ~/efs-qual-matrix/src && TMPDIR=$HOME/efs-qual-matrix/tmp python3 scripts/qualify.py run \
+  --matrix scripts/qualify_matrix.json --topology nuc-private-3 --out ~/efs-artifacts/RUN --work ~/efs-qual-matrix/work'
+```
+
+`loopback-3` is the same with `--topology loopback-3` (about 30 minutes,
+append-failover alone about 19 minutes). Run long commands in `screen`. The
+driver deletes its stores, mounts and scratch; afterwards remove the tree with
+`edelete --force --delete ~/efs-qual-matrix`. On another host pass its own
+port ranges (`--port-base`, `--private-port-base` for loopback; edit the
+addresses of a private topology).
 
 ## Limitations and remaining gates
 
@@ -233,4 +300,6 @@ TODO-REPRO
   D2 live evidence.
 - The live harnesses run on TCP loopback only; RDMA for them is not driven.
 - The orcd-mini and intel control lines have not run.
+- The E3 retry path is not exercised by a recorded run: in
+  `loopback-3-r2-ea3360a75` both step-downs succeeded at the first attempt.
 - 6–16 members beyond 5 are sampled only at 6–8 on loopback.

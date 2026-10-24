@@ -311,5 +311,5 @@ try:
 finally:
     shutil.rmtree(tmp)
 print('qualify driver: stub pass/fail/not-run/deadline/liar verdicts, result fields, SHA256SUMS '
-      'and tamper control, summary and F3 row, refusals, --plan commands, topology gate, NOTRUN stubs, '
+      'and tamper control, summary and F3 row, refusals, --plan commands, topology gate, stub gates, '
       'b-checks CLI, ssh wrapper, A11 matrix validation and topologies, _node start/stop PASS')
