@@ -2995,7 +2995,14 @@ A6 read-path selectors ([table](../status/a6-settings-inventory-20261024.md#deci
 - `EFS_KV_BLOOM`: **always on**; remove the `0` path.
 - `EFS_READ_VERIFY`: **open until a code audit** confirms that every GET path, packed reads and reconstruction included, validates the requested identity and payload integrity before returning bytes. K16's record format and gates run with verification off do not prove that coverage. If the audit confirms the client re-hash is redundant, remove it; otherwise make verification the one built-in behavior. No toggle either way.
 
-The remaining A6 selectors are not decided yet.
+A6 Raft and query selectors, user Oct 24:
+
+- `EFS_RAFT_BATCH_NOOP`: **always 1**; remove the `0` path.
+- `EFS_RAFT_BATCH_OVERLAP`: **always 1**; remove the `0` path. Removing the alternatives does not replace qualification: both batching mechanisms must preserve persistence ordering, election safety and recovery correctness in the retained implementation.
+- `EFS_QUERY_BACKEND`: **disk only**; remove the `ram` backend and the variable (bounded query storage with restart catch-up).
+- `EFS_RDMA_FIRST`: **trace only, renamed `EFS_RDMA_TRACE`**; off by default, and it changes only diagnostics.
+
+Still open: `EFS_COMMANDS`, `EFS_COMMANDS_SERVER`, `EFS_EXPIRY`, `EFS_FUSE_EXPORT`, `EFS_UNMOUNT_REVOKE`, `--no-persist`, `EFS_TRANSPORT`, and the documented default for buffered versus direct I/O.
 
 ### D41 — K9 / W87 closed without resolution (user, Oct 24)
 
