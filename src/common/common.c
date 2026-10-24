@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <string.h>
+#include <unistd.h>
 
 int efs_chunk_size_valid(uint32_t chunk_size)
 {
@@ -85,4 +86,22 @@ uint64_t efs_parse_quota(const char *str)
     }
 
     return (uint64_t)(val * (double)mult);
+}
+
+extern char **environ;
+
+unsigned efs_faults_env_ignored(const char *prog)
+{
+    unsigned n = 0;
+
+    for (char **e = environ; e && *e; e++) {
+        if (strncmp(*e, "EFS_FAULT_", 10) && strncmp(*e, "EFS_KV_COMPACT_DIE=", 19))
+            continue;
+        const char *eq = strchr(*e, '=');
+        int len = eq ? (int)(eq - *e) : (int)strlen(*e);
+        fprintf(stderr, "%s: %.*s ignored: this build has no fault hooks "
+                "(build with EFS_FAULTS=1 for fault tests)\n", prog, len, *e);
+        n++;
+    }
+    return n;
 }

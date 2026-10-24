@@ -7897,6 +7897,9 @@ int main(int argc, char **argv)
         fuse_cmdline_help();fuse_lowlevel_help();return 0;
     }
     if (efs_help_requested(argc,argv)) { efs_cli_help(stdout,argv[0],NULL);return 0; }
+#if !EFS_FAULTS
+    efs_faults_env_ignored("efs-fuse");
+#endif
     if (argc >= 3 && (strcmp(argv[1], "--stop") == 0 ||
                       strcmp(argv[1], "--resume") == 0)) {
         int force = argc == 4 && strcmp(argv[3], "--force-discard") == 0;

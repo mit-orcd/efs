@@ -885,6 +885,9 @@ int main(int argc, char **argv)
     /* Install before any work — imagenet load has produced silent SIGSEGVs. */
     efsd_install_crash_handlers();
     efs_log_timestamps_install();
+#if !EFS_FAULTS
+    efs_faults_env_ignored("efsd");
+#endif
 
     /* The 1024-fd soft cap put accept() into EMFILE backoff under conn
      * storms (~500 live conns + data files), which wedged new mounts and
