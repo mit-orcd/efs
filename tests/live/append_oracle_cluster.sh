@@ -26,10 +26,16 @@ start_daemons() {
     ss -ltnH "sport = :$((PORT+i))" | grep -q . && { echo "port $((PORT+i)) in use"; exit 1; }
   done
   mkdir -p "$D"/{n1,n2,n3,logs,mnt}
+  # K33 positional CLI: node 1 seeds, 2 and 3 join it on their first start
+  # (empty store); every restart names its own endpoint and store.
   for i in 1 2 3; do
-    join=""; [ $i -gt 1 ] && join="--join $ADDR:$((PORT+1))"
-    nohup "$REL/efsd" --node-id $i --addr $ADDR --port $((PORT+i)) --storage "$D/n$i" \
-      --quota "${EFS_K09_QUOTA:-4G}" $IO $join >> "$D/logs/efsd-n$i.log" 2>&1 &
+    if [ $i -gt 1 ] && [ -z "$(ls -A "$D/n$i")" ]; then
+      set -- --join $ADDR:$((PORT+1)) --listen $ADDR:$((PORT+i)) "$D/n$i"
+    else
+      set -- $ADDR:$((PORT+i)) "$D/n$i"
+    fi
+    nohup "$REL/efsd" "$@" --quota "${EFS_K09_QUOTA:-4G}" --discovery-port 0 $IO \
+      >> "$D/logs/efsd-n$i.log" 2>&1 &
     echo $! > "$D/logs/n$i.pid"
     for t in $(seq 60); do grep -q listening "$D/logs/efsd-n$i.log" && break; sleep 0.5; done
   done
@@ -46,7 +52,8 @@ stop_daemons() {
 case $cmd in
 start)
   start_daemons
-  for t in $(seq 30); do "$REL/efs-mgmt" raft-mkfs $ADDR:$((PORT+1)) 2>&1 | grep -q 'raft-mkfs rc=0 ' && break; sleep 1; done
+  # The three members form and create the root themselves (K33).
+  for t in $(seq 120); do "$REL/efs-mgmt" raft-getattr $ADDR:$((PORT+1)) 1 > /dev/null 2>&1 && break; sleep 1; done
   mount_client
   ;;
 remount)

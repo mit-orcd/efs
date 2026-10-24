@@ -21,6 +21,15 @@ full acceptance are separate states.
 [D41: K9 / W87 closed without resolution](decisions.md#d41--k9--w87-closed-without-resolution-user-oct-24):
 **user decision Oct 24: the append record loss was never reproduced and has no root cause; K9 is closed and reopens if a loss is seen again.** Not a passing gate.
 
+[K15/K29 append harness accounting rule](k15-k29-accounting-rule-20261024.md):
+**PASS (scoped), on `claude/devel-k9-append-836bbe`, not merged.**
+`tests/live/append_failover.py` accounts a write the client saw fail (record
+absent, hole explained by its abandon) and reports it separately; a lost
+acknowledged record or an unexplained hole stays a mismatch. Unit check with
+negative controls in `make test`. The harness (and `append_oracle_cluster.sh`)
+now starts efsd with the K33 CLI. amd `make test-all` fails only what the
+untouched base fails. Live failover gates NOTRUN (parent session).
+
 [Oct 24 merge: W155, D31 drain, K33 increment 2, K33 client view](k33-client-view-20261024.md#after-the-merge):
 **merged into devel; Merged-tree `make test-all` on intel2 (W155, D31 drain, K33 increment 2 and live client view at `910bbeef4`): 442 commands, 0 FAIL, 14 NOTRUN host limits (raw: intel2 `~/efs-artifacts/merge-wave2-20261024/`, `SHA256SUMS` `0d13a146…4ecf`). The first run at `3e01ba95c` failed only `tests/test_k33_client_view.py`, which waited for a joiner log line that increment 2 renamed; fixed in `910bbeef4`.** Before the next deploy, devops `start.sh` and cluster `cluster.sh` must move to the positional `efsd ADDR:PORT STORAGE` / `efsd --join SEED STORAGE` form (`--node-id` is refused), and every store needs a fresh format.
 

@@ -133,6 +133,8 @@ TEST_SRCS += tests/test_retained_namespace_audit.c
 TEST_BINS += tests/test_retained_namespace_audit
 
 TEST_BINS += tests/test_kv_reader_gate
+TEST_SRCS += tests/test_append_interleave.c
+TEST_BINS += tests/test_append_interleave
 
 SERVER_SRCS = src/server/put_fence.c src/server/put_upload.c src/server/put_orphan.c src/server/efsd.c src/server/store.c src/server/store_nvme.c src/server/storage_roots.c \
               src/server/handler.c \
@@ -208,6 +210,7 @@ test-report-pressure:
 	python3 tests/test_append_flush_budget.py
 	python3 tests/test_append_burst_clock.py
 	python3 tests/test_append_oracle.py
+	python3 tests/test_append_failover_accounting.py
 	python3 tests/test_append_reserve_budget.py
 	python3 tests/test_put_pool_budget.py
 	python3 tests/test_get_pool_startup.py
@@ -594,6 +597,7 @@ test: all $(TEST_SPECIAL_BINS)
 	./tests/test_publication_recovery
 	./tests/test_append_receipt
 	./tests/test_append_cleanup
+	./tests/test_append_interleave
 	python3 tests/test_append_prepare_batch.py
 	python3 tests/test_meta_cmd_namespace.py
 	python3 tests/test_submit_unknown_tag.py
