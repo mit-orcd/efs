@@ -210,3 +210,13 @@ plane has *decided* are unavailable and recorded as such; it is never used
 because a target is merely *slow*. In an asynchronous network a client
 cannot distinguish the two, and letting it try would let any latency spike
 quietly lower the protection level of freshly written data.
+
+**A full member is not an unavailable one (B5, Oct 24).** A stripe member
+that refuses a fragment as full (`EFS_ERR_QUOTA`, quota or physical space)
+never turns the write into a degraded acknowledgement: no rebuild could pay
+that debt while the member stays full. The client gives the object up,
+marks the member full for 10 s and places a new object with the full
+member's slot on a spare that is neither down nor full; with no such spare
+(three members) the write fails `ENOSPC`. `df` and `efs-mgmt status` agree:
+the full member's room is 0 in the 3-of-N bound, so three members with one
+full report 0 free.

@@ -210,6 +210,15 @@ static int cmd_status(int argc, char **argv)
                    list->nodes[i].id, list->nodes[i].addr, list->nodes[i].port,
                    reach, used_str, npaths);
         }
+        /* B5: exact per-member bytes for machine consumers (the line
+         * above rounds); capacity/available are the member's own STATUS
+         * values (filesystem bounded by its quota), the inputs of the
+         * usable-capacity model below. */
+        if (up)
+            printf("      bytes: used=%llu quota=%llu capacity=%llu available=%llu valid=%d\n",
+                   (unsigned long long)current.used, (unsigned long long)current.quota,
+                   (unsigned long long)current.capacity_bytes,
+                   (unsigned long long)current.available_bytes, current.capacity_valid ? 1 : 0);
         if (up && current.capacity_valid && ncap < EFS_MAX_NODES) {
             cap_quota[ncap] = current.capacity_bytes;
             cap_room[ncap++] = current.available_bytes;
