@@ -9,7 +9,7 @@ EFS_FAULT_COMPACT_DIE inside its #if EFS_FAULTS block and nowhere else.
 
 Usage: make libefs.a && python3 tests/test_faults_env_ignored.py"""
 from pathlib import Path
-import os, re, subprocess, sys, tempfile
+import os, subprocess, sys, tempfile
 root = Path(__file__).resolve().parents[1]
 if not (root / 'libefs.a').exists():
     sys.exit('build libefs.a first (make libefs.a)')
@@ -43,5 +43,4 @@ with tempfile.TemporaryDirectory(prefix='efs-faults-env-') as d:
     want = sorted('efsd: %s ignored: this build has no fault hooks (build with EFS_FAULTS=1 for fault tests)' % v
                   for v in ('EFS_FAULT_COMPACT_DIE', 'EFS_KV_COMPACT_DIE', 'EFS_FAULT_DRAIN_FILE'))
     assert lines == want, lines
-    assert not re.search(r'=1|/tmp/x', r.stderr)
 print('W149 fault variables: normal build names each EFS_FAULT_* and EFS_KV_COMPACT_DIE as ignored; hook only behind EFS_FAULTS PASS')
